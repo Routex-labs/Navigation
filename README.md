@@ -9,7 +9,7 @@
 |-- .gitignore
 |-- .github/
 |   `-- workflows/
-|       `-- pr-triage.yml            # PR 자동 분류 트리거(규칙은 prompt/triage-pr.md)
+|       `-- project-automation.yml   # 이슈/PR 이벤트 -> Projects 보드 Status 자동 이동
 |-- docs/
 |   |-- navigation-overview.md        # 프로젝트 개요와 결정 기록
 |   `-- research-notes.md             # 조사/근거/레퍼런스 정리
@@ -18,8 +18,7 @@
 |   |-- design-cicd-issues.md         # CI/CD 파이프라인 설계 -> 이슈 명세
 |   |-- implement-issue.md            # 보드 최우선 이슈를 GitHub Flow로 구현
 |   |-- label-cd.md                   # CD 라벨 생성/업데이트
-|   |-- label-ci.md                   # CI 라벨 생성/업데이트
-|   `-- triage-pr.md                  # 새 PR 자동 분류(labels/assignee/board)
+|   `-- label-ci.md                   # CI 라벨 생성/업데이트
 |-- issues/
 |   `-- issue.md                      # 마일스톤별 이슈 초안과 설명
 |-- AGENTS.md                         # 에이전트 작업 라우팅 / 규칙
