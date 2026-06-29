@@ -1,0 +1,114 @@
+name: Project automation
+
+# Projects(v2) 보드의 Status를 이슈/PR 이벤트에 맞춰 자동으로 옮긴다.
+#   - 이슈 열림/재오픈      → Todo
+#   - 이슈 닫힘             → Done
+#   - PR 열림/ready/재오픈  → (PR이 닫는 이슈를) Review (PR)
+#   - PR 머지              → (PR이 닫는 이슈를) Done
+#
+# 필요 시크릿: PROJECT_PAT
+#   조직 Projects 쓰기 권한이 있는 classic PAT (scope: repo, project).
+#   기본 GITHUB_TOKEN은 조직 Projects v2에 쓸 수 없어 별도 PAT가 필요하다.
+#   Settings → Secrets and variables → Actions → New repository secret 로 등록.
+
+on:
+  issues:
+    types: [opened, reopened, closed]
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: project-automation-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+env:
+  PROJECT_OWNER: HumanLayer-auth
+  PROJECT_NUMBER: "2"
+  REPO_NAME: Navigation
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Move project item to the right Status
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_PAT }}
+          EVENT_NAME: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          ISSUE_NODE_ID: ${{ github.event.issue.node_id }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_MERGED: ${{ github.event.pull_request.merged }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::warning::PROJECT_PAT 시크릿이 없어 자동화를 건너뜁니다. (README의 등록 안내 참고)"
+            exit 0
+          fi
+
+          ORG="$PROJECT_OWNER"; NUM="$PROJECT_NUMBER"; REPO="$REPO_NAME"
+
+          # --- 프로젝트/필드/옵션 ID 조회 ---
+          proj=$(gh api graphql -f query='
+            query($org:String!,$num:Int!){
+              organization(login:$org){ projectV2(number:$num){
+                id
+                field(name:"Status"){ ... on ProjectV2SingleSelectField { id options{ id name } } }
+              }}}' -f org="$ORG" -F num="$NUM")
+          PROJECT_ID=$(echo "$proj" | jq -r '.data.organization.projectV2.id')
+          FIELD_ID=$(echo "$proj" | jq -r '.data.organization.projectV2.field.id')
+          opt(){ echo "$proj" | jq -r --arg n "$1" '.data.organization.projectV2.field.options[]|select(.name==$n)|.id'; }
+          TODO=$(opt "Todo"); REVIEW=$(opt "Review (PR)"); DONE=$(opt "Done")
+
+          # --- 대상 이슈 node id 목록과 목표 상태 결정 ---
+          DESIRED=""
+          NODES=()
+          if [ "$EVENT_NAME" = "issues" ]; then
+            NODES=("$ISSUE_NODE_ID")
+            if [ "$ACTION" = "closed" ]; then DESIRED="$DONE"; else DESIRED="$TODO"; fi
+          elif [ "$EVENT_NAME" = "pull_request_target" ]; then
+            if [ "$ACTION" = "closed" ]; then
+              if [ "${PR_MERGED}" = "true" ]; then DESIRED="$DONE"; else
+                echo "PR이 머지 없이 닫힘 — 변경 없음"; exit 0
+              fi
+            else
+              DESIRED="$REVIEW"
+            fi
+            refs=$(gh api graphql -f query='
+              query($org:String!,$repo:String!,$pr:Int!){
+                repository(owner:$org,name:$repo){ pullRequest(number:$pr){
+                  closingIssuesReferences(first:20){ nodes{ id } }
+                }}}' -f org="$ORG" -f repo="$REPO" -F pr="$PR_NUMBER")
+            while IFS= read -r n; do [ -n "$n" ] && NODES+=("$n"); done \
+              < <(echo "$refs" | jq -r '.data.repository.pullRequest.closingIssuesReferences.nodes[].id')
+            if [ "${#NODES[@]}" -eq 0 ]; then
+              echo "이 PR이 닫는 이슈가 없습니다 (Closes #N 미사용) — 변경 없음"; exit 0
+            fi
+          fi
+
+          # --- 각 이슈를 프로젝트 아이템으로 보장한 뒤 Status 설정 ---
+          for nid in "${NODES[@]}"; do
+            [ -z "$nid" ] && continue
+            itemq=$(gh api graphql -f query='
+              query($id:ID!){ node(id:$id){ ... on Issue {
+                projectItems(first:50){ nodes{ id project{ id } } }
+              }}}' -f id="$nid")
+            ITEM_ID=$(echo "$itemq" | jq -r --arg p "$PROJECT_ID" \
+              '.data.node.projectItems.nodes[]?|select(.project.id==$p)|.id' | head -1)
+            if [ -z "$ITEM_ID" ] || [ "$ITEM_ID" = "null" ]; then
+              addq=$(gh api graphql -f query='
+                mutation($p:ID!,$c:ID!){ addProjectV2ItemById(input:{projectId:$p,contentId:$c}){ item{ id } } }' \
+                -f p="$PROJECT_ID" -f c="$nid")
+              ITEM_ID=$(echo "$addq" | jq -r '.data.addProjectV2ItemById.item.id')
+            fi
+            gh api graphql -f query='
+              mutation($p:ID!,$i:ID!,$f:ID!,$o:String!){
+                updateProjectV2ItemFieldValue(input:{
+                  projectId:$p,itemId:$i,fieldId:$f,value:{singleSelectOptionId:$o}
+                }){ projectV2Item{ id } } }' \
+              -f p="$PROJECT_ID" -f i="$ITEM_ID" -f f="$FIELD_ID" -f o="$DESIRED" >/dev/null
+            echo "✓ item $ITEM_ID → $DESIRED"
+          done
