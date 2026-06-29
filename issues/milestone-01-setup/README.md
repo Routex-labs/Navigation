@@ -22,7 +22,7 @@
 | ID | 컴포넌트 | 상태 | GitHub | 제목 |
 |---|---|---|---|---|
 | M1-001 | client | Draft | - | [Flutter 클라이언트 골격 생성](M1-001-frontend-flutter-scaffold.md) |
-| M1-002 | api | Draft | - | [FastAPI 백엔드 골격 생성](M1-002-backend-fastapi-scaffold.md) |
+| M1-002 | api | Done | #7 | [FastAPI 백엔드 골격 생성](M1-002-backend-fastapi-scaffold.md) |
 | M1-003 | client / api | Draft | - | [프론트–백엔드 연동 스모크 테스트](M1-003-integration-smoke-test.md) |
 
 ## 진행 순서
