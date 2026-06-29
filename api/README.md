@@ -30,7 +30,33 @@ uvicorn app.main:app --reload
 | POST | `/query/destination` | 목적지 질의 (RAG 스텁) |
 | POST | `/query/info` | 장소 정보 질의 (RAG 스텁) |
 
+## 구조
+
+Spring Boot의 Controller / Service / Repository / Domain 흐름을 FastAPI에 맞춰 사용한다.
+
+| 역할 | 위치 | 현재 구현 |
+|------|------|-----------|
+| Controller | `app/routers/` | `buildings.py` |
+| Service | `app/services/` | `BuildingService` |
+| Repository interface | `app/repositories/` | `BuildingRepository` |
+| Repository implementation | `app/repositories/` | `MemoryBuildingRepository` |
+| Domain object | `app/domain/` | `Building` |
+| DI wiring | `app/core/dependencies.py` | `get_building_service`, `get_building_repository` |
+
+초기 데이터 저장소는 `MemoryBuildingRepository`다. 앱 시작 시 `app/data/sample_building.json`을
+`Building` 도메인 객체로 읽어 메모리에 보관한다. 나중에 SQL을 도입할 때는
+`BuildingRepository` 계약을 구현하는 `SqlBuildingRepository`를 추가하고 DI 설정만 교체한다.
+
 ## 테스트
+
+M1-002의 테스트는 Given / When / Then 흐름을 기준으로 작성한다.
+각 테스트는 pytest의 함수 스코프 fixture를 통해 BeforeEach / AfterEach 초기화를 거친다.
+
+- BeforeEach: 앱 override 상태를 비우고 테스트용 `MemoryBuildingRepository`와 새 `TestClient`를 준비한다.
+- Given: 요청 경로, payload, 기대 응답을 준비한다.
+- When: `TestClient`로 API를 호출한다.
+- Then: 상태 코드와 응답 본문을 검증한다.
+- AfterEach: 테스트 종료 후 앱 override 상태와 repository cache를 다시 비운다.
 
 ```bash
 pytest
