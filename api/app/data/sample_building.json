@@ -1,0 +1,49 @@
+{
+  "id": "bldg-001",
+  "name": "데모 건물",
+  "floors": [1, 2],
+  "floor_data": {
+    "1": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "properties": { "type": "corridor", "name": "1층 복도" },
+          "geometry": {
+            "type": "LineString",
+            "coordinates": [[126.9780, 37.5665], [126.9785, 37.5665]]
+          }
+        },
+        {
+          "type": "Feature",
+          "properties": { "type": "poi", "name": "강의실 101", "id": "poi-101" },
+          "geometry": {
+            "type": "Point",
+            "coordinates": [126.9782, 37.5665]
+          }
+        }
+      ]
+    },
+    "2": {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "properties": { "type": "corridor", "name": "2층 복도" },
+          "geometry": {
+            "type": "LineString",
+            "coordinates": [[126.9780, 37.5665], [126.9785, 37.5665]]
+          }
+        },
+        {
+          "type": "Feature",
+          "properties": { "type": "poi", "name": "강의실 201", "id": "poi-201" },
+          "geometry": {
+            "type": "Point",
+            "coordinates": [126.9782, 37.5665]
+          }
+        }
+      ]
+    }
+  }
+}
