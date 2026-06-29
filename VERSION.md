@@ -15,13 +15,16 @@
 
 ## 컴포넌트별 스택 / 이미지
 
+상세 설계 근거는 [docs/research/06-tech-stack.md](docs/research/06-tech-stack.md)를 참조한다.
+아래 버전은 착수 목표치이며, 구현 시 `pubspec.yaml`·`requirements.txt`에 핀으로 고정한다.
+
 | 컴포넌트 | 언어 / 런타임 | 핵심 의존성 | 베이스 이미지 | 이미지 태그 | 포트 |
 |---|---|---|---|---|---|
-| 클라이언트 / 데모 UI | TypeScript / Node 20 | Vite 또는 Next.js | `node:20-slim` | `navigation/client:0.1.0` | 3000 |
-| API 서버 | Python 3.12 또는 Node 20 | FastAPI 또는 Express/NestJS | `python:3.12-slim` 또는 `node:20-slim` | `navigation/api:0.1.0` | 8000 |
-| 경로 계산 / 추천 모듈 | TBD | 지도/경로 라이브러리 확정 필요 | TBD | `navigation/routing:0.1.0` | - |
-| 데이터 파이프라인 | Python 3.12 | pandas, requests, pytest | `python:3.12-slim` | `navigation/pipeline:0.1.0` | - |
-| 발표용 대시보드 | TypeScript / Node 20 | Next.js, chart library | `node:20-slim` | `navigation/dashboard:0.1.0` | 3001 |
+| 클라이언트 (앱) | Dart / Flutter 3.24+ | `sensors_plus` ^6, `geolocator` ^13, `flutter_map` ^7, `flutter_riverpod` ^2, `dio` ^5 | (앱 빌드, 이미지 없음) | `navigation/client:0.1.0` | - |
+| 측위 엔진 | Dart (온디바이스) | PDR·Particle Filter 직접 구현 (`vector_math`) | (클라이언트 내장) | - | - |
+| API 서버 | Python 3.12 | FastAPI ^0.115, `uvicorn` ^0.32, `pydantic` ^2.9, `shapely` ^2 | `python:3.12-slim` | `navigation/api:0.1.0` | 8000 |
+| AI / RAG | Python 3.12 | `sentence-transformers` ^3, `faiss-cpu` ^1.8, `anthropic` ^0.39 | `python:3.12-slim` | `navigation/rag:0.1.0` | (API 내장) |
+| 데이터 | 정적 GeoJSON 파일 | 확장 시 PostgreSQL/PostGIS | - | - | - |
 
 ## 버전 정책
 
