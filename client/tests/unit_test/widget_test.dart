@@ -4,9 +4,12 @@ import 'package:geolocator/geolocator.dart';
 
 import 'package:navigation_client/app.dart';
 import 'package:navigation_client/core/service_locator.dart';
+import 'package:navigation_client/routing/app_routes.dart';
 import 'package:navigation_client/screens/debug/api_health_check_screen.dart';
+import 'package:navigation_client/screens/destination/destination_screen.dart';
 import 'package:navigation_client/screens/indoor_map/indoor_map_screen.dart';
 import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
+import 'package:navigation_client/screens/route_guide/route_guide_screen.dart';
 
 final _fakePosition = Position(
   latitude: 37.5665,
@@ -173,5 +176,60 @@ void main() {
 
     expect(find.text('데모 건물 · 2층'), findsOneWidget);
     expect(find.text('강의실 201'), findsOneWidget);
+  });
+
+  testWidgets('destination screen shows every POI by default', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: DestinationScreen()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('강의실 101'), findsOneWidget);
+    expect(find.text('강의실 201'), findsOneWidget);
+  });
+
+  testWidgets('destination screen filters as the user types', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: DestinationScreen()));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '201');
+    await tester.pumpAndSettle();
+
+    expect(find.text('강의실 101'), findsNothing);
+    expect(find.text('강의실 201'), findsOneWidget);
+  });
+
+  testWidgets('destination screen shows an empty state for no matches', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: DestinationScreen()));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '존재하지않는장소');
+    await tester.pumpAndSettle();
+
+    expect(find.text('찾을 수 없어요. 다시 입력해볼까요?'), findsOneWidget);
+  });
+
+  testWidgets('selecting a destination navigates to the route guide', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        routes: {
+          '/': (context) => const DestinationScreen(),
+          AppRoutes.routeGuide: (context) => const RouteGuideScreen(),
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('강의실 101'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('강의실 101'), findsOneWidget);
+    expect(find.textContaining('1층'), findsOneWidget);
   });
 }

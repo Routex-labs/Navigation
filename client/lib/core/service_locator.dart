@@ -2,10 +2,17 @@ import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../repositories/building_repository.dart';
+import '../repositories/destination_repository.dart';
 import '../repositories/mock_building_repository.dart';
+import '../repositories/mock_destination_repository.dart';
 
 /// 백엔드가 준비되면 이 한 줄만 [HttpBuildingRepository]로 바꾼다.
 final BuildingRepository buildingRepository = MockBuildingRepository();
+
+/// 백엔드 RAG가 준비되면 이 한 줄만 [HttpDestinationRepository]로 바꾼다.
+final DestinationRepository destinationRepository = MockDestinationRepository(
+  buildingRepository,
+);
 
 Future<Map<Permission, PermissionStatus>> defaultRequestStartupPermissions() {
   return [

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../core/api_config.dart';
 import '../../core/service_locator.dart';
 import '../../models/building.dart';
 import '../../models/floor_plan.dart';
@@ -19,8 +20,6 @@ class IndoorMapScreen extends StatefulWidget {
 }
 
 class _IndoorMapScreenState extends State<IndoorMapScreen> {
-  static const _buildingId = 'bldg-001';
-
   bool _loading = true;
   Building? _building;
   int? _selectedFloor;
@@ -33,7 +32,7 @@ class _IndoorMapScreenState extends State<IndoorMapScreen> {
   }
 
   Future<void> _loadBuilding() async {
-    final building = await buildingRepository.getBuilding(_buildingId);
+    final building = await buildingRepository.getBuilding(demoBuildingId);
     if (!mounted) return;
 
     if (building == null || building.floors.isEmpty) {
@@ -51,7 +50,7 @@ class _IndoorMapScreenState extends State<IndoorMapScreen> {
   Future<void> _loadFloorPlan(int floor) async {
     setState(() => _loading = true);
     final geojson = await buildingRepository.getFloorGeoJson(
-      _buildingId,
+      demoBuildingId,
       floor,
     );
     if (!mounted) return;
