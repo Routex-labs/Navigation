@@ -230,6 +230,31 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('강의실 101'), findsOneWidget);
-    expect(find.textContaining('1층'), findsOneWidget);
+    expect(find.textContaining('목적지까지 약'), findsOneWidget);
+  });
+
+  testWidgets('route guide shows the ETA card and building info FAB', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        routes: {
+          '/': (context) => const DestinationScreen(),
+          AppRoutes.routeGuide: (context) => const RouteGuideScreen(),
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('강의실 201'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(FloatingActionButton), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.info_outline));
+    await tester.pumpAndSettle();
+
+    expect(find.text('건물 정보 Q&A'), findsOneWidget);
+    expect(find.textContaining('화장실'), findsWidgets);
   });
 }

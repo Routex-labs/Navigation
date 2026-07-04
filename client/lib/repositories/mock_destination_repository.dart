@@ -28,7 +28,9 @@ class MockDestinationRepository implements DestinationRepository {
 
       final floorPlan = FloorPlan.fromGeoJson(geojson);
       for (final poi in floorPlan.pois) {
-        results.add(PoiSearchResult(name: poi.name, floor: floor));
+        results.add(
+          PoiSearchResult(name: poi.name, floor: floor, point: poi.point),
+        );
       }
     }
 

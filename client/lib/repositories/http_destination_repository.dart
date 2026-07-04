@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:latlong2/latlong.dart';
 
 import '../core/api_config.dart';
 import '../models/poi_search_result.dart';
@@ -36,6 +37,11 @@ class HttpDestinationRepository implements DestinationRepository {
           (poi) => PoiSearchResult(
             name: poi['name'] as String,
             floor: poi['floor'] as int,
+            // 백엔드 RAG가 좌표를 내려주기 시작하면 여기서 파싱한다.
+            point: LatLng(
+              (poi['lat'] as num?)?.toDouble() ?? 0,
+              (poi['lng'] as num?)?.toDouble() ?? 0,
+            ),
           ),
         )
         .toList();
