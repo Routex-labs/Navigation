@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  frontend:
+    name: Frontend (Flutter)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Linux desktop build deps
+        run: sudo apt-get update -y && sudo apt-get install -y ninja-build libgtk-3-dev xvfb
+
+      - run: flutter config --enable-linux-desktop
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test test/
+      - run: xvfb-run -a flutter test integration_test/ -d linux
+
+  backend:
+    name: Backend (FastAPI)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: api/requirements.txt
+
+      - run: pip install -r requirements.txt
+      - run: pytest tests/unit
+      - run: pytest tests/integration
+
+      # TODO: add ruff / black --check once the project adopts them.
