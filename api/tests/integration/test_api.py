@@ -2,48 +2,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.dependencies import get_building_repository
-from app.domain.building import Building
 from app.main import app
-from app.repositories.memory_building_repository import MemoryBuildingRepository
-
-
-def _test_building() -> Building:
-    return Building(
-        id="bldg-001",
-        name="테스트 건물",
-        floors=[1, 2],
-        floor_data={
-            "1": {
-                "type": "FeatureCollection",
-                "features": [
-                    {
-                        "type": "Feature",
-                        "properties": {"type": "corridor", "name": "1층 복도"},
-                        "geometry": {
-                            "type": "LineString",
-                            "coordinates": [[126.9780, 37.5665], [126.9785, 37.5665]],
-                        },
-                    }
-                ],
-            },
-            "2": {
-                "type": "FeatureCollection",
-                "features": [],
-            },
-        },
-    )
-
-
-def _create_test_building_repository() -> MemoryBuildingRepository:
-    return MemoryBuildingRepository(buildings=[_test_building()])
 
 
 @pytest.fixture
-def api_client():
+def api_client(building_repository):
     # BeforeEach
     app.dependency_overrides.clear()
     get_building_repository.cache_clear()
-    app.dependency_overrides[get_building_repository] = _create_test_building_repository
+    app.dependency_overrides[get_building_repository] = lambda: building_repository
+
     with TestClient(app) as client:
         yield client
 
@@ -52,7 +20,7 @@ def api_client():
     get_building_repository.cache_clear()
 
 
-def test_health(api_client):
+def test_헬스체크(api_client):
     # Given
     expected_body = {"status": "ok"}
 
@@ -64,7 +32,7 @@ def test_health(api_client):
     assert response.json() == expected_body
 
 
-def test_list_buildings(api_client):
+def test_건물_목록_조회(api_client):
     # Given
     expected_building_id = "bldg-001"
 
@@ -79,7 +47,7 @@ def test_list_buildings(api_client):
     assert "floor_data" not in buildings[0]
 
 
-def test_get_building(api_client):
+def test_건물_단건_조회(api_client):
     # Given
     building_id = "bldg-001"
 
@@ -91,7 +59,7 @@ def test_get_building(api_client):
     assert response.json()["id"] == building_id
 
 
-def test_get_building_not_found(api_client):
+def test_없는_건물_404(api_client):
     # Given
     building_id = "nonexistent"
 
@@ -103,7 +71,7 @@ def test_get_building_not_found(api_client):
     assert response.json()["detail"] == "Building not found"
 
 
-def test_get_floor(api_client):
+def test_층_조회(api_client):
     # Given
     building_id = "bldg-001"
     floor = 1
@@ -118,7 +86,7 @@ def test_get_floor(api_client):
     assert len(geojson["features"]) > 0
 
 
-def test_get_floor_not_found(api_client):
+def test_없는_층_404(api_client):
     # Given
     building_id = "bldg-001"
     floor = 99
@@ -131,7 +99,7 @@ def test_get_floor_not_found(api_client):
     assert response.json()["detail"] == "Floor not found"
 
 
-def test_query_destination_stub(api_client):
+def test_목적지_질의_스텁(api_client):
     # Given
     payload = {"text": "강의실 101", "building_id": "bldg-001"}
 
@@ -146,7 +114,7 @@ def test_query_destination_stub(api_client):
     assert body["result"] is None
 
 
-def test_query_info_stub(api_client):
+def test_정보_질의_스텁(api_client):
     # Given
     payload = {"text": "화장실 위치", "building_id": "bldg-001"}
 
