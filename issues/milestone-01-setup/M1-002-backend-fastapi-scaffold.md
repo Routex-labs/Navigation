@@ -30,15 +30,15 @@ uvicorn app.main:app --reload
 아래로 내려가며 파일을 하나씩 만든다. 순서는 **의존성 순서**(데이터 → 로직 → 경로 → 진입점)라,
 각 단계에서 필요한 게 이미 앞 단계에 존재한다. 각 코드 블록은 그대로 붙여넣어도 동작한다.
 
-만들 최종 구조:
+`api/` 디렉토리를 기준으로 볼 최종 구조:
 
 ```
-api/
+.
 ├── app/
 │   ├── main.py          ← 진입점 (라우터 연결 + 미들웨어)
 │   ├── core/            ← FastAPI DI 설정
 │   │   └── dependencies.py
-│   ├── domain/          ← 순수 도메인 객체
+│   ├── domain/          ← 순수 데이터 객체
 │   │   └── building.py
 │   ├── routers/         ← URL → 함수 매핑
 │   │   ├── buildings.py
@@ -52,7 +52,8 @@ api/
 │   │   └── building.py
 │   └── data/
 │       └── sample_building.json
-├── tests/test_main.py
+├── tests/
+│   └── test_main.py
 ├── requirements.txt
 └── README.md
 ```
@@ -61,11 +62,11 @@ api/
 
 ### 0단계 — 폴더 만들기 + 가상환경 준비
 
-프로젝트 루트(`Navigation`)에서 시작한다. 먼저 `api/`와 하위 폴더들을 만든다.
+`Navigation/api` 디렉토리에서 시작한다. `api/`는 백엔드 서비스 루트이고,
+아래 경로는 모두 `api/` 기준 상대 경로다.
 
 ```powershell
-# 1) api 폴더 생성 후 진입
-mkdir api
+# 1) api 폴더로 진입
 cd api
 
 # 2) 하위 폴더 한 번에 생성 (중간 폴더는 자동 생성됨)
@@ -150,40 +151,61 @@ pip install -r requirements.txt
 
 건물·층을 늘리거나 실제 평면도 좌표로 바꾸는 일은 **M2**에서.
 
-### 3단계 — 도메인 객체 — `app/domain/building.py`
+### 3단계 — 도메인 데이터 객체 — `app/domain/building.py`
 
 Spring Boot의 `domain` 객체처럼 서비스/저장소 내부에서 사용할 순수 객체를 둔다.
 Pydantic 응답 스키마와 분리해두면 나중에 SQL 모델이 생겨도 서비스 로직의 기준이 흔들리지 않는다.
+비즈니스 로직은 `Service`에 두고, `Domain`은 private 멤버와 getter/setter로 데이터만 보관한다.
 
 ```python
 from copy import deepcopy
-from dataclasses import dataclass
 from typing import Any
 
-@dataclass(frozen=True)
+
 class Building:
-    id: str
-    name: str
-    floors: list[int]
-    floor_data: dict[str, dict[str, Any]]
+    def __init__(
+        self,
+        id: str,
+        name: str,
+        floors: list[int],
+        floor_data: dict[str, dict[str, Any]],
+    ):
+        self._id = id
+        self._name = name
+        self._floors = list(floors)
+        self._floor_data = deepcopy(floor_data)
 
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Building":
-        return cls(
-            id=data["id"],
-            name=data["name"],
-            floors=list(data["floors"]),
-            floor_data=deepcopy(data["floor_data"]),
-        )
+    @property
+    def id(self) -> str:
+        return self._id
 
-    def to_summary(self) -> dict[str, Any]:
-        return {"id": self.id, "name": self.name, "floors": list(self.floors)}
+    @id.setter
+    def id(self, id: str) -> None:
+        self._id = id
 
-    def get_floor_geojson(self, floor: int) -> dict[str, Any] | None:
-        geojson = self.floor_data.get(str(floor))
-        if geojson is None:
-            return None
-        return deepcopy(geojson)
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @name.setter
+    def name(self, name: str) -> None:
+        self._name = name
+
+    @property
+    def floors(self) -> list[int]:
+        return list(self._floors)
+
+    @floors.setter
+    def floors(self, floors: list[int]) -> None:
+        self._floors = list(floors)
+
+    @property
+    def floor_data(self) -> dict[str, dict[str, Any]]:
+        return deepcopy(self._floor_data)
+
+    @floor_data.setter
+    def floor_data(self, floor_data: dict[str, dict[str, Any]]) -> None:
+        self._floor_data = deepcopy(floor_data)
 ```
 
 ### 4단계 — Repository 계약 — `app/repositories/building_repository.py`
@@ -211,6 +233,7 @@ class BuildingRepository(Protocol):
 ```python
 import json
 from pathlib import Path
+from typing import Any
 
 from app.domain.building import Building
 
@@ -234,37 +257,59 @@ class MemoryBuildingRepository:
 
     def _load_building(self, data_path: Path) -> Building:
         with open(data_path, encoding="utf-8") as f:
-            return Building.from_dict(json.load(f))
+            return self._to_building(json.load(f))
+
+    def _to_building(self, data: dict[str, Any]) -> Building:
+        return Building(
+            id=data["id"],
+            name=data["name"],
+            floors=list(data["floors"]),
+            floor_data=data["floor_data"],
+        )
 ```
 
 ### 6단계 — 비즈니스 로직 — `app/services/building_service.py`
 
 `BuildingService`는 `BuildingRepository` 인터페이스에 의존한다.
 라우터가 필요한 응답 형태로 도메인 객체를 가공하는 책임은 여기 둔다.
+도메인 객체는 데이터만 보관하므로 요약 변환과 층 GeoJSON 조회도 Service가 담당한다.
 
 ```python
 from typing import Any
 
+from app.domain.building import Building
 from app.repositories.building_repository import BuildingRepository
+
 
 class BuildingService:
     def __init__(self, building_repository: BuildingRepository):
         self.building_repository = building_repository
 
     def get_all_buildings(self) -> list[dict[str, Any]]:
-        return [building.to_summary() for building in self.building_repository.find_all()]
+        return [self._to_summary(building) for building in self.building_repository.find_all()]
 
     def get_building(self, building_id: str) -> dict[str, Any] | None:
         building = self.building_repository.find_by_id(building_id)
         if building is None:
             return None
-        return building.to_summary()
+        return self._to_summary(building)
 
     def get_floor_geojson(self, building_id: str, floor: int) -> dict[str, Any] | None:
         building = self.building_repository.find_by_id(building_id)
         if building is None:
             return None
-        return building.get_floor_geojson(floor)
+
+        geojson = building.floor_data.get(str(floor))
+        if geojson is None:
+            return None
+        return geojson
+
+    def _to_summary(self, building: Building) -> dict[str, Any]:
+        return {
+            "id": building.id,
+            "name": building.name,
+            "floors": building.floors,
+        }
 ```
 
 ### 7단계 — DI 설정 — `app/core/dependencies.py`
@@ -650,7 +695,7 @@ sequenceDiagram
     R->>S: BuildingService.get_floor_geojson("bldg-001", 1)
     S->>P: find_by_id("bldg-001")
     P-->>S: Building 또는 None
-    S->>D: get_floor_geojson(1)
+    S->>D: floor_data 조회
     S-->>R: 층 GeoJSON 또는 None
     alt 데이터 있음
         R-->>F: 200 OK + GeoJSON
@@ -664,7 +709,7 @@ sequenceDiagram
 | URL 라우팅 | `routers/` | API 경로를 추가·변경할 때 |
 | 비즈니스 로직 | `services/` | 응답 가공·검증 규칙을 바꿀 때 |
 | 저장소 계약/구현 | `repositories/` | 데이터 소스를 Memory→SQL로 교체할 때 |
-| 도메인 객체 | `domain/` | 내부 데이터 표현을 바꿀 때 |
+| 도메인 객체 | `domain/` | 내부 데이터 표현과 접근자를 바꿀 때 |
 
 한 파일이 한 가지 역할만 담당 → 수정 범위가 좁고 다른 부분에 영향이 없다.
 
@@ -712,7 +757,7 @@ flowchart TD
 - `_DEFAULT_DATA_PATH = Path(__file__).parent.parent / "data" / "sample_building.json"` — 실행 위치와 무관하게 샘플 데이터를 찾는다.
 - `BuildingRepository(Protocol)` — Python에서 interface처럼 저장소 메서드 계약을 표현한다.
 - `MemoryBuildingRepository` — 초기 구현체. JSON을 읽은 뒤 메모리의 `Building` 객체를 조회한다.
-- `str(floor)` — `floor`는 정수(`1`)지만 JSON 키는 문자열(`"1"`)이라 도메인 객체 내부에서 변환한다.
+- `str(floor)` — `floor`는 정수(`1`)지만 JSON 키는 문자열(`"1"`)이라 Service에서 변환한다.
 
 ---
 
@@ -734,19 +779,19 @@ flowchart TD
 ## 파일 (Files)
 
 ```
-api/requirements.txt
-api/app/main.py
-api/app/core/dependencies.py
-api/app/domain/building.py
-api/app/routers/buildings.py
-api/app/routers/query.py          (스텁)
-api/app/services/building_service.py
-api/app/repositories/building_repository.py
-api/app/repositories/memory_building_repository.py
-api/app/schemas/building.py       (정의만, 라우터 미연결)
-api/app/data/sample_building.json
-api/tests/test_main.py
-api/README.md
+requirements.txt
+app/main.py
+app/core/dependencies.py
+app/domain/building.py
+app/routers/buildings.py
+app/routers/query.py          (스텁)
+app/services/building_service.py
+app/repositories/building_repository.py
+app/repositories/memory_building_repository.py
+app/schemas/building.py       (정의만, 라우터 미연결)
+app/data/sample_building.json
+tests/test_main.py
+README.md
 ```
 
 ## 메모
