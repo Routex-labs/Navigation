@@ -127,6 +127,19 @@ def resource_category(extension: str, content_type: str) -> str:
     return "resources"
 
 
+def write_resource_body(path: Path, body: bytes, category: str) -> int:
+    if category == "json":
+        try:
+            parsed = json.loads(body.decode("utf-8"))
+        except UnicodeDecodeError:
+            parsed = json.loads(body.decode("utf-8-sig"))
+        path.write_text(json.dumps(parsed, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return path.stat().st_size
+
+    path.write_bytes(body)
+    return len(body)
+
+
 def safe_asset_filename(url: str, extension: str) -> str:
     parsed = urlsplit(url)
     raw_name = unquote(Path(parsed.path).name) or parsed.netloc or "resource"
@@ -205,14 +218,14 @@ class ResourceCapture:
             }[category]
             target_dir.mkdir(parents=True, exist_ok=True)
             saved_path = target_dir / safe_asset_filename(url, extension)
-            saved_path.write_bytes(body)
+            size_bytes = write_resource_body(saved_path, body, category)
             self._saved_urls.add(url)
 
             entry = dict(base_entry)
             entry.update(
                 {
                     "category": category,
-                    "size_bytes": len(body),
+                    "size_bytes": size_bytes,
                     "saved_path": str(saved_path.resolve()),
                 }
             )
