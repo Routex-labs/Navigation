@@ -34,9 +34,27 @@ uvicorn app.main:app --reload
 
 Spring Boot의 Controller / Service / Repository / Domain 흐름을 FastAPI에 맞춰 사용한다.
 
+```text
+app/main.py
+    |
+    v
+app/routers/  <---->  app/schemas/
+    |
+    v
+app/services/
+    |
+    v
+app/repositories/
+    |
+    v
+app/domain/
+```
+
 | 역할 | 위치 | 현재 구현 |
 |------|------|-----------|
+| App entry point | `app/main.py` | FastAPI 앱 생성, router 등록 |
 | Controller | `app/routers/` | `buildings.py` |
+| Schema | `app/schemas/` | API 요청/응답 모델 |
 | Service | `app/services/` | `BuildingService` |
 | Repository interface | `app/repositories/` | `BuildingRepository` |
 | Repository implementation | `app/repositories/` | `MemoryBuildingRepository` |

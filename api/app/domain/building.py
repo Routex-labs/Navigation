@@ -1,38 +1,57 @@
 """
 app/domain/building.py
 ======================
-Building 도메인 객체.
+Building 도메인 데이터 객체.
 
 FastAPI 응답 모델(Pydantic schema)과 분리해 서비스/저장소 내부에서 사용하는
-순수 Python 객체를 둔다. 나중에 SQL 모델이 생겨도 서비스는 이 도메인 객체를 기준으로 동작한다.
+순수 Python 객체를 둔다. 비즈니스 로직은 Service가 담당하고, Domain은 데이터만 보관한다.
 """
 
 from copy import deepcopy
-from dataclasses import dataclass
 from typing import Any
 
 
-@dataclass(frozen=True)
 class Building:
-    id: str
-    name: str
-    floors: list[int]
-    floor_data: dict[str, dict[str, Any]]
+    def __init__(
+        self,
+        id: str,
+        name: str,
+        floors: list[int],
+        floor_data: dict[str, dict[str, Any]],
+    ):
+        self._id = id
+        self._name = name
+        self._floors = list(floors)
+        self._floor_data = deepcopy(floor_data)
 
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Building":
-        return cls(
-            id=data["id"],
-            name=data["name"],
-            floors=list(data["floors"]),
-            floor_data=deepcopy(data["floor_data"]),
-        )
+    @property
+    def id(self) -> str:
+        return self._id
 
-    def to_summary(self) -> dict[str, Any]:
-        return {"id": self.id, "name": self.name, "floors": list(self.floors)}
+    @id.setter
+    def id(self, id: str) -> None:
+        self._id = id
 
-    def get_floor_geojson(self, floor: int) -> dict[str, Any] | None:
-        geojson = self.floor_data.get(str(floor))
-        if geojson is None:
-            return None
-        return deepcopy(geojson)
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @name.setter
+    def name(self, name: str) -> None:
+        self._name = name
+
+    @property
+    def floors(self) -> list[int]:
+        return list(self._floors)
+
+    @floors.setter
+    def floors(self, floors: list[int]) -> None:
+        self._floors = list(floors)
+
+    @property
+    def floor_data(self) -> dict[str, dict[str, Any]]:
+        return deepcopy(self._floor_data)
+
+    @floor_data.setter
+    def floor_data(self, floor_data: dict[str, dict[str, Any]]) -> None:
+        self._floor_data = deepcopy(floor_data)

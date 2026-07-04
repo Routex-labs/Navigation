@@ -9,6 +9,7 @@ app/repositories/memory_building_repository.py
 
 import json
 from pathlib import Path
+from typing import Any
 
 from app.domain.building import Building
 
@@ -33,4 +34,12 @@ class MemoryBuildingRepository:
 
     def _load_building(self, data_path: Path) -> Building:
         with open(data_path, encoding="utf-8") as f:
-            return Building.from_dict(json.load(f))
+            return self._to_building(json.load(f))
+
+    def _to_building(self, data: dict[str, Any]) -> Building:
+        return Building(
+            id=data["id"],
+            name=data["name"],
+            floors=list(data["floors"]),
+            floor_data=data["floor_data"],
+        )
