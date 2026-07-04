@@ -1,20 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:geolocator/geolocator.dart';
 
 import 'package:navigation_client/app.dart';
 import 'package:navigation_client/core/service_locator.dart';
 import 'package:navigation_client/screens/debug/api_health_check_screen.dart';
 import 'package:navigation_client/screens/indoor_map/indoor_map_screen.dart';
+import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
+
+final _fakePosition = Position(
+  latitude: 37.5665,
+  longitude: 126.9780,
+  timestamp: DateTime(2024, 1, 1),
+  accuracy: 5,
+  altitude: 0,
+  altitudeAccuracy: 0,
+  heading: 0,
+  headingAccuracy: 0,
+  speed: 0,
+  speedAccuracy: 0,
+);
+
+final _fakeLowAccuracyPosition = Position(
+  latitude: 37.5665,
+  longitude: 126.9780,
+  timestamp: DateTime(2024, 1, 1),
+  accuracy: 100,
+  altitude: 0,
+  altitudeAccuracy: 0,
+  heading: 0,
+  headingAccuracy: 0,
+  speed: 0,
+  speedAccuracy: 0,
+);
 
 void main() {
   setUp(() {
-    // 실제 permission_handler 플러그인 채널이 없는 테스트 환경에서 멈추지 않도록
-    // 즉시 완료되는 가짜 권한 요청으로 교체한다.
+    // 실제 permission_handler/geolocator 플러그인 채널이 없는 테스트 환경에서
+    // 멈추지 않도록 즉시 완료되는 가짜 함수로 교체한다.
     requestStartupPermissions = () async => {};
+    getCurrentPosition = () async => _fakePosition;
   });
 
   tearDown(() {
     requestStartupPermissions = defaultRequestStartupPermissions;
+    getCurrentPosition = defaultGetCurrentPosition;
   });
 
   testWidgets('splash screen shows entry points', (WidgetTester tester) async {
@@ -42,7 +72,11 @@ void main() {
     await tester.pumpWidget(const NavigationApp());
 
     await tester.tap(find.text('시작하기'));
-    await tester.pumpAndSettle();
+    // 지도 타일은 네트워크 이미지라 pumpAndSettle을 쓰면 무한정 기다릴 수 있으니
+    // 라우트 전환과 위치 조회가 끝날 만큼만 프레임을 진행한다.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
 
     expect(find.text('야외 지도 (GPS 모드)'), findsOneWidget);
   });
@@ -63,6 +97,43 @@ void main() {
 
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.byIcon(Icons.refresh), findsOneWidget);
+  });
+
+  testWidgets('outdoor map shows a location marker after loading', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: OutdoorMapScreen()));
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    await tester.pump();
+
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byIcon(Icons.navigation), findsOneWidget);
+    expect(find.text('GPS 신호 약함'), findsNothing);
+  });
+
+  testWidgets('outdoor map shows a low-accuracy warning badge', (
+    WidgetTester tester,
+  ) async {
+    getCurrentPosition = () async => _fakeLowAccuracyPosition;
+
+    await tester.pumpWidget(const MaterialApp(home: OutdoorMapScreen()));
+    await tester.pump();
+
+    expect(find.text('GPS 신호 약함'), findsOneWidget);
+  });
+
+  testWidgets('outdoor map falls back to a default location on failure', (
+    WidgetTester tester,
+  ) async {
+    getCurrentPosition = () async => throw Exception('위치를 가져올 수 없음');
+
+    await tester.pumpWidget(const MaterialApp(home: OutdoorMapScreen()));
+    await tester.pump();
+
+    expect(find.byIcon(Icons.navigation), findsOneWidget);
+    expect(find.text('GPS 신호 약함'), findsOneWidget);
   });
 
   testWidgets('indoor map shows building info loaded from the repository', (

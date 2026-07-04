@@ -1,3 +1,4 @@
+import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../repositories/building_repository.dart';
@@ -17,3 +18,13 @@ Future<Map<Permission, PermissionStatus>> defaultRequestStartupPermissions() {
 /// 이 변수를 즉시 완료되는 가짜 함수로 교체해 실제 플러그인 호출을 피한다.
 Future<Map<Permission, PermissionStatus>> Function() requestStartupPermissions =
     defaultRequestStartupPermissions;
+
+Future<Position> defaultGetCurrentPosition() {
+  return Geolocator.getCurrentPosition(
+    locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+  );
+}
+
+/// 야외 지도 화면의 현재 위치 조회. 플랫폼 채널이 없는 테스트 환경에서는
+/// 이 변수를 가짜 [Position]을 즉시 반환하는 함수로 교체한다.
+Future<Position> Function() getCurrentPosition = defaultGetCurrentPosition;
