@@ -6,6 +6,27 @@ on:
     branches: [main]
 
 jobs:
+  frontend:
+    name: Frontend (Flutter)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test test/
+
+      # TODO: enable once client/integration_test/ lands (see follow-up PR).
+      # - run: flutter test integration_test/
+
   backend:
     name: Backend (FastAPI)
     runs-on: ubuntu-latest
