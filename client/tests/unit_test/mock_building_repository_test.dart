@@ -23,6 +23,8 @@ void main() {
 
     expect(building, isNotNull);
     expect(building!.name, '데모 건물');
+    expect(building.entrance?.latitude, 37.5665);
+    expect(building.entrance?.longitude, 126.9779);
   });
 
   test('returns null for an unknown building id', () async {

@@ -2,6 +2,7 @@
   "id": "bldg-001",
   "name": "데모 건물",
   "floors": [1, 2],
+  "entrance": { "lat": 37.5665, "lng": 126.9779 },
   "floor_data": {
     "1": {
       "type": "FeatureCollection",

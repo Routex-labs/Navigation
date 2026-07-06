@@ -130,6 +130,17 @@ void main() {
     expect(find.text('GPS 신호 약함'), findsOneWidget);
   });
 
+  testWidgets('outdoor map shows a route and ETA card to the entrance', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: OutdoorMapScreen()));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byIcon(Icons.place), findsOneWidget);
+    expect(find.textContaining('목적지까지 약'), findsOneWidget);
+  });
+
   testWidgets('outdoor map falls back to a default location on failure', (
     WidgetTester tester,
   ) async {
