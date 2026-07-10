@@ -15,11 +15,13 @@ import json
 import sqlite3
 from pathlib import Path
 
+# 스크립트를 어느 디렉토리에서 실행해도 같은 입력/출력 경로를 사용한다.
 API_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_JSON = API_ROOT / "app" / "data" / "navigation_1f.json"
 DEFAULT_DB = API_ROOT / "data" / "navigation.db"
 
-# drop - create 방식
+# 개발용 데이터셋을 항상 같은 상태로 만들기 위해 DROP → CREATE를 한 번에 실행한다.
+# 자식 테이블부터 DROP해야 외래 키 관계가 있어도 안전하게 다시 생성할 수 있다.
 DDL = """
 PRAGMA foreign_keys = ON;
 
@@ -106,21 +108,26 @@ def load_navigation_db(
     json_path : Path = DEFAULT_JSON, db_path: Path = DEFAULT_DB
 ) -> dict[str, int]:
     """navigation JSON을 읽어 SQLite로 적재하고 테이블별 건수를 반환한다."""
+    # 원본 JSON 전체를 Python dict/list 구조로 읽는다.
     with open(json_path, encoding = "utf-8") as f:
         data = json.load(f)
 
+    # 현재 데이터셋은 건물 하나와 그 안의 단일 층을 기준으로 구성돼 있다.
     building = data["building"]
     floor = building["floor"]
     building_id = building["id"]
     floor_id = floor["id"]
 
+    # 출력 폴더가 아직 없어도 DB 파일을 생성할 수 있게 준비한다.
     db_path = Path(db_path)
     db_path.parent.mkdir(parents = True, exist_ok = True) # data/ 폴더 없으면 생성
 
     conn = sqlite3.connect(db_path)
     try:
+        # 테이블과 인덱스를 초기화한 뒤 아래 INSERT를 시작한다.
         conn.executescript(DDL) # DROP + CREATE ( 멱등의 핵심 ), 자동 transaction 시작
 
+        # --- 건물/층: 각각 한 건씩 INSERT ---
         conn.execute(
             "INSERT INTO buildings (id, name, area_m2, perimeter_m, footprint_local_m)"
             " VALUES (?, ?, ?, ?, ?)",
@@ -138,7 +145,8 @@ def load_navigation_db(
             (floor_id, building_id, floor["name"], floor["level"]),
         )
 
-        # 대량 Insert 는 executemany - 한 건씩 execute 보다 훨씬 빠른다.
+        # --- 그래프/지도 데이터: 목록을 executemany로 일괄 INSERT ---
+        # 대량 Insert는 한 건씩 execute하는 것보다 DB 호출 횟수가 적다.
         conn.executemany(
             "INSERT INTO nodes (id, floor_id, type, name, x_m, y_m, lat, lng, source_x, source_y)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -159,6 +167,7 @@ def load_navigation_db(
             ],
         )
         conn.executemany(
+            # Edge는 Node ID를 참조하고 geometry는 JSON 문자열로 저장한다.
             "INSERT INTO edges (id, floor_id, from_node_id, to_node_id, length_m, bidirectional, geometry)"
             " VALUES (?, ?, ?, ?, ?, ?, ?)",
             [
@@ -175,6 +184,7 @@ def load_navigation_db(
             ],
         )
         conn.executemany(
+            # Store 폴리곤과 선택적 입구 좌표를 평면 컬럼으로 적재한다.
             "INSERT INTO stores (id, floor_id, name, centroid_x_m, centroid_y_m,"
             " entrance_x_m, entrance_y_m, entrance_node_id, polygon)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -195,6 +205,7 @@ def load_navigation_db(
             ],
         )
         conn.executemany(
+            # POI 위치는 Node와 별개로 표시하되 linked_node_id로 길찾기에 연결할 수 있다.
             "INSERT INTO pois (id, floor_id, type, name, x_m, y_m, linked_node_id)"
             " VALUES (?, ?, ?, ?, ?, ?, ?)",
             [
@@ -210,9 +221,10 @@ def load_navigation_db(
                 for p in data["pois"]
             ],
         )
+        # 모든 테이블 INSERT가 성공한 경우에만 한 번에 영구 반영한다.
         conn.commit() # 자동으로 transaction 마무리
 
-        # 적재 결과 요약 - CLI 출력과 테스트 검증 사용
+        # 적재 결과 요약은 CLI 출력과 테스트의 데이터 건수 검증에 함께 사용한다.
         counts = {
             table: conn.execute(f"select count(*) from {table}").fetchone()[0]
             for table in ("buildings", "floors", "nodes", "edges", "stores", "pois")
@@ -220,9 +232,11 @@ def load_navigation_db(
         return counts
     
     finally:
+        # 중간 INSERT에서 예외가 발생해도 파일 핸들을 반드시 반환한다.
         conn.close() # 예외가 나도 커넥션은 반드시 닫는다.
 
 if __name__ == "__main__":
+    # 모듈 import 때는 실행하지 않고 직접 호출했을 때만 CLI 인자를 처리한다.
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", type=Path, default=DEFAULT_JSON)
     parser.add_argument("--db", type=Path, default=DEFAULT_DB)

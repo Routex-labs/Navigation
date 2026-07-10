@@ -10,4 +10,6 @@ uvicorn 이 import할 'app'객체만 노출한다.
 """
 from app.FastAPIConfig import create_app
 
+# uvicorn의 ``app.main:app`` 경로가 참조하는 모듈 전역 ASGI 애플리케이션이다.
+# 실제 설정과 라우터 조립은 테스트에서도 재사용할 수 있도록 create_app에 위임한다.
 app = create_app()

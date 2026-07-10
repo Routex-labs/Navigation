@@ -8,6 +8,8 @@ TestClient로 HTTP 왕복 전체(라우팅 → DI → service → SQLite → 직
 from tests.conftest import BUILDING_ID, FLOOR_NAME
 
 
+# --- 서버 상태와 건물 HTTP API ---
+
 def test_헬스체크(api_client):
     response = api_client.get("/health")
 
@@ -36,11 +38,14 @@ def test_건물_단건_조회(api_client):
 
 
 def test_없는_건물_404(api_client):
+    # Service의 None이 Router에서 HTTP 404로 변환되는지 확인한다.
     response = api_client.get("/buildings/nonexistent")
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Building not found"
 
+
+# --- 층 지도/그래프 HTTP API ---
 
 def test_층_지도_조회(api_client):
     response = api_client.get(f"/buildings/{BUILDING_ID}/floors/{FLOOR_NAME}")
@@ -68,6 +73,8 @@ def test_층_그래프_조회(api_client):
     assert len(body["edges"]) == 282
 
 
+# --- 매장 검색 HTTP API ---
+
 def test_매장_검색(api_client):
     response = api_client.get(f"/buildings/{BUILDING_ID}/stores", params={"q": "베네타"})
 
@@ -83,6 +90,8 @@ def test_매장_검색_전체(api_client):
     assert response.status_code == 200
     assert len(response.json()) == 61
 
+
+# --- 아직 구현 전인 자연어 질의 API 계약 ---
 
 def test_목적지_질의_스텁(api_client):
     payload = {"text": "구찌 어디야", "building_id": BUILDING_ID}

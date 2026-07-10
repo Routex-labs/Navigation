@@ -13,8 +13,11 @@ from tests.conftest import BUILDING_ID, FLOOR_NAME
 
 @pytest.fixture
 def service(building_repository) -> BuildingService:
+    # HTTP 계층을 제외하고 Service와 실제 SQLite Repository 조합만 검증한다.
     return BuildingService(building_repository)
 
+
+# --- 건물 조회 비즈니스 규약 ---
 
 def test_건물_목록_조회(service):
     # When
@@ -38,8 +41,11 @@ def test_건물_상세_조회(service):
 
 
 def test_없는_건물은_None(service):
+    # Service는 HTTPException 대신 저장 결과 없음의 의미로 None을 사용한다.
     assert service.get_building("nonexistent") is None
 
+
+# --- 층 지도와 길찾기 그래프 조합 ---
 
 def test_층_그래프_조회(service):
     # When
@@ -69,9 +75,12 @@ def test_층_지도_조회(service):
 
 
 def test_없는_층은_None(service):
+    # 지도와 그래프 모두 존재하지 않는 층에 대해 같은 None 규약을 따른다.
     assert service.get_floor_graph(BUILDING_ID, "99F") is None
     assert service.get_floor_map(BUILDING_ID, "99F") is None
 
+
+# --- 매장 검색 규약 ---
 
 def test_매장_검색(service):
     # When
@@ -84,6 +93,7 @@ def test_매장_검색(service):
 
 
 def test_매장_검색_빈_질의는_전체(service):
+    # LIKE '%%'가 되어 해당 건물의 전체 매장을 반환한다.
     assert len(service.search_stores(BUILDING_ID, "")) == 61
 
 
