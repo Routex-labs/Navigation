@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'routing/app_routes.dart';
 import 'screens/arrival/arrival_screen.dart';
 import 'screens/debug/api_health_check_screen.dart';
+import 'screens/debug/floor_map_preview_screen.dart';
 import 'screens/destination/destination_screen.dart';
 import 'screens/indoor_map/indoor_map_screen.dart';
 import 'screens/outdoor_map/outdoor_map_screen.dart';
@@ -28,6 +29,7 @@ class NavigationApp extends StatelessWidget {
         AppRoutes.routeGuide: (context) => const RouteGuideScreen(),
         AppRoutes.arrival: (context) => const ArrivalScreen(),
         AppRoutes.debugApiHealth: (context) => const ApiHealthCheckScreen(),
+        AppRoutes.debugFloorMapPreview: (context) => const FloorMapPreviewScreen(),
       },
     );
   }

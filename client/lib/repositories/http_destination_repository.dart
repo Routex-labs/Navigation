@@ -36,7 +36,7 @@ class HttpDestinationRepository implements DestinationRepository {
         .map(
           (poi) => PoiSearchResult(
             name: poi['name'] as String,
-            floor: poi['floor'] as int,
+            floor: poi['floor'] as String,
             // 백엔드 RAG가 좌표를 내려주기 시작하면 여기서 파싱한다.
             point: LatLng(
               (poi['lat'] as num?)?.toDouble() ?? 0,

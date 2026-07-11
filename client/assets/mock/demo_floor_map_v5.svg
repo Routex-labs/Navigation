@@ -1,0 +1,421 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     viewBox="0 0 2048 825" width="2048" height="825" role="img"
+     aria-labelledby="map-title map-desc">
+  <title id="map-title">시설 실내 평면도 및 보행 그래프 SVG</title>
+  <desc id="map-desc">원본 안내도의 비출입 공간과 실제 출입구를 반영하고, 출입 노드·복도 노드·중간 연결 노드 및 벽을 통과하지 않는 보행 그래프를 포함한 편집 가능한 벡터 평면도.</desc>
+
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#24302b" flood-opacity=".14"/>
+    </filter>
+<symbol id="icon-restroom" viewBox="0 0 48 48">
+      <circle cx="15" cy="9" r="3" fill="currentColor"/>
+      <path d="M15 15v15m-6-9 6-6 6 6m-9 9-2 12m8-12 2 12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
+      <circle cx="34" cy="9" r="3" fill="currentColor"/>
+      <path d="M34 15v11m-6-5 6-6 6 6m-9 5h6l-2 16m-2-16 1 16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="icon-elevator" viewBox="0 0 48 48">
+      <rect x="7" y="8" width="34" height="34" rx="3" fill="none" stroke="currentColor" stroke-width="2.2"/>
+      <path d="M17 5l4-4 4 4M31 5l4-4 4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="17" cy="20" r="2.5" fill="currentColor"/><path d="M17 24v11m-5-5 5-6 5 6" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>
+      <circle cx="31" cy="20" r="2.5" fill="currentColor"/><path d="M31 24v11m-5-5 5-6 5 6" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="icon-stairs" viewBox="0 0 48 48">
+      <path d="M6 39h9v-8h9v-8h9v-8h9" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+      <path d="M9 12h28M32 7l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="icon-exit" viewBox="0 0 48 48">
+      <rect x="5" y="5" width="38" height="38" rx="3" fill="none" stroke="currentColor" stroke-width="2.4"/>
+      <circle cx="21" cy="14" r="3" fill="currentColor"/>
+      <path d="M21 19l-5 8 6 3 4 10m-10-13-5 8m11-5 9-2 7 6M31 15h8" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M35 11l5 4-5 4" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="icon-fire" viewBox="0 0 32 32">
+      <rect x="8" y="5" width="16" height="22" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>
+      <path d="M12 9h8m-5 4h5m-8 9h8M21 5V2h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="icon-aed" viewBox="0 0 48 48">
+      <path d="M24 41C12 32 7 26 7 17A10 10 0 0 1 24 10 10 10 0 0 1 41 17c0 9-5 15-17 24Z" fill="currentColor"/>
+      <path d="M27 11l-7 13h7l-4 13 12-17h-7l5-9Z" fill="#fff"/>
+    </symbol>
+    <symbol id="icon-pin" viewBox="0 0 48 60">
+      <path d="M24 56C15 43 8 34 8 23A16 16 0 1 1 40 23c0 11-7 20-16 33Z" fill="currentColor"/>
+      <circle cx="24" cy="23" r="8" fill="#fff"/>
+      <circle cx="24" cy="21" r="3" fill="currentColor"/>
+      <path d="M24 26v7m-4-3 4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </symbol>
+  </defs>
+
+  <style>
+    .outer-wall{fill:none;stroke:#222825;stroke-width:4;stroke-linejoin:round;stroke-linecap:square;vector-effect:non-scaling-stroke}
+    .blocked{fill:#202523;stroke:#202523;stroke-width:1;vector-effect:non-scaling-stroke}
+    .floor{fill:#f8faf8}
+    .room-fill{fill:#f2f1ef}
+    .service-fill{fill:#efedf1}
+    .meeting-fill{fill:#f6f1f3}
+    .wall-line{fill:none;stroke:#606662;stroke-width:3.2;stroke-linejoin:miter;stroke-linecap:square;vector-effect:non-scaling-stroke}
+    .wall-thin{fill:none;stroke:#8f9491;stroke-width:2.2;stroke-linejoin:miter;stroke-linecap:square;vector-effect:non-scaling-stroke}
+    .partition{fill:none;stroke:#858b87;stroke-width:3;stroke-linejoin:miter;stroke-linecap:square;vector-effect:non-scaling-stroke}
+    .open-feature{fill:none;stroke:#7e8581;stroke-width:3.2;stroke-linecap:round;vector-effect:non-scaling-stroke}
+    .furniture{fill:none;stroke:#989d9a;stroke-width:3;stroke-linecap:square;stroke-linejoin:miter;vector-effect:non-scaling-stroke}
+    .column{fill:#a7aba8}
+    .label,.small-label,.zone-label,.node-label{font-family:"NanumSquare","Noto Sans CJK KR","Apple SD Gothic Neo",sans-serif;text-anchor:middle;dominant-baseline:middle;pointer-events:none}
+    .label{fill:#333936;font-weight:750;letter-spacing:-.45px}.small-label{fill:#454c48;font-weight:680;letter-spacing:-.25px}
+    .zone-label{fill:#505753;font-weight:750;letter-spacing:-.3px}
+    .amenity{fill:#bde3b7;stroke:#527d51;stroke-width:1.5;vector-effect:non-scaling-stroke}.amenity-icon{color:#416d43}
+    .fire-box{fill:#f4d6dc;stroke:#b76575;stroke-width:1.2;vector-effect:non-scaling-stroke}.fire-icon{color:#9f1930}
+    .access-node circle{fill:#0f7790;stroke:#fff;stroke-width:3;vector-effect:non-scaling-stroke}
+    .access-node .node-ring{fill:none;stroke:#0f7790;stroke-width:1.7;stroke-opacity:.45;vector-effect:non-scaling-stroke}
+    .access-node .node-label{fill:#07566b;font-size:11px;font-weight:800}
+    .graph-edge{fill:none;stroke:#5e8e99;stroke-width:2.1;stroke-opacity:.58;stroke-dasharray:7 7;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+    .corridor-node circle{fill:#d78222;stroke:#fff;stroke-width:2.5;vector-effect:non-scaling-stroke}
+    .corridor-node .node-ring{fill:none;stroke:#d78222;stroke-width:1.5;stroke-opacity:.4;vector-effect:non-scaling-stroke}
+    .corridor-node .node-label{fill:#8c4f0b;font-size:9px;font-weight:800}
+  </style>
+
+  <rect width="2048" height="825" fill="#edf4e7"/>
+
+  <!-- building mass -->
+  <path id="building-footprint" class="blocked" filter="url(#shadow)" d="M72 58H1778V289H1868V706H1471V760H1208V706H1187V681H1073V760H65V690H20V295H72Z"/>
+
+  <!-- accessible floor cutout -->
+  <path class="floor" d="M177 238H704V76H1064V239H1139L1183 96H1628V239H1677V289H1692V389H1764V538H1853V633H1667V681H1471V706H1208V681H1173V594H775V681H180V450H177Z"/>
+  <path class="floor" d="M180 239H752V239H1064V239H1140V239H1628V239H1691V305H1764V538H1667V610H1550V681H1173V594H775V681H180V450H180Z"/>
+
+  <!-- inaccessible / non-enterable black areas copied from the source image -->
+  <g id="inaccessible-areas">
+    <!-- upper-left mass -->
+    <path class="blocked" d="M72 58H428V159H366V238H303V193H255V238H177V250H72V58Z"/>
+    <path class="blocked" d="M304 159H366V238H304Z"/>
+    <!-- strip above the top-left rooms -->
+    <path class="blocked" d="M428 58H703V77H428Z"/>
+    <!-- central top shell and service voids -->
+    <path class="blocked" d="M704 58H752V239H704Z"/>
+    <path class="blocked" d="M1064 58H1184L1140 239H1064Z"/>
+    <path class="blocked" d="M876 111H941V239H876Z"/>
+    <!-- upper-right shell -->
+    <path class="blocked" d="M1184 58H1778V97H1184Z"/>
+    <path class="blocked" d="M1628 97H1778V289H1710V239H1628Z"/>
+    <!-- left side shell -->
+    <path class="blocked" d="M20 295H180V310H92V450H180V690H65V690H20Z"/>
+    <path class="blocked" d="M20 450H180V681H20Z"/>
+    <!-- right side irregular mass -->
+    <path class="blocked" d="M1764 289H1868V538H1764V389H1692V305H1764Z"/>
+    <path class="blocked" d="M1667 389H1868V538H1764V456H1667Z"/>
+    <path class="blocked" d="M1667 633H1868V706H1471V681H1667Z"/>
+    <!-- bottom shell -->
+    <path class="blocked" d="M65 681H775V760H65Z"/>
+    <path class="blocked" d="M1073 681H1208V760H1073Z"/>
+    <path class="blocked" d="M1471 706H1868V706H1471Z"/>
+  </g>
+
+  <!-- room fills -->
+  <g id="room-fills">
+    <path class="service-fill" d="M366 159H428V238H366Z"/>
+    <path class="service-fill" d="M429 77H550V238H429Z"/>
+    <path class="service-fill" d="M553 77H703V238H553Z"/>
+    <path class="service-fill" d="M21 310H180V450H21Z"/>
+    <path class="room-fill" d="M752 76H1064V239H752Z"/>
+    <path class="room-fill" d="M1184 97H1258V239H1140Z"/>
+    <path class="room-fill" d="M1258 97H1398V239H1258Z"/>
+    <path class="service-fill" d="M1398 97H1628V239H1398Z"/>
+    <path class="meeting-fill" d="M775 594H1173V681H775Z"/>
+    <path class="service-fill" d="M1667 538H1853V633H1667Z"/>
+    <path class="service-fill" d="M1550 610H1667V681H1550Z"/>
+    <path class="room-fill" d="M1692 305H1764V389H1692Z"/>
+    <path class="room-fill" d="M1677 145H1765V239H1677Z"/>
+  </g>
+
+  <!-- architectural wall lines with real openings -->
+  <g id="architectural-walls">
+    <path class="outer-wall" d="M72 58H1778V289H1868V706H1471V760H1208V706H1187V681H1073V760H65V690H20V295H72Z"/>
+
+    <!-- top-left rooms: bottom wall gaps are doors -->
+    <path class="wall-line" d="M366 159V238M366 159H428M428 159V238M366 238H386M408 238H428"/>
+    <path class="wall-line" d="M429 77V238M429 77H550M550 77V238M429 238H472M500 238H550"/>
+    <path class="wall-line" d="M553 77V238M553 77H703M703 77V238M553 238H610M638 238H703"/>
+
+    <!-- left restroom: opening on right -->
+    <path class="wall-line" d="M21 310H180M21 310V450M21 450H180M180 310V360M180 392V450"/>
+
+    <!-- central service core -->
+    <path class="wall-line" d="M752 76H1064M752 76V239M1064 76V239M752 239H780M808 239H1008M1036 239H1064"/>
+    <path class="wall-thin" d="M814 76V239M876 111V239M941 111V239M1001 76V239"/>
+    <path class="wall-thin" d="M816 111H876M816 174H876M816 176H876M816 237H876M941 111H1000M941 174H1000M941 176H1000M941 237H1000"/>
+
+    <!-- top-right rooms with bottom openings -->
+    <path class="wall-line" d="M1184 97H1258M1140 239H1182M1210 239H1258M1184 97L1140 239M1258 97V239"/>
+    <path class="wall-line" d="M1258 97H1398M1398 97V239M1258 239H1310M1338 239H1398"/>
+    <path class="wall-line" d="M1398 97H1628M1628 97V239M1398 239H1478M1506 239H1628"/>
+
+    <!-- right cores -->
+    <path class="wall-line" d="M1692 305H1764M1764 305V389M1692 305V389M1692 389H1712M1740 389H1764"/>
+    <path class="wall-line" d="M1677 145H1765M1765 145V239M1677 145V239M1677 239H1706M1734 239H1765"/>
+
+    <!-- right service rooms -->
+    <path class="wall-line" d="M1667 538H1853M1853 538V633M1667 633H1853M1667 538V572M1667 602V633"/>
+    <path class="wall-line" d="M1550 610V681H1667V610"/>
+
+    <!-- team making rooms: walls are line-only and top gaps are actual entrances -->
+    <path class="partition" d="M775 681V594M775 594H796M824 594H858M858 594H878M906 594H936M936 594H970M998 594H1043M1043 594H1085M1113 594H1173M1173 594V681"/>
+    <path class="partition" d="M858 594V681M936 594V681M1043 594V681"/>
+  </g>
+
+  <!-- open circular rooms, intentionally leaving entrance gaps -->
+  <g id="open-program-zones">
+    <!-- media circle: entrance gap on the right -->
+    <path class="open-feature" d="M401 363 A102 99 0 1 0 401 513"/>
+    <!-- round meeting room: entrance gap on the left -->
+    <path class="open-feature" d="M465 319 A66 66 0 1 1 465 431"/>
+    <text class="zone-label" x="335" y="438" font-size="19">미디어써클룸</text>
+    <text class="zone-label" x="501" y="375" font-size="17">원형미팅룸</text>
+    <text class="zone-label" x="480" y="609" font-size="20">코워킹스페이스</text>
+  </g>
+
+  <!-- central stair -->
+  <g id="central-stair">
+    <path class="room-fill" d="M968 308L1109 305L1126 518H930Z"/>
+    <path class="wall-thin" d="M968 308L1109 305L1126 518H930Z"/>
+    <path class="furniture" d="M974 315v164M990 312v166M1006 310v168M1022 309v170M1038 308v171M1054 307v172M1070 307v172M1086 306v173M1102 306v173"/>
+    <path class="furniture" d="M930 478H1126M943 489H1124M956 500H1125M968 511H1126"/>
+    <path d="M988 366H1070V456H988Z" fill="#f8faf8" stroke="#8f9491" stroke-width="1.4" stroke-dasharray="5 5"/>
+    <text class="small-label" x="1029" y="414" font-size="17">2,3층 방향 계단</text>
+  </g>
+
+  <!-- startup cafe zone: clearer furniture/boundary linework -->
+  <g id="startup-cafe-zone">
+    <path class="furniture" d="M1260 321H1509M1260 321V363M1509 321V363"/>
+    <path class="furniture" d="M1260 363V389M1260 389H1394M1422 389H1509M1509 363V389"/>
+    <path class="furniture" d="M1260 470V539H1354M1480 539H1552V498"/>
+    <path class="furniture" d="M1260 389V427M1509 389V427"/>
+    <rect x="1248" y="347" width="24" height="24" class="column"/>
+    <rect x="1392" y="377" width="24" height="24" class="column"/>
+    <rect x="1248" y="527" width="24" height="24" class="column"/>
+    <text class="zone-label" x="1417" y="451" font-size="20">창업카페 ZONE</text>
+  </g>
+
+  <!-- labels -->
+  <g id="labels">
+    <text class="label" x="397" y="199" font-size="18">우편함</text>
+    <text class="label" x="489" y="166" font-size="20">정보도서관</text>
+    <use href="#icon-restroom" x="606" y="115" width="48" height="48" style="color:#666b68"/>
+    <use href="#icon-restroom" x="76" y="338" width="52" height="52" style="color:#666b68"/>
+    <use href="#icon-stairs" x="759" y="130" width="48" height="48" style="color:#747a76"/>
+    <use href="#icon-stairs" x="1008" y="130" width="48" height="48" style="color:#747a76"/>
+    <use href="#icon-elevator" x="823" y="118" width="46" height="46" style="color:#686e6a"/>
+    <use href="#icon-elevator" x="823" y="183" width="46" height="46" style="color:#686e6a"/>
+    <use href="#icon-elevator" x="948" y="118" width="46" height="46" style="color:#686e6a"/>
+    <use href="#icon-elevator" x="948" y="183" width="46" height="46" style="color:#686e6a"/>
+    <text class="label" x="1213" y="165" font-size="20">카페</text>
+    <text class="label" x="1328" y="165" font-size="20">편의점</text>
+    <text class="label" x="1513" y="165" font-size="18">허브 엑셀러레이팅 존</text>
+
+    <text class="small-label" font-size="16"><tspan x="816" y="632">팀</tspan><tspan x="816" dy="17">메이킹룸 4</tspan></text>
+    <text class="small-label" font-size="16"><tspan x="897" y="632">팀</tspan><tspan x="897" dy="17">메이킹룸 3</tspan></text>
+    <text class="small-label" x="989" y="639" font-size="16">팀메이킹룸 2</text>
+    <text class="small-label" x="1108" y="639" font-size="16">팀메이킹룸 1</text>
+    <text class="label" x="1760" y="585" font-size="18">고객지원실</text>
+    <text class="label" x="1609" y="646" font-size="17">대관사무실</text>
+    <use href="#icon-elevator" x="1704" y="319" width="48" height="48" style="color:#686e6a"/>
+    <use href="#icon-stairs" x="1697" y="166" width="48" height="48" style="color:#747a76"/>
+  </g>
+
+  <!-- columns -->
+  <g id="columns">
+    <rect class="column" x="692" y="347" width="18" height="20" rx="2"/><rect class="column" x="704" y="516" width="18" height="20" rx="2"/>
+    <rect class="column" x="812" y="517" width="18" height="20" rx="2"/><rect class="column" x="985" y="517" width="18" height="20" rx="2"/>
+    <rect class="column" x="1116" y="347" width="18" height="20" rx="2"/><rect class="column" x="1250" y="347" width="18" height="20" rx="2"/>
+    <rect class="column" x="1250" y="518" width="18" height="20" rx="2"/><rect class="column" x="1395" y="518" width="18" height="20" rx="2"/>
+  </g>
+
+  <!-- walkable navigation graph: edges are routed only through open floor/corridor space -->
+  <g id="navigation-graph" aria-label="보행 가능 복도 연결 그래프">
+    <g id="graph-edges" aria-label="노드 연결선">
+      <!-- upper main corridor -->
+      <path id="edge-C01-C02" class="graph-edge" data-from="C01" data-to="C02" d="M205 270H320"/>
+      <path id="edge-C02-C03" class="graph-edge" data-from="C02" data-to="C03" d="M320 270H486"/>
+      <path id="edge-C03-C04" class="graph-edge" data-from="C03" data-to="C04" d="M486 270H624"/>
+      <path id="edge-C04-C05" class="graph-edge" data-from="C04" data-to="C05" d="M624 270H794"/>
+      <path id="edge-C05-C06" class="graph-edge" data-from="C05" data-to="C06" d="M794 270H910"/>
+      <path id="edge-C06-C07" class="graph-edge" data-from="C06" data-to="C07" d="M910 270H1060"/>
+      <path id="edge-C07-C08" class="graph-edge" data-from="C07" data-to="C08" d="M1060 270H1196"/>
+      <path id="edge-C08-C09" class="graph-edge" data-from="C08" data-to="C09" d="M1196 270H1324"/>
+      <path id="edge-C09-C10" class="graph-edge" data-from="C09" data-to="C10" d="M1324 270H1492"/>
+      <path id="edge-C10-C11" class="graph-edge" data-from="C10" data-to="C11" d="M1492 270H1640"/>
+
+      <!-- top room/exit threshold stubs -->
+      <path id="edge-N22-C01" class="graph-edge" data-from="N22" data-to="C01" d="M163 268L205 270"/>
+      <path id="edge-N01-C03" class="graph-edge" data-from="N01" data-to="C03" d="M397 238V255H486V270"/>
+      <path id="edge-N02-C03" class="graph-edge" data-from="N02" data-to="C03" d="M486 238V270"/>
+      <path id="edge-N03-C04" class="graph-edge" data-from="N03" data-to="C04" d="M624 238V270"/>
+      <path id="edge-N07-C05" class="graph-edge" data-from="N07" data-to="C05" d="M794 239V270"/>
+      <path id="edge-N08-C07" class="graph-edge" data-from="N08" data-to="C07" d="M1022 239V255H1060V270"/>
+      <path id="edge-N09-C08" class="graph-edge" data-from="N09" data-to="C08" d="M1196 239V270"/>
+      <path id="edge-N10-C09" class="graph-edge" data-from="N10" data-to="C09" d="M1324 239V270"/>
+      <path id="edge-N11-C10" class="graph-edge" data-from="N11" data-to="C10" d="M1492 239V270"/>
+      <path id="edge-N12-C11" class="graph-edge" data-from="N12" data-to="C11" d="M1720 239V255H1640V270"/>
+      <path id="edge-N23-C11" class="graph-edge" data-from="N23" data-to="C11" d="M1686 268L1640 270"/>
+
+      <!-- west open-floor branch -->
+      <path id="edge-C04-C12" class="graph-edge" data-from="C04" data-to="C12" d="M624 270V380"/>
+      <path id="edge-C12-C13" class="graph-edge" data-from="C12" data-to="C13" d="M624 380V540"/>
+      <path id="edge-C13-C14" class="graph-edge" data-from="C13" data-to="C14" d="M624 540H760V555"/>
+      <path id="edge-C14-C15" class="graph-edge" data-from="C14" data-to="C15" d="M760 555H885"/>
+      <path id="edge-C15-C16" class="graph-edge" data-from="C15" data-to="C16" d="M885 555H1170"/>
+      <path id="edge-C16-C17" class="graph-edge" data-from="C16" data-to="C17" d="M1170 555H1225"/>
+      <path id="edge-C17-C18" class="graph-edge" data-from="C17" data-to="C18" d="M1225 555L1417 565"/>
+      <path id="edge-C18-C19" class="graph-edge" data-from="C18" data-to="C19" d="M1417 565H1580"/>
+
+      <!-- left restroom and circular-room access -->
+      <path id="edge-N04-C30" class="graph-edge" data-from="N04" data-to="C30" d="M180 376H215"/>
+      <path id="edge-C30-C31" class="graph-edge" data-from="C30" data-to="C31" d="M215 376V270"/>
+      <path id="edge-C31-C01" class="graph-edge" data-from="C31" data-to="C01" d="M215 270H205"/>
+      <path id="edge-N06-N05" class="graph-edge" data-from="N06" data-to="N05" d="M439 375L420 438"/>
+      <path id="edge-N05-C27" class="graph-edge" data-from="N05" data-to="C27" d="M420 438H455"/>
+      <path id="edge-C27-C28" class="graph-edge" data-from="C27" data-to="C28" d="M455 438V500"/>
+      <path id="edge-C28-C29" class="graph-edge" data-from="C28" data-to="C29" d="M455 500L520 540"/>
+      <path id="edge-C29-C13" class="graph-edge" data-from="C29" data-to="C13" d="M520 540H624"/>
+
+      <!-- lower team-room corridor -->
+      <path id="edge-C14-C23" class="graph-edge" data-from="C14" data-to="C23" d="M760 555H810"/>
+      <path id="edge-C23-C24" class="graph-edge" data-from="C23" data-to="C24" d="M810 555H892"/>
+      <path id="edge-C24-C25" class="graph-edge" data-from="C24" data-to="C25" d="M892 555H984"/>
+      <path id="edge-C25-C26" class="graph-edge" data-from="C25" data-to="C26" d="M984 555H1099"/>
+      <path id="edge-C26-C16" class="graph-edge" data-from="C26" data-to="C16" d="M1099 555H1170"/>
+      <path id="edge-N16-C23" class="graph-edge" data-from="N16" data-to="C23" d="M810 594V555"/>
+      <path id="edge-N17-C24" class="graph-edge" data-from="N17" data-to="C24" d="M892 594V555"/>
+      <path id="edge-N18-C25" class="graph-edge" data-from="N18" data-to="C25" d="M984 594V555"/>
+      <path id="edge-N19-C26" class="graph-edge" data-from="N19" data-to="C26" d="M1099 594V555"/>
+
+      <!-- central-right and startup-cafe branch -->
+      <path id="edge-C08-C32" class="graph-edge" data-from="C08" data-to="C32" d="M1196 270H1215V447"/>
+      <path id="edge-C32-C17" class="graph-edge" data-from="C32" data-to="C17" d="M1215 447V555H1225"/>
+      <path id="edge-N14-C32" class="graph-edge" data-from="N14" data-to="C32" d="M1260 447H1215"/>
+      <path id="edge-N15-C18" class="graph-edge" data-from="N15" data-to="C18" d="M1417 539V565"/>
+
+      <!-- right-side circulation and service rooms -->
+      <path id="edge-C11-C21" class="graph-edge" data-from="C11" data-to="C21" d="M1640 270V420"/>
+      <path id="edge-C21-C22" class="graph-edge" data-from="C21" data-to="C22" d="M1640 420V530"/>
+      <path id="edge-C22-C19" class="graph-edge" data-from="C22" data-to="C19" d="M1640 530L1580 565"/>
+      <path id="edge-N13-C21" class="graph-edge" data-from="N13" data-to="C21" d="M1726 389H1660V420H1640"/>
+      <path id="edge-C19-C20" class="graph-edge" data-from="C19" data-to="C20" d="M1580 565L1608 590"/>
+      <path id="edge-C20-N20" class="graph-edge" data-from="C20" data-to="N20" d="M1608 590L1667 587"/>
+      <path id="edge-C20-N21" class="graph-edge" data-from="C20" data-to="N21" d="M1608 590V610"/>
+
+      <!-- south exits -->
+      <path id="edge-C17-C33" class="graph-edge" data-from="C17" data-to="C33" d="M1225 555L1231 670"/>
+      <path id="edge-C33-C34" class="graph-edge" data-from="C33" data-to="C34" d="M1231 670H1309"/>
+      <path id="edge-C34-C35" class="graph-edge" data-from="C34" data-to="C35" d="M1309 670H1386"/>
+      <path id="edge-C35-C36" class="graph-edge" data-from="C35" data-to="C36" d="M1386 670H1463"/>
+      <path id="edge-C18-C35" class="graph-edge" data-from="C18" data-to="C35" d="M1417 565L1386 670"/>
+      <path id="edge-C33-N24" class="graph-edge" data-from="C33" data-to="N24" d="M1231 670V706"/>
+      <path id="edge-C34-N25" class="graph-edge" data-from="C34" data-to="N25" d="M1309 670V706"/>
+      <path id="edge-C35-N26" class="graph-edge" data-from="C35" data-to="N26" d="M1386 670V706"/>
+      <path id="edge-C36-N27" class="graph-edge" data-from="C36" data-to="N27" d="M1463 670V706"/>
+    </g>
+
+    <g id="corridor-nodes" aria-label="복도 및 중간 연결 노드">
+      <g id="node-C01" class="corridor-node" data-node-id="C01" data-type="corridor" transform="translate(205 270)"><title>C01 좌측 상부 복도</title><circle class="node-ring" r="8"/><circle r="4.5"/><text class="node-label" y="-12">C01</text></g>
+      <g id="node-C02" class="corridor-node" data-node-id="C02" data-type="corridor" transform="translate(320 270)"><title>C02 좌측 상부 복도</title><circle class="node-ring" r="8"/><circle r="4.5"/><text class="node-label" y="-12">C02</text></g>
+      <g id="node-C03" class="corridor-node" data-node-id="C03" data-type="junction" transform="translate(486 270)"><title>C03 정보도서관 앞 교차점</title><circle class="node-ring" r="8"/><circle r="4.5"/><text class="node-label" y="-12">C03</text></g>
+      <g id="node-C04" class="corridor-node" data-node-id="C04" data-type="junction" transform="translate(624 270)"><title>C04 상부 화장실 앞 교차점</title><circle class="node-ring" r="8"/><circle r="4.5"/><text class="node-label" y="-12">C04</text></g>
+      <g id="node-C05" class="corridor-node" data-node-id="C05" data-type="corridor" transform="translate(794 270)"><title>C05 중앙 코어 좌측 복도</title><circle class="node-ring" r="8"/><circle r="4.5"/><text class="node-label" y="-12">C05</text></g>
+      <g id="node-C06" class="corridor-node" data-node-id="C06" data-type="corridor" transform="translate(910 270)"><title>C06 중앙 상부 복도</title><circle class="node-ring" r="8"/><circle r="4.5"/><text class="node-label" y="-12">C06</text></g>
+      <g id="node-C07" class="corridor-node" data-node-id="C07" data-type="corridor" transform="translate(1060 270)"><title>C07 중앙 코어 우측 복도</title><circle class="node-ring" r="8"/><circle r="4.5"/><text class="node-label" y="-12">C07</text></g>
+      <g id="node-C08" class="corridor-node" data-node-id="C08" data-type="junction" transform="translate(1196 270)"><title>C08 카페 앞 교차점</title><circle class="node-ring" r="8"/><circle r="4.5"/><text class="node-label" y="-12">C08</text></g>
+      <g id="node-C09" class="corridor-node" data-node-id="C09" data-type="corridor" transform="translate(1324 270)"><title>C09 편의점 앞 복도</title><circle class="node-ring" r="8"/><circle r="4.5"/><text class="node-label" y="-12">C09</text></g>
+      <g id="node-C10" class="corridor-node" data-node-id="C10" data-type="corridor" transform="translate(1492 270)"><title>C10 허브 존 앞 복도</title><circle class="node-ring" r="8"/><circle r="4.5"/><text class="node-label" y="-12">C10</text></g>
+      <g id="node-C11" class="corridor-node" data-node-id="C11" data-type="junction" transform="translate(1640 270)"><title>C11 우측 상부 교차점</title><circle class="node-ring" r="8"/><circle r="4.5"/><text class="node-label" y="-12">C11</text></g>
+      <g id="node-C12" class="corridor-node" data-node-id="C12" data-type="corridor" transform="translate(624 380)"><title>C12 서측 중앙 통로</title><circle class="node-ring" r="8"/><circle r="4.5"/><text class="node-label" x="13">C12</text></g>
+      <g id="node-C13" class="corridor-node" data-node-id="C13" data-type="junction" transform="translate(624 540)"><title>C13 서측 하부 교차점</title><circle class="node-ring" r="8"/><circle r="4.5"/><text class="node-label" x="13">C13</text></g>
+      <g id="node-C14" class="corridor-node" data-node-id="C14" data-type="corridor" transform="translate(760 555)"><title>C14 하부 복도</title><circle class="node-ring" r="8"/><circle r="4.5"/><text class="node-label" y="-12">C14</text></g>
+      <g id="node-C15" class="corridor-node" data-node-id="C15" data-type="junction" transform="translate(885 555)"><title>C15 팀메이킹룸 앞 교차점</title><circle class="node-ring" r="8"/><circle r="4.5"/><text class="node-label" y="-12">C15</text></g>
+      <g id="node-C16" class="corridor-node" data-node-id="C16" data-type="corridor" transform="translate(1170 555)"><title>C16 중앙 하부 복도</title><circle class="node-ring" r="8"/><circle r="4.5"/><text class="node-label" y="-12">C16</text></g>
+      <g id="node-C17" class="corridor-node" data-node-id="C17" data-type="junction" transform="translate(1225 555)"><title>C17 남측 출구 분기점</title><circle class="node-ring" r="8"/><circle r="4.5"/><text class="node-label" y="-12">C17</text></g>
+      <g id="node-C18" class="corridor-node" data-node-id="C18" data-type="junction" transform="translate(1417 565)"><title>C18 창업카페 남측 교차점</title><circle class="node-ring" r="8"/><circle r="4.5"/><text class="node-label" y="-12">C18</text></g>
+      <g id="node-C19" class="corridor-node" data-node-id="C19" data-type="junction" transform="translate(1580 565)"><title>C19 우측 서비스 구역 교차점</title><circle class="node-ring" r="8"/><circle r="4.5"/><text class="node-label" y="-12">C19</text></g>
+      <g id="node-C20" class="corridor-node" data-node-id="C20" data-type="junction" transform="translate(1608 590)"><title>C20 고객지원실·대관사무실 분기점</title><circle class="node-ring" r="8"/><circle r="4.5"/><text class="node-label" x="-14">C20</text></g>
+      <g id="node-C21" class="corridor-node" data-node-id="C21" data-type="corridor" transform="translate(1640 420)"><title>C21 우측 세로 복도</title><circle class="node-ring" r="8"/><circle r="4.5"/><text class="node-label" x="-14">C21</text></g>
+      <g id="node-C22" class="corridor-node" data-node-id="C22" data-type="corridor" transform="translate(1640 530)"><title>C22 우측 세로 복도</title><circle class="node-ring" r="8"/><circle r="4.5"/><text class="node-label" x="-14">C22</text></g>
+      <g id="node-C23" class="corridor-node" data-node-id="C23" data-type="corridor" transform="translate(810 555)"><title>C23 팀메이킹룸 4 앞 복도</title><circle class="node-ring" r="8"/><circle r="4.5"/></g>
+      <g id="node-C24" class="corridor-node" data-node-id="C24" data-type="corridor" transform="translate(892 555)"><title>C24 팀메이킹룸 3 앞 복도</title><circle class="node-ring" r="8"/><circle r="4.5"/></g>
+      <g id="node-C25" class="corridor-node" data-node-id="C25" data-type="corridor" transform="translate(984 555)"><title>C25 팀메이킹룸 2 앞 복도</title><circle class="node-ring" r="8"/><circle r="4.5"/></g>
+      <g id="node-C26" class="corridor-node" data-node-id="C26" data-type="corridor" transform="translate(1099 555)"><title>C26 팀메이킹룸 1 앞 복도</title><circle class="node-ring" r="8"/><circle r="4.5"/></g>
+      <g id="node-C27" class="corridor-node" data-node-id="C27" data-type="corridor" transform="translate(455 438)"><title>C27 원형 공간 사이 통로</title><circle class="node-ring" r="8"/><circle r="4.5"/></g>
+      <g id="node-C28" class="corridor-node" data-node-id="C28" data-type="corridor" transform="translate(455 500)"><title>C28 원형 공간 하부 통로</title><circle class="node-ring" r="8"/><circle r="4.5"/></g>
+      <g id="node-C29" class="corridor-node" data-node-id="C29" data-type="corridor" transform="translate(520 540)"><title>C29 코워킹스페이스 연결점</title><circle class="node-ring" r="8"/><circle r="4.5"/></g>
+      <g id="node-C30" class="corridor-node" data-node-id="C30" data-type="corridor" transform="translate(215 376)"><title>C30 좌측 화장실 앞</title><circle class="node-ring" r="8"/><circle r="4.5"/></g>
+      <g id="node-C31" class="corridor-node" data-node-id="C31" data-type="corridor" transform="translate(215 270)"><title>C31 좌측 세로 연결점</title><circle class="node-ring" r="8"/><circle r="4.5"/></g>
+      <g id="node-C32" class="corridor-node" data-node-id="C32" data-type="junction" transform="translate(1215 447)"><title>C32 창업카페 서측 분기점</title><circle class="node-ring" r="8"/><circle r="4.5"/></g>
+      <g id="node-C33" class="corridor-node" data-node-id="C33" data-type="junction" transform="translate(1231 670)"><title>C33 남측 출구 1 연결점</title><circle class="node-ring" r="8"/><circle r="4.5"/></g>
+      <g id="node-C34" class="corridor-node" data-node-id="C34" data-type="corridor" transform="translate(1309 670)"><title>C34 남측 출구 2 연결점</title><circle class="node-ring" r="8"/><circle r="4.5"/></g>
+      <g id="node-C35" class="corridor-node" data-node-id="C35" data-type="corridor" transform="translate(1386 670)"><title>C35 남측 출구 3 연결점</title><circle class="node-ring" r="8"/><circle r="4.5"/></g>
+      <g id="node-C36" class="corridor-node" data-node-id="C36" data-type="corridor" transform="translate(1463 670)"><title>C36 남측 출구 4 연결점</title><circle class="node-ring" r="8"/><circle r="4.5"/></g>
+    </g>
+  </g>
+
+  <!-- access nodes: every node is a separate SVG object with id/data attributes -->
+  <g id="access-nodes" aria-label="공간 출입 노드">
+    <g id="node-N01" class="access-node" data-node-id="N01" data-space="우편함" data-type="entrance" transform="translate(397 238)"><title>N01 우편함 출입구</title><circle class="node-ring" r="11"/><circle r="6"/><text class="node-label" y="-16">N01</text></g>
+    <g id="node-N02" class="access-node" data-node-id="N02" data-space="정보도서관" data-type="entrance" transform="translate(486 238)"><title>N02 정보도서관 출입구</title><circle class="node-ring" r="11"/><circle r="6"/><text class="node-label" y="-16">N02</text></g>
+    <g id="node-N03" class="access-node" data-node-id="N03" data-space="상부 화장실" data-type="entrance" transform="translate(624 238)"><title>N03 화장실 출입구</title><circle class="node-ring" r="11"/><circle r="6"/><text class="node-label" y="-16">N03</text></g>
+    <g id="node-N04" class="access-node" data-node-id="N04" data-space="좌측 화장실" data-type="entrance" transform="translate(180 376)"><title>N04 좌측 화장실 출입구</title><circle class="node-ring" r="11"/><circle r="6"/><text class="node-label" x="22">N04</text></g>
+    <g id="node-N05" class="access-node" data-node-id="N05" data-space="미디어써클룸" data-type="entrance" transform="translate(420 438)"><title>N05 미디어써클룸 출입구</title><circle class="node-ring" r="11"/><circle r="6"/><text class="node-label" x="24">N05</text></g>
+    <g id="node-N06" class="access-node" data-node-id="N06" data-space="원형미팅룸" data-type="entrance" transform="translate(439 375)"><title>N06 원형미팅룸 출입구</title><circle class="node-ring" r="11"/><circle r="6"/><text class="node-label" x="-24">N06</text></g>
+    <g id="node-N07" class="access-node" data-node-id="N07" data-space="중앙 코어 좌측" data-type="core-entrance" transform="translate(794 239)"><title>N07 중앙 코어 좌측 출입구</title><circle class="node-ring" r="11"/><circle r="6"/><text class="node-label" y="-16">N07</text></g>
+    <g id="node-N08" class="access-node" data-node-id="N08" data-space="중앙 코어 우측" data-type="core-entrance" transform="translate(1022 239)"><title>N08 중앙 코어 우측 출입구</title><circle class="node-ring" r="11"/><circle r="6"/><text class="node-label" y="-16">N08</text></g>
+    <g id="node-N09" class="access-node" data-node-id="N09" data-space="카페" data-type="entrance" transform="translate(1196 239)"><title>N09 카페 출입구</title><circle class="node-ring" r="11"/><circle r="6"/><text class="node-label" y="-16">N09</text></g>
+    <g id="node-N10" class="access-node" data-node-id="N10" data-space="편의점" data-type="entrance" transform="translate(1324 239)"><title>N10 편의점 출입구</title><circle class="node-ring" r="11"/><circle r="6"/><text class="node-label" y="-16">N10</text></g>
+    <g id="node-N11" class="access-node" data-node-id="N11" data-space="허브 엑셀러레이팅 존" data-type="entrance" transform="translate(1492 239)"><title>N11 허브 엑셀러레이팅 존 출입구</title><circle class="node-ring" r="11"/><circle r="6"/><text class="node-label" y="-16">N11</text></g>
+    <g id="node-N12" class="access-node" data-node-id="N12" data-space="우측 계단" data-type="vertical-connection" transform="translate(1720 239)"><title>N12 우측 계단 출입구</title><circle class="node-ring" r="11"/><circle r="6"/><text class="node-label" y="-16">N12</text></g>
+    <g id="node-N13" class="access-node" data-node-id="N13" data-space="우측 엘리베이터" data-type="vertical-connection" transform="translate(1726 389)"><title>N13 우측 엘리베이터 출입구</title><circle class="node-ring" r="11"/><circle r="6"/><text class="node-label" y="18">N13</text></g>
+    <g id="node-N14" class="access-node" data-node-id="N14" data-space="창업카페 존" data-type="zone-entrance" transform="translate(1260 447)"><title>N14 창업카페 존 서측 진입점</title><circle class="node-ring" r="11"/><circle r="6"/><text class="node-label" x="-24">N14</text></g>
+    <g id="node-N15" class="access-node" data-node-id="N15" data-space="창업카페 존" data-type="zone-entrance" transform="translate(1417 539)"><title>N15 창업카페 존 남측 진입점</title><circle class="node-ring" r="11"/><circle r="6"/><text class="node-label" y="18">N15</text></g>
+    <g id="node-N16" class="access-node" data-node-id="N16" data-space="팀메이킹룸 4" data-type="entrance" transform="translate(810 594)"><title>N16 팀메이킹룸 4 출입구</title><circle class="node-ring" r="11"/><circle r="6"/><text class="node-label" y="-16">N16</text></g>
+    <g id="node-N17" class="access-node" data-node-id="N17" data-space="팀메이킹룸 3" data-type="entrance" transform="translate(892 594)"><title>N17 팀메이킹룸 3 출입구</title><circle class="node-ring" r="11"/><circle r="6"/><text class="node-label" y="-16">N17</text></g>
+    <g id="node-N18" class="access-node" data-node-id="N18" data-space="팀메이킹룸 2" data-type="entrance" transform="translate(984 594)"><title>N18 팀메이킹룸 2 출입구</title><circle class="node-ring" r="11"/><circle r="6"/><text class="node-label" y="-16">N18</text></g>
+    <g id="node-N19" class="access-node" data-node-id="N19" data-space="팀메이킹룸 1" data-type="entrance" transform="translate(1099 594)"><title>N19 팀메이킹룸 1 출입구</title><circle class="node-ring" r="11"/><circle r="6"/><text class="node-label" y="-16">N19</text></g>
+    <g id="node-N20" class="access-node" data-node-id="N20" data-space="고객지원실" data-type="entrance" transform="translate(1667 587)"><title>N20 고객지원실 출입구</title><circle class="node-ring" r="11"/><circle r="6"/><text class="node-label" x="-24">N20</text></g>
+    <g id="node-N21" class="access-node" data-node-id="N21" data-space="대관사무실" data-type="entrance" transform="translate(1608 610)"><title>N21 대관사무실 상부 개방 출입구</title><circle class="node-ring" r="11"/><circle r="6"/><text class="node-label" y="-16">N21</text></g>
+    <g id="node-N22" class="access-node" data-node-id="N22" data-space="좌측 비상구" data-type="exit" transform="translate(163 268)"><title>N22 좌측 비상구</title><circle class="node-ring" r="12"/><circle r="6.5"/><text class="node-label" y="-17">N22</text></g>
+    <g id="node-N23" class="access-node" data-node-id="N23" data-space="우측 비상구" data-type="exit" transform="translate(1686 268)"><title>N23 우측 비상구</title><circle class="node-ring" r="12"/><circle r="6.5"/><text class="node-label" y="-17">N23</text></g>
+    <g id="node-N24" class="access-node" data-node-id="N24" data-space="하단 비상구" data-type="exit" transform="translate(1231 706)"><title>N24 하단 비상구 1</title><circle class="node-ring" r="12"/><circle r="6.5"/><text class="node-label" y="-17">N24</text></g>
+    <g id="node-N25" class="access-node" data-node-id="N25" data-space="하단 비상구" data-type="exit" transform="translate(1309 706)"><title>N25 하단 비상구 2</title><circle class="node-ring" r="12"/><circle r="6.5"/><text class="node-label" y="-17">N25</text></g>
+    <g id="node-N26" class="access-node" data-node-id="N26" data-space="하단 비상구" data-type="exit" transform="translate(1386 706)"><title>N26 하단 비상구 3</title><circle class="node-ring" r="12"/><circle r="6.5"/><text class="node-label" y="-17">N26</text></g>
+    <g id="node-N27" class="access-node" data-node-id="N27" data-space="하단 비상구" data-type="exit" transform="translate(1463 706)"><title>N27 하단 비상구 4</title><circle class="node-ring" r="12"/><circle r="6.5"/><text class="node-label" y="-17">N27</text></g>
+  </g>
+
+  <!-- amenities -->
+  <g id="amenities">
+    <g transform="translate(139 244)"><rect class="amenity" width="48" height="48" rx="4"/><use href="#icon-exit" x="2" y="2" width="44" height="44" class="amenity-icon"/></g>
+    <g transform="translate(1662 244)"><rect class="amenity" width="48" height="48" rx="4"/><use href="#icon-exit" x="2" y="2" width="44" height="44" class="amenity-icon"/></g>
+    <g transform="translate(1207 705)"><rect class="amenity" width="48" height="48" rx="4"/><use href="#icon-exit" x="2" y="2" width="44" height="44" class="amenity-icon"/></g>
+    <g transform="translate(1285 705)"><rect class="amenity" width="48" height="48" rx="4"/><use href="#icon-exit" x="2" y="2" width="44" height="44" class="amenity-icon"/></g>
+    <g transform="translate(1362 705)"><rect class="amenity" width="48" height="48" rx="4"/><use href="#icon-exit" x="2" y="2" width="44" height="44" class="amenity-icon"/></g>
+    <g transform="translate(1439 705)"><rect class="amenity" width="48" height="48" rx="4"/><use href="#icon-exit" x="2" y="2" width="44" height="44" class="amenity-icon"/></g>
+    <g transform="translate(1542 634)"><use href="#icon-aed" width="42" height="42" class="amenity-icon"/></g>
+
+    <g transform="translate(897 78)"><rect class="fire-box" width="32" height="34" rx="4"/><use href="#icon-fire" width="32" height="32" class="fire-icon"/></g>
+    <g transform="translate(678 240)"><rect class="fire-box" width="32" height="34" rx="4"/><use href="#icon-fire" width="32" height="32" class="fire-icon"/></g>
+    <g transform="translate(1138 240)"><rect class="fire-box" width="32" height="34" rx="4"/><use href="#icon-fire" width="32" height="32" class="fire-icon"/></g>
+    <g transform="translate(424 516)"><rect class="fire-box" width="32" height="34" rx="4"/><use href="#icon-fire" width="32" height="32" class="fire-icon"/></g>
+    <g transform="translate(674 500)"><rect class="fire-box" width="32" height="34" rx="4"/><use href="#icon-fire" width="32" height="32" class="fire-icon"/></g>
+    <g transform="translate(1088 505)"><rect class="fire-box" width="32" height="34" rx="4"/><use href="#icon-fire" width="32" height="32" class="fire-icon"/></g>
+    <g transform="translate(1391 502)"><rect class="fire-box" width="32" height="34" rx="4"/><use href="#icon-fire" width="32" height="32" class="fire-icon"/></g>
+    <g transform="translate(1515 337)"><rect class="fire-box" width="32" height="34" rx="4"/><use href="#icon-fire" width="32" height="32" class="fire-icon"/></g>
+    <g transform="translate(1451 648)"><rect class="fire-box" width="32" height="34" rx="4"/><use href="#icon-fire" width="32" height="32" class="fire-icon"/></g>
+    <g transform="translate(1170 655)"><rect class="fire-box" width="32" height="34" rx="4"/><use href="#icon-fire" width="32" height="32" class="fire-icon"/></g>
+  </g>
+
+  <!-- node legend -->
+  <g id="node-legend" transform="translate(79 708)">
+    <rect x="0" y="0" width="320" height="38" rx="9" fill="#fff" stroke="#cfd5d1"/>
+    <circle cx="18" cy="19" r="6" fill="#0f7790" stroke="#fff" stroke-width="2"/>
+    <circle cx="18" cy="19" r="10" fill="none" stroke="#0f7790" stroke-opacity=".45"/>
+    <text class="small-label" x="92" y="19" font-size="14">공간 출입 노드</text>
+    <circle cx="185" cy="19" r="5" fill="#d78222" stroke="#fff" stroke-width="2"/>
+    <circle cx="185" cy="19" r="9" fill="none" stroke="#d78222" stroke-opacity=".4"/>
+    <text class="small-label" x="255" y="19" font-size="14">복도 연결 노드</text>
+  </g>
+</svg>

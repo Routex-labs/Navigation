@@ -1,10 +1,10 @@
 {
-  "id": "bldg-001",
+  "id": "test-center",
   "name": "데모 건물",
-  "floors": [1, 2],
+  "floors": ["1F", "2F"],
   "entrance": { "lat": 37.5665, "lng": 126.9779 },
   "floor_data": {
-    "1": {
+    "1F": {
       "type": "FeatureCollection",
       "features": [
         {
@@ -25,7 +25,7 @@
         }
       ]
     },
-    "2": {
+    "2F": {
       "type": "FeatureCollection",
       "features": [
         {

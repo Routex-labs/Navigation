@@ -5,16 +5,24 @@ import 'api_config.dart';
 import '../repositories/building_repository.dart';
 import '../repositories/destination_repository.dart';
 import '../repositories/directions_repository.dart';
-import '../repositories/mock_building_repository.dart';
+import '../repositories/http_building_repository.dart';
 import '../repositories/mock_destination_repository.dart';
 import '../repositories/mock_directions_repository.dart';
 import '../repositories/tmap_directions_repository.dart';
 
-/// 백엔드가 준비되면 이 한 줄만 [HttpBuildingRepository]로 바꾼다.
-final BuildingRepository buildingRepository = MockBuildingRepository();
+/// 실내 지도·목적지 검색·경로 안내가 전부 백엔드(api/) 다익스트라 그래프로
+/// 동작하도록 HttpBuildingRepository를 쓴다. 백엔드 없이 오프라인으로 확인할
+/// 땐 이 한 줄만 MockBuildingRepository()로 되돌리면 된다.
+///
+/// watchPosition/requestStartupPermissions와 같은 이유로 final이 아니다 —
+/// 플랫폼 채널·네트워크가 없는 위젯 테스트 환경에서는 이 변수를
+/// MockBuildingRepository()로 교체해 실제 HTTP 호출 없이 동작을 검증한다.
+BuildingRepository buildingRepository = HttpBuildingRepository();
 
 /// 백엔드 RAG가 준비되면 이 한 줄만 [HttpDestinationRepository]로 바꾼다.
-final DestinationRepository destinationRepository = MockDestinationRepository(
+/// buildingRepository를 감싸므로, 테스트에서 buildingRepository를 교체했다면
+/// 이 변수도 같은 인스턴스로 다시 만들어 줘야 한다.
+DestinationRepository destinationRepository = MockDestinationRepository(
   buildingRepository,
 );
 

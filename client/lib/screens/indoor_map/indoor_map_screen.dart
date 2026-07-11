@@ -1,16 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 
 import '../../core/api_config.dart';
 import '../../core/service_locator.dart';
 import '../../models/building.dart';
 import '../../models/floor_plan.dart';
 import '../../routing/app_routes.dart';
-import '../../widgets/location_marker.dart';
-import '../../widgets/uncertainty_circle.dart';
-
-const _fallbackCenter = LatLng(37.5665, 126.9780);
+import '../../widgets/floor_plan_view.dart';
 
 class IndoorMapScreen extends StatefulWidget {
   const IndoorMapScreen({super.key});
@@ -22,8 +17,9 @@ class IndoorMapScreen extends StatefulWidget {
 class _IndoorMapScreenState extends State<IndoorMapScreen> {
   bool _loading = true;
   Building? _building;
-  int? _selectedFloor;
+  String? _selectedFloor;
   FloorPlan? _floorPlan;
+  StorePolygon? _selectedStore;
 
   @override
   void initState() {
@@ -35,30 +31,31 @@ class _IndoorMapScreenState extends State<IndoorMapScreen> {
     final building = await buildingRepository.getBuilding(demoBuildingId);
     if (!mounted) return;
 
-    if (building == null || building.floors.isEmpty) {
-      setState(() {
-        _building = building;
-        _loading = false;
-      });
-      return;
-    }
-
-    setState(() => _building = building);
-    await _loadFloorPlan(building.floors.first);
-  }
-
-  Future<void> _loadFloorPlan(int floor) async {
-    setState(() => _loading = true);
-    final geojson = await buildingRepository.getFloorGeoJson(
-      demoBuildingId,
-      floor,
-    );
-    if (!mounted) return;
+    final selectedFloor =
+        building != null && building.floors.isNotEmpty ? building.floors.first : null;
     setState(() {
-      _selectedFloor = floor;
-      _floorPlan = geojson == null ? null : FloorPlan.fromGeoJson(geojson);
+      _building = building;
+      _selectedFloor = selectedFloor;
       _loading = false;
     });
+    if (selectedFloor != null) await _loadFloorPlan(selectedFloor);
+  }
+
+  /// 목적지 검색·경로 안내 화면(route_guide_screen.dart)과 동일하게
+  /// buildingRepository를 통해 층 지도를 받아온다 — 데이터 소스를 하나로
+  /// 맞춰야 실내 지도에서 본 것과 경로 안내 화면의 지도가 어긋나지 않는다.
+  Future<void> _loadFloorPlan(String floor) async {
+    final geojson = await buildingRepository.getFloorGeoJson(demoBuildingId, floor);
+    if (!mounted || geojson == null) return;
+    setState(() => _floorPlan = FloorPlan.fromJson(geojson));
+  }
+
+  void _selectFloor(String floor) {
+    setState(() {
+      _selectedFloor = floor;
+      _floorPlan = null;
+    });
+    _loadFloorPlan(floor);
   }
 
   @override
@@ -69,17 +66,17 @@ class _IndoorMapScreenState extends State<IndoorMapScreen> {
         title: Text(
           building == null
               ? '실내 지도 (PDR 모드)'
-              : '${building.name} · $_selectedFloor층',
+              : '${building.name} · $_selectedFloor',
         ),
         actions: [
           if (building != null && building.floors.length > 1)
-            PopupMenuButton<int>(
+            PopupMenuButton<String>(
               icon: const Icon(Icons.layers),
               tooltip: '층 전환',
-              onSelected: (floor) => _loadFloorPlan(floor),
+              onSelected: _selectFloor,
               itemBuilder: (context) => building.floors
                   .map(
-                    (floor) => PopupMenuItem(value: floor, child: Text('$floor층')),
+                    (floor) => PopupMenuItem(value: floor, child: Text(floor)),
                   )
                   .toList(),
             ),
@@ -89,11 +86,24 @@ class _IndoorMapScreenState extends State<IndoorMapScreen> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: FilledButton(
-            onPressed: () {
-              Navigator.of(context).pushNamed(AppRoutes.destination);
-            },
-            child: const Text('목적지 검색'),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_selectedStore != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    '${_selectedStore!.name} · ${_selectedStore!.category ?? '-'}',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              FilledButton(
+                onPressed: () {
+                  Navigator.of(context).pushNamed(AppRoutes.destination);
+                },
+                child: const Text('목적지 검색'),
+              ),
+            ],
           ),
         ),
       ),
@@ -104,59 +114,14 @@ class _IndoorMapScreenState extends State<IndoorMapScreen> {
     if (_building == null) {
       return const Center(child: Text('건물 정보를 찾을 수 없습니다'));
     }
-
     final floorPlan = _floorPlan;
     if (floorPlan == null) {
-      return const Center(child: Text('평면도를 찾을 수 없습니다'));
+      return const Center(child: CircularProgressIndicator());
     }
 
-    final center = floorPlan.corridors.isNotEmpty &&
-            floorPlan.corridors.first.isNotEmpty
-        ? floorPlan.corridors.first.first
-        : (floorPlan.pois.isNotEmpty ? floorPlan.pois.first.point : _fallbackCenter);
-
-    return FlutterMap(
-      options: MapOptions(initialCenter: center, initialZoom: 19),
-      children: [
-        PolylineLayer(
-          polylines: [
-            for (final corridor in floorPlan.corridors)
-              Polyline(points: corridor, color: Colors.grey, strokeWidth: 6),
-          ],
-        ),
-        MarkerLayer(
-          markers: [
-            for (final poi in floorPlan.pois)
-              Marker(
-                point: poi.point,
-                width: 80,
-                height: 40,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.place, size: 16, color: Colors.black54),
-                    Text(
-                      poi.name,
-                      style: const TextStyle(fontSize: 10),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-            // 더미 현재 위치 마커. 실제 PDR 위치 갱신은 M3~M4에서 연결한다.
-            Marker(
-              point: center,
-              child: const Stack(
-                alignment: Alignment.center,
-                children: [
-                  UncertaintyCircle(diameter: 40, color: Color(0xFF6C3FE0)),
-                  LocationMarker(mode: LocationMode.indoor),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ],
+    return FloorPlanView(
+      floorPlan: floorPlan,
+      onStoreSelected: (store) => setState(() => _selectedStore = store),
     );
   }
 }

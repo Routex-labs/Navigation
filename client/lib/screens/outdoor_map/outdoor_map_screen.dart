@@ -19,6 +19,12 @@ import '../../widgets/status_badge.dart';
 const _fallbackLocation = LatLng(37.5665, 126.9780);
 const _lowAccuracyThresholdMeters = 30.0;
 
+/// 배경지도 타일 공급자. 플랫폼 채널·네트워크가 없는 위젯 테스트 환경에서는
+/// 이 변수를 실제 OSM/VWorld에 요청하지 않는 가짜 TileProvider로 교체한다
+/// (안 그러면 진짜 HTTP 요청이 백그라운드에 남아 이후 테스트의 pumpAndSettle과
+/// 뒤섞여 타임아웃을 일으킨다).
+TileProvider Function() outdoorTileProvider = NetworkTileProvider.new;
+
 // 건물 진입 판정: "입구 근처" + "신호가 방금 나빠짐"을 같이 봐서
 // 건물 앞을 그냥 지나가는 경우(신호는 안 나빠짐)와 구분한다.
 // 세 값 다 실측 검증 전이라 추정치이고, 실기기 테스트하며 조정이 필요하다.
@@ -181,6 +187,7 @@ class _OutdoorMapScreenState extends State<OutdoorMapScreen> {
                   ? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
                   : 'https://api.vworld.kr/req/wmts/1.0.0/$vworldApiKey/Base/{z}/{y}/{x}.png',
               userAgentPackageName: 'com.navigation.navigation_client',
+              tileProvider: outdoorTileProvider(),
             ),
             CircleLayer(
               circles: [

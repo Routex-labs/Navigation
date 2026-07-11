@@ -5,12 +5,13 @@ import 'package:latlong2/latlong.dart';
 import '../../core/api_config.dart';
 import '../../core/service_locator.dart';
 import '../../models/floor_plan.dart';
+import '../../models/indoor_route.dart';
 import '../../models/poi_search_result.dart';
 import '../../routing/app_routes.dart';
 import '../../widgets/eta_card.dart';
+import '../../widgets/floor_plan_view.dart';
 import '../../widgets/location_marker.dart';
 import '../../widgets/rag_chat_panel.dart';
-import '../../widgets/route_polyline.dart';
 
 const _fallbackCenter = LatLng(37.5665, 126.9780);
 const _walkingSpeedMetersPerSecond = 1.2;
@@ -27,6 +28,7 @@ class _RouteGuideScreenState extends State<RouteGuideScreen> {
   bool _loading = true;
   PoiSearchResult? _destination;
   FloorPlan? _floorPlan;
+  IndoorRoute? _route;
 
   @override
   void didChangeDependencies() {
@@ -49,10 +51,61 @@ class _RouteGuideScreenState extends State<RouteGuideScreen> {
       destination.floor,
     );
     if (!mounted) return;
+    final floorPlan = geojson == null ? null : FloorPlan.fromJson(geojson);
     setState(() {
-      _floorPlan = geojson == null ? null : FloorPlan.fromGeoJson(geojson);
+      _floorPlan = floorPlan;
       _loading = false;
     });
+    if (floorPlan != null) {
+      await _loadRoute(floorPlan, destination);
+    }
+  }
+
+  /// 실제 최단 경로를 조회한다. 시작/도착 노드 ID를 못 구하면(PDR 미연동,
+  /// 목적지에 entranceNodeId 없음 등) route는 null로 남고 화면은 직선 fallback을 쓴다.
+  Future<void> _loadRoute(FloorPlan floorPlan, PoiSearchResult destination) async {
+    final endNodeId = destination.nodeId;
+    final startNodeId = _pickStartNodeId(floorPlan, excludingNodeId: endNodeId);
+    if (endNodeId == null || startNodeId == null) return;
+
+    final route = await buildingRepository.getShortestRoute(
+      demoBuildingId,
+      destination.floor,
+      startNodeId,
+      endNodeId,
+    );
+    if (!mounted) return;
+    setState(() => _route = route);
+  }
+
+  /// PDR이 아직 없어 "현재 위치"를 알 수 없다. 임시로 층 평면도 중심에서
+  /// 가장 가까운 매장 입구 노드를 출발점으로 쓴다. 실제 PDR 위치 연동은
+  /// M3~M4에서 이 자리를 대체한다.
+  String? _pickStartNodeId(FloorPlan floorPlan, {String? excludingNodeId}) {
+    final origin = _footprintCenter(floorPlan) ?? _currentLocation();
+    StorePolygon? nearest;
+    double? nearestDistance;
+    for (final store in floorPlan.stores) {
+      final nodeId = store.entranceNodeId;
+      if (nodeId == null || nodeId == excludingNodeId) continue;
+      final distance = localDistanceMeters(origin, store.centroid);
+      if (nearestDistance == null || distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = store;
+      }
+    }
+    return nearest?.entranceNodeId;
+  }
+
+  LatLng? _footprintCenter(FloorPlan floorPlan) {
+    if (floorPlan.footprint.isEmpty) return null;
+    final avgLat =
+        floorPlan.footprint.map((p) => p.latitude).reduce((a, b) => a + b) /
+            floorPlan.footprint.length;
+    final avgLng =
+        floorPlan.footprint.map((p) => p.longitude).reduce((a, b) => a + b) /
+            floorPlan.footprint.length;
+    return LatLng(avgLat, avgLng);
   }
 
   void _openBuildingInfo() {
@@ -115,12 +168,10 @@ class _RouteGuideScreenState extends State<RouteGuideScreen> {
   }
 
   Widget _buildEtaCard(PoiSearchResult destination) {
-    final current = _currentLocation();
-    final distance = const Distance().as(
-      LengthUnit.Meter,
-      current,
-      destination.point,
-    );
+    final route = _route;
+    final distance = route != null
+        ? route.distanceMeters
+        : localDistanceMeters(_currentLocation(), destination.point);
     final minutes = (distance / _walkingSpeedMetersPerSecond / 60)
         .ceil()
         .clamp(1, 999);
@@ -133,29 +184,24 @@ class _RouteGuideScreenState extends State<RouteGuideScreen> {
       return const Center(child: Text('평면도를 찾을 수 없습니다'));
     }
 
-    final current = _currentLocation();
+    final route = _route;
+    // 실제 경로가 있으면 그 시작점을, 없으면(fallback) 임시 현재 위치를 마커에 쓴다 —
+    // 그려지는 선의 출발점과 마커 위치가 항상 일치하도록.
+    final current = (route != null && route.points.isNotEmpty)
+        ? route.points.first
+        : _currentLocation();
 
-    return FlutterMap(
-      options: MapOptions(initialCenter: destination.point, initialZoom: 19),
-      children: [
-        PolylineLayer(
-          polylines: [
-            for (final corridor in floorPlan.corridors)
-              Polyline(points: corridor, color: Colors.grey, strokeWidth: 6),
-            buildRoutePolyline([current, destination.point]),
-          ],
+    return FloorPlanView(
+      floorPlan: floorPlan,
+      routePoints: route?.points ?? [current, destination.point],
+      extraMarkers: [
+        Marker(
+          point: current,
+          child: const LocationMarker(mode: LocationMode.indoor),
         ),
-        MarkerLayer(
-          markers: [
-            Marker(
-              point: current,
-              child: const LocationMarker(mode: LocationMode.indoor),
-            ),
-            Marker(
-              point: destination.point,
-              child: const Icon(Icons.place, color: Colors.red),
-            ),
-          ],
+        Marker(
+          point: destination.point,
+          child: const Icon(Icons.place, color: Colors.red),
         ),
       ],
     );

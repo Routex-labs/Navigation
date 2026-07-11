@@ -1,0 +1,2657 @@
+{
+  "meta": {
+    "dataset": "test-center-1f",
+    "generated_by": "scripts/convert_svg_floor_map.py",
+    "source_attribution": [
+      "1f-v5.svg"
+    ],
+    "coordinate_system": {
+      "local_m": "SVG viewBox 좌상단 원점, x=오른쪽, y=아래",
+      "scale_m_per_source_unit": 0.05,
+      "scale_basis": "temporary_for_flutter_demo"
+    }
+  },
+  "building": {
+    "id": "test-center",
+    "name": "시설 실내 평면도 테스트 센터",
+    "floor": {
+      "id": "test-center-1f",
+      "name": "1F",
+      "level": 1
+    },
+    "footprint_local_m": [
+      {
+        "x": 3.6,
+        "y": 2.9
+      },
+      {
+        "x": 88.9,
+        "y": 2.9
+      },
+      {
+        "x": 88.9,
+        "y": 14.45
+      },
+      {
+        "x": 93.4,
+        "y": 14.45
+      },
+      {
+        "x": 93.4,
+        "y": 35.3
+      },
+      {
+        "x": 73.55,
+        "y": 35.3
+      },
+      {
+        "x": 73.55,
+        "y": 38.0
+      },
+      {
+        "x": 60.4,
+        "y": 38.0
+      },
+      {
+        "x": 60.4,
+        "y": 35.3
+      },
+      {
+        "x": 59.35,
+        "y": 35.3
+      },
+      {
+        "x": 59.35,
+        "y": 34.05
+      },
+      {
+        "x": 53.65,
+        "y": 34.05
+      },
+      {
+        "x": 53.65,
+        "y": 38.0
+      },
+      {
+        "x": 3.25,
+        "y": 38.0
+      },
+      {
+        "x": 3.25,
+        "y": 34.5
+      },
+      {
+        "x": 1.0,
+        "y": 34.5
+      },
+      {
+        "x": 1.0,
+        "y": 14.75
+      },
+      {
+        "x": 3.6,
+        "y": 14.75
+      }
+    ],
+    "area_m2": 3073.635,
+    "perimeter_m": 262.9
+  },
+  "nodes": [
+    {
+      "id": "C01",
+      "type": "corridor",
+      "name": "C01 좌측 상부 복도",
+      "position": {
+        "source": {
+          "x": 205.0,
+          "y": 270.0
+        },
+        "local_m": {
+          "x": 10.25,
+          "y": 13.5
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C02",
+      "type": "corridor",
+      "name": "C02 좌측 상부 복도",
+      "position": {
+        "source": {
+          "x": 320.0,
+          "y": 270.0
+        },
+        "local_m": {
+          "x": 16.0,
+          "y": 13.5
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C03",
+      "type": "junction",
+      "name": "C03 정보도서관 앞 교차점",
+      "position": {
+        "source": {
+          "x": 486.0,
+          "y": 270.0
+        },
+        "local_m": {
+          "x": 24.3,
+          "y": 13.5
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C04",
+      "type": "junction",
+      "name": "C04 상부 화장실 앞 교차점",
+      "position": {
+        "source": {
+          "x": 624.0,
+          "y": 270.0
+        },
+        "local_m": {
+          "x": 31.2,
+          "y": 13.5
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C05",
+      "type": "corridor",
+      "name": "C05 중앙 코어 좌측 복도",
+      "position": {
+        "source": {
+          "x": 794.0,
+          "y": 270.0
+        },
+        "local_m": {
+          "x": 39.7,
+          "y": 13.5
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C06",
+      "type": "corridor",
+      "name": "C06 중앙 상부 복도",
+      "position": {
+        "source": {
+          "x": 910.0,
+          "y": 270.0
+        },
+        "local_m": {
+          "x": 45.5,
+          "y": 13.5
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C07",
+      "type": "corridor",
+      "name": "C07 중앙 코어 우측 복도",
+      "position": {
+        "source": {
+          "x": 1060.0,
+          "y": 270.0
+        },
+        "local_m": {
+          "x": 53.0,
+          "y": 13.5
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C08",
+      "type": "junction",
+      "name": "C08 카페 앞 교차점",
+      "position": {
+        "source": {
+          "x": 1196.0,
+          "y": 270.0
+        },
+        "local_m": {
+          "x": 59.8,
+          "y": 13.5
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C09",
+      "type": "corridor",
+      "name": "C09 편의점 앞 복도",
+      "position": {
+        "source": {
+          "x": 1324.0,
+          "y": 270.0
+        },
+        "local_m": {
+          "x": 66.2,
+          "y": 13.5
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C10",
+      "type": "corridor",
+      "name": "C10 허브 존 앞 복도",
+      "position": {
+        "source": {
+          "x": 1492.0,
+          "y": 270.0
+        },
+        "local_m": {
+          "x": 74.6,
+          "y": 13.5
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C11",
+      "type": "junction",
+      "name": "C11 우측 상부 교차점",
+      "position": {
+        "source": {
+          "x": 1640.0,
+          "y": 270.0
+        },
+        "local_m": {
+          "x": 82.0,
+          "y": 13.5
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C12",
+      "type": "corridor",
+      "name": "C12 서측 중앙 통로",
+      "position": {
+        "source": {
+          "x": 624.0,
+          "y": 380.0
+        },
+        "local_m": {
+          "x": 31.2,
+          "y": 19.0
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C13",
+      "type": "junction",
+      "name": "C13 서측 하부 교차점",
+      "position": {
+        "source": {
+          "x": 624.0,
+          "y": 540.0
+        },
+        "local_m": {
+          "x": 31.2,
+          "y": 27.0
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C14",
+      "type": "corridor",
+      "name": "C14 하부 복도",
+      "position": {
+        "source": {
+          "x": 760.0,
+          "y": 555.0
+        },
+        "local_m": {
+          "x": 38.0,
+          "y": 27.75
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C15",
+      "type": "junction",
+      "name": "C15 팀메이킹룸 앞 교차점",
+      "position": {
+        "source": {
+          "x": 885.0,
+          "y": 555.0
+        },
+        "local_m": {
+          "x": 44.25,
+          "y": 27.75
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C16",
+      "type": "corridor",
+      "name": "C16 중앙 하부 복도",
+      "position": {
+        "source": {
+          "x": 1170.0,
+          "y": 555.0
+        },
+        "local_m": {
+          "x": 58.5,
+          "y": 27.75
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C17",
+      "type": "junction",
+      "name": "C17 남측 출구 분기점",
+      "position": {
+        "source": {
+          "x": 1225.0,
+          "y": 555.0
+        },
+        "local_m": {
+          "x": 61.25,
+          "y": 27.75
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C18",
+      "type": "junction",
+      "name": "C18 창업카페 남측 교차점",
+      "position": {
+        "source": {
+          "x": 1417.0,
+          "y": 565.0
+        },
+        "local_m": {
+          "x": 70.85,
+          "y": 28.25
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C19",
+      "type": "junction",
+      "name": "C19 우측 서비스 구역 교차점",
+      "position": {
+        "source": {
+          "x": 1580.0,
+          "y": 565.0
+        },
+        "local_m": {
+          "x": 79.0,
+          "y": 28.25
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C20",
+      "type": "junction",
+      "name": "C20 고객지원실·대관사무실 분기점",
+      "position": {
+        "source": {
+          "x": 1608.0,
+          "y": 590.0
+        },
+        "local_m": {
+          "x": 80.4,
+          "y": 29.5
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C21",
+      "type": "corridor",
+      "name": "C21 우측 세로 복도",
+      "position": {
+        "source": {
+          "x": 1640.0,
+          "y": 420.0
+        },
+        "local_m": {
+          "x": 82.0,
+          "y": 21.0
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C22",
+      "type": "corridor",
+      "name": "C22 우측 세로 복도",
+      "position": {
+        "source": {
+          "x": 1640.0,
+          "y": 530.0
+        },
+        "local_m": {
+          "x": 82.0,
+          "y": 26.5
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C23",
+      "type": "corridor",
+      "name": "C23 팀메이킹룸 4 앞 복도",
+      "position": {
+        "source": {
+          "x": 810.0,
+          "y": 555.0
+        },
+        "local_m": {
+          "x": 40.5,
+          "y": 27.75
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C24",
+      "type": "corridor",
+      "name": "C24 팀메이킹룸 3 앞 복도",
+      "position": {
+        "source": {
+          "x": 892.0,
+          "y": 555.0
+        },
+        "local_m": {
+          "x": 44.6,
+          "y": 27.75
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C25",
+      "type": "corridor",
+      "name": "C25 팀메이킹룸 2 앞 복도",
+      "position": {
+        "source": {
+          "x": 984.0,
+          "y": 555.0
+        },
+        "local_m": {
+          "x": 49.2,
+          "y": 27.75
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C26",
+      "type": "corridor",
+      "name": "C26 팀메이킹룸 1 앞 복도",
+      "position": {
+        "source": {
+          "x": 1099.0,
+          "y": 555.0
+        },
+        "local_m": {
+          "x": 54.95,
+          "y": 27.75
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C27",
+      "type": "corridor",
+      "name": "C27 원형 공간 사이 통로",
+      "position": {
+        "source": {
+          "x": 455.0,
+          "y": 438.0
+        },
+        "local_m": {
+          "x": 22.75,
+          "y": 21.9
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C28",
+      "type": "corridor",
+      "name": "C28 원형 공간 하부 통로",
+      "position": {
+        "source": {
+          "x": 455.0,
+          "y": 500.0
+        },
+        "local_m": {
+          "x": 22.75,
+          "y": 25.0
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C29",
+      "type": "corridor",
+      "name": "C29 코워킹스페이스 연결점",
+      "position": {
+        "source": {
+          "x": 520.0,
+          "y": 540.0
+        },
+        "local_m": {
+          "x": 26.0,
+          "y": 27.0
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C30",
+      "type": "corridor",
+      "name": "C30 좌측 화장실 앞",
+      "position": {
+        "source": {
+          "x": 215.0,
+          "y": 376.0
+        },
+        "local_m": {
+          "x": 10.75,
+          "y": 18.8
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C31",
+      "type": "corridor",
+      "name": "C31 좌측 세로 연결점",
+      "position": {
+        "source": {
+          "x": 215.0,
+          "y": 270.0
+        },
+        "local_m": {
+          "x": 10.75,
+          "y": 13.5
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C32",
+      "type": "junction",
+      "name": "C32 창업카페 서측 분기점",
+      "position": {
+        "source": {
+          "x": 1215.0,
+          "y": 447.0
+        },
+        "local_m": {
+          "x": 60.75,
+          "y": 22.35
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C33",
+      "type": "junction",
+      "name": "C33 남측 출구 1 연결점",
+      "position": {
+        "source": {
+          "x": 1231.0,
+          "y": 670.0
+        },
+        "local_m": {
+          "x": 61.55,
+          "y": 33.5
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C34",
+      "type": "corridor",
+      "name": "C34 남측 출구 2 연결점",
+      "position": {
+        "source": {
+          "x": 1309.0,
+          "y": 670.0
+        },
+        "local_m": {
+          "x": 65.45,
+          "y": 33.5
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C35",
+      "type": "corridor",
+      "name": "C35 남측 출구 3 연결점",
+      "position": {
+        "source": {
+          "x": 1386.0,
+          "y": 670.0
+        },
+        "local_m": {
+          "x": 69.3,
+          "y": 33.5
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "C36",
+      "type": "corridor",
+      "name": "C36 남측 출구 4 연결점",
+      "position": {
+        "source": {
+          "x": 1463.0,
+          "y": 670.0
+        },
+        "local_m": {
+          "x": 73.15,
+          "y": 33.5
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N01",
+      "type": "entrance",
+      "name": "우편함",
+      "position": {
+        "source": {
+          "x": 397.0,
+          "y": 238.0
+        },
+        "local_m": {
+          "x": 19.85,
+          "y": 11.9
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N02",
+      "type": "entrance",
+      "name": "정보도서관",
+      "position": {
+        "source": {
+          "x": 486.0,
+          "y": 238.0
+        },
+        "local_m": {
+          "x": 24.3,
+          "y": 11.9
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N03",
+      "type": "entrance",
+      "name": "상부 화장실",
+      "position": {
+        "source": {
+          "x": 624.0,
+          "y": 238.0
+        },
+        "local_m": {
+          "x": 31.2,
+          "y": 11.9
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N04",
+      "type": "entrance",
+      "name": "좌측 화장실",
+      "position": {
+        "source": {
+          "x": 180.0,
+          "y": 376.0
+        },
+        "local_m": {
+          "x": 9.0,
+          "y": 18.8
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N05",
+      "type": "entrance",
+      "name": "미디어써클룸",
+      "position": {
+        "source": {
+          "x": 420.0,
+          "y": 438.0
+        },
+        "local_m": {
+          "x": 21.0,
+          "y": 21.9
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N06",
+      "type": "entrance",
+      "name": "원형미팅룸",
+      "position": {
+        "source": {
+          "x": 439.0,
+          "y": 375.0
+        },
+        "local_m": {
+          "x": 21.95,
+          "y": 18.75
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N07",
+      "type": "core-entrance",
+      "name": "중앙 코어 좌측",
+      "position": {
+        "source": {
+          "x": 794.0,
+          "y": 239.0
+        },
+        "local_m": {
+          "x": 39.7,
+          "y": 11.95
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N08",
+      "type": "core-entrance",
+      "name": "중앙 코어 우측",
+      "position": {
+        "source": {
+          "x": 1022.0,
+          "y": 239.0
+        },
+        "local_m": {
+          "x": 51.1,
+          "y": 11.95
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N09",
+      "type": "entrance",
+      "name": "카페",
+      "position": {
+        "source": {
+          "x": 1196.0,
+          "y": 239.0
+        },
+        "local_m": {
+          "x": 59.8,
+          "y": 11.95
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N10",
+      "type": "entrance",
+      "name": "편의점",
+      "position": {
+        "source": {
+          "x": 1324.0,
+          "y": 239.0
+        },
+        "local_m": {
+          "x": 66.2,
+          "y": 11.95
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N11",
+      "type": "entrance",
+      "name": "허브 엑셀러레이팅 존",
+      "position": {
+        "source": {
+          "x": 1492.0,
+          "y": 239.0
+        },
+        "local_m": {
+          "x": 74.6,
+          "y": 11.95
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N12",
+      "type": "vertical-connection",
+      "name": "우측 계단",
+      "position": {
+        "source": {
+          "x": 1720.0,
+          "y": 239.0
+        },
+        "local_m": {
+          "x": 86.0,
+          "y": 11.95
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N13",
+      "type": "vertical-connection",
+      "name": "우측 엘리베이터",
+      "position": {
+        "source": {
+          "x": 1726.0,
+          "y": 389.0
+        },
+        "local_m": {
+          "x": 86.3,
+          "y": 19.45
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N14",
+      "type": "zone-entrance",
+      "name": "창업카페 존",
+      "position": {
+        "source": {
+          "x": 1260.0,
+          "y": 447.0
+        },
+        "local_m": {
+          "x": 63.0,
+          "y": 22.35
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N15",
+      "type": "zone-entrance",
+      "name": "창업카페 존",
+      "position": {
+        "source": {
+          "x": 1417.0,
+          "y": 539.0
+        },
+        "local_m": {
+          "x": 70.85,
+          "y": 26.95
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N16",
+      "type": "entrance",
+      "name": "팀메이킹룸 4",
+      "position": {
+        "source": {
+          "x": 810.0,
+          "y": 594.0
+        },
+        "local_m": {
+          "x": 40.5,
+          "y": 29.7
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N17",
+      "type": "entrance",
+      "name": "팀메이킹룸 3",
+      "position": {
+        "source": {
+          "x": 892.0,
+          "y": 594.0
+        },
+        "local_m": {
+          "x": 44.6,
+          "y": 29.7
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N18",
+      "type": "entrance",
+      "name": "팀메이킹룸 2",
+      "position": {
+        "source": {
+          "x": 984.0,
+          "y": 594.0
+        },
+        "local_m": {
+          "x": 49.2,
+          "y": 29.7
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N19",
+      "type": "entrance",
+      "name": "팀메이킹룸 1",
+      "position": {
+        "source": {
+          "x": 1099.0,
+          "y": 594.0
+        },
+        "local_m": {
+          "x": 54.95,
+          "y": 29.7
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N20",
+      "type": "entrance",
+      "name": "고객지원실",
+      "position": {
+        "source": {
+          "x": 1667.0,
+          "y": 587.0
+        },
+        "local_m": {
+          "x": 83.35,
+          "y": 29.35
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N21",
+      "type": "entrance",
+      "name": "대관사무실",
+      "position": {
+        "source": {
+          "x": 1608.0,
+          "y": 610.0
+        },
+        "local_m": {
+          "x": 80.4,
+          "y": 30.5
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N22",
+      "type": "exit",
+      "name": "좌측 비상구",
+      "position": {
+        "source": {
+          "x": 163.0,
+          "y": 268.0
+        },
+        "local_m": {
+          "x": 8.15,
+          "y": 13.4
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N23",
+      "type": "exit",
+      "name": "우측 비상구",
+      "position": {
+        "source": {
+          "x": 1686.0,
+          "y": 268.0
+        },
+        "local_m": {
+          "x": 84.3,
+          "y": 13.4
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N24",
+      "type": "exit",
+      "name": "하단 비상구",
+      "position": {
+        "source": {
+          "x": 1231.0,
+          "y": 706.0
+        },
+        "local_m": {
+          "x": 61.55,
+          "y": 35.3
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N25",
+      "type": "exit",
+      "name": "하단 비상구",
+      "position": {
+        "source": {
+          "x": 1309.0,
+          "y": 706.0
+        },
+        "local_m": {
+          "x": 65.45,
+          "y": 35.3
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N26",
+      "type": "exit",
+      "name": "하단 비상구",
+      "position": {
+        "source": {
+          "x": 1386.0,
+          "y": 706.0
+        },
+        "local_m": {
+          "x": 69.3,
+          "y": 35.3
+        },
+        "wgs84": null
+      }
+    },
+    {
+      "id": "N27",
+      "type": "exit",
+      "name": "하단 비상구",
+      "position": {
+        "source": {
+          "x": 1463.0,
+          "y": 706.0
+        },
+        "local_m": {
+          "x": 73.15,
+          "y": 35.3
+        },
+        "wgs84": null
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-C01-C02",
+      "from": "C01",
+      "to": "C02",
+      "length_m": 5.75,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 10.25,
+          "y": 13.5
+        },
+        {
+          "x": 16.0,
+          "y": 13.5
+        }
+      ]
+    },
+    {
+      "id": "edge-C02-C03",
+      "from": "C02",
+      "to": "C03",
+      "length_m": 8.3,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 16.0,
+          "y": 13.5
+        },
+        {
+          "x": 24.3,
+          "y": 13.5
+        }
+      ]
+    },
+    {
+      "id": "edge-C03-C04",
+      "from": "C03",
+      "to": "C04",
+      "length_m": 6.9,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 24.3,
+          "y": 13.5
+        },
+        {
+          "x": 31.2,
+          "y": 13.5
+        }
+      ]
+    },
+    {
+      "id": "edge-C04-C05",
+      "from": "C04",
+      "to": "C05",
+      "length_m": 8.5,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 31.2,
+          "y": 13.5
+        },
+        {
+          "x": 39.7,
+          "y": 13.5
+        }
+      ]
+    },
+    {
+      "id": "edge-C05-C06",
+      "from": "C05",
+      "to": "C06",
+      "length_m": 5.8,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 39.7,
+          "y": 13.5
+        },
+        {
+          "x": 45.5,
+          "y": 13.5
+        }
+      ]
+    },
+    {
+      "id": "edge-C06-C07",
+      "from": "C06",
+      "to": "C07",
+      "length_m": 7.5,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 45.5,
+          "y": 13.5
+        },
+        {
+          "x": 53.0,
+          "y": 13.5
+        }
+      ]
+    },
+    {
+      "id": "edge-C07-C08",
+      "from": "C07",
+      "to": "C08",
+      "length_m": 6.8,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 53.0,
+          "y": 13.5
+        },
+        {
+          "x": 59.8,
+          "y": 13.5
+        }
+      ]
+    },
+    {
+      "id": "edge-C08-C09",
+      "from": "C08",
+      "to": "C09",
+      "length_m": 6.4,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 59.8,
+          "y": 13.5
+        },
+        {
+          "x": 66.2,
+          "y": 13.5
+        }
+      ]
+    },
+    {
+      "id": "edge-C09-C10",
+      "from": "C09",
+      "to": "C10",
+      "length_m": 8.4,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 66.2,
+          "y": 13.5
+        },
+        {
+          "x": 74.6,
+          "y": 13.5
+        }
+      ]
+    },
+    {
+      "id": "edge-C10-C11",
+      "from": "C10",
+      "to": "C11",
+      "length_m": 7.4,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 74.6,
+          "y": 13.5
+        },
+        {
+          "x": 82.0,
+          "y": 13.5
+        }
+      ]
+    },
+    {
+      "id": "edge-N22-C01",
+      "from": "N22",
+      "to": "C01",
+      "length_m": 2.102,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 8.15,
+          "y": 13.4
+        },
+        {
+          "x": 10.25,
+          "y": 13.5
+        }
+      ]
+    },
+    {
+      "id": "edge-N01-C03",
+      "from": "N01",
+      "to": "C03",
+      "length_m": 6.05,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 19.85,
+          "y": 11.9
+        },
+        {
+          "x": 19.85,
+          "y": 12.75
+        },
+        {
+          "x": 24.3,
+          "y": 12.75
+        },
+        {
+          "x": 24.3,
+          "y": 13.5
+        }
+      ]
+    },
+    {
+      "id": "edge-N02-C03",
+      "from": "N02",
+      "to": "C03",
+      "length_m": 1.6,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 24.3,
+          "y": 11.9
+        },
+        {
+          "x": 24.3,
+          "y": 13.5
+        }
+      ]
+    },
+    {
+      "id": "edge-N03-C04",
+      "from": "N03",
+      "to": "C04",
+      "length_m": 1.6,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 31.2,
+          "y": 11.9
+        },
+        {
+          "x": 31.2,
+          "y": 13.5
+        }
+      ]
+    },
+    {
+      "id": "edge-N07-C05",
+      "from": "N07",
+      "to": "C05",
+      "length_m": 1.55,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 39.7,
+          "y": 11.95
+        },
+        {
+          "x": 39.7,
+          "y": 13.5
+        }
+      ]
+    },
+    {
+      "id": "edge-N08-C07",
+      "from": "N08",
+      "to": "C07",
+      "length_m": 3.45,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 51.1,
+          "y": 11.95
+        },
+        {
+          "x": 51.1,
+          "y": 12.75
+        },
+        {
+          "x": 53.0,
+          "y": 12.75
+        },
+        {
+          "x": 53.0,
+          "y": 13.5
+        }
+      ]
+    },
+    {
+      "id": "edge-N09-C08",
+      "from": "N09",
+      "to": "C08",
+      "length_m": 1.55,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 59.8,
+          "y": 11.95
+        },
+        {
+          "x": 59.8,
+          "y": 13.5
+        }
+      ]
+    },
+    {
+      "id": "edge-N10-C09",
+      "from": "N10",
+      "to": "C09",
+      "length_m": 1.55,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 66.2,
+          "y": 11.95
+        },
+        {
+          "x": 66.2,
+          "y": 13.5
+        }
+      ]
+    },
+    {
+      "id": "edge-N11-C10",
+      "from": "N11",
+      "to": "C10",
+      "length_m": 1.55,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 74.6,
+          "y": 11.95
+        },
+        {
+          "x": 74.6,
+          "y": 13.5
+        }
+      ]
+    },
+    {
+      "id": "edge-N12-C11",
+      "from": "N12",
+      "to": "C11",
+      "length_m": 5.55,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 86.0,
+          "y": 11.95
+        },
+        {
+          "x": 86.0,
+          "y": 12.75
+        },
+        {
+          "x": 82.0,
+          "y": 12.75
+        },
+        {
+          "x": 82.0,
+          "y": 13.5
+        }
+      ]
+    },
+    {
+      "id": "edge-N23-C11",
+      "from": "N23",
+      "to": "C11",
+      "length_m": 2.302,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 84.3,
+          "y": 13.4
+        },
+        {
+          "x": 82.0,
+          "y": 13.5
+        }
+      ]
+    },
+    {
+      "id": "edge-C04-C12",
+      "from": "C04",
+      "to": "C12",
+      "length_m": 5.5,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 31.2,
+          "y": 13.5
+        },
+        {
+          "x": 31.2,
+          "y": 19.0
+        }
+      ]
+    },
+    {
+      "id": "edge-C12-C13",
+      "from": "C12",
+      "to": "C13",
+      "length_m": 8.0,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 31.2,
+          "y": 19.0
+        },
+        {
+          "x": 31.2,
+          "y": 27.0
+        }
+      ]
+    },
+    {
+      "id": "edge-C13-C14",
+      "from": "C13",
+      "to": "C14",
+      "length_m": 7.55,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 31.2,
+          "y": 27.0
+        },
+        {
+          "x": 38.0,
+          "y": 27.0
+        },
+        {
+          "x": 38.0,
+          "y": 27.75
+        }
+      ]
+    },
+    {
+      "id": "edge-C14-C15",
+      "from": "C14",
+      "to": "C15",
+      "length_m": 6.25,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 38.0,
+          "y": 27.75
+        },
+        {
+          "x": 44.25,
+          "y": 27.75
+        }
+      ]
+    },
+    {
+      "id": "edge-C15-C16",
+      "from": "C15",
+      "to": "C16",
+      "length_m": 14.25,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 44.25,
+          "y": 27.75
+        },
+        {
+          "x": 58.5,
+          "y": 27.75
+        }
+      ]
+    },
+    {
+      "id": "edge-C16-C17",
+      "from": "C16",
+      "to": "C17",
+      "length_m": 2.75,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 58.5,
+          "y": 27.75
+        },
+        {
+          "x": 61.25,
+          "y": 27.75
+        }
+      ]
+    },
+    {
+      "id": "edge-C17-C18",
+      "from": "C17",
+      "to": "C18",
+      "length_m": 9.613,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 61.25,
+          "y": 27.75
+        },
+        {
+          "x": 70.85,
+          "y": 28.25
+        }
+      ]
+    },
+    {
+      "id": "edge-C18-C19",
+      "from": "C18",
+      "to": "C19",
+      "length_m": 8.15,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 70.85,
+          "y": 28.25
+        },
+        {
+          "x": 79.0,
+          "y": 28.25
+        }
+      ]
+    },
+    {
+      "id": "edge-N04-C30",
+      "from": "N04",
+      "to": "C30",
+      "length_m": 1.75,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 9.0,
+          "y": 18.8
+        },
+        {
+          "x": 10.75,
+          "y": 18.8
+        }
+      ]
+    },
+    {
+      "id": "edge-C30-C31",
+      "from": "C30",
+      "to": "C31",
+      "length_m": 5.3,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 10.75,
+          "y": 18.8
+        },
+        {
+          "x": 10.75,
+          "y": 13.5
+        }
+      ]
+    },
+    {
+      "id": "edge-C31-C01",
+      "from": "C31",
+      "to": "C01",
+      "length_m": 0.5,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 10.75,
+          "y": 13.5
+        },
+        {
+          "x": 10.25,
+          "y": 13.5
+        }
+      ]
+    },
+    {
+      "id": "edge-N06-N05",
+      "from": "N06",
+      "to": "N05",
+      "length_m": 3.29,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 21.95,
+          "y": 18.75
+        },
+        {
+          "x": 21.0,
+          "y": 21.9
+        }
+      ]
+    },
+    {
+      "id": "edge-N05-C27",
+      "from": "N05",
+      "to": "C27",
+      "length_m": 1.75,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 21.0,
+          "y": 21.9
+        },
+        {
+          "x": 22.75,
+          "y": 21.9
+        }
+      ]
+    },
+    {
+      "id": "edge-C27-C28",
+      "from": "C27",
+      "to": "C28",
+      "length_m": 3.1,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 22.75,
+          "y": 21.9
+        },
+        {
+          "x": 22.75,
+          "y": 25.0
+        }
+      ]
+    },
+    {
+      "id": "edge-C28-C29",
+      "from": "C28",
+      "to": "C29",
+      "length_m": 3.816,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 22.75,
+          "y": 25.0
+        },
+        {
+          "x": 26.0,
+          "y": 27.0
+        }
+      ]
+    },
+    {
+      "id": "edge-C29-C13",
+      "from": "C29",
+      "to": "C13",
+      "length_m": 5.2,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 26.0,
+          "y": 27.0
+        },
+        {
+          "x": 31.2,
+          "y": 27.0
+        }
+      ]
+    },
+    {
+      "id": "edge-C14-C23",
+      "from": "C14",
+      "to": "C23",
+      "length_m": 2.5,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 38.0,
+          "y": 27.75
+        },
+        {
+          "x": 40.5,
+          "y": 27.75
+        }
+      ]
+    },
+    {
+      "id": "edge-C23-C24",
+      "from": "C23",
+      "to": "C24",
+      "length_m": 4.1,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 40.5,
+          "y": 27.75
+        },
+        {
+          "x": 44.6,
+          "y": 27.75
+        }
+      ]
+    },
+    {
+      "id": "edge-C24-C25",
+      "from": "C24",
+      "to": "C25",
+      "length_m": 4.6,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 44.6,
+          "y": 27.75
+        },
+        {
+          "x": 49.2,
+          "y": 27.75
+        }
+      ]
+    },
+    {
+      "id": "edge-C25-C26",
+      "from": "C25",
+      "to": "C26",
+      "length_m": 5.75,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 49.2,
+          "y": 27.75
+        },
+        {
+          "x": 54.95,
+          "y": 27.75
+        }
+      ]
+    },
+    {
+      "id": "edge-C26-C16",
+      "from": "C26",
+      "to": "C16",
+      "length_m": 3.55,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 54.95,
+          "y": 27.75
+        },
+        {
+          "x": 58.5,
+          "y": 27.75
+        }
+      ]
+    },
+    {
+      "id": "edge-N16-C23",
+      "from": "N16",
+      "to": "C23",
+      "length_m": 1.95,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 40.5,
+          "y": 29.7
+        },
+        {
+          "x": 40.5,
+          "y": 27.75
+        }
+      ]
+    },
+    {
+      "id": "edge-N17-C24",
+      "from": "N17",
+      "to": "C24",
+      "length_m": 1.95,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 44.6,
+          "y": 29.7
+        },
+        {
+          "x": 44.6,
+          "y": 27.75
+        }
+      ]
+    },
+    {
+      "id": "edge-N18-C25",
+      "from": "N18",
+      "to": "C25",
+      "length_m": 1.95,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 49.2,
+          "y": 29.7
+        },
+        {
+          "x": 49.2,
+          "y": 27.75
+        }
+      ]
+    },
+    {
+      "id": "edge-N19-C26",
+      "from": "N19",
+      "to": "C26",
+      "length_m": 1.95,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 54.95,
+          "y": 29.7
+        },
+        {
+          "x": 54.95,
+          "y": 27.75
+        }
+      ]
+    },
+    {
+      "id": "edge-C08-C32",
+      "from": "C08",
+      "to": "C32",
+      "length_m": 9.8,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 59.8,
+          "y": 13.5
+        },
+        {
+          "x": 60.75,
+          "y": 13.5
+        },
+        {
+          "x": 60.75,
+          "y": 22.35
+        }
+      ]
+    },
+    {
+      "id": "edge-C32-C17",
+      "from": "C32",
+      "to": "C17",
+      "length_m": 5.9,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 60.75,
+          "y": 22.35
+        },
+        {
+          "x": 60.75,
+          "y": 27.75
+        },
+        {
+          "x": 61.25,
+          "y": 27.75
+        }
+      ]
+    },
+    {
+      "id": "edge-N14-C32",
+      "from": "N14",
+      "to": "C32",
+      "length_m": 2.25,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 63.0,
+          "y": 22.35
+        },
+        {
+          "x": 60.75,
+          "y": 22.35
+        }
+      ]
+    },
+    {
+      "id": "edge-N15-C18",
+      "from": "N15",
+      "to": "C18",
+      "length_m": 1.3,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 70.85,
+          "y": 26.95
+        },
+        {
+          "x": 70.85,
+          "y": 28.25
+        }
+      ]
+    },
+    {
+      "id": "edge-C11-C21",
+      "from": "C11",
+      "to": "C21",
+      "length_m": 7.5,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 82.0,
+          "y": 13.5
+        },
+        {
+          "x": 82.0,
+          "y": 21.0
+        }
+      ]
+    },
+    {
+      "id": "edge-C21-C22",
+      "from": "C21",
+      "to": "C22",
+      "length_m": 5.5,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 82.0,
+          "y": 21.0
+        },
+        {
+          "x": 82.0,
+          "y": 26.5
+        }
+      ]
+    },
+    {
+      "id": "edge-C22-C19",
+      "from": "C22",
+      "to": "C19",
+      "length_m": 3.473,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 82.0,
+          "y": 26.5
+        },
+        {
+          "x": 79.0,
+          "y": 28.25
+        }
+      ]
+    },
+    {
+      "id": "edge-N13-C21",
+      "from": "N13",
+      "to": "C21",
+      "length_m": 5.85,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 86.3,
+          "y": 19.45
+        },
+        {
+          "x": 83.0,
+          "y": 19.45
+        },
+        {
+          "x": 83.0,
+          "y": 21.0
+        },
+        {
+          "x": 82.0,
+          "y": 21.0
+        }
+      ]
+    },
+    {
+      "id": "edge-C19-C20",
+      "from": "C19",
+      "to": "C20",
+      "length_m": 1.877,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 79.0,
+          "y": 28.25
+        },
+        {
+          "x": 80.4,
+          "y": 29.5
+        }
+      ]
+    },
+    {
+      "id": "edge-C20-N20",
+      "from": "C20",
+      "to": "N20",
+      "length_m": 2.954,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 80.4,
+          "y": 29.5
+        },
+        {
+          "x": 83.35,
+          "y": 29.35
+        }
+      ]
+    },
+    {
+      "id": "edge-C20-N21",
+      "from": "C20",
+      "to": "N21",
+      "length_m": 1.0,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 80.4,
+          "y": 29.5
+        },
+        {
+          "x": 80.4,
+          "y": 30.5
+        }
+      ]
+    },
+    {
+      "id": "edge-C17-C33",
+      "from": "C17",
+      "to": "C33",
+      "length_m": 5.758,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 61.25,
+          "y": 27.75
+        },
+        {
+          "x": 61.55,
+          "y": 33.5
+        }
+      ]
+    },
+    {
+      "id": "edge-C33-C34",
+      "from": "C33",
+      "to": "C34",
+      "length_m": 3.9,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 61.55,
+          "y": 33.5
+        },
+        {
+          "x": 65.45,
+          "y": 33.5
+        }
+      ]
+    },
+    {
+      "id": "edge-C34-C35",
+      "from": "C34",
+      "to": "C35",
+      "length_m": 3.85,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 65.45,
+          "y": 33.5
+        },
+        {
+          "x": 69.3,
+          "y": 33.5
+        }
+      ]
+    },
+    {
+      "id": "edge-C35-C36",
+      "from": "C35",
+      "to": "C36",
+      "length_m": 3.85,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 69.3,
+          "y": 33.5
+        },
+        {
+          "x": 73.15,
+          "y": 33.5
+        }
+      ]
+    },
+    {
+      "id": "edge-C18-C35",
+      "from": "C18",
+      "to": "C35",
+      "length_m": 5.474,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 70.85,
+          "y": 28.25
+        },
+        {
+          "x": 69.3,
+          "y": 33.5
+        }
+      ]
+    },
+    {
+      "id": "edge-C33-N24",
+      "from": "C33",
+      "to": "N24",
+      "length_m": 1.8,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 61.55,
+          "y": 33.5
+        },
+        {
+          "x": 61.55,
+          "y": 35.3
+        }
+      ]
+    },
+    {
+      "id": "edge-C34-N25",
+      "from": "C34",
+      "to": "N25",
+      "length_m": 1.8,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 65.45,
+          "y": 33.5
+        },
+        {
+          "x": 65.45,
+          "y": 35.3
+        }
+      ]
+    },
+    {
+      "id": "edge-C35-N26",
+      "from": "C35",
+      "to": "N26",
+      "length_m": 1.8,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 69.3,
+          "y": 33.5
+        },
+        {
+          "x": 69.3,
+          "y": 35.3
+        }
+      ]
+    },
+    {
+      "id": "edge-C36-N27",
+      "from": "C36",
+      "to": "N27",
+      "length_m": 1.8,
+      "bidirectional": true,
+      "geometry_local_m": [
+        {
+          "x": 73.15,
+          "y": 33.5
+        },
+        {
+          "x": 73.15,
+          "y": 35.3
+        }
+      ]
+    }
+  ],
+  "stores": [
+    {
+      "id": "space-n01",
+      "name": "우편함",
+      "centroid": {
+        "local_m": {
+          "x": 19.85,
+          "y": 11.9
+        }
+      },
+      "entrance_local_m": {
+        "x": 19.85,
+        "y": 11.9
+      },
+      "entrance_node_id": "N01",
+      "polygon_local_m": null
+    },
+    {
+      "id": "space-n02",
+      "name": "정보도서관",
+      "centroid": {
+        "local_m": {
+          "x": 24.3,
+          "y": 11.9
+        }
+      },
+      "entrance_local_m": {
+        "x": 24.3,
+        "y": 11.9
+      },
+      "entrance_node_id": "N02",
+      "polygon_local_m": null
+    },
+    {
+      "id": "space-n03",
+      "name": "상부 화장실",
+      "centroid": {
+        "local_m": {
+          "x": 31.2,
+          "y": 11.9
+        }
+      },
+      "entrance_local_m": {
+        "x": 31.2,
+        "y": 11.9
+      },
+      "entrance_node_id": "N03",
+      "polygon_local_m": null
+    },
+    {
+      "id": "space-n04",
+      "name": "좌측 화장실",
+      "centroid": {
+        "local_m": {
+          "x": 9.0,
+          "y": 18.8
+        }
+      },
+      "entrance_local_m": {
+        "x": 9.0,
+        "y": 18.8
+      },
+      "entrance_node_id": "N04",
+      "polygon_local_m": null
+    },
+    {
+      "id": "space-n05",
+      "name": "미디어써클룸",
+      "centroid": {
+        "local_m": {
+          "x": 21.0,
+          "y": 21.9
+        }
+      },
+      "entrance_local_m": {
+        "x": 21.0,
+        "y": 21.9
+      },
+      "entrance_node_id": "N05",
+      "polygon_local_m": null
+    },
+    {
+      "id": "space-n06",
+      "name": "원형미팅룸",
+      "centroid": {
+        "local_m": {
+          "x": 21.95,
+          "y": 18.75
+        }
+      },
+      "entrance_local_m": {
+        "x": 21.95,
+        "y": 18.75
+      },
+      "entrance_node_id": "N06",
+      "polygon_local_m": null
+    },
+    {
+      "id": "space-n09",
+      "name": "카페",
+      "centroid": {
+        "local_m": {
+          "x": 59.8,
+          "y": 11.95
+        }
+      },
+      "entrance_local_m": {
+        "x": 59.8,
+        "y": 11.95
+      },
+      "entrance_node_id": "N09",
+      "polygon_local_m": null
+    },
+    {
+      "id": "space-n10",
+      "name": "편의점",
+      "centroid": {
+        "local_m": {
+          "x": 66.2,
+          "y": 11.95
+        }
+      },
+      "entrance_local_m": {
+        "x": 66.2,
+        "y": 11.95
+      },
+      "entrance_node_id": "N10",
+      "polygon_local_m": null
+    },
+    {
+      "id": "space-n11",
+      "name": "허브 엑셀러레이팅 존",
+      "centroid": {
+        "local_m": {
+          "x": 74.6,
+          "y": 11.95
+        }
+      },
+      "entrance_local_m": {
+        "x": 74.6,
+        "y": 11.95
+      },
+      "entrance_node_id": "N11",
+      "polygon_local_m": null
+    },
+    {
+      "id": "space-n14",
+      "name": "창업카페 존",
+      "centroid": {
+        "local_m": {
+          "x": 63.0,
+          "y": 22.35
+        }
+      },
+      "entrance_local_m": {
+        "x": 63.0,
+        "y": 22.35
+      },
+      "entrance_node_id": "N14",
+      "polygon_local_m": null
+    },
+    {
+      "id": "space-n16",
+      "name": "팀메이킹룸 4",
+      "centroid": {
+        "local_m": {
+          "x": 40.5,
+          "y": 29.7
+        }
+      },
+      "entrance_local_m": {
+        "x": 40.5,
+        "y": 29.7
+      },
+      "entrance_node_id": "N16",
+      "polygon_local_m": null
+    },
+    {
+      "id": "space-n17",
+      "name": "팀메이킹룸 3",
+      "centroid": {
+        "local_m": {
+          "x": 44.6,
+          "y": 29.7
+        }
+      },
+      "entrance_local_m": {
+        "x": 44.6,
+        "y": 29.7
+      },
+      "entrance_node_id": "N17",
+      "polygon_local_m": null
+    },
+    {
+      "id": "space-n18",
+      "name": "팀메이킹룸 2",
+      "centroid": {
+        "local_m": {
+          "x": 49.2,
+          "y": 29.7
+        }
+      },
+      "entrance_local_m": {
+        "x": 49.2,
+        "y": 29.7
+      },
+      "entrance_node_id": "N18",
+      "polygon_local_m": null
+    },
+    {
+      "id": "space-n19",
+      "name": "팀메이킹룸 1",
+      "centroid": {
+        "local_m": {
+          "x": 54.95,
+          "y": 29.7
+        }
+      },
+      "entrance_local_m": {
+        "x": 54.95,
+        "y": 29.7
+      },
+      "entrance_node_id": "N19",
+      "polygon_local_m": null
+    },
+    {
+      "id": "space-n20",
+      "name": "고객지원실",
+      "centroid": {
+        "local_m": {
+          "x": 83.35,
+          "y": 29.35
+        }
+      },
+      "entrance_local_m": {
+        "x": 83.35,
+        "y": 29.35
+      },
+      "entrance_node_id": "N20",
+      "polygon_local_m": null
+    },
+    {
+      "id": "space-n21",
+      "name": "대관사무실",
+      "centroid": {
+        "local_m": {
+          "x": 80.4,
+          "y": 30.5
+        }
+      },
+      "entrance_local_m": {
+        "x": 80.4,
+        "y": 30.5
+      },
+      "entrance_node_id": "N21",
+      "polygon_local_m": null
+    }
+  ],
+  "pois": [
+    {
+      "id": "poi-n07",
+      "type": "core-entrance",
+      "name": "중앙 코어 좌측",
+      "position": {
+        "local_m": {
+          "x": 39.7,
+          "y": 11.95
+        }
+      },
+      "linked_node_id": "N07"
+    },
+    {
+      "id": "poi-n08",
+      "type": "core-entrance",
+      "name": "중앙 코어 우측",
+      "position": {
+        "local_m": {
+          "x": 51.1,
+          "y": 11.95
+        }
+      },
+      "linked_node_id": "N08"
+    },
+    {
+      "id": "poi-n12",
+      "type": "vertical-connection",
+      "name": "우측 계단",
+      "position": {
+        "local_m": {
+          "x": 86.0,
+          "y": 11.95
+        }
+      },
+      "linked_node_id": "N12"
+    },
+    {
+      "id": "poi-n13",
+      "type": "vertical-connection",
+      "name": "우측 엘리베이터",
+      "position": {
+        "local_m": {
+          "x": 86.3,
+          "y": 19.45
+        }
+      },
+      "linked_node_id": "N13"
+    },
+    {
+      "id": "poi-n22",
+      "type": "exit",
+      "name": "좌측 비상구",
+      "position": {
+        "local_m": {
+          "x": 8.15,
+          "y": 13.4
+        }
+      },
+      "linked_node_id": "N22"
+    },
+    {
+      "id": "poi-n23",
+      "type": "exit",
+      "name": "우측 비상구",
+      "position": {
+        "local_m": {
+          "x": 84.3,
+          "y": 13.4
+        }
+      },
+      "linked_node_id": "N23"
+    },
+    {
+      "id": "poi-n24",
+      "type": "exit",
+      "name": "하단 비상구",
+      "position": {
+        "local_m": {
+          "x": 61.55,
+          "y": 35.3
+        }
+      },
+      "linked_node_id": "N24"
+    },
+    {
+      "id": "poi-n25",
+      "type": "exit",
+      "name": "하단 비상구",
+      "position": {
+        "local_m": {
+          "x": 65.45,
+          "y": 35.3
+        }
+      },
+      "linked_node_id": "N25"
+    },
+    {
+      "id": "poi-n26",
+      "type": "exit",
+      "name": "하단 비상구",
+      "position": {
+        "local_m": {
+          "x": 69.3,
+          "y": 35.3
+        }
+      },
+      "linked_node_id": "N26"
+    },
+    {
+      "id": "poi-n27",
+      "type": "exit",
+      "name": "하단 비상구",
+      "position": {
+        "local_m": {
+          "x": 73.15,
+          "y": 35.3
+        }
+      },
+      "linked_node_id": "N27"
+    }
+  ]
+}

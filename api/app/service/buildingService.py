@@ -126,7 +126,7 @@ class BuildingService:
             "edge_ids": list(path.edge_ids),
             "coordinate_system": "local_m",
             "path_points": self._build_path_points(path, nodes, edges),
-            "total_distance_m": path.total_distance_m,
+            "total_distance_m": round(path.total_distance_m, 3),
         }
 
     @staticmethod

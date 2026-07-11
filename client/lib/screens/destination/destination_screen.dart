@@ -71,7 +71,7 @@ class _DestinationScreenState extends State<DestinationScreen> {
                           return ListTile(
                             leading: const Icon(Icons.place),
                             title: Text(destination.name),
-                            subtitle: Text('${destination.floor}층'),
+                            subtitle: Text(destination.floor),
                             onTap: () => _selectDestination(destination),
                           );
                         },

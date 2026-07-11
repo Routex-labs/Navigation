@@ -39,6 +39,7 @@ dependencies:
   flutter_map: ^7.0.2
   latlong2: ^0.9.1
   geolocator: ^13.0.2
+  flutter_svg: ^2.3.0
 
 dev_dependencies:
   flutter_test:
@@ -71,6 +72,9 @@ flutter:
 
   assets:
     - assets/mock/sample_building.json
+    - assets/mock/hyundai_floor_1f.json
+    - assets/mock/hyundai_floor_map.svg
+    - assets/mock/demo_floor_map_v5.svg
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

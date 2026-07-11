@@ -8,4 +8,5 @@ class AppRoutes {
   static const routeGuide = '/route-guide';
   static const arrival = '/arrival';
   static const debugApiHealth = '/debug/api-health';
+  static const debugFloorMapPreview = '/debug/floor-map-preview';
 }
