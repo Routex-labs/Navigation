@@ -1,19 +1,23 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:latlong2/latlong.dart';
 
 import '../../models/floor_plan.dart';
+import '../../models/indoor_route.dart';
+import '../../repositories/http_building_repository.dart';
 import '../../widgets/eta_card.dart';
 import '../../widgets/floor_plan_view.dart';
 
 const _walkingSpeedMetersPerSecond = 1.2;
+const _buildingId = 'thehyundai-seoul';
+const _floorName = '1F';
 
-/// hyundai_floor_map_corrected_v6.svg에서 변환한 매장 폴리곤 데이터를
-/// FloorPlanView로 그려서, 매장을 검색하거나 지도에서 탭하면 임시 시작점부터
-/// 그 매장까지 직선 경로 + ETA를 보여준다. PDR이 없어 실제 현재 위치를 모르니
-/// 출입구(게이트) 중 하나를 임시 시작점으로 쓴다.
+/// 임시 시작점으로 쓰는 매장. PDR이 없어 실제 현재 위치를 모르니
+/// 항상 이 매장 입구에서 출발한 것으로 가정한다.
+const _startStoreName = '발렌시아가';
+
+/// 더현대 서울 실제 층 데이터를 백엔드에서 받아 FloorPlanView로 그려서,
+/// 매장을 검색하거나 지도에서 탭하면 임시 시작점(발렌시아가)부터 그 매장까지
+/// 백엔드 다익스트라 최단 경로 + ETA를 보여준다.
 class FloorMapPreviewScreen extends StatefulWidget {
   const FloorMapPreviewScreen({super.key});
 
@@ -22,9 +26,13 @@ class FloorMapPreviewScreen extends StatefulWidget {
 }
 
 class _FloorMapPreviewScreenState extends State<FloorMapPreviewScreen> {
+  final _repository = HttpBuildingRepository();
   FloorPlan? _floorPlan;
   LatLng? _startPoint;
+  String? _startNodeId;
   StorePolygon? _selectedStore;
+  IndoorRoute? _route;
+  bool _routeLoading = false;
   final _searchController = TextEditingController();
   String _query = '';
 
@@ -44,21 +52,22 @@ class _FloorMapPreviewScreenState extends State<FloorMapPreviewScreen> {
   }
 
   Future<void> _load() async {
-    final raw = await rootBundle.loadString('assets/mock/hyundai_floor_1f.json');
-    final floorPlan = FloorPlan.fromJson(jsonDecode(raw) as Map<String, dynamic>);
-    if (!mounted) return;
+    final geojson = await _repository.getFloorGeoJson(_buildingId, _floorName);
+    if (!mounted || geojson == null) return;
+
+    final floorPlan = FloorPlan.fromJson(geojson);
+    final startStore =
+        floorPlan.stores.where((store) => store.name == _startStoreName).firstOrNull;
     setState(() {
       _floorPlan = floorPlan;
-      _startPoint = _pickStartPoint(floorPlan);
+      _startPoint = startStore?.centroid ?? _fallbackStartPoint(floorPlan);
+      _startNodeId = startStore?.entranceNodeId;
     });
   }
 
-  /// PDR이 없어 "현재 위치"를 모른다. 출입구(게이트) POI가 있으면 그중 하나를,
-  /// 없으면 건물 외곽 중심을 임시 시작점으로 쓴다.
-  LatLng _pickStartPoint(FloorPlan floorPlan) {
-    final gate = floorPlan.pois.where((poi) => poi.type == 'exit').firstOrNull;
-    if (gate != null) return gate.point;
-
+  /// 발렌시아가를 못 찾으면(데이터 변경 등) 건물 외곽 중심을 임시 시작점으로 쓴다.
+  /// 이 경우 노드 ID가 없어 다익스트라 경로 대신 직선 fallback으로만 표시된다.
+  LatLng _fallbackStartPoint(FloorPlan floorPlan) {
     if (floorPlan.footprint.isNotEmpty) {
       final avgLat = floorPlan.footprint.map((p) => p.latitude).reduce((a, b) => a + b) /
           floorPlan.footprint.length;
@@ -72,8 +81,31 @@ class _FloorMapPreviewScreenState extends State<FloorMapPreviewScreen> {
   void _selectStore(StorePolygon store) {
     setState(() {
       _selectedStore = store;
+      _route = null;
       _searchController.clear();
       _query = '';
+    });
+    _loadRoute(store);
+  }
+
+  /// 시작/도착 노드 ID가 모두 있으면 백엔드 다익스트라 경로를 가져온다.
+  /// 실패하거나 노드 ID가 없으면 route는 null로 남아 직선 fallback으로 그려진다.
+  Future<void> _loadRoute(StorePolygon destination) async {
+    final startNodeId = _startNodeId;
+    final endNodeId = destination.entranceNodeId;
+    if (startNodeId == null || endNodeId == null) return;
+
+    setState(() => _routeLoading = true);
+    final route = await _repository.getShortestRoute(
+      _buildingId,
+      _floorName,
+      startNodeId,
+      endNodeId,
+    );
+    if (!mounted) return;
+    setState(() {
+      _route = route;
+      _routeLoading = false;
     });
   }
 
@@ -104,8 +136,10 @@ class _FloorMapPreviewScreenState extends State<FloorMapPreviewScreen> {
   Widget _buildBody(FloorPlan floorPlan) {
     final start = _startPoint;
     final selected = _selectedStore;
-    final routePoints =
-        start != null && selected != null ? [start, selected.centroid] : const <LatLng>[];
+    final route = _route;
+    final routePoints = route != null
+        ? route.points
+        : (start != null && selected != null ? [start, selected.centroid] : const <LatLng>[]);
 
     return Stack(
       children: [
@@ -181,14 +215,21 @@ class _FloorMapPreviewScreenState extends State<FloorMapPreviewScreen> {
     if (selected == null || start == null) {
       return const Text('매장을 검색하거나 지도에서 탭해보세요', textAlign: TextAlign.center);
     }
+    if (_routeLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: CircularProgressIndicator(),
+      );
+    }
 
-    final distance = const Distance().as(LengthUnit.Meter, start, selected.centroid);
+    final route = _route;
+    final distance = route?.distanceMeters ?? localDistanceMeters(start, selected.centroid);
     final minutes = (distance / _walkingSpeedMetersPerSecond / 60).ceil().clamp(1, 999);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text('${selected.name} · ${selected.category ?? '-'}'),
+        Text('$_startStoreName → ${selected.name} · ${selected.category ?? '-'}'),
         const SizedBox(height: 8),
         EtaCard(distanceMeters: distance, minutes: minutes),
       ],

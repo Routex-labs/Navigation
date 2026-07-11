@@ -1,10 +1,33 @@
+import 'dart:math' as math;
+
 import 'package:latlong2/latlong.dart';
+
+/// local_m 좌표를 LatLng.latitude/longitude에 그대로 담을 때 곱하는 배율.
+/// latlong2의 LatLng은 latitude를 ±90도로 강제하는데, 실제 건물 local_m
+/// 값은 이 범위를 쉽게 넘는다(예: 더현대 서울 1층 y 최대값 98.123m →
+/// "The north latitude can't be bigger than 90.0" 예외로 전체 지도가 그려지지
+/// 않고 앱이 죽는다). CrsSimple은 절대 좌표 스케일에 무관하게 동작하므로,
+/// 모든 local_m 좌표에 이 배율을 곱해 항상 ±90/±180 범위 안에 들어오게 만든다.
+const localMToLatLngScale = 0.3;
 
 /// 백엔드 local_m {x, y} 좌표를 flutter_map CrsSimple에서 쓸 LatLng(y, x)로
 /// 바꾼다. 실내 관련 모델(FloorPlan, IndoorRoute)이 전부 이 규칙을 공유해야
 /// 같은 지도 위에서 좌표가 어긋나지 않는다.
 LatLng localPointToLatLng(Map<String, dynamic> point) {
-  return LatLng((point['y'] as num).toDouble(), (point['x'] as num).toDouble());
+  return LatLng(
+    (point['y'] as num).toDouble() * localMToLatLngScale,
+    (point['x'] as num).toDouble() * localMToLatLngScale,
+  );
+}
+
+/// localPointToLatLng으로 만든 두 점 사이의 실제 거리(m). 이 LatLng은 실제
+/// 위경도가 아니라 축소된 로컬 미터 좌표라, latlong2의 Distance(대권 거리
+/// 공식)를 쓰면 미터 단위 숫자를 위경도 각도로 착각해 터무니없이 큰 값이
+/// 나온다. 실외(GPS) 좌표에는 이 함수를 쓰면 안 된다.
+double localDistanceMeters(LatLng a, LatLng b) {
+  final dx = (a.longitude - b.longitude) / localMToLatLngScale;
+  final dy = (a.latitude - b.latitude) / localMToLatLngScale;
+  return math.sqrt(dx * dx + dy * dy);
 }
 
 class PoiMarker {
@@ -70,6 +93,14 @@ class FloorPlan {
         .map((point) => localPointToLatLng(point as Map<String, dynamic>))
         .toList();
 
+    final corridors = ((json['corridors_local_m'] as List<dynamic>?) ?? const [])
+        .map(
+          (corridor) => (corridor as List<dynamic>)
+              .map((point) => localPointToLatLng(point as Map<String, dynamic>))
+              .toList(),
+        )
+        .toList();
+
     final stores = ((json['stores'] as List<dynamic>?) ?? const [])
         .cast<Map<String, dynamic>>()
         .map(
@@ -100,7 +131,12 @@ class FloorPlan {
         )
         .toList();
 
-    return FloorPlan(footprint: footprint, stores: stores, pois: pois);
+    return FloorPlan(
+      footprint: footprint,
+      corridors: corridors,
+      stores: stores,
+      pois: pois,
+    );
   }
 
   static FloorPlan _fromGeoJson(Map<String, dynamic> geojson) {

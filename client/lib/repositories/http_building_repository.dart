@@ -71,8 +71,36 @@ class HttpBuildingRepository implements BuildingRepository {
     if (response.statusCode == 404) return null;
 
     final geojson = jsonDecode(response.body) as Map<String, dynamic>;
+
+    // /floors/{floor}는 매장 폴리곤이 없는(점 정보만 있는) 건물에서는 지도가
+    // 텅 비어 보인다. /floors/{floor}/graph의 간선 geometry를 복도선으로
+    // 얹어서 FloorPlan._fromApiResponse가 그대로 그릴 수 있게 한다.
+    final corridors = await _fetchCorridors(buildingId, floor);
+    if (corridors != null) geojson['corridors_local_m'] = corridors;
+
     _floorGeoJsonCache[cacheKey] = geojson;
     return geojson;
+  }
+
+  Future<List<List<Map<String, dynamic>>>?> _fetchCorridors(
+    String buildingId,
+    String floor,
+  ) async {
+    final response = await _client.get(
+      Uri.parse('$apiBaseUrl/buildings/$buildingId/floors/$floor/graph'),
+    );
+    if (response.statusCode != 200) return null;
+
+    final graph = jsonDecode(response.body) as Map<String, dynamic>;
+    final edges = (graph['edges'] as List<dynamic>? ?? const [])
+        .cast<Map<String, dynamic>>();
+    return edges
+        .map(
+          (edge) => (edge['geometry_local_m'] as List<dynamic>? ?? const [])
+              .cast<Map<String, dynamic>>(),
+        )
+        .where((points) => points.length >= 2)
+        .toList();
   }
 
   @override

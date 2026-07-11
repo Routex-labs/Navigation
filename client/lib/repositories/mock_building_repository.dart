@@ -71,7 +71,7 @@ class MockBuildingRepository implements BuildingRepository {
 
     return IndoorRoute(
       points: [start, end],
-      distanceMeters: const Distance().as(LengthUnit.Meter, start, end),
+      distanceMeters: localDistanceMeters(start, end),
     );
   }
 

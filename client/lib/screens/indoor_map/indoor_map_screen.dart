@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../core/api_config.dart';
 import '../../core/service_locator.dart';
 import '../../models/building.dart';
+import '../../models/floor_plan.dart';
 import '../../routing/app_routes.dart';
-
-/// 더현대 서울 실내 지도 SVG 원본. 매장 탭 이벤트는 후순위로 미루고,
-/// 지금은 실내 지도 화면에서 이 이미지를 그대로 보여준다.
-const _floorMapAsset = 'assets/mock/hyundai_floor_map.svg';
+import '../../widgets/floor_plan_view.dart';
 
 class IndoorMapScreen extends StatefulWidget {
   const IndoorMapScreen({super.key});
@@ -21,6 +18,8 @@ class _IndoorMapScreenState extends State<IndoorMapScreen> {
   bool _loading = true;
   Building? _building;
   String? _selectedFloor;
+  FloorPlan? _floorPlan;
+  StorePolygon? _selectedStore;
 
   @override
   void initState() {
@@ -32,12 +31,31 @@ class _IndoorMapScreenState extends State<IndoorMapScreen> {
     final building = await buildingRepository.getBuilding(demoBuildingId);
     if (!mounted) return;
 
+    final selectedFloor =
+        building != null && building.floors.isNotEmpty ? building.floors.first : null;
     setState(() {
       _building = building;
-      _selectedFloor =
-          building != null && building.floors.isNotEmpty ? building.floors.first : null;
+      _selectedFloor = selectedFloor;
       _loading = false;
     });
+    if (selectedFloor != null) await _loadFloorPlan(selectedFloor);
+  }
+
+  /// 목적지 검색·경로 안내 화면(route_guide_screen.dart)과 동일하게
+  /// buildingRepository를 통해 층 지도를 받아온다 — 데이터 소스를 하나로
+  /// 맞춰야 실내 지도에서 본 것과 경로 안내 화면의 지도가 어긋나지 않는다.
+  Future<void> _loadFloorPlan(String floor) async {
+    final geojson = await buildingRepository.getFloorGeoJson(demoBuildingId, floor);
+    if (!mounted || geojson == null) return;
+    setState(() => _floorPlan = FloorPlan.fromJson(geojson));
+  }
+
+  void _selectFloor(String floor) {
+    setState(() {
+      _selectedFloor = floor;
+      _floorPlan = null;
+    });
+    _loadFloorPlan(floor);
   }
 
   @override
@@ -55,7 +73,7 @@ class _IndoorMapScreenState extends State<IndoorMapScreen> {
             PopupMenuButton<String>(
               icon: const Icon(Icons.layers),
               tooltip: '층 전환',
-              onSelected: (floor) => setState(() => _selectedFloor = floor),
+              onSelected: _selectFloor,
               itemBuilder: (context) => building.floors
                   .map(
                     (floor) => PopupMenuItem(value: floor, child: Text(floor)),
@@ -68,11 +86,24 @@ class _IndoorMapScreenState extends State<IndoorMapScreen> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: FilledButton(
-            onPressed: () {
-              Navigator.of(context).pushNamed(AppRoutes.destination);
-            },
-            child: const Text('목적지 검색'),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_selectedStore != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    '${_selectedStore!.name} · ${_selectedStore!.category ?? '-'}',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              FilledButton(
+                onPressed: () {
+                  Navigator.of(context).pushNamed(AppRoutes.destination);
+                },
+                child: const Text('목적지 검색'),
+              ),
+            ],
           ),
         ),
       ),
@@ -83,11 +114,14 @@ class _IndoorMapScreenState extends State<IndoorMapScreen> {
     if (_building == null) {
       return const Center(child: Text('건물 정보를 찾을 수 없습니다'));
     }
+    final floorPlan = _floorPlan;
+    if (floorPlan == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-    return InteractiveViewer(
-      maxScale: 6,
-      minScale: 0.5,
-      child: SvgPicture.asset(_floorMapAsset, fit: BoxFit.contain),
+    return FloorPlanView(
+      floorPlan: floorPlan,
+      onStoreSelected: (store) => setState(() => _selectedStore = store),
     );
   }
 }

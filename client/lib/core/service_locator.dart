@@ -5,13 +5,15 @@ import 'api_config.dart';
 import '../repositories/building_repository.dart';
 import '../repositories/destination_repository.dart';
 import '../repositories/directions_repository.dart';
-import '../repositories/mock_building_repository.dart';
+import '../repositories/http_building_repository.dart';
 import '../repositories/mock_destination_repository.dart';
 import '../repositories/mock_directions_repository.dart';
 import '../repositories/tmap_directions_repository.dart';
 
-/// 백엔드가 준비되면 이 한 줄만 [HttpBuildingRepository]로 바꾼다.
-final BuildingRepository buildingRepository = MockBuildingRepository();
+/// 실내 지도·목적지 검색·경로 안내가 전부 백엔드(api/) 다익스트라 그래프로
+/// 동작하도록 HttpBuildingRepository를 쓴다. 백엔드 없이 오프라인으로 확인할
+/// 땐 이 한 줄만 MockBuildingRepository()로 되돌리면 된다.
+final BuildingRepository buildingRepository = HttpBuildingRepository();
 
 /// 백엔드 RAG가 준비되면 이 한 줄만 [HttpDestinationRepository]로 바꾼다.
 final DestinationRepository destinationRepository = MockDestinationRepository(

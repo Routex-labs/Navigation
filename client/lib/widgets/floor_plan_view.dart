@@ -90,18 +90,21 @@ class _FloorPlanViewState extends State<FloorPlanView> {
                 child: PolygonLayer<int>(
                   hitNotifier: _storeHitNotifier,
                   polygons: [
+                    // 폴리곤 없이 점 정보만 있는 매장(예: 백엔드 실데이터의 호텔 항목)은
+                    // 매장 영역을 그릴 수 없으니 건너뛴다.
                     for (final (index, store) in floorPlan.stores.indexed)
-                      Polygon(
-                        points: store.polygon,
-                        color: index == _selectedStoreIndex
-                            ? _selectedFillColor
-                            : _storeFillColor(store.category),
-                        borderColor: index == _selectedStoreIndex
-                            ? _selectedBorderColor
-                            : _storeBorderColor,
-                        borderStrokeWidth: index == _selectedStoreIndex ? 2.2 : 1.35,
-                        hitValue: index,
-                      ),
+                      if (store.polygon.isNotEmpty)
+                        Polygon(
+                          points: store.polygon,
+                          color: index == _selectedStoreIndex
+                              ? _selectedFillColor
+                              : _storeFillColor(store.category),
+                          borderColor: index == _selectedStoreIndex
+                              ? _selectedBorderColor
+                              : _storeBorderColor,
+                          borderStrokeWidth: index == _selectedStoreIndex ? 2.2 : 1.35,
+                          hitValue: index,
+                        ),
                   ],
                 ),
               ),
@@ -116,7 +119,14 @@ class _FloorPlanViewState extends State<FloorPlanView> {
             MarkerLayer(
               markers: [
                 for (final store in floorPlan.stores)
-                  ?_storeLabelMarker(store, pixelsPerUnit),
+                  // 폴리곤이 있으면 폴리곤 크기에 맞춘 라벨을, 점 정보만 있으면
+                  // (예: 백엔드 실데이터의 사무시설형 공간) POI와 같은 형태의
+                  // 아이콘+라벨 마커를 대신 그린다 — 폴리곤이 없다고 이름 자체가
+                  // 안 보이면 지도가 텅 비어 보인다.
+                  if (store.polygon.isEmpty)
+                    _pointStoreMarker(store)
+                  else
+                    ?_storeLabelMarker(store, pixelsPerUnit),
                 for (final poi in floorPlan.pois)
                   Marker(
                     point: poi.point,
@@ -192,7 +202,10 @@ class _FloorPlanViewState extends State<FloorPlanView> {
 
   /// 매장 폴리곤의 화면 픽셀 크기에 맞춰 라벨을 그린다. 폴리곤이 너무 작게
   /// 렌더링되면(예: 축소된 상태의 좁은 뷰티 카운터) 라벨을 아예 생략한다.
+  /// 폴리곤이 없는 매장(점 정보만 있음)도 라벨을 생략한다.
   Marker? _storeLabelMarker(StorePolygon store, double pixelsPerUnit) {
+    if (store.polygon.isEmpty) return null;
+
     var minX = store.polygon.first.longitude;
     var maxX = store.polygon.first.longitude;
     var minY = store.polygon.first.latitude;
@@ -218,6 +231,28 @@ class _FloorPlanViewState extends State<FloorPlanView> {
           style: TextStyle(fontSize: fontSize),
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+
+  /// 폴리곤 없이 점 정보만 있는 매장(공간)용 마커. POI 마커와 같은 모양이다.
+  Marker _pointStoreMarker(StorePolygon store) {
+    return Marker(
+      point: store.centroid,
+      width: 80,
+      height: 40,
+      child: IgnorePointer(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.storefront, size: 16, color: Colors.black54),
+            Text(
+              store.name,
+              style: const TextStyle(fontSize: 10),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
       ),
     );
