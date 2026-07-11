@@ -1,7 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
@@ -9,6 +10,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/app.dart';
 import 'package:navigation_client/core/service_locator.dart';
 import 'package:navigation_client/models/poi_search_result.dart';
+import 'package:navigation_client/repositories/mock_building_repository.dart';
+import 'package:navigation_client/repositories/mock_destination_repository.dart';
 import 'package:navigation_client/routing/app_routes.dart';
 import 'package:navigation_client/screens/arrival/arrival_screen.dart';
 import 'package:navigation_client/screens/debug/api_health_check_screen.dart';
@@ -16,6 +19,21 @@ import 'package:navigation_client/screens/destination/destination_screen.dart';
 import 'package:navigation_client/screens/indoor_map/indoor_map_screen.dart';
 import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
 import 'package:navigation_client/screens/route_guide/route_guide_screen.dart';
+import 'package:navigation_client/widgets/floor_plan_view.dart';
+
+// 1x1 흰색 PNG (base64). 배경지도 타일을 흉내내되 실제 네트워크 요청은 하지
+// 않는다 - flutter_map 자체 테스트 스위트도 같은 방식을 쓴다.
+const _whiteTileBase64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAQAAAAEAAQMAAABmvDolAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAANQTFRF////p8QbyAAAAB9JREFUeJztwQENAAAAwqD3T20ON6AAAAAAAAAAAL4NIQAAAfFnIe4AAAAASUVORK5CYII=';
+final _whiteTileImage = MemoryImage(base64Decode(_whiteTileBase64));
+
+class _FakeTileProvider extends TileProvider {
+  @override
+  ImageProvider<Object> getImage(
+    TileCoordinates coordinates,
+    TileLayer options,
+  ) => _whiteTileImage;
+}
 
 // 데모 건물 입구(37.5665, 126.9779)에서 약 185m 떨어진 좌표.
 // 자동 건물 진입 감지(반경 50m)에 걸리지 않도록 충분히 멀리 둔다.
@@ -61,16 +79,34 @@ final _fakePositionAtEntrance = Position(
 );
 
 void main() {
+  final originalBuildingRepository = buildingRepository;
+  final originalDestinationRepository = destinationRepository;
+  final testBuildingRepository = MockBuildingRepository();
+
   setUp(() {
     // 실제 permission_handler/geolocator 플러그인 채널이 없는 테스트 환경에서
     // 멈추지 않도록 즉시 완료되는 가짜 함수로 교체한다.
     requestStartupPermissions = () async => {};
     watchPosition = () => Stream.value(_fakePosition);
+
+    // 네트워크가 없는 테스트 환경에서는 HttpBuildingRepository(운영 기본값)
+    // 대신 asset 기반 MockBuildingRepository로 교체해 결정적으로 검증한다.
+    // 테스트마다 새로 만들지 않고 파일 전체에서 하나를 공유한다.
+    buildingRepository = testBuildingRepository;
+    destinationRepository = MockDestinationRepository(buildingRepository);
+
+    // 야외 지도의 배경 타일도 실제 OSM/VWorld 대신 가짜 provider로 교체한다.
+    // 실제 네트워크 요청을 남겨두면 그 요청이 이후 테스트까지 이어져
+    // pumpAndSettle이 끝없이 걸리는 원인이 된다.
+    outdoorTileProvider = () => _FakeTileProvider();
   });
 
   tearDown(() {
     requestStartupPermissions = defaultRequestStartupPermissions;
     watchPosition = defaultWatchPosition;
+    buildingRepository = originalBuildingRepository;
+    destinationRepository = originalDestinationRepository;
+    outdoorTileProvider = NetworkTileProvider.new;
   });
 
   testWidgets('splash screen shows entry points', (WidgetTester tester) async {
@@ -263,14 +299,14 @@ void main() {
     expect(find.textContaining('데모 건물'), findsOneWidget);
   });
 
-  testWidgets('indoor map renders the floor map image', (
+  testWidgets('indoor map renders the floor plan view', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const MaterialApp(home: IndoorMapScreen()));
     await tester.pumpAndSettle();
 
     expect(find.text('데모 건물 · 1F'), findsOneWidget);
-    expect(find.byType(SvgPicture), findsOneWidget);
+    expect(find.byType(FloorPlanView), findsOneWidget);
     expect(find.byIcon(Icons.layers), findsOneWidget);
   });
 
@@ -287,7 +323,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('데모 건물 · 2F'), findsOneWidget);
-    expect(find.byType(SvgPicture), findsOneWidget);
+    expect(find.byType(FloorPlanView), findsOneWidget);
   });
 
   testWidgets('destination screen shows every POI by default', (
@@ -341,7 +377,10 @@ void main() {
     await tester.tap(find.text('강의실 101'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('강의실 101'), findsOneWidget);
+    // 이전 화면(목적지 입력)의 "강의실 101" 목록 항목이 Navigator 스택에
+    // 남아있어 textContaining만으로는 새 화면과 구분되지 않는다 - 경로 안내
+    // 화면 AppBar에만 있는 정확한 제목으로 확인한다.
+    expect(find.text('강의실 101(으)로 안내'), findsOneWidget);
     expect(find.textContaining('목적지까지 약'), findsOneWidget);
   });
 

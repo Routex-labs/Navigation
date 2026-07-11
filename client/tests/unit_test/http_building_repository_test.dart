@@ -49,6 +49,11 @@ void main() {
       var requestCount = 0;
       final client = MockClient((request) async {
         requestCount++;
+        // /floors/{floor}는 지도 데이터를, /floors/{floor}/graph는 복도선으로
+        // 얹을 간선 목록을 준다 - getFloorGeoJson이 내부적으로 둘 다 호출한다.
+        if (request.url.path.endsWith('/graph')) {
+          return http.Response(jsonEncode({'floor': {}, 'nodes': [], 'edges': []}), 200);
+        }
         return http.Response(jsonEncode({'type': 'FeatureCollection', 'features': []}), 200);
       });
       final repository = HttpBuildingRepository(client: client);
@@ -57,7 +62,46 @@ void main() {
       await repository.getFloorGeoJson('bldg-001', '1F'); // 같은 조합 → 캐시 재사용
       await repository.getFloorGeoJson('bldg-001', '2F'); // 다른 층 → 새 요청
 
-      expect(requestCount, 2);
+      // 층마다 지도 요청 1번 + 그래프 요청 1번 = 2번씩, 캐시된 재호출은 요청 없음.
+      expect(requestCount, 4);
+    });
+
+    test('merges graph edges into corridors_local_m', () async {
+      final client = MockClient((request) async {
+        if (request.url.path.endsWith('/graph')) {
+          return http.Response(
+            jsonEncode({
+              'floor': {},
+              'nodes': [],
+              'edges': [
+                {
+                  'id': 'e1',
+                  'from': 'A',
+                  'to': 'B',
+                  'length_m': 1.0,
+                  'bidirectional': true,
+                  'geometry_local_m': [
+                    {'x': 0, 'y': 0},
+                    {'x': 1, 'y': 1},
+                  ],
+                },
+              ],
+            }),
+            200,
+          );
+        }
+        return http.Response(jsonEncode({'footprint_local_m': [], 'stores': [], 'pois': []}), 200);
+      });
+      final repository = HttpBuildingRepository(client: client);
+
+      final geojson = await repository.getFloorGeoJson('bldg-001', '1F');
+
+      expect(geojson!['corridors_local_m'], [
+        [
+          {'x': 0, 'y': 0},
+          {'x': 1, 'y': 1},
+        ],
+      ]);
     });
   });
 
