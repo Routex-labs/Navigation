@@ -1,12 +1,13 @@
-# PDR 제품 이식 설계 (v3)
+# PDR 제품 이식 설계 (v4)
 
 연구 앱(`.local/indoor-sensor-navigation-mock/app`)에서 검증한 PDR을 메인 Flutter 앱
-(`client`)에 제품 모듈로 이식하기 위한 설계 문서. 코드 검증과 2회 검토(Codex + Claude)를
-반영한 최종본이다.
+(`client`)에 제품 모듈로 이식하기 위한 설계 문서. 코드 검증과 검토(Codex + Claude)를 반영했다.
 
 - 설명·주석은 한국어, 코드·식별자는 영어 (AGENTS.md 규칙).
 - 이 문서는 설계만 담는다. 구현은 Phase 0부터 단계별로 진행하고 각 단계마다 테스트 후
   한국어 커밋을 만든다.
+- **범위: 로직 + UI 연동 계약까지.** 위젯·화면·렌더러 등 표현 계층은 별도 트랙(UI팀)에서
+  진행되며 이 문서의 구현 범위가 아니다 (결정 C).
 
 ---
 
@@ -26,7 +27,27 @@
 | 결정 | 확정안 | 근거 |
 |---|---|---|
 | **A. untracked WIP 처리** | **손대지 않는다.** PDR 이식 범위와 충돌하지 않으면 그대로 둔다. 충돌하면 파일별 소유자·목적을 먼저 확인하고, 사용자가 명시적으로 승인한 경우에만 별도 백업 브랜치에 보존한다. riverpod은 도입하지 않는다. | `client/lib/features/`, `lib/state/`, `lib/data/`, `lib/core/config/`, `integration_test/`, `api/tests/integration/test_buildings_api.py` 등은 미추적 상태다. import되지 않는다는 사실만으로 죽은 코드로 확정할 수 없고, 테스트·API 파일은 사용자의 진행 중 작업일 수 있다. 삭제는 실질적으로 미추적 작업 삭제다. |
-| **B. 실내 렌더링 기판** | **meter-space 커스텀 렌더러**(CustomPaint + InteractiveViewer). flutter_map은 야외 전용. | 백엔드가 navigation geometry를 `local_m`으로 내려주고 PDR도 로컬 미터다. flutter_map에 얹으려면 가짜 투영이 필요하다. `CrsSimple` 대안은 보류 항목. |
+| **B. 실내 렌더링 기판** | **meter-space 커스텀 렌더러**(CustomPaint + InteractiveViewer). flutter_map은 야외 전용. **단, 렌더러 구현은 UI팀 몫**(결정 C 참조). 우리는 렌더러가 소비할 좌표·모델·변환만 제공. | 백엔드가 navigation geometry를 `local_m`으로 내려주고 PDR도 로컬 미터다. flutter_map에 얹으려면 가짜 투영이 필요하다. `CrsSimple` 대안은 보류 항목. |
+| **C. UI 범위 분리** | **UI(위젯·화면·렌더러·캘리브레이션 제스처·품질 indicator)는 별도 작업으로 진행된다. 우리 범위는 "로직 + UI가 붙을 계약(인터페이스)"까지다.** 실제 픽셀을 그리는 코드는 만들지 않는다. | 지도 렌더러·화면·overlay는 다른 트랙에서 개발된다. 로직/계약과 표현을 분리하면 양쪽이 병렬 작업할 수 있고, 코어의 테스트 가능성도 지켜진다. |
+
+### 범위 경계 (결정 C 상세)
+
+| 영역 | 우리(로직·계약) | UI팀(표현) |
+|---|---|---|
+| PDR 계산 코어 (`indoor_pdr_core`) | ✅ 전부 | — |
+| 센서 브릿지 + 세션 lifecycle 컨트롤러 (headless) | ✅ | — |
+| 좌표 변환·anchor·캘리브레이션 **상태기계** | ✅ | — |
+| `FloorMapResponse` local_m **파서/모델** | ✅ | — |
+| 품질 판정 (`PdrQuality`, features, 임계값) | ✅ | — |
+| meter-space **렌더러**(CustomPaint) | — | ✅ |
+| IndoorMap/RouteGuide **화면**, overlay 위젯 | — | ✅ |
+| 캘리브레이션 **UI**(핀/방향 제스처) | — | ✅ |
+| quality **indicator 위젯**, debug 주황 toggle | — | ✅ |
+
+원칙:
+- 우리는 순수 `Stream`/인터페이스/값 타입만 노출하고 **어떤 상태관리(riverpod 등)도 강제하지 않는다.** UI팀이 감싼다.
+- 세션 lifecycle 컨트롤러는 **우리가 headless 로직으로 소유**한다. UI는 관찰만 한다 (Phase 2).
+- UI가 붙을 계약은 **Phase 1 직후 별도 산출물**로 앞당겨 확정한다. UI팀이 코어 완성을 기다리지 않고 병렬 작업하도록.
 
 ---
 
@@ -66,18 +87,22 @@
 ```
 [읽기 전용] .local/…/app  ──(코드 참조·복사만, import 절대 금지)──▶
 
-packages/indoor_pdr_core/          ← pure Dart (dart:math만. Flutter SDK 의존 0)
+packages/indoor_pdr_core/          ← pure Dart (dart:math만. Flutter SDK 의존 0)          [우리]
     ▲ path dependency
 client/lib/features/indoor_navigation/
-    platform/     typed PdrMotionSource + iOS bridge adapter   ← flutter/services 허용
-    application/  IndoorNavigationController(앱 범위 세션 소유)
-    mapping/      FloorCoordinateTransform, PdrAnchor, FloorMapModel(local_m 파서)
-    presentation/ meter-space 렌더러, overlay, quality indicator
+    platform/     typed PdrMotionSource + iOS bridge adapter   ← flutter/services 허용     [우리]
+    application/  IndoorNavigationController(앱 범위 세션 소유, headless)                   [우리]
+    mapping/      FloorCoordinateTransform, PdrAnchor, FloorMapModel(local_m 파서)          [우리]
+    ── 위까지가 우리 범위. 아래는 계약(Stream/인터페이스)으로만 연결 ──
+    presentation/ meter-space 렌더러, overlay, quality indicator, 캘리브레이션 UI          [UI팀]
 ```
 
 - `indoor_pdr_core`는 주입된 이벤트와 clock만 사용. 내부 타이머·플랫폼 채널·JSON export 금지.
   진단 데이터는 구조체로 노출하고 직렬화는 client 몫.
 - raw `Map`은 platform adapter에서 typed event로 변환 후 폐기. core에 `Map<dynamic,dynamic>` 금지.
+- **UI 경계는 계약으로만 넘는다**: 우리 쪽은 `Stream<PdrSnapshot>`·상태·순수 함수를 노출하고,
+  UI팀은 그걸 구독/호출한다. 우리 코드는 위젯을 import하지 않고, UI팀 코드는 우리 내부 구현을
+  import하지 않는다(계약 파일만). 상태관리 방식은 UI팀 자유.
 
 ---
 
@@ -254,7 +279,22 @@ headingReference                   // magneticNorth | arbitraryCorrected
   ```
 - 완료 기준: `dart test` 통과 + 거리·걸음수 정확 재현.
 
-### Phase 2 — iOS typed bridge + session lifecycle
+### Phase 1.5 — UI 연동 계약 확정 (앞당김, UI팀 병렬 착수 지점)
+UI팀이 코어 완성을 기다리지 않도록 계약을 먼저 못박는다. 코드가 아니라 **인터페이스 + 문서**가 산출물.
+- 생성:
+  - `client/lib/features/indoor_navigation/contract/`에 UI가 의존할 공개 타입만 모은 배럴 —
+    `PdrSnapshot`(재노출), `IndoorNavigationView`(관찰용 인터페이스: `Stream<PdrSnapshot> snapshots`,
+    `Stream<CalibrationState> calibration`, `PdrQuality get quality`),
+    `IndoorNavigationIntents`(UI→우리: `confirmAnchorByPin`, `confirmAnchorByHeading`, `changeFloor`,
+    `startGuidance`, `stopGuidance`).
+  - `FloorCoordinateTransform.toFloor(PdrLocalPoint)` 시그니처 확정(순수 함수).
+  - `CalibrationState` 열거/상태 정의(미보정·핀대기·방향대기·확정, `requiresManualRotationCalibration` 포함).
+  - `docs/pdr-ui-contract.md`: UI가 구독하는 것 / 주는 것 / 좌표를 지도에 얹는 법 / 미보정 시 "위치
+    그리지 않기" 규약(§4) 명시.
+- 테스트: 계약 타입만으로 컴파일되는 fake 구현 + 계약 준수 테스트.
+- 완료 기준: UI팀이 이 계약만 보고 렌더러/화면 작업을 병렬 시작할 수 있다. 위젯 코드 0.
+
+### Phase 2 — iOS typed bridge + session lifecycle (headless)
 - 생성: `PdrMotionBridge.swift` 최소 이식판(CoreMotion+CMPedometer+peak, GPS/IMUv3 제외)을 client
   `ios/Runner/`에, `platform/ios_pdr_motion_source.dart`, `application/indoor_navigation_controller.dart`.
 - **세션 owner 단일화**: `IndoorNavigationController`(앱 범위)가 세션을 소유한다.
@@ -265,21 +305,31 @@ headingReference                   // magneticNorth | arbitraryCorrected
   - 권한 거부 → `degraded` + 안내.
 - 테스트: fake `PdrMotionSource`로 controller 단위 테스트(구독/해제/화면 전환 시 세션 유지/pause 경계),
   실기기 스모크.
-- 완료 기준: 실기기 세션 시작→걷기→snapshot 갱신, 화면 전환 시 세션 유지, 안내 종료 시 정지 확인.
+- **헤드리스 검증 하니스**: 제품 UI 대신, 코어→브릿지→컨트롤러가 도는지 확인하는 최소 example/CLI 또는
+  위젯 테스트 하니스(제품 화면 아님). UI팀도 이걸 참고해 개발.
+- 완료 기준: 실기기 세션 시작→걷기→snapshot 갱신(하니스 로그로 확인), 화면 전환 시 세션 유지, 안내 종료
+  시 정지 확인. **위젯/화면 코드는 만들지 않는다.**
 
-### Phase 3 — local_m 렌더링 + anchor/캘리브레이션 + overlay
+### Phase 3 — 좌표계 로직 + local_m 파서 + anchor/캘리브레이션 상태기계 (렌더링 제외)
+UI팀이 그릴 렌더러·화면·캘리브레이션 제스처는 **범위 밖**. 우리는 그들이 소비할 로직·모델만 만든다.
 - 생성: `FloorMapModel`(FloorMapResponse `local_m` 파서, 레거시 GeoJSON 파서 대체),
-  meter-space `FloorMapPainter`, `mapping/`의 `PdrAnchor`/`FloorCoordinateTransform`,
-  캘리브레이션 UI(핀+방향), IndoorMap/RouteGuide overlay.
-- SVG 벽 레이어는 §4 정합 계약대로 처리(변환 없으면 정합 미주장).
+  `mapping/`의 `PdrAnchor`/`FloorCoordinateTransform`(순수), 캘리브레이션 **상태기계**
+  (Phase 1.5의 `CalibrationState` 구현 — 미보정/핀대기/방향대기/확정 전이),
+  heading reference 분기(magneticNorth vs arbitraryCorrected, §4).
+- SVG 벽 레이어 정합 계약(§4): 변환 없으면 파서는 px geometry를 "미정합"으로 표시만 하고 local_m로
+  올리지 않는다. 실제 렌더 판단은 UI팀 몫이지만, 데이터에 정합 여부 플래그를 실어 보낸다.
 - API: `north_alignment` 필드 확장(백엔드 이슈, 값 없으면 `calibrated:false` 경로).
-- 테스트: transform 왕복, 파서, 위젯(미보정 시 위치 마커 미표시, arbitrary reference 시 캘리브레이션 강제).
-- 완료 기준: anchor 지정 후 지도 위 초록 위치 이동, 미보정 시 "그리는 척" 없음.
+- 테스트: transform 왕복, 파서, 캘리브레이션 상태 전이, arbitrary reference 시
+  `requiresManualRotationCalibration=true` 확인. **위젯 테스트 없음(위젯이 없으므로).**
+- 완료 기준: UI팀이 `FloorCoordinateTransform`으로 PDR 좌표를 지도 좌표로 변환 가능, 미보정/미정합
+  상태가 데이터로 정확히 노출됨.
 
-### Phase 4 — 품질 진단 + debug 주황 toggle + telemetry
-- 생성: quality indicator 위젯, debug 빌드 한정 주황 toggle, 세션 진단 요약 export(v3 부분집합).
-- 테스트: 13-49 재생 시 "divergence 18%이지만 degraded 아님" 회귀 케이스 고정.
-- 완료 기준: 임계값 전부 config 주입, 하드코딩 0.
+### Phase 4 — 품질 판정 로직 + 진단 데이터 노출 (위젯 제외)
+quality indicator 위젯·debug 주황 toggle은 **UI팀**. 우리는 판정 로직과 노출 데이터만.
+- 생성: `PdrQuality`/`PdrQualityFeatures` 계산(§5), 세션 진단 요약 구조체(직렬화 가능, v3 부분집합),
+  임계값 config.
+- 테스트: 13-49 재생 시 "divergence 18%이지만 degraded 아님" 회귀 케이스 고정, 품질 상태 전이 테스트.
+- 완료 기준: 임계값 전부 config 주입(하드코딩 0), 품질 상태·features가 계약(Phase 1.5)대로 스트림에 실림.
 
 ### Phase 5 — labeled route conditional distance fusion 실험 (연구 앱, 제품 코드 무수정)
 - known-distance/known-loop 수집 프로토콜 + 실측 거리 필드, feature 세트는 §5와 동일 스키마.
@@ -312,7 +362,11 @@ headingReference                   // magneticNorth | arbitraryCorrected
 ---
 
 ## 변경 이력
-- **v3**: untracked WIP 비파괴 처리(결정 A), SVG px↔local_m 정합 계약(§4), heading reference
+- **v4**: UI 범위 분리(결정 C) — 위젯·화면·렌더러·캘리브레이션 제스처·품질 indicator는 UI팀 몫,
+  우리는 로직 + 계약까지. 범위 경계 표(§0), UI 경계는 계약으로만(§2), Phase 1.5(UI 연동 계약 앞당김)
+  신설, Phase 2에 헤드리스 하니스 추가, Phase 3(렌더링 제외·좌표/파서/상태기계만)·Phase 4(위젯
+  제외·판정 로직만) 재정의.
+- v3: untracked WIP 비파괴 처리(결정 A), SVG px↔local_m 정합 계약(§4), heading reference
   fallback 처리(§4 `HeadingReference`), replay parity를 거리 회귀(기존 세션)+shape trace(향후)로 분리
   (Phase 1), 세션 owner 단일화(Phase 2).
 - v2: LatLng affine → local_m rigid transform, 렌더링 기판 결정 추가, 코어 추출/재작성 명시.
