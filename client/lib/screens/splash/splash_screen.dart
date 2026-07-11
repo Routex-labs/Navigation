@@ -72,6 +72,12 @@ class _SplashScreenState extends State<SplashScreen> {
                       },
                       child: const Text('API 상태 확인 (dev)'),
                     ),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(context).pushNamed(AppRoutes.debugFloorMapPreview);
+                      },
+                      child: const Text('더현대 서울 평면도 미리보기 (dev)'),
+                    ),
                   ],
                 ),
               ),

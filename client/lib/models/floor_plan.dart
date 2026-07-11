@@ -1,5 +1,12 @@
 import 'package:latlong2/latlong.dart';
 
+/// 백엔드 local_m {x, y} 좌표를 flutter_map CrsSimple에서 쓸 LatLng(y, x)로
+/// 바꾼다. 실내 관련 모델(FloorPlan, IndoorRoute)이 전부 이 규칙을 공유해야
+/// 같은 지도 위에서 좌표가 어긋나지 않는다.
+LatLng localPointToLatLng(Map<String, dynamic> point) {
+  return LatLng((point['y'] as num).toDouble(), (point['x'] as num).toDouble());
+}
+
 class PoiMarker {
   const PoiMarker({required this.name, required this.point, this.type});
 
@@ -15,11 +22,19 @@ class StorePolygon {
     required this.name,
     required this.polygon,
     required this.centroid,
+    this.entranceNodeId,
+    this.category,
   });
 
   final String name;
   final List<LatLng> polygon;
   final LatLng centroid;
+
+  /// 경로탐색 시작/도착 노드로 쓸 매장 입구 노드 ID. 없으면 경로탐색 불가.
+  final String? entranceNodeId;
+
+  /// 매장 대분류(예: fashion/beauty/service). 백엔드 실데이터에만 채워짐.
+  final String? category;
 }
 
 /// 층 평면도. 두 가지 소스를 모두 파싱한다:
@@ -52,7 +67,7 @@ class FloorPlan {
   static FloorPlan _fromApiResponse(Map<String, dynamic> json) {
     final footprint = ((json['footprint_local_m'] as List<dynamic>?) ??
             const [])
-        .map((point) => _toLocalLatLng(point as Map<String, dynamic>))
+        .map((point) => localPointToLatLng(point as Map<String, dynamic>))
         .toList();
 
     final stores = ((json['stores'] as List<dynamic>?) ?? const [])
@@ -61,11 +76,13 @@ class FloorPlan {
           (store) => StorePolygon(
             name: store['name'] as String? ?? '',
             polygon: ((store['polygon_local_m'] as List<dynamic>?) ?? const [])
-                .map((point) => _toLocalLatLng(point as Map<String, dynamic>))
+                .map((point) => localPointToLatLng(point as Map<String, dynamic>))
                 .toList(),
-            centroid: _toLocalLatLng(
+            centroid: localPointToLatLng(
               store['centroid_local_m'] as Map<String, dynamic>,
             ),
+            entranceNodeId: store['entrance_node_id'] as String?,
+            category: store['category'] as String?,
           ),
         )
         .toList();
@@ -75,7 +92,7 @@ class FloorPlan {
         .map(
           (poi) => PoiMarker(
             name: poi['name'] as String? ?? '',
-            point: _toLocalLatLng(
+            point: localPointToLatLng(
               poi['position_local_m'] as Map<String, dynamic>,
             ),
             type: poi['type'] as String?,
@@ -84,10 +101,6 @@ class FloorPlan {
         .toList();
 
     return FloorPlan(footprint: footprint, stores: stores, pois: pois);
-  }
-
-  static LatLng _toLocalLatLng(Map<String, dynamic> point) {
-    return LatLng((point['y'] as num).toDouble(), (point['x'] as num).toDouble());
   }
 
   static FloorPlan _fromGeoJson(Map<String, dynamic> geojson) {
