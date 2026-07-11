@@ -201,7 +201,7 @@ void main() {
     source.emitRaw(motionEvent(tMs: 1000, heading: 0));
     await settle();
 
-    driver.onAppBackgrounded();
+    await driver.onAppBackgrounded();
     source.emitRaw(
       pedometerEvent(
         steps: 8,
@@ -217,6 +217,61 @@ void main() {
       driver.currentSnapshot?.steps ?? 0,
       0,
       reason: 'pause 중에는 confirmed가 늘지 않아야 한다',
+    );
+  });
+
+  test('안내 중 background는 tracking과 native source를 한 번 멈춘다', () async {
+    await driver.startGuidance(floorId: 'F1');
+    source.emitRaw(motionEvent(tMs: 1000));
+    await settle();
+
+    await driver.onAppBackgrounded();
+    await driver.onAppBackgrounded();
+
+    expect(source.stopCount, 1);
+    expect(driver.currentRuntimeStatus.state, PdrRuntimeState.paused);
+  });
+
+  test('background 뒤 foreground는 source와 tracking을 한 번 재개한다', () async {
+    await driver.startGuidance(floorId: 'F1');
+    await driver.onAppBackgrounded();
+
+    await driver.onAppForegrounded();
+    await driver.onAppForegrounded();
+
+    expect(source.startCount, 2);
+    expect(driver.currentRuntimeStatus.state, PdrRuntimeState.starting);
+  });
+
+  test('안내 중이 아니면 lifecycle이 source를 호출하지 않는다', () async {
+    await driver.onAppBackgrounded();
+    await driver.onAppForegrounded();
+
+    expect(source.startCount, 0);
+    expect(source.stopCount, 0);
+  });
+
+  test('background 센서 정지 실패는 degraded warning으로 노출된다', () async {
+    await driver.startGuidance(floorId: 'F1');
+    source.stopError = StateError('stop');
+
+    await driver.onAppBackgrounded();
+
+    expect(driver.currentRuntimeStatus.state, PdrRuntimeState.degraded);
+    expect(driver.currentRuntimeStatus.warnings, contains('sensorStopFailed'));
+  });
+
+  test('foreground 센서 재시작 실패는 degraded warning으로 노출된다', () async {
+    await driver.startGuidance(floorId: 'F1');
+    await driver.onAppBackgrounded();
+    source.startError = StateError('resume');
+
+    await driver.onAppForegrounded();
+
+    expect(driver.currentRuntimeStatus.state, PdrRuntimeState.degraded);
+    expect(
+      driver.currentRuntimeStatus.warnings,
+      contains('sensorResumeFailed'),
     );
   });
 

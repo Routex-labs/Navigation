@@ -44,6 +44,7 @@ class IndoorNavigationDriver implements IndoorNavigationController {
   CalibrationStatus _calib = const CalibrationStatus.uncalibrated();
   PdrRuntimeStatus _runtimeStatus = const PdrRuntimeStatus.idle();
   bool _guiding = false;
+  bool _backgrounded = false;
   String? _floorId;
 
   // 캘리브레이션 진행 중 임시 상태.
@@ -79,6 +80,7 @@ class IndoorNavigationDriver implements IndoorNavigationController {
     }
     _floorId = floorId;
     _guiding = true;
+    _backgrounded = false;
     _session.reset();
     _updateRuntime(PdrRuntimeState.starting);
     _eventSub ??= _source.events.listen(
@@ -102,6 +104,7 @@ class IndoorNavigationDriver implements IndoorNavigationController {
       return;
     }
     _guiding = false;
+    _backgrounded = false;
     _updateRuntime(PdrRuntimeState.stopping);
     await _source.stop();
     _pendingPinFloorM = null;
@@ -159,16 +162,38 @@ class IndoorNavigationDriver implements IndoorNavigationController {
   // ── 앱 lifecycle (앱 셸이 호출) ──
 
   /// 앱이 background로 가면 tracking pause.
-  void onAppBackgrounded() {
-    if (_guiding) {
-      _session.pause(atMs: _session.lastMotionAtMs ?? _nowMs());
+  Future<void> onAppBackgrounded() async {
+    if (!_guiding || _backgrounded) {
+      return;
+    }
+    _backgrounded = true;
+    _session.pause(atMs: _session.lastMotionAtMs ?? _nowMs());
+    try {
+      await _source.stop();
+      _updateRuntime(PdrRuntimeState.paused);
+    } on Object {
+      _updateRuntime(
+        PdrRuntimeState.degraded,
+        warnings: const ['sensorStopFailed'],
+      );
     }
   }
 
   /// 앱이 foreground로 돌아오면 tracking resume.
-  void onAppForegrounded() {
-    if (_guiding) {
+  Future<void> onAppForegrounded() async {
+    if (!_guiding || !_backgrounded) {
+      return;
+    }
+    try {
+      await _source.start();
       _session.resume(atMs: _session.lastMotionAtMs ?? _nowMs());
+      _backgrounded = false;
+      _updateRuntime(PdrRuntimeState.starting);
+    } on Object {
+      _updateRuntime(
+        PdrRuntimeState.degraded,
+        warnings: const ['sensorResumeFailed'],
+      );
     }
   }
 
