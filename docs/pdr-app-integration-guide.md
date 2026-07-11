@@ -78,6 +78,54 @@ flowchart TB
 | `client/ios/Runner/PdrMotionBridge.swift` | CoreMotion·CMPedometer 수집 | heading, step peak, pedometer batch를 EventChannel으로 전달 |
 | `client/lib/features/indoor_navigation/` | platform/application/contract 계층 | raw sensor → typed event → PDR 계산 → UI 계약 |
 
+### 연구 앱 디렉터리에서 메인 앱으로의 이식 위치
+
+원본 연구 앱은 `.local/indoor-sensor-navigation-mock/app/`에 보존한다. 메인 앱이 이
+디렉터리를 import하지는 않으며, 제품에 필요한 책임만 아래 위치로 분리해 이식했다.
+
+| 원본 연구 앱 위치 | 메인 앱 이식 위치 | 이식한 책임 |
+|---|---|---|
+| `lib/src/pdr/` | `packages/indoor_pdr_core/lib/src/` | 걸음·보폭·heading·경로 누적·품질 계산의 pure Dart 코어 |
+| `lib/src/platform/` | `client/lib/features/indoor_navigation/platform/` | Dart 플랫폼 이벤트 타입과 iOS EventChannel adapter |
+| `ios/Runner/PdrMotionBridge.swift` | `client/ios/Runner/PdrMotionBridge.swift` | CoreMotion·CMPedometer 기반 heading/peak/pedometer 수집 |
+| `lib/src/pdr/pdr_engine.dart`의 앱 제어 책임 | `client/lib/features/indoor_navigation/application/` | 세션 시작·종료, lifecycle, 오류 상태, snapshot 전달 |
+| `lib/src/ui/pdr_screen.dart`가 소비하던 상태 | `client/lib/features/indoor_navigation/contract/` | UI가 의존할 공개 타입·상태·intent 계약 |
+| `test/`, 기록 세션 | `packages/indoor_pdr_core/test/`, `client/test/`, `client/integration_test/` | 계산 회귀와 실기기 하니스 검증 |
+
+GPS 비교·세션 export·IMU 녹화·RoNIN/TFLite 실험 코드는 제품 이식 범위에서 의도적으로 제외했다.
+따라서 기존 `IndoorMap` 화면에 로직을 직접 끼워 넣은 구조가 아니라,
+`client/lib/features/indoor_navigation/` 독립 모듈을 앱 전역 lifecycle에 연결한 구조다.
+
+### 이식 파일별 상세 책임
+
+아래는 UI·지도 팀이 연결할 때 알아야 하는 추가/변경 파일의 실제 책임이다. `contract/` 밖의
+구현 파일은 UI가 직접 import하지 않는다.
+
+| 파일 | 입력 → 출력 | 상세 책임 / 변경 시 주의점 |
+|---|---|---|
+| `client/lib/app.dart` | Flutter lifecycle → driver 호출 | `WidgetsBindingObserver`로 앱 background/foreground를 감지해 PDR 세션을 pause/resume한다. 화면 전환만으로는 stop하지 않는다. |
+| `client/lib/core/service_locator.dart` | 앱 시작 → 전역 단일 인스턴스 | `IosPdrMotionSource`와 `IndoorNavigationDriver`를 한 번 생성한다. 화면별로 driver를 새로 만들면 경로가 끊기므로 금지한다. |
+| `client/ios/Runner/AppDelegate.swift` | Flutter messenger → EventChannel/MethodChannel | `navigation_client/pdr_motion`, `navigation_client/pdr_motion_cmd` 채널을 Swift bridge에 등록한다. 채널 이름은 Dart adapter와 반드시 같아야 한다. |
+| `client/ios/Runner/PdrMotionBridge.swift` | CoreMotion/CMPedometer → tagged native event | DeviceMotion, 보행 방향 보조 신호, step peak, CMPedometer 배치를 모아 Dart로 보낸다. GPS·IMU export는 포함하지 않으며 `resetPedometer` 명령도 처리한다. |
+| `platform/pdr_motion_source.dart` | 플랫폼별 구현 → 공통 센서 인터페이스 | `events`, `start`, `stop`, `resetPedometer`만 정의한다. Android 구현도 이 인터페이스를 구현하면 된다. |
+| `platform/native_pdr_event.dart` | raw EventChannel `Map` → `HeadingEvent`/`AccelPeakEvent`/`PedometerBatchEvent` | native payload의 형식 검증과 typed 변환 경계다. raw `Map`은 이 파일 바깥으로 새지 않는다. |
+| `platform/ios_pdr_motion_source.dart` | EventChannel/MethodChannel → `NativePdrEvent` stream | iOS 채널 구독을 열고 닫으며, raw 이벤트를 parser에 전달한다. PDR 수학이나 UI 상태는 여기 두지 않는다. |
+| `application/indoor_navigation_controller.dart` | typed sensor event → snapshot·calibration·runtime stream | 앱 범위 세션 owner다. start/stop, background pause, 층 변경 reset, 센서 오류, pin/heading anchor 확정을 처리한다. UI는 이 구현체가 아니라 계약만 본다. |
+| `contract/indoor_navigation_contract.dart` | UI import → 공개 PDR 타입 | UI용 barrel이다. `PdrSnapshot`, controller view/intents, anchor 관련 타입을 한 곳에서 노출한다. |
+| `contract/indoor_navigation_view.dart` | 로직 → UI | `snapshots`, calibration, runtime status의 읽기 전용 stream과 최신 값을 제공한다. 마커·상태 indicator는 이것을 구독한다. |
+| `contract/indoor_navigation_intents.dart` | UI 제스처 → 로직 명령 | `startGuidance`, `stopGuidance`, pin/heading anchor, 층 변경 명령을 정의한다. UI가 세션 내부를 직접 조작하지 않게 한다. |
+| `contract/calibration_state.dart`, `pdr_anchor.dart` | 사용자 pin/방향 + PDR local point → floor `local_m` | 캘리브레이션 단계와 rigid transform을 정의한다. `canRenderPosition`이 true일 때만 지도에 위치를 그린다. 실제 축·북쪽 정렬값 검증은 Phase 3이다. |
+| `contract/pdr_runtime_status.dart` | 센서 실행 결과 → 상태·warning code | `idle`부터 `degraded`까지의 앱 실행 상태를 제공한다. warning은 사용자 문구가 아니라 UI/telemetry가 해석할 코드다. |
+| `packages/indoor_pdr_core/lib/indoor_pdr_core.dart` | 패키지 소비자 → public API | 계산 코어의 barrel이다. client와 테스트는 원칙적으로 이 공개 API만 import한다. |
+| `application/pdr_session.dart` | heading + peak + pedometer batch → `PdrSnapshot` | PDR 계산의 orchestration이다. confirmed(초록) 경로와 accel preview(주황) 경로, 거리·걸음·품질 snapshot을 조합한다. |
+| `application/pedometer_batch_processor.dart`, `tracking_timeline.dart` | 늦게 도착한 CMPedometer batch → 추적 중 step만 반영 | batch 중복·stale 세션을 걸러내고 background 경계를 가르는 동안의 step만 남긴다. lifecycle 정확도의 핵심이다. |
+| `application/stride_estimator.dart` | Apple distance/cadence/pace → step distance | Apple distance 우선, cadence·pace 다음, 0.70m fallback 순서로 보폭을 고르고 급격한 변화는 smoothing한다. |
+| `application/heading_trackers.dart`, `path_accumulator.dart` | DeviceMotion heading + step 시각 → confirmed 경로 | 팔 흔들림을 분리하고 보행 방향 offset을 추정한다. 배치 안 step도 해당 시점 heading으로 분산 배치해 코너가 한꺼번에 꺾이지 않게 한다. |
+| `application/accel_preview_track.dart`, `quality_metrics.dart` | accel peak + confirmed 경로 → 주황 preview·경고 | accel 기반 경로는 진단용이다. confirmed 위치를 대체하거나 평균내지 않으며, 과다/과소 계수 의심을 warning으로만 노출한다. |
+| `application/pdr_session_config.dart` | 제품/실험 설정 → PDR core | fallback 보폭, 경로 point 상한, 품질 임계값을 주입한다. 현 임계값은 실측 데이터로 재보정 대상이다. |
+| `domain/events.dart`, `snapshot.dart`, `pdr_local_point.dart`, `quality.dart` | 각 계층 간 값 전달 | 플랫폼·앱·UI 사이에서 공유하는 immutable 데이터 모델이다. PDR 좌표는 `eastM/northM` 미터이며 LatLng가 아니다. |
+| `debug/pdr_device_harness.dart`, `integration_test/pdr_device_smoke_test.dart` | 실기기 센서 → PASS/FAIL receipt | 제품 화면 없이도 센서 시작·걷기 snapshot·중단을 검증하는 standalone 하니스다. 실제 화면 진입 흐름을 검증하는 테스트와는 구분한다. |
+
 ## 3. 센서부터 UI 계약까지의 데이터 흐름
 
 ```mermaid
