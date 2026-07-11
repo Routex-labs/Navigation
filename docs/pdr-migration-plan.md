@@ -310,6 +310,21 @@ UI팀이 코어 완성을 기다리지 않도록 계약을 먼저 못박는다. 
 - 완료 기준: 실기기 세션 시작→걷기→snapshot 갱신(하니스 로그로 확인), 화면 전환 시 세션 유지, 안내 종료
   시 정지 확인. **위젯/화면 코드는 만들지 않는다.**
 
+#### 구현·검증 현황 (2026-07-11)
+
+- 구현 완료: iOS CoreMotion/CMPedometer 최소 브릿지, typed Dart adapter, 앱 범위
+  `IndoorNavigationDriver`, service locator 단일 인스턴스, 앱 background/foreground 전달.
+- runtime 계약: `idle/starting/running/paused/stopping/degraded`와 센서 오류 warning을 UI 계약으로
+  노출. runtime 오류 뒤 snapshot quality도 degraded로 합성한다.
+- 자동 검증: `indoor_pdr_core` 10 tests, client 26 tests 통과. PDR 변경 경로 `flutter analyze`
+  clean. `flutter build ios --simulator --debug` 통과.
+- 전체 client analyze의 19건은 기존 미추적 `health_check_test.dart`, `data/`, `features/map/`,
+  `state/`의 `MyApp`/`dio`/`riverpod` baseline이며 Phase 2 변경 경로에는 신규 issue가 없다.
+- 실기기 하니스: `client/integration_test/pdr_device_smoke_test.dart`. 기본 실행에서는 skip하며
+  `--dart-define=PDR_DEVICE_SMOKE=true`일 때만 실제 센서를 검증한다.
+- **현재 상태: 실기기 acceptance 대기.** 연결된 iPhone에서 heading 수신 → 보행 snapshot 갱신 →
+  stop 후 이벤트 중단을 통과하기 전에는 Phase 2를 완료로 표시하지 않는다.
+
 ### Phase 3 — 좌표계 로직 + local_m 파서 + anchor/캘리브레이션 상태기계 (렌더링 제외)
 UI팀이 그릴 렌더러·화면·캘리브레이션 제스처는 **범위 밖**. 우리는 그들이 소비할 로직·모델만 만든다.
 - 생성: `FloorMapModel`(FloorMapResponse `local_m` 파서, 레거시 GeoJSON 파서 대체),
