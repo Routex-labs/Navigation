@@ -12,7 +12,7 @@ class FakeIndoorNavigation implements IndoorNavigationController {
 
   PdrSnapshot? _current;
   CalibrationStatus _calib = const CalibrationStatus.uncalibrated();
-  PdrRuntimeStatus _runtimeStatus = const PdrRuntimeStatus.idle();
+  final PdrRuntimeStatus _runtimeStatus = const PdrRuntimeStatus.idle();
   final List<String> log = [];
 
   @override
