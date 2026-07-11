@@ -2,11 +2,14 @@
 가공된 실 데이터를 SQLite(navigation.db) 에 적재하는 ETL
 
 1회성 스크립트. 실행할 때마다 테이블을 DROP 후 재생성한다 (멱등).
+--append를 주면 기존 테이블/데이터를 지우지 않고 이 건물만 추가로 적재한다
+(같은 DB에 건물을 여러 개 담을 때 사용, 예: thehyundai-seoul + test-center).
 
 실행방법
 python scripts/load_dataset.py
 python scripts/load_dataset.py --db data/navigation.db
 python scripts/load_dataset.py --vector-dir app/data/vector_maps
+python scripts/load_dataset.py --json app/data/navigation_test_center_1f.json --append
 
 """
 from __future__ import annotations
@@ -23,9 +26,11 @@ DEFAULT_JSON = API_ROOT / "app" / "data" / "navigation_1f.json"
 DEFAULT_VECTOR_DIR = API_ROOT / "app" / "data" / "vector_maps"
 DEFAULT_DB = API_ROOT / "data" / "navigation.db"
 
-# 개발용 데이터셋을 항상 같은 상태로 만들기 위해 DROP → CREATE를 한 번에 실행한다.
-# 자식 테이블부터 DROP해야 외래 키 관계가 있어도 안전하게 다시 생성할 수 있다.
-DDL = """
+# 개발용 데이터셋을 항상 같은 상태로 만들기 위해 기본적으로 DROP → CREATE를
+# 실행한다. 자식 테이블부터 DROP해야 외래 키 관계가 있어도 안전하게 다시
+# 생성할 수 있다. --append(APPEND_DDL만 실행)를 주면 DROP을 건너뛰어 기존에
+# 적재된 다른 건물 데이터를 보존한 채로 새 건물만 추가할 수 있다.
+DROP_DDL = """
 PRAGMA foreign_keys = ON;
 
 DROP TABLE IF EXISTS pois;
@@ -36,8 +41,12 @@ DROP TABLE IF EXISTS map_features;
 DROP TABLE IF EXISTS floor_vector_maps;
 DROP TABLE IF EXISTS floors;
 DROP TABLE IF EXISTS buildings;
+"""
 
-CREATE TABLE buildings (
+APPEND_DDL = """
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS buildings (
     id                TEXT PRIMARY KEY,
     name              TEXT NOT NULL,
     area_m2           REAL,
@@ -45,7 +54,7 @@ CREATE TABLE buildings (
     footprint_local_m TEXT              -- [{"x":..,"y":..}, ...] JSON
 );
 
-CREATE TABLE floors (
+CREATE TABLE IF NOT EXISTS floors (
     id          TEXT PRIMARY KEY,
     building_id TEXT NOT NULL REFERENCES buildings(id),
     name        TEXT NOT NULL,          -- 예: 1F
@@ -53,13 +62,13 @@ CREATE TABLE floors (
     UNIQUE (building_id, name)
 );
 
-CREATE TABLE floor_vector_maps (
+CREATE TABLE IF NOT EXISTS floor_vector_maps (
     floor_id          TEXT PRIMARY KEY REFERENCES floors(id),
     coordinate_system TEXT NOT NULL,    -- SVG viewBox 좌표계 메타데이터 JSON
     source            TEXT NOT NULL     -- 원본 파일/형식 추적용 JSON
 );
 
-CREATE TABLE map_features (
+CREATE TABLE IF NOT EXISTS map_features (
     id            TEXT NOT NULL,
     floor_id      TEXT NOT NULL REFERENCES floor_vector_maps(floor_id),
     kind          TEXT NOT NULL,        -- footprint|store|amenity|wall|gate
@@ -71,10 +80,10 @@ CREATE TABLE map_features (
     centroid_y    REAL,
     PRIMARY KEY (floor_id, id)
 );
-CREATE INDEX idx_map_features_floor ON map_features(floor_id);
-CREATE INDEX idx_map_features_kind  ON map_features(kind);
+CREATE INDEX IF NOT EXISTS idx_map_features_floor ON map_features(floor_id);
+CREATE INDEX IF NOT EXISTS idx_map_features_kind  ON map_features(kind);
 
-CREATE TABLE nodes (
+CREATE TABLE IF NOT EXISTS nodes (
     id       TEXT PRIMARY KEY,
     floor_id TEXT NOT NULL REFERENCES floors(id),
     type     TEXT NOT NULL,             -- corridor|junction|store_entrance|escalator|elevator|dead_end
@@ -87,10 +96,10 @@ CREATE TABLE nodes (
     source_y REAL
 );
 
-CREATE INDEX idx_nodes_floor ON nodes(floor_id);
-CREATE INDEX idx_nodes_type  ON nodes(type);
+CREATE INDEX IF NOT EXISTS idx_nodes_floor ON nodes(floor_id);
+CREATE INDEX IF NOT EXISTS idx_nodes_type  ON nodes(type);
 
-CREATE TABLE edges (
+CREATE TABLE IF NOT EXISTS edges (
     id            TEXT PRIMARY KEY,
     floor_id      TEXT NOT NULL REFERENCES floors(id),
     from_node_id  TEXT NOT NULL REFERENCES nodes(id),
@@ -99,11 +108,11 @@ CREATE TABLE edges (
     bidirectional INTEGER NOT NULL DEFAULT 1,
     geometry      TEXT                  -- local_m polyline JSON
 );
-CREATE INDEX idx_edges_floor ON edges(floor_id);
-CREATE INDEX idx_edges_from  ON edges(from_node_id);
-CREATE INDEX idx_edges_to    ON edges(to_node_id);
+CREATE INDEX IF NOT EXISTS idx_edges_floor ON edges(floor_id);
+CREATE INDEX IF NOT EXISTS idx_edges_from  ON edges(from_node_id);
+CREATE INDEX IF NOT EXISTS idx_edges_to    ON edges(to_node_id);
 
-CREATE TABLE stores (
+CREATE TABLE IF NOT EXISTS stores (
     id               TEXT PRIMARY KEY,
     floor_id         TEXT NOT NULL REFERENCES floors(id),
     name             TEXT NOT NULL,
@@ -114,10 +123,10 @@ CREATE TABLE stores (
     entrance_node_id TEXT REFERENCES nodes(id),
     polygon          TEXT               -- local_m Polygon JSON
 );
-CREATE INDEX idx_stores_floor ON stores(floor_id);
-CREATE INDEX idx_stores_name  ON stores(name);
+CREATE INDEX IF NOT EXISTS idx_stores_floor ON stores(floor_id);
+CREATE INDEX IF NOT EXISTS idx_stores_name  ON stores(name);
 
-CREATE TABLE pois (
+CREATE TABLE IF NOT EXISTS pois (
     id             TEXT PRIMARY KEY,
     floor_id       TEXT NOT NULL REFERENCES floors(id),
     type           TEXT NOT NULL,
@@ -126,8 +135,8 @@ CREATE TABLE pois (
     y_m            REAL NOT NULL,
     linked_node_id TEXT REFERENCES nodes(id)
 );
-CREATE INDEX idx_pois_floor ON pois(floor_id);
-CREATE INDEX idx_pois_type  ON pois(type);
+CREATE INDEX IF NOT EXISTS idx_pois_floor ON pois(floor_id);
+CREATE INDEX IF NOT EXISTS idx_pois_type  ON pois(type);
 """
 
 
@@ -220,6 +229,8 @@ def load_navigation_db(
     json_path: Path = DEFAULT_JSON,
     db_path: Path = DEFAULT_DB,
     vector_path: Path | None = DEFAULT_VECTOR_DIR,
+    *,
+    append: bool = False,
 ) -> dict[str, int]:
     """navigation JSON을 읽어 SQLite로 적재하고 테이블별 건수를 반환한다."""
     # 원본 JSON 전체를 Python dict/list 구조로 읽는다.
@@ -242,8 +253,11 @@ def load_navigation_db(
 
     conn = sqlite3.connect(db_path)
     try:
-        # 테이블과 인덱스를 초기화한 뒤 아래 INSERT를 시작한다.
-        conn.executescript(DDL) # DROP + CREATE ( 멱등의 핵심 ), 자동 transaction 시작
+        # append가 아니면 기존 테이블을 전부 지우고 새로 만든다(단일 건물 기준 멱등).
+        # append면 DROP을 건너뛰어 이미 적재된 다른 건물 데이터를 보존한다.
+        if not append:
+            conn.executescript(DROP_DDL)
+        conn.executescript(APPEND_DDL)
 
         # --- 건물/층: 각각 한 건씩 INSERT ---
         conn.execute(
@@ -390,9 +404,16 @@ if __name__ == "__main__":
         help="건물/층별 벡터 JSON 디렉터리 또는 단일 JSON 파일",
     )
     parser.add_argument("--db", type=Path, default=DEFAULT_DB)
+    parser.add_argument(
+        "--append",
+        action="store_true",
+        help="기존 테이블을 DROP하지 않고 이 건물만 추가로 적재한다",
+    )
     args = parser.parse_args()
 
-    result = load_navigation_db(args.json, args.db, args.vector_dir)
+    result = load_navigation_db(
+        args.json, args.db, args.vector_dir, append=args.append
+    )
     print(f"적재 완료 : {args.db}")
     for table, count in result.items():
         print(f" {table}: {count}")
