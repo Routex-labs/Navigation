@@ -3,7 +3,8 @@
 from tests.conftest import BUILDING_ID
 
 
-def test_매장_검색(api_client):
+# 검색어가 포함된 매장을 반환하는지 검증한다.
+def test_검색어로_매장을_조회한다(api_client):
     response = api_client.get(
         f"/buildings/{BUILDING_ID}/stores",
         params={"q": "베네타"},
@@ -15,7 +16,8 @@ def test_매장_검색(api_client):
     assert any("베네타" in store["name"] for store in stores)
 
 
-def test_매장_검색_전체(api_client):
+# 검색어가 없을 때 건물의 전체 매장을 반환하는지 검증한다.
+def test_검색어가_없으면_전체_매장을_조회한다(api_client):
     response = api_client.get(f"/buildings/{BUILDING_ID}/stores")
 
     assert response.status_code == 200

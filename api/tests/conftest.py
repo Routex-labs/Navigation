@@ -13,7 +13,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.FastAPIConfig import create_app, get_db
-from app.repository.sqliteBuildingRepository import SqliteBuildingRepository
 from scripts.load_dataset import DEFAULT_JSON, load_navigation_db
 
 # 여러 테스트가 같은 실데이터 식별자를 사용하도록 상수로 공유한다.
@@ -38,12 +37,6 @@ def db_connection(navigation_db_path):
     conn.row_factory = sqlite3.Row
     yield conn
     conn.close()
-
-
-@pytest.fixture
-def building_repository(db_connection) -> SqliteBuildingRepository:
-    # Service 단위 테스트가 FastAPI DI 없이 Repository를 직접 주입받게 한다.
-    return SqliteBuildingRepository(db_connection)
 
 
 @pytest.fixture
