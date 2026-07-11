@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.FastAPIConfig import get_building_service
 from app.schema.floor_map import FloorMapResponse
-from app.schema.route import RouteResponse
+from app.schema.route import FloorGraphResponse, RouteResponse
 from app.service.buildingService import BuildingService
 
 # prefix는 아래 모든 경로 앞에 /buildings를 붙이고 tags는 Swagger 그룹을 만든다.
@@ -106,7 +106,10 @@ def get_shortest_route(
 
     return result
 
-@router.get("/{building_id}/floors/{floor_name}/graph")
+@router.get(
+    "/{building_id}/floors/{floor_name}/graph",
+    response_model=FloorGraphResponse,
+)
 def get_floor_graph(
     building_id: str,
     floor_name: str,
