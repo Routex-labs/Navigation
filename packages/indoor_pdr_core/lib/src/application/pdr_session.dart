@@ -16,6 +16,23 @@ import 'pdr_session_config.dart';
 import 'quality_metrics.dart';
 import 'stride_estimator.dart';
 
+/// 적용된 confirmed 배치의 진단 정보. [PdrSession.onBatchApplied]로 전달된다.
+class AppliedBatchInfo {
+  const AppliedBatchInfo({
+    required this.batchId,
+    required this.deltaSteps,
+    required this.appliedSteps,
+    required this.stepDistanceMeters,
+    required this.strideSource,
+  });
+
+  final int batchId;
+  final int deltaSteps;
+  final int appliedSteps;
+  final double stepDistanceMeters;
+  final String strideSource;
+}
+
 /// 위젯·플랫폼·지도·GPS·ML·export에 의존하지 않는 PDR 코어.
 ///
 /// typed 센서 이벤트를 받아 confirmed(초록) 경로/거리와 preview(주황) 경로, 품질
@@ -67,6 +84,9 @@ class PdrSession {
   int? lastMotionAtMs;
 
   int iosTrackedSteps = 0;
+
+  /// 적용된 confirmed 배치 진단 훅(telemetry/테스트용). appliedSteps>0일 때만 호출.
+  void Function(AppliedBatchInfo info)? onBatchApplied;
 
   // ── 파생 상태 ──
 
@@ -177,6 +197,15 @@ class PdrSession {
     );
     iosTrackedSteps += applied;
     _stride.addTrackedDistance(application.stepDistanceMeters * applied);
+    onBatchApplied?.call(
+      AppliedBatchInfo(
+        batchId: application.batchId,
+        deltaSteps: application.deltaSteps,
+        appliedSteps: applied,
+        stepDistanceMeters: application.stepDistanceMeters,
+        strideSource: application.strideSource,
+      ),
+    );
     _emit();
   }
 

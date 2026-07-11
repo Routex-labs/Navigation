@@ -33,6 +33,7 @@ class PedometerBatchRecord {
 class PedometerBatchApplication {
   const PedometerBatchApplication({
     required this.appliedSteps,
+    required this.deltaSteps,
     required this.batchId,
     required this.createdAtMs,
     required this.strideSource,
@@ -43,6 +44,9 @@ class PedometerBatchApplication {
   });
 
   final int appliedSteps;
+
+  /// 이 배치의 총 step 증가분(tracking split 적용 전).
+  final int deltaSteps;
   final int batchId;
   final int? createdAtMs;
   final String strideSource;
@@ -175,6 +179,7 @@ class PedometerBatchProcessor {
     }
     return PedometerBatchApplication(
       appliedSteps: appliedSteps,
+      deltaSteps: deltaSteps,
       batchId: batchId,
       createdAtMs: receivedAtMs,
       strideSource: stride.source,
