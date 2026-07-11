@@ -35,7 +35,8 @@ class FakePdrMotionSource implements PdrMotionSource {
 
   void emitRaw(Map<String, Object?> raw) {
     final e = NativePdrEvent.tryParse(raw);
-    if (e != null) _controller.add(e);
+    if (e == null) return;
+    _controller.add(e);
   }
 }
 
@@ -54,9 +55,8 @@ Map<String, Object?> motionEvent({
       'headingStable': true,
       'headingSource': source,
       'motionTimestamp': tMs.toDouble(),
-      if (stepPeakCount != null) 'stepPeakCount': stepPeakCount,
-      if (latestStepPeakMs != null)
-        'latestStepPeakMs': latestStepPeakMs.toDouble(),
+      'stepPeakCount': ?stepPeakCount,
+      'latestStepPeakMs': ?latestStepPeakMs?.toDouble(),
     };
 
 Map<String, Object?> pedometerEvent({
