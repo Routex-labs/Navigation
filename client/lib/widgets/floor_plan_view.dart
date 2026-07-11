@@ -5,6 +5,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../models/floor_plan.dart';
+import 'route_polyline.dart';
 
 /// 매장 폴리곤을 탭할 수 있는 실내 평면도 뷰.
 ///
@@ -18,6 +19,7 @@ class FloorPlanView extends StatefulWidget {
     required this.floorPlan,
     this.onStoreSelected,
     this.extraMarkers = const [],
+    this.routePoints = const [],
   });
 
   final FloorPlan floorPlan;
@@ -25,6 +27,9 @@ class FloorPlanView extends StatefulWidget {
 
   /// 현재 위치 마커 등, 평면도 데이터에는 없는 마커를 추가로 겹쳐 그릴 때 사용.
   final List<Marker> extraMarkers;
+
+  /// 시작점→목적지 경로선. 2개 미만이면 그리지 않는다.
+  final List<LatLng> routePoints;
 
   @override
   State<FloorPlanView> createState() => _FloorPlanViewState();
@@ -104,6 +109,8 @@ class _FloorPlanViewState extends State<FloorPlanView> {
               polylines: [
                 for (final corridor in floorPlan.corridors)
                   Polyline(points: corridor, color: Colors.grey, strokeWidth: 6),
+                if (widget.routePoints.length >= 2)
+                  buildRoutePolyline(widget.routePoints),
               ],
             ),
             MarkerLayer(
