@@ -1,6 +1,7 @@
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
 import 'calibration_state.dart';
+import 'pdr_runtime_status.dart';
 
 /// UI가 **구독**하는 읽기 전용 관찰 계약.
 ///
@@ -19,4 +20,10 @@ abstract interface class IndoorNavigationView {
 
   /// 가장 최근 캘리브레이션 상태.
   CalibrationStatus get currentCalibration;
+
+  /// 플랫폼 센서 파이프라인 실행 상태 스트림.
+  Stream<PdrRuntimeStatus> get runtimeStatuses;
+
+  /// 가장 최근 센서 파이프라인 실행 상태.
+  PdrRuntimeStatus get currentRuntimeStatus;
 }

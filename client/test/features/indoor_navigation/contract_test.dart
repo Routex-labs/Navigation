@@ -8,9 +8,11 @@ import 'package:navigation_client/features/indoor_navigation/contract/indoor_nav
 class FakeIndoorNavigation implements IndoorNavigationController {
   final _snapshots = StreamController<PdrSnapshot>.broadcast();
   final _calibration = StreamController<CalibrationStatus>.broadcast();
+  final _runtimeStatuses = StreamController<PdrRuntimeStatus>.broadcast();
 
   PdrSnapshot? _current;
   CalibrationStatus _calib = const CalibrationStatus.uncalibrated();
+  PdrRuntimeStatus _runtimeStatus = const PdrRuntimeStatus.idle();
   final List<String> log = [];
 
   @override
@@ -26,10 +28,18 @@ class FakeIndoorNavigation implements IndoorNavigationController {
   CalibrationStatus get currentCalibration => _calib;
 
   @override
-  void startGuidance({required String floorId}) => log.add('start:$floorId');
+  Stream<PdrRuntimeStatus> get runtimeStatuses => _runtimeStatuses.stream;
 
   @override
-  void stopGuidance() => log.add('stop');
+  PdrRuntimeStatus get currentRuntimeStatus => _runtimeStatus;
+
+  @override
+  Future<void> startGuidance({required String floorId}) async {
+    log.add('start:$floorId');
+  }
+
+  @override
+  Future<void> stopGuidance() async => log.add('stop');
 
   @override
   Future<void> confirmAnchorByPin({required PdrLocalPoint floorPointM}) async {
@@ -37,14 +47,14 @@ class FakeIndoorNavigation implements IndoorNavigationController {
   }
 
   @override
-  Future<void> confirmAnchorByHeading({
-    required double floorHeadingDeg,
-  }) async {
+  Future<void> confirmAnchorByHeading({required double floorHeadingDeg}) async {
     log.add('heading:$floorHeadingDeg');
   }
 
   @override
-  void changeFloor({required String floorId}) => log.add('floor:$floorId');
+  Future<void> changeFloor({required String floorId}) async {
+    log.add('floor:$floorId');
+  }
 
   // 테스트 구동용.
   void pushCalibration(CalibrationStatus s) {
@@ -55,6 +65,7 @@ class FakeIndoorNavigation implements IndoorNavigationController {
   void dispose() {
     _snapshots.close();
     _calibration.close();
+    _runtimeStatuses.close();
   }
 }
 
@@ -69,13 +80,18 @@ void main() {
 
     test('UI intents가 로직으로 전달된다', () async {
       final nav = FakeIndoorNavigation();
-      nav.startGuidance(floorId: 'F1');
-      await nav.confirmAnchorByPin(
-        floorPointM: const PdrLocalPoint(3, 4),
-      );
-      nav.changeFloor(floorId: 'F2');
-      nav.stopGuidance();
+      await nav.startGuidance(floorId: 'F1');
+      await nav.confirmAnchorByPin(floorPointM: const PdrLocalPoint(3, 4));
+      await nav.changeFloor(floorId: 'F2');
+      await nav.stopGuidance();
       expect(nav.log, ['start:F1', 'pin:3.0,4.0', 'floor:F2', 'stop']);
+      nav.dispose();
+    });
+
+    test('runtime 초기 상태는 idle이고 warning이 없다', () {
+      final nav = FakeIndoorNavigation();
+      expect(nav.currentRuntimeStatus.state, PdrRuntimeState.idle);
+      expect(nav.currentRuntimeStatus.warnings, isEmpty);
       nav.dispose();
     });
 
@@ -90,16 +106,15 @@ void main() {
     PdrAnchor anchor({
       PdrLocalPoint origin = PdrLocalPoint.zero,
       double rotationDeg = 0,
-    }) =>
-        PdrAnchor(
-          floorId: 'F1',
-          anchorLocalM: origin,
-          rotationDeg: rotationDeg,
-          headingReference: HeadingReference.magneticNorth,
-          requiresManualRotationCalibration: false,
-          source: AnchorSource.userPin,
-          confidence: 1,
-        );
+    }) => PdrAnchor(
+      floorId: 'F1',
+      anchorLocalM: origin,
+      rotationDeg: rotationDeg,
+      headingReference: HeadingReference.magneticNorth,
+      requiresManualRotationCalibration: false,
+      source: AnchorSource.userPin,
+      confidence: 1,
+    );
 
     test('회전·평행이동이 없으면 항등이다', () {
       final t = FloorCoordinateTransform(anchor());
