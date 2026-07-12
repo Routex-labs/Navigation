@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:navigation_client/widgets/eta_card.dart';
 import 'package:navigation_client/widgets/location_marker.dart';
 import 'package:navigation_client/widgets/rag_chat_panel.dart';
@@ -20,7 +21,7 @@ void main() {
 
     final icon = tester.widget<Icon>(find.byType(Icon));
     expect(icon.icon, Icons.navigation);
-    expect(icon.color, Colors.blue);
+    expect(icon.color, AppColors.primary);
   });
 
   testWidgets('LocationMarker colorOverride wins over the mode color', (
@@ -74,7 +75,9 @@ void main() {
       ),
     );
 
-    expect(find.text('목적지까지 약 2분 / 150m'), findsOneWidget);
+    expect(find.text('목적지까지'), findsOneWidget);
+    expect(find.textContaining('약 2분', findRichText: true), findsOneWidget);
+    expect(find.textContaining('150m', findRichText: true), findsOneWidget);
   });
 
   testWidgets('RagChatPanel shows the hardcoded sample exchanges', (

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_theme.dart';
+
 /// 현재 위치 마커 모드. 실외(GPS)/실내(PDR)에 따라 색과 아이콘이 다르다.
 enum LocationMode {
-  outdoor(color: Colors.blue, icon: Icons.navigation),
-  indoor(color: Color(0xFF6C3FE0), icon: Icons.circle);
+  outdoor(color: AppColors.primary, icon: Icons.navigation),
+  indoor(color: AppColors.indoor, icon: Icons.circle);
 
   const LocationMode({required this.color, required this.icon});
 

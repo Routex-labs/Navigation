@@ -7,6 +7,7 @@ import '../../models/floor_plan.dart';
 import '../../models/indoor_route.dart';
 import '../../models/poi_search_result.dart';
 import '../../routing/app_routes.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/eta_card.dart';
 import '../../widgets/floor_plan_view.dart';
 import '../../widgets/rag_chat_panel.dart';
@@ -110,6 +111,9 @@ class _RouteGuideScreenState extends State<RouteGuideScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (context) => const RagChatPanel(),
     );
   }
@@ -124,48 +128,7 @@ class _RouteGuideScreenState extends State<RouteGuideScreen> {
     return _fallbackCenter;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final destination = _destination;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(destination == null ? '경로 안내' : '${destination.name}(으)로 안내'),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _openBuildingInfo,
-        tooltip: '건물 정보',
-        child: const Icon(Icons.info_outline),
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : destination == null
-              ? const Center(child: Text('목적지 정보가 없습니다'))
-              : _buildMap(destination),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (destination != null) _buildEtaCard(destination),
-              if (destination != null) const SizedBox(height: 8),
-              FilledButton(
-                onPressed: () {
-                  Navigator.of(context).pushNamed(
-                    AppRoutes.arrival,
-                    arguments: destination,
-                  );
-                },
-                child: const Text('도착'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEtaCard(PoiSearchResult destination) {
+  ({double distanceMeters, int minutes}) _etaFor(PoiSearchResult destination) {
     final route = _route;
     final distance = route != null
         ? route.distanceMeters
@@ -173,7 +136,68 @@ class _RouteGuideScreenState extends State<RouteGuideScreen> {
     final minutes = (distance / _walkingSpeedMetersPerSecond / 60)
         .ceil()
         .clamp(1, 999);
-    return EtaCard(distanceMeters: distance, minutes: minutes);
+    return (distanceMeters: distance, minutes: minutes);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final destination = _destination;
+    return Scaffold(
+      body: SafeArea(
+        child: Column(
+          children: [
+            if (destination != null)
+              _GuidanceBanner(
+                destinationName: destination.name,
+                eta: _etaFor(destination),
+              )
+            else
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: IconButton(
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    icon: const Icon(Icons.chevron_left),
+                  ),
+                ),
+              ),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : destination == null
+                      ? const Center(child: Text('목적지 정보가 없습니다'))
+                      : Stack(
+                          children: [
+                            _buildMap(destination),
+                            Positioned(
+                              bottom: 12,
+                              right: 12,
+                              child: FloatingActionButton(
+                                heroTag: 'rag-info',
+                                onPressed: _openBuildingInfo,
+                                tooltip: '건물 정보',
+                                child: const Icon(Icons.info_outline),
+                              ),
+                            ),
+                          ],
+                        ),
+            ),
+            if (destination != null)
+              _BottomEta(
+                eta: _etaFor(destination),
+                floor: destination.floor,
+                onArrived: () {
+                  Navigator.of(context).pushNamed(
+                    AppRoutes.arrival,
+                    arguments: destination,
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildMap(PoiSearchResult destination) {
@@ -196,6 +220,159 @@ class _RouteGuideScreenState extends State<RouteGuideScreen> {
       routePoints: route?.points ?? [current, destination.point],
       currentLocation: current,
       destination: destination.point,
+    );
+  }
+}
+
+class _GuidanceBanner extends StatelessWidget {
+  const _GuidanceBanner({required this.destinationName, required this.eta});
+
+  final String destinationName;
+  final ({double distanceMeters, int minutes}) eta;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.42),
+            blurRadius: 24,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              IconButton(
+                onPressed: () => Navigator.of(context).maybePop(),
+                icon: const Icon(Icons.chevron_left, color: Colors.white),
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.white.withValues(alpha: 0.16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  minimumSize: const Size(34, 34),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.22),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                alignment: Alignment.center,
+                child: const Icon(Icons.navigation, color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '$destinationName(으)로 안내',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 7,
+            children: [
+              _Chip(label: '📱 실내 PDR 모드'),
+              _Chip(label: '목적지까지 ${eta.distanceMeters.round()}m'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Chip extends StatelessWidget {
+  const _Chip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+}
+
+class _BottomEta extends StatelessWidget {
+  const _BottomEta({required this.eta, required this.floor, required this.onArrived});
+
+  final ({double distanceMeters, int minutes}) eta;
+  final String floor;
+  final VoidCallback onArrived;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(top: BorderSide(color: Color(0x11000000))),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Expanded(child: EtaCard(distanceMeters: eta.distanceMeters, minutes: eta.minutes)),
+                const SizedBox(width: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEEF3FF),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    floor,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.indoor,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: onArrived,
+                child: const Text('도착'),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

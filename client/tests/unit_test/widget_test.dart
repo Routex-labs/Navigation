@@ -140,7 +140,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump();
 
-    expect(find.text('야외 지도 (GPS 모드)'), findsOneWidget);
+    expect(find.text('야외 — GPS 모드'), findsOneWidget);
   });
 
   testWidgets('api health check shows loading then a status message', (
@@ -194,7 +194,7 @@ void main() {
     await tester.pump();
 
     expect(find.byIcon(Icons.place), findsOneWidget);
-    expect(find.textContaining('목적지까지 약'), findsOneWidget);
+    expect(find.textContaining('목적지까지'), findsOneWidget);
   });
 
   testWidgets(
@@ -251,7 +251,7 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(find.text('야외 지도 (GPS 모드)'), findsOneWidget);
+      expect(find.text('야외 — GPS 모드'), findsOneWidget);
       expect(find.text('INDOOR'), findsNothing);
     },
   );
@@ -305,24 +305,22 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: IndoorMapScreen()));
     await tester.pumpAndSettle();
 
-    expect(find.text('데모 건물 · 1F'), findsOneWidget);
+    expect(find.text('데모 건물'), findsOneWidget);
+    expect(find.textContaining('현재 1F 위치'), findsOneWidget);
     expect(find.byType(FloorPlanView), findsOneWidget);
     expect(find.byIcon(Icons.layers), findsOneWidget);
   });
 
-  testWidgets('indoor map switches floor label via the floor switcher', (
+  testWidgets('indoor map switches floor via the floor tabs', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const MaterialApp(home: IndoorMapScreen()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.layers));
+    await tester.tap(find.text('2F'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('2F').last);
-    await tester.pumpAndSettle();
-
-    expect(find.text('데모 건물 · 2F'), findsOneWidget);
+    expect(find.textContaining('현재 2F 위치'), findsOneWidget);
     expect(find.byType(FloorPlanView), findsOneWidget);
   });
 
@@ -358,7 +356,8 @@ void main() {
     await tester.enterText(find.byType(TextField), '존재하지않는장소');
     await tester.pumpAndSettle();
 
-    expect(find.text('찾을 수 없어요. 다시 입력해볼까요?'), findsOneWidget);
+    expect(find.text('찾을 수 없어요'), findsOneWidget);
+    expect(find.text('다시 입력해볼까요?'), findsOneWidget);
   });
 
   testWidgets('selecting a destination navigates to the route guide', (
@@ -381,7 +380,7 @@ void main() {
     // 남아있어 textContaining만으로는 새 화면과 구분되지 않는다 - 경로 안내
     // 화면 AppBar에만 있는 정확한 제목으로 확인한다.
     expect(find.text('강의실 101(으)로 안내'), findsOneWidget);
-    expect(find.textContaining('목적지까지 약'), findsOneWidget);
+    expect(find.textContaining('목적지까지'), findsWidgets);
   });
 
   testWidgets('route guide shows the ETA card and building info FAB', (
@@ -452,7 +451,7 @@ void main() {
       ),
     );
 
-    expect(find.text('강의실 101에 도착했습니다!'), findsOneWidget);
+    expect(find.text('강의실 101에 도착했습니다'), findsOneWidget);
 
     // 자동 종료 타이머가 만료될 때까지 시간을 진행시킨다.
     await tester.pump(const Duration(seconds: 2));

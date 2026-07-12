@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'routing/app_routes.dart';
+import 'theme/app_theme.dart';
 import 'screens/arrival/arrival_screen.dart';
 import 'screens/debug/api_health_check_screen.dart';
 import 'screens/debug/floor_map_preview_screen.dart';
@@ -17,9 +18,7 @@ class NavigationApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Navigation Client',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-      ),
+      theme: AppTheme.light,
       initialRoute: AppRoutes.splash,
       routes: {
         AppRoutes.splash: (context) => const SplashScreen(),

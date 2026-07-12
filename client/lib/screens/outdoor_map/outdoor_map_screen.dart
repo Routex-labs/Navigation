@@ -10,6 +10,7 @@ import '../../core/service_locator.dart';
 import '../../models/building.dart';
 import '../../models/directions_route.dart';
 import '../../routing/app_routes.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/eta_card.dart';
 import '../../widgets/location_marker.dart';
 import '../../widgets/route_polyline.dart';
@@ -132,35 +133,8 @@ class _OutdoorMapScreenState extends State<OutdoorMapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final entrance = _entrance;
     return Scaffold(
-      appBar: AppBar(title: const Text('야외 지도 (GPS 모드)')),
       body: _loading ? const Center(child: CircularProgressIndicator()) : _buildBody(),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_route != null)
-                EtaCard(
-                  distanceMeters: _route!.distanceMeters,
-                  minutes: (_route!.durationSeconds / 60).ceil().clamp(1, 999),
-                ),
-              if (_route != null) const SizedBox(height: 8),
-              // 건물 입구 좌표를 모를 때만 수동 진입 버튼을 남겨둔다.
-              // 좌표를 아는 경우엔 design.md 원칙대로 자동 감지만으로 전환한다.
-              if (!_loading && entrance == null)
-                FilledButton(
-                  onPressed: () {
-                    Navigator.of(context).pushNamed(AppRoutes.indoorMap);
-                  },
-                  child: const Text('건물 진입 감지 (임시)'),
-                ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -171,7 +145,7 @@ class _OutdoorMapScreenState extends State<OutdoorMapScreen> {
         : LatLng(position.latitude, position.longitude);
     final accuracy = position?.accuracy ?? 0;
     final lowAccuracy = position == null || accuracy > _lowAccuracyThresholdMeters;
-    final markerColor = lowAccuracy ? Colors.amber : Colors.blue;
+    final markerColor = lowAccuracy ? AppColors.warning : AppColors.primary;
     final entrance = _entrance;
     final route = _route;
 
@@ -215,19 +189,141 @@ class _OutdoorMapScreenState extends State<OutdoorMapScreen> {
                 if (entrance != null)
                   Marker(
                     point: entrance,
-                    child: const Icon(Icons.place, color: Colors.red),
+                    child: const Icon(Icons.place, color: AppColors.dest),
                   ),
               ],
             ),
           ],
         ),
-        if (lowAccuracy)
-          const Positioned(
-            top: 12,
-            left: 12,
-            child: StatusBadge(label: 'GPS 신호 약함'),
+
+        // 상단 오버레이 바
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.86),
+              border: const Border(
+                bottom: BorderSide(color: Color(0x11000000)),
+              ),
+            ),
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      '야외 — GPS 모드',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.text,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      lowAccuracy ? '위치 정확도 낮음 · 신호를 찾는 중...' : '정확도 ±${accuracy.round()}m',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: lowAccuracy ? AppColors.warning : AppColors.muted,
+                        fontWeight: lowAccuracy ? FontWeight.w600 : FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
+        ),
+
+        if (lowAccuracy)
+          Positioned(
+            top: 66,
+            left: 12,
+            child: StatusBadge(
+              label: 'GPS 신호 약함',
+              color: AppColors.warning,
+              icon: Icons.warning_amber_rounded,
+            ),
+          ),
+
+        // 하단: ETA 카드 + (임시) 진입 버튼 + 검색 바
+        Positioned(
+          left: 12,
+          right: 12,
+          bottom: 0,
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (route != null)
+                  EtaCard(
+                    distanceMeters: route.distanceMeters,
+                    minutes: (route.durationSeconds / 60).ceil().clamp(1, 999),
+                  ),
+                if (route != null) const SizedBox(height: 8),
+                // 건물 입구 좌표를 모를 때만 수동 진입 버튼을 남겨둔다.
+                // 좌표를 아는 경우엔 design.md 원칙대로 자동 감지만으로 전환한다.
+                if (!_loading && entrance == null) ...[
+                  FilledButton(
+                    onPressed: () {
+                      Navigator.of(context).pushNamed(AppRoutes.indoorMap);
+                    },
+                    child: const Text('건물 진입 감지 (임시)'),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                _DestinationSearchBar(
+                  onTap: () {
+                    Navigator.of(context).pushNamed(AppRoutes.destination);
+                  },
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+        ),
       ],
+    );
+  }
+}
+
+class _DestinationSearchBar extends StatelessWidget {
+  const _DestinationSearchBar({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(28),
+      elevation: 6,
+      shadowColor: Colors.black.withValues(alpha: 0.15),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(28),
+        onTap: onTap,
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+          child: Row(
+            children: [
+              Icon(Icons.search, size: 18, color: AppColors.muted),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '목적지를 입력하세요',
+                  style: TextStyle(fontSize: 14, color: AppColors.muted),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
