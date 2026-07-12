@@ -23,17 +23,17 @@
 
 ### 커밋 체크리스트
 
-- [ ] `문서: ORM 전환 계획 정리` — 리팩터링 문서만 stage
-- [ ] `의존성: ORM 패키지 추가` — SQLAlchemy, pydantic-settings import 검증
-- [ ] `코어: DB 세션 추가` — Settings, engine, SessionLocal, `get_db` import·Session 생성 검증
-- [ ] `모델: 지도 ORM 추가` — 8개 모델과 빈 SQLite `create_all()` 검증
-- [ ] `시드: 지도 데이터 ORM 적재` — `reset → seed`와 데이터 적재 검증
-- [ ] `스키마: GET 응답 모델 추가` — 새 `schemas/` 응답 모델 검증
-- [ ] `조회: 건물 ORM 쿼리 추가` — 건물·매장·지도·그래프 Query 검증
-- [ ] `서비스: 경로 탐색 이전` — NavigationService 경로 규칙 검증
-- [ ] `라우터: ORM DI 전환` — `routers/`, `main.py`, response_model, URL/상태 코드 검증
-- [ ] `테스트: ORM 검증 전환` — 임시 시드 DB fixture, 정상·오류 API 검증
-- [ ] `정리: sqlite3 구조 제거` — 전체 테스트와 import 검색 후 레거시 삭제
+- [x] `문서: ORM 전환 계획 정리` — 리팩터링 문서만 stage
+- [x] `의존성: ORM 패키지 추가` — SQLAlchemy, pydantic-settings import 검증
+- [x] `코어: DB 세션 추가` — Settings, engine, SessionLocal, `get_db` import·Session 생성 검증
+- [x] `모델: 지도 ORM 추가` — 8개 모델과 빈 SQLite `create_all()` 검증
+- [x] `시드: 지도 데이터 ORM 적재` — `reset → seed`와 데이터 적재 검증
+- [x] `스키마: GET 응답 모델 추가` — 새 `schemas/` 응답 모델 검증
+- [x] `조회: 건물 ORM 쿼리 추가` — 건물·매장·지도·그래프 Query 검증
+- [x] `서비스: 경로 탐색 이전` — NavigationService 경로 규칙 검증
+- [x] `라우터: ORM DI 전환` — `routers/`, `main.py`, response_model, URL/상태 코드 검증
+- [x] `테스트: ORM 검증 전환` — 임시 시드 DB fixture, 정상·오류 API 검증
+- [x] `정리: sqlite3 구조 제거` — 전체 테스트와 import 검색 후 레거시 삭제
 
 ### 커밋 경계 규칙
 

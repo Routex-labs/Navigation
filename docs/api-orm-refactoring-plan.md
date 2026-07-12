@@ -1530,17 +1530,17 @@ Query/API 테스트 전환을 시작하지 않으며, 응답 모델이 준비되
 아래 체크박스 하나를 하나의 짧은 커밋으로 처리한다. 각 커밋은 해당 단계의 테스트 또는 검증을
 통과한 뒤에만 만든다. 커밋 메시지는 제안한 한 줄을 사용한다.
 
-- [ ] 문서 확정 — `문서: ORM 전환 계획 정리`
-- [ ] SQLAlchemy와 pydantic-settings 의존성 추가 — `의존성: ORM 패키지 추가`
-- [ ] Settings, engine, SessionLocal, `get_db` 추가 — `코어: DB 세션 추가`
-- [ ] 8개 ORM 모델과 빈 DB `create_all()` 검증 — `모델: 지도 ORM 추가`
-- [ ] ORM 기반 reset·seed CLI 구현 — `시드: 지도 데이터 ORM 적재`
-- [ ] GET API 응답 모델 추가 — `스키마: GET 응답 모델 추가`
-- [ ] 건물·매장·지도·그래프 Query 함수 이전 — `조회: 건물 ORM 쿼리 추가`
-- [ ] 최단 경로 `NavigationService` 이전 — `서비스: 경로 탐색 이전`
-- [ ] `routers/`, `main.py`, Session DI로 HTTP 계층 전환 — `라우터: ORM DI 전환`
-- [ ] 임시 시드 DB fixture와 Query/Service/API 테스트 전환 — `테스트: ORM 검증 전환`
-- [ ] 기존 sqlite3 Repository·BuildingService·시드·설정 코드 제거 — `정리: sqlite3 구조 제거`
+- [x] 문서 확정 — `문서: ORM 전환 계획 정리`
+- [x] SQLAlchemy와 pydantic-settings 의존성 추가 — `의존성: ORM 패키지 추가`
+- [x] Settings, engine, SessionLocal, `get_db` 추가 — `코어: DB 세션 추가`
+- [x] 8개 ORM 모델과 빈 DB `create_all()` 검증 — `모델: 지도 ORM 추가`
+- [x] ORM 기반 reset·seed CLI 구현 — `시드: 지도 데이터 ORM 적재`
+- [x] GET API 응답 모델 추가 — `스키마: GET 응답 모델 추가`
+- [x] 건물·매장·지도·그래프 Query 함수 이전 — `조회: 건물 ORM 쿼리 추가`
+- [x] 최단 경로 `NavigationService` 이전 — `서비스: 경로 탐색 이전`
+- [x] `routers/`, `main.py`, Session DI로 HTTP 계층 전환 — `라우터: ORM DI 전환`
+- [x] 임시 시드 DB fixture와 Query/Service/API 테스트 전환 — `테스트: ORM 검증 전환`
+- [x] 기존 sqlite3 Repository·BuildingService·시드·설정 코드 제거 — `정리: sqlite3 구조 제거`
 
 커밋 경계는 합리적이다. 다만 기존 앱이 계속 실행·테스트될 수 있도록 새 `schemas/`,
 `queries/`, `services/`, `routers/`는 전환 커밋 전까지 추가만 하고 기존 모듈을 먼저 삭제하지
@@ -1557,12 +1557,12 @@ Query/API 테스트 전환을 시작하지 않으며, 응답 모델이 준비되
 - [x] 7단계 설계: API별 책임과 Service 경계 확정
 - [x] 8단계 설계: Router/DI와 앱 조립 구조 확정
 - [x] 9단계 설계: 테스트 범위와 오류 사례 확정
-- [ ] 기준선 테스트 기록
-- [ ] 2단계 구현: Core 설정과 Session DI
-- [ ] 4단계 구현: ORM 모델과 빈 DB 생성 검증
-- [ ] 5단계 구현: reset·seed CLI
-- [ ] 6단계 구현: GET 응답 모델
-- [ ] 7단계 구현: Query/NavigationService로 코드 이동
-- [ ] 8단계 구현: Router/DI 전환과 `main.py` 정리
-- [ ] 9단계 구현: 테스트 전환과 최종 검증
-- [ ] 기존 sqlite3 구조 제거
+- [x] 기준선 테스트 기록
+- [x] 2단계 구현: Core 설정과 Session DI
+- [x] 4단계 구현: ORM 모델과 빈 DB 생성 검증
+- [x] 5단계 구현: reset·seed CLI
+- [x] 6단계 구현: GET 응답 모델
+- [x] 7단계 구현: Query/NavigationService로 코드 이동
+- [x] 8단계 구현: Router/DI 전환과 `main.py` 정리
+- [x] 9단계 구현: 테스트 전환과 최종 검증
+- [x] 기존 sqlite3 구조 제거
