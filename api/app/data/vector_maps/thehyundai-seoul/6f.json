@@ -1,0 +1,5709 @@
+{
+  "schema_version": "1.0",
+  "building_id": "thehyundai-seoul",
+  "floor_id": "thehyundai-seoul-6f",
+  "source": {
+    "type": "screenshot",
+    "file": "source_images/6f.png",
+    "description": "Original floor guide screenshot supplied by the user."
+  },
+  "coordinate_system": {
+    "id": "image_px",
+    "unit": "px",
+    "origin": "top-left",
+    "x_axis": "right",
+    "y_axis": "down",
+    "view_box": {
+      "min_x": 0.0,
+      "min_y": 0.0,
+      "width": 1102.0,
+      "height": 649.0
+    }
+  },
+  "extraction_status": "official_map_synced_manual_image_labels_untrusted",
+  "features": [
+    {
+      "id": "image-bounds",
+      "kind": "footprint",
+      "name": null,
+      "category": "raw_image_bounds",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 0.0,
+            "y": 0.0
+          },
+          {
+            "x": 1102.0,
+            "y": 0.0
+          },
+          {
+            "x": 1102.0,
+            "y": 649.0
+          },
+          {
+            "x": 0.0,
+            "y": 649.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 551.0,
+        "y": 324.5
+      }
+    },
+    {
+      "id": "store-area-6f-001",
+      "kind": "store",
+      "name": null,
+      "category": "unmatched_extracted_store_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 389.0,
+            "y": 108.0
+          },
+          {
+            "x": 389.0,
+            "y": 133.0
+          },
+          {
+            "x": 438.0,
+            "y": 133.0
+          },
+          {
+            "x": 438.0,
+            "y": 108.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 413.5,
+        "y": 120.5
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#dcdcdc",
+        "pixel_area": 1141,
+        "bounding_box": {
+          "x": 389,
+          "y": 108,
+          "width": 50,
+          "height": 26
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "store-area-6f-002",
+      "kind": "store",
+      "name": null,
+      "category": "unmatched_extracted_store_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 756.0,
+            "y": 153.0
+          },
+          {
+            "x": 791.0,
+            "y": 159.0
+          },
+          {
+            "x": 845.0,
+            "y": 173.0
+          },
+          {
+            "x": 914.0,
+            "y": 199.0
+          },
+          {
+            "x": 914.0,
+            "y": 153.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 866.539,
+        "y": 167.503
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#dcdcdc",
+        "pixel_area": 2898,
+        "bounding_box": {
+          "x": 756,
+          "y": 153,
+          "width": 159,
+          "height": 47
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "store-area-6f-003",
+      "kind": "store",
+      "name": null,
+      "category": "unmatched_extracted_store_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 145.0,
+            "y": 212.0
+          },
+          {
+            "x": 171.0,
+            "y": 199.0
+          },
+          {
+            "x": 238.0,
+            "y": 174.0
+          },
+          {
+            "x": 312.0,
+            "y": 158.0
+          },
+          {
+            "x": 145.0,
+            "y": 158.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 195.648,
+        "y": 174.493
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#dcdcdc",
+        "pixel_area": 3548,
+        "bounding_box": {
+          "x": 145,
+          "y": 158,
+          "width": 168,
+          "height": 55
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "store-area-6f-004",
+      "kind": "store",
+      "name": null,
+      "category": "unmatched_extracted_store_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 343.0,
+            "y": 226.0
+          },
+          {
+            "x": 331.0,
+            "y": 226.0
+          },
+          {
+            "x": 319.0,
+            "y": 233.0
+          },
+          {
+            "x": 215.0,
+            "y": 338.0
+          },
+          {
+            "x": 211.0,
+            "y": 347.0
+          },
+          {
+            "x": 212.0,
+            "y": 364.0
+          },
+          {
+            "x": 220.0,
+            "y": 374.0
+          },
+          {
+            "x": 323.0,
+            "y": 420.0
+          },
+          {
+            "x": 338.0,
+            "y": 420.0
+          },
+          {
+            "x": 348.0,
+            "y": 416.0
+          },
+          {
+            "x": 341.0,
+            "y": 398.0
+          },
+          {
+            "x": 345.0,
+            "y": 395.0
+          },
+          {
+            "x": 453.0,
+            "y": 356.0
+          },
+          {
+            "x": 462.0,
+            "y": 346.0
+          },
+          {
+            "x": 465.0,
+            "y": 335.0
+          },
+          {
+            "x": 466.0,
+            "y": 297.0
+          },
+          {
+            "x": 460.0,
+            "y": 285.0
+          },
+          {
+            "x": 381.0,
+            "y": 242.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 341.293,
+        "y": 324.021
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#dcdcdc",
+        "pixel_area": 30642,
+        "bounding_box": {
+          "x": 211,
+          "y": 226,
+          "width": 256,
+          "height": 195
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "store-area-6f-005",
+      "kind": "store",
+      "name": null,
+      "category": "unmatched_extracted_store_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 30.0,
+            "y": 265.0
+          },
+          {
+            "x": 30.0,
+            "y": 429.0
+          },
+          {
+            "x": 88.0,
+            "y": 429.0
+          },
+          {
+            "x": 90.0,
+            "y": 425.0
+          },
+          {
+            "x": 113.0,
+            "y": 425.0
+          },
+          {
+            "x": 113.0,
+            "y": 404.0
+          },
+          {
+            "x": 83.0,
+            "y": 381.0
+          },
+          {
+            "x": 83.0,
+            "y": 286.0
+          },
+          {
+            "x": 112.0,
+            "y": 272.0
+          },
+          {
+            "x": 113.0,
+            "y": 265.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 61.976,
+        "y": 350.066
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#dcdcdc",
+        "pixel_area": 9940,
+        "bounding_box": {
+          "x": 30,
+          "y": 265,
+          "width": 84,
+          "height": 165
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "store-area-6f-006",
+      "kind": "store",
+      "name": null,
+      "category": "unmatched_extracted_store_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 145.0,
+            "y": 445.0
+          },
+          {
+            "x": 145.0,
+            "y": 492.0
+          },
+          {
+            "x": 275.0,
+            "y": 492.0
+          },
+          {
+            "x": 244.0,
+            "y": 485.0
+          },
+          {
+            "x": 194.0,
+            "y": 469.0
+          },
+          {
+            "x": 174.0,
+            "y": 461.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 184.573,
+        "y": 477.721
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#dcdcdc",
+        "pixel_area": 2332,
+        "bounding_box": {
+          "x": 145,
+          "y": 445,
+          "width": 131,
+          "height": 48
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "store-area-6f-007",
+      "kind": "store",
+      "name": null,
+      "category": "unmatched_extracted_store_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 914.0,
+            "y": 447.0
+          },
+          {
+            "x": 845.0,
+            "y": 473.0
+          },
+          {
+            "x": 796.0,
+            "y": 486.0
+          },
+          {
+            "x": 761.0,
+            "y": 492.0
+          },
+          {
+            "x": 914.0,
+            "y": 492.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 868.147,
+        "y": 477.762
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#dcdcdc",
+        "pixel_area": 2731,
+        "bounding_box": {
+          "x": 761,
+          "y": 447,
+          "width": 154,
+          "height": 46
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "store-area-6f-008",
+      "kind": "store",
+      "name": null,
+      "category": "unmatched_extracted_store_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 936.0,
+            "y": 501.0
+          },
+          {
+            "x": 936.0,
+            "y": 529.0
+          },
+          {
+            "x": 1006.0,
+            "y": 529.0
+          },
+          {
+            "x": 1006.0,
+            "y": 501.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 971.0,
+        "y": 515.0
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#dcdcdc",
+        "pixel_area": 1828,
+        "bounding_box": {
+          "x": 936,
+          "y": 501,
+          "width": 71,
+          "height": 29
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "store-area-6f-009",
+      "kind": "store",
+      "name": null,
+      "category": "unmatched_extracted_store_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 91.0,
+            "y": 514.0
+          },
+          {
+            "x": 91.0,
+            "y": 546.0
+          },
+          {
+            "x": 168.0,
+            "y": 546.0
+          },
+          {
+            "x": 168.0,
+            "y": 514.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 129.5,
+        "y": 530.0
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#dcdcdc",
+        "pixel_area": 2192,
+        "bounding_box": {
+          "x": 91,
+          "y": 514,
+          "width": 78,
+          "height": 33
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "store-area-6f-010",
+      "kind": "store",
+      "name": null,
+      "category": "unmatched_extracted_store_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 188.0,
+            "y": 514.0
+          },
+          {
+            "x": 188.0,
+            "y": 568.0
+          },
+          {
+            "x": 219.0,
+            "y": 568.0
+          },
+          {
+            "x": 221.0,
+            "y": 570.0
+          },
+          {
+            "x": 221.0,
+            "y": 648.0
+          },
+          {
+            "x": 271.0,
+            "y": 648.0
+          },
+          {
+            "x": 271.0,
+            "y": 514.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 237.277,
+        "y": 572.595
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#dcdcdc",
+        "pixel_area": 8402,
+        "bounding_box": {
+          "x": 188,
+          "y": 514,
+          "width": 84,
+          "height": 135
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "store-area-6f-011",
+      "kind": "store",
+      "name": null,
+      "category": "unmatched_extracted_store_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 274.0,
+            "y": 514.0
+          },
+          {
+            "x": 274.0,
+            "y": 648.0
+          },
+          {
+            "x": 371.0,
+            "y": 648.0
+          },
+          {
+            "x": 371.0,
+            "y": 590.0
+          },
+          {
+            "x": 351.0,
+            "y": 589.0
+          },
+          {
+            "x": 351.0,
+            "y": 514.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 317.437,
+        "y": 584.845
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#dcdcdc",
+        "pixel_area": 11164,
+        "bounding_box": {
+          "x": 274,
+          "y": 514,
+          "width": 98,
+          "height": 135
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "store-area-6f-012",
+      "kind": "store",
+      "name": null,
+      "category": "unmatched_extracted_store_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 374.0,
+            "y": 514.0
+          },
+          {
+            "x": 374.0,
+            "y": 550.0
+          },
+          {
+            "x": 425.0,
+            "y": 550.0
+          },
+          {
+            "x": 425.0,
+            "y": 514.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 399.5,
+        "y": 532.0
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#dcdcdc",
+        "pixel_area": 1699,
+        "bounding_box": {
+          "x": 374,
+          "y": 514,
+          "width": 52,
+          "height": 37
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "store-area-6f-013",
+      "kind": "store",
+      "name": null,
+      "category": "unmatched_extracted_store_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 448.0,
+            "y": 514.0
+          },
+          {
+            "x": 448.0,
+            "y": 648.0
+          },
+          {
+            "x": 498.0,
+            "y": 648.0
+          },
+          {
+            "x": 498.0,
+            "y": 514.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 473.0,
+        "y": 581.0
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#dcdcdc",
+        "pixel_area": 6437,
+        "bounding_box": {
+          "x": 448,
+          "y": 514,
+          "width": 51,
+          "height": 135
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "store-area-6f-014",
+      "kind": "store",
+      "name": null,
+      "category": "unmatched_extracted_store_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 501.0,
+            "y": 514.0
+          },
+          {
+            "x": 501.0,
+            "y": 648.0
+          },
+          {
+            "x": 551.0,
+            "y": 648.0
+          },
+          {
+            "x": 551.0,
+            "y": 514.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 526.0,
+        "y": 581.0
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#dcdcdc",
+        "pixel_area": 6815,
+        "bounding_box": {
+          "x": 501,
+          "y": 514,
+          "width": 51,
+          "height": 135
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "store-area-6f-015",
+      "kind": "store",
+      "name": null,
+      "category": "unmatched_extracted_store_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 554.0,
+            "y": 514.0
+          },
+          {
+            "x": 554.0,
+            "y": 648.0
+          },
+          {
+            "x": 604.0,
+            "y": 648.0
+          },
+          {
+            "x": 604.0,
+            "y": 514.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 579.0,
+        "y": 581.0
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#dcdcdc",
+        "pixel_area": 6585,
+        "bounding_box": {
+          "x": 554,
+          "y": 514,
+          "width": 51,
+          "height": 135
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "store-area-6f-016",
+      "kind": "store",
+      "name": null,
+      "category": "unmatched_extracted_store_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 608.0,
+            "y": 514.0
+          },
+          {
+            "x": 608.0,
+            "y": 648.0
+          },
+          {
+            "x": 658.0,
+            "y": 648.0
+          },
+          {
+            "x": 658.0,
+            "y": 514.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 633.0,
+        "y": 581.0
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#dcdcdc",
+        "pixel_area": 6690,
+        "bounding_box": {
+          "x": 608,
+          "y": 514,
+          "width": 51,
+          "height": 135
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "store-area-6f-017",
+      "kind": "store",
+      "name": null,
+      "category": "unmatched_extracted_store_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 749.0,
+            "y": 514.0
+          },
+          {
+            "x": 749.0,
+            "y": 624.0
+          },
+          {
+            "x": 820.0,
+            "y": 624.0
+          },
+          {
+            "x": 820.0,
+            "y": 514.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 784.5,
+        "y": 569.0
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#dcdcdc",
+        "pixel_area": 7843,
+        "bounding_box": {
+          "x": 749,
+          "y": 514,
+          "width": 72,
+          "height": 111
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "store-area-6f-018",
+      "kind": "store",
+      "name": null,
+      "category": "unmatched_extracted_store_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 823.0,
+            "y": 514.0
+          },
+          {
+            "x": 823.0,
+            "y": 624.0
+          },
+          {
+            "x": 882.0,
+            "y": 624.0
+          },
+          {
+            "x": 882.0,
+            "y": 574.0
+          },
+          {
+            "x": 884.0,
+            "y": 572.0
+          },
+          {
+            "x": 914.0,
+            "y": 572.0
+          },
+          {
+            "x": 914.0,
+            "y": 514.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 862.623,
+        "y": 563.22
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#dcdcdc",
+        "pixel_area": 8184,
+        "bounding_box": {
+          "x": 823,
+          "y": 514,
+          "width": 92,
+          "height": 111
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "store-area-6f-019",
+      "kind": "store",
+      "name": null,
+      "category": "unmatched_extracted_store_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 680.0,
+            "y": 518.0
+          },
+          {
+            "x": 680.0,
+            "y": 553.0
+          },
+          {
+            "x": 730.0,
+            "y": 553.0
+          },
+          {
+            "x": 730.0,
+            "y": 518.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 705.0,
+        "y": 535.5
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#dcdcdc",
+        "pixel_area": 1653,
+        "bounding_box": {
+          "x": 680,
+          "y": 518,
+          "width": 51,
+          "height": 36
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "highlighted-area-6f-020",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_highlighted_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 441.0,
+            "y": 32.0
+          },
+          {
+            "x": 441.0,
+            "y": 133.0
+          },
+          {
+            "x": 894.0,
+            "y": 133.0
+          },
+          {
+            "x": 894.0,
+            "y": 32.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 667.5,
+        "y": 82.5
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#e7d3e7",
+        "pixel_area": 43033,
+        "bounding_box": {
+          "x": 441,
+          "y": 32,
+          "width": 454,
+          "height": 102
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "highlighted-area-6f-021",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_highlighted_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 212.0,
+            "y": 94.0
+          },
+          {
+            "x": 213.0,
+            "y": 134.0
+          },
+          {
+            "x": 351.0,
+            "y": 134.0
+          },
+          {
+            "x": 351.0,
+            "y": 94.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 281.75,
+        "y": 113.976
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#e7d3e7",
+        "pixel_area": 5144,
+        "bounding_box": {
+          "x": 212,
+          "y": 94,
+          "width": 140,
+          "height": 41
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "highlighted-area-6f-022",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_highlighted_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 660.0,
+            "y": 101.0
+          },
+          {
+            "x": 660.0,
+            "y": 128.0
+          },
+          {
+            "x": 711.0,
+            "y": 128.0
+          },
+          {
+            "x": 711.0,
+            "y": 101.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 685.5,
+        "y": 114.5
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#e7d3e7",
+        "pixel_area": 1232,
+        "bounding_box": {
+          "x": 660,
+          "y": 101,
+          "width": 52,
+          "height": 28
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "highlighted-area-6f-023",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_highlighted_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 714.0,
+            "y": 101.0
+          },
+          {
+            "x": 714.0,
+            "y": 128.0
+          },
+          {
+            "x": 731.0,
+            "y": 128.0
+          },
+          {
+            "x": 715.0,
+            "y": 126.0
+          },
+          {
+            "x": 715.0,
+            "y": 119.0
+          },
+          {
+            "x": 721.0,
+            "y": 118.0
+          },
+          {
+            "x": 721.0,
+            "y": 113.0
+          },
+          {
+            "x": 717.0,
+            "y": 109.0
+          },
+          {
+            "x": 718.0,
+            "y": 103.0
+          },
+          {
+            "x": 738.0,
+            "y": 103.0
+          },
+          {
+            "x": 739.0,
+            "y": 108.0
+          },
+          {
+            "x": 740.0,
+            "y": 103.0
+          },
+          {
+            "x": 746.0,
+            "y": 103.0
+          },
+          {
+            "x": 748.0,
+            "y": 108.0
+          },
+          {
+            "x": 746.0,
+            "y": 113.0
+          },
+          {
+            "x": 743.0,
+            "y": 111.0
+          },
+          {
+            "x": 743.0,
+            "y": 118.0
+          },
+          {
+            "x": 750.0,
+            "y": 119.0
+          },
+          {
+            "x": 749.0,
+            "y": 128.0
+          },
+          {
+            "x": 751.0,
+            "y": 128.0
+          },
+          {
+            "x": 751.0,
+            "y": 101.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 732.502,
+        "y": 111.116
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#e7d3e7",
+        "pixel_area": 376,
+        "bounding_box": {
+          "x": 714,
+          "y": 101,
+          "width": 38,
+          "height": 28
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "highlighted-area-6f-024",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_highlighted_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 961.0,
+            "y": 128.0
+          },
+          {
+            "x": 961.0,
+            "y": 146.0
+          },
+          {
+            "x": 962.0,
+            "y": 143.0
+          },
+          {
+            "x": 973.0,
+            "y": 143.0
+          },
+          {
+            "x": 975.0,
+            "y": 145.0
+          },
+          {
+            "x": 984.0,
+            "y": 143.0
+          },
+          {
+            "x": 986.0,
+            "y": 147.0
+          },
+          {
+            "x": 987.0,
+            "y": 143.0
+          },
+          {
+            "x": 1003.0,
+            "y": 143.0
+          },
+          {
+            "x": 1003.0,
+            "y": 128.0
+          },
+          {
+            "x": 991.0,
+            "y": 128.0
+          },
+          {
+            "x": 992.0,
+            "y": 132.0
+          },
+          {
+            "x": 989.0,
+            "y": 134.0
+          },
+          {
+            "x": 987.0,
+            "y": 141.0
+          },
+          {
+            "x": 976.0,
+            "y": 141.0
+          },
+          {
+            "x": 975.0,
+            "y": 134.0
+          },
+          {
+            "x": 972.0,
+            "y": 132.0
+          },
+          {
+            "x": 973.0,
+            "y": 128.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 981.913,
+        "y": 136.598
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#e7d3e7",
+        "pixel_area": 508,
+        "bounding_box": {
+          "x": 961,
+          "y": 128,
+          "width": 43,
+          "height": 20
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "highlighted-area-6f-025",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_highlighted_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 0.0,
+            "y": 146.0
+          },
+          {
+            "x": 0.0,
+            "y": 174.0
+          },
+          {
+            "x": 37.0,
+            "y": 174.0
+          },
+          {
+            "x": 33.0,
+            "y": 173.0
+          },
+          {
+            "x": 34.0,
+            "y": 154.0
+          },
+          {
+            "x": 46.0,
+            "y": 154.0
+          },
+          {
+            "x": 47.0,
+            "y": 157.0
+          },
+          {
+            "x": 48.0,
+            "y": 154.0
+          },
+          {
+            "x": 59.0,
+            "y": 154.0
+          },
+          {
+            "x": 61.0,
+            "y": 160.0
+          },
+          {
+            "x": 53.0,
+            "y": 161.0
+          },
+          {
+            "x": 58.0,
+            "y": 161.0
+          },
+          {
+            "x": 60.0,
+            "y": 164.0
+          },
+          {
+            "x": 59.0,
+            "y": 174.0
+          },
+          {
+            "x": 95.0,
+            "y": 174.0
+          },
+          {
+            "x": 95.0,
+            "y": 146.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 47.735,
+        "y": 159.026
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#e7d3e7",
+        "pixel_area": 2208,
+        "bounding_box": {
+          "x": 0,
+          "y": 146,
+          "width": 96,
+          "height": 29
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "highlighted-area-6f-026",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_highlighted_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 98.0,
+            "y": 146.0
+          },
+          {
+            "x": 98.0,
+            "y": 156.0
+          },
+          {
+            "x": 103.0,
+            "y": 156.0
+          },
+          {
+            "x": 103.0,
+            "y": 150.0
+          },
+          {
+            "x": 115.0,
+            "y": 150.0
+          },
+          {
+            "x": 116.0,
+            "y": 156.0
+          },
+          {
+            "x": 119.0,
+            "y": 156.0
+          },
+          {
+            "x": 119.0,
+            "y": 146.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 108.081,
+        "y": 149.867
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#e7d3e7",
+        "pixel_area": 168,
+        "bounding_box": {
+          "x": 98,
+          "y": 146,
+          "width": 22,
+          "height": 11
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "highlighted-area-6f-027",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_highlighted_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 961.0,
+            "y": 152.0
+          },
+          {
+            "x": 961.0,
+            "y": 332.0
+          },
+          {
+            "x": 1098.0,
+            "y": 332.0
+          },
+          {
+            "x": 1098.0,
+            "y": 150.0
+          },
+          {
+            "x": 1004.0,
+            "y": 150.0
+          },
+          {
+            "x": 1003.0,
+            "y": 153.0
+          },
+          {
+            "x": 979.0,
+            "y": 151.0
+          },
+          {
+            "x": 977.0,
+            "y": 153.0
+          },
+          {
+            "x": 969.0,
+            "y": 152.0
+          },
+          {
+            "x": 968.0,
+            "y": 150.0
+          },
+          {
+            "x": 967.0,
+            "y": 152.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 1029.662,
+        "y": 241.317
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#e7d3e7",
+        "pixel_area": 24810,
+        "bounding_box": {
+          "x": 961,
+          "y": 150,
+          "width": 138,
+          "height": 183
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "highlighted-area-6f-028",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_highlighted_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 0.0,
+            "y": 177.0
+          },
+          {
+            "x": 0.0,
+            "y": 204.0
+          },
+          {
+            "x": 41.0,
+            "y": 204.0
+          },
+          {
+            "x": 41.0,
+            "y": 198.0
+          },
+          {
+            "x": 45.0,
+            "y": 197.0
+          },
+          {
+            "x": 45.0,
+            "y": 192.0
+          },
+          {
+            "x": 48.0,
+            "y": 191.0
+          },
+          {
+            "x": 49.0,
+            "y": 193.0
+          },
+          {
+            "x": 49.0,
+            "y": 185.0
+          },
+          {
+            "x": 42.0,
+            "y": 186.0
+          },
+          {
+            "x": 39.0,
+            "y": 181.0
+          },
+          {
+            "x": 41.0,
+            "y": 177.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 21.859,
+        "y": 190.56
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#e7d3e7",
+        "pixel_area": 1245,
+        "bounding_box": {
+          "x": 0,
+          "y": 177,
+          "width": 50,
+          "height": 28
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "highlighted-area-6f-029",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_highlighted_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 63.0,
+            "y": 186.0
+          },
+          {
+            "x": 63.0,
+            "y": 191.0
+          },
+          {
+            "x": 71.0,
+            "y": 198.0
+          },
+          {
+            "x": 71.0,
+            "y": 204.0
+          },
+          {
+            "x": 113.0,
+            "y": 204.0
+          },
+          {
+            "x": 113.0,
+            "y": 177.0
+          },
+          {
+            "x": 71.0,
+            "y": 177.0
+          },
+          {
+            "x": 72.0,
+            "y": 185.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 90.616,
+        "y": 190.513
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#e7d3e7",
+        "pixel_area": 1271,
+        "bounding_box": {
+          "x": 63,
+          "y": 177,
+          "width": 51,
+          "height": 28
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "highlighted-area-6f-030",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_highlighted_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 0.0,
+            "y": 207.0
+          },
+          {
+            "x": 0.0,
+            "y": 215.0
+          },
+          {
+            "x": 28.0,
+            "y": 215.0
+          },
+          {
+            "x": 30.0,
+            "y": 217.0
+          },
+          {
+            "x": 30.0,
+            "y": 238.0
+          },
+          {
+            "x": 113.0,
+            "y": 238.0
+          },
+          {
+            "x": 113.0,
+            "y": 207.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 66.653,
+        "y": 221.515
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#e7d3e7",
+        "pixel_area": 2450,
+        "bounding_box": {
+          "x": 0,
+          "y": 207,
+          "width": 114,
+          "height": 32
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "highlighted-area-6f-031",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_highlighted_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 30.0,
+            "y": 241.0
+          },
+          {
+            "x": 30.0,
+            "y": 262.0
+          },
+          {
+            "x": 113.0,
+            "y": 262.0
+          },
+          {
+            "x": 113.0,
+            "y": 241.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 71.5,
+        "y": 251.5
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#e7d3e7",
+        "pixel_area": 1583,
+        "bounding_box": {
+          "x": 30,
+          "y": 241,
+          "width": 84,
+          "height": 22
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "highlighted-area-6f-032",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_highlighted_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 961.0,
+            "y": 335.0
+          },
+          {
+            "x": 961.0,
+            "y": 482.0
+          },
+          {
+            "x": 1098.0,
+            "y": 482.0
+          },
+          {
+            "x": 1098.0,
+            "y": 335.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 1029.5,
+        "y": 408.5
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#e7d3e7",
+        "pixel_area": 20165,
+        "bounding_box": {
+          "x": 961,
+          "y": 335,
+          "width": 138,
+          "height": 148
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "facility-area-6f-033",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_facility_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 156.0,
+            "y": 94.0
+          },
+          {
+            "x": 156.0,
+            "y": 128.0
+          },
+          {
+            "x": 188.0,
+            "y": 128.0
+          },
+          {
+            "x": 188.0,
+            "y": 94.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 172.0,
+        "y": 111.0
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#73c7a4",
+        "pixel_area": 863,
+        "bounding_box": {
+          "x": 156,
+          "y": 94,
+          "width": 33,
+          "height": 35
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "facility-area-6f-034",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_facility_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 897.0,
+            "y": 99.0
+          },
+          {
+            "x": 897.0,
+            "y": 133.0
+          },
+          {
+            "x": 932.0,
+            "y": 133.0
+          },
+          {
+            "x": 932.0,
+            "y": 99.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 914.5,
+        "y": 116.0
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#73c7a4",
+        "pixel_area": 963,
+        "bounding_box": {
+          "x": 897,
+          "y": 99,
+          "width": 36,
+          "height": 35
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "facility-area-6f-035",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_facility_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 120.0,
+            "y": 281.0
+          },
+          {
+            "x": 120.0,
+            "y": 305.0
+          },
+          {
+            "x": 127.0,
+            "y": 305.0
+          },
+          {
+            "x": 127.0,
+            "y": 281.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 123.5,
+        "y": 293.0
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#73c7a4",
+        "pixel_area": 200,
+        "bounding_box": {
+          "x": 120,
+          "y": 281,
+          "width": 8,
+          "height": 25
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "facility-area-6f-036",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_facility_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 130.0,
+            "y": 281.0
+          },
+          {
+            "x": 130.0,
+            "y": 305.0
+          },
+          {
+            "x": 137.0,
+            "y": 305.0
+          },
+          {
+            "x": 137.0,
+            "y": 281.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 133.5,
+        "y": 293.0
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#73c7a4",
+        "pixel_area": 200,
+        "bounding_box": {
+          "x": 130,
+          "y": 281,
+          "width": 8,
+          "height": 25
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "facility-area-6f-037",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_facility_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 908.0,
+            "y": 285.0
+          },
+          {
+            "x": 908.0,
+            "y": 311.0
+          },
+          {
+            "x": 916.0,
+            "y": 312.0
+          },
+          {
+            "x": 915.0,
+            "y": 285.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 911.777,
+        "y": 298.541
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#73c7a4",
+        "pixel_area": 217,
+        "bounding_box": {
+          "x": 908,
+          "y": 285,
+          "width": 9,
+          "height": 28
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "facility-area-6f-038",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_facility_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 926.0,
+            "y": 285.0
+          },
+          {
+            "x": 919.0,
+            "y": 285.0
+          },
+          {
+            "x": 918.0,
+            "y": 312.0
+          },
+          {
+            "x": 926.0,
+            "y": 311.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 922.223,
+        "y": 298.541
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#73c7a4",
+        "pixel_area": 217,
+        "bounding_box": {
+          "x": 918,
+          "y": 285,
+          "width": 9,
+          "height": 28
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "facility-area-6f-039",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_facility_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 120.0,
+            "y": 326.0
+          },
+          {
+            "x": 120.0,
+            "y": 361.0
+          },
+          {
+            "x": 127.0,
+            "y": 361.0
+          },
+          {
+            "x": 127.0,
+            "y": 326.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 123.5,
+        "y": 343.5
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#73c7a4",
+        "pixel_area": 288,
+        "bounding_box": {
+          "x": 120,
+          "y": 326,
+          "width": 8,
+          "height": 36
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "facility-area-6f-040",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_facility_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 130.0,
+            "y": 326.0
+          },
+          {
+            "x": 130.0,
+            "y": 361.0
+          },
+          {
+            "x": 137.0,
+            "y": 361.0
+          },
+          {
+            "x": 137.0,
+            "y": 326.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 133.5,
+        "y": 343.5
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#73c7a4",
+        "pixel_area": 288,
+        "bounding_box": {
+          "x": 130,
+          "y": 326,
+          "width": 8,
+          "height": 36
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "facility-area-6f-041",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_facility_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 908.0,
+            "y": 332.0
+          },
+          {
+            "x": 908.0,
+            "y": 361.0
+          },
+          {
+            "x": 915.0,
+            "y": 361.0
+          },
+          {
+            "x": 915.0,
+            "y": 332.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 911.5,
+        "y": 346.5
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#73c7a4",
+        "pixel_area": 240,
+        "bounding_box": {
+          "x": 908,
+          "y": 332,
+          "width": 8,
+          "height": 30
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "facility-area-6f-042",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_facility_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 919.0,
+            "y": 332.0
+          },
+          {
+            "x": 919.0,
+            "y": 361.0
+          },
+          {
+            "x": 926.0,
+            "y": 361.0
+          },
+          {
+            "x": 926.0,
+            "y": 332.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 922.5,
+        "y": 346.5
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#73c7a4",
+        "pixel_area": 240,
+        "bounding_box": {
+          "x": 919,
+          "y": 332,
+          "width": 8,
+          "height": 30
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "facility-area-6f-043",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_facility_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 433.0,
+            "y": 367.0
+          },
+          {
+            "x": 398.0,
+            "y": 379.0
+          },
+          {
+            "x": 406.0,
+            "y": 379.0
+          },
+          {
+            "x": 408.0,
+            "y": 384.0
+          },
+          {
+            "x": 435.0,
+            "y": 374.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 419.331,
+        "y": 375.571
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#73c7a4",
+        "pixel_area": 270,
+        "bounding_box": {
+          "x": 398,
+          "y": 367,
+          "width": 38,
+          "height": 18
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "facility-area-6f-044",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_facility_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 436.0,
+            "y": 376.0
+          },
+          {
+            "x": 407.0,
+            "y": 387.0
+          },
+          {
+            "x": 407.0,
+            "y": 395.0
+          },
+          {
+            "x": 438.0,
+            "y": 384.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 422.224,
+        "y": 385.462
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#73c7a4",
+        "pixel_area": 283,
+        "bounding_box": {
+          "x": 407,
+          "y": 376,
+          "width": 33,
+          "height": 20
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "facility-area-6f-045",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_facility_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 386.0,
+            "y": 384.0
+          },
+          {
+            "x": 354.0,
+            "y": 395.0
+          },
+          {
+            "x": 355.0,
+            "y": 403.0
+          },
+          {
+            "x": 386.0,
+            "y": 392.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 370.137,
+        "y": 393.518
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#73c7a4",
+        "pixel_area": 298,
+        "bounding_box": {
+          "x": 353,
+          "y": 384,
+          "width": 34,
+          "height": 20
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "facility-area-6f-046",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_facility_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 394.0,
+            "y": 400.0
+          },
+          {
+            "x": 387.0,
+            "y": 400.0
+          },
+          {
+            "x": 386.0,
+            "y": 395.0
+          },
+          {
+            "x": 356.0,
+            "y": 406.0
+          },
+          {
+            "x": 359.0,
+            "y": 413.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 372.676,
+        "y": 403.976
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#73c7a4",
+        "pixel_area": 281,
+        "bounding_box": {
+          "x": 356,
+          "y": 395,
+          "width": 39,
+          "height": 19
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "facility-area-6f-047",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_facility_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 0.0,
+            "y": 432.0
+          },
+          {
+            "x": 0.0,
+            "y": 499.0
+          },
+          {
+            "x": 88.0,
+            "y": 499.0
+          },
+          {
+            "x": 88.0,
+            "y": 432.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 44.0,
+        "y": 465.5
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#73c7a4",
+        "pixel_area": 5204,
+        "bounding_box": {
+          "x": 0,
+          "y": 432,
+          "width": 89,
+          "height": 68
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "facility-area-6f-048",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_facility_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 1009.0,
+            "y": 486.0
+          },
+          {
+            "x": 1009.0,
+            "y": 529.0
+          },
+          {
+            "x": 1051.0,
+            "y": 529.0
+          },
+          {
+            "x": 1051.0,
+            "y": 486.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 1030.0,
+        "y": 507.5
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#73c7a4",
+        "pixel_area": 1627,
+        "bounding_box": {
+          "x": 1009,
+          "y": 486,
+          "width": 43,
+          "height": 44
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "facility-area-6f-049",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_facility_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 1056.0,
+            "y": 486.0
+          },
+          {
+            "x": 1056.0,
+            "y": 529.0
+          },
+          {
+            "x": 1098.0,
+            "y": 529.0
+          },
+          {
+            "x": 1098.0,
+            "y": 486.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 1077.0,
+        "y": 507.5
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#73c7a4",
+        "pixel_area": 1730,
+        "bounding_box": {
+          "x": 1056,
+          "y": 486,
+          "width": 43,
+          "height": 44
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "facility-area-6f-050",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_facility_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 0.0,
+            "y": 503.0
+          },
+          {
+            "x": 0.0,
+            "y": 546.0
+          },
+          {
+            "x": 42.0,
+            "y": 546.0
+          },
+          {
+            "x": 42.0,
+            "y": 503.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 21.0,
+        "y": 524.5
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#73c7a4",
+        "pixel_area": 1623,
+        "bounding_box": {
+          "x": 0,
+          "y": 503,
+          "width": 43,
+          "height": 44
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "facility-area-6f-051",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_facility_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 45.0,
+            "y": 503.0
+          },
+          {
+            "x": 45.0,
+            "y": 546.0
+          },
+          {
+            "x": 88.0,
+            "y": 546.0
+          },
+          {
+            "x": 88.0,
+            "y": 503.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 66.5,
+        "y": 524.5
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#73c7a4",
+        "pixel_area": 1802,
+        "bounding_box": {
+          "x": 45,
+          "y": 503,
+          "width": 44,
+          "height": 44
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "facility-area-6f-052",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_facility_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 188.0,
+            "y": 571.0
+          },
+          {
+            "x": 188.0,
+            "y": 601.0
+          },
+          {
+            "x": 218.0,
+            "y": 601.0
+          },
+          {
+            "x": 218.0,
+            "y": 571.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 203.0,
+        "y": 586.0
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#73c7a4",
+        "pixel_area": 650,
+        "bounding_box": {
+          "x": 188,
+          "y": 571,
+          "width": 31,
+          "height": 31
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "facility-area-6f-053",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_facility_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 885.0,
+            "y": 575.0
+          },
+          {
+            "x": 885.0,
+            "y": 605.0
+          },
+          {
+            "x": 914.0,
+            "y": 605.0
+          },
+          {
+            "x": 914.0,
+            "y": 575.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 899.5,
+        "y": 590.0
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#73c7a4",
+        "pixel_area": 622,
+        "bounding_box": {
+          "x": 885,
+          "y": 575,
+          "width": 30,
+          "height": 31
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    },
+    {
+      "id": "facility-area-6f-054",
+      "kind": "amenity",
+      "name": null,
+      "category": "unmatched_extracted_facility_area",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          {
+            "x": 661.0,
+            "y": 579.0
+          },
+          {
+            "x": 661.0,
+            "y": 609.0
+          },
+          {
+            "x": 690.0,
+            "y": 609.0
+          },
+          {
+            "x": 690.0,
+            "y": 579.0
+          }
+        ]
+      },
+      "centroid": {
+        "x": 675.5,
+        "y": 594.0
+      },
+      "extraction": {
+        "method": "connected_component_fill_trace",
+        "fill_rgb": "#73c7a4",
+        "pixel_area": 621,
+        "bounding_box": {
+          "x": 661,
+          "y": 579,
+          "width": 30,
+          "height": 31
+        },
+        "label_mapping_status": "pending_manual_review"
+      }
+    }
+  ],
+  "notes": [
+    "Store names are unverified manual transcriptions from the original screenshot; text and polygon associations remain pending manual review.",
+    "Area polygons were traced from exact-color screenshot regions. Their association with transcribed store names remains pending manual review."
+  ],
+  "geometry_extraction": {
+    "method": "connected_component_fill_trace",
+    "fill_rgb": [
+      "#dcdcdc",
+      "#e7d3e7",
+      "#73c7a4"
+    ],
+    "feature_count": 54,
+    "label_mapping": "pending_manual_review"
+  },
+  "official_map": {
+    "source": {
+      "provider": "dabeeo",
+      "page": "https://www.ehyundai.com/mobile/branch/DP/floorMap.do?branchCd=B00140000&floorCd=B010B100",
+      "map_endpoint": "https://api.dabeeomaps.com/v2/map?t=JS",
+      "map_version": "180.0",
+      "deployed_date": null,
+      "credentials_persisted": false
+    },
+    "coordinate_system": {
+      "id": "dabeeo_map_xy",
+      "unit": "provider_map_unit",
+      "x_axis_direction": 1,
+      "y_axis_direction": 1,
+      "size": {
+        "width": 3000.0,
+        "height": 3000.0
+      }
+    },
+    "map_id": "MP-qe6m98422alw0347",
+    "floor_id": "FL-t89mxdj9mxcy0524",
+    "floor_name": "6F",
+    "counts": {
+      "pois": 47,
+      "linked_objects": 44,
+      "unlinked_pois": 2
+    },
+    "pois": [
+      {
+        "id": "PO-Hw80tGf7m7933",
+        "object_id": "OB-z6D8oQem_X1216",
+        "name_ko": "세이지 라운지",
+        "name_en": "SAGE LOUNGE",
+        "category_code": "31",
+        "position": {
+          "x": 1105.183183,
+          "y": 1163.88019,
+          "z": 0.0
+        },
+        "phone": "02-3277-0953",
+        "map_brand_cd": "400A01A01038000A37085"
+      },
+      {
+        "id": "PO-OoQwhkfzZ9172",
+        "object_id": "OB-EsiI-AsQVp0988",
+        "name_ko": "TUNE",
+        "name_en": "TUNE",
+        "category_code": "57",
+        "position": {
+          "x": 1306.306396,
+          "y": 1174.267211,
+          "z": 0.0
+        },
+        "phone": "02-3277-0680",
+        "map_brand_cd": "400A01A01033000142014"
+      },
+      {
+        "id": "PO-C1rVUt6gL3899",
+        "object_id": "OB-pP-K44qKgz0988",
+        "name_ko": "티켓 부스",
+        "name_en": "TICKET BOOTH",
+        "category_code": "57",
+        "position": {
+          "x": 1721.735714,
+          "y": 1164.194661,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": "400A01A01033000A36588"
+      },
+      {
+        "id": "PO-fXXA1AR_G6628",
+        "object_id": "OB-tSZF9u0CGb0992",
+        "name_ko": "고디바",
+        "name_en": "GODIVA",
+        "category_code": "38",
+        "position": {
+          "x": 1285.166656,
+          "y": 1802.273284,
+          "z": 0.0
+        },
+        "phone": "02-3277-0661",
+        "map_brand_cd": "400A01A01023000112603"
+      },
+      {
+        "id": "PO-VL2v3hP5R0218",
+        "object_id": "OB-hUzJE9WnJd0995",
+        "name_ko": "리스토란테 에오",
+        "name_en": "RISTORANTE EO",
+        "category_code": "37",
+        "position": {
+          "x": 1152.570855,
+          "y": 1833.480354,
+          "z": 0.0
+        },
+        "phone": "02-3277-0651",
+        "map_brand_cd": "400A01A01019000119244"
+      },
+      {
+        "id": "PO-NCpMNrEp82723",
+        "object_id": "OB-e3dQ7V4Mzr1971",
+        "name_ko": "송",
+        "name_en": "SONG",
+        "category_code": "37",
+        "position": {
+          "x": 1478.543518,
+          "y": 1881.345764,
+          "z": 0.0
+        },
+        "phone": "02-3277-0655",
+        "map_brand_cd": "400A01A01019000104076"
+      },
+      {
+        "id": "PO-nA8T0s76X4138",
+        "object_id": "OB-wDm11vO6LG1972",
+        "name_ko": "사천화가",
+        "name_en": "Sichuan HwaGa",
+        "category_code": "37",
+        "position": {
+          "x": 1561.078909,
+          "y": 1881.345764,
+          "z": 0.0
+        },
+        "phone": "02-3277-0665",
+        "map_brand_cd": "400A01A01019000144275"
+      },
+      {
+        "id": "PO-YMLJzrGIy5754",
+        "object_id": "OB-KINchgKa2i0555",
+        "name_ko": "로바",
+        "name_en": "ROBA",
+        "category_code": "37",
+        "position": {
+          "x": 1873.306946,
+          "y": 1858.532593,
+          "z": 0.0
+        },
+        "phone": "02-3277-0652",
+        "map_brand_cd": "400A01A01019000A36372"
+      },
+      {
+        "id": "PO-vpJN8tesm7538",
+        "object_id": "OB-oOxENXV22b0556",
+        "name_ko": "도원 스타일",
+        "name_en": "TAO-YUEN STYLE",
+        "category_code": "37",
+        "position": {
+          "x": 1998.010051,
+          "y": 1836.092937,
+          "z": 0.0
+        },
+        "phone": "02-3277-0653",
+        "map_brand_cd": "400A01A01019000113848"
+      },
+      {
+        "id": "PO-f48w-34Od9066",
+        "object_id": "OB-v_kB5gyK2t1972",
+        "name_ko": "상춘재",
+        "name_en": "sangchunjae",
+        "category_code": "37",
+        "position": {
+          "x": 1641.280579,
+          "y": 1880.179137,
+          "z": 0.0
+        },
+        "phone": "02-3277-0657",
+        "map_brand_cd": "400A01A01019000140257"
+      },
+      {
+        "id": "PO-bawy_CfOO1219",
+        "object_id": "OB-jOJxZ5cbkz1972",
+        "name_ko": "베르그",
+        "name_en": "BERG",
+        "category_code": "38",
+        "position": {
+          "x": 2156.217407,
+          "y": 1776.37677,
+          "z": 0.0
+        },
+        "phone": "02-3277-0654",
+        "map_brand_cd": "400A01A01023000141608"
+      },
+      {
+        "id": "PO-oneB-3Fe-8051",
+        "object_id": "OB-TeVuDk81L94781",
+        "name_ko": "현대백화점 카드 (서비스 라운지 안)",
+        "name_en": "CARDㆍ MEMBER SHIP",
+        "category_code": "57",
+        "position": {
+          "x": 760.001129,
+          "y": 1280.834534,
+          "z": 0.0
+        },
+        "phone": "02-3277-0924",
+        "map_brand_cd": "400A01A01033000A36468"
+      },
+      {
+        "id": "PO-uuaBqr5nj9235",
+        "object_id": "OB-0fNS8asl45499",
+        "name_ko": "이탈리 마켓",
+        "name_en": "EATALY MARKET",
+        "category_code": "37",
+        "position": {
+          "x": 872.794006,
+          "y": 1799.061925,
+          "z": 0.0
+        },
+        "phone": "02-3277-0660",
+        "map_brand_cd": "400A01A01019000120763"
+      },
+      {
+        "id": "PO-amsqf8JE40283",
+        "object_id": "OB-Lfr0INkD70553",
+        "name_ko": "나의 가야",
+        "name_en": "MY GAYA",
+        "category_code": "37",
+        "position": {
+          "x": 1035.055627,
+          "y": 1825.718387,
+          "z": 0.0
+        },
+        "phone": "02-3277-0650",
+        "map_brand_cd": "400A01A01019000107727"
+      },
+      {
+        "id": "PO-eQJBf-yCx6756",
+        "object_id": "OB-DWBa9GlCyp1971",
+        "name_ko": "정돈 프리미엄",
+        "name_en": "JUNGDON PREMIUM",
+        "category_code": "37",
+        "position": {
+          "x": 1397.174988,
+          "y": 1881.345764,
+          "z": 0.0
+        },
+        "phone": "02-3277-0670",
+        "map_brand_cd": "400A01A01019000138236"
+      },
+      {
+        "id": "PO-VND6sg7cH1294",
+        "object_id": "OB-4wgXb27Jh92355",
+        "name_ko": "SMT 라운지",
+        "name_en": "SMT LOUNGE",
+        "category_code": "37",
+        "position": {
+          "x": 759.741593,
+          "y": 1513.477477,
+          "z": 0.0
+        },
+        "phone": "02-3277-0659",
+        "map_brand_cd": "400A01A01019000A36326"
+      },
+      {
+        "id": "PO-vc5dugm6O0661",
+        "object_id": "OB-zKN1URo6_k4780",
+        "name_ko": "TAX REFUND (Service Lounge)",
+        "name_en": "TAX REFUND (Service Lounge)",
+        "category_code": "9992",
+        "position": {
+          "x": 745.756226,
+          "y": 1233.957825,
+          "z": 0.0
+        },
+        "phone": "02-3277-0088",
+        "map_brand_cd": "400A01A01033000A36470"
+      },
+      {
+        "id": "PO-srY9lgYZb1809",
+        "object_id": "OB-YzYgqdR1o8823",
+        "name_ko": "상품권(서비스 라운지 안)",
+        "name_en": "GIFT CARD",
+        "category_code": "9992",
+        "position": {
+          "x": 783.831197,
+          "y": 1329.954224,
+          "z": 0.0
+        },
+        "phone": "02-3277-0640",
+        "map_brand_cd": "400A01A01033000A36469"
+      },
+      {
+        "id": "PO-zbWA20Ae85369",
+        "object_id": "OB-ijIo9S7Yn4777",
+        "name_ko": "ALT. 1",
+        "name_en": "ALT. 1",
+        "category_code": "57",
+        "position": {
+          "x": 1694.68573,
+          "y": 1115.761841,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": "400A01A01033000A36472"
+      },
+      {
+        "id": "PO-irMt24efY8957",
+        "object_id": "OB-tUn8c1o6Up1215",
+        "name_ko": "CH 1985",
+        "name_en": "CH 1985",
+        "category_code": "57",
+        "position": {
+          "x": 2247.250488,
+          "y": 1357.978821,
+          "z": 0.0
+        },
+        "phone": "02-785-1985",
+        "map_brand_cd": "400A01A01033000A36471"
+      },
+      {
+        "id": "PO-uNkq7Zqnj3640",
+        "object_id": "OB-gVNo-cMOF1210",
+        "name_ko": "카페 H",
+        "name_en": "CAFE H",
+        "category_code": "9992",
+        "position": {
+          "x": 2247.255761,
+          "y": 1614.396951,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": "400F21391"
+      },
+      {
+        "id": "PO-Yq6mx8Reb5870",
+        "object_id": "OB-zAm-NDQf9k0992",
+        "name_ko": "이탈리",
+        "name_en": "EATALY",
+        "category_code": "37",
+        "position": {
+          "x": 1191.772999,
+          "y": 1483.114373,
+          "z": 0.0
+        },
+        "phone": "02-3277-0658",
+        "map_brand_cd": "400A01A01019000A36320"
+      },
+      {
+        "id": "PO-_UKuqxF_H5730",
+        "object_id": "OB-8RtERYzca1844",
+        "name_ko": "PDR",
+        "name_en": "PDR",
+        "category_code": "57",
+        "position": {
+          "x": 1751.777265,
+          "y": 1807.395222,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-qUAYC4j_l3710",
+        "object_id": "OB-Oiokbl3Te5525",
+        "name_ko": "취식 가능장소",
+        "name_en": "Dining area",
+        "category_code": "",
+        "position": {
+          "x": 2023.710815,
+          "y": 1722.558887,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-PBwhIw00P4614",
+        "object_id": "OB-O6MHfPc97x5527",
+        "name_ko": "취식 가능장소",
+        "name_en": "Dining area",
+        "category_code": "",
+        "position": {
+          "x": 2024.817953,
+          "y": 1244.778653,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-NqfZnc_xe1919",
+        "object_id": "OB-XJ_WD9Pups5527",
+        "name_ko": "취식 가능장소",
+        "name_en": "Dining area",
+        "category_code": "",
+        "position": {
+          "x": 938.363591,
+          "y": 1718.847388,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-DIDc87Bq00402",
+        "object_id": "OB-zdO25o7UXr5528",
+        "name_ko": "취식 가능장소",
+        "name_en": "Dining area",
+        "category_code": "",
+        "position": {
+          "x": 939.71712,
+          "y": 1255.147849,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-V71mTQgbJ1923",
+        "object_id": "OB-pPxsVoNo4a8825",
+        "name_ko": "여행사 데스크",
+        "name_en": "TRAVEL AGENCY DESK",
+        "category_code": "9992",
+        "position": {
+          "x": 784.725952,
+          "y": 1373.8974,
+          "z": 0.0
+        },
+        "phone": "02-3277-0642",
+        "map_brand_cd": "400A01A01033000A41721"
+      },
+      {
+        "id": "PO-iOfWonTJR3090",
+        "object_id": "OB-_iI0WnKjX_0557",
+        "name_ko": "휴대전화 충전기 대여(유료)",
+        "name_en": "Rental Cell Phone Chargers (paid)",
+        "category_code": "54",
+        "position": {
+          "x": 1793.504517,
+          "y": 1164.194702,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": "400F23994"
+      },
+      {
+        "id": "PO-qoZaOhAIb5644",
+        "object_id": "OB-c5ci1lz4cg0557",
+        "name_ko": "TAX REFUND KIOSK Ⅱ",
+        "name_en": "TAX REFUND KIOSK Ⅱ",
+        "category_code": "9992",
+        "position": {
+          "x": 840.865234,
+          "y": 1233.957825,
+          "z": 0.0
+        },
+        "phone": "02-3277-0088",
+        "map_brand_cd": "400A01A01033000A42662"
+      },
+      {
+        "id": "PO-BJZC5vYmr8459",
+        "object_id": "OB-i8TtGBxdr4912",
+        "name_ko": "에스컬레이터",
+        "name_en": "Escalator",
+        "category_code": "9994",
+        "position": {
+          "x": 2075.47301,
+          "y": 1481.018066,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-kMXEbYhDG7718",
+        "object_id": "OB-rnqRAf0Xt94916",
+        "name_ko": "에스컬레이터",
+        "name_en": "Escalator",
+        "category_code": "9994",
+        "position": {
+          "x": 1279.951936,
+          "y": 1584.752051,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-kwGd_76MF8007",
+        "object_id": "OB-TLJg9Zw2Bo4915",
+        "name_ko": "에스컬레이터",
+        "name_en": "Escalator",
+        "category_code": "9994",
+        "position": {
+          "x": 871.340522,
+          "y": 1471.253968,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-eh-s_ig4M1560",
+        "object_id": "OB-sY6OAnumf1095",
+        "name_ko": "흡연실 (전자담배 전용)",
+        "name_en": "Smoking room",
+        "category_code": "9992",
+        "position": {
+          "x": 742.028015,
+          "y": 1701.355408,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": "400A01A01033000A36473"
+      },
+      {
+        "id": "PO-c5qqbLiYj6214",
+        "object_id": "OB-MXrrV-dSS4072",
+        "name_ko": "화장실",
+        "name_en": "Restroom",
+        "category_code": "9991",
+        "position": {
+          "x": 706.999433,
+          "y": 1790.685303,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-SaM_bwDZY7623",
+        "object_id": "OB-c-oL_iRa-r4074",
+        "name_ko": "음수대",
+        "name_en": "Water fountain",
+        "category_code": "",
+        "position": {
+          "x": 776.971718,
+          "y": 1790.685303,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-MlbKjIVF54310",
+        "object_id": "OB-2BT-CfUWai3698",
+        "name_ko": "엘리베이터",
+        "name_en": "Elevator",
+        "category_code": "9993",
+        "position": {
+          "x": 985.5,
+          "y": 1885.346247,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-W5elJ10753753",
+        "object_id": "OB-Ep4XUo-yXF7477",
+        "name_ko": "엘리베이터",
+        "name_en": "Elevator",
+        "category_code": "9993",
+        "position": {
+          "x": 1706.964844,
+          "y": 1896.885969,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-_3i7eyewJ2444",
+        "object_id": "OB-yxAjReM5u3696",
+        "name_ko": "엘리베이터",
+        "name_en": "Elevator",
+        "category_code": "9993",
+        "position": {
+          "x": 2049.0,
+          "y": 1890.817353,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-2W7__HlKy5480",
+        "object_id": "OB-yvSHBqF7GQ6230",
+        "name_ko": "화장실",
+        "name_en": "Restroom",
+        "category_code": "9991",
+        "position": {
+          "x": 2248.574282,
+          "y": 1764.428711,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-LulaTXedi7494",
+        "object_id": "OB-6Dh48jib57700",
+        "name_ko": "장애인화장실",
+        "name_en": "Disabled",
+        "category_code": "9991",
+        "position": {
+          "x": 2320.166016,
+          "y": 1764.428711,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-wZKeHlZnB7607",
+        "object_id": "OB-4h6KCQgCX90557",
+        "name_ko": "ATM (하나은행)",
+        "name_en": "ATM (HN Bank)",
+        "category_code": "9992",
+        "position": {
+          "x": 2174.742188,
+          "y": 1199.286743,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": "400A01A01033000A36474"
+      },
+      {
+        "id": "PO-PwIyevH5U3558",
+        "object_id": "OB-1xyhtaqiw81215",
+        "name_ko": "엘리베이터",
+        "name_en": "Elevator",
+        "category_code": "9993",
+        "position": {
+          "x": 2072.425889,
+          "y": 1166.494079,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-3it-FOUoP8752",
+        "object_id": "OB-fmQFV9BUwe1215",
+        "name_ko": "엘리베이터",
+        "name_en": "Elevator",
+        "category_code": "9993",
+        "position": {
+          "x": 937.639282,
+          "y": 1159.423527,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-NTitM86308484",
+        "object_id": "OB-Ep4XUo-yXF7477",
+        "name_ko": "유아차 전용 E/V",
+        "name_en": "Elevator (for strollers only)",
+        "category_code": "",
+        "position": {
+          "x": 1707.447376,
+          "y": 1936.376796,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-NPaZZbajD3780",
+        "object_id": "",
+        "name_ko": "포토존 스테이지",
+        "name_en": "Photo zone stage",
+        "category_code": "9992",
+        "position": {
+          "x": 2075.755226,
+          "y": 1394.077654,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-hOSWCVdMC7075",
+        "object_id": "",
+        "name_ko": "포토존 스테이지",
+        "name_en": "Photo zone stage",
+        "category_code": "9992",
+        "position": {
+          "x": 2078.609867,
+          "y": 1565.885014,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      }
+    ],
+    "objects": [
+      {
+        "id": "OB-v_kB5gyK2t1972",
+        "attribute_code": "OB-RESTAURANT",
+        "passable": false,
+        "position": {
+          "x": 1641.280579,
+          "y": 1881.345814,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1681.964844,
+              "y": 1990.700001
+            },
+            {
+              "x": 1600.596313,
+              "y": 1990.700001
+            },
+            {
+              "x": 1600.596313,
+              "y": 1771.991627
+            },
+            {
+              "x": 1681.964844,
+              "y": 1771.991627
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-f48w-34Od9066"
+        ],
+        "names_ko": [
+          "상춘재"
+        ]
+      },
+      {
+        "id": "OB-wDm11vO6LG1972",
+        "attribute_code": "OB-RESTAURANT",
+        "passable": false,
+        "position": {
+          "x": 1559.912048,
+          "y": 1881.345764,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1600.596313,
+              "y": 1990.699951
+            },
+            {
+              "x": 1519.227783,
+              "y": 1990.699951
+            },
+            {
+              "x": 1519.227783,
+              "y": 1771.991577
+            },
+            {
+              "x": 1600.596313,
+              "y": 1771.991577
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-nA8T0s76X4138"
+        ],
+        "names_ko": [
+          "사천화가"
+        ]
+      },
+      {
+        "id": "OB-e3dQ7V4Mzr1971",
+        "attribute_code": "OB-RESTAURANT",
+        "passable": false,
+        "position": {
+          "x": 1478.543518,
+          "y": 1881.345764,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1519.227783,
+              "y": 1990.699951
+            },
+            {
+              "x": 1437.859253,
+              "y": 1990.699951
+            },
+            {
+              "x": 1437.859253,
+              "y": 1771.991577
+            },
+            {
+              "x": 1519.227783,
+              "y": 1771.991577
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-NCpMNrEp82723"
+        ],
+        "names_ko": [
+          "송"
+        ]
+      },
+      {
+        "id": "OB-DWBa9GlCyp1971",
+        "attribute_code": "OB-RESTAURANT",
+        "passable": false,
+        "position": {
+          "x": 1397.174988,
+          "y": 1881.345764,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1437.859253,
+              "y": 1990.699951
+            },
+            {
+              "x": 1356.490723,
+              "y": 1990.699951
+            },
+            {
+              "x": 1356.490723,
+              "y": 1771.991577
+            },
+            {
+              "x": 1437.859253,
+              "y": 1771.991577
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-eQJBf-yCx6756"
+        ],
+        "names_ko": [
+          "정돈 프리미엄"
+        ]
+      },
+      {
+        "id": "OB-Lfr0INkD70553",
+        "attribute_code": "OB-RESTAURANT",
+        "passable": false,
+        "position": {
+          "x": 1026.0,
+          "y": 1881.345764,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 960.5,
+              "y": 1771.991577
+            },
+            {
+              "x": 960.5,
+              "y": 1847.014893
+            },
+            {
+              "x": 960.5,
+              "y": 1860.199951
+            },
+            {
+              "x": 960.5,
+              "y": 1860.346191
+            },
+            {
+              "x": 1010.5,
+              "y": 1860.346191
+            },
+            {
+              "x": 1010.413269,
+              "y": 1990.699951
+            },
+            {
+              "x": 1091.5,
+              "y": 1990.699951
+            },
+            {
+              "x": 1091.5,
+              "y": 1771.991577
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-amsqf8JE40283"
+        ],
+        "names_ko": [
+          "나의 가야"
+        ]
+      },
+      {
+        "id": "OB-6Dh48jib57700",
+        "attribute_code": "OB-DISABLED_TOILET",
+        "passable": false,
+        "position": {
+          "x": 2320.166016,
+          "y": 1764.428711,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2354.666016,
+              "y": 1799.678711
+            },
+            {
+              "x": 2354.666016,
+              "y": 1729.178711
+            },
+            {
+              "x": 2285.666016,
+              "y": 1729.178711
+            },
+            {
+              "x": 2285.666016,
+              "y": 1777.796786
+            },
+            {
+              "x": 2285.666016,
+              "y": 1799.678711
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-LulaTXedi7494"
+        ],
+        "names_ko": [
+          "장애인화장실"
+        ]
+      },
+      {
+        "id": "OB-gVNo-cMOF1210",
+        "attribute_code": "OB-OTHER_FACILITIES",
+        "passable": false,
+        "position": {
+          "x": 2247.255761,
+          "y": 1614.396951,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2354.676562,
+              "y": 1729.178711
+            },
+            {
+              "x": 2139.834961,
+              "y": 1729.178711
+            },
+            {
+              "x": 2139.834961,
+              "y": 1499.615192
+            },
+            {
+              "x": 2354.666016,
+              "y": 1499.615723
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-uNkq7Zqnj3640"
+        ],
+        "names_ko": [
+          "카페 H"
+        ]
+      },
+      {
+        "id": "OB-tUn8c1o6Up1215",
+        "attribute_code": "OB-OTHER_FACILITIES",
+        "passable": false,
+        "position": {
+          "x": 2247.250488,
+          "y": 1357.978821,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2354.666016,
+              "y": 1499.615723
+            },
+            {
+              "x": 2139.834961,
+              "y": 1499.615192
+            },
+            {
+              "x": 2139.834961,
+              "y": 1216.341919
+            },
+            {
+              "x": 2354.666016,
+              "y": 1216.341919
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-irMt24efY8957"
+        ],
+        "names_ko": [
+          "CH 1985"
+        ]
+      },
+      {
+        "id": "OB-pPxsVoNo4a8825",
+        "attribute_code": "OB-OTHER_FACILITIES",
+        "passable": false,
+        "position": {
+          "x": 784.725952,
+          "y": 1373.8974,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 850.451965,
+              "y": 1355.859497
+            },
+            {
+              "x": 718.999939,
+              "y": 1355.859497
+            },
+            {
+              "x": 718.999939,
+              "y": 1391.935303
+            },
+            {
+              "x": 850.451965,
+              "y": 1391.935303
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-V71mTQgbJ1923"
+        ],
+        "names_ko": [
+          "여행사 데스크"
+        ]
+      },
+      {
+        "id": "OB-YzYgqdR1o8823",
+        "attribute_code": "OB-OTHER_FACILITIES",
+        "passable": false,
+        "position": {
+          "x": 760.001648,
+          "y": 1329.954224,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 669.503296,
+              "y": 1304.04895
+            },
+            {
+              "x": 669.503296,
+              "y": 1320.872437
+            },
+            {
+              "x": 718.999939,
+              "y": 1320.872437
+            },
+            {
+              "x": 718.999939,
+              "y": 1355.859497
+            },
+            {
+              "x": 850.451965,
+              "y": 1355.859497
+            },
+            {
+              "x": 850.451965,
+              "y": 1320.872437
+            },
+            {
+              "x": 850.5,
+              "y": 1320.872437
+            },
+            {
+              "x": 850.5,
+              "y": 1304.04895
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-srY9lgYZb1809"
+        ],
+        "names_ko": [
+          "상품권(서비스 라운지 안)"
+        ]
+      },
+      {
+        "id": "OB-sY6OAnumf1095",
+        "attribute_code": "OB-SMOKING_ROOM",
+        "passable": false,
+        "position": {
+          "x": 742.028015,
+          "y": 1701.355408,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 812.0,
+              "y": 1755.237671
+            },
+            {
+              "x": 672.05603,
+              "y": 1755.237671
+            },
+            {
+              "x": 672.05603,
+              "y": 1647.473145
+            },
+            {
+              "x": 812.0,
+              "y": 1647.473145
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-eh-s_ig4M1560"
+        ],
+        "names_ko": [
+          "흡연실 (전자담배 전용)"
+        ]
+      },
+      {
+        "id": "OB-MXrrV-dSS4072",
+        "attribute_code": "OB-TOILET",
+        "passable": false,
+        "position": {
+          "x": 706.999433,
+          "y": 1790.685303,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 672.056091,
+              "y": 1755.237671
+            },
+            {
+              "x": 741.943436,
+              "y": 1755.237671
+            },
+            {
+              "x": 741.943436,
+              "y": 1826.132935
+            },
+            {
+              "x": 672.055431,
+              "y": 1826.132935
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-c5qqbLiYj6214"
+        ],
+        "names_ko": [
+          "화장실"
+        ]
+      },
+      {
+        "id": "OB-ijIo9S7Yn4777",
+        "attribute_code": "OB-OTHER_FACILITIES",
+        "passable": false,
+        "position": {
+          "x": 1694.68573,
+          "y": 1115.761841,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1346.0,
+              "y": 1194.699951
+            },
+            {
+              "x": 2043.317993,
+              "y": 1194.699951
+            },
+            {
+              "x": 2043.316772,
+              "y": 1138.288208
+            },
+            {
+              "x": 2043.37146,
+              "y": 1036.82373
+            },
+            {
+              "x": 1346.0,
+              "y": 1036.82373
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-zbWA20Ae85369"
+        ],
+        "names_ko": [
+          "ALT. 1"
+        ]
+      },
+      {
+        "id": "OB-TeVuDk81L94781",
+        "attribute_code": "OB-OTHER_FACILITIES",
+        "passable": false,
+        "position": {
+          "x": 760.001129,
+          "y": 1280.834534,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 669.502258,
+              "y": 1257.620117
+            },
+            {
+              "x": 850.5,
+              "y": 1257.620117
+            },
+            {
+              "x": 850.5,
+              "y": 1304.04895
+            },
+            {
+              "x": 669.502258,
+              "y": 1304.04895
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-oneB-3Fe-8051"
+        ],
+        "names_ko": [
+          "현대백화점 카드 (서비스 라운지 안)"
+        ]
+      },
+      {
+        "id": "OB-zKN1URo6_k4780",
+        "attribute_code": "OB-OTHER_FACILITIES",
+        "passable": false,
+        "position": {
+          "x": 745.756226,
+          "y": 1233.957825,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 669.502258,
+              "y": 1257.620117
+            },
+            {
+              "x": 822.010193,
+              "y": 1257.620117
+            },
+            {
+              "x": 822.010193,
+              "y": 1210.295532
+            },
+            {
+              "x": 669.502258,
+              "y": 1210.295532
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-vc5dugm6O0661"
+        ],
+        "names_ko": [
+          "TAX REFUND (Service Lounge)"
+        ]
+      },
+      {
+        "id": "OB-4wgXb27Jh92355",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 784.725983,
+          "y": 1519.704224,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 850.451965,
+              "y": 1405.030762
+            },
+            {
+              "x": 850.451965,
+              "y": 1391.935303
+            },
+            {
+              "x": 719.0,
+              "y": 1391.935303
+            },
+            {
+              "x": 719.0,
+              "y": 1405.030762
+            },
+            {
+              "x": 719.0,
+              "y": 1425.601318
+            },
+            {
+              "x": 719.0,
+              "y": 1571.693848
+            },
+            {
+              "x": 719.0,
+              "y": 1605.668091
+            },
+            {
+              "x": 719.0,
+              "y": 1641.855957
+            },
+            {
+              "x": 719.0,
+              "y": 1647.473145
+            },
+            {
+              "x": 812.0,
+              "y": 1647.473145
+            },
+            {
+              "x": 812.0,
+              "y": 1641.855957
+            },
+            {
+              "x": 850.451965,
+              "y": 1641.855957
+            },
+            {
+              "x": 850.451965,
+              "y": 1605.668091
+            },
+            {
+              "x": 804.277954,
+              "y": 1571.693848
+            },
+            {
+              "x": 804.277954,
+              "y": 1425.601318
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-VND6sg7cH1294"
+        ],
+        "names_ko": [
+          "SMT 라운지"
+        ]
+      },
+      {
+        "id": "OB-yvSHBqF7GQ6230",
+        "attribute_code": "OB-TOILET",
+        "passable": false,
+        "position": {
+          "x": 2248.574282,
+          "y": 1764.428711,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2283.074282,
+              "y": 1799.678711
+            },
+            {
+              "x": 2283.074282,
+              "y": 1729.178711
+            },
+            {
+              "x": 2214.074282,
+              "y": 1729.178711
+            },
+            {
+              "x": 2214.074282,
+              "y": 1777.796786
+            },
+            {
+              "x": 2214.074282,
+              "y": 1799.678711
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-2W7__HlKy5480"
+        ],
+        "names_ko": [
+          "화장실"
+        ]
+      },
+      {
+        "id": "OB-EsiI-AsQVp0988",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1306.566648,
+          "y": 1173.814029,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1346.0,
+              "y": 1194.7
+            },
+            {
+              "x": 1267.133295,
+              "y": 1194.7
+            },
+            {
+              "x": 1267.133295,
+              "y": 1152.928059
+            },
+            {
+              "x": 1346.0,
+              "y": 1152.928059
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-OoQwhkfzZ9172"
+        ],
+        "names_ko": [
+          "TUNE"
+        ]
+      },
+      {
+        "id": "OB-tSZF9u0CGb0992",
+        "attribute_code": "OB-RESTAURANT",
+        "passable": false,
+        "position": {
+          "x": 1285.166656,
+          "y": 1802.273284,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1326.0,
+              "y": 1771.991626
+            },
+            {
+              "x": 1244.333313,
+              "y": 1771.991626
+            },
+            {
+              "x": 1244.333313,
+              "y": 1832.554942
+            },
+            {
+              "x": 1326.0,
+              "y": 1832.554942
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-fXXA1AR_G6628"
+        ],
+        "names_ko": [
+          "고디바"
+        ]
+      },
+      {
+        "id": "OB-hUzJE9WnJd0995",
+        "attribute_code": "OB-RESTAURANT",
+        "passable": false,
+        "position": {
+          "x": 1168.094788,
+          "y": 1881.345813,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1213.0,
+              "y": 1771.991626
+            },
+            {
+              "x": 1091.5,
+              "y": 1771.991626
+            },
+            {
+              "x": 1091.5,
+              "y": 1990.7
+            },
+            {
+              "x": 1244.689575,
+              "y": 1990.7
+            },
+            {
+              "x": 1244.689575,
+              "y": 1889.366626
+            },
+            {
+              "x": 1213.0,
+              "y": 1889.366626
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-VL2v3hP5R0218"
+        ],
+        "names_ko": [
+          "리스토란테 에오"
+        ]
+      },
+      {
+        "id": "OB-yxAjReM5u3696",
+        "attribute_code": "OB-ELEVATOR",
+        "passable": false,
+        "position": {
+          "x": 2049.0,
+          "y": 1890.817353,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2024.5,
+              "y": 1915.817353
+            },
+            {
+              "x": 2073.5,
+              "y": 1915.817353
+            },
+            {
+              "x": 2073.5,
+              "y": 1865.817353
+            },
+            {
+              "x": 2024.5,
+              "y": 1865.817353
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-_3i7eyewJ2444"
+        ],
+        "names_ko": [
+          "엘리베이터"
+        ]
+      },
+      {
+        "id": "OB-2BT-CfUWai3698",
+        "attribute_code": "OB-ELEVATOR",
+        "passable": false,
+        "position": {
+          "x": 985.5,
+          "y": 1885.346247,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 960.5,
+              "y": 1860.346247
+            },
+            {
+              "x": 960.5,
+              "y": 1910.346247
+            },
+            {
+              "x": 1010.5,
+              "y": 1910.346247
+            },
+            {
+              "x": 1010.5,
+              "y": 1860.346247
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-MlbKjIVF54310"
+        ],
+        "names_ko": [
+          "엘리베이터"
+        ]
+      },
+      {
+        "id": "OB-i8TtGBxdr4912",
+        "attribute_code": "OB-ESCALATOR_UP",
+        "passable": false,
+        "position": {
+          "x": 2083.502136,
+          "y": 1483.08784,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2091.504211,
+              "y": 1543.953706
+            },
+            {
+              "x": 2091.504211,
+              "y": 1422.221974
+            },
+            {
+              "x": 2075.500061,
+              "y": 1422.221974
+            },
+            {
+              "x": 2075.500061,
+              "y": 1543.953706
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-BJZC5vYmr8459"
+        ],
+        "names_ko": [
+          "에스컬레이터"
+        ]
+      },
+      {
+        "id": "OB-TLJg9Zw2Bo4915",
+        "attribute_code": "OB-ESCALATOR_DOWN",
+        "passable": false,
+        "position": {
+          "x": 863.391395,
+          "y": 1479.908332,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 871.393531,
+              "y": 1415.862957
+            },
+            {
+              "x": 855.389258,
+              "y": 1415.862957
+            },
+            {
+              "x": 855.389258,
+              "y": 1543.953706
+            },
+            {
+              "x": 871.393531,
+              "y": 1543.953706
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-kwGd_76MF8007"
+        ],
+        "names_ko": [
+          "에스컬레이터"
+        ]
+      },
+      {
+        "id": "OB-rnqRAf0Xt94916",
+        "attribute_code": "OB-ESCALATOR_UP",
+        "passable": false,
+        "position": {
+          "x": 1282.008229,
+          "y": 1592.478821,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1221.378989,
+              "y": 1623.109338
+            },
+            {
+              "x": 1348.121225,
+              "y": 1576.883767
+            },
+            {
+              "x": 1342.637468,
+              "y": 1561.848304
+            },
+            {
+              "x": 1215.895232,
+              "y": 1608.073875
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-kMXEbYhDG7718"
+        ],
+        "names_ko": [
+          "에스컬레이터"
+        ]
+      },
+      {
+        "id": "OB-8RtERYzca1844",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1751.777265,
+          "y": 1807.395222,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1792.610608,
+              "y": 1778.176502
+            },
+            {
+              "x": 1710.943921,
+              "y": 1778.176502
+            },
+            {
+              "x": 1710.943921,
+              "y": 1836.613943
+            },
+            {
+              "x": 1792.610608,
+              "y": 1836.613943
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-_UKuqxF_H5730"
+        ],
+        "names_ko": [
+          "PDR"
+        ]
+      },
+      {
+        "id": "OB-pP-K44qKgz0988",
+        "attribute_code": "OB-OTHER_FACILITIES",
+        "passable": false,
+        "position": {
+          "x": 1721.735714,
+          "y": 1164.194661,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1762.839352,
+              "y": 1141.319661
+            },
+            {
+              "x": 1680.632077,
+              "y": 1141.319661
+            },
+            {
+              "x": 1680.632077,
+              "y": 1187.069661
+            },
+            {
+              "x": 1762.839352,
+              "y": 1187.069661
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-C1rVUt6gL3899"
+        ],
+        "names_ko": [
+          "티켓 부스"
+        ]
+      },
+      {
+        "id": "OB-zAm-NDQf9k0992",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1191.772999,
+          "y": 1483.114373,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1198.666667,
+              "y": 1597.7
+            },
+            {
+              "x": 1210.411517,
+              "y": 1593.038527
+            },
+            {
+              "x": 1337.153753,
+              "y": 1546.812955
+            },
+            {
+              "x": 1364.872009,
+              "y": 1537.215747
+            },
+            {
+              "x": 1374.919617,
+              "y": 1529.803577
+            },
+            {
+              "x": 1382.825928,
+              "y": 1518.108875
+            },
+            {
+              "x": 1386.779114,
+              "y": 1504.272815
+            },
+            {
+              "x": 1389.414551,
+              "y": 1447.61095
+            },
+            {
+              "x": 1386.284912,
+              "y": 1434.433765
+            },
+            {
+              "x": 1380.025757,
+              "y": 1425.044971
+            },
+            {
+              "x": 1370.47229,
+              "y": 1417.303394
+            },
+            {
+              "x": 1231.28833,
+              "y": 1344.005298
+            },
+            {
+              "x": 1195.91092,
+              "y": 1332.096039
+            },
+            {
+              "x": 1185.318822,
+              "y": 1331.831236
+            },
+            {
+              "x": 1172.343502,
+              "y": 1335.803273
+            },
+            {
+              "x": 1160.692194,
+              "y": 1344.806557
+            },
+            {
+              "x": 1004.193941,
+              "y": 1501.7
+            },
+            {
+              "x": 997.57388,
+              "y": 1511.367302
+            },
+            {
+              "x": 994.39625,
+              "y": 1522.489005
+            },
+            {
+              "x": 994.131448,
+              "y": 1535.464326
+            },
+            {
+              "x": 997.044275,
+              "y": 1546.812955
+            },
+            {
+              "x": 1002.869929,
+              "y": 1557.682327
+            },
+            {
+              "x": 1012.66762,
+              "y": 1564.592596
+            },
+            {
+              "x": 1128.915899,
+              "y": 1617.023483
+            },
+            {
+              "x": 1159.802124,
+              "y": 1631.267932
+            },
+            {
+              "x": 1172.485107,
+              "y": 1634.39751
+            },
+            {
+              "x": 1190.768494,
+              "y": 1633.409229
+            },
+            {
+              "x": 1209.072933,
+              "y": 1627.250082
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-Yq6mx8Reb5870"
+        ],
+        "names_ko": [
+          "이탈리"
+        ]
+      },
+      {
+        "id": "OB-Ep4XUo-yXF7477",
+        "attribute_code": "OB-ELEVATOR",
+        "passable": false,
+        "position": {
+          "x": 1706.964844,
+          "y": 1896.885969,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1681.964844,
+              "y": 1871.885969
+            },
+            {
+              "x": 1681.964844,
+              "y": 1921.885969
+            },
+            {
+              "x": 1731.964844,
+              "y": 1921.885969
+            },
+            {
+              "x": 1731.964844,
+              "y": 1871.885969
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-W5elJ10753753",
+          "PO-NTitM86308484"
+        ],
+        "names_ko": [
+          "엘리베이터",
+          "유아차 전용 E/V"
+        ]
+      },
+      {
+        "id": "OB-Oiokbl3Te5525",
+        "attribute_code": "OB-OTHER_SPACE",
+        "passable": false,
+        "position": {
+          "x": 1938.789062,
+          "y": 1706.470947,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2036.773438,
+              "y": 1684.689453
+            },
+            {
+              "x": 2003.245117,
+              "y": 1697.186523
+            },
+            {
+              "x": 1967.447266,
+              "y": 1708.826172
+            },
+            {
+              "x": 1929.533203,
+              "y": 1719.56543
+            },
+            {
+              "x": 1889.667969,
+              "y": 1729.361328
+            },
+            {
+              "x": 1848.032227,
+              "y": 1738.176758
+            },
+            {
+              "x": 1804.808594,
+              "y": 1743.974609
+            },
+            {
+              "x": 2072.769531,
+              "y": 1743.501953
+            },
+            {
+              "x": 2072.769531,
+              "y": 1668.967285
+            },
+            {
+              "x": 2067.887695,
+              "y": 1671.375
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-qUAYC4j_l3710"
+        ],
+        "names_ko": [
+          "취식 가능장소"
+        ]
+      },
+      {
+        "id": "OB-XJ_WD9Pups5527",
+        "attribute_code": "OB-OTHER_SPACE",
+        "passable": false,
+        "position": {
+          "x": 1003.37006,
+          "y": 1704.293701,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1113.342414,
+              "y": 1743.501953
+            },
+            {
+              "x": 1078.88069,
+              "y": 1735.906281
+            },
+            {
+              "x": 1041.645113,
+              "y": 1725.890547
+            },
+            {
+              "x": 1005.862755,
+              "y": 1715.228636
+            },
+            {
+              "x": 974.195801,
+              "y": 1704.186523
+            },
+            {
+              "x": 940.668457,
+              "y": 1690.689453
+            },
+            {
+              "x": 909.553711,
+              "y": 1675.375
+            },
+            {
+              "x": 893.397705,
+              "y": 1665.085449
+            },
+            {
+              "x": 893.397705,
+              "y": 1743.501953
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-NqfZnc_xe1919"
+        ],
+        "names_ko": [
+          "취식 가능장소"
+        ]
+      },
+      {
+        "id": "OB-O6MHfPc97x5527",
+        "attribute_code": "OB-OTHER_SPACE",
+        "passable": false,
+        "position": {
+          "x": 1938.786524,
+          "y": 1259.121094,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1804.803516,
+              "y": 1220.794663
+            },
+            {
+              "x": 1848.032227,
+              "y": 1228.358887
+            },
+            {
+              "x": 1889.667969,
+              "y": 1237.173828
+            },
+            {
+              "x": 1929.533203,
+              "y": 1246.970215
+            },
+            {
+              "x": 1967.447266,
+              "y": 1257.708984
+            },
+            {
+              "x": 2003.246094,
+              "y": 1269.348633
+            },
+            {
+              "x": 2036.773438,
+              "y": 1281.847168
+            },
+            {
+              "x": 2067.887695,
+              "y": 1295.161621
+            },
+            {
+              "x": 2072.769531,
+              "y": 1297.569336
+            },
+            {
+              "x": 2072.769531,
+              "y": 1220.672852
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-PBwhIw00P4614"
+        ],
+        "names_ko": [
+          "취식 가능장소"
+        ]
+      },
+      {
+        "id": "OB-zdO25o7UXr5528",
+        "attribute_code": "OB-OTHER_SPACE",
+        "passable": false,
+        "position": {
+          "x": 1030.920225,
+          "y": 1273.58252,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 935.897888,
+              "y": 1296.847168
+            },
+            {
+              "x": 969.425232,
+              "y": 1283.348633
+            },
+            {
+              "x": 1005.223572,
+              "y": 1269.708984
+            },
+            {
+              "x": 1043.138611,
+              "y": 1256.970215
+            },
+            {
+              "x": 1083.00238,
+              "y": 1247.173828
+            },
+            {
+              "x": 1124.639587,
+              "y": 1238.358887
+            },
+            {
+              "x": 1168.442745,
+              "y": 1229.387695
+            },
+            {
+              "x": 893.397705,
+              "y": 1229.387695
+            },
+            {
+              "x": 893.397705,
+              "y": 1317.777344
+            },
+            {
+              "x": 906.263657,
+              "y": 1310.528287
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-DIDc87Bq00402"
+        ],
+        "names_ko": [
+          "취식 가능장소"
+        ]
+      },
+      {
+        "id": "OB-1xyhtaqiw81215",
+        "attribute_code": "OB-ELEVATOR",
+        "passable": false,
+        "position": {
+          "x": 2072.425889,
+          "y": 1166.494079,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2101.534474,
+              "y": 1138.288207
+            },
+            {
+              "x": 2043.316823,
+              "y": 1138.288207
+            },
+            {
+              "x": 2043.317993,
+              "y": 1194.699951
+            },
+            {
+              "x": 2101.534955,
+              "y": 1194.699951
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-PwIyevH5U3558"
+        ],
+        "names_ko": [
+          "엘리베이터"
+        ]
+      },
+      {
+        "id": "OB-fmQFV9BUwe1215",
+        "attribute_code": "OB-ELEVATOR",
+        "passable": false,
+        "position": {
+          "x": 937.639282,
+          "y": 1159.423527,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 965.110291,
+              "y": 1131.272343
+            },
+            {
+              "x": 910.168274,
+              "y": 1131.272343
+            },
+            {
+              "x": 910.168274,
+              "y": 1187.574711
+            },
+            {
+              "x": 965.110291,
+              "y": 1187.574711
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-3it-FOUoP8752"
+        ],
+        "names_ko": [
+          "엘리베이터"
+        ]
+      },
+      {
+        "id": "OB-z6D8oQem_X1216",
+        "attribute_code": "OB-OTHER_FACILITIES",
+        "passable": false,
+        "position": {
+          "x": 1105.183183,
+          "y": 1163.88019,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1213.271118,
+              "y": 1131.272343
+            },
+            {
+              "x": 997.095247,
+              "y": 1131.272343
+            },
+            {
+              "x": 997.349915,
+              "y": 1196.488037
+            },
+            {
+              "x": 1213.271118,
+              "y": 1196.488037
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-Hw80tGf7m7933"
+        ],
+        "names_ko": [
+          "세이지 라운지"
+        ]
+      },
+      {
+        "id": "OB-0fNS8asl45499",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 872.794006,
+          "y": 1799.061925,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 812.0,
+              "y": 1771.990916
+            },
+            {
+              "x": 933.588013,
+              "y": 1771.991577
+            },
+            {
+              "x": 933.588013,
+              "y": 1826.132935
+            },
+            {
+              "x": 812.0,
+              "y": 1826.132935
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-uuaBqr5nj9235"
+        ],
+        "names_ko": [
+          "이탈리 마켓"
+        ]
+      },
+      {
+        "id": "OB-c-oL_iRa-r4074",
+        "attribute_code": "OB-OTHER_FACILITIES",
+        "passable": false,
+        "position": {
+          "x": 776.971718,
+          "y": 1790.685303,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 741.943436,
+              "y": 1755.237671
+            },
+            {
+              "x": 812.0,
+              "y": 1755.237671
+            },
+            {
+              "x": 812.0,
+              "y": 1826.132935
+            },
+            {
+              "x": 741.943436,
+              "y": 1826.132935
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-SaM_bwDZY7623"
+        ],
+        "names_ko": [
+          "음수대"
+        ]
+      },
+      {
+        "id": "OB-KINchgKa2i0555",
+        "attribute_code": "OB-RESTAURANT",
+        "passable": false,
+        "position": {
+          "x": 1873.306946,
+          "y": 1858.532593,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1930.0,
+              "y": 1771.991577
+            },
+            {
+              "x": 1816.613892,
+              "y": 1771.991577
+            },
+            {
+              "x": 1816.613892,
+              "y": 1945.073608
+            },
+            {
+              "x": 1930.0,
+              "y": 1945.073608
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-YMLJzrGIy5754"
+        ],
+        "names_ko": [
+          "로바"
+        ]
+      },
+      {
+        "id": "OB-oOxENXV22b0556",
+        "attribute_code": "OB-RESTAURANT",
+        "passable": false,
+        "position": {
+          "x": 2001.75,
+          "y": 1858.532593,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1930.0,
+              "y": 1771.991577
+            },
+            {
+              "x": 1930.0,
+              "y": 1945.073608
+            },
+            {
+              "x": 1975.376221,
+              "y": 1945.073486
+            },
+            {
+              "x": 1975.376221,
+              "y": 1945.073608
+            },
+            {
+              "x": 2024.5,
+              "y": 1945.073608
+            },
+            {
+              "x": 2024.5,
+              "y": 1865.817383
+            },
+            {
+              "x": 2073.5,
+              "y": 1865.817383
+            },
+            {
+              "x": 2073.5,
+              "y": 1865.358154
+            },
+            {
+              "x": 2073.5,
+              "y": 1850.504883
+            },
+            {
+              "x": 2073.5,
+              "y": 1771.991577
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-vpJN8tesm7538"
+        ],
+        "names_ko": [
+          "도원 스타일"
+        ]
+      },
+      {
+        "id": "OB-4h6KCQgCX90557",
+        "attribute_code": "OB-ATM",
+        "passable": false,
+        "position": {
+          "x": 2174.742188,
+          "y": 1199.286743,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2209.649414,
+              "y": 1216.341919
+            },
+            {
+              "x": 2139.834961,
+              "y": 1216.341919
+            },
+            {
+              "x": 2139.834961,
+              "y": 1182.231567
+            },
+            {
+              "x": 2209.649414,
+              "y": 1182.231567
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-wZKeHlZnB7607"
+        ],
+        "names_ko": [
+          "ATM (하나은행)"
+        ]
+      },
+      {
+        "id": "OB-_iI0WnKjX_0557",
+        "attribute_code": "OB-OTHER_FACILITIES",
+        "passable": false,
+        "position": {
+          "x": 1793.504517,
+          "y": 1164.194702,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1824.169678,
+              "y": 1187.069702
+            },
+            {
+              "x": 1762.839355,
+              "y": 1187.069702
+            },
+            {
+              "x": 1762.839355,
+              "y": 1141.319702
+            },
+            {
+              "x": 1824.169678,
+              "y": 1141.319702
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-iOfWonTJR3090"
+        ],
+        "names_ko": [
+          "휴대전화 충전기 대여(유료)"
+        ]
+      },
+      {
+        "id": "OB-c5ci1lz4cg0557",
+        "attribute_code": "OB-OTHER_FACILITIES",
+        "passable": false,
+        "position": {
+          "x": 840.865234,
+          "y": 1233.957825,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 822.010254,
+              "y": 1257.580527
+            },
+            {
+              "x": 859.720276,
+              "y": 1257.620117
+            },
+            {
+              "x": 859.720276,
+              "y": 1210.295532
+            },
+            {
+              "x": 822.010193,
+              "y": 1210.295532
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-qoZaOhAIb5644"
+        ],
+        "names_ko": [
+          "TAX REFUND KIOSK Ⅱ"
+        ]
+      },
+      {
+        "id": "OB-jOJxZ5cbkz1972",
+        "attribute_code": "OB-RESTAURANT",
+        "passable": false,
+        "position": {
+          "x": 2158.437117,
+          "y": 1776.37677,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2214.088834,
+              "y": 1753.074829
+            },
+            {
+              "x": 2102.7854,
+              "y": 1753.074829
+            },
+            {
+              "x": 2102.7854,
+              "y": 1799.678711
+            },
+            {
+              "x": 2214.088834,
+              "y": 1799.678711
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-bawy_CfOO1219"
+        ],
+        "names_ko": [
+          "베르그"
+        ]
+      }
+    ]
+  },
+  "manual_label_candidates": [
+    {
+      "id": "store-6f-001-세이지-라운지",
+      "name": "세이지 라운지",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-002-tune",
+      "name": "TUNE",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-003-alt-1",
+      "name": "ALT.1",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-004-티켓-부스",
+      "name": "티켓 부스",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-005-계시-가능장소",
+      "name": "계시 가능장소",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-006-smt-라운지",
+      "name": "SMT 라운지",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-007-이탈리",
+      "name": "이탈리",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-008-ch-1985",
+      "name": "CH 1985",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-009-카페-h",
+      "name": "카페 H",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-010-이탈리-마켓",
+      "name": "이탈리 마켓",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-011-나의가야",
+      "name": "나의가야",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-012-리스토란테-에오",
+      "name": "리스토란테 에오",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-013-고디바",
+      "name": "고디바",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-014-pdr",
+      "name": "PDR",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-015-도원스타일",
+      "name": "도원스타일",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-016-베르그",
+      "name": "베르그",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-017-오픈-yy",
+      "name": "오픈 YY",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-018-팝마트",
+      "name": "팝마트",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-019-나이키-라이즈",
+      "name": "나이키 라이즈",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-020-점프프레이업",
+      "name": "점프프레이업",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-021-솝",
+      "name": "솝",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-022-사회화가",
+      "name": "사회화가",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-023-상칼제",
+      "name": "상칼제",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-024-arket",
+      "name": "ARKET",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-025-arket-cafe",
+      "name": "ARKET CAFE",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-026-케이스티파이",
+      "name": "케이스티파이",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    },
+    {
+      "id": "store-6f-027-attag",
+      "name": "ATTAG",
+      "source": "manual_transcription_from_original_screenshot",
+      "text_confidence": "unverified",
+      "label_status": "pending_manual_review",
+      "geometry_status": "pending_manual_trace",
+      "geometry": null,
+      "centroid": null
+    }
+  ]
+}

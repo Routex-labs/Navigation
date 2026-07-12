@@ -2934,5 +2934,4500 @@
         "y": 1218.0
       }
     }
-  ]
+  ],
+  "official_map": {
+    "source": {
+      "provider": "dabeeo",
+      "page": "https://www.ehyundai.com/mobile/branch/DP/floorMap.do?branchCd=B00140000&floorCd=B010B100",
+      "map_endpoint": "https://api.dabeeomaps.com/v2/map?t=JS",
+      "map_version": "180.0",
+      "deployed_date": null,
+      "credentials_persisted": false
+    },
+    "coordinate_system": {
+      "id": "dabeeo_map_xy",
+      "unit": "provider_map_unit",
+      "x_axis_direction": 1,
+      "y_axis_direction": 1,
+      "size": {
+        "width": 3000.0,
+        "height": 3000.0
+      }
+    },
+    "map_id": "MP-qe6m98422alw0347",
+    "floor_id": "FL-soem999bnha10599",
+    "floor_name": "1F",
+    "counts": {
+      "pois": 87,
+      "linked_objects": 82,
+      "unlinked_pois": 4
+    },
+    "pois": [
+      {
+        "id": "PO-Nmycfl6kW6313",
+        "object_id": "OB-P4A9415eK9323",
+        "name_ko": "보테가 베네타",
+        "name_en": "BOTTEGA VENETA",
+        "category_code": "32",
+        "position": {
+          "x": 762.345052,
+          "y": 1757.649694,
+          "z": 0.0
+        },
+        "phone": "02-3277-0132",
+        "map_brand_cd": "400A01A01A40000102674"
+      },
+      {
+        "id": "PO-HO4Szxple8130",
+        "object_id": "OB-Z5c_mrw3N89335",
+        "name_ko": "펜디",
+        "name_en": "FENDI",
+        "category_code": "32",
+        "position": {
+          "x": 906.977844,
+          "y": 1732.484131,
+          "z": 0.0
+        },
+        "phone": "02-3277-0134",
+        "map_brand_cd": "400A01A01A40000102559"
+      },
+      {
+        "id": "PO-aNOI0qviT9257",
+        "object_id": "OB-gxdRbsUKPu9337",
+        "name_ko": "불가리",
+        "name_en": "BULGARI",
+        "category_code": "32",
+        "position": {
+          "x": 1034.954437,
+          "y": 1777.377033,
+          "z": 0.0
+        },
+        "phone": "02-3277-0140",
+        "map_brand_cd": "400A01A01A40000101944"
+      },
+      {
+        "id": "PO-vMDL4LoLl0289",
+        "object_id": "OB-zLCONFljy56894",
+        "name_ko": "부쉐론",
+        "name_en": "BOU CHERON",
+        "category_code": "32",
+        "position": {
+          "x": 1118.811707,
+          "y": 1793.849715,
+          "z": 0.0
+        },
+        "phone": "02-3277-0148",
+        "map_brand_cd": "400A01A01A40000102666"
+      },
+      {
+        "id": "PO-C3lhY03Nq2306",
+        "object_id": "OB-wPOtN2CP0Z6893",
+        "name_ko": "리모와",
+        "name_en": "RIMOWA",
+        "category_code": "32",
+        "position": {
+          "x": 1190.043346,
+          "y": 1808.105433,
+          "z": 0.0
+        },
+        "phone": "02-3277-0159",
+        "map_brand_cd": "400A01A01A40000110747"
+      },
+      {
+        "id": "PO-Ek5WaJIDm4448",
+        "object_id": "OB-_-fvdMboS26896",
+        "name_ko": "토즈",
+        "name_en": "TOD'S",
+        "category_code": "32",
+        "position": {
+          "x": 1298.240564,
+          "y": 1760.5318,
+          "z": 0.0
+        },
+        "phone": "02-3277-0135",
+        "map_brand_cd": "400A01A01A40000107627"
+      },
+      {
+        "id": "PO-QBYQxxAAR6145",
+        "object_id": "OB-M76jMnJG9i6896",
+        "name_ko": "버버리",
+        "name_en": "BURBERRY",
+        "category_code": "32",
+        "position": {
+          "x": 1393.684744,
+          "y": 1811.462889,
+          "z": 0.0
+        },
+        "phone": "02-3277-8556",
+        "map_brand_cd": "400A01A01A40000100465"
+      },
+      {
+        "id": "PO-7fAC1zcRT7649",
+        "object_id": "OB-efAr42-Cwy8127",
+        "name_ko": "미우미우",
+        "name_en": "MIUMIU",
+        "category_code": "24",
+        "position": {
+          "x": 1040.124991,
+          "y": 1225.35197,
+          "z": 0.0
+        },
+        "phone": "02-3277-0144",
+        "map_brand_cd": "400A01A01A40000114931"
+      },
+      {
+        "id": "PO-xVTcQys5A8977",
+        "object_id": "OB-uf152_fQdp9351",
+        "name_ko": "셀린느",
+        "name_en": "CELINE",
+        "category_code": "32",
+        "position": {
+          "x": 2145.484123,
+          "y": 1249.061059,
+          "z": 0.0
+        },
+        "phone": "1577-8841",
+        "map_brand_cd": "400A01A01A40000A45733"
+      },
+      {
+        "id": "PO-RVDD0gwWA0601",
+        "object_id": "OB-lypn2umrI8123",
+        "name_ko": "티파니앤코",
+        "name_en": "TIFFANY&CO.",
+        "category_code": "35",
+        "position": {
+          "x": 1343.318614,
+          "y": 1182.39235,
+          "z": 0.0
+        },
+        "phone": "02-6250-8720",
+        "map_brand_cd": "400A01A01A40000102015"
+      },
+      {
+        "id": "PO-gm_1EWj5f2065",
+        "object_id": "OB-ET3VGYG8D49423",
+        "name_ko": "샤넬 뷰티",
+        "name_en": "CHANEL BEAUTY",
+        "category_code": "35",
+        "position": {
+          "x": 938.585423,
+          "y": 1490.481282,
+          "z": 0.0
+        },
+        "phone": "02-3277-0150",
+        "map_brand_cd": "400A01A01A41000100606"
+      },
+      {
+        "id": "PO-CSZWZOZm_7000",
+        "object_id": "OB-uRDgLuRn9g3504",
+        "name_ko": "쿠오카",
+        "name_en": "Kuoca",
+        "category_code": "35",
+        "position": {
+          "x": 1087.128041,
+          "y": 1387.437981,
+          "z": 0.0
+        },
+        "phone": "02-3277-0162",
+        "map_brand_cd": "400A01A01A41000129995"
+      },
+      {
+        "id": "PO-Gf_NsQZzV8544",
+        "object_id": "OB--pIFchSBh3502",
+        "name_ko": "마티에 프리미에르",
+        "name_en": "matiere premiere",
+        "category_code": "35",
+        "position": {
+          "x": 1054.184634,
+          "y": 1417.031989,
+          "z": 0.0
+        },
+        "phone": "02-3277-0193",
+        "map_brand_cd": "400A01A01A41000144849"
+      },
+      {
+        "id": "PO-4RBf7brmK0553",
+        "object_id": "OB-NGJH1V2BUw9423",
+        "name_ko": "톰포드 뷰티",
+        "name_en": "TOM FORD beauty",
+        "category_code": "35",
+        "position": {
+          "x": 982.824325,
+          "y": 1560.519453,
+          "z": 0.0
+        },
+        "phone": "02-3277-0173",
+        "map_brand_cd": "400A01A01A41000119440"
+      },
+      {
+        "id": "PO-yZUm4etzn2289",
+        "object_id": "OB-zUlg5Kl7uz5338",
+        "name_ko": "에스티 로더",
+        "name_en": "ESTEE LAUDER",
+        "category_code": "35",
+        "position": {
+          "x": 1399.043364,
+          "y": 1432.9767,
+          "z": 0.0
+        },
+        "phone": "02-3277-0154",
+        "map_brand_cd": "400A01A01A41000101805"
+      },
+      {
+        "id": "PO--SDnFDwCT3864",
+        "object_id": "OB-8_CpYNTBLG5339",
+        "name_ko": "프라다 뷰티",
+        "name_en": "PRADA BEAUTY",
+        "category_code": "35",
+        "position": {
+          "x": 1229.642764,
+          "y": 1490.8893,
+          "z": 0.0
+        },
+        "phone": "02-3277-0128",
+        "map_brand_cd": "400A01A01A41000141117"
+      },
+      {
+        "id": "PO-TRzx47byR5369",
+        "object_id": "OB-_8aSyIkvJN9419",
+        "name_ko": "조 말론 런던",
+        "name_en": "JO MALONE",
+        "category_code": "35",
+        "position": {
+          "x": 1063.567688,
+          "y": 1477.468541,
+          "z": 0.0
+        },
+        "phone": "02-3277-0176",
+        "map_brand_cd": "400A01A01A41000119276"
+      },
+      {
+        "id": "PO-iK68VYKov8809",
+        "object_id": "OB-EjWeKJF3c9855",
+        "name_ko": "로에베",
+        "name_en": "LOEWE",
+        "category_code": "32",
+        "position": {
+          "x": 1631.597414,
+          "y": 1182.973342,
+          "z": 0.0
+        },
+        "phone": "02-3277-0166",
+        "map_brand_cd": "400A01A01A40000101841"
+      },
+      {
+        "id": "PO-zSLxgiZPp0753",
+        "object_id": "OB-B1Wqr4XUI6331",
+        "name_ko": "레페토",
+        "name_en": "REPETTO",
+        "category_code": "32",
+        "position": {
+          "x": 1740.816618,
+          "y": 1197.203882,
+          "z": 0.0
+        },
+        "phone": "02-3277-0198",
+        "map_brand_cd": "400A01A01A40000114755"
+      },
+      {
+        "id": "PO-H9EW5K6NS2833",
+        "object_id": "OB-RbXFG8BWvm0270",
+        "name_ko": "루이비통",
+        "name_en": "LOUIS VUITTON",
+        "category_code": "32",
+        "position": {
+          "x": 1752.599944,
+          "y": 1483.75865,
+          "z": 0.0
+        },
+        "phone": "02-3432-1854",
+        "map_brand_cd": "400A01A01A40000101752"
+      },
+      {
+        "id": "PO-nkTkSy3st5151",
+        "object_id": "OB-NN761rRg4B9859",
+        "name_ko": "구찌",
+        "name_en": "GUCCI",
+        "category_code": "32",
+        "position": {
+          "x": 1930.40007,
+          "y": 1215.052624,
+          "z": 0.0
+        },
+        "phone": "02-1577-1921",
+        "map_brand_cd": "400A01A01A40000101676"
+      },
+      {
+        "id": "PO-VUPb_mowY7218",
+        "object_id": "OB-hHRaxp1xJK8127",
+        "name_ko": "발렌티노",
+        "name_en": "VALENTINO",
+        "category_code": "32",
+        "position": {
+          "x": 1143.425283,
+          "y": 1213.497893,
+          "z": 0.0
+        },
+        "phone": "02-3277-0138",
+        "map_brand_cd": "400A01A01A40000100014"
+      },
+      {
+        "id": "PO-nZDHFEAfT9816",
+        "object_id": "OB-HN0y71UqvLk9440",
+        "name_ko": "톰브라운",
+        "name_en": "THOM BROWNE",
+        "category_code": "24",
+        "position": {
+          "x": 2145.560711,
+          "y": 1480.892833,
+          "z": 0.0
+        },
+        "phone": "02-3277-0149",
+        "map_brand_cd": "400A01A01A40000138381"
+      },
+      {
+        "id": "PO-lB8Eh8MAx1081",
+        "object_id": "OB-AiwXXZOAl87024",
+        "name_ko": "생로랑",
+        "name_en": "SAINT LAURENT",
+        "category_code": "35",
+        "position": {
+          "x": 2289.872181,
+          "y": 1379.266823,
+          "z": 0.0
+        },
+        "phone": "02-3277-0131",
+        "map_brand_cd": "400A01A01A40000116636"
+      },
+      {
+        "id": "PO-AZP5VspPq4681",
+        "object_id": "OB-VtNNs1B2ec7023",
+        "name_ko": "몽클레르",
+        "name_en": "MONCLER",
+        "category_code": "32",
+        "position": {
+          "x": 2304.795773,
+          "y": 1613.043301,
+          "z": 0.0
+        },
+        "phone": "02-3277-0136",
+        "map_brand_cd": "400A01A01A40000116721"
+      },
+      {
+        "id": "PO-XE5AyvOY-6217",
+        "object_id": "OB-CedZwDOdIS7346",
+        "name_ko": "발렌시아가",
+        "name_en": "BALENCIAGA",
+        "category_code": "32",
+        "position": {
+          "x": 849.039305,
+          "y": 1274.356132,
+          "z": 0.0
+        },
+        "phone": "02-3277-0137",
+        "map_brand_cd": "400A01A01A40000111324"
+      },
+      {
+        "id": "PO-zo0B7h0Ci1073",
+        "object_id": "OB-vIl-j5zwtA9339",
+        "name_ko": "프라다",
+        "name_en": "PRADA",
+        "category_code": "32",
+        "position": {
+          "x": 1625.737248,
+          "y": 1826.060879,
+          "z": 0.0
+        },
+        "phone": "02-3277-0130",
+        "map_brand_cd": "400A01A01A40000100635"
+      },
+      {
+        "id": "PO-z2Y_PMpLN3210",
+        "object_id": "OB-tabFht2QAp9424",
+        "name_ko": "메종 프란시스 커정",
+        "name_en": "MAISON FRANCID KURKDJIAN",
+        "category_code": "35",
+        "position": {
+          "x": 1044.899736,
+          "y": 1557.749624,
+          "z": 0.0
+        },
+        "phone": "02-3277-0181",
+        "map_brand_cd": "400A01A01A41000144923"
+      },
+      {
+        "id": "PO-gPxUdR00y4529",
+        "object_id": "OB-uXRbFgTuSa9424",
+        "name_ko": "프레 데릭말",
+        "name_en": "FREDERIC MALLE",
+        "category_code": "35",
+        "position": {
+          "x": 1069.983819,
+          "y": 1595.911365,
+          "z": 0.0
+        },
+        "phone": "02-3277-0180",
+        "map_brand_cd": "400A01A01A41000120849"
+      },
+      {
+        "id": "PO-mUhFcvK7w5817",
+        "object_id": "OB-NZz0ihtZMh9425",
+        "name_ko": "산타 마리아 노벨라",
+        "name_en": "SANTA MARIA NOVELLA",
+        "category_code": "35",
+        "position": {
+          "x": 1130.534156,
+          "y": 1574.594792,
+          "z": 0.0
+        },
+        "phone": "02-3277-0165",
+        "map_brand_cd": "400A01A01A41000114873"
+      },
+      {
+        "id": "PO-21bWY7vNS8090",
+        "object_id": "OB-NNWpujXXS-9418",
+        "name_ko": "헤라",
+        "name_en": "HERA",
+        "category_code": "35",
+        "position": {
+          "x": 1067.923672,
+          "y": 1517.118278,
+          "z": 0.0
+        },
+        "phone": "02-3277-0158",
+        "map_brand_cd": "400A01A01A41000112822"
+      },
+      {
+        "id": "PO-b1f2u6pn19153",
+        "object_id": "OB-Bxgs1c9SM529427",
+        "name_ko": "설화수",
+        "name_en": "SUL WHASOO",
+        "category_code": "35",
+        "position": {
+          "x": 1315.706235,
+          "y": 1621.961816,
+          "z": 0.0
+        },
+        "phone": "02-3277-0152",
+        "map_brand_cd": "400A01A01A41000101801"
+      },
+      {
+        "id": "PO-NKL2Noskp0569",
+        "object_id": "OB-z5rTphgIDw7348",
+        "name_ko": "나스",
+        "name_en": "NARS",
+        "category_code": "35",
+        "position": {
+          "x": 1330.07074,
+          "y": 1349.635507,
+          "z": 0.0
+        },
+        "phone": "02-3277-0171",
+        "map_brand_cd": "400A01A01A41000115119"
+      },
+      {
+        "id": "PO--Aksc58lQ1986",
+        "object_id": "OB-08gzW2uCiX3505",
+        "name_ko": "에르메스 뷰티",
+        "name_en": "HERMES BEAUTY",
+        "category_code": "35",
+        "position": {
+          "x": 1150.572614,
+          "y": 1384.596281,
+          "z": 0.0
+        },
+        "phone": "02-3277-0125",
+        "map_brand_cd": "400A01A01A41000130607"
+      },
+      {
+        "id": "PO-qBb4RVzVr4193",
+        "object_id": "OB-W3gSdGSkR_5339",
+        "name_ko": "아르마니 뷰티",
+        "name_en": "ARMANI BEAUTY",
+        "category_code": "35",
+        "position": {
+          "x": 1230.935538,
+          "y": 1445.908013,
+          "z": 0.0
+        },
+        "phone": "02-3277-0172",
+        "map_brand_cd": "400A01A01A41000116686"
+      },
+      {
+        "id": "PO-E8I-xAJ145321",
+        "object_id": "OB-SoTjbj3R3r5339",
+        "name_ko": "아쿠아 디 파르마",
+        "name_en": "ACQUA DIPARMA",
+        "category_code": "35",
+        "position": {
+          "x": 1231.631573,
+          "y": 1537.078914,
+          "z": 0.0
+        },
+        "phone": "02-3277-0186",
+        "map_brand_cd": "400A01A01A41000112052"
+      },
+      {
+        "id": "PO-8G-7fm4tJ6353",
+        "object_id": "OB-h8dL3_xhme5337",
+        "name_ko": "시슬리",
+        "name_en": "SISLEY",
+        "category_code": "35",
+        "position": {
+          "x": 1315.647464,
+          "y": 1555.436143,
+          "z": 0.0
+        },
+        "phone": "02-3277-0153",
+        "map_brand_cd": "400A01A01A41000100035"
+      },
+      {
+        "id": "PO-lNZXXqB2j7833",
+        "object_id": "OB--3id50z6yB5338",
+        "name_ko": "입생로랑",
+        "name_en": "YVES SAINT LAURENT",
+        "category_code": "35",
+        "position": {
+          "x": 1317.939057,
+          "y": 1428.668889,
+          "z": 0.0
+        },
+        "phone": "02-3277-0169",
+        "map_brand_cd": "400A01A01A41000117030"
+      },
+      {
+        "id": "PO-pn6YzQkUO9153",
+        "object_id": "OB-VdYOQp-MM5333",
+        "name_ko": "메종 마르지엘라 퍼퓸",
+        "name_en": "MAISON MARGIELA",
+        "category_code": "35",
+        "position": {
+          "x": 1399.043364,
+          "y": 1560.0852,
+          "z": 0.0
+        },
+        "phone": "02-3277-0197",
+        "map_brand_cd": "400A01A01A41000136524"
+      },
+      {
+        "id": "PO-psrx-E2QU1009",
+        "object_id": "OB-pNr8RieUQA5337",
+        "name_ko": "디올 뷰티",
+        "name_en": "DIOR BEAUTY",
+        "category_code": "35",
+        "position": {
+          "x": 1399.043364,
+          "y": 1502.907,
+          "z": 0.0
+        },
+        "phone": "02-3277-0151",
+        "map_brand_cd": "400A01A01A41000100610"
+      },
+      {
+        "id": "PO-LkwW7ARVY5105",
+        "object_id": "OB-FDoohfgVj6883",
+        "name_ko": "탬버린즈",
+        "name_en": "TAMBUR INS",
+        "category_code": "36",
+        "position": {
+          "x": 1236.622282,
+          "y": 1370.134979,
+          "z": 0.0
+        },
+        "phone": "02-3277-8593",
+        "map_brand_cd": "400A01A01A41000134475"
+      },
+      {
+        "id": "PO-EIdQCH0YT6586",
+        "object_id": "OB-VVpKun8g_U7348",
+        "name_ko": "오휘/후",
+        "name_en": "O HUI/ WHOO",
+        "category_code": "35",
+        "position": {
+          "x": 1245.35381,
+          "y": 1620.6784,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-B6vMKNxDm8009",
+        "object_id": "OB-9VwVox8etM3505",
+        "name_ko": "MAC",
+        "name_en": "MAC",
+        "category_code": "38",
+        "position": {
+          "x": 1399.948764,
+          "y": 1351.6367,
+          "z": 0.0
+        },
+        "phone": "02-3277-0170",
+        "map_brand_cd": "400A01A01A41000143223"
+      },
+      {
+        "id": "PO-ZUUKB6sdh1593",
+        "object_id": "OB-ZMwYSLP70W79429",
+        "name_ko": "젠틀몬스터",
+        "name_en": "GENTLE MONSTER",
+        "category_code": "36",
+        "position": {
+          "x": 1601.558376,
+          "y": 1606.271184,
+          "z": 0.0
+        },
+        "phone": "02-3277-0182",
+        "map_brand_cd": "400A01A01A06000120162"
+      },
+      {
+        "id": "PO-2-rJKPQYe3337",
+        "object_id": "OB-FFEwRryWG5d9436",
+        "name_ko": "바이 레도",
+        "name_en": "BYREDO",
+        "category_code": "35",
+        "position": {
+          "x": 987.626853,
+          "y": 1421.340524,
+          "z": 0.0
+        },
+        "phone": "02-3277-0179",
+        "map_brand_cd": "400A01A01A41000141497"
+      },
+      {
+        "id": "PO-qbEdDnd895130",
+        "object_id": "OB-nVtdyIBY2Oh9428",
+        "name_ko": "딥티크",
+        "name_en": "DIPTY QUE",
+        "category_code": "35",
+        "position": {
+          "x": 1602.074914,
+          "y": 1494.653729,
+          "z": 0.0
+        },
+        "phone": "02-3277-0178",
+        "map_brand_cd": "400A01A01A41000115222"
+      },
+      {
+        "id": "PO-ABijlzm397680",
+        "object_id": "OB-MBSge8kIoB7347",
+        "name_ko": "크리드",
+        "name_en": "CREED",
+        "category_code": "35",
+        "position": {
+          "x": 1217.958737,
+          "y": 1594.410059,
+          "z": 0.0
+        },
+        "phone": "02-3277-0163",
+        "map_brand_cd": "00A01A01A41000A45335"
+      },
+      {
+        "id": "PO-NyezFOtR45461",
+        "object_id": "OB-2C69n7B556581",
+        "name_ko": "투어리스트 데스크 서비스 - 유모차 대여",
+        "name_en": "TOURIST DESK SERVICE- STROLLER",
+        "category_code": "9992",
+        "position": {
+          "x": 1386.518352,
+          "y": 1023.967678,
+          "z": 0.0
+        },
+        "phone": "02-3277-0505",
+        "map_brand_cd": "400F24591"
+      },
+      {
+        "id": "PO-teUtsih2N9762",
+        "object_id": "OB-8dq6g3a7d9418",
+        "name_ko": "키엘",
+        "name_en": "KIEHL'S",
+        "category_code": "35",
+        "position": {
+          "x": 1145.538452,
+          "y": 1519.884753,
+          "z": 0.0
+        },
+        "phone": "02-3277-0155",
+        "map_brand_cd": "400A01A01A41000108261"
+      },
+      {
+        "id": "PO-jH2tLhTWM1936",
+        "object_id": "OB-bxW5adz25H89427",
+        "name_ko": "이솝",
+        "name_en": "AESOP",
+        "category_code": "35",
+        "position": {
+          "x": 1398.470737,
+          "y": 1631.211737,
+          "z": 0.0
+        },
+        "phone": "02-3277-0156",
+        "map_brand_cd": "400A01A01A41000111921"
+      },
+      {
+        "id": "PO-iVhobbC-v0998",
+        "object_id": "OB-a3aPUFuRGS6582",
+        "name_ko": "발레 라운지",
+        "name_en": "VALET LOUNGE",
+        "category_code": "9992",
+        "position": {
+          "x": 729.325254,
+          "y": 1659.790438,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": "400F23356"
+      },
+      {
+        "id": "PO-1MUAt0Fom4757",
+        "object_id": "",
+        "name_ko": "페어몬트 호텔",
+        "name_en": "fairmont Hotel",
+        "category_code": "54",
+        "position": {
+          "x": 2486.509174,
+          "y": 1471.496942,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-FnAfnhVcz5929",
+        "object_id": "OB-lGJ_K7EBTI9422",
+        "name_ko": "메모 파리",
+        "name_en": "MEMO PARIS",
+        "category_code": "35",
+        "position": {
+          "x": 1001.383991,
+          "y": 1487.777037,
+          "z": 0.0
+        },
+        "phone": "02-3277-0164",
+        "map_brand_cd": "400A01A01A41000130730"
+      },
+      {
+        "id": "PO-ycohmIvZf5120",
+        "object_id": "OB-rourmomKR06897",
+        "name_ko": "크리스챤 디올 (남/여)",
+        "name_en": "CHRISTIAN DIOR",
+        "category_code": "32",
+        "position": {
+          "x": 1911.776656,
+          "y": 1745.765283,
+          "z": 0.0
+        },
+        "phone": "02-3277-8566",
+        "map_brand_cd": "400A01A01A40000100449"
+      },
+      {
+        "id": "PO-_az6DiEe43889",
+        "object_id": "",
+        "name_ko": "WATERFALL GARDEN",
+        "name_en": "WATERFALL GARDEN",
+        "category_code": "9992",
+        "position": {
+          "x": 1970.889711,
+          "y": 1487.037448,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": "400A01A01025000A36329"
+      },
+      {
+        "id": "PO-ZtznVXoG01054",
+        "object_id": "OB-Tzgz_hK5V6174",
+        "name_ko": "유아차 전용 E/V",
+        "name_en": "Elevator (for strollers only)",
+        "category_code": "",
+        "position": {
+          "x": 1703.985291,
+          "y": 1951.310178,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-olgaHsx-80298",
+        "object_id": "OB-FKr7UDG1Hf9425",
+        "name_ko": "록시땅",
+        "name_en": "LOCCI TANE",
+        "category_code": "35",
+        "position": {
+          "x": 1163.323957,
+          "y": 1609.639029,
+          "z": 0.0
+        },
+        "phone": "02-3277-0127",
+        "map_brand_cd": "400A01A01A41000111359"
+      },
+      {
+        "id": "PO-bEaXkQ92W3387",
+        "object_id": "OB-rFbYpy0tgAx9428",
+        "name_ko": "르 라보",
+        "name_en": "LE LABO",
+        "category_code": "35",
+        "position": {
+          "x": 1601.418235,
+          "y": 1380.621467,
+          "z": 0.0
+        },
+        "phone": "02-3277-0161",
+        "map_brand_cd": "400A01A01A41000124028"
+      },
+      {
+        "id": "PO-KUcsEB8l37533",
+        "object_id": "OB-SJj2P-bPL5559",
+        "name_ko": "스킨 케어룸",
+        "name_en": "SkIN CARE ROOM",
+        "category_code": "32",
+        "position": {
+          "x": 762.268355,
+          "y": 1839.916316,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": "400F23586"
+      },
+      {
+        "id": "PO-07DinRnZI3871",
+        "object_id": "OB-LGExsdB6y4421",
+        "name_ko": "커뮤니티 라운지",
+        "name_en": "COM MUNITY LOUNGE",
+        "category_code": "31",
+        "position": {
+          "x": 761.215409,
+          "y": 1891.11953,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": "400A01A01041000A41730"
+      },
+      {
+        "id": "PO-QDhLZPwn-9734",
+        "object_id": "OB-KGwBEwc_t_7348",
+        "name_ko": "구찌 뷰티",
+        "name_en": "GUCCI BEAUTY",
+        "category_code": "35",
+        "position": {
+          "x": 1300.44609,
+          "y": 1371.84322,
+          "z": 0.0
+        },
+        "phone": "02-3277-0174",
+        "map_brand_cd": "400A01A01A41000130045"
+      },
+      {
+        "id": "PO-U6hZ2idzw9372",
+        "object_id": "OB-W-aKOu0O-4453",
+        "name_ko": "투어리스트 데스크 서비스 - 캐리어 보관 서비스",
+        "name_en": "TOURIST DESK SERVICE- LUGGAGE STORAGE SERVICE",
+        "category_code": "9992",
+        "position": {
+          "x": 1386.518352,
+          "y": 1075.434027,
+          "z": 0.0
+        },
+        "phone": "02-3277-0505",
+        "map_brand_cd": "400F24111"
+      },
+      {
+        "id": "PO-JX50wNRGi2737",
+        "object_id": "OB-ZoroocslY7021",
+        "name_ko": "다미아니",
+        "name_en": "DAMIANI",
+        "category_code": "35",
+        "position": {
+          "x": 2289.068848,
+          "y": 1478.01416,
+          "z": 0.0
+        },
+        "phone": "02-3277-0177",
+        "map_brand_cd": "400A01A01A40000119171"
+      },
+      {
+        "id": "PO-g-Qs2usRK5184",
+        "object_id": "OB-7qNdmEU_IU7247",
+        "name_ko": "에스컬레이터",
+        "name_en": "Escalator",
+        "category_code": "9994",
+        "position": {
+          "x": 863.677291,
+          "y": 1495.719147,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-79T5tNCbX1542",
+        "object_id": "OB-jIqLyGY6S57247",
+        "name_ko": "에스컬레이터",
+        "name_en": "Escalator",
+        "category_code": "9994",
+        "position": {
+          "x": 1484.282704,
+          "y": 1495.660197,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-CrRXuYr7I8723",
+        "object_id": "OB-eNrZ0UphBZ7250",
+        "name_ko": "에스컬레이터",
+        "name_en": "Escalator",
+        "category_code": "9994",
+        "position": {
+          "x": 1529.022254,
+          "y": 1494.517634,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-ZDIiTbuxX7875",
+        "object_id": "OB-VXC_dpE8PT7245",
+        "name_ko": "에스컬레이터",
+        "name_en": "Escalator",
+        "category_code": "9994",
+        "position": {
+          "x": 2062.583081,
+          "y": 1492.040122,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-OtkDgCUwm0591",
+        "object_id": "OB-J-oxgdtqR8080",
+        "name_ko": "출구",
+        "name_en": "Exit",
+        "category_code": "9995",
+        "position": {
+          "x": 636.360373,
+          "y": 1512.390841,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-aCd83OWPJ4438",
+        "object_id": "OB-VFr-4p-Ma6249",
+        "name_ko": "출구",
+        "name_en": "Exit",
+        "category_code": "9995",
+        "position": {
+          "x": 1511.016815,
+          "y": 925.078081,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-IUr0JcJdy0927",
+        "object_id": "OB-xD5o5hOoh8335",
+        "name_ko": "출구",
+        "name_en": "Exit",
+        "category_code": "9995",
+        "position": {
+          "x": 2349.104486,
+          "y": 1230.840623,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-37OFT9ZUH7718",
+        "object_id": "OB-KKkQglffd1864",
+        "name_ko": "출구",
+        "name_en": "Exit",
+        "category_code": "9995",
+        "position": {
+          "x": 2385.724846,
+          "y": 1801.893925,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-HwdghqaiS1983",
+        "object_id": "OB-GW5bCvGGn1876",
+        "name_ko": "출구",
+        "name_en": "Exit",
+        "category_code": "9995",
+        "position": {
+          "x": 1512.999275,
+          "y": 2062.322445,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-r52wm2fcn1150",
+        "object_id": "OB-jpTVvS7265477",
+        "name_ko": "9호선, 5호선 여의도역",
+        "name_en": "Line 9, Line 5 Yeouido Station",
+        "category_code": "",
+        "position": {
+          "x": 2268.90944,
+          "y": 2173.616198,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-SbEjEmz0A5237",
+        "object_id": "OB-kO7t5k2iy2184",
+        "name_ko": "컨시어지 (안내데스크)",
+        "name_en": "Concierge Information",
+        "category_code": "9992",
+        "position": {
+          "x": 1504.941555,
+          "y": 1635.773809,
+          "z": 0.0
+        },
+        "phone": "02-3277-0114",
+        "map_brand_cd": "400F21295"
+      },
+      {
+        "id": "PO-1GQgwcc4B6958",
+        "object_id": "OB-ZLIwO3Xvm9967",
+        "name_ko": "5호선 여의나루역",
+        "name_en": "Line 5 Yeouinaru Station",
+        "category_code": "",
+        "position": {
+          "x": 2270.368343,
+          "y": 908.976498,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-ScHxkQcAR4247",
+        "object_id": "OB-PwB1cHPN_1923",
+        "name_ko": "화장실",
+        "name_en": "Restroom",
+        "category_code": "9991",
+        "position": {
+          "x": 1602.074914,
+          "y": 1022.913025,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-QuY1qFi9vs4258",
+        "object_id": "OB-Tzgz_hK5V6174",
+        "name_ko": "엘리베이터",
+        "name_en": "Elevator",
+        "category_code": "9993",
+        "position": {
+          "x": 1702.13562,
+          "y": 1906.833747,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-0d_J1ehum94259",
+        "object_id": "OB-Oj7Hv9agx4923",
+        "name_ko": "정수기",
+        "name_en": "Water fountain",
+        "category_code": "56",
+        "position": {
+          "x": 1602.113939,
+          "y": 1120.845438,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-6TUC1J65u8791",
+        "object_id": "OB-jgE8Sd0zA6373",
+        "name_ko": "엘리베이터",
+        "name_en": "Elevator",
+        "category_code": "9993",
+        "position": {
+          "x": 2043.631014,
+          "y": 1914.887066,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-liVt_3V4D1703",
+        "object_id": "OB-6oCzB-AELo6376",
+        "name_ko": "엘리베이터",
+        "name_en": "Elevator",
+        "category_code": "9993",
+        "position": {
+          "x": 2020.581314,
+          "y": 1175.7891,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-G1_ZRKAf44894",
+        "object_id": "OB-bVOj9CksJP6375",
+        "name_ko": "엘리베이터",
+        "name_en": "Elevator",
+        "category_code": "9993",
+        "position": {
+          "x": 951.427471,
+          "y": 1168.220211,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-lbJ6GZW007895",
+        "object_id": "OB-2ayEuac0pH6375",
+        "name_ko": "엘리베이터",
+        "name_en": "Elevator",
+        "category_code": "9993",
+        "position": {
+          "x": 963.087582,
+          "y": 1910.365547,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-1D9bSv_Bv8346",
+        "object_id": "OB-cQk8aMDOg1337",
+        "name_ko": "장애인화장실",
+        "name_en": "Disabled",
+        "category_code": "9991",
+        "position": {
+          "x": 1602.074914,
+          "y": 1072.913025,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": null
+      },
+      {
+        "id": "PO-BCVLQ7SGQ6385",
+        "object_id": "",
+        "name_ko": "서혜영 작품",
+        "name_en": "Haiyoung Suh artwork",
+        "category_code": "9992",
+        "position": {
+          "x": 1277.156277,
+          "y": 1296.914431,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": "400A01A01025000A43170"
+      },
+      {
+        "id": "PO-wSgJRrl_P8410",
+        "object_id": "",
+        "name_ko": "박선기 작품",
+        "name_en": "Seonghi Bahk artwork",
+        "category_code": "9992",
+        "position": {
+          "x": 1271.831601,
+          "y": 1689.63749,
+          "z": 0.0
+        },
+        "phone": null,
+        "map_brand_cd": "400A01A01025000A43169"
+      },
+      {
+        "id": "PO-nwmgi9vgb5269",
+        "object_id": "OB-7WLbH7PmIw9344",
+        "name_ko": "페라가모",
+        "name_en": "FERRAGAMO",
+        "category_code": "32",
+        "position": {
+          "x": 2267.565336,
+          "y": 1888.46138,
+          "z": 0.0
+        },
+        "phone": "02-3277-8573",
+        "map_brand_cd": "400A01A01A40000100634"
+      },
+      {
+        "id": "PO-FmmYZib575409",
+        "object_id": "OB-lgCDuHRT3l9345",
+        "name_ko": "반클리프아펠",
+        "name_en": "Van Cleef & Arpels",
+        "category_code": "32",
+        "position": {
+          "x": 2107.127537,
+          "y": 1735.557608,
+          "z": 0.0
+        },
+        "phone": "02-1877-4128",
+        "map_brand_cd": "400A01A01A40000101939"
+      }
+    ],
+    "objects": [
+      {
+        "id": "OB-VtNNs1B2ec7023",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 2289.090698,
+          "y": 1636.187622,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2230.181396,
+              "y": 1557.075195
+            },
+            {
+              "x": 2347.966769,
+              "y": 1557.075195
+            },
+            {
+              "x": 2348.0,
+              "y": 1696.700073
+            },
+            {
+              "x": 2327.899902,
+              "y": 1715.300049
+            },
+            {
+              "x": 2299.732673,
+              "y": 1715.300049
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-AZP5VspPq4681"
+        ],
+        "names_ko": [
+          "몽클레르"
+        ]
+      },
+      {
+        "id": "OB-ZoroocslY7021",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 2289.068848,
+          "y": 1478.01416,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2230.181396,
+              "y": 1442.972778
+            },
+            {
+              "x": 2230.181396,
+              "y": 1513.056152
+            },
+            {
+              "x": 2347.956299,
+              "y": 1513.056152
+            },
+            {
+              "x": 2347.939697,
+              "y": 1442.972168
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-JX50wNRGi2737"
+        ],
+        "names_ko": [
+          "다미아니"
+        ]
+      },
+      {
+        "id": "OB-AiwXXZOAl87024",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 2289.060521,
+          "y": 1359.436401,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2311.5,
+              "y": 1275.900024
+            },
+            {
+              "x": 2230.181396,
+              "y": 1361.0
+            },
+            {
+              "x": 2230.181396,
+              "y": 1442.972778
+            },
+            {
+              "x": 2347.939645,
+              "y": 1442.972778
+            },
+            {
+              "x": 2347.899902,
+              "y": 1275.900024
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-lB8Eh8MAx1081"
+        ],
+        "names_ko": [
+          "생로랑"
+        ]
+      },
+      {
+        "id": "OB-P4A9415eK9323",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 763.669556,
+          "y": 1732.484131,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 756.575317,
+              "y": 1656.38855
+            },
+            {
+              "x": 756.575496,
+              "y": 1714.86145
+            },
+            {
+              "x": 673.503296,
+              "y": 1714.86145
+            },
+            {
+              "x": 673.502319,
+              "y": 1808.579712
+            },
+            {
+              "x": 853.836792,
+              "y": 1808.579712
+            },
+            {
+              "x": 853.419617,
+              "y": 1656.38855
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-Nmycfl6kW6313"
+        ],
+        "names_ko": [
+          "보테가 베네타"
+        ]
+      },
+      {
+        "id": "OB-a3aPUFuRGS6582",
+        "attribute_code": "OB-OTHER_FACILITIES",
+        "passable": false,
+        "position": {
+          "x": 729.325254,
+          "y": 1662.365228,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 756.5755,
+              "y": 1714.873692
+            },
+            {
+              "x": 702.075008,
+              "y": 1714.873692
+            },
+            {
+              "x": 702.075008,
+              "y": 1609.856764
+            },
+            {
+              "x": 756.5755,
+              "y": 1609.856764
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-iVhobbC-v0998"
+        ],
+        "names_ko": [
+          "발레 라운지"
+        ]
+      },
+      {
+        "id": "OB-Oj7Hv9agx4923",
+        "attribute_code": "OB-OTHER_FACILITIES",
+        "passable": false,
+        "position": {
+          "x": 1602.113939,
+          "y": 1116.131312,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1577.074914,
+              "y": 1097.913025
+            },
+            {
+              "x": 1577.074914,
+              "y": 1134.3496
+            },
+            {
+              "x": 1627.152963,
+              "y": 1134.3496
+            },
+            {
+              "x": 1627.152963,
+              "y": 1097.913025
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-0d_J1ehum94259"
+        ],
+        "names_ko": [
+          "정수기"
+        ]
+      },
+      {
+        "id": "OB-08gzW2uCiX3505",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1150.572614,
+          "y": 1378.5152,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1179.392414,
+              "y": 1352.5667
+            },
+            {
+              "x": 1121.752814,
+              "y": 1362.249
+            },
+            {
+              "x": 1121.752814,
+              "y": 1404.4637
+            },
+            {
+              "x": 1179.392414,
+              "y": 1404.4637
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO--Aksc58lQ1986"
+        ],
+        "names_ko": [
+          "에르메스 뷰티"
+        ]
+      },
+      {
+        "id": "OB-NN761rRg4B9859",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1922.556414,
+          "y": 1227.97145,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2045.580714,
+              "y": 1150.7891
+            },
+            {
+              "x": 1799.531514,
+              "y": 1150.7891
+            },
+            {
+              "x": 1799.608514,
+              "y": 1179.974
+            },
+            {
+              "x": 1800.212196,
+              "y": 1243.323838
+            },
+            {
+              "x": 1838.292014,
+              "y": 1254.0717
+            },
+            {
+              "x": 1888.581814,
+              "y": 1261.9383
+            },
+            {
+              "x": 1925.241214,
+              "y": 1268.8273
+            },
+            {
+              "x": 1957.860614,
+              "y": 1277.2152
+            },
+            {
+              "x": 1987.861014,
+              "y": 1286.1649
+            },
+            {
+              "x": 2009.449114,
+              "y": 1292.9038
+            },
+            {
+              "x": 2036.024214,
+              "y": 1301.9698
+            },
+            {
+              "x": 2045.581314,
+              "y": 1305.1538
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-nkTkSy3st5151"
+        ],
+        "names_ko": [
+          "구찌"
+        ]
+      },
+      {
+        "id": "OB-kO7t5k2iy2184",
+        "attribute_code": "OB-OTHER_FACILITIES",
+        "passable": false,
+        "position": {
+          "x": 1504.941555,
+          "y": 1635.773809,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1469.941555,
+              "y": 1605.773809
+            },
+            {
+              "x": 1469.941555,
+              "y": 1665.773809
+            },
+            {
+              "x": 1539.941555,
+              "y": 1665.773809
+            },
+            {
+              "x": 1539.941555,
+              "y": 1605.773809
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-SbEjEmz0A5237"
+        ],
+        "names_ko": [
+          "컨시어지 (안내데스크)"
+        ]
+      },
+      {
+        "id": "OB-2C69n7B556581",
+        "attribute_code": "OB-OTHER_FACILITIES",
+        "passable": false,
+        "position": {
+          "x": 1386.518352,
+          "y": 1023.967678,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1343.721824,
+              "y": 997.414063
+            },
+            {
+              "x": 1429.31488,
+              "y": 997.414063
+            },
+            {
+              "x": 1429.31488,
+              "y": 1050.521293
+            },
+            {
+              "x": 1343.721824,
+              "y": 1050.521293
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-NyezFOtR45461"
+        ],
+        "names_ko": [
+          "투어리스트 데스크 서비스 - 유모차 대여"
+        ]
+      },
+      {
+        "id": "OB-8dq6g3a7d9418",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1145.538452,
+          "y": 1525.884753,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1114.663452,
+              "y": 1543.68703
+            },
+            {
+              "x": 1176.413452,
+              "y": 1556.81203
+            },
+            {
+              "x": 1176.413452,
+              "y": 1494.957477
+            },
+            {
+              "x": 1114.663452,
+              "y": 1494.957477
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-teUtsih2N9762"
+        ],
+        "names_ko": [
+          "키엘"
+        ]
+      },
+      {
+        "id": "OB-NNWpujXXS-9418",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1063.552689,
+          "y": 1521.644777,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1033.735581,
+              "y": 1520.519777
+            },
+            {
+              "x": 1093.369798,
+              "y": 1537.269777
+            },
+            {
+              "x": 1093.369798,
+              "y": 1506.019777
+            },
+            {
+              "x": 1033.735581,
+              "y": 1506.019777
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-21bWY7vNS8090"
+        ],
+        "names_ko": [
+          "헤라"
+        ]
+      },
+      {
+        "id": "OB-_8aSyIkvJN9419",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1086.201568,
+          "y": 1465.166473,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1033.849762,
+              "y": 1461.082112
+            },
+            {
+              "x": 1033.849762,
+              "y": 1506.0
+            },
+            {
+              "x": 1093.483978,
+              "y": 1506.0
+            },
+            {
+              "x": 1093.483978,
+              "y": 1492.645447
+            },
+            {
+              "x": 1093.120578,
+              "y": 1440.279076
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-TRzx47byR5369"
+        ],
+        "names_ko": [
+          "조 말론 런던"
+        ]
+      },
+      {
+        "id": "OB-lGJ_K7EBTI9422",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1001.383991,
+          "y": 1487.777037,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1021.340512,
+              "y": 1517.171052
+            },
+            {
+              "x": 981.427471,
+              "y": 1517.171052
+            },
+            {
+              "x": 981.427471,
+              "y": 1458.383023
+            },
+            {
+              "x": 1021.340512,
+              "y": 1458.383023
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-FnAfnhVcz5929"
+        ],
+        "names_ko": [
+          "메모 파리"
+        ]
+      },
+      {
+        "id": "OB-ET3VGYG8D49423",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 938.585423,
+          "y": 1490.481282,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 908.274042,
+              "y": 1556.81203
+            },
+            {
+              "x": 927.169448,
+              "y": 1547.954808
+            },
+            {
+              "x": 968.896804,
+              "y": 1517.446601
+            },
+            {
+              "x": 968.896804,
+              "y": 1464.303271
+            },
+            {
+              "x": 922.24877,
+              "y": 1430.842656
+            },
+            {
+              "x": 908.274042,
+              "y": 1424.150533
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-gm_1EWj5f2065"
+        ],
+        "names_ko": [
+          "샤넬 뷰티"
+        ]
+      },
+      {
+        "id": "OB-NGJH1V2BUw9423",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 971.652384,
+          "y": 1563.208912,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1005.70348,
+              "y": 1587.320238
+            },
+            {
+              "x": 1005.70348,
+              "y": 1539.097587
+            },
+            {
+              "x": 969.684112,
+              "y": 1539.097587
+            },
+            {
+              "x": 937.601287,
+              "y": 1567.231384
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-4RBf7brmK0553"
+        ],
+        "names_ko": [
+          "톰포드 뷰티"
+        ]
+      },
+      {
+        "id": "OB-uXRbFgTuSa9424",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1057.464774,
+          "y": 1580.720728,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1096.440794,
+              "y": 1610.816837
+            },
+            {
+              "x": 1018.488753,
+              "y": 1592.886939
+            },
+            {
+              "x": 1096.440794,
+              "y": 1550.62462
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-gPxUdR00y4529"
+        ],
+        "names_ko": [
+          "프레 데릭말"
+        ]
+      },
+      {
+        "id": "OB-tabFht2QAp9424",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1057.464774,
+          "y": 1562.704198,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1018.488753,
+              "y": 1592.886939
+            },
+            {
+              "x": 1018.488753,
+              "y": 1532.521457
+            },
+            {
+              "x": 1096.440794,
+              "y": 1550.62462
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-z2Y_PMpLN3210"
+        ],
+        "names_ko": [
+          "메종 프란시스 커정"
+        ]
+      },
+      {
+        "id": "OB-FKr7UDG1Hf9425",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1143.606962,
+          "y": 1598.792944,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1106.022885,
+              "y": 1612.049796
+            },
+            {
+              "x": 1181.19104,
+              "y": 1626.477234
+            },
+            {
+              "x": 1181.19104,
+              "y": 1571.108654
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-olgaHsx-80298"
+        ],
+        "names_ko": [
+          "록시땅"
+        ]
+      },
+      {
+        "id": "OB-NZz0ihtZMh9425",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1143.606962,
+          "y": 1585.150636,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1106.022885,
+              "y": 1558.251477
+            },
+            {
+              "x": 1106.022885,
+              "y": 1612.049796
+            },
+            {
+              "x": 1181.19104,
+              "y": 1571.108654
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-mUhFcvK7w5817"
+        ],
+        "names_ko": [
+          "산타 마리아 노벨라"
+        ]
+      },
+      {
+        "id": "OB-Bxgs1c9SM529427",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1314.266141,
+          "y": 1621.001743,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1279.562259,
+              "y": 1592.289043
+            },
+            {
+              "x": 1279.562259,
+              "y": 1641.772632
+            },
+            {
+              "x": 1348.970023,
+              "y": 1649.714443
+            },
+            {
+              "x": 1348.970023,
+              "y": 1600.418076
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-b1f2u6pn19153"
+        ],
+        "names_ko": [
+          "설화수"
+        ]
+      },
+      {
+        "id": "OB-bxW5adz25H89427",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1398.661328,
+          "y": 1628.185934,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1364.591586,
+              "y": 1601.146264
+            },
+            {
+              "x": 1364.591586,
+              "y": 1650.327852
+            },
+            {
+              "x": 1432.73107,
+              "y": 1655.225603
+            },
+            {
+              "x": 1432.73107,
+              "y": 1605.431797
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-jH2tLhTWM1936"
+        ],
+        "names_ko": [
+          "이솝"
+        ]
+      },
+      {
+        "id": "OB-rFbYpy0tgAx9428",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1601.558376,
+          "y": 1376.51846,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1624.333333,
+              "y": 1324.01551
+            },
+            {
+              "x": 1578.78342,
+              "y": 1322.162464
+            },
+            {
+              "x": 1578.78342,
+              "y": 1430.874456
+            },
+            {
+              "x": 1624.333333,
+              "y": 1430.874456
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-bEaXkQ92W3387"
+        ],
+        "names_ko": [
+          "르 라보"
+        ]
+      },
+      {
+        "id": "OB-nVtdyIBY2Oh9428",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1602.074914,
+          "y": 1494.16605,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1624.849871,
+              "y": 1439.925534
+            },
+            {
+              "x": 1579.299958,
+              "y": 1439.925534
+            },
+            {
+              "x": 1579.299958,
+              "y": 1548.406566
+            },
+            {
+              "x": 1624.849871,
+              "y": 1548.406566
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-qbEdDnd895130"
+        ],
+        "names_ko": [
+          "딥티크"
+        ]
+      },
+      {
+        "id": "OB-ZMwYSLP70W79429",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1601.558376,
+          "y": 1606.271184,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1624.333333,
+              "y": 1652.547156
+            },
+            {
+              "x": 1578.78342,
+              "y": 1654.666667
+            },
+            {
+              "x": 1578.78342,
+              "y": 1557.875701
+            },
+            {
+              "x": 1624.333333,
+              "y": 1557.875701
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-ZUUKB6sdh1593"
+        ],
+        "names_ko": [
+          "젠틀몬스터"
+        ]
+      },
+      {
+        "id": "OB-FFEwRryWG5d9436",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 974.864293,
+          "y": 1417.497638,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 937.046096,
+              "y": 1414.930345
+            },
+            {
+              "x": 975.555487,
+              "y": 1442.973081
+            },
+            {
+              "x": 1012.682489,
+              "y": 1442.973081
+            },
+            {
+              "x": 1012.682489,
+              "y": 1392.022195
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-2-rJKPQYe3337"
+        ],
+        "names_ko": [
+          "바이 레도"
+        ]
+      },
+      {
+        "id": "OB-HN0y71UqvLk9440",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 2144.973004,
+          "y": 1481.238558,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2190.852217,
+              "y": 1557.075235
+            },
+            {
+              "x": 2099.093792,
+              "y": 1556.81203
+            },
+            {
+              "x": 2099.093792,
+              "y": 1405.401882
+            },
+            {
+              "x": 2190.852217,
+              "y": 1405.401882
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-nZDHFEAfT9816"
+        ],
+        "names_ko": [
+          "톰브라운"
+        ]
+      },
+      {
+        "id": "OB-jgE8Sd0zA6373",
+        "attribute_code": "OB-ELEVATOR",
+        "passable": false,
+        "position": {
+          "x": 2043.631014,
+          "y": 1914.887066,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2018.631014,
+              "y": 1939.887066
+            },
+            {
+              "x": 2068.631014,
+              "y": 1939.887066
+            },
+            {
+              "x": 2068.631014,
+              "y": 1889.887066
+            },
+            {
+              "x": 2018.631014,
+              "y": 1889.887066
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-6TUC1J65u8791"
+        ],
+        "names_ko": [
+          "엘리베이터"
+        ]
+      },
+      {
+        "id": "OB-2ayEuac0pH6375",
+        "attribute_code": "OB-ELEVATOR",
+        "passable": false,
+        "position": {
+          "x": 962.038631,
+          "y": 1910.365547,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 937.038631,
+              "y": 1885.831192
+            },
+            {
+              "x": 937.038631,
+              "y": 1934.761296
+            },
+            {
+              "x": 987.038631,
+              "y": 1934.899902
+            },
+            {
+              "x": 987.038631,
+              "y": 1885.831192
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-lbJ6GZW007895"
+        ],
+        "names_ko": [
+          "엘리베이터"
+        ]
+      },
+      {
+        "id": "OB-bVOj9CksJP6375",
+        "attribute_code": "OB-ELEVATOR",
+        "passable": false,
+        "position": {
+          "x": 951.427471,
+          "y": 1168.220211,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 976.427471,
+              "y": 1143.12599
+            },
+            {
+              "x": 926.427471,
+              "y": 1143.12599
+            },
+            {
+              "x": 926.427471,
+              "y": 1193.314433
+            },
+            {
+              "x": 976.427471,
+              "y": 1193.314433
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-G1_ZRKAf44894"
+        ],
+        "names_ko": [
+          "엘리베이터"
+        ]
+      },
+      {
+        "id": "OB-6oCzB-AELo6376",
+        "attribute_code": "OB-ELEVATOR",
+        "passable": false,
+        "position": {
+          "x": 2020.581314,
+          "y": 1175.7891,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2045.581314,
+              "y": 1150.7891
+            },
+            {
+              "x": 1995.581314,
+              "y": 1150.7891
+            },
+            {
+              "x": 1995.581314,
+              "y": 1200.7891
+            },
+            {
+              "x": 2045.581314,
+              "y": 1200.7891
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-liVt_3V4D1703"
+        ],
+        "names_ko": [
+          "엘리베이터"
+        ]
+      },
+      {
+        "id": "OB-VXC_dpE8PT7245",
+        "attribute_code": "OB-ESCALATOR_DOWN",
+        "passable": false,
+        "position": {
+          "x": 2055.003845,
+          "y": 1452.041565,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2063.003845,
+              "y": 1411.437683
+            },
+            {
+              "x": 2047.003845,
+              "y": 1411.437683
+            },
+            {
+              "x": 2047.003845,
+              "y": 1492.645447
+            },
+            {
+              "x": 2063.003845,
+              "y": 1492.645447
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-ZDIiTbuxX7875"
+        ],
+        "names_ko": [
+          "에스컬레이터"
+        ]
+      },
+      {
+        "id": "OB-7qNdmEU_IU7247",
+        "attribute_code": "OB-ESCALATOR_DOWN",
+        "passable": false,
+        "position": {
+          "x": 856.15142,
+          "y": 1452.041565,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 864.15142,
+              "y": 1411.437683
+            },
+            {
+              "x": 848.15142,
+              "y": 1411.437683
+            },
+            {
+              "x": 848.15142,
+              "y": 1492.645447
+            },
+            {
+              "x": 864.15142,
+              "y": 1492.645447
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-g-Qs2usRK5184"
+        ],
+        "names_ko": [
+          "에스컬레이터"
+        ]
+      },
+      {
+        "id": "OB-jIqLyGY6S57247",
+        "attribute_code": "OB-ESCALATOR_UP",
+        "passable": false,
+        "position": {
+          "x": 1492.387944,
+          "y": 1452.041565,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1500.390019,
+              "y": 1492.645447
+            },
+            {
+              "x": 1500.390019,
+              "y": 1411.437683
+            },
+            {
+              "x": 1484.385869,
+              "y": 1411.437683
+            },
+            {
+              "x": 1484.385869,
+              "y": 1492.645447
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-79T5tNCbX1542"
+        ],
+        "names_ko": [
+          "에스컬레이터"
+        ]
+      },
+      {
+        "id": "OB-eNrZ0UphBZ7250",
+        "attribute_code": "OB-ESCALATOR_DOWN",
+        "passable": false,
+        "position": {
+          "x": 1521.081848,
+          "y": 1452.041565,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1529.081848,
+              "y": 1411.437683
+            },
+            {
+              "x": 1513.081848,
+              "y": 1411.437683
+            },
+            {
+              "x": 1513.081848,
+              "y": 1492.645447
+            },
+            {
+              "x": 1529.081848,
+              "y": 1492.645447
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-CrRXuYr7I8723"
+        ],
+        "names_ko": [
+          "에스컬레이터"
+        ]
+      },
+      {
+        "id": "OB-GW5bCvGGn1876",
+        "attribute_code": "OB-OUTLINE",
+        "passable": false,
+        "position": {
+          "x": 1513.667622,
+          "y": 2023.127346,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1526.167622,
+              "y": 2030.627346
+            },
+            {
+              "x": 1501.167622,
+              "y": 2030.627346
+            },
+            {
+              "x": 1513.667622,
+              "y": 2015.627346
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-HwdghqaiS1983"
+        ],
+        "names_ko": [
+          "출구"
+        ]
+      },
+      {
+        "id": "OB-J-oxgdtqR8080",
+        "attribute_code": "OB-OUTLINE",
+        "passable": false,
+        "position": {
+          "x": 673.550569,
+          "y": 1501.965393,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 666.050569,
+              "y": 1514.465393
+            },
+            {
+              "x": 666.050569,
+              "y": 1489.465393
+            },
+            {
+              "x": 681.050569,
+              "y": 1501.965393
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-OtkDgCUwm0591"
+        ],
+        "names_ko": [
+          "출구"
+        ]
+      },
+      {
+        "id": "OB-KKkQglffd1864",
+        "attribute_code": "OB-OUTLINE",
+        "passable": false,
+        "position": {
+          "x": 2342.450652,
+          "y": 1794.004771,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2356.68439,
+              "y": 1790.858232
+            },
+            {
+              "x": 2338.52878,
+              "y": 1808.044676
+            },
+            {
+              "x": 2337.294719,
+              "y": 1788.558088
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-37OFT9ZUH7718"
+        ],
+        "names_ko": [
+          "출구"
+        ]
+      },
+      {
+        "id": "OB-xD5o5hOoh8335",
+        "attribute_code": "OB-OUTLINE",
+        "passable": false,
+        "position": {
+          "x": 2342.704979,
+          "y": 1191.195285,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2338.139667,
+              "y": 1177.351228
+            },
+            {
+              "x": 2357.068706,
+              "y": 1193.68192
+            },
+            {
+              "x": 2337.805771,
+              "y": 1196.873997
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-IUr0JcJdy0927"
+        ],
+        "names_ko": [
+          "출구"
+        ]
+      },
+      {
+        "id": "OB-VFr-4p-Ma6249",
+        "attribute_code": "OB-OUTLINE",
+        "passable": false,
+        "position": {
+          "x": 1510.633239,
+          "y": 967.295725,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1498.133239,
+              "y": 959.795725
+            },
+            {
+              "x": 1523.133239,
+              "y": 959.795725
+            },
+            {
+              "x": 1510.633239,
+              "y": 974.795725
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-aCd83OWPJ4438"
+        ],
+        "names_ko": [
+          "출구"
+        ]
+      },
+      {
+        "id": "OB-cQk8aMDOg1337",
+        "attribute_code": "OB-TOILET",
+        "passable": false,
+        "position": {
+          "x": 1602.074914,
+          "y": 1072.913025,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1577.074914,
+              "y": 1047.913025
+            },
+            {
+              "x": 1627.074914,
+              "y": 1047.913025
+            },
+            {
+              "x": 1627.074914,
+              "y": 1097.913025
+            },
+            {
+              "x": 1577.074914,
+              "y": 1097.913025
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-1D9bSv_Bv8346"
+        ],
+        "names_ko": [
+          "장애인화장실"
+        ]
+      },
+      {
+        "id": "OB-PwB1cHPN_1923",
+        "attribute_code": "OB-TOILET",
+        "passable": false,
+        "position": {
+          "x": 1602.074914,
+          "y": 1022.913025,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1577.074914,
+              "y": 997.913025
+            },
+            {
+              "x": 1577.074914,
+              "y": 1024.169176
+            },
+            {
+              "x": 1577.074914,
+              "y": 1034.844754
+            },
+            {
+              "x": 1577.074914,
+              "y": 1047.913025
+            },
+            {
+              "x": 1627.074914,
+              "y": 1047.913025
+            },
+            {
+              "x": 1627.074914,
+              "y": 997.913025
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-ScHxkQcAR4247"
+        ],
+        "names_ko": [
+          "화장실"
+        ]
+      },
+      {
+        "id": "OB-Tzgz_hK5V6174",
+        "attribute_code": "OB-ELEVATOR",
+        "passable": false,
+        "position": {
+          "x": 1702.13562,
+          "y": 1906.833747,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1677.13562,
+              "y": 1881.833747
+            },
+            {
+              "x": 1677.13562,
+              "y": 1931.833747
+            },
+            {
+              "x": 1727.13562,
+              "y": 1931.833747
+            },
+            {
+              "x": 1727.13562,
+              "y": 1881.833747
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-ZtznVXoG01054",
+          "PO-QuY1qFi9vs4258"
+        ],
+        "names_ko": [
+          "유아차 전용 E/V",
+          "엘리베이터"
+        ]
+      },
+      {
+        "id": "OB-EjWeKJF3c9855",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1631.597414,
+          "y": 1185.7421,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1629.911914,
+              "y": 1231.7475
+            },
+            {
+              "x": 1662.352614,
+              "y": 1234.4228
+            },
+            {
+              "x": 1686.120214,
+              "y": 1237.1346
+            },
+            {
+              "x": 1686.114014,
+              "y": 1134.3496
+            },
+            {
+              "x": 1577.074914,
+              "y": 1134.3496
+            },
+            {
+              "x": 1577.074614,
+              "y": 1228.8686
+            },
+            {
+              "x": 1599.779914,
+              "y": 1230.1894
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-iK68VYKov8809"
+        ],
+        "names_ko": [
+          "로에베"
+        ]
+      },
+      {
+        "id": "OB-lypn2umrI8123",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1343.318614,
+          "y": 1182.39235,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1263.429814,
+              "y": 1247.3871
+            },
+            {
+              "x": 1301.637914,
+              "y": 1241.1857
+            },
+            {
+              "x": 1344.246914,
+              "y": 1235.7846
+            },
+            {
+              "x": 1381.206714,
+              "y": 1232.6523
+            },
+            {
+              "x": 1449.424014,
+              "y": 1229.1448
+            },
+            {
+              "x": 1449.424014,
+              "y": 1112.726
+            },
+            {
+              "x": 1237.213214,
+              "y": 1112.3706
+            },
+            {
+              "x": 1237.217014,
+              "y": 1252.4141
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-RVDD0gwWA0601"
+        ],
+        "names_ko": [
+          "티파니앤코"
+        ]
+      },
+      {
+        "id": "OB-efAr42-Cwy8127",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1040.124991,
+          "y": 1223.8299,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 989.999992,
+              "y": 1143.1139
+            },
+            {
+              "x": 989.999992,
+              "y": 1304.5459
+            },
+            {
+              "x": 1090.249989,
+              "y": 1279.5623
+            },
+            {
+              "x": 1090.249989,
+              "y": 1143.1139
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-7fAC1zcRT7649"
+        ],
+        "names_ko": [
+          "미우미우"
+        ]
+      },
+      {
+        "id": "OB-hHRaxp1xJK8127",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1144.919702,
+          "y": 1211.4453,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1199.589414,
+              "y": 1204.209
+            },
+            {
+              "x": 1199.589414,
+              "y": 1143.1139
+            },
+            {
+              "x": 1090.249989,
+              "y": 1143.1139
+            },
+            {
+              "x": 1090.249989,
+              "y": 1279.7767
+            },
+            {
+              "x": 1199.589414,
+              "y": 1258.775
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-VUPb_mowY7218"
+        ],
+        "names_ko": [
+          "발렌티노"
+        ]
+      },
+      {
+        "id": "OB-wPOtN2CP0Z6893",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1189.757685,
+          "y": 1798.684544,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1226.078735,
+              "y": 1725.852694
+            },
+            {
+              "x": 1213.868235,
+              "y": 1723.771094
+            },
+            {
+              "x": 1173.597935,
+              "y": 1716.345094
+            },
+            {
+              "x": 1153.436635,
+              "y": 1712.525094
+            },
+            {
+              "x": 1153.436635,
+              "y": 1884.843994
+            },
+            {
+              "x": 1226.078735,
+              "y": 1884.843994
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-C3lhY03Nq2306"
+        ],
+        "names_ko": [
+          "리모와"
+        ]
+      },
+      {
+        "id": "OB-zLCONFljy56894",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1118.153452,
+          "y": 1792.084,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1153.436614,
+              "y": 1712.5251
+            },
+            {
+              "x": 1082.870289,
+              "y": 1699.324
+            },
+            {
+              "x": 1082.870289,
+              "y": 1884.844
+            },
+            {
+              "x": 1153.436614,
+              "y": 1884.844
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-vMDL4LoLl0289"
+        ],
+        "names_ko": [
+          "부쉐론"
+        ]
+      },
+      {
+        "id": "OB-_-fvdMboS26896",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1298.240564,
+          "y": 1760.5318,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1317.343114,
+              "y": 1736.7201
+            },
+            {
+              "x": 1254.831514,
+              "y": 1730.015
+            },
+            {
+              "x": 1254.831514,
+              "y": 1791.0486
+            },
+            {
+              "x": 1341.649614,
+              "y": 1791.0486
+            },
+            {
+              "x": 1341.649614,
+              "y": 1739.0613
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-Ek5WaJIDm4448"
+        ],
+        "names_ko": [
+          "토즈"
+        ]
+      },
+      {
+        "id": "OB-M76jMnJG9i6896",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1392.620964,
+          "y": 1858.85035,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1408.377614,
+              "y": 1745.0828
+            },
+            {
+              "x": 1365.057714,
+              "y": 1741.3159
+            },
+            {
+              "x": 1341.649614,
+              "y": 1739.0613
+            },
+            {
+              "x": 1341.649614,
+              "y": 1791.0486
+            },
+            {
+              "x": 1341.649614,
+              "y": 1978.6394
+            },
+            {
+              "x": 1443.592314,
+              "y": 1978.5981
+            },
+            {
+              "x": 1443.535814,
+              "y": 1844.907
+            },
+            {
+              "x": 1443.535814,
+              "y": 1745.0828
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-QBYQxxAAR6145"
+        ],
+        "names_ko": [
+          "버버리"
+        ]
+      },
+      {
+        "id": "OB-rourmomKR06897",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1906.501864,
+          "y": 1735.2157,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2018.631014,
+              "y": 1679.3447
+            },
+            {
+              "x": 1794.373014,
+              "y": 1726.6028
+            },
+            {
+              "x": 1794.372714,
+              "y": 1791.0867
+            },
+            {
+              "x": 2018.631014,
+              "y": 1791.0867
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-ycohmIvZf5120"
+        ],
+        "names_ko": [
+          "크리스챤 디올 (남/여)"
+        ]
+      },
+      {
+        "id": "OB-VdYOQp-MM5333",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1399.043364,
+          "y": 1560.0852,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1365.355614,
+              "y": 1537.3655
+            },
+            {
+              "x": 1365.355614,
+              "y": 1579.6177
+            },
+            {
+              "x": 1432.731114,
+              "y": 1582.8049
+            },
+            {
+              "x": 1432.731114,
+              "y": 1537.3655
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-pn6YzQkUO9153"
+        ],
+        "names_ko": [
+          "메종 마르지엘라 퍼퓸"
+        ]
+      },
+      {
+        "id": "OB-h8dL3_xhme5337",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1315.647464,
+          "y": 1558.4916,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1265.939314,
+              "y": 1537.3655
+            },
+            {
+              "x": 1265.939314,
+              "y": 1567.2314
+            },
+            {
+              "x": 1365.355614,
+              "y": 1579.6177
+            },
+            {
+              "x": 1365.355614,
+              "y": 1537.3655
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-8G-7fm4tJ6353"
+        ],
+        "names_ko": [
+          "시슬리"
+        ]
+      },
+      {
+        "id": "OB-pNr8RieUQA5337",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1399.043364,
+          "y": 1502.907,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1432.731114,
+              "y": 1537.3655
+            },
+            {
+              "x": 1432.731114,
+              "y": 1468.4485
+            },
+            {
+              "x": 1365.355614,
+              "y": 1468.4485
+            },
+            {
+              "x": 1365.355614,
+              "y": 1537.3655
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-psrx-E2QU1009"
+        ],
+        "names_ko": [
+          "디올 뷰티"
+        ]
+      },
+      {
+        "id": "OB-zUlg5Kl7uz5338",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1399.043364,
+          "y": 1432.9767,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1365.355614,
+              "y": 1400.1797
+            },
+            {
+              "x": 1365.355614,
+              "y": 1443.5627
+            },
+            {
+              "x": 1365.355614,
+              "y": 1468.4485
+            },
+            {
+              "x": 1432.731114,
+              "y": 1468.4485
+            },
+            {
+              "x": 1432.731114,
+              "y": 1397.5049
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-yZUm4etzn2289"
+        ],
+        "names_ko": [
+          "에스티 로더"
+        ]
+      },
+      {
+        "id": "OB--3id50z6yB5338",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1315.647464,
+          "y": 1425.2315,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1365.355614,
+              "y": 1400.1797
+            },
+            {
+              "x": 1265.939314,
+              "y": 1414.5965
+            },
+            {
+              "x": 1265.939314,
+              "y": 1450.2833
+            },
+            {
+              "x": 1365.355614,
+              "y": 1450.2833
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-lNZXXqB2j7833"
+        ],
+        "names_ko": [
+          "입생로랑"
+        ]
+      },
+      {
+        "id": "OB-8_CpYNTBLG5339",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1229.642764,
+          "y": 1490.8893,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1265.939314,
+              "y": 1468.4485
+            },
+            {
+              "x": 1193.374914,
+              "y": 1468.4485
+            },
+            {
+              "x": 1193.346214,
+              "y": 1513.3301
+            },
+            {
+              "x": 1265.939314,
+              "y": 1513.3296
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO--SDnFDwCT3864"
+        ],
+        "names_ko": [
+          "프라다 뷰티"
+        ]
+      },
+      {
+        "id": "OB-W3gSdGSkR_5339",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1229.628614,
+          "y": 1441.5516,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1265.939314,
+              "y": 1414.6547
+            },
+            {
+              "x": 1193.317914,
+              "y": 1427.1147
+            },
+            {
+              "x": 1193.374914,
+              "y": 1468.4485
+            },
+            {
+              "x": 1265.939314,
+              "y": 1468.4485
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-qBb4RVzVr4193"
+        ],
+        "names_ko": [
+          "아르마니 뷰티"
+        ]
+      },
+      {
+        "id": "OB-SoTjbj3R3r5339",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1229.642764,
+          "y": 1540.3178,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1193.346214,
+              "y": 1513.3301
+            },
+            {
+              "x": 1193.346214,
+              "y": 1557.3308
+            },
+            {
+              "x": 1265.939314,
+              "y": 1567.306
+            },
+            {
+              "x": 1265.939314,
+              "y": 1513.3296
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-E8I-xAJ145321"
+        ],
+        "names_ko": [
+          "아쿠아 디 파르마"
+        ]
+      },
+      {
+        "id": "OB-RbXFG8BWvm0270",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1773.784154,
+          "y": 1488.027491,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1646.235511,
+              "y": 1328.610376
+            },
+            {
+              "x": 1719.478212,
+              "y": 1333.814419
+            },
+            {
+              "x": 1817.90909,
+              "y": 1355.557119
+            },
+            {
+              "x": 1901.332798,
+              "y": 1443.44612
+            },
+            {
+              "x": 1901.332798,
+              "y": 1530.960118
+            },
+            {
+              "x": 1835.653189,
+              "y": 1616.473577
+            },
+            {
+              "x": 1766.115568,
+              "y": 1632.873286
+            },
+            {
+              "x": 1707.896937,
+              "y": 1640.852958
+            },
+            {
+              "x": 1646.235511,
+              "y": 1647.444607
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-H9EW5K6NS2833"
+        ],
+        "names_ko": [
+          "루이비통"
+        ]
+      },
+      {
+        "id": "OB--pIFchSBh3502",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1061.99284,
+          "y": 1408.2382,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1030.225291,
+              "y": 1384.9609
+            },
+            {
+              "x": 1030.225291,
+              "y": 1436.4865
+            },
+            {
+              "x": 1093.760389,
+              "y": 1419.7039
+            },
+            {
+              "x": 1047.65519,
+              "y": 1379.9899
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-Gf_NsQZzV8544"
+        ],
+        "names_ko": [
+          "마티에 프리미에르"
+        ]
+      },
+      {
+        "id": "OB-uRDgLuRn9g3504",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1079.315052,
+          "y": 1391.8899,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1110.974914,
+              "y": 1364.0759
+            },
+            {
+              "x": 1047.65519,
+              "y": 1379.9899
+            },
+            {
+              "x": 1093.760389,
+              "y": 1419.7039
+            },
+            {
+              "x": 1110.974914,
+              "y": 1412.1483
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-CSZWZOZm_7000"
+        ],
+        "names_ko": [
+          "쿠오카"
+        ]
+      },
+      {
+        "id": "OB-9VwVox8etM3505",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1399.948764,
+          "y": 1351.6367,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1367.166414,
+              "y": 1330.0122
+            },
+            {
+              "x": 1367.166414,
+              "y": 1377.6058
+            },
+            {
+              "x": 1432.731114,
+              "y": 1373.4587
+            },
+            {
+              "x": 1432.731114,
+              "y": 1325.6676
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-B6vMKNxDm8009"
+        ],
+        "names_ko": [
+          "MAC"
+        ]
+      },
+      {
+        "id": "OB-SJj2P-bPL5559",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 762.241452,
+          "y": 1837.055943,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 850.986141,
+              "y": 1865.439735
+            },
+            {
+              "x": 850.986141,
+              "y": 1808.672151
+            },
+            {
+              "x": 673.496763,
+              "y": 1808.672151
+            },
+            {
+              "x": 673.496763,
+              "y": 1865.439735
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-KUcsEB8l37533"
+        ],
+        "names_ko": [
+          "스킨 케어룸"
+        ]
+      },
+      {
+        "id": "OB-ZLIwO3Xvm9967",
+        "attribute_code": "OB-FIXED_FACILITY",
+        "passable": false,
+        "position": {
+          "x": 2270.368343,
+          "y": 890.576498,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2255.368343,
+              "y": 875.576498
+            },
+            {
+              "x": 2255.368343,
+              "y": 905.576498
+            },
+            {
+              "x": 2285.368343,
+              "y": 905.576498
+            },
+            {
+              "x": 2285.368343,
+              "y": 875.576498
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-1GQgwcc4B6958"
+        ],
+        "names_ko": [
+          "5호선 여의나루역"
+        ]
+      },
+      {
+        "id": "OB-jpTVvS7265477",
+        "attribute_code": "OB-FIXED_FACILITY",
+        "passable": false,
+        "position": {
+          "x": 2268.90944,
+          "y": 2154.616198,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2253.90944,
+              "y": 2139.616198
+            },
+            {
+              "x": 2253.90944,
+              "y": 2169.616198
+            },
+            {
+              "x": 2283.90944,
+              "y": 2169.616198
+            },
+            {
+              "x": 2283.90944,
+              "y": 2139.616198
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-r52wm2fcn1150"
+        ],
+        "names_ko": [
+          "9호선, 5호선 여의도역"
+        ]
+      },
+      {
+        "id": "OB-LGExsdB6y4421",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 762.220086,
+          "y": 1890.800108,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 850.937872,
+              "y": 1916.262526
+            },
+            {
+              "x": 850.937872,
+              "y": 1865.33769
+            },
+            {
+              "x": 673.5023,
+              "y": 1865.33769
+            },
+            {
+              "x": 673.5023,
+              "y": 1916.262526
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-07DinRnZI3871"
+        ],
+        "names_ko": [
+          "커뮤니티 라운지"
+        ]
+      },
+      {
+        "id": "OB-FDoohfgVj6883",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1235.284381,
+          "y": 1370.735449,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1201.415831,
+              "y": 1350.197049
+            },
+            {
+              "x": 1201.415831,
+              "y": 1398.185749
+            },
+            {
+              "x": 1269.152931,
+              "y": 1391.273749
+            },
+            {
+              "x": 1269.152931,
+              "y": 1343.285149
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-LkwW7ARVY5105"
+        ],
+        "names_ko": [
+          "탬버린즈"
+        ]
+      },
+      {
+        "id": "OB-Z5c_mrw3N89335",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 906.977844,
+          "y": 1732.484131,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 960.076904,
+              "y": 1668.13269
+            },
+            {
+              "x": 918.605103,
+              "y": 1656.390991
+            },
+            {
+              "x": 853.419617,
+              "y": 1656.38855
+            },
+            {
+              "x": 853.836792,
+              "y": 1808.579712
+            },
+            {
+              "x": 960.536072,
+              "y": 1808.579102
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-HO4Szxple8130"
+        ],
+        "names_ko": [
+          "펜디"
+        ]
+      },
+      {
+        "id": "OB-gxdRbsUKPu9337",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1034.954437,
+          "y": 1777.377033,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1054.38147,
+              "y": 1690.651123
+            },
+            {
+              "x": 1021.071472,
+              "y": 1680.97229
+            },
+            {
+              "x": 987.038635,
+              "y": 1669.910072
+            },
+            {
+              "x": 987.038635,
+              "y": 1884.843994
+            },
+            {
+              "x": 1082.870239,
+              "y": 1884.843994
+            },
+            {
+              "x": 1082.870239,
+              "y": 1699.323975
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-aNOI0qviT9257"
+        ],
+        "names_ko": [
+          "불가리"
+        ]
+      },
+      {
+        "id": "OB-vIl-j5zwtA9339",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1669.435303,
+          "y": 1854.327209,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1706.0,
+              "y": 1736.720093
+            },
+            {
+              "x": 1660.5,
+              "y": 1741.0
+            },
+            {
+              "x": 1606.0,
+              "y": 1744.5
+            },
+            {
+              "x": 1575.5,
+              "y": 1744.5
+            },
+            {
+              "x": 1575.5,
+              "y": 1844.906982
+            },
+            {
+              "x": 1590.5,
+              "y": 1844.906982
+            },
+            {
+              "x": 1590.5,
+              "y": 1978.639404
+            },
+            {
+              "x": 1677.13562,
+              "y": 1978.639404
+            },
+            {
+              "x": 1677.13562,
+              "y": 1791.08667
+            },
+            {
+              "x": 1763.369873,
+              "y": 1791.08667
+            },
+            {
+              "x": 1763.370605,
+              "y": 1730.015015
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-zo0B7h0Ci1073"
+        ],
+        "names_ko": [
+          "프라다"
+        ]
+      },
+      {
+        "id": "OB-7WLbH7PmIw9344",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 2258.076897,
+          "y": 1824.258173,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2263.800049,
+              "y": 1774.400024
+            },
+            {
+              "x": 2273.5,
+              "y": 1764.899902
+            },
+            {
+              "x": 2169.909648,
+              "y": 1669.876819
+            },
+            {
+              "x": 2169.453843,
+              "y": 1801.999937
+            },
+            {
+              "x": 2197.927002,
+              "y": 1802.010986
+            },
+            {
+              "x": 2197.927002,
+              "y": 1978.639404
+            },
+            {
+              "x": 2346.677734,
+              "y": 1978.639526
+            },
+            {
+              "x": 2346.699951,
+              "y": 1856.099976
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-nwmgi9vgb5269"
+        ],
+        "names_ko": [
+          "페라가모"
+        ]
+      },
+      {
+        "id": "OB-lgCDuHRT3l9345",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 2107.127537,
+          "y": 1735.557608,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2168.655098,
+              "y": 1669.115217
+            },
+            {
+              "x": 2045.599976,
+              "y": 1669.115217
+            },
+            {
+              "x": 2045.599976,
+              "y": 1802.0
+            },
+            {
+              "x": 2168.655098,
+              "y": 1801.999936
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-FmmYZib575409"
+        ],
+        "names_ko": [
+          "반클리프아펠"
+        ]
+      },
+      {
+        "id": "OB-uf152_fQdp9351",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 2219.020986,
+          "y": 1160.919018,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 2347.677612,
+              "y": 997.415161
+            },
+            {
+              "x": 2347.677856,
+              "y": 1126.703796
+            },
+            {
+              "x": 2199.422974,
+              "y": 1282.41156
+            },
+            {
+              "x": 2156.821006,
+              "y": 1324.423973
+            },
+            {
+              "x": 2092.17875,
+              "y": 1323.499695
+            },
+            {
+              "x": 2090.364115,
+              "y": 1191.024122
+            },
+            {
+              "x": 2199.422974,
+              "y": 1191.024122
+            },
+            {
+              "x": 2199.422974,
+              "y": 1140.15728
+            },
+            {
+              "x": 2229.971069,
+              "y": 1140.157898
+            },
+            {
+              "x": 2229.971069,
+              "y": 997.414063
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-xVTcQys5A8977"
+        ],
+        "names_ko": [
+          "셀린느"
+        ]
+      },
+      {
+        "id": "OB-W-aKOu0O-4453",
+        "attribute_code": "OB-OTHER_FACILITIES",
+        "passable": false,
+        "position": {
+          "x": 1386.518352,
+          "y": 1075.434027,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1343.721824,
+              "y": 1050.521293
+            },
+            {
+              "x": 1429.31488,
+              "y": 1050.521293
+            },
+            {
+              "x": 1429.31488,
+              "y": 1100.346761
+            },
+            {
+              "x": 1343.721824,
+              "y": 1100.346761
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-U6hZ2idzw9372"
+        ],
+        "names_ko": [
+          "투어리스트 데스크 서비스 - 캐리어 보관 서비스"
+        ]
+      },
+      {
+        "id": "OB-CedZwDOdIS7346",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 830.260315,
+          "y": 1274.668396,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 752.171692,
+              "y": 1225.336792
+            },
+            {
+              "x": 751.080811,
+              "y": 1240.371338
+            },
+            {
+              "x": 747.597229,
+              "y": 1252.298218
+            },
+            {
+              "x": 740.630127,
+              "y": 1269.084229
+            },
+            {
+              "x": 731.485718,
+              "y": 1284.544922
+            },
+            {
+              "x": 719.293335,
+              "y": 1299.122314
+            },
+            {
+              "x": 702.075012,
+              "y": 1316.509155
+            },
+            {
+              "x": 702.075012,
+              "y": 1324.0
+            },
+            {
+              "x": 920.000427,
+              "y": 1324.0
+            },
+            {
+              "x": 958.445618,
+              "y": 1311.826294
+            },
+            {
+              "x": 958.445618,
+              "y": 1225.338867
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-XE5AyvOY-6217"
+        ],
+        "names_ko": [
+          "발렌시아가"
+        ]
+      },
+      {
+        "id": "OB-MBSge8kIoB7347",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1231.577515,
+          "y": 1601.533875,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1194.398804,
+              "y": 1575.793091
+            },
+            {
+              "x": 1194.398804,
+              "y": 1627.274658
+            },
+            {
+              "x": 1268.756226,
+              "y": 1589.062378
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-ABijlzm397680"
+        ],
+        "names_ko": [
+          "크리드"
+        ]
+      },
+      {
+        "id": "OB-VVpKun8g_U7348",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1231.577515,
+          "y": 1614.901367,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1194.398804,
+              "y": 1627.274658
+            },
+            {
+              "x": 1268.756226,
+              "y": 1640.740356
+            },
+            {
+              "x": 1268.756226,
+              "y": 1589.062378
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-EIdQCH0YT6586"
+        ],
+        "names_ko": [
+          "오휘/후"
+        ]
+      },
+      {
+        "id": "OB-z5rTphgIDw7348",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1316.147461,
+          "y": 1356.074856,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1282.27887,
+              "y": 1338.999931
+            },
+            {
+              "x": 1350.015991,
+              "y": 1380.061768
+            },
+            {
+              "x": 1350.016052,
+              "y": 1332.087944
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-NKL2Noskp0569"
+        ],
+        "names_ko": [
+          "나스"
+        ]
+      },
+      {
+        "id": "OB-KGwBEwc_t_7348",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1316.14743,
+          "y": 1362.986843,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1282.27887,
+              "y": 1338.999931
+            },
+            {
+              "x": 1282.278931,
+              "y": 1386.973755
+            },
+            {
+              "x": 1350.015991,
+              "y": 1380.061768
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-QDhLZPwn-9734"
+        ],
+        "names_ko": [
+          "구찌 뷰티"
+        ]
+      },
+      {
+        "id": "OB-B1Wqr4XUI6331",
+        "attribute_code": "OB-SHOPPING",
+        "passable": false,
+        "position": {
+          "x": 1744.297336,
+          "y": 1190.237647,
+          "z": 0.0
+        },
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            {
+              "x": 1800.56573,
+              "y": 1149.082573
+            },
+            {
+              "x": 1687.341966,
+              "y": 1136.111248
+            },
+            {
+              "x": 1687.341966,
+              "y": 1235.304219
+            },
+            {
+              "x": 1801.252706,
+              "y": 1244.364046
+            }
+          ]
+        },
+        "poi_ids": [
+          "PO-zSLxgiZPp0753"
+        ],
+        "names_ko": [
+          "레페토"
+        ]
+      }
+    ]
+  },
+  "extraction_status": "official_map_synced_manual_image_labels_untrusted"
 }
