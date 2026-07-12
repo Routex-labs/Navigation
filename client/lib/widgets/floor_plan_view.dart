@@ -1,11 +1,23 @@
 import 'dart:math';
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../core/api_config.dart';
 import '../models/floor_plan.dart';
+
+/// maplibre_gl은 web/android/iOS만 지원한다(패키지 자체 pubspec에 명시된
+/// 플랫폼 목록). Windows/Linux/macOS 데스크톱에서 `flutter run`으로 띄우면
+/// 플러그인이 대체 구현을 찾지 못해 알아보기 힘든
+/// "TargetPlatform.windows is not yet supported by the maps plugin" 텍스트를
+/// 그대로 그리므로, 그 대신 원인이 분명한 안내를 보여준다.
+const _mapSupportedNativePlatforms = {TargetPlatform.android, TargetPlatform.iOS};
+
+bool get _isMapSupportedOnThisPlatform =>
+    kIsWeb || _mapSupportedNativePlatforms.contains(defaultTargetPlatform);
 
 const _tileSourceId = 'floor-tiles';
 const _routeSourceId = 'floor-route';
@@ -62,11 +74,15 @@ class _FloorPlanViewState extends State<FloorPlanView> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_isMapSupportedOnThisPlatform) {
+      return const _UnsupportedPlatformNotice();
+    }
     return MapLibreMap(
       styleString: _initialStyle,
       initialCameraPosition: CameraPosition(
         target: _initialCenter(widget.floorPlan),
         zoom: 18,
+        bearing: _straighteningBearing(widget.floorPlan.footprint),
       ),
       onMapCreated: (controller) => _controller = controller,
       onStyleLoadedCallback: _onStyleLoaded,
@@ -239,6 +255,8 @@ class _FloorPlanViewState extends State<FloorPlanView> {
       east = east > point.longitude ? east : point.longitude;
     }
 
+    // newLatLngBounds always resets bearing/tilt to 0, so the straightening
+    // rotation has to be re-applied after the bounds fit.
     await controller.moveCamera(
       CameraUpdate.newLatLngBounds(
         LatLngBounds(
@@ -250,6 +268,9 @@ class _FloorPlanViewState extends State<FloorPlanView> {
         right: 24,
         bottom: 24,
       ),
+    );
+    await controller.moveCamera(
+      CameraUpdate.bearingTo(_straighteningBearing(footprint)),
     );
   }
 
@@ -342,6 +363,65 @@ class _FloorPlanViewState extends State<FloorPlanView> {
 
   static LatLng _toMapLibreLatLng(ll.LatLng point) {
     return LatLng(point.latitude, point.longitude);
+  }
+
+  /// 건물 외곽선의 실제 방위각(진북 기준)과 화면(북쪽=위) 사이의 어긋남만큼
+  /// 카메라를 회전시켜서, 실좌표(WGS84) 데이터는 그대로 두고 화면에는 건물이
+  /// 반듯하게(축에 맞춰) 보이도록 하는 bearing을 계산한다.
+  ///
+  /// 외곽선에서 가장 긴 변의 진북 기준 방위각을 구해 90으로 나눈 나머지를
+  /// 쓴다 — 그 나머지만큼 카메라를 돌리면 그 변이 화면에서 수평/수직에 맞춰진다.
+  static double _straighteningBearing(List<ll.LatLng> footprint) {
+    if (footprint.length < 2) return 0.0;
+
+    final meanLatRad = footprint.map((p) => p.latitude).reduce((a, b) => a + b) /
+        footprint.length *
+        (pi / 180);
+    final cosLat = cos(meanLatRad);
+
+    var longestLength = -1.0;
+    var longestBearingDeg = 0.0;
+    for (var i = 0; i < footprint.length; i++) {
+      final p1 = footprint[i];
+      final p2 = footprint[(i + 1) % footprint.length];
+      final dx = (p2.longitude - p1.longitude) * cosLat;
+      final dy = p2.latitude - p1.latitude;
+      final length = sqrt(dx * dx + dy * dy);
+      if (length > longestLength) {
+        longestLength = length;
+        longestBearingDeg = atan2(dx, dy) * 180 / pi;
+      }
+    }
+
+    return longestBearingDeg % 90;
+  }
+}
+
+class _UnsupportedPlatformNotice extends StatelessWidget {
+  const _UnsupportedPlatformNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return const ColoredBox(
+      color: Color(0xFFF3F1EF),
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.map_outlined, size: 40, color: Colors.black45),
+              SizedBox(height: 12),
+              Text(
+                '실내 지도는 웹 브라우저 또는 모바일 앱에서만 볼 수 있어요.\n'
+                'Windows 데스크톱 앱에서는 아직 지원하지 않아요.',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
