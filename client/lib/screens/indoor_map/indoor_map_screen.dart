@@ -22,6 +22,10 @@ class _IndoorMapScreenState extends State<IndoorMapScreen> {
   FloorPlan? _floorPlan;
   StorePolygon? _selectedStore;
 
+  /// 백엔드 연결 실패 시 사용자에게 보여줄 메시지. null이면 정상 상태.
+  /// 이게 없으면 fetch 예외가 조용히 삼켜져 로딩 스피너가 영원히 멈추지 않는다.
+  String? _error;
+
   @override
   void initState() {
     super.initState();
@@ -29,26 +33,43 @@ class _IndoorMapScreenState extends State<IndoorMapScreen> {
   }
 
   Future<void> _loadBuilding() async {
-    final building = await buildingRepository.getBuilding(demoBuildingId);
-    if (!mounted) return;
-
-    final selectedFloor =
-        building != null && building.floors.isNotEmpty ? building.floors.first : null;
     setState(() {
-      _building = building;
-      _selectedFloor = selectedFloor;
-      _loading = false;
+      _loading = true;
+      _error = null;
     });
-    if (selectedFloor != null) await _loadFloorPlan(selectedFloor);
+    try {
+      final building = await buildingRepository.getBuilding(demoBuildingId);
+      if (!mounted) return;
+
+      final selectedFloor =
+          building != null && building.floors.isNotEmpty ? building.floors.first : null;
+      setState(() {
+        _building = building;
+        _selectedFloor = selectedFloor;
+        _loading = false;
+      });
+      if (selectedFloor != null) await _loadFloorPlan(selectedFloor);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = '지도를 불러오지 못했습니다. 서버 연결을 확인해주세요.';
+      });
+    }
   }
 
   /// 목적지 검색·경로 안내 화면(route_guide_screen.dart)과 동일하게
   /// buildingRepository를 통해 층 지도를 받아온다 — 데이터 소스를 하나로
   /// 맞춰야 실내 지도에서 본 것과 경로 안내 화면의 지도가 어긋나지 않는다.
   Future<void> _loadFloorPlan(String floor) async {
-    final geojson = await buildingRepository.getFloorGeoJson(demoBuildingId, floor);
-    if (!mounted || geojson == null) return;
-    setState(() => _floorPlan = FloorPlan.fromJson(geojson));
+    try {
+      final geojson = await buildingRepository.getFloorGeoJson(demoBuildingId, floor);
+      if (!mounted || geojson == null) return;
+      setState(() => _floorPlan = FloorPlan.fromJson(geojson));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = '지도를 불러오지 못했습니다. 서버 연결을 확인해주세요.');
+    }
   }
 
   void _selectFloor(String floor) {
@@ -74,7 +95,7 @@ class _IndoorMapScreenState extends State<IndoorMapScreen> {
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
-                : _buildBody(),
+                : (_error != null ? _buildError(_error!) : _buildBody()),
           ),
           _BottomBar(
             selectedStore: _selectedStore,
@@ -85,6 +106,27 @@ class _IndoorMapScreenState extends State<IndoorMapScreen> {
             },
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildError(String message) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.wifi_off, size: 40, color: Colors.black45),
+            const SizedBox(height: 12),
+            Text(message, textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            OutlinedButton(
+              onPressed: _loadBuilding,
+              child: const Text('다시 시도'),
+            ),
+          ],
+        ),
       ),
     );
   }

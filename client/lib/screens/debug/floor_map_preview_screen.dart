@@ -35,6 +35,7 @@ class _FloorMapPreviewScreenState extends State<FloorMapPreviewScreen> {
   bool _routeLoading = false;
   final _searchController = TextEditingController();
   String _query = '';
+  String? _error;
 
   @override
   void initState() {
@@ -52,17 +53,23 @@ class _FloorMapPreviewScreenState extends State<FloorMapPreviewScreen> {
   }
 
   Future<void> _load() async {
-    final geojson = await _repository.getFloorGeoJson(_buildingId, _floorName);
-    if (!mounted || geojson == null) return;
+    setState(() => _error = null);
+    try {
+      final geojson = await _repository.getFloorGeoJson(_buildingId, _floorName);
+      if (!mounted || geojson == null) return;
 
-    final floorPlan = FloorPlan.fromJson(geojson);
-    final startStore =
-        floorPlan.stores.where((store) => store.name == _startStoreName).firstOrNull;
-    setState(() {
-      _floorPlan = floorPlan;
-      _startPoint = startStore?.centroid ?? _fallbackStartPoint(floorPlan);
-      _startNodeId = startStore?.entranceNodeId;
-    });
+      final floorPlan = FloorPlan.fromJson(geojson);
+      final startStore =
+          floorPlan.stores.where((store) => store.name == _startStoreName).firstOrNull;
+      setState(() {
+        _floorPlan = floorPlan;
+        _startPoint = startStore?.centroid ?? _fallbackStartPoint(floorPlan);
+        _startNodeId = startStore?.entranceNodeId;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = '지도를 불러오지 못했습니다. 서버 연결을 확인해주세요.');
+    }
   }
 
   /// 발렌시아가를 못 찾으면(데이터 변경 등) 건물 외곽 중심을 임시 시작점으로 쓴다.
@@ -119,11 +126,26 @@ class _FloorMapPreviewScreenState extends State<FloorMapPreviewScreen> {
   @override
   Widget build(BuildContext context) {
     final floorPlan = _floorPlan;
+    final error = _error;
     return Scaffold(
       appBar: AppBar(title: const Text('더현대 서울 평면도 미리보기')),
-      body: floorPlan == null
-          ? const Center(child: CircularProgressIndicator())
-          : _buildBody(floorPlan),
+      body: error != null
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(error, textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
+                    OutlinedButton(onPressed: _load, child: const Text('다시 시도')),
+                  ],
+                ),
+              ),
+            )
+          : (floorPlan == null
+              ? const Center(child: CircularProgressIndicator())
+              : _buildBody(floorPlan)),
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
