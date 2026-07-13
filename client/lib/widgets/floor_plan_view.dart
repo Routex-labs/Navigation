@@ -48,6 +48,7 @@ class FloorPlanView extends StatefulWidget {
     this.currentLocation,
     this.destination,
     this.routePoints = const [],
+    this.interactive = true,
   });
 
   final String buildingId;
@@ -63,6 +64,12 @@ class FloorPlanView extends StatefulWidget {
 
   /// 시작점→목적지 경로선. 2개 미만이면 그리지 않는다.
   final List<ll.LatLng> routePoints;
+
+  /// false면 스크롤/줌/회전 제스처를 전부 끈다. 웹에서는 MapLibre 지도가
+  /// 실제 DOM 캔버스라 그 위에 떠 있는 바텀시트를 스크롤해도 마우스 휠
+  /// 이벤트가 새어나가 지도가 같이 움직일 수 있다 — 시트가 열려 있는
+  /// 동안은 상위(MapShellScreen)가 이 값을 false로 내려 막는다.
+  final bool interactive;
 
   @override
   State<FloorPlanView> createState() => _FloorPlanViewState();
@@ -91,6 +98,11 @@ class _FloorPlanViewState extends State<FloorPlanView> {
       myLocationEnabled: false,
       logoEnabled: false,
       attributionButtonPosition: AttributionButtonPosition.bottomRight,
+      scrollGesturesEnabled: widget.interactive,
+      zoomGesturesEnabled: widget.interactive,
+      rotateGesturesEnabled: widget.interactive,
+      tiltGesturesEnabled: widget.interactive,
+      dragEnabled: widget.interactive,
     );
   }
 
@@ -106,6 +118,13 @@ class _FloorPlanViewState extends State<FloorPlanView> {
     }
     if (oldWidget.routePoints != widget.routePoints) {
       _updateRouteSource();
+      // 경로가 새로 생기면(이전엔 없다가 이번에 생김) 경로 전체가 화면에
+      // 들어오도록 카메라를 자동으로 줌아웃한다. 이미 경로가 있는 상태에서
+      // 갱신될 때는(예: PDR 위치가 계속 바뀌는 경우) 다시 맞추지 않는다 —
+      // 사용자가 지도를 보는 중에 카메라가 계속 튀면 방해가 된다.
+      if (widget.routePoints.length >= 2 && oldWidget.routePoints.length < 2) {
+        _fitToRouteBounds(widget.routePoints);
+      }
     }
     if (oldWidget.currentLocation != widget.currentLocation ||
         oldWidget.destination != widget.destination) {
@@ -305,7 +324,48 @@ class _FloorPlanViewState extends State<FloorPlanView> {
     _styleReady = true;
     await _updateRouteSource();
     await _updateMarkersSource();
-    await _fitToFootprint();
+    if (widget.routePoints.length >= 2) {
+      await _fitToRouteBounds(widget.routePoints);
+    } else {
+      await _fitToFootprint();
+    }
+  }
+
+  /// 경로 전체(출발점~도착점)가 화면 안에 들어오도록 카메라를 맞춘다.
+  /// `newLatLngBounds`는 카메라 tilt/bearing을 0(정북)으로 되돌리므로,
+  /// [_fitToFootprint]가 쓰는 건물 정렬 회전은 경로를 보여주는 동안은 잠시
+  /// 포기한다 — 경로 전체를 보여주는 목적이 건물 정렬보다 우선한다.
+  Future<void> _fitToRouteBounds(List<ll.LatLng> points) async {
+    final controller = _controller;
+    if (controller == null || points.length < 2) return;
+
+    var minLat = points.first.latitude;
+    var maxLat = points.first.latitude;
+    var minLng = points.first.longitude;
+    var maxLng = points.first.longitude;
+    for (final point in points) {
+      minLat = min(minLat, point.latitude);
+      maxLat = max(maxLat, point.latitude);
+      minLng = min(minLng, point.longitude);
+      maxLng = max(maxLng, point.longitude);
+    }
+
+    // 출발점과 도착점이 사실상 같은 좌표면 경계 상자 폭이 0에 가까워져
+    // 줌 계산이 발산한다 — 이 경우엔 화면에 맞출 "경로"랄 게 없으니 건너뛴다.
+    if ((maxLat - minLat).abs() < 1e-6 && (maxLng - minLng).abs() < 1e-6) return;
+
+    await controller.moveCamera(
+      CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+          southwest: LatLng(minLat, minLng),
+          northeast: LatLng(maxLat, maxLng),
+        ),
+        left: 40,
+        top: 110,
+        right: 40,
+        bottom: 180,
+      ),
+    );
   }
 
   /// 화면(뷰포트) 크기에 맞춰 건물이 최대한 크게(=매장 라벨이 최대한 많이

@@ -18,12 +18,18 @@ class IndoorMapBody extends StatefulWidget {
     super.key,
     required this.buildingId,
     this.bottomOverlayHeight = 140,
+    this.onRouteVisibleChanged,
   });
 
   final String buildingId;
 
-  /// 하단 공용 바가 차지하는 높이만큼 ETA/매장 카드를 그 위에 띄운다.
+  /// 하단 공용 바가 차지하는 높이만큼 매장 카드를 그 위에 띄운다.
+  /// (ETA 카드는 화면 최하단에 직접 붙으므로 이 값을 쓰지 않는다.)
   final double bottomOverlayHeight;
+
+  /// ETA 카드가 화면 최하단에 새로 나타나거나 사라질 때 호출된다.
+  /// 상위(MapShellScreen)가 이 값으로 하단 공용 바를 그 위로 띄운다.
+  final ValueChanged<bool>? onRouteVisibleChanged;
 
   @override
   State<IndoorMapBody> createState() => IndoorMapBodyState();
@@ -37,6 +43,14 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   StorePolygon? _selectedStore;
   IndoorRoute? _route;
   PoiSearchResult? _routeDestination;
+  bool _interactive = true;
+
+  /// 검색·길찾기 시트가 지도 위에 떠 있는 동안 지도 제스처를 꺼서, 시트를
+  /// 마우스 휠로 스크롤할 때 그 아래 지도까지 같이 움직이지 않게 한다.
+  void setInteractive(bool value) {
+    if (_interactive == value) return;
+    setState(() => _interactive = value);
+  }
 
   /// 백엔드 연결 실패 시 사용자에게 보여줄 메시지. null이면 정상 상태.
   /// 이게 없으면 fetch 예외가 조용히 삼켜져 로딩 스피너가 영원히 멈추지 않는다.
@@ -63,6 +77,14 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     setState(() {
       _loading = true;
       _error = null;
+      // 건물을 바꾸는 동안 이전 건물의 층 평면도가 남아있으면, 아직 로딩
+      // 중인데도 _buildBody가 "새 건물 ID + 이전 건물 평면도" 조합으로
+      // FloorPlanView를 그려버린다 — 그 상태로 지도 위젯이 한 번 초기
+      // 카메라를 잡아버리면(_fitToFootprint) 이후 진짜 평면도가 도착해도
+      // 다시 맞추지 않아 엉뚱한 위치를 보여준 채로 굳는다(햄버거로 건물
+      // 전환한 직후 지도가 빈 화면으로 보이는 원인). 새 평면도가 준비될
+      // 때까지는 로딩 스피너만 보이도록 확실히 비워둔다.
+      _floorPlan = null;
     });
     try {
       final building = await buildingRepository.getBuilding(widget.buildingId);
@@ -97,6 +119,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   }
 
   void _selectFloor(String floor) {
+    final hadRoute = _route != null;
     setState(() {
       _selectedFloor = floor;
       _floorPlan = null;
@@ -105,6 +128,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       _route = null;
       _routeDestination = null;
     });
+    if (hadRoute) widget.onRouteVisibleChanged?.call(false);
     _loadFloorPlan(floor);
   }
 
@@ -117,7 +141,11 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 
   /// 길찾기 시트에서 도착지를 고르면 호출된다. 목적지가 다른 층이면 그 층으로
   /// 먼저 전환한 뒤 최단 경로(다익스트라)를 조회해 지도 위에 표시한다.
-  Future<void> showRouteTo(PoiSearchResult destination) async {
+  ///
+  /// [origin]을 주면(매장 정보 시트의 "출발지로 설정") 그 매장의 입구 노드를
+  /// 시작점으로 쓰고, 없으면 기존처럼 현재 위치에서 가장 가까운 매장 입구를
+  /// 자동으로 고른다.
+  Future<void> showRouteTo(PoiSearchResult destination, {PoiSearchResult? origin}) async {
     if (destination.floor != _selectedFloor) {
       _selectFloor(destination.floor);
       await _loadFloorPlan(destination.floor);
@@ -125,10 +153,15 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     if (!mounted) return;
     final floorPlan = _floorPlan;
     if (floorPlan == null) return;
-    setState(() => _routeDestination = destination);
+    setState(() {
+      _routeDestination = destination;
+      // 새 목적지를 받을 때마다 초기화해서, 이번 경로가 계산되면 지도가
+      // 전체 경로에 맞춰 다시 줌아웃되게 한다(FloorPlanView의 null→값 전환).
+      _route = null;
+    });
 
     final endNodeId = destination.nodeId;
-    final startNodeId = _pickStartNodeId(floorPlan, excludingNodeId: endNodeId);
+    final startNodeId = origin?.nodeId ?? _pickStartNodeId(floorPlan, excludingNodeId: endNodeId);
     if (endNodeId == null || startNodeId == null) return;
 
     final route = await buildingRepository.getShortestRoute(
@@ -139,6 +172,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     );
     if (!mounted) return;
     setState(() => _route = route);
+    widget.onRouteVisibleChanged?.call(route != null);
   }
 
   /// PDR이 아직 없어 "현재 위치"를 알 수 없다. 임시로 층 평면도 중심에서
@@ -165,6 +199,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       _route = null;
       _routeDestination = null;
     });
+    widget.onRouteVisibleChanged?.call(false);
   }
 
   @override
@@ -224,6 +259,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           destination: routeDestination?.point,
           routePoints: route?.points ?? const [],
           onStoreSelected: (selected) => setState(() => _selectedStore = selected),
+          interactive: _interactive,
         ),
 
         Positioned(
@@ -239,16 +275,22 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 
         if (route != null && routeDestination != null)
           Positioned(
-            left: 12,
-            right: 12,
-            bottom: widget.bottomOverlayHeight,
-            child: EtaCard(
-              distanceMeters: route.distanceMeters,
-              minutes: (route.distanceMeters / _walkingSpeedMetersPerSecond / 60)
-                  .ceil()
-                  .clamp(1, 999),
-              label: '${routeDestination.name}까지',
-              onClose: _clearRoute,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: EtaCard(
+                  distanceMeters: route.distanceMeters,
+                  minutes: (route.distanceMeters / _walkingSpeedMetersPerSecond / 60)
+                      .ceil()
+                      .clamp(1, 999),
+                  label: '${routeDestination.name}까지',
+                  onClose: _clearRoute,
+                ),
+              ),
             ),
           )
         else if (store != null)
