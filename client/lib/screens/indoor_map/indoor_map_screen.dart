@@ -145,6 +145,9 @@ class _IndoorMapScreenState extends State<IndoorMapScreen> {
       buildingId: demoBuildingId,
       floorName: _selectedFloor!,
       floorPlan: floorPlan,
+      // 실제 PDR 위치 연동 전까지, 실내 진입 시에도 "현재 위치" 아이콘이
+      // 화면에 보이도록 층 평면도 기준 근사 위치를 대신 쓴다.
+      currentLocation: floorPlan.approximateCurrentLocation(),
       onStoreSelected: (store) => setState(() => _selectedStore = store),
     );
   }

@@ -72,6 +72,25 @@ class FloorPlan {
   final List<StorePolygon> stores;
   final List<PoiMarker> pois;
 
+  /// 실내 위치 추정(PDR)이 아직 없어 실제 "현재 위치"를 모를 때 쓰는 임시
+  /// 근사치. 외곽선 중심 → 복도 시작점 → 첫 POI 순으로 계산 가능한 첫 값을
+  /// 쓴다. 셋 다 없으면 null(호출자가 별도 fallback을 쓴다).
+  /// 실제 PDR 위치 연동이 붙으면 이 자리를 대체한다.
+  LatLng? approximateCurrentLocation() {
+    if (footprint.isNotEmpty) {
+      final avgLat =
+          footprint.map((p) => p.latitude).reduce((a, b) => a + b) / footprint.length;
+      final avgLng =
+          footprint.map((p) => p.longitude).reduce((a, b) => a + b) / footprint.length;
+      return LatLng(avgLat, avgLng);
+    }
+    if (corridors.isNotEmpty && corridors.first.isNotEmpty) {
+      return corridors.first.first;
+    }
+    if (pois.isNotEmpty) return pois.first.point;
+    return null;
+  }
+
   factory FloorPlan.fromJson(Map<String, dynamic> json) {
     if (json.containsKey('footprint_wgs84') || json.containsKey('footprint_local_m')) {
       return _fromApiResponse(json);

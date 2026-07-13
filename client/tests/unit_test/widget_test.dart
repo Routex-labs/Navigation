@@ -309,6 +309,11 @@ void main() {
     expect(find.textContaining('현재 1F 위치'), findsOneWidget);
     expect(find.byType(FloorPlanView), findsOneWidget);
     expect(find.byIcon(Icons.layers), findsOneWidget);
+
+    // PDR이 아직 없어도, 실내 지도 진입 시 "현재 위치" 아이콘이 뜨도록
+    // 층 평면도 근사 위치가 FloorPlanView로 전달돼야 한다.
+    final floorPlanView = tester.widget<FloorPlanView>(find.byType(FloorPlanView));
+    expect(floorPlanView.currentLocation, isNotNull);
   });
 
   testWidgets('indoor map switches floor via the floor tabs', (

@@ -215,11 +215,74 @@ class _FloorPlanViewState extends State<FloorPlanView> {
     );
 
     await controller.addGeoJsonSource(_markersSourceId, _emptyFeatureCollection);
+
+    // 세 레이어를 kind별로 나누지 않고(레이어 filter는 웹 플랫폼에서 안정적으로
+    // 안 먹는 경우가 있었다), 기존에 이미 검증된 match 표현식(paint 속성 자체를
+    // kind로 분기)만으로 스타일을 나눈다 — 해당 kind가 아니면 반지름 0으로 숨긴다.
+    //
+    // 후광(halo): 현재 위치에서만 보이는 옅은 원 — "여기 있어요" 느낌.
     await controller.addCircleLayer(
       _markersSourceId,
-      'floor-markers-circle',
+      'floor-markers-halo',
       const CircleLayerProperties(
-        circleRadius: 8,
+        circleRadius: [
+          'match',
+          ['get', 'kind'],
+          'current',
+          20,
+          0,
+        ],
+        circleColor: '#6C3FE0',
+        circleOpacity: [
+          'match',
+          ['get', 'kind'],
+          'current',
+          0.15,
+          0,
+        ],
+      ),
+      enableInteraction: false,
+    );
+    // 받침(base): 현재 위치는 흰 원 + 보라 테두리, 목적지는 흰 원(테두리 없음).
+    await controller.addCircleLayer(
+      _markersSourceId,
+      'floor-markers-base',
+      const CircleLayerProperties(
+        circleRadius: [
+          'match',
+          ['get', 'kind'],
+          'current',
+          9,
+          'destination',
+          11,
+          0,
+        ],
+        circleColor: '#FFFFFF',
+        circleStrokeColor: '#6C3FE0',
+        circleStrokeWidth: [
+          'match',
+          ['get', 'kind'],
+          'current',
+          2.5,
+          0,
+        ],
+      ),
+      enableInteraction: false,
+    );
+    // 중심점(dot): 현재 위치는 보라, 목적지는 빨강 + 흰 테두리의 "핀" 느낌.
+    await controller.addCircleLayer(
+      _markersSourceId,
+      'floor-markers-dot',
+      const CircleLayerProperties(
+        circleRadius: [
+          'match',
+          ['get', 'kind'],
+          'current',
+          4,
+          'destination',
+          8,
+          0,
+        ],
         circleColor: [
           'match',
           ['get', 'kind'],
@@ -228,7 +291,13 @@ class _FloorPlanViewState extends State<FloorPlanView> {
           '#6C3FE0',
         ],
         circleStrokeColor: '#FFFFFF',
-        circleStrokeWidth: 2,
+        circleStrokeWidth: [
+          'match',
+          ['get', 'kind'],
+          'destination',
+          1.5,
+          0,
+        ],
       ),
       enableInteraction: false,
     );

@@ -81,7 +81,7 @@ class _RouteGuideScreenState extends State<RouteGuideScreen> {
   /// 가장 가까운 매장 입구 노드를 출발점으로 쓴다. 실제 PDR 위치 연동은
   /// M3~M4에서 이 자리를 대체한다.
   String? _pickStartNodeId(FloorPlan floorPlan, {String? excludingNodeId}) {
-    final origin = _footprintCenter(floorPlan) ?? _currentLocation();
+    final origin = floorPlan.approximateCurrentLocation() ?? _fallbackCenter;
     StorePolygon? nearest;
     double? nearestDistance;
     for (final store in floorPlan.stores) {
@@ -96,17 +96,6 @@ class _RouteGuideScreenState extends State<RouteGuideScreen> {
     return nearest?.entranceNodeId;
   }
 
-  LatLng? _footprintCenter(FloorPlan floorPlan) {
-    if (floorPlan.footprint.isEmpty) return null;
-    final avgLat =
-        floorPlan.footprint.map((p) => p.latitude).reduce((a, b) => a + b) /
-            floorPlan.footprint.length;
-    final avgLng =
-        floorPlan.footprint.map((p) => p.longitude).reduce((a, b) => a + b) /
-            floorPlan.footprint.length;
-    return LatLng(avgLat, avgLng);
-  }
-
   void _openBuildingInfo() {
     showModalBottomSheet(
       context: context,
@@ -119,13 +108,7 @@ class _RouteGuideScreenState extends State<RouteGuideScreen> {
   }
 
   LatLng _currentLocation() {
-    final floorPlan = _floorPlan;
-    if (floorPlan == null) return _fallbackCenter;
-    if (floorPlan.corridors.isNotEmpty && floorPlan.corridors.first.isNotEmpty) {
-      return floorPlan.corridors.first.first;
-    }
-    if (floorPlan.pois.isNotEmpty) return floorPlan.pois.first.point;
-    return _fallbackCenter;
+    return _floorPlan?.approximateCurrentLocation() ?? _fallbackCenter;
   }
 
   ({double distanceMeters, int minutes}) _etaFor(PoiSearchResult destination) {

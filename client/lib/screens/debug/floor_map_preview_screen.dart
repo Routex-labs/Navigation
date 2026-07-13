@@ -171,6 +171,10 @@ class _FloorMapPreviewScreenState extends State<FloorMapPreviewScreen> {
           floorPlan: floorPlan,
           onStoreSelected: _selectStore,
           routePoints: routePoints,
+          // 시작점(임시 현재 위치)과 선택 매장을 마커로도 표시해서,
+          // 경로선만 있을 때보다 출발/도착이 한눈에 구분되게 한다.
+          currentLocation: start,
+          destination: selected?.centroid,
         ),
         SafeArea(
           child: Padding(
