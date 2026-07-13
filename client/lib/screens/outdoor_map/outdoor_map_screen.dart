@@ -317,8 +317,24 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
                   child: LocationMarker(
                     mode: LocationMode.outdoor,
                     colorOverride: markerColor,
+                    // heading은 기기가 유효한 값을 못 줄 때 -1(또는 0)을 내려주는
+                    // 경우가 있어, 음수면 회전하지 않고 기본 방향을 유지한다.
+                    headingDegrees: (position != null && position.heading >= 0)
+                        ? position.heading
+                        : null,
                   ),
                 ),
+                // 경로의 실제 출발점. 대부분은 현재 위치와 같지만, 길찾기
+                // 시트에서 출발지를 직접 골랐을 때는 현재 위치와 달라질 수
+                // 있어 그 지점에 별도로 표시한다(너무 가까우면 위 마커와
+                // 겹치므로 생략).
+                if (route != null &&
+                    route.points.isNotEmpty &&
+                    const Distance().as(LengthUnit.Meter, route.points.first, center) > 5)
+                  Marker(
+                    point: route.points.first,
+                    child: const Icon(Icons.trip_origin, color: AppColors.success),
+                  ),
                 if (userDestination != null)
                   Marker(
                     point: userDestination,
