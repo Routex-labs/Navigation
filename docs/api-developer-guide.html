@@ -662,6 +662,41 @@ html:not([data-theme]) .icon-moon { display: none; }
 .map-info { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--fg-muted); margin: 6px 0 10px; min-height: 1.4em; }
 .map-info strong { color: var(--accent-hover); font-weight: 600; }
 .nm-node { cursor: pointer; }
+.map-loading, .map-error {
+  display: grid;
+  min-height: 280px;
+  place-items: center;
+  color: var(--fg-muted);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+}
+.map-error { color: var(--dg-red); }
+.map-feature { transition: opacity 0.12s; }
+.map-feature:hover { opacity: 0.72; }
+.store-route-controls {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin: 12px 0;
+}
+.store-route-controls label { color: var(--fg-muted); font-size: 12px; }
+.store-route-controls select {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-soft);
+  color: var(--fg-strong);
+  font: 13px 'Pretendard', sans-serif;
+}
+.store-route-arrow { align-self: center; color: var(--fg-subtle); padding-top: 18px; }
+@media (max-width: 850px) {
+  .store-route-controls { grid-template-columns: 1fr; }
+  .store-route-arrow { display: none; }
+}
 
 /* ===== 접이식 섹션 ===== */
 details.fold { margin: 6px 0 10px; border-bottom: 1px solid var(--border-soft); padding-bottom: 6px; }
@@ -736,6 +771,7 @@ details.fold[open] > summary::before { transform: rotate(90deg); }
       <a href="#architecture">내부 동작</a>
       <a href="#request-lifecycle">요청 생명주기</a>
       <a href="#route-computation">최단 경로 계산</a>
+      <a href="#worked-example">실행 예시 (출발→도착)</a>
       <a href="#data-model">데이터 모델</a>
       <a href="#node-map">노드 지도</a>
       <a href="#seed-pipeline">시드 파이프라인</a>
@@ -1260,6 +1296,140 @@ RouteResponse (node_ids, edge_ids, path_points, total_distance_m)</pre>
     </div>
       </div>
     </details>
+    <details class="fold" id="worked-example" open>
+      <summary>실행 예시 — 출발점→도착점 전 과정</summary>
+      <div class="fold-body">
+<p>
+  실제 값으로 한 번 따라가 봅니다. <strong>더현대 서울 1F</strong>에서
+  <strong>엘리베이터 EV1 앞</strong>에 서 있는 사용자가
+  <strong>"보테가 베네타"</strong> 매장까지 가는 시나리오입니다. 아래 모든 ID·좌표·거리는
+  실제 시드 데이터(<code>navigation_1f.json</code>)와 다익스트라 계산 결과 그대로입니다.
+</p>
+
+<h3 id="we-step0">0단계 · 도착점을 노드로 확정 (매장 검색)</h3>
+<p>
+  사용자는 좌표가 아니라 "보테가 베네타"라는 이름으로 목적지를 고릅니다.
+  매장 검색이 이미 <strong>진입 노드 ID</strong>를 돌려주므로 별도 변환이 필요 없습니다.
+</p>
+<pre><span class="label">bash</span><span class="tk-fn">curl</span> <span class="tk-str">"http://127.0.0.1:8000/buildings/thehyundai-seoul/stores?q=보테가"</span></pre>
+<pre><span class="label">json · 응답(발췌)</span>[
+  {
+    <span class="tk-prop">"id"</span>: <span class="tk-str">"store_000"</span>,
+    <span class="tk-prop">"floor_id"</span>: <span class="tk-str">"FL-soem999bnha10599"</span>,
+    <span class="tk-prop">"name"</span>: <span class="tk-str">"보테가 베네타"</span>,
+    <span class="tk-prop">"centroid_local_m"</span>: { <span class="tk-prop">"x"</span>: <span class="tk-num">10.051</span>, <span class="tk-prop">"y"</span>: <span class="tk-num">74.52</span> },
+    <span class="tk-prop">"entrance_local_m"</span>: { <span class="tk-prop">"x"</span>: <span class="tk-num">13.122</span>, <span class="tk-prop">"y"</span>: <span class="tk-num">64.434</span> },
+    <span class="tk-prop">"entrance_node_id"</span>: <span class="tk-str">"store_entrance_000"</span>   <span class="tk-cm">// ← 이게 도착 노드</span>
+  }
+]</pre>
+<p>
+  → <code>end_node_id = "store_entrance_000"</code> 로 확정됩니다.
+</p>
+
+<h3 id="we-step1">1단계 · 출발점</h3>
+<p>
+  사용자는 EV1 노드(<code>ND-6OEzy_zfT8980</code>, 좌표 <code>local_m {30.136, 21.074}</code>) 앞에 있습니다.
+  이 예시는 <strong>노드 ID로 바로 출발</strong>하는 현재 동작을 보여줍니다.
+  실제 위치(임의 <code>(x,y)</code> 좌표)에서 출발하려면 좌표를 가장 가까운 노드로 붙이는
+  <em>nearest-node 스냅 → by-point route</em> 단계가 필요하며, 이는 아직 계획 단계입니다
+  (하단 <strong>"임의 좌표에서 출발하려면"</strong> 참고).
+</p>
+
+<h3 id="we-step2">2단계 · 어떤 엔드포인트가 활성화되나</h3>
+<pre><span class="label">bash</span><span class="tk-fn">curl</span> <span class="tk-str">"http://127.0.0.1:8000/buildings/thehyundai-seoul/floors/1F/route\
+?start_node_id=ND-6OEzy_zfT8980&amp;end_node_id=store_entrance_000"</span></pre>
+<pre><span class="label">text · 내부 처리 경로</span>GET /buildings/thehyundai-seoul/floors/1F/route?start_node_id=…&amp;end_node_id=…
+  ▼  routers/buildings.py :: get_shortest_route()      ← 이 핸들러가 활성화
+  ▼  NavigationService(session).get_shortest_path()
+       ├─ Floor 'thehyundai-seoul/1F' 조회        (쿼리 1)
+       ├─ 1F Node 234개 조회                       (쿼리 2)
+       └─ 1F Edge 282개 조회                       (쿼리 3)
+  ▼  domain/dijkstra.find_shortest_path(nodes, edges, start, end)
+       └─ 9개 간선을 통과하는 최단 경로 발견
+  ▼  _build_path_points() : 간선 geometry를 하나의 선으로 연결
+  ▼  RouteResponse (200 OK)</pre>
+
+<h3 id="we-step3">3단계 · 경로가 어떻게 잡히나 (홉별 내역)</h3>
+<p>
+  EV1에서 출발해 복도 노드들을 거쳐 매장 입구까지 <strong>9개 간선, 총 57.99m</strong>.
+  마지막 <code>store_edge_000</code>은 복도 노드와 매장 입구가 같은 지점이라 길이 0m입니다.
+</p>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>#</th><th>간선</th><th>거리</th><th>누적</th><th>이동</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><code>edge_00000</code></td><td>12.26m</td><td>12.26m</td><td>EV1 → 복도</td></tr>
+      <tr><td>2</td><td><code>edge_00001</code></td><td>6.07m</td><td>18.33m</td><td>복도 → 복도</td></tr>
+      <tr><td>3</td><td><code>edge_00010</code></td><td>5.35m</td><td>23.67m</td><td>복도 → 복도</td></tr>
+      <tr><td>4</td><td><code>edge_00012</code></td><td>5.26m</td><td>28.93m</td><td>복도 → ES1(에스컬레이터)</td></tr>
+      <tr><td>5</td><td><code>edge_00100</code></td><td>5.02m</td><td>33.95m</td><td>ES1 → 복도</td></tr>
+      <tr><td>6</td><td><code>edge_00166</code></td><td>7.68m</td><td>41.63m</td><td>복도 → 복도</td></tr>
+      <tr><td>7</td><td><code>edge_00167</code></td><td>10.69m</td><td>52.32m</td><td>복도 → 복도</td></tr>
+      <tr><td>8</td><td><code>edge_00018</code></td><td>5.67m</td><td>57.99m</td><td>복도 → 매장 앞 복도</td></tr>
+      <tr><td>9</td><td><code>store_edge_000</code></td><td>0.00m</td><td>57.99m</td><td>복도 → 보테가 베네타 입구</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h3 id="we-step4">4단계 · 응답 (RouteResponse)</h3>
+<pre><span class="label">json · 200 OK</span>{
+  <span class="tk-prop">"start_node_id"</span>: <span class="tk-str">"ND-6OEzy_zfT8980"</span>,
+  <span class="tk-prop">"end_node_id"</span>:   <span class="tk-str">"store_entrance_000"</span>,
+  <span class="tk-prop">"path_found"</span>:    <span class="tk-num">true</span>,
+  <span class="tk-prop">"coordinate_system"</span>: <span class="tk-str">"local_m"</span>,
+  <span class="tk-prop">"total_distance_m"</span>: <span class="tk-num">57.994</span>,
+  <span class="tk-prop">"node_ids"</span>: [
+    <span class="tk-str">"ND-6OEzy_zfT8980"</span>, <span class="tk-str">"ND-8ZJEwbAW11243"</span>, <span class="tk-str">"ND-8Pt2zyMNg8851"</span>,
+    <span class="tk-str">"ND-GlfJ_zwwc9683"</span>, <span class="tk-str">"ND-kO6RMT9w39043"</span>, <span class="tk-str">"ND-AtD81yOed2354"</span>,
+    <span class="tk-str">"ND-3zJd-FVPp7018"</span>, <span class="tk-str">"ND-nF9Rakzif8490"</span>, <span class="tk-str">"ND-QCNbdWLZi7268"</span>,
+    <span class="tk-str">"store_entrance_000"</span>
+  ],
+  <span class="tk-prop">"edge_ids"</span>: [
+    <span class="tk-str">"edge_00000"</span>, <span class="tk-str">"edge_00001"</span>, <span class="tk-str">"edge_00010"</span>, <span class="tk-str">"edge_00012"</span>,
+    <span class="tk-str">"edge_00100"</span>, <span class="tk-str">"edge_00166"</span>, <span class="tk-str">"edge_00167"</span>, <span class="tk-str">"edge_00018"</span>,
+    <span class="tk-str">"store_edge_000"</span>
+  ],
+  <span class="tk-prop">"path_points"</span>: [
+    { <span class="tk-prop">"x"</span>: <span class="tk-num">30.136</span>, <span class="tk-prop">"y"</span>: <span class="tk-num">21.074</span> },  <span class="tk-cm">// EV1</span>
+    { <span class="tk-prop">"x"</span>: <span class="tk-num">30.128</span>, <span class="tk-prop">"y"</span>: <span class="tk-num">33.329</span> },
+    { <span class="tk-prop">"x"</span>: <span class="tk-num">24.42</span>,  <span class="tk-prop">"y"</span>: <span class="tk-num">35.396</span> },
+    { <span class="tk-prop">"x"</span>: <span class="tk-num">19.074</span>, <span class="tk-prop">"y"</span>: <span class="tk-num">35.396</span> },
+    { <span class="tk-prop">"x"</span>: <span class="tk-num">17.995</span>, <span class="tk-prop">"y"</span>: <span class="tk-num">40.542</span> },
+    { <span class="tk-prop">"x"</span>: <span class="tk-num">12.981</span>, <span class="tk-prop">"y"</span>: <span class="tk-num">40.387</span> },
+    { <span class="tk-prop">"x"</span>: <span class="tk-num">12.981</span>, <span class="tk-prop">"y"</span>: <span class="tk-num">48.067</span> },
+    { <span class="tk-prop">"x"</span>: <span class="tk-num">13.088</span>, <span class="tk-prop">"y"</span>: <span class="tk-num">58.759</span> },
+    { <span class="tk-prop">"x"</span>: <span class="tk-num">13.122</span>, <span class="tk-prop">"y"</span>: <span class="tk-num">64.434</span> }   <span class="tk-cm">// 보테가 베네타 입구</span>
+  ]
+}</pre>
+<p>
+  <code>path_points</code>가 지도에 그대로 찍으면 되는 좌표열입니다. 격자 기반으로 추출된
+  간선이라 꺾임이 다소 각지게 보일 수 있는데, <strong>부드럽게 그리는 것(스무딩)은
+  Flutter 렌더 단계의 역할</strong>이며 이 응답 값은 원본 그대로 유지됩니다.
+</p>
+
+<h3 id="we-step5">5단계 · Flutter가 그리기</h3>
+<p>
+  클라이언트는 <code>path_points</code>를 폴리라인으로 잇고, 필요하면 코너 라운딩/스플라인
+  보간으로 매끄럽게 그립니다. <code>node_ids</code>·<code>edge_ids</code>는 하이라이트나
+  "다음 안내"용, <code>total_distance_m</code>은 남은 거리 표시에 씁니다.
+</p>
+
+<h3 id="we-future">임의 좌표에서 출발하려면 (계획된 흐름)</h3>
+<p>
+  위 예시는 출발을 <strong>노드 ID</strong>로 줬습니다. 실제 실행에서 PDR/GPS가 주는 것은
+  노드가 아닌 임의 좌표이므로, 아래 두 단계를 추가로 만들 예정입니다
+  (설계·미결 질문은 <code>docs/routing-api-plan.md</code> 참고).
+</p>
+<pre><span class="label">text · 계획된 엔드포인트 (아직 미구현)</span><span class="tk-cm"># ① 좌표를 가장 가까운 그래프 노드로 스냅</span>
+GET /buildings/thehyundai-seoul/floors/1F/nearest-node?x=31.2&amp;y=20.5
+  → { "node_id": "ND-6OEzy_zfT8980", "offset_m": 1.14 }
+
+<span class="tk-cm"># ② 스냅을 내부에서 처리하고 한 번에 경로 반환</span>
+POST /buildings/thehyundai-seoul/floors/1F/route/by-point
+  { "start": { "x": 31.2, "y": 20.5 }, "end_node_id": "store_entrance_000" }
+  → 위 4단계와 동일한 RouteResponse</pre>
+      </div>
+    </details>
     <details class="fold" id="data-model" open>
       <summary>데이터 모델</summary>
       <div class="fold-body">
@@ -1347,16 +1517,136 @@ RouteResponse (node_ids, edge_ids, path_points, total_distance_m)</pre>
     <p>내부 컬럼명과 API 키는 다릅니다. DB의 <code>from_node_id</code>/<code>to_node_id</code>는 API에서 <code>from</code>/<code>to</code>로, <code>centroid_x_m</code>/<code>centroid_y_m</code>은 <code>centroid_local_m: {x, y}</code>로 노출됩니다. 이 변환은 <code>queries/</code>가 명시적으로 수행하며, Flutter 계약을 지키기 위해 <code>from_attributes=True</code> 같은 자동 매핑에 의존하지 않습니다.</p>
       </div>
     </details>
+    <details class="fold" id="graph-json-format" open>
+      <summary>저장 데이터 형식 (JSON)</summary>
+      <div class="fold-body">
+<p>
+        길찾기 그래프는 세 단계로 흐릅니다. <code>vector_maps/&lt;floor&gt;.json</code>(원재료:
+        매장 폴리곤·공식 지도)에서 <code>scripts/generate_navigation_floors.py</code>가
+        <code>navigation_&lt;floor&gt;.json</code>(그래프)을 뽑고, 이를 <code>seed_navigation.py</code>가
+        DB로, <code>build_api_guide_floor_data.py</code>가 뷰어 번들로 각각 적재합니다.
+        API를 만들 때 실제로 읽게 되는 것은 <strong><code>navigation_&lt;floor&gt;.json</code></strong>입니다.
+      </p>
+
+      <h3 id="graph-json-top">navigation_&lt;floor&gt;.json 최상위 구조</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>키</th><th>타입</th><th>내용</th></tr></thead>
+          <tbody>
+            <tr><td><code>meta</code></td><td>object</td><td>스키마 버전, 좌표계 변환(<code>coordinate_system</code>), <code>graph_status</code></td></tr>
+            <tr><td><code>building</code></td><td>object</td><td>건물·층 메타(<code>floor.level</code>), <code>footprint_local_m</code>, 면적/둘레</td></tr>
+            <tr><td><code>nodes</code></td><td>array</td><td>길찾기 정점 (아래 참조)</td></tr>
+            <tr><td><code>edges</code></td><td>array</td><td>정점을 잇는 간선 (가중치=거리)</td></tr>
+            <tr><td><code>stores</code></td><td>array</td><td>매장 — 이름으로 검색해 <code>entrance_node_id</code>로 경로 시작/끝을 정함</td></tr>
+            <tr><td><code>pois</code></td><td>array</td><td>화장실·급수대·시설 등 <em>비-그래프</em> 마커 (<code>linked_node_id</code>로 노드 참조)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 id="graph-json-node">node — 정점</h3>
+      <p><code>type</code>에 따라 의미가 갈립니다. <strong>엘리베이터·에스컬레이터는 그래프 노드</strong>(경로가 도달 가능)이고, 화장실 등은 <code>pois</code>에만 있습니다.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th><code>type</code></th><th>이름(<code>name</code>)</th><th>역할</th></tr></thead>
+          <tbody>
+            <tr><td><code>corridor</code></td><td>null</td><td>복도 정점·분기·매장 접근점</td></tr>
+            <tr><td><code>store_entrance</code></td><td>매장명</td><td>매장 입구 — 경로 출발/도착으로 선택되는 노드</td></tr>
+            <tr><td><code>elevator</code></td><td>EV 이름</td><td>엘리베이터 (수직 이동)</td></tr>
+            <tr><td><code>escalator</code></td><td>ES 이름</td><td>에스컬레이터 (수직 이동)</td></tr>
+          </tbody>
+        </table>
+      </div>
+<pre>{
+  "id": "3f-store-entrance-000",
+  "type": "store_entrance",
+  "name": "산드로",                         // corridor는 null
+  "position": {
+    "source":  { "x": 118.0, "y": 309.0 },  // 원본 이미지 픽셀 (없으면 null)
+    "local_m": { "x": 12.76, "y": 66.71 },  // 건물 전체 미터 좌표 ← 라우팅·DB가 쓰는 값
+    "wgs84":   null                          // 위경도 (미보유)
+  }
+}</pre>
+      <p class="note">수직 이동 모델링 향후 과제: 에스컬레이터는 상행/하행이 방향으로 갈리고(방향별 노드), 엘리베이터는 양방향 단일이라, 지금의 단일 <code>escalator</code>/<code>elevator</code> 타입을 층간 라우팅 시 세분화할 예정입니다.</p>
+
+      <h3 id="graph-json-edge">edge — 간선</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>필드</th><th>타입</th><th>내용</th></tr></thead>
+          <tbody>
+            <tr><td><code>from</code> / <code>to</code></td><td>string</td><td>연결하는 두 노드 <code>id</code></td></tr>
+            <tr><td><code>length_m</code></td><td>number</td><td>간선 거리(미터) — 다익스트라 <strong>가중치</strong></td></tr>
+            <tr><td><code>bidirectional</code></td><td>boolean</td><td>양방향 여부 (현재 전부 true)</td></tr>
+            <tr><td><code>geometry_local_m</code></td><td>array&lt;{x,y}&gt;</td><td>실제 통로 형상 폴리라인 — 곡선은 여러 점, 거리는 각 구간 합</td></tr>
+          </tbody>
+        </table>
+      </div>
+<pre>{
+  "id": "3f-corridor-edge-003",
+  "from": "3f-corridor-003", "to": "3f-corridor-004",
+  "length_m": 2.22, "bidirectional": true,
+  "geometry_local_m": [ { "x": 16.73, "y": 38.72 }, { "x": 17.31, "y": 36.58 } ]
+}</pre>
+
+      <h3 id="graph-json-store">store · poi</h3>
+<pre>// store — 매장(목적지)
+{
+  "id": "3f-store-OB-…", "name": "산드로",
+  "centroid":        { "local_m": { "x": 8.41, "y": 69.84 } },
+  "entrance_local_m": { "x": 12.76, "y": 66.71 },
+  "entrance_node_id": "3f-store-entrance-000",   // ← nodes의 store_entrance를 가리킴
+  "polygon_local_m":  [ { "x": …, "y": … }, … ], // 매장 외곽 폴리곤
+  "source": { "official_object_id": "OB-…", "vector_feature_id": "store-area-3f-058",
+              "feature_match_distance_px": 6.69 }
+}
+
+// poi — 비-그래프 마커 (화장실·급수대·시설)
+{ "id": "3f-poi-025", "type": "facility", "name": "…",
+  "position": { "local_m": { "x": 159.58, "y": 24.07 } },
+  "linked_node_id": "3f-corridor-068" }           // 가장 가까운 복도 노드</pre>
+
+      <h3 id="graph-json-coords">좌표계</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>좌표계</th><th>단위</th><th>쓰이는 곳</th></tr></thead>
+          <tbody>
+            <tr><td><code>local_m</code></td><td>미터</td><td>라우팅·DB·거리 계산의 기준 (1F에서 확립한 건물 전체 좌표)</td></tr>
+            <tr><td><code>source</code></td><td>이미지 픽셀</td><td>원본 도면 PNG 위 위치 (일부 노드만 보유)</td></tr>
+            <tr><td><code>meta.coordinate_system.navigation_to_vector</code></td><td>아핀</td><td><code>local_m → 이미지 픽셀</code> 변환식. 도면 위에 그래프를 겹쳐 그릴 때 사용</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 id="graph-json-bundle">뷰어 번들 (api-developer-guide-floor-data.js)</h3>
+      <p>이 문서의 인터랙티브 뷰어 전용입니다. <code>build_api_guide_floor_data.py</code>가
+        navigation JSON을 읽어 좌표를 <strong>이미지 픽셀로 투영</strong>하되(위 아핀), 거리는 미터로 남깁니다.
+        API 구현에는 원본 <code>navigation_&lt;floor&gt;.json</code>을 쓰세요.</p>
+<pre>window.API_GUIDE_FLOOR_DATA = {
+  vectors: { "3f": { features:[…], viewBox:{min_x,min_y,width,height} } },   // 도면 배경
+  graphs:  { "3f": {
+    distance_unit: "m",
+    nodes: [ { id, type, x, y, name } ],                 // x,y = 이미지 픽셀
+    edges: [ { id, from, to, length_m, bidirectional, geometry:[[x,y],…] } ]
+  } }
+}</pre>
+      </div>
+    </details>
     <details class="fold" id="node-map" open>
       <summary>노드 지도</summary>
       <div class="fold-body">
-<p>시드된 실제 <code>nodes</code>·<code>edges</code> 데이터로 그린 인터랙티브 길찾기 그래프입니다.
-층 버튼으로 지도를 전환하고, 체크박스로 표시할 노드 타입을 고르세요.
+<p>더현대 서울 전 층 JSON과 시드된 실제 <code>nodes</code>·<code>edges</code> 데이터를 확인하는 인터랙티브 뷰어입니다.
+층 버튼으로 지도를 전환하고, 체크박스로 표시할 노드 또는 지도 피처 타입을 고르세요.
 지도에서 <strong>노드를 클릭하면 출발점 → 도착점</strong>이 차례로 지정되고,
-문서에 내장된 다익스트라가 서버와 동일한 규칙으로 최단 경로를 계산해 표시합니다.</p>
+문서에 내장된 다익스트라가 서버와 동일한 규칙으로 최단 경로를 계산해 표시합니다.
+아직 노드·간선이 없는 층은 JSON의 <code>footprint/store/amenity</code> 도형과 데이터 상태를 대신 표시합니다.</p>
 
 <div id="nodeMapWidget">
   <div class="map-toolbar" id="nmFloors"></div>
+  <div class="store-route-controls">
+    <label>출발 매장<select id="nmStartStore" aria-label="출발 매장"></select></label>
+    <span class="store-route-arrow">→</span>
+    <label>도착 매장<select id="nmEndStore" aria-label="도착 매장"></select></label>
+    <button class="map-btn" id="nmRouteStores">매장 경로 찾기</button>
+  </div>
   <div class="type-filters" id="nmTypes"></div>
   <div class="map-toolbar">
     <button class="map-btn" id="nmAll">모두 표시</button>
@@ -1708,8 +1998,49 @@ RouteResponse (node_ids, edge_ids, path_points, total_distance_m)</pre>
   Navigation API Documentation · FastAPI + SQLAlchemy 2.0
 </footer>
 
+<script src="api-developer-guide-floor-data.js"></script>
 <script>
 const NAV_DATA = [{"key":"FL-soem999bnha10599","label":"더현대 서울 1F","building":"thehyundai-seoul","floor":"1F","nodes":[{"id":"ND-6OEzy_zfT8980","t":"elevator","x":30.14,"y":21.07,"n":"EV1"},{"id":"ND-8ZJEwbAW11243","t":"junction","x":30.13,"y":33.33,"n":"NODE"},{"id":"ND-np4qQSEjM2412","t":"corridor","x":37.46,"y":31.2,"n":"NODE"},{"id":"ND-s5Wxtj-y16044","t":"junction","x":68.64,"y":26.03,"n":"NODE"},{"id":"ND-M9EBIIyAu8179","t":"junction","x":77.02,"y":25.5,"n":"NODE"},{"id":"ND-8Pt2zyMNg8851","t":"corridor","x":24.42,"y":35.4,"n":"NODE"},{"id":"ND-GlfJ_zwwc9683","t":"junction","x":19.07,"y":35.4,"n":"NODE"},{"id":"ND-pYcsFRnrP0515","t":"junction","x":12.98,"y":35.4,"n":"NODE"},{"id":"ND-QCNbdWLZi7268","t":"junction","x":13.12,"y":64.43,"n":"NODE"},{"id":"ND-TnFpEXPsv2380","t":"junction","x":18.86,"y":64.44,"n":"NODE"},{"id":"ND-pcbOsXX3I4524","t":"junction","x":23.81,"y":64.44,"n":"NODE"},{"id":"ND-YbQ2RtGEt6052","t":"corridor","x":27.68,"y":64.44,"n":"NODE"},{"id":"ND-HqQVZXVvT9332","t":"junction","x":30.04,"y":64.44,"n":"NODE"},{"id":"ND-vT4MNbhZY1236","t":"corridor","x":30.04,"y":75.69,"n":"NODE"},{"id":"ND-KBSvN8TDk5531","t":"junction","x":83.3,"y":72.49,"n":"NODE"},{"id":"ND-J1ww7CrVS4131","t":"corridor","x":89.0,"y":52.08,"n":"NODE"},{"id":"ND-n10BJN9pK5619","t":"corridor","x":89.0,"y":49.7,"n":"NODE"},{"id":"ND-OBzjbJhAj6899","t":"junction","x":89.0,"y":36.47,"n":"NODE"},{"id":"ND-zPIR1Xlr78364","t":"junction","x":83.53,"y":25.28,"n":"NODE"},{"id":"ND-WK2fgePom3964","t":"junction","x":123.88,"y":30.59,"n":"NODE"},{"id":"ND-DoBQb2bU_6172","t":"corridor","x":128.71,"y":32.1,"n":"NODE"},{"id":"ND-FofkBxzrM1212","t":"junction","x":138.72,"y":34.84,"n":"NODE"},{"id":"ND-CY7QOEB_J4717","t":"junction","x":140.45,"y":34.84,"n":"NODE"},{"id":"ND-dwvi-_GRh5900","t":"elevator","x":140.45,"y":18.16,"n":"EV2"},{"id":"ND-58LsWHSpG1772","t":"corridor","x":146.54,"y":34.84,"n":"NODE"},{"id":"ND-EVk8jv5jc4867","t":"junction","x":152.88,"y":34.84,"n":"NODE"},{"id":"ND-RZC7y1YgT7443","t":"corridor","x":156.14,"y":31.58,"n":"NODE"},{"id":"ND-yiJ6BrK7c8492","t":"dead_end","x":160.06,"y":27.66,"n":"NODE"},{"id":"ND-iLRFLACW-3909","t":"corridor","x":152.88,"y":45.91,"n":"NODE"},{"id":"ND-Gc0mcAvj_5011","t":"corridor","x":152.88,"y":48.17,"n":"NODE"},{"id":"ND-ttYxOC4dv6148","t":"junction","x":152.88,"y":65.51,"n":"NODE"},{"id":"ND-5LBgeDifkg7059","t":"dead_end","x":160.99,"y":73.25,"n":"NODE"},{"id":"ND-lDnK_A1iy3883","t":"junction","x":151.08,"y":65.58,"n":"NODE"},{"id":"ND-Re4ooPmAA4876","t":"corridor","x":141.1,"y":65.51,"n":"NODE"},{"id":"ND-vSJC7awfK7603","t":"junction","x":139.14,"y":65.51,"n":"NODE"},{"id":"ND-uTCudaGza9139","t":"junction","x":135.71,"y":65.51,"n":"NODE"},{"id":"ND-XdYNzc8jt7260","t":"corridor","x":100.16,"y":71.79,"n":"NODE"},{"id":"ND-HXaBphHsA1916","t":"escalator","x":140.13,"y":58.34,"n":"ES3-UP(TO2F)"},{"id":"ND-Wpb0-uW9D3316","t":"escalator","x":138.04,"y":58.34,"n":"ES3-UP(FRB1)"},{"id":"ND-2Nd0fUp-J5580","t":"escalator","x":137.85,"y":40.7,"n":"ES3-DN(FR2F)"},{"id":"ND-UGoSau5nz6732","t":"escalator","x":139.83,"y":40.7,"n":"ES3-DN(TOB1)"},{"id":"ND-DFWgcx5bA9876","t":"escalator","x":80.14,"y":40.37,"n":"ES2-UP(FRB1)"},{"id":"ND-k5XlGr56f2388","t":"escalator","x":81.86,"y":40.37,"n":"ES2-UP(TO2F)"},{"id":"ND-knl6QTsvh7604","t":"escalator","x":84.73,"y":40.38,"n":"ES2-1-DN(FR2F)"},{"id":"ND-k4q-72JBh9364","t":"escalator","x":86.44,"y":40.38,"n":"ES2-1-DN(TOB1)"},{"id":"ND-HxBpFmmz-2675","t":"corridor","x":89.0,"y":61.86,"n":"NODE"},{"id":"ND-ahEBpWpgh3396","t":"junction","x":89.0,"y":60.14,"n":"NODE"},{"id":"ND-_YE0dEdnd8675","t":"junction","x":85.58,"y":60.13,"n":"NODE"},{"id":"ND-xAMaYWopJ0051","t":"junction","x":81.02,"y":60.13,"n":"NODE"},{"id":"ND-p7mzWvDi61268","t":"escalator","x":81.86,"y":57.96,"n":"ES2-DN(TOB1)"},{"id":"ND-XNAu6NkFC2236","t":"escalator","x":80.04,"y":57.96,"n":"ES2-DN(FR2F)"},{"id":"ND-amnSSqfMq7059","t":"escalator","x":86.51,"y":57.9,"n":"ES2-1-UP(TO2F)"},{"id":"ND-XIMqJJoY18387","t":"escalator","x":84.56,"y":57.9,"n":"ES2-1-UP(FRB1)"},{"id":"ND-ha9dxgWqR0843","t":"junction","x":77.17,"y":60.14,"n":"NODE"},{"id":"ND-s4suRKntD8867","t":"junction","x":77.17,"y":57.96,"n":"NODE"},{"id":"ND-zFpXIZXDO9891","t":"corridor","x":77.17,"y":55.64,"n":"NODE"},{"id":"ND-pLiGzopE_1163","t":"corridor","x":77.17,"y":50.86,"n":"NODE"},{"id":"ND-2NzytmibA2290","t":"corridor","x":77.17,"y":43.96,"n":"NODE"},{"id":"ND-h6EtLVcbD4908","t":"junction","x":77.17,"y":39.02,"n":"NODE"},{"id":"ND-klytMZIr76444","t":"corridor","x":77.17,"y":35.39,"n":"NODE"},{"id":"ND-kO6RMT9w39043","t":"escalator","x":18.0,"y":40.54,"n":"ES1-DN(FR2F)"},{"id":"ND-vNkzxL7bF9707","t":"escalator","x":19.99,"y":40.54,"n":"ES1-DN(TOB1)"},{"id":"ND-dxqdNpg1c4213","t":"escalator","x":19.95,"y":58.72,"n":"ES1-UP(TO2F)"},{"id":"ND-5_0BwXc265244","t":"escalator","x":17.97,"y":58.74,"n":"ES1-UP(FRB1)"},{"id":"ND-pMJU3A7D86715","t":"junction","x":51.24,"y":34.21,"n":"NODE"},{"id":"ND-dPqNERNT61659","t":"corridor","x":51.24,"y":49.05,"n":"NODE"},{"id":"ND-AfHsn-cll3891","t":"junction","x":51.24,"y":41.26,"n":"NODE"},{"id":"ND-CWq1vjgVv5115","t":"corridor","x":51.24,"y":44.51,"n":"NODE"},{"id":"ND--mEEYOk4l1195","t":"corridor","x":56.06,"y":40.73,"n":"NODE"},{"id":"ND-bkGkpNmj-3635","t":"corridor","x":64.47,"y":39.66,"n":"NODE"},{"id":"ND-JIOQjAF9a0523","t":"corridor","x":44.56,"y":42.35,"n":"NODE"},{"id":"ND-Z2sDCqsob3715","t":"corridor","x":39.59,"y":44.15,"n":"NODE"},{"id":"ND-Ocw6ypX_T5019","t":"junction","x":35.25,"y":45.75,"n":"NODE"},{"id":"ND-QFYbS1nGa5315","t":"junction","x":51.24,"y":57.0,"n":"NODE"},{"id":"ND-gq38k9H1F4579","t":"corridor","x":35.23,"y":48.57,"n":"NODE"},{"id":"ND-HDZ_0vEJT6091","t":"corridor","x":35.23,"y":50.72,"n":"NODE"},{"id":"ND-RC-uKQe0do6915","t":"corridor","x":35.25,"y":51.84,"n":"NODE"},{"id":"ND-Fp41GwLML9243","t":"corridor","x":51.24,"y":52.0,"n":"NODE"},{"id":"ND-_wJfSHEatf0043","t":"corridor","x":51.24,"y":53.93,"n":"NODE"},{"id":"ND-XJziATUz07428","t":"corridor","x":83.66,"y":10.63,"n":"NODE"},{"id":"ND-B2dugn7h08876","t":"dead_end","x":71.47,"y":10.63,"n":"NODE"},{"id":"ND-z3ngosK-18332","t":"junction","x":120.64,"y":38.71,"n":"NODE"},{"id":"ND-_7BU71r7l0244","t":"corridor","x":125.17,"y":44.55,"n":"NODE"},{"id":"ND-PJDoXxjPs1444","t":"junction","x":125.97,"y":48.73,"n":"NODE"},{"id":"ND-APwvbDrci3554","t":"junction","x":135.19,"y":48.73,"n":"NODE"},{"id":"ND-sdV7EVwcG4612","t":"corridor","x":135.19,"y":40.66,"n":"NODE"},{"id":"ND-AciBpxUB62684","t":"junction","x":121.07,"y":61.04,"n":"NODE"},{"id":"ND-nCJCCVGxA3692","t":"corridor","x":125.02,"y":53.73,"n":"NODE"},{"id":"ND-dt9ogFZtb9907","t":"junction","x":135.19,"y":58.4,"n":"NODE"},{"id":"ND-3GD4Z-gGj7627","t":"junction","x":151.08,"y":58.34,"n":"NODE"},{"id":"ND-zDrGMyfX08731","t":"junction","x":152.88,"y":58.34,"n":"NODE"},{"id":"ND-KjeW7UMz08930","t":"junction","x":83.31,"y":67.2,"n":"NODE"},{"id":"ND-714c8z7wb5954","t":"junction","x":22.1,"y":40.54,"n":"NODE"},{"id":"ND-oKqhWfdTk6658","t":"corridor","x":22.1,"y":48.88,"n":"NODE"},{"id":"ND-RGNGncH2k8860","t":"junction","x":22.07,"y":58.65,"n":"NODE"},{"id":"ND-vIuNH30UO2042","t":"junction","x":30.18,"y":53.01,"n":"NODE"},{"id":"ND-XqklFUK425843","t":"corridor","x":30.19,"y":49.21,"n":"NODE"},{"id":"ND-z8BzuiZdf9258","t":"corridor","x":28.39,"y":44.63,"n":"NODE"},{"id":"ND-u5zolO_VO0483","t":"junction","x":30.19,"y":45.77,"n":"NODE"},{"id":"ND-PHj1hhyDg5740","t":"junction","x":33.97,"y":53.01,"n":"NODE"},{"id":"ND-KHcP8FR944500","t":"corridor","x":39.36,"y":54.38,"n":"NODE"},{"id":"ND-i7sLiauPs8278","t":"corridor","x":48.03,"y":56.49,"n":"NODE"},{"id":"ND-eVkG7veBm0890","t":"corridor","x":55.6,"y":57.78,"n":"NODE"},{"id":"ND-xvPkIDw1w1994","t":"corridor","x":60.08,"y":58.38,"n":"NODE"},{"id":"ND-xm-zsHxUm2746","t":"corridor","x":63.96,"y":58.82,"n":"NODE"},{"id":"ND-LIhhbGrQE1554","t":"corridor","x":68.48,"y":59.24,"n":"NODE"},{"id":"ND-8uo9t_LZg3858","t":"corridor","x":70.47,"y":59.41,"n":"NODE"},{"id":"ND-sLRY3D1Yj4706","t":"corridor","x":73.11,"y":59.67,"n":"NODE"},{"id":"ND-YA3LtgPpG1826","t":"corridor","x":135.71,"y":84.83,"n":"NODE"},{"id":"ND-qpqxeP12C2601","t":"corridor","x":140.74,"y":84.83,"n":"NODE"},{"id":"ND-yXLBfQ---3497","t":"elevator","x":140.74,"y":91.56,"n":"EV3"},{"id":"ND-yinh2VAvd9411","t":"corridor","x":29.99,"y":84.34,"n":"NODE"},{"id":"ND-WCvsig2if1283","t":"elevator","x":27.27,"y":88.4,"n":"EV4"},{"id":"ND-AtD81yOed2354","t":"junction","x":12.98,"y":40.39,"n":"NODE"},{"id":"ND-3zJd-FVPp7018","t":"corridor","x":12.98,"y":48.07,"n":"NODE"},{"id":"ND-nF9Rakzif8490","t":"junction","x":13.09,"y":58.76,"n":"NODE"},{"id":"ND-YalFSQ-7V0482","t":"corridor","x":27.27,"y":87.01,"n":"NODE"},{"id":"ND-5c1Bx7olY7217","t":"corridor","x":27.27,"y":84.37,"n":"NODE"},{"id":"ND-NDqVVnKly3378","t":"junction","x":110.74,"y":71.04,"n":"NODE"},{"id":"ND-vsudfQQ9j9528","t":"junction","x":123.86,"y":68.44,"n":"NODE"},{"id":"ND-t7RjoBsdw8529","t":"junction","x":135.19,"y":65.51,"n":"NODE"},{"id":"ND-Rjtx6oXBk5643","t":"junction","x":77.08,"y":31.1,"n":"NODE"},{"id":"ND-lUAioyVJ97616","t":"corridor","x":72.44,"y":31.37,"n":"NODE"},{"id":"ND-rZ91rfxFD0473","t":"junction","x":68.48,"y":31.8,"n":"NODE"},{"id":"ND-wY_RYLctK6585","t":"junction","x":68.57,"y":39.22,"n":"NODE"},{"id":"ND-YlwZA3Eng6889","t":"corridor","x":64.12,"y":32.37,"n":"NODE"},{"id":"ND-vaGRD3YSs8585","t":"corridor","x":55.73,"y":33.54,"n":"NODE"},{"id":"ND-xGu0gmm8u4505","t":"corridor","x":47.51,"y":34.77,"n":"NODE"},{"id":"ND-qVtyHsxck8257","t":"corridor","x":40.71,"y":36.03,"n":"NODE"},{"id":"ND-5eq_NYZU-9577","t":"corridor","x":37.16,"y":36.83,"n":"NODE"},{"id":"ND-gZnYoVX4C0889","t":"junction","x":35.09,"y":37.35,"n":"NODE"},{"id":"ND-msMa6nlgr2344","t":"corridor","x":29.88,"y":38.62,"n":"NODE"},{"id":"ND-3vZ7YnTGv1025","t":"junction","x":51.24,"y":28.2,"n":"NODE"},{"id":"ND-6SlOSPK_Z2753","t":"corridor","x":45.85,"y":29.38,"n":"NODE"},{"id":"ND-CMrIBfE8t9825","t":"junction","x":34.62,"y":66.11,"n":"NODE"},{"id":"ND-2xspp1VeW1599","t":"corridor","x":44.22,"y":68.34,"n":"NODE"},{"id":"ND-5Obvc9PpO3495","t":"junction","x":51.47,"y":70.02,"n":"NODE"},{"id":"ND-mjWf6RrkT4823","t":"junction","x":56.32,"y":70.87,"n":"NODE"},{"id":"ND-XgQtL0V-u0767","t":"junction","x":63.1,"y":71.72,"n":"NODE"},{"id":"ND-2r7P3AXJe2471","t":"corridor","x":71.46,"y":72.37,"n":"NODE"},{"id":"ND-3bw-ezBiS4719","t":"junction","x":77.09,"y":72.49,"n":"NODE"},{"id":"ND-LOWf9kinV6223","t":"corridor","x":28.34,"y":58.65,"n":"NODE"},{"id":"ND-SLi6A_k777367","t":"junction","x":33.76,"y":60.28,"n":"NODE"},{"id":"ND-y9c42z8Nm9663","t":"corridor","x":36.15,"y":60.64,"n":"NODE"},{"id":"ND-eb2xyjLk80767","t":"corridor","x":39.29,"y":61.48,"n":"NODE"},{"id":"ND-hAONRJm-y6264","t":"junction","x":51.38,"y":64.28,"n":"NODE"},{"id":"ND-M0vbjijvj8200","t":"corridor","x":55.27,"y":64.79,"n":"NODE"},{"id":"ND-RPPMFdnYk0640","t":"junction","x":63.62,"y":65.8,"n":"NODE"},{"id":"ND-QTZOxTYAN2776","t":"corridor","x":72.37,"y":66.8,"n":"NODE"},{"id":"ND-p-F1dDC9S5200","t":"junction","x":77.22,"y":67.11,"n":"NODE"},{"id":"ND--9qoaNWhd9455","t":"corridor","x":44.05,"y":62.76,"n":"NODE"},{"id":"ND-Skc0K7WGa0528","t":"corridor","x":47.86,"y":63.67,"n":"NODE"},{"id":"ND-J3ORkjQav4710","t":"corridor","x":95.94,"y":25.59,"n":"NODE"},{"id":"ND-Ogj7-mAZb6206","t":"junction","x":106.63,"y":26.77,"n":"NODE"},{"id":"ND-1nCirZhzw2550","t":"corridor","x":116.96,"y":28.91,"n":"NODE"},{"id":"ND-SuuMk45wT4846","t":"junction","x":88.87,"y":25.34,"n":"NODE"},{"id":"ND-6hnhMBxDc6158","t":"junction","x":88.97,"y":30.84,"n":"NODE"},{"id":"ND-nccG5gLEx0061","t":"dead_end","x":92.97,"y":30.84,"n":"NODE"},{"id":"ND-u1hBcVMgp5101","t":"corridor","x":110.47,"y":33.45,"n":"NODE"},{"id":"ND-o9XljztO36310","t":"corridor","x":117.08,"y":35.44,"n":"NODE"},{"id":"ND-T5eXUEb474238","t":"junction","x":88.94,"y":67.13,"n":"NODE"},{"id":"ND-EVGwY4nbP5326","t":"junction","x":88.94,"y":72.41,"n":"NODE"},{"id":"ND-AXlfpAVnW0662","t":"dead_end","x":93.1,"y":67.03,"n":"NODE"},{"id":"ND-0ZSJPAPvB3429","t":"corridor","x":110.5,"y":65.21,"n":"NODE"},{"id":"ND-u-WeJcqFr4902","t":"corridor","x":117.87,"y":63.66,"n":"NODE"},{"id":"ND-5G4d8pPn99219","t":"corridor","x":56.32,"y":88.0,"n":"NODE"},{"id":"ND-rxPtY47tv3572","t":"corridor","x":110.74,"y":87.48,"n":"NODE"},{"id":"ND-Jcu7MR0wA4631","t":"elevator","x":103.74,"y":87.48,"n":"EV6"},{"id":"ND-e4K01UMM07647","t":"dead_end","x":62.5,"y":88.0,"n":"EV5"},{"id":"ND-R9OtNLOZZ9866","t":"corridor","x":88.36,"y":2.44,"n":"NODE"},{"id":"ND-eNvFB4KrG5055","t":"corridor","x":5.04,"y":58.76,"n":"NODE"},{"id":"ND-B8JfkPLDE4485","t":"corridor","x":88.34,"y":7.85,"n":"NODE"},{"id":"ND-5iZ0py7438366","t":"corridor","x":83.3,"y":94.57,"n":"NODE"},{"id":"store_entrance_000","t":"store_entrance","x":13.12,"y":64.43,"n":"보테가 베네타"},{"id":"store_entrance_001","t":"store_entrance","x":30.04,"y":73.62,"n":"펜디"},{"id":"store_entrance_002","t":"store_entrance","x":30.02,"y":78.69,"n":"불가리"},{"id":"store_entrance_003","t":"store_entrance","x":56.32,"y":79.79,"n":"부쉐론"},{"id":"store_entrance_004","t":"store_entrance","x":56.32,"y":80.46,"n":"리모와"},{"id":"store_entrance_005","t":"store_entrance","x":56.32,"y":76.54,"n":"토즈"},{"id":"store_entrance_006","t":"store_entrance","x":62.5,"y":88.0,"n":"버버리"},{"id":"store_entrance_007","t":"store_entrance","x":30.14,"y":22.03,"n":"미우미우"},{"id":"store_entrance_008","t":"store_entrance","x":140.45,"y":18.16,"n":"셀린느"},{"id":"store_entrance_009","t":"store_entrance","x":71.47,"y":10.63,"n":"티파니앤코"},{"id":"store_entrance_010","t":"store_entrance","x":22.1,"y":49.33,"n":"샤넬 뷰티"},{"id":"store_entrance_011","t":"store_entrance","x":40.71,"y":36.03,"n":"쿠오카"},{"id":"store_entrance_012","t":"store_entrance","x":35.17,"y":41.27,"n":"마티에 프리미에르"},{"id":"store_entrance_013","t":"store_entrance","x":33.87,"y":56.42,"n":"톰포드 뷰티"},{"id":"store_entrance_014","t":"store_entrance","x":77.17,"y":43.62,"n":"에스티 로더"},{"id":"store_entrance_015","t":"store_entrance","x":51.24,"y":49.35,"n":"프라다 뷰티"},{"id":"store_entrance_016","t":"store_entrance","x":35.23,"y":48.02,"n":"조 말론 런던"},{"id":"store_entrance_017","t":"store_entrance","x":95.64,"y":25.57,"n":"로에베"},{"id":"store_entrance_018","t":"store_entrance","x":106.21,"y":26.72,"n":"오픈 준비중"},{"id":"store_entrance_019","t":"store_entrance","x":125.29,"y":52.32,"n":"루이비통"},{"id":"store_entrance_020","t":"store_entrance","x":123.7,"y":30.55,"n":"구찌"},{"id":"store_entrance_021","t":"store_entrance","x":51.24,"y":28.2,"n":"발렌티노"},{"id":"store_entrance_022","t":"store_entrance","x":152.88,"y":48.38,"n":"톰브라운"},{"id":"store_entrance_023","t":"store_entrance","x":152.88,"y":37.38,"n":"생로랑"},{"id":"store_entrance_024","t":"store_entrance","x":152.88,"y":62.65,"n":"몽클레르"},{"id":"store_entrance_025","t":"store_entrance","x":17.04,"y":35.4,"n":"발렌시아가"},{"id":"store_entrance_026","t":"store_entrance","x":103.74,"y":87.48,"n":"프라다"},{"id":"store_entrance_027","t":"store_entrance","x":37.65,"y":53.95,"n":"메종 프란시스 커정"},{"id":"store_entrance_028","t":"store_entrance","x":38.98,"y":61.4,"n":"프레 데릭말"},{"id":"store_entrance_029","t":"store_entrance","x":46.3,"y":56.07,"n":"산타 마리아 노벨라"},{"id":"store_entrance_030","t":"store_entrance","x":38.81,"y":54.24,"n":"헤라"},{"id":"store_entrance_031","t":"store_entrance","x":63.62,"y":65.8,"n":"설화수"},{"id":"store_entrance_032","t":"store_entrance","x":68.52,"y":35.26,"n":"나스"},{"id":"store_entrance_033","t":"store_entrance","x":51.24,"y":38.34,"n":"에르메스 뷰티"},{"id":"store_entrance_034","t":"store_entrance","x":51.24,"y":44.71,"n":"아르마니 뷰티"},{"id":"store_entrance_035","t":"store_entrance","x":51.24,"y":54.05,"n":"아쿠아 디 파르마"},{"id":"store_entrance_036","t":"store_entrance","x":63.96,"y":58.82,"n":"시슬리"},{"id":"store_entrance_037","t":"store_entrance","x":64.06,"y":39.71,"n":"입생로랑"},{"id":"store_entrance_038","t":"store_entrance","x":77.17,"y":56.19,"n":"메종 마르지엘라 퍼퓸"},{"id":"store_entrance_039","t":"store_entrance","x":77.17,"y":50.55,"n":"디올 뷰티"},{"id":"store_entrance_040","t":"store_entrance","x":56.6,"y":40.66,"n":"탬버린즈"},{"id":"store_entrance_041","t":"store_entrance","x":56.71,"y":64.96,"n":"오휘/후"},{"id":"store_entrance_042","t":"store_entrance","x":68.53,"y":35.47,"n":"MAC"},{"id":"store_entrance_043","t":"store_entrance","x":89.0,"y":60.83,"n":"젠틀몬스터"},{"id":"store_entrance_044","t":"store_entrance","x":35.18,"y":42.21,"n":"바이 레도"},{"id":"store_entrance_045","t":"store_entrance","x":89.0,"y":49.67,"n":"딥티크"},{"id":"store_entrance_046","t":"store_entrance","x":55.6,"y":57.78,"n":"크리드"},{"id":"store_entrance_047","t":"store_entrance","x":51.24,"y":52.53,"n":"키엘"},{"id":"store_entrance_048","t":"store_entrance","x":77.19,"y":63.03,"n":"이솝"},{"id":"store_entrance_049","t":"store_entrance","x":152.88,"y":47.41,"n":"페어몬트 호텔"},{"id":"store_entrance_050","t":"store_entrance","x":35.23,"y":49.04,"n":"메모 파리"},{"id":"store_entrance_051","t":"store_entrance","x":123.06,"y":68.6,"n":"크리스챤 디올 (남/여)"},{"id":"store_entrance_052","t":"store_entrance","x":51.31,"y":60.52,"n":"록시땅"},{"id":"store_entrance_053","t":"store_entrance","x":89.0,"y":37.96,"n":"르 라보"},{"id":"store_entrance_054","t":"store_entrance","x":27.27,"y":84.37,"n":"스킨 케어룸"},{"id":"store_entrance_055","t":"store_entrance","x":27.27,"y":88.4,"n":"커뮤니티 라운지"},{"id":"store_entrance_056","t":"store_entrance","x":64.06,"y":39.71,"n":"구찌 뷰티"},{"id":"store_entrance_057","t":"store_entrance","x":152.88,"y":48.06,"n":"다미아니"},{"id":"store_entrance_058","t":"store_entrance","x":83.65,"y":11.79,"n":"정수기"},{"id":"store_entrance_059","t":"store_entrance","x":140.74,"y":86.06,"n":"페라가모"},{"id":"store_entrance_060","t":"store_entrance","x":135.71,"y":73.81,"n":"반클리프아펠"}],"edges":[{"id":"edge_00000","a":"ND-6OEzy_zfT8980","b":"ND-8ZJEwbAW11243","l":12.255,"bi":true,"g":[[30.14,21.07],[30.13,33.33]]},{"id":"edge_00001","a":"ND-8ZJEwbAW11243","b":"ND-8Pt2zyMNg8851","l":6.071,"bi":true,"g":[[30.13,33.33],[24.42,35.4]]},{"id":"edge_00002","a":"ND-8ZJEwbAW11243","b":"ND-np4qQSEjM2412","l":7.634,"bi":true,"g":[[30.13,33.33],[37.46,31.2]]},{"id":"edge_00003","a":"ND-8ZJEwbAW11243","b":"ND-gZnYoVX4C0889","l":6.385,"bi":true,"g":[[30.13,33.33],[35.09,37.35]]},{"id":"edge_00004","a":"ND-np4qQSEjM2412","b":"ND-6SlOSPK_Z2753","l":8.586,"bi":true,"g":[[37.46,31.2],[45.85,29.38]]},{"id":"edge_00005","a":"ND-s5Wxtj-y16044","b":"ND-rZ91rfxFD0473","l":5.779,"bi":true,"g":[[68.64,26.03],[68.48,31.8]]},{"id":"edge_00006","a":"ND-s5Wxtj-y16044","b":"ND-M9EBIIyAu8179","l":8.396,"bi":true,"g":[[68.64,26.03],[77.02,25.5]]},{"id":"edge_00007","a":"ND-s5Wxtj-y16044","b":"ND-3vZ7YnTGv1025","l":17.533,"bi":true,"g":[[68.64,26.03],[51.24,28.2]]},{"id":"edge_00008","a":"ND-M9EBIIyAu8179","b":"ND-zPIR1Xlr78364","l":6.52,"bi":true,"g":[[77.02,25.5],[83.53,25.28]]},{"id":"edge_00009","a":"ND-M9EBIIyAu8179","b":"ND-Rjtx6oXBk5643","l":5.602,"bi":true,"g":[[77.02,25.5],[77.08,31.1]]},{"id":"edge_00010","a":"ND-8Pt2zyMNg8851","b":"ND-GlfJ_zwwc9683","l":5.346,"bi":true,"g":[[24.42,35.4],[19.07,35.4]]},{"id":"edge_00011","a":"ND-GlfJ_zwwc9683","b":"ND-vNkzxL7bF9707","l":5.227,"bi":true,"g":[[19.07,35.4],[19.99,40.54]]},{"id":"edge_00012","a":"ND-GlfJ_zwwc9683","b":"ND-kO6RMT9w39043","l":5.258,"bi":true,"g":[[19.07,35.4],[18.0,40.54]]},{"id":"edge_00013","a":"ND-GlfJ_zwwc9683","b":"ND-pYcsFRnrP0515","l":6.093,"bi":true,"g":[[19.07,35.4],[12.98,35.4]]},{"id":"edge_00014","a":"ND-pYcsFRnrP0515","b":"ND-AtD81yOed2354","l":4.991,"bi":true,"g":[[12.98,35.4],[12.98,40.39]]},{"id":"edge_00015","a":"ND-pYcsFRnrP0515","b":"ND-kO6RMT9w39043","l":7.185,"bi":true,"g":[[12.98,35.4],[18.0,40.54]]},{"id":"edge_00016","a":"ND-QCNbdWLZi7268","b":"ND-5_0BwXc265244","l":7.479,"bi":true,"g":[[13.12,64.43],[17.97,58.74]]},{"id":"edge_00017","a":"ND-QCNbdWLZi7268","b":"ND-TnFpEXPsv2380","l":5.734,"bi":true,"g":[[13.12,64.43],[18.86,64.44]]},{"id":"edge_00018","a":"ND-QCNbdWLZi7268","b":"ND-nF9Rakzif8490","l":5.675,"bi":true,"g":[[13.12,64.43],[13.09,58.76]]},{"id":"edge_00019","a":"ND-TnFpEXPsv2380","b":"ND-5_0BwXc265244","l":5.769,"bi":true,"g":[[18.86,64.44],[17.97,58.74]]},{"id":"edge_00020","a":"ND-TnFpEXPsv2380","b":"ND-dxqdNpg1c4213","l":5.823,"bi":true,"g":[[18.86,64.44],[19.95,58.72]]},{"id":"edge_00021","a":"ND-TnFpEXPsv2380","b":"ND-pcbOsXX3I4524","l":4.95,"bi":true,"g":[[18.86,64.44],[23.81,64.44]]},{"id":"edge_00022","a":"ND-pcbOsXX3I4524","b":"ND-RGNGncH2k8860","l":6.047,"bi":true,"g":[[23.81,64.44],[22.07,58.65]]},{"id":"edge_00023","a":"ND-pcbOsXX3I4524","b":"ND-YbQ2RtGEt6052","l":3.878,"bi":true,"g":[[23.81,64.44],[27.68,64.44]]},{"id":"edge_00024","a":"ND-YbQ2RtGEt6052","b":"ND-HqQVZXVvT9332","l":2.351,"bi":true,"g":[[27.68,64.44],[30.04,64.44]]},{"id":"edge_00025","a":"ND-HqQVZXVvT9332","b":"ND-CMrIBfE8t9825","l":4.877,"bi":true,"g":[[30.04,64.44],[34.62,66.11]]},{"id":"edge_00026","a":"ND-HqQVZXVvT9332","b":"ND-vT4MNbhZY1236","l":11.251,"bi":true,"g":[[30.04,64.44],[30.04,75.69]]},{"id":"edge_00027","a":"ND-vT4MNbhZY1236","b":"ND-yinh2VAvd9411","l":8.656,"bi":true,"g":[[30.04,75.69],[29.99,84.34]]},{"id":"edge_00028","a":"ND-KBSvN8TDk5531","b":"ND-3bw-ezBiS4719","l":6.211,"bi":true,"g":[[83.3,72.49],[77.09,72.49]]},{"id":"edge_00029","a":"ND-KBSvN8TDk5531","b":"ND-EVGwY4nbP5326","l":5.638,"bi":true,"g":[[83.3,72.49],[88.94,72.41]]},{"id":"edge_00030","a":"ND-KBSvN8TDk5531","b":"ND-KjeW7UMz08930","l":5.289,"bi":true,"g":[[83.3,72.49],[83.31,67.2]]},{"id":"edge_00031","a":"ND-J1ww7CrVS4131","b":"ND-ahEBpWpgh3396","l":8.052,"bi":true,"g":[[89.0,52.08],[89.0,60.14]]},{"id":"edge_00032","a":"ND-J1ww7CrVS4131","b":"ND-n10BJN9pK5619","l":2.386,"bi":true,"g":[[89.0,52.08],[89.0,49.7]]},{"id":"edge_00033","a":"ND-n10BJN9pK5619","b":"ND-OBzjbJhAj6899","l":13.23,"bi":true,"g":[[89.0,49.7],[89.0,36.47]]},{"id":"edge_00034","a":"ND-OBzjbJhAj6899","b":"ND-6hnhMBxDc6158","l":5.625,"bi":true,"g":[[89.0,36.47],[88.97,30.84]]},{"id":"edge_00035","a":"ND-OBzjbJhAj6899","b":"ND-k4q-72JBh9364","l":4.674,"bi":true,"g":[[89.0,36.47],[86.44,40.38]]},{"id":"edge_00036","a":"ND-zPIR1Xlr78364","b":"ND-XJziATUz07428","l":14.648,"bi":true,"g":[[83.53,25.28],[83.66,10.63]]},{"id":"edge_00037","a":"ND-zPIR1Xlr78364","b":"ND-SuuMk45wT4846","l":5.334,"bi":true,"g":[[83.53,25.28],[88.87,25.34]]},{"id":"edge_00038","a":"ND-WK2fgePom3964","b":"ND-DoBQb2bU_6172","l":5.06,"bi":true,"g":[[123.88,30.59],[128.71,32.1]]},{"id":"edge_00039","a":"ND-WK2fgePom3964","b":"ND-z3ngosK-18332","l":8.739,"bi":true,"g":[[123.88,30.59],[120.64,38.71]]},{"id":"edge_00040","a":"ND-WK2fgePom3964","b":"ND-1nCirZhzw2550","l":7.116,"bi":true,"g":[[123.88,30.59],[116.96,28.91]]},{"id":"edge_00041","a":"ND-DoBQb2bU_6172","b":"ND-FofkBxzrM1212","l":10.382,"bi":true,"g":[[128.71,32.1],[138.72,34.84]]},{"id":"edge_00042","a":"ND-FofkBxzrM1212","b":"ND-CY7QOEB_J4717","l":1.731,"bi":true,"g":[[138.72,34.84],[140.45,34.84]]},{"id":"edge_00043","a":"ND-FofkBxzrM1212","b":"ND-UGoSau5nz6732","l":5.963,"bi":true,"g":[[138.72,34.84],[139.83,40.7]]},{"id":"edge_00044","a":"ND-FofkBxzrM1212","b":"ND-2Nd0fUp-J5580","l":5.924,"bi":true,"g":[[138.72,34.84],[137.85,40.7]]},{"id":"edge_00045","a":"ND-CY7QOEB_J4717","b":"ND-dwvi-_GRh5900","l":16.683,"bi":true,"g":[[140.45,34.84],[140.45,18.16]]},{"id":"edge_00046","a":"ND-CY7QOEB_J4717","b":"ND-58LsWHSpG1772","l":6.09,"bi":true,"g":[[140.45,34.84],[146.54,34.84]]},{"id":"edge_00047","a":"ND-58LsWHSpG1772","b":"ND-EVk8jv5jc4867","l":6.34,"bi":true,"g":[[146.54,34.84],[152.88,34.84]]},{"id":"edge_00048","a":"ND-EVk8jv5jc4867","b":"ND-RZC7y1YgT7443","l":4.61,"bi":true,"g":[[152.88,34.84],[156.14,31.58]]},{"id":"edge_00049","a":"ND-EVk8jv5jc4867","b":"ND-iLRFLACW-3909","l":11.067,"bi":true,"g":[[152.88,34.84],[152.88,45.91]]},{"id":"edge_00050","a":"ND-RZC7y1YgT7443","b":"ND-yiJ6BrK7c8492","l":5.538,"bi":true,"g":[[156.14,31.58],[160.06,27.66]]},{"id":"edge_00051","a":"ND-iLRFLACW-3909","b":"ND-Gc0mcAvj_5011","l":2.259,"bi":true,"g":[[152.88,45.91],[152.88,48.17]]},{"id":"edge_00052","a":"ND-Gc0mcAvj_5011","b":"ND-zDrGMyfX08731","l":10.177,"bi":true,"g":[[152.88,48.17],[152.88,58.34]]},{"id":"edge_00053","a":"ND-ttYxOC4dv6148","b":"ND-lDnK_A1iy3883","l":1.802,"bi":true,"g":[[152.88,65.51],[151.08,65.58]]},{"id":"edge_00054","a":"ND-ttYxOC4dv6148","b":"ND-zDrGMyfX08731","l":7.162,"bi":true,"g":[[152.88,65.51],[152.88,58.34]]},{"id":"edge_00055","a":"ND-ttYxOC4dv6148","b":"ND-5LBgeDifkg7059","l":11.214,"bi":true,"g":[[152.88,65.51],[160.99,73.25]]},{"id":"edge_00056","a":"ND-lDnK_A1iy3883","b":"ND-Re4ooPmAA4876","l":9.984,"bi":true,"g":[[151.08,65.58],[141.1,65.51]]},{"id":"edge_00057","a":"ND-lDnK_A1iy3883","b":"ND-3GD4Z-gGj7627","l":7.238,"bi":true,"g":[[151.08,65.58],[151.08,58.34]]},{"id":"edge_00058","a":"ND-Re4ooPmAA4876","b":"ND-vSJC7awfK7603","l":1.957,"bi":true,"g":[[141.1,65.51],[139.14,65.51]]},{"id":"edge_00059","a":"ND-vSJC7awfK7603","b":"ND-Wpb0-uW9D3316","l":7.246,"bi":true,"g":[[139.14,65.51],[138.04,58.34]]},{"id":"edge_00060","a":"ND-vSJC7awfK7603","b":"ND-uTCudaGza9139","l":3.432,"bi":true,"g":[[139.14,65.51],[135.71,65.51]]},{"id":"edge_00061","a":"ND-vSJC7awfK7603","b":"ND-HXaBphHsA1916","l":7.23,"bi":true,"g":[[139.14,65.51],[140.13,58.34]]},{"id":"edge_00062","a":"ND-uTCudaGza9139","b":"ND-YA3LtgPpG1826","l":19.326,"bi":true,"g":[[135.71,65.51],[135.71,84.83]]},{"id":"edge_00063","a":"ND-uTCudaGza9139","b":"ND-t7RjoBsdw8529","l":0.52,"bi":true,"g":[[135.71,65.51],[135.19,65.51]]},{"id":"edge_00064","a":"ND-XdYNzc8jt7260","b":"ND-NDqVVnKly3378","l":10.604,"bi":true,"g":[[100.16,71.79],[110.74,71.04]]},{"id":"edge_00065","a":"ND-XdYNzc8jt7260","b":"ND-EVGwY4nbP5326","l":11.24,"bi":true,"g":[[100.16,71.79],[88.94,72.41]]},{"id":"edge_00066","a":"ND-HXaBphHsA1916","b":"ND-Wpb0-uW9D3316","l":2.086,"bi":true,"g":[[140.13,58.34],[138.04,58.34]]},{"id":"edge_00067","a":"ND-HXaBphHsA1916","b":"ND-3GD4Z-gGj7627","l":10.948,"bi":true,"g":[[140.13,58.34],[151.08,58.34]]},{"id":"edge_00068","a":"ND-Wpb0-uW9D3316","b":"ND-dt9ogFZtb9907","l":2.853,"bi":true,"g":[[138.04,58.34],[135.19,58.4]]},{"id":"edge_00069","a":"ND-2Nd0fUp-J5580","b":"ND-UGoSau5nz6732","l":1.977,"bi":true,"g":[[137.85,40.7],[139.83,40.7]]},{"id":"edge_00070","a":"ND-2Nd0fUp-J5580","b":"ND-sdV7EVwcG4612","l":2.658,"bi":true,"g":[[137.85,40.7],[135.19,40.66]]},{"id":"edge_00071","a":"ND-DFWgcx5bA9876","b":"ND-h6EtLVcbD4908","l":3.268,"bi":true,"g":[[80.14,40.37],[77.17,39.02]]},{"id":"edge_00072","a":"ND-DFWgcx5bA9876","b":"ND-k5XlGr56f2388","l":1.719,"bi":true,"g":[[80.14,40.37],[81.86,40.37]]},{"id":"edge_00073","a":"ND-k5XlGr56f2388","b":"ND-knl6QTsvh7604","l":2.874,"bi":true,"g":[[81.86,40.37],[84.73,40.38]]},{"id":"edge_00074","a":"ND-knl6QTsvh7604","b":"ND-k4q-72JBh9364","l":1.708,"bi":true,"g":[[84.73,40.38],[86.44,40.38]]},{"id":"edge_00075","a":"ND-HxBpFmmz-2675","b":"ND-ahEBpWpgh3396","l":1.723,"bi":true,"g":[[89.0,61.86],[89.0,60.14]]},{"id":"edge_00076","a":"ND-HxBpFmmz-2675","b":"ND-T5eXUEb474238","l":5.267,"bi":true,"g":[[89.0,61.86],[88.94,67.13]]},{"id":"edge_00077","a":"ND-ahEBpWpgh3396","b":"ND-amnSSqfMq7059","l":3.347,"bi":true,"g":[[89.0,60.14],[86.51,57.9]]},{"id":"edge_00078","a":"ND-ahEBpWpgh3396","b":"ND-_YE0dEdnd8675","l":3.418,"bi":true,"g":[[89.0,60.14],[85.58,60.13]]},{"id":"edge_00079","a":"ND-_YE0dEdnd8675","b":"ND-xAMaYWopJ0051","l":4.559,"bi":true,"g":[[85.58,60.13],[81.02,60.13]]},{"id":"edge_00080","a":"ND-_YE0dEdnd8675","b":"ND-amnSSqfMq7059","l":2.413,"bi":true,"g":[[85.58,60.13],[86.51,57.9]]},{"id":"edge_00081","a":"ND-_YE0dEdnd8675","b":"ND-XIMqJJoY18387","l":2.452,"bi":true,"g":[[85.58,60.13],[84.56,57.9]]},{"id":"edge_00082","a":"ND-xAMaYWopJ0051","b":"ND-p7mzWvDi61268","l":2.325,"bi":true,"g":[[81.02,60.13],[81.86,57.96]]},{"id":"edge_00083","a":"ND-xAMaYWopJ0051","b":"ND-XNAu6NkFC2236","l":2.381,"bi":true,"g":[[81.02,60.13],[80.04,57.96]]},{"id":"edge_00084","a":"ND-xAMaYWopJ0051","b":"ND-ha9dxgWqR0843","l":3.858,"bi":true,"g":[[81.02,60.13],[77.17,60.14]]},{"id":"edge_00085","a":"ND-p7mzWvDi61268","b":"ND-XNAu6NkFC2236","l":1.819,"bi":true,"g":[[81.86,57.96],[80.04,57.96]]},{"id":"edge_00086","a":"ND-p7mzWvDi61268","b":"ND-XIMqJJoY18387","l":2.698,"bi":true,"g":[[81.86,57.96],[84.56,57.9]]},{"id":"edge_00087","a":"ND-XNAu6NkFC2236","b":"ND-s4suRKntD8867","l":2.875,"bi":true,"g":[[80.04,57.96],[77.17,57.96]]},{"id":"edge_00088","a":"ND-amnSSqfMq7059","b":"ND-XIMqJJoY18387","l":1.954,"bi":true,"g":[[86.51,57.9],[84.56,57.9]]},{"id":"edge_00089","a":"ND-ha9dxgWqR0843","b":"ND-p-F1dDC9S5200","l":6.975,"bi":true,"g":[[77.17,60.14],[77.22,67.11]]},{"id":"edge_00090","a":"ND-ha9dxgWqR0843","b":"ND-sLRY3D1Yj4706","l":4.086,"bi":true,"g":[[77.17,60.14],[73.11,59.67]]},{"id":"edge_00091","a":"ND-ha9dxgWqR0843","b":"ND-s4suRKntD8867","l":2.178,"bi":true,"g":[[77.17,60.14],[77.17,57.96]]},{"id":"edge_00092","a":"ND-s4suRKntD8867","b":"ND-zFpXIZXDO9891","l":2.319,"bi":true,"g":[[77.17,57.96],[77.17,55.64]]},{"id":"edge_00093","a":"ND-zFpXIZXDO9891","b":"ND-pLiGzopE_1163","l":4.78,"bi":true,"g":[[77.17,55.64],[77.17,50.86]]},{"id":"edge_00094","a":"ND-pLiGzopE_1163","b":"ND-2NzytmibA2290","l":6.9,"bi":true,"g":[[77.17,50.86],[77.17,43.96]]},{"id":"edge_00095","a":"ND-2NzytmibA2290","b":"ND-h6EtLVcbD4908","l":4.942,"bi":true,"g":[[77.17,43.96],[77.17,39.02]]},{"id":"edge_00096","a":"ND-h6EtLVcbD4908","b":"ND-wY_RYLctK6585","l":8.6,"bi":true,"g":[[77.17,39.02],[68.57,39.22]]},{"id":"edge_00097","a":"ND-h6EtLVcbD4908","b":"ND-klytMZIr76444","l":3.628,"bi":true,"g":[[77.17,39.02],[77.17,35.39]]},{"id":"edge_00098","a":"ND-klytMZIr76444","b":"ND-Rjtx6oXBk5643","l":4.288,"bi":true,"g":[[77.17,35.39],[77.08,31.1]]},{"id":"edge_00099","a":"ND-kO6RMT9w39043","b":"ND-vNkzxL7bF9707","l":1.997,"bi":true,"g":[[18.0,40.54],[19.99,40.54]]},{"id":"edge_00100","a":"ND-kO6RMT9w39043","b":"ND-AtD81yOed2354","l":5.016,"bi":true,"g":[[18.0,40.54],[12.98,40.39]]},{"id":"edge_00101","a":"ND-vNkzxL7bF9707","b":"ND-714c8z7wb5954","l":2.111,"bi":true,"g":[[19.99,40.54],[22.1,40.54]]},{"id":"edge_00102","a":"ND-dxqdNpg1c4213","b":"ND-5_0BwXc265244","l":1.979,"bi":true,"g":[[19.95,58.72],[17.97,58.74]]},{"id":"edge_00103","a":"ND-dxqdNpg1c4213","b":"ND-RGNGncH2k8860","l":2.118,"bi":true,"g":[[19.95,58.72],[22.07,58.65]]},{"id":"edge_00104","a":"ND-5_0BwXc265244","b":"ND-nF9Rakzif8490","l":4.881,"bi":true,"g":[[17.97,58.74],[13.09,58.76]]},{"id":"edge_00105","a":"ND-pMJU3A7D86715","b":"ND-vaGRD3YSs8585","l":4.543,"bi":true,"g":[[51.24,34.21],[55.73,33.54]]},{"id":"edge_00106","a":"ND-pMJU3A7D86715","b":"ND-AfHsn-cll3891","l":7.052,"bi":true,"g":[[51.24,34.21],[51.24,41.26]]},{"id":"edge_00107","a":"ND-pMJU3A7D86715","b":"ND-3vZ7YnTGv1025","l":6.013,"bi":true,"g":[[51.24,34.21],[51.24,28.2]]},{"id":"edge_00108","a":"ND-pMJU3A7D86715","b":"ND-xGu0gmm8u4505","l":3.777,"bi":true,"g":[[51.24,34.21],[47.51,34.77]]},{"id":"edge_00109","a":"ND-dPqNERNT61659","b":"ND-CWq1vjgVv5115","l":4.534,"bi":true,"g":[[51.24,49.05],[51.24,44.51]]},{"id":"edge_00110","a":"ND-dPqNERNT61659","b":"ND-Fp41GwLML9243","l":2.95,"bi":true,"g":[[51.24,49.05],[51.24,52.0]]},{"id":"edge_00111","a":"ND-AfHsn-cll3891","b":"ND-CWq1vjgVv5115","l":3.25,"bi":true,"g":[[51.24,41.26],[51.24,44.51]]},{"id":"edge_00112","a":"ND-AfHsn-cll3891","b":"ND--mEEYOk4l1195","l":4.849,"bi":true,"g":[[51.24,41.26],[56.06,40.73]]},{"id":"edge_00113","a":"ND-AfHsn-cll3891","b":"ND-JIOQjAF9a0523","l":6.766,"bi":true,"g":[[51.24,41.26],[44.56,42.35]]},{"id":"edge_00114","a":"ND--mEEYOk4l1195","b":"ND-bkGkpNmj-3635","l":8.478,"bi":true,"g":[[56.06,40.73],[64.47,39.66]]},{"id":"edge_00115","a":"ND-bkGkpNmj-3635","b":"ND-wY_RYLctK6585","l":4.119,"bi":true,"g":[[64.47,39.66],[68.57,39.22]]},{"id":"edge_00116","a":"ND-JIOQjAF9a0523","b":"ND-Z2sDCqsob3715","l":5.284,"bi":true,"g":[[44.56,42.35],[39.59,44.15]]},{"id":"edge_00117","a":"ND-Z2sDCqsob3715","b":"ND-Ocw6ypX_T5019","l":4.63,"bi":true,"g":[[39.59,44.15],[35.25,45.75]]},{"id":"edge_00118","a":"ND-Ocw6ypX_T5019","b":"ND-u5zolO_VO0483","l":5.063,"bi":true,"g":[[35.25,45.75],[30.19,45.77]]},{"id":"edge_00119","a":"ND-Ocw6ypX_T5019","b":"ND-gZnYoVX4C0889","l":8.405,"bi":true,"g":[[35.25,45.75],[35.09,37.35]]},{"id":"edge_00120","a":"ND-Ocw6ypX_T5019","b":"ND-gq38k9H1F4579","l":2.82,"bi":true,"g":[[35.25,45.75],[35.23,48.57]]},{"id":"edge_00121","a":"ND-QFYbS1nGa5315","b":"ND-_wJfSHEatf0043","l":3.066,"bi":true,"g":[[51.24,57.0],[51.24,53.93]]},{"id":"edge_00122","a":"ND-QFYbS1nGa5315","b":"ND-i7sLiauPs8278","l":3.25,"bi":true,"g":[[51.24,57.0],[48.03,56.49]]},{"id":"edge_00123","a":"ND-QFYbS1nGa5315","b":"ND-eVkG7veBm0890","l":4.423,"bi":true,"g":[[51.24,57.0],[55.6,57.78]]},{"id":"edge_00124","a":"ND-QFYbS1nGa5315","b":"ND-hAONRJm-y6264","l":7.281,"bi":true,"g":[[51.24,57.0],[51.38,64.28]]},{"id":"edge_00125","a":"ND-gq38k9H1F4579","b":"ND-HDZ_0vEJT6091","l":2.147,"bi":true,"g":[[35.23,48.57],[35.23,50.72]]},{"id":"edge_00126","a":"ND-HDZ_0vEJT6091","b":"ND-RC-uKQe0do6915","l":1.123,"bi":true,"g":[[35.23,50.72],[35.25,51.84]]},{"id":"edge_00127","a":"ND-RC-uKQe0do6915","b":"ND-PHj1hhyDg5740","l":1.736,"bi":true,"g":[[35.25,51.84],[33.97,53.01]]},{"id":"edge_00128","a":"ND-Fp41GwLML9243","b":"ND-_wJfSHEatf0043","l":1.933,"bi":true,"g":[[51.24,52.0],[51.24,53.93]]},{"id":"edge_00129","a":"ND-XJziATUz07428","b":"ND-B2dugn7h08876","l":12.185,"bi":true,"g":[[83.66,10.63],[71.47,10.63]]},{"id":"edge_00130","a":"ND-z3ngosK-18332","b":"ND-o9XljztO36310","l":4.833,"bi":true,"g":[[120.64,38.71],[117.08,35.44]]},{"id":"edge_00131","a":"ND-z3ngosK-18332","b":"ND-_7BU71r7l0244","l":7.396,"bi":true,"g":[[120.64,38.71],[125.17,44.55]]},{"id":"edge_00132","a":"ND-_7BU71r7l0244","b":"ND-PJDoXxjPs1444","l":4.247,"bi":true,"g":[[125.17,44.55],[125.97,48.73]]},{"id":"edge_00133","a":"ND-PJDoXxjPs1444","b":"ND-APwvbDrci3554","l":9.223,"bi":true,"g":[[125.97,48.73],[135.19,48.73]]},{"id":"edge_00134","a":"ND-PJDoXxjPs1444","b":"ND-nCJCCVGxA3692","l":5.097,"bi":true,"g":[[125.97,48.73],[125.02,53.73]]},{"id":"edge_00135","a":"ND-APwvbDrci3554","b":"ND-dt9ogFZtb9907","l":9.677,"bi":true,"g":[[135.19,48.73],[135.19,58.4]]},{"id":"edge_00136","a":"ND-APwvbDrci3554","b":"ND-sdV7EVwcG4612","l":8.061,"bi":true,"g":[[135.19,48.73],[135.19,40.66]]},{"id":"edge_00137","a":"ND-AciBpxUB62684","b":"ND-vsudfQQ9j9528","l":7.906,"bi":true,"g":[[121.07,61.04],[123.86,68.44]]},{"id":"edge_00138","a":"ND-AciBpxUB62684","b":"ND-u-WeJcqFr4902","l":4.13,"bi":true,"g":[[121.07,61.04],[117.87,63.66]]},{"id":"edge_00139","a":"ND-AciBpxUB62684","b":"ND-nCJCCVGxA3692","l":8.307,"bi":true,"g":[[121.07,61.04],[125.02,53.73]]},{"id":"edge_00140","a":"ND-dt9ogFZtb9907","b":"ND-t7RjoBsdw8529","l":7.103,"bi":true,"g":[[135.19,58.4],[135.19,65.51]]},{"id":"edge_00141","a":"ND-3GD4Z-gGj7627","b":"ND-zDrGMyfX08731","l":1.806,"bi":true,"g":[[151.08,58.34],[152.88,58.34]]},{"id":"edge_00142","a":"ND-KjeW7UMz08930","b":"ND-p-F1dDC9S5200","l":6.09,"bi":true,"g":[[83.31,67.2],[77.22,67.11]]},{"id":"edge_00143","a":"ND-KjeW7UMz08930","b":"ND-T5eXUEb474238","l":5.637,"bi":true,"g":[[83.31,67.2],[88.94,67.13]]},{"id":"edge_00144","a":"ND-714c8z7wb5954","b":"ND-msMa6nlgr2344","l":8.009,"bi":true,"g":[[22.1,40.54],[29.88,38.62]]},{"id":"edge_00145","a":"ND-714c8z7wb5954","b":"ND-z8BzuiZdf9258","l":7.501,"bi":true,"g":[[22.1,40.54],[28.39,44.63]]},{"id":"edge_00146","a":"ND-714c8z7wb5954","b":"ND-oKqhWfdTk6658","l":8.343,"bi":true,"g":[[22.1,40.54],[22.1,48.88]]},{"id":"edge_00147","a":"ND-oKqhWfdTk6658","b":"ND-RGNGncH2k8860","l":9.762,"bi":true,"g":[[22.1,48.88],[22.07,58.65]]},{"id":"edge_00148","a":"ND-RGNGncH2k8860","b":"ND-LOWf9kinV6223","l":6.276,"bi":true,"g":[[22.07,58.65],[28.34,58.65]]},{"id":"edge_00149","a":"ND-RGNGncH2k8860","b":"ND-vIuNH30UO2042","l":9.878,"bi":true,"g":[[22.07,58.65],[30.18,53.01]]},{"id":"edge_00150","a":"ND-vIuNH30UO2042","b":"ND-XqklFUK425843","l":3.803,"bi":true,"g":[[30.18,53.01],[30.19,49.21]]},{"id":"edge_00151","a":"ND-vIuNH30UO2042","b":"ND-PHj1hhyDg5740","l":3.793,"bi":true,"g":[[30.18,53.01],[33.97,53.01]]},{"id":"edge_00152","a":"ND-XqklFUK425843","b":"ND-u5zolO_VO0483","l":3.439,"bi":true,"g":[[30.19,49.21],[30.19,45.77]]},{"id":"edge_00153","a":"ND-z8BzuiZdf9258","b":"ND-u5zolO_VO0483","l":2.127,"bi":true,"g":[[28.39,44.63],[30.19,45.77]]},{"id":"edge_00154","a":"ND-PHj1hhyDg5740","b":"ND-SLi6A_k777367","l":7.272,"bi":true,"g":[[33.97,53.01],[33.76,60.28]]},{"id":"edge_00155","a":"ND-PHj1hhyDg5740","b":"ND-KHcP8FR944500","l":5.563,"bi":true,"g":[[33.97,53.01],[39.36,54.38]]},{"id":"edge_00156","a":"ND-KHcP8FR944500","b":"ND-i7sLiauPs8278","l":8.924,"bi":true,"g":[[39.36,54.38],[48.03,56.49]]},{"id":"edge_00157","a":"ND-eVkG7veBm0890","b":"ND-xvPkIDw1w1994","l":4.525,"bi":true,"g":[[55.6,57.78],[60.08,58.38]]},{"id":"edge_00158","a":"ND-xvPkIDw1w1994","b":"ND-xm-zsHxUm2746","l":3.906,"bi":true,"g":[[60.08,58.38],[63.96,58.82]]},{"id":"edge_00159","a":"ND-xm-zsHxUm2746","b":"ND-LIhhbGrQE1554","l":4.54,"bi":true,"g":[[63.96,58.82],[68.48,59.24]]},{"id":"edge_00160","a":"ND-LIhhbGrQE1554","b":"ND-8uo9t_LZg3858","l":1.994,"bi":true,"g":[[68.48,59.24],[70.47,59.41]]},{"id":"edge_00161","a":"ND-8uo9t_LZg3858","b":"ND-sLRY3D1Yj4706","l":2.65,"bi":true,"g":[[70.47,59.41],[73.11,59.67]]},{"id":"edge_00162","a":"ND-YA3LtgPpG1826","b":"ND-qpqxeP12C2601","l":5.026,"bi":true,"g":[[135.71,84.83],[140.74,84.83]]},{"id":"edge_00163","a":"ND-qpqxeP12C2601","b":"ND-yXLBfQ---3497","l":6.723,"bi":true,"g":[[140.74,84.83],[140.74,91.56]]},{"id":"edge_00164","a":"ND-yinh2VAvd9411","b":"ND-5c1Bx7olY7217","l":2.716,"bi":true,"g":[[29.99,84.34],[27.27,84.37]]},{"id":"edge_00165","a":"ND-WCvsig2if1283","b":"ND-YalFSQ-7V0482","l":1.391,"bi":true,"g":[[27.27,88.4],[27.27,87.01]]},{"id":"edge_00166","a":"ND-AtD81yOed2354","b":"ND-3zJd-FVPp7018","l":7.68,"bi":true,"g":[[12.98,40.39],[12.98,48.07]]},{"id":"edge_00167","a":"ND-3zJd-FVPp7018","b":"ND-nF9Rakzif8490","l":10.693,"bi":true,"g":[[12.98,48.07],[13.09,58.76]]},{"id":"edge_00168","a":"ND-YalFSQ-7V0482","b":"ND-5c1Bx7olY7217","l":2.644,"bi":true,"g":[[27.27,87.01],[27.27,84.37]]},{"id":"edge_00169","a":"ND-NDqVVnKly3378","b":"ND-0ZSJPAPvB3429","l":5.842,"bi":true,"g":[[110.74,71.04],[110.5,65.21]]},{"id":"edge_00170","a":"ND-NDqVVnKly3378","b":"ND-vsudfQQ9j9528","l":13.377,"bi":true,"g":[[110.74,71.04],[123.86,68.44]]},{"id":"edge_00171","a":"ND-NDqVVnKly3378","b":"ND-rxPtY47tv3572","l":16.432,"bi":true,"g":[[110.74,71.04],[110.74,87.48]]},{"id":"edge_00172","a":"ND-vsudfQQ9j9528","b":"ND-t7RjoBsdw8529","l":11.701,"bi":true,"g":[[123.86,68.44],[135.19,65.51]]},{"id":"edge_00173","a":"ND-Rjtx6oXBk5643","b":"ND-lUAioyVJ97616","l":4.642,"bi":true,"g":[[77.08,31.1],[72.44,31.37]]},{"id":"edge_00174","a":"ND-Rjtx6oXBk5643","b":"ND-6hnhMBxDc6158","l":11.893,"bi":true,"g":[[77.08,31.1],[88.97,30.84]]},{"id":"edge_00175","a":"ND-lUAioyVJ97616","b":"ND-rZ91rfxFD0473","l":3.983,"bi":true,"g":[[72.44,31.37],[68.48,31.8]]},{"id":"edge_00176","a":"ND-rZ91rfxFD0473","b":"ND-YlwZA3Eng6889","l":4.399,"bi":true,"g":[[68.48,31.8],[64.12,32.37]]},{"id":"edge_00177","a":"ND-rZ91rfxFD0473","b":"ND-wY_RYLctK6585","l":7.413,"bi":true,"g":[[68.48,31.8],[68.57,39.22]]},{"id":"edge_00178","a":"ND-YlwZA3Eng6889","b":"ND-vaGRD3YSs8585","l":8.469,"bi":true,"g":[[64.12,32.37],[55.73,33.54]]},{"id":"edge_00179","a":"ND-xGu0gmm8u4505","b":"ND-qVtyHsxck8257","l":6.916,"bi":true,"g":[[47.51,34.77],[40.71,36.03]]},{"id":"edge_00180","a":"ND-qVtyHsxck8257","b":"ND-5eq_NYZU-9577","l":3.63,"bi":true,"g":[[40.71,36.03],[37.16,36.83]]},{"id":"edge_00181","a":"ND-5eq_NYZU-9577","b":"ND-gZnYoVX4C0889","l":2.14,"bi":true,"g":[[37.16,36.83],[35.09,37.35]]},{"id":"edge_00182","a":"ND-gZnYoVX4C0889","b":"ND-msMa6nlgr2344","l":5.366,"bi":true,"g":[[35.09,37.35],[29.88,38.62]]},{"id":"edge_00183","a":"ND-3vZ7YnTGv1025","b":"ND-6SlOSPK_Z2753","l":5.52,"bi":true,"g":[[51.24,28.2],[45.85,29.38]]},{"id":"edge_00184","a":"ND-CMrIBfE8t9825","b":"ND-2xspp1VeW1599","l":9.862,"bi":true,"g":[[34.62,66.11],[44.22,68.34]]},{"id":"edge_00185","a":"ND-CMrIBfE8t9825","b":"ND-SLi6A_k777367","l":5.89,"bi":true,"g":[[34.62,66.11],[33.76,60.28]]},{"id":"edge_00186","a":"ND-2xspp1VeW1599","b":"ND-5Obvc9PpO3495","l":7.439,"bi":true,"g":[[44.22,68.34],[51.47,70.02]]},{"id":"edge_00187","a":"ND-5Obvc9PpO3495","b":"ND-mjWf6RrkT4823","l":4.924,"bi":true,"g":[[51.47,70.02],[56.32,70.87]]},{"id":"edge_00188","a":"ND-5Obvc9PpO3495","b":"ND-hAONRJm-y6264","l":5.748,"bi":true,"g":[[51.47,70.02],[51.38,64.28]]},{"id":"edge_00189","a":"ND-mjWf6RrkT4823","b":"ND-XgQtL0V-u0767","l":6.838,"bi":true,"g":[[56.32,70.87],[63.1,71.72]]},{"id":"edge_00190","a":"ND-mjWf6RrkT4823","b":"ND-5G4d8pPn99219","l":17.126,"bi":true,"g":[[56.32,70.87],[56.32,88.0]]},{"id":"edge_00191","a":"ND-XgQtL0V-u0767","b":"ND-RPPMFdnYk0640","l":5.939,"bi":true,"g":[[63.1,71.72],[63.62,65.8]]},{"id":"edge_00192","a":"ND-XgQtL0V-u0767","b":"ND-2r7P3AXJe2471","l":8.377,"bi":true,"g":[[63.1,71.72],[71.46,72.37]]},{"id":"edge_00193","a":"ND-2r7P3AXJe2471","b":"ND-3bw-ezBiS4719","l":5.637,"bi":true,"g":[[71.46,72.37],[77.09,72.49]]},{"id":"edge_00194","a":"ND-3bw-ezBiS4719","b":"ND-p-F1dDC9S5200","l":5.377,"bi":true,"g":[[77.09,72.49],[77.22,67.11]]},{"id":"edge_00195","a":"ND-LOWf9kinV6223","b":"ND-SLi6A_k777367","l":5.662,"bi":true,"g":[[28.34,58.65],[33.76,60.28]]},{"id":"edge_00196","a":"ND-SLi6A_k777367","b":"ND-y9c42z8Nm9663","l":2.413,"bi":true,"g":[[33.76,60.28],[36.15,60.64]]},{"id":"edge_00197","a":"ND-y9c42z8Nm9663","b":"ND-eb2xyjLk80767","l":3.256,"bi":true,"g":[[36.15,60.64],[39.29,61.48]]},{"id":"edge_00198","a":"ND-eb2xyjLk80767","b":"ND--9qoaNWhd9455","l":4.925,"bi":true,"g":[[39.29,61.48],[44.05,62.76]]},{"id":"edge_00199","a":"ND-hAONRJm-y6264","b":"ND-Skc0K7WGa0528","l":3.571,"bi":true,"g":[[51.38,64.28],[47.86,63.67]]},{"id":"edge_00200","a":"ND-hAONRJm-y6264","b":"ND-M0vbjijvj8200","l":3.926,"bi":true,"g":[[51.38,64.28],[55.27,64.79]]},{"id":"edge_00201","a":"ND-M0vbjijvj8200","b":"ND-RPPMFdnYk0640","l":8.412,"bi":true,"g":[[55.27,64.79],[63.62,65.8]]},{"id":"edge_00202","a":"ND-RPPMFdnYk0640","b":"ND-QTZOxTYAN2776","l":8.803,"bi":true,"g":[[63.62,65.8],[72.37,66.8]]},{"id":"edge_00203","a":"ND-QTZOxTYAN2776","b":"ND-p-F1dDC9S5200","l":4.855,"bi":true,"g":[[72.37,66.8],[77.22,67.11]]},{"id":"edge_00204","a":"ND--9qoaNWhd9455","b":"ND-Skc0K7WGa0528","l":3.92,"bi":true,"g":[[44.05,62.76],[47.86,63.67]]},{"id":"edge_00205","a":"ND-J3ORkjQav4710","b":"ND-Ogj7-mAZb6206","l":10.751,"bi":true,"g":[[95.94,25.59],[106.63,26.77]]},{"id":"edge_00206","a":"ND-J3ORkjQav4710","b":"ND-SuuMk45wT4846","l":7.077,"bi":true,"g":[[95.94,25.59],[88.87,25.34]]},{"id":"edge_00207","a":"ND-Ogj7-mAZb6206","b":"ND-u1hBcVMgp5101","l":7.714,"bi":true,"g":[[106.63,26.77],[110.47,33.45]]},{"id":"edge_00208","a":"ND-Ogj7-mAZb6206","b":"ND-1nCirZhzw2550","l":10.556,"bi":true,"g":[[106.63,26.77],[116.96,28.91]]},{"id":"edge_00209","a":"ND-SuuMk45wT4846","b":"ND-6hnhMBxDc6158","l":5.501,"bi":true,"g":[[88.87,25.34],[88.97,30.84]]},{"id":"edge_00210","a":"ND-6hnhMBxDc6158","b":"ND-nccG5gLEx0061","l":4.003,"bi":true,"g":[[88.97,30.84],[92.97,30.84]]},{"id":"edge_00211","a":"ND-u1hBcVMgp5101","b":"ND-o9XljztO36310","l":6.903,"bi":true,"g":[[110.47,33.45],[117.08,35.44]]},{"id":"edge_00212","a":"ND-T5eXUEb474238","b":"ND-AXlfpAVnW0662","l":4.16,"bi":true,"g":[[88.94,67.13],[93.1,67.03]]},{"id":"edge_00213","a":"ND-T5eXUEb474238","b":"ND-EVGwY4nbP5326","l":5.28,"bi":true,"g":[[88.94,67.13],[88.94,72.41]]},{"id":"edge_00214","a":"ND-0ZSJPAPvB3429","b":"ND-u-WeJcqFr4902","l":7.53,"bi":true,"g":[[110.5,65.21],[117.87,63.66]]},{"id":"edge_00215","a":"ND-5G4d8pPn99219","b":"ND-e4K01UMM07647","l":6.183,"bi":true,"g":[[56.32,88.0],[62.5,88.0]]},{"id":"edge_00216","a":"ND-rxPtY47tv3572","b":"ND-Jcu7MR0wA4631","l":7.006,"bi":true,"g":[[110.74,87.48],[103.74,87.48]]},{"id":"store_edge_000","a":"store_entrance_000","b":"ND-QCNbdWLZi7268","l":0.0,"bi":true,"g":[[13.12,64.43],[13.12,64.43]]},{"id":"store_edge_001","a":"store_entrance_001","b":"ND-vT4MNbhZY1236","l":2.071,"bi":true,"g":[[30.04,73.62],[30.04,75.69]]},{"id":"store_edge_002","a":"store_entrance_002","b":"ND-vT4MNbhZY1236","l":3.004,"bi":true,"g":[[30.02,78.69],[30.04,75.69]]},{"id":"store_edge_003","a":"store_entrance_003","b":"ND-5G4d8pPn99219","l":8.203,"bi":true,"g":[[56.32,79.79],[56.32,88.0]]},{"id":"store_edge_004","a":"store_entrance_004","b":"ND-5G4d8pPn99219","l":7.535,"bi":true,"g":[[56.32,80.46],[56.32,88.0]]},{"id":"store_edge_005","a":"store_entrance_005","b":"ND-mjWf6RrkT4823","l":5.667,"bi":true,"g":[[56.32,76.54],[56.32,70.87]]},{"id":"store_edge_006","a":"store_entrance_006","b":"ND-e4K01UMM07647","l":0.0,"bi":true,"g":[[62.5,88.0],[62.5,88.0]]},{"id":"store_edge_007","a":"store_entrance_007","b":"ND-6OEzy_zfT8980","l":0.956,"bi":true,"g":[[30.14,22.03],[30.14,21.07]]},{"id":"store_edge_008","a":"store_entrance_008","b":"ND-dwvi-_GRh5900","l":0.0,"bi":true,"g":[[140.45,18.16],[140.45,18.16]]},{"id":"store_edge_009","a":"store_entrance_009","b":"ND-B2dugn7h08876","l":0.0,"bi":true,"g":[[71.47,10.63],[71.47,10.63]]},{"id":"store_edge_010","a":"store_entrance_010","b":"ND-oKqhWfdTk6658","l":0.444,"bi":true,"g":[[22.1,49.33],[22.1,48.88]]},{"id":"store_edge_011","a":"store_entrance_011","b":"ND-qVtyHsxck8257","l":0.0,"bi":true,"g":[[40.71,36.03],[40.71,36.03]]},{"id":"store_edge_012","a":"store_entrance_012","b":"ND-gZnYoVX4C0889","l":3.923,"bi":true,"g":[[35.17,41.27],[35.09,37.35]]},{"id":"store_edge_013","a":"store_entrance_013","b":"ND-PHj1hhyDg5740","l":3.417,"bi":true,"g":[[33.87,56.42],[33.97,53.01]]},{"id":"store_edge_014","a":"store_entrance_014","b":"ND-2NzytmibA2290","l":0.337,"bi":true,"g":[[77.17,43.62],[77.17,43.96]]},{"id":"store_edge_015","a":"store_entrance_015","b":"ND-dPqNERNT61659","l":0.3,"bi":true,"g":[[51.24,49.35],[51.24,49.05]]},{"id":"store_edge_016","a":"store_entrance_016","b":"ND-gq38k9H1F4579","l":0.546,"bi":true,"g":[[35.23,48.02],[35.23,48.57]]},{"id":"store_edge_017","a":"store_entrance_017","b":"ND-J3ORkjQav4710","l":0.299,"bi":true,"g":[[95.64,25.57],[95.94,25.59]]},{"id":"store_edge_018","a":"store_entrance_018","b":"ND-Ogj7-mAZb6206","l":0.418,"bi":true,"g":[[106.21,26.72],[106.63,26.77]]},{"id":"store_edge_019","a":"store_entrance_019","b":"ND-nCJCCVGxA3692","l":1.439,"bi":true,"g":[[125.29,52.32],[125.02,53.73]]},{"id":"store_edge_020","a":"store_entrance_020","b":"ND-WK2fgePom3964","l":0.18,"bi":true,"g":[[123.7,30.55],[123.88,30.59]]},{"id":"store_edge_021","a":"store_entrance_021","b":"ND-3vZ7YnTGv1025","l":0.0,"bi":true,"g":[[51.24,28.2],[51.24,28.2]]},{"id":"store_edge_022","a":"store_entrance_022","b":"ND-Gc0mcAvj_5011","l":0.208,"bi":true,"g":[[152.88,48.38],[152.88,48.17]]},{"id":"store_edge_023","a":"store_entrance_023","b":"ND-EVk8jv5jc4867","l":2.539,"bi":true,"g":[[152.88,37.38],[152.88,34.84]]},{"id":"store_edge_024","a":"store_entrance_024","b":"ND-ttYxOC4dv6148","l":2.856,"bi":true,"g":[[152.88,62.65],[152.88,65.51]]},{"id":"store_edge_025","a":"store_entrance_025","b":"ND-GlfJ_zwwc9683","l":2.033,"bi":true,"g":[[17.04,35.4],[19.07,35.4]]},{"id":"store_edge_026","a":"store_entrance_026","b":"ND-Jcu7MR0wA4631","l":0.0,"bi":true,"g":[[103.74,87.48],[103.74,87.48]]},{"id":"store_edge_027","a":"store_entrance_027","b":"ND-KHcP8FR944500","l":1.763,"bi":true,"g":[[37.65,53.95],[39.36,54.38]]},{"id":"store_edge_028","a":"store_entrance_028","b":"ND-eb2xyjLk80767","l":0.323,"bi":true,"g":[[38.98,61.4],[39.29,61.48]]},{"id":"store_edge_029","a":"store_entrance_029","b":"ND-i7sLiauPs8278","l":1.781,"bi":true,"g":[[46.3,56.07],[48.03,56.49]]},{"id":"store_edge_030","a":"store_entrance_030","b":"ND-KHcP8FR944500","l":0.565,"bi":true,"g":[[38.81,54.24],[39.36,54.38]]},{"id":"store_edge_031","a":"store_entrance_031","b":"ND-RPPMFdnYk0640","l":0.0,"bi":true,"g":[[63.62,65.8],[63.62,65.8]]},{"id":"store_edge_032","a":"store_entrance_032","b":"ND-rZ91rfxFD0473","l":3.457,"bi":true,"g":[[68.52,35.26],[68.48,31.8]]},{"id":"store_edge_033","a":"store_entrance_033","b":"ND-AfHsn-cll3891","l":2.92,"bi":true,"g":[[51.24,38.34],[51.24,41.26]]},{"id":"store_edge_034","a":"store_entrance_034","b":"ND-CWq1vjgVv5115","l":0.197,"bi":true,"g":[[51.24,44.71],[51.24,44.51]]},{"id":"store_edge_035","a":"store_entrance_035","b":"ND-_wJfSHEatf0043","l":0.118,"bi":true,"g":[[51.24,54.05],[51.24,53.93]]},{"id":"store_edge_036","a":"store_entrance_036","b":"ND-xm-zsHxUm2746","l":0.0,"bi":true,"g":[[63.96,58.82],[63.96,58.82]]},{"id":"store_edge_037","a":"store_entrance_037","b":"ND-bkGkpNmj-3635","l":0.415,"bi":true,"g":[[64.06,39.71],[64.47,39.66]]},{"id":"store_edge_038","a":"store_entrance_038","b":"ND-zFpXIZXDO9891","l":0.548,"bi":true,"g":[[77.17,56.19],[77.17,55.64]]},{"id":"store_edge_039","a":"store_entrance_039","b":"ND-pLiGzopE_1163","l":0.311,"bi":true,"g":[[77.17,50.55],[77.17,50.86]]},{"id":"store_edge_040","a":"store_entrance_040","b":"ND--mEEYOk4l1195","l":0.544,"bi":true,"g":[[56.6,40.66],[56.06,40.73]]},{"id":"store_edge_041","a":"store_entrance_041","b":"ND-M0vbjijvj8200","l":1.442,"bi":true,"g":[[56.71,64.96],[55.27,64.79]]},{"id":"store_edge_042","a":"store_entrance_042","b":"ND-rZ91rfxFD0473","l":3.668,"bi":true,"g":[[68.53,35.47],[68.48,31.8]]},{"id":"store_edge_043","a":"store_entrance_043","b":"ND-ahEBpWpgh3396","l":0.697,"bi":true,"g":[[89.0,60.83],[89.0,60.14]]},{"id":"store_edge_044","a":"store_entrance_044","b":"ND-Ocw6ypX_T5019","l":3.545,"bi":true,"g":[[35.18,42.21],[35.25,45.75]]},{"id":"store_edge_045","a":"store_entrance_045","b":"ND-n10BJN9pK5619","l":0.023,"bi":true,"g":[[89.0,49.67],[89.0,49.7]]},{"id":"store_edge_046","a":"store_entrance_046","b":"ND-eVkG7veBm0890","l":0.0,"bi":true,"g":[[55.6,57.78],[55.6,57.78]]},{"id":"store_edge_047","a":"store_entrance_047","b":"ND-Fp41GwLML9243","l":0.534,"bi":true,"g":[[51.24,52.53],[51.24,52.0]]},{"id":"store_edge_048","a":"store_entrance_048","b":"ND-ha9dxgWqR0843","l":2.891,"bi":true,"g":[[77.19,63.03],[77.17,60.14]]},{"id":"store_edge_049","a":"store_entrance_049","b":"ND-Gc0mcAvj_5011","l":0.759,"bi":true,"g":[[152.88,47.41],[152.88,48.17]]},{"id":"store_edge_050","a":"store_entrance_050","b":"ND-gq38k9H1F4579","l":0.466,"bi":true,"g":[[35.23,49.04],[35.23,48.57]]},{"id":"store_edge_051","a":"store_entrance_051","b":"ND-vsudfQQ9j9528","l":0.819,"bi":true,"g":[[123.06,68.6],[123.86,68.44]]},{"id":"store_edge_052","a":"store_entrance_052","b":"ND-QFYbS1nGa5315","l":3.525,"bi":true,"g":[[51.31,60.52],[51.24,57.0]]},{"id":"store_edge_053","a":"store_entrance_053","b":"ND-OBzjbJhAj6899","l":1.489,"bi":true,"g":[[89.0,37.96],[89.0,36.47]]},{"id":"store_edge_054","a":"store_entrance_054","b":"ND-5c1Bx7olY7217","l":0.0,"bi":true,"g":[[27.27,84.37],[27.27,84.37]]},{"id":"store_edge_055","a":"store_entrance_055","b":"ND-WCvsig2if1283","l":0.0,"bi":true,"g":[[27.27,88.4],[27.27,88.4]]},{"id":"store_edge_056","a":"store_entrance_056","b":"store_entrance_037","l":0.0,"bi":true,"g":[[64.06,39.71],[64.06,39.71]]},{"id":"store_edge_057","a":"store_entrance_057","b":"ND-Gc0mcAvj_5011","l":0.107,"bi":true,"g":[[152.88,48.06],[152.88,48.17]]},{"id":"store_edge_058","a":"store_entrance_058","b":"ND-XJziATUz07428","l":1.161,"bi":true,"g":[[83.65,11.79],[83.66,10.63]]},{"id":"store_edge_059","a":"store_entrance_059","b":"ND-qpqxeP12C2601","l":1.225,"bi":true,"g":[[140.74,86.06],[140.74,84.83]]},{"id":"store_edge_060","a":"store_entrance_060","b":"ND-uTCudaGza9139","l":8.308,"bi":true,"g":[[135.71,73.81],[135.71,65.51]]},{"id":"synthetic_edge_000","a":"ND-R9OtNLOZZ9866","b":"ND-XJziATUz07428","l":9.454,"bi":true,"g":[[88.36,2.44],[83.66,10.63]]},{"id":"synthetic_edge_001","a":"ND-eNvFB4KrG5055","b":"ND-nF9Rakzif8490","l":8.048,"bi":true,"g":[[5.04,58.76],[13.09,58.76]]},{"id":"synthetic_edge_002","a":"ND-B8JfkPLDE4485","b":"ND-XJziATUz07428","l":5.444,"bi":true,"g":[[88.34,7.85],[83.66,10.63]]},{"id":"synthetic_edge_003","a":"ND-5iZ0py7438366","b":"ND-Jcu7MR0wA4631","l":21.629,"bi":true,"g":[[83.3,94.57],[103.74,87.48]]}]},{"key":"test-center-1f","label":"테스트 센터 1F","building":"test-center","floor":"1F","nodes":[{"id":"C01","t":"corridor","x":10.25,"y":13.5,"n":"C01 좌측 상부 복도"},{"id":"C02","t":"corridor","x":16.0,"y":13.5,"n":"C02 좌측 상부 복도"},{"id":"C03","t":"junction","x":24.3,"y":13.5,"n":"C03 정보도서관 앞 교차점"},{"id":"C04","t":"junction","x":31.2,"y":13.5,"n":"C04 상부 화장실 앞 교차점"},{"id":"C05","t":"corridor","x":39.7,"y":13.5,"n":"C05 중앙 코어 좌측 복도"},{"id":"C06","t":"corridor","x":45.5,"y":13.5,"n":"C06 중앙 상부 복도"},{"id":"C07","t":"corridor","x":53.0,"y":13.5,"n":"C07 중앙 코어 우측 복도"},{"id":"C08","t":"junction","x":59.8,"y":13.5,"n":"C08 카페 앞 교차점"},{"id":"C09","t":"corridor","x":66.2,"y":13.5,"n":"C09 편의점 앞 복도"},{"id":"C10","t":"corridor","x":74.6,"y":13.5,"n":"C10 허브 존 앞 복도"},{"id":"C11","t":"junction","x":82.0,"y":13.5,"n":"C11 우측 상부 교차점"},{"id":"C12","t":"corridor","x":31.2,"y":19.0,"n":"C12 서측 중앙 통로"},{"id":"C13","t":"junction","x":31.2,"y":27.0,"n":"C13 서측 하부 교차점"},{"id":"C14","t":"corridor","x":38.0,"y":27.75,"n":"C14 하부 복도"},{"id":"C15","t":"junction","x":44.25,"y":27.75,"n":"C15 팀메이킹룸 앞 교차점"},{"id":"C16","t":"corridor","x":58.5,"y":27.75,"n":"C16 중앙 하부 복도"},{"id":"C17","t":"junction","x":61.25,"y":27.75,"n":"C17 남측 출구 분기점"},{"id":"C18","t":"junction","x":70.85,"y":28.25,"n":"C18 창업카페 남측 교차점"},{"id":"C19","t":"junction","x":79.0,"y":28.25,"n":"C19 우측 서비스 구역 교차점"},{"id":"C20","t":"junction","x":80.4,"y":29.5,"n":"C20 고객지원실·대관사무실 분기점"},{"id":"C21","t":"corridor","x":82.0,"y":21.0,"n":"C21 우측 세로 복도"},{"id":"C22","t":"corridor","x":82.0,"y":26.5,"n":"C22 우측 세로 복도"},{"id":"C23","t":"corridor","x":40.5,"y":27.75,"n":"C23 팀메이킹룸 4 앞 복도"},{"id":"C24","t":"corridor","x":44.6,"y":27.75,"n":"C24 팀메이킹룸 3 앞 복도"},{"id":"C25","t":"corridor","x":49.2,"y":27.75,"n":"C25 팀메이킹룸 2 앞 복도"},{"id":"C26","t":"corridor","x":54.95,"y":27.75,"n":"C26 팀메이킹룸 1 앞 복도"},{"id":"C27","t":"corridor","x":22.75,"y":21.9,"n":"C27 원형 공간 사이 통로"},{"id":"C28","t":"corridor","x":22.75,"y":25.0,"n":"C28 원형 공간 하부 통로"},{"id":"C29","t":"corridor","x":26.0,"y":27.0,"n":"C29 코워킹스페이스 연결점"},{"id":"C30","t":"corridor","x":10.75,"y":18.8,"n":"C30 좌측 화장실 앞"},{"id":"C31","t":"corridor","x":10.75,"y":13.5,"n":"C31 좌측 세로 연결점"},{"id":"C32","t":"junction","x":60.75,"y":22.35,"n":"C32 창업카페 서측 분기점"},{"id":"C33","t":"junction","x":61.55,"y":33.5,"n":"C33 남측 출구 1 연결점"},{"id":"C34","t":"corridor","x":65.45,"y":33.5,"n":"C34 남측 출구 2 연결점"},{"id":"C35","t":"corridor","x":69.3,"y":33.5,"n":"C35 남측 출구 3 연결점"},{"id":"C36","t":"corridor","x":73.15,"y":33.5,"n":"C36 남측 출구 4 연결점"},{"id":"N01","t":"entrance","x":19.85,"y":11.9,"n":"우편함"},{"id":"N02","t":"entrance","x":24.3,"y":11.9,"n":"정보도서관"},{"id":"N03","t":"entrance","x":31.2,"y":11.9,"n":"상부 화장실"},{"id":"N04","t":"entrance","x":9.0,"y":18.8,"n":"좌측 화장실"},{"id":"N05","t":"entrance","x":21.0,"y":21.9,"n":"미디어써클룸"},{"id":"N06","t":"entrance","x":21.95,"y":18.75,"n":"원형미팅룸"},{"id":"N07","t":"core-entrance","x":39.7,"y":11.95,"n":"중앙 코어 좌측"},{"id":"N08","t":"core-entrance","x":51.1,"y":11.95,"n":"중앙 코어 우측"},{"id":"N09","t":"entrance","x":59.8,"y":11.95,"n":"카페"},{"id":"N10","t":"entrance","x":66.2,"y":11.95,"n":"편의점"},{"id":"N11","t":"entrance","x":74.6,"y":11.95,"n":"허브 엑셀러레이팅 존"},{"id":"N12","t":"vertical-connection","x":86.0,"y":11.95,"n":"우측 계단"},{"id":"N13","t":"vertical-connection","x":86.3,"y":19.45,"n":"우측 엘리베이터"},{"id":"N14","t":"zone-entrance","x":63.0,"y":22.35,"n":"창업카페 존"},{"id":"N15","t":"zone-entrance","x":70.85,"y":26.95,"n":"창업카페 존"},{"id":"N16","t":"entrance","x":40.5,"y":29.7,"n":"팀메이킹룸 4"},{"id":"N17","t":"entrance","x":44.6,"y":29.7,"n":"팀메이킹룸 3"},{"id":"N18","t":"entrance","x":49.2,"y":29.7,"n":"팀메이킹룸 2"},{"id":"N19","t":"entrance","x":54.95,"y":29.7,"n":"팀메이킹룸 1"},{"id":"N20","t":"entrance","x":83.35,"y":29.35,"n":"고객지원실"},{"id":"N21","t":"entrance","x":80.4,"y":30.5,"n":"대관사무실"},{"id":"N22","t":"exit","x":8.15,"y":13.4,"n":"좌측 비상구"},{"id":"N23","t":"exit","x":84.3,"y":13.4,"n":"우측 비상구"},{"id":"N24","t":"exit","x":61.55,"y":35.3,"n":"하단 비상구"},{"id":"N25","t":"exit","x":65.45,"y":35.3,"n":"하단 비상구"},{"id":"N26","t":"exit","x":69.3,"y":35.3,"n":"하단 비상구"},{"id":"N27","t":"exit","x":73.15,"y":35.3,"n":"하단 비상구"}],"edges":[{"id":"edge-C01-C02","a":"C01","b":"C02","l":5.75,"bi":true,"g":[[10.25,13.5],[16.0,13.5]]},{"id":"edge-C02-C03","a":"C02","b":"C03","l":8.3,"bi":true,"g":[[16.0,13.5],[24.3,13.5]]},{"id":"edge-C03-C04","a":"C03","b":"C04","l":6.9,"bi":true,"g":[[24.3,13.5],[31.2,13.5]]},{"id":"edge-C04-C05","a":"C04","b":"C05","l":8.5,"bi":true,"g":[[31.2,13.5],[39.7,13.5]]},{"id":"edge-C05-C06","a":"C05","b":"C06","l":5.8,"bi":true,"g":[[39.7,13.5],[45.5,13.5]]},{"id":"edge-C06-C07","a":"C06","b":"C07","l":7.5,"bi":true,"g":[[45.5,13.5],[53.0,13.5]]},{"id":"edge-C07-C08","a":"C07","b":"C08","l":6.8,"bi":true,"g":[[53.0,13.5],[59.8,13.5]]},{"id":"edge-C08-C09","a":"C08","b":"C09","l":6.4,"bi":true,"g":[[59.8,13.5],[66.2,13.5]]},{"id":"edge-C09-C10","a":"C09","b":"C10","l":8.4,"bi":true,"g":[[66.2,13.5],[74.6,13.5]]},{"id":"edge-C10-C11","a":"C10","b":"C11","l":7.4,"bi":true,"g":[[74.6,13.5],[82.0,13.5]]},{"id":"edge-N22-C01","a":"N22","b":"C01","l":2.102,"bi":true,"g":[[8.15,13.4],[10.25,13.5]]},{"id":"edge-N01-C03","a":"N01","b":"C03","l":6.05,"bi":true,"g":[[19.85,11.9],[19.85,12.75],[24.3,12.75],[24.3,13.5]]},{"id":"edge-N02-C03","a":"N02","b":"C03","l":1.6,"bi":true,"g":[[24.3,11.9],[24.3,13.5]]},{"id":"edge-N03-C04","a":"N03","b":"C04","l":1.6,"bi":true,"g":[[31.2,11.9],[31.2,13.5]]},{"id":"edge-N07-C05","a":"N07","b":"C05","l":1.55,"bi":true,"g":[[39.7,11.95],[39.7,13.5]]},{"id":"edge-N08-C07","a":"N08","b":"C07","l":3.45,"bi":true,"g":[[51.1,11.95],[51.1,12.75],[53.0,12.75],[53.0,13.5]]},{"id":"edge-N09-C08","a":"N09","b":"C08","l":1.55,"bi":true,"g":[[59.8,11.95],[59.8,13.5]]},{"id":"edge-N10-C09","a":"N10","b":"C09","l":1.55,"bi":true,"g":[[66.2,11.95],[66.2,13.5]]},{"id":"edge-N11-C10","a":"N11","b":"C10","l":1.55,"bi":true,"g":[[74.6,11.95],[74.6,13.5]]},{"id":"edge-N12-C11","a":"N12","b":"C11","l":5.55,"bi":true,"g":[[86.0,11.95],[86.0,12.75],[82.0,12.75],[82.0,13.5]]},{"id":"edge-N23-C11","a":"N23","b":"C11","l":2.302,"bi":true,"g":[[84.3,13.4],[82.0,13.5]]},{"id":"edge-C04-C12","a":"C04","b":"C12","l":5.5,"bi":true,"g":[[31.2,13.5],[31.2,19.0]]},{"id":"edge-C12-C13","a":"C12","b":"C13","l":8.0,"bi":true,"g":[[31.2,19.0],[31.2,27.0]]},{"id":"edge-C13-C14","a":"C13","b":"C14","l":7.55,"bi":true,"g":[[31.2,27.0],[38.0,27.0],[38.0,27.75]]},{"id":"edge-C14-C15","a":"C14","b":"C15","l":6.25,"bi":true,"g":[[38.0,27.75],[44.25,27.75]]},{"id":"edge-C15-C16","a":"C15","b":"C16","l":14.25,"bi":true,"g":[[44.25,27.75],[58.5,27.75]]},{"id":"edge-C16-C17","a":"C16","b":"C17","l":2.75,"bi":true,"g":[[58.5,27.75],[61.25,27.75]]},{"id":"edge-C17-C18","a":"C17","b":"C18","l":9.613,"bi":true,"g":[[61.25,27.75],[70.85,28.25]]},{"id":"edge-C18-C19","a":"C18","b":"C19","l":8.15,"bi":true,"g":[[70.85,28.25],[79.0,28.25]]},{"id":"edge-N04-C30","a":"N04","b":"C30","l":1.75,"bi":true,"g":[[9.0,18.8],[10.75,18.8]]},{"id":"edge-C30-C31","a":"C30","b":"C31","l":5.3,"bi":true,"g":[[10.75,18.8],[10.75,13.5]]},{"id":"edge-C31-C01","a":"C31","b":"C01","l":0.5,"bi":true,"g":[[10.75,13.5],[10.25,13.5]]},{"id":"edge-N06-N05","a":"N06","b":"N05","l":3.29,"bi":true,"g":[[21.95,18.75],[21.0,21.9]]},{"id":"edge-N05-C27","a":"N05","b":"C27","l":1.75,"bi":true,"g":[[21.0,21.9],[22.75,21.9]]},{"id":"edge-C27-C28","a":"C27","b":"C28","l":3.1,"bi":true,"g":[[22.75,21.9],[22.75,25.0]]},{"id":"edge-C28-C29","a":"C28","b":"C29","l":3.816,"bi":true,"g":[[22.75,25.0],[26.0,27.0]]},{"id":"edge-C29-C13","a":"C29","b":"C13","l":5.2,"bi":true,"g":[[26.0,27.0],[31.2,27.0]]},{"id":"edge-C14-C23","a":"C14","b":"C23","l":2.5,"bi":true,"g":[[38.0,27.75],[40.5,27.75]]},{"id":"edge-C23-C24","a":"C23","b":"C24","l":4.1,"bi":true,"g":[[40.5,27.75],[44.6,27.75]]},{"id":"edge-C24-C25","a":"C24","b":"C25","l":4.6,"bi":true,"g":[[44.6,27.75],[49.2,27.75]]},{"id":"edge-C25-C26","a":"C25","b":"C26","l":5.75,"bi":true,"g":[[49.2,27.75],[54.95,27.75]]},{"id":"edge-C26-C16","a":"C26","b":"C16","l":3.55,"bi":true,"g":[[54.95,27.75],[58.5,27.75]]},{"id":"edge-N16-C23","a":"N16","b":"C23","l":1.95,"bi":true,"g":[[40.5,29.7],[40.5,27.75]]},{"id":"edge-N17-C24","a":"N17","b":"C24","l":1.95,"bi":true,"g":[[44.6,29.7],[44.6,27.75]]},{"id":"edge-N18-C25","a":"N18","b":"C25","l":1.95,"bi":true,"g":[[49.2,29.7],[49.2,27.75]]},{"id":"edge-N19-C26","a":"N19","b":"C26","l":1.95,"bi":true,"g":[[54.95,29.7],[54.95,27.75]]},{"id":"edge-C08-C32","a":"C08","b":"C32","l":9.8,"bi":true,"g":[[59.8,13.5],[60.75,13.5],[60.75,22.35]]},{"id":"edge-C32-C17","a":"C32","b":"C17","l":5.9,"bi":true,"g":[[60.75,22.35],[60.75,27.75],[61.25,27.75]]},{"id":"edge-N14-C32","a":"N14","b":"C32","l":2.25,"bi":true,"g":[[63.0,22.35],[60.75,22.35]]},{"id":"edge-N15-C18","a":"N15","b":"C18","l":1.3,"bi":true,"g":[[70.85,26.95],[70.85,28.25]]},{"id":"edge-C11-C21","a":"C11","b":"C21","l":7.5,"bi":true,"g":[[82.0,13.5],[82.0,21.0]]},{"id":"edge-C21-C22","a":"C21","b":"C22","l":5.5,"bi":true,"g":[[82.0,21.0],[82.0,26.5]]},{"id":"edge-C22-C19","a":"C22","b":"C19","l":3.473,"bi":true,"g":[[82.0,26.5],[79.0,28.25]]},{"id":"edge-N13-C21","a":"N13","b":"C21","l":5.85,"bi":true,"g":[[86.3,19.45],[83.0,19.45],[83.0,21.0],[82.0,21.0]]},{"id":"edge-C19-C20","a":"C19","b":"C20","l":1.877,"bi":true,"g":[[79.0,28.25],[80.4,29.5]]},{"id":"edge-C20-N20","a":"C20","b":"N20","l":2.954,"bi":true,"g":[[80.4,29.5],[83.35,29.35]]},{"id":"edge-C20-N21","a":"C20","b":"N21","l":1.0,"bi":true,"g":[[80.4,29.5],[80.4,30.5]]},{"id":"edge-C17-C33","a":"C17","b":"C33","l":5.758,"bi":true,"g":[[61.25,27.75],[61.55,33.5]]},{"id":"edge-C33-C34","a":"C33","b":"C34","l":3.9,"bi":true,"g":[[61.55,33.5],[65.45,33.5]]},{"id":"edge-C34-C35","a":"C34","b":"C35","l":3.85,"bi":true,"g":[[65.45,33.5],[69.3,33.5]]},{"id":"edge-C35-C36","a":"C35","b":"C36","l":3.85,"bi":true,"g":[[69.3,33.5],[73.15,33.5]]},{"id":"edge-C18-C35","a":"C18","b":"C35","l":5.474,"bi":true,"g":[[70.85,28.25],[69.3,33.5]]},{"id":"edge-C33-N24","a":"C33","b":"N24","l":1.8,"bi":true,"g":[[61.55,33.5],[61.55,35.3]]},{"id":"edge-C34-N25","a":"C34","b":"N25","l":1.8,"bi":true,"g":[[65.45,33.5],[65.45,35.3]]},{"id":"edge-C35-N26","a":"C35","b":"N26","l":1.8,"bi":true,"g":[[69.3,33.5],[69.3,35.3]]},{"id":"edge-C36-N27","a":"C36","b":"N27","l":1.8,"bi":true,"g":[[73.15,33.5],[73.15,35.3]]}]}];
+const HYUNDAI_VECTOR_FLOORS = [
+  ['B6', 'b6'], ['B5', 'b5'], ['B4', 'b4'], ['B3', 'b3'], ['B2', 'b2'], ['B1', 'b1'],
+  ['2F', '2f'], ['3F', '3f'], ['4F', '4f'], ['5F', '5f'], ['6F', '6f'],
+].map(([floor, file]) => ({
+  key: `thehyundai-seoul-${file}`,
+  label: `더현대 서울 ${floor}`,
+  building: 'thehyundai-seoul',
+  floor,
+  fileKey: file,
+  nodes: [],
+  edges: [],
+  mapUrl: `../api/app/data/vector_maps/thehyundai-seoul/${file}.json`,
+  imageUrl: `../api/app/data/vector_maps/thehyundai-seoul/source_images/${file}.png`,
+  graphUrl: null,
+}));
+
+// 더현대 층은 지하부터 지상 순서로, 테스트 센터는 마지막에 표시한다.
+const hyundai1F = NAV_DATA.find(item => item.building === 'thehyundai-seoul');
+if (hyundai1F) {
+  Object.assign(hyundai1F, {
+    fileKey: '1f',
+    mapUrl: '../api/app/data/vector_maps/thehyundai-seoul/1f.json',
+    imageUrl: '../client/assets/mock/hyundai_floor_map.svg',
+    // local_m -> SVG viewBox(px), fitted from 55 matching store centroids.
+    coordinateTransform: {
+      x: { localX: 11.96880364, localY: 0.12594195, offset: 11.1613734 },
+      y: { localX: 0.06662614, localY: 11.8898916, offset: 55.62274694 },
+    },
+  });
+}
+const testDatasets = NAV_DATA.filter(item => item.building !== 'thehyundai-seoul');
+NAV_DATA.splice(
+  0,
+  NAV_DATA.length,
+  ...HYUNDAI_VECTOR_FLOORS.slice(0, 6),
+  hyundai1F,
+  ...HYUNDAI_VECTOR_FLOORS.slice(6),
+  ...testDatasets,
+);
+
 (function () {
   const TYPE_COLORS = {
     corridor: 'var(--dg-blue)', junction: 'var(--dg-yellow)',
@@ -1720,16 +2051,46 @@ const NAV_DATA = [{"key":"FL-soem999bnha10599","label":"더현대 서울 1F","bu
     dead_end: 'var(--dg-red)', exit: 'var(--dg-red)',
   };
   const color = t => TYPE_COLORS[t] || 'var(--dg-muted)';
+  const FEATURE_STYLES = {
+    footprint: { fill: 'var(--bg-soft)', stroke: 'var(--border)' },
+    store: { fill: 'var(--accent-soft)', stroke: 'var(--accent)' },
+    amenity: { fill: 'var(--dg-orange)', stroke: 'var(--dg-orange)' },
+    wall: { fill: 'none', stroke: 'var(--fg-subtle)' },
+    gate: { fill: 'var(--dg-green)', stroke: 'var(--dg-green)' },
+  };
+  const featureStyle = kind => FEATURE_STYLES[kind] || { fill: 'var(--bg-soft)', stroke: 'var(--fg-muted)' };
+  const escapeHtml = value => String(value ?? '')
+    .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;').replaceAll("'", '&#039;');
 
   const elFloors = document.getElementById('nmFloors');
   const elTypes = document.getElementById('nmTypes');
   const elInfo = document.getElementById('nmInfo');
   const elWrap = document.getElementById('nmSvgWrap');
+  const elStartStore = document.getElementById('nmStartStore');
+  const elEndStore = document.getElementById('nmEndStore');
+  const elRouteStores = document.getElementById('nmRouteStores');
   if (!elWrap) return;
 
   let floor = NAV_DATA[0];
   let hidden = new Set();
   let start = null, end = null, path = null;
+
+  function applyCoordinateTransform(targetFloor) {
+    const transform = targetFloor.coordinateTransform;
+    if (!transform || targetFloor.coordinatesTransformed) return;
+    const point = ([x, y]) => [
+      transform.x.localX * x + transform.x.localY * y + transform.x.offset,
+      transform.y.localX * x + transform.y.localY * y + transform.y.offset,
+    ];
+    for (const node of targetFloor.nodes) {
+      [node.x, node.y] = point([node.x, node.y]);
+    }
+    for (const edge of targetFloor.edges) {
+      edge.g = edge.g.map(point);
+    }
+    targetFloor.coordinatesTransformed = true;
+  }
 
   function dijkstra(f, s, e) {
     const adj = new Map(f.nodes.map(n => [n.id, []]));
@@ -1775,14 +2136,83 @@ const NAV_DATA = [{"key":"FL-soem999bnha10599","label":"더현대 서울 1F","bu
     return { x: minX - pad, y: minY - pad, w: (maxX - minX) + 2 * pad, h: (maxY - minY) + 2 * pad };
   }
 
+  function featurePoints(feature) {
+    let coordinates = feature.geometry?.coordinates || [];
+    while (Array.isArray(coordinates[0]) && !Number.isFinite(coordinates[0][0])) {
+      coordinates = coordinates[0];
+    }
+    return coordinates.map(point => Array.isArray(point)
+      ? [Number(point[0]), Number(point[1])]
+      : [Number(point.x), Number(point.y)]
+    ).filter(point => point.every(Number.isFinite));
+  }
+
+  function vectorFeatureMarkup(targetFloor, strokeWidth) {
+    const visible = (targetFloor.features || []).filter(feature => !hidden.has(feature.kind));
+    const rank = { footprint: 0, store: 1, amenity: 2, wall: 3, gate: 4 };
+    visible.sort((a, b) => (rank[a.kind] ?? 9) - (rank[b.kind] ?? 9));
+    let out = '';
+    for (const feature of visible) {
+      const points = featurePoints(feature);
+      if (points.length < 2) continue;
+      const style = featureStyle(feature.kind);
+      const title = escapeHtml([feature.name, feature.category, feature.id].filter(Boolean).join(' · '));
+      const attrs = `class="map-feature" fill="${style.fill}" fill-opacity="${feature.kind === 'footprint' ? 0.65 : 0.3}" stroke="${style.stroke}" stroke-width="${strokeWidth.toFixed(2)}" vector-effect="non-scaling-stroke"`;
+      if (feature.geometry?.type === 'LineString') {
+        out += `<polyline ${attrs} fill="none" points="${points.map(point => point.join(',')).join(' ')}"><title>${title}</title></polyline>`;
+      } else {
+        out += `<polygon ${attrs} points="${points.map(point => point.join(',')).join(' ')}"><title>${title}</title></polygon>`;
+      }
+    }
+    return out;
+  }
+
+  function renderVectorMap() {
+    if (floor.loadError) {
+      elWrap.innerHTML = `<div class="map-error">${escapeHtml(floor.loadError)}</div>`;
+      updateInfo();
+      return;
+    }
+    if (!floor.features) {
+      elWrap.innerHTML = '<div class="map-loading">층 JSON을 불러오는 중…</div>';
+      return;
+    }
+
+    const box = floor.viewBox || { min_x: 0, min_y: 0, width: 100, height: 100 };
+    const strokeWidth = Math.max(box.width, box.height) / 650;
+    let out = `<svg viewBox="${box.min_x ?? 0} ${box.min_y ?? 0} ${box.width} ${box.height}" xmlns="http://www.w3.org/2000/svg">`;
+    if (floor.imageUrl) {
+      out += `<image href="${escapeHtml(floor.imageUrl)}" x="${box.min_x ?? 0}" y="${box.min_y ?? 0}" width="${box.width}" height="${box.height}" preserveAspectRatio="none" opacity="0.82"/>`;
+    }
+    out += vectorFeatureMarkup(floor, strokeWidth);
+    out += '</svg>';
+    elWrap.innerHTML = out;
+    updateInfo();
+  }
+
   function render() {
-    const b = bounds(floor);
+    if (!floor.nodes?.length) {
+      renderVectorMap();
+      return;
+    }
+    const b = floor.viewBox
+      ? { x: floor.viewBox.min_x ?? 0, y: floor.viewBox.min_y ?? 0, w: floor.viewBox.width, h: floor.viewBox.height }
+      : bounds(floor);
     const r = b.w / 200, sw = b.w / 700;
     const pos = new Map(floor.nodes.map(n => [n.id, n]));
+    const routeEdgeIds = path ? new Set(path.edges) : null;
+    const routeNodeIds = path ? new Set(path.nodes) : null;
     let out = `<svg viewBox="${b.x.toFixed(1)} ${b.y.toFixed(1)} ${b.w.toFixed(1)} ${b.h.toFixed(1)}" xmlns="http://www.w3.org/2000/svg">`;
+    if (floor.imageUrl) {
+      out += `<image href="${escapeHtml(floor.imageUrl)}" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" preserveAspectRatio="none" opacity="0.82"/>`;
+    }
+    if (floor.features?.length) {
+      out += `<g opacity="0.38">${vectorFeatureMarkup(floor, sw)}</g>`;
+    }
     // 간선
-    out += `<g stroke="var(--dg-line)" stroke-width="${sw.toFixed(2)}" fill="none" stroke-linecap="round">`;
+    out += `<g stroke="var(--dg-blue)" stroke-width="${(sw * 1.35).toFixed(2)}" fill="none" stroke-linecap="round" opacity="0.8">`;
     for (const ed of floor.edges) {
+      if (routeEdgeIds && !routeEdgeIds.has(ed.id)) continue;
       const pts = ed.g.length >= 2 ? ed.g : [[pos.get(ed.a).x, pos.get(ed.a).y], [pos.get(ed.b).x, pos.get(ed.b).y]];
       out += `<polyline points="${pts.map(p => p.join(',')).join(' ')}"/>`;
     }
@@ -1802,6 +2232,7 @@ const NAV_DATA = [{"key":"FL-soem999bnha10599","label":"더현대 서울 1F","bu
     out += '<g>';
     for (const n of floor.nodes) {
       if (hidden.has(n.t)) continue;
+      if (routeNodeIds && !routeNodeIds.has(n.id)) continue;
       const isS = n.id === start, isE = n.id === end;
       const ring = isS ? 'var(--dg-green)' : isE ? 'var(--dg-red)' : null;
       out += `<g class="nm-node" data-id="${n.id}">`;
@@ -1828,18 +2259,36 @@ const NAV_DATA = [{"key":"FL-soem999bnha10599","label":"더현대 서울 1F","bu
   }
 
   function updateInfo() {
+    if (!floor.nodes?.length) {
+      if (floor.loadError) {
+        elInfo.innerHTML = `<strong>${floor.label}</strong> · JSON 로드 실패`;
+        return;
+      }
+      const counts = {};
+      (floor.features || []).forEach(feature => { counts[feature.kind] = (counts[feature.kind] || 0) + 1; });
+      const summary = Object.entries(counts).map(([kind, count]) => `${kind} ${count}`).join(' · ');
+      elInfo.innerHTML = `<strong>${floor.label}</strong> · 지도 피처 ${(floor.features || []).length}개${summary ? ` (${summary})` : ''} · 노드 0개 · 간선 0개 — 길찾기 그래프 미생성`;
+      return;
+    }
     if (!start) { elInfo.innerHTML = '노드를 클릭해 <strong>출발점</strong>을 선택하세요.'; return; }
-    if (!end) { elInfo.innerHTML = `출발 <strong>${start}</strong> — 노드를 클릭해 <strong>도착점</strong>을 선택하세요.`; return; }
-    if (!path) { elInfo.innerHTML = `출발 <strong>${start}</strong> → 도착 <strong>${end}</strong> — 연결된 경로가 없습니다 (Route not found).`; return; }
-    elInfo.innerHTML = `출발 <strong>${start}</strong> → 도착 <strong>${end}</strong> · 거리 <strong>${path.total.toFixed(1)} m</strong> · 경유 노드 ${path.nodes.length}개 · 간선 ${path.edges.length}개`;
+    const nodeLabel = id => floor.nodes.find(node => node.id === id)?.n || id;
+    if (!end) { elInfo.innerHTML = `출발 <strong>${escapeHtml(nodeLabel(start))}</strong> — 노드를 클릭해 <strong>도착점</strong>을 선택하세요.`; return; }
+    if (!path) { elInfo.innerHTML = `출발 <strong>${escapeHtml(nodeLabel(start))}</strong> → 도착 <strong>${escapeHtml(nodeLabel(end))}</strong> — 연결된 경로가 없습니다 (Route not found).`; return; }
+    const unit = floor.distanceUnit || 'm';
+    const prototype = floor.graphStatus?.includes('prototype') ? ' · <strong>2F 시제품</strong>' : '';
+    elInfo.innerHTML = `출발 <strong>${escapeHtml(nodeLabel(start))}</strong> → 도착 <strong>${escapeHtml(nodeLabel(end))}</strong> · 거리 <strong>${path.total.toFixed(1)} ${unit}</strong> · 경유 노드 ${path.nodes.length}개 · 간선 ${path.edges.length}개${prototype}`;
   }
 
   function renderTypes() {
     const counts = {};
-    floor.nodes.forEach(n => { counts[n.t] = (counts[n.t] || 0) + 1; });
+    if (floor.nodes?.length) {
+      floor.nodes.forEach(n => { counts[n.t] = (counts[n.t] || 0) + 1; });
+    } else {
+      (floor.features || []).forEach(feature => { counts[feature.kind] = (counts[feature.kind] || 0) + 1; });
+    }
     elTypes.innerHTML = Object.entries(counts).sort().map(([t, c]) =>
       `<label><input type="checkbox" data-type="${t}" ${hidden.has(t) ? '' : 'checked'}>` +
-      `<span class="type-dot" style="background:${color(t)}"></span>${t} (${c})</label>`
+      `<span class="type-dot" style="background:${floor.nodes?.length ? color(t) : featureStyle(t).stroke}"></span>${t} (${c})</label>`
     ).join('');
     elTypes.querySelectorAll('input').forEach(cb => cb.addEventListener('change', () => {
       cb.checked ? hidden.delete(cb.dataset.type) : hidden.add(cb.dataset.type);
@@ -1847,11 +2296,67 @@ const NAV_DATA = [{"key":"FL-soem999bnha10599","label":"더현대 서울 1F","bu
     }));
   }
 
-  function selectFloor(f) {
+  function renderStoreSelectors() {
+    const stores = (floor.nodes || [])
+      .filter(node => node.t === 'store_entrance' && node.n)
+      .sort((a, b) => a.n.localeCompare(b.n, 'ko'));
+    const options = stores.map(node => `<option value="${escapeHtml(node.id)}">${escapeHtml(node.n)}</option>`).join('');
+    const placeholder = stores.length
+      ? '<option value="">매장을 선택하세요</option>'
+      : '<option value="">연결된 매장 데이터 없음</option>';
+    elStartStore.innerHTML = placeholder + options;
+    elEndStore.innerHTML = placeholder + options;
+    elStartStore.disabled = stores.length < 2;
+    elEndStore.disabled = stores.length < 2;
+    elRouteStores.disabled = stores.length < 2;
+  }
+
+  async function selectFloor(f) {
     floor = f; hidden = new Set(); start = end = path = null;
     elFloors.querySelectorAll('.floor-tab').forEach(btn =>
       btn.classList.toggle('active', btn.dataset.key === f.key));
-    renderTypes(); render();
+
+    if ((f.mapUrl && !f.features) || ((f.graphUrl || window.API_GUIDE_FLOOR_DATA?.graphs?.[f.fileKey]) && !f.graphLoaded)) {
+      elTypes.innerHTML = '';
+      elInfo.innerHTML = `<strong>${f.label}</strong> · JSON 로딩 중`;
+      elWrap.innerHTML = '<div class="map-loading">층 JSON을 불러오는 중…</div>';
+      try {
+        if (f.mapUrl && !f.features) {
+          const embeddedMap = window.API_GUIDE_FLOOR_DATA?.vectors?.[f.fileKey];
+          if (embeddedMap) {
+            f.features = embeddedMap.features || [];
+            f.viewBox = embeddedMap.viewBox;
+          } else {
+            const response = await fetch(f.mapUrl);
+            if (!response.ok) throw new Error(`지도 HTTP ${response.status}`);
+            const data = await response.json();
+            f.features = data.features || [];
+            f.viewBox = data.coordinate_system?.view_box;
+          }
+        }
+        if ((f.graphUrl || window.API_GUIDE_FLOOR_DATA?.graphs?.[f.fileKey]) && !f.graphLoaded) {
+          let graph = window.API_GUIDE_FLOOR_DATA?.graphs?.[f.fileKey];
+          if (!graph) {
+            const response = await fetch(f.graphUrl);
+            if (!response.ok) throw new Error(`그래프 HTTP ${response.status}`);
+            graph = await response.json();
+          }
+          f.nodes = (graph.nodes || []).map(node => ({ id: node.id, t: node.type, x: node.x, y: node.y, n: node.name }));
+          f.edges = (graph.edges || []).map(edge => ({
+            id: edge.id, a: edge.from, b: edge.to, l: edge.length_m ?? edge.length_px,
+            bi: edge.bidirectional, g: edge.geometry,
+          }));
+          f.distanceUnit = graph.distance_unit || 'px';
+          f.graphStatus = graph.generation_status;
+          f.graphLoaded = true;
+        }
+        applyCoordinateTransform(f);
+      } catch (error) {
+        f.loadError = `층 JSON을 불러오지 못했습니다: ${error.message}`;
+      }
+      if (floor !== f) return;
+    }
+    renderTypes(); renderStoreSelectors(); render();
   }
 
   elFloors.innerHTML = NAV_DATA.map(f =>
@@ -1861,11 +2366,26 @@ const NAV_DATA = [{"key":"FL-soem999bnha10599","label":"더현대 서울 1F","bu
 
   document.getElementById('nmAll').addEventListener('click', () => { hidden = new Set(); renderTypes(); render(); });
   document.getElementById('nmNone').addEventListener('click', () => {
-    hidden = new Set(floor.nodes.map(n => n.t)); renderTypes(); render();
+    hidden = new Set(floor.nodes?.length
+      ? floor.nodes.map(n => n.t)
+      : (floor.features || []).map(feature => feature.kind));
+    renderTypes(); render();
   });
   document.getElementById('nmReset').addEventListener('click', () => { start = end = path = null; updateInfo(); render(); });
+  elRouteStores.addEventListener('click', () => {
+    const selectedStart = elStartStore.value;
+    const selectedEnd = elEndStore.value;
+    if (!selectedStart || !selectedEnd || selectedStart === selectedEnd) {
+      elInfo.innerHTML = '서로 다른 <strong>출발 매장</strong>과 <strong>도착 매장</strong>을 선택하세요.';
+      return;
+    }
+    start = selectedStart;
+    end = selectedEnd;
+    path = dijkstra(floor, start, end);
+    render();
+  });
 
-  selectFloor(NAV_DATA[0]);
+  selectFloor(hyundai1F);
 })();
 </script>
 
