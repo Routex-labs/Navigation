@@ -1,4 +1,6 @@
 import 'dart:math';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kIsWeb;
@@ -25,6 +27,28 @@ const _markersSourceId = 'floor-markers';
 const _highlightSourceId = 'floor-highlight';
 const _directionSourceId = 'floor-direction';
 const _storesFillLayerId = 'floor-stores-fill';
+
+/// POI `type` 속성(백엔드 실데이터 값)을 지도 위 아이콘에 매핑한다. 건물마다
+/// 명명이 조금씩 달라(더현대는 elevator/escalator/toilet/exit, 데모 건물인
+/// test-center는 vertical-connection/core-entrance를 쓴다) 여러 값을 같은
+/// 아이콘으로 묶는다. 매핑에 없는 값(facility/poi 등)은 [_defaultPoiIcon]으로
+/// 그린다.
+const _poiIconByType = <String, IconData>{
+  'elevator': Icons.elevator,
+  'vertical-connection': Icons.elevator,
+  'escalator': Icons.escalator,
+  'toilet': Icons.wc,
+  'exit': Icons.exit_to_app,
+  'core-entrance': Icons.exit_to_app,
+  'facility': Icons.info_outline,
+};
+const _defaultPoiIcon = Icons.place;
+const _poiIconBackgroundColor = Color(0xFF76AE6D);
+
+/// [MapLibreMapController.addImage]에 등록할 때 쓰는 이름. 같은 아이콘을
+/// 여러 type이 공유할 수 있으므로 type이 아니라 아이콘 자체를 키로 삼아
+/// 중복 렌더링/등록을 피한다.
+String _poiIconImageName(IconData icon) => 'poi-icon-${icon.codePoint}';
 
 /// 지도 위에 얹을 현재 위치/목적지 점 마커. 종류에 따라 스타일이 달라진다
 /// (마커 색상은 [_markersGeoJson]의 circle-color data-driven 표현식이 결정).
@@ -230,14 +254,28 @@ class _FloorPlanViewState extends State<FloorPlanView> {
       enableInteraction: false,
     );
 
-    await controller.addCircleLayer(
+    // 엘리베이터/에스컬레이터/화장실 같은 POI는 단순 점 대신 종류별 아이콘으로
+    // 그린다. MapLibre 심볼 레이어는 사전 등록된 비트맵만 참조할 수 있어서,
+    // 필요한 아이콘들을 먼저 오프스크린 렌더링해 addImage로 등록한 다음
+    // type 속성에 따라 골라 쓰는 match 표현식을 iconImage에 건다.
+    for (final icon in {..._poiIconByType.values, _defaultPoiIcon}) {
+      await controller.addImage(_poiIconImageName(icon), await _renderPoiIcon(icon));
+    }
+    await controller.addSymbolLayer(
       _tileSourceId,
-      'floor-pois-circle',
-      const CircleLayerProperties(
-        circleRadius: 4,
-        circleColor: '#76AE6D',
-        circleStrokeColor: '#FFFFFF',
-        circleStrokeWidth: 1.2,
+      'floor-pois-icon',
+      SymbolLayerProperties(
+        iconImage: [
+          'match',
+          ['get', 'type'],
+          for (final entry in _poiIconByType.entries) ...[
+            entry.key,
+            _poiIconImageName(entry.value),
+          ],
+          _poiIconImageName(_defaultPoiIcon),
+        ],
+        iconSize: 0.32,
+        iconAllowOverlap: true,
       ),
       sourceLayer: 'pois',
       enableInteraction: false,
@@ -248,7 +286,7 @@ class _FloorPlanViewState extends State<FloorPlanView> {
       const SymbolLayerProperties(
         textField: ['get', 'name'],
         textSize: 10,
-        textOffset: [0, 1.2],
+        textOffset: [0, 1.6],
         textColor: '#4F5451',
         textHaloColor: '#FFFFFF',
         textHaloWidth: 1,
@@ -477,6 +515,37 @@ class _FloorPlanViewState extends State<FloorPlanView> {
     final lat = footprint.map((p) => p.latitude).reduce((a, b) => a + b) / footprint.length;
     final lng = footprint.map((p) => p.longitude).reduce((a, b) => a + b) / footprint.length;
     return ll.LatLng(lat, lng);
+  }
+
+  /// Material 아이콘 글리프를 흰 테두리 + 초록 원 배경 위에 흰색으로 그려
+  /// PNG 바이트로 오프스크린 렌더링한다. MapLibre 심볼 레이어는 미리 등록된
+  /// 비트맵 이미지만 참조할 수 있어서([MapLibreMapController.addImage]),
+  /// 폰트 글리프를 직접 캔버스에 그려 이미지로 바꿔야 한다.
+  static Future<Uint8List> _renderPoiIcon(IconData icon) async {
+    const canvasSize = 96.0;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, canvasSize, canvasSize));
+    const center = Offset(canvasSize / 2, canvasSize / 2);
+
+    canvas.drawCircle(center, canvasSize / 2, Paint()..color = Colors.white);
+    canvas.drawCircle(center, canvasSize / 2 - 5, Paint()..color = _poiIconBackgroundColor);
+
+    final textPainter = TextPainter(textDirection: TextDirection.ltr)
+      ..text = TextSpan(
+        text: String.fromCharCode(icon.codePoint),
+        style: TextStyle(
+          fontSize: canvasSize * 0.55,
+          fontFamily: icon.fontFamily,
+          package: icon.fontPackage,
+          color: Colors.white,
+        ),
+      )
+      ..layout();
+    textPainter.paint(canvas, center - Offset(textPainter.width / 2, textPainter.height / 2));
+
+    final image = await recorder.endRecording().toImage(canvasSize.toInt(), canvasSize.toInt());
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    return byteData!.buffer.asUint8List();
   }
 
   static const _metersPerDegreeLat = 111320.0;
