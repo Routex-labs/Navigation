@@ -96,6 +96,17 @@ class _FloorPlanViewState extends State<FloorPlanView> {
     if (!_isMapSupportedOnThisPlatform) {
       return const _UnsupportedPlatformNotice();
     }
+    final footprint = widget.floorPlan.footprint;
+    // 건물 전체가 화면에 다 들어오는 줌보다 더 축소되지 않도록 최솟값으로
+    // 고정한다. _fitBearingAndZoom은 건물 정렬 각도를 가정하고 화면을 꽉
+    // 채우는 줌을 구하는데, 그 값을 그대로 하한으로 쓰면 사용자가 지도를
+    // 회전했을 때(회전하면 외곽선이 화면에 더 넓게 걸쳐짐) 그 줌으로는
+    // 건물 일부가 화면 밖으로 밀려나는데도 더 축소를 못 하는 문제가 있었다
+    // — 그래서 회전 각도와 무관하게 항상 전체가 들어오도록 회전-불변
+    // 반지름(중심~가장 먼 꼭짓점) 기준으로 따로 계산한다.
+    final minZoom = footprint.isEmpty
+        ? null
+        : _minVisibleZoom(footprint, MediaQuery.sizeOf(context));
     return MapLibreMap(
       styleString: _initialStyle,
       initialCameraPosition: CameraPosition(
@@ -103,6 +114,7 @@ class _FloorPlanViewState extends State<FloorPlanView> {
         zoom: 18,
         bearing: _straighteningBearing(widget.floorPlan.footprint),
       ),
+      minMaxZoomPreference: MinMaxZoomPreference(minZoom, null),
       onMapCreated: (controller) => _controller = controller,
       onStyleLoadedCallback: _onStyleLoaded,
       onMapClick: _handleMapClick,
@@ -527,6 +539,32 @@ class _FloorPlanViewState extends State<FloorPlanView> {
 
     if (bestZoom.isFinite) return (bearing: bestBearing, zoom: bestZoom);
     return (bearing: axisBearing, zoom: 18.0);
+  }
+
+  /// 카메라를 어느 방향(bearing)으로 돌려도 건물 전체가 화면 안에 들어오는
+  /// 줌을 계산한다. [_fitBearingAndZoom]처럼 특정 방향에 맞춘 꽉 찬 사각형
+  /// 경계 대신, 중심점에서 가장 먼 꼭짓점까지 거리(회전해도 변하지 않는
+  /// 반지름)를 뷰포트의 짧은 변에 맞춰 원이 항상 들어오게 하므로 회전
+  /// 상태와 무관하게 안전하다.
+  static double _minVisibleZoom(List<ll.LatLng> footprint, Size viewport) {
+    final center = _centroid(footprint);
+    final cosLat = cos(center.latitude * pi / 180);
+
+    var maxRadiusM = 0.0;
+    for (final p in footprint) {
+      final dx = (p.longitude - center.longitude) * cosLat * _metersPerDegreeLat;
+      final dy = (p.latitude - center.latitude) * _metersPerDegreeLat;
+      maxRadiusM = max(maxRadiusM, sqrt(dx * dx + dy * dy));
+    }
+    if (maxRadiusM <= 0) return 18.0;
+
+    final availableShortSide = max(
+      1.0,
+      min(viewport.width, viewport.height) - _fitPaddingPx * 2,
+    );
+    final metersPerPixelAtLat = _metersPerPixelAtZoom0Equator * cosLat;
+    final metersPerPixelNeeded = (maxRadiusM * 2) / availableShortSide;
+    return log(metersPerPixelAtLat / metersPerPixelNeeded) / log(2);
   }
 
   Future<void> _updateRouteSource() async {
