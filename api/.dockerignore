@@ -1,0 +1,16 @@
+.venv/
+.vevn/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.cache/
+.coverage
+.coverage.*
+htmlcov/
+
+data/
+dataBase/*.db
+
+Dockerfile
+.dockerignore
