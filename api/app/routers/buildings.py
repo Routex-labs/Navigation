@@ -70,6 +70,30 @@ def get_floor_map(
     return result
 
 
+@router.get("/{building_id}/route", response_model=RouteResponse)
+def get_building_route(
+    building_id: str,
+    start_node_id: str,
+    end_node_id: str,
+    session: Session = Depends(get_db),
+):
+    """건물 전체에서 층을 넘나드는 최단 경로(엘리베이터·에스컬레이터 환승 포함)."""
+    try:
+        result = NavigationService(session).get_building_shortest_path(
+            building_id=building_id,
+            start_node_id=start_node_id,
+            end_node_id=end_node_id,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    if result is None:
+        raise HTTPException(status_code=404, detail="Building not found")
+    if not result["path_found"]:
+        raise HTTPException(status_code=404, detail="Route not found")
+    return result
+
+
 @router.get(
     "/{building_id}/floors/{floor_name}/route",
     response_model=RouteResponse,

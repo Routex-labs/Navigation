@@ -29,6 +29,8 @@ def test_층_지도에_SVG_벡터_feature를_응답한다(api_client):
         "height": 1313.0,
     }
     assert len(body["vector_map"]["features"]) == 78
+    assert len(body["navigation_graph"]["nodes"]) == 234
+    assert len(body["navigation_graph"]["edges"]) == 282
 
 
 # 존재하지 않는 층 요청이 찾을 수 없음 응답으로 변환되는지 검증한다.

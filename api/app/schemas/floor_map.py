@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from app.schemas.route import FloorGraphResponse
+
 
 class PointResponse(BaseModel):
     x: float
@@ -75,5 +77,6 @@ class FloorMapResponse(BaseModel):
     navigation_coordinate_system: Literal["local_m"]
     footprint_local_m: list[PointResponse]
     vector_map: VectorMapResponse | None
+    navigation_graph: FloorGraphResponse
     stores: list[StoreResponse]
     pois: list[PoiResponse]

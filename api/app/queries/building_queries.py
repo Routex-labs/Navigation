@@ -75,6 +75,7 @@ def get_floor_map(
         "navigation_coordinate_system": "local_m",
         "footprint_local_m": (building.footprint_local_m or []) if building else [],
         "vector_map": _to_vector_map_dict(session, vector_map) if vector_map else None,
+        "navigation_graph": _to_floor_graph_dict(session, floor),
         "stores": [_to_store_dict(store) for store in stores],
         "pois": [_to_poi_dict(poi) for poi in pois],
     }
@@ -89,6 +90,11 @@ def get_floor_graph(
     floor = _find_floor(session, building_id, floor_name)
     if floor is None:
         return None
+    return _to_floor_graph_dict(session, floor)
+
+
+def _to_floor_graph_dict(session: Session, floor: Floor) -> dict[str, Any]:
+    """층 지도와 독립 그래프 API가 공유하는 길찾기 레이어 응답을 조립한다."""
     nodes = session.scalars(select(Node).where(Node.floor_id == floor.id)).all()
     edges = session.scalars(select(Edge).where(Edge.floor_id == floor.id)).all()
     return {

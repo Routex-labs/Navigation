@@ -43,12 +43,16 @@ class Edge(Base):
     )
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    floor_id: Mapped[str] = mapped_column(ForeignKey("floors.id"), nullable=False)
+    # 층 내부 간선은 해당 층 id를 가진다. 층을 잇는 수직 전이(transfer) 간선은
+    # 특정 층에 속하지 않으므로 NULL이다. (단일 층 조회는 floor_id로 필터되어 제외됨)
+    floor_id: Mapped[str | None] = mapped_column(ForeignKey("floors.id"))
     from_node_id: Mapped[str] = mapped_column(ForeignKey("nodes.id"), nullable=False)
     to_node_id: Mapped[str] = mapped_column(ForeignKey("nodes.id"), nullable=False)
     length_m: Mapped[float] = mapped_column(Float, nullable=False)
     bidirectional: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     geometry: Mapped[list[dict] | None] = mapped_column(JSON)
+    # 수직 전이 간선 여부(elevator/escalator 환승). 층 내부 간선은 None.
+    transfer_mode: Mapped[str | None] = mapped_column(String)
 
     floor: Mapped["Floor"] = relationship(back_populates="edges")
     from_node: Mapped[Node] = relationship(foreign_keys=[from_node_id])

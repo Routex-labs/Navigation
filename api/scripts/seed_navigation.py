@@ -73,11 +73,24 @@ def edge_geometry_and_length(
     edge: dict,
     node_points: dict[str, dict[str, float]],
 ) -> tuple[list[dict], float]:
-    """geometry 또는 length가 누락된 입력을 양 끝 노드 좌표로 보완한다."""
-    geometry = edge.get("geometry_local_m") or [
-        dict(node_points[edge["from"]]),
-        dict(node_points[edge["to"]]),
-    ]
+    """geometry 또는 length가 누락된 입력을 양 끝 노드 좌표로 보완한다.
+
+    입력 포맷 두 가지를 모두 지원한다.
+      - 기존:   edge["geometry_local_m"] = [{x,y}, ...]
+      - Studio: edge["geometry"] = {"source": [...], "local_m": [{x,y}, ...]}
+    """
+    geometry = edge.get("geometry_local_m")
+    if geometry is None:
+        raw = edge.get("geometry")
+        if isinstance(raw, dict):
+            geometry = raw.get("local_m")
+        elif isinstance(raw, list):
+            geometry = raw
+    if not geometry:
+        geometry = [
+            dict(node_points[edge["from"]]),
+            dict(node_points[edge["to"]]),
+        ]
     length_m = edge.get("length_m")
     if length_m is None:
         length_m = sum(
@@ -102,15 +115,19 @@ def _add_dataset(
         for node in data["nodes"]
     }
 
-    session.add(
-        Building(
-            id=building_id,
-            name=building_data["name"],
-            area_m2=building_data.get("area_m2"),
-            perimeter_m=building_data.get("perimeter_m"),
-            footprint_local_m=building_data.get("footprint_local_m"),
+    # 같은 건물의 여러 층을 이어서 시드할 때 Building은 한 번만 생성한다.
+    # autoflush=False이므로 직후 flush로 identity map에 올려 다음 층 조회가 찾도록 한다.
+    if session.get(Building, building_id) is None:
+        session.add(
+            Building(
+                id=building_id,
+                name=building_data["name"],
+                area_m2=building_data.get("area_m2"),
+                perimeter_m=building_data.get("perimeter_m"),
+                footprint_local_m=building_data.get("footprint_local_m"),
+            )
         )
-    )
+        session.flush()
     session.add(
         Floor(
             id=floor_id,
@@ -164,7 +181,7 @@ def _add_dataset(
             entrance_node_id=store.get("entrance_node_id"),
             polygon=store.get("polygon_local_m"),
         )
-        for store in data["stores"]
+        for store in data.get("stores", [])
     )
     session.add_all(
         Poi(
@@ -176,7 +193,7 @@ def _add_dataset(
             y_m=poi["position"]["local_m"]["y"],
             linked_node_id=poi.get("linked_node_id"),
         )
-        for poi in data["pois"]
+        for poi in data.get("pois", [])
     )
 
     if vector_path is not None:

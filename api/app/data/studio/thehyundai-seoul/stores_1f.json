@@ -1,0 +1,1394 @@
+{
+  "building_id": "thehyundai-seoul",
+  "floor": {
+    "id": "FL-soem999bnha10599",
+    "name": "1F",
+    "level": 5
+  },
+  "coordinate_frame": "studio_local_m",
+  "stores": [
+    {
+      "id": "store_007",
+      "name": "미우미우",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "ND-6SlOSPK_Z2753",
+      "entrance_local_m": {
+        "x": 32.005011177519094,
+        "y": 32.27171488598309
+      },
+      "entrance_wgs84": {
+        "lat": 37.525865342372995,
+        "lng": 126.92840595839716
+      },
+      "centroid_local_m": {
+        "x": 32.005011177519094,
+        "y": 32.27171488598309
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "name_match",
+        "legacy_store_id": "store_007"
+      }
+    },
+    {
+      "id": "store_000",
+      "name": "보테가 베네타",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_000",
+      "entrance_local_m": {
+        "x": 14.463382936709234,
+        "y": 83.02429733706892
+      },
+      "entrance_wgs84": {
+        "lat": 37.52541309075371,
+        "lng": 126.92820143111847
+      },
+      "centroid_local_m": {
+        "x": 14.463382936709234,
+        "y": 83.02429733706892
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_000"
+      }
+    },
+    {
+      "id": "store_001",
+      "name": "펜디",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_001",
+      "entrance_local_m": {
+        "x": 23.80654212168741,
+        "y": 82.30898170237087
+      },
+      "entrance_wgs84": {
+        "lat": 37.525419798276914,
+        "lng": 126.92830662297997
+      },
+      "centroid_local_m": {
+        "x": 23.80654212168741,
+        "y": 82.30898170237087
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_001"
+      }
+    },
+    {
+      "id": "store_002",
+      "name": "불가리",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_002",
+      "entrance_local_m": {
+        "x": 31.744665913954613,
+        "y": 87.08829222484806
+      },
+      "entrance_wgs84": {
+        "lat": 37.52537756179889,
+        "lng": 126.92839522935272
+      },
+      "centroid_local_m": {
+        "x": 31.744665913954613,
+        "y": 87.08829222484806
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_002"
+      }
+    },
+    {
+      "id": "store_003",
+      "name": "부쉐론",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_003",
+      "entrance_local_m": {
+        "x": 36.76150925078999,
+        "y": 88.26011027837365
+      },
+      "entrance_wgs84": {
+        "lat": 37.52536731857338,
+        "lng": 126.9284514910904
+      },
+      "centroid_local_m": {
+        "x": 36.76150925078999,
+        "y": 88.26011027837365
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_003"
+      }
+    },
+    {
+      "id": "store_004",
+      "name": "리모와",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_004",
+      "entrance_local_m": {
+        "x": 41.4295580246329,
+        "y": 87.68426884379846
+      },
+      "entrance_wgs84": {
+        "lat": 37.52537261365569,
+        "lng": 126.92850407835591
+      },
+      "centroid_local_m": {
+        "x": 41.4295580246329,
+        "y": 87.68426884379846
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_004"
+      }
+    },
+    {
+      "id": "store_005",
+      "name": "토즈",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_005",
+      "entrance_local_m": {
+        "x": 48.084715490334965,
+        "y": 85.80567716796709
+      },
+      "entrance_wgs84": {
+        "lat": 37.52538957375899,
+        "lng": 126.92857920162906
+      },
+      "centroid_local_m": {
+        "x": 48.084715490334965,
+        "y": 85.80567716796709
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_005"
+      }
+    },
+    {
+      "id": "store_006",
+      "name": "버버리",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_006",
+      "entrance_local_m": {
+        "x": 53.951852226136964,
+        "y": 90.53576278048095
+      },
+      "entrance_wgs84": {
+        "lat": 37.525347699384334,
+        "lng": 126.92864452094076
+      },
+      "centroid_local_m": {
+        "x": 53.951852226136964,
+        "y": 90.53576278048095
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_006"
+      }
+    },
+    {
+      "id": "store_012",
+      "name": "마티에 프리미에르",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_012",
+      "entrance_local_m": {
+        "x": 32.65236301775218,
+        "y": 50.88613798167238
+      },
+      "entrance_wgs84": {
+        "lat": 37.52569973050774,
+        "lng": 126.9284105907418
+      },
+      "centroid_local_m": {
+        "x": 32.65236301775218,
+        "y": 50.88613798167238
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_012"
+      }
+    },
+    {
+      "id": "store_013",
+      "name": "톰포드 뷰티",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_013",
+      "entrance_local_m": {
+        "x": 28.3470305949958,
+        "y": 65.41601952734612
+      },
+      "entrance_wgs84": {
+        "lat": 37.5255702823306,
+        "lng": 126.9283600974963
+      },
+      "centroid_local_m": {
+        "x": 28.3470305949958,
+        "y": 65.41601952734612
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_013"
+      }
+    },
+    {
+      "id": "store_014",
+      "name": "에스티 로더",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_014",
+      "entrance_local_m": {
+        "x": 54.51389109874584,
+        "y": 52.85938933155539
+      },
+      "entrance_wgs84": {
+        "lat": 37.52568297337853,
+        "lng": 126.92865620422288
+      },
+      "centroid_local_m": {
+        "x": 54.51389109874584,
+        "y": 52.85938933155539
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_014"
+      }
+    },
+    {
+      "id": "store_015",
+      "name": "프라다 뷰티",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_015",
+      "entrance_local_m": {
+        "x": 43.81333106893766,
+        "y": 59.669650396733275
+      },
+      "entrance_wgs84": {
+        "lat": 37.52562198181611,
+        "lng": 126.92853487722923
+      },
+      "centroid_local_m": {
+        "x": 43.81333106893766,
+        "y": 59.669650396733275
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_015"
+      }
+    },
+    {
+      "id": "store_016",
+      "name": "조 말론 런던",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_016",
+      "entrance_local_m": {
+        "x": 33.547287023638525,
+        "y": 58.398507775792496
+      },
+      "entrance_wgs84": {
+        "lat": 37.52563291644595,
+        "lng": 126.92841958762071
+      },
+      "centroid_local_m": {
+        "x": 33.547287023638525,
+        "y": 58.398507775792496
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_016"
+      }
+    },
+    {
+      "id": "store_017",
+      "name": "로에베",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_017",
+      "entrance_local_m": {
+        "x": 69.06149616939793,
+        "y": 28.391296444247544
+      },
+      "entrance_wgs84": {
+        "lat": 37.52590122956996,
+        "lng": 126.92882331486013
+      },
+      "centroid_local_m": {
+        "x": 69.06149616939793,
+        "y": 28.391296444247544
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_017"
+      }
+    },
+    {
+      "id": "store_019",
+      "name": "루이비통",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_019",
+      "entrance_local_m": {
+        "x": 76.9623838221778,
+        "y": 57.52825441440136
+      },
+      "entrance_wgs84": {
+        "lat": 37.525642251547964,
+        "lng": 126.92890803616768
+      },
+      "centroid_local_m": {
+        "x": 76.9623838221778,
+        "y": 57.52825441440136
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_019"
+      }
+    },
+    {
+      "id": "store_020",
+      "name": "구찌",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_020",
+      "entrance_local_m": {
+        "x": 87.11365738707566,
+        "y": 31.33735704717803
+      },
+      "entrance_wgs84": {
+        "lat": 37.52587567651887,
+        "lng": 126.9290259428746
+      },
+      "centroid_local_m": {
+        "x": 87.11365738707566,
+        "y": 31.33735704717803
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_020"
+      }
+    },
+    {
+      "id": "store_021",
+      "name": "발렌티노",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_021",
+      "entrance_local_m": {
+        "x": 38.44491235157502,
+        "y": 31.050495773189823
+      },
+      "entrance_wgs84": {
+        "lat": 37.52587644512748,
+        "lng": 126.92847856696075
+      },
+      "centroid_local_m": {
+        "x": 38.44491235157502,
+        "y": 31.050495773189823
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_021"
+      }
+    },
+    {
+      "id": "store_022",
+      "name": "톰브라운",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_022",
+      "entrance_local_m": {
+        "x": 101.79780326595106,
+        "y": 58.89729389030005
+      },
+      "entrance_wgs84": {
+        "lat": 37.52563097984872,
+        "lng": 126.92918718539278
+      },
+      "centroid_local_m": {
+        "x": 101.79780326595106,
+        "y": 58.89729389030005
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_022"
+      }
+    },
+    {
+      "id": "store_023",
+      "name": "생로랑",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_023",
+      "entrance_local_m": {
+        "x": 111.44105298889662,
+        "y": 50.338241482515215
+      },
+      "entrance_wgs84": {
+        "lat": 37.525707493819766,
+        "lng": 126.92929686882633
+      },
+      "centroid_local_m": {
+        "x": 111.44105298889662,
+        "y": 50.338241482515215
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_023"
+      }
+    },
+    {
+      "id": "store_024",
+      "name": "몽클레르",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_024",
+      "entrance_local_m": {
+        "x": 111.80566916799607,
+        "y": 70.42672229833222
+      },
+      "entrance_wgs84": {
+        "lat": 37.5255287550719,
+        "lng": 126.92929811124657
+      },
+      "centroid_local_m": {
+        "x": 111.80566916799607,
+        "y": 70.42672229833222
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_024"
+      }
+    },
+    {
+      "id": "store_025",
+      "name": "발렌시아가",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_025",
+      "entrance_local_m": {
+        "x": 19.19660614771674,
+        "y": 37.16009397505408
+      },
+      "entrance_wgs84": {
+        "lat": 37.52582137491348,
+        "lng": 126.92826119626118
+      },
+      "centroid_local_m": {
+        "x": 19.19660614771674,
+        "y": 37.16009397505408
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_025"
+      }
+    },
+    {
+      "id": "store_026",
+      "name": "프라다",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_026",
+      "entrance_local_m": {
+        "x": 69.56711364951977,
+        "y": 91.12079982485906
+      },
+      "entrance_wgs84": {
+        "lat": 37.525343065961714,
+        "lng": 126.92882007516152
+      },
+      "centroid_local_m": {
+        "x": 69.56711364951977,
+        "y": 91.12079982485906
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_026"
+      }
+    },
+    {
+      "id": "store_027",
+      "name": "메종 프란시스 커정",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_027",
+      "entrance_local_m": {
+        "x": 32.070566249325225,
+        "y": 65.6064315331889
+      },
+      "entrance_wgs84": {
+        "lat": 37.52556872448512,
+        "lng": 126.92840195201657
+      },
+      "centroid_local_m": {
+        "x": 32.070566249325225,
+        "y": 65.6064315331889
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_027"
+      }
+    },
+    {
+      "id": "store_028",
+      "name": "프레 데릭말",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_028",
+      "entrance_local_m": {
+        "x": 33.891059734348886,
+        "y": 68.24145133742822
+      },
+      "entrance_wgs84": {
+        "lat": 37.52554534417809,
+        "lng": 126.92842205359972
+      },
+      "centroid_local_m": {
+        "x": 33.891059734348886,
+        "y": 68.24145133742822
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_028"
+      }
+    },
+    {
+      "id": "store_029",
+      "name": "산타 마리아 노벨라",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_029",
+      "entrance_local_m": {
+        "x": 37.486023146174475,
+        "y": 67.14673866794223
+      },
+      "entrance_wgs84": {
+        "lat": 37.52555521696683,
+        "lng": 126.92846264484487
+      },
+      "centroid_local_m": {
+        "x": 37.486023146174475,
+        "y": 67.14673866794223
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_029"
+      }
+    },
+    {
+      "id": "store_030",
+      "name": "헤라",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_030",
+      "entrance_local_m": {
+        "x": 33.70727072237924,
+        "y": 61.56843691620821
+      },
+      "entrance_wgs84": {
+        "lat": 37.52560471552156,
+        "lng": 126.92842093598658
+      },
+      "centroid_local_m": {
+        "x": 33.70727072237924,
+        "y": 61.56843691620821
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_030"
+      }
+    },
+    {
+      "id": "store_031",
+      "name": "설화수",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_031",
+      "entrance_local_m": {
+        "x": 49.8161726593643,
+        "y": 71.36444704846217
+      },
+      "entrance_wgs84": {
+        "lat": 37.525518138748986,
+        "lng": 126.92860073180267
+      },
+      "centroid_local_m": {
+        "x": 49.8161726593643,
+        "y": 71.36444704846217
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_031"
+      }
+    },
+    {
+      "id": "store_032",
+      "name": "나스",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_032",
+      "entrance_local_m": {
+        "x": 50.197310109284,
+        "y": 45.63442510892912
+      },
+      "entrance_wgs84": {
+        "lat": 37.52574710461603,
+        "lng": 126.92860868030165
+      },
+      "centroid_local_m": {
+        "x": 50.197310109284,
+        "y": 45.63442510892912
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_032"
+      }
+    },
+    {
+      "id": "store_033",
+      "name": "에르메스 뷰티",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_033",
+      "entrance_local_m": {
+        "x": 38.98272009745245,
+        "y": 48.88310087301939
+      },
+      "entrance_wgs84": {
+        "lat": 37.52571778605056,
+        "lng": 126.92848207843211
+      },
+      "centroid_local_m": {
+        "x": 38.98272009745245,
+        "y": 48.88310087301939
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_033"
+      }
+    },
+    {
+      "id": "store_034",
+      "name": "아르마니 뷰티",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_034",
+      "entrance_local_m": {
+        "x": 43.62470172232324,
+        "y": 55.92964903468092
+      },
+      "entrance_wgs84": {
+        "lat": 37.52565525432964,
+        "lng": 126.92853328778732
+      },
+      "centroid_local_m": {
+        "x": 43.62470172232324,
+        "y": 55.92964903468092
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_034"
+      }
+    },
+    {
+      "id": "store_035",
+      "name": "아쿠아 디 파르마",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_035",
+      "entrance_local_m": {
+        "x": 44.102774403319536,
+        "y": 62.87805626694643
+      },
+      "entrance_wgs84": {
+        "lat": 37.525593443261876,
+        "lng": 126.9285376762566
+      },
+      "centroid_local_m": {
+        "x": 44.102774403319536,
+        "y": 62.87805626694643
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_035"
+      }
+    },
+    {
+      "id": "store_036",
+      "name": "시슬리",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_036",
+      "entrance_local_m": {
+        "x": 49.79967571903843,
+        "y": 65.24698977350717
+      },
+      "entrance_wgs84": {
+        "lat": 37.52557257274406,
+        "lng": 126.92860141679957
+      },
+      "centroid_local_m": {
+        "x": 49.79967571903843,
+        "y": 65.24698977350717
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_036"
+      }
+    },
+    {
+      "id": "store_037",
+      "name": "입생로랑",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_037",
+      "entrance_local_m": {
+        "x": 49.419629661948434,
+        "y": 52.76190548662359
+      },
+      "entrance_wgs84": {
+        "lat": 37.52568365408305,
+        "lng": 126.92859891881685
+      },
+      "centroid_local_m": {
+        "x": 49.419629661948434,
+        "y": 52.76190548662359
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_037"
+      }
+    },
+    {
+      "id": "store_038",
+      "name": "메종 마르지엘라 퍼퓸",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_038",
+      "entrance_local_m": {
+        "x": 54.54288512798432,
+        "y": 65.56141214486807
+      },
+      "entrance_wgs84": {
+        "lat": 37.52556994880074,
+        "lng": 126.92865472276755
+      },
+      "centroid_local_m": {
+        "x": 54.54288512798432,
+        "y": 65.56141214486807
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_038"
+      }
+    },
+    {
+      "id": "store_039",
+      "name": "디올 뷰티",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_039",
+      "entrance_local_m": {
+        "x": 55.25392236675069,
+        "y": 59.99598824268129
+      },
+      "entrance_wgs84": {
+        "lat": 37.52561949733841,
+        "lng": 126.92866351237204
+      },
+      "centroid_local_m": {
+        "x": 55.25392236675069,
+        "y": 59.99598824268129
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_039"
+      }
+    },
+    {
+      "id": "store_040",
+      "name": "탬버린즈",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_040",
+      "entrance_local_m": {
+        "x": 44.248795752957086,
+        "y": 47.51248285632391
+      },
+      "entrance_wgs84": {
+        "lat": 37.52573017516577,
+        "lng": 126.92854150529108
+      },
+      "centroid_local_m": {
+        "x": 44.248795752957086,
+        "y": 47.51248285632391
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_040"
+      }
+    },
+    {
+      "id": "store_041",
+      "name": "오휘/후",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_041",
+      "entrance_local_m": {
+        "x": 45.26286022390371,
+        "y": 70.61456779441086
+      },
+      "entrance_wgs84": {
+        "lat": 37.5255246444526,
+        "lng": 126.92854962372769
+      },
+      "centroid_local_m": {
+        "x": 45.26286022390371,
+        "y": 70.61456779441086
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_041"
+      }
+    },
+    {
+      "id": "store_042",
+      "name": "MAC",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_042",
+      "entrance_local_m": {
+        "x": 55.260788015633025,
+        "y": 47.41342995108232
+      },
+      "entrance_wgs84": {
+        "lat": 37.5257314602066,
+        "lng": 126.92866538016958
+      },
+      "centroid_local_m": {
+        "x": 55.260788015633025,
+        "y": 47.41342995108232
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_042"
+      }
+    },
+    {
+      "id": "store_043",
+      "name": "젠틀몬스터",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_043",
+      "entrance_local_m": {
+        "x": 67.67135802815346,
+        "y": 69.84343673555132
+      },
+      "entrance_wgs84": {
+        "lat": 37.52553232754438,
+        "lng": 126.92880177996155
+      },
+      "centroid_local_m": {
+        "x": 67.67135802815346,
+        "y": 69.84343673555132
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_043"
+      }
+    },
+    {
+      "id": "store_044",
+      "name": "바이 레도",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_044",
+      "entrance_local_m": {
+        "x": 28.671788069724496,
+        "y": 51.972548356088026
+      },
+      "entrance_wgs84": {
+        "lat": 37.52568991746018,
+        "lng": 126.92836566339332
+      },
+      "centroid_local_m": {
+        "x": 28.671788069724496,
+        "y": 51.972548356088026
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_044"
+      }
+    },
+    {
+      "id": "store_045",
+      "name": "딥티크",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_045",
+      "entrance_local_m": {
+        "x": 67.35658709277214,
+        "y": 58.16920142291356
+      },
+      "entrance_wgs84": {
+        "lat": 37.52563619614782,
+        "lng": 126.92879990079277
+      },
+      "centroid_local_m": {
+        "x": 67.35658709277214,
+        "y": 58.16920142291356
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_045"
+      }
+    },
+    {
+      "id": "store_046",
+      "name": "크리드",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_046",
+      "entrance_local_m": {
+        "x": 43.010639127448194,
+        "y": 69.47055894660477
+      },
+      "entrance_wgs84": {
+        "lat": 37.52553474156217,
+        "lng": 126.928524453975
+      },
+      "centroid_local_m": {
+        "x": 43.010639127448194,
+        "y": 69.47055894660477
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_046"
+      }
+    },
+    {
+      "id": "store_047",
+      "name": "키엘",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_047",
+      "entrance_local_m": {
+        "x": 38.88191844533525,
+        "y": 61.798994073335564
+      },
+      "entrance_wgs84": {
+        "lat": 37.52560285364535,
+        "lng": 126.92847910662472
+      },
+      "centroid_local_m": {
+        "x": 38.88191844533525,
+        "y": 61.798994073335564
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_047"
+      }
+    },
+    {
+      "id": "store_048",
+      "name": "이솝",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_048",
+      "entrance_local_m": {
+        "x": 54.78175342754665,
+        "y": 71.63710474033313
+      },
+      "entrance_wgs84": {
+        "lat": 37.52551589458879,
+        "lng": 126.92865654490456
+      },
+      "centroid_local_m": {
+        "x": 54.78175342754665,
+        "y": 71.63710474033313
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_048"
+      }
+    },
+    {
+      "id": "store_050",
+      "name": "메모 파리",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_050",
+      "entrance_local_m": {
+        "x": 29.64612827643189,
+        "y": 58.268810503149794
+      },
+      "entrance_wgs84": {
+        "lat": 37.52563392752628,
+        "lng": 126.92837572658952
+      },
+      "centroid_local_m": {
+        "x": 29.64612827643189,
+        "y": 58.268810503149794
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_050"
+      }
+    },
+    {
+      "id": "store_051",
+      "name": "크리스챤 디올 (남/여)",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_051",
+      "entrance_local_m": {
+        "x": 86.54969420459186,
+        "y": 83.91041702055853
+      },
+      "entrance_wgs84": {
+        "lat": 37.52540784817061,
+        "lng": 126.92901211806029
+      },
+      "centroid_local_m": {
+        "x": 86.54969420459186,
+        "y": 83.91041702055853
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_051"
+      }
+    },
+    {
+      "id": "store_052",
+      "name": "록시땅",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_052",
+      "entrance_local_m": {
+        "x": 39.70891100983631,
+        "y": 69.72742225867152
+      },
+      "entrance_wgs84": {
+        "lat": 37.52553233490614,
+        "lng": 126.92848728021544
+      },
+      "centroid_local_m": {
+        "x": 39.70891100983631,
+        "y": 69.72742225867152
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_052"
+      }
+    },
+    {
+      "id": "store_053",
+      "name": "르 라보",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_053",
+      "entrance_local_m": {
+        "x": 67.38968148928252,
+        "y": 46.73935197124058
+      },
+      "entrance_wgs84": {
+        "lat": 37.52573790289825,
+        "lng": 126.92880189956873
+      },
+      "centroid_local_m": {
+        "x": 67.38968148928252,
+        "y": 46.73935197124058
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_053"
+      }
+    },
+    {
+      "id": "store_054",
+      "name": "스킨 케어룸",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_054",
+      "entrance_local_m": {
+        "x": 13.648440524149864,
+        "y": 92.80009169678623
+      },
+      "entrance_wgs84": {
+        "lat": 37.52532607352311,
+        "lng": 126.92819087364751
+      },
+      "centroid_local_m": {
+        "x": 13.648440524149864,
+        "y": 92.80009169678623
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_054"
+      }
+    },
+    {
+      "id": "store_055",
+      "name": "커뮤니티 라운지",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_055",
+      "entrance_local_m": {
+        "x": 14.202307087209888,
+        "y": 98.37843574978504
+      },
+      "entrance_wgs84": {
+        "lat": 37.52527645638403,
+        "lng": 126.92819630960078
+      },
+      "centroid_local_m": {
+        "x": 14.202307087209888,
+        "y": 98.37843574978504
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_055"
+      }
+    },
+    {
+      "id": "store_056",
+      "name": "구찌 뷰티",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_056",
+      "entrance_local_m": {
+        "x": 48.46206739947157,
+        "y": 46.97987671045378
+      },
+      "entrance_wgs84": {
+        "lat": 37.52573506886019,
+        "lng": 126.92858897115751
+      },
+      "centroid_local_m": {
+        "x": 48.46206739947157,
+        "y": 46.97987671045378
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_056"
+      }
+    },
+    {
+      "id": "store_057",
+      "name": "다미아니",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_057",
+      "entrance_local_m": {
+        "x": 110.79449880824318,
+        "y": 58.44532423871779
+      },
+      "entrance_wgs84": {
+        "lat": 37.52563533135658,
+        "lng": 126.92928844282146
+      },
+      "centroid_local_m": {
+        "x": 110.79449880824318,
+        "y": 58.44532423871779
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_057"
+      }
+    },
+    {
+      "id": "store_059",
+      "name": "페라가모",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_059",
+      "entrance_local_m": {
+        "x": 108.48318708579623,
+        "y": 97.32047478714404
+      },
+      "entrance_wgs84": {
+        "lat": 37.5252893262373,
+        "lng": 126.92925691346036
+      },
+      "centroid_local_m": {
+        "x": 108.48318708579623,
+        "y": 97.32047478714404
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_059"
+      }
+    },
+    {
+      "id": "store_060",
+      "name": "반클리프아펠",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "store_entrance_060",
+      "entrance_local_m": {
+        "x": 98.62782613193718,
+        "y": 83.45548040723406
+      },
+      "entrance_wgs84": {
+        "lat": 37.525412339029344,
+        "lng": 126.92914803531833
+      },
+      "centroid_local_m": {
+        "x": 98.62782613193718,
+        "y": 83.45548040723406
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "id_join",
+        "legacy_store_id": "store_060"
+      }
+    },
+    {
+      "id": "store_008",
+      "name": "셀린느",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "node_002",
+      "entrance_local_m": {
+        "x": 101.33930255316147,
+        "y": 33.650348587776335
+      },
+      "entrance_wgs84": {
+        "lat": 37.525855616407014,
+        "lng": 126.9291856210578
+      },
+      "centroid_local_m": {
+        "x": 101.33930255316147,
+        "y": 33.650348587776335
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "name_match",
+        "legacy_store_id": "store_008"
+      }
+    },
+    {
+      "id": "ST-1F-001",
+      "name": "컨시어지(안내데스크)",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "node_019",
+      "entrance_local_m": {
+        "x": 61.498280821618486,
+        "y": 72.13329851865069
+      },
+      "entrance_wgs84": {
+        "lat": 37.525511725531885,
+        "lng": 126.92873202050862
+      },
+      "centroid_local_m": {
+        "x": 61.498280821618486,
+        "y": 72.13329851865069
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-1F-002",
+      "name": "발레라운지",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "node_021",
+      "entrance_local_m": {
+        "x": 12.174599235915627,
+        "y": 74.55334780491445
+      },
+      "entrance_wgs84": {
+        "lat": 37.525488383395675,
+        "lng": 126.92817689278466
+      },
+      "centroid_local_m": {
+        "x": 12.174599235915627,
+        "y": 74.55334780491445
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "store_011",
+      "name": "쿠오카",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "node_022",
+      "entrance_local_m": {
+        "x": 35.48974424378737,
+        "y": 49.020990332227086
+      },
+      "entrance_wgs84": {
+        "lat": 37.525716431042255,
+        "lng": 126.92844277048506
+      },
+      "centroid_local_m": {
+        "x": 35.48974424378737,
+        "y": 49.020990332227086
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "name_match",
+        "legacy_store_id": "store_011"
+      }
+    },
+    {
+      "id": "store_010",
+      "name": "샤넬 뷰티",
+      "floor_id": "FL-soem999bnha10599",
+      "entrance_node_id": "node_025",
+      "entrance_local_m": {
+        "x": 25.37595860103031,
+        "y": 59.5586702080392
+      },
+      "entrance_wgs84": {
+        "lat": 37.52562229352295,
+        "lng": 126.92832751298337
+      },
+      "centroid_local_m": {
+        "x": 25.37595860103031,
+        "y": 59.5586702080392
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "name_match",
+        "legacy_store_id": "store_010"
+      }
+    }
+  ],
+  "unmatched": [
+    {
+      "node_id": "ND-M9EBIIyAu8179",
+      "name": "NODE",
+      "reason": "placeholder_name"
+    },
+    {
+      "node_id": "ND-Ogj7-mAZb6206",
+      "name": "NODE",
+      "reason": "placeholder_name"
+    },
+    {
+      "node_id": "ND-eNvFB4KrG5055",
+      "name": "입구",
+      "reason": "placeholder_name"
+    }
+  ],
+  "summary": {
+    "stores": 59,
+    "unmatched": 3,
+    "by_method": {
+      "name_match": 4,
+      "id_join": 53,
+      "studio_only": 2
+    }
+  }
+}

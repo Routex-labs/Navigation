@@ -18,12 +18,66 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domain.dijkstra import ShortestPath, find_shortest_path
-from app.models import Edge, Floor, Node
+from app.models import Building, Edge, Floor, Node
 
 
 class NavigationService:
     def __init__(self, session: Session):
         self._session = session
+
+    def get_building_shortest_path(
+        self,
+        building_id: str,
+        start_node_id: str,
+        end_node_id: str,
+    ) -> dict[str, Any] | None:
+        """건물 전체(모든 층 + 수직 전이 간선)에서 층을 넘나드는 최단 경로를 찾는다.
+
+        층 내부 간선(floor_id=해당 층)과 수직 전이 간선(floor_id=NULL)을 함께 싣는다.
+        """
+        if self._session.get(Building, building_id) is None:
+            return None
+
+        floor_ids = self._session.scalars(
+            select(Floor.id).where(Floor.building_id == building_id)
+        ).all()
+        if not floor_ids:
+            return None
+
+        nodes = self._session.scalars(
+            select(Node).where(Node.floor_id.in_(floor_ids))
+        ).all()
+        # 층 내부 간선 + 층을 잇는 수직 전이 간선(floor_id IS NULL)
+        edges = self._session.scalars(
+            select(Edge).where(
+                (Edge.floor_id.in_(floor_ids)) | (Edge.floor_id.is_(None))
+            )
+        ).all()
+
+        path = find_shortest_path(
+            nodes=nodes,
+            edges=edges,
+            start_node_id=start_node_id,
+            end_node_id=end_node_id,
+        )
+
+        if path is None:
+            return {
+                "start_node_id": start_node_id,
+                "end_node_id": end_node_id,
+                "path_found": False,
+            }
+
+        return {
+            "start_node_id": start_node_id,
+            "end_node_id": end_node_id,
+            "path_found": True,
+            "node_ids": list(path.node_ids),
+            "edge_ids": list(path.edge_ids),
+            "coordinate_system": "local_m",
+            "path_points": self._build_path_points(path, nodes, edges),
+            "total_distance_m": round(path.total_distance_m, 3),
+        }
 
     def get_shortest_path(
         self,

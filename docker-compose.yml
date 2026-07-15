@@ -1,0 +1,24 @@
+services:
+  api:
+    build:
+      context: ./api
+    image: navigation/api:0.1.0
+    ports:
+      - "8001:8001"
+    environment:
+      NAV_DATABASE_URL: sqlite:////app/data/navigation.db
+    command: >
+      sh -c "python -m scripts.reset_and_seed &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8001"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=2).read()",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s

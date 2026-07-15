@@ -1,0 +1,1459 @@
+{
+  "building_id": "thehyundai-seoul",
+  "floor": {
+    "id": "FL-urk3dfu89rg50546",
+    "name": "4F",
+    "level": 2
+  },
+  "coordinate_frame": "studio_local_m",
+  "stores": [
+    {
+      "id": "ST-4F-001",
+      "name": "타이틀 리스트",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_000",
+      "entrance_local_m": {
+        "x": 30.826927909213495,
+        "y": 50.10876365825061
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 30.826927909213495,
+        "y": 50.10876365825061
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-002",
+      "name": "제이린드 버그",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_001",
+      "entrance_local_m": {
+        "x": 30.835329690539936,
+        "y": 55.916050999110354
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 30.835329690539936,
+        "y": 55.916050999110354
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-003",
+      "name": "브리핑 골프",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_002",
+      "entrance_local_m": {
+        "x": 30.5160306185914,
+        "y": 63.836506615268476
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 30.5160306185914,
+        "y": 63.836506615268476
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-004",
+      "name": "세인트 앤드류스",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_003",
+      "entrance_local_m": {
+        "x": 30.62530201255911,
+        "y": 70.24338734142
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 30.62530201255911,
+        "y": 70.24338734142
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-005",
+      "name": "풋 조이",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_004",
+      "entrance_local_m": {
+        "x": 34.3216655602295,
+        "y": 91.2498802848259
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 34.3216655602295,
+        "y": 91.2498802848259
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-006",
+      "name": "보스 골프",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_005",
+      "entrance_local_m": {
+        "x": 36.14903304896495,
+        "y": 90.99277916306464
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 36.14903304896495,
+        "y": 90.99277916306464
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-007",
+      "name": "PXG",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_006",
+      "entrance_local_m": {
+        "x": 35.447374639566085,
+        "y": 39.71852420068332
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 35.447374639566085,
+        "y": 39.71852420068332
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-008",
+      "name": "나이키 골프",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_007",
+      "entrance_local_m": {
+        "x": 37.500066910585645,
+        "y": 38.47160790911721
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 37.500066910585645,
+        "y": 38.47160790911721
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-009",
+      "name": "티노5",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_008",
+      "entrance_local_m": {
+        "x": 48.92269993865993,
+        "y": 33.36292629175361
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 48.92269993865993,
+        "y": 33.36292629175361
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-010",
+      "name": "지포어",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_009",
+      "entrance_local_m": {
+        "x": 41.786615587204864,
+        "y": 37.13040795793897
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 41.786615587204864,
+        "y": 37.13040795793897
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-011",
+      "name": "후그",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_010",
+      "entrance_local_m": {
+        "x": 45.133019935471935,
+        "y": 35.71487580891909
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 45.133019935471935,
+        "y": 35.71487580891909
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-012",
+      "name": "말본 골프",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_011",
+      "entrance_local_m": {
+        "x": 39.386369243150384,
+        "y": 94.22260767787363
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 39.386369243150384,
+        "y": 94.22260767787363
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-013",
+      "name": "어메이징 크리",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_012",
+      "entrance_local_m": {
+        "x": 42.86446374602902,
+        "y": 94.28882849344808
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 42.86446374602902,
+        "y": 94.28882849344808
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-014",
+      "name": "윌슨",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_013",
+      "entrance_local_m": {
+        "x": 46.185437181848,
+        "y": 93.2302678471596
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 46.185437181848,
+        "y": 93.2302678471596
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-015",
+      "name": "굿러너 컴퍼니",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_014",
+      "entrance_local_m": {
+        "x": 55.89361808875011,
+        "y": 62.00178527879444
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 55.89361808875011,
+        "y": 62.00178527879444
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-016",
+      "name": "POP-UP STUDIO A",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_015",
+      "entrance_local_m": {
+        "x": 55.90721860818197,
+        "y": 72.57995782094716
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 55.90721860818197,
+        "y": 72.57995782094716
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-017",
+      "name": "시다스",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_016",
+      "entrance_local_m": {
+        "x": 51.79737952154131,
+        "y": 94.97671289940406
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 51.79737952154131,
+        "y": 94.97671289940406
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-018",
+      "name": "노스페이스",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_017",
+      "entrance_local_m": {
+        "x": 80.00415692182693,
+        "y": 27.965097251738143
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 80.00415692182693,
+        "y": 27.965097251738143
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-019",
+      "name": "타미힐피거",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_018",
+      "entrance_local_m": {
+        "x": 57.80712934930273,
+        "y": 20.727092794838356
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 57.80712934930273,
+        "y": 20.727092794838356
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-020",
+      "name": "빈폴",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_019",
+      "entrance_local_m": {
+        "x": 65.4259098659897,
+        "y": 25.732996195603036
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 65.4259098659897,
+        "y": 25.732996195603036
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-021",
+      "name": "라코스테",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_020",
+      "entrance_local_m": {
+        "x": 62.47959281053786,
+        "y": 20.463888071283407
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 62.47959281053786,
+        "y": 20.463888071283407
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-022",
+      "name": "스노우 피크",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_021",
+      "entrance_local_m": {
+        "x": 38.53939978826556,
+        "y": 67.05379940317643
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 38.53939978826556,
+        "y": 67.05379940317643
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-023",
+      "name": "사우스 케이프",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_022",
+      "entrance_local_m": {
+        "x": 55.82333981270017,
+        "y": 100.42807987116954
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 55.82333981270017,
+        "y": 100.42807987116954
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-024",
+      "name": "랑방 블랑",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_023",
+      "entrance_local_m": {
+        "x": 58.951086849633334,
+        "y": 100.24302744540866
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 58.951086849633334,
+        "y": 100.24302744540866
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-025",
+      "name": "A.P.C 골프",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_024",
+      "entrance_local_m": {
+        "x": 62.1535537480438,
+        "y": 99.54804360343311
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 62.1535537480438,
+        "y": 99.54804360343311
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-026",
+      "name": "베르판 (엠비언스)",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_025",
+      "entrance_local_m": {
+        "x": 66.1831038161956,
+        "y": 61.42683249221656
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 66.1831038161956,
+        "y": 61.42683249221656
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-027",
+      "name": "아크 테릭스",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_030",
+      "entrance_local_m": {
+        "x": 75.06278959450336,
+        "y": 27.959454253160956
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 75.06278959450336,
+        "y": 27.959454253160956
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-028",
+      "name": "두오모 라이팅",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_031",
+      "entrance_local_m": {
+        "x": 65.08838980143433,
+        "y": 65.55516322197754
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 65.08838980143433,
+        "y": 65.55516322197754
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-029",
+      "name": "지누스",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_032",
+      "entrance_local_m": {
+        "x": 91.94910018970468,
+        "y": 72.30985088180778
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 91.94910018970468,
+        "y": 72.30985088180778
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-030",
+      "name": "노르딕 슬립",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_033",
+      "entrance_local_m": {
+        "x": 85.04933885909531,
+        "y": 40.02889524341194
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 85.04933885909531,
+        "y": 40.02889524341194
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-031",
+      "name": "리바트 토탈",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_037",
+      "entrance_local_m": {
+        "x": 76.62517766557714,
+        "y": 102.3784103672452
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 76.62517766557714,
+        "y": 102.3784103672452
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-032",
+      "name": "리네 로제",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_039",
+      "entrance_local_m": {
+        "x": 91.31947227675909,
+        "y": 37.99078840440802
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 91.31947227675909,
+        "y": 37.99078840440802
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-033",
+      "name": "USM/ 허먼밀러",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_040",
+      "entrance_local_m": {
+        "x": 87.37068472814035,
+        "y": 48.55787648198498
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 87.37068472814035,
+        "y": 48.55787648198498
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-034",
+      "name": "무브먼 트랩",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_041",
+      "entrance_local_m": {
+        "x": 91.97405970982015,
+        "y": 58.96148695968047
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 91.97405970982015,
+        "y": 58.96148695968047
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-035",
+      "name": "칼한센 앤선",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_042",
+      "entrance_local_m": {
+        "x": 86.44809609696473,
+        "y": 68.82061209532142
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 86.44809609696473,
+        "y": 68.82061209532142
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-036",
+      "name": "나뚜찌",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_043",
+      "entrance_local_m": {
+        "x": 88.42712398550248,
+        "y": 68.18053598533372
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 88.42712398550248,
+        "y": 68.18053598533372
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-037",
+      "name": "웨스트 엘름",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_044",
+      "entrance_local_m": {
+        "x": 85.63834665368357,
+        "y": 90.06508865849578
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 85.63834665368357,
+        "y": 90.06508865849578
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-038",
+      "name": "위글위글",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_045",
+      "entrance_local_m": {
+        "x": 87.51733468880875,
+        "y": 59.447334153533475
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 87.51733468880875,
+        "y": 59.447334153533475
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-039",
+      "name": "템퍼",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_046",
+      "entrance_local_m": {
+        "x": 91.28594556701547,
+        "y": 86.53368509364401
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 91.28594556701547,
+        "y": 86.53368509364401
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-040",
+      "name": "시몬스",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_047",
+      "entrance_local_m": {
+        "x": 92.51429197375788,
+        "y": 80.30061030846372
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 92.51429197375788,
+        "y": 80.30061030846372
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-041",
+      "name": "씰리",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_048",
+      "entrance_local_m": {
+        "x": 91.81662738816173,
+        "y": 65.67188011576653
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 91.81662738816173,
+        "y": 65.67188011576653
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-042",
+      "name": "HBYH 루이스폴센 헤리터 빌레로이앤보흐 사브르 WMF POP-UP STUDIO C 로얄코펜하겐 휘슬러",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_049",
+      "entrance_local_m": {
+        "x": 70.420795249524,
+        "y": 59.37685710531561
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 70.420795249524,
+        "y": 59.37685710531561
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-043",
+      "name": "아레나",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_050",
+      "entrance_local_m": {
+        "x": 44.55308599114105,
+        "y": 71.27706493718985
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 44.55308599114105,
+        "y": 71.27706493718985
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-044",
+      "name": "나이키스윔",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_051",
+      "entrance_local_m": {
+        "x": 46.97258041749301,
+        "y": 70.3459350475826
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 46.97258041749301,
+        "y": 70.3459350475826
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-045",
+      "name": "안다르",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_052",
+      "entrance_local_m": {
+        "x": 41.76021750331454,
+        "y": 67.4961291890375
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 41.76021750331454,
+        "y": 67.4961291890375
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-046",
+      "name": "크랙앤칼",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_053",
+      "entrance_local_m": {
+        "x": 30.556227036193203,
+        "y": 76.7611617383923
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 30.556227036193203,
+        "y": 76.7611617383923
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-047",
+      "name": "캘러 웨이",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_054",
+      "entrance_local_m": {
+        "x": 30.34612228149146,
+        "y": 83.01939502289515
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 30.34612228149146,
+        "y": 83.01939502289515
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-048",
+      "name": "에이스 프리미엄 스토어",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_056",
+      "entrance_local_m": {
+        "x": 65.32921793516483,
+        "y": 96.89695364152067
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 65.32921793516483,
+        "y": 96.89695364152067
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-049",
+      "name": "POP-UP STUDIO B",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_057",
+      "entrance_local_m": {
+        "x": 87.26460021166501,
+        "y": 78.89755762941594
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 87.26460021166501,
+        "y": 78.89755762941594
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-050",
+      "name": "몽벨",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_059",
+      "entrance_local_m": {
+        "x": 49.64596906713229,
+        "y": 73.1357632900791
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 49.64596906713229,
+        "y": 73.1357632900791
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-051",
+      "name": "윌리엄스 소노마",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_060",
+      "entrance_local_m": {
+        "x": 81.11150906499282,
+        "y": 97.13683371603125
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 81.11150906499282,
+        "y": 97.13683371603125
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-052",
+      "name": "레고트/ 알레시/ 움브라",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_061",
+      "entrance_local_m": {
+        "x": 65.86153687505588,
+        "y": 72.21257716426084
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 65.86153687505588,
+        "y": 72.21257716426084
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-053",
+      "name": "리바트 토탈",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_063",
+      "entrance_local_m": {
+        "x": 79.34738159714335,
+        "y": 86.4410688533347
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 79.34738159714335,
+        "y": 86.4410688533347
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-054",
+      "name": "에싸",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_064",
+      "entrance_local_m": {
+        "x": 91.96449456322891,
+        "y": 46.05417589551061
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 91.96449456322891,
+        "y": 46.05417589551061
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-055",
+      "name": "정수기",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_065",
+      "entrance_local_m": {
+        "x": 85.17577358709904,
+        "y": 34.06553654882481
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 85.17577358709904,
+        "y": 34.06553654882481
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-056",
+      "name": "정수기",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_066",
+      "entrance_local_m": {
+        "x": 38.915035329122205,
+        "y": 26.798485772281907
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 38.915035329122205,
+        "y": 26.798485772281907
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-057",
+      "name": "피레넥스 (침구)",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_069",
+      "entrance_local_m": {
+        "x": 87.70742032397645,
+        "y": 38.19874350501658
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 87.70742032397645,
+        "y": 38.19874350501658
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-058",
+      "name": "바이리네",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_070",
+      "entrance_local_m": {
+        "x": 91.80268295224961,
+        "y": 54.200546646601936
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 91.80268295224961,
+        "y": 54.200546646601936
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-059",
+      "name": "만다리나덕",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_071",
+      "entrance_local_m": {
+        "x": 52.60519445573965,
+        "y": 33.00691666254056
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 52.60519445573965,
+        "y": 33.00691666254056
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-060",
+      "name": "헤지스",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_072",
+      "entrance_local_m": {
+        "x": 59.21279946911997,
+        "y": 31.235477963530244
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 59.21279946911997,
+        "y": 31.235477963530244
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-061",
+      "name": "바스통",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_073",
+      "entrance_local_m": {
+        "x": 62.45867251486161,
+        "y": 31.334935199097004
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 62.45867251486161,
+        "y": 31.334935199097004
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-062",
+      "name": "파타고니아",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_074",
+      "entrance_local_m": {
+        "x": 77.59183222996258,
+        "y": 27.89960266809726
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 77.59183222996258,
+        "y": 27.89960266809726
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-063",
+      "name": "살로몬",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_075",
+      "entrance_local_m": {
+        "x": 72.68457836724674,
+        "y": 28.283827272500375
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 72.68457836724674,
+        "y": 28.283827272500375
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-064",
+      "name": "코토팍시",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_076",
+      "entrance_local_m": {
+        "x": 69.1077877693766,
+        "y": 33.69477480678704
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 69.1077877693766,
+        "y": 33.69477480678704
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-065",
+      "name": "씨엘르",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_077",
+      "entrance_local_m": {
+        "x": 38.55478169404462,
+        "y": 59.534929376249636
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 38.55478169404462,
+        "y": 59.534929376249636
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-066",
+      "name": "칼렉",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_078",
+      "entrance_local_m": {
+        "x": 41.94189072804386,
+        "y": 59.25795511625003
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 41.94189072804386,
+        "y": 59.25795511625003
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-067",
+      "name": "가민",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_079",
+      "entrance_local_m": {
+        "x": 45.9621566818479,
+        "y": 55.966058470637876
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 45.9621566818479,
+        "y": 55.966058470637876
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-068",
+      "name": "EQL 퍼포먼스",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_080",
+      "entrance_local_m": {
+        "x": 49.51672082534678,
+        "y": 59.572358873580626
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 49.51672082534678,
+        "y": 59.572358873580626
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-069",
+      "name": "라이다",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_081",
+      "entrance_local_m": {
+        "x": 52.64474046001255,
+        "y": 54.91095963202619
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 52.64474046001255,
+        "y": 54.91095963202619
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-070",
+      "name": "써코니",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_082",
+      "entrance_local_m": {
+        "x": 55.834350080021444,
+        "y": 55.16752719994196
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 55.834350080021444,
+        "y": 55.16752719994196
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-071",
+      "name": "시에라 디자인",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "store_entrance_083",
+      "entrance_local_m": {
+        "x": 52.86748499779354,
+        "y": 71.44019440097247
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 52.86748499779354,
+        "y": 71.44019440097247
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    },
+    {
+      "id": "ST-4F-072",
+      "name": "프롤라",
+      "floor_id": "FL-urk3dfu89rg50546",
+      "entrance_node_id": "node_002",
+      "entrance_local_m": {
+        "x": 75.57307731711474,
+        "y": 63.72487621222467
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 75.57307731711474,
+        "y": 63.72487621222467
+      },
+      "polygon_local_m": null,
+      "match": {
+        "method": "studio_only",
+        "legacy_store_id": null
+      }
+    }
+  ],
+  "unmatched": [],
+  "summary": {
+    "stores": 72,
+    "unmatched": 0,
+    "by_method": {
+      "studio_only": 72
+    }
+  }
+}

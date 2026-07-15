@@ -1,78 +1,91 @@
 # Navigation
 
-> 경진대회용 Navigation 프로젝트 - 경로 안내, 사용자 흐름, 데모 구현을 한 저장소에서 관리한다.
+> 실외에서 실내까지 이어지는 경로 안내를 위한 Flutter 클라이언트와 FastAPI 백엔드 데모입니다.
 
-## 디렉토리 구조
+처음 실행한다면 [로컬 개발 가이드](docs/local-development-guide.md)부터 보세요. Windows, macOS, Android 에뮬레이터/실기기, iOS 시뮬레이터/실기기 실행 방법을 분리해서 정리해 두었습니다.
+
+## 구성
 
 ```text
-.
-|-- .gitignore
-|-- .github/
-|   `-- workflows/
-|       `-- project-automation.yml   # 이슈/PR 이벤트 -> Projects 보드 Status 자동 이동
-|-- docs/
-|   |-- navigation-overview.md        # 프로젝트 개요와 결정 기록
-|   `-- research-notes.md             # 조사/근거/레퍼런스 정리
-|-- prompt/                           # CI/CD 자동화 작업별 프롬프트
-|   |-- create-issues.md              # cicd-issues.md -> GitHub 이슈 생성
-|   |-- design-cicd-issues.md         # CI/CD 파이프라인 설계 -> 이슈 명세
-|   |-- implement-issue.md            # 보드 최우선 이슈를 GitHub Flow로 구현
-|   |-- label-cd.md                   # CD 라벨 생성/업데이트
-|   `-- label-ci.md                   # CI 라벨 생성/업데이트
-|-- issues/
-|   `-- issue.md                      # 마일스톤별 이슈 초안과 설명
-|-- AGENTS.md                         # 에이전트 작업 라우팅 / 규칙
-|-- HISTORY.md                        # 변경 이력
-|-- VERSION.md                        # 버전 정보
-`-- README.md                         # 이 문서
+client/  Flutter 앱 (Android · iOS · macOS)
+api/     FastAPI · SQLAlchemy · SQLite 백엔드
+docs/    실행, 구조, 조사 문서
 ```
 
-## 초기 운영 규칙
-
-- 프로젝트 기획, 기술 선택, 일정 변경은 `docs/navigation-overview.md`에 먼저 남긴다.
-- 자동화 작업은 `AGENTS.md`의 라우팅 표를 기준으로 `prompt/`의 전문을 먼저 읽고 수행한다.
-- 큰 병합이나 버전 변경은 `HISTORY.md`와 `VERSION.md`를 함께 갱신한다.
-- 마일스톤별 GitHub 이슈 초안과 설명은 `issues/issue.md`에 먼저 정리한다.
-
-## 더현대서울 지도 데이터셋 구축
-
-더현대서울 실내 내비게이션 데모용 원천 데이터를 추출한다.
-
-생성 산출물:
-
-- `thehyundai_indoor_navigation_dataset/thehyundai_building.geojson`
-- `thehyundai_indoor_navigation_dataset/thehyundai_building_summary.json`
-- `thehyundai_indoor_navigation_dataset/floor_assets/manifest.json`
-- `thehyundai_indoor_navigation_dataset/floor_assets/page_screenshot.png`
-- `thehyundai_indoor_navigation_dataset/floor_assets/highres_screenshot.png`
-- `thehyundai_indoor_navigation_dataset/floor_assets/map_element_screenshot.png`
-- `thehyundai_indoor_navigation_dataset/thehyundai_dataset_summary.json`
-
-입력 SHP 기본 파일명은 `AL_D010_11_20260609.shp`이다. 스크립트는 현재 작업 디렉토리 아래에서
-`서울특별시 gis 데이터`, `서울특별시 GIS데이터` 등 유사 폴더명을 먼저 찾고, 실패하면 같은 파일명을 재귀 검색한다.
-
-### 실행 방법
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-playwright install chromium
-python scripts/extract_thehyundai_building.py
-python scripts/extract_ehyundai_floor_assets.py
-python scripts/build_thehyundai_dataset.py
-python scripts/build_navigation_map.py
-python scripts/generate_preview.py
+```text
+Flutter 앱 ──HTTP──> FastAPI ──> SQLite
+                    │
+                    └── 실내 지도 · 매장 · 그래프 · 최단 경로 API
 ```
 
-SHP 경로를 명시하려면 다음처럼 실행한다.
+## 빠른 시작
 
-```bash
-python scripts/extract_thehyundai_building.py --shp "서울특별시 GIS데이터/AL_D010_11_20260609.shp"
-python scripts/build_thehyundai_dataset.py --shp "서울특별시 GIS데이터/AL_D010_11_20260609.shp"
+상세 실행법은 [로컬 개발 가이드](docs/local-development-guide.md)를 따릅니다. 요약하면 백엔드를 먼저 띄우고, Flutter 앱은 `client/`에서 실행합니다.
+
+**Docker로 백엔드 실행**
+
+```powershell
+docker compose up --build api
 ```
 
-후처리 파이프라인은 `thehyundai_indoor_navigation_dataset/navigation_map.json`,
-`thehyundai_indoor_navigation_dataset/preview.html`,
-`thehyundai_indoor_navigation_dataset/debug/*.png`를 생성한다.
-상세 실행 옵션은 `scripts/README.md`를 참고한다.
+컨테이너는 시작 시 개발 DB를 초기화하고 기본 지도 데이터를 적재한 뒤 `0.0.0.0:8001`로 API를 실행합니다.
+상태 확인은 `Invoke-RestMethod http://127.0.0.1:8001/health`로 합니다.
+
+**백엔드 — 로컬 Python**
+
+```powershell
+Set-Location api
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m scripts.reset_and_seed
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
+```
+
+서버 상태를 확인합니다.
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8001/health
+```
+
+**Flutter 앱 — Android 에뮬레이터 예시**
+
+```powershell
+Set-Location client
+flutter pub get
+flutter devices
+flutter run
+```
+
+Android 에뮬레이터는 기본값 `http://10.0.2.2:8001`을 사용하므로 별도 API 주소 지정이 필요 없습니다. 실기기, iOS, macOS 실행 방법과 네트워크·HTTP 주의사항은 [로컬 개발 가이드](docs/local-development-guide.md)를 따르세요.
+
+## 주요 API
+
+| 용도 | 경로 |
+|---|---|
+| 상태 확인 | `GET /health` |
+| 건물 목록 | `GET /buildings` |
+| 층 지도 | `GET /buildings/{building_id}/floors/{floor_name}` |
+| 층 그래프 | `GET /buildings/{building_id}/floors/{floor_name}/graph` |
+| 최단 경로 | `GET /buildings/{building_id}/floors/{floor_name}/route?start_node_id=...&end_node_id=...` |
+
+현재 앱의 기본 데모 건물은 `test-center`입니다. API 전체 계약은 서버 실행 뒤 [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs)에서 확인할 수 있습니다.
+
+## 문서
+
+- [로컬 개발 가이드](docs/local-development-guide.md): 플랫폼별 실행, API 주소, 문제 해결
+- [FastAPI 요청 흐름](docs/fastapi-request-flow.md): Router → Query/Service → SQLite 구조
+- [프로젝트 개요](docs/navigation-overview.md): 프로젝트 목적과 결정 기록
+- [기술 스택](docs/research/06-tech-stack.md): 조사 근거와 기술 선택
+
+## 데이터셋 작업
+
+더현대서울 원천 데이터셋 추출·미리보기 작업은 앱 실행과 별개입니다. 관련 산출물과 스크립트는 [thehyundai_indoor_navigation_dataset/README.md](thehyundai_indoor_navigation_dataset/README.md)를 참고하세요.
+
+## 개발 규칙
+
+- API 계약은 Flutter 클라이언트가 소비하는 JSON 형태를 우선으로 유지합니다.
+- 개발 DB 초기화와 시드는 서버 시작 시가 아니라 `python -m scripts.reset_and_seed`로 실행합니다.
+- Docker Compose 개발 환경은 컨테이너 시작 command에서 `python -m scripts.reset_and_seed`를 실행합니다.
+- CI/CD 자동화는 `.github/workflows/`에서 관리합니다.
