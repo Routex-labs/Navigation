@@ -12,7 +12,11 @@ void main() {
       final client = MockClient((request) async {
         requestCount++;
         return http.Response(
-          jsonEncode({'id': 'bldg-001', 'name': '데모 건물', 'floors': ['1F', '2F']}),
+          jsonEncode({
+            'id': 'bldg-001',
+            'name': '데모 건물',
+            'floors': ['1F', '2F'],
+          }),
           200,
           headers: {'content-type': 'application/json; charset=utf-8'},
         );
@@ -49,12 +53,10 @@ void main() {
       var requestCount = 0;
       final client = MockClient((request) async {
         requestCount++;
-        // /floors/{floor}는 지도 데이터를, /floors/{floor}/graph는 복도선으로
-        // 얹을 간선 목록을 준다 - getFloorGeoJson이 내부적으로 둘 다 호출한다.
-        if (request.url.path.endsWith('/graph')) {
-          return http.Response(jsonEncode({'floor': {}, 'nodes': [], 'edges': []}), 200);
-        }
-        return http.Response(jsonEncode({'type': 'FeatureCollection', 'features': []}), 200);
+        return http.Response(
+          jsonEncode({'type': 'FeatureCollection', 'features': []}),
+          200,
+        );
       });
       final repository = HttpBuildingRepository(client: client);
 
@@ -62,35 +64,57 @@ void main() {
       await repository.getFloorGeoJson('bldg-001', '1F'); // 같은 조합 → 캐시 재사용
       await repository.getFloorGeoJson('bldg-001', '2F'); // 다른 층 → 새 요청
 
-      // 층마다 지도 요청 1번 + 그래프 요청 1번 = 2번씩, 캐시된 재호출은 요청 없음.
-      expect(requestCount, 4);
+      // 층마다 /floors/{floor} 요청 1번씩만, 캐시된 재호출은 요청 없음.
+      expect(requestCount, 2);
     });
 
-    test('merges graph edges into corridors_local_m', () async {
+    test('does not call the separate /graph endpoint', () async {
+      final requestPaths = <String>[];
       final client = MockClient((request) async {
-        if (request.url.path.endsWith('/graph')) {
-          return http.Response(
-            jsonEncode({
-              'floor': {},
-              'nodes': [],
+        requestPaths.add(request.url.path);
+        return http.Response(
+          jsonEncode({'type': 'FeatureCollection', 'features': []}),
+          200,
+        );
+      });
+      final repository = HttpBuildingRepository(client: client);
+
+      await repository.getFloorGeoJson('bldg-001', '1F');
+
+      expect(requestPaths, ['/buildings/bldg-001/floors/1F']);
+      expect(requestPaths.any((path) => path.endsWith('/graph')), isFalse);
+    });
+
+    test('maps navigation_graph edges into corridors_local_m', () async {
+      final client = MockClient((request) async {
+        return http.Response(
+          jsonEncode({
+            'floor': '1F',
+            'footprint_local_m': [],
+            'stores': [],
+            'pois': [],
+            'navigation_graph': {
+              'floor': {'id': '1F', 'name': '1층'},
+              'nodes': [
+                {'id': 'A', 'x_m': 0.0, 'y_m': 0.0},
+                {'id': 'B', 'x_m': 1.0, 'y_m': 1.0},
+              ],
               'edges': [
                 {
                   'id': 'e1',
-                  'from': 'A',
-                  'to': 'B',
-                  'length_m': 1.0,
-                  'bidirectional': true,
+                  'from_node_id': 'A',
+                  'to_node_id': 'B',
                   'geometry_local_m': [
-                    {'x': 0, 'y': 0},
-                    {'x': 1, 'y': 1},
+                    [0.0, 0.0],
+                    [1.0, 1.0],
                   ],
                 },
               ],
-            }),
-            200,
-          );
-        }
-        return http.Response(jsonEncode({'footprint_local_m': [], 'stores': [], 'pois': []}), 200);
+            },
+          }),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
       });
       final repository = HttpBuildingRepository(client: client);
 
@@ -98,8 +122,8 @@ void main() {
 
       expect(geojson!['corridors_local_m'], [
         [
-          {'x': 0, 'y': 0},
-          {'x': 1, 'y': 1},
+          [0.0, 0.0],
+          [1.0, 1.0],
         ],
       ]);
     });
@@ -134,8 +158,18 @@ void main() {
       });
       final repository = HttpBuildingRepository(client: client);
 
-      final first = await repository.getShortestRoute('bldg-001', '1F', 'N1', 'N2');
-      final second = await repository.getShortestRoute('bldg-001', '1F', 'N1', 'N2');
+      final first = await repository.getShortestRoute(
+        'bldg-001',
+        '1F',
+        'N1',
+        'N2',
+      );
+      final second = await repository.getShortestRoute(
+        'bldg-001',
+        '1F',
+        'N1',
+        'N2',
+      );
 
       expect(first?.distanceMeters, 5.0);
       expect(first?.points.length, 2);
@@ -151,8 +185,18 @@ void main() {
       });
       final repository = HttpBuildingRepository(client: client);
 
-      final notFound = await repository.getShortestRoute('bldg-001', '1F', 'N1', 'N2');
-      final badRequest = await repository.getShortestRoute('bldg-001', '1F', 'N1', 'N3');
+      final notFound = await repository.getShortestRoute(
+        'bldg-001',
+        '1F',
+        'N1',
+        'N2',
+      );
+      final badRequest = await repository.getShortestRoute(
+        'bldg-001',
+        '1F',
+        'N1',
+        'N3',
+      );
 
       expect(notFound, isNull);
       expect(badRequest, isNull);
@@ -167,7 +211,11 @@ void main() {
         requestCount++;
         return http.Response(
           jsonEncode([
-            {'id': 'bldg-001', 'name': '데모 건물', 'floors': ['1F', '2F']},
+            {
+              'id': 'bldg-001',
+              'name': '데모 건물',
+              'floors': ['1F', '2F'],
+            },
           ]),
           200,
           headers: {'content-type': 'application/json; charset=utf-8'},

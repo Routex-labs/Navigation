@@ -12,7 +12,8 @@ import 'building_repository.dart';
 /// 건물/층 데이터는 자주 안 바뀌므로 한 번 받아온 응답은 메모리에 캐싱해서
 /// 같은 건물·같은 층을 다시 요청할 때 네트워크를 다시 타지 않는다.
 class HttpBuildingRepository implements BuildingRepository {
-  HttpBuildingRepository({http.Client? client}) : _client = client ?? http.Client();
+  HttpBuildingRepository({http.Client? client})
+    : _client = client ?? http.Client();
 
   final http.Client _client;
 
@@ -73,32 +74,26 @@ class HttpBuildingRepository implements BuildingRepository {
     final geojson = jsonDecode(response.body) as Map<String, dynamic>;
 
     // /floors/{floor}는 매장 폴리곤이 없는(점 정보만 있는) 건물에서는 지도가
-    // 텅 비어 보인다. /floors/{floor}/graph의 간선 geometry를 복도선으로
-    // 얹어서 FloorPlan._fromApiResponse가 그대로 그릴 수 있게 한다.
-    final corridors = await _fetchCorridors(buildingId, floor);
+    // 텅 비어 보인다. 응답에 함께 내려오는 navigation_graph의 간선 geometry를
+    // 복도선으로 얹어서 FloorPlan._fromApiResponse가 그대로 그릴 수 있게 한다.
+    final corridors = _corridorsFromNavigationGraph(
+      geojson['navigation_graph'] as Map<String, dynamic>?,
+    );
     if (corridors != null) geojson['corridors_local_m'] = corridors;
 
     _floorGeoJsonCache[cacheKey] = geojson;
     return geojson;
   }
 
-  Future<List<List<Map<String, dynamic>>>?> _fetchCorridors(
-    String buildingId,
-    String floor,
-  ) async {
-    final response = await _client.get(
-      Uri.parse('$apiBaseUrl/buildings/$buildingId/floors/$floor/graph'),
-    );
-    if (response.statusCode != 200) return null;
+  List<List<dynamic>>? _corridorsFromNavigationGraph(
+    Map<String, dynamic>? navigationGraph,
+  ) {
+    if (navigationGraph == null) return null;
 
-    final graph = jsonDecode(response.body) as Map<String, dynamic>;
-    final edges = (graph['edges'] as List<dynamic>? ?? const [])
+    final edges = (navigationGraph['edges'] as List<dynamic>? ?? const [])
         .cast<Map<String, dynamic>>();
     return edges
-        .map(
-          (edge) => (edge['geometry_local_m'] as List<dynamic>? ?? const [])
-              .cast<Map<String, dynamic>>(),
-        )
+        .map((edge) => edge['geometry_local_m'] as List<dynamic>? ?? const [])
         .where((points) => points.length >= 2)
         .toList();
   }
@@ -114,11 +109,15 @@ class HttpBuildingRepository implements BuildingRepository {
     final cached = _routeCache[cacheKey];
     if (cached != null) return cached;
 
-    final uri = Uri.parse(
-      '$apiBaseUrl/buildings/$buildingId/floors/$floor/route',
-    ).replace(
-      queryParameters: {'start_node_id': startNodeId, 'end_node_id': endNodeId},
-    );
+    final uri =
+        Uri.parse(
+          '$apiBaseUrl/buildings/$buildingId/floors/$floor/route',
+        ).replace(
+          queryParameters: {
+            'start_node_id': startNodeId,
+            'end_node_id': endNodeId,
+          },
+        );
     final response = await _client.get(uri);
     // 404(층/경로 없음)와 400(잘못된 노드 ID) 둘 다 "경로 없음"으로 단순화한다.
     if (response.statusCode == 404 || response.statusCode == 400) return null;
