@@ -159,13 +159,34 @@ def _seed_transfers(session, floors: list[str]) -> None:
     )
 
 
-def seed_studio(floors: list[str], *, session=None) -> None:
-    """여러 층을 하나의 트랜잭션으로 개발 DB에 적재한다(Building은 1회만 생성)."""
+def seed_studio(
+    floors: list[str],
+    *,
+    vector_path: Path | None = seed_navigation.DEFAULT_VECTOR_DIR,
+    session=None,
+) -> None:
+    """여러 층을 하나의 트랜잭션으로 개발 DB에 적재한다(Building은 1회만 생성).
+
+    vector_path로 벡터 지도(FloorVectorMap/MapFeature)를 함께 붙인다. 층의
+    floor_id가 vector_path 데이터셋과 일치하지 않으면 그 층은 벡터 지도 없이
+    노드/엣지/스토어만 적재한다(예: 3F/4F는 아직 Studio와 legacy 벡터 데이터의
+    floor_id가 어긋나 있음).
+    """
     own_session = session or SessionLocal()
     try:
         for floor_code in floors:
             data = build_seed_dict(floor_code)
-            seed_navigation._add_dataset(own_session, data, vector_path=None)
+            floor_vector_path = vector_path
+            if floor_vector_path is not None:
+                try:
+                    seed_navigation.find_vector_dataset(
+                        floor_vector_path,
+                        building_id=data["building"]["id"],
+                        floor_id=data["building"]["floor"]["id"],
+                    )
+                except FileNotFoundError:
+                    floor_vector_path = None
+            seed_navigation._add_dataset(own_session, data, floor_vector_path)
         _seed_transfers(own_session, floors)
         if session is None:
             own_session.commit()
@@ -181,8 +202,14 @@ def seed_studio(floors: list[str], *, session=None) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--floor", nargs="*", default=["1f", "3f", "4f"])
+    parser.add_argument(
+        "--vector-dir",
+        type=Path,
+        default=seed_navigation.DEFAULT_VECTOR_DIR,
+        help="건물/층별 벡터 JSON 디렉터리(floor_id가 일치하는 층만 붙는다)",
+    )
     args = parser.parse_args()
-    seed_studio(args.floor)
+    seed_studio(args.floor, vector_path=args.vector_dir)
     for floor_code in args.floor:
         data = build_seed_dict(floor_code)
         print(
