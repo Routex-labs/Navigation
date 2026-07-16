@@ -1,11 +1,21 @@
-/// 기본값은 Android 에뮬레이터에서 호스트 localhost를 가리키는 특수 주소다.
-/// 다른 플랫폼(웹/데스크톱/실기기)에서 개발 서버를 붙일 땐
-///   flutter run --dart-define=API_BASE_URL=http://localhost:8001
-/// 로 덮어쓴다.
-const apiBaseUrl = String.fromEnvironment(
-  'API_BASE_URL',
-  defaultValue: 'http://10.0.2.2:8001',
-);
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
+
+/// dart-define으로 넘기면 플랫폼 무관하게 최우선 적용된다(실기기 등):
+///   flutter run --dart-define=API_BASE_URL=http://192.168.0.10:8000
+const _apiBaseUrlOverride = String.fromEnvironment('API_BASE_URL');
+
+/// 안드로이드 에뮬레이터는 호스트의 localhost를 `10.0.2.2`로 가리켜야 접속되고,
+/// 웹/데스크톱/iOS 시뮬레이터는 `localhost`가 그대로 동작한다. 플랫폼별로
+/// 맞는 기본값을 자동 선택해서, 로컬 개발 서버(`uvicorn app.main:app --reload`,
+/// 기본 포트 8000)를 dart-define 없이 바로 붙일 수 있게 한다.
+String get apiBaseUrl {
+  if (_apiBaseUrlOverride.isNotEmpty) return _apiBaseUrlOverride;
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    return 'http://10.0.2.2:8000';
+  }
+  return 'http://localhost:8000';
+}
 
 /// 데모 건물 ID. 백엔드(api/)에 실제로 적재된 test-center 건물과 맞춰야
 /// 실내 지도·목적지 검색·경로 안내가 전부 백엔드 다익스트라 그래프로

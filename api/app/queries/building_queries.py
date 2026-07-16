@@ -12,7 +12,10 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.domain.georeference import GeoTransform
+from app.domain.tiling import local_points_to_lnglat
 from app.models import Building, Edge, Floor, FloorVectorMap, MapFeature, Node, Poi, Store
+from app.queries.geo_transform import fit_building_geo_transform
 
 
 def list_buildings(session: Session) -> list[dict[str, Any]]:
@@ -52,7 +55,8 @@ def search_stores(
         .join(Floor, Store.floor_id == Floor.id)
         .where(Floor.building_id == building_id, Store.name.like(f"%{query}%"))
     ).all()
-    return [_to_store_dict(store) for store in stores]
+    transform = fit_building_geo_transform(session, building_id)
+    return [_to_store_dict(store, transform) for store in stores]
 
 
 def get_floor_map(
@@ -70,14 +74,15 @@ def get_floor_map(
         select(Store).where(Store.floor_id == floor.id)
     ).all()
     pois = session.scalars(select(Poi).where(Poi.floor_id == floor.id)).all()
+    transform = fit_building_geo_transform(session, building_id)
     return {
         "floor": {"id": floor.id, "name": floor.name, "level": floor.level},
         "navigation_coordinate_system": "local_m",
         "footprint_local_m": (building.footprint_local_m or []) if building else [],
+        "footprint_wgs84": _footprint_wgs84(building, transform),
         "vector_map": _to_vector_map_dict(session, vector_map) if vector_map else None,
-        "navigation_graph": _to_floor_graph_dict(session, floor),
-        "stores": [_to_store_dict(store) for store in stores],
-        "pois": [_to_poi_dict(poi) for poi in pois],
+        "stores": [_to_store_dict(store, transform) for store in stores],
+        "pois": [_to_poi_dict(poi, transform) for poi in pois],
     }
 
 
@@ -153,12 +158,24 @@ def _to_edge_dict(edge: Edge) -> dict[str, Any]:
     }
 
 
-def _to_store_dict(store: Store) -> dict[str, Any]:
+def _to_store_dict(store: Store, transform: GeoTransform | None) -> dict[str, Any]:
+    centroid_wgs84 = None
+    polygon_wgs84 = None
+    if transform is not None:
+        lat, lng = transform.apply(store.centroid_x_m, store.centroid_y_m)
+        centroid_wgs84 = {"lat": lat, "lng": lng}
+        if store.polygon:
+            polygon_wgs84 = [
+                {"lng": lng, "lat": lat}
+                for lng, lat in local_points_to_lnglat(store.polygon, transform)
+            ]
     return {
         "id": store.id,
         "floor_id": store.floor_id,
         "name": store.name,
         "centroid_local_m": {"x": store.centroid_x_m, "y": store.centroid_y_m},
+        "centroid_wgs84": centroid_wgs84,
+        "polygon_wgs84": polygon_wgs84,
         "entrance_local_m": _optional_point(
             store.entrance_x_m,
             store.entrance_y_m,
@@ -169,14 +186,29 @@ def _to_store_dict(store: Store) -> dict[str, Any]:
     }
 
 
-def _to_poi_dict(poi: Poi) -> dict[str, Any]:
+def _to_poi_dict(poi: Poi, transform: GeoTransform | None) -> dict[str, Any]:
+    position_wgs84 = None
+    if transform is not None:
+        lat, lng = transform.apply(poi.x_m, poi.y_m)
+        position_wgs84 = {"lat": lat, "lng": lng}
     return {
         "id": poi.id,
         "type": poi.type,
         "name": poi.name,
         "position_local_m": {"x": poi.x_m, "y": poi.y_m},
+        "position_wgs84": position_wgs84,
         "linked_node_id": poi.linked_node_id,
     }
+
+
+def _footprint_wgs84(
+    building: Building | None,
+    transform: GeoTransform | None,
+) -> list[dict[str, float]] | None:
+    if building is None or transform is None or not building.footprint_local_m:
+        return None
+    points = local_points_to_lnglat(building.footprint_local_m, transform)
+    return [{"lng": lng, "lat": lat} for lng, lat in points]
 
 
 def _to_vector_map_dict(

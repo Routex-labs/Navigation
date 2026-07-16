@@ -3,10 +3,16 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION"/>
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- usesCleartextTraffic: 개발용 로컬 API 서버(http://<PC LAN IP>:8000)에
+         실기기로 접속하려면 평문 HTTP 허용이 필요하다. Dart http는 자체 소켓이라
+         이 정책과 무관하게 동작하지만, MapLibre 네이티브(벡터 타일 요청)는
+         Android 네트워크 정책을 따르므로 이 설정이 없으면 실내 지도 타일만
+         조용히 차단돼 지도가 비어 보인다. -->
     <application
         android:label="navigation_client"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"

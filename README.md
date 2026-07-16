@@ -22,6 +22,7 @@ Flutter 앱 ──HTTP──> FastAPI ──> SQLite
 
 상세 실행법은 [로컬 개발 가이드](docs/local-development-guide.md)를 따릅니다. 요약하면 백엔드를 먼저 띄우고, Flutter 앱은 `client/`에서 실행합니다.
 
+## 더현대서울 지도 데이터셋 구축
 **Docker로 백엔드 실행**
 
 ```powershell

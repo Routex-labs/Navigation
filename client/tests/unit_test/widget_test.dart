@@ -8,6 +8,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
 import 'package:navigation_client/app.dart';
+import 'package:navigation_client/core/api_config.dart';
 import 'package:navigation_client/core/service_locator.dart';
 import 'package:navigation_client/models/poi_search_result.dart';
 import 'package:navigation_client/repositories/mock_building_repository.dart';
@@ -17,6 +18,7 @@ import 'package:navigation_client/screens/arrival/arrival_screen.dart';
 import 'package:navigation_client/screens/debug/api_health_check_screen.dart';
 import 'package:navigation_client/screens/destination/destination_screen.dart';
 import 'package:navigation_client/screens/indoor_map/indoor_map_screen.dart';
+import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
 import 'package:navigation_client/screens/route_guide/route_guide_screen.dart';
 import 'package:navigation_client/widgets/floor_plan_view.dart';
@@ -109,38 +111,21 @@ void main() {
     outdoorTileProvider = NetworkTileProvider.new;
   });
 
-  testWidgets('splash screen shows entry points', (WidgetTester tester) async {
-    await tester.pumpWidget(const NavigationApp());
-
-    expect(find.text('Navigation'), findsOneWidget);
-    expect(find.text('시작하기'), findsOneWidget);
-  });
-
-  testWidgets('splash screen requests permissions then stops loading', (
+  testWidgets('app opens directly into the outdoor (home) map shell', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const NavigationApp());
-
-    expect(find.byType(LinearProgressIndicator), findsOneWidget);
-
-    await tester.pumpAndSettle();
-
-    expect(find.byType(LinearProgressIndicator), findsNothing);
-  });
-
-  testWidgets('splash "시작하기" navigates to outdoor map', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(const NavigationApp());
-
-    await tester.tap(find.text('시작하기'));
     // 지도 타일은 네트워크 이미지라 pumpAndSettle을 쓰면 무한정 기다릴 수 있으니
-    // 라우트 전환과 위치 조회가 끝날 만큼만 프레임을 진행한다.
+    // 위치 조회가 끝날 만큼만 프레임을 진행한다.
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump();
 
-    expect(find.text('야외 지도 (GPS 모드)'), findsOneWidget);
+    // 야외(홈) 모드로 바로 시작했는지는 하단 공용 바의 홈/실내 세그먼트로 확인한다 —
+    // 실내 모드였다면 상단 바에 햄버거 버튼이 추가로 보였을 것이다.
+    expect(find.text('홈'), findsOneWidget);
+    expect(find.text('실내'), findsOneWidget);
+    expect(find.byIcon(Icons.menu), findsNothing);
   });
 
   testWidgets('api health check shows loading then a status message', (
@@ -164,7 +149,9 @@ void main() {
   testWidgets('outdoor map shows a location marker after loading', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: OutdoorMapScreen()));
+    await tester.pumpWidget(
+      MaterialApp(home: OutdoorMapBody(onEnterBuilding: () {})),
+    );
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
@@ -180,7 +167,9 @@ void main() {
   ) async {
     watchPosition = () => Stream.value(_fakeLowAccuracyPosition);
 
-    await tester.pumpWidget(const MaterialApp(home: OutdoorMapScreen()));
+    await tester.pumpWidget(
+      MaterialApp(home: OutdoorMapBody(onEnterBuilding: () {})),
+    );
     await tester.pump();
 
     expect(find.text('GPS 신호 약함'), findsOneWidget);
@@ -189,40 +178,35 @@ void main() {
   testWidgets('outdoor map shows a route and ETA card to the entrance', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: OutdoorMapScreen()));
+    await tester.pumpWidget(
+      MaterialApp(home: OutdoorMapBody(onEnterBuilding: () {})),
+    );
     await tester.pump();
     await tester.pump();
 
     expect(find.byIcon(Icons.place), findsOneWidget);
-    expect(find.textContaining('목적지까지 약'), findsOneWidget);
+    expect(find.textContaining('건물 입구까지'), findsOneWidget);
   });
 
   testWidgets(
-    'outdoor map auto-navigates to indoor map within the entrance radius',
+    'map shell switches to indoor mode when entrance is detected nearby',
     (WidgetTester tester) async {
       watchPosition = () => Stream.value(_fakePositionAtEntrance);
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: const OutdoorMapScreen(),
-          routes: {
-            AppRoutes.indoorMap: (context) =>
-                const Scaffold(body: Text('INDOOR')),
-          },
-        ),
-      );
+      await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
 
       await tester.pump();
       await tester.pump();
       expect(find.text('건물 감지 중...'), findsOneWidget);
 
       await tester.pumpAndSettle();
-      expect(find.text('INDOOR'), findsOneWidget);
+      // 실내 모드로 전환되면 공용 상단바에 건물 선택용 햄버거 버튼이 나타난다.
+      expect(find.byIcon(Icons.menu), findsOneWidget);
     },
   );
 
   testWidgets(
-    'outdoor map does not auto-navigate near the entrance when GPS signal stays strong',
+    'map shell does not switch to indoor mode when GPS signal stays strong near the entrance',
     (WidgetTester tester) async {
       // 입구와 같은 좌표지만 신호는 계속 양호함 (건물 앞을 지나가는 상황).
       final passingByPosition = Position(
@@ -239,20 +223,11 @@ void main() {
       );
       watchPosition = () => Stream.value(passingByPosition);
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: const OutdoorMapScreen(),
-          routes: {
-            AppRoutes.indoorMap: (context) =>
-                const Scaffold(body: Text('INDOOR')),
-          },
-        ),
-      );
+      await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
       await tester.pump();
       await tester.pump();
 
-      expect(find.text('야외 지도 (GPS 모드)'), findsOneWidget);
-      expect(find.text('INDOOR'), findsNothing);
+      expect(find.byIcon(Icons.menu), findsNothing);
     },
   );
 
@@ -262,7 +237,9 @@ void main() {
     final controller = StreamController<Position>();
     watchPosition = () => controller.stream;
 
-    await tester.pumpWidget(const MaterialApp(home: OutdoorMapScreen()));
+    await tester.pumpWidget(
+      MaterialApp(home: OutdoorMapBody(onEnterBuilding: () {})),
+    );
 
     controller.add(_fakePosition);
     await tester.pump();
@@ -280,7 +257,9 @@ void main() {
   ) async {
     watchPosition = () => Stream.error(Exception('위치를 가져올 수 없음'));
 
-    await tester.pumpWidget(const MaterialApp(home: OutdoorMapScreen()));
+    await tester.pumpWidget(
+      MaterialApp(home: OutdoorMapBody(onEnterBuilding: () {})),
+    );
     await tester.pump();
 
     expect(find.byIcon(Icons.navigation), findsOneWidget);
@@ -290,7 +269,9 @@ void main() {
   testWidgets('indoor map shows building info loaded from the repository', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: IndoorMapScreen()));
+    await tester.pumpWidget(
+      const MaterialApp(home: IndoorMapBody(buildingId: demoBuildingId)),
+    );
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
@@ -302,27 +283,34 @@ void main() {
   testWidgets('indoor map renders the floor plan view', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: IndoorMapScreen()));
+    await tester.pumpWidget(
+      const MaterialApp(home: IndoorMapBody(buildingId: demoBuildingId)),
+    );
     await tester.pumpAndSettle();
 
-    expect(find.text('데모 건물 · 1F'), findsOneWidget);
+    expect(find.text('데모 건물'), findsOneWidget);
+    expect(find.textContaining('현재 1F 위치'), findsOneWidget);
     expect(find.byType(FloorPlanView), findsOneWidget);
     expect(find.byIcon(Icons.layers), findsOneWidget);
+
+    // PDR이 아직 없어도, 실내 지도 진입 시 "현재 위치" 아이콘이 뜨도록
+    // 층 평면도 근사 위치가 FloorPlanView로 전달돼야 한다.
+    final floorPlanView = tester.widget<FloorPlanView>(find.byType(FloorPlanView));
+    expect(floorPlanView.currentLocation, isNotNull);
   });
 
-  testWidgets('indoor map switches floor label via the floor switcher', (
+  testWidgets('indoor map switches floor via the floor tabs', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: IndoorMapScreen()));
+    await tester.pumpWidget(
+      const MaterialApp(home: IndoorMapBody(buildingId: demoBuildingId)),
+    );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.layers));
+    await tester.tap(find.text('2F'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('2F').last);
-    await tester.pumpAndSettle();
-
-    expect(find.text('데모 건물 · 2F'), findsOneWidget);
+    expect(find.textContaining('현재 2F 위치'), findsOneWidget);
     expect(find.byType(FloorPlanView), findsOneWidget);
   });
 
@@ -358,7 +346,8 @@ void main() {
     await tester.enterText(find.byType(TextField), '존재하지않는장소');
     await tester.pumpAndSettle();
 
-    expect(find.text('찾을 수 없어요. 다시 입력해볼까요?'), findsOneWidget);
+    expect(find.text('찾을 수 없어요'), findsOneWidget);
+    expect(find.text('다시 입력해볼까요?'), findsOneWidget);
   });
 
   testWidgets('selecting a destination navigates to the route guide', (
@@ -381,7 +370,7 @@ void main() {
     // 남아있어 textContaining만으로는 새 화면과 구분되지 않는다 - 경로 안내
     // 화면 AppBar에만 있는 정확한 제목으로 확인한다.
     expect(find.text('강의실 101(으)로 안내'), findsOneWidget);
-    expect(find.textContaining('목적지까지 약'), findsOneWidget);
+    expect(find.textContaining('목적지까지'), findsWidgets);
   });
 
   testWidgets('route guide shows the ETA card and building info FAB', (
@@ -452,7 +441,7 @@ void main() {
       ),
     );
 
-    expect(find.text('강의실 101에 도착했습니다!'), findsOneWidget);
+    expect(find.text('강의실 101에 도착했습니다'), findsOneWidget);
 
     // 자동 종료 타이머가 만료될 때까지 시간을 진행시킨다.
     await tester.pump(const Duration(seconds: 2));

@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../core/api_config.dart';
+import '../domain/floor_router.dart';
 import '../models/building.dart';
+import '../models/floor_graph.dart';
 import '../models/indoor_route.dart';
 import 'building_repository.dart';
 
@@ -12,13 +14,15 @@ import 'building_repository.dart';
 /// 건물/층 데이터는 자주 안 바뀌므로 한 번 받아온 응답은 메모리에 캐싱해서
 /// 같은 건물·같은 층을 다시 요청할 때 네트워크를 다시 타지 않는다.
 class HttpBuildingRepository implements BuildingRepository {
-  HttpBuildingRepository({http.Client? client}) : _client = client ?? http.Client();
+  HttpBuildingRepository({http.Client? client})
+    : _client = client ?? http.Client();
 
   final http.Client _client;
 
   List<Building>? _allBuildingsCache;
   final Map<String, Building> _buildingCache = {};
   final Map<String, Map<String, dynamic>> _floorGeoJsonCache = {};
+  final Map<String, FloorGraph> _floorGraphCache = {};
   final Map<String, IndoorRoute> _routeCache = {};
 
   @override
@@ -73,34 +77,47 @@ class HttpBuildingRepository implements BuildingRepository {
     final geojson = jsonDecode(response.body) as Map<String, dynamic>;
 
     // /floors/{floor}는 매장 폴리곤이 없는(점 정보만 있는) 건물에서는 지도가
-    // 텅 비어 보인다. /floors/{floor}/graph의 간선 geometry를 복도선으로
-    // 얹어서 FloorPlan._fromApiResponse가 그대로 그릴 수 있게 한다.
-    final corridors = await _fetchCorridors(buildingId, floor);
+    // 텅 비어 보인다. 응답에 함께 내려오는 navigation_graph의 간선 geometry를
+    // 복도선으로 얹어서 FloorPlan._fromApiResponse가 그대로 그릴 수 있게 한다.
+    final corridors = _corridorsFromNavigationGraph(
+      geojson['navigation_graph'] as Map<String, dynamic>?,
+    );
     if (corridors != null) geojson['corridors_local_m'] = corridors;
 
     _floorGeoJsonCache[cacheKey] = geojson;
     return geojson;
   }
 
-  Future<List<List<Map<String, dynamic>>>?> _fetchCorridors(
-    String buildingId,
-    String floor,
-  ) async {
+  List<List<dynamic>>? _corridorsFromNavigationGraph(
+    Map<String, dynamic>? navigationGraph,
+  ) {
+    if (navigationGraph == null) return null;
+
+    final edges = (navigationGraph['edges'] as List<dynamic>? ?? const [])
+        .cast<Map<String, dynamic>>();
+    return edges
+        .map((edge) => edge['geometry_local_m'] as List<dynamic>? ?? const [])
+        .where((points) => points.length >= 2)
+        .toList();
+  }
+
+  /// 층 길찾기 그래프(nodes+edges). 서버 /route 왕복 없이 클라이언트에서
+  /// 직접 다익스트라를 돌리기 위한 원본 데이터라 건물/층당 한 번만 받는다.
+  Future<FloorGraph?> _getFloorGraph(String buildingId, String floor) async {
+    final cacheKey = '$buildingId/$floor';
+    final cached = _floorGraphCache[cacheKey];
+    if (cached != null) return cached;
+
     final response = await _client.get(
       Uri.parse('$apiBaseUrl/buildings/$buildingId/floors/$floor/graph'),
     );
-    if (response.statusCode != 200) return null;
+    if (response.statusCode == 404) return null;
 
-    final graph = jsonDecode(response.body) as Map<String, dynamic>;
-    final edges = (graph['edges'] as List<dynamic>? ?? const [])
-        .cast<Map<String, dynamic>>();
-    return edges
-        .map(
-          (edge) => (edge['geometry_local_m'] as List<dynamic>? ?? const [])
-              .cast<Map<String, dynamic>>(),
-        )
-        .where((points) => points.length >= 2)
-        .toList();
+    final graph = FloorGraph.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+    _floorGraphCache[cacheKey] = graph;
+    return graph;
   }
 
   @override
@@ -114,18 +131,19 @@ class HttpBuildingRepository implements BuildingRepository {
     final cached = _routeCache[cacheKey];
     if (cached != null) return cached;
 
-    final uri = Uri.parse(
-      '$apiBaseUrl/buildings/$buildingId/floors/$floor/route',
-    ).replace(
-      queryParameters: {'start_node_id': startNodeId, 'end_node_id': endNodeId},
-    );
-    final response = await _client.get(uri);
-    // 404(층/경로 없음)와 400(잘못된 노드 ID) 둘 다 "경로 없음"으로 단순화한다.
-    if (response.statusCode == 404 || response.statusCode == 400) return null;
+    final graph = await _getFloorGraph(buildingId, floor);
+    if (graph == null) return null;
 
-    final route = IndoorRoute.fromJson(
-      jsonDecode(response.body) as Map<String, dynamic>,
-    );
+    // 다익스트라는 그래프에 없는 노드 ID를 ArgumentError로 거부한다(백엔드가
+    // 이 경우를 400으로 응답하던 것과 동일하게 "경로 없음"으로 단순화한다).
+    IndoorRoute? route;
+    try {
+      route = computeShortestRoute(graph, startNodeId, endNodeId);
+    } on ArgumentError {
+      return null;
+    }
+    if (route == null) return null;
+
     _routeCache[cacheKey] = route;
     return route;
   }

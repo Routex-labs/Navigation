@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/poi_search_result.dart';
 import '../../routing/app_routes.dart';
+import '../../theme/app_theme.dart';
 
 const _autoDismissDelay = Duration(seconds: 2);
 
@@ -43,24 +44,70 @@ class _ArrivalScreenState extends State<ArrivalScreen> {
         ModalRoute.of(context)?.settings.arguments as PoiSearchResult?;
 
     return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.check_circle, color: Colors.green, size: 64),
-            const SizedBox(height: 16),
-            Text(
-              destination == null
-                  ? '도착했습니다!'
-                  : '${destination.name}에 도착했습니다!',
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: _startNewSearch,
-              child: const Text('새 목적지 탐색'),
-            ),
-          ],
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(32, 20, 32, 20),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 88,
+                height: 88,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F5E9),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.success.withValues(alpha: 0.28),
+                      blurRadius: 56,
+                    ),
+                  ],
+                ),
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.check_circle,
+                  color: AppColors.success,
+                  size: 50,
+                ),
+              ),
+              const SizedBox(height: 22),
+              const Text(
+                '도착했습니다!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 27,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.text,
+                  letterSpacing: -0.6,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                destination == null
+                    ? '목적지에 도착했습니다'
+                    : '${destination.name}에 도착했습니다',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 14.5, color: AppColors.muted),
+              ),
+              if (destination != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  destination.floor,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 12, color: AppColors.muted),
+                ),
+              ],
+              const SizedBox(height: 28),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: _startNewSearch,
+                  icon: const Icon(Icons.search, size: 18),
+                  label: const Text('새 목적지 탐색'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

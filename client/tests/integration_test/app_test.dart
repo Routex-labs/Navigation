@@ -12,7 +12,8 @@ void main() {
     app.main();
     await tester.pumpAndSettle(const Duration(seconds: 10));
 
-    expect(find.text('Navigation'), findsOneWidget);
-    expect(find.text('시작하기'), findsOneWidget);
+    // 앱은 이제 스플래시 화면 없이 바로 야외(홈) 지도로 시작한다.
+    expect(find.text('홈'), findsOneWidget);
+    expect(find.text('실내'), findsOneWidget);
   });
 }

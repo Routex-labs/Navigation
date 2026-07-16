@@ -10,6 +10,11 @@ class LocalPointResponse(BaseModel):
     y: float
 
 
+class LatLngResponse(BaseModel):
+    lat: float
+    lng: float
+
+
 class GraphFloorResponse(BaseModel):
     id: str
     name: str
@@ -48,4 +53,5 @@ class RouteResponse(BaseModel):
     edge_ids: list[str]
     coordinate_system: Literal["local_m"]
     path_points: list[LocalPointResponse]
+    path_points_wgs84: list[LatLngResponse]
     total_distance_m: float

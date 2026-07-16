@@ -71,7 +71,7 @@ class MockBuildingRepository implements BuildingRepository {
 
     return IndoorRoute(
       points: [start, end],
-      distanceMeters: localDistanceMeters(start, end),
+      distanceMeters: wgs84DistanceMeters(start, end),
     );
   }
 

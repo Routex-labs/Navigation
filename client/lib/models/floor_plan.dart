@@ -1,33 +1,21 @@
-import 'dart:math' as math;
-
 import 'package:latlong2/latlong.dart';
 
-/// local_m 좌표를 LatLng.latitude/longitude에 그대로 담을 때 곱하는 배율.
-/// latlong2의 LatLng은 latitude를 ±90도로 강제하는데, 실제 건물 local_m
-/// 값은 이 범위를 쉽게 넘는다(예: 더현대 서울 1층 y 최대값 98.123m →
-/// "The north latitude can't be bigger than 90.0" 예외로 전체 지도가 그려지지
-/// 않고 앱이 죽는다). CrsSimple은 절대 좌표 스케일에 무관하게 동작하므로,
-/// 모든 local_m 좌표에 이 배율을 곱해 항상 ±90/±180 범위 안에 들어오게 만든다.
-const localMToLatLngScale = 0.3;
-
-/// 백엔드 local_m {x, y} 좌표를 flutter_map CrsSimple에서 쓸 LatLng(y, x)로
-/// 바꾼다. 실내 관련 모델(FloorPlan, IndoorRoute)이 전부 이 규칙을 공유해야
-/// 같은 지도 위에서 좌표가 어긋나지 않는다.
-LatLng localPointToLatLng(Map<String, dynamic> point) {
-  return LatLng(
-    (point['y'] as num).toDouble() * localMToLatLngScale,
-    (point['x'] as num).toDouble() * localMToLatLngScale,
-  );
+/// 백엔드 {"lat":.., "lng":..} 좌표를 LatLng으로 바꾼다. 실내 관련 모델
+/// (FloorPlan, IndoorRoute)이 전부 이 규칙을 공유해야 MapLibre 벡터 타일
+/// (실좌표 기준으로 렌더링됨) 위에서 좌표가 어긋나지 않는다.
+///
+/// 건물에 실좌표 앵커(geo_transform)가 없으면(예: test-center) 백엔드가 이
+/// 필드를 null로 내려준다 — 이 경우 null을 그대로 반환하고 호출자가 그
+/// 지점을 건너뛴다.
+LatLng? wgs84PointToLatLng(Map<String, dynamic>? point) {
+  if (point == null) return null;
+  return LatLng((point['lat'] as num).toDouble(), (point['lng'] as num).toDouble());
 }
 
-/// localPointToLatLng으로 만든 두 점 사이의 실제 거리(m). 이 LatLng은 실제
-/// 위경도가 아니라 축소된 로컬 미터 좌표라, latlong2의 Distance(대권 거리
-/// 공식)를 쓰면 미터 단위 숫자를 위경도 각도로 착각해 터무니없이 큰 값이
-/// 나온다. 실외(GPS) 좌표에는 이 함수를 쓰면 안 된다.
-double localDistanceMeters(LatLng a, LatLng b) {
-  final dx = (a.longitude - b.longitude) / localMToLatLngScale;
-  final dy = (a.latitude - b.latitude) / localMToLatLngScale;
-  return math.sqrt(dx * dx + dy * dy);
+/// 두 실좌표(WGS84) 사이의 대권 거리(m). 실내 매장은 건물 규모(수백m)라
+/// 대권 거리와 평면 거리 차이가 무시할 만큼 작아 그대로 써도 된다.
+double wgs84DistanceMeters(LatLng a, LatLng b) {
+  return const Distance().as(LengthUnit.Meter, a, b);
 }
 
 class PoiMarker {
@@ -42,6 +30,7 @@ class PoiMarker {
 
 class StorePolygon {
   const StorePolygon({
+    required this.id,
     required this.name,
     required this.polygon,
     required this.centroid,
@@ -49,6 +38,8 @@ class StorePolygon {
     this.category,
   });
 
+  /// 벡터 타일에서 탭한 매장 feature(properties.id)와 매칭하는 데 쓴다.
+  final String id;
   final String name;
   final List<LatLng> polygon;
   final LatLng centroid;
@@ -60,13 +51,14 @@ class StorePolygon {
   final String? category;
 }
 
-/// 층 평면도. 두 가지 소스를 모두 파싱한다:
+/// 층 평면도 중 지도 위젯(MapLibre)이 직접 그리지 않는 값들 — 근처 입구
+/// 찾기, 현재 위치/외곽선 중심 fallback 등 "위치 계산"용으로만 쓴다.
+/// 실제 매장 폴리곤/POI/외곽선 렌더링은 벡터 타일(MVT) 소스가 대신한다.
+///
+/// 두 가지 소스를 모두 파싱한다:
 /// - mock: api/app/data/sample_building.json과 동일한 GeoJSON FeatureCollection
 /// - 백엔드: api/app/router/buildingRouter.py의 /floors/{floor} 응답
-///   (footprint_local_m/stores/pois, 건물 로컬 좌표계 - 미터 단위, 위경도 아님)
-///
-/// 로컬 좌표는 flutter_map의 CrsSimple(비지리 평면 좌표계)에서
-/// LatLng(y, x)로 그대로 사용한다 - 실제 위경도로 투영하지 않는다.
+///   (footprint_wgs84/stores/pois, 진짜 WGS84 — 건물에 실좌표 앵커가 없으면 비어 있음)
 class FloorPlan {
   const FloorPlan({
     this.footprint = const [],
@@ -80,63 +72,77 @@ class FloorPlan {
   final List<StorePolygon> stores;
   final List<PoiMarker> pois;
 
+  /// 실내 위치 추정(PDR)이 아직 없어 실제 "현재 위치"를 모를 때 쓰는 임시
+  /// 근사치. 외곽선 중심 → 복도 시작점 → 첫 POI 순으로 계산 가능한 첫 값을
+  /// 쓴다. 셋 다 없으면 null(호출자가 별도 fallback을 쓴다).
+  /// 실제 PDR 위치 연동이 붙으면 이 자리를 대체한다.
+  LatLng? approximateCurrentLocation() {
+    if (footprint.isNotEmpty) {
+      final avgLat =
+          footprint.map((p) => p.latitude).reduce((a, b) => a + b) / footprint.length;
+      final avgLng =
+          footprint.map((p) => p.longitude).reduce((a, b) => a + b) / footprint.length;
+      return LatLng(avgLat, avgLng);
+    }
+    if (corridors.isNotEmpty && corridors.first.isNotEmpty) {
+      return corridors.first.first;
+    }
+    if (pois.isNotEmpty) return pois.first.point;
+    return null;
+  }
+
   factory FloorPlan.fromJson(Map<String, dynamic> json) {
-    if (json.containsKey('footprint_local_m')) {
+    if (json.containsKey('footprint_wgs84') || json.containsKey('footprint_local_m')) {
       return _fromApiResponse(json);
     }
     return _fromGeoJson(json);
   }
 
   static FloorPlan _fromApiResponse(Map<String, dynamic> json) {
-    final footprint = ((json['footprint_local_m'] as List<dynamic>?) ??
-            const [])
-        .map((point) => localPointToLatLng(point as Map<String, dynamic>))
-        .toList();
-
-    final corridors = ((json['corridors_local_m'] as List<dynamic>?) ?? const [])
-        .map(
-          (corridor) => (corridor as List<dynamic>)
-              .map((point) => localPointToLatLng(point as Map<String, dynamic>))
-              .toList(),
-        )
+    final footprint = ((json['footprint_wgs84'] as List<dynamic>?) ?? const [])
+        .map((point) => wgs84PointToLatLng(point as Map<String, dynamic>))
+        .whereType<LatLng>()
         .toList();
 
     final stores = ((json['stores'] as List<dynamic>?) ?? const [])
         .cast<Map<String, dynamic>>()
-        .map(
-          (store) => StorePolygon(
+        .map((store) {
+          final centroid = wgs84PointToLatLng(
+            store['centroid_wgs84'] as Map<String, dynamic>?,
+          );
+          // 실좌표 앵커가 없는 건물의 매장은 지도 위에 놓을 위치가 없으니 건너뛴다.
+          if (centroid == null) return null;
+          final polygon = ((store['polygon_wgs84'] as List<dynamic>?) ?? const [])
+              .map((point) => wgs84PointToLatLng(point as Map<String, dynamic>))
+              .whereType<LatLng>()
+              .toList();
+          return StorePolygon(
+            id: store['id'] as String,
             name: store['name'] as String? ?? '',
-            polygon: ((store['polygon_local_m'] as List<dynamic>?) ?? const [])
-                .map((point) => localPointToLatLng(point as Map<String, dynamic>))
-                .toList(),
-            centroid: localPointToLatLng(
-              store['centroid_local_m'] as Map<String, dynamic>,
-            ),
+            polygon: polygon,
+            centroid: centroid,
             entranceNodeId: store['entrance_node_id'] as String?,
             category: store['category'] as String?,
-          ),
-        )
+          );
+        })
+        .whereType<StorePolygon>()
         .toList();
 
     final pois = ((json['pois'] as List<dynamic>?) ?? const [])
         .cast<Map<String, dynamic>>()
-        .map(
-          (poi) => PoiMarker(
+        .map((poi) {
+          final point = wgs84PointToLatLng(poi['position_wgs84'] as Map<String, dynamic>?);
+          if (point == null) return null;
+          return PoiMarker(
             name: poi['name'] as String? ?? '',
-            point: localPointToLatLng(
-              poi['position_local_m'] as Map<String, dynamic>,
-            ),
+            point: point,
             type: poi['type'] as String?,
-          ),
-        )
+          );
+        })
+        .whereType<PoiMarker>()
         .toList();
 
-    return FloorPlan(
-      footprint: footprint,
-      corridors: corridors,
-      stores: stores,
-      pois: pois,
-    );
+    return FloorPlan(footprint: footprint, stores: stores, pois: pois);
   }
 
   static FloorPlan _fromGeoJson(Map<String, dynamic> geojson) {

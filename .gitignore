@@ -44,6 +44,9 @@ Thumbs.db
 # 로컬 전용 디자인 참고 문서 (저장소에서 삭제됨, 개인 참고용으로만 복원)
 design.md
 TODO*.md
+vector_tile_migration_prompt.md
+vector_tile_handoff.md
+ui_redesign_prompt.md
 
 # Generated SQLite database (api/scripts/load_dataset.py 로 재생성 가능)
 api/data/
