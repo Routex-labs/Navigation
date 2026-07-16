@@ -96,17 +96,19 @@ void main() {
             'navigation_graph': {
               'floor': {'id': '1F', 'name': '1층'},
               'nodes': [
-                {'id': 'A', 'x_m': 0.0, 'y_m': 0.0},
-                {'id': 'B', 'x_m': 1.0, 'y_m': 1.0},
+                {'id': 'A', 'type': 'corridor', 'x_m': 0.0, 'y_m': 0.0},
+                {'id': 'B', 'type': 'corridor', 'x_m': 1.0, 'y_m': 1.0},
               ],
               'edges': [
                 {
                   'id': 'e1',
-                  'from_node_id': 'A',
-                  'to_node_id': 'B',
+                  'from': 'A',
+                  'to': 'B',
+                  'length_m': 1.4142,
+                  'bidirectional': true,
                   'geometry_local_m': [
-                    [0.0, 0.0],
-                    [1.0, 1.0],
+                    {'x': 0.0, 'y': 0.0},
+                    {'x': 1.0, 'y': 1.0},
                   ],
                 },
               ],
@@ -122,8 +124,8 @@ void main() {
 
       expect(geojson!['corridors_local_m'], [
         [
-          [0.0, 0.0],
-          [1.0, 1.0],
+          {'x': 0.0, 'y': 0.0},
+          {'x': 1.0, 'y': 1.0},
         ],
       ]);
     });
@@ -186,57 +188,126 @@ void main() {
   });
 
   group('getShortestRoute', () {
-    // 그래프(nodes+edges)는 /graph에서 한 번만 받아 다익스트라를 클라이언트에서
-    // 직접 돌린다. api/app/schemas/route.py::FloorGraphResponse와 동일한 모양.
-    Map<String, dynamic> graphResponse() => {
-      'floor': {'id': '1F', 'name': '1층'},
-      'nodes': [
-        {
-          'id': 'N1',
-          'type': 'corridor',
-          'name': null,
-          'x_m': 0.0,
-          'y_m': 0.0,
-          'lat': 37.5260,
-          'lng': 126.9280,
-        },
-        {
-          'id': 'N2',
-          'type': 'corridor',
-          'name': null,
-          'x_m': 5.0,
-          'y_m': 0.0,
-          'lat': 37.5261,
-          'lng': 126.9281,
-        },
-        {
-          'id': 'N3',
-          'type': 'corridor',
-          'name': null,
-          'x_m': 0.0,
-          'y_m': 5.0,
-          'lat': 37.5262,
-          'lng': 126.9282,
-        },
-      ],
-      'edges': [
-        {
-          'id': 'E1',
-          'from': 'N1',
-          'to': 'N2',
-          'length_m': 5.0,
-          'bidirectional': true,
-          'geometry_local_m': <Map<String, double>>[],
-        },
-      ],
+    // 그래프(nodes+edges)는 이제 별도 /graph 엔드포인트가 아니라
+    // GET /buildings/{id}/floors/{floor} 응답에 함께 내려오는 navigation_graph
+    // 하나에서만 얻는다. api/app/schemas/floor_map.py::FloorMapResponse와 동일한
+    // 모양(최소 navigation_graph만 채움).
+    //
+    // N1 -> N3 직행 간선(10.0)보다 N1 -> N2 -> N3 우회 경로(2.0 + 3.0 = 5.0)가
+    // 더 짧으므로, 다익스트라가 실제로 우회 경로를 골랐는지(노드 순서)까지
+    // 검증할 수 있다.
+    Map<String, dynamic> floorResponse() => {
+      'floor': {'id': '1F', 'name': '1층', 'level': 1},
+      'navigation_coordinate_system': 'local_m',
+      'footprint_local_m': <Map<String, double>>[],
+      'vector_map': null,
+      'navigation_graph': {
+        'floor': {'id': '1F', 'name': '1층'},
+        'nodes': [
+          {
+            'id': 'N1',
+            'type': 'corridor',
+            'name': null,
+            'x_m': 0.0,
+            'y_m': 0.0,
+            'lat': 37.5260,
+            'lng': 126.9280,
+          },
+          {
+            'id': 'N2',
+            'type': 'corridor',
+            'name': null,
+            'x_m': 2.0,
+            'y_m': 1.0,
+            'lat': 37.5261,
+            'lng': 126.9281,
+          },
+          {
+            'id': 'N3',
+            'type': 'corridor',
+            'name': null,
+            'x_m': 5.0,
+            'y_m': 0.0,
+            'lat': 37.5262,
+            'lng': 126.9282,
+          },
+        ],
+        'edges': [
+          {
+            'id': 'E_DIRECT',
+            'from': 'N1',
+            'to': 'N3',
+            'length_m': 10.0,
+            'bidirectional': true,
+            'geometry_local_m': <Map<String, double>>[],
+          },
+          {
+            'id': 'E1',
+            'from': 'N1',
+            'to': 'N2',
+            'length_m': 2.0,
+            'bidirectional': true,
+            'geometry_local_m': <Map<String, double>>[],
+          },
+          {
+            'id': 'E2',
+            'from': 'N2',
+            'to': 'N3',
+            'length_m': 3.0,
+            'bidirectional': true,
+            'geometry_local_m': <Map<String, double>>[],
+          },
+        ],
+      },
+      'stores': <Map<String, dynamic>>[],
+      'pois': <Map<String, dynamic>>[],
     };
 
-    test('computes the route from the cached graph and reuses it per node pair', () async {
+    test(
+      'GET /floors/{floor} 응답 하나로 최단 경로를 계산한다(별도 /graph 요청 없음)',
+      () async {
+        final requestPaths = <String>[];
+        final client = MockClient((request) async {
+          requestPaths.add(request.url.path);
+          return http.Response(
+            jsonEncode(floorResponse()),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        });
+        final repository = HttpBuildingRepository(client: client);
+
+        final route = await repository.getShortestRoute(
+          'thehyundai-seoul',
+          '1F',
+          'N1',
+          'N3',
+        );
+
+        // 요청 경로가 /buildings/thehyundai-seoul/floors/1F 하나뿐이어야 한다.
+        expect(requestPaths, ['/buildings/thehyundai-seoul/floors/1F']);
+
+        // 거리: 직행(10.0)이 아니라 N1->N2->N3 우회(2.0+3.0=5.0)를 골라야 한다.
+        expect(route?.distanceMeters, 5.0);
+
+        // 노드 순서: 세 노드의 lat/lng을 N1, N2, N3 순서로 그대로 지난다
+        // (간선 geometry가 비어 있어 노드 좌표 사이를 직선으로 잇기 때문).
+        expect(route?.points.length, 3);
+        expect(route!.points[0].latitude, closeTo(37.5260, 1e-9));
+        expect(route.points[0].longitude, closeTo(126.9280, 1e-9));
+        expect(route.points[1].latitude, closeTo(37.5261, 1e-9));
+        expect(route.points[1].longitude, closeTo(126.9281, 1e-9));
+        expect(route.points[2].latitude, closeTo(37.5262, 1e-9));
+        expect(route.points[2].longitude, closeTo(126.9282, 1e-9));
+      },
+    );
+
+    test('reuses the cached floor response for a second node pair on the same floor', () async {
       var requestCount = 0;
       final client = MockClient((request) async {
         requestCount++;
         return http.Response(
-          jsonEncode(graphResponse()),
+          jsonEncode(floorResponse()),
           200,
           headers: {'content-type': 'application/json; charset=utf-8'},
         );
@@ -244,33 +315,32 @@ void main() {
       final repository = HttpBuildingRepository(client: client);
 
       final first = await repository.getShortestRoute(
-        'bldg-001',
+        'thehyundai-seoul',
         '1F',
         'N1',
         'N2',
       );
       final second = await repository.getShortestRoute(
-        'bldg-001',
+        'thehyundai-seoul',
         '1F',
         'N1',
-        'N2',
+        'N3',
       );
 
-      expect(first?.distanceMeters, 5.0);
-      expect(first?.points.length, 2);
+      expect(first?.distanceMeters, 2.0);
       expect(second?.distanceMeters, 5.0);
-      // 그래프는 층당 한 번만 요청하고(캐시), 경로 계산은 로컬에서 수행한다.
+      // 층 응답은 한 번만 요청하고(캐시), 두 경로 계산 모두 로컬에서 수행한다.
       expect(requestCount, 1);
     });
 
-    test('returns null when the floor graph is not found (404)', () async {
+    test('returns null when the floor is not found (404)', () async {
       final client = MockClient((request) async {
         return http.Response('', 404);
       });
       final repository = HttpBuildingRepository(client: client);
 
       final result = await repository.getShortestRoute(
-        'bldg-001',
+        'thehyundai-seoul',
         '1F',
         'N1',
         'N2',
@@ -282,7 +352,7 @@ void main() {
     test('returns null for a node ID that is not in the graph', () async {
       final client = MockClient((request) async {
         return http.Response(
-          jsonEncode(graphResponse()),
+          jsonEncode(floorResponse()),
           200,
           headers: {'content-type': 'application/json; charset=utf-8'},
         );
@@ -290,31 +360,10 @@ void main() {
       final repository = HttpBuildingRepository(client: client);
 
       final result = await repository.getShortestRoute(
-        'bldg-001',
+        'thehyundai-seoul',
         '1F',
         'N1',
         'unknown',
-      );
-
-      expect(result, isNull);
-    });
-
-    test('returns null when the two nodes are not connected', () async {
-      final client = MockClient((request) async {
-        return http.Response(
-          jsonEncode(graphResponse()),
-          200,
-          headers: {'content-type': 'application/json; charset=utf-8'},
-        );
-      });
-      final repository = HttpBuildingRepository(client: client);
-
-      // N3는 그래프에 있지만 어떤 간선으로도 연결돼 있지 않다.
-      final result = await repository.getShortestRoute(
-        'bldg-001',
-        '1F',
-        'N1',
-        'N3',
       );
 
       expect(result, isNull);

@@ -57,17 +57,22 @@ class _Pair {
 }
 
 /// 노드의 (x_m, y_m, lat, lng) 대응점들로 local_m -> WGS84 affine 변환을 피팅한다.
-/// 실측 앵커가 3개 미만이면(건물에 wgs84 앵커가 없음) geo_transform.py와 동일한
-/// 합성 대응점으로 대체한다 — 그래야 앵커 없는 건물도 서버와 같은 위치에 뜬다.
+/// 실측 앵커가 3개 미만이거나(건물에 wgs84 앵커가 없음) 한 직선 위에 몰려 있어
+/// 유일해를 구할 수 없으면(예: 노드가 한 방향 복도에만 있는 층) geo_transform.py와
+/// 동일한 합성 대응점으로 대체한다 — 그래야 이런 건물도 서버와 같은 위치에 뜬다.
 AffineTransform fitFloorGeoTransform(List<GraphNode> nodes) {
-  var pairs = nodes
+  final realPairs = nodes
       .where((node) => node.lat != null && node.lng != null)
       .map((node) => _Pair(node.xM, node.yM, node.lat!, node.lng!))
       .toList();
 
-  if (pairs.length < 3) pairs = _syntheticPairs();
+  if (realPairs.length >= 3) {
+    final transform = _fitWgs84Transform(realPairs);
+    if (transform != null) return transform;
+  }
 
-  return _fitWgs84Transform(pairs);
+  // _syntheticPairs()는 한 직선 위에 있지 않은 3점(L자형)이라 항상 풀린다.
+  return _fitWgs84Transform(_syntheticPairs())!;
 }
 
 List<_Pair> _syntheticPairs() {
@@ -88,7 +93,8 @@ List<_Pair> _syntheticPairs() {
 /// (x,y) -> (lng, lat) 대응점들로 6-DOF affine 변환을 최소자승 피팅한다.
 /// 위도/경도 1도의 실제 거리가 다른 문제를 보정하기 위해 평균 위도의
 /// cos값(lngScale)을 경도에 곱해 등방(isotropic) 공간으로 만든 뒤 피팅한다.
-AffineTransform _fitWgs84Transform(List<_Pair> pairs) {
+/// 대응점이 한 직선 위에 몰려 있어 유일해가 없으면 null을 반환한다.
+AffineTransform? _fitWgs84Transform(List<_Pair> pairs) {
   final meanLat = pairs.map((p) => p.lat).reduce((a, b) => a + b) / pairs.length;
   final lngScale = math.cos(meanLat * math.pi / 180);
 
@@ -126,6 +132,7 @@ AffineTransform _fitWgs84Transform(List<_Pair> pairs) {
 
   final abTx = _solve3x3(normal, [sxu, syu, su]);
   final cdTy = _solve3x3(normal, [sxv, syv, sv]);
+  if (abTx == null || cdTy == null) return null;
 
   return AffineTransform(
     a: abTx[0],
@@ -138,9 +145,11 @@ AffineTransform _fitWgs84Transform(List<_Pair> pairs) {
   );
 }
 
-/// 3x3 선형계 A*w=b를 크라메르 공식으로 푼다.
-List<double> _solve3x3(List<List<double>> a, List<double> b) {
+/// 3x3 선형계 A*w=b를 크라메르 공식으로 푼다. 대응점이 한 직선 위에 몰려
+/// 있어 A가 특이행렬이면(det≈0) null을 반환한다.
+List<double>? _solve3x3(List<List<double>> a, List<double> b) {
   final det = _det3x3(a);
+  if (det.abs() < 1e-9) return null;
 
   final w = List<double>.filled(3, 0);
   for (var col = 0; col < 3; col++) {

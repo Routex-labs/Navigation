@@ -934,16 +934,15 @@ details.fold[open] > summary::before { transform: rotate(90deg); }
         연결까지 포함합니다. 이 경로는 legacy 기본 시드와 별개이므로, Studio 데이터만 적재하려면
         아래처럼 DB를 재생성한 뒤 어댑터를 실행하세요.
       </p>
-<pre><span class="label">powershell</span><span class="tk-cm"># (선택) 매장 위치 매핑 재생성 — store_entrance 노드 → stores_{층}.json</span>
+<pre><span class="label">powershell</span><span class="tk-cm"># (선택) 매장 위치 매핑 재생성 — store_entrance 노드 → stores_1f.json</span>
 <span class="tk-prop">python</span> -m scripts.map_studio_stores
 
-<span class="tk-cm"># DB 재생성 후 Studio 데이터(1F/3F/4F + 매장 + POI + 수직 전이) 적재</span>
+<span class="tk-cm"># DB 재생성 후 Studio 데이터(1F + 매장 + POI) 적재</span>
 <span class="tk-prop">python</span> -m scripts.reset_database
 <span class="tk-prop">python</span> -m scripts.studio_adapter</pre>
       <p style="margin-bottom:0">
-        <code>studio_adapter</code>는 3개 층을 하나의 트랜잭션으로 적재하고
-        (건물은 1회만 생성)하고, 내부에서 <code>link_vertical_transfers.build_transfers()</code>를
-        호출해 층 간 transfer edge를 함께 추가합니다.
+        <code>studio_adapter</code>는 1F Studio JSON을 표준 시드 dict로 변환해
+        <code>seed_navigation</code>의 적재 로직을 재사용합니다.
       </p>
     </div>
 
@@ -1017,8 +1016,7 @@ details.fold[open] > summary::before { transform: rotate(90deg); }
 │   ├── seed_navigation.py        <span class="note"># JSON → ORM 객체 적재 (Studio geometry·building dedup 지원)</span>
 │   ├── reset_and_seed.py         <span class="note"># legacy 개발 DB 초기화 원커맨드</span>
 │   ├── map_studio_stores.py      <span class="note"># store_entrance 노드 → 매장 위치 매핑</span>
-│   ├── link_vertical_transfers.py <span class="note"># 엘리베이터·에스컬레이터 층 간 연결 생성</span>
-│   └── studio_adapter.py         <span class="note"># Studio JSON → 표준 시드 dict + 다층 적재</span>
+│   └── studio_adapter.py         <span class="note"># Studio JSON(1F) → 표준 시드 dict 변환·적재</span>
 ├── <span class="dir">tests/</span>
 │   ├── <span class="dir">unit/</span>                <span class="note"># dijkstra, NavigationService, 시드 헬퍼</span>
 │   └── <span class="dir">integration/</span>         <span class="note"># API 계약, 시드, Query</span>
@@ -1613,7 +1611,7 @@ RouteResponse (node_ids, edge_ids, path_points, total_distance_m)</pre>
       <li><code>seed_navigation()</code>은 테이블을 지우지 않으므로, 여러 JSON에 대해 반복 호출하면 다건물 적재(append)가 됩니다.</li>
       <li>테스트는 <code>session=</code> 인자로 자신의 임시 DB Session을 주입해 같은 시드 코드를 재사용합니다.</li>
       <li>FastAPI 서버 startup 이벤트에는 <code>drop_all()</code>/<code>create_all()</code>이 없습니다. 서버 재시작으로 데이터가 사라지는 사고를 막기 위한 규칙입니다.</li>
-      <li><strong>Studio 경로</strong>: 더현대 서울은 <code>studio_adapter</code>가 층별 Studio JSON을 표준 dict로 변환해 <code>seed_navigation</code>의 적재 로직을 재사용합니다. 같은 건물의 여러 층을 이어 적재하되 <code>Building</code>은 1회만 생성하고(<code>session.get</code>+<code>flush</code> dedup), 내부에서 <code>link_vertical_transfers.build_transfers()</code>를 호출해 층 간 transfer edge(<code>floor_id=NULL</code>)를 추가합니다. 매장 폴리곤·footprint·벡터맵은 좌표계 재투영 전까지 보류 상태입니다.</li>
+      <li><strong>Studio 경로</strong>: 더현대 서울 1F는 <code>studio_adapter</code>가 Studio JSON을 표준 dict로 변환해 <code>seed_navigation</code>의 적재 로직을 재사용합니다. 매장 폴리곤·footprint·벡터맵은 좌표계 재투영 전까지 보류 상태입니다.</li>
     </ul>
       </div>
     </details>

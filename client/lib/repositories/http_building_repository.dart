@@ -75,21 +75,20 @@ class HttpBuildingRepository implements BuildingRepository {
     if (response.statusCode == 404) return null;
 
     final geojson = jsonDecode(response.body) as Map<String, dynamic>;
-
-    // 층 지도 응답에 포함된 그래프를 함께 캐시한다. 이후 길찾기는 /graph를
-    // 다시 호출하지 않고 이 데이터로 클라이언트 다익스트라를 실행한다.
-    final navigationGraph = geojson['navigation_graph'];
-    if (navigationGraph is Map<String, dynamic>) {
-      _floorGraphCache[cacheKey] = FloorGraph.fromJson(navigationGraph);
-    }
+    final navigationGraph = geojson['navigation_graph'] as Map<String, dynamic>?;
 
     // /floors/{floor}는 매장 폴리곤이 없는(점 정보만 있는) 건물에서는 지도가
     // 텅 비어 보인다. 응답에 함께 내려오는 navigation_graph의 간선 geometry를
     // 복도선으로 얹어서 FloorPlan._fromApiResponse가 그대로 그릴 수 있게 한다.
-    final corridors = _corridorsFromNavigationGraph(
-      geojson['navigation_graph'] as Map<String, dynamic>?,
-    );
+    final corridors = _corridorsFromNavigationGraph(navigationGraph);
     if (corridors != null) geojson['corridors_local_m'] = corridors;
+
+    // navigation_graph가 이 응답에 이미 포함돼 있으므로, 최단 경로 계산용
+    // nodes/edges도 여기서 함께 캐싱해둔다 — getShortestRoute가 별도로
+    // /floors/{floor}/graph를 다시 호출하지 않게 하기 위함이다.
+    if (navigationGraph != null) {
+      _floorGraphCache[cacheKey] = FloorGraph.fromJson(navigationGraph);
+    }
 
     _floorGeoJsonCache[cacheKey] = geojson;
     return geojson;
@@ -108,25 +107,6 @@ class HttpBuildingRepository implements BuildingRepository {
         .toList();
   }
 
-  /// 층 길찾기 그래프(nodes+edges). 서버 /route 왕복 없이 클라이언트에서
-  /// 직접 다익스트라를 돌리기 위한 원본 데이터라 건물/층당 한 번만 받는다.
-  Future<FloorGraph?> _getFloorGraph(String buildingId, String floor) async {
-    final cacheKey = '$buildingId/$floor';
-    final cached = _floorGraphCache[cacheKey];
-    if (cached != null) return cached;
-
-    final response = await _client.get(
-      Uri.parse('$apiBaseUrl/buildings/$buildingId/floors/$floor/graph'),
-    );
-    if (response.statusCode == 404) return null;
-
-    final graph = FloorGraph.fromJson(
-      jsonDecode(response.body) as Map<String, dynamic>,
-    );
-    _floorGraphCache[cacheKey] = graph;
-    return graph;
-  }
-
   @override
   Future<IndoorRoute?> getShortestRoute(
     String buildingId,
@@ -138,7 +118,16 @@ class HttpBuildingRepository implements BuildingRepository {
     final cached = _routeCache[cacheKey];
     if (cached != null) return cached;
 
-    final graph = await _getFloorGraph(buildingId, floor);
+    // 다익스트라 입력(nodes+edges)은 별도 /graph 엔드포인트가 아니라
+    // /floors/{floor} 응답의 navigation_graph에서만 얻는다. 아직 그 응답을
+    // 받은 적이 없으면(캐시 미스) getFloorGeoJson이 한 번 받아와 채워준다 —
+    // 이미 캐시돼 있으면 getFloorGeoJson 자체가 네트워크를 타지 않는다.
+    final graphCacheKey = '$buildingId/$floor';
+    var graph = _floorGraphCache[graphCacheKey];
+    if (graph == null) {
+      await getFloorGeoJson(buildingId, floor);
+      graph = _floorGraphCache[graphCacheKey];
+    }
     if (graph == null) return null;
 
     // 다익스트라는 그래프에 없는 노드 ID를 ArgumentError로 거부한다(백엔드가

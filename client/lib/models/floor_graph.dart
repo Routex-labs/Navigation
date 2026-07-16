@@ -1,6 +1,6 @@
 /// api/app/schemas/route.py의 FloorGraphResponse를 파싱한 결과.
-/// GET /buildings/{id}/floors/{floor}/graph 응답이며, 클라이언트가 직접
-/// 다익스트라를 돌릴 때 쓰는 nodes/edges 원본이다.
+/// GET /buildings/{id}/floors/{floor} 응답의 navigation_graph 필드이며,
+/// 클라이언트가 직접 다익스트라를 돌릴 때 쓰는 nodes/edges 원본이다.
 class LocalPoint {
   const LocalPoint(this.x, this.y);
 
