@@ -81,6 +81,8 @@ def get_floor_map(
         "footprint_local_m": (building.footprint_local_m or []) if building else [],
         "footprint_wgs84": _footprint_wgs84(building, transform),
         "vector_map": _to_vector_map_dict(session, vector_map) if vector_map else None,
+        # Flutter는 최초 층 지도 응답에서 이 그래프를 캐시해 클라이언트 다익스트라를 실행한다.
+        "navigation_graph": _to_floor_graph_dict(session, floor),
         "stores": [_to_store_dict(store, transform) for store in stores],
         "pois": [_to_poi_dict(poi, transform) for poi in pois],
     }

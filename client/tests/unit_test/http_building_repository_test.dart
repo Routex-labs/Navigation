@@ -127,6 +127,62 @@ void main() {
         ],
       ]);
     });
+
+    test('reuses the floor response graph for the following route request', () async {
+      final requestPaths = <String>[];
+      final client = MockClient((request) async {
+        requestPaths.add(request.url.path);
+        return http.Response(
+          jsonEncode({
+            'floor': {'id': 'floor-1f', 'name': '1F'},
+            'footprint_local_m': [],
+            'stores': [],
+            'pois': [],
+            'navigation_graph': {
+              'floor': {'id': 'floor-1f', 'name': '1F'},
+              'nodes': [
+                {
+                  'id': 'A',
+                  'type': 'corridor',
+                  'name': null,
+                  'x_m': 0.0,
+                  'y_m': 0.0,
+                  'lat': 37.0,
+                  'lng': 127.0,
+                },
+                {
+                  'id': 'B',
+                  'type': 'corridor',
+                  'name': null,
+                  'x_m': 2.0,
+                  'y_m': 0.0,
+                  'lat': 37.0,
+                  'lng': 127.0,
+                },
+              ],
+              'edges': [
+                {
+                  'id': 'AB',
+                  'from': 'A',
+                  'to': 'B',
+                  'length_m': 2.0,
+                  'bidirectional': true,
+                  'geometry_local_m': [],
+                },
+              ],
+            },
+          }),
+          200,
+        );
+      });
+      final repository = HttpBuildingRepository(client: client);
+
+      await repository.getFloorGeoJson('bldg-001', '1F');
+      final route = await repository.getShortestRoute('bldg-001', '1F', 'A', 'B');
+
+      expect(route?.distanceMeters, 2.0);
+      expect(requestPaths, ['/buildings/bldg-001/floors/1F']);
+    });
   });
 
   group('getShortestRoute', () {

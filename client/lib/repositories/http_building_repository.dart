@@ -76,6 +76,13 @@ class HttpBuildingRepository implements BuildingRepository {
 
     final geojson = jsonDecode(response.body) as Map<String, dynamic>;
 
+    // 층 지도 응답에 포함된 그래프를 함께 캐시한다. 이후 길찾기는 /graph를
+    // 다시 호출하지 않고 이 데이터로 클라이언트 다익스트라를 실행한다.
+    final navigationGraph = geojson['navigation_graph'];
+    if (navigationGraph is Map<String, dynamic>) {
+      _floorGraphCache[cacheKey] = FloorGraph.fromJson(navigationGraph);
+    }
+
     // /floors/{floor}는 매장 폴리곤이 없는(점 정보만 있는) 건물에서는 지도가
     // 텅 비어 보인다. 응답에 함께 내려오는 navigation_graph의 간선 geometry를
     // 복도선으로 얹어서 FloorPlan._fromApiResponse가 그대로 그릴 수 있게 한다.

@@ -3,7 +3,7 @@
 설계 근거: docs/floorgraph-studio-integration.md (§3 목표 구조, §6 결정 D1~D5)
 
 변환 규칙:
-  - floor(상단) → building 블록 합성. 건물명은 legacy navigation_1f.json에서 계승,
+  - floor(상단) → building 블록 합성. 건물명은 Studio 건물 ID의 정적 메타데이터로 보완하며,
     footprint/area는 좌표계 재투영 전이므로 None(D2).
   - nodes  → 그대로 사용(position.local_m/wgs84/source 구조가 이미 호환).
   - edges  → 그대로 사용(seed_navigation.edge_geometry_and_length가 geometry.local_m 처리).
@@ -28,20 +28,15 @@ from scripts.link_vertical_transfers import build_transfers
 
 API_ROOT = Path(__file__).resolve().parents[1]
 STUDIO_DIR = API_ROOT / "app" / "data" / "studio" / "thehyundai-seoul"
-LEGACY_NAV_1F = API_ROOT / "app" / "data" / "navigation_1f.json"
+BUILDING_NAMES = {"thehyundai-seoul": "더현대 서울"}
 
 # 지도에 마커로 노출할 편의시설 노드 타입 → POI 로 승격(D-POI: 노드에서 자동 생성)
 POI_NODE_TYPES = {"elevator", "escalator"}
 
 
 def _building_name(building_id: str) -> str:
-    """건물명은 legacy navigation_1f.json에서 계승(없으면 building_id로 대체)."""
-    if LEGACY_NAV_1F.exists():
-        legacy = json.loads(LEGACY_NAV_1F.read_text(encoding="utf-8"))
-        building = legacy.get("building", {})
-        if building.get("id") == building_id and building.get("name"):
-            return building["name"]
-    return building_id
+    """Studio 데이터에 없는 표시용 건물명을 ID 기반 메타데이터로 보완한다."""
+    return BUILDING_NAMES.get(building_id, building_id)
 
 
 def _scoped(floor_id: str, raw_id: str | None) -> str | None:
@@ -166,7 +161,9 @@ def seed_studio(floors: list[str], *, session=None) -> None:
         for floor_code in floors:
             data = build_seed_dict(floor_code)
             seed_navigation._add_dataset(own_session, data, vector_path=None)
-        _seed_transfers(own_session, floors)
+        # 1층만 적재할 때는 연결할 다른 층이 없으므로 transfer 계산도 생략한다.
+        if len(floors) > 1:
+            _seed_transfers(own_session, floors)
         if session is None:
             own_session.commit()
     except Exception:
