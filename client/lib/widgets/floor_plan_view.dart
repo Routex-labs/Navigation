@@ -188,6 +188,11 @@ class _FloorPlanViewState extends State<FloorPlanView> {
         bearing: _straighteningBearing(widget.floorPlan.footprint),
       ),
       minMaxZoomPreference: MinMaxZoomPreference(minZoom, null),
+      // _enforceMinZoom이 controller.cameraPosition으로 현재 줌을 읽는데,
+      // 이 값은 trackCameraPosition이 켜져 있을 때만 갱신된다. 꺼두면
+      // initialCameraPosition의 줌(18)에 영원히 멈춰 있어서, 사용자가 확대해도
+      // onCameraIdle마다 "하한보다 낮다"고 오판하고 줌을 되돌려버린다.
+      trackCameraPosition: true,
       onMapCreated: (controller) => _controller = controller,
       onStyleLoadedCallback: _onStyleLoaded,
       onMapClick: _handleMapClick,
@@ -289,6 +294,7 @@ class _FloorPlanViewState extends State<FloorPlanView> {
       'floor-stores-label',
       SymbolLayerProperties(
         textField: ['get', 'name'],
+        textFont: _mapFontStack,
         textSize: [
           'interpolate',
           ['linear'],
@@ -348,6 +354,7 @@ class _FloorPlanViewState extends State<FloorPlanView> {
       'floor-pois-label',
       const SymbolLayerProperties(
         textField: ['get', 'name'],
+        textFont: _mapFontStack,
         textSize: 10,
         textOffset: [0, 1.6],
         textColor: '#4F5451',
@@ -1143,9 +1150,23 @@ const _emptyFeatureCollection = {
 // 원본 SVG(hyundai_floor_map_corrected_v6.svg)의 배경색을 그대로 옮겼다.
 // 나머지 레이어(외곽선/매장/POI/경로)는 스타일 로드 후 벡터·GeoJSON
 // 소스로 추가한다.
-const _initialStyle = '''
+/// 심볼 레이어(매장명/POI 라벨)가 쓰는 폰트. API가 app/data/fonts 아래 같은
+/// 이름의 디렉터리로 글리프를 서빙한다(GET /fonts/{fontstack}/{range}.pbf).
+/// 매장명이 한글이라 한글 글리프가 있는 폰트여야 한다 — MapLibre 기본값인
+/// Open Sans에는 한글이 없어서 라벨이 깨진다.
+const _mapFontStack = ['Noto Sans KR Regular'];
+
+/// [_initialStyle]의 glyphs 템플릿. `{fontstack}`/`{range}`는 MapLibre가
+/// 치환하는 자리표시자라 Dart 보간과 섞이지 않게 따로 조립한다.
+String get _glyphsUrl => '$apiBaseUrl/fonts/{fontstack}/{range}.pbf';
+
+/// glyphs가 비어 있으면 심볼 레이어가 폰트를 못 받아 레이아웃을 끝내지 못하고,
+/// 그 여파로 같은 벡터 타일의 fill 레이어까지 전부 안 그려진다. 배경색만 남고
+/// 지도가 빈 화면이 되므로 glyphs는 반드시 채워야 한다.
+String get _initialStyle => '''
 {
   "version": 8,
+  "glyphs": "$_glyphsUrl",
   "sources": {},
   "layers": [
     {"id": "background", "type": "background", "paint": {"background-color": "#EDF4E7"}}

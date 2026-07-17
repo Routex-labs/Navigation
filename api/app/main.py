@@ -16,7 +16,7 @@ from app.schemas.health import HealthResponse
 
 def create_app() -> FastAPI:
     """FastAPI 앱 팩토리. uvicorn과 테스트가 이 함수로 앱을 만든다."""
-    from app.routers import buildings, query
+    from app.routers import buildings, fonts, query
 
     app = FastAPI(title="Navigation API", version="0.3.0")
 
@@ -29,6 +29,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(buildings.router)  # 건물/지도/그래프/경로 API
+    app.include_router(fonts.router)      # MapLibre 심볼 레이어용 글리프
     app.include_router(query.router)      # 자연어 질의 API(현재 stub)
 
     @app.get("/health", tags=["health"], response_model=HealthResponse)
