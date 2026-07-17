@@ -1,0 +1,86 @@
+{
+  "building_id": "test-tower",
+  "floor": {
+    "id": "FL-TEST-2F",
+    "name": "2F",
+    "level": 4,
+    "order": 4
+  },
+  "coordinate_frame": "studio_local_m",
+  "stores": [
+    {
+      "id": "shop-a-2f",
+      "name": "가게A",
+      "floor_id": "FL-TEST-2F",
+      "entrance_node_id": "S-1",
+      "entrance_local_m": {
+        "x": 65.0,
+        "y": 83.0
+      },
+      "centroid_local_m": {
+        "x": 65.0,
+        "y": 83.0
+      },
+      "polygon_local_m": [
+        {
+          "x": 55.0,
+          "y": 73.0
+        },
+        {
+          "x": 75.0,
+          "y": 73.0
+        },
+        {
+          "x": 75.0,
+          "y": 93.0
+        },
+        {
+          "x": 55.0,
+          "y": 93.0
+        }
+      ],
+      "match": {
+        "method": "synthetic"
+      }
+    },
+    {
+      "id": "shop-b-2f",
+      "name": "가게B",
+      "floor_id": "FL-TEST-2F",
+      "entrance_node_id": "S-2",
+      "entrance_local_m": {
+        "x": 145.0,
+        "y": 83.0
+      },
+      "centroid_local_m": {
+        "x": 145.0,
+        "y": 83.0
+      },
+      "polygon_local_m": [
+        {
+          "x": 135.0,
+          "y": 73.0
+        },
+        {
+          "x": 155.0,
+          "y": 73.0
+        },
+        {
+          "x": 155.0,
+          "y": 93.0
+        },
+        {
+          "x": 135.0,
+          "y": 93.0
+        }
+      ],
+      "match": {
+        "method": "synthetic"
+      }
+    }
+  ],
+  "unmatched": [],
+  "summary": {
+    "stores": 2
+  }
+}

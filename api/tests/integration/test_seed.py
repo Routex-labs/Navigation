@@ -37,7 +37,7 @@ def test_시드데이터가_ORM_지도그래프로_조회된다(db_session):
     assert any(len(edge.geometry) >= 2 for edge in edges)
 
 
-# stores_1f.json의 매장 경계가 Store.polygon에 보존되는지 검증한다.
+# stores JSON의 매장 경계가 Store.polygon에 그대로 보존되는지 검증한다.
 def test_시드데이터에_매장_폴리곤이_있다(db_session):
     floor = db_session.scalars(
         select(Floor).where(
@@ -47,5 +47,14 @@ def test_시드데이터에_매장_폴리곤이_있다(db_session):
     ).one()
 
     stores = db_session.scalars(select(Store).where(Store.floor_id == floor.id)).all()
-    assert len(stores) == 59
-    assert sum(store.polygon is not None for store in stores) == 57
+    assert sorted(store.id for store in stores) == ["shop-a-1f", "shop-b-1f"]
+    # 1F는 기준층이라 정규화가 항등 → 픽스처 좌표가 변형 없이 저장돼야 한다.
+    shop_a = next(store for store in stores if store.id == "shop-a-1f")
+    assert shop_a.polygon == [
+        {"x": 25.0, "y": 35.0},
+        {"x": 35.0, "y": 35.0},
+        {"x": 35.0, "y": 45.0},
+        {"x": 25.0, "y": 45.0},
+    ]
+    assert (shop_a.centroid_x_m, shop_a.centroid_y_m) == (30.0, 40.0)
+    assert all(store.polygon for store in stores)
