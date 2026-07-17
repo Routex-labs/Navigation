@@ -142,3 +142,24 @@ def add_dataset(session: Session, data: dict) -> None:
         for poi in data.get("pois", [])
     )
 
+
+def add_transfer_edges(session: Session, transfers: list[dict]) -> None:
+    """층을 잇는 수직 전이 간선을 Session에 추가한다(commit은 호출자).
+
+    층 내부 간선과 달리 floor_id는 None이다. 단일 층 조회는 floor_id로 필터되므로
+    전이 간선은 자연히 제외되고, 건물 전체 경로 탐색에서만 쓰인다.
+    """
+    session.add_all(
+        Edge(
+            id=transfer["id"],
+            floor_id=None,
+            from_node_id=transfer["from"],
+            to_node_id=transfer["to"],
+            length_m=transfer["length_m"],
+            bidirectional=transfer.get("bidirectional", True),
+            geometry=None,
+            transfer_mode=transfer["mode"],
+        )
+        for transfer in transfers
+    )
+
