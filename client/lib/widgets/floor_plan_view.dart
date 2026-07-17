@@ -171,6 +171,11 @@ class _FloorPlanViewState extends State<FloorPlanView> {
         bearing: _straighteningBearing(widget.floorPlan.footprint),
       ),
       minMaxZoomPreference: MinMaxZoomPreference(minZoom, null),
+      // _enforceMinZoom이 controller.cameraPosition으로 현재 줌을 읽는데,
+      // 이 값은 trackCameraPosition이 켜져 있을 때만 갱신된다. 꺼두면
+      // initialCameraPosition의 줌(18)에 영원히 멈춰 있어서, 사용자가 확대해도
+      // onCameraIdle마다 "하한보다 낮다"고 오판하고 줌을 되돌려버린다.
+      trackCameraPosition: true,
       onMapCreated: (controller) => _controller = controller,
       onStyleLoadedCallback: _onStyleLoaded,
       onMapClick: _handleMapClick,
