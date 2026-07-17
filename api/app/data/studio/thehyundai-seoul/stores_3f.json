@@ -3,1192 +3,13 @@
   "floor": {
     "id": "FL-t4f3r0t8nnlf0560",
     "name": "3F",
-    "level": 3
+    "level": 3,
+    "order": 3
   },
   "coordinate_frame": "studio_local_m",
   "stores": [
     {
-      "id": "ST-3F-001",
-      "name": "시스템",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_000",
-      "entrance_local_m": {
-        "x": 41.610260723871,
-        "y": 38.69366048104598
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 41.610260723871,
-        "y": 38.69366048104598
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-002",
-      "name": "SJSJ",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_001",
-      "entrance_local_m": {
-        "x": 45.50176096546728,
-        "y": 38.70251076586945
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 45.50176096546728,
-        "y": 38.70251076586945
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-003",
-      "name": "누니 주얼리",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_002",
-      "entrance_local_m": {
-        "x": 52.55769877502595,
-        "y": 37.4217455735991
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 52.55769877502595,
-        "y": 37.4217455735991
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-004",
-      "name": "앤더슨벨",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_003",
-      "entrance_local_m": {
-        "x": 49.02839604545975,
-        "y": 37.87652891133091
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 49.02839604545975,
-        "y": 37.87652891133091
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-005",
-      "name": "마인",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_004",
-      "entrance_local_m": {
-        "x": 56.40280033282854,
-        "y": 34.19627726640161
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 56.40280033282854,
-        "y": 34.19627726640161
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-006",
-      "name": "타임",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_005",
-      "entrance_local_m": {
-        "x": 59.97227905329161,
-        "y": 34.17337346124418
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 59.97227905329161,
-        "y": 34.17337346124418
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-007",
-      "name": "구호",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_006",
-      "entrance_local_m": {
-        "x": 63.32505157066935,
-        "y": 34.56318291792064
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 63.32505157066935,
-        "y": 34.56318291792064
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-008",
-      "name": "더 캐시미어",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_007",
-      "entrance_local_m": {
-        "x": 66.5945289184166,
-        "y": 34.729854759657385
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 66.5945289184166,
-        "y": 34.729854759657385
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-009",
-      "name": "캠퍼투게더 스토어",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_008",
-      "entrance_local_m": {
-        "x": 68.97227723364728,
-        "y": 56.04632192826506
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 68.97227723364728,
-        "y": 56.04632192826506
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-010",
-      "name": "솔리드 옴므",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_009",
-      "entrance_local_m": {
-        "x": 40.59207447906625,
-        "y": 89.27690639276692
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 40.59207447906625,
-        "y": 89.27690639276692
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-011",
-      "name": "룰루레몬",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_010",
-      "entrance_local_m": {
-        "x": 45.885316830481614,
-        "y": 94.26487243100983
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 45.885316830481614,
-        "y": 94.26487243100983
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-012",
-      "name": "온",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_011",
-      "entrance_local_m": {
-        "x": 58.097512616888736,
-        "y": 94.47008856854956
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 58.097512616888736,
-        "y": 94.47008856854956
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-013",
-      "name": "시스템 옴므",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_012",
-      "entrance_local_m": {
-        "x": 63.659577228841975,
-        "y": 93.67799814396608
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 63.659577228841975,
-        "y": 93.67799814396608
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-014",
-      "name": "노이스",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_013",
-      "entrance_local_m": {
-        "x": 71.28751315019585,
-        "y": 89.88155549715893
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 71.28751315019585,
-        "y": 89.88155549715893
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-015",
-      "name": "폴로",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_014",
-      "entrance_local_m": {
-        "x": 77.32586632278752,
-        "y": 92.09004337925637
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 77.32586632278752,
-        "y": 92.09004337925637
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-016",
-      "name": "클럽모나코",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_015",
-      "entrance_local_m": {
-        "x": 90.85731422199407,
-        "y": 52.775505569868415
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 90.85731422199407,
-        "y": 52.775505569868415
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-017",
-      "name": "띠어리",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_016",
-      "entrance_local_m": {
-        "x": 89.95215465465388,
-        "y": 86.52574805194737
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 89.95215465465388,
-        "y": 86.52574805194737
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-018",
-      "name": "듀퐁 셔츠/ 닥스 셔츠/ 카운테스마라",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_017",
-      "entrance_local_m": {
-        "x": 89.36971240077328,
-        "y": 40.28784062125774
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 89.36971240077328,
-        "y": 40.28784062125774
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-019",
-      "name": "아스페시",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_018",
-      "entrance_local_m": {
-        "x": 91.08705069604372,
-        "y": 59.906863583962505
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 91.08705069604372,
-        "y": 59.906863583962505
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-020",
-      "name": "바버",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_019",
-      "entrance_local_m": {
-        "x": 81.64773241029646,
-        "y": 88.42714850853973
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 81.64773241029646,
-        "y": 88.42714850853973
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-021",
-      "name": "프레이트",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_020",
-      "entrance_local_m": {
-        "x": 90.92308430094893,
-        "y": 75.42755161961786
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 90.92308430094893,
-        "y": 75.42755161961786
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-022",
-      "name": "벨벳트렁크",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_021",
-      "entrance_local_m": {
-        "x": 57.32258993891306,
-        "y": 59.146280858146326
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 57.32258993891306,
-        "y": 59.146280858146326
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-023",
-      "name": "CP컴퍼니",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_022",
-      "entrance_local_m": {
-        "x": 49.05985273342498,
-        "y": 62.12570641830277
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 49.05985273342498,
-        "y": 62.12570641830277
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-024",
-      "name": "쿠에른 컨셉스토어",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_023",
-      "entrance_local_m": {
-        "x": 36.15416203456445,
-        "y": 42.4907973345513
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 36.15416203456445,
-        "y": 42.4907973345513
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-025",
-      "name": "애브뉴준오 (헤어숍)",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_024",
-      "entrance_local_m": {
-        "x": 38.90636292520839,
-        "y": 27.464697242988876
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 38.90636292520839,
-        "y": 27.464697242988876
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-026",
-      "name": "듀베티카",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_025",
-      "entrance_local_m": {
-        "x": 72.75487083171545,
-        "y": 71.75723533277224
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 72.75487083171545,
-        "y": 71.75723533277224
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-027",
-      "name": "POP-UP STUDIO B",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_026",
-      "entrance_local_m": {
-        "x": 78.97947083351747,
-        "y": 36.02957521793134
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 78.97947083351747,
-        "y": 36.02957521793134
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-028",
-      "name": "아이엠샵",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_027",
-      "entrance_local_m": {
-        "x": 45.30366042375479,
-        "y": 68.7649803196507
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 45.30366042375479,
-        "y": 68.7649803196507
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-029",
-      "name": "시리즈 코너",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_028",
-      "entrance_local_m": {
-        "x": 48.718747707094344,
-        "y": 69.60060326399912
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 48.718747707094344,
-        "y": 69.60060326399912
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-030",
-      "name": "분크",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_029",
-      "entrance_local_m": {
-        "x": 67.13383985184065,
-        "y": 72.05485015770806
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 67.13383985184065,
-        "y": 72.05485015770806
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-031",
-      "name": "스컬프",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_030",
-      "entrance_local_m": {
-        "x": 52.27168053820087,
-        "y": 70.26482624899064
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 52.27168053820087,
-        "y": 70.26482624899064
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-032",
-      "name": "베로니카 비어드",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_031",
-      "entrance_local_m": {
-        "x": 40.31739870159951,
-        "y": 64.50191779201222
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 40.31739870159951,
-        "y": 64.50191779201222
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-033",
-      "name": "모드맨",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_032",
-      "entrance_local_m": {
-        "x": 44.727369021520914,
-        "y": 56.836758625891704
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 44.727369021520914,
-        "y": 56.836758625891704
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-034",
-      "name": "바네사 브루노",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_033",
-      "entrance_local_m": {
-        "x": 29.74836207557326,
-        "y": 64.55284438166089
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 29.74836207557326,
-        "y": 64.55284438166089
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-035",
-      "name": "금강 안경",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_034",
-      "entrance_local_m": {
-        "x": 52.102487949834796,
-        "y": 90.65437265535994
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 52.102487949834796,
-        "y": 90.65437265535994
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-036",
-      "name": "로라스 블랑",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_035",
-      "entrance_local_m": {
-        "x": 76.67255453924157,
-        "y": 64.2854088688082
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 76.67255453924157,
-        "y": 64.2854088688082
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-037",
-      "name": "탠디",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_036",
-      "entrance_local_m": {
-        "x": 74.61803595569,
-        "y": 58.07038799691421
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 74.61803595569,
-        "y": 58.07038799691421
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-038",
-      "name": "조이그라이슨",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_037",
-      "entrance_local_m": {
-        "x": 70.91378396076273,
-        "y": 38.09004586726364
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 70.91378396076273,
-        "y": 38.09004586726364
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-039",
-      "name": "버윅",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_038",
-      "entrance_local_m": {
-        "x": 72.36575833698556,
-        "y": 57.64956401455932
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 72.36575833698556,
-        "y": 57.64956401455932
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-040",
-      "name": "아떼바네 사브루노",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_039",
-      "entrance_local_m": {
-        "x": 65.37691641278549,
-        "y": 67.09744888677675
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 65.37691641278549,
-        "y": 67.09744888677675
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-041",
-      "name": "시프트G",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_046",
-      "entrance_local_m": {
-        "x": 51.937360508361,
-        "y": 56.895145434719566
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 51.937360508361,
-        "y": 56.895145434719566
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-042",
-      "name": "송지오",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_047",
-      "entrance_local_m": {
-        "x": 95.76843941584228,
-        "y": 56.96813798916138
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 95.76843941584228,
-        "y": 56.96813798916138
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-043",
-      "name": "POP-UP STUDIO A",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_048",
-      "entrance_local_m": {
-        "x": 84.90785752197435,
-        "y": 86.93943708384623
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 84.90785752197435,
-        "y": 86.93943708384623
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-044",
-      "name": "톰그레이 하운드(남)",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_049",
-      "entrance_local_m": {
-        "x": 55.950525505726205,
-        "y": 68.89508603528033
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 55.950525505726205,
-        "y": 68.89508603528033
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-045",
-      "name": "데바스테",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_051",
-      "entrance_local_m": {
-        "x": 33.420557534282075,
-        "y": 42.881381773356026
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 33.420557534282075,
-        "y": 42.881381773356026
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-046",
-      "name": "어그",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_052",
-      "entrance_local_m": {
-        "x": 65.18897683302995,
-        "y": 58.12533597180342
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 65.18897683302995,
-        "y": 58.12533597180342
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-047",
-      "name": "리던",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_055",
-      "entrance_local_m": {
-        "x": 29.362486785618255,
-        "y": 58.52090895704379
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 29.362486785618255,
-        "y": 58.52090895704379
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-048",
-      "name": "스톤 헨지",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_056",
-      "entrance_local_m": {
-        "x": 34.49028342698094,
-        "y": 72.6368576805576
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 34.49028342698094,
-        "y": 72.6368576805576
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-049",
-      "name": "디디에 두보",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_057",
-      "entrance_local_m": {
-        "x": 34.92943219788,
-        "y": 54.52624003921281
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 34.92943219788,
-        "y": 54.52624003921281
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-050",
-      "name": "톰그레이 하운드(여)",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_058",
-      "entrance_local_m": {
-        "x": 58.5778759837085,
-        "y": 70.14834519831206
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 58.5778759837085,
-        "y": 70.14834519831206
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-051",
-      "name": "메종키츠네 (남/여)",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_059",
-      "entrance_local_m": {
-        "x": 34.16529742702732,
-        "y": 87.80978690189518
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 34.16529742702732,
-        "y": 87.80978690189518
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-052",
-      "name": "비비안/ 바바라/ 피앳유즈",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_062",
-      "entrance_local_m": {
-        "x": 72.87490445481284,
-        "y": 66.06648290859626
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 72.87490445481284,
-        "y": 66.06648290859626
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-053",
-      "name": "비너스/ 와코루/ 레이로우",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_063",
-      "entrance_local_m": {
-        "x": 75.41326066499012,
-        "y": 65.73406269044426
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 75.41326066499012,
-        "y": 65.73406269044426
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-054",
-      "name": "다이아미",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_064",
-      "entrance_local_m": {
-        "x": 35.271741284230906,
-        "y": 51.67732830372846
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 35.271741284230906,
-        "y": 51.67732830372846
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-055",
-      "name": "제이에스티나",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_065",
-      "entrance_local_m": {
-        "x": 34.45249239131992,
-        "y": 75.48631532672842
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 34.45249239131992,
-        "y": 75.48631532672842
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-056",
-      "name": "골든듀",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_066",
-      "entrance_local_m": {
-        "x": 35.999383442923346,
-        "y": 62.91248132943717
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 35.999383442923346,
-        "y": 62.91248132943717
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-057",
-      "name": "DKNY",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_067",
-      "entrance_local_m": {
-        "x": 95.75533091100823,
-        "y": 64.32015889137233
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 95.75533091100823,
-        "y": 64.32015889137233
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-058",
-      "name": "더일마",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_068",
-      "entrance_local_m": {
-        "x": 75.02833646456278,
-        "y": 35.460795239430524
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 75.02833646456278,
-        "y": 35.460795239430524
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-059",
-      "name": "이비엠",
-      "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_069",
-      "entrance_local_m": {
-        "x": 81.45286874237038,
-        "y": 34.67232826131047
-      },
-      "entrance_wgs84": null,
-      "centroid_local_m": {
-        "x": 81.45286874237038,
-        "y": 34.67232826131047
-      },
-      "polygon_local_m": null,
-      "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
-      }
-    },
-    {
-      "id": "ST-3F-060",
+      "id": "store_3f_000",
       "name": "산드로",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_070",
@@ -1198,17 +19,34 @@
       },
       "entrance_wgs84": null,
       "centroid_local_m": {
-        "x": 29.469637332254333,
-        "y": 82.07366353175564
+        "x": 29.384678,
+        "y": 82.527321
       },
-      "polygon_local_m": null,
+      "polygon_local_m": [
+        {
+          "x": 31.351444,
+          "y": 79.597881
+        },
+        {
+          "x": 27.396242,
+          "y": 79.588529
+        },
+        {
+          "x": 27.417911,
+          "y": 85.456762
+        },
+        {
+          "x": 31.373113,
+          "y": 85.466114
+        }
+      ],
       "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
+        "method": "name_match",
+        "legacy_object_id": "OB-yynEJFBiTL9674"
       }
     },
     {
-      "id": "ST-3F-061",
+      "id": "store_3f_001",
       "name": "A.P.C.",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_071",
@@ -1218,17 +56,34 @@
       },
       "entrance_wgs84": null,
       "centroid_local_m": {
-        "x": 29.49424536043152,
-        "y": 76.54861963530361
+        "x": 29.363009,
+        "y": 76.659088
       },
-      "polygon_local_m": null,
+      "polygon_local_m": [
+        {
+          "x": 31.329776,
+          "y": 73.729648
+        },
+        {
+          "x": 27.374573,
+          "y": 73.720296
+        },
+        {
+          "x": 27.396242,
+          "y": 79.588529
+        },
+        {
+          "x": 31.351444,
+          "y": 79.597881
+        }
+      ],
       "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
+        "method": "name_match",
+        "legacy_object_id": "OB-Gsz9i9hINd9672"
       }
     },
     {
-      "id": "ST-3F-062",
+      "id": "store_3f_002",
       "name": "가니",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_072",
@@ -1238,17 +93,108 @@
       },
       "entrance_wgs84": null,
       "centroid_local_m": {
-        "x": 29.461699402169312,
-        "y": 70.6949333605557
+        "x": 29.34134,
+        "y": 70.790855
       },
-      "polygon_local_m": null,
+      "polygon_local_m": [
+        {
+          "x": 31.308107,
+          "y": 67.861415
+        },
+        {
+          "x": 27.352904,
+          "y": 67.852063
+        },
+        {
+          "x": 27.374573,
+          "y": 73.720296
+        },
+        {
+          "x": 31.329776,
+          "y": 73.729648
+        }
+      ],
       "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
+        "method": "name_match",
+        "legacy_object_id": "OB-dI39WyTHQq9673"
       }
     },
     {
-      "id": "ST-3F-063",
+      "id": "store_3f_003",
+      "name": "바네사 브루노",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_033",
+      "entrance_local_m": {
+        "x": 29.74836207557326,
+        "y": 64.55284438166089
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 29.319671,
+        "y": 64.922623
+      },
+      "polygon_local_m": [
+        {
+          "x": 31.286438,
+          "y": 61.993182
+        },
+        {
+          "x": 27.331236,
+          "y": 61.98383
+        },
+        {
+          "x": 27.352904,
+          "y": 67.852063
+        },
+        {
+          "x": 31.308107,
+          "y": 67.861415
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-fa0_7wbN0j9673"
+      }
+    },
+    {
+      "id": "store_3f_004",
+      "name": "리던",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_055",
+      "entrance_local_m": {
+        "x": 29.362486785618255,
+        "y": 58.52090895704379
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 29.298002,
+        "y": 59.05439
+      },
+      "polygon_local_m": [
+        {
+          "x": 31.264769,
+          "y": 56.124949
+        },
+        {
+          "x": 27.309567,
+          "y": 56.115597
+        },
+        {
+          "x": 27.331236,
+          "y": 61.98383
+        },
+        {
+          "x": 31.286438,
+          "y": 61.993182
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-dFLcCzEPE-9674"
+      }
+    },
+    {
+      "id": "store_3f_005",
       "name": "마쥬",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_073",
@@ -1258,137 +204,608 @@
       },
       "entrance_wgs84": null,
       "centroid_local_m": {
-        "x": 29.263492791564595,
-        "y": 53.1252467585159
+        "x": 29.276334,
+        "y": 53.186156
       },
-      "polygon_local_m": null,
+      "polygon_local_m": [
+        {
+          "x": 31.243101,
+          "y": 50.256716
+        },
+        {
+          "x": 27.287898,
+          "y": 50.247364
+        },
+        {
+          "x": 27.309567,
+          "y": 56.115597
+        },
+        {
+          "x": 31.264769,
+          "y": 56.124949
+        }
+      ],
       "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
+        "method": "name_match",
+        "legacy_object_id": "OB-BT5o7L48Fo9674"
       }
     },
     {
-      "id": "ST-3F-064",
-      "name": "크림",
+      "id": "store_3f_006",
+      "name": "엘리베이터",
       "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_074",
+      "entrance_node_id": "ND-XeluISb812705",
       "entrance_local_m": {
-        "x": 29.635910520715203,
-        "y": 47.34855877919574
+        "x": 36.91886029446621,
+        "y": 35.778826069528535
       },
       "entrance_wgs84": null,
       "centroid_local_m": {
-        "x": 29.635910520715203,
-        "y": 47.34855877919574
+        "x": 36.75883,
+        "y": 36.277454
       },
-      "polygon_local_m": null,
+      "polygon_local_m": [
+        {
+          "x": 38.020053,
+          "y": 33.654874
+        },
+        {
+          "x": 35.478681,
+          "y": 33.648865
+        },
+        {
+          "x": 35.501966,
+          "y": 38.903045
+        },
+        {
+          "x": 38.034641,
+          "y": 38.909034
+        }
+      ],
       "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
+        "method": "point_in_polygon",
+        "legacy_object_id": "OB-YMyVOv7TcF0710"
       }
     },
     {
-      "id": "ST-3F-065",
-      "name": "TEN-C",
+      "id": "store_3f_007",
+      "name": "엘리베이터",
       "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_075",
+      "entrance_node_id": "ND-jnfuM0YFK1534",
       "entrance_local_m": {
-        "x": 40.360558151283186,
-        "y": 59.620504871234274
+        "x": 85.82050324475824,
+        "y": 39.47792916438688
       },
       "entrance_wgs84": null,
       "centroid_local_m": {
-        "x": 40.360558151283186,
-        "y": 59.620504871234274
+        "x": 85.598027,
+        "y": 36.603928
       },
-      "polygon_local_m": null,
+      "polygon_local_m": [
+        {
+          "x": 86.875819,
+          "y": 33.648057
+        },
+        {
+          "x": 84.298384,
+          "y": 33.641962
+        },
+        {
+          "x": 84.320236,
+          "y": 39.559799
+        },
+        {
+          "x": 86.897671,
+          "y": 39.565893
+        }
+      ],
       "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
+        "method": "point_in_polygon",
+        "legacy_object_id": "OB-2_Yq02bVkR0711"
       }
     },
     {
-      "id": "ST-3F-066",
-      "name": "아뜰리에 디 갤럭시",
+      "id": "store_3f_008",
+      "name": "에스컬레이터",
       "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_076",
+      "entrance_node_id": null,
+      "entrance_local_m": null,
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 86.808506,
+        "y": 65.351714
+      },
+      "polygon_local_m": [
+        {
+          "x": 87.506658,
+          "y": 59.076826
+        },
+        {
+          "x": 86.133687,
+          "y": 59.431317
+        },
+        {
+          "x": 86.087919,
+          "y": 71.218201
+        },
+        {
+          "x": 87.477127,
+          "y": 71.62536
+        }
+      ],
+      "match": {
+        "method": "polygon_only",
+        "legacy_object_id": "OB-2amSWz6YFu2219"
+      }
+    },
+    {
+      "id": "store_3f_009",
+      "name": "에스컬레이터",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": null,
+      "entrance_local_m": null,
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 33.497099,
+        "y": 64.38869
+      },
+      "polygon_local_m": [
+        {
+          "x": 34.154402,
+          "y": 70.326349
+        },
+        {
+          "x": 34.201726,
+          "y": 57.858258
+        },
+        {
+          "x": 32.858752,
+          "y": 58.524907
+        },
+        {
+          "x": 32.762778,
+          "y": 70.698044
+        }
+      ],
+      "match": {
+        "method": "polygon_only",
+        "legacy_object_id": "OB-3zYvVVyyDe2220"
+      }
+    },
+    {
+      "id": "store_3f_010",
+      "name": "에스컬레이터",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "ND-N_KBQywuF2672",
       "entrance_local_m": {
-        "x": 96.07261864129283,
-        "y": 71.27595600461619
+        "x": 60.33043609097854,
+        "y": 58.03250477948582
       },
       "entrance_wgs84": null,
       "centroid_local_m": {
-        "x": 96.07261864129283,
-        "y": 71.27595600461619
+        "x": 60.812449,
+        "y": 64.239692
       },
-      "polygon_local_m": null,
+      "polygon_local_m": [
+        {
+          "x": 61.471532,
+          "y": 58.429208
+        },
+        {
+          "x": 60.080322,
+          "y": 58.508444
+        },
+        {
+          "x": 60.259363,
+          "y": 70.233424
+        },
+        {
+          "x": 61.43061,
+          "y": 70.473033
+        }
+      ],
       "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
+        "method": "point_in_polygon",
+        "legacy_object_id": "OB-CK045oQNfb2222"
       }
     },
     {
-      "id": "ST-3F-067",
-      "name": "슈트패브릭",
+      "id": "store_3f_011",
+      "name": "에스컬레이터",
       "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_077",
+      "entrance_node_id": null,
+      "entrance_local_m": null,
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 62.624149,
+        "y": 64.502555
+      },
+      "polygon_local_m": [
+        {
+          "x": 63.271917,
+          "y": 58.74615
+        },
+        {
+          "x": 62.044382,
+          "y": 58.508444
+        },
+        {
+          "x": 62.044382,
+          "y": 70.71074
+        },
+        {
+          "x": 63.149164,
+          "y": 70.473033
+        }
+      ],
+      "match": {
+        "method": "polygon_only",
+        "legacy_object_id": "OB-lgAKkPpgKc2225"
+      }
+    },
+    {
+      "id": "store_3f_012",
+      "name": "듀퐁 셔츠",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": null,
+      "entrance_local_m": null,
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 87.729798,
+        "y": 39.9726
+      },
+      "polygon_local_m": [
+        {
+          "x": 87.44447,
+          "y": 39.413808
+        },
+        {
+          "x": 87.448592,
+          "y": 40.530053
+        },
+        {
+          "x": 88.015125,
+          "y": 40.531393
+        },
+        {
+          "x": 88.011003,
+          "y": 39.415147
+        }
+      ],
+      "match": {
+        "method": "polygon_only",
+        "legacy_object_id": "OB-9Gz7PriVR1420"
+      }
+    },
+    {
+      "id": "store_3f_013",
+      "name": null,
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": null,
+      "entrance_local_m": null,
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 88.609463,
+        "y": 39.957806
+      },
+      "polygon_local_m": [
+        {
+          "x": 88.324136,
+          "y": 39.399014
+        },
+        {
+          "x": 88.328258,
+          "y": 40.515259
+        },
+        {
+          "x": 88.894791,
+          "y": 40.516598
+        },
+        {
+          "x": 88.890669,
+          "y": 39.400353
+        }
+      ],
+      "match": {
+        "method": "polygon_only",
+        "legacy_object_id": "OB-4xQb9aPpB6913"
+      }
+    },
+    {
+      "id": "store_3f_038",
+      "name": "화장실",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "node_003",
       "entrance_local_m": {
-        "x": 93.00780129993794,
-        "y": 85.93719081722664
+        "x": 84.78871846446667,
+        "y": 92.56584991105905
       },
       "entrance_wgs84": null,
       "centroid_local_m": {
-        "x": 93.00780129993794,
-        "y": 85.93719081722664
+        "x": 84.683668,
+        "y": 93.874258
       },
-      "polygon_local_m": null,
+      "polygon_local_m": [
+        {
+          "x": 83.385651,
+          "y": 96.446277
+        },
+        {
+          "x": 83.366627,
+          "y": 91.294375
+        },
+        {
+          "x": 85.981394,
+          "y": 91.300558
+        },
+        {
+          "x": 86.000431,
+          "y": 96.455821
+        }
+      ],
       "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
+        "method": "name_match",
+        "legacy_object_id": "OB-7SvETCNZB7825"
       }
     },
     {
-      "id": "ST-3F-068",
-      "name": "타임옴므",
+      "id": "store_3f_015",
+      "name": "아뜰리에 아티산 (의류 수선)",
       "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_078",
+      "entrance_node_id": null,
+      "entrance_local_m": null,
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 94.970051,
+        "y": 43.29494
+      },
+      "polygon_local_m": [
+        {
+          "x": 97.828538,
+          "y": 40.393898
+        },
+        {
+          "x": 92.090089,
+          "y": 40.380329
+        },
+        {
+          "x": 92.111564,
+          "y": 46.195983
+        },
+        {
+          "x": 97.850012,
+          "y": 46.209552
+        }
+      ],
+      "match": {
+        "method": "polygon_only",
+        "legacy_object_id": "OB-wlATqM3jTW7992"
+      }
+    },
+    {
+      "id": "store_3f_016",
+      "name": "누니 주얼리",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_002",
       "entrance_local_m": {
-        "x": 67.19435632560973,
-        "y": 93.88659823509471
+        "x": 52.55769877502595,
+        "y": 37.4217455735991
       },
       "entrance_wgs84": null,
       "centroid_local_m": {
-        "x": 67.19435632560973,
-        "y": 93.88659823509471
+        "x": 52.332913,
+        "y": 37.630958
       },
-      "polygon_local_m": null,
+      "polygon_local_m": [
+        {
+          "x": 50.582529,
+          "y": 34.887258
+        },
+        {
+          "x": 54.145149,
+          "y": 34.895682
+        },
+        {
+          "x": 54.163953,
+          "y": 39.988015
+        },
+        {
+          "x": 50.604125,
+          "y": 40.735842
+        }
+      ],
       "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
+        "method": "name_match",
+        "legacy_object_id": "OB-TXsCVttAkWY7712"
       }
     },
     {
-      "id": "ST-3F-069",
-      "name": "준지",
+      "id": "store_3f_017",
+      "name": "더 캐시미어",
       "floor_id": "FL-t4f3r0t8nnlf0560",
-      "entrance_node_id": "store_entrance_079",
+      "entrance_node_id": "store_entrance_007",
       "entrance_local_m": {
-        "x": 95.4213023994254,
-        "y": 49.37438422977665
+        "x": 66.5945289184166,
+        "y": 34.729854759657385
       },
       "entrance_wgs84": null,
       "centroid_local_m": {
-        "x": 95.4213023994254,
-        "y": 49.37438422977665
+        "x": 66.903034,
+        "y": 34.147809
       },
-      "polygon_local_m": null,
+      "polygon_local_m": [
+        {
+          "x": 65.194195,
+          "y": 28.495051
+        },
+        {
+          "x": 65.235083,
+          "y": 39.568037
+        },
+        {
+          "x": 68.590614,
+          "y": 40.022128
+        },
+        {
+          "x": 68.548079,
+          "y": 28.502981
+        }
+      ],
       "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
+        "method": "name_match",
+        "legacy_object_id": "OB-DIeLJ9LEa4I7714"
       }
     },
     {
-      "id": "ST-3F-070",
+      "id": "store_3f_018",
+      "name": "구호",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_006",
+      "entrance_local_m": {
+        "x": 63.32505157066935,
+        "y": 34.56318291792064
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 63.522646,
+        "y": 34.000697
+      },
+      "polygon_local_m": [
+        {
+          "x": 61.804893,
+          "y": 28.487036
+        },
+        {
+          "x": 61.845383,
+          "y": 39.452461
+        },
+        {
+          "x": 65.235083,
+          "y": 39.568037
+        },
+        {
+          "x": 65.194195,
+          "y": 28.495051
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-OWFQ35beO5Y7714"
+      }
+    },
+    {
+      "id": "store_3f_019",
+      "name": "타임",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_005",
+      "entrance_local_m": {
+        "x": 59.97227905329161,
+        "y": 34.17337346124418
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 59.885342,
+        "y": 33.992096
+      },
+      "polygon_local_m": [
+        {
+          "x": 57.931404,
+          "y": 28.477877
+        },
+        {
+          "x": 57.972292,
+          "y": 39.550864
+        },
+        {
+          "x": 61.845383,
+          "y": 39.452461
+        },
+        {
+          "x": 61.804893,
+          "y": 28.487036
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-QyP7s9LVfid7715"
+      }
+    },
+    {
+      "id": "store_3f_020",
+      "name": "마인",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_004",
+      "entrance_local_m": {
+        "x": 56.40280033282854,
+        "y": 34.19627726640161
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 56.034729,
+        "y": 34.122111
+      },
+      "polygon_local_m": [
+        {
+          "x": 54.121418,
+          "y": 28.468868
+        },
+        {
+          "x": 54.163953,
+          "y": 39.988015
+        },
+        {
+          "x": 57.972292,
+          "y": 39.550864
+        },
+        {
+          "x": 57.931404,
+          "y": 28.477877
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-_jPfmtwWefF7715"
+      }
+    },
+    {
+      "id": "store_3f_021",
+      "name": "프레이트",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_020",
+      "entrance_local_m": {
+        "x": 90.92308430094893,
+        "y": 75.42755161961786
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 90.871721,
+        "y": 75.572099
+      },
+      "polygon_local_m": [
+        {
+          "x": 92.351923,
+          "y": 72.161194
+        },
+        {
+          "x": 89.366303,
+          "y": 72.154134
+        },
+        {
+          "x": 89.391519,
+          "y": 78.983005
+        },
+        {
+          "x": 92.377139,
+          "y": 78.990064
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-sz0Sgi38zMO7717"
+      }
+    },
+    {
+      "id": "store_3f_022",
       "name": "비이커",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_080",
@@ -1398,17 +815,1977 @@
       },
       "entrance_wgs84": null,
       "centroid_local_m": {
-        "x": 90.95748065701203,
-        "y": 68.16664176876347
+        "x": 90.846505,
+        "y": 68.743229
       },
-      "polygon_local_m": null,
+      "polygon_local_m": [
+        {
+          "x": 92.326707,
+          "y": 65.332324
+        },
+        {
+          "x": 89.341088,
+          "y": 65.325264
+        },
+        {
+          "x": 89.366303,
+          "y": 72.154134
+        },
+        {
+          "x": 92.351923,
+          "y": 72.161194
+        }
+      ],
       "match": {
-        "method": "studio_only",
+        "method": "name_match",
+        "legacy_object_id": "OB-QwmqJn19Ok47717"
+      }
+    },
+    {
+      "id": "store_3f_023",
+      "name": "아스페시",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_018",
+      "entrance_local_m": {
+        "x": 91.08705069604372,
+        "y": 59.906863583962505
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 90.781748,
+        "y": 59.501387
+      },
+      "polygon_local_m": [
+        {
+          "x": 92.292582,
+          "y": 56.090555
+        },
+        {
+          "x": 89.245698,
+          "y": 56.08335
+        },
+        {
+          "x": 89.270914,
+          "y": 62.91222
+        },
+        {
+          "x": 92.317798,
+          "y": 62.919425
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-v-kygpqxW7X7718"
+      }
+    },
+    {
+      "id": "store_3f_024",
+      "name": "클럽모나코",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_015",
+      "entrance_local_m": {
+        "x": 90.85731422199407,
+        "y": 52.775505569868415
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 90.756532,
+        "y": 52.672517
+      },
+      "polygon_local_m": [
+        {
+          "x": 92.267366,
+          "y": 49.261684
+        },
+        {
+          "x": 89.220482,
+          "y": 49.25448
+        },
+        {
+          "x": 89.245698,
+          "y": 56.08335
+        },
+        {
+          "x": 92.292582,
+          "y": 56.090555
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-KRfUJYyLMX77718"
+      }
+    },
+    {
+      "id": "store_3f_025",
+      "name": "DKNY",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_067",
+      "entrance_local_m": {
+        "x": 95.75533091100823,
+        "y": 64.32015889137233
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 95.685739,
+        "y": 64.260301
+      },
+      "polygon_local_m": [
+        {
+          "x": 93.46754,
+          "y": 67.707257
+        },
+        {
+          "x": 95.531898,
+          "y": 67.712138
+        },
+        {
+          "x": 95.531898,
+          "y": 67.712138
+        },
+        {
+          "x": 97.929433,
+          "y": 67.717807
+        },
+        {
+          "x": 97.903938,
+          "y": 60.813345
+        },
+        {
+          "x": 93.442044,
+          "y": 60.802795
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-bUMJ1mUe3AG7718"
+      }
+    },
+    {
+      "id": "store_3f_026",
+      "name": "준지",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_079",
+      "entrance_local_m": {
+        "x": 95.4213023994254,
+        "y": 49.37438422977665
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 95.63311,
+        "y": 50.007637
+      },
+      "polygon_local_m": [
+        {
+          "x": 97.850012,
+          "y": 46.209549
+        },
+        {
+          "x": 93.388119,
+          "y": 46.198998
+        },
+        {
+          "x": 93.416207,
+          "y": 53.805725
+        },
+        {
+          "x": 97.878101,
+          "y": 53.816275
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-xO8dYG-MlqP7719"
+      }
+    },
+    {
+      "id": "store_3f_027",
+      "name": "송지오",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_047",
+      "entrance_local_m": {
+        "x": 95.76843941584228,
+        "y": 56.96813798916138
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 95.661502,
+        "y": 57.309538
+      },
+      "polygon_local_m": [
+        {
+          "x": 93.417637,
+          "y": 53.805728
+        },
+        {
+          "x": 93.443474,
+          "y": 60.802798
+        },
+        {
+          "x": 97.905367,
+          "y": 60.813348
+        },
+        {
+          "x": 97.87953,
+          "y": 53.816279
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-q3axtRQ6H3K7720"
+      }
+    },
+    {
+      "id": "store_3f_028",
+      "name": "아뜰리에 디 갤럭시",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_076",
+      "entrance_local_m": {
+        "x": 96.07261864129283,
+        "y": 71.27595600461619
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 95.711735,
+        "y": 71.360582
+      },
+      "polygon_local_m": [
+        {
+          "x": 93.494481,
+          "y": 75.003358
+        },
+        {
+          "x": 97.955929,
+          "y": 75.013908
+        },
+        {
+          "x": 97.928988,
+          "y": 67.717806
+        },
+        {
+          "x": 93.46754,
+          "y": 67.707257
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-AIQnQ0CsZMv7722"
+      }
+    },
+    {
+      "id": "store_3f_029",
+      "name": "룰루레몬",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_010",
+      "entrance_local_m": {
+        "x": 45.885316830481614,
+        "y": 94.26487243100983
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 46.377248,
+        "y": 96.177921
+      },
+      "polygon_local_m": [
+        {
+          "x": 48.695424,
+          "y": 98.581773
+        },
+        {
+          "x": 48.652204,
+          "y": 86.877265
+        },
+        {
+          "x": 43.58991,
+          "y": 84.948444
+        },
+        {
+          "x": 43.665517,
+          "y": 105.424072
+        },
+        {
+          "x": 49.990296,
+          "y": 105.439027
+        },
+        {
+          "x": 49.964987,
+          "y": 98.584775
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-FHWC1UjQFxZ7728"
+      }
+    },
+    {
+      "id": "store_3f_030",
+      "name": "쿠에른 컨셉스토어",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_023",
+      "entrance_local_m": {
+        "x": 36.15416203456445,
+        "y": 42.4907973345513
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 36.261583,
+        "y": 42.807994
+      },
+      "polygon_local_m": [
+        {
+          "x": 38.039455,
+          "y": 38.909046
+        },
+        {
+          "x": 34.516672,
+          "y": 38.900715
+        },
+        {
+          "x": 34.546191,
+          "y": 46.895003
+        },
+        {
+          "x": 36.445885,
+          "y": 46.899495
+        },
+        {
+          "x": 38.06581,
+          "y": 46.046551
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-J17zpgqdQqv7731"
+      }
+    },
+    {
+      "id": "store_3f_031",
+      "name": "데바스테",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_051",
+      "entrance_local_m": {
+        "x": 33.420557534282075,
+        "y": 42.881381773356026
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 33.376059,
+        "y": 42.893665
+      },
+      "polygon_local_m": [
+        {
+          "x": 32.23648,
+          "y": 46.889541
+        },
+        {
+          "x": 32.214548,
+          "y": 40.950155
+        },
+        {
+          "x": 32.199024,
+          "y": 38.895235
+        },
+        {
+          "x": 34.516672,
+          "y": 38.900715
+        },
+        {
+          "x": 34.546191,
+          "y": 46.895003
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-VQhHPmVWauv7732"
+      }
+    },
+    {
+      "id": "store_3f_032",
+      "name": "시스템",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_000",
+      "entrance_local_m": {
+        "x": 41.610260723871,
+        "y": 38.69366048104598
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 41.399887,
+        "y": 38.936726
+      },
+      "polygon_local_m": [
+        {
+          "x": 39.508907,
+          "y": 33.658395
+        },
+        {
+          "x": 39.551192,
+          "y": 45.10975
+        },
+        {
+          "x": 43.401098,
+          "y": 43.256858
+        },
+        {
+          "x": 43.365689,
+          "y": 33.667514
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-LNR-5k_U4Fx7732"
+      }
+    },
+    {
+      "id": "store_3f_033",
+      "name": "SJSJ",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_001",
+      "entrance_local_m": {
+        "x": 45.50176096546728,
+        "y": 38.70251076586945
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 45.164224,
+        "y": 38.124317
+      },
+      "polygon_local_m": [
+        {
+          "x": 43.365689,
+          "y": 33.667514
+        },
+        {
+          "x": 43.401098,
+          "y": 43.256858
+        },
+        {
+          "x": 47.056583,
+          "y": 41.860138
+        },
+        {
+          "x": 47.026363,
+          "y": 33.67617
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-DwRsZPHI7bs7733"
+      }
+    },
+    {
+      "id": "store_3f_034",
+      "name": "앤더슨벨",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_003",
+      "entrance_local_m": {
+        "x": 49.02839604545975,
+        "y": 37.87652891133091
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 48.772306,
+        "y": 37.496093
+      },
+      "polygon_local_m": [
+        {
+          "x": 47.026363,
+          "y": 33.67617
+        },
+        {
+          "x": 47.056583,
+          "y": 41.860138
+        },
+        {
+          "x": 50.604125,
+          "y": 40.735842
+        },
+        {
+          "x": 50.582529,
+          "y": 34.887258
+        },
+        {
+          "x": 50.578088,
+          "y": 33.684568
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-qF_jNMThrMY7733"
+      }
+    },
+    {
+      "id": "store_3f_035",
+      "name": "애브뉴준오 (헤어숍)",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_024",
+      "entrance_local_m": {
+        "x": 38.90636292520839,
+        "y": 27.464697242988876
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 45.028023,
+        "y": 27.48658
+      },
+      "polygon_local_m": [
+        {
+          "x": 50.532392,
+          "y": 21.309232
+        },
+        {
+          "x": 39.492676,
+          "y": 21.283128
+        },
+        {
+          "x": 39.508907,
+          "y": 33.658395
+        },
+        {
+          "x": 50.578088,
+          "y": 33.684568
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-Z2oKSkRJz2d7734"
+      }
+    },
+    {
+      "id": "store_3f_036",
+      "name": "엘리베이터",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "node_004",
+      "entrance_local_m": {
+        "x": 84.7684154984947,
+        "y": 98.73269330199469
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 84.702559,
+        "y": 99.028681
+      },
+      "polygon_local_m": [
+        {
+          "x": 83.404687,
+          "y": 101.60154
+        },
+        {
+          "x": 83.385663,
+          "y": 96.449639
+        },
+        {
+          "x": 86.000431,
+          "y": 96.455821
+        },
+        {
+          "x": 86.019454,
+          "y": 101.607723
+        }
+      ],
+      "match": {
+        "method": "point_in_polygon",
+        "legacy_object_id": "OB-kMq28_Yib9025"
+      }
+    },
+    {
+      "id": "store_3f_037",
+      "name": "장애인화장실",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "node_005",
+      "entrance_local_m": {
+        "x": 82.09760883954796,
+        "y": 93.54583262550517
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 81.95907,
+        "y": 93.854382
+      },
+      "polygon_local_m": [
+        {
+          "x": 80.661185,
+          "y": 96.423486
+        },
+        {
+          "x": 80.642189,
+          "y": 91.279096
+        },
+        {
+          "x": 83.256956,
+          "y": 91.285278
+        },
+        {
+          "x": 83.275952,
+          "y": 96.429668
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-ge-W7y2bc2057"
+      }
+    },
+    {
+      "id": "store_3f_038_038",
+      "name": "화장실",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "node_003",
+      "entrance_local_m": {
+        "x": 84.78871846446667,
+        "y": 92.56584991105905
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 42.319576,
+        "y": 93.913362
+      },
+      "polygon_local_m": [
+        {
+          "x": 41.023623,
+          "y": 96.47312
+        },
+        {
+          "x": 41.004701,
+          "y": 91.348769
+        },
+        {
+          "x": 43.61758,
+          "y": 91.354947
+        },
+        {
+          "x": 43.632408,
+          "y": 96.479289
+        }
+      ],
+      "match": {
+        "method": "studio_export",
         "legacy_store_id": null
       }
     },
     {
-      "id": "ST-3F-071",
+      "id": "store_3f_039",
+      "name": "엘리베이터",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": null,
+      "entrance_local_m": null,
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 42.338492,
+        "y": 99.054676
+      },
+      "polygon_local_m": [
+        {
+          "x": 41.042483,
+          "y": 101.628738
+        },
+        {
+          "x": 41.023446,
+          "y": 96.47312
+        },
+        {
+          "x": 43.632488,
+          "y": 96.479289
+        },
+        {
+          "x": 43.655539,
+          "y": 101.634916
+        }
+      ],
+      "match": {
+        "method": "polygon_only",
+        "legacy_object_id": "OB-LAG3fcMau5528"
+      }
+    },
+    {
+      "id": "store_3f_040",
+      "name": "유아차 전용 E/V",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "ND-ACkiJovMQ2542",
+      "entrance_local_m": {
+        "x": 72.18272172321417,
+        "y": 96.90746360420762
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 72.302552,
+        "y": 96.41544
+      },
+      "polygon_local_m": [
+        {
+          "x": 71.042289,
+          "y": 94.053748
+        },
+        {
+          "x": 71.059708,
+          "y": 98.771214
+        },
+        {
+          "x": 73.562815,
+          "y": 98.777132
+        },
+        {
+          "x": 73.545395,
+          "y": 94.059666
+        }
+      ],
+      "match": {
+        "method": "point_in_polygon",
+        "legacy_object_id": "OB-t-m08ZIORU0378"
+      }
+    },
+    {
+      "id": "store_3f_041",
+      "name": "시리즈 코너",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_028",
+      "entrance_local_m": {
+        "x": 48.718747707094344,
+        "y": 69.60060326399912
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 48.945134,
+        "y": 70.129117
+      },
+      "polygon_local_m": [
+        {
+          "x": 47.166137,
+          "y": 74.902395
+        },
+        {
+          "x": 50.765448,
+          "y": 74.910906
+        },
+        {
+          "x": 50.730186,
+          "y": 65.361179
+        },
+        {
+          "x": 47.11881,
+          "y": 65.352639
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-eNTNdEPfhC5245"
+      }
+    },
+    {
+      "id": "store_3f_042",
+      "name": "스컬프",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_030",
+      "entrance_local_m": {
+        "x": 52.27168053820087,
+        "y": 70.26482624899064
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 52.639766,
+        "y": 70.150975
+      },
+      "polygon_local_m": [
+        {
+          "x": 50.730224,
+          "y": 65.371638
+        },
+        {
+          "x": 54.514045,
+          "y": 65.380585
+        },
+        {
+          "x": 54.549308,
+          "y": 74.930312
+        },
+        {
+          "x": 50.765487,
+          "y": 74.921365
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-hUSnd5phbR5245"
+      }
+    },
+    {
+      "id": "store_3f_043",
+      "name": "벨벳트렁크",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_021",
+      "entrance_local_m": {
+        "x": 57.32258993891306,
+        "y": 59.146280858146326
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 57.252601,
+        "y": 59.043374
+      },
+      "polygon_local_m": [
+        {
+          "x": 54.467255,
+          "y": 52.709059
+        },
+        {
+          "x": 59.991485,
+          "y": 52.722122
+        },
+        {
+          "x": 60.03821,
+          "y": 65.375839
+        },
+        {
+          "x": 54.513993,
+          "y": 65.366476
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-mx9RKgF-fQ5245"
+      }
+    },
+    {
+      "id": "store_3f_044",
+      "name": "골든듀",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_066",
+      "entrance_local_m": {
+        "x": 35.999383442923346,
+        "y": 62.91248132943717
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 35.682555,
+        "y": 62.666944
+      },
+      "polygon_local_m": [
+        {
+          "x": 37.118823,
+          "y": 57.858558
+        },
+        {
+          "x": 34.202389,
+          "y": 58.06028
+        },
+        {
+          "x": 34.233455,
+          "y": 67.369577
+        },
+        {
+          "x": 37.153969,
+          "y": 67.376483
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-YEfOrKPHBC5246"
+      }
+    },
+    {
+      "id": "store_3f_045",
+      "name": "아이엠샵",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_027",
+      "entrance_local_m": {
+        "x": 45.30366042375479,
+        "y": 68.7649803196507
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 45.255649,
+        "y": 69.441443
+      },
+      "polygon_local_m": [
+        {
+          "x": 47.159367,
+          "y": 73.538359
+        },
+        {
+          "x": 43.388578,
+          "y": 73.521371
+        },
+        {
+          "x": 43.357975,
+          "y": 65.343747
+        },
+        {
+          "x": 47.115396,
+          "y": 65.352631
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-nwXRgqmmOq5247"
+      }
+    },
+    {
+      "id": "store_3f_046",
+      "name": "모드맨",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_032",
+      "entrance_local_m": {
+        "x": 44.727369021520914,
+        "y": 56.836758625891704
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 42.340019,
+        "y": 58.783478
+      },
+      "polygon_local_m": [
+        {
+          "x": 47.111055,
+          "y": 59.98539
+        },
+        {
+          "x": 47.09159,
+          "y": 54.713914
+        },
+        {
+          "x": 42.25233,
+          "y": 54.702584
+        },
+        {
+          "x": 42.264045,
+          "y": 57.875188
+        },
+        {
+          "x": 37.11884,
+          "y": 57.863022
+        },
+        {
+          "x": 37.135401,
+          "y": 62.348211
+        },
+        {
+          "x": 43.346968,
+          "y": 62.362899
+        },
+        {
+          "x": 43.338563,
+          "y": 59.97647
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-wXnhs491Vu5247"
+      }
+    },
+    {
+      "id": "store_3f_047",
+      "name": "분크",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_029",
+      "entrance_local_m": {
+        "x": 67.13383985184065,
+        "y": 72.05485015770806
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 67.007546,
+        "y": 71.908415
+      },
+      "polygon_local_m": [
+        {
+          "x": 64.38554,
+          "y": 70.036923
+        },
+        {
+          "x": 64.399316,
+          "y": 73.767541
+        },
+        {
+          "x": 69.629552,
+          "y": 73.779908
+        },
+        {
+          "x": 69.615777,
+          "y": 70.04929
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-51W2_Fuzs0w5248"
+      }
+    },
+    {
+      "id": "store_3f_048",
+      "name": "조이그라이슨",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_037",
+      "entrance_local_m": {
+        "x": 70.91378396076273,
+        "y": 38.09004586726364
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 71.024434,
+        "y": 37.731234
+      },
+      "polygon_local_m": [
+        {
+          "x": 73.316426,
+          "y": 34.931367
+        },
+        {
+          "x": 68.571808,
+          "y": 34.929797
+        },
+        {
+          "x": 68.590612,
+          "y": 40.022132
+        },
+        {
+          "x": 73.338897,
+          "y": 41.012382
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-PN8qOtYyz6037"
+      }
+    },
+    {
+      "id": "store_3f_049",
+      "name": "탠디",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_036",
+      "entrance_local_m": {
+        "x": 74.61803595569,
+        "y": 58.07038799691421
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 75.055634,
+        "y": 57.640816
+      },
+      "polygon_local_m": [
+        {
+          "x": 76.26198,
+          "y": 53.009838
+        },
+        {
+          "x": 76.261085,
+          "y": 52.767447
+        },
+        {
+          "x": 73.814171,
+          "y": 52.761661
+        },
+        {
+          "x": 73.850183,
+          "y": 62.514186
+        },
+        {
+          "x": 76.297096,
+          "y": 62.519972
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-Q5soRZVQ43901"
+      }
+    },
+    {
+      "id": "store_3f_050",
+      "name": "비비안",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_062",
+      "entrance_local_m": {
+        "x": 72.87490445481284,
+        "y": 66.06648290859626
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 73.117211,
+        "y": 66.289233
+      },
+      "polygon_local_m": [
+        {
+          "x": 72.048979,
+          "y": 62.509927
+        },
+        {
+          "x": 72.076872,
+          "y": 70.063554
+        },
+        {
+          "x": 74.185443,
+          "y": 70.06854
+        },
+        {
+          "x": 74.157551,
+          "y": 62.514913
+        }
+      ],
+      "match": {
+        "method": "point_in_polygon",
+        "legacy_object_id": "OB-M52AHXlYbt3905"
+      }
+    },
+    {
+      "id": "store_3f_051",
+      "name": "듀베티카",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_025",
+      "entrance_local_m": {
+        "x": 72.75487083171545,
+        "y": 71.75723533277224
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 72.97725,
+        "y": 71.92133
+      },
+      "polygon_local_m": [
+        {
+          "x": 69.615768,
+          "y": 70.046887
+        },
+        {
+          "x": 69.629552,
+          "y": 73.779908
+        },
+        {
+          "x": 76.338733,
+          "y": 73.795772
+        },
+        {
+          "x": 76.324948,
+          "y": 70.062751
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-TKKx_0Vaaq3905"
+      }
+    },
+    {
+      "id": "store_3f_052",
+      "name": "어그",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_052",
+      "entrance_local_m": {
+        "x": 65.18897683302995,
+        "y": 58.12533597180342
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 65.288439,
+        "y": 58.277799
+      },
+      "polygon_local_m": [
+        {
+          "x": 67.311872,
+          "y": 56.345102
+        },
+        {
+          "x": 63.250698,
+          "y": 56.335499
+        },
+        {
+          "x": 63.265006,
+          "y": 60.210496
+        },
+        {
+          "x": 67.32618,
+          "y": 60.220099
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-Hrwk5Mtp_k5246"
+      }
+    },
+    {
+      "id": "store_3f_053",
+      "name": "아떼바네 사브루노",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_039",
+      "entrance_local_m": {
+        "x": 65.37691641278549,
+        "y": 67.09744888677675
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 65.322739,
+        "y": 67.10104
+      },
+      "polygon_local_m": [
+        {
+          "x": 67.344205,
+          "y": 64.170124
+        },
+        {
+          "x": 63.279592,
+          "y": 64.160513
+        },
+        {
+          "x": 63.301273,
+          "y": 70.031956
+        },
+        {
+          "x": 67.365885,
+          "y": 70.041567
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-y09devh3j9018"
+      }
+    },
+    {
+      "id": "store_3f_054",
+      "name": "솔리드 옴므",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_009",
+      "entrance_local_m": {
+        "x": 40.59207447906625,
+        "y": 89.27690639276692
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 40.826539,
+        "y": 88.876705
+      },
+      "polygon_local_m": [
+        {
+          "x": 37.783091,
+          "y": 91.341151
+        },
+        {
+          "x": 37.764923,
+          "y": 86.421081
+        },
+        {
+          "x": 38.267133,
+          "y": 86.705625
+        },
+        {
+          "x": 38.908196,
+          "y": 86.827353
+        },
+        {
+          "x": 39.749501,
+          "y": 86.889443
+        },
+        {
+          "x": 40.490129,
+          "y": 86.831093
+        },
+        {
+          "x": 41.26104,
+          "y": 86.712704
+        },
+        {
+          "x": 42.04398,
+          "y": 86.310997
+        },
+        {
+          "x": 42.709162,
+          "y": 85.883249
+        },
+        {
+          "x": 43.590371,
+          "y": 84.94941
+        },
+        {
+          "x": 43.614024,
+          "y": 91.354938
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-_xuz5QCu910988"
+      }
+    },
+    {
+      "id": "store_3f_055",
+      "name": "금강 안경",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_034",
+      "entrance_local_m": {
+        "x": 52.102487949834796,
+        "y": 90.65437265535994
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 52.135282,
+        "y": 91.201488
+      },
+      "polygon_local_m": [
+        {
+          "x": 50.035752,
+          "y": 94.580939
+        },
+        {
+          "x": 50.008263,
+          "y": 87.136445
+        },
+        {
+          "x": 54.388809,
+          "y": 88.546395
+        },
+        {
+          "x": 54.41113,
+          "y": 94.591295
+        },
+        {
+          "x": 50.035752,
+          "y": 94.580939
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-vhk5-suCN9288"
+      }
+    },
+    {
+      "id": "store_3f_056",
+      "name": "노이스",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_013",
+      "entrance_local_m": {
+        "x": 71.28751315019585,
+        "y": 89.88155549715893
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 71.287286,
+        "y": 90.042752
+      },
+      "polygon_local_m": [
+        {
+          "x": 68.89116,
+          "y": 88.160449
+        },
+        {
+          "x": 68.937041,
+          "y": 92.324975
+        },
+        {
+          "x": 73.53903,
+          "y": 92.335857
+        },
+        {
+          "x": 73.516379,
+          "y": 87.381439
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB--TP-DKBJXq9295"
+      }
+    },
+    {
+      "id": "store_3f_057",
+      "name": "온",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_011",
+      "entrance_local_m": {
+        "x": 58.097512616888736,
+        "y": 94.47008856854956
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 58.146804,
+        "y": 93.7131
+      },
+      "polygon_local_m": [
+        {
+          "x": 54.388561,
+          "y": 88.479129
+        },
+        {
+          "x": 54.426827,
+          "y": 98.842113
+        },
+        {
+          "x": 61.926018,
+          "y": 98.859846
+        },
+        {
+          "x": 61.888398,
+          "y": 88.671911
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-Aeon7q1sSP9297"
+      }
+    },
+    {
+      "id": "store_3f_058",
+      "name": "시스템 옴므",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_012",
+      "entrance_local_m": {
+        "x": 63.659577228841975,
+        "y": 93.67799814396608
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 63.66142,
+        "y": 93.834406
+      },
+      "polygon_local_m": [
+        {
+          "x": 61.873111,
+          "y": 88.847938
+        },
+        {
+          "x": 61.910081,
+          "y": 98.859808
+        },
+        {
+          "x": 65.444373,
+          "y": 98.868154
+        },
+        {
+          "x": 65.407055,
+          "y": 88.761845
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-K9YWviOPQV9298"
+      }
+    },
+    {
+      "id": "store_3f_059",
+      "name": "타임옴므",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_078",
+      "entrance_local_m": {
+        "x": 67.19435632560973,
+        "y": 93.88659823509471
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 67.199436,
+        "y": 93.670463
+      },
+      "polygon_local_m": [
+        {
+          "x": 65.406992,
+          "y": 88.744676
+        },
+        {
+          "x": 65.444373,
+          "y": 98.868165
+        },
+        {
+          "x": 68.974309,
+          "y": 98.876512
+        },
+        {
+          "x": 68.937041,
+          "y": 92.324975
+        },
+        {
+          "x": 68.89116,
+          "y": 88.160449
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-MOGUqjyEgR9298"
+      }
+    },
+    {
+      "id": "store_3f_060",
+      "name": "베로니카 비어드",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_031",
+      "entrance_local_m": {
+        "x": 40.31739870159951,
+        "y": 64.50191779201222
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 40.249959,
+        "y": 64.866434
+      },
+      "polygon_local_m": [
+        {
+          "x": 43.345705,
+          "y": 62.357932
+        },
+        {
+          "x": 37.135633,
+          "y": 62.343248
+        },
+        {
+          "x": 37.154213,
+          "y": 67.374936
+        },
+        {
+          "x": 43.364285,
+          "y": 67.38962
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-K2XcGCo3Qd1951"
+      }
+    },
+    {
+      "id": "store_3f_061",
+      "name": "톰그레이 하운드(남)",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_049",
+      "entrance_local_m": {
+        "x": 55.950525505726205,
+        "y": 68.89508603528033
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 55.808202,
+        "y": 70.138963
+      },
+      "polygon_local_m": [
+        {
+          "x": 54.514005,
+          "y": 65.369656
+        },
+        {
+          "x": 57.067199,
+          "y": 65.375693
+        },
+        {
+          "x": 57.102399,
+          "y": 74.908269
+        },
+        {
+          "x": 54.549204,
+          "y": 74.902232
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-yloEYvXDV0925"
+      }
+    },
+    {
+      "id": "store_3f_062",
+      "name": "정수기",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": null,
+      "entrance_local_m": null,
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 87.864991,
+        "y": 92.749533
+      },
+      "polygon_local_m": [
+        {
+          "x": 86.989416,
+          "y": 91.663567
+        },
+        {
+          "x": 86.99742,
+          "y": 93.831376
+        },
+        {
+          "x": 88.740567,
+          "y": 93.835498
+        },
+        {
+          "x": 88.732562,
+          "y": 91.667689
+        }
+      ],
+      "match": {
+        "method": "polygon_only",
+        "legacy_object_id": "OB-Gn7ivJ7Jf4835"
+      }
+    },
+    {
+      "id": "store_3f_063",
+      "name": "더일마",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_068",
+      "entrance_local_m": {
+        "x": 75.02833646456278,
+        "y": 35.460795239430524
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 75.57466,
+        "y": 34.833964
+      },
+      "polygon_local_m": [
+        {
+          "x": 73.906776,
+          "y": 29.713729
+        },
+        {
+          "x": 73.944561,
+          "y": 39.946401
+        },
+        {
+          "x": 77.242544,
+          "y": 39.954199
+        },
+        {
+          "x": 77.204759,
+          "y": 29.721527
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-tjTy0C3SBL7699"
+      }
+    },
+    {
+      "id": "store_3f_064",
+      "name": "듀퐁 셔츠/ 닥스 셔츠/ 카운테스마라",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_017",
+      "entrance_local_m": {
+        "x": 89.36971240077328,
+        "y": 40.28784062125774
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 88.932114,
+        "y": 40.94181
+      },
+      "polygon_local_m": [
+        {
+          "x": 90.905311,
+          "y": 43.105884
+        },
+        {
+          "x": 87.140533,
+          "y": 43.479143
+        },
+        {
+          "x": 86.899741,
+          "y": 38.629899
+        },
+        {
+          "x": 90.892934,
+          "y": 38.63445
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-7p5q5ODpZfu7716"
+      }
+    },
+    {
+      "id": "store_3f_065",
+      "name": "시프트G",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_046",
+      "entrance_local_m": {
+        "x": 51.937360508361,
+        "y": 56.895145434719566
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 51.219401,
+        "y": 57.184443
+      },
+      "polygon_local_m": [
+        {
+          "x": 54.493262,
+          "y": 60.005855
+        },
+        {
+          "x": 47.110902,
+          "y": 59.988399
+        },
+        {
+          "x": 47.097871,
+          "y": 56.459348
+        },
+        {
+          "x": 54.466344,
+          "y": 52.715912
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-8rmmRulpSt7675"
+      }
+    },
+    {
+      "id": "store_3f_066",
+      "name": "캠퍼투게더 스토어",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_008",
+      "entrance_local_m": {
+        "x": 68.97227723364728,
+        "y": 56.04632192826506
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 68.486643,
+        "y": 56.02358
+      },
+      "polygon_local_m": [
+        {
+          "x": 71.177292,
+          "y": 52.746842
+        },
+        {
+          "x": 64.764139,
+          "y": 52.731677
+        },
+        {
+          "x": 64.777424,
+          "y": 56.329424
+        },
+        {
+          "x": 67.31185,
+          "y": 56.339279
+        },
+        {
+          "x": 67.32623,
+          "y": 60.233691
+        },
+        {
+          "x": 71.209468,
+          "y": 60.242873
+        },
+        {
+          "x": 71.181789,
+          "y": 52.746852
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-hR3jAW5ny07676"
+      }
+    },
+    {
+      "id": "store_3f_067",
+      "name": "로라스 블랑",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_035",
+      "entrance_local_m": {
+        "x": 76.67255453924157,
+        "y": 64.2854088688082
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 78.087498,
+        "y": 63.716004
+      },
+      "polygon_local_m": [
+        {
+          "x": 80.30789,
+          "y": 67.829027
+        },
+        {
+          "x": 80.401226,
+          "y": 67.142334
+        },
+        {
+          "x": 80.61967,
+          "y": 61.389944
+        },
+        {
+          "x": 80.585298,
+          "y": 60.342312
+        },
+        {
+          "x": 80.408507,
+          "y": 59.672159
+        },
+        {
+          "x": 80.153461,
+          "y": 59.053327
+        },
+        {
+          "x": 76.290904,
+          "y": 52.758933
+        },
+        {
+          "x": 76.260395,
+          "y": 52.758861
+        },
+        {
+          "x": 76.338075,
+          "y": 73.795792
+        },
+        {
+          "x": 77.087645,
+          "y": 73.797564
+        },
+        {
+          "x": 80.092687,
+          "y": 68.558365
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-7hfoF9Rf1n7677"
+      }
+    },
+    {
+      "id": "store_3f_068",
+      "name": "POP-UP STUDIO A",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_048",
+      "entrance_local_m": {
+        "x": 84.90785752197435,
+        "y": 86.93943708384623
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 84.640901,
+        "y": 87.167446
+      },
+      "polygon_local_m": [
+        {
+          "x": 84.900281,
+          "y": 82.943414
+        },
+        {
+          "x": 83.229714,
+          "y": 83.720827
+        },
+        {
+          "x": 83.257679,
+          "y": 91.294118
+        },
+        {
+          "x": 85.977032,
+          "y": 91.300548
+        },
+        {
+          "x": 85.943773,
+          "y": 82.293305
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-w7YjQXBfge7678"
+      }
+    },
+    {
+      "id": "store_3f_069",
+      "name": "폴로",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_014",
+      "entrance_local_m": {
+        "x": 77.32586632278752,
+        "y": 92.09004337925637
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 77.475811,
+        "y": 92.330521
+      },
+      "polygon_local_m": [
+        {
+          "x": 77.219953,
+          "y": 86.024952
+        },
+        {
+          "x": 74.851893,
+          "y": 86.740615
+        },
+        {
+          "x": 74.896345,
+          "y": 98.778887
+        },
+        {
+          "x": 79.982065,
+          "y": 98.790912
+        },
+        {
+          "x": 79.93086,
+          "y": 84.923711
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-IAOYdsit3S7679"
+      }
+    },
+    {
+      "id": "store_3f_070",
+      "name": "바버",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_019",
+      "entrance_local_m": {
+        "x": 81.64773241029646,
+        "y": 88.42714850853973
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 81.643285,
+        "y": 87.800975
+      },
+      "polygon_local_m": [
+        {
+          "x": 81.898118,
+          "y": 84.241448
+        },
+        {
+          "x": 79.935222,
+          "y": 84.923721
+        },
+        {
+          "x": 79.958685,
+          "y": 91.277733
+        },
+        {
+          "x": 83.257647,
+          "y": 91.285533
+        },
+        {
+          "x": 83.229682,
+          "y": 83.712242
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-zOz28kA73d7681"
+      }
+    },
+    {
+      "id": "store_3f_071",
+      "name": "띠어리",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_016",
+      "entrance_local_m": {
+        "x": 89.95215465465388,
+        "y": 86.52574805194737
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 89.016509,
+        "y": 86.533678
+      },
+      "polygon_local_m": [
+        {
+          "x": 86.951495,
+          "y": 81.394113
+        },
+        {
+          "x": 91.043602,
+          "y": 81.403789
+        },
+        {
+          "x": 91.081522,
+          "y": 91.673243
+        },
+        {
+          "x": 86.989416,
+          "y": 91.663567
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-7hMlL1bEAB7681"
+      }
+    },
+    {
+      "id": "store_3f_072",
       "name": "수트 서플라이",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_081",
@@ -1418,17 +2795,577 @@
       },
       "entrance_wgs84": null,
       "centroid_local_m": {
-        "x": 95.7378757601467,
-        "y": 77.93479677532073
+        "x": 95.738364,
+        "y": 78.211561
       },
-      "polygon_local_m": null,
+      "polygon_local_m": [
+        {
+          "x": 93.518923,
+          "y": 81.408457
+        },
+        {
+          "x": 97.981454,
+          "y": 81.419009
+        },
+        {
+          "x": 97.957806,
+          "y": 75.014665
+        },
+        {
+          "x": 93.495274,
+          "y": 75.004113
+        }
+      ],
       "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
+        "method": "name_match",
+        "legacy_object_id": "OB-teT1UM2mML7683"
       }
     },
     {
-      "id": "ST-3F-072",
+      "id": "store_3f_073",
+      "name": "CP컴퍼니",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_022",
+      "entrance_local_m": {
+        "x": 49.05985273342498,
+        "y": 62.12570641830277
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 48.923879,
+        "y": 62.677808
+      },
+      "polygon_local_m": [
+        {
+          "x": 47.130867,
+          "y": 65.350827
+        },
+        {
+          "x": 50.728615,
+          "y": 65.371634
+        },
+        {
+          "x": 50.715538,
+          "y": 59.996922
+        },
+        {
+          "x": 47.116879,
+          "y": 59.992309
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-SeXdc12Mo3008"
+      }
+    },
+    {
+      "id": "store_3f_074",
+      "name": "와코루",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_063",
+      "entrance_local_m": {
+        "x": 75.41326066499012,
+        "y": 65.73406269044426
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 75.242335,
+        "y": 66.283411
+      },
+      "polygon_local_m": [
+        {
+          "x": 74.159722,
+          "y": 62.50407
+        },
+        {
+          "x": 74.187614,
+          "y": 70.057697
+        },
+        {
+          "x": 76.324948,
+          "y": 70.062751
+        },
+        {
+          "x": 76.297056,
+          "y": 62.509124
+        }
+      ],
+      "match": {
+        "method": "point_in_polygon",
+        "legacy_object_id": "OB-vqJuxwui04645"
+      }
+    },
+    {
+      "id": "store_3f_075",
+      "name": "스톤 헨지",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_056",
+      "entrance_local_m": {
+        "x": 34.49028342698094,
+        "y": 72.6368576805576
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 34.629066,
+        "y": 72.823418
+      },
+      "polygon_local_m": [
+        {
+          "x": 33.560625,
+          "y": 71.519174
+        },
+        {
+          "x": 33.570238,
+          "y": 74.122632
+        },
+        {
+          "x": 35.697508,
+          "y": 74.127662
+        },
+        {
+          "x": 35.687894,
+          "y": 71.524204
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-dn7rpa4ug3766"
+      }
+    },
+    {
+      "id": "store_3f_076",
+      "name": "톰그레이 하운드(여)",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_058",
+      "entrance_local_m": {
+        "x": 58.5778759837085,
+        "y": 70.14834519831206
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 58.561997,
+        "y": 70.131785
+      },
+      "polygon_local_m": [
+        {
+          "x": 57.063388,
+          "y": 65.386613
+        },
+        {
+          "x": 60.025588,
+          "y": 65.393617
+        },
+        {
+          "x": 60.060606,
+          "y": 74.876958
+        },
+        {
+          "x": 57.098406,
+          "y": 74.869954
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-7NMXgWlCW4805"
+      }
+    },
+    {
+      "id": "store_3f_077",
+      "name": "버윅",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_038",
+      "entrance_local_m": {
+        "x": 72.36575833698556,
+        "y": 57.64956401455932
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 72.516824,
+        "y": 57.634814
+      },
+      "polygon_local_m": [
+        {
+          "x": 73.816711,
+          "y": 53.004056
+        },
+        {
+          "x": 73.815816,
+          "y": 52.761665
+        },
+        {
+          "x": 71.18182,
+          "y": 52.755437
+        },
+        {
+          "x": 71.217832,
+          "y": 62.507962
+        },
+        {
+          "x": 73.851828,
+          "y": 62.51419
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-tM9WM-mmE5675"
+      }
+    },
+    {
+      "id": "store_3f_078",
+      "name": "디디에 두보",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_057",
+      "entrance_local_m": {
+        "x": 34.92943219788,
+        "y": 54.52624003921281
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 35.15743,
+        "y": 54.565223
+      },
+      "polygon_local_m": [
+        {
+          "x": 34.089448,
+          "y": 53.379781
+        },
+        {
+          "x": 34.098184,
+          "y": 55.745635
+        },
+        {
+          "x": 36.225413,
+          "y": 55.750665
+        },
+        {
+          "x": 36.216676,
+          "y": 53.384811
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-aT0rwn5hJ1026"
+      }
+    },
+    {
+      "id": "store_3f_079",
+      "name": "다이아미",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_064",
+      "entrance_local_m": {
+        "x": 35.271741284230906,
+        "y": 51.67732830372846
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 35.151115,
+        "y": 52.080573
+      },
+      "polygon_local_m": [
+        {
+          "x": 34.079834,
+          "y": 50.776323
+        },
+        {
+          "x": 34.089448,
+          "y": 53.379781
+        },
+        {
+          "x": 36.222397,
+          "y": 53.384824
+        },
+        {
+          "x": 36.212783,
+          "y": 50.781366
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-HPOsHzDh06763"
+      }
+    },
+    {
+      "id": "store_3f_080",
+      "name": "제이에스티나",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_065",
+      "entrance_local_m": {
+        "x": 34.45249239131992,
+        "y": 75.48631532672842
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 34.638221,
+        "y": 75.308074
+      },
+      "polygon_local_m": [
+        {
+          "x": 33.570238,
+          "y": 74.122632
+        },
+        {
+          "x": 33.578974,
+          "y": 76.488486
+        },
+        {
+          "x": 35.706203,
+          "y": 76.493516
+        },
+        {
+          "x": 35.697467,
+          "y": 74.127662
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-JlTB5wkGaS6771"
+      }
+    },
+    {
+      "id": "store_3f_081",
+      "name": "POP-UP STUDIO B",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_026",
+      "entrance_local_m": {
+        "x": 78.97947083351747,
+        "y": 36.02957521793134
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 78.832364,
+        "y": 34.83005
+      },
+      "polygon_local_m": [
+        {
+          "x": 77.201952,
+          "y": 29.72152
+        },
+        {
+          "x": 77.239581,
+          "y": 39.930921
+        },
+        {
+          "x": 80.462811,
+          "y": 39.938543
+        },
+        {
+          "x": 80.425112,
+          "y": 29.729142
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-K533_CPYC5086"
+      }
+    },
+    {
+      "id": "store_3f_082",
+      "name": "이비엠",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_069",
+      "entrance_local_m": {
+        "x": 81.45286874237038,
+        "y": 34.67232826131047
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 82.085157,
+        "y": 34.849584
+      },
+      "polygon_local_m": [
+        {
+          "x": 80.42372,
+          "y": 29.729138
+        },
+        {
+          "x": 80.461504,
+          "y": 39.96181
+        },
+        {
+          "x": 83.747028,
+          "y": 39.969579
+        },
+        {
+          "x": 83.708373,
+          "y": 29.736905
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-KAnQKskyx9785"
+      }
+    },
+    {
+      "id": "store_3f_083",
+      "name": "슈트패브릭",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_077",
+      "entrance_local_m": {
+        "x": 93.00780129993794,
+        "y": 85.93719081722664
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 93.108615,
+        "y": 86.543354
+      },
+      "polygon_local_m": [
+        {
+          "x": 91.043602,
+          "y": 81.403789
+        },
+        {
+          "x": 95.135708,
+          "y": 81.413465
+        },
+        {
+          "x": 95.173628,
+          "y": 91.682919
+        },
+        {
+          "x": 91.081522,
+          "y": 91.673243
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-u2hWFJg1p3892"
+      }
+    },
+    {
+      "id": "store_3f_084",
+      "name": "정수기",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": null,
+      "entrance_local_m": null,
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 35.150768,
+        "y": 92.610575
+      },
+      "polygon_local_m": [
+        {
+          "x": 36.089316,
+          "y": 93.733893
+        },
+        {
+          "x": 34.220501,
+          "y": 93.729474
+        },
+        {
+          "x": 34.212221,
+          "y": 91.487257
+        },
+        {
+          "x": 36.081036,
+          "y": 91.491676
+        }
+      ],
+      "match": {
+        "method": "polygon_only",
+        "legacy_object_id": "OB-TInJt7qENQ9672"
+      }
+    },
+    {
+      "id": "store_3f_085",
+      "name": "메종키츠네 (남/여)",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_059",
+      "entrance_local_m": {
+        "x": 34.16529742702732,
+        "y": 87.80978690189518
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 33.915331,
+        "y": 87.235261
+      },
+      "polygon_local_m": [
+        {
+          "x": 35.661397,
+          "y": 84.42406
+        },
+        {
+          "x": 35.157665,
+          "y": 83.72737
+        },
+        {
+          "x": 34.837506,
+          "y": 83.17708
+        },
+        {
+          "x": 33.633029,
+          "y": 80.357879
+        },
+        {
+          "x": 31.896131,
+          "y": 84.415157
+        },
+        {
+          "x": 31.909003,
+          "y": 87.900929
+        },
+        {
+          "x": 31.20452,
+          "y": 87.899263
+        },
+        {
+          "x": 31.217741,
+          "y": 91.479705
+        },
+        {
+          "x": 36.454488,
+          "y": 91.492559
+        },
+        {
+          "x": 36.431026,
+          "y": 85.138547
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-3InsStd0dT9672"
+      }
+    },
+    {
+      "id": "store_3f_086",
+      "name": "크림",
+      "floor_id": "FL-t4f3r0t8nnlf0560",
+      "entrance_node_id": "store_entrance_074",
+      "entrance_local_m": {
+        "x": 29.635910520715203,
+        "y": 47.34855877919574
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 29.254356,
+        "y": 47.234359
+      },
+      "polygon_local_m": [
+        {
+          "x": 31.220815,
+          "y": 44.221355
+        },
+        {
+          "x": 27.265612,
+          "y": 44.212002
+        },
+        {
+          "x": 27.287898,
+          "y": 50.247364
+        },
+        {
+          "x": 31.243101,
+          "y": 50.256716
+        }
+      ],
+      "match": {
+        "method": "name_match",
+        "legacy_object_id": "OB-DrU176fEMW9675"
+      }
+    },
+    {
+      "id": "store_3f_087",
       "name": "버켄스탁",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_082",
@@ -1438,22 +3375,37 @@
       },
       "entrance_wgs84": null,
       "centroid_local_m": {
-        "x": 65.05401922203134,
-        "y": 62.300139304558385
+        "x": 65.302893,
+        "y": 62.192148
       },
-      "polygon_local_m": null,
+      "polygon_local_m": [
+        {
+          "x": 67.326326,
+          "y": 60.259451
+        },
+        {
+          "x": 63.265152,
+          "y": 60.249848
+        },
+        {
+          "x": 63.27946,
+          "y": 64.124845
+        },
+        {
+          "x": 67.340634,
+          "y": 64.134448
+        }
+      ],
       "match": {
-        "method": "studio_only",
-        "legacy_store_id": null
+        "method": "name_match",
+        "legacy_object_id": "OB-dnte9BPQB7016"
       }
     }
   ],
   "unmatched": [],
   "summary": {
-    "stores": 72,
-    "unmatched": 0,
-    "by_method": {
-      "studio_only": 72
-    }
+    "stores": 88,
+    "with_polygon": 88,
+    "new_footprints": 0
   }
 }

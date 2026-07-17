@@ -94,17 +94,44 @@
     "graph_transform": {
       "rotation": 0,
       "lockAspect": true,
-      "lockedAspect": 1.856154
+      "lockedAspect": 1.856153553421873
     },
-    "detected_map_rect": null,
-    "detected_image_content_rect": null,
+    "detected_map_rect": {
+      "x": 0,
+      "y": 0,
+      "width": 1177.7307692307693,
+      "height": 694.7296416938111
+    },
+    "detected_image_content_rect": {
+      "x": 0,
+      "y": 0,
+      "width": 1177.7307692307693,
+      "height": 694.7296416938111
+    },
     "image_original_size": {
       "width": 1180,
       "height": 697
     },
-    "image_import_info": null,
-    "meters_per_pixel": null,
-    "project_alignment": null
+    "image_import_info": {
+      "originalSize": {
+        "width": 1180,
+        "height": 697
+      },
+      "preparedSize": {
+        "width": 1180,
+        "height": 697
+      },
+      "originalMime": "image/png",
+      "outputMime": "image/png",
+      "optimized": false
+    },
+    "meters_per_pixel": 0.08179608532777577,
+    "project_alignment": {
+      "referenceFloor": null,
+      "pixelsPerMeter": null,
+      "rotation": 0,
+      "tolerancePct": 2
+    }
   },
   "nodes": [
     {
@@ -15224,5 +15251,39 @@
       "store_entrance": 72,
       "restroom": 1
     }
-  }
+  },
+  "building_footprint_local_m": [
+    {
+      "x": 26.811008,
+      "y": 13.311745
+    },
+    {
+      "x": 93.84319,
+      "y": 13.481845
+    },
+    {
+      "x": 93.754129,
+      "y": 115.196238
+    },
+    {
+      "x": 26.956547,
+      "y": 114.741135
+    },
+    {
+      "x": 26.867484,
+      "y": 80.153696
+    },
+    {
+      "x": 28.559689,
+      "y": 79.812373
+    },
+    {
+      "x": 28.515157,
+      "y": 48.18306
+    },
+    {
+      "x": 26.733889,
+      "y": 48.410611
+    }
+  ]
 }
