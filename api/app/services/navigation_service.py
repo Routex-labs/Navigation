@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.domain.dijkstra import ShortestPath, find_shortest_path
 from app.domain.tiling import local_points_to_lnglat
-from app.models import Edge, Floor, Node
+from app.models import Building, Edge, Floor, Node
 from app.queries.geo_transform import fit_building_geo_transform
 
 
@@ -70,6 +70,15 @@ class NavigationService:
                 "path_found": False,
             }
 
+        # 모든 층이 건물 공통 local_m 프레임으로 정규화돼 적재되므로(scripts/floor_alignment)
+        # 건물 변환 하나로 층을 넘나드는 경로 전체를 wgs84로 옮길 수 있다.
+        path_points = self._build_path_points(path, nodes, edges)
+        transform = fit_building_geo_transform(self._session, building_id)
+        path_points_wgs84 = [
+            {"lng": lng, "lat": lat}
+            for lng, lat in local_points_to_lnglat(path_points, transform)
+        ]
+
         return {
             "start_node_id": start_node_id,
             "end_node_id": end_node_id,
@@ -77,7 +86,8 @@ class NavigationService:
             "node_ids": list(path.node_ids),
             "edge_ids": list(path.edge_ids),
             "coordinate_system": "local_m",
-            "path_points": self._build_path_points(path, nodes, edges),
+            "path_points": path_points,
+            "path_points_wgs84": path_points_wgs84,
             "total_distance_m": round(path.total_distance_m, 3),
         }
 
