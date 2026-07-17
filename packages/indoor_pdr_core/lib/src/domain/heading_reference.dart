@@ -11,11 +11,13 @@ HeadingReference headingReferenceFromSource(String? source) {
     return HeadingReference.magneticNorth;
   }
   // Android TYPE_ROTATION_VECTOR는 자력계·자이로·가속도 융합으로 지자기 북을
-  // 기준으로 한다. GAME_ROTATION_VECTOR/gyro hold는 절대 기준이 아니므로 제외한다.
+  // 기준으로 한다. 자력 교란 때 잠시 gyro hold를 하더라도, 이 값은 마지막
+  // rotation-vector frame에서 적분을 이어가므로 기준 frame 자체는 자북이다.
+  // 품질 저하는 HeadingEvent.headingStable로 별도 전달된다. 반면
+  // GAME_ROTATION_VECTOR/순수 gyro hold는 절대 기준이 아니므로 제외한다.
   if (source != null &&
       source.contains('rotation_vector') &&
-      !source.contains('game_rotation_vector') &&
-      !source.contains('gyro_hold')) {
+      !source.contains('game_rotation_vector')) {
     return HeadingReference.magneticNorth;
   }
   if (source != null && source.contains('xArbitraryCorrectedZVertical')) {

@@ -281,7 +281,18 @@ class PdrMotionBridge(
             fieldDeviation > 0.35 || innovation > 35 || inaccurate
         if (useGyroHold && gyroHeadingInitialized) {
             fusedHeadingDeg = gyroHeadingDeg
-            selectedHeadingSource = "sensor_manager/gyro_hold"
+            // TYPE_ROTATION_VECTOR는 자력계까지 포함한 9-axis fusion이라
+            // gyro hold 중에도 마지막 절대 북 기준 frame을 이어받는다. hold는
+            // "정확도가 낮다"는 뜻이지, heading frame 자체가 arbitrary로
+            // 바뀐다는 뜻은 아니다. 반대로 game rotation vector는 처음부터
+            // 자력계를 쓰지 않으므로 기존처럼 absolute heading으로 선언하지
+            // 않는다.
+            selectedHeadingSource = if (rotationSource.contains("rotation_vector") &&
+                !rotationSource.contains("game")) {
+                "sensor_manager/rotation_vector+gyro_hold"
+            } else {
+                "sensor_manager/gyro_hold"
+            }
             headingStable = false
             return
         }
