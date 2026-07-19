@@ -3,7 +3,7 @@
 URL·쿼리 파라미터 파싱, `Depends(get_db)` 주입, `response_model`(=`dto/`) 지정,
 그리고 **아래 계층의 반환을 HTTP 상태 코드로 번역**하는 일만 한다. 비즈니스 로직은 없다.
 
-> Spring 대응: `@RestController`. 얇게 유지 — 조회는 `repositories/`, 계산은 `services/`.
+> Spring 대응: `@RestController`. 얇게 유지 — 조회는 `repositories/`. 경로 계산은 서버에 없다(클라이언트가 `navigation_graph`로 온디바이스 수행).
 
 ---
 
@@ -11,7 +11,7 @@ URL·쿼리 파라미터 파싱, `Depends(get_db)` 주입, `response_model`(=`dt
 
 | 파일 | prefix | 담당 |
 |---|---|---|
-| `buildings.py` | `/buildings` | 건물/층/지도/그래프/경로/타일 |
+| `buildings.py` | `/buildings` | 건물/층/지도/그래프/타일 |
 | `fonts.py` | `/fonts` | MapLibre 글리프(.pbf) 서빙 |
 | `query.py` | `/query` | 자연어 질의 (현재 stub) |
 | `__init__.py` | — | 패키지 표식 |
@@ -28,7 +28,6 @@ URL·쿼리 파라미터 파싱, `Depends(get_db)` 주입, `response_model`(=`dt
 |---|---|
 | dict / list | 200 |
 | `None` | `HTTPException(404)` |
-| `{"path_found": False}` | `HTTPException(404, "Route not found")` |
 | `ValueError` | `HTTPException(400, str(error))` |
 
 ```python
@@ -44,7 +43,7 @@ def get_building(building_id: str, session: Session = Depends(get_db)):
 주의점:
 
 - **모든 핸들러는 `def`(동기)로 선언한다.** SQLAlchemy 동기 IO라 `async def`로 두면 이벤트 루프가 막힌다(동기 `def`는 anyio 스레드풀에서 실행됨).
-- `buildings.py`는 **단순 조회는 `repositories.building_queries`**, **최단 경로만 `services.NavigationService`**를 쓴다.
+- `buildings.py`는 **조회를 `repositories.building_queries`**로 처리한다. 최단 경로는 서버에서 계산하지 않고, 층 지도 응답의 `navigation_graph`를 받아 **클라이언트가 온디바이스 탐색**한다.
 - `fonts.py`는 `resources/fonts/`에서 `.pbf`를 읽어 준다. 없는 범위는 404가 아니라 **빈 200**을 돌려준다(MapLibre가 404를 스타일 오류로 보고 심볼 레이아웃을 멈추지 않게). 경로 조작 방지로 `FONTS_DIR` 밖 접근을 차단한다.
 
 ---
@@ -56,7 +55,6 @@ routers/buildings.py
     ──►  core.database.get_db
     ──►  dto/ (response_model)
     ──►  repositories.building_queries, tile_queries
-    ──►  services.NavigationService
 
 main.create_app()  ──►  routers (include_router)
 ```
@@ -69,7 +67,7 @@ main.create_app()  ──►  routers (include_router)
 
 | 하고 싶은 것 | 방법 |
 |---|---|
-| 새 엔드포인트 | 핸들러(`def` + `Depends(get_db)`) → `response_model`에 dto 지정 → 조회/서비스 호출 |
+| 새 엔드포인트 | 핸들러(`def` + `Depends(get_db)`) → `response_model`에 dto 지정 → 조회 호출 |
 | 새 라우터 파일 | `APIRouter(prefix=...)` 만들고 `main.create_app()`에서 `include_router` |
 | 에러 응답 형태 변경 | `HTTPException(status_code, detail=...)` (핸들러에서만) |
-| 응답 필드 추가 | 여기 말고 `dto/` + `repositories/`·`services/` |
+| 응답 필드 추가 | 여기 말고 `dto/` + `repositories/` |

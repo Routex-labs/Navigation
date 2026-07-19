@@ -14,7 +14,7 @@ HTTP로 **오가는 데이터의 모양**을 Pydantic 모델로 정의한다. Fa
 |---|---|---|
 | `building.py` | 건물 목록/상세 | `BuildingSummaryResponse`, `BuildingDetailResponse` |
 | `floor_map.py` | 층 지도 화면 | `FloorMapResponse`, `StoreResponse`, `PoiResponse` |
-| `route.py` | 최단 경로 / 그래프 | `RouteResponse`, `FloorGraphResponse`, `GraphEdgeResponse` |
+| `route.py` | 길찾기 그래프 | `FloorGraphResponse`, `GraphNodeResponse`, `GraphEdgeResponse` |
 | `health.py` | 헬스 체크 | `HealthResponse` |
 | `__init__.py` | 패키지 표식 | — |
 

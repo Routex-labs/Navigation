@@ -59,7 +59,6 @@ geo/tiling.py        ──►  geo.georeference.GeoTransform (타입), app.mode
 
 repositories/geo_transform.py  ──►  geo.georeference (변환 피팅)
 repositories/building_queries.py, tile_queries.py ──►  geo.tiling, geo.georeference
-services/navigation_service.py ──►  geo.tiling (경로 점 wgs84 변환)
 ```
 
 - **geo는 app 상위 계층에 의존하지 않는다.** `models`의 값 필드(`x_m`, `polygon` 등)만 읽는다.

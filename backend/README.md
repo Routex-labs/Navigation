@@ -12,11 +12,9 @@ FastAPI 기반 실내 내비게이션 API 서버.
 | 진입점 | [`app/main.py`](app/main.py) | FastAPI 앱 팩토리 · 라우터 등록 · `/health` |
 | 경계 | [`app/routers/`](app/routers/README.md) | HTTP 엔드포인트, 상태 코드 번역 |
 | 계약 | [`app/dto/`](app/dto/README.md) | Pydantic 요청/응답 스키마 |
-| 조합 | [`app/services/`](app/services/README.md) | 비즈니스 규칙 · 유스케이스 조립 |
 | 접근 | [`app/repositories/`](app/repositories/README.md) | DB 조회 + 응답 dict 조립 |
 | 데이터 | [`app/models/`](app/models/README.md) | SQLAlchemy ORM 엔티티 (테이블) |
 | 순수 로직 | [`app/geo/`](app/geo/README.md) | 좌표 변환 · 지도 타일 |
-| 순수 로직 | [`app/routing/`](app/routing/README.md) | 경로 탐색(다익스트라) |
 | 인프라 | [`app/core/`](app/core/README.md) | 설정 · DB 엔진/세션 |
 | 스크립트 | [`scripts/seed/`](scripts/seed/README.md) | DB 초기화 · 시드 (DB 접근) |
 | 스크립트 | [`scripts/transform/`](scripts/transform/README.md) | 순수 변환 (파일→파일 / dict→dict) |
@@ -31,9 +29,7 @@ backend/
 │   ├── models/          # SQLAlchemy ORM 모델 (DB 테이블)
 │   ├── dto/             # Pydantic 요청/응답 스키마
 │   ├── repositories/    # DB 쿼리 계층 (건물·타일 조회, 좌표 변환)
-│   ├── services/        # 도메인 로직 조합 (navigation_service)
 │   ├── geo/             # 지리 계산 (georeference, tiling)
-│   ├── routing/         # 경로 탐색 알고리즘 (dijkstra)
 │   └── routers/         # HTTP 엔드포인트 (buildings, query, fonts)
 ├── scripts/             # 오프라인 실행용 스크립트
 │   ├── seed/            # DB 초기화·시드 (reset_and_seed 등)
@@ -43,14 +39,15 @@ backend/
 │   └── studio/          # 스튜디오 원본 데이터
 ├── data/                # 런타임 SQLite DB (gitignore, 재생성 가능)
 └── tests/               # 테스트
-    ├── unit/            # 단위 테스트 (알고리즘·서비스)
+    ├── unit/            # 단위 테스트 (좌표 변환·타일·시드)
     └── integration/     # 통합 테스트 (API·DB)
 ```
 
 ## 계층 흐름
 
 요청은 바깥(HTTP)에서 안(DB)으로 흐르고, 결과는 `dto`로 직렬화되어 돌아간다.
-`geo`·`routing`은 프레임워크를 모르는 순수 계산 모듈이고, `core`는 모두가 딛는 기반이다.
+`geo`는 프레임워크를 모르는 순수 계산 모듈이고, `core`는 모두가 딛는 기반이다.
+최단 경로 계산은 서버에 없다 — 층 지도 응답의 `navigation_graph`를 받아 **클라이언트가 온디바이스 Dijkstra**(`client/lib/domain/dijkstra.dart`)로 수행한다.
 
 ```
         HTTP 요청
@@ -59,16 +56,16 @@ backend/
    ┌───────────────┐   response_model
    │   routers/    │───────────────► dto/        (계약: 나가는 모양)
    └───────┬───────┘
-           │  단순 조회        │  계산·조합
-           ▼                   ▼
-   ┌───────────────┐   ┌───────────────┐
-   │ repositories/ │◄──│   services/   │
-   └───────┬───────┘   └───────┬───────┘
-           │                   │ 사용
-           ▼                   ▼
-   ┌───────────────┐   ┌──────────────────────┐
-   │    models/    │   │  geo/ · routing/     │  (순수 로직, 부작용 없음)
-   │   (ORM/DB)    │   └──────────────────────┘
+           │  조회
+           ▼
+   ┌───────────────┐        ┌──────────────┐
+   │ repositories/ │───사용─►│    geo/      │  (순수 로직, 부작용 없음)
+   └───────┬───────┘        └──────────────┘
+           │
+           ▼
+   ┌───────────────┐
+   │    models/    │
+   │   (ORM/DB)    │
    └───────┬───────┘
            ▼
         SQLite
@@ -76,7 +73,7 @@ backend/
    core/ (config·database) ── 위 모든 계층이 Session/설정을 여기서 얻음
 ```
 
-의존 규칙: 바깥이 안을 호출하고, 안은 바깥을 모른다. `models`/`geo`/`routing`은 상위 계층에 의존하지 않으며, `dto`는 `models`를 import하지 않는다(저장되는 모양 ≠ 나가는 모양).
+의존 규칙: 바깥이 안을 호출하고, 안은 바깥을 모른다. `models`/`geo`는 상위 계층에 의존하지 않으며, `dto`는 `models`를 import하지 않는다(저장되는 모양 ≠ 나가는 모양).
 
 ## 실행
 
