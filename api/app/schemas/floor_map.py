@@ -27,6 +27,7 @@ class StoreResponse(BaseModel):
     id: str
     floor_id: str
     name: str
+    category: str | None = None
     centroid_local_m: PointResponse
     # 실측 앵커가 부족하면 합성 좌표 기반 근사치가 채워진다.
     centroid_wgs84: LatLngResponse | None

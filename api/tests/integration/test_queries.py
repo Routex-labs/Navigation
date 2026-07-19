@@ -35,6 +35,10 @@ def test_층_지도는_기존_JSON_구조를_유지한다(db_session):
     assert result["stores"] and result["pois"]
     assert len(result["navigation_graph"]["nodes"]) == 8
     assert all(store["polygon_local_m"] for store in result["stores"])
+    # 매장 카테고리(한글 대분류)가 층 지도까지 전달된다. 미지정 매장은 None.
+    categories = {store["name"]: store["category"] for store in result["stores"]}
+    assert categories["가게A"] == "여성패션"
+    assert categories["가게B"] is None
 
 
 # 층 그래프 간선이 from/to 짧은 키로 노출되는지 검증한다.

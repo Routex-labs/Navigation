@@ -145,6 +145,8 @@ def _reshape_stores(
                 "id": store["id"],  # store id는 층별로 이미 유일(네임스페이싱 불필요)
                 # 매칭 안 된 구조물 footprint는 name이 null → store id로 폴백(stores.name NOT NULL)
                 "name": store.get("name") or store["id"],
+                # 한글 대분류 카테고리(없으면 None). name-null footprint는 category도 null.
+                "category": store.get("category"),
                 # seed_navigation는 store["centroid"]["local_m"] 구조를 기대한다.
                 "centroid": {"local_m": floor_alignment.apply_point(align, centroid)},
                 "entrance_local_m": floor_alignment.apply_point(align, entrance) if entrance else None,

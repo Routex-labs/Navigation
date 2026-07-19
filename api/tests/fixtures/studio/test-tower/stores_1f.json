@@ -11,6 +11,7 @@
     {
       "id": "shop-a-1f",
       "name": "가게A",
+      "category": "여성패션",
       "floor_id": "FL-TEST-1F",
       "entrance_node_id": "S-1",
       "entrance_local_m": {

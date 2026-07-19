@@ -179,6 +179,7 @@ def _to_store_dict(store: Store, transform: GeoTransform | None) -> dict[str, An
         "id": store.id,
         "floor_id": store.floor_id,
         "name": store.name,
+        "category": store.category,
         "centroid_local_m": {"x": store.centroid_x_m, "y": store.centroid_y_m},
         "centroid_wgs84": centroid_wgs84,
         "polygon_wgs84": polygon_wgs84,

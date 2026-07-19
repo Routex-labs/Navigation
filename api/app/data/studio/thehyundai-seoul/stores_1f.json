@@ -11,6 +11,7 @@
     {
       "id": "store_007",
       "name": "미우미우",
+      "category": "명품",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "ND-6SlOSPK_Z2753",
       "entrance_local_m": {
@@ -55,6 +56,7 @@
     {
       "id": "store_000",
       "name": "보테가 베네타",
+      "category": "명품",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_000",
       "entrance_local_m": {
@@ -95,6 +97,7 @@
     {
       "id": "store_001",
       "name": "펜디",
+      "category": "명품",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_001",
       "entrance_local_m": {
@@ -139,6 +142,7 @@
     {
       "id": "store_002",
       "name": "불가리",
+      "category": "시계·주얼리",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_002",
       "entrance_local_m": {
@@ -179,6 +183,7 @@
     {
       "id": "store_003",
       "name": "부쉐론",
+      "category": "시계·주얼리",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_003",
       "entrance_local_m": {
@@ -219,6 +224,7 @@
     {
       "id": "store_004",
       "name": "리모와",
+      "category": "잡화",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_004",
       "entrance_local_m": {
@@ -259,6 +265,7 @@
     {
       "id": "store_005",
       "name": "토즈",
+      "category": "명품",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_005",
       "entrance_local_m": {
@@ -299,6 +306,7 @@
     {
       "id": "store_006",
       "name": "버버리",
+      "category": "명품",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_006",
       "entrance_local_m": {
@@ -343,6 +351,7 @@
     {
       "id": "store_012",
       "name": "마티에 프리미에르",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_012",
       "entrance_local_m": {
@@ -383,6 +392,7 @@
     {
       "id": "store_013",
       "name": "톰포드 뷰티",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_013",
       "entrance_local_m": {
@@ -423,6 +433,7 @@
     {
       "id": "store_014",
       "name": "에스티 로더",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_014",
       "entrance_local_m": {
@@ -463,6 +474,7 @@
     {
       "id": "store_015",
       "name": "프라다 뷰티",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_015",
       "entrance_local_m": {
@@ -503,6 +515,7 @@
     {
       "id": "store_016",
       "name": "조 말론 런던",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_016",
       "entrance_local_m": {
@@ -543,6 +556,7 @@
     {
       "id": "store_017",
       "name": "로에베",
+      "category": "명품",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_017",
       "entrance_local_m": {
@@ -587,6 +601,7 @@
     {
       "id": "store_019",
       "name": "루이비통",
+      "category": "명품",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_019",
       "entrance_local_m": {
@@ -643,6 +658,7 @@
     {
       "id": "store_020",
       "name": "구찌",
+      "category": "명품",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_020",
       "entrance_local_m": {
@@ -707,6 +723,7 @@
     {
       "id": "store_021",
       "name": "발렌티노",
+      "category": "명품",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_021",
       "entrance_local_m": {
@@ -747,6 +764,7 @@
     {
       "id": "store_022",
       "name": "톰브라운",
+      "category": "명품",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_022",
       "entrance_local_m": {
@@ -787,6 +805,7 @@
     {
       "id": "store_023",
       "name": "생로랑",
+      "category": "명품",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_023",
       "entrance_local_m": {
@@ -831,6 +850,7 @@
     {
       "id": "store_024",
       "name": "몽클레르",
+      "category": "명품",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_024",
       "entrance_local_m": {
@@ -875,6 +895,7 @@
     {
       "id": "store_025",
       "name": "발렌시아가",
+      "category": "명품",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_025",
       "entrance_local_m": {
@@ -935,6 +956,7 @@
     {
       "id": "store_026",
       "name": "프라다",
+      "category": "명품",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_026",
       "entrance_local_m": {
@@ -999,6 +1021,7 @@
     {
       "id": "store_027",
       "name": "메종 프란시스 커정",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_027",
       "entrance_local_m": {
@@ -1035,6 +1058,7 @@
     {
       "id": "store_028",
       "name": "프레 데릭말",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_028",
       "entrance_local_m": {
@@ -1071,6 +1095,7 @@
     {
       "id": "store_029",
       "name": "산타 마리아 노벨라",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_029",
       "entrance_local_m": {
@@ -1107,6 +1132,7 @@
     {
       "id": "store_030",
       "name": "헤라",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_030",
       "entrance_local_m": {
@@ -1147,6 +1173,7 @@
     {
       "id": "store_031",
       "name": "설화수",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_031",
       "entrance_local_m": {
@@ -1187,6 +1214,7 @@
     {
       "id": "store_032",
       "name": "나스",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_032",
       "entrance_local_m": {
@@ -1223,6 +1251,7 @@
     {
       "id": "store_033",
       "name": "에르메스 뷰티",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_033",
       "entrance_local_m": {
@@ -1263,6 +1292,7 @@
     {
       "id": "store_034",
       "name": "아르마니 뷰티",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_034",
       "entrance_local_m": {
@@ -1303,6 +1333,7 @@
     {
       "id": "store_035",
       "name": "아쿠아 디 파르마",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_035",
       "entrance_local_m": {
@@ -1343,6 +1374,7 @@
     {
       "id": "store_036",
       "name": "시슬리",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_036",
       "entrance_local_m": {
@@ -1383,6 +1415,7 @@
     {
       "id": "store_037",
       "name": "입생로랑",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_037",
       "entrance_local_m": {
@@ -1423,6 +1456,7 @@
     {
       "id": "store_038",
       "name": "메종 마르지엘라 퍼퓸",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_038",
       "entrance_local_m": {
@@ -1463,6 +1497,7 @@
     {
       "id": "store_039",
       "name": "디올 뷰티",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_039",
       "entrance_local_m": {
@@ -1503,6 +1538,7 @@
     {
       "id": "store_040",
       "name": "탬버린즈",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_040",
       "entrance_local_m": {
@@ -1543,6 +1579,7 @@
     {
       "id": "store_041",
       "name": "오휘/후",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_041",
       "entrance_local_m": {
@@ -1579,6 +1616,7 @@
     {
       "id": "store_042",
       "name": "MAC",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_042",
       "entrance_local_m": {
@@ -1619,6 +1657,7 @@
     {
       "id": "store_043",
       "name": "젠틀몬스터",
+      "category": "잡화",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_043",
       "entrance_local_m": {
@@ -1659,6 +1698,7 @@
     {
       "id": "store_044",
       "name": "바이 레도",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_044",
       "entrance_local_m": {
@@ -1699,6 +1739,7 @@
     {
       "id": "store_045",
       "name": "딥티크",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_045",
       "entrance_local_m": {
@@ -1739,6 +1780,7 @@
     {
       "id": "store_046",
       "name": "크리드",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_046",
       "entrance_local_m": {
@@ -1775,6 +1817,7 @@
     {
       "id": "store_047",
       "name": "키엘",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_047",
       "entrance_local_m": {
@@ -1815,6 +1858,7 @@
     {
       "id": "store_048",
       "name": "이솝",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_048",
       "entrance_local_m": {
@@ -1855,6 +1899,7 @@
     {
       "id": "store_050",
       "name": "메모 파리",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_050",
       "entrance_local_m": {
@@ -1895,6 +1940,7 @@
     {
       "id": "store_051",
       "name": "크리스챤 디올 (남/여)",
+      "category": "명품",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_051",
       "entrance_local_m": {
@@ -1935,6 +1981,7 @@
     {
       "id": "store_052",
       "name": "록시땅",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_052",
       "entrance_local_m": {
@@ -1971,6 +2018,7 @@
     {
       "id": "store_053",
       "name": "르 라보",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_053",
       "entrance_local_m": {
@@ -2011,6 +2059,7 @@
     {
       "id": "store_054",
       "name": "스킨 케어룸",
+      "category": "서비스",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_054",
       "entrance_local_m": {
@@ -2051,6 +2100,7 @@
     {
       "id": "store_055",
       "name": "커뮤니티 라운지",
+      "category": "편의시설",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_055",
       "entrance_local_m": {
@@ -2091,6 +2141,7 @@
     {
       "id": "store_056",
       "name": "구찌 뷰티",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_056",
       "entrance_local_m": {
@@ -2127,6 +2178,7 @@
     {
       "id": "store_057",
       "name": "다미아니",
+      "category": "시계·주얼리",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_057",
       "entrance_local_m": {
@@ -2167,6 +2219,7 @@
     {
       "id": "store_059",
       "name": "페라가모",
+      "category": "명품",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_059",
       "entrance_local_m": {
@@ -2219,6 +2272,7 @@
     {
       "id": "store_060",
       "name": "반클리프아펠",
+      "category": "시계·주얼리",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "store_entrance_060",
       "entrance_local_m": {
@@ -2259,6 +2313,7 @@
     {
       "id": "store_008",
       "name": "셀린느",
+      "category": "명품",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "node_002",
       "entrance_local_m": {
@@ -2315,6 +2370,7 @@
     {
       "id": "store_011",
       "name": "쿠오카",
+      "category": "명품",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "node_022",
       "entrance_local_m": {
@@ -2355,6 +2411,7 @@
     {
       "id": "store_010",
       "name": "샤넬 뷰티",
+      "category": "화장품·향수",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "node_025",
       "entrance_local_m": {
@@ -2403,6 +2460,7 @@
     {
       "id": "ST-1F-001",
       "name": "컨시어지(안내데스크)",
+      "category": "편의시설",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "node_019",
       "entrance_local_m": {
@@ -2443,6 +2501,7 @@
     {
       "id": "footprint_002",
       "name": "레페토",
+      "category": "잡화",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "ND-Ogj7-mAZb6206",
       "entrance_local_m": {
@@ -2483,6 +2542,7 @@
     {
       "id": "footprint_060",
       "name": "엘레베이터",
+      "category": "편의시설",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": null,
@@ -2517,6 +2577,7 @@
     {
       "id": "footprint_061",
       "name": "엘레베이터",
+      "category": "편의시설",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": null,
@@ -2551,6 +2612,7 @@
     {
       "id": "footprint_005",
       "name": "티파니앤코",
+      "category": "시계·주얼리",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "ND-M9EBIIyAu8179",
       "entrance_local_m": {
@@ -2599,6 +2661,7 @@
     {
       "id": "footprint_063",
       "name": "투어리스트 데스크 서비스",
+      "category": "편의시설",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": null,
@@ -2633,6 +2696,7 @@
     {
       "id": "footprint_064",
       "name": "투어리스트 데스크 서비스",
+      "category": "편의시설",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": null,
@@ -2667,6 +2731,7 @@
     {
       "id": "footprint_065",
       "name": "화장실",
+      "category": "편의시설",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": null,
@@ -2701,6 +2766,7 @@
     {
       "id": "footprint_066",
       "name": "장애인 화장실",
+      "category": "편의시설",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": null,
@@ -2735,6 +2801,7 @@
     {
       "id": "footprint_067",
       "name": "정수기",
+      "category": "편의시설",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": null,
@@ -2769,6 +2836,7 @@
     {
       "id": "ST-1F-002",
       "name": "발레라운지",
+      "category": "편의시설",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": "node_021",
       "entrance_local_m": {
@@ -2809,6 +2877,7 @@
     {
       "id": "footprint_069",
       "name": "엘레베이터",
+      "category": "편의시설",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": null,
@@ -2843,6 +2912,7 @@
     {
       "id": "footprint_070",
       "name": "엘레베이터",
+      "category": "편의시설",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": null,
@@ -2877,6 +2947,7 @@
     {
       "id": "footprint_071",
       "name": "엘레베이터",
+      "category": "편의시설",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": null,
@@ -2911,6 +2982,7 @@
     {
       "id": "footprint_072",
       "name": "서쪽에스컬레이터",
+      "category": "편의시설",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": null,
@@ -2945,6 +3017,7 @@
     {
       "id": "footprint_073",
       "name": "중앙에스컬레이터1",
+      "category": "편의시설",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": null,
@@ -2979,6 +3052,7 @@
     {
       "id": "footprint_074",
       "name": "중앙에스컬레이터2",
+      "category": "편의시설",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": null,
@@ -3013,6 +3087,7 @@
     {
       "id": "footprint_075",
       "name": "동쪽에스컬레이터",
+      "category": "편의시설",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": null,
