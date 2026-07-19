@@ -74,6 +74,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   bool _placingPdrAnchor = false;
   PdrDebugSessionRecorder? _pdrDebugRecorder;
   bool _exportingPdrDebugJson = false;
+  final GlobalKey _pdrShareButtonKey = GlobalKey();
 
   /// 검색·길찾기 시트가 지도 위에 떠 있는 동안 지도 제스처를 꺼서, 시트를
   /// 마우스 휠로 스크롤할 때 그 아래 지도까지 같이 움직이지 않게 한다.
@@ -473,12 +474,35 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         graph: _floorGraph,
         device: device,
       );
-      await const PdrDebugSessionShare().share(session);
+      await const PdrDebugSessionShare().share(
+        session,
+        sharePositionOrigin: _pdrSharePositionOrigin(),
+      );
     } on Object catch (error) {
       if (mounted) _showPdrMessage('PDR JSON을 내보내지 못했습니다: $error');
     } finally {
       if (mounted) setState(() => _exportingPdrDebugJson = false);
     }
+  }
+
+  /// iOS 공유 시트는 popover 기준 사각형이 필요하다. 전달하지 않으면
+  /// share_plus가 `{0, 0, 0, 0}`을 보내 iOS에서 공유를 거부한다.
+  Rect? _pdrSharePositionOrigin() {
+    final buttonBox =
+        _pdrShareButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (buttonBox != null &&
+        buttonBox.hasSize &&
+        buttonBox.size.isEmpty == false) {
+      return buttonBox.localToGlobal(Offset.zero) & buttonBox.size;
+    }
+
+    final screenBox = context.findRenderObject() as RenderBox?;
+    if (screenBox != null &&
+        screenBox.hasSize &&
+        screenBox.size.isEmpty == false) {
+      return screenBox.localToGlobal(Offset.zero) & screenBox.size;
+    }
+    return null;
   }
 
   @override
@@ -598,6 +622,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
                   !pdrActive && (_pdrDebugRecorder?.hasSnapshot ?? false),
               exporting: _exportingPdrDebugJson,
               onExport: _exportPdrDebugJson,
+              shareButtonKey: _pdrShareButtonKey,
             ),
           ),
         ),
@@ -646,6 +671,7 @@ class _PdrMapControl extends StatelessWidget {
     required this.canExport,
     required this.exporting,
     required this.onExport,
+    required this.shareButtonKey,
   });
 
   final bool active;
@@ -653,6 +679,7 @@ class _PdrMapControl extends StatelessWidget {
   final bool canExport;
   final bool exporting;
   final VoidCallback onExport;
+  final GlobalKey shareButtonKey;
 
   @override
   Widget build(BuildContext context) {
@@ -710,6 +737,7 @@ class _PdrMapControl extends StatelessWidget {
             if (canExport) ...[
               Container(width: 1, height: 24, color: const Color(0xFFE0E3E7)),
               IconButton(
+                key: shareButtonKey,
                 tooltip: 'PDR 디버그 JSON 공유',
                 onPressed: exporting ? null : onExport,
                 icon: exporting

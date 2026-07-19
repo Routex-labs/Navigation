@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui';
 
 import 'package:share_plus/share_plus.dart';
 
@@ -6,7 +7,10 @@ import 'package:share_plus/share_plus.dart';
 class PdrDebugSessionShare {
   const PdrDebugSessionShare();
 
-  Future<void> share(Map<String, Object?> session) async {
+  Future<void> share(
+    Map<String, Object?> session, {
+    Rect? sharePositionOrigin,
+  }) async {
     final startedAt = session['started_at_utc']?.toString() ?? 'unknown';
     final filename = 'pdr-debug-${_filenameTimestamp(startedAt)}.json';
     final json = const JsonEncoder.withIndent('  ').convert(session);
@@ -20,6 +24,8 @@ class PdrDebugSessionShare {
       ],
       subject: 'PDR debug session',
       text: 'PDR 실측 디버그 세션 JSON입니다.',
+      sharePositionOrigin: sharePositionOrigin,
+      fileNameOverrides: [filename],
     );
   }
 
