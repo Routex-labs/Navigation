@@ -11,6 +11,8 @@
     {
       "id": "store_4f_000",
       "name": "에이스 프리미엄 스토어",
+      "category": "리빙",
+      "subcategory": "리빙",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_056",
       "entrance_local_m": {
@@ -76,6 +78,8 @@
     {
       "id": "store_4f_001",
       "name": "템퍼",
+      "category": "리빙",
+      "subcategory": "리빙",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_046",
       "entrance_local_m": {
@@ -113,6 +117,8 @@
     {
       "id": "store_4f_002",
       "name": "시몬스",
+      "category": "리빙",
+      "subcategory": "리빙",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_047",
       "entrance_local_m": {
@@ -150,6 +156,8 @@
     {
       "id": "store_4f_003",
       "name": "지누스",
+      "category": "리빙",
+      "subcategory": "리빙",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_032",
       "entrance_local_m": {
@@ -187,6 +195,8 @@
     {
       "id": "store_4f_004",
       "name": "씰리",
+      "category": "리빙",
+      "subcategory": "리빙",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_048",
       "entrance_local_m": {
@@ -224,6 +234,8 @@
     {
       "id": "store_4f_005",
       "name": "무브먼 트랩",
+      "category": "리빙",
+      "subcategory": "리빙",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_041",
       "entrance_local_m": {
@@ -261,6 +273,8 @@
     {
       "id": "store_4f_006",
       "name": "바이리네",
+      "category": "리빙",
+      "subcategory": "리빙",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_070",
       "entrance_local_m": {
@@ -298,6 +312,8 @@
     {
       "id": "store_4f_007",
       "name": "에싸",
+      "category": "리빙",
+      "subcategory": "리빙",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_064",
       "entrance_local_m": {
@@ -335,6 +351,8 @@
     {
       "id": "store_4f_008",
       "name": "리네 로제",
+      "category": "리빙",
+      "subcategory": "리빙",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_039",
       "entrance_local_m": {
@@ -372,6 +390,8 @@
     {
       "id": "store_4f_009",
       "name": "캘러 웨이",
+      "category": "스포츠·골프",
+      "subcategory": "골프",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_054",
       "entrance_local_m": {
@@ -409,6 +429,8 @@
     {
       "id": "store_4f_010",
       "name": "크랙앤칼",
+      "category": "리빙",
+      "subcategory": "리빙",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_053",
       "entrance_local_m": {
@@ -446,6 +468,8 @@
     {
       "id": "store_4f_052",
       "name": "화장실",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "node_013",
       "entrance_local_m": {
@@ -487,6 +511,8 @@
     {
       "id": "store_4f_012",
       "name": "타이틀 리스트",
+      "category": "스포츠·골프",
+      "subcategory": "골프",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_000",
       "entrance_local_m": {
@@ -524,6 +550,8 @@
     {
       "id": "store_4f_013",
       "name": "제이린드 버그",
+      "category": "스포츠·골프",
+      "subcategory": "골프",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_001",
       "entrance_local_m": {
@@ -561,6 +589,8 @@
     {
       "id": "store_4f_014",
       "name": "브리핑 골프",
+      "category": "스포츠·골프",
+      "subcategory": "골프",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_002",
       "entrance_local_m": {
@@ -598,6 +628,8 @@
     {
       "id": "store_4f_015",
       "name": "세인트 앤드류스",
+      "category": "스포츠·골프",
+      "subcategory": "골프",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_003",
       "entrance_local_m": {
@@ -635,6 +667,8 @@
     {
       "id": "store_4f_016",
       "name": "어메이징 크리",
+      "category": "스포츠·골프",
+      "subcategory": "골프",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_012",
       "entrance_local_m": {
@@ -672,6 +706,8 @@
     {
       "id": "store_4f_017",
       "name": "말본 골프",
+      "category": "스포츠·골프",
+      "subcategory": "골프",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_011",
       "entrance_local_m": {
@@ -713,6 +749,8 @@
     {
       "id": "store_4f_018",
       "name": "윌슨",
+      "category": "스포츠·골프",
+      "subcategory": "스포츠·아웃도어",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_013",
       "entrance_local_m": {
@@ -762,6 +800,8 @@
     {
       "id": "store_4f_019",
       "name": "시다스",
+      "category": "스포츠·골프",
+      "subcategory": "스포츠·아웃도어",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_016",
       "entrance_local_m": {
@@ -799,6 +839,8 @@
     {
       "id": "store_4f_020",
       "name": "후그",
+      "category": "스포츠·골프",
+      "subcategory": "스포츠·아웃도어",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_010",
       "entrance_local_m": {
@@ -836,6 +878,8 @@
     {
       "id": "store_4f_021",
       "name": "지포어",
+      "category": "스포츠·골프",
+      "subcategory": "골프",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_009",
       "entrance_local_m": {
@@ -873,6 +917,8 @@
     {
       "id": "store_4f_022",
       "name": "티노5",
+      "category": "스포츠·골프",
+      "subcategory": "골프",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_008",
       "entrance_local_m": {
@@ -926,6 +972,8 @@
     {
       "id": "store_4f_023",
       "name": "만다리나덕",
+      "category": "잡화",
+      "subcategory": "잡화",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_071",
       "entrance_local_m": {
@@ -963,6 +1011,8 @@
     {
       "id": "store_4f_024",
       "name": "빈폴",
+      "category": "패션",
+      "subcategory": "남성패션",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_019",
       "entrance_local_m": {
@@ -1008,6 +1058,8 @@
     {
       "id": "store_4f_025",
       "name": "라코스테",
+      "category": "패션",
+      "subcategory": "남성패션",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_020",
       "entrance_local_m": {
@@ -1061,6 +1113,8 @@
     {
       "id": "store_4f_026",
       "name": "타미힐피거",
+      "category": "패션",
+      "subcategory": "남성패션",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_018",
       "entrance_local_m": {
@@ -1118,6 +1172,8 @@
     {
       "id": "store_4f_027",
       "name": "노스페이스",
+      "category": "스포츠·골프",
+      "subcategory": "스포츠·아웃도어",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_017",
       "entrance_local_m": {
@@ -1155,6 +1211,8 @@
     {
       "id": "store_4f_028",
       "name": "파타고니아",
+      "category": "스포츠·골프",
+      "subcategory": "스포츠·아웃도어",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_074",
       "entrance_local_m": {
@@ -1192,6 +1250,8 @@
     {
       "id": "store_4f_029",
       "name": "살로몬",
+      "category": "스포츠·골프",
+      "subcategory": "스포츠·아웃도어",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_075",
       "entrance_local_m": {
@@ -1229,6 +1289,8 @@
     {
       "id": "store_4f_030",
       "name": "아크 테릭스",
+      "category": "스포츠·골프",
+      "subcategory": "스포츠·아웃도어",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_030",
       "entrance_local_m": {
@@ -1266,6 +1328,8 @@
     {
       "id": "store_4f_031",
       "name": "USM/ 허먼밀러",
+      "category": "리빙",
+      "subcategory": "리빙",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_040",
       "entrance_local_m": {
@@ -1303,6 +1367,8 @@
     {
       "id": "store_4f_032",
       "name": "노르딕 슬립",
+      "category": "리빙",
+      "subcategory": "리빙",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_033",
       "entrance_local_m": {
@@ -1340,6 +1406,8 @@
     {
       "id": "store_4f_033",
       "name": "피레넥스 (침구)",
+      "category": "리빙",
+      "subcategory": "리빙",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_069",
       "entrance_local_m": {
@@ -1377,6 +1445,8 @@
     {
       "id": "store_4f_034",
       "name": "위글위글",
+      "category": "리빙",
+      "subcategory": "리빙",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_045",
       "entrance_local_m": {
@@ -1414,6 +1484,8 @@
     {
       "id": "store_4f_035",
       "name": "나뚜찌",
+      "category": "리빙",
+      "subcategory": "리빙",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_043",
       "entrance_local_m": {
@@ -1451,6 +1523,8 @@
     {
       "id": "store_4f_036",
       "name": "칼한센 앤선",
+      "category": "리빙",
+      "subcategory": "리빙",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_042",
       "entrance_local_m": {
@@ -1488,6 +1562,8 @@
     {
       "id": "store_4f_037",
       "name": "POP-UP STUDIO B",
+      "category": "팝업",
+      "subcategory": "팝업",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_057",
       "entrance_local_m": {
@@ -1525,6 +1601,8 @@
     {
       "id": "store_4f_038",
       "name": "웨스트 엘름",
+      "category": "리빙",
+      "subcategory": "리빙",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_044",
       "entrance_local_m": {
@@ -1562,6 +1640,8 @@
     {
       "id": "store_4f_039",
       "name": "엘리베이터",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "ND-R6EfIQv7G7473",
       "entrance_local_m": {
@@ -1599,6 +1679,8 @@
     {
       "id": "store_4f_040",
       "name": "엘리베이터",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "ND-zd8eqeyxl7345",
       "entrance_local_m": {
@@ -1636,6 +1718,8 @@
     {
       "id": "store_4f_041",
       "name": "엘리베이터",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "node_001",
       "entrance_local_m": {
@@ -1673,6 +1757,8 @@
     {
       "id": "store_4f_042",
       "name": "엘리베이터",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "ND-NDVX2L3T17813",
       "entrance_local_m": {
@@ -1710,6 +1796,8 @@
     {
       "id": "store_4f_043",
       "name": "에스컬레이터",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "ND--wFamIACZO5593",
       "entrance_local_m": {
@@ -1747,6 +1835,8 @@
     {
       "id": "store_4f_044",
       "name": "에스컬레이터",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": null,
       "entrance_local_m": null,
@@ -1781,6 +1871,8 @@
     {
       "id": "store_4f_045",
       "name": "에스컬레이터",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "node_003",
       "entrance_local_m": {
@@ -1818,6 +1910,8 @@
     {
       "id": "store_4f_046",
       "name": "에스컬레이터",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": null,
       "entrance_local_m": null,
@@ -1852,6 +1946,8 @@
     {
       "id": "store_4f_047",
       "name": "써코니",
+      "category": "스포츠·골프",
+      "subcategory": "스포츠·아웃도어",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_082",
       "entrance_local_m": {
@@ -1889,6 +1985,8 @@
     {
       "id": "store_4f_048",
       "name": "굿러너 컴퍼니",
+      "category": "스포츠·골프",
+      "subcategory": "스포츠·아웃도어",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_014",
       "entrance_local_m": {
@@ -1926,6 +2024,8 @@
     {
       "id": "store_4f_049",
       "name": "POP-UP STUDIO A",
+      "category": "팝업",
+      "subcategory": "팝업",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_015",
       "entrance_local_m": {
@@ -1963,6 +2063,8 @@
     {
       "id": "store_4f_050",
       "name": "씨엘르",
+      "category": "스포츠·골프",
+      "subcategory": "스포츠·아웃도어",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_077",
       "entrance_local_m": {
@@ -2000,6 +2102,8 @@
     {
       "id": "store_4f_051",
       "name": "프롤라",
+      "category": "스포츠·골프",
+      "subcategory": "스포츠·아웃도어",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "node_002",
       "entrance_local_m": {
@@ -2065,6 +2169,8 @@
     {
       "id": "store_4f_052_052",
       "name": "화장실",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "node_013",
       "entrance_local_m": {
@@ -2102,6 +2208,8 @@
     {
       "id": "store_4f_053",
       "name": "유아차 전용 E/V",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "node_025",
       "entrance_local_m": {
@@ -2139,6 +2247,8 @@
     {
       "id": "store_4f_054",
       "name": "풋 조이",
+      "category": "스포츠·골프",
+      "subcategory": "골프",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_004",
       "entrance_local_m": {
@@ -2176,6 +2286,8 @@
     {
       "id": "store_4f_055",
       "name": "보스 골프",
+      "category": "스포츠·골프",
+      "subcategory": "골프",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_005",
       "entrance_local_m": {
@@ -2213,6 +2325,8 @@
     {
       "id": "store_4f_056",
       "name": "코토팍시",
+      "category": "스포츠·골프",
+      "subcategory": "스포츠·아웃도어",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_076",
       "entrance_local_m": {
@@ -2250,6 +2364,8 @@
     {
       "id": "store_4f_057",
       "name": "칼렉",
+      "category": "스포츠·골프",
+      "subcategory": "스포츠·아웃도어",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_078",
       "entrance_local_m": {
@@ -2287,6 +2403,8 @@
     {
       "id": "store_4f_058",
       "name": "스노우 피크",
+      "category": "스포츠·골프",
+      "subcategory": "스포츠·아웃도어",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_021",
       "entrance_local_m": {
@@ -2324,6 +2442,8 @@
     {
       "id": "store_4f_059",
       "name": "안다르",
+      "category": "스포츠·골프",
+      "subcategory": "스포츠·아웃도어",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_052",
       "entrance_local_m": {
@@ -2361,6 +2481,8 @@
     {
       "id": "store_4f_060",
       "name": "아레나",
+      "category": "스포츠·골프",
+      "subcategory": "스포츠·아웃도어",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_050",
       "entrance_local_m": {
@@ -2398,6 +2520,8 @@
     {
       "id": "store_4f_061",
       "name": "나이키스윔",
+      "category": "스포츠·골프",
+      "subcategory": "스포츠·아웃도어",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_051",
       "entrance_local_m": {
@@ -2435,6 +2559,8 @@
     {
       "id": "store_4f_062",
       "name": "몽벨",
+      "category": "스포츠·골프",
+      "subcategory": "스포츠·아웃도어",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_059",
       "entrance_local_m": {
@@ -2472,6 +2598,8 @@
     {
       "id": "store_4f_063",
       "name": "가민",
+      "category": "스포츠·골프",
+      "subcategory": "스포츠·아웃도어",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_079",
       "entrance_local_m": {
@@ -2509,6 +2637,8 @@
     {
       "id": "store_4f_064",
       "name": "정수기",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_066",
       "entrance_local_m": {
@@ -2546,6 +2676,8 @@
     {
       "id": "store_4f_065",
       "name": "정수기",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_065",
       "entrance_local_m": {
@@ -2583,6 +2715,8 @@
     {
       "id": "store_4f_066",
       "name": "리바트 토탈",
+      "category": "리빙",
+      "subcategory": "리빙",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_037",
       "entrance_local_m": {
@@ -2660,6 +2794,8 @@
     {
       "id": "store_4f_067",
       "name": "사우스 케이프",
+      "category": "스포츠·골프",
+      "subcategory": "골프",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_022",
       "entrance_local_m": {
@@ -2701,6 +2837,8 @@
     {
       "id": "store_4f_068",
       "name": "랑방 블랑",
+      "category": "스포츠·골프",
+      "subcategory": "골프",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_023",
       "entrance_local_m": {
@@ -2738,6 +2876,8 @@
     {
       "id": "store_4f_069",
       "name": "A.P.C 골프",
+      "category": "스포츠·골프",
+      "subcategory": "골프",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_024",
       "entrance_local_m": {
@@ -2779,6 +2919,8 @@
     {
       "id": "store_4f_070",
       "name": "바스통",
+      "category": "스포츠·골프",
+      "subcategory": "골프",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_073",
       "entrance_local_m": {
@@ -2840,6 +2982,8 @@
     {
       "id": "store_4f_071",
       "name": "헤지스",
+      "category": "패션",
+      "subcategory": "남성패션",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_072",
       "entrance_local_m": {
@@ -2905,6 +3049,8 @@
     {
       "id": "store_4f_072",
       "name": "윌리엄스 소노마",
+      "category": "리빙",
+      "subcategory": "리빙",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_060",
       "entrance_local_m": {
@@ -2942,6 +3088,8 @@
     {
       "id": "store_4f_073",
       "name": "라이다",
+      "category": "스포츠·골프",
+      "subcategory": "스포츠·아웃도어",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_081",
       "entrance_local_m": {
@@ -2979,6 +3127,8 @@
     {
       "id": "store_4f_074",
       "name": "EQL 퍼포먼스",
+      "category": "스포츠·골프",
+      "subcategory": "스포츠·아웃도어",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_080",
       "entrance_local_m": {
@@ -3016,6 +3166,8 @@
     {
       "id": "store_4f_075",
       "name": "시에라 디자인",
+      "category": "스포츠·골프",
+      "subcategory": "스포츠·아웃도어",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_083",
       "entrance_local_m": {
@@ -3053,6 +3205,8 @@
     {
       "id": "store_4f_076",
       "name": "POP-UP STUDIO C",
+      "category": "팝업",
+      "subcategory": "팝업",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_049",
       "entrance_local_m": {
@@ -3158,6 +3312,8 @@
     {
       "id": "store_4f_077",
       "name": "베르판 (엠비언스)",
+      "category": "리빙",
+      "subcategory": "리빙",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_025",
       "entrance_local_m": {
@@ -3199,6 +3355,8 @@
     {
       "id": "store_4f_078",
       "name": "두오모 라이팅",
+      "category": "리빙",
+      "subcategory": "리빙",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_031",
       "entrance_local_m": {
@@ -3252,6 +3410,8 @@
     {
       "id": "store_4f_079",
       "name": "알레시",
+      "category": "리빙",
+      "subcategory": "리빙",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_061",
       "entrance_local_m": {
@@ -3329,6 +3489,8 @@
     {
       "id": "store_4f_080",
       "name": "나이키 골프",
+      "category": "스포츠·골프",
+      "subcategory": "골프",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_007",
       "entrance_local_m": {
@@ -3366,6 +3528,8 @@
     {
       "id": "store_4f_081",
       "name": "PXG",
+      "category": "스포츠·골프",
+      "subcategory": "골프",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_006",
       "entrance_local_m": {
@@ -3403,6 +3567,8 @@
     {
       "id": "store_4f_082",
       "name": "리바트 토탈",
+      "category": "리빙",
+      "subcategory": "리빙",
       "floor_id": "FL-urk3dfu89rg50546",
       "entrance_node_id": "store_entrance_063",
       "entrance_local_m": {

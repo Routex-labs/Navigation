@@ -11,6 +11,8 @@
     {
       "id": "store_3f_000",
       "name": "산드로",
+      "category": "패션",
+      "subcategory": "여성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_070",
       "entrance_local_m": {
@@ -48,6 +50,8 @@
     {
       "id": "store_3f_001",
       "name": "A.P.C.",
+      "category": "패션",
+      "subcategory": "컨템포러리",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_071",
       "entrance_local_m": {
@@ -85,6 +89,8 @@
     {
       "id": "store_3f_002",
       "name": "가니",
+      "category": "패션",
+      "subcategory": "여성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_072",
       "entrance_local_m": {
@@ -122,6 +128,8 @@
     {
       "id": "store_3f_003",
       "name": "바네사 브루노",
+      "category": "패션",
+      "subcategory": "여성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_033",
       "entrance_local_m": {
@@ -159,6 +167,8 @@
     {
       "id": "store_3f_004",
       "name": "리던",
+      "category": "패션",
+      "subcategory": "여성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_055",
       "entrance_local_m": {
@@ -196,6 +206,8 @@
     {
       "id": "store_3f_005",
       "name": "마쥬",
+      "category": "패션",
+      "subcategory": "여성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_073",
       "entrance_local_m": {
@@ -233,6 +245,8 @@
     {
       "id": "store_3f_006",
       "name": "엘리베이터",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "ND-XeluISb812705",
       "entrance_local_m": {
@@ -270,6 +284,8 @@
     {
       "id": "store_3f_007",
       "name": "엘리베이터",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "ND-jnfuM0YFK1534",
       "entrance_local_m": {
@@ -307,6 +323,8 @@
     {
       "id": "store_3f_008",
       "name": "에스컬레이터",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": null,
       "entrance_local_m": null,
@@ -341,6 +359,8 @@
     {
       "id": "store_3f_009",
       "name": "에스컬레이터",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": null,
       "entrance_local_m": null,
@@ -375,6 +395,8 @@
     {
       "id": "store_3f_010",
       "name": "에스컬레이터",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "ND-N_KBQywuF2672",
       "entrance_local_m": {
@@ -412,6 +434,8 @@
     {
       "id": "store_3f_011",
       "name": "에스컬레이터",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": null,
       "entrance_local_m": null,
@@ -446,6 +470,8 @@
     {
       "id": "store_3f_012",
       "name": "듀퐁 셔츠",
+      "category": "패션",
+      "subcategory": "남성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": null,
       "entrance_local_m": null,
@@ -480,6 +506,8 @@
     {
       "id": "store_3f_013",
       "name": null,
+      "category": null,
+      "subcategory": null,
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": null,
       "entrance_local_m": null,
@@ -514,6 +542,8 @@
     {
       "id": "store_3f_038",
       "name": "화장실",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "node_003",
       "entrance_local_m": {
@@ -551,6 +581,8 @@
     {
       "id": "store_3f_015",
       "name": "아뜰리에 아티산 (의류 수선)",
+      "category": "서비스",
+      "subcategory": "서비스",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": null,
       "entrance_local_m": null,
@@ -585,6 +617,8 @@
     {
       "id": "store_3f_016",
       "name": "누니 주얼리",
+      "category": "주얼리·시계",
+      "subcategory": "시계·주얼리",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_002",
       "entrance_local_m": {
@@ -622,6 +656,8 @@
     {
       "id": "store_3f_017",
       "name": "더 캐시미어",
+      "category": "패션",
+      "subcategory": "여성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_007",
       "entrance_local_m": {
@@ -659,6 +695,8 @@
     {
       "id": "store_3f_018",
       "name": "구호",
+      "category": "패션",
+      "subcategory": "여성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_006",
       "entrance_local_m": {
@@ -696,6 +734,8 @@
     {
       "id": "store_3f_019",
       "name": "타임",
+      "category": "패션",
+      "subcategory": "여성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_005",
       "entrance_local_m": {
@@ -733,6 +773,8 @@
     {
       "id": "store_3f_020",
       "name": "마인",
+      "category": "패션",
+      "subcategory": "여성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_004",
       "entrance_local_m": {
@@ -770,6 +812,8 @@
     {
       "id": "store_3f_021",
       "name": "프레이트",
+      "category": "패션",
+      "subcategory": "컨템포러리",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_020",
       "entrance_local_m": {
@@ -807,6 +851,8 @@
     {
       "id": "store_3f_022",
       "name": "비이커",
+      "category": "패션",
+      "subcategory": "컨템포러리",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_080",
       "entrance_local_m": {
@@ -844,6 +890,8 @@
     {
       "id": "store_3f_023",
       "name": "아스페시",
+      "category": "패션",
+      "subcategory": "컨템포러리",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_018",
       "entrance_local_m": {
@@ -881,6 +929,8 @@
     {
       "id": "store_3f_024",
       "name": "클럽모나코",
+      "category": "패션",
+      "subcategory": "컨템포러리",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_015",
       "entrance_local_m": {
@@ -918,6 +968,8 @@
     {
       "id": "store_3f_025",
       "name": "DKNY",
+      "category": "패션",
+      "subcategory": "컨템포러리",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_067",
       "entrance_local_m": {
@@ -963,6 +1015,8 @@
     {
       "id": "store_3f_026",
       "name": "준지",
+      "category": "패션",
+      "subcategory": "남성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_079",
       "entrance_local_m": {
@@ -1000,6 +1054,8 @@
     {
       "id": "store_3f_027",
       "name": "송지오",
+      "category": "패션",
+      "subcategory": "남성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_047",
       "entrance_local_m": {
@@ -1037,6 +1093,8 @@
     {
       "id": "store_3f_028",
       "name": "아뜰리에 디 갤럭시",
+      "category": "서비스",
+      "subcategory": "서비스",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_076",
       "entrance_local_m": {
@@ -1074,6 +1132,8 @@
     {
       "id": "store_3f_029",
       "name": "룰루레몬",
+      "category": "스포츠·골프",
+      "subcategory": "스포츠·아웃도어",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_010",
       "entrance_local_m": {
@@ -1119,6 +1179,8 @@
     {
       "id": "store_3f_030",
       "name": "쿠에른 컨셉스토어",
+      "category": "패션",
+      "subcategory": "컨템포러리",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_023",
       "entrance_local_m": {
@@ -1160,6 +1222,8 @@
     {
       "id": "store_3f_031",
       "name": "데바스테",
+      "category": "패션",
+      "subcategory": "컨템포러리",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_051",
       "entrance_local_m": {
@@ -1201,6 +1265,8 @@
     {
       "id": "store_3f_032",
       "name": "시스템",
+      "category": "패션",
+      "subcategory": "여성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_000",
       "entrance_local_m": {
@@ -1238,6 +1304,8 @@
     {
       "id": "store_3f_033",
       "name": "SJSJ",
+      "category": "패션",
+      "subcategory": "여성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_001",
       "entrance_local_m": {
@@ -1275,6 +1343,8 @@
     {
       "id": "store_3f_034",
       "name": "앤더슨벨",
+      "category": "패션",
+      "subcategory": "컨템포러리",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_003",
       "entrance_local_m": {
@@ -1316,6 +1386,8 @@
     {
       "id": "store_3f_035",
       "name": "애브뉴준오 (헤어숍)",
+      "category": "서비스",
+      "subcategory": "서비스",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_024",
       "entrance_local_m": {
@@ -1353,6 +1425,8 @@
     {
       "id": "store_3f_036",
       "name": "엘리베이터",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "node_004",
       "entrance_local_m": {
@@ -1390,6 +1464,8 @@
     {
       "id": "store_3f_037",
       "name": "장애인화장실",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "node_005",
       "entrance_local_m": {
@@ -1427,6 +1503,8 @@
     {
       "id": "store_3f_038_038",
       "name": "화장실",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "node_003",
       "entrance_local_m": {
@@ -1464,6 +1542,8 @@
     {
       "id": "store_3f_039",
       "name": "엘리베이터",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": null,
       "entrance_local_m": null,
@@ -1498,6 +1578,8 @@
     {
       "id": "store_3f_040",
       "name": "유아차 전용 E/V",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "ND-ACkiJovMQ2542",
       "entrance_local_m": {
@@ -1535,6 +1617,8 @@
     {
       "id": "store_3f_041",
       "name": "시리즈 코너",
+      "category": "패션",
+      "subcategory": "남성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_028",
       "entrance_local_m": {
@@ -1572,6 +1656,8 @@
     {
       "id": "store_3f_042",
       "name": "스컬프",
+      "category": "주얼리·시계",
+      "subcategory": "시계·주얼리",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_030",
       "entrance_local_m": {
@@ -1609,6 +1695,8 @@
     {
       "id": "store_3f_043",
       "name": "벨벳트렁크",
+      "category": "잡화",
+      "subcategory": "잡화",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_021",
       "entrance_local_m": {
@@ -1646,6 +1734,8 @@
     {
       "id": "store_3f_044",
       "name": "골든듀",
+      "category": "주얼리·시계",
+      "subcategory": "시계·주얼리",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_066",
       "entrance_local_m": {
@@ -1683,6 +1773,8 @@
     {
       "id": "store_3f_045",
       "name": "아이엠샵",
+      "category": "패션",
+      "subcategory": "컨템포러리",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_027",
       "entrance_local_m": {
@@ -1720,6 +1812,8 @@
     {
       "id": "store_3f_046",
       "name": "모드맨",
+      "category": "패션",
+      "subcategory": "남성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_032",
       "entrance_local_m": {
@@ -1773,6 +1867,8 @@
     {
       "id": "store_3f_047",
       "name": "분크",
+      "category": "잡화",
+      "subcategory": "잡화",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_029",
       "entrance_local_m": {
@@ -1810,6 +1906,8 @@
     {
       "id": "store_3f_048",
       "name": "조이그라이슨",
+      "category": "잡화",
+      "subcategory": "잡화",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_037",
       "entrance_local_m": {
@@ -1847,6 +1945,8 @@
     {
       "id": "store_3f_049",
       "name": "탠디",
+      "category": "잡화",
+      "subcategory": "잡화",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_036",
       "entrance_local_m": {
@@ -1888,6 +1988,8 @@
     {
       "id": "store_3f_050",
       "name": "비비안",
+      "category": "패션",
+      "subcategory": "여성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_062",
       "entrance_local_m": {
@@ -1925,6 +2027,8 @@
     {
       "id": "store_3f_051",
       "name": "듀베티카",
+      "category": "패션",
+      "subcategory": "컨템포러리",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_025",
       "entrance_local_m": {
@@ -1962,6 +2066,8 @@
     {
       "id": "store_3f_052",
       "name": "어그",
+      "category": "잡화",
+      "subcategory": "잡화",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_052",
       "entrance_local_m": {
@@ -1999,6 +2105,8 @@
     {
       "id": "store_3f_053",
       "name": "아떼바네 사브루노",
+      "category": "잡화",
+      "subcategory": "잡화",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_039",
       "entrance_local_m": {
@@ -2036,6 +2144,8 @@
     {
       "id": "store_3f_054",
       "name": "솔리드 옴므",
+      "category": "패션",
+      "subcategory": "남성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_009",
       "entrance_local_m": {
@@ -2101,6 +2211,8 @@
     {
       "id": "store_3f_055",
       "name": "금강 안경",
+      "category": "잡화",
+      "subcategory": "잡화",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_034",
       "entrance_local_m": {
@@ -2142,6 +2254,8 @@
     {
       "id": "store_3f_056",
       "name": "노이스",
+      "category": "잡화",
+      "subcategory": "잡화",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_013",
       "entrance_local_m": {
@@ -2179,6 +2293,8 @@
     {
       "id": "store_3f_057",
       "name": "온",
+      "category": "스포츠·골프",
+      "subcategory": "스포츠·아웃도어",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_011",
       "entrance_local_m": {
@@ -2216,6 +2332,8 @@
     {
       "id": "store_3f_058",
       "name": "시스템 옴므",
+      "category": "패션",
+      "subcategory": "남성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_012",
       "entrance_local_m": {
@@ -2253,6 +2371,8 @@
     {
       "id": "store_3f_059",
       "name": "타임옴므",
+      "category": "패션",
+      "subcategory": "남성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_078",
       "entrance_local_m": {
@@ -2294,6 +2414,8 @@
     {
       "id": "store_3f_060",
       "name": "베로니카 비어드",
+      "category": "패션",
+      "subcategory": "여성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_031",
       "entrance_local_m": {
@@ -2331,6 +2453,8 @@
     {
       "id": "store_3f_061",
       "name": "톰그레이 하운드(남)",
+      "category": "패션",
+      "subcategory": "컨템포러리",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_049",
       "entrance_local_m": {
@@ -2368,6 +2492,8 @@
     {
       "id": "store_3f_062",
       "name": "정수기",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": null,
       "entrance_local_m": null,
@@ -2402,6 +2528,8 @@
     {
       "id": "store_3f_063",
       "name": "더일마",
+      "category": "패션",
+      "subcategory": "여성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_068",
       "entrance_local_m": {
@@ -2439,6 +2567,8 @@
     {
       "id": "store_3f_064",
       "name": "듀퐁 셔츠/ 닥스 셔츠/ 카운테스마라",
+      "category": "패션",
+      "subcategory": "남성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_017",
       "entrance_local_m": {
@@ -2476,6 +2606,8 @@
     {
       "id": "store_3f_065",
       "name": "시프트G",
+      "category": "패션",
+      "subcategory": "남성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_046",
       "entrance_local_m": {
@@ -2513,6 +2645,8 @@
     {
       "id": "store_3f_066",
       "name": "캠퍼투게더 스토어",
+      "category": "잡화",
+      "subcategory": "잡화",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_008",
       "entrance_local_m": {
@@ -2562,6 +2696,8 @@
     {
       "id": "store_3f_067",
       "name": "로라스 블랑",
+      "category": "패션",
+      "subcategory": "여성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_035",
       "entrance_local_m": {
@@ -2627,6 +2763,8 @@
     {
       "id": "store_3f_068",
       "name": "POP-UP STUDIO A",
+      "category": "팝업",
+      "subcategory": "팝업",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_048",
       "entrance_local_m": {
@@ -2668,6 +2806,8 @@
     {
       "id": "store_3f_069",
       "name": "폴로",
+      "category": "패션",
+      "subcategory": "남성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_014",
       "entrance_local_m": {
@@ -2709,6 +2849,8 @@
     {
       "id": "store_3f_070",
       "name": "바버",
+      "category": "패션",
+      "subcategory": "남성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_019",
       "entrance_local_m": {
@@ -2750,6 +2892,8 @@
     {
       "id": "store_3f_071",
       "name": "띠어리",
+      "category": "패션",
+      "subcategory": "남성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_016",
       "entrance_local_m": {
@@ -2787,6 +2931,8 @@
     {
       "id": "store_3f_072",
       "name": "수트 서플라이",
+      "category": "패션",
+      "subcategory": "남성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_081",
       "entrance_local_m": {
@@ -2824,6 +2970,8 @@
     {
       "id": "store_3f_073",
       "name": "CP컴퍼니",
+      "category": "패션",
+      "subcategory": "남성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_022",
       "entrance_local_m": {
@@ -2861,6 +3009,8 @@
     {
       "id": "store_3f_074",
       "name": "와코루",
+      "category": "패션",
+      "subcategory": "여성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_063",
       "entrance_local_m": {
@@ -2898,6 +3048,8 @@
     {
       "id": "store_3f_075",
       "name": "스톤 헨지",
+      "category": "주얼리·시계",
+      "subcategory": "시계·주얼리",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_056",
       "entrance_local_m": {
@@ -2935,6 +3087,8 @@
     {
       "id": "store_3f_076",
       "name": "톰그레이 하운드(여)",
+      "category": "패션",
+      "subcategory": "컨템포러리",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_058",
       "entrance_local_m": {
@@ -2972,6 +3126,8 @@
     {
       "id": "store_3f_077",
       "name": "버윅",
+      "category": "잡화",
+      "subcategory": "잡화",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_038",
       "entrance_local_m": {
@@ -3013,6 +3169,8 @@
     {
       "id": "store_3f_078",
       "name": "디디에 두보",
+      "category": "주얼리·시계",
+      "subcategory": "시계·주얼리",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_057",
       "entrance_local_m": {
@@ -3050,6 +3208,8 @@
     {
       "id": "store_3f_079",
       "name": "다이아미",
+      "category": "주얼리·시계",
+      "subcategory": "시계·주얼리",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_064",
       "entrance_local_m": {
@@ -3087,6 +3247,8 @@
     {
       "id": "store_3f_080",
       "name": "제이에스티나",
+      "category": "주얼리·시계",
+      "subcategory": "시계·주얼리",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_065",
       "entrance_local_m": {
@@ -3124,6 +3286,8 @@
     {
       "id": "store_3f_081",
       "name": "POP-UP STUDIO B",
+      "category": "팝업",
+      "subcategory": "팝업",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_026",
       "entrance_local_m": {
@@ -3161,6 +3325,8 @@
     {
       "id": "store_3f_082",
       "name": "이비엠",
+      "category": "패션",
+      "subcategory": "남성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_069",
       "entrance_local_m": {
@@ -3198,6 +3364,8 @@
     {
       "id": "store_3f_083",
       "name": "슈트패브릭",
+      "category": "패션",
+      "subcategory": "남성패션",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_077",
       "entrance_local_m": {
@@ -3235,6 +3403,8 @@
     {
       "id": "store_3f_084",
       "name": "정수기",
+      "category": "편의시설",
+      "subcategory": "편의시설",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": null,
       "entrance_local_m": null,
@@ -3269,6 +3439,8 @@
     {
       "id": "store_3f_085",
       "name": "메종키츠네 (남/여)",
+      "category": "패션",
+      "subcategory": "컨템포러리",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_059",
       "entrance_local_m": {
@@ -3330,6 +3502,8 @@
     {
       "id": "store_3f_086",
       "name": "크림",
+      "category": "잡화",
+      "subcategory": "잡화",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_074",
       "entrance_local_m": {
@@ -3367,6 +3541,8 @@
     {
       "id": "store_3f_087",
       "name": "버켄스탁",
+      "category": "잡화",
+      "subcategory": "잡화",
       "floor_id": "FL-t4f3r0t8nnlf0560",
       "entrance_node_id": "store_entrance_082",
       "entrance_local_m": {

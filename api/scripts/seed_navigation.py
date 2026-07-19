@@ -120,6 +120,8 @@ def add_dataset(session: Session, data: dict) -> None:
             id=store["id"],
             floor_id=floor_id,
             name=store["name"],
+            category=store.get("category"),
+            subcategory=store.get("subcategory"),
             centroid_x_m=store["centroid"]["local_m"]["x"],
             centroid_y_m=store["centroid"]["local_m"]["y"],
             entrance_x_m=(store.get("entrance_local_m") or {}).get("x"),
