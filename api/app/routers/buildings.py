@@ -1,16 +1,16 @@
 """건물/층/그래프/매장 HTTP 엔드포인트.
 
 URL 파라미터, Depends(get_db), response_model, 400/404 변환만 담당한다.
-단순 조회는 building_queries, 최단 경로만 NavigationService를 사용한다.
+조회는 building_queries가 담당한다. 최단 경로 계산은 클라이언트가 층 지도 응답의
+navigation_graph로 온디바이스 다익스트라를 돌리므로 서버에는 두지 않는다.
 sqlite3/SQLAlchemy 동기 IO이므로 모든 핸들러는 def(동기)로 선언한다.
 
 경로 목록 (prefix=/buildings):
   GET /buildings                                → 건물 목록
   GET /buildings/{id}                           → 건물 상세 (footprint 포함)
   GET /buildings/{id}/stores?q=검색어           → 매장 검색
-  GET /buildings/{id}/floors/{floor}            → 층 지도 데이터 (매장+POI)
+  GET /buildings/{id}/floors/{floor}            → 층 지도 데이터 (매장+POI+그래프)
   GET /buildings/{id}/floors/{floor}/graph      → 길찾기 그래프 (nodes+edges)
-  GET /buildings/{id}/floors/{floor}/route      → 최단 경로
   GET /buildings/{id}/floors/{floor}/tiles/{z}/{x}/{y}.mvt → 벡터 타일(MVT)
 """
 
@@ -21,8 +21,7 @@ from app.core.database import get_db
 from app.queries import building_queries, tile_queries
 from app.schemas.building import BuildingDetailResponse, BuildingSummaryResponse
 from app.schemas.floor_map import FloorMapResponse, StoreResponse
-from app.schemas.route import FloorGraphResponse, RouteResponse
-from app.services.navigation_service import NavigationService
+from app.schemas.route import FloorGraphResponse
 
 router = APIRouter(prefix="/buildings", tags=["buildings"])
 
@@ -68,61 +67,6 @@ def get_floor_map(
     result = building_queries.get_floor_map(session, building_id, floor_name)
     if result is None:
         raise HTTPException(status_code=404, detail="Floor not found")
-    return result
-
-
-@router.get("/{building_id}/route", response_model=RouteResponse)
-def get_building_route(
-    building_id: str,
-    start_node_id: str,
-    end_node_id: str,
-    session: Session = Depends(get_db),
-):
-    """건물 전체에서 층을 넘나드는 최단 경로(엘리베이터·에스컬레이터 환승 포함)."""
-    try:
-        result = NavigationService(session).get_building_shortest_path(
-            building_id=building_id,
-            start_node_id=start_node_id,
-            end_node_id=end_node_id,
-        )
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-
-    if result is None:
-        raise HTTPException(status_code=404, detail="Building not found")
-    if not result["path_found"]:
-        raise HTTPException(status_code=404, detail="Route not found")
-    return result
-
-
-@router.get(
-    "/{building_id}/floors/{floor_name}/route",
-    response_model=RouteResponse,
-)
-def get_shortest_route(
-    building_id: str,
-    floor_name: str,
-    start_node_id: str,
-    end_node_id: str,
-    session: Session = Depends(get_db),
-):
-    """두 노드 사이의 최단 경로. 계산 규칙은 NavigationService에 있다."""
-    try:
-        result = NavigationService(session).get_shortest_path(
-            building_id=building_id,
-            floor_name=floor_name,
-            start_node_id=start_node_id,
-            end_node_id=end_node_id,
-        )
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-
-    if result is None:
-        raise HTTPException(status_code=404, detail="Floor not found")
-
-    if not result["path_found"]:
-        raise HTTPException(status_code=404, detail="Route not found")
-
     return result
 
 

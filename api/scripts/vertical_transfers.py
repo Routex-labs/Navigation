@@ -3,7 +3,8 @@
 Edge 모델은 이미 이걸 전제한다(app/models/navigation.py):
   - floor_id가 nullable — 전이 간선은 특정 층에 속하지 않는다.
   - transfer_mode 컬럼 — elevator/escalator 구분.
-라우팅도 준비돼 있다(NavigationService.get_building_shortest_path).
+이 전이 간선은 층 지도 응답의 navigation_graph에 함께 실려, 클라이언트가
+온디바이스 경로 탐색에서 층 간 이동에 사용한다.
 
 매칭 방식:
   예전 link_vertical_transfers는 엘리베이터 **이름**(EV1, EV2…)으로 그룹핑했지만,

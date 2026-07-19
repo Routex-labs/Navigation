@@ -1,6 +1,7 @@
-"""최단 경로 API 응답 모델."""
+"""층 길찾기 그래프 API 응답 모델.
 
-from typing import Literal
+최단 경로 계산은 클라이언트가 이 그래프로 온디바이스 다익스트라를 돌린다(서버 미보유).
+"""
 
 from pydantic import BaseModel, Field
 
@@ -8,11 +9,6 @@ from pydantic import BaseModel, Field
 class LocalPointResponse(BaseModel):
     x: float
     y: float
-
-
-class LatLngResponse(BaseModel):
-    lat: float
-    lng: float
 
 
 class GraphFloorResponse(BaseModel):
@@ -43,15 +39,3 @@ class FloorGraphResponse(BaseModel):
     floor: GraphFloorResponse
     nodes: list[GraphNodeResponse]
     edges: list[GraphEdgeResponse]
-
-
-class RouteResponse(BaseModel):
-    start_node_id: str
-    end_node_id: str
-    path_found: Literal[True]
-    node_ids: list[str]
-    edge_ids: list[str]
-    coordinate_system: Literal["local_m"]
-    path_points: list[LocalPointResponse]
-    path_points_wgs84: list[LatLngResponse]
-    total_distance_m: float

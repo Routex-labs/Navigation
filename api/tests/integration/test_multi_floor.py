@@ -1,4 +1,4 @@
-"""다층 적재 검증 — 좌표 정규화·수직 전이·층 간 경로.
+"""다층 적재 검증 — 좌표 정규화·수직 전이 간선 생성.
 
 합성 픽스처(test-tower)는 2F를 일부러 1F와 다른 프레임으로 만들어 뒀다:
     2F_local = 2 * 1F_local + (5, 3)
@@ -73,37 +73,3 @@ def test_엘리베이터마다_수직_전이_간선이_생성된다(db_session):
         for ev in ("EV-A", "EV-B", "EV-C", "EV-D")
     }
     assert all(edge.bidirectional for edge in transfers)
-
-
-# 건물 전체 경로가 전이 간선을 타고 층을 넘어가는지 검증한다.
-def test_건물_경로가_층을_넘어간다(api_client):
-    response = api_client.get(
-        f"/buildings/{BUILDING_ID}/route",
-        params={
-            "start_node_id": "FL-TEST-1F:S-1",  # 1F 가게A 입구
-            "end_node_id": "FL-TEST-2F:S-2",  # 2F 가게B 입구
-        },
-    )
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["path_found"] is True
-    # 출발/도착 층이 모두 경로에 나타나야 한다.
-    floors = {node_id.split(":")[0] for node_id in body["node_ids"]}
-    assert floors == {"FL-TEST-1F", "FL-TEST-2F"}
-    # 층을 넘으려면 전이 간선을 정확히 한 번 타야 한다.
-    assert len([e for e in body["edge_ids"] if e.startswith("xfer:")]) == 1
-    assert len(body["path_points_wgs84"]) == len(body["path_points"])
-
-
-# 단일 층 경로는 전이 간선을 쓰지 않는다.
-def test_층_내_경로는_전이_간선을_쓰지_않는다(api_client):
-    response = api_client.get(
-        f"/buildings/{BUILDING_ID}/floors/1F/route",
-        params={"start_node_id": "FL-TEST-1F:S-1", "end_node_id": "FL-TEST-1F:S-2"},
-    )
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["path_found"] is True
-    assert not [e for e in body["edge_ids"] if e.startswith("xfer:")]
