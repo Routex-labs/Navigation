@@ -45,6 +45,9 @@ class Floor(Base):
         nullable=False,
         default="unversioned",
     )
+    # 층 외곽선. 층마다 윤곽이 다르므로(지하 주차장이 지상보다 넓다) 건물 하나의
+    # footprint를 전 층에 돌려쓰면 어느 층이든 1F 모양이 그려진다.
+    footprint_local_m: Mapped[list[dict] | None] = mapped_column(JSON)
 
     building: Mapped["Building"] = relationship(back_populates="floors")
     nodes: Mapped[list["Node"]] = relationship(back_populates="floor")

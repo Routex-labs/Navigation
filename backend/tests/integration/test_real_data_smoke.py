@@ -72,18 +72,26 @@ def test_모든_층_노드가_같은_좌표_프레임에_있다(real_db_session)
         select(Floor).where(Floor.building_id == REAL_BUILDING_ID)
     ).all()
     building = real_db_session.get(Building, REAL_BUILDING_ID)
-    footprint = building.footprint_local_m
-    assert footprint, "건물 외곽이 있어야 정규화 범위를 검증할 수 있다"
+    assert building.footprint_local_m, "건물 외곽이 있어야 정규화 범위를 검증할 수 있다"
 
-    # 외곽 bbox에 여유를 둔 범위 안에 모든 층의 노드가 들어와야 한다.
+    # 각 층의 노드는 그 층 외곽 bbox에 여유를 둔 범위 안에 들어와야 한다.
     # (층 프레임이 정규화되지 않으면 스케일이 달라 크게 벗어난다.)
-    margin = 15.0
-    min_x = min(point["x"] for point in footprint) - margin
-    max_x = max(point["x"] for point in footprint) + margin
-    min_y = min(point["y"] for point in footprint) - margin
-    max_y = max(point["y"] for point in footprint) + margin
+    #
+    # 층마다 자기 외곽선으로 재는 것이 핵심이다. 지하 주차장은 지상 타워보다
+    # 훨씬 넓어(B3 295x148m 대 1F 167x98m) 기준층 외곽에 마진을 더하는 방식으로는
+    # 검증이 성립하지 않는다.
+    above_ground_margin = 15.0
+    basement_margin = 30.0
 
     for floor in floors:
+        footprint = floor.footprint_local_m or building.footprint_local_m
+        assert footprint, f"{floor.name} 외곽선이 없다"
+        margin = basement_margin if floor.level < 0 else above_ground_margin
+        min_x = min(point["x"] for point in footprint) - margin
+        max_x = max(point["x"] for point in footprint) + margin
+        min_y = min(point["y"] for point in footprint) - margin
+        max_y = max(point["y"] for point in footprint) + margin
+
         nodes = real_db_session.scalars(
             select(Node).where(Node.floor_id == floor.id)
         ).all()

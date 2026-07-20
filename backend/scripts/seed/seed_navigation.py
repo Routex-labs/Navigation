@@ -79,6 +79,7 @@ def add_dataset(session: Session, data: dict) -> None:
             map_calibration_version=building_data.get(
                 "map_calibration_version", "unversioned"
             ),
+            footprint_local_m=floor_data.get("footprint_local_m"),
         )
     )
 

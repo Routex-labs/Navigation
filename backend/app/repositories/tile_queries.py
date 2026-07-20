@@ -37,7 +37,14 @@ def render_floor_tile(
     bounds = tile_bounds(z, x, y)
     stores = session.scalars(select(Store).where(Store.floor_id == floor.id)).all()
     pois = session.scalars(select(Poi).where(Poi.floor_id == floor.id)).all()
-    layers = build_floor_tile_layers(building, stores=stores, pois=pois, transform=transform, bounds=bounds)
+    layers = build_floor_tile_layers(
+        building,
+        stores=stores,
+        pois=pois,
+        transform=transform,
+        bounds=bounds,
+        footprint_local_m=floor.footprint_local_m,
+    )
 
     return mapbox_vector_tile.encode(
         layers,

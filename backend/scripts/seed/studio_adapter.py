@@ -205,6 +205,9 @@ def build_seed_dict(
     floor_id = floor["id"]
     nodes = _normalized_nodes(floor_id, studio["nodes"], align, to_wgs84)
     footprint = studio.get("building_footprint_local_m") or None
+    aligned_footprint = (
+        [floor_alignment.apply_point(align, p) for p in footprint] if footprint else None
+    )
 
     return {
         "building": {
@@ -212,11 +215,14 @@ def build_seed_dict(
             "name": _building_name(building_id),
             "area_m2": None,  # D2: 좌표계 재투영 전까지 보류
             "perimeter_m": None,
-            # Studio '테두리' 도구로 찍은 건물 외곽. 건물 프레임으로 정규화해서 넣는다.
-            "footprint_local_m": (
-                [floor_alignment.apply_point(align, p) for p in footprint] if footprint else None
-            ),
-            "floor": {"id": floor_id, "name": floor["name"], "level": floor["level"]},
+            # 건물 대표 외곽(기준층). 층별 윤곽은 floor.footprint_local_m에 따로 넣는다.
+            "footprint_local_m": aligned_footprint,
+            "floor": {
+                "id": floor_id,
+                "name": floor["name"],
+                "level": floor["level"],
+                "footprint_local_m": aligned_footprint,
+            },
             "map_calibration_version": studio.get("coordinate_system", {}).get(
                 "calibration_version", "unversioned"
             ),

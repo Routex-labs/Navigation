@@ -90,13 +90,17 @@ def build_floor_tile_layers(
     pois: list["Poi"],
     transform: "GeoTransform | None",
     bounds: TileBounds,
+    footprint_local_m: list[dict] | None = None,
 ) -> list[dict]:
     if transform is None:
         return []
 
     layers: list[dict] = []
 
-    footprint_ring = _local_polygon_ring(building.footprint_local_m or [], transform)
+    # 층 외곽선을 받으면 그것을 그린다. 건물 footprint는 기준층 것이라 지하층
+    # 타일에도 1F 윤곽이 찍힌다.
+    footprint = footprint_local_m or building.footprint_local_m or []
+    footprint_ring = _local_polygon_ring(footprint, transform)
     if footprint_ring and bounds.intersects(*_polygon_bbox(footprint_ring)):
         layers.append(
             {

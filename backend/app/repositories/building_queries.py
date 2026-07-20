@@ -76,8 +76,10 @@ def get_floor_map(
         "floor": {"id": floor.id, "name": floor.name, "level": floor.level},
         "navigation_coordinate_system": "local_m",
         "map_calibration_version": floor.map_calibration_version,
-        "footprint_local_m": (building.footprint_local_m or []) if building else [],
-        "footprint_wgs84": _footprint_wgs84(building, transform),
+        # 층 외곽선이 있으면 그것을 쓴다. 건물 footprint는 기준층(1F) 것이라
+        # 전 층에 돌려쓰면 지하 주차장에도 1F 윤곽이 그려진다.
+        "footprint_local_m": _floor_footprint(floor, building),
+        "footprint_wgs84": _footprint_wgs84(_floor_footprint(floor, building), transform),
         # Flutter는 최초 층 지도 응답에서 이 그래프를 캐시해 클라이언트 다익스트라를 실행한다.
         "navigation_graph": _to_floor_graph_dict(session, floor),
         "stores": [_to_store_dict(store, transform) for store in stores],
@@ -208,13 +210,20 @@ def _to_poi_dict(poi: Poi, transform: GeoTransform | None) -> dict[str, Any]:
     }
 
 
+# 층 자체 외곽선 우선, 없으면 건물 대표 외곽으로 폴백한다.
+def _floor_footprint(floor: Floor, building: Building | None) -> list[dict]:
+    if floor.footprint_local_m:
+        return floor.footprint_local_m
+    return (building.footprint_local_m or []) if building else []
+
+
 def _footprint_wgs84(
-    building: Building | None,
+    footprint: list[dict],
     transform: GeoTransform | None,
 ) -> list[dict[str, float]] | None:
-    if building is None or transform is None or not building.footprint_local_m:
+    if transform is None or not footprint:
         return None
-    points = local_points_to_lnglat(building.footprint_local_m, transform)
+    points = local_points_to_lnglat(footprint, transform)
     return [{"lng": lng, "lat": lat} for lng, lat in points]
 
 
