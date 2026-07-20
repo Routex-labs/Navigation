@@ -126,6 +126,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   PdrDebugSessionRecorder? _pdrDebugRecorder;
   bool _exportingPdrDebugJson = false;
   double _mapCameraBearingDeg = 0;
+  final ValueNotifier<double> _mapCameraBearingNotifier = ValueNotifier(0);
   final GlobalKey _pdrShareButtonKey = GlobalKey();
   late final DebugModeController _debugModeController;
 
@@ -182,6 +183,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     _debugModeController
       ..removeListener(_onDebugModeChanged)
       ..dispose();
+    _mapCameraBearingNotifier.dispose();
     super.dispose();
   }
 
@@ -193,6 +195,15 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       unawaited(_stopPdrWhenDebugModeTurnsOff());
     }
     if (mounted) setState(() {});
+  }
+
+  void _onMapCameraBearingChanged(double bearingDeg) {
+    if (!bearingDeg.isFinite ||
+        (bearingDeg - _mapCameraBearingDeg).abs() < 0.05) {
+      return;
+    }
+    _mapCameraBearingDeg = bearingDeg;
+    _mapCameraBearingNotifier.value = bearingDeg;
   }
 
   Future<void> _stopPdrWhenDebugModeTurnsOff() async {
@@ -769,9 +780,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         indoorNavigationDriver.currentRuntimeStatus.state !=
         PdrRuntimeState.idle;
     final debugEnabled = _debugModeController.enabled;
-    final cardinalCross = debugEnabled && _debugModeController.showCardinalCross
-        ? buildLandmarkCardinalCross(
-            buildingId: widget.buildingId,
+    final cardinalCalibration =
+        debugEnabled && _debugModeController.showCardinalCross
+        ? cardinalCalibrationForBuilding(
+            widget.buildingId,
             floorPlan: floorPlan,
           )
         : null;
@@ -781,7 +793,6 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
             _floorGraph,
             showNodes: _debugModeController.showGraphNodes,
             showEdges: _debugModeController.showGraphEdges,
-            cardinalCross: cardinalCross,
             activeEdgeIds: _pdrMatchedEdgeIds,
           )
         : const DebugMapOverlay();
@@ -832,7 +843,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
               ? _pdrRawPathPoints
               : const [],
           debugMapOverlay: debugOverlay,
-          onCameraBearingChanged: (bearing) => _mapCameraBearingDeg = bearing,
+          onCameraBearingChanged: _onMapCameraBearingChanged,
           onMapPressed: _onMapPressedForPdr,
           onStoreSelected: (selected) {
             setState(() => _highlightedStoreId = selected.id);
@@ -850,6 +861,17 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           visibleInsets: EdgeInsets.fromLTRB(0, topOverlay, 0, bottomOverlay),
           overlayHitTest: _isTapOnMapOverlay,
         ),
+
+        if (cardinalCalibration != null)
+          Positioned.fill(
+            child: ValueListenableBuilder<double>(
+              valueListenable: _mapCameraBearingNotifier,
+              builder: (context, cameraBearingDeg, _) => CardinalGridOverlay(
+                northMapBearingDeg: cardinalCalibration.northMapBearingDeg,
+                cameraBearingDeg: cameraBearingDeg,
+              ),
+            ),
+          ),
 
         // 모바일에서 status bar 높이만큼 아래로 내려온 검색창(MapTopBar) 밑에
         // 층 chip이 깔리지 않도록 SafeArea로 감싼다. 웹/데스크톱은 SafeArea.top이

@@ -29,36 +29,19 @@ class DebugMapEdge {
   final bool active;
 }
 
-class DebugCardinalCross {
-  const DebugCardinalCross({
-    required this.north,
-    required this.east,
-    required this.south,
-    required this.west,
-  });
-
-  final ll.LatLng north;
-  final ll.LatLng east;
-  final ll.LatLng south;
-  final ll.LatLng west;
-}
-
 class DebugMapOverlay {
   const DebugMapOverlay({
     this.nodes = const [],
     this.edges = const [],
     this.showNodes = false,
     this.showEdges = false,
-    this.cardinalCross,
   });
 
   final List<DebugMapNode> nodes;
   final List<DebugMapEdge> edges;
   final bool showNodes;
   final bool showEdges;
-  final DebugCardinalCross? cardinalCross;
-
-  bool get isEmpty => nodes.isEmpty && edges.isEmpty && cardinalCross == null;
+  bool get isEmpty => nodes.isEmpty && edges.isEmpty;
 }
 
 /// floor-local navigation graph를 MapLibre가 바로 그릴 수 있는 WGS84 진단
@@ -67,11 +50,10 @@ DebugMapOverlay buildDebugMapOverlay(
   FloorGraph? graph, {
   bool showNodes = true,
   bool showEdges = true,
-  DebugCardinalCross? cardinalCross,
   Set<String> activeEdgeIds = const {},
 }) {
   if (graph == null || graph.nodes.isEmpty || (!showNodes && !showEdges)) {
-    return DebugMapOverlay(cardinalCross: cardinalCross);
+    return const DebugMapOverlay();
   }
 
   final transform = fitFloorGeoTransform(graph.nodes);
@@ -131,6 +113,5 @@ DebugMapOverlay buildDebugMapOverlay(
     edges: edges,
     showNodes: showNodes,
     showEdges: showEdges,
-    cardinalCross: cardinalCross,
   );
 }

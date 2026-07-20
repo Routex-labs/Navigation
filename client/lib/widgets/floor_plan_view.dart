@@ -232,6 +232,8 @@ class _FloorPlanViewState extends State<FloorPlanView> {
       },
       onStyleLoadedCallback: _onStyleLoaded,
       onMapClick: _handleMapClick,
+      onCameraMove: (position) =>
+          widget.onCameraBearingChanged?.call(position.bearing),
       // maplibre_gl 웹 구현이 minMaxZoomPreference를 놓치는 경우에 대비한
       // 이중 안전장치. 제스처가 끝난 시점에 하한 아래로 내려가 있으면
       // 하한으로 다시 올려서, "축소하면 건물이 사라진다"는 문제를 뿌리째 막는다.
@@ -476,38 +478,6 @@ class _FloorPlanViewState extends State<FloorPlanView> {
       ],
       enableInteraction: false,
     );
-    await controller.addLineLayer(
-      _debugGraphSourceId,
-      'floor-debug-cardinal-ns',
-      const LineLayerProperties(
-        lineColor: '#D32F2F',
-        lineWidth: 3,
-        lineOpacity: 0.92,
-        lineCap: 'round',
-      ),
-      filter: [
-        '==',
-        ['get', 'kind'],
-        'cardinal-ns',
-      ],
-      enableInteraction: false,
-    );
-    await controller.addLineLayer(
-      _debugGraphSourceId,
-      'floor-debug-cardinal-ew',
-      const LineLayerProperties(
-        lineColor: '#1976D2',
-        lineWidth: 3,
-        lineOpacity: 0.92,
-        lineCap: 'round',
-      ),
-      filter: [
-        '==',
-        ['get', 'kind'],
-        'cardinal-ew',
-      ],
-      enableInteraction: false,
-    );
     await controller.addCircleLayer(
       _debugGraphSourceId,
       'floor-debug-graph-nodes',
@@ -548,27 +518,6 @@ class _FloorPlanViewState extends State<FloorPlanView> {
       ],
       enableInteraction: false,
     );
-    await controller.addSymbolLayer(
-      _debugGraphSourceId,
-      'floor-debug-cardinal-labels',
-      const SymbolLayerProperties(
-        textField: ['get', 'label'],
-        textFont: _mapFontStack,
-        textSize: 15,
-        textOffset: [0, 0],
-        textColor: '#263238',
-        textHaloColor: '#FFFFFF',
-        textHaloWidth: 2,
-        textAllowOverlap: true,
-      ),
-      filter: [
-        '==',
-        ['get', 'kind'],
-        'cardinal-label',
-      ],
-      enableInteraction: false,
-    );
-
     await controller.addGeoJsonSource(
       _pdrRawTrailSourceId,
       _emptyFeatureCollection,
@@ -1333,50 +1282,6 @@ class _FloorPlanViewState extends State<FloorPlanView> {
           },
         });
       }
-    }
-    final cardinal = overlay.cardinalCross;
-    if (cardinal != null) {
-      features.addAll([
-        {
-          'type': 'Feature',
-          'properties': {'kind': 'cardinal-ns'},
-          'geometry': {
-            'type': 'LineString',
-            'coordinates': [
-              [cardinal.south.longitude, cardinal.south.latitude],
-              [cardinal.north.longitude, cardinal.north.latitude],
-            ],
-          },
-        },
-        {
-          'type': 'Feature',
-          'properties': {'kind': 'cardinal-ew'},
-          'geometry': {
-            'type': 'LineString',
-            'coordinates': [
-              [cardinal.west.longitude, cardinal.west.latitude],
-              [cardinal.east.longitude, cardinal.east.latitude],
-            ],
-          },
-        },
-        for (final direction in [
-          (label: 'N', point: cardinal.north),
-          (label: 'E', point: cardinal.east),
-          (label: 'S', point: cardinal.south),
-          (label: 'W', point: cardinal.west),
-        ])
-          {
-            'type': 'Feature',
-            'properties': {'kind': 'cardinal-label', 'label': direction.label},
-            'geometry': {
-              'type': 'Point',
-              'coordinates': [
-                direction.point.longitude,
-                direction.point.latitude,
-              ],
-            },
-          },
-      ]);
     }
     await controller.setGeoJsonSource(_debugGraphSourceId, {
       'type': 'FeatureCollection',

@@ -1,9 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:latlong2/latlong.dart' as ll;
-
 import '../../models/floor_plan.dart';
-import 'debug_map_overlay.dart';
 
 class CardinalCalibrationResult {
   const CardinalCalibrationResult({
@@ -169,73 +166,5 @@ CardinalCalibrationResult _fitCardinalCalibration(
     landmarkCount: landmarks.length,
     rmsErrorPx: math.sqrt(squaredError / landmarks.length),
     reflected: reflected,
-  );
-}
-
-DebugCardinalCross? buildLandmarkCardinalCross({
-  required String buildingId,
-  required FloorPlan floorPlan,
-}) {
-  final calibration = cardinalCalibrationForBuilding(
-    buildingId,
-    floorPlan: floorPlan,
-  );
-  final footprint = floorPlan.footprint;
-  if (calibration == null || footprint.isEmpty) return null;
-
-  final center = _polygonCentroid(footprint);
-  const armLengthM = 24.0;
-
-  ll.LatLng endpoint(double bearingDeg) {
-    final radians = bearingDeg * math.pi / 180;
-    const metersPerDegreeLat = 111320.0;
-    final metersPerDegreeLng =
-        metersPerDegreeLat * math.cos(center.latitude * math.pi / 180);
-    return ll.LatLng(
-      center.latitude + math.cos(radians) * armLengthM / metersPerDegreeLat,
-      center.longitude + math.sin(radians) * armLengthM / metersPerDegreeLng,
-    );
-  }
-
-  final north = calibration.northMapBearingDeg;
-  return DebugCardinalCross(
-    north: endpoint(north),
-    east: endpoint(north + 90),
-    south: endpoint(north + 180),
-    west: endpoint(north + 270),
-  );
-}
-
-ll.LatLng _polygonCentroid(List<ll.LatLng> footprint) {
-  final meanLatitude =
-      footprint.map((point) => point.latitude).reduce((a, b) => a + b) /
-      footprint.length;
-  final longitudeScale = math.cos(meanLatitude * math.pi / 180);
-  var twiceArea = 0.0;
-  var weightedX = 0.0;
-  var weightedY = 0.0;
-  for (var index = 0; index < footprint.length; index++) {
-    final current = footprint[index];
-    final next = footprint[(index + 1) % footprint.length];
-    final x1 = current.longitude * longitudeScale;
-    final y1 = current.latitude;
-    final x2 = next.longitude * longitudeScale;
-    final y2 = next.latitude;
-    final cross = x1 * y2 - x2 * y1;
-    twiceArea += cross;
-    weightedX += (x1 + x2) * cross;
-    weightedY += (y1 + y2) * cross;
-  }
-
-  if (twiceArea.abs() < 1e-12) {
-    return ll.LatLng(
-      meanLatitude,
-      footprint.map((point) => point.longitude).reduce((a, b) => a + b) /
-          footprint.length,
-    );
-  }
-  return ll.LatLng(
-    weightedY / (3 * twiceArea),
-    weightedX / (3 * twiceArea) / longitudeScale,
   );
 }

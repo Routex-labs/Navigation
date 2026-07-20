@@ -120,8 +120,8 @@ class _AdvancedDebugOptions extends StatelessWidget {
       children: [
         _DebugSwitch(
           key: const ValueKey('debug-show-cardinal-cross'),
-          title: '지도 고정 방위선',
-          subtitle: '건물 중심에 N–S/E–W 십자선 표시',
+          title: '전체 화면 방위 격자',
+          subtitle: '지도 위에 얇은 N–S/E–W 십자선 표시',
           color: const Color(0xFFD32F2F),
           value: controller.showCardinalCross,
           onChanged: controller.setShowCardinalCross,

@@ -139,18 +139,23 @@ void main() {
     expect(calibration.northMapBearingDeg, closeTo(305.2, 0.2));
   });
 
-  test('방위 십자선 네 끝점은 건물 중심 주변의 지도 좌표로 생성된다', () {
-    final cross = buildLandmarkCardinalCross(
-      buildingId: 'thehyundai-seoul',
-      floorPlan: const FloorPlan(
-        footprint: [LatLng(37.5250, 126.9280), LatLng(37.5260, 126.9290)],
-        pois: [],
+  testWidgets('방위 격자는 지도와 별개인 전체 화면 painter로 표시된다', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: SizedBox.expand(
+          child: CardinalGridOverlay(
+            northMapBearingDeg: 305,
+            cameraBearingDeg: 90,
+          ),
+        ),
       ),
     );
 
-    expect(cross, isNotNull);
-    expect(cross!.north, isNot(cross.south));
-    expect(cross.east, isNot(cross.west));
+    expect(find.byKey(const ValueKey('cardinal-grid-overlay')), findsOneWidget);
+    expect(
+      cardinalScreenAngleDeg(northMapBearingDeg: 305, cameraBearingDeg: 90),
+      215,
+    );
   });
 
   test(
@@ -285,7 +290,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('debug-mode-enabled')));
     await tester.pumpAndSettle();
     expect(find.text('고급 표시 옵션'), findsOneWidget);
-    expect(find.text('지도 고정 방위선'), findsOneWidget);
+    expect(find.text('전체 화면 방위 격자'), findsOneWidget);
     expect(find.text('노드 이름'), findsNothing);
     expect(find.text('간선 이름'), findsNothing);
     expect(find.text('Raw 근접 경로'), findsOneWidget);
