@@ -17,9 +17,16 @@ class FloorMapMatcher {
     this.edgeSwitchBiasM = 1.25,
     this.minimumNetworkTransitionM = 4,
     this.transitionDistanceMultiplier = 3,
+    this.accessEdgePenaltyM = 4,
+    this.directionMismatchPenaltyM = 2,
+    this.recoveryTriggerDistanceM = 2,
+    this.recoveryConsecutiveSamples = 3,
+    this.recoverySearchRadiusM = 12,
+    this.recoveryMinimumNetworkTransitionM = 14,
+    this.recoveryTransitionDistanceMultiplier = 4,
   }) : _nodes = {for (final node in graph.nodes) node.id: node},
-       _edges = _buildEdges(graph),
-       _adjacency = _buildAdjacency(graph) {
+       _edges = _buildEdges(graph, accessEdgePenaltyM),
+       _adjacency = _buildAdjacency(graph, accessEdgePenaltyM) {
     for (final edge in _edges) {
       _edgeById[edge.id] = edge;
     }
@@ -37,6 +44,28 @@ class FloorMapMatcher {
   /// 넘는 후보는 센서 드리프트에 의한 다른 복도 스냅으로 보고 무시한다.
   final double transitionDistanceMultiplier;
 
+  /// 매장 입구·POI로 끝나는 짧은 가지가 가까이 있어도 주 통행 복도를 우선하기
+  /// 위한 거리 환산 페널티다. 실제 graph 거리에는 더하지 않고 후보 순위에만 쓴다.
+  final double accessEdgePenaltyM;
+
+  /// 최근 PDR 이동 방향과 후보 간선 방향이 직교할수록 후보 점수에 더하는 값이다.
+  final double directionMismatchPenaltyM;
+
+  /// 현재 간선에서 이 거리 이상 벗어나야 복구 증거를 누적한다.
+  final double recoveryTriggerDistanceM;
+
+  /// 같은 대체 복도가 연속해서 선택돼야 복구 전환을 허용한다.
+  final int recoveryConsecutiveSamples;
+
+  /// 복구 후보가 raw 위치에서 이 거리보다 멀면 잘못된 재부착으로 간주한다.
+  final double recoverySearchRadiusM;
+
+  /// 복구 모드에서 허용하는 최소 graph 이동거리다. 정상 모드의 4m 제한 때문에
+  /// 한번 놓친 분기를 영원히 통과하지 못하는 문제를 완화한다.
+  final double recoveryMinimumNetworkTransitionM;
+
+  final double recoveryTransitionDistanceMultiplier;
+
   final Map<String, GraphNode> _nodes;
   final List<_NetworkEdge> _edges;
   final Map<String, _NetworkEdge> _edgeById = {};
@@ -45,6 +74,9 @@ class FloorMapMatcher {
 
   _MatchedCandidate? _last;
   PdrLocalPoint? _lastRaw;
+  String? _suspectEdgeId;
+  int _suspectSamples = 0;
+  double _suspectRawDistanceM = 0;
 
   /// 시작점처럼 아직 직전 PDR 상태가 없는 좌표를 통행 가능한 graph 위로
   /// 투영한다. 이 호출은 matcher의 시간 상태를 바꾸지 않으므로, 사용자가
@@ -52,7 +84,7 @@ class FloorMapMatcher {
   MapMatchedFloorPoint? snapToWalkableNetwork(PdrLocalPoint point) {
     if (_edges.isEmpty) return null;
     final nearest = _candidatesFor(point).firstOrNull;
-    return nearest?.publicResult;
+    return nearest?.publicResult();
   }
 
   /// raw 한 점의 graph 위 매칭 결과다. 간선 전환은 현재 raw 점이 더 가깝다는
@@ -61,16 +93,19 @@ class FloorMapMatcher {
   MapMatchedFloorPoint? match(PdrLocalPoint raw) {
     if (_edges.isEmpty) return null;
 
-    final candidates = _candidatesFor(raw);
+    final movement = _lastRaw == null ? null : raw - _lastRaw!;
+    final rawStepM = movement?.distance ?? 0;
+    final candidates = _candidatesFor(raw, movement: movement);
     if (candidates.isEmpty) return null;
 
     final previous = _last;
     _MatchedCandidate selected;
+    var state = MapMatchState.tracking;
     if (previous == null) {
       selected = candidates.first;
+      _clearRecoveryEvidence();
     } else {
       final previousEdgeCandidate = previous.edge.project(raw);
-      final rawStepM = _lastRaw == null ? 0 : (raw - _lastRaw!).distance;
       final maxTransitionM = math.max(
         minimumNetworkTransitionM,
         rawStepM * transitionDistanceMultiplier + edgeSwitchBiasM,
@@ -91,22 +126,119 @@ class FloorMapMatcher {
       // 바꾼다. 그렇지 않으면 직전 간선 위에서 계속 투영해 벽 너머 복도로
       // 점프하지 않는다.
       if (bestReachableSwitch != null &&
-          bestReachableSwitch.distanceToGraphM + edgeSwitchBiasM <
-              previousEdgeCandidate.distanceToGraphM) {
+          _isClearlyBetter(
+            bestReachableSwitch,
+            previousEdgeCandidate,
+            movement,
+          )) {
         selected = bestReachableSwitch;
+        _clearRecoveryEvidence();
       } else {
-        selected = previousEdgeCandidate;
+        final recoveryCandidate = _bestRecoveryCandidate(
+          candidates,
+          previous,
+          previousEdgeCandidate,
+          movement,
+        );
+        if (recoveryCandidate == null ||
+            previousEdgeCandidate.distanceToGraphM < recoveryTriggerDistanceM) {
+          selected = previousEdgeCandidate;
+          _clearRecoveryEvidence();
+        } else {
+          _recordRecoveryEvidence(recoveryCandidate.edge.id, rawStepM);
+          selected = previousEdgeCandidate;
+          state = MapMatchState.suspect;
+
+          if (_suspectSamples >= recoveryConsecutiveSamples) {
+            final route = _routeBetween(previous, recoveryCandidate);
+            final recoveryTransitionM = math.max(
+              recoveryMinimumNetworkTransitionM,
+              _suspectRawDistanceM * recoveryTransitionDistanceMultiplier +
+                  edgeSwitchBiasM,
+            );
+            if (route != null && route.distanceM <= recoveryTransitionM) {
+              selected = recoveryCandidate;
+              state = MapMatchState.recovered;
+              _clearRecoveryEvidence();
+            }
+          }
+        }
       }
     }
 
     _last = selected;
     _lastRaw = raw;
-    return selected.publicResult;
+    return selected.publicResult(state: state);
   }
 
-  List<_MatchedCandidate> _candidatesFor(PdrLocalPoint point) =>
-      <_MatchedCandidate>[for (final edge in _edges) edge.project(point)]
-        ..sort((a, b) => a.distanceToGraphM.compareTo(b.distanceToGraphM));
+  List<_MatchedCandidate> _candidatesFor(
+    PdrLocalPoint point, {
+    PdrLocalPoint? movement,
+  }) => <_MatchedCandidate>[for (final edge in _edges) edge.project(point)]
+    ..sort(
+      (a, b) =>
+          _candidateScore(a, movement).compareTo(_candidateScore(b, movement)),
+    );
+
+  double _candidateScore(_MatchedCandidate candidate, PdrLocalPoint? movement) {
+    var score = candidate.distanceToGraphM + candidate.edge.matchingPenaltyM;
+    final movementDistance = movement?.distance ?? 0;
+    if (movement == null || movementDistance < 0.2) return score;
+
+    final dot =
+        (movement.eastM * candidate.tangentEast +
+            movement.northM * candidate.tangentNorth) /
+        movementDistance;
+    final alignment = candidate.edge.bidirectional
+        ? dot.abs().clamp(0.0, 1.0)
+        : dot.clamp(0.0, 1.0);
+    score += (1 - alignment) * directionMismatchPenaltyM;
+    return score;
+  }
+
+  bool _isClearlyBetter(
+    _MatchedCandidate candidate,
+    _MatchedCandidate current,
+    PdrLocalPoint? movement,
+  ) =>
+      _candidateScore(candidate, movement) + edgeSwitchBiasM <
+      _candidateScore(current, movement);
+
+  _MatchedCandidate? _bestRecoveryCandidate(
+    List<_MatchedCandidate> candidates,
+    _MatchedCandidate previous,
+    _MatchedCandidate current,
+    PdrLocalPoint? movement,
+  ) {
+    for (final candidate in candidates) {
+      if (candidate.edge.id == previous.edge.id ||
+          candidate.distanceToGraphM > recoverySearchRadiusM ||
+          !_isClearlyBetter(candidate, current, movement)) {
+        continue;
+      }
+      // 끊어진 graph 사이를 순간이동시키지 않는다. 연결되지 않은 후보는 복구
+      // 증거로도 쓰지 않아 기존 경로와 새 점을 직선으로 잇는 일을 막는다.
+      if (_routeBetween(previous, candidate) != null) return candidate;
+    }
+    return null;
+  }
+
+  void _recordRecoveryEvidence(String edgeId, double rawStepM) {
+    if (_suspectEdgeId == edgeId) {
+      _suspectSamples += 1;
+      _suspectRawDistanceM += rawStepM;
+      return;
+    }
+    _suspectEdgeId = edgeId;
+    _suspectSamples = 1;
+    _suspectRawDistanceM = rawStepM;
+  }
+
+  void _clearRecoveryEvidence() {
+    _suspectEdgeId = null;
+    _suspectSamples = 0;
+    _suspectRawDistanceM = 0;
+  }
 
   /// raw 점마다 선택된 간선만 돌려준다. 진단이나 간선 전환 테스트에 쓴다.
   List<MapMatchedFloorPoint> matchPath(Iterable<PdrLocalPoint> rawPath) => [
@@ -262,21 +394,35 @@ class FloorMapMatcher {
     );
   }
 
-  static List<_NetworkEdge> _buildEdges(FloorGraph graph) {
+  static List<_NetworkEdge> _buildEdges(
+    FloorGraph graph,
+    double accessEdgePenaltyM,
+  ) {
     final nodes = {for (final node in graph.nodes) node.id: node};
     final edges = <_NetworkEdge>[];
     for (final edge in graph.edges) {
-      final networkEdge = _NetworkEdge.fromGraphEdge(edge, nodes);
+      final networkEdge = _NetworkEdge.fromGraphEdge(
+        edge,
+        nodes,
+        accessEdgePenaltyM,
+      );
       if (networkEdge != null) edges.add(networkEdge);
     }
     return edges;
   }
 
-  static Map<String, List<_GraphArc>> _buildAdjacency(FloorGraph graph) {
+  static Map<String, List<_GraphArc>> _buildAdjacency(
+    FloorGraph graph,
+    double accessEdgePenaltyM,
+  ) {
     final nodes = {for (final node in graph.nodes) node.id: node};
     final adjacency = <String, List<_GraphArc>>{};
     for (final edge in graph.edges) {
-      final networkEdge = _NetworkEdge.fromGraphEdge(edge, nodes);
+      final networkEdge = _NetworkEdge.fromGraphEdge(
+        edge,
+        nodes,
+        accessEdgePenaltyM,
+      );
       if (networkEdge == null) continue;
       adjacency
           .putIfAbsent(networkEdge.fromNodeId, () => [])
@@ -297,12 +443,16 @@ class MapMatchedFloorPoint {
     required this.point,
     required this.edgeId,
     required this.distanceToGraphM,
+    this.state = MapMatchState.tracking,
   });
 
   final PdrLocalPoint point;
   final String edgeId;
   final double distanceToGraphM;
+  final MapMatchState state;
 }
+
+enum MapMatchState { tracking, suspect, recovered }
 
 class _NetworkEdge {
   _NetworkEdge({
@@ -311,6 +461,7 @@ class _NetworkEdge {
     required this.toNodeId,
     required this.bidirectional,
     required this.points,
+    required this.matchingPenaltyM,
   }) : _cumulativeLengths = _buildCumulativeLengths(points);
 
   final String id;
@@ -318,6 +469,7 @@ class _NetworkEdge {
   final String toNodeId;
   final bool bidirectional;
   final List<PdrLocalPoint> points;
+  final double matchingPenaltyM;
   final List<double> _cumulativeLengths;
 
   double get lengthM => _cumulativeLengths.last;
@@ -325,6 +477,7 @@ class _NetworkEdge {
   static _NetworkEdge? fromGraphEdge(
     GraphEdge edge,
     Map<String, GraphNode> nodes,
+    double accessEdgePenaltyM,
   ) {
     final geometry = edge.geometryLocalM.length >= 2
         ? edge.geometryLocalM
@@ -340,7 +493,31 @@ class _NetworkEdge {
       toNodeId: edge.toNodeId,
       bidirectional: edge.bidirectional,
       points: points,
+      matchingPenaltyM: _matchingPenalty(edge, nodes, accessEdgePenaltyM),
     );
+  }
+
+  static double _matchingPenalty(
+    GraphEdge edge,
+    Map<String, GraphNode> nodes,
+    double accessEdgePenaltyM,
+  ) {
+    final fromType = nodes[edge.fromNodeId]?.type.toLowerCase();
+    final toType = nodes[edge.toNodeId]?.type.toLowerCase();
+    const backboneTypes = {'corridor', 'junction', 'path', 'dead_end'};
+    const accessTypes = {'store_entrance', 'poi'};
+
+    if (edge.id.startsWith('store_edge_') ||
+        accessTypes.contains(fromType) ||
+        accessTypes.contains(toType)) {
+      return accessEdgePenaltyM;
+    }
+    if (backboneTypes.contains(fromType) && backboneTypes.contains(toType)) {
+      return 0;
+    }
+    // 승강기·에스컬레이터·출구 연결선은 필요할 때 선택할 수 있게 완전히
+    // 제외하지 않되, 같은 거리라면 주 복도를 먼저 고른다.
+    return accessEdgePenaltyM * 0.5;
   }
 
   _MatchedCandidate project(PdrLocalPoint raw) {
@@ -364,6 +541,8 @@ class _NetworkEdge {
         distanceToGraphM: distance,
         distanceAlongEdgeM:
             _cumulativeLengths[index - 1] + math.sqrt(segmentLengthSquared) * t,
+        tangentEast: dx / math.sqrt(segmentLengthSquared),
+        tangentNorth: dy / math.sqrt(segmentLengthSquared),
       );
       if (best == null || candidate.distanceToGraphM < best.distanceToGraphM) {
         best = candidate;
@@ -451,17 +630,24 @@ class _MatchedCandidate {
     required this.point,
     required this.distanceToGraphM,
     required this.distanceAlongEdgeM,
+    required this.tangentEast,
+    required this.tangentNorth,
   });
 
   final _NetworkEdge edge;
   final PdrLocalPoint point;
   final double distanceToGraphM;
   final double distanceAlongEdgeM;
+  final double tangentEast;
+  final double tangentNorth;
 
-  MapMatchedFloorPoint get publicResult => MapMatchedFloorPoint(
+  MapMatchedFloorPoint publicResult({
+    MapMatchState state = MapMatchState.tracking,
+  }) => MapMatchedFloorPoint(
     point: point,
     edgeId: edge.id,
     distanceToGraphM: distanceToGraphM,
+    state: state,
   );
 }
 
