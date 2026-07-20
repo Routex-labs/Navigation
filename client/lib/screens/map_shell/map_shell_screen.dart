@@ -467,8 +467,16 @@ class _MapShellScreenState extends State<MapShellScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _FavoritesPill(key: _favoritesPillKey, onTap: _openFavorites),
-                  const SizedBox(width: 8),
-                  _CategoryPill(key: _categoryPillKey, onTap: _openCategoryList),
+                  // 카테고리 pill은 실내 지도에서만 노출한다. 야외 모드에서는
+                  // "현재 건물"이 정의되지 않아 어떤 카테고리를 보여줄지 기준이
+                  // 없으므로 아예 숨긴다.
+                  if (_mode == MapMode.indoor) ...[
+                    const SizedBox(width: 8),
+                    _CategoryPill(
+                      key: _categoryPillKey,
+                      onTap: _openCategoryList,
+                    ),
+                  ],
                 ],
               ),
             ),
