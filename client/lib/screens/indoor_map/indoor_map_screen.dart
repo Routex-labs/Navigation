@@ -195,6 +195,14 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     if (mounted) setState(() {});
   }
 
+  void _onMapCameraBearingChanged(double bearingDeg) {
+    if (!bearingDeg.isFinite ||
+        (bearingDeg - _mapCameraBearingDeg).abs() < 0.01) {
+      return;
+    }
+    if (mounted) setState(() => _mapCameraBearingDeg = bearingDeg);
+  }
+
   Future<void> _stopPdrWhenDebugModeTurnsOff() async {
     if (indoorNavigationDriver.currentRuntimeStatus.state ==
         PdrRuntimeState.idle) {
@@ -767,6 +775,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         indoorNavigationDriver.currentRuntimeStatus.state !=
         PdrRuntimeState.idle;
     final debugEnabled = _debugModeController.enabled;
+    final absoluteNorthReference = absoluteNorthReferenceForBuilding(
+      widget.buildingId,
+    );
     final pdrCurrent = debugEnabled ? _pdrCurrentLocation : null;
     final debugOverlay = debugEnabled
         ? buildDebugMapOverlay(
@@ -825,7 +836,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
               ? _pdrRawPathPoints
               : const [],
           debugMapOverlay: debugOverlay,
-          onCameraBearingChanged: (bearing) => _mapCameraBearingDeg = bearing,
+          onCameraBearingChanged: _onMapCameraBearingChanged,
           onMapPressed: _onMapPressedForPdr,
           onStoreSelected: (selected) {
             setState(() => _highlightedStoreId = selected.id);
@@ -890,6 +901,21 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
             left: 12,
             right: 12,
             child: SafeArea(child: _PdrAnchorHint(onCancel: _cancelPdrAnchor)),
+          ),
+
+        if (debugEnabled &&
+            _debugModeController.showAbsoluteCardinals &&
+            absoluteNorthReference != null)
+          Positioned(
+            top: 142,
+            right: 12,
+            child: SafeArea(
+              bottom: false,
+              child: AbsoluteCardinalOverlay(
+                reference: absoluteNorthReference,
+                cameraBearingDeg: _mapCameraBearingDeg,
+              ),
+            ),
           ),
 
         if (route != null && routeDestination != null)

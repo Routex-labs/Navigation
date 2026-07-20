@@ -75,6 +75,7 @@ void main() {
       expect(controller.showRawPdrPath, isTrue);
       expect(controller.showConfirmedPdrPath, isTrue);
       expect(controller.showMapMatchedPdrPath, isTrue);
+      expect(controller.showAbsoluteCardinals, isTrue);
 
       await controller.setEnabled(true);
       await controller.setShowGraphNodes(false);
@@ -84,6 +85,7 @@ void main() {
       await controller.setShowRawPdrPath(false);
       await controller.setShowConfirmedPdrPath(false);
       await controller.setShowMapMatchedPdrPath(false);
+      await controller.setShowAbsoluteCardinals(false);
 
       final restored = DebugModeController(preferences: preferences);
       await restored.ready;
@@ -95,11 +97,56 @@ void main() {
       expect(restored.showRawPdrPath, isFalse);
       expect(restored.showConfirmedPdrPath, isFalse);
       expect(restored.showMapMatchedPdrPath, isFalse);
+      expect(restored.showAbsoluteCardinals, isFalse);
 
       controller.dispose();
       restored.dispose();
     },
   );
+
+  test('더현대 절대 진북은 현재 도면 위쪽에서 시계방향 38.5도다', () {
+    final reference = absoluteNorthReferenceForBuilding('thehyundai-seoul');
+
+    expect(reference, isNotNull);
+    expect(reference!.mapBearingDeg, 38.5);
+    expect(
+      absoluteDirectionScreenAngleDeg(
+        mapBearingDeg: reference.mapBearingDeg,
+        cameraBearingDeg: 10,
+      ),
+      28.5,
+    );
+    expect(
+      absoluteDirectionScreenAngleDeg(
+        mapBearingDeg: reference.mapBearingDeg,
+        cameraBearingDeg: 90,
+      ),
+      308.5,
+    );
+    expect(absoluteNorthReferenceForBuilding('unknown'), isNull);
+  });
+
+  testWidgets('절대 방위 오버레이는 네 방위를 모두 표시한다', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: AbsoluteCardinalOverlay(
+            reference: AbsoluteNorthReference(
+              mapBearingDeg: 38.5,
+              description: 'test',
+            ),
+            cameraBearingDeg: 0,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('absolute-cardinal-N')), findsOneWidget);
+    expect(find.byKey(const ValueKey('absolute-cardinal-E')), findsOneWidget);
+    expect(find.byKey(const ValueKey('absolute-cardinal-S')), findsOneWidget);
+    expect(find.byKey(const ValueKey('absolute-cardinal-W')), findsOneWidget);
+    expect(find.text('도면 진북 +38.5°'), findsOneWidget);
+  });
 
   test(
     'graph overlay marks the matched edge and its endpoint nodes active',
@@ -233,6 +280,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('debug-mode-enabled')));
     await tester.pumpAndSettle();
     expect(find.text('고급 표시 옵션'), findsOneWidget);
+    expect(find.text('절대 동·서·남·북'), findsOneWidget);
     expect(find.text('노드 이름'), findsOneWidget);
     expect(find.text('간선 이름'), findsOneWidget);
     expect(find.text('Raw 근접 경로'), findsOneWidget);

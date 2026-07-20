@@ -23,6 +23,7 @@ class DebugModeController extends ChangeNotifier {
   static const _showConfirmedPdrPathKey = 'debug_mode.show_confirmed_pdr_path';
   static const _showMapMatchedPdrPathKey =
       'debug_mode.show_map_matched_pdr_path';
+  static const _showAbsoluteCardinalsKey = 'debug_mode.show_absolute_cardinals';
 
   SharedPreferences? _preferences;
   late final Future<void> _loadFuture;
@@ -36,6 +37,7 @@ class DebugModeController extends ChangeNotifier {
   bool _showRawPdrPath = true;
   bool _showConfirmedPdrPath = true;
   bool _showMapMatchedPdrPath = true;
+  bool _showAbsoluteCardinals = true;
 
   bool get isLoaded => _isLoaded;
   Future<void> get ready => _loadFuture;
@@ -47,6 +49,7 @@ class DebugModeController extends ChangeNotifier {
   bool get showRawPdrPath => _showRawPdrPath;
   bool get showConfirmedPdrPath => _showConfirmedPdrPath;
   bool get showMapMatchedPdrPath => _showMapMatchedPdrPath;
+  bool get showAbsoluteCardinals => _showAbsoluteCardinals;
 
   Future<void> _load() async {
     try {
@@ -64,6 +67,8 @@ class DebugModeController extends ChangeNotifier {
           preferences.getBool(_showConfirmedPdrPathKey) ?? true;
       _showMapMatchedPdrPath =
           preferences.getBool(_showMapMatchedPdrPathKey) ?? true;
+      _showAbsoluteCardinals =
+          preferences.getBool(_showAbsoluteCardinalsKey) ?? true;
     } on Object {
       // 플랫폼 저장소가 없는 테스트/개발 환경에서는 기본값으로 동작한다.
     } finally {
@@ -122,6 +127,13 @@ class DebugModeController extends ChangeNotifier {
     value,
     () => _showMapMatchedPdrPath,
     (next) => _showMapMatchedPdrPath = next,
+  );
+
+  Future<void> setShowAbsoluteCardinals(bool value) => _setBool(
+    _showAbsoluteCardinalsKey,
+    value,
+    () => _showAbsoluteCardinals,
+    (next) => _showAbsoluteCardinals = next,
   );
 
   Future<void> _setBool(

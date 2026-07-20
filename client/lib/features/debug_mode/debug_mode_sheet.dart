@@ -119,6 +119,15 @@ class _AdvancedDebugOptions extends StatelessWidget {
       subtitle: const Text('노드·간선 및 PDR 경로별 표시를 선택합니다.'),
       children: [
         _DebugSwitch(
+          key: const ValueKey('debug-show-absolute-cardinals'),
+          title: '절대 동·서·남·북',
+          subtitle: '지도 회전과 무관한 실제 방위 표시',
+          color: const Color(0xFFD32F2F),
+          value: controller.showAbsoluteCardinals,
+          onChanged: controller.setShowAbsoluteCardinals,
+        ),
+        const Divider(height: 20),
+        _DebugSwitch(
           key: const ValueKey('debug-show-graph-nodes'),
           title: '지도 노드 점',
           subtitle: '노드 위치를 점으로 표시',
