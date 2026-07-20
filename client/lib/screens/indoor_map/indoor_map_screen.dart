@@ -608,14 +608,21 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           visibleInsets: EdgeInsets.fromLTRB(0, topOverlay, 0, bottomOverlay),
         ),
 
+        // 모바일에서 status bar 높이만큼 아래로 내려온 검색창(MapTopBar) 밑에
+        // 층 chip이 깔리지 않도록 SafeArea로 감싼다. 웹/데스크톱은 SafeArea.top이
+        // 0이라 기존 위치가 그대로 유지된다. 같은 이유로 _FavoritesPill,
+        // _PdrMapControl 등 다른 상단 오버레이도 모두 SafeArea를 쓰고 있다.
         Positioned(
           top: 78,
           left: 0,
           right: 0,
-          child: _IndoorInfoBar(
-            building: building,
-            selectedFloor: _selectedFloor,
-            onSelectFloor: _selectFloor,
+          child: SafeArea(
+            bottom: false,
+            child: _IndoorInfoBar(
+              building: building,
+              selectedFloor: _selectedFloor,
+              onSelectFloor: _selectFloor,
+            ),
           ),
         ),
 

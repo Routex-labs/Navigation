@@ -15,7 +15,7 @@
 ## 컴포넌트별 스택 / 이미지
 
 상세 설계 근거는 [docs/research/06-tech-stack.md](docs/research/06-tech-stack.md)를 참조한다.
-아래 값은 현재 `client/pubspec.yaml`과 `api/requirements.txt` 기준으로 관리한다.
+아래 값은 현재 `client/pubspec.yaml`과 `backend/requirements.txt` 기준으로 관리한다.
 
 | 컴포넌트 | 언어 / 런타임 | 핵심 의존성 | 베이스 이미지 | 이미지 태그 | 포트 |
 |---|---|---|---|---|---|

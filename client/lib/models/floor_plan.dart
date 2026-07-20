@@ -36,6 +36,7 @@ class StorePolygon {
     required this.centroid,
     this.entranceNodeId,
     this.category,
+    this.subcategory,
   });
 
   /// 벡터 타일에서 탭한 매장 feature(properties.id)와 매칭하는 데 쓴다.
@@ -47,8 +48,11 @@ class StorePolygon {
   /// 경로탐색 시작/도착 노드로 쓸 매장 입구 노드 ID. 없으면 경로탐색 불가.
   final String? entranceNodeId;
 
-  /// 매장 대분류(예: fashion/beauty/service). 백엔드 실데이터에만 채워짐.
+  /// 매장 대분류(예: 패션/뷰티/서비스). 백엔드 실데이터에만 채워짐.
   final String? category;
+
+  /// 매장 소분류(예: 여성패션/남성패션/컨템포러리). 백엔드 실데이터에만 채워짐.
+  final String? subcategory;
 }
 
 /// 층 평면도 중 지도 위젯(MapLibre)이 직접 그리지 않는 값들 — 근처 입구
@@ -123,6 +127,7 @@ class FloorPlan {
             centroid: centroid,
             entranceNodeId: store['entrance_node_id'] as String?,
             category: store['category'] as String?,
+            subcategory: store['subcategory'] as String?,
           );
         })
         .whereType<StorePolygon>()

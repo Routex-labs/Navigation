@@ -1,14 +1,14 @@
 services:
-  api:
+  backend:
     build:
-      context: ./api
-    image: navigation/api:0.1.0
+      context: ./backend
+    image: navigation/backend:0.1.0
     ports:
       - "8001:8001"
     environment:
       NAV_DATABASE_URL: sqlite:////app/data/navigation.db
     command: >
-      sh -c "python -m scripts.reset_and_seed &&
+      sh -c "python -m scripts.seed.reset_and_seed &&
              uvicorn app.main:app --host 0.0.0.0 --port 8001"
     healthcheck:
       test:
