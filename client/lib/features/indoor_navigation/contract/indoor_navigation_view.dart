@@ -1,7 +1,6 @@
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
 import 'calibration_state.dart';
-import 'pdr_heading_observation.dart';
 import 'pdr_runtime_status.dart';
 
 /// UI가 **구독**하는 읽기 전용 관찰 계약.
@@ -15,12 +14,6 @@ abstract interface class IndoorNavigationView {
 
   /// 가장 최근 스냅샷. 세션 시작 전이면 null.
   PdrSnapshot? get currentSnapshot;
-
-  /// 위치·걸음과 독립적으로 갱신되는 휴대폰 실시간 방위(최대 20Hz).
-  Stream<PdrHeadingObservation> get headingObservations;
-
-  /// 가장 최근 휴대폰 방위. 센서 샘플을 아직 못 받았으면 null.
-  PdrHeadingObservation? get currentHeadingObservation;
 
   /// 캘리브레이션 상태 스트림. 위치 렌더 여부·캘리브레이션 UI를 이걸로 결정한다.
   Stream<CalibrationStatus> get calibration;

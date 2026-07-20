@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/features/debug_mode/debug_mode.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/calibration_state.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/pdr_anchor.dart';
 import 'package:navigation_client/models/floor_graph.dart';
+import 'package:navigation_client/models/floor_plan.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 PdrSnapshot _snapshot() => const PdrSnapshot(
@@ -73,8 +75,7 @@ void main() {
       expect(controller.showRawPdrPath, isTrue);
       expect(controller.showConfirmedPdrPath, isTrue);
       expect(controller.showMapMatchedPdrPath, isTrue);
-      expect(controller.showAbsoluteCardinals, isTrue);
-      expect(controller.showPhoneHeading, isTrue);
+      expect(controller.showCardinalCross, isTrue);
 
       await controller.setEnabled(true);
       await controller.setShowGraphNodes(false);
@@ -82,8 +83,7 @@ void main() {
       await controller.setShowRawPdrPath(false);
       await controller.setShowConfirmedPdrPath(false);
       await controller.setShowMapMatchedPdrPath(false);
-      await controller.setShowAbsoluteCardinals(false);
-      await controller.setShowPhoneHeading(false);
+      await controller.setShowCardinalCross(false);
 
       final restored = DebugModeController(preferences: preferences);
       await restored.ready;
@@ -93,62 +93,64 @@ void main() {
       expect(restored.showRawPdrPath, isFalse);
       expect(restored.showConfirmedPdrPath, isFalse);
       expect(restored.showMapMatchedPdrPath, isFalse);
-      expect(restored.showAbsoluteCardinals, isFalse);
-      expect(restored.showPhoneHeading, isFalse);
+      expect(restored.showCardinalCross, isFalse);
 
       controller.dispose();
       restored.dispose();
     },
   );
 
-  test('더현대 절대 진북은 현재 도면 위쪽에서 시계방향 38.5도다', () {
-    final reference = absoluteNorthReferenceForBuilding('thehyundai-seoul');
+  test('더현대 정북은 다섯 랜드마크 대응으로 회전과 반전을 함께 결정한다', () {
+    final calibration = cardinalCalibrationForBuilding('thehyundai-seoul');
 
-    expect(reference, isNotNull);
-    expect(reference!.mapBearingDeg, 38.5);
-    expect(
-      absoluteDirectionScreenAngleDeg(
-        mapBearingDeg: reference.mapBearingDeg,
-        cameraBearingDeg: 10,
-      ),
-      28.5,
-    );
-    expect(
-      absoluteDirectionScreenAngleDeg(
-        mapBearingDeg: reference.mapBearingDeg,
-        cameraBearingDeg: 90,
-      ),
-      308.5,
-    );
-    expect(absoluteNorthReferenceForBuilding('unknown'), isNull);
+    expect(calibration, isNotNull);
+    expect(calibration!.landmarkCount, 5);
+    expect(calibration.reflected, isTrue);
+    expect(calibration.rmsErrorPx, lessThan(12));
+    expect(calibration.northMapBearingDeg, closeTo(308.9, 0.2));
+    expect(cardinalCalibrationForBuilding('unknown'), isNull);
   });
 
-  testWidgets('절대 방위 오버레이는 네 방위를 모두 표시한다', (tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
-          body: AbsoluteCardinalOverlay(
-            reference: AbsoluteNorthReference(
-              mapBearingDeg: 38.5,
-              description: 'test',
-            ),
-            cameraBearingDeg: 0,
-            showPhoneHeading: true,
-            phoneHeadingDeg: 25,
-            phoneHeadingStable: false,
-            phoneHeadingAccuracy: 'low',
-          ),
-        ),
+  test('현재 도면의 WGS84 랜드마크가 있으면 그 좌표로 정북을 다시 맞춘다', () {
+    StorePolygon store(String name, double latitude, double longitude) =>
+        StorePolygon(
+          id: name,
+          name: name,
+          polygon: const [],
+          centroid: LatLng(latitude, longitude),
+        );
+
+    final calibration = cardinalCalibrationForBuilding(
+      'thehyundai-seoul',
+      floorPlan: FloorPlan(
+        pois: const [],
+        stores: [
+          store('보테가 베네타', 37.52539279890545, 126.92820599451144),
+          store('불가리', 37.525378771370065, 126.92839318128878),
+          store('티파니앤코', 37.5259072870112, 126.92861936102356),
+          store('루이비통', 37.525630957187424, 126.9289095728308),
+          store('프라다', 37.5253297978992, 126.92882557288411),
+        ],
       ),
     );
 
-    expect(find.byKey(const ValueKey('absolute-cardinal-N')), findsOneWidget);
-    expect(find.byKey(const ValueKey('absolute-cardinal-E')), findsOneWidget);
-    expect(find.byKey(const ValueKey('absolute-cardinal-S')), findsOneWidget);
-    expect(find.byKey(const ValueKey('absolute-cardinal-W')), findsOneWidget);
-    expect(find.text('도면 진북 +38.5°'), findsOneWidget);
-    expect(find.byKey(const ValueKey('phone-heading-needle')), findsOneWidget);
-    expect(find.text('폰 25° · LOW'), findsOneWidget);
+    expect(calibration, isNotNull);
+    expect(calibration!.landmarkCount, 5);
+    expect(calibration.northMapBearingDeg, closeTo(305.2, 0.2));
+  });
+
+  test('방위 십자선 네 끝점은 건물 중심 주변의 지도 좌표로 생성된다', () {
+    final cross = buildLandmarkCardinalCross(
+      buildingId: 'thehyundai-seoul',
+      floorPlan: const FloorPlan(
+        footprint: [LatLng(37.5250, 126.9280), LatLng(37.5260, 126.9290)],
+        pois: [],
+      ),
+    );
+
+    expect(cross, isNotNull);
+    expect(cross!.north, isNot(cross.south));
+    expect(cross.east, isNot(cross.west));
   });
 
   test(
@@ -283,8 +285,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('debug-mode-enabled')));
     await tester.pumpAndSettle();
     expect(find.text('고급 표시 옵션'), findsOneWidget);
-    expect(find.text('절대 동·서·남·북'), findsOneWidget);
-    expect(find.text('폰 측정 방위'), findsOneWidget);
+    expect(find.text('지도 고정 방위선'), findsOneWidget);
     expect(find.text('노드 이름'), findsNothing);
     expect(find.text('간선 이름'), findsNothing);
     expect(find.text('Raw 근접 경로'), findsOneWidget);

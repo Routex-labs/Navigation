@@ -61,9 +61,6 @@ class FakePdrMotionSource implements PdrMotionSource {
 Map<String, Object?> motionEvent({
   required int tMs,
   double heading = 0,
-  double? deviceHeading,
-  bool headingStable = true,
-  String magneticAccuracy = 'high',
   String source = 'device_motion/xMagneticNorthZVertical',
   int? stepPeakCount,
   int? latestStepPeakMs,
@@ -72,9 +69,7 @@ Map<String, Object?> motionEvent({
   'kind': 'motion',
   'stepSessionId': 1,
   'fusedHeadingDeg': heading,
-  'deviceHeadingDeg': deviceHeading,
-  'headingStable': headingStable,
-  'magneticAccuracy': magneticAccuracy,
+  'headingStable': true,
   'headingSource': source,
   'motionTimestamp': tMs.toDouble(),
   'stepPeakCount': ?stepPeakCount,
@@ -175,30 +170,6 @@ void main() {
     expect(driver.currentSnapshot!.steps, 10);
     expect(driver.currentSnapshot!.distanceM, closeTo(7.0, 1e-9));
     expect(seen, isNotEmpty);
-  });
-
-  test('휴대폰 센서 원본 방위를 위치 스냅샷과 별도 스트림으로 방출한다', () async {
-    await driver.startGuidance(floorId: 'F1');
-    final seen = <PdrHeadingObservation>[];
-    driver.headingObservations.listen(seen.add);
-
-    source.emitRaw(
-      motionEvent(
-        tMs: 1000,
-        heading: 42,
-        deviceHeading: 47,
-        headingStable: false,
-        magneticAccuracy: 'low',
-      ),
-    );
-    await settle();
-
-    expect(seen, hasLength(1));
-    expect(seen.single.measuredBearingDeg, 47);
-    expect(seen.single.walkingBearingDeg, closeTo(42, 1e-9));
-    expect(seen.single.stable, isFalse);
-    expect(seen.single.magneticAccuracy, 'low');
-    expect(driver.currentHeadingObservation, same(seen.single));
   });
 
   test('자북 기준: pin 확정으로 바로 calibrated', () async {

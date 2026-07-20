@@ -121,8 +121,6 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   String? _highlightedStoreId;
   late final DebugPdrTrailState _pdrTrailState;
   StreamSubscription<PdrSnapshot>? _pdrSnapshotSub;
-  StreamSubscription<PdrHeadingObservation>? _pdrHeadingSub;
-  PdrHeadingObservation? _pdrHeadingObservation;
   StreamSubscription<CalibrationStatus>? _pdrCalibrationSub;
   bool _placingPdrAnchor = false;
   PdrDebugSessionRecorder? _pdrDebugRecorder;
@@ -158,14 +156,6 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       snapshot: indoorNavigationDriver.currentSnapshot,
       calibration: indoorNavigationDriver.currentCalibration,
     );
-    _pdrHeadingObservation = indoorNavigationDriver.currentHeadingObservation;
-    _pdrHeadingSub = indoorNavigationDriver.headingObservations.listen((
-      observation,
-    ) {
-      if (mounted) {
-        setState(() => _pdrHeadingObservation = observation);
-      }
-    });
     _pdrSnapshotSub = indoorNavigationDriver.snapshots.listen((snapshot) {
       _pdrDebugRecorder?.recordSnapshot(snapshot);
       if (mounted) setState(() => _pdrTrailState.recordSnapshot(snapshot));
@@ -188,7 +178,6 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   @override
   void dispose() {
     _pdrSnapshotSub?.cancel();
-    _pdrHeadingSub?.cancel();
     _pdrCalibrationSub?.cancel();
     _debugModeController
       ..removeListener(_onDebugModeChanged)
@@ -204,14 +193,6 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       unawaited(_stopPdrWhenDebugModeTurnsOff());
     }
     if (mounted) setState(() {});
-  }
-
-  void _onMapCameraBearingChanged(double bearingDeg) {
-    if (!bearingDeg.isFinite ||
-        (bearingDeg - _mapCameraBearingDeg).abs() < 0.01) {
-      return;
-    }
-    if (mounted) setState(() => _mapCameraBearingDeg = bearingDeg);
   }
 
   Future<void> _stopPdrWhenDebugModeTurnsOff() async {
@@ -543,7 +524,6 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     }
     setState(() {
       _pdrTrailState.beginNewSession();
-      _pdrHeadingObservation = null;
     });
     _pdrDebugRecorder = PdrDebugSessionRecorder();
     _pdrDebugRecorder?.recordRuntime(
@@ -789,17 +769,19 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         indoorNavigationDriver.currentRuntimeStatus.state !=
         PdrRuntimeState.idle;
     final debugEnabled = _debugModeController.enabled;
-    final absoluteNorthReference = absoluteNorthReferenceForBuilding(
-      widget.buildingId,
-    );
+    final cardinalCross = debugEnabled && _debugModeController.showCardinalCross
+        ? buildLandmarkCardinalCross(
+            buildingId: widget.buildingId,
+            floorPlan: floorPlan,
+          )
+        : null;
     final pdrCurrent = debugEnabled ? _pdrCurrentLocation : null;
     final debugOverlay = debugEnabled
         ? buildDebugMapOverlay(
             _floorGraph,
             showNodes: _debugModeController.showGraphNodes,
             showEdges: _debugModeController.showGraphEdges,
-            showNodeLabels: false,
-            showEdgeLabels: false,
+            cardinalCross: cardinalCross,
             activeEdgeIds: _pdrMatchedEdgeIds,
           )
         : const DebugMapOverlay();
@@ -850,7 +832,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
               ? _pdrRawPathPoints
               : const [],
           debugMapOverlay: debugOverlay,
-          onCameraBearingChanged: _onMapCameraBearingChanged,
+          onCameraBearingChanged: (bearing) => _mapCameraBearingDeg = bearing,
           onMapPressed: _onMapPressedForPdr,
           onStoreSelected: (selected) {
             setState(() => _highlightedStoreId = selected.id);
@@ -915,28 +897,6 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
             left: 12,
             right: 12,
             child: SafeArea(child: _PdrAnchorHint(onCancel: _cancelPdrAnchor)),
-          ),
-
-        if (debugEnabled &&
-            _debugModeController.showAbsoluteCardinals &&
-            absoluteNorthReference != null)
-          Positioned(
-            top: 142,
-            right: 12,
-            child: SafeArea(
-              bottom: false,
-              child: AbsoluteCardinalOverlay(
-                reference: absoluteNorthReference,
-                cameraBearingDeg: _mapCameraBearingDeg,
-                showPhoneHeading: _debugModeController.showPhoneHeading,
-                phoneHeadingDeg:
-                    pdrActive && _debugModeController.showPhoneHeading
-                    ? _pdrHeadingObservation?.measuredBearingDeg
-                    : null,
-                phoneHeadingStable: _pdrHeadingObservation?.stable ?? false,
-                phoneHeadingAccuracy: _pdrHeadingObservation?.magneticAccuracy,
-              ),
-            ),
           ),
 
         if (route != null && routeDestination != null)

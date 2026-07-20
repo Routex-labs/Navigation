@@ -29,24 +29,36 @@ class DebugMapEdge {
   final bool active;
 }
 
+class DebugCardinalCross {
+  const DebugCardinalCross({
+    required this.north,
+    required this.east,
+    required this.south,
+    required this.west,
+  });
+
+  final ll.LatLng north;
+  final ll.LatLng east;
+  final ll.LatLng south;
+  final ll.LatLng west;
+}
+
 class DebugMapOverlay {
   const DebugMapOverlay({
     this.nodes = const [],
     this.edges = const [],
     this.showNodes = false,
     this.showEdges = false,
-    this.showNodeLabels = false,
-    this.showEdgeLabels = false,
+    this.cardinalCross,
   });
 
   final List<DebugMapNode> nodes;
   final List<DebugMapEdge> edges;
   final bool showNodes;
   final bool showEdges;
-  final bool showNodeLabels;
-  final bool showEdgeLabels;
+  final DebugCardinalCross? cardinalCross;
 
-  bool get isEmpty => nodes.isEmpty && edges.isEmpty;
+  bool get isEmpty => nodes.isEmpty && edges.isEmpty && cardinalCross == null;
 }
 
 /// floor-local navigation graph를 MapLibre가 바로 그릴 수 있는 WGS84 진단
@@ -55,14 +67,11 @@ DebugMapOverlay buildDebugMapOverlay(
   FloorGraph? graph, {
   bool showNodes = true,
   bool showEdges = true,
-  bool showNodeLabels = false,
-  bool showEdgeLabels = false,
+  DebugCardinalCross? cardinalCross,
   Set<String> activeEdgeIds = const {},
 }) {
-  if (graph == null ||
-      graph.nodes.isEmpty ||
-      (!showNodes && !showEdges && !showNodeLabels && !showEdgeLabels)) {
-    return const DebugMapOverlay();
+  if (graph == null || graph.nodes.isEmpty || (!showNodes && !showEdges)) {
+    return DebugMapOverlay(cardinalCross: cardinalCross);
   }
 
   final transform = fitFloorGeoTransform(graph.nodes);
@@ -81,7 +90,7 @@ DebugMapOverlay buildDebugMapOverlay(
     return ll.LatLng(point.$1, point.$2);
   }
 
-  final nodes = showNodes || showNodeLabels
+  final nodes = showNodes
       ? [
           for (final node in graph.nodes)
             DebugMapNode(
@@ -93,7 +102,7 @@ DebugMapOverlay buildDebugMapOverlay(
       : const <DebugMapNode>[];
 
   final edges = <DebugMapEdge>[];
-  if (showEdges || showEdgeLabels) {
+  if (showEdges) {
     for (final edge in graph.edges) {
       final from = nodesById[edge.fromNodeId];
       final to = nodesById[edge.toNodeId];
@@ -122,7 +131,6 @@ DebugMapOverlay buildDebugMapOverlay(
     edges: edges,
     showNodes: showNodes,
     showEdges: showEdges,
-    showNodeLabels: showNodeLabels,
-    showEdgeLabels: showEdgeLabels,
+    cardinalCross: cardinalCross,
   );
 }
