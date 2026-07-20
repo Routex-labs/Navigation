@@ -21,9 +21,12 @@ abstract interface class IndoorNavigationIntents {
     PdrToFloorAxes axes = const PdrToFloorAxes.identity(),
   });
 
-  /// 사용자가 현재 진행 방향을 지도 기준으로 맞춰 회전(rotationDeg)을 확정한다.
-  /// arbitrary heading reference일 때 필수(§4).
-  Future<void> confirmAnchorByHeading({required double floorHeadingDeg});
+  /// 사용자가 현재 진행 방향을 floor local_m 방향으로 맞춰 rotation을 확정한다.
+  /// [floorDirection]은 위치가 아닌 단위와 무관한 방향 벡터다. 컨트롤러가 anchor
+  /// 확정 때 받은 axes로 PDR 동·북 방향에 역변환한다.
+  Future<void> confirmAnchorByFloorDirection({
+    required PdrLocalPoint floorDirection,
+  });
 
   /// 층 변경. PDR 세션을 reset하고 새 층 anchor 확정을 다시 요구한다.
   Future<void> changeFloor({required String floorId});

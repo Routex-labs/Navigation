@@ -203,13 +203,30 @@ void main() {
     );
     await settle();
 
-    await driver.confirmAnchorByPin(floorPointM: const PdrLocalPoint(0, 0));
+    const rotatedAxes = PdrToFloorAxes(
+      // 실제 동쪽은 floor 위쪽(+y), 실제 북쪽은 floor 왼쪽(-x)인 회전층.
+      eastToX: 0,
+      northToX: -1,
+      eastToY: 1,
+      northToY: 0,
+    );
+    await driver.confirmAnchorByPin(
+      floorPointM: const PdrLocalPoint(0, 0),
+      axes: rotatedAxes,
+    );
     expect(driver.currentCalibration.phase, CalibrationPhase.awaitingHeading);
     expect(driver.currentCalibration.requiresManualRotationCalibration, isTrue);
 
-    await driver.confirmAnchorByHeading(floorHeadingDeg: 90);
+    await driver.confirmAnchorByFloorDirection(
+      floorDirection: const PdrLocalPoint(0, 1),
+    );
     expect(driver.currentCalibration.phase, CalibrationPhase.calibrated);
     expect(driver.currentCalibration.anchor!.rotationDeg, closeTo(90, 1e-9));
+    final mappedNorth = FloorCoordinateTransform(
+      driver.currentCalibration.anchor!,
+    ).toFloor(const PdrLocalPoint(0, 1));
+    expect(mappedNorth.eastM, closeTo(0, 1e-9));
+    expect(mappedNorth.northM, closeTo(1, 1e-9));
   });
 
   test('background는 tracking을 pause해 이후 배치를 반영하지 않는다', () async {

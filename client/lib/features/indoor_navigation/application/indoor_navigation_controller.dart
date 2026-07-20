@@ -152,12 +152,20 @@ class IndoorNavigationDriver implements IndoorNavigationController {
   }
 
   @override
-  Future<void> confirmAnchorByHeading({required double floorHeadingDeg}) async {
+  Future<void> confirmAnchorByFloorDirection({
+    required PdrLocalPoint floorDirection,
+  }) async {
     if (!_guiding || _pendingPinFloorM == null) {
       return;
     }
-    // PDR 보행 heading을 floor heading에 맞추는 회전.
-    final rotationDeg = floorHeadingDeg - _session.walkingHeadingDeg;
+    // 화면/floor 좌표의 방향을 자북 기준 PDR 동·북 frame으로 되돌린 뒤 비교한다.
+    // axes가 반전되거나 회전된 층에서 floor 각도를 바로 빼면 90°/180° 오차가 난다.
+    final pdrDirection = _pendingAxes.inverseApply(floorDirection);
+    if (pdrDirection == null || pdrDirection.distance < 1e-12) return;
+    final targetPdrHeadingDeg = pdrBearingForDirection(pdrDirection);
+    final rotationDeg = normalizePdrRotation(
+      targetPdrHeadingDeg - _session.walkingHeadingDeg,
+    );
     _finalizeAnchor(
       rotationDeg: rotationDeg,
       source: AnchorSource.manualHeadingCal,

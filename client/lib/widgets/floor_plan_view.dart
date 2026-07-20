@@ -96,6 +96,7 @@ class FloorPlanView extends StatefulWidget {
     this.highlightedStoreId,
     this.visibleInsets = EdgeInsets.zero,
     this.overlayHitTest,
+    this.onCameraBearingChanged,
   });
 
   final String buildingId;
@@ -118,6 +119,10 @@ class FloorPlanView extends StatefulWidget {
   /// 를 우회해 네이티브 지도까지 흘러들어와 매장까지 함께 선택되는 문제가 있다.
   /// 이 콜백으로 오버레이 소유자가 명시적으로 그 영역의 탭을 무시하게 한다.
   final bool Function(Offset globalPoint)? overlayHitTest;
+
+  /// 화면 위/오른쪽처럼 뷰포트 기준 방향을 실제 지도 방향으로 바꿀 수 있도록
+  /// 현재 카메라 bearing(0°=북쪽)을 상위에 알린다.
+  final ValueChanged<double>? onCameraBearingChanged;
 
   /// 현재 위치 마커. null이면 표시하지 않는다.
   final ll.LatLng? currentLocation;
@@ -221,13 +226,16 @@ class _FloorPlanViewState extends State<FloorPlanView> {
       // initialCameraPosition의 줌(18)에 영원히 멈춰 있어서, 사용자가 확대해도
       // onCameraIdle마다 "하한보다 낮다"고 오판하고 줌을 되돌려버린다.
       trackCameraPosition: true,
-      onMapCreated: (controller) => _controller = controller,
+      onMapCreated: (controller) {
+        _controller = controller;
+        _notifyCameraBearing();
+      },
       onStyleLoadedCallback: _onStyleLoaded,
       onMapClick: _handleMapClick,
       // maplibre_gl 웹 구현이 minMaxZoomPreference를 놓치는 경우에 대비한
       // 이중 안전장치. 제스처가 끝난 시점에 하한 아래로 내려가 있으면
       // 하한으로 다시 올려서, "축소하면 건물이 사라진다"는 문제를 뿌리째 막는다.
-      onCameraIdle: _enforceMinZoom,
+      onCameraIdle: _handleCameraIdle,
       // 웹에서는 기본값(false)이면 매장 폴리곤처럼 상호작용 가능한 레이어를
       // 탭했을 때 onMapClick이 아예 안 불려서(대신 별도 feature-tap 이벤트만
       // 발생) 매장을 눌러도 아무 반응이 없었다. onMapClick 하나로 매장 탭
@@ -759,6 +767,18 @@ class _FloorPlanViewState extends State<FloorPlanView> {
     // 않도록 아주 작은 여유(0.01)를 둔다.
     if (position.zoom < minZoom - 0.01) {
       controller.moveCamera(CameraUpdate.zoomTo(minZoom));
+    }
+  }
+
+  void _handleCameraIdle() {
+    _enforceMinZoom();
+    _notifyCameraBearing();
+  }
+
+  void _notifyCameraBearing() {
+    final bearing = _controller?.cameraPosition?.bearing;
+    if (bearing != null && bearing.isFinite) {
+      widget.onCameraBearingChanged?.call(bearing);
     }
   }
 

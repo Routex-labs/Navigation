@@ -125,6 +125,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   bool _placingPdrAnchor = false;
   PdrDebugSessionRecorder? _pdrDebugRecorder;
   bool _exportingPdrDebugJson = false;
+  double _mapCameraBearingDeg = 0;
   final GlobalKey _pdrShareButtonKey = GlobalKey();
   late final DebugModeController _debugModeController;
 
@@ -452,6 +453,13 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     return ll.LatLng(wgs84.$1, wgs84.$2);
   }
 
+  double? get _pdrCurrentHeadingDeg {
+    final snapshot = _pdrTrailState.snapshot;
+    final anchor = _pdrTrailState.anchor;
+    if (snapshot == null || anchor == null || !snapshot.hasHeading) return null;
+    return normalizePdrBearing(snapshot.walkingHeadingDeg + anchor.rotationDeg);
+  }
+
   /// 걸음이 아직 확정되지 않은 PDR 시작 직후에도, 사용자가 선택한 anchor를
   /// 현재 위치 마커로 표시한다. PDR을 켜기 전에는 null이라 도면 중앙에 가짜
   /// 현재 위치가 나타나지 않는다.
@@ -555,19 +563,25 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 
   Future<void> _confirmPdrAnchor(PdrLocalPoint floorPoint) async {
     final graph = _floorGraph;
+    final axes = graph == null
+        ? const PdrToFloorAxes.identity()
+        : fitPdrToFloorAxes(graph.nodes);
     await indoorNavigationDriver.confirmAnchorByPin(
       floorPointM: floorPoint,
-      axes: graph == null
-          ? const PdrToFloorAxes.identity()
-          : fitPdrToFloorAxes(graph.nodes),
+      axes: axes,
     );
     if (!mounted) return;
     if (indoorNavigationDriver.currentCalibration.phase ==
         CalibrationPhase.awaitingHeading) {
-      final heading = await _askFloorHeading();
-      if (heading == null || !mounted) return;
-      await indoorNavigationDriver.confirmAnchorByHeading(
-        floorHeadingDeg: heading,
+      final screenDirection = await _askScreenDirection();
+      if (screenDirection == null || !mounted) return;
+      final floorDirection = floorDirectionForScreenDirection(
+        cameraBearingDeg: _mapCameraBearingDeg,
+        screenClockwiseOffsetDeg: screenDirection,
+        axes: axes,
+      );
+      await indoorNavigationDriver.confirmAnchorByFloorDirection(
+        floorDirection: floorDirection,
       );
     }
     if (!mounted) return;
@@ -584,7 +598,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     if (mounted) setState(() => _placingPdrAnchor = false);
   }
 
-  Future<double?> _askFloorHeading() {
+  Future<double?> _askScreenDirection() {
     return showDialog<double>(
       context: context,
       builder: (context) => AlertDialog(
@@ -796,7 +810,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           currentLocation: current,
           currentHeadingDegrees: pdrCurrent == null
               ? null
-              : _pdrTrailState.snapshot?.walkingHeadingDeg,
+              : _pdrCurrentHeadingDeg,
           destination: routeDestination?.point,
           routePoints: route?.points ?? const [],
           pdrPathPoints:
@@ -811,6 +825,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
               ? _pdrRawPathPoints
               : const [],
           debugMapOverlay: debugOverlay,
+          onCameraBearingChanged: (bearing) => _mapCameraBearingDeg = bearing,
           onMapPressed: _onMapPressedForPdr,
           onStoreSelected: (selected) {
             setState(() => _highlightedStoreId = selected.id);

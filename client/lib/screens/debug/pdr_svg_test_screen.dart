@@ -81,8 +81,8 @@ class _PdrSvgTestScreenState extends State<PdrSvgTestScreen> {
     if (indoorNavigationDriver
         .currentCalibration
         .requiresManualRotationCalibration) {
-      await indoorNavigationDriver.confirmAnchorByHeading(
-        floorHeadingDeg: _svgClockwiseRotationDeg,
+      await indoorNavigationDriver.confirmAnchorByFloorDirection(
+        floorDirection: pdrDirectionForBearing(_svgClockwiseRotationDeg),
       );
     }
     if (mounted) setState(() => _starting = false);

@@ -50,8 +50,10 @@ class FakeIndoorNavigation implements IndoorNavigationController {
   }
 
   @override
-  Future<void> confirmAnchorByHeading({required double floorHeadingDeg}) async {
-    log.add('heading:$floorHeadingDeg');
+  Future<void> confirmAnchorByFloorDirection({
+    required PdrLocalPoint floorDirection,
+  }) async {
+    log.add('heading:${floorDirection.eastM},${floorDirection.northM}');
   }
 
   @override
@@ -140,6 +142,43 @@ void main() {
       final p = t.toFloor(const PdrLocalPoint(0, 1));
       expect(p.eastM, closeTo(1, 1e-9));
       expect(p.northM, closeTo(0, 1e-9));
+    });
+
+    test('회전된 floor 방향을 axes 역변환해 PDR bearing으로 복원한다', () {
+      const axes = PdrToFloorAxes(
+        eastToX: 0,
+        northToX: -1,
+        eastToY: 1,
+        northToY: 0,
+      );
+
+      final pdrDirection = axes.inverseApply(const PdrLocalPoint(0, 1));
+
+      expect(pdrDirection, isNotNull);
+      expect(pdrBearingForDirection(pdrDirection!), closeTo(90, 1e-9));
+    });
+
+    test('화면 방향은 camera bearing을 반영해 floor 방향으로 바뀐다', () {
+      const axes = PdrToFloorAxes(
+        eastToX: 1,
+        northToX: 0,
+        eastToY: 0,
+        northToY: -1,
+      );
+
+      final floorDirection = floorDirectionForScreenDirection(
+        cameraBearingDeg: 30,
+        screenClockwiseOffsetDeg: 90,
+        axes: axes,
+      );
+      final pdrDirection = axes.inverseApply(floorDirection)!;
+
+      expect(pdrBearingForDirection(pdrDirection), closeTo(120, 1e-9));
+    });
+
+    test('heading 회전 차이는 360도 경계에서 최단각으로 정규화한다', () {
+      expect(normalizePdrRotation(1 - 359), closeTo(2, 1e-9));
+      expect(normalizePdrRotation(359 - 1), closeTo(-2, 1e-9));
     });
 
     test('남쪽으로 증가하는 floor y축으로 자북 PDR를 바꾼다', () {

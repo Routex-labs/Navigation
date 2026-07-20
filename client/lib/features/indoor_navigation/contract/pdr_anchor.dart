@@ -79,7 +79,54 @@ class PdrToFloorAxes {
     eastToX * point.eastM + northToX * point.northM,
     eastToY * point.eastM + northToY * point.northM,
   );
+
+  /// floor `local_m` 방향을 자북 기준 PDR `(east, north)` 방향으로 되돌린다.
+  ///
+  /// 실측 affine가 퇴화한 경우 잘못된 방향으로 보정하지 않도록 null을 반환한다.
+  PdrLocalPoint? inverseApply(PdrLocalPoint point) {
+    final determinant = eastToX * northToY - northToX * eastToY;
+    if (determinant.abs() < 1e-12) return null;
+    return PdrLocalPoint(
+      (northToY * point.eastM - northToX * point.northM) / determinant,
+      (-eastToY * point.eastM + eastToX * point.northM) / determinant,
+    );
+  }
 }
+
+/// 0°=북쪽, 90°=동쪽인 bearing을 PDR 동·북 단위 벡터로 바꾼다.
+PdrLocalPoint pdrDirectionForBearing(double bearingDeg) {
+  final radians = bearingDeg * math.pi / 180;
+  return PdrLocalPoint(math.sin(radians), math.cos(radians));
+}
+
+/// PDR 동·북 방향 벡터를 0° 이상 360° 미만의 bearing으로 바꾼다.
+double pdrBearingForDirection(PdrLocalPoint direction) => normalizePdrBearing(
+  math.atan2(direction.eastM, direction.northM) * 180 / math.pi,
+);
+
+double normalizePdrBearing(double bearingDeg) {
+  final normalized = bearingDeg % 360;
+  return normalized < 0 ? normalized + 360 : normalized;
+}
+
+/// 두 bearing 사이의 최단 회전각을 -180° 이상 180° 미만으로 정규화한다.
+double normalizePdrRotation(double rotationDeg) {
+  final normalized = (rotationDeg + 180) % 360;
+  return (normalized < 0 ? normalized + 360 : normalized) - 180;
+}
+
+/// 현재 지도 카메라를 기준으로 고른 화면 방향을 floor-local 방향으로 바꾼다.
+///
+/// 화면 위쪽은 camera bearing, 오른쪽은 camera bearing+90°가 가리키는 실제
+/// 동·북 방향이다. 컨트롤러는 이 floor 방향을 [PdrToFloorAxes.inverseApply]로
+/// 되돌린 뒤 arbitrary PDR heading과 비교한다.
+PdrLocalPoint floorDirectionForScreenDirection({
+  required double cameraBearingDeg,
+  required double screenClockwiseOffsetDeg,
+  required PdrToFloorAxes axes,
+}) => axes.apply(
+  pdrDirectionForBearing(cameraBearingDeg + screenClockwiseOffsetDeg),
+);
 
 /// 나침반 bearing 보정각을 PDR east/north 벡터에 적용한다.
 ///
