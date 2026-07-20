@@ -121,6 +121,8 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   String? _highlightedStoreId;
   late final DebugPdrTrailState _pdrTrailState;
   StreamSubscription<PdrSnapshot>? _pdrSnapshotSub;
+  StreamSubscription<PdrHeadingObservation>? _pdrHeadingSub;
+  PdrHeadingObservation? _pdrHeadingObservation;
   StreamSubscription<CalibrationStatus>? _pdrCalibrationSub;
   bool _placingPdrAnchor = false;
   PdrDebugSessionRecorder? _pdrDebugRecorder;
@@ -156,6 +158,14 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       snapshot: indoorNavigationDriver.currentSnapshot,
       calibration: indoorNavigationDriver.currentCalibration,
     );
+    _pdrHeadingObservation = indoorNavigationDriver.currentHeadingObservation;
+    _pdrHeadingSub = indoorNavigationDriver.headingObservations.listen((
+      observation,
+    ) {
+      if (mounted) {
+        setState(() => _pdrHeadingObservation = observation);
+      }
+    });
     _pdrSnapshotSub = indoorNavigationDriver.snapshots.listen((snapshot) {
       _pdrDebugRecorder?.recordSnapshot(snapshot);
       if (mounted) setState(() => _pdrTrailState.recordSnapshot(snapshot));
@@ -178,6 +188,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   @override
   void dispose() {
     _pdrSnapshotSub?.cancel();
+    _pdrHeadingSub?.cancel();
     _pdrCalibrationSub?.cancel();
     _debugModeController
       ..removeListener(_onDebugModeChanged)
@@ -530,7 +541,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       }
       return;
     }
-    setState(() => _pdrTrailState.beginNewSession());
+    setState(() {
+      _pdrTrailState.beginNewSession();
+      _pdrHeadingObservation = null;
+    });
     _pdrDebugRecorder = PdrDebugSessionRecorder();
     _pdrDebugRecorder?.recordRuntime(
       indoorNavigationDriver.currentRuntimeStatus,
@@ -784,8 +798,8 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
             _floorGraph,
             showNodes: _debugModeController.showGraphNodes,
             showEdges: _debugModeController.showGraphEdges,
-            showNodeLabels: _debugModeController.showGraphNodeLabels,
-            showEdgeLabels: _debugModeController.showGraphEdgeLabels,
+            showNodeLabels: false,
+            showEdgeLabels: false,
             activeEdgeIds: _pdrMatchedEdgeIds,
           )
         : const DebugMapOverlay();
@@ -916,6 +930,13 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
               child: AbsoluteCardinalOverlay(
                 reference: absoluteNorthReference,
                 cameraBearingDeg: _mapCameraBearingDeg,
+                showPhoneHeading: _debugModeController.showPhoneHeading,
+                phoneHeadingDeg:
+                    pdrActive && _debugModeController.showPhoneHeading
+                    ? _pdrHeadingObservation?.measuredBearingDeg
+                    : null,
+                phoneHeadingStable: _pdrHeadingObservation?.stable ?? false,
+                phoneHeadingAccuracy: _pdrHeadingObservation?.magneticAccuracy,
               ),
             ),
           ),

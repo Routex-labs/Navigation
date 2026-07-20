@@ -126,6 +126,14 @@ class _AdvancedDebugOptions extends StatelessWidget {
           value: controller.showAbsoluteCardinals,
           onChanged: controller.setShowAbsoluteCardinals,
         ),
+        _DebugSwitch(
+          key: const ValueKey('debug-show-phone-heading'),
+          title: '폰 측정 방위',
+          subtitle: '파란 바늘 · 센서 원본 방향과 정확도',
+          color: const Color(0xFF1976D2),
+          value: controller.showPhoneHeading,
+          onChanged: controller.setShowPhoneHeading,
+        ),
         const Divider(height: 20),
         _DebugSwitch(
           key: const ValueKey('debug-show-graph-nodes'),
@@ -135,25 +143,11 @@ class _AdvancedDebugOptions extends StatelessWidget {
           onChanged: controller.setShowGraphNodes,
         ),
         _DebugSwitch(
-          key: const ValueKey('debug-show-graph-node-labels'),
-          title: '노드 이름',
-          subtitle: '노드 이름/ID 텍스트를 표시',
-          value: controller.showGraphNodeLabels,
-          onChanged: controller.setShowGraphNodeLabels,
-        ),
-        _DebugSwitch(
           key: const ValueKey('debug-show-graph-edges'),
           title: '지도 간선 선',
           subtitle: '간선 위치와 현재 매칭 간선을 표시',
           value: controller.showGraphEdges,
           onChanged: controller.setShowGraphEdges,
-        ),
-        _DebugSwitch(
-          key: const ValueKey('debug-show-graph-edge-labels'),
-          title: '간선 이름',
-          subtitle: '간선 이름/ID 텍스트를 표시',
-          value: controller.showGraphEdgeLabels,
-          onChanged: controller.setShowGraphEdgeLabels,
         ),
         const Divider(height: 20),
         _DebugSwitch(

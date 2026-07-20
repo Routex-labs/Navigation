@@ -26,6 +26,7 @@ export 'calibration_state.dart';
 export 'indoor_navigation_intents.dart';
 export 'indoor_navigation_view.dart';
 export 'pdr_anchor.dart';
+export 'pdr_heading_observation.dart';
 export 'pdr_runtime_status.dart';
 
 import 'indoor_navigation_intents.dart';

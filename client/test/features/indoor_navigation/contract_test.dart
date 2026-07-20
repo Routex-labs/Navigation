@@ -7,6 +7,8 @@ import 'package:navigation_client/features/indoor_navigation/contract/indoor_nav
 /// 병렬 작업할 수 있음을 보인다(Phase 1.5).
 class FakeIndoorNavigation implements IndoorNavigationController {
   final _snapshots = StreamController<PdrSnapshot>.broadcast();
+  final _headingObservations =
+      StreamController<PdrHeadingObservation>.broadcast();
   final _calibration = StreamController<CalibrationStatus>.broadcast();
   final _runtimeStatuses = StreamController<PdrRuntimeStatus>.broadcast();
 
@@ -20,6 +22,13 @@ class FakeIndoorNavigation implements IndoorNavigationController {
 
   @override
   PdrSnapshot? get currentSnapshot => _current;
+
+  @override
+  Stream<PdrHeadingObservation> get headingObservations =>
+      _headingObservations.stream;
+
+  @override
+  PdrHeadingObservation? get currentHeadingObservation => null;
 
   @override
   Stream<CalibrationStatus> get calibration => _calibration.stream;
@@ -69,6 +78,7 @@ class FakeIndoorNavigation implements IndoorNavigationController {
 
   void dispose() {
     _snapshots.close();
+    _headingObservations.close();
     _calibration.close();
     _runtimeStatuses.close();
   }

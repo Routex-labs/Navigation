@@ -36,10 +36,14 @@ class IndoorNavigationDriver implements IndoorNavigationController {
   StreamSubscription<NativePdrEvent>? _eventSub;
 
   final _snapshots = StreamController<PdrSnapshot>.broadcast();
+  final _headingObservations =
+      StreamController<PdrHeadingObservation>.broadcast();
   final _calibration = StreamController<CalibrationStatus>.broadcast();
   final _runtimeStatuses = StreamController<PdrRuntimeStatus>.broadcast();
 
   PdrSnapshot? _current;
+  PdrHeadingObservation? _currentHeadingObservation;
+  int? _lastHeadingPublishTimestampMs;
   CalibrationStatus _calib = const CalibrationStatus.uncalibrated();
   PdrRuntimeStatus _runtimeStatus = const PdrRuntimeStatus.idle();
   bool _guiding = false;
@@ -58,6 +62,14 @@ class IndoorNavigationDriver implements IndoorNavigationController {
 
   @override
   PdrSnapshot? get currentSnapshot => _current;
+
+  @override
+  Stream<PdrHeadingObservation> get headingObservations =>
+      _headingObservations.stream;
+
+  @override
+  PdrHeadingObservation? get currentHeadingObservation =>
+      _currentHeadingObservation;
 
   @override
   Stream<CalibrationStatus> get calibration => _calibration.stream;
@@ -81,6 +93,8 @@ class IndoorNavigationDriver implements IndoorNavigationController {
     _floorId = floorId;
     _guiding = true;
     _backgrounded = false;
+    _currentHeadingObservation = null;
+    _lastHeadingPublishTimestampMs = null;
     _session.reset();
     _updateRuntime(PdrRuntimeState.starting);
     _eventSub ??= _source.events.listen(
@@ -127,6 +141,8 @@ class IndoorNavigationDriver implements IndoorNavigationController {
     _pendingPinFloorM = null;
     _pendingPinPdrM = null;
     _pendingAxes = const PdrToFloorAxes.identity();
+    _currentHeadingObservation = null;
+    _lastHeadingPublishTimestampMs = null;
     _updateCalibration(CalibrationPhase.uncalibrated);
     _updateRuntime(PdrRuntimeState.idle);
   }
@@ -234,6 +250,7 @@ class IndoorNavigationDriver implements IndoorNavigationController {
     _session.dispose();
     await _source.dispose();
     await _snapshots.close();
+    await _headingObservations.close();
     await _calibration.close();
     await _runtimeStatuses.close();
   }
@@ -248,6 +265,7 @@ class IndoorNavigationDriver implements IndoorNavigationController {
     final heading = e.heading;
     if (heading != null) {
       _session.onHeading(heading);
+      _publishHeadingObservation(heading.motionTimestampMs);
     }
     final accelPeak = e.accelPeak;
     if (accelPeak != null) {
@@ -256,6 +274,32 @@ class IndoorNavigationDriver implements IndoorNavigationController {
     final pedometer = e.pedometer;
     if (pedometer != null) {
       _session.onPedometerBatch(pedometer);
+    }
+  }
+
+  void _publishHeadingObservation(int motionTimestampMs) {
+    final measured = _session.deviceHeadingDeg >= 0
+        ? _session.deviceHeadingDeg
+        : _session.fusedHeadingDeg;
+    final observation = PdrHeadingObservation(
+      measuredBearingDeg: normalizePdrBearing(measured),
+      walkingBearingDeg: normalizePdrBearing(_session.walkingHeadingDeg),
+      stable: _session.headingStable,
+      source: _session.headingSource,
+      magneticAccuracy: _session.magneticAccuracy,
+      motionTimestampMs: motionTimestampMs,
+    );
+    _currentHeadingObservation = observation;
+
+    final last = _lastHeadingPublishTimestampMs;
+    if (last != null &&
+        motionTimestampMs >= last &&
+        motionTimestampMs - last < 50) {
+      return;
+    }
+    _lastHeadingPublishTimestampMs = motionTimestampMs;
+    if (!_headingObservations.isClosed) {
+      _headingObservations.add(observation);
     }
   }
 

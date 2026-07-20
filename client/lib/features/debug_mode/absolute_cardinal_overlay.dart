@@ -47,10 +47,20 @@ class AbsoluteCardinalOverlay extends StatelessWidget {
     super.key,
     required this.reference,
     required this.cameraBearingDeg,
+    this.showPhoneHeading = false,
+    this.phoneHeadingDeg,
+    this.phoneHeadingStable = false,
+    this.phoneHeadingAccuracy,
   });
 
   final AbsoluteNorthReference reference;
   final double cameraBearingDeg;
+  final bool showPhoneHeading;
+
+  /// 휴대폰 상단이 향하는 센서 원본 방위. 0°=자북, 90°=동쪽.
+  final double? phoneHeadingDeg;
+  final bool phoneHeadingStable;
+  final String? phoneHeadingAccuracy;
 
   @override
   Widget build(BuildContext context) {
@@ -58,11 +68,22 @@ class AbsoluteCardinalOverlay extends StatelessWidget {
       mapBearingDeg: reference.mapBearingDeg,
       cameraBearingDeg: cameraBearingDeg,
     );
+    final measuredHeading = showPhoneHeading ? phoneHeadingDeg : null;
+    final phoneScreenAngleDeg = measuredHeading == null
+        ? null
+        : absoluteDirectionScreenAngleDeg(
+            mapBearingDeg: reference.mapBearingDeg + measuredHeading,
+            cameraBearingDeg: cameraBearingDeg,
+          );
 
     return IgnorePointer(
       child: Semantics(
-        label:
-            '${reference.description}, 카메라 ${cameraBearingDeg.toStringAsFixed(1)}°',
+        label: [
+          reference.description,
+          '카메라 ${cameraBearingDeg.toStringAsFixed(1)}°',
+          if (measuredHeading != null)
+            '폰 측정 ${measuredHeading.toStringAsFixed(1)}°',
+        ].join(', '),
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.94),
@@ -95,6 +116,15 @@ class AbsoluteCardinalOverlay extends StatelessWidget {
                           painter: const _CompassNeedlePainter(),
                         ),
                       ),
+                      if (phoneScreenAngleDeg != null)
+                        Transform.rotate(
+                          angle: phoneScreenAngleDeg * math.pi / 180,
+                          child: CustomPaint(
+                            key: const ValueKey('phone-heading-needle'),
+                            size: const Size.square(78),
+                            painter: const _PhoneHeadingNeedlePainter(),
+                          ),
+                        ),
                       for (final direction in const [
                         (label: 'N', offsetDeg: 0.0, color: Color(0xFFD32F2F)),
                         (label: 'E', offsetDeg: 90.0, color: Color(0xFF455A64)),
@@ -139,12 +169,46 @@ class AbsoluteCardinalOverlay extends StatelessWidget {
                     color: const Color(0xFF6D4C9A),
                   ),
                 ),
+                if (showPhoneHeading) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    measuredHeading == null
+                        ? '폰 방위 측정 대기'
+                        : '폰 ${measuredHeading.toStringAsFixed(0)}° · ${_headingQualityLabel()}',
+                    key: const ValueKey('phone-heading-status'),
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: measuredHeading == null
+                          ? const Color(0xFF78909C)
+                          : _headingQualityColor(),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
         ),
       ),
     );
+  }
+
+  String _headingQualityLabel() {
+    final accuracy = phoneHeadingAccuracy?.trim().toUpperCase();
+    if (accuracy != null && accuracy.isNotEmpty && accuracy != 'UNKNOWN') {
+      return accuracy;
+    }
+    return phoneHeadingStable ? 'STABLE' : '불안정';
+  }
+
+  Color _headingQualityColor() {
+    final accuracy = phoneHeadingAccuracy?.toLowerCase();
+    if (!phoneHeadingStable ||
+        accuracy == 'low' ||
+        accuracy == 'uncalibrated') {
+      return const Color(0xFFF57C00);
+    }
+    return const Color(0xFF1976D2);
   }
 }
 
@@ -208,6 +272,31 @@ class _CompassNeedlePainter extends CustomPainter {
       ..lineTo(center.dx + 5, center.dy + 5)
       ..close();
     canvas.drawPath(northNeedle, Paint()..color = const Color(0xFFD32F2F));
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _PhoneHeadingNeedlePainter extends CustomPainter {
+  const _PhoneHeadingNeedlePainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = size.shortestSide / 2;
+    final tip = center - Offset(0, radius - 9);
+    final paint = Paint()
+      ..color = const Color(0xFF1976D2)
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(center, tip + const Offset(0, 6), paint);
+    final arrow = Path()
+      ..moveTo(tip.dx, tip.dy)
+      ..lineTo(tip.dx - 5, tip.dy + 10)
+      ..lineTo(tip.dx + 5, tip.dy + 10)
+      ..close();
+    canvas.drawPath(arrow, paint);
   }
 
   @override

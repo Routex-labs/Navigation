@@ -69,35 +69,32 @@ void main() {
 
       expect(controller.enabled, isFalse);
       expect(controller.showGraphNodes, isTrue);
-      expect(controller.showGraphNodeLabels, isFalse);
       expect(controller.showGraphEdges, isTrue);
-      expect(controller.showGraphEdgeLabels, isFalse);
       expect(controller.showRawPdrPath, isTrue);
       expect(controller.showConfirmedPdrPath, isTrue);
       expect(controller.showMapMatchedPdrPath, isTrue);
       expect(controller.showAbsoluteCardinals, isTrue);
+      expect(controller.showPhoneHeading, isTrue);
 
       await controller.setEnabled(true);
       await controller.setShowGraphNodes(false);
-      await controller.setShowGraphNodeLabels(true);
       await controller.setShowGraphEdges(false);
-      await controller.setShowGraphEdgeLabels(true);
       await controller.setShowRawPdrPath(false);
       await controller.setShowConfirmedPdrPath(false);
       await controller.setShowMapMatchedPdrPath(false);
       await controller.setShowAbsoluteCardinals(false);
+      await controller.setShowPhoneHeading(false);
 
       final restored = DebugModeController(preferences: preferences);
       await restored.ready;
       expect(restored.enabled, isTrue);
       expect(restored.showGraphNodes, isFalse);
-      expect(restored.showGraphNodeLabels, isTrue);
       expect(restored.showGraphEdges, isFalse);
-      expect(restored.showGraphEdgeLabels, isTrue);
       expect(restored.showRawPdrPath, isFalse);
       expect(restored.showConfirmedPdrPath, isFalse);
       expect(restored.showMapMatchedPdrPath, isFalse);
       expect(restored.showAbsoluteCardinals, isFalse);
+      expect(restored.showPhoneHeading, isFalse);
 
       controller.dispose();
       restored.dispose();
@@ -136,6 +133,10 @@ void main() {
               description: 'test',
             ),
             cameraBearingDeg: 0,
+            showPhoneHeading: true,
+            phoneHeadingDeg: 25,
+            phoneHeadingStable: false,
+            phoneHeadingAccuracy: 'low',
           ),
         ),
       ),
@@ -146,6 +147,8 @@ void main() {
     expect(find.byKey(const ValueKey('absolute-cardinal-S')), findsOneWidget);
     expect(find.byKey(const ValueKey('absolute-cardinal-W')), findsOneWidget);
     expect(find.text('도면 진북 +38.5°'), findsOneWidget);
+    expect(find.byKey(const ValueKey('phone-heading-needle')), findsOneWidget);
+    expect(find.text('폰 25° · LOW'), findsOneWidget);
   });
 
   test(
@@ -281,8 +284,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('고급 표시 옵션'), findsOneWidget);
     expect(find.text('절대 동·서·남·북'), findsOneWidget);
-    expect(find.text('노드 이름'), findsOneWidget);
-    expect(find.text('간선 이름'), findsOneWidget);
+    expect(find.text('폰 측정 방위'), findsOneWidget);
+    expect(find.text('노드 이름'), findsNothing);
+    expect(find.text('간선 이름'), findsNothing);
     expect(find.text('Raw 근접 경로'), findsOneWidget);
     expect(find.text('확정 PDR 경로'), findsOneWidget);
     expect(find.text('지도 부착 경로'), findsOneWidget);
