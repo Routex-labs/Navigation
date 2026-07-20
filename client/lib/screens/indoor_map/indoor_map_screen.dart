@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart' as ll;
 
 import '../../core/service_locator.dart';
 import '../../domain/geo_transform.dart';
+import '../../features/debug_mode/debug_mode.dart';
 import '../../features/indoor_navigation/application/floor_map_matcher.dart';
 import '../../features/indoor_navigation/contract/indoor_navigation_contract.dart';
 import '../../features/indoor_navigation/debug/pdr_debug_device_info.dart';
@@ -80,6 +81,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   PdrDebugSessionRecorder? _pdrDebugRecorder;
   bool _exportingPdrDebugJson = false;
   final GlobalKey _pdrShareButtonKey = GlobalKey();
+  late final DebugModeController _debugModeController;
 
   /// 검색·길찾기 시트가 지도 위에 떠 있는 동안 지도 제스처를 꺼서, 시트를
   /// 마우스 휠로 스크롤할 때 그 아래 지도까지 같이 움직이지 않게 한다.
@@ -102,6 +104,8 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   @override
   void initState() {
     super.initState();
+    _debugModeController = DebugModeController()
+      ..addListener(_onDebugModeChanged);
     _pdrSnapshot = indoorNavigationDriver.currentSnapshot;
     _pdrSnapshotSub = indoorNavigationDriver.snapshots.listen((snapshot) {
       _pdrDebugRecorder?.recordSnapshot(snapshot);
@@ -126,7 +130,29 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   void dispose() {
     _pdrSnapshotSub?.cancel();
     _pdrCalibrationSub?.cancel();
+    _debugModeController
+      ..removeListener(_onDebugModeChanged)
+      ..dispose();
     super.dispose();
+  }
+
+  void _onDebugModeChanged() {
+    final enabled = _debugModeController.enabled;
+    if (!enabled &&
+        indoorNavigationDriver.currentRuntimeStatus.state !=
+            PdrRuntimeState.idle) {
+      unawaited(_stopPdrWhenDebugModeTurnsOff());
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _stopPdrWhenDebugModeTurnsOff() async {
+    if (indoorNavigationDriver.currentRuntimeStatus.state ==
+        PdrRuntimeState.idle) {
+      return;
+    }
+    await indoorNavigationDriver.stopGuidance();
+    if (mounted) setState(() => _placingPdrAnchor = false);
   }
 
   @override
@@ -296,10 +322,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     widget.onRouteVisibleChanged?.call(false);
   }
 
-  /// PDR 원본 path를 floor graph의 통행 간선에 스냅한 결과다. 이 값만 지도에
-  /// 렌더해 센서 드리프트가 매장/벽을 가로질러 보이는 일을 막는다. 매 snapshot
-  /// 전체를 시간순으로 다시 매칭해 matcher의 간선 전환 히스테리시스도 유지한다.
-  List<PdrLocalPoint> get _pdrMatchedFloorPath {
+  List<PdrLocalPoint> get _pdrConfirmedFloorPath {
     final snapshot = _pdrSnapshot;
     final anchor = _pdrCalibration.anchor;
     final graph = _floorGraph;
@@ -312,12 +335,45 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       return const [];
     }
     final pdrToFloor = FloorCoordinateTransform(anchor);
+    return snapshot.path.map(pdrToFloor.toFloor).toList(growable: false);
+  }
+
+  List<PdrLocalPoint> get _pdrRawFloorPath {
+    final snapshot = _pdrSnapshot;
+    final anchor = _pdrCalibration.anchor;
+    final graph = _floorGraph;
+    if (snapshot == null ||
+        anchor == null ||
+        !_pdrCalibration.canRenderPosition ||
+        anchor.floorId != _selectedFloor ||
+        graph == null ||
+        graph.nodes.isEmpty) {
+      return const [];
+    }
+    final pdrToFloor = FloorCoordinateTransform(anchor);
+    return snapshot.preview.path
+        .map(pdrToFloor.toFloor)
+        .toList(growable: false);
+  }
+
+  /// confirmed PDR path를 floor graph의 통행 간선에 스냅한 결과다. 매 snapshot
+  /// 전체를 시간순으로 다시 매칭해 matcher의 간선 전환 히스테리시스도 유지한다.
+  List<PdrLocalPoint> get _pdrMatchedFloorPath {
+    final graph = _floorGraph;
+    final confirmed = _pdrConfirmedFloorPath;
+    if (graph == null || confirmed.isEmpty) return const [];
     // 단순 스냅 점들을 직선으로 잇지 않는다. 간선이 바뀌는 경우에는 반드시
-    // 두 점 사이의 graph 경로(복도·교차점)를 펼쳐서 매장 내부를 가로지르는
-    // 녹색 선이 생기지 않게 한다.
+    // 두 점 사이의 graph 경로(복도·교차점)를 펼친다.
+    return FloorMapMatcher(graph).matchRoutedPath(confirmed);
+  }
+
+  Set<String> get _pdrMatchedEdgeIds {
+    final graph = _floorGraph;
+    final confirmed = _pdrConfirmedFloorPath;
+    if (graph == null || confirmed.isEmpty) return const {};
     return FloorMapMatcher(
       graph,
-    ).matchRoutedPath(snapshot.path.map(pdrToFloor.toFloor));
+    ).matchPath(confirmed).map((point) => point.edgeId).toSet();
   }
 
   ll.LatLng? get _pdrCurrentLocation {
@@ -349,19 +405,27 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     return ll.LatLng(wgs84.$1, wgs84.$2);
   }
 
-  List<ll.LatLng> get _pdrPathPoints {
+  List<ll.LatLng> _floorPathToWgs84(List<PdrLocalPoint> path) {
     final graph = _floorGraph;
-    if (graph == null) {
+    if (graph == null || path.isEmpty) {
       return const [];
     }
     final floorToWgs84 = fitFloorGeoTransform(graph.nodes);
-    return _pdrMatchedFloorPath
+    return path
         .map((point) {
           final wgs84 = floorToWgs84.apply(point.eastM, point.northM);
           return ll.LatLng(wgs84.$1, wgs84.$2);
         })
         .toList(growable: false);
   }
+
+  List<ll.LatLng> get _pdrMatchedPathPoints =>
+      _floorPathToWgs84(_pdrMatchedFloorPath);
+
+  List<ll.LatLng> get _pdrConfirmedPathPoints =>
+      _floorPathToWgs84(_pdrConfirmedFloorPath);
+
+  List<ll.LatLng> get _pdrRawPathPoints => _floorPathToWgs84(_pdrRawFloorPath);
 
   Future<void> _togglePdr() async {
     final floor = _selectedFloor;
@@ -551,10 +615,33 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
     final error = _error;
-    if (error != null) return _buildError(error);
-    return _buildBody();
+    final body = _loading
+        ? const Center(child: CircularProgressIndicator())
+        : error != null
+        ? _buildError(error)
+        : _buildBody();
+    return Stack(
+      children: [
+        Positioned.fill(child: body),
+        Positioned(
+          left: 12,
+          bottom:
+              _mapShellBottomChromePx +
+              (_route != null ? _etaCardHeightPx : 0) +
+              12,
+          child: SafeArea(
+            top: false,
+            bottom: false,
+            child: DebugModeSettingsButton(
+              controller: _debugModeController,
+              onPressed: () =>
+                  showDebugModeSettingsSheet(context, _debugModeController),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildError(String message) {
@@ -593,12 +680,23 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     final pdrActive =
         indoorNavigationDriver.currentRuntimeStatus.state !=
         PdrRuntimeState.idle;
-    final pdrCurrent = _pdrCurrentLocation;
+    final debugEnabled = _debugModeController.enabled;
+    final pdrCurrent = debugEnabled ? _pdrCurrentLocation : null;
+    final debugOverlay = debugEnabled
+        ? buildDebugMapOverlay(
+            _floorGraph,
+            showNodes: _debugModeController.showGraphNodes,
+            showEdges: _debugModeController.showGraphEdges,
+            showNodeLabels: _debugModeController.showGraphNodeLabels,
+            showEdgeLabels: _debugModeController.showGraphEdgeLabels,
+            activeEdgeIds: _pdrMatchedEdgeIds,
+          )
+        : const DebugMapOverlay();
     // PDR anchor 또는 실제 route가 없을 때 도면 중심을 가짜 현재 위치로
     // 그리지 않는다. 실내 PDR은 시작 위치를 모르면 절대 위치를 알 수 없다.
     final current =
         pdrCurrent ??
-        _pdrAnchorLocation ??
+        (debugEnabled ? _pdrAnchorLocation : null) ??
         ((route != null && route.points.isNotEmpty)
             ? route.points.first
             : null);
@@ -629,7 +727,18 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
               : _pdrSnapshot?.walkingHeadingDeg,
           destination: routeDestination?.point,
           routePoints: route?.points ?? const [],
-          pdrPathPoints: _pdrPathPoints,
+          pdrPathPoints:
+              debugEnabled && _debugModeController.showMapMatchedPdrPath
+              ? _pdrMatchedPathPoints
+              : const [],
+          pdrConfirmedPathPoints:
+              debugEnabled && _debugModeController.showConfirmedPdrPath
+              ? _pdrConfirmedPathPoints
+              : const [],
+          pdrRawPathPoints: debugEnabled && _debugModeController.showRawPdrPath
+              ? _pdrRawPathPoints
+              : const [],
+          debugMapOverlay: debugOverlay,
           onMapPressed: _onMapPressedForPdr,
           onStoreSelected: (selected) {
             setState(() => _highlightedStoreId = selected.id);
@@ -665,23 +774,24 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           ),
         ),
 
-        Positioned(
-          top: 116,
-          right: 12,
-          child: SafeArea(
-            child: _PdrMapControl(
-              active: pdrActive,
-              onPressed: _togglePdr,
-              canExport:
-                  !pdrActive && (_pdrDebugRecorder?.hasSnapshot ?? false),
-              exporting: _exportingPdrDebugJson,
-              onExport: _exportPdrDebugJson,
-              shareButtonKey: _pdrShareButtonKey,
+        if (debugEnabled)
+          Positioned(
+            top: 168,
+            right: 12,
+            child: SafeArea(
+              child: _PdrMapControl(
+                active: pdrActive,
+                onPressed: _togglePdr,
+                canExport:
+                    !pdrActive && (_pdrDebugRecorder?.hasSnapshot ?? false),
+                exporting: _exportingPdrDebugJson,
+                onExport: _exportPdrDebugJson,
+                shareButtonKey: _pdrShareButtonKey,
+              ),
             ),
           ),
-        ),
 
-        if (_placingPdrAnchor)
+        if (debugEnabled && _placingPdrAnchor)
           Positioned(
             top: 116,
             left: 12,

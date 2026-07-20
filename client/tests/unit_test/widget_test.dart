@@ -296,6 +296,11 @@ void main() {
       find.byType(FloorPlanView),
     );
     expect(floorPlanView.currentLocation, isNull);
+
+    // 기본 지도에는 설정 진입점만 남고 PDR 제어는 디버그 모드를 켠 뒤에만
+    // 나타난다. 일반 사용자의 내비게이션 UI와 센서 테스트 UI를 분리한다.
+    expect(find.byIcon(Icons.bug_report_outlined), findsOneWidget);
+    expect(find.text('PDR 시작'), findsNothing);
   });
 
   testWidgets('indoor map switches floor via the floor tabs', (

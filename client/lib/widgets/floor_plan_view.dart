@@ -9,6 +9,7 @@ import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../core/api_config.dart';
+import '../features/debug_mode/debug_map_overlay.dart';
 import '../models/floor_plan.dart';
 
 /// maplibre_gl은 web/android/iOS만 지원한다(패키지 자체 pubspec에 명시된
@@ -27,6 +28,9 @@ bool get _isMapSupportedOnThisPlatform =>
 const _tileSourceId = 'floor-tiles';
 const _routeSourceId = 'floor-route';
 const _pdrTrailSourceId = 'floor-pdr-trail';
+const _pdrRawTrailSourceId = 'floor-pdr-raw-trail';
+const _pdrConfirmedTrailSourceId = 'floor-pdr-confirmed-trail';
+const _debugGraphSourceId = 'floor-debug-graph';
 const _markersSourceId = 'floor-markers';
 const _highlightSourceId = 'floor-highlight';
 const _directionSourceId = 'floor-direction';
@@ -84,6 +88,9 @@ class FloorPlanView extends StatefulWidget {
     this.destination,
     this.routePoints = const [],
     this.pdrPathPoints = const [],
+    this.pdrRawPathPoints = const [],
+    this.pdrConfirmedPathPoints = const [],
+    this.debugMapOverlay = const DebugMapOverlay(),
     this.interactive = true,
     this.highlightedStoreId,
     this.visibleInsets = EdgeInsets.zero,
@@ -115,8 +122,18 @@ class FloorPlanView extends StatefulWidget {
   /// 시작점→목적지 경로선. 2개 미만이면 그리지 않는다.
   final List<ll.LatLng> routePoints;
 
-  /// 센서로 확정된 PDR 경로. 길찾기 route와 다른 초록색으로 렌더한다.
+  /// navigation graph에 부착한 PDR 경로. 보라색 실선으로 렌더한다.
+  /// 기존 호출부 호환을 위해 필드 이름은 유지한다.
   final List<ll.LatLng> pdrPathPoints;
+
+  /// 아직 확정되지 않은 accel preview 경로. 주황색 점선으로 렌더한다.
+  final List<ll.LatLng> pdrRawPathPoints;
+
+  /// 센서 파이프라인이 자체 확정한 PDR 경로. 초록색 실선으로 렌더한다.
+  final List<ll.LatLng> pdrConfirmedPathPoints;
+
+  /// 디버그 모드에서만 채워지는 navigation graph 노드·간선 데이터.
+  final DebugMapOverlay debugMapOverlay;
 
   /// false면 스크롤/줌/회전 제스처를 전부 끈다. 웹에서는 MapLibre 지도가
   /// 실제 DOM 캔버스라 그 위에 떠 있는 바텀시트를 스크롤해도 마우스 휠
@@ -240,6 +257,15 @@ class _FloorPlanViewState extends State<FloorPlanView> {
     }
     if (oldWidget.pdrPathPoints != widget.pdrPathPoints) {
       _updatePdrTrailSource();
+    }
+    if (oldWidget.pdrRawPathPoints != widget.pdrRawPathPoints) {
+      _updatePdrRawTrailSource();
+    }
+    if (oldWidget.pdrConfirmedPathPoints != widget.pdrConfirmedPathPoints) {
+      _updatePdrConfirmedTrailSource();
+    }
+    if (oldWidget.debugMapOverlay != widget.debugMapOverlay) {
+      _updateDebugGraphSource();
     }
     if (oldWidget.currentLocation != widget.currentLocation ||
         oldWidget.destination != widget.destination) {
@@ -380,12 +406,174 @@ class _FloorPlanViewState extends State<FloorPlanView> {
     );
 
     await controller.addGeoJsonSource(
+      _debugGraphSourceId,
+      _emptyFeatureCollection,
+    );
+    await controller.addLineLayer(
+      _debugGraphSourceId,
+      'floor-debug-graph-edges',
+      const LineLayerProperties(
+        lineColor: '#607D8B',
+        lineWidth: 2,
+        lineOpacity: 0.72,
+        lineDasharray: [2, 1.5],
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      filter: [
+        '==',
+        ['get', 'kind'],
+        'edge',
+      ],
+      enableInteraction: false,
+    );
+    await controller.addLineLayer(
+      _debugGraphSourceId,
+      'floor-debug-graph-active-edges',
+      const LineLayerProperties(
+        lineColor: '#00ACC1',
+        lineWidth: 5,
+        lineOpacity: 0.88,
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      filter: [
+        'all',
+        [
+          '==',
+          ['get', 'kind'],
+          'edge',
+        ],
+        [
+          '==',
+          ['get', 'active'],
+          true,
+        ],
+      ],
+      enableInteraction: false,
+    );
+    await controller.addCircleLayer(
+      _debugGraphSourceId,
+      'floor-debug-graph-nodes',
+      const CircleLayerProperties(
+        circleRadius: 4,
+        circleColor: '#FFFFFF',
+        circleStrokeColor: '#455A64',
+        circleStrokeWidth: 2,
+      ),
+      filter: [
+        '==',
+        ['get', 'kind'],
+        'node',
+      ],
+      enableInteraction: false,
+    );
+    await controller.addCircleLayer(
+      _debugGraphSourceId,
+      'floor-debug-graph-active-nodes',
+      const CircleLayerProperties(
+        circleRadius: 6,
+        circleColor: '#00ACC1',
+        circleStrokeColor: '#FFFFFF',
+        circleStrokeWidth: 2,
+      ),
+      filter: [
+        'all',
+        [
+          '==',
+          ['get', 'kind'],
+          'node-label',
+        ],
+        [
+          '==',
+          ['get', 'active'],
+          true,
+        ],
+      ],
+      enableInteraction: false,
+    );
+    await controller.addSymbolLayer(
+      _debugGraphSourceId,
+      'floor-debug-graph-labels',
+      const SymbolLayerProperties(
+        textField: ['get', 'label'],
+        textFont: _mapFontStack,
+        textSize: 10,
+        textOffset: [0, 1.1],
+        textColor: '#263238',
+        textHaloColor: '#FFFFFF',
+        textHaloWidth: 1.5,
+        textAllowOverlap: true,
+      ),
+      filter: [
+        'any',
+        [
+          '==',
+          ['get', 'kind'],
+          'node',
+        ],
+        [
+          '==',
+          ['get', 'kind'],
+          'edge-label',
+        ],
+      ],
+      enableInteraction: false,
+    );
+
+    await controller.addGeoJsonSource(
+      _pdrRawTrailSourceId,
+      _emptyFeatureCollection,
+    );
+    await controller.addLineLayer(
+      _pdrRawTrailSourceId,
+      'floor-pdr-raw-trail-line',
+      const LineLayerProperties(
+        lineColor: '#F57C00',
+        lineWidth: 3.25,
+        lineOpacity: 0.95,
+        lineDasharray: [1.5, 1.5],
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      enableInteraction: false,
+    );
+
+    await controller.addGeoJsonSource(
+      _pdrConfirmedTrailSourceId,
+      _emptyFeatureCollection,
+    );
+    await controller.addLineLayer(
+      _pdrConfirmedTrailSourceId,
+      'floor-pdr-confirmed-trail-casing',
+      const LineLayerProperties(
+        lineColor: '#FFFFFF',
+        lineWidth: 6.25,
+        lineOpacity: 0.82,
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      enableInteraction: false,
+    );
+    await controller.addLineLayer(
+      _pdrConfirmedTrailSourceId,
+      'floor-pdr-confirmed-trail-line',
+      const LineLayerProperties(
+        lineColor: '#2E7D32',
+        lineWidth: 3.25,
+        lineOpacity: 0.96,
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      enableInteraction: false,
+    );
+
+    await controller.addGeoJsonSource(
       _pdrTrailSourceId,
       _emptyFeatureCollection,
     );
-    // PDR 궤적은 지도 위 도로/보행 경로처럼 얇은 흰 casing을 먼저 깔고,
-    // 채도가 과하지 않은 초록 중심선을 올린다. 기존의 굵은 단색 선은 평면도
-    // 위에 형광펜을 칠한 듯 보여 실제 지도와 이질감이 컸다.
+    // 그래프에 부착한 경로는 raw(주황)·confirmed(초록)와 겹쳐도 구별되도록
+    // 보라색으로 그린다. 세 소스가 독립적이라 디버그 설정에서 각각 끌 수 있다.
     await controller.addLineLayer(
       _pdrTrailSourceId,
       'floor-pdr-trail-casing',
@@ -402,7 +590,7 @@ class _FloorPlanViewState extends State<FloorPlanView> {
       _pdrTrailSourceId,
       'floor-pdr-trail-line',
       const LineLayerProperties(
-        lineColor: '#248A55',
+        lineColor: '#7E57C2',
         lineWidth: 3.25,
         lineOpacity: 0.96,
         lineCap: 'round',
@@ -559,6 +747,9 @@ class _FloorPlanViewState extends State<FloorPlanView> {
 
     _styleReady = true;
     await _updateRouteSource();
+    await _updateDebugGraphSource();
+    await _updatePdrRawTrailSource();
+    await _updatePdrConfirmedTrailSource();
     await _updatePdrTrailSource();
     await _updateMarkersSource();
     await _updateDirectionSource();
@@ -970,17 +1161,31 @@ class _FloorPlanViewState extends State<FloorPlanView> {
   }
 
   Future<void> _updatePdrTrailSource() async {
+    await _updateLineSource(_pdrTrailSourceId, widget.pdrPathPoints);
+  }
+
+  Future<void> _updatePdrRawTrailSource() async {
+    await _updateLineSource(_pdrRawTrailSourceId, widget.pdrRawPathPoints);
+  }
+
+  Future<void> _updatePdrConfirmedTrailSource() async {
+    await _updateLineSource(
+      _pdrConfirmedTrailSourceId,
+      widget.pdrConfirmedPathPoints,
+    );
+  }
+
+  Future<void> _updateLineSource(
+    String sourceId,
+    List<ll.LatLng> points,
+  ) async {
     final controller = _controller;
     if (controller == null) return;
-    final points = widget.pdrPathPoints;
     if (points.length < 2) {
-      await controller.setGeoJsonSource(
-        _pdrTrailSourceId,
-        _emptyFeatureCollection,
-      );
+      await controller.setGeoJsonSource(sourceId, _emptyFeatureCollection);
       return;
     }
-    await controller.setGeoJsonSource(_pdrTrailSourceId, {
+    await controller.setGeoJsonSource(sourceId, {
       'type': 'FeatureCollection',
       'features': [
         {
@@ -994,6 +1199,83 @@ class _FloorPlanViewState extends State<FloorPlanView> {
           },
         },
       ],
+    });
+  }
+
+  Future<void> _updateDebugGraphSource() async {
+    final controller = _controller;
+    if (controller == null) return;
+    final overlay = widget.debugMapOverlay;
+    if (overlay.isEmpty) {
+      await controller.setGeoJsonSource(
+        _debugGraphSourceId,
+        _emptyFeatureCollection,
+      );
+      return;
+    }
+
+    final features = <Map<String, dynamic>>[];
+    for (final edge in overlay.edges) {
+      if (overlay.showEdges) {
+        features.add({
+          'type': 'Feature',
+          'properties': {'kind': 'edge', 'active': edge.active},
+          'geometry': {
+            'type': 'LineString',
+            'coordinates': [
+              for (final point in edge.points)
+                [point.longitude, point.latitude],
+            ],
+          },
+        });
+      }
+      if (overlay.showEdgeLabels) {
+        features.add({
+          'type': 'Feature',
+          'properties': {
+            'kind': 'edge-label',
+            'label': edge.id,
+            'active': edge.active,
+          },
+          'geometry': {
+            'type': 'Point',
+            'coordinates': [
+              edge.labelPosition.longitude,
+              edge.labelPosition.latitude,
+            ],
+          },
+        });
+      }
+    }
+    for (final node in overlay.nodes) {
+      if (overlay.showNodes) {
+        features.add({
+          'type': 'Feature',
+          'properties': {'kind': 'node', 'active': node.active},
+          'geometry': {
+            'type': 'Point',
+            'coordinates': [node.position.longitude, node.position.latitude],
+          },
+        });
+      }
+      if (overlay.showNodeLabels) {
+        features.add({
+          'type': 'Feature',
+          'properties': {
+            'kind': 'node-label',
+            'label': node.id,
+            'active': node.active,
+          },
+          'geometry': {
+            'type': 'Point',
+            'coordinates': [node.position.longitude, node.position.latitude],
+          },
+        });
+      }
+    }
+    await controller.setGeoJsonSource(_debugGraphSourceId, {
+      'type': 'FeatureCollection',
+      'features': features,
     });
   }
 
@@ -1213,7 +1495,8 @@ String get _glyphsUrl => '$apiBaseUrl/fonts/{fontstack}/{range}.pbf';
 /// glyphs가 비어 있으면 심볼 레이어가 폰트를 못 받아 레이아웃을 끝내지 못하고,
 /// 그 여파로 같은 벡터 타일의 fill 레이어까지 전부 안 그려진다. 배경색만 남고
 /// 지도가 빈 화면이 되므로 glyphs는 반드시 채워야 한다.
-String get _initialStyle => '''
+String get _initialStyle =>
+    '''
 {
   "version": 8,
   "glyphs": "$_glyphsUrl",
