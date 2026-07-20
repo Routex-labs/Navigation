@@ -233,9 +233,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       final building = await buildingRepository.getBuilding(widget.buildingId);
       if (!mounted) return;
 
-      final selectedFloor = building != null && building.floors.isNotEmpty
-          ? building.floors.first
-          : null;
+      // floors.first가 아니라 initialFloor를 쓴다. 층 목록은 위층부터라
+      // 지하층이 있는 건물에서 first는 최상층(6F)이다.
+      final selectedFloor = building?.initialFloor;
       setState(() {
         _building = building;
         _selectedFloor = selectedFloor;
@@ -1126,8 +1126,12 @@ class _FloorSelectorState extends State<_FloorSelector> {
     if (floors.length <= 1) {
       return _FloorChip(label: selected, active: true, onTap: () {});
     }
-    // 다른 층은 selected를 뺀 자연 순서(1F, 2F, …)로 세로로 떨어뜨린다.
+    // 다른 층은 selected를 뺀 채 백엔드가 준 순서(위층 → 아래층, 엘리베이터
+    // 버튼판과 동일)로 세로로 떨어뜨린다.
     final others = floors.where((f) => f != selected).toList(growable: false);
+    // 12개 층(6F~B6)이면 전부 펼쳤을 때 화면 밖으로 넘친다. 펼침 영역은 화면
+    // 높이의 절반으로 묶고 그 안에서 스크롤시킨다.
+    final maxListHeight = MediaQuery.sizeOf(context).height * 0.5;
     return TapRegion(
       onTapOutside: (_) {
         if (_expanded) setState(() => _expanded = false);
@@ -1162,14 +1166,25 @@ class _FloorSelectorState extends State<_FloorSelector> {
                 ),
               ),
               if (_expanded)
-                for (final floor in others) ...[
-                  const SizedBox(height: 6),
-                  _FloorChip(
-                    label: floor,
-                    active: false,
-                    onTap: () => _pick(floor),
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: maxListHeight),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final floor in others) ...[
+                          const SizedBox(height: 6),
+                          _FloorChip(
+                            label: floor,
+                            active: false,
+                            onTap: () => _pick(floor),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                ],
+                ),
             ],
           ),
         ),

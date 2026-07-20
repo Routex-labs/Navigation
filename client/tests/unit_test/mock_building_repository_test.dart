@@ -15,7 +15,9 @@ void main() {
 
     expect(buildings, hasLength(1));
     expect(buildings.first.id, 'thehyundai-seoul');
-    expect(buildings.first.floors, ['1F', '2F']);
+    // 층 목록은 위층부터(엘리베이터 버튼판 순서), 처음 열 층은 따로 내려온다.
+    expect(buildings.first.floors, ['2F', '1F']);
+    expect(buildings.first.initialFloor, '1F');
   });
 
   test('returns the building by id', () async {

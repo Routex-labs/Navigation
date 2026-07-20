@@ -1,7 +1,8 @@
 {
   "id": "thehyundai-seoul",
   "name": "데모 건물",
-  "floors": ["1F", "2F"],
+  "floors": ["2F", "1F"],
+  "default_floor": "1F",
   "entrance": { "lat": 37.5665, "lng": 126.9779 },
   "floor_data": {
     "1F": {
