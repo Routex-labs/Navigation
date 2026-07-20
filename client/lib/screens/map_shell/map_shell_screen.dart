@@ -41,6 +41,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
   final _outdoorKey = GlobalKey<OutdoorMapBodyState>();
   final _indoorKey = GlobalKey<IndoorMapBodyState>();
 
+  // 지도 위에 얹은 공용 오버레이(검색창·저장한 장소 pill·하단 홈/실내 바)의
+  // 영역을 IndoorMapBody가 map click 처리에서 제외할 수 있게 넘겨줄 key들.
+  // MapLibre PlatformView가 gesture arena를 우회해서 오버레이 탭이 뒤의 매장
+  // 까지 새어들어가는 문제를 여기서 함께 막는다.
+  final _topBarKey = GlobalKey();
+  final _favoritesPillKey = GlobalKey();
+  final _bottomBarKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
@@ -304,6 +312,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
                 onRouteVisibleChanged: (visible) =>
                     setState(() => _indoorRouteVisible = visible),
                 onStoreTap: _showStoreInfo,
+                outerOverlayKeys: [
+                  _topBarKey,
+                  _favoritesPillKey,
+                  _bottomBarKey,
+                ],
               ),
             ],
           ),
@@ -313,6 +326,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
             left: 0,
             right: 0,
             child: MapTopBar(
+              key: _topBarKey,
               showHamburger: _mode == MapMode.indoor,
               onHamburgerTap: _onHamburgerTap,
               onSearch: _onSearch,
@@ -325,7 +339,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
             left: 16,
             child: SafeArea(
               bottom: false,
-              child: _FavoritesPill(onTap: _openFavorites),
+              child: _FavoritesPill(key: _favoritesPillKey, onTap: _openFavorites),
             ),
           ),
 
@@ -348,6 +362,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
             right: 0,
             bottom: routeVisible ? _etaBarLiftHeight : 0,
             child: MapBottomBar(
+              key: _bottomBarKey,
               mode: _mode,
               onModeChanged: _setMode,
               onCalibrate: _onCalibrate,
@@ -362,7 +377,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
 /// 검색창 바로 아래에 뜨는 작은 "장소" 칩. 저장해둔 매장 리스트로 가는
 /// 지름길이다. 검색과 시각적으로 분리되도록 흰 카드 톤을 유지한다.
 class _FavoritesPill extends StatelessWidget {
-  const _FavoritesPill({required this.onTap});
+  const _FavoritesPill({super.key, required this.onTap});
 
   final VoidCallback onTap;
 

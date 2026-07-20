@@ -38,6 +38,15 @@ const _etaCardHeightPx = 130.0;
 // 여유를 두되, 잘못 눌러 건물 반대편에서 PDR이 시작하는 일은 막는다.
 const _maxPdrAnchorSnapDistanceM = 12.0;
 
+// MapShellScreen이 route 표시 시 MapBottomBar(홈/실내 세그먼트)를 위로 리프트
+// 하는 양. PDR 버튼도 이 값만큼 같이 올라야 홈/실내 버튼과 세로 정렬이 유지된다.
+// map_shell_screen.dart의 _etaBarLiftHeight와 동일해야 한다.
+const _bottomBarLiftPx = 92.0;
+
+// MapBottomBar 내부의 하단 패딩(홈/실내 세그먼트 하단 여백). PDR 버튼을
+// 같은 하단 여백으로 붙여야 두 버튼이 시각적으로 같은 baseline에 놓인다.
+const _bottomBarInnerBottomPaddingPx = 14.0;
+
 /// 실내 지도 본문(층 평면도 + 경로/매장 오버레이). 검색창·길찾기·건물 전환 같은
 /// 공통 UI는 [MapShellScreen]이 상단/하단 바로 얹으므로 여기서는 다루지 않는다.
 class IndoorMapBody extends StatefulWidget {
@@ -46,6 +55,7 @@ class IndoorMapBody extends StatefulWidget {
     required this.buildingId,
     this.onRouteVisibleChanged,
     this.onStoreTap,
+    this.outerOverlayKeys = const [],
   });
 
   final String buildingId;
@@ -57,6 +67,11 @@ class IndoorMapBody extends StatefulWidget {
   /// 지도 위 매장 폴리곤을 탭하면 호출된다. 상위(MapShellScreen)가 검색
   /// 결과를 탭했을 때와 똑같이 매장 정보 시트를 띄운다.
   final ValueChanged<PoiSearchResult>? onStoreTap;
+
+  /// 상위(MapShellScreen)가 지도 위에 얹은 오버레이(검색창·저장한 장소 pill·
+  /// 하단 공용 바 등)의 GlobalKey들. 이 영역 안의 탭은 뒤의 매장 선택으로
+  /// 이어지지 않게 map click 처리에서 제외한다.
+  final List<GlobalKey> outerOverlayKeys;
 
   @override
   State<IndoorMapBody> createState() => IndoorMapBodyState();
@@ -71,6 +86,33 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   IndoorRoute? _route;
   PoiSearchResult? _routeDestination;
   bool _interactive = true;
+
+  // 지도 위에 얹은 오버레이(층 selector, PDR 버튼 등) 영역을 map click 처리기
+  // 에서 배제하기 위한 GlobalKey들. MapLibre PlatformView가 Flutter gesture
+  // arena를 우회하는 문제 때문에 오버레이 위 탭도 뒤의 매장까지 함께 클릭되는
+  // 문제를 여기서 명시적으로 걸러낸다.
+  final _floorSelectorKey = GlobalKey();
+  final _pdrControlKey = GlobalKey();
+
+  /// [globalPoint]가 지도 위 오버레이 영역 안이면 true — 그 좌표의 지도 탭은
+  /// 매장 선택 처리를 건너뛰어야 한다. 자체 오버레이(층 selector, PDR)와
+  /// 상위가 넘겨준 outer 오버레이(검색창·저장 장소·하단 바 등)를 모두 검사한다.
+  bool _isTapOnMapOverlay(Offset globalPoint) {
+    for (final key in [
+      _floorSelectorKey,
+      _pdrControlKey,
+      ...widget.outerOverlayKeys,
+    ]) {
+      final ctx = key.currentContext;
+      if (ctx == null) continue;
+      final box = ctx.findRenderObject() as RenderBox?;
+      if (box == null || !box.attached) continue;
+      final rect = box.localToGlobal(Offset.zero) & box.size;
+      if (rect.contains(globalPoint)) return true;
+    }
+    return false;
+  }
+
   String? _highlightedStoreId;
   PdrSnapshot? _pdrSnapshot;
   CalibrationStatus _pdrCalibration = indoorNavigationDriver.currentCalibration;
@@ -645,6 +687,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           interactive: _interactive,
           highlightedStoreId: _highlightedStoreId,
           visibleInsets: EdgeInsets.fromLTRB(0, topOverlay, 0, bottomOverlay),
+          overlayHitTest: _isTapOnMapOverlay,
         ),
 
         // 모바일에서 status bar 높이만큼 아래로 내려온 검색창(MapTopBar) 밑에
@@ -661,31 +704,49 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
               building: building,
               selectedFloor: _selectedFloor,
               onSelectFloor: _selectFloor,
+              floorSelectorKey: _floorSelectorKey,
             ),
           ),
         ),
 
-        Positioned(
-          top: 116,
-          right: 12,
+        // PDR 버튼은 화면 좌하단, MapBottomBar의 홈/실내 버튼과 같은 baseline에
+        // 붙인다. route가 표시되면 홈/실내 세그먼트가 위로 lift되므로 PDR도
+        // 같은 값(_bottomBarLiftPx)만큼 함께 올려 세로 정렬을 유지한다.
+        AnimatedPositioned(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          left: 12,
+          bottom: route != null ? _bottomBarLiftPx : 0,
           child: SafeArea(
-            child: _PdrMapControl(
-              active: pdrActive,
-              onPressed: _togglePdr,
-              canExport:
-                  !pdrActive && (_pdrDebugRecorder?.hasSnapshot ?? false),
-              exporting: _exportingPdrDebugJson,
-              onExport: _exportPdrDebugJson,
-              shareButtonKey: _pdrShareButtonKey,
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                0,
+                0,
+                0,
+                _bottomBarInnerBottomPaddingPx,
+              ),
+              child: _PdrMapControl(
+                key: _pdrControlKey,
+                active: pdrActive,
+                onPressed: _togglePdr,
+                canExport:
+                    !pdrActive && (_pdrDebugRecorder?.hasSnapshot ?? false),
+                exporting: _exportingPdrDebugJson,
+                onExport: _exportPdrDebugJson,
+                shareButtonKey: _pdrShareButtonKey,
+              ),
             ),
           ),
         ),
 
+        // 앵커 배치 안내는 PDR이 하단으로 이동해 상단이 비었으므로 상단
+        // 전폭으로 되돌린다.
         if (_placingPdrAnchor)
           Positioned(
             top: 116,
             left: 12,
-            right: 120,
+            right: 12,
             child: SafeArea(child: _PdrAnchorHint(onCancel: _cancelPdrAnchor)),
           ),
 
@@ -720,6 +781,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 /// 시각적으로 우선되게 한다.
 class _PdrMapControl extends StatelessWidget {
   const _PdrMapControl({
+    super.key,
     required this.active,
     required this.onPressed,
     required this.canExport,
@@ -863,71 +925,123 @@ class _IndoorInfoBar extends StatelessWidget {
     required this.building,
     required this.selectedFloor,
     required this.onSelectFloor,
+    this.floorSelectorKey,
   });
 
   final Building building;
   final String? selectedFloor;
   final ValueChanged<String> onSelectFloor;
 
+  /// _FloorSelector에 붙일 GlobalKey. 부모(IndoorMapBody)가 이 key로 selector
+  /// 의 화면 영역을 알아내 지도 클릭 이벤트에서 제외하는 데 쓴다.
+  final GlobalKey? floorSelectorKey;
+
   @override
   Widget build(BuildContext context) {
     final floors = building.floors;
     final selectedFloor = this.selectedFloor;
-    final label = selectedFloor == null
-        ? building.name
-        : '${building.name} · $selectedFloor';
+    if (floors.isEmpty || selectedFloor == null) {
+      return const SizedBox.shrink();
+    }
+    // 검색창 오른쪽 아래에 정렬된 층 selector만 남긴다. 건물 이름 라벨은
+    // 지도 위 chrome을 최소화하고자 제거했다 — 이미 건물 전환 시트에서
+    // 어느 건물인지 확인할 수 있다.
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          Flexible(
-            child: Material(
-              color: Colors.white.withValues(alpha: 0.9),
-              borderRadius: BorderRadius.circular(12),
-              elevation: 2,
-              shadowColor: Colors.black.withValues(alpha: 0.1),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                child: Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.text,
-                    letterSpacing: -0.2,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
+      child: Align(
+        alignment: Alignment.topRight,
+        child: _FloorSelector(
+          key: floorSelectorKey,
+          floors: floors,
+          selectedFloor: selectedFloor,
+          onSelectFloor: onSelectFloor,
+        ),
+      ),
+    );
+  }
+}
+
+/// 검색창 오른쪽 아래에 놓이는 접이식 층 선택기. 기본 상태에서는 현재 층
+/// 한 개만 chip으로 뜨고, 누르면 나머지 층이 세로로 펼쳐진다. 다른 층을
+/// 고르거나 바깥을 탭하면 다시 접힌다.
+///
+/// 층이 하나뿐이면 접고 펴는 의미가 없으므로 단순 표시용 chip만 보인다.
+class _FloorSelector extends StatefulWidget {
+  const _FloorSelector({
+    super.key,
+    required this.floors,
+    required this.selectedFloor,
+    required this.onSelectFloor,
+  });
+
+  final List<String> floors;
+  final String selectedFloor;
+  final ValueChanged<String> onSelectFloor;
+
+  @override
+  State<_FloorSelector> createState() => _FloorSelectorState();
+}
+
+class _FloorSelectorState extends State<_FloorSelector> {
+  bool _expanded = false;
+
+  void _toggle() => setState(() => _expanded = !_expanded);
+
+  void _pick(String floor) {
+    if (floor != widget.selectedFloor) widget.onSelectFloor(floor);
+    setState(() => _expanded = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = widget.selectedFloor;
+    final floors = widget.floors;
+    if (floors.length <= 1) {
+      return _FloorChip(label: selected, active: true, onTap: () {});
+    }
+    // 다른 층은 selected를 뺀 자연 순서(1F, 2F, …)로 세로로 떨어뜨린다.
+    final others = floors.where((f) => f != selected).toList(growable: false);
+    return TapRegion(
+      onTapOutside: (_) {
+        if (_expanded) setState(() => _expanded = false);
+      },
+      // MapLibre가 PlatformView라, 지도 위 Flutter 오버레이를 탭해도 그 아래
+      // 네이티브 지도의 onMapClick이 그대로 함께 발화해 뒤에 있는 매장이
+      // 같이 눌리는 문제가 있다. 이 GestureDetector로 selector 영역의 모든
+      // 탭을 opaque로 흡수해서 새어나가지 않게 한다. 내부 chip InkWell은
+      // nested라 자기 tap을 그대로 받고, chip 사이 간격이나 stadium 외곽
+      // 모서리의 빈 공간만 여기가 소비한다.
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {},
+        // IntrinsicWidth + crossAxisAlignment.stretch로 Column의 폭을 trigger
+        // chip(화살표까지 포함해 가장 넓다)에 맞추고, 아래 옵션 chip들이 그
+        // 폭으로 늘어나 모든 chip 크기가 동일해 보이게 한다.
+        child: IntrinsicWidth(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+            _FloorChip(
+              label: selected,
+              active: true,
+              onTap: _toggle,
+              // 접힘 상태에서는 아래로 펼칠 수 있음을 표시하고, 펼침 상태에서는
+              // 다시 접을 수 있음을 표시한다. 색은 active chip 톤에 맞춰 흰색.
+              trailing: Icon(
+                _expanded ? Icons.expand_less : Icons.expand_more,
+                size: 16,
+                color: Colors.white,
               ),
             ),
+            if (_expanded)
+              for (final floor in others) ...[
+                const SizedBox(height: 6),
+                _FloorChip(label: floor, active: false, onTap: () => _pick(floor)),
+              ],
+            ],
           ),
-          if (floors.length > 1) ...[
-            const SizedBox(width: 6),
-            Flexible(
-              child: SizedBox(
-                height: 30,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  shrinkWrap: true,
-                  itemCount: floors.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 4),
-                  itemBuilder: (context, index) {
-                    final floor = floors[index];
-                    return _FloorChip(
-                      label: floor,
-                      active: floor == selectedFloor,
-                      onTap: () => onSelectFloor(floor),
-                    );
-                  },
-                ),
-              ),
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }
@@ -938,52 +1052,72 @@ class _FloorChip extends StatelessWidget {
     required this.label,
     required this.active,
     required this.onTap,
+    this.trailing,
   });
 
   final String label;
   final bool active;
   final VoidCallback onTap;
 
+  /// 층 라벨 오른쪽에 붙일 아이콘 등의 위젯. 드롭다운 trigger에서
+  /// expand_more/expand_less 아이콘을 붙이는 데 쓴다.
+  final Widget? trailing;
+
   @override
   Widget build(BuildContext context) {
-    // IndoorMapBody는 화면 본문으로도, 단독 위젯 테스트로도 쓰인다.
-    // 이 표면을 여기서 제공하면 어느 쪽에서도 InkWell이 Material 조상을
-    // 잃지 않고, 선택 시 ripple도 chip decoration 위에 자연스럽게 그려진다.
-    return Material(
-      color: Colors.transparent,
-      child: Ink(
-        decoration: BoxDecoration(
-          color: active ? AppColors.indoor : Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: active ? AppColors.indoor : const Color(0x14000000),
-            width: 1.5,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: active
-                  ? AppColors.indoor.withValues(alpha: 0.38)
-                  : Colors.black.withValues(alpha: 0.08),
-              blurRadius: active ? 10 : 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
+    // Material에 shape를 지정하고 clipBehavior: antiAlias를 주면 InkWell
+    // splash/hover/focus 하이라이트가 stadium 밖으로 새지 않고 chip 모양
+    // 안에서 잘려서 그려진다. 이전 구현(BoxDecoration 위 InkWell)에서는
+    // 클릭·포커스 시 아주 살짝 네모난 하이라이트 상자가 비쳤다.
+    final shape = StadiumBorder(
+      side: BorderSide(
+        color: active ? AppColors.indoor : const Color(0x14000000),
+        width: 1.5,
+      ),
+    );
+    return SizedBox(
+      height: 30,
+      child: Material(
+        color: active ? AppColors.indoor : Colors.white,
+        shape: shape,
+        clipBehavior: Clip.antiAlias,
+        elevation: active ? 3 : 1.5,
+        shadowColor: active
+            ? AppColors.indoor.withValues(alpha: 0.38)
+            : Colors.black.withValues(alpha: 0.16),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(20),
+          customBorder: shape,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 15),
-            child: Center(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  color: active ? Colors.white : AppColors.muted,
-                ),
-              ),
-            ),
+            // trailing이 있는 trigger chip은 텍스트를 왼쪽, 화살표를 오른쪽
+            // 가장자리에 붙여 드롭다운 형태를 명확히 하고, 옵션 chip은 늘어난
+            // 폭 안에서 텍스트를 가운데 정렬해 균형을 잡는다.
+            padding: EdgeInsets.symmetric(horizontal: trailing == null ? 12 : 12),
+            child: trailing == null
+                ? Center(
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: active ? Colors.white : AppColors.muted,
+                      ),
+                    ),
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: active ? Colors.white : AppColors.muted,
+                        ),
+                      ),
+                      trailing!,
+                    ],
+                  ),
           ),
         ),
       ),

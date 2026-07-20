@@ -87,6 +87,7 @@ class FloorPlanView extends StatefulWidget {
     this.interactive = true,
     this.highlightedStoreId,
     this.visibleInsets = EdgeInsets.zero,
+    this.overlayHitTest,
   });
 
   final String buildingId;
@@ -100,6 +101,15 @@ class FloorPlanView extends StatefulWidget {
 
   /// 선택된(또는 포커스된) 매장의 [StorePolygon.id]. null이면 강조 표시가 없다.
   final String? highlightedStoreId;
+
+  /// 지도 위에 얹은 Flutter 오버레이(층 selector 같은)가 자기 영역을 알려주는
+  /// 콜백. 인자는 화면 전역 좌표. true 반환 시 그 좌표의 탭은 매장 선택으로
+  /// 이어지지 않는다.
+  ///
+  /// MapLibre는 PlatformView라 위에 얹힌 Flutter 위젯 위의 탭이 gesture arena
+  /// 를 우회해 네이티브 지도까지 흘러들어와 매장까지 함께 선택되는 문제가 있다.
+  /// 이 콜백으로 오버레이 소유자가 명시적으로 그 영역의 탭을 무시하게 한다.
+  final bool Function(Offset globalPoint)? overlayHitTest;
 
   /// 현재 위치 마커. null이면 표시하지 않는다.
   final ll.LatLng? currentLocation;
@@ -1091,6 +1101,22 @@ class _FloorPlanViewState extends State<FloorPlanView> {
     // 그 아래 실제 DOM 캔버스(MapLibre)까지 새어나가, 마침 그 자리에 다른
     // 매장 폴리곤이 있으면 그 매장 정보 시트가 겹쳐 열리는 문제가 있었다.
     if (!widget.interactive) return;
+
+    // 층 selector 같은 지도 위 오버레이 영역의 탭은 무시한다. MapLibre가
+    // PlatformView라 Flutter gesture arena를 우회해 네이티브 지도가 독립적으로
+    // 탭을 받아버려, 오버레이 InkWell이 소비하더라도 뒤의 매장이 함께
+    // 선택되는 문제가 남아 있었다. onMapClick의 point는 지도 위젯 로컬 좌표
+    // 이므로 지도 자체의 RenderBox로 전역 좌표로 변환한 뒤 오버레이 소유자에
+    // 게 물어본다.
+    final overlayHitTest = widget.overlayHitTest;
+    if (overlayHitTest != null) {
+      final box = context.findRenderObject() as RenderBox?;
+      if (box != null && box.attached) {
+        final globalTap = box.localToGlobal(Offset(point.x, point.y));
+        if (overlayHitTest(globalTap)) return;
+      }
+    }
+
 
     final mapPressed = widget.onMapPressed;
     if (mapPressed?.call(
