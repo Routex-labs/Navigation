@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/features/debug_mode/debug_mode.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/calibration_state.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/pdr_anchor.dart';
 import 'package:navigation_client/models/floor_graph.dart';
+import 'package:navigation_client/models/floor_plan.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 PdrSnapshot _snapshot() => const PdrSnapshot(
@@ -69,37 +71,92 @@ void main() {
 
       expect(controller.enabled, isFalse);
       expect(controller.showGraphNodes, isTrue);
-      expect(controller.showGraphNodeLabels, isFalse);
       expect(controller.showGraphEdges, isTrue);
-      expect(controller.showGraphEdgeLabels, isFalse);
       expect(controller.showRawPdrPath, isTrue);
       expect(controller.showConfirmedPdrPath, isTrue);
       expect(controller.showMapMatchedPdrPath, isTrue);
+      expect(controller.showCardinalCross, isTrue);
 
       await controller.setEnabled(true);
       await controller.setShowGraphNodes(false);
-      await controller.setShowGraphNodeLabels(true);
       await controller.setShowGraphEdges(false);
-      await controller.setShowGraphEdgeLabels(true);
       await controller.setShowRawPdrPath(false);
       await controller.setShowConfirmedPdrPath(false);
       await controller.setShowMapMatchedPdrPath(false);
+      await controller.setShowCardinalCross(false);
 
       final restored = DebugModeController(preferences: preferences);
       await restored.ready;
       expect(restored.enabled, isTrue);
       expect(restored.showGraphNodes, isFalse);
-      expect(restored.showGraphNodeLabels, isTrue);
       expect(restored.showGraphEdges, isFalse);
-      expect(restored.showGraphEdgeLabels, isTrue);
       expect(restored.showRawPdrPath, isFalse);
       expect(restored.showConfirmedPdrPath, isFalse);
       expect(restored.showMapMatchedPdrPath, isFalse);
+      expect(restored.showCardinalCross, isFalse);
 
       controller.dispose();
       restored.dispose();
     },
   );
+
+  test('더현대 정북은 다섯 랜드마크 대응으로 회전과 반전을 함께 결정한다', () {
+    final calibration = cardinalCalibrationForBuilding('thehyundai-seoul');
+
+    expect(calibration, isNotNull);
+    expect(calibration!.landmarkCount, 5);
+    expect(calibration.reflected, isTrue);
+    expect(calibration.rmsErrorPx, lessThan(12));
+    expect(calibration.northMapBearingDeg, closeTo(308.9, 0.2));
+    expect(cardinalCalibrationForBuilding('unknown'), isNull);
+  });
+
+  test('현재 도면의 WGS84 랜드마크가 있으면 그 좌표로 정북을 다시 맞춘다', () {
+    StorePolygon store(String name, double latitude, double longitude) =>
+        StorePolygon(
+          id: name,
+          name: name,
+          polygon: const [],
+          centroid: LatLng(latitude, longitude),
+        );
+
+    final calibration = cardinalCalibrationForBuilding(
+      'thehyundai-seoul',
+      floorPlan: FloorPlan(
+        pois: const [],
+        stores: [
+          store('보테가 베네타', 37.52539279890545, 126.92820599451144),
+          store('불가리', 37.525378771370065, 126.92839318128878),
+          store('티파니앤코', 37.5259072870112, 126.92861936102356),
+          store('루이비통', 37.525630957187424, 126.9289095728308),
+          store('프라다', 37.5253297978992, 126.92882557288411),
+        ],
+      ),
+    );
+
+    expect(calibration, isNotNull);
+    expect(calibration!.landmarkCount, 5);
+    expect(calibration.northMapBearingDeg, closeTo(305.2, 0.2));
+  });
+
+  testWidgets('방위 격자는 지도와 별개인 전체 화면 painter로 표시된다', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: SizedBox.expand(
+          child: CardinalGridOverlay(
+            northMapBearingDeg: 305,
+            cameraBearingDeg: 90,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('cardinal-grid-overlay')), findsOneWidget);
+    expect(
+      cardinalScreenAngleDeg(northMapBearingDeg: 305, cameraBearingDeg: 90),
+      215,
+    );
+  });
 
   test(
     'graph overlay marks the matched edge and its endpoint nodes active',
@@ -233,8 +290,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('debug-mode-enabled')));
     await tester.pumpAndSettle();
     expect(find.text('고급 표시 옵션'), findsOneWidget);
-    expect(find.text('노드 이름'), findsOneWidget);
-    expect(find.text('간선 이름'), findsOneWidget);
+    expect(find.text('전체 화면 방위 격자'), findsOneWidget);
+    expect(find.text('노드 이름'), findsNothing);
+    expect(find.text('간선 이름'), findsNothing);
     expect(find.text('Raw 근접 경로'), findsOneWidget);
     expect(find.text('확정 PDR 경로'), findsOneWidget);
     expect(find.text('지도 부착 경로'), findsOneWidget);

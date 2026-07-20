@@ -116,8 +116,17 @@ class _AdvancedDebugOptions extends StatelessWidget {
         '고급 표시 옵션',
         style: TextStyle(fontWeight: FontWeight.w700),
       ),
-      subtitle: const Text('노드·간선 및 PDR 경로별 표시를 선택합니다.'),
+      subtitle: const Text('방위·노드·간선 및 PDR 경로별 표시를 선택합니다.'),
       children: [
+        _DebugSwitch(
+          key: const ValueKey('debug-show-cardinal-cross'),
+          title: '전체 화면 방위 격자',
+          subtitle: '지도 위에 얇은 N–S/E–W 십자선 표시',
+          color: const Color(0xFFD32F2F),
+          value: controller.showCardinalCross,
+          onChanged: controller.setShowCardinalCross,
+        ),
+        const Divider(height: 20),
         _DebugSwitch(
           key: const ValueKey('debug-show-graph-nodes'),
           title: '지도 노드 점',
@@ -126,25 +135,11 @@ class _AdvancedDebugOptions extends StatelessWidget {
           onChanged: controller.setShowGraphNodes,
         ),
         _DebugSwitch(
-          key: const ValueKey('debug-show-graph-node-labels'),
-          title: '노드 이름',
-          subtitle: '노드 이름/ID 텍스트를 표시',
-          value: controller.showGraphNodeLabels,
-          onChanged: controller.setShowGraphNodeLabels,
-        ),
-        _DebugSwitch(
           key: const ValueKey('debug-show-graph-edges'),
           title: '지도 간선 선',
           subtitle: '간선 위치와 현재 매칭 간선을 표시',
           value: controller.showGraphEdges,
           onChanged: controller.setShowGraphEdges,
-        ),
-        _DebugSwitch(
-          key: const ValueKey('debug-show-graph-edge-labels'),
-          title: '간선 이름',
-          subtitle: '간선 이름/ID 텍스트를 표시',
-          value: controller.showGraphEdgeLabels,
-          onChanged: controller.setShowGraphEdgeLabels,
         ),
         const Divider(height: 20),
         _DebugSwitch(

@@ -35,17 +35,12 @@ class DebugMapOverlay {
     this.edges = const [],
     this.showNodes = false,
     this.showEdges = false,
-    this.showNodeLabels = false,
-    this.showEdgeLabels = false,
   });
 
   final List<DebugMapNode> nodes;
   final List<DebugMapEdge> edges;
   final bool showNodes;
   final bool showEdges;
-  final bool showNodeLabels;
-  final bool showEdgeLabels;
-
   bool get isEmpty => nodes.isEmpty && edges.isEmpty;
 }
 
@@ -55,13 +50,9 @@ DebugMapOverlay buildDebugMapOverlay(
   FloorGraph? graph, {
   bool showNodes = true,
   bool showEdges = true,
-  bool showNodeLabels = false,
-  bool showEdgeLabels = false,
   Set<String> activeEdgeIds = const {},
 }) {
-  if (graph == null ||
-      graph.nodes.isEmpty ||
-      (!showNodes && !showEdges && !showNodeLabels && !showEdgeLabels)) {
+  if (graph == null || graph.nodes.isEmpty || (!showNodes && !showEdges)) {
     return const DebugMapOverlay();
   }
 
@@ -81,7 +72,7 @@ DebugMapOverlay buildDebugMapOverlay(
     return ll.LatLng(point.$1, point.$2);
   }
 
-  final nodes = showNodes || showNodeLabels
+  final nodes = showNodes
       ? [
           for (final node in graph.nodes)
             DebugMapNode(
@@ -93,7 +84,7 @@ DebugMapOverlay buildDebugMapOverlay(
       : const <DebugMapNode>[];
 
   final edges = <DebugMapEdge>[];
-  if (showEdges || showEdgeLabels) {
+  if (showEdges) {
     for (final edge in graph.edges) {
       final from = nodesById[edge.fromNodeId];
       final to = nodesById[edge.toNodeId];
@@ -122,7 +113,5 @@ DebugMapOverlay buildDebugMapOverlay(
     edges: edges,
     showNodes: showNodes,
     showEdges: showEdges,
-    showNodeLabels: showNodeLabels,
-    showEdgeLabels: showEdgeLabels,
   );
 }

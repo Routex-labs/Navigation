@@ -232,6 +232,8 @@ class _FloorPlanViewState extends State<FloorPlanView> {
       },
       onStyleLoadedCallback: _onStyleLoaded,
       onMapClick: _handleMapClick,
+      onCameraMove: (position) =>
+          widget.onCameraBearingChanged?.call(position.bearing),
       // maplibre_gl 웹 구현이 minMaxZoomPreference를 놓치는 경우에 대비한
       // 이중 안전장치. 제스처가 끝난 시점에 하한 아래로 내려가 있으면
       // 하한으로 다시 올려서, "축소하면 건물이 사라진다"는 문제를 뿌리째 막는다.
@@ -506,7 +508,7 @@ class _FloorPlanViewState extends State<FloorPlanView> {
         [
           '==',
           ['get', 'kind'],
-          'node-label',
+          'node',
         ],
         [
           '==',
@@ -516,35 +518,6 @@ class _FloorPlanViewState extends State<FloorPlanView> {
       ],
       enableInteraction: false,
     );
-    await controller.addSymbolLayer(
-      _debugGraphSourceId,
-      'floor-debug-graph-labels',
-      const SymbolLayerProperties(
-        textField: ['get', 'label'],
-        textFont: _mapFontStack,
-        textSize: 10,
-        textOffset: [0, 1.1],
-        textColor: '#263238',
-        textHaloColor: '#FFFFFF',
-        textHaloWidth: 1.5,
-        textAllowOverlap: true,
-      ),
-      filter: [
-        'any',
-        [
-          '==',
-          ['get', 'kind'],
-          'node',
-        ],
-        [
-          '==',
-          ['get', 'kind'],
-          'edge-label',
-        ],
-      ],
-      enableInteraction: false,
-    );
-
     await controller.addGeoJsonSource(
       _pdrRawTrailSourceId,
       _emptyFeatureCollection,
@@ -1297,43 +1270,12 @@ class _FloorPlanViewState extends State<FloorPlanView> {
           },
         });
       }
-      if (overlay.showEdgeLabels) {
-        features.add({
-          'type': 'Feature',
-          'properties': {
-            'kind': 'edge-label',
-            'label': edge.id,
-            'active': edge.active,
-          },
-          'geometry': {
-            'type': 'Point',
-            'coordinates': [
-              edge.labelPosition.longitude,
-              edge.labelPosition.latitude,
-            ],
-          },
-        });
-      }
     }
     for (final node in overlay.nodes) {
       if (overlay.showNodes) {
         features.add({
           'type': 'Feature',
           'properties': {'kind': 'node', 'active': node.active},
-          'geometry': {
-            'type': 'Point',
-            'coordinates': [node.position.longitude, node.position.latitude],
-          },
-        });
-      }
-      if (overlay.showNodeLabels) {
-        features.add({
-          'type': 'Feature',
-          'properties': {
-            'kind': 'node-label',
-            'label': node.id,
-            'active': node.active,
-          },
           'geometry': {
             'type': 'Point',
             'coordinates': [node.position.longitude, node.position.latitude],

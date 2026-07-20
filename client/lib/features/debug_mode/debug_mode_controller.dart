@@ -16,13 +16,12 @@ class DebugModeController extends ChangeNotifier {
 
   static const _enabledKey = 'debug_mode.enabled';
   static const _showGraphNodesKey = 'debug_mode.show_graph_nodes';
-  static const _showGraphNodeLabelsKey = 'debug_mode.show_graph_node_labels';
   static const _showGraphEdgesKey = 'debug_mode.show_graph_edges';
-  static const _showGraphEdgeLabelsKey = 'debug_mode.show_graph_edge_labels';
   static const _showRawPdrPathKey = 'debug_mode.show_raw_pdr_path';
   static const _showConfirmedPdrPathKey = 'debug_mode.show_confirmed_pdr_path';
   static const _showMapMatchedPdrPathKey =
       'debug_mode.show_map_matched_pdr_path';
+  static const _showCardinalCrossKey = 'debug_mode.show_cardinal_cross';
 
   SharedPreferences? _preferences;
   late final Future<void> _loadFuture;
@@ -30,23 +29,21 @@ class DebugModeController extends ChangeNotifier {
   bool _isLoaded = false;
   bool _enabled = false;
   bool _showGraphNodes = true;
-  bool _showGraphNodeLabels = false;
   bool _showGraphEdges = true;
-  bool _showGraphEdgeLabels = false;
   bool _showRawPdrPath = true;
   bool _showConfirmedPdrPath = true;
   bool _showMapMatchedPdrPath = true;
+  bool _showCardinalCross = true;
 
   bool get isLoaded => _isLoaded;
   Future<void> get ready => _loadFuture;
   bool get enabled => _enabled;
   bool get showGraphNodes => _showGraphNodes;
-  bool get showGraphNodeLabels => _showGraphNodeLabels;
   bool get showGraphEdges => _showGraphEdges;
-  bool get showGraphEdgeLabels => _showGraphEdgeLabels;
   bool get showRawPdrPath => _showRawPdrPath;
   bool get showConfirmedPdrPath => _showConfirmedPdrPath;
   bool get showMapMatchedPdrPath => _showMapMatchedPdrPath;
+  bool get showCardinalCross => _showCardinalCross;
 
   Future<void> _load() async {
     try {
@@ -54,16 +51,13 @@ class DebugModeController extends ChangeNotifier {
       final preferences = _preferences!;
       _enabled = preferences.getBool(_enabledKey) ?? false;
       _showGraphNodes = preferences.getBool(_showGraphNodesKey) ?? true;
-      _showGraphNodeLabels =
-          preferences.getBool(_showGraphNodeLabelsKey) ?? false;
       _showGraphEdges = preferences.getBool(_showGraphEdgesKey) ?? true;
-      _showGraphEdgeLabels =
-          preferences.getBool(_showGraphEdgeLabelsKey) ?? false;
       _showRawPdrPath = preferences.getBool(_showRawPdrPathKey) ?? true;
       _showConfirmedPdrPath =
           preferences.getBool(_showConfirmedPdrPathKey) ?? true;
       _showMapMatchedPdrPath =
           preferences.getBool(_showMapMatchedPdrPathKey) ?? true;
+      _showCardinalCross = preferences.getBool(_showCardinalCrossKey) ?? true;
     } on Object {
       // 플랫폼 저장소가 없는 테스트/개발 환경에서는 기본값으로 동작한다.
     } finally {
@@ -89,20 +83,6 @@ class DebugModeController extends ChangeNotifier {
     (next) => _showGraphEdges = next,
   );
 
-  Future<void> setShowGraphNodeLabels(bool value) => _setBool(
-    _showGraphNodeLabelsKey,
-    value,
-    () => _showGraphNodeLabels,
-    (next) => _showGraphNodeLabels = next,
-  );
-
-  Future<void> setShowGraphEdgeLabels(bool value) => _setBool(
-    _showGraphEdgeLabelsKey,
-    value,
-    () => _showGraphEdgeLabels,
-    (next) => _showGraphEdgeLabels = next,
-  );
-
   Future<void> setShowRawPdrPath(bool value) => _setBool(
     _showRawPdrPathKey,
     value,
@@ -122,6 +102,13 @@ class DebugModeController extends ChangeNotifier {
     value,
     () => _showMapMatchedPdrPath,
     (next) => _showMapMatchedPdrPath = next,
+  );
+
+  Future<void> setShowCardinalCross(bool value) => _setBool(
+    _showCardinalCrossKey,
+    value,
+    () => _showCardinalCross,
+    (next) => _showCardinalCross = next,
   );
 
   Future<void> _setBool(
