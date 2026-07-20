@@ -926,13 +926,14 @@ details.fold[open] > summary::before { transform: rotate(90deg); }
     <p><code>reset_and_seed</code>는 <code>drop_all()</code>이 먼저 실행되므로 개발 DB의 모든 테이블이 삭제 후 재생성됩니다. 서버 startup 이벤트에서는 절대 DB를 초기화하지 않으며, 초기화는 이 CLI에서만 수행됩니다.</p>
 
     <div class="callout">
-      <strong>더현대 서울 — FloorGraph Studio 파이프라인</strong>
+      <strong>더현대 서울 — 다베오 층 데이터 파이프라인</strong>
       <p>
-        더현대 서울 층 데이터는 FloorGraph Studio 에디터에서 익스포트한
-        <code>app/data/studio/thehyundai-seoul/{1f,3f,4f}.json</code>에서 적재하며,
-        전용 시드 경로를 씁니다. 매장 위치 매핑과 층 간 수직 전이(엘리베이터·에스컬레이터)
-        연결까지 포함합니다. 이 경로는 legacy 기본 시드와 별개이므로, Studio 데이터만 적재하려면
-        아래처럼 DB를 재생성한 뒤 어댑터를 실행하세요.
+        더현대 서울 층 데이터는 다베오 공식 payload에서 만든
+        <code>backend/resources/studio/thehyundai-seoul-dabeeo/{b6..6f}.json</code>
+        12개 층에서 적재하며, 전용 시드 경로를 씁니다. 전 층이 하나의 좌표 프레임을
+        공유하므로 층 정렬이 필요 없습니다. 매장 위치 매핑과 층 간 수직 전이(엘리베이터·
+        에스컬레이터) 연결까지 포함합니다. 이 경로는 legacy 기본 시드와 별개이므로,
+        층 데이터만 적재하려면 아래처럼 DB를 재생성한 뒤 어댑터를 실행하세요.
       </p>
 <pre><span class="label">powershell</span><span class="tk-cm"># (선택) 매장 위치 매핑 재생성 — store_entrance 노드 → stores_1f.json</span>
 <span class="tk-prop">python</span> -m scripts.map_studio_stores
