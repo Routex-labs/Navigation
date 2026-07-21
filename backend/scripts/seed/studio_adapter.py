@@ -32,6 +32,22 @@ API_ROOT = Path(__file__).resolve().parents[2]
 STUDIO_DIR = API_ROOT / "resources" / "studio" / "thehyundai-seoul-dabeeo"
 BUILDING_NAMES = {"thehyundai-seoul": "더현대 서울"}
 
+# 매장 id -> {category, subcategory} 오버라이드. Studio 원본은 리테일을 전부
+# category="매장"으로 뭉개므로(build_studio가 dabeeo categoryCode를 버림), 실제
+# 카테고리를 별도 매핑으로 주입한다. 현재는 category_code가 repo에 남아 있는
+# 매장만 채워져 있고(navigation_map_parts/stores.json 기반), 나머지는 매핑에
+# 없으므로 원본 category를 그대로 둔다. 파일이 없으면 오버라이드 없이 동작한다.
+STORE_CATEGORIES_PATH = API_ROOT / "resources" / "store_categories.json"
+# 매장명 -> {category, subcategory}. category_code가 없는 매장(대부분)을 브랜드명
+# 기준으로 분류한 폴백 매핑. id 기반(STORE_CATEGORIES_PATH)이 우선한다.
+STORE_CATEGORIES_BY_NAME_PATH = API_ROOT / "resources" / "store_category_by_name.json"
+
+
+def _load_store_categories(path: Path = STORE_CATEGORIES_PATH) -> dict[str, dict]:
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
 # 기준층: 건물 공통 프레임의 wgs84 앵커를 가진 층. 좌표 자체는 전 층이 공유하므로
 # 여기서 가져오는 것은 local_m -> wgs84 아핀뿐이다.
 REFERENCE_FLOOR = "1f"
@@ -161,6 +177,8 @@ def _reshape_stores(
     if not stores_path.exists():
         return []
     payload = json.loads(stores_path.read_text(encoding="utf-8"))
+    category_overrides = _load_store_categories()
+    category_by_name = _load_store_categories(STORE_CATEGORIES_BY_NAME_PATH)
     reshaped: list[dict] = []
     for store in payload.get("stores", []):
         entrance = store.get("entrance_local_m")
@@ -174,14 +192,21 @@ def _reshape_stores(
         entrance_node_id = _scoped(floor_id, store.get("entrance_node_id"))
         if entrance_node_id is None and entrance is not None:
             entrance_node_id = _nearest_node_id(nodes, entrance["x"], entrance["y"])
+        # 실제 카테고리 오버라이드. id 기반(category_code 근거)이 최우선, 없으면
+        # 매장명 기반 폴백, 둘 다 없으면 원본 값을 유지한다.
+        override = category_overrides.get(store["id"]) or category_by_name.get(
+            (store.get("name") or "").strip()
+        )
+        category = (override or {}).get("category") or store.get("category")
+        subcategory = (override or {}).get("subcategory") or store.get("subcategory")
         reshaped.append(
             {
                 "id": store["id"],  # store id는 층별로 이미 유일(네임스페이싱 불필요)
                 # 매칭 안 된 구조물 footprint는 name이 null → store id로 폴백(stores.name NOT NULL)
                 "name": store.get("name") or store["id"],
                 # 한글 대분류/소분류 카테고리(없으면 None). name-null footprint는 둘 다 null.
-                "category": store.get("category"),
-                "subcategory": store.get("subcategory"),
+                "category": category,
+                "subcategory": subcategory,
                 # seed_navigation는 store["centroid"]["local_m"] 구조를 기대한다.
                 "centroid": {"local_m": centroid},
                 "entrance_local_m": entrance,
