@@ -128,10 +128,33 @@ def _scope_edges(floor_id: str, edges: list[dict]) -> list[dict]:
     return scoped
 
 
+# 입구 좌표(local_m)에서 가장 가까운 통행 노드 ID를 찾는다. Studio 원본은 매장에
+# entrance_local_m(좌표)만 주고 entrance_node_id(그래프 연결)는 비워두므로, 이걸
+# 채워주지 않으면 클라이언트가 도착 노드를 못 찾아 다익스트라가 아예 돌지 않는다.
+# 교차점(junction) 우선으로 스냅해 엘리베이터/에스컬레이터 노드에 잘못 붙는 걸 막고,
+# junction이 하나도 없으면 아무 노드로나 폴백한다.
+def _nearest_node_id(
+    nodes: list[dict],
+    x: float,
+    y: float,
+) -> str | None:
+    candidates = [n for n in nodes if n.get("type") == "junction"] or nodes
+    best_id: str | None = None
+    best_distance = float("inf")
+    for node in candidates:
+        local = node["position"]["local_m"]
+        distance = hypot(local["x"] - x, local["y"] - y)
+        if distance < best_distance:
+            best_distance = distance
+            best_id = node["id"]
+    return best_id
+
+
 # 폴리곤을 포함한 stores_{층}.json을 seed용 store dict로 변환한다.
 def _reshape_stores(
     floor_code: str,
     floor_id: str,
+    nodes: list[dict],
     directory: Path = STUDIO_DIR,
 ) -> list[dict]:
     stores_path = directory / f"stores_{floor_code}.json"
@@ -145,6 +168,12 @@ def _reshape_stores(
         if centroid is None:
             continue  # 좌표가 없으면 지도에 놓을 자리가 없다
         polygon = store.get("polygon_local_m")
+        # entrance_node_id는 Node FK → 네임스페이싱한 노드 ID와 일치시켜야 한다.
+        # 원본이 이미 노드를 지정했으면 그대로 스코프하고, 비어 있으면(현 Studio
+        # 데이터는 전부 null) 입구 좌표를 가장 가까운 통행 노드에 스냅해 채운다.
+        entrance_node_id = _scoped(floor_id, store.get("entrance_node_id"))
+        if entrance_node_id is None and entrance is not None:
+            entrance_node_id = _nearest_node_id(nodes, entrance["x"], entrance["y"])
         reshaped.append(
             {
                 "id": store["id"],  # store id는 층별로 이미 유일(네임스페이싱 불필요)
@@ -156,8 +185,7 @@ def _reshape_stores(
                 # seed_navigation는 store["centroid"]["local_m"] 구조를 기대한다.
                 "centroid": {"local_m": centroid},
                 "entrance_local_m": entrance,
-                # entrance_node_id는 Node FK → 네임스페이싱한 노드 ID와 일치시켜야 한다.
-                "entrance_node_id": _scoped(floor_id, store.get("entrance_node_id")),
+                "entrance_node_id": entrance_node_id,
                 "polygon_local_m": polygon or None,
             }
         )
@@ -217,7 +245,7 @@ def build_seed_dict(
         },
         "nodes": nodes,
         "edges": _scope_edges(floor_id, studio["edges"]),
-        "stores": _reshape_stores(floor_code, floor_id, directory),
+        "stores": _reshape_stores(floor_code, floor_id, nodes, directory),
         "pois": _generate_pois(floor_id, nodes),
     }
 
