@@ -8,6 +8,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.core.config import settings
+from app.core.request_capture import RequestCaptureMiddleware
 from app.dto.health import HealthResponse
 
 
@@ -24,6 +26,8 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    if settings.http_capture:
+        app.add_middleware(RequestCaptureMiddleware)
 
     app.include_router(buildings.router)  # 건물/지도/그래프/경로 API
     app.include_router(fonts.router)      # MapLibre 심볼 레이어용 글리프

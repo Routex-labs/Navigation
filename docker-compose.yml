@@ -7,6 +7,11 @@ services:
       - "8001:8001"
     environment:
       NAV_DATABASE_URL: sqlite:////app/data/navigation.db
+      NAV_SQL_ECHO: ${NAV_SQL_ECHO:-1}
+      NAV_HTTP_CAPTURE: ${NAV_HTTP_CAPTURE:-1}
+    volumes:
+      - ./sql:/app/sql
+      - ./args:/app/args
     command: >
       sh -c "python -m scripts.seed.reset_and_seed &&
              uvicorn app.main:app --host 0.0.0.0 --port 8001"

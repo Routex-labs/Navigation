@@ -16,19 +16,31 @@
   - 쉘 버전(PowerShell 5.1/7, bash/zsh)에 따라 `&&`·`;` 체이닝이 깨질 수 있으므로 **명령은 체이닝하지 말고 한 줄씩 순서대로 실행한다.** `cd A && B` 대신 창을 해당 폴더에서 연 뒤 명령만 실행한다. (파이프 `|`는 버전 무관하게 동작하므로 tee에는 파이프를 쓴다.)
 
   **1) 창 먼저 연다 (해당 작업 폴더에서 + UTF-8 고정)**
+    - **저장소 위치를 하드코딩하지 않는다.** 먼저 현재 저장소의 루트를 찾아 이후 창의 작업 폴더와 `sql/`·`args/` 로그 위치의 기준으로 쓴다. 다른 로컬에서는 이 값이 예를 들어 `C:\work\Navigation` 또는 `~/src/Navigation`일 수 있다.
+    ```powershell
+    # Windows PowerShell — 저장소 안에서 실행
+    $repoRoot = git rev-parse --show-toplevel
+    $clientRoot = Join-Path $repoRoot 'client'
+    ```
+    ```bash
+    # macOS/Linux shell — 저장소 안에서 실행
+    repo_root="$(git rev-parse --show-toplevel)"
+    client_root="$repo_root/client"
+    ```
     - docker/flutter/uvicorn 출력에 한글이 섞이므로 **콘솔·출력·로그 인코딩을 UTF-8로 고정**한다. 안 하면 로그가 UTF-16이나 깨진 문자로 남는다. 창을 열 때 프렐류드로 박아 둔다.
     ```powershell
     # Windows — 백엔드 창(저장소 루트), 프론트 창(client). -Command로 UTF-8 고정 후 -NoExit로 남는다.
-    Start-Process powershell -ArgumentList '-NoExit','-Command','[Console]::OutputEncoding=[Text.Encoding]::UTF8; $OutputEncoding=[Text.Encoding]::UTF8; $PSDefaultParameterValues[''Out-File:Encoding'']=''utf8''' -WorkingDirectory 'D:\Navigation'
-    Start-Process powershell -ArgumentList '-NoExit','-Command','[Console]::OutputEncoding=[Text.Encoding]::UTF8; $OutputEncoding=[Text.Encoding]::UTF8; $PSDefaultParameterValues[''Out-File:Encoding'']=''utf8''' -WorkingDirectory 'D:\Navigation\client'
+    Start-Process powershell -ArgumentList '-NoExit','-Command','[Console]::OutputEncoding=[Text.Encoding]::UTF8; $OutputEncoding=[Text.Encoding]::UTF8; $PSDefaultParameterValues[''Out-File:Encoding'']=''utf8''' -WorkingDirectory $repoRoot
+    Start-Process powershell -ArgumentList '-NoExit','-Command','[Console]::OutputEncoding=[Text.Encoding]::UTF8; $OutputEncoding=[Text.Encoding]::UTF8; $PSDefaultParameterValues[''Out-File:Encoding'']=''utf8''' -WorkingDirectory $clientRoot
     ```
     ```bash
     # macOS — Terminal 창 2개 (macOS 터미널은 기본 UTF-8이라 별도 설정 불필요)
-    osascript -e 'tell app "Terminal" to do script "cd ~/Navigation"'
-    osascript -e 'tell app "Terminal" to do script "cd ~/Navigation/client"'
+    osascript -e "tell app \"Terminal\" to do script \"cd '$repo_root'\""
+    osascript -e "tell app \"Terminal\" to do script \"cd '$client_root'\""
     ```
 
   **2) 백엔드 창에서 순서대로 실행 — Docker (`docker info`가 정상일 때)**
+    - SQL·HTTP JSON 진단은 개발 실행의 기본값이다. Compose가 `NAV_SQL_ECHO=1`·`NAV_HTTP_CAPTURE=1`과 `sql/`·`args/` 볼륨을 자동 설정하므로, 사람이 환경변수를 따로 입력하지 않는다.
     ```powershell
     # Windows — UTF-8 로그. PS 5.1의 Tee-Object는 파일을 UTF-16으로 쓰므로 패스스루로 tee한다.
     docker compose up --build backend 2>&1 | ForEach-Object { $_; $_ | Out-File backend.log -Append -Encoding utf8 }
@@ -45,6 +57,8 @@
     .\.venv\Scripts\Activate.ps1
     python -m pip install -r requirements.txt
     python -m scripts.seed.reset_and_seed
+    $env:NAV_SQL_ECHO = '1'
+    $env:NAV_HTTP_CAPTURE = '1'
     uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8001 2>&1 | ForEach-Object { $_; $_ | Out-File ..\backend.log -Append -Encoding utf8 }
     ```
     ```bash
@@ -53,6 +67,8 @@
     source .venv/bin/activate
     pip install -r requirements.txt
     python -m scripts.seed.reset_and_seed
+    export NAV_SQL_ECHO=1
+    export NAV_HTTP_CAPTURE=1
     uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8001 2>&1 | tee ../backend.log
     ```
     - `--reload-dir app`으로 **감시 범위를 `app/` 코드로만 한정**한다. 안 그러면 `tests/`·`resources/` 편집도 리로드를 트리거해 서버가 리로드되다 죽는다(Windows에서 특히). Docker 백엔드는 `--reload`가 없어 이 문제가 없다.
@@ -70,11 +86,10 @@
   - Docker 사용 가능 여부는 `docker info`가 정상 응답하는지로 판단한다. 실패하면 위 로컬 Python 대체 경로로 백엔드를 띄운다.
   - **백엔드·프론트 창 모두 UTF-8로 실행한다.** Windows는 (a) 창 프렐류드로 콘솔 인코딩을 UTF-8로 고정하고(콘솔 표시·네이티브 출력 디코딩), (b) 로그 파일은 `Tee-Object` 대신 **패스스루 `... | ForEach-Object { $_; $_ | Out-File <log> -Append -Encoding utf8 }`** 로 쓴다(PS 5.1 Tee-Object는 파일을 UTF-16으로 씀). 소스 파일·리소스 JSON도 UTF-8로 저장한다. 한글 로그가 UTF-16/깨짐으로 남으면 에이전트가 로그를 못 읽는다.
   - 사용자는 창에서 실시간 로그를 보고, 에이전트는 `backend.log`·`frontend.log`를 읽어 추적한다. (두 로그 파일은 `.gitignore`에 둔다.)
-- **명령 예시는 Windows PowerShell 기준으로 작성하되, macOS 개발자를 위해 다를 경우 대응 명령을 함께 적는다.** (Bash 도구는 스크립트용으로만.)
-- **DB 초기화·시드는 서버 시작이 아니라 `python -m scripts.seed.reset_and_seed`로 실행한다.** 서버 부팅 시 자동 시드를 넣지 않는다.
+  - 백엔드 개발 실행 뒤에는 에이전트가 `sql/queries.sql`과 `args/*.json`도 함께 확인한다. 두 디렉터리도 `.gitignore`에 두며, 로그를 위한 파일/환경변수를 사용자에게 수동으로 만들거나 설정하게 하지 않는다.
+
 - **경로 계산은 클라이언트 온디바이스(Dijkstra, `client/lib/domain/dijkstra.dart`)가 담당한다.** 서버는 그래프(nodes·edges)만 제공하며, 최단 경로 로직을 서버로 옮기지 않는다.
 - **API 계약(JSON)은 Flutter 클라이언트가 소비하는 형태를 우선으로 유지한다.** 백엔드 응답 스키마를 바꾸면 클라이언트의 모델·파싱도 함께 확인한다.
-- **백엔드·클라이언트를 함께 바꿨다면 양쪽 테스트를 모두 돌린다** (`backend/tests`, `client/test`).
 - **문서·커밋·PR은 한국어로 작성한다.** 기존 문서 톤을 따른다.
 
 ## 코드 검토 원칙 — 위험 기준으로 무게를 다르게

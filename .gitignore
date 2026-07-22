@@ -39,6 +39,7 @@ htmlcov/
 .agents/
 .claude/
 sql/
+args/
 fastapi-study/
 
 # IDE / OS
