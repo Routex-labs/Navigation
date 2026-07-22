@@ -53,7 +53,7 @@ dto/*  ──►  pydantic 만 (models·sqlalchemy import 안 함)
 routers/*  ──►  dto (response_model=..., 요청 Body 타입)
 ```
 
-- **dict를 실제로 조립하는 곳은 `repositories/`·`services/`다.** 그들은 기존 JSON 모양의 순수 dict를 만들고, FastAPI가 라우터의 `response_model`(=dto)로 그 dict를 검증·직렬화한다.
+- **dict를 실제로 조립하는 곳은 `repositories/`다.** 기존 JSON 모양의 순수 dict를 만들고, FastAPI가 라우터의 `response_model`(=dto)로 그 dict를 검증·직렬화한다.
 - 즉 dto는 "계약 선언"이고, 값 생성은 다른 계층이 한다.
 
 ---
@@ -62,6 +62,6 @@ routers/*  ──►  dto (response_model=..., 요청 Body 타입)
 
 | 하고 싶은 것 | 방법 |
 |---|---|
-| 응답에 필드 추가 | 해당 dto에 필드 추가 + 값을 만드는 `repositories/`·`services/` dict도 수정 |
+| 응답에 필드 추가 | 해당 dto에 필드 추가 + 값을 만드는 `repositories/` dict도 수정 |
 | API 키 이름만 바꾸기 | `Field(alias="...")` (DB/모델은 그대로) |
 | 요청 Body 검증 | 라우터에서 Pydantic 모델을 파라미터로 받기(`query.py`의 `DestinationRequest` 참고) |

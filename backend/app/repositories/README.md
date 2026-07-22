@@ -3,7 +3,7 @@
 Session으로 DB를 읽어 **기존 API 응답과 같은 모양의 순수 dict**를 만든다.
 `select()` 조회와 ORM→dict 변환이 여기 모인다. HTTP 상태 코드는 모른다(변환은 라우터가).
 
-> Spring 대응: Repository + 일부 Mapper. 단순 조회는 여기서 끝내고, 여러 엔티티 조합·계산이 필요한 것만 `services/`로 올린다.
+> Spring 대응: Repository + 일부 Mapper. 조회부터 응답 dict 조립까지 이 계층에서 끝낸다(별도 service 계층은 두지 않는다 — 서버는 조회·직렬화만 하고, 경로 계산은 클라이언트가 온디바이스로 수행).
 
 ---
 
@@ -52,7 +52,6 @@ repositories/*  ──►  models (select), geo (변환·타일 수학), sqlalch
 tile_queries    ──►  building_queries._find_floor, geo_transform, mapbox_vector_tile
 
 routers/*   ──►  repositories (단순 조회)
-services/*  ──►  repositories.geo_transform (경로 점 wgs84 변환)
 ```
 
 - repositories는 `models`와 `geo`에 의존하지만 `dto`·`routers`에는 의존하지 않는다(계약은 라우터가 dto로 강제).

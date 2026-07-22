@@ -110,7 +110,7 @@ def get_db() -> Iterator[Session]:
 config.py  ──►  (환경변수만 읽음. 다른 app 모듈에 의존 안 함)
 database.py ──►  config.settings
 
-routers / repositories / services  ──►  core.database.get_db, SessionLocal
+routers / repositories  ──►  core.database.get_db, SessionLocal
 scripts/seed                       ──►  core.database.SessionLocal, engine
 ```
 
