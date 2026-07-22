@@ -15,7 +15,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import API_ROOT
+from app.geo.georeference import GeoTransform
 from app.models import Building, Floor, Store
+from app.repositories.geo_transform import fit_building_geo_transform
 
 _SYNONYMS_PATH = API_ROOT / "resources" / "query_synonyms.json"
 
@@ -78,7 +80,16 @@ def _rank(
     return scored
 
 
-def _to_match(store: Store, floor: Floor) -> dict[str, Any]:
+def _to_match(
+    store: Store,
+    floor: Floor,
+    transform: GeoTransform | None,
+) -> dict[str, Any]:
+    # wgs84는 지도 표시용. 건물에 실좌표 앵커가 없으면 transform이 없어 null이 된다.
+    centroid_wgs84 = None
+    if transform is not None:
+        lat, lng = transform.apply(store.centroid_x_m, store.centroid_y_m)
+        centroid_wgs84 = {"lat": lat, "lng": lng}
     return {
         "store_id": store.id,
         "name": store.name,
@@ -88,6 +99,7 @@ def _to_match(store: Store, floor: Floor) -> dict[str, Any]:
         "floor_name": floor.name,
         "entrance_node_id": store.entrance_node_id,
         "centroid_local_m": {"x": store.centroid_x_m, "y": store.centroid_y_m},
+        "centroid_wgs84": centroid_wgs84,
     }
 
 
@@ -116,7 +128,8 @@ def match_destination(
     if not scored:
         return {"status": "no_match", "query": text, "match": None}
     _, _, _, store, floor = scored[0]
-    return {"status": _status(store), "query": text, "match": _to_match(store, floor)}
+    transform = fit_building_geo_transform(session, building_id)
+    return {"status": _status(store), "query": text, "match": _to_match(store, floor, transform)}
 
 
 # 정보 질의. 최적 1건 + 대상이 존재하는 층 목록(level 오름차순)을 반환.
@@ -131,6 +144,7 @@ def match_info(
     if not scored:
         return {"status": "no_match", "query": text, "match": None, "floors": []}
     _, _, _, store, floor = scored[0]
+    transform = fit_building_geo_transform(session, building_id)
     by_level: dict[str, int] = {}
     for _, level, _sid, _store, matched_floor in scored:
         by_level.setdefault(matched_floor.name, level)
@@ -138,6 +152,6 @@ def match_info(
     return {
         "status": "ok",
         "query": text,
-        "match": _to_match(store, floor),
+        "match": _to_match(store, floor, transform),
         "floors": floors,
     }

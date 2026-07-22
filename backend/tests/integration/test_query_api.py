@@ -18,6 +18,9 @@ def test_목적지_질의가_매장과_입구노드를_반환한다(api_client):
     assert body["match"]["name"] == "가게A"
     assert body["match"]["entrance_node_id"]  # 경로용 노드가 채워져 있어야 한다
     assert body["match"]["floor_name"] in ("1F", "2F")
+    # 지도 표시용 wgs84 좌표가 함께 온다(클라이언트가 지도에 찍을 수 있어야 한다).
+    assert body["match"]["centroid_wgs84"]["lat"] is not None
+    assert body["match"]["centroid_wgs84"]["lng"] is not None
 
 
 # 매칭 결과가 없으면 예외가 아니라 200 + no_match다.

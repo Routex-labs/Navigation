@@ -12,6 +12,11 @@ class LocalPoint(BaseModel):
     y: float
 
 
+class LatLng(BaseModel):
+    lat: float
+    lng: float
+
+
 # destination·info가 공유하는 매칭 대상 매장 정보.
 class QueryMatch(BaseModel):
     store_id: str
@@ -22,6 +27,7 @@ class QueryMatch(BaseModel):
     floor_name: str                 # 사람이 보는 층 라벨(예: B2). Floor.name 조인으로 채운다.
     entrance_node_id: str | None    # 온디바이스 경로의 도착 노드. 없으면 status=ok_no_route.
     centroid_local_m: LocalPoint
+    centroid_wgs84: LatLng | None   # 지도 표시용 실좌표. 건물에 wgs84 앵커가 없으면 null.
 
 
 class DestinationResponse(BaseModel):
