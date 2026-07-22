@@ -40,7 +40,7 @@ def create_app() -> FastAPI:
 
     app.include_router(buildings.router)  # 건물/지도/그래프/경로 API
     app.include_router(fonts.router)      # MapLibre 심볼 레이어용 글리프
-    app.include_router(query.router)      # 자연어 질의 API(현재 stub)
+    app.include_router(query.router)      # 자연어 질의 API(경량 매칭 + AI 임베딩 검색)
 
     # 서버 생존 확인. Flutter가 서버 연결 전 호출.
     @app.get("/health", tags=["health"], response_model=HealthResponse)

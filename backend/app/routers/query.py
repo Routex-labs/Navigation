@@ -33,10 +33,32 @@ class InfoRequest(BaseModel):
     current_floor_id: str | None = None
 
 
+# POST /query/ai 요청 Body. AI 쿼리 버튼 전용(자연어). destination과 동일 구조.
+class AiRequest(BaseModel):
+    text: str = Field(min_length=1)  # 빈 문자열은 422
+    building_id: str
+    current_floor_id: str | None = None
+
+
 # 목적지 자연어 질의. 최적 매장 1건과 입구 노드를 반환한다.
 @router.post("/destination", response_model=DestinationResponse)
 def query_destination(body: DestinationRequest, session: Session = Depends(get_db)):
     result = query_search.match_destination(
+        session,
+        body.building_id,
+        body.text,
+        current_floor_id=body.current_floor_id,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Building not found")
+    return result
+
+
+# AI 자연어 질의(하이브리드). 경량 매칭이 놓친 자연어를 임베딩 의미 검색으로 보완한다.
+# 응답은 destination과 동일 계약. 상단 일반 검색이 아니라 "AI 쿼리" 버튼에서 사용.
+@router.post("/ai", response_model=DestinationResponse)
+def query_ai(body: AiRequest, session: Session = Depends(get_db)):
+    result = query_search.match_ai_destination(
         session,
         body.building_id,
         body.text,

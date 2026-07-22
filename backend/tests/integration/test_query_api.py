@@ -106,3 +106,34 @@ def test_정보_질의_매칭_없으면_no_match(api_client):
 
     assert response.status_code == 200
     assert response.json()["status"] == "no_match"
+
+
+# AI 질의도 정확한 이름은 1차 경량 경로로 확정된다(임베딩·torch 없이 동작).
+def test_ai_질의가_정확한_이름을_경량으로_확정한다(api_client):
+    payload = {"text": "가게A", "building_id": BUILDING_ID}
+
+    response = api_client.post("/query/ai", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["match"]["name"] == "가게A"
+    assert body["match"]["entrance_node_id"]  # 경로용 노드가 채워져 있어야 한다
+
+
+# AI 질의도 응답 계약(status/query/match)은 destination과 같다 — 빈 질의는 422.
+def test_ai_질의_빈_텍스트는_422를_반환한다(api_client):
+    payload = {"text": "", "building_id": BUILDING_ID}
+
+    response = api_client.post("/query/ai", json=payload)
+
+    assert response.status_code == 422
+
+
+# 없는 건물은 AI 질의도 404.
+def test_ai_질의_없는_건물은_404를_반환한다(api_client):
+    payload = {"text": "가게A", "building_id": "no-such-building"}
+
+    response = api_client.post("/query/ai", json=payload)
+
+    assert response.status_code == 404

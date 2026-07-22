@@ -1,7 +1,8 @@
-# 자연어 질의 경량 매칭.
-# 매장 이름·카테고리·동의어를 텍스트로 매칭해 최적 1건을 고른다. 임베딩/RAG 없음.
-# - match_destination: 최적 매장 1건 + 입구 노드(온디바이스 경로용).
-# - match_info:        최적 1건 + 대상이 존재하는 층 목록.
+# 자연어 질의 매칭.
+# 매장 이름·카테고리·동의어를 텍스트로 매칭해 최적 1건을 고른다(경량, 임베딩 없음).
+# - match_destination:    최적 매장 1건 + 입구 노드(온디바이스 경로용).
+# - match_info:           최적 1건 + 대상이 존재하는 층 목록.
+# - match_ai_destination: 하이브리드 — 1차 경량 매칭, 실패 시 2차 임베딩 의미 검색(query_semantic).
 # Building이 없으면 None(→ Router가 404). 매칭 0건은 status="no_match"로 정상 응답.
 # floor_name은 여기서 Floor를 조인해 얻는다(공유 _to_store_dict는 건드리지 않음).
 
@@ -141,6 +142,39 @@ def match_destination(
     if not scored:
         return {"status": "no_match", "query": text, "match": None}
     _, _, _, store, floor = scored[0]
+    transform = fit_building_geo_transform(session, building_id)
+    return {"status": _status(store), "query": text, "match": _to_match(store, floor, transform)}
+
+
+# AI 자연어 질의(하이브리드). 1차 경량 매칭 → 실패 시 2차 임베딩 의미 검색.
+# destination과 같은 응답 계약(status/query/match)을 쓴다. 설계: docs/backend/native/FAISS.md
+def match_ai_destination(
+    session: Session,
+    building_id: str,
+    text: str,
+    *,
+    current_floor_id: str | None = None,
+) -> dict[str, Any] | None:
+    if session.get(Building, building_id) is None:
+        return None
+    # 1차: 정확 이름·동의어·부분 매칭. 브랜드명은 임베딩 유사도보다 문자열 일치가 정확·안전하다.
+    scored = _rank(
+        _load_stores(session, building_id, current_floor_id=current_floor_id),
+        text,
+    )
+    if scored:
+        _, _, _, store, floor = scored[0]
+        transform = fit_building_geo_transform(session, building_id)
+        return {"status": _status(store), "query": text, "match": _to_match(store, floor, transform)}
+    # 2차: 경량이 놓친 자연어를 임베딩 의미 검색으로. import는 여기서 지연 — AI 경로만 torch를 로드.
+    from app.repositories import query_semantic
+
+    hit = query_semantic.semantic_search(
+        session, building_id, text, current_floor_id=current_floor_id
+    )
+    if hit is None:
+        return {"status": "no_match", "query": text, "match": None}
+    _score, store, floor = hit
     transform = fit_building_geo_transform(session, building_id)
     return {"status": _status(store), "query": text, "match": _to_match(store, floor, transform)}
 
