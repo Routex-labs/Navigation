@@ -34,6 +34,17 @@ const _debugGraphSourceId = 'floor-debug-graph';
 const _markersSourceId = 'floor-markers';
 const _highlightSourceId = 'floor-highlight';
 const _storesFillLayerId = 'floor-stores-fill';
+const _verticalTransportFillLayerId = 'floor-vertical-transport-fill';
+
+/// 에스컬레이터/엘리베이터/유아차 전용 E/V — 수직이동 구조물 폴리곤을
+/// 초록톤으로 덧칠해 주변 매장에서 눈에 띄게 하기 위한 name 매칭 값.
+/// 백엔드 타일에는 category 속성이 없어(전 층 name은 일정) name으로 매칭한다.
+/// 값이 바뀌면 초록 하이라이트만 빠지고 일반 매장 스타일로 폴백된다.
+const _verticalTransportStoreNames = <String>[
+  '에스컬레이터',
+  '엘리베이터',
+  '유아차 전용 E/V',
+];
 
 /// POI `type` 속성(백엔드 실데이터 값)을 지도 위 아이콘에 매핑한다. 건물마다
 /// 명명이 조금씩 달라(더현대는 elevator/escalator/toilet/exit, 데모 건물인
@@ -330,6 +341,27 @@ class _FloorPlanViewState extends State<FloorPlanView> {
       ),
       sourceLayer: 'stores',
     );
+    // 수직이동 구조물(에스컬레이터/엘리베이터) 전용 오버레이. 일반 매장 fill
+    // 바로 위, 라벨/POI 아이콘보다 아래에 깔아서 초록 아이콘과 한 덩어리로
+    // 읽히게 한다. 필터가 어긋나면(백엔드 name 변경 등) 이 레이어만 비고
+    // 아래 일반 매장 스타일로 자연스럽게 폴백된다.
+    await controller.addFillLayer(
+      _tileSourceId,
+      _verticalTransportFillLayerId,
+      const FillLayerProperties(
+        fillColor: '#DCEBD4',
+        fillOutlineColor: '#6FA167',
+      ),
+      sourceLayer: 'stores',
+      filter: [
+        'match',
+        ['get', 'name'],
+        _verticalTransportStoreNames,
+        true,
+        false,
+      ],
+      enableInteraction: false,
+    );
     // 매장명 라벨: 폴리곤 크기에 맞춰 폰트를 직접 계산하던 예전 로직 대신
     // MapLibre의 자동 줄바꿈(text-max-width)과 충돌 감지에 맡긴다 —
     // 이게 벡터 타일로 바꾼 핵심 이유(텍스트가 매장 박스를 벗어나는 문제)다.
@@ -395,7 +427,8 @@ class _FloorPlanViewState extends State<FloorPlanView> {
           ],
           _poiIconImageName(_defaultPoiIcon),
         ],
-        iconSize: 0.32,
+        iconSize: 0.28,
+        iconOpacity: 0.92,
         iconAllowOverlap: true,
       ),
       sourceLayer: 'pois',
@@ -615,7 +648,20 @@ class _FloorPlanViewState extends State<FloorPlanView> {
           _currentLocationImageName,
           _currentLocationDotImageName,
         ],
-        iconSize: 1.15,
+        // 도착 핀(iconSize 0.115→0.25, 캔버스 128px, 머리 108px)과 화면상
+        // 파란 원의 크기가 대략 맞도록 zoom 기반 interpolate으로 맞춘다.
+        // 현재 위치 캔버스는 144px에 파란 도트는 48px 지름이라 축척비
+        // (108/48 ≈ 2.25)를 곱한 값을 각 stop에 넣어 축소해도 도트가 지도를
+        // 덮지 않고, 확대해도 도착 핀 머리와 비슷한 크기로 커진다.
+        iconSize: [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          16,
+          0.26,
+          20,
+          0.56,
+        ],
         iconRotate: [
           'coalesce',
           ['get', 'heading'],

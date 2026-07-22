@@ -19,12 +19,17 @@ class HttpDestinationRepository implements DestinationRepository {
   @override
   Future<List<PoiSearchResult>> searchDestinations(
     String buildingId,
-    String query,
-  ) async {
+    String query, {
+    String? currentFloorId,
+  }) async {
     final response = await _client.post(
       Uri.parse('$apiBaseUrl/query/destination'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'text': query, 'building_id': buildingId}),
+      body: jsonEncode({
+        'text': query,
+        'building_id': buildingId,
+        'current_floor_id': ?currentFloorId,
+      }),
     );
 
     final body = jsonDecode(response.body) as Map<String, dynamic>;

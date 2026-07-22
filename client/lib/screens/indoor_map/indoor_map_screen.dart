@@ -130,6 +130,11 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   final GlobalKey _pdrShareButtonKey = GlobalKey();
   late final DebugModeController _debugModeController;
 
+  /// 지금 이 실내 지도가 보여주는 층 이름(예: "B2"). 층이 아직 로드되지
+  /// 않았거나 건물 로딩 실패 상태면 null. MapShellScreen이 상단 검색과
+  /// 길찾기 시트의 검색을 현재 층으로 좁힐 때 참조한다.
+  String? get currentFloor => _selectedFloor;
+
   /// 검색·길찾기 시트가 지도 위에 떠 있는 동안 지도 제스처를 꺼서, 시트를
   /// 마우스 휠로 스크롤할 때 그 아래 지도까지 같이 움직이지 않게 한다.
   void setInteractive(bool value) {
@@ -829,7 +834,13 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           currentHeadingDegrees: pdrCurrent == null
               ? null
               : _pdrCurrentHeadingDeg,
-          destination: routeDestination?.point,
+          // 핀은 매장 중심(centroid)이 아니라 실제 도착 노드(경로의 마지막
+          // 점 = 매장 입구)에 찍는다. 경로가 아직 계산되기 전 짧은 순간에는
+          // 경로 정보가 없으므로 centroid로 폴백해 핀이 아예 안 보이는
+          // 상태를 만들지 않는다.
+          destination: (route != null && route.points.isNotEmpty)
+              ? route.points.last
+              : routeDestination?.point,
           routePoints: route?.points ?? const [],
           pdrPathPoints:
               debugEnabled && _debugModeController.showMapMatchedPdrPath
