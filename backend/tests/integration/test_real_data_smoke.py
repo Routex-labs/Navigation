@@ -5,9 +5,13 @@
 합성 픽스처 테스트(test-tower)가 담당한다.
 """
 
+import json
+
 from sqlalchemy import select
 
+from app.core.config import API_ROOT
 from app.models import Building, Edge, Floor, Node, Store
+from app.repositories import query_search
 from tests.conftest import REAL_BUILDING_ID, REAL_FLOOR_NAME
 
 
@@ -110,6 +114,23 @@ def test_모든_노드가_wgs84를_갖는다(real_db_session):
 
     assert nodes
     assert [node.id for node in nodes if node.lat is None or node.lng is None] == []
+
+
+# 선언된 동의어가 모두 실존 장소로 매칭되는지 확인한다(죽은 항목 방지).
+# 브랜드가 데이터에서 사라지면 이 테스트가 그 동의어를 잡아낸다.
+def test_동의어_사전은_실존_장소로_매칭된다(real_db_session):
+    synonyms = json.loads(
+        (API_ROOT / "resources" / "query_synonyms.json").read_text(encoding="utf-8")
+    )
+
+    assert synonyms, "동의어 사전이 비어 있다"
+    dead = [
+        alias
+        for alias in synonyms
+        if (query_search.match_destination(real_db_session, REAL_BUILDING_ID, alias) or {}).get("match")
+        is None
+    ]
+    assert dead == [], f"매칭되지 않는 동의어(죽은 항목): {dead}"
 
 
 # 실데이터로 층 지도 API가 그래프와 매장 폴리곤을 함께 응답하는지 확인한다.
