@@ -23,18 +23,25 @@ router = APIRouter(prefix="/query", tags=["query"])
 class DestinationRequest(BaseModel):
     text: str = Field(min_length=1)  # 빈 문자열은 422
     building_id: str
+    current_floor_id: str | None = None
 
 
 # POST /query/info 요청 Body. DestinationRequest와 동일 구조.
 class InfoRequest(BaseModel):
     text: str = Field(min_length=1)
     building_id: str
+    current_floor_id: str | None = None
 
 
 # 목적지 자연어 질의. 최적 매장 1건과 입구 노드를 반환한다.
 @router.post("/destination", response_model=DestinationResponse)
 def query_destination(body: DestinationRequest, session: Session = Depends(get_db)):
-    result = query_search.match_destination(session, body.building_id, body.text)
+    result = query_search.match_destination(
+        session,
+        body.building_id,
+        body.text,
+        current_floor_id=body.current_floor_id,
+    )
     if result is None:
         raise HTTPException(status_code=404, detail="Building not found")
     return result
@@ -43,7 +50,12 @@ def query_destination(body: DestinationRequest, session: Session = Depends(get_d
 # 장소 정보 자연어 질의. 대상 정보와 존재하는 층 목록을 반환한다.
 @router.post("/info", response_model=InfoResponse)
 def query_info(body: InfoRequest, session: Session = Depends(get_db)):
-    result = query_search.match_info(session, body.building_id, body.text)
+    result = query_search.match_info(
+        session,
+        body.building_id,
+        body.text,
+        current_floor_id=body.current_floor_id,
+    )
     if result is None:
         raise HTTPException(status_code=404, detail="Building not found")
     return result

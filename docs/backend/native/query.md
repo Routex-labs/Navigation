@@ -24,7 +24,8 @@
 
 ### `POST /query/destination`
 
-- 요청: `{ "text": str, "building_id": str }` (기존 `DestinationRequest` 유지)
+- 요청: `{ "text": str, "building_id": str, "current_floor_id": str | null }`
+  - `current_floor_id`는 선택 사항이다. 값이 있으면 해당 층에서만 매칭해 현재 층의 화장실·엘리베이터·에스컬레이터를 바로 찾는다. 생략하면 기존처럼 건물 전체에서 검색한다.
 - 처리: `text`를 정규화 → 건물 내 매장을 매칭 → 최상위 1건 선택 → 입구 노드·층 정보와 함께 반환.
 - 응답(성공, 200):
   ```json
@@ -50,7 +51,8 @@
 
 ### `POST /query/info`
 
-- 요청: `{ "text": str, "building_id": str }` (기존 `InfoRequest` 유지)
+- 요청: `{ "text": str, "building_id": str, "current_floor_id": str | null }`
+  - `current_floor_id`를 주면 `floors`도 현재 층 하나만 반환한다. 생략하면 대상이 존재하는 모든 층을 반환한다.
 - 처리: **매장 단일 풀만** 검색한다(POI 제외). 데이터상 화장실·엘리베이터·에스컬레이터가 모두 매장으로 존재하므로 매장만으로 대상이 커버되고, POI(elevator/escalator 마커)는 추가 정보가 없다. 매칭 규칙은 `destination`과 동일(4절 공유).
 - 응답(성공, 200): 설명 정보 중심 — `name`, `category`, `subcategory`, `floor_name`, 좌표. 경로용 `entrance_node_id`는 선택(강조하지 않음).
 - **여러 층에 같은 대상이 있으면 층 목록을 준다.** "화장실 몇 층이야?"의 답은 단건 좌표가 아니라 존재하는 층들이다. 대표 1건 + `floors: [floor_name, …]`(있는 층 목록)을 함께 반환한다.

@@ -108,12 +108,20 @@ def _status(store: Store) -> str:
     return "ok" if store.entrance_node_id else "ok_no_route"
 
 
-def _load_stores(session: Session, building_id: str) -> list[tuple[Store, Floor]]:
-    return session.execute(
+def _load_stores(
+    session: Session,
+    building_id: str,
+    *,
+    current_floor_id: str | None = None,
+) -> list[tuple[Store, Floor]]:
+    statement = (
         select(Store, Floor)
         .join(Floor, Store.floor_id == Floor.id)
         .where(Floor.building_id == building_id)
-    ).all()
+    )
+    if current_floor_id is not None:
+        statement = statement.where(Floor.id == current_floor_id)
+    return session.execute(statement).all()
 
 
 # 목적지 질의. Building 없으면 None(→404). 매칭 최적 1건을 입구 노드와 함께 반환.
@@ -121,10 +129,15 @@ def match_destination(
     session: Session,
     building_id: str,
     text: str,
+    *,
+    current_floor_id: str | None = None,
 ) -> dict[str, Any] | None:
     if session.get(Building, building_id) is None:
         return None
-    scored = _rank(_load_stores(session, building_id), text)
+    scored = _rank(
+        _load_stores(session, building_id, current_floor_id=current_floor_id),
+        text,
+    )
     if not scored:
         return {"status": "no_match", "query": text, "match": None}
     _, _, _, store, floor = scored[0]
@@ -137,10 +150,15 @@ def match_info(
     session: Session,
     building_id: str,
     text: str,
+    *,
+    current_floor_id: str | None = None,
 ) -> dict[str, Any] | None:
     if session.get(Building, building_id) is None:
         return None
-    scored = _rank(_load_stores(session, building_id), text)
+    scored = _rank(
+        _load_stores(session, building_id, current_floor_id=current_floor_id),
+        text,
+    )
     if not scored:
         return {"status": "no_match", "query": text, "match": None, "floors": []}
     _, _, _, store, floor = scored[0]
