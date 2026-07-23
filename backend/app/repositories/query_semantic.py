@@ -48,8 +48,11 @@ _indexes: dict[str, tuple[Any, list[str]]] = {}
 def _get_model() -> Any | None:
     """모델을 한 번만 로드해 재사용. 로드 실패 시 None을 돌려 AI 경로만 비활성한다."""
     global _model, _model_load_failed
+
     if _model is not None or _model_load_failed:
         return _model
+
+    # 락 안에서 한 번 더 확인 — 동시 요청이 모델을 두 번 로드하지 않게.
     with _model_lock:
         if _model is None and not _model_load_failed:
             try:
@@ -82,15 +85,20 @@ def _build_index(session: "Session", building_id: str) -> tuple[Any, list[str]] 
     model = _get_model()
     if model is None:
         return None
+
     rows = _load_stores(session, building_id)  # 건물 전체(층 필터는 검색 후 적용)
     if not rows:
         return None
+
     import faiss
 
+    # 벡터 행 순서와 store_ids 순서가 1:1로 대응한다 — 검색 결과 position으로 역참조한다.
     store_ids = [store.id for store, _floor in rows]
     vectors = _encode(model, [_document_text(store) for store, _floor in rows])
+
     index = faiss.IndexFlatIP(vectors.shape[1])
     index.add(vectors)
+
     return index, store_ids
 
 
@@ -98,6 +106,8 @@ def _get_index(session: "Session", building_id: str) -> tuple[Any, list[str]] | 
     cached = _indexes.get(building_id)
     if cached is not None:
         return cached
+
+    # 모델 로드와 같은 이유로 락 안에서 재확인 — 인덱스를 중복 빌드하지 않게.
     with _index_lock:
         cached = _indexes.get(building_id)
         if cached is None:
@@ -129,6 +139,7 @@ def semantic_search(
     model = _get_model()
     if model is None:
         return None
+
     got = _get_index(session, building_id)
     if got is None:
         return None

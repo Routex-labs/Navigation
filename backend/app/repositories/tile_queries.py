@@ -29,14 +29,18 @@ def render_floor_tile(
     floor = _find_floor(session, building_id, floor_name)
     if floor is None:
         return None
+
     building = session.get(Building, building_id)
     if building is None:
         return None
 
+    # 좌표 변환과 타일 경계 — 무엇을 그릴지 고르는 기준.
     transform = fit_building_geo_transform(session, building_id)
     bounds = tile_bounds(z, x, y)
+
     stores = session.scalars(select(Store).where(Store.floor_id == floor.id)).all()
     pois = session.scalars(select(Poi).where(Poi.floor_id == floor.id)).all()
+
     layers = build_floor_tile_layers(
         building,
         stores=stores,

@@ -26,6 +26,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # SQL·HTTP 진단 캡처는 개발 실행에서만 켠다.
     if settings.http_capture:
         app.add_middleware(RequestCaptureMiddleware)
 
@@ -38,6 +39,7 @@ def create_app() -> FastAPI:
         def clear_development_logs() -> None:
             clear_runtime_logs()
 
+    # 라우터 등록.
     app.include_router(buildings.router)  # 건물/지도/그래프/경로 API
     app.include_router(fonts.router)      # MapLibre 심볼 레이어용 글리프
     app.include_router(query.router)      # 자연어 질의 API(경량 매칭 + AI 임베딩 검색)
