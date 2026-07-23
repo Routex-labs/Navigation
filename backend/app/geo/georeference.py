@@ -109,11 +109,14 @@ def fit_wgs84_transform(pairs: Iterable[PointPair]) -> GeoTransform:
     if len(pairs) < 3:
         raise ValueError("affine 변환을 피팅하려면 대응점이 3개 이상 필요합니다.")
 
+    # 경도를 위도와 같은 물리 스케일로 눌러 등방 공간을 만든다.
     mean_lat = sum(pair.v for pair in pairs) / len(pairs)
     lng_scale = math.cos(math.radians(mean_lat))
 
     isotropic_pairs = [PointPair(x=p.x, y=p.y, u=p.u * lng_scale, v=p.v) for p in pairs]
     transform = fit_affine_transform(isotropic_pairs)
+
+    # apply()가 되돌릴 수 있도록 보정값을 결과에 실어 보낸다.
     return dataclasses.replace(transform, lng_scale=lng_scale)
 
 
@@ -136,4 +139,5 @@ def compose_transforms(inner: GeoTransform, outer: GeoTransform) -> GeoTransform
     d = c2 * b1 + d2 * d1
     tx = a2 * tx1 + b2 * ty1 + tx2
     ty = c2 * tx1 + d2 * ty1 + ty2
+
     return GeoTransform(a=a, b=b, c=c, d=d, tx=tx, ty=ty, lng_scale=outer.lng_scale)

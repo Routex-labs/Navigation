@@ -5,6 +5,9 @@
 #   1) 최초 1회 DB 적재: python -m scripts.seed.reset_and_seed
 #   2) 서버 실행:        uvicorn app.main:app --reload
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -13,11 +16,28 @@ from app.core.request_capture import RequestCaptureMiddleware, clear_runtime_log
 from app.dto.health import HealthResponse
 
 
+# 개발 진단 로그의 수명주기. yield 앞이 startup, 뒤가 shutdown이다.
+# 새 서버 실행은 새 진단 세션이므로 이전 실행의 로그를 남기지 않고,
+# 정상 종료 때 파일을 비운다.
+@asynccontextmanager
+async def _development_log_lifespan(app: FastAPI) -> AsyncIterator[None]:
+    start_runtime_logs()
+    try:
+        yield
+    finally:
+        clear_runtime_logs()
+
+
 # FastAPI 앱 팩토리. uvicorn과 테스트가 이 함수로 앱을 만든다.
 def create_app() -> FastAPI:
     from app.routers import buildings, fonts, query
 
-    app = FastAPI(title="Navigation API", version="0.3.0")
+    # lifespan은 생성 시점에 넘겨야 해서, 진단 캡처 여부를 여기서 먼저 정한다.
+    app = FastAPI(
+        title="Navigation API",
+        version="0.3.0",
+        lifespan=_development_log_lifespan if settings.http_capture else None,
+    )
 
     # 개발 중에는 모든 출처(*) 허용. 운영 배포 시 Flutter 앱 도메인으로 교체 필요
     app.add_middleware(
@@ -26,21 +46,14 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # SQL·HTTP 진단 캡처는 개발 실행에서만 켠다(로그 파일 정리는 위 lifespan이 담당).
     if settings.http_capture:
         app.add_middleware(RequestCaptureMiddleware)
 
-        @app.on_event("startup")
-        def clear_previous_development_logs() -> None:
-            # 새 서버 실행은 새 진단 세션이므로 이전 실행의 로그를 남기지 않는다.
-            start_runtime_logs()
-
-        @app.on_event("shutdown")
-        def clear_development_logs() -> None:
-            clear_runtime_logs()
-
+    # 라우터 등록.
     app.include_router(buildings.router)  # 건물/지도/그래프/경로 API
     app.include_router(fonts.router)      # MapLibre 심볼 레이어용 글리프
-    app.include_router(query.router)      # 자연어 질의 API(현재 stub)
+    app.include_router(query.router)      # 자연어 질의 API(경량 매칭 + AI 임베딩 검색)
 
     # 서버 생존 확인. Flutter가 서버 연결 전 호출.
     @app.get("/health", tags=["health"], response_model=HealthResponse)

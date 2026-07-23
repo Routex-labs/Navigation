@@ -15,8 +15,130 @@ HTTP로 **오가는 데이터의 모양**을 Pydantic 모델로 정의한다. Fa
 | `building.py` | 건물 목록/상세 | `BuildingSummaryResponse`, `BuildingDetailResponse` |
 | `floor_map.py` | 층 지도 화면 | `FloorMapResponse`, `StoreResponse`, `PoiResponse` |
 | `route.py` | 길찾기 그래프 | `FloorGraphResponse`, `GraphNodeResponse`, `GraphEdgeResponse` |
+| `query.py` | 자연어 질의 | `DestinationResponse`, `InfoResponse`, `QueryMatch` |
 | `health.py` | 헬스 체크 | `HealthResponse` |
 | `__init__.py` | 패키지 표식 | — |
+
+---
+
+## 응답 모델 구조
+
+```mermaid
+classDiagram
+    class BuildingSummaryResponse {
+        +str id
+        +str name
+        +list~str~ floors 「표시 순서」
+        +str default_floor ?
+    }
+    class BuildingDetailResponse {
+        +float area_m2 ?
+        +float perimeter_m ?
+        +list~PointResponse~ footprint_local_m
+    }
+    class FloorMapResponse {
+        +Literal navigation_coordinate_system
+        +str map_calibration_version
+        +list~PointResponse~ footprint_local_m
+        +list~LatLngResponse~ footprint_wgs84 ?
+    }
+    class FloorResponse {
+        +str id 「불투명 내부 id」
+        +str name 「B2 라벨」
+        +int level
+    }
+    class StoreResponse {
+        +str id
+        +str floor_id
+        +str name
+        +str category ?
+        +str subcategory ?
+        +str entrance_node_id ?
+    }
+    class PoiResponse {
+        +str id
+        +str type 「아이콘 키」
+        +str name ?
+        +str linked_node_id ?
+    }
+    class FloorGraphResponse
+    class GraphFloorResponse {
+        +str id
+        +str name
+    }
+    class GraphNodeResponse {
+        +str id
+        +str type
+        +float x_m
+        +float y_m
+        +float lat ?
+        +float lng ?
+    }
+    class GraphEdgeResponse {
+        +str id
+        +str from_node_id 「alias: from」
+        +str to_node_id 「alias: to」
+        +float length_m
+        +bool bidirectional
+    }
+    class DestinationResponse {
+        +str status 「ok·ok_no_route·no_match」
+        +str query
+    }
+    class InfoResponse {
+        +str status 「ok·no_match」
+        +str query
+        +list~str~ floors
+    }
+    class QueryMatch {
+        +str store_id
+        +str name
+        +str floor_id
+        +str floor_name
+        +str entrance_node_id ?
+    }
+    class PointResponse {
+        +float x
+        +float y
+    }
+    class LatLngResponse {
+        +float lat
+        +float lng
+    }
+
+    BuildingSummaryResponse <|-- BuildingDetailResponse : 상속
+
+    FloorMapResponse *-- FloorResponse : floor
+    FloorMapResponse *-- StoreResponse : stores
+    FloorMapResponse *-- PoiResponse : pois
+    FloorMapResponse *-- FloorGraphResponse : navigation_graph
+
+    FloorGraphResponse *-- GraphFloorResponse : floor
+    FloorGraphResponse *-- GraphNodeResponse : nodes
+    FloorGraphResponse *-- GraphEdgeResponse : edges
+
+    DestinationResponse *-- QueryMatch : match ?
+    InfoResponse *-- QueryMatch : match ?
+
+    StoreResponse ..> PointResponse : centroid·polygon
+    StoreResponse ..> LatLngResponse : wgs84 ?
+    PoiResponse ..> PointResponse : position
+    QueryMatch ..> LatLngResponse : centroid_wgs84 ?
+```
+
+`?` nullable · 실선은 포함, 점선은 좌표 타입 사용.
+`floor_map.py`가 `route.py`를 import한다(층 지도 응답이 그래프를 품는다) — 반대 방향은 없다.
+
+다이어그램에서 뺀 것: `HealthResponse`(필드 1개, 다른 모델과 안 엮임)와 **중복 정의된 좌표 타입들**.
+같은 모양의 점 타입이 파일마다 따로 있다 — 구조가 같아 JSON 출력은 동일하지만 타입은 별개다.
+
+| 모양 | 정의된 곳 |
+|---|---|
+| `{x, y}` | `floor_map.PointResponse`, `route.LocalPointResponse`, `query.LocalPoint` |
+| `{lat, lng}` | `floor_map.LatLngResponse`, `query.LatLng` |
+
+`route.py`·`query.py`가 `floor_map.py`를 import하지 않으려다 생긴 중복이다. 정리하려면
+좌표 타입만 담는 모듈을 따로 두고 셋이 공유하면 되지만, 응답 스키마가 바뀌지 않으므로 급하진 않다.
 
 ---
 
@@ -41,7 +163,7 @@ DB와 API 계약이 **독립적으로** 바뀐다.
 
 - **키 이름 변경**: `GraphEdgeResponse`는 `from_node_id`를 `Field(alias="from")`으로 노출한다(내부 컬럼명 ≠ API 키).
 - **계산 필드**: `StoreResponse.centroid_wgs84`, `polygon_wgs84`처럼 DB에 없고 변환으로만 만들어지는 값.
-- **리터럴 제약**: `coordinate_system: Literal["local_m"]`, `path_found: Literal[True]`로 계약을 타입에 박아 둔다.
+- **리터럴 제약**: `navigation_coordinate_system: Literal["local_m"]`처럼 계약을 타입에 박아 둔다.
 
 ---
 

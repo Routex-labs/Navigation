@@ -33,6 +33,8 @@ def get_building(session: Session, building_id: str) -> dict[str, Any] | None:
     ).one_or_none()
     if building is None:
         return None
+
+    # 목록용 요약에 상세 전용 필드를 얹는다.
     summary = _to_building_summary(building)
     summary["area_m2"] = building.area_m2
     summary["perimeter_m"] = building.perimeter_m
@@ -48,11 +50,13 @@ def search_stores(
 ) -> list[dict[str, Any]] | None:
     if session.get(Building, building_id) is None:
         return None
+
     stores = session.scalars(
         select(Store)
         .join(Floor, Store.floor_id == Floor.id)
         .where(Floor.building_id == building_id, Store.name.like(f"%{query}%"))
     ).all()
+
     transform = fit_building_geo_transform(session, building_id)
     return [_to_store_dict(store, transform) for store in stores]
 
@@ -66,12 +70,15 @@ def get_floor_map(
     floor = _find_floor(session, building_id, floor_name)
     if floor is None:
         return None
+
+    # 한 층을 그리는 데 필요한 재료를 모은다.
     building = session.get(Building, building_id)
     stores = session.scalars(
         select(Store).where(Store.floor_id == floor.id)
     ).all()
     pois = session.scalars(select(Poi).where(Poi.floor_id == floor.id)).all()
     transform = fit_building_geo_transform(session, building_id)
+
     return {
         "floor": {"id": floor.id, "name": floor.name, "level": floor.level},
         "navigation_coordinate_system": "local_m",
@@ -103,6 +110,7 @@ def get_floor_graph(
 def _to_floor_graph_dict(session: Session, floor: Floor) -> dict[str, Any]:
     nodes = session.scalars(select(Node).where(Node.floor_id == floor.id)).all()
     edges = session.scalars(select(Edge).where(Edge.floor_id == floor.id)).all()
+
     return {
         "floor": {"id": floor.id, "name": floor.name},
         "nodes": [_to_node_dict(node) for node in nodes],
@@ -134,6 +142,7 @@ def _to_building_summary(building: Building) -> dict[str, Any]:
     # 클라이언트가 floors.first를 초기 층으로 썼는데, 지하층이 생기자 목록 첫
     # 항목이 최상층(6F)이 되어 앱이 6F로 열렸다.
     floors = sorted(building.floors, key=lambda floor: floor.level, reverse=True)
+
     return {
         "id": building.id,
         "name": building.name,
@@ -147,6 +156,8 @@ def _to_building_summary(building: Building) -> dict[str, Any]:
 def _default_floor(floors: list[Floor]) -> str | None:
     if not floors:
         return None
+
+    # 지상층이 있으면 그중 가장 낮은 층(=1F), 없으면 최상층으로 폴백.
     above_ground = [floor for floor in floors if floor.level >= 1]
     if above_ground:
         return min(above_ground, key=lambda floor: floor.level).name
@@ -178,6 +189,7 @@ def _to_edge_dict(edge: Edge) -> dict[str, Any]:
 
 
 def _to_store_dict(store: Store, transform: GeoTransform | None) -> dict[str, Any]:
+    # 실좌표 앵커가 없는 건물이면 transform이 없어 wgs84 필드는 null로 나간다.
     centroid_wgs84 = None
     polygon_wgs84 = None
     if transform is not None:
@@ -188,6 +200,7 @@ def _to_store_dict(store: Store, transform: GeoTransform | None) -> dict[str, An
                 {"lng": lng, "lat": lat}
                 for lng, lat in local_points_to_lnglat(store.polygon, transform)
             ]
+
     return {
         "id": store.id,
         "floor_id": store.floor_id,
@@ -212,6 +225,7 @@ def _to_poi_dict(poi: Poi, transform: GeoTransform | None) -> dict[str, Any]:
     if transform is not None:
         lat, lng = transform.apply(poi.x_m, poi.y_m)
         position_wgs84 = {"lat": lat, "lng": lng}
+
     return {
         "id": poi.id,
         "type": poi.type,
@@ -235,6 +249,7 @@ def _footprint_wgs84(
 ) -> list[dict[str, float]] | None:
     if transform is None or not footprint:
         return None
+
     points = local_points_to_lnglat(footprint, transform)
     return [{"lng": lng, "lat": lat} for lng, lat in points]
 

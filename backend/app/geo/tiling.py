@@ -44,11 +44,15 @@ def tile_bounds(z: int, x: int, y: int) -> TileBounds:
         raise ValueError(f"타일 좌표 범위를 벗어났습니다: z={z}, x={x}, y={y}")
 
     tiles_per_axis = 2.0**z
+
+    # 경도는 타일 격자에 선형 비례한다.
     west = x / tiles_per_axis * 360.0 - 180.0
     east = (x + 1) / tiles_per_axis * 360.0 - 180.0
+
     # 타일 y는 위쪽(북쪽)이 작은 값이라 north가 y, south가 y+1에 대응한다.
     north = _tile_edge_latitude(y, tiles_per_axis)
     south = _tile_edge_latitude(y + 1, tiles_per_axis)
+
     return TileBounds(west=west, south=south, east=east, north=north)
 
 
@@ -114,6 +118,7 @@ def build_floor_tile_layers(
             }
         )
 
+    # 매장 폴리곤 — 타일에 걸치지 않는 것은 버린다.
     store_features = []
     for store in stores:
         if not store.polygon:
@@ -129,6 +134,7 @@ def build_floor_tile_layers(
         )
     layers.append({"name": "stores", "features": store_features})
 
+    # POI는 점이라 bbox 교차가 곧 포함 여부다.
     poi_features = []
     for poi in pois:
         lat, lng = transform.apply(poi.x_m, poi.y_m)

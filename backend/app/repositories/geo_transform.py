@@ -31,10 +31,12 @@ def _synthetic_geo_pairs(anchor_lat: float, anchor_lng: float) -> list[PointPair
         lng = anchor_lng + x_m / (_METERS_PER_DEGREE_LAT * lng_scale)
         return lat, lng
 
+    # affine 피팅에 필요한 최소 개수(3점) — 원점과 두 축 방향.
     pairs = []
     for x_m, y_m in ((0.0, 0.0), (100.0, 0.0), (0.0, 100.0)):
         lat, lng = to_wgs84(x_m, y_m)
         pairs.append(PointPair(x=x_m, y=y_m, u=lng, v=lat))
+
     return pairs
 
 
@@ -54,4 +56,5 @@ def fit_building_geo_transform(session: Session, building_id: str) -> GeoTransfo
     pairs = [PointPair(x=x_m, y=y_m, u=lng, v=lat) for x_m, y_m, lat, lng in rows]
     if len(pairs) < 3:
         pairs = _synthetic_geo_pairs(_SYNTHETIC_ANCHOR_LAT, _SYNTHETIC_ANCHOR_LNG)
+
     return fit_wgs84_transform(pairs)

@@ -1,7 +1,8 @@
-# 자연어 질의 경량 매칭.
-# 매장 이름·카테고리·동의어를 텍스트로 매칭해 최적 1건을 고른다. 임베딩/RAG 없음.
-# - match_destination: 최적 매장 1건 + 입구 노드(온디바이스 경로용).
-# - match_info:        최적 1건 + 대상이 존재하는 층 목록.
+# 자연어 질의 매칭.
+# 매장 이름·카테고리·동의어를 텍스트로 매칭해 최적 1건을 고른다(경량, 임베딩 없음).
+# - match_destination:    최적 매장 1건 + 입구 노드(온디바이스 경로용).
+# - match_info:           최적 1건 + 대상이 존재하는 층 목록.
+# - match_ai_destination: 하이브리드 — 1차 경량 매칭, 실패 시 2차 임베딩 의미 검색(query_semantic).
 # Building이 없으면 None(→ Router가 404). 매칭 0건은 status="no_match"로 정상 응답.
 # floor_name은 여기서 Floor를 조인해 얻는다(공유 _to_store_dict는 건드리지 않음).
 
@@ -71,11 +72,14 @@ def _rank(
 ) -> list[tuple[int, int, str, Store, Floor]]:
     q = _normalize_query(text)
     canon = _synonyms().get(q, q)  # 동의어가 있으면 표준어로, 없으면 그대로.
+
+    # 걸리는 매장만 tier와 함께 모은다.
     scored = []
     for store, floor in rows:
         tier = _tier(store, q, canon)
         if tier is not None:
             scored.append((tier, floor.level, store.id, store, floor))
+
     scored.sort(key=lambda row: (row[0], row[1], row[2]))
     return scored
 
@@ -90,6 +94,7 @@ def _to_match(
     if transform is not None:
         lat, lng = transform.apply(store.centroid_x_m, store.centroid_y_m)
         centroid_wgs84 = {"lat": lat, "lng": lng}
+
     return {
         "store_id": store.id,
         "name": store.name,
@@ -108,6 +113,9 @@ def _status(store: Store) -> str:
     return "ok" if store.entrance_node_id else "ok_no_route"
 
 
+# current_floor_id는 층 라벨("B2")과 내부 id("FL-...")를 모두 받는다. 클라이언트는
+# 사용자가 보는 라벨만 들고 있고, building_id로 스코프가 잡혀 있어 uq_floors_building_name이
+# 건물 안에서 라벨의 유일성을 보장한다. id도 받는 건 기존 호출부 호환용.
 def _load_stores(
     session: Session,
     building_id: str,
@@ -119,8 +127,11 @@ def _load_stores(
         .join(Floor, Store.floor_id == Floor.id)
         .where(Floor.building_id == building_id)
     )
+
     if current_floor_id is not None:
-        statement = statement.where(Floor.id == current_floor_id)
+        statement = statement.where(
+            (Floor.name == current_floor_id) | (Floor.id == current_floor_id)
+        )
     return session.execute(statement).all()
 
 
@@ -134,14 +145,55 @@ def match_destination(
 ) -> dict[str, Any] | None:
     if session.get(Building, building_id) is None:
         return None
+
     scored = _rank(
         _load_stores(session, building_id, current_floor_id=current_floor_id),
         text,
     )
     if not scored:
         return {"status": "no_match", "query": text, "match": None}
+
+    # 정렬이 결정적이라 [0]이 곧 최적 1건.
     _, _, _, store, floor = scored[0]
     transform = fit_building_geo_transform(session, building_id)
+
+    return {"status": _status(store), "query": text, "match": _to_match(store, floor, transform)}
+
+
+# AI 자연어 질의(하이브리드). 1차 경량 매칭 → 실패 시 2차 임베딩 의미 검색.
+# destination과 같은 응답 계약(status/query/match)을 쓴다. 설계: docs/backend/native/FAISS.md
+def match_ai_destination(
+    session: Session,
+    building_id: str,
+    text: str,
+    *,
+    current_floor_id: str | None = None,
+) -> dict[str, Any] | None:
+    if session.get(Building, building_id) is None:
+        return None
+
+    # 1차: 정확 이름·동의어·부분 매칭. 브랜드명은 임베딩 유사도보다 문자열 일치가 정확·안전하다.
+    scored = _rank(
+        _load_stores(session, building_id, current_floor_id=current_floor_id),
+        text,
+    )
+    if scored:
+        _, _, _, store, floor = scored[0]
+        transform = fit_building_geo_transform(session, building_id)
+        return {"status": _status(store), "query": text, "match": _to_match(store, floor, transform)}
+
+    # 2차: 경량이 놓친 자연어를 임베딩 의미 검색으로. import는 여기서 지연 — AI 경로만 torch를 로드.
+    from app.repositories import query_semantic
+
+    hit = query_semantic.semantic_search(
+        session, building_id, text, current_floor_id=current_floor_id
+    )
+    if hit is None:
+        return {"status": "no_match", "query": text, "match": None}
+
+    _score, store, floor = hit
+    transform = fit_building_geo_transform(session, building_id)
+
     return {"status": _status(store), "query": text, "match": _to_match(store, floor, transform)}
 
 
@@ -155,18 +207,23 @@ def match_info(
 ) -> dict[str, Any] | None:
     if session.get(Building, building_id) is None:
         return None
+
     scored = _rank(
         _load_stores(session, building_id, current_floor_id=current_floor_id),
         text,
     )
     if not scored:
         return {"status": "no_match", "query": text, "match": None, "floors": []}
+
     _, _, _, store, floor = scored[0]
     transform = fit_building_geo_transform(session, building_id)
+
+    # 같은 이름이 여러 층에 있으면 층 목록으로 모아 준다(예: 화장실). level 오름차순.
     by_level: dict[str, int] = {}
     for _, level, _sid, _store, matched_floor in scored:
         by_level.setdefault(matched_floor.name, level)
     floors = [name for name, _ in sorted(by_level.items(), key=lambda kv: kv[1])]
+
     return {
         "status": "ok",
         "query": text,

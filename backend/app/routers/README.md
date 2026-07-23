@@ -13,10 +13,72 @@ URL·쿼리 파라미터 파싱, `Depends(get_db)` 주입, `response_model`(=`dt
 |---|---|---|
 | `buildings.py` | `/buildings` | 건물/층/지도/그래프/타일 |
 | `fonts.py` | `/fonts` | MapLibre 글리프(.pbf) 서빙 |
-| `query.py` | `/query` | 자연어 질의 (현재 stub) |
+| `query.py` | `/query` | 자연어 질의 (경량 매칭 + AI 임베딩 검색) |
 | `__init__.py` | — | 패키지 표식 |
 
 라우터 등록은 `app/main.py`의 `create_app()`에서 `include_router`로 한다. `/health`도 거기 있다.
+
+---
+
+## 엔드포인트 → 조회 함수
+
+```mermaid
+flowchart LR
+    subgraph EP["엔드포인트"]
+        e1["GET /buildings"]
+        e2["GET /buildings/{id}"]
+        e3["GET /buildings/{id}/stores?q="]
+        e4["GET /…/floors/{floor}"]
+        e5["GET /…/floors/{floor}/graph"]
+        e6["GET /…/tiles/{z}/{x}/{y}.mvt"]
+        e7["POST /query/destination"]
+        e8["POST /query/ai"]
+        e9["POST /query/info"]
+        e10["GET /fonts/…"]
+        e11["GET /health"]
+    end
+
+    subgraph RP["repositories/"]
+        f1["list_buildings()"]
+        f2["get_building()"]
+        f3["search_stores()"]
+        f4["get_floor_map()"]
+        f5["get_floor_graph()"]
+        f6["render_floor_tile()"]
+        f7["match_destination()"]
+        f8["match_ai_destination()"]
+        f9["match_info()"]
+    end
+
+    subgraph DT["dto/ (response_model)"]
+        d1["BuildingSummaryResponse"]
+        d2["BuildingDetailResponse"]
+        d3["StoreResponse"]
+        d4["FloorMapResponse"]
+        d5["FloorGraphResponse"]
+        d6["DestinationResponse"]
+        d7["InfoResponse"]
+        d8["HealthResponse"]
+    end
+
+    e1 --> f1 --> d1
+    e2 --> f2 --> d2
+    e3 --> f3 --> d3
+    e4 --> f4 --> d4
+    e5 --> f5 --> d5
+    e6 --> f6
+    e7 --> f7 --> d6
+    e8 --> f8 --> d6
+    e9 --> f9 --> d7
+    e11 --> d8
+
+    e6 -. "bytes 그대로" .-> mvt["Response(media_type=mvt)"]
+    e10 -. "파일 스트림" .-> pbf[".pbf 파일"]
+```
+
+- **대부분의 엔드포인트는 조회 함수 하나에 dto 하나로 1:1 대응한다.** 라우터에 로직이 없다는 뜻이다.
+- **`/query/destination`과 `/query/ai`는 같은 `DestinationResponse`를 쓴다.** 응답 계약이 같아야 클라이언트가 두 경로를 갈아끼울 수 있다.
+- **타일과 글리프만 `response_model`이 없다.** JSON이 아니라 바이너리를 그대로 내보낸다.
 
 ---
 
