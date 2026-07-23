@@ -13,6 +13,7 @@ Session으로 DB를 읽어 **기존 API 응답과 같은 모양의 순수 dict**
 |---|---|---|
 | `building_queries.py` | 건물/층/매장/지도/그래프 조회 + dict 조립 | `list_buildings`, `get_building`, `search_stores`, `get_floor_map`, `get_floor_graph` |
 | `query_search.py` | 자연어 질의 경량 매칭(이름·카테고리·동의어) | `match_destination`, `match_info`, `match_ai_destination` |
+| `query_morph.py` | 질의 형태소 정규화(Kiwi). 조사·어미 제거 | `normalize` |
 | `query_semantic.py` | 임베딩 의미 검색(FAISS). 경량이 놓친 자연어 보완 | `semantic_search`, `reset_indexes` |
 | `geo_transform.py` | 건물 `local_m → wgs84` 변환을 요청 시점에 피팅 | `fit_building_geo_transform` |
 | `tile_queries.py` | 층 지도를 MVT 바이트로 렌더링 | `render_floor_tile` |
@@ -31,6 +32,7 @@ flowchart LR
 
     BQ["building_queries.py<br/>건물·층·지도·그래프"]
     QS["query_search.py<br/>경량 매칭"]
+    MO["query_morph.py<br/>형태소 정규화"]
     SEM["query_semantic.py<br/>임베딩 의미 검색"]
     TQ["tile_queries.py<br/>MVT 렌더"]
     GT["geo_transform.py<br/>좌표 변환 피팅"]
@@ -38,6 +40,8 @@ flowchart LR
     RB --> BQ & TQ
     RQ --> QS
 
+    QS --> MO
+    MO -. "동의어 사전만 빌려 씀" .-> QS
     QS -. "경량 실패 시에만" .-> SEM
     SEM --> QS
     TQ --> BQ
@@ -49,14 +53,14 @@ flowchart LR
     classDef core fill:#2a9d8f,color:#fff,stroke:none
     classDef shared fill:#e9c46a,color:#212529,stroke:none
     class RB,RQ entry
-    class BQ,QS,SEM,TQ core
+    class BQ,QS,MO,SEM,TQ core
     class GT shared
 ```
 
 두 개의 공유 지점이 이 계층의 핵심이다.
 
 - **`geo_transform`(노랑)을 네 경로가 모두 거친다.** 지도·타일·질의가 같은 좌표를 가리키려면 반드시 이 함수 하나를 통해야 한다. 여기가 어긋나면 "지도에선 맞는데 타일에선 어긋나는" 증상이 난다.
-- **`query_semantic`이 `query_search`를 되부른다.** 순환처럼 보이지만 `_load_stores`(매장 로딩)만 빌려 쓰는 단방향 재사용이다. 아래 `query_search` 내부도 참고.
+- **`query_semantic`·`query_morph`가 `query_search`를 되부른다.** 순환처럼 보이지만 각각 `_load_stores`(매장 로딩)·`_synonyms`(동의어 사전)만 빌려 쓰는 단방향 재사용이다. `query_morph` 쪽은 함수 안에서 지연 import해 모듈 로드 시점의 순환을 피한다.
 
 ---
 
@@ -99,10 +103,11 @@ flowchart TD
     mAI -. "경량이 0건일 때만" .-> SEM["query_semantic<br/>semantic_search()"]
 
     rank --> loadS["_load_stores()"] & normQ["_normalize_query()"] & tier["_tier()"] & syn["_synonyms()"]
-    normQ --> norm["_norm()"]
+    normQ --> norm["_norm()"] & tail["_strip_tail()"] & MO["query_morph<br/>normalize()"]
     mDest --> status["_status()"]
 
     SEM -. "매장 로딩만 빌려 씀" .-> loadS
+    MO -. "사용자 사전 구성 시" .-> syn
 
     mDest -.-> GT["geo_transform"]
     mInfo -.-> GT
@@ -111,12 +116,13 @@ flowchart TD
     classDef priv fill:#e9ecef,color:#212529,stroke:#adb5bd
     classDef ext fill:#e9c46a,color:#212529,stroke:none
     class mDest,mInfo,mAI pub
-    class rank,loadS,toMatch,normQ,tier,syn,norm,status priv
-    class GT,SEM ext
+    class rank,loadS,toMatch,normQ,tier,syn,norm,tail,status priv
+    class GT,SEM,MO ext
 ```
 
 - **`_load_stores()`가 이 계층의 허브다.** 세 공개 함수와 의미 검색이 전부 이걸 통해 매장을 읽으므로, 여기 걸린 층 필터가 모든 경로에 동시에 적용된다.
 - **점선은 조건부**다. 1차 경량 매칭이 걸리면 임베딩까지 가지 않는다 — 브랜드명은 문자열 일치가 더 정확하고, `torch` 로드를 피할 수 있다.
+- **`_normalize_query()`는 2단계다.** `_strip_tail()`(의문형 꼬리) → `query_morph.normalize()`(조사·어미). 순서가 중요하다 — "몇 층이야"의 "층"은 형태소 분석기가 일반명사로 보기 때문에 꼬리를 먼저 떼야 한다. Kiwi가 없으면 1단계 결과만 쓴다.
 
 ---
 
