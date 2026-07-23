@@ -80,6 +80,10 @@ def _rank(
     rows: list[tuple[Store, Floor]],
     text: str,
 ) -> list[tuple[int, int, str, Store, Floor]]:
+    # 매장명을 형태소 사전에 먼저 등록한다 — 안 하면 미등록 브랜드명이 조사로 오해돼
+    # 잘려 나간다("리모와" → "리모"). 이미 등록된 단어는 건너뛰므로 두 번째 요청부터는 사실상 무료.
+    query_morph.register_words(store.name for store, _floor in rows)
+
     q = _normalize_query(text)
     canon = _synonyms().get(q, q)  # 동의어가 있으면 표준어로, 없으면 그대로.
 

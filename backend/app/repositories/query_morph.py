@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 import threading
+from collections.abc import Iterable
 from typing import Any
 
 # 제거할 품사 태그. 접두사로 검사한다.
@@ -29,9 +30,15 @@ _DROP_TAGS = ("J", "E", "V", "MM", "MA", "NP", "XSV", "XSA")
 
 _WHITESPACE = re.compile(r"\s+")
 
-_lock = threading.Lock()
+# 재진입 가능한 락. 분석(tokenize)과 사전 추가(add_user_word)를 같은 락으로 묶는다 —
+# 사전 추가는 Kiwi 내부 자료구조를 바꾸므로 분석과 동시에 일어나면 안 된다.
+# 분석은 질의당 수십 µs라 직렬화해도 체감되지 않는다.
+_lock = threading.RLock()
 _kiwi: Any | None = None
 _load_failed = False
+
+# 이미 사용자 사전에 넣은 단어. 같은 단어를 매 요청 다시 등록하지 않기 위한 캐시.
+_registered: set[str] = set()
 
 
 def _user_words() -> list[str]:
@@ -74,6 +81,29 @@ def _is_dropped(tag: str) -> bool:
     return tag.startswith(_DROP_TAGS)
 
 
+def register_words(words: Iterable[str]) -> None:
+    """매장명을 사용자 사전에 등록한다. 이미 등록된 단어는 건너뛴다.
+
+    이게 없으면 미등록 브랜드명이 조사로 오해돼 잘려 나간다 —
+    "리모와" → "리모"("와"를 접속조사로), "생로랑" → "생로", "발렌시아가" → "발렌시아".
+    질의를 원문 그대로 넣어도 깨지는 회귀라, 실데이터 1531건 중 35건에서 실제로 발생했다.
+    등록 비용은 고유 626건에 1ms 남짓이라 첫 질의에서 한 번에 처리한다.
+    """
+    kiwi = _get_kiwi()
+    if kiwi is None:
+        return
+
+    with _lock:
+        for word in words:
+            if not word or word in _registered:
+                continue
+            try:
+                kiwi.add_user_word(word, "NNP")
+            except Exception as error:  # noqa: BLE001 - 한 단어 실패가 전체를 막지 않게
+                print(f"사용자 사전 등록 실패({word!r}): {error}")
+            _registered.add(word)  # 실패한 단어도 기록 — 매 요청 재시도하지 않는다
+
+
 def normalize(text: str) -> str | None:
     """조사·어미·용언을 뗀 질의를 돌려준다. 분석 불가·남는 게 없으면 None(→ 호출부 폴백).
 
@@ -84,7 +114,8 @@ def normalize(text: str) -> str | None:
         return None
 
     try:
-        tokens = kiwi.tokenize(text)
+        with _lock:  # 사전 추가와 겹치지 않게 — register_words 주석 참고
+            tokens = kiwi.tokenize(text)
     except Exception as error:  # noqa: BLE001 - 이 질의만 폴백, 서버는 계속
         print(f"형태소 분석 실패({text!r}): {error}")
         return None
