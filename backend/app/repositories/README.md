@@ -12,9 +12,162 @@ Session으로 DB를 읽어 **기존 API 응답과 같은 모양의 순수 dict**
 | 파일 | 역할 | 핵심 함수 |
 |---|---|---|
 | `building_queries.py` | 건물/층/매장/지도/그래프 조회 + dict 조립 | `list_buildings`, `get_building`, `search_stores`, `get_floor_map`, `get_floor_graph` |
+| `query_search.py` | 자연어 질의 경량 매칭(이름·카테고리·동의어) | `match_destination`, `match_info`, `match_ai_destination` |
+| `query_semantic.py` | 임베딩 의미 검색(FAISS). 경량이 놓친 자연어 보완 | `semantic_search`, `reset_indexes` |
 | `geo_transform.py` | 건물 `local_m → wgs84` 변환을 요청 시점에 피팅 | `fit_building_geo_transform` |
 | `tile_queries.py` | 층 지도를 MVT 바이트로 렌더링 | `render_floor_tile` |
 | `__init__.py` | 패키지 표식 | — |
+
+---
+
+## 모듈 연관관계 (전체 그림)
+
+모듈 사이의 의존만 본다. 함수 단위는 아래 모듈별 다이어그램에서 따로 본다.
+
+```mermaid
+flowchart LR
+    RB["routers/buildings.py"]
+    RQ["routers/query.py"]
+
+    BQ["building_queries.py<br/>건물·층·지도·그래프"]
+    QS["query_search.py<br/>경량 매칭"]
+    SEM["query_semantic.py<br/>임베딩 의미 검색"]
+    TQ["tile_queries.py<br/>MVT 렌더"]
+    GT["geo_transform.py<br/>좌표 변환 피팅"]
+
+    RB --> BQ & TQ
+    RQ --> QS
+
+    QS -. "경량 실패 시에만" .-> SEM
+    SEM --> QS
+    TQ --> BQ
+    BQ --> GT
+    QS --> GT
+    TQ --> GT
+
+    classDef entry fill:#264653,color:#fff,stroke:none
+    classDef core fill:#2a9d8f,color:#fff,stroke:none
+    classDef shared fill:#e9c46a,color:#212529,stroke:none
+    class RB,RQ entry
+    class BQ,QS,SEM,TQ core
+    class GT shared
+```
+
+두 개의 공유 지점이 이 계층의 핵심이다.
+
+- **`geo_transform`(노랑)을 네 경로가 모두 거친다.** 지도·타일·질의가 같은 좌표를 가리키려면 반드시 이 함수 하나를 통해야 한다. 여기가 어긋나면 "지도에선 맞는데 타일에선 어긋나는" 증상이 난다.
+- **`query_semantic`이 `query_search`를 되부른다.** 순환처럼 보이지만 `_load_stores`(매장 로딩)만 빌려 쓰는 단방향 재사용이다. 아래 `query_search` 내부도 참고.
+
+---
+
+## `building_queries.py` 내부
+
+```mermaid
+flowchart TD
+    listB["list_buildings()"] --> toSummary["_to_building_summary()"]
+    getB["get_building()"] --> toSummary
+    searchS["search_stores()"] --> toStore["_to_store_dict()"]
+    getFM["get_floor_map()"] --> findF["_find_floor()"] & toGraph["_to_floor_graph_dict()"] & toStore & toPoi["_to_poi_dict()"]
+    getFG["get_floor_graph()"] --> findF & toGraph
+    toGraph --> toNode["_to_node_dict()"] & toEdge["_to_edge_dict()"]
+    toSummary --> defF["_default_floor()"]
+    getFM --> floorFP["_floor_footprint()"] --> fpWgs["_footprint_wgs84()"]
+
+    searchS -.-> GT["geo_transform"]
+    getFM -.-> GT
+
+    classDef pub fill:#2a9d8f,color:#fff,stroke:none
+    classDef priv fill:#e9ecef,color:#212529,stroke:#adb5bd
+    classDef ext fill:#e9c46a,color:#212529,stroke:none
+    class listB,getB,searchS,getFM,getFG pub
+    class toSummary,toStore,toPoi,toGraph,findF,toNode,toEdge,defF,floorFP,fpWgs priv
+    class GT ext
+```
+
+- `_to_floor_graph_dict()`를 **층 지도와 그래프 API가 공유한다.** 클라이언트가 층 지도 응답 한 번으로 그래프까지 캐시할 수 있는 이유다.
+- `_floor_footprint()`는 층 외곽선이 없을 때만 건물 것으로 폴백한다 — 지하층에 1F 윤곽이 그려지던 문제의 대응.
+
+---
+
+## `query_search.py` 내부
+
+```mermaid
+flowchart TD
+    mDest["match_destination()"] --> rank["_rank()"] & toMatch["_to_match()"]
+    mInfo["match_info()"] --> rank & toMatch
+    mAI["match_ai_destination()"] --> rank
+    mAI -. "경량이 0건일 때만" .-> SEM["query_semantic<br/>semantic_search()"]
+
+    rank --> loadS["_load_stores()"] & normQ["_normalize_query()"] & tier["_tier()"] & syn["_synonyms()"]
+    normQ --> norm["_norm()"]
+    mDest --> status["_status()"]
+
+    SEM -. "매장 로딩만 빌려 씀" .-> loadS
+
+    mDest -.-> GT["geo_transform"]
+    mInfo -.-> GT
+
+    classDef pub fill:#2a9d8f,color:#fff,stroke:none
+    classDef priv fill:#e9ecef,color:#212529,stroke:#adb5bd
+    classDef ext fill:#e9c46a,color:#212529,stroke:none
+    class mDest,mInfo,mAI pub
+    class rank,loadS,toMatch,normQ,tier,syn,norm,status priv
+    class GT,SEM ext
+```
+
+- **`_load_stores()`가 이 계층의 허브다.** 세 공개 함수와 의미 검색이 전부 이걸 통해 매장을 읽으므로, 여기 걸린 층 필터가 모든 경로에 동시에 적용된다.
+- **점선은 조건부**다. 1차 경량 매칭이 걸리면 임베딩까지 가지 않는다 — 브랜드명은 문자열 일치가 더 정확하고, `torch` 로드를 피할 수 있다.
+
+---
+
+## `query_semantic.py` 내부
+
+```mermaid
+flowchart TD
+    semSearch["semantic_search()"] --> getModel["_get_model()"] & getIdx["_get_index()"] & encode["_encode()"]
+    getIdx --> buildIdx["_build_index()"]
+    buildIdx --> getModel & docText["_document_text()"] & encode
+    buildIdx -.-> loadS["query_search<br/>_load_stores()"]
+    semSearch -.-> loadS
+    resetI["reset_indexes()"] -. "캐시 비움" .-> getIdx
+
+    classDef pub fill:#2a9d8f,color:#fff,stroke:none
+    classDef priv fill:#e9ecef,color:#212529,stroke:#adb5bd
+    classDef ext fill:#e9c46a,color:#212529,stroke:none
+    class semSearch,resetI pub
+    class getIdx,buildIdx,getModel,encode,docText priv
+    class loadS ext
+```
+
+- **`_get_model()`과 `_get_index()`는 둘 다 지연 로드 싱글턴**이다. 락 안에서 한 번 더 확인해 동시 요청이 모델·인덱스를 중복 생성하지 않게 한다.
+- **인덱스는 `store_id`만 캐시한다.** ORM 객체는 매 요청 현재 세션으로 새로 읽는다(`semantic_search → _load_stores`) — detached 객체와 stale 층 정보를 피하기 위해서다.
+- 모델 로드가 실패하면 `_get_model()`이 `None`을 돌려주고 AI 경로만 조용히 비활성된다. 경량 매칭은 계속 동작한다.
+
+---
+
+## `tile_queries.py` · `geo_transform.py` 내부
+
+```mermaid
+flowchart TD
+    renderT["render_floor_tile()"] --> findF["building_queries<br/>_find_floor()"] & bounds["geo.tiling<br/>tile_bounds()"] & layers["geo.tiling<br/>build_floor_tile_layers()"] & encode["mapbox_vector_tile<br/>encode()"]
+    renderT --> fitT["fit_building_geo_transform()"]
+
+    fitT --> fitW["geo.georeference<br/>fit_wgs84_transform()"]
+    fitT -. "앵커 3개 미만이면" .-> synth["_synthetic_geo_pairs()"]
+    synth --> fitW
+
+    classDef pub fill:#2a9d8f,color:#fff,stroke:none
+    classDef priv fill:#e9ecef,color:#212529,stroke:#adb5bd
+    classDef ext fill:#e9c46a,color:#212529,stroke:none
+    class renderT,fitT pub
+    class synth priv
+    class findF,bounds,layers,encode,fitW ext
+```
+
+- 수학(`geo/`)과 조회(`repositories/`)를 나눈 경계가 여기서 보인다. 타일 **바이트 인코딩**만 외부 포맷 라이브러리에 의존하므로 `geo`가 아니라 이쪽에 있다.
+- 점선 폴백은 실측 앵커가 없는 합성 데이터용이다. 위치는 가짜지만 형태·크기는 정확한 지도가 나온다.
+
+> 색: 초록 = 공개 함수(라우터가 부름), 회색 = 모듈 내부 헬퍼, 노랑 = 다른 모듈.
 
 ---
 
