@@ -8350,13 +8350,392 @@
         "object_id": "OB-OjGSVhS-w2030",
         "review_required": false
       }
+    },
+    {
+      "id": "derived-escalator-b3-ND-6XpfE3k3z3570",
+      "name": "에스컬레이터",
+      "category": "편의시설",
+      "subcategory": "escalator",
+      "floor_id": "FL-rkzm563umfy00610",
+      "entrance_node_id": null,
+      "entrance_local_m": {
+        "x": 101.022088,
+        "y": 157.690034
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 101.161137,
+        "y": 154.908209
+      },
+      "polygon_local_m": [
+        {
+          "x": 101.961351,
+          "y": 158.446469
+        },
+        {
+          "x": 100.360923,
+          "y": 158.446469
+        },
+        {
+          "x": 100.360923,
+          "y": 151.369948
+        },
+        {
+          "x": 101.961351,
+          "y": 151.369948
+        }
+      ],
+      "match": {
+        "method": "derived_escalator_nodes",
+        "source_node_id": "ND-6XpfE3k3z3570",
+        "source_node_name": "ES1-DN(TOB4)",
+        "basis": "mirror",
+        "review_required": true
+      }
+    },
+    {
+      "id": "derived-escalator-b3-ND-AoEbQpa8D4491",
+      "name": "에스컬레이터",
+      "category": "편의시설",
+      "subcategory": "escalator",
+      "floor_id": "FL-rkzm563umfy00610",
+      "entrance_node_id": null,
+      "entrance_local_m": {
+        "x": 223.442561,
+        "y": 159.444985
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 223.627329,
+        "y": 155.704184
+      },
+      "polygon_local_m": [
+        {
+          "x": 224.427542,
+          "y": 160.03842
+        },
+        {
+          "x": 222.827115,
+          "y": 160.03842
+        },
+        {
+          "x": 222.827115,
+          "y": 151.369948
+        },
+        {
+          "x": 224.427542,
+          "y": 151.369948
+        }
+      ],
+      "match": {
+        "method": "derived_escalator_nodes",
+        "source_node_id": "ND-AoEbQpa8D4491",
+        "source_node_name": "ES3-DN(FRB2)",
+        "basis": "mirror",
+        "review_required": true
+      }
+    },
+    {
+      "id": "derived-escalator-b3-ND-K_k7AZxSU3539",
+      "name": "에스컬레이터",
+      "category": "편의시설",
+      "subcategory": "escalator",
+      "floor_id": "FL-rkzm563umfy00610",
+      "entrance_node_id": null,
+      "entrance_local_m": {
+        "x": 221.884313,
+        "y": 159.444985
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 221.846593,
+        "y": 155.704184
+      },
+      "polygon_local_m": [
+        {
+          "x": 222.646807,
+          "y": 160.03842
+        },
+        {
+          "x": 221.04638,
+          "y": 160.03842
+        },
+        {
+          "x": 221.04638,
+          "y": 151.369948
+        },
+        {
+          "x": 222.646807,
+          "y": 151.369948
+        }
+      ],
+      "match": {
+        "method": "derived_escalator_nodes",
+        "source_node_id": "ND-K_k7AZxSU3539",
+        "source_node_name": "ES3-DN(TOB4)",
+        "basis": "mirror",
+        "review_required": true
+      }
+    },
+    {
+      "id": "derived-escalator-b3-ND-L-sdrh14_8092",
+      "name": "에스컬레이터",
+      "category": "편의시설",
+      "subcategory": "escalator",
+      "floor_id": "FL-rkzm563umfy00610",
+      "entrance_node_id": null,
+      "entrance_local_m": {
+        "x": 168.652604,
+        "y": 143.606746
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 168.659332,
+        "y": 147.941083
+      },
+      "polygon_local_m": [
+        {
+          "x": 169.459545,
+          "y": 144.365521
+        },
+        {
+          "x": 167.859118,
+          "y": 144.365521
+        },
+        {
+          "x": 167.859118,
+          "y": 151.516645
+        },
+        {
+          "x": 169.459545,
+          "y": 151.516645
+        }
+      ],
+      "match": {
+        "method": "derived_escalator_nodes",
+        "source_node_id": "ND-L-sdrh14_8092",
+        "source_node_name": "ES2-1-UP(FRB4)",
+        "basis": "translate",
+        "review_required": true
+      }
+    },
+    {
+      "id": "derived-escalator-b3-ND-OmC1lWGDR9251",
+      "name": "에스컬레이터",
+      "category": "편의시설",
+      "subcategory": "escalator",
+      "floor_id": "FL-rkzm563umfy00610",
+      "entrance_node_id": null,
+      "entrance_local_m": {
+        "x": 223.442543,
+        "y": 141.837131
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 223.627329,
+        "y": 147.035712
+      },
+      "polygon_local_m": [
+        {
+          "x": 224.427542,
+          "y": 142.701476
+        },
+        {
+          "x": 222.827115,
+          "y": 142.701476
+        },
+        {
+          "x": 222.827115,
+          "y": 151.369948
+        },
+        {
+          "x": 224.427542,
+          "y": 151.369948
+        }
+      ],
+      "match": {
+        "method": "derived_escalator_nodes",
+        "source_node_id": "ND-OmC1lWGDR9251",
+        "source_node_name": "ES3-UP(FRB4)",
+        "basis": "translate",
+        "review_required": true
+      }
+    },
+    {
+      "id": "derived-escalator-b3-ND-Zac-IYber6434",
+      "name": "에스컬레이터",
+      "category": "편의시설",
+      "subcategory": "escalator",
+      "floor_id": "FL-rkzm563umfy00610",
+      "entrance_node_id": null,
+      "entrance_local_m": {
+        "x": 102.696276,
+        "y": 143.187766
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 102.758298,
+        "y": 147.831688
+      },
+      "polygon_local_m": [
+        {
+          "x": 103.558512,
+          "y": 144.293427
+        },
+        {
+          "x": 101.958084,
+          "y": 144.293427
+        },
+        {
+          "x": 101.958084,
+          "y": 151.369948
+        },
+        {
+          "x": 103.558512,
+          "y": 151.369948
+        }
+      ],
+      "match": {
+        "method": "derived_escalator_nodes",
+        "source_node_id": "ND-Zac-IYber6434",
+        "source_node_name": "ES1-UP(FRB4)",
+        "basis": "translate",
+        "review_required": true
+      }
+    },
+    {
+      "id": "derived-escalator-b3-ND-lG77R91-84618",
+      "name": "에스컬레이터",
+      "category": "편의시설",
+      "subcategory": "escalator",
+      "floor_id": "FL-rkzm563umfy00610",
+      "entrance_node_id": null,
+      "entrance_local_m": {
+        "x": 102.860439,
+        "y": 157.690034
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 102.758298,
+        "y": 154.908209
+      },
+      "polygon_local_m": [
+        {
+          "x": 103.558512,
+          "y": 158.446469
+        },
+        {
+          "x": 101.958084,
+          "y": 158.446469
+        },
+        {
+          "x": 101.958084,
+          "y": 151.369948
+        },
+        {
+          "x": 103.558512,
+          "y": 151.369948
+        }
+      ],
+      "match": {
+        "method": "derived_escalator_nodes",
+        "source_node_id": "ND-lG77R91-84618",
+        "source_node_name": "ES1-DN(FRB2)",
+        "basis": "mirror",
+        "review_required": true
+      }
+    },
+    {
+      "id": "derived-escalator-b3-ND-uUZQt-zrv9963",
+      "name": "에스컬레이터",
+      "category": "편의시설",
+      "subcategory": "escalator",
+      "floor_id": "FL-rkzm563umfy00610",
+      "entrance_node_id": null,
+      "entrance_local_m": {
+        "x": 168.851727,
+        "y": 158.125923
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 168.659332,
+        "y": 155.092207
+      },
+      "polygon_local_m": [
+        {
+          "x": 169.459545,
+          "y": 158.667769
+        },
+        {
+          "x": 167.859118,
+          "y": 158.667769
+        },
+        {
+          "x": 167.859118,
+          "y": 151.516645
+        },
+        {
+          "x": 169.459545,
+          "y": 151.516645
+        }
+      ],
+      "match": {
+        "method": "derived_escalator_nodes",
+        "source_node_id": "ND-uUZQt-zrv9963",
+        "source_node_name": "ES2-1-DN(FRB2)",
+        "basis": "mirror",
+        "review_required": true
+      }
+    },
+    {
+      "id": "derived-escalator-b3-ND-vGCA0BTa_1547",
+      "name": "에스컬레이터",
+      "category": "편의시설",
+      "subcategory": "escalator",
+      "floor_id": "FL-rkzm563umfy00610",
+      "entrance_node_id": null,
+      "entrance_local_m": {
+        "x": 167.230915,
+        "y": 158.125923
+      },
+      "entrance_wgs84": null,
+      "centroid_local_m": {
+        "x": 167.172597,
+        "y": 155.092207
+      },
+      "polygon_local_m": [
+        {
+          "x": 167.972811,
+          "y": 158.667769
+        },
+        {
+          "x": 166.372384,
+          "y": 158.667769
+        },
+        {
+          "x": 166.372384,
+          "y": 151.516645
+        },
+        {
+          "x": 167.972811,
+          "y": 151.516645
+        }
+      ],
+      "match": {
+        "method": "derived_escalator_nodes",
+        "source_node_id": "ND-vGCA0BTa_1547",
+        "source_node_name": "ES2-1-DN(TOB4)",
+        "basis": "mirror",
+        "review_required": true
+      }
     }
   ],
   "unmatched": [],
   "summary": {
     "source": "dabeeo official map",
-    "store_count": 209,
-    "polygon_count": 208,
-    "review_required": false
+    "store_count": 218,
+    "polygon_count": 217,
+    "review_required": false,
+    "derived_escalator_count": 9
   }
 }
