@@ -123,7 +123,7 @@ class _DestinationRow extends StatelessWidget {
         width: 38,
         height: 38,
         decoration: BoxDecoration(
-          color: const Color(0xFFF3F4F6),
+          color: AppColors.blue50,
           borderRadius: BorderRadius.circular(11),
         ),
         alignment: Alignment.center,
@@ -139,7 +139,7 @@ class _DestinationRow extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: const Color(0xFFF3F4F6),
+              color: AppColors.blue50,
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(

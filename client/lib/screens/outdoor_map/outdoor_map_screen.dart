@@ -54,7 +54,6 @@ class OutdoorMapBody extends StatefulWidget {
 }
 
 class OutdoorMapBodyState extends State<OutdoorMapBody> {
-  bool _loading = true;
   bool _autoNavigated = false;
   Position? _position;
   LatLng? _entrance;
@@ -102,18 +101,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   void _handlePositionError() {
     if (!mounted) return;
-    setState(() {
-      _position = null;
-      _loading = false;
-    });
+    setState(() => _position = null);
   }
 
   void _handlePosition(Position position) {
     if (!mounted) return;
-    setState(() {
-      _position = position;
-      _loading = false;
-    });
+    setState(() => _position = position);
     _maybeAutoEnter(position);
     _updateRoute(position);
   }
@@ -257,9 +250,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return _loading ? const Center(child: CircularProgressIndicator()) : _buildBody();
-  }
+  Widget build(BuildContext context) => _buildBody();
 
   Widget _buildBody() {
     final position = _position;

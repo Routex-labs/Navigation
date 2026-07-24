@@ -43,7 +43,7 @@ class RagChatPanel extends StatelessWidget {
                   onPressed: () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.close, size: 18, color: AppColors.muted),
                   style: IconButton.styleFrom(
-                    backgroundColor: const Color(0xFFF3F4F6),
+                    backgroundColor: AppColors.blue50,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -99,7 +99,7 @@ class RagChatPanel extends StatelessWidget {
                           vertical: 10,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF3F4F6),
+                          color: AppColors.blue50,
                           borderRadius: const BorderRadius.only(
                             topLeft: Radius.circular(18),
                             topRight: Radius.circular(18),

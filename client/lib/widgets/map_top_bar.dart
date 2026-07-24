@@ -59,7 +59,13 @@ class _MapTopBarState extends State<MapTopBar> {
               Expanded(
                 child: TextField(
                   controller: _controller,
-                  onSubmitted: widget.onSearch,
+                  onSubmitted: (value) {
+                    // 사용자가 엔터로 검색을 확정한 뒤에는 검색창이 비워진
+                    // 상태로 돌아가고 키보드도 내려가야 다음 조작이 자연스럽다.
+                    widget.onSearch(value);
+                    _controller.clear();
+                    FocusScope.of(context).unfocus();
+                  },
                   textInputAction: TextInputAction.search,
                   decoration: InputDecoration(
                     isDense: true,

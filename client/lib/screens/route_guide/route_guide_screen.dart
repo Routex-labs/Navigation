@@ -331,7 +331,7 @@ class _BottomEta extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEEF3FF),
+                    color: AppColors.blue50,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(

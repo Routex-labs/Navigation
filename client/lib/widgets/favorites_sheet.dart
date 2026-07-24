@@ -143,7 +143,7 @@ class _FavoriteTile extends StatelessWidget {
         width: 36,
         height: 36,
         decoration: BoxDecoration(
-          color: const Color(0xFFEEF3FF),
+          color: AppColors.blue50,
           borderRadius: BorderRadius.circular(10),
         ),
         alignment: Alignment.center,

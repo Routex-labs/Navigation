@@ -11,7 +11,7 @@
 | 지도 | [`route_polyline.dart`](route_polyline.dart), [`location_marker.dart`](location_marker.dart), [`uncertainty_circle.dart`](uncertainty_circle.dart) | 경로선, 위치와 불확실성 표현 |
 | 지도 셸 | [`map_top_bar.dart`](map_top_bar.dart), [`map_bottom_bar.dart`](map_bottom_bar.dart), [`eta_card.dart`](eta_card.dart), [`status_badge.dart`](status_badge.dart) | 지도 화면 공통 조작·상태 |
 | 탐색 시트 | [`directions_sheet.dart`](directions_sheet.dart), [`building_switcher_sheet.dart`](building_switcher_sheet.dart) | 출발/도착 검색, 건물 전환 |
-| 장소 시트 | [`category_list_sheet.dart`](category_list_sheet.dart), [`category_stores_sheet.dart`](category_stores_sheet.dart), [`store_info_sheet.dart`](store_info_sheet.dart), [`favorites_sheet.dart`](favorites_sheet.dart) | 카테고리·매장·즐겨찾기 |
+| 장소 시트 | [`category_stores_sheet.dart`](category_stores_sheet.dart), [`store_info_sheet.dart`](store_info_sheet.dart), [`favorites_sheet.dart`](favorites_sheet.dart) | 카테고리 매장·매장 정보·즐겨찾기 |
 | 공통 | [`sheet_header.dart`](sheet_header.dart), [`rag_chat_panel.dart`](rag_chat_panel.dart) | 시트 헤더, 자연어 질의 패널 |
 
 ## `FloorPlanView` 경계

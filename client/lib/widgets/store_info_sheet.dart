@@ -181,7 +181,7 @@ class _StoreInfoSheetState extends State<StoreInfoSheet> {
                           width: 44,
                           height: 44,
                           decoration: BoxDecoration(
-                            color: const Color(0xFFEEF3FF),
+                            color: AppColors.blue50,
                             borderRadius: BorderRadius.circular(13),
                           ),
                           alignment: Alignment.center,
@@ -304,7 +304,7 @@ class _CategoryChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xFFEEF3FF),
+      color: AppColors.blue50,
       shape: StadiumBorder(
         side: BorderSide(color: AppColors.primary.withValues(alpha: 0.28)),
       ),
