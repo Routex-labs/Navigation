@@ -3,7 +3,7 @@
 1F/2F에 각각 가게A(입구 노드 있음)·가게B가 있다.
 """
 
-from tests.conftest import BUILDING_ID, FLOOR_ID
+from tests.conftest import BUILDING_ID, FLOOR_ID, FLOOR_NAME
 
 
 # 목적지 질의가 매장 1건과 입구 노드를 반환한다.
@@ -70,7 +70,7 @@ def test_현재_층을_지정하면_그_층의_대상만_반환한다(api_client
     payload = {
         "text": "가게A",
         "building_id": BUILDING_ID,
-        "current_floor_id": FLOOR_ID,
+        "current_floor": FLOOR_NAME,
     }
 
     response = api_client.post("/query/destination", json=payload)
@@ -86,7 +86,7 @@ def test_현재_층을_지정한_정보_질의는_그_층만_반환한다(api_cl
     payload = {
         "text": "가게A",
         "building_id": BUILDING_ID,
-        "current_floor_id": FLOOR_ID,
+        "current_floor": FLOOR_NAME,
     }
 
     response = api_client.post("/query/info", json=payload)

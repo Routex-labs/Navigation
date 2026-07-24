@@ -156,7 +156,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
     final results = await destinationRepository.searchDestinations(
       _buildingId,
       normalized,
-      currentFloorId: _indoorKey.currentState?.currentFloor,
+      currentFloor: _indoorKey.currentState?.currentFloor,
     );
     if (!mounted) return;
     final match = results.firstOrNull;
@@ -271,7 +271,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
     final results = await destinationRepository.searchDestinations(
       _buildingId,
       query,
-      currentFloorId: includeAllFloors ? null : currentFloor,
+      currentFloor: includeAllFloors ? null : currentFloor,
     );
     return results
         .map(

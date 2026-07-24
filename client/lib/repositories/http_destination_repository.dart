@@ -30,7 +30,7 @@ class HttpDestinationRepository implements DestinationRepository {
   Future<List<PoiSearchResult>> searchDestinations(
     String buildingId,
     String query, {
-    String? currentFloorId,
+    String? currentFloor,
   }) async {
     // 백엔드는 text.min_length=1을 강제해 빈 문자열이면 422를 낸다. 시트를
     // 처음 열 때(_search('')) 등 정상 흐름에서도 빈 쿼리가 들어오므로,
@@ -43,7 +43,7 @@ class HttpDestinationRepository implements DestinationRepository {
       body: utf8.encode(jsonEncode({
         'text': query,
         'building_id': buildingId,
-        'current_floor_id': ?currentFloorId,
+        'current_floor': ?currentFloor,
       })),
     );
 

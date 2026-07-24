@@ -23,14 +23,16 @@ router = APIRouter(prefix="/query", tags=["query"])
 class DestinationRequest(BaseModel):
     text: str = Field(min_length=1)  # 빈 문자열은 422
     building_id: str
-    current_floor_id: str | None = None
+    # 사용자에게 보이는 층 이름(예: "B2"). 클라이언트는 사람이 읽는 층 라벨만
+    # 들고 있으므로 백엔드도 그 라벨로 필터링한다. 층 name은 건물 내에서 유일.
+    current_floor: str | None = None
 
 
 # POST /query/info 요청 Body. DestinationRequest와 동일 구조.
 class InfoRequest(BaseModel):
     text: str = Field(min_length=1)
     building_id: str
-    current_floor_id: str | None = None
+    current_floor: str | None = None
 
 
 # 목적지 자연어 질의. 최적 매장 1건과 입구 노드를 반환한다.
@@ -40,7 +42,7 @@ def query_destination(body: DestinationRequest, session: Session = Depends(get_d
         session,
         body.building_id,
         body.text,
-        current_floor_id=body.current_floor_id,
+        current_floor=body.current_floor,
     )
     if result is None:
         raise HTTPException(status_code=404, detail="Building not found")
@@ -54,7 +56,7 @@ def query_info(body: InfoRequest, session: Session = Depends(get_db)):
         session,
         body.building_id,
         body.text,
-        current_floor_id=body.current_floor_id,
+        current_floor=body.current_floor,
     )
     if result is None:
         raise HTTPException(status_code=404, detail="Building not found")

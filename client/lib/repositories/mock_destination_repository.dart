@@ -14,19 +14,19 @@ class MockDestinationRepository implements DestinationRepository {
   Future<List<PoiSearchResult>> searchDestinations(
     String buildingId,
     String query, {
-    String? currentFloorId,
+    String? currentFloor,
   }) async {
     final building = await _buildingRepository.getBuilding(buildingId);
     if (building == null) return [];
 
-    // currentFloorId가 주어지면 그 층만 로드해서 훑는다 — 화장실/엘리베이터처럼
+    // currentFloor가 주어지면 그 층만 로드해서 훑는다 — 화장실/엘리베이터처럼
     // 층마다 같은 이름이 여러 개 있는 시설을 다른 층 결과와 섞어 내보내지
     // 않기 위해서. 값이 실제 이 건물의 층 목록에 있을 때만 필터로 취급하고,
     // 없으면(층 이름이 바뀌었거나 아직 로드 전인 경우) 안전하게 전체 검색으로
     // 폴백해서 기존 흐름을 깨뜨리지 않는다.
-    final floorsToScan = (currentFloorId != null &&
-            building.floors.contains(currentFloorId))
-        ? [currentFloorId]
+    final floorsToScan = (currentFloor != null &&
+            building.floors.contains(currentFloor))
+        ? [currentFloor]
         : building.floors;
 
     final results = <PoiSearchResult>[];

@@ -41,7 +41,6 @@ migrate_working_dir/
 **/Flutter/GeneratedPluginRegistrant.h
 **/Flutter/GeneratedPluginRegistrant.m
 **/GeneratedPluginRegistrant.java
-lib/generated_plugin_registrant.dart
 
 # Symbolication related
 app.*.symbols

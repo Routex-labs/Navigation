@@ -39,7 +39,7 @@ enum _ActiveField { origin, destination }
 
 /// [DirectionsSheet]가 부모(MapShellScreen)에 검색을 위임할 때 쓰는 콜백.
 /// [includeAllFloors]가 true면 "전체 층에서 찾기" 토글이 켜진 상태 —
-/// 부모는 리포지토리 호출에서 current_floor_id를 빼서 건물 전체를 검색한다.
+/// 부모는 리포지토리 호출에서 current_floor를 빼서 건물 전체를 검색한다.
 typedef DirectionsSearchCallback =
     Future<List<DirectionsCandidate>> Function(
       String query, {

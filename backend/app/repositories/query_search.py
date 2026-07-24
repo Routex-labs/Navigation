@@ -112,15 +112,18 @@ def _load_stores(
     session: Session,
     building_id: str,
     *,
-    current_floor_id: str | None = None,
+    current_floor: str | None = None,
 ) -> list[tuple[Store, Floor]]:
+    # 층 이름은 건물 안에서 유일해서 (building_id, name)만으로 특정된다.
+    # 클라이언트가 UI에서 다루는 사람이 읽는 라벨(예: "B2")을 그대로 받아
+    # 여기서 필터링한다 — 별도로 floor id를 클라이언트에 노출하지 않는다.
     statement = (
         select(Store, Floor)
         .join(Floor, Store.floor_id == Floor.id)
         .where(Floor.building_id == building_id)
     )
-    if current_floor_id is not None:
-        statement = statement.where(Floor.id == current_floor_id)
+    if current_floor is not None:
+        statement = statement.where(Floor.name == current_floor)
     return session.execute(statement).all()
 
 
@@ -130,12 +133,12 @@ def match_destination(
     building_id: str,
     text: str,
     *,
-    current_floor_id: str | None = None,
+    current_floor: str | None = None,
 ) -> dict[str, Any] | None:
     if session.get(Building, building_id) is None:
         return None
     scored = _rank(
-        _load_stores(session, building_id, current_floor_id=current_floor_id),
+        _load_stores(session, building_id, current_floor=current_floor),
         text,
     )
     if not scored:
@@ -151,12 +154,12 @@ def match_info(
     building_id: str,
     text: str,
     *,
-    current_floor_id: str | None = None,
+    current_floor: str | None = None,
 ) -> dict[str, Any] | None:
     if session.get(Building, building_id) is None:
         return None
     scored = _rank(
-        _load_stores(session, building_id, current_floor_id=current_floor_id),
+        _load_stores(session, building_id, current_floor=current_floor),
         text,
     )
     if not scored:
