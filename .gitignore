@@ -53,6 +53,11 @@ fastapi-study/
 Thumbs.db
 .vscode/
 !.vscode/extensions.json
+.idea/
+
+# Local dev clone of backend (개별 개발자가 로컬에서 uvicorn 실행용으로
+# 복사해 둘 수 있어 저장소에는 포함하지 않는다. 실제 배포·개발 기준은 backend/)
+api/
 
 # 로컬 전용 디자인 참고 문서 (저장소에서 삭제됨, 개인 참고용으로만 복원)
 design.md
