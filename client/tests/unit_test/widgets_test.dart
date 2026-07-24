@@ -97,6 +97,9 @@ void main() {
     final polyline = buildRoutePolyline(points);
 
     expect(polyline.points, points);
-    expect(polyline.color, const Color(0xFF1A73E8));
+    // 팔레트가 바뀌어도 "primary와 어긋나면 실패"만 유지되도록 상수를 그대로
+    // 참조한다. 이전에는 0xFF1A73E8을 하드코딩해 blue500(0xFF4A87F1)로 톤이
+    // 바뀔 때 테스트가 함께 깨졌다.
+    expect(polyline.color, AppColors.primary);
   });
 }

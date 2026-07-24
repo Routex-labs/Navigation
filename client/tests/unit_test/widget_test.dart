@@ -155,8 +155,9 @@ void main() {
       MaterialApp(home: OutdoorMapBody(onEnterBuilding: () {})),
     );
 
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
-
+    // OutdoorMapBody는 위치 신호를 기다리는 동안에도 지도를 그리며,
+    // 로딩 스피너로 화면을 가리지 않는다. 첫 pump가 끝나면 fake 스트림이
+    // 첫 위치를 흘려주므로 곧바로 위치 마커가 보여야 한다.
     await tester.pump();
 
     expect(find.byType(CircularProgressIndicator), findsNothing);
