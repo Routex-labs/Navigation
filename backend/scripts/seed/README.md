@@ -70,3 +70,7 @@ seed/seed_navigation  ──►  app.models
 | 스키마 바꾼 뒤 반영 | 마이그레이션 없음 → `reset_and_seed`로 drop & create |
 | 새 건물 데이터 추가 | `resources/studio/<building>/`에 층 JSON 배치 + `studio_adapter`의 `STUDIO_DIR`/`BUILDING_NAMES` 조정 |
 | 매장 카테고리 수정 | `resources/store_categories.json`(id) 또는 `store_category_by_name.json`(매장명) 편집 후 `reset_and_seed` |
+
+---
+
+> **다음 읽기:** [`backend/notebooks` — 자연어 검색 품질 분석](../../notebooks/README.md)

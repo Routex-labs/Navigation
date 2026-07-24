@@ -73,3 +73,7 @@ repositories/building_queries.py, tile_queries.py ──►  geo.tiling, geo.geo
 | 좌표가 어긋나 보인다 | 변환 피팅 입력(대응점)은 `repositories/geo_transform.py`, 수학은 `georeference.py` |
 | 타일에 매장이 안 나온다 | `build_floor_tile_layers`의 bbox 교차 / `transform is None` 분기 |
 | 새 좌표계 단계 추가 | `compose_transforms`로 기존 변환에 합성 |
+
+---
+
+> **다음 읽기:** [`app/repositories` — DB 조회와 응답 조립](../repositories/README.md)

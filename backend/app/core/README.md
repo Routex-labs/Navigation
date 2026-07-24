@@ -168,3 +168,7 @@ scripts/seed            ──►  core.database.SessionLocal, engine
 | SQL 로그 보기 | `NAV_SQL_ECHO=1`로 실행 후 `backend/app/sql/queries.sql` |
 | 실제 요청 인자 보기 | `NAV_HTTP_CAPTURE=1`로 실행 후 `backend/app/args/*.json` |
 | 테스트에서 임시 DB 쓰기 | `dependency_overrides[get_db]` 교체 (conftest 참고) |
+
+---
+
+> **다음 읽기:** [`app/models` — SQLAlchemy ORM 데이터 모델](../models/README.md)

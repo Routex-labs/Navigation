@@ -81,3 +81,7 @@ seed/studio_adapter  ──►  transform.floor_alignment, transform.vertical_tr
 | 다베오 payload가 갱신됨 | `build_studio_from_dabeeo` 재실행 → `reset_and_seed` |
 | 건물 크기가 실측과 안 맞음 | `build_studio_from_dabeeo.SCALE_M_PER_UNIT` (현재 0.1, 미검증) |
 | 글리프 범위 부족(한자 등) | `make_glyphs.js` 재생성 후 `resources/fonts/`에 커밋 |
+
+---
+
+> **다음 읽기:** [`backend/resources` — 서버 정적·입력 데이터](../../resources/README.md)

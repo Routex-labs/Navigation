@@ -138,3 +138,7 @@ main.create_app()  ──►  routers (include_router)
 | 새 라우터 파일 | `APIRouter(prefix=...)` 만들고 `main.create_app()`에서 `include_router` |
 | 에러 응답 형태 변경 | `HTTPException(status_code, detail=...)` (핸들러에서만) |
 | 응답 필드 추가 | 여기 말고 `dto/` + `repositories/` |
+
+---
+
+> **다음 읽기:** [`backend/scripts` — 데이터 준비와 오프라인 도구](../../scripts/README.md)

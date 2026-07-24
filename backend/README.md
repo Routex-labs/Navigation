@@ -9,6 +9,7 @@ FastAPI 기반 실내 내비게이션 API 서버.
 
 | 계층 | 디렉터리 | 역할 |
 |---|---|---|
+| 앱 목차 | [`app/`](app/README.md) | FastAPI 애플리케이션 전체 계층 안내 |
 | 진입점 | [`app/main.py`](app/main.py) | FastAPI 앱 팩토리 · 라우터 등록 · `/health` |
 | 경계 | [`app/routers/`](app/routers/README.md) | HTTP 엔드포인트, 상태 코드 번역 |
 | 계약 | [`app/dto/`](app/dto/README.md) | Pydantic 요청/응답 스키마 |
@@ -16,8 +17,24 @@ FastAPI 기반 실내 내비게이션 API 서버.
 | 데이터 | [`app/models/`](app/models/README.md) | SQLAlchemy ORM 엔티티 (테이블) |
 | 순수 로직 | [`app/geo/`](app/geo/README.md) | 좌표 변환 · 지도 타일 |
 | 인프라 | [`app/core/`](app/core/README.md) | 설정 · DB 엔진/세션 |
+| 스크립트 목차 | [`scripts/`](scripts/README.md) | 시드 · 변환 · 검색 평가 · 모델 워밍 |
 | 스크립트 | [`scripts/seed/`](scripts/seed/README.md) | DB 초기화 · 시드 (DB 접근) |
 | 스크립트 | [`scripts/transform/`](scripts/transform/README.md) | 순수 변환 (파일→파일 / dict→dict) |
+| 평가 | [`notebooks/`](notebooks/README.md) | FAISS·Kiwi 품질 분석 노트북 |
+| 리소스 | [`resources/`](resources/README.md) | Studio 입력 · 글리프 · 검색 분류 사전 |
+| 테스트 | [`tests/`](tests/README.md) | 합성/실데이터 픽스처 기반 단위·통합 테스트 |
+
+## 처음 읽는 순서
+
+처음 보는 사람은 아래 순서대로 읽는다. 각 문서 맨 아래의 **다음 읽기** 링크가 이 순서를
+그대로 이어 주므로, 목차로 돌아오지 않아도 된다.
+
+```text
+backend README
+→ app → core → models → dto → geo → repositories → routers
+→ scripts → transform → resources → studio → fonts → seed
+→ notebooks → tests → fixtures → unit → integration
+```
 
 ## 디렉터리 구조
 
@@ -125,3 +142,7 @@ Compose는 컨테이너의 `/app/data/navigation.db`). 자세한 건 [`app/core/
 Docker는 일상 개발 실행에 쓰지 않는다. 배포 이미지·컨테이너 환경 호환성을 명시적으로 확인할
 때만 저장소 루트에서 `docker compose up --build backend`를 사용한다. 실제 Cloud Run 배포 절차는
 [`../docs/guide/gcp-instance.md`](../docs/guide/gcp-instance.md)를 따른다.
+
+---
+
+> **다음 읽기:** [`backend/app` — FastAPI 애플리케이션](app/README.md)
