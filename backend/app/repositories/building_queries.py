@@ -106,6 +106,63 @@ def get_floor_graph(
     return _to_floor_graph_dict(session, floor)
 
 
+# 수직 이동 정책. 층 간 전이 간선 중 무엇을 그래프에 실을지 고른다.
+#   auto      — 엘리베이터·에스컬레이터 모두(비용 모델이 층수에 따라 자동으로 고름)
+#   elevator  — 엘리베이터만 (에스컬레이터 회피)
+#   escalator — 에스컬레이터만
+VERTICAL_POLICIES = ("auto", "elevator", "escalator")
+
+
+def _vertical_allows(policy: str, transfer_mode: str | None) -> bool:
+    # 층 내부 간선(transfer_mode=None)은 정책과 무관하게 항상 포함한다.
+    if transfer_mode is None:
+        return True
+    if policy == "elevator":
+        return transfer_mode == "elevator"
+    if policy == "escalator":
+        return transfer_mode == "escalator"
+    return True  # auto
+
+
+# 건물 전체 길찾기 그래프(전 층 nodes + 층 내부 간선 + 수직 전이 간선). 없으면 None.
+# 층별 /graph와 달리 수직 전이 간선을 포함해 클라이언트가 층 간 경로를 계산할 수 있다.
+# 전이 간선은 floor_id가 None이라 층별 조회에서는 빠지므로 여기서만 합류한다.
+def get_building_graph(
+    session: Session,
+    building_id: str,
+    vertical: str = "auto",
+) -> dict[str, Any] | None:
+    building = session.get(Building, building_id)
+    if building is None:
+        return None
+
+    floor_ids = session.scalars(
+        select(Floor.id).where(Floor.building_id == building_id)
+    ).all()
+    nodes = session.scalars(select(Node).where(Node.floor_id.in_(floor_ids))).all()
+    node_ids = {node.id for node in nodes}
+
+    # 층 내부 간선 + 이 건물 노드를 잇는 전이 간선(floor_id=None). 전이 간선은
+    # 건물 스코프가 없으므로 from 노드가 이 건물 소속인 것만 고른다.
+    intra_edges = session.scalars(select(Edge).where(Edge.floor_id.in_(floor_ids))).all()
+    transfer_edges = session.scalars(
+        select(Edge).where(
+            Edge.floor_id.is_(None),
+            Edge.from_node_id.in_(node_ids),
+        )
+    ).all()
+    edges = list(intra_edges) + [
+        edge for edge in transfer_edges if _vertical_allows(vertical, edge.transfer_mode)
+    ]
+
+    return {
+        "building": {"id": building.id, "name": building.name},
+        "vertical": vertical,
+        "nodes": [_to_graph_node_dict(node) for node in nodes],
+        "edges": [_to_edge_dict(edge) for edge in edges],
+    }
+
+
 # 층 지도와 독립 그래프 API가 공유하는 길찾기 레이어 응답을 조립한다.
 def _to_floor_graph_dict(session: Session, floor: Floor) -> dict[str, Any]:
     nodes = session.scalars(select(Node).where(Node.floor_id == floor.id)).all()
@@ -176,6 +233,12 @@ def _to_node_dict(node: Node) -> dict[str, Any]:
     }
 
 
+# 건물 전체 그래프용 노드 dict. 층별 그래프와 달리 어느 층 노드인지 floor_id를 함께 준다
+# (전 층 노드가 한 그래프에 섞이므로 클라이언트가 층별로 다시 나눌 수 있어야 한다).
+def _to_graph_node_dict(node: Node) -> dict[str, Any]:
+    return {**_to_node_dict(node), "floor_id": node.floor_id}
+
+
 def _to_edge_dict(edge: Edge) -> dict[str, Any]:
     # 내부 from_node_id/to_node_id를 API에서는 짧은 from/to 키로 노출한다.
     return {
@@ -185,6 +248,9 @@ def _to_edge_dict(edge: Edge) -> dict[str, Any]:
         "length_m": edge.length_m,
         "bidirectional": edge.bidirectional,
         "geometry_local_m": edge.geometry or [],
+        # 층 내부 간선은 None, 수직 전이 간선은 elevator/escalator. 클라이언트가
+        # 경로 안내에서 "엘리베이터 이용" 같은 문구·아이콘을 고르는 근거.
+        "transfer_mode": edge.transfer_mode,
     }
 
 
