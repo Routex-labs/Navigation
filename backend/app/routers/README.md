@@ -30,6 +30,7 @@ flowchart LR
         e3["GET /buildings/{id}/stores?q="]
         e4["GET /…/floors/{floor}"]
         e5["GET /…/floors/{floor}/graph"]
+        e5b["GET /…/{id}/graph?vertical="]
         e6["GET /…/tiles/{z}/{x}/{y}.mvt"]
         e7["POST /query/destination"]
         e8["POST /query/ai"]
@@ -44,6 +45,7 @@ flowchart LR
         f3["search_stores()"]
         f4["get_floor_map()"]
         f5["get_floor_graph()"]
+        f5b["get_building_graph()"]
         f6["render_floor_tile()"]
         f7["match_destination()"]
         f8["match_ai_destination()"]
@@ -56,6 +58,7 @@ flowchart LR
         d3["StoreResponse"]
         d4["FloorMapResponse"]
         d5["FloorGraphResponse"]
+        d5b["BuildingGraphResponse"]
         d6["DestinationResponse"]
         d7["InfoResponse"]
         d8["HealthResponse"]
@@ -66,6 +69,7 @@ flowchart LR
     e3 --> f3 --> d3
     e4 --> f4 --> d4
     e5 --> f5 --> d5
+    e5b --> f5b --> d5b
     e6 --> f6
     e7 --> f7 --> d6
     e8 --> f8 --> d6
@@ -106,6 +110,7 @@ def get_building(building_id: str, session: Session = Depends(get_db)):
 
 - **모든 핸들러는 `def`(동기)로 선언한다.** SQLAlchemy 동기 IO라 `async def`로 두면 이벤트 루프가 막힌다(동기 `def`는 anyio 스레드풀에서 실행됨).
 - `buildings.py`는 **조회를 `repositories.building_queries`**로 처리한다. 최단 경로는 서버에서 계산하지 않고, 층 지도 응답의 `navigation_graph`를 받아 **클라이언트가 온디바이스 탐색**한다.
+- **층 간 이동은 `GET /{id}/graph`가 담당한다.** 층별 `/graph`는 `floor_id`로 필터돼 수직 전이 간선(엘리베이터/에스컬레이터)이 빠지므로 한 층 안에서만 경로를 낼 수 있다. 건물 전체 그래프는 전 층 노드 + 층 내부 간선 + 전이 간선을 합쳐 층 간 경로를 가능하게 하고, `?vertical=auto|elevator|escalator`로 수직 이동 수단 정책을 고른다.
 - `fonts.py`는 `resources/fonts/`에서 `.pbf`를 읽어 준다. 없는 범위는 404가 아니라 **빈 200**을 돌려준다(MapLibre가 404를 스타일 오류로 보고 심볼 레이아웃을 멈추지 않게). 경로 조작 방지로 `FONTS_DIR` 밖 접근을 차단한다.
 
 ---

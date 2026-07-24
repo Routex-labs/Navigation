@@ -94,7 +94,7 @@ classDiagram
 `🔑` PK · `🔗` FK · `?` nullable · 실선은 소유(층이 지우면 같이 사라짐), 점선은 참조.
 
 - **`Floor`가 허브다.** Node·Edge·Store·Poi 모두 `floor_id`로 층에 매인다.
-- **`Edge.floor_id`는 nullable.** 층 내부 간선은 층 id를, **층을 잇는 수직 전이 간선(엘리베이터/에스컬레이터)은 `NULL`**을 가진다. 단일 층 조회는 `floor_id`로 필터되어 전이 간선을 자연히 제외하고, 건물 전체 경로 탐색에서만 쓰인다(`Edge.transfer_mode` 참고).
+- **`Edge.floor_id`는 nullable.** 층 내부 간선은 층 id를, **층을 잇는 수직 전이 간선(엘리베이터/에스컬레이터)은 `NULL`**을 가진다. 단일 층 조회(`get_floor_graph`)는 `floor_id`로 필터되어 전이 간선을 자연히 제외하고, 건물 전체 그래프(`get_building_graph`)만 전이 간선을 합쳐 층 간 경로에 쓴다(`Edge.transfer_mode`·`Edge.bidirectional` 참고 — 에스컬레이터는 방향이 있어 단방향이다).
 
 ---
 

@@ -11,7 +11,7 @@ Session으로 DB를 읽어 **기존 API 응답과 같은 모양의 순수 dict**
 
 | 파일 | 역할 | 핵심 함수 |
 |---|---|---|
-| `building_queries.py` | 건물/층/매장/지도/그래프 조회 + dict 조립 | `list_buildings`, `get_building`, `search_stores`, `get_floor_map`, `get_floor_graph` |
+| `building_queries.py` | 건물/층/매장/지도/그래프 조회 + dict 조립 | `list_buildings`, `get_building`, `search_stores`, `get_floor_map`, `get_floor_graph`, `get_building_graph` |
 | `query_search.py` | 자연어 질의 경량 매칭(이름·카테고리·동의어) | `match_destination`, `match_info`, `match_ai_destination` |
 | `query_morph.py` | 질의 형태소 정규화(Kiwi). 조사·어미 제거 | `normalize` |
 | `query_semantic.py` | 임베딩 의미 검색(FAISS). 경량 미스·모호한 부분 일치 보완 | `semantic_search`, `reset_indexes`, `warm_model_in_background` |

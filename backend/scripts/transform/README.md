@@ -14,7 +14,7 @@
 | `build_studio_from_dabeeo.py` | 파일→파일 (CLI) | 다베오 공식 payload → 12개 층 `{층}.json` + `stores_{층}.json` |
 | `make_glyphs.js` | 파일→파일 (Node) | 폰트(.ttf) → MapLibre 글리프 `.pbf` (`resources/fonts/`) |
 | `floor_alignment.py` | dict→dict (순수) | `local_m` 좌표에 2D 아핀 적용 |
-| `vertical_transfers.py` | dict→dict (순수) | 인접 층의 엘리베이터/에스컬레이터를 이어 수직 전이 간선 생성 |
+| `vertical_transfers.py` | dict→dict (순수) | 엘리베이터/에스컬레이터를 이어 수직 전이 간선 생성 (에스컬레이터=방향 단방향, 엘리베이터=샤프트 직행, 층수 기반 비용) |
 | `__init__.py` | 패키지 표식 | — |
 
 ---
@@ -41,9 +41,18 @@ python -m scripts.transform.build_studio_from_dabeeo <다베오payload.json>
 프레임의 층을 섞어야 할 일이 생기면 커밋 `c81aad3` 이전 이력에서 되살릴 수 있다.
 
 ### `vertical_transfers.py` (순수)
-`build_transfers(floors) -> (transfers, unresolved)`.
-인접 층의 같은 수직 통로를 **위치 근접**으로 이어 전이 간선을 만든다(이름이 전부
-"엘리베이터"라 이름으론 못 맞춤).
+`build_transfers(floors) -> (transfers, unresolved)`. 같은 수직 통로는 **위치 근접**으로
+맞춘다(이름이 전부 "엘리베이터"라 이름으론 못 맞춤). 수단별로 다르게 잇는다.
+
+- **에스컬레이터**: 원본 `trans_code`(`OB-ESCALATOR_UP`/`_DOWN`)로 방향을 읽어 **인접 층끼리
+  단방향**(`bidirectional=False`) 간선을 만든다 → 상행 전용을 하행으로 타는 불가능 경로 제거.
+- **엘리베이터**: 층을 가로질러 같은 자리를 **샤프트**로 묶고, 서비스하는 **모든 층쌍을 양방향
+  직행** 연결한다.
+- **비용(`length_m`)**: 에스컬 `20/홉`, 엘리베 `35 + 5×홉` → 1~2층은 에스컬레이터, 3층+는
+  엘리베이터가 최단. 상수는 파일 상단에 근거와 함께 모여 있다.
+
+> 설계·검증 기준: [`docs/backend/navigate/vertical-transfer-routing.md`](../../../docs/backend/navigate/vertical-transfer-routing.md).
+> 서빙은 `building_queries.get_building_graph`(건물 전체 그래프 + `vertical` 정책)가 한다.
 
 ### `make_glyphs.js` (Node)
 `node make_glyphs.js <font.ttf> <outDir>` — 심볼 레이어 텍스트용 256자 단위 글리프

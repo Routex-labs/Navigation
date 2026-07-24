@@ -14,7 +14,7 @@ HTTP로 **오가는 데이터의 모양**을 Pydantic 모델로 정의한다. Fa
 |---|---|---|
 | `building.py` | 건물 목록/상세 | `BuildingSummaryResponse`, `BuildingDetailResponse` |
 | `floor_map.py` | 층 지도 화면 | `FloorMapResponse`, `StoreResponse`, `PoiResponse` |
-| `route.py` | 길찾기 그래프 | `FloorGraphResponse`, `GraphNodeResponse`, `GraphEdgeResponse` |
+| `route.py` | 길찾기 그래프 | `FloorGraphResponse`, `BuildingGraphResponse`, `GraphNodeResponse`, `GraphEdgeResponse` |
 | `query.py` | 자연어 질의 | `DestinationResponse`, `InfoResponse`, `QueryMatch` |
 | `health.py` | 헬스 체크 | `HealthResponse` |
 | `__init__.py` | 패키지 표식 | — |
@@ -73,6 +73,7 @@ classDiagram
         +float y_m
         +float lat ?
         +float lng ?
+        +str floor_id ? 「건물 전체 그래프만」
     }
     class GraphEdgeResponse {
         +str id
@@ -80,6 +81,15 @@ classDiagram
         +str to_node_id 「alias: to」
         +float length_m
         +bool bidirectional
+        +str transfer_mode ? 「elevator·escalator」
+    }
+    class BuildingGraphResponse {
+        +GraphBuildingResponse building
+        +str vertical 「auto·elevator·escalator」
+    }
+    class GraphBuildingResponse {
+        +str id
+        +str name
     }
     class DestinationResponse {
         +str status 「ok·ok_no_route·no_match」
@@ -116,6 +126,10 @@ classDiagram
     FloorGraphResponse *-- GraphFloorResponse : floor
     FloorGraphResponse *-- GraphNodeResponse : nodes
     FloorGraphResponse *-- GraphEdgeResponse : edges
+
+    BuildingGraphResponse *-- GraphBuildingResponse : building
+    BuildingGraphResponse *-- GraphNodeResponse : nodes 「전 층」
+    BuildingGraphResponse *-- GraphEdgeResponse : edges 「+수직 전이」
 
     DestinationResponse *-- QueryMatch : match ?
     InfoResponse *-- QueryMatch : match ?
