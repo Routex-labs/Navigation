@@ -57,6 +57,7 @@ class IndoorMapBody extends StatefulWidget {
     required this.buildingId,
     this.onRouteVisibleChanged,
     this.onStoreTap,
+    this.onPlacingLocationChanged,
     this.outerOverlayKeys = const [],
   });
 
@@ -69,6 +70,11 @@ class IndoorMapBody extends StatefulWidget {
   /// 지도 위 매장 폴리곤을 탭하면 호출된다. 상위(MapShellScreen)가 검색
   /// 결과를 탭했을 때와 똑같이 매장 정보 시트를 띄운다.
   final ValueChanged<PoiSearchResult>? onStoreTap;
+
+  /// "위치 지정" 흐름이 시작되어 지도 탭을 대기 중인지가 바뀔 때 호출된다.
+  /// 상위(MapShellScreen)가 이 값으로 하단 바의 "위치 지정" 버튼을 눌린
+  /// 상태로 표시해서, 사용자가 다음 동작(지도 탭)을 알 수 있게 한다.
+  final ValueChanged<bool>? onPlacingLocationChanged;
 
   /// 상위(MapShellScreen)가 지도 위에 얹은 오버레이(검색창·저장한 장소 pill·
   /// 하단 공용 바 등)의 GlobalKey들. 이 영역 안의 탭은 뒤의 매장 선택으로
@@ -124,6 +130,19 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   StreamSubscription<CalibrationStatus>? _pdrCalibrationSub;
   bool _placingPdrAnchor = false;
   PdrDebugSessionRecorder? _pdrDebugRecorder;
+
+  /// FloorPlanView의 카메라를 직접 제어(회전/중심 이동)하기 위한 controller.
+  /// 재보정 버튼이 첫 탭에서 사용자가 바라보는 방향으로 지도를 돌리고,
+  /// 두 번째 탭에서 현재 위치를 화면 정중앙에 오게 하는 데 쓴다. 건물/층 변경
+  /// 마다 FloorPlanView가 새 state로 재생성되지만 controller는 새 state에
+  /// 자동 attach 되므로 이 필드는 한 번만 만들어 재사용한다.
+  final _floorPlanController = FloorPlanController();
+
+  /// 재보정 버튼 탭 카운터. 홀수 번째(1·3·5번째) 탭은 현재 위치를 화면 정중앙에
+  /// 놓고, 짝수 번째(2·4·6번째) 탭은 사용자가 바라보는 방향(heading)에 맞춰
+  /// 지도를 회전시킨다. 위치나 heading을 아직 몰라 실제 동작이 스킵된 탭은
+  /// 카운트를 올리지 않아, 다음 탭이 원하는 동작을 이어가도록 한다.
+  int _recalibrateTapCount = 0;
   bool _exportingPdrDebugJson = false;
   double _mapCameraBearingDeg = 0;
   final ValueNotifier<double> _mapCameraBearingNotifier = ValueNotifier(0);
@@ -140,6 +159,15 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   void setInteractive(bool value) {
     if (_interactive == value) return;
     setState(() => _interactive = value);
+  }
+
+  /// 앵커 배치 대기 상태를 바꿀 때는 항상 이 헬퍼로 지나 setState + 상위
+  /// 알림을 함께 처리한다. 상위(MapShellScreen)는 이 알림을 받아 하단 바의
+  /// "위치 지정" 버튼을 "눌린 상태"로 표시한다.
+  void _setPlacingAnchor(bool value) {
+    if (_placingPdrAnchor == value) return;
+    setState(() => _placingPdrAnchor = value);
+    widget.onPlacingLocationChanged?.call(value);
   }
 
   /// 매장 정보 시트가 닫히면 상위(MapShellScreen)가 호출해서 지도 위
@@ -171,11 +199,11 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         setState(() {
           _pdrDebugRecorder?.recordCalibration(status);
           _pdrTrailState.recordCalibration(status);
-          if (status.phase == CalibrationPhase.calibrated ||
-              status.phase == CalibrationPhase.uncalibrated) {
-            _placingPdrAnchor = false;
-          }
         });
+        if (status.phase == CalibrationPhase.calibrated ||
+            status.phase == CalibrationPhase.uncalibrated) {
+          _setPlacingAnchor(false);
+        }
       }
     });
     _loadBuilding();
@@ -217,7 +245,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       return;
     }
     await indoorNavigationDriver.stopGuidance();
-    if (mounted) setState(() => _placingPdrAnchor = false);
+    if (mounted) _setPlacingAnchor(false);
   }
 
   @override
@@ -307,16 +335,78 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     if (indoorNavigationDriver.currentRuntimeStatus.state !=
         PdrRuntimeState.idle) {
       await indoorNavigationDriver.changeFloor(floorId: floor);
-      if (mounted) setState(() => _placingPdrAnchor = true);
+      if (mounted) _setPlacingAnchor(true);
     }
     await _loadFloorPlan(floor);
   }
 
-  /// 위치 보정 버튼. 실제 PDR 위치 연동 전까지는 별도로 보정할 상태가 없어
-  /// 재조회만 트리거하는 자리표시자다 — PDR이 붙으면 이 자리에서 재보정한다.
+  /// 하단 바 재보정 버튼(위치 지정 오른쪽). 탭할 때마다 두 동작을 번갈아
+  /// 수행한다:
+  ///  1) 첫 탭: 사용자의 현재 위치를 화면 정중앙에 오게 카메라를 옮긴다.
+  ///  2) 두 번째 탭: 사용자가 바라보는 방향(PDR heading)이 화면 위쪽에 오도록
+  ///     지도를 회전한다.
+  ///
+  /// 위치/heading이 아직 없어 해당 동작을 수행할 수 없으면 안내만 띄우고
+  /// 카운트를 올리지 않아, 다음 탭이 원하는 동작을 이어서 시도한다.
   Future<void> recalibrate() async {
+    if (!_floorPlanController.isAttached) return;
+
+    // 홀수 번째 탭(1,3,5...) → 중앙 정렬, 짝수 번째 탭(2,4,6...) → 회전.
+    // 실제로 동작을 수행한 경우에만 카운트를 올린다.
+    final isCenterAction = _recalibrateTapCount.isEven;
+    if (isCenterAction) {
+      final target = _pdrCurrentLocation ?? _pdrAnchorLocation;
+      if (target == null) {
+        _showPdrMessage('아직 현재 위치가 없습니다. 위치 지정 버튼으로 먼저 위치를 잡아주세요.');
+        return;
+      }
+      await _floorPlanController.centerOn(target);
+    } else {
+      final heading = _pdrCurrentHeadingDeg;
+      if (heading == null) {
+        _showPdrMessage('아직 바라보는 방향을 알 수 없습니다. 위치 지정 후 조금 걸어 방향을 잡아주세요.');
+        return;
+      }
+      await _floorPlanController.rotateToBearing(heading);
+    }
+    _recalibrateTapCount++;
+  }
+
+  /// 하단 바의 "위치 지정" 버튼에서 호출된다. 지도를 사용하지 않고 건물에
+  /// 들어와 자동 위치 추정이 아직 없을 때, 사용자가 지도 위 한 점을 탭해 자기
+  /// 위치를 직접 지정하도록 앵커 배치 모드에 진입한다.
+  ///
+  /// PDR이 아직 켜지지 않았으면 이 층으로 세션을 새로 시작한 뒤 앵커 대기
+  /// 상태로 넘어가고, 이미 켜져 있으면 (다른 층으로 갈 때처럼) 앵커만 다시
+  /// 잡도록 대기 상태로만 돌린다. 실제 탭 처리는 기존 [_onMapPressedForPdr]가
+  /// 그대로 맡는다.
+  Future<void> startLocationPlacement() async {
     final floor = _selectedFloor;
-    if (floor != null) await _loadFloorPlan(floor);
+    final graph = _floorGraph;
+    if (floor == null ||
+        graph == null ||
+        graph.nodes.isEmpty ||
+        graph.edges.isEmpty) {
+      _showPdrMessage('이 층은 위치 지정에 필요한 지도 정보가 아직 없습니다.');
+      return;
+    }
+    if (indoorNavigationDriver.currentRuntimeStatus.state ==
+        PdrRuntimeState.idle) {
+      setState(() {
+        _pdrTrailState.beginNewSession();
+      });
+      _pdrDebugRecorder = PdrDebugSessionRecorder();
+      _pdrDebugRecorder?.recordRuntime(
+        indoorNavigationDriver.currentRuntimeStatus,
+      );
+      await indoorNavigationDriver.startGuidance(floorId: floor);
+      _pdrDebugRecorder?.recordRuntime(
+        indoorNavigationDriver.currentRuntimeStatus,
+      );
+      if (!mounted) return;
+    }
+    _setPlacingAnchor(true);
+    _showPdrMessage('지도에서 현재 서 있는 위치를 탭해 지정해주세요.');
   }
 
   /// 길찾기 시트에서 도착지를 고르면 호출된다. 목적지가 다른 층이면 그 층으로
@@ -345,8 +435,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 
     final endNodeId = destination.nodeId;
     final startNodeId =
-        origin?.nodeId ??
-        _pickStartNodeId(floorPlan, excludingNodeId: endNodeId);
+        origin?.nodeId ?? _pickStartNodeId(excludingNodeId: endNodeId);
     if (endNodeId == null) return;
     if (startNodeId == null) {
       _showPdrMessage('출발 위치를 먼저 지정해주세요. PDR 시작 후 입구 또는 복도를 탭하면 됩니다.');
@@ -360,27 +449,63 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       endNodeId,
     );
     if (!mounted) return;
+    if (route == null) {
+      // 다익스트라가 실패해 경로가 null로 왔을 때(예: startNodeId·endNodeId가
+      // 이 층 그래프에 없어 ArgumentError로 그래프가 거부한 경우). 이전에는
+      // 조용히 넘어가 사용자가 "왜 아무 반응도 없지" 하고 헷갈렸다.
+      setState(() => _route = null);
+      widget.onRouteVisibleChanged?.call(false);
+      _showPdrMessage('경로를 찾지 못했습니다. 다른 매장을 골라보거나 출발지를 다시 지정해주세요.');
+      return;
+    }
     setState(() => _route = route);
-    widget.onRouteVisibleChanged?.call(route != null);
+    widget.onRouteVisibleChanged?.call(true);
   }
 
-  /// PDR anchor 또는 확정 PDR 위치에서 가장 가까운 매장 입구 노드를 고른다.
-  /// 위치를 모르는 상태에서 도면 중심을 출발점으로 추정하지 않는다.
-  String? _pickStartNodeId(FloorPlan floorPlan, {String? excludingNodeId}) {
-    final origin = _pdrCurrentLocation ?? _pdrAnchorLocation;
-    if (origin == null) return null;
-    StorePolygon? nearest;
-    double? nearestDistance;
-    for (final store in floorPlan.stores) {
-      final nodeId = store.entranceNodeId;
-      if (nodeId == null || nodeId == excludingNodeId) continue;
-      final distance = wgs84DistanceMeters(origin, store.centroid);
-      if (nearestDistance == null || distance < nearestDistance) {
-        nearestDistance = distance;
-        nearest = store;
+  /// PDR 확정 위치(또는 사용자가 잡은 앵커)에서 가장 가까운 **그래프 노드**를
+  /// 골라 라우팅 시작점으로 쓴다.
+  ///
+  /// 예전엔 "가장 가까운 매장의 centroid"를 기준으로 그 매장의 entrance node를
+  /// 반환했는데(a) 매장 중심점은 실제 입구 위치와 크게 다를 수 있고 (b) 사용자가
+  /// 복도에 서 있으면 옆 매장 입구가 시작점이 돼 경로가 실제 위치에서 뚝
+  /// 떨어진 지점에서 시작하는 것처럼 보였다. 이제는 통행 그래프의 모든 노드
+  /// (복도·교차점·매장 입구 등)에서 사용자의 floor-local 위치와 가장 가까운
+  /// 노드를 고르므로 복도에 서 있으면 그 복도 노드가 자연스럽게 잡힌다.
+  ///
+  /// 위치를 모르는 상태에서는 도면 중심을 가짜 시작점으로 추정하지 않는다.
+  String? _pickStartNodeId({String? excludingNodeId}) {
+    final graph = _floorGraph;
+    if (graph == null || graph.nodes.isEmpty) return null;
+    final current = _pdrFloorLocation();
+    if (current == null) return null;
+
+    GraphNode? nearest;
+    double? nearestDistanceSquared;
+    for (final node in graph.nodes) {
+      if (node.id == excludingNodeId) continue;
+      final dx = node.xM - current.eastM;
+      final dy = node.yM - current.northM;
+      final distanceSquared = dx * dx + dy * dy;
+      if (nearestDistanceSquared == null ||
+          distanceSquared < nearestDistanceSquared) {
+        nearestDistanceSquared = distanceSquared;
+        nearest = node;
       }
     }
-    return nearest?.entranceNodeId;
+    return nearest?.id;
+  }
+
+  /// 사용자의 현재 층 위치(floor-local m)를 돌려준다. PDR 확정 위치가 있으면
+  /// 그걸, 없으면 사용자가 지정한 앵커(같은 층일 때만)를 쓴다. 이 층에 아직
+  /// 아무 위치도 없으면 null.
+  PdrLocalPoint? _pdrFloorLocation() {
+    final matched = _pdrMatchedFloorPath;
+    if (matched.isNotEmpty) return matched.last;
+    final anchor = _pdrTrailState.anchor;
+    if (anchor != null && anchor.floorId == _selectedFloor) {
+      return anchor.anchorLocalM;
+    }
+    return null;
   }
 
   void _clearRoute() {
@@ -531,7 +656,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       await indoorNavigationDriver.stopGuidance();
       recorder?.recordRuntime(indoorNavigationDriver.currentRuntimeStatus);
       if (mounted) {
-        setState(() => _placingPdrAnchor = false);
+        _setPlacingAnchor(false);
         if (recorder?.hasSnapshot ?? false) {
           _showPdrMessageWithExport('PDR 세션이 종료됐습니다. JSON으로 내보내 분석할 수 있습니다.');
         }
@@ -550,7 +675,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       indoorNavigationDriver.currentRuntimeStatus,
     );
     if (!mounted) return;
-    setState(() => _placingPdrAnchor = true);
+    _setPlacingAnchor(true);
     _showPdrMessage('현재 서 있는 위치를 지도에서 한 번 탭해 PDR 시작점을 맞춰주세요.');
   }
 
@@ -603,7 +728,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       );
     }
     if (!mounted) return;
-    setState(() => _placingPdrAnchor = false);
+    _setPlacingAnchor(false);
     _showPdrMessage('시작점을 통로에 맞췄습니다. 이동 경로는 통로 그래프를 따라 표시됩니다.');
   }
 
@@ -613,7 +738,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     _pdrDebugRecorder?.recordRuntime(
       indoorNavigationDriver.currentRuntimeStatus,
     );
-    if (mounted) setState(() => _placingPdrAnchor = false);
+    if (mounted) _setPlacingAnchor(false);
   }
 
   Future<double?> _askScreenDirection() {
@@ -792,7 +917,12 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
             floorPlan: floorPlan,
           )
         : null;
-    final pdrCurrent = debugEnabled ? _pdrCurrentLocation : null;
+    // 현재 위치 마커와 앵커 위치는 일반 사용자에게도 노출한다 — 하단 바의
+    // "위치 지정" 버튼으로 사용자가 자기 위치를 지정한 뒤에는 그 지점이
+    // 지도에 보여야 하고, 이후 PDR 스냅샷이 갱신되면 그 실시간 위치도
+    // 그대로 이어서 보여야 한다. 디버그 오버레이(그래프 노드/간선, 활성
+    // 간선 하이라이트)만 debugEnabled 뒤에 남겨 둔다.
+    final pdrCurrent = _pdrCurrentLocation;
     final debugOverlay = debugEnabled
         ? buildDebugMapOverlay(
             _floorGraph,
@@ -805,7 +935,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     // 그리지 않는다. 실내 PDR은 시작 위치를 모르면 절대 위치를 알 수 없다.
     final current =
         pdrCurrent ??
-        (debugEnabled ? _pdrAnchorLocation : null) ??
+        _pdrAnchorLocation ??
         ((route != null && route.points.isNotEmpty)
             ? route.points.first
             : null);
@@ -826,7 +956,11 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     return Stack(
       children: [
         FloorPlanView(
+          // 건물/층이 바뀔 때 위젯 자체를 다시 만들어야 초기화 상태를 재사용
+          // 하지 않으므로 ValueKey를 유지한다. 카메라 조작(회전/중심 이동)은
+          // controller가 매번 새로운 state에 자동 attach/detach 하도록 처리한다.
           key: ValueKey('${widget.buildingId}-$_selectedFloor'),
+          controller: _floorPlanController,
           buildingId: widget.buildingId,
           floorName: _selectedFloor!,
           floorPlan: floorPlan,
@@ -926,7 +1060,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
             ),
           ),
 
-        if (debugEnabled && _placingPdrAnchor)
+        // 앵커 배치 안내는 디버그 모드에서 시작된 PDR이든, 일반 사용자가 하단
+        // 바의 "위치 지정" 버튼으로 시작한 흐름이든 동일하게 필요하므로
+        // debugEnabled 게이팅을 두지 않는다.
+        if (_placingPdrAnchor)
           Positioned(
             top: 130,
             left: 12,

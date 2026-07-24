@@ -41,6 +41,16 @@ class _MapShellScreenState extends State<MapShellScreen> {
   bool _outdoorRouteVisible = false;
   bool _indoorRouteVisible = false;
 
+  /// 실내 지도에서 "위치 지정" 흐름이 켜져 있는지. IndoorMapBody가 콜백으로
+  /// 알려주며, 하단 바 "위치 지정" 버튼을 눌린 상태로 표시하는 데 쓴다.
+  bool _indoorPlacingLocation = false;
+
+  /// 사용자가 명시적으로 고른 출발지(매장 정보 시트 "출발지로 설정" 또는
+  /// 길찾기 시트 안에서 특정 매장을 골랐을 때). 이 값이 채워져 있으면 이후
+  /// 매장에서 "도착"을 누를 때 길찾기 시트를 다시 열지 않고 바로 이 출발지
+  /// 기준으로 경로를 그린다. null이면 "현재 위치"(=PDR)을 기본 출발지로 쓴다.
+  DirectionsCandidate? _selectedOrigin;
+
   final _outdoorKey = GlobalKey<OutdoorMapBodyState>();
   final _indoorKey = GlobalKey<IndoorMapBodyState>();
 
@@ -213,9 +223,21 @@ class _MapShellScreenState extends State<MapShellScreen> {
       floor: match.floor,
     );
     if (action == StoreInfoAction.setOrigin) {
+      // 출발지를 지정하면 다음 "도착" 탭이 시트를 다시 열지 않고 바로 이
+      // 매장을 출발지로 쓸 수 있도록 상위 상태에도 기억해둔다. 시트는
+      // 도착지를 골라야 실제 경로를 그릴 수 있으므로 그대로 연다.
+      setState(() => _selectedOrigin = candidate);
       await _openDirections(presetOrigin: candidate);
     } else if (action == StoreInfoAction.setDestination) {
-      await _openDirections(presetDestination: candidate);
+      // 도착 버튼은 언제나 시트를 거치지 않고 바로 경로를 그린다.
+      // - 명시적으로 고른 출발지가 있으면 그 매장에서 → 새 도착지
+      // - 없으면 origin=null 로 넘겨 showRouteTo가 PDR 현재 위치(또는 위치
+      //   지정으로 잡아둔 앵커) 기준으로 가장 가까운 통로 노드를 골라 라우팅
+      // 어느 쪽도 준비되지 않은 경우(출발지·PDR 둘 다 없음)는 showRouteTo가
+      // "출발 위치를 먼저 지정해주세요" 안내를 띄우므로, 여기서는 조용히
+      // 시트를 다시 여는 이전 동작을 재현하지 않는다 — 사용자가 시트로
+      // 되돌아가지 않고 바로 결과(경로 또는 안내)를 보게 하는 게 요청사항.
+      await _startRoute(origin: _selectedOrigin, destination: candidate);
     }
     return true;
   }
@@ -301,11 +323,15 @@ class _MapShellScreenState extends State<MapShellScreen> {
     final currentFloorLabel = _mode == MapMode.indoor
         ? _indoorKey.currentState?.currentFloor
         : null;
+    // 상위가 기억해둔 출발지가 있으면 시트에도 미리 채워, 사용자가 매번 다시
+    // 입력하지 않아도 되게 한다. presetOrigin(이번 진입점에서 명시적으로 넘긴
+    // 값)이 있으면 그 값이 우선한다.
+    final initialOrigin = presetOrigin ?? _selectedOrigin;
     final result = await _withMapsLocked(
       () => DirectionsSheet.show(
         context,
         originLabel: '현재 위치',
-        initialOrigin: presetOrigin,
+        initialOrigin: initialOrigin,
         initialDestination: presetDestination,
         search: _searchDirectionsCandidates,
         currentFloorLabel: currentFloorLabel,
@@ -313,33 +339,51 @@ class _MapShellScreenState extends State<MapShellScreen> {
     );
     if (result == null || !mounted) return;
 
-    final destination = result.destination;
-    final origin = result.origin;
+    // 시트 안에서 고른 출발지는 다음 "도착" 탭이 그대로 재사용할 수 있도록
+    // 상위 상태에도 반영한다. "현재 위치"(=null)를 골랐다면 명시적 출발지가
+    // 없다는 뜻이므로 저장된 값도 지워, 다음번엔 시트가 다시 열리게 한다.
+    setState(() => _selectedOrigin = result.origin);
+    await _startRoute(origin: result.origin, destination: result.destination);
+  }
 
+  /// 실제 경로 표시. 길찾기 시트를 거치는 경로와, 이미 기억해둔 출발지로 바로
+  /// 라우팅하는 경로가 함께 쓸 수 있게 뽑아뒀다. [origin]이 null이면 "현재
+  /// 위치"(=PDR)로 라우팅한다.
+  Future<void> _startRoute({
+    DirectionsCandidate? origin,
+    required DirectionsCandidate destination,
+  }) async {
     if (_mode == MapMode.outdoor) {
       await _outdoorKey.currentState?.showRouteTo(
         destination.point,
         label: destination.title,
         origin: origin?.point,
       );
-    } else {
-      await _indoorKey.currentState?.showRouteTo(
-        PoiSearchResult(
-          name: destination.title,
-          floor: destination.floor ?? '',
-          point: destination.point,
-          nodeId: destination.nodeId,
-        ),
-        origin: origin == null
-            ? null
-            : PoiSearchResult(
-                name: origin.title,
-                floor: origin.floor ?? '',
-                point: origin.point,
-                nodeId: origin.nodeId,
-              ),
-      );
+      return;
     }
+    // 실내 다익스트라는 층별로 돌아가므로 출발지가 목적지와 다른 층에 있으면
+    // 그 node ID를 이 층 그래프에서 찾지 못해 route가 조용히 null이 된다.
+    // 이런 경우엔 명시적 출발지를 버리고 null로 넘겨, showRouteTo가 이 층의
+    // PDR 위치에서 가장 가까운 노드를 자동으로 골라 라우팅하도록 한다 —
+    // 사용자가 "왜 아무 것도 안 그려지지" 하고 헷갈리는 상태를 만들지 않는다.
+    final sameFloorOrigin =
+        origin != null && origin.floor == destination.floor ? origin : null;
+    await _indoorKey.currentState?.showRouteTo(
+      PoiSearchResult(
+        name: destination.title,
+        floor: destination.floor ?? '',
+        point: destination.point,
+        nodeId: destination.nodeId,
+      ),
+      origin: sameFloorOrigin == null
+          ? null
+          : PoiSearchResult(
+              name: sameFloorOrigin.title,
+              floor: sameFloorOrigin.floor ?? '',
+              point: sameFloorOrigin.point,
+              nodeId: sameFloorOrigin.nodeId,
+            ),
+    );
   }
 
   /// "장소" 칩을 누르면 사용자가 저장해둔 매장 목록 시트를 연다. 항목을
@@ -437,6 +481,15 @@ class _MapShellScreenState extends State<MapShellScreen> {
     }
   }
 
+  /// "위치 지정" 버튼(하단 바). 지도 없이 건물에 들어와 자동 위치 추정이 되지
+  /// 않을 때, 사용자가 지도에서 직접 자기 위치를 탭해 지정하도록 실내 지도를
+  /// 앵커 배치 모드로 전환한다. 야외 모드는 GPS가 위치를 잡으므로 하단 바에서
+  /// 아예 노출되지 않고, 여기서도 실내 모드일 때만 실행한다.
+  void _onPlaceLocation() {
+    if (_mode != MapMode.indoor) return;
+    _indoorKey.currentState?.startLocationPlacement();
+  }
+
   void _onEnterBuilding() => _setMode(MapMode.indoor);
 
   @override
@@ -462,6 +515,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
                     setState(() => _indoorRouteVisible = visible),
                 onStoreTap: (match) {
                   _runSheetChain(() => _showStoreInfo(match));
+                },
+                onPlacingLocationChanged: (placing) {
+                  if (_indoorPlacingLocation == placing) return;
+                  setState(() => _indoorPlacingLocation = placing);
                 },
                 outerOverlayKeys: [
                   _topBarKey,
@@ -533,6 +590,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
               mode: _mode,
               onModeChanged: _setMode,
               onCalibrate: _onCalibrate,
+              onPlaceLocation: _onPlaceLocation,
+              placingLocation: _mode == MapMode.indoor && _indoorPlacingLocation,
             ),
           ),
         ],

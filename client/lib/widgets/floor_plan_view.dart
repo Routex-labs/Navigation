@@ -77,6 +77,37 @@ const _currentLocationDotImageName = 'marker-current-location-dot';
 /// (마커 색상은 [_markersGeoJson]의 circle-color data-driven 표현식이 결정).
 enum MapMarkerKind { current, destination }
 
+/// FloorPlanView의 카메라를 외부에서 직접 조작(회전/중심 이동)하기 위한
+/// controller. 상위 위젯(IndoorMapBody)이 이 controller를 생성해 FloorPlanView
+/// 에 전달하면, FloorPlanView가 initState에서 자신을 attach한다.
+///
+/// 건물/층이 바뀔 때 FloorPlanView는 ValueKey 차이로 통째로 재생성되지만,
+/// controller는 새 state가 만들어질 때 자동으로 재attach되므로 상위는 controller
+/// 를 한 번만 만들어 놓고 계속 재사용할 수 있다.
+class FloorPlanController {
+  FloorPlanViewState? _state;
+
+  void _attach(FloorPlanViewState state) => _state = state;
+
+  void _detach(FloorPlanViewState state) {
+    if (identical(_state, state)) _state = null;
+  }
+
+  /// FloorPlanView가 아직 준비되지 않았거나 detach된 상태면 false.
+  bool get isAttached => _state != null;
+
+  /// 카메라 bearing만 [bearingDeg](북쪽 기준 시계방향)로 돌린다. 사용자가
+  /// 바라보는 방향을 화면 위쪽에 오게 하는 나침반 모드에 쓴다.
+  Future<void> rotateToBearing(double bearingDeg) async {
+    await _state?.rotateToBearing(bearingDeg);
+  }
+
+  /// 카메라 중심만 [target]으로 옮긴다. bearing/줌은 유지.
+  Future<void> centerOn(ll.LatLng target) async {
+    await _state?.centerOn(target);
+  }
+}
+
 /// 매장 폴리곤을 탭할 수 있는 실내 평면도 뷰.
 ///
 /// 건물/층의 벡터 타일(MVT, `GET /buildings/{id}/floors/{floor}/tiles/{z}/{x}/{y}.mvt`)을
@@ -108,7 +139,12 @@ class FloorPlanView extends StatefulWidget {
     this.visibleInsets = EdgeInsets.zero,
     this.overlayHitTest,
     this.onCameraBearingChanged,
+    this.controller,
   });
+
+  /// 카메라를 외부에서 조작(회전/중심 이동)하기 위한 controller. 상위 위젯이
+  /// 재보정 버튼처럼 지도 밖에서 오는 명령을 이 controller로 전달한다.
+  final FloorPlanController? controller;
 
   final String buildingId;
   final String floorName;
@@ -176,14 +212,26 @@ class FloorPlanView extends StatefulWidget {
   final EdgeInsets visibleInsets;
 
   @override
-  State<FloorPlanView> createState() => _FloorPlanViewState();
+  State<FloorPlanView> createState() => FloorPlanViewState();
 }
 
-class _FloorPlanViewState extends State<FloorPlanView> {
+class FloorPlanViewState extends State<FloorPlanView> {
   MapLibreMapController? _controller;
   bool _styleReady = false;
   Size? _lastViewport;
   double? _minZoom;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller?._attach(this);
+  }
+
+  @override
+  void dispose() {
+    widget.controller?._detach(this);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -270,6 +318,10 @@ class _FloorPlanViewState extends State<FloorPlanView> {
   @override
   void didUpdateWidget(covariant FloorPlanView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.controller, widget.controller)) {
+      oldWidget.controller?._detach(this);
+      widget.controller?._attach(this);
+    }
     if (!_styleReady) return;
     if (oldWidget.buildingId != widget.buildingId ||
         oldWidget.floorName != widget.floorName) {
@@ -900,6 +952,33 @@ class _FloorPlanViewState extends State<FloorPlanView> {
   /// 외곽선에 맞춘 각도, 그리고 그걸 90도 돌린 각도) 각각에 대해 "그 각도로
   /// 봤을 때 건물이 뷰포트에 얼마나 크게 들어가는지"를 직접 계산해서 더 크게
   /// 보이는 쪽을 고른다.
+  /// 카메라 bearing만 [bearingDeg](북쪽 기준 시계방향, 0~360°)로 돌린다.
+  /// 사용자가 바라보는 방향을 화면 위쪽에 오게 하는 나침반 모드에 쓴다 —
+  /// 현재 중심/줌은 유지하고 회전만 한다.
+  Future<void> rotateToBearing(double bearingDeg) async {
+    final controller = _controller;
+    if (controller == null || !bearingDeg.isFinite) return;
+    final current = controller.cameraPosition;
+    await controller.moveCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: current?.target ?? _initialCenter(widget.floorPlan),
+          zoom: current?.zoom ?? 18,
+          bearing: bearingDeg,
+          tilt: current?.tilt ?? 0,
+        ),
+      ),
+    );
+  }
+
+  /// 카메라 중심만 [target]으로 옮긴다. 현재 bearing/줌은 유지 — 사용자 위치를
+  /// 화면 정중앙에 오게 하는 데 쓴다.
+  Future<void> centerOn(ll.LatLng target) async {
+    final controller = _controller;
+    if (controller == null) return;
+    await controller.moveCamera(CameraUpdate.newLatLng(_toMapLibreLatLng(target)));
+  }
+
   Future<void> _fitToFootprint() async {
     final controller = _controller;
     final footprint = widget.floorPlan.footprint;

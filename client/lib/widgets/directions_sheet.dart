@@ -221,17 +221,21 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
     _search(activeQuery);
   }
 
-  /// 출발지 입력창을 처음 탭해 활성화할 때만 호출된다. 기본 문구("현재
-  /// 위치"/미리 채워진 매장명)를 지우고 전체 목록을 보여준다 — 이미
-  /// 출발지 입력 중일 때(커서 위치만 바꾸는 탭 등)는 타이핑한 내용을
+  /// 출발지 입력창을 처음 탭해 활성화할 때만 호출된다. 아직 명시적 출발지가
+  /// 없을 때(=필드에 "현재 위치" placeholder만 있음)는 지워서 사용자가 바로
+  /// 검색어를 칠 수 있게 하고, 지도에서 "출발지로 설정"으로 매장이 이미 채워진
+  /// 경우처럼 실제 출발지가 있을 때는 그대로 남겨 사용자가 다시 입력하지 않아도
+  /// 되게 한다(입력을 바꾸고 싶으면 그때 직접 지우거나 덮어쓰면 된다).
+  /// 이미 출발지 입력 중일 때(커서 위치만 바꾸는 탭 등)는 타이핑한 내용을
   /// 지우면 안 되므로 다시 호출하지 않는다.
   void _onOriginTap() {
     if (_activeField == _ActiveField.origin) return;
+    final hasExplicitOrigin = _selectedOrigin != null;
     setState(() {
       _activeField = _ActiveField.origin;
-      _originController.clear();
+      if (!hasExplicitOrigin) _originController.clear();
     });
-    _search('');
+    _search(hasExplicitOrigin ? _originController.text : '');
   }
 
   void _onOriginChanged(String query) {
