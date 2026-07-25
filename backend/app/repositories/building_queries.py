@@ -38,7 +38,12 @@ def get_building(session: Session, building_id: str) -> dict[str, Any] | None:
     summary = _to_building_summary(building)
     summary["area_m2"] = building.area_m2
     summary["perimeter_m"] = building.perimeter_m
-    summary["footprint_local_m"] = building.footprint_local_m or []
+    footprint_local = building.footprint_local_m or []
+    summary["footprint_local_m"] = footprint_local
+    # 야외 지도가 건물 폴리곤을 그리려면 wgs84 좌표가 필요하다. floor 응답과
+    # 같은 아핀을 공유하도록 fit_building_geo_transform으로 매 요청 재피팅한다.
+    transform = fit_building_geo_transform(session, building_id)
+    summary["footprint_wgs84"] = _footprint_wgs84(footprint_local, transform)
     return summary
 
 
