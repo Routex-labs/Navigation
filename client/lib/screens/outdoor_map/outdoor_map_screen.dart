@@ -173,6 +173,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   MapLibreMapController? _mapController;
   bool _styleReady = false;
+  // 야외 오버레이가 지금 보여주는 층. 사용자가 층 chip으로 바꿀 수 있다.
+  // null은 아직 건물 로드가 안 됐거나 층 정보 없음.
+  String? _activeFloor;
   // 지도가 아직 안 뜬 시점의 첫 GPS 위치를 잊지 않도록 pending 값을 두고,
   // 스타일 로드 콜백에서 이를 반영한다.
   bool _pendingCenterOnPosition = false;
@@ -209,12 +212,33 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _building = building;
       _entrance = building?.entrance;
       _buildingFootprint = building?.footprintWgs84;
+      _activeFloor = building?.initialFloor;
     });
     _syncDestinationLayer();
     _syncBuildingLayer();
     // 스타일이 이미 로드된 뒤 건물이 늦게 도착한 케이스(테스트/느린 네트워크)를
     // 위해 실내 MVT 소스도 여기서 한 번 더 등록 시도.
     _ensureIndoorTilesRegistered();
+  }
+
+  /// 야외 오버레이 층 chip으로 다른 층을 골랐을 때. 소스를 통째로 제거·재추가해
+  /// 새 층의 MVT를 받아오게 한다(레이어는 소스에 붙어있어 그대로 재사용).
+  Future<void> _switchOverlayFloor(String floor) async {
+    if (floor == _activeFloor) return;
+    final controller = _mapController;
+    final building = _building;
+    if (controller == null || building == null || !_styleReady) return;
+
+    setState(() => _activeFloor = floor);
+    if (_indoorTilesRegistered) {
+      // 순서 중요: 레이어부터 지워야 소스를 지울 수 있다(레이어가 붙어있으면 오류).
+      await controller.removeLayer(_indoorStoresLabelLayerId);
+      await controller.removeLayer(_indoorStoresFillLayerId);
+      await controller.removeLayer(_indoorFootprintLayerId);
+      await controller.removeSource(_indoorTilesSourceId);
+      _indoorTilesRegistered = false;
+    }
+    await _ensureIndoorTilesRegistered();
   }
 
   void _handlePositionError() {
@@ -606,11 +630,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final building = _building;
     if (controller == null || !_styleReady || building == null) return;
     if (_indoorTilesRegistered) return;
-    final initialFloor = building.initialFloor;
-    if (initialFloor == null) return;
+    final floor = _activeFloor ?? building.initialFloor;
+    if (floor == null) return;
 
     final tileUrl =
-        '$apiBaseUrl/buildings/${building.id}/floors/$initialFloor/tiles/{z}/{x}/{y}.mvt';
+        '$apiBaseUrl/buildings/${building.id}/floors/$floor/tiles/{z}/{x}/{y}.mvt';
     await controller.addSource(
       _indoorTilesSourceId,
       VectorSourceProperties(tiles: [tileUrl]),
@@ -764,6 +788,20 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
             ),
           ),
 
+        // 활성 건물이 있으면 우측 상단에 층 chip을 띄운다. 야외 오버레이는 줌
+        // 인터폴레이트로 자동 페이드인/아웃되므로, 사용자는 chip으로 언제든
+        // 층을 바꿔가며 확대해서 훑어볼 수 있다.
+        if (_building != null && _activeFloor != null)
+          Positioned(
+            top: 76,
+            right: 12,
+            child: _OutdoorFloorChip(
+              floors: _building!.floors,
+              activeFloor: _activeFloor!,
+              onPick: _switchOverlayFloor,
+            ),
+          ),
+
 
         if (route != null)
           Positioned(
@@ -797,5 +835,78 @@ extension _ColorHex on Color {
     final rgb =
         (r * 255).round() << 16 | (g * 255).round() << 8 | (b * 255).round();
     return '#${rgb.toRadixString(16).padLeft(6, '0').toUpperCase()}';
+  }
+}
+
+/// 야외 오버레이 우측 상단에 뜨는 층 선택 chip. 현재 층 라벨을 눌러 나오는
+/// 시스템 팝업 메뉴에서 다른 층을 고른다 — 실내 화면의 접이식 selector와
+/// 다르게 야외에서는 팝업 하나로 충분하다(자주 여는 UI가 아니므로).
+class _OutdoorFloorChip extends StatelessWidget {
+  const _OutdoorFloorChip({
+    required this.floors,
+    required this.activeFloor,
+    required this.onPick,
+  });
+
+  final List<String> floors;
+  final String activeFloor;
+  final ValueChanged<String> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      elevation: 3,
+      shadowColor: Colors.black.withValues(alpha: 0.15),
+      borderRadius: BorderRadius.circular(20),
+      child: PopupMenuButton<String>(
+        tooltip: '층 선택',
+        onSelected: onPick,
+        // 백엔드가 준 순서(위층 → 아래층) 그대로. 층 하나뿐이면 메뉴에 활성 층
+        // 만 뜨지만 UI를 특별 처리하지 않는다 — 그런 건물은 chip 자체가 정보용.
+        itemBuilder: (context) => [
+          for (final floor in floors)
+            PopupMenuItem<String>(
+              value: floor,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    floor == activeFloor
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_unchecked,
+                    size: 16,
+                    color: floor == activeFloor
+                        ? AppColors.primary
+                        : AppColors.muted,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(floor),
+                ],
+              ),
+            ),
+        ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.layers, size: 16, color: AppColors.primary),
+              const SizedBox(width: 6),
+              Text(
+                activeFloor,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.text,
+                ),
+              ),
+              const SizedBox(width: 2),
+              const Icon(Icons.arrow_drop_down, size: 16, color: AppColors.muted),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
