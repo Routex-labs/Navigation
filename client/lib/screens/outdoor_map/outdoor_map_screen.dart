@@ -68,6 +68,11 @@ const _buildingPressedHoldMs = 220;
 // 매장 텍스트까지 자세히 나오도록 지도 확대.
 const _indoorOverlayTargetZoom = 18.0;
 
+// 실내 오버레이가 zoom-interpolate로 페이드인되는 줌 구간. 이 아래는 완전히
+// 숨겨져 야외 지도만 보이고, 이 위는 완전히 보인다.
+const _indoorOverlayFadeInStartZoom = 16.5;
+const _indoorOverlayFadeInEndZoom = 17.5;
+
 // latlong2 <-> MapLibre 타입 브릿지.
 LatLng _toGl(ll.LatLng p) => LatLng(p.latitude, p.longitude);
 
@@ -168,9 +173,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   MapLibreMapController? _mapController;
   bool _styleReady = false;
-  // 실내 오버레이(활성 건물의 층 MVT 레이어들)가 지금 보이는 상태인지.
-  // true면 하단에 "실내에서 나가기" 버튼이 뜨고, false면 야외만 보인다.
-  bool _indoorOverlayVisible = false;
   // 지도가 아직 안 뜬 시점의 첫 GPS 위치를 잊지 않도록 pending 값을 두고,
   // 스타일 로드 콜백에서 이를 반영한다.
   bool _pendingCenterOnPosition = false;
@@ -559,12 +561,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 방해하지 않는다(단일 탭이 여기 오면 그건 pan이 아닌 명시적 탭).
     final point = ll.LatLng(coords.latitude, coords.longitude);
     if (!_isInsideBuilding(point)) return;
-    if (_indoorOverlayVisible) return; // 이미 오버레이 보이는 상태면 무시.
 
-    // 사용자가 탭한 걸 "인식됐다"고 폴리곤을 잠깐 진하게 반짝인 뒤 실내 오버레이를
-    // 페이드인한다. 예전에는 여기서 화면을 바로 실내 모드로 스왑했지만, 이제는
-    // 야외 지도 위에 실내 도면이 제자리에서 올라와서 사용자가 야외 맥락을 유지한
-    // 채로 실내를 볼 수 있게 한다.
+    // 폴리곤을 잠깐 진하게 반짝여 "인식됐다"는 시각 피드백을 준 뒤 카메라를
+    // 건물로 확대한다. 실내 MVT 레이어는 zoom-interpolate fillOpacity로 자동으로
+    // 페이드인하므로 여기서 명시적 opacity 조작은 불필요하다.
     final controller = _mapController;
     if (controller == null) return;
     await controller.setLayerProperties(
@@ -577,67 +577,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _buildingFillLayerId,
       const FillLayerProperties(fillOpacity: _buildingFillOpacityDefault),
     );
-    await _showIndoorOverlay();
-  }
-
-  /// 활성 건물의 실내 층 MVT 레이어를 페이드인하고 카메라를 건물로 확대한다.
-  Future<void> _showIndoorOverlay() async {
-    final controller = _mapController;
-    final building = _building;
-    if (controller == null || building == null || !_styleReady) return;
-    // 카메라를 건물 중앙으로 이동 + 확대. 건물 footprint centroid를 대략
-    // 대상으로 삼는다(정확한 중심이 아니라도 사용자가 이미 근처를 탭한 상태라
-    // 시야가 크게 벗어나지 않는다).
     final target = _footprintCentroid() ?? _entrance;
     if (target != null) {
       await controller.animateCamera(
         CameraUpdate.newLatLngZoom(_toGl(target), _indoorOverlayTargetZoom),
       );
     }
-    // 세 레이어 opacity를 부드럽게 올린다. MapLibre style spec의 transition
-    // 설정이 없어서 개별 setLayerProperties로도 즉시 값이 반영되지만, 사용자
-    // 지각상 "펑" 하고 나타나지는 않도록 간단한 2-스텝 페이드를 준다.
-    await _setIndoorOverlayOpacity(0.6);
-    await Future<void>.delayed(const Duration(milliseconds: 120));
-    if (!mounted) return;
-    await _setIndoorOverlayOpacity(1.0);
-    if (!mounted) return;
-    setState(() => _indoorOverlayVisible = true);
-  }
-
-  /// "실내 나가기" 버튼: 오버레이 페이드아웃 + 카메라를 사용자 위치로 복귀.
-  Future<void> _dismissIndoorOverlay() async {
-    final controller = _mapController;
-    if (controller == null) return;
-    await _setIndoorOverlayOpacity(0.0);
-    if (!mounted) return;
-    setState(() => _indoorOverlayVisible = false);
-    final position = _position;
-    if (position != null) {
-      await controller.animateCamera(
-        CameraUpdate.newLatLngZoom(
-          LatLng(position.latitude, position.longitude),
-          17,
-        ),
-      );
-    }
-  }
-
-  Future<void> _setIndoorOverlayOpacity(double opacity) async {
-    final controller = _mapController;
-    if (controller == null || !_indoorTilesRegistered) return;
-    await controller.setLayerProperties(
-      _indoorFootprintLayerId,
-      FillLayerProperties(fillOpacity: opacity),
-    );
-    await controller.setLayerProperties(
-      _indoorStoresFillLayerId,
-      FillLayerProperties(fillOpacity: opacity),
-    );
-    await controller.setLayerProperties(
-      _indoorStoresLabelLayerId,
-      SymbolLayerProperties(textOpacity: opacity),
-    );
   }
 
   // footprint의 대략적인 중심(단순 평균). 폴리곤이 볼록하지 않아도 시각 목적엔
@@ -670,25 +615,38 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _indoorTilesSourceId,
       VectorSourceProperties(tiles: [tileUrl]),
     );
-    // 도면은 야외 위성 위에 종이처럼 얹히는 흰 배경 + 매장 회색 fill + 이름.
-    // 초기 opacity 0 — _showIndoorOverlay가 페이드인한다.
+    // 실내 도면은 확대에 따라 자연스럽게 나타나야 한다(Google Maps의 건물 내부
+    // 표시와 같은 패턴): 줌 16.5 미만은 완전히 안 보이고 17.5부터 완전히 보이며
+    // 사이는 부드럽게 페이드인. MapLibre의 zoom-interpolate 표현식으로 처리해
+    // 카메라 이동 중 실시간으로 부드럽게 반영된다(수동 setLayerProperties 호출
+    // 없이). 아래는 [interpolate, linear, [zoom], stop0_zoom, stop0_val, ...]
+    // 형태의 style expression.
+    const fadeExpr = [
+      'interpolate',
+      ['linear'],
+      ['zoom'],
+      _indoorOverlayFadeInStartZoom,
+      0,
+      _indoorOverlayFadeInEndZoom,
+      1,
+    ];
     await controller.addFillLayer(
       _indoorTilesSourceId,
       _indoorFootprintLayerId,
-      const FillLayerProperties(
+      FillLayerProperties(
         fillColor: '#FFFFFF',
         fillOutlineColor: '#00000088',
-        fillOpacity: 0,
+        fillOpacity: fadeExpr,
       ),
       sourceLayer: 'footprint',
     );
     await controller.addFillLayer(
       _indoorTilesSourceId,
       _indoorStoresFillLayerId,
-      const FillLayerProperties(
+      FillLayerProperties(
         fillColor: '#F3F1EF',
         fillOutlineColor: '#D8D4D1',
-        fillOpacity: 0,
+        fillOpacity: fadeExpr,
       ),
       sourceLayer: 'stores',
     );
@@ -703,7 +661,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         textHaloColor: '#FFFFFF',
         textHaloWidth: 1,
         textMaxWidth: 6,
-        textOpacity: 0,
+        textOpacity: fadeExpr,
       ),
       sourceLayer: 'stores',
     );
@@ -806,39 +764,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
             ),
           ),
 
-        if (_indoorOverlayVisible)
-          Positioned(
-            top: 76,
-            right: 12,
-            child: Material(
-              color: Colors.white,
-              elevation: 3,
-              shadowColor: Colors.black.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(20),
-              child: InkWell(
-                onTap: _dismissIndoorOverlay,
-                borderRadius: BorderRadius.circular(20),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.close, size: 16, color: AppColors.text),
-                      SizedBox(width: 6),
-                      Text(
-                        '실내 나가기',
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.text,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
 
         if (route != null)
           Positioned(
