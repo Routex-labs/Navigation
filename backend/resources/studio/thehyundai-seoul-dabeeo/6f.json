@@ -57,19 +57,19 @@
         "type": "affine_2d",
         "matrix": [
           [
-            6.883167485215995e-06,
-            8.995545471111328e-06,
-            126.92621505936576
+            5.3103488290357615e-06,
+            1.198065777565362e-05,
+            126.92586509790313
           ],
           [
-            7.134189567448183e-06,
-            -5.4589042789819695e-06,
-            37.52530883269033
+            3.3138707461145867e-06,
+            -1.2190943193573635e-05,
+            37.52726235997185
           ],
           [
-            0,
-            0,
-            1
+            0.0,
+            0.0,
+            1.0
           ]
         ],
         "input_axes": [
@@ -80,9 +80,17 @@
           "lng",
           "lat"
         ],
-        "rotate_deg": 52.577682846677305,
-        "anchor": "vworld_building_centroid",
-        "status": "unverified"
+        "rotate_deg": 38.1977524881521,
+        "anchor": "gcp_refit",
+        "status": "verified_by_gcp",
+        "refit": {
+          "source": "resources/calibration/thehyundai-seoul-gcps.json",
+          "residuals_m": {
+            "n_gcps": 4,
+            "median_m": 0.04,
+            "max_m": 0.04
+          }
+        }
       }
     },
     "georeferencing": {
@@ -91,7 +99,7 @@
       "east": "126.92813320128863",
       "north": "37.52792740515329",
       "rotate_deg": 52.577682846677305,
-      "status": "unverified"
+      "status": "stale_needs_recompute"
     },
     "notes": [
       "모든 층이 다베오 원본 좌표계를 공유한다. 층 정렬이 필요 없으므로 shear/이방성이 생기지 않는다.",

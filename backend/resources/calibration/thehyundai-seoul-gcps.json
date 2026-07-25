@@ -1,0 +1,49 @@
+{
+  "exported_at": "2026-07-25T03:43:46.511Z",
+  "source_tool": "backend/scripts/tools/gcp_picker.html",
+  "building_id": "thehyundai-seoul",
+  "notes": [
+    "VWorld 위성/하이브리드 지도에서 건물 4개 꼭지점을 직접 클릭해 얻은 lat/lng.",
+    "라벨 1=북, 2=서, 3=남, 4=동 (사용자 확인, 2026-07-25).",
+    "재정합 스크립트: python -m scripts.transform.refit_building_wgs84 --studio resources/studio/thehyundai-seoul-dabeeo --gcps resources/calibration/thehyundai-seoul-gcps.json"
+  ],
+  "floorplan_pixel_size": null,
+  "gcps": [
+    {
+      "label": "1",
+      "outdoor": {
+        "lat": 37.5268237209597,
+        "lng": 126.9283070675221
+      },
+      "indoor_px": null,
+      "complete": false
+    },
+    {
+      "label": "2",
+      "outdoor": {
+        "lat": 37.52626975559059,
+        "lng": 126.92741812669914
+      },
+      "indoor_px": null,
+      "complete": false
+    },
+    {
+      "label": "3",
+      "outdoor": {
+        "lat": 37.52507325472446,
+        "lng": 126.92859288433488
+      },
+      "indoor_px": null,
+      "complete": false
+    },
+    {
+      "label": "4",
+      "outdoor": {
+        "lat": 37.52562801782851,
+        "lng": 126.92948221377281
+      },
+      "indoor_px": null,
+      "complete": false
+    }
+  ]
+}
