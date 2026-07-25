@@ -234,11 +234,16 @@ void main() {
     );
 
     controller.add(_fakePosition);
-    await tester.pump();
+    // MapLibre 이관 후 _handlePosition이 비동기 _syncCurrentLayer / _updateRoute
+    // 를 추가로 스케줄하는데, 이 마이크로태스크들이 완료돼 setState의 결과가
+    // 위젯 트리에 반영되기까지 여러 프레임이 걸린다. 단일 pump()는 스트림
+    // 리스너만 발동해서 화면 상태 assertion 이 안정적으로 실패한다 —
+    // 짧게 pump해 큐를 비운다.
+    await tester.pump(const Duration(milliseconds: 50));
     expect(find.text('GPS 신호 약함'), findsNothing);
 
     controller.add(_fakeLowAccuracyPosition);
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
     expect(find.text('GPS 신호 약함'), findsOneWidget);
 
     await controller.close();
