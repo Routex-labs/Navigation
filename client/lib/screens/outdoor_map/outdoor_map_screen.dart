@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' show Point;
 
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kIsWeb;
@@ -39,6 +40,9 @@ bool get _isMapSupportedOnThisPlatform =>
     kIsWeb || _mapSupportedNativePlatforms.contains(defaultTargetPlatform);
 
 // MapLibre 소스·레이어 ID. 층 지도의 명명 규칙(_로 시작하지 않는 kebab-case) 준수.
+const _buildingSourceId = 'outdoor-building';
+const _buildingFillLayerId = 'outdoor-building-fill';
+const _buildingOutlineLayerId = 'outdoor-building-outline';
 const _routeSourceId = 'outdoor-route';
 const _routeCasingLayerId = 'outdoor-route-casing';
 const _routeLineLayerId = 'outdoor-route-line';
@@ -47,6 +51,13 @@ const _accuracyLayerId = 'outdoor-accuracy';
 const _currentDotLayerId = 'outdoor-current-dot';
 const _destSourceId = 'outdoor-destination';
 const _destLayerId = 'outdoor-destination-pin';
+
+// 건물 폴리곤의 기본/눌린 상태 fill opacity. 기본은 옅게 존재만 알리고,
+// 사용자가 탭한 순간 잠깐 진하게 반짝여서 "인식됐다"는 시각 피드백을 준다.
+const _buildingFillOpacityDefault = 0.15;
+const _buildingFillOpacityPressed = 0.45;
+// 탭 후 실내로 넘어가기 전에 진한 상태를 유지하는 시간.
+const _buildingPressedHoldMs = 220;
 
 // latlong2 <-> MapLibre 타입 브릿지.
 LatLng _toGl(ll.LatLng p) => LatLng(p.latitude, p.longitude);
@@ -137,6 +148,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   bool _autoNavigated = false;
   Position? _position;
   ll.LatLng? _entrance;
+  List<ll.LatLng>? _buildingFootprint;
   DirectionsRoute? _route;
   double? _previousAccuracy;
   StreamSubscription<Position>? _positionSubscription;
@@ -178,8 +190,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       demoBuildingId,
     );
     if (!mounted) return;
-    setState(() => _entrance = building?.entrance);
+    setState(() {
+      _entrance = building?.entrance;
+      _buildingFootprint = building?.footprintWgs84;
+    });
     _syncDestinationLayer();
+    _syncBuildingLayer();
   }
 
   void _handlePositionError() {
@@ -359,6 +375,31 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final controller = _mapController;
     if (controller == null) return;
 
+    // 건물 폴리곤: 옅은 반투명 fill + 외곽선. "이 건물이 탭 가능하다"는 시각
+    // 힌트가 되고, 사용자가 탭하면 opacity를 잠깐 올려 인식됐다는 피드백을 준다.
+    // 다른 레이어(경로선·위치 점)가 위에 오도록 가장 먼저 추가한다.
+    await controller.addSource(
+      _buildingSourceId,
+      GeojsonSourceProperties(data: _emptyCollection()),
+    );
+    await controller.addFillLayer(
+      _buildingSourceId,
+      _buildingFillLayerId,
+      FillLayerProperties(
+        fillColor: AppColors.primary.toHexString(),
+        fillOpacity: _buildingFillOpacityDefault,
+      ),
+    );
+    await controller.addLineLayer(
+      _buildingSourceId,
+      _buildingOutlineLayerId,
+      LineLayerProperties(
+        lineColor: AppColors.primary.toHexString(),
+        lineWidth: 2,
+        lineOpacity: 0.7,
+      ),
+    );
+
     // 경로선: 두께 있는 파란 실선 + 흰 casing으로 배경 대비를 확보한다.
     await controller.addSource(
       _routeSourceId,
@@ -430,6 +471,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
     if (!mounted) return;
     setState(() => _styleReady = true);
+    _syncBuildingLayer();
     _syncCurrentLayer();
     _syncDestinationLayer();
     _syncRouteLayer();
@@ -441,6 +483,83 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         ),
       );
     }
+  }
+
+  Future<void> _syncBuildingLayer() async {
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    final footprint = _buildingFootprint;
+    if (footprint == null || footprint.length < 3) {
+      await controller.setGeoJsonSource(_buildingSourceId, _emptyCollection());
+      return;
+    }
+    final ring = [
+      for (final p in footprint) [p.longitude, p.latitude],
+    ];
+    // GeoJSON Polygon linear ring은 첫 점과 마지막 점이 같아야 한다. 백엔드가
+    // 이미 닫아 보내주면 중복 추가하지 않는다.
+    if (ring.first[0] != ring.last[0] || ring.first[1] != ring.last[1]) {
+      ring.add(ring.first);
+    }
+    await controller.setGeoJsonSource(
+      _buildingSourceId,
+      _collection([
+        {
+          'type': 'Feature',
+          'properties': const <String, dynamic>{},
+          'geometry': {
+            'type': 'Polygon',
+            'coordinates': [ring],
+          },
+        },
+      ]),
+    );
+  }
+
+  /// 지도에서 탭한 위경도가 건물 footprint 내부인지 판정한다(ray-casting).
+  /// 백엔드가 자기 참조 없이 단일 외곽선만 내려주므로 hole/멀티 폴리곤은 안 다룬다.
+  bool _isInsideBuilding(ll.LatLng point) {
+    final footprint = _buildingFootprint;
+    if (footprint == null || footprint.length < 3) return false;
+    var inside = false;
+    final n = footprint.length;
+    for (var i = 0, j = n - 1; i < n; j = i++) {
+      final xi = footprint[i].longitude;
+      final yi = footprint[i].latitude;
+      final xj = footprint[j].longitude;
+      final yj = footprint[j].latitude;
+      final intersect = ((yi > point.latitude) != (yj > point.latitude)) &&
+          (point.longitude <
+              (xj - xi) * (point.latitude - yi) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+
+  Future<void> _handleMapClick(Point<double> _, LatLng coords) async {
+    // 폴리곤 히트 검사만 하고, 나머지 탭은 흡수하지 않아 지도 pan/zoom 제스처를
+    // 방해하지 않는다(단일 탭이 여기 오면 그건 pan이 아닌 명시적 탭).
+    final point = ll.LatLng(coords.latitude, coords.longitude);
+    if (!_isInsideBuilding(point)) return;
+    if (_autoNavigated) return; // 이미 진입 트리거가 걸렸으면 중복 호출 방지.
+    _autoNavigated = true;
+
+    // 사용자가 탭한 걸 "인식됐다"고 잠깐 진하게 반짝인 뒤 실내로 넘긴다.
+    final controller = _mapController;
+    if (controller != null) {
+      await controller.setLayerProperties(
+        _buildingFillLayerId,
+        const FillLayerProperties(fillOpacity: _buildingFillOpacityPressed),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: _buildingPressedHoldMs));
+      if (!mounted) return;
+      await controller.setLayerProperties(
+        _buildingFillLayerId,
+        const FillLayerProperties(fillOpacity: _buildingFillOpacityDefault),
+      );
+    }
+    if (!mounted) return;
+    widget.onEnterBuilding();
   }
 
   Future<void> _syncCurrentLayer() async {
@@ -514,6 +633,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
             ),
             onMapCreated: (controller) => _mapController = controller,
             onStyleLoadedCallback: _onStyleLoaded,
+            onMapClick: _handleMapClick,
             compassEnabled: false,
             myLocationEnabled: false,
             logoEnabled: false,

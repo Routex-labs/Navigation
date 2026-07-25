@@ -47,4 +47,32 @@ void main() {
 
     expect(building.initialFloor, isNull);
   });
+
+  test('footprint_wgs84가 있으면 LatLng 리스트로 파싱된다', () {
+    final building = Building.fromJson({
+      'id': 'x',
+      'name': 'x',
+      'floors': <String>[],
+      'footprint_wgs84': [
+        {'lat': 37.5268, 'lng': 126.9283},
+        {'lat': 37.5263, 'lng': 126.9274},
+        {'lat': 37.5251, 'lng': 126.9286},
+      ],
+    });
+
+    expect(building.footprintWgs84, isNotNull);
+    expect(building.footprintWgs84!.length, 3);
+    expect(building.footprintWgs84!.first.latitude, closeTo(37.5268, 1e-9));
+    expect(building.footprintWgs84!.first.longitude, closeTo(126.9283, 1e-9));
+  });
+
+  test('footprint_wgs84가 없는 응답은 null이다', () {
+    final building = Building.fromJson({
+      'id': 'x',
+      'name': 'x',
+      'floors': <String>[],
+    });
+
+    expect(building.footprintWgs84, isNull);
+  });
 }
