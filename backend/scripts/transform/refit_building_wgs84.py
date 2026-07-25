@@ -151,15 +151,51 @@ def extreme_corners(footprint: list[dict]) -> list[Corner]:
     return corners
 
 
-# GCP·극점을 "중심에서 바라본 각도"로 짝짓는다.
-# GCP는 도 좌표를 등방(미터) 공간으로 눌러서 각도를 잰다.
-# 극점은 로컬 미터 그대로 각도를 재되, 현재 아핀의 회전으로 세계 좌표 방향으로 돌린다.
-# 짝짓기는 "가능한 모든 순열 중 각도 차 합이 최소"인 순열을 고른다 — 정렬 후
-# 인덱스로 짝짓는 방식은 두 리스트의 위상이 어긋나면 실패한다(실측 확인).
-# n=4면 24가지, n=6이면 720가지라 브루트포스로 충분히 최적.
+# GCP·극점을 각도(중심에서 바라본)로 정렬해 순환 순서 4가지 중 가장 물리적으로
+# 합당한 매칭을 고른다.
+#
+# 왜 각도 정렬만으로는 부족한가:
+#   현재 unverified 아핀의 회전각을 신뢰해 corner를 세계 방위로 돌린 뒤 짝짓는데,
+#   그 회전각 자체가 90° 정도 틀려있으면 매칭이 축 하나만큼 밀린 잘못된 순열로
+#   들어간다. 그러면 fit은 여전히 수학적으로 수렴하지만 스케일이 심하게 이방적
+#   (예: x=0.6 vs y=1.7)이 되어, 실제 건물이 정사각형에 가까운데도 축별로
+#   물리 단위가 다른 것처럼 취급된다 — 이 상태로 재시드하면 실내 지도 카메라
+#   정렬·매장 폴리곤이 눈에 띄게 어긋난다.
+#
+# 어떻게 바로잡는가:
+#   각도 정렬로 얻은 base 매칭에 대해 순환 shift 0/1/2/3(= 0/90/180/270°)를
+#   모두 시도하고, 각각 아핀을 fit해 스케일 이방성이 가장 낮은 순열을 채택한다.
+#   물리적으로 국소 좌표계는 대체로 등방(같은 m/local_m)이므로 균일 스케일 fit
+#   이 "옳은" 매칭이라는 근거가 된다.
 def _angular_distance(a: float, b: float) -> float:
     d = abs(a - b) % (2 * math.pi)
     return min(d, 2 * math.pi - d)
+
+
+def _fit_pairs(gcps, corners, perm) -> tuple[GeoTransform, list[float]]:
+    """corner 순열 하나에 대해 fit + 각 GCP 잔차."""
+    from app.geo.georeference import fit_wgs84_transform, PointPair
+    pairs = [
+        PointPair(x=corners[perm[i]].x, y=corners[perm[i]].y,
+                  u=gcps[i]["outdoor"]["lng"], v=gcps[i]["outdoor"]["lat"])
+        for i in range(len(gcps))
+    ]
+    t = fit_wgs84_transform(pairs)
+    residuals = []
+    for i in range(len(gcps)):
+        pred_lat, pred_lng = t.apply(corners[perm[i]].x, corners[perm[i]].y)
+        residuals.append(haversine_m(
+            gcps[i]["outdoor"]["lat"], gcps[i]["outdoor"]["lng"],
+            pred_lat, pred_lng,
+        ))
+    return t, residuals
+
+
+def _scale_anisotropy(t: GeoTransform) -> float:
+    """축별 스케일 비율(1.0이 완전 균일, 값이 클수록 이방적)."""
+    sx = math.hypot(t.a, t.c) * METERS_PER_DEGREE_LAT
+    sy = math.hypot(t.b, t.d) * METERS_PER_DEGREE_LAT
+    return max(sx, sy) / max(1e-9, min(sx, sy))
 
 
 def angle_nearest_match(gcps: list[dict], corners: list[Corner], current: GeoTransform) -> list[Match]:
@@ -193,16 +229,47 @@ def angle_nearest_match(gcps: list[dict], corners: list[Corner], current: GeoTra
             f"GCP {n}개 vs footprint 극점 {len(corners)}개. 지금은 4점 GCP → 4극점만 지원."
         )
 
-    best_perm = None
+    # base: 각도만으로 최적 순열
+    base_perm = None
     best_total = float("inf")
     for perm in itertools.permutations(range(n)):
         total = sum(_angular_distance(gcp_angles[i], corner_angles[perm[i]]) for i in range(n))
         if total < best_total:
             best_total = total
-            best_perm = perm
+            base_perm = perm
+    assert base_perm is not None
+
+    # corner 목록은 CCW 순환(bbox 극점을 min_xy→max_x_min_y→max_xy→min_x_max_y로
+    # 뽑았음)이라, base_perm에 shift 1/2/3을 얹으면 90/180/270° 돈 매칭이 된다.
+    # 네 후보 중 스케일 이방성이 가장 낮은 것을 택한다 — 실제 로컬 좌표계는 등방
+    # (dabeeo scale 0.1 m/unit for both axes)이라는 사전 정보를 활용한다.
+    print("\n== 순환 shift 후보별 fit 비교 ==")
+    print(f"{'shift':<6} {'x-scale':>10} {'y-scale':>10} {'anisotropy':>12} {'max_resid(m)':>14}")
+    candidates = []
+    for shift in range(n):
+        perm = tuple(base_perm[(i + shift) % n] for i in range(n))
+        t, residuals = _fit_pairs(gcps, corners, perm)
+        aniso = _scale_anisotropy(t)
+        sx = math.hypot(t.a, t.c) * METERS_PER_DEGREE_LAT
+        sy = math.hypot(t.b, t.d) * METERS_PER_DEGREE_LAT
+        candidates.append((aniso, shift, perm, t, residuals))
+        marker = " <-" if shift == 0 else ""
+        print(f"{shift:<6} {sx:>10.4f} {sy:>10.4f} {aniso:>12.3f} {max(residuals):>14.3f}{marker}")
+
+    # 정렬 우선순위: (1) 이방성 낮음(0.001 단위로 반올림) (2) 잔차 낮음.
+    # 대칭 회전(0°/180° 또는 90°/270°)은 스케일이 같이 나오는데, 그중 잔차가
+    # 더 작은 쪽이 실제 매칭 방향과 일치한다 — 사각형이 완벽 대칭이 아니라
+    # GCP 오차가 한 쪽에서 더 잘 상쇄되기 때문. 반올림 없이 float으로 비교하면
+    # 부동소수 미세 차이 때문에 tiebreaker가 작동하지 않아 잘못된 방향을 고른다.
+    candidates.sort(key=lambda x: (round(x[0], 3), max(x[4])))
+    best = candidates[0]
+    _, chosen_shift, chosen_perm, _, _ = best
+    if chosen_shift != 0:
+        print(f"** base 각도 매칭이 축 {chosen_shift}칸 shift됨 — 스케일 이방성·잔차 최소값을 채택.")
+        print(f"   (원인: 현재 unverified 아핀의 회전각이 실제와 90°*{chosen_shift} 어긋나 있음)")
 
     matches = []
-    for i, corner_idx in enumerate(best_perm):
+    for i, corner_idx in enumerate(chosen_perm):
         g = gcps[i]
         c = corners[corner_idx]
         lat, lng = g["outdoor"]["lat"], g["outdoor"]["lng"]
