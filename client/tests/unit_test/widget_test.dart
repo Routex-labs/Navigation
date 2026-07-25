@@ -1,8 +1,6 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
@@ -22,22 +20,9 @@ import 'package:navigation_client/screens/indoor_map/indoor_map_screen.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
 import 'package:navigation_client/screens/route_guide/route_guide_screen.dart';
+import 'package:navigation_client/widgets/eta_card.dart';
 import 'package:navigation_client/widgets/floor_plan_view.dart';
 import 'package:navigation_client/widgets/map_bottom_bar.dart';
-
-// 1x1 흰색 PNG (base64). 배경지도 타일을 흉내내되 실제 네트워크 요청은 하지
-// 않는다 - flutter_map 자체 테스트 스위트도 같은 방식을 쓴다.
-const _whiteTileBase64 =
-    'iVBORw0KGgoAAAANSUhEUgAAAQAAAAEAAQMAAABmvDolAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAANQTFRF////p8QbyAAAAB9JREFUeJztwQENAAAAwqD3T20ON6AAAAAAAAAAAL4NIQAAAfFnIe4AAAAASUVORK5CYII=';
-final _whiteTileImage = MemoryImage(base64Decode(_whiteTileBase64));
-
-class _FakeTileProvider extends TileProvider {
-  @override
-  ImageProvider<Object> getImage(
-    TileCoordinates coordinates,
-    TileLayer options,
-  ) => _whiteTileImage;
-}
 
 // 데모 건물 입구(37.5665, 126.9779)에서 약 185m 떨어진 좌표.
 // 자동 건물 진입 감지(반경 50m)에 걸리지 않도록 충분히 멀리 둔다.
@@ -101,10 +86,9 @@ void main() {
     buildingRepository = testBuildingRepository;
     destinationRepository = MockDestinationRepository(buildingRepository);
 
-    // 야외 지도의 배경 타일도 실제 OSM/VWorld 대신 가짜 provider로 교체한다.
-    // 실제 네트워크 요청을 남겨두면 그 요청이 이후 테스트까지 이어져
-    // pumpAndSettle이 끝없이 걸리는 원인이 된다.
-    outdoorTileProvider = () => _FakeTileProvider();
+    // 야외 지도가 MapLibre로 이관된 뒤에는 배경 타일 fake provider가 필요 없다.
+    // 위젯 테스트 환경(TargetPlatform.android)에서는 MapLibreMap이 PlatformView
+    // 를 만들지만 실제 렌더링은 안 되고 네트워크 요청도 뜨지 않는다.
   });
 
   tearDown(() {
@@ -112,7 +96,6 @@ void main() {
     watchPosition = defaultWatchPosition;
     buildingRepository = originalBuildingRepository;
     destinationRepository = originalDestinationRepository;
-    outdoorTileProvider = NetworkTileProvider.new;
   });
 
   testWidgets('app opens directly into the outdoor (home) map shell', (
@@ -148,7 +131,7 @@ void main() {
     expect(find.byIcon(Icons.refresh), findsOneWidget);
   });
 
-  testWidgets('outdoor map shows a location marker after loading', (
+  testWidgets('outdoor map body renders map after position arrives', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -160,8 +143,12 @@ void main() {
     // 첫 위치를 흘려주므로 곧바로 위치 마커가 보여야 한다.
     await tester.pump();
 
+    // MapLibre 이관 이후에는 현재 위치 마커가 지도 내부(CircleLayer)에 렌더돼
+    // Flutter 위젯 트리에서 찾을 수 없다. 로딩 인디케이터가 사라지고
+    // OutdoorMapBody가 body 상태로 넘어갔는지, 신호가 양호할 때 경고 배지가
+    // 안 뜨는지로 정상 렌더링을 갈음한다.
     expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(find.byIcon(Icons.navigation), findsOneWidget);
+    expect(find.byType(OutdoorMapBody), findsOneWidget);
     expect(find.text('GPS 신호 약함'), findsNothing);
   });
 
@@ -187,7 +174,9 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.byIcon(Icons.place), findsOneWidget);
+    // 목적지 핀은 MapLibre 심볼 레이어로 옮겨져 Flutter 트리에는 없다.
+    // 실제 경로가 계산돼 ETA 카드가 뜬 것으로 "경로 표시 흐름이 살아있다"를 검증.
+    expect(find.byType(EtaCard), findsOneWidget);
     expect(find.textContaining('건물 입구까지'), findsOneWidget);
   });
 
@@ -265,7 +254,10 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.byIcon(Icons.navigation), findsOneWidget);
+    // 위치 실패 시에도 지도 body는 폴백 좌표로 렌더되고 GPS 신호 약함 배지가
+    // 뜬다. 위치 마커는 MapLibre native로 옮겨져 트리에서 찾지 않는다.
+    expect(find.byType(OutdoorMapBody), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.text('GPS 신호 약함'), findsOneWidget);
   });
 

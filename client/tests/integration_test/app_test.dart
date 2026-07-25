@@ -1,30 +1,14 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'package:navigation_client/core/service_locator.dart';
 import 'package:navigation_client/main.dart' as app;
 import 'package:navigation_client/repositories/mock_building_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
-import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
-
-const _whiteTileBase64 =
-    'iVBORw0KGgoAAAANSUhEUgAAAQAAAAEAAQMAAABmvDolAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAANQTFRF////p8QbyAAAAB9JREFUeJztwQENAAAAwqD3T20ON6AAAAAAAAAAAL4NIQAAAfFnIe4AAAAASUVORK5CYII=';
-final _whiteTileImage = MemoryImage(base64Decode(_whiteTileBase64));
-
-class _TestTileProvider extends TileProvider {
-  @override
-  ImageProvider<Object> getImage(
-    TileCoordinates coordinates,
-    TileLayer options,
-  ) => _whiteTileImage;
-}
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -33,17 +17,18 @@ void main() {
   final originalDestinationRepository = destinationRepository;
   final originalRequestStartupPermissions = requestStartupPermissions;
   final originalWatchPosition = watchPosition;
-  final originalOutdoorTileProvider = outdoorTileProvider;
 
   setUpAll(() {
     // Linux CI에는 GPS/권한 플러그인과 개발용 API 서버가 없다. 이 테스트의
     // 목적은 앱 부팅이므로, 외부 의존성을 메모리 기반 대역으로 고정한다.
+    // 야외 지도가 MapLibre로 옮겨간 뒤로는 배경 타일도 별도 fake provider가
+    // 필요 없다 — 데스크톱에서는 _isMapSupportedOnThisPlatform이 false라
+    // MapLibreMap 위젯 자체가 생성되지 않아 네트워크 요청이 발생하지 않는다.
     final mockBuildingRepository = MockBuildingRepository();
     buildingRepository = mockBuildingRepository;
     destinationRepository = MockDestinationRepository(mockBuildingRepository);
     requestStartupPermissions = () async => {};
     watchPosition = () => const Stream.empty();
-    outdoorTileProvider = () => _TestTileProvider();
   });
 
   tearDownAll(() {
@@ -51,7 +36,6 @@ void main() {
     destinationRepository = originalDestinationRepository;
     requestStartupPermissions = originalRequestStartupPermissions;
     watchPosition = originalWatchPosition;
-    outdoorTileProvider = originalOutdoorTileProvider;
   });
 
   testWidgets('app launches and reaches a settled state', (

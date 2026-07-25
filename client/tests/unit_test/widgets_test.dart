@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/theme/app_theme.dart';
 import 'package:navigation_client/widgets/eta_card.dart';
 import 'package:navigation_client/widgets/location_marker.dart';
 import 'package:navigation_client/widgets/rag_chat_panel.dart';
-import 'package:navigation_client/widgets/route_polyline.dart';
 import 'package:navigation_client/widgets/status_badge.dart';
 import 'package:navigation_client/widgets/uncertainty_circle.dart';
 
@@ -91,15 +89,4 @@ void main() {
     expect(find.textContaining('화장실'), findsWidgets);
   });
 
-  test('buildRoutePolyline connects the given points', () {
-    const points = [LatLng(37.5665, 126.9780), LatLng(37.5670, 126.9790)];
-
-    final polyline = buildRoutePolyline(points);
-
-    expect(polyline.points, points);
-    // 팔레트가 바뀌어도 "primary와 어긋나면 실패"만 유지되도록 상수를 그대로
-    // 참조한다. 이전에는 0xFF1A73E8을 하드코딩해 blue500(0xFF4A87F1)로 톤이
-    // 바뀔 때 테스트가 함께 깨졌다.
-    expect(polyline.color, AppColors.primary);
-  });
 }
