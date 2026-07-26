@@ -11,6 +11,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import '../core/api_config.dart';
 import '../features/debug_mode/debug_map_overlay.dart';
 import '../models/floor_plan.dart';
+import 'floor_facility_style.dart';
 
 /// maplibre_gl은 web/android/iOS만 지원한다(패키지 자체 pubspec에 명시된
 /// 플랫폼 목록). Windows/Linux/macOS 데스크톱에서 `flutter run`으로 띄우면
@@ -35,115 +36,6 @@ const _markersSourceId = 'floor-markers';
 const _highlightSourceId = 'floor-highlight';
 const _storesFillLayerId = 'floor-stores-fill';
 const _verticalTransportFillLayerId = 'floor-vertical-transport-fill';
-
-/// 에스컬레이터/엘리베이터/유아차 전용 E/V — 수직이동 구조물 폴리곤을
-/// 초록톤으로 덧칠해 주변 매장에서 눈에 띄게 하기 위한 name 매칭 값.
-/// 백엔드 타일에는 category 속성이 없어(전 층 name은 일정) name으로 매칭한다.
-/// 값이 바뀌면 초록 하이라이트만 빠지고 일반 매장 스타일로 폴백된다.
-const _verticalTransportStoreNames = <String>[
-  '에스컬레이터',
-  '엘리베이터',
-  '유아차 전용 E/V',
-];
-
-/// POI `type` 속성(백엔드 실데이터 값)을 지도 위 아이콘에 매핑한다. 건물마다
-/// 명명이 조금씩 달라(더현대는 elevator/escalator/toilet/exit, 데모 건물인
-/// 데이터셋마다 vertical-connection/core-entrance 등을 쓸 수 있어 여러 값을 같은
-/// 아이콘으로 묶는다. 매핑에 없는 값(facility/poi 등)은 [_defaultPoiIcon]으로
-/// 그린다.
-const _poiIconByType = <String, IconData>{
-  'elevator': Icons.elevator,
-  'vertical-connection': Icons.elevator,
-  'escalator': Icons.escalator,
-  'toilet': Icons.wc,
-  'exit': Icons.exit_to_app,
-  'core-entrance': Icons.exit_to_app,
-  'facility': Icons.info_outline,
-};
-const _defaultPoiIcon = Icons.place;
-const _poiIconBackgroundColor = Color(0xFF76AE6D);
-
-/// 매장 폴리곤이지만 이름이 이 표에 있는 시설(화장실·정수기 등)은 라벨
-/// 옆에 종류별 아이콘을 함께 얹는다. POI(엘리베이터·에스컬레이터 등)와 달리
-/// 이 시설들은 백엔드에서 `pois` 레이어가 아니라 `stores` 레이어에 들어오기
-/// 때문에 POI 아이콘 매핑만으로는 눈에 띄지 않는다. 벡터 타일에는
-/// subcategory 속성이 없어(name/id/kind만 노출) name으로 매칭한다.
-///
-/// 화장실은 흰 원 안에 파란 Icons.man과 분홍 Icons.woman을 나란히 얹어
-/// 남/여 화장실임이 한눈에 읽히도록 한다(duo 스타일에서 left/rightBackground
-/// 값은 배경색이 아니라 좌/우 아이콘 색으로 쓰인다).
-/// 장애인화장실은 접근성 파랑 원에 휠체어 아이콘(Icons.accessible)을 얹고,
-/// 나머지 시설은 다른 POI와 동일하게 초록 원 위에 흰 아이콘으로 그린다.
-const _storeFacilityStyleByName = <String, _FacilityIconStyle>{
-  '화장실': _FacilityIconStyle.duo(
-    leftIcon: Icons.man,
-    leftBackground: Color(0xFF1E88E5),
-    rightIcon: Icons.woman,
-    rightBackground: Color(0xFFEC407A),
-  ),
-  '장애인화장실': _FacilityIconStyle(
-    icon: Icons.accessible,
-    background: Color(0xFF1565C0),
-  ),
-  '정수기': _FacilityIconStyle(
-    icon: Icons.water_drop_outlined,
-    background: _poiIconBackgroundColor,
-  ),
-  '수유실': _FacilityIconStyle(
-    icon: Icons.child_friendly,
-    background: _poiIconBackgroundColor,
-  ),
-  '흡연실 (전자담배 전용)': _FacilityIconStyle(
-    icon: Icons.smoking_rooms,
-    background: _poiIconBackgroundColor,
-  ),
-  'ATM (하나은행)': _FacilityIconStyle(
-    icon: Icons.local_atm,
-    background: _poiIconBackgroundColor,
-  ),
-  '취식 가능장소': _FacilityIconStyle(
-    icon: Icons.dining_outlined,
-    background: _poiIconBackgroundColor,
-  ),
-};
-
-/// 편의시설 아이콘 스타일. 단일 아이콘 모드와 좌/우 반원을 서로 다른 색으로
-/// 나눠 두 아이콘을 얹는 duo 모드를 지원한다(화장실 남/여 표현용).
-class _FacilityIconStyle {
-  const _FacilityIconStyle({required this.icon, required this.background})
-      : leftIcon = null,
-        leftBackground = null,
-        rightIcon = null,
-        rightBackground = null;
-
-  const _FacilityIconStyle.duo({
-    required IconData this.leftIcon,
-    required Color this.leftBackground,
-    required IconData this.rightIcon,
-    required Color this.rightBackground,
-  })  : icon = Icons.wc,
-        background = const Color(0xFF9E9E9E);
-
-  final IconData icon;
-  final Color background;
-  final IconData? leftIcon;
-  final Color? leftBackground;
-  final IconData? rightIcon;
-  final Color? rightBackground;
-
-  bool get isDuo => leftIcon != null;
-}
-
-/// [MapLibreMapController.addImage]에 등록할 때 쓰는 이름. 같은 아이콘을
-/// 여러 type이 공유할 수 있으므로 type이 아니라 아이콘 자체를 키로 삼아
-/// 중복 렌더링/등록을 피한다.
-String _poiIconImageName(IconData icon) => 'poi-icon-${icon.codePoint}';
-
-/// 편의시설 아이콘은 이름별로 배경색/구성이 달라(화장실 duo, 장애인화장실
-/// 파랑 등) 아이콘 codePoint만으로는 구분되지 않는다. 시설 이름을 그대로
-/// 키로 삼아 addImage에 등록한다.
-String _facilityIconImageName(String facilityName) =>
-    'facility-icon-$facilityName';
 
 /// 목적지 핀 이미지의 addImage 등록 이름.
 const _destinationPinImageName = 'marker-destination-pin';
@@ -491,7 +383,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
       sourceLayer: 'stores',
       filter: [
         'any',
-        for (final name in _verticalTransportStoreNames)
+        for (final name in kVerticalTransportStoreNames)
           [
             '==',
             ['get', 'name'],
@@ -534,17 +426,17 @@ class FloorPlanViewState extends State<FloorPlanView> {
     // 그린다. MapLibre 심볼 레이어는 사전 등록된 비트맵만 참조할 수 있어서,
     // 필요한 아이콘들을 먼저 오프스크린 렌더링해 addImage로 등록한 다음
     // type 속성에 따라 골라 쓰는 match 표현식을 iconImage에 건다.
-    for (final icon in {..._poiIconByType.values, _defaultPoiIcon}) {
+    for (final icon in {...kPoiIconByType.values, kDefaultPoiIcon}) {
       await controller.addImage(
-        _poiIconImageName(icon),
-        await _renderPoiIcon(icon),
+        poiIconImageName(icon),
+        await renderPoiIconPng(icon),
       );
     }
     // 편의시설 아이콘은 이름별로 배경색/구성이 달라 각각 별도로 렌더링한다.
-    for (final entry in _storeFacilityStyleByName.entries) {
+    for (final entry in kStoreFacilityStyleByName.entries) {
       await controller.addImage(
-        _facilityIconImageName(entry.key),
-        await _renderFacilityIcon(entry.value),
+        facilityIconImageName(entry.key),
+        await renderFacilityIconPng(entry.value),
       );
     }
     await controller.addImage(
@@ -566,11 +458,11 @@ class FloorPlanViewState extends State<FloorPlanView> {
         iconImage: [
           'match',
           ['get', 'type'],
-          for (final entry in _poiIconByType.entries) ...[
+          for (final entry in kPoiIconByType.entries) ...[
             entry.key,
-            _poiIconImageName(entry.value),
+            poiIconImageName(entry.value),
           ],
-          _poiIconImageName(_defaultPoiIcon),
+          poiIconImageName(kDefaultPoiIcon),
         ],
         iconSize: 0.28,
         iconOpacity: 0.92,
@@ -607,11 +499,11 @@ class FloorPlanViewState extends State<FloorPlanView> {
         iconImage: [
           'match',
           ['get', 'name'],
-          for (final entry in _storeFacilityStyleByName.entries) ...[
+          for (final entry in kStoreFacilityStyleByName.entries) ...[
             entry.key,
-            _facilityIconImageName(entry.key),
+            facilityIconImageName(entry.key),
           ],
-          _poiIconImageName(_defaultPoiIcon),
+          poiIconImageName(kDefaultPoiIcon),
         ],
         iconSize: 0.28,
         iconOpacity: 0.92,
@@ -624,7 +516,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
       sourceLayer: 'stores',
       filter: [
         'any',
-        for (final name in _storeFacilityStyleByName.keys)
+        for (final name in kStoreFacilityStyleByName.keys)
           [
             '==',
             ['get', 'name'],
@@ -1123,132 +1015,6 @@ class FloorPlanViewState extends State<FloorPlanView> {
         footprint.map((p) => p.longitude).reduce((a, b) => a + b) /
         footprint.length;
     return ll.LatLng(lat, lng);
-  }
-
-  /// Material 아이콘 글리프를 흰 테두리 + 초록 원 배경 위에 흰색으로 그려
-  /// PNG 바이트로 오프스크린 렌더링한다. MapLibre 심볼 레이어는 미리 등록된
-  /// 비트맵 이미지만 참조할 수 있어서([MapLibreMapController.addImage]),
-  /// 폰트 글리프를 직접 캔버스에 그려 이미지로 바꿔야 한다.
-  static Future<Uint8List> _renderPoiIcon(IconData icon) async {
-    const canvasSize = 96.0;
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(
-      recorder,
-      const Rect.fromLTWH(0, 0, canvasSize, canvasSize),
-    );
-    const center = Offset(canvasSize / 2, canvasSize / 2);
-
-    canvas.drawCircle(center, canvasSize / 2, Paint()..color = Colors.white);
-    canvas.drawCircle(
-      center,
-      canvasSize / 2 - 5,
-      Paint()..color = _poiIconBackgroundColor,
-    );
-
-    _paintIconGlyph(
-      canvas,
-      icon: icon,
-      color: Colors.white,
-      fontSize: canvasSize * 0.55,
-      center: center,
-    );
-
-    final image = await recorder.endRecording().toImage(
-      canvasSize.toInt(),
-      canvasSize.toInt(),
-    );
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    return byteData!.buffer.asUint8List();
-  }
-
-  /// 편의시설(화장실·정수기·수유실 등)용 아이콘 렌더러. 단일 배경색 모드와
-  /// 좌/우 반원을 다른 색으로 나눠 아이콘을 두 개 얹는 duo 모드를 지원한다.
-  /// duo 모드는 화장실을 파랑(남)·분홍(여)으로 한눈에 구분되게 만들 때 쓴다.
-  static Future<Uint8List> _renderFacilityIcon(
-    _FacilityIconStyle style,
-  ) async {
-    const canvasSize = 96.0;
-    const radius = canvasSize / 2;
-    const innerRadius = canvasSize / 2 - 5;
-    const center = Offset(canvasSize / 2, canvasSize / 2);
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(
-      recorder,
-      const Rect.fromLTWH(0, 0, canvasSize, canvasSize),
-    );
-
-    canvas.drawCircle(center, radius, Paint()..color = Colors.white);
-
-    if (style.isDuo) {
-      // 배경은 흰색 원 하나로 두고, 좌/우 아이콘 자체를 서로 다른 색으로
-      // 그린다(예: 파란 남 · 분홍 여). 반대로 배경을 두 색으로 나누고 흰
-      // 글리프를 얹으면 시설 아이콘 사이 대비가 강해 지도 배경을 눌러버려서,
-      // 흰 원 위에 컬러 글리프를 두는 편이 지도와 잘 어울린다.
-      canvas.drawCircle(
-        center,
-        innerRadius,
-        Paint()..color = Colors.white,
-      );
-
-      _paintIconGlyph(
-        canvas,
-        icon: style.leftIcon!,
-        color: style.leftBackground!,
-        fontSize: canvasSize * 0.48,
-        center: const Offset(canvasSize * 0.29, canvasSize / 2),
-      );
-      _paintIconGlyph(
-        canvas,
-        icon: style.rightIcon!,
-        color: style.rightBackground!,
-        fontSize: canvasSize * 0.48,
-        center: const Offset(canvasSize * 0.71, canvasSize / 2),
-      );
-    } else {
-      canvas.drawCircle(
-        center,
-        innerRadius,
-        Paint()..color = style.background,
-      );
-      _paintIconGlyph(
-        canvas,
-        icon: style.icon,
-        color: Colors.white,
-        fontSize: canvasSize * 0.55,
-        center: center,
-      );
-    }
-
-    final image = await recorder.endRecording().toImage(
-      canvasSize.toInt(),
-      canvasSize.toInt(),
-    );
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    return byteData!.buffer.asUint8List();
-  }
-
-  static void _paintIconGlyph(
-    Canvas canvas, {
-    required IconData icon,
-    required Color color,
-    required double fontSize,
-    required Offset center,
-  }) {
-    final textPainter = TextPainter(textDirection: TextDirection.ltr)
-      ..text = TextSpan(
-        text: String.fromCharCode(icon.codePoint),
-        style: TextStyle(
-          fontSize: fontSize,
-          fontFamily: icon.fontFamily,
-          package: icon.fontPackage,
-          color: color,
-        ),
-      )
-      ..layout();
-    textPainter.paint(
-      canvas,
-      center - Offset(textPainter.width / 2, textPainter.height / 2),
-    );
   }
 
   /// 목적지 마커의 빨간 물방울 핀 이미지를 오프스크린 렌더링해 PNG 바이트로
