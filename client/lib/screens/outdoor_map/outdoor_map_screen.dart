@@ -118,6 +118,17 @@ const _buildingPressedHoldMs = 220;
 const _indoorOverlayFadeInStartZoom = 16.5;
 const _indoorOverlayFadeInEndZoom = 17.5;
 
+// 실내 MVT 소스에 minzoom을 걸어 이 값 미만에서는 아예 타일 요청이 나가지 않게
+// 한다. 이유: 백엔드 MVT는 요청 타일 경계로 지오메트리를 4096 유닛에 양자화하는데
+// (mapbox_vector_tile.encode의 quantize_bounds), 낮은 zoom(예: z=10)에서는 1
+// 유닛이 10 m 이상이라 건물이 눈에 띄게 뒤틀린 채로 저장된다. 사용자가 야외 지도를
+// 축소했다 다시 확대하는 순간 MapLibre가 캐시된 저-zoom 부모 타일을 over-scale해
+// 잠깐 표시하는데(정확한 z=17 타일이 도착하기 전), 이 부모 타일이 회전된 도면처럼
+// 보이는 원인이었다. 페이드 시작(_indoorOverlayFadeInStartZoom=16.5) 바로 아래에
+// 잡아 이하 zoom에서는 요청도 캐시도 없게 한다 — 어차피 opacity=0이라 시각적
+// 손해가 없고, 저-zoom 캐시가 없으므로 zoom-in 시 항상 fresh 고정밀 타일이 뜬다.
+const _indoorTilesMinZoom = 16.0;
+
 // 사용자가 지도를 이만큼 이상 확대하면 "실내 진입" 의도로 보고, 야외 지도 위에
 // 층 chip과 위치 지정 버튼 등 실내 UI 오버레이를 얹는다. 오버레이가 완전히
 // 보이는 시점(_indoorOverlayFadeInEndZoom)과 맞춰 페이드가 끝나는 순간 부가
@@ -1306,7 +1317,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     try {
       await controller.addSource(
         _indoorTilesSourceId,
-        VectorSourceProperties(tiles: [tileUrl]),
+        VectorSourceProperties(
+          tiles: [tileUrl],
+          // minzoom 미만에서는 타일 요청·캐시 자체를 막아, 저-zoom 부모 타일이
+          // over-scale된 채 잠깐 보이면서 도면이 회전한 것처럼 보이는 문제를
+          // 예방한다. 근거는 _indoorTilesMinZoom 정의 위 주석 참고.
+          minzoom: _indoorTilesMinZoom,
+        ),
       );
       // POI/시설 아이콘 비트맵을 스타일당 한 번만 addImage로 등록한다. 층을
       // 바꿔도 이미지는 그대로 재사용되므로 반복 렌더를 피한다.

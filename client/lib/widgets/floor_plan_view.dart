@@ -27,6 +27,17 @@ bool get _isMapSupportedOnThisPlatform =>
     kIsWeb || _mapSupportedNativePlatforms.contains(defaultTargetPlatform);
 
 const _tileSourceId = 'floor-tiles';
+
+// 실내 MVT 소스에 걸어 낮은 zoom에서 아예 타일 요청·캐시가 생기지 않게 한다.
+// 백엔드 MVT는 요청 타일 경계로 지오메트리를 4096 유닛에 양자화하기 때문에
+// (mapbox_vector_tile.encode의 quantize_bounds) zoom이 낮을수록 유닛당 미터가
+// 커져 도면이 회전한 것처럼 뒤틀린 채 저장된다. 이 값 미만에서는 요청도 캐시도
+// 없어 이후 zoom-in 시 항상 고정밀 타일이 표시된다. FloorPlanView는 시작 카메라
+// 자체가 건물 footprint에 fit돼 있어 실내 화면 안에서는 이 문제가 잘 안 보이지만,
+// 야외 화면에서 진입해 넘어온 카메라 상태를 이어받을 때(향후 확장)나 사용자가
+// 지도를 축소해 다른 층 정보를 훑을 때 저-zoom 부모 타일이 캐시되는 것을 미리
+// 막는다. 야외 화면(outdoor_map_screen.dart의 _indoorTilesMinZoom)과 같은 값.
+const _tileSourceMinZoom = 16.0;
 const _routeSourceId = 'floor-route';
 const _pdrTrailSourceId = 'floor-pdr-trail';
 const _pdrRawTrailSourceId = 'floor-pdr-raw-trail';
@@ -340,7 +351,12 @@ class FloorPlanViewState extends State<FloorPlanView> {
 
     await controller.addSource(
       _tileSourceId,
-      VectorSourceProperties(tiles: [tileUrl]),
+      VectorSourceProperties(
+        tiles: [tileUrl],
+        // 낮은 zoom에서 저정밀 양자화된 타일이 캐시되는 것을 막는다. 근거는
+        // _tileSourceMinZoom 정의 위 주석 참고.
+        minzoom: _tileSourceMinZoom,
+      ),
     );
 
     // 원본 SVG 디자인(hyundai_floor_map_corrected_v6.svg)의 색상을 그대로 옮긴다.
