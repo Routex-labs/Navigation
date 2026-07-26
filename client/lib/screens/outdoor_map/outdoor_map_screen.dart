@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:math' show Point, pi;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -128,6 +129,13 @@ const _indoorOverlayFadeInEndZoom = 17.5;
 // 잡아 이하 zoom에서는 요청도 캐시도 없게 한다 — 어차피 opacity=0이라 시각적
 // 손해가 없고, 저-zoom 캐시가 없으므로 zoom-in 시 항상 fresh 고정밀 타일이 뜬다.
 const _indoorTilesMinZoom = 16.0;
+
+// 극한 확대(z>=19) 시 MapLibre가 backend에 매우 좁은 tile bounds로 quantize된
+// MVT를 요청하는데, tile 경계가 좁을수록 double 좌표 → 4096 유닛 quantize 과정에서
+// 상대 오차가 누적돼 도면이 미세하게 뒤틀린다. maxzoom을 이 값으로 잡아 그 이상에서는
+// z=18 tile을 over-scale하도록 한다. z=18 tile은 ~150m 폭이라 0.04m/유닛의 안정된
+// precision을 가진다.
+const _indoorTilesMaxZoom = 18.0;
 
 // 사용자가 지도를 이만큼 이상 확대하면 "실내 진입" 의도로 보고, 야외 지도 위에
 // 층 chip과 위치 지정 버튼 등 실내 UI 오버레이를 얹는다. 오버레이가 완전히
@@ -527,6 +535,60 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncRouteLayer();
     _syncHighlightLayer();
     _notifyRouteVisibilityIfChanged();
+    // 층 chip을 눌렀는데 카메라가 건물 밖을 보거나 실내 오버레이가 페이드인되기
+    // 전 zoom(<17.5)에 있으면 사용자는 새 층 도면을 볼 수 없다 — "5F/6F를 골랐는데
+    // 아무것도 안 나온다"는 인상을 준다. 층 chip 탭은 명시적으로 "그 층을 보고
+    // 싶다"는 신호이므로, 이 경우 건물 중심으로 카메라를 옮겨 오버레이가 확실히
+    // 화면에 뜨게 한다. 이미 건물이 잘 보이는 상태에서 층만 바꾼 경우에는 카메라를
+    // 건드리지 않는다 — 그 상황에서 강제로 재정렬하면 사용자의 view가 불필요하게
+    // 튀어 조작감이 나빠진다.
+    await _recenterOnBuildingIfNeeded();
+  }
+
+  /// 층 chip 탭·자동 실내 진입 뒤에 실내 오버레이를 보장 노출하기 위한 헬퍼.
+  /// - 카메라 zoom이 오버레이 fade-in end 미만이면 그 zoom + 건물 중심으로 이동.
+  /// - 카메라가 건물 중심에서 크게 벗어나 있으면 zoom 유지한 채 건물 중심으로 이동.
+  /// - 두 조건 모두 아니면 아무 것도 하지 않는다(사용자의 현재 view 존중).
+  Future<void> _recenterOnBuildingIfNeeded() async {
+    final controller = _mapController;
+    final footprint = _buildingFootprint;
+    if (controller == null || footprint == null || footprint.length < 3) {
+      return;
+    }
+    final cam = controller.cameraPosition;
+    if (cam == null) return;
+    final center = _buildingCenter(footprint);
+    if (center == null) return;
+
+    final needZoomIn = cam.zoom < _indoorOverlayFadeInEndZoom;
+    // 건물 중심에서 카메라까지 대략적인 거리. 위경도 도 단위지만 근사적으로
+    // 계산해 "화면 밖" 판정에만 쓴다 — 정확한 거리 계산은 필요 없다.
+    final distDeg = math.sqrt(
+      math.pow(cam.target.latitude - center.latitude, 2) +
+          math.pow(cam.target.longitude - center.longitude, 2),
+    );
+    // 대략 300m 이상 떨어져 있으면 화면 밖으로 간주(37°에서 0.003° ≈ 300m).
+    final farFromBuilding = distDeg > 0.003;
+
+    if (!needZoomIn && !farFromBuilding) return;
+
+    final targetZoom = needZoomIn ? _indoorOverlayFadeInEndZoom : cam.zoom;
+    await controller.animateCamera(
+      CameraUpdate.newLatLngZoom(_toGl(center), targetZoom),
+    );
+  }
+
+  ll.LatLng? _buildingCenter(List<ll.LatLng> footprint) {
+    if (footprint.isEmpty) return null;
+    var minLat = double.infinity, maxLat = double.negativeInfinity;
+    var minLng = double.infinity, maxLng = double.negativeInfinity;
+    for (final p in footprint) {
+      if (p.latitude < minLat) minLat = p.latitude;
+      if (p.latitude > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLng) minLng = p.longitude;
+      if (p.longitude > maxLng) maxLng = p.longitude;
+    }
+    return ll.LatLng((minLat + maxLat) / 2, (minLng + maxLng) / 2);
   }
 
   void _handlePositionError() {
@@ -1323,6 +1385,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           // over-scale된 채 잠깐 보이면서 도면이 회전한 것처럼 보이는 문제를
           // 예방한다. 근거는 _indoorTilesMinZoom 정의 위 주석 참고.
           minzoom: _indoorTilesMinZoom,
+          // maxzoom 이상에서는 MapLibre가 maxzoom 타일을 over-scale해 그린다.
+          // 백엔드의 mapbox_vector_tile.encode는 요청 zoom이 커질수록 tile 경계
+          // 사각형도 미세해지는데(z=21이면 20m 남짓), 이 좁은 사각형을 4096 유닛에
+          // quantize할 때 부동소수점 오차가 상대적으로 커져 사용자가 극한 확대를
+          // 하면 도면이 잠깐 뒤틀린 것처럼 보이는 원인이 됐다. z=18을 상한으로
+          // 잡으면 tile 경계가 ~150m로 충분히 넓어 quantize precision이 0.04m/유닛
+          // 이라 어떤 확대 배율에서도 sub-pixel로 안정된다.
+          maxzoom: _indoorTilesMaxZoom,
         ),
       );
       // POI/시설 아이콘 비트맵을 스타일당 한 번만 addImage로 등록한다. 층을

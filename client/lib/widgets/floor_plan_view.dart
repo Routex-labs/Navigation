@@ -38,6 +38,12 @@ const _tileSourceId = 'floor-tiles';
 // 지도를 축소해 다른 층 정보를 훑을 때 저-zoom 부모 타일이 캐시되는 것을 미리
 // 막는다. 야외 화면(outdoor_map_screen.dart의 _indoorTilesMinZoom)과 같은 값.
 const _tileSourceMinZoom = 16.0;
+
+// 극한 확대에서 MVT quantize precision이 상대적으로 커지는 문제를 피하기 위한
+// 상한. z=18 tile은 ~150m 폭이라 4096 유닛 quantize 시 0.04m/유닛으로 안정된다.
+// 그 이상 확대(z>=19)에서는 MapLibre가 z=18 tile을 over-scale해 그린다.
+// outdoor_map_screen.dart의 _indoorTilesMaxZoom과 같은 값.
+const _tileSourceMaxZoom = 18.0;
 const _routeSourceId = 'floor-route';
 const _pdrTrailSourceId = 'floor-pdr-trail';
 const _pdrRawTrailSourceId = 'floor-pdr-raw-trail';
@@ -356,6 +362,9 @@ class FloorPlanViewState extends State<FloorPlanView> {
         // 낮은 zoom에서 저정밀 양자화된 타일이 캐시되는 것을 막는다. 근거는
         // _tileSourceMinZoom 정의 위 주석 참고.
         minzoom: _tileSourceMinZoom,
+        // 극한 확대에서 quantize precision 오차로 도면이 미세하게 뒤틀리는 것을
+        // 막는다. 근거는 _tileSourceMaxZoom 정의 위 주석 참고.
+        maxzoom: _tileSourceMaxZoom,
       ),
     );
 
