@@ -3037,7 +3037,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final anchor = _pdrTrailState.anchor;
     if (anchor == null || anchor.floorId != _activeFloor) return null;
 
-    final corrected = _corridorTrackingSession.result?.correctedPosition;
+    final corrected = _corridorTrackingSession.result?.previewPosition;
     if (snapshot != null && corrected != null) {
       final wgs84 = transform.apply(corrected.eastM, corrected.northM);
       return ll.LatLng(wgs84.$1, wgs84.$2);
@@ -3227,7 +3227,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final anchor = _pdrTrailState.anchor;
     if (snapshot == null || anchor == null || !snapshot.hasHeading) return null;
     final correctedFloorHeading =
-        _corridorTrackingSession.result?.correctedHeadingDeg;
+        _corridorTrackingSession.result?.previewHeadingDeg;
     return correctedFloorHeading == null
         ? normalizePdrBearing(
             snapshot.walkingHeadingDeg + anchor.rotationDeg,

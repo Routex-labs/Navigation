@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
 import '../../../models/floor_graph.dart';
@@ -85,6 +87,7 @@ class CorridorTrackingSession {
           snapshot,
           transform,
         ),
+        rawPreviewTailPositions: _previewTailFloorPoints(snapshot, transform),
       ),
     );
     _lastSteps = snapshot.steps;
@@ -125,6 +128,20 @@ class CorridorTrackingSession {
     );
     return snapshot.path
         .skip(start)
+        .map(transform.toFloor)
+        .toList(growable: false);
+  }
+
+  List<PdrLocalPoint> _previewTailFloorPoints(
+    PdrSnapshot snapshot,
+    FloorCoordinateTransform transform,
+  ) {
+    final leadSteps = snapshot.preview.steps - snapshot.steps;
+    final path = snapshot.preview.path;
+    if (leadSteps <= 0 || path.length < 2) return const [];
+    final movementCount = math.min(leadSteps, path.length - 1);
+    return path
+        .skip(path.length - movementCount - 1)
         .map(transform.toFloor)
         .toList(growable: false);
   }

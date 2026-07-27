@@ -856,6 +856,13 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     return _corridorTrackingSession.result?.correctedPath ?? const [];
   }
 
+  List<PdrLocalPoint> get _pdrMatchedPreviewFloorPath {
+    final anchor = _pdrTrailState.anchor;
+    if (anchor == null || anchor.floorId != _selectedFloor) return const [];
+    final preview = _corridorTrackingSession.result?.previewPath ?? const [];
+    return preview.length >= 2 ? preview : const [];
+  }
+
   Set<String> get _pdrMatchedEdgeIds {
     if (!_hasMeaningfulPdrMovement(_pdrConfirmedFloorPath)) return const {};
     final edgeId = _corridorTrackingSession.result?.currentEdgeId;
@@ -879,9 +886,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 
   ll.LatLng? get _pdrCurrentLocation {
     final graph = _floorGraph;
-    final path = _pdrMatchedFloorPath;
-    if (graph == null || path.isEmpty) return null;
-    final current = path.last;
+    final result = _corridorTrackingSession.result;
+    if (graph == null || result == null) return null;
+    final current = result.previewPosition;
     final wgs84 = fitFloorGeoTransform(
       graph.nodes,
     ).apply(current.eastM, current.northM);
@@ -894,7 +901,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     if (snapshot == null || anchor == null || !snapshot.hasHeading) return null;
     final transform = FloorCoordinateTransform(anchor);
     final correctedFloorHeading =
-        _corridorTrackingSession.result?.correctedHeadingDeg;
+        _corridorTrackingSession.result?.previewHeadingDeg;
     return correctedFloorHeading == null
         ? normalizePdrBearing(
             snapshot.walkingHeadingDeg + anchor.rotationDeg,
@@ -947,6 +954,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 
   List<ll.LatLng> get _pdrMatchedPathPoints =>
       _floorPathToWgs84(_pdrMatchedFloorPath);
+
+  List<ll.LatLng> get _pdrMatchedPreviewPathPoints =>
+      _floorPathToWgs84(_pdrMatchedPreviewFloorPath);
 
   List<ll.LatLng> get _pdrConfirmedPathPoints =>
       _floorPathToWgs84(_pdrConfirmedFloorPath);
@@ -1324,6 +1334,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           pdrPathPoints:
               debugEnabled && _debugModeController.showMapMatchedPdrPath
               ? _pdrMatchedPathPoints
+              : const [],
+          pdrPreviewPathPoints:
+              debugEnabled && _debugModeController.showMapMatchedPdrPath
+              ? _pdrMatchedPreviewPathPoints
               : const [],
           pdrConfirmedPathPoints:
               debugEnabled && _debugModeController.showConfirmedPdrPath

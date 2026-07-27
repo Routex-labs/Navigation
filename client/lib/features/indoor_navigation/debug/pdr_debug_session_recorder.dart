@@ -26,7 +26,8 @@ class PdrDebugSessionRecorder {
   // v6: Android RoNIN 자동보폭 비교 경로와 1Hz 보폭/속도 관측을 추가했다.
   // v7: 세션형 복도 보정 위치·heading bias·상태 전이 시계열을 추가했다.
   // v8: 간선 누적 진행거리와 잠긴 진행 방향을 추가했다.
-  static const schemaVersion = 8;
+  // v9: 주황 기반 보라 preview 위치·후보 간선·모호성·경로를 추가했다.
+  static const schemaVersion = 9;
   static const _maxQualitySamples = 900;
 
   final DateTime _startedAt;
@@ -82,6 +83,10 @@ class PdrDebugSessionRecorder {
       'last_confirmed_node_id': result.lastConfirmedNodeId,
       'position_floor_local_m': _pointJson(result.correctedPosition),
       'corrected_heading_deg': result.correctedHeadingDeg,
+      'preview_position_floor_local_m': _pointJson(result.previewPosition),
+      'preview_heading_deg': result.previewHeadingDeg,
+      'preview_candidate_edge_ids': result.previewCandidateEdgeIds,
+      'preview_is_ambiguous': result.previewIsAmbiguous,
       'heading_bias_deg': result.headingBiasDeg,
     };
     final stateChanged =
@@ -172,6 +177,9 @@ class PdrDebugSessionRecorder {
         'map_matched_floor_local_m': _pointsJson(matchedPath),
         'corridor_corrected_floor_local_m': _pointsJson(
           corridorCorrection?.correctedPath ?? const [],
+        ),
+        'corridor_preview_floor_local_m': _pointsJson(
+          corridorCorrection?.previewPath ?? const [],
         ),
       },
       'quality_samples_1hz': [
@@ -298,6 +306,13 @@ class PdrDebugSessionRecorder {
                 corridorCorrection.correctedPosition,
               ),
               'corrected_heading_deg': corridorCorrection.correctedHeadingDeg,
+              'preview_position_floor_local_m': _pointJson(
+                corridorCorrection.previewPosition,
+              ),
+              'preview_heading_deg': corridorCorrection.previewHeadingDeg,
+              'preview_candidate_edge_ids':
+                  corridorCorrection.previewCandidateEdgeIds,
+              'preview_is_ambiguous': corridorCorrection.previewIsAmbiguous,
               'heading_bias_deg': corridorCorrection.headingBiasDeg,
             },
     };

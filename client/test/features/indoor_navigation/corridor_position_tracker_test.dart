@@ -74,6 +74,41 @@ const _longStraightGraph = FloorGraph(
   ],
 );
 
+const _shortTurnChainGraph = FloorGraph(
+  nodes: [
+    GraphNode(id: 'a', type: 'corridor', xM: 0, yM: 0),
+    GraphNode(id: 'b', type: 'junction', xM: 1, yM: 0),
+    GraphNode(id: 'c', type: 'junction', xM: 1, yM: 1),
+    GraphNode(id: 'd', type: 'corridor', xM: 3, yM: 1),
+  ],
+  edges: [
+    GraphEdge(
+      id: 'ab',
+      fromNodeId: 'a',
+      toNodeId: 'b',
+      lengthM: 1,
+      bidirectional: true,
+      geometryLocalM: [LocalPoint(0, 0), LocalPoint(1, 0)],
+    ),
+    GraphEdge(
+      id: 'bc',
+      fromNodeId: 'b',
+      toNodeId: 'c',
+      lengthM: 1,
+      bidirectional: true,
+      geometryLocalM: [LocalPoint(1, 0), LocalPoint(1, 1)],
+    ),
+    GraphEdge(
+      id: 'cd',
+      fromNodeId: 'c',
+      toNodeId: 'd',
+      lengthM: 2,
+      bidirectional: true,
+      geometryLocalM: [LocalPoint(1, 1), LocalPoint(3, 1)],
+    ),
+  ],
+);
+
 CorridorObservation _observation({
   required int atMs,
   required int confirmedSteps,
@@ -82,6 +117,7 @@ CorridorObservation _observation({
   required double headingDeg,
   PdrLocalPoint raw = PdrLocalPoint.zero,
   List<PdrLocalPoint> rawConfirmedStepPositions = const [],
+  List<PdrLocalPoint> rawPreviewTailPositions = const [],
 }) => CorridorObservation(
   timestampMs: atMs,
   rawConfirmedPosition: raw,
@@ -92,6 +128,7 @@ CorridorObservation _observation({
   sensorHeadingDeg: headingDeg,
   hasHeading: true,
   rawConfirmedStepPositions: rawConfirmedStepPositions,
+  rawPreviewTailPositions: rawPreviewTailPositions,
 );
 
 void main() {
@@ -200,6 +237,67 @@ void main() {
 
       expect(result.correctedPosition.eastM, closeTo(2.4, 1e-9));
       expect(result.correctedPosition.northM, closeTo(0, 1e-9));
+    });
+
+    test('초록보다 앞선 주황 tail은 확정 위치를 바꾸지 않고 보라 preview만 진행한다', () {
+      final tracker = CorridorPositionTracker(_longStraightGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(1, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+
+      final result = tracker.update(
+        _observation(
+          atMs: 1000,
+          confirmedSteps: 0,
+          confirmedDistanceM: 0,
+          previewSteps: 3,
+          headingDeg: 90,
+          rawPreviewTailPositions: const [
+            PdrLocalPoint(1, 0),
+            PdrLocalPoint(1.7, 0),
+            PdrLocalPoint(2.4, 0),
+            PdrLocalPoint(3.1, 0),
+          ],
+        ),
+      );
+
+      expect(result.correctedPosition, const PdrLocalPoint(1, 0));
+      expect(result.previewPosition.eastM, closeTo(3.1, 1e-9));
+      expect(result.previewPosition.northM, closeTo(0, 1e-9));
+      expect(result.previewPath, hasLength(4));
+    });
+
+    test('주황 tail의 직진-회전 형태를 연결 간선 후보와 비교한다', () {
+      final tracker = CorridorPositionTracker(_crossGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(9, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+
+      final result = tracker.update(
+        _observation(
+          atMs: 1000,
+          confirmedSteps: 0,
+          confirmedDistanceM: 0,
+          previewSteps: 4,
+          headingDeg: 0,
+          rawPreviewTailPositions: const [
+            PdrLocalPoint(9, 0),
+            PdrLocalPoint(9.7, 0),
+            PdrLocalPoint(10, 0),
+            PdrLocalPoint(10, 0.7),
+            PdrLocalPoint(10, 1.4),
+          ],
+        ),
+      );
+
+      expect(result.correctedPosition, const PdrLocalPoint(9, 0));
+      expect(result.previewPosition.eastM, closeTo(10, 1e-9));
+      expect(result.previewPosition.northM, closeTo(1.4, 1e-9));
+      expect(result.previewCandidateEdgeIds, contains('bc'));
     });
 
     test('직진 연결 간선은 체크포인트 전이 없이 같은 복도처럼 이어간다', () {
@@ -498,6 +596,96 @@ void main() {
         recovered.correctedPath,
         isNot(contains(const PdrLocalPoint(20, 3))),
       );
+    });
+
+    test('초록 배치 중 간선 끝을 넘은 잔여 걸음도 유턴 복구 증거로 보존한다', () {
+      final tracker = CorridorPositionTracker(_longStraightGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(49, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+
+      final pending = tracker.update(
+        _observation(
+          atMs: 1000,
+          confirmedSteps: 5,
+          confirmedDistanceM: 3.5,
+          previewSteps: 5,
+          headingDeg: 270,
+          raw: const PdrLocalPoint(47.9, 0),
+          rawConfirmedStepPositions: const [
+            PdrLocalPoint(49.7, 0),
+            PdrLocalPoint(50, 0),
+            PdrLocalPoint(49.3, 0),
+            PdrLocalPoint(48.6, 0),
+            PdrLocalPoint(47.9, 0),
+          ],
+        ),
+      );
+      expect(pending.state, CorridorTrackingState.uncertain);
+      expect(pending.currentEdgeId, 'straight');
+      expect(pending.correctedPosition, const PdrLocalPoint(50, 0));
+
+      final recovered = tracker.update(
+        _observation(
+          atMs: 2600,
+          confirmedSteps: 6,
+          confirmedDistanceM: 4.2,
+          previewSteps: 6,
+          headingDeg: 270,
+          raw: const PdrLocalPoint(47.2, 0),
+          rawConfirmedStepPositions: const [PdrLocalPoint(47.2, 0)],
+        ),
+      );
+
+      expect(recovered.state, CorridorTrackingState.nodeConfirmed);
+      expect(recovered.travelDirectionSign, -1);
+      expect(recovered.correctedPosition.eastM, inInclusiveRange(46.8, 47.4));
+    });
+
+    test('긴 초록 배치의 회전 형태가 짧은 연결 간선 두 개를 지나도 함께 확정한다', () {
+      final tracker = CorridorPositionTracker(_shortTurnChainGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(0.5, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+
+      final pending = tracker.update(
+        _observation(
+          atMs: 1000,
+          confirmedSteps: 3,
+          confirmedDistanceM: 2.5,
+          previewSteps: 3,
+          headingDeg: 90,
+          raw: const PdrLocalPoint(2, 1),
+          rawConfirmedStepPositions: const [
+            PdrLocalPoint(1, 0),
+            PdrLocalPoint(1, 1),
+            PdrLocalPoint(2, 1),
+          ],
+        ),
+      );
+      expect(pending.state, CorridorTrackingState.uncertain);
+
+      final recovered = tracker.update(
+        _observation(
+          atMs: 2600,
+          confirmedSteps: 4,
+          confirmedDistanceM: 3.2,
+          previewSteps: 4,
+          headingDeg: 90,
+          raw: const PdrLocalPoint(2.7, 1),
+          rawConfirmedStepPositions: const [PdrLocalPoint(2.7, 1)],
+        ),
+      );
+
+      expect(recovered.state, CorridorTrackingState.nodeConfirmed);
+      expect(recovered.currentEdgeId, 'cd');
+      expect(recovered.lastConfirmedNodeId, 'c');
+      expect(recovered.correctedPosition.eastM, closeTo(2.7, 1e-9));
+      expect(recovered.correctedPosition.northM, closeTo(1, 1e-9));
     });
 
     test('uncertain 복구는 최신 heading 스파이크보다 최근 확정 이동 형태를 우선한다', () {

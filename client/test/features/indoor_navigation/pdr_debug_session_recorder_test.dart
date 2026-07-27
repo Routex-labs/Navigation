@@ -130,7 +130,7 @@ void main() {
     final matched = paths['map_matched_floor_local_m']! as List<Object?>;
     final finalMatched = matched.last! as Map<String, double>;
 
-    expect(json['schema_version'], 8);
+    expect(json['schema_version'], 9);
     expect(
       (json['map_context']! as Map<String, Object?>)['map_calibration_version'],
       'thehyundai-seoul-1f-svg-v1',
@@ -254,6 +254,11 @@ void main() {
         pendingEdgeId: 'bc',
         lastConfirmedNodeId: null,
         correctedPath: [PdrLocalPoint.zero, PdrLocalPoint(4, 0)],
+        previewPosition: PdrLocalPoint(4.5, 0),
+        previewHeadingDeg: 90,
+        previewPath: [PdrLocalPoint(4, 0), PdrLocalPoint(4.5, 0)],
+        previewCandidateEdgeIds: ['bc'],
+        previewIsAmbiguous: false,
         rawConfirmedPosition: PdrLocalPoint(4, 1),
         rawPreviewPosition: PdrLocalPoint(4.5, 1.2),
       ),
@@ -278,6 +283,7 @@ void main() {
     expect(correction['pending_edge_id'], 'bc');
     expect(paths['confirmed_pdr_local_m'], hasLength(2));
     expect(paths['corridor_corrected_floor_local_m'], hasLength(2));
+    expect(paths['corridor_preview_floor_local_m'], hasLength(2));
     expect(json['corridor_correction_samples'], hasLength(1));
   });
 }
