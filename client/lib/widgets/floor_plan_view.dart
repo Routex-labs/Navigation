@@ -11,6 +11,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import '../core/api_config.dart';
 import '../features/debug_mode/debug_map_overlay.dart';
 import '../models/floor_plan.dart';
+import '../screens/outdoor_map/indoor_entry_zoom.dart';
 import 'floor_facility_style.dart';
 
 /// maplibre_gl은 web/android/iOS만 지원한다(패키지 자체 pubspec에 명시된
@@ -28,22 +29,12 @@ bool get _isMapSupportedOnThisPlatform =>
 
 const _tileSourceId = 'floor-tiles';
 
-// 실내 MVT 소스에 걸어 낮은 zoom에서 아예 타일 요청·캐시가 생기지 않게 한다.
-// 백엔드 MVT는 요청 타일 경계로 지오메트리를 4096 유닛에 양자화하기 때문에
-// (mapbox_vector_tile.encode의 quantize_bounds) zoom이 낮을수록 유닛당 미터가
-// 커져 도면이 회전한 것처럼 뒤틀린 채 저장된다. 이 값 미만에서는 요청도 캐시도
-// 없어 이후 zoom-in 시 항상 고정밀 타일이 표시된다. FloorPlanView는 시작 카메라
-// 자체가 건물 footprint에 fit돼 있어 실내 화면 안에서는 이 문제가 잘 안 보이지만,
-// 야외 화면에서 진입해 넘어온 카메라 상태를 이어받을 때(향후 확장)나 사용자가
-// 지도를 축소해 다른 층 정보를 훑을 때 저-zoom 부모 타일이 캐시되는 것을 미리
-// 막는다. 야외 화면(outdoor_map_screen.dart의 _indoorTilesMinZoom)과 같은 값.
-const _tileSourceMinZoom = 16.0;
-
-// 극한 확대에서 MVT quantize precision이 상대적으로 커지는 문제를 피하기 위한
-// 상한. z=18 tile은 ~150m 폭이라 4096 유닛 quantize 시 0.04m/유닛으로 안정된다.
-// 그 이상 확대(z>=19)에서는 MapLibre가 z=18 tile을 over-scale해 그린다.
-// outdoor_map_screen.dart의 _indoorTilesMaxZoom과 같은 값.
-const _tileSourceMaxZoom = 18.0;
+// 실내 MVT 소스의 zoom 범위는 indoor_entry_zoom.dart의 공용 상수를 그대로 쓴다.
+// 예전에는 이 파일이 같은 값을 따로 들고 "야외 화면과 같은 값"이라고 적어 뒀지만
+// 실제로는 minzoom이 16.0 vs 15.0으로 어긋나 있었다. 두 화면이 같은 백엔드
+// 엔드포인트를 부르는 이상 범위가 갈리면 (1) 한쪽에서만 도면이 비고 (2) 백엔드
+// 워밍업이 덮지 못하는 zoom이 생겨 그 타일만 쿼리를 새로 낸다. 값의 근거는
+// indoorTilesMinZoom/indoorTilesMaxZoom 정의 위 주석에 정리되어 있다.
 const _routeSourceId = 'floor-route';
 const _pdrTrailSourceId = 'floor-pdr-trail';
 const _pdrRawTrailSourceId = 'floor-pdr-raw-trail';
@@ -360,11 +351,11 @@ class FloorPlanViewState extends State<FloorPlanView> {
       VectorSourceProperties(
         tiles: [tileUrl],
         // 낮은 zoom에서 저정밀 양자화된 타일이 캐시되는 것을 막는다. 근거는
-        // _tileSourceMinZoom 정의 위 주석 참고.
-        minzoom: _tileSourceMinZoom,
+        // indoorTilesMinZoom 정의 위 주석 참고.
+        minzoom: indoorTilesMinZoom,
         // 극한 확대에서 quantize precision 오차로 도면이 미세하게 뒤틀리는 것을
-        // 막는다. 근거는 _tileSourceMaxZoom 정의 위 주석 참고.
-        maxzoom: _tileSourceMaxZoom,
+        // 막는다. 근거는 indoorTilesMaxZoom 정의 위 주석 참고.
+        maxzoom: indoorTilesMaxZoom,
       ),
     );
 

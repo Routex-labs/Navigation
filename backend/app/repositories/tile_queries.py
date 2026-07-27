@@ -129,11 +129,17 @@ def render_floor_tile(
     return tile_bytes
 
 
-# 클라이언트가 층을 훑을 때 사용하는 실내 오버레이 줌 범위. floor_plan_view/outdoor
-# overlay 모두 minzoom=16, maxzoom=18로 소스를 등록하므로 이 두 zoom만 채우면
-# 실제 사용 범위를 다 덮는다. z=16은 페이드 시작 밖이라 굳이 안 채워도 되지만
-# 안전하게 포함해 카메라가 살짝 축소된 순간에도 캐시 히트를 유지한다.
-_WARM_ZOOMS: tuple[int, ...] = (16, 17, 18)
+# 클라이언트가 실내 MVT 소스를 등록하는 zoom 범위 전체.
+#
+# 클라이언트(client/lib/screens/outdoor_map/indoor_entry_zoom.dart)의
+# indoorTilesMinZoom=15 / indoorTilesMaxZoom=18과 맞춰야 한다. 여기가 좁으면
+# 덮지 못한 zoom의 타일만 캐시를 못 타서 요청마다 새로 5개 쿼리를 낸다.
+#
+# z=15가 필요한 이유는 실내 이탈 임계값이 카메라 zoom 15.6이기 때문이다.
+# MapLibre가 요청하는 타일 z는 카메라 zoom의 내림이라 15.6에서는 z=15를
+# 부른다. 예전에는 이 목록이 (16, 17, 18)이라 야외에서 실내로 진입·이탈하는
+# 구간의 타일이 전부 워밍업 밖이었다.
+_WARM_ZOOMS: tuple[int, ...] = (15, 16, 17, 18)
 # 화면이 건물 중심을 벗어나 있어도 인접 타일까지 커버되도록 bbox 밖으로 몇 장
 # 더 확장해 warmup한다. 1이면 8방향 인접, 2면 24방향. 실측 사용 패턴이 대체로
 # 건물 중심 근처라 1로 충분하다.
