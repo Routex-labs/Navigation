@@ -105,6 +105,13 @@ const _pdrLocationDotImageName = 'outdoor-pdr-location-dot';
 const _highlightSourceId = 'outdoor-highlight';
 const _highlightFillLayerId = 'outdoor-highlight-fill';
 const _highlightLineLayerId = 'outdoor-highlight-line';
+// 실내 진입 오버레이가 켜지면 건물 밖만 어둡게 덮어 실내 도면에 시선을 모으는
+// dim scrim. 위젯 트리 스크림이 아니라 MapLibre fill 레이어라, 세계를 덮는
+// outer ring + 건물 footprint를 hole로 뚫은 폴리곤으로 그려도 건물 안쪽은 그대로
+// 밝게 남는다. 삽입 순서를 야외 building outline 위 / 실내 MVT 오버레이 아래로
+// 잡아, 실내 오버레이가 스크림 위에 얹혀 스포트라이트처럼 보이게 한다.
+const _dimScrimSourceId = 'outdoor-dim-scrim';
+const _dimScrimFillLayerId = 'outdoor-dim-scrim-fill';
 
 // 건물 폴리곤의 기본/눌린 상태 fill opacity. 기본은 옅게 존재만 알리고,
 // 사용자가 탭한 순간 잠깐 진하게 반짝여서 "인식됐다"는 시각 피드백을 준다.
@@ -1064,6 +1071,21 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       ),
     );
 
+    // 실내 진입 dim scrim. 건물 outline 바로 위에 두어 이후 등록되는 route/실내
+    // MVT 오버레이보다 아래에 오게 한다 — 실내 도면은 스크림 위에 그려져 밝게
+    // 남고, 야외 base만 어두워진다. 초기 opacity=0, geometry는 _syncDimScrimLayer
+    // 가 footprint 로드 후 세계 outer + 건물 hole 폴리곤으로 채운다.
+    await controller.addSource(
+      _dimScrimSourceId,
+      GeojsonSourceProperties(data: _emptyCollection()),
+    );
+    await controller.addFillLayer(
+      _dimScrimSourceId,
+      _dimScrimFillLayerId,
+      const FillLayerProperties(fillColor: '#000000', fillOpacity: 0),
+      enableInteraction: false,
+    );
+
     // 경로선: 두께 있는 파란 실선 + 흰 casing으로 배경 대비를 확보한다.
     await controller.addSource(
       _routeSourceId,
@@ -1213,6 +1235,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncRouteLayer();
     _syncPdrCurrentLayer();
     _syncHighlightLayer();
+    _syncDimScrimLayer();
     _ensureIndoorTilesRegistered();
     if (_pendingCenterOnPosition && _position != null) {
       _pendingCenterOnPosition = false;
@@ -1253,6 +1276,80 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         },
       ]),
     );
+    // 건물 footprint가 바뀌면 dim scrim의 hole도 함께 갱신해야 한다.
+    _syncDimScrimLayer();
+  }
+
+  /// dim scrim 갱신. 건물 footprint가 있으면 세계 전체를 덮는 outer ring +
+  /// 건물 hole 폴리곤을 넣고, 실내 진입 상태에 따라 fillOpacity를 실내 오버레이와
+  /// 같은 zoom 페이드 구간(16.5~17.5)에 맞춰 0 → 0.35로 켠다. 실내 진입이 꺼져
+  /// 있을 땐 opacity=0으로 완전히 사라진다. 이렇게 하면 건물 밖만 반투명 검정으로
+  /// 덮이고 실내 오버레이는 그대로 밝게 보인다.
+  Future<void> _syncDimScrimLayer() async {
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    final footprint = _buildingFootprint;
+    if (footprint == null || footprint.length < 3) {
+      await controller.setGeoJsonSource(_dimScrimSourceId, _emptyCollection());
+    } else {
+      // 세계 전체를 덮는 outer ring(웹 메르카토르 상하한). 어떤 위치·줌에서도
+      // 화면 밖까지 확실히 덮어 가장자리가 새어나오지 않는다.
+      const worldRing = [
+        [-180.0, -85.05112878],
+        [180.0, -85.05112878],
+        [180.0, 85.05112878],
+        [-180.0, 85.05112878],
+        [-180.0, -85.05112878],
+      ];
+      // GeoJSON 폴리곤 hole은 outer와 반대 방향(CW)이 표준. 백엔드 순회 방향에
+      // 상관없이 안전하게 hole로 처리되도록 reversed로 뒤집는다.
+      final holeRing = <List<double>>[
+        for (final p in footprint.reversed) [p.longitude, p.latitude],
+      ];
+      if (holeRing.first[0] != holeRing.last[0] ||
+          holeRing.first[1] != holeRing.last[1]) {
+        holeRing.add(holeRing.first);
+      }
+      await controller.setGeoJsonSource(
+        _dimScrimSourceId,
+        _collection([
+          {
+            'type': 'Feature',
+            'properties': const <String, dynamic>{},
+            'geometry': {
+              'type': 'Polygon',
+              'coordinates': [worldRing, holeRing],
+            },
+          },
+        ]),
+      );
+    }
+
+    if (_indoorEntered) {
+      // 실내 MVT 오버레이 페이드 구간과 동일한 zoom 창을 쓴다 — 오버레이가
+      // 뜨는 것과 동시에 스크림도 자연스럽게 짙어진다. 최대치 0.35는 기존 위젯
+      // 스크림(#40000000 = 0.25)보다 살짝 진하게 잡아 실내 vs 야외의 밝기
+      // 대비를 조금 더 명확히 준다.
+      await controller.setLayerProperties(
+        _dimScrimFillLayerId,
+        FillLayerProperties(
+          fillOpacity: const [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            _indoorOverlayFadeInStartZoom,
+            0,
+            _indoorOverlayFadeInEndZoom,
+            0.35,
+          ],
+        ),
+      );
+    } else {
+      await controller.setLayerProperties(
+        _dimScrimFillLayerId,
+        const FillLayerProperties(fillOpacity: 0),
+      );
+    }
   }
 
   /// 지도에서 탭한 위경도가 건물 footprint 내부인지 판정한다(ray-casting).
@@ -1323,8 +1420,17 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (!_autoIndoorEntryArmed) return;
     _autoIndoorEntryArmed = false;
     if (_indoorEntered) return;
-    setState(() => _indoorEntered = true);
-    widget.onIndoorEnteredChanged?.call(true);
+    _setIndoorEntered(true);
+  }
+
+  /// [_indoorEntered] 상태 변경을 한 곳으로 모은 헬퍼. setState + 상위 콜백 통지에
+  /// 더해 dim scrim의 fillOpacity도 함께 갱신해, 실내 진입/이탈에 스포트라이트
+  /// 효과가 즉시 반영되게 한다.
+  void _setIndoorEntered(bool value) {
+    if (_indoorEntered == value) return;
+    setState(() => _indoorEntered = value);
+    widget.onIndoorEnteredChanged?.call(value);
+    _syncDimScrimLayer();
   }
 
   void _handleCameraIdle() {
@@ -1340,8 +1446,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _autoIndoorEntryArmed = true;
       if (_indoorEntered) {
         if (_placingPdrAnchor) _setPlacingAnchor(false);
-        setState(() => _indoorEntered = false);
-        widget.onIndoorEnteredChanged?.call(false);
+        _setIndoorEntered(false);
       }
     }
   }
@@ -1858,9 +1963,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       // 실내 진입 오버레이가 아직 열리지 않은 상태에서 호출되면 (예: 사용자가
       // 하단 세그먼트에서 실내로 갔다가 다시 야외로 온 뒤 눌렀을 때) 오버레이를
       // 먼저 켜서 다음 동작을 알린다.
-      setState(() => _indoorEntered = true);
       _autoIndoorEntryArmed = false;
-      widget.onIndoorEnteredChanged?.call(true);
+      _setIndoorEntered(true);
     }
     final floor = _activeFloor;
     final graph = _floorGraph;
@@ -2026,6 +2130,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           )
         else
           const ColoredBox(color: AppColors.surface),
+
+        // 실내 진입 시 야외만 어둡게 덮는 dim scrim은 위젯 트리가 아니라
+        // MapLibre fill 레이어(_dimScrimFillLayerId)로 처리한다. 위젯 스크림은
+        // PlatformView 위에 얹혀 야외 base와 실내 MVT 오버레이를 한꺼번에 덮어
+        // 실내까지 어두워지는 문제가 있었다. 지금은 세계를 덮는 outer ring +
+        // 건물 footprint를 hole로 뚫은 폴리곤을 스크림 레이어로 그리고, 실내
+        // 오버레이 아래에 삽입해 건물 안쪽만 밝게 스포트라이트된다.
 
         if (lowAccuracy)
           const Positioned(
