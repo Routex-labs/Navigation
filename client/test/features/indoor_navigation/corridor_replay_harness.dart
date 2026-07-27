@@ -257,6 +257,21 @@ class CorridorReplayRun {
     return jumps;
   }
 
+  /// preview가 확정 위치에서 떨어진 최대 거리(m).
+  ///
+  /// 화면 마커는 preview 위치다. 이 값이 크면 마커가 보라선 끝을 한참 벗어나
+  /// 사용자에게는 "마커가 선을 안 따라간다"로 보인다.
+  double get maxPreviewLeadM {
+    var longest = 0.0;
+    for (final sample in samples) {
+      final lead =
+          (sample.result.previewPosition - sample.result.correctedPosition)
+              .distance;
+      if (lead > longest) longest = lead;
+    }
+    return longest;
+  }
+
   int previewJumpsOver(double meters) => [
     ...previewJumpsOnBatch,
     ...previewJumpsElsewhere,

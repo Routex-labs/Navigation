@@ -11,6 +11,9 @@ void main() {
   for (final fixture in [
     'pdr_v10_ios_b2_west.json',
     'pdr_v10_android_b2_east.json',
+    'pdr_v10_ios_b2_loop.json',
+    'pdr_v10_ios_b2_rect.json',
+    'pdr_v10_android_b2_west.json',
   ]) {
     test('덤프 $fixture', () {
       final run = CorridorReplay.load(fixture).run();
@@ -43,8 +46,22 @@ void main() {
         }
         previous = sample.result.previewPosition;
       }
+      var frozen = 0;
+      var prevPv = run.samples.first.result.previewPosition;
+      var maxLead = 0.0;
+      for (final sample in run.samples.skip(1)) {
+        final pv = sample.result.previewPosition;
+        if ((pv - prevPv).distance < 1e-6) frozen += 1;
+        maxLead = maxLead > (pv - sample.result.correctedPosition).distance
+            ? maxLead
+            : (pv - sample.result.correctedPosition).distance;
+        prevPv = pv;
+      }
       // ignore: avoid_print
-      print('preview 3m 초과 점프 ${jumps.length}건');
+      print(
+        'preview 3m 초과 점프 ${jumps.length}건 | 정지 프레임 $frozen/${run.samples.length} '
+        '| 확정과의 최대 거리 ${maxLead.toStringAsFixed(1)}m',
+      );
       // ignore: avoid_print
       print(jumps.take(15).join('\n'));
 

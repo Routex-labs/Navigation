@@ -108,11 +108,15 @@ void main() {
       );
     });
 
-    test('preview가 3m 넘게 순간이동하지 않는다', () {
+    test('마커가 보라선에서 멀리 떨어지지 않는다', () {
+      // 화면 마커는 preview 위치다. 모호 구간에서 preview를 얼려 뒀더니
+      // 실측에서 214프레임 중 189프레임이 같은 좌표에 남아, 마커가 실제
+      // 위치에서 40m 떨어진 지점에 머물렀다. 선행분은 주황이 앞선 걸음만큼만
+      // 나가야 한다.
       expect(
-        run.previewJumpsOver(3),
-        lessThanOrEqualTo(8),
-        reason: '실측 30건. 실제 ${run.previewJumpsOver(3)}건',
+        run.maxPreviewLeadM,
+        lessThan(15),
+        reason: '최대 ${run.maxPreviewLeadM.toStringAsFixed(1)}m',
       );
     });
   });

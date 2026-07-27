@@ -32,6 +32,7 @@ class CorridorTrackerConfig {
     this.deadEndPenaltyDeg = 90,
     this.reverseTriggerDeg = 115,
     this.absoluteErrorWeight = 0.25,
+    this.costHorizonM = 25,
     this.maxSegmentErrorDeg = 60,
     this.positionalWeightDegPerM = 1.0,
     this.positionalToleranceM = 6,
@@ -91,6 +92,14 @@ class CorridorTrackerConfig {
 
   /// 위치 벌점이 방위 항을 완전히 눌러 버리지 않게 하는 상한.
   final double positionalMaxOffsetM;
+
+  /// 비용이 기억하는 이동 거리(m). 이보다 오래된 증거는 지수적으로 잊는다.
+  ///
+  /// 없으면 비용이 세션 전체 평균이 되어, 후반에는 누적 거리에 눌려 새 증거가
+  /// 순위를 못 바꾼다. 실측에서 130m를 걸은 뒤 마지막 12m를 서쪽으로 갔는데도
+  /// 1등이 초반에 고른 간선에 붙박여 확정 위치가 0.5m만 움직였다. 최근 구간을
+  /// 더 무겁게 봐야 "지금 어디를 걷고 있는가"에 반응한다.
+  final double costHorizonM;
 
   /// 한 걸음이 낼 수 있는 최대 비용(도). 그 이상은 잘라낸다.
   ///
@@ -246,6 +255,12 @@ class CorridorPositionTracker {
   String? _leaderEdgeId;
   int _leaderSign = 1;
 
+  /// 확정 위치에서 preview까지의 경로 길이(m). 뒤로 줄지 않게 지킨다.
+  double _previewLeadM = 0;
+
+  /// 이번 갱신에서 확정 위치가 나아간 거리(m).
+  double _confirmedAdvanceM = 0;
+
   bool get isInitialized => _beam.isNotEmpty;
 
   _Hypothesis? get _best => _beam.isEmpty ? null : _beam.first;
@@ -291,6 +306,8 @@ class CorridorPositionTracker {
     _pendingEdgeId = null;
     _leaderEdgeId = null;
     _leaderSign = 1;
+    _previewLeadM = 0;
+    _confirmedAdvanceM = 0;
 
     // 시작 방향을 하나로 못 박지 않는다. 첫 걸음의 방위는 복도에 거의 수직인
     // 경우가 많고(실측에서 176.9°), 그것으로 진행 부호를 잠그면 6° 차이로
@@ -333,6 +350,8 @@ class CorridorPositionTracker {
       observation.confirmedDistanceM - _lastConfirmedDistanceM,
     );
 
+    final previousCorrected = _correctedPosition;
+    _confirmedAdvanceM = 0;
     if (deltaSteps > 0 && deltaDistanceM > 0) {
       final segments = _rawSegments(
         deltaSteps: deltaSteps,
@@ -346,6 +365,7 @@ class CorridorPositionTracker {
       }
       _updateHeadingBias();
       _publishConfirmed(transitionsBefore: transitionsBefore);
+      _confirmedAdvanceM = (_correctedPosition - previousCorrected).distance;
     }
 
     _lastConfirmedSteps = math.max(
@@ -449,6 +469,7 @@ class CorridorPositionTracker {
       positionalToleranceM: config.positionalToleranceM,
       positionalMaxOffsetM: config.positionalMaxOffsetM,
       maxPathPoints: config.maxPathPoints,
+      costHorizonM: config.costHorizonM,
     );
     if (remainingM <= distanceToEnd + 1e-6) return [advanced];
 
@@ -688,40 +709,74 @@ class CorridorPositionTracker {
         ? gapDeg < exitThreshold
         : gapDeg < config.ambiguousMarginDeg;
 
-    if (_previewIsAmbiguous) {
-      // 갈렸으면 1등을 따라가지 않는다. 점수가 조금만 흔들려도 북쪽↔남쪽으로
-      // 10m씩 튀기 때문이다.
-      //
-      // 두 후보의 공통 prefix까지만 전진시키는 방법도 써 봤지만, 그 prefix
-      // 길이가 프레임마다 바뀌면서 4.6m씩 앞뒤로 진동했다. 결론이 날 때까지
-      // 아예 멈춰 세우는 쪽이 화면에서 정직하다 — "어디로 갈지 아직 모른다".
-      // 확정 위치는 빔이 계속 밀고 있으므로 이 정지는 preview 선행분에만
-      // 해당하고, 마커 자체가 멈추는 것이 아니다.
-      final shared = runnerUp == null
-          ? const <PdrLocalPoint>[]
-          : _commonPrefix(leader.path, runnerUp.path);
-      if (_previewPath.length <= 1 && shared.length > 1) {
-        _previewPath
-          ..clear()
-          ..addAll(shared);
-        _previewPosition = _previewPath.last;
-      }
-      _previewHeadingDeg = result.correctedHeadingDeg;
-    } else {
-      _previewPath
-        ..clear()
-        ..addAll(leader.path.isEmpty ? [_correctedPosition] : leader.path);
-      _previewPosition = _previewPath.last;
-      _previewHeadingDeg = leader.edge.bearingForTravel(
-        leader.progressM,
-        leader.travelSign,
-      );
-    }
+    // 선행분(확정 위치에서 preview까지의 길이)은 **뒤로 줄지 않는다**.
+    //
+    // 갈렸을 때 공통 지점까지만 전진시키면 옳지만, 그 공통 지점은 프레임마다
+    // 조금씩 바뀌어서 preview가 앞뒤로 진동한다(실측 3m 초과 28건). 반대로
+    // 아예 얼려 두면 모호가 안 풀릴 때 옛 자리에 영원히 남는다(실측 214개 중
+    // 189개가 같은 좌표, 실제 위치에서 40m). 선행분을 단조로 두면 둘 다
+    // 피한다 — 확정이 따라온 만큼만 줄어들고, 앞으로는 자유롭게 늘어난다.
+    final leaderPath = leader.path.isEmpty ? [_correctedPosition] : leader.path;
+    final fullLeadM = _pathLength(leaderPath);
+    final targetLeadM = _previewIsAmbiguous && runnerUp != null
+        ? _pathLength(_commonPrefix(leaderPath, runnerUp.path))
+        : fullLeadM;
+    _previewLeadM = math
+        .max(targetLeadM, _previewLeadM - _confirmedAdvanceM)
+        .clamp(0.0, fullLeadM)
+        .toDouble();
+    _previewPath
+      ..clear()
+      ..addAll(_truncateToLength(leaderPath, _previewLeadM));
+    _previewPosition = _previewPath.last;
+    _previewHeadingDeg = _previewIsAmbiguous
+        ? result.correctedHeadingDeg
+        : leader.edge.bearingForTravel(leader.progressM, leader.travelSign);
     final seen = <String>{};
     _previewCandidateEdgeIds = [
       for (final candidate in candidates)
         if (seen.add(candidate.edge.id)) candidate.edge.id,
     ];
+  }
+
+  static double _pathLength(List<PdrLocalPoint> path) {
+    var total = 0.0;
+    for (var index = 1; index < path.length; index += 1) {
+      total += (path[index] - path[index - 1]).distance;
+    }
+    return total;
+  }
+
+  /// 경로 앞에서부터 [lengthM]만큼만 남긴다. 마지막 점은 정확히 그 지점이다.
+  static List<PdrLocalPoint> _truncateToLength(
+    List<PdrLocalPoint> path,
+    double lengthM,
+  ) {
+    if (path.isEmpty) return path;
+    final kept = <PdrLocalPoint>[path.first];
+    var remaining = lengthM;
+    for (var index = 1; index < path.length; index += 1) {
+      final step = (path[index] - path[index - 1]).distance;
+      if (step <= 1e-9) continue;
+      if (remaining >= step) {
+        kept.add(path[index]);
+        remaining -= step;
+        continue;
+      }
+      if (remaining > 1e-6) {
+        final t = remaining / step;
+        kept.add(
+          PdrLocalPoint(
+            path[index - 1].eastM +
+                (path[index].eastM - path[index - 1].eastM) * t,
+            path[index - 1].northM +
+                (path[index].northM - path[index - 1].northM) * t,
+          ),
+        );
+      }
+      break;
+    }
+    return kept;
   }
 
   static List<PdrLocalPoint> _commonPrefix(
@@ -745,6 +800,7 @@ class CorridorPositionTracker {
       ..add(_correctedPosition);
     _previewCandidateEdgeIds = const [];
     _previewIsAmbiguous = false;
+    _previewLeadM = 0;
   }
 }
 
@@ -807,6 +863,7 @@ class _Hypothesis {
     required double positionalToleranceM,
     required double positionalMaxOffsetM,
     required int maxPathPoints,
+    required double costHorizonM,
   }) {
     if (distanceM <= 1e-6) return this;
     final absoluteError = _headingError(observedHeadingDeg, graphHeadingDeg);
@@ -836,14 +893,18 @@ class _Hypothesis {
     final nextPath = path.length >= maxPathPoints
         ? [...path.skip(path.length - maxPathPoints + 1), nextPoint]
         : [...path, nextPoint];
+    // 오래된 증거를 지수적으로 잊는다. 그래야 후반에도 최근 구간이 순위를
+    // 바꿀 수 있다.
+    final decay = math.exp(-distanceM / costHorizonM);
     return _copy(
       progressM: nextProgress,
       path: nextPath,
       cost:
-          cost +
+          cost * decay +
           combined * distanceM +
           offsetM * positionalWeightDegPerM * distanceM,
-      matchedM: matchedM + distanceM,
+      matchedM: matchedM * decay + distanceM,
+      unmatchedM: unmatchedM * decay,
       previousObservedHeadingDeg: observedHeadingDeg,
       previousGraphHeadingDeg: graphHeadingDeg,
     );
@@ -874,6 +935,8 @@ class _Hypothesis {
     matchedM: matchedM + distanceM,
     unmatchedM: unmatchedM + distanceM,
   );
+
+  /// 노드 전이 비용도 같은 지평선으로 잊는다.
 
   _Hypothesis _copy({
     double? progressM,
