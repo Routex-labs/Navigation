@@ -22,7 +22,8 @@ class PdrDebugSessionRecorder {
   // v5: heading 분해(fused/offset/device/gyro/walkDir)와 수렴 상태를 추가했다.
   // 방향이 틀어졌을 때 자력계·walkOffset·네이티브 유도식·실제 회전 중 무엇인지
   // 파일만으로 가르기 위한 값이다.
-  static const schemaVersion = 5;
+  // v6: Android RoNIN 자동보폭 비교 경로와 1Hz 보폭/속도 관측을 추가했다.
+  static const schemaVersion = 6;
   static const _maxQualitySamples = 900;
 
   final DateTime _startedAt;
@@ -91,6 +92,14 @@ class PdrDebugSessionRecorder {
     final matchedPath = hasMapContext
         ? FloorMapMatcher(graph).matchRoutedPath(floorPath)
         : const <PdrLocalPoint>[];
+    final roninRawPath = snapshot == null || !snapshot.ronin.supported
+        ? const <PdrLocalPoint>[]
+        : snapshot.ronin.path;
+    final roninFloorPath = hasMapContext && snapshot.ronin.supported
+        ? roninRawPath
+              .map(FloorCoordinateTransform(anchor).toFloor)
+              .toList(growable: false)
+        : const <PdrLocalPoint>[];
 
     return {
       'schema_version': schemaVersion,
@@ -114,7 +123,9 @@ class PdrDebugSessionRecorder {
       ),
       'paths': {
         'confirmed_pdr_local_m': _pointsJson(rawPath),
+        'ronin_stride_pdr_local_m': _pointsJson(roninRawPath),
         'floor_local_m_before_matching': _pointsJson(floorPath),
+        'ronin_stride_floor_local_m': _pointsJson(roninFloorPath),
         'map_matched_floor_local_m': _pointsJson(matchedPath),
       },
       'quality_samples_1hz': [
@@ -192,6 +203,19 @@ class PdrDebugSessionRecorder {
       'has_heading': snapshot.hasHeading,
       'preview_steps': snapshot.preview.steps,
       'preview_distance_m': snapshot.preview.distanceM,
+      'ronin': {
+        'supported': snapshot.ronin.supported,
+        'model_ready': snapshot.ronin.modelReady,
+        'model': snapshot.ronin.model,
+        'status': snapshot.ronin.status,
+        'steps': snapshot.ronin.steps,
+        'distance_m': snapshot.ronin.distanceM,
+        'effective_stride_m': snapshot.ronin.effectiveStrideM,
+        'raw_stride_m': snapshot.ronin.rawStrideM,
+        'speed_mps': snapshot.ronin.speedMps,
+        'speed_std_mps': snapshot.ronin.speedStdMps,
+        'cadence_hz': snapshot.ronin.cadenceHz,
+      },
       'quality': {
         'state': snapshot.quality.state.name,
         'warnings': snapshot.quality.warnings,
@@ -268,6 +292,7 @@ class _PdrQualitySample {
     required this.cadenceHz,
     required this.previewSteps,
     required this.previewDistanceM,
+    required this.ronin,
     required this.headingBreakdown,
   });
 
@@ -285,6 +310,7 @@ class _PdrQualitySample {
   /// 두 곡선을 같은 시간축에 놓아야 한다.
   final int previewSteps;
   final double previewDistanceM;
+  final Map<String, Object?> ronin;
 
   /// 시간에 따른 비교가 핵심이라(초반 수렴 구간, 구간별 자기 왜곡) summary뿐
   /// 아니라 매 샘플에 남긴다.
@@ -303,6 +329,17 @@ class _PdrQualitySample {
       cadenceHz: features.cadenceHz,
       previewSteps: snapshot.preview.steps,
       previewDistanceM: snapshot.preview.distanceM,
+      ronin: {
+        'supported': snapshot.ronin.supported,
+        'model_ready': snapshot.ronin.modelReady,
+        'status': snapshot.ronin.status,
+        'distance_m': snapshot.ronin.distanceM,
+        'effective_stride_m': snapshot.ronin.effectiveStrideM,
+        'raw_stride_m': snapshot.ronin.rawStrideM,
+        'speed_mps': snapshot.ronin.speedMps,
+        'speed_std_mps': snapshot.ronin.speedStdMps,
+        'cadence_hz': snapshot.ronin.cadenceHz,
+      },
       headingBreakdown: PdrDebugSessionRecorder.headingBreakdownJson(features),
     );
   }
@@ -313,6 +350,7 @@ class _PdrQualitySample {
     'distance_m': distanceM,
     'preview_steps': previewSteps,
     'preview_distance_m': previewDistanceM,
+    'ronin': ronin,
     'walking_heading_deg': walkingHeadingDeg,
     'heading_stable': headingStable,
     'magnetic_accuracy': magneticAccuracy,

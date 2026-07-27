@@ -43,3 +43,9 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Android 전용 RoNIN 비교 경로의 온디바이스 추론 런타임.
+    // iOS/Flutter 의존성에는 포함하지 않아 실험 범위를 Android로 제한한다.
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.27.0")
+}

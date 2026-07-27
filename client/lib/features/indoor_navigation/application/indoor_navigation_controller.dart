@@ -298,6 +298,7 @@ class IndoorNavigationDriver implements IndoorNavigationController {
       walkingHeadingDeg: snapshot.walkingHeadingDeg,
       hasHeading: snapshot.hasHeading,
       preview: snapshot.preview,
+      ronin: snapshot.ronin,
       quality: PdrQuality(
         state: PdrQualityState.degraded,
         warnings: warnings,

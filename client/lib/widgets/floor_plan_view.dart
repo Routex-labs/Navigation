@@ -40,6 +40,7 @@ const _routeSourceId = 'floor-route';
 const _pdrTrailSourceId = 'floor-pdr-trail';
 const _pdrRawTrailSourceId = 'floor-pdr-raw-trail';
 const _pdrConfirmedTrailSourceId = 'floor-pdr-confirmed-trail';
+const _pdrRoninTrailSourceId = 'floor-pdr-ronin-trail';
 const _debugGraphSourceId = 'floor-debug-graph';
 const _markersSourceId = 'floor-markers';
 const _highlightSourceId = 'floor-highlight';
@@ -210,6 +211,7 @@ class FloorPlanView extends StatefulWidget {
     this.pdrPathPoints = const [],
     this.pdrRawPathPoints = const [],
     this.pdrConfirmedPathPoints = const [],
+    this.pdrRoninPathPoints = const [],
     this.debugMapOverlay = const DebugMapOverlay(),
     this.interactive = true,
     this.highlightedStoreId,
@@ -271,6 +273,9 @@ class FloorPlanView extends StatefulWidget {
 
   /// 센서 파이프라인이 자체 확정한 PDR 경로. 초록색 실선으로 렌더한다.
   final List<ll.LatLng> pdrConfirmedPathPoints;
+
+  /// Android RoNIN 속도에서 구한 자동보폭 비교 경로. 분홍 파선으로 렌더한다.
+  final List<ll.LatLng> pdrRoninPathPoints;
 
   /// 디버그 모드에서만 채워지는 navigation graph 노드·간선 데이터.
   final DebugMapOverlay debugMapOverlay;
@@ -495,6 +500,9 @@ class FloorPlanViewState extends State<FloorPlanView> {
     }
     if (oldWidget.pdrConfirmedPathPoints != widget.pdrConfirmedPathPoints) {
       _updatePdrConfirmedTrailSource();
+    }
+    if (oldWidget.pdrRoninPathPoints != widget.pdrRoninPathPoints) {
+      _updatePdrRoninTrailSource();
     }
     if (oldWidget.debugMapOverlay != widget.debugMapOverlay) {
       _updateDebugGraphSource();
@@ -861,6 +869,36 @@ class FloorPlanViewState extends State<FloorPlanView> {
     );
 
     await controller.addGeoJsonSource(
+      _pdrRoninTrailSourceId,
+      _emptyFeatureCollection,
+    );
+    await controller.addLineLayer(
+      _pdrRoninTrailSourceId,
+      'floor-pdr-ronin-trail-casing',
+      const LineLayerProperties(
+        lineColor: '#FFFFFF',
+        lineWidth: 6.25,
+        lineOpacity: 0.82,
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      enableInteraction: false,
+    );
+    await controller.addLineLayer(
+      _pdrRoninTrailSourceId,
+      'floor-pdr-ronin-trail-line',
+      const LineLayerProperties(
+        lineColor: '#D81B60',
+        lineWidth: 3.5,
+        lineOpacity: 0.96,
+        lineDasharray: [3.0, 1.5],
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      enableInteraction: false,
+    );
+
+    await controller.addGeoJsonSource(
       _pdrTrailSourceId,
       _emptyFeatureCollection,
     );
@@ -988,6 +1026,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
     await _updateDebugGraphSource();
     await _updatePdrRawTrailSource();
     await _updatePdrConfirmedTrailSource();
+    await _updatePdrRoninTrailSource();
     await _updatePdrTrailSource();
     await _updateMarkersSource();
     await _updateHighlightSource();
@@ -1133,7 +1172,9 @@ class FloorPlanViewState extends State<FloorPlanView> {
   Future<void> centerOn(ll.LatLng target) async {
     final controller = _controller;
     if (controller == null) return;
-    await controller.moveCamera(CameraUpdate.newLatLng(_toMapLibreLatLng(target)));
+    await controller.moveCamera(
+      CameraUpdate.newLatLng(_toMapLibreLatLng(target)),
+    );
   }
 
   Future<void> _fitToFootprint() async {
@@ -1477,6 +1518,10 @@ class FloorPlanViewState extends State<FloorPlanView> {
     );
   }
 
+  Future<void> _updatePdrRoninTrailSource() async {
+    await _updateLineSource(_pdrRoninTrailSourceId, widget.pdrRoninPathPoints);
+  }
+
   Future<void> _updateLineSource(
     String sourceId,
     List<ll.LatLng> points,
@@ -1616,8 +1661,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
     // 가 계속 그 버튼에 남아 매장 탭을 포함한 모든 지도 클릭이 삼켜졌다. 실제
     // 판정은 뷰포트 하단이 소프트키보드에 잘려있는지로 한다 — 웹/데스크톱에서
     // 이 값은 항상 0이라 자연스럽게 지도 탭이 통과된다.
-    final keyboardHeight =
-        MediaQuery.maybeOf(context)?.viewInsets.bottom ?? 0;
+    final keyboardHeight = MediaQuery.maybeOf(context)?.viewInsets.bottom ?? 0;
     if (keyboardHeight > 0) {
       FocusManager.instance.primaryFocus?.unfocus();
       return;

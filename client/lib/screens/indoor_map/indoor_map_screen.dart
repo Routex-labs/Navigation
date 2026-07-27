@@ -821,6 +821,22 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         .toList(growable: false);
   }
 
+  List<PdrLocalPoint> get _pdrRoninFloorPath {
+    final snapshot = _pdrTrailState.snapshot;
+    final anchor = _pdrTrailState.anchor;
+    final graph = _floorGraph;
+    if (snapshot == null ||
+        !snapshot.ronin.supported ||
+        anchor == null ||
+        anchor.floorId != _selectedFloor ||
+        graph == null ||
+        graph.nodes.isEmpty) {
+      return const [];
+    }
+    final pdrToFloor = FloorCoordinateTransform(anchor);
+    return snapshot.ronin.path.map(pdrToFloor.toFloor).toList(growable: false);
+  }
+
   /// confirmed PDR path를 floor graph의 통행 간선에 스냅한 결과다. 매 snapshot
   /// 전체를 시간순으로 다시 매칭해 matcher의 간선 전환 히스테리시스도 유지한다.
   List<PdrLocalPoint> get _pdrMatchedFloorPath {
@@ -910,6 +926,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       _floorPathToWgs84(_pdrConfirmedFloorPath);
 
   List<ll.LatLng> get _pdrRawPathPoints => _floorPathToWgs84(_pdrRawFloorPath);
+
+  List<ll.LatLng> get _pdrRoninPathPoints =>
+      _floorPathToWgs84(_pdrRoninFloorPath);
 
   Future<void> _togglePdr() async {
     final floor = _selectedFloor;
@@ -1286,6 +1305,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           pdrRawPathPoints: debugEnabled && _debugModeController.showRawPdrPath
               ? _pdrRawPathPoints
               : const [],
+          pdrRoninPathPoints:
+              debugEnabled && _debugModeController.showRoninPdrPath
+              ? _pdrRoninPathPoints
+              : const [],
           debugMapOverlay: debugOverlay,
           onCameraBearingChanged: _onMapCameraBearingChanged,
           onMapPressed: _onMapPressedForPdr,
@@ -1464,7 +1487,6 @@ class _PdrAnchorHint extends StatelessWidget {
     );
   }
 }
-
 /// 안내 배너 오른쪽 상단의 취소(X).
 ///
 /// Material `IconButton`을 쓰지 않는 이유: 기본 최소 탭 영역이 48x48이라
@@ -1494,4 +1516,3 @@ class _HintCancelButton extends StatelessWidget {
     );
   }
 }
-

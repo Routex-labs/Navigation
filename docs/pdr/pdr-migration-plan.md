@@ -408,7 +408,7 @@ quality indicator 위젯·debug 주황 toggle은 **UI팀**. 우리는 판정 로
 | SVG 벽 레이어 정합 | 백엔드 px↔local_m 변환 계약 전까지 정합 미주장 |
 | fusion 제품 적용 | Phase 5 라벨 데이터 전까지 근거 없음 (정책 4) |
 | map matching / route constraint | PDR core 밖 후속 계층 |
-| RoNIN/TFLite/ML asset | 거리 44~56% 과소추정, 제품 후보 아님 (정책 6) |
+| RoNIN 자동보폭의 제품 적용 | 과거 거리 44~56% 과소추정 때문에 제품 후보는 아님. Android 디버그 비교선에서만 원인을 재검증 |
 | 진북/지자기 편차 자동 보정 | 자북 기준 계약으로 회피. 필요 시 별도 설계 |
 | 백그라운드 센서 동작 | 세션은 화면 활성 중만 (제약 7) |
 | undercount 플래그의 자동 경로 전환 활용 | 오탐 모드 때문에 진단 전용 유지 |

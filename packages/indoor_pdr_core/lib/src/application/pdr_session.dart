@@ -14,6 +14,7 @@ import 'path_accumulator.dart';
 import 'pedometer_batch_processor.dart';
 import 'pdr_session_config.dart';
 import 'quality_metrics.dart';
+import 'ronin_stride_track.dart';
 import 'stride_estimator.dart';
 
 /// 적용된 confirmed 배치의 진단 정보. [PdrSession.onBatchApplied]로 전달된다.
@@ -48,6 +49,7 @@ class PdrSession {
     : config = config ?? const PdrSessionConfig() {
     _paths = PathAccumulator(maxPoints: this.config.maxPathPoints);
     _accelPreview = AccelPreviewTrack(maxPoints: this.config.maxPathPoints);
+    _roninTrack = RoninStrideTrack(maxPoints: this.config.maxPathPoints);
     _stride.fallbackMeters = this.config.fallbackStrideMeters;
     _stride.effectiveMeters = this.config.fallbackStrideMeters;
     _stride.lastBatchMeters = this.config.fallbackStrideMeters;
@@ -57,6 +59,7 @@ class PdrSession {
 
   late final PathAccumulator _paths;
   late final AccelPreviewTrack _accelPreview;
+  late final RoninStrideTrack _roninTrack;
   final StrideEstimator _stride = StrideEstimator();
   final PedometerBatchProcessor _pedometer = PedometerBatchProcessor();
   final SwingDetector _swing = SwingDetector();
@@ -195,6 +198,7 @@ class PdrSession {
 
   /// CMPedometer 배치. confirmed(초록) 경로/거리에 반영.
   void onPedometerBatch(PedometerBatchEvent e) {
+    final roninObservationChanged = _roninTrack.observe(e);
     final application = _pedometer.process(
       e,
       receivedAtMs: config.nowMs(),
@@ -204,6 +208,7 @@ class PdrSession {
       stride: _stride,
     );
     if (application == null) {
+      if (roninObservationChanged) _emit();
       return;
     }
     final applied = _paths.applyPedometerBatch(
@@ -218,6 +223,12 @@ class PdrSession {
     );
     iosTrackedSteps += applied;
     _stride.addTrackedDistance(application.stepDistanceMeters * applied);
+    _roninTrack.apply(
+      application,
+      currentWalkDeg: walkingHeadingDeg,
+      currentFusedDeg: fusedHeadingDeg,
+      headingAt: _headingHistory.at,
+    );
     onBatchApplied?.call(
       AppliedBatchInfo(
         batchId: application.batchId,
@@ -241,6 +252,7 @@ class PdrSession {
   void reset({int? newStepSessionId}) {
     _paths.reset();
     _accelPreview.reset();
+    _roninTrack.reset();
     iosTrackedSteps = 0;
     _pedometer.reset(
       initialTrackingOn: _tracking,
@@ -316,6 +328,7 @@ class PdrSession {
         steps: _accelPreview.steps,
         distanceM: _accelPreview.distanceM,
       ),
+      ronin: _roninTrack.snapshot,
       quality: quality,
     );
   }

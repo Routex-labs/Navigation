@@ -115,6 +115,29 @@ void main() {
     await driver.dispose();
   });
 
+  test('Android RoNIN 자동보폭 필드를 typed event로 파싱한다', () {
+    final event = NativePdrEvent.tryParse(const {
+      'source': 'android_sensor_manager',
+      'kind': 'pedometer',
+      'stepSessionId': 3,
+      'steps': 7,
+      'roninSupported': true,
+      'roninReady': true,
+      'roninModel': 'ronin-tcn-200hz',
+      'roninStatus': 'ready',
+      'roninSpeedMps': 1.04,
+      'roninSpeedStdMps': 0.09,
+      'roninCadenceHz': 1.6,
+      'roninStrideMeters': 0.65,
+    });
+
+    expect(event, isNotNull);
+    expect(event!.pedometer!.isAndroid, isTrue);
+    expect(event.pedometer!.roninSupported, isTrue);
+    expect(event.pedometer!.roninReady, isTrue);
+    expect(event.pedometer!.roninStrideMeters, 0.65);
+  });
+
   test('startGuidance는 소스를 켜고 awaitingPin으로 간다', () async {
     await driver.startGuidance(floorId: 'F1');
     expect(source.startCount, 1);

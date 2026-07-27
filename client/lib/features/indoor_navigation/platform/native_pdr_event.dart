@@ -100,6 +100,14 @@ class NativePdrEvent {
       stepCounterDelta: (raw['stepCounterDelta'] as num?)?.toInt(),
       counterLastEventAtMs: _double(raw, 'counterLastEventAtMs'),
       stepAccelAmplitudeMps2: _double(raw, 'stepAccelAmplitudeMps2'),
+      roninSupported: raw['roninSupported'] as bool? ?? false,
+      roninReady: raw['roninReady'] as bool? ?? false,
+      roninModel: raw['roninModel']?.toString(),
+      roninStatus: raw['roninStatus']?.toString(),
+      roninSpeedMps: _double(raw, 'roninSpeedMps'),
+      roninSpeedStdMps: _double(raw, 'roninSpeedStdMps'),
+      roninCadenceHz: _double(raw, 'roninCadenceHz'),
+      roninStrideMeters: _double(raw, 'roninStrideMeters'),
     );
   }
 

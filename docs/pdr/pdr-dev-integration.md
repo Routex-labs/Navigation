@@ -173,8 +173,9 @@ callback으로 보내며, 이 값은 보통 짧은 시간 단위로 묶여 도�
 #### Android 센서 처리
 
 `PdrMotionBridge.kt`는 rotation vector, linear acceleration, accelerometer, gravity,
-gyroscope, magnetic field를 등록한다. 회전·가속도 계열은 약 100 Hz 목표로 받고, step
-센서는 각 센서에 맞는 시스템 지연 설정으로 받는다.
+gyroscope, magnetic field를 등록한다. 기존 heading·peak 계산은 약 100 Hz 목표로 받고,
+RoNIN 입력에 쓰는 raw accelerometer·gyroscope는 200 Hz를 요청한다. 실제 전달 주기가
+흔들리면 200 Hz로 선형 보간하고 40 ms보다 큰 결손이 있는 추론 창은 폐기한다.
 
 - `STEP_COUNTER`는 기기 부팅 이후 누적값이므로, PDR 시작 시점의 값을 baseline으로 잡고
   이후 delta만 세션 걸음 수로 사용한다. counter가 live가 되면 `STEP_DETECTOR`나 가속도
@@ -186,6 +187,10 @@ gyroscope, magnetic field를 등록한다. 회전·가속도 계열은 약 100 H
   마지막 자북 frame을 이어가지만, game rotation vector나 순수 gyro hold는 arbitrary
   기준으로 취급되어 수동 방향 보정이 필요하다.
 - 종료 직전에는 counter의 마지막 관측값을 한 번 반영하고 세션을 동결한다.
+- Android 디버그 모드에서는 공식 RoNIN TCN의 최근 수평 속도를
+  `STEP_DETECTOR` cadence로 나눠 자동보폭 후보를 만든다. 이 값은 기존 heading과
+  `STEP_COUNTER`에만 적용한 분홍 비교 경로를 별도로 누적하며, 확정 위치·길찾기·
+  맵매칭에는 반영하지 않는다. iOS에는 모델과 추론 런타임을 포함하지 않는다.
 
 ### 코어 파일이 함께 동작하는 방식
 
@@ -201,6 +206,7 @@ gyroscope, magnetic field를 등록한다. 회전·가속도 계열은 약 100 H
 | `application/heading_trackers.dart` | 최근 heading 기록, 팔 흔들림 판별, 보행축 기반의 `walkOffset`을 관리한다. |
 | `application/path_accumulator.dart` | 각 확정 걸음을 해당 시각의 heading으로 로컬 좌표 경로에 누적한다. |
 | `application/accel_preview_track.dart` | 가속도 peak 기반의 보조 경로와 peak 거부 사유를 별도로 유지한다. 지도 위치를 결정하지 않는다. |
+| `application/ronin_stride_track.dart` | Android RoNIN 보폭 후보를 같은 step·heading에 적용한 분홍 비교 경로를 유지한다. 확정 경로에 영향을 주지 않는다. |
 | `application/quality_metrics.dart` | 보행계 과소 계수·가속도 peak 과다 검출 가능성을 품질 신호로 계산한다. |
 | `application/pdr_session_config.dart` | 기본 보폭(0.70 m), 경로 최대 점 수, 품질 임계값 등 세션 설정을 제공한다. |
 
@@ -232,6 +238,10 @@ tracking 구간에 해당하는 걸음만 남긴다.
 1. iOS가 제공한 누적 거리의 delta ÷ step delta
 2. iOS cadence와 pace로 계산한 거리
 3. 기본 보폭 0.70 m
+
+Android RoNIN 보폭은 위 우선순위에 들어가지 않는다. 200 Hz 세계 좌표계 6축 IMU에서
+추정한 수평 속도를 cadence로 나눈 뒤 `0.20~1.50 m` 범위와 배치당 변화 제한을 적용해
+별도 분홍 경로에만 사용한다. 모델 준비 전 구간은 0.70 m로 시작점을 맞춘다.
 
 유효 보폭 범위는 0.35~1.20 m이며, 이전 추정값에서 한 번에 크게 바뀌지 않도록 제한하고
 누적 걸음 수가 적을 때는 조금 더 빠르게 적응한다. Android의 cadence 및 가속도 amplitude

@@ -33,6 +33,7 @@ class PdrMotionBridge(
     messenger: BinaryMessenger,
 ) : EventChannel.StreamHandler, MethodChannel.MethodCallHandler, SensorEventListener {
     private val sensorManager = activity.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+    private val roninEstimator = RoninStrideEstimator(activity.applicationContext)
     private var sink: EventChannel.EventSink? = null
 
     private val rotationMatrix = FloatArray(9)
@@ -44,6 +45,7 @@ class PdrMotionBridge(
     private var hasRotation = false
     private var hasGravity = false
     private var hasLinearAccel = false
+    private var hasGyro = false
     private var rotationSource = "unavailable"
 
     private var rawRotationHeadingDeg = 0.0
@@ -87,6 +89,7 @@ class PdrMotionBridge(
     private var pedometerDeltaMs = 0.0
     private var cadenceHz = 0.0
     private var cadenceAvailable = false
+    private var roninCadenceHz = 0.0
     private var lastStepAccelAmplitudeMps2 = 0.0
     private var latestStepEventSource = "snapshot"
 
@@ -123,6 +126,7 @@ class PdrMotionBridge(
 
     override fun onCancel(arguments: Any?) {
         sensorManager.unregisterListener(this)
+        roninEstimator.resetSession()
         sink = null
     }
 
@@ -145,9 +149,12 @@ class PdrMotionBridge(
         }
         register(rotation, 10_000)
         register(sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION), 10_000)
-        register(sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER), 10_000)
+        // RoNIN 원 모델의 200Hz 입력에 최대한 가까운 raw 표본을 확보한다.
+        // 실제 기기 전달률이 낮거나 흔들려도 estimator가 200Hz로 보간하며,
+        // 40ms보다 큰 결손이 있으면 그 추론 창을 폐기한다.
+        register(sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER), 5_000)
         register(sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY), 10_000)
-        register(sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE), 10_000)
+        register(sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE), 5_000)
         register(sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD), 20_000)
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
             ContextCompat.checkSelfPermission(activity, Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED
@@ -171,6 +178,14 @@ class PdrMotionBridge(
             }
             Sensor.TYPE_ACCELEROMETER -> {
                 copy3(event.values, rawAccel)
+                if (hasRotation && hasGyro) {
+                    roninEstimator.addDeviceSample(
+                        event.timestamp,
+                        gyro,
+                        rawAccel,
+                        rotationMatrix,
+                    )
+                }
                 if (!hasLinearAccel) captureImu(event.timestamp)
             }
             Sensor.TYPE_GRAVITY -> {
@@ -212,6 +227,7 @@ class PdrMotionBridge(
 
     private fun updateGyro(event: SensorEvent) {
         copy3(event.values, gyro)
+        hasGyro = true
         gyroZ = gyro[2].toDouble()
         if (lastGyroNs != 0L && gyroHeadingInitialized) {
             val dt = (event.timestamp - lastGyroNs) / 1_000_000_000.0
@@ -332,6 +348,11 @@ class PdrMotionBridge(
         if (pedometerDeltaMs in 200.0..3_000.0) {
             cadenceHz = 1_000.0 / pedometerDeltaMs
             cadenceAvailable = true
+            roninCadenceHz = if (roninCadenceHz <= 0) {
+                cadenceHz
+            } else {
+                roninCadenceHz * 0.8 + cadenceHz * 0.2
+            }
         }
         lastPedometerAtMs = monotonicAtMs
         detectorSteps += 1
@@ -370,6 +391,7 @@ class PdrMotionBridge(
         pedometerDeltaMs = 0.0
         cadenceHz = 0.0
         cadenceAvailable = false
+        roninCadenceHz = 0.0
         lastStepAccelAmplitudeMps2 = 0.0
         latestStepEventSource = "snapshot"
         accelPeakTimes.clear()
@@ -384,6 +406,7 @@ class PdrMotionBridge(
         walkDirConfidence = 0.0
         gyroHeadingInitialized = false
         magneticFieldBaseline = null
+        roninEstimator.resetSession()
         emit("snapshot")
         return stepSessionId
     }
@@ -503,9 +526,51 @@ class PdrMotionBridge(
                 "counterLastEventAtMs" to lastStepCounterAtMs,
                 "stepDetectorEvents" to stepDetectorEvents,
             ))
+            payload.putAll(roninPayload())
             if (sessionFinalized && stepCounterReady) payload["authoritativeSteps"] = observedCounterSteps
         }
         activity.runOnUiThread { eventSink.success(payload) }
+    }
+
+    /**
+     * RoNIN은 수평 속도를 내고 Android STEP_DETECTOR가 cadence를 낸다.
+     * 둘의 시간축이 충분히 최근일 때만 speed/cadence를 한 걸음 거리 후보로
+     * 공개한다. 이 값은 기존 confirmed 경로에는 들어가지 않는다.
+     */
+    private fun roninPayload(): Map<String, Any> {
+        val payload = linkedMapOf<String, Any>(
+            "roninSupported" to roninEstimator.supported,
+            "roninModel" to RoninStrideEstimator.MODEL_NAME,
+            "roninStatus" to roninEstimator.status,
+        )
+        val estimate = roninEstimator.latestEstimate
+        val ageNs = estimate?.let {
+            max(0L, SystemClock.elapsedRealtimeNanos() - it.inferredAtSensorNs)
+        }
+        val recent = ageNs != null && ageNs <= 2_000_000_000L
+        val stride = if (
+            recent &&
+            estimate != null &&
+            roninCadenceHz in 0.5..3.5
+        ) {
+            estimate.speedMps / roninCadenceHz
+        } else {
+            null
+        }
+        val usableStride = stride?.takeIf { it.isFinite() && it in 0.20..1.50 }
+        payload["roninReady"] = recent && estimate != null
+        if (estimate != null) {
+            payload["roninSpeedMps"] = estimate.speedMps
+            payload["roninSpeedStdMps"] = estimate.speedStdMps
+            payload["roninEstimateAgeMs"] = (ageNs ?: 0L) / 1_000_000.0
+        }
+        if (roninCadenceHz > 0) {
+            payload["roninCadenceHz"] = roninCadenceHz
+        }
+        if (usableStride != null) {
+            payload["roninStrideMeters"] = usableStride
+        }
+        return payload
     }
 
     override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) {

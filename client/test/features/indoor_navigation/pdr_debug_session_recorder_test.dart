@@ -22,6 +22,21 @@ PdrSnapshot _snapshot({
     steps: steps + 1,
     distanceM: distanceM + 0.5,
   ),
+  ronin: PdrRoninTrack(
+    supported: true,
+    modelReady: true,
+    position: path.last,
+    path: path,
+    steps: steps,
+    distanceM: distanceM - 0.2,
+    effectiveStrideM: 0.65,
+    model: 'ronin-tcn-200hz',
+    status: 'ready',
+    rawStrideM: 0.63,
+    speedMps: 1.01,
+    speedStdMps: 0.08,
+    cadenceHz: 1.6,
+  ),
   quality: const PdrQuality(
     state: PdrQualityState.caution,
     warnings: ['headingUnstable'],
@@ -114,13 +129,17 @@ void main() {
     final matched = paths['map_matched_floor_local_m']! as List<Object?>;
     final finalMatched = matched.last! as Map<String, double>;
 
-    expect(json['schema_version'], 5);
+    expect(json['schema_version'], 6);
     expect(
       (json['map_context']! as Map<String, Object?>)['map_calibration_version'],
       'thehyundai-seoul-1f-svg-v1',
     );
     expect(summary['confirmed_steps'], 4);
     expect(summary['confirmed_distance_m'], 3.1);
+    expect(
+      (summary['ronin']! as Map<String, Object?>)['distance_m'],
+      closeTo(2.9, 1e-9),
+    );
     expect(summary['map_matched_path_distance_m'], closeTo(4, 1e-9));
     expect(
       (summary['quality']! as Map<String, Object?>)['magnetic_accuracy'],
@@ -160,6 +179,11 @@ void main() {
     expect(sample['distance_m'], 3.1);
     expect(sample['preview_steps'], 5);
     expect(sample['preview_distance_m'], 3.6);
+    expect(sample['ronin'], isA<Map<String, Object?>>());
+    expect(
+      (sample['ronin']! as Map<String, Object?>)['effective_stride_m'],
+      0.65,
+    );
     // heading 분해도 매 샘플에 들어간다 — 초반 수렴 구간을 보려면 시계열이어야 한다.
     expect(sample['fused_heading_deg'], 80);
     expect(sample['walk_offset_deg'], 10);
