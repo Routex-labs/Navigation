@@ -421,23 +421,10 @@ void main() {
     expect(find.text('B2'), findsOneWidget);
   });
 
-  testWidgets('검색 시트는 AI를 자동으로 부르지 않는다', (WidgetTester tester) async {
-    // 의미 검색은 임베딩 모델을 태우므로 사용자가 명시적으로 고를 때만 돈다.
-    final repository = _FallbackDestinationRepository();
-    destinationRepository = repository;
-
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
-    await tester.pumpAndSettle();
-    await openSearchSheet(tester, '밥 먹을 곳');
-
-    expect(repository.lightQueries, ['밥 먹을 곳']);
-    expect(repository.aiQueries, isEmpty);
-    expect(find.textContaining('찾지 못했어요'), findsOneWidget);
-  });
-
-  testWidgets('빈손이면 AI 검색으로 넘어가 같은 질의를 다시 던진다', (
+  testWidgets('엔터로 확정하면 경량이 빈손일 때 의미 검색까지 자동으로 간다', (
     WidgetTester tester,
   ) async {
+    // 사용자는 "일반 검색"과 "AI 검색"을 구분하지 않는다. 한 곳에 치면 된다.
     final repository = _FallbackDestinationRepository(
       aiResult: const PoiSearchResult(
         name: '요즘김밥',
@@ -452,27 +439,62 @@ void main() {
     await tester.pumpAndSettle();
     await openSearchSheet(tester, '밥 먹을 곳');
 
-    await tester.tap(find.text('AI 검색으로 찾기'));
-    await tester.pumpAndSettle();
-
-    // 사용자가 방금 친 말을 다시 치게 하지 않는다.
+    // 경량 → 의미 순으로 같은 질의가 이어진다. 버튼을 누를 필요가 없다.
+    expect(repository.lightQueries, ['밥 먹을 곳']);
     expect(repository.aiQueries, ['밥 먹을 곳']);
     expect(find.textContaining('요즘김밥'), findsOneWidget);
+    // 왜 다른 이름이 나왔는지 알려 준다.
+    expect(find.text('뜻이 비슷한 매장을 찾았어요'), findsOneWidget);
   });
 
-  testWidgets('카테고리 열의 AI 검색 pill이 AI 패널을 연다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('경량이 찾으면 의미 검색은 돌지 않는다', (WidgetTester tester) async {
+    // 매장 이름은 일반 검색처럼 즉시 끝나야 한다.
+    final repository = _FallbackDestinationRepository(
+      lightResult: const PoiSearchResult(
+        name: 'MLB',
+        floor: 'B2',
+        point: LatLng(37.52, 126.92),
+        nodeId: 'FL-2:ND-9',
+      ),
+    );
+    destinationRepository = repository;
+
+    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpAndSettle();
+    await openSearchSheet(tester, 'MLB');
+
+    expect(repository.aiQueries, isEmpty);
+    expect(find.text('뜻이 비슷한 매장을 찾았어요'), findsNothing);
+  });
+
+  testWidgets('타이핑 중에는 의미 검색을 부르지 않는다', (WidgetTester tester) async {
+    // 의미 검색은 첫 호출이 20초대까지 간다. 글자마다 던지면 "밥"·"밥 먹"이
+    // 전부 모델을 태우므로, 확정(엔터) 전에는 절대 타면 안 된다.
+    final repository = _FallbackDestinationRepository();
+    destinationRepository = repository;
+
+    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('건물, 장소를 검색하세요'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, '밥 먹을');
+    // 디바운스가 끝나 경량 검색은 돌지만, 의미 검색은 아직이다.
+    await tester.pumpAndSettle(const Duration(milliseconds: 500));
+
+    expect(repository.lightQueries, ['밥 먹을']);
+    expect(repository.aiQueries, isEmpty);
+  });
+
+  testWidgets('카테고리 열에 AI 검색 pill이 더는 없다', (WidgetTester tester) async {
     destinationRepository = _FallbackDestinationRepository();
 
     await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('AI 검색'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('AI 매장 찾기'), findsOneWidget);
+    expect(find.text('AI 검색'), findsNothing);
   });
+
 
   testWidgets('건물 이름으로 검색하면 건물 줄이 뜬다', (WidgetTester tester) async {
     // 예전 상단 검색이 하던 건물 이름 검색을 시트로 옮겨 왔다.

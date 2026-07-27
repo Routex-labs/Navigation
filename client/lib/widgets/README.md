@@ -14,13 +14,22 @@
 | 장소 시트 | [`category_stores_sheet.dart`](category_stores_sheet.dart), [`store_info_sheet.dart`](store_info_sheet.dart), [`favorites_sheet.dart`](favorites_sheet.dart) | 카테고리 매장·매장 정보·즐겨찾기 |
 | 공통 | [`sheet_header.dart`](sheet_header.dart) | 시트 헤더 |
 
-## 검색 두 갈래
+## 검색은 한 곳, 두 단계
 
 상단 검색창은 입력을 받지 않고 탭하면 [`search_sheet.dart`](search_sheet.dart)를 올린다.
-시트는 경량 매칭(`/query/destination`, 형태소 정규화 포함)만 쓰고, 빈손일 때 "AI 검색으로
-찾기"로 [`ai_search_sheet.dart`](ai_search_sheet.dart)(`/query/ai`, 의미 검색)에 넘긴다.
-AI 검색은 카테고리 열의 pill로도 바로 열린다. 매 검색마다 임베딩 모델을 태우지 않으려고
-갈래를 나눈 것이라, 둘을 하나로 합치지 않는다.
+사용자는 "일반 검색"과 "AI 검색"을 구분하지 않는다 — 매장 이름을 치든 자연어를 치든
+같은 입력창에 치고, 어느 경로로 찾을지는 시트가 정한다.
+
+- **타이핑 중**: 경량 매칭(`/query/destination`)만. 형태소 정규화(Kiwi)가 이 경로에 있어
+  매장 이름은 즉시 걸린다.
+- **엔터로 확정**: 경량이 빈손이면 의미 검색(`/query/ai`)까지 자동으로 이어 붙인다.
+
+의미 검색을 타이핑 중이 아니라 확정 시점에만 붙이는 이유는 비용이다. 백엔드가 임베딩
+모델을 로드하면 첫 호출이 20초대까지 가므로, 글자마다 던지면 "밥"·"밥 먹"이 전부 모델을
+태운다. **이 조건을 지우면 검색이 느려지는 게 아니라 멈춘 것처럼 보인다.**
+
+[`ai_search_sheet.dart`](ai_search_sheet.dart)는 경로 안내 화면의 FAB에서만 쓰는 대화형
+검색 패널로 남아 있다.
 
 ## `FloorPlanView` 경계
 
