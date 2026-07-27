@@ -10,9 +10,17 @@
 | 지도 | [`floor_plan_view.dart`](floor_plan_view.dart) | MapLibre 층 지도, 매장·POI·현재 위치·경로 표시 |
 | 지도 | [`route_polyline.dart`](route_polyline.dart), [`location_marker.dart`](location_marker.dart), [`uncertainty_circle.dart`](uncertainty_circle.dart) | 경로선, 위치와 불확실성 표현 |
 | 지도 셸 | [`map_top_bar.dart`](map_top_bar.dart), [`map_bottom_bar.dart`](map_bottom_bar.dart), [`eta_card.dart`](eta_card.dart), [`status_badge.dart`](status_badge.dart) | 지도 화면 공통 조작·상태 |
-| 탐색 시트 | [`directions_sheet.dart`](directions_sheet.dart), [`building_switcher_sheet.dart`](building_switcher_sheet.dart) | 출발/도착 검색, 건물 전환 |
+| 탐색 시트 | [`search_sheet.dart`](search_sheet.dart), [`ai_search_sheet.dart`](ai_search_sheet.dart), [`directions_sheet.dart`](directions_sheet.dart), [`building_switcher_sheet.dart`](building_switcher_sheet.dart) | 매장 검색(경량)·AI 검색(의미), 출발/도착 검색, 건물 전환 |
 | 장소 시트 | [`category_stores_sheet.dart`](category_stores_sheet.dart), [`store_info_sheet.dart`](store_info_sheet.dart), [`favorites_sheet.dart`](favorites_sheet.dart) | 카테고리 매장·매장 정보·즐겨찾기 |
-| 공통 | [`sheet_header.dart`](sheet_header.dart), [`rag_chat_panel.dart`](rag_chat_panel.dart) | 시트 헤더, 자연어 질의 패널 |
+| 공통 | [`sheet_header.dart`](sheet_header.dart) | 시트 헤더 |
+
+## 검색 두 갈래
+
+상단 검색창은 입력을 받지 않고 탭하면 [`search_sheet.dart`](search_sheet.dart)를 올린다.
+시트는 경량 매칭(`/query/destination`, 형태소 정규화 포함)만 쓰고, 빈손일 때 "AI 검색으로
+찾기"로 [`ai_search_sheet.dart`](ai_search_sheet.dart)(`/query/ai`, 의미 검색)에 넘긴다.
+AI 검색은 카테고리 열의 pill로도 바로 열린다. 매 검색마다 임베딩 모델을 태우지 않으려고
+갈래를 나눈 것이라, 둘을 하나로 합치지 않는다.
 
 ## `FloorPlanView` 경계
 

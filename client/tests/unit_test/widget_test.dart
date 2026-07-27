@@ -10,6 +10,7 @@ import 'package:navigation_client/app.dart';
 import 'package:navigation_client/core/api_config.dart';
 import 'package:navigation_client/core/service_locator.dart';
 import 'package:navigation_client/models/poi_search_result.dart';
+import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/repositories/mock_building_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
 import 'package:navigation_client/routing/app_routes.dart';
@@ -388,6 +389,103 @@ void main() {
     expect(find.text('강의실 201'), findsOneWidget);
   });
 
+  /// 새 검색 흐름: 상단 검색창은 입력을 받지 않고, 탭하면 아래에서 시트가
+  /// 올라온다. 그 시트의 입력창에 쳐야 결과 목록이 뜬다.
+  Future<void> openSearchSheet(WidgetTester tester, String query) async {
+    await tester.tap(find.text('건물, 장소를 검색하세요'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, query);
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('홈 탭에서도 매장 이름으로 검색 결과가 뜬다', (WidgetTester tester) async {
+    // 회귀: 건물 안을 보고 있지 않으면 검색이 "건물 이름"만 뒤져서, 홈 화면에서
+    // 매장명을 치면 무조건 "검색 결과가 없습니다"가 떴다.
+    final repository = _FallbackDestinationRepository(
+      lightResult: const PoiSearchResult(
+        name: 'MLB',
+        floor: 'B2',
+        point: LatLng(37.52, 126.92),
+        nodeId: 'FL-2:ND-9',
+      ),
+    );
+    destinationRepository = repository;
+
+    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpAndSettle();
+    await openSearchSheet(tester, 'MLB');
+
+    expect(repository.lightQueries, ['MLB']);
+    expect(find.text('MLB'), findsWidgets);
+    expect(find.text('B2'), findsOneWidget);
+  });
+
+  testWidgets('검색 시트는 AI를 자동으로 부르지 않는다', (WidgetTester tester) async {
+    // 의미 검색은 임베딩 모델을 태우므로 사용자가 명시적으로 고를 때만 돈다.
+    final repository = _FallbackDestinationRepository();
+    destinationRepository = repository;
+
+    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpAndSettle();
+    await openSearchSheet(tester, '밥 먹을 곳');
+
+    expect(repository.lightQueries, ['밥 먹을 곳']);
+    expect(repository.aiQueries, isEmpty);
+    expect(find.textContaining('찾지 못했어요'), findsOneWidget);
+  });
+
+  testWidgets('빈손이면 AI 검색으로 넘어가 같은 질의를 다시 던진다', (
+    WidgetTester tester,
+  ) async {
+    final repository = _FallbackDestinationRepository(
+      aiResult: const PoiSearchResult(
+        name: '요즘김밥',
+        floor: 'B1',
+        point: LatLng(37.52, 126.92),
+        nodeId: 'FL-1:ND-1',
+      ),
+    );
+    destinationRepository = repository;
+
+    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpAndSettle();
+    await openSearchSheet(tester, '밥 먹을 곳');
+
+    await tester.tap(find.text('AI 검색으로 찾기'));
+    await tester.pumpAndSettle();
+
+    // 사용자가 방금 친 말을 다시 치게 하지 않는다.
+    expect(repository.aiQueries, ['밥 먹을 곳']);
+    expect(find.textContaining('요즘김밥'), findsOneWidget);
+  });
+
+  testWidgets('카테고리 열의 AI 검색 pill이 AI 패널을 연다', (
+    WidgetTester tester,
+  ) async {
+    destinationRepository = _FallbackDestinationRepository();
+
+    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('AI 검색'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('AI 매장 찾기'), findsOneWidget);
+  });
+
+  testWidgets('건물 이름으로 검색하면 건물 줄이 뜬다', (WidgetTester tester) async {
+    // 예전 상단 검색이 하던 건물 이름 검색을 시트로 옮겨 왔다.
+    destinationRepository = _FallbackDestinationRepository();
+
+    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpAndSettle();
+    await openSearchSheet(tester, '데모');
+
+    expect(find.textContaining('건물 ·'), findsOneWidget);
+  });
+
+
   testWidgets('destination screen filters as the user types', (
     WidgetTester tester,
   ) async {
@@ -455,11 +553,13 @@ void main() {
 
     expect(find.byType(FloatingActionButton), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.info_outline));
+    // FAB는 하드코딩 Q&A 껍데기가 아니라 실제 /query/ai를 쓰는 매장 찾기 패널을
+    // 연다. 백엔드는 문장으로 답하지 않고 매장 1건을 돌려주므로 UI도 검색형이다.
+    await tester.tap(find.byIcon(Icons.search));
     await tester.pumpAndSettle();
 
-    expect(find.text('건물 정보 Q&A'), findsOneWidget);
-    expect(find.textContaining('화장실'), findsWidgets);
+    expect(find.text('AI 매장 찾기'), findsOneWidget);
+    expect(find.byType(TextField), findsWidgets);
   });
 
   testWidgets('arrival screen shows a generic message and navigates on tap', (
@@ -515,4 +615,35 @@ void main() {
 
     expect(find.text('INDOOR'), findsOneWidget);
   });
+}
+
+/// 경량(`/query/destination`)과 AI(`/query/ai`)를 따로 흉내내, 폴백이 실제로
+/// 갈리는지 본다. 어떤 질의가 어느 경로로 갔는지도 기록한다.
+class _FallbackDestinationRepository implements DestinationRepository {
+  _FallbackDestinationRepository({this.lightResult, this.aiResult});
+
+  final PoiSearchResult? lightResult;
+  final PoiSearchResult? aiResult;
+  final lightQueries = <String>[];
+  final aiQueries = <String>[];
+
+  @override
+  Future<List<PoiSearchResult>> searchDestinations(
+    String buildingId,
+    String query, {
+    String? currentFloorId,
+  }) async {
+    lightQueries.add(query);
+    return lightResult == null ? const [] : [lightResult!];
+  }
+
+  @override
+  Future<List<PoiSearchResult>> searchDestinationsAi(
+    String buildingId,
+    String query, {
+    String? currentFloorId,
+  }) async {
+    aiQueries.add(query);
+    return aiResult == null ? const [] : [aiResult!];
+  }
 }

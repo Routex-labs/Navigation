@@ -10,6 +10,23 @@ class MockDestinationRepository implements DestinationRepository {
 
   final BuildingRepository _buildingRepository;
 
+  /// Mock에는 임베딩 인덱스가 없으므로 이름 부분 일치 검색을 그대로 쓰고,
+  /// 백엔드의 "최대 1건" 규약만 맞춘다. 자연어 의미 검색은 재현하지 않는다 —
+  /// 흉내 낸 결과로 테스트를 통과시키면 실제 연동에서만 깨지는 차이가 숨는다.
+  @override
+  Future<List<PoiSearchResult>> searchDestinationsAi(
+    String buildingId,
+    String query, {
+    String? currentFloorId,
+  }) async {
+    final results = await searchDestinations(
+      buildingId,
+      query,
+      currentFloorId: currentFloorId,
+    );
+    return results.isEmpty ? const [] : [results.first];
+  }
+
   @override
   Future<List<PoiSearchResult>> searchDestinations(
     String buildingId,

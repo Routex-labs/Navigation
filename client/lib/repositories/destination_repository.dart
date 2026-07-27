@@ -15,4 +15,22 @@ abstract class DestinationRepository {
     String query, {
     String? currentFloorId,
   });
+
+  /// FAISS 하이브리드 자연어 질의. 응답 계약은 [searchDestinations]와 같지만
+  /// 사전에 없는 표현("밥 먹을 곳", "애들 신발")도 의미로 찾는다.
+  ///
+  /// 백엔드가 경량 1차를 먼저 돌리고, 확정하지 못했을 때만 임베딩 의미 검색
+  /// 2차로 넘어간다(설계: docs/backend/native/FAISS.md). 즉 정확한 이름은
+  /// 즉시 오지만, **2차로 넘어가는 자연어는 임베딩 모델 로드로 첫 호출이 수 초
+  /// 걸릴 수 있다.** 호출부는 반드시 로딩 상태를 노출하고 UI를 막지 않는다.
+  ///
+  /// 결과는 [searchDestinations]와 같은 "최대 1건" 규약이다 — 백엔드가
+  /// 안내 대상 매장 1건만 확정해 주기 때문이다. 빈 리스트는 no_match,
+  /// `nodeId`가 null인 1건은 ok_no_route(위치는 알지만 입구 노드가 없어 경로
+  /// 안내 불가)를 뜻한다.
+  Future<List<PoiSearchResult>> searchDestinationsAi(
+    String buildingId,
+    String query, {
+    String? currentFloorId,
+  });
 }

@@ -10,7 +10,7 @@ import '../../routing/app_routes.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/eta_card.dart';
 import '../../widgets/floor_plan_view.dart';
-import '../../widgets/rag_chat_panel.dart';
+import '../../widgets/ai_search_sheet.dart';
 
 const _fallbackCenter = LatLng(37.5665, 126.9780);
 const _walkingSpeedMetersPerSecond = 1.2;
@@ -103,7 +103,7 @@ class _RouteGuideScreenState extends State<RouteGuideScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => const RagChatPanel(),
+      builder: (context) => const AiSearchSheet(buildingId: demoBuildingId),
     );
   }
 
@@ -159,8 +159,8 @@ class _RouteGuideScreenState extends State<RouteGuideScreen> {
                               child: FloatingActionButton(
                                 heroTag: 'rag-info',
                                 onPressed: _openBuildingInfo,
-                                tooltip: '건물 정보',
-                                child: const Icon(Icons.info_outline),
+                                tooltip: 'AI 매장 찾기',
+                                child: const Icon(Icons.search),
                               ),
                             ),
                           ],

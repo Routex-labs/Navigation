@@ -7,7 +7,10 @@ import '../core/api_config.dart';
 import '../models/poi_search_result.dart';
 import 'destination_repository.dart';
 
-/// api/app/routers/query.py의 POST /query/destination을 호출한다.
+/// api/app/routers/query.py의 POST /query/destination·/query/ai를 호출한다.
+///
+/// 두 엔드포인트는 **응답 계약이 완전히 같고**(하이브리드 경로만 다름) 요청
+/// Body도 같아, 경로만 바꿔 [_query] 하나로 처리한다.
 ///
 /// 백엔드는 매칭 최적 1건만 돌려주므로(app/repositories/query_search.py의
 /// _rank가 tier+level+id로 정렬 후 첫 번째), 이 구현이 돌려주는 리스트는
@@ -31,6 +34,23 @@ class HttpDestinationRepository implements DestinationRepository {
     String buildingId,
     String query, {
     String? currentFloorId,
+  }) =>
+      _query('destination', buildingId, query, currentFloorId: currentFloorId);
+
+  /// `POST /query/ai` — 경량 1차 + FAISS 의미 검색 2차 하이브리드.
+  /// 응답 계약이 /query/destination과 같아 파싱을 그대로 공유한다.
+  @override
+  Future<List<PoiSearchResult>> searchDestinationsAi(
+    String buildingId,
+    String query, {
+    String? currentFloorId,
+  }) => _query('ai', buildingId, query, currentFloorId: currentFloorId);
+
+  Future<List<PoiSearchResult>> _query(
+    String endpoint,
+    String buildingId,
+    String query, {
+    String? currentFloorId,
   }) async {
     // 백엔드는 text.min_length=1을 강제해 빈 문자열이면 422를 낸다. 시트를
     // 처음 열 때(_search('')) 등 정상 흐름에서도 빈 쿼리가 들어오므로,
@@ -38,7 +58,7 @@ class HttpDestinationRepository implements DestinationRepository {
     if (query.trim().isEmpty) return const [];
 
     final response = await _client.post(
-      Uri.parse('$apiBaseUrl/query/destination'),
+      Uri.parse('$apiBaseUrl/query/$endpoint'),
       headers: const {'Content-Type': 'application/json; charset=utf-8'},
       body: utf8.encode(jsonEncode({
         'text': query,
@@ -55,7 +75,7 @@ class HttpDestinationRepository implements DestinationRepository {
     }
     if (response.statusCode >= 500) {
       throw http.ClientException(
-        'destination query failed: ${response.statusCode}',
+        '$endpoint query failed: ${response.statusCode}',
         response.request?.url,
       );
     }

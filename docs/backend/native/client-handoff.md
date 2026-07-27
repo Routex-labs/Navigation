@@ -82,14 +82,45 @@
 
 ## 완성 기준
 
-- [ ] `POST /query/ai`를 `{text, building_id, current_floor_id?}`로 호출한다.
-- [ ] 응답을 **단일 `match` 객체**로 파싱한다(`store_id`·`name`·`floor_name`·`entrance_node_id`·좌표).
-- [ ] 사전에 없는 자연어("밥 먹을 곳", "애들 신발")로도 관련 매장이 안내된다.
-- [ ] `status`별 처리: `ok`=경로 안내, `ok_no_route`=위치만+안내, `no_match`=결과 없음.
-- [ ] 첫 질의의 모델 로드 지연 동안 **로딩 상태**가 표시되고 UI가 멈추지 않는다.
-- [ ] 빈/공백 질의(422)·건물 없음(404)에서 앱이 크래시하지 않고 사용자에게 안내한다.
-- [ ] 기존 `/query/destination` 경량 검색의 **낡은 `result` 리스트 파서**가 현재 계약(`match`)으로 교정된다.
-- [ ] `rag_chat_panel`이 하드코딩 샘플이 아니라 실제 백엔드 결과(또는 검색형 진입점)로 동작한다.
+**연동 완료.** 아래 항목은 모두 충족했다(구현 위치는 "연동 결과" 참고).
+
+- [x] `POST /query/ai`를 `{text, building_id, current_floor_id?}`로 호출한다.
+- [x] 응답을 **단일 `match` 객체**로 파싱한다(`store_id`·`name`·`floor_name`·`entrance_node_id`·좌표).
+- [x] 사전에 없는 자연어("밥 먹을 곳", "애들 신발")로도 관련 매장이 안내된다.
+- [x] `status`별 처리: `ok`=경로 안내, `ok_no_route`=위치만+안내, `no_match`=결과 없음.
+- [x] 첫 질의의 모델 로드 지연 동안 **로딩 상태**가 표시되고 UI가 멈추지 않는다.
+- [x] 빈/공백 질의(422)·건물 없음(404)에서 앱이 크래시하지 않고 사용자에게 안내한다.
+- [x] ~~기존 `/query/destination` 경량 검색의 낡은 `result` 리스트 파서 교정~~ —
+      **이 항목은 문서가 낡았다.** 확인해 보니 `http_destination_repository.dart`는
+      이미 현재 계약(`{status, query, match}`)으로 파싱하고 있었다.
+- [x] `rag_chat_panel`이 하드코딩 샘플이 아니라 실제 백엔드 결과로 동작한다.
+
+## 연동 결과
+
+- **진입점은 별도 "AI 쿼리" 버튼이 아니라 상단 검색의 2차 폴백으로 붙였다.**
+  `map_shell_screen._onSearch`가 경량(`/query/destination`)을 먼저 태우고, 빈손일
+  때만 `/query/ai`를 부른다. 사용자가 "결과 없음"을 볼 상황에서만 타므로 잘 되던
+  검색은 그대로 빠르고, 못 찾던 자연어만 건진다. 사용자가 "이건 AI로 찾아야 하는
+  질의"라고 미리 판단할 필요가 없다.
+- `rag_chat_panel.dart`는 하드코딩 Q&A 껍데기에서 **실제 `/query/ai` 검색 패널**로
+  교체했다. 생성형 답변이 아니라 매장 1건 안내임을 UI 문구로 반영했다.
+- `DestinationRepository.searchDestinationsAi`를 추가하고, 두 엔드포인트의 응답
+  계약이 같으므로 파싱은 경로만 바꿔 공유한다.
+
+## 실측(로컬 CPU, 2026-07-27)
+
+| 질의 | `/query/destination` | `/query/ai` |
+|---|---|---|
+| `MLB` | ok · MLB(B2) | ok · MLB(B2), 0.3초 |
+| `밥 먹을 곳` | **no_match** | ok · 요즘김밥(B1) |
+| `애들 신발` | **no_match** | ok · 탠디(3F) |
+| `asdfqwerzxcv` | no_match | no_match |
+
+- 경량이 못 찾는 자연어를 AI가 실제로 건진다는 것이 폴백 설계의 근거다.
+- **첫 질의(모델 콜드 스타트)는 20.8초 걸렸다.** 이 문서가 적어 둔 "CPU ~6초"보다
+  훨씬 길다. 워밍 후에는 0.3~0.5초. 로딩 표시가 필수인 이유이며, 20초대는 SnackBar
+  스피너만으로 버티기엔 길어 배포 전 워밍 전략(min-instances·startup CPU boost)을
+  다시 볼 것.
 
 ## 검증 방법
 
