@@ -7,6 +7,7 @@ import '../../models/favorite_place.dart';
 import '../../models/floor_plan.dart';
 import '../../models/poi_search_result.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/ai_search_sheet.dart';
 import '../../widgets/building_switcher_sheet.dart';
 import '../../widgets/category_icon.dart';
 import '../../widgets/category_stores_sheet.dart';
@@ -14,6 +15,7 @@ import '../../widgets/directions_sheet.dart';
 import '../../widgets/favorites_sheet.dart';
 import '../../widgets/map_bottom_bar.dart';
 import '../../widgets/map_top_bar.dart';
+import '../../widgets/search_sheet.dart';
 import '../../widgets/store_info_sheet.dart';
 import '../indoor_map/indoor_map_screen.dart';
 import '../outdoor_map/outdoor_map_screen.dart';
@@ -160,119 +162,51 @@ class _MapShellScreenState extends State<MapShellScreen> {
     }
   }
 
-  Future<void> _onSearch(String query) async {
-    final normalized = query.trim();
-    if (normalized.isEmpty) {
-      setState(() => _placeInfo = null);
-      return;
-    }
-
-    // 건물 밖을 보고 있으면 먼저 건물 이름으로 맞춰 본다.
-    //
-    // **여기서 끝내면 안 된다.** 예전에는 건물이 안 걸리면 곧장 "검색 결과가
-    // 없습니다"로 끝나서, 홈 화면에서 매장명("MLB")이나 자연어("밥 먹을 곳")를
-    // 친 사용자는 무엇을 쳐도 결과를 못 봤다 — 건물 이름("더현대 서울")만
-    // 맞는 검색어였던 셈이다. 건물이 안 걸리면 아래 매장 검색으로 흘려보낸다.
-    if (!_indoorContextActive) {
-      final buildings = await buildingRepository.getAllBuildings();
-      final building = buildings
-          .where((b) => b.name.toLowerCase().contains(normalized.toLowerCase()))
-          .firstOrNull;
-      if (!mounted) return;
-      if (building != null) {
+  /// 상단 검색창 탭 → 아래에서 검색 시트를 올린다. 입력과 결과 목록이 한
+  /// 화면에 있어야 "쳤는데 아무것도 안 나온다"는 인상이 안 생긴다.
+  ///
+  /// 시트는 경량 검색만 쓴다. 빈손이면 사용자가 "AI 검색으로 찾기"를 눌러
+  /// 명시적으로 의미 검색으로 넘어간다 — 매 검색마다 임베딩 모델을 태우지
+  /// 않으면서, 못 찾았을 때 다음 수단은 바로 옆에 두는 절충이다.
+  Future<void> _openSearchSheet() async {
+    final outcome = await _withMapsLocked(
+      () => SearchSheet.show(
+        context,
+        buildingId: _buildingId,
+        currentFloorId: _activeIndoorFloor,
+      ),
+    );
+    if (!mounted || outcome == null) return;
+    switch (outcome) {
+      case SearchSheetStorePicked(:final store):
+        await _runSheetChain(() => _showStoreInfo(store));
+      case SearchSheetBuildingPicked(:final building):
         setState(() {
           _placeInfo = (
             title: building.name,
             subtitle: '${building.floors.length}개 층',
           );
         });
-        return;
-      }
-      setState(() => _placeInfo = null);
+      case SearchSheetAiRequested(:final query):
+        await _openAiSearch(initialQuery: query);
     }
-
-    // 상단 일반 검색도 실내에서는 지금 보고 있는 층 안에서만 매칭한다 —
-    // 화장실/엘리베이터/에스컬레이터처럼 층마다 같은 이름이 여러 개 있는
-    // 시설을 다른 층으로 데려가지 않기 위해서. 아직 층이 로드되지 않은
-    // 순간에는 현재 층을 알 수 없으므로 예전 전체 건물 검색으로 폴백한다.
-    // 1차: 경량 검색(/query/destination). 정확한 이름·동의어는 즉시 온다.
-    var results = await destinationRepository.searchDestinations(
-      _buildingId,
-      normalized,
-      currentFloorId: _activeIndoorFloor,
-    );
-    if (!mounted) return;
-
-    // 2차: 경량이 빈손이면 하이브리드 자연어 질의(/query/ai)로 한 번 더 찾는다.
-    // "밥 먹을 곳", "애들 신발"처럼 사전에 없는 표현은 여기서만 걸린다.
-    // 사용자가 "결과 없음"을 볼 상황에서만 타므로, 잘 되던 검색이 느려지지
-    // 않으면서 못 찾던 질의만 건진다.
-    if (results.isEmpty) {
-      results = await _searchDestinationsWithAi(normalized);
-      if (!mounted) return;
-    }
-
-    final match = results.firstOrNull;
-    if (match == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('검색 결과가 없습니다')),
-      );
-      return;
-    }
-    // status=ok_no_route — 매장은 찾았지만 입구 노드가 스냅되지 않아 온디바이스
-    // 다익스트라의 도착점이 없다. 위치는 보여주되 경로 안내가 안 된다고 먼저
-    // 알려, 사용자가 길찾기를 눌렀다가 조용히 실패하는 일을 막는다.
-    if (match.nodeId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${match.name}은(는) 위치만 표시할 수 있어요 (경로 안내 불가)')),
-      );
-    }
-
-    await _runSheetChain(() => _showStoreInfo(match));
   }
 
-  /// 경량 검색이 놓친 자연어를 `/query/ai`로 한 번 더 찾는다.
-  ///
-  /// 2차 의미 검색으로 넘어가면 백엔드가 임베딩 모델을 로드하느라 첫 호출이
-  /// 수 초 걸릴 수 있어(CPU ~6초) 진행 표시를 띄운다. SnackBar라 지도·입력은
-  /// 그대로 살아 있고, 결과가 오면 바로 걷어낸다.
-  ///
-  /// 실패(서버 장애·네트워크 끊김)는 삼켜서 빈 결과로 되돌린다 — 여기까지
-  /// 왔다는 건 이미 경량 검색이 빈손이었다는 뜻이라 사용자에게는 "결과 없음"이
-  /// 자연스러운 결말이고, 예외를 띄워 검색 흐름을 끊을 이유가 없다.
-  Future<List<PoiSearchResult>> _searchDestinationsWithAi(String query) async {
-    // async gap 뒤에 context를 다시 쓰지 않도록 messenger를 미리 잡아 둔다.
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      const SnackBar(
-        // 모델 로드가 끝날 때까지는 떠 있어야 하므로 충분히 길게 잡고,
-        // 완료 시 finally에서 명시적으로 걷는다.
-        duration: Duration(minutes: 1),
-        content: Row(
-          children: [
-            SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-            SizedBox(width: 12),
-            Expanded(child: Text('비슷한 뜻으로 다시 찾는 중…')),
-          ],
-        ),
+  /// 카테고리 열의 "AI 검색" pill과 검색 시트의 빈 결과에서 함께 여는 패널.
+  /// 형태소 정규화 + 의미 검색(`/query/ai`)이 여기서 돌아간다.
+  Future<void> _openAiSearch({String? initialQuery}) async {
+    final store = await _withMapsLocked(
+      () => AiSearchSheet.show(
+        context,
+        buildingId: _buildingId,
+        currentFloorId: _activeIndoorFloor,
+        initialQuery: initialQuery,
       ),
     );
-    try {
-      return await destinationRepository.searchDestinationsAi(
-        _buildingId,
-        query,
-        currentFloorId: _activeIndoorFloor,
-      );
-    } on Object {
-      return const [];
-    } finally {
-      messenger.hideCurrentSnackBar();
-    }
+    if (!mounted || store == null) return;
+    await _runSheetChain(() => _showStoreInfo(store));
   }
+
 
   /// 매장 정보 시트를 띄운다. 검색 결과를 탭했을 때와 지도 위 매장 폴리곤을
   /// 직접 탭했을 때 모두 이 메서드를 거쳐 같은 시트가 뜨고, 출발지/도착지로
@@ -660,7 +594,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
               key: _topBarKey,
               showHamburger: _mode == MapMode.indoor,
               onHamburgerTap: _onHamburgerTap,
-              onSearch: _onSearch,
+              onSearchTap: _openSearchSheet,
               onDirectionsTap: _openDirections,
             ),
           ),
@@ -678,6 +612,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _FavoritesPill(key: _favoritesPillKey, onTap: _openFavorites),
+                    const SizedBox(width: 8),
+                    // 카테고리 chip보다 앞(장소 pill 바로 다음)에 둔다. 검색이
+                    // 빈손일 때 사용자가 바로 다음으로 집는 수단이라 눈에 잘
+                    // 띄는 자리가 필요하다.
+                    _AiSearchPill(onTap: () => _openAiSearch()),
                     const SizedBox(width: 8),
                     // 야외·실내 모드 모두에서 노출한다. _buildingId가 항상
                     // 현재 대상 건물(기본값 demoBuildingId)이라, 야외에서 chip을
@@ -760,6 +699,49 @@ class _FavoritesPill extends StatelessWidget {
               SizedBox(width: 6),
               Text(
                 '장소',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.text,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 저장한 장소 pill 다음(카테고리 chip 앞)에 붙는 AI 검색 진입 pill.
+///
+/// 상단 검색은 경량 매칭만 쓰고, 뜻으로 찾는 의미 검색(`/query/ai`)은 여기로
+/// 분리했다. 매 검색마다 임베딩 모델을 태우면 잘 되던 검색까지 느려지므로,
+/// 사용자가 필요할 때 명시적으로 고르게 한다.
+class _AiSearchPill extends StatelessWidget {
+  const _AiSearchPill({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      elevation: 3,
+      shadowColor: Colors.black.withValues(alpha: 0.15),
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.auto_awesome, size: 16, color: AppColors.primary),
+              SizedBox(width: 6),
+              Text(
+                'AI 검색',
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w700,
