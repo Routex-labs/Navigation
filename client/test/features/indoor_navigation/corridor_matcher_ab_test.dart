@@ -27,11 +27,6 @@ void main() {
       final old = FloorMapMatcher(graph).matchRoutedPath(raw);
       final beam = replay.run().last.correctedPath;
 
-      String report(String label, List<dynamic> path) {
-        final points = path.cast<dynamic>();
-        return label;
-      }
-
       final oldLen = CorridorReplayRun.lengthOf(old);
       final beamLen = CorridorReplayRun.lengthOf(beam);
       final oldTp = CorridorReplayRun.teleportsOf(old);
@@ -56,7 +51,7 @@ void main() {
         '${minOf(beam.map((p) => p.eastM)).toStringAsFixed(0)}~${maxOf(beam.map((p) => p.eastM)).toStringAsFixed(0)}  '
         '${minOf(beam.map((p) => p.northM)).toStringAsFixed(0)}~${maxOf(beam.map((p) => p.northM)).toStringAsFixed(0)}',
       );
-      expect(report, isNotNull);
+      expect(beam, isNotEmpty);
     });
   }
 }
