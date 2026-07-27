@@ -34,6 +34,7 @@ import '../../widgets/eta_card.dart';
 import '../../widgets/floor_facility_style.dart';
 import '../../widgets/floor_selector.dart';
 import '../../widgets/status_badge.dart';
+import 'indoor_entry_zoom.dart';
 
 // 위치 조회 실패 시 대체 좌표 (서울시청). 저장·전달은 latlong2 타입으로 하고
 // MapLibre API에 넘길 때만 [_toGl]로 변환한다 — 이 파일 외부(Building.entrance,
@@ -130,36 +131,10 @@ const _buildingFillOpacityPressed = 0.45;
 // "인식됐다" 느낌을 준다.
 const _buildingPressedHoldMs = 220;
 
-// 실내 오버레이가 zoom-interpolate로 페이드인되는 줌 구간. 이 아래는 완전히
-// 숨겨져 야외 지도만 보이고, 이 위는 완전히 보인다.
-const _indoorOverlayFadeInStartZoom = 16.5;
-const _indoorOverlayFadeInEndZoom = 17.5;
-
-// 실내 MVT 소스에 minzoom을 걸어 이 값 미만에서는 아예 타일 요청이 나가지 않게
-// 한다. 이유: 백엔드 MVT는 요청 타일 경계로 지오메트리를 4096 유닛에 양자화하는데
-// (mapbox_vector_tile.encode의 quantize_bounds), 낮은 zoom(예: z=10)에서는 1
-// 유닛이 10 m 이상이라 건물이 눈에 띄게 뒤틀린 채로 저장된다. 사용자가 야외 지도를
-// 축소했다 다시 확대하는 순간 MapLibre가 캐시된 저-zoom 부모 타일을 over-scale해
-// 잠깐 표시하는데(정확한 z=17 타일이 도착하기 전), 이 부모 타일이 회전된 도면처럼
-// 보이는 원인이었다. 페이드 시작(_indoorOverlayFadeInStartZoom=16.5) 바로 아래에
-// 잡아 이하 zoom에서는 요청도 캐시도 없게 한다 — 어차피 opacity=0이라 시각적
-// 손해가 없고, 저-zoom 캐시가 없으므로 zoom-in 시 항상 fresh 고정밀 타일이 뜬다.
-const _indoorTilesMinZoom = 16.0;
-
-// 극한 확대(z>=19) 시 MapLibre가 backend에 매우 좁은 tile bounds로 quantize된
-// MVT를 요청하는데, tile 경계가 좁을수록 double 좌표 → 4096 유닛 quantize 과정에서
-// 상대 오차가 누적돼 도면이 미세하게 뒤틀린다. maxzoom을 이 값으로 잡아 그 이상에서는
-// z=18 tile을 over-scale하도록 한다. z=18 tile은 ~150m 폭이라 0.04m/유닛의 안정된
-// precision을 가진다.
-const _indoorTilesMaxZoom = 18.0;
-
-// 사용자가 지도를 이만큼 이상 확대하면 "실내 진입" 의도로 보고, 야외 지도 위에
-// 층 chip과 위치 지정 버튼 등 실내 UI 오버레이를 얹는다. 오버레이가 완전히
-// 보이는 시점(_indoorOverlayFadeInEndZoom)과 맞춰 페이드가 끝나는 순간 부가
-// 인터페이스도 함께 나타나도록 한다. 모드(홈/실내)는 여기서 전환하지 않는다 —
-// 사용자는 하단 세그먼트로 언제든 전환 가능하고, 이 오버레이는 야외 화면
-// 그대로에서 실내 기능을 즉시 쓸 수 있게 확장하는 목적이다.
-const _indoorEntryZoomThreshold = _indoorOverlayFadeInEndZoom;
+// 실내 진입/이탈 임계값·오버레이 페이드 구간은 서로 얽혀 있어 한 곳에서만
+// 정의한다 — indoor_entry_zoom.dart 참고. 값 하나만 옮겨도 "도면이 다 보이기
+// 전에 실내에서 튕겨 나가는" 증상이나 "이탈 순간 도면이 툭 끊기는" 증상이
+// 조용히 되살아나므로, 관계를 함수로 고정하고 테스트로 지킨다.
 
 // PDR 앵커 배치 시 탭 위치에서 통로 그래프까지 허용하는 최대 거리(m).
 // 야외 지도에서는 건물이 화면 안에서 상대적으로 작게 보이고 탭 정밀도가 떨어져
@@ -676,7 +651,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   }
 
   /// 층 chip 탭·자동 실내 진입 뒤에 실내 오버레이를 보장 노출하기 위한 헬퍼.
-  /// - 카메라 zoom이 오버레이 fade-in end 미만이면 그 zoom + 건물 중심으로 이동.
+  /// - 카메라 zoom이 이탈 임계값 미만(=도면이 사실상 안 보임)이면 진입 임계값
+  ///   + 건물 중심으로 이동.
   /// - 카메라가 건물 중심에서 크게 벗어나 있으면 zoom 유지한 채 건물 중심으로 이동.
   /// - 두 조건 모두 아니면 아무 것도 하지 않는다(사용자의 현재 view 존중).
   Future<void> _recenterOnBuildingIfNeeded() async {
@@ -690,7 +666,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final center = _buildingCenter(footprint);
     if (center == null) return;
 
-    final needZoomIn = cam.zoom < _indoorOverlayFadeInEndZoom;
+    // 이탈 임계값 기준으로 판정한다. 진입 임계값(17.5)으로 재면, 넓은 지하층
+    // 전체를 담으려고 z≈16.05까지 축소해 둔 사용자가 층 chip을 누르는 순간
+    // 카메라가 다시 17.5로 튀어올라 방금 맞춘 view를 빼앗긴다.
+    final needZoomIn = cam.zoom < indoorExitZoomThreshold;
     // 건물 중심에서 카메라까지 대략적인 거리. 위경도 도 단위지만 근사적으로
     // 계산해 "화면 밖" 판정에만 쓴다 — 정확한 거리 계산은 필요 없다.
     final distDeg = math.sqrt(
@@ -702,7 +681,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
     if (!needZoomIn && !farFromBuilding) return;
 
-    final targetZoom = needZoomIn ? _indoorOverlayFadeInEndZoom : cam.zoom;
+    final targetZoom = needZoomIn ? indoorEntryZoomThreshold : cam.zoom;
     await controller.animateCamera(
       CameraUpdate.newLatLngZoom(_toGl(center), targetZoom),
     );
@@ -1484,15 +1463,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       await controller.setLayerProperties(
         _dimScrimFillLayerId,
         FillLayerProperties(
-          fillOpacity: const [
-            'interpolate',
-            ['linear'],
-            ['zoom'],
-            _indoorOverlayFadeInStartZoom,
-            0,
-            _indoorOverlayFadeInEndZoom,
-            0.35,
-          ],
+          fillOpacity: _fadeExpr(maxOpacity: 0.35),
         ),
       );
     } else {
@@ -1500,6 +1471,52 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _dimScrimFillLayerId,
         const FillLayerProperties(fillOpacity: 0),
       );
+    }
+  }
+
+  /// 현재 진입 상태에 맞는 오버레이 페이드 표현식.
+  /// 구간이 진입 전후로 왜 다른지는 [indoorOverlayFadeExpr] 쪽 주석 참고.
+  List<Object> _fadeExpr({double maxOpacity = 1}) =>
+      indoorOverlayFadeExpr(entered: _indoorEntered, maxOpacity: maxOpacity);
+
+  /// 실내 진입/이탈로 페이드 구간이 바뀌었을 때 이미 등록된 오버레이 레이어의
+  /// opacity 표현식을 갈아 끼운다. 레이어가 아직 등록되지 않았으면
+  /// [_ensureIndoorTilesRegistered]가 등록 시점의 상태로 넣어주므로 아무것도
+  /// 하지 않아도 된다.
+  Future<void> _syncIndoorOverlayFade() async {
+    final controller = _mapController;
+    if (controller == null || !_styleReady || !_indoorTilesRegistered) return;
+    final fadeExpr = _fadeExpr();
+    // 이미 제거된 레이어에 대한 setLayerProperties가 native에서 예외를 던지는
+    // 구현이 있어(층 전환과 겹치는 순간) 각각 감싼다.
+    for (final id in [
+      _indoorFootprintLayerId,
+      _indoorStoresFillLayerId,
+      _indoorVerticalTransportFillLayerId,
+    ]) {
+      try {
+        await controller.setLayerProperties(
+          id,
+          FillLayerProperties(fillOpacity: fadeExpr),
+        );
+      } catch (_) {}
+    }
+    try {
+      await controller.setLayerProperties(
+        _indoorStoresLabelLayerId,
+        SymbolLayerProperties(textOpacity: fadeExpr),
+      );
+    } catch (_) {}
+    for (final id in [
+      _indoorPoiIconLayerId,
+      _indoorStoreFacilityIconLayerId,
+    ]) {
+      try {
+        await controller.setLayerProperties(
+          id,
+          SymbolLayerProperties(iconOpacity: fadeExpr),
+        );
+      } catch (_) {}
     }
   }
 
@@ -1587,6 +1604,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     setState(() => _indoorEntered = value);
     widget.onIndoorEnteredChanged?.call(value);
     _syncDimScrimLayer();
+    // 진입/이탈로 페이드 구간 자체가 바뀌므로 이미 붙어 있는 오버레이 레이어의
+    // opacity 표현식도 함께 갈아 끼운다.
+    unawaited(_syncIndoorOverlayFade());
   }
 
   void _handleCameraIdle() {
@@ -1594,16 +1614,21 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (controller == null) return;
     final zoom = controller.cameraPosition?.zoom;
     if (zoom == null) return;
-    if (zoom >= _indoorEntryZoomThreshold) {
-      _triggerIndoorEntry();
-    } else {
-      // 사용자가 다시 축소했으므로 오버레이를 접고 다음 확대에서 재발화할 수
-      // 있게 무장한다. 배치 대기 중이면 종료해 하단 바 표시도 함께 초기화한다.
-      _autoIndoorEntryArmed = true;
-      if (_indoorEntered) {
-        if (_placingPdrAnchor) _setPlacingAnchor(false);
-        _setIndoorEntered(false);
-      }
+    switch (indoorEntryTransitionForZoom(zoom)) {
+      case IndoorEntryTransition.enter:
+        _triggerIndoorEntry();
+      case IndoorEntryTransition.exit:
+        // 사용자가 건물을 벗어날 만큼 축소했으므로 오버레이를 접고 다음 확대에서
+        // 재발화할 수 있게 무장한다. 배치 대기 중이면 종료해 하단 바 표시도 함께
+        // 초기화한다.
+        _autoIndoorEntryArmed = true;
+        if (_indoorEntered) {
+          if (_placingPdrAnchor) _setPlacingAnchor(false);
+          _setIndoorEntered(false);
+        }
+      case IndoorEntryTransition.keep:
+        // 히스테리시스 밴드 — 현재 상태를 그대로 유지한다.
+        break;
     }
   }
 
@@ -1644,8 +1669,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           tiles: [tileUrl],
           // minzoom 미만에서는 타일 요청·캐시 자체를 막아, 저-zoom 부모 타일이
           // over-scale된 채 잠깐 보이면서 도면이 회전한 것처럼 보이는 문제를
-          // 예방한다. 근거는 _indoorTilesMinZoom 정의 위 주석 참고.
-          minzoom: _indoorTilesMinZoom,
+          // 예방한다. 근거는 indoorTilesMinZoom 정의 위 주석 참고.
+          minzoom: indoorTilesMinZoom,
           // maxzoom 이상에서는 MapLibre가 maxzoom 타일을 over-scale해 그린다.
           // 백엔드의 mapbox_vector_tile.encode는 요청 zoom이 커질수록 tile 경계
           // 사각형도 미세해지는데(z=21이면 20m 남짓), 이 좁은 사각형을 4096 유닛에
@@ -1653,27 +1678,18 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           // 하면 도면이 잠깐 뒤틀린 것처럼 보이는 원인이 됐다. z=18을 상한으로
           // 잡으면 tile 경계가 ~150m로 충분히 넓어 quantize precision이 0.04m/유닛
           // 이라 어떤 확대 배율에서도 sub-pixel로 안정된다.
-          maxzoom: _indoorTilesMaxZoom,
+          maxzoom: indoorTilesMaxZoom,
         ),
       );
       // POI/시설 아이콘 비트맵을 스타일당 한 번만 addImage로 등록한다. 층을
       // 바꿔도 이미지는 그대로 재사용되므로 반복 렌더를 피한다.
       await _ensureFacilityIconImagesRegistered(controller);
       // 실내 도면은 확대에 따라 자연스럽게 나타나야 한다(Google Maps의 건물 내부
-      // 표시와 같은 패턴): 줌 16.5 미만은 완전히 안 보이고 17.5부터 완전히 보이며
-      // 사이는 부드럽게 페이드인. MapLibre의 zoom-interpolate 표현식으로 처리해
-      // 카메라 이동 중 실시간으로 부드럽게 반영된다(수동 setLayerProperties 호출
-      // 없이). 아래는 [interpolate, linear, [zoom], stop0_zoom, stop0_val, ...]
-      // 형태의 style expression.
-      const fadeExpr = [
-        'interpolate',
-        ['linear'],
-        ['zoom'],
-        _indoorOverlayFadeInStartZoom,
-        0,
-        _indoorOverlayFadeInEndZoom,
-        1,
-      ];
+      // 표시와 같은 패턴). 페이드 구간은 진입 상태에 따라 달라지므로
+      // [indoorOverlayFadeExpr]가 만들어 준다. zoom-interpolate 표현식이라
+      // 카메라 이동 중에는 setLayerProperties 없이도 실시간으로 반영되고,
+      // 진입/이탈로 구간 자체가 바뀔 때만 [_syncIndoorOverlayFade]가 갱신한다.
+      final fadeExpr = _fadeExpr();
       // POI/시설 아이콘은 오버레이가 페이드인되는 구간에서는 살짝 작게, 사용자가
       // 실내로 더 확대해 들어갈수록 실내 화면과 비슷한 크기로 커지도록 zoom
       // 기반 iconSize로 준다. 아이콘 캔버스 96px 기준으로 실내 화면은 0.28
@@ -1683,7 +1699,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         'interpolate',
         ['linear'],
         ['zoom'],
-        _indoorOverlayFadeInEndZoom,
+        indoorOverlayFadeInEndZoom,
         0.22,
         20,
         0.42,
