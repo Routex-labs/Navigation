@@ -434,6 +434,123 @@ void main() {
       expect(recovered.correctedPosition.northM, closeTo(0, 1e-9));
     });
 
+    test('간선 끝에서 되돌아가면 같은 간선의 역방향을 거리 검증 후 재획득한다', () {
+      final tracker = CorridorPositionTracker(_crossGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(19, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+
+      final stoppedAtNode = tracker.update(
+        _observation(
+          atMs: 1000,
+          confirmedSteps: 4,
+          confirmedDistanceM: 2.8,
+          previewSteps: 4,
+          headingDeg: 90,
+          raw: const PdrLocalPoint(21.8, 0),
+          rawConfirmedStepPositions: const [
+            PdrLocalPoint(19.7, 0),
+            PdrLocalPoint(20.4, 0),
+            PdrLocalPoint(21.1, 0),
+            PdrLocalPoint(21.8, 0),
+          ],
+        ),
+      );
+      expect(stoppedAtNode.state, CorridorTrackingState.uncertain);
+      expect(stoppedAtNode.currentEdgeId, 'bd');
+      expect(stoppedAtNode.correctedPosition, const PdrLocalPoint(20, 0));
+
+      tracker.update(
+        _observation(
+          atMs: 1400,
+          confirmedSteps: 4,
+          confirmedDistanceM: 2.8,
+          previewSteps: 5,
+          headingDeg: 270,
+          raw: const PdrLocalPoint(21.8, 0),
+        ),
+      );
+      final recovered = tracker.update(
+        _observation(
+          atMs: 3200,
+          confirmedSteps: 7,
+          confirmedDistanceM: 4.9,
+          previewSteps: 8,
+          headingDeg: 270,
+          raw: const PdrLocalPoint(19.7, 0),
+          rawConfirmedStepPositions: const [
+            PdrLocalPoint(21.1, 0),
+            PdrLocalPoint(20.4, 0),
+            PdrLocalPoint(19.7, 0),
+          ],
+        ),
+      );
+
+      expect(recovered.state, CorridorTrackingState.nodeConfirmed);
+      expect(recovered.currentEdgeId, 'bd');
+      expect(recovered.travelDirectionSign, -1);
+      expect(recovered.lastConfirmedNodeId, 'd');
+      expect(recovered.correctedPosition.eastM, closeTo(17.9, 1e-9));
+      expect(recovered.correctedPosition.northM, closeTo(0, 1e-9));
+      expect(
+        recovered.correctedPath,
+        isNot(contains(const PdrLocalPoint(20, 3))),
+      );
+    });
+
+    test('uncertain 복구는 최신 heading 스파이크보다 최근 확정 이동 형태를 우선한다', () {
+      final tracker = CorridorPositionTracker(_crossGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(19, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+
+      tracker.update(
+        _observation(
+          atMs: 1000,
+          confirmedSteps: 4,
+          confirmedDistanceM: 2.8,
+          previewSteps: 4,
+          headingDeg: 90,
+          raw: const PdrLocalPoint(21.8, 0),
+        ),
+      );
+      tracker.update(
+        _observation(
+          atMs: 1400,
+          confirmedSteps: 4,
+          confirmedDistanceM: 2.8,
+          previewSteps: 5,
+          headingDeg: 270,
+          raw: const PdrLocalPoint(21.8, 0),
+        ),
+      );
+      final recovered = tracker.update(
+        _observation(
+          atMs: 3200,
+          confirmedSteps: 7,
+          confirmedDistanceM: 4.9,
+          previewSteps: 8,
+          // 최신 표본만 북쪽으로 튀었지만, 배치 내부 세 걸음은 서쪽이다.
+          headingDeg: 0,
+          raw: const PdrLocalPoint(19.7, 0),
+          rawConfirmedStepPositions: const [
+            PdrLocalPoint(21.1, 0),
+            PdrLocalPoint(20.4, 0),
+            PdrLocalPoint(19.7, 0),
+          ],
+        ),
+      );
+
+      expect(recovered.currentEdgeId, 'bd');
+      expect(recovered.travelDirectionSign, -1);
+      expect(recovered.correctedPosition.eastM, closeTo(17.9, 1e-9));
+      expect(recovered.correctedPosition.northM, closeTo(0, 1e-9));
+    });
+
     test('최신 heading만 후보와 맞고 초록 걸음별 방향이 다르면 회전을 확정하지 않는다', () {
       final tracker = CorridorPositionTracker(_crossGraph)
         ..reset(

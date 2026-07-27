@@ -28,6 +28,9 @@ class CorridorTrackerConfig {
     this.straightHeadingSpreadDeg = 12,
     this.uncertainReacquireMs = 1500,
     this.uncertainReacquireDistanceM = 2,
+    this.recoveryWindowMs = 6000,
+    this.recoveryWindowDistanceM = 6,
+    this.recoveryCandidateMarginDeg = 8,
     this.maxPathPoints = 800,
   });
 
@@ -45,6 +48,9 @@ class CorridorTrackerConfig {
   final double straightHeadingSpreadDeg;
   final int uncertainReacquireMs;
   final double uncertainReacquireDistanceM;
+  final int recoveryWindowMs;
+  final double recoveryWindowDistanceM;
+  final double recoveryCandidateMarginDeg;
   final int maxPathPoints;
 }
 
@@ -122,6 +128,7 @@ class CorridorPositionTracker {
   final _CorridorNetwork _network;
   final List<PdrLocalPoint> _correctedPath = [];
   final List<({int atMs, double headingDeg})> _headingWindow = [];
+  final List<_RecoverySegment> _recoverySegments = [];
 
   CorridorTrackingState _state = CorridorTrackingState.uncertain;
   _CorridorEdge? _currentEdge;
@@ -199,6 +206,7 @@ class CorridorPositionTracker {
     _turn = null;
     _clearLiveTurnCandidate();
     _clearUncertainCandidate();
+    _recoverySegments.clear();
     _headingWindow
       ..clear()
       ..add((atMs: timestampMs, headingDeg: _sensorHeadingDeg));
@@ -293,9 +301,8 @@ class CorridorPositionTracker {
       if (turn != null &&
           (observation.timestampMs - turn.startedAtMs >= config.turnTimeoutMs ||
               turn.confirmedDistanceM >= reachableDistanceLimitM)) {
-        _state = CorridorTrackingState.uncertain;
+        _enterUncertain(observation.timestampMs);
         _turn = null;
-        _straightSinceMs = observation.timestampMs;
       }
     }
 
@@ -413,9 +420,7 @@ class CorridorPositionTracker {
                 continuation.edge.bearingAwayFromNode(nodeId),
               ) >
               config.newEdgeHeadingToleranceDeg + 25) {
-        _state = CorridorTrackingState.uncertain;
-        _straightSinceMs = atMs;
-        _clearUncertainCandidate();
+        _enterUncertain(atMs);
         return;
       }
 
@@ -664,17 +669,30 @@ class CorridorPositionTracker {
     final edge = _currentEdge;
     if (edge == null) return;
 
+    final segments = _rawSegments(
+      deltaSteps: deltaSteps,
+      deltaDistanceM: deltaDistanceM,
+      previousRawConfirmedPosition: previousRawConfirmedPosition,
+      rawConfirmedStepPositions: rawConfirmedStepPositions,
+    );
+    for (final segment in segments) {
+      _recordRecoverySegment(
+        atMs: atMs,
+        headingDeg: _normalizeBearing(segment.headingDeg + _headingBiasDeg),
+        distanceM: segment.distanceM,
+      );
+    }
+    _observeUncertainCandidate(
+      atMs,
+      _normalizeBearing(_sensorHeadingDeg + _headingBiasDeg),
+    );
+
     final candidateId = _uncertainCandidateEdgeId;
     final candidateSince = _uncertainCandidateSinceMs;
     if (candidateId == null || candidateSince == null) return;
     final candidate = _network.edgeById(candidateId);
     if (candidate == null) return;
-    for (final segment in _rawSegments(
-      deltaSteps: deltaSteps,
-      deltaDistanceM: deltaDistanceM,
-      previousRawConfirmedPosition: previousRawConfirmedPosition,
-      rawConfirmedStepPositions: rawConfirmedStepPositions,
-    )) {
+    for (final segment in segments) {
       final candidateProgressM = _uncertainCandidateTravelSign > 0
           ? 0.0
           : candidate.lengthM;
@@ -691,10 +709,14 @@ class CorridorPositionTracker {
         continue;
       }
       _uncertainCandidateDistanceM += segment.distanceM;
-      if (candidate == edge && _uncertainCandidateNodeId == null) {
-        final next = (_currentProgressM + _travelSign * segment.distanceM)
-            .clamp(0.0, edge.lengthM)
-            .toDouble();
+      if (candidate == edge &&
+          _uncertainCandidateNodeId == null &&
+          _uncertainCandidateTravelSign == _travelSign) {
+        final next =
+            (_currentProgressM +
+                    _uncertainCandidateTravelSign * segment.distanceM)
+                .clamp(0.0, edge.lengthM)
+                .toDouble();
         _currentProgressM = next;
         _correctedPosition = edge.pointAt(next);
         _appendCorrected(_correctedPosition);
@@ -705,9 +727,25 @@ class CorridorPositionTracker {
       return;
     }
     if (candidate == edge && _uncertainCandidateNodeId == null) {
+      if (_uncertainCandidateTravelSign != _travelSign) {
+        _travelSign = _uncertainCandidateTravelSign;
+        _travelDirectionLocked = true;
+        _currentProgressM =
+            (_currentProgressM +
+                    _travelSign *
+                        math.min(
+                          _uncertainCandidateDistanceM,
+                          config.maximumConfirmationProgressM,
+                        ))
+                .clamp(0.0, edge.lengthM)
+                .toDouble();
+        _correctedPosition = edge.pointAt(_currentProgressM);
+        _appendCorrected(_correctedPosition);
+      }
       _state = CorridorTrackingState.straightTracking;
       _straightSinceMs = atMs;
       _clearUncertainCandidate();
+      _recoverySegments.clear();
       return;
     }
     final nodeId = _uncertainCandidateNodeId;
@@ -728,44 +766,125 @@ class CorridorPositionTracker {
   void _observeUncertainCandidate(int atMs, double headingDeg) {
     final edge = _currentEdge;
     if (edge == null) return;
-    final currentBearing = edge.bearingForTravel(
-      _currentProgressM,
-      _travelSign,
-    );
     final nodeId = edge.nodeAtTravelEnd(_travelSign);
     final distanceToNodeM = _travelSign > 0
         ? edge.lengthM - _currentProgressM
         : _currentProgressM;
     if (distanceToNodeM <= 0.35) {
-      final candidate = _network.bestOutgoing(
-        nodeId: nodeId,
-        excludingEdgeId: edge.id,
-        headingDeg: headingDeg,
-        toleranceDeg: config.newEdgeHeadingToleranceDeg,
+      final candidate = _bestRecoveryCandidate(
+        _network.recoveryOptionsFromNode(nodeId),
+        currentHeadingDeg: headingDeg,
       );
       if (candidate == null) {
+        if (_uncertainCandidateEdgeId != null && _recoverySegments.isEmpty) {
+          return;
+        }
         _clearUncertainCandidate();
         return;
       }
+      if (_shouldKeepUnverifiedCandidate(candidate)) return;
       _setUncertainCandidate(
         edgeId: candidate.edge.id,
         nodeId: nodeId,
-        travelSign: candidate.edge.travelSignAwayFromNode(nodeId),
+        travelSign: candidate.travelSign,
         atMs: atMs,
       );
       return;
     }
 
-    if (_headingError(headingDeg, currentBearing) <=
-        config.newEdgeHeadingToleranceDeg) {
-      _setUncertainCandidate(
-        edgeId: edge.id,
-        nodeId: null,
+    final candidates = <_RecoveryOption>[
+      _RecoveryOption(
+        edge: edge,
         travelSign: _travelSign,
-        atMs: atMs,
-      );
-    } else {
+        bearingDeg: edge.bearingForTravel(_currentProgressM, _travelSign),
+      ),
+      if (edge.bidirectional)
+        _RecoveryOption(
+          edge: edge,
+          travelSign: -_travelSign,
+          bearingDeg: edge.bearingForTravel(_currentProgressM, -_travelSign),
+        ),
+    ];
+    final candidate = _bestRecoveryCandidate(
+      candidates,
+      currentHeadingDeg: headingDeg,
+    );
+    if (candidate == null) {
+      if (_uncertainCandidateEdgeId != null && _recoverySegments.isEmpty) {
+        return;
+      }
       _clearUncertainCandidate();
+      return;
+    }
+    if (_shouldKeepUnverifiedCandidate(candidate)) return;
+    _setUncertainCandidate(
+      edgeId: candidate.edge.id,
+      nodeId: null,
+      travelSign: candidate.travelSign,
+      atMs: atMs,
+    );
+  }
+
+  bool _shouldKeepUnverifiedCandidate(_RecoveryOption replacement) =>
+      _uncertainCandidateEdgeId != null &&
+      _recoverySegments.isEmpty &&
+      (_uncertainCandidateEdgeId != replacement.edge.id ||
+          _uncertainCandidateTravelSign != replacement.travelSign);
+
+  _RecoveryOption? _bestRecoveryCandidate(
+    List<_RecoveryOption> candidates, {
+    required double currentHeadingDeg,
+  }) {
+    if (candidates.isEmpty) return null;
+    final scored = <({double errorDeg, _RecoveryOption option})>[];
+    for (final option in candidates) {
+      // 최신 heading 한 번의 스파이크보다 초록 배치에서 복원한 최근 이동
+      // 형태가 우세하도록 실시간 표본은 짧은 걸음 절반보다 작게 가중한다.
+      const realtimeWeightM = 0.35;
+      var weightedError =
+          _headingError(currentHeadingDeg, option.bearingDeg) * realtimeWeightM;
+      var weightM = realtimeWeightM;
+      for (final segment in _recoverySegments) {
+        weightedError +=
+            _headingError(segment.headingDeg, option.bearingDeg) *
+            segment.distanceM;
+        weightM += segment.distanceM;
+      }
+      scored.add((errorDeg: weightedError / weightM, option: option));
+    }
+    scored.sort((left, right) => left.errorDeg.compareTo(right.errorDeg));
+    final best = scored.first;
+    if (best.errorDeg > config.newEdgeHeadingToleranceDeg) return null;
+    if (scored.length > 1 &&
+        scored[1].errorDeg - best.errorDeg <
+            config.recoveryCandidateMarginDeg) {
+      return null;
+    }
+    return best.option;
+  }
+
+  void _recordRecoverySegment({
+    required int atMs,
+    required double headingDeg,
+    required double distanceM,
+  }) {
+    if (distanceM <= 0) return;
+    _recoverySegments.add(
+      _RecoverySegment(
+        atMs: atMs,
+        headingDeg: headingDeg,
+        distanceM: distanceM,
+      ),
+    );
+    final oldestAtMs = atMs - config.recoveryWindowMs;
+    _recoverySegments.removeWhere((segment) => segment.atMs < oldestAtMs);
+    var totalM = _recoverySegments.fold<double>(
+      0,
+      (sum, segment) => sum + segment.distanceM,
+    );
+    while (_recoverySegments.length > 1 &&
+        totalM > config.recoveryWindowDistanceM) {
+      totalM -= _recoverySegments.removeAt(0).distanceM;
     }
   }
 
@@ -807,6 +926,14 @@ class CorridorPositionTracker {
     _state = CorridorTrackingState.nodeConfirmed;
     _straightSinceMs = atMs;
     _clearLiveTurnCandidate();
+    _recoverySegments.clear();
+  }
+
+  void _enterUncertain(int atMs) {
+    _state = CorridorTrackingState.uncertain;
+    _straightSinceMs = atMs;
+    _clearUncertainCandidate();
+    _recoverySegments.clear();
   }
 
   void _recordHeading(int atMs, double headingDeg) {
@@ -892,6 +1019,30 @@ class _TurnEvidence {
   final int oldTravelSign;
   double confirmedDistanceM = 0;
   double alignedNewEdgeDistanceM = 0;
+}
+
+class _RecoverySegment {
+  const _RecoverySegment({
+    required this.atMs,
+    required this.headingDeg,
+    required this.distanceM,
+  });
+
+  final int atMs;
+  final double headingDeg;
+  final double distanceM;
+}
+
+class _RecoveryOption {
+  const _RecoveryOption({
+    required this.edge,
+    required this.travelSign,
+    required this.bearingDeg,
+  });
+
+  final _CorridorEdge edge;
+  final int travelSign;
+  final double bearingDeg;
 }
 
 class _CorridorNetwork {
@@ -1062,6 +1213,16 @@ class _CorridorNetwork {
     headingDeg: incomingBearingDeg,
     toleranceDeg: toleranceDeg,
   );
+
+  List<_RecoveryOption> recoveryOptionsFromNode(String nodeId) => [
+    for (final edge in _incident[nodeId] ?? const [])
+      if (!edge.accessEdge && (edge.bidirectional || edge.fromNodeId == nodeId))
+        _RecoveryOption(
+          edge: edge,
+          travelSign: edge.travelSignAwayFromNode(nodeId),
+          bearingDeg: edge.bearingAwayFromNode(nodeId),
+        ),
+  ];
 }
 
 class _CorridorNode {
