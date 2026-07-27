@@ -284,6 +284,17 @@ String _baseMapStyle() {
     'glyphs': '$apiBaseUrl/fonts/{fontstack}/{range}.pbf',
     'sources': {'base': source},
     'layers': [
+      // **여기 background 레이어가 없으면 지도가 검게 뜬다.**
+      // MapLibre GL의 WebGL 캔버스는 base color 없이 clear되면 검정으로 남는데,
+      // OSM/VWorld raster 타일이 도착하기 전(첫 진입)이나 캐시에 없는 zoom을
+      // 갔다 오면(z<15까지 축소 후 다시 확대) 그 사이가 통째로 검게 보인다.
+      // 실내 초기 스타일(_initialStyle)이 이미 같은 이유로 background를 깔고
+      // 있다. 색은 OSM의 land 기본색에 가까운 옅은 회백색.
+      {
+        'id': 'background',
+        'type': 'background',
+        'paint': {'background-color': '#EDECE8'},
+      },
       {'id': 'base', 'type': 'raster', 'source': 'base'},
     ],
   });
