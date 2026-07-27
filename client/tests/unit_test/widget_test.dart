@@ -73,9 +73,13 @@ void main() {
   final originalDestinationRepository = destinationRepository;
   final testBuildingRepository = MockBuildingRepository();
 
-  setUp(() {
+  setUp(() async {
     // ignore: invalid_use_of_visible_for_testing_member
     SharedPreferences.setMockInitialValues({});
+    // debugModeController는 service_locator의 전역이라 이 파일의 모든 테스트가
+    // 같은 인스턴스를 공유한다. mock을 비운 뒤 다시 읽어, 앞 테스트가 켜 둔
+    // 디버그 모드가 뒤 테스트로 새지 않게 한다.
+    await debugModeController.reload();
     // 실제 permission_handler/geolocator 플러그인 채널이 없는 테스트 환경에서
     // 멈추지 않도록 즉시 완료되는 가짜 함수로 교체한다.
     requestStartupPermissions = () async => {};
@@ -316,6 +320,9 @@ void main() {
     (WidgetTester tester) async {
       // ignore: invalid_use_of_visible_for_testing_member
       SharedPreferences.setMockInitialValues({'debug_mode.enabled': true});
+      // setUp이 이미 빈 mock으로 로드해 둔 상태라, 여기서 다시 읽어야 방금 켠
+      // 디버그 모드가 전역 컨트롤러에 반영된다.
+      await debugModeController.reload();
 
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1;

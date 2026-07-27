@@ -10,7 +10,9 @@ class DebugModeController extends ChangeNotifier {
   factory DebugModeController({SharedPreferences? preferences}) =>
       DebugModeController._(preferences);
 
-  DebugModeController._(this._preferences) {
+  DebugModeController._(SharedPreferences? preferences)
+    : _preferences = preferences,
+      _hasInjectedPreferences = preferences != null {
     _loadFuture = _load();
   }
 
@@ -24,6 +26,7 @@ class DebugModeController extends ChangeNotifier {
   static const _showCardinalCrossKey = 'debug_mode.show_cardinal_cross';
 
   SharedPreferences? _preferences;
+  final bool _hasInjectedPreferences;
   late final Future<void> _loadFuture;
   bool _disposed = false;
   bool _isLoaded = false;
@@ -64,6 +67,24 @@ class DebugModeController extends ChangeNotifier {
       _isLoaded = true;
       if (!_disposed) notifyListeners();
     }
+  }
+
+  /// 저장소에서 설정을 다시 읽는다.
+  ///
+  /// 앱 실행 중에는 쓸 일이 없다 — 설정 변경은 [setEnabled] 등이 메모리와
+  /// 저장소를 함께 갱신하기 때문이다. 필요한 쪽은 테스트다. 이 컨트롤러는
+  /// service_locator의 전역이라 한 테스트 파일의 모든 테스트가 같은 인스턴스를
+  /// 공유하는데, 로드는 생성자에서 한 번만 일어난다. 그래서 SharedPreferences
+  /// mock을 갈아끼워도 **가장 먼저 컨트롤러를 건드린 테스트가 읽은 값이 그대로
+  /// 남아**, 뒤 테스트가 디버그 모드를 켜도 UI에 반영되지 않는다.
+  ///
+  /// 생성자로 [SharedPreferences]를 직접 주입받은 경우에는 그 인스턴스를
+  /// 그대로 쓰고, 아니면 캐시를 버려 새로 받아온다 —
+  /// `setMockInitialValues`가 저장소와 함께 getInstance 캐시도 리셋하므로,
+  /// 캐시를 버려야 새 mock 값이 보인다.
+  Future<void> reload() {
+    if (!_hasInjectedPreferences) _preferences = null;
+    return _load();
   }
 
   Future<void> setEnabled(bool value) =>

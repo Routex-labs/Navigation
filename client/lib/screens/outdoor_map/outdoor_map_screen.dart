@@ -15,9 +15,12 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import '../../core/api_config.dart';
 import '../../core/service_locator.dart';
 import '../../domain/geo_transform.dart';
-import '../../features/debug_mode/debug_pdr_trail_state.dart';
+import '../../features/debug_mode/debug_mode.dart';
 import '../../features/indoor_navigation/application/floor_map_matcher.dart';
 import '../../features/indoor_navigation/contract/indoor_navigation_contract.dart';
+import '../../features/indoor_navigation/debug/pdr_debug_device_info.dart';
+import '../../features/indoor_navigation/debug/pdr_debug_session_recorder.dart';
+import '../../features/indoor_navigation/debug/pdr_debug_session_share.dart';
 import '../../domain/multi_floor_router.dart';
 import '../../models/building.dart';
 import '../../models/building_graph.dart';
@@ -31,6 +34,7 @@ import '../../widgets/eta_card.dart';
 import '../../widgets/floor_facility_style.dart';
 import '../../widgets/floor_selector.dart';
 import '../../widgets/status_badge.dart';
+import 'indoor_entry_zoom.dart';
 
 // 위치 조회 실패 시 대체 좌표 (서울시청). 저장·전달은 latlong2 타입으로 하고
 // MapLibre API에 넘길 때만 [_toGl]로 변환한다 — 이 파일 외부(Building.entrance,
@@ -127,36 +131,10 @@ const _buildingFillOpacityPressed = 0.45;
 // "인식됐다" 느낌을 준다.
 const _buildingPressedHoldMs = 220;
 
-// 실내 오버레이가 zoom-interpolate로 페이드인되는 줌 구간. 이 아래는 완전히
-// 숨겨져 야외 지도만 보이고, 이 위는 완전히 보인다.
-const _indoorOverlayFadeInStartZoom = 16.5;
-const _indoorOverlayFadeInEndZoom = 17.5;
-
-// 실내 MVT 소스에 minzoom을 걸어 이 값 미만에서는 아예 타일 요청이 나가지 않게
-// 한다. 이유: 백엔드 MVT는 요청 타일 경계로 지오메트리를 4096 유닛에 양자화하는데
-// (mapbox_vector_tile.encode의 quantize_bounds), 낮은 zoom(예: z=10)에서는 1
-// 유닛이 10 m 이상이라 건물이 눈에 띄게 뒤틀린 채로 저장된다. 사용자가 야외 지도를
-// 축소했다 다시 확대하는 순간 MapLibre가 캐시된 저-zoom 부모 타일을 over-scale해
-// 잠깐 표시하는데(정확한 z=17 타일이 도착하기 전), 이 부모 타일이 회전된 도면처럼
-// 보이는 원인이었다. 페이드 시작(_indoorOverlayFadeInStartZoom=16.5) 바로 아래에
-// 잡아 이하 zoom에서는 요청도 캐시도 없게 한다 — 어차피 opacity=0이라 시각적
-// 손해가 없고, 저-zoom 캐시가 없으므로 zoom-in 시 항상 fresh 고정밀 타일이 뜬다.
-const _indoorTilesMinZoom = 16.0;
-
-// 극한 확대(z>=19) 시 MapLibre가 backend에 매우 좁은 tile bounds로 quantize된
-// MVT를 요청하는데, tile 경계가 좁을수록 double 좌표 → 4096 유닛 quantize 과정에서
-// 상대 오차가 누적돼 도면이 미세하게 뒤틀린다. maxzoom을 이 값으로 잡아 그 이상에서는
-// z=18 tile을 over-scale하도록 한다. z=18 tile은 ~150m 폭이라 0.04m/유닛의 안정된
-// precision을 가진다.
-const _indoorTilesMaxZoom = 18.0;
-
-// 사용자가 지도를 이만큼 이상 확대하면 "실내 진입" 의도로 보고, 야외 지도 위에
-// 층 chip과 위치 지정 버튼 등 실내 UI 오버레이를 얹는다. 오버레이가 완전히
-// 보이는 시점(_indoorOverlayFadeInEndZoom)과 맞춰 페이드가 끝나는 순간 부가
-// 인터페이스도 함께 나타나도록 한다. 모드(홈/실내)는 여기서 전환하지 않는다 —
-// 사용자는 하단 세그먼트로 언제든 전환 가능하고, 이 오버레이는 야외 화면
-// 그대로에서 실내 기능을 즉시 쓸 수 있게 확장하는 목적이다.
-const _indoorEntryZoomThreshold = _indoorOverlayFadeInEndZoom;
+// 실내 진입/이탈 임계값·오버레이 페이드 구간은 서로 얽혀 있어 한 곳에서만
+// 정의한다 — indoor_entry_zoom.dart 참고. 값 하나만 옮겨도 "도면이 다 보이기
+// 전에 실내에서 튕겨 나가는" 증상이나 "이탈 순간 도면이 툭 끊기는" 증상이
+// 조용히 되살아나므로, 관계를 함수로 고정하고 테스트로 지킨다.
 
 // PDR 앵커 배치 시 탭 위치에서 통로 그래프까지 허용하는 최대 거리(m).
 // 야외 지도에서는 건물이 화면 안에서 상대적으로 작게 보이고 탭 정밀도가 떨어져
@@ -174,6 +152,16 @@ const _floorSelectorBottomOffset =
 // 경로 ETA 카드가 화면에 뜨면 하단 바(=층 선택기 기준선)가 이만큼 위로 올라간다.
 // map_shell_screen.dart의 _etaBarLiftHeight와 동일해야 한다.
 const _bottomBarLiftPx = 92.0;
+
+// 홈/실내 세그먼트의 왼쪽에 8px 간격으로 PDR 제어를 붙이는 right inset.
+// indoor_map_screen.dart의 동명 상수와 같은 값이어야 실내 탭과 야외 실내 진입
+// 오버레이에서 PDR 버튼이 같은 자리에 놓인다.
+const _pdrControlRightInsetPx = 184.0;
+
+// PDR 안내 토스트를 하단 바(+ETA 카드) 위로 띄우기 위한 오프셋. 실내 화면의
+// _mapShellBottomChromePx/_etaCardHeightPx와 같은 값을 쓴다.
+const _mapShellBottomChromePx = 112.0;
+const _etaCardHeightPx = 130.0;
 
 // latlong2 <-> MapLibre 타입 브릿지.
 LatLng _toGl(ll.LatLng p) => LatLng(p.latitude, p.longitude);
@@ -448,6 +436,28 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   StreamSubscription<PdrSnapshot>? _pdrSnapshotSub;
   StreamSubscription<CalibrationStatus>? _pdrCalibrationSub;
 
+  /// 디버그 설정은 실내 지도와 공유한다 — 어느 화면에서 켜든 같은 상태를 본다.
+  final DebugModeController _debugModeController = debugModeController;
+
+  /// 이번 PDR 세션의 기록기. "PDR 시작"에서 새로 만들고 종료 시 JSON으로
+  /// 내보낸다. 실내 화면과 같은 포맷이라 두 화면에서 받은 로그를 같은 분석
+  /// 스크립트로 비교할 수 있다.
+  PdrDebugSessionRecorder? _pdrDebugRecorder;
+  bool _exportingPdrDebugJson = false;
+
+  /// 활성 층 GeoJSON의 map_calibration_version. 내보낸 세션이 어떤 보정본
+  /// 도면 위에서 측정된 것인지 구분하는 데 쓴다.
+  String _mapCalibrationVersion = 'unversioned';
+
+  // 지도 위 Flutter 오버레이(PDR 제어·디버그 설정 버튼) 영역. MapLibre는
+  // PlatformView라 이 위젯들 위의 탭도 native 지도까지 흘러들어가 onMapClick이
+  // 함께 발화한다 — 버튼을 눌렀을 뿐인데 뒤의 매장이 열리거나 앵커가 버튼
+  // 아래에 찍히는 것을 막기 위해 좌표로 걸러낸다(실내 화면의 overlayHitTest와
+  // 같은 목적).
+  final GlobalKey _pdrControlKey = GlobalKey();
+  final GlobalKey _debugModeSettingsKey = GlobalKey();
+  final GlobalKey _pdrShareButtonKey = GlobalKey();
+
   /// 검색·길찾기 시트가 지도 위에 떠 있는 동안 지도 제스처를 꺼서, 시트를
   /// 마우스 휠로 스크롤할 때 그 아래 지도까지 같이 움직이지 않게 한다.
   void setInteractive(bool value) {
@@ -468,12 +478,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       snapshot: indoorNavigationDriver.currentSnapshot,
       calibration: indoorNavigationDriver.currentCalibration,
     );
+    _debugModeController.addListener(_onDebugModeChanged);
     _pdrSnapshotSub = indoorNavigationDriver.snapshots.listen((snapshot) {
+      _pdrDebugRecorder?.recordSnapshot(snapshot);
       if (!mounted) return;
       setState(() => _pdrTrailState.recordSnapshot(snapshot));
       _syncPdrCurrentLayer();
     });
     _pdrCalibrationSub = indoorNavigationDriver.calibration.listen((status) {
+      _pdrDebugRecorder?.recordCalibration(status);
       if (!mounted) return;
       setState(() => _pdrTrailState.recordCalibration(status));
       if (status.phase == CalibrationPhase.calibrated ||
@@ -494,7 +507,28 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _positionSubscription?.cancel();
     _pdrSnapshotSub?.cancel();
     _pdrCalibrationSub?.cancel();
+    // 앱 전역 인스턴스라 dispose하지 않는다 — 실내 화면이 같은 컨트롤러를
+    // 계속 구독한다.
+    _debugModeController.removeListener(_onDebugModeChanged);
     super.dispose();
+  }
+
+  /// 디버그 모드를 끄면 PDR 진입점이 화면에서 사라진다. 세션이 켜져 있는 채로
+  /// 버튼만 없어지면 센서가 계속 돌면서 종료할 방법이 없으므로 함께 정리한다.
+  /// (실내 화면도 같은 처리를 하며, [stopGuidance]는 이미 idle이면 즉시
+  /// 리턴하므로 두 화면이 같이 호출해도 안전하다.)
+  void _onDebugModeChanged() {
+    if (!_debugModeController.enabled &&
+        indoorNavigationDriver.currentRuntimeStatus.state !=
+            PdrRuntimeState.idle) {
+      unawaited(_stopPdrWhenDebugModeTurnsOff());
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _stopPdrWhenDebugModeTurnsOff() async {
+    await indoorNavigationDriver.stopGuidance();
+    if (mounted) _setPlacingAnchor(false);
   }
 
   Future<void> _loadBuildingEntrance() async {
@@ -539,6 +573,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       setState(() {
         _floorGraph = graph;
         _floorPlan = plan;
+        _mapCalibrationVersion =
+            geojson?['map_calibration_version'] as String? ?? 'unversioned';
       });
       _syncPdrCurrentLayer();
     } catch (_) {
@@ -548,6 +584,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         setState(() {
           _floorGraph = null;
           _floorPlan = null;
+          _mapCalibrationVersion = 'unversioned';
         });
       }
     }
@@ -570,6 +607,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _activeFloor = floor;
       _floorGraph = null;
       _floorPlan = null;
+      _mapCalibrationVersion = 'unversioned';
       if (multiRoute == null) {
         _indoorRouteSegment = null;
       } else {
@@ -613,7 +651,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   }
 
   /// 층 chip 탭·자동 실내 진입 뒤에 실내 오버레이를 보장 노출하기 위한 헬퍼.
-  /// - 카메라 zoom이 오버레이 fade-in end 미만이면 그 zoom + 건물 중심으로 이동.
+  /// - 카메라 zoom이 이탈 임계값 미만(=도면이 사실상 안 보임)이면 진입 임계값
+  ///   + 건물 중심으로 이동.
   /// - 카메라가 건물 중심에서 크게 벗어나 있으면 zoom 유지한 채 건물 중심으로 이동.
   /// - 두 조건 모두 아니면 아무 것도 하지 않는다(사용자의 현재 view 존중).
   Future<void> _recenterOnBuildingIfNeeded() async {
@@ -627,7 +666,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final center = _buildingCenter(footprint);
     if (center == null) return;
 
-    final needZoomIn = cam.zoom < _indoorOverlayFadeInEndZoom;
+    // 이탈 임계값 기준으로 판정한다. 진입 임계값(17.5)으로 재면, 넓은 지하층
+    // 전체를 담으려고 z≈16.05까지 축소해 둔 사용자가 층 chip을 누르는 순간
+    // 카메라가 다시 17.5로 튀어올라 방금 맞춘 view를 빼앗긴다.
+    final needZoomIn = cam.zoom < indoorExitZoomThreshold;
     // 건물 중심에서 카메라까지 대략적인 거리. 위경도 도 단위지만 근사적으로
     // 계산해 "화면 밖" 판정에만 쓴다 — 정확한 거리 계산은 필요 없다.
     final distDeg = math.sqrt(
@@ -639,7 +681,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
     if (!needZoomIn && !farFromBuilding) return;
 
-    final targetZoom = needZoomIn ? _indoorOverlayFadeInEndZoom : cam.zoom;
+    final targetZoom = needZoomIn ? indoorEntryZoomThreshold : cam.zoom;
     await controller.animateCamera(
       CameraUpdate.newLatLngZoom(_toGl(center), targetZoom),
     );
@@ -1421,15 +1463,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       await controller.setLayerProperties(
         _dimScrimFillLayerId,
         FillLayerProperties(
-          fillOpacity: const [
-            'interpolate',
-            ['linear'],
-            ['zoom'],
-            _indoorOverlayFadeInStartZoom,
-            0,
-            _indoorOverlayFadeInEndZoom,
-            0.35,
-          ],
+          fillOpacity: _fadeExpr(maxOpacity: 0.35),
         ),
       );
     } else {
@@ -1437,6 +1471,52 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _dimScrimFillLayerId,
         const FillLayerProperties(fillOpacity: 0),
       );
+    }
+  }
+
+  /// 현재 진입 상태에 맞는 오버레이 페이드 표현식.
+  /// 구간이 진입 전후로 왜 다른지는 [indoorOverlayFadeExpr] 쪽 주석 참고.
+  List<Object> _fadeExpr({double maxOpacity = 1}) =>
+      indoorOverlayFadeExpr(entered: _indoorEntered, maxOpacity: maxOpacity);
+
+  /// 실내 진입/이탈로 페이드 구간이 바뀌었을 때 이미 등록된 오버레이 레이어의
+  /// opacity 표현식을 갈아 끼운다. 레이어가 아직 등록되지 않았으면
+  /// [_ensureIndoorTilesRegistered]가 등록 시점의 상태로 넣어주므로 아무것도
+  /// 하지 않아도 된다.
+  Future<void> _syncIndoorOverlayFade() async {
+    final controller = _mapController;
+    if (controller == null || !_styleReady || !_indoorTilesRegistered) return;
+    final fadeExpr = _fadeExpr();
+    // 이미 제거된 레이어에 대한 setLayerProperties가 native에서 예외를 던지는
+    // 구현이 있어(층 전환과 겹치는 순간) 각각 감싼다.
+    for (final id in [
+      _indoorFootprintLayerId,
+      _indoorStoresFillLayerId,
+      _indoorVerticalTransportFillLayerId,
+    ]) {
+      try {
+        await controller.setLayerProperties(
+          id,
+          FillLayerProperties(fillOpacity: fadeExpr),
+        );
+      } catch (_) {}
+    }
+    try {
+      await controller.setLayerProperties(
+        _indoorStoresLabelLayerId,
+        SymbolLayerProperties(textOpacity: fadeExpr),
+      );
+    } catch (_) {}
+    for (final id in [
+      _indoorPoiIconLayerId,
+      _indoorStoreFacilityIconLayerId,
+    ]) {
+      try {
+        await controller.setLayerProperties(
+          id,
+          SymbolLayerProperties(iconOpacity: fadeExpr),
+        );
+      } catch (_) {}
     }
   }
 
@@ -1462,6 +1542,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   Future<void> _handleMapClick(Point<double> pointPx, LatLng coords) async {
     final point = ll.LatLng(coords.latitude, coords.longitude);
+
+    // 지도 위에 얹은 PDR 제어·디버그 설정 버튼을 누른 탭은 여기서 끊는다.
+    // 그러지 않으면 "PDR 시작"을 누른 손가락이 버튼 아래의 매장까지 함께
+    // 선택하거나, 앵커 배치 대기 중에 버튼 위치에 앵커가 찍힌다.
+    if (_isTapOnMapOverlay(Offset(pointPx.x, pointPx.y))) return;
 
     // 위치 지정 대기 중이라면 이 탭은 PDR 앵커 배치로 소비된다 — 지도 탭이
     // 건물 진입 처리로 새어들어가면 사용자가 위치를 지정하는 순간 오버레이가
@@ -1519,6 +1604,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     setState(() => _indoorEntered = value);
     widget.onIndoorEnteredChanged?.call(value);
     _syncDimScrimLayer();
+    // 진입/이탈로 페이드 구간 자체가 바뀌므로 이미 붙어 있는 오버레이 레이어의
+    // opacity 표현식도 함께 갈아 끼운다.
+    unawaited(_syncIndoorOverlayFade());
   }
 
   void _handleCameraIdle() {
@@ -1526,16 +1614,21 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (controller == null) return;
     final zoom = controller.cameraPosition?.zoom;
     if (zoom == null) return;
-    if (zoom >= _indoorEntryZoomThreshold) {
-      _triggerIndoorEntry();
-    } else {
-      // 사용자가 다시 축소했으므로 오버레이를 접고 다음 확대에서 재발화할 수
-      // 있게 무장한다. 배치 대기 중이면 종료해 하단 바 표시도 함께 초기화한다.
-      _autoIndoorEntryArmed = true;
-      if (_indoorEntered) {
-        if (_placingPdrAnchor) _setPlacingAnchor(false);
-        _setIndoorEntered(false);
-      }
+    switch (indoorEntryTransitionForZoom(zoom)) {
+      case IndoorEntryTransition.enter:
+        _triggerIndoorEntry();
+      case IndoorEntryTransition.exit:
+        // 사용자가 건물을 벗어날 만큼 축소했으므로 오버레이를 접고 다음 확대에서
+        // 재발화할 수 있게 무장한다. 배치 대기 중이면 종료해 하단 바 표시도 함께
+        // 초기화한다.
+        _autoIndoorEntryArmed = true;
+        if (_indoorEntered) {
+          if (_placingPdrAnchor) _setPlacingAnchor(false);
+          _setIndoorEntered(false);
+        }
+      case IndoorEntryTransition.keep:
+        // 히스테리시스 밴드 — 현재 상태를 그대로 유지한다.
+        break;
     }
   }
 
@@ -1576,8 +1669,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           tiles: [tileUrl],
           // minzoom 미만에서는 타일 요청·캐시 자체를 막아, 저-zoom 부모 타일이
           // over-scale된 채 잠깐 보이면서 도면이 회전한 것처럼 보이는 문제를
-          // 예방한다. 근거는 _indoorTilesMinZoom 정의 위 주석 참고.
-          minzoom: _indoorTilesMinZoom,
+          // 예방한다. 근거는 indoorTilesMinZoom 정의 위 주석 참고.
+          minzoom: indoorTilesMinZoom,
           // maxzoom 이상에서는 MapLibre가 maxzoom 타일을 over-scale해 그린다.
           // 백엔드의 mapbox_vector_tile.encode는 요청 zoom이 커질수록 tile 경계
           // 사각형도 미세해지는데(z=21이면 20m 남짓), 이 좁은 사각형을 4096 유닛에
@@ -1585,27 +1678,18 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           // 하면 도면이 잠깐 뒤틀린 것처럼 보이는 원인이 됐다. z=18을 상한으로
           // 잡으면 tile 경계가 ~150m로 충분히 넓어 quantize precision이 0.04m/유닛
           // 이라 어떤 확대 배율에서도 sub-pixel로 안정된다.
-          maxzoom: _indoorTilesMaxZoom,
+          maxzoom: indoorTilesMaxZoom,
         ),
       );
       // POI/시설 아이콘 비트맵을 스타일당 한 번만 addImage로 등록한다. 층을
       // 바꿔도 이미지는 그대로 재사용되므로 반복 렌더를 피한다.
       await _ensureFacilityIconImagesRegistered(controller);
       // 실내 도면은 확대에 따라 자연스럽게 나타나야 한다(Google Maps의 건물 내부
-      // 표시와 같은 패턴): 줌 16.5 미만은 완전히 안 보이고 17.5부터 완전히 보이며
-      // 사이는 부드럽게 페이드인. MapLibre의 zoom-interpolate 표현식으로 처리해
-      // 카메라 이동 중 실시간으로 부드럽게 반영된다(수동 setLayerProperties 호출
-      // 없이). 아래는 [interpolate, linear, [zoom], stop0_zoom, stop0_val, ...]
-      // 형태의 style expression.
-      const fadeExpr = [
-        'interpolate',
-        ['linear'],
-        ['zoom'],
-        _indoorOverlayFadeInStartZoom,
-        0,
-        _indoorOverlayFadeInEndZoom,
-        1,
-      ];
+      // 표시와 같은 패턴). 페이드 구간은 진입 상태에 따라 달라지므로
+      // [indoorOverlayFadeExpr]가 만들어 준다. zoom-interpolate 표현식이라
+      // 카메라 이동 중에는 setLayerProperties 없이도 실시간으로 반영되고,
+      // 진입/이탈로 구간 자체가 바뀔 때만 [_syncIndoorOverlayFade]가 갱신한다.
+      final fadeExpr = _fadeExpr();
       // POI/시설 아이콘은 오버레이가 페이드인되는 구간에서는 살짝 작게, 사용자가
       // 실내로 더 확대해 들어갈수록 실내 화면과 비슷한 크기로 커지도록 zoom
       // 기반 iconSize로 준다. 아이콘 캔버스 96px 기준으로 실내 화면은 0.28
@@ -1615,7 +1699,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         'interpolate',
         ['linear'],
         ['zoom'],
-        _indoorOverlayFadeInEndZoom,
+        indoorOverlayFadeInEndZoom,
         0.22,
         20,
         0.42,
@@ -2060,6 +2144,120 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _showSnack('지도에서 현재 서 있는 위치를 탭해 지정해주세요.');
   }
 
+  /// 디버그 모드의 "PDR 시작/종료" 버튼. 실내 지도 탭의 _togglePdr와 같은
+  /// 계약이다 — 시작하면 이번 세션 기록기를 새로 열고 앵커 배치 대기로 넘기며,
+  /// 종료하면 마지막 스냅샷까지 기록한 뒤 JSON 내보내기를 안내한다.
+  ///
+  /// 야외에서는 "활성 층"이 층 chip으로 정해지므로, 사용자가 지금 보고 있는
+  /// 층의 그래프가 없으면(타일만 있고 navigation_graph가 없는 층) 시작하지
+  /// 않는다 — 그래프가 없으면 PDR 좌표를 층 좌표로 옮길 수 없어 측정이
+  /// 무의미하다.
+  Future<void> _togglePdr() async {
+    final floor = _activeFloor;
+    final graph = _floorGraph;
+    if (indoorNavigationDriver.currentRuntimeStatus.state !=
+        PdrRuntimeState.idle) {
+      final recorder = _pdrDebugRecorder;
+      final snapshot = indoorNavigationDriver.currentSnapshot;
+      if (snapshot != null) recorder?.recordSnapshot(snapshot);
+      await indoorNavigationDriver.stopGuidance();
+      recorder?.recordRuntime(indoorNavigationDriver.currentRuntimeStatus);
+      if (!mounted) return;
+      _setPlacingAnchor(false);
+      if (recorder?.hasSnapshot ?? false) {
+        _showPdrMessageWithExport('PDR 세션이 종료됐습니다. JSON으로 내보내 분석할 수 있습니다.');
+      }
+      return;
+    }
+    if (floor == null ||
+        graph == null ||
+        graph.nodes.isEmpty ||
+        graph.edges.isEmpty) {
+      _showSnack('이 층은 PDR 좌표 변환용 navigation graph가 아직 없습니다.');
+      return;
+    }
+    setState(() => _pdrTrailState.beginNewSession());
+    _pdrDebugRecorder = PdrDebugSessionRecorder()
+      ..recordRuntime(indoorNavigationDriver.currentRuntimeStatus);
+    await indoorNavigationDriver.startGuidance(floorId: floor);
+    _pdrDebugRecorder?.recordRuntime(
+      indoorNavigationDriver.currentRuntimeStatus,
+    );
+    if (!mounted) return;
+    _setPlacingAnchor(true);
+    _showSnack('현재 서 있는 위치를 지도에서 한 번 탭해 PDR 시작점을 맞춰주세요.');
+  }
+
+  void _showPdrMessageWithExport(String message) {
+    if (!mounted) return;
+    showDebugToast(
+      context,
+      message: message,
+      bottomOffset:
+          _mapShellBottomChromePx +
+          (_hasAnyRouteVisible ? _etaCardHeightPx : 0) +
+          12,
+      actionLabel: 'JSON 공유',
+      onAction: () => unawaited(_exportPdrDebugJson()),
+    );
+  }
+
+  Future<void> _exportPdrDebugJson() async {
+    final recorder = _pdrDebugRecorder;
+    if (recorder == null || !recorder.hasSnapshot || _exportingPdrDebugJson) {
+      _showSnack('내보낼 PDR 세션이 없습니다.');
+      return;
+    }
+    setState(() => _exportingPdrDebugJson = true);
+    try {
+      final device = await PdrDebugDeviceInfo.load();
+      final session = recorder.buildJson(
+        buildingId: _building?.id ?? demoBuildingId,
+        selectedFloor: _activeFloor,
+        mapCalibrationVersion: _mapCalibrationVersion,
+        graph: _floorGraph,
+        device: device,
+      );
+      await const PdrDebugSessionShare().share(
+        session,
+        sharePositionOrigin: _pdrSharePositionOrigin(),
+      );
+    } on Object catch (error) {
+      if (mounted) _showSnack('PDR JSON을 내보내지 못했습니다: $error');
+    } finally {
+      if (mounted) setState(() => _exportingPdrDebugJson = false);
+    }
+  }
+
+  /// iOS 공유 시트는 popover 기준 사각형이 필요하다. 전달하지 않으면
+  /// share_plus가 `{0, 0, 0, 0}`을 보내 iOS에서 공유를 거부한다.
+  Rect? _pdrSharePositionOrigin() {
+    final box =
+        _pdrShareButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box != null && box.hasSize && !box.size.isEmpty) {
+      return box.localToGlobal(Offset.zero) & box.size;
+    }
+    return null;
+  }
+
+  /// [localPoint]가 지도 위 Flutter 오버레이(PDR 제어·디버그 설정) 영역이면
+  /// true. 인자는 MapLibre가 준 지도 위젯 로컬 좌표라 전역 좌표로 바꿔 비교한다.
+  bool _isTapOnMapOverlay(Offset localPoint) {
+    final mapBox = context.findRenderObject() as RenderBox?;
+    if (mapBox == null || !mapBox.attached) return false;
+    final globalPoint = mapBox.localToGlobal(localPoint);
+    for (final key in [_pdrControlKey, _debugModeSettingsKey]) {
+      final ctx = key.currentContext;
+      if (ctx == null) continue;
+      final box = ctx.findRenderObject() as RenderBox?;
+      if (box == null || !box.attached) continue;
+      if ((box.localToGlobal(Offset.zero) & box.size).contains(globalPoint)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   Future<void> _onMapPressedForPdr(ll.LatLng point) async {
     final graph = _floorGraph;
     if (graph == null || graph.nodes.isEmpty) {
@@ -2161,6 +2359,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final userDestination = _userDestination;
     final indoorRouteDestination = _indoorRouteDestination;
     final indoorRouteVisible = _hasAnyRouteVisible;
+    final debugEnabled = _debugModeController.enabled;
+    final pdrActive =
+        indoorNavigationDriver.currentRuntimeStatus.state !=
+        PdrRuntimeState.idle;
     final initialCenter = position == null
         ? _fallbackLocation
         : ll.LatLng(position.latitude, position.longitude);
@@ -2243,6 +2445,64 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
                 floors: _building!.floors,
                 selectedFloor: _activeFloor!,
                 onSelectFloor: _switchOverlayFloor,
+              ),
+            ),
+          ),
+
+        // PDR 제어 — 실내 지도 탭과 같은 자리(하단 홈/실내 세그먼트 왼쪽,
+        // 층 선택기 옆)에 같은 위젯으로 놓는다. 두 화면에서 버튼이 옮겨 다니면
+        // 실측 중에 "지금 어느 화면인지"를 먼저 확인해야 해서 테스트가 끊긴다.
+        //
+        // 노출 조건에 pdrActive를 함께 두는 이유: 세션이 도는 중에 사용자가
+        // 지도를 축소하면 _handleCameraIdle이 실내 진입 오버레이를 끄는데,
+        // 그때 버튼까지 사라지면 센서는 계속 돌면서 종료·내보내기 수단이
+        // 없어진다. 진행 중인 세션은 언제나 끌 수 있어야 한다.
+        if (debugEnabled && (_indoorEntered || pdrActive))
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            right: _pdrControlRightInsetPx,
+            bottom: indoorRouteVisible ? _bottomBarLiftPx : 0,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.only(
+                  bottom: _bottomBarInnerBottomPaddingPx,
+                ),
+                child: PdrMapControl(
+                  key: _pdrControlKey,
+                  active: pdrActive,
+                  onPressed: () => unawaited(_togglePdr()),
+                  canExport:
+                      !pdrActive && (_pdrDebugRecorder?.hasSnapshot ?? false),
+                  exporting: _exportingPdrDebugJson,
+                  onExport: () => unawaited(_exportPdrDebugJson()),
+                  shareButtonKey: _pdrShareButtonKey,
+                ),
+              ),
+            ),
+          ),
+
+        // 디버그 설정 진입점도 실내 탭과 같은 왼쪽 하단에 둔다. 야외에서
+        // 실내로 진입한 상태에서만 노출해 일반 야외 지도 화면은 그대로 둔다.
+        if (_indoorEntered)
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            left: 12,
+            bottom: indoorRouteVisible ? _bottomBarLiftPx : 0,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.only(
+                  bottom: _bottomBarInnerBottomPaddingPx,
+                ),
+                child: DebugModeSettingsButton(
+                  key: _debugModeSettingsKey,
+                  controller: _debugModeController,
+                  onPressed: () =>
+                      showDebugModeSettingsSheet(context, _debugModeController),
+                ),
               ),
             ),
           ),

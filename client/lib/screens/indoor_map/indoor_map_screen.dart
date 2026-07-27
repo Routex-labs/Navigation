@@ -165,7 +165,11 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   double _mapCameraBearingDeg = 0;
   final ValueNotifier<double> _mapCameraBearingNotifier = ValueNotifier(0);
   final GlobalKey _pdrShareButtonKey = GlobalKey();
-  late final DebugModeController _debugModeController;
+
+  /// 디버그 설정은 야외 지도의 실내 진입 오버레이와 공유한다(service_locator).
+  /// 화면마다 별도 인스턴스를 만들면 한쪽에서 켠 디버그 모드가 다른 쪽에
+  /// 반영되지 않는다.
+  final DebugModeController _debugModeController = debugModeController;
 
   /// 지금 이 실내 지도가 보여주는 층 이름(예: "B2"). 층이 아직 로드되지
   /// 않았거나 건물 로딩 실패 상태면 null. MapShellScreen이 상단 검색과
@@ -202,8 +206,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   @override
   void initState() {
     super.initState();
-    _debugModeController = DebugModeController()
-      ..addListener(_onDebugModeChanged);
+    _debugModeController.addListener(_onDebugModeChanged);
     _pdrTrailState = DebugPdrTrailState.fromCurrent(
       snapshot: indoorNavigationDriver.currentSnapshot,
       calibration: indoorNavigationDriver.currentCalibration,
@@ -231,9 +234,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   void dispose() {
     _pdrSnapshotSub?.cancel();
     _pdrCalibrationSub?.cancel();
-    _debugModeController
-      ..removeListener(_onDebugModeChanged)
-      ..dispose();
+    // 앱 전역 인스턴스라 dispose하지 않는다 — 여기서 버리면 야외 지도가
+    // 같은 컨트롤러를 계속 구독하고 있다가 notifyListeners에서 죽는다.
+    _debugModeController.removeListener(_onDebugModeChanged);
     _mapCameraBearingNotifier.dispose();
     super.dispose();
   }
@@ -1290,7 +1293,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
                 padding: const EdgeInsets.only(
                   bottom: _bottomBarInnerBottomPaddingPx,
                 ),
-                child: _PdrMapControl(
+                child: PdrMapControl(
                   key: _pdrControlKey,
                   active: pdrActive,
                   onPressed: _togglePdr,
@@ -1338,107 +1341,6 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
             ),
           ),
       ],
-    );
-  }
-}
-
-/// 지도 톤을 해치지 않는 compact PDR 시작/종료 제어. 강한 파란 큰 버튼 대신
-/// 실제 지도 앱처럼 흰 surface 위에 상태 색만 얹어, 지도와 현재 위치가
-/// 시각적으로 우선되게 한다.
-class _PdrMapControl extends StatelessWidget {
-  const _PdrMapControl({
-    super.key,
-    required this.active,
-    required this.onPressed,
-    required this.canExport,
-    required this.exporting,
-    required this.onExport,
-    required this.shareButtonKey,
-  });
-
-  final bool active;
-  final VoidCallback onPressed;
-  final bool canExport;
-  final bool exporting;
-  final VoidCallback onExport;
-  final GlobalKey shareButtonKey;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = active ? const Color(0xFFD93025) : AppColors.indoor;
-    return Tooltip(
-      message: active ? 'PDR 종료' : 'PDR 시작',
-      child: Material(
-        color: Colors.white.withValues(alpha: 0.96),
-        elevation: 3,
-        shadowColor: Colors.black.withValues(alpha: 0.16),
-        shape: StadiumBorder(
-          side: BorderSide(color: color.withValues(alpha: active ? 0.36 : 0.2)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            InkWell(
-              onTap: onPressed,
-              customBorder: const StadiumBorder(),
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(10, 9, canExport ? 7 : 13, 9),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 26,
-                      height: 26,
-                      decoration: BoxDecoration(
-                        color: color,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        active
-                            ? Icons.stop_rounded
-                            : Icons.directions_walk_rounded,
-                        size: 17,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(width: 7),
-                    Text(
-                      active ? 'PDR 종료' : 'PDR 시작',
-                      style: TextStyle(
-                        color: active
-                            ? const Color(0xFFB3261E)
-                            : const Color(0xFF202124),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            if (canExport) ...[
-              Container(width: 1, height: 24, color: AppColors.blue100),
-              IconButton(
-                key: shareButtonKey,
-                tooltip: 'PDR 디버그 JSON 공유',
-                onPressed: exporting ? null : onExport,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints.tightFor(
-                  width: 40,
-                  height: 44,
-                ),
-                icon: exporting
-                    ? const SizedBox(
-                        width: 17,
-                        height: 17,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.ios_share_rounded, size: 20),
-              ),
-            ],
-          ],
-        ),
-      ),
     );
   }
 }
