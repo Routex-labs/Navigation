@@ -957,8 +957,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       if (controller == null || !_styleReady) return;
       await controller.animateCamera(CameraUpdate.newLatLng(_toGl(target)));
     } else {
-      // 짝수 번째 탭 — 바라보는 방향이 화면 위쪽에 오도록 회전. 중심·줌·tilt는
-      // 그대로 두고 bearing만 바꾼다.
+      // 짝수 번째 탭 — 바라보는 방향이 화면 위쪽에 오도록 회전. 이때 내 실내
+      // 위치도 함께 화면 정중앙에 놓는다. 중앙 정렬 후 조금 걸어간 뒤 회전을
+      // 누르면 화면 중심과 내 위치가 이미 어긋나 있어, 중심을 그대로 두고
+      // 돌리면 내 위치가 화면 가장자리로 밀려나기 때문이다. 줌·tilt는 유지.
       final heading = _pdrCurrentHeadingDeg;
       if (heading == null) {
         _showSnack('아직 바라보는 방향을 알 수 없습니다. 위치 지정 후 조금 걸어 방향을 잡아주세요.');
@@ -967,8 +969,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       final controller = _mapController;
       if (controller == null || !_styleReady) return;
       final camera = controller.cameraPosition;
-      final center = camera?.target ??
-          _toGl(_pdrCurrentWgs84() ?? _entrance ?? _fallbackLocation);
+      // 위치를 아직 모르면(앵커가 다른 층 등) 지금 보고 있는 중심을 그대로 둔다.
+      final myLocation = _pdrCurrentWgs84();
+      final center = myLocation != null
+          ? _toGl(myLocation)
+          : camera?.target ?? _toGl(_entrance ?? _fallbackLocation);
       await controller.animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(

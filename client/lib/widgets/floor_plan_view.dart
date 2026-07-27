@@ -73,10 +73,15 @@ class FloorPlanController {
   /// FloorPlanView가 아직 준비되지 않았거나 detach된 상태면 false.
   bool get isAttached => _state != null;
 
-  /// 카메라 bearing만 [bearingDeg](북쪽 기준 시계방향)로 돌린다. 사용자가
-  /// 바라보는 방향을 화면 위쪽에 오게 하는 나침반 모드에 쓴다.
-  Future<void> rotateToBearing(double bearingDeg) async {
-    await _state?.rotateToBearing(bearingDeg);
+  /// 카메라를 [bearingDeg](북쪽 기준 시계방향)로 돌린다. 사용자가 바라보는
+  /// 방향을 화면 위쪽에 오게 하는 나침반 모드에 쓴다.
+  ///
+  /// [center]를 주면 회전과 함께 그 지점을 화면 정중앙에 놓는다. 회전축을 화면
+  /// 중심에 고정하면, 사용자가 중앙 정렬 후 조금 걸어간 뒤 회전을 누를 때 내
+  /// 위치가 화면 가장자리로 밀려난다 — 나침반 모드는 "내가 보는 방향"을
+  /// 보여주는 기능이므로 내 위치가 항상 중심이어야 한다.
+  Future<void> rotateToBearing(double bearingDeg, {ll.LatLng? center}) async {
+    await _state?.rotateToBearing(bearingDeg, center: center);
   }
 
   /// 카메라 중심만 [target]으로 옮긴다. bearing/줌은 유지.
@@ -980,14 +985,19 @@ class FloorPlanViewState extends State<FloorPlanView> {
   /// 카메라 bearing만 [bearingDeg](북쪽 기준 시계방향, 0~360°)로 돌린다.
   /// 사용자가 바라보는 방향을 화면 위쪽에 오게 하는 나침반 모드에 쓴다 —
   /// 현재 중심/줌은 유지하고 회전만 한다.
-  Future<void> rotateToBearing(double bearingDeg) async {
+  Future<void> rotateToBearing(double bearingDeg, {ll.LatLng? center}) async {
     final controller = _controller;
     if (controller == null || !bearingDeg.isFinite) return;
     final current = controller.cameraPosition;
+    // [center]가 있으면 그 지점을 화면 중앙에 놓고 돌린다. 없으면(위치를 아직
+    // 모르는 경우) 지금 보고 있는 중심을 그대로 두고 bearing만 바꾼다.
+    final target = center != null
+        ? _toMapLibreLatLng(center)
+        : current?.target ?? _initialCenter(widget.floorPlan);
     await controller.moveCamera(
       CameraUpdate.newCameraPosition(
         CameraPosition(
-          target: current?.target ?? _initialCenter(widget.floorPlan),
+          target: target,
           zoom: current?.zoom ?? 18,
           bearing: bearingDeg,
           tilt: current?.tilt ?? 0,

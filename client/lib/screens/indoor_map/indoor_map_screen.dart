@@ -403,7 +403,13 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         _showPdrMessage('아직 바라보는 방향을 알 수 없습니다. 위치 지정 후 조금 걸어 방향을 잡아주세요.');
         return;
       }
-      await _floorPlanController.rotateToBearing(heading);
+      // 회전도 내 위치를 중심으로 한다. 중앙 정렬 후 걸어간 뒤 회전을 누르면
+      // 화면 중심과 내 위치가 이미 어긋나 있어, 중심을 그대로 두고 돌리면 내
+      // 위치가 화면 가장자리로 밀려난다.
+      await _floorPlanController.rotateToBearing(
+        heading,
+        center: _pdrCurrentLocation ?? _pdrAnchorLocation,
+      );
     }
     _recalibrateTapCount++;
   }
