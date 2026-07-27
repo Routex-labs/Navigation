@@ -192,12 +192,23 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 화장실/엘리베이터/에스컬레이터처럼 층마다 같은 이름이 여러 개 있는
     // 시설을 다른 층으로 데려가지 않기 위해서. 아직 층이 로드되지 않은
     // 순간에는 현재 층을 알 수 없으므로 예전 전체 건물 검색으로 폴백한다.
-    final results = await destinationRepository.searchDestinations(
+    // 1차: 경량 검색(/query/destination). 정확한 이름·동의어는 즉시 온다.
+    var results = await destinationRepository.searchDestinations(
       _buildingId,
       normalized,
       currentFloorId: _activeIndoorFloor,
     );
     if (!mounted) return;
+
+    // 2차: 경량이 빈손이면 하이브리드 자연어 질의(/query/ai)로 한 번 더 찾는다.
+    // "밥 먹을 곳", "애들 신발"처럼 사전에 없는 표현은 여기서만 걸린다.
+    // 사용자가 "결과 없음"을 볼 상황에서만 타므로, 잘 되던 검색이 느려지지
+    // 않으면서 못 찾던 질의만 건진다.
+    if (results.isEmpty) {
+      results = await _searchDestinationsWithAi(normalized);
+      if (!mounted) return;
+    }
+
     final match = results.firstOrNull;
     if (match == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -205,8 +216,59 @@ class _MapShellScreenState extends State<MapShellScreen> {
       );
       return;
     }
+    // status=ok_no_route — 매장은 찾았지만 입구 노드가 스냅되지 않아 온디바이스
+    // 다익스트라의 도착점이 없다. 위치는 보여주되 경로 안내가 안 된다고 먼저
+    // 알려, 사용자가 길찾기를 눌렀다가 조용히 실패하는 일을 막는다.
+    if (match.nodeId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${match.name}은(는) 위치만 표시할 수 있어요 (경로 안내 불가)')),
+      );
+    }
 
     await _runSheetChain(() => _showStoreInfo(match));
+  }
+
+  /// 경량 검색이 놓친 자연어를 `/query/ai`로 한 번 더 찾는다.
+  ///
+  /// 2차 의미 검색으로 넘어가면 백엔드가 임베딩 모델을 로드하느라 첫 호출이
+  /// 수 초 걸릴 수 있어(CPU ~6초) 진행 표시를 띄운다. SnackBar라 지도·입력은
+  /// 그대로 살아 있고, 결과가 오면 바로 걷어낸다.
+  ///
+  /// 실패(서버 장애·네트워크 끊김)는 삼켜서 빈 결과로 되돌린다 — 여기까지
+  /// 왔다는 건 이미 경량 검색이 빈손이었다는 뜻이라 사용자에게는 "결과 없음"이
+  /// 자연스러운 결말이고, 예외를 띄워 검색 흐름을 끊을 이유가 없다.
+  Future<List<PoiSearchResult>> _searchDestinationsWithAi(String query) async {
+    // async gap 뒤에 context를 다시 쓰지 않도록 messenger를 미리 잡아 둔다.
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(
+        // 모델 로드가 끝날 때까지는 떠 있어야 하므로 충분히 길게 잡고,
+        // 완료 시 finally에서 명시적으로 걷는다.
+        duration: Duration(minutes: 1),
+        content: Row(
+          children: [
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: 12),
+            Expanded(child: Text('비슷한 뜻으로 다시 찾는 중…')),
+          ],
+        ),
+      ),
+    );
+    try {
+      return await destinationRepository.searchDestinationsAi(
+        _buildingId,
+        query,
+        currentFloorId: _activeIndoorFloor,
+      );
+    } on Object {
+      return const [];
+    } finally {
+      messenger.hideCurrentSnackBar();
+    }
   }
 
   /// 매장 정보 시트를 띄운다. 검색 결과를 탭했을 때와 지도 위 매장 폴리곤을
