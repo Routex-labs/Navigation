@@ -76,6 +76,9 @@ class IndoorNavigationDriver implements IndoorNavigationController {
   Map<String, Object?>? get lastPedometerFinalizeInfo =>
       _lastPedometerFinalizeInfo;
 
+  @override
+  bool get isHeadingConverged => _session.headingConverged;
+
   // ── IndoorNavigationIntents ──
 
   @override

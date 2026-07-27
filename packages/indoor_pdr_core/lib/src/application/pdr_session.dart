@@ -61,6 +61,8 @@ class PdrSession {
   final PedometerBatchProcessor _pedometer = PedometerBatchProcessor();
   final SwingDetector _swing = SwingDetector();
   final WalkOffsetEstimator _walkOffset = WalkOffsetEstimator();
+  final HeadingConvergenceTracker _headingConvergence =
+      HeadingConvergenceTracker();
   final HeadingHistory _headingHistory = HeadingHistory();
 
   final StreamController<PdrSnapshot> _snapshots =
@@ -96,6 +98,19 @@ class PdrSession {
   /// fused heading + walkOffset. confirmed path 방향의 기준.
   double get walkingHeadingDeg =>
       normalizeDegrees(fusedHeadingDeg + _walkOffset.offsetDeg);
+
+  /// [walkingHeadingDeg]에 더해진 보정량(진단용). ±60°로 clamp된다.
+  double get walkOffsetDeg => _walkOffset.offsetDeg;
+
+  /// walkOffset이 지금 갱신 중인지(진단용).
+  bool get walkOffsetActive => _walkOffset.active;
+
+  /// heading이 자리를 잡았는지. 앵커를 확정하기 전에 이 값을 확인하면, 방향이
+  /// 아직 흔들리는 동안 놓인 첫 걸음들이 틀어지는 것을 막을 수 있다.
+  bool get headingConverged => _headingConvergence.converged;
+
+  /// 수렴 판정 창의 최대 편차(도).
+  double get headingSpreadDeg => _headingConvergence.spreadDeg;
 
   HeadingReference get headingReference =>
       headingReferenceFromSource(headingSource);
@@ -134,6 +149,10 @@ class PdrSession {
 
     // 팔 흔들림은 smoothing 전 raw heading으로 판단한다.
     _swing.update(motionMs, e.fusedHeadingDeg);
+    // smoothing 전 raw로 판정한다. 필터 tau가 0.1초라 smoothing된 값은 raw를
+    // 거의 그대로 따라가지만, 수렴 판정만큼은 필터가 만든 매끄러움에 속으면
+    // 안 된다.
+    _headingConvergence.update(motionMs, e.fusedHeadingDeg);
     _updateFusedHeading(e.fusedHeadingDeg, dtSeconds);
     _walkOffset.update(
       nowMs: motionMs,
@@ -232,6 +251,7 @@ class PdrSession {
     _swing.reset();
     walkDirConfidence = 0;
     _walkOffset.reset();
+    _headingConvergence.reset();
     _emit();
   }
 
@@ -356,6 +376,15 @@ class PdrSession {
         headingReferenceIsMagneticNorth:
             headingReference == HeadingReference.magneticNorth,
         peakRejectHistogram: Map.unmodifiable(_accelPreview.rejectReasons),
+        fusedHeadingDeg: fusedHeadingDeg,
+        walkOffsetDeg: walkOffsetDeg,
+        walkOffsetActive: walkOffsetActive,
+        deviceHeadingDeg: deviceHeadingDeg,
+        gyroHeadingDeg: gyroHeadingDeg,
+        walkDirDeg: walkDirDeg,
+        walkDirConfidence: walkDirConfidence,
+        headingConverged: headingConverged,
+        headingSpreadDeg: headingSpreadDeg,
       ),
     );
   }

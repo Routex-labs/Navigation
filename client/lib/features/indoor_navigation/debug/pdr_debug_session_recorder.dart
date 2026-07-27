@@ -19,7 +19,10 @@ class PdrDebugSessionRecorder {
   // v4: 1Hz 샘플에 preview(주황)를 추가하고, pedometer live/재조회 대조 블록을
   // 넣었다. 지금까지는 시계열에 confirmed(초록)만 있어서 주황이 언제 벌어졌는지
   // 파일만으로는 알 수 없었다.
-  static const schemaVersion = 4;
+  // v5: heading 분해(fused/offset/device/gyro/walkDir)와 수렴 상태를 추가했다.
+  // 방향이 틀어졌을 때 자력계·walkOffset·네이티브 유도식·실제 회전 중 무엇인지
+  // 파일만으로 가르기 위한 값이다.
+  static const schemaVersion = 5;
   static const _maxQualitySamples = 900;
 
   final DateTime _startedAt;
@@ -209,8 +212,29 @@ class PdrDebugSessionRecorder {
         'pedometer_flagged_span_s': features.pedometerFlaggedSpanS,
         'peak_reject_histogram': features.peakRejectHistogram,
       },
+      'heading_breakdown': headingBreakdownJson(features),
     };
   }
+
+  /// `walking_heading_deg`가 어떻게 만들어졌는지의 분해.
+  ///
+  /// `walking = fused + walk_offset`이므로, 방향이 틀렸을 때 이 값들을 비교하면
+  /// 자력계(device≈fused가 함께 틀림)·walkOffset(fused는 맞음)·네이티브
+  /// 유도식(device는 맞고 fused만 틀림)을 구분할 수 있다. `gyro`는 자력계와
+  /// 독립이라, fused만 흔들리면 자기장 문제이고 셋이 같이 움직이면 실제 회전이다.
+  static Map<String, Object?> headingBreakdownJson(
+    PdrQualityFeatures features,
+  ) => {
+    'fused_heading_deg': features.fusedHeadingDeg,
+    'walk_offset_deg': features.walkOffsetDeg,
+    'walk_offset_active': features.walkOffsetActive,
+    'device_heading_deg': features.deviceHeadingDeg,
+    'gyro_heading_deg': features.gyroHeadingDeg,
+    'walk_dir_deg': features.walkDirDeg,
+    'walk_dir_confidence': features.walkDirConfidence,
+    'heading_converged': features.headingConverged,
+    'heading_spread_deg': features.headingSpreadDeg,
+  };
 
   static List<Map<String, double>> _pointsJson(
     Iterable<PdrLocalPoint> points,
@@ -244,6 +268,7 @@ class _PdrQualitySample {
     required this.cadenceHz,
     required this.previewSteps,
     required this.previewDistanceM,
+    required this.headingBreakdown,
   });
 
   final DateTime at;
@@ -261,6 +286,10 @@ class _PdrQualitySample {
   final int previewSteps;
   final double previewDistanceM;
 
+  /// 시간에 따른 비교가 핵심이라(초반 수렴 구간, 구간별 자기 왜곡) summary뿐
+  /// 아니라 매 샘플에 남긴다.
+  final Map<String, Object?> headingBreakdown;
+
   factory _PdrQualitySample.fromSnapshot(DateTime at, PdrSnapshot snapshot) {
     final features = snapshot.quality.features;
     return _PdrQualitySample(
@@ -274,6 +303,7 @@ class _PdrQualitySample {
       cadenceHz: features.cadenceHz,
       previewSteps: snapshot.preview.steps,
       previewDistanceM: snapshot.preview.distanceM,
+      headingBreakdown: PdrDebugSessionRecorder.headingBreakdownJson(features),
     );
   }
 
@@ -288,5 +318,6 @@ class _PdrQualitySample {
     'magnetic_accuracy': magneticAccuracy,
     'rotation_heading_accuracy_deg': rotationHeadingAccuracyDeg,
     'cadence_hz': cadenceHz,
+    ...headingBreakdown,
   };
 }

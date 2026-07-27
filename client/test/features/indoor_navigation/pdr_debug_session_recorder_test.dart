@@ -40,6 +40,15 @@ PdrSnapshot _snapshot({
       rollDeg: -2,
       headingReferenceIsMagneticNorth: true,
       peakRejectHistogram: {},
+      fusedHeadingDeg: 80,
+      walkOffsetDeg: 10,
+      walkOffsetActive: true,
+      deviceHeadingDeg: 82,
+      gyroHeadingDeg: 78,
+      walkDirDeg: 88,
+      walkDirConfidence: 0.6,
+      headingConverged: true,
+      headingSpreadDeg: 3.5,
     ),
   ),
 );
@@ -105,7 +114,7 @@ void main() {
     final matched = paths['map_matched_floor_local_m']! as List<Object?>;
     final finalMatched = matched.last! as Map<String, double>;
 
-    expect(json['schema_version'], 4);
+    expect(json['schema_version'], 5);
     expect(
       (json['map_context']! as Map<String, Object?>)['map_calibration_version'],
       'thehyundai-seoul-1f-svg-v1',
@@ -151,6 +160,11 @@ void main() {
     expect(sample['distance_m'], 3.1);
     expect(sample['preview_steps'], 5);
     expect(sample['preview_distance_m'], 3.6);
+    // heading 분해도 매 샘플에 들어간다 — 초반 수렴 구간을 보려면 시계열이어야 한다.
+    expect(sample['fused_heading_deg'], 80);
+    expect(sample['walk_offset_deg'], 10);
+    expect(sample['device_heading_deg'], 82);
+    expect(sample['heading_converged'], true);
   });
 
   test('pedometer live/재조회 대조를 남기고, 없으면 null이다', () {

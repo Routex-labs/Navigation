@@ -51,6 +51,10 @@ const _placingHintTopPx = 132.0;
 // 여유를 두되, 잘못 눌러 건물 반대편에서 PDR이 시작하는 일은 막는다.
 const _maxPdrAnchorSnapDistanceM = 12.0;
 
+/// 앵커 확정 전에 heading 수렴을 기다리는 최대 시간. 넘기면 경고만 띄우고
+/// 진행한다 — 자기 왜곡이 심한 곳에서 앵커 확정 자체가 막히면 더 나쁘다.
+const _headingSettleTimeout = Duration(seconds: 4);
+
 // MapShellScreen이 route 표시 시 MapBottomBar(홈/실내 세그먼트)를 위로 리프트
 // 하는 양. PDR 버튼도 이 값만큼 같이 올라야 홈/실내 버튼과 세로 정렬이 유지된다.
 // map_shell_screen.dart의 _etaBarLiftHeight와 동일해야 한다.
@@ -976,7 +980,30 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     return true;
   }
 
+  /// heading이 자리를 잡을 때까지 최대 [_headingSettleTimeout]만큼 기다린다.
+  ///
+  /// 세션 시작 직후에는 자북 reference가 아직 수렴하지 않았거나 사용자가 몸을
+  /// 돌리는 중이라 방향이 흔들린다. 그 상태로 앵커를 확정하면 첫 걸음들이
+  /// 틀어진 방향으로 눕는다. 타임아웃되면 그냥 진행한다 — 방향이 계속 흔들리는
+  /// 환경(강한 자기 왜곡 등)에서 앵커 확정 자체가 막히면 더 나쁘다.
+  Future<bool> _waitForHeadingToSettle() async {
+    if (indoorNavigationDriver.isHeadingConverged) return true;
+    _showPdrMessage('방향을 잡는 중입니다. 폰을 든 채로 잠시만 기다려주세요.');
+    final deadline = DateTime.now().add(_headingSettleTimeout);
+    while (DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      if (!mounted) return false;
+      if (indoorNavigationDriver.isHeadingConverged) return true;
+    }
+    return false;
+  }
+
   Future<void> _confirmPdrAnchor(PdrLocalPoint floorPoint) async {
+    final settled = await _waitForHeadingToSettle();
+    if (!mounted) return;
+    if (!settled) {
+      _showPdrMessage('방향이 아직 흔들립니다. 그대로 시작하되 초반 경로가 틀어질 수 있습니다.');
+    }
     final graph = _floorGraph;
     final axes = graph == null
         ? const PdrToFloorAxes.identity()

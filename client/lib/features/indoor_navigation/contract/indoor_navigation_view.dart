@@ -27,6 +27,14 @@ abstract interface class IndoorNavigationView {
   /// 가장 최근 센서 파이프라인 실행 상태.
   PdrRuntimeStatus get currentRuntimeStatus;
 
+  /// heading이 자리를 잡았는지.
+  ///
+  /// 세션 시작 직후에는 CoreMotion의 자북 reference가 아직 수렴하지 않았거나
+  /// 사용자가 몸을 돌리는 중이라 방향이 흔들린다. 그 사이에 앵커를 확정하면
+  /// 첫 걸음들이 틀어진 방향으로 눕는다(실측: 첫 4걸음이 복도 대비 17.6° 어긋남).
+  /// native의 `headingStable`은 기기 기울기만 보므로 이 판단에 쓸 수 없다.
+  bool get isHeadingConverged;
+
   /// 마지막 [IndoorNavigationIntents.stopGuidance]에서 native가 돌려준 pedometer
   /// 동결 결과. 세션을 끝내기 전이면 null.
   ///

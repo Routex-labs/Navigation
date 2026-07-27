@@ -34,6 +34,9 @@ class FakeIndoorNavigation implements IndoorNavigationController {
   PdrRuntimeStatus get currentRuntimeStatus => _runtimeStatus;
 
   @override
+  bool get isHeadingConverged => true;
+
+  @override
   Map<String, Object?>? get lastPedometerFinalizeInfo => null;
 
   @override
