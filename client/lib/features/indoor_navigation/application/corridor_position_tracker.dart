@@ -5,60 +5,129 @@ import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 import '../../../models/floor_graph.dart';
 import '../contract/pdr_anchor.dart';
 
+/// 보정 결과의 확신도.
+///
+/// 예전 구현의 상태기(직선/회전대기/노드확정/불확실) 이름을 유지하지만 의미가
+/// 다르다. 지금은 상태가 동작을 바꾸지 않는다 — 빔이 항상 모든 가설을 들고
+/// 있고, 이 값은 **그 빔이 지금 얼마나 갈렸는지**를 표시할 뿐이다.
 enum CorridorTrackingState {
+  /// 1등 가설이 뚜렷하다.
   straightTracking,
+
+  /// 1·2등이 다른 간선인데 점수 차가 작다. 표시는 공통 지점에서 멈춘다.
   turnPending,
+
+  /// 이번 갱신에서 1등 가설이 노드를 넘었다.
   nodeConfirmed,
+
+  /// 모든 가설이 그래프로 설명되지 않는다(막다른 곳 등).
   uncertain,
 }
 
 class CorridorTrackerConfig {
   const CorridorTrackerConfig({
-    this.straightStableMs = 2000,
-    this.junctionRadiusM = 4,
-    this.turnThresholdDeg = 15,
-    this.turnObservationMs = 500,
-    this.newDirectionHoldMs = 1000,
-    this.newEdgeHeadingToleranceDeg = 20,
-    this.minimumNewEdgeProgressM = 1.5,
-    this.maximumConfirmationProgressM = 2.5,
-    this.turnTimeoutMs = 4000,
-    this.turnDistanceLimitM = 4,
+    this.windowDistanceM = 30,
+    this.beamWidth = 24,
+    this.progressBucketM = 1.5,
+    this.transitionPenaltyDegM = 3,
+    this.deadEndPenaltyDeg = 90,
+    this.reverseTriggerDeg = 115,
+    this.absoluteErrorWeight = 0.25,
+    this.maxSegmentErrorDeg = 60,
+    this.positionalWeightDegPerM = 1.0,
+    this.positionalToleranceM = 6,
+    this.positionalMaxOffsetM = 12,
+    this.leaderSwitchMarginDeg = 2.5,
+    this.ambiguousMarginDeg = 6,
     this.maxHeadingCorrectionPerStepDeg = 0.75,
-    this.straightHeadingSpreadDeg = 12,
-    this.uncertainReacquireMs = 1500,
-    this.uncertainReacquireDistanceM = 2,
-    this.recoveryWindowMs = 6000,
-    this.recoveryWindowDistanceM = 6,
-    this.recoveryCandidateMarginDeg = 8,
-    this.previewCandidateMarginDeg = 5,
-    this.previewMaximumMeanErrorDeg = 55,
-    this.maximumLocalPathTransitions = 3,
-    this.maximumLocalPathCandidates = 12,
+    this.headingBiasLimitDeg = 60,
+    this.headingBiasMaxErrorDeg = 50,
+    this.maxTransitionsPerSegment = 3,
     this.maxPathPoints = 800,
   });
 
-  final int straightStableMs;
-  final double junctionRadiusM;
-  final double turnThresholdDeg;
-  final int turnObservationMs;
-  final int newDirectionHoldMs;
-  final double newEdgeHeadingToleranceDeg;
-  final double minimumNewEdgeProgressM;
-  final double maximumConfirmationProgressM;
-  final int turnTimeoutMs;
-  final double turnDistanceLimitM;
+  /// 매 갱신마다 다시 평가하는 최근 이동 거리.
+  ///
+  /// 이 길이 안에서는 어떤 결정도 되돌릴 수 있다. 짧으면 회전을 놓쳤을 때
+  /// 복구할 근거가 사라지고, 길면 계산량과 표시 지연이 늘어난다.
+  final double windowDistanceM;
+
+  /// 동시에 유지하는 가설 수. 교차점이 촘촘한 층에서 정답이 살아남을 여유.
+  final int beamWidth;
+
+  /// 같은 간선·같은 방향에서 이 간격 안의 가설은 하나로 합친다.
+  final double progressBucketM;
+
+  /// 노드를 넘을 때마다 더하는 비용(도·m). 근거 없는 간선 갈아타기를 막되,
+  /// 실제 회전을 이기지 못할 만큼 작아야 한다.
+  final double transitionPenaltyDegM;
+
+  /// 그래프로 설명되지 않은 이동 1m당 비용(도). 막다른 가설을 죽이지 않고
+  /// 크게 벌점만 줘서, 다른 가설이 없을 때도 위치가 멈추지 않게 한다.
+  final double deadEndPenaltyDeg;
+
+  /// 관측 방향이 현재 진행 방향과 이만큼 어긋나면 유턴 가설을 함께 만든다.
+  final double reverseTriggerDeg;
+
+  /// 비용에서 절대 방위 오차가 차지하는 비중. 나머지는 형태(방위 변화) 오차다.
+  ///
+  /// 형태를 더 크게 보는 이유: 시작 heading이 틀어져 있어도 회전의 순서와
+  /// 크기는 그대로 남기 때문이다. 다만 형태만 보면 전역 회전에 완전히
+  /// 무감각해져서 **정반대 방향**도 똑같이 좋은 설명이 된다. 절대 항은 그걸
+  /// 막는 최소한의 닻이다.
+  ///
+  /// heading이 늘 틀어져 있다고 가정하면 안 된다 — 맞는 세션이 더 많다.
+  /// 틀어진 경우는 [headingBiasMaxErrorDeg] 아래의 bias 학습이 흡수하고,
+  /// 그동안은 형태 항이 버틴다.
+  final double absoluteErrorWeight;
+
+  /// 원본 위치에서 벗어난 1m당 더하는 비용(도/m).
+  ///
+  /// 방위·형태만으로는 **나란히 놓인 두 복도**를 구분할 수 없다. 실측에서
+  /// y=131.1 복도와 9m 북쪽의 y=141.5 복도가 둘 다 동서 방향이라, 위치 항이
+  /// 없을 때 엉뚱한 쪽으로 올라가 그대로 눌러앉았다. 구 map matcher가 주
+  /// 신호로 쓰던 근접도를 여기서 되살린다.
+  final double positionalWeightDegPerM;
+
+  /// 이 거리 안의 어긋남은 벌하지 않는다.
+  ///
+  /// 넉넉해야 한다. PDR 원본은 누적 드리프트를 안고 가며(실측 106m 왕복에서
+  /// 폐합오차 13.8m), 좁게 잡으면 시간이 갈수록 **정답 가설**이 더 크게
+  /// 벌점을 먹는다. 나란한 복도 간격(실측 9m)보다 작기만 하면 된다.
+  final double positionalToleranceM;
+
+  /// 위치 벌점이 방위 항을 완전히 눌러 버리지 않게 하는 상한.
+  final double positionalMaxOffsetM;
+
+  /// 한 걸음이 낼 수 있는 최대 비용(도). 그 이상은 잘라낸다.
+  ///
+  /// 안드로이드 실측에서 heading이 직선 복도 위에서도 ±35° 흔들렸다. 이런
+  /// 튀는 한 걸음이 비용을 독점하면, 실제로는 없는 회전을 그래프에서 찾아
+  /// 엉뚱한 간선으로 갈아탄다. 포화시키면 "많이 틀렸다"까지만 반영된다.
+  final double maxSegmentErrorDeg;
+
+  /// 표시 중인 간선을 다른 가설이 이만큼 이겨야 1등을 넘겨준다.
+  ///
+  /// 없으면 점수가 근소하게 오갈 때마다 화면 위치가 복도 사이를 오간다.
+  final double leaderSwitchMarginDeg;
+
+  /// 1·2등 평균 오차가 이 안이면 갈렸다고 본다.
+  final double ambiguousMarginDeg;
+
   final double maxHeadingCorrectionPerStepDeg;
-  final double straightHeadingSpreadDeg;
-  final int uncertainReacquireMs;
-  final double uncertainReacquireDistanceM;
-  final int recoveryWindowMs;
-  final double recoveryWindowDistanceM;
-  final double recoveryCandidateMarginDeg;
-  final double previewCandidateMarginDeg;
-  final double previewMaximumMeanErrorDeg;
-  final int maximumLocalPathTransitions;
-  final int maximumLocalPathCandidates;
+  final double headingBiasLimitDeg;
+
+  /// 이 각도보다 크게 틀어진 상태에서는 bias를 학습하지 않는다. 엉뚱한 간선에
+  /// 붙어 있는 동안 bias까지 오염되는 것을 막는다.
+  ///
+  /// 넉넉해야 한다. 시작 heading 오차는 **세션마다 달라지는 미지수**다(같은
+  /// 기기에서도 켤 때마다 다르다). 실측 한 세션에서 복도 대비 28° 넘게
+  /// 틀어진 채로 "수렴"한 적이 있다 — 수렴은 흔들림이 작다는 뜻이지 방향이
+  /// 맞다는 뜻이 아니다. 이 값이 작으면 정작 보정이 필요한 세션에서 bias가
+  /// 영원히 0에 머문다.
+  final double headingBiasMaxErrorDeg;
+
+  final int maxTransitionsPerSegment;
   final int maxPathPoints;
 }
 
@@ -94,7 +163,7 @@ class CorridorObservation {
   /// 아직 초록으로 확정되지 않은 최근 주황 경로의 floor 좌표.
   ///
   /// 첫 점은 tail 직전 위치이며 이후 점마다 한 걸음의 이동 벡터를 만든다.
-  /// 확정 상태에는 반영하지 않고 화면용 그래프 preview에만 사용한다.
+  /// 확정 상태에는 반영하지 않고 화면용 preview에만 사용한다.
   final List<PdrLocalPoint> rawPreviewTailPositions;
 }
 
@@ -138,11 +207,20 @@ class CorridorTrackingResult {
   final PdrLocalPoint rawPreviewPosition;
 }
 
-/// 초록·주황 원본을 수정하지 않고 실제 위치만 graph 제약으로 누적 보정한다.
+/// 초록·주황 원본을 수정하지 않고 실제 위치만 graph 제약으로 보정한다.
 ///
-/// 직선에서는 현재 간선을 잠근 채 위치 잔차와 heading bias를 천천히 줄인다.
-/// 간선 전환은 연결 노드 근처에서 주황 heading으로 후보를 만든 뒤, 초록
-/// confirmed 거리로 노드 도달 가능성과 새 간선 진행거리를 확인한 경우만 한다.
+/// **빔 서치**로 동작한다. 하나의 "현재 간선"을 잠그는 대신, 서로 다른 간선
+/// 위에 있는 가설 여러 개를 동시에 들고 다니면서 걸음마다 점수를 매기고,
+/// 최근 [CorridorTrackerConfig.windowDistanceM] 구간 안에서는 언제든 1등이
+/// 바뀔 수 있게 둔다.
+///
+/// 이전 구현은 간선을 잠그고 노드에서만 엄격한 증거로 전환하는 탐욕적
+/// 상태기였다. 시간적 일관성은 얻었지만 회전을 한 번 놓치면 되돌릴 방법이
+/// 없어서, 실측에서 교차점에 28초 멈춰 있거나 한 복도를 계속 미끄러졌다.
+/// 빔은 놓친 회전을 "그 가설이 아직 살아 있다"는 형태로 해결한다.
+///
+/// 위치는 절대 멈추지 않는다. 어떤 가설도 그래프로 설명되지 않으면 벌점을
+/// 주되 진행은 시키므로, 걸은 거리가 통째로 사라지지 않는다.
 class CorridorPositionTracker {
   CorridorPositionTracker(
     FloorGraph graph, {
@@ -151,16 +229,16 @@ class CorridorPositionTracker {
 
   final CorridorTrackerConfig config;
   final _CorridorNetwork _network;
+
+  /// 윈도우 밖으로 나가 더는 바뀌지 않는 경로.
+  final List<PdrLocalPoint> _committedPath = [];
   final List<PdrLocalPoint> _correctedPath = [];
   final List<PdrLocalPoint> _previewPath = [];
-  final List<({int atMs, double headingDeg})> _headingWindow = [];
-  final List<_RecoverySegment> _recoverySegments = [];
+
+  List<_Hypothesis> _beam = const [];
+  double _windowDistanceM = 0;
 
   CorridorTrackingState _state = CorridorTrackingState.uncertain;
-  _CorridorEdge? _currentEdge;
-  double _currentProgressM = 0;
-  int _travelSign = 1;
-  bool _travelDirectionLocked = false;
   PdrLocalPoint _correctedPosition = PdrLocalPoint.zero;
   PdrLocalPoint _previewPosition = PdrLocalPoint.zero;
   double _previewHeadingDeg = 0;
@@ -173,33 +251,26 @@ class CorridorPositionTracker {
   int _lastConfirmedSteps = 0;
   double _lastConfirmedDistanceM = 0;
   int _lastPreviewSteps = 0;
-  int _straightSinceMs = 0;
-  int _lastWalkingAtMs = 0;
+  String? _pendingEdgeId;
   String? _lastConfirmedNodeId;
+  String? _leaderEdgeId;
+  int _leaderSign = 1;
 
-  _TurnEvidence? _turn;
-  String? _liveTurnEdgeId;
-  String? _liveTurnNodeId;
-  int? _liveTurnSinceMs;
-  String? _uncertainCandidateEdgeId;
-  String? _uncertainCandidateNodeId;
-  int _uncertainCandidateTravelSign = 1;
-  int? _uncertainCandidateSinceMs;
-  double _uncertainCandidateDistanceM = 0;
+  bool get isInitialized => _beam.isNotEmpty;
 
-  bool get isInitialized => _currentEdge != null;
+  _Hypothesis? get _best => _beam.isEmpty ? null : _beam.first;
 
   CorridorTrackingResult get result => CorridorTrackingResult(
     state: _state,
     correctedPosition: _correctedPosition,
     correctedHeadingDeg:
-        _currentEdge?.bearingForTravel(_currentProgressM, _travelSign) ??
+        _best?.edge.bearingForTravel(_best!.progressM, _best!.travelSign) ??
         _normalizeBearing(_sensorHeadingDeg + _headingBiasDeg),
     headingBiasDeg: _headingBiasDeg,
-    currentEdgeId: _currentEdge?.id,
-    currentEdgeProgressM: _currentProgressM,
-    travelDirectionSign: _travelSign,
-    pendingEdgeId: _turn?.candidateEdge.id ?? _uncertainCandidateEdgeId,
+    currentEdgeId: _best?.edge.id,
+    currentEdgeProgressM: _best?.progressM ?? 0,
+    travelDirectionSign: _best?.travelSign ?? 1,
+    pendingEdgeId: _pendingEdgeId,
     lastConfirmedNodeId: _lastConfirmedNodeId,
     correctedPath: List.unmodifiable(_correctedPath),
     previewPosition: _previewPosition,
@@ -219,39 +290,35 @@ class CorridorPositionTracker {
     double initialConfirmedDistanceM = 0,
     int initialPreviewSteps = 0,
   }) {
-    final nearest = _network.nearestProjection(
-      initialPosition,
-      headingDeg: initialHeadingDeg,
-    );
-    _currentEdge = nearest?.edge;
-    _currentProgressM = nearest?.distanceAlongM ?? 0;
-    _travelSign = nearest?.edge.directionSignForHeading(initialHeadingDeg) ?? 1;
-    _travelDirectionLocked = false;
-    _correctedPosition = nearest?.point ?? initialPosition;
-    _rawConfirmedPosition = initialPosition;
-    _rawPreviewPosition = initialPosition;
     _sensorHeadingDeg = _normalizeBearing(initialHeadingDeg);
     _headingBiasDeg = 0;
     _lastConfirmedSteps = initialConfirmedSteps;
     _lastConfirmedDistanceM = initialConfirmedDistanceM;
     _lastPreviewSteps = initialPreviewSteps;
-    _straightSinceMs = timestampMs;
-    _lastWalkingAtMs = timestampMs;
+    _rawConfirmedPosition = initialPosition;
+    _rawPreviewPosition = initialPosition;
     _lastConfirmedNodeId = null;
-    _turn = null;
-    _clearLiveTurnCandidate();
-    _clearUncertainCandidate();
-    _recoverySegments.clear();
-    _headingWindow
-      ..clear()
-      ..add((atMs: timestampMs, headingDeg: _sensorHeadingDeg));
+    _pendingEdgeId = null;
+    _leaderEdgeId = null;
+    _leaderSign = 1;
+    _windowDistanceM = 0;
+    _committedPath.clear();
+
+    // 시작 방향을 하나로 못 박지 않는다. 첫 걸음의 방위는 복도에 거의 수직인
+    // 경우가 많고(실측에서 176.9°), 그것으로 진행 부호를 잠그면 6° 차이로
+    // 역주행이 확정된다. 대신 근처 간선의 양방향을 모두 씨앗으로 깔고 걸음이
+    // 쌓이면서 걸러지게 둔다.
+    _beam = _seedHypotheses(initialPosition, initialHeadingDeg);
+    _correctedPosition = _best == null
+        ? initialPosition
+        : _best!.edge.pointAt(_best!.progressM);
     _correctedPath
       ..clear()
       ..add(_correctedPosition);
-    _resetPreviewToConfirmed();
-    _state = nearest == null
+    _state = _beam.isEmpty
         ? CorridorTrackingState.uncertain
         : CorridorTrackingState.straightTracking;
+    _resetPreviewToConfirmed();
   }
 
   CorridorTrackingResult update(CorridorObservation observation) {
@@ -267,7 +334,6 @@ class CorridorPositionTracker {
     _rawPreviewPosition = observation.rawPreviewPosition;
     if (observation.hasHeading && observation.sensorHeadingDeg.isFinite) {
       _sensorHeadingDeg = _normalizeBearing(observation.sensorHeadingDeg);
-      _recordHeading(observation.timestampMs, _sensorHeadingDeg);
     }
 
     final deltaSteps = math.max(
@@ -278,68 +344,21 @@ class CorridorPositionTracker {
       0.0,
       observation.confirmedDistanceM - _lastConfirmedDistanceM,
     );
-    final deltaPreviewSteps = math.max(
-      0,
-      observation.previewSteps - _lastPreviewSteps,
-    );
-    if (_state == CorridorTrackingState.nodeConfirmed &&
-        (deltaSteps > 0 || deltaPreviewSteps > 0)) {
-      _state = CorridorTrackingState.straightTracking;
-      _straightSinceMs = observation.timestampMs;
-    }
-    if (deltaSteps > 0 || deltaPreviewSteps > 0) {
-      _lastWalkingAtMs = observation.timestampMs;
-    }
 
-    if (deltaPreviewSteps > 0 && observation.hasHeading) {
-      _observeRealtimeTurn(observation.timestampMs);
-    }
-
-    if (deltaDistanceM > 0 && deltaSteps > 0) {
-      switch (_state) {
-        case CorridorTrackingState.straightTracking:
-          _applyStraightConfirmed(
-            atMs: observation.timestampMs,
-            deltaSteps: deltaSteps,
-            deltaDistanceM: deltaDistanceM,
-            previousRawConfirmedPosition: previousRawConfirmedPosition,
-            rawConfirmedStepPositions: observation.rawConfirmedStepPositions,
-          );
-        case CorridorTrackingState.turnPending:
-          _applyPendingConfirmed(
-            atMs: observation.timestampMs,
-            deltaSteps: deltaSteps,
-            deltaDistanceM: deltaDistanceM,
-            previousRawConfirmedPosition: previousRawConfirmedPosition,
-            rawConfirmedStepPositions: observation.rawConfirmedStepPositions,
-          );
-        case CorridorTrackingState.uncertain:
-          _applyUncertainConfirmed(
-            atMs: observation.timestampMs,
-            deltaSteps: deltaSteps,
-            deltaDistanceM: deltaDistanceM,
-            previousRawConfirmedPosition: previousRawConfirmedPosition,
-            rawConfirmedStepPositions: observation.rawConfirmedStepPositions,
-          );
-        case CorridorTrackingState.nodeConfirmed:
-          break;
+    if (deltaSteps > 0 && deltaDistanceM > 0) {
+      final segments = _rawSegments(
+        deltaSteps: deltaSteps,
+        deltaDistanceM: deltaDistanceM,
+        previousRawConfirmedPosition: previousRawConfirmedPosition,
+        rawConfirmedStepPositions: observation.rawConfirmedStepPositions,
+      );
+      final transitionsBefore = _best?.transitions ?? 0;
+      for (final segment in segments) {
+        _advanceBeam(segment);
       }
-    }
-
-    if (_state == CorridorTrackingState.turnPending) {
-      final turn = _turn;
-      final reachableDistanceLimitM = turn == null
-          ? config.turnDistanceLimitM
-          : math.max(
-              config.turnDistanceLimitM,
-              turn.distanceToNodeM + config.minimumNewEdgeProgressM,
-            );
-      if (turn != null &&
-          (observation.timestampMs - turn.startedAtMs >= config.turnTimeoutMs ||
-              turn.confirmedDistanceM >= reachableDistanceLimitM)) {
-        _enterUncertain(observation.timestampMs);
-        _turn = null;
-      }
+      _updateHeadingBias();
+      _slideWindow();
+      _publishConfirmed(transitionsBefore: transitionsBefore);
     }
 
     _lastConfirmedSteps = math.max(
@@ -355,831 +374,73 @@ class CorridorPositionTracker {
     return result;
   }
 
-  void _applyStraightConfirmed({
-    required int atMs,
-    required int deltaSteps,
-    required double deltaDistanceM,
-    required PdrLocalPoint previousRawConfirmedPosition,
-    required List<PdrLocalPoint> rawConfirmedStepPositions,
-  }) {
-    final segments = _rawSegments(
-      deltaSteps: deltaSteps,
-      deltaDistanceM: deltaDistanceM,
-      previousRawConfirmedPosition: previousRawConfirmedPosition,
-      rawConfirmedStepPositions: rawConfirmedStepPositions,
-    );
-    for (var index = 0; index < segments.length; index += 1) {
-      final segment = segments[index];
-      final remainingM = _integrateStraightStep(
-        atMs: atMs,
-        rawHeadingDeg: segment.headingDeg,
-        stepDistanceM: segment.distanceM,
-      );
-      if (_state == CorridorTrackingState.straightTracking) continue;
-      if (_state == CorridorTrackingState.uncertain) {
-        final remaining = <({double headingDeg, double distanceM})>[
-          if (remainingM > 1e-6)
-            (headingDeg: segment.headingDeg, distanceM: remainingM),
-          ...segments.skip(index + 1),
-        ];
-        _applyUncertainSegments(atMs: atMs, segments: remaining);
-      }
-      break;
-    }
-  }
+  // ── 빔 ──
 
-  double _integrateStraightStep({
-    required int atMs,
-    required double rawHeadingDeg,
-    required double stepDistanceM,
-  }) {
-    final edge = _currentEdge;
-    if (edge == null || stepDistanceM <= 0) return 0;
-    if (!_travelDirectionLocked) {
-      _travelSign = edge.directionSignForHeading(rawHeadingDeg);
-      _travelDirectionLocked = true;
-    }
-    final targetHeading = edge.bearingForTravel(_currentProgressM, _travelSign);
-    final farFromJunction =
-        _network.nearestJunctionDistance(edge, _correctedPosition) >
-        config.junctionRadiusM;
-    final stable =
-        atMs - _straightSinceMs >= config.straightStableMs &&
-        atMs - _lastWalkingAtMs <= 1200 &&
-        _headingSpreadDeg <= config.straightHeadingSpreadDeg &&
-        farFromJunction;
-
-    if (stable) {
-      final correctedRawHeading = _normalizeBearing(
-        rawHeadingDeg + _headingBiasDeg,
-      );
-      final requested = _shortestDelta(targetHeading - correctedRawHeading);
-      final maxCorrection = config.maxHeadingCorrectionPerStepDeg;
-      _headingBiasDeg = _clampSigned(
-        _headingBiasDeg +
-            requested.clamp(-maxCorrection, maxCorrection).toDouble(),
-        60,
-      );
-    }
-    return _advanceStraightOnGraph(
-      distanceM: stepDistanceM,
-      rawHeadingDeg: rawHeadingDeg,
-      atMs: atMs,
-    );
-  }
-
-  double _advanceStraightOnGraph({
-    required double distanceM,
-    required double rawHeadingDeg,
-    required int atMs,
-  }) {
-    var remainingM = distanceM;
-    var transitions = 0;
-    while (remainingM > 1e-6 && transitions < 16) {
-      final edge = _currentEdge;
-      if (edge == null) return remainingM;
-      final distanceToEnd = _travelSign > 0
-          ? edge.lengthM - _currentProgressM
-          : _currentProgressM;
-      if (remainingM <= distanceToEnd + 1e-6) {
-        _currentProgressM = (_currentProgressM + _travelSign * remainingM)
-            .clamp(0.0, edge.lengthM)
-            .toDouble();
-        _correctedPosition = edge.pointAt(_currentProgressM);
-        _appendCorrected(_correctedPosition);
-        return 0;
-      }
-
-      _currentProgressM = _travelSign > 0 ? edge.lengthM : 0;
-      _correctedPosition = edge.pointAt(_currentProgressM);
-      _appendCorrected(_correctedPosition);
-      remainingM = math.max(0, remainingM - distanceToEnd);
-      final nodeId = edge.nodeAtTravelEnd(_travelSign);
-      final incomingBearing = edge.bearingTowardNode(nodeId);
-      final continuation = _network.bestStraightContinuation(
-        nodeId: nodeId,
-        excludingEdgeId: edge.id,
-        incomingBearingDeg: incomingBearing,
-        toleranceDeg: config.newEdgeHeadingToleranceDeg,
-      );
-      if (continuation == null ||
-          _headingError(
-                _normalizeBearing(rawHeadingDeg + _headingBiasDeg),
-                continuation.edge.bearingAwayFromNode(nodeId),
-              ) >
-              config.newEdgeHeadingToleranceDeg + 25) {
-        _enterUncertain(atMs);
-        return remainingM;
-      }
-
-      _currentEdge = continuation.edge;
-      _travelSign = continuation.edge.travelSignAwayFromNode(nodeId);
-      _travelDirectionLocked = true;
-      _currentProgressM = _travelSign > 0 ? 0 : continuation.edge.lengthM;
-      _correctedPosition = continuation.edge.pointAt(_currentProgressM);
-      transitions += 1;
-    }
-    return remainingM;
-  }
-
-  List<({double headingDeg, double distanceM})> _rawSegments({
-    required int deltaSteps,
-    required double deltaDistanceM,
-    required PdrLocalPoint previousRawConfirmedPosition,
-    required List<PdrLocalPoint> rawConfirmedStepPositions,
-  }) {
-    final rawSegments = <({double headingDeg, double distanceM})>[];
-    var rawCursor = previousRawConfirmedPosition;
-    var rawTotalM = 0.0;
-    for (final rawPoint in rawConfirmedStepPositions) {
-      final movement = rawPoint - rawCursor;
-      rawCursor = rawPoint;
-      if (movement.distance <= 1e-6) continue;
-      rawSegments.add((
-        headingDeg: pdrBearingForDirection(movement),
-        distanceM: movement.distance,
-      ));
-      rawTotalM += movement.distance;
-    }
-    if (rawSegments.isEmpty || rawTotalM <= 1e-6) {
-      final fallbackSteps = math.max(1, deltaSteps);
-      return [
-        for (var index = 0; index < fallbackSteps; index += 1)
-          (
-            headingDeg: _sensorHeadingDeg,
-            distanceM: deltaDistanceM / fallbackSteps,
-          ),
-      ];
-    }
-    final distanceScale = deltaDistanceM / rawTotalM;
-    return [
-      for (final segment in rawSegments)
-        (
-          headingDeg: segment.headingDeg,
-          distanceM: segment.distanceM * distanceScale,
-        ),
-    ];
-  }
-
-  void _observeRealtimeTurn(int atMs) {
-    final edge = _currentEdge;
-    if (edge == null) return;
-    final correctedHeading = _normalizeBearing(
-      _sensorHeadingDeg + _headingBiasDeg,
-    );
-
-    if (_state == CorridorTrackingState.turnPending) {
-      final turn = _turn;
-      if (turn == null) return;
-      final oldDirection = edge.bearingForTravel(
-        _currentProgressM,
-        _travelSign,
-      );
-      if (_headingError(correctedHeading, oldDirection) < 10 &&
-          _headingError(
-                correctedHeading,
-                turn.candidateEdge.bearingAwayFromNode(turn.node.id),
-              ) >
-              config.newEdgeHeadingToleranceDeg) {
-        _state = CorridorTrackingState.straightTracking;
-        _turn = null;
-        _clearLiveTurnCandidate();
-        _straightSinceMs = atMs;
-        return;
-      }
-      final candidate = _network.bestOutgoing(
-        nodeId: turn.node.id,
-        excludingEdgeId: edge.id,
-        headingDeg: correctedHeading,
-        toleranceDeg: config.newEdgeHeadingToleranceDeg + 10,
-      );
-      if (candidate != null && candidate.edge.id != turn.candidateEdge.id) {
-        final replacement = _TurnEvidence(
-          node: turn.node,
-          candidateEdge: candidate.edge,
-          startedAtMs: turn.startedAtMs,
-          candidateSinceMs: atMs,
-          distanceToNodeM: turn.distanceToNodeM,
-          startedProgressM: turn.startedProgressM,
-          oldTravelSign: turn.oldTravelSign,
-        )..confirmedDistanceM = turn.confirmedDistanceM;
-        _turn = replacement;
-      }
-      return;
-    }
-
-    if (_state == CorridorTrackingState.uncertain) {
-      _observeUncertainCandidate(atMs, correctedHeading);
-      return;
-    }
-    if (_state != CorridorTrackingState.straightTracking) return;
-
-    final junction = _network.nearestJunctionOn(
-      edge,
-      _correctedPosition,
-      maxDistanceM: config.junctionRadiusM,
-    );
-    if (junction == null) {
-      _clearLiveTurnCandidate();
-      return;
-    }
-    if (edge.nodeAtTravelEnd(_travelSign) != junction.node.id) {
-      _clearLiveTurnCandidate();
-      return;
-    }
-    final currentBearing = edge.bearingTowardNode(junction.node.id);
-    final candidate = _network.bestOutgoing(
-      nodeId: junction.node.id,
-      excludingEdgeId: edge.id,
-      headingDeg: correctedHeading,
-      toleranceDeg: config.newEdgeHeadingToleranceDeg + 10,
-    );
-    if (candidate == null) {
-      _clearLiveTurnCandidate();
-      return;
-    }
-    final candidateBearing = candidate.edge.bearingAwayFromNode(
-      junction.node.id,
-    );
-    if (_headingError(currentBearing, candidateBearing) <
-        config.turnThresholdDeg) {
-      _clearLiveTurnCandidate();
-      return;
-    }
-    if (_liveTurnEdgeId != candidate.edge.id ||
-        _liveTurnNodeId != junction.node.id) {
-      if (_recentHeadingChangeDeg(atMs) < config.turnThresholdDeg) {
-        _clearLiveTurnCandidate();
-        return;
-      }
-      _liveTurnEdgeId = candidate.edge.id;
-      _liveTurnNodeId = junction.node.id;
-      _liveTurnSinceMs = atMs;
-      return;
-    }
-    final liveSince = _liveTurnSinceMs ?? atMs;
-    if (atMs - liveSince < config.turnObservationMs) return;
-    _turn = _TurnEvidence(
-      node: junction.node,
-      candidateEdge: candidate.edge,
-      startedAtMs: liveSince,
-      candidateSinceMs: liveSince,
-      distanceToNodeM: junction.distanceM,
-      startedProgressM: _currentProgressM,
-      oldTravelSign: _travelSign,
-    );
-    _clearLiveTurnCandidate();
-    _state = CorridorTrackingState.turnPending;
-  }
-
-  void _applyPendingConfirmed({
-    required int atMs,
-    required int deltaSteps,
-    required double deltaDistanceM,
-    required PdrLocalPoint previousRawConfirmedPosition,
-    required List<PdrLocalPoint> rawConfirmedStepPositions,
-  }) {
-    final turn = _turn;
-    if (turn == null) return;
-    final candidateBearing = turn.candidateEdge.bearingAwayFromNode(
-      turn.node.id,
-    );
-    for (final segment in _rawSegments(
-      deltaSteps: deltaSteps,
-      deltaDistanceM: deltaDistanceM,
-      previousRawConfirmedPosition: previousRawConfirmedPosition,
-      rawConfirmedStepPositions: rawConfirmedStepPositions,
-    )) {
-      final beforeM = turn.confirmedDistanceM;
-      turn.confirmedDistanceM += segment.distanceM;
-      final afterNodeBeforeM = math.max(beforeM, turn.distanceToNodeM);
-      final afterNodeAfterM = math.max(
-        turn.confirmedDistanceM,
-        turn.distanceToNodeM,
-      );
-      final candidateDistanceM = afterNodeAfterM - afterNodeBeforeM;
-      if (candidateDistanceM <= 0) continue;
-      final segmentHeading = _normalizeBearing(
-        segment.headingDeg + _headingBiasDeg,
-      );
-      if (_headingError(segmentHeading, candidateBearing) <=
-          config.newEdgeHeadingToleranceDeg) {
-        turn.alignedNewEdgeDistanceM += candidateDistanceM;
-      } else {
-        turn.alignedNewEdgeDistanceM = 0;
-      }
-    }
-
-    // 확정 전 마커는 기존 간선에서 교차 노드까지만 이동한다. 후보 복도로
-    // 미리 들어가거나 임의 노드로 순간이동하지 않는다.
-    final oldEdge = _currentEdge;
-    if (oldEdge != null) {
-      final progressToNode = math.min(
-        turn.confirmedDistanceM,
-        turn.distanceToNodeM,
-      );
-      _currentProgressM =
-          (turn.startedProgressM + turn.oldTravelSign * progressToNode)
-              .clamp(0.0, oldEdge.lengthM)
-              .toDouble();
-      _correctedPosition = oldEdge.pointAt(_currentProgressM);
-      _appendCorrected(_correctedPosition);
-    }
-
-    final newEdgeProgressM = math.max(
-      0.0,
-      turn.confirmedDistanceM - turn.distanceToNodeM,
-    );
-    final heldLongEnough =
-        atMs - turn.candidateSinceMs >= config.newDirectionHoldMs;
-    if (heldLongEnough &&
-        newEdgeProgressM >= config.minimumNewEdgeProgressM &&
-        turn.alignedNewEdgeDistanceM >= config.minimumNewEdgeProgressM) {
-      _confirmNodeTransition(
-        node: turn.node,
-        edge: turn.candidateEdge,
-        progressM: math.min(
-          newEdgeProgressM,
-          config.maximumConfirmationProgressM,
-        ),
-        atMs: atMs,
-      );
-      _turn = null;
-    }
-  }
-
-  void _applyUncertainConfirmed({
-    required int atMs,
-    required int deltaSteps,
-    required double deltaDistanceM,
-    required PdrLocalPoint previousRawConfirmedPosition,
-    required List<PdrLocalPoint> rawConfirmedStepPositions,
-  }) {
-    final segments = _rawSegments(
-      deltaSteps: deltaSteps,
-      deltaDistanceM: deltaDistanceM,
-      previousRawConfirmedPosition: previousRawConfirmedPosition,
-      rawConfirmedStepPositions: rawConfirmedStepPositions,
-    );
-    _applyUncertainSegments(atMs: atMs, segments: segments);
-  }
-
-  void _applyUncertainSegments({
-    required int atMs,
-    required List<({double headingDeg, double distanceM})> segments,
-  }) {
-    final edge = _currentEdge;
-    if (edge == null || segments.isEmpty) return;
-
-    for (final segment in segments) {
-      _recordRecoverySegment(
-        atMs: atMs,
-        headingDeg: _normalizeBearing(segment.headingDeg + _headingBiasDeg),
-        distanceM: segment.distanceM,
-      );
-    }
-    final matched = _bestLocalRecovery();
-    if (matched == null) {
-      if (_recoveryDistanceM >= config.uncertainReacquireDistanceM) {
-        _clearUncertainCandidate();
-      }
-      return;
-    }
-    _setUncertainCandidate(
-      edgeId: matched.edge.id,
-      nodeId: matched.lastNodeId,
-      travelSign: matched.travelSign,
-      atMs: atMs,
-    );
-    _uncertainCandidateDistanceM = matched.comparedDistanceM;
-    final candidateSince = _uncertainCandidateSinceMs;
-    if (candidateSince == null ||
-        atMs - candidateSince < config.uncertainReacquireMs ||
-        _uncertainCandidateDistanceM < config.uncertainReacquireDistanceM) {
-      return;
-    }
-    _confirmLocalRecovery(matched, atMs: atMs);
-    _clearUncertainCandidate();
-  }
-
-  double get _recoveryDistanceM => _recoverySegments.fold<double>(
-    0,
-    (sum, segment) => sum + segment.distanceM,
-  );
-
-  _LocalPathHypothesis? _bestLocalRecovery() {
-    // 전체 구간이 맞으면 회전 순서까지 포함한 결과를 우선한다. 노드 밖으로
-    // 잠깐 진행했다가 유턴한 것처럼 앞부분이 어떤 후보에도 맞지 않으면, 한
-    // 걸음씩 앞을 걷어낸 가장 긴 suffix를 다시 비교한다.
-    for (var start = 0; start < _recoverySegments.length; start += 1) {
-      final suffix = _recoverySegments.skip(start).toList(growable: false);
-      final suffixDistanceM = suffix.fold<double>(
-        0,
-        (sum, segment) => sum + segment.distanceM,
-      );
-      if (suffixDistanceM < config.uncertainReacquireDistanceM) break;
-      final matches =
-          _matchLocalPaths(
-                seeds: _previewSeeds(includeHeadingBaseline: false),
-                segments: suffix,
-              )
-              .where(
-                (candidate) =>
-                    candidate.meanErrorDeg <= config.newEdgeHeadingToleranceDeg,
-              )
-              .toList(growable: false);
-      if (matches.isEmpty) continue;
-      if (matches.length > 1 &&
-          matches[1].meanErrorDeg - matches.first.meanErrorDeg <
-              config.recoveryCandidateMarginDeg) {
-        continue;
-      }
-      return matches.first;
-    }
-    return null;
-  }
-
-  void _confirmLocalRecovery(
-    _LocalPathHypothesis matched, {
-    required int atMs,
-  }) {
-    for (final point in matched.path.skip(1)) {
-      _appendCorrected(point);
-    }
-    _currentEdge = matched.edge;
-    _currentProgressM = matched.progressM;
-    _travelSign = matched.travelSign;
-    _travelDirectionLocked = true;
-    _correctedPosition = matched.edge.pointAt(matched.progressM);
-    _appendCorrected(_correctedPosition);
-    _lastConfirmedNodeId = matched.lastNodeId;
-    _state = matched.lastNodeId == null
-        ? CorridorTrackingState.straightTracking
-        : CorridorTrackingState.nodeConfirmed;
-    _straightSinceMs = atMs;
-    _clearLiveTurnCandidate();
-    _recoverySegments.clear();
-  }
-
-  void _observeUncertainCandidate(
-    int atMs,
-    double headingDeg, {
-    bool confirmedEvidence = false,
-  }) {
-    final edge = _currentEdge;
-    if (edge == null) return;
-    final nodeId = edge.nodeAtTravelEnd(_travelSign);
-    final distanceToNodeM = _travelSign > 0
-        ? edge.lengthM - _currentProgressM
-        : _currentProgressM;
-    if (distanceToNodeM <= 0.35) {
-      final candidate = _bestRecoveryCandidate(
-        _network.recoveryOptionsFromNode(nodeId),
-        currentHeadingDeg: headingDeg,
-        requireConfirmedAlignment: confirmedEvidence,
-      );
-      if (candidate == null) {
-        if (_uncertainCandidateEdgeId != null && !confirmedEvidence) {
-          return;
-        }
-        _clearUncertainCandidate();
-        return;
-      }
-      if (_shouldKeepUnverifiedCandidate(
-        candidate,
-        confirmedEvidence: confirmedEvidence,
-      )) {
-        return;
-      }
-      _setUncertainCandidate(
-        edgeId: candidate.edge.id,
-        nodeId: nodeId,
-        travelSign: candidate.travelSign,
-        atMs: atMs,
-      );
-      return;
-    }
-
-    final candidates = <_RecoveryOption>[
-      _RecoveryOption(
-        edge: edge,
-        travelSign: _travelSign,
-        bearingDeg: edge.bearingForTravel(_currentProgressM, _travelSign),
-      ),
-      if (edge.bidirectional)
-        _RecoveryOption(
-          edge: edge,
-          travelSign: -_travelSign,
-          bearingDeg: edge.bearingForTravel(_currentProgressM, -_travelSign),
-        ),
-    ];
-    final candidate = _bestRecoveryCandidate(
-      candidates,
-      currentHeadingDeg: headingDeg,
-      requireConfirmedAlignment: confirmedEvidence,
-    );
-    if (candidate == null) {
-      if (_uncertainCandidateEdgeId != null && !confirmedEvidence) {
-        return;
-      }
-      _clearUncertainCandidate();
-      return;
-    }
-    if (_shouldKeepUnverifiedCandidate(
-      candidate,
-      confirmedEvidence: confirmedEvidence,
-    )) {
-      return;
-    }
-    _setUncertainCandidate(
-      edgeId: candidate.edge.id,
-      nodeId: null,
-      travelSign: candidate.travelSign,
-      atMs: atMs,
-    );
-  }
-
-  bool _shouldKeepUnverifiedCandidate(
-    _RecoveryOption replacement, {
-    required bool confirmedEvidence,
-  }) =>
-      _uncertainCandidateEdgeId != null &&
-      !confirmedEvidence &&
-      (_uncertainCandidateEdgeId != replacement.edge.id ||
-          _uncertainCandidateTravelSign != replacement.travelSign);
-
-  _RecoveryOption? _bestRecoveryCandidate(
-    List<_RecoveryOption> candidates, {
-    required double currentHeadingDeg,
-    required bool requireConfirmedAlignment,
-  }) {
-    if (candidates.isEmpty) return null;
-    final scored = <({double errorDeg, _RecoveryOption option})>[];
-    for (final option in candidates) {
-      // 최신 heading 한 번의 스파이크보다 초록 배치에서 복원한 최근 이동
-      // 형태가 우세하도록 실시간 표본은 짧은 걸음 절반보다 작게 가중한다.
-      const realtimeWeightM = 0.35;
-      var weightedError =
-          _headingError(currentHeadingDeg, option.bearingDeg) * realtimeWeightM;
-      var weightM = realtimeWeightM;
-      var alignedDistanceM = 0.0;
-      // 방향 전환 이전 걸음을 한 평균에 섞지 않는다. 최신 걸음부터 후보와
-      // 연속으로 정렬된 suffix만 사용해 "동쪽 진행 뒤 서쪽 유턴"을 동·서
-      // 평균이 아닌 새 서쪽 구간으로 판단한다.
-      for (final segment in _recoverySegments.reversed) {
-        final error = _headingError(segment.headingDeg, option.bearingDeg);
-        if (error > config.newEdgeHeadingToleranceDeg) break;
-        weightedError += error * segment.distanceM;
-        weightM += segment.distanceM;
-        alignedDistanceM += segment.distanceM;
-      }
-      if (requireConfirmedAlignment &&
-          _recoverySegments.isNotEmpty &&
-          alignedDistanceM <= 1e-6) {
-        continue;
-      }
-      scored.add((errorDeg: weightedError / weightM, option: option));
-    }
-    if (scored.isEmpty) return null;
-    scored.sort((left, right) => left.errorDeg.compareTo(right.errorDeg));
-    final best = scored.first;
-    if (best.errorDeg > config.newEdgeHeadingToleranceDeg) return null;
-    if (scored.length > 1 &&
-        scored[1].errorDeg - best.errorDeg <
-            config.recoveryCandidateMarginDeg) {
-      return null;
-    }
-    return best.option;
-  }
-
-  void _recordRecoverySegment({
-    required int atMs,
-    required double headingDeg,
-    required double distanceM,
-  }) {
-    if (distanceM <= 0) return;
-    _recoverySegments.add(
-      _RecoverySegment(
-        atMs: atMs,
-        headingDeg: headingDeg,
-        distanceM: distanceM,
-      ),
-    );
-    final oldestAtMs = atMs - config.recoveryWindowMs;
-    _recoverySegments.removeWhere((segment) => segment.atMs < oldestAtMs);
-    var totalM = _recoverySegments.fold<double>(
-      0,
-      (sum, segment) => sum + segment.distanceM,
-    );
-    while (_recoverySegments.length > 1 &&
-        totalM > config.recoveryWindowDistanceM) {
-      totalM -= _recoverySegments.removeAt(0).distanceM;
-    }
-  }
-
-  void _setUncertainCandidate({
-    required String edgeId,
-    required String? nodeId,
-    required int travelSign,
-    required int atMs,
-  }) {
-    if (_uncertainCandidateEdgeId == edgeId &&
-        _uncertainCandidateNodeId == nodeId &&
-        _uncertainCandidateTravelSign == travelSign) {
-      return;
-    }
-    _uncertainCandidateEdgeId = edgeId;
-    _uncertainCandidateNodeId = nodeId;
-    _uncertainCandidateTravelSign = travelSign;
-    _uncertainCandidateSinceMs = atMs;
-    _uncertainCandidateDistanceM = 0;
-  }
-
-  void _confirmNodeTransition({
-    required _CorridorNode node,
-    required _CorridorEdge edge,
-    required double progressM,
-    required int atMs,
-  }) {
-    _appendCorrected(node.point);
-    _currentEdge = edge;
-    _travelSign = edge.travelSignAwayFromNode(node.id);
-    _travelDirectionLocked = true;
-    final boundedProgressM = progressM.clamp(0.0, edge.lengthM).toDouble();
-    _currentProgressM = _travelSign > 0
-        ? boundedProgressM
-        : edge.lengthM - boundedProgressM;
-    _correctedPosition = edge.pointAt(_currentProgressM);
-    _appendCorrected(_correctedPosition);
-    _lastConfirmedNodeId = node.id;
-    _state = CorridorTrackingState.nodeConfirmed;
-    _straightSinceMs = atMs;
-    _clearLiveTurnCandidate();
-    _recoverySegments.clear();
-  }
-
-  void _enterUncertain(int atMs) {
-    _state = CorridorTrackingState.uncertain;
-    _straightSinceMs = atMs;
-    _clearUncertainCandidate();
-    _recoverySegments.clear();
-  }
-
-  void _rebuildPreview(List<PdrLocalPoint> rawPreviewTailPositions) {
-    final edge = _currentEdge;
-    if (edge == null || rawPreviewTailPositions.length < 2) {
-      _resetPreviewToConfirmed();
-      return;
-    }
-    final segments = <_RecoverySegment>[];
-    for (var index = 1; index < rawPreviewTailPositions.length; index += 1) {
-      final movement =
-          rawPreviewTailPositions[index] - rawPreviewTailPositions[index - 1];
-      if (movement.distance <= 1e-6) continue;
-      segments.add(
-        _RecoverySegment(
-          atMs: 0,
-          headingDeg: _normalizeBearing(
-            pdrBearingForDirection(movement) + _headingBiasDeg,
-          ),
-          distanceM: movement.distance,
-        ),
-      );
-    }
-    if (segments.isEmpty) {
-      _resetPreviewToConfirmed();
-      return;
-    }
-
-    final candidates =
-        _matchLocalPaths(seeds: _previewSeeds(), segments: segments)
-            .where(
-              (candidate) =>
-                  candidate.meanErrorDeg <= config.previewMaximumMeanErrorDeg,
-            )
-            .toList(growable: false);
-    if (candidates.isEmpty) {
-      _resetPreviewToConfirmed();
-      return;
-    }
-
-    final best = candidates.first;
-    _previewPosition = best.edge.pointAt(best.progressM);
-    _previewHeadingDeg = best.edge.bearingForTravel(
-      best.progressM,
-      best.travelSign,
-    );
-    _previewPath
-      ..clear()
-      ..addAll(best.path);
-    _previewCandidateEdgeIds = [
-      for (final candidate in candidates)
-        if (!candidates
-            .take(candidates.indexOf(candidate))
-            .any((other) => other.edge.id == candidate.edge.id))
-          candidate.edge.id,
-    ];
-    _previewIsAmbiguous =
-        candidates.length > 1 &&
-        candidates[1].meanErrorDeg - best.meanErrorDeg <
-            config.previewCandidateMarginDeg;
-  }
-
-  List<_LocalPathHypothesis> _previewSeeds({
-    bool includeHeadingBaseline = true,
-  }) {
-    final edge = _currentEdge;
-    if (edge == null) return const [];
-    final baselineObserved = !includeHeadingBaseline || _headingWindow.isEmpty
-        ? null
-        : _normalizeBearing(_headingWindow.first.headingDeg + _headingBiasDeg);
-    final baselineGraph = includeHeadingBaseline
-        ? edge.bearingForTravel(_currentProgressM, _travelSign)
-        : null;
-    final nodeId = edge.nodeAtTravelEnd(_travelSign);
-    final distanceToNodeM = _travelSign > 0
-        ? edge.lengthM - _currentProgressM
-        : _currentProgressM;
-
-    if (_state == CorridorTrackingState.uncertain && distanceToNodeM <= 0.35) {
-      final node = _network.nodes[nodeId];
-      if (node == null) return const [];
-      return [
-        for (final option in _network.recoveryOptionsFromNode(nodeId))
-          _LocalPathHypothesis(
-            edge: option.edge,
-            progressM: option.travelSign > 0 ? 0 : option.edge.lengthM,
-            travelSign: option.travelSign,
-            path: [node.point],
-            edgeIds: [option.edge.id],
-            previousObservedHeadingDeg: baselineObserved,
-            previousGraphHeadingDeg: baselineGraph,
-            lastNodeId: nodeId,
-          ),
-      ];
-    }
-
-    final seeds = <_LocalPathHypothesis>[
-      _LocalPathHypothesis(
-        edge: edge,
-        progressM: _currentProgressM,
-        travelSign: _travelSign,
-        path: [_correctedPosition],
-        edgeIds: [edge.id],
-        previousObservedHeadingDeg: baselineObserved,
-        previousGraphHeadingDeg: baselineGraph,
-      ),
-    ];
-    if (_state == CorridorTrackingState.uncertain && edge.bidirectional) {
-      seeds.add(
-        _LocalPathHypothesis(
-          edge: edge,
-          progressM: _currentProgressM,
-          travelSign: -_travelSign,
-          path: [_correctedPosition],
-          edgeIds: [edge.id],
-          previousObservedHeadingDeg: baselineObserved,
-          previousGraphHeadingDeg: baselineGraph,
-        ),
-      );
-    }
-    return seeds;
-  }
-
-  List<_LocalPathHypothesis> _matchLocalPaths({
-    required List<_LocalPathHypothesis> seeds,
-    required List<_RecoverySegment> segments,
-  }) {
-    var candidates = seeds;
-    for (final segment in segments) {
-      final next = <_LocalPathHypothesis>[];
-      for (final candidate in candidates) {
-        next.addAll(
-          _advanceLocalPath(
-            candidate,
-            observedHeadingDeg: segment.headingDeg,
-            remainingM: segment.distanceM,
+  List<_Hypothesis> _seedHypotheses(
+    PdrLocalPoint position,
+    double headingDeg,
+  ) {
+    final seeds = <_Hypothesis>[];
+    for (final projection in _network.nearbyProjections(position, radiusM: 8)) {
+      for (final sign in const [1, -1]) {
+        if (sign < 0 && !projection.edge.bidirectional) continue;
+        seeds.add(
+          _Hypothesis(
+            edge: projection.edge,
+            progressM: projection.distanceAlongM,
+            travelSign: sign,
+            path: [projection.point],
+            // 시작 위치 오차를 비용에 넣어, 멀리 떨어진 복도에서 시작한
+            // 가설이 초반부터 불리하게 둔다.
+            cost: projection.distanceM * 6,
+            matchedM: 0,
           ),
         );
       }
-      next.sort(
-        (left, right) => left.meanErrorDeg.compareTo(right.meanErrorDeg),
-      );
-      candidates = next
-          .take(config.maximumLocalPathCandidates)
-          .toList(growable: false);
-      if (candidates.isEmpty) break;
     }
-    candidates.sort(
-      (left, right) => left.meanErrorDeg.compareTo(right.meanErrorDeg),
-    );
-    return candidates;
+    if (seeds.isEmpty) return const [];
+    return _prune(seeds);
   }
 
-  List<_LocalPathHypothesis> _advanceLocalPath(
-    _LocalPathHypothesis hypothesis, {
-    required double observedHeadingDeg,
-    required double remainingM,
+  void _advanceBeam(
+    ({double headingDeg, double distanceM, PdrLocalPoint rawPoint}) segment,
+  ) {
+    final observed = _normalizeBearing(segment.headingDeg + _headingBiasDeg);
+    final next = <_Hypothesis>[];
+    for (final hypothesis in _beam) {
+      next.addAll(
+        _advance(hypothesis, observed, segment.distanceM, segment.rawPoint),
+      );
+      // 복도 한가운데서 되돌아오는 경우, 노드를 거치지 않으므로 전이만으로는
+      // 표현되지 않는다. 관측이 진행 방향과 크게 어긋날 때만 반대 부호 가설을
+      // 함께 만들어 비용이 판정하게 한다.
+      final currentBearing = hypothesis.edge.bearingForTravel(
+        hypothesis.progressM,
+        hypothesis.travelSign,
+      );
+      if (hypothesis.edge.bidirectional &&
+          _headingError(observed, currentBearing) >= config.reverseTriggerDeg) {
+        next.addAll(
+          _advance(
+            hypothesis.reversed(),
+            observed,
+            segment.distanceM,
+            segment.rawPoint,
+          ),
+        );
+      }
+    }
+    if (next.isEmpty) return;
+    _beam = _prune(next);
+    _windowDistanceM += segment.distanceM;
+  }
+
+  List<_Hypothesis> _advance(
+    _Hypothesis hypothesis,
+    double observedHeadingDeg,
+    double remainingM,
+    PdrLocalPoint rawPoint, {
+    int depth = 0,
   }) {
     if (remainingM <= 1e-6) return [hypothesis];
     final edge = hypothesis.edge;
@@ -1195,147 +456,494 @@ class CorridorPositionTracker {
       observedHeadingDeg: observedHeadingDeg,
       graphHeadingDeg: graphHeading,
       distanceM: appliedM,
+      absoluteWeight: config.absoluteErrorWeight,
+      maxSegmentErrorDeg: config.maxSegmentErrorDeg,
+      rawPoint: rawPoint,
+      positionalWeightDegPerM: config.positionalWeightDegPerM,
+      positionalToleranceM: config.positionalToleranceM,
+      positionalMaxOffsetM: config.positionalMaxOffsetM,
     );
     if (remainingM <= distanceToEnd + 1e-6) return [advanced];
 
+    final leftoverM = remainingM - appliedM;
     final nodeId = edge.nodeAtTravelEnd(hypothesis.travelSign);
     final node = _network.nodes[nodeId];
-    if (node == null ||
-        advanced.transitions >= config.maximumLocalPathTransitions) {
-      return [advanced.withUnmatchedDistance(remainingM - appliedM)];
+    if (node == null || depth >= config.maxTransitionsPerSegment) {
+      return [advanced.withDeadEnd(leftoverM, config.deadEndPenaltyDeg)];
     }
-    final options = _network
-        .recoveryOptionsFromNode(nodeId)
-        .where((option) => option.edge.id != edge.id)
-        .toList(growable: false);
+    // 같은 간선으로 되돌아가는 선택지도 남긴다. 막다른 복도 끝에서 유턴하는
+    // 것은 정상적인 보행이고, 이걸 빼면 그 지점에서 가설이 전멸한다.
+    final options = _network.recoveryOptionsFromNode(nodeId);
     if (options.isEmpty) {
-      return [advanced.withUnmatchedDistance(remainingM - appliedM)];
+      return [advanced.withDeadEnd(leftoverM, config.deadEndPenaltyDeg)];
     }
-    final branched = <_LocalPathHypothesis>[];
+    final branched = <_Hypothesis>[];
     for (final option in options) {
-      final next = advanced.enter(
-        option,
-        nodeId: nodeId,
-        nodePoint: node.point,
-      );
       branched.addAll(
-        _advanceLocalPath(
-          next,
-          observedHeadingDeg: observedHeadingDeg,
-          remainingM: remainingM - appliedM,
+        _advance(
+          advanced.enter(
+            option,
+            nodeId: nodeId,
+            nodePoint: node.point,
+            penaltyDegM: config.transitionPenaltyDegM,
+          ),
+          observedHeadingDeg,
+          leftoverM,
+          rawPoint,
+          depth: depth + 1,
         ),
       );
     }
     return branched;
   }
 
+  /// 같은 자리에 몰린 가설을 합치고 상위 [CorridorTrackerConfig.beamWidth]만 남긴다.
+  ///
+  /// 합치지 않으면 빔이 "같은 간선 위 1cm 차이" 복제본으로 가득 차서, 정작
+  /// 다른 복도에 있는 정답 가설이 밀려난다.
+  List<_Hypothesis> _prune(List<_Hypothesis> candidates) {
+    final best = <String, _Hypothesis>{};
+    for (final candidate in candidates) {
+      final bucket = (candidate.progressM / config.progressBucketM).round();
+      final key = '${candidate.edge.id}|${candidate.travelSign}|$bucket';
+      final existing = best[key];
+      if (existing == null || candidate.meanErrorDeg < existing.meanErrorDeg) {
+        best[key] = candidate;
+      }
+    }
+    final sorted = best.values.toList(growable: false)
+      ..sort((left, right) => left.meanErrorDeg.compareTo(right.meanErrorDeg));
+    return sorted.take(config.beamWidth).toList(growable: false);
+  }
+
+  /// 윈도우를 넘어간 앞부분은 1등 가설의 결정으로 확정하고 모든 가설에서 뗀다.
+  void _slideWindow() {
+    final best = _best;
+    if (best == null) return;
+    while (_windowDistanceM > config.windowDistanceM && best.path.length > 1) {
+      final committed = best.path.first;
+      _appendCommitted(committed);
+      var dropped = 0.0;
+      final trimmed = <_Hypothesis>[];
+      for (final hypothesis in _beam) {
+        if (hypothesis.path.length <= 1) continue;
+        if (identical(hypothesis, best)) {
+          dropped = (hypothesis.path[1] - hypothesis.path[0]).distance;
+        }
+        trimmed.add(hypothesis.dropOldestPathPoint());
+      }
+      if (trimmed.isEmpty) break;
+      _beam = trimmed;
+      _windowDistanceM -= dropped <= 0 ? 0.1 : dropped;
+    }
+  }
+
+  /// 표시용 1등을 고른다. 근소한 점수 차로 화면이 복도 사이를 오가지 않게,
+  /// 지금 보여 주고 있는 간선을 [CorridorTrackerConfig.leaderSwitchMarginDeg]
+  /// 만큼 이겨야 넘겨준다.
+  ///
+  /// 1등이 노드를 넘어가면 이전 간선의 가설은 빔에서 사라지므로 자연히 새
+  /// 간선으로 넘어간다 — 그 전환은 붙어 있는 간선이라 위치가 튀지 않는다.
+  void _electLeader() {
+    if (_beam.isEmpty) return;
+    final globalBest = _beam.first;
+    final heldId = _leaderEdgeId;
+    if (heldId == null) {
+      _leaderEdgeId = globalBest.edge.id;
+      _leaderSign = globalBest.travelSign;
+      return;
+    }
+    _Hypothesis? held;
+    for (final hypothesis in _beam) {
+      if (hypothesis.edge.id == heldId &&
+          hypothesis.travelSign == _leaderSign) {
+        held = hypothesis;
+        break;
+      }
+    }
+    if (held == null ||
+        globalBest.meanErrorDeg <
+            held.meanErrorDeg - config.leaderSwitchMarginDeg) {
+      _leaderEdgeId = globalBest.edge.id;
+      _leaderSign = globalBest.travelSign;
+      return;
+    }
+    // 유지하는 쪽이 이겼으면 빔 순서를 바꿔 이후 단계가 같은 1등을 본다.
+    if (!identical(held, globalBest)) {
+      final reordered = [held, ...(_beam.where((h) => !identical(h, held)))];
+      _beam = reordered;
+    }
+  }
+
+  void _publishConfirmed({required int transitionsBefore}) {
+    _electLeader();
+    final best = _best;
+    if (best == null) return;
+    _correctedPosition = best.edge.pointAt(best.progressM);
+    _correctedPath
+      ..clear()
+      ..addAll(_committedPath)
+      ..addAll(best.path);
+    if (_correctedPath.length > config.maxPathPoints) {
+      _correctedPath.removeRange(0, _correctedPath.length - config.maxPathPoints);
+    }
+    _lastConfirmedNodeId = best.lastNodeId;
+
+    final runnerUp = _beam.length > 1 ? _beam[1] : null;
+    final ambiguous =
+        runnerUp != null &&
+        runnerUp.edge.id != best.edge.id &&
+        runnerUp.meanErrorDeg - best.meanErrorDeg < config.ambiguousMarginDeg;
+    _pendingEdgeId = ambiguous ? runnerUp.edge.id : null;
+    if (best.unmatchedM > 0.5) {
+      _state = CorridorTrackingState.uncertain;
+    } else if (best.transitions > transitionsBefore) {
+      _state = CorridorTrackingState.nodeConfirmed;
+    } else if (ambiguous) {
+      _state = CorridorTrackingState.turnPending;
+    } else {
+      _state = CorridorTrackingState.straightTracking;
+    }
+  }
+
+  /// 1등 가설이 뚜렷할 때만 heading bias를 조금씩 복도 방향으로 당긴다.
+  void _updateHeadingBias() {
+    final best = _best;
+    if (best == null || best.unmatchedM > 0.5) return;
+    final target = best.edge.bearingForTravel(best.progressM, best.travelSign);
+    final corrected = _normalizeBearing(_sensorHeadingDeg + _headingBiasDeg);
+    final requested = _shortestDelta(target - corrected);
+    if (requested.abs() > config.headingBiasMaxErrorDeg) return;
+    final maxCorrection = config.maxHeadingCorrectionPerStepDeg;
+    _headingBiasDeg = _clampSigned(
+      _headingBiasDeg + requested.clamp(-maxCorrection, maxCorrection),
+      config.headingBiasLimitDeg,
+    );
+  }
+
+  void _appendCommitted(PdrLocalPoint point) {
+    if (_committedPath.isEmpty ||
+        (_committedPath.last - point).distance > 1e-6) {
+      _committedPath.add(point);
+      if (_committedPath.length > config.maxPathPoints) {
+        _committedPath.removeRange(
+          0,
+          _committedPath.length - config.maxPathPoints,
+        );
+      }
+    }
+  }
+
+  List<({double headingDeg, double distanceM, PdrLocalPoint rawPoint})>
+  _rawSegments({
+    required int deltaSteps,
+    required double deltaDistanceM,
+    required PdrLocalPoint previousRawConfirmedPosition,
+    required List<PdrLocalPoint> rawConfirmedStepPositions,
+  }) {
+    final rawSegments =
+        <({double headingDeg, double distanceM, PdrLocalPoint rawPoint})>[];
+    var rawCursor = previousRawConfirmedPosition;
+    var rawTotalM = 0.0;
+    for (final rawPoint in rawConfirmedStepPositions) {
+      final movement = rawPoint - rawCursor;
+      rawCursor = rawPoint;
+      if (movement.distance <= 1e-6) continue;
+      rawSegments.add((
+        headingDeg: pdrBearingForDirection(movement),
+        distanceM: movement.distance,
+        rawPoint: rawPoint,
+      ));
+      rawTotalM += movement.distance;
+    }
+    if (rawSegments.isEmpty || rawTotalM <= 1e-6) {
+      final fallbackSteps = math.max(1, deltaSteps);
+      return [
+        for (var index = 0; index < fallbackSteps; index += 1)
+          (
+            headingDeg: _sensorHeadingDeg,
+            distanceM: deltaDistanceM / fallbackSteps,
+            rawPoint: _rawConfirmedPosition,
+          ),
+      ];
+    }
+    final distanceScale = deltaDistanceM / rawTotalM;
+    return [
+      for (final segment in rawSegments)
+        (
+          headingDeg: segment.headingDeg,
+          distanceM: segment.distanceM * distanceScale,
+          rawPoint: segment.rawPoint,
+        ),
+    ];
+  }
+
+  // ── preview ──
+
+  /// 확정 빔을 그대로 이어 주황 꼬리만 더 태운다.
+  ///
+  /// 예전에는 매번 "확정 위치 + 현재 주황 선행분"으로 처음부터 다시 만들었다.
+  /// 확정 배치가 도착하면 선행 걸음 수가 갑자기 줄어(19→8) preview가 8m 뒤로
+  /// 재계산됐고, 그게 화면에서 보이던 역주행이었다. 지금은 확정 빔이 이미
+  /// 그 걸음들을 소비한 상태라 꼬리만 짧아질 뿐 기준점이 뒤로 가지 않는다.
+  void _rebuildPreview(List<PdrLocalPoint> rawPreviewTailPositions) {
+    final best = _best;
+    if (best == null) {
+      _resetPreviewToConfirmed();
+      return;
+    }
+    // 씨앗은 **표시 중인 1등 하나뿐**이다. 빔 전체를 씨앗으로 쓰면 확정 쪽
+    // 후보 경쟁이 그대로 preview 위치로 새어 나와, 화면이 복도 사이를 오간다.
+    // 여기서 갈리는 것은 "이 앞 분기에서 어디로 가는가"만이어야 한다.
+    var candidates = [best.forPreview()];
+    for (var index = 1; index < rawPreviewTailPositions.length; index += 1) {
+      final movement =
+          rawPreviewTailPositions[index] - rawPreviewTailPositions[index - 1];
+      if (movement.distance <= 1e-6) continue;
+      final observed = _normalizeBearing(
+        pdrBearingForDirection(movement) + _headingBiasDeg,
+      );
+      final next = <_Hypothesis>[];
+      for (final hypothesis in candidates) {
+        next.addAll(
+          _advance(
+            hypothesis,
+            observed,
+            movement.distance,
+            rawPreviewTailPositions[index],
+          ),
+        );
+      }
+      if (next.isEmpty) break;
+      candidates = _prune(next);
+    }
+    if (candidates.isEmpty) {
+      _resetPreviewToConfirmed();
+      return;
+    }
+
+    final leader = candidates.first;
+    final runnerUp = candidates.length > 1 ? candidates[1] : null;
+    // 모호 판정에 히스테리시스를 준다. 단일 임계값을 쓰면 점수가 그 근처에서
+    // 오갈 때마다 "분기에서 대기 <-> 꼬리 끝까지 전진"이 번갈아 일어나서,
+    // preview가 꼬리 길이만큼(실측 4.6m) 앞뒤로 진동한다.
+    final gapDeg = runnerUp == null || runnerUp.edge.id == leader.edge.id
+        ? double.infinity
+        : runnerUp.meanErrorDeg - leader.meanErrorDeg;
+    final exitThreshold = config.ambiguousMarginDeg * 2;
+    _previewIsAmbiguous = _previewIsAmbiguous
+        ? gapDeg < exitThreshold
+        : gapDeg < config.ambiguousMarginDeg;
+
+    if (_previewIsAmbiguous) {
+      // 갈렸으면 1등을 따라가지 않는다. 점수가 조금만 흔들려도 북쪽↔남쪽으로
+      // 10m씩 튀기 때문이다.
+      //
+      // 두 후보의 공통 prefix까지만 전진시키는 방법도 써 봤지만, 그 prefix
+      // 길이가 프레임마다 바뀌면서 4.6m씩 앞뒤로 진동했다. 결론이 날 때까지
+      // 아예 멈춰 세우는 쪽이 화면에서 정직하다 — "어디로 갈지 아직 모른다".
+      // 확정 위치는 빔이 계속 밀고 있으므로 이 정지는 preview 선행분에만
+      // 해당하고, 마커 자체가 멈추는 것이 아니다.
+      final shared = runnerUp == null
+          ? const <PdrLocalPoint>[]
+          : _commonPrefix(leader.path, runnerUp.path);
+      if (_previewPath.length <= 1 && shared.length > 1) {
+        _previewPath
+          ..clear()
+          ..addAll(shared);
+        _previewPosition = _previewPath.last;
+      }
+      _previewHeadingDeg = result.correctedHeadingDeg;
+    } else {
+      _previewPath
+        ..clear()
+        ..addAll(leader.path.isEmpty ? [_correctedPosition] : leader.path);
+      _previewPosition = _previewPath.last;
+      _previewHeadingDeg = leader.edge.bearingForTravel(
+        leader.progressM,
+        leader.travelSign,
+      );
+    }
+    final seen = <String>{};
+    _previewCandidateEdgeIds = [
+      for (final candidate in candidates)
+        if (seen.add(candidate.edge.id)) candidate.edge.id,
+    ];
+  }
+
+  static List<PdrLocalPoint> _commonPrefix(
+    List<PdrLocalPoint> left,
+    List<PdrLocalPoint> right,
+  ) {
+    final shared = <PdrLocalPoint>[];
+    final limit = math.min(left.length, right.length);
+    for (var index = 0; index < limit; index += 1) {
+      if ((left[index] - right[index]).distance > 0.05) break;
+      shared.add(left[index]);
+    }
+    return shared;
+  }
+
   void _resetPreviewToConfirmed() {
     _previewPosition = _correctedPosition;
-    _previewHeadingDeg =
-        _currentEdge?.bearingForTravel(_currentProgressM, _travelSign) ??
-        _normalizeBearing(_sensorHeadingDeg + _headingBiasDeg);
+    _previewHeadingDeg = result.correctedHeadingDeg;
     _previewPath
       ..clear()
       ..add(_correctedPosition);
     _previewCandidateEdgeIds = const [];
     _previewIsAmbiguous = false;
   }
-
-  void _recordHeading(int atMs, double headingDeg) {
-    _headingWindow.add((atMs: atMs, headingDeg: headingDeg));
-    final oldest = atMs - config.straightStableMs;
-    _headingWindow.removeWhere((sample) => sample.atMs < oldest);
-  }
-
-  double _recentHeadingChangeDeg(int atMs) {
-    ({int atMs, double headingDeg})? baseline;
-    for (final sample in _headingWindow) {
-      final ageMs = atMs - sample.atMs;
-      if (ageMs < config.turnObservationMs || ageMs > 1200) continue;
-      baseline = sample;
-      break;
-    }
-    return baseline == null
-        ? 0
-        : _headingError(_sensorHeadingDeg, baseline.headingDeg);
-  }
-
-  double get _headingSpreadDeg {
-    var spread = 0.0;
-    for (var left = 0; left < _headingWindow.length; left += 1) {
-      for (var right = left + 1; right < _headingWindow.length; right += 1) {
-        spread = math.max(
-          spread,
-          _headingError(
-            _headingWindow[left].headingDeg,
-            _headingWindow[right].headingDeg,
-          ),
-        );
-      }
-    }
-    return spread;
-  }
-
-  void _appendCorrected(PdrLocalPoint point) {
-    if (_correctedPath.isEmpty ||
-        (_correctedPath.last - point).distance > 1e-6) {
-      _correctedPath.add(point);
-      if (_correctedPath.length > config.maxPathPoints) {
-        _correctedPath.removeRange(
-          0,
-          _correctedPath.length - config.maxPathPoints,
-        );
-      }
-    }
-  }
-
-  void _clearUncertainCandidate() {
-    _uncertainCandidateEdgeId = null;
-    _uncertainCandidateNodeId = null;
-    _uncertainCandidateTravelSign = 1;
-    _uncertainCandidateSinceMs = null;
-    _uncertainCandidateDistanceM = 0;
-  }
-
-  void _clearLiveTurnCandidate() {
-    _liveTurnEdgeId = null;
-    _liveTurnNodeId = null;
-    _liveTurnSinceMs = null;
-  }
 }
 
-class _TurnEvidence {
-  _TurnEvidence({
-    required this.node,
-    required this.candidateEdge,
-    required this.startedAtMs,
-    required this.candidateSinceMs,
-    required this.distanceToNodeM,
-    required this.startedProgressM,
-    required this.oldTravelSign,
+/// 빔의 한 가설. 어느 간선 위 어디를, 어느 방향으로 걷고 있다는 한 가지 설명.
+class _Hypothesis {
+  const _Hypothesis({
+    required this.edge,
+    required this.progressM,
+    required this.travelSign,
+    required this.path,
+    required this.cost,
+    required this.matchedM,
+    this.unmatchedM = 0,
+    this.previousObservedHeadingDeg,
+    this.previousGraphHeadingDeg,
+    this.transitions = 0,
+    this.lastNodeId,
   });
 
-  final _CorridorNode node;
-  final _CorridorEdge candidateEdge;
-  final int startedAtMs;
-  final int candidateSinceMs;
-  final double distanceToNodeM;
-  final double startedProgressM;
-  final int oldTravelSign;
-  double confirmedDistanceM = 0;
-  double alignedNewEdgeDistanceM = 0;
-}
+  final _CorridorEdge edge;
+  final double progressM;
+  final int travelSign;
+  final List<PdrLocalPoint> path;
 
-class _RecoverySegment {
-  const _RecoverySegment({
-    required this.atMs,
-    required this.headingDeg,
-    required this.distanceM,
-  });
+  /// 누적 가중 오차(도·m).
+  final double cost;
 
-  final int atMs;
-  final double headingDeg;
-  final double distanceM;
+  /// 비용을 매긴 총 이동 거리(m).
+  final double matchedM;
+
+  /// 그래프로 설명하지 못한 이동 거리(m).
+  final double unmatchedM;
+
+  final double? previousObservedHeadingDeg;
+  final double? previousGraphHeadingDeg;
+  final int transitions;
+  final String? lastNodeId;
+
+  /// 가설끼리 비교하는 값. 같은 걸음을 먹었으므로 거리 정규화만으로 공평하다.
+  double get meanErrorDeg => matchedM <= 1e-6 ? cost : cost / matchedM;
+
+  _Hypothesis reversed() => _copy(travelSign: -travelSign);
+
+  /// preview 분기용 사본. 경로를 **현재 위치 한 점으로 리셋**한다.
+  ///
+  /// 윈도우 이력(최대 30m)을 그대로 들고 가면 두 preview 후보의 공통 prefix가
+  /// 그 이력 전체가 되어, 분기 대기 지점이 현재 위치보다 뒤로 잡힌다. 그러면
+  /// 모호해질 때마다 preview가 꼬리 길이만큼 뒤로 튄다.
+  _Hypothesis forPreview() => _copy(path: [edge.pointAt(progressM)]);
+
+  _Hypothesis dropOldestPathPoint() =>
+      _copy(path: path.sublist(1));
+
+  _Hypothesis advance({
+    required double observedHeadingDeg,
+    required double graphHeadingDeg,
+    required double distanceM,
+    required double absoluteWeight,
+    required double maxSegmentErrorDeg,
+    required PdrLocalPoint rawPoint,
+    required double positionalWeightDegPerM,
+    required double positionalToleranceM,
+    required double positionalMaxOffsetM,
+  }) {
+    if (distanceM <= 1e-6) return this;
+    final absoluteError = _headingError(observedHeadingDeg, graphHeadingDeg);
+    final previousObserved = previousObservedHeadingDeg;
+    final previousGraph = previousGraphHeadingDeg;
+    // 형태 오차: 관측의 방위 변화와 그래프의 방위 변화가 얼마나 다른가.
+    // heading에 상수 bias가 껴 있어도 이 값은 살아남는다.
+    final shapeError = previousObserved == null || previousGraph == null
+        ? absoluteError
+        : _headingError(
+            _shortestDelta(observedHeadingDeg - previousObserved),
+            _shortestDelta(graphHeadingDeg - previousGraph),
+          );
+    final combined = math.min(
+      maxSegmentErrorDeg,
+      absoluteError * absoluteWeight + shapeError * (1 - absoluteWeight),
+    );
+    final nextProgress = (progressM + travelSign * distanceM)
+        .clamp(0.0, edge.lengthM)
+        .toDouble();
+    final nextPoint = edge.pointAt(nextProgress);
+    // 나란한 복도를 가르는 유일한 신호. 원본이 늘 조금씩 흐르므로 허용치
+    // 안쪽은 공짜로 두고, 상한을 씌워 방위 항을 완전히 덮지 않게 한다.
+    final offsetM = ((nextPoint - rawPoint).distance - positionalToleranceM)
+        .clamp(0.0, positionalMaxOffsetM)
+        .toDouble();
+    return _copy(
+      progressM: nextProgress,
+      path: [...path, nextPoint],
+      cost:
+          cost +
+          combined * distanceM +
+          offsetM * positionalWeightDegPerM * distanceM,
+      matchedM: matchedM + distanceM,
+      previousObservedHeadingDeg: observedHeadingDeg,
+      previousGraphHeadingDeg: graphHeadingDeg,
+    );
+  }
+
+  _Hypothesis enter(
+    _RecoveryOption option, {
+    required String nodeId,
+    required PdrLocalPoint nodePoint,
+    required double penaltyDegM,
+  }) => _Hypothesis(
+    edge: option.edge,
+    progressM: option.travelSign > 0 ? 0 : option.edge.lengthM,
+    travelSign: option.travelSign,
+    path: [...path, nodePoint],
+    cost: cost + penaltyDegM,
+    matchedM: matchedM,
+    unmatchedM: unmatchedM,
+    previousObservedHeadingDeg: previousObservedHeadingDeg,
+    previousGraphHeadingDeg: previousGraphHeadingDeg,
+    transitions: transitions + 1,
+    lastNodeId: nodeId,
+  );
+
+  /// 그래프로 더 갈 수 없는 이동. 가설을 죽이지 않고 벌점만 준다.
+  _Hypothesis withDeadEnd(double distanceM, double penaltyDeg) => _copy(
+    cost: cost + penaltyDeg * distanceM,
+    matchedM: matchedM + distanceM,
+    unmatchedM: unmatchedM + distanceM,
+  );
+
+  _Hypothesis _copy({
+    double? progressM,
+    int? travelSign,
+    List<PdrLocalPoint>? path,
+    double? cost,
+    double? matchedM,
+    double? unmatchedM,
+    double? previousObservedHeadingDeg,
+    double? previousGraphHeadingDeg,
+  }) => _Hypothesis(
+    edge: edge,
+    progressM: progressM ?? this.progressM,
+    travelSign: travelSign ?? this.travelSign,
+    path: path ?? this.path,
+    cost: cost ?? this.cost,
+    matchedM: matchedM ?? this.matchedM,
+    unmatchedM: unmatchedM ?? this.unmatchedM,
+    previousObservedHeadingDeg:
+        previousObservedHeadingDeg ?? this.previousObservedHeadingDeg,
+    previousGraphHeadingDeg:
+        previousGraphHeadingDeg ?? this.previousGraphHeadingDeg,
+    transitions: transitions,
+    lastNodeId: lastNodeId,
+  );
 }
 
 class _RecoveryOption {
@@ -1348,105 +956,6 @@ class _RecoveryOption {
   final _CorridorEdge edge;
   final int travelSign;
   final double bearingDeg;
-}
-
-class _LocalPathHypothesis {
-  const _LocalPathHypothesis({
-    required this.edge,
-    required this.progressM,
-    required this.travelSign,
-    required this.path,
-    required this.edgeIds,
-    this.weightedError = 0,
-    this.comparedDistanceM = 0,
-    this.previousObservedHeadingDeg,
-    this.previousGraphHeadingDeg,
-    this.transitions = 0,
-    this.lastNodeId,
-  });
-
-  final _CorridorEdge edge;
-  final double progressM;
-  final int travelSign;
-  final List<PdrLocalPoint> path;
-  final List<String> edgeIds;
-  final double weightedError;
-  final double comparedDistanceM;
-  final double? previousObservedHeadingDeg;
-  final double? previousGraphHeadingDeg;
-  final int transitions;
-  final String? lastNodeId;
-
-  double get meanErrorDeg => comparedDistanceM <= 1e-6
-      ? double.infinity
-      : weightedError / comparedDistanceM;
-
-  _LocalPathHypothesis advance({
-    required double observedHeadingDeg,
-    required double graphHeadingDeg,
-    required double distanceM,
-  }) {
-    if (distanceM <= 1e-6) return this;
-    final absoluteError = _headingError(observedHeadingDeg, graphHeadingDeg);
-    final previousObserved = previousObservedHeadingDeg;
-    final previousGraph = previousGraphHeadingDeg;
-    final shapeError = previousObserved == null || previousGraph == null
-        ? absoluteError
-        : _headingError(
-            _shortestDelta(observedHeadingDeg - previousObserved),
-            _shortestDelta(graphHeadingDeg - previousGraph),
-          );
-    final combinedError = absoluteError * 0.35 + shapeError * 0.65;
-    final nextProgress = (progressM + travelSign * distanceM)
-        .clamp(0.0, edge.lengthM)
-        .toDouble();
-    return _LocalPathHypothesis(
-      edge: edge,
-      progressM: nextProgress,
-      travelSign: travelSign,
-      path: [...path, edge.pointAt(nextProgress)],
-      edgeIds: edgeIds,
-      weightedError: weightedError + combinedError * distanceM,
-      comparedDistanceM: comparedDistanceM + distanceM,
-      previousObservedHeadingDeg: observedHeadingDeg,
-      previousGraphHeadingDeg: graphHeadingDeg,
-      transitions: transitions,
-      lastNodeId: lastNodeId,
-    );
-  }
-
-  _LocalPathHypothesis enter(
-    _RecoveryOption option, {
-    required String nodeId,
-    required PdrLocalPoint nodePoint,
-  }) => _LocalPathHypothesis(
-    edge: option.edge,
-    progressM: option.travelSign > 0 ? 0 : option.edge.lengthM,
-    travelSign: option.travelSign,
-    path: [...path, nodePoint],
-    edgeIds: [...edgeIds, option.edge.id],
-    weightedError: weightedError,
-    comparedDistanceM: comparedDistanceM,
-    previousObservedHeadingDeg: previousObservedHeadingDeg,
-    previousGraphHeadingDeg: previousGraphHeadingDeg,
-    transitions: transitions + 1,
-    lastNodeId: nodeId,
-  );
-
-  _LocalPathHypothesis withUnmatchedDistance(double distanceM) =>
-      _LocalPathHypothesis(
-        edge: edge,
-        progressM: progressM,
-        travelSign: travelSign,
-        path: path,
-        edgeIds: edgeIds,
-        weightedError: weightedError + 90 * distanceM,
-        comparedDistanceM: comparedDistanceM + distanceM,
-        previousObservedHeadingDeg: previousObservedHeadingDeg,
-        previousGraphHeadingDeg: previousGraphHeadingDeg,
-        transitions: transitions,
-        lastNodeId: lastNodeId,
-      );
 }
 
 class _CorridorNetwork {
@@ -1495,6 +1004,28 @@ class _CorridorNetwork {
   final Map<String, List<_CorridorEdge>> _incident = {};
 
   _CorridorEdge? edgeById(String id) => _edgesById[id];
+
+  /// [radiusM] 안에 있는 모든 간선의 투영점. 빔의 시작 씨앗을 만든다.
+  ///
+  /// 가장 가까운 하나만 고르면 시작 위치가 평행 복도 사이에 있을 때 그 선택이
+  /// 곧 최종 답이 된다. 후보를 다 깔고 걸음으로 걸러내는 편이 안전하다.
+  List<_EdgeProjection> nearbyProjections(
+    PdrLocalPoint point, {
+    required double radiusM,
+  }) {
+    final found = <_EdgeProjection>[];
+    for (final edge in edges) {
+      if (edge.accessEdge) continue;
+      final projection = edge.project(point);
+      if (projection.distanceM <= radiusM) found.add(projection);
+    }
+    if (found.isEmpty) {
+      final nearest = nearestProjection(point);
+      if (nearest != null) found.add(nearest);
+    }
+    found.sort((left, right) => left.distanceM.compareTo(right.distanceM));
+    return found;
+  }
 
   _EdgeProjection? nearestProjection(
     PdrLocalPoint point, {
