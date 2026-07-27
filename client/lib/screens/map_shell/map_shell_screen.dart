@@ -167,25 +167,28 @@ class _MapShellScreenState extends State<MapShellScreen> {
       return;
     }
 
-    // 건물 밖을 보고 있을 때만 건물 이름 검색. 실내 진입 오버레이가 켜져 있으면
-    // 야외 탭이어도 아래 매장 검색으로 흘려보낸다.
+    // 건물 밖을 보고 있으면 먼저 건물 이름으로 맞춰 본다.
+    //
+    // **여기서 끝내면 안 된다.** 예전에는 건물이 안 걸리면 곧장 "검색 결과가
+    // 없습니다"로 끝나서, 홈 화면에서 매장명("MLB")이나 자연어("밥 먹을 곳")를
+    // 친 사용자는 무엇을 쳐도 결과를 못 봤다 — 건물 이름("더현대 서울")만
+    // 맞는 검색어였던 셈이다. 건물이 안 걸리면 아래 매장 검색으로 흘려보낸다.
     if (!_indoorContextActive) {
       final buildings = await buildingRepository.getAllBuildings();
-      final match = buildings
+      final building = buildings
           .where((b) => b.name.toLowerCase().contains(normalized.toLowerCase()))
           .firstOrNull;
       if (!mounted) return;
-      setState(() {
-        _placeInfo = match == null
-            ? null
-            : (title: match.name, subtitle: '${match.floors.length}개 층');
-      });
-      if (match == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('검색 결과가 없습니다')),
-        );
+      if (building != null) {
+        setState(() {
+          _placeInfo = (
+            title: building.name,
+            subtitle: '${building.floors.length}개 층',
+          );
+        });
+        return;
       }
-      return;
+      setState(() => _placeInfo = null);
     }
 
     // 상단 일반 검색도 실내에서는 지금 보고 있는 층 안에서만 매칭한다 —

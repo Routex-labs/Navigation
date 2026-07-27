@@ -389,6 +389,31 @@ void main() {
     expect(find.text('강의실 201'), findsOneWidget);
   });
 
+  testWidgets('홈 탭에서도 매장 이름으로 검색된다', (WidgetTester tester) async {
+    // 회귀: 건물 안을 보고 있지 않으면 검색이 "건물 이름"만 뒤져서, 사용자가
+    // 홈 화면에서 매장명을 치면 무조건 "검색 결과가 없습니다"가 떴다.
+    final repository = _FallbackDestinationRepository(
+      lightResult: const PoiSearchResult(
+        name: 'MLB',
+        floor: 'B2',
+        point: LatLng(37.52, 126.92),
+        nodeId: 'FL-2:ND-9',
+      ),
+    );
+    destinationRepository = repository;
+
+    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField).first, 'MLB');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+
+    expect(repository.lightQueries, ['MLB']);
+    expect(find.text('검색 결과가 없습니다'), findsNothing);
+    expect(find.text('MLB'), findsWidgets);
+  });
+
   testWidgets('경량 검색이 놓친 자연어는 /query/ai로 다시 찾는다', (
     WidgetTester tester,
   ) async {
