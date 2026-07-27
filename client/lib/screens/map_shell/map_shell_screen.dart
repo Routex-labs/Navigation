@@ -3,6 +3,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/api_config.dart';
 import '../../core/service_locator.dart';
+import '../../models/building.dart';
 import '../../models/favorite_place.dart';
 import '../../models/floor_plan.dart';
 import '../../models/poi_search_result.dart';
@@ -14,7 +15,7 @@ import '../../widgets/directions_sheet.dart';
 import '../../widgets/favorites_sheet.dart';
 import '../../widgets/map_bottom_bar.dart';
 import '../../widgets/map_top_bar.dart';
-import '../../widgets/search_sheet.dart';
+import '../../widgets/search_panel.dart';
 import '../../widgets/store_info_sheet.dart';
 import '../indoor_map/indoor_map_screen.dart';
 import '../outdoor_map/outdoor_map_screen.dart';
@@ -73,6 +74,21 @@ class _MapShellScreenState extends State<MapShellScreen> {
   final _favoritesPillKey = GlobalKey();
   final _categoryRowKey = GlobalKey();
   final _bottomBarKey = GlobalKey();
+  final _searchPanelKey = GlobalKey();
+
+  // 상단 검색창은 이제 여기(상위)가 소유한다. 결과 패널이 검색창 바로 아래에
+  // 붙어야 하므로, 입력 상태를 검색창과 패널이 함께 볼 수 있는 이 자리에 둔다.
+  final _searchController = TextEditingController();
+  final _searchFocus = FocusNode();
+
+  /// 검색이 활성인지 — 포커스가 들어왔거나 글자가 남아 있는 상태. true인
+  /// 동안에만 결과 패널이 뜨고 지도 제스처가 잠긴다.
+  bool _searchActive = false;
+  String _searchQuery = '';
+
+  /// 엔터로 확정할 때마다 1씩 오른다. 같은 글자로 다시 엔터를 눌러도 의미
+  /// 검색이 다시 돌아야 하므로 bool이 아니라 카운터다.
+  int _searchSubmitTick = 0;
 
   /// 시트 X 버튼이 눌리면 true가 된다. 시트 체인의 어떤 시점에서든 이 값이
   /// true면 부모 loop(_openFavorites, _openCategoryStores, _showStoreInfo)는
@@ -100,7 +116,16 @@ class _MapShellScreenState extends State<MapShellScreen> {
   @override
   void initState() {
     super.initState();
+    _searchFocus.addListener(_onSearchFocusChanged);
     _requestStartupPermissions();
+  }
+
+  @override
+  void dispose() {
+    _searchFocus.removeListener(_onSearchFocusChanged);
+    _searchFocus.dispose();
+    _searchController.dispose();
+    super.dispose();
   }
 
   /// 예전에는 스플래시 화면이 이 요청을 진행 중 화면과 함께 보여줬지만,
@@ -123,6 +148,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   void _setMode(MapMode mode) {
     if (mode == _mode) return;
+    // 하단 바는 검색 막(barrier) 위에 있어 검색 중에도 눌린다. 화면이 바뀌는데
+    // 결과 패널만 남아 있으면 안 되므로 여기서 함께 닫는다.
+    _closeSearch();
     setState(() {
       _mode = mode;
       _placeInfo = null;
@@ -161,32 +189,65 @@ class _MapShellScreenState extends State<MapShellScreen> {
     }
   }
 
-  /// 상단 검색창 탭 → 아래에서 검색 시트를 올린다. 입력과 결과 목록이 한
-  /// 화면에 있어야 "쳤는데 아무것도 안 나온다"는 인상이 안 생긴다.
-  ///
-  /// 시트는 경량 검색만 쓴다. 빈손이면 사용자가 "AI 검색으로 찾기"를 눌러
-  /// 명시적으로 의미 검색으로 넘어간다 — 매 검색마다 임베딩 모델을 태우지
-  /// 않으면서, 못 찾았을 때 다음 수단은 바로 옆에 두는 절충이다.
-  Future<void> _openSearchSheet() async {
-    final outcome = await _withMapsLocked(
-      () => SearchSheet.show(
-        context,
-        buildingId: _buildingId,
-        currentFloorId: _activeIndoorFloor,
-      ),
-    );
-    if (!mounted || outcome == null) return;
-    switch (outcome) {
-      case SearchSheetStorePicked(:final store):
-        await _runSheetChain(() => _showStoreInfo(store));
-      case SearchSheetBuildingPicked(:final building):
-        setState(() {
-          _placeInfo = (
-            title: building.name,
-            subtitle: '${building.floors.length}개 층',
-          );
-        });
-    }
+  /// 검색창에 포커스가 들어오면 그 자리에서 검색을 시작한다. 예전에는 탭이
+  /// 아래에서 시트를 올렸고, 그 시트 안에 입력창이 하나 더 있었다 — 사용자가
+  /// 방금 누른 창과 실제로 치는 창이 달라 검색창이 두 개인 것처럼 보였다.
+  void _onSearchFocusChanged() {
+    if (_searchFocus.hasFocus) _activateSearch();
+  }
+
+  void _activateSearch() {
+    if (_searchActive) return;
+    setState(() => _searchActive = true);
+    // 결과 패널이 지도 위에 떠 있는 동안 지도 제스처를 잠근다. 실내는 웹에서
+    // 실제 DOM 캔버스(MapLibre)라 패널 위 휠 이벤트가 지도로 새어나간다.
+    _outdoorKey.currentState?.setInteractive(false);
+    _indoorKey.currentState?.setInteractive(false);
+  }
+
+  /// 검색을 끝낸다. 결과를 골라 시트로 넘어갈 때도, 사용자가 뒤로/바깥을
+  /// 눌러 그냥 닫을 때도 같은 경로를 탄다 — 어느 쪽이든 패널이 시트 뒤에
+  /// 남아 겹치면 안 된다.
+  void _closeSearch() {
+    _searchFocus.unfocus();
+    _searchController.clear();
+    if (!_searchActive && _searchQuery.isEmpty) return;
+    setState(() {
+      _searchActive = false;
+      _searchQuery = '';
+    });
+    _outdoorKey.currentState?.setInteractive(true);
+    _indoorKey.currentState?.setInteractive(true);
+  }
+
+  void _onSearchChanged(String value) {
+    _activateSearch();
+    if (_searchQuery == value) return;
+    setState(() => _searchQuery = value);
+  }
+
+  /// 엔터로 확정. 패널이 이 시점에만 의미 검색(`/query/ai`)까지 이어 붙인다.
+  void _onSearchSubmitted(String value) {
+    _activateSearch();
+    setState(() {
+      _searchQuery = value;
+      _searchSubmitTick++;
+    });
+  }
+
+  Future<void> _onSearchStorePicked(PoiSearchResult store) async {
+    _closeSearch();
+    await _runSheetChain(() => _showStoreInfo(store));
+  }
+
+  void _onSearchBuildingPicked(Building building) {
+    _closeSearch();
+    setState(() {
+      _placeInfo = (
+        title: building.name,
+        subtitle: '${building.floors.length}개 층',
+      );
+    });
   }
 
   /// 매장 정보 시트를 띄운다. 검색 결과를 탭했을 때와 지도 위 매장 폴리곤을
@@ -507,6 +568,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 두 화면 모두 같은 PDR 세션을 사용하므로 어느 쪽에서 지정해도 이후 다른
   /// 쪽에서도 그대로 이어져 보인다.
   void _onPlaceLocation() {
+    // 이제부터 지도를 탭해야 하므로 검색 막을 먼저 걷는다.
+    _closeSearch();
     if (_mode == MapMode.indoor) {
       _indoorKey.currentState?.startLocationPlacement();
     } else {
@@ -514,10 +577,37 @@ class _MapShellScreenState extends State<MapShellScreen> {
     }
   }
 
+  /// 결과 패널이 쓸 수 있는 최대 높이. 상단 바가 차지한 78 + 안전영역과,
+  /// 올라온 소프트키보드 높이를 뺀 나머지다. 아주 좁은 화면에서 0 이하가
+  /// 되지 않도록 하한을 둔다 — 0이면 패널이 아예 안 보여 검색이 죽은 것처럼
+  /// 보인다.
+  double _searchPanelMaxHeight(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final available =
+        media.size.height - media.padding.top - 78 - media.viewInsets.bottom - 16;
+    return available < 180 ? 180 : available;
+  }
+
   @override
   Widget build(BuildContext context) {
     final placeInfo = _placeInfo;
     final routeVisible = _mode == MapMode.outdoor ? _outdoorRouteVisible : _indoorRouteVisible;
+    // 시트였을 때는 뒤로가기가 시트만 닫았다. 패널로 바뀌었다고 뒤로가기가
+    // 앱을 종료해 버리면 안 되므로, 검색 중에는 pop을 가로채 검색만 닫는다.
+    return PopScope(
+      canPop: !_searchActive,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _closeSearch();
+      },
+      child: _buildShell(context, placeInfo, routeVisible),
+    );
+  }
+
+  Widget _buildShell(
+    BuildContext context,
+    ({String title, String subtitle})? placeInfo,
+    bool routeVisible,
+  ) {
     return Scaffold(
       // 상단 검색창(MapTopBar)에 포커스가 들어가 소프트키보드가 올라올 때
       // Scaffold body가 리사이즈되면 그 안의 MapLibre PlatformView(지도)도
@@ -561,11 +651,26 @@ class _MapShellScreenState extends State<MapShellScreen> {
                   _topBarKey,
                   _favoritesPillKey,
                   _categoryRowKey,
+                  _searchPanelKey,
                   _bottomBarKey,
                 ],
               ),
             ],
           ),
+
+          // 검색 중에는 지도 전체를 덮는 얇은 막을 깔아, 바깥을 누르면 검색이
+          // 닫히게 한다. 예전 바텀시트의 barrier가 하던 역할이다 — 이게 없으면
+          // 결과 패널이 뜬 채로 지도를 조작하게 되어 상태가 어긋난다.
+          if (_searchActive)
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _closeSearch,
+                child: ColoredBox(
+                  color: Colors.black.withValues(alpha: 0.12),
+                ),
+              ),
+            ),
 
           Positioned(
             top: 0,
@@ -575,42 +680,79 @@ class _MapShellScreenState extends State<MapShellScreen> {
               key: _topBarKey,
               showHamburger: _mode == MapMode.indoor,
               onHamburgerTap: _onHamburgerTap,
-              onSearchTap: _openSearchSheet,
+              controller: _searchController,
+              focusNode: _searchFocus,
+              onChanged: _onSearchChanged,
+              onSubmitted: _onSearchSubmitted,
+              searchActive: _searchActive,
+              onCancelSearch: _closeSearch,
               onDirectionsTap: _openDirections,
             ),
           ),
 
-          Positioned(
-            top: 78,
-            left: 0,
-            right: 0,
-            child: SafeArea(
-              bottom: false,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _FavoritesPill(key: _favoritesPillKey, onTap: _openFavorites),
-                    const SizedBox(width: 8),
-                    // 야외·실내 모드 모두에서 노출한다. _buildingId가 항상
-                    // 현재 대상 건물(기본값 demoBuildingId)이라, 야외에서 chip을
-                    // 눌러도 그 건물의 카테고리 매장 시트가 정상적으로 뜬다.
-                    _CategoryChipsRow(
-                      key: _categoryRowKey,
-                      buildingId: _buildingId,
-                      onSelectCategory: (category) {
-                        _runSheetChain(() => _openCategoryStores(category));
-                      },
-                    ),
-                  ],
+          // 결과 패널과 카테고리 열은 같은 자리를 쓴다. 검색 중에는 카테고리
+          // 열을 접어 두 오버레이가 겹치지 않게 한다.
+          if (_searchActive)
+            Positioned(
+              top: 78,
+              left: 12,
+              right: 12,
+              child: SafeArea(
+                bottom: false,
+                child: ConstrainedBox(
+                  // 키보드가 올라와도 Scaffold를 리사이즈하지 않으므로
+                  // (resizeToAvoidBottomInset: false), 패널이 키보드 밑으로
+                  // 들어가지 않도록 여기서 직접 높이를 깎는다.
+                  constraints: BoxConstraints(
+                    maxHeight: _searchPanelMaxHeight(context),
+                  ),
+                  child: SearchPanel(
+                    key: _searchPanelKey,
+                    buildingId: _buildingId,
+                    query: _searchQuery,
+                    submitTick: _searchSubmitTick,
+                    currentFloorId: () => _activeIndoorFloor,
+                    onStorePicked: _onSearchStorePicked,
+                    onBuildingPicked: _onSearchBuildingPicked,
+                  ),
+                ),
+              ),
+            )
+          else
+            Positioned(
+              top: 78,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                bottom: false,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _FavoritesPill(
+                        key: _favoritesPillKey,
+                        onTap: _openFavorites,
+                      ),
+                      const SizedBox(width: 8),
+                      // 야외·실내 모드 모두에서 노출한다. _buildingId가 항상
+                      // 현재 대상 건물(기본값 demoBuildingId)이라, 야외에서 chip을
+                      // 눌러도 그 건물의 카테고리 매장 시트가 정상적으로 뜬다.
+                      _CategoryChipsRow(
+                        key: _categoryRowKey,
+                        buildingId: _buildingId,
+                        onSelectCategory: (category) {
+                          _runSheetChain(() => _openCategoryStores(category));
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
 
-          if (placeInfo != null)
+          if (placeInfo != null && !_searchActive)
             Positioned(
               top: 128,
               left: 12,

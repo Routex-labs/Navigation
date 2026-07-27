@@ -8,16 +8,23 @@ import '../theme/app_theme.dart';
 /// 오른쪽 길찾기 아이콘이 여는 별도 입력 시트를 통해서만 시작된다 —
 /// 이 둘을 분리해야 검색이 곧바로 내비게이션을 시작하지 않는다는 기획을 지킬 수 있다.
 ///
-/// **여기서 직접 입력받지 않는다.** 탭하면 [onSearchTap]이 아래에서 검색 시트를
-/// 올리고, 입력과 결과 목록은 그 시트가 함께 보여준다. 예전처럼 상단 바에서
-/// 곧장 검색하면 결과를 놓을 자리가 없어 스낵바로만 알리게 되고, 사용자에게는
-/// "쳤는데 아무것도 안 나온다"로 보였다.
+/// **여기서 직접 입력받는다.** 탭하면 이 창에 커서가 잡히고, 결과는 상위가
+/// 바로 아래에 붙이는 `SearchPanel`이 보여준다. 한동안은 탭하면 아래에서
+/// 입력창이 하나 더 있는 시트가 올라왔는데, 방금 누른 창과 실제로 치는 창이
+/// 달라 검색창이 두 개인 것처럼 보였다. 다만 결과를 놓을 자리는 반드시
+/// 있어야 한다 — 결과 표시 없이 상단에서만 검색하면 예전처럼 스낵바로만
+/// 알리게 되어 "쳤는데 아무것도 안 나온다"가 된다.
 class MapTopBar extends StatelessWidget {
   const MapTopBar({
     super.key,
     required this.showHamburger,
     required this.onHamburgerTap,
-    required this.onSearchTap,
+    required this.controller,
+    required this.focusNode,
+    required this.onChanged,
+    required this.onSubmitted,
+    required this.searchActive,
+    required this.onCancelSearch,
     required this.onDirectionsTap,
     this.hintText = '건물, 장소를 검색하세요',
   });
@@ -25,8 +32,18 @@ class MapTopBar extends StatelessWidget {
   final bool showHamburger;
   final VoidCallback onHamburgerTap;
 
-  /// 검색창을 탭했을 때. 상위가 검색 시트를 연다.
-  final VoidCallback onSearchTap;
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final ValueChanged<String> onChanged;
+
+  /// 엔터로 확정. 상위가 이때만 의미 검색까지 이어 붙인다.
+  final ValueChanged<String> onSubmitted;
+
+  /// 검색이 활성(포커스 또는 입력 중)인지. true면 왼쪽 버튼이 햄버거 대신
+  /// "검색 종료"로 바뀐다.
+  final bool searchActive;
+  final VoidCallback onCancelSearch;
+
   final VoidCallback onDirectionsTap;
   final String hintText;
 
@@ -43,47 +60,73 @@ class MapTopBar extends StatelessWidget {
           shadowColor: Colors.black.withValues(alpha: 0.15),
           child: Row(
             children: [
-              if (showHamburger)
+              if (searchActive)
+                IconButton(
+                  onPressed: onCancelSearch,
+                  icon: const Icon(Icons.arrow_back, color: AppColors.muted),
+                  tooltip: '검색 닫기',
+                )
+              else if (showHamburger)
                 IconButton(
                   onPressed: onHamburgerTap,
                   icon: const Icon(Icons.menu, color: AppColors.muted),
                   tooltip: '건물 선택',
+                )
+              else
+                const Padding(
+                  padding: EdgeInsets.only(left: 16),
+                  child: Icon(Icons.search, size: 18, color: AppColors.muted),
                 ),
-              if (!showHamburger) const SizedBox(width: 8),
               Expanded(
-                child: InkWell(
-                  onTap: onSearchTap,
-                  borderRadius: BorderRadius.circular(20),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    child: Row(
-                      children: [
-                        if (!showHamburger) ...[
-                          const Icon(
-                            Icons.search,
-                            size: 18,
-                            color: AppColors.muted,
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                        Expanded(
-                          child: Text(
-                            hintText,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: AppColors.muted,
-                            ),
-                          ),
-                        ),
-                      ],
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: TextField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    textInputAction: TextInputAction.search,
+                    onChanged: onChanged,
+                    onSubmitted: onSubmitted,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: AppColors.text,
+                    ),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      border: InputBorder.none,
+                      hintText: hintText,
+                      hintStyle: const TextStyle(
+                        fontSize: 14,
+                        color: AppColors.muted,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                   ),
                 ),
               ),
-              IconButton(
-                onPressed: onDirectionsTap,
-                icon: const Icon(Icons.directions, color: AppColors.primary),
-                tooltip: '길찾기',
+              // 글자가 있으면 지우기, 없으면 길찾기. 둘을 나란히 두면 좁은
+              // 화면에서 입력 폭이 더 줄어든다.
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: controller,
+                builder: (context, value, _) {
+                  if (value.text.isEmpty) {
+                    return IconButton(
+                      onPressed: onDirectionsTap,
+                      icon: const Icon(
+                        Icons.directions,
+                        color: AppColors.primary,
+                      ),
+                      tooltip: '길찾기',
+                    );
+                  }
+                  return IconButton(
+                    onPressed: () {
+                      controller.clear();
+                      onChanged('');
+                    },
+                    icon: const Icon(Icons.close, color: AppColors.muted),
+                    tooltip: '입력 지우기',
+                  );
+                },
               ),
               const SizedBox(width: 4),
             ],
