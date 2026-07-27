@@ -127,8 +127,15 @@ class AccelPreviewTrack {
       confirmedDistanceM: confirmedDistanceM,
     );
     if (leadReason != null) {
+      // 실제로 걸음을 버려야 lead cap이 의미가 있다. 예전에는 여기서 reject만
+      // 기록하고 아래로 그대로 흘러가, position·path·steps·distanceM에 전부
+      // 반영된 뒤 lastRejectReason까지 'none'으로 덮였다. 그래서 캡이 사실상
+      // no-op이었고 preview가 confirmed보다 무한히 앞서 나갔다(실측 세션에서
+      // stepLeadCap 133건이 기록됐는데도 preview가 confirmed+12를 훌쩍 넘긴
+      // 163걸음까지 갔다). 위쪽 다른 reject 경로들과 동일하게 여기서 끊는다.
       _resyncGate(peakMs);
-      _recordReject(reason: leadReason, deltaPeaks: 1, counted: false);
+      _recordReject(reason: leadReason, deltaPeaks: delta);
+      return false;
     }
 
     final headingRad = headingDeg * math.pi / 180;
