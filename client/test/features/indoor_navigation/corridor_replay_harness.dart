@@ -184,6 +184,20 @@ class CorridorReplayRun {
 
   double get distanceRetention => correctedDistanceM / replay.expectedDistanceM;
 
+  /// 보정 경로 안에서 한 걸음 이상 건너뛴 구간들(m).
+  ///
+  /// 보정 경로는 그래프를 따라가므로 이웃한 두 점 사이는 한 걸음 남짓이어야
+  /// 한다. 여기 큰 값이 나오면 서로 다른 가설의 조각을 이어 붙였다는 뜻이고,
+  /// 화면에는 매장을 가로지르는 직선으로 그려진다.
+  List<double> get correctedTeleports {
+    final path = last.correctedPath;
+    return [
+      for (var index = 1; index < path.length; index += 1)
+        if ((path[index] - path[index - 1]).distance > 2)
+          (path[index] - path[index - 1]).distance,
+    ];
+  }
+
   /// 확정 위치가 한 지점에 머문 최장 시간(초).
   ///
   /// 걷고 있는데 마커가 멈춰 있으면 그만큼 이동이 통째로 버려졌다는 뜻이다.

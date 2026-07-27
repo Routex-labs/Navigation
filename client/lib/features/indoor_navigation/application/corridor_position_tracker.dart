@@ -26,7 +26,6 @@ enum CorridorTrackingState {
 
 class CorridorTrackerConfig {
   const CorridorTrackerConfig({
-    this.windowDistanceM = 30,
     this.beamWidth = 24,
     this.progressBucketM = 1.5,
     this.transitionPenaltyDegM = 3,
@@ -45,12 +44,6 @@ class CorridorTrackerConfig {
     this.maxTransitionsPerSegment = 3,
     this.maxPathPoints = 800,
   });
-
-  /// 매 갱신마다 다시 평가하는 최근 이동 거리.
-  ///
-  /// 이 길이 안에서는 어떤 결정도 되돌릴 수 있다. 짧으면 회전을 놓쳤을 때
-  /// 복구할 근거가 사라지고, 길면 계산량과 표시 지연이 늘어난다.
-  final double windowDistanceM;
 
   /// 동시에 유지하는 가설 수. 교차점이 촘촘한 층에서 정답이 살아남을 여유.
   final int beamWidth;
@@ -211,8 +204,8 @@ class CorridorTrackingResult {
 ///
 /// **빔 서치**로 동작한다. 하나의 "현재 간선"을 잠그는 대신, 서로 다른 간선
 /// 위에 있는 가설 여러 개를 동시에 들고 다니면서 걸음마다 점수를 매기고,
-/// 최근 [CorridorTrackerConfig.windowDistanceM] 구간 안에서는 언제든 1등이
-/// 바뀔 수 있게 둔다.
+/// 언제든 1등이 바뀔 수 있게 둔다. 1등이 바뀌면 그 가설이 들고 있던 경로가
+/// 그대로 화면 경로가 되므로, 최근 구간이 통째로 다시 그려진다.
 ///
 /// 이전 구현은 간선을 잠그고 노드에서만 엄격한 증거로 전환하는 탐욕적
 /// 상태기였다. 시간적 일관성은 얻었지만 회전을 한 번 놓치면 되돌릴 방법이
@@ -230,13 +223,10 @@ class CorridorPositionTracker {
   final CorridorTrackerConfig config;
   final _CorridorNetwork _network;
 
-  /// 윈도우 밖으로 나가 더는 바뀌지 않는 경로.
-  final List<PdrLocalPoint> _committedPath = [];
   final List<PdrLocalPoint> _correctedPath = [];
   final List<PdrLocalPoint> _previewPath = [];
 
   List<_Hypothesis> _beam = const [];
-  double _windowDistanceM = 0;
 
   CorridorTrackingState _state = CorridorTrackingState.uncertain;
   PdrLocalPoint _correctedPosition = PdrLocalPoint.zero;
@@ -301,8 +291,6 @@ class CorridorPositionTracker {
     _pendingEdgeId = null;
     _leaderEdgeId = null;
     _leaderSign = 1;
-    _windowDistanceM = 0;
-    _committedPath.clear();
 
     // 시작 방향을 하나로 못 박지 않는다. 첫 걸음의 방위는 복도에 거의 수직인
     // 경우가 많고(실측에서 176.9°), 그것으로 진행 부호를 잠그면 6° 차이로
@@ -357,7 +345,6 @@ class CorridorPositionTracker {
         _advanceBeam(segment);
       }
       _updateHeadingBias();
-      _slideWindow();
       _publishConfirmed(transitionsBefore: transitionsBefore);
     }
 
@@ -432,7 +419,6 @@ class CorridorPositionTracker {
     }
     if (next.isEmpty) return;
     _beam = _prune(next);
-    _windowDistanceM += segment.distanceM;
   }
 
   List<_Hypothesis> _advance(
@@ -462,6 +448,7 @@ class CorridorPositionTracker {
       positionalWeightDegPerM: config.positionalWeightDegPerM,
       positionalToleranceM: config.positionalToleranceM,
       positionalMaxOffsetM: config.positionalMaxOffsetM,
+      maxPathPoints: config.maxPathPoints,
     );
     if (remainingM <= distanceToEnd + 1e-6) return [advanced];
 
@@ -516,28 +503,6 @@ class CorridorPositionTracker {
     return sorted.take(config.beamWidth).toList(growable: false);
   }
 
-  /// 윈도우를 넘어간 앞부분은 1등 가설의 결정으로 확정하고 모든 가설에서 뗀다.
-  void _slideWindow() {
-    final best = _best;
-    if (best == null) return;
-    while (_windowDistanceM > config.windowDistanceM && best.path.length > 1) {
-      final committed = best.path.first;
-      _appendCommitted(committed);
-      var dropped = 0.0;
-      final trimmed = <_Hypothesis>[];
-      for (final hypothesis in _beam) {
-        if (hypothesis.path.length <= 1) continue;
-        if (identical(hypothesis, best)) {
-          dropped = (hypothesis.path[1] - hypothesis.path[0]).distance;
-        }
-        trimmed.add(hypothesis.dropOldestPathPoint());
-      }
-      if (trimmed.isEmpty) break;
-      _beam = trimmed;
-      _windowDistanceM -= dropped <= 0 ? 0.1 : dropped;
-    }
-  }
-
   /// 표시용 1등을 고른다. 근소한 점수 차로 화면이 복도 사이를 오가지 않게,
   /// 지금 보여 주고 있는 간선을 [CorridorTrackerConfig.leaderSwitchMarginDeg]
   /// 만큼 이겨야 넘겨준다.
@@ -568,10 +533,8 @@ class CorridorPositionTracker {
       _leaderSign = globalBest.travelSign;
       return;
     }
-    // 유지하는 쪽이 이겼으면 빔 순서를 바꿔 이후 단계가 같은 1등을 본다.
     if (!identical(held, globalBest)) {
-      final reordered = [held, ...(_beam.where((h) => !identical(h, held)))];
-      _beam = reordered;
+      _beam = [held, ..._beam.where((h) => !identical(h, held))];
     }
   }
 
@@ -580,13 +543,16 @@ class CorridorPositionTracker {
     final best = _best;
     if (best == null) return;
     _correctedPosition = best.edge.pointAt(best.progressM);
+    // 1등 가설이 **자기 이력 전체**를 들고 있으므로 그대로 쓴다.
+    //
+    // 예전에는 윈도우 밖을 따로 커밋해 두고 `커밋분 + 현재 윈도우`로 이어
+    // 붙였는데, 1등이 바뀌면 두 조각이 서로 다른 복도에 있어서 이음매가
+    // 지도를 가로지르는 직선으로 그려졌다(실측에서 29점 중 21구간이 2m 초과
+    // 점프, 합계 102.5m). 한 가설의 경로는 정의상 그래프를 따라가므로
+    // 이음매가 없다. 서로 수렴한 가설은 _prune이 합치면서 옛 갈래를 지운다.
     _correctedPath
       ..clear()
-      ..addAll(_committedPath)
       ..addAll(best.path);
-    if (_correctedPath.length > config.maxPathPoints) {
-      _correctedPath.removeRange(0, _correctedPath.length - config.maxPathPoints);
-    }
     _lastConfirmedNodeId = best.lastNodeId;
 
     final runnerUp = _beam.length > 1 ? _beam[1] : null;
@@ -619,19 +585,6 @@ class CorridorPositionTracker {
       _headingBiasDeg + requested.clamp(-maxCorrection, maxCorrection),
       config.headingBiasLimitDeg,
     );
-  }
-
-  void _appendCommitted(PdrLocalPoint point) {
-    if (_committedPath.isEmpty ||
-        (_committedPath.last - point).distance > 1e-6) {
-      _committedPath.add(point);
-      if (_committedPath.length > config.maxPathPoints) {
-        _committedPath.removeRange(
-          0,
-          _committedPath.length - config.maxPathPoints,
-        );
-      }
-    }
   }
 
   List<({double headingDeg, double distanceM, PdrLocalPoint rawPoint})>
@@ -842,8 +795,6 @@ class _Hypothesis {
   /// 모호해질 때마다 preview가 꼬리 길이만큼 뒤로 튄다.
   _Hypothesis forPreview() => _copy(path: [edge.pointAt(progressM)]);
 
-  _Hypothesis dropOldestPathPoint() =>
-      _copy(path: path.sublist(1));
 
   _Hypothesis advance({
     required double observedHeadingDeg,
@@ -855,6 +806,7 @@ class _Hypothesis {
     required double positionalWeightDegPerM,
     required double positionalToleranceM,
     required double positionalMaxOffsetM,
+    required int maxPathPoints,
   }) {
     if (distanceM <= 1e-6) return this;
     final absoluteError = _headingError(observedHeadingDeg, graphHeadingDeg);
@@ -881,9 +833,12 @@ class _Hypothesis {
     final offsetM = ((nextPoint - rawPoint).distance - positionalToleranceM)
         .clamp(0.0, positionalMaxOffsetM)
         .toDouble();
+    final nextPath = path.length >= maxPathPoints
+        ? [...path.skip(path.length - maxPathPoints + 1), nextPoint]
+        : [...path, nextPoint];
     return _copy(
       progressM: nextProgress,
-      path: [...path, nextPoint],
+      path: nextPath,
       cost:
           cost +
           combined * distanceM +

@@ -19,15 +19,28 @@ void main() {
     });
 
     test('걸은 거리의 대부분이 보정 경로에 남는다', () {
-      // 실측 0.21 -> 빔 교체 후 0.65. 아직 목표(0.9)에는 못 미친다.
-      // 남은 손실은 서쪽 구간에서 나란한 복도를 잘못 골라 되돌아 나오는 데서
-      // 생긴다. 회귀를 막는 선에서 현재값 바로 아래에 문턱을 둔다.
+      // 실측 0.21 -> 1.00. 보정 경로는 1등 가설 자신의 이력이라 걸은 거리와
+      // 같아야 정상이다. 모자라면 이동을 버린 것이고, 넘치면 이질적인 조각을
+      // 이어 붙인 것이다.
       expect(
         run.distanceRetention,
-        greaterThan(0.6),
+        greaterThan(0.95),
         reason:
             '실측 0.21. 미해결 구간의 이동이 버려지면 마커는 영원히 뒤처진다. '
             '실제 유지율 ${run.distanceRetention.toStringAsFixed(2)}',
+      );
+    });
+
+    test('보정 경로가 매장을 가로질러 순간이동하지 않는다', () {
+      // 서로 다른 가설의 조각을 이어 붙이면 이음매가 지도를 가로지르는
+      // 직선이 된다. 실측에서 29점 중 21구간이 2m 초과 점프였고 합계 102.5m —
+      // 화면에 보이던 "건물 뚫고 가는 보라선"이 이것이었다.
+      expect(
+        run.correctedTeleports,
+        isEmpty,
+        reason:
+            '${run.correctedTeleports.length}구간, 최대 '
+            '${run.correctedTeleports.isEmpty ? 0 : run.correctedTeleports.reduce((a, b) => a > b ? a : b).toStringAsFixed(1)}m',
       );
     });
 
@@ -82,20 +95,23 @@ void main() {
       final batchMean = onBatch.reduce((a, b) => a + b) / onBatch.length;
       final elseMean =
           elsewhere.reduce((a, b) => a + b) / elsewhere.length;
+      // 비율로 재지 않는다. 확정 배치는 한 번에 5걸음(약 3.5m)을 밀어 주므로
+      // preview도 그만큼 **앞으로** 나가는 것이 정상이고, 배치 사이 평균은
+      // 모호 구간 정지 때문에 0에 가깝다. 문제는 방향과 크기였다 — 실측에서는
+      // 배치가 올 때마다 평균 5.17m씩 **뒤로** 재계산됐다.
       expect(
         batchMean,
-        lessThan(elseMean * 3 + 0.5),
+        lessThan(2.5),
         reason:
-            '배치 도착 평균 ${batchMean.toStringAsFixed(2)}m vs '
-            '그 외 ${elseMean.toStringAsFixed(2)}m. 확정 배치가 preview를 '
-            '되감으면 여기서만 커진다',
+            '배치 도착 평균 ${batchMean.toStringAsFixed(2)}m '
+            '(실측 5.17m), 그 외 ${elseMean.toStringAsFixed(2)}m',
       );
     });
 
     test('preview가 3m 넘게 순간이동하지 않는다', () {
       expect(
         run.previewJumpsOver(3),
-        lessThanOrEqualTo(12),
+        lessThanOrEqualTo(8),
         reason: '실측 30건. 실제 ${run.previewJumpsOver(3)}건',
       );
     });
@@ -132,6 +148,10 @@ void main() {
       expect(bounds.maxEast, greaterThan(205));
     });
 
+    test('보정 경로가 매장을 가로질러 순간이동하지 않는다', () {
+      expect(run.correctedTeleports, isEmpty);
+    });
+
     test('한 간선에만 붙어 있지 않다', () {
       expect(
         run.visitedEdgeIds.toSet().length,
@@ -150,13 +170,12 @@ void main() {
     });
 
     test('걸은 거리의 대부분이 보정 경로에 남는다', () {
-      // 1을 넘을 수 있다. 윈도우 안에서 1등이 바뀌면 최근 구간이 다시 그려져
-      // 경로가 약간 지그재그로 남기 때문이다. 과도한 초과는 그 재작성이 너무
-      // 잦다는 뜻이라 위쪽도 함께 막는다.
-      expect(run.distanceRetention, greaterThan(0.9));
+      // 1등이 바뀌면 최근 구간이 다시 그려지지만, 그것도 그래프를 따라가는
+      // 한 가설의 이력이므로 길이는 걸은 거리와 같아야 한다.
+      expect(run.distanceRetention, greaterThan(0.95));
       expect(
         run.distanceRetention,
-        lessThan(1.25),
+        lessThan(1.05),
         reason: '실제 유지율 ${run.distanceRetention.toStringAsFixed(2)}',
       );
     });
