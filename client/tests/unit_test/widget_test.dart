@@ -1,8 +1,6 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
@@ -22,22 +20,10 @@ import 'package:navigation_client/screens/indoor_map/indoor_map_screen.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
 import 'package:navigation_client/screens/route_guide/route_guide_screen.dart';
+import 'package:navigation_client/widgets/eta_card.dart';
 import 'package:navigation_client/widgets/floor_plan_view.dart';
+import 'package:navigation_client/widgets/floor_selector.dart';
 import 'package:navigation_client/widgets/map_bottom_bar.dart';
-
-// 1x1 흰색 PNG (base64). 배경지도 타일을 흉내내되 실제 네트워크 요청은 하지
-// 않는다 - flutter_map 자체 테스트 스위트도 같은 방식을 쓴다.
-const _whiteTileBase64 =
-    'iVBORw0KGgoAAAANSUhEUgAAAQAAAAEAAQMAAABmvDolAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAANQTFRF////p8QbyAAAAB9JREFUeJztwQENAAAAwqD3T20ON6AAAAAAAAAAAL4NIQAAAfFnIe4AAAAASUVORK5CYII=';
-final _whiteTileImage = MemoryImage(base64Decode(_whiteTileBase64));
-
-class _FakeTileProvider extends TileProvider {
-  @override
-  ImageProvider<Object> getImage(
-    TileCoordinates coordinates,
-    TileLayer options,
-  ) => _whiteTileImage;
-}
 
 // 데모 건물 입구(37.5665, 126.9779)에서 약 185m 떨어진 좌표.
 // 자동 건물 진입 감지(반경 50m)에 걸리지 않도록 충분히 멀리 둔다.
@@ -101,10 +87,9 @@ void main() {
     buildingRepository = testBuildingRepository;
     destinationRepository = MockDestinationRepository(buildingRepository);
 
-    // 야외 지도의 배경 타일도 실제 OSM/VWorld 대신 가짜 provider로 교체한다.
-    // 실제 네트워크 요청을 남겨두면 그 요청이 이후 테스트까지 이어져
-    // pumpAndSettle이 끝없이 걸리는 원인이 된다.
-    outdoorTileProvider = () => _FakeTileProvider();
+    // 야외 지도가 MapLibre로 이관된 뒤에는 배경 타일 fake provider가 필요 없다.
+    // 위젯 테스트 환경(TargetPlatform.android)에서는 MapLibreMap이 PlatformView
+    // 를 만들지만 실제 렌더링은 안 되고 네트워크 요청도 뜨지 않는다.
   });
 
   tearDown(() {
@@ -112,7 +97,6 @@ void main() {
     watchPosition = defaultWatchPosition;
     buildingRepository = originalBuildingRepository;
     destinationRepository = originalDestinationRepository;
-    outdoorTileProvider = NetworkTileProvider.new;
   });
 
   testWidgets('app opens directly into the outdoor (home) map shell', (
@@ -148,11 +132,11 @@ void main() {
     expect(find.byIcon(Icons.refresh), findsOneWidget);
   });
 
-  testWidgets('outdoor map shows a location marker after loading', (
+  testWidgets('outdoor map body renders map after position arrives', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(home: OutdoorMapBody(onEnterBuilding: () {})),
+      MaterialApp(home: const OutdoorMapBody()),
     );
 
     // OutdoorMapBody는 위치 신호를 기다리는 동안에도 지도를 그리며,
@@ -160,8 +144,12 @@ void main() {
     // 첫 위치를 흘려주므로 곧바로 위치 마커가 보여야 한다.
     await tester.pump();
 
+    // MapLibre 이관 이후에는 현재 위치 마커가 지도 내부(CircleLayer)에 렌더돼
+    // Flutter 위젯 트리에서 찾을 수 없다. 로딩 인디케이터가 사라지고
+    // OutdoorMapBody가 body 상태로 넘어갔는지, 신호가 양호할 때 경고 배지가
+    // 안 뜨는지로 정상 렌더링을 갈음한다.
     expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(find.byIcon(Icons.navigation), findsOneWidget);
+    expect(find.byType(OutdoorMapBody), findsOneWidget);
     expect(find.text('GPS 신호 약함'), findsNothing);
   });
 
@@ -171,7 +159,7 @@ void main() {
     watchPosition = () => Stream.value(_fakeLowAccuracyPosition);
 
     await tester.pumpWidget(
-      MaterialApp(home: OutdoorMapBody(onEnterBuilding: () {})),
+      MaterialApp(home: const OutdoorMapBody()),
     );
     await tester.pump();
 
@@ -182,17 +170,19 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(home: OutdoorMapBody(onEnterBuilding: () {})),
+      MaterialApp(home: const OutdoorMapBody()),
     );
     await tester.pump();
     await tester.pump();
 
-    expect(find.byIcon(Icons.place), findsOneWidget);
+    // 목적지 핀은 MapLibre 심볼 레이어로 옮겨져 Flutter 트리에는 없다.
+    // 실제 경로가 계산돼 ETA 카드가 뜬 것으로 "경로 표시 흐름이 살아있다"를 검증.
+    expect(find.byType(EtaCard), findsOneWidget);
     expect(find.textContaining('건물 입구까지'), findsOneWidget);
   });
 
   testWidgets(
-    'map shell switches to indoor mode when entrance is detected nearby',
+    'map shell shows the indoor entry overlay when entrance is detected nearby',
     (WidgetTester tester) async {
       watchPosition = () => Stream.value(_fakePositionAtEntrance);
 
@@ -203,13 +193,15 @@ void main() {
       expect(find.text('건물 감지 중...'), findsOneWidget);
 
       await tester.pumpAndSettle();
-      // 실내 모드로 전환되면 공용 상단바에 건물 선택용 햄버거 버튼이 나타난다.
-      expect(find.byIcon(Icons.menu), findsOneWidget);
+      // 실내 진입 오버레이가 켜지면 야외 지도 위에 세로 층 선택기(FloorSelector)
+      // 가 나타난다. 모드는 여전히 야외라 상단 햄버거는 뜨지 않는다.
+      expect(find.byType(FloorSelector), findsOneWidget);
+      expect(find.byIcon(Icons.menu), findsNothing);
     },
   );
 
   testWidgets(
-    'map shell does not switch to indoor mode when GPS signal stays strong near the entrance',
+    'map shell keeps the outdoor view when GPS signal stays strong near the entrance',
     (WidgetTester tester) async {
       // 입구와 같은 좌표지만 신호는 계속 양호함 (건물 앞을 지나가는 상황).
       final passingByPosition = Position(
@@ -230,6 +222,8 @@ void main() {
       await tester.pump();
       await tester.pump();
 
+      // 오버레이가 켜지지 않았으므로 층 선택기와 햄버거 모두 없어야 한다.
+      expect(find.byType(FloorSelector), findsNothing);
       expect(find.byIcon(Icons.menu), findsNothing);
     },
   );
@@ -241,15 +235,20 @@ void main() {
     watchPosition = () => controller.stream;
 
     await tester.pumpWidget(
-      MaterialApp(home: OutdoorMapBody(onEnterBuilding: () {})),
+      MaterialApp(home: const OutdoorMapBody()),
     );
 
     controller.add(_fakePosition);
-    await tester.pump();
+    // MapLibre 이관 후 _handlePosition이 비동기 _syncCurrentLayer / _updateRoute
+    // 를 추가로 스케줄하는데, 이 마이크로태스크들이 완료돼 setState의 결과가
+    // 위젯 트리에 반영되기까지 여러 프레임이 걸린다. 단일 pump()는 스트림
+    // 리스너만 발동해서 화면 상태 assertion 이 안정적으로 실패한다 —
+    // 짧게 pump해 큐를 비운다.
+    await tester.pump(const Duration(milliseconds: 50));
     expect(find.text('GPS 신호 약함'), findsNothing);
 
     controller.add(_fakeLowAccuracyPosition);
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
     expect(find.text('GPS 신호 약함'), findsOneWidget);
 
     await controller.close();
@@ -261,11 +260,14 @@ void main() {
     watchPosition = () => Stream.error(Exception('위치를 가져올 수 없음'));
 
     await tester.pumpWidget(
-      MaterialApp(home: OutdoorMapBody(onEnterBuilding: () {})),
+      MaterialApp(home: const OutdoorMapBody()),
     );
     await tester.pump();
 
-    expect(find.byIcon(Icons.navigation), findsOneWidget);
+    // 위치 실패 시에도 지도 body는 폴백 좌표로 렌더되고 GPS 신호 약함 배지가
+    // 뜬다. 위치 마커는 MapLibre native로 옮겨져 트리에서 찾지 않는다.
+    expect(find.byType(OutdoorMapBody), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.text('GPS 신호 약함'), findsOneWidget);
   });
 

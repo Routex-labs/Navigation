@@ -7,6 +7,7 @@ class Building {
     required this.floors,
     this.defaultFloor,
     this.entrance,
+    this.footprintWgs84,
   });
 
   final String id;
@@ -24,6 +25,12 @@ class Building {
   /// (야외 길찾기가 붙기 전 이전 스키마와의 호환을 위해 optional로 둔다).
   final LatLng? entrance;
 
+  /// 건물 외곽선(위경도). 야외 지도에서 폴리곤을 그리고 탭 인터랙션의
+  /// 히트박스로 쓴다. 실측 앵커가 없어 백엔드가 계산할 수 없는 건물이면 null.
+  /// 폴리곤의 마지막 점이 첫 점과 같지 않아도 되며(자동으로 닫힘 처리),
+  /// 백엔드가 [{lat, lng}, ...] 형식으로 내려준다.
+  final List<LatLng>? footprintWgs84;
+
   /// 지도를 열 때 선택할 층. default_floor가 오면 그것을, 아니면 목록의 첫
   /// 항목을 쓴다. 층이 하나도 없으면 null.
   String? get initialFloor {
@@ -35,6 +42,7 @@ class Building {
 
   factory Building.fromJson(Map<String, dynamic> json) {
     final entrance = json['entrance'] as Map<String, dynamic>?;
+    final footprint = json['footprint_wgs84'] as List<dynamic>?;
     return Building(
       id: json['id'] as String,
       name: json['name'] as String,
@@ -46,6 +54,12 @@ class Building {
               (entrance['lat'] as num).toDouble(),
               (entrance['lng'] as num).toDouble(),
             ),
+      footprintWgs84: footprint == null
+          ? null
+          : [
+              for (final p in footprint.cast<Map<String, dynamic>>())
+                LatLng((p['lat'] as num).toDouble(), (p['lng'] as num).toDouble()),
+            ],
     );
   }
 }

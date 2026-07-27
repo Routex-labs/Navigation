@@ -4,6 +4,12 @@
   "floors": ["2F", "1F"],
   "default_floor": "1F",
   "entrance": { "lat": 37.5665, "lng": 126.9779 },
+  "footprint_wgs84": [
+    { "lat": 37.5663, "lng": 126.9777 },
+    { "lat": 37.5667, "lng": 126.9777 },
+    { "lat": 37.5667, "lng": 126.9783 },
+    { "lat": 37.5663, "lng": 126.9783 }
+  ],
   "floor_data": {
     "1F": {
       "type": "FeatureCollection",

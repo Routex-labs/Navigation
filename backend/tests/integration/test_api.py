@@ -38,6 +38,12 @@ def test_건물_상세를_조회한다(api_client):
         {"x": 100.0, "y": 80.0},
         {"x": 0.0, "y": 80.0},
     ]
+    # 야외 지도용 wgs84 외곽선. local_m 꼭지점 개수만큼 lat/lng 쌍이 실려야 한다.
+    assert isinstance(body["footprint_wgs84"], list)
+    assert len(body["footprint_wgs84"]) == len(body["footprint_local_m"])
+    for point in body["footprint_wgs84"]:
+        assert set(point) == {"lat", "lng"}
+        assert isinstance(point["lat"], float) and isinstance(point["lng"], float)
 
 
 # 존재하지 않는 건물 요청이 찾을 수 없음 응답으로 변환되는지 검증한다.

@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel
 
-from app.dto.floor_map import PointResponse
+from app.dto.floor_map import LatLngResponse, PointResponse
 
 
 # 건물 목록 한 줄. 앱이 건물을 고르고 첫 층을 여는 데 필요한 최소 정보다.
@@ -22,3 +22,6 @@ class BuildingDetailResponse(BuildingSummaryResponse):
     perimeter_m: float | None  # 건물 둘레 (미터), 선택
 
     footprint_local_m: list[PointResponse]  # 건물 대표 외곽선 (local_m). 기준층 것이라 층별 외곽은 층 지도 응답을 쓴다
+    # 야외 지도에서 건물 폴리곤을 그리기 위한 wgs84 외곽선.
+    # 실측 wgs84 앵커가 없어 아핀을 만들 수 없으면 None.
+    footprint_wgs84: list[LatLngResponse] | None = None
