@@ -65,7 +65,7 @@ const _currentLocationDotImageName =
 
 /// 현재 위치 심볼을 그릴 때 쓰는 디자인 좌표계의 한 변 길이(px). 아래 렌더
 /// 코드의 모든 반지름/오프셋은 이 좌표계 기준이다.
-const _currentLocationIconDesignSize = 216.0;
+const _currentLocationIconDesignSize = 144.0;
 
 /// 디자인 좌표계 대비 실제 비트맵 배율. 아이콘을 크게 키우면 MapLibre가
 /// 비트맵을 화면 픽셀 수보다 적은 원본으로 늘려 그리게 되어 흰 테두리가
@@ -1242,13 +1242,8 @@ class FloorPlanViewState extends State<FloorPlanView> {
     canvas.scale(_currentLocationIconPixelRatio);
 
     if (showHeading) {
-      // 예전에는 cone 반지름이 62인데 그중 안쪽 24px가 흰 원·파란 점에 통째로
-      // 가려졌다. 그라데이션이 가장 진한 중심부가 안 보이고 이미 옅어진 바깥쪽만
-      // 남아서 방향을 알아보기 어려웠다. 반지름을 점 대비 5.5배로 키우고,
-      // 점에 가려지는 구간(r<27, 즉 t<0.27)을 지난 뒤에도 알파가 충분히
-      // 남도록 stop을 바깥으로 밀었다.
-      const coneRadius = 100.0;
-      const halfAngle = 33 * pi / 180;
+      const coneRadius = 62.0;
+      const halfAngle = 31 * pi / 180;
       final coneBounds = Rect.fromCircle(center: center, radius: coneRadius);
       final headingCone = Path()
         ..moveTo(center.dx, center.dy)
@@ -1260,10 +1255,10 @@ class FloorPlanViewState extends State<FloorPlanView> {
           ..shader = ui.Gradient.radial(
             center,
             coneRadius,
-            const [Color(0xC21976D2), Color(0x7A1976D2), Color(0x001976D2)],
-            const [0, 0.62, 1],
+            const [Color(0x8F1976D2), Color(0x451976D2), Color(0x001976D2)],
+            const [0, 0.58, 1],
           )
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5),
       );
     }
 
