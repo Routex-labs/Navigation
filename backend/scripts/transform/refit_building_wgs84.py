@@ -198,6 +198,100 @@ def _scale_anisotropy(t: GeoTransform) -> float:
     return max(sx, sy) / max(1e-9, min(sx, sy))
 
 
+# dabeeo studio 로컬 프레임 규약: source 좌표가 화면 픽셀(y-down)이고 scale 0.1을
+# 곱한 local_m도 같은 y-down 방향이다. 화면 y-down 프레임에서 CCW로 corner를
+# 순회하면 실세계에서는 CW로 도는 것으로 보인다(y축 반전으로 handedness가 뒤집힘).
+# 따라서 GCP의 실세계 방위가 CCW로 N→W→S→E 순인 것에 반해, dabeeo local corner를
+# CCW 순회하는 시퀀스(min_xy → max_x_min_y → max_xy → min_x_max_y)는 실세계 CW
+# 순서를 그린다 — 즉 corner-to-GCP 매핑을 CCW로 이어붙이면 GCP는 world CW 순인
+# N→E→S→W 로 나타나야 한다.
+#
+# 이 규약이 대칭 사각형 건물의 180° 뒤집힘 모호성을 확정적으로 해소한다:
+# 각도 매칭(fit이 아닌 순수 순서)만으로 유일한 corner-GCP 매핑을 결정한다.
+_WORLD_CW_FROM_NORTH: tuple[str, ...] = ("N", "E", "S", "W")
+
+
+def _compass_hints_present(gcps: list[dict]) -> bool:
+    return all((g.get("compass") or "").upper() in _WORLD_CW_FROM_NORTH for g in gcps)
+
+
+# compass 힌트로 corner ↔ GCP 매핑을 결정한다. dabeeo local 프레임에서 corner
+# CCW 순회가 world CW를 그리므로, N GCP가 매핑된 corner를 시작점으로 잡고 local-CCW로
+# 대응 GCP를 N→E→S→W 순으로 배치한다. 4개 시작점 후보 중 유일한 정답을 뽑는
+# 우선순위:
+#   1) 이방성(uniform scale) — 90°/270° 방향 후보 2개를 제거해 2개 남김
+#   2) prior_rotate_deg 근접도 — 남은 2개(180° 대칭)에서 유일한 정답 확정
+#
+# prior 필요성: 대칭 사각형 4-corner GCP만으로는 shift-0과 shift-2가 같은 이방성·
+# 유사한 잔차를 갖고 GCP 클릭 오차가 잔차 tiebreaker를 좌우해 180° 뒤집힘을 확정
+# 판별할 수 없다. 스튜디오 JSON에 저장된 이전 fit의 rotate_deg를 prior로 쓴다 —
+# refit은 아핀을 미세 조정하는 작업이지 근본 방향을 뒤집는 작업이 아니라는 가정.
+# GCP를 다른 좌표계(VWorld↔OSM)에서 다시 잡아도 rotate_deg는 유지된다.
+def compass_match(
+    gcps: list[dict],
+    corners: list[Corner],
+    prior_rotate_deg: float | None = None,
+) -> list[Match]:
+    n = len(gcps)
+    if n != 4 or len(corners) != 4:
+        raise SystemExit("compass 매칭은 지금 4점 GCP → 4극점만 지원.")
+    gcp_by_compass = {(g.get("compass") or "").upper(): g for g in gcps}
+    missing = [c for c in _WORLD_CW_FROM_NORTH if c not in gcp_by_compass]
+    if missing:
+        raise SystemExit(f"compass 힌트가 부족합니다: {missing}")
+
+    candidates = []
+    for start_idx in range(4):
+        pairs = []
+        matches = []
+        for offset, compass in enumerate(_WORLD_CW_FROM_NORTH):
+            c = corners[(start_idx + offset) % 4]
+            g = gcp_by_compass[compass]
+            lat = g["outdoor"]["lat"]
+            lng = g["outdoor"]["lng"]
+            pairs.append(PointPair(x=c.x, y=c.y, u=lng, v=lat))
+            matches.append(Match(
+                label=f'{g["label"]}({compass})', gcp_lat=lat, gcp_lng=lng, corner=c,
+                dist_before_m=0.0,
+            ))
+        t = fit_wgs84_transform(pairs)
+        sx = math.hypot(t.a, t.c) * METERS_PER_DEGREE_LAT
+        sy = math.hypot(t.b, t.d) * METERS_PER_DEGREE_LAT
+        aniso = max(sx, sy) / max(1e-9, min(sx, sy))
+        rot = math.degrees(math.atan2(t.c, t.a))
+        candidates.append({"start": start_idx, "aniso": aniso, "rot": rot, "matches": matches})
+
+    print("\n== compass 후보별 fit (start_idx는 N GCP를 어느 local corner에 배정하는지) ==")
+    for c in candidates:
+        print(f"  start={c['start']} → N→{corners[c['start']].name:<14} aniso={c['aniso']:.4f} rotate_deg={c['rot']:+.3f}")
+
+    # (1) 이방성 필터 — 90° 뒤틀림 후보 제거
+    aniso_sorted = sorted(candidates, key=lambda c: round(c["aniso"], 3))
+    best_aniso = round(aniso_sorted[0]["aniso"], 3)
+    uniform = [c for c in aniso_sorted if round(c["aniso"], 3) == best_aniso]
+
+    if len(uniform) == 1:
+        return uniform[0]["matches"]
+
+    # (2) prior_rotate_deg 근접도 — 180° 대칭 후보 사이 확정
+    if prior_rotate_deg is None:
+        print("[경고] uniform-scale 후보가 여럿(180° 대칭)인데 prior_rotate_deg가 없음. "
+              "첫 후보를 임의 선택하니 스토어 배치를 반드시 시각 검증하세요.")
+        return uniform[0]["matches"]
+
+    def angular_diff(a: float, b: float) -> float:
+        d = abs(a - b) % 360.0
+        return min(d, 360.0 - d)
+
+    chosen = min(uniform, key=lambda c: angular_diff(c["rot"], prior_rotate_deg))
+    print(f"** prior_rotate_deg={prior_rotate_deg:+.3f} 기준으로 start={chosen['start']} (rotate_deg={chosen['rot']:+.3f}) 채택")
+    other = [c for c in uniform if c["start"] != chosen["start"]]
+    if other:
+        c = other[0]
+        print(f"   (기각: start={c['start']} rotate_deg={c['rot']:+.3f}, prior와 {angular_diff(c['rot'], prior_rotate_deg):.1f}° 차이)")
+    return chosen["matches"]
+
+
 def angle_nearest_match(gcps: list[dict], corners: list[Corner], current: GeoTransform) -> list[Match]:
     lats = [g["outdoor"]["lat"] for g in gcps]
     lngs = [g["outdoor"]["lng"] for g in gcps]
@@ -257,10 +351,10 @@ def angle_nearest_match(gcps: list[dict], corners: list[Corner], current: GeoTra
         print(f"{shift:<6} {sx:>10.4f} {sy:>10.4f} {aniso:>12.3f} {max(residuals):>14.3f}{marker}")
 
     # 정렬 우선순위: (1) 이방성 낮음(0.001 단위로 반올림) (2) 잔차 낮음.
-    # 대칭 회전(0°/180° 또는 90°/270°)은 스케일이 같이 나오는데, 그중 잔차가
-    # 더 작은 쪽이 실제 매칭 방향과 일치한다 — 사각형이 완벽 대칭이 아니라
-    # GCP 오차가 한 쪽에서 더 잘 상쇄되기 때문. 반올림 없이 float으로 비교하면
-    # 부동소수 미세 차이 때문에 tiebreaker가 작동하지 않아 잘못된 방향을 고른다.
+    # ⚠️ 사각형 대칭 건물에서는 shift 0/2(또는 1/3)가 같은 이방성·거의 같은 잔차를
+    # 갖는다. 이 경우 잔차 tiebreaker는 GCP 클릭 오차에 좌지우지되어 180° 뒤집힘을
+    # 확정적으로 판별하지 못한다 — 반드시 compass_match()의 힌트를 사용해야 한다.
+    # 이 함수는 compass 힌트가 없을 때만 fallback으로 호출된다.
     candidates.sort(key=lambda x: (round(x[0], 3), max(x[4])))
     best = candidates[0]
     _, chosen_shift, chosen_perm, _, _ = best
@@ -499,8 +593,12 @@ def main() -> None:
     if args.mapping:
         print(f"\n== 명시적 매칭 (--map \"{args.mapping}\") ==")
         matches = explicit_match(gcps, corners, args.mapping, current)
+    elif _compass_hints_present(gcps):
+        print("\n== GCP compass 힌트 기반 자동 매칭 (world CW N→E→S→W 규약) ==")
+        prior_rot = reference["coordinate_system"]["affine_transforms"]["local_m_to_wgs84"].get("rotate_deg")
+        matches = compass_match(gcps, corners, prior_rotate_deg=prior_rot)
     else:
-        print("\n== 각도 최근접 자동 매칭 ==")
+        print("\n== 각도 최근접 자동 매칭 (compass 힌트 없음) ==")
         matches = angle_nearest_match(gcps, corners, current)
     print_matches(matches)
 
