@@ -30,6 +30,9 @@ class CorridorReplay {
   final int expectedSteps;
   final double expectedDistanceM;
 
+  /// 보정 전 원본(초록) floor 경로. 구 [FloorMapMatcher]와 A/B 할 때 쓴다.
+  late final List<PdrLocalPoint> floorPath;
+
   static const _fixtureDir = 'test/features/indoor_navigation/fixtures';
 
   static FloorGraph loadGraph([String name = 'b2_graph.json']) {
@@ -61,7 +64,14 @@ class CorridorReplay {
         for (final event in json['tracker_input_events'] as List)
           CorridorReplayEvent._(event as Map<String, dynamic>),
       ],
-    );
+    )..floorPath = [
+      for (final point
+          in (json['floor_local_m_before_matching'] as List? ?? const []))
+        PdrLocalPoint(
+          ((point as List)[0] as num).toDouble(),
+          (point[1] as num).toDouble(),
+        ),
+    ];
   }
 
   /// 이벤트를 순서대로 먹이고 각 시점의 결과를 모은다.
@@ -189,13 +199,20 @@ class CorridorReplayRun {
   /// 보정 경로는 그래프를 따라가므로 이웃한 두 점 사이는 한 걸음 남짓이어야
   /// 한다. 여기 큰 값이 나오면 서로 다른 가설의 조각을 이어 붙였다는 뜻이고,
   /// 화면에는 매장을 가로지르는 직선으로 그려진다.
-  List<double> get correctedTeleports {
-    final path = last.correctedPath;
-    return [
-      for (var index = 1; index < path.length; index += 1)
-        if ((path[index] - path[index - 1]).distance > 2)
-          (path[index] - path[index - 1]).distance,
-    ];
+  List<double> get correctedTeleports => teleportsOf(last.correctedPath);
+
+  static List<double> teleportsOf(List<PdrLocalPoint> path) => [
+    for (var index = 1; index < path.length; index += 1)
+      if ((path[index] - path[index - 1]).distance > 2)
+        (path[index] - path[index - 1]).distance,
+  ];
+
+  static double lengthOf(List<PdrLocalPoint> path) {
+    var total = 0.0;
+    for (var index = 1; index < path.length; index += 1) {
+      total += (path[index] - path[index - 1]).distance;
+    }
+    return total;
   }
 
   /// 확정 위치가 한 지점에 머문 최장 시간(초).
