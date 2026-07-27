@@ -34,7 +34,9 @@ class CorridorTrackerConfig {
     this.absoluteErrorWeight = 0.25,
     this.costHorizonM = 25,
     this.maxSegmentErrorDeg = 60,
-    this.positionalWeightDegPerM = 1.0,
+    this.seedRadiusM = 5,
+    this.seedPenaltyDegM = 25,
+    this.positionalWeightDegPerM = 0.5,
     this.positionalToleranceM = 6,
     this.positionalMaxOffsetM = 12,
     this.leaderSwitchMarginDeg = 2.5,
@@ -74,6 +76,17 @@ class CorridorTrackerConfig {
   /// 틀어진 경우는 [headingBiasMaxErrorDeg] 아래의 bias 학습이 흡수하고,
   /// 그동안은 형태 항이 버틴다.
   final double absoluteErrorWeight;
+
+  /// 시작 시 씨앗을 까는 반경(m). 사용자가 찍은 위치를 믿는 범위다.
+  final double seedRadiusM;
+
+  /// 시작 위치에서 1m 떨어진 씨앗에 매기는 **영구** 벌점(도·m).
+  ///
+  /// 이 벌점만은 [costHorizonM]으로 잊지 않는다. 잊으면 시작 지점 옆에 나란히
+  /// 있던, 실제로는 한 번도 지나간 적 없는 복도의 씨앗이 25m 뒤에 공짜가 되어
+  /// 원본 드리프트만으로 1등이 된다. 간선 전이로 도달한 가설과 달리 이 씨앗은
+  /// 그래프 연결로 정당화된 적이 없으므로 끝까지 불리해야 한다.
+  final double seedPenaltyDegM;
 
   /// 원본 위치에서 벗어난 1m당 더하는 비용(도/m).
   ///
@@ -388,7 +401,10 @@ class CorridorPositionTracker {
     double headingDeg,
   ) {
     final seeds = <_Hypothesis>[];
-    for (final projection in _network.nearbyProjections(position, radiusM: 8)) {
+    for (final projection in _network.nearbyProjections(
+      position,
+      radiusM: config.seedRadiusM,
+    )) {
       for (final sign in const [1, -1]) {
         if (sign < 0 && !projection.edge.bidirectional) continue;
         seeds.add(
@@ -397,10 +413,10 @@ class CorridorPositionTracker {
             progressM: projection.distanceAlongM,
             travelSign: sign,
             path: [projection.point],
-            // 시작 위치 오차를 비용에 넣어, 멀리 떨어진 복도에서 시작한
-            // 가설이 초반부터 불리하게 둔다.
-            cost: projection.distanceM * 6,
+            cost: 0,
             matchedM: 0,
+            // 잊히지 않는 벌점. 시작 지점에서 먼 씨앗일수록 끝까지 불리하다.
+            seedPenaltyDegM: projection.distanceM * config.seedPenaltyDegM,
           ),
         );
       }
@@ -819,6 +835,7 @@ class _Hypothesis {
     this.transitions = 0,
     this.lastNodeId,
     this.previousOffsetM = 0,
+    this.seedPenaltyDegM = 0,
   });
 
   final _CorridorEdge edge;
@@ -843,8 +860,13 @@ class _Hypothesis {
   /// 직전 걸음에서 원본 위치와 벌어져 있던 거리(m).
   final double previousOffsetM;
 
+  /// 시작 위치에서 떨어져 있던 만큼의 영구 벌점(도·m). 감쇠하지 않는다.
+  final double seedPenaltyDegM;
+
   /// 가설끼리 비교하는 값. 같은 걸음을 먹었으므로 거리 정규화만으로 공평하다.
-  double get meanErrorDeg => matchedM <= 1e-6 ? cost : cost / matchedM;
+  double get meanErrorDeg => matchedM <= 1e-6
+      ? cost + seedPenaltyDegM
+      : (cost + seedPenaltyDegM) / matchedM;
 
   _Hypothesis reversed() => _copy(travelSign: -travelSign);
 
@@ -945,6 +967,7 @@ class _Hypothesis {
     transitions: transitions + 1,
     lastNodeId: nodeId,
     previousOffsetM: previousOffsetM,
+    seedPenaltyDegM: seedPenaltyDegM,
   );
 
   /// 그래프로 더 갈 수 없는 이동. 가설을 죽이지 않고 벌점만 준다.
@@ -967,6 +990,7 @@ class _Hypothesis {
     double? previousGraphHeadingDeg,
     double? previousOffsetM,
   }) => _Hypothesis(
+    seedPenaltyDegM: seedPenaltyDegM,
     edge: edge,
     progressM: progressM ?? this.progressM,
     travelSign: travelSign ?? this.travelSign,
