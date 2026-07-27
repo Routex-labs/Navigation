@@ -389,12 +389,12 @@ void main() {
     expect(find.text('강의실 201'), findsOneWidget);
   });
 
-  /// 새 검색 흐름: 상단 검색창은 입력을 받지 않고, 탭하면 아래에서 시트가
-  /// 올라온다. 그 시트의 입력창에 쳐야 결과 목록이 뜬다.
-  Future<void> openSearchSheet(WidgetTester tester, String query) async {
-    await tester.tap(find.text('건물, 장소를 검색하세요'));
+  /// 새 검색 흐름: 상단 검색창에 그대로 친다. 아래에서 입력창이 하나 더 있는
+  /// 시트가 올라오지 않고, 결과는 검색창 바로 밑 패널에 뜬다.
+  Future<void> searchFromTopBar(WidgetTester tester, String query) async {
+    await tester.tap(find.byType(TextField));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).first, query);
+    await tester.enterText(find.byType(TextField), query);
     await tester.testTextInput.receiveAction(TextInputAction.search);
     await tester.pumpAndSettle();
   }
@@ -414,7 +414,7 @@ void main() {
 
     await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
     await tester.pumpAndSettle();
-    await openSearchSheet(tester, 'MLB');
+    await searchFromTopBar(tester, 'MLB');
 
     expect(repository.lightQueries, ['MLB']);
     expect(find.text('MLB'), findsWidgets);
@@ -437,7 +437,7 @@ void main() {
 
     await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
     await tester.pumpAndSettle();
-    await openSearchSheet(tester, '밥 먹을 곳');
+    await searchFromTopBar(tester, '밥 먹을 곳');
 
     // 경량 → 의미 순으로 같은 질의가 이어진다. 버튼을 누를 필요가 없다.
     expect(repository.lightQueries, ['밥 먹을 곳']);
@@ -461,7 +461,7 @@ void main() {
 
     await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
     await tester.pumpAndSettle();
-    await openSearchSheet(tester, 'MLB');
+    await searchFromTopBar(tester, 'MLB');
 
     expect(repository.aiQueries, isEmpty);
     expect(find.text('뜻이 비슷한 매장을 찾았어요'), findsNothing);
@@ -476,14 +476,37 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('건물, 장소를 검색하세요'));
+    await tester.tap(find.byType(TextField));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).first, '밥 먹을');
+    await tester.enterText(find.byType(TextField), '밥 먹을');
     // 디바운스가 끝나 경량 검색은 돌지만, 의미 검색은 아직이다.
     await tester.pumpAndSettle(const Duration(milliseconds: 500));
 
     expect(repository.lightQueries, ['밥 먹을']);
     expect(repository.aiQueries, isEmpty);
+  });
+
+  testWidgets('검색창을 눌러도 두 번째 입력창이 생기지 않는다', (WidgetTester tester) async {
+    // 회귀: 예전에는 상단 검색창을 누르면 아래에서 입력창이 하나 더 있는 시트가
+    // 올라와, 방금 누른 창과 실제로 치는 창이 달랐다. 검색 중 화면에 있는
+    // TextField는 상단 바의 것 하나뿐이어야 한다.
+    destinationRepository = _FallbackDestinationRepository();
+
+    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TextField), findsOneWidget);
+    await tester.tap(find.byType(TextField));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TextField), findsOneWidget);
+    // 친 글자는 그대로 상단 검색창에 남는다.
+    await tester.enterText(find.byType(TextField), 'MLB');
+    await tester.pumpAndSettle(const Duration(milliseconds: 500));
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller?.text,
+      'MLB',
+    );
   });
 
   testWidgets('카테고리 열에 AI 검색 pill이 더는 없다', (WidgetTester tester) async {
@@ -497,12 +520,12 @@ void main() {
 
 
   testWidgets('건물 이름으로 검색하면 건물 줄이 뜬다', (WidgetTester tester) async {
-    // 예전 상단 검색이 하던 건물 이름 검색을 시트로 옮겨 왔다.
+    // 매장과 건물을 같은 결과 패널에 함께 얹는다.
     destinationRepository = _FallbackDestinationRepository();
 
     await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
     await tester.pumpAndSettle();
-    await openSearchSheet(tester, '데모');
+    await searchFromTopBar(tester, '데모');
 
     expect(find.textContaining('건물 ·'), findsOneWidget);
   });
