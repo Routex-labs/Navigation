@@ -15,9 +15,12 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import '../../core/api_config.dart';
 import '../../core/service_locator.dart';
 import '../../domain/geo_transform.dart';
-import '../../features/debug_mode/debug_pdr_trail_state.dart';
+import '../../features/debug_mode/debug_mode.dart';
 import '../../features/indoor_navigation/application/floor_map_matcher.dart';
 import '../../features/indoor_navigation/contract/indoor_navigation_contract.dart';
+import '../../features/indoor_navigation/debug/pdr_debug_device_info.dart';
+import '../../features/indoor_navigation/debug/pdr_debug_session_recorder.dart';
+import '../../features/indoor_navigation/debug/pdr_debug_session_share.dart';
 import '../../domain/multi_floor_router.dart';
 import '../../models/building.dart';
 import '../../models/building_graph.dart';
@@ -174,6 +177,16 @@ const _floorSelectorBottomOffset =
 // 경로 ETA 카드가 화면에 뜨면 하단 바(=층 선택기 기준선)가 이만큼 위로 올라간다.
 // map_shell_screen.dart의 _etaBarLiftHeight와 동일해야 한다.
 const _bottomBarLiftPx = 92.0;
+
+// 홈/실내 세그먼트의 왼쪽에 8px 간격으로 PDR 제어를 붙이는 right inset.
+// indoor_map_screen.dart의 동명 상수와 같은 값이어야 실내 탭과 야외 실내 진입
+// 오버레이에서 PDR 버튼이 같은 자리에 놓인다.
+const _pdrControlRightInsetPx = 184.0;
+
+// PDR 안내 토스트를 하단 바(+ETA 카드) 위로 띄우기 위한 오프셋. 실내 화면의
+// _mapShellBottomChromePx/_etaCardHeightPx와 같은 값을 쓴다.
+const _mapShellBottomChromePx = 112.0;
+const _etaCardHeightPx = 130.0;
 
 // latlong2 <-> MapLibre 타입 브릿지.
 LatLng _toGl(ll.LatLng p) => LatLng(p.latitude, p.longitude);
@@ -448,6 +461,28 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   StreamSubscription<PdrSnapshot>? _pdrSnapshotSub;
   StreamSubscription<CalibrationStatus>? _pdrCalibrationSub;
 
+  /// 디버그 설정은 실내 지도와 공유한다 — 어느 화면에서 켜든 같은 상태를 본다.
+  final DebugModeController _debugModeController = debugModeController;
+
+  /// 이번 PDR 세션의 기록기. "PDR 시작"에서 새로 만들고 종료 시 JSON으로
+  /// 내보낸다. 실내 화면과 같은 포맷이라 두 화면에서 받은 로그를 같은 분석
+  /// 스크립트로 비교할 수 있다.
+  PdrDebugSessionRecorder? _pdrDebugRecorder;
+  bool _exportingPdrDebugJson = false;
+
+  /// 활성 층 GeoJSON의 map_calibration_version. 내보낸 세션이 어떤 보정본
+  /// 도면 위에서 측정된 것인지 구분하는 데 쓴다.
+  String _mapCalibrationVersion = 'unversioned';
+
+  // 지도 위 Flutter 오버레이(PDR 제어·디버그 설정 버튼) 영역. MapLibre는
+  // PlatformView라 이 위젯들 위의 탭도 native 지도까지 흘러들어가 onMapClick이
+  // 함께 발화한다 — 버튼을 눌렀을 뿐인데 뒤의 매장이 열리거나 앵커가 버튼
+  // 아래에 찍히는 것을 막기 위해 좌표로 걸러낸다(실내 화면의 overlayHitTest와
+  // 같은 목적).
+  final GlobalKey _pdrControlKey = GlobalKey();
+  final GlobalKey _debugModeSettingsKey = GlobalKey();
+  final GlobalKey _pdrShareButtonKey = GlobalKey();
+
   /// 검색·길찾기 시트가 지도 위에 떠 있는 동안 지도 제스처를 꺼서, 시트를
   /// 마우스 휠로 스크롤할 때 그 아래 지도까지 같이 움직이지 않게 한다.
   void setInteractive(bool value) {
@@ -468,12 +503,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       snapshot: indoorNavigationDriver.currentSnapshot,
       calibration: indoorNavigationDriver.currentCalibration,
     );
+    _debugModeController.addListener(_onDebugModeChanged);
     _pdrSnapshotSub = indoorNavigationDriver.snapshots.listen((snapshot) {
+      _pdrDebugRecorder?.recordSnapshot(snapshot);
       if (!mounted) return;
       setState(() => _pdrTrailState.recordSnapshot(snapshot));
       _syncPdrCurrentLayer();
     });
     _pdrCalibrationSub = indoorNavigationDriver.calibration.listen((status) {
+      _pdrDebugRecorder?.recordCalibration(status);
       if (!mounted) return;
       setState(() => _pdrTrailState.recordCalibration(status));
       if (status.phase == CalibrationPhase.calibrated ||
@@ -494,7 +532,28 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _positionSubscription?.cancel();
     _pdrSnapshotSub?.cancel();
     _pdrCalibrationSub?.cancel();
+    // 앱 전역 인스턴스라 dispose하지 않는다 — 실내 화면이 같은 컨트롤러를
+    // 계속 구독한다.
+    _debugModeController.removeListener(_onDebugModeChanged);
     super.dispose();
+  }
+
+  /// 디버그 모드를 끄면 PDR 진입점이 화면에서 사라진다. 세션이 켜져 있는 채로
+  /// 버튼만 없어지면 센서가 계속 돌면서 종료할 방법이 없으므로 함께 정리한다.
+  /// (실내 화면도 같은 처리를 하며, [stopGuidance]는 이미 idle이면 즉시
+  /// 리턴하므로 두 화면이 같이 호출해도 안전하다.)
+  void _onDebugModeChanged() {
+    if (!_debugModeController.enabled &&
+        indoorNavigationDriver.currentRuntimeStatus.state !=
+            PdrRuntimeState.idle) {
+      unawaited(_stopPdrWhenDebugModeTurnsOff());
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _stopPdrWhenDebugModeTurnsOff() async {
+    await indoorNavigationDriver.stopGuidance();
+    if (mounted) _setPlacingAnchor(false);
   }
 
   Future<void> _loadBuildingEntrance() async {
@@ -539,6 +598,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       setState(() {
         _floorGraph = graph;
         _floorPlan = plan;
+        _mapCalibrationVersion =
+            geojson?['map_calibration_version'] as String? ?? 'unversioned';
       });
       _syncPdrCurrentLayer();
     } catch (_) {
@@ -548,6 +609,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         setState(() {
           _floorGraph = null;
           _floorPlan = null;
+          _mapCalibrationVersion = 'unversioned';
         });
       }
     }
@@ -570,6 +632,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _activeFloor = floor;
       _floorGraph = null;
       _floorPlan = null;
+      _mapCalibrationVersion = 'unversioned';
       if (multiRoute == null) {
         _indoorRouteSegment = null;
       } else {
@@ -1463,6 +1526,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Future<void> _handleMapClick(Point<double> pointPx, LatLng coords) async {
     final point = ll.LatLng(coords.latitude, coords.longitude);
 
+    // 지도 위에 얹은 PDR 제어·디버그 설정 버튼을 누른 탭은 여기서 끊는다.
+    // 그러지 않으면 "PDR 시작"을 누른 손가락이 버튼 아래의 매장까지 함께
+    // 선택하거나, 앵커 배치 대기 중에 버튼 위치에 앵커가 찍힌다.
+    if (_isTapOnMapOverlay(Offset(pointPx.x, pointPx.y))) return;
+
     // 위치 지정 대기 중이라면 이 탭은 PDR 앵커 배치로 소비된다 — 지도 탭이
     // 건물 진입 처리로 새어들어가면 사용자가 위치를 지정하는 순간 오버레이가
     // 다시 리셋되는 것처럼 보인다.
@@ -2060,6 +2128,120 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _showSnack('지도에서 현재 서 있는 위치를 탭해 지정해주세요.');
   }
 
+  /// 디버그 모드의 "PDR 시작/종료" 버튼. 실내 지도 탭의 _togglePdr와 같은
+  /// 계약이다 — 시작하면 이번 세션 기록기를 새로 열고 앵커 배치 대기로 넘기며,
+  /// 종료하면 마지막 스냅샷까지 기록한 뒤 JSON 내보내기를 안내한다.
+  ///
+  /// 야외에서는 "활성 층"이 층 chip으로 정해지므로, 사용자가 지금 보고 있는
+  /// 층의 그래프가 없으면(타일만 있고 navigation_graph가 없는 층) 시작하지
+  /// 않는다 — 그래프가 없으면 PDR 좌표를 층 좌표로 옮길 수 없어 측정이
+  /// 무의미하다.
+  Future<void> _togglePdr() async {
+    final floor = _activeFloor;
+    final graph = _floorGraph;
+    if (indoorNavigationDriver.currentRuntimeStatus.state !=
+        PdrRuntimeState.idle) {
+      final recorder = _pdrDebugRecorder;
+      final snapshot = indoorNavigationDriver.currentSnapshot;
+      if (snapshot != null) recorder?.recordSnapshot(snapshot);
+      await indoorNavigationDriver.stopGuidance();
+      recorder?.recordRuntime(indoorNavigationDriver.currentRuntimeStatus);
+      if (!mounted) return;
+      _setPlacingAnchor(false);
+      if (recorder?.hasSnapshot ?? false) {
+        _showPdrMessageWithExport('PDR 세션이 종료됐습니다. JSON으로 내보내 분석할 수 있습니다.');
+      }
+      return;
+    }
+    if (floor == null ||
+        graph == null ||
+        graph.nodes.isEmpty ||
+        graph.edges.isEmpty) {
+      _showSnack('이 층은 PDR 좌표 변환용 navigation graph가 아직 없습니다.');
+      return;
+    }
+    setState(() => _pdrTrailState.beginNewSession());
+    _pdrDebugRecorder = PdrDebugSessionRecorder()
+      ..recordRuntime(indoorNavigationDriver.currentRuntimeStatus);
+    await indoorNavigationDriver.startGuidance(floorId: floor);
+    _pdrDebugRecorder?.recordRuntime(
+      indoorNavigationDriver.currentRuntimeStatus,
+    );
+    if (!mounted) return;
+    _setPlacingAnchor(true);
+    _showSnack('현재 서 있는 위치를 지도에서 한 번 탭해 PDR 시작점을 맞춰주세요.');
+  }
+
+  void _showPdrMessageWithExport(String message) {
+    if (!mounted) return;
+    showDebugToast(
+      context,
+      message: message,
+      bottomOffset:
+          _mapShellBottomChromePx +
+          (_hasAnyRouteVisible ? _etaCardHeightPx : 0) +
+          12,
+      actionLabel: 'JSON 공유',
+      onAction: () => unawaited(_exportPdrDebugJson()),
+    );
+  }
+
+  Future<void> _exportPdrDebugJson() async {
+    final recorder = _pdrDebugRecorder;
+    if (recorder == null || !recorder.hasSnapshot || _exportingPdrDebugJson) {
+      _showSnack('내보낼 PDR 세션이 없습니다.');
+      return;
+    }
+    setState(() => _exportingPdrDebugJson = true);
+    try {
+      final device = await PdrDebugDeviceInfo.load();
+      final session = recorder.buildJson(
+        buildingId: _building?.id ?? demoBuildingId,
+        selectedFloor: _activeFloor,
+        mapCalibrationVersion: _mapCalibrationVersion,
+        graph: _floorGraph,
+        device: device,
+      );
+      await const PdrDebugSessionShare().share(
+        session,
+        sharePositionOrigin: _pdrSharePositionOrigin(),
+      );
+    } on Object catch (error) {
+      if (mounted) _showSnack('PDR JSON을 내보내지 못했습니다: $error');
+    } finally {
+      if (mounted) setState(() => _exportingPdrDebugJson = false);
+    }
+  }
+
+  /// iOS 공유 시트는 popover 기준 사각형이 필요하다. 전달하지 않으면
+  /// share_plus가 `{0, 0, 0, 0}`을 보내 iOS에서 공유를 거부한다.
+  Rect? _pdrSharePositionOrigin() {
+    final box =
+        _pdrShareButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box != null && box.hasSize && !box.size.isEmpty) {
+      return box.localToGlobal(Offset.zero) & box.size;
+    }
+    return null;
+  }
+
+  /// [localPoint]가 지도 위 Flutter 오버레이(PDR 제어·디버그 설정) 영역이면
+  /// true. 인자는 MapLibre가 준 지도 위젯 로컬 좌표라 전역 좌표로 바꿔 비교한다.
+  bool _isTapOnMapOverlay(Offset localPoint) {
+    final mapBox = context.findRenderObject() as RenderBox?;
+    if (mapBox == null || !mapBox.attached) return false;
+    final globalPoint = mapBox.localToGlobal(localPoint);
+    for (final key in [_pdrControlKey, _debugModeSettingsKey]) {
+      final ctx = key.currentContext;
+      if (ctx == null) continue;
+      final box = ctx.findRenderObject() as RenderBox?;
+      if (box == null || !box.attached) continue;
+      if ((box.localToGlobal(Offset.zero) & box.size).contains(globalPoint)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   Future<void> _onMapPressedForPdr(ll.LatLng point) async {
     final graph = _floorGraph;
     if (graph == null || graph.nodes.isEmpty) {
@@ -2161,6 +2343,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final userDestination = _userDestination;
     final indoorRouteDestination = _indoorRouteDestination;
     final indoorRouteVisible = _hasAnyRouteVisible;
+    final debugEnabled = _debugModeController.enabled;
+    final pdrActive =
+        indoorNavigationDriver.currentRuntimeStatus.state !=
+        PdrRuntimeState.idle;
     final initialCenter = position == null
         ? _fallbackLocation
         : ll.LatLng(position.latitude, position.longitude);
@@ -2243,6 +2429,64 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
                 floors: _building!.floors,
                 selectedFloor: _activeFloor!,
                 onSelectFloor: _switchOverlayFloor,
+              ),
+            ),
+          ),
+
+        // PDR 제어 — 실내 지도 탭과 같은 자리(하단 홈/실내 세그먼트 왼쪽,
+        // 층 선택기 옆)에 같은 위젯으로 놓는다. 두 화면에서 버튼이 옮겨 다니면
+        // 실측 중에 "지금 어느 화면인지"를 먼저 확인해야 해서 테스트가 끊긴다.
+        //
+        // 노출 조건에 pdrActive를 함께 두는 이유: 세션이 도는 중에 사용자가
+        // 지도를 축소하면 _handleCameraIdle이 실내 진입 오버레이를 끄는데,
+        // 그때 버튼까지 사라지면 센서는 계속 돌면서 종료·내보내기 수단이
+        // 없어진다. 진행 중인 세션은 언제나 끌 수 있어야 한다.
+        if (debugEnabled && (_indoorEntered || pdrActive))
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            right: _pdrControlRightInsetPx,
+            bottom: indoorRouteVisible ? _bottomBarLiftPx : 0,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.only(
+                  bottom: _bottomBarInnerBottomPaddingPx,
+                ),
+                child: PdrMapControl(
+                  key: _pdrControlKey,
+                  active: pdrActive,
+                  onPressed: () => unawaited(_togglePdr()),
+                  canExport:
+                      !pdrActive && (_pdrDebugRecorder?.hasSnapshot ?? false),
+                  exporting: _exportingPdrDebugJson,
+                  onExport: () => unawaited(_exportPdrDebugJson()),
+                  shareButtonKey: _pdrShareButtonKey,
+                ),
+              ),
+            ),
+          ),
+
+        // 디버그 설정 진입점도 실내 탭과 같은 왼쪽 하단에 둔다. 야외에서
+        // 실내로 진입한 상태에서만 노출해 일반 야외 지도 화면은 그대로 둔다.
+        if (_indoorEntered)
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            left: 12,
+            bottom: indoorRouteVisible ? _bottomBarLiftPx : 0,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.only(
+                  bottom: _bottomBarInnerBottomPaddingPx,
+                ),
+                child: DebugModeSettingsButton(
+                  key: _debugModeSettingsKey,
+                  controller: _debugModeController,
+                  onPressed: () =>
+                      showDebugModeSettingsSheet(context, _debugModeController),
+                ),
               ),
             ),
           ),
