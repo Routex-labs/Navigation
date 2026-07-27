@@ -123,6 +123,28 @@ const _highlightLineLayerId = 'outdoor-highlight-line';
 const _dimScrimSourceId = 'outdoor-dim-scrim';
 const _dimScrimFillLayerId = 'outdoor-dim-scrim-fill';
 
+// 디버그 모드 전용 PDR 진단 레이어. 실내 지도(floor_plan_view.dart)가 이미
+// 같은 세 경로를 그리고 있어서, **색·굵기·점선 패턴을 그대로 맞춘다** — 두
+// 화면에서 같은 선이 다른 색으로 보이면 진단 자체를 믿을 수 없게 된다.
+//
+// 세 경로를 따로 두는 이유는 PDR 파이프라인의 단계를 눈으로 분리해 보기
+// 위해서다. raw(주황 점선)는 걸음 추정이 만든 날것의 궤적, confirmed(초록)는
+// 그중 확정된 걸음만, matched(보라)는 confirmed를 통행 그래프 간선에 스냅한
+// 결과다. 셋이 갈라지는 지점이 곧 어느 단계에서 틀어졌는지를 가리킨다.
+const _debugGraphSourceId = 'outdoor-debug-graph';
+const _debugGraphEdgeLayerId = 'outdoor-debug-graph-edges';
+const _debugGraphActiveEdgeLayerId = 'outdoor-debug-graph-active-edges';
+const _debugGraphNodeLayerId = 'outdoor-debug-graph-nodes';
+const _debugGraphActiveNodeLayerId = 'outdoor-debug-graph-active-nodes';
+const _pdrRawTrailSourceId = 'outdoor-pdr-raw-trail';
+const _pdrRawTrailLayerId = 'outdoor-pdr-raw-trail-line';
+const _pdrConfirmedTrailSourceId = 'outdoor-pdr-confirmed-trail';
+const _pdrConfirmedTrailCasingLayerId = 'outdoor-pdr-confirmed-trail-casing';
+const _pdrConfirmedTrailLayerId = 'outdoor-pdr-confirmed-trail-line';
+const _pdrMatchedTrailSourceId = 'outdoor-pdr-matched-trail';
+const _pdrMatchedTrailCasingLayerId = 'outdoor-pdr-matched-trail-casing';
+const _pdrMatchedTrailLayerId = 'outdoor-pdr-matched-trail-line';
+
 // 건물 폴리곤의 기본/눌린 상태 fill opacity. 기본은 옅게 존재만 알리고,
 // 사용자가 탭한 순간 잠깐 진하게 반짝여서 "인식됐다"는 시각 피드백을 준다.
 const _buildingFillOpacityDefault = 0.15;
@@ -484,6 +506,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       if (!mounted) return;
       setState(() => _pdrTrailState.recordSnapshot(snapshot));
       _syncPdrCurrentLayer();
+      unawaited(_syncDebugPdrLayers());
     });
     _pdrCalibrationSub = indoorNavigationDriver.calibration.listen((status) {
       _pdrDebugRecorder?.recordCalibration(status);
@@ -494,6 +517,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _setPlacingAnchor(false);
       }
       _syncPdrCurrentLayer();
+      unawaited(_syncDebugPdrLayers());
     });
     _loadBuildingEntrance();
     _positionSubscription = watchPosition().listen(
@@ -523,6 +547,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
             PdrRuntimeState.idle) {
       unawaited(_stopPdrWhenDebugModeTurnsOff());
     }
+    // 디버그 시트에서 개별 경로 토글을 켜고 끄면 여기로 들어온다. 레이어는
+    // 이미 등록돼 있으므로 데이터만 다시 채우면 즉시 반영된다.
+    unawaited(_syncDebugPdrLayers());
     if (mounted) setState(() {});
   }
 
@@ -577,6 +604,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
             geojson?['map_calibration_version'] as String? ?? 'unversioned';
       });
       _syncPdrCurrentLayer();
+      unawaited(_syncDebugPdrLayers());
     } catch (_) {
       // 로드 실패 시 앵커 배치·매장 탭은 안내로 막고 나머지 야외 지도 동작은
       // 그대로 유지한다.
@@ -637,6 +665,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await _ensureIndoorTilesRegistered();
     await _loadFloorGraph(building.id, floor);
     _syncPdrCurrentLayer();
+    unawaited(_syncDebugPdrLayers());
     _syncRouteLayer();
     _syncHighlightLayer();
     _notifyRouteVisibilityIfChanged();
@@ -1321,6 +1350,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _pdrLocationDotImageName,
       await _renderPdrLocationIcon(showHeading: false),
     );
+    // PDR 진단 레이어를 현재 위치 마커보다 **먼저** 등록해, 마커가 항상 경로
+    // 위에 오게 한다. 진단 선이 현재 위치를 덮으면 정작 어디에 서 있는지가
+    // 안 보인다.
+    await _registerDebugPdrLayers(controller);
+
     await controller.addSource(
       _pdrCurrentSourceId,
       GeojsonSourceProperties(data: _emptyCollection()),
@@ -1364,6 +1398,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncDestinationLayer();
     _syncRouteLayer();
     _syncPdrCurrentLayer();
+    unawaited(_syncDebugPdrLayers());
     _syncHighlightLayer();
     _syncDimScrimLayer();
     _ensureIndoorTilesRegistered();
@@ -2000,6 +2035,155 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     return true;
   }
 
+  /// 디버그 PDR 진단 소스·레이어를 한 번 등록한다. 색·굵기·점선은 실내 지도
+  /// (floor_plan_view.dart)와 같은 값을 쓴다 — 근거는 소스 ID 정의 위 주석 참고.
+  Future<void> _registerDebugPdrLayers(MapLibreMapController controller) async {
+    await controller.addSource(
+      _debugGraphSourceId,
+      GeojsonSourceProperties(data: _emptyCollection()),
+    );
+    await controller.addLineLayer(
+      _debugGraphSourceId,
+      _debugGraphEdgeLayerId,
+      const LineLayerProperties(
+        lineColor: '#607D8B',
+        lineWidth: 2,
+        lineOpacity: 0.72,
+        lineDasharray: [2, 1.5],
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      filter: ['==', ['get', 'kind'], 'edge'],
+      enableInteraction: false,
+    );
+    // 현재 PDR이 올라타 있다고 판정된 간선만 굵은 청록으로 덧그린다.
+    await controller.addLineLayer(
+      _debugGraphSourceId,
+      _debugGraphActiveEdgeLayerId,
+      const LineLayerProperties(
+        lineColor: '#00ACC1',
+        lineWidth: 5,
+        lineOpacity: 0.88,
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      filter: [
+        'all',
+        ['==', ['get', 'kind'], 'edge'],
+        ['==', ['get', 'active'], true],
+      ],
+      enableInteraction: false,
+    );
+    await controller.addCircleLayer(
+      _debugGraphSourceId,
+      _debugGraphNodeLayerId,
+      const CircleLayerProperties(
+        circleRadius: 4,
+        circleColor: '#FFFFFF',
+        circleStrokeColor: '#455A64',
+        circleStrokeWidth: 2,
+      ),
+      filter: ['==', ['get', 'kind'], 'node'],
+      enableInteraction: false,
+    );
+    await controller.addCircleLayer(
+      _debugGraphSourceId,
+      _debugGraphActiveNodeLayerId,
+      const CircleLayerProperties(
+        circleRadius: 6,
+        circleColor: '#00ACC1',
+        circleStrokeColor: '#FFFFFF',
+        circleStrokeWidth: 2,
+      ),
+      filter: [
+        'all',
+        ['==', ['get', 'kind'], 'node'],
+        ['==', ['get', 'active'], true],
+      ],
+      enableInteraction: false,
+    );
+
+    // raw: 걸음 추정이 만든 날것의 궤적. 점선이라 확정 경로와 겹쳐도 구분된다.
+    await controller.addSource(
+      _pdrRawTrailSourceId,
+      GeojsonSourceProperties(data: _emptyCollection()),
+    );
+    await controller.addLineLayer(
+      _pdrRawTrailSourceId,
+      _pdrRawTrailLayerId,
+      const LineLayerProperties(
+        lineColor: '#F57C00',
+        lineWidth: 3.25,
+        lineOpacity: 0.95,
+        lineDasharray: [1.5, 1.5],
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      enableInteraction: false,
+    );
+
+    // confirmed: 확정된 걸음만. 흰 casing을 깔아 어두운 배경에서도 읽힌다.
+    await controller.addSource(
+      _pdrConfirmedTrailSourceId,
+      GeojsonSourceProperties(data: _emptyCollection()),
+    );
+    await controller.addLineLayer(
+      _pdrConfirmedTrailSourceId,
+      _pdrConfirmedTrailCasingLayerId,
+      const LineLayerProperties(
+        lineColor: '#FFFFFF',
+        lineWidth: 6.25,
+        lineOpacity: 0.82,
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      enableInteraction: false,
+    );
+    await controller.addLineLayer(
+      _pdrConfirmedTrailSourceId,
+      _pdrConfirmedTrailLayerId,
+      const LineLayerProperties(
+        lineColor: '#2E7D32',
+        lineWidth: 3.25,
+        lineOpacity: 0.96,
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      enableInteraction: false,
+    );
+
+    // matched: confirmed를 통행 그래프에 스냅한 결과. 셋이 갈라지는 지점이
+    // 어느 단계에서 틀어졌는지를 가리킨다.
+    await controller.addSource(
+      _pdrMatchedTrailSourceId,
+      GeojsonSourceProperties(data: _emptyCollection()),
+    );
+    await controller.addLineLayer(
+      _pdrMatchedTrailSourceId,
+      _pdrMatchedTrailCasingLayerId,
+      const LineLayerProperties(
+        lineColor: '#FFFFFF',
+        lineWidth: 6.5,
+        lineOpacity: 0.9,
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      enableInteraction: false,
+    );
+    await controller.addLineLayer(
+      _pdrMatchedTrailSourceId,
+      _pdrMatchedTrailLayerId,
+      const LineLayerProperties(
+        lineColor: '#7E57C2',
+        lineWidth: 3.25,
+        lineOpacity: 0.96,
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      enableInteraction: false,
+    );
+  }
+
   Future<void> _syncPdrCurrentLayer() async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
@@ -2052,6 +2236,175 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       anchor.anchorLocalM.northM,
     );
     return ll.LatLng(wgs84.$1, wgs84.$2);
+  }
+
+  /// PDR 스냅샷의 층 로컬 좌표 경로들. 실내 지도와 같은 계산을 쓴다 — 두
+  /// 화면이 다른 값을 그리면 진단이 서로를 반박하게 된다.
+  ///
+  /// 앵커가 없거나 지금 보고 있는 층과 다른 층에 찍혀 있으면 빈 경로다.
+  /// 층을 바꾸면 그 층 경로만 보여야 하기 때문이다.
+  List<PdrLocalPoint> get _pdrConfirmedFloorPath {
+    final snapshot = _pdrTrailState.snapshot;
+    final anchor = _pdrTrailState.anchor;
+    final graph = _floorGraph;
+    if (snapshot == null ||
+        anchor == null ||
+        anchor.floorId != _activeFloor ||
+        graph == null ||
+        graph.nodes.isEmpty) {
+      return const [];
+    }
+    final pdrToFloor = FloorCoordinateTransform(anchor);
+    return snapshot.path.map(pdrToFloor.toFloor).toList(growable: false);
+  }
+
+  /// 확정 전 미리보기(preview)까지 포함한 날것의 궤적.
+  List<PdrLocalPoint> get _pdrRawFloorPath {
+    final snapshot = _pdrTrailState.snapshot;
+    final anchor = _pdrTrailState.anchor;
+    final graph = _floorGraph;
+    if (snapshot == null ||
+        anchor == null ||
+        anchor.floorId != _activeFloor ||
+        graph == null ||
+        graph.nodes.isEmpty) {
+      return const [];
+    }
+    final pdrToFloor = FloorCoordinateTransform(anchor);
+    return snapshot.preview.path
+        .map(pdrToFloor.toFloor)
+        .toList(growable: false);
+  }
+
+  /// confirmed 경로를 통행 간선에 스냅한 결과. 단순 스냅 점을 직선으로 잇지
+  /// 않고 간선이 바뀌는 구간은 그래프 경로로 펼친다(matchRoutedPath).
+  List<PdrLocalPoint> get _pdrMatchedFloorPath {
+    final graph = _floorGraph;
+    final confirmed = _pdrConfirmedFloorPath;
+    if (graph == null || confirmed.isEmpty) return const [];
+    return FloorMapMatcher(graph).matchRoutedPath(confirmed);
+  }
+
+  /// PDR이 올라타 있다고 판정된 간선들. 세션 시작 직후 원점 하나만 투영돼
+  /// 아직 걷지도 않은 간선이 강조되는 것을 막으려고 실제 이동이 생긴 뒤에만
+  /// 채운다.
+  Set<String> get _pdrMatchedEdgeIds {
+    final graph = _floorGraph;
+    final confirmed = _pdrConfirmedFloorPath;
+    if (graph == null || !_hasMeaningfulPdrMovement(confirmed)) return const {};
+    return FloorMapMatcher(
+      graph,
+    ).matchPath(confirmed).map((point) => point.edgeId).toSet();
+  }
+
+  /// 세션 시작 직후에는 원점 한 개만 가장 가까운 간선에 투영되면서, 아직 걷지도
+  /// 않았는데 그 간선 전체가 청록색으로 강조될 수 있다. 실내 지도와 같은 기준
+  /// (누적 이동 0.2 m)을 쓴다 — 두 화면이 다른 기준을 쓰면 같은 세션에서 활성
+  /// 간선이 한쪽에만 뜬다.
+  bool _hasMeaningfulPdrMovement(List<PdrLocalPoint> path) {
+    if (path.length < 2) return false;
+    var distanceM = 0.0;
+    for (var index = 1; index < path.length; index++) {
+      final dx = path[index].eastM - path[index - 1].eastM;
+      final dy = path[index].northM - path[index - 1].northM;
+      distanceM += math.sqrt(dx * dx + dy * dy);
+      if (distanceM >= 0.2) return true;
+    }
+    return false;
+  }
+
+  List<ll.LatLng> _floorPathToWgs84(List<PdrLocalPoint> path) {
+    final graph = _floorGraph;
+    if (graph == null || path.isEmpty) return const [];
+    final floorToWgs84 = fitFloorGeoTransform(graph.nodes);
+    return path
+        .map((point) {
+          final wgs84 = floorToWgs84.apply(point.eastM, point.northM);
+          return ll.LatLng(wgs84.$1, wgs84.$2);
+        })
+        .toList(growable: false);
+  }
+
+  /// 디버그 모드의 PDR 진단 레이어(그래프 노드·간선 + 세 경로)를 갱신한다.
+  ///
+  /// 디버그 모드가 꺼져 있거나 개별 토글이 꺼져 있으면 해당 소스를 비운다 —
+  /// 레이어를 지웠다 다시 만들지 않고 데이터만 비우는 편이 층 전환·스타일
+  /// 재로드와 경쟁하지 않아 안전하다.
+  Future<void> _syncDebugPdrLayers() async {
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    final debug = _debugModeController;
+    final on = debug.enabled;
+
+    // 그래프 노드·간선은 실내 지도와 같은 공용 변환기를 쓴다. 직접 from→to
+    // 직선을 긋지 않는 것이 중요하다 — 간선에 geometryLocalM(꺾인 복도)이 있으면
+    // 그 형상을 따라야 하고, 활성 간선에 물린 노드도 함께 강조돼야 한다.
+    final overlay = on
+        ? buildDebugMapOverlay(
+            _floorGraph,
+            showNodes: debug.showGraphNodes,
+            showEdges: debug.showGraphEdges,
+            activeEdgeIds: _pdrMatchedEdgeIds,
+          )
+        : const DebugMapOverlay();
+    final features = <Map<String, dynamic>>[
+      for (final edge in overlay.edges)
+        {
+          'type': 'Feature',
+          'properties': {'kind': 'edge', 'active': edge.active},
+          'geometry': {
+            'type': 'LineString',
+            'coordinates': [
+              for (final p in edge.points) [p.longitude, p.latitude],
+            ],
+          },
+        },
+      for (final node in overlay.nodes)
+        {
+          'type': 'Feature',
+          'properties': {'kind': 'node', 'active': node.active},
+          'geometry': {
+            'type': 'Point',
+            'coordinates': [node.position.longitude, node.position.latitude],
+          },
+        },
+    ];
+    await controller.setGeoJsonSource(
+      _debugGraphSourceId,
+      _collection(features),
+    );
+
+    await _setTrail(
+      controller,
+      _pdrRawTrailSourceId,
+      on && debug.showRawPdrPath ? _floorPathToWgs84(_pdrRawFloorPath) : const [],
+    );
+    await _setTrail(
+      controller,
+      _pdrConfirmedTrailSourceId,
+      on && debug.showConfirmedPdrPath
+          ? _floorPathToWgs84(_pdrConfirmedFloorPath)
+          : const [],
+    );
+    await _setTrail(
+      controller,
+      _pdrMatchedTrailSourceId,
+      on && debug.showMapMatchedPdrPath
+          ? _floorPathToWgs84(_pdrMatchedFloorPath)
+          : const [],
+    );
+  }
+
+  /// 점 2개 미만이면 LineString이 성립하지 않아 소스를 비운다.
+  Future<void> _setTrail(
+    MapLibreMapController controller,
+    String sourceId,
+    List<ll.LatLng> points,
+  ) async {
+    await controller.setGeoJsonSource(
+      sourceId,
+      points.length < 2 ? _emptyCollection() : _collection([_lineFeature(points)]),
+    );
   }
 
   /// 사용자가 바라보는 방향(true north 기준, 시계방향 도). PDR 세션이 heading을
@@ -2316,6 +2669,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (!mounted) return;
     _setPlacingAnchor(false);
     _syncPdrCurrentLayer();
+    unawaited(_syncDebugPdrLayers());
     _showSnack('시작점을 통로에 맞췄습니다.');
   }
 
