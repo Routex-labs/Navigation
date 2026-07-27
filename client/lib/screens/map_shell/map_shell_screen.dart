@@ -7,7 +7,6 @@ import '../../models/favorite_place.dart';
 import '../../models/floor_plan.dart';
 import '../../models/poi_search_result.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/ai_search_sheet.dart';
 import '../../widgets/building_switcher_sheet.dart';
 import '../../widgets/category_icon.dart';
 import '../../widgets/category_stores_sheet.dart';
@@ -187,26 +186,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
             subtitle: '${building.floors.length}개 층',
           );
         });
-      case SearchSheetAiRequested(:final query):
-        await _openAiSearch(initialQuery: query);
     }
   }
-
-  /// 카테고리 열의 "AI 검색" pill과 검색 시트의 빈 결과에서 함께 여는 패널.
-  /// 형태소 정규화 + 의미 검색(`/query/ai`)이 여기서 돌아간다.
-  Future<void> _openAiSearch({String? initialQuery}) async {
-    final store = await _withMapsLocked(
-      () => AiSearchSheet.show(
-        context,
-        buildingId: _buildingId,
-        currentFloorId: _activeIndoorFloor,
-        initialQuery: initialQuery,
-      ),
-    );
-    if (!mounted || store == null) return;
-    await _runSheetChain(() => _showStoreInfo(store));
-  }
-
 
   /// 매장 정보 시트를 띄운다. 검색 결과를 탭했을 때와 지도 위 매장 폴리곤을
   /// 직접 탭했을 때 모두 이 메서드를 거쳐 같은 시트가 뜨고, 출발지/도착지로
@@ -613,11 +594,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
                   children: [
                     _FavoritesPill(key: _favoritesPillKey, onTap: _openFavorites),
                     const SizedBox(width: 8),
-                    // 카테고리 chip보다 앞(장소 pill 바로 다음)에 둔다. 검색이
-                    // 빈손일 때 사용자가 바로 다음으로 집는 수단이라 눈에 잘
-                    // 띄는 자리가 필요하다.
-                    _AiSearchPill(onTap: () => _openAiSearch()),
-                    const SizedBox(width: 8),
                     // 야외·실내 모드 모두에서 노출한다. _buildingId가 항상
                     // 현재 대상 건물(기본값 demoBuildingId)이라, 야외에서 chip을
                     // 눌러도 그 건물의 카테고리 매장 시트가 정상적으로 뜬다.
@@ -699,49 +675,6 @@ class _FavoritesPill extends StatelessWidget {
               SizedBox(width: 6),
               Text(
                 '장소',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.text,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 저장한 장소 pill 다음(카테고리 chip 앞)에 붙는 AI 검색 진입 pill.
-///
-/// 상단 검색은 경량 매칭만 쓰고, 뜻으로 찾는 의미 검색(`/query/ai`)은 여기로
-/// 분리했다. 매 검색마다 임베딩 모델을 태우면 잘 되던 검색까지 느려지므로,
-/// 사용자가 필요할 때 명시적으로 고르게 한다.
-class _AiSearchPill extends StatelessWidget {
-  const _AiSearchPill({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      elevation: 3,
-      shadowColor: Colors.black.withValues(alpha: 0.15),
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.auto_awesome, size: 16, color: AppColors.primary),
-              SizedBox(width: 6),
-              Text(
-                'AI 검색',
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w700,
