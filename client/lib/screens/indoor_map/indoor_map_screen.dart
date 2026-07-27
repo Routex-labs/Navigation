@@ -172,8 +172,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   final DebugModeController _debugModeController = debugModeController;
 
   /// 지금 이 실내 지도가 보여주는 층 이름(예: "B2"). 층이 아직 로드되지
-  /// 않았거나 건물 로딩 실패 상태면 null. MapShellScreen이 상단 검색과
-  /// 길찾기 시트의 검색을 현재 층으로 좁힐 때 참조한다.
+  /// 않았거나 건물 로딩 실패 상태면 null. MapShellScreen이 길찾기·카테고리
+  /// 시트의 검색을 현재 층으로 좁힐 때 참조한다. 상단 검색창은 층으로 좁히지
+  /// 않고 건물 전체를 뒤지므로 이 값을 쓰지 않는다.
   String? get currentFloor => _selectedFloor;
 
   /// 검색·길찾기 시트가 지도 위에 떠 있는 동안 지도 제스처를 꺼서, 시트를

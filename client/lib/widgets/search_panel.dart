@@ -41,7 +41,6 @@ class SearchPanel extends StatefulWidget {
     required this.buildingId,
     required this.query,
     required this.submitTick,
-    required this.currentFloorId,
     required this.onStorePicked,
     required this.onBuildingPicked,
   });
@@ -55,10 +54,6 @@ class SearchPanel extends StatefulWidget {
   /// 붙인다 — 같은 글자로 다시 엔터를 눌러도 재검색되게 하려고 bool이 아닌
   /// 카운터로 받는다.
   final int submitTick;
-
-  /// 검색 시점의 층을 그때그때 물어본다. 값으로 받으면 사용자가 층을 바꾼 뒤
-  /// 상위가 리빌드되기 전까지 옛 층으로 검색하게 된다.
-  final String? Function() currentFloorId;
 
   final ValueChanged<PoiSearchResult> onStorePicked;
   final ValueChanged<Building> onBuildingPicked;
@@ -142,16 +137,18 @@ class _SearchPanelState extends State<SearchPanel> {
       _searchingSemantic = false;
     });
 
-    final floorId = widget.currentFloorId();
     List<PoiSearchResult> results;
     Building? building;
     var fromSemantic = false;
     try {
       // 1단계: 경량 매칭. 매장 이름·동의어는 여기서 즉시 걸린다.
+      // 층으로 좁히지 않고 **건물 전체**를 뒤진다 — 사용자가 이름을 알고
+      // 검색할 때는 그 매장이 몇 층인지 모르는 게 보통이라, 현재 층으로 좁히면
+      // 분명히 있는 매장이 "결과 없음"으로 나온다. 어느 층인지는 결과 줄에
+      // 함께 적혀 있고, 다른 층이면 경로도 층 간 경로로 이어진다.
       results = await destinationRepository.searchDestinations(
         widget.buildingId,
         query,
-        currentFloorId: floorId,
       );
       final buildings = await buildingRepository.getAllBuildings();
       building = buildings
@@ -166,7 +163,6 @@ class _SearchPanelState extends State<SearchPanel> {
         results = await destinationRepository.searchDestinationsAi(
           widget.buildingId,
           query,
-          currentFloorId: floorId,
         );
         fromSemantic = results.isNotEmpty;
       }

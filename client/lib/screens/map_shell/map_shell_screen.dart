@@ -159,9 +159,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   /// 지금 화면이 "건물 안"을 보고 있는지. 실내 탭이거나, 야외 탭이어도 실내
   /// 진입 오버레이가 켜져 있으면 사용자에게는 똑같이 건물 내부를 보고 있는
-  /// 상태다. 상단 검색·길찾기·카테고리 시트는 이 값으로 분기해야 한다 —
-  /// 모드(_mode)만 보고 분기하면, 야외 지도 위에서 실내 도면을 훑는 동안
-  /// 검색이 매장이 아닌 건물 이름만 뒤져 "아무것도 안 나오는" 상태가 된다.
+  /// 상태다. 길찾기·카테고리 시트는 이 값으로 분기해야 한다 — 모드(_mode)만
+  /// 보고 분기하면, 야외 지도 위에서 실내 도면을 훑는 동안 길찾기 후보가
+  /// 매장이 아닌 건물 이름만 뒤져 "아무것도 안 나오는" 상태가 된다.
   bool get _indoorContextActive =>
       _mode == MapMode.indoor || _outdoorIndoorEntered;
 
@@ -711,7 +711,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
                     buildingId: _buildingId,
                     query: _searchQuery,
                     submitTick: _searchSubmitTick,
-                    currentFloorId: () => _activeIndoorFloor,
                     onStorePicked: _onSearchStorePicked,
                     onBuildingPicked: _onSearchBuildingPicked,
                   ),
