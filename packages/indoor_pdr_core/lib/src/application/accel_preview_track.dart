@@ -35,6 +35,14 @@ class AccelPreviewTrack {
 
   final int maxPoints;
   final List<PdrLocalPoint> path = [PdrLocalPoint.zero];
+
+  /// [path]와 같은 길이·같은 인덱스로 유지되는, 실제 반영된 peak 시각.
+  ///
+  /// 거부된 peak는 path에 점을 만들지 않으므로 여기에도 남지 않는다. 원점은
+  /// 대응 peak가 없어 null이다. 배치 peak(`delta > 1`)는 알고 있는 시각이
+  /// `latestPeakMs` 하나뿐이라 같은 값을 delta번 넣어 인덱스를 맞춘다.
+  final List<int?> acceptedPeakTimesMs = [null];
+
   PdrLocalPoint position = PdrLocalPoint.zero;
   int steps = 0;
   int acceptedPeaks = 0;
@@ -147,6 +155,7 @@ class AccelPreviewTrack {
     for (var i = 0; i < delta; i += 1) {
       position += stepOffset;
       path.add(position);
+      acceptedPeakTimesMs.add(peakMs);
     }
     steps += delta;
     acceptedPeaks += delta;
@@ -163,6 +172,9 @@ class AccelPreviewTrack {
     path
       ..clear()
       ..add(PdrLocalPoint.zero);
+    acceptedPeakTimesMs
+      ..clear()
+      ..add(null);
     position = PdrLocalPoint.zero;
     steps = 0;
     acceptedPeaks = 0;
@@ -180,7 +192,10 @@ class AccelPreviewTrack {
 
   void _trim() {
     if (path.length > maxPoints) {
-      path.removeRange(0, path.length - maxPoints);
+      final drop = path.length - maxPoints;
+      path.removeRange(0, drop);
+      // 인덱스 정렬이 깨지면 확정 소비가 엉뚱한 걸음을 지우므로 반드시 함께 자른다.
+      acceptedPeakTimesMs.removeRange(0, drop);
     }
   }
 

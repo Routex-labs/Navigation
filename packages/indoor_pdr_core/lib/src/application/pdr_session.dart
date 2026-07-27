@@ -94,6 +94,9 @@ class PdrSession {
 
   int iosTrackedSteps = 0;
 
+  /// 마지막으로 confirmed 경로에 반영된 배치. snapshot이 그대로 실어 나른다.
+  PdrAppliedBatch? _lastAppliedBatch;
+
   /// 적용된 confirmed 배치 진단 훅(telemetry/테스트용). appliedSteps>0일 때만 호출.
   void Function(AppliedBatchInfo info)? onBatchApplied;
 
@@ -226,6 +229,13 @@ class PdrSession {
     );
     iosTrackedSteps += applied;
     _stride.addTrackedDistance(application.stepDistanceMeters * applied);
+    _lastAppliedBatch = PdrAppliedBatch(
+      batchId: application.batchId,
+      spanStartMs: application.spanStartMs,
+      spanEndMs: application.spanEndMs,
+      appliedSteps: applied,
+      appliedDistanceM: application.stepDistanceMeters * applied,
+    );
     _roninTrack.apply(
       application,
       currentWalkDeg: walkingHeadingDeg,
@@ -257,6 +267,9 @@ class PdrSession {
     _accelPreview.reset();
     _roninTrack.reset();
     iosTrackedSteps = 0;
+    // _pedometer.reset()이 batchId를 1로 되돌리므로 이전 배치 식별자를 남기면
+    // 소비자가 새 세션의 batchId=1을 "이미 소비함"으로 오판한다.
+    _lastAppliedBatch = null;
     _pedometer.reset(
       initialTrackingOn: _tracking,
       newSessionId: newStepSessionId,
@@ -330,9 +343,13 @@ class PdrSession {
         path: List.unmodifiable(_accelPreview.path),
         steps: _accelPreview.steps,
         distanceM: _accelPreview.distanceM,
+        acceptedPeakTimesMs: List.unmodifiable(
+          _accelPreview.acceptedPeakTimesMs,
+        ),
       ),
       ronin: _roninTrack.snapshot,
       quality: quality,
+      lastAppliedBatch: _lastAppliedBatch,
     );
   }
 
