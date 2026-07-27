@@ -44,14 +44,21 @@ TRANS_CODE_TYPES = {
     "OB-STAIRS": "stairs",
 }
 
+# object.attributeCode -> (category, subcategory). 다베오는 식음료 매장도 "시설
+# 속성"으로 태깅하므로(OB-CAFE/OB-RESTAURANT), 속성이 붙었다는 이유만으로 전부
+# 편의시설로 넣으면 스타벅스 리저브·런던베이글 뮤지엄 같은 매장이 편의시설이 된다.
+# 대분류를 속성별로 명시해 식음료는 식음료로 떨어지게 한다.
+# 주의: OB-RESTAURANT는 거친 태그라 레스토랑/카페·베이커리/식품·그로서리를 구분하지
+# 못한다. 여기서는 가장 흔한 값을 기본으로 주고, 매장별 세부 분류는 생성된
+# resources/studio/.../stores_{층}.json에서 손으로 다듬는다(재생성 시 재적용 필요).
 FACILITY_ATTRIBUTES = {
-    "OB-ELEVATOR": "elevator",
-    "OB-ESCALATOR_UP": "escalator",
-    "OB-ESCALATOR_DOWN": "escalator",
-    "OB-TOILET": "restroom",
-    "OB-CAFE": "cafe",
-    "OB-RESTAURANT": "restaurant",
-    "OB-OTHER_FACILITIES": "facility",
+    "OB-ELEVATOR": ("편의시설", "elevator"),
+    "OB-ESCALATOR_UP": ("편의시설", "escalator"),
+    "OB-ESCALATOR_DOWN": ("편의시설", "escalator"),
+    "OB-TOILET": ("편의시설", "restroom"),
+    "OB-CAFE": ("식음료", "카페·베이커리"),
+    "OB-RESTAURANT": ("식음료", "레스토랑"),
+    "OB-OTHER_FACILITIES": ("편의시설", "facility"),
 }
 
 
@@ -237,13 +244,15 @@ def build_floor(payload: dict, floor: dict, geo: dict) -> tuple[dict, dict]:
         obj = objects.get(poi.get("objectId") or "")
         shape = polygon((obj or {}).get("coordinates")) if obj else []
         attribute = (obj or {}).get("attributeCode")
-        subcategory = FACILITY_ATTRIBUTES.get(attribute or "")
+        # 속성이 없는 일반 리테일은 대분류를 알 수 없어 "매장"으로 두고,
+        # 실제 카테고리는 시드 단계의 store_categories*.json 오버라이드가 채운다.
+        category, subcategory = FACILITY_ATTRIBUTES.get(attribute or "", ("매장", "매장"))
         store_id = poi["id"]
         record = {
             "id": store_id,
             "name": title,
-            "category": "편의시설" if subcategory else "매장",
-            "subcategory": subcategory or "매장",
+            "category": category,
+            "subcategory": subcategory,
             "floor_id": floor_id,
             "entrance_node_id": None,
             "entrance_local_m": to_local(poi.get("position") or {}),

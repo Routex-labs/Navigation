@@ -57,6 +57,22 @@ def test_매장_입구는_실존하는_노드를_가리킨다(real_db_session):
     assert dangling == []
 
 
+# 다베오 원본은 식음료 매장도 "시설 속성"(OB-RESTAURANT/OB-CAFE)으로 태깅하는 탓에
+# 변환기가 전부 편의시설로 뭉갤 수 있다. 층·소분류가 서로 다른 대표 매장 몇 곳만
+# 골라 대분류가 식음료로 유지되는지 확인한다. 개수는 데이터 편집마다 바뀌므로
+# 단언하지 않고, 소분류도 재조정 여지가 있어 대분류만 고정한다.
+@pytest.mark.parametrize(
+    "store_name",
+    ["스타벅스 리저브", "런던베이글 뮤지엄", "파이브 가이즈", "정돈 프리미엄", "카페 H"],
+)
+def test_대표_식음료_매장은_편의시설로_분류되지_않는다(real_db_session, store_name):
+    stores = real_db_session.scalars(select(Store).where(Store.name == store_name)).all()
+
+    assert stores, f"{store_name!r}가 실데이터에 없다"
+    for store in stores:
+        assert store.category == "식음료", f"{store_name} -> {store.category}"
+
+
 # 층을 잇는 수직 전이 간선이 생성되고, 서로 다른 층을 잇는지 확인한다.
 def test_수직_전이_간선이_층을_잇는다(real_db_session):
     node_floor = dict(real_db_session.execute(select(Node.id, Node.floor_id)).all())
