@@ -61,22 +61,28 @@ bool get _isMapSupportedOnThisPlatform =>
 const _buildingSourceId = 'outdoor-building';
 const _buildingFillLayerId = 'outdoor-building-fill';
 const _buildingOutlineLayerId = 'outdoor-building-outline';
-const _indoorTilesSourceId = 'outdoor-indoor-tiles';
-const _indoorFootprintLayerId = 'outdoor-indoor-footprint';
-const _indoorStoresFillLayerId = 'outdoor-indoor-stores-fill';
+// 실내 오버레이 소스·레이어 ID **베이스 이름**. 층을 바꿀 때마다 세대(generation)
+// 카운터를 이 뒤에 붙여 매번 다른 실제 ID를 만든다 — 같은 ID로 removeSource →
+// addSource를 반복하면 maplibre_gl native(Android/iOS)가 이전 소스 정리를
+// 스케줄만 한 채 리턴해 곧이은 addSource가 "source already exists"로 조용히
+// 실패하는 사례가 있었다(특정 층으로 전환 시 아무것도 안 그려지는 증상). 세대
+// 카운터로 실제 ID를 유일하게 만들면 native cleanup 경쟁이 사라진다.
+const _indoorTilesSourceIdBase = 'outdoor-indoor-tiles';
+const _indoorFootprintLayerIdBase = 'outdoor-indoor-footprint';
+const _indoorStoresFillLayerIdBase = 'outdoor-indoor-stores-fill';
 // 수직이동(에스컬레이터/엘리베이터) 구조물 폴리곤을 초록톤으로 덧칠하는 fill.
-// _indoorStoresFillLayerId 위, 라벨/아이콘보다 아래에 삽입해 초록 배경 + 라벨/
+// _indoorStoresFillLayerIdBase 위, 라벨/아이콘보다 아래에 삽입해 초록 배경 + 라벨/
 // 아이콘이 한 덩어리로 읽히게 한다. 실내 화면의 _verticalTransportFillLayerId와
 // 시각 언어를 맞춘다.
-const _indoorVerticalTransportFillLayerId =
+const _indoorVerticalTransportFillLayerIdBase =
     'outdoor-indoor-vertical-transport-fill';
-const _indoorStoresLabelLayerId = 'outdoor-indoor-stores-label';
+const _indoorStoresLabelLayerIdBase = 'outdoor-indoor-stores-label';
 // POI(엘리베이터·에스컬레이터·화장실 등 `pois` 소스 레이어) 위 아이콘 심볼과
 // `stores` 소스 레이어에 이름으로 매칭되는 편의시설(화장실·정수기·수유실 등)
 // 위 아이콘 심볼. 실내 화면과 같은 아이콘/색을 써 두 화면 사이에서 위치를
 // 이어보아도 시설 표기가 흔들리지 않는다.
-const _indoorPoiIconLayerId = 'outdoor-indoor-pois-icon';
-const _indoorStoreFacilityIconLayerId =
+const _indoorPoiIconLayerIdBase = 'outdoor-indoor-pois-icon';
+const _indoorStoreFacilityIconLayerIdBase =
     'outdoor-indoor-store-facility-icons';
 const _routeSourceId = 'outdoor-route';
 const _routeCasingLayerId = 'outdoor-route-casing';
@@ -385,6 +391,50 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   // 층 전환마다 소스/레이어는 다시 붙지만 이미지는 그대로 재사용된다.
   bool _facilityIconImagesRegistered = false;
 
+  // 실내 오버레이 소스·레이어의 세대 카운터. 층 전환마다 [_bumpIndoorIds]가
+  // 이 값을 올려 새로운 실제 ID를 만든다. 상수 대신 인스턴스 필드로 두는 이유는
+  // 파일 상단 상수 블록의 주석 참고(native remove/add 경쟁 회피).
+  int _indoorIdGeneration = 0;
+  late String _indoorTilesSourceId = _idFor(_indoorTilesSourceIdBase);
+  late String _indoorFootprintLayerId = _idFor(_indoorFootprintLayerIdBase);
+  late String _indoorStoresFillLayerId = _idFor(_indoorStoresFillLayerIdBase);
+  late String _indoorVerticalTransportFillLayerId =
+      _idFor(_indoorVerticalTransportFillLayerIdBase);
+  late String _indoorStoresLabelLayerId = _idFor(_indoorStoresLabelLayerIdBase);
+  late String _indoorPoiIconLayerId = _idFor(_indoorPoiIconLayerIdBase);
+  late String _indoorStoreFacilityIconLayerId =
+      _idFor(_indoorStoreFacilityIconLayerIdBase);
+
+  String _idFor(String base) => '$base-g$_indoorIdGeneration';
+
+  /// 다음 실내 오버레이 등록에 쓸 소스·레이어 실제 ID를 새 세대(generation)로
+  /// 갈아 끼운다. 층을 바꿀 때 remove가 완전히 끝나기 전 add가 같은 ID로 오면
+  /// maplibre_gl native가 조용히 실패하는 문제를 회피한다. 반드시 이전 세대의
+  /// remove 이후, 다음 세대의 add 전에 호출한다.
+  void _bumpIndoorIds() {
+    _indoorIdGeneration++;
+    _indoorTilesSourceId = _idFor(_indoorTilesSourceIdBase);
+    _indoorFootprintLayerId = _idFor(_indoorFootprintLayerIdBase);
+    _indoorStoresFillLayerId = _idFor(_indoorStoresFillLayerIdBase);
+    _indoorVerticalTransportFillLayerId =
+        _idFor(_indoorVerticalTransportFillLayerIdBase);
+    _indoorStoresLabelLayerId = _idFor(_indoorStoresLabelLayerIdBase);
+    _indoorPoiIconLayerId = _idFor(_indoorPoiIconLayerIdBase);
+    _indoorStoreFacilityIconLayerId =
+        _idFor(_indoorStoreFacilityIconLayerIdBase);
+  }
+
+  /// 현재 세대의 실내 오버레이 레이어 ID 목록(위→아래 순). removeLayer 순서로
+  /// 그대로 재사용할 수 있다 — 레이어는 반드시 소스보다 먼저 제거해야 한다.
+  List<String> get _indoorOverlayLayerIds => [
+        _indoorStoreFacilityIconLayerId,
+        _indoorPoiIconLayerId,
+        _indoorStoresLabelLayerId,
+        _indoorVerticalTransportFillLayerId,
+        _indoorStoresFillLayerId,
+        _indoorFootprintLayerId,
+      ];
+
   /// 실내 진입 오버레이 상태. true면 층 chip과 위치 지정 버튼 등 실내 UI를
   /// 야외 지도 위에 그린다. 건물 폴리곤 탭, 줌 임계값 초과, GPS 근접 감지
   /// 중 하나로 켜지고, 사용자가 지도를 축소해 임계값 아래로 내려가면 자동으로
@@ -535,6 +585,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         await controller.removeSource(_indoorTilesSourceId);
       } catch (_) {}
       _indoorTilesRegistered = false;
+      // 다음 등록은 새 세대 ID로. 같은 ID로 즉시 addSource를 다시 부르면
+      // native(Android/iOS)가 이전 remove의 정리를 아직 못 끝내 조용히 실패하는
+      // 경우가 있다(특정 층으로 전환 시 아무것도 안 그려지는 원인이었음).
+      _bumpIndoorIds();
     }
     await _ensureIndoorTilesRegistered();
     await _loadFloorGraph(building.id, floor);
@@ -1681,19 +1735,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _indoorTilesRegistered = false;
     }
   }
-
-  /// 실내 오버레이의 소스/레이어 제거 순서. 레이어는 반드시 소스보다 먼저
-  /// 빠져야 native가 dangling reference로 실패하지 않는다. 위→아래(=최상단
-  /// 심볼부터 밑바닥 footprint까지) 순으로 나열해 두면 remove 순서를 그대로
-  /// 재사용할 수 있다.
-  static const _indoorOverlayLayerIds = <String>[
-    _indoorStoreFacilityIconLayerId,
-    _indoorPoiIconLayerId,
-    _indoorStoresLabelLayerId,
-    _indoorVerticalTransportFillLayerId,
-    _indoorStoresFillLayerId,
-    _indoorFootprintLayerId,
-  ];
 
   /// POI/편의시설 아이콘 비트맵을 스타일당 한 번만 addImage로 등록한다.
   /// [_ensureIndoorTilesRegistered]가 층 전환마다 소스/레이어를 다시 붙일 때
