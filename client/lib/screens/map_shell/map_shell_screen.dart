@@ -621,6 +621,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
             children: [
               OutdoorMapBody(
                 key: _outdoorKey,
+                // IndexedStack은 안 보이는 쪽도 살려 두므로, 실내 탭으로
+                // 넘어갔다는 사실을 야외 지도에 직접 알려야 한다 — 그래야
+                // 실내에 있는 동안 야외 지도가 GPS를 구독하지 않는다.
+                active: _mode == MapMode.outdoor,
                 onRouteVisibleChanged: (visible) =>
                     setState(() => _outdoorRouteVisible = visible),
                 onPlacingLocationChanged: (placing) {

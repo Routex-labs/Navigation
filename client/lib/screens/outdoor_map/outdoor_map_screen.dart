@@ -341,11 +341,18 @@ Map<String, dynamic> _collection(List<Map<String, dynamic>> features) =>
 class OutdoorMapBody extends StatefulWidget {
   const OutdoorMapBody({
     super.key,
+    this.active = true,
     this.onRouteVisibleChanged,
     this.onPlacingLocationChanged,
     this.onIndoorEnteredChanged,
     this.onStoreTap,
   });
+
+  /// 이 야외 지도가 지금 화면에 보이는지. [MapShellScreen]은 야외/실내를
+  /// IndexedStack으로 겹쳐 두므로, 사용자가 실내 탭으로 넘어가도 이 위젯은
+  /// 살아 있다. 알려주지 않으면 보이지도 않는 야외 지도가 GPS를 계속 구독한다 —
+  /// 실내에 들어간 뒤에는 GPS를 쓰지 않는다는 규칙을 지키려면 이 값이 필요하다.
+  final bool active;
 
   /// ETA 카드가 화면 최하단에 새로 나타나거나 사라질 때 호출된다.
   /// 상위(MapShellScreen)가 이 값으로 하단 공용 바를 그 위로 띄운다.
@@ -466,6 +473,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// PDR 앵커 배치 대기 중인지. true면 다음 지도 탭은 건물 진입 처리가 아닌
   /// PDR 시작점 지정으로 소비된다.
   bool _placingPdrAnchor = false;
+
+  /// 실내 진입 오버레이에서 위치 보정 버튼을 누른 횟수. 실내 탭과 같은 규칙으로
+  /// 홀수 번째(1·3·5…) 탭은 실내 위치 중앙 정렬, 짝수 번째(2·4·6…) 탭은 방향
+  /// 회전을 수행한다. 순수 야외(GPS) 보정은 이 카운터를 쓰지 않는다.
+  int _recalibrateTapCount = 0;
   late final DebugPdrTrailState _pdrTrailState;
   StreamSubscription<PdrSnapshot>? _pdrSnapshotSub;
   StreamSubscription<CalibrationStatus>? _pdrCalibrationSub;
@@ -532,10 +544,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       unawaited(_syncDebugPdrLayers());
     });
     _loadBuildingEntrance();
-    _positionSubscription = watchPosition().listen(
-      _handlePosition,
-      onError: (Object _) => _handlePositionError(),
-    );
+    _syncGpsSubscription();
+  }
+
+  @override
+  void didUpdateWidget(covariant OutdoorMapBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 실내 탭으로 넘어가면(active=false) GPS 구독을 끊고, 돌아오면 다시 붙인다.
+    if (oldWidget.active != widget.active) _syncGpsSubscription();
   }
 
   @override
@@ -741,6 +757,43 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     return ll.LatLng((minLat + maxLat) / 2, (minLng + maxLng) / 2);
   }
 
+  /// 지금 GPS를 써도 되는 상태인지. 건물 안에서는 GPS를 아예 쓰지 않는다 —
+  /// 실내에서는 신호가 튀어 위치가 건물 밖으로 날아가고, 실내 위치는 PDR(위치
+  /// 지정 + 걸음 추적)이 담당하기 때문이다. 그래서 다음 두 경우에는 구독 자체를
+  /// 끊는다.
+  ///   - 실내 진입 오버레이가 켜진 상태([_indoorEntered])
+  ///   - 사용자가 하단 세그먼트로 실내 탭에 가 있어 이 화면이 안 보이는 상태
+  ///     (`widget.active == false`)
+  /// "마커만 숨기기"가 아니라 구독을 끊는 이유: 화면에 안 보여도 스트림이 살아
+  /// 있으면 위치가 계속 들어와 자동 경로 재계산·카메라 이동을 트리거한다.
+  bool get _gpsTrackingWanted => widget.active && !_indoorEntered;
+
+  /// GPS 구독을 [_gpsTrackingWanted] 상태에 맞춘다. 구독 시작/해제의 유일한
+  /// 진입점이라 중복 구독이나 해제 누락이 생기지 않는다.
+  void _syncGpsSubscription() {
+    if (_gpsTrackingWanted) {
+      if (_positionSubscription != null) return;
+      _positionSubscription = watchPosition().listen(
+        _handlePosition,
+        onError: (Object _) => _handlePositionError(),
+      );
+      return;
+    }
+    if (_positionSubscription == null) return;
+    unawaited(_positionSubscription!.cancel());
+    _positionSubscription = null;
+    // 마지막으로 알던 GPS 위치도 버린다. 남겨두면 실내에 들어간 뒤에도 마커가
+    // 그려지거나(“GPS 기반 위치가 보이면 안 된다”), 다시 야외로 나왔을 때 옛
+    // 좌표가 잠깐 현재 위치인 것처럼 보인다.
+    _pendingCenterOnPosition = false;
+    if (!mounted) return;
+    setState(() {
+      _position = null;
+      _previousAccuracy = null;
+    });
+    _syncCurrentLayer();
+  }
+
   void _handlePositionError() {
     if (!mounted) return;
     setState(() => _position = null);
@@ -749,9 +802,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   void _handlePosition(Position position) {
     if (!mounted) return;
+    // 실내 진입 직전에 이미 큐에 들어간 이벤트가 진입 후 도착할 수 있다.
+    // 구독은 끊겼어도 이 한 건이 새어들어오면 위치 마커가 다시 켜지므로 막는다.
+    if (!_gpsTrackingWanted) return;
     setState(() => _position = position);
     _syncCurrentLayer();
     _maybeAutoEnter(position);
+    // 이번 위치로 자동 실내 진입이 발동했다면 GPS 기반 걷기 경로는 더 이상
+    // 계산하지 않는다 — 사용자는 이미 건물 안이다.
+    if (_indoorEntered) return;
     _updateRoute(position);
   }
 
@@ -843,8 +902,22 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     );
   }
 
-  /// 위치 보정 버튼: 즉시 새 GPS 위치를 한 번 더 조회해 마커·지도 중심을 갱신한다.
+  /// 위치 보정 버튼.
+  ///
+  /// 실내 진입 오버레이가 켜져 있으면 GPS를 아예 건드리지 않고 실내(PDR) 위치를
+  /// 기준으로 카메라를 맞춘다 — 건물 안에서 GPS를 다시 찍으면 지도가 건물 밖
+  /// 좌표로 튀어 방금 지정한 실내 위치를 잃는다. 동작은 실내 탭
+  /// ([IndoorMapBodyState.recalibrate])과 동일하게 탭마다 번갈아 수행한다:
+  /// 홀수 번째 탭은 실내 위치를 화면 정중앙에, 짝수 번째 탭은 바라보는 방향을
+  /// 화면 위쪽에 오도록 회전.
+  ///
+  /// 순수 야외 상태에서만 예전처럼 새 GPS 위치를 한 번 더 조회해 마커·지도
+  /// 중심을 갱신한다.
   Future<void> recalibrate() async {
+    if (_indoorEntered) {
+      await _recalibrateIndoor();
+      return;
+    }
     try {
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.best),
@@ -862,6 +935,52 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         const SnackBar(content: Text('위치를 다시 확인하지 못했습니다')),
       );
     }
+  }
+
+  /// 실내 진입 오버레이에서의 위치 보정. GPS를 호출하지 않고 PDR이 알고 있는
+  /// 실내 위치·방향만 쓴다.
+  ///
+  /// 실제로 동작을 수행한 탭만 카운트를 올린다 — 위치나 heading을 아직 몰라
+  /// 안내만 띄운 탭까지 세면, 사용자가 위치를 잡은 뒤 누른 다음 탭이 "회전"
+  /// 차례로 밀려 정작 중앙 정렬이 안 된다.
+  Future<void> _recalibrateIndoor() async {
+    if (_recalibrateTapCount.isEven) {
+      // 홀수 번째 탭 — 실내 위치를 화면 정중앙으로. 앵커가 다른 층에 있거나
+      // 층 그래프가 아직 없으면 null이라 여기서 걸린다. 지도가 아직 준비되지
+      // 않았더라도 "위치를 먼저 지정하라"는 안내는 먼저 띄운다.
+      final target = _pdrCurrentWgs84();
+      if (target == null) {
+        _showSnack('아직 현재 위치가 없습니다. 위치 지정 버튼으로 먼저 위치를 잡아주세요.');
+        return;
+      }
+      final controller = _mapController;
+      if (controller == null || !_styleReady) return;
+      await controller.animateCamera(CameraUpdate.newLatLng(_toGl(target)));
+    } else {
+      // 짝수 번째 탭 — 바라보는 방향이 화면 위쪽에 오도록 회전. 중심·줌·tilt는
+      // 그대로 두고 bearing만 바꾼다.
+      final heading = _pdrCurrentHeadingDeg;
+      if (heading == null) {
+        _showSnack('아직 바라보는 방향을 알 수 없습니다. 위치 지정 후 조금 걸어 방향을 잡아주세요.');
+        return;
+      }
+      final controller = _mapController;
+      if (controller == null || !_styleReady) return;
+      final camera = controller.cameraPosition;
+      final center = camera?.target ??
+          _toGl(_pdrCurrentWgs84() ?? _entrance ?? _fallbackLocation);
+      await controller.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: center,
+            zoom: camera?.zoom ?? indoorEntryZoomThreshold,
+            bearing: heading,
+            tilt: camera?.tilt ?? 0,
+          ),
+        ),
+      );
+    }
+    _recalibrateTapCount++;
   }
 
   /// 길찾기 시트에서 도착지를 고르면 호출된다. [origin]을 주면(길찾기
@@ -1411,7 +1530,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncHighlightLayer();
     _syncDimScrimLayer();
     _ensureIndoorTilesRegistered();
-    if (_pendingCenterOnPosition && _position != null) {
+    // 스타일이 뜨기 전에 받아둔 첫 GPS 위치로의 카메라 이동. 그 사이에 실내로
+    // 들어갔다면(줌 임계값·건물 탭) 실행하지 않는다 — 실내 도면을 보고 있는데
+    // 카메라가 GPS 좌표로 튀면 안 된다.
+    if (_pendingCenterOnPosition && _position != null && _gpsTrackingWanted) {
       _pendingCenterOnPosition = false;
       await controller.animateCamera(
         CameraUpdate.newLatLng(
@@ -1638,6 +1760,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (_indoorEntered == value) return;
     setState(() => _indoorEntered = value);
     widget.onIndoorEnteredChanged?.call(value);
+    // 실내로 들어가면 GPS 구독을 끊고 마커를 지운다. 다시 나가면 재구독한다.
+    _syncGpsSubscription();
     _syncDimScrimLayer();
     // 진입/이탈로 페이드 구간 자체가 바뀌므로 이미 붙어 있는 오버레이 레이어의
     // opacity 표현식도 함께 갈아 끼운다.
@@ -1851,13 +1975,17 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _facilityIconImagesRegistered = true;
   }
 
+  /// GPS 현재 위치 마커. 실내에서는 [_gpsTrackingWanted]가 false라 항상 빈
+  /// 소스로 밀어 넣어 마커가 지도에서 사라진다 — [_syncGpsSubscription]이
+  /// `_position`을 비우는 것과 이중으로 막아, 어느 경로로 들어와도 건물 안에서
+  /// GPS 기반 위치가 보이지 않게 한다.
   Future<void> _syncCurrentLayer() async {
     final controller = _mapController;
     if (controller == null || !_styleReady) {
-      _pendingCenterOnPosition = _position != null;
+      _pendingCenterOnPosition = _gpsTrackingWanted && _position != null;
       return;
     }
-    final pos = _position;
+    final pos = _gpsTrackingWanted ? _position : null;
     if (pos == null) {
       await controller.setGeoJsonSource(_currentSourceId, _emptyCollection());
       return;
@@ -2646,7 +2774,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Widget _buildBody() {
     final position = _position;
     final accuracy = position?.accuracy ?? 0;
-    final lowAccuracy = position == null || accuracy > _lowAccuracyThresholdMeters;
+    // GPS를 쓰지 않는 실내 상태에서는 신호 품질 배지도 띄우지 않는다. 위치가
+    // 비어 있다는 이유로 "GPS 신호 약함"이 뜨면, 실내에서 GPS를 기다리는 중인
+    // 것처럼 읽혀 실제 동작(PDR 기반)과 어긋난다.
+    final lowAccuracy = _gpsTrackingWanted &&
+        (position == null || accuracy > _lowAccuracyThresholdMeters);
     final route = _route;
     final userDestination = _userDestination;
     final indoorRouteDestination = _indoorRouteDestination;
