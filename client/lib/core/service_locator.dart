@@ -3,6 +3,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'api_config.dart';
+import '../features/debug_mode/debug_mode_controller.dart';
 import '../features/indoor_navigation/application/indoor_navigation_controller.dart';
 import '../features/indoor_navigation/platform/android_pdr_motion_source.dart';
 import '../features/indoor_navigation/platform/ios_pdr_motion_source.dart';
@@ -25,6 +26,13 @@ final PdrMotionSource pdrMotionSource = switch (defaultTargetPlatform) {
 final IndoorNavigationDriver indoorNavigationDriver = IndoorNavigationDriver(
   source: pdrMotionSource,
 );
+
+/// 디버그 모드 설정도 화면 간에 공유한다. 실내 지도와 야외 지도의 실내 진입
+/// 오버레이가 각자 컨트롤러를 만들면, 한쪽에서 디버그 모드를 켜도 다른 쪽은
+/// 자기 메모리 값(꺼짐)을 계속 보여줘 같은 세션 안에서 PDR 진입점이 있다
+/// 없다 한다. MapShellScreen이 두 body를 IndexedStack으로 동시에 살려 두기
+/// 때문에 특히 눈에 띈다 — 하나만 두고 양쪽이 같은 상태를 구독한다.
+final DebugModeController debugModeController = DebugModeController();
 
 /// 실내 지도·목적지 검색·경로 안내가 전부 백엔드(api/) 다익스트라 그래프로
 /// 동작하도록 HttpBuildingRepository를 쓴다. 백엔드 없이 오프라인으로 확인할
