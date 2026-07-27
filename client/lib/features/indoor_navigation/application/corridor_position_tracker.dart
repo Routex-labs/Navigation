@@ -818,6 +818,7 @@ class _Hypothesis {
     this.previousGraphHeadingDeg,
     this.transitions = 0,
     this.lastNodeId,
+    this.previousOffsetM = 0,
   });
 
   final _CorridorEdge edge;
@@ -838,6 +839,9 @@ class _Hypothesis {
   final double? previousGraphHeadingDeg;
   final int transitions;
   final String? lastNodeId;
+
+  /// 직전 걸음에서 원본 위치와 벌어져 있던 거리(m).
+  final double previousOffsetM;
 
   /// 가설끼리 비교하는 값. 같은 걸음을 먹었으므로 거리 정규화만으로 공평하다.
   double get meanErrorDeg => matchedM <= 1e-6 ? cost : cost / matchedM;
@@ -885,11 +889,23 @@ class _Hypothesis {
         .clamp(0.0, edge.lengthM)
         .toDouble();
     final nextPoint = edge.pointAt(nextProgress);
-    // 나란한 복도를 가르는 유일한 신호. 원본이 늘 조금씩 흐르므로 허용치
-    // 안쪽은 공짜로 두고, 상한을 씌워 방위 항을 완전히 덮지 않게 한다.
-    final offsetM = ((nextPoint - rawPoint).distance - positionalToleranceM)
+    // 나란한 복도를 가르는 신호. 다만 **절대 어긋남**을 벌하면 안 된다 —
+    // PDR 원본은 heading 오차로 옆으로 밀리고(실측 안드로이드 87m 보행에서
+    // north 방향 13m), 그러면 원본이 밀려간 쪽의 엉뚱한 평행 복도가 오히려
+    // 가까워져서 그리로 붙는다. 실제로 남쪽 매장 앞을 걸었는데 10m 북쪽
+    // 복도로 올라가 버렸다.
+    //
+    // 그래서 어긋남의 **증가분**만 벌한다. 서서히 밀리는 드리프트는 걸음당
+    // 증가가 미미해 거의 공짜이고, 갈림길에서 엉뚱한 쪽으로 꺾는 순간에는
+    // 급격히 벌어져 크게 물린다.
+    final offsetNowM = (nextPoint - rawPoint).distance;
+    final grownM = (offsetNowM - previousOffsetM)
         .clamp(0.0, positionalMaxOffsetM)
         .toDouble();
+    final offsetM =
+        grownM * 10 +
+        (offsetNowM - positionalToleranceM).clamp(0.0, positionalMaxOffsetM) *
+            0.15;
     final nextPath = path.length >= maxPathPoints
         ? [...path.skip(path.length - maxPathPoints + 1), nextPoint]
         : [...path, nextPoint];
@@ -905,6 +921,7 @@ class _Hypothesis {
           offsetM * positionalWeightDegPerM * distanceM,
       matchedM: matchedM * decay + distanceM,
       unmatchedM: unmatchedM * decay,
+      previousOffsetM: offsetNowM,
       previousObservedHeadingDeg: observedHeadingDeg,
       previousGraphHeadingDeg: graphHeadingDeg,
     );
@@ -927,6 +944,7 @@ class _Hypothesis {
     previousGraphHeadingDeg: previousGraphHeadingDeg,
     transitions: transitions + 1,
     lastNodeId: nodeId,
+    previousOffsetM: previousOffsetM,
   );
 
   /// 그래프로 더 갈 수 없는 이동. 가설을 죽이지 않고 벌점만 준다.
@@ -947,6 +965,7 @@ class _Hypothesis {
     double? unmatchedM,
     double? previousObservedHeadingDeg,
     double? previousGraphHeadingDeg,
+    double? previousOffsetM,
   }) => _Hypothesis(
     edge: edge,
     progressM: progressM ?? this.progressM,
@@ -961,6 +980,7 @@ class _Hypothesis {
         previousGraphHeadingDeg ?? this.previousGraphHeadingDeg,
     transitions: transitions,
     lastNodeId: lastNodeId,
+    previousOffsetM: previousOffsetM ?? this.previousOffsetM,
   );
 }
 
