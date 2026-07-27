@@ -103,7 +103,7 @@ class _RouteGuideScreenState extends State<RouteGuideScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => const RagChatPanel(),
+      builder: (context) => const RagChatPanel(buildingId: demoBuildingId),
     );
   }
 
@@ -159,8 +159,8 @@ class _RouteGuideScreenState extends State<RouteGuideScreen> {
                               child: FloatingActionButton(
                                 heroTag: 'rag-info',
                                 onPressed: _openBuildingInfo,
-                                tooltip: '건물 정보',
-                                child: const Icon(Icons.info_outline),
+                                tooltip: 'AI 매장 찾기',
+                                child: const Icon(Icons.search),
                               ),
                             ),
                           ],

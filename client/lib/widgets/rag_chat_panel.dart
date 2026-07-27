@@ -1,121 +1,305 @@
 import 'package:flutter/material.dart';
 
+import '../core/service_locator.dart';
+import '../models/poi_search_result.dart';
 import '../theme/app_theme.dart';
 
-/// 건물 정보 Q&A 패널 (design.md 공통 컴포넌트: RagChatPanel).
-/// 실제 RAG 응답이 붙기 전까지 하드코딩된 대화 샘플을 보여준다.
-class RagChatPanel extends StatelessWidget {
-  const RagChatPanel({super.key});
+/// 자연어로 매장을 찾는 패널. 백엔드의 하이브리드 질의(`POST /query/ai`)를
+/// 그대로 호출한다.
+///
+/// **대화형 생성 응답이 아니다.** 백엔드는 의미가 가장 가까운 매장 1건과 그
+/// 층·입구 노드를 돌려주는 검색(retrieval)이라, 이 패널도 "질문에 문장으로
+/// 답하는" RAG가 아니라 똑똑한 매장 찾기로 보이게 만든다. 예전에는 하드코딩된
+/// 샘플 대화만 보여주는 껍데기였다.
+class RagChatPanel extends StatefulWidget {
+  const RagChatPanel({
+    super.key,
+    required this.buildingId,
+    this.currentFloorId,
+  });
 
-  static const _sampleExchanges = [
-    ('화장실 몇 시까지 이용 가능해요?', '본관 화장실은 22시까지 운영합니다.'),
-    ('엘리베이터는 어디 있어요?', '정문 로비 안내데스크 옆에 있습니다.'),
-  ];
+  final String buildingId;
+
+  /// 주면 그 층으로 스코프해서 찾는다. 층 라벨("B2")·내부 id 모두 허용된다.
+  final String? currentFloorId;
+
+  @override
+  State<RagChatPanel> createState() => _RagChatPanelState();
+}
+
+/// 한 번의 질의와 그 결과. [result]는 찾은 매장(없으면 null)이고, [answer]는
+/// 화면에 그대로 띄우는 문장이다.
+class _Exchange {
+  _Exchange(this.query);
+
+  final String query;
+  String? answer;
+  PoiSearchResult? result;
+
+  bool get pending => answer == null;
+}
+
+class _RagChatPanelState extends State<RagChatPanel> {
+  final _controller = TextEditingController();
+  final _exchanges = <_Exchange>[];
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit(String raw) async {
+    final query = raw.trim();
+    // 백엔드가 공백만 있는 질의를 422로 막으므로 아예 보내지 않는다.
+    if (query.isEmpty || _busy) return;
+
+    final exchange = _Exchange(query);
+    setState(() {
+      _exchanges.add(exchange);
+      _busy = true;
+      _controller.clear();
+    });
+
+    String answer;
+    PoiSearchResult? result;
+    try {
+      final results = await destinationRepository.searchDestinationsAi(
+        widget.buildingId,
+        query,
+        currentFloorId: widget.currentFloorId,
+      );
+      result = results.firstOrNull;
+      if (result == null) {
+        // status=no_match. 백엔드 임계값(0.50) 미달이거나 정말 없는 경우다.
+        answer = '"$query"에 맞는 매장을 찾지 못했어요.';
+      } else if (result.nodeId == null) {
+        // status=ok_no_route — 위치는 알지만 입구 노드가 없어 경로 계산 불가.
+        answer = '${result.name} · ${result.floor}에 있어요.\n'
+            '(입구 정보가 없어 경로 안내는 어려워요)';
+      } else {
+        answer = '${result.name} · ${result.floor}에 있어요.';
+      }
+    } on Object {
+      // 건물 없음(404)·검증 실패(422)는 repository가 빈 결과로 흡수하므로,
+      // 여기 오는 건 서버 장애나 네트워크 끊김이다. 패널을 닫지 않고 안내만 한다.
+      answer = '지금은 검색할 수 없어요. 잠시 후 다시 시도해 주세요.';
+    }
+
+    if (!mounted) return;
+    setState(() {
+      exchange.answer = answer;
+      exchange.result = result;
+      _busy = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Padding(
+        // 키보드가 올라오면 입력창이 가려지지 않도록 그만큼 밀어 올린다.
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _header(context),
+            const Divider(height: 1),
+            Flexible(child: _body(context)),
+            _input(context),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _header(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 8, 12),
+      child: Row(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 8, 12),
-            child: Row(
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '건물 정보 Q&A',
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        'RAG · 건물 데이터베이스',
-                        style: TextStyle(fontSize: 11, color: AppColors.muted),
-                      ),
-                    ],
-                  ),
+                Text(
+                  'AI 매장 찾기',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
                 ),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close, size: 18, color: AppColors.muted),
-                  style: IconButton.styleFrom(
-                    backgroundColor: AppColors.blue50,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    minimumSize: const Size(32, 32),
-                  ),
+                SizedBox(height: 2),
+                Text(
+                  '"밥 먹을 곳"처럼 편하게 물어보세요',
+                  style: TextStyle(fontSize: 11, color: AppColors.muted),
                 ),
               ],
             ),
           ),
-          const Divider(height: 1),
-          Flexible(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (final exchange in _sampleExchanges) ...[
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Container(
-                        constraints: BoxConstraints(
-                          maxWidth: MediaQuery.of(context).size.width * 0.7,
-                        ),
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
-                        ),
-                        decoration: const BoxDecoration(
-                          color: AppColors.indoor,
-                          borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(18),
-                            topRight: Radius.circular(18),
-                            bottomLeft: Radius.circular(18),
-                            bottomRight: Radius.circular(4),
-                          ),
-                        ),
-                        child: Text(
-                          exchange.$1,
-                          style: const TextStyle(color: Colors.white, fontSize: 13),
-                        ),
-                      ),
-                    ),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Container(
-                        constraints: BoxConstraints(
-                          maxWidth: MediaQuery.of(context).size.width * 0.7,
-                        ),
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.blue50,
-                          borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(18),
-                            topRight: Radius.circular(18),
-                            bottomLeft: Radius.circular(4),
-                            bottomRight: Radius.circular(18),
-                          ),
-                        ),
-                        child: Text(
-                          exchange.$2,
-                          style: const TextStyle(color: AppColors.text, fontSize: 13),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
+          IconButton(
+            onPressed: () => Navigator.of(context).pop(),
+            icon: const Icon(Icons.close, size: 18, color: AppColors.muted),
+            style: IconButton.styleFrom(
+              backgroundColor: AppColors.blue50,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
               ),
+              minimumSize: const Size(32, 32),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _body(BuildContext context) {
+    if (_exchanges.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.fromLTRB(16, 28, 16, 28),
+        child: Text(
+          '찾고 싶은 곳을 자연어로 입력하면\n의미가 가장 가까운 매장을 알려드려요.',
+          style: TextStyle(fontSize: 13, color: AppColors.muted, height: 1.5),
+        ),
+      );
+    }
+    final maxBubbleWidth = MediaQuery.sizeOf(context).width * 0.7;
+    return SingleChildScrollView(
+      reverse: true,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final exchange in _exchanges) ...[
+            _bubble(
+              text: exchange.query,
+              maxWidth: maxBubbleWidth,
+              fromUser: true,
+            ),
+            if (exchange.pending)
+              _pendingBubble(maxBubbleWidth)
+            else
+              _bubble(
+                text: exchange.answer!,
+                maxWidth: maxBubbleWidth,
+                fromUser: false,
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _bubble({
+    required String text,
+    required double maxWidth,
+    required bool fromUser,
+  }) {
+    return Align(
+      alignment: fromUser ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: fromUser ? AppColors.indoor : AppColors.blue50,
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(18),
+            topRight: const Radius.circular(18),
+            bottomLeft: Radius.circular(fromUser ? 18 : 4),
+            bottomRight: Radius.circular(fromUser ? 4 : 18),
+          ),
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            color: fromUser ? Colors.white : AppColors.text,
+            fontSize: 13,
+            height: 1.4,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 응답 대기 표시. 2차 의미 검색으로 넘어가면 백엔드가 임베딩 모델을
+  /// 로드하느라 첫 질의가 수 초 걸릴 수 있어(CPU ~6초) 반드시 노출한다.
+  Widget _pendingBubble(double maxWidth) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: const BoxDecoration(
+          color: AppColors.blue50,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(18),
+            topRight: Radius.circular(18),
+            bottomLeft: Radius.circular(4),
+            bottomRight: Radius.circular(18),
+          ),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: 10),
+            Text(
+              '찾는 중…',
+              style: TextStyle(fontSize: 13, color: AppColors.text),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _input(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _controller,
+              enabled: !_busy,
+              textInputAction: TextInputAction.search,
+              onSubmitted: _submit,
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: '예: 밥 먹을 곳',
+                filled: true,
+                fillColor: AppColors.blue50,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            // 응답을 기다리는 동안 중복 질의를 막는다.
+            onPressed: _busy ? null : () => _submit(_controller.text),
+            icon: const Icon(Icons.arrow_upward, size: 18),
+            style: IconButton.styleFrom(
+              backgroundColor: AppColors.indoor,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: AppColors.muted,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              minimumSize: const Size(44, 44),
             ),
           ),
         ],
