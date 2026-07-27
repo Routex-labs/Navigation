@@ -36,6 +36,10 @@ Color categoryColorFor(String category) =>
 /// subcategory가 있으면 그것으로 먼저 판정하고, 없으면 매장 이름의 부분
 /// 문자열(정수기·ATM·수유실 등)로 판정한다. 어느 규칙에도 걸리지 않는
 /// 일반 매장은 상점 아이콘([Icons.storefront])으로 폴백한다.
+///
+/// subcategory 표기가 두 갈래라 양쪽을 모두 받는다. 층 원본(studio JSON)에서
+/// 온 시설물은 `restroom`·`elevator` 같은 영어 소문자이고, 카테고리 오버라이드
+/// (store_categories*.json)를 거친 매장은 `레스토랑`·`카페·베이커리` 같은 한글이다.
 IconData storeIconFor({String? name, String? subcategory}) {
   final sub = subcategory?.toLowerCase();
   switch (sub) {
@@ -46,9 +50,15 @@ IconData storeIconFor({String? name, String? subcategory}) {
     case 'escalator':
       return Icons.escalator;
     case 'cafe':
+    case '카페·베이커리':
       return Icons.local_cafe_outlined;
     case 'restaurant':
+    case '레스토랑':
       return Icons.restaurant;
+    case '식품·그로서리':
+      return Icons.local_grocery_store_outlined;
+    case '와인·주류':
+      return Icons.wine_bar_outlined;
   }
   final n = name ?? '';
   if (n.contains('화장실') || n.contains('세면대')) return Icons.wc;
