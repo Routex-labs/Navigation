@@ -82,7 +82,10 @@ class PdrSnapshot {
     this.ronin = const PdrRoninTrack.empty(),
   });
 
-  /// 초록 confirmed 위치(제품 위치). 로컬 미터, 세션 시작점 기준.
+  /// 초록 confirmed 센서 원본 위치. 로컬 미터, 세션 시작점 기준.
+  ///
+  /// 제품 현재 위치는 클라이언트가 이 원본을 복도 graph 제약 상태기에 넣어
+  /// 별도로 유지한다. 원본은 진단·비교를 위해 수정하지 않는다.
   final PdrLocalPoint position;
   final List<PdrLocalPoint> path;
   final int steps;

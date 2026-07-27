@@ -56,8 +56,14 @@ flowchart LR
 
 ## 맵 매칭
 
-`FloorMapMatcher`는 추정 위치를 `FloorGraph`의 edge 네트워크에 맞춘다. 추적 상태는
-`tracking`, `suspect`, `recovered`로 구분해 순간적인 센서 튐을 바로 경로 이탈로 확정하지 않는다.
+원본 초록·주황 경로는 진단값으로 그대로 보존한다. 제품 현재 위치는
+`CorridorTrackingSession`이 snapshot의 새 거리만 `CorridorPositionTracker`에 전달해
+세션 상태로 누적한다. 직선에서는 현재 edge에 위치와 heading bias를 함께 수렴시키고,
+교차로에서는 주황으로 회전 후보를 관찰한 뒤 초록 거리로 확인된 경우에만 연결 edge와
+노드를 확정한다.
+
+`FloorMapMatcher`는 anchor 스냅과 기존 진단/호환 경로 계산에 남아 있지만, 제품 현재
+위치를 정하기 위해 매 build마다 원본 경로 전체를 다시 계산하지 않는다.
 
 ## 실패 지점
 
@@ -66,6 +72,7 @@ flowchart LR
 - 센서 heading 좌표축과 지도 좌표축을 바로 빼면 회전·반전된 층에서 90°/180° 오차가 난다.
 - native source 시작 실패는 `degraded` 상태로 표시해야 하며 UI를 무한 로딩에 두지 않는다.
 - 맵 매칭 품질은 그래프 연결성과 좌표 정확도에 의존한다. PDR만 조정하기 전에 그래프를 확인한다.
+- `uncertain`에서 가까운 노드를 임의로 선택하면 평행 복도·벽 너머 복도로 순간이동한다.
 
 ## 검증
 

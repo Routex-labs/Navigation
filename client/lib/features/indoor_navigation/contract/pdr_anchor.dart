@@ -160,4 +160,29 @@ class FloorCoordinateTransform {
       anchor.anchorLocalM.northM + floorDelta.northM,
     );
   }
+
+  /// PDR bearing을 위치와 동일한 회전·축 변환으로 floor bearing으로 바꾼다.
+  ///
+  /// `walkingHeading + rotation`만 하면 y축 반전이나 회전된 도면에서 방향
+  /// 마커와 복도 각도가 어긋난다. 단위 방향 벡터를 실제 좌표 변환에 통과시켜
+  /// 위치와 heading이 항상 같은 frame을 쓰게 한다.
+  double toFloorBearing(double pdrBearingDeg) {
+    final direction = pdrDirectionForBearing(pdrBearingDeg);
+    final rotated = rotatePdrBearing(direction, anchor.rotationDeg);
+    return pdrBearingForDirection(axes.apply(rotated));
+  }
+
+  /// tracker의 floor-local bearing을 지도/WGS84 기준 bearing으로 되돌린다.
+  ///
+  /// 복도 보정기는 floor graph 각도로 동작하지만 위치 마커 heading은 true
+  /// north 기준을 기대한다. 축 반전·회전이 있는 도면에서 floor 각도를 그대로
+  /// 넘기면 마커만 반대로 보이므로 같은 선형 변환의 역변환을 거친다.
+  double floorBearingToMapBearing(double floorBearingDeg) {
+    final floorDirection = pdrDirectionForBearing(floorBearingDeg);
+    final alignedPdrDirection = axes.inverseApply(floorDirection);
+    if (alignedPdrDirection == null || alignedPdrDirection.distance < 1e-12) {
+      return normalizePdrBearing(floorBearingDeg);
+    }
+    return pdrBearingForDirection(alignedPdrDirection);
+  }
 }

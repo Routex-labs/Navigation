@@ -12,6 +12,7 @@ import '../../features/indoor_navigation/contract/indoor_navigation_contract.dar
 import '../../features/indoor_navigation/debug/pdr_debug_device_info.dart';
 import '../../features/indoor_navigation/debug/pdr_debug_session_recorder.dart';
 import '../../features/indoor_navigation/debug/pdr_debug_session_share.dart';
+import '../../features/indoor_navigation/application/corridor_tracking_session.dart';
 import '../../domain/multi_floor_router.dart';
 import '../../models/building.dart';
 import '../../models/building_graph.dart';
@@ -168,6 +169,8 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 
   String? _highlightedStoreId;
   late final DebugPdrTrailState _pdrTrailState;
+  final CorridorTrackingSession _corridorTrackingSession =
+      corridorTrackingSession;
   StreamSubscription<PdrSnapshot>? _pdrSnapshotSub;
   StreamSubscription<CalibrationStatus>? _pdrCalibrationSub;
   bool _placingPdrAnchor = false;
@@ -238,13 +241,19 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     );
     _pdrSnapshotSub = indoorNavigationDriver.snapshots.listen((snapshot) {
       _pdrDebugRecorder?.recordSnapshot(snapshot);
-      if (mounted) setState(() => _pdrTrailState.recordSnapshot(snapshot));
+      if (mounted) {
+        setState(() {
+          _pdrTrailState.recordSnapshot(snapshot);
+          _syncCorridorTracking(snapshot);
+        });
+      }
     });
     _pdrCalibrationSub = indoorNavigationDriver.calibration.listen((status) {
       if (mounted) {
         setState(() {
           _pdrDebugRecorder?.recordCalibration(status);
           _pdrTrailState.recordCalibration(status);
+          _syncCorridorTracking(_pdrTrailState.snapshot);
         });
         if (status.phase == CalibrationPhase.calibrated ||
             status.phase == CalibrationPhase.uncalibrated) {
@@ -359,6 +368,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         _floorGraph = graph;
         _mapCalibrationVersion =
             geojson['map_calibration_version'] as String? ?? 'unversioned';
+        _syncCorridorTracking(_pdrTrailState.snapshot);
       });
     } catch (_) {
       if (!mounted) return;
@@ -460,6 +470,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         PdrRuntimeState.idle) {
       setState(() {
         _pdrTrailState.beginNewSession();
+        _corridorTrackingSession.reset();
       });
       _pdrDebugRecorder = PdrDebugSessionRecorder();
       _pdrDebugRecorder?.recordRuntime(
@@ -837,24 +848,18 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     return snapshot.ronin.path.map(pdrToFloor.toFloor).toList(growable: false);
   }
 
-  /// confirmed PDR path를 floor graph의 통행 간선에 스냅한 결과다. 매 snapshot
-  /// 전체를 시간순으로 다시 매칭해 matcher의 간선 전환 히스테리시스도 유지한다.
+  /// 원본과 분리해 세션 동안 누적한 복도 제약 경로다. build 시점마다 confirmed
+  /// 전체를 다시 매칭하지 않아 현재 edge·heading bias·회전 증거가 유지된다.
   List<PdrLocalPoint> get _pdrMatchedFloorPath {
-    final graph = _floorGraph;
-    final confirmed = _pdrConfirmedFloorPath;
-    if (graph == null || confirmed.isEmpty) return const [];
-    // 단순 스냅 점들을 직선으로 잇지 않는다. 간선이 바뀌는 경우에는 반드시
-    // 두 점 사이의 graph 경로(복도·교차점)를 펼친다.
-    return FloorMapMatcher(graph).matchRoutedPath(confirmed);
+    final anchor = _pdrTrailState.anchor;
+    if (anchor == null || anchor.floorId != _selectedFloor) return const [];
+    return _corridorTrackingSession.result?.correctedPath ?? const [];
   }
 
   Set<String> get _pdrMatchedEdgeIds {
-    final graph = _floorGraph;
-    final confirmed = _pdrConfirmedFloorPath;
-    if (graph == null || !_hasMeaningfulPdrMovement(confirmed)) return const {};
-    return FloorMapMatcher(
-      graph,
-    ).matchPath(confirmed).map((point) => point.edgeId).toSet();
+    if (!_hasMeaningfulPdrMovement(_pdrConfirmedFloorPath)) return const {};
+    final edgeId = _corridorTrackingSession.result?.currentEdgeId;
+    return edgeId == null ? const {} : {edgeId};
   }
 
   /// 세션 시작 직후에는 원점 한 개만 가장 가까운 간선에 투영되면서, 사용자가
@@ -887,7 +892,28 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     final snapshot = _pdrTrailState.snapshot;
     final anchor = _pdrTrailState.anchor;
     if (snapshot == null || anchor == null || !snapshot.hasHeading) return null;
-    return normalizePdrBearing(snapshot.walkingHeadingDeg + anchor.rotationDeg);
+    final transform = FloorCoordinateTransform(anchor);
+    final correctedFloorHeading =
+        _corridorTrackingSession.result?.correctedHeadingDeg;
+    return correctedFloorHeading == null
+        ? normalizePdrBearing(
+            snapshot.walkingHeadingDeg + anchor.rotationDeg,
+          )
+        : transform.floorBearingToMapBearing(correctedFloorHeading);
+  }
+
+  void _syncCorridorTracking(PdrSnapshot? snapshot) {
+    final anchor = _pdrTrailState.anchor;
+    if (anchor == null || anchor.floorId != _selectedFloor) return;
+    final result = _corridorTrackingSession.update(
+      graph: _floorGraph,
+      anchor: anchor,
+      snapshot: snapshot,
+      timestampMs: DateTime.now().millisecondsSinceEpoch,
+    );
+    if (result != null) {
+      _pdrDebugRecorder?.recordCorridorCorrection(result);
+    }
   }
 
   /// 걸음이 아직 확정되지 않은 PDR 시작 직후에도, 사용자가 선택한 anchor를
@@ -960,6 +986,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     }
     setState(() {
       _pdrTrailState.beginNewSession();
+      _corridorTrackingSession.reset();
     });
     _pdrDebugRecorder = PdrDebugSessionRecorder();
     _pdrDebugRecorder?.recordRuntime(

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
+import 'package:navigation_client/features/indoor_navigation/application/corridor_position_tracker.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/calibration_state.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/pdr_anchor.dart';
 import 'package:navigation_client/features/indoor_navigation/debug/pdr_debug_session_recorder.dart';
@@ -129,7 +130,7 @@ void main() {
     final matched = paths['map_matched_floor_local_m']! as List<Object?>;
     final finalMatched = matched.last! as Map<String, double>;
 
-    expect(json['schema_version'], 6);
+    expect(json['schema_version'], 7);
     expect(
       (json['map_context']! as Map<String, Object?>)['map_calibration_version'],
       'thehyundai-seoul-1f-svg-v1',
@@ -228,5 +229,51 @@ void main() {
     expect(finalize['queried_steps'], 140);
     // 이 차이가 0인지 아닌지가 초반 부족분의 성격을 가른다.
     expect(finalize['queried_minus_live'], 28);
+  });
+
+  test('복도 보정 상태와 heading bias를 원본 경로와 별도로 기록한다', () {
+    final recorder = PdrDebugSessionRecorder(
+      startedAt: DateTime.utc(2026, 7, 18, 9),
+    );
+    recorder.recordSnapshot(
+      _snapshot(
+        steps: 4,
+        distanceM: 3.1,
+        path: const [PdrLocalPoint.zero, PdrLocalPoint(4, 1)],
+      ),
+    );
+    recorder.recordCorridorCorrection(
+      const CorridorTrackingResult(
+        state: CorridorTrackingState.turnPending,
+        correctedPosition: PdrLocalPoint(4, 0),
+        correctedHeadingDeg: 90,
+        headingBiasDeg: 7,
+        currentEdgeId: 'ab',
+        pendingEdgeId: 'bc',
+        lastConfirmedNodeId: null,
+        correctedPath: [PdrLocalPoint.zero, PdrLocalPoint(4, 0)],
+        rawConfirmedPosition: PdrLocalPoint(4, 1),
+        rawPreviewPosition: PdrLocalPoint(4.5, 1.2),
+      ),
+      at: DateTime.utc(2026, 7, 18, 9, 0, 3),
+    );
+
+    final json = recorder.buildJson(
+      buildingId: 'thehyundai-seoul',
+      selectedFloor: '1F',
+      mapCalibrationVersion: 'v1',
+      graph: _graph(),
+      device: const {},
+    );
+    final summary = json['summary']! as Map<String, Object?>;
+    final correction = summary['corridor_correction']! as Map<String, Object?>;
+    final paths = json['paths']! as Map<String, Object?>;
+
+    expect(correction['state'], 'turnPending');
+    expect(correction['heading_bias_deg'], 7);
+    expect(correction['pending_edge_id'], 'bc');
+    expect(paths['confirmed_pdr_local_m'], hasLength(2));
+    expect(paths['corridor_corrected_floor_local_m'], hasLength(2));
+    expect(json['corridor_correction_samples'], hasLength(1));
   });
 }

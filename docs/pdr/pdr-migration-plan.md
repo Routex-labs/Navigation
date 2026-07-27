@@ -162,7 +162,7 @@ class PedometerBatchEvent {
 class AccelPeakEvent { final int count; final int? latestPeakMs; final num? motionTimestampMs; }
 
 class PdrSnapshot {
-  final PdrLocalPoint position;           // 초록 confirmed (제품 위치)
+  final PdrLocalPoint position;           // 초록 confirmed 센서 원본
   final List<PdrLocalPoint> path;
   final int steps; final double distanceM;
   final double walkingHeadingDeg;

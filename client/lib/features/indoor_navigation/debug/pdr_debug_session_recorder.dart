@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
 import '../../../models/floor_graph.dart';
+import '../application/corridor_position_tracker.dart';
 import '../application/floor_map_matcher.dart';
 import '../contract/calibration_state.dart';
 import '../contract/pdr_anchor.dart';
@@ -23,13 +24,16 @@ class PdrDebugSessionRecorder {
   // 방향이 틀어졌을 때 자력계·walkOffset·네이티브 유도식·실제 회전 중 무엇인지
   // 파일만으로 가르기 위한 값이다.
   // v6: Android RoNIN 자동보폭 비교 경로와 1Hz 보폭/속도 관측을 추가했다.
-  static const schemaVersion = 6;
+  // v7: 세션형 복도 보정 위치·heading bias·상태 전이 시계열을 추가했다.
+  static const schemaVersion = 7;
   static const _maxQualitySamples = 900;
 
   final DateTime _startedAt;
   final List<_PdrQualitySample> _qualitySamples = [];
+  final List<Map<String, Object?>> _corridorSamples = [];
 
   PdrSnapshot? _latestSnapshot;
+  CorridorTrackingResult? _latestCorridorCorrection;
   PdrAnchor? _anchor;
   PdrRuntimeStatus _runtimeStatus = const PdrRuntimeStatus.idle();
   Map<String, Object?>? _pedometerFinalize;
@@ -63,6 +67,39 @@ class PdrDebugSessionRecorder {
 
   void recordRuntime(PdrRuntimeStatus status) => _runtimeStatus = status;
 
+  void recordCorridorCorrection(CorridorTrackingResult result, {DateTime? at}) {
+    _latestCorridorCorrection = result;
+    final previous = _corridorSamples.lastOrNull;
+    final now = (at ?? DateTime.now()).toUtc();
+    final sample = <String, Object?>{
+      'at_utc': now.toIso8601String(),
+      'state': result.state.name,
+      'edge_id': result.currentEdgeId,
+      'pending_edge_id': result.pendingEdgeId,
+      'last_confirmed_node_id': result.lastConfirmedNodeId,
+      'position_floor_local_m': _pointJson(result.correctedPosition),
+      'corrected_heading_deg': result.correctedHeadingDeg,
+      'heading_bias_deg': result.headingBiasDeg,
+    };
+    final stateChanged =
+        previous == null ||
+        previous['state'] != sample['state'] ||
+        previous['edge_id'] != sample['edge_id'] ||
+        previous['pending_edge_id'] != sample['pending_edge_id'];
+    final previousAt = previous == null
+        ? null
+        : DateTime.tryParse(previous['at_utc']! as String);
+    if (!stateChanged &&
+        previousAt != null &&
+        now.difference(previousAt).inMilliseconds < 1000) {
+      return;
+    }
+    _corridorSamples.add(sample);
+    if (_corridorSamples.length > _maxQualitySamples) {
+      _corridorSamples.removeAt(0);
+    }
+  }
+
   /// stopGuidance에서 native가 돌려준 pedometer 동결/재조회 결과.
   void recordPedometerFinalize(Map<String, Object?>? info) =>
       _pedometerFinalize = info;
@@ -89,8 +126,10 @@ class PdrDebugSessionRecorder {
               .map(FloorCoordinateTransform(anchor).toFloor)
               .toList(growable: false)
         : const <PdrLocalPoint>[];
+    final corridorCorrection = _latestCorridorCorrection;
     final matchedPath = hasMapContext
-        ? FloorMapMatcher(graph).matchRoutedPath(floorPath)
+        ? corridorCorrection?.correctedPath ??
+              FloorMapMatcher(graph).matchRoutedPath(floorPath)
         : const <PdrLocalPoint>[];
     final roninRawPath = snapshot == null || !snapshot.ronin.supported
         ? const <PdrLocalPoint>[]
@@ -120,6 +159,7 @@ class PdrDebugSessionRecorder {
         snapshot,
         floorPathDistanceM: _pathLength(floorPath),
         mapMatchedDistanceM: _pathLength(matchedPath),
+        corridorCorrection: corridorCorrection,
       ),
       'paths': {
         'confirmed_pdr_local_m': _pointsJson(rawPath),
@@ -127,10 +167,14 @@ class PdrDebugSessionRecorder {
         'floor_local_m_before_matching': _pointsJson(floorPath),
         'ronin_stride_floor_local_m': _pointsJson(roninFloorPath),
         'map_matched_floor_local_m': _pointsJson(matchedPath),
+        'corridor_corrected_floor_local_m': _pointsJson(
+          corridorCorrection?.correctedPath ?? const [],
+        ),
       },
       'quality_samples_1hz': [
         for (final sample in _qualitySamples) sample.toJson(),
       ],
+      'corridor_correction_samples': _corridorSamples,
       'runtime': {
         'state': _runtimeStatus.state.name,
         'warnings': _runtimeStatus.warnings,
@@ -190,6 +234,7 @@ class PdrDebugSessionRecorder {
     PdrSnapshot? snapshot, {
     required double floorPathDistanceM,
     required double mapMatchedDistanceM,
+    required CorridorTrackingResult? corridorCorrection,
   }) {
     if (snapshot == null) return const {'recorded': false};
     final features = snapshot.quality.features;
@@ -237,6 +282,19 @@ class PdrDebugSessionRecorder {
         'peak_reject_histogram': features.peakRejectHistogram,
       },
       'heading_breakdown': headingBreakdownJson(features),
+      'corridor_correction': corridorCorrection == null
+          ? null
+          : {
+              'state': corridorCorrection.state.name,
+              'edge_id': corridorCorrection.currentEdgeId,
+              'pending_edge_id': corridorCorrection.pendingEdgeId,
+              'last_confirmed_node_id': corridorCorrection.lastConfirmedNodeId,
+              'position_floor_local_m': _pointJson(
+                corridorCorrection.correctedPosition,
+              ),
+              'corrected_heading_deg': corridorCorrection.correctedHeadingDeg,
+              'heading_bias_deg': corridorCorrection.headingBiasDeg,
+            },
     };
   }
 

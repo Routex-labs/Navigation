@@ -44,6 +44,9 @@ class AppliedBatchInfo {
 /// 위치 계산:
 ///   거리 = CMPedometer step delta × 추정 보폭
 ///   방향 = fused heading smoothing + walkOffset 보정
+///
+/// 이 결과는 초록 센서 원본이다. 제품 현재 위치의 복도 제약은 floor graph를
+/// 소유한 Flutter 클라이언트가 별도 상태로 적용한다.
 class PdrSession {
   PdrSession({PdrSessionConfig? config})
     : config = config ?? const PdrSessionConfig() {

@@ -16,6 +16,7 @@ import '../../core/api_config.dart';
 import '../../core/service_locator.dart';
 import '../../domain/geo_transform.dart';
 import '../../features/debug_mode/debug_mode.dart';
+import '../../features/indoor_navigation/application/corridor_tracking_session.dart';
 import '../../features/indoor_navigation/application/floor_map_matcher.dart';
 import '../../features/indoor_navigation/contract/indoor_navigation_contract.dart';
 import '../../features/indoor_navigation/debug/pdr_debug_device_info.dart';
@@ -598,7 +599,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _indoorVerticalTransportFillLayerId,
         _indoorStoresFillLayerId,
         _indoorFootprintLayerId,
-      ];
+  ];
 
   /// 실내 진입 오버레이 상태. true면 층 chip과 위치 지정 버튼 등 실내 UI를
   /// 야외 지도 위에 그린다. 건물 폴리곤 탭, 줌 임계값 초과, GPS 근접 감지
@@ -615,6 +616,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 회전을 수행한다. 순수 야외(GPS) 보정은 이 카운터를 쓰지 않는다.
   int _recalibrateTapCount = 0;
   late final DebugPdrTrailState _pdrTrailState;
+  final CorridorTrackingSession _corridorTrackingSession =
+      corridorTrackingSession;
   StreamSubscription<PdrSnapshot>? _pdrSnapshotSub;
   StreamSubscription<CalibrationStatus>? _pdrCalibrationSub;
 
@@ -676,7 +679,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _pdrSnapshotSub = indoorNavigationDriver.snapshots.listen((snapshot) {
       _pdrDebugRecorder?.recordSnapshot(snapshot);
       if (!mounted) return;
-      setState(() => _pdrTrailState.recordSnapshot(snapshot));
+      setState(() {
+        _pdrTrailState.recordSnapshot(snapshot);
+        _syncCorridorTracking(snapshot);
+      });
       _syncPdrCurrentLayer();
       _syncEntranceExitWatch();
       unawaited(_syncDebugPdrLayers());
@@ -684,7 +690,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _pdrCalibrationSub = indoorNavigationDriver.calibration.listen((status) {
       _pdrDebugRecorder?.recordCalibration(status);
       if (!mounted) return;
-      setState(() => _pdrTrailState.recordCalibration(status));
+      setState(() {
+        _pdrTrailState.recordCalibration(status);
+        _syncCorridorTracking(_pdrTrailState.snapshot);
+      });
       if (status.phase == CalibrationPhase.calibrated ||
           status.phase == CalibrationPhase.uncalibrated) {
         _setPlacingAnchor(false);
@@ -826,6 +835,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _mapCalibrationVersion =
             geojson?['map_calibration_version'] as String? ?? 'unversioned';
       });
+      _syncCorridorTracking(_pdrTrailState.snapshot);
       _syncPdrCurrentLayer();
       unawaited(_syncDebugPdrLayers());
       // 지하층 외곽선은 방금 받은 도면에서 나온다. 도면이 도착한 이 시점에
@@ -3027,15 +3037,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final anchor = _pdrTrailState.anchor;
     if (anchor == null || anchor.floorId != _activeFloor) return null;
 
-    if (snapshot != null) {
-      final pdrToFloor = FloorCoordinateTransform(anchor);
-      final points = snapshot.path.map(pdrToFloor.toFloor).toList();
-      final matched = FloorMapMatcher(graph).matchRoutedPath(points);
-      final last = matched.isNotEmpty ? matched.last : null;
-      if (last != null) {
-        final wgs84 = transform.apply(last.eastM, last.northM);
-        return ll.LatLng(wgs84.$1, wgs84.$2);
-      }
+    final corrected = _corridorTrackingSession.result?.correctedPosition;
+    if (snapshot != null && corrected != null) {
+      final wgs84 = transform.apply(corrected.eastM, corrected.northM);
+      return ll.LatLng(wgs84.$1, wgs84.$2);
     }
     final wgs84 = transform.apply(
       anchor.anchorLocalM.eastM,
@@ -3216,12 +3221,31 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 사용자가 바라보는 방향(true north 기준, 시계방향 도). PDR 세션이 heading을
   /// 아직 못 얻은 상태(예: 자북 못 잡음 + 수동 방향 보정 아직 안 함, 첫 걸음
   /// 전)에는 null을 돌려주고, 이 경우 마커도 heading 원뿔 없이 도트만 뜬다.
-  /// 계산식은 실내와 동일하다(pdr snapshot의 걷기 heading + anchor의 회전 오프셋).
+  /// 계산식은 실내와 동일하며 도면 축 변환과 복도 heading bias까지 반영한다.
   double? get _pdrCurrentHeadingDeg {
     final snapshot = _pdrTrailState.snapshot;
     final anchor = _pdrTrailState.anchor;
     if (snapshot == null || anchor == null || !snapshot.hasHeading) return null;
-    return normalizePdrBearing(snapshot.walkingHeadingDeg + anchor.rotationDeg);
+    final correctedFloorHeading =
+        _corridorTrackingSession.result?.correctedHeadingDeg;
+    return correctedFloorHeading == null
+        ? normalizePdrBearing(
+            snapshot.walkingHeadingDeg + anchor.rotationDeg,
+          )
+        : FloorCoordinateTransform(
+            anchor,
+          ).floorBearingToMapBearing(correctedFloorHeading);
+  }
+
+  void _syncCorridorTracking(PdrSnapshot? snapshot) {
+    final anchor = _pdrTrailState.anchor;
+    if (anchor == null || anchor.floorId != _activeFloor) return;
+    _corridorTrackingSession.update(
+      graph: _floorGraph,
+      anchor: anchor,
+      snapshot: snapshot,
+      timestampMs: DateTime.now().millisecondsSinceEpoch,
+    );
   }
 
   /// 강조 매장 폴리곤을 highlight 소스에 채운다. null 또는 미매치면 비운다.
@@ -3295,7 +3319,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
     if (indoorNavigationDriver.currentRuntimeStatus.state ==
         PdrRuntimeState.idle) {
-      setState(() => _pdrTrailState.beginNewSession());
+      setState(() {
+        _pdrTrailState.beginNewSession();
+        _corridorTrackingSession.reset();
+      });
       await indoorNavigationDriver.startGuidance(floorId: floor);
       if (!mounted) return;
     }
@@ -3860,7 +3887,6 @@ class _PlacingAnchorHint extends StatelessWidget {
     );
   }
 }
-
 /// 안내 배너 오른쪽 상단의 취소(X).
 ///
 /// Material `IconButton`을 쓰지 않는 이유: 기본 최소 탭 영역이 48x48이라
@@ -3890,4 +3916,3 @@ class _HintCancelButton extends StatelessWidget {
     );
   }
 }
-

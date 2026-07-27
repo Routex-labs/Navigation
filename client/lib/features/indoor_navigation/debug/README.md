@@ -8,7 +8,7 @@
 | 파일 | 역할 | 주요 항목 |
 |---|---|---|
 | [`pdr_device_harness.dart`](pdr_device_harness.dart) | 센서 시작·스냅샷·정지 후 안정성을 확인하는 실기기 화면 | `PdrDeviceHarness`, receipt JSON |
-| [`pdr_debug_session_recorder.dart`](pdr_debug_session_recorder.dart) | snapshot·품질·anchor·그래프 매칭 정보를 제한된 크기로 수집 | `PdrDebugSessionRecorder`, schema v3 |
+| [`pdr_debug_session_recorder.dart`](pdr_debug_session_recorder.dart) | snapshot·품질·anchor·복도 보정 상태를 제한된 크기로 수집 | `PdrDebugSessionRecorder`, schema v7 |
 | [`pdr_debug_device_info.dart`](pdr_debug_device_info.dart) | OS·기기·앱 버전 메타데이터 수집 | `PdrDebugDeviceInfo` |
 | [`pdr_debug_session_share.dart`](pdr_debug_session_share.dart) | 진단 JSON을 임시 파일로 만들어 공유 시트에 전달 | `PdrDebugSessionShare` |
 

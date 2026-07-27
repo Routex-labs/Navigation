@@ -284,10 +284,29 @@ PDR core의 좌표는 세션 시작점 기준의 로컬 미터 좌표다. anchor
 floorPoint = rotate(pdrPoint, rotationDeg) + anchorLocalM
 ```
 
-`FloorMapMatcher`는 변환된 점을 navigation graph의 가까운 간선에 투영한다. 직전 간선을
-약하게 우선해 평행 복도나 분기점에서 경로가 불필요하게 튀는 현상을 줄인다. 매칭된 좌표는
-WGS84로 바뀐 뒤 `FloorPlanView`에 전달된다. 맵매칭은 센서 오차를 수정하는 알고리즘이
-아니라, 지도에서 통로를 벗어난 경로가 보이지 않게 하는 표시 보정이다.
+초록 confirmed와 주황 preview는 진단 원본으로 그대로 저장한다. 제품 위치는
+`CorridorTrackingSession`이 새 snapshot의 누적값 차이만
+`CorridorPositionTracker`에 전달해 별도로 유지한다. 화면을 다시 그릴 때 초록 경로
+전체를 처음부터 맵매칭하지 않는다.
+
+- `straightTracking`: 같은 간선을 2초 이상 안정적으로 걷고 교차 노드에서 4m 이상
+  떨어졌으면 걸음마다 중심선 잔차의 25%를 당기고 heading bias를 최대 0.75° 보정한다.
+- `turnPending`: 교차 노드 4m 안에서 주황 heading 변화가 15° 이상이고 같은 출구
+  후보가 0.5초 이상 유지되면 진입한다. 이때 마커는 기존 간선에서 노드까지만 움직인다.
+- `nodeConfirmed`: 초록 배치가 복원한 걸음별 경로와 누적 거리를 사용해 새 방향 1초,
+  출구 heading 오차 20° 이내, 노드 이후 1.5m 이상을 모두 만족할 때만 확정한다.
+- `uncertain`: 4초 또는 약 4m 안에 확정하지 못하면 기존 간선 위에서만 위치를
+  유지한다. 한 후보가 1.5초·2m 이상 우세하기 전에는 다른 간선이나 노드로 점프하지 않는다.
+
+초록 배치의 이동 방향은 배치 수신 시점 heading 하나로 만들지 않는다. PDR 코어가
+`stepPeakTimes`와 과거 heading으로 복원해 초록 경로에 추가한 걸음별 점을 그대로
+소비한다. 도면 축이 반전된 층에서는 위치와 heading 모두 같은 `PdrToFloorAxes`
+변환을 통과시킨다. 확인된 위치는 WGS84로 바뀐 뒤 길안내와 현재 위치 마커에 쓰인다.
+
+`FloorMapMatcher`는 anchor 스냅과 이전 진단 JSON 호환용으로 남는다. 디버그 JSON
+schema v7은 `corridor_corrected_floor_local_m`과
+`corridor_correction_samples`에 상태, 현재/후보 간선, 확정 노드, 보정 위치,
+corrected heading, heading bias를 기록한다.
 
 ## 6. 상태와 제한 사항
 
@@ -306,8 +325,9 @@ WGS84로 바뀐 뒤 `FloorPlanView`에 전달된다. 맵매칭은 센서 오차�
 
 - 해당 층의 `navigation_graph`가 없거나 비어 있으면 PDR을 시작할 수 없다.
 - 시작점 지정이 부정확하면 이후 경로도 같은 만큼 어긋난다.
-- 자력계 교란, 휴대 방식, 급회전, Android의 고정 보폭은 누적 위치 오차를 만들 수 있다.
+- 자력계 교란, 휴대 방식, 급회전, 잘못된 자동보폭은 누적 위치 오차를 만들 수 있다.
 - graph가 실제 통로와 다르면 맵매칭 결과도 잘못된 통로에 표시될 수 있다.
+- `uncertain`이 오래 유지되면 임의 노드로 점프하지 않고 외부 위치 재지정이 필요하다.
 
 ## 7. 확인 방법
 

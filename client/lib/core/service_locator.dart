@@ -4,6 +4,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'api_config.dart';
 import '../features/debug_mode/debug_mode_controller.dart';
+import '../features/indoor_navigation/application/corridor_tracking_session.dart';
 import '../features/indoor_navigation/application/indoor_navigation_controller.dart';
 import '../features/indoor_navigation/platform/android_pdr_motion_source.dart';
 import '../features/indoor_navigation/platform/ios_pdr_motion_source.dart';
@@ -26,6 +27,8 @@ final PdrMotionSource pdrMotionSource = switch (defaultTargetPlatform) {
 final IndoorNavigationDriver indoorNavigationDriver = IndoorNavigationDriver(
   source: pdrMotionSource,
 );
+final CorridorTrackingSession corridorTrackingSession =
+    CorridorTrackingSession();
 
 /// 디버그 모드 설정도 화면 간에 공유한다. 실내 지도와 야외 지도의 실내 진입
 /// 오버레이가 각자 컨트롤러를 만들면, 한쪽에서 디버그 모드를 켜도 다른 쪽은
