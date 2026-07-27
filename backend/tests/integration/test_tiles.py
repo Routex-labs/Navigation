@@ -41,3 +41,44 @@ def test_범위를_벗어난_타일_좌표는_잘못된요청_응답을_반환�
     )
 
     assert response.status_code == 400
+
+
+# 헤더가 없으면 MapLibre가 같은 타일을 줌 전환·층 재방문마다 다시 받아 간다.
+def test_타일_응답에_캐시_헤더가_붙는다(api_client):
+    response = api_client.get(
+        f"/buildings/{BUILDING_ID}/floors/{FLOOR_NAME}/tiles/0/0/0.mvt"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "public, max-age=60"
+    assert response.headers["etag"]
+
+
+def test_같은_타일은_같은_ETag를_돌려준다(api_client):
+    url = f"/buildings/{BUILDING_ID}/floors/{FLOOR_NAME}/tiles/0/0/0.mvt"
+
+    first = api_client.get(url)
+    second = api_client.get(url)
+
+    assert first.headers["etag"] == second.headers["etag"]
+
+
+def test_ETag가_같으면_본문없는_304를_돌려준다(api_client):
+    url = f"/buildings/{BUILDING_ID}/floors/{FLOOR_NAME}/tiles/0/0/0.mvt"
+    etag = api_client.get(url).headers["etag"]
+
+    response = api_client.get(url, headers={"If-None-Match": etag})
+
+    assert response.status_code == 304
+    assert response.content == b""
+    # 304에도 헤더를 붙여야 브라우저가 만료 시각을 갱신한다.
+    assert response.headers["cache-control"] == "public, max-age=60"
+
+
+def test_ETag가_다르면_본문을_다시_내려준다(api_client):
+    url = f"/buildings/{BUILDING_ID}/floors/{FLOOR_NAME}/tiles/0/0/0.mvt"
+
+    response = api_client.get(url, headers={"If-None-Match": '"stale"'})
+
+    assert response.status_code == 200
+    assert response.content

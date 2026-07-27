@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 import threading
+from pathlib import Path
 
 import mapbox_vector_tile
 from sqlalchemy import select
@@ -27,11 +28,55 @@ from app.repositories.geo_transform import fit_building_geo_transform
 # 처리하며 뒤쪽 타일이 3~4초 이상 걸린다. 그 사이 MapLibre 네이티브 OkHttp의
 # keep-alive 소켓 재사용/취소 경쟁으로 "Socket closed"가 튀고, 실패한 타일은
 # MapLibre가 잠시 재요청하지 않아 해당 층 오버레이가 빈 채로 남는 증상이 있었다.
-# 타일 바이트는 (건물 데이터, 층, z, x, y) 조합에 대해 결정적이고, 재시드
-# 이전에는 바뀔 일이 없으니 프로세스 메모리에 무한 캐싱해도 안전하다 — 첫 요청
-# 후 나머지는 마이크로초 반환이라 병렬 요청 폭풍이 사라진다. 프로세스 재시작
-# (=재시드)마다 새 dict으로 시작하므로 stale 걱정도 없다.
+# 타일 바이트는 (건물 데이터, 층, z, x, y) 조합에 대해 결정적이라 프로세스
+# 메모리에 캐싱해도 안전하다 — 첫 요청 후 나머지는 마이크로초 반환이라 병렬
+# 요청 폭풍이 사라진다.
+#
+# 단, "재시드하면 프로세스가 재시작되니 stale 걱정이 없다"는 전제는 이 저장소의
+# 개발 절차에서 성립하지 않는다(AGENTS.md 참고). reset_and_seed는 별도 프로세스로
+# 돌고 uvicorn은 --reload-dir app으로 app/ 코드만 감시하므로, 재시드는 DB 파일만
+# 바꿀 뿐 리로드를 트리거하지 않는다. 그대로 두면 서버가 시드 이전 타일을 계속
+# 내보낸다. 그래서 DB 파일의 mtime을 캐시 "세대"로 삼아 자동 무효화한다.
 _TILE_BYTES_CACHE: dict[tuple[str, str, int, int, int], bytes] = {}
+
+# 현재 캐시가 어느 DB 상태에서 만들어졌는지 — (파일 경로, mtime_ns).
+# 경로까지 넣는 이유는 서로 다른 DB가 우연히 같은 mtime을 가질 수 있어서다
+# (테스트가 임시 DB를 갈아끼울 때 실제로 일어날 수 있다).
+_CACHE_GENERATION: tuple[str, int] | None = None
+
+# 워밍업 데몬 스레드와 요청 처리 스레드가 같은 dict을 만지므로 교체는 락으로 묶는다.
+_CACHE_LOCK = threading.Lock()
+
+
+# 캐시 세대를 구한다. settings.database_url이 아니라 세션이 실제로 물고 있는
+# 엔진에서 경로를 얻는다 — 테스트는 임시 DB 엔진을 get_db 오버라이드로 주입할 뿐
+# settings는 건드리지 않으므로, 전역 설정을 보면 엉뚱한 파일을 보게 된다.
+#
+# sqlite 파일이 아니면(메모리 DB나 다른 백엔드) None을 돌려준다. 무효화 근거가
+# 없는 상태에서 세대를 지어내면 조용히 낡은 타일을 내보내게 되므로, 그때는
+# 세대 판정을 아예 건너뛴다.
+def _cache_generation(session: Session) -> tuple[str, int] | None:
+    url = session.get_bind().url
+    if url.get_backend_name() != "sqlite" or not url.database:
+        return None
+    try:
+        return url.database, Path(url.database).stat().st_mtime_ns
+    except OSError:
+        return None
+
+
+# DB가 바뀌었으면(=재시드) 타일 캐시를 통째로 버린다.
+def _invalidate_if_reseeded(session: Session) -> None:
+    global _CACHE_GENERATION
+
+    generation = _cache_generation(session)
+    if generation is None:
+        return
+
+    with _CACHE_LOCK:
+        if generation != _CACHE_GENERATION:
+            _CACHE_GENERATION = generation
+            _TILE_BYTES_CACHE.clear()
 
 
 # 층 지도를 MVT 바이트로 렌더링한다. 건물/층이 없으면 None.
@@ -43,6 +88,8 @@ def render_floor_tile(
     x: int,
     y: int,
 ) -> bytes | None:
+    _invalidate_if_reseeded(session)
+
     cache_key = (building_id, floor_name, z, x, y)
     cached = _TILE_BYTES_CACHE.get(cache_key)
     if cached is not None:
@@ -82,11 +129,17 @@ def render_floor_tile(
     return tile_bytes
 
 
-# 클라이언트가 층을 훑을 때 사용하는 실내 오버레이 줌 범위. floor_plan_view/outdoor
-# overlay 모두 minzoom=16, maxzoom=18로 소스를 등록하므로 이 두 zoom만 채우면
-# 실제 사용 범위를 다 덮는다. z=16은 페이드 시작 밖이라 굳이 안 채워도 되지만
-# 안전하게 포함해 카메라가 살짝 축소된 순간에도 캐시 히트를 유지한다.
-_WARM_ZOOMS: tuple[int, ...] = (16, 17, 18)
+# 클라이언트가 실내 MVT 소스를 등록하는 zoom 범위 전체.
+#
+# 클라이언트(client/lib/screens/outdoor_map/indoor_entry_zoom.dart)의
+# indoorTilesMinZoom=15 / indoorTilesMaxZoom=18과 맞춰야 한다. 여기가 좁으면
+# 덮지 못한 zoom의 타일만 캐시를 못 타서 요청마다 새로 5개 쿼리를 낸다.
+#
+# z=15가 필요한 이유는 실내 이탈 임계값이 카메라 zoom 15.6이기 때문이다.
+# MapLibre가 요청하는 타일 z는 카메라 zoom의 내림이라 15.6에서는 z=15를
+# 부른다. 예전에는 이 목록이 (16, 17, 18)이라 야외에서 실내로 진입·이탈하는
+# 구간의 타일이 전부 워밍업 밖이었다.
+_WARM_ZOOMS: tuple[int, ...] = (15, 16, 17, 18)
 # 화면이 건물 중심을 벗어나 있어도 인접 타일까지 커버되도록 bbox 밖으로 몇 장
 # 더 확장해 warmup한다. 1이면 8방향 인접, 2면 24방향. 실측 사용 패턴이 대체로
 # 건물 중심 근처라 1로 충분하다.
