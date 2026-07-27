@@ -81,6 +81,7 @@ CorridorObservation _observation({
   required int previewSteps,
   required double headingDeg,
   PdrLocalPoint raw = PdrLocalPoint.zero,
+  List<PdrLocalPoint> rawConfirmedStepPositions = const [],
 }) => CorridorObservation(
   timestampMs: atMs,
   rawConfirmedPosition: raw,
@@ -90,6 +91,7 @@ CorridorObservation _observation({
   previewSteps: previewSteps,
   sensorHeadingDeg: headingDeg,
   hasHeading: true,
+  rawConfirmedStepPositions: rawConfirmedStepPositions,
 );
 
 void main() {
@@ -112,7 +114,7 @@ void main() {
   });
 
   group('CorridorPositionTracker', () {
-    test('직선에서는 위치와 heading bias가 함께 복도 방향으로 수렴한다', () {
+    test('직선에서는 위치를 간선에 고정하고 heading bias를 복도 방향으로 수렴시킨다', () {
       final tracker = CorridorPositionTracker(_longStraightGraph)
         ..reset(
           initialPosition: const PdrLocalPoint(1, 0),
@@ -137,8 +139,12 @@ void main() {
       expect(result.currentEdgeId, 'straight');
       expect(result.state, CorridorTrackingState.straightTracking);
       expect(result.headingBiasDeg, greaterThan(0));
-      expect(result.correctedHeadingDeg, greaterThan(80));
-      expect(result.correctedPosition.northM.abs(), lessThan(0.45));
+      expect(result.correctedHeadingDeg, closeTo(90, 1e-9));
+      expect(result.correctedPosition.northM, closeTo(0, 1e-9));
+      expect(
+        result.correctedPath.every((point) => point.northM.abs() < 1e-9),
+        isTrue,
+      );
     });
 
     test('원본이 평행 복도에 가까워져도 연결 노드 도달 전에는 전환하지 않는다', () {
@@ -166,7 +172,7 @@ void main() {
       expect(tracker.result.correctedPosition.northM.abs(), lessThan(0.1));
     });
 
-    test('초록 배치는 수신 시점 heading이 아니라 복원된 걸음별 경로를 적분한다', () {
+    test('초록 배치는 복원된 걸음별 방향으로 간선 진행 방향을 정한다', () {
       final tracker = CorridorPositionTracker(_longStraightGraph)
         ..reset(
           initialPosition: const PdrLocalPoint(1, 0),
@@ -177,26 +183,26 @@ void main() {
       final result = tracker.update(
         CorridorObservation(
           timestampMs: 1000,
-          rawConfirmedPosition: const PdrLocalPoint(1, 1.4),
+          rawConfirmedPosition: const PdrLocalPoint(2.4, 0),
           confirmedSteps: 2,
           confirmedDistanceM: 1.4,
-          rawPreviewPosition: const PdrLocalPoint(1, 1.4),
+          rawPreviewPosition: const PdrLocalPoint(2.4, 0),
           previewSteps: 2,
           // 배치가 늦게 도착한 시점에는 폰이 이미 동쪽을 향한 상황.
           sensorHeadingDeg: 90,
           hasHeading: true,
           rawConfirmedStepPositions: const [
-            PdrLocalPoint(1, 0.7),
-            PdrLocalPoint(1, 1.4),
+            PdrLocalPoint(1.7, 0),
+            PdrLocalPoint(2.4, 0),
           ],
         ),
       );
 
-      expect(result.correctedPosition.eastM, closeTo(1, 1e-9));
-      expect(result.correctedPosition.northM, closeTo(1.4, 1e-9));
+      expect(result.correctedPosition.eastM, closeTo(2.4, 1e-9));
+      expect(result.correctedPosition.northM, closeTo(0, 1e-9));
     });
 
-    test('직진 연결 간선은 초록 거리로 노드 도달이 확인된 뒤 이어간다', () {
+    test('직진 연결 간선은 체크포인트 전이 없이 같은 복도처럼 이어간다', () {
       final tracker = CorridorPositionTracker(_crossGraph)
         ..reset(
           initialPosition: const PdrLocalPoint(8.5, 0),
@@ -214,9 +220,9 @@ void main() {
         ),
       );
 
-      expect(result.state, CorridorTrackingState.nodeConfirmed);
+      expect(result.state, CorridorTrackingState.straightTracking);
       expect(result.currentEdgeId, 'bd');
-      expect(result.lastConfirmedNodeId, 'b');
+      expect(result.lastConfirmedNodeId, isNull);
       expect(result.correctedPath, contains(const PdrLocalPoint(10, 0)));
       expect(result.correctedPosition.eastM, closeTo(10.6, 1e-9));
       expect(result.correctedPosition.northM, closeTo(0, 1e-9));
@@ -361,6 +367,130 @@ void main() {
       );
     });
 
+    test('uncertain 뒤 원래 직진 방향이 돌아오면 연결된 직진 간선을 재획득한다', () {
+      final tracker = CorridorPositionTracker(_crossGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(8.5, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+
+      tracker.update(
+        _observation(
+          atMs: 100,
+          confirmedSteps: 0,
+          confirmedDistanceM: 0,
+          previewSteps: 1,
+          headingDeg: 0,
+        ),
+      );
+      tracker.update(
+        _observation(
+          atMs: 700,
+          confirmedSteps: 0,
+          confirmedDistanceM: 0,
+          previewSteps: 2,
+          headingDeg: 0,
+        ),
+      );
+      tracker.update(
+        _observation(
+          atMs: 4800,
+          confirmedSteps: 4,
+          confirmedDistanceM: 2.8,
+          previewSteps: 6,
+          headingDeg: 180,
+        ),
+      );
+
+      tracker.update(
+        _observation(
+          atMs: 5000,
+          confirmedSteps: 4,
+          confirmedDistanceM: 2.8,
+          previewSteps: 7,
+          headingDeg: 90,
+        ),
+      );
+      final recovered = tracker.update(
+        _observation(
+          atMs: 7000,
+          confirmedSteps: 7,
+          confirmedDistanceM: 4.9,
+          previewSteps: 10,
+          headingDeg: 90,
+        ),
+      );
+
+      expect(
+        recovered.state,
+        anyOf(
+          CorridorTrackingState.nodeConfirmed,
+          CorridorTrackingState.straightTracking,
+        ),
+      );
+      expect(recovered.currentEdgeId, 'bd');
+      expect(recovered.correctedPosition.eastM, greaterThanOrEqualTo(11.5));
+      expect(recovered.correctedPosition.northM, closeTo(0, 1e-9));
+    });
+
+    test('최신 heading만 후보와 맞고 초록 걸음별 방향이 다르면 회전을 확정하지 않는다', () {
+      final tracker = CorridorPositionTracker(_crossGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(7, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+
+      tracker.update(
+        _observation(
+          atMs: 1200,
+          confirmedSteps: 0,
+          confirmedDistanceM: 0,
+          previewSteps: 1,
+          headingDeg: 0,
+        ),
+      );
+      tracker.update(
+        _observation(
+          atMs: 1800,
+          confirmedSteps: 0,
+          confirmedDistanceM: 0,
+          previewSteps: 2,
+          headingDeg: 0,
+        ),
+      );
+      final result = tracker.update(
+        _observation(
+          atMs: 3000,
+          confirmedSteps: 8,
+          confirmedDistanceM: 5.6,
+          previewSteps: 8,
+          headingDeg: 0,
+          raw: const PdrLocalPoint(12.6, 0),
+          rawConfirmedStepPositions: const [
+            PdrLocalPoint(7.7, 0),
+            PdrLocalPoint(8.4, 0),
+            PdrLocalPoint(9.1, 0),
+            PdrLocalPoint(9.8, 0),
+            PdrLocalPoint(10.5, 0),
+            PdrLocalPoint(11.2, 0),
+            PdrLocalPoint(11.9, 0),
+            PdrLocalPoint(12.6, 0),
+          ],
+        ),
+      );
+
+      expect(result.currentEdgeId, 'ab');
+      expect(
+        result.state,
+        anyOf(
+          CorridorTrackingState.turnPending,
+          CorridorTrackingState.uncertain,
+        ),
+      );
+    });
+
     test('복도 중간 유턴은 교차로 진입이나 다른 간선 전환으로 보지 않는다', () {
       final tracker = CorridorPositionTracker(_crossGraph)
         ..reset(
@@ -381,6 +511,141 @@ void main() {
 
       expect(result.state, CorridorTrackingState.straightTracking);
       expect(result.currentEdgeId, 'ab');
+    });
+
+    test('heading이 계속 흔들려도 보정 경로는 활성 간선 밖으로 나가지 않는다', () {
+      final tracker = CorridorPositionTracker(_longStraightGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(45, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+
+      const headings = [40.0, 150.0, 300.0, 20.0, 280.0];
+      for (var step = 1; step <= headings.length; step += 1) {
+        tracker.update(
+          _observation(
+            atMs: step * 500,
+            confirmedSteps: step,
+            confirmedDistanceM: step * 0.7,
+            previewSteps: step,
+            headingDeg: headings[step - 1],
+            raw: PdrLocalPoint(45 + step * 0.4, step * 0.8),
+            rawConfirmedStepPositions: [
+              PdrLocalPoint(45 + step * 0.4, step * 0.8),
+            ],
+          ),
+        );
+      }
+
+      expect(
+        tracker.result.correctedPath.every(
+          (point) =>
+              point.northM.abs() < 1e-9 &&
+              point.eastM >= 0 &&
+              point.eastM <= 50,
+        ),
+        isTrue,
+      );
+    });
+
+    test('연결 출구가 없는 간선 끝에서는 밖으로 뚫고 가지 않고 uncertain이 된다', () {
+      final tracker = CorridorPositionTracker(_longStraightGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(49, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+
+      final result = tracker.update(
+        _observation(
+          atMs: 1000,
+          confirmedSteps: 4,
+          confirmedDistanceM: 2.8,
+          previewSteps: 4,
+          headingDeg: 90,
+          raw: const PdrLocalPoint(51.8, 0),
+          rawConfirmedStepPositions: const [
+            PdrLocalPoint(49.7, 0),
+            PdrLocalPoint(50.4, 0),
+            PdrLocalPoint(51.1, 0),
+            PdrLocalPoint(51.8, 0),
+          ],
+        ),
+      );
+
+      expect(result.state, CorridorTrackingState.uncertain);
+      expect(result.correctedPosition, const PdrLocalPoint(50, 0));
+      expect(
+        result.correctedPath.every((point) => point.northM.abs() < 1e-9),
+        isTrue,
+      );
+    });
+
+    test('시간 변화가 없는 heading 오차는 교차로 회전으로 오인하지 않는다', () {
+      final tracker = CorridorPositionTracker(_crossGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(8.5, 0),
+          initialHeadingDeg: 20,
+          timestampMs: 0,
+        );
+
+      tracker.update(
+        _observation(
+          atMs: 600,
+          confirmedSteps: 0,
+          confirmedDistanceM: 0,
+          previewSteps: 1,
+          headingDeg: 20,
+        ),
+      );
+      final result = tracker.update(
+        _observation(
+          atMs: 1200,
+          confirmedSteps: 0,
+          confirmedDistanceM: 0,
+          previewSteps: 2,
+          headingDeg: 20,
+        ),
+      );
+
+      expect(result.state, CorridorTrackingState.straightTracking);
+      expect(result.pendingEdgeId, isNull);
+    });
+
+    test('진행 방향을 잠근 뒤 휴대폰 heading이 반대로 튀어도 위치와 표시 방향은 유지한다', () {
+      final tracker = CorridorPositionTracker(_longStraightGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(5, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+
+      tracker.update(
+        _observation(
+          atMs: 500,
+          confirmedSteps: 1,
+          confirmedDistanceM: 0.7,
+          previewSteps: 1,
+          headingDeg: 90,
+          raw: const PdrLocalPoint(5.7, 0),
+          rawConfirmedStepPositions: const [PdrLocalPoint(5.7, 0)],
+        ),
+      );
+      final result = tracker.update(
+        _observation(
+          atMs: 1000,
+          confirmedSteps: 2,
+          confirmedDistanceM: 1.4,
+          previewSteps: 2,
+          headingDeg: 270,
+          raw: const PdrLocalPoint(6.4, 0),
+          rawConfirmedStepPositions: const [PdrLocalPoint(6.4, 0)],
+        ),
+      );
+
+      expect(result.correctedPosition.eastM, closeTo(6.4, 1e-9));
+      expect(result.correctedHeadingDeg, closeTo(90, 1e-9));
     });
   });
 }

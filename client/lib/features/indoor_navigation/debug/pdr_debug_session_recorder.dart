@@ -25,7 +25,8 @@ class PdrDebugSessionRecorder {
   // 파일만으로 가르기 위한 값이다.
   // v6: Android RoNIN 자동보폭 비교 경로와 1Hz 보폭/속도 관측을 추가했다.
   // v7: 세션형 복도 보정 위치·heading bias·상태 전이 시계열을 추가했다.
-  static const schemaVersion = 7;
+  // v8: 간선 누적 진행거리와 잠긴 진행 방향을 추가했다.
+  static const schemaVersion = 8;
   static const _maxQualitySamples = 900;
 
   final DateTime _startedAt;
@@ -75,6 +76,8 @@ class PdrDebugSessionRecorder {
       'at_utc': now.toIso8601String(),
       'state': result.state.name,
       'edge_id': result.currentEdgeId,
+      'edge_progress_m': result.currentEdgeProgressM,
+      'travel_direction_sign': result.travelDirectionSign,
       'pending_edge_id': result.pendingEdgeId,
       'last_confirmed_node_id': result.lastConfirmedNodeId,
       'position_floor_local_m': _pointJson(result.correctedPosition),
@@ -287,6 +290,8 @@ class PdrDebugSessionRecorder {
           : {
               'state': corridorCorrection.state.name,
               'edge_id': corridorCorrection.currentEdgeId,
+              'edge_progress_m': corridorCorrection.currentEdgeProgressM,
+              'travel_direction_sign': corridorCorrection.travelDirectionSign,
               'pending_edge_id': corridorCorrection.pendingEdgeId,
               'last_confirmed_node_id': corridorCorrection.lastConfirmedNodeId,
               'position_floor_local_m': _pointJson(

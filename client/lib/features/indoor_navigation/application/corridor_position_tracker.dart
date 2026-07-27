@@ -21,9 +21,9 @@ class CorridorTrackerConfig {
     this.newDirectionHoldMs = 1000,
     this.newEdgeHeadingToleranceDeg = 20,
     this.minimumNewEdgeProgressM = 1.5,
+    this.maximumConfirmationProgressM = 2.5,
     this.turnTimeoutMs = 4000,
     this.turnDistanceLimitM = 4,
-    this.positionCorrectionFraction = 0.25,
     this.maxHeadingCorrectionPerStepDeg = 0.75,
     this.straightHeadingSpreadDeg = 12,
     this.uncertainReacquireMs = 1500,
@@ -38,9 +38,9 @@ class CorridorTrackerConfig {
   final int newDirectionHoldMs;
   final double newEdgeHeadingToleranceDeg;
   final double minimumNewEdgeProgressM;
+  final double maximumConfirmationProgressM;
   final int turnTimeoutMs;
   final double turnDistanceLimitM;
-  final double positionCorrectionFraction;
   final double maxHeadingCorrectionPerStepDeg;
   final double straightHeadingSpreadDeg;
   final int uncertainReacquireMs;
@@ -84,6 +84,8 @@ class CorridorTrackingResult {
     required this.correctedHeadingDeg,
     required this.headingBiasDeg,
     required this.currentEdgeId,
+    required this.currentEdgeProgressM,
+    required this.travelDirectionSign,
     required this.pendingEdgeId,
     required this.lastConfirmedNodeId,
     required this.correctedPath,
@@ -96,6 +98,8 @@ class CorridorTrackingResult {
   final double correctedHeadingDeg;
   final double headingBiasDeg;
   final String? currentEdgeId;
+  final double currentEdgeProgressM;
+  final int travelDirectionSign;
   final String? pendingEdgeId;
   final String? lastConfirmedNodeId;
   final List<PdrLocalPoint> correctedPath;
@@ -121,6 +125,9 @@ class CorridorPositionTracker {
 
   CorridorTrackingState _state = CorridorTrackingState.uncertain;
   _CorridorEdge? _currentEdge;
+  double _currentProgressM = 0;
+  int _travelSign = 1;
+  bool _travelDirectionLocked = false;
   PdrLocalPoint _correctedPosition = PdrLocalPoint.zero;
   PdrLocalPoint _rawConfirmedPosition = PdrLocalPoint.zero;
   PdrLocalPoint _rawPreviewPosition = PdrLocalPoint.zero;
@@ -138,6 +145,8 @@ class CorridorPositionTracker {
   String? _liveTurnNodeId;
   int? _liveTurnSinceMs;
   String? _uncertainCandidateEdgeId;
+  String? _uncertainCandidateNodeId;
+  int _uncertainCandidateTravelSign = 1;
   int? _uncertainCandidateSinceMs;
   double _uncertainCandidateDistanceM = 0;
 
@@ -146,9 +155,13 @@ class CorridorPositionTracker {
   CorridorTrackingResult get result => CorridorTrackingResult(
     state: _state,
     correctedPosition: _correctedPosition,
-    correctedHeadingDeg: _normalizeBearing(_sensorHeadingDeg + _headingBiasDeg),
+    correctedHeadingDeg:
+        _currentEdge?.bearingForTravel(_currentProgressM, _travelSign) ??
+        _normalizeBearing(_sensorHeadingDeg + _headingBiasDeg),
     headingBiasDeg: _headingBiasDeg,
     currentEdgeId: _currentEdge?.id,
+    currentEdgeProgressM: _currentProgressM,
+    travelDirectionSign: _travelSign,
     pendingEdgeId: _turn?.candidateEdge.id ?? _uncertainCandidateEdgeId,
     lastConfirmedNodeId: _lastConfirmedNodeId,
     correctedPath: List.unmodifiable(_correctedPath),
@@ -164,8 +177,14 @@ class CorridorPositionTracker {
     double initialConfirmedDistanceM = 0,
     int initialPreviewSteps = 0,
   }) {
-    final nearest = _network.nearestProjection(initialPosition);
+    final nearest = _network.nearestProjection(
+      initialPosition,
+      headingDeg: initialHeadingDeg,
+    );
     _currentEdge = nearest?.edge;
+    _currentProgressM = nearest?.distanceAlongM ?? 0;
+    _travelSign = nearest?.edge.directionSignForHeading(initialHeadingDeg) ?? 1;
+    _travelDirectionLocked = false;
     _correctedPosition = nearest?.point ?? initialPosition;
     _rawConfirmedPosition = initialPosition;
     _rawPreviewPosition = initialPosition;
@@ -245,12 +264,18 @@ class CorridorPositionTracker {
         case CorridorTrackingState.turnPending:
           _applyPendingConfirmed(
             atMs: observation.timestampMs,
+            deltaSteps: deltaSteps,
             deltaDistanceM: deltaDistanceM,
+            previousRawConfirmedPosition: previousRawConfirmedPosition,
+            rawConfirmedStepPositions: observation.rawConfirmedStepPositions,
           );
         case CorridorTrackingState.uncertain:
           _applyUncertainConfirmed(
             atMs: observation.timestampMs,
+            deltaSteps: deltaSteps,
             deltaDistanceM: deltaDistanceM,
+            previousRawConfirmedPosition: previousRawConfirmedPosition,
+            rawConfirmedStepPositions: observation.rawConfirmedStepPositions,
           );
         case CorridorTrackingState.nodeConfirmed:
           break;
@@ -293,53 +318,122 @@ class CorridorPositionTracker {
     required PdrLocalPoint previousRawConfirmedPosition,
     required List<PdrLocalPoint> rawConfirmedStepPositions,
   }) {
-    final edge = _currentEdge;
-    if (edge == null) return;
-    final correctedHeading = _normalizeBearing(
-      _sensorHeadingDeg + _headingBiasDeg,
-    );
-    final junction = _network.nearestConnectedNodeOn(
-      edge,
-      _correctedPosition,
-      maxDistanceM: config.junctionRadiusM,
-    );
-    final continuation = junction == null
-        ? null
-        : _network.bestOutgoing(
-            nodeId: junction.node.id,
-            excludingEdgeId: edge.id,
-            headingDeg: correctedHeading,
-            toleranceDeg: config.newEdgeHeadingToleranceDeg,
-          );
-    final towardJunction =
-        junction != null &&
-        _headingError(
-              correctedHeading,
-              edge.bearingTowardNode(junction.node.id),
-            ) <=
-            config.newEdgeHeadingToleranceDeg;
-    final continuesSameDirection =
-        junction != null &&
-        continuation != null &&
-        _headingError(
-              edge.bearingTowardNode(junction.node.id),
-              continuation.edge.bearingAwayFromNode(junction.node.id),
-            ) <=
-            config.newEdgeHeadingToleranceDeg;
-    if (continuation != null &&
-        towardJunction &&
-        continuesSameDirection &&
-        junction.distanceM <= deltaDistanceM + 0.35) {
-      final leftoverM = math.max(0.0, deltaDistanceM - junction.distanceM);
-      _confirmNodeTransition(
-        node: junction.node,
-        edge: continuation.edge,
-        progressM: leftoverM,
+    for (final segment in _rawSegments(
+      deltaSteps: deltaSteps,
+      deltaDistanceM: deltaDistanceM,
+      previousRawConfirmedPosition: previousRawConfirmedPosition,
+      rawConfirmedStepPositions: rawConfirmedStepPositions,
+    )) {
+      _integrateStraightStep(
         atMs: atMs,
+        rawHeadingDeg: segment.headingDeg,
+        stepDistanceM: segment.distanceM,
       );
-      return;
+      if (_state != CorridorTrackingState.straightTracking) break;
     }
+  }
 
+  void _integrateStraightStep({
+    required int atMs,
+    required double rawHeadingDeg,
+    required double stepDistanceM,
+  }) {
+    final edge = _currentEdge;
+    if (edge == null || stepDistanceM <= 0) return;
+    if (!_travelDirectionLocked) {
+      _travelSign = edge.directionSignForHeading(rawHeadingDeg);
+      _travelDirectionLocked = true;
+    }
+    final targetHeading = edge.bearingForTravel(_currentProgressM, _travelSign);
+    final farFromJunction =
+        _network.nearestJunctionDistance(edge, _correctedPosition) >
+        config.junctionRadiusM;
+    final stable =
+        atMs - _straightSinceMs >= config.straightStableMs &&
+        atMs - _lastWalkingAtMs <= 1200 &&
+        _headingSpreadDeg <= config.straightHeadingSpreadDeg &&
+        farFromJunction;
+
+    if (stable) {
+      final correctedRawHeading = _normalizeBearing(
+        rawHeadingDeg + _headingBiasDeg,
+      );
+      final requested = _shortestDelta(targetHeading - correctedRawHeading);
+      final maxCorrection = config.maxHeadingCorrectionPerStepDeg;
+      _headingBiasDeg = _clampSigned(
+        _headingBiasDeg +
+            requested.clamp(-maxCorrection, maxCorrection).toDouble(),
+        60,
+      );
+    }
+    _advanceStraightOnGraph(
+      distanceM: stepDistanceM,
+      rawHeadingDeg: rawHeadingDeg,
+      atMs: atMs,
+    );
+  }
+
+  void _advanceStraightOnGraph({
+    required double distanceM,
+    required double rawHeadingDeg,
+    required int atMs,
+  }) {
+    var remainingM = distanceM;
+    var transitions = 0;
+    while (remainingM > 1e-6 && transitions < 16) {
+      final edge = _currentEdge;
+      if (edge == null) return;
+      final distanceToEnd = _travelSign > 0
+          ? edge.lengthM - _currentProgressM
+          : _currentProgressM;
+      if (remainingM <= distanceToEnd + 1e-6) {
+        _currentProgressM = (_currentProgressM + _travelSign * remainingM)
+            .clamp(0.0, edge.lengthM)
+            .toDouble();
+        _correctedPosition = edge.pointAt(_currentProgressM);
+        _appendCorrected(_correctedPosition);
+        return;
+      }
+
+      _currentProgressM = _travelSign > 0 ? edge.lengthM : 0;
+      _correctedPosition = edge.pointAt(_currentProgressM);
+      _appendCorrected(_correctedPosition);
+      remainingM = math.max(0, remainingM - distanceToEnd);
+      final nodeId = edge.nodeAtTravelEnd(_travelSign);
+      final incomingBearing = edge.bearingTowardNode(nodeId);
+      final continuation = _network.bestStraightContinuation(
+        nodeId: nodeId,
+        excludingEdgeId: edge.id,
+        incomingBearingDeg: incomingBearing,
+        toleranceDeg: config.newEdgeHeadingToleranceDeg,
+      );
+      if (continuation == null ||
+          _headingError(
+                _normalizeBearing(rawHeadingDeg + _headingBiasDeg),
+                continuation.edge.bearingAwayFromNode(nodeId),
+              ) >
+              config.newEdgeHeadingToleranceDeg + 25) {
+        _state = CorridorTrackingState.uncertain;
+        _straightSinceMs = atMs;
+        _clearUncertainCandidate();
+        return;
+      }
+
+      _currentEdge = continuation.edge;
+      _travelSign = continuation.edge.travelSignAwayFromNode(nodeId);
+      _travelDirectionLocked = true;
+      _currentProgressM = _travelSign > 0 ? 0 : continuation.edge.lengthM;
+      _correctedPosition = continuation.edge.pointAt(_currentProgressM);
+      transitions += 1;
+    }
+  }
+
+  List<({double headingDeg, double distanceM})> _rawSegments({
+    required int deltaSteps,
+    required double deltaDistanceM,
+    required PdrLocalPoint previousRawConfirmedPosition,
+    required List<PdrLocalPoint> rawConfirmedStepPositions,
+  }) {
     final rawSegments = <({double headingDeg, double distanceM})>[];
     var rawCursor = previousRawConfirmedPosition;
     var rawTotalM = 0.0;
@@ -355,68 +449,22 @@ class CorridorPositionTracker {
     }
     if (rawSegments.isEmpty || rawTotalM <= 1e-6) {
       final fallbackSteps = math.max(1, deltaSteps);
-      for (var index = 0; index < fallbackSteps; index += 1) {
-        rawSegments.add((
-          headingDeg: _sensorHeadingDeg,
-          distanceM: deltaDistanceM / fallbackSteps,
-        ));
-      }
-      rawTotalM = deltaDistanceM;
+      return [
+        for (var index = 0; index < fallbackSteps; index += 1)
+          (
+            headingDeg: _sensorHeadingDeg,
+            distanceM: deltaDistanceM / fallbackSteps,
+          ),
+      ];
     }
-    final distanceScale = rawTotalM <= 1e-6 ? 1.0 : deltaDistanceM / rawTotalM;
-    for (final segment in rawSegments) {
-      _integrateStraightStep(
-        atMs: atMs,
-        rawHeadingDeg: segment.headingDeg,
-        stepDistanceM: segment.distanceM * distanceScale,
-      );
-    }
-  }
-
-  void _integrateStraightStep({
-    required int atMs,
-    required double rawHeadingDeg,
-    required double stepDistanceM,
-  }) {
-    final edge = _currentEdge;
-    if (edge == null || stepDistanceM <= 0) return;
-    final correctedHeading = _normalizeBearing(rawHeadingDeg + _headingBiasDeg);
-    final radians = correctedHeading * math.pi / 180;
-    final integrated = PdrLocalPoint(
-      _correctedPosition.eastM + math.sin(radians) * stepDistanceM,
-      _correctedPosition.northM + math.cos(radians) * stepDistanceM,
-    );
-    final projection = edge.project(integrated);
-    final farFromJunction =
-        _network.nearestJunctionDistance(edge, projection.point) >
-        config.junctionRadiusM;
-    final stable =
-        atMs - _straightSinceMs >= config.straightStableMs &&
-        atMs - _lastWalkingAtMs <= 1200 &&
-        _headingSpreadDeg <= config.straightHeadingSpreadDeg &&
-        farFromJunction;
-
-    if (stable) {
-      _correctedPosition = _blend(
-        integrated,
-        projection.point,
-        config.positionCorrectionFraction,
-      );
-      final targetHeading = edge.closestBearingAt(
-        projection.point,
-        correctedHeading,
-      );
-      final requested = _shortestDelta(targetHeading - correctedHeading);
-      final maxCorrection = config.maxHeadingCorrectionPerStepDeg;
-      _headingBiasDeg = _clampSigned(
-        _headingBiasDeg +
-            requested.clamp(-maxCorrection, maxCorrection).toDouble(),
-        60,
-      );
-    } else {
-      _correctedPosition = integrated;
-    }
-    _appendCorrected(_correctedPosition);
+    final distanceScale = deltaDistanceM / rawTotalM;
+    return [
+      for (final segment in rawSegments)
+        (
+          headingDeg: segment.headingDeg,
+          distanceM: segment.distanceM * distanceScale,
+        ),
+    ];
   }
 
   void _observeRealtimeTurn(int atMs) {
@@ -429,9 +477,9 @@ class CorridorPositionTracker {
     if (_state == CorridorTrackingState.turnPending) {
       final turn = _turn;
       if (turn == null) return;
-      final oldDirection = edge.closestBearingAt(
-        _correctedPosition,
-        correctedHeading,
+      final oldDirection = edge.bearingForTravel(
+        _currentProgressM,
+        _travelSign,
       );
       if (_headingError(correctedHeading, oldDirection) < 10 &&
           _headingError(
@@ -452,14 +500,16 @@ class CorridorPositionTracker {
         toleranceDeg: config.newEdgeHeadingToleranceDeg + 10,
       );
       if (candidate != null && candidate.edge.id != turn.candidateEdge.id) {
-        _turn = _TurnEvidence(
+        final replacement = _TurnEvidence(
           node: turn.node,
           candidateEdge: candidate.edge,
           startedAtMs: turn.startedAtMs,
           candidateSinceMs: atMs,
           distanceToNodeM: turn.distanceToNodeM,
-          startedPosition: turn.startedPosition,
-        );
+          startedProgressM: turn.startedProgressM,
+          oldTravelSign: turn.oldTravelSign,
+        )..confirmedDistanceM = turn.confirmedDistanceM;
+        _turn = replacement;
       }
       return;
     }
@@ -479,12 +529,11 @@ class CorridorPositionTracker {
       _clearLiveTurnCandidate();
       return;
     }
-    final currentBearing = edge.bearingTowardNode(junction.node.id);
-    if (_headingError(correctedHeading, currentBearing) <
-        config.turnThresholdDeg) {
+    if (edge.nodeAtTravelEnd(_travelSign) != junction.node.id) {
       _clearLiveTurnCandidate();
       return;
     }
+    final currentBearing = edge.bearingTowardNode(junction.node.id);
     final candidate = _network.bestOutgoing(
       nodeId: junction.node.id,
       excludingEdgeId: edge.id,
@@ -495,8 +544,20 @@ class CorridorPositionTracker {
       _clearLiveTurnCandidate();
       return;
     }
+    final candidateBearing = candidate.edge.bearingAwayFromNode(
+      junction.node.id,
+    );
+    if (_headingError(currentBearing, candidateBearing) <
+        config.turnThresholdDeg) {
+      _clearLiveTurnCandidate();
+      return;
+    }
     if (_liveTurnEdgeId != candidate.edge.id ||
         _liveTurnNodeId != junction.node.id) {
+      if (_recentHeadingChangeDeg(atMs) < config.turnThresholdDeg) {
+        _clearLiveTurnCandidate();
+        return;
+      }
       _liveTurnEdgeId = candidate.edge.id;
       _liveTurnNodeId = junction.node.id;
       _liveTurnSinceMs = atMs;
@@ -510,7 +571,8 @@ class CorridorPositionTracker {
       startedAtMs: liveSince,
       candidateSinceMs: liveSince,
       distanceToNodeM: junction.distanceM,
-      startedPosition: _correctedPosition,
+      startedProgressM: _currentProgressM,
+      oldTravelSign: _travelSign,
     );
     _clearLiveTurnCandidate();
     _state = CorridorTrackingState.turnPending;
@@ -518,11 +580,41 @@ class CorridorPositionTracker {
 
   void _applyPendingConfirmed({
     required int atMs,
+    required int deltaSteps,
     required double deltaDistanceM,
+    required PdrLocalPoint previousRawConfirmedPosition,
+    required List<PdrLocalPoint> rawConfirmedStepPositions,
   }) {
     final turn = _turn;
     if (turn == null) return;
-    turn.confirmedDistanceM += deltaDistanceM;
+    final candidateBearing = turn.candidateEdge.bearingAwayFromNode(
+      turn.node.id,
+    );
+    for (final segment in _rawSegments(
+      deltaSteps: deltaSteps,
+      deltaDistanceM: deltaDistanceM,
+      previousRawConfirmedPosition: previousRawConfirmedPosition,
+      rawConfirmedStepPositions: rawConfirmedStepPositions,
+    )) {
+      final beforeM = turn.confirmedDistanceM;
+      turn.confirmedDistanceM += segment.distanceM;
+      final afterNodeBeforeM = math.max(beforeM, turn.distanceToNodeM);
+      final afterNodeAfterM = math.max(
+        turn.confirmedDistanceM,
+        turn.distanceToNodeM,
+      );
+      final candidateDistanceM = afterNodeAfterM - afterNodeBeforeM;
+      if (candidateDistanceM <= 0) continue;
+      final segmentHeading = _normalizeBearing(
+        segment.headingDeg + _headingBiasDeg,
+      );
+      if (_headingError(segmentHeading, candidateBearing) <=
+          config.newEdgeHeadingToleranceDeg) {
+        turn.alignedNewEdgeDistanceM += candidateDistanceM;
+      } else {
+        turn.alignedNewEdgeDistanceM = 0;
+      }
+    }
 
     // 확정 전 마커는 기존 간선에서 교차 노드까지만 이동한다. 후보 복도로
     // 미리 들어가거나 임의 노드로 순간이동하지 않는다.
@@ -532,11 +624,11 @@ class CorridorPositionTracker {
         turn.confirmedDistanceM,
         turn.distanceToNodeM,
       );
-      _correctedPosition = oldEdge.pointTowardNode(
-        from: turn.startedPosition,
-        nodeId: turn.node.id,
-        distanceM: progressToNode,
-      );
+      _currentProgressM =
+          (turn.startedProgressM + turn.oldTravelSign * progressToNode)
+              .clamp(0.0, oldEdge.lengthM)
+              .toDouble();
+      _correctedPosition = oldEdge.pointAt(_currentProgressM);
       _appendCorrected(_correctedPosition);
     }
 
@@ -544,24 +636,18 @@ class CorridorPositionTracker {
       0.0,
       turn.confirmedDistanceM - turn.distanceToNodeM,
     );
-    final correctedHeading = _normalizeBearing(
-      _sensorHeadingDeg + _headingBiasDeg,
-    );
-    final headingMatches =
-        _headingError(
-          correctedHeading,
-          turn.candidateEdge.bearingAwayFromNode(turn.node.id),
-        ) <=
-        config.newEdgeHeadingToleranceDeg;
     final heldLongEnough =
         atMs - turn.candidateSinceMs >= config.newDirectionHoldMs;
-    if (headingMatches &&
-        heldLongEnough &&
-        newEdgeProgressM >= config.minimumNewEdgeProgressM) {
+    if (heldLongEnough &&
+        newEdgeProgressM >= config.minimumNewEdgeProgressM &&
+        turn.alignedNewEdgeDistanceM >= config.minimumNewEdgeProgressM) {
       _confirmNodeTransition(
         node: turn.node,
         edge: turn.candidateEdge,
-        progressM: newEdgeProgressM,
+        progressM: math.min(
+          newEdgeProgressM,
+          config.maximumConfirmationProgressM,
+        ),
         atMs: atMs,
       );
       _turn = null;
@@ -570,45 +656,70 @@ class CorridorPositionTracker {
 
   void _applyUncertainConfirmed({
     required int atMs,
+    required int deltaSteps,
     required double deltaDistanceM,
+    required PdrLocalPoint previousRawConfirmedPosition,
+    required List<PdrLocalPoint> rawConfirmedStepPositions,
   }) {
     final edge = _currentEdge;
     if (edge == null) return;
-    final correctedHeading = _normalizeBearing(
-      _sensorHeadingDeg + _headingBiasDeg,
-    );
-    final radians =
-        edge.closestBearingAt(_correctedPosition, correctedHeading) *
-        math.pi /
-        180;
-    final tentative = PdrLocalPoint(
-      _correctedPosition.eastM + math.sin(radians) * deltaDistanceM,
-      _correctedPosition.northM + math.cos(radians) * deltaDistanceM,
-    );
-    // 불확실할 때도 현재 간선 투영만 허용한다. 다른 간선이나 노드로는
-    // 후보가 확정되기 전까지 절대 옮기지 않는다.
-    _correctedPosition = edge.project(tentative).point;
-    _appendCorrected(_correctedPosition);
-    _uncertainCandidateDistanceM += deltaDistanceM;
 
     final candidateId = _uncertainCandidateEdgeId;
     final candidateSince = _uncertainCandidateSinceMs;
     if (candidateId == null || candidateSince == null) return;
     final candidate = _network.edgeById(candidateId);
-    final junction = _network.nearestJunctionOn(
-      edge,
-      _correctedPosition,
-      maxDistanceM: config.junctionRadiusM,
-    );
-    if (candidate == null || junction == null) return;
+    if (candidate == null) return;
+    for (final segment in _rawSegments(
+      deltaSteps: deltaSteps,
+      deltaDistanceM: deltaDistanceM,
+      previousRawConfirmedPosition: previousRawConfirmedPosition,
+      rawConfirmedStepPositions: rawConfirmedStepPositions,
+    )) {
+      final candidateProgressM = _uncertainCandidateTravelSign > 0
+          ? 0.0
+          : candidate.lengthM;
+      final candidateBearing = candidate.bearingForTravel(
+        candidate == edge ? _currentProgressM : candidateProgressM,
+        _uncertainCandidateTravelSign,
+      );
+      final segmentHeading = _normalizeBearing(
+        segment.headingDeg + _headingBiasDeg,
+      );
+      if (_headingError(segmentHeading, candidateBearing) >
+          config.newEdgeHeadingToleranceDeg) {
+        _uncertainCandidateDistanceM = 0;
+        continue;
+      }
+      _uncertainCandidateDistanceM += segment.distanceM;
+      if (candidate == edge && _uncertainCandidateNodeId == null) {
+        final next = (_currentProgressM + _travelSign * segment.distanceM)
+            .clamp(0.0, edge.lengthM)
+            .toDouble();
+        _currentProgressM = next;
+        _correctedPosition = edge.pointAt(next);
+        _appendCorrected(_correctedPosition);
+      }
+    }
     if (atMs - candidateSince < config.uncertainReacquireMs ||
         _uncertainCandidateDistanceM < config.uncertainReacquireDistanceM) {
       return;
     }
+    if (candidate == edge && _uncertainCandidateNodeId == null) {
+      _state = CorridorTrackingState.straightTracking;
+      _straightSinceMs = atMs;
+      _clearUncertainCandidate();
+      return;
+    }
+    final nodeId = _uncertainCandidateNodeId;
+    final node = nodeId == null ? null : _network.nodes[nodeId];
+    if (node == null) return;
     _confirmNodeTransition(
-      node: junction.node,
+      node: node,
       edge: candidate,
-      progressM: math.max(0, _uncertainCandidateDistanceM - junction.distanceM),
+      progressM: math.min(
+        _uncertainCandidateDistanceM,
+        config.maximumConfirmationProgressM,
+      ),
       atMs: atMs,
     );
     _clearUncertainCandidate();
@@ -617,27 +728,61 @@ class CorridorPositionTracker {
   void _observeUncertainCandidate(int atMs, double headingDeg) {
     final edge = _currentEdge;
     if (edge == null) return;
-    final junction = _network.nearestJunctionOn(
-      edge,
-      _correctedPosition,
-      maxDistanceM: config.junctionRadiusM,
+    final currentBearing = edge.bearingForTravel(
+      _currentProgressM,
+      _travelSign,
     );
-    if (junction == null) {
-      _clearUncertainCandidate();
+    final nodeId = edge.nodeAtTravelEnd(_travelSign);
+    final distanceToNodeM = _travelSign > 0
+        ? edge.lengthM - _currentProgressM
+        : _currentProgressM;
+    if (distanceToNodeM <= 0.35) {
+      final candidate = _network.bestOutgoing(
+        nodeId: nodeId,
+        excludingEdgeId: edge.id,
+        headingDeg: headingDeg,
+        toleranceDeg: config.newEdgeHeadingToleranceDeg,
+      );
+      if (candidate == null) {
+        _clearUncertainCandidate();
+        return;
+      }
+      _setUncertainCandidate(
+        edgeId: candidate.edge.id,
+        nodeId: nodeId,
+        travelSign: candidate.edge.travelSignAwayFromNode(nodeId),
+        atMs: atMs,
+      );
       return;
     }
-    final candidate = _network.bestOutgoing(
-      nodeId: junction.node.id,
-      excludingEdgeId: edge.id,
-      headingDeg: headingDeg,
-      toleranceDeg: config.newEdgeHeadingToleranceDeg,
-    );
-    if (candidate == null) {
+
+    if (_headingError(headingDeg, currentBearing) <=
+        config.newEdgeHeadingToleranceDeg) {
+      _setUncertainCandidate(
+        edgeId: edge.id,
+        nodeId: null,
+        travelSign: _travelSign,
+        atMs: atMs,
+      );
+    } else {
       _clearUncertainCandidate();
+    }
+  }
+
+  void _setUncertainCandidate({
+    required String edgeId,
+    required String? nodeId,
+    required int travelSign,
+    required int atMs,
+  }) {
+    if (_uncertainCandidateEdgeId == edgeId &&
+        _uncertainCandidateNodeId == nodeId &&
+        _uncertainCandidateTravelSign == travelSign) {
       return;
     }
-    if (_uncertainCandidateEdgeId == candidate.edge.id) return;
-    _uncertainCandidateEdgeId = candidate.edge.id;
+    _uncertainCandidateEdgeId = edgeId;
+    _uncertainCandidateNodeId = nodeId;
+    _uncertainCandidateTravelSign = travelSign;
     _uncertainCandidateSinceMs = atMs;
     _uncertainCandidateDistanceM = 0;
   }
@@ -650,10 +795,13 @@ class CorridorPositionTracker {
   }) {
     _appendCorrected(node.point);
     _currentEdge = edge;
-    _correctedPosition = edge.pointAwayFromNode(
-      node.id,
-      progressM.clamp(0.0, edge.lengthM).toDouble(),
-    );
+    _travelSign = edge.travelSignAwayFromNode(node.id);
+    _travelDirectionLocked = true;
+    final boundedProgressM = progressM.clamp(0.0, edge.lengthM).toDouble();
+    _currentProgressM = _travelSign > 0
+        ? boundedProgressM
+        : edge.lengthM - boundedProgressM;
+    _correctedPosition = edge.pointAt(_currentProgressM);
     _appendCorrected(_correctedPosition);
     _lastConfirmedNodeId = node.id;
     _state = CorridorTrackingState.nodeConfirmed;
@@ -665,6 +813,19 @@ class CorridorPositionTracker {
     _headingWindow.add((atMs: atMs, headingDeg: headingDeg));
     final oldest = atMs - config.straightStableMs;
     _headingWindow.removeWhere((sample) => sample.atMs < oldest);
+  }
+
+  double _recentHeadingChangeDeg(int atMs) {
+    ({int atMs, double headingDeg})? baseline;
+    for (final sample in _headingWindow) {
+      final ageMs = atMs - sample.atMs;
+      if (ageMs < config.turnObservationMs || ageMs > 1200) continue;
+      baseline = sample;
+      break;
+    }
+    return baseline == null
+        ? 0
+        : _headingError(_sensorHeadingDeg, baseline.headingDeg);
   }
 
   double get _headingSpreadDeg {
@@ -698,6 +859,8 @@ class CorridorPositionTracker {
 
   void _clearUncertainCandidate() {
     _uncertainCandidateEdgeId = null;
+    _uncertainCandidateNodeId = null;
+    _uncertainCandidateTravelSign = 1;
     _uncertainCandidateSinceMs = null;
     _uncertainCandidateDistanceM = 0;
   }
@@ -716,7 +879,8 @@ class _TurnEvidence {
     required this.startedAtMs,
     required this.candidateSinceMs,
     required this.distanceToNodeM,
-    required this.startedPosition,
+    required this.startedProgressM,
+    required this.oldTravelSign,
   });
 
   final _CorridorNode node;
@@ -724,8 +888,10 @@ class _TurnEvidence {
   final int startedAtMs;
   final int candidateSinceMs;
   final double distanceToNodeM;
-  final PdrLocalPoint startedPosition;
+  final double startedProgressM;
+  final int oldTravelSign;
   double confirmedDistanceM = 0;
+  double alignedNewEdgeDistanceM = 0;
 }
 
 class _CorridorNetwork {
@@ -775,11 +941,36 @@ class _CorridorNetwork {
 
   _CorridorEdge? edgeById(String id) => _edgesById[id];
 
-  _EdgeProjection? nearestProjection(PdrLocalPoint point) {
+  _EdgeProjection? nearestProjection(
+    PdrLocalPoint point, {
+    double? headingDeg,
+  }) {
     _EdgeProjection? best;
     for (final edge in edges) {
       final projection = edge.project(point);
-      if (best == null || projection.distanceM < best.distanceM) {
+      final closer =
+          best == null || projection.distanceM < best.distanceM - 0.1;
+      final nearTie =
+          best != null &&
+          (projection.distanceM - best.distanceM).abs() <= 0.1 &&
+          headingDeg != null;
+      final headingBetter =
+          nearTie &&
+          _headingError(
+                headingDeg,
+                edge.bearingForTravel(
+                  projection.distanceAlongM,
+                  edge.directionSignForHeading(headingDeg),
+                ),
+              ) <
+              _headingError(
+                headingDeg,
+                best.edge.bearingForTravel(
+                  best.distanceAlongM,
+                  best.edge.directionSignForHeading(headingDeg),
+                ),
+              );
+      if (closer || headingBetter) {
         best = projection;
       }
     }
@@ -795,17 +986,6 @@ class _CorridorNetwork {
     point,
     maxDistanceM: maxDistanceM,
     accepts: (nodeId) => _isDirectionDecisionNode(edge, nodeId),
-  );
-
-  _JunctionDistance? nearestConnectedNodeOn(
-    _CorridorEdge edge,
-    PdrLocalPoint point, {
-    required double maxDistanceM,
-  }) => _nearestNodeOn(
-    edge,
-    point,
-    maxDistanceM: maxDistanceM,
-    accepts: (nodeId) => (_incident[nodeId]?.length ?? 0) >= 2,
   );
 
   _JunctionDistance? _nearestNodeOn(
@@ -870,6 +1050,18 @@ class _CorridorNetwork {
     }
     return best;
   }
+
+  _OutgoingEdge? bestStraightContinuation({
+    required String nodeId,
+    required String excludingEdgeId,
+    required double incomingBearingDeg,
+    required double toleranceDeg,
+  }) => bestOutgoing(
+    nodeId: nodeId,
+    excludingEdgeId: excludingEdgeId,
+    headingDeg: incomingBearingDeg,
+    toleranceDeg: toleranceDeg,
+  );
 }
 
 class _CorridorNode {
@@ -936,14 +1128,33 @@ class _CorridorEdge {
     return best!;
   }
 
-  double closestBearingAt(PdrLocalPoint point, double headingDeg) {
-    final projection = project(point);
-    final forward = projection.tangentBearingDeg;
+  int directionSignForHeading(double headingDeg) {
+    if (!bidirectional) return 1;
+    final forward = bearingForTravel(0, 1);
     final reverse = _normalizeBearing(forward + 180);
     return _headingError(headingDeg, forward) <=
             _headingError(headingDeg, reverse)
-        ? forward
-        : reverse;
+        ? 1
+        : -1;
+  }
+
+  int travelSignAwayFromNode(String nodeId) => nodeId == fromNodeId ? 1 : -1;
+
+  String nodeAtTravelEnd(int travelSign) =>
+      travelSign > 0 ? toNodeId : fromNodeId;
+
+  double bearingForTravel(double distanceAlongM, int travelSign) {
+    final tangent = tangentBearingAt(distanceAlongM);
+    return travelSign > 0 ? tangent : _normalizeBearing(tangent + 180);
+  }
+
+  double tangentBearingAt(double distanceAlongM) {
+    final target = distanceAlongM.clamp(0.0, lengthM).toDouble();
+    for (var index = 1; index < _lengths.length; index += 1) {
+      if (target > _lengths[index] && index < _lengths.length - 1) continue;
+      return pdrBearingForDirection(points[index] - points[index - 1]);
+    }
+    return pdrBearingForDirection(points.last - points[points.length - 2]);
   }
 
   double bearingTowardNode(String nodeId) {
@@ -955,19 +1166,6 @@ class _CorridorEdge {
 
   double bearingAwayFromNode(String nodeId) =>
       _normalizeBearing(bearingTowardNode(nodeId) + 180);
-
-  PdrLocalPoint pointAwayFromNode(String nodeId, double distanceM) =>
-      pointAt(nodeId == fromNodeId ? distanceM : lengthM - distanceM);
-
-  PdrLocalPoint pointTowardNode({
-    required PdrLocalPoint from,
-    required String nodeId,
-    required double distanceM,
-  }) {
-    final start = project(from).distanceAlongM;
-    final target = nodeId == toNodeId ? start + distanceM : start - distanceM;
-    return pointAt(target.clamp(0.0, lengthM).toDouble());
-  }
 
   PdrLocalPoint pointAt(double distanceM) {
     final target = distanceM.clamp(0.0, lengthM).toDouble();
@@ -1023,12 +1221,6 @@ List<double> _cumulativeLengths(List<PdrLocalPoint> points) {
   }
   return result;
 }
-
-PdrLocalPoint _blend(PdrLocalPoint from, PdrLocalPoint to, double fraction) =>
-    PdrLocalPoint(
-      from.eastM + (to.eastM - from.eastM) * fraction,
-      from.northM + (to.northM - from.northM) * fraction,
-    );
 
 double _normalizeBearing(double value) {
   final normalized = value % 360;
