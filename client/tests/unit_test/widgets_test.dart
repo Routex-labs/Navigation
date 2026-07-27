@@ -7,7 +7,7 @@ import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/theme/app_theme.dart';
 import 'package:navigation_client/widgets/eta_card.dart';
 import 'package:navigation_client/widgets/location_marker.dart';
-import 'package:navigation_client/widgets/rag_chat_panel.dart';
+import 'package:navigation_client/widgets/ai_search_sheet.dart';
 import 'package:navigation_client/widgets/status_badge.dart';
 import 'package:navigation_client/widgets/uncertainty_circle.dart';
 
@@ -82,7 +82,7 @@ void main() {
     expect(find.textContaining('150m', findRichText: true), findsOneWidget);
   });
 
-  group('RagChatPanel', () {
+  group('AiSearchSheet', () {
     // 전역을 선언 시점에 읽으면 lazy 초기화가 테스트 존 밖에서 일어나
     // HttpDestinationRepository의 http.Client 생성이 터진다. setUp 안에서 잡는다.
     late DestinationRepository originalRepository;
@@ -92,7 +92,7 @@ void main() {
 
     Future<void> pumpPanel(WidgetTester tester) => tester.pumpWidget(
       const MaterialApp(
-        home: Scaffold(body: RagChatPanel(buildingId: 'thehyundai-seoul')),
+        home: Scaffold(body: AiSearchSheet(buildingId: 'thehyundai-seoul')),
       ),
     );
 
@@ -209,7 +209,7 @@ void main() {
   });
 }
 
-/// [RagChatPanel]이 쓰는 것은 searchDestinationsAi 하나뿐이라 그 경로만 흉내낸다.
+/// [AiSearchSheet]가 쓰는 것은 searchDestinationsAi 하나뿐이라 그 경로만 흉내낸다.
 class _FakeDestinationRepository implements DestinationRepository {
   _FakeDestinationRepository({this.result, this.fail = false, this.delay});
 
