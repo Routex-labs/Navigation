@@ -455,6 +455,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     setState(() => _interactive = value);
   }
 
+  /// 실내 진입 오버레이에서 지금 보고 있는 층. 상위(MapShellScreen)가 상단
+  /// 검색·길찾기 시트를 "현재 층 우선"으로 좁힐 때 쓴다 — 실내 화면의
+  /// [IndoorMapBodyState.currentFloor]와 같은 계약이라 상위가 두 화면을
+  /// 동일하게 다룰 수 있다.
+  String? get currentFloor => _activeFloor;
+
   @override
   void initState() {
     super.initState();
@@ -828,9 +834,22 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 다르면 건물 전체 그래프로 층 간 경로를 계산해 현재 보고 있는 층의 세그먼트만
   /// 지도에 얹는다(층 chip으로 다른 층을 훑을 때 [_switchOverlayFloor]가
   /// 세그먼트를 갈아 끼운다).
-  Future<void> showIndoorRouteTo(PoiSearchResult destination) async {
+  /// [origin]을 주면 PDR 앵커 대신 그 매장을 출발지로 쓴다 — 상단 길찾기 시트에서
+  /// 매장을 출발지로 고른 경우다. 이때 앵커(위치 지정)가 없어도 경로를 그릴 수
+  /// 있어야 하므로, 앵커 필수 검사는 origin이 없을 때만 적용한다.
+  Future<void> showIndoorRouteTo(
+    PoiSearchResult destination, {
+    PoiSearchResult? origin,
+  }) async {
     final anchor = _pdrTrailState.anchor;
-    if (anchor == null) {
+    // 명시적 출발지는 노드 id와 층이 둘 다 있어야 그래프 탐색을 시작할 수 있다.
+    // 하나라도 비면 앵커 경로로 폴백해, 사용자가 "출발지를 골랐는데 아무 일도
+    // 안 일어나는" 상태에 빠지지 않게 한다.
+    final originNodeId = origin?.nodeId;
+    final originFloor = origin?.floor;
+    final hasExplicitOrigin =
+        originNodeId != null && originFloor != null && originFloor.isNotEmpty;
+    if (!hasExplicitOrigin && anchor == null) {
       _showSnack('출발 위치를 먼저 지정해주세요. 하단 "위치 지정" 버튼으로 시작점을 탭하면 됩니다.');
       return;
     }
@@ -841,7 +860,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _showSnack('도착지 노드 정보가 없어 경로를 계산할 수 없습니다.');
       return;
     }
-    final startFloor = anchor.floorId;
+    final startFloor = hasExplicitOrigin ? originFloor : anchor!.floorId;
+    final explicitStartNodeId = hasExplicitOrigin ? originNodeId : null;
     // 이전 걷기 경로가 남아 있으면 함께 지워, 실내 경로만 화면에 뜨도록 한다.
     setState(() {
       _route = null;
@@ -861,6 +881,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         buildingId: building.id,
         floor: endFloor,
         endNodeId: endNodeId,
+        startNodeId: explicitStartNodeId,
       );
     } else {
       await _computeAndShowMultiFloorIndoorRoute(
@@ -868,33 +889,43 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         startFloor: startFloor,
         endFloor: endFloor,
         endNodeId: endNodeId,
+        startNodeId: explicitStartNodeId,
       );
     }
   }
 
   /// 같은 층 안에서 계산한 실내 경로를 지도에 얹는다. 활성 층이 목적지 층과
   /// 다르면 먼저 그 층으로 오버레이를 전환해 필요한 그래프를 다시 로드한다.
+  /// [startNodeId]가 주어지면(길찾기 시트에서 매장을 출발지로 고른 경우) 그
+  /// 노드에서 바로 출발하고, null이면 PDR 앵커 주변 최근접 통로 노드를 찾는다.
   Future<void> _computeAndShowSingleFloorIndoorRoute({
     required String buildingId,
     required String floor,
     required String endNodeId,
+    String? startNodeId,
   }) async {
     if (floor != _activeFloor) {
       await _switchOverlayFloor(floor);
       if (!mounted) return;
     }
     final graph = _floorGraph;
-    final anchor = _pdrTrailState.anchor;
-    if (graph == null || anchor == null || anchor.floorId != floor) {
+    if (graph == null) {
       _showSnack('경로 계산에 필요한 층 정보를 불러오지 못했습니다.');
       return;
     }
-    final startNodeId = _nearestNodeId(
-      graph.nodes,
-      anchor.anchorLocalM.eastM,
-      anchor.anchorLocalM.northM,
-      excludingNodeId: endNodeId,
-    );
+    if (startNodeId == null) {
+      final anchor = _pdrTrailState.anchor;
+      if (anchor == null || anchor.floorId != floor) {
+        _showSnack('경로 계산에 필요한 층 정보를 불러오지 못했습니다.');
+        return;
+      }
+      startNodeId = _nearestNodeId(
+        graph.nodes,
+        anchor.anchorLocalM.eastM,
+        anchor.anchorLocalM.northM,
+        excludingNodeId: endNodeId,
+      );
+    }
     if (startNodeId == null) {
       _showSnack('시작 위치 주변에서 통로 노드를 찾지 못했습니다.');
       return;
@@ -924,11 +955,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 화면(_activeFloor)에 해당하는 세그먼트를 지도에 얹는다. 층 chip으로
   /// 다른 층을 훑으면 [_switchOverlayFloor]가 그 층 세그먼트로 갈아탄다.
   /// 시작 층부터 훑도록 활성 층을 자동으로 시작 층으로 전환한다.
+  /// [startNodeId]가 주어지면(길찾기 시트에서 매장을 출발지로 고른 경우) 그
+  /// 노드에서 바로 출발하고, null이면 PDR 앵커 기준으로 시작 노드를 고른다.
   Future<void> _computeAndShowMultiFloorIndoorRoute({
     required String buildingId,
     required String startFloor,
     required String endFloor,
     required String endNodeId,
+    String? startNodeId,
   }) async {
     final buildingGraph = await buildingRepository.getBuildingGraph(buildingId);
     if (!mounted) return;
@@ -937,7 +971,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _clearIndoorRoute();
       return;
     }
-    final startNodeId = _pickStartNodeIdInBuildingGraph(
+    startNodeId ??= _pickStartNodeIdInBuildingGraph(
       graph: buildingGraph,
       startFloorName: startFloor,
       excludingNodeId: endNodeId,
