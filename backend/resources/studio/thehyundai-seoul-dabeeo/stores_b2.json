@@ -1399,8 +1399,8 @@
     {
       "id": "PO-HU40njvml1512",
       "name": "스타벅스 리저브",
-      "category": "편의시설",
-      "subcategory": "restaurant",
+      "category": "식음료",
+      "subcategory": "카페·베이커리",
       "floor_id": "FL-1ibh3iudjt4ro0414",
       "entrance_node_id": null,
       "entrance_local_m": {

@@ -4108,8 +4108,8 @@
     {
       "id": "PO-fXXA1AR_G6628",
       "name": "고디바",
-      "category": "편의시설",
-      "subcategory": "restaurant",
+      "category": "식음료",
+      "subcategory": "카페·베이커리",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 128.516665,
@@ -4119,8 +4119,8 @@
     {
       "id": "PO-VL2v3hP5R0218",
       "name": "리스토란테 에오",
-      "category": "편의시설",
-      "subcategory": "restaurant",
+      "category": "식음료",
+      "subcategory": "레스토랑",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 118.306319,
@@ -4130,8 +4130,8 @@
     {
       "id": "PO-NCpMNrEp82723",
       "name": "송",
-      "category": "편의시설",
-      "subcategory": "restaurant",
+      "category": "식음료",
+      "subcategory": "레스토랑",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 147.854352,
@@ -4141,8 +4141,8 @@
     {
       "id": "PO-nA8T0s76X4138",
       "name": "사천화가",
-      "category": "편의시설",
-      "subcategory": "restaurant",
+      "category": "식음료",
+      "subcategory": "레스토랑",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 155.991204,
@@ -4152,8 +4152,8 @@
     {
       "id": "PO-YMLJzrGIy5754",
       "name": "로바",
-      "category": "편의시설",
-      "subcategory": "restaurant",
+      "category": "식음료",
+      "subcategory": "레스토랑",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 187.330694,
@@ -4163,8 +4163,8 @@
     {
       "id": "PO-vpJN8tesm7538",
       "name": "도원 스타일",
-      "category": "편의시설",
-      "subcategory": "restaurant",
+      "category": "식음료",
+      "subcategory": "레스토랑",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 201.537524,
@@ -4174,8 +4174,8 @@
     {
       "id": "PO-f48w-34Od9066",
       "name": "상춘재",
-      "category": "편의시설",
-      "subcategory": "restaurant",
+      "category": "식음료",
+      "subcategory": "레스토랑",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 164.128058,
@@ -4185,8 +4185,8 @@
     {
       "id": "PO-bawy_CfOO1219",
       "name": "베르그",
-      "category": "편의시설",
-      "subcategory": "restaurant",
+      "category": "식음료",
+      "subcategory": "레스토랑",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 215.843711,
@@ -4218,8 +4218,8 @@
     {
       "id": "PO-amsqf8JE40283",
       "name": "나의 가야",
-      "category": "편의시설",
-      "subcategory": "restaurant",
+      "category": "식음료",
+      "subcategory": "레스토랑",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 100.573916,
@@ -4229,8 +4229,8 @@
     {
       "id": "PO-eQJBf-yCx6756",
       "name": "정돈 프리미엄",
-      "category": "편의시설",
-      "subcategory": "restaurant",
+      "category": "식음료",
+      "subcategory": "레스토랑",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 139.717498,
@@ -4295,8 +4295,8 @@
     {
       "id": "PO-uNkq7Zqnj3640",
       "name": "카페 H",
-      "category": "편의시설",
-      "subcategory": "facility",
+      "category": "식음료",
+      "subcategory": "카페·베이커리",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 224.725313,
