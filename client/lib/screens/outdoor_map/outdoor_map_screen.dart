@@ -35,6 +35,7 @@ import '../../widgets/floor_facility_style.dart';
 import '../../widgets/floor_selector.dart';
 import '../../widgets/status_badge.dart';
 import 'indoor_entry_zoom.dart';
+import 'indoor_overlay_layers.dart';
 
 // 위치 조회 실패 시 대체 좌표 (서울시청). 저장·전달은 latlong2 타입으로 하고
 // MapLibre API에 넘길 때만 [_toGl]로 변환한다 — 이 파일 외부(Building.entrance,
@@ -1226,10 +1227,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await controller.addFillLayer(
       _buildingSourceId,
       _buildingFillLayerId,
-      FillLayerProperties(
-        fillColor: AppColors.primary.toHexString(),
-        fillOpacity: _buildingFillOpacityDefault,
-      ),
+      buildingFillProps(_buildingFillOpacityDefault),
     );
     await controller.addLineLayer(
       _buildingSourceId,
@@ -1252,7 +1250,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await controller.addFillLayer(
       _dimScrimSourceId,
       _dimScrimFillLayerId,
-      const FillLayerProperties(fillColor: '#000000', fillOpacity: 0),
+      dimScrimProps(0),
       enableInteraction: false,
     );
 
@@ -1506,16 +1504,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       // 뜨는 것과 동시에 스크림도 자연스럽게 짙어진다. 최대치 0.35는 기존 위젯
       // 스크림(#40000000 = 0.25)보다 살짝 진하게 잡아 실내 vs 야외의 밝기
       // 대비를 조금 더 명확히 준다.
+      // fillColor를 반드시 함께 넘긴다 — setLayerProperties는 patch가 아니라
+      // 전체 교체다(indoor_overlay_layers.dart 상단 주석 참고).
       await controller.setLayerProperties(
         _dimScrimFillLayerId,
-        FillLayerProperties(
-          fillOpacity: _fadeExpr(maxOpacity: 0.35),
-        ),
+        dimScrimProps(_fadeExpr(maxOpacity: 0.35)),
       );
     } else {
       await controller.setLayerProperties(
         _dimScrimFillLayerId,
-        const FillLayerProperties(fillOpacity: 0),
+        dimScrimProps(0),
       );
     }
   }
@@ -1529,39 +1527,28 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// opacity 표현식을 갈아 끼운다. 레이어가 아직 등록되지 않았으면
   /// [_ensureIndoorTilesRegistered]가 등록 시점의 상태로 넣어주므로 아무것도
   /// 하지 않아도 된다.
+  ///
+  /// **각 레이어의 전체 속성을 매번 다시 넘긴다.** opacity만 넘기면 안 된다 —
+  /// 이유는 indoor_overlay_layers.dart 상단 주석 참고.
   Future<void> _syncIndoorOverlayFade() async {
     final controller = _mapController;
     if (controller == null || !_styleReady || !_indoorTilesRegistered) return;
     final fadeExpr = _fadeExpr();
     // 이미 제거된 레이어에 대한 setLayerProperties가 native에서 예외를 던지는
     // 구현이 있어(층 전환과 겹치는 순간) 각각 감싼다.
-    for (final id in [
-      _indoorFootprintLayerId,
-      _indoorStoresFillLayerId,
-      _indoorVerticalTransportFillLayerId,
+    for (final (id, props) in [
+      (_indoorFootprintLayerId, indoorFootprintProps(fadeExpr)),
+      (_indoorStoresFillLayerId, indoorStoresFillProps(fadeExpr)),
+      (
+        _indoorVerticalTransportFillLayerId,
+        indoorVerticalTransportProps(fadeExpr),
+      ),
+      (_indoorStoresLabelLayerId, indoorStoresLabelProps(fadeExpr)),
+      (_indoorPoiIconLayerId, indoorPoiIconProps(fadeExpr)),
+      (_indoorStoreFacilityIconLayerId, indoorFacilityIconProps(fadeExpr)),
     ]) {
       try {
-        await controller.setLayerProperties(
-          id,
-          FillLayerProperties(fillOpacity: fadeExpr),
-        );
-      } catch (_) {}
-    }
-    try {
-      await controller.setLayerProperties(
-        _indoorStoresLabelLayerId,
-        SymbolLayerProperties(textOpacity: fadeExpr),
-      );
-    } catch (_) {}
-    for (final id in [
-      _indoorPoiIconLayerId,
-      _indoorStoreFacilityIconLayerId,
-    ]) {
-      try {
-        await controller.setLayerProperties(
-          id,
-          SymbolLayerProperties(iconOpacity: fadeExpr),
-        );
+        await controller.setLayerProperties(id, props);
       } catch (_) {}
     }
   }
@@ -1618,15 +1605,17 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 그대로 야외로 유지된다.
     final controller = _mapController;
     if (controller == null) return;
+    // fillColor를 매번 함께 넘긴다 — 빼면 검정으로 되돌아간다
+    // (indoor_overlay_layers.dart 상단 주석 참고).
     await controller.setLayerProperties(
       _buildingFillLayerId,
-      const FillLayerProperties(fillOpacity: _buildingFillOpacityPressed),
+      buildingFillProps(_buildingFillOpacityPressed),
     );
     await Future<void>.delayed(const Duration(milliseconds: _buildingPressedHoldMs));
     if (!mounted) return;
     await controller.setLayerProperties(
       _buildingFillLayerId,
-      const FillLayerProperties(fillOpacity: _buildingFillOpacityDefault),
+      buildingFillProps(_buildingFillOpacityDefault),
     );
     _triggerIndoorEntry();
   }
@@ -1736,20 +1725,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       // 카메라 이동 중에는 setLayerProperties 없이도 실시간으로 반영되고,
       // 진입/이탈로 구간 자체가 바뀔 때만 [_syncIndoorOverlayFade]가 갱신한다.
       final fadeExpr = _fadeExpr();
-      // POI/시설 아이콘은 오버레이가 페이드인되는 구간에서는 살짝 작게, 사용자가
-      // 실내로 더 확대해 들어갈수록 실내 화면과 비슷한 크기로 커지도록 zoom
-      // 기반 iconSize로 준다. 아이콘 캔버스 96px 기준으로 실내 화면은 0.28
-      // 고정이지만, 야외 오버레이는 화면 시야가 훨씬 넓어 그대로 두면 라벨을
-      // 가릴 만큼 크게 보인다.
-      const iconSizeExpr = [
-        'interpolate',
-        ['linear'],
-        ['zoom'],
-        indoorOverlayFadeInEndZoom,
-        0.22,
-        20,
-        0.42,
-      ];
       // 실내 오버레이 레이어를 route casing 바로 아래에 삽입한다. 안 그러면
       // _onStyleLoaded가 먼저 그린 경로선/GPS 마커/PDR dot이 나중에 얹힌 stores
       // fill(줌 17.5+에서 fillOpacity=1) 밑으로 깔려 화면에서 완전히 사라진다.
@@ -1760,11 +1735,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       await controller.addFillLayer(
         _indoorTilesSourceId,
         _indoorFootprintLayerId,
-        FillLayerProperties(
-          fillColor: '#FFFFFF',
-          fillOutlineColor: '#00000088',
-          fillOpacity: fadeExpr,
-        ),
+        indoorFootprintProps(fadeExpr),
         sourceLayer: 'footprint',
         belowLayerId: _routeCasingLayerId,
         enableInteraction: false,
@@ -1772,11 +1743,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       await controller.addFillLayer(
         _indoorTilesSourceId,
         _indoorStoresFillLayerId,
-        FillLayerProperties(
-          fillColor: '#F3F1EF',
-          fillOutlineColor: '#D8D4D1',
-          fillOpacity: fadeExpr,
-        ),
+        indoorStoresFillProps(fadeExpr),
         sourceLayer: 'stores',
         belowLayerId: _routeCasingLayerId,
       );
@@ -1788,11 +1755,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       await controller.addFillLayer(
         _indoorTilesSourceId,
         _indoorVerticalTransportFillLayerId,
-        FillLayerProperties(
-          fillColor: '#DCEBD4',
-          fillOutlineColor: '#6FA167',
-          fillOpacity: fadeExpr,
-        ),
+        indoorVerticalTransportProps(fadeExpr),
         sourceLayer: 'stores',
         belowLayerId: _routeCasingLayerId,
         filter: [
@@ -1809,16 +1772,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       await controller.addSymbolLayer(
         _indoorTilesSourceId,
         _indoorStoresLabelLayerId,
-        SymbolLayerProperties(
-          textField: ['get', 'name'],
-          textFont: const ['Noto Sans KR Regular'],
-          textSize: 11,
-          textColor: '#333333',
-          textHaloColor: '#FFFFFF',
-          textHaloWidth: 1,
-          textMaxWidth: 6,
-          textOpacity: fadeExpr,
-        ),
+        indoorStoresLabelProps(fadeExpr),
         sourceLayer: 'stores',
         belowLayerId: _routeCasingLayerId,
         enableInteraction: false,
@@ -1829,20 +1783,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       await controller.addSymbolLayer(
         _indoorTilesSourceId,
         _indoorPoiIconLayerId,
-        SymbolLayerProperties(
-          iconImage: [
-            'match',
-            ['get', 'type'],
-            for (final entry in kPoiIconByType.entries) ...[
-              entry.key,
-              poiIconImageName(entry.value),
-            ],
-            poiIconImageName(kDefaultPoiIcon),
-          ],
-          iconSize: iconSizeExpr,
-          iconOpacity: fadeExpr,
-          iconAllowOverlap: true,
-        ),
+        indoorPoiIconProps(fadeExpr),
         sourceLayer: 'pois',
         belowLayerId: _routeCasingLayerId,
         enableInteraction: false,
@@ -1854,21 +1795,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       await controller.addSymbolLayer(
         _indoorTilesSourceId,
         _indoorStoreFacilityIconLayerId,
-        SymbolLayerProperties(
-          iconImage: [
-            'match',
-            ['get', 'name'],
-            for (final entry in kStoreFacilityStyleByName.entries) ...[
-              entry.key,
-              facilityIconImageName(entry.key),
-            ],
-            poiIconImageName(kDefaultPoiIcon),
-          ],
-          iconSize: iconSizeExpr,
-          iconOpacity: fadeExpr,
-          iconAllowOverlap: true,
-          iconOffset: [0, -18],
-        ),
+        indoorFacilityIconProps(fadeExpr),
         sourceLayer: 'stores',
         belowLayerId: _routeCasingLayerId,
         filter: [
@@ -2925,16 +2852,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           ),
       ],
     );
-  }
-}
-
-// AppColors 는 Color 인스턴스라 CircleLayerProperties가 요구하는 문자열 색상으로
-// 자주 변환해 쓰기 편하도록 확장으로 감싼다.
-extension _ColorHex on Color {
-  String toHexString() {
-    final rgb =
-        (r * 255).round() << 16 | (g * 255).round() << 8 | (b * 255).round();
-    return '#${rgb.toRadixString(16).padLeft(6, '0').toUpperCase()}';
   }
 }
 
