@@ -924,6 +924,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       if (snapshot != null) recorder?.recordSnapshot(snapshot);
       await indoorNavigationDriver.stopGuidance();
       recorder?.recordRuntime(indoorNavigationDriver.currentRuntimeStatus);
+      recorder?.recordPedometerFinalize(
+        indoorNavigationDriver.lastPedometerFinalizeInfo,
+      );
       if (mounted) {
         _setPlacingAnchor(false);
         if (recorder?.hasSnapshot ?? false) {

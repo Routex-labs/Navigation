@@ -34,6 +34,9 @@ class FakeIndoorNavigation implements IndoorNavigationController {
   PdrRuntimeStatus get currentRuntimeStatus => _runtimeStatus;
 
   @override
+  Map<String, Object?>? get lastPedometerFinalizeInfo => null;
+
+  @override
   Future<void> startGuidance({required String floorId}) async {
     log.add('start:$floorId');
   }

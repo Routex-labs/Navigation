@@ -146,18 +146,52 @@ final class PdrMotionStreamHandler: NSObject, FlutterStreamHandler {
 
   /// 안내 종료 시점의 마지막 CMPedometer 상태를 동결한다. iOS의 후속 callback은
   /// stop() 전에 도착할 수 있으므로, 이 호출 뒤에는 세션 path를 바꾸지 않는다.
-  func finalizePedometer() -> [String: Any] {
+  /// 세션 구간을 사후 재조회한 결과를 함께 돌려준다(진단 전용, 보정 없음).
+  ///
+  /// `startUpdates`의 live stream은 첫 batch가 10초 이상 늦게 오면서 그 구간을
+  /// 적게 세는 일이 관측됐다(실측: 14.9초 구간에 5걸음). 같은 구간을
+  /// `queryPedometerData`로 다시 물었을 때 더 큰 값이 나오는지가, 걸음이
+  /// "OS에 늦게 도착한 것"인지 "OS가 아예 못 본 것"인지를 가른다.
+  ///
+  /// 지금은 판단 근거만 모은다. `queriedSteps`가 `steps`보다 크다고 확인되기
+  /// 전까지는 이 값으로 경로를 보정하지 않는다.
+  func finalizePedometer(completion: @escaping ([String: Any]) -> Void) {
     dispatchPrecondition(condition: .onQueue(.main))
     let stoppedAtMs = Date().timeIntervalSince1970 * 1000.0
     pedometerFinalized = true
     emit(kind: "snapshot")
-    return [
+
+    var payload: [String: Any] = [
       "stepSessionId": stepSessionId,
       "sessionStartMs": pedometerSessionStartMs,
       "stoppedAtMs": stoppedAtMs,
       "steps": latestSteps,
       "distanceAvailable": latestDistanceAvailable,
     ]
+
+    guard pedometerSessionStartMs > 0, CMPedometer.isStepCountingAvailable()
+    else {
+      payload["queryAvailable"] = false
+      completion(payload)
+      return
+    }
+
+    let from = Date(timeIntervalSince1970: pedometerSessionStartMs / 1000.0)
+    let to = Date(timeIntervalSince1970: stoppedAtMs / 1000.0)
+    pedometer.queryPedometerData(from: from, to: to) { data, error in
+      DispatchQueue.main.async {
+        payload["queryAvailable"] = true
+        if let error {
+          payload["queryError"] = error.localizedDescription
+        } else if let data {
+          payload["queriedSteps"] = data.numberOfSteps.intValue
+          if let distance = data.distance?.doubleValue {
+            payload["queriedDistanceM"] = distance
+          }
+        }
+        completion(payload)
+      }
+    }
   }
 
   private func startPedometer() {

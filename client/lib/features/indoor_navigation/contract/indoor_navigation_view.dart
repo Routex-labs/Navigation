@@ -26,4 +26,12 @@ abstract interface class IndoorNavigationView {
 
   /// 가장 최근 센서 파이프라인 실행 상태.
   PdrRuntimeStatus get currentRuntimeStatus;
+
+  /// 마지막 [IndoorNavigationIntents.stopGuidance]에서 native가 돌려준 pedometer
+  /// 동결 결과. 세션을 끝내기 전이면 null.
+  ///
+  /// iOS는 여기에 세션 구간 재조회 결과(`queriedSteps`)를 함께 담는다. live
+  /// stream이 초반 구간을 적게 세는 원인을 가리기 위한 **진단 전용** 값이고,
+  /// 경로·거리 보정에는 쓰지 않는다.
+  Map<String, Object?>? get lastPedometerFinalizeInfo;
 }

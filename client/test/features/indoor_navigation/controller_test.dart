@@ -14,6 +14,7 @@ class FakePdrMotionSource implements PdrMotionSource {
   int stopCount = 0;
   int resetCount = 0;
   int finalizeCount = 0;
+  Map<String, Object?>? finalizeInfo;
   int _sessionId = 0;
   Object? startError;
   Object? stopError;
@@ -42,8 +43,9 @@ class FakePdrMotionSource implements PdrMotionSource {
   }
 
   @override
-  Future<void> finalizePedometer() async {
+  Future<Map<String, Object?>?> finalizePedometer() async {
     finalizeCount++;
+    return finalizeInfo;
   }
 
   @override

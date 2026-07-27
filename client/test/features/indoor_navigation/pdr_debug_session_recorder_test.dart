@@ -105,7 +105,7 @@ void main() {
     final matched = paths['map_matched_floor_local_m']! as List<Object?>;
     final finalMatched = matched.last! as Map<String, double>;
 
-    expect(json['schema_version'], 3);
+    expect(json['schema_version'], 4);
     expect(
       (json['map_context']! as Map<String, Object?>)['map_calibration_version'],
       'thehyundai-seoul-1f-svg-v1',
@@ -120,5 +120,75 @@ void main() {
     expect(finalMatched['east_m'], closeTo(4, 1e-9));
     expect(finalMatched['north_m'], closeTo(0, 1e-9));
     expect((json['quality_samples_1hz']! as List<Object?>), hasLength(1));
+  });
+
+  test('1Hz 샘플에 주황(preview)도 같이 남긴다', () {
+    // 초록만 남기면 둘이 언제 벌어졌는지를 파일에서 못 읽는다.
+    final recorder = PdrDebugSessionRecorder(
+      startedAt: DateTime.utc(2026, 7, 18, 9),
+    );
+    recorder.recordSnapshot(
+      _snapshot(
+        steps: 4,
+        distanceM: 3.1,
+        path: const [PdrLocalPoint(0, 0), PdrLocalPoint(4, 1)],
+      ),
+      at: DateTime.utc(2026, 7, 18, 9),
+    );
+
+    final json = recorder.buildJson(
+      buildingId: 'thehyundai-seoul',
+      selectedFloor: '1F',
+      mapCalibrationVersion: 'v1',
+      graph: _graph(),
+      device: const {},
+    );
+
+    final sample =
+        (json['quality_samples_1hz']! as List<Object?>).single!
+            as Map<String, Object?>;
+    expect(sample['steps'], 4);
+    expect(sample['distance_m'], 3.1);
+    expect(sample['preview_steps'], 5);
+    expect(sample['preview_distance_m'], 3.6);
+  });
+
+  test('pedometer live/재조회 대조를 남기고, 없으면 null이다', () {
+    final recorder = PdrDebugSessionRecorder(
+      startedAt: DateTime.utc(2026, 7, 18, 9),
+    );
+    recorder.recordSnapshot(
+      _snapshot(
+        steps: 4,
+        distanceM: 3.1,
+        path: const [PdrLocalPoint(0, 0), PdrLocalPoint(4, 1)],
+      ),
+      at: DateTime.utc(2026, 7, 18, 9),
+    );
+
+    Map<String, Object?> build() => recorder.buildJson(
+      buildingId: 'thehyundai-seoul',
+      selectedFloor: '1F',
+      mapCalibrationVersion: 'v1',
+      graph: _graph(),
+      device: const {},
+    );
+
+    expect(build()['pedometer_finalize'], isNull);
+
+    recorder.recordPedometerFinalize(const {
+      'steps': 112,
+      'queriedSteps': 140,
+      'queriedDistanceM': 107.4,
+      'queryAvailable': true,
+      'sessionStartMs': 1000.0,
+      'stoppedAtMs': 77000.0,
+    });
+
+    final finalize = build()['pedometer_finalize']! as Map<String, Object?>;
+    expect(finalize['live_steps'], 112);
+    expect(finalize['queried_steps'], 140);
+    // 이 차이가 0인지 아닌지가 초반 부족분의 성격을 가른다.
+    expect(finalize['queried_minus_live'], 28);
   });
 }

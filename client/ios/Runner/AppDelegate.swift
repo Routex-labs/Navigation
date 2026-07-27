@@ -39,7 +39,8 @@ import UIKit
       case "resetPedometer":
         result(handler.resetPedometerBaseline())
       case "finalizePedometer":
-        result(handler.finalizePedometer())
+        // queryPedometerData가 비동기라 result를 completion에서 넘긴다.
+        handler.finalizePedometer { result($0) }
       default:
         result(FlutterMethodNotImplemented)
       }

@@ -66,8 +66,11 @@ class IosPdrMotionSource implements PdrMotionSource {
   }
 
   @override
-  Future<void> finalizePedometer() async {
-    await _commandChannel.invokeMethod<Object?>('finalizePedometer');
+  Future<Map<String, Object?>?> finalizePedometer() async {
+    final result = await _commandChannel.invokeMethod<Object?>(
+      'finalizePedometer',
+    );
+    return result is Map ? Map<String, Object?>.from(result) : null;
   }
 
   @override

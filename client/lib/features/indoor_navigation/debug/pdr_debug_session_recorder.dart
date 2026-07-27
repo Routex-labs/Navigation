@@ -16,7 +16,10 @@ class PdrDebugSessionRecorder {
   PdrDebugSessionRecorder({DateTime? startedAt})
     : _startedAt = startedAt ?? DateTime.now().toUtc();
 
-  static const schemaVersion = 3;
+  // v4: 1Hz 샘플에 preview(주황)를 추가하고, pedometer live/재조회 대조 블록을
+  // 넣었다. 지금까지는 시계열에 confirmed(초록)만 있어서 주황이 언제 벌어졌는지
+  // 파일만으로는 알 수 없었다.
+  static const schemaVersion = 4;
   static const _maxQualitySamples = 900;
 
   final DateTime _startedAt;
@@ -25,6 +28,7 @@ class PdrDebugSessionRecorder {
   PdrSnapshot? _latestSnapshot;
   PdrAnchor? _anchor;
   PdrRuntimeStatus _runtimeStatus = const PdrRuntimeStatus.idle();
+  Map<String, Object?>? _pedometerFinalize;
   DateTime? _lastQualitySampleAt;
   int? _lastSampledSteps;
 
@@ -54,6 +58,10 @@ class PdrDebugSessionRecorder {
   }
 
   void recordRuntime(PdrRuntimeStatus status) => _runtimeStatus = status;
+
+  /// stopGuidance에서 native가 돌려준 pedometer 동결/재조회 결과.
+  void recordPedometerFinalize(Map<String, Object?>? info) =>
+      _pedometerFinalize = info;
 
   Map<String, Object?> buildJson({
     required String buildingId,
@@ -113,6 +121,34 @@ class PdrDebugSessionRecorder {
         'state': _runtimeStatus.state.name,
         'warnings': _runtimeStatus.warnings,
       },
+      'pedometer_finalize': _pedometerFinalizeJson(),
+    };
+  }
+
+  /// live stream이 센 걸음(`live_steps`)과 같은 구간을 사후 재조회한
+  /// 걸음(`queried_steps`)의 대조.
+  ///
+  /// 이 둘의 관계가 초반 구간 부족분의 성격을 가른다:
+  ///  - `queried > live`  -> OS는 봤는데 live stream이 늦게/적게 흘린 것.
+  ///                         재조회 값으로 백필하는 게 옳다.
+  ///  - `queried == live` -> OS가 그 걸음들을 아예 못 봤다. 백필할 근거가 없고
+  ///                         다른 방법을 찾아야 한다.
+  ///
+  /// 판단 근거를 모으는 단계이므로 이 값으로 경로를 보정하지 않는다.
+  Map<String, Object?>? _pedometerFinalizeJson() {
+    final info = _pedometerFinalize;
+    if (info == null) return null;
+    final live = (info['steps'] as num?)?.toInt();
+    final queried = (info['queriedSteps'] as num?)?.toInt();
+    return {
+      'live_steps': live,
+      'queried_steps': queried,
+      'queried_distance_m': (info['queriedDistanceM'] as num?)?.toDouble(),
+      'query_available': info['queryAvailable'],
+      'query_error': info['queryError'],
+      'session_start_ms': (info['sessionStartMs'] as num?)?.toDouble(),
+      'stopped_at_ms': (info['stoppedAtMs'] as num?)?.toDouble(),
+      if (live != null && queried != null) 'queried_minus_live': queried - live,
     };
   }
 
@@ -206,6 +242,8 @@ class _PdrQualitySample {
     required this.magneticAccuracy,
     required this.rotationHeadingAccuracyDeg,
     required this.cadenceHz,
+    required this.previewSteps,
+    required this.previewDistanceM,
   });
 
   final DateTime at;
@@ -216,6 +254,12 @@ class _PdrQualitySample {
   final String magneticAccuracy;
   final double rotationHeadingAccuracyDeg;
   final double cadenceHz;
+
+  /// 주황(accel preview) 시계열. 초록만 남기면 둘이 **언제** 벌어졌는지를
+  /// 파일에서 못 읽는다 — 초반 지연인지 전 구간에 걸친 과다 계수인지 구분하려면
+  /// 두 곡선을 같은 시간축에 놓아야 한다.
+  final int previewSteps;
+  final double previewDistanceM;
 
   factory _PdrQualitySample.fromSnapshot(DateTime at, PdrSnapshot snapshot) {
     final features = snapshot.quality.features;
@@ -228,6 +272,8 @@ class _PdrQualitySample {
       magneticAccuracy: features.magneticAccuracy,
       rotationHeadingAccuracyDeg: features.rotationHeadingAccuracyDeg,
       cadenceHz: features.cadenceHz,
+      previewSteps: snapshot.preview.steps,
+      previewDistanceM: snapshot.preview.distanceM,
     );
   }
 
@@ -235,6 +281,8 @@ class _PdrQualitySample {
     'at_utc': at.toIso8601String(),
     'steps': steps,
     'distance_m': distanceM,
+    'preview_steps': previewSteps,
+    'preview_distance_m': previewDistanceM,
     'walking_heading_deg': walkingHeadingDeg,
     'heading_stable': headingStable,
     'magnetic_accuracy': magneticAccuracy,

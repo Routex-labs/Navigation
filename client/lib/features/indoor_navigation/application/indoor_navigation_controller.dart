@@ -42,6 +42,7 @@ class IndoorNavigationDriver implements IndoorNavigationController {
   PdrSnapshot? _current;
   CalibrationStatus _calib = const CalibrationStatus.uncalibrated();
   PdrRuntimeStatus _runtimeStatus = const PdrRuntimeStatus.idle();
+  Map<String, Object?>? _lastPedometerFinalizeInfo;
   bool _guiding = false;
   bool _backgrounded = false;
   String? _floorId;
@@ -70,6 +71,10 @@ class IndoorNavigationDriver implements IndoorNavigationController {
 
   @override
   PdrRuntimeStatus get currentRuntimeStatus => _runtimeStatus;
+
+  @override
+  Map<String, Object?>? get lastPedometerFinalizeInfo =>
+      _lastPedometerFinalizeInfo;
 
   // ── IndoorNavigationIntents ──
 
@@ -115,7 +120,7 @@ class IndoorNavigationDriver implements IndoorNavigationController {
       // stop 전에 native가 보유한 마지막 STEP_COUNTER/CMPedometer 상태를
       // 한 번만 flush한다. finalize 뒤 native는 추가 pedometer callback을
       // 경로로 보내지 않으므로 종료 지점이 흔들리지 않는다.
-      await _source.finalizePedometer();
+      _lastPedometerFinalizeInfo = await _source.finalizePedometer();
       await Future<void>.delayed(Duration.zero);
     } on Object {
       _updateRuntime(

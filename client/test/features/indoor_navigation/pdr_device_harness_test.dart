@@ -23,7 +23,7 @@ class FakeHarnessMotionSource implements PdrMotionSource {
   Future<int?> resetPedometer() async => 1;
 
   @override
-  Future<void> finalizePedometer() async {}
+  Future<Map<String, Object?>?> finalizePedometer() async => null;
 
   @override
   Future<void> dispose() async => _events.close();
