@@ -90,9 +90,15 @@ class MapTopBar extends StatelessWidget {
                       fontSize: 14,
                       color: AppColors.text,
                     ),
+                    // 상단 바 자체가 이미 흰 카드다. 전역 inputDecorationTheme의
+                    // 채움색(blue50)과 포커스 테두리(파란 1.5px)를 그대로 두면
+                    // 카드 안에 파란 알약이 하나 더 생긴다 — 셋 다 여기서 끈다.
                     decoration: InputDecoration(
                       isDense: true,
+                      filled: false,
                       border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
                       hintText: hintText,
                       hintStyle: const TextStyle(
                         fontSize: 14,
