@@ -68,6 +68,15 @@ def create_app() -> FastAPI:
 
         query_semantic.warm_model_in_background()
 
+    # 실내 오버레이 MVT 타일을 기동 시점에 미리 인코딩해 캐시에 채운다. 그러지
+    # 않으면 사용자가 처음 층을 훑을 때 CPU 바운드 인코딩이 직렬 처리되며 몇 초씩
+    # 걸리고, 그 사이 MapLibre 네이티브의 소켓 취소·재사용 경쟁으로 "Socket
+    # closed"가 튀어 일부 층 오버레이가 빈 채로 남던 증상을 사전에 없앤다.
+    from app.core.database import SessionLocal
+    from app.repositories import tile_queries
+
+    tile_queries.warm_tile_cache_in_background(SessionLocal)
+
     return app
 
 
