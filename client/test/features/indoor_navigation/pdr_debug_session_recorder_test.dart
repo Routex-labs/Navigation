@@ -10,6 +10,9 @@ PdrSnapshot _snapshot({
   required int steps,
   required double distanceM,
   required List<PdrLocalPoint> path,
+  PdrAppliedBatch? lastAppliedBatch,
+  List<int?>? previewPeakTimesMs,
+  int? previewSteps,
 }) => PdrSnapshot(
   position: path.last,
   path: path,
@@ -17,11 +20,14 @@ PdrSnapshot _snapshot({
   distanceM: distanceM,
   walkingHeadingDeg: 90,
   hasHeading: true,
+  lastAppliedBatch: lastAppliedBatch,
   preview: PdrPreview(
     position: path.last,
     path: path,
-    steps: steps + 1,
+    steps: previewSteps ?? steps + 1,
     distanceM: distanceM + 0.5,
+    acceptedPeakTimesMs:
+        previewPeakTimesMs ?? List<int?>.filled(path.length, null),
   ),
   ronin: PdrRoninTrack(
     supported: true,
@@ -130,7 +136,7 @@ void main() {
     final matched = paths['map_matched_floor_local_m']! as List<Object?>;
     final finalMatched = matched.last! as Map<String, double>;
 
-    expect(json['schema_version'], 9);
+    expect(json['schema_version'], 10);
     expect(
       (json['map_context']! as Map<String, Object?>)['map_calibration_version'],
       'thehyundai-seoul-1f-svg-v1',
@@ -285,5 +291,211 @@ void main() {
     expect(paths['corridor_corrected_floor_local_m'], hasLength(2));
     expect(paths['corridor_preview_floor_local_m'], hasLength(2));
     expect(json['corridor_correction_samples'], hasLength(1));
+  });
+
+  group('tracker 입력 이벤트(v10)', () {
+    const result = CorridorTrackingResult(
+      state: CorridorTrackingState.straightTracking,
+      correctedPosition: PdrLocalPoint(4, 0),
+      correctedHeadingDeg: 90,
+      headingBiasDeg: 0,
+      currentEdgeId: 'ab',
+      currentEdgeProgressM: 4,
+      travelDirectionSign: 1,
+      pendingEdgeId: null,
+      lastConfirmedNodeId: null,
+      correctedPath: [PdrLocalPoint.zero, PdrLocalPoint(4, 0)],
+      previewPosition: PdrLocalPoint(4.5, 0),
+      previewHeadingDeg: 90,
+      previewPath: [PdrLocalPoint(4, 0), PdrLocalPoint(4.5, 0)],
+      previewCandidateEdgeIds: ['ab'],
+      previewIsAmbiguous: false,
+      rawConfirmedPosition: PdrLocalPoint(4, 1),
+      rawPreviewPosition: PdrLocalPoint(4.5, 1.2),
+    );
+
+    CorridorObservation observation({
+      required int timestampMs,
+      required int confirmedSteps,
+      int previewSteps = 6,
+    }) => CorridorObservation(
+      timestampMs: timestampMs,
+      rawConfirmedPosition: const PdrLocalPoint(4, 1),
+      confirmedSteps: confirmedSteps,
+      confirmedDistanceM: confirmedSteps * 0.7,
+      rawPreviewPosition: const PdrLocalPoint(4.5, 1.2),
+      previewSteps: previewSteps,
+      sensorHeadingDeg: 91.5,
+      hasHeading: true,
+      rawConfirmedStepPositions: const [PdrLocalPoint(3.3, 1)],
+      rawPreviewTailPositions: const [
+        PdrLocalPoint(4, 1),
+        PdrLocalPoint(4.5, 1.2),
+      ],
+    );
+
+    List<Object?> eventsOf(PdrDebugSessionRecorder recorder) =>
+        recorder.buildJson(
+              buildingId: 'b',
+              selectedFloor: '1F',
+              mapCalibrationVersion: 'v1',
+              graph: _graph(),
+              device: const {},
+            )['tracker_input_events']!
+            as List<Object?>;
+
+    test('재초기화 지점과 관측을 순서대로 남긴다', () {
+      final recorder = PdrDebugSessionRecorder(
+        startedAt: DateTime.utc(2026, 7, 27, 9),
+      );
+      final snapshot = _snapshot(
+        steps: 3,
+        distanceM: 2.1,
+        path: const [PdrLocalPoint.zero, PdrLocalPoint(4, 1)],
+      );
+
+      recorder.recordTrackerInput(
+        observation: null,
+        wasReset: true,
+        result: result,
+        snapshot: snapshot,
+        previewTailPeakTimesMs: const [],
+        at: DateTime.utc(2026, 7, 27, 9, 0, 1),
+      );
+      recorder.recordTrackerInput(
+        observation: observation(timestampMs: 1000, confirmedSteps: 3),
+        wasReset: false,
+        result: result,
+        snapshot: snapshot,
+        previewTailPeakTimesMs: const [900, 1100],
+        at: DateTime.utc(2026, 7, 27, 9, 0, 2),
+      );
+
+      final events = eventsOf(recorder);
+      expect(events, hasLength(2));
+      final reset = events.first! as Map<String, Object?>;
+      expect(reset['kind'], 'reset');
+      // reset 지점에는 관측이 없다. 재생은 여기서 상태를 다시 세운다.
+      expect(reset.containsKey('confirmed_steps'), isFalse);
+
+      final update = events.last! as Map<String, Object?>;
+      expect(update['kind'], 'update');
+      expect(update['timestamp_ms'], 1000);
+      expect(update['confirmed_steps'], 3);
+      expect(update['sensor_heading_deg'], 91.5);
+      expect(update['raw_confirmed_step_positions'], hasLength(1));
+      // 꼬리 좌표와 peak 시각의 인덱스가 맞아야 확정 시간창과 대조할 수 있다.
+      expect(update['raw_preview_tail_positions'], hasLength(2));
+      expect(update['raw_preview_tail_peak_times_ms'], [900, 1100]);
+      expect((update['result']! as Map<String, Object?>)['edge_id'], 'ab');
+    });
+
+    test('같은 batchId는 한 번만 applied_batch로 남긴다', () {
+      final recorder = PdrDebugSessionRecorder(
+        startedAt: DateTime.utc(2026, 7, 27, 9),
+      );
+      final snapshot = _snapshot(
+        steps: 3,
+        distanceM: 2.1,
+        path: const [PdrLocalPoint.zero, PdrLocalPoint(4, 1)],
+        lastAppliedBatch: const PdrAppliedBatch(
+          batchId: 7,
+          spanStartMs: 500,
+          spanEndMs: 1500,
+          appliedSteps: 3,
+          appliedDistanceM: 2.1,
+        ),
+        previewPeakTimesMs: const [null, 1200],
+      );
+
+      for (var i = 0; i < 3; i += 1) {
+        recorder.recordTrackerInput(
+          observation: observation(
+            timestampMs: 1000 + i * 500,
+            confirmedSteps: 3,
+          ),
+          wasReset: false,
+          result: result,
+          snapshot: snapshot,
+          previewTailPeakTimesMs: const [1200],
+          at: DateTime.utc(2026, 7, 27, 9, 0, i),
+        );
+      }
+
+      final events = eventsOf(recorder);
+      final withBatch = events
+          .cast<Map<String, Object?>>()
+          .where((event) => event.containsKey('applied_batch'))
+          .toList();
+      // snapshot은 motion마다 재방출되므로 batchId로 막지 않으면 3번 찍힌다.
+      expect(withBatch, hasLength(1));
+      final batch = withBatch.single['applied_batch']! as Map<String, Object?>;
+      expect(batch['batch_id'], 7);
+      expect(batch['span_end_ms'], 1500);
+      expect(batch['applied_steps'], 3);
+      expect(batch['consumed_preview_peak_times_ms'], [1200]);
+    });
+
+    test('걸음·배치 변화가 없으면 heartbeat 간격으로만 남긴다', () {
+      final recorder = PdrDebugSessionRecorder(
+        startedAt: DateTime.utc(2026, 7, 27, 9),
+      );
+      final snapshot = _snapshot(
+        steps: 3,
+        distanceM: 2.1,
+        path: const [PdrLocalPoint.zero, PdrLocalPoint(4, 1)],
+      );
+
+      // 50ms 간격 20건 = 950ms. heartbeat(250ms)로 첫 건 + 3건만 남아야 한다.
+      for (var i = 0; i < 20; i += 1) {
+        recorder.recordTrackerInput(
+          observation: observation(timestampMs: 1000 + i * 50, confirmedSteps: 3),
+          wasReset: false,
+          result: result,
+          snapshot: snapshot,
+          previewTailPeakTimesMs: const [],
+          at: DateTime.utc(2026, 7, 27, 9, 0, 0, i * 50),
+        );
+      }
+
+      final events = eventsOf(recorder);
+      expect(events, hasLength(4));
+      expect(
+        events
+            .cast<Map<String, Object?>>()
+            .map((event) => event['timestamp_ms']),
+        [1000, 1250, 1500, 1750],
+      );
+    });
+
+    test('걸음이 바뀌면 heartbeat 전이라도 남긴다', () {
+      final recorder = PdrDebugSessionRecorder(
+        startedAt: DateTime.utc(2026, 7, 27, 9),
+      );
+      PdrSnapshot snapshotWith(int steps) => _snapshot(
+        steps: steps,
+        distanceM: steps * 0.7,
+        path: const [PdrLocalPoint.zero, PdrLocalPoint(4, 1)],
+      );
+
+      recorder.recordTrackerInput(
+        observation: observation(timestampMs: 1000, confirmedSteps: 3),
+        wasReset: false,
+        result: result,
+        snapshot: snapshotWith(3),
+        previewTailPeakTimesMs: const [],
+        at: DateTime.utc(2026, 7, 27, 9, 0, 0),
+      );
+      recorder.recordTrackerInput(
+        observation: observation(timestampMs: 1050, confirmedSteps: 4),
+        wasReset: false,
+        result: result,
+        snapshot: snapshotWith(4),
+        previewTailPeakTimesMs: const [],
+        at: DateTime.utc(2026, 7, 27, 9, 0, 0, 50),
+      );
+
+      expect(eventsOf(recorder), hasLength(2));
+    });
   });
 }

@@ -27,12 +27,29 @@ class PdrDebugSessionRecorder {
   // v7: 세션형 복도 보정 위치·heading bias·상태 전이 시계열을 추가했다.
   // v8: 간선 누적 진행거리와 잠긴 진행 방향을 추가했다.
   // v9: 주황 기반 보라 preview 위치·후보 간선·모호성·경로를 추가했다.
-  static const schemaVersion = 9;
+  // v10: corridor tracker의 **입력 이벤트**를 남긴다. v9까지는 출력(경로·1Hz
+  // 샘플)만 있어서 tracker를 정확히 재생할 수 없었다(주황 꼬리와 배치 경계가
+  // 없었다). 이제 tracker가 실제로 받은 관측 전체 + 확정 배치 식별자 +
+  // 그 시간창에서 소비된 accepted peak를 남겨 재생 fixture로 쓸 수 있다.
+  static const schemaVersion = 10;
   static const _maxQualitySamples = 900;
+  static const _maxTrackerInputEvents = 4000;
+
+  /// 걸음 변화가 없어도 이 간격마다 한 건은 남긴다. turnPending 타임아웃처럼
+  /// 시간만으로 진행되는 전이를 재생하려면 무입력 구간의 시각도 필요하다.
+  static const _trackerInputHeartbeatMs = 250;
 
   final DateTime _startedAt;
   final List<_PdrQualitySample> _qualitySamples = [];
   final List<Map<String, Object?>> _corridorSamples = [];
+  final List<Map<String, Object?>> _trackerInputEvents = [];
+
+  int? _lastLoggedBatchId;
+  int? _lastLoggedBatchSpanEndMs;
+  int? _lastTrackerInputAtMs;
+  int? _lastTrackerInputSteps;
+  int? _lastTrackerInputPreviewSteps;
+  int _droppedTrackerInputEvents = 0;
 
   PdrSnapshot? _latestSnapshot;
   CorridorTrackingResult? _latestCorridorCorrection;
@@ -106,6 +123,122 @@ class PdrDebugSessionRecorder {
     if (_corridorSamples.length > _maxQualitySamples) {
       _corridorSamples.removeAt(0);
     }
+  }
+
+  /// corridor tracker가 실제로 받은 입력 이벤트(v10).
+  ///
+  /// 좌표는 anchor 변환이 끝난 floor local 값이라, 재생 시 anchor를 다시 적용할
+  /// 필요 없이 그대로 [CorridorObservation]으로 되돌릴 수 있다.
+  ///
+  /// [observation]이 null이면 재초기화(reset) 지점이다.
+  void recordTrackerInput({
+    required CorridorObservation? observation,
+    required bool wasReset,
+    required CorridorTrackingResult result,
+    required PdrSnapshot snapshot,
+    required List<int?> previewTailPeakTimesMs,
+    DateTime? at,
+  }) {
+    final now = (at ?? DateTime.now()).toUtc();
+    final batch = snapshot.lastAppliedBatch;
+    final isNewBatch = batch != null && batch.batchId != _lastLoggedBatchId;
+    final stepsChanged =
+        _lastTrackerInputSteps != snapshot.steps ||
+        _lastTrackerInputPreviewSteps != snapshot.preview.steps;
+    // heartbeat는 tracker 시간축(observation.timestampMs)에서만 잰다. 관측이
+    // 없는 reset 지점에 벽시계를 섞으면 두 시계 차이만큼 뒤따르는 update가
+    // 통째로 버려진다.
+    final atMs = observation?.timestampMs;
+    final staleEnough =
+        atMs == null ||
+        _lastTrackerInputAtMs == null ||
+        atMs - _lastTrackerInputAtMs! >= _trackerInputHeartbeatMs;
+    if (!wasReset && !isNewBatch && !stepsChanged && !staleEnough) return;
+
+    if (_trackerInputEvents.length >= _maxTrackerInputEvents) {
+      // 앞을 버리면 재생이 중간부터 시작돼 상태가 어긋난다. 세션 앞부분을
+      // 온전히 남기고 초과분만 세어 둔다.
+      _droppedTrackerInputEvents += 1;
+      return;
+    }
+
+    _trackerInputEvents.add({
+      'at_utc': now.toIso8601String(),
+      'timestamp_ms': ?atMs,
+      'kind': wasReset ? 'reset' : 'update',
+      if (observation != null) ...{
+        'confirmed_steps': observation.confirmedSteps,
+        'confirmed_distance_m': observation.confirmedDistanceM,
+        'preview_steps': observation.previewSteps,
+        'sensor_heading_deg': observation.sensorHeadingDeg,
+        'has_heading': observation.hasHeading,
+        'raw_confirmed_position': _pairJson(observation.rawConfirmedPosition),
+        'raw_preview_position': _pairJson(observation.rawPreviewPosition),
+        'raw_confirmed_step_positions': [
+          for (final point in observation.rawConfirmedStepPositions)
+            _pairJson(point),
+        ],
+        'raw_preview_tail_positions': [
+          for (final point in observation.rawPreviewTailPositions)
+            _pairJson(point),
+        ],
+        // 꼬리 좌표와 같은 인덱스. 확정 배치 시간창과 대조하는 기준이다.
+        'raw_preview_tail_peak_times_ms': previewTailPeakTimesMs,
+      },
+      if (isNewBatch)
+        'applied_batch': {
+          'batch_id': batch.batchId,
+          'span_start_ms': batch.spanStartMs,
+          'span_end_ms': batch.spanEndMs,
+          'applied_steps': batch.appliedSteps,
+          'applied_distance_m': batch.appliedDistanceM,
+          // 이 배치 시간창에서 확정으로 넘어간 주황 peak. 걸음 수 차감이 아니라
+          // 시간창이 기준이라는 것을 파일만으로 확인할 수 있게 남긴다.
+          'consumed_preview_peak_times_ms': _consumedPreviewPeaks(
+            snapshot,
+            spanEndMs: batch.spanEndMs,
+          ),
+        },
+      'result': {
+        'state': result.state.name,
+        'edge_id': result.currentEdgeId,
+        'edge_progress_m': result.currentEdgeProgressM,
+        'travel_direction_sign': result.travelDirectionSign,
+        'pending_edge_id': result.pendingEdgeId,
+        'last_confirmed_node_id': result.lastConfirmedNodeId,
+        'position': _pairJson(result.correctedPosition),
+        'corrected_heading_deg': result.correctedHeadingDeg,
+        'preview_position': _pairJson(result.previewPosition),
+        'preview_heading_deg': result.previewHeadingDeg,
+        'preview_candidate_edge_ids': result.previewCandidateEdgeIds,
+        'preview_is_ambiguous': result.previewIsAmbiguous,
+        'heading_bias_deg': result.headingBiasDeg,
+      },
+    });
+
+    // reset 지점은 tracker 시각을 모르므로 baseline을 비워, 다음 update가
+    // heartbeat와 무관하게 반드시 남도록 한다(재생 시작점 직후를 놓치지 않는다).
+    _lastTrackerInputAtMs = atMs;
+    _lastTrackerInputSteps = snapshot.steps;
+    _lastTrackerInputPreviewSteps = snapshot.preview.steps;
+    if (isNewBatch) {
+      _lastLoggedBatchId = batch.batchId;
+      _lastLoggedBatchSpanEndMs = batch.spanEndMs;
+    }
+  }
+
+  /// 직전 배치 끝 ~ 이번 배치 끝 사이에 찍힌 accepted preview peak.
+  List<int> _consumedPreviewPeaks(
+    PdrSnapshot snapshot, {
+    required int? spanEndMs,
+  }) {
+    if (spanEndMs == null) return const [];
+    final from = _lastLoggedBatchSpanEndMs;
+    return [
+      for (final time in snapshot.preview.acceptedPeakTimesMs)
+        if (time != null && time <= spanEndMs && (from == null || time > from))
+          time,
+    ];
   }
 
   /// stopGuidance에서 native가 돌려준 pedometer 동결/재조회 결과.
@@ -186,6 +319,10 @@ class PdrDebugSessionRecorder {
         for (final sample in _qualitySamples) sample.toJson(),
       ],
       'corridor_correction_samples': _corridorSamples,
+      // corridor tracker 정확 재생용 입력 이벤트(v10). `kind: 'reset'`에서
+      // 상태를 다시 세우고, 이후 `update`를 순서대로 먹이면 재현된다.
+      'tracker_input_events': _trackerInputEvents,
+      'tracker_input_dropped': _droppedTrackerInputEvents,
       'runtime': {
         'state': _runtimeStatus.state.name,
         'warnings': _runtimeStatus.warnings,
@@ -346,6 +483,17 @@ class PdrDebugSessionRecorder {
     'east_m': point.eastM,
     'north_m': point.northM,
   };
+
+  /// tracker 입력 이벤트 전용 압축 좌표 `[east_m, north_m]`.
+  ///
+  /// 이벤트 수가 많아 키 이름 반복이 파일 크기를 크게 좌우한다. mm 단위로
+  /// 끊어도 재생 결과는 달라지지 않는다.
+  static List<double> _pairJson(PdrLocalPoint point) => [
+    _round3(point.eastM),
+    _round3(point.northM),
+  ];
+
+  static double _round3(double value) => (value * 1000).roundToDouble() / 1000;
 
   static double _pathLength(List<PdrLocalPoint> points) {
     var total = 0.0;

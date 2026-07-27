@@ -19,12 +19,25 @@ class CorridorTrackingSession {
 
   CorridorTrackingResult? get result => _tracker?.result;
 
+  /// 직전 [update]가 tracker에 실제로 넘긴 관측. 디버그 레코더가 정확 재생용
+  /// 입력 이벤트로 기록한다. 재초기화(reset) 경로였다면 null이다.
+  CorridorObservation? get lastObservation => _lastObservation;
+
+  /// 직전 [update]가 tracker를 재초기화했는지. 재생 시 같은 지점에서 상태를
+  /// 다시 세워야 하므로 입력 이벤트와 함께 남긴다.
+  bool get lastWasReset => _lastWasReset;
+
+  CorridorObservation? _lastObservation;
+  bool _lastWasReset = false;
+
   void reset() {
     _tracker = null;
     _graphKey = null;
     _anchorKey = null;
     _lastSteps = null;
     _lastDistanceM = null;
+    _lastObservation = null;
+    _lastWasReset = false;
   }
 
   CorridorTrackingResult? update({
@@ -70,26 +83,26 @@ class CorridorTrackingSession {
       _anchorKey = nextAnchorKey;
       _lastSteps = snapshot.steps;
       _lastDistanceM = snapshot.distanceM;
+      _lastObservation = null;
+      _lastWasReset = true;
       return _tracker!.result;
     }
 
-    final output = _tracker!.update(
-      CorridorObservation(
-        timestampMs: timestampMs,
-        rawConfirmedPosition: transform.toFloor(snapshot.position),
-        confirmedSteps: snapshot.steps,
-        confirmedDistanceM: snapshot.distanceM,
-        rawPreviewPosition: transform.toFloor(snapshot.preview.position),
-        previewSteps: snapshot.preview.steps,
-        sensorHeadingDeg: floorHeadingDeg,
-        hasHeading: snapshot.hasHeading,
-        rawConfirmedStepPositions: _newConfirmedFloorPoints(
-          snapshot,
-          transform,
-        ),
-        rawPreviewTailPositions: _previewTailFloorPoints(snapshot, transform),
-      ),
+    final observation = CorridorObservation(
+      timestampMs: timestampMs,
+      rawConfirmedPosition: transform.toFloor(snapshot.position),
+      confirmedSteps: snapshot.steps,
+      confirmedDistanceM: snapshot.distanceM,
+      rawPreviewPosition: transform.toFloor(snapshot.preview.position),
+      previewSteps: snapshot.preview.steps,
+      sensorHeadingDeg: floorHeadingDeg,
+      hasHeading: snapshot.hasHeading,
+      rawConfirmedStepPositions: _newConfirmedFloorPoints(snapshot, transform),
+      rawPreviewTailPositions: _previewTailFloorPoints(snapshot, transform),
     );
+    final output = _tracker!.update(observation);
+    _lastObservation = observation;
+    _lastWasReset = false;
     _lastSteps = snapshot.steps;
     _lastDistanceM = snapshot.distanceM;
     return output;
@@ -136,13 +149,31 @@ class CorridorTrackingSession {
     PdrSnapshot snapshot,
     FloorCoordinateTransform transform,
   ) {
-    final leadSteps = snapshot.preview.steps - snapshot.steps;
-    final path = snapshot.preview.path;
-    if (leadSteps <= 0 || path.length < 2) return const [];
-    final movementCount = math.min(leadSteps, path.length - 1);
-    return path
-        .skip(path.length - movementCount - 1)
+    final start = _previewTailStart(snapshot);
+    if (start == null) return const [];
+    return snapshot.preview.path
+        .skip(start)
         .map(transform.toFloor)
         .toList(growable: false);
+  }
+
+  /// [_previewTailFloorPoints]와 **같은 인덱스**의 accepted peak 시각.
+  ///
+  /// 재생·분석이 "이 주황 꼬리가 언제 찍힌 걸음인지"를 알아야 확정 배치
+  /// 시간창과 대조할 수 있다. 좌표만으로는 복원되지 않는 정보다.
+  List<int?> previewTailPeakTimesMs(PdrSnapshot snapshot) {
+    final start = _previewTailStart(snapshot);
+    if (start == null) return const [];
+    final times = snapshot.preview.acceptedPeakTimesMs;
+    if (times.length != snapshot.preview.path.length) return const [];
+    return times.skip(start).toList(growable: false);
+  }
+
+  int? _previewTailStart(PdrSnapshot snapshot) {
+    final leadSteps = snapshot.preview.steps - snapshot.steps;
+    final path = snapshot.preview.path;
+    if (leadSteps <= 0 || path.length < 2) return null;
+    final movementCount = math.min(leadSteps, path.length - 1);
+    return path.length - movementCount - 1;
   }
 }

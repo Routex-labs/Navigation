@@ -920,6 +920,16 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     );
     if (result != null) {
       _pdrDebugRecorder?.recordCorridorCorrection(result);
+      if (snapshot != null) {
+        _pdrDebugRecorder?.recordTrackerInput(
+          observation: _corridorTrackingSession.lastObservation,
+          wasReset: _corridorTrackingSession.lastWasReset,
+          result: result,
+          snapshot: snapshot,
+          previewTailPeakTimesMs: _corridorTrackingSession
+              .previewTailPeakTimesMs(snapshot),
+        );
+      }
     }
   }
 
