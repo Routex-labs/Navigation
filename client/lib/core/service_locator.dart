@@ -32,6 +32,11 @@ final IndoorNavigationDriver indoorNavigationDriver = IndoorNavigationDriver(
 /// 자기 메모리 값(꺼짐)을 계속 보여줘 같은 세션 안에서 PDR 진입점이 있다
 /// 없다 한다. MapShellScreen이 두 body를 IndexedStack으로 동시에 살려 두기
 /// 때문에 특히 눈에 띈다 — 하나만 두고 양쪽이 같은 상태를 구독한다.
+///
+/// 다른 전역들과 달리 교체 가능한 var가 아니라 final이다. 위젯이 구독하는
+/// ChangeNotifier라, 실행 중에 다른 인스턴스로 갈아끼우면 이미 구독 중인
+/// 화면들이 옛 인스턴스만 계속 바라보게 된다. 테스트에서 설정을 바꿔야 하면
+/// 인스턴스를 교체하지 말고 [DebugModeController.reload]를 쓴다.
 final DebugModeController debugModeController = DebugModeController();
 
 /// 실내 지도·목적지 검색·경로 안내가 전부 백엔드(api/) 다익스트라 그래프로
