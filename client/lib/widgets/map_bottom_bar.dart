@@ -18,6 +18,7 @@ class MapBottomBar extends StatelessWidget {
     required this.onCalibrate,
     required this.onPlaceLocation,
     this.placingLocation = false,
+    this.showPlaceLocation = true,
   });
 
   final MapMode mode;
@@ -26,14 +27,19 @@ class MapBottomBar extends StatelessWidget {
 
   /// 위치 보정 버튼 옆에 놓인 "위치 지정" 버튼을 눌렀을 때 호출된다. 지도를
   /// 켜지 않은 채 건물에 들어와 자동 위치 추정이 되지 않을 때, 사용자가 직접
-  /// 지도에서 본인 위치를 지정하는 흐름의 진입점이다. 실내 모드에서만
-  /// 노출된다 — 야외 모드는 GPS로 이미 위치가 잡히므로 이 버튼이 필요없다.
+  /// 지도에서 본인 위치를 지정하는 흐름의 진입점이다. 야외 지도의 실내 진입
+  /// 오버레이와 실내 지도 모두에서 노출한다.
   final VoidCallback onPlaceLocation;
 
   /// 사용자가 "위치 지정" 버튼을 눌러 지도 탭을 대기 중인지. true면 버튼을
   /// 눌린(선택된) 톤으로 표시해서 "지금 지도의 어딘가를 탭해야 한다"는 대기
   /// 상태임을 시각적으로 알린다.
   final bool placingLocation;
+
+  /// 위치 지정 버튼 자체를 노출할지. 야외 모드에서 실내 진입 오버레이가 아직
+  /// 켜지지 않았거나 층 정보가 준비되지 않은 상황에서는 상위가 false로 넘겨
+  /// 버튼을 숨긴다 — 눌러도 의미가 없는 버튼을 노출해 혼란을 주지 않는다.
+  final bool showPlaceLocation;
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +54,7 @@ class MapBottomBar extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (mode == MapMode.indoor) ...[
+                if (showPlaceLocation) ...[
                   _PlaceLocationButton(
                     onPressed: onPlaceLocation,
                     active: placingLocation,

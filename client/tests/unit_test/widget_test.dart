@@ -22,6 +22,7 @@ import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
 import 'package:navigation_client/screens/route_guide/route_guide_screen.dart';
 import 'package:navigation_client/widgets/eta_card.dart';
 import 'package:navigation_client/widgets/floor_plan_view.dart';
+import 'package:navigation_client/widgets/floor_selector.dart';
 import 'package:navigation_client/widgets/map_bottom_bar.dart';
 
 // 데모 건물 입구(37.5665, 126.9779)에서 약 185m 떨어진 좌표.
@@ -135,7 +136,7 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(home: OutdoorMapBody(onEnterBuilding: () {})),
+      MaterialApp(home: const OutdoorMapBody()),
     );
 
     // OutdoorMapBody는 위치 신호를 기다리는 동안에도 지도를 그리며,
@@ -158,7 +159,7 @@ void main() {
     watchPosition = () => Stream.value(_fakeLowAccuracyPosition);
 
     await tester.pumpWidget(
-      MaterialApp(home: OutdoorMapBody(onEnterBuilding: () {})),
+      MaterialApp(home: const OutdoorMapBody()),
     );
     await tester.pump();
 
@@ -169,7 +170,7 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(home: OutdoorMapBody(onEnterBuilding: () {})),
+      MaterialApp(home: const OutdoorMapBody()),
     );
     await tester.pump();
     await tester.pump();
@@ -181,7 +182,7 @@ void main() {
   });
 
   testWidgets(
-    'map shell switches to indoor mode when entrance is detected nearby',
+    'map shell shows the indoor entry overlay when entrance is detected nearby',
     (WidgetTester tester) async {
       watchPosition = () => Stream.value(_fakePositionAtEntrance);
 
@@ -192,13 +193,15 @@ void main() {
       expect(find.text('건물 감지 중...'), findsOneWidget);
 
       await tester.pumpAndSettle();
-      // 실내 모드로 전환되면 공용 상단바에 건물 선택용 햄버거 버튼이 나타난다.
-      expect(find.byIcon(Icons.menu), findsOneWidget);
+      // 실내 진입 오버레이가 켜지면 야외 지도 위에 세로 층 선택기(FloorSelector)
+      // 가 나타난다. 모드는 여전히 야외라 상단 햄버거는 뜨지 않는다.
+      expect(find.byType(FloorSelector), findsOneWidget);
+      expect(find.byIcon(Icons.menu), findsNothing);
     },
   );
 
   testWidgets(
-    'map shell does not switch to indoor mode when GPS signal stays strong near the entrance',
+    'map shell keeps the outdoor view when GPS signal stays strong near the entrance',
     (WidgetTester tester) async {
       // 입구와 같은 좌표지만 신호는 계속 양호함 (건물 앞을 지나가는 상황).
       final passingByPosition = Position(
@@ -219,6 +222,8 @@ void main() {
       await tester.pump();
       await tester.pump();
 
+      // 오버레이가 켜지지 않았으므로 층 선택기와 햄버거 모두 없어야 한다.
+      expect(find.byType(FloorSelector), findsNothing);
       expect(find.byIcon(Icons.menu), findsNothing);
     },
   );
@@ -230,7 +235,7 @@ void main() {
     watchPosition = () => controller.stream;
 
     await tester.pumpWidget(
-      MaterialApp(home: OutdoorMapBody(onEnterBuilding: () {})),
+      MaterialApp(home: const OutdoorMapBody()),
     );
 
     controller.add(_fakePosition);
@@ -255,7 +260,7 @@ void main() {
     watchPosition = () => Stream.error(Exception('위치를 가져올 수 없음'));
 
     await tester.pumpWidget(
-      MaterialApp(home: OutdoorMapBody(onEnterBuilding: () {})),
+      MaterialApp(home: const OutdoorMapBody()),
     );
     await tester.pump();
 
