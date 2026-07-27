@@ -11,11 +11,12 @@ import '../theme/app_theme.dart';
 /// 층·입구 노드를 돌려주는 검색(retrieval)이라, 이 패널도 "질문에 문장으로
 /// 답하는" RAG가 아니라 똑똑한 매장 찾기로 보이게 만든다. 예전에는 하드코딩된
 /// 샘플 대화만 보여주는 껍데기였다.
-class RagChatPanel extends StatefulWidget {
-  const RagChatPanel({
+class AiSearchSheet extends StatefulWidget {
+  const AiSearchSheet({
     super.key,
     required this.buildingId,
     this.currentFloorId,
+    this.initialQuery,
   });
 
   final String buildingId;
@@ -23,8 +24,34 @@ class RagChatPanel extends StatefulWidget {
   /// 주면 그 층으로 스코프해서 찾는다. 층 라벨("B2")·내부 id 모두 허용된다.
   final String? currentFloorId;
 
+  /// 열자마자 한 번 던질 질의. 검색 시트가 빈손으로 끝나 "AI 검색으로 찾기"로
+  /// 넘어온 경우, 사용자가 방금 친 말을 다시 치게 하지 않는다.
+  final String? initialQuery;
+
+  /// 사용자가 결과를 골랐으면 그 매장을, 그냥 닫았으면 null을 돌려준다.
+  static Future<PoiSearchResult?> show(
+    BuildContext context, {
+    required String buildingId,
+    String? currentFloorId,
+    String? initialQuery,
+  }) {
+    return showModalBottomSheet<PoiSearchResult>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => AiSearchSheet(
+        buildingId: buildingId,
+        currentFloorId: currentFloorId,
+        initialQuery: initialQuery,
+      ),
+    );
+  }
+
   @override
-  State<RagChatPanel> createState() => _RagChatPanelState();
+  State<AiSearchSheet> createState() => _AiSearchSheetState();
 }
 
 /// 한 번의 질의와 그 결과. [result]는 찾은 매장(없으면 null)이고, [answer]는
@@ -39,10 +66,20 @@ class _Exchange {
   bool get pending => answer == null;
 }
 
-class _RagChatPanelState extends State<RagChatPanel> {
+class _AiSearchSheetState extends State<AiSearchSheet> {
   final _controller = TextEditingController();
   final _exchanges = <_Exchange>[];
   bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialQuery?.trim();
+    if (initial != null && initial.isNotEmpty) {
+      // build 이후로 미뤄야 setState가 안전하다.
+      WidgetsBinding.instance.addPostFrameCallback((_) => _submit(initial));
+    }
+  }
 
   @override
   void dispose() {
@@ -184,6 +221,11 @@ class _RagChatPanelState extends State<RagChatPanel> {
                 text: exchange.answer!,
                 maxWidth: maxBubbleWidth,
                 fromUser: false,
+                // 찾은 매장은 탭해서 그대로 매장 정보/길찾기 흐름으로 넘어간다.
+                // 답만 보고 다시 검색창에 이름을 옮겨 적게 하지 않는다.
+                onTap: exchange.result == null
+                    ? null
+                    : () => Navigator.of(context).pop(exchange.result),
               ),
           ],
         ],
@@ -195,28 +237,66 @@ class _RagChatPanelState extends State<RagChatPanel> {
     required String text,
     required double maxWidth,
     required bool fromUser,
+    VoidCallback? onTap,
   }) {
+    final borderRadius = BorderRadius.only(
+      topLeft: const Radius.circular(18),
+      topRight: const Radius.circular(18),
+      bottomLeft: Radius.circular(fromUser ? 18 : 4),
+      bottomRight: Radius.circular(fromUser ? 4 : 18),
+    );
     return Align(
       alignment: fromUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         constraints: BoxConstraints(maxWidth: maxWidth),
         margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
+        child: Material(
           color: fromUser ? AppColors.indoor : AppColors.blue50,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(18),
-            topRight: const Radius.circular(18),
-            bottomLeft: Radius.circular(fromUser ? 18 : 4),
-            bottomRight: Radius.circular(fromUser ? 4 : 18),
-          ),
-        ),
-        child: Text(
-          text,
-          style: TextStyle(
-            color: fromUser ? Colors.white : AppColors.text,
-            fontSize: 13,
-            height: 1.4,
+          borderRadius: borderRadius,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: borderRadius,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 10,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    text,
+                    style: TextStyle(
+                      color: fromUser ? Colors.white : AppColors.text,
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  ),
+                  if (onTap != null) ...[
+                    const SizedBox(height: 6),
+                    const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '눌러서 위치 보기',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_right,
+                          size: 14,
+                          color: AppColors.primary,
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
       ),
