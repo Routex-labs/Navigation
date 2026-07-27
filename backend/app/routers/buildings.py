@@ -15,10 +15,14 @@ sqlite3/SQLAlchemy 동기 IO이므로 모든 핸들러는 def(동기)로 선언�
   GET /buildings/{id}/floors/{floor}/tiles/{z}/{x}/{y}.mvt → 벡터 타일(MVT)
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+import hashlib
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
+from app.core.http_cache import cache_headers, etag_matches
 from app.repositories import building_queries, tile_queries
 from app.dto.building import BuildingDetailResponse, BuildingSummaryResponse
 from app.dto.floor_map import FloorMapResponse, StoreResponse
@@ -100,6 +104,7 @@ def get_floor_tile(
     x: int,
     y: int,
     session: Session = Depends(get_db),
+    if_none_match: str | None = Header(default=None),
 ):
     try:
         tile_bytes = tile_queries.render_floor_tile(session, building_id, floor_name, z, x, y)
@@ -109,7 +114,20 @@ def get_floor_tile(
     if tile_bytes is None:
         raise HTTPException(status_code=404, detail="Floor not found")
 
-    return Response(content=tile_bytes, media_type="application/vnd.mapbox-vector-tile")
+    # 같은 타일을 여러 번 요청하는 것은 MapLibre의 정상 동작이다(줌 전환·층
+    # 재방문·부모 타일 프리페치). 캐시 헤더가 없으면 그 전부가 서버까지 온다.
+    # ETag는 이미 만들어진 바이트에서 뽑으므로 추가 쿼리가 없다.
+    etag = f'"{hashlib.blake2b(tile_bytes, digest_size=16).hexdigest()}"'
+    headers = cache_headers(etag, settings.tile_cache_max_age)
+
+    if etag_matches(if_none_match, etag):
+        return Response(status_code=304, headers=headers)
+
+    return Response(
+        content=tile_bytes,
+        media_type="application/vnd.mapbox-vector-tile",
+        headers=headers,
+    )
 
 
 # 층 길찾기 그래프. 클라이언트/서버 경로 탐색의 입력.

@@ -10,7 +10,10 @@
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Header, HTTPException, Response
+
+from app.core.config import settings
+from app.core.http_cache import cache_headers, etag_matches
 
 router = APIRouter(prefix="/fonts", tags=["fonts"])
 
@@ -21,10 +24,25 @@ FONTS_DIR = Path(__file__).resolve().parents[2] / "resources" / "fonts"
 # 멈추게 두지 않고, 해당 글자만 조용히 비게 만든다.
 _EMPTY_GLYPHS_PBF = b""
 
+# 빈 응답의 ETag. 내용이 항상 같으므로 상수여도 된다.
+_EMPTY_GLYPHS_ETAG = '"empty"'
+
+
+# 파일 내용 대신 (mtime, 크기)로 ETag를 만든다. 해시와 달리 파일을 읽지 않아도
+# 되므로, 재검증 요청을 170KB짜리 read_bytes 없이 304로 끝낼 수 있다.
+def _file_etag(path: Path) -> str:
+    stat = path.stat()
+    return f'"{stat.st_mtime_ns:x}-{stat.st_size:x}"'
+
 
 # 글리프 범위 하나를 돌려준다. 없는 범위는 빈 200.
 @router.get("/{fontstack}/{start}-{end}.pbf")
-def get_glyph_range(fontstack: str, start: int, end: int) -> Response:
+def get_glyph_range(
+    fontstack: str,
+    start: int,
+    end: int,
+    if_none_match: str | None = Header(default=None),
+) -> Response:
     if start < 0 or end < start or end > 65535 or end - start != 255:
         raise HTTPException(status_code=400, detail="Invalid glyph range")
 
@@ -41,6 +59,33 @@ def get_glyph_range(fontstack: str, start: int, end: int) -> Response:
         except (OSError, ValueError):
             continue
         if resolved.is_file():
-            return Response(content=resolved.read_bytes(), media_type="application/x-protobuf")
+            try:
+                etag = _file_etag(resolved)
+            except OSError:
+                # stat이 실패하면 캐시를 포기하고 내용만 정상적으로 내려준다.
+                return Response(
+                    content=resolved.read_bytes(),
+                    media_type="application/x-protobuf",
+                )
 
-    return Response(content=_EMPTY_GLYPHS_PBF, media_type="application/x-protobuf")
+            headers = cache_headers(etag, settings.glyph_cache_max_age)
+            if etag_matches(if_none_match, etag):
+                return Response(status_code=304, headers=headers)
+
+            return Response(
+                content=resolved.read_bytes(),
+                media_type="application/x-protobuf",
+                headers=headers,
+            )
+
+    # 없는 범위(한자 등)도 캐시한다 — 안 그러면 "비어 있음"을 확인하려고 매번
+    # 다시 물어보게 되고, 요청 수로는 있는 범위와 똑같이 비싸다.
+    headers = cache_headers(_EMPTY_GLYPHS_ETAG, settings.glyph_cache_max_age)
+    if etag_matches(if_none_match, _EMPTY_GLYPHS_ETAG):
+        return Response(status_code=304, headers=headers)
+
+    return Response(
+        content=_EMPTY_GLYPHS_PBF,
+        media_type="application/x-protobuf",
+        headers=headers,
+    )
