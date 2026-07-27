@@ -530,6 +530,31 @@ void main() {
     expect(find.textContaining('건물 ·'), findsOneWidget);
   });
 
+  testWidgets('상단 검색은 실내에서도 현재 층으로 좁히지 않는다', (WidgetTester tester) async {
+    // 이름을 알고 검색하는 사용자는 그 매장이 몇 층인지 모른다. 현재 층으로
+    // 좁히면 분명히 있는 매장이 "결과 없음"으로 나온다. 층 스코프는 길찾기·
+    // 카테고리 시트만 쓴다.
+    final repository = _FallbackDestinationRepository(
+      lightResult: const PoiSearchResult(
+        name: 'MLB',
+        floor: 'B2',
+        point: LatLng(37.52, 126.92),
+        nodeId: 'FL-2:ND-9',
+      ),
+    );
+    destinationRepository = repository;
+
+    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpAndSettle();
+    // 실내 탭으로 전환하면 현재 층(_activeIndoorFloor)이 잡힌다.
+    await tester.tap(find.text('실내'));
+    await tester.pumpAndSettle();
+    await searchFromTopBar(tester, 'MLB');
+
+    expect(repository.lightFloorScopes, [null]);
+    expect(find.text('B2'), findsOneWidget);
+  });
+
 
   testWidgets('destination screen filters as the user types', (
     WidgetTester tester,
@@ -672,6 +697,10 @@ class _FallbackDestinationRepository implements DestinationRepository {
   final lightQueries = <String>[];
   final aiQueries = <String>[];
 
+  /// 검색이 층으로 좁혔는지 확인하려고 넘어온 값을 그대로 모아 둔다.
+  final lightFloorScopes = <String?>[];
+  final aiFloorScopes = <String?>[];
+
   @override
   Future<List<PoiSearchResult>> searchDestinations(
     String buildingId,
@@ -679,6 +708,7 @@ class _FallbackDestinationRepository implements DestinationRepository {
     String? currentFloorId,
   }) async {
     lightQueries.add(query);
+    lightFloorScopes.add(currentFloorId);
     return lightResult == null ? const [] : [lightResult!];
   }
 
@@ -689,6 +719,7 @@ class _FallbackDestinationRepository implements DestinationRepository {
     String? currentFloorId,
   }) async {
     aiQueries.add(query);
+    aiFloorScopes.add(currentFloorId);
     return aiResult == null ? const [] : [aiResult!];
   }
 }
