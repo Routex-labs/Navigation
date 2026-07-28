@@ -75,6 +75,21 @@ const entranceFarMeters = 40.0;
 /// 실기기 로그로 가장 먼저 조정할 값이다.
 const entryLookbackWindow = Duration(seconds: 10);
 
+/// 실내에서 PDR 위치가 입구에서 이만큼 안으로 들어오면 "밖으로 나가려는 것일 수
+/// 있다"고 보고 GPS를 다시 켠다(m).
+///
+/// 실내에서는 GPS를 끄는 것이 원칙이지만, 그러면 사용자가 아무 조작 없이 걸어
+/// 나갔을 때 알 방법이 없다. 그렇다고 실내 내내 켜 두면 위성을 못 잡고 탐색만
+/// 반복해 배터리를 계속 쓴다. 그래서 **PDR이 계기를 만들고 판단은 GPS가 한다** —
+/// 입구 앞에 왔을 때만 잠깐 켠다.
+const entranceNodeWatchMeters = 15.0;
+
+/// 켜 둔 GPS를 다시 끄는 거리(m).
+///
+/// [entranceNodeWatchMeters]와 같은 값을 쓰면 PDR이 경계에서 조금만 흔들려도
+/// 구독이 붙었다 끊겼다 한다. 10 m 여유를 둬 그 떨림을 흡수한다.
+const entranceNodeReleaseMeters = 25.0;
+
 /// 창에 쌓아 두는 위치 표본 수의 상한.
 ///
 /// 창은 표본의 **자체 timestamp**로 자르는데, 기기 시계가 멈추거나 플랫폼이 같은
@@ -178,6 +193,37 @@ class IndoorEntryGpsTracker {
         : IndoorEntryGpsDecision.none;
   }
 }
+
+/// 실내 상태에서 "밖으로 나가는지 확인하려고" GPS를 켜 둬야 하는지.
+///
+/// [pdrPoint]는 PDR이 말하는 지금 위치, [watching]은 지금 켜 둔 상태인지다.
+/// 켜는 반경([entranceNodeWatchMeters])과 끄는 반경([entranceNodeReleaseMeters])
+/// 이 달라서, 그 사이에서는 현재 상태를 유지한다.
+///
+/// PDR 위치를 모르면(앵커 없음·다른 층) false다 — 입구 앞인지 알 근거가 없으면
+/// 켜지 않는다.
+bool shouldWatchGpsNearEntrance({
+  required ll.LatLng? pdrPoint,
+  required ll.LatLng? entrance,
+  required bool watching,
+}) {
+  if (pdrPoint == null || entrance == null) return false;
+  final distance = _metersBetween(pdrPoint, entrance);
+  if (watching) return distance <= entranceNodeReleaseMeters;
+  return distance <= entranceNodeWatchMeters;
+}
+
+/// 실내에서 켠 GPS가 잡은 [fix]가 "밖으로 나왔다"를 뜻하는지.
+///
+/// 근거는 **오차 자체**다. 오차 [trustedAccuracyMeters] 이하는 건물 안에서 거의
+/// 나오지 않으므로, 그 값이 잡혔다는 것만으로 실외의 강한 증거다.
+///
+/// 거리 조건([entranceNearMeters] 이내)은 확인 사살이다. PDR은 "입구 앞"이라고
+/// 했는데 GPS가 한참 떨어진 곳을 가리키면 둘 중 하나가 틀린 것이므로, 그때는
+/// 판정하지 않는다 — 사용자는 예전처럼 탭이나 축소로 나가면 된다.
+bool isOutdoorsFix({required GpsFix fix, required ll.LatLng entrance}) =>
+    fix.accuracyMeters <= trustedAccuracyMeters &&
+    _metersBetween(fix.point, entrance) <= entranceNearMeters;
 
 double _metersBetween(ll.LatLng a, ll.LatLng b) =>
     const ll.Distance().as(ll.LengthUnit.Meter, a, b);

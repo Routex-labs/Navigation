@@ -126,7 +126,11 @@ void main() {
   /// 멀리서 접근 → 입구 앞(양호) → 신호 저하 순서를 지켜야 한다 — 판정이 "신호가
   /// 멀쩡했을 때 입구 앞에 있었다"는 근거를 창에서 찾기 때문이다.
   Future<void> walkIntoBuilding(WidgetTester tester) async {
-    final positions = StreamController<Position>();
+    // broadcast여야 한다. 앵커가 입구에 찍히면 PDR 위치도 입구 앞이라 화면이
+    // 이탈 확인용 GPS를 **다시 구독**하는데, 단일 구독 스트림은 취소된 뒤
+    // 재구독하면 'already been listened to'로 터진다. 실제 앱의 watchPosition은
+    // 호출마다 새 스트림을 준다.
+    final positions = StreamController<Position>.broadcast();
     watchPosition = () => positions.stream;
     await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
     // 위치를 흘리기 전에 건물(입구 좌표·층 그래프) 로드가 끝날 때까지 진행한다.

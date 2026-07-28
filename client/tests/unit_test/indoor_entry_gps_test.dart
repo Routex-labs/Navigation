@@ -171,6 +171,73 @@ void main() {
     });
   });
 
+  group('이탈 감시 (실내에서 GPS를 켜 둘지)', () {
+    bool watch({required double pdrMetersFromEntrance, required bool watching}) =>
+        shouldWatchGpsNearEntrance(
+          pdrPoint: east(pdrMetersFromEntrance),
+          entrance: entrance,
+          watching: watching,
+        );
+
+    test('PDR이 입구 앞으로 들어오면 켠다', () {
+      expect(watch(pdrMetersFromEntrance: 10, watching: false), isTrue);
+    });
+
+    test('켜는 반경 밖에서는 켜지 않는다', () {
+      expect(watch(pdrMetersFromEntrance: 20, watching: false), isFalse);
+    });
+
+    test('한 번 켜지면 조금 멀어져도 유지한다', () {
+      // 켜는 반경(15m)과 끄는 반경(25m) 사이. 여기서 상태가 바뀌면 PDR이 경계에서
+      // 흔들릴 때마다 구독이 붙었다 끊겼다 한다.
+      expect(watch(pdrMetersFromEntrance: 20, watching: true), isTrue);
+    });
+
+    test('입구에서 충분히 벗어나면 끈다', () {
+      expect(watch(pdrMetersFromEntrance: 40, watching: true), isFalse);
+    });
+
+    test('PDR 위치를 모르면 켜지 않는다', () {
+      // 앵커가 없거나 다른 층에 있는 경우. 입구 앞인지 알 근거가 없다.
+      expect(
+        shouldWatchGpsNearEntrance(
+          pdrPoint: null,
+          entrance: entrance,
+          watching: false,
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group('야외 판정', () {
+    bool outdoors({required double accuracy, required double metersFromEntrance}) =>
+        isOutdoorsFix(
+          fix: fix(
+            atSeconds: 0,
+            accuracy: accuracy,
+            metersFromEntrance: metersFromEntrance,
+          ),
+          entrance: entrance,
+        );
+
+    test('입구 앞에서 신뢰 좌표가 잡히면 밖으로 나온 것이다', () {
+      expect(outdoors(accuracy: 8, metersFromEntrance: 10), isTrue);
+    });
+
+    test('신호가 나쁘면 밖으로 보지 않는다', () {
+      // 실내에서 켠 GPS가 흔히 주는 값. 이걸로 나갔다고 보면 안에 있는 사용자의
+      // 실내 도면이 제멋대로 닫힌다.
+      expect(outdoors(accuracy: 45, metersFromEntrance: 10), isFalse);
+    });
+
+    test('PDR이 말한 입구와 GPS가 어긋나면 판정하지 않는다', () {
+      // PDR은 "입구 앞"이라 해서 GPS를 켰는데 200m 밖이 잡혔다. 둘 중 하나가
+      // 틀린 상태라 판단을 미룬다.
+      expect(outdoors(accuracy: 8, metersFromEntrance: 200), isFalse);
+    });
+  });
+
   group('창 관리', () {
     test('창을 벗어난 표본은 버린다', () {
       final tracker = IndoorEntryGpsTracker();
