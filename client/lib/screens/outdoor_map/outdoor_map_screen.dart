@@ -110,6 +110,12 @@ const _pdrCurrentLayerId = 'outdoor-pdr-current-dot';
 // floor_plan_view.dart의 _renderCurrentLocationIcon도 함께 맞춰야 한다).
 const _pdrLocationImageName = 'outdoor-pdr-location';
 const _pdrLocationDotImageName = 'outdoor-pdr-location-dot';
+// 아래 세 값은 floor_plan_view.dart의 _currentLocationIcon* 상수와 같은 뜻이고
+// 같은 값이어야 한다. 코어 지름 44px은 야외 GPS 정확도 원의 테두리 지름과
+// 일치시켜, 사용자가 크기로 인식하는 경계가 두 마커에서 같아지게 잡은 값이다.
+const _pdrLocationIconPixelRatio = 2.0;
+const _pdrLocationCoreRadius = 22.0;
+const _pdrLocationRimRadius = _pdrLocationCoreRadius + 5;
 // 실내 오버레이에서 매장 폴리곤을 탭했을 때 그 매장 하나만 옅은 파란색 + 진한
 // 테두리로 강조 표시하는 전용 소스·레이어. 실내 지도의 highlight와 같은 톤
 // (#1A73E8, 옅은 fill + 얇은 line)으로 맞춰 두 화면 사이 UX가 흔들리지 않게 한다.
@@ -199,11 +205,13 @@ LatLng _toGl(ll.LatLng p) => LatLng(p.latitude, p.longitude);
 Future<Uint8List> _renderPdrLocationIcon({required bool showHeading}) async {
   const canvasSize = 144.0;
   const center = Offset(canvasSize / 2, canvasSize / 2);
+  const pixelSize = canvasSize * _pdrLocationIconPixelRatio;
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(
     recorder,
-    const Rect.fromLTWH(0, 0, canvasSize, canvasSize),
+    const Rect.fromLTWH(0, 0, pixelSize, pixelSize),
   );
+  canvas.scale(_pdrLocationIconPixelRatio);
 
   if (showHeading) {
     const coneRadius = 62.0;
@@ -228,24 +236,28 @@ Future<Uint8List> _renderPdrLocationIcon({required bool showHeading}) async {
 
   canvas.drawCircle(
     center + const Offset(0, 2),
-    27,
+    _pdrLocationRimRadius + 3,
     Paint()
       ..color = const Color(0x33000000)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
   );
-  canvas.drawCircle(center, 24, Paint()..color = Colors.white);
+  canvas.drawCircle(
+    center,
+    _pdrLocationRimRadius,
+    Paint()..color = Colors.white,
+  );
 
   const blue = Color(0xFF1976D2);
-  canvas.drawCircle(center, 18, Paint()..color = blue);
+  canvas.drawCircle(center, _pdrLocationCoreRadius, Paint()..color = blue);
   canvas.drawCircle(
-    center - const Offset(5, 5),
-    4.5,
+    center - const Offset(6, 6),
+    5.5,
     Paint()..color = const Color(0x66FFFFFF),
   );
 
   final image = await recorder.endRecording().toImage(
-    canvasSize.toInt(),
-    canvasSize.toInt(),
+    pixelSize.toInt(),
+    pixelSize.toInt(),
   );
   final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
   return byteData!.buffer.asUint8List();
@@ -1502,15 +1514,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           _pdrLocationImageName,
           _pdrLocationDotImageName,
         ],
-        iconSize: [
-          'interpolate',
-          ['linear'],
-          ['zoom'],
-          16,
-          0.26,
-          20,
-          0.56,
-        ],
+        // 야외 GPS 마커(CircleLayer 상수 반지름)가 zoom과 무관하게 고정이므로
+        // 이쪽도 고정으로 둔다 — 디자인 1px = 화면 1px.
+        iconSize: 1.0 / _pdrLocationIconPixelRatio,
         iconRotate: [
           'coalesce',
           ['get', 'heading'],

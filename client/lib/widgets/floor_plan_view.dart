@@ -60,24 +60,30 @@ const _currentLocationIconDesignSize = 144.0;
 /// iconSize는 같은 배율로 나눠서, 화면상 크기는 그대로 두고 해상도만 올린다.
 const _currentLocationIconPixelRatio = 2.0;
 
-/// 현재 위치 심볼의 zoom별 크기. 값은 "[_currentLocationIconDesignSize] 캔버스에
-/// 곱할 배율"로 읽는다 — 파란 도트 지름은 디자인 36px, 흰 테두리는 48px이므로
-/// 배율 0.54면 테두리 지름이 약 26px, 1.2면 약 58px이 된다.
+/// 현재 위치 심볼의 화면 크기. 디자인 좌표계 1px = 화면 1px이 되도록 고정한다
+/// (비트맵은 [_currentLocationIconPixelRatio]배로 렌더하므로 그만큼 나눈다).
 ///
-/// 실내에서는 zoom 하한이 건물 크기에 따라 17 전후로 잡히고 경로 안내는 19에서
-/// 시작하며 확대는 그 이상까지 열려 있다. 그래서 확대할수록 커지되, MapLibre
-/// interpolate가 stop 밖에서는 양 끝 값으로 고정되는 성질을 이용해 zoom 16
-/// 아래에서는 도트가 도면을 덮지 않을 만큼 작게, zoom 22 위에서는 더 이상
-/// 커지지 않게 상·하한을 둔다.
-const _currentLocationIconSizeExpression = <Object>[
-  'interpolate',
-  ['linear'],
-  ['zoom'],
-  16,
-  0.54 / _currentLocationIconPixelRatio,
-  22,
-  1.2 / _currentLocationIconPixelRatio,
-];
+/// zoom 보간을 쓰지 않는 이유: 야외 GPS 마커는 `CircleLayer`의 상수
+/// `circleRadius`로 그려져 zoom과 무관하게 같은 크기를 유지한다
+/// (outdoor_map_screen.dart의 `outdoor-accuracy`/`outdoor-current-dot`).
+/// 실내 마커도 같은 크기로 보여야 하므로 zoom에 따라 커지면 안 된다.
+///
+/// 크기의 기준은 "눈에 보이는 경계"다. GPS 마커에서 사용자가 크기로 인식하는
+/// 것은 18px 도트가 아니라 정확도 원의 **불투명도 100%인 1px 테두리**(지름
+/// 44px)다. 실내 마커에는 그 테두리 원이 없고 바깥 흰 링은 도면 바닥(#FFFFFF)에
+/// 묻혀 안 보이므로, 지각되는 경계는 파란 코어 원뿐이다. 그래서 코어 지름을
+/// 44px로 맞춰(디자인 반지름 22) 두 화면의 마커가 같은 크기로 읽히게 한다.
+const _currentLocationIconSize = 1.0 / _currentLocationIconPixelRatio;
+
+/// 파란 코어 원의 반지름(디자인 단위 = 화면 px). 지름 44px이 야외 GPS 정확도
+/// 원의 테두리 지름과 같다 — 이 값이 두 화면에서 마커가 같은 크기로 읽히게
+/// 만드는 실질적인 기준이다.
+const _currentLocationCoreRadius = 22.0;
+
+/// 코어를 감싸는 흰 링의 반지름. 코어보다 5px 두껍게 잡아, 도면 바닥(#FFFFFF)
+/// 에서는 묻히더라도 매장 fill(#F3F1EF)이나 경로선 위에서는 코어가 배경과
+/// 분리돼 보이게 한다.
+const _currentLocationRimRadius = _currentLocationCoreRadius + 5;
 
 /// 지도 위에 얹을 현재 위치/목적지 점 마커. 종류에 따라 스타일이 달라진다
 /// (마커 색상은 [_markersGeoJson]의 circle-color data-driven 표현식이 결정).
@@ -774,7 +780,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
           _currentLocationImageName,
           _currentLocationDotImageName,
         ],
-        iconSize: _currentLocationIconSizeExpression,
+        iconSize: _currentLocationIconSize,
         iconRotate: [
           'coalesce',
           ['get', 'heading'],
@@ -1119,8 +1125,9 @@ class FloorPlanViewState extends State<FloorPlanView> {
   ///
   /// 아래 좌표는 모두 [_currentLocationIconDesignSize] 기준의 디자인 단위이고,
   /// 실제 비트맵은 [_currentLocationIconPixelRatio]배로 렌더링한다 — 화면상
-  /// 크기는 iconSize가 정하고(=[_currentLocationIconSizeExpression]) 이 배율은
-  /// 해상도만 올린다.
+  /// 크기는 iconSize가 정하고(=[_currentLocationIconSize]) 이 배율은 해상도만
+  /// 올린다. iconSize가 디자인 1px = 화면 1px로 고정이므로, 아래 반지름은 그대로
+  /// 화면 픽셀로 읽으면 된다(코어 반지름 22 = 화면 지름 44px).
   static Future<Uint8List> _renderCurrentLocationIcon({
     required bool showHeading,
   }) async {
@@ -1157,18 +1164,22 @@ class FloorPlanViewState extends State<FloorPlanView> {
 
     canvas.drawCircle(
       center + const Offset(0, 2),
-      27,
+      _currentLocationRimRadius + 3,
       Paint()
         ..color = const Color(0x33000000)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
     );
-    canvas.drawCircle(center, 24, Paint()..color = Colors.white);
+    canvas.drawCircle(
+      center,
+      _currentLocationRimRadius,
+      Paint()..color = Colors.white,
+    );
 
     const blue = Color(0xFF1976D2);
-    canvas.drawCircle(center, 18, Paint()..color = blue);
+    canvas.drawCircle(center, _currentLocationCoreRadius, Paint()..color = blue);
     canvas.drawCircle(
-      center - const Offset(5, 5),
-      4.5,
+      center - const Offset(6, 6),
+      5.5,
       Paint()..color = const Color(0x66FFFFFF),
     );
 
