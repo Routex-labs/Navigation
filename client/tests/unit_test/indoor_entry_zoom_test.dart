@@ -116,7 +116,11 @@ void main() {
     test('밴드 안에서는 상태를 유지한다', () {
       for (final z in [15.6, 16.0, 16.5, 17.0, 17.49]) {
         expect(
-          indoorEntryTransitionForZoom(z, buildingNearby: true),
+          indoorEntryTransitionForZoom(
+            z,
+            buildingNearby: true,
+            entryZoom: indoorEntryZoomThreshold,
+          ),
           IndoorEntryTransition.keep,
           reason: 'zoom $z는 히스테리시스 밴드 안이어야 한다',
         );
@@ -128,6 +132,7 @@ void main() {
         indoorEntryTransitionForZoom(
           indoorEntryZoomThreshold,
           buildingNearby: true,
+          entryZoom: indoorEntryZoomThreshold,
         ),
         IndoorEntryTransition.enter,
       );
@@ -135,6 +140,7 @@ void main() {
         indoorEntryTransitionForZoom(
           indoorExitZoomThreshold - 0.01,
           buildingNearby: true,
+          entryZoom: indoorEntryZoomThreshold,
         ),
         IndoorEntryTransition.exit,
       );
@@ -142,6 +148,7 @@ void main() {
         indoorEntryTransitionForZoom(
           indoorExitZoomThreshold,
           buildingNearby: true,
+          entryZoom: indoorEntryZoomThreshold,
         ),
         IndoorEntryTransition.keep,
       );
@@ -155,7 +162,11 @@ void main() {
     test('건물이 주변에 없으면 아무리 확대해도 진입하지 않는다', () {
       for (final z in [17.5, 18.0, 19.0, 21.0]) {
         expect(
-          indoorEntryTransitionForZoom(z, buildingNearby: false),
+          indoorEntryTransitionForZoom(
+            z,
+            buildingNearby: false,
+            entryZoom: indoorEntryZoomThreshold,
+          ),
           IndoorEntryTransition.keep,
           reason: 'zoom $z에서 건물 없이 실내로 들어가면 안 된다',
         );
@@ -169,11 +180,16 @@ void main() {
         indoorEntryTransitionForZoom(
           indoorExitZoomThreshold - 0.01,
           buildingNearby: false,
+          entryZoom: indoorEntryZoomThreshold,
         ),
         IndoorEntryTransition.exit,
       );
       expect(
-        indoorEntryTransitionForZoom(17.0, buildingNearby: false),
+        indoorEntryTransitionForZoom(
+          17.0,
+          buildingNearby: false,
+          entryZoom: indoorEntryZoomThreshold,
+        ),
         IndoorEntryTransition.keep,
       );
     });
@@ -268,6 +284,126 @@ void main() {
 
     test('maxzoom이 진입 임계값보다 높다', () {
       expect(indoorTilesMaxZoom, greaterThan(indoorEntryZoomThreshold));
+    });
+  });
+
+  group('진입 임계값의 화면 폭 보정', () {
+    // 이 그룹이 지키는 증상: 데스크톱 Chrome에서는 확대만으로 실내에 들어가는데
+    // 폰 실기기에서는 아무리 확대해도 층 선택기·위치 지정 버튼이 뜨지 않던 문제.
+    // 고정 임계값 17.5가 화면 폭에 따라 "얼마나 확대한 상태인지"를 다르게
+    // 의미해서 생긴 일이다.
+    const buildingWidthM = 179.3; // 1F 정북 정렬 폭
+
+    double thresholdAt(double viewportPx) => indoorEntryZoomThresholdFor(
+      buildingWidthMeters: buildingWidthM,
+      viewportWidthPx: viewportPx,
+      latitude: referenceLatitude,
+    );
+
+    test('폰 폭에서는 건물이 화면에 담기는 순간 진입한다', () {
+      final threshold = thresholdAt(referenceViewportWidthPx);
+      // 보정 전에는 17.5여서, 건물이 화면 밖으로 넘칠 때까지 확대해야 닿았다.
+      expect(threshold, lessThan(indoorEntryZoomThreshold));
+      final visible = visibleWidthMeters(
+        zoom: threshold,
+        availablePx: referenceViewportWidthPx,
+        latitude: referenceLatitude,
+      );
+      // zoomToFitWidth ↔ visibleWidthMeters 왕복에서 1e-13 수준 오차가 남으므로
+      // 경계를 mm 단위로 느슨하게 잡는다.
+      expect(
+        visible,
+        greaterThan(buildingWidthM - 0.001),
+        reason:
+            '진입하는 순간 보이는 폭 ${visible.toStringAsFixed(0)} m가 건물 폭 '
+            '$buildingWidthM m보다 좁다 — 건물이 화면 밖으로 넘쳐야만 진입한다',
+      );
+    });
+
+    test('넓은 화면에서는 기존 임계값이 그대로 쓰인다(데스크톱 회귀 방지)', () {
+      expect(thresholdAt(1400), indoorEntryZoomThreshold);
+    });
+
+    test('어떤 화면 폭에서도 지금보다 진입이 어려워지지 않는다', () {
+      for (var px = 280.0; px <= 2400.0; px += 20) {
+        expect(
+          thresholdAt(px),
+          lessThanOrEqualTo(indoorEntryZoomThreshold),
+          reason: '화면 폭 $px px에서 임계값이 기존보다 높아졌다',
+        );
+      }
+    });
+
+    test('아주 넓은 건물 + 좁은 화면에서도 이탈 임계값 위에 남는다', () {
+      // 하한이 없으면 진입 임계값이 이탈 임계값 아래로 내려가 같은 zoom에서
+      // 진입과 이탈이 동시에 성립하고, 오버레이가 켜졌다 꺼졌다 진동한다.
+      for (final width in [286.1, 500.0, 1200.0, 5000.0]) {
+        final threshold = indoorEntryZoomThresholdFor(
+          buildingWidthMeters: width,
+          viewportWidthPx: 280,
+          latitude: referenceLatitude,
+        );
+        expect(
+          threshold,
+          greaterThan(indoorExitZoomThreshold),
+          reason: '건물 폭 $width m에서 진입 임계값이 이탈 임계값 이하로 내려갔다',
+        );
+      }
+    });
+
+    test('낮아진 임계값으로 진입해도 도면은 흐리지 않다', () {
+      // 하한을 페이드 아웃 램프 끝(16.0)에 맞춘 이유. 진입 순간 램프가 "진입 후"
+      // 램프로 갈아끼워지므로, 그 램프가 이미 100%인 zoom에서만 진입해야 한다.
+      for (final px in [280.0, 320.0, referenceViewportWidthPx, 430.0, 768.0]) {
+        final threshold = thresholdAt(px);
+        expect(
+          indoorOverlayOpacityAt(zoom: threshold, entered: true),
+          1.0,
+          reason: '화면 폭 $px px의 진입 zoom에서 도면이 100% 불투명하지 않다',
+        );
+      }
+    });
+
+    test('건물 폭이나 화면 폭이 없으면 보정하지 않는다', () {
+      expect(
+        indoorEntryZoomThresholdFor(
+          buildingWidthMeters: 0,
+          viewportWidthPx: referenceViewportWidthPx,
+          latitude: referenceLatitude,
+        ),
+        indoorEntryZoomThreshold,
+      );
+      expect(
+        indoorEntryZoomThresholdFor(
+          buildingWidthMeters: buildingWidthM,
+          viewportWidthPx: 0,
+          latitude: referenceLatitude,
+        ),
+        indoorEntryZoomThreshold,
+      );
+    });
+
+    test('보정된 임계값이 실제 진입 판정에 반영된다', () {
+      final threshold = thresholdAt(referenceViewportWidthPx);
+      // 보정 전이라면 keep이었을 zoom에서 enter가 나와야 한다.
+      expect(threshold, lessThan(indoorEntryZoomThreshold));
+      expect(
+        indoorEntryTransitionForZoom(
+          threshold,
+          buildingNearby: true,
+          entryZoom: threshold,
+        ),
+        IndoorEntryTransition.enter,
+      );
+      // 근접 게이트는 그대로 살아 있다 — 건물이 없으면 여전히 안 들어간다.
+      expect(
+        indoorEntryTransitionForZoom(
+          threshold,
+          buildingNearby: false,
+          entryZoom: threshold,
+        ),
+        IndoorEntryTransition.keep,
+      );
     });
   });
 }

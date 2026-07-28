@@ -28,6 +28,40 @@ void main() {
   ll.LatLng eastOf(double meters) =>
       ll.LatLng(37.5665, 126.9783 + meters / metersPerDegreeLng);
 
+  group('폴리곤 폭', () {
+    // 실내 진입 임계값을 화면 폭에 맞출 때 "이 건물이 화면에 담기는 zoom"의
+    // 입력이다. 여기가 틀리면 좁은 화면의 진입 임계값이 통째로 어긋난다.
+    test('경도 폭을 이 위도의 미터로 환산한다', () {
+      // 경도 0.0006도 x 88231 m/도 ≈ 53 m.
+      expect(polygonWidthMeters(footprint), closeTo(52.9, 0.5));
+    });
+
+    test('위도가 높아질수록 같은 경도 폭이 좁아진다', () {
+      const north = <ll.LatLng>[
+        ll.LatLng(60.0000, 126.9777),
+        ll.LatLng(60.0004, 126.9777),
+        ll.LatLng(60.0004, 126.9783),
+        ll.LatLng(60.0000, 126.9783),
+      ];
+      expect(
+        polygonWidthMeters(north),
+        lessThan(polygonWidthMeters(footprint)),
+      );
+    });
+
+    test('점이 3개 미만이면 0이다', () {
+      // 호출부는 0을 "보정 근거 없음"으로 읽고 기본 임계값을 그대로 쓴다.
+      expect(polygonWidthMeters(const []), 0);
+      expect(
+        polygonWidthMeters(const [
+          ll.LatLng(37.5663, 126.9777),
+          ll.LatLng(37.5667, 126.9783),
+        ]),
+        0,
+      );
+    });
+  });
+
   group('폴리곤 내부 판정', () {
     test('건물 중심은 내부다', () {
       expect(isPointInPolygon(center, footprint), isTrue);
