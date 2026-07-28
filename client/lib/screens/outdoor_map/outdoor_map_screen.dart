@@ -611,6 +611,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 사용자 입장에선 취소가 안 먹은 것으로 보인다.
   final GlobalKey _placingHintKey = GlobalKey();
 
+  /// 건물 로드 실패 배지("다시 시도"). 이 탭이 지도까지 새어들어가면 재시도를
+  /// 누른 손가락이 배지 아래 지점의 건물 진입·앵커 배치까지 함께 발화시킨다.
+  final GlobalKey _buildingLoadFailedKey = GlobalKey();
+
   /// 검색·길찾기 시트가 지도 위에 떠 있는 동안 지도 제스처를 꺼서, 시트를
   /// 마우스 휠로 스크롤할 때 그 아래 지도까지 같이 움직이지 않게 한다.
   void setInteractive(bool value) {
@@ -650,8 +654,24 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _syncPdrCurrentLayer();
       unawaited(_syncDebugPdrLayers());
     });
-    _loadBuildingEntrance();
+    unawaited(_loadBuildingEntrance());
     _syncGpsSubscription();
+  }
+
+  /// 건물 로드가 실패한 상태인지. 배지를 띄우는 유일한 근거이며, 재시도가
+  /// 성공하면 [_loadBuildingEntrance]가 다시 false로 되돌린다.
+  bool _buildingLoadFailed = false;
+
+  /// 재시도 요청이 아직 도는 중인지. 연타로 요청이 겹치는 것을 막고, 배지
+  /// 문구를 "다시 불러오는 중"으로 바꿔 사용자가 눌린 걸 알 수 있게 한다.
+  bool _retryingBuildingLoad = false;
+
+  Future<void> _retryBuildingLoad() async {
+    if (_retryingBuildingLoad) return;
+    setState(() => _retryingBuildingLoad = true);
+    await _loadBuildingEntrance();
+    if (!mounted) return;
+    setState(() => _retryingBuildingLoad = false);
   }
 
   @override
@@ -693,12 +713,31 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (mounted) _setPlacingAnchor(false);
   }
 
+  /// 건물(입구·footprint·층 목록)을 로드한다.
+  ///
+  /// **실패를 조용히 삼키면 안 된다.** 이 화면의 실내 기능은 전부 [_building]과
+  /// [_buildingFootprint]에 걸려 있다 — 층 선택기, 위치 지정, 확대/탭 실내 진입
+  /// 판정, 실내 도면 오버레이 등록이 모두 그렇다. 요청이 던지면 아래 setState가
+  /// 아예 실행되지 않아 그 전부가 **아무 표시 없이** 사라진다. 예전에는 이
+  /// 호출이 await도 catch도 없이 initState에서 발사돼 예외가 unhandled async
+  /// error로만 남았고, 화면에는 "야외 지도는 멀쩡한데 실내 기능만 없는" 상태가
+  /// 원인을 짚을 단서 하나 없이 남았다.
+  ///
+  /// 야외 지도 자체는 건물 없이도 쓸 수 있으므로, 실내 화면([IndoorMapBody])
+  /// 처럼 전체 화면 에러로 덮지 않는다. 지도는 그대로 두고 재시도가 달린 배지만
+  /// 띄워, 사용자가 왜 실내 기능이 없는지 알고 그 자리에서 복구할 수 있게 한다.
   Future<void> _loadBuildingEntrance() async {
-    final Building? building = await buildingRepository.getBuilding(
-      demoBuildingId,
-    );
+    final Building? building;
+    try {
+      building = await buildingRepository.getBuilding(demoBuildingId);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _buildingLoadFailed = true);
+      return;
+    }
     if (!mounted) return;
     setState(() {
+      _buildingLoadFailed = false;
       _building = building;
       _entrance = building?.entrance;
       _buildingFootprint = building?.footprintWgs84;
@@ -3019,6 +3058,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _pdrControlKey,
       _debugModeSettingsKey,
       _placingHintKey,
+      _buildingLoadFailedKey,
     ]) {
       final ctx = key.currentContext;
       if (ctx == null) continue;
@@ -3218,6 +3258,35 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
               label: 'GPS 신호 약함',
               color: AppColors.warning,
               icon: Icons.warning_amber_rounded,
+            ),
+          ),
+
+        // 건물을 못 불러오면 층 선택기·위치 지정·실내 진입·실내 도면이 통째로
+        // 사라진다. 그 이유를 화면에 남기고 재시도 경로를 준다 — 예전에는 이
+        // 상태가 아무 표시 없이 조용히 지나갔다.
+        //
+        // 자리는 위치 지정 안내와 같은 [_placingHintTopPx]다. **누를 수 있어야
+        // 하므로 GPS 배지 자리(top 76)를 쓰면 안 된다** — 거기는 MapShellScreen의
+        // 카테고리 chip 열(top 78)에 덮여 탭이 chip으로 먹힌다. 두 오버레이는
+        // 동시에 뜨지 않는다(위치 지정은 실내 진입 상태에서만 열리고, 그러려면
+        // 건물이 로드돼 있어야 한다).
+        if (_buildingLoadFailed)
+          Positioned(
+            top: _placingHintTopPx,
+            left: 12,
+            child: SafeArea(
+              bottom: false,
+              child: GestureDetector(
+                key: _buildingLoadFailedKey,
+                onTap: () => unawaited(_retryBuildingLoad()),
+                child: StatusBadge(
+                  label: _retryingBuildingLoad
+                      ? '건물 정보를 다시 불러오는 중…'
+                      : '건물 정보를 불러오지 못했습니다 · 다시 시도',
+                  color: AppColors.warning,
+                  icon: Icons.wifi_off,
+                ),
+              ),
             ),
           ),
 
