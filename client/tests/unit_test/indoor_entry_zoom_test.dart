@@ -116,7 +116,7 @@ void main() {
     test('밴드 안에서는 상태를 유지한다', () {
       for (final z in [15.6, 16.0, 16.5, 17.0, 17.49]) {
         expect(
-          indoorEntryTransitionForZoom(z),
+          indoorEntryTransitionForZoom(z, buildingNearby: true),
           IndoorEntryTransition.keep,
           reason: 'zoom $z는 히스테리시스 밴드 안이어야 한다',
         );
@@ -125,15 +125,55 @@ void main() {
 
     test('임계값 경계에서 진입·이탈이 갈린다', () {
       expect(
-        indoorEntryTransitionForZoom(indoorEntryZoomThreshold),
+        indoorEntryTransitionForZoom(
+          indoorEntryZoomThreshold,
+          buildingNearby: true,
+        ),
         IndoorEntryTransition.enter,
       );
       expect(
-        indoorEntryTransitionForZoom(indoorExitZoomThreshold - 0.01),
+        indoorEntryTransitionForZoom(
+          indoorExitZoomThreshold - 0.01,
+          buildingNearby: true,
+        ),
         IndoorEntryTransition.exit,
       );
       expect(
-        indoorEntryTransitionForZoom(indoorExitZoomThreshold),
+        indoorEntryTransitionForZoom(
+          indoorExitZoomThreshold,
+          buildingNearby: true,
+        ),
+        IndoorEntryTransition.keep,
+      );
+    });
+  });
+
+  group('건물 근접 게이트', () {
+    // 이 그룹이 지키는 증상: 실내 도면이 있는 건물이 주변에 없는데도 확대만
+    // 하면 실내 모드로 전환돼, 도면 한 장 없이 층 선택기와 위치 지정 버튼만
+    // 뜨던 문제.
+    test('건물이 주변에 없으면 아무리 확대해도 진입하지 않는다', () {
+      for (final z in [17.5, 18.0, 19.0, 21.0]) {
+        expect(
+          indoorEntryTransitionForZoom(z, buildingNearby: false),
+          IndoorEntryTransition.keep,
+          reason: 'zoom $z에서 건물 없이 실내로 들어가면 안 된다',
+        );
+      }
+    });
+
+    test('건물이 없어도 이탈 판정은 zoom만으로 유지된다', () {
+      // 근접 게이트가 이탈까지 건드리면, 실내에서 도면 끝을 보려고 살짝 패닝한
+      // 순간 야외로 튕겨 나간다. 이탈은 축소와 건물 밖 탭만 담당한다.
+      expect(
+        indoorEntryTransitionForZoom(
+          indoorExitZoomThreshold - 0.01,
+          buildingNearby: false,
+        ),
+        IndoorEntryTransition.exit,
+      );
+      expect(
+        indoorEntryTransitionForZoom(17.0, buildingNearby: false),
         IndoorEntryTransition.keep,
       );
     });

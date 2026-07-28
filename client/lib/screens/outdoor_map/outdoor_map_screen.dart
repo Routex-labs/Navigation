@@ -34,6 +34,7 @@ import '../../widgets/eta_card.dart';
 import '../../widgets/floor_facility_style.dart';
 import '../../widgets/floor_selector.dart';
 import '../../widgets/status_badge.dart';
+import 'indoor_entry_proximity.dart';
 import 'indoor_entry_zoom.dart';
 import 'indoor_overlay_layers.dart';
 
@@ -1693,25 +1694,27 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
   }
 
-  /// 지도에서 탭한 위경도가 건물 footprint 내부인지 판정한다(ray-casting).
-  /// 백엔드가 자기 참조 없이 단일 외곽선만 내려주므로 hole/멀티 폴리곤은 안 다룬다.
+  /// 지도에서 탭한 위경도가 건물 footprint 내부인지 판정한다.
+  /// 판정 자체는 [isPointInPolygon]에 있다 — 실내 진입 근접 판정
+  /// ([isIndoorBuildingNearCamera])과 같은 계산을 써야 "탭은 건물 안인데 근접은
+  /// 아니다" 같은 모순이 생기지 않는다.
   bool _isInsideBuilding(ll.LatLng point) {
     final footprint = _buildingFootprint;
-    if (footprint == null || footprint.length < 3) return false;
-    var inside = false;
-    final n = footprint.length;
-    for (var i = 0, j = n - 1; i < n; j = i++) {
-      final xi = footprint[i].longitude;
-      final yi = footprint[i].latitude;
-      final xj = footprint[j].longitude;
-      final yj = footprint[j].latitude;
-      final intersect = ((yi > point.latitude) != (yj > point.latitude)) &&
-          (point.longitude <
-              (xj - xi) * (point.latitude - yi) / (yj - yi) + xi);
-      if (intersect) inside = !inside;
-    }
-    return inside;
+    if (footprint == null) return false;
+    return isPointInPolygon(point, footprint);
   }
+
+  /// 지도 탭 처리의 테스트 진입점.
+  ///
+  /// MapLibre 플랫폼 뷰는 위젯 테스트에 없어 `onMapClick`이 아예 발화하지
+  /// 않는다. 그래서 실기기에서 쓰이는 것과 **같은 함수**를 직접 부른다 —
+  /// 테스트용 축약 경로를 따로 두면 정작 검증하려는 분기(건물 밖 탭 → 야외
+  /// 전환)를 우회해 버린다.
+  @visibleForTesting
+  Future<void> handleMapClickForTest(ll.LatLng point) => _handleMapClick(
+    const Point<double>(0, 0),
+    LatLng(point.latitude, point.longitude),
+  );
 
   Future<void> _handleMapClick(Point<double> pointPx, LatLng coords) async {
     final point = ll.LatLng(coords.latitude, coords.longitude);
@@ -1789,9 +1792,21 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   void _handleCameraIdle() {
     final controller = _mapController;
     if (controller == null) return;
-    final zoom = controller.cameraPosition?.zoom;
-    if (zoom == null) return;
-    switch (indoorEntryTransitionForZoom(zoom)) {
+    // zoom과 target은 같은 CameraPosition에서 나오고 둘 다 non-nullable이므로,
+    // 카메라를 받았다면 중심 좌표도 항상 있다.
+    final camera = controller.cameraPosition;
+    if (camera == null) return;
+    // 확대만으로는 실내로 들어가지 않는다. 카메라 중심이 실내 도면이 있는 건물
+    // 근처일 때만 진입을 허용한다 — 건물이 없는 지역을 확대했을 때 도면 없이
+    // 층 선택기·위치 지정 버튼만 뜨는 것을 막는다.
+    final buildingNearby = isIndoorBuildingNearCamera(
+      camera: ll.LatLng(camera.target.latitude, camera.target.longitude),
+      footprint: _buildingFootprint,
+    );
+    switch (indoorEntryTransitionForZoom(
+      camera.zoom,
+      buildingNearby: buildingNearby,
+    )) {
       case IndoorEntryTransition.enter:
         _triggerIndoorEntry();
       case IndoorEntryTransition.exit:

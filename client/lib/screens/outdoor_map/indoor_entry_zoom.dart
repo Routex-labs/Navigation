@@ -132,8 +132,26 @@ enum IndoorEntryTransition {
 /// 두 임계값 사이는 [IndoorEntryTransition.keep]이다. 실내에 들어와 층 전체를
 /// 보려고 축소하는 구간이 여기이며, 반대로 아직 진입하지 않았다면 이 구간에서
 /// 도면만 옅게 보일 뿐 실내 UI는 뜨지 않는다.
-IndoorEntryTransition indoorEntryTransitionForZoom(double zoom) {
-  if (zoom >= indoorEntryZoomThreshold) return IndoorEntryTransition.enter;
+///
+/// [buildingNearby]는 카메라가 실내 도면이 있는 건물 근처인지
+/// (`isIndoorBuildingNearCamera`, `indoor_entry_proximity.dart`)다. false면
+/// 아무리 확대해도 [IndoorEntryTransition.enter]를 내지 않는다 — 건물이 없는
+/// 지역을 확대했을 때 도면 한 장 없이 층 선택기·위치 지정 버튼만 뜨는 것을
+/// 막는다. 대신 [IndoorEntryTransition.exit]도 내지 않는다: 이탈은 축소와
+/// 건물 밖 탭으로만 판정해, 실내에서 도면 끝을 보려고 살짝 패닝했을 때 화면이
+/// 야외로 튀지 않게 한다.
+///
+/// 이 파라미터는 기본값을 두지 않는다. 기본값 true를 두면 새 호출부가 값을
+/// 빼먹는 순간 "확대만으로 실내 진입" 버그가 조용히 되살아난다.
+IndoorEntryTransition indoorEntryTransitionForZoom(
+  double zoom, {
+  required bool buildingNearby,
+}) {
+  if (zoom >= indoorEntryZoomThreshold) {
+    return buildingNearby
+        ? IndoorEntryTransition.enter
+        : IndoorEntryTransition.keep;
+  }
   if (zoom < indoorExitZoomThreshold) return IndoorEntryTransition.exit;
   return IndoorEntryTransition.keep;
 }
