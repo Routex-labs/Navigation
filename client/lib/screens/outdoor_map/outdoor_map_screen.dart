@@ -203,6 +203,14 @@ const _pdrControlRightInsetPx = 184.0;
 const _mapShellBottomChromePx = 112.0;
 const _etaCardHeightPx = 130.0;
 
+// 위치 지정 안내를 상단 chrome 아래에 놓기 위한 오프셋. MapShellScreen의
+// 검색창(top 0)과 그 아래 카테고리 chip 열(top 78, 높이 ≈32) 밑으로 내려야
+// 안내가 chip에 가려지지 않는다. 이 오버레이는 chip 열과 **다른 Stack**에
+// 있으므로 Positioned만으로는 겹침을 피할 수 없다 — SafeArea로 감싸 노치
+// 기기에서 chip 열이 상태바만큼 내려앉는 것까지 같이 따라가야 한다.
+// 실내 화면의 동명 상수와 같은 값이어야 두 화면에서 안내가 같은 자리에 뜬다.
+const _placingHintTopPx = 132.0;
+
 // latlong2 <-> MapLibre 타입 브릿지.
 LatLng _toGl(ll.LatLng p) => LatLng(p.latitude, p.longitude);
 
@@ -529,6 +537,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   final GlobalKey _pdrControlKey = GlobalKey();
   final GlobalKey _debugModeSettingsKey = GlobalKey();
   final GlobalKey _pdrShareButtonKey = GlobalKey();
+
+  /// 위치 지정 안내 배너. 오른쪽 상단 X를 누른 탭이 지도까지 새어들어가 배너
+  /// 아래 지점에 앵커가 찍히는 것을 막는다 — 취소했는데 위치가 지정되면
+  /// 사용자 입장에선 취소가 안 먹은 것으로 보인다.
+  final GlobalKey _placingHintKey = GlobalKey();
 
   /// 검색·길찾기 시트가 지도 위에 떠 있는 동안 지도 제스처를 꺼서, 시트를
   /// 마우스 휠로 스크롤할 때 그 아래 지도까지 같이 움직이지 않게 한다.
@@ -2814,7 +2827,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final mapBox = context.findRenderObject() as RenderBox?;
     if (mapBox == null || !mapBox.attached) return false;
     final globalPoint = mapBox.localToGlobal(localPoint);
-    for (final key in [_pdrControlKey, _debugModeSettingsKey]) {
+    for (final key in [
+      _pdrControlKey,
+      _debugModeSettingsKey,
+      _placingHintKey,
+    ]) {
       final ctx = key.currentContext;
       if (ctx == null) continue;
       final box = ctx.findRenderObject() as RenderBox?;
@@ -2885,7 +2902,24 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _setPlacingAnchor(false);
     _syncPdrCurrentLayer();
     unawaited(_syncDebugPdrLayers());
-    _showSnack('시작점을 통로에 맞췄습니다.');
+    // 배치가 끝났다는 안내는 따로 띄우지 않는다. 지도에 위치 마커가 바로
+    // 찍히고 안내 배너가 사라지는 것으로 이미 결과가 보이는데, 토스트까지
+    // 겹치면 방금 지정한 지점을 가린다.
+  }
+
+  /// 안내 오른쪽 상단 X — 위치 지정을 취소한다.
+  ///
+  /// 배치 대기만 끄는 게 아니라 PDR 세션까지 함께 멈춘다.
+  /// [startLocationPlacement]가 idle이던 세션을 켠 뒤 대기로 넘기므로, 대기만
+  /// 끄면 센서는 계속 돌면서 앵커 없는 세션이 남는다(실내 화면의 동명 함수와
+  /// 같은 계약).
+  Future<void> _cancelPdrAnchor() async {
+    if (!_placingPdrAnchor) return;
+    await indoorNavigationDriver.stopGuidance();
+    _pdrDebugRecorder?.recordRuntime(
+      indoorNavigationDriver.currentRuntimeStatus,
+    );
+    if (mounted) _setPlacingAnchor(false);
   }
 
   Future<double?> _askScreenDirection() {
@@ -3081,11 +3115,17 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           ),
 
         if (_indoorEntered && _placingPdrAnchor)
-          const Positioned(
-            top: 128,
+          Positioned(
+            top: _placingHintTopPx,
             left: 12,
             right: 12,
-            child: _PlacingAnchorHint(),
+            child: SafeArea(
+              bottom: false,
+              child: _PlacingAnchorHint(
+                key: _placingHintKey,
+                onCancel: () => unawaited(_cancelPdrAnchor()),
+              ),
+            ),
           ),
 
         if (indoorRouteDestination != null)
@@ -3138,8 +3178,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
 /// PDR 앵커 배치 대기 중임을 상단에 짧게 알려주는 배지. 하단 바 버튼의 활성
 /// 톤과 함께 사용자에게 "지금 지도 탭이 다음 액션을 소비한다"는 상태를 전한다.
+///
+/// 배치 대기는 지도 탭을 통째로 가져가는 상태라(건물 진입·매장 선택이 모두
+/// 막힌다) **빠져나올 길이 안내 안에 있어야 한다.** 예전에는 축소해 실내
+/// 오버레이를 접거나 세그먼트를 옮기는 우회로밖에 없었다.
 class _PlacingAnchorHint extends StatelessWidget {
-  const _PlacingAnchorHint();
+  const _PlacingAnchorHint({super.key, required this.onCancel});
+
+  final VoidCallback onCancel;
 
   @override
   Widget build(BuildContext context) {
@@ -3147,25 +3193,66 @@ class _PlacingAnchorHint extends StatelessWidget {
       color: AppColors.indoor,
       elevation: 3,
       borderRadius: BorderRadius.circular(20),
-      child: const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
+          // X는 문구 오른쪽 **상단**에 고정한다. 좁은 화면에서 문구가 두 줄로
+          // 접혀도 취소 버튼이 세로 중앙으로 밀려나지 않아, 눌러야 할 자리가
+          // 문구 길이에 따라 흔들리지 않는다.
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.touch_app, size: 16, color: Colors.white),
-            SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                '지도를 탭해 현재 서 있는 위치를 지정해주세요',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
+            const Padding(
+              padding: EdgeInsets.only(top: 5),
+              child: Icon(Icons.touch_app, size: 16, color: Colors.white),
+            ),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: Text(
+                  '지도를 탭해 현재 서 있는 위치를 지정해주세요',
+                  maxLines: 2,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-                overflow: TextOverflow.ellipsis,
               ),
             ),
+            const SizedBox(width: 6),
+            _HintCancelButton(onPressed: onCancel, color: Colors.white),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 안내 배너 오른쪽 상단의 취소(X).
+///
+/// Material `IconButton`을 쓰지 않는 이유: 기본 최소 탭 영역이 48x48이라
+/// 한 줄짜리 안내 pill 높이를 두 배 이상으로 늘려 카테고리 chip 열까지
+/// 밀어 올린다. 여기서는 26x26으로 줄이되 아이콘보다 넓은 탭 영역은 남긴다.
+class _HintCancelButton extends StatelessWidget {
+  const _HintCancelButton({required this.onPressed, required this.color});
+
+  final VoidCallback onPressed;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: '위치 지정 취소',
+      child: InkWell(
+        onTap: onPressed,
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: 26,
+          height: 26,
+          child: Center(
+            child: Icon(Icons.close_rounded, size: 18, color: color),
+          ),
         ),
       ),
     );
