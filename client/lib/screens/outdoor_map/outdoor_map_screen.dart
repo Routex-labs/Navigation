@@ -34,6 +34,7 @@ import '../../widgets/eta_card.dart';
 import '../../widgets/floor_facility_style.dart';
 import '../../widgets/floor_selector.dart';
 import '../../widgets/status_badge.dart';
+import 'floor_outline.dart';
 import 'indoor_entry_proximity.dart';
 import 'indoor_entry_zoom.dart';
 import 'indoor_overlay_layers.dart';
@@ -66,7 +67,12 @@ bool get _isMapSupportedOnThisPlatform =>
 // MapLibre 소스·레이어 ID. 층 지도의 명명 규칙(_로 시작하지 않는 kebab-case) 준수.
 const _buildingSourceId = 'outdoor-building';
 const _buildingFillLayerId = 'outdoor-building-fill';
-const _buildingOutlineLayerId = 'outdoor-building-outline';
+// 현재 층의 외곽선. 건물 폴리곤 소스와 **분리한** 전용 소스를 쓴다 — 지하층에서는
+// 건물 외곽선이 아니라 그 층 도면의 외곽선을 따라가야 해서 지오메트리가 서로
+// 다르고(규칙은 floor_outline.dart), 실내 도면 위에 얹혀야 보이므로 레이어 순서도
+// 건물 fill과 다르다.
+const _floorOutlineSourceId = 'outdoor-floor-outline';
+const _floorOutlineLayerId = 'outdoor-floor-outline-line';
 // 실내 오버레이 소스·레이어 ID **베이스 이름**. 층을 바꿀 때마다 세대(generation)
 // 카운터를 이 뒤에 붙여 매번 다른 실제 ID를 만든다 — 같은 ID로 removeSource →
 // addSource를 반복하면 maplibre_gl native(Android/iOS)가 이전 소스 정리를
@@ -653,6 +659,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       });
       _syncPdrCurrentLayer();
       unawaited(_syncDebugPdrLayers());
+      // 지하층 외곽선은 방금 받은 도면에서 나온다. 도면이 도착한 이 시점에
+      // 한 번 더 그려야 층을 바꾼 직후의 빈 외곽선이 채워진다.
+      unawaited(_syncFloorOutlineLayer());
+      _syncDimScrimLayer();
     } catch (_) {
       // 로드 실패 시 앵커 배치·매장 탭은 안내로 막고 나머지 야외 지도 동작은
       // 그대로 유지한다.
@@ -662,6 +672,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           _floorPlan = null;
           _mapCalibrationVersion = 'unversioned';
         });
+        unawaited(_syncFloorOutlineLayer());
+        _syncDimScrimLayer();
       }
     }
   }
@@ -692,6 +704,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       // 층이 바뀌면 그 층에 강조하던 매장은 지도에 없다. 강조도 초기화.
       _highlightedStoreId = null;
     });
+    // 층이 바뀐 순간 이전 층의 외곽선은 더 이상 맞지 않는다. 새 도면이 도착할
+    // 때까지(지하 → 다른 층) 선을 지워 둔다 — 틀린 경계를 보여주지 않는다.
+    unawaited(_syncFloorOutlineLayer());
     if (_indoorTilesRegistered) {
       // 순서 중요: 레이어부터 지워야 소스를 지울 수 있다(레이어가 붙어있으면 오류).
       // 이미 없는 레이어에 대해 removeLayer가 예외를 던지는 native 구현도 있어
@@ -1361,9 +1376,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 다음 _ensureIndoorTilesRegistered 호출이 아이콘을 다시 등록하도록 리셋.
     _facilityIconImagesRegistered = false;
 
-    // 건물 폴리곤: 옅은 반투명 fill + 외곽선. "이 건물이 탭 가능하다"는 시각
-    // 힌트가 되고, 사용자가 탭하면 opacity를 잠깐 올려 인식됐다는 피드백을 준다.
-    // 다른 레이어(경로선·위치 점)가 위에 오도록 가장 먼저 추가한다.
+    // 건물 폴리곤: 옅은 반투명 fill. "이 건물이 탭 가능하다"는 시각 힌트가 되고,
+    // 사용자가 탭하면 opacity를 잠깐 올려 인식됐다는 피드백을 준다. 다른
+    // 레이어(경로선·위치 점)가 위에 오도록 가장 먼저 추가한다. 외곽선은 여기
+    // 붙이지 않는다 — 실내 진입 상태에서만, 층에 따라 다른 링을 그리므로 아래
+    // 전용 소스로 뺐다.
     await controller.addSource(
       _buildingSourceId,
       GeojsonSourceProperties(data: _emptyCollection()),
@@ -1373,17 +1390,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _buildingFillLayerId,
       buildingFillProps(_buildingFillOpacityDefault),
     );
-    await controller.addLineLayer(
-      _buildingSourceId,
-      _buildingOutlineLayerId,
-      LineLayerProperties(
-        lineColor: AppColors.primary.toHexString(),
-        lineWidth: 2,
-        lineOpacity: 0.7,
-      ),
-    );
 
-    // 실내 진입 dim scrim. 건물 outline 바로 위에 두어 이후 등록되는 route/실내
+    // 실내 진입 dim scrim. 건물 fill 바로 위에 두어 이후 등록되는 route/실내
     // MVT 오버레이보다 아래에 오게 한다 — 실내 도면은 스크림 위에 그려져 밝게
     // 남고, 야외 base만 어두워진다. 초기 opacity=0, geometry는 _syncDimScrimLayer
     // 가 footprint 로드 후 세계 outer + 건물 hole 폴리곤으로 채운다.
@@ -1422,6 +1430,28 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         lineCap: 'round',
         lineJoin: 'round',
       ),
+    );
+
+    // 현재 층 외곽선. **경로선 다음에** 등록하는 것이 핵심이다 — 실내 MVT
+    // 오버레이는 나중에 `belowLayerId: _routeCasingLayerId`로 삽입되므로, 경로선
+    // 앞(=건물 fill·dim scrim 옆)에 두면 불투명한 흰색 footprint fill 밑으로
+    // 깔려 선이 반쯤 먹힌다. 도면 위에 얹혀야 경계가 그대로 보인다.
+    //
+    // 페이드 표현식은 **진입 상태 램프로 고정**한다. 이 레이어는 진입했을 때만
+    // 지오메트리를 갖고(그 외에는 빈 소스), 진입 상태에서만 보이므로 진입 전
+    // 램프가 쓰일 일이 없다. 덕분에 상태가 바뀔 때 setLayerProperties를 다시
+    // 부를 필요가 없다(전체 교체 규칙에 걸릴 여지도 사라진다).
+    await controller.addSource(
+      _floorOutlineSourceId,
+      GeojsonSourceProperties(data: _emptyCollection()),
+    );
+    await controller.addLineLayer(
+      _floorOutlineSourceId,
+      _floorOutlineLayerId,
+      floorOutlineProps(
+        indoorOverlayFadeExpr(entered: true, maxOpacity: 0.9),
+      ),
+      enableInteraction: false,
     );
 
     // 현재 위치: 반투명 원(정확도 반경 시각화용, 픽셀 반경) + 진한 점.
@@ -1570,14 +1600,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       await controller.setGeoJsonSource(_buildingSourceId, _emptyCollection());
       return;
     }
-    final ring = [
-      for (final p in footprint) [p.longitude, p.latitude],
-    ];
-    // GeoJSON Polygon linear ring은 첫 점과 마지막 점이 같아야 한다. 백엔드가
-    // 이미 닫아 보내주면 중복 추가하지 않는다.
-    if (ring.first[0] != ring.last[0] || ring.first[1] != ring.last[1]) {
-      ring.add(ring.first);
-    }
+    final ring = _closedRing(footprint);
     await controller.setGeoJsonSource(
       _buildingSourceId,
       _collection([
@@ -1591,8 +1614,63 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         },
       ]),
     );
-    // 건물 footprint가 바뀌면 dim scrim의 hole도 함께 갱신해야 한다.
+    // 건물 footprint가 바뀌면 dim scrim의 hole과 층 외곽선도 함께 갱신해야 한다.
     _syncDimScrimLayer();
+    _syncFloorOutlineLayer();
+  }
+
+  /// 지금 "층 경계"로 삼아야 하는 링. 지상층이면 건물 외곽선, 지하층이면 그 층
+  /// 도면의 외곽선이고, 실내에 들어가 있지 않으면 null이다. 규칙과 근거는
+  /// [floorOutlineRing] 참고.
+  ///
+  /// 외곽선·dim scrim hole·건물 안 탭 판정이 **모두 이 하나를 본다.** 셋이 서로
+  /// 다른 링을 쓰면 사용자가 보는 선 안쪽이 어두워지거나(scrim), 선 안쪽을
+  /// 탭했는데 야외로 튕겨 나가는(탭 판정) 모순이 생긴다.
+  List<ll.LatLng>? _activeFloorOutlineRing() => floorOutlineRing(
+    indoorEntered: _indoorEntered,
+    floor: _activeFloor,
+    buildingFootprint: _buildingFootprint,
+    floorFootprint: _floorPlan?.footprint,
+  );
+
+  /// 현재 층 외곽선 갱신. 그릴 링이 없으면 소스를 비워 선을 지운다 — 레이어
+  /// 속성은 건드리지 않는다(등록 시 넣은 값 그대로 쓴다).
+  Future<void> _syncFloorOutlineLayer() async {
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    final ring = _activeFloorOutlineRing();
+    if (ring == null) {
+      await controller.setGeoJsonSource(
+        _floorOutlineSourceId,
+        _emptyCollection(),
+      );
+      return;
+    }
+    await controller.setGeoJsonSource(
+      _floorOutlineSourceId,
+      _collection([
+        {
+          'type': 'Feature',
+          'properties': const <String, dynamic>{},
+          'geometry': {
+            'type': 'Polygon',
+            'coordinates': [_closedRing(ring)],
+          },
+        },
+      ]),
+    );
+  }
+
+  /// GeoJSON Polygon linear ring은 첫 점과 마지막 점이 같아야 한다. 백엔드가
+  /// 이미 닫아 보내주면 중복 추가하지 않는다.
+  static List<List<double>> _closedRing(List<ll.LatLng> points) {
+    final ring = <List<double>>[
+      for (final p in points) [p.longitude, p.latitude],
+    ];
+    if (ring.first[0] != ring.last[0] || ring.first[1] != ring.last[1]) {
+      ring.add(ring.first);
+    }
+    return ring;
   }
 
   /// dim scrim 갱신. 건물 footprint가 있으면 세계 전체를 덮는 outer ring +
@@ -1603,7 +1681,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Future<void> _syncDimScrimLayer() async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
-    final footprint = _buildingFootprint;
+    // hole은 외곽선과 **같은 링**을 쓴다. 지하층에서 건물 외곽선으로 뚫으면
+    // 건물 밖으로 뻗어 나간 지하 도면이 스크림에 덮여, 사용자가 보는 외곽선
+    // 안쪽이 어두워지는 모순이 생긴다. 링이 아직 없으면(지하 도면 로딩 중)
+    // 건물 외곽선으로 폴백해 스크림 자체는 유지한다 — 스포트라이트가 한 프레임
+    // 통째로 꺼지는 것보다 낫다.
+    final footprint = _activeFloorOutlineRing() ?? _buildingFootprint;
     if (footprint == null || footprint.length < 3) {
       await controller.setGeoJsonSource(_dimScrimSourceId, _emptyCollection());
     } else {
@@ -1618,13 +1701,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       ];
       // GeoJSON 폴리곤 hole은 outer와 반대 방향(CW)이 표준. 백엔드 순회 방향에
       // 상관없이 안전하게 hole로 처리되도록 reversed로 뒤집는다.
-      final holeRing = <List<double>>[
-        for (final p in footprint.reversed) [p.longitude, p.latitude],
-      ];
-      if (holeRing.first[0] != holeRing.last[0] ||
-          holeRing.first[1] != holeRing.last[1]) {
-        holeRing.add(holeRing.first);
-      }
+      final holeRing = _closedRing(footprint.reversed.toList());
       await controller.setGeoJsonSource(
         _dimScrimSourceId,
         _collection([
@@ -1698,10 +1775,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 판정 자체는 [isPointInPolygon]에 있다 — 실내 진입 근접 판정
   /// ([isIndoorBuildingNearCamera])과 같은 계산을 써야 "탭은 건물 안인데 근접은
   /// 아니다" 같은 모순이 생기지 않는다.
+  ///
+  /// 실내 진입 중인 지하층에서는 그 층 외곽선 안쪽도 "건물 안"으로 본다. 화면에
+  /// 그려진 외곽선 안을 탭했는데 야외로 튕겨 나가면(지하는 건물 외곽선 밖까지
+  /// 뻗어 있다) 사용자 입장에서는 도면 위를 눌렀을 뿐이다. 두 링의 **합집합**을
+  /// 보므로 지상층·야외에서의 판정은 지금까지와 같다.
   bool _isInsideBuilding(ll.LatLng point) {
     final footprint = _buildingFootprint;
-    if (footprint == null) return false;
-    return isPointInPolygon(point, footprint);
+    if (footprint != null && isPointInPolygon(point, footprint)) return true;
+    final ring = _activeFloorOutlineRing();
+    return ring != null && isPointInPolygon(point, ring);
   }
 
   /// 지도 탭 처리의 테스트 진입점.
@@ -1815,6 +1898,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 실내로 들어가면 GPS 구독을 끊고 마커를 지운다. 다시 나가면 재구독한다.
     _syncGpsSubscription();
     _syncDimScrimLayer();
+    // 외곽선은 실내 진입 상태에서만 그린다 — 이탈하면 여기서 소스가 비워진다.
+    unawaited(_syncFloorOutlineLayer());
     // 진입/이탈로 페이드 구간 자체가 바뀌므로 이미 붙어 있는 오버레이 레이어의
     // opacity 표현식도 함께 갈아 끼운다.
     unawaited(_syncIndoorOverlayFade());

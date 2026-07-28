@@ -87,6 +87,22 @@ void main() {
     });
   });
 
+  group('층 외곽선', () {
+    test('색·굵기·opacity를 항상 함께 보낸다', () {
+      final json = wireJson(floorOutlineProps(fadeExpr));
+      // line-color가 null로 가면 스펙 기본값 #000000으로 되돌아간다(fill과 같은
+      // 이유 — 파일 상단 주석 참고).
+      expect(json['line-color'], isNotNull);
+      expect(json['line-width'], isNotNull);
+      expect(json['line-opacity'], isNotNull);
+    });
+
+    test('얇게 긋는다', () {
+      // 실내 도면 위에 얹히는 선이라 굵어지면 가장자리 매장을 덮는다.
+      expect(wireJson(floorOutlineProps(fadeExpr))['line-width'], 1);
+    });
+  });
+
   test('페이드 표현식은 그대로 실려 나간다', () {
     // opacity를 zoom 표현식으로 주는 구조 자체는 유지되어야 한다 —
     // 이 값이 상수로 바뀌면 오버레이 페이드인이 죽는다.

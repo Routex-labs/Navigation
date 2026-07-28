@@ -64,6 +64,19 @@ FillLayerProperties buildingFillProps(double opacity) => FillLayerProperties(
   fillOpacity: opacity,
 );
 
+/// 실내 진입 상태에서만 그리는 현재 층 외곽선.
+///
+/// 실내 도면 **위에** 얹히는 선이라 얇게(1px) 긋는다. 굵게 그으면 도면 가장자리
+/// 매장을 덮고, 지하처럼 외곽이 들쭉날쭉한 층에서는 선 자체가 도면처럼 읽힌다.
+/// 어느 링을 따라갈지는 [floor_outline.dart]가 정한다.
+LineLayerProperties floorOutlineProps(List<Object> fadeExpr) =>
+    LineLayerProperties(
+      lineColor: AppColors.primary.toHexString(),
+      lineWidth: 1,
+      lineOpacity: fadeExpr,
+      lineJoin: 'round',
+    );
+
 /// 실내 진입 dim scrim. 세계를 덮는 outer ring + 건물 hole 폴리곤을 칠한다.
 FillLayerProperties dimScrimProps(Object fillOpacity) =>
     FillLayerProperties(fillColor: '#000000', fillOpacity: fillOpacity);
