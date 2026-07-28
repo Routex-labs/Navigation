@@ -62,7 +62,7 @@ const _currentLocationIconPixelRatio = 2.0;
 
 /// 현재 위치 심볼의 zoom별 크기. 값은 "[_currentLocationIconDesignSize] 캔버스에
 /// 곱할 배율"로 읽는다 — 파란 도트 지름은 디자인 36px, 흰 테두리는 48px이므로
-/// 배율 0.44면 테두리 지름이 약 21px, 1.0이면 48px이 된다.
+/// 배율 0.54면 테두리 지름이 약 26px, 1.2면 약 58px이 된다.
 ///
 /// 실내에서는 zoom 하한이 건물 크기에 따라 17 전후로 잡히고 경로 안내는 19에서
 /// 시작하며 확대는 그 이상까지 열려 있다. 그래서 확대할수록 커지되, MapLibre
@@ -74,9 +74,9 @@ const _currentLocationIconSizeExpression = <Object>[
   ['linear'],
   ['zoom'],
   16,
-  0.44 / _currentLocationIconPixelRatio,
+  0.54 / _currentLocationIconPixelRatio,
   22,
-  1.0 / _currentLocationIconPixelRatio,
+  1.2 / _currentLocationIconPixelRatio,
 ];
 
 /// 지도 위에 얹을 현재 위치/목적지 점 마커. 종류에 따라 스타일이 달라진다
