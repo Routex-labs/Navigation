@@ -101,6 +101,19 @@ const _currentLocationRimRadius = _currentLocationCoreRadius + 5;
 /// 현재 위치 심볼 레이어 id.
 const _currentMarkerLayerId = 'floor-markers-current';
 
+/// 목적지 핀 심볼 레이어 id. 현재 위치 레이어를 다시 등록할 때 이 레이어 아래로
+/// 넣어야 원래의 위/아래 순서(목적지 핀이 위)가 유지된다.
+const _destinationMarkerLayerId = 'floor-markers-destination-pin';
+
+/// 현재 위치 심볼 레이어의 filter. 마커 소스에는 목적지도 함께 들어오므로
+/// `kind`로 걸러낸다. 레이어를 다시 등록할 때 이 filter를 빠뜨리면 목적지
+/// 좌표에도 파란 도트가 찍힌다.
+const _currentMarkerFilter = <Object>[
+  '==',
+  ['get', 'kind'],
+  'current',
+];
+
 /// 현재 위치 심볼 레이어의 속성 묶음. 등록([_onStyleLoaded])과 hot reload 시
 /// 재적용([FloorPlanViewState.reassemble])이 같은 값을 쓰도록 한 곳에 모아 둔다.
 ///
@@ -305,28 +318,55 @@ class FloorPlanViewState extends State<FloorPlanView> {
     unawaited(_refreshCurrentLocationSymbol());
   }
 
-  /// 현재 위치 비트맵을 다시 등록하고 심볼 레이어 속성을 다시 적용한다.
+  /// 현재 위치 비트맵을 등록하고 심볼 레이어를 얹는다.
   ///
-  /// 비트맵 이름에 코어 반지름이 들어 있어(_currentLocationImageName), 크기를
-  /// 바꿨다면 새 이름이므로 웹 addImage의 "이미 있으면 건너뛰기"에 걸리지 않는다.
-  /// 반대로 크기를 안 바꿨다면 같은 이름이라 건너뛰고 로그만 남는다 — 어느
-  /// 경우든 안전하다. setLayerProperties는 patch가 아니라 전체 교체이므로
-  /// 속성 묶음을 통째로 넘긴다.
+  /// 비트맵 이름에 코어 반지름이 들어 있으므로([_currentLocationImageName]),
+  /// 크기를 바꿨다면 새 이름이라 웹 addImage의 "이미 있으면 건너뛰기"에 걸리지
+  /// 않는다. 크기를 안 바꿨다면 같은 이름이라 건너뛰고 로그만 남는다.
+  Future<void> _addCurrentLocationSymbolLayer(
+    MapLibreMapController controller, {
+    String? belowLayerId,
+  }) async {
+    await controller.addImage(
+      _currentLocationImageName,
+      await _renderCurrentLocationIcon(showHeading: true),
+    );
+    await controller.addImage(
+      _currentLocationDotImageName,
+      await _renderCurrentLocationIcon(showHeading: false),
+    );
+    await controller.addSymbolLayer(
+      _markersSourceId,
+      _currentMarkerLayerId,
+      _currentLocationSymbolProperties,
+      filter: _currentMarkerFilter,
+      belowLayerId: belowLayerId,
+      enableInteraction: false,
+    );
+  }
+
+  /// 현재 위치 심볼을 지우고 다시 등록한다.
+  ///
+  /// `setLayerProperties`로 속성만 갈아끼우지 않는 이유가 두 가지다.
+  /// 1. 웹 구현은 키마다 `setPaintProperty`를 먼저 시도하고 **예외가 났을 때만**
+  ///    `setLayoutProperty`로 폴백한다(maplibre_web_gl_platform.dart). 그런데
+  ///    `icon-image`/`icon-size`는 layout 속성이고, MapLibre GL JS가 알 수 없는
+  ///    paint 속성에 대해 예외를 던지는지 아니면 error 이벤트만 쏘고 조용히
+  ///    반환하는지가 버전에 따라 다르다. 후자면 폴백이 안 타서 아무것도 적용되지
+  ///    않는다 — 바로 이번에 문제였던 "조용히 안 바뀜"을 다시 만드는 셈이다.
+  /// 2. `iconImage`가 이미지 **이름**을 담은 표현식이라, 코어 크기를 바꿔 이름이
+  ///    바뀌면 레이어 자체를 다시 등록해야 새 이름을 가리킨다.
+  ///
+  /// 다시 등록하면 레이어가 스택 맨 위로 가므로 목적지 핀 아래로 넣어 원래
+  /// 순서를 유지한다.
   Future<void> _refreshCurrentLocationSymbol() async {
     final controller = _controller;
     if (controller == null || !_styleReady) return;
     try {
-      await controller.addImage(
-        _currentLocationImageName,
-        await _renderCurrentLocationIcon(showHeading: true),
-      );
-      await controller.addImage(
-        _currentLocationDotImageName,
-        await _renderCurrentLocationIcon(showHeading: false),
-      );
-      await controller.setLayerProperties(
-        _currentMarkerLayerId,
-        _currentLocationSymbolProperties,
+      await controller.removeLayer(_currentMarkerLayerId);
+      await _addCurrentLocationSymbolLayer(
+        controller,
+        belowLayerId: _destinationMarkerLayerId,
       );
     } catch (error, stackTrace) {
       // hot reload 편의 기능이므로 실패해도 앱을 죽이지 않는다. 레이어가 이미
@@ -851,21 +891,8 @@ class FloorPlanViewState extends State<FloorPlanView> {
       _emptyFeatureCollection,
     );
 
-    // 현재 위치와 heading을 하나의 심볼로 합친다. 미터 단위 GeoJSON 폴리곤은
-    // 확대할수록 화살표만 커지므로, 고정 픽셀 PNG를 회전시켜 점과 방향 표시가
-    // 언제나 같은 비율과 크기를 유지하게 한다. heading이 없을 때는 북쪽을
-    // 임의로 가리키지 않고 동일 디자인의 원형 점만 사용한다.
-    await controller.addSymbolLayer(
-      _markersSourceId,
-      _currentMarkerLayerId,
-      _currentLocationSymbolProperties,
-      filter: [
-        '==',
-        ['get', 'kind'],
-        'current',
-      ],
-      enableInteraction: false,
-    );
+    // 목적지 핀 레이어보다 먼저 등록해, 겹칠 때 목적지 핀이 위에 오게 한다.
+    await _addCurrentLocationSymbolLayer(controller);
 
     // 목적지는 빨간 물방울 핀(_destinationPinImageName)에 "도착" 텍스트를
     // 얹어서 표시한다. 텍스트는 아이콘에 미리 굽지 않고 MapLibre의 textField로
@@ -885,7 +912,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
     // 현재 위치는 이 소스에 함께 들어와 있어도 filter가 걸러낸다.
     await controller.addSymbolLayer(
       _markersSourceId,
-      'floor-markers-destination-pin',
+      _destinationMarkerLayerId,
       const SymbolLayerProperties(
         iconImage: _destinationPinImageName,
         iconSize: [
