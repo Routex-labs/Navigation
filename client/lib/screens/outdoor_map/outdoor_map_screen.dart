@@ -55,6 +55,25 @@ const _buildingEntryThresholdMeters = 20.0;
 const _degradedAccuracyFloorMeters = 15.0;
 const _accuracyWorsenedRatio = 1.3;
 
+// 자동 진입 직후 입구를 기준으로 실내 위치(PDR 앵커)를 잡을 때, 입구 좌표에서
+// 통행 그래프까지 허용하는 최대 거리(m).
+//
+// 사용자가 손으로 찍는 경우(_maxPdrAnchorSnapDistanceM, 40 m)보다 좁게 잡는다.
+// 그쪽은 "화면에서 건물이 작게 보여 탭이 빗나가는" 오차를 감싸야 하지만, 여기서
+// 비교하는 두 좌표는 백엔드가 내려준 입구와 같은 백엔드가 내려준 통행 그래프라
+// 둘이 크게 벌어졌다면 그건 손 떨림이 아니라 **데이터 정합이 깨진 상태**다.
+// 그런 상태에서 억지로 스냅하면 건물 반대편 복도에 위치를 찍어 놓고 거기서부터
+// 걸음을 쌓는다 — 위치가 없는 것보다 나쁘다.
+const _maxEntranceAnchorSnapDistanceM = 25.0;
+
+// 자동 앵커를 확정하기 전에 센서 세션의 첫 보고를 기다리는 최대 시간.
+// 근거는 [_awaitSensorWarmup] 주석 참고.
+const _sensorWarmupTimeout = Duration(seconds: 2);
+
+// GPS course(진행 방향)를 신뢰할 수 있다고 보는 최소 속도(m/s). 이보다 느리면
+// 플랫폼이 채워 넣는 0°를 "정북으로 걸어 들어왔다"로 오독하게 된다.
+const _entryCourseMinSpeedMps = 0.5;
+
 // 실내 지도와 같은 이유. maplibre_gl은 web/android/iOS만 지원하므로
 // 데스크톱에서는 사전에 안내를 보여주고 지도 자체는 그리지 않는다.
 const _mapSupportedNativePlatforms = {
@@ -754,12 +773,21 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
   }
 
+  /// 진행 중인 층 그래프 로드. 자동 실내 진입은 GPS 이벤트를 따라 발화하므로
+  /// 건물이 막 도착한 직후, 즉 층 그래프 요청이 아직 도는 중에 걸릴 수 있다.
+  /// 그 순간 [_floorGraph]만 보면 "그래프 없음"으로 오판해 자동 앵커를 포기하게
+  /// 되므로, [_startTrackingFromEntrance]가 이 future를 먼저 기다린다.
+  Future<void>? _floorGraphLoad;
+
   /// 활성 층의 통행 그래프와 매장 목록(FloorPlan)을 함께 로드한다.
   /// - 그래프: PDR 앵커 배치·스냅과 마커 렌더링에 쓰인다.
   /// - 평면도: 실내 오버레이 위 매장 폴리곤 탭으로 벡터 타일 feature id를
   ///   실제 매장 정보로 되돌리는 데 쓴다.
   /// 실패는 조용히 넘겨 그래프/평면도 없이 층 시각화만 유지한다.
-  Future<void> _loadFloorGraph(String buildingId, String floor) async {
+  Future<void> _loadFloorGraph(String buildingId, String floor) =>
+      _floorGraphLoad = _fetchFloorGraph(buildingId, floor);
+
+  Future<void> _fetchFloorGraph(String buildingId, String floor) async {
     try {
       final geojson = await buildingRepository.getFloorGeoJson(
         buildingId,
@@ -1000,6 +1028,168 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       context,
     ).showSnackBar(const SnackBar(content: Text('건물 감지 중...')));
     _triggerIndoorEntry();
+    // 트리거가 실제로 오버레이를 켠 경우에만 이어서 위치를 잡는다. 무장이 풀린
+    // 상태([_autoIndoorEntryArmed]=false)면 위 호출이 no-op이라, 야외 지도를 보고
+    // 있는 사용자에게 실내 위치 아이콘만 뜨는 상태가 된다.
+    if (!_indoorEntered) return;
+    unawaited(_startTrackingFromEntrance(entrance, position));
+  }
+
+  /// 자동 실내 진입 직후, 방금 지나온 입구를 기준으로 실내 위치(PDR 앵커)를 잡고
+  /// 센서 추적을 시작한다.
+  ///
+  /// 예전에는 트리거가 층 오버레이만 켜고 끝났다. 그래서 건물에 들어와도 지도에는
+  /// 내 위치가 없었고, 하단 바 "위치 지정"을 눌러 복도를 직접 탭해야 비로소 걸음
+  /// 추적이 시작됐다. 진입 판정 자체가 "입구 20 m 이내 + 신호 저하"를 근거로
+  /// 발화한 이상 그 입구가 곧 사용자의 현재 위치이므로, 여기서 앵커까지 잡아 준다.
+  ///
+  /// **먼저 실패 조건부터.** 아래 중 하나라도 걸리면 자동 앵커를 포기하고 기존
+  /// 수동 경로를 안내한다 — 틀린 위치를 찍는 것보다 위치가 없는 편이 낫다.
+  ///   - 이미 확정된 앵커가 있다 → 사용자가 직접 잡아 둔 위치를 덮지 않는다.
+  ///   - 층 그래프가 없다 → 입구 WGS84를 층 좌표로 옮길 수 없다.
+  ///   - 입구가 통로 그래프에서 [_maxEntranceAnchorSnapDistanceM]보다 멀다 →
+  ///     입구 좌표와 도면 정합이 어긋난 상태다.
+  Future<void> _startTrackingFromEntrance(
+    ll.LatLng entrance,
+    Position position,
+  ) async {
+    if (indoorNavigationDriver.currentCalibration.canRenderPosition) return;
+
+    // 건물이 막 도착한 직후라면 층 그래프 요청이 아직 도는 중이다.
+    await _floorGraphLoad;
+    if (!mounted || !_indoorEntered) return;
+
+    final floor = _activeFloor;
+    final graph = _floorGraph;
+    if (floor == null ||
+        graph == null ||
+        graph.nodes.isEmpty ||
+        graph.edges.isEmpty) {
+      _replaceSnack('이 층의 지도 정보가 없어 실내 위치를 자동으로 잡지 못했습니다. 위치 지정으로 직접 지정해주세요.');
+      return;
+    }
+
+    final local = fitFloorGeoTransform(
+      graph.nodes,
+    ).invert(entrance.latitude, entrance.longitude);
+    if (local == null) {
+      _replaceSnack('입구 좌표를 이 층 좌표로 바꾸지 못했습니다. 위치 지정으로 직접 지정해주세요.');
+      return;
+    }
+    final snapped = FloorMapMatcher(
+      graph,
+    ).snapToWalkableNetwork(PdrLocalPoint(local.$1, local.$2));
+    if (snapped == null ||
+        snapped.distanceToGraphM > _maxEntranceAnchorSnapDistanceM) {
+      // 수동 배치와 같은 이유로 실측 거리를 함께 노출한다 — 매번 같은 문구만
+      // 나오면 입구 좌표가 틀린 건지 도면이 틀린 건지 구분할 수 없다.
+      final gapM = snapped?.distanceToGraphM.toStringAsFixed(1);
+      _replaceSnack(
+        gapM == null
+            ? '입구 근처에서 통로를 찾지 못했습니다. 위치 지정으로 직접 지정해주세요.'
+            : '입구가 가장 가까운 통로에서 약 ${gapM}m 떨어져 있습니다. 위치 지정으로 직접 지정해주세요.',
+      );
+      return;
+    }
+
+    if (indoorNavigationDriver.currentRuntimeStatus.state ==
+        PdrRuntimeState.idle) {
+      setState(() => _pdrTrailState.beginNewSession());
+      await indoorNavigationDriver.startGuidance(floorId: floor);
+      if (!mounted) return;
+    }
+    await _awaitSensorWarmup();
+    if (!mounted || !_indoorEntered) return;
+
+    final axes = fitPdrToFloorAxes(graph.nodes);
+    await indoorNavigationDriver.confirmAnchorByPin(
+      floorPointM: snapped.point,
+      axes: axes,
+    );
+    if (!mounted) return;
+
+    // 자북 heading을 못 얻는 기기는 여기서 방향 보정을 기다린다. 수동 배치는
+    // 사용자에게 다이얼로그로 물어보지만, 자동 진입에서 아무 조작 없이 모달이
+    // 튀어나오면 사용자는 자기가 뭘 눌러 띄운 건지 알 수 없다. 대신 진입 방향을
+    // 추정해 그 자리에서 확정한다([_entryFloorDirection]).
+    if (indoorNavigationDriver.currentCalibration.phase ==
+        CalibrationPhase.awaitingHeading) {
+      final direction = _entryFloorDirection(
+        position: position,
+        anchorFloorPoint: snapped.point,
+        graph: graph,
+        axes: axes,
+      );
+      if (direction == null) {
+        _replaceSnack('진입 방향을 알 수 없습니다. 위치 지정으로 직접 지정해주세요.');
+        return;
+      }
+      await indoorNavigationDriver.confirmAnchorByFloorDirection(
+        floorDirection: direction,
+      );
+      if (!mounted) return;
+    }
+
+    _syncPdrCurrentLayer();
+    unawaited(_syncDebugPdrLayers());
+    _replaceSnack('입구를 기준으로 실내 위치를 잡았습니다. 걸음 추적을 시작합니다.');
+  }
+
+  /// 센서 세션이 첫 이벤트를 보고할 때까지(최대 [_sensorWarmupTimeout]) 기다린다.
+  ///
+  /// [IndoorNavigationDriver.confirmAnchorByPin]은 **호출 시점의** heading
+  /// reference로 분기한다. 자북 heading을 이미 받았으면 회전 0으로 즉시 확정하고,
+  /// 아직 아무 heading도 못 받았으면 arbitrary로 보고 수동 방향 보정을 요구한다.
+  /// 수동 배치에서는 사용자가 지도를 보고 탭하는 몇 초가 자연스러운 유예였지만,
+  /// 자동 배치는 startGuidance 직후 곧바로 찍으므로 그 유예가 없다. 기다리지
+  /// 않으면 나침반이 멀쩡한 기기까지 전부 방향 보정 분기로 빠져, 추정한 진입
+  /// 방향이 회전각으로 박히고 이후 궤적 전체가 그만큼 돌아간다.
+  Future<void> _awaitSensorWarmup() async {
+    bool reported(PdrRuntimeState state) =>
+        state == PdrRuntimeState.running || state == PdrRuntimeState.degraded;
+    if (reported(indoorNavigationDriver.currentRuntimeStatus.state)) return;
+    try {
+      await indoorNavigationDriver.runtimeStatuses
+          .firstWhere((status) => reported(status.state))
+          .timeout(_sensorWarmupTimeout);
+    } on Object {
+      // 센서가 끝내 조용해도(권한 거부·미지원 기기·타임아웃) 앵커는 찍는다 —
+      // 걸음이 쌓이지 않더라도 "어느 입구로 들어왔는지"는 지도에 보여야 한다.
+    }
+  }
+
+  /// arbitrary reference 기기에서 쓸 "진입 방향"을 층 좌표 벡터로 만든다.
+  /// 층 좌표계는 데이터셋마다 축이 뒤집혀 있을 수 있어, 나침반 각도는 반드시
+  /// [axes]를 거쳐 층 벡터로 바꾼다.
+  PdrLocalPoint? _entryFloorDirection({
+    required Position position,
+    required PdrLocalPoint anchorFloorPoint,
+    required FloorGraph graph,
+    required PdrToFloorAxes axes,
+  }) {
+    // 1순위: GPS course. 실제로 측정된 이동 방향이라 가장 정확하다. 다만 멈춰
+    // 있을 때는 값이 의미 없고 플랫폼이 0으로 채우므로 속도로 먼저 거른다.
+    final course = position.heading;
+    if (position.speed >= _entryCourseMinSpeedMps &&
+        course > 0 &&
+        course < 360) {
+      return axes.apply(pdrDirectionForBearing(course));
+    }
+    // 2순위: 입구 → 층 그래프 중심. 입구를 통과한 사람은 건물 안쪽을 향한다.
+    // GPS course보다 거칠지만, 방향을 몰라 awaitingHeading에 멈춰 서면 앵커가
+    // 확정되지 않아 위치 아이콘도 걸음 추적도 아예 없다. 회전이 어긋나면
+    // 사용자가 "위치 지정"으로 다시 잡을 수 있으므로 되돌릴 수 있는 오차다.
+    var sumX = 0.0;
+    var sumY = 0.0;
+    for (final node in graph.nodes) {
+      sumX += node.xM;
+      sumY += node.yM;
+    }
+    final dx = sumX / graph.nodes.length - anchorFloorPoint.eastM;
+    final dy = sumY / graph.nodes.length - anchorFloorPoint.northM;
+    // 입구가 그래프 중심과 사실상 같은 점이면 방향 벡터가 0이 된다.
+    if (dx * dx + dy * dy < 1e-6) return null;
+    return PdrLocalPoint(dx, dy);
   }
 
   Future<void> _updateRoute(Position position) async {
@@ -3177,6 +3367,18 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   void _showSnack(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// 지금 떠 있는 안내를 걷어내고 새 안내를 띄운다.
+  ///
+  /// 자동 실내 진입은 '건물 감지 중...'을 먼저 띄우고 뒤이어 결과를 알린다.
+  /// 그냥 showSnackBar를 부르면 두 번째 안내가 큐에 쌓여 첫 안내가 4초를 다
+  /// 채운 뒤에야 뜬다 — 이미 끝난 작업의 진행 중 문구를 계속 보여주고, 하단
+  /// 바를 그만큼 오래 가린다.
+  void _replaceSnack(String message) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
+    messenger.showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
