@@ -50,6 +50,35 @@ const _destinationPinImageName = 'marker-destination-pin';
 const _currentLocationImageName = 'marker-current-location';
 const _currentLocationDotImageName = 'marker-current-location-dot';
 
+/// 현재 위치 심볼을 그릴 때 쓰는 디자인 좌표계의 한 변 길이(px). 아래 렌더
+/// 코드의 모든 반지름/오프셋은 이 좌표계 기준이다.
+const _currentLocationIconDesignSize = 144.0;
+
+/// 디자인 좌표계 대비 실제 비트맵 배율. 아이콘을 크게 키우면 MapLibre가
+/// 비트맵을 화면 픽셀 수보다 적은 원본으로 늘려 그리게 되어 흰 테두리가
+/// 뭉개진다(특히 devicePixelRatio 2~3인 폰). 비트맵만 이 배율로 크게 렌더하고
+/// iconSize는 같은 배율로 나눠서, 화면상 크기는 그대로 두고 해상도만 올린다.
+const _currentLocationIconPixelRatio = 2.0;
+
+/// 현재 위치 심볼의 zoom별 크기. 값은 "[_currentLocationIconDesignSize] 캔버스에
+/// 곱할 배율"로 읽는다 — 파란 도트 지름은 디자인 36px, 흰 테두리는 48px이므로
+/// 배율 0.44면 테두리 지름이 약 21px, 1.0이면 48px이 된다.
+///
+/// 실내에서는 zoom 하한이 건물 크기에 따라 17 전후로 잡히고 경로 안내는 19에서
+/// 시작하며 확대는 그 이상까지 열려 있다. 그래서 확대할수록 커지되, MapLibre
+/// interpolate가 stop 밖에서는 양 끝 값으로 고정되는 성질을 이용해 zoom 16
+/// 아래에서는 도트가 도면을 덮지 않을 만큼 작게, zoom 22 위에서는 더 이상
+/// 커지지 않게 상·하한을 둔다.
+const _currentLocationIconSizeExpression = <Object>[
+  'interpolate',
+  ['linear'],
+  ['zoom'],
+  16,
+  0.44 / _currentLocationIconPixelRatio,
+  22,
+  1.0 / _currentLocationIconPixelRatio,
+];
+
 /// 지도 위에 얹을 현재 위치/목적지 점 마커. 종류에 따라 스타일이 달라진다
 /// (마커 색상은 [_markersGeoJson]의 circle-color data-driven 표현식이 결정).
 enum MapMarkerKind { current, destination }
@@ -745,20 +774,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
           _currentLocationImageName,
           _currentLocationDotImageName,
         ],
-        // 도착 핀(iconSize 0.115→0.25, 캔버스 128px, 머리 108px)과 화면상
-        // 파란 원의 크기가 대략 맞도록 zoom 기반 interpolate으로 맞춘다.
-        // 현재 위치 캔버스는 144px에 파란 도트는 48px 지름이라 축척비
-        // (108/48 ≈ 2.25)를 곱한 값을 각 stop에 넣어 축소해도 도트가 지도를
-        // 덮지 않고, 확대해도 도착 핀 머리와 비슷한 크기로 커진다.
-        iconSize: [
-          'interpolate',
-          ['linear'],
-          ['zoom'],
-          16,
-          0.26,
-          20,
-          0.56,
-        ],
+        iconSize: _currentLocationIconSizeExpression,
         iconRotate: [
           'coalesce',
           ['get', 'heading'],
@@ -1098,18 +1114,25 @@ class FloorPlanViewState extends State<FloorPlanView> {
   }
 
   /// 상용 지도 앱처럼 흰 테두리의 파란 현재 위치 점 뒤로 반투명 heading cone이
-  /// 퍼지는 하나의 고정 크기 심볼을 렌더링한다. MapLibre가 이 비트맵 전체를
-  /// 회전하므로 확대/축소해도 점과 방향 범위의 크기·간격이 흐트러지지 않는다.
+  /// 퍼지는 하나의 심볼을 렌더링한다. MapLibre가 이 비트맵 전체를 회전하므로
+  /// 확대/축소해도 점과 방향 범위의 비율·간격이 흐트러지지 않는다.
+  ///
+  /// 아래 좌표는 모두 [_currentLocationIconDesignSize] 기준의 디자인 단위이고,
+  /// 실제 비트맵은 [_currentLocationIconPixelRatio]배로 렌더링한다 — 화면상
+  /// 크기는 iconSize가 정하고(=[_currentLocationIconSizeExpression]) 이 배율은
+  /// 해상도만 올린다.
   static Future<Uint8List> _renderCurrentLocationIcon({
     required bool showHeading,
   }) async {
-    const canvasSize = 144.0;
+    const canvasSize = _currentLocationIconDesignSize;
     const center = Offset(canvasSize / 2, canvasSize / 2);
+    const pixelSize = canvasSize * _currentLocationIconPixelRatio;
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(
       recorder,
-      const Rect.fromLTWH(0, 0, canvasSize, canvasSize),
+      const Rect.fromLTWH(0, 0, pixelSize, pixelSize),
     );
+    canvas.scale(_currentLocationIconPixelRatio);
 
     if (showHeading) {
       const coneRadius = 62.0;
@@ -1150,8 +1173,8 @@ class FloorPlanViewState extends State<FloorPlanView> {
     );
 
     final image = await recorder.endRecording().toImage(
-      canvasSize.toInt(),
-      canvasSize.toInt(),
+      pixelSize.toInt(),
+      pixelSize.toInt(),
     );
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
     return byteData!.buffer.asUint8List();
