@@ -54,13 +54,30 @@ final _fakeLowAccuracyPosition = Position(
   speedAccuracy: 0,
 );
 
-// 데모 건물 입구와 정확히 같은 좌표 + 신호 저하(자동 진입 감지 테스트용).
-// accuracy가 저하 기준(15m)을 넘어야 "막 나빠진 신호"로 판정된다.
+// 자동 진입 감지 테스트용 두 건. 판정은 **한 건으로 성립하지 않는다** —
+// "신호가 멀쩡했을 때 입구 앞에 있었다"는 근거가 창 안에 있어야 하므로, 접근
+// 표본(양호)과 진입 표본(저하)을 순서대로 흘려야 한다. 근거 없이 저하 한 건만
+// 오는 경우는 판정하지 않는 것이 이 정책의 규칙이다.
+final _fakePositionApproachingEntrance = Position(
+  latitude: 37.5665,
+  longitude: 126.9779,
+  timestamp: DateTime(2024, 1, 1),
+  accuracy: 10,
+  altitude: 0,
+  altitudeAccuracy: 0,
+  heading: 0,
+  headingAccuracy: 0,
+  speed: 0,
+  speedAccuracy: 0,
+);
+
+// 데모 건물 입구와 정확히 같은 좌표 + 신호 저하. accuracy가 '무너졌다' 기준
+// (30m)을 넘어야 진입으로 읽힌다.
 final _fakePositionAtEntrance = Position(
   latitude: 37.5665,
   longitude: 126.9779,
   timestamp: DateTime(2024, 1, 1),
-  accuracy: 25,
+  accuracy: 45,
   altitude: 0,
   altitudeAccuracy: 0,
   heading: 0,
@@ -189,12 +206,18 @@ void main() {
   testWidgets(
     'map shell shows the indoor entry overlay when entrance is detected nearby',
     (WidgetTester tester) async {
-      watchPosition = () => Stream.value(_fakePositionAtEntrance);
+      watchPosition = () => Stream.fromIterable([
+            _fakePositionApproachingEntrance,
+            _fakePositionAtEntrance,
+          ]);
 
       await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
 
-      await tester.pump();
-      await tester.pump();
+      // 접근 표본 → 진입 표본 순으로 흘러야 판정이 서므로, 두 건이 모두 도착할
+      // 때까지 프레임을 진행한다.
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
       // 자동 진입은 '건물 감지 중...'을 먼저 띄운 뒤, 입구 기준으로 실내 위치를
       // 잡는 작업이 끝나면 같은 자리에 결과를 덮어쓴다(진행 문구가 4초를 다
       // 채운 뒤에야 결과가 뜨면 이미 끝난 작업을 계속 보여주는 셈이다).

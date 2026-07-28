@@ -75,6 +75,21 @@ void main() {
     ],
   };
 
+  // 자동 진입은 "신호가 멀쩡했을 때 입구 앞에 있었다"는 근거를 요구한다.
+  // 저하 표본만 흘리면 판정이 서지 않으므로 접근 표본을 먼저 보낸다.
+  Position approachingEntrance() => Position(
+        latitude: 37.5665,
+        longitude: 126.9779,
+        timestamp: DateTime(2024, 1, 1),
+        accuracy: 10,
+        altitude: 0,
+        altitudeAccuracy: 0,
+        heading: 0,
+        headingAccuracy: 0,
+        speed: 0,
+        speedAccuracy: 0,
+      );
+
   Position atEntrance() => Position(
         latitude: 37.5665,
         longitude: 126.9779,
@@ -108,8 +123,8 @@ void main() {
   }
 
   /// 야외 지도를 띄우고 "입구 20m 이내 + 신호 저하"로 자동 실내 진입을 발화시킨다.
-  /// 첫 위치는 반드시 건물에서 떨어진 곳이어야 한다 — 진입 판정은 직전 정확도와
-  /// 비교해 "방금 나빠졌는지"를 보기 때문이다.
+  /// 멀리서 접근 → 입구 앞(양호) → 신호 저하 순서를 지켜야 한다 — 판정이 "신호가
+  /// 멀쩡했을 때 입구 앞에 있었다"는 근거를 창에서 찾기 때문이다.
   Future<void> walkIntoBuilding(WidgetTester tester) async {
     final positions = StreamController<Position>();
     watchPosition = () => positions.stream;
@@ -117,6 +132,8 @@ void main() {
     // 위치를 흘리기 전에 건물(입구 좌표·층 그래프) 로드가 끝날 때까지 진행한다.
     await drain(tester);
     positions.add(farAway());
+    await tester.pump(const Duration(milliseconds: 50));
+    positions.add(approachingEntrance());
     await tester.pump(const Duration(milliseconds: 50));
     positions.add(atEntrance());
     await tester.pump(const Duration(milliseconds: 50));

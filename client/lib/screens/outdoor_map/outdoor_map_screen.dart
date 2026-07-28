@@ -35,6 +35,7 @@ import '../../widgets/floor_facility_style.dart';
 import '../../widgets/floor_selector.dart';
 import '../../widgets/status_badge.dart';
 import 'floor_outline.dart';
+import 'indoor_entry_gps.dart';
 import 'indoor_entry_proximity.dart';
 import 'indoor_entry_zoom.dart';
 import 'indoor_overlay_layers.dart';
@@ -43,17 +44,16 @@ import 'indoor_overlay_layers.dart';
 // MapLibre API에 넘길 때만 [_toGl]로 변환한다 — 이 파일 외부(Building.entrance,
 // DirectionsRoute.points)가 latlong2를 쓰고 있어 그 타입을 저장 형식으로 유지한다.
 const _fallbackLocation = ll.LatLng(37.5665, 126.9780);
-const _lowAccuracyThresholdMeters = 30.0;
+// 'GPS 신호 약함' 배지 임계값. 진입 판정의 '신호가 무너졌다' 기준과 **같은 값**을
+// 쓴다 — 배지가 뜬 상태에서 진입이 판정되므로 사용자가 보는 것과 코드의 판단이
+// 어긋나지 않는다.
+const _lowAccuracyThresholdMeters = degradedAccuracyMeters;
 // 실내 경로 ETA 분 계산에 쓰는 평균 걷기 속도. 실내 화면 상수와 일치시켜야
 // 같은 목적지 라우팅에서 두 화면 사이 표시가 어긋나지 않는다.
 const _indoorWalkingSpeedMetersPerSecond = 1.2;
 
-// 건물 진입 판정: "입구 근처" + "신호가 방금 나빠짐"을 같이 봐서
-// 건물 앞을 그냥 지나가는 경우(신호는 안 나빠짐)와 구분한다.
-// 세 값 다 실측 검증 전이라 추정치이고, 실기기 테스트하며 조정이 필요하다.
-const _buildingEntryThresholdMeters = 20.0;
-const _degradedAccuracyFloorMeters = 15.0;
-const _accuracyWorsenedRatio = 1.3;
+// 건물 진입/이탈 판정 정책은 indoor_entry_gps.dart가 소유한다. 임계값과 그 근거,
+// "왜 직전 값 대비 비율이 아닌가"는 전부 그쪽 주석에 있다.
 
 // 자동 진입 직후 입구를 기준으로 실내 위치(PDR 앵커)를 잡을 때, 입구 좌표에서
 // 통행 그래프까지 허용하는 최대 거리(m).
@@ -497,7 +497,22 @@ class OutdoorMapBody extends StatefulWidget {
 }
 
 class OutdoorMapBodyState extends State<OutdoorMapBody> {
-  bool _autoNavigated = false;
+  /// GPS 기반 자동 실내 진입이 지금 켜져 있는지.
+  ///
+  /// 예전에는 `_autoNavigated`라는 **되돌릴 수 없는** 1회성 플래그였다. 그래서
+  /// 입구 앞을 지나가다 한 번 잘못 발동하면, 사용자가 건물 밖을 탭해 나온 뒤
+  /// 진짜로 들어가도 자동 진입이 다시는 동작하지 않았다 — 오탐 한 번이 그 화면의
+  /// 자동 진입 기능 자체를 죽였다.
+  ///
+  /// 지금은 [IndoorEntryGpsDecision.rearm]이 다시 켠다. 조건은 "신뢰할 수 있는
+  /// 좌표가 입구에서 충분히 떨어진 곳에서 잡힘"이라, 실내에 그대로 있는 동안에는
+  /// 켜지지 않는다. **건물 밖을 탭한 것만으로는 켜지 않는 것이 중요하다** — 그건
+  /// "바깥 지도를 보여줘"라는 화면 조작이지 "내가 밖에 있다"가 아니라서, 그걸로
+  /// 다시 켜면 실내에 있는 사용자가 곧바로 되끌려 들어간다.
+  bool _gpsEntryArmed = true;
+
+  /// 최근 위치 창. 진입·재활성화 판정의 유일한 입력이다.
+  final _gpsEntryTracker = IndoorEntryGpsTracker();
   Position? _position;
   ll.LatLng? _entrance;
   Building? _building;
@@ -510,7 +525,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   IndoorRoute? _indoorRouteSegment;
   MultiFloorRoute? _indoorMultiFloorRoute;
   PoiSearchResult? _indoorRouteDestination;
-  double? _previousAccuracy;
   StreamSubscription<Position>? _positionSubscription;
   bool _interactive = true;
   ll.LatLng? _userDestination;
@@ -975,11 +989,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 그려지거나(“GPS 기반 위치가 보이면 안 된다”), 다시 야외로 나왔을 때 옛
     // 좌표가 잠깐 현재 위치인 것처럼 보인다.
     _pendingCenterOnPosition = false;
+    // 판정 창도 비운다. 실내에 있는 동안은 표본이 끊기므로, 다시 야외로 나왔을 때
+    // 창에 남은 옛 표본이 지금 상황을 대표하지 못한다.
+    _gpsEntryTracker.clear();
     if (!mounted) return;
-    setState(() {
-      _position = null;
-      _previousAccuracy = null;
-    });
+    setState(() => _position = null);
     _syncCurrentLayer();
   }
 
@@ -1004,30 +1018,32 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   }
 
   void _maybeAutoEnter(Position position) {
-    final entrance = _entrance;
-    if (_autoNavigated || entrance == null) return;
-
-    final distance = const ll.Distance().as(
-      ll.LengthUnit.Meter,
-      ll.LatLng(position.latitude, position.longitude),
-      entrance,
+    _gpsEntryTracker.record(
+      GpsFix(
+        at: position.timestamp,
+        point: ll.LatLng(position.latitude, position.longitude),
+        accuracyMeters: position.accuracy,
+      ),
     );
-    final isNear = distance <= _buildingEntryThresholdMeters;
+    final entrance = _entrance;
+    final decision = _gpsEntryTracker.decide(
+      entrance: entrance,
+      armed: _gpsEntryArmed,
+    );
+    if (decision == IndoorEntryGpsDecision.rearm) {
+      // 밖으로 나왔다. 다음 진입을 다시 자동으로 잡을 수 있게 무장한다.
+      _gpsEntryArmed = true;
+      return;
+    }
+    if (decision != IndoorEntryGpsDecision.enter || entrance == null) return;
 
-    final previousAccuracy = _previousAccuracy;
-    _previousAccuracy = position.accuracy;
-    final accuracyWorsened =
-        position.accuracy > _degradedAccuracyFloorMeters &&
-        (previousAccuracy == null ||
-            position.accuracy > previousAccuracy * _accuracyWorsenedRatio);
-
-    if (!isNear || !accuracyWorsened) return;
-
-    _autoNavigated = true;
+    _gpsEntryArmed = false;
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('건물 감지 중...')));
-    _triggerIndoorEntry();
+    // GPS 경로는 [_gpsEntryArmed]라는 자기 게이트를 이미 통과했다. zoom 무장까지
+    // 보면, 밖으로 나온 게 확인돼 다시 무장해도 여기서 막혀 아무 일도 안 일어난다.
+    _triggerIndoorEntry(ignoreZoomArming: true);
     // 트리거가 실제로 오버레이를 켠 경우에만 이어서 위치를 잡는다. 무장이 풀린
     // 상태([_autoIndoorEntryArmed]=false)면 위 호출이 no-op이라, 야외 지도를 보고
     // 있는 사용자에게 실내 위치 아이콘만 뜨는 상태가 된다.
@@ -2212,7 +2228,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         buildingFillProps(_buildingFillOpacityDefault),
       );
     }
-    _triggerIndoorEntry(explicit: true);
+    _triggerIndoorEntry(ignoreZoomArming: true);
   }
 
   /// 실내 진입 트리거 — 건물 탭·줌 임계값 초과·GPS 근접 감지 중 하나로 호출.
@@ -2220,12 +2236,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 사용자가 축소해 임계값 아래로 내려가면 [_handleCameraIdle]이 오버레이를
   /// 다시 끄고 트리거를 재무장한다.
   ///
-  /// [explicit]는 사용자가 건물 폴리곤을 **직접 탭**한 경우다. 이때는
-  /// [_autoIndoorEntryArmed]를 무시한다. 무장 플래그는 "같은 줌에서 자동 진입이
-  /// 반복 발화하지 않게" 하려고 있는 것이라, 명시적 탭까지 막으면 건물 밖을 탭해
-  /// 야외로 나온 사용자가 같은 줌에서 건물을 다시 탭해도 들어갈 수 없게 된다.
-  void _triggerIndoorEntry({bool explicit = false}) {
-    if (!explicit && !_autoIndoorEntryArmed) return;
+  /// [ignoreZoomArming]은 **자기 게이트를 따로 가진 호출자**가 쓴다.
+  /// [_autoIndoorEntryArmed]는 "같은 줌에서 카메라가 멈출 때마다 반복 발화하지
+  /// 않게" 하려는 zoom 트리거 전용 플래그이고, [_exitIndoorByOutsideTap]이 일부러
+  /// 재무장하지 않는다(아래 주석 참고). 그래서 이 플래그로 다른 경로까지 막으면
+  /// 두 가지가 조용히 죽는다.
+  ///   - 건물 밖을 탭해 나온 사용자가 건물을 **직접 다시 탭**해도 안 들어감
+  ///   - GPS 자동 진입이 [_gpsEntryArmed]로 다시 무장돼도 여기서 막힘
+  /// 둘 다 자기 쪽 게이트를 이미 통과한 호출이므로 zoom 무장은 보지 않는다.
+  void _triggerIndoorEntry({bool ignoreZoomArming = false}) {
+    if (!ignoreZoomArming && !_autoIndoorEntryArmed) return;
     _autoIndoorEntryArmed = false;
     if (_indoorEntered) return;
     _setIndoorEntered(true);
@@ -2237,7 +2257,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 보통 진입 임계값 위이므로, 재무장하면 다음 카메라 정지에서 곧바로 다시
   /// 실내로 끌려 들어가 "나갈 수 없는" 상태가 된다. 다시 들어오는 경로는 두
   /// 가지가 열려 있다 — 건물을 직접 탭하거나(위 [_triggerIndoorEntry]의
-  /// `explicit`), 이탈 임계값 아래로 축소했다가 다시 확대하는 것.
+  /// `ignoreZoomArming`), 이탈 임계값 아래로 축소했다가 다시 확대하는 것.
   void _exitIndoorByOutsideTap() {
     // 앵커 배치 대기 중이었다면 함께 종료해 하단 바 버튼 톤도 되돌린다.
     // (배치 대기 중인 탭은 위에서 이미 소비되므로 방어적 처리다.)

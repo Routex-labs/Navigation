@@ -36,7 +36,23 @@ void main() {
   // 건물 북쪽으로 약 220 m. footprint 밖이며 근접 톨러런스(80 m)도 넘는다.
   const outsideBuilding = ll.LatLng(37.5687, 126.9780);
 
-  // 데모 건물 입구 위 + 신호 저하. 자동 실내 진입 조건을 만족한다.
+  // 데모 건물 입구 위 + 신호 양호. 자동 진입은 "신호가 멀쩡했을 때 입구 앞에
+  // 있었다"는 근거를 요구하므로, 저하 표본만으로는 판정이 서지 않는다.
+  Position approachingEntrance() => Position(
+    latitude: 37.5665,
+    longitude: 126.9779,
+    timestamp: DateTime(2024, 1, 1),
+    accuracy: 10,
+    altitude: 0,
+    altitudeAccuracy: 0,
+    heading: 0,
+    headingAccuracy: 0,
+    speed: 0,
+    speedAccuracy: 0,
+  );
+
+  // 같은 자리에서 신호가 무너진 상태. 위 접근 표본과 짝을 이뤄 자동 실내 진입
+  // 조건을 만족한다.
   Position atEntrance() => Position(
     latitude: 37.5665,
     longitude: 126.9779,
@@ -116,6 +132,8 @@ void main() {
     // 좌표는 asset 로드 후에 채워지므로, 입구를 첫 이벤트로 흘리면 아직 입구를
     // 몰라 진입이 일어나지 않는다.
     positions.add(farAway());
+    await tester.pump(const Duration(milliseconds: 50));
+    positions.add(approachingEntrance());
     await tester.pump(const Duration(milliseconds: 50));
     positions.add(atEntrance());
     await tester.pump(const Duration(milliseconds: 50));
