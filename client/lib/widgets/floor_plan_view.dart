@@ -84,14 +84,19 @@ const _currentLocationIconPixelRatio = 2.0;
 /// 크기의 기준은 "눈에 보이는 경계"다. GPS 마커에서 사용자가 크기로 인식하는
 /// 것은 18px 도트가 아니라 정확도 원의 **불투명도 100%인 1px 테두리**(지름
 /// 44px)다. 실내 마커에는 그 테두리 원이 없고 바깥 흰 링은 도면 바닥(#FFFFFF)에
-/// 묻혀 안 보이므로, 지각되는 경계는 파란 코어 원뿐이다. 그래서 코어 지름을
-/// 44px로 맞춰(디자인 반지름 22) 두 화면의 마커가 같은 크기로 읽히게 한다.
+/// 묻혀 안 보이므로, 지각되는 경계는 파란 코어 원뿐이다. 그래서 코어 지름이
+/// 곧 이 마커의 체감 크기이며, 그 값은 [_currentLocationCoreRadius]가 정한다.
 const _currentLocationIconSize = 1.0 / _currentLocationIconPixelRatio;
 
-/// 파란 코어 원의 반지름(디자인 단위 = 화면 px). 지름 44px이 야외 GPS 정확도
-/// 원의 테두리 지름과 같다 — 이 값이 두 화면에서 마커가 같은 크기로 읽히게
-/// 만드는 실질적인 기준이다.
-const _currentLocationCoreRadius = 22.0;
+/// 파란 코어 원의 반지름(디자인 단위 = 화면 px). 이 마커의 체감 크기를 정하는
+/// 유일한 값이므로, 크기를 조정할 때는 여기만 바꾼다 — 흰 링·그림자는 이 값에서
+/// 파생되고, 비트맵 등록 이름([_currentLocationImageName])도 이 값을 포함해
+/// 자동으로 새 이름이 된다.
+///
+/// GPS 정확도 원의 테두리 지름(44px)에 맞춰 22로 뒀다가, 실내 도면에서 너무
+/// 크다고 판단해 지름 32px로 줄인 값이다. 야외 GPS 도트(18px)보다는 크고 정확도
+/// 원(44px)보다는 작다.
+const _currentLocationCoreRadius = 16.0;
 
 /// 코어를 감싸는 흰 링의 반지름. 코어보다 5px 두껍게 잡아, 도면 바닥(#FFFFFF)
 /// 에서는 묻히더라도 매장 fill(#F3F1EF)이나 경로선 위에서는 코어가 배경과
@@ -1222,7 +1227,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
   /// 실제 비트맵은 [_currentLocationIconPixelRatio]배로 렌더링한다 — 화면상
   /// 크기는 iconSize가 정하고(=[_currentLocationIconSize]) 이 배율은 해상도만
   /// 올린다. iconSize가 디자인 1px = 화면 1px로 고정이므로, 아래 반지름은 그대로
-  /// 화면 픽셀로 읽으면 된다(코어 반지름 22 = 화면 지름 44px).
+  /// 화면 픽셀로 읽으면 된다(코어 반지름 16 = 화면 지름 32px).
   static Future<Uint8List> _renderCurrentLocationIcon({
     required bool showHeading,
   }) async {
@@ -1272,9 +1277,12 @@ class FloorPlanViewState extends State<FloorPlanView> {
 
     const blue = Color(0xFF1976D2);
     canvas.drawCircle(center, _currentLocationCoreRadius, Paint()..color = blue);
+    // 코어 왼쪽 위의 광택 점. 코어 크기를 바꿔도 비율이 유지되도록 코어 반지름에서
+    // 파생시킨다(원본 디자인의 코어 18 / offset 5 / 반지름 4.5 비율).
+    const glossOffset = _currentLocationCoreRadius * 0.28;
     canvas.drawCircle(
-      center - const Offset(6, 6),
-      5.5,
+      center - const Offset(glossOffset, glossOffset),
+      _currentLocationCoreRadius * 0.25,
       Paint()..color = const Color(0x66FFFFFF),
     );
 

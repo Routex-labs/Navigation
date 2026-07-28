@@ -115,10 +115,10 @@ const _pdrLocationImageName = 'outdoor-pdr-location-r$_pdrLocationCoreRadius';
 const _pdrLocationDotImageName =
     'outdoor-pdr-location-dot-r$_pdrLocationCoreRadius';
 // 아래 세 값은 floor_plan_view.dart의 _currentLocationIcon* 상수와 같은 뜻이고
-// 같은 값이어야 한다. 코어 지름 44px은 야외 GPS 정확도 원의 테두리 지름과
-// 일치시켜, 사용자가 크기로 인식하는 경계가 두 마커에서 같아지게 잡은 값이다.
+// 같은 값이어야 한다. 코어 지름(반지름 16 → 32px)이 이 마커의 체감 크기를
+// 정한다 — 야외 GPS 도트(18px)보다 크고 정확도 원 테두리(44px)보다 작게 잡았다.
 const _pdrLocationIconPixelRatio = 2.0;
-const _pdrLocationCoreRadius = 22.0;
+const _pdrLocationCoreRadius = 16.0;
 const _pdrLocationRimRadius = _pdrLocationCoreRadius + 5;
 // 실내 오버레이에서 매장 폴리곤을 탭했을 때 그 매장 하나만 옅은 파란색 + 진한
 // 테두리로 강조 표시하는 전용 소스·레이어. 실내 지도의 highlight와 같은 톤
@@ -253,9 +253,12 @@ Future<Uint8List> _renderPdrLocationIcon({required bool showHeading}) async {
 
   const blue = Color(0xFF1976D2);
   canvas.drawCircle(center, _pdrLocationCoreRadius, Paint()..color = blue);
+  // 코어 크기를 바꿔도 비율이 유지되도록 코어 반지름에서 파생시킨다
+  // (원본 디자인의 코어 18 / offset 5 / 반지름 4.5 비율).
+  const glossOffset = _pdrLocationCoreRadius * 0.28;
   canvas.drawCircle(
-    center - const Offset(6, 6),
-    5.5,
+    center - const Offset(glossOffset, glossOffset),
+    _pdrLocationCoreRadius * 0.25,
     Paint()..color = const Color(0x66FFFFFF),
   );
 
