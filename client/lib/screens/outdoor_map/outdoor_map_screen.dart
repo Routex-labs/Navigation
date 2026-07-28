@@ -104,6 +104,17 @@ const _accuracyLayerId = 'outdoor-accuracy';
 const _currentDotLayerId = 'outdoor-current-dot';
 const _destSourceId = 'outdoor-destination';
 const _destLayerId = 'outdoor-destination-pin';
+// 실내 경로의 도착 노드에 찍는 물방울 핀. 야외 GPS 목적지 원(_destLayerId)과
+// **소스를 나눈다** — 같은 소스에 넣으면 원 레이어 필터가 없어 실내 도착
+// 노드에도 빨간 원이 함께 그려져 핀 밑에 원이 비어져 나온다.
+const _indoorDestSourceId = 'outdoor-indoor-destination';
+const _indoorDestLayerId = 'outdoor-indoor-destination-pin';
+// 도착 핀 비트맵의 addImage 등록 키. 실내 지도(floor_plan_view.dart)의 핀과
+// 같은 물방울 모양이지만 흰 원과 "도착" 텍스트가 없는 단색 빨강이라, 이름을
+// 나눠 두 디자인이 섞이지 않게 한다. 웹 addImage는 같은 이름이 이미 있으면
+// 새 비트맵을 버리므로(위 _pdrLocationImageName 주석 참고) 디자인을 바꿀 땐
+// 이름도 같이 바꿔야 살아 있는 지도에 반영된다.
+const _destinationPinImageName = 'outdoor-destination-pin-solid-v1';
 // 실내 진입 상태에서 사용자의 PDR 위치(앵커 또는 실시간 확정 위치)를 그리는
 // 전용 소스·레이어. 야외 GPS 마커와 함께 그려질 수 있지만 색과 위치가 달라
 // 겹쳐도 서로 구분된다 — GPS는 건물 밖 신호, PDR은 건물 내 실측이라 두 표시가
@@ -280,6 +291,52 @@ Future<Uint8List> _renderPdrLocationIcon({required bool showHeading}) async {
   final image = await recorder.endRecording().toImage(
     pixelSize.toInt(),
     pixelSize.toInt(),
+  );
+  final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+  return byteData!.buffer.asUint8List();
+}
+
+/// 실내 경로 도착 노드에 찍는 물방울 핀을 오프스크린 렌더링해 PNG 바이트로
+/// 돌려준다. 위쪽 원 + 아래쪽 삼각 꼬리를 같은 빨강으로 합쳐 물방울을 만들고,
+/// 꼬리의 두 밑변은 원의 접선에 정확히 맞물리도록 tangentAngle(중심-끝점 축과
+/// 접점 사이의 각도, acos(r/d))로 계산해 이음매가 매끄럽게 이어진다. 모양·크기는
+/// 실내 지도의 [floor_plan_view.dart:_renderDestinationPinIcon]과 같은 값이다.
+///
+/// 다른 점은 두 가지다 — 안쪽 흰 원을 그리지 않아 **단색 빨강**이고, "도착"
+/// 텍스트를 얹지 않는다. 그래서 실내 핀이 텍스트를 심볼 레이어 textField로
+/// 올리며 감수했던 제약(웹 CanvasKit에서 한글 글리프가 두부로 깨지는 문제,
+/// textOffset을 아이콘 흰 원 중심에 맞추는 계산)이 여기서는 아예 없다.
+Future<Uint8List> _renderDestinationPinIcon() async {
+  const canvasWidth = 128.0;
+  const canvasHeight = 172.0;
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(
+    recorder,
+    const Rect.fromLTWH(0, 0, canvasWidth, canvasHeight),
+  );
+
+  const cx = canvasWidth / 2;
+  const headRadius = 54.0;
+  const headCenterY = headRadius + 6;
+  const tipY = canvasHeight - 6;
+  const centerToTipDistance = tipY - headCenterY;
+
+  final tangentAngle = math.acos(headRadius / centerToTipDistance);
+  final tangentDx = headRadius * math.sin(tangentAngle);
+  final tangentDy = headRadius * math.cos(tangentAngle);
+
+  final pinPaint = Paint()..color = AppColors.dest;
+  canvas.drawCircle(const Offset(cx, headCenterY), headRadius, pinPaint);
+  final tail = Path()
+    ..moveTo(cx, tipY)
+    ..lineTo(cx + tangentDx, headCenterY + tangentDy)
+    ..lineTo(cx - tangentDx, headCenterY + tangentDy)
+    ..close();
+  canvas.drawPath(tail, pinPaint);
+
+  final image = await recorder.endRecording().toImage(
+    canvasWidth.toInt(),
+    canvasHeight.toInt(),
   );
   final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
   return byteData!.buffer.asUint8List();
@@ -743,6 +800,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncPdrCurrentLayer();
     unawaited(_syncDebugPdrLayers());
     _syncRouteLayer();
+    // 층이 바뀌면 도착 핀도 다시 판정한다 — 다층 경로에서 도착지 층을 벗어나면
+    // 핀이 사라지고, 다시 그 층으로 돌아오면 살아난다.
+    _syncIndoorDestinationLayer();
     _syncHighlightLayer();
     _notifyRouteVisibilityIfChanged();
     // 층 chip을 눌렀는데 카메라가 건물 밖을 보거나 실내 오버레이가 페이드인되기
@@ -1129,6 +1189,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     });
     _syncDestinationLayer();
     _syncRouteLayer();
+    // 경로 계산 전에도 도착지 centroid에 핀을 먼저 띄운다 — 사용자가 고른
+    // 매장이 어디인지 즉시 보이고, 계산이 끝나면 도착 노드로 옮겨 붙는다.
+    _syncIndoorDestinationLayer();
     _notifyRouteVisibilityIfChanged();
 
     if (startFloor == endFloor) {
@@ -1202,6 +1265,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _indoorMultiFloorRoute = null;
     });
     _syncRouteLayer();
+    _syncIndoorDestinationLayer();
     _notifyRouteVisibilityIfChanged();
     _fitCameraToIndoorRoute(route);
   }
@@ -1256,6 +1320,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _indoorRouteSegment = segment?.route;
     });
     _syncRouteLayer();
+    _syncIndoorDestinationLayer();
     _notifyRouteVisibilityIfChanged();
     if (segment != null && segment.route.points.length >= 2) {
       _fitCameraToIndoorRoute(segment.route);
@@ -1376,6 +1441,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _indoorRouteDestination = null;
     });
     _syncRouteLayer();
+    _syncIndoorDestinationLayer();
     _notifyRouteVisibilityIfChanged();
   }
 
@@ -1581,12 +1647,47 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       enableInteraction: false,
     );
 
+    // 실내 경로 도착 핀 — 현재 위치 마커보다 **나중에** 등록해, 도착 노드와
+    // 사용자 위치가 겹칠 때 도착 핀이 위에 오게 한다(실내 지도와 같은 순서).
+    // 핀 바닥(tip)이 도착 노드 좌표에 오도록 iconAnchor는 bottom이고, 크기는
+    // 실내 지도와 같은 zoom 보간식을 써서 축소했을 때 핀이 도면을 다 덮지
+    // 않게 한다. allowOverlap을 켜 매장 라벨과 겹쳐도 핀은 항상 보인다.
+    await controller.addImage(
+      _destinationPinImageName,
+      await _renderDestinationPinIcon(),
+    );
+    await controller.addSource(
+      _indoorDestSourceId,
+      GeojsonSourceProperties(data: _emptyCollection()),
+    );
+    await controller.addSymbolLayer(
+      _indoorDestSourceId,
+      _indoorDestLayerId,
+      const SymbolLayerProperties(
+        iconImage: _destinationPinImageName,
+        iconSize: [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          16,
+          0.115,
+          20,
+          0.25,
+        ],
+        iconAnchor: 'bottom',
+        iconAllowOverlap: true,
+        iconIgnorePlacement: true,
+      ),
+      enableInteraction: false,
+    );
+
     if (!mounted) return;
     setState(() => _styleReady = true);
     _syncBuildingLayer();
     _syncCurrentLayer();
     _syncDestinationLayer();
     _syncRouteLayer();
+    _syncIndoorDestinationLayer();
     _syncPdrCurrentLayer();
     unawaited(_syncDebugPdrLayers());
     _syncHighlightLayer();
@@ -2172,6 +2273,51 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _destSourceId,
       _collection([_pointFeature(target)]),
     );
+  }
+
+  /// 실내 경로의 도착 노드에 물방울 핀을 찍는다.
+  ///
+  /// 핀을 찍는 좌표는 매장 중심(centroid)이 아니라 **경로의 마지막 점**이다 —
+  /// 그래프 도착 노드는 매장 입구라 centroid와 몇 미터 어긋나고, 그 상태로
+  /// centroid에 찍으면 경로선이 핀에 닿지 않고 끊긴 것처럼 보인다. 경로가 아직
+  /// 계산되기 전 짧은 순간에는 경로가 없으므로 centroid로 폴백해 핀이 아예
+  /// 안 보이는 구간을 만들지 않는다(실내 화면의 _destinationPinForCurrentFloor와
+  /// 같은 규칙).
+  ///
+  /// 다층 경로에서는 **도착지 층을 보고 있을 때만** 찍는다. 중간 층은 지나가는
+  /// 층이라 그 층 좌표에 도착 핀이 있으면 "여기가 목적지"로 잘못 읽힌다.
+  Future<void> _syncIndoorDestinationLayer() async {
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    final target = _indoorDestinationPinForActiveFloor();
+    if (target == null) {
+      await controller.setGeoJsonSource(
+        _indoorDestSourceId,
+        _emptyCollection(),
+      );
+      return;
+    }
+    await controller.setGeoJsonSource(
+      _indoorDestSourceId,
+      _collection([_pointFeature(target)]),
+    );
+  }
+
+  ll.LatLng? _indoorDestinationPinForActiveFloor() {
+    final destination = _indoorRouteDestination;
+    if (destination == null) return null;
+    final multi = _indoorMultiFloorRoute;
+    if (multi != null) {
+      if (multi.destinationSegment.floorName != _activeFloor) return null;
+      final points = multi.destinationSegment.route.points;
+      return points.isNotEmpty ? points.last : destination.point;
+    }
+    final segment = _indoorRouteSegment;
+    if (segment != null && segment.points.isNotEmpty) return segment.points.last;
+    // 단일 층 경로는 목적지 층에서만 그려진다. 층을 옮기면 _switchOverlayFloor가
+    // 세그먼트를 비우므로, 그때는 목적지 층이 아닌 곳에 centroid 폴백 핀이
+    // 남지 않도록 층을 직접 확인한다.
+    return destination.floor == _activeFloor ? destination.point : null;
   }
 
   Future<void> _syncRouteLayer() async {
