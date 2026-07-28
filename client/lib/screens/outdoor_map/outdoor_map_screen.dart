@@ -718,6 +718,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   @override
   void dispose() {
+    _entranceWatchGraceTimer?.cancel();
     _positionSubscription?.cancel();
     _pdrSnapshotSub?.cancel();
     _pdrCalibrationSub?.cancel();
@@ -962,10 +963,27 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     return ll.LatLng((minLat + maxLat) / 2, (minLng + maxLng) / 2);
   }
 
-  /// 실내 상태에서 "밖으로 나갔는지" 확인하려고 GPS를 잠깐 켜 둔 상태인지.
-  /// PDR 위치가 입구 앞으로 들어오면 켜지고 벗어나면 꺼진다
+  /// 실내 상태에서 "밖으로 나갔는지" 확인하려고 GPS를 켜 둔 상태인지.
+  ///
+  /// **진입하는 순간 켠다.** 예전에는 PDR 앵커가 잡힌 뒤에야 켜졌는데, 앵커는
+  /// 센서 준비까지 기다리느라 몇 초 늦게 확정되고 자동 앵커가 실패하는 층에서는
+  /// 끝내 안 잡힌다. 그 사이에 들어오자마자 돌아 나가면 놓쳤다 — 정작 가장
+  /// 확인이 필요한 순간이다. 이후에는 PDR이 입구에서 벗어났다고 말할 때 끈다
   /// ([shouldWatchGpsNearEntrance]).
   bool _watchingGpsForExit = false;
+
+  /// PDR이 말을 못 하는 동안의 유예([entranceWatchGraceWindow])가 끝났는지.
+  /// 타이머가 이 값을 올리고 감시를 다시 판정한다 — PDR 이벤트가 영영 안 오는
+  /// 경우에도 GPS가 무한정 켜져 있지 않게 하는 유일한 장치다.
+  bool _entranceWatchGraceExpired = false;
+  Timer? _entranceWatchGraceTimer;
+
+  /// 이번 실내 상태가 **자동 진입**으로 켜졌는지.
+  ///
+  /// 자동 이탈은 자동 진입을 되돌리기 위한 것이다. 사용자가 건물을 직접 탭해서
+  /// 도면을 연 경우까지 자동으로 닫으면, 입구 앞에 서서 층 도면을 보려던 사람의
+  /// 화면이 신호가 잡히는 순간 제멋대로 닫힌다.
+  bool _indoorEnteredByGps = false;
 
   /// 지금 GPS를 써도 되는 상태인지. 건물 안에서는 GPS를 아예 쓰지 않는다 —
   /// 실내에서는 신호가 튀어 위치가 건물 밖으로 날아가고, 실내 위치는 PDR(위치
@@ -1054,12 +1072,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// **PDR이 언제 확인할지만 정하고 판단은 GPS가 한다.** PDR이 드리프트로 틀려도
   /// 대가는 헛되이 몇 초 켠 것뿐이라, 드리프트가 결론에 섞이지 않는다.
   void _syncEntranceExitWatch() {
-    final next = shouldWatchGpsNearEntrance(
-      // 야외 상태에서는 볼 필요가 없다 — 이미 정상 구독 중이다.
-      pdrPoint: _indoorEntered ? _pdrCurrentWgs84() : null,
-      entrance: _entrance,
-      watching: _watchingGpsForExit,
-    );
+    // 야외 상태이거나 사용자가 직접 열어 둔 도면이면 감시하지 않는다.
+    final watchable = _indoorEntered && _indoorEnteredByGps;
+    final next = watchable &&
+        shouldWatchGpsNearEntrance(
+          pdrPoint: _pdrCurrentWgs84(),
+          entrance: _entrance,
+          watching: _watchingGpsForExit,
+          graceExpired: _entranceWatchGraceExpired,
+        );
     if (next == _watchingGpsForExit) return;
     _watchingGpsForExit = next;
     _syncGpsSubscription();
@@ -1117,6 +1138,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     ).showSnackBar(const SnackBar(content: Text('건물 감지 중...')));
     // GPS 경로는 [_gpsEntryArmed]라는 자기 게이트를 이미 통과했다. zoom 무장까지
     // 보면, 밖으로 나온 게 확인돼 다시 무장해도 여기서 막혀 아무 일도 안 일어난다.
+    //
+    // _setIndoorEntered가 이 표식을 보고 이탈 감시를 켜므로 **먼저** 세워야 한다.
+    _indoorEnteredByGps = true;
     _triggerIndoorEntry(ignoreZoomArming: true);
     // 트리거가 실제로 오버레이를 켠 경우에만 이어서 위치를 잡는다. 무장이 풀린
     // 상태([_autoIndoorEntryArmed]=false)면 위 호출이 no-op이라, 야외 지도를 보고
@@ -2344,9 +2368,27 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 효과가 즉시 반영되게 한다.
   void _setIndoorEntered(bool value) {
     if (_indoorEntered == value) return;
-    // 야외로 나가면 이탈 감시는 의미가 없다. 여기서 내려두지 않으면 다시 실내로
-    // 들어갈 때 감시가 켜진 상태로 남아 GPS가 계속 붙어 있게 된다.
-    if (!value) _watchingGpsForExit = false;
+    // 감시 상태는 _syncGpsSubscription보다 **먼저** 정해야 한다. 그래야 진입
+    // 순간에 구독이 한 번 끊겼다 붙는 일이 없다.
+    _entranceWatchGraceTimer?.cancel();
+    if (value) {
+      _watchingGpsForExit = _indoorEnteredByGps;
+      _entranceWatchGraceExpired = false;
+      if (_indoorEnteredByGps) {
+        _entranceWatchGraceTimer = Timer(entranceWatchGraceWindow, () {
+          if (!mounted) return;
+          _entranceWatchGraceExpired = true;
+          _syncEntranceExitWatch();
+        });
+      }
+    } else {
+      // 야외로 나가면 이탈 감시는 의미가 없다. 여기서 내려두지 않으면 다시 실내로
+      // 들어갈 때 감시가 켜진 상태로 남아 GPS가 계속 붙어 있게 된다.
+      _watchingGpsForExit = false;
+      _entranceWatchGraceExpired = false;
+      _entranceWatchGraceTimer = null;
+      _indoorEnteredByGps = false;
+    }
     setState(() => _indoorEntered = value);
     widget.onIndoorEnteredChanged?.call(value);
     // 실내로 들어가면 GPS 구독을 끊고 마커를 지운다. 다시 나가면 재구독한다.

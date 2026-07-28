@@ -177,6 +177,7 @@ void main() {
           pdrPoint: east(pdrMetersFromEntrance),
           entrance: entrance,
           watching: watching,
+          graceExpired: false,
         );
 
     test('PDR이 입구 앞으로 들어오면 켠다', () {
@@ -197,13 +198,62 @@ void main() {
       expect(watch(pdrMetersFromEntrance: 40, watching: true), isFalse);
     });
 
-    test('PDR 위치를 모르면 켜지 않는다', () {
-      // 앵커가 없거나 다른 층에 있는 경우. 입구 앞인지 알 근거가 없다.
+    test('PDR이 아직 말을 못 하면 유예 동안은 켜 둔다', () {
+      // 진입 직후가 이 상태다. 앵커가 아직 없어 PDR 위치를 모르는데, 여기서
+      // 꺼 버리면 들어오자마자 돌아 나가는 사용자를 놓친다.
       expect(
         shouldWatchGpsNearEntrance(
           pdrPoint: null,
           entrance: entrance,
           watching: false,
+          graceExpired: false,
+        ),
+        isTrue,
+      );
+    });
+
+    test('유예가 끝났는데도 PDR이 말을 못 하면 끈다', () {
+      // 자동 앵커가 실패한 층 등. 무한정 켜 두면 실내 내내 GPS가 배터리를 쓴다.
+      expect(
+        shouldWatchGpsNearEntrance(
+          pdrPoint: null,
+          entrance: entrance,
+          watching: true,
+          graceExpired: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('PDR이 말을 할 수 있으면 유예와 무관하게 거리로 정한다', () {
+      // 유예가 끝났어도 입구 앞이면 계속 켜 두고, 유예가 남았어도 멀어지면 끈다.
+      expect(
+        shouldWatchGpsNearEntrance(
+          pdrPoint: east(10),
+          entrance: entrance,
+          watching: true,
+          graceExpired: true,
+        ),
+        isTrue,
+      );
+      expect(
+        shouldWatchGpsNearEntrance(
+          pdrPoint: east(40),
+          entrance: entrance,
+          watching: true,
+          graceExpired: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('입구를 모르면 켜지 않는다', () {
+      expect(
+        shouldWatchGpsNearEntrance(
+          pdrPoint: east(10),
+          entrance: null,
+          watching: false,
+          graceExpired: false,
         ),
         isFalse,
       );

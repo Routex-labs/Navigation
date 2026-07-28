@@ -146,6 +146,43 @@ void main() {
     await drain(tester);
   }
 
+  testWidgets('들어오자마자 돌아 나가도 앵커를 기다리지 않고 알아챈다', (
+    WidgetTester tester,
+  ) async {
+    // 진입 직후에는 앵커가 아직 없어 PDR이 위치를 말하지 못한다. 예전에는 그동안
+    // GPS가 꺼져 있어서, 문을 통과했다 바로 돌아 나가는 사용자를 놓쳤다 —
+    // 정작 가장 확인이 필요한 순간이다.
+    final positions = StreamController<Position>.broadcast();
+    watchPosition = () => positions.stream;
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: OutdoorMapBody())),
+    );
+    await drain(tester);
+    positions.add(fix(entrance, 10));
+    await tester.pump(const Duration(milliseconds: 50));
+    positions.add(fix(entrance, 60));
+    await tester.pump(const Duration(milliseconds: 50));
+    // 앵커가 확정되는 센서 준비 대기(2초) 전에 확인한다.
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(FloorSelector), findsOneWidget);
+    expect(
+      positions.hasListener,
+      isTrue,
+      reason: '진입 순간부터 이탈 확인용 GPS가 붙어 있어야 한다',
+    );
+
+    positions.add(fix(entrance, 8));
+    await tester.pump(const Duration(milliseconds: 50));
+    await drain(tester);
+    expect(find.byType(FloorSelector), findsNothing);
+
+    // 앵커를 기다리던 센서 준비 타이머가 아직 살아 있다. 여기서 흘려보내지 않으면
+    // 테스트가 "타이머가 남았다"로 넘어진다. (이탈이 먼저 일어났으므로 이 타이머가
+    // 깨어나도 앵커는 찍지 않는다.)
+    await tester.pump(const Duration(seconds: 3));
+    await drain(tester);
+  });
+
   testWidgets('입구 앞에서 신뢰 좌표가 잡히면 실내 도면을 접는다', (
     WidgetTester tester,
   ) async {

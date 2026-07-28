@@ -90,6 +90,19 @@ const entranceNodeWatchMeters = 15.0;
 /// 구독이 붙었다 끊겼다 한다. 10 m 여유를 둬 그 떨림을 흡수한다.
 const entranceNodeReleaseMeters = 25.0;
 
+/// PDR이 아직 아무 말도 못 하는 동안 감시를 켜 두는 유예.
+///
+/// 진입 직후에는 앵커가 아직 없어 PDR 위치를 모른다. 그 구간에서 감시를 꺼 버리면
+/// **들어오자마자 돌아 나가는 사용자를 놓친다** — 정작 가장 확인이 필요한 순간이다.
+/// 자동 앵커가 실패한 층(통로 지도 없음 등)에서는 PDR 위치를 끝내 알 수 없어서
+/// 감시가 영영 안 켜지기도 한다.
+///
+/// 그래서 "모르면 켜 둔다"로 두되, 무한정 켜 두지 않도록 상한을 건다. 들어왔다
+/// 바로 나가는 행동은 1분 안에 끝나므로, 그 뒤에도 PDR이 말을 못 하면 안에 머무는
+/// 것으로 보고 끈다. PDR이 위치를 말할 수 있게 되면 이 유예와 무관하게 거리 규칙이
+/// 우선한다.
+const entranceWatchGraceWindow = Duration(seconds: 60);
+
 /// 창에 쌓아 두는 위치 표본 수의 상한.
 ///
 /// 창은 표본의 **자체 timestamp**로 자르는데, 기기 시계가 멈추거나 플랫폼이 같은
@@ -196,18 +209,25 @@ class IndoorEntryGpsTracker {
 
 /// 실내 상태에서 "밖으로 나가는지 확인하려고" GPS를 켜 둬야 하는지.
 ///
-/// [pdrPoint]는 PDR이 말하는 지금 위치, [watching]은 지금 켜 둔 상태인지다.
-/// 켜는 반경([entranceNodeWatchMeters])과 끄는 반경([entranceNodeReleaseMeters])
-/// 이 달라서, 그 사이에서는 현재 상태를 유지한다.
+/// [pdrPoint]는 PDR이 말하는 지금 위치, [watching]은 지금 켜 둔 상태인지,
+/// [graceExpired]는 [entranceWatchGraceWindow]가 지났는지다.
 ///
-/// PDR 위치를 모르면(앵커 없음·다른 층) false다 — 입구 앞인지 알 근거가 없으면
-/// 켜지 않는다.
+/// 판단 순서가 중요하다.
+///   1. 입구를 모르면 켜지 않는다 — 비교할 기준이 없다.
+///   2. **PDR이 위치를 말할 수 있으면 그것만 본다.** 켜는 반경
+///      ([entranceNodeWatchMeters])과 끄는 반경([entranceNodeReleaseMeters])이
+///      달라서, 그 사이에서는 현재 상태를 유지한다.
+///   3. PDR이 말을 못 하면(앵커 없음·다른 층) 유예 동안만 켜 둔다. 진입 직후가
+///      바로 이 구간이고, 여기서 꺼 버리면 들어오자마자 돌아 나가는 사용자를
+///      놓친다.
 bool shouldWatchGpsNearEntrance({
   required ll.LatLng? pdrPoint,
   required ll.LatLng? entrance,
   required bool watching,
+  required bool graceExpired,
 }) {
-  if (pdrPoint == null || entrance == null) return false;
+  if (entrance == null) return false;
+  if (pdrPoint == null) return !graceExpired;
   final distance = _metersBetween(pdrPoint, entrance);
   if (watching) return distance <= entranceNodeReleaseMeters;
   return distance <= entranceNodeWatchMeters;

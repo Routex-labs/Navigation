@@ -12,18 +12,23 @@ import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:navigation_client/widgets/floor_selector.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 건물 안에서는 GPS를 쓰지 않는다는 규칙에 대한 회귀 테스트.
+/// 건물 안에서는 GPS를 **화면에 쓰지 않는다**는 규칙에 대한 회귀 테스트.
 ///
 /// 예전에는 야외 지도가 실내 진입 오버레이를 켠 뒤에도 위치 스트림을 그대로
 /// 구독했고, 위치 보정 버튼도 GPS를 다시 조회해 카메라를 GPS 좌표로 옮겼다.
 /// 그래서 (1) 실내 도면 위에 건물 밖 GPS 점이 찍히고, (2) 실내 위치를 지정한
 /// 직후 보정을 누르면 지도가 건물 밖으로 튀었다.
 ///
+/// 지금은 구독을 무조건 끊지 않는다. 들어오자마자 돌아 나가는 사용자를 알아채려면
+/// 진입 직후에도 위치가 필요해서, 이탈 확인용으로 잠깐 켜 둔다. 대신 그 위치는
+/// 마커·경로·진입 판정 어디에도 넘기지 않으며, 확인이 끝나면(입구에서 벗어나거나
+/// 유예가 지나면) 구독도 끊는다.
+///
 /// MapLibre 레이어는 위젯 트리에 없어 마커 픽셀을 직접 볼 수 없다. 대신
-/// **위치 스트림 구독이 실제로 해제되는지**(= GPS를 더 이상 쓰지 않음)와
-/// **GPS 신호 배지가 사라지는지**로 검증한다. 위치 보정은 어떤 안내가 뜨는지로
-/// 분기를 구분한다 — GPS 경로를 탔다면 테스트 환경에 geolocator 플러그인
-/// 채널이 없어 '위치를 다시 확인하지 못했습니다'가 떴을 것이다.
+/// **GPS 신호 배지가 사라지는지**(= GPS 기반 표시를 껐음)와 **결국 구독이
+/// 해제되는지**로 검증한다. 위치 보정은 어떤 안내가 뜨는지로 분기를 구분한다 —
+/// GPS 경로를 탔다면 테스트 환경에 geolocator 플러그인 채널이 없어 '위치를 다시
+/// 확인하지 못했습니다'가 떴을 것이다.
 void main() {
   late BuildingRepository originalBuildingRepository;
   late DestinationRepository originalDestinationRepository;
@@ -119,7 +124,7 @@ void main() {
     watchPosition = defaultWatchPosition;
   });
 
-  testWidgets('실내 진입 오버레이가 켜지면 위치 구독을 끊고 GPS 배지도 감춘다', (
+  testWidgets('실내 진입 오버레이가 켜지면 GPS 배지를 감추고, 확인이 끝나면 구독도 끊는다', (
     WidgetTester tester,
   ) async {
     var cancelled = false;
@@ -148,7 +153,15 @@ void main() {
     await drain(tester);
 
     expect(find.byType(FloorSelector), findsOneWidget);
-    // 실내로 들어간 순간 GPS 구독이 해제되고, GPS 기반 표시도 사라진다.
+    // 실내로 들어간 순간 GPS 기반 표시가 사라진다. 구독은 이탈 확인용으로 잠깐
+    // 남아 있지만, 그 위치는 화면 어디에도 반영되지 않는다.
+    expect(find.text('GPS 신호 약함'), findsNothing);
+    expect(cancelled, isFalse);
+
+    // 이 층에는 통로 지도가 없어 PDR이 위치를 말하지 못한다. 그런 경우에도 GPS가
+    // 무한정 켜져 있으면 안 되므로, 유예(60초)가 지나면 구독을 끊는다.
+    await tester.pump(const Duration(seconds: 61));
+    await drain(tester);
     expect(cancelled, isTrue);
     expect(find.text('GPS 신호 약함'), findsNothing);
   });
