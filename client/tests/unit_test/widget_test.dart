@@ -54,13 +54,30 @@ final _fakeLowAccuracyPosition = Position(
   speedAccuracy: 0,
 );
 
-// 데모 건물 입구와 정확히 같은 좌표 + 신호 저하(자동 진입 감지 테스트용).
-// accuracy가 저하 기준(15m)을 넘어야 "막 나빠진 신호"로 판정된다.
+// 자동 진입 감지 테스트용 두 건. 판정은 **한 건으로 성립하지 않는다** —
+// "신호가 멀쩡했을 때 입구 앞에 있었다"는 근거가 창 안에 있어야 하므로, 접근
+// 표본(양호)과 진입 표본(저하)을 순서대로 흘려야 한다. 근거 없이 저하 한 건만
+// 오는 경우는 판정하지 않는 것이 이 정책의 규칙이다.
+final _fakePositionApproachingEntrance = Position(
+  latitude: 37.5665,
+  longitude: 126.9779,
+  timestamp: DateTime(2024, 1, 1),
+  accuracy: 10,
+  altitude: 0,
+  altitudeAccuracy: 0,
+  heading: 0,
+  headingAccuracy: 0,
+  speed: 0,
+  speedAccuracy: 0,
+);
+
+// 데모 건물 입구와 정확히 같은 좌표 + 신호 저하. accuracy가 '무너졌다' 기준
+// (30m)을 넘어야 진입으로 읽힌다.
 final _fakePositionAtEntrance = Position(
   latitude: 37.5665,
   longitude: 126.9779,
   timestamp: DateTime(2024, 1, 1),
-  accuracy: 25,
+  accuracy: 45,
   altitude: 0,
   altitudeAccuracy: 0,
   heading: 0,
@@ -189,13 +206,24 @@ void main() {
   testWidgets(
     'map shell shows the indoor entry overlay when entrance is detected nearby',
     (WidgetTester tester) async {
-      watchPosition = () => Stream.value(_fakePositionAtEntrance);
+      watchPosition = () => Stream.fromIterable([
+            _fakePositionApproachingEntrance,
+            _fakePositionAtEntrance,
+          ]);
 
       await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
 
-      await tester.pump();
-      await tester.pump();
-      expect(find.text('건물 감지 중...'), findsOneWidget);
+      // 접근 표본 → 진입 표본 순으로 흘러야 판정이 서므로, 두 건이 모두 도착할
+      // 때까지 프레임을 진행한다.
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      // 자동 진입은 '건물 감지 중...'을 먼저 띄운 뒤, 입구 기준으로 실내 위치를
+      // 잡는 작업이 끝나면 같은 자리에 결과를 덮어쓴다(진행 문구가 4초를 다
+      // 채운 뒤에야 결과가 뜨면 이미 끝난 작업을 계속 보여주는 셈이다).
+      // 이 fixture의 mock 층에는 navigation_graph가 없어 결과가 즉시 나오므로,
+      // 여기서 보이는 것은 진행 문구가 아니라 수동 지정 안내다.
+      expect(find.textContaining('위치 지정으로 직접 지정해주세요'), findsOneWidget);
 
       await tester.pumpAndSettle();
       // 실내 진입 오버레이가 켜지면 야외 지도 위에 세로 층 선택기(FloorSelector)
@@ -389,12 +417,12 @@ void main() {
     expect(find.text('강의실 201'), findsOneWidget);
   });
 
-  /// 새 검색 흐름: 상단 검색창은 입력을 받지 않고, 탭하면 아래에서 시트가
-  /// 올라온다. 그 시트의 입력창에 쳐야 결과 목록이 뜬다.
-  Future<void> openSearchSheet(WidgetTester tester, String query) async {
-    await tester.tap(find.text('건물, 장소를 검색하세요'));
+  /// 새 검색 흐름: 상단 검색창에 그대로 친다. 아래에서 입력창이 하나 더 있는
+  /// 시트가 올라오지 않고, 결과는 검색창 바로 밑 패널에 뜬다.
+  Future<void> searchFromTopBar(WidgetTester tester, String query) async {
+    await tester.tap(find.byType(TextField));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).first, query);
+    await tester.enterText(find.byType(TextField), query);
     await tester.testTextInput.receiveAction(TextInputAction.search);
     await tester.pumpAndSettle();
   }
@@ -414,30 +442,17 @@ void main() {
 
     await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
     await tester.pumpAndSettle();
-    await openSearchSheet(tester, 'MLB');
+    await searchFromTopBar(tester, 'MLB');
 
     expect(repository.lightQueries, ['MLB']);
     expect(find.text('MLB'), findsWidgets);
     expect(find.text('B2'), findsOneWidget);
   });
 
-  testWidgets('검색 시트는 AI를 자동으로 부르지 않는다', (WidgetTester tester) async {
-    // 의미 검색은 임베딩 모델을 태우므로 사용자가 명시적으로 고를 때만 돈다.
-    final repository = _FallbackDestinationRepository();
-    destinationRepository = repository;
-
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
-    await tester.pumpAndSettle();
-    await openSearchSheet(tester, '밥 먹을 곳');
-
-    expect(repository.lightQueries, ['밥 먹을 곳']);
-    expect(repository.aiQueries, isEmpty);
-    expect(find.textContaining('찾지 못했어요'), findsOneWidget);
-  });
-
-  testWidgets('빈손이면 AI 검색으로 넘어가 같은 질의를 다시 던진다', (
+  testWidgets('엔터로 확정하면 경량이 빈손일 때 의미 검색까지 자동으로 간다', (
     WidgetTester tester,
   ) async {
+    // 사용자는 "일반 검색"과 "AI 검색"을 구분하지 않는다. 한 곳에 치면 된다.
     final repository = _FallbackDestinationRepository(
       aiResult: const PoiSearchResult(
         name: '요즘김밥',
@@ -450,39 +465,122 @@ void main() {
 
     await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
     await tester.pumpAndSettle();
-    await openSearchSheet(tester, '밥 먹을 곳');
+    await searchFromTopBar(tester, '밥 먹을 곳');
 
-    await tester.tap(find.text('AI 검색으로 찾기'));
-    await tester.pumpAndSettle();
-
-    // 사용자가 방금 친 말을 다시 치게 하지 않는다.
+    // 경량 → 의미 순으로 같은 질의가 이어진다. 버튼을 누를 필요가 없다.
+    expect(repository.lightQueries, ['밥 먹을 곳']);
     expect(repository.aiQueries, ['밥 먹을 곳']);
     expect(find.textContaining('요즘김밥'), findsOneWidget);
+    // 왜 다른 이름이 나왔는지 알려 준다.
+    expect(find.text('뜻이 비슷한 매장을 찾았어요'), findsOneWidget);
   });
 
-  testWidgets('카테고리 열의 AI 검색 pill이 AI 패널을 연다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('경량이 찾으면 의미 검색은 돌지 않는다', (WidgetTester tester) async {
+    // 매장 이름은 일반 검색처럼 즉시 끝나야 한다.
+    final repository = _FallbackDestinationRepository(
+      lightResult: const PoiSearchResult(
+        name: 'MLB',
+        floor: 'B2',
+        point: LatLng(37.52, 126.92),
+        nodeId: 'FL-2:ND-9',
+      ),
+    );
+    destinationRepository = repository;
+
+    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpAndSettle();
+    await searchFromTopBar(tester, 'MLB');
+
+    expect(repository.aiQueries, isEmpty);
+    expect(find.text('뜻이 비슷한 매장을 찾았어요'), findsNothing);
+  });
+
+  testWidgets('타이핑 중에는 의미 검색을 부르지 않는다', (WidgetTester tester) async {
+    // 의미 검색은 첫 호출이 20초대까지 간다. 글자마다 던지면 "밥"·"밥 먹"이
+    // 전부 모델을 태우므로, 확정(엔터) 전에는 절대 타면 안 된다.
+    final repository = _FallbackDestinationRepository();
+    destinationRepository = repository;
+
+    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(TextField));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '밥 먹을');
+    // 디바운스가 끝나 경량 검색은 돌지만, 의미 검색은 아직이다.
+    await tester.pumpAndSettle(const Duration(milliseconds: 500));
+
+    expect(repository.lightQueries, ['밥 먹을']);
+    expect(repository.aiQueries, isEmpty);
+  });
+
+  testWidgets('검색창을 눌러도 두 번째 입력창이 생기지 않는다', (WidgetTester tester) async {
+    // 회귀: 예전에는 상단 검색창을 누르면 아래에서 입력창이 하나 더 있는 시트가
+    // 올라와, 방금 누른 창과 실제로 치는 창이 달랐다. 검색 중 화면에 있는
+    // TextField는 상단 바의 것 하나뿐이어야 한다.
     destinationRepository = _FallbackDestinationRepository();
 
     await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('AI 검색'));
+    expect(find.byType(TextField), findsOneWidget);
+    await tester.tap(find.byType(TextField));
     await tester.pumpAndSettle();
 
-    expect(find.text('AI 매장 찾기'), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+    // 친 글자는 그대로 상단 검색창에 남는다.
+    await tester.enterText(find.byType(TextField), 'MLB');
+    await tester.pumpAndSettle(const Duration(milliseconds: 500));
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller?.text,
+      'MLB',
+    );
   });
+
+  testWidgets('카테고리 열에 AI 검색 pill이 더는 없다', (WidgetTester tester) async {
+    destinationRepository = _FallbackDestinationRepository();
+
+    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('AI 검색'), findsNothing);
+  });
+
 
   testWidgets('건물 이름으로 검색하면 건물 줄이 뜬다', (WidgetTester tester) async {
-    // 예전 상단 검색이 하던 건물 이름 검색을 시트로 옮겨 왔다.
+    // 매장과 건물을 같은 결과 패널에 함께 얹는다.
     destinationRepository = _FallbackDestinationRepository();
 
     await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
     await tester.pumpAndSettle();
-    await openSearchSheet(tester, '데모');
+    await searchFromTopBar(tester, '데모');
 
     expect(find.textContaining('건물 ·'), findsOneWidget);
+  });
+
+  testWidgets('상단 검색은 실내에서도 현재 층으로 좁히지 않는다', (WidgetTester tester) async {
+    // 이름을 알고 검색하는 사용자는 그 매장이 몇 층인지 모른다. 현재 층으로
+    // 좁히면 분명히 있는 매장이 "결과 없음"으로 나온다. 층 스코프는 길찾기·
+    // 카테고리 시트만 쓴다.
+    final repository = _FallbackDestinationRepository(
+      lightResult: const PoiSearchResult(
+        name: 'MLB',
+        floor: 'B2',
+        point: LatLng(37.52, 126.92),
+        nodeId: 'FL-2:ND-9',
+      ),
+    );
+    destinationRepository = repository;
+
+    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpAndSettle();
+    // 실내 탭으로 전환하면 현재 층(_activeIndoorFloor)이 잡힌다.
+    await tester.tap(find.text('실내'));
+    await tester.pumpAndSettle();
+    await searchFromTopBar(tester, 'MLB');
+
+    expect(repository.lightFloorScopes, [null]);
+    expect(find.text('B2'), findsOneWidget);
   });
 
 
@@ -627,6 +725,10 @@ class _FallbackDestinationRepository implements DestinationRepository {
   final lightQueries = <String>[];
   final aiQueries = <String>[];
 
+  /// 검색이 층으로 좁혔는지 확인하려고 넘어온 값을 그대로 모아 둔다.
+  final lightFloorScopes = <String?>[];
+  final aiFloorScopes = <String?>[];
+
   @override
   Future<List<PoiSearchResult>> searchDestinations(
     String buildingId,
@@ -634,6 +736,7 @@ class _FallbackDestinationRepository implements DestinationRepository {
     String? currentFloorId,
   }) async {
     lightQueries.add(query);
+    lightFloorScopes.add(currentFloorId);
     return lightResult == null ? const [] : [lightResult!];
   }
 
@@ -644,6 +747,7 @@ class _FallbackDestinationRepository implements DestinationRepository {
     String? currentFloorId,
   }) async {
     aiQueries.add(query);
+    aiFloorScopes.add(currentFloorId);
     return aiResult == null ? const [] : [aiResult!];
   }
 }

@@ -38,6 +38,13 @@ const _mapShellBottomChromePx = 112.0;
 // 영향을 주지 않고 여기서 별도 상수로 잡지 않는다.
 const _etaCardHeightPx = 130.0;
 
+// 위치 지정 안내를 상단 chrome 아래에 놓기 위한 오프셋. MapShellScreen의
+// 검색창(top 0)과 그 아래 카테고리 chip 열(top 78, 높이 ≈32) 밑으로 내려야
+// 안내가 chip에 가려지지 않는다. SafeArea와 함께 써서 노치 기기에서 chip 열이
+// 상태바만큼 내려앉는 것까지 따라간다.
+// 야외 화면의 동명 상수와 같은 값이어야 두 화면에서 안내가 같은 자리에 뜬다.
+const _placingHintTopPx = 132.0;
+
 // 사용자가 매장 내부/건물 밖을 탭했을 때 멀리 떨어진 복도로 강제 스냅하지
 // 않기 위한 상한이다. 입구나 매장 앞을 누르는 정상적인 경우에는 충분히
 // 여유를 두되, 잘못 눌러 건물 반대편에서 PDR이 시작하는 일은 막는다.
@@ -122,6 +129,11 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   final _pdrControlKey = GlobalKey();
   final _debugModeSettingsKey = GlobalKey();
 
+  /// 위치 지정 안내 배너. 오른쪽 상단 X를 누른 탭이 지도까지 새어들어가 배너
+  /// 아래 지점에 앵커가 찍히는 것을 막는다 — 취소했는데 위치가 지정되면
+  /// 사용자 입장에선 취소가 안 먹은 것으로 보인다.
+  final _placingHintKey = GlobalKey();
+
   /// [globalPoint]가 지도 위 오버레이 영역 안이면 true — 그 좌표의 지도 탭은
   /// 매장 선택 처리를 건너뛰어야 한다. 자체 오버레이(층 selector, PDR)와
   /// 상위가 넘겨준 outer 오버레이(검색창·저장 장소·하단 바 등)를 모두 검사한다.
@@ -130,6 +142,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       _floorSelectorKey,
       _pdrControlKey,
       _debugModeSettingsKey,
+      _placingHintKey,
       ...widget.outerOverlayKeys,
     ]) {
       final ctx = key.currentContext;
@@ -172,8 +185,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   final DebugModeController _debugModeController = debugModeController;
 
   /// 지금 이 실내 지도가 보여주는 층 이름(예: "B2"). 층이 아직 로드되지
-  /// 않았거나 건물 로딩 실패 상태면 null. MapShellScreen이 상단 검색과
-  /// 길찾기 시트의 검색을 현재 층으로 좁힐 때 참조한다.
+  /// 않았거나 건물 로딩 실패 상태면 null. MapShellScreen이 길찾기·카테고리
+  /// 시트의 검색을 현재 층으로 좁힐 때 참조한다. 상단 검색창은 층으로 좁히지
+  /// 않고 건물 전체를 뒤지므로 이 값을 쓰지 않는다.
   String? get currentFloor => _selectedFloor;
 
   /// 검색·길찾기 시트가 지도 위에 떠 있는 동안 지도 제스처를 꺼서, 시트를
@@ -402,7 +416,13 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         _showPdrMessage('아직 바라보는 방향을 알 수 없습니다. 위치 지정 후 조금 걸어 방향을 잡아주세요.');
         return;
       }
-      await _floorPlanController.rotateToBearing(heading);
+      // 회전도 내 위치를 중심으로 한다. 중앙 정렬 후 걸어간 뒤 회전을 누르면
+      // 화면 중심과 내 위치가 이미 어긋나 있어, 중심을 그대로 두고 돌리면 내
+      // 위치가 화면 가장자리로 밀려난다.
+      await _floorPlanController.rotateToBearing(
+        heading,
+        center: _pdrCurrentLocation ?? _pdrAnchorLocation,
+      );
     }
     _recalibrateTapCount++;
   }
@@ -966,7 +986,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     }
     if (!mounted) return;
     _setPlacingAnchor(false);
-    _showPdrMessage('시작점을 통로에 맞췄습니다. 이동 경로는 통로 그래프를 따라 표시됩니다.');
+    // 배치가 끝났다는 안내는 따로 띄우지 않는다. 도면에 위치 마커가 바로
+    // 찍히고 안내 배너가 사라지는 것으로 이미 결과가 보이는데, 토스트까지
+    // 겹치면 방금 지정한 지점을 가린다.
   }
 
   Future<void> _cancelPdrAnchor() async {
@@ -1312,10 +1334,16 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         // debugEnabled 게이팅을 두지 않는다.
         if (_placingPdrAnchor)
           Positioned(
-            top: 130,
+            top: _placingHintTopPx,
             left: 12,
             right: 12,
-            child: SafeArea(child: _PdrAnchorHint(onCancel: _cancelPdrAnchor)),
+            child: SafeArea(
+              bottom: false,
+              child: _PdrAnchorHint(
+                key: _placingHintKey,
+                onCancel: _cancelPdrAnchor,
+              ),
+            ),
           ),
 
         if (_hasActiveRoute && routeDestination != null)
@@ -1349,7 +1377,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 /// 지도 위에 올라간 뒤 안내가 사라져 어디를 눌러야 하는지 놓치기 쉬워서, 지도
 /// chrome 바로 아래에 남겨 둔다.
 class _PdrAnchorHint extends StatelessWidget {
-  const _PdrAnchorHint({required this.onCancel});
+  const _PdrAnchorHint({super.key, required this.onCancel});
 
   final VoidCallback onCancel;
 
@@ -1361,8 +1389,11 @@ class _PdrAnchorHint extends StatelessWidget {
       shadowColor: Colors.black.withValues(alpha: 0.14),
       borderRadius: BorderRadius.circular(14),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
         child: Row(
+          // X는 문구 오른쪽 **상단**에 고정한다. 문구가 두 줄로 접혀도 취소
+          // 버튼이 세로 중앙으로 밀려나지 않아 눌러야 할 자리가 흔들리지 않는다.
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Icon(
               Icons.touch_app_outlined,
@@ -1371,18 +1402,48 @@ class _PdrAnchorHint extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             const Expanded(
-              child: Text(
-                '입구 또는 복도에 시작점을 탭하세요',
-                maxLines: 2,
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              child: Padding(
+                padding: EdgeInsets.only(top: 2),
+                child: Text(
+                  '입구 또는 복도에 시작점을 탭하세요',
+                  maxLines: 2,
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
-            IconButton(
-              tooltip: 'PDR 취소',
-              onPressed: onCancel,
-              icon: const Icon(Icons.close_rounded, size: 20),
-            ),
+            const SizedBox(width: 6),
+            _HintCancelButton(onPressed: onCancel, color: AppColors.muted),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 안내 배너 오른쪽 상단의 취소(X).
+///
+/// Material `IconButton`을 쓰지 않는 이유: 기본 최소 탭 영역이 48x48이라
+/// 한두 줄짜리 안내 카드 높이를 불필요하게 늘린다. 26x26으로 줄이되 아이콘
+/// 보다 넓은 탭 영역은 남긴다. 야외 화면의 동명 위젯과 같은 규격이다.
+class _HintCancelButton extends StatelessWidget {
+  const _HintCancelButton({required this.onPressed, required this.color});
+
+  final VoidCallback onPressed;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: '위치 지정 취소',
+      child: InkWell(
+        onTap: onPressed,
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: 26,
+          height: 26,
+          child: Center(
+            child: Icon(Icons.close_rounded, size: 18, color: color),
+          ),
         ),
       ),
     );

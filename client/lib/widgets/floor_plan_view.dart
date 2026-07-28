@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -47,8 +48,102 @@ const _verticalTransportFillLayerId = 'floor-vertical-transport-fill';
 
 /// 목적지 핀 이미지의 addImage 등록 이름.
 const _destinationPinImageName = 'marker-destination-pin';
-const _currentLocationImageName = 'marker-current-location';
-const _currentLocationDotImageName = 'marker-current-location-dot';
+
+/// 현재 위치 심볼의 addImage 등록 이름. **이름 끝에 코어 반지름을 박아 둔다.**
+///
+/// maplibre_gl 웹 구현의 addImage는 같은 이름이 이미 등록돼 있으면 새 비트맵을
+/// 버리고 조용히 건너뛴다(`if (!_map.hasImage(name))` … `else { print(...) }`,
+/// maplibre_web_gl_platform.dart). 게다가 이 패키지의 플랫폼 인터페이스에는
+/// removeImage가 없어서 이미 등록된 이름을 지울 방법도 없다. 그래서 이름이
+/// 고정이면, 살아 있는 지도 인스턴스에 예전 크기의 비트맵이 그대로 남아
+/// 디자인을 바꿔도 화면이 안 바뀐다. 반지름을 이름에 넣어 두면 디자인이 바뀔
+/// 때 이름도 함께 바뀌므로 항상 새 비트맵으로 등록된다.
+const _currentLocationImageName =
+    'marker-current-location-r$_currentLocationCoreRadius';
+const _currentLocationDotImageName =
+    'marker-current-location-dot-r$_currentLocationCoreRadius';
+
+/// 현재 위치 심볼을 그릴 때 쓰는 디자인 좌표계의 한 변 길이(px). 아래 렌더
+/// 코드의 모든 반지름/오프셋은 이 좌표계 기준이다.
+const _currentLocationIconDesignSize = 144.0;
+
+/// 디자인 좌표계 대비 실제 비트맵 배율. 아이콘을 크게 키우면 MapLibre가
+/// 비트맵을 화면 픽셀 수보다 적은 원본으로 늘려 그리게 되어 흰 테두리가
+/// 뭉개진다(특히 devicePixelRatio 2~3인 폰). 비트맵만 이 배율로 크게 렌더하고
+/// iconSize는 같은 배율로 나눠서, 화면상 크기는 그대로 두고 해상도만 올린다.
+const _currentLocationIconPixelRatio = 2.0;
+
+/// 현재 위치 심볼의 화면 크기. 디자인 좌표계 1px = 화면 1px이 되도록 고정한다
+/// (비트맵은 [_currentLocationIconPixelRatio]배로 렌더하므로 그만큼 나눈다).
+///
+/// zoom 보간을 쓰지 않는 이유: 야외 GPS 마커는 `CircleLayer`의 상수
+/// `circleRadius`로 그려져 zoom과 무관하게 같은 크기를 유지한다
+/// (outdoor_map_screen.dart의 `outdoor-accuracy`/`outdoor-current-dot`).
+/// 실내 마커도 같은 크기로 보여야 하므로 zoom에 따라 커지면 안 된다.
+///
+/// 크기의 기준은 "눈에 보이는 경계"다. GPS 마커에서 사용자가 크기로 인식하는
+/// 것은 18px 도트가 아니라 정확도 원의 **불투명도 100%인 1px 테두리**(지름
+/// 44px)다. 실내 마커에는 그 테두리 원이 없고 바깥 흰 링은 도면 바닥(#FFFFFF)에
+/// 묻혀 안 보이므로, 지각되는 경계는 파란 코어 원뿐이다. 그래서 코어 지름이
+/// 곧 이 마커의 체감 크기이며, 그 값은 [_currentLocationCoreRadius]가 정한다.
+const _currentLocationIconSize = 1.0 / _currentLocationIconPixelRatio;
+
+/// 파란 코어 원의 반지름(디자인 단위 = 화면 px). 이 마커의 체감 크기를 정하는
+/// 유일한 값이므로, 크기를 조정할 때는 여기만 바꾼다 — 흰 링·그림자는 이 값에서
+/// 파생되고, 비트맵 등록 이름([_currentLocationImageName])도 이 값을 포함해
+/// 자동으로 새 이름이 된다.
+///
+/// GPS 정확도 원의 테두리 지름(44px)에 맞춰 22로 뒀다가, 실내 도면에서 너무
+/// 크다고 판단해 지름 32px로 줄인 값이다. 야외 GPS 도트(18px)보다는 크고 정확도
+/// 원(44px)보다는 작다.
+const _currentLocationCoreRadius = 16.0;
+
+/// 코어를 감싸는 흰 링의 반지름. 코어보다 5px 두껍게 잡아, 도면 바닥(#FFFFFF)
+/// 에서는 묻히더라도 매장 fill(#F3F1EF)이나 경로선 위에서는 코어가 배경과
+/// 분리돼 보이게 한다.
+const _currentLocationRimRadius = _currentLocationCoreRadius + 5;
+
+/// 현재 위치 심볼 레이어 id.
+const _currentMarkerLayerId = 'floor-markers-current';
+
+/// 목적지 핀 심볼 레이어 id. 현재 위치 레이어를 다시 등록할 때 이 레이어 아래로
+/// 넣어야 원래의 위/아래 순서(목적지 핀이 위)가 유지된다.
+const _destinationMarkerLayerId = 'floor-markers-destination-pin';
+
+/// 현재 위치 심볼 레이어의 filter. 마커 소스에는 목적지도 함께 들어오므로
+/// `kind`로 걸러낸다. 레이어를 다시 등록할 때 이 filter를 빠뜨리면 목적지
+/// 좌표에도 파란 도트가 찍힌다.
+const _currentMarkerFilter = <Object>[
+  '==',
+  ['get', 'kind'],
+  'current',
+];
+
+/// 현재 위치 심볼 레이어의 속성 묶음. 등록([_onStyleLoaded])과 hot reload 시
+/// 재적용([FloorPlanViewState.reassemble])이 같은 값을 쓰도록 한 곳에 모아 둔다.
+///
+/// 현재 위치와 heading을 하나의 심볼로 합친다. 미터 단위 GeoJSON 폴리곤은
+/// 확대할수록 화살표만 커지므로, 고정 픽셀 PNG를 회전시켜 점과 방향 표시가
+/// 언제나 같은 비율과 크기를 유지하게 한다. heading이 없을 때는 북쪽을 임의로
+/// 가리키지 않고 동일 디자인의 원형 점만 사용한다.
+const _currentLocationSymbolProperties = SymbolLayerProperties(
+  iconImage: [
+    'case',
+    ['has', 'heading'],
+    _currentLocationImageName,
+    _currentLocationDotImageName,
+  ],
+  iconSize: _currentLocationIconSize,
+  iconRotate: [
+    'coalesce',
+    ['get', 'heading'],
+    0,
+  ],
+  iconRotationAlignment: 'map',
+  iconPitchAlignment: 'viewport',
+  iconAllowOverlap: true,
+  iconIgnorePlacement: true,
+);
 
 /// 지도 위에 얹을 현재 위치/목적지 점 마커. 종류에 따라 스타일이 달라진다
 /// (마커 색상은 [_markersGeoJson]의 circle-color data-driven 표현식이 결정).
@@ -73,10 +168,15 @@ class FloorPlanController {
   /// FloorPlanView가 아직 준비되지 않았거나 detach된 상태면 false.
   bool get isAttached => _state != null;
 
-  /// 카메라 bearing만 [bearingDeg](북쪽 기준 시계방향)로 돌린다. 사용자가
-  /// 바라보는 방향을 화면 위쪽에 오게 하는 나침반 모드에 쓴다.
-  Future<void> rotateToBearing(double bearingDeg) async {
-    await _state?.rotateToBearing(bearingDeg);
+  /// 카메라를 [bearingDeg](북쪽 기준 시계방향)로 돌린다. 사용자가 바라보는
+  /// 방향을 화면 위쪽에 오게 하는 나침반 모드에 쓴다.
+  ///
+  /// [center]를 주면 회전과 함께 그 지점을 화면 정중앙에 놓는다. 회전축을 화면
+  /// 중심에 고정하면, 사용자가 중앙 정렬 후 조금 걸어간 뒤 회전을 누를 때 내
+  /// 위치가 화면 가장자리로 밀려난다 — 나침반 모드는 "내가 보는 방향"을
+  /// 보여주는 기능이므로 내 위치가 항상 중심이어야 한다.
+  Future<void> rotateToBearing(double bearingDeg, {ll.LatLng? center}) async {
+    await _state?.rotateToBearing(bearingDeg, center: center);
   }
 
   /// 카메라 중심만 [target]으로 옮긴다. bearing/줌은 유지.
@@ -208,6 +308,76 @@ class FloorPlanViewState extends State<FloorPlanView> {
   void dispose() {
     widget.controller?._detach(this);
     super.dispose();
+  }
+
+  /// hot reload 때 현재 위치 심볼을 다시 등록·적용한다(debug 빌드에서만 호출됨).
+  ///
+  /// MapLibre 지도는 PlatformView/캔버스라 hot reload로도 살아남고, 스타일이
+  /// 이미 로드된 상태에서는 `onStyleLoadedCallback`이 다시 불리지 않는다. 마커
+  /// 비트맵 등록과 `iconSize` 적용이 전부 [_onStyleLoaded] 안에 있으므로, 이
+  /// 훅이 없으면 마커 디자인을 고쳐도 hot reload에서는 화면이 그대로다 —
+  /// "크기를 바꿨는데 안 바뀐다"의 실제 원인이 이것이었다.
+  @override
+  void reassemble() {
+    super.reassemble();
+    unawaited(_refreshCurrentLocationSymbol());
+  }
+
+  /// 현재 위치 비트맵을 등록하고 심볼 레이어를 얹는다.
+  ///
+  /// 비트맵 이름에 코어 반지름이 들어 있으므로([_currentLocationImageName]),
+  /// 크기를 바꿨다면 새 이름이라 웹 addImage의 "이미 있으면 건너뛰기"에 걸리지
+  /// 않는다. 크기를 안 바꿨다면 같은 이름이라 건너뛰고 로그만 남는다.
+  Future<void> _addCurrentLocationSymbolLayer(
+    MapLibreMapController controller, {
+    String? belowLayerId,
+  }) async {
+    await controller.addImage(
+      _currentLocationImageName,
+      await _renderCurrentLocationIcon(showHeading: true),
+    );
+    await controller.addImage(
+      _currentLocationDotImageName,
+      await _renderCurrentLocationIcon(showHeading: false),
+    );
+    await controller.addSymbolLayer(
+      _markersSourceId,
+      _currentMarkerLayerId,
+      _currentLocationSymbolProperties,
+      filter: _currentMarkerFilter,
+      belowLayerId: belowLayerId,
+      enableInteraction: false,
+    );
+  }
+
+  /// 현재 위치 심볼을 지우고 다시 등록한다.
+  ///
+  /// `setLayerProperties`로 속성만 갈아끼우지 않는 이유가 두 가지다.
+  /// 1. 웹 구현은 키마다 `setPaintProperty`를 먼저 시도하고 **예외가 났을 때만**
+  ///    `setLayoutProperty`로 폴백한다(maplibre_web_gl_platform.dart). 그런데
+  ///    `icon-image`/`icon-size`는 layout 속성이고, MapLibre GL JS가 알 수 없는
+  ///    paint 속성에 대해 예외를 던지는지 아니면 error 이벤트만 쏘고 조용히
+  ///    반환하는지가 버전에 따라 다르다. 후자면 폴백이 안 타서 아무것도 적용되지
+  ///    않는다 — 바로 이번에 문제였던 "조용히 안 바뀜"을 다시 만드는 셈이다.
+  /// 2. `iconImage`가 이미지 **이름**을 담은 표현식이라, 코어 크기를 바꿔 이름이
+  ///    바뀌면 레이어 자체를 다시 등록해야 새 이름을 가리킨다.
+  ///
+  /// 다시 등록하면 레이어가 스택 맨 위로 가므로 목적지 핀 아래로 넣어 원래
+  /// 순서를 유지한다.
+  Future<void> _refreshCurrentLocationSymbol() async {
+    final controller = _controller;
+    if (controller == null || !_styleReady) return;
+    try {
+      await controller.removeLayer(_currentMarkerLayerId);
+      await _addCurrentLocationSymbolLayer(
+        controller,
+        belowLayerId: _destinationMarkerLayerId,
+      );
+    } catch (error, stackTrace) {
+      // hot reload 편의 기능이므로 실패해도 앱을 죽이지 않는다. 레이어가 이미
+      // 사라진 뒤(층 전환 직후 등)에 호출되면 native가 예외를 던질 수 있다.
+      debugPrint('current location symbol refresh failed: $error\n$stackTrace');
+    }
   }
 
   @override
@@ -726,51 +896,8 @@ class FloorPlanViewState extends State<FloorPlanView> {
       _emptyFeatureCollection,
     );
 
-    // 현재 위치와 heading을 하나의 심볼로 합친다. 미터 단위 GeoJSON 폴리곤은
-    // 확대할수록 화살표만 커지므로, 고정 픽셀 PNG를 회전시켜 점과 방향 표시가
-    // 언제나 같은 비율과 크기를 유지하게 한다. heading이 없을 때는 북쪽을
-    // 임의로 가리키지 않고 동일 디자인의 원형 점만 사용한다.
-    await controller.addSymbolLayer(
-      _markersSourceId,
-      'floor-markers-current',
-      const SymbolLayerProperties(
-        iconImage: [
-          'case',
-          ['has', 'heading'],
-          _currentLocationImageName,
-          _currentLocationDotImageName,
-        ],
-        // 도착 핀(iconSize 0.115→0.25, 캔버스 128px, 머리 108px)과 화면상
-        // 파란 원의 크기가 대략 맞도록 zoom 기반 interpolate으로 맞춘다.
-        // 현재 위치 캔버스는 144px에 파란 도트는 48px 지름이라 축척비
-        // (108/48 ≈ 2.25)를 곱한 값을 각 stop에 넣어 축소해도 도트가 지도를
-        // 덮지 않고, 확대해도 도착 핀 머리와 비슷한 크기로 커진다.
-        iconSize: [
-          'interpolate',
-          ['linear'],
-          ['zoom'],
-          16,
-          0.26,
-          20,
-          0.56,
-        ],
-        iconRotate: [
-          'coalesce',
-          ['get', 'heading'],
-          0,
-        ],
-        iconRotationAlignment: 'map',
-        iconPitchAlignment: 'viewport',
-        iconAllowOverlap: true,
-        iconIgnorePlacement: true,
-      ),
-      filter: [
-        '==',
-        ['get', 'kind'],
-        'current',
-      ],
-      enableInteraction: false,
-    );
+    // 목적지 핀 레이어보다 먼저 등록해, 겹칠 때 목적지 핀이 위에 오게 한다.
+    await _addCurrentLocationSymbolLayer(controller);
 
     // 목적지는 빨간 물방울 핀(_destinationPinImageName)에 "도착" 텍스트를
     // 얹어서 표시한다. 텍스트는 아이콘에 미리 굽지 않고 MapLibre의 textField로
@@ -790,7 +917,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
     // 현재 위치는 이 소스에 함께 들어와 있어도 filter가 걸러낸다.
     await controller.addSymbolLayer(
       _markersSourceId,
-      'floor-markers-destination-pin',
+      _destinationMarkerLayerId,
       const SymbolLayerProperties(
         iconImage: _destinationPinImageName,
         iconSize: [
@@ -980,14 +1107,19 @@ class FloorPlanViewState extends State<FloorPlanView> {
   /// 카메라 bearing만 [bearingDeg](북쪽 기준 시계방향, 0~360°)로 돌린다.
   /// 사용자가 바라보는 방향을 화면 위쪽에 오게 하는 나침반 모드에 쓴다 —
   /// 현재 중심/줌은 유지하고 회전만 한다.
-  Future<void> rotateToBearing(double bearingDeg) async {
+  Future<void> rotateToBearing(double bearingDeg, {ll.LatLng? center}) async {
     final controller = _controller;
     if (controller == null || !bearingDeg.isFinite) return;
     final current = controller.cameraPosition;
+    // [center]가 있으면 그 지점을 화면 중앙에 놓고 돌린다. 없으면(위치를 아직
+    // 모르는 경우) 지금 보고 있는 중심을 그대로 두고 bearing만 바꾼다.
+    final target = center != null
+        ? _toMapLibreLatLng(center)
+        : current?.target ?? _initialCenter(widget.floorPlan);
     await controller.moveCamera(
       CameraUpdate.newCameraPosition(
         CameraPosition(
-          target: current?.target ?? _initialCenter(widget.floorPlan),
+          target: target,
           zoom: current?.zoom ?? 18,
           bearing: bearingDeg,
           tilt: current?.tilt ?? 0,
@@ -1088,18 +1220,26 @@ class FloorPlanViewState extends State<FloorPlanView> {
   }
 
   /// 상용 지도 앱처럼 흰 테두리의 파란 현재 위치 점 뒤로 반투명 heading cone이
-  /// 퍼지는 하나의 고정 크기 심볼을 렌더링한다. MapLibre가 이 비트맵 전체를
-  /// 회전하므로 확대/축소해도 점과 방향 범위의 크기·간격이 흐트러지지 않는다.
+  /// 퍼지는 하나의 심볼을 렌더링한다. MapLibre가 이 비트맵 전체를 회전하므로
+  /// 확대/축소해도 점과 방향 범위의 비율·간격이 흐트러지지 않는다.
+  ///
+  /// 아래 좌표는 모두 [_currentLocationIconDesignSize] 기준의 디자인 단위이고,
+  /// 실제 비트맵은 [_currentLocationIconPixelRatio]배로 렌더링한다 — 화면상
+  /// 크기는 iconSize가 정하고(=[_currentLocationIconSize]) 이 배율은 해상도만
+  /// 올린다. iconSize가 디자인 1px = 화면 1px로 고정이므로, 아래 반지름은 그대로
+  /// 화면 픽셀로 읽으면 된다(코어 반지름 16 = 화면 지름 32px).
   static Future<Uint8List> _renderCurrentLocationIcon({
     required bool showHeading,
   }) async {
-    const canvasSize = 144.0;
+    const canvasSize = _currentLocationIconDesignSize;
     const center = Offset(canvasSize / 2, canvasSize / 2);
+    const pixelSize = canvasSize * _currentLocationIconPixelRatio;
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(
       recorder,
-      const Rect.fromLTWH(0, 0, canvasSize, canvasSize),
+      const Rect.fromLTWH(0, 0, pixelSize, pixelSize),
     );
+    canvas.scale(_currentLocationIconPixelRatio);
 
     if (showHeading) {
       const coneRadius = 62.0;
@@ -1124,24 +1264,31 @@ class FloorPlanViewState extends State<FloorPlanView> {
 
     canvas.drawCircle(
       center + const Offset(0, 2),
-      27,
+      _currentLocationRimRadius + 3,
       Paint()
         ..color = const Color(0x33000000)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
     );
-    canvas.drawCircle(center, 24, Paint()..color = Colors.white);
+    canvas.drawCircle(
+      center,
+      _currentLocationRimRadius,
+      Paint()..color = Colors.white,
+    );
 
     const blue = Color(0xFF1976D2);
-    canvas.drawCircle(center, 18, Paint()..color = blue);
+    canvas.drawCircle(center, _currentLocationCoreRadius, Paint()..color = blue);
+    // 코어 왼쪽 위의 광택 점. 코어 크기를 바꿔도 비율이 유지되도록 코어 반지름에서
+    // 파생시킨다(원본 디자인의 코어 18 / offset 5 / 반지름 4.5 비율).
+    const glossOffset = _currentLocationCoreRadius * 0.28;
     canvas.drawCircle(
-      center - const Offset(5, 5),
-      4.5,
+      center - const Offset(glossOffset, glossOffset),
+      _currentLocationCoreRadius * 0.25,
       Paint()..color = const Color(0x66FFFFFF),
     );
 
     final image = await recorder.endRecording().toImage(
-      canvasSize.toInt(),
-      canvasSize.toInt(),
+      pixelSize.toInt(),
+      pixelSize.toInt(),
     );
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
     return byteData!.buffer.asUint8List();

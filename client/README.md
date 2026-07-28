@@ -30,7 +30,7 @@ samples, guidance on mobile development, and a full API reference.
 | [`core/`](lib/core/README.md) | 전역 배선. DI 싱글턴, API 주소·키·데모 건물 |
 | [`routing/`](lib/routing/README.md) | 화면 경로 이름과 `MaterialApp` 등록 규칙 |
 | [`screens/`](lib/screens/README.md) | 실외·실내 지도, 목적지 검색, 경로 안내, 도착, 디버그 화면 |
-| [`widgets/`](lib/widgets/README.md) | 지도·경로선·검색 시트·마커·공통 바 |
+| [`widgets/`](lib/widgets/README.md) | 지도·경로선·검색 패널·마커·공통 바 |
 | [`features/`](lib/features/README.md) | 독립 기능 목차: PDR 실내 측위와 지도/PDR 개발 진단 |
 | ↳ [`indoor_navigation/`](lib/features/indoor_navigation/README.md) | PDR 계약·컨트롤러·맵 매칭·플랫폼 센서·진단 |
 | ↳ [`debug_mode/`](lib/features/debug_mode/README.md) | 개발용 지도 오버레이·보정·PDR 흔적·설정 시트 |

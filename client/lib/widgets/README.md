@@ -10,17 +10,38 @@
 | 지도 | [`floor_plan_view.dart`](floor_plan_view.dart) | MapLibre 층 지도, 매장·POI·현재 위치·경로 표시 |
 | 지도 | [`route_polyline.dart`](route_polyline.dart), [`location_marker.dart`](location_marker.dart), [`uncertainty_circle.dart`](uncertainty_circle.dart) | 경로선, 위치와 불확실성 표현 |
 | 지도 셸 | [`map_top_bar.dart`](map_top_bar.dart), [`map_bottom_bar.dart`](map_bottom_bar.dart), [`eta_card.dart`](eta_card.dart), [`status_badge.dart`](status_badge.dart) | 지도 화면 공통 조작·상태 |
-| 탐색 시트 | [`search_sheet.dart`](search_sheet.dart), [`ai_search_sheet.dart`](ai_search_sheet.dart), [`directions_sheet.dart`](directions_sheet.dart), [`building_switcher_sheet.dart`](building_switcher_sheet.dart) | 매장 검색(경량)·AI 검색(의미), 출발/도착 검색, 건물 전환 |
+| 탐색 | [`search_panel.dart`](search_panel.dart), [`ai_search_sheet.dart`](ai_search_sheet.dart), [`directions_sheet.dart`](directions_sheet.dart), [`building_switcher_sheet.dart`](building_switcher_sheet.dart) | 매장 검색(경량)·AI 검색(의미), 출발/도착 검색, 건물 전환 |
 | 장소 시트 | [`category_stores_sheet.dart`](category_stores_sheet.dart), [`store_info_sheet.dart`](store_info_sheet.dart), [`favorites_sheet.dart`](favorites_sheet.dart) | 카테고리 매장·매장 정보·즐겨찾기 |
 | 공통 | [`sheet_header.dart`](sheet_header.dart) | 시트 헤더 |
 
-## 검색 두 갈래
+## 검색은 한 곳, 두 단계
 
-상단 검색창은 입력을 받지 않고 탭하면 [`search_sheet.dart`](search_sheet.dart)를 올린다.
-시트는 경량 매칭(`/query/destination`, 형태소 정규화 포함)만 쓰고, 빈손일 때 "AI 검색으로
-찾기"로 [`ai_search_sheet.dart`](ai_search_sheet.dart)(`/query/ai`, 의미 검색)에 넘긴다.
-AI 검색은 카테고리 열의 pill로도 바로 열린다. 매 검색마다 임베딩 모델을 태우지 않으려고
-갈래를 나눈 것이라, 둘을 하나로 합치지 않는다.
+검색은 [`map_top_bar.dart`](map_top_bar.dart)의 검색창에서 **그 자리에서** 이뤄지고,
+결과는 바로 아래에 붙는 [`search_panel.dart`](search_panel.dart)가 보여준다. 한동안은
+검색창을 탭하면 입력창이 하나 더 있는 시트가 올라왔는데, 방금 누른 창과 실제로 치는
+창이 달라 검색창이 두 개인 것처럼 보였다. **다만 결과를 놓을 자리는 반드시 있어야
+한다** — 결과 표시 없이 상단에서만 검색하면 그보다 더 예전처럼 스낵바로만 알리게 되어
+"쳤는데 아무것도 안 나온다"가 된다.
+
+사용자는 "일반 검색"과 "AI 검색"을 구분하지 않는다 — 매장 이름을 치든 자연어를 치든
+같은 입력창에 치고, 어느 경로로 찾을지는 패널이 정한다.
+
+- **타이핑 중**(`query` 변경): 경량 매칭(`/query/destination`)만. 형태소 정규화(Kiwi)가
+  이 경로에 있어 매장 이름은 즉시 걸린다.
+- **엔터로 확정**(`submitTick` 증가): 경량이 빈손이면 의미 검색(`/query/ai`)까지 자동으로
+  이어 붙인다.
+
+두 단계 모두 **건물 전체 층**을 뒤진다. 이름을 알고 검색하는 사용자는 그 매장이 몇 층인지
+모르는 게 보통이라, 보고 있는 층으로 좁히면 분명히 있는 매장이 "결과 없음"으로 나온다.
+층 스코프(`currentFloorId`)를 쓰는 건 [`directions_sheet.dart`](directions_sheet.dart)와
+카테고리 매장 시트뿐이다.
+
+의미 검색을 타이핑 중이 아니라 확정 시점에만 붙이는 이유는 비용이다. 백엔드가 임베딩
+모델을 로드하면 첫 호출이 20초대까지 가므로, 글자마다 던지면 "밥"·"밥 먹"이 전부 모델을
+태운다. **이 조건을 지우면 검색이 느려지는 게 아니라 멈춘 것처럼 보인다.**
+
+[`ai_search_sheet.dart`](ai_search_sheet.dart)는 경로 안내 화면의 FAB에서만 쓰는 대화형
+검색 패널로 남아 있다.
 
 ## `FloorPlanView` 경계
 
