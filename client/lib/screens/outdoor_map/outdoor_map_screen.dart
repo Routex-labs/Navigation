@@ -6,7 +6,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform, kIsWeb;
+    show TargetPlatform, defaultTargetPlatform, kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart' as ll;
@@ -1741,37 +1741,68 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
     // 폴리곤 히트 검사만 하고, 나머지 탭은 흡수하지 않아 지도 pan/zoom 제스처를
     // 방해하지 않는다(단일 탭이 여기 오면 그건 pan이 아닌 명시적 탭).
-    if (!_isInsideBuilding(point)) return;
+    if (!_isInsideBuilding(point)) {
+      // 실내 모드에서 건물 밖을 탭한 것 — 사용자가 야외로 나가겠다는 뜻이다.
+      // 축소해서 나가는 것보다 훨씬 직관적인 탈출 경로다.
+      if (_indoorEntered) _exitIndoorByOutsideTap();
+      return;
+    }
 
     // 폴리곤을 잠깐 진하게 반짝여 "인식됐다"는 시각 피드백을 준 뒤, 야외 지도
     // 위에 실내 UI 오버레이(층 chip, 위치 지정 버튼 등)를 켠다. 화면 모드는
     // 그대로 야외로 유지된다.
+    //
+    // 반짝임은 장식이라 컨트롤러가 아직 없으면 건너뛴다. 진입을 컨트롤러 유무에
+    // 걸어 두면(예전 `if (controller == null) return;`) 스타일 로드 전에 건물을
+    // 탭한 사용자에게 아무 반응도 없다.
     final controller = _mapController;
-    if (controller == null) return;
-    // fillColor를 매번 함께 넘긴다 — 빼면 검정으로 되돌아간다
-    // (indoor_overlay_layers.dart 상단 주석 참고).
-    await controller.setLayerProperties(
-      _buildingFillLayerId,
-      buildingFillProps(_buildingFillOpacityPressed),
-    );
-    await Future<void>.delayed(const Duration(milliseconds: _buildingPressedHoldMs));
-    if (!mounted) return;
-    await controller.setLayerProperties(
-      _buildingFillLayerId,
-      buildingFillProps(_buildingFillOpacityDefault),
-    );
-    _triggerIndoorEntry();
+    if (controller != null) {
+      // fillColor를 매번 함께 넘긴다 — 빼면 검정으로 되돌아간다
+      // (indoor_overlay_layers.dart 상단 주석 참고).
+      await controller.setLayerProperties(
+        _buildingFillLayerId,
+        buildingFillProps(_buildingFillOpacityPressed),
+      );
+      await Future<void>.delayed(
+        const Duration(milliseconds: _buildingPressedHoldMs),
+      );
+      if (!mounted) return;
+      await controller.setLayerProperties(
+        _buildingFillLayerId,
+        buildingFillProps(_buildingFillOpacityDefault),
+      );
+    }
+    _triggerIndoorEntry(explicit: true);
   }
 
   /// 실내 진입 트리거 — 건물 탭·줌 임계값 초과·GPS 근접 감지 중 하나로 호출.
   /// 화면 모드는 바꾸지 않고 야외 지도 위에 얹는 실내 UI 오버레이만 켠다.
   /// 사용자가 축소해 임계값 아래로 내려가면 [_handleCameraIdle]이 오버레이를
   /// 다시 끄고 트리거를 재무장한다.
-  void _triggerIndoorEntry() {
-    if (!_autoIndoorEntryArmed) return;
+  ///
+  /// [explicit]는 사용자가 건물 폴리곤을 **직접 탭**한 경우다. 이때는
+  /// [_autoIndoorEntryArmed]를 무시한다. 무장 플래그는 "같은 줌에서 자동 진입이
+  /// 반복 발화하지 않게" 하려고 있는 것이라, 명시적 탭까지 막으면 건물 밖을 탭해
+  /// 야외로 나온 사용자가 같은 줌에서 건물을 다시 탭해도 들어갈 수 없게 된다.
+  void _triggerIndoorEntry({bool explicit = false}) {
+    if (!explicit && !_autoIndoorEntryArmed) return;
     _autoIndoorEntryArmed = false;
     if (_indoorEntered) return;
     _setIndoorEntered(true);
+  }
+
+  /// 실내 모드에서 건물 바깥 야외 지도를 탭했을 때의 이탈.
+  ///
+  /// 재무장([_autoIndoorEntryArmed])은 **하지 않는다.** 탭으로 나온 시점의 줌은
+  /// 보통 진입 임계값 위이므로, 재무장하면 다음 카메라 정지에서 곧바로 다시
+  /// 실내로 끌려 들어가 "나갈 수 없는" 상태가 된다. 다시 들어오는 경로는 두
+  /// 가지가 열려 있다 — 건물을 직접 탭하거나(위 [_triggerIndoorEntry]의
+  /// `explicit`), 이탈 임계값 아래로 축소했다가 다시 확대하는 것.
+  void _exitIndoorByOutsideTap() {
+    // 앵커 배치 대기 중이었다면 함께 종료해 하단 바 버튼 톤도 되돌린다.
+    // (배치 대기 중인 탭은 위에서 이미 소비되므로 방어적 처리다.)
+    if (_placingPdrAnchor) _setPlacingAnchor(false);
+    _setIndoorEntered(false);
   }
 
   /// [_indoorEntered] 상태 변경을 한 곳으로 모은 헬퍼. setState + 상위 콜백 통지에
