@@ -108,8 +108,12 @@ const _pdrCurrentLayerId = 'outdoor-pdr-current-dot';
 // 지도의 현재 위치 마커와 동일한 시각 언어를 유지하려고 같은 파란 색·크기를
 // 사용한다(현시점 이 렌더링은 두 화면에 각각 있음 — 시각 스타일을 바꿀 땐
 // floor_plan_view.dart의 _renderCurrentLocationIcon도 함께 맞춰야 한다).
-const _pdrLocationImageName = 'outdoor-pdr-location';
-const _pdrLocationDotImageName = 'outdoor-pdr-location-dot';
+// 이름 끝에 코어 반지름을 박아 둔다 — 웹 addImage는 같은 이름이 이미 있으면
+// 새 비트맵을 버리고 건너뛰고, removeImage도 없어서 디자인을 바꿔도 살아 있는
+// 지도에는 예전 크기가 남는다(floor_plan_view.dart의 같은 주석 참고).
+const _pdrLocationImageName = 'outdoor-pdr-location-r$_pdrLocationCoreRadius';
+const _pdrLocationDotImageName =
+    'outdoor-pdr-location-dot-r$_pdrLocationCoreRadius';
 // 아래 세 값은 floor_plan_view.dart의 _currentLocationIcon* 상수와 같은 뜻이고
 // 같은 값이어야 한다. 코어 지름 44px은 야외 GPS 정확도 원의 테두리 지름과
 // 일치시켜, 사용자가 크기로 인식하는 경계가 두 마커에서 같아지게 잡은 값이다.

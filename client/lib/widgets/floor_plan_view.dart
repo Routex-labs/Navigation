@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -47,8 +48,20 @@ const _verticalTransportFillLayerId = 'floor-vertical-transport-fill';
 
 /// 목적지 핀 이미지의 addImage 등록 이름.
 const _destinationPinImageName = 'marker-destination-pin';
-const _currentLocationImageName = 'marker-current-location';
-const _currentLocationDotImageName = 'marker-current-location-dot';
+
+/// 현재 위치 심볼의 addImage 등록 이름. **이름 끝에 코어 반지름을 박아 둔다.**
+///
+/// maplibre_gl 웹 구현의 addImage는 같은 이름이 이미 등록돼 있으면 새 비트맵을
+/// 버리고 조용히 건너뛴다(`if (!_map.hasImage(name))` … `else { print(...) }`,
+/// maplibre_web_gl_platform.dart). 게다가 이 패키지의 플랫폼 인터페이스에는
+/// removeImage가 없어서 이미 등록된 이름을 지울 방법도 없다. 그래서 이름이
+/// 고정이면, 살아 있는 지도 인스턴스에 예전 크기의 비트맵이 그대로 남아
+/// 디자인을 바꿔도 화면이 안 바뀐다. 반지름을 이름에 넣어 두면 디자인이 바뀔
+/// 때 이름도 함께 바뀌므로 항상 새 비트맵으로 등록된다.
+const _currentLocationImageName =
+    'marker-current-location-r$_currentLocationCoreRadius';
+const _currentLocationDotImageName =
+    'marker-current-location-dot-r$_currentLocationCoreRadius';
 
 /// 현재 위치 심볼을 그릴 때 쓰는 디자인 좌표계의 한 변 길이(px). 아래 렌더
 /// 코드의 모든 반지름/오프셋은 이 좌표계 기준이다.
@@ -84,6 +97,35 @@ const _currentLocationCoreRadius = 22.0;
 /// 에서는 묻히더라도 매장 fill(#F3F1EF)이나 경로선 위에서는 코어가 배경과
 /// 분리돼 보이게 한다.
 const _currentLocationRimRadius = _currentLocationCoreRadius + 5;
+
+/// 현재 위치 심볼 레이어 id.
+const _currentMarkerLayerId = 'floor-markers-current';
+
+/// 현재 위치 심볼 레이어의 속성 묶음. 등록([_onStyleLoaded])과 hot reload 시
+/// 재적용([FloorPlanViewState.reassemble])이 같은 값을 쓰도록 한 곳에 모아 둔다.
+///
+/// 현재 위치와 heading을 하나의 심볼로 합친다. 미터 단위 GeoJSON 폴리곤은
+/// 확대할수록 화살표만 커지므로, 고정 픽셀 PNG를 회전시켜 점과 방향 표시가
+/// 언제나 같은 비율과 크기를 유지하게 한다. heading이 없을 때는 북쪽을 임의로
+/// 가리키지 않고 동일 디자인의 원형 점만 사용한다.
+const _currentLocationSymbolProperties = SymbolLayerProperties(
+  iconImage: [
+    'case',
+    ['has', 'heading'],
+    _currentLocationImageName,
+    _currentLocationDotImageName,
+  ],
+  iconSize: _currentLocationIconSize,
+  iconRotate: [
+    'coalesce',
+    ['get', 'heading'],
+    0,
+  ],
+  iconRotationAlignment: 'map',
+  iconPitchAlignment: 'viewport',
+  iconAllowOverlap: true,
+  iconIgnorePlacement: true,
+);
 
 /// 지도 위에 얹을 현재 위치/목적지 점 마커. 종류에 따라 스타일이 달라진다
 /// (마커 색상은 [_markersGeoJson]의 circle-color data-driven 표현식이 결정).
@@ -248,6 +290,49 @@ class FloorPlanViewState extends State<FloorPlanView> {
   void dispose() {
     widget.controller?._detach(this);
     super.dispose();
+  }
+
+  /// hot reload 때 현재 위치 심볼을 다시 등록·적용한다(debug 빌드에서만 호출됨).
+  ///
+  /// MapLibre 지도는 PlatformView/캔버스라 hot reload로도 살아남고, 스타일이
+  /// 이미 로드된 상태에서는 `onStyleLoadedCallback`이 다시 불리지 않는다. 마커
+  /// 비트맵 등록과 `iconSize` 적용이 전부 [_onStyleLoaded] 안에 있으므로, 이
+  /// 훅이 없으면 마커 디자인을 고쳐도 hot reload에서는 화면이 그대로다 —
+  /// "크기를 바꿨는데 안 바뀐다"의 실제 원인이 이것이었다.
+  @override
+  void reassemble() {
+    super.reassemble();
+    unawaited(_refreshCurrentLocationSymbol());
+  }
+
+  /// 현재 위치 비트맵을 다시 등록하고 심볼 레이어 속성을 다시 적용한다.
+  ///
+  /// 비트맵 이름에 코어 반지름이 들어 있어(_currentLocationImageName), 크기를
+  /// 바꿨다면 새 이름이므로 웹 addImage의 "이미 있으면 건너뛰기"에 걸리지 않는다.
+  /// 반대로 크기를 안 바꿨다면 같은 이름이라 건너뛰고 로그만 남는다 — 어느
+  /// 경우든 안전하다. setLayerProperties는 patch가 아니라 전체 교체이므로
+  /// 속성 묶음을 통째로 넘긴다.
+  Future<void> _refreshCurrentLocationSymbol() async {
+    final controller = _controller;
+    if (controller == null || !_styleReady) return;
+    try {
+      await controller.addImage(
+        _currentLocationImageName,
+        await _renderCurrentLocationIcon(showHeading: true),
+      );
+      await controller.addImage(
+        _currentLocationDotImageName,
+        await _renderCurrentLocationIcon(showHeading: false),
+      );
+      await controller.setLayerProperties(
+        _currentMarkerLayerId,
+        _currentLocationSymbolProperties,
+      );
+    } catch (error, stackTrace) {
+      // hot reload 편의 기능이므로 실패해도 앱을 죽이지 않는다. 레이어가 이미
+      // 사라진 뒤(층 전환 직후 등)에 호출되면 native가 예외를 던질 수 있다.
+      debugPrint('current location symbol refresh failed: $error\n$stackTrace');
+    }
   }
 
   @override
@@ -772,25 +857,8 @@ class FloorPlanViewState extends State<FloorPlanView> {
     // 임의로 가리키지 않고 동일 디자인의 원형 점만 사용한다.
     await controller.addSymbolLayer(
       _markersSourceId,
-      'floor-markers-current',
-      const SymbolLayerProperties(
-        iconImage: [
-          'case',
-          ['has', 'heading'],
-          _currentLocationImageName,
-          _currentLocationDotImageName,
-        ],
-        iconSize: _currentLocationIconSize,
-        iconRotate: [
-          'coalesce',
-          ['get', 'heading'],
-          0,
-        ],
-        iconRotationAlignment: 'map',
-        iconPitchAlignment: 'viewport',
-        iconAllowOverlap: true,
-        iconIgnorePlacement: true,
-      ),
+      _currentMarkerLayerId,
+      _currentLocationSymbolProperties,
       filter: [
         '==',
         ['get', 'kind'],
