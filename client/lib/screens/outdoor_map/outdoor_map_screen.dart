@@ -857,7 +857,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
     if (!needZoomIn && !farFromBuilding) return;
 
-    final targetZoom = needZoomIn ? indoorEntryZoomThreshold : cam.zoom;
+    // 확대해 줄 때의 목표 zoom도 화면 폭에 맞춘 임계값을 쓴다. 고정 17.5로
+    // 올리면 폰에서는 건물이 화면 밖으로 넘치게 확대돼, 포커스를 맞췄는데
+    // 오히려 건물이 안 보이게 된다.
+    final targetZoom = needZoomIn ? _entryZoomThreshold() : cam.zoom;
     await controller.animateCamera(
       CameraUpdate.newLatLngZoom(_toGl(center), targetZoom),
     );
@@ -2030,7 +2033,34 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     unawaited(_syncIndoorOverlayFade());
   }
 
+  /// 지금 화면 폭에서 쓸 실내 진입 임계값.
+  ///
+  /// 고정값 [indoorEntryZoomThreshold]는 화면이 좁을수록 "더 깊이 확대해야
+  /// 닿는" 값이라, 폰에서는 건물이 화면 밖으로 넘칠 때까지 확대해야 진입이
+  /// 발화했다. 근거와 보정식은 [indoorEntryZoomThresholdFor] 참고.
+  ///
+  /// 확대 진입 판정([_handleCameraIdle])과 건물 포커스
+  /// ([_recenterOnBuildingIfNeeded])가 **같은 값을 봐야 한다.** 둘이 어긋나면
+  /// 포커스가 맞춰 준 zoom이 진입 임계값에 못 미쳐, 건물로 포커스는 됐는데
+  /// 정작 실내로는 들어가지 않는 상태가 만들어진다.
+  double _entryZoomThreshold() {
+    final footprint = _buildingFootprint;
+    if (footprint == null || footprint.length < 3) {
+      return indoorEntryZoomThreshold;
+    }
+    return indoorEntryZoomThresholdFor(
+      buildingWidthMeters: polygonWidthMeters(footprint),
+      // 이 화면의 지도는 Stack을 꽉 채우고, MapShellScreen도 Scaffold body
+      // 전체를 내주므로 지도 폭 == 화면 폭이다.
+      viewportWidthPx: MediaQuery.sizeOf(context).width,
+      latitude: _buildingCenter(footprint)?.latitude ?? referenceLatitude,
+    );
+  }
+
   void _handleCameraIdle() {
+    // 카메라 콜백은 위젯이 사라진 뒤에도 한 박자 늦게 도착할 수 있다.
+    // _entryZoomThreshold가 context를 읽으므로 먼저 걸러낸다.
+    if (!mounted) return;
     final controller = _mapController;
     if (controller == null) return;
     // zoom과 target은 같은 CameraPosition에서 나오고 둘 다 non-nullable이므로,
@@ -2047,6 +2077,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     switch (indoorEntryTransitionForZoom(
       camera.zoom,
       buildingNearby: buildingNearby,
+      entryZoom: _entryZoomThreshold(),
     )) {
       case IndoorEntryTransition.enter:
         _triggerIndoorEntry();

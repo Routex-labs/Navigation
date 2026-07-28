@@ -53,6 +53,34 @@ bool isPointInPolygon(ll.LatLng point, List<ll.LatLng> polygon) {
   return inside;
 }
 
+/// [polygon]의 동서 방향 폭(m).
+///
+/// 실내 진입 임계값을 화면 폭에 맞출 때(`indoorEntryZoomThresholdFor`) "이 건물이
+/// 화면에 담기는 zoom"의 입력으로 쓴다.
+///
+/// 회전을 고려하지 않은 **축 정렬 경계 상자**의 폭이다. 지도는 기본이 정북
+/// 정렬이라 사용자가 실제로 보는 가로 폭과 같고, 사용자가 지도를 돌린 경우에도
+/// 회전한 건물의 실제 가로 폭보다 크거나 같게 나와 임계값이 보수적으로
+/// (=진입이 조금 늦게) 움직일 뿐이라 과잉 진입 쪽으로는 새지 않는다.
+///
+/// 점이 3개 미만이면 0을 돌려준다. 호출부는 이때 보정 없이 기본 임계값을 쓴다.
+double polygonWidthMeters(List<ll.LatLng> polygon) {
+  if (polygon.length < 3) return 0;
+  var minLng = polygon.first.longitude;
+  var maxLng = minLng;
+  var latSum = 0.0;
+  for (final p in polygon) {
+    if (p.longitude < minLng) minLng = p.longitude;
+    if (p.longitude > maxLng) maxLng = p.longitude;
+    latSum += p.latitude;
+  }
+  // 경도 1도의 미터는 위도에 따라 줄어든다. 건물 규모에서는 평균 위도 하나로
+  // 근사해도 오차가 무시할 수준이다([metersToPolygon]과 같은 근사).
+  final meanLat = latSum / polygon.length;
+  final mPerDegLng = _metersPerDegreeLat * math.cos(meanLat * math.pi / 180);
+  return (maxLng - minLng) * mPerDegLng;
+}
+
 /// [point]에서 [polygon]까지의 거리(m). 내부면 0이다.
 ///
 /// 외곽선의 **변**까지의 거리를 재므로, 꼭짓점만 비교할 때와 달리 긴 벽면
