@@ -115,6 +115,17 @@ const _indoorDestLayerId = 'outdoor-indoor-destination-pin';
 // 새 비트맵을 버리므로(위 _pdrLocationImageName 주석 참고) 디자인을 바꿀 땐
 // 이름도 같이 바꿔야 살아 있는 지도에 반영된다.
 const _destinationPinImageName = 'outdoor-destination-pin-solid-v1';
+// 도착 핀 iconSize의 zoom 보간 구간(z16 → z20). 원본 비트맵이 128x172px이라
+// 화면 높이는 172 x iconSize다.
+//
+// 기준은 현재 위치 마커다 — 그쪽은 zoom과 무관하게 42px 고정 도트인데
+// (_pdrLocationRimRadius 21의 지름), 이전 값(0.115/0.25)에서는 실내 오버레이를
+// 실제로 보는 zoom 18에서 핀이 31px밖에 안 돼 "저기가 목적지"를 가리키는
+// 랜드마크가 사용자 위치 도트보다 작았다. 지금 값은 z18 ≈ 48px, z20 ≈ 65px로
+// 도트보다 확실히 크다. 위쪽(z20) 상한은 확대했을 때 핀이 도착 매장 폴리곤을
+// 통째로 덮지 않는 선에서 잡았다.
+const _destinationPinIconSizeZ16 = 0.18;
+const _destinationPinIconSizeZ20 = 0.38;
 // 실내 진입 상태에서 사용자의 PDR 위치(앵커 또는 실시간 확정 위치)를 그리는
 // 전용 소스·레이어. 야외 GPS 마커와 함께 그려질 수 있지만 색과 위치가 달라
 // 겹쳐도 서로 구분된다 — GPS는 건물 밖 신호, PDR은 건물 내 실측이라 두 표시가
@@ -1650,8 +1661,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 실내 경로 도착 핀 — 현재 위치 마커보다 **나중에** 등록해, 도착 노드와
     // 사용자 위치가 겹칠 때 도착 핀이 위에 오게 한다(실내 지도와 같은 순서).
     // 핀 바닥(tip)이 도착 노드 좌표에 오도록 iconAnchor는 bottom이고, 크기는
-    // 실내 지도와 같은 zoom 보간식을 써서 축소했을 때 핀이 도면을 다 덮지
-    // 않게 한다. allowOverlap을 켜 매장 라벨과 겹쳐도 핀은 항상 보인다.
+    // zoom 보간식으로 걸어 축소했을 때 핀이 도면을 다 덮지 않게 한다.
+    // allowOverlap을 켜 매장 라벨과 겹쳐도 핀은 항상 보인다.
     await controller.addImage(
       _destinationPinImageName,
       await _renderDestinationPinIcon(),
@@ -1670,9 +1681,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           ['linear'],
           ['zoom'],
           16,
-          0.115,
+          _destinationPinIconSizeZ16,
           20,
-          0.25,
+          _destinationPinIconSizeZ20,
         ],
         iconAnchor: 'bottom',
         iconAllowOverlap: true,
