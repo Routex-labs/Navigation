@@ -49,13 +49,16 @@
     py -3.12 -m venv .venv
     .\.venv\Scripts\Activate.ps1
     python -m pip install -r requirements.txt
+    python -m scripts.warm_embedding_model
     ```
     ```bash
     # macOS (backend 폴더)
     python3 -m venv .venv
     source .venv/bin/activate
     python -m pip install -r requirements.txt
+    python -m scripts.warm_embedding_model
     ```
+    - `warm_embedding_model`은 `/query/ai`용 임베딩 모델(약 420MB)을 로컬 HF 캐시에 미리 받아 둔다. **빼먹으면 첫 AI 질의가 다운로드를 통째로 기다린다**(실측 3분 29초, 그동안 프론트는 "찾는 중…"만 돈다). 캐시가 이미 있으면 즉시 끝난다.
     - 검증할 때마다:
     ```powershell
     # Windows — UTF-8 로그. PS 5.1의 Tee-Object는 파일을 UTF-16으로 쓰므로 패스스루로 tee한다.
@@ -63,6 +66,7 @@
     python -m scripts.seed.reset_and_seed
     $env:NAV_SQL_ECHO = '1'
     $env:NAV_HTTP_CAPTURE = '1'
+    $env:NAV_WARM_EMBEDDING = '1'
     python -m uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8001 2>&1 | ForEach-Object { $_; $_ | Out-File ..\backend-local.log -Append -Encoding utf8 }
     ```
     ```bash
@@ -71,8 +75,10 @@
     python -m scripts.seed.reset_and_seed
     export NAV_SQL_ECHO=1
     export NAV_HTTP_CAPTURE=1
+    export NAV_WARM_EMBEDDING=1
     python -m uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8001 2>&1 | tee ../backend-local.log
     ```
+    - `NAV_WARM_EMBEDDING=1`은 기동 직후 백그라운드로 임베딩 모델을 올려 첫 `/query/ai`의 로드 대기(캐시 히트여도 약 6.5초)를 없앤다. 기본값이 꺼짐이라 **안 켜면 재시작할 때마다 첫 AI 질의가 그 시간을 뒤집어쓴다.** AI 질의를 안 건드리는 작업이면 생략해도 되지만, 켜 두면 400MB대 메모리를 상주시킨다는 점만 알아 둔다.
     - `--reload-dir app`으로 **감시 범위를 `app/` 코드로만 한정**한다. 안 그러면 `tests/`·`resources/` 편집도 리로드를 트리거해 서버가 리로드되다 죽는다(Windows에서 특히).
 
   **2') Docker는 배포 준비 때만 사용**
