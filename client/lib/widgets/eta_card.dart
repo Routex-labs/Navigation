@@ -10,6 +10,7 @@ class EtaCard extends StatelessWidget {
     required this.minutes,
     this.label = '목적지까지',
     this.onClose,
+    this.onClosePointerDown,
   });
 
   final double distanceMeters;
@@ -20,6 +21,7 @@ class EtaCard extends StatelessWidget {
   /// 직접 고른 경로를 취소할 때만 쓰고, 자동 안내(예: 건물 입구까지)에는
   /// null이라 버튼이 사라진다.
   final VoidCallback? onClose;
+  final ValueChanged<Offset>? onClosePointerDown;
 
   @override
   Widget build(BuildContext context) {
@@ -67,22 +69,26 @@ class EtaCard extends StatelessWidget {
               // "안내 종료"는 되돌리기 어려운 조작(경로/도착지 리셋)이므로
               // 색상은 부드럽되, 다른 카드 요소보다 명확히 눌러야 할 지점으로
               // 읽히도록 outlined 톤을 준다.
-              TextButton(
-                onPressed: onClose,
-                style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xFFD93025),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  shape: RoundedRectangleBorder(
-                    side: const BorderSide(color: Color(0x33D93025)),
-                    borderRadius: BorderRadius.circular(20),
+              Listener(
+                onPointerDown: (event) =>
+                    onClosePointerDown?.call(event.position),
+                child: TextButton(
+                  onPressed: onClose,
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFFD93025),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                      side: const BorderSide(color: Color(0x33D93025)),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                  textStyle: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  child: const Text('안내 종료'),
                 ),
-                child: const Text('안내 종료'),
               ),
             ],
           ],

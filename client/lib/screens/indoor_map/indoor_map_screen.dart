@@ -23,6 +23,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/eta_card.dart';
 import '../../widgets/floor_plan_view.dart';
 import '../../widgets/floor_selector.dart';
+import '../../widgets/map_overlay_tap_guard.dart';
 
 const _walkingSpeedMetersPerSecond = 1.2;
 
@@ -128,6 +129,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   final _floorSelectorKey = GlobalKey();
   final _pdrControlKey = GlobalKey();
   final _debugModeSettingsKey = GlobalKey();
+  final _etaCardKey = GlobalKey();
+  final _mapOverlayTapGuard = MapOverlayTapGuard();
+  Offset? _etaClosePointerDown;
 
   /// 위치 지정 안내 배너. 오른쪽 상단 X를 누른 탭이 지도까지 새어들어가 배너
   /// 아래 지점에 앵커가 찍히는 것을 막는다 — 취소했는데 위치가 지정되면
@@ -138,11 +142,14 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   /// 매장 선택 처리를 건너뛰어야 한다. 자체 오버레이(층 selector, PDR)와
   /// 상위가 넘겨준 outer 오버레이(검색창·저장 장소·하단 바 등)를 모두 검사한다.
   bool _isTapOnMapOverlay(Offset globalPoint) {
+    if (_mapOverlayTapGuard.consumeIfBlocked(globalPoint)) return true;
+
     for (final key in [
       _floorSelectorKey,
       _pdrControlKey,
       _debugModeSettingsKey,
       _placingHintKey,
+      _etaCardKey,
       ...widget.outerOverlayKeys,
     ]) {
       final ctx = key.currentContext;
@@ -716,6 +723,11 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   }
 
   void _clearRoute() {
+    final pointerDown = _etaClosePointerDown;
+    _etaClosePointerDown = null;
+    if (pointerDown != null) {
+      _mapOverlayTapGuard.retainPointerDown(pointerDown);
+    }
     setState(() {
       _route = null;
       _multiFloorRoute = null;
@@ -1356,6 +1368,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                 child: EtaCard(
+                  key: _etaCardKey,
                   distanceMeters: _etaDistanceMeters(route),
                   minutes: (_etaDistanceMeters(route) /
                           _walkingSpeedMetersPerSecond /
@@ -1364,6 +1377,8 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
                       .clamp(1, 999),
                   label: _etaLabel(routeDestination),
                   onClose: _clearRoute,
+                  onClosePointerDown: (position) =>
+                      _etaClosePointerDown = position,
                 ),
               ),
             ),
