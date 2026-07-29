@@ -89,6 +89,23 @@ class SemanticResult:
         """지금 의미 검색 기능을 쓸 수 없는 상태인가(모델·인덱스 미가용)."""
         return self.reason in _DEGRADED_REASONS
 
+
+@dataclass(frozen=True)
+class SemanticResults:
+    """의미 검색 상위 N건과 사유. 탐색(DiscoveryResponse)이 여러 후보를 필요로 한다.
+
+    `SemanticResult`(1건)와 사유 체계는 같다 — hits가 비어 있어도 reason으로
+    degraded/no_match를 구분한다.
+    """
+
+    reason: SemanticReason
+    hits: tuple[tuple[float, "Store", "Floor"], ...] = ()
+
+    @property
+    def is_degraded(self) -> bool:
+        return self.reason in _DEGRADED_REASONS
+
+
 _model_lock = threading.Lock()
 _model: Any | None = None
 _model_load_failed = False
@@ -244,6 +261,63 @@ def reset_indexes() -> None:
         _indexes.clear()
 
 
+def search_many(
+    session: "Session",
+    building_id: str,
+    text: str,
+    *,
+    limit: int = _TOP_K,
+) -> SemanticResults:
+    """건물 인덱스에서 임계값 이상 상위 `limit`건을 사유와 함께 돌려준다.
+
+    판정 규칙은 `search()`와 같다. **최상위 후보가 임계값 미달이면 BELOW_THRESHOLD로
+    끝낸다** — 점수는 내림차순이라 그 아래를 더 볼 이유가 없고, "상위 하나는 미달인데
+    아래가 통과"라는 상태 자체가 없다.
+
+    살아 있는 후보가 하나도 없으면(인덱스 빌드 후 전부 삭제 등) INDEX_UNAVAILABLE —
+    질의를 바꿔도 소용없는 상태라 degraded 쪽으로 본다.
+    """
+    model = _get_model()
+    if model is None:
+        return SemanticResults(SemanticReason.MODEL_UNAVAILABLE)
+
+    got = _get_index(session, building_id)
+    if got is None:
+        return SemanticResults(SemanticReason.INDEX_UNAVAILABLE)
+    index, store_ids = got
+
+    # 인덱스는 store_id만 캐시한다(교차 요청 지속). ORM 객체는 매 요청 현재 세션으로
+    # 새로 로드해 detached 객체·stale 층 정보를 피한다.
+    rows = {store.id: (store, floor) for store, floor in _load_stores(session, building_id)}
+
+    query_vec = _encode(model, [text])
+    # 삭제된 매장을 건너뛰어야 하므로 요청 수보다 넉넉히 받는다.
+    k = min(max(limit, _TOP_K), index.ntotal)
+    scores, positions = index.search(query_vec, k)
+
+    hits: list[tuple[float, "Store", "Floor"]] = []
+    saw_alive = False
+    for score, pos in zip(scores[0], positions[0]):
+        if pos < 0:
+            continue
+        pair = rows.get(store_ids[pos])
+        if pair is None:
+            continue  # 인덱스 빌드 후 삭제된 매장 방어
+        saw_alive = True
+        if float(score) < SIMILARITY_THRESHOLD:
+            break  # 내림차순이라 이후도 전부 미달
+        store, floor = pair
+        hits.append((float(score), store, floor))
+        if len(hits) >= limit:
+            break
+
+    if hits:
+        return SemanticResults(SemanticReason.OK, tuple(hits))
+    if saw_alive:
+        return SemanticResults(SemanticReason.BELOW_THRESHOLD)
+    return SemanticResults(SemanticReason.INDEX_UNAVAILABLE)
+
+
 def search(
     session: "Session",
     building_id: str,
@@ -260,45 +334,12 @@ def search(
     실패해도 예외를 올리지 않는다 — 사유만 드러내고 예외는 그대로 삼킨다. 모델 로드
     실패가 요청을 500으로 만들면 경량 1차 경로까지 죽는다(모듈 상단 핵심 원칙).
     사유 구분은 SemanticReason 참고.
+
+    구현은 `search_many(limit=1)`에 위임한다 — 판정 규칙(임계값·삭제 매장 방어·사유)이
+    한 곳에만 있어야 1건 경로와 N건 경로가 갈라지지 않는다.
     """
-    model = _get_model()
-    if model is None:
-        return SemanticResult(SemanticReason.MODEL_UNAVAILABLE)
-
-    got = _get_index(session, building_id)
-    if got is None:
-        # _get_index는 "모델 미가용"과 "매장 0건"을 모두 None으로 준다. 다만 위에서
-        # 모델을 이미 확인했고 _model은 한 번 로드되면 None으로 돌아가지 않으므로,
-        # 여기까지 왔다는 건 사실상 인덱스를 못 만든 쪽이다. 둘 다 degraded라
-        # 사용자 안내는 어차피 같다.
-        return SemanticResult(SemanticReason.INDEX_UNAVAILABLE)
-    index, store_ids = got
-
-    # 인덱스는 store_id만 캐시한다(교차 요청 지속). ORM 객체는 매 요청 현재 세션으로 새로 로드해
-    # detached 객체·stale 층 정보를 피한다.
-    rows = {store.id: (store, floor) for store, floor in _load_stores(session, building_id)}
-
-    query_vec = _encode(model, [text])
-    k = min(_TOP_K, index.ntotal)
-    scores, positions = index.search(query_vec, k)
-
-    # 내림차순 정렬됨. 살아 있는 최상위 후보 1건으로 판정한다.
-    # top-K를 1이 아니라 넉넉히 받는 이유는 인덱스 빌드 후 삭제된 매장을 건너뛰기 위해서다.
-    for score, pos in zip(scores[0], positions[0]):
-        if pos < 0:
-            continue
-        pair = rows.get(store_ids[pos])
-        if pair is None:
-            continue  # 인덱스 빌드 후 삭제된 매장 방어
-        store, floor = pair
-        if float(score) < SIMILARITY_THRESHOLD:
-            # 최상위가 미달이면 이후도 미달 → no_match("다른 말로 다시 찾아보세요").
-            return SemanticResult(SemanticReason.BELOW_THRESHOLD)
-        return SemanticResult(SemanticReason.OK, (float(score), store, floor))
-
-    # 살아 있는 후보가 하나도 없다(인덱스 빌드 후 전부 삭제 등). 인덱스가 현재 데이터를
-    # 반영하지 못한 상태라 질의를 바꿔도 소용없다 → degraded 쪽으로 본다.
-    return SemanticResult(SemanticReason.INDEX_UNAVAILABLE)
+    results = search_many(session, building_id, text, limit=1)
+    return SemanticResult(results.reason, results.hits[0] if results.hits else None)
 
 
 def semantic_search(

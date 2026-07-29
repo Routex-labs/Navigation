@@ -12,6 +12,9 @@ from app.repositories import query_search, query_semantic
 from app.repositories.query_search import _load_stores
 from tests.conftest import BUILDING_ID, FLOOR_ID
 
+MAX_MATCHES = query_search.MAX_DISCOVERY_MATCHES
+CLARIFY_PREVIEW = query_search.CLARIFY_PREVIEW_MATCHES
+
 
 # 1차 경량이 맞으면 임베딩(2차)을 아예 호출하지 않는다 — 브랜드명은 문자열 일치가 우선.
 def test_1차_경량이_맞으면_임베딩을_호출하지_않는다(db_session, monkeypatch):
@@ -309,6 +312,261 @@ def test_semantic_search는_사유와_무관하게_기존_모양을_유지한다
     score, hit_store, hit_floor = hit
     assert (hit_store.id, hit_floor.id) == (store.id, floor.id)
     assert score == pytest.approx(0.71, rel=1e-6)
+
+
+# ==========================================================================
+# 탐색(discover) 판정 로직 — conversational-discovery.md 7·8절, Wave 6
+# 임베딩 2차는 monkeypatch로 대체한다(torch·모델 다운로드 없이 모드 분기를 본다).
+# ==========================================================================
+
+
+def _add_store(db_session, store_id, name, *, subcategory, facets=None, floor_id=FLOOR_ID):
+    """탐색 후보를 늘리기 위한 임시 매장. db_session 픽스처가 닫히며 롤백된다."""
+    store = Store(
+        id=store_id,
+        floor_id=floor_id,
+        name=name,
+        category="패션",
+        subcategory=subcategory,
+        search_facets=facets,
+        centroid_x_m=10.0,
+        centroid_y_m=10.0,
+    )
+    db_session.add(store)
+    return store
+
+
+def _seed_fashion_pool(db_session):
+    """category="패션" tier 1 후보를 styles가 갈리도록 6건 추가한다.
+
+    "패션"은 category 정확 일치(tier 1)라 경량이 후보 집합을 만들고, styles 값이
+    스포츠/캐주얼/명품으로 갈려 clarify 조건(구분력 있는 축)이 성립한다.
+    """
+    rows = [
+        ("sp-1", "스포츠샵1", "스포츠·아웃도어", {"styles": ["스포츠"]}),
+        ("sp-2", "스포츠샵2", "스포츠·아웃도어", {"styles": ["스포츠"]}),
+        ("cs-1", "캐주얼샵1", "캐주얼·스트리트", {"styles": ["캐주얼"]}),
+        ("cs-2", "캐주얼샵2", "캐주얼·스트리트", {"styles": ["캐주얼"]}),
+        ("lx-1", "명품샵1", "명품", {"styles": ["명품"]}),
+        ("lx-2", "명품샵2", "명품", {"styles": ["명품"]}),
+    ]
+    for store_id, name, subcategory, facets in rows:
+        _add_store(db_session, store_id, name, subcategory=subcategory, facets=facets)
+    db_session.flush()
+
+
+def _no_semantic(monkeypatch):
+    """2차 의미 검색이 호출되면 테스트를 실패시킨다(호출 횟수 dict를 돌려준다)."""
+    calls = {"n": 0}
+
+    def spy(*_args, **_kwargs):
+        calls["n"] += 1
+        return query_semantic.SemanticResults(query_semantic.SemanticReason.BELOW_THRESHOLD)
+
+    monkeypatch.setattr(query_semantic, "search_many", spy)
+    return calls
+
+
+def test_discover_정확한_이름은_direct_1건이다(db_session, monkeypatch):
+    calls = _no_semantic(monkeypatch)
+
+    result = query_search.discover(db_session, BUILDING_ID, "가게A 어디야?")
+
+    assert result["mode"] == "direct"
+    assert [match["name"] for match in result["matches"]] == ["가게A"]
+    assert result["question"] is None
+    assert result["options"] == []
+    assert calls["n"] == 0  # 1차에서 확정 → 2차 미호출
+
+
+def test_discover_후보가_넓고_구분력_있는_축이_있으면_clarify다(db_session, monkeypatch):
+    _no_semantic(monkeypatch)
+    _seed_fashion_pool(db_session)
+
+    result = query_search.discover(db_session, BUILDING_ID, "패션")
+
+    assert result["mode"] == "clarify"
+    assert result["question"] == "어떤 스타일을 찾으세요?"
+    # 실제 후보가 있는 값만 option이 된다. 값별 count는 이름 중복 제거 후 후보 기준.
+    assert {option["value"] for option in result["options"]} == {"스포츠", "캐주얼", "명품"}
+    assert all(option["facet"] == "styles" for option in result["options"])
+    assert all(option["count"] == 2 for option in result["options"])
+    # 질문과 함께 보여줄 초기 후보는 3건(12절 확정).
+    assert len(result["matches"]) == CLARIFY_PREVIEW
+
+
+def test_discover_clarify_초기후보는_서로_다른_소분류로_퍼진다(db_session, monkeypatch):
+    _no_semantic(monkeypatch)
+    _seed_fashion_pool(db_session)
+
+    result = query_search.discover(db_session, BUILDING_ID, "패션")
+
+    subcategories = [match["subcategory"] for match in result["matches"]]
+    assert len(set(subcategories)) == len(subcategories)  # 한 소분류에 몰리지 않는다
+
+
+def test_discover_clarify_후보는_검증된_태그로만_reason을_만든다(db_session, monkeypatch):
+    _no_semantic(monkeypatch)
+    _seed_fashion_pool(db_session)
+
+    result = query_search.discover(db_session, BUILDING_ID, "패션")
+
+    for match in result["matches"]:
+        if match["matched_facets"]:
+            assert set(match["matched_facets"]) == {"styles"}
+            assert match["reason"] == f"{match['matched_facets']['styles'][0]} 스타일 매장이에요."
+        else:
+            assert match["reason"] is None  # 태그가 없으면 이유를 만들지 않는다
+
+
+def test_discover_구분력_있는_축이_없으면_clarify_대신_results다(db_session, monkeypatch):
+    _no_semantic(monkeypatch)
+    # 후보는 넓지만(6건) styles가 전부 "명품" 하나 — 되물어도 후보가 그대로다.
+    for index in range(6):
+        _add_store(
+            db_session,
+            f"lux-{index}",
+            f"명품샵{index}",
+            subcategory="명품",
+            facets={"styles": ["명품"]},
+        )
+    db_session.flush()
+
+    result = query_search.discover(db_session, BUILDING_ID, "명품")
+
+    assert result["mode"] == "results"
+    assert result["question"] is None
+    assert result["options"] == []
+    assert len(result["matches"]) == MAX_MATCHES
+
+
+def test_discover_태그가_얇은_축은_질문으로_쓰지_않는다(db_session, monkeypatch):
+    _no_semantic(monkeypatch)
+    # 값은 2개지만(스포츠·캐주얼) 태그가 있는 후보는 8건 중 2건뿐이다. 이 질문에
+    # 답하면 태그 없는 6건이 통째로 사라지므로 되묻지 않는다.
+    _add_store(db_session, "thin-1", "얇은샵1", subcategory="슈즈", facets={"styles": ["스포츠"]})
+    _add_store(db_session, "thin-2", "얇은샵2", subcategory="슈즈", facets={"styles": ["캐주얼"]})
+    for index in range(6):
+        _add_store(db_session, f"plain-{index}", f"무태그샵{index}", subcategory="잡화")
+    db_session.flush()
+
+    result = query_search.discover(db_session, BUILDING_ID, "패션")
+
+    assert result["mode"] == "results"
+    assert result["options"] == []
+
+
+def test_discover_selected_facets가_후보를_좁히면_results다(db_session, monkeypatch):
+    _no_semantic(monkeypatch)
+    _seed_fashion_pool(db_session)
+
+    result = query_search.discover(
+        db_session,
+        BUILDING_ID,
+        "패션",
+        selected_facets={"styles": ["스포츠"]},
+    )
+
+    assert result["mode"] == "results"
+    assert {match["name"] for match in result["matches"]} == {"스포츠샵1", "스포츠샵2"}
+    for match in result["matches"]:
+        assert match["matched_facets"] == {"styles": ["스포츠"]}
+        assert match["reason"] == "스포츠 스타일 매장이에요."
+
+
+def test_discover_선택이_후보를_0건으로_만들면_선택을_해제한다(db_session, monkeypatch):
+    _no_semantic(monkeypatch)
+    _seed_fashion_pool(db_session)
+
+    result = query_search.discover(
+        db_session,
+        BUILDING_ID,
+        "패션",
+        selected_facets={"cuisines": ["일식"]},  # 이 후보 집합에 없는 축
+    )
+
+    # 막다른 흐름(빈 결과)을 만들지 않는다 — 선택을 해제하고 전체 후보 판정으로 되돌아간다.
+    # 이 후보 집합은 넓고 styles가 갈리므로 되돌아간 자리가 clarify다.
+    assert result["mode"] == "clarify"
+    assert result["matches"]
+    assert all(match["matched_facets"].keys() <= {"styles"} for match in result["matches"])
+
+
+def test_discover_같은_이름_시설은_층만_달라도_한_번만_나온다(db_session, monkeypatch):
+    _no_semantic(monkeypatch)
+
+    # "가게"는 1F·2F의 가게A·가게B에 부분 일치한다(총 4행, 이름은 2개).
+    result = query_search.discover(db_session, BUILDING_ID, "가게")
+
+    assert result["mode"] == "results"
+    names = [match["name"] for match in result["matches"]]
+    assert sorted(names) == ["가게A", "가게B"]
+
+
+def test_discover_이름_중복_제거는_현재_층을_대표로_고른다(db_session, monkeypatch):
+    _no_semantic(monkeypatch)
+
+    result = query_search.discover(
+        db_session, BUILDING_ID, "가게", current_floor_id="2F"
+    )
+
+    # 후보 제거가 아니라 정렬 보조다 — 후보 수는 그대로고 대표 층만 현재 층이 된다.
+    assert {match["name"] for match in result["matches"]} == {"가게A", "가게B"}
+    assert all(match["floor_name"] == "2F" for match in result["matches"])
+
+
+def test_discover_2차도_못_찾으면_no_match다(db_session, monkeypatch):
+    monkeypatch.setattr(
+        query_semantic,
+        "search_many",
+        lambda *a, **k: query_semantic.SemanticResults(
+            query_semantic.SemanticReason.BELOW_THRESHOLD
+        ),
+    )
+
+    result = query_search.discover(db_session, BUILDING_ID, "존재하지않는것")
+
+    assert result["mode"] == "no_match"
+    assert result["matches"] == []
+    assert result["options"] == []
+
+
+def test_discover_모델이_없으면_degraded다(db_session, monkeypatch):
+    monkeypatch.setattr(
+        query_semantic,
+        "search_many",
+        lambda *a, **k: query_semantic.SemanticResults(
+            query_semantic.SemanticReason.MODEL_UNAVAILABLE
+        ),
+    )
+
+    result = query_search.discover(db_session, BUILDING_ID, "밥 먹을 데")
+
+    # no_match("다른 말로 다시")와 구분된다 — 질의를 바꿔도 결과가 달라지지 않는 상태.
+    assert result["mode"] == "degraded"
+
+
+def test_discover_경량이_놓치면_2차_상위_N을_후보로_쓴다(db_session, monkeypatch):
+    rows = _load_stores(db_session, BUILDING_ID)
+    hits = tuple((0.7 - index * 0.01, store, floor) for index, (store, floor) in enumerate(rows))
+    monkeypatch.setattr(
+        query_semantic,
+        "search_many",
+        lambda *a, **k: query_semantic.SemanticResults(
+            query_semantic.SemanticReason.OK, hits
+        ),
+    )
+
+    result = query_search.discover(db_session, BUILDING_ID, "밥 먹을 데")
+
+    assert result["mode"] == "results"
+    assert 0 < len(result["matches"]) <= MAX_MATCHES
+    names = [match["name"] for match in result["matches"]]
+    assert len(names) == len(set(names))  # 다양성 보정: 이름 중복 없음
+
+
+def test_discover_없는_건물은_None을_반환한다(db_session):
+    assert query_search.discover(db_session, "no-such", "가게A") is None
 
 
 def _stub_index(db_session, monkeypatch, *, top_score):

@@ -5,6 +5,7 @@
 # 실제 매칭은 repositories/query_search가 담당한다. sqlite 동기 IO라 핸들러는 def.
 # 경로 목록 (prefix=/query):
 #   POST /query/destination → 목적지 매장 1건 + 입구 노드
+#   POST /query/ai          → 탐색 결과(mode + 질문/선택지 + 여러 후보)
 #   POST /query/info        → 대상 정보 + 존재하는 층 목록
 
 from typing import Annotated
@@ -14,7 +15,7 @@ from pydantic import AfterValidator, BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.dto.query import DestinationResponse, InfoResponse
+from app.dto.query import DestinationResponse, DiscoveryResponse, InfoResponse
 from app.repositories import query_search
 
 # /query 아래의 자연어 질의 엔드포인트를 Swagger에서 query 그룹으로 묶는다.
@@ -50,11 +51,15 @@ class InfoRequest(BaseModel):
     current_floor_id: str | None = None
 
 
-# POST /query/ai 요청 Body. AI 쿼리 버튼 전용(자연어). destination과 동일 구조.
+# POST /query/ai 요청 Body. 탐색(Discovery) 전용 — destination과 계약이 다르다.
+# selected_facets는 사용자가 clarify 질문에서 고른 값이다. 서버 대화 세션을 만들지 않고
+# 클라이언트가 매 요청에 원문과 현재 선택을 다시 보내는 stateless 계약이다(8-2절).
+# 예: {"text": "신발", "building_id": "thehyundai-seoul", "selected_facets": {"styles": ["스포츠"]}}
 class AiRequest(BaseModel):
     text: QueryText
     building_id: str
     current_floor_id: str | None = None
+    selected_facets: dict[str, list[str]] | None = None
 
 
 # 목적지 자연어 질의. 최적 매장 1건과 입구 노드를 반환한다.
@@ -71,15 +76,17 @@ def query_destination(body: DestinationRequest, session: Session = Depends(get_d
     return result
 
 
-# AI 자연어 질의(하이브리드). 경량 미스·모호한 부분 일치를 임베딩 의미 검색으로 보완한다.
-# 응답은 destination과 동일 계약. 상단 일반 검색이 아니라 "AI 쿼리" 버튼에서 사용.
-@router.post("/ai", response_model=DestinationResponse)
+# AI 자연어 탐색 질의. 명확한 목적지는 바로 1건(direct), 넓은 질의는 되묻거나(clarify)
+# 다양성 보정된 여러 후보(results)를 준다. 응답 계약은 destination과 다르다(DiscoveryResponse).
+# 설계: docs/backend/native/conversational-discovery.md 8절.
+@router.post("/ai", response_model=DiscoveryResponse)
 def query_ai(body: AiRequest, session: Session = Depends(get_db)):
-    result = query_search.match_ai_destination(
+    result = query_search.discover(
         session,
         body.building_id,
         body.text,
         current_floor_id=body.current_floor_id,
+        selected_facets=body.selected_facets,
     )
     if result is None:
         raise HTTPException(status_code=404, detail="Building not found")
