@@ -12,7 +12,7 @@ from sqlalchemy import select
 
 from app.core.config import API_ROOT
 from app.models import Building, Edge, Floor, Node, Store
-from app.repositories import query_search
+from app.repositories import query_search, query_semantic
 from tests.conftest import REAL_BUILDING_ID, REAL_FLOOR_NAME
 
 
@@ -197,3 +197,85 @@ def test_층지도는_그래프와_매장_폴리곤을_함께_응답한다(real_
     with_polygon = [store for store in body["stores"] if store["polygon_local_m"]]
     assert with_polygon
     assert all(store["polygon_wgs84"] for store in with_polygon)
+
+
+def test_elevator_typo_resolves_on_b2_without_semantic_fallback(
+    real_db_session, monkeypatch
+):
+    """A known typo must remain in the current-floor light matching path."""
+    calls = {"count": 0}
+
+    def semantic_spy(*_args, **_kwargs):
+        calls["count"] += 1
+        return query_semantic.SemanticResults(
+            query_semantic.SemanticReason.BELOW_THRESHOLD
+        )
+
+    monkeypatch.setattr(query_semantic, "search_many", semantic_spy)
+
+    direct = query_search.match_destination(
+        real_db_session,
+        REAL_BUILDING_ID,
+        "엘레베이터",
+        current_floor_id="B2",
+    )
+    discovery = query_search.discover(
+        real_db_session,
+        REAL_BUILDING_ID,
+        "엘레베이터",
+        current_floor_id="B2",
+    )
+
+    assert direct["match"]["name"] == "엘리베이터"
+    assert direct["match"]["floor_name"] == "B2"
+    assert discovery["mode"] == "direct"
+    assert [match["floor_name"] for match in discovery["matches"]] == ["B2"]
+    assert calls["count"] == 0
+
+
+def test_current_floor_multiple_exits_are_returned_as_physical_choices(
+    real_db_session,
+):
+    """Same-name exits are distinct physical choices, not duplicate stores."""
+    rows = [
+        (store, floor)
+        for store, floor in query_search._load_stores(
+            real_db_session,
+            REAL_BUILDING_ID,
+            current_floor_id="1F",
+        )
+        if store.name == "출구"
+    ]
+    assert len(rows) >= 2
+
+    direct = query_search.match_destination(
+        real_db_session,
+        REAL_BUILDING_ID,
+        "출구",
+        current_floor_id="1F",
+    )
+    discovery = query_search.discover(
+        real_db_session,
+        REAL_BUILDING_ID,
+        "출구",
+        current_floor_id="1F",
+    )
+
+    assert direct["status"] == "ambiguous"
+    assert direct["match"] is None
+
+    # 현재 층 정보가 없어도 물리적으로 다른 출구 하나를 ID 정렬 순서로 임의
+    # 확정하지 않는다. 빈 경량 결과가 discovery 목록으로 이어진다.
+    unscoped_direct = query_search.match_destination(
+        real_db_session,
+        REAL_BUILDING_ID,
+        "출구",
+    )
+    assert unscoped_direct["status"] == "ambiguous"
+    assert unscoped_direct["match"] is None
+
+    assert discovery["mode"] == "results"
+    assert {match["store_id"] for match in discovery["matches"]} == {
+        store.id for store, _floor in rows
+    }
+    assert {match["floor_name"] for match in discovery["matches"]} == {"1F"}

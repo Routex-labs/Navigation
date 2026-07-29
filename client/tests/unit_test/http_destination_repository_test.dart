@@ -494,5 +494,19 @@ void main() {
         isEmpty,
       );
     });
+
+    test('ambiguous 단일 목적지는 목록 탐색으로 넘길 수 있게 빈 결과다', () async {
+      final repository = HttpDestinationRepository(
+        client: MockClient(
+          (request) async =>
+              _json({'status': 'ambiguous', 'query': '출구', 'match': null}),
+        ),
+      );
+
+      expect(
+        await repository.searchDestinations('thehyundai-seoul', '출구'),
+        isEmpty,
+      );
+    });
   });
 }

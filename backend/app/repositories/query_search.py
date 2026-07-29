@@ -25,6 +25,11 @@ from app.repositories.geo_transform import fit_building_geo_transform
 _SYNONYMS_PATH = API_ROOT / "resources" / "query_synonyms.json"
 MAX_QUERY_LENGTH = 200
 
+# Studio의 Store 레코드에는 원본 POI type(exit 등)이 보존되지 않는다. 현재
+# 데모 데이터에서 같은 이름이어도 서로 다른 물리 선택지로 취급해야 하는 값은
+# 이 정책 집합에만 명시해, 일반 매장명 중복을 목록으로 바꾸지 않는다.
+_MULTI_PHYSICAL_POI_NAMES = frozenset({"출구"})
+
 # 질의 꼬리(조사·의문형) — 정규화 때 최대 1개 제거. 긴 것부터 검사한다.
 _TAILS = tuple(
     sorted(("몇 층이야", "몇층이야", "몇 층", "몇층", "어디야", "어디", "위치", "알려줘"),
@@ -88,6 +93,14 @@ def _normalize_query(text: str) -> str:
     """단일 정규화 결과가 필요한 검사 호환용. 매칭은 모든 후보를 직접 평가한다."""
     candidates = _query_candidates(text)
     return candidates[-1] if candidates else ""
+
+
+def _is_multi_physical_query(text: str) -> bool:
+    return _normalize_query(text) in _MULTI_PHYSICAL_POI_NAMES
+
+
+def _is_multi_physical_store(store: Store) -> bool:
+    return _norm(store.name or "") in _MULTI_PHYSICAL_POI_NAMES
 
 
 def _strip_tail(t: str) -> str:
@@ -222,12 +235,21 @@ def _is_confident_light_match(
     if not scored:
         return False
     best_group = scored[0][:3]  # (tier, 후보 순서, 정밀도)
-    best_names = {
-        _norm(store.name or "")
-        for tier, order, precision, _level, _store_id, store, _floor in scored
+    best_rows = [
+        (store, floor)
+        for tier, order, precision, _level, _store_id, store, floor in scored
         if (tier, order, precision) == best_group
-    }
-    return len(best_names) == 1
+    ]
+    best_names = {_norm(store.name or "") for store, _floor in best_rows}
+    if len(best_names) != 1:
+        return False
+
+    # 출구처럼 이름은 같아도 좌표가 다른 POI들은 사용자가 고를 목록이어야
+    # 한다. 일반 매장명이 여러 층에 반복되는 기존 direct 동작은 그대로 둔다.
+    return not (
+        len(best_rows) > 1
+        and all(_is_multi_physical_store(store) for store, _floor in best_rows)
+    )
 
 
 def _floor_names_for_match(
@@ -311,6 +333,17 @@ def match_destination(
     )
     if not scored:
         return {"status": "no_match", "query": text, "match": None}
+
+    if _is_multi_physical_query(text):
+        physical_matches = [
+            store
+            for _tier, _level, _store_id, store, _floor in scored
+            if _is_multi_physical_store(store)
+        ]
+        if len(physical_matches) > 1:
+            # DestinationResponse는 단일 목적지 계약이다. 클라이언트가 빈
+            # light 결과를 받으면 /query/ai 목록 계약으로 자연스럽게 이어진다.
+            return {"status": "ambiguous", "query": text, "match": None}
 
     # 정렬이 결정적이라 [0]이 곧 최적 1건.
     _, _, _, store, floor = scored[0]
@@ -505,7 +538,13 @@ def _dedupe_by_name(
     order: list[str] = []
     picked: dict[str, tuple[Store, Floor]] = {}
     for store, floor in rows:
-        key = _norm(store.name or "") or store.id
+        # 일반 매장·전 층 공용 시설은 이름으로 묶되, 출구는 같은 층에서도
+        # 서로 다른 물리 선택지라 store id를 유지한다.
+        key = (
+            store.id
+            if _is_multi_physical_store(store)
+            else (_norm(store.name or "") or store.id)
+        )
         if key not in picked:
             picked[key] = (store, floor)
             order.append(key)
@@ -634,17 +673,17 @@ def discover(
 
     building_rows = _load_stores(session, building_id)
     building_scored = _rank_with_candidate(building_rows, text)
+    floor_scoped = (
+        _rank_with_candidate(
+            _load_stores(session, building_id, current_floor_id=current_floor_id),
+            text,
+        )
+        if current_floor_id is not None
+        else building_scored
+    )
 
     if not selection:
         # 층 스코프 1차가 우선 — 현재 층에 있는 시설을 그 층에서 확정한다.
-        floor_scoped = (
-            _rank_with_candidate(
-                _load_stores(session, building_id, current_floor_id=current_floor_id),
-                text,
-            )
-            if current_floor_id is not None
-            else building_scored
-        )
         for scored in (floor_scoped, building_scored):
             if _is_confident_light_match(scored):
                 *_, store, floor = scored[0]
@@ -656,7 +695,19 @@ def discover(
 
     # 탐색 후보 집합. 경량이 잡은 게 있으면(카테고리·소분류 정확 일치 등) 그것이
     # 의미 검색보다 정밀하므로 먼저 쓴다.
-    pool = [(store, floor) for *_rank, store, floor in building_scored]
+    # 현재 층에서 여러 출구가 맞으면 다른 층의 동명 출구를 섞지 않는다. 이
+    # 정책은 Store에 시설 kind가 없는 데모 데이터의 명시적 보완이다.
+    if current_floor_id is not None and _is_multi_physical_query(text):
+        current_floor_physical = [
+            (store, floor)
+            for *_rank, store, floor in floor_scoped
+            if _is_multi_physical_store(store)
+        ]
+        pool = current_floor_physical or [
+            (store, floor) for *_rank, store, floor in building_scored
+        ]
+    else:
+        pool = [(store, floor) for *_rank, store, floor in building_scored]
 
     degraded = False
     if not pool:

@@ -38,7 +38,7 @@ class QueryMatch(BaseModel):
 
 # 목적지 질의 응답. 최적 매장 1건을 안내 대상으로 준다.
 class DestinationResponse(BaseModel):
-    status: str              # ok | ok_no_route | no_match
+    status: str              # ok | ok_no_route | no_match | ambiguous
     query: str               # 사용자가 보낸 원문. 화면에 되비추는 용도
     match: QueryMatch | None  # 최적 1건. no_match면 null
 
