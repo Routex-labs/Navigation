@@ -24,6 +24,7 @@ from math import hypot
 from pathlib import Path
 
 from app.core.database import SessionLocal
+from app.repositories import store_facets
 from scripts.seed import seed_navigation
 from scripts.transform import floor_alignment, vertical_transfers
 
@@ -41,6 +42,9 @@ STORE_CATEGORIES_PATH = API_ROOT / "resources" / "store_categories.json"
 # 매장명 -> {category, subcategory}. category_code가 없는 매장(대부분)을 브랜드명
 # 기준으로 분류한 폴백 매핑. id 기반(STORE_CATEGORIES_PATH)이 우선한다.
 STORE_CATEGORIES_BY_NAME_PATH = API_ROOT / "resources" / "store_category_by_name.json"
+# 검색 전용 facet 오버레이 디렉터리. 파생 규칙(store_facets._SUBCATEGORY_TO_STYLES)과
+# 합쳐 stores.search_facets 컬럼을 채운다. 디렉터리가 없으면 파생분만 적재된다.
+STORE_SEARCH_FACETS_DIR = API_ROOT / "resources" / "store_search_facets"
 
 
 def _load_store_categories(path: Path = STORE_CATEGORIES_PATH) -> dict[str, dict]:
@@ -179,6 +183,9 @@ def _reshape_stores(
     payload = json.loads(stores_path.read_text(encoding="utf-8"))
     category_overrides = _load_store_categories()
     category_by_name = _load_store_categories(STORE_CATEGORIES_BY_NAME_PATH)
+    # 검색 facet은 카테고리가 확정된 뒤에 계산한다 — 파생 규칙이 소분류를 보기 때문에
+    # 오버라이드 적용 전 원본 소분류로 계산하면 태그가 통째로 어긋난다.
+    facet_overlay = store_facets.load_overlay(STORE_SEARCH_FACETS_DIR)
     reshaped: list[dict] = []
     for store in payload.get("stores", []):
         entrance = store.get("entrance_local_m")
@@ -199,6 +206,11 @@ def _reshape_stores(
         )
         category = (override or {}).get("category") or store.get("category")
         subcategory = (override or {}).get("subcategory") or store.get("subcategory")
+        # 파생(소분류) + 수작업 오버레이. 빈 dict는 저장하지 않는다 — 컬럼을 None으로 둬야
+        # "태그 없음"과 "빈 태그"가 DB에서 구분 없이 하나로 남는다(설계 5-1 빈 배열 금지).
+        facets = store_facets.resolve_facets(
+            store["id"], category, subcategory, facet_overlay
+        )
         reshaped.append(
             {
                 "id": store["id"],  # store id는 층별로 이미 유일(네임스페이싱 불필요)
@@ -212,6 +224,7 @@ def _reshape_stores(
                 "entrance_local_m": entrance,
                 "entrance_node_id": entrance_node_id,
                 "polygon_local_m": polygon or None,
+                "search_facets": facets or None,
             }
         )
     return reshaped
