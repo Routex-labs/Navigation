@@ -395,6 +395,26 @@ def test_discover_후보가_넓고_구분력_있는_축이_있으면_clarify다(
     assert len(result["matches"]) == CLARIFY_PREVIEW
 
 
+# clarify 화면의 "전체 보기"는 선택 chip을 비운 채 같은 질의를 다시 보낸다.
+# show_all 계약이 없으면 selected_facets={}가 선택 없음으로 처리되어 다시 clarify가 된다.
+def test_discover_전체_보기는_빈_선택에서도_clarify를_건너뛴다(db_session, monkeypatch):
+    _no_semantic(monkeypatch)
+    _seed_fashion_pool(db_session)
+
+    result = query_search.discover(
+        db_session,
+        BUILDING_ID,
+        "패션",
+        selected_facets={},
+        show_all=True,
+    )
+
+    assert result["mode"] == "results"
+    assert result["question"] is None
+    assert result["options"] == []
+    assert len(result["matches"]) == MAX_MATCHES
+
+
 def test_discover_clarify_초기후보는_서로_다른_소분류로_퍼진다(db_session, monkeypatch):
     _no_semantic(monkeypatch)
     _seed_fashion_pool(db_session)

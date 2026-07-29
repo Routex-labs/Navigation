@@ -5,6 +5,7 @@
 
 import pytest
 
+from app.repositories import query_search
 from tests.conftest import BUILDING_ID, FLOOR_ID, FLOOR_NAME
 
 
@@ -206,6 +207,31 @@ def test_ai_질의가_여러_후보를_results로_반환한다(api_client):
     assert set(names) == {"가게A", "가게B"}
     assert len(names) == len(set(names))  # 같은 이름이 층만 달리해 반복되지 않는다
     assert len(body["matches"]) <= 5
+
+
+def test_ai_전체_보기_wire_필드를_서비스까지_전달한다(api_client, monkeypatch):
+    captured = {}
+    original_discover = query_search.discover
+
+    def spy(*args, **kwargs):
+        captured["show_all"] = kwargs["show_all"]
+        return original_discover(*args, **kwargs)
+
+    monkeypatch.setattr(query_search, "discover", spy)
+
+    response = api_client.post(
+        "/query/ai",
+        json={
+            "text": "가게",
+            "building_id": BUILDING_ID,
+            "selected_facets": {},
+            "show_all": True,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["mode"] == "results"
+    assert captured == {"show_all": True}
 
 
 # 태그가 붙지 않은 매장에 selected_facets를 걸면 좁혀지지 않는다 — 막다른 흐름 대신

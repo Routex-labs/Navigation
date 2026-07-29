@@ -565,9 +565,15 @@ tier 1의 후보 수 판정에도 같은 기준을 쓴다 — 서로 다른 이�
   "current_floor_id": "1F",
   "selected_facets": {
     "styles": ["스포츠"]
-  }
+  },
+  "show_all": false
 }
 ```
+
+`show_all`은 기본값이 `false`인 선택 필드다. clarify 화면에서 사용자가 `전체 보기`를
+누르면 원문과 `selected_facets: {}`를 유지한 채 `true`로 보낸다. 서버는 같은 후보와
+선택 필터를 계산하되 질문만 생략하고 `results`를 반환한다. 후보 없음(`no_match`)과
+의미 검색 불가(`degraded`) 판정은 이 값으로 바꾸지 않는다.
 
 `current_floor_id`는 후보 제거 조건이 아니라 거리·접근성 정렬 보조로만 사용한다.
 현재 층에 식당이 없다는 이유로 타 층 식당 전체를 없애서는 안 된다.

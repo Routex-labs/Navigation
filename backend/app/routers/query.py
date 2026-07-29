@@ -60,6 +60,8 @@ class AiRequest(BaseModel):
     building_id: str
     current_floor_id: str | None = None
     selected_facets: dict[str, list[str]] | None = None
+    # clarify에서 "전체 보기"를 누를 때만 true. 생략한 기존 요청은 기존 흐름을 유지한다.
+    show_all: bool = False
 
 
 # 목적지 자연어 질의. 최적 매장 1건과 입구 노드를 반환한다.
@@ -87,6 +89,7 @@ def query_ai(body: AiRequest, session: Session = Depends(get_db)):
         body.text,
         current_floor_id=body.current_floor_id,
         selected_facets=body.selected_facets,
+        show_all=body.show_all,
     )
     if result is None:
         raise HTTPException(status_code=404, detail="Building not found")

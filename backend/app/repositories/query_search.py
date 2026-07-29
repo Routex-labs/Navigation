@@ -602,6 +602,7 @@ def discover(
     *,
     current_floor_id: str | None = None,
     selected_facets: dict[str, list[str]] | None = None,
+    show_all: bool = False,
 ) -> dict[str, Any] | None:
     """탐색 질의. 명확하면 바로 안내하고, 넓으면 되묻거나 여러 후보를 추천한다.
 
@@ -615,6 +616,7 @@ def discover(
          (2절 "결과가 없는데 계속 세분화 질문"). option은 항상 실제 후보가 있는 값만
          만들므로, 이 되돌림은 화면에 없던 축을 클라이언트가 보냈을 때만 일어난다.
       4. 이름 중복 제거 → 후보가 넓고 구분력 있는 축이 있으면 `clarify`, 아니면 `results`.
+         `show_all=True`이면 후보·선택 계산은 그대로 두고 clarify만 건너뛰어 `results`를 준다.
 
     `current_floor_id`는 8-2절 A안이다. 1차 경량(tier 0·1 시설 질의)은 층 스코프를 유지해
     "화장실"이 현재 층에서 확정되게 하고, 탐색 후보 집합은 건물 전체를 보되 같은 이름이
@@ -689,7 +691,7 @@ def discover(
             matches=_discovery_matches(candidates, MAX_DISCOVERY_MATCHES, {}, transform),
         )
 
-    if selection:
+    if selection or show_all:
         return _discovery(
             text,
             "results",
