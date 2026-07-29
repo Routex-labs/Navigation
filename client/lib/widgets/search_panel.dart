@@ -20,16 +20,32 @@ import '../theme/app_theme.dart';
 /// 자연어를 치든 상단 검색창 한 곳에 치면 되고, 어느 경로로 찾을지는 이
 /// 패널이 정한다.
 ///
-/// - **타이핑 중**([query] 변경): 경량 매칭(`/query/destination`)만 돌린다.
-///   형태소 정규화(Kiwi)가 이 경로에 들어 있어 "MLB" 같은 이름은 즉시 걸린다.
-/// - **엔터로 확정**([submitTick] 증가): 경량이 빈손이면 의미 검색
-///   (`/query/ai`)까지 자동으로 이어 붙인다. "밥 먹을 곳"처럼 사전에 없는
-///   표현이 여기서 걸린다.
+/// - **타이핑이 300ms 멎으면**: 경량 매칭(`/query/destination`). 형태소
+///   정규화(Kiwi)가 이 경로에 들어 있어 "MLB" 같은 이름은 즉시 걸린다.
+/// - **경량이 빈손이면**: 400ms를 더 기다렸다가 의미 검색(`/query/ai`)까지
+///   자동으로 이어 붙인다. "밥 먹을 곳"처럼 사전에 없는 표현이 여기서 걸린다.
+/// - **엔터로 확정**([submitTick] 증가): 두 대기를 모두 건너뛰고 같은 경로를
+///   즉시 탄다.
 ///
-/// 의미 검색을 타이핑 중이 아니라 **확정 시점에만** 붙이는 이유는 비용이다.
-/// 백엔드가 임베딩 모델을 로드하면 첫 호출이 20초대까지 가므로, 글자마다
-/// 던지면 "밥"·"밥 먹"·"밥 먹을"이 전부 모델을 태운다. 사용자가 다 치고
-/// 엔터를 누른 순간에만 한 번 태운다.
+/// ### 왜 엔터를 트리거에서 뺐나
+///
+/// 예전에는 의미 검색을 엔터에만 붙였다. 비용 때문이었는데 두 가지가 깨졌다.
+///
+/// 1. 한글 IME에서 첫 엔터가 조합 확정에 쓰이면 `onSubmitted`가 실행되지 않아
+///    [submitTick]이 오르지 않는다. 그러면 의미 검색은 **아예 시작되지 않는다.**
+/// 2. 그때까지 화면에는 경량이 빈손이라는 이유만으로 "찾지 못했어요"가 최종
+///    결론처럼 떠 있었다. "신발"·"밥집"은 어떤 매장명·카테고리와도 정확히
+///    일치하지 않으므로 타이핑만으로는 **항상** 이 화면이었다. 아직 AI를 부르지도
+///    않았는데 사용자는 "이 앱은 못 찾는구나"로 읽는다.
+///
+/// 그래서 트리거를 엔터가 아니라 **타이핑이 멎었다는 사실**로 바꾸고, 비용은
+/// 디바운스를 두 단으로 나눠 막는다. 경량은 300ms로 예전처럼 빠르게 두고, 의미
+/// 검색만 그 위에 400ms를 더 얹어 사용자가 실제로 손을 뗀 뒤에 한 번 돈다.
+/// 글자마다 태우지 않는 게 핵심이다 — 백엔드가 임베딩 모델을 처음 올리는 호출은
+/// HF 캐시가 있어도 6초대이고(`NAV_WARM_EMBEDDING=1`이 그 비용을 서버 기동
+/// 시점으로 옮기지만, 워밍이 끝나기 전에 들어온 첫 사용자는 여전히 맞는다),
+/// 그렇다고 경량까지 700ms로 늦추면 매장 이름을 정확히 아는 흔한 검색이 같이
+/// 느려진다. 두 단으로 나누면 흔한 경로는 안 건드리고 비싼 경로만 늦출 수 있다.
 ///
 /// 상태를 상위에서 명령형으로 밀어 넣지 않고 [query]·[submitTick] 두 값으로만
 /// 받는 이유는 순서 문제 때문이다. 패널은 검색이 활성화될 때 비로소 트리에
@@ -62,24 +78,69 @@ class SearchPanel extends StatefulWidget {
   State<SearchPanel> createState() => _SearchPanelState();
 }
 
+/// 패널이 지금 어느 단계에 있는지. 예전에는 `_searching`·`_searchingSemantic`
+/// 불리언 두 개로 표현했는데, "경량은 끝났지만 의미 검색은 아직"이라는 단계가
+/// 생기면서 조합만으로는 화면을 정할 수 없게 됐다. 특히 [noMatch]는 **의미
+/// 검색까지 끝났을 때만** 들어갈 수 있어야 하는데, 불리언으로는 "검색 안 하는
+/// 중 + 결과 없음"과 구분이 안 된다.
+///
+/// 앞으로 들어올 clarify·results 같은 탐색 상태는 여기 미리 만들지 않는다.
+/// 계약이 정해지지 않은 상태를 지금 열거해 두면, 화면 로직이 아직 오지도 않은
+/// 분기를 짊어진 채로 굳는다.
+enum _SearchPhase {
+  /// 아직 아무것도 치지 않았다. 안내 문구만 보여준다.
+  idle,
+
+  /// 경량 매칭이 도는 중. 의미 검색으로 넘어가기 전 대기 시간도 여기 포함된다
+  /// — 사용자 입장에서는 둘 다 "찾는 중"이고, 아직 결론이 아니다.
+  searchingLight,
+
+  /// 의미 검색이 도는 중. 모델 로드로 오래 걸릴 수 있어 경량과 다른 문구를
+  /// 띄운다 — 같은 스피너만 돌면 멈춘 것처럼 보인다.
+  searchingSemantic,
+
+  /// 보여줄 매장·건물이 있다.
+  results,
+
+  /// 경량과 의미 검색을 **둘 다** 끝냈는데 없다. 최종 "결과 없음" 문구는 오직
+  /// 이 단계에서만 나온다.
+  noMatch,
+
+  /// 서버·네트워크가 끊겨 검색을 끝내지 못했다. 없는 것과 못 찾은 것은 사용자가
+  /// 할 행동이 다르다 — 전자는 다른 말로 바꿔야 하고, 후자는 기다려야 한다.
+  error,
+}
+
 class _SearchPanelState extends State<SearchPanel> {
+  /// 경량 검색용 디바운스. 글자마다 서버를 때리지 않게 잠깐 모았다 보낸다.
+  static const _lightDebounce = Duration(milliseconds: 300);
+
+  /// 경량이 빈손일 때 의미 검색으로 넘어가기 전에 한 번 더 기다리는 시간.
+  /// 300ms를 그대로 쓰지 않는 이유는 클래스 주석에 적었다 — 의미 검색은 경량과
+  /// 비용이 자릿수로 다르므로 "타이핑이 잠깐 멈췄다"가 아니라 "손을 뗐다"에
+  /// 가까운 신호에서만 태운다. 이 값을 0으로 두면 "밥"·"밥 먹"·"밥 먹을"이 전부
+  /// 모델을 태운다.
+  static const _semanticGrace = Duration(milliseconds: 400);
+
+  /// 두 단계의 대기를 **한 필드로** 돌린다. 한 시점에 살아 있을 수 있는 대기는
+  /// 하나뿐이고(경량을 기다리는 중이거나, 경량이 끝나 의미 검색을 기다리는
+  /// 중이거나), 취소 지점도 같다 — 새 글자가 오면 둘 다 죽어야 한다. 필드를
+  /// 나누면 "경량 타이머는 껐는데 의미 타이머는 살아 있는" 조합이 생긴다.
   Timer? _debounce;
 
-  /// 마지막으로 결과를 확정한 질의. 빈 문자열이면 아직 아무것도 안 쳤다.
+  /// 마지막으로 결과를 확정한 질의. "…에 맞는 매장을 찾지 못했어요" 문구에 쓴다.
   String _submittedQuery = '';
   List<PoiSearchResult> _results = const [];
 
   /// 이름이 걸린 건물. 매장과 함께 목록 맨 위에 한 줄로 얹는다 — 예전 상단
   /// 검색이 하던 "건물 이름 검색"을 여기로 옮겨 온 것이다.
   Building? _building;
-  bool _searching = false;
 
-  /// 의미 검색(2단계)이 도는 중. 모델 로드로 오래 걸릴 수 있어 경량 검색과
-  /// 다른 문구를 띄운다 — 같은 스피너만 돌면 멈춘 것처럼 보인다.
-  bool _searchingSemantic = false;
+  _SearchPhase _phase = _SearchPhase.idle;
 
   /// 이번 결과가 의미 검색에서 나왔는지. 목록에 "뜻으로 찾은 결과"라고 표시해
-  /// 사용자가 왜 다른 이름이 나왔는지 납득할 수 있게 한다.
+  /// 사용자가 왜 다른 이름이 나왔는지 납득할 수 있게 한다. 단계가 아니라 결과의
+  /// 성질이라 [_SearchPhase]에 합치지 않고 따로 둔다.
   bool _fromSemantic = false;
 
   /// 늦게 도착한 응답이 최신 결과를 덮어쓰지 않게 하는 순번.
@@ -96,8 +157,10 @@ class _SearchPanelState extends State<SearchPanel> {
   void didUpdateWidget(covariant SearchPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.submitTick != oldWidget.submitTick) {
-      // 엔터로 확정. 디바운스를 기다리지 않고 즉시, 의미 검색까지 허용해서.
-      _search(widget.query, allowSemantic: true);
+      // 엔터로 확정. 사용자가 이미 "다 쳤다"고 말한 셈이라 두 대기를 모두
+      // 건너뛴다. 엔터가 의미 검색의 **유일한** 트리거는 아니지만, 가장 빠른
+      // 트리거로는 남는다.
+      _search(widget.query, immediate: true);
     } else if (widget.query != oldWidget.query) {
       _scheduleSearch(widget.query);
     }
@@ -109,37 +172,37 @@ class _SearchPanelState extends State<SearchPanel> {
     super.dispose();
   }
 
-  /// 타이핑마다 서버를 때리지 않도록 잠깐 모았다 보낸다. 타이핑 중에는 경량
-  /// 검색만 — 의미 검색은 엔터로 확정했을 때만 붙는다(클래스 주석 참고).
+  /// 타이핑마다 서버를 때리지 않도록 잠깐 모았다 보낸다. 여기서 시작한 검색도
+  /// 경량이 빈손이면 의미 검색까지 이어진다 — 엔터를 안 눌러도 된다.
   void _scheduleSearch(String value) {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 300), () => _search(value));
+    _debounce = Timer(_lightDebounce, () => _search(value));
   }
 
-  Future<void> _search(String raw, {bool allowSemantic = false}) async {
+  /// [immediate]가 참이면 의미 검색으로 넘어가기 전 [_semanticGrace] 대기를
+  /// 건너뛴다. 엔터로 확정한 경우다.
+  Future<void> _search(String raw, {bool immediate = false}) async {
     _debounce?.cancel();
     final query = raw.trim();
     if (query.isEmpty) {
+      // 검색창을 비웠다. 진행 중인 응답이 나중에 도착해 빈 화면을 덮지 않도록
+      // 순번도 함께 올린다.
+      _requestId++;
       setState(() {
         _submittedQuery = '';
         _results = const [];
         _building = null;
-        _searching = false;
-        _searchingSemantic = false;
         _fromSemantic = false;
+        _phase = _SearchPhase.idle;
       });
       return;
     }
 
     final requestId = ++_requestId;
-    setState(() {
-      _searching = true;
-      _searchingSemantic = false;
-    });
+    setState(() => _phase = _SearchPhase.searchingLight);
 
     List<PoiSearchResult> results;
     Building? building;
-    var fromSemantic = false;
     try {
       // 1단계: 경량 매칭. 매장 이름·동의어는 여기서 즉시 걸린다.
       // 층으로 좁히지 않고 **건물 전체**를 뒤진다 — 사용자가 이름을 알고
@@ -154,33 +217,79 @@ class _SearchPanelState extends State<SearchPanel> {
       building = buildings
           .where((b) => b.name.toLowerCase().contains(query.toLowerCase()))
           .firstOrNull;
-
-      // 2단계: 엔터로 확정했는데 아무것도 못 찾았으면 의미 검색까지 이어 붙인다.
-      // 사용자가 "결과 없음"을 볼 상황에서만 타므로, 잘 되던 검색은 그대로 빠르다.
-      if (allowSemantic && results.isEmpty && building == null) {
-        if (!mounted || requestId != _requestId) return;
-        setState(() => _searchingSemantic = true);
-        results = await destinationRepository.searchDestinationsAi(
-          widget.buildingId,
-          query,
-        );
-        fromSemantic = results.isNotEmpty;
-      }
     } on Object {
-      // 서버 장애·네트워크 끊김. 패널을 닫지 않고 "결과 없음"으로 둔다.
-      results = const [];
-      building = null;
-      fromSemantic = false;
+      _finishFailed(query, requestId);
+      return;
     }
     // 이 응답을 기다리는 사이 사용자가 더 쳤다면 버린다.
     if (!mounted || requestId != _requestId) return;
+
+    // 2단계로 넘길지 판단한다. 예전에는 여기에 `allowSemantic`(=엔터를 눌렀다)
+    // 조건이 하나 더 있었다. 그 조건이 빠지면서 "찾지 못했어요"는 의미 검색을
+    // 지난 뒤에만 나올 수 있게 된다. 경량이 한 건이라도 잡으면 그대로 보여준다
+    // — 잘 되던 검색은 여전히 빠르다.
+    if (results.isEmpty && building == null) {
+      if (immediate) {
+        await _semanticSearch(query, requestId);
+      } else {
+        // 대기를 `Future.delayed`가 아니라 Timer로 두는 이유는 취소 때문이다.
+        // 패널이 닫히면 dispose가 이 타이머를 끄고, 사용자가 글자를 더 치면
+        // _scheduleSearch가 같은 필드를 덮어써 끈다. `await Future.delayed`는
+        // 취소할 방법이 없어 패널이 사라진 뒤에도 살아 있다.
+        _debounce = Timer(
+          _semanticGrace,
+          () => _semanticSearch(query, requestId),
+        );
+      }
+      return;
+    }
+
     setState(() {
       _submittedQuery = query;
       _results = results;
       _building = building;
-      _fromSemantic = fromSemantic;
-      _searching = false;
-      _searchingSemantic = false;
+      _fromSemantic = false;
+      _phase = _SearchPhase.results;
+    });
+  }
+
+  /// 2단계. 여기까지 왔다는 건 경량이 확실히 빈손이라는 뜻이고, 이 함수가 끝나야
+  /// 비로소 [_SearchPhase.noMatch]를 최종 결론으로 쓸 수 있다.
+  Future<void> _semanticSearch(String query, int requestId) async {
+    if (!mounted || requestId != _requestId) return;
+    setState(() => _phase = _SearchPhase.searchingSemantic);
+
+    List<PoiSearchResult> results;
+    try {
+      results = await destinationRepository.searchDestinationsAi(
+        widget.buildingId,
+        query,
+      );
+    } on Object {
+      _finishFailed(query, requestId);
+      return;
+    }
+    if (!mounted || requestId != _requestId) return;
+    setState(() {
+      _submittedQuery = query;
+      _results = results;
+      _building = null;
+      _fromSemantic = results.isNotEmpty;
+      _phase = results.isEmpty ? _SearchPhase.noMatch : _SearchPhase.results;
+    });
+  }
+
+  /// 서버 장애·네트워크 끊김. 패널을 닫지 않고 안내만 바꾼다. 이걸 "결과 없음"과
+  /// 같이 처리하면, 백엔드가 죽었을 뿐인데 사용자에게 "그런 매장은 없다"고 말하는
+  /// 셈이 된다 — 사용자는 말을 바꿔 가며 계속 헛수고를 하게 된다.
+  void _finishFailed(String query, int requestId) {
+    if (!mounted || requestId != _requestId) return;
+    setState(() {
+      _submittedQuery = query;
+      _results = const [];
+      _building = null;
+      _fromSemantic = false;
+      _phase = _SearchPhase.error;
     });
   }
 
@@ -197,42 +306,57 @@ class _SearchPanelState extends State<SearchPanel> {
   }
 
   Widget _body(BuildContext context) {
-    if (_searching) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(),
-            if (_searchingSemantic) ...[
-              const SizedBox(height: 14),
-              const Text(
-                '뜻이 비슷한 매장을 찾는 중…',
-                style: TextStyle(fontSize: 13, color: AppColors.muted),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                '처음 한 번은 조금 오래 걸릴 수 있어요',
-                style: TextStyle(fontSize: 11.5, color: AppColors.muted),
-              ),
-            ],
-          ],
-        ),
-      );
+    switch (_phase) {
+      case _SearchPhase.idle:
+        return const Padding(
+          padding: EdgeInsets.fromLTRB(16, 20, 16, 22),
+          child: Text(
+            '매장 이름을 입력하면 바로 찾아드려요.\n'
+            '"밥 먹을 곳"처럼 뜻으로 물어도 됩니다.',
+            style: TextStyle(fontSize: 13, color: AppColors.muted, height: 1.5),
+          ),
+        );
+      case _SearchPhase.searchingLight:
+      case _SearchPhase.searchingSemantic:
+        return _searchingState();
+      case _SearchPhase.error:
+        return _errorState();
+      case _SearchPhase.noMatch:
+        return _emptyState(context);
+      case _SearchPhase.results:
+        return _resultList();
     }
-    if (_submittedQuery.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.fromLTRB(16, 20, 16, 22),
-        child: Text(
-          '매장 이름을 입력하면 바로 찾아드려요.\n'
-          '"밥 먹을 곳"처럼 뜻으로 물어도 됩니다.',
-          style: TextStyle(fontSize: 13, color: AppColors.muted, height: 1.5),
-        ),
-      );
-    }
-    final building = _building;
-    if (_results.isEmpty && building == null) return _emptyState(context);
+  }
 
+  /// 아직 결론이 아니라는 화면. 경량 단계에서는 스피너만 돌리고, 의미 검색으로
+  /// 넘어가면 문구를 덧붙인다 — 여기서 갑자기 오래 걸리기 시작하기 때문에,
+  /// 같은 스피너만 계속 돌면 사용자는 앱이 멈췄다고 읽는다.
+  Widget _searchingState() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const CircularProgressIndicator(),
+          if (_phase == _SearchPhase.searchingSemantic) ...[
+            const SizedBox(height: 14),
+            const Text(
+              '뜻이 비슷한 매장을 찾는 중…',
+              style: TextStyle(fontSize: 13, color: AppColors.muted),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              '처음 한 번은 조금 오래 걸릴 수 있어요',
+              style: TextStyle(fontSize: 11.5, color: AppColors.muted),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _resultList() {
+    final building = _building;
     return ListView.separated(
       shrinkWrap: true,
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -311,10 +435,34 @@ class _SearchPanelState extends State<SearchPanel> {
             style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 6),
-          // 엔터로 확정했다면 의미 검색까지 이미 돌린 뒤다. 사용자가 더 눌러 볼
-          // 수단이 남아 있는 것처럼 보이면 안 되므로, 다른 말로 바꿔 보라고만 한다.
+          // 이 문구가 나오는 시점에는 경량과 의미 검색을 모두 돌린 뒤다
+          // (_SearchPhase.noMatch에서만 그린다). 사용자가 더 눌러 볼 수단이
+          // 남아 있는 것처럼 보이면 안 되므로, 다른 말로 바꿔 보라고만 한다.
           const Text(
             '다른 말로 바꿔서 다시 찾아보세요.',
+            style: TextStyle(fontSize: 12.5, color: AppColors.muted),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 검색을 끝내지 못한 화면. "찾지 못했어요"와 문구를 나누는 이유는 사용자가
+  /// 할 행동이 다르기 때문이다 — 여기서는 말을 바꿔도 소용이 없다.
+  Widget _errorState() {
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(16, 20, 16, 22),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '지금은 검색할 수 없어요.',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          ),
+          SizedBox(height: 6),
+          Text(
+            '연결 상태를 확인하고 잠시 후 다시 시도해 주세요.',
             style: TextStyle(fontSize: 12.5, color: AppColors.muted),
           ),
         ],

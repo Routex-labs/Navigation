@@ -495,10 +495,26 @@ void main() {
     expect(find.text('뜻이 비슷한 매장을 찾았어요'), findsNothing);
   });
 
-  testWidgets('타이핑 중에는 의미 검색을 부르지 않는다', (WidgetTester tester) async {
-    // 의미 검색은 첫 호출이 20초대까지 간다. 글자마다 던지면 "밥"·"밥 먹"이
-    // 전부 모델을 태우므로, 확정(엔터) 전에는 절대 타면 안 된다.
-    final repository = _FallbackDestinationRepository();
+  testWidgets('엔터를 누르지 않아도 타이핑이 멎으면 의미 검색까지 간다', (
+    WidgetTester tester,
+  ) async {
+    // 회귀: 예전에는 의미 검색이 onSubmitted(엔터)에만 붙어 있었다. 한글 IME에서
+    // 첫 엔터가 조합 확정에 쓰이면 onSubmitted가 오지 않아 의미 검색이 아예
+    // 시작되지 않았고, 화면에는 경량이 빈손이라는 이유만으로 "찾지 못했어요"가
+    // 최종 결론처럼 떠 있었다. "신발"·"밥집"은 어떤 매장명과도 정확히 일치하지
+    // 않으므로 타이핑만으로는 항상 그 화면이었다.
+    //
+    // 대신 비용은 디바운스 두 단(경량 300ms + 의미 400ms)으로 막는다. 중간
+    // 글자로 모델을 태우지 않는지는 widgets_test.dart의 SearchPanel 그룹이
+    // 타이머 단위로 확인한다.
+    final repository = _FallbackDestinationRepository(
+      aiResult: const PoiSearchResult(
+        name: '요즘김밥',
+        floor: 'B1',
+        point: LatLng(37.52, 126.92),
+        nodeId: 'FL-1:ND-1',
+      ),
+    );
     destinationRepository = repository;
 
     await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
@@ -507,11 +523,15 @@ void main() {
     await tester.tap(find.byType(TextField));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '밥 먹을');
-    // 디바운스가 끝나 경량 검색은 돌지만, 의미 검색은 아직이다.
-    await tester.pumpAndSettle(const Duration(milliseconds: 500));
+    // receiveAction(엔터)을 일부러 보내지 않는다. 시간만 흘린다.
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 450));
+    await tester.pumpAndSettle();
 
     expect(repository.lightQueries, ['밥 먹을']);
-    expect(repository.aiQueries, isEmpty);
+    expect(repository.aiQueries, ['밥 먹을']);
+    expect(find.textContaining('요즘김밥'), findsOneWidget);
   });
 
   testWidgets('검색창을 눌러도 두 번째 입력창이 생기지 않는다', (WidgetTester tester) async {

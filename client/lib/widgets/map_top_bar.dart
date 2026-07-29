@@ -36,7 +36,9 @@ class MapTopBar extends StatelessWidget {
   final FocusNode focusNode;
   final ValueChanged<String> onChanged;
 
-  /// 엔터로 확정. 상위가 이때만 의미 검색까지 이어 붙인다.
+  /// 엔터로 확정. 의미 검색은 타이핑이 멎어도 알아서 이어지므로 이 콜백은
+  /// **유일한 트리거가 아니라 지름길**이다 — 한글 IME에서 첫 엔터가 조합 확정에
+  /// 쓰여 여기까지 오지 않아도 검색은 끝까지 간다.
   final ValueChanged<String> onSubmitted;
 
   /// 검색이 활성(포커스 또는 입력 중)인지. true면 왼쪽 버튼이 햄버거 대신
