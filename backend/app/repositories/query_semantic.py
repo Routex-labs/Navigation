@@ -23,13 +23,13 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+from sqlalchemy import func, select
 
+from app.models import Floor, Store
 from app.repositories.query_search import _load_stores  # 건물/층 조인 재사용
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
-
-    from app.models import Floor, Store
 
 _MODEL_NAME = "jhgan/ko-sroberta-multitask"
 
@@ -94,8 +94,30 @@ _model: Any | None = None
 _model_load_failed = False
 
 _index_lock = threading.Lock()
-# building_id -> (faiss.Index, [store_id ...]) — 벡터 행 순서와 store_id를 짝지어 역참조.
-_indexes: dict[str, tuple[Any, list[str]]] = {}
+# building_id -> (faiss.Index, [store_id ...], fingerprint) — 벡터 행 순서와 store_id를
+# 짝지어 역참조하고, fingerprint로 이 인덱스가 어느 시점의 DB 데이터를 반영하는지 기억한다.
+_indexes: dict[str, tuple[Any, list[str], "_Fingerprint"]] = {}
+
+# 매장 수 + max(store.id)의 건물별 지문. 별도 프로세스(reset_and_seed)가 재시딩해도
+# 서버 프로세스는 그 사실을 모른다 — semantic_search 진입 때마다 이 지문을 값싼 SQL로
+# 재계산해 옛 인덱스(_indexes)와 다르면 그 건물만 버리고 재빌드한다.
+# count(*) 1건 수준의 비용이라 매 요청에 걸어도 된다(문서 상단 핵심 원칙 — 무거운 것은
+# 함수 안 지연 import). max(id)까지 같이 보는 이유: 매장 수가 같아도 삭제+추가로
+# 구성원이 바뀌는 재시딩을 놓치지 않기 위해서다(완벽한 체크섬은 아니지만 실전 재시딩
+# 패턴 — 전체 삭제 후 재적재 — 은 id 구성이 통째로 바뀌므로 count만으로도 대부분 걸러지고,
+# max(id)가 우연히 같은 count에서 구성이 바뀐 경우의 보강 신호가 된다).
+_Fingerprint = tuple[int, str | None]
+
+
+def _compute_fingerprint(session: "Session", building_id: str) -> _Fingerprint:
+    """건물의 매장 수 + 최대 id를 값싼 집계 쿼리 한 번으로 계산한다."""
+    row = session.execute(
+        select(func.count(Store.id), func.max(Store.id))
+        .join(Floor, Store.floor_id == Floor.id)
+        .where(Floor.building_id == building_id)
+    ).one()
+    count, max_id = row
+    return int(count), max_id
 
 
 def _load_model() -> Any:
@@ -194,20 +216,26 @@ def _build_index(session: "Session", building_id: str) -> tuple[Any, list[str]] 
 
 
 def _get_index(session: "Session", building_id: str) -> tuple[Any, list[str]] | None:
+    # 값싼 지문 재계산(count(*) + max(id) 한 번) — 매 질의마다 실행되므로 반드시 저렴해야
+    # 한다. 지문이 캐시와 같으면 임베딩 재계산(수 초) 없이 그대로 재사용한다.
+    fingerprint = _compute_fingerprint(session, building_id)
+
     cached = _indexes.get(building_id)
-    if cached is not None:
-        return cached
+    if cached is not None and cached[2] == fingerprint:
+        return cached[0], cached[1]
 
     # 모델 로드와 같은 이유로 락 안에서 재확인 — 인덱스를 중복 빌드하지 않게.
+    # 락 안에서도 지문을 다시 확인한다: 대기 중에 다른 스레드가 이미 최신으로 갱신했을 수 있다.
     with _index_lock:
         cached = _indexes.get(building_id)
-        if cached is None:
+        if cached is None or cached[2] != fingerprint:
             built = _build_index(session, building_id)
             if built is None:
                 return None  # 캐시하지 않음 — 모델 준비되면 다음 요청에서 재시도
-            _indexes[building_id] = built
-            cached = built
-    return cached
+            index, store_ids = built
+            _indexes[building_id] = (index, store_ids, fingerprint)
+            cached = _indexes[building_id]
+    return cached[0], cached[1]
 
 
 def reset_indexes() -> None:
