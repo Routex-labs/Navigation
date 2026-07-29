@@ -98,16 +98,23 @@ def _strip_tail(t: str) -> str:
 
 
 # tier 2(이름 부분 일치) 안의 정밀도. 낮을수록 우선.
-# 사용자는 이름 앞에서부터 친다 — "이"는 "이솝"을 찾는 것이지 "엘리베이터"의 세 번째
-# 글자를 찾는 게 아니다. 이 순위가 없으면 둘 다 같은 tier 2라 층·ID순으로 갈려,
-# 한두 글자를 친 순간 엉뚱한 시설이 먼저 뜬다(KIWI.md 9절이 예고한 한 글자 과매칭).
-_NAME_PREFIX = 0   # 이름이 질의로 시작 — "이" → "이솝"
+# 사용자는 이름 앞에서부터 친다 — "레이어드"는 "카페 레이어드"를 찾는 것이지 다른 이름의
+# 중간 어딘가를 찾는 게 아니다. 이 순위가 없으면 둘 다 같은 tier 2라 층·ID순으로 갈려,
+# 몇 글자를 친 순간 엉뚱한 시설이 먼저 뜬다(KIWI.md 9절이 예고한 한 글자 과매칭).
+_NAME_PREFIX = 0   # 이름이 질의로 시작 — "이솝화" → "이솝 화장품"(2글자부터, 아래 참고)
 _WORD_PREFIX = 1   # 이름 속 단어가 질의로 시작 — "레이어드" → "카페 레이어드"
-_CONTAINS = 2      # 그 밖의 중간 포함 — "이" → "엘리베이터"
+_CONTAINS = 2      # 그 밖의 중간 포함 — "이솝" → "엘리베이터솝"(가상의 예)
+
+# tier 2(이름 부분 일치)에 들어가려면 질의가 최소 2글자여야 한다. query_morph.normalize가
+# 형태소 분해로 오타·조사를 지우면서 질의가 1글자로 축소되는 경우가 있다("샤낼"→"샤",
+# "물 사고싶어"→"물"). 그 1글자가 무관한 매장 이름 접두와 우연히 맞아 오탐이 난다.
+# tier 0(정확 이름 일치)·tier 1(카테고리 일치)은 이 하한의 영향을 받지 않는다 — "송"·"온"
+# 같은 한 글자 매장명은 정확 일치로 계속 잡혀야 한다.
+_MIN_NAME_PARTIAL_MATCH_LEN = 2
 
 
 def _name_match_rank(name: str, q: str) -> int | None:
-    if not q or q not in name:
+    if not q or len(q) < _MIN_NAME_PARTIAL_MATCH_LEN or q not in name:
         return None
     if name.startswith(q):
         return _NAME_PREFIX
