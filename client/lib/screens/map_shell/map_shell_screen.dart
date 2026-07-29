@@ -717,6 +717,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                     submitTick: _searchSubmitTick,
                     onStorePicked: _onSearchStorePicked,
                     onBuildingPicked: _onSearchBuildingPicked,
+                    currentFloorId: _activeIndoorFloor,
                   ),
                 ),
               ),

@@ -578,10 +578,12 @@ void main() {
     expect(find.textContaining('건물 ·'), findsOneWidget);
   });
 
-  testWidgets('상단 검색은 실내에서도 현재 층으로 좁히지 않는다', (WidgetTester tester) async {
-    // 이름을 알고 검색하는 사용자는 그 매장이 몇 층인지 모른다. 현재 층으로
-    // 좁히면 분명히 있는 매장이 "결과 없음"으로 나온다. 층 스코프는 길찾기·
-    // 카테고리 시트만 쓴다.
+  testWidgets('상단 검색은 실내에서 현재 층을 요청에 함께 보낸다', (WidgetTester tester) async {
+    // "화장실"처럼 시설 질의가 건물 전체 정렬 순서상 우연히 걸리는 층이 아니라
+    // 지금 보고 있는 층으로 확정되도록, 실내 탭에서는 현재 층(_activeIndoorFloor)을
+    // 경량 요청에 실어 보낸다. 매장 이름을 아는 검색이 다른 층에 있어 이 때문에
+    // 경량이 빈손이 되더라도 의미 검색은 층을 무시하고 건물 전체를 보므로 여전히
+    // 찾아낸다(백엔드 query_search.match_ai_destination).
     final repository = _FallbackDestinationRepository(
       lightResult: const PoiSearchResult(
         name: 'MLB',
@@ -599,7 +601,7 @@ void main() {
     await tester.pumpAndSettle();
     await searchFromTopBar(tester, 'MLB');
 
-    expect(repository.lightFloorScopes, [null]);
+    expect(repository.lightFloorScopes, isNot(contains(null)));
     expect(find.text('B2'), findsOneWidget);
   });
 

@@ -27,6 +27,11 @@ import '../theme/app_theme.dart';
 /// - **엔터로 확정**([submitTick] 증가): 두 대기를 모두 건너뛰고 같은 경로를
 ///   즉시 탄다.
 ///
+/// 두 요청 모두 [currentFloorId]가 있으면 함께 보낸다 — "화장실"처럼 층
+/// 시설을 가리키는 질의가 지금 보고 있는 층으로 확정되게 하기 위해서다.
+/// 매장 이름 검색이 다른 층에 있어 이 때문에 1차가 빈손이 되더라도, 2차
+/// 의미 검색은 층을 무시하고 건물 전체를 보므로 그대로 찾아낸다.
+///
 /// ### 왜 엔터를 트리거에서 뺐나
 ///
 /// 예전에는 의미 검색을 엔터에만 붙였다. 비용 때문이었는데 두 가지가 깨졌다.
@@ -59,12 +64,19 @@ class SearchPanel extends StatefulWidget {
     required this.submitTick,
     required this.onStorePicked,
     required this.onBuildingPicked,
+    this.currentFloorId,
   });
 
   final String buildingId;
 
   /// 상단 검색창에 지금 들어 있는 글자.
   final String query;
+
+  /// 지금 보고 있는 층. 실내 지도가 열려 있을 때만 값이 있고, 야외 모드거나
+  /// 층이 아직 안 잡혔으면 null이다. 시설 질의("화장실")가 건물 전체에서
+  /// 정렬 순서상 우연히 걸리는 층(예: B6)이 아니라 실제로 보고 있는 층으로
+  /// 확정되도록 요청에 실어 보낸다.
+  final String? currentFloorId;
 
   /// 엔터로 확정할 때마다 상위가 1씩 올린다. 값이 바뀐 순간에만 의미 검색을
   /// 붙인다 — 같은 글자로 다시 엔터를 눌러도 재검색되게 하려고 bool이 아닌
@@ -205,13 +217,15 @@ class _SearchPanelState extends State<SearchPanel> {
     Building? building;
     try {
       // 1단계: 경량 매칭. 매장 이름·동의어는 여기서 즉시 걸린다.
-      // 층으로 좁히지 않고 **건물 전체**를 뒤진다 — 사용자가 이름을 알고
-      // 검색할 때는 그 매장이 몇 층인지 모르는 게 보통이라, 현재 층으로 좁히면
-      // 분명히 있는 매장이 "결과 없음"으로 나온다. 어느 층인지는 결과 줄에
-      // 함께 적혀 있고, 다른 층이면 경로도 층 간 경로로 이어진다.
+      // 현재 층을 함께 보낸다 — "화장실"처럼 시설을 가리키는 질의는 이래야
+      // 지금 보고 있는 층으로 확정된다(안 보내면 건물 전체에서 정렬 순서상
+      // 우연히 걸리는 층이 나온다). 매장을 이름으로 아는 검색이 다른 층에
+      // 있어 여기서 빈손이 되더라도, 빈손이면 아래에서 층 제한이 없는 의미
+      // 검색으로 자동으로 넘어가 그 매장을 여전히 찾아낸다.
       results = await destinationRepository.searchDestinations(
         widget.buildingId,
         query,
+        currentFloorId: widget.currentFloorId,
       );
       final buildings = await buildingRepository.getAllBuildings();
       building = buildings
@@ -261,9 +275,14 @@ class _SearchPanelState extends State<SearchPanel> {
 
     List<PoiSearchResult> results;
     try {
+      // 백엔드의 2차(의미) 단계는 current_floor_id를 받아도 건물 전체를 본다
+      // (query_search.match_ai_destination 주석 참고) — 1차만 층으로 좁혀
+      // 확정하고, 1차가 실패한 뒤인 여기서는 층을 또 좁히지 않는다. 그대로
+      // 넘겨도 회귀가 없다.
       results = await destinationRepository.searchDestinationsAi(
         widget.buildingId,
         query,
+        currentFloorId: widget.currentFloorId,
       );
     } on Object {
       _finishFailed(query, requestId);

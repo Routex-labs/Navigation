@@ -237,7 +237,7 @@ void main() {
     final query = ValueNotifier<String>('');
     final submitTick = ValueNotifier<int>(0);
 
-    Future<void> pumpPanel(WidgetTester tester) {
+    Future<void> pumpPanel(WidgetTester tester, {String? currentFloorId}) {
       query.value = '';
       submitTick.value = 0;
       return tester.pumpWidget(
@@ -251,6 +251,7 @@ void main() {
                 submitTick: submitTick.value,
                 onStorePicked: (_) {},
                 onBuildingPicked: (_) {},
+                currentFloorId: currentFloorId,
               ),
             ),
           ),
@@ -429,6 +430,38 @@ void main() {
       expect(find.textContaining('다시 시도'), findsOneWidget);
     });
 
+    testWidgets('현재 층이 주어지면 경량·의미 검색 요청 모두에 실어 보낸다', (
+      WidgetTester tester,
+    ) async {
+      // "화장실"은 tier 1(카테고리 정확 일치)로 경량이 빈손이라, 의미 검색까지
+      // 이어진다 — 두 요청 모두 층이 실제로 실리는지 확인해야 한다.
+      final repository = _FakeSearchRepository(aiResults: const [store]);
+      destinationRepository = repository;
+      await pumpPanel(tester, currentFloorId: '1F');
+
+      query.value = '화장실';
+      await tester.pump();
+      await settleSearch(tester);
+
+      expect(repository.lightFloorIds, ['1F']);
+      expect(repository.aiFloorIds, ['1F']);
+    });
+
+    testWidgets('현재 층이 없으면(야외 모드 등) null을 그대로 보낸다', (
+      WidgetTester tester,
+    ) async {
+      final repository = _FakeSearchRepository();
+      destinationRepository = repository;
+      await pumpPanel(tester);
+
+      query.value = '화장실';
+      await tester.pump();
+      await settleSearch(tester);
+
+      expect(repository.lightFloorIds, [null]);
+      expect(repository.aiFloorIds, [null]);
+    });
+
     testWidgets('검색어를 지우면 안내 문구로 돌아간다', (WidgetTester tester) async {
       destinationRepository = _FakeSearchRepository();
       await pumpPanel(tester);
@@ -466,12 +499,18 @@ class _FakeSearchRepository implements DestinationRepository {
   /// 않는지 확인하는 게 이 목록의 목적이다.
   final aiQueries = <String>[];
 
+  /// 두 호출 각각에 실제로 실린 `currentFloorId`. 패널이 상위에서 받은 값을
+  /// 그대로 넘기는지(빼먹거나 다른 값으로 바꾸지 않는지) 확인하는 데 쓴다.
+  final lightFloorIds = <String?>[];
+  final aiFloorIds = <String?>[];
+
   @override
   Future<List<PoiSearchResult>> searchDestinations(
     String buildingId,
     String query, {
     String? currentFloorId,
   }) async {
+    lightFloorIds.add(currentFloorId);
     if (fail) throw Exception('boom');
     return lightResults;
   }
@@ -483,6 +522,7 @@ class _FakeSearchRepository implements DestinationRepository {
     String? currentFloorId,
   }) async {
     aiQueries.add(query);
+    aiFloorIds.add(currentFloorId);
     if (aiDelay != null) await Future<void>.delayed(aiDelay!);
     if (fail) throw Exception('boom');
     return aiResults;
