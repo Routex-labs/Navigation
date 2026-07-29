@@ -10,6 +10,7 @@ import '../../models/poi_search_result.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/building_switcher_sheet.dart';
 import '../../widgets/category_icon.dart';
+import '../../widgets/category_label_order.dart';
 import '../../widgets/category_stores_sheet.dart';
 import '../../widgets/directions_sheet.dart';
 import '../../widgets/favorites_sheet.dart';
@@ -881,7 +882,7 @@ class _FavoritesPill extends StatelessWidget {
 /// pill → 카테고리 목록 시트 → 매장 목록 시트로 두 단계였음).
 ///
 /// 카테고리 enumeration은 건물 전 층의 `stores[].category`를 unique하게 뽑아
-/// 매장 수 많은 순으로 정렬한다. HttpBuildingRepository가 층별 응답을
+/// 사용자에게 보이는 label 기준 가나다 순으로 정렬한다. HttpBuildingRepository가 층별 응답을
 /// 캐시하므로 첫 로드 이후엔 즉시.
 class _CategoryChipsRow extends StatefulWidget {
   const _CategoryChipsRow({
@@ -911,7 +912,7 @@ class _CategoryChipsRowState extends State<_CategoryChipsRow> {
   Future<List<String>> _load() async {
     final building = await buildingRepository.getBuilding(widget.buildingId);
     if (building == null) return const [];
-    final counts = <String, int>{};
+    final categories = <String?>[];
     for (final floor in building.floors) {
       final json = await buildingRepository.getFloorGeoJson(
         widget.buildingId,
@@ -920,17 +921,10 @@ class _CategoryChipsRowState extends State<_CategoryChipsRow> {
       if (json == null) continue;
       final plan = FloorPlan.fromJson(json);
       for (final store in plan.stores) {
-        final c = store.category;
-        if (c == null || c.isEmpty) continue;
-        counts[c] = (counts[c] ?? 0) + 1;
+        categories.add(store.category);
       }
     }
-    final entries = counts.entries.toList()
-      ..sort((a, b) {
-        final c = b.value.compareTo(a.value);
-        return c != 0 ? c : a.key.compareTo(b.key);
-      });
-    return entries.map((e) => e.key).toList();
+    return sortedCategoryLabels(categories);
   }
 
   @override
