@@ -11,8 +11,8 @@ import os
 
 import pytest
 
-from app.repositories import query_semantic
-from tests.conftest import REAL_BUILDING_ID
+from app.repositories import query_search, query_semantic
+from tests.conftest import REAL_BUILDING_ID, REAL_FLOOR_NAME
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("NAV_TEST_EMBEDDING") != "1",
@@ -41,3 +41,21 @@ def test_무의미_질의는_임계값에서_걸러진다(real_db_session):
     hit = query_semantic.semantic_search(real_db_session, REAL_BUILDING_ID, "asdfqwerzxcv")
 
     assert hit is None
+
+
+# 회귀: 현재 층에 그 업종이 하나도 없어도 AI 질의는 타 층에서 찾아 준다.
+# 클라이언트는 항상 보고 있는 층을 실어 보낸다(map_shell_screen: currentFloorId).
+# 1F(식당 0개)에서 "밥집"을 물으면 2차가 층 필터에 전멸해 no_match가 나오던 버그.
+def test_현재층에_업종이_없어도_AI질의는_타층에서_찾는다(real_db_session):
+    query_semantic.reset_indexes()
+
+    result = query_search.match_ai_destination(
+        real_db_session,
+        REAL_BUILDING_ID,
+        "밥집",
+        current_floor_id=REAL_FLOOR_NAME,  # "1F"
+    )
+
+    assert result is not None
+    assert result["status"] in ("ok", "ok_no_route")
+    assert result["match"]["floor_name"]  # 몇 층인지는 데이터에 맡기고 안내 가능만 본다

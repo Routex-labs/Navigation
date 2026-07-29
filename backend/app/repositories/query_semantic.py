@@ -12,10 +12,14 @@
 #   무거운 의존성을 로드하지 않는다.
 # - 인덱스는 건물별로 최초 질의 때 1회 빌드해 메모리 상주. 코퍼스가 작아 IndexFlatIP 브루트포스로 충분.
 # - 코사인 유사도 = L2 정규화 임베딩 + IndexFlatIP 내적. 임계값 미만은 no_match(엉뚱한 매장 방지).
+# - 실패는 사유를 구분해 돌려준다(SemanticReason). "모델·인덱스 미가용(degraded)"과
+#   "임계값 미달(no_match)"은 화면 문구가 달라야 한다. 사유만 드러내고 예외는 그대로 삼킨다.
 
 from __future__ import annotations
 
 import threading
+from dataclasses import dataclass
+from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -38,6 +42,52 @@ SIMILARITY_THRESHOLD = 0.50
 
 # 상위 몇 건을 받아 층 필터를 적용할지. 코퍼스가 작아 넉넉히 받는다.
 _TOP_K = 10
+
+
+class SemanticReason(str, Enum):
+    """의미 검색 결과의 사유. 화면 문구가 사유별로 달라야 해서 구분한다.
+
+    설계 근거: docs/backend/native/conversational-discovery.md 8-4절.
+    이전에는 아래 넷이 전부 None 하나로 뭉개져 있어서, 호출부가 "지금 의미 검색을
+    못 쓴다"(degraded)와 "찾았지만 안 닮았다"(no_match)를 구분할 수 없었다.
+
+    - OK: 임계값 이상 후보 1건을 찾았다.
+    - MODEL_UNAVAILABLE: 모델이 아직 없거나 로드에 실패했다 → degraded.
+    - INDEX_UNAVAILABLE: 인덱스를 만들지 못했다(건물에 매장 0건 등) → degraded.
+    - BELOW_THRESHOLD: 최상위 유사도가 SIMILARITY_THRESHOLD 미만이다 → no_match.
+
+    str 혼합 Enum이라 로그·JSON 직렬화에서 값이 그대로 문자열로 찍힌다.
+    """
+
+    OK = "ok"
+    MODEL_UNAVAILABLE = "model_unavailable"
+    INDEX_UNAVAILABLE = "index_unavailable"
+    BELOW_THRESHOLD = "below_threshold"
+
+
+# degraded로 안내해야 하는 사유들. "의미 검색 기능 자체를 지금 못 쓴다"는 뜻이며,
+# 질의를 바꿔도 결과가 달라지지 않는다. BELOW_THRESHOLD는 여기 들어가지 않는다 —
+# 그건 기능은 정상이고 이 질의만 안 닮은 것이라 "다른 말로 다시"가 맞는 안내다.
+_DEGRADED_REASONS = frozenset(
+    {SemanticReason.MODEL_UNAVAILABLE, SemanticReason.INDEX_UNAVAILABLE}
+)
+
+
+@dataclass(frozen=True)
+class SemanticResult:
+    """의미 검색 1건의 결과와 사유.
+
+    hit은 reason이 OK일 때만 채워진다. 호출부는 `result.hit`만 봐도 기존과 동일하게
+    동작하고, 문구를 나눠야 할 때만 `result.is_degraded`를 본다.
+    """
+
+    reason: SemanticReason
+    hit: tuple[float, "Store", "Floor"] | None = None
+
+    @property
+    def is_degraded(self) -> bool:
+        """지금 의미 검색 기능을 쓸 수 없는 상태인가(모델·인덱스 미가용)."""
+        return self.reason in _DEGRADED_REASONS
 
 _model_lock = threading.Lock()
 _model: Any | None = None
@@ -166,24 +216,34 @@ def reset_indexes() -> None:
         _indexes.clear()
 
 
-def semantic_search(
+def search(
     session: "Session",
     building_id: str,
     text: str,
-    *,
-    current_floor_id: str | None = None,
-) -> tuple[float, "Store", "Floor"] | None:
-    """건물 인덱스에서 임계값 이상 최상위 (score, Store, Floor) 1건. 없으면 None.
+) -> SemanticResult:
+    """건물 인덱스에서 임계값 이상 최상위 1건을 사유와 함께 돌려준다.
 
-    모델·인덱스가 준비 안 됐거나(로드 실패 등) 임계값 미달이면 None → 호출부가 no_match로 처리.
+    검색 범위는 건물 전체다 — 현재 층으로 좁히지 않는다. 자연어 질의를 던지는 사용자는
+    대상이 몇 층인지 모르는 상태이고, 응답의 floor_name이 층까지 안내하기 때문이다.
+    이전에는 현재 층 필터를 받았는데, 1F에서 "밥집"을 물으면 상위 후보(전부 B1 식당가)가
+    필터에 전멸해 no_match가 나왔다. 현재 층 우선이 필요한 시설 찾기는 1차 경량 경로가
+    층 스코프를 유지한 채 담당한다(match_ai_destination).
+
+    실패해도 예외를 올리지 않는다 — 사유만 드러내고 예외는 그대로 삼킨다. 모델 로드
+    실패가 요청을 500으로 만들면 경량 1차 경로까지 죽는다(모듈 상단 핵심 원칙).
+    사유 구분은 SemanticReason 참고.
     """
     model = _get_model()
     if model is None:
-        return None
+        return SemanticResult(SemanticReason.MODEL_UNAVAILABLE)
 
     got = _get_index(session, building_id)
     if got is None:
-        return None
+        # _get_index는 "모델 미가용"과 "매장 0건"을 모두 None으로 준다. 다만 위에서
+        # 모델을 이미 확인했고 _model은 한 번 로드되면 None으로 돌아가지 않으므로,
+        # 여기까지 왔다는 건 사실상 인덱스를 못 만든 쪽이다. 둘 다 degraded라
+        # 사용자 안내는 어차피 같다.
+        return SemanticResult(SemanticReason.INDEX_UNAVAILABLE)
     index, store_ids = got
 
     # 인덱스는 store_id만 캐시한다(교차 요청 지속). ORM 객체는 매 요청 현재 세션으로 새로 로드해
@@ -194,7 +254,8 @@ def semantic_search(
     k = min(_TOP_K, index.ntotal)
     scores, positions = index.search(query_vec, k)
 
-    # 내림차순 정렬됨. 층 필터로 건너뛰다 처음 만난 온-층 후보로 판정한다.
+    # 내림차순 정렬됨. 살아 있는 최상위 후보 1건으로 판정한다.
+    # top-K를 1이 아니라 넉넉히 받는 이유는 인덱스 빌드 후 삭제된 매장을 건너뛰기 위해서다.
     for score, pos in zip(scores[0], positions[0]):
         if pos < 0:
             continue
@@ -202,11 +263,24 @@ def semantic_search(
         if pair is None:
             continue  # 인덱스 빌드 후 삭제된 매장 방어
         store, floor = pair
-        # 라벨("B2")·내부 id("FL-...") 둘 다 허용 — query_search._load_stores와 같은 규칙.
-        # 두 경로가 다른 기준을 쓰면 같은 요청이 경량/의미 검색에서 다르게 걸러진다.
-        if current_floor_id is not None and current_floor_id not in (floor.name, floor.id):
-            continue
         if float(score) < SIMILARITY_THRESHOLD:
-            return None  # 최상위(온-층) 후보가 미달이면 이후도 미달 → no_match
-        return float(score), store, floor
-    return None
+            # 최상위가 미달이면 이후도 미달 → no_match("다른 말로 다시 찾아보세요").
+            return SemanticResult(SemanticReason.BELOW_THRESHOLD)
+        return SemanticResult(SemanticReason.OK, (float(score), store, floor))
+
+    # 살아 있는 후보가 하나도 없다(인덱스 빌드 후 전부 삭제 등). 인덱스가 현재 데이터를
+    # 반영하지 못한 상태라 질의를 바꿔도 소용없다 → degraded 쪽으로 본다.
+    return SemanticResult(SemanticReason.INDEX_UNAVAILABLE)
+
+
+def semantic_search(
+    session: "Session",
+    building_id: str,
+    text: str,
+) -> tuple[float, "Store", "Floor"] | None:
+    """search()의 하위 호환 래퍼. 임계값 이상 최상위 (score, Store, Floor) 1건, 없으면 None.
+
+    사유가 필요 없는 기존 호출부(match_ai_destination·평가 스크립트)를 그대로 두기 위한
+    얇은 어댑터다. 사유로 문구를 나눠야 하는 새 호출부는 search()를 쓴다.
+    """
+    return search(session, building_id, text).hit
