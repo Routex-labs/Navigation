@@ -329,6 +329,32 @@ void main() {
       expect(find.text('뜻이 비슷한 매장을 찾았어요'), findsOneWidget);
     });
 
+    testWidgets('의미 검색 결과가 질의와 이름이 정확히 같으면 배너를 띄우지 않는다', (
+      WidgetTester tester,
+    ) async {
+      // 층 스코프(ea315b8) 적용 뒤: 1F에서 타 층 "나이키"를 정확한 이름으로
+      // 검색하면 1차(현재 층 한정)는 빈손이고 2차 의미 검색이 찾아낸다. 이때는
+      // 뜻으로 찾은 게 아니라 정확한 이름 일치이므로 "뜻이 비슷한" 배너가
+      // 붙으면 안 된다.
+      const nike = PoiSearchResult(
+        name: '나이키',
+        floor: '3F',
+        point: LatLng(37.52, 126.92),
+        nodeId: 'FL-3:ND-1',
+      );
+      final repository = _FakeSearchRepository(aiResults: const [nike]);
+      destinationRepository = repository;
+      await pumpPanel(tester, currentFloorId: '1F');
+
+      query.value = '나이키';
+      await tester.pump();
+      await settleSearch(tester);
+
+      expect(repository.aiQueries, ['나이키']);
+      expect(find.text('나이키'), findsOneWidget);
+      expect(find.text('뜻이 비슷한 매장을 찾았어요'), findsNothing);
+    });
+
     testWidgets('의미 검색까지 빈손이어야 최종 없음 문구를 띄운다', (WidgetTester tester) async {
       final repository = _FakeSearchRepository();
       destinationRepository = repository;

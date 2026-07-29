@@ -123,6 +123,28 @@ enum _SearchPhase {
   error,
 }
 
+/// 의미 검색 결과가 사실상 정확한 이름 일치인지 휴리스틱으로 판정한다. 서버가
+/// 어느 tier(정확 일치·동의어·의미)로 매칭했는지는 클라이언트로 내려오지
+/// 않으므로, 질의와 결과 이름을 직접 비교해 추정한다.
+///
+/// 최근 층 스코프 적용(ea315b8)으로 상단 검색이 현재 층을 함께 보내면서,
+/// 사용자가 타 층 매장을 정확한 이름으로 검색해도 1차 경량 검색(현재 층
+/// 한정)이 빈손이 되어 2차 의미 검색으로 넘어오는 경우가 생겼다. 이때도
+/// [SearchPanel._fromSemantic] 배너("뜻이 비슷한 매장을 찾았어요")가 그대로
+/// 붙으면, 정확한 이름을 쳤는데 "뜻으로 찾았다"고 말하는 셈이라 부정확하다.
+///
+/// 대소문자·앞뒤 공백만 정규화하고 그 밖의 정규화(형태소 분석 등)는 하지
+/// 않는다. 서버의 Kiwi 정규화까지 흉내내려 하면 휴리스틱이 오히려 서버 판정과
+/// 어긋나는 경우가 늘어난다 — 여기서는 "누가 봐도 같은 이름"만 걸러낸다.
+bool _isExactNameMatch(String query, List<PoiSearchResult> results) {
+  final normalizedQuery = query.trim().toLowerCase();
+  if (normalizedQuery.isEmpty) return false;
+  return results.any((result) {
+    final name = result.name.trim().toLowerCase();
+    return name == normalizedQuery || name.startsWith(normalizedQuery);
+  });
+}
+
 class _SearchPanelState extends State<SearchPanel> {
   /// 경량 검색용 디바운스. 글자마다 서버를 때리지 않게 잠깐 모았다 보낸다.
   static const _lightDebounce = Duration(milliseconds: 300);
@@ -289,11 +311,14 @@ class _SearchPanelState extends State<SearchPanel> {
       return;
     }
     if (!mounted || requestId != _requestId) return;
+    // 결과가 사실상 정확한 이름 일치면(예: 타 층 "나이키") "뜻이 비슷한"
+    // 배너를 붙이지 않는다 — 실제로는 뜻으로 찾은 게 아니라 층 스코프 때문에
+    // 1차가 빈손이 되어 여기로 넘어왔을 뿐이다.
     setState(() {
       _submittedQuery = query;
       _results = results;
       _building = null;
-      _fromSemantic = results.isNotEmpty;
+      _fromSemantic = results.isNotEmpty && !_isExactNameMatch(query, results);
       _phase = results.isEmpty ? _SearchPhase.noMatch : _SearchPhase.results;
     });
   }
