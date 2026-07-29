@@ -97,25 +97,53 @@ def _strip_tail(t: str) -> str:
     return t
 
 
-# 매칭 우선순위 tier. 낮을수록 우선. 안 걸리면 None.
-def _tier(store: Store, q: str, canon: str) -> int | None:
+# tier 2(이름 부분 일치) 안의 정밀도. 낮을수록 우선.
+# 사용자는 이름 앞에서부터 친다 — "이"는 "이솝"을 찾는 것이지 "엘리베이터"의 세 번째
+# 글자를 찾는 게 아니다. 이 순위가 없으면 둘 다 같은 tier 2라 층·ID순으로 갈려,
+# 한두 글자를 친 순간 엉뚱한 시설이 먼저 뜬다(KIWI.md 9절이 예고한 한 글자 과매칭).
+_NAME_PREFIX = 0   # 이름이 질의로 시작 — "이" → "이솝"
+_WORD_PREFIX = 1   # 이름 속 단어가 질의로 시작 — "레이어드" → "카페 레이어드"
+_CONTAINS = 2      # 그 밖의 중간 포함 — "이" → "엘리베이터"
+
+
+def _name_match_rank(name: str, q: str) -> int | None:
+    if not q or q not in name:
+        return None
+    if name.startswith(q):
+        return _NAME_PREFIX
+    if any(token.startswith(q) for token in name.split()):
+        return _WORD_PREFIX
+    return _CONTAINS
+
+
+# 매칭 우선순위 (tier, tier 2 정밀도). 낮을수록 우선. 안 걸리면 None.
+def _tier(store: Store, q: str, canon: str) -> tuple[int, int] | None:
     name = _norm(store.name or "")
     cat = _norm(store.category or "")
     sub = _norm(store.subcategory or "")
     if name in (q, canon):
-        return 0  # 정확 이름 일치
+        return 0, 0  # 정확 이름 일치
     if q in (cat, sub) or canon in (cat, sub):
-        return 1  # 카테고리/서브카테고리 일치
-    if (q and q in name) or (canon and canon in name):
-        return 2  # 이름 부분 일치
+        return 1, 0  # 카테고리/서브카테고리 일치
+    # 질의 원문과 동의어 표준형 중 더 정밀하게 걸린 쪽을 쓴다.
+    ranks = [
+        rank
+        for rank in (_name_match_rank(name, q), _name_match_rank(name, canon))
+        if rank is not None
+    ]
+    if ranks:
+        return 2, min(ranks)  # 이름 부분 일치
     return None
 
 
-# (tier, 구두점 후보 순서, floor.level, store.id) 오름차순 정렬 — 결정적.
+# (tier, 구두점 후보 순서, tier 2 정밀도, floor.level, store.id) 오름차순 정렬 — 결정적.
+# 정밀도를 후보 순서 뒤에 두는 이유: 후보 순서는 "원문에 가까운 정규화"를 뜻하고,
+# 정밀도는 그 후보가 이름 어디에 걸렸는지를 뜻한다. 원문 우선을 먼저 지킨 뒤
+# 같은 후보 안에서 접두를 앞세워야 "A.P.C." 같은 기존 동작이 그대로 남는다.
 def _rank_with_candidate(
     rows: list[tuple[Store, Floor]],
     text: str,
-) -> list[tuple[int, int, int, str, Store, Floor]]:
+) -> list[tuple[int, int, int, int, str, Store, Floor]]:
     # 매장명을 형태소 사전에 먼저 등록한다 — 안 하면 미등록 브랜드명이 조사로 오해돼
     # 잘려 나간다("리모와" → "리모"). 이미 등록된 단어는 건너뛰므로 두 번째 요청부터는 사실상 무료.
     query_morph.register_words(store.name for store, _floor in rows)
@@ -123,26 +151,27 @@ def _rank_with_candidate(
     candidates = _query_candidates(text)
     synonyms = _synonyms()
 
-    # 걸리는 매장마다 최선의 (tier, 후보 순서)를 고른다. tier가 같으면 원문에 가까운
-    # 후보가 먼저라 "A.P.C."가 "A.P.C 골프"의 부분 일치보다 우선한다.
+    # 걸리는 매장마다 최선의 (tier, 후보 순서, 정밀도)를 고른다. tier가 같으면 원문에
+    # 가까운 후보가 먼저라 "A.P.C."가 "A.P.C 골프"의 부분 일치보다 우선한다.
     scored_with_candidate = []
     for store, floor in rows:
-        best: tuple[int, int] | None = None
+        best: tuple[int, int, int] | None = None
         for candidate_order, q in enumerate(candidates):
             canon = synonyms.get(q, q)
-            tier = _tier(store, q, canon)
-            if tier is None:
+            matched = _tier(store, q, canon)
+            if matched is None:
                 continue
-            key = (tier, candidate_order)
+            tier, precision = matched
+            key = (tier, candidate_order, precision)
             if best is None or key < best:
                 best = key
         if best is not None:
-            tier, candidate_order = best
+            tier, candidate_order, precision = best
             scored_with_candidate.append(
-                (tier, candidate_order, floor.level, store.id, store, floor)
+                (tier, candidate_order, precision, floor.level, store.id, store, floor)
             )
 
-    scored_with_candidate.sort(key=lambda row: (row[0], row[1], row[2], row[3]))
+    scored_with_candidate.sort(key=lambda row: (row[0], row[1], row[2], row[3], row[4]))
     return scored_with_candidate
 
 
@@ -150,12 +179,13 @@ def _rank(
     rows: list[tuple[Store, Floor]],
     text: str,
 ) -> list[tuple[int, int, str, Store, Floor]]:
-    """외부 매칭용 순위. 내부 구두점 후보 순서는 정렬에만 쓰고 반환에서는 감춘다."""
+    """외부 매칭용 순위. 내부 후보 순서·정밀도는 정렬에만 쓰고 반환에서는 감춘다."""
     return [
         (tier, level, store_id, store, floor)
         for (
             tier,
             _candidate_order,
+            _precision,
             level,
             store_id,
             store,
@@ -165,24 +195,27 @@ def _rank(
 
 
 def _is_confident_light_match(
-    scored: list[tuple[int, int, int, str, Store, Floor]],
+    scored: list[tuple[int, int, int, int, str, Store, Floor]],
 ) -> bool:
     """AI 경로에서 경량 결과를 바로 확정해도 되는지 판단한다.
 
     정확 이름·카테고리는 기존처럼 확정한다. 이름 부분 일치(tier 2)는 최상위 후보가
     같은 매장명 하나일 때만 확정해, 여러 브랜드 중 ID순 첫 매장을 고르는 일을 막는다.
     같은 시설이 여러 층에 있는 경우는 이름이 같으므로 하나의 대상으로 본다.
+
+    같은 tier 2라도 정밀도가 다르면 다른 그룹으로 본다 — "이"의 접두 일치("이솝")가
+    유일하면, 중간 포함이 수십 건 있어도 그 하나로 확정한다.
     """
     if not scored:
         return False
     best_tier = scored[0][0]
     if best_tier < 2:
         return True
-    best_candidate_order = scored[0][1]
+    best_group = scored[0][:3]  # (tier, 후보 순서, 정밀도)
     best_names = {
         _norm(store.name or "")
-        for tier, candidate_order, _level, _store_id, store, _floor in scored
-        if (tier, candidate_order) == (best_tier, best_candidate_order)
+        for tier, order, precision, _level, _store_id, store, _floor in scored
+        if (tier, order, precision) == best_group
     }
     return len(best_names) == 1
 
@@ -277,7 +310,9 @@ def match_destination(
 
 
 # AI 자연어 질의(하이브리드). 1차 경량 확정 → 미스·모호한 부분 일치 시 2차 의미 검색.
-# destination과 같은 응답 계약(status/query/match)을 쓴다. 설계: docs/backend/native/FAISS.md
+# 검색 범위가 단계별로 다르다: 1차는 현재 층 한정(가까운 시설 우선), 2차는 건물 전체
+# (사용자가 층을 모르는 자연어 질의). destination과 같은 응답 계약(status/query/match)을 쓴다.
+# 설계: docs/backend/native/FAISS.md
 def match_ai_destination(
     session: Session,
     building_id: str,
@@ -295,17 +330,20 @@ def match_ai_destination(
         text,
     )
     if _is_confident_light_match(scored):
-        _, _, _, _, store, floor = scored[0]
+        *_, store, floor = scored[0]
         transform = fit_building_geo_transform(session, building_id)
         return {"status": _status(store), "query": text, "match": _to_match(store, floor, transform)}
 
     # 2차: 경량이 놓쳤거나 모호한 자연어를 임베딩 의미 검색으로.
     # import는 여기서 지연 — AI 경로가 2차를 쓸 때만 torch를 로드한다.
+    #
+    # current_floor_id를 넘기지 않는다 — 2차는 건물 전체를 본다.
+    # 1차(현재 층 한정)가 이미 실패한 뒤라 층을 또 좁히면 남는 게 없다. 실제로 1F에서
+    # "밥집"은 1F에 식당이 0개라 무조건 no_match였다. 현재 층 시설("화장실")은 1차가
+    # 층 스코프로 잡아 확정하므로, 층 우선순위는 여기서가 아니라 1차에서 지켜진다.
     from app.repositories import query_semantic
 
-    hit = query_semantic.semantic_search(
-        session, building_id, text, current_floor_id=current_floor_id
-    )
+    hit = query_semantic.semantic_search(session, building_id, text)
     if hit is None:
         return {"status": "no_match", "query": text, "match": None}
 
