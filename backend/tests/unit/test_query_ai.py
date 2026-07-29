@@ -7,9 +7,10 @@
 
 import pytest
 
+from app.models import Store
 from app.repositories import query_search, query_semantic
 from app.repositories.query_search import _load_stores
-from tests.conftest import BUILDING_ID
+from tests.conftest import BUILDING_ID, FLOOR_ID
 
 
 # 1차 경량이 맞으면 임베딩(2차)을 아예 호출하지 않는다 — 브랜드명은 문자열 일치가 우선.
@@ -91,6 +92,79 @@ def test_부분일치여도_최상위_매장명이_하나면_1차에서_확정�
         "게A",
         current_floor_id="1F",
     )
+
+    assert result["match"]["name"] == "가게A"
+    assert calls["n"] == 0
+
+
+# --- tier 1(카테고리·소분류 정확 일치) 확정 조건 (Wave 5-a) ---
+# "명품"(43건)·"레스토랑"(65건)처럼 소분류와 글자가 같은 질의가 첫 매장으로 임의
+# 확정되지 않도록, 서로 다른 매장 이름이 둘 이상이면 확정하지 않고 2차로 넘긴다.
+# docs/backend/native/conversational-discovery.md 7-2절, search-qa-fix-wave.md Wave 5-a.
+
+
+def test_tier1_서로_다른_이름이_2개_이상이면_1차에서_확정하지_않는다(
+    db_session, monkeypatch
+):
+    # 가게A(패션/여성패션)와 같은 subcategory("여성패션")를 갖되 이름이 다른 매장을
+    # 추가해, tier 1 후보의 서로 다른 이름이 2개("가게A", "가게C")가 되게 만든다.
+    extra = Store(
+        id="shop-c-1f-extra",
+        floor_id=FLOOR_ID,
+        name="가게C",
+        category="패션",
+        subcategory="여성패션",
+        centroid_x_m=50.0,
+        centroid_y_m=40.0,
+    )
+    db_session.add(extra)
+    db_session.flush()
+
+    store, floor = _load_stores(db_session, BUILDING_ID)[0]
+    calls = {"n": 0}
+
+    def spy(*_args, **_kwargs):
+        calls["n"] += 1
+        return 0.71, store, floor
+
+    monkeypatch.setattr(query_semantic, "semantic_search", spy)
+
+    result = query_search.match_ai_destination(db_session, BUILDING_ID, "여성패션")
+
+    assert calls["n"] == 1  # 1차가 확정하지 않아 2차로 넘어감
+    assert result["match"]["store_id"] == store.id
+
+
+def test_tier1_후보가_같은_이름_1개뿐이면_층만_달라도_확정한다(
+    db_session, monkeypatch
+):
+    calls = {"n": 0}
+
+    def spy(*_args, **_kwargs):
+        calls["n"] += 1
+        return None
+
+    monkeypatch.setattr(query_semantic, "semantic_search", spy)
+
+    result = query_search.match_ai_destination(db_session, BUILDING_ID, "여성패션")
+
+    # "여성패션" subcategory는 1F·2F의 "가게A"에만 걸린다 — 층은 다르지만 이름은
+    # 하나이므로 1차에서 확정하고 2차(임베딩)를 부르지 않는다.
+    assert result["match"]["name"] == "가게A"
+    assert calls["n"] == 0
+
+
+def test_tier0은_여러_층_중복이어도_확정한다(db_session, monkeypatch):
+    calls = {"n": 0}
+
+    def spy(*_args, **_kwargs):
+        calls["n"] += 1
+        return None
+
+    monkeypatch.setattr(query_semantic, "semantic_search", spy)
+
+    # "가게A"는 1F·2F에 동일한 이름으로 존재한다(정확 이름 일치 = tier 0).
+    result = query_search.match_ai_destination(db_session, BUILDING_ID, "가게A")
 
     assert result["match"]["name"] == "가게A"
     assert calls["n"] == 0
