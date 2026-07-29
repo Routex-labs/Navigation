@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../core/service_locator.dart';
 import '../models/building.dart';
+import '../models/discovery_result.dart';
 import '../models/poi_search_result.dart';
 import '../theme/app_theme.dart';
 
@@ -177,6 +178,25 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 성질이라 [_SearchPhase]에 합치지 않고 따로 둔다.
   bool _fromSemantic = false;
 
+  /// 마지막 `/query/ai` 응답의 mode. 지금 화면은 clarify든 results든 matches를
+  /// 그대로 목록으로 보여주므로 분기에 쓰이지 않지만, Wave 11(질문 chip·후보
+  /// 재정렬 UI)이 이어받을 자리로 보관한다.
+  DiscoveryMode? _discoveryMode;
+
+  /// clarify일 때의 질문 문장. 지금은 화면에 그리지 않는다(Wave 11 몫).
+  String? _discoveryQuestion;
+
+  /// clarify일 때의 선택지. 지금은 화면에 그리지 않는다(Wave 11 몫).
+  List<DiscoveryOption> _discoveryOptions = const [];
+
+  /// 아래 세 getter는 이 위젯 어디에서도 아직 읽지 않는다 — Wave 11이 질문
+  /// chip·후보 재정렬 UI를 그릴 때 상태를 다시 파싱하지 않고 바로 쓰도록
+  /// 열어 둔 자리다. 지금 당장 쓰이지 않는다고 필드를 지우면 그 정보(mode·
+  /// question·options)는 [_semanticSearch] 밖으로 나갈 방법이 없어진다.
+  DiscoveryMode? get discoveryMode => _discoveryMode;
+  String? get discoveryQuestion => _discoveryQuestion;
+  List<DiscoveryOption> get discoveryOptions => _discoveryOptions;
+
   /// 늦게 도착한 응답이 최신 결과를 덮어쓰지 않게 하는 순번.
   int _requestId = 0;
 
@@ -227,6 +247,9 @@ class _SearchPanelState extends State<SearchPanel> {
         _results = const [];
         _building = null;
         _fromSemantic = false;
+        _discoveryMode = null;
+        _discoveryQuestion = null;
+        _discoveryOptions = const [];
         _phase = _SearchPhase.idle;
       });
       return;
@@ -285,23 +308,35 @@ class _SearchPanelState extends State<SearchPanel> {
       _results = results;
       _building = building;
       _fromSemantic = false;
+      // 경량 매칭 결과라 discovery 계약과 무관하다 — 직전 AI 질의의 잔여
+      // 질문/선택지가 이번 결과에 얹혀 보이지 않도록 함께 지운다.
+      _discoveryMode = null;
+      _discoveryQuestion = null;
+      _discoveryOptions = const [];
       _phase = _SearchPhase.results;
     });
   }
 
   /// 2단계. 여기까지 왔다는 건 경량이 확실히 빈손이라는 뜻이고, 이 함수가 끝나야
   /// 비로소 [_SearchPhase.noMatch]를 최종 결론으로 쓸 수 있다.
+  ///
+  /// 백엔드 응답은 DiscoveryResponse(mode + question/options + matches)다.
+  /// 지금 화면은 mode를 분기하지 않고 matches를 그대로 기존 결과 목록으로
+  /// 매핑한다 — clarify여도 초기 후보를, results면 다양성 보정된 후보를,
+  /// no_match·degraded(매치 없음)면 빈 목록을 보여주는 셈이라 기존 "찾음/
+  /// 못 찾음" 화면과 자연스럽게 맞아떨어진다. question/options는 상태에만
+  /// 보관해 두고 Wave 11이 chip UI를 그릴 때 그대로 쓴다.
   Future<void> _semanticSearch(String query, int requestId) async {
     if (!mounted || requestId != _requestId) return;
     setState(() => _phase = _SearchPhase.searchingSemantic);
 
-    List<PoiSearchResult> results;
+    DiscoveryResult discovery;
     try {
       // 백엔드의 2차(의미) 단계는 current_floor_id를 받아도 건물 전체를 본다
       // (query_search.match_ai_destination 주석 참고) — 1차만 층으로 좁혀
       // 확정하고, 1차가 실패한 뒤인 여기서는 층을 또 좁히지 않는다. 그대로
       // 넘겨도 회귀가 없다.
-      results = await destinationRepository.searchDestinationsAi(
+      discovery = await destinationRepository.searchDestinationsAi(
         widget.buildingId,
         query,
         currentFloorId: widget.currentFloorId,
@@ -311,6 +346,10 @@ class _SearchPanelState extends State<SearchPanel> {
       return;
     }
     if (!mounted || requestId != _requestId) return;
+
+    final results = discovery.matches
+        .map((match) => match.toPoiSearchResult())
+        .toList();
     // 결과가 사실상 정확한 이름 일치면(예: 타 층 "나이키") "뜻이 비슷한"
     // 배너를 붙이지 않는다 — 실제로는 뜻으로 찾은 게 아니라 층 스코프 때문에
     // 1차가 빈손이 되어 여기로 넘어왔을 뿐이다.
@@ -319,6 +358,9 @@ class _SearchPanelState extends State<SearchPanel> {
       _results = results;
       _building = null;
       _fromSemantic = results.isNotEmpty && !_isExactNameMatch(query, results);
+      _discoveryMode = discovery.mode;
+      _discoveryQuestion = discovery.question;
+      _discoveryOptions = discovery.options;
       _phase = results.isEmpty ? _SearchPhase.noMatch : _SearchPhase.results;
     });
   }
@@ -333,6 +375,9 @@ class _SearchPanelState extends State<SearchPanel> {
       _results = const [];
       _building = null;
       _fromSemantic = false;
+      _discoveryMode = null;
+      _discoveryQuestion = null;
+      _discoveryOptions = const [];
       _phase = _SearchPhase.error;
     });
   }

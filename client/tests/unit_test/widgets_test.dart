@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/core/service_locator.dart';
 import 'package:navigation_client/models/building.dart';
 import 'package:navigation_client/models/building_graph.dart';
+import 'package:navigation_client/models/discovery_result.dart';
 import 'package:navigation_client/models/indoor_route.dart';
 import 'package:navigation_client/models/poi_search_result.dart';
 import 'package:navigation_client/repositories/building_repository.dart';
@@ -542,18 +543,39 @@ class _FakeSearchRepository implements DestinationRepository {
   }
 
   @override
-  Future<List<PoiSearchResult>> searchDestinationsAi(
+  Future<DiscoveryResult> searchDestinationsAi(
     String buildingId,
     String query, {
     String? currentFloorId,
+    Map<String, List<String>>? selectedFacets,
   }) async {
     aiQueries.add(query);
     aiFloorIds.add(currentFloorId);
     if (aiDelay != null) await Future<void>.delayed(aiDelay!);
     if (fail) throw Exception('boom');
-    return aiResults;
+    return DiscoveryResult(
+      mode: aiResults.isEmpty ? DiscoveryMode.noMatch : DiscoveryMode.results,
+      query: query,
+      matches: aiResults.map(_toDiscoveryMatch).toList(),
+    );
   }
 }
+
+/// [PoiSearchResult] → [DiscoveryMatch] 변환. 가짜 저장소가 미리 준비해 둔
+/// 결과를 DiscoveryResponse 계약으로 감싸는 용도라 storeId·floorId는
+/// 테스트가 값 자체를 검증하지 않는 placeholder다.
+DiscoveryMatch _toDiscoveryMatch(PoiSearchResult result) => DiscoveryMatch(
+  storeId: '${result.floor}:${result.name}',
+  name: result.name,
+  category: result.category,
+  subcategory: result.subcategory,
+  floorId: result.floor,
+  floorName: result.floor,
+  entranceNodeId: result.nodeId,
+  point: result.point,
+  matchedFacets: const {},
+  reason: null,
+);
 
 /// 패널은 건물 이름 검색 때문에 getAllBuildings만 부른다. 나머지는 부르지
 /// 않으므로 호출되면 테스트가 틀린 것이라 그대로 던진다.
@@ -596,15 +618,20 @@ class _FakeDestinationRepository implements DestinationRepository {
   final aiQueries = <String>[];
 
   @override
-  Future<List<PoiSearchResult>> searchDestinationsAi(
+  Future<DiscoveryResult> searchDestinationsAi(
     String buildingId,
     String query, {
     String? currentFloorId,
+    Map<String, List<String>>? selectedFacets,
   }) async {
     aiQueries.add(query);
     if (delay != null) await Future<void>.delayed(delay!);
     if (fail) throw Exception('boom');
-    return result == null ? const [] : [result!];
+    return DiscoveryResult(
+      mode: result == null ? DiscoveryMode.noMatch : DiscoveryMode.direct,
+      query: query,
+      matches: result == null ? const [] : [_toDiscoveryMatch(result!)],
+    );
   }
 
   @override

@@ -1,3 +1,4 @@
+import '../models/discovery_result.dart';
 import '../models/poi_search_result.dart';
 
 abstract class DestinationRepository {
@@ -16,21 +17,30 @@ abstract class DestinationRepository {
     String? currentFloorId,
   });
 
-  /// FAISS 하이브리드 자연어 질의. 응답 계약은 [searchDestinations]와 같지만
-  /// 사전에 없는 표현("밥 먹을 곳", "애들 신발")도 의미로 찾는다.
+  /// 탐색(Discovery) 질의. 백엔드 `POST /query/ai`를 호출하며, 응답 계약은
+  /// [searchDestinations](DestinationResponse, 최대 1건)와 **다르다**
+  /// (DiscoveryResponse — mode + 질문/선택지 + 여러 후보). 설계:
+  /// docs/backend/native/conversational-discovery.md 8-2·8-3절.
   ///
-  /// 백엔드가 경량 1차를 먼저 돌리고, 확정하지 못했을 때만 임베딩 의미 검색
-  /// 2차로 넘어간다(설계: docs/backend/native/FAISS.md). 즉 정확한 이름은
-  /// 즉시 오지만, **2차로 넘어가는 자연어는 임베딩 모델 로드로 첫 호출이 수 초
-  /// 걸릴 수 있다.** 호출부는 반드시 로딩 상태를 노출하고 UI를 막지 않는다.
+  /// 백엔드가 경량 1차를 먼저 돌리고, 단일 대상으로 확정하지 못했을 때만
+  /// facet 해석 + 임베딩 의미 검색으로 넘어간다. 정확한 이름은 `direct`로
+  /// 즉시 오지만, **그 외 경로는 임베딩 모델 로드로 첫 호출이 수 초 걸릴 수
+  /// 있다.** 호출부는 반드시 로딩 상태를 노출하고 UI를 막지 않는다.
   ///
-  /// 결과는 [searchDestinations]와 같은 "최대 1건" 규약이다 — 백엔드가
-  /// 안내 대상 매장 1건만 확정해 주기 때문이다. 빈 리스트는 no_match,
-  /// `nodeId`가 null인 1건은 ok_no_route(위치는 알지만 입구 노드가 없어 경로
-  /// 안내 불가)를 뜻한다.
-  Future<List<PoiSearchResult>> searchDestinationsAi(
+  /// [selectedFacets]는 사용자가 이전 clarify 질문에서 고른 값이다(축 이름 →
+  /// 선택한 값 목록). 서버가 대화 세션을 유지하지 않으므로(stateless), 매
+  /// 요청마다 지금까지의 선택을 다시 실어 보내야 한다 — 비워 두면 첫 질문
+  /// 상태로 취급된다.
+  ///
+  /// 반환값의 `mode`가 화면 분기의 유일한 근거다: `direct`(1건 확정)·
+  /// `clarify`(질문 + 초기 후보)·`results`(다양성 보정 후보 목록)·
+  /// `no_match`(빈 matches)·`degraded`(의미 검색 불가, 가능하면 matches를
+  /// 함께 담아 옴). `matches` 안의 각 건은 [DiscoveryMatch.toPoiSearchResult]로
+  /// 기존 [PoiSearchResult] 기반 화면에 얹을 수 있다.
+  Future<DiscoveryResult> searchDestinationsAi(
     String buildingId,
     String query, {
     String? currentFloorId,
+    Map<String, List<String>>? selectedFacets,
   });
 }

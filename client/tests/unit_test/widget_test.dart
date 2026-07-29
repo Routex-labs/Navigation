@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:navigation_client/app.dart';
 import 'package:navigation_client/core/api_config.dart';
 import 'package:navigation_client/core/service_locator.dart';
+import 'package:navigation_client/models/discovery_result.dart';
 import 'package:navigation_client/models/poi_search_result.dart';
 import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/repositories/mock_building_repository.dart';
@@ -763,13 +764,35 @@ class _FallbackDestinationRepository implements DestinationRepository {
   }
 
   @override
-  Future<List<PoiSearchResult>> searchDestinationsAi(
+  Future<DiscoveryResult> searchDestinationsAi(
     String buildingId,
     String query, {
     String? currentFloorId,
+    Map<String, List<String>>? selectedFacets,
   }) async {
     aiQueries.add(query);
     aiFloorScopes.add(currentFloorId);
-    return aiResult == null ? const [] : [aiResult!];
+    if (aiResult == null) {
+      return DiscoveryResult(mode: DiscoveryMode.noMatch, query: query);
+    }
+    final result = aiResult!;
+    return DiscoveryResult(
+      mode: DiscoveryMode.direct,
+      query: query,
+      matches: [
+        DiscoveryMatch(
+          storeId: '${result.floor}:${result.name}',
+          name: result.name,
+          category: result.category,
+          subcategory: result.subcategory,
+          floorId: result.floor,
+          floorName: result.floor,
+          entranceNodeId: result.nodeId,
+          point: result.point,
+          matchedFacets: const {},
+          reason: null,
+        ),
+      ],
+    );
   }
 }

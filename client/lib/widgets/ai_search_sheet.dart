@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/service_locator.dart';
+import '../models/discovery_result.dart';
 import '../models/poi_search_result.dart';
 import '../theme/app_theme.dart';
 
@@ -63,6 +64,12 @@ class _Exchange {
   String? answer;
   PoiSearchResult? result;
 
+  /// 이번 질의의 원본 DiscoveryResponse. 지금 화면은 matches 중 첫 건만
+  /// answer/result로 뽑아 쓰고 question/options/mode는 그리지 않는다 —
+  /// Wave 11(질문 chip·다중 후보 표시)이 이 시트를 같은 계약으로 확장할 때
+  /// 다시 파싱하지 않고 그대로 쓰도록 보관해 둔다.
+  DiscoveryResult? discovery;
+
   bool get pending => answer == null;
 }
 
@@ -101,25 +108,32 @@ class _AiSearchSheetState extends State<AiSearchSheet> {
 
     String answer;
     PoiSearchResult? result;
+    DiscoveryResult? discovery;
     try {
-      final results = await destinationRepository.searchDestinationsAi(
+      // 응답 계약은 DiscoveryResponse(mode + question/options + matches)다.
+      // 이 시트는 아직 mode를 분기하지 않고 matches 중 첫 건만 답으로 쓴다 —
+      // clarify의 초기 후보·results의 상위 후보·degraded의 잔여 결과 모두
+      // "첫 건이 있으면 안내, 없으면 못 찾음"으로 같이 처리해도 기존 UX와
+      // 다르지 않다. question/options를 chip으로 그리는 건 Wave 11 몫이다.
+      discovery = await destinationRepository.searchDestinationsAi(
         widget.buildingId,
         query,
         currentFloorId: widget.currentFloorId,
       );
-      result = results.firstOrNull;
+      result = discovery.matches.firstOrNull?.toPoiSearchResult();
       if (result == null) {
-        // status=no_match. 백엔드 임계값(0.50) 미달이거나 정말 없는 경우다.
+        // mode=no_match, 또는 degraded인데 남은 후보도 없는 경우.
         answer = '"$query"에 맞는 매장을 찾지 못했어요.';
       } else if (result.nodeId == null) {
-        // status=ok_no_route — 위치는 알지만 입구 노드가 없어 경로 계산 불가.
+        // entrance_node_id가 없는 매장 — 위치는 알지만 입구 노드가 없어
+        // 온디바이스 경로 계산이 불가능하다.
         answer = '${result.name} · ${result.floor}에 있어요.\n'
             '(입구 정보가 없어 경로 안내는 어려워요)';
       } else {
         answer = '${result.name} · ${result.floor}에 있어요.';
       }
     } on Object {
-      // 건물 없음(404)·검증 실패(422)는 repository가 빈 결과로 흡수하므로,
+      // 건물 없음(404)·검증 실패(422)는 repository가 no_match로 흡수하므로,
       // 여기 오는 건 서버 장애나 네트워크 끊김이다. 패널을 닫지 않고 안내만 한다.
       answer = '지금은 검색할 수 없어요. 잠시 후 다시 시도해 주세요.';
     }
@@ -128,6 +142,7 @@ class _AiSearchSheetState extends State<AiSearchSheet> {
     setState(() {
       exchange.answer = answer;
       exchange.result = result;
+      exchange.discovery = discovery;
       _busy = false;
     });
   }
