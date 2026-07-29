@@ -97,6 +97,7 @@ void main() {
         'text': '밥 먹을 곳',
         'building_id': 'thehyundai-seoul',
         'current_floor_id': 'B2',
+        'show_all': false,
       });
     });
 
@@ -154,6 +155,28 @@ void main() {
       final body =
           jsonDecode(utf8.decode(captured.bodyBytes)) as Map<String, dynamic>;
       expect(body.containsKey('selected_facets'), isFalse);
+    });
+
+    test('전체 보기 요청은 show_all=true를 보낸다', () async {
+      late http.Request captured;
+      final repository = HttpDestinationRepository(
+        client: MockClient((request) async {
+          captured = request;
+          return _json(_discoveryBody(mode: 'results'));
+        }),
+      );
+
+      await repository.searchDestinationsAi(
+        'thehyundai-seoul',
+        '신발',
+        selectedFacets: const {'styles': ['스포츠']},
+        showAll: true,
+      );
+
+      final body =
+          jsonDecode(utf8.decode(captured.bodyBytes)) as Map<String, dynamic>;
+      expect(body['show_all'], isTrue);
+      expect(body['selected_facets'], {'styles': ['스포츠']});
     });
 
     test('direct: matches 1건과 mode를 파싱한다', () async {

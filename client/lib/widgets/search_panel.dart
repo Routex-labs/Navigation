@@ -97,20 +97,20 @@ class SearchPanel extends StatefulWidget {
 /// 검색까지 끝났을 때만** 들어갈 수 있어야 하는데, 불리언으로는 "검색 안 하는
 /// 중 + 결과 없음"과 구분이 안 된다.
 ///
-/// 앞으로 들어올 clarify·results 같은 탐색 상태는 여기 미리 만들지 않는다.
-/// 계약이 정해지지 않은 상태를 지금 열거해 두면, 화면 로직이 아직 오지도 않은
-/// 분기를 짊어진 채로 굳는다.
 enum _SearchPhase {
   /// 아직 아무것도 치지 않았다. 안내 문구만 보여준다.
   idle,
 
   /// 경량 매칭이 도는 중. 의미 검색으로 넘어가기 전 대기 시간도 여기 포함된다
   /// — 사용자 입장에서는 둘 다 "찾는 중"이고, 아직 결론이 아니다.
-  searchingLight,
+  typingLightSearch,
 
   /// 의미 검색이 도는 중. 모델 로드로 오래 걸릴 수 있어 경량과 다른 문구를
   /// 띄운다 — 같은 스피너만 돌면 멈춘 것처럼 보인다.
-  searchingSemantic,
+  semanticSearching,
+
+  /// 후보가 넓어서 선택지를 먼저 보여 주는 탐색 응답이다.
+  clarify,
 
   /// 보여줄 매장·건물이 있다.
   results,
@@ -118,6 +118,9 @@ enum _SearchPhase {
   /// 경량과 의미 검색을 **둘 다** 끝냈는데 없다. 최종 "결과 없음" 문구는 오직
   /// 이 단계에서만 나온다.
   noMatch,
+
+  /// 의미 모델은 쓸 수 없지만 경량/태그 후보는 남아 있을 수 있다.
+  degraded,
 
   /// 서버·네트워크가 끊겨 검색을 끝내지 못했다. 없는 것과 못 찾은 것은 사용자가
   /// 할 행동이 다르다 — 전자는 다른 말로 바꿔야 하고, 후자는 기다려야 한다.
@@ -178,24 +181,27 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 성질이라 [_SearchPhase]에 합치지 않고 따로 둔다.
   bool _fromSemantic = false;
 
-  /// 마지막 `/query/ai` 응답의 mode. 지금 화면은 clarify든 results든 matches를
-  /// 그대로 목록으로 보여주므로 분기에 쓰이지 않지만, Wave 11(질문 chip·후보
-  /// 재정렬 UI)이 이어받을 자리로 보관한다.
+  /// 마지막 탐색 응답의 원본 후보. [PoiSearchResult]로만 바꾸면 storeId와
+  /// reason을 잃어 추천 이유·선택 후 추적을 할 수 없으므로 별도로 보존한다.
+  List<DiscoveryMatch> _discoveryMatches = const [];
+
+  /// 마지막 `/query/ai` 응답의 mode. 화면 상태는 이 값을 안전하게 명시 분기한다.
   DiscoveryMode? _discoveryMode;
 
-  /// clarify일 때의 질문 문장. 지금은 화면에 그리지 않는다(Wave 11 몫).
+  /// clarify일 때의 질문 문장.
   String? _discoveryQuestion;
 
-  /// clarify일 때의 선택지. 지금은 화면에 그리지 않는다(Wave 11 몫).
+  /// clarify일 때의 선택지.
   List<DiscoveryOption> _discoveryOptions = const [];
 
-  /// 아래 세 getter는 이 위젯 어디에서도 아직 읽지 않는다 — Wave 11이 질문
-  /// chip·후보 재정렬 UI를 그릴 때 상태를 다시 파싱하지 않고 바로 쓰도록
-  /// 열어 둔 자리다. 지금 당장 쓰이지 않는다고 필드를 지우면 그 정보(mode·
-  /// question·options)는 [_semanticSearch] 밖으로 나갈 방법이 없어진다.
-  DiscoveryMode? get discoveryMode => _discoveryMode;
-  String? get discoveryQuestion => _discoveryQuestion;
-  List<DiscoveryOption> get discoveryOptions => _discoveryOptions;
+  /// stateless API에 매번 실어 보내는 facet 선택. 이 맵 하나가 화면 chip과
+  /// 다음 요청 body의 공통 원본이라, 화면은 선택됐는데 요청에는 빠지는 상태를
+  /// 만들지 않는다.
+  Map<String, List<String>> _selectedFacets = const {};
+
+  /// 최근 선택 순서. "다시 선택"은 마지막 질문의 답 하나만 되돌려 질문으로
+  /// 복귀시킨다. 각 축은 현재 한 값을 선택하게 하므로 `(facet, value)`로 둔다.
+  final List<(String facet, String value)> _facetSelectionOrder = [];
 
   /// 늦게 도착한 응답이 최신 결과를 덮어쓰지 않게 하는 순번.
   int _requestId = 0;
@@ -230,6 +236,9 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 경량이 빈손이면 의미 검색까지 이어진다 — 엔터를 안 눌러도 된다.
   void _scheduleSearch(String value) {
     _debounce?.cancel();
+    // 새 입력이 들어온 순간 기존 요청을 무효화한다. 디바운스가 끝나기 전에도
+    // 이전 검색의 늦은 응답이 화면을 덮으면, 화면의 검색어와 후보가 달라진다.
+    _requestId++;
     _debounce = Timer(_lightDebounce, () => _search(value));
   }
 
@@ -247,16 +256,25 @@ class _SearchPanelState extends State<SearchPanel> {
         _results = const [];
         _building = null;
         _fromSemantic = false;
+        _discoveryMatches = const [];
         _discoveryMode = null;
         _discoveryQuestion = null;
         _discoveryOptions = const [];
+        _selectedFacets = const {};
+        _facetSelectionOrder.clear();
         _phase = _SearchPhase.idle;
       });
       return;
     }
 
     final requestId = ++_requestId;
-    setState(() => _phase = _SearchPhase.searchingLight);
+    setState(() {
+      // 새 원문 검색은 이전 clarify 선택의 연장이 아니다. 선택을 남기면 다른
+      // 문장에 이전 facet이 섞여 stateless 계약의 의미가 깨진다.
+      _selectedFacets = const {};
+      _facetSelectionOrder.clear();
+      _phase = _SearchPhase.typingLightSearch;
+    });
 
     List<PoiSearchResult> results;
     Building? building;
@@ -308,6 +326,7 @@ class _SearchPanelState extends State<SearchPanel> {
       _results = results;
       _building = building;
       _fromSemantic = false;
+      _discoveryMatches = const [];
       // 경량 매칭 결과라 discovery 계약과 무관하다 — 직전 AI 질의의 잔여
       // 질문/선택지가 이번 결과에 얹혀 보이지 않도록 함께 지운다.
       _discoveryMode = null;
@@ -321,14 +340,11 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 비로소 [_SearchPhase.noMatch]를 최종 결론으로 쓸 수 있다.
   ///
   /// 백엔드 응답은 DiscoveryResponse(mode + question/options + matches)다.
-  /// 지금 화면은 mode를 분기하지 않고 matches를 그대로 기존 결과 목록으로
-  /// 매핑한다 — clarify여도 초기 후보를, results면 다양성 보정된 후보를,
-  /// no_match·degraded(매치 없음)면 빈 목록을 보여주는 셈이라 기존 "찾음/
-  /// 못 찾음" 화면과 자연스럽게 맞아떨어진다. question/options는 상태에만
-  /// 보관해 두고 Wave 11이 chip UI를 그릴 때 그대로 쓴다.
+  /// mode마다 명시적인 화면 상태로 옮긴다. 추천 후보는 [DiscoveryMatch] 원본을
+  /// 별도 보관해 reason/storeId를 잃지 않고 기존 길찾기 콜백에는 변환값만 준다.
   Future<void> _semanticSearch(String query, int requestId) async {
     if (!mounted || requestId != _requestId) return;
-    setState(() => _phase = _SearchPhase.searchingSemantic);
+    setState(() => _phase = _SearchPhase.semanticSearching);
 
     DiscoveryResult discovery;
     try {
@@ -358,11 +374,118 @@ class _SearchPanelState extends State<SearchPanel> {
       _results = results;
       _building = null;
       _fromSemantic = results.isNotEmpty && !_isExactNameMatch(query, results);
+      _discoveryMatches = discovery.matches;
       _discoveryMode = discovery.mode;
       _discoveryQuestion = discovery.question;
       _discoveryOptions = discovery.options;
-      _phase = results.isEmpty ? _SearchPhase.noMatch : _SearchPhase.results;
+      _phase = _phaseForDiscovery(discovery);
     });
+  }
+
+  _SearchPhase _phaseForDiscovery(DiscoveryResult discovery) {
+    // 서버가 새 mode를 추가하거나 계약을 어긴 경우에는 후보를 임의로 추천하지
+    // 않는다. 사용자가 다른 표현으로 재검색할 수 있는 안전한 noMatch로 보낸다.
+    return switch (discovery.mode) {
+      DiscoveryMode.direct => discovery.matches.isEmpty
+          ? _SearchPhase.noMatch
+          : _SearchPhase.results,
+      DiscoveryMode.clarify => _SearchPhase.clarify,
+      DiscoveryMode.results => discovery.matches.isEmpty
+          ? _SearchPhase.noMatch
+          : _SearchPhase.results,
+      DiscoveryMode.noMatch || DiscoveryMode.unknown => _SearchPhase.noMatch,
+      DiscoveryMode.degraded => _SearchPhase.degraded,
+    };
+  }
+
+  /// facet 동작은 새 `/query/ai` 요청이다. 서버 세션이 없으므로 원문·현재 층·
+  /// 선택 전체를 항상 다시 보내고, 요청 번호도 올려 과거 응답을 무효화한다.
+  Future<void> _requestDiscovery({required bool showAll}) async {
+    _debounce?.cancel();
+    final query = widget.query.trim();
+    if (query.isEmpty) return;
+
+    final requestId = ++_requestId;
+    setState(() => _phase = _SearchPhase.semanticSearching);
+    try {
+      final discovery = await destinationRepository.searchDestinationsAi(
+        widget.buildingId,
+        query,
+        currentFloorId: widget.currentFloorId,
+        selectedFacets: _selectedFacets.isEmpty
+            ? null
+            : Map<String, List<String>>.fromEntries(
+                _selectedFacets.entries.map(
+                  (entry) => MapEntry(entry.key, List<String>.from(entry.value)),
+                ),
+              ),
+        showAll: showAll,
+      );
+      if (!mounted || requestId != _requestId) return;
+
+      final results = discovery.matches
+          .map((match) => match.toPoiSearchResult())
+          .toList();
+      setState(() {
+        _submittedQuery = query;
+        _results = results;
+        _building = null;
+        _fromSemantic =
+            results.isNotEmpty && !_isExactNameMatch(query, results);
+        _discoveryMatches = discovery.matches;
+        _discoveryMode = discovery.mode;
+        _discoveryQuestion = discovery.question;
+        _discoveryOptions = discovery.options;
+        _phase = _phaseForDiscovery(discovery);
+      });
+    } on Object {
+      _finishFailed(query, requestId);
+    }
+  }
+
+  void _selectFacet(DiscoveryOption option) {
+    final next = Map<String, List<String>>.fromEntries(
+      _selectedFacets.entries.map(
+        (entry) => MapEntry(entry.key, List<String>.from(entry.value)),
+      ),
+    );
+    // 한 질문은 한 축을 가리키므로 같은 축의 이전 선택은 교체한다. 다중 축은
+    // 그대로 유지되어 다음 요청에 모두 전송된다.
+    next[option.facet] = [option.value];
+    setState(() {
+      _selectedFacets = next;
+      _facetSelectionOrder.removeWhere((item) => item.$1 == option.facet);
+      _facetSelectionOrder.add((option.facet, option.value));
+    });
+    _requestDiscovery(showAll: false);
+  }
+
+  void _removeFacet(String facet, String value) {
+    final next = Map<String, List<String>>.fromEntries(
+      _selectedFacets.entries.map(
+        (entry) => MapEntry(entry.key, List<String>.from(entry.value)),
+      ),
+    );
+    final values = next[facet];
+    if (values == null) return;
+    values.remove(value);
+    if (values.isEmpty) next.remove(facet);
+    setState(() {
+      _selectedFacets = next;
+      _facetSelectionOrder.removeWhere(
+        (item) => item.$1 == facet && item.$2 == value,
+      );
+    });
+    _requestDiscovery(showAll: false);
+  }
+
+  void _chooseAgain() {
+    if (_facetSelectionOrder.isEmpty) {
+      _requestDiscovery(showAll: false);
+      return;
+    }
+    final last = _facetSelectionOrder.last;
+    _removeFacet(last.$1, last.$2);
   }
 
   /// 서버 장애·네트워크 끊김. 패널을 닫지 않고 안내만 바꾼다. 이걸 "결과 없음"과
@@ -375,9 +498,12 @@ class _SearchPanelState extends State<SearchPanel> {
       _results = const [];
       _building = null;
       _fromSemantic = false;
+      _discoveryMatches = const [];
       _discoveryMode = null;
       _discoveryQuestion = null;
       _discoveryOptions = const [];
+      _selectedFacets = const {};
+      _facetSelectionOrder.clear();
       _phase = _SearchPhase.error;
     });
   }
@@ -405,15 +531,18 @@ class _SearchPanelState extends State<SearchPanel> {
             style: TextStyle(fontSize: 13, color: AppColors.muted, height: 1.5),
           ),
         );
-      case _SearchPhase.searchingLight:
-      case _SearchPhase.searchingSemantic:
+      case _SearchPhase.typingLightSearch:
+      case _SearchPhase.semanticSearching:
         return _searchingState();
+      case _SearchPhase.clarify:
+      case _SearchPhase.results:
+        return _resultList();
+      case _SearchPhase.degraded:
+        return _results.isEmpty ? _degradedState() : _resultList();
       case _SearchPhase.error:
         return _errorState();
       case _SearchPhase.noMatch:
         return _emptyState(context);
-      case _SearchPhase.results:
-        return _resultList();
     }
   }
 
@@ -427,10 +556,10 @@ class _SearchPanelState extends State<SearchPanel> {
         mainAxisSize: MainAxisSize.min,
         children: [
           const CircularProgressIndicator(),
-          if (_phase == _SearchPhase.searchingSemantic) ...[
+          if (_phase == _SearchPhase.semanticSearching) ...[
             const SizedBox(height: 14),
             const Text(
-              '뜻이 비슷한 매장을 찾는 중…',
+              '취향에 맞는 매장을 찾는 중…',
               style: TextStyle(fontSize: 13, color: AppColors.muted),
             ),
             const SizedBox(height: 4),
@@ -445,72 +574,149 @@ class _SearchPanelState extends State<SearchPanel> {
   }
 
   Widget _resultList() {
-    final building = _building;
-    return ListView.separated(
-      shrinkWrap: true,
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      itemCount:
-          _results.length + (building == null ? 0 : 1) + (_fromSemantic ? 1 : 0),
-      separatorBuilder: (_, _) => const Divider(height: 1, indent: 16),
-      itemBuilder: (context, index) {
-        // 의미 검색으로 찾은 결과는 입력한 말과 이름이 전혀 다를 수 있다.
-        // 왜 이게 나왔는지 한 줄로 알려 준다.
-        if (_fromSemantic && index == 0) {
-          return const Padding(
-            padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: Row(
-              children: [
-                Icon(Icons.auto_awesome, size: 14, color: AppColors.primary),
-                SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    '뜻이 비슷한 매장을 찾았어요',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.primary,
-                    ),
+    final rows = <Widget>[];
+    final isDiscovery = _discoveryMode != null;
+    if (isDiscovery) rows.add(_discoveryHeader());
+    if (_fromSemantic) {
+      rows.add(
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Row(
+            children: [
+              Icon(Icons.auto_awesome, size: 14, color: AppColors.primary),
+              SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  '뜻이 비슷한 매장을 찾았어요',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary,
                   ),
                 ),
-              ],
-            ),
-          );
-        }
-        final offset = (building == null ? 0 : 1) + (_fromSemantic ? 1 : 0);
-        if (building != null && index == (_fromSemantic ? 1 : 0)) {
-          return ListTile(
-            leading: const Icon(
-              Icons.apartment_outlined,
-              color: AppColors.primary,
-            ),
-            title: Text(
-              building.name,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-            ),
-            subtitle: Text(
-              '건물 · ${building.floors.length}개 층',
-              style: const TextStyle(fontSize: 12, color: AppColors.muted),
-            ),
-            onTap: () => widget.onBuildingPicked(building),
-          );
-        }
-        final store = _results[index - offset];
-        return ListTile(
-          leading: const Icon(Icons.place_outlined, color: AppColors.primary),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    final building = _building;
+    if (building != null) {
+      rows.add(
+        ListTile(
+          leading: const Icon(Icons.apartment_outlined, color: AppColors.primary),
           title: Text(
-            store.name,
+            building.name,
             style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
           ),
           subtitle: Text(
-            // 입구 노드가 없으면(status=ok_no_route) 경로 계산이 불가능하다.
-            store.nodeId == null ? '${store.floor} · 경로 안내 불가' : store.floor,
+            '건물 · ${building.floors.length}개 층',
             style: const TextStyle(fontSize: 12, color: AppColors.muted),
           ),
-          onTap: () => widget.onStorePicked(store),
-        );
-      },
+          onTap: () => widget.onBuildingPicked(building),
+        ),
+      );
+    }
+    for (var index = 0; index < _results.length; index++) {
+      final match = index < _discoveryMatches.length
+          ? _discoveryMatches[index]
+          : null;
+      rows.add(_storeTile(_results[index], match));
+    }
+
+    return ListView.separated(
+      shrinkWrap: true,
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      itemCount: rows.length,
+      separatorBuilder: (_, _) => const Divider(height: 1, indent: 16),
+      itemBuilder: (_, index) => rows[index],
     );
   }
+
+  Widget _discoveryHeader() {
+    final isClarify = _discoveryMode == DiscoveryMode.clarify;
+    final selectedChips = <Widget>[];
+    for (final entry in _selectedFacets.entries) {
+      for (final value in entry.value) {
+        selectedChips.add(
+          InputChip(
+            key: Key('selected-facet-${entry.key}-$value'),
+            label: Text('$value 선택됨'),
+            onDeleted: () => _removeFacet(entry.key, value),
+          ),
+        );
+      }
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_discoveryMode == DiscoveryMode.degraded)
+            const Text(
+              '일부 추천 기능이 준비되지 않아 제한된 결과만 보여드려요.',
+              style: TextStyle(fontSize: 12, color: AppColors.muted),
+            ),
+          if (isClarify) ...[
+            Text(
+              _discoveryQuestion ?? '어떤 조건을 더 중요하게 보시나요?',
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+            if (_discoveryOptions.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: _discoveryOptions
+                    .map(
+                      (option) => ActionChip(
+                        key: Key('facet-option-${option.facet}-${option.value}'),
+                        label: Text('${option.label} (${option.count})'),
+                        onPressed: () => _selectFacet(option),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
+          ],
+          if (selectedChips.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Wrap(spacing: 8, runSpacing: 6, children: selectedChips),
+          ],
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 4,
+            children: [
+              TextButton(
+                key: const Key('show-all'),
+                onPressed: () => _requestDiscovery(showAll: true),
+                child: const Text('전체 보기'),
+              ),
+              TextButton(
+                key: const Key('choose-again'),
+                onPressed: _chooseAgain,
+                child: const Text('다시 선택'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _storeTile(PoiSearchResult store, DiscoveryMatch? match) => ListTile(
+    leading: const Icon(Icons.place_outlined, color: AppColors.primary),
+    title: Text(
+      store.name,
+      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+    ),
+    subtitle: Text(
+      match?.reason ??
+          (store.nodeId == null ? '${store.floor} · 경로 안내 불가' : store.floor),
+      style: const TextStyle(fontSize: 12, color: AppColors.muted),
+    ),
+    onTap: () => widget.onStorePicked(store),
+  );
 
   Widget _emptyState(BuildContext context) {
     return Padding(
@@ -529,6 +735,27 @@ class _SearchPanelState extends State<SearchPanel> {
           // 남아 있는 것처럼 보이면 안 되므로, 다른 말로 바꿔 보라고만 한다.
           const Text(
             '다른 말로 바꿔서 다시 찾아보세요.',
+            style: TextStyle(fontSize: 12.5, color: AppColors.muted),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _degradedState() {
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(16, 20, 16, 22),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '추천 기능을 지금은 제한적으로만 사용할 수 있어요.',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          ),
+          SizedBox(height: 6),
+          Text(
+            '잠시 후 다시 검색하거나 다른 표현으로 찾아보세요.',
             style: TextStyle(fontSize: 12.5, color: AppColors.muted),
           ),
         ],

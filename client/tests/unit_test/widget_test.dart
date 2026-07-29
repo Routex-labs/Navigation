@@ -769,6 +769,7 @@ class _FallbackDestinationRepository implements DestinationRepository {
     String query, {
     String? currentFloorId,
     Map<String, List<String>>? selectedFacets,
+    bool showAll = false,
   }) async {
     aiQueries.add(query);
     aiFloorScopes.add(currentFloorId);

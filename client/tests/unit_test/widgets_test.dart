@@ -382,7 +382,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 800));
       await flush(tester);
 
-      expect(find.text('뜻이 비슷한 매장을 찾는 중…'), findsOneWidget);
+      expect(find.text('취향에 맞는 매장을 찾는 중…'), findsOneWidget);
       expect(find.textContaining('찾지 못했어요'), findsNothing);
 
       await drain(tester);
@@ -400,7 +400,7 @@ void main() {
       // 가짜 시계를 1ms도 돌리지 않았는데 이미 의미 검색 단계다.
       await flush(tester);
 
-      expect(find.text('뜻이 비슷한 매장을 찾는 중…'), findsOneWidget);
+      expect(find.text('취향에 맞는 매장을 찾는 중…'), findsOneWidget);
 
       await drain(tester);
     });
@@ -505,6 +505,141 @@ void main() {
       expect(find.textContaining('찾지 못했어요'), findsNothing);
       expect(find.textContaining('매장 이름을 입력하면'), findsOneWidget);
     });
+
+    testWidgets('clarify 질문·후보 이유를 표시하고 facet 전체를 다시 보낸다', (
+      WidgetTester tester,
+    ) async {
+      final repository = _ScriptedDiscoveryRepository([
+        DiscoveryResult(
+          mode: DiscoveryMode.clarify,
+          query: '신발',
+          question: '어떤 스타일의 신발을 찾으세요?',
+          options: const [
+            DiscoveryOption(
+              facet: 'styles',
+              value: '스포츠',
+              label: '스포츠',
+              count: 3,
+            ),
+          ],
+          matches: const [
+            DiscoveryMatch(
+              storeId: 'ST-NIKE',
+              name: '나이키 라이즈',
+              category: '패션',
+              subcategory: '스포츠',
+              floorId: 'FL-3',
+              floorName: '3F',
+              entranceNodeId: 'FL-3:ND-1',
+              point: LatLng(37.52, 126.92),
+              matchedFacets: {'styles': ['스포츠']},
+              reason: '스포츠 신발을 찾을 때 볼 만해요.',
+            ),
+          ],
+        ),
+        DiscoveryResult(
+          mode: DiscoveryMode.results,
+          query: '신발',
+          matches: const [
+            DiscoveryMatch(
+              storeId: 'ST-NIKE',
+              name: '나이키 라이즈',
+              category: '패션',
+              subcategory: '스포츠',
+              floorId: 'FL-3',
+              floorName: '3F',
+              entranceNodeId: 'FL-3:ND-1',
+              point: LatLng(37.52, 126.92),
+              matchedFacets: {'styles': ['스포츠']},
+              reason: '스포츠 신발을 찾을 때 볼 만해요.',
+            ),
+          ],
+        ),
+      ]);
+      destinationRepository = repository;
+      await pumpPanel(tester, currentFloorId: '1F');
+
+      query.value = '신발';
+      await tester.pump();
+      await settleSearch(tester);
+
+      expect(find.text('어떤 스타일의 신발을 찾으세요?'), findsOneWidget);
+      expect(find.text('스포츠 (3)'), findsOneWidget);
+      expect(find.text('스포츠 신발을 찾을 때 볼 만해요.'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('facet-option-styles-스포츠')));
+      await flush(tester);
+
+      expect(find.byKey(const Key('selected-facet-styles-스포츠')), findsOneWidget);
+      expect(repository.selectedFacets, [null, {'styles': ['스포츠']}]);
+      expect(repository.showAllValues, [false, false]);
+      expect(repository.floorIds, ['1F', '1F']);
+    });
+
+    testWidgets('전체 보기와 다시 선택은 새 요청으로 상태를 되돌린다', (
+      WidgetTester tester,
+    ) async {
+      final clarify = DiscoveryResult(
+        mode: DiscoveryMode.clarify,
+        query: '신발',
+        question: '어떤 스타일의 신발을 찾으세요?',
+        options: const [
+          DiscoveryOption(
+            facet: 'styles',
+            value: '스포츠',
+            label: '스포츠',
+            count: 3,
+          ),
+        ],
+      );
+      const match = DiscoveryMatch(
+        storeId: 'ST-NIKE',
+        name: '나이키 라이즈',
+        category: '패션',
+        subcategory: '스포츠',
+        floorId: 'FL-3',
+        floorName: '3F',
+        entranceNodeId: 'FL-3:ND-1',
+        point: LatLng(37.52, 126.92),
+        matchedFacets: {'styles': ['스포츠']},
+        reason: '스포츠 신발을 찾을 때 볼 만해요.',
+      );
+      final repository = _ScriptedDiscoveryRepository([
+        clarify,
+        const DiscoveryResult(
+          mode: DiscoveryMode.results,
+          query: '신발',
+          matches: [match],
+        ),
+        const DiscoveryResult(
+          mode: DiscoveryMode.results,
+          query: '신발',
+          matches: [match],
+        ),
+        clarify,
+      ]);
+      destinationRepository = repository;
+      await pumpPanel(tester);
+
+      query.value = '신발';
+      await tester.pump();
+      await settleSearch(tester);
+      await tester.tap(find.byKey(const Key('facet-option-styles-스포츠')));
+      await flush(tester);
+      await tester.tap(find.byKey(const Key('show-all')));
+      await flush(tester);
+      await tester.tap(find.byKey(const Key('choose-again')));
+      await flush(tester);
+
+      expect(repository.showAllValues, [false, false, true, false]);
+      expect(repository.selectedFacets, [
+        null,
+        {'styles': ['스포츠']},
+        {'styles': ['스포츠']},
+        null,
+      ]);
+      expect(find.text('어떤 스타일의 신발을 찾으세요?'), findsOneWidget);
+    });
   });
 }
 
@@ -548,6 +683,7 @@ class _FakeSearchRepository implements DestinationRepository {
     String query, {
     String? currentFloorId,
     Map<String, List<String>>? selectedFacets,
+    bool showAll = false,
   }) async {
     aiQueries.add(query);
     aiFloorIds.add(currentFloorId);
@@ -558,6 +694,48 @@ class _FakeSearchRepository implements DestinationRepository {
       query: query,
       matches: aiResults.map(_toDiscoveryMatch).toList(),
     );
+  }
+}
+
+/// clarify 이후의 요청 body를 검증하기 위한 순차 응답 fake. 네트워크 지연을
+/// 흉내 내기보다, 선택 상태가 다음 요청에 온전히 전달되는지를 명시적으로 기록한다.
+class _ScriptedDiscoveryRepository implements DestinationRepository {
+  _ScriptedDiscoveryRepository(this._responses);
+
+  final List<DiscoveryResult> _responses;
+  final selectedFacets = <Map<String, List<String>>?>[];
+  final showAllValues = <bool>[];
+  final floorIds = <String?>[];
+  var _index = 0;
+
+  @override
+  Future<List<PoiSearchResult>> searchDestinations(
+    String buildingId,
+    String query, {
+    String? currentFloorId,
+  }) async => const [];
+
+  @override
+  Future<DiscoveryResult> searchDestinationsAi(
+    String buildingId,
+    String query, {
+    String? currentFloorId,
+    Map<String, List<String>>? selectedFacets,
+    bool showAll = false,
+  }) async {
+    this.selectedFacets.add(selectedFacets == null
+        ? null
+        : Map<String, List<String>>.fromEntries(
+            selectedFacets.entries.map(
+              (entry) => MapEntry(entry.key, List<String>.from(entry.value)),
+            ),
+          ));
+    showAllValues.add(showAll);
+    floorIds.add(currentFloorId);
+    if (_index >= _responses.length) {
+      throw StateError('준비한 Discovery 응답보다 요청이 많습니다.');
+    }
+    return _responses[_index++];
   }
 }
 
@@ -623,6 +801,7 @@ class _FakeDestinationRepository implements DestinationRepository {
     String query, {
     String? currentFloorId,
     Map<String, List<String>>? selectedFacets,
+    bool showAll = false,
   }) async {
     aiQueries.add(query);
     if (delay != null) await Future<void>.delayed(delay!);

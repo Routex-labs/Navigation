@@ -118,6 +118,7 @@ class HttpDestinationRepository implements DestinationRepository {
     String query, {
     String? currentFloorId,
     Map<String, List<String>>? selectedFacets,
+    bool showAll = false,
   }) async {
     // 백엔드는 text.min_length=1을 강제해 빈 문자열이면 422를 낸다. HTTP를
     // 아예 태우지 않고 조용히 "빈 결과"와 같은 no_match를 돌려준다.
@@ -133,6 +134,7 @@ class HttpDestinationRepository implements DestinationRepository {
         'building_id': buildingId,
         'current_floor_id': ?currentFloorId,
         'selected_facets': ?selectedFacets,
+        'show_all': showAll,
       })),
     );
 

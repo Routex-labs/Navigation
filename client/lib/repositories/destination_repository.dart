@@ -32,6 +32,10 @@ abstract class DestinationRepository {
   /// 요청마다 지금까지의 선택을 다시 실어 보내야 한다 — 비워 두면 첫 질문
   /// 상태로 취급된다.
   ///
+  /// [showAll]은 사용자가 clarify 질문에서 "전체 보기"를 선택했다는 뜻이다.
+  /// 선택 facet이 있더라도 함께 보낼 수 있으며, 서버는 추가 질문 없이 후보
+  /// 목록을 반환한다. 서버 세션을 쓰지 않으므로 이 값 역시 매 요청에 명시한다.
+  ///
   /// 반환값의 `mode`가 화면 분기의 유일한 근거다: `direct`(1건 확정)·
   /// `clarify`(질문 + 초기 후보)·`results`(다양성 보정 후보 목록)·
   /// `no_match`(빈 matches)·`degraded`(의미 검색 불가, 가능하면 matches를
@@ -42,5 +46,6 @@ abstract class DestinationRepository {
     String query, {
     String? currentFloorId,
     Map<String, List<String>>? selectedFacets,
+    bool showAll = false,
   });
 }

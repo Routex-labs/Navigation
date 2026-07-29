@@ -22,6 +22,7 @@ class MockDestinationRepository implements DestinationRepository {
     String query, {
     String? currentFloorId,
     Map<String, List<String>>? selectedFacets,
+    bool showAll = false,
   }) async {
     final results = await searchDestinations(
       buildingId,
