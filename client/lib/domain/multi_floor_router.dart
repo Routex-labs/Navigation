@@ -14,6 +14,21 @@ import '../models/indoor_route.dart';
 import 'dijkstra.dart';
 import 'geo_transform.dart';
 
+/// 중간층 보행에 매기는 가중치.
+///
+/// 거리 합만 최소화하면 "중간층을 가로질러 다른 에스컬레이터로 갈아타기"와
+/// "목적층에서 걷기"가 같은 값이 된다. 사람에게는 전혀 같지 않다 — 중간층 보행은
+/// 목적지로 가는 진척이 아니고, 그 층에서 다음 기기를 다시 찾아야 하며, 층 전환
+/// 감지가 흔들릴 구간도 늘어난다. 그래서 **출발층도 목적층도 아닌 층**의 보행만
+/// 이 배수로 비싸게 매겨, 걸어야 할 거리를 사용자가 이미 서 있는 출발층으로 옮긴다.
+///
+/// 실측(현대 서울, B1 출발): 이 값이 1.0이면 B1→2F가 1F를 69.6m 가로질러 뱅크를
+/// 갈아탔다. 1.3~2.0 구간은 모두 "처음부터 같은 뱅크를 타고 직행"을 고르며(중간층
+/// 보행 2.0m), 대가는 실거리 +10.6m다. 안정 구간의 가운데를 취한다.
+///
+/// 선택에만 쓰는 값이다 — ETA·남은거리는 아래에서 원본 `length_m`으로 계산한다.
+const double kIntermediateFloorWalkPenalty = 1.5;
+
 /// 두 노드 사이 층 간 최단 경로를 계산한다. 경로가 없거나 층 매핑이 부족해
 /// 세그먼트를 만들 수 없으면 null.
 MultiFloorRoute? computeMultiFloorRoute(
@@ -23,12 +38,7 @@ MultiFloorRoute? computeMultiFloorRoute(
 ) {
   final ShortestPath? path;
   try {
-    path = findShortestPath(
-      nodes: graph.nodes,
-      edges: graph.edges,
-      startNodeId: startNodeId,
-      endNodeId: endNodeId,
-    );
+    path = _selectPath(graph, startNodeId, endNodeId);
   } on ArgumentError {
     return null;
   }
@@ -150,6 +160,102 @@ MultiFloorRoute? computeMultiFloorRoute(
   }
 
   return MultiFloorRoute(segments: built, totalDistanceMeters: totalDistance);
+}
+
+/// 경로를 고른다. 중간층 보행 가중치는 **수단 선택을 바꾸지 않는 선에서만** 쓴다.
+///
+/// 가중치를 무조건 적용하면 엘리베이터 경로의 환승 보행(샤프트가 전 층을 서비스하지
+/// 않아 중간층에서 갈아타는 구간)까지 비싸져, 긴 이동이 에스컬레이터 연속 탑승으로
+/// 뒤집힌다. 실측에서 200쌍 중 13건이 그렇게 바뀌었고 전부 4~9홉짜리였다
+/// (예: 6F→B4가 엘리베이터 3회 → 에스컬레이터 9회). 층수에 따른 수단 선택은
+/// 백엔드 비용 상수(ESCALATOR_HOP_M·ELEVATOR_BOARD_M)의 소관이고, 이 가중치가
+/// 뒤집을 문제가 아니다.
+///
+/// 그래서 원본 가중치 경로가 엘리베이터를 쓰면 그대로 두고, 에스컬레이터만 쓰는
+/// 경로일 때만 가중치를 적용하며, 그 결과가 엘리베이터를 끌어들이면 되돌린다.
+/// 이 규칙으로 같은 200쌍에서 수단이 바뀐 경로는 0건이 된다.
+ShortestPath? _selectPath(
+  BuildingGraph graph,
+  String startNodeId,
+  String endNodeId,
+) {
+  final raw = findShortestPath(
+    nodes: graph.nodes,
+    edges: graph.edges,
+    startNodeId: startNodeId,
+    endNodeId: endNodeId,
+  );
+  if (raw == null) return null;
+
+  final transferModeById = <String, String>{
+    for (final edge in graph.edges)
+      if (edge.transferMode != null) edge.id: edge.transferMode!,
+  };
+  bool usesElevator(ShortestPath path) =>
+      path.edgeIds.any((id) => transferModeById[id] == 'elevator');
+  if (usesElevator(raw)) return raw;
+
+  final weightedEdges = _weightedForSelection(graph, startNodeId, endNodeId);
+  if (identical(weightedEdges, graph.edges)) return raw;
+  final weighted = findShortestPath(
+    nodes: graph.nodes,
+    edges: weightedEdges,
+    startNodeId: startNodeId,
+    endNodeId: endNodeId,
+  );
+  if (weighted == null || usesElevator(weighted)) return raw;
+  return weighted;
+}
+
+/// 경로 **선택용** 간선 목록. 중간층의 층 내부 간선만 길이를 부풀린 사본이다.
+///
+/// 어느 층이 중간층인지는 경로를 풀기 전에 알 수 있다 — 출발/목적 노드의 층이
+/// 아닌 모든 층이다. 그래서 상태 확장이나 k-최단경로 없이, 같은 다익스트라에
+/// 다시 매긴 가중치만 넘기면 된다. 수직 전이 간선은 건드리지 않는다(수단 선택
+/// 교차점은 백엔드 비용 상수가 정한다).
+List<GraphEdge> _weightedForSelection(
+  BuildingGraph graph,
+  String startNodeId,
+  String endNodeId,
+) {
+  if (kIntermediateFloorWalkPenalty == 1.0) return graph.edges;
+
+  final floorIdByNodeId = {
+    for (final node in graph.nodes) node.id: node.floorId,
+  };
+  final startFloorId = floorIdByNodeId[startNodeId];
+  final endFloorId = floorIdByNodeId[endNodeId];
+  // 같은 층 안의 경로면 중간층이 없다 — 부풀릴 대상도 없다.
+  if (startFloorId == null ||
+      endFloorId == null ||
+      startFloorId == endFloorId) {
+    return graph.edges;
+  }
+
+  final weighted = <GraphEdge>[];
+  for (final edge in graph.edges) {
+    final floorId =
+        floorIdByNodeId[edge.fromNodeId] ?? floorIdByNodeId[edge.toNodeId];
+    final intermediate =
+        edge.transferMode == null &&
+        floorId != null &&
+        floorId != startFloorId &&
+        floorId != endFloorId;
+    weighted.add(
+      intermediate
+          ? GraphEdge(
+              id: edge.id,
+              fromNodeId: edge.fromNodeId,
+              toNodeId: edge.toNodeId,
+              lengthM: edge.lengthM * kIntermediateFloorWalkPenalty,
+              bidirectional: edge.bidirectional,
+              geometryLocalM: edge.geometryLocalM,
+              transferMode: edge.transferMode,
+            )
+          : edge,
+    );
+  }
+  return weighted;
 }
 
 LatLng _apply(AffineTransform transform, double xM, double yM) {
