@@ -104,6 +104,9 @@ def add_dataset(session: Session, data: dict) -> None:
                 from_node_id=edge["from"],
                 to_node_id=edge["to"],
                 length_m=length_m,
+                # 층 내부 간선은 실제 거리가 곧 라우팅 비용이다. 둘이 갈라지는 것은
+                # 수직 전이 간선뿐이다(add_transfer_edges 참고).
+                cost_m=length_m,
                 bidirectional=edge.get("bidirectional", True),
                 geometry=geometry,
             )
@@ -153,7 +156,10 @@ def add_transfer_edges(session: Session, transfers: list[dict]) -> None:
             floor_id=None,
             from_node_id=transfer["from"],
             to_node_id=transfer["to"],
+            # 전이 간선은 실제 이동 거리(length_m)와 라우팅 비용(cost_m)이 다르다.
+            # 비용은 수단 선호를 인코딩한 튜닝값이라 표시 거리로 쓰면 안 된다.
             length_m=transfer["length_m"],
+            cost_m=transfer["cost_m"],
             bidirectional=transfer.get("bidirectional", True),
             geometry=None,
             transfer_mode=transfer["mode"],

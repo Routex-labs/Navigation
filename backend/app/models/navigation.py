@@ -52,7 +52,16 @@ class Edge(Base):
     floor_id: Mapped[str | None] = mapped_column(ForeignKey("floors.id"))
     from_node_id: Mapped[str] = mapped_column(ForeignKey("nodes.id"), nullable=False)  # 시작 노드 FK
     to_node_id: Mapped[str] = mapped_column(ForeignKey("nodes.id"), nullable=False)  # 끝 노드 FK
-    length_m: Mapped[float] = mapped_column(Float, nullable=False)  # 간선 길이(미터) = Dijkstra 가중치
+    # 실제 이동 거리(미터). 사용자에게 보여 주는 거리·진행률의 근거다.
+    length_m: Mapped[float] = mapped_column(Float, nullable=False)
+    # 라우팅 비용(미터 단위 가중치) = Dijkstra가 최소화하는 값.
+    #
+    # 층 내부 간선은 length_m와 같다. 수직 전이 간선만 달라진다 — "어떤 수단으로 몇 층을
+    # 갈지"를 고르게 하려고 실제 거리가 아닌 튜닝된 비용을 싣기 때문이다
+    # (scripts/transform/vertical_transfers.py의 비용 상수 주석 참고).
+    # 이 둘을 한 컬럼으로 겸하면 에스컬레이터 20m 같은 가중치가 사용자에게 보이는
+    # 총 거리에 그대로 더해져 표시 거리가 부풀려진다.
+    cost_m: Mapped[float] = mapped_column(Float, nullable=False)
     bidirectional: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)  # 양방향 통행 가능 여부
     geometry: Mapped[list[dict] | None] = mapped_column(JSON)  # 간선 경로 폴리라인 좌표(local_m), 선택 (직선이면 없음)
     # 수직 전이 간선 여부(elevator/escalator 환승). 층 내부 간선은 None.

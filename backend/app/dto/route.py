@@ -43,13 +43,23 @@ class GraphEdgeResponse(BaseModel):
     from_node_id: str = Field(alias="from")  # 시작 노드 id
     to_node_id: str = Field(alias="to")  # 도착 노드 id
 
-    length_m: float  # 간선 길이 (미터). 경로 비용
+    length_m: float  # 실제 이동 거리 (미터). 사용자에게 보여 주는 거리·진행률의 근거
+    # 라우팅 비용 (미터 단위 가중치). Dijkstra는 이 값을 최소화한다.
+    # 층 내부 간선은 length_m와 같고, 수직 전이 간선만 다르다 — 수단 선호(에스컬레이터 vs
+    # 엘리베이터)를 인코딩한 튜닝값이라 표시 거리로 쓰면 총 거리가 부풀려진다.
+    cost_m: float
     bidirectional: bool  # 양방향 통행 가능 여부. False면 from→to만 지날 수 있다
 
     geometry_local_m: list[LocalPointResponse]  # 간선을 그릴 꺾은선 (local_m). 비면 직선으로 그린다
 
     # 층 내부 간선은 None, 수직 전이 간선은 "elevator"/"escalator". 경로 안내 문구·아이콘 근거.
     transfer_mode: str | None = None
+
+    # 이 간선이 잇는 층. 전이 간선은 두 값이 다르고, 층 내부 간선은 같다.
+    # **수직 전이의 도착 지점은 이 to 노드와 to_floor_id가 단일 원천이다** —
+    # 클라이언트는 이름·그룹으로 도착 노드를 다시 고르지 않는다.
+    from_floor_id: str | None = None
+    to_floor_id: str | None = None
 
 
 # 한 층의 길찾기 그래프 전체.
