@@ -52,6 +52,98 @@ def _load_store_categories(path: Path = STORE_CATEGORIES_PATH) -> dict[str, dict
         return {}
     return json.loads(path.read_text(encoding="utf-8"))
 
+
+def _resolved_category(
+    store: dict, overrides: dict[str, dict], by_name: dict[str, dict]
+) -> tuple[str | None, str | None]:
+    """카테고리 오버라이드 적용 순서를 한 곳에 모은다 — id 우선, 매장명 폴백, 원본 유지.
+
+    `_reshape_stores`와 검증용 `_all_store_rows`가 같은 결과를 보게 하려고 함수로 뺐다.
+    두 곳이 각자 오버라이드를 적용하면 규칙이 갈리는 순간 검증이 통과하는데 시드는
+    다른 카테고리를 넣는 일이 생긴다.
+    """
+    override = overrides.get(store["id"]) or by_name.get((store.get("name") or "").strip())
+    return (
+        (override or {}).get("category") or store.get("category"),
+        (override or {}).get("subcategory") or store.get("subcategory"),
+    )
+
+
+def _all_store_rows(directory: Path = STUDIO_DIR) -> list[dict]:
+    """facet 검증용 전 매장 목록. `store_facets`가 기대하는 순수 dict 모양이다.
+
+    DB를 거치지 않고 Studio JSON에서 직접 만든다 — 검증은 적재 **전에** 돌아야
+    잘못된 태그가 DB에 들어가는 것을 막을 수 있다.
+    """
+    overrides = _load_store_categories()
+    by_name = _load_store_categories(STORE_CATEGORIES_BY_NAME_PATH)
+    rows: list[dict] = []
+    for path in sorted(directory.glob("stores_*.json")):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        for store in payload.get("stores", []):
+            category, subcategory = _resolved_category(store, overrides, by_name)
+            rows.append(
+                {
+                    "store_id": store["id"],
+                    # name-null footprint는 id로 폴백 — _reshape_stores와 같은 규칙이라
+                    # 오버레이의 name 대조가 실제 적재값과 어긋나지 않는다.
+                    "name": store.get("name") or store["id"],
+                    "category": category,
+                    "subcategory": subcategory,
+                }
+            )
+    return rows
+
+
+def validate_facet_resources(directory: Path = STUDIO_DIR) -> list[str]:
+    """오버레이·intents 정의를 실데이터와 대조한다. 오류 메시지 목록(빈 목록이면 정상).
+
+    설계 문서 5-2가 요구하는 "시드가 실패로 처리"의 실행 지점이다. 지금까지
+    `store_facets.validate_*`는 단위 테스트만 불렀고 시드는 검증 없이 적재했다 —
+    고아 store_id나 vocabulary 밖 값이 있어도 시드가 성공했다.
+
+    태그가 없는 매장은 오류가 아니다(5-2 명시) — 커버리지 보고가 따로 다룬다.
+
+    **실데이터(STUDIO_DIR)를 시드할 때만 검증한다.** 테스트는 합성 층 몇 개짜리 임시
+    디렉터리로 시드하는데, 거기에는 오버레이가 가리키는 매장이 당연히 없어서 전부
+    고아 store_id로 잡힌다. 오버레이는 실제 건물 데이터에 대해 정의된 것이므로
+    다른 데이터셋으로 대조하는 것 자체가 의미가 없다.
+    """
+    if directory != STUDIO_DIR or not STORE_SEARCH_FACETS_DIR.exists():
+        return []
+
+    rows = _all_store_rows(directory)
+    known_ids = {row["store_id"] for row in rows}
+    names = {row["store_id"]: row["name"] for row in rows}
+
+    vocabulary_path = STORE_SEARCH_FACETS_DIR / "_vocabulary.json"
+    vocabulary = (
+        json.loads(vocabulary_path.read_text(encoding="utf-8")).get("vocabulary", {})
+        if vocabulary_path.exists()
+        else {}
+    )
+
+    errors: list[str] = []
+    for path in sorted(STORE_SEARCH_FACETS_DIR.glob("*.json")):
+        if path.name.startswith("_"):
+            continue
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        errors += [
+            f"{path.name}: {message}"
+            for message in store_facets.validate_overlay(
+                payload, vocabulary, known_ids, names
+            )
+        ]
+
+    intents_path = STORE_SEARCH_FACETS_DIR / store_facets.INTENTS_FILENAME
+    if intents_path.exists():
+        payload = json.loads(intents_path.read_text(encoding="utf-8"))
+        errors += [
+            f"{store_facets.INTENTS_FILENAME}: {message}"
+            for message in store_facets.validate_intents(payload, rows)
+        ]
+    return errors
+
 # 기준층: 건물 공통 프레임의 wgs84 앵커를 가진 층. 좌표 자체는 전 층이 공유하므로
 # 여기서 가져오는 것은 local_m -> wgs84 아핀뿐이다.
 REFERENCE_FLOOR = "1f"
@@ -201,11 +293,7 @@ def _reshape_stores(
             entrance_node_id = _nearest_node_id(nodes, entrance["x"], entrance["y"])
         # 실제 카테고리 오버라이드. id 기반(category_code 근거)이 최우선, 없으면
         # 매장명 기반 폴백, 둘 다 없으면 원본 값을 유지한다.
-        override = category_overrides.get(store["id"]) or category_by_name.get(
-            (store.get("name") or "").strip()
-        )
-        category = (override or {}).get("category") or store.get("category")
-        subcategory = (override or {}).get("subcategory") or store.get("subcategory")
+        category, subcategory = _resolved_category(store, category_overrides, category_by_name)
         # 파생(소분류) + 수작업 오버레이. 빈 dict는 저장하지 않는다 — 컬럼을 None으로 둬야
         # "태그 없음"과 "빈 태그"가 DB에서 구분 없이 하나로 남는다(설계 5-1 빈 배열 금지).
         facets = store_facets.resolve_facets(
@@ -299,6 +387,14 @@ def seed_studio(
     if REFERENCE_FLOOR not in codes:
         raise ValueError(f"기준층 {REFERENCE_FLOOR}.json이 있어야 wgs84를 계산할 수 있습니다.")
     reference = _load(REFERENCE_FLOOR, directory)
+
+    # 적재 전에 검증한다 — 잘못된 태그가 DB에 들어간 뒤 실패하면 반쯤 시드된 DB가 남는다.
+    facet_errors = validate_facet_resources(directory)
+    if facet_errors:
+        raise ValueError(
+            "검색 facet 리소스 검증 실패 "
+            f"({len(facet_errors)}건):\n  - " + "\n  - ".join(facet_errors)
+        )
 
     own_session = session or SessionLocal()
     try:
