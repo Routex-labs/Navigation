@@ -716,8 +716,56 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 문구를 "다시 불러오는 중"으로 바꿔 사용자가 눌린 걸 알 수 있게 한다.
   bool _retryingBuildingLoad = false;
 
+  /// 실패했을 때 스스로 다시 시도하는 간격.
+  ///
+  /// **한 번 실패하면 영영 복구되지 않는 것이 실제 문제였다.** 이 로드는
+  /// initState에서 딱 한 번 돌고, 실패하면 사람이 배지를 누를 때까지 그대로
+  /// 남는다. 그런데 개발 중에는 `uvicorn --reload`가 백엔드 코드를 고칠 때마다
+  /// 서버를 잠깐 내리므로, 하필 그 순간 화면이 열려 있으면 층 선택기·위치
+  /// 지정·실내 진입·실내 도면이 통째로 죽은 채 남는다. 클라이언트를 hot
+  /// reload해도 initState는 다시 돌지 않아 그대로다.
+  ///
+  /// 간격을 늘려 가는 이유는 두 경우를 한 사다리로 덮기 위해서다 — 서버가
+  /// 리로드 중이라 곧 살아나는 경우(앞쪽 짧은 간격)와, 아직 뜨지도 않아 한참
+  /// 걸리는 경우(뒤쪽 긴 간격). 다 쓰면 약 1분간 6번 시도한다.
+  ///
+  /// **무한히 재시도하지는 않는다.** 백엔드가 아예 없는 환경(기기에서 서버
+  /// 없이 실행)에서 영원히 요청을 날리면 배터리와 로그만 태운다. 사다리를 다
+  /// 쓴 뒤에는 배지의 "다시 시도"에 맡긴다.
+  static const _buildingRetryDelays = <Duration>[
+    Duration(seconds: 1),
+    Duration(seconds: 2),
+    Duration(seconds: 4),
+    Duration(seconds: 8),
+    Duration(seconds: 16),
+    Duration(seconds: 30),
+  ];
+
+  int _buildingRetryAttempt = 0;
+  Timer? _buildingRetryTimer;
+
+  /// 다음 자동 재시도를 예약한다. 이미 예약돼 있거나 사다리를 다 썼으면 아무
+  /// 것도 하지 않는다.
+  void _scheduleBuildingRetry() {
+    if (_buildingRetryTimer != null) return;
+    if (_buildingRetryAttempt >= _buildingRetryDelays.length) return;
+    final delay = _buildingRetryDelays[_buildingRetryAttempt++];
+    _buildingRetryTimer = Timer(delay, () {
+      _buildingRetryTimer = null;
+      // 사람이 누른 재시도가 도는 중이면 그 결과를 기다린다. 실패하면 그쪽이
+      // 다시 사다리를 이어 준다.
+      if (!mounted || _retryingBuildingLoad) return;
+      unawaited(_loadBuildingEntrance());
+    });
+  }
+
   Future<void> _retryBuildingLoad() async {
     if (_retryingBuildingLoad) return;
+    // 사람이 직접 눌렀다는 것은 "지금은 될 것 같다"는 신호다. 사다리를 처음
+    // 부터 다시 쓸 수 있게 되돌려, 이번에도 실패하면 짧은 간격부터 다시 시도한다.
+    _buildingRetryTimer?.cancel();
+    _buildingRetryTimer = null;
+    _buildingRetryAttempt = 0;
     setState(() => _retryingBuildingLoad = true);
     await _loadBuildingEntrance();
     if (!mounted) return;
@@ -733,6 +781,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   @override
   void dispose() {
+    _buildingRetryTimer?.cancel();
     _entranceWatchGraceTimer?.cancel();
     _positionSubscription?.cancel();
     _pdrSnapshotSub?.cancel();
@@ -783,10 +832,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       building = await buildingRepository.getBuilding(demoBuildingId);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _buildingLoadFailed = true);
+      if (!_buildingLoadFailed) setState(() => _buildingLoadFailed = true);
+      _scheduleBuildingRetry();
       return;
     }
     if (!mounted) return;
+    // 성공했으면 예약된 재시도는 필요 없다. 사다리도 되돌려, 나중에 다시
+    // 끊겼을 때 짧은 간격부터 새로 시작하게 한다.
+    _buildingRetryTimer?.cancel();
+    _buildingRetryTimer = null;
+    _buildingRetryAttempt = 0;
     setState(() {
       _buildingLoadFailed = false;
       _building = building;

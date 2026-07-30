@@ -86,6 +86,55 @@ void main() {
     expect(failing.getBuildingCalls, greaterThanOrEqualTo(2));
   });
 
+  testWidgets('백엔드가 살아나면 누르지 않아도 스스로 복구된다', (WidgetTester tester) async {
+    // 실제로 겪은 상황: `uvicorn --reload`가 백엔드 코드를 고칠 때마다 서버를
+    // 잠깐 내리는데, 하필 그 순간 화면이 열려 있으면 이 로드만 실패하고
+    // 실내 기능 전체가 죽은 채로 남았다. 로드는 initState에서 한 번만 돌아
+    // 클라이언트를 hot reload해도 되살아나지 않는다.
+    final failing = _FlakyBuildingRepository(inner)..failing = true;
+    useRepository(failing);
+
+    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await drain(tester);
+    expect(find.textContaining('건물 정보를 불러오지 못했습니다'), findsOneWidget);
+
+    // 백엔드가 돌아왔다. 사용자는 아무것도 누르지 않는다.
+    failing.failing = false;
+    await tester.pump(const Duration(seconds: 2));
+    await drain(tester);
+
+    expect(find.textContaining('건물 정보를 불러오지 못했습니다'), findsNothing);
+  });
+
+  testWidgets('백엔드가 계속 죽어 있어도 재시도를 무한히 반복하지 않는다', (
+    WidgetTester tester,
+  ) async {
+    // 서버 없이 실행하는 환경에서 영원히 요청을 날리면 배터리와 로그만 태운다.
+    // 사다리를 다 쓰면 멈추고 배지의 "다시 시도"에 맡긴다.
+    final failing = _FlakyBuildingRepository(inner)..failing = true;
+    useRepository(failing);
+
+    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await drain(tester);
+
+    // 사다리 총합(1+2+4+8+16+30 = 61초)을 훌쩍 넘겨 진행시킨다.
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(seconds: 20));
+    }
+    final afterLadder = failing.getBuildingCalls;
+
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(seconds: 20));
+    }
+
+    expect(failing.getBuildingCalls, afterLadder);
+    // 배지는 그대로 남아 사용자가 직접 재시도할 수 있다.
+    expect(find.textContaining('건물 정보를 불러오지 못했습니다'), findsOneWidget);
+    // 호출 수 자체도 상식적인 범위여야 한다. 이 카운터는 야외 지도만 세는 게
+    // 아니라 카테고리 열·실내 화면이 각자 한 번씩 부르는 것까지 함께 센다.
+    expect(afterLadder, lessThan(20));
+  });
+
   testWidgets('정상 로드에서는 배지가 뜨지 않는다', (WidgetTester tester) async {
     // 배지가 항상 떠 있으면(=조건이 뒤집혔으면) 위 두 테스트는 그대로 통과한다.
     useRepository(_FlakyBuildingRepository(inner));
