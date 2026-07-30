@@ -26,6 +26,8 @@ from __future__ import annotations
 
 from math import hypot
 
+from scripts.transform.vertical_matching import min_cost_matching
+
 # 수직 이동 수단으로 볼 노드 타입
 TRANSFER_TYPES = ("elevator", "escalator")
 # 같은 수직 통로로 볼 최대 수평 거리(m). 정규화 잔차(~1-3m)를 감안한 값.
@@ -83,8 +85,12 @@ def _escalator_direction(node: dict) -> str | None:
     return None
 
 
-# a쪽 노드들을 b쪽 노드에 최근접 1:1로 짝짓는다. 반경 밖이면 unresolved에 남긴다.
-# 반환: [(a_node, b_node, distance)] — 짝지어진 것만.
+# a쪽 노드들을 b쪽 노드에 최소비용 1:1로 짝짓는다. 반경 밖이면 이을 수 없다.
+# 반환: [(a_node, b_node, distance)] — 짝지어진 것만. 짝 못 얻은 a는 unresolved에 남긴다.
+#
+# 예전에는 a를 입력 순서대로 훑으며 가장 가까운 미사용 b를 집었다(순차 탐욕). 후보 거리가
+# 비슷하면 입력 순서에 따라 결과가 갈렸다. 이제 전역 최소비용 매칭(vertical_matching)으로
+# 순서와 무관하게 같은 짝이 나온다. 반경 밖 쌍은 cost=None으로 막아 매칭에서 뺀다.
 def _match_by_position(
     a_nodes: list[dict],
     b_nodes: list[dict],
@@ -94,24 +100,30 @@ def _match_by_position(
     mode: str,
     unresolved: list[dict],
 ) -> list[tuple[dict, dict, float]]:
-    used: set[str] = set()
-    pairs: list[tuple[dict, dict, float]] = []
-    for a in a_nodes:
-        candidates = [(_distance(a, b), b) for b in b_nodes if b["id"] not in used]
-        near = [c for c in candidates if c[0] <= MATCH_RADIUS_M]
-        if not near:
+    by_id = {node["id"]: node for node in (*a_nodes, *b_nodes)}
+    a_ids = [node["id"] for node in a_nodes]
+    b_ids = [node["id"] for node in b_nodes]
+
+    def cost(a_id: str, b_id: str) -> float | None:
+        distance = _distance(by_id[a_id], by_id[b_id])
+        return distance if distance <= MATCH_RADIUS_M else None
+
+    matched = min_cost_matching(a_ids, b_ids, cost)
+    matched_a = {a_id for a_id, _b_id in matched}
+
+    pairs = [(by_id[a_id], by_id[b_id], _distance(by_id[a_id], by_id[b_id])) for a_id, b_id in matched]
+
+    # 짝을 못 얻은 a 노드는 자동으로 아무 데나 잇지 않고 unresolved로 보고한다(사람 확인 대상).
+    for a_id in sorted(a_ids):
+        if a_id not in matched_a:
             unresolved.append(
                 {
-                    "node_id": a["id"],
+                    "node_id": a_id,
                     "floor": a_floor["name"],
                     "mode": mode,
                     "reason": f"{b_floor['name']}에 {MATCH_RADIUS_M}m 이내 대응 없음",
                 }
             )
-            continue
-        distance, b = min(near, key=lambda c: c[0])
-        used.add(b["id"])
-        pairs.append((a, b, distance))
     return pairs
 
 
