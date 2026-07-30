@@ -9,6 +9,7 @@ sqlite3/SQLAlchemy 동기 IO이므로 모든 핸들러는 def(동기)로 선언�
   GET /buildings                                → 건물 목록
   GET /buildings/{id}                           → 건물 상세 (footprint 포함)
   GET /buildings/{id}/stores?q=검색어           → 매장 검색
+  GET /buildings/{id}/places/{place_id}         → 매장/시설 상세
   GET /buildings/{id}/floors/{floor}            → 층 지도 데이터 (매장+POI+그래프)
   GET /buildings/{id}/floors/{floor}/graph      → 층 길찾기 그래프 (nodes+edges)
   GET /buildings/{id}/graph?vertical=auto       → 건물 전체 그래프 (전 층+수직 전이)
@@ -25,8 +26,9 @@ from app.core.database import get_db
 from app.core.http_cache import cache_headers, etag_matches
 from app.dto.building import BuildingDetailResponse, BuildingSummaryResponse
 from app.dto.floor_map import FloorMapResponse, StoreResponse
+from app.dto.place_detail import PlaceDetailResponse
 from app.dto.route import BuildingGraphResponse, FloorGraphResponse
-from app.repositories import building_queries, tile_queries
+from app.repositories import building_queries, place_detail_queries, tile_queries
 
 router = APIRouter(prefix="/buildings", tags=["buildings"])
 
@@ -77,6 +79,35 @@ def search_stores(
     if result is None:
         raise HTTPException(status_code=404, detail="Building not found")
     return result
+
+
+# 매장/시설 상세. 층 지도 응답에 끼워 넣지 않고 탭한 순간 1건만 가져오는 이유는,
+# 한 층에 매장이 최대 240건이라 상세를 층 응답에 합치면 지도 첫 렌더가 그만큼
+# 느려지기 때문이다. 층 응답은 지도를 그리는 최소 묶음으로 유지한다.
+@router.get(
+    "/{building_id}/places/{place_id}",
+    response_model=PlaceDetailResponse,
+)
+def get_place_detail(
+    building_id: str,
+    place_id: str,
+    session: Session = Depends(get_db),
+    if_none_match: str | None = Header(default=None),
+):
+    result = place_detail_queries.get_place_detail(session, building_id, place_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Place not found")
+
+    # 상세는 시트를 열 때마다 요청되고 내용은 재시드 전까지 바뀌지 않는다.
+    # 직렬화된 본문에서 ETag를 뽑으므로 추가 쿼리가 없다.
+    body = PlaceDetailResponse.model_validate(result).model_dump_json()
+    etag = f'"{hashlib.blake2b(body.encode("utf-8"), digest_size=16).hexdigest()}"'
+    headers = cache_headers(etag, settings.tile_cache_max_age)
+
+    if etag_matches(if_none_match, etag):
+        return Response(status_code=304, headers=headers)
+
+    return Response(content=body, media_type="application/json", headers=headers)
 
 
 # 층 지도 데이터. Flutter 지도 화면이 footprint/매장 폴리곤/POI를 그리는 데 사용.
