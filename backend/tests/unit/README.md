@@ -5,11 +5,15 @@ HTTP 요청 전체를 띄우지 않고 함수·변환을 좁게 검증한다. �
 
 ## 테스트 영역
 
-| 영역 | 주요 파일 |
+app 계층을 미러링해 하위 폴더로 나눈다(각 폴더는 패키지 표식 `__init__.py`를 둔다).
+
+| 하위 폴더 | 주요 파일 |
 |---|---|
-| 좌표·타일 | `test_georeference.py`, `test_tiling.py`, `test_floor_alignment.py` |
-| 질의 | `test_query_search.py`, `test_query_morph.py`, `test_query_ai.py`, `test_query_coverage.py` |
-| 시드·변환 | `test_seed_navigation.py`, `test_studio_adapter_edges.py`, `test_vertical_transfers.py`, `test_reset_and_seed.py` |
+| `query/` | `test_query_search.py`, `test_query_morph.py`, `test_query_ai.py`, `test_query_semantic.py`, `test_query_coverage.py`, `test_query_request.py`, `test_store_facets.py` |
+| `graph/` | `test_graph_integrity.py`, `test_graph_revision.py`, `test_edge_constraints.py`, `test_vertical_transfers.py`, `test_store_entrance_snap.py`, `test_studio_adapter_edges.py`, `test_route_dto.py` |
+| `geo/` | `test_georeference.py`, `test_tiling.py`, `test_tile_cache.py`, `test_floor_alignment.py` |
+| `seed/` | `test_reset_and_seed.py`, `test_seed_navigation.py` |
+| `core/` | `test_database_pragmas.py`, `test_http_cache.py` |
 
 ## 코드 관계
 

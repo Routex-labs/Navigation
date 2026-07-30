@@ -408,7 +408,8 @@ def test_후보가_아닌_매장을_excluded에_적으면_잡는다():
 def test_배포된_intents_파일이_Phase_1_범위를_유지한다():
     from pathlib import Path
 
-    path = Path(__file__).resolve().parents[2] / "resources" / "store_search_facets"
+    # 이 파일 위치(tests/unit/query) 기준 backend 루트는 3단계 위다.
+    path = Path(__file__).resolve().parents[3] / "resources" / "store_search_facets"
     intents = store_facets.load_intents(path)
 
     assert set(intents) == {"신발", "식사"}

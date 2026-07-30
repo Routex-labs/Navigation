@@ -5,13 +5,15 @@ ORM, 좌표 변환까지 이어지는 경로를 확인한다.
 
 ## 테스트 영역
 
-| 영역 | 주요 파일 |
+API 영역별로 하위 폴더로 나눈다(각 폴더는 패키지 표식 `__init__.py`를 둔다).
+
+| 하위 폴더 | 주요 파일 |
 |---|---|
-| 앱·건물·매장 | `test_api.py`, `test_store_api.py`, `test_seed.py` |
-| 층/건물 그래프 | `test_floor_graph.py`, `test_building_graph.py`, `test_multi_floor.py` |
-| 자연어 질의 | `test_queries.py`, `test_query_api.py`, `test_query_semantic_smoke.py` |
-| 지도 타일 | `test_tiles.py` |
-| 실데이터 | `test_real_data_smoke.py` |
+| `graph/` | `test_floor_graph.py`, `test_building_graph.py`, `test_building_graph_cross_building.py`, `test_multi_floor.py`, `test_graph_integrity_seed.py`, `test_seed_graph_gate.py`, `test_store_entrance_snap_seed.py` |
+| `query/` | `test_queries.py`, `test_query_api.py`, `test_query_semantic_smoke.py` |
+| `map/` | `test_tiles.py`, `test_tile_cache.py`, `test_fonts.py` |
+| `endpoints/` | `test_api.py`, `test_ops.py`, `test_store_api.py` |
+| `seed/` | `test_seed.py`, `test_real_data_smoke.py` |
 
 ## 요청 검증 흐름
 
