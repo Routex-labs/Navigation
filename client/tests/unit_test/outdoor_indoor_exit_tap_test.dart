@@ -111,9 +111,16 @@ void main() {
   });
 
   /// 자동 실내 진입까지 끌고 간 뒤 상태 키를 돌려준다.
+  ///
+  /// [outerOverlay]를 주면 지도 위에 상위 화면(MapShellScreen)의 오버레이를
+  /// 흉내 낸 위젯을 함께 얹는다. 그때만 Stack으로 감싸며, 지도가 화면 전체를
+  /// 그대로 차지하도록 [StackFit.expand]를 쓴다 — 지도 크기가 달라지면 층
+  /// 선택기 위치도 함께 움직여 좌표 기반 검증이 무의미해진다.
   Future<GlobalKey<OutdoorMapBodyState>> enterIndoor(
-    WidgetTester tester,
-  ) async {
+    WidgetTester tester, {
+    List<GlobalKey> outerOverlayKeys = const [],
+    Widget? outerOverlay,
+  }) async {
     final key = GlobalKey<OutdoorMapBodyState>();
     // broadcast여야 한다. 야외로 나가면 화면이 GPS를 **다시 구독**하는데,
     // 단일 구독 스트림은 취소된 뒤 재구독하면 'already been listened to'로
@@ -124,8 +131,15 @@ void main() {
     // Scaffold로 감싸는 것이 필수다. 자동 실내 진입은 '건물 감지 중...' 스낵바를
     // 띄우는데, 하위에 Scaffold가 없으면 ScaffoldMessenger가 예외를 던져 진입
     // 코드가 그 자리에서 끊긴다(오버레이가 안 켜진 것처럼 보인다).
+    final map = OutdoorMapBody(key: key, outerOverlayKeys: outerOverlayKeys);
     await tester.pumpWidget(
-      MaterialApp(home: Scaffold(body: OutdoorMapBody(key: key))),
+      MaterialApp(
+        home: Scaffold(
+          body: outerOverlay == null
+              ? map
+              : Stack(fit: StackFit.expand, children: [map, outerOverlay]),
+        ),
+      ),
     );
     await drain(tester);
     // 첫 위치는 건물에서 떨어진 곳이어야 한다 — 자동 진입 판정에 쓰는 입구
@@ -185,6 +199,53 @@ void main() {
 
     // ignore: invalid_use_of_visible_for_testing_member
     await key.currentState!.handleMapClickForTest(insideBuilding);
+    await drain(tester);
+
+    expect(find.byType(FloorSelector), findsOneWidget);
+  });
+
+  testWidgets('층 선택기를 누른 탭은 건물 밖 좌표여도 야외로 나가지 않는다', (
+    WidgetTester tester,
+  ) async {
+    // MapLibre 플랫폼 뷰는 Flutter gesture arena를 우회해서, 지도 위에 얹은
+    // 층 chip을 누르면 그 탭이 지도에도 함께 도착한다. chip은 좌측 하단에
+    // 있으므로 지도를 조금만 축소해 건물이 화면 가운데 일부만 차지하게 되면
+    // 그 좌표가 건물 밖으로 풀린다 — 층을 바꿨을 뿐인데 야외로 튕겨 나갔다.
+    // (확대해 두면 chip 자리도 건물 안이라 증상이 숨는다.)
+    final key = await enterIndoor(tester);
+    final selectorCenter = tester.getCenter(find.byType(FloorSelector));
+
+    // ignore: invalid_use_of_visible_for_testing_member
+    await key.currentState!.handleMapClickForTest(
+      outsideBuilding,
+      screenPoint: selectorCenter,
+    );
+    await drain(tester);
+
+    expect(find.byType(FloorSelector), findsOneWidget);
+  });
+
+  testWidgets('상위 화면 오버레이를 누른 탭도 야외 이탈로 해석하지 않는다', (
+    WidgetTester tester,
+  ) async {
+    // 하단 공용 바("위치 지정" 등)는 상위 MapShellScreen이 지도 위에 얹으므로
+    // 야외 지도가 스스로 알 수 없다. 좌표를 넘겨받지 못하면 하단 바를 누른
+    // 탭이 그대로 지도 탭이 되어 실내 오버레이가 닫힌다.
+    final bottomBarKey = GlobalKey();
+    final key = await enterIndoor(
+      tester,
+      outerOverlayKeys: [bottomBarKey],
+      outerOverlay: Align(
+        alignment: Alignment.bottomCenter,
+        child: Container(key: bottomBarKey, height: 60, color: Colors.white),
+      ),
+    );
+
+    // ignore: invalid_use_of_visible_for_testing_member
+    await key.currentState!.handleMapClickForTest(
+      outsideBuilding,
+      screenPoint: tester.getCenter(find.byKey(bottomBarKey)),
+    );
     await drain(tester);
 
     expect(find.byType(FloorSelector), findsOneWidget);

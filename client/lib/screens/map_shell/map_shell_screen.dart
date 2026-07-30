@@ -638,6 +638,17 @@ class _MapShellScreenState extends State<MapShellScreen> {
                 onStoreTap: (match) {
                   _runSheetChain(() => _showStoreInfo(match));
                 },
+                // 실내 화면과 같은 목록을 넘긴다. 야외 지도도 실내 진입
+                // 오버레이가 켜지면 층 선택기·위치 지정을 함께 쓰므로, 상단
+                // 검색창이나 하단 바를 누른 탭이 지도 탭으로 새어들어가면
+                // 실내 오버레이가 닫히거나 그 자리에 PDR 앵커가 찍힌다.
+                outerOverlayKeys: [
+                  _topBarKey,
+                  _favoritesPillKey,
+                  _categoryRowKey,
+                  _searchPanelKey,
+                  _bottomBarKey,
+                ],
               ),
               IndoorMapBody(
                 key: _indoorKey,

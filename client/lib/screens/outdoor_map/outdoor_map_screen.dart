@@ -467,6 +467,7 @@ class OutdoorMapBody extends StatefulWidget {
     this.onPlacingLocationChanged,
     this.onIndoorEnteredChanged,
     this.onStoreTap,
+    this.outerOverlayKeys = const [],
   });
 
   /// 이 야외 지도가 지금 화면에 보이는지. [MapShellScreen]은 야외/실내를
@@ -491,6 +492,13 @@ class OutdoorMapBody extends StatefulWidget {
   /// 실내 진입 오버레이에서 매장 폴리곤을 탭했을 때 호출된다. 상위
   /// (MapShellScreen)가 실내 화면과 동일한 매장 정보 시트를 띄운다.
   final ValueChanged<PoiSearchResult>? onStoreTap;
+
+  /// 상위(MapShellScreen)가 지도 위에 얹은 오버레이(검색창·저장한 장소 pill·
+  /// 카테고리 chip 열·하단 공용 바 등)의 GlobalKey들. 이 영역 안의 탭은
+  /// [_handleMapClick]에서 제외한다 — MapLibre 플랫폼 뷰가 Flutter gesture
+  /// arena를 우회해 오버레이를 누른 탭도 지도 탭으로 함께 도착하기 때문이다.
+  /// 실내 화면(IndoorMapBody)이 같은 목적으로 쓰는 것과 같은 목록이다.
+  final List<GlobalKey> outerOverlayKeys;
 
   @override
   State<OutdoorMapBody> createState() => OutdoorMapBodyState();
@@ -638,6 +646,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   final GlobalKey _pdrControlKey = GlobalKey();
   final GlobalKey _debugModeSettingsKey = GlobalKey();
   final GlobalKey _pdrShareButtonKey = GlobalKey();
+
+  /// 층 선택기. **가장 중요한 항목이다.** 이 열은 실내 진입 상태에서만 뜨는데,
+  /// 그 상태에서 chip을 누른 탭이 지도까지 새어들어가면 그 좌표가 건물 밖으로
+  /// 판정돼 `_exitIndoorByOutsideTap`이 걸린다 — 층을 바꿨을 뿐인데 야외로
+  /// 튕겨 나간다. 지도를 크게 확대해 두면 chip 자리도 건물 안이라 증상이 숨고,
+  /// 건물이 화면 일부만 차지할 만큼 축소했을 때만 재현된다.
+  final GlobalKey _floorSelectorKey = GlobalKey();
 
   /// 위치 지정 안내 배너. 오른쪽 상단 X를 누른 탭이 지도까지 새어들어가 배너
   /// 아래 지점에 앵커가 찍히는 것을 막는다 — 취소했는데 위치가 지정되면
@@ -2264,9 +2279,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 않는다. 그래서 실기기에서 쓰이는 것과 **같은 함수**를 직접 부른다 —
   /// 테스트용 축약 경로를 따로 두면 정작 검증하려는 분기(건물 밖 탭 → 야외
   /// 전환)를 우회해 버린다.
+  ///
+  /// [screenPoint]는 지도 위젯 로컬 픽셀 좌표다. 오버레이(층 선택기 등) 위를
+  /// 누른 탭이 지도 탭으로 새어들어가는 경우를 재현하려면 이 값이 필요하다 —
+  /// 좌표가 늘 (0,0)이면 오버레이 배제 로직 자체가 검증되지 않는다.
   @visibleForTesting
-  Future<void> handleMapClickForTest(ll.LatLng point) => _handleMapClick(
-    const Point<double>(0, 0),
+  Future<void> handleMapClickForTest(
+    ll.LatLng point, {
+    Offset screenPoint = Offset.zero,
+  }) => _handleMapClick(
+    Point<double>(screenPoint.dx, screenPoint.dy),
     LatLng(point.latitude, point.longitude),
   );
 
@@ -3377,17 +3399,20 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     return null;
   }
 
-  /// [localPoint]가 지도 위 Flutter 오버레이(PDR 제어·디버그 설정) 영역이면
-  /// true. 인자는 MapLibre가 준 지도 위젯 로컬 좌표라 전역 좌표로 바꿔 비교한다.
+  /// [localPoint]가 지도 위 Flutter 오버레이(층 선택기·PDR 제어·디버그 설정과
+  /// 상위가 얹은 검색창·카테고리 열·하단 바) 영역이면 true. 인자는 MapLibre가
+  /// 준 지도 위젯 로컬 좌표라 전역 좌표로 바꿔 비교한다.
   bool _isTapOnMapOverlay(Offset localPoint) {
     final mapBox = context.findRenderObject() as RenderBox?;
     if (mapBox == null || !mapBox.attached) return false;
     final globalPoint = mapBox.localToGlobal(localPoint);
     for (final key in [
+      _floorSelectorKey,
       _pdrControlKey,
       _debugModeSettingsKey,
       _placingHintKey,
       _buildingLoadFailedKey,
+      ...widget.outerOverlayKeys,
     ]) {
       final ctx = key.currentContext;
       if (ctx == null) continue;
@@ -3647,6 +3672,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
             child: SafeArea(
               top: false,
               child: FloorSelector(
+                key: _floorSelectorKey,
                 floors: _building!.floors,
                 selectedFloor: _activeFloor!,
                 onSelectFloor: _switchOverlayFloor,
