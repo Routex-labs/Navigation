@@ -1599,6 +1599,17 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
     final startFloor = hasExplicitOrigin ? originFloor : anchor!.floorId;
     final explicitStartNodeId = hasExplicitOrigin ? originNodeId : null;
+    // 매장을 출발지로 골랐으면 현재 위치도 그 매장으로 옮긴다. 이걸 안 하면
+    // 경로는 그 매장에서 뻗어 나가는데 위치 아이콘만 예전 자리(또는 아무 데도)
+    // 남아, 사용자는 자기가 어디 있다고 표시되는지와 경로가 어긋난 화면을 본다.
+    if (hasExplicitOrigin) {
+      await _anchorAtStoreOrigin(
+        floor: originFloor,
+        nodeId: originNodeId,
+        storePoint: origin!.point,
+      );
+      if (!mounted) return;
+    }
     // 이전 걷기 경로가 남아 있으면 함께 지워, 실내 경로만 화면에 뜨도록 한다.
     setState(() {
       _route = null;
@@ -1632,6 +1643,56 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         startNodeId: explicitStartNodeId,
       );
     }
+  }
+
+  /// 출발지로 고른 매장 자리에 PDR 앵커를 다시 찍어, 현재 위치 아이콘을 그
+  /// 매장으로 옮긴다.
+  ///
+  /// 사용자가 "이 매장에서 출발한다"고 말한 것은 곧 "나는 지금 여기 있다"는
+  /// 뜻이므로, 지도를 탭해 직접 지정한 것과 같은 취급을 한다 — 그래서 배치도
+  /// 수동 배치와 **같은 함수**([_confirmPdrAnchor])를 쓴다. 자북 heading을 주는
+  /// 기기는 그 자리에서 조용히 확정되고, 그렇지 못한 기기는 수동 배치와 똑같이
+  /// 진행 방향을 한 번 물어본다. 방향을 0으로 가정해 조용히 넘어가면 이후
+  /// 걸음 궤적 전체가 그만큼 돌아간 채로 쌓인다.
+  ///
+  /// 실패는 조용히 넘긴다. 위치 아이콘을 못 옮기더라도 경로 자체는 그려져야
+  /// 한다 — 여기서 return해 버리면 길찾기가 통째로 죽는다.
+  Future<void> _anchorAtStoreOrigin({
+    required String floor,
+    required String nodeId,
+    required ll.LatLng storePoint,
+  }) async {
+    // [_confirmPdrAnchor]가 축 변환(axes)을 [_floorGraph]에서 가져오므로,
+    // 앵커를 찍기 전에 그 층 그래프가 화면에 올라와 있어야 한다.
+    if (floor != _activeFloor) {
+      await _switchOverlayFloor(floor);
+      if (!mounted) return;
+    }
+    final graph = _floorGraph;
+    if (graph == null || graph.nodes.isEmpty) return;
+
+    // 매장의 입구 노드를 그대로 쓴다. 그 노드는 이미 통로 위에 있으므로 스냅이
+    // 필요 없고, 경로 탐색이 시작하는 지점과도 정확히 같은 자리가 된다.
+    final node = graph.nodes.where((n) => n.id == nodeId).firstOrNull;
+    final PdrLocalPoint floorPoint;
+    if (node != null) {
+      floorPoint = PdrLocalPoint(node.xM, node.yM);
+    } else {
+      // 노드를 못 찾는 경우(그래프 갱신 시차 등)는 매장 좌표를 층 좌표로 되돌려
+      // 가장 가까운 통로에 붙인다 — 수동 배치가 탭 좌표에 하는 것과 같다.
+      final local = fitFloorGeoTransform(
+        graph.nodes,
+      ).invert(storePoint.latitude, storePoint.longitude);
+      if (local == null) return;
+      final snapped = FloorMapMatcher(
+        graph,
+      ).snapToWalkableNetwork(PdrLocalPoint(local.$1, local.$2));
+      if (snapped == null) return;
+      floorPoint = snapped.point;
+    }
+
+    if (!await _bindPdrSessionToFloor(floor)) return;
+    await _confirmPdrAnchor(floorPoint);
   }
 
   /// 같은 층 안에서 계산한 실내 경로를 지도에 얹는다. 활성 층이 목적지 층과

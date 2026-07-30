@@ -445,38 +445,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       _showPdrMessage('이 층은 위치 지정에 필요한 지도 정보가 아직 없습니다.');
       return;
     }
-    if (indoorNavigationDriver.currentRuntimeStatus.state ==
-        PdrRuntimeState.idle) {
-      setState(() {
-        _pdrTrailState.beginNewSession();
-      });
-      _pdrDebugRecorder = PdrDebugSessionRecorder();
-      _pdrDebugRecorder?.recordRuntime(
-        indoorNavigationDriver.currentRuntimeStatus,
-      );
-      await indoorNavigationDriver.startGuidance(floorId: floor);
-      _pdrDebugRecorder?.recordRuntime(
-        indoorNavigationDriver.currentRuntimeStatus,
-      );
-      if (!mounted) return;
-    } else if (indoorNavigationDriver.currentFloorId != floor) {
-      // **다른 층에서 돌던 세션을 그냥 재사용하면 안 된다.** 앵커에 찍히는 층은
-      // 세션의 층이고, 위치 마커·경로는 `anchor.floorId == 지금 보고 있는 층`일
-      // 때만 그려진다. 그래서 1층에서 위치를 지정한 뒤 2층에서 다시 지정하면
-      // 새 앵커가 여전히 1층으로 기록돼 2층 지도에는 아무것도 나타나지 않았다 —
-      // 사용자 눈에는 "첫 층 말고는 위치 지정이 안 되는" 버그였다.
-      //
-      // 걸음 세션도 함께 리셋한다. 이전 층에서 쌓은 걸음·궤적을 그대로 이어받으면
-      // 새 앵커 기준 위치가 처음부터 어긋난 채 시작한다.
-      setState(() {
-        _pdrTrailState.beginNewSession();
-      });
-      await indoorNavigationDriver.changeFloor(floorId: floor);
-      _pdrDebugRecorder?.recordRuntime(
-        indoorNavigationDriver.currentRuntimeStatus,
-      );
-      if (!mounted) return;
-    }
+    if (!await _bindPdrSessionToFloor(floor)) return;
     _setPlacingAnchor(true);
     _showPdrMessage('지도에서 현재 서 있는 위치를 탭해 지정해주세요.');
   }
@@ -509,6 +478,19 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     setState(() {
       _routeDestination = destination;
     });
+
+    // 매장을 출발지로 골랐으면 현재 위치도 그 매장으로 옮긴다. 이걸 안 하면
+    // 경로는 그 매장에서 뻗어 나가는데 위치 아이콘만 예전 자리(또는 아무 데도)
+    // 남아, 사용자는 자기가 어디 있다고 표시되는지와 경로가 어긋난 화면을 본다.
+    final originNodeId = origin?.nodeId;
+    if (originNodeId != null && startFloor.isNotEmpty) {
+      await _anchorAtStoreOrigin(
+        floor: startFloor,
+        nodeId: originNodeId,
+        storePoint: origin!.point,
+      );
+      if (!mounted) return;
+    }
 
     if (startFloor == endFloor) {
       await _computeAndShowSingleFloorRoute(
@@ -951,6 +933,81 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     if (!mounted) return;
     _setPlacingAnchor(true);
     _showPdrMessage('현재 서 있는 위치를 지도에서 한 번 탭해 PDR 시작점을 맞춰주세요.');
+  }
+
+  /// PDR 세션을 [floor]에 맞춘다. 이어서 앵커를 찍어도 되면 true.
+  ///
+  /// **다른 층에서 이미 돌고 있는 세션을 그냥 재사용하면 안 된다.** 앵커에
+  /// 찍히는 층은 세션의 층([IndoorNavigationView.currentFloorId])이고, 위치
+  /// 마커·경로는 `anchor.floorId == 지금 보고 있는 층`일 때만 그려진다. 그래서
+  /// 1층에서 위치를 지정한 뒤 2층에서 다시 지정하면, 새 앵커가 여전히 1층으로
+  /// 기록돼 2층 지도에는 아무것도 나타나지 않았다.
+  ///
+  /// 층이 바뀌면 걸음 세션도 함께 리셋한다. 이전 층에서 쌓은 걸음·궤적을 그대로
+  /// 이어받으면 새 앵커 기준 위치가 처음부터 어긋난 채 시작한다.
+  Future<bool> _bindPdrSessionToFloor(String floor) async {
+    if (indoorNavigationDriver.currentRuntimeStatus.state ==
+        PdrRuntimeState.idle) {
+      setState(() {
+        _pdrTrailState.beginNewSession();
+      });
+      _pdrDebugRecorder = PdrDebugSessionRecorder();
+      _pdrDebugRecorder?.recordRuntime(
+        indoorNavigationDriver.currentRuntimeStatus,
+      );
+      await indoorNavigationDriver.startGuidance(floorId: floor);
+      _pdrDebugRecorder?.recordRuntime(
+        indoorNavigationDriver.currentRuntimeStatus,
+      );
+      return mounted;
+    }
+    if (indoorNavigationDriver.currentFloorId == floor) return true;
+    setState(() {
+      _pdrTrailState.beginNewSession();
+    });
+    await indoorNavigationDriver.changeFloor(floorId: floor);
+    _pdrDebugRecorder?.recordRuntime(
+      indoorNavigationDriver.currentRuntimeStatus,
+    );
+    return mounted;
+  }
+
+  /// 출발지로 고른 매장 자리에 PDR 앵커를 다시 찍어, 현재 위치 아이콘을 그
+  /// 매장으로 옮긴다. 근거와 실패 처리는 야외 화면의 동명 함수와 같다.
+  Future<void> _anchorAtStoreOrigin({
+    required String floor,
+    required String nodeId,
+    required ll.LatLng storePoint,
+  }) async {
+    // [_confirmPdrAnchor]가 축 변환(axes)을 [_floorGraph]에서 가져오므로,
+    // 앵커를 찍기 전에 그 층 도면이 화면에 올라와 있어야 한다.
+    if (floor != _selectedFloor) {
+      await _selectFloor(floor);
+      if (!mounted) return;
+    }
+    final graph = _floorGraph;
+    if (graph == null || graph.nodes.isEmpty) return;
+
+    // 매장의 입구 노드를 그대로 쓴다. 이미 통로 위에 있어 스냅이 필요 없고,
+    // 경로 탐색이 시작하는 지점과도 정확히 같은 자리가 된다.
+    final node = graph.nodes.where((n) => n.id == nodeId).firstOrNull;
+    final PdrLocalPoint floorPoint;
+    if (node != null) {
+      floorPoint = PdrLocalPoint(node.xM, node.yM);
+    } else {
+      final local = fitFloorGeoTransform(
+        graph.nodes,
+      ).invert(storePoint.latitude, storePoint.longitude);
+      if (local == null) return;
+      final snapped = FloorMapMatcher(
+        graph,
+      ).snapToWalkableNetwork(PdrLocalPoint(local.$1, local.$2));
+      if (snapped == null) return;
+      floorPoint = snapped.point;
+    }
+
+    if (!await _bindPdrSessionToFloor(floor)) return;
+    await _confirmPdrAnchor(floorPoint);
   }
 
   bool _onMapPressedForPdr(ll.LatLng point) {
