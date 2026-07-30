@@ -93,15 +93,41 @@ flutter run -d <device-id>
 flutter run --dart-define=API_BASE_URL=http://192.168.0.10:8001
 ```
 
+백엔드를 직접 수정하지 않는다면 로컬 서버를 띄우지 않고 **배포된 Cloud Run 백엔드**에 바로 붙어도 된다.
+`API_BASE_URL`에 배포 서비스 URL을 넣으면 되고, 주소는 [GCP 배포 문서](gcp-instance.md)를 참고한다.
+
 실기기 연결이 안 되면 PC 방화벽에서 Python/Uvicorn 또는 TCP 8001의 개인 네트워크 수신을 허용한다. 외부 공개 환경에서는 HTTP 대신 HTTPS 주소를 사용한다.
 
 ## API 키 주입
 
-키는 소스에 넣지 않고 실행 시 주입한다.
+키·URL은 소스에 넣지 않고 실행 시 주입한다. 매번 길게 치지 않도록 git에 올리지 않는
+`client/config.local.json` 하나에 모아 `--dart-define-from-file`로 넣는 방식을 권장한다.
+
+```powershell
+Set-Location client
+# 최초 1회: 템플릿 복사 후 값 채우기 (config.local.json은 .gitignore로 커밋되지 않는다)
+Copy-Item config.example.json config.local.json
+# config.local.json의 API_BASE_URL·TMAP_APP_KEY·VWORLD_API_KEY를 채운 뒤:
+flutter run --dart-define-from-file=config.local.json
+```
+
+`config.local.json` 예시(키를 비우면 각각 목업 경로 / OSM 배경지도로 자동 대체):
+
+```json
+{
+  "API_BASE_URL": "http://localhost:8001",
+  "TMAP_APP_KEY": "",
+  "VWORLD_API_KEY": ""
+}
+```
+
+키를 하나만 즉석에서 넘길 땐 단건 방식도 그대로 동작한다.
 
 ```powershell
 flutter run --dart-define=TMAP_APP_KEY=<TMAP_KEY> --dart-define=VWORLD_API_KEY=<VWORLD_KEY>
 ```
+
+> **주입 값은 컴파일 타임에 박힌다.** 키·URL을 바꾸면 hot reload로는 안 먹으므로 `flutter run`을 재시작한다.
 
 ## 문제 해결
 

@@ -20,9 +20,26 @@ Flutter 앱 ──HTTP──> FastAPI ──> SQLite
 
 ## 빠른 시작
 
-상세 실행법은 [로컬 개발 가이드](docs/guide/local-development-guide.md)를 따릅니다. 요약하면 백엔드를 먼저 띄우고, Flutter 앱은 `client/`에서 실행합니다.
+상세 실행법은 [로컬 개발 가이드](docs/guide/local-development-guide.md)를 따릅니다. **앱만 실행**할지, **백엔드까지 수정**할지에 따라 두 갈래입니다.
 
-**백엔드 — 로컬 Python (기본)**
+### 앱만 실행 — 배포된 백엔드에 붙기 (로컬 백엔드 불필요)
+
+`main`에 올라간 백엔드는 Cloud Run에 자동 배포돼 있어, 로컬 서버를 띄우지 않고 앱만 실행할 수 있습니다. 실행 값(배포 URL·외부 API 키)은 git에 올리지 않는 `client/config.local.json` 하나에 모아 주입합니다.
+
+```powershell
+Set-Location client
+Copy-Item config.example.json config.local.json   # 최초 1회
+# config.local.json의 API_BASE_URL에 배포 서비스 주소(→ docs/guide/gcp-instance.md),
+# TMAP_APP_KEY·VWORLD_API_KEY에 발급받은 키를 채운다. 키는 비워도 앱은 뜬다.
+flutter pub get
+flutter run --dart-define-from-file=config.local.json
+```
+
+`config.local.json`은 `.gitignore`로 커밋되지 않으며, 형식은 커밋된 `client/config.example.json`을 따릅니다. 키를 비우면 각각 목업 경로 / OSM 배경지도로 자동 대체됩니다. 실기기·iOS·macOS 실행과 네트워크·HTTP 주의사항은 [로컬 개발 가이드](docs/guide/local-development-guide.md)를 따르세요.
+
+### 백엔드까지 수정 — 로컬 Python
+
+백엔드 코드를 고칠 때만 로컬 서버를 띄웁니다. 이 경우 `config.local.json`의 `API_BASE_URL`을 `http://localhost:8001`로 두거나(안드로이드 에뮬레이터는 비워 두면 기본값 `http://10.0.2.2:8001` 사용), 아예 지정하지 않습니다.
 
 ```powershell
 Set-Location backend
@@ -45,19 +62,7 @@ Invoke-RestMethod http://127.0.0.1:8001/health
 python -m pip install -r requirements-dev.txt
 ```
 
-**Flutter 앱 — Android 에뮬레이터 예시**
-
-```powershell
-Set-Location client
-flutter pub get
-flutter devices
-flutter run
-```
-
-Android 에뮬레이터는 기본값 `http://10.0.2.2:8001`을 사용하므로 별도 API 주소 지정이 필요 없습니다. 실기기, iOS, macOS 실행 방법과 네트워크·HTTP 주의사항은 [로컬 개발 가이드](docs/guide/local-development-guide.md)를 따르세요.
-
-Docker Compose는 배포 이미지·컨테이너 환경을 확인할 때만 사용합니다. 실제 Cloud Run 배포는
-[GCP 배포 문서](docs/guide/gcp-instance.md)를 따릅니다.
+Docker Compose는 배포 이미지·컨테이너 환경을 확인할 때만 사용합니다. 실제 Cloud Run 배포(및 `main` push 자동 배포)는 [GCP 배포 문서](docs/guide/gcp-instance.md)를 따릅니다.
 
 ## 주요 API
 
@@ -91,4 +96,4 @@ Docker Compose는 배포 이미지·컨테이너 환경을 확인할 때만 사�
 - API 계약은 Flutter 클라이언트가 소비하는 JSON 형태를 우선으로 유지합니다.
 - 개발 DB 초기화와 시드는 서버 시작 시가 아니라 `python -m scripts.seed.reset_and_seed`로 실행합니다.
 - 일상 개발·기능 검증은 로컬 Python을 사용하고, Docker는 배포 환경 호환성 확인에만 사용합니다.
-- CI/CD 자동화는 `.github/workflows/`에서 관리합니다.
+- CI(테스트·린트)는 `.github/workflows/`에서, CD(Cloud Run 배포)는 `main` push에 반응하는 GCP Cloud Build 트리거에서 관리합니다.

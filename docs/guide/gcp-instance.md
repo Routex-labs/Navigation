@@ -3,9 +3,12 @@
 > 백엔드 FastAPI 서버를 Google Cloud Run에 배포하고 관리하는 방법을 정리합니다.
 > Flutter 클라이언트는 로컬에서 실행하고 이 서버 주소를 바라봅니다.
 
-> **현재 상태(2026-07-24): 배포된 서비스 없음.** 이전 `navigation-api` 서비스는
-> 비용 관리를 위해 삭제되었고, 아래 URL·설정 표는 재배포 시의 **기준 스펙**이다.
-> `gcloud run services list`가 비어 있는 것이 정상이며, 재배포는 [재배포](#재배포)를 따른다.
+> **현재 상태(2026-07-31): `navigation-api` 서비스 배포·운영 중.** `main` 브랜치 push마다
+> Cloud Build 트리거(GitHub `Routex-labs/Navigation` 연동)가 이미지를 다시 빌드해 자동
+> 재배포한다(GCP CD). 서비스 URL·설정은 아래 표 기준이다. Cloud Run 파일시스템이 휘발성이라
+> 재시작마다 DB가 비므로, 서비스 환경변수 `NAV_SEED_ON_START=1`로 기동 시 1회 시드한다.
+> 이 값이 빠지면 `/buildings`가 빈 테이블로 500이 난다(health는 OK). 수동 재배포·설정 변경은
+> [재배포](#재배포)를 따른다.
 
 ## AI 질의(임베딩) 때문에 주의할 배포 스펙
 
@@ -39,7 +42,7 @@
 | 메모리 | 2 GiB (임베딩 모델 상주 약 775 MB 실측 반영, 최소 요구) |
 | CPU | 1 vCPU |
 | 최소 인스턴스 | 1 (콜드 스타트 방지) |
-| 최대 인스턴스 | 100 (기본값) |
+| 최대 인스턴스 | 20 |
 | 동시 요청 | 80 (기본값) |
 | 요청 타임아웃 | 300초 |
 | 컨테이너 포트 | 8080 (`$PORT`) |
@@ -92,6 +95,14 @@
 
 ## 재배포
 
+**평소에는 손댈 필요가 없다.** `main`에 push하면 Cloud Build 트리거가 자동으로 다시 빌드·배포한다(GCP CD).
+아래 수동 명령은 CD 없이 즉시 반영하거나, 환경변수·리소스 설정을 바꿀 때만 쓴다.
+
+> **주의 — `NAV_SEED_ON_START`는 서비스에 계속 남아 있어야 한다.** 이 값이 비면 다음 콜드
+> 스타트에서 DB가 빈 채로 떠 `/buildings`가 500이 난다. 환경변수만 바꿀 때는 재빌드 없이
+> `gcloud run services update navigation-api --region asia-northeast3 --set-env-vars NAV_SEED_ON_START=1`
+> 로 즉시 반영할 수 있다.
+
 로컬 코드 기준으로 이미지를 다시 빌드(Cloud Build)하고 배포합니다. 로컬 Docker 불필요.
 저장소 루트에서 실행합니다.
 
@@ -129,13 +140,19 @@ gcloud run services describe navigation-api --region asia-northeast3
 
 ## Flutter 클라이언트 연결
 
+배포 URL과 TMAP/VWorld 키를 매번 치지 않도록, git에 올리지 않는 `client/config.local.json`에 모아
+한 번에 주입한다(형식은 `client/config.example.json` 참고, 자세한 내용은
+[로컬 개발 가이드](local-development-guide.md#api-키-주입)).
+
 ```powershell
-cd D:\Navigation\client
-flutter run --dart-define=API_BASE_URL=https://navigation-api-465890645804.asia-northeast3.run.app
+Set-Location client
+# config.example.json을 config.local.json으로 복사한 뒤 API_BASE_URL에 위 서비스 URL,
+# TMAP_APP_KEY·VWORLD_API_KEY에 발급받은 키를 채운다.
+flutter run --dart-define-from-file=config.local.json
 ```
 
-TMAP/VWorld 키를 함께 쓰려면 `--dart-define=TMAP_APP_KEY=...`, `--dart-define=VWORLD_API_KEY=...`를 추가합니다.
-키를 생략하면 각각 목업 경로 / OSM 배경지도로 자동 대체됩니다.
+`API_BASE_URL`을 배포 URL로 채우면 로컬 백엔드를 띄우지 않아도 된다. 키를 비워 두면 각각 목업 경로 /
+OSM 배경지도로 자동 대체된다. (단건으로 넘기려면 `--dart-define=API_BASE_URL=<서비스 URL>`도 여전히 동작.)
 
 ## 비용 관리
 
