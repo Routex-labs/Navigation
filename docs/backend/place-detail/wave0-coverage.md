@@ -16,15 +16,15 @@
 ## 1. 1,640건의 정체
 
 원본 `backend/resources/studio/thehyundai-seoul-dabeeo/stores_*.json` 11개 층에
-`store_categories.json`(id 61건) + `store_category_by_name.json`(이름 494건) 오버레이를
+`store_categories.json`(id 66건) + `store_category_by_name.json`(이름 494건) 오버레이를
 적용한 뒤의 분포다.
 
 | category | 건수 | 비율 |
 |---|---:|---:|
 | **편의시설** | 1,101 | 67.1% |
-| 패션 | 266 | 16.2% |
-| 식음료 | 134 | 8.2% |
-| 리빙 | 52 | 3.2% |
+| 패션 | 260 | 15.9% |
+| 식음료 | 138 | 8.4% |
+| 리빙 | 54 | 3.3% |
 | 뷰티 | 36 | 2.2% |
 | 서비스 | 30 | 1.8% |
 | 키즈 | 21 | 1.3% |
