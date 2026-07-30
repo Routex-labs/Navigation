@@ -3,13 +3,22 @@
 최단 경로 계산은 클라이언트가 이 그래프로 온디바이스 다익스트라를 돌린다(서버 미보유).
 """
 
+from typing import Annotated
+
 from pydantic import BaseModel, Field
+
+# 그래프 수치 필드는 유한값만 허용한다. float는 기본적으로 NaN/±Infinity를 통과시키는데,
+# 그대로 직렬화하면 표준이 아닌 JSON(`NaN`/`Infinity` 토큰)이 나가 클라이언트 파서가
+# 깨지거나 조용히 오염된 좌표·거리가 경로 탐색에 흘러든다. 응답 검증에서 막는다.
+FiniteFloat = Annotated[float, Field(allow_inf_nan=False)]
+# 거리·비용은 유한하면서 음수가 아니어야 한다(음수 가중치 = 잘못된 최단 경로).
+NonNegativeFiniteFloat = Annotated[float, Field(allow_inf_nan=False, ge=0)]
 
 
 # 그래프 좌표 한 점 (local_m).
 class LocalPointResponse(BaseModel):
-    x: float  # 로컬 좌표 X (미터)
-    y: float  # 로컬 좌표 Y (미터)
+    x: FiniteFloat  # 로컬 좌표 X (미터)
+    y: FiniteFloat  # 로컬 좌표 Y (미터)
 
 
 # 이 그래프가 어느 층 것인지. 지도 응답의 FloorResponse보다 얇다(level 없음).
@@ -24,11 +33,11 @@ class GraphNodeResponse(BaseModel):
     type: str  # 노드 종류 (통로·입구·엘리베이터 등). 경로 안내 문구와 아이콘의 근거
     name: str | None  # 표시 이름, 선택
 
-    x_m: float  # 노드 위치 X (local_m)
-    y_m: float  # 노드 위치 Y (local_m)
+    x_m: FiniteFloat  # 노드 위치 X (local_m)
+    y_m: FiniteFloat  # 노드 위치 Y (local_m)
 
-    lat: float | None  # 실측 위도. 이 값이 채워진 노드들이 좌표 변환의 앵커가 된다
-    lng: float | None  # 실측 경도. 앵커가 3개 미만이면 합성 좌표로 폴백한다
+    lat: FiniteFloat | None  # 실측 위도. 이 값이 채워진 노드들이 좌표 변환의 앵커가 된다
+    lng: FiniteFloat | None  # 실측 경도. 앵커가 3개 미만이면 합성 좌표로 폴백한다
 
     # 건물 전체 그래프에서만 채워진다(층별 그래프는 단일 층이라 생략). 전 층 노드가
     # 한 그래프에 섞일 때 클라이언트가 층별로 다시 나누는 근거.
@@ -43,11 +52,11 @@ class GraphEdgeResponse(BaseModel):
     from_node_id: str = Field(alias="from")  # 시작 노드 id
     to_node_id: str = Field(alias="to")  # 도착 노드 id
 
-    length_m: float  # 실제 이동 거리 (미터). 사용자에게 보여 주는 거리·진행률의 근거
+    length_m: NonNegativeFiniteFloat  # 실제 이동 거리 (미터). 사용자에게 보여 주는 거리·진행률의 근거
     # 라우팅 비용 (미터 단위 가중치). Dijkstra는 이 값을 최소화한다.
     # 층 내부 간선은 length_m와 같고, 수직 전이 간선만 다르다 — 수단 선호(에스컬레이터 vs
     # 엘리베이터)를 인코딩한 튜닝값이라 표시 거리로 쓰면 총 거리가 부풀려진다.
-    cost_m: float
+    cost_m: NonNegativeFiniteFloat
     bidirectional: bool  # 양방향 통행 가능 여부. False면 from→to만 지날 수 있다
 
     geometry_local_m: list[LocalPointResponse]  # 간선을 그릴 꺾은선 (local_m). 비면 직선으로 그린다
