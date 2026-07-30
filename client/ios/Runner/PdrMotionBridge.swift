@@ -13,6 +13,8 @@ import Foundation
 ///   - "motion": DeviceMotion attitude/pose (~33 Hz로 throttle)
 ///   - "pedometer": CMPedometer step 필드(iOS가 1~2.5s로 배치)
 ///   - "snapshot": 초기 listen/reset 시 둘 다
+///   - "altitude": CMAltimeter 기압/상대고도(~1 Hz). 층 전이 판정 전용이며
+///     heading·pedometer 필드를 함께 싣지 않는다(아래 emitAltitude 주석 참고)
 ///
 /// Dart 경로 계산: 거리는 CMPedometer step/distance, 방향은 DeviceMotion attitude에서
 /// 유도한 fusedHeadingDeg + walkDirDeg. accelMagnitude/gyroZ/magneticField 스칼라와
@@ -20,7 +22,9 @@ import Foundation
 final class PdrMotionStreamHandler: NSObject, FlutterStreamHandler {
   private let motionManager = CMMotionManager()
   private let pedometer = CMPedometer()
+  private let altimeter = CMAltimeter()
   private let motionQueue = OperationQueue()
+  private let altimeterQueue = OperationQueue()
 
   private var sink: FlutterEventSink?
 
@@ -88,6 +92,18 @@ final class PdrMotionStreamHandler: NSObject, FlutterStreamHandler {
   private var gyroHeadingDeg = 0.0
   private var gyroHeadingInitialized = false
 
+  // 기압계(CMAltimeter). 층 전이 판정용이며 PDR 경로 계산에는 개입하지 않는다.
+  // relativeAltitude는 startRelativeAltitudeUpdates 시점 기준 누적 상대고도이고,
+  // pressure는 kPa다. Dart는 hPa 기압에서 고도를 직접 계산하므로(양 플랫폼 공통
+  // 경로) relativeAltitude는 그 계산을 실측으로 검증하는 대조값으로만 쓴다.
+  private var altimeterAvailable = false
+  private var hasAltitudeSample = false
+  private var latestRelativeAltitudeM = 0.0
+  private var latestPressureHpa = 0.0
+  private var latestAltitudeTimestampMs = 0.0
+  private var lastAltitudeCallbackAt: Date?
+  private var altimeterWatchdog: Timer?
+
   func onListen(
     withArguments arguments: Any?,
     eventSink events: @escaping FlutterEventSink
@@ -96,6 +112,7 @@ final class PdrMotionStreamHandler: NSObject, FlutterStreamHandler {
     motionQueue.qualityOfService = .userInteractive
     startPedometer()
     startDeviceMotion()
+    startAltimeter()
     emit(kind: "snapshot")
     return nil
   }
@@ -103,6 +120,7 @@ final class PdrMotionStreamHandler: NSObject, FlutterStreamHandler {
   func onCancel(withArguments arguments: Any?) -> FlutterError? {
     pedometer.stopUpdates()
     motionManager.stopDeviceMotionUpdates()
+    stopAltimeter()
     sink = nil
     return nil
   }
@@ -242,6 +260,87 @@ final class PdrMotionStreamHandler: NSObject, FlutterStreamHandler {
         }
         self.lastPedometerCallbackAt = now
         self.emit(kind: "pedometer")
+      }
+    }
+  }
+
+  /// 기압계 스트림을 켠다. 없는 기기(iPhone 5s 이하)면 조용히 비활성 상태로 남고,
+  /// Dart는 `altimeterAvailable=false`를 보고 층 전이 판정 자체를 끈다.
+  ///
+  /// pedometer reset에서 이 스트림을 다시 시작하지 않는다. 기압 시계열이 끊기면
+  /// Dart의 baseline과 이동평균이 매 층 전환마다 처음부터 채워져야 하고, 그
+  /// 공백 구간의 상승을 놓친다. 세션 baseline은 Dart가 관리한다.
+  private func startAltimeter() {
+    guard CMAltimeter.isRelativeAltitudeAvailable() else {
+      altimeterAvailable = false
+      return
+    }
+    guard !altimeterAvailable else { return }
+    altimeterAvailable = true
+    lastAltitudeCallbackAt = nil
+    altimeterQueue.qualityOfService = .utility
+    startAltimeterWatchdog()
+    altimeter.startRelativeAltitudeUpdates(to: altimeterQueue) { [weak self] data, error in
+      guard let self else { return }
+      if let error {
+        self.sendError("Altimeter: \(error.localizedDescription)")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+          self?.restartAltimeter()
+        }
+        return
+      }
+      guard let data else { return }
+      // CMAltitudeData.pressure는 kPa다. 1 kPa = 10 hPa.
+      let pressureHpa = data.pressure.doubleValue * 10.0
+      let relativeAltitudeM = data.relativeAltitude.doubleValue
+      let timestampMs =
+        (Date().timeIntervalSince1970 - ProcessInfo.processInfo.systemUptime
+          + data.timestamp) * 1000.0
+      DispatchQueue.main.async {
+        self.lastAltitudeCallbackAt = Date()
+        self.hasAltitudeSample = true
+        self.latestPressureHpa = pressureHpa
+        self.latestRelativeAltitudeM = relativeAltitudeM
+        self.latestAltitudeTimestampMs = timestampMs
+        self.emitAltitude()
+      }
+    }
+  }
+
+  /// EventChannel 재구독과 CMAltimeter의 드문 callback 정지를 함께 복구한다.
+  ///
+  /// 예전 onCancel은 native update만 멈추고 `altimeterAvailable`을 true로
+  /// 남겼다. 그 결과 앱 background/foreground 뒤 startAltimeter의 guard가
+  /// 재시작을 건너뛰어, 로그에는 첫 몇 샘플만 있고 이후 영구 정지했다.
+  private func stopAltimeter() {
+    altimeter.stopRelativeAltitudeUpdates()
+    altimeterWatchdog?.invalidate()
+    altimeterWatchdog = nil
+    altimeterAvailable = false
+    lastAltitudeCallbackAt = nil
+  }
+
+  private func restartAltimeter() {
+    dispatchPrecondition(condition: .onQueue(.main))
+    guard sink != nil else {
+      stopAltimeter()
+      return
+    }
+    stopAltimeter()
+    startAltimeter()
+  }
+
+  private func startAltimeterWatchdog() {
+    altimeterWatchdog?.invalidate()
+    altimeterWatchdog = Timer.scheduledTimer(
+      withTimeInterval: 2.0,
+      repeats: true
+    ) { [weak self] _ in
+      guard let self, self.sink != nil, self.altimeterAvailable else { return }
+      let silence = self.lastAltitudeCallbackAt.map { Date().timeIntervalSince($0) }
+        ?? .infinity
+      if silence >= 4.0 {
+        self.restartAltimeter()
       }
     }
   }
@@ -482,6 +581,13 @@ final class PdrMotionStreamHandler: NSObject, FlutterStreamHandler {
       "kind": kind,
       "stepSessionId": stepSessionId,
     ]
+    if kind == "snapshot" {
+      // 첫 기압 샘플이 오기 전에도 Dart가 기능 가용 여부를 알아야 한다. 센서가
+      // 없는 기기에서 "판정 대기 중"으로 오해하지 않게 하는 값이다.
+      payload["altimeterAvailable"] = altimeterAvailable
+      payload["altimeterSource"] =
+        altimeterAvailable ? "ios_cmaltimeter" : "unavailable"
+    }
     if kind != "pedometer" && hasMotionSample {
       payload["fusedHeadingDeg"] = latestFusedHeadingDeg
       payload["deviceHeadingDeg"] = latestDeviceHeadingDeg
@@ -520,6 +626,25 @@ final class PdrMotionStreamHandler: NSObject, FlutterStreamHandler {
       payload["stepPeakTimes"] = stepPeakTimesMs
     }
     sink(payload)
+  }
+
+  /// 기압 샘플만 담은 이벤트. `emit(kind:)`을 재사용하지 않는 이유는 그쪽이
+  /// `kind != "motion"`일 때 pedometer 블록을 함께 싣기 때문이다. 기압은 초당 한 번
+  /// 오므로 그대로 태우면 같은 step 값이 계속 pedometer 배치로 재입력되고,
+  /// Android쪽 대응 코드에서는 stepDelta 회계(lastReportedSteps)까지 흔든다.
+  /// 층 전이 판정은 PDR 걸음 파이프라인과 완전히 분리해 둔다.
+  private func emitAltitude() {
+    guard let sink, hasAltitudeSample else { return }
+    sink([
+      "source": "ios_core_motion",
+      "kind": "altitude",
+      "stepSessionId": stepSessionId,
+      "altimeterAvailable": altimeterAvailable,
+      "altimeterSource": "ios_cmaltimeter",
+      "pressureHpa": latestPressureHpa,
+      "relativeAltitudeM": latestRelativeAltitudeM,
+      "altitudeTimestamp": latestAltitudeTimestampMs,
+    ])
   }
 
   private func sendError(_ message: String) {

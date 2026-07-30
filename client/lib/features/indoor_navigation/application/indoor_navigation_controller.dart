@@ -38,6 +38,10 @@ class IndoorNavigationDriver implements IndoorNavigationController {
   final _snapshots = StreamController<PdrSnapshot>.broadcast();
   final _calibration = StreamController<CalibrationStatus>.broadcast();
   final _runtimeStatuses = StreamController<PdrRuntimeStatus>.broadcast();
+  final _altitudes = StreamController<AltitudeSample>.broadcast();
+
+  AltitudeSample? _currentAltitude;
+  AltimeterStatus _altimeterStatus = const AltimeterStatus.unavailable();
 
   PdrSnapshot? _current;
   CalibrationStatus _calib = const CalibrationStatus.uncalibrated();
@@ -71,6 +75,15 @@ class IndoorNavigationDriver implements IndoorNavigationController {
 
   @override
   PdrRuntimeStatus get currentRuntimeStatus => _runtimeStatus;
+
+  @override
+  Stream<AltitudeSample> get altitudeSamples => _altitudes.stream;
+
+  @override
+  AltitudeSample? get currentAltitude => _currentAltitude;
+
+  @override
+  AltimeterStatus get altimeterStatus => _altimeterStatus;
 
   @override
   Map<String, Object?>? get lastPedometerFinalizeInfo =>
@@ -198,6 +211,55 @@ class IndoorNavigationDriver implements IndoorNavigationController {
     _updateCalibration(CalibrationPhase.awaitingPin);
   }
 
+  @override
+  Future<void> applyVerticalTransfer({
+    required String floorId,
+    required PdrLocalPoint anchorLocalM,
+    PdrToFloorAxes? axes,
+  }) async {
+    final previous = _calib.anchor;
+    // 직전 anchor가 없으면 물려받을 회전값이 없다. 이때는 층만 바꾸는
+    // changeFloor 경로로 사용자 pin을 받는 게 맞다(조용히 틀린 위치보다 낫다).
+    if (!_guiding || previous == null) {
+      return;
+    }
+    _floorId = floorId;
+    _pendingPinFloorM = null;
+    _pendingPinPdrM = null;
+    _pendingAxes = const PdrToFloorAxes.identity();
+    // 걸음 세션을 새로 열어야 PDR 원점이 "지금 여기"가 된다. 그래야 도착 노드를
+    // 원점에 놓는 아래 anchor가 곧 현재 위치가 된다. reset을 빼면 수직 이동 전
+    // 층에서 걸은 거리가 새 층 위치에 그대로 더해진다.
+    try {
+      await _resetSessionForNewFloor();
+    } on Object {
+      _session.reset();
+      _updateRuntime(
+        PdrRuntimeState.degraded,
+        warnings: const ['pedometerResetFailed'],
+      );
+    }
+    final reference = _session.headingReference;
+    _updateCalibration(
+      CalibrationPhase.calibrated,
+      anchor: PdrAnchor(
+        floorId: floorId,
+        anchorLocalM: anchorLocalM,
+        // 같은 센서 세션이므로 heading frame이 끊기지 않는다. 회전값을 물려받아
+        // 사용자가 새 층에서 방향 보정을 다시 하지 않게 한다.
+        rotationDeg: previous.rotationDeg,
+        headingReference: reference,
+        requiresManualRotationCalibration:
+            reference != HeadingReference.magneticNorth,
+        source: AnchorSource.verticalTransfer,
+        // 사용자 pin(1.0)보다 낮다. 도착 노드 좌표만큼만 정확하고, 에스컬레이터를
+        // 내린 직후 실제 위치는 노드에서 몇 미터 벗어나 있을 수 있다.
+        confidence: 0.7,
+        axes: axes ?? previous.axes,
+      ),
+    );
+  }
+
   // ── 앱 lifecycle (앱 셸이 호출) ──
 
   /// 앱이 background로 가면 tracking pause.
@@ -244,6 +306,7 @@ class IndoorNavigationDriver implements IndoorNavigationController {
     await _snapshots.close();
     await _calibration.close();
     await _runtimeStatuses.close();
+    await _altitudes.close();
   }
 
   // ── 내부 ──
@@ -251,6 +314,18 @@ class IndoorNavigationDriver implements IndoorNavigationController {
   void _onNativeEvent(NativePdrEvent e) {
     if (_runtimeStatus.state == PdrRuntimeState.starting) {
       _updateRuntime(PdrRuntimeState.running);
+    }
+    // 기압은 PdrSession에 넣지 않는다. 층 전이 판정기만 보는 별도 스트림이다.
+    final altimeter = e.altimeter;
+    if (altimeter != null) {
+      _altimeterStatus = altimeter;
+    }
+    final altitude = e.altitude;
+    if (altitude != null) {
+      _currentAltitude = altitude;
+      if (!_altitudes.isClosed) {
+        _altitudes.add(altitude);
+      }
     }
     // 순서 유지: heading → accel peak → pedometer (연구 엔진과 동일).
     final heading = e.heading;

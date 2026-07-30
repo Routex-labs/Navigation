@@ -3,7 +3,11 @@ import 'dart:math' as math;
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
 /// anchor 확정 근거.
-enum AnchorSource { entranceGate, userPin, manualHeadingCal }
+///
+/// [verticalTransfer]는 기압계가 층 이동을 확인해 새 층의 도착 노드로 위치를
+/// 옮긴 경우다. 사용자 pin과 달리 회전값은 직전 anchor에서 그대로 물려받는다 —
+/// 같은 센서 세션이라 heading frame이 끊기지 않기 때문이다.
+enum AnchorSource { entranceGate, userPin, manualHeadingCal, verticalTransfer }
 
 /// PDR 로컬 미터 좌표를 floor `local_m` 좌표에 고정하는 데 필요한 데이터(§4).
 ///

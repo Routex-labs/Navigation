@@ -108,6 +108,15 @@ class PdrMotionBridge(
     private var stepWindowMinG = 0.0
     private var stepWindowMaxG = 0.0
 
+    // 기압계. 층 전이 판정 전용이고 PDR 걸음·heading 경로에는 개입하지 않는다.
+    // TYPE_PRESSURE 미탑재 기기가 실제로 있으므로 가용 여부를 Dart로 알린다.
+    private var barometerAvailable = false
+    private var barometerName = "unavailable"
+    private var hasPressureSample = false
+    private var pressureHpa = 0.0
+    private var pressureTimestampMs = 0.0
+    private var lastPressureEmitMs = 0.0
+
     private data class HorizontalSample(val bootSeconds: Double, val east: Double, val north: Double)
     private val horizontalSamples = ArrayList<HorizontalSample>()
     private var walkDirDeg = 0.0
@@ -156,6 +165,12 @@ class PdrMotionBridge(
         register(sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY), 10_000)
         register(sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE), 5_000)
         register(sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD), 20_000)
+        // 기압은 층 전이 판정에만 쓰므로 5Hz면 충분하다(에스컬레이터 상승은 20~30초).
+        // 더 빠르게 받으면 이벤트 수만 늘고 판정 품질은 나아지지 않는다.
+        val pressure = sensorManager.getDefaultSensor(Sensor.TYPE_PRESSURE)
+        barometerAvailable = pressure != null
+        barometerName = pressure?.name ?: "unavailable"
+        register(pressure, 200_000)
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
             ContextCompat.checkSelfPermission(activity, Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED
         ) {
@@ -196,6 +211,7 @@ class PdrMotionBridge(
             Sensor.TYPE_MAGNETIC_FIELD -> magneticField = magnitude(event.values)
             Sensor.TYPE_STEP_COUNTER -> updateStepCounter(event.values[0], event.timestamp)
             Sensor.TYPE_STEP_DETECTOR -> updateStepDetector(event.timestamp)
+            Sensor.TYPE_PRESSURE -> updatePressure(event.values[0], event.timestamp)
         }
     }
 
@@ -372,6 +388,39 @@ class PdrMotionBridge(
         }
     }
 
+    /** TYPE_PRESSURE values[0]은 hPa다. registerListener의 주기는 힌트일 뿐이라
+     * 기기가 더 빨리 밀어 넣을 수 있으므로 발신 간격을 코드에서 한 번 더 조인다. */
+    private fun updatePressure(hpa: Float, sensorNs: Long) {
+        pressureHpa = hpa.toDouble()
+        pressureTimestampMs = sensorNsToEpochMs(sensorNs)
+        hasPressureSample = true
+        if (pressureTimestampMs - lastPressureEmitMs < 180.0) return
+        lastPressureEmitMs = pressureTimestampMs
+        emitAltitude()
+    }
+
+    /**
+     * 기압 샘플만 담은 이벤트. emit()을 재사용하지 않는다 — emit()은
+     * kind != "motion"에서 pedometer 블록을 함께 싣고 lastReportedSteps 델타
+     * 회계를 진행시키므로, 초당 몇 번 오는 기압 이벤트에 태우면 걸음 델타가
+     * 0으로 잘려 나가며 PDR 배치 타이밍이 흔들린다.
+     */
+    private fun emitAltitude() {
+        val eventSink = sink ?: return
+        if (!hasPressureSample) return
+        val payload = linkedMapOf<String, Any>(
+            "source" to "android_sensor_manager",
+            "kind" to "altitude",
+            "stepSessionId" to stepSessionId,
+            "altimeterAvailable" to barometerAvailable,
+            "altimeterSource" to "android_pressure",
+            "altimeterSensorName" to barometerName,
+            "pressureHpa" to pressureHpa,
+            "altitudeTimestamp" to pressureTimestampMs,
+        )
+        activity.runOnUiThread { eventSink.success(payload) }
+    }
+
     private fun resetPedometer(): Int {
         stepSessionId += 1
         sessionStartMs = System.currentTimeMillis().toDouble()
@@ -486,6 +535,14 @@ class PdrMotionBridge(
             "kind" to kind,
             "stepSessionId" to stepSessionId,
         )
+        if (kind == "snapshot") {
+            // 첫 기압 샘플 전에도 Dart가 센서 유무를 알 수 있어야, 기압계 없는
+            // 기기에서 층 전이 판정을 "대기 중"이 아니라 "비활성"으로 다룬다.
+            payload["altimeterAvailable"] = barometerAvailable
+            payload["altimeterSource"] =
+                if (barometerAvailable) "android_pressure" else "unavailable"
+            payload["altimeterSensorName"] = barometerName
+        }
         if (kind != "pedometer" && hasRotation) {
             payload.putAll(linkedMapOf(
                 "fusedHeadingDeg" to fusedHeadingDeg,

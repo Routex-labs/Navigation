@@ -1,5 +1,6 @@
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
+import 'altitude_sample.dart';
 import 'calibration_state.dart';
 import 'pdr_runtime_status.dart';
 
@@ -26,6 +27,15 @@ abstract interface class IndoorNavigationView {
 
   /// 가장 최근 센서 파이프라인 실행 상태.
   PdrRuntimeStatus get currentRuntimeStatus;
+
+  /// 기압계 샘플 스트림. 층 전이 판정의 입력이며 위치 추정에는 쓰지 않는다.
+  Stream<AltitudeSample> get altitudeSamples;
+
+  /// 가장 최근 기압 샘플. 아직 없으면 null.
+  AltitudeSample? get currentAltitude;
+
+  /// 기압계 가용 상태. native snapshot이 오기 전에는 `unavailable`이다.
+  AltimeterStatus get altimeterStatus;
 
   /// heading이 자리를 잡았는지.
   ///

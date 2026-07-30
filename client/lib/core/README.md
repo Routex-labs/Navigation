@@ -66,7 +66,10 @@ flowchart LR
 | 백엔드 주소 변경 | `--dart-define=API_BASE_URL=...` |
 | 외부 API 키 주입 | `--dart-define=TMAP_APP_KEY=...`, `VWORLD_API_KEY=...` |
 | 실제/Mock 리포지토리 전환 | `service_locator.dart` |
-| 테스트에서 GPS·권한 대체 | `watchPosition`, `requestStartupPermissions` 교체 |
+| 테스트에서 GPS·권한 대체 | `watchPosition`, `requestStartupPermissions`, `isPedometerPermissionGranted` 교체 |
+
+권한 요청은 **하나씩 순서대로** 한다(`defaultRequestStartupPermissions`). `List<Permission>.request()`로
+묶어 던지면 OS 다이얼로그가 연달아 겹쳐 떠서, 사용자가 첫 문구를 읽기 전에 다음 창을 마주한다.
 
 ---
 

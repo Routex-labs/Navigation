@@ -9,6 +9,7 @@ class FakeIndoorNavigation implements IndoorNavigationController {
   final _snapshots = StreamController<PdrSnapshot>.broadcast();
   final _calibration = StreamController<CalibrationStatus>.broadcast();
   final _runtimeStatuses = StreamController<PdrRuntimeStatus>.broadcast();
+  final _altitudes = StreamController<AltitudeSample>.broadcast();
 
   PdrSnapshot? _current;
   CalibrationStatus _calib = const CalibrationStatus.uncalibrated();
@@ -32,6 +33,15 @@ class FakeIndoorNavigation implements IndoorNavigationController {
 
   @override
   PdrRuntimeStatus get currentRuntimeStatus => _runtimeStatus;
+
+  @override
+  Stream<AltitudeSample> get altitudeSamples => _altitudes.stream;
+
+  @override
+  AltitudeSample? get currentAltitude => null;
+
+  @override
+  AltimeterStatus get altimeterStatus => const AltimeterStatus.unavailable();
 
   @override
   bool get isHeadingConverged => true;
@@ -67,6 +77,17 @@ class FakeIndoorNavigation implements IndoorNavigationController {
     log.add('floor:$floorId');
   }
 
+  @override
+  Future<void> applyVerticalTransfer({
+    required String floorId,
+    required PdrLocalPoint anchorLocalM,
+    PdrToFloorAxes? axes,
+  }) async {
+    log.add(
+      'transfer:$floorId@${anchorLocalM.eastM},${anchorLocalM.northM}',
+    );
+  }
+
   // 테스트 구동용.
   void pushCalibration(CalibrationStatus s) {
     _calib = s;
@@ -77,6 +98,7 @@ class FakeIndoorNavigation implements IndoorNavigationController {
     _snapshots.close();
     _calibration.close();
     _runtimeStatuses.close();
+    _altitudes.close();
   }
 }
 
