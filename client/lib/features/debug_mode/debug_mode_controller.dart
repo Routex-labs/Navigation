@@ -23,6 +23,7 @@ class DebugModeController extends ChangeNotifier {
   static const _showConfirmedPdrPathKey = 'debug_mode.show_confirmed_pdr_path';
   static const _showMapMatchedPdrPathKey =
       'debug_mode.show_map_matched_pdr_path';
+  static const _showRoninPdrPathKey = 'debug_mode.show_ronin_pdr_path';
   static const _showCardinalCrossKey = 'debug_mode.show_cardinal_cross';
 
   SharedPreferences? _preferences;
@@ -36,6 +37,7 @@ class DebugModeController extends ChangeNotifier {
   bool _showRawPdrPath = true;
   bool _showConfirmedPdrPath = true;
   bool _showMapMatchedPdrPath = true;
+  bool _showRoninPdrPath = true;
   bool _showCardinalCross = true;
 
   bool get isLoaded => _isLoaded;
@@ -46,6 +48,7 @@ class DebugModeController extends ChangeNotifier {
   bool get showRawPdrPath => _showRawPdrPath;
   bool get showConfirmedPdrPath => _showConfirmedPdrPath;
   bool get showMapMatchedPdrPath => _showMapMatchedPdrPath;
+  bool get showRoninPdrPath => _showRoninPdrPath;
   bool get showCardinalCross => _showCardinalCross;
 
   Future<void> _load() async {
@@ -60,6 +63,7 @@ class DebugModeController extends ChangeNotifier {
           preferences.getBool(_showConfirmedPdrPathKey) ?? true;
       _showMapMatchedPdrPath =
           preferences.getBool(_showMapMatchedPdrPathKey) ?? true;
+      _showRoninPdrPath = preferences.getBool(_showRoninPdrPathKey) ?? true;
       _showCardinalCross = preferences.getBool(_showCardinalCrossKey) ?? true;
     } on Object {
       // 플랫폼 저장소가 없는 테스트/개발 환경에서는 기본값으로 동작한다.
@@ -123,6 +127,13 @@ class DebugModeController extends ChangeNotifier {
     value,
     () => _showMapMatchedPdrPath,
     (next) => _showMapMatchedPdrPath = next,
+  );
+
+  Future<void> setShowRoninPdrPath(bool value) => _setBool(
+    _showRoninPdrPathKey,
+    value,
+    () => _showRoninPdrPath,
+    (next) => _showRoninPdrPath = next,
   );
 
   Future<void> setShowCardinalCross(bool value) => _setBool(

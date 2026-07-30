@@ -95,6 +95,80 @@ class SwingDetector {
   }
 }
 
+/// 자북 기준 heading이 "자리를 잡았는지"를 판정한다.
+///
+/// native가 주는 `headingStable`은 기기 기울기(top축의 수평 성분)만 본다. 즉
+/// 폰을 똑바로 들고만 있으면 세션 시작 직후에도 true다. 그래서 CoreMotion의
+/// 자북 reference가 아직 수렴하지 않았거나 사용자가 몸을 돌리는 중이어도
+/// "안정"으로 보고돼, 그 사이에 놓인 첫 걸음들이 틀어진 방향으로 눕는다
+/// (실측: 첫 4걸음이 복도 방향 대비 17.6° 어긋남).
+///
+/// 여기서는 값이 실제로 **가만히 있는지**를 본다. 최근 [windowMs] 동안의
+/// heading이 원형 평균에서 [maxDeviationDeg] 안에 머물고, 그 창이 최소
+/// [minSpanMs]만큼 채워졌을 때 수렴으로 본다. 원인이 센서 수렴이든 사용자
+/// 회전이든 "지금 방향을 믿어도 되는가"라는 같은 질문에 답한다.
+class HeadingConvergenceTracker {
+  HeadingConvergenceTracker({
+    this.windowMs = 2000,
+    this.minSpanMs = 1200,
+    this.maxDeviationDeg = 12.0,
+    this.minSamples = 8,
+  });
+
+  final int windowMs;
+  final int minSpanMs;
+  final double maxDeviationDeg;
+  final int minSamples;
+
+  final List<({int ms, double deg})> _window = [];
+
+  bool converged = false;
+
+  /// 수렴 판정에 쓴 최근 창의 최대 편차(도). 진단용.
+  double spreadDeg = 0;
+
+  void update(int nowMs, double rawDeg) {
+    _window.add((ms: nowMs, deg: rawDeg));
+    var drop = 0;
+    while (drop < _window.length && _window[drop].ms < nowMs - windowMs) {
+      drop += 1;
+    }
+    if (drop > 0) _window.removeRange(0, drop);
+
+    if (_window.length < minSamples ||
+        _window.last.ms - _window.first.ms < minSpanMs) {
+      // 아직 판단할 만큼 안 모였다. 한 번 수렴했다면 그 상태를 유지한다 —
+      // 샘플이 잠깐 끊겼다고 다시 "수렴 안 됨"으로 돌리면 게이트가 깜빡인다.
+      return;
+    }
+
+    var sumSin = 0.0;
+    var sumCos = 0.0;
+    for (final sample in _window) {
+      final r = sample.deg * math.pi / 180;
+      sumSin += math.sin(r);
+      sumCos += math.cos(r);
+    }
+    final meanDeg = math.atan2(sumSin, sumCos) * 180 / math.pi;
+
+    var maxDeviation = 0.0;
+    for (final sample in _window) {
+      final d = shortestDeltaDegrees(sample.deg - meanDeg).abs();
+      if (d > maxDeviation) maxDeviation = d;
+    }
+    spreadDeg = maxDeviation;
+    if (maxDeviation <= maxDeviationDeg) {
+      converged = true;
+    }
+  }
+
+  void reset() {
+    _window.clear();
+    converged = false;
+    spreadDeg = 0;
+  }
+}
+
 /// 팔 흔들림에서 추정한 보행축을 fused heading에 천천히 반영한다.
 class WalkOffsetEstimator {
   static const double confidenceThreshold = 0.35;

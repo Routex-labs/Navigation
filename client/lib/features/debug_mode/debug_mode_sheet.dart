@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'debug_mode_controller.dart';
@@ -158,10 +159,19 @@ class _AdvancedDebugOptions extends StatelessWidget {
           value: controller.showConfirmedPdrPath,
           onChanged: controller.setShowConfirmedPdrPath,
         ),
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android)
+          _DebugSwitch(
+            key: const ValueKey('debug-show-ronin-pdr-path'),
+            title: 'RoNIN 보폭 경로',
+            subtitle: '분홍 파선 · Android ML 자동보폭 실험값',
+            color: const Color(0xFFD81B60),
+            value: controller.showRoninPdrPath,
+            onChanged: controller.setShowRoninPdrPath,
+          ),
         _DebugSwitch(
           key: const ValueKey('debug-show-map-matched-pdr-path'),
           title: '지도 부착 경로',
-          subtitle: '보라 실선 · 노드와 간선을 따라 보정한 값',
+          subtitle: '보라 실선=초록 확정 · 점선=주황 기반 임시 추적',
           color: const Color(0xFF7E57C2),
           value: controller.showMapMatchedPdrPath,
           onChanged: controller.setShowMapMatchedPdrPath,

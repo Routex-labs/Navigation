@@ -138,6 +138,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 예전에는 스플래시 화면이 이 요청을 진행 중 화면과 함께 보여줬지만,
   /// 이제 앱이 바로 지도 화면으로 시작하므로 화면을 막지 않고 백그라운드로
   /// 요청만 하고, 거부된 게 있으면 지도 위에 짧게 안내만 띄운다.
+  ///
+  /// 권한 요청은 한 번에 하나씩 순서대로 뜬다([requestStartupPermissions]).
   Future<void> _requestStartupPermissions() async {
     try {
       final statuses = await requestStartupPermissions();

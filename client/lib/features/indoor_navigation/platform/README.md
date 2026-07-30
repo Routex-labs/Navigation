@@ -8,7 +8,7 @@ application 계층에 동일한 `PdrMotionSource` 계약을 제공한다.
 | 파일 | 역할 |
 |---|---|
 | [`pdr_motion_source.dart`](pdr_motion_source.dart) | 이벤트·시작·정지·pedometer 수명주기 인터페이스 |
-| [`native_pdr_event.dart`](native_pdr_event.dart) | raw native payload → typed PDR core 이벤트 파싱 |
+| [`native_pdr_event.dart`](native_pdr_event.dart) | raw native payload → typed PDR core 이벤트·기압 샘플 파싱 |
 | [`android_pdr_motion_source.dart`](android_pdr_motion_source.dart) | Android SensorManager bridge 어댑터 |
 | [`ios_pdr_motion_source.dart`](ios_pdr_motion_source.dart) | iOS CoreMotion/CMPedometer bridge 어댑터 |
 
@@ -49,6 +49,20 @@ flowchart LR
 
 `NativePdrEvent.tryParse`는 heading, acceleration peak, pedometer batch를 각각 typed
 `indoor_pdr_core` 이벤트로 변환한다. payload가 `Map`이 아니면 `null`로 무시한다.
+
+## 기압계 (`kind: "altitude"`)
+
+층 전이 판정용으로 iOS `CMAltimeter`(~1Hz)와 Android `TYPE_PRESSURE`(5Hz로 조임)를 함께
+싣는다. 파싱 결과는 `AltitudeSample`·`AltimeterStatus`이며 `PdrSession`에는 들어가지 않는다.
+
+- 기압 이벤트는 **pedometer·heading 블록을 함께 싣지 않는다.** 두 native bridge 모두 별도
+  `emitAltitude()`를 쓴다. 기존 `emit()`은 `kind != "motion"`에서 pedometer 블록을 함께 보내고
+  Android는 `lastReportedSteps` 델타 회계까지 진행시키므로, 초당 여러 번 오는 기압 이벤트에
+  태우면 걸음 델타가 0으로 잘려 배치 타이밍이 흔들린다.
+- `snapshot` 이벤트에는 첫 샘플 전에도 `altimeterAvailable`이 실린다. 기압계가 없는 기기를
+  "판정 대기 중"으로 오해하지 않기 위한 값이다.
+- 고도 환산은 Dart 한 곳(`pressureAltitudeM`)에서만 한다. iOS의 `relativeAltitude`는 그 계산을
+  실측으로 대조하는 진단값으로만 남긴다.
 
 ## 실패 지점
 

@@ -30,6 +30,20 @@
 	<string>실외에서 현재 위치를 지도에 표시하기 위해 위치 권한이 필요합니다.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>실내에서 걸음을 감지해 위치를 추정하기 위해 동작 센서 권한이 필요합니다.</string>
+	<!-- 개발용 로컬 API 서버(http://<Mac LAN IP>:8001)에 실기기로 붙기 위한 설정.
+	     ATS는 기본적으로 cleartext HTTP를 막는다. NSAllowsArbitraryLoads 대신
+	     NSAllowsLocalNetworking을 쓰면 사설/링크로컬 대역(10.x, 172.16~31.x,
+	     192.168.x, .local)에만 예외가 열리고 공개 인터넷 평문은 계속 차단된다.
+	     Android는 AndroidManifest의 usesCleartextTraffic이 같은 역할을 한다. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<!-- iOS 14+는 같은 네트워크의 기기에 접속할 때 로컬 네트워크 권한을 묻는다.
+	     이 설명이 없으면 프롬프트를 띄우지 못해 연결이 실패한다. -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>같은 네트워크의 개발용 지도·경로 서버에 연결하기 위해 로컬 네트워크 접근이 필요합니다.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -1,3 +1,4 @@
+export 'altimeter_debug_chip.dart';
 export 'cardinal_grid_overlay.dart';
 export 'debug_map_overlay.dart';
 export 'debug_mode_controller.dart';

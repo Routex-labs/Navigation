@@ -33,6 +33,7 @@ class PdrMotionBridge(
     messenger: BinaryMessenger,
 ) : EventChannel.StreamHandler, MethodChannel.MethodCallHandler, SensorEventListener {
     private val sensorManager = activity.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+    private val roninEstimator = RoninStrideEstimator(activity.applicationContext)
     private var sink: EventChannel.EventSink? = null
 
     private val rotationMatrix = FloatArray(9)
@@ -44,6 +45,7 @@ class PdrMotionBridge(
     private var hasRotation = false
     private var hasGravity = false
     private var hasLinearAccel = false
+    private var hasGyro = false
     private var rotationSource = "unavailable"
 
     private var rawRotationHeadingDeg = 0.0
@@ -87,6 +89,7 @@ class PdrMotionBridge(
     private var pedometerDeltaMs = 0.0
     private var cadenceHz = 0.0
     private var cadenceAvailable = false
+    private var roninCadenceHz = 0.0
     private var lastStepAccelAmplitudeMps2 = 0.0
     private var latestStepEventSource = "snapshot"
 
@@ -104,6 +107,15 @@ class PdrMotionBridge(
     private var stepWindowInitialized = false
     private var stepWindowMinG = 0.0
     private var stepWindowMaxG = 0.0
+
+    // 기압계. 층 전이 판정 전용이고 PDR 걸음·heading 경로에는 개입하지 않는다.
+    // TYPE_PRESSURE 미탑재 기기가 실제로 있으므로 가용 여부를 Dart로 알린다.
+    private var barometerAvailable = false
+    private var barometerName = "unavailable"
+    private var hasPressureSample = false
+    private var pressureHpa = 0.0
+    private var pressureTimestampMs = 0.0
+    private var lastPressureEmitMs = 0.0
 
     private data class HorizontalSample(val bootSeconds: Double, val east: Double, val north: Double)
     private val horizontalSamples = ArrayList<HorizontalSample>()
@@ -123,6 +135,7 @@ class PdrMotionBridge(
 
     override fun onCancel(arguments: Any?) {
         sensorManager.unregisterListener(this)
+        roninEstimator.resetSession()
         sink = null
     }
 
@@ -145,10 +158,19 @@ class PdrMotionBridge(
         }
         register(rotation, 10_000)
         register(sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION), 10_000)
-        register(sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER), 10_000)
+        // RoNIN 원 모델의 200Hz 입력에 최대한 가까운 raw 표본을 확보한다.
+        // 실제 기기 전달률이 낮거나 흔들려도 estimator가 200Hz로 보간하며,
+        // 40ms보다 큰 결손이 있으면 그 추론 창을 폐기한다.
+        register(sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER), 5_000)
         register(sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY), 10_000)
-        register(sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE), 10_000)
+        register(sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE), 5_000)
         register(sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD), 20_000)
+        // 기압은 층 전이 판정에만 쓰므로 5Hz면 충분하다(에스컬레이터 상승은 20~30초).
+        // 더 빠르게 받으면 이벤트 수만 늘고 판정 품질은 나아지지 않는다.
+        val pressure = sensorManager.getDefaultSensor(Sensor.TYPE_PRESSURE)
+        barometerAvailable = pressure != null
+        barometerName = pressure?.name ?: "unavailable"
+        register(pressure, 200_000)
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
             ContextCompat.checkSelfPermission(activity, Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED
         ) {
@@ -171,6 +193,14 @@ class PdrMotionBridge(
             }
             Sensor.TYPE_ACCELEROMETER -> {
                 copy3(event.values, rawAccel)
+                if (hasRotation && hasGyro) {
+                    roninEstimator.addDeviceSample(
+                        event.timestamp,
+                        gyro,
+                        rawAccel,
+                        rotationMatrix,
+                    )
+                }
                 if (!hasLinearAccel) captureImu(event.timestamp)
             }
             Sensor.TYPE_GRAVITY -> {
@@ -181,6 +211,7 @@ class PdrMotionBridge(
             Sensor.TYPE_MAGNETIC_FIELD -> magneticField = magnitude(event.values)
             Sensor.TYPE_STEP_COUNTER -> updateStepCounter(event.values[0], event.timestamp)
             Sensor.TYPE_STEP_DETECTOR -> updateStepDetector(event.timestamp)
+            Sensor.TYPE_PRESSURE -> updatePressure(event.values[0], event.timestamp)
         }
     }
 
@@ -212,6 +243,7 @@ class PdrMotionBridge(
 
     private fun updateGyro(event: SensorEvent) {
         copy3(event.values, gyro)
+        hasGyro = true
         gyroZ = gyro[2].toDouble()
         if (lastGyroNs != 0L && gyroHeadingInitialized) {
             val dt = (event.timestamp - lastGyroNs) / 1_000_000_000.0
@@ -332,6 +364,11 @@ class PdrMotionBridge(
         if (pedometerDeltaMs in 200.0..3_000.0) {
             cadenceHz = 1_000.0 / pedometerDeltaMs
             cadenceAvailable = true
+            roninCadenceHz = if (roninCadenceHz <= 0) {
+                cadenceHz
+            } else {
+                roninCadenceHz * 0.8 + cadenceHz * 0.2
+            }
         }
         lastPedometerAtMs = monotonicAtMs
         detectorSteps += 1
@@ -349,6 +386,39 @@ class PdrMotionBridge(
             lastPedometerEventAtMs = atMs
             emit("pedometer")
         }
+    }
+
+    /** TYPE_PRESSURE values[0]은 hPa다. registerListener의 주기는 힌트일 뿐이라
+     * 기기가 더 빨리 밀어 넣을 수 있으므로 발신 간격을 코드에서 한 번 더 조인다. */
+    private fun updatePressure(hpa: Float, sensorNs: Long) {
+        pressureHpa = hpa.toDouble()
+        pressureTimestampMs = sensorNsToEpochMs(sensorNs)
+        hasPressureSample = true
+        if (pressureTimestampMs - lastPressureEmitMs < 180.0) return
+        lastPressureEmitMs = pressureTimestampMs
+        emitAltitude()
+    }
+
+    /**
+     * 기압 샘플만 담은 이벤트. emit()을 재사용하지 않는다 — emit()은
+     * kind != "motion"에서 pedometer 블록을 함께 싣고 lastReportedSteps 델타
+     * 회계를 진행시키므로, 초당 몇 번 오는 기압 이벤트에 태우면 걸음 델타가
+     * 0으로 잘려 나가며 PDR 배치 타이밍이 흔들린다.
+     */
+    private fun emitAltitude() {
+        val eventSink = sink ?: return
+        if (!hasPressureSample) return
+        val payload = linkedMapOf<String, Any>(
+            "source" to "android_sensor_manager",
+            "kind" to "altitude",
+            "stepSessionId" to stepSessionId,
+            "altimeterAvailable" to barometerAvailable,
+            "altimeterSource" to "android_pressure",
+            "altimeterSensorName" to barometerName,
+            "pressureHpa" to pressureHpa,
+            "altitudeTimestamp" to pressureTimestampMs,
+        )
+        activity.runOnUiThread { eventSink.success(payload) }
     }
 
     private fun resetPedometer(): Int {
@@ -370,6 +440,7 @@ class PdrMotionBridge(
         pedometerDeltaMs = 0.0
         cadenceHz = 0.0
         cadenceAvailable = false
+        roninCadenceHz = 0.0
         lastStepAccelAmplitudeMps2 = 0.0
         latestStepEventSource = "snapshot"
         accelPeakTimes.clear()
@@ -384,6 +455,7 @@ class PdrMotionBridge(
         walkDirConfidence = 0.0
         gyroHeadingInitialized = false
         magneticFieldBaseline = null
+        roninEstimator.resetSession()
         emit("snapshot")
         return stepSessionId
     }
@@ -463,6 +535,14 @@ class PdrMotionBridge(
             "kind" to kind,
             "stepSessionId" to stepSessionId,
         )
+        if (kind == "snapshot") {
+            // 첫 기압 샘플 전에도 Dart가 센서 유무를 알 수 있어야, 기압계 없는
+            // 기기에서 층 전이 판정을 "대기 중"이 아니라 "비활성"으로 다룬다.
+            payload["altimeterAvailable"] = barometerAvailable
+            payload["altimeterSource"] =
+                if (barometerAvailable) "android_pressure" else "unavailable"
+            payload["altimeterSensorName"] = barometerName
+        }
         if (kind != "pedometer" && hasRotation) {
             payload.putAll(linkedMapOf(
                 "fusedHeadingDeg" to fusedHeadingDeg,
@@ -503,9 +583,51 @@ class PdrMotionBridge(
                 "counterLastEventAtMs" to lastStepCounterAtMs,
                 "stepDetectorEvents" to stepDetectorEvents,
             ))
+            payload.putAll(roninPayload())
             if (sessionFinalized && stepCounterReady) payload["authoritativeSteps"] = observedCounterSteps
         }
         activity.runOnUiThread { eventSink.success(payload) }
+    }
+
+    /**
+     * RoNIN은 수평 속도를 내고 Android STEP_DETECTOR가 cadence를 낸다.
+     * 둘의 시간축이 충분히 최근일 때만 speed/cadence를 한 걸음 거리 후보로
+     * 공개한다. 이 값은 기존 confirmed 경로에는 들어가지 않는다.
+     */
+    private fun roninPayload(): Map<String, Any> {
+        val payload = linkedMapOf<String, Any>(
+            "roninSupported" to roninEstimator.supported,
+            "roninModel" to RoninStrideEstimator.MODEL_NAME,
+            "roninStatus" to roninEstimator.status,
+        )
+        val estimate = roninEstimator.latestEstimate
+        val ageNs = estimate?.let {
+            max(0L, SystemClock.elapsedRealtimeNanos() - it.inferredAtSensorNs)
+        }
+        val recent = ageNs != null && ageNs <= 2_000_000_000L
+        val stride = if (
+            recent &&
+            estimate != null &&
+            roninCadenceHz in 0.5..3.5
+        ) {
+            estimate.speedMps / roninCadenceHz
+        } else {
+            null
+        }
+        val usableStride = stride?.takeIf { it.isFinite() && it in 0.20..1.50 }
+        payload["roninReady"] = recent && estimate != null
+        if (estimate != null) {
+            payload["roninSpeedMps"] = estimate.speedMps
+            payload["roninSpeedStdMps"] = estimate.speedStdMps
+            payload["roninEstimateAgeMs"] = (ageNs ?: 0L) / 1_000_000.0
+        }
+        if (roninCadenceHz > 0) {
+            payload["roninCadenceHz"] = roninCadenceHz
+        }
+        if (usableStride != null) {
+            payload["roninStrideMeters"] = usableStride
+        }
+        return payload
     }
 
     override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) {

@@ -40,6 +40,15 @@ PdrSnapshot _snapshot() => const PdrSnapshot(
       rollDeg: 0,
       headingReferenceIsMagneticNorth: true,
       peakRejectHistogram: {},
+      fusedHeadingDeg: 90,
+      walkOffsetDeg: 0,
+      walkOffsetActive: false,
+      deviceHeadingDeg: 90,
+      gyroHeadingDeg: 90,
+      walkDirDeg: 90,
+      walkDirConfidence: 0.8,
+      headingConverged: true,
+      headingSpreadDeg: 1.0,
     ),
   ),
 );
@@ -75,6 +84,7 @@ void main() {
       expect(controller.showRawPdrPath, isTrue);
       expect(controller.showConfirmedPdrPath, isTrue);
       expect(controller.showMapMatchedPdrPath, isTrue);
+      expect(controller.showRoninPdrPath, isTrue);
       expect(controller.showCardinalCross, isTrue);
 
       await controller.setEnabled(true);
@@ -83,6 +93,7 @@ void main() {
       await controller.setShowRawPdrPath(false);
       await controller.setShowConfirmedPdrPath(false);
       await controller.setShowMapMatchedPdrPath(false);
+      await controller.setShowRoninPdrPath(false);
       await controller.setShowCardinalCross(false);
 
       final restored = DebugModeController(preferences: preferences);
@@ -93,6 +104,7 @@ void main() {
       expect(restored.showRawPdrPath, isFalse);
       expect(restored.showConfirmedPdrPath, isFalse);
       expect(restored.showMapMatchedPdrPath, isFalse);
+      expect(restored.showRoninPdrPath, isFalse);
       expect(restored.showCardinalCross, isFalse);
 
       controller.dispose();
@@ -295,6 +307,7 @@ void main() {
     expect(find.text('간선 이름'), findsNothing);
     expect(find.text('Raw 근접 경로'), findsOneWidget);
     expect(find.text('확정 PDR 경로'), findsOneWidget);
+    expect(find.text('RoNIN 보폭 경로'), findsOneWidget);
     expect(find.text('지도 부착 경로'), findsOneWidget);
 
     controller.dispose();

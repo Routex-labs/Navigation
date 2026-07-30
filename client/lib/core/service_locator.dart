@@ -5,6 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'api_config.dart';
 import '../features/debug_mode/debug_mode_controller.dart';
 import '../features/indoor_navigation/application/indoor_navigation_controller.dart';
+import '../features/indoor_navigation/application/indoor_location_estimate.dart';
 import '../features/indoor_navigation/platform/android_pdr_motion_source.dart';
 import '../features/indoor_navigation/platform/ios_pdr_motion_source.dart';
 import '../features/indoor_navigation/platform/pdr_motion_source.dart';
@@ -19,13 +20,24 @@ import '../state/favorites_controller.dart';
 
 /// 앱 전체에서 공유하는 PDR 센서 소스와 세션 드라이버다. 화면이 바뀌어도
 /// 센서 세션을 다시 만들지 않도록 singleton으로 유지한다.
-final PdrMotionSource pdrMotionSource = switch (defaultTargetPlatform) {
-  TargetPlatform.android => AndroidPdrMotionSource(),
-  _ => IosPdrMotionSource(),
-};
+PdrMotionSource createDefaultPdrMotionSource({
+  TargetPlatform? platform,
+  bool? isWeb,
+}) {
+  if (isWeb ?? kIsWeb) return const UnsupportedPdrMotionSource();
+  return switch (platform ?? defaultTargetPlatform) {
+    TargetPlatform.iOS => IosPdrMotionSource(),
+    TargetPlatform.android => AndroidPdrMotionSource(),
+    _ => const UnsupportedPdrMotionSource(),
+  };
+}
+
+final PdrMotionSource pdrMotionSource = createDefaultPdrMotionSource();
 final IndoorNavigationDriver indoorNavigationDriver = IndoorNavigationDriver(
   source: pdrMotionSource,
 );
+final IndoorLocationEstimateController indoorLocationEstimateController =
+    IndoorLocationEstimateController();
 
 /// 디버그 모드 설정도 화면 간에 공유한다. 실내 지도와 야외 지도의 실내 진입
 /// 오버레이가 각자 컨트롤러를 만들면, 한쪽에서 디버그 모드를 켜도 다른 쪽은
@@ -65,20 +77,66 @@ final DirectionsRepository directionsRepository = tmapAppKey.isEmpty
 /// 뒤에도 유지된다. 테스트에서는 이 변수를 in-memory 컨트롤러로 교체한다.
 FavoritesController favoritesController = FavoritesController();
 
-Future<Map<Permission, PermissionStatus>> defaultRequestStartupPermissions() {
-  final permissions = <Permission>[Permission.locationWhenInUse];
-  if (defaultTargetPlatform == TargetPlatform.iOS) {
-    permissions.add(Permission.sensors);
-  } else if (defaultTargetPlatform == TargetPlatform.android) {
-    permissions.add(Permission.activityRecognition);
+/// 걸음 센서(PDR)에 필요한 권한. iOS는 Motion & Fitness, Android는
+/// ActivityRecognition이며 가속도·자력계 원시값은 권한이 필요 없다.
+Permission get pedometerPermission =>
+    defaultTargetPlatform == TargetPlatform.iOS
+    ? Permission.sensors
+    : Permission.activityRecognition;
+
+/// 앱 시작 시 필요한 권한을 **하나씩 순서대로** 요청한다.
+///
+/// 예전에는 `List<Permission>.request()`로 목록을 한 번에 던졌다. 이 호출은
+/// 요청을 동시에 보내기 때문에 OS 다이얼로그가 연달아 겹쳐 뜨고, 사용자는 첫
+/// 문구를 읽기도 전에 다음 창을 마주해 무엇을 허용했는지 모른 채 넘기게 된다.
+/// `await`로 앞 다이얼로그가 닫힌 뒤 다음을 요청하면 순서가 보장된다.
+///
+/// 두 권한 모두 앱을 쓰려면 결국 필요하므로 시점을 나누지 않고 여기서 함께
+/// 받는다. 위치를 먼저 요청하는 이유는 앱이 야외 지도로 시작하기 때문이다 —
+/// 사용자가 가장 먼저 보는 화면과 첫 다이얼로그가 맞아야 이유가 납득된다.
+Future<Map<Permission, PermissionStatus>>
+defaultRequestStartupPermissions() async {
+  final statuses = <Permission, PermissionStatus>{};
+  for (final permission in [
+    Permission.locationWhenInUse,
+    pedometerPermission,
+  ]) {
+    statuses[permission] = await permission.request();
   }
-  return permissions.request();
+  return statuses;
 }
 
-/// 스플래시 화면의 시작 권한 요청. 플랫폼 채널이 없는 테스트 환경에서는
+/// 앱 시작 시 권한 요청. 플랫폼 채널이 없는 테스트 환경에서는
 /// 이 변수를 즉시 완료되는 가짜 함수로 교체해 실제 플러그인 호출을 피한다.
 Future<Map<Permission, PermissionStatus>> Function() requestStartupPermissions =
     defaultRequestStartupPermissions;
+
+/// 걸음 센서 권한이 지금 허용돼 있는지. **다이얼로그를 띄우지 않는다.**
+///
+/// PDR 상시 실행이 화면 진입마다 센서를 켜려 하므로, 거부된 상태에서 매번
+/// 시작을 시도하면 `sensorStartFailed` degraded가 반복해서 쌓인다. 자동 시작
+/// 전에 이 값으로 걸러낸다.
+///
+/// iOS/Android가 아닌 플랫폼은 네이티브 PDR 구현 자체가 없으므로 false다.
+/// 모바일 테스트에서 권한 플러그인만 빠진 경우에는 **허용으로 본다**. 이 경우
+/// 센서 시작 실패는 driver가 degraded warning으로 바꿔 플랫폼 경계 안에서
+/// 처리한다.
+Future<bool> defaultIsPedometerPermissionGranted() async {
+  if (kIsWeb ||
+      defaultTargetPlatform != TargetPlatform.iOS &&
+          defaultTargetPlatform != TargetPlatform.android) {
+    return false;
+  }
+  try {
+    return (await pedometerPermission.status).isGranted;
+  } on Object {
+    return true;
+  }
+}
+
+/// 자동 시작 게이트. 테스트에서는 교체해 플러그인 호출을 피한다.
+Future<bool> Function() isPedometerPermissionGranted =
+    defaultIsPedometerPermissionGranted;
 
 Stream<Position> defaultWatchPosition() {
   return Geolocator.getPositionStream(
@@ -95,3 +153,32 @@ Stream<Position> defaultWatchPosition() {
 /// 판정이 계속 갱신되도록 한다. 플랫폼 채널이 없는 테스트 환경에서는 이
 /// 변수를 가짜 [Position] 스트림으로 교체한다.
 Stream<Position> Function() watchPosition = defaultWatchPosition;
+
+/// 실내 화면을 직접 열었을 때 추정위치를 만들기 위한 GPS 1회 조회.
+///
+/// 자동 초기화가 권한 다이얼로그를 갑자기 띄우면 안 되므로 현재 권한이 이미
+/// 허용된 경우에만 조회한다. 위치 서비스가 꺼졌거나 권한이 없거나 5초 안에
+/// 좌표를 얻지 못하면 null로 끝내고 사용자의 수동 위치 지정을 남겨 둔다.
+Future<Position?> defaultRequestIndoorEstimatePosition() async {
+  try {
+    if (!await Geolocator.isLocationServiceEnabled()) return null;
+    final permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever ||
+        permission == LocationPermission.unableToDetermine) {
+      return null;
+    }
+    return Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        timeLimit: Duration(seconds: 5),
+      ),
+    );
+  } on Object {
+    return null;
+  }
+}
+
+/// 테스트에서는 플랫폼 채널 없이 좌표/실패를 주입할 수 있도록 교체 가능하게 둔다.
+Future<Position?> Function() requestIndoorEstimatePosition =
+    defaultRequestIndoorEstimatePosition;

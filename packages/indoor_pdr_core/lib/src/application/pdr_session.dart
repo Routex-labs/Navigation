@@ -14,6 +14,7 @@ import 'path_accumulator.dart';
 import 'pedometer_batch_processor.dart';
 import 'pdr_session_config.dart';
 import 'quality_metrics.dart';
+import 'ronin_stride_track.dart';
 import 'stride_estimator.dart';
 
 /// 적용된 confirmed 배치의 진단 정보. [PdrSession.onBatchApplied]로 전달된다.
@@ -43,11 +44,15 @@ class AppliedBatchInfo {
 /// 위치 계산:
 ///   거리 = CMPedometer step delta × 추정 보폭
 ///   방향 = fused heading smoothing + walkOffset 보정
+///
+/// 이 결과는 초록 센서 원본이다. 제품 현재 위치의 복도 제약은 floor graph를
+/// 소유한 Flutter 클라이언트가 별도 상태로 적용한다.
 class PdrSession {
   PdrSession({PdrSessionConfig? config})
     : config = config ?? const PdrSessionConfig() {
     _paths = PathAccumulator(maxPoints: this.config.maxPathPoints);
     _accelPreview = AccelPreviewTrack(maxPoints: this.config.maxPathPoints);
+    _roninTrack = RoninStrideTrack(maxPoints: this.config.maxPathPoints);
     _stride.fallbackMeters = this.config.fallbackStrideMeters;
     _stride.effectiveMeters = this.config.fallbackStrideMeters;
     _stride.lastBatchMeters = this.config.fallbackStrideMeters;
@@ -57,10 +62,13 @@ class PdrSession {
 
   late final PathAccumulator _paths;
   late final AccelPreviewTrack _accelPreview;
+  late final RoninStrideTrack _roninTrack;
   final StrideEstimator _stride = StrideEstimator();
   final PedometerBatchProcessor _pedometer = PedometerBatchProcessor();
   final SwingDetector _swing = SwingDetector();
   final WalkOffsetEstimator _walkOffset = WalkOffsetEstimator();
+  final HeadingConvergenceTracker _headingConvergence =
+      HeadingConvergenceTracker();
   final HeadingHistory _headingHistory = HeadingHistory();
 
   final StreamController<PdrSnapshot> _snapshots =
@@ -86,6 +94,9 @@ class PdrSession {
 
   int iosTrackedSteps = 0;
 
+  /// 마지막으로 confirmed 경로에 반영된 배치. snapshot이 그대로 실어 나른다.
+  PdrAppliedBatch? _lastAppliedBatch;
+
   /// 적용된 confirmed 배치 진단 훅(telemetry/테스트용). appliedSteps>0일 때만 호출.
   void Function(AppliedBatchInfo info)? onBatchApplied;
 
@@ -96,6 +107,19 @@ class PdrSession {
   /// fused heading + walkOffset. confirmed path 방향의 기준.
   double get walkingHeadingDeg =>
       normalizeDegrees(fusedHeadingDeg + _walkOffset.offsetDeg);
+
+  /// [walkingHeadingDeg]에 더해진 보정량(진단용). ±60°로 clamp된다.
+  double get walkOffsetDeg => _walkOffset.offsetDeg;
+
+  /// walkOffset이 지금 갱신 중인지(진단용).
+  bool get walkOffsetActive => _walkOffset.active;
+
+  /// heading이 자리를 잡았는지. 앵커를 확정하기 전에 이 값을 확인하면, 방향이
+  /// 아직 흔들리는 동안 놓인 첫 걸음들이 틀어지는 것을 막을 수 있다.
+  bool get headingConverged => _headingConvergence.converged;
+
+  /// 수렴 판정 창의 최대 편차(도).
+  double get headingSpreadDeg => _headingConvergence.spreadDeg;
 
   HeadingReference get headingReference =>
       headingReferenceFromSource(headingSource);
@@ -134,6 +158,10 @@ class PdrSession {
 
     // 팔 흔들림은 smoothing 전 raw heading으로 판단한다.
     _swing.update(motionMs, e.fusedHeadingDeg);
+    // smoothing 전 raw로 판정한다. 필터 tau가 0.1초라 smoothing된 값은 raw를
+    // 거의 그대로 따라가지만, 수렴 판정만큼은 필터가 만든 매끄러움에 속으면
+    // 안 된다.
+    _headingConvergence.update(motionMs, e.fusedHeadingDeg);
     _updateFusedHeading(e.fusedHeadingDeg, dtSeconds);
     _walkOffset.update(
       nowMs: motionMs,
@@ -176,6 +204,7 @@ class PdrSession {
 
   /// CMPedometer 배치. confirmed(초록) 경로/거리에 반영.
   void onPedometerBatch(PedometerBatchEvent e) {
+    final roninObservationChanged = _roninTrack.observe(e);
     final application = _pedometer.process(
       e,
       receivedAtMs: config.nowMs(),
@@ -185,6 +214,7 @@ class PdrSession {
       stride: _stride,
     );
     if (application == null) {
+      if (roninObservationChanged) _emit();
       return;
     }
     final applied = _paths.applyPedometerBatch(
@@ -199,6 +229,19 @@ class PdrSession {
     );
     iosTrackedSteps += applied;
     _stride.addTrackedDistance(application.stepDistanceMeters * applied);
+    _lastAppliedBatch = PdrAppliedBatch(
+      batchId: application.batchId,
+      spanStartMs: application.spanStartMs,
+      spanEndMs: application.spanEndMs,
+      appliedSteps: applied,
+      appliedDistanceM: application.stepDistanceMeters * applied,
+    );
+    _roninTrack.apply(
+      application,
+      currentWalkDeg: walkingHeadingDeg,
+      currentFusedDeg: fusedHeadingDeg,
+      headingAt: _headingHistory.at,
+    );
     onBatchApplied?.call(
       AppliedBatchInfo(
         batchId: application.batchId,
@@ -222,7 +265,11 @@ class PdrSession {
   void reset({int? newStepSessionId}) {
     _paths.reset();
     _accelPreview.reset();
+    _roninTrack.reset();
     iosTrackedSteps = 0;
+    // _pedometer.reset()이 batchId를 1로 되돌리므로 이전 배치 식별자를 남기면
+    // 소비자가 새 세션의 batchId=1을 "이미 소비함"으로 오판한다.
+    _lastAppliedBatch = null;
     _pedometer.reset(
       initialTrackingOn: _tracking,
       newSessionId: newStepSessionId,
@@ -232,6 +279,7 @@ class PdrSession {
     _swing.reset();
     walkDirConfidence = 0;
     _walkOffset.reset();
+    _headingConvergence.reset();
     _emit();
   }
 
@@ -295,8 +343,13 @@ class PdrSession {
         path: List.unmodifiable(_accelPreview.path),
         steps: _accelPreview.steps,
         distanceM: _accelPreview.distanceM,
+        acceptedPeakTimesMs: List.unmodifiable(
+          _accelPreview.acceptedPeakTimesMs,
+        ),
       ),
+      ronin: _roninTrack.snapshot,
       quality: quality,
+      lastAppliedBatch: _lastAppliedBatch,
     );
   }
 
@@ -356,6 +409,15 @@ class PdrSession {
         headingReferenceIsMagneticNorth:
             headingReference == HeadingReference.magneticNorth,
         peakRejectHistogram: Map.unmodifiable(_accelPreview.rejectReasons),
+        fusedHeadingDeg: fusedHeadingDeg,
+        walkOffsetDeg: walkOffsetDeg,
+        walkOffsetActive: walkOffsetActive,
+        deviceHeadingDeg: deviceHeadingDeg,
+        gyroHeadingDeg: gyroHeadingDeg,
+        walkDirDeg: walkDirDeg,
+        walkDirConfidence: walkDirConfidence,
+        headingConverged: headingConverged,
+        headingSpreadDeg: headingSpreadDeg,
       ),
     );
   }

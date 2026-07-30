@@ -10,7 +10,7 @@
 | [`building.dart`](building.dart) | `Building` | 건물 정보, 층 목록, 초기 층 |
 | [`floor_plan.dart`](floor_plan.dart) | `FloorPlan`, `StorePolygon`, `PoiMarker` | 층 외곽·매장·POI·복도 렌더 데이터 |
 | [`floor_graph.dart`](floor_graph.dart) | `FloorGraph`, `GraphNode`, `GraphEdge`, `LocalPoint` | `local_m` 내비게이션 그래프 |
-| [`indoor_route.dart`](indoor_route.dart) | `IndoorRoute` | 실내 경로점·거리 |
+| [`indoor_route.dart`](indoor_route.dart) | `IndoorRoute` | 실내 경로점·거리 + 진행률 계산용 로컬 좌표·간선 id |
 | [`poi_search_result.dart`](poi_search_result.dart) | `PoiSearchResult` | 목적지 검색 결과 |
 | [`directions_route.dart`](directions_route.dart) | `DirectionsRoute` | 실외 보행 경로점·거리·시간 |
 | [`favorite_place.dart`](favorite_place.dart) | `FavoritePlace` | 저장 가능한 즐겨찾기 장소 |

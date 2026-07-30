@@ -68,8 +68,11 @@ MultiFloorRoute? computeMultiFloorRoute(
       current ??= _PendingSegment(fromNode.floorId!);
       current.addNode(fromNode);
       current.transferModeToNext = edge.transferMode;
+      current.transferDistanceM = edge.lengthM;
+      current.transferFromNode = fromNode;
+      current.transferToNode = toNode;
       segments.add(current);
-      totalDistance += current.distanceM;
+      totalDistance += current.distanceM + edge.lengthM;
       current = _PendingSegment(toNode.floorId!)..addNode(toNode);
       continue;
     }
@@ -88,7 +91,7 @@ MultiFloorRoute? computeMultiFloorRoute(
     } else if (edge.fromNodeId == toNodeId && edge.toNodeId == fromNodeId) {
       geometry = geometry.reversed.toList();
     }
-    current.addGeometry(geometry, edge.lengthM);
+    current.addGeometry(geometry, edge.lengthM, edge.id);
   }
 
   if (current != null) {
@@ -110,23 +113,43 @@ MultiFloorRoute? computeMultiFloorRoute(
     final floorName = graph.floorNamesById[segment.floorId];
     if (floorName == null) return null;
     final points = <LatLng>[
-      for (final point in segment.points)
-        _apply(transform, point.x, point.y),
+      for (final point in segment.points) _apply(transform, point.x, point.y),
     ];
+    final transferFrom = segment.transferFromNode;
+    final transferTo = segment.transferToNode;
+    final transferToTransform = transferTo?.floorId == null
+        ? null
+        : transformByFloor[transferTo!.floorId!];
+    final transferPoints =
+        transferFrom == null ||
+            transferTo == null ||
+            transferToTransform == null
+        ? const <LatLng>[]
+        : <LatLng>[
+            _apply(transform, transferFrom.xM, transferFrom.yM),
+            _apply(transferToTransform, transferTo.xM, transferTo.yM),
+          ];
     built.add(
       IndoorRouteSegment(
         floorId: segment.floorId,
         floorName: floorName,
-        route: IndoorRoute(points: points, distanceMeters: segment.distanceM),
+        route: IndoorRoute(
+          points: points,
+          distanceMeters: segment.distanceM,
+          // 세그먼트 폴리라인·간선은 그 층 안에서만 이어진다. 진행률은 층별
+          // 세그먼트 단위로 계산하고, 남은 거리는 화면이 이후 세그먼트 길이를
+          // 더해 합산한다.
+          pointsLocalM: segment.points,
+          edgeIds: segment.edgeIds,
+        ),
         transferModeToNext: segment.transferModeToNext,
+        transferPointsToNext: transferPoints,
+        transferDistanceMeters: segment.transferDistanceM,
       ),
     );
   }
 
-  return MultiFloorRoute(
-    segments: built,
-    totalDistanceMeters: totalDistance,
-  );
+  return MultiFloorRoute(segments: built, totalDistanceMeters: totalDistance);
 }
 
 LatLng _apply(AffineTransform transform, double xM, double yM) {
@@ -141,8 +164,15 @@ class _PendingSegment {
 
   final String floorId;
   final List<LocalPoint> points = <LocalPoint>[];
+
+  /// 이 세그먼트가 지나는 층 내부 간선 id. 수직 전이 간선은 세그먼트 경계일
+  /// 뿐 이동 폴리라인에 포함되지 않으므로 여기에도 넣지 않는다.
+  final List<String> edgeIds = <String>[];
   double distanceM = 0.0;
   String? transferModeToNext;
+  double transferDistanceM = 0.0;
+  GraphNode? transferFromNode;
+  GraphNode? transferToNode;
 
   void addNode(GraphNode node) {
     if (points.isNotEmpty &&
@@ -153,8 +183,13 @@ class _PendingSegment {
     points.add(LocalPoint(node.xM, node.yM));
   }
 
-  void addGeometry(List<LocalPoint> geometry, double edgeLengthM) {
+  void addGeometry(
+    List<LocalPoint> geometry,
+    double edgeLengthM,
+    String edgeId,
+  ) {
     if (geometry.isEmpty) return;
+    edgeIds.add(edgeId);
     if (points.isNotEmpty &&
         points.last.x == geometry.first.x &&
         points.last.y == geometry.first.y) {
