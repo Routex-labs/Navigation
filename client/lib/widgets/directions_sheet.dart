@@ -71,6 +71,7 @@ class DirectionsSheet extends StatefulWidget {
     this.initialOrigin,
     this.initialDestination,
     this.currentFloorLabel,
+    this.focusOrigin = false,
   });
 
   /// 출발지를 따로 고르지 않았을 때 보여줄 문구("현재 위치").
@@ -91,6 +92,11 @@ class DirectionsSheet extends StatefulWidget {
   /// 로드되지 않은 경우 null이며, 이때는 기존처럼 건물 전체를 뒤진다.
   final String? currentFloorLabel;
 
+  /// 출발지 칸을 활성으로 열지. 상단 초안 바의 **출발 행**을 눌러 들어올 때 켠다 —
+  /// 출발지를 바꾸려고 누른 것이므로 커서와 후보 목록이 그 칸에 맞아야 한다.
+  /// 기본은 false로, 도착지를 고르는 기존 흐름이 그대로 유지된다.
+  final bool focusOrigin;
+
   static Future<DirectionsResult?> show(
     BuildContext context, {
     required String originLabel,
@@ -98,6 +104,7 @@ class DirectionsSheet extends StatefulWidget {
     DirectionsCandidate? initialOrigin,
     DirectionsCandidate? initialDestination,
     String? currentFloorLabel,
+    bool focusOrigin = false,
   }) {
     return showModalBottomSheet<DirectionsResult>(
       context: context,
@@ -111,6 +118,7 @@ class DirectionsSheet extends StatefulWidget {
         initialOrigin: initialOrigin,
         initialDestination: initialDestination,
         currentFloorLabel: currentFloorLabel,
+        focusOrigin: focusOrigin,
       ),
     );
   }
@@ -225,11 +233,12 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
   late final _destinationController = TextEditingController(
     text: widget.initialDestination?.title ?? '',
   );
+  final _originFocusNode = FocusNode();
   final _destinationFocusNode = FocusNode();
 
   DirectionsCandidate? _selectedOrigin;
   DirectionsCandidate? _selectedDestination;
-  _ActiveField _activeField = _ActiveField.destination;
+  late _ActiveField _activeField;
   List<DirectionsCandidate> _results = [];
   bool _loading = false;
 
@@ -244,6 +253,17 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
     super.initState();
     _selectedOrigin = widget.initialOrigin;
     _selectedDestination = widget.initialDestination;
+    if (widget.focusOrigin) {
+      // 출발 행을 눌러 열렸다. 후보 목록도 출발지 기준(맨 위 "현재 위치" 고정 행)
+      // 이어야 한다. 명시적 출발지가 없으면 칸에 적힌 "현재 위치"는 값이 아니라
+      // 안내문이므로 지운다 — 그대로 두면 사용자가 먼저 지워야 하고, 검색어로도
+      // 쓰여서 결과가 비어 버린다([_onOriginTap]과 같은 규칙).
+      _activeField = _ActiveField.origin;
+      if (widget.initialOrigin == null) _originController.clear();
+      _search(_originController.text);
+      return;
+    }
+    _activeField = _ActiveField.destination;
     _search(_destinationController.text);
   }
 
@@ -251,6 +271,7 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
   void dispose() {
     _originController.dispose();
     _destinationController.dispose();
+    _originFocusNode.dispose();
     _destinationFocusNode.dispose();
     super.dispose();
   }
@@ -390,6 +411,8 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
                     const SizedBox(height: 14),
                     TextField(
                       controller: _originController,
+                      focusNode: _originFocusNode,
+                      autofocus: widget.focusOrigin,
                       onTap: _onOriginTap,
                       onChanged: _onOriginChanged,
                       decoration: const InputDecoration(
@@ -401,7 +424,7 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
                     TextField(
                       controller: _destinationController,
                       focusNode: _destinationFocusNode,
-                      autofocus: true,
+                      autofocus: !widget.focusOrigin,
                       onTap: () => setState(() => _activeField = _ActiveField.destination),
                       onChanged: _onDestinationChanged,
                       decoration: const InputDecoration(

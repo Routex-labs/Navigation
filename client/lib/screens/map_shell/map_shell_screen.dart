@@ -508,9 +508,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 값을 채워, 상단 출발 행에서 끊긴 흐름을 그대로 이어 간다. 시트 안에서
   /// 출발지를 직접 고르면(맨 위 "현재 위치" 포함) 그 선택이 [presetOrigin]보다
   /// 우선한다.
+  /// [focusOrigin]은 출발지 칸을 활성으로 열지다. 상단 초안 바의 **출발 행**을
+  /// 눌러 들어올 때만 켠다 — 출발지를 바꾸려고 누른 것이므로 커서가 그 칸에 있어야
+  /// 한다. 매장 정보 시트에서 출발지를 이미 정하고 넘어오는 경우는 다음에 고를 것이
+  /// 도착지라 기본값(도착지 활성)이 맞다.
   Future<void> _openDirections({
     DirectionsCandidate? presetOrigin,
     DirectionsCandidate? presetDestination,
+    bool focusOrigin = false,
   }) async {
     // 건물 안을 보고 있을 때만 현재 층 라벨을 시트에 넘겨 "B2에서 검색" 표시와
     // "전체 층에서 찾기" 토글이 뜨게 한다. 순수 야외 상태는 층 개념 자체가
@@ -529,6 +534,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
         initialDestination: initialDestination,
         search: _searchDirectionsCandidates,
         currentFloorLabel: currentFloorLabel,
+        focusOrigin: focusOrigin,
       ),
     );
     if (result == null || !mounted) return;
@@ -917,6 +923,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
               routeDestinationLabel: _routeDraftDestination?.title,
               onRouteOriginTap: () => _openDirections(
                 presetDestination: _routeDraftDestination,
+                focusOrigin: true,
               ),
               onRouteDestinationTap: () => _openDirections(
                 presetDestination: _routeDraftDestination,
