@@ -4,7 +4,6 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'api_config.dart';
 import '../features/debug_mode/debug_mode_controller.dart';
-import '../features/indoor_navigation/application/corridor_tracking_session.dart';
 import '../features/indoor_navigation/application/indoor_navigation_controller.dart';
 import '../features/indoor_navigation/application/indoor_location_estimate.dart';
 import '../features/indoor_navigation/platform/android_pdr_motion_source.dart';
@@ -28,8 +27,6 @@ final PdrMotionSource pdrMotionSource = switch (defaultTargetPlatform) {
 final IndoorNavigationDriver indoorNavigationDriver = IndoorNavigationDriver(
   source: pdrMotionSource,
 );
-final CorridorTrackingSession corridorTrackingSession =
-    CorridorTrackingSession();
 final IndoorLocationEstimateController indoorLocationEstimateController =
     IndoorLocationEstimateController();
 

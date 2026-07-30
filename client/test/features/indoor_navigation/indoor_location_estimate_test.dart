@@ -45,6 +45,33 @@ const _graph = FloorGraph(
 void main() {
   final now = DateTime.utc(2026, 7, 30, 12);
 
+  test('자북 heading은 안정도 수렴을 기다리지 않고 자동 PDR 기준점에 쓸 수 있다', () {
+    expect(
+      canAutoAnchorEstimatedLocation(
+        hasHeading: true,
+        headingReferenceIsMagneticNorth: true,
+      ),
+      isTrue,
+    );
+  });
+
+  test('heading이 없거나 임의 기준이면 자동 PDR 기준점을 만들지 않는다', () {
+    expect(
+      canAutoAnchorEstimatedLocation(
+        hasHeading: false,
+        headingReferenceIsMagneticNorth: true,
+      ),
+      isFalse,
+    );
+    expect(
+      canAutoAnchorEstimatedLocation(
+        hasHeading: true,
+        headingReferenceIsMagneticNorth: false,
+      ),
+      isFalse,
+    );
+  });
+
   test('정확하고 최근인 GPS는 가장 가까운 통로에 붙여 추정위치를 만든다', () {
     final estimate = estimateIndoorLocationFromGps(
       buildingId: 'building',

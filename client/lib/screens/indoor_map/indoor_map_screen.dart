@@ -192,7 +192,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   String? _highlightedStoreId;
   late final DebugPdrTrailState _pdrTrailState;
   final CorridorTrackingSession _corridorTrackingSession =
-      corridorTrackingSession;
+      CorridorTrackingSession();
   StreamSubscription<PdrSnapshot>? _pdrSnapshotSub;
   StreamSubscription<CalibrationStatus>? _pdrCalibrationSub;
   StreamSubscription<AltitudeSample>? _pdrAltitudeSub;
@@ -511,9 +511,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     }
     final resolvedEstimate = estimate;
 
-    // 마커는 estimate를 저장한 순간 바로 보인다. PDR 결합은 센서와 방향이
-    // 준비된 경우에만 이어서 적용해, 자동 동작이 방향 선택 모달을 띄우거나
-    // 불확실한 방향으로 첫 경로를 만들지 않게 한다.
+    // 마커는 estimate를 저장한 순간 바로 보인다. PDR 결합은 센서와 자북
+    // heading이 준비된 경우에만 이어서 적용해, 자동 동작이 방향 선택 모달을
+    // 띄우거나 임의 기준 heading으로 첫 경로를 만들지 않게 한다.
     await _startPdrIfIdle();
     if (!mounted ||
         _selectedFloor != floor ||
@@ -528,7 +528,14 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       await Future<void>.delayed(const Duration(milliseconds: 100));
       if (!mounted || _selectedFloor != floor) return;
     }
-    if (!indoorNavigationDriver.isHeadingConverged) return;
+    final snapshot = indoorNavigationDriver.currentSnapshot;
+    if (!canAutoAnchorEstimatedLocation(
+      hasHeading: snapshot?.hasHeading ?? false,
+      headingReferenceIsMagneticNorth:
+          snapshot?.quality.features.headingReferenceIsMagneticNorth ?? false,
+    )) {
+      return;
+    }
 
     await indoorNavigationDriver.confirmAnchorByPin(
       floorPointM: resolvedEstimate.localM,

@@ -9,6 +9,17 @@ import 'floor_map_matcher.dart';
 const trustedIndoorGpsAccuracyM = 15.0;
 const maxIndoorGpsSnapDistanceM = 12.0;
 
+/// GPS 추정점을 사용자 입력 없이 PDR 기준점으로 승격해도 되는지 판단한다.
+///
+/// 자북 기준 heading이면 `confirmAnchorByPin`이 화면 방향 질문 없이 도면 회전을
+/// 계산할 수 있다. 짧은 대기 시간 안에 `headingConverged`가 true가 되지 않았다는
+/// 이유만으로 막지는 않는다. 수렴 플래그는 흔들림의 안정도일 뿐 자북 기준의
+/// 유효 여부와 다르고, 이를 필수로 두면 마커가 GPS 한 점에 영구 정지한다.
+bool canAutoAnchorEstimatedLocation({
+  required bool hasHeading,
+  required bool headingReferenceIsMagneticNorth,
+}) => hasHeading && headingReferenceIsMagneticNorth;
+
 /// GPS를 건물 층 그래프에 투영해 얻은 절대 위치 추정값.
 ///
 /// PDR 앵커와 별도로 보존한다. 둘을 같은 값으로 덮어쓰면 이후 화면이 "GPS가

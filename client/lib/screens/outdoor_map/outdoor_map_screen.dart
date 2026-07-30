@@ -632,7 +632,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   int _recalibrateTapCount = 0;
   late final DebugPdrTrailState _pdrTrailState;
   final CorridorTrackingSession _corridorTrackingSession =
-      corridorTrackingSession;
+      CorridorTrackingSession();
   StreamSubscription<PdrSnapshot>? _pdrSnapshotSub;
   StreamSubscription<CalibrationStatus>? _pdrCalibrationSub;
 
