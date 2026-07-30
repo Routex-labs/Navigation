@@ -53,7 +53,8 @@ classDiagram
         +str floor_id 🔗 ? 「NULL이면 층간 전이」
         +str from_node_id 🔗
         +str to_node_id 🔗
-        +float length_m 「경로 비용」
+        +float length_m 「실제 이동 거리」
+        +float cost_m 「라우팅 비용, 전이만 length와 다름」
         +bool bidirectional
         +JSON geometry ?
     }
