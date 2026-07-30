@@ -92,6 +92,15 @@ const indoorEntryZoomThreshold = indoorOverlayFadeInEndZoom;
 /// 판정하지 않는다.
 const indoorExitZoomThreshold = 15.6;
 
+/// 하단 바에서 '홈'(야외)을 눌러 야외 지도로 돌아올 때 카메라를 맞출 zoom.
+///
+/// [indoorExitZoomThreshold]보다 **낮아야 한다.** 이 값이 이탈 임계값 위에
+/// 있으면 오버레이를 닫아도 카메라는 "실내로 볼 수 있는 zoom"에 남는다. 그
+/// 상태는 두 가지로 어긋난다 — 페이드 구간이 진입 램프로 되돌아가 도면이 반쯤
+/// 보이고([indoorOverlayFadeExpr]), 다음 카메라 정지에서 다시 실내로 끌려
+/// 들어갈 수 있다. 이탈 임계값 아래로 내리면 zoom 판정도 "야외"로 일치한다.
+const outdoorReturnZoom = indoorExitZoomThreshold - 0.1;
+
 /// 화면 폭 [viewportWidthPx]에서 실제로 쓸 진입 임계값.
 ///
 /// [indoorEntryZoomThreshold]는 **절대 zoom**이라, 같은 값이라도 화면이 넓으면

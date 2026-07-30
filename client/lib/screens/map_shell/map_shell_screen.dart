@@ -170,6 +170,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
       _mode = mode;
       _placeInfo = null;
     });
+    // '홈'을 누른 것은 "야외 지도를 보겠다"는 뜻이다. 야외 지도가 실내 진입
+    // 오버레이를 켠 상태로 남아 있으면, 홈으로 왔는데 도면·실내 위치 아이콘이
+    // 그대로 보이고 길찾기도 실내 앵커에서 출발한다. 오버레이를 닫고 카메라도
+    // 야외 시야로 되돌린다.
+    if (mode == MapMode.outdoor) {
+      final outdoor = _outdoorKey.currentState;
+      if (outdoor != null) unawaited(outdoor.returnToOutdoorView());
+    }
     _dropIndoorOriginIfOutdoors();
   }
 

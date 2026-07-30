@@ -2524,6 +2524,33 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _setIndoorEntered(false);
   }
 
+  /// 하단 바에서 '홈'(야외)을 눌러 이 화면으로 돌아왔을 때의 이탈. 상위
+  /// (MapShellScreen)가 모드를 야외로 바꿀 때 호출한다.
+  ///
+  /// 여기서는 오버레이만 끄는 것으로 끝나지 않는다. 카메라가 건물을 크게 확대한
+  /// 자리에 그대로 남아 있으면, 오버레이를 껐어도 도면은 진입 램프
+  /// ([indoorOverlayFadeExpr])에 따라 그대로 보인다 — "홈을 눌렀는데 실내가
+  /// 보이는" 상태다. 그래서 카메라도 야외 시야([outdoorReturnZoom])로 함께
+  /// 축소한다.
+  ///
+  /// 실내 앵커에서 계산한 경로도 지운다. 야외에서 쓰는 위치는 GPS뿐이므로,
+  /// 실내 위치에서 출발하던 경로만 남으면 화면의 위치 아이콘과 경로 시작점이
+  /// 어긋난다.
+  ///
+  /// [_exitIndoorByOutsideTap]과 달리 **재무장한다**([_autoIndoorEntryArmed]).
+  /// 축소까지 함께 하므로 곧바로 다시 끌려 들어갈 위험이 없고, 사용자가 건물로
+  /// 다시 확대하면 예전처럼 자연스럽게 실내로 들어가야 한다.
+  Future<void> returnToOutdoorView() async {
+    if (!_indoorEntered) return;
+    if (_placingPdrAnchor) _setPlacingAnchor(false);
+    _clearIndoorRoute();
+    _autoIndoorEntryArmed = true;
+    _setIndoorEntered(false);
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    await controller.animateCamera(CameraUpdate.zoomTo(outdoorReturnZoom));
+  }
+
   /// [_indoorEntered] 상태 변경을 한 곳으로 모은 헬퍼. setState + 상위 콜백 통지에
   /// 더해 dim scrim의 fillOpacity도 함께 갱신해, 실내 진입/이탈에 스포트라이트
   /// 효과가 즉시 반영되게 한다.
