@@ -20,7 +20,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 import app.models  # noqa: F401  # 모든 모델을 Base.metadata에 등록
-from app.core.database import get_db
+from app.core.database import enable_sqlite_pragmas, get_db
 from app.main import create_app
 from app.models.base import Base
 from scripts.seed import studio_adapter
@@ -47,6 +47,8 @@ def _seeded_engine(tmp_path_factory, name: str, directory: Path):
         # TestClient 요청은 스레드풀에서 실행되므로 스레드 검사를 끈다.
         connect_args={"check_same_thread": False},
     )
+    # 운영 엔진과 같은 PRAGMA(FK 강제 등)를 걸어, 무결성 제약이 테스트에서도 실제로 동작하게 한다.
+    enable_sqlite_pragmas(engine)
     Base.metadata.create_all(engine)
     session = sessionmaker(bind=engine)()
     try:
