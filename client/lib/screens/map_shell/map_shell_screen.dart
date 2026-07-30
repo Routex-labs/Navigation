@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -174,18 +175,46 @@ class _MapShellScreenState extends State<MapShellScreen> {
     return null;
   }
 
+  /// 지금 지도 제스처를 잠그고 있는 이유들. 잠금 요청이 겹칠 수 있어서 bool이
+  /// 아니라 집합이다 — 예전처럼 각자 `setInteractive(true)`로 풀면, 카테고리 열
+  /// 위에 마우스를 올린 채 시트를 닫는 순간 아직 필요한 잠금까지 함께 풀린다.
+  final _mapLockReasons = <String>{};
+
+  /// 바텀시트·검색 패널이 지도 위에 떠 있는 동안.
+  static const _mapLockSheet = 'sheet';
+  static const _mapLockSearch = 'search';
+
+  /// 지도 위 오버레이(장소 pill·카테고리 chip 열) 위에 포인터가 올라와 있는 동안.
+  /// 마우스(hover)와 터치(pointer down)는 끝나는 시점이 달라 따로 센다.
+  static const _mapLockOverlayHover = 'overlay-hover';
+  static const _mapLockOverlayTouch = 'overlay-touch';
+
+  void _lockMaps(String reason) {
+    if (!_mapLockReasons.add(reason)) return;
+    if (_mapLockReasons.length == 1) _applyMapInteractive();
+  }
+
+  void _unlockMaps(String reason) {
+    if (!_mapLockReasons.remove(reason)) return;
+    if (_mapLockReasons.isEmpty) _applyMapInteractive();
+  }
+
+  void _applyMapInteractive() {
+    final interactive = _mapLockReasons.isEmpty;
+    _outdoorKey.currentState?.setInteractive(interactive);
+    _indoorKey.currentState?.setInteractive(interactive);
+  }
+
   /// 바텀시트가 떠 있는 동안 지도 제스처를 꺼서, 시트를 마우스 휠로
   /// 스크롤할 때 그 아래 지도까지 같이 스크롤/줌되지 않게 한다. 실내 지도는
   /// 웹에서 실제 DOM 캔버스(MapLibre)라 시트 위에서도 휠 이벤트가 새어나갈
   /// 수 있어서 필요하다.
   Future<T?> _withMapsLocked<T>(Future<T?> Function() showSheet) async {
-    _outdoorKey.currentState?.setInteractive(false);
-    _indoorKey.currentState?.setInteractive(false);
+    _lockMaps(_mapLockSheet);
     try {
       return await showSheet();
     } finally {
-      _outdoorKey.currentState?.setInteractive(true);
-      _indoorKey.currentState?.setInteractive(true);
+      _unlockMaps(_mapLockSheet);
     }
   }
 
@@ -201,8 +230,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
     setState(() => _searchActive = true);
     // 결과 패널이 지도 위에 떠 있는 동안 지도 제스처를 잠근다. 실내는 웹에서
     // 실제 DOM 캔버스(MapLibre)라 패널 위 휠 이벤트가 지도로 새어나간다.
-    _outdoorKey.currentState?.setInteractive(false);
-    _indoorKey.currentState?.setInteractive(false);
+    _lockMaps(_mapLockSearch);
   }
 
   /// 검색을 끝낸다. 결과를 골라 시트로 넘어갈 때도, 사용자가 뒤로/바깥을
@@ -211,13 +239,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
   void _closeSearch() {
     _searchFocus.unfocus();
     _searchController.clear();
+    // 잠금 해제는 조기 반환보다 먼저 한다. 잡고 있지 않은 이유를 푸는 것은
+    // no-op이므로, 상태가 어긋나도 잠금이 남아 지도가 굳는 일이 없다.
+    _unlockMaps(_mapLockSearch);
     if (!_searchActive && _searchQuery.isEmpty) return;
     setState(() {
       _searchActive = false;
       _searchQuery = '';
     });
-    _outdoorKey.currentState?.setInteractive(true);
-    _indoorKey.currentState?.setInteractive(true);
   }
 
   void _onSearchChanged(String value) {
@@ -739,29 +768,30 @@ class _MapShellScreenState extends State<MapShellScreen> {
               right: 0,
               child: SafeArea(
                 bottom: false,
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _FavoritesPill(
-                        key: _favoritesPillKey,
-                        onTap: _openFavorites,
-                      ),
-                      const SizedBox(width: 8),
-                      // 야외·실내 모드 모두에서 노출한다. _buildingId가 항상
-                      // 현재 대상 건물(기본값 demoBuildingId)이라, 야외에서 chip을
-                      // 눌러도 그 건물의 카테고리 매장 시트가 정상적으로 뜬다.
-                      _CategoryChipsRow(
-                        key: _categoryRowKey,
-                        buildingId: _buildingId,
-                        onSelectCategory: (category) {
-                          _runSheetChain(() => _openCategoryStores(category));
-                        },
-                      ),
-                    ],
-                  ),
+                child: _MapOverlayScrollRow(
+                  onPointerOverChanged: (over) => over
+                      ? _lockMaps(_mapLockOverlayHover)
+                      : _unlockMaps(_mapLockOverlayHover),
+                  onPointerDownChanged: (down) => down
+                      ? _lockMaps(_mapLockOverlayTouch)
+                      : _unlockMaps(_mapLockOverlayTouch),
+                  children: [
+                    _FavoritesPill(
+                      key: _favoritesPillKey,
+                      onTap: _openFavorites,
+                    ),
+                    const SizedBox(width: 8),
+                    // 야외·실내 모드 모두에서 노출한다. _buildingId가 항상
+                    // 현재 대상 건물(기본값 demoBuildingId)이라, 야외에서 chip을
+                    // 눌러도 그 건물의 카테고리 매장 시트가 정상적으로 뜬다.
+                    _CategoryChipsRow(
+                      key: _categoryRowKey,
+                      buildingId: _buildingId,
+                      onSelectCategory: (category) {
+                        _runSheetChain(() => _openCategoryStores(category));
+                      },
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -800,6 +830,118 @@ class _MapShellScreenState extends State<MapShellScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 지도 위에 얹은 가로 스크롤 오버레이 열(장소 pill + 카테고리 chip)의 껍데기.
+///
+/// 이 위젯이 존재하는 이유는 두 가지 모두 **지도가 Flutter 위젯이 아니라
+/// MapLibre 플랫폼 뷰**라는 데서 나온다. 위젯 트리에서는 이 열이 지도 위에
+/// 있지만, 실제 포인터 입력은 지도 쪽에도 그대로 도착한다.
+///
+/// 1. **지도 잠금** — 이 열 위에서 휠을 굴리면 그 휠이 지도까지 내려가 지도가
+///    확대/축소된다("카테고리 열을 스크롤했는데 지도 배율이 같이 변한다"). 시트를
+///    열 때 쓰던 것과 같은 잠금([MapShellScreen._withMapsLocked])을 포인터가 이
+///    열 위에 있는 동안에도 걸어 지도 제스처 자체를 꺼 둔다.
+/// 2. **세로 휠 → 가로 스크롤** — Flutter의 가로 스크롤 뷰는 세로 휠 delta를
+///    0으로 계산해 아예 소비하지 않는다. 그래서 휠을 굴려도 열은 그대로고 지도만
+///    움직였다. 세로 delta를 가로 오프셋으로 직접 옮겨 준다.
+class _MapOverlayScrollRow extends StatefulWidget {
+  const _MapOverlayScrollRow({
+    required this.onPointerOverChanged,
+    required this.onPointerDownChanged,
+    required this.children,
+  });
+
+  /// 마우스 포인터가 이 열 위로 들어오거나 나갈 때.
+  final ValueChanged<bool> onPointerOverChanged;
+
+  /// 이 열 위에서 손가락/버튼이 눌리거나 떼어질 때. hover가 없는 터치 환경을
+  /// 위한 경로라 hover와 별개로 통지한다.
+  final ValueChanged<bool> onPointerDownChanged;
+
+  final List<Widget> children;
+
+  @override
+  State<_MapOverlayScrollRow> createState() => _MapOverlayScrollRowState();
+}
+
+class _MapOverlayScrollRowState extends State<_MapOverlayScrollRow> {
+  final _controller = ScrollController();
+  bool _pointerOver = false;
+  bool _pointerDown = false;
+
+  @override
+  void dispose() {
+    // 잠금을 쥔 채로 사라지면(검색이 켜져 이 열이 트리에서 빠지는 경우 등)
+    // 지도가 영영 잠긴 상태로 남는다. 나가면서 반드시 반납한다.
+    //
+    // **다음 프레임으로 미루는 것이 중요하다.** 반납은 지도 위젯의 setState로
+    // 이어지는데, dispose는 상위 rebuild 도중에 실행될 수 있어 그 자리에서 부르면
+    // "setState() called during build"로 터진다. 반납은 멱등이라 (MouseRegion이
+    // 제거되며 보내는 onExit와 겹쳐) 두 번 불려도 문제없다.
+    final releaseHover = _pointerOver ? widget.onPointerOverChanged : null;
+    final releaseTouch = _pointerDown ? widget.onPointerDownChanged : null;
+    if (releaseHover != null || releaseTouch != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        releaseHover?.call(false);
+        releaseTouch?.call(false);
+      });
+    }
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _setPointerOver(bool value) {
+    if (_pointerOver == value) return;
+    _pointerOver = value;
+    widget.onPointerOverChanged(value);
+  }
+
+  void _setPointerDown(bool value) {
+    if (_pointerDown == value) return;
+    _pointerDown = value;
+    widget.onPointerDownChanged(value);
+  }
+
+  /// 세로 휠을 가로 오프셋으로 옮긴다. 트랙패드 가로 스크롤(dx)도 그대로 받도록
+  /// dy가 0일 때는 dx를 쓴다.
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) return;
+    if (!_controller.hasClients) return;
+    final position = _controller.position;
+    final delta = event.scrollDelta.dy != 0
+        ? event.scrollDelta.dy
+        : event.scrollDelta.dx;
+    final target = (position.pixels + delta).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    if (target == position.pixels) return;
+    _controller.jumpTo(target);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      controller: _controller,
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      // 잠금·휠 처리는 뷰포트 전체가 아니라 chip이 실제로 그려진 영역에만 건다.
+      // 뷰포트는 화면 폭 전체라, 바깥까지 잠그면 chip 오른쪽 빈 곳에 마우스를
+      // 올려 둔 것만으로 지도 휠 줌이 죽는다.
+      child: MouseRegion(
+        onEnter: (_) => _setPointerOver(true),
+        onExit: (_) => _setPointerOver(false),
+        child: Listener(
+          onPointerSignal: _onPointerSignal,
+          onPointerDown: (_) => _setPointerDown(true),
+          onPointerUp: (_) => _setPointerDown(false),
+          onPointerCancel: (_) => _setPointerDown(false),
+          child: Row(mainAxisSize: MainAxisSize.min, children: widget.children),
+        ),
       ),
     );
   }
