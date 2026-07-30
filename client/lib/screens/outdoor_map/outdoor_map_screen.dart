@@ -1090,6 +1090,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 찍히고(예전 버그), 위치가 비어 있다는 이유만으로 신호 배지가 뜬다.
   bool get _outdoorGpsVisible => widget.active && !_indoorEntered;
 
+  /// 실내(PDR) 위치를 화면과 길찾기에 써도 되는 상태인지 — [_outdoorGpsVisible]의
+  /// 반대쪽 짝이다. 두 값은 **동시에 true가 되지 않는다**: 실내 오버레이가 켜져
+  /// 있으면 PDR만, 야외 상태면 GPS만 쓴다.
+  ///
+  /// 이 구분이 없으면 실내에서 위치를 지정한 뒤 축소해 야외로 나왔을 때, 야외
+  /// 지도 위에 실내 위치 아이콘이 그대로 남고(도면은 페이드로 사라졌는데 파란
+  /// 점만 공중에 떠 있는 상태) 길찾기 출발지도 그 실내 앵커로 잡힌다. 야외에서는
+  /// GPS가 위치의 유일한 출처여야 한다.
+  bool get _indoorLocationVisible => _indoorEntered;
+
   /// GPS 구독을 [_gpsTrackingWanted] 상태에 맞춘다. 구독 시작/해제의 유일한
   /// 진입점이라 중복 구독이나 해제 누락이 생기지 않는다.
   void _syncGpsSubscription() {
@@ -1560,8 +1570,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       return;
     }
 
+    // 야외 길찾기의 출발지는 GPS 현재 위치뿐이다(실내 앵커는 쓰지 않는다).
+    // 아직 신호를 못 잡았으면 경로를 계산할 수 없으므로, 조용히 끝내지 않고
+    // 이유를 알린다 — 안내가 없으면 "도착을 눌렀는데 아무 일도 안 일어남"이 된다.
     final position = _position;
-    if (position == null) return;
+    if (position == null) {
+      _showSnack('현재 위치를 아직 못 잡았습니다. GPS 신호를 확인해주세요.');
+      return;
+    }
     await _updateRoute(position);
   }
 
@@ -2538,6 +2554,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     widget.onIndoorEnteredChanged?.call(value);
     // 실내로 들어가면 GPS 구독을 끊고 마커를 지운다. 다시 나가면 재구독한다.
     _syncGpsSubscription();
+    // 위치 아이콘의 주인이 바뀌는 순간이다. 야외로 나가면 실내 위치 마커를
+    // 지우고(GPS 마커가 그 역할을 받는다), 실내로 들어가면 다시 그린다.
+    unawaited(_syncPdrCurrentLayer());
     _syncDimScrimLayer();
     // 외곽선은 실내 진입 상태에서만 그린다 — 이탈하면 여기서 소스가 비워진다.
     unawaited(_syncFloorOutlineLayer());
@@ -3113,10 +3132,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     );
   }
 
+  /// 실내 위치(PDR) 마커. 야외 상태에서는 [_indoorLocationVisible]이 false라
+  /// 항상 빈 소스를 밀어 넣어 마커가 사라진다 — 야외에서는 GPS 마커
+  /// ([_syncCurrentLayer])만 보이고, 실내에서는 이쪽만 보인다.
   Future<void> _syncPdrCurrentLayer() async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
-    final location = _pdrCurrentWgs84();
+    final location = _indoorLocationVisible ? _pdrCurrentWgs84() : null;
     if (location == null) {
       await controller.setGeoJsonSource(_pdrCurrentSourceId, _emptyCollection());
       return;

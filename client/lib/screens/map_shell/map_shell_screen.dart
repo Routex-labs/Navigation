@@ -170,6 +170,21 @@ class _MapShellScreenState extends State<MapShellScreen> {
       _mode = mode;
       _placeInfo = null;
     });
+    _dropIndoorOriginIfOutdoors();
+  }
+
+  /// 야외 컨텍스트로 나왔을 때, 실내 지점(층+노드)으로 잡아둔 출발지를 버린다.
+  ///
+  /// 실내에서 "출발지로 설정"한 매장은 야외 지도에서 쓸 수 없다. 그대로 두면
+  /// 길찾기 시트의 출발지 칸에는 건물 안 매장이 적혀 있는데 실제 경로는 GPS에서
+  /// 시작해, 화면에 적힌 출발지와 그려지는 경로가 어긋난다. 비우면 다시 "현재
+  /// 위치"(=야외에서는 GPS)가 기본 출발지가 된다.
+  void _dropIndoorOriginIfOutdoors() {
+    if (_indoorContextActive) return;
+    final origin = _selectedOrigin;
+    if (origin == null) return;
+    if (origin.floor == null && origin.nodeId == null) return;
+    setState(() => _selectedOrigin = null);
   }
 
   /// 지금 화면이 "건물 안"을 보고 있는지. 실내 탭이거나, 야외 탭이어도 실내
@@ -543,7 +558,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
     //   - origin이 매장이면(길찾기 시트에서 출발지로 고름) 그 매장의 노드
     // 후자를 걷기 경로(TMAP)로 보내면 건물 안 두 지점 사이에 직선이 그려져
     // 명백히 틀린 결과가 나오므로, 실내 노드 정보가 있으면 실내 라우팅으로 보낸다.
+    //
+    // **오버레이가 켜져 있을 때만** 이 분기를 탄다([_indoorContextActive]).
+    // 오버레이를 닫고 야외 지도를 보는 중이라면 사용자의 위치는 GPS이지 실내
+    // 앵커가 아니다. 그때도 실내 라우팅으로 보내면, 화면에는 GPS 위치 아이콘이
+    // 있는데 경로만 예전에 찍어둔 건물 안 앵커에서 뻗어 나간다.
     if (_mode == MapMode.outdoor &&
+        _indoorContextActive &&
         destination.floor != null &&
         destination.nodeId != null &&
         // origin이 있다면 그것도 실내 노드여야 실내 그래프로 이을 수 있다.
@@ -569,10 +590,17 @@ class _MapShellScreenState extends State<MapShellScreen> {
     }
 
     if (_mode == MapMode.outdoor) {
+      // 야외 걷기 경로(TMAP)는 출발지도 야외 좌표여야 한다. 실내 지점이 출발지로
+      // 남아 있으면(실내에서 "출발지로 설정"한 매장을 그대로 들고 나온 경우)
+      // 버리고 GPS 현재 위치에서 시작한다 — 건물 안 좌표를 그대로 보내면 실내
+      // 두 지점 사이에 직선이 그려진다. [_dropIndoorOriginIfOutdoors]가 상태도
+      // 함께 비우지만, 그 경로를 타지 않은 호출(모드 전환 없이 들어온 경우)에도
+      // 같은 규칙이 적용되도록 여기서 한 번 더 막는다.
+      final indoorOrigin = origin?.floor != null || origin?.nodeId != null;
       await _outdoorKey.currentState?.showRouteTo(
         destination.point,
         label: destination.title,
-        origin: origin?.point,
+        origin: indoorOrigin ? null : origin?.point,
       );
       return;
     }
@@ -741,6 +769,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
                 onIndoorEnteredChanged: (entered) {
                   if (_outdoorIndoorEntered == entered) return;
                   setState(() => _outdoorIndoorEntered = entered);
+                  // 오버레이를 닫고 야외로 나온 순간부터는 위치·출발지가 GPS다.
+                  if (!entered) _dropIndoorOriginIfOutdoors();
                 },
                 onStoreTap: _onMapStoreTap,
                 onLocationAnchored: _onLocationAnchored,
