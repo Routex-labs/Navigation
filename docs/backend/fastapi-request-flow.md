@@ -169,8 +169,9 @@ flowchart TD
 
     bq["building_queries"]
     tq["tile_queries"]
-    qs["query_search<br/>경량 매칭"]
+    qs["query_search<br/>경량 매칭 + 탐색(discover)"]
     mo["query_morph<br/>형태소 정규화"]
+    sf["store_facets<br/>facet 파생·intent 해석"]
     sem["query_semantic<br/>FAISS 임베딩"]
     gt["geo_transform"]
 
@@ -179,13 +180,14 @@ flowchart TD
     p1 & p3 --> qs
     p2 --> qs
     qs --> mo
-    qs -. "경량 0건 또는 모호한 tier 2" .-> sem
+    p2 -. "탐색 facet 좁힘·질문" .-> sf
+    qs -. "탐색 후보 0건" .-> sem
     sem -. "매장 로딩만" .-> qs
     bq & tq & qs --> gt
 
     classDef q fill:#2a9d8f,color:#fff,stroke:none
     classDef shared fill:#e9c46a,color:#212529,stroke:none
-    class bq,tq,qs,mo,sem q
+    class bq,tq,qs,mo,sf,sem q
     class gt shared
 ```
 
@@ -217,52 +219,75 @@ flowchart TD
 ```
 
 `GET /buildings/{b}/floors/{f}/graph`는 같은 `navigation_graph`만 따로 내려주는
-경량 엔드포인트다. 서버는 두 경로 모두에서 **그래프를 조회해 내려줄 뿐 탐색하지 않는다.**
+경량 엔드포인트이고, `GET /buildings/{b}/graph?vertical=auto|elevator|escalator`는 전 층
+노드 + 층 내부 간선 + 수직 전이 간선을 합친 **건물 전체 그래프**(층 간 경로 입력)를 내려준다.
+서버는 어느 경로에서도 **그래프를 조회해 내려줄 뿐 탐색하지 않는다.**
 
 > **왜 서버가 경로를 계산하지 않나.** 클라이언트가 층 지도 응답의 `navigation_graph`로
 > 온디바이스 탐색을 이미 수행하므로 서버측 라우팅은 죽은 코드였다. 서버측 Dijkstra와
 > `/route` 엔드포인트를 제거했다. 그래프 파이프라인(Node/Edge, 시드, 층 간 전이 간선,
 > `/graph`, 응답의 `navigation_graph`)은 클라이언트의 라우팅 입력으로 그대로 남아 있다.
-> 층 간(건물 전체) 경로는 현재 범위에서 빠졌고, 클라이언트는 단일 층 탐색만 수행한다.
+> 층 간(건물 전체) 경로도 클라이언트가 온디바이스로 계산한다 — 서버는 위 건물 전체 그래프를
+> 내려줄 뿐이고, 층별 세그먼트 분할과 경로 탐색은 `client/lib/domain/multi_floor_router.dart`가
+> 한다. 한 층 안 경로는 층 지도의 `navigation_graph`로, 층 간 경로는 건물 전체 그래프로 계산한다.
 
-### 4-2. 자연어 질의 — 하이브리드 2단 경로
+### 4-2. 자연어 탐색 질의 — `discover()`의 mode 판정
 
-`POST /query/ai`는 경량 문자열 매칭을 먼저 시도한다. 0건이거나 최상위 tier 2가
-서로 다른 매장명을 여럿 잡으면 임베딩 의미 검색으로 넘어간다.
+`POST /query/ai`는 경량 문자열 매칭을 먼저 시도하고, 확정하지 못하면 후보 집합을 만들어
+되묻거나(clarify) 여러 후보를 추천한다(results). 응답 계약은 destination과 **다르다** —
+단일 매장이 아니라 `mode`(direct·clarify·results·no_match·degraded) + 질문/선택지 + 여러
+후보를 담은 `DiscoveryResponse`이고, `mode`가 화면 분기의 유일한 근거다. 진입점은
+`query_search.discover()`다.
 
 ```mermaid
 flowchart TD
-    req["POST /query/ai<br/>{text, building_id, current_floor_id?}"]
-    norm["정규화: 구두점 후보 → 꼬리 제거 → Kiwi<br/>'화장실이 어디야?' → '화장실'"]
-    rank["1차: _rank() — 정확 이름·동의어·부분 매칭"]
-    hit{"경량에서 확정 가능한가?"}
-    ok1["status=ok<br/>임베딩까지 안 감 (torch 로드 회피)"]
-    imp["지연 import: query_semantic<br/>(AI 경로만 torch를 로드)"]
-    sem["2차: semantic_search()<br/>FAISS IndexFlatIP 코사인 검색"]
-    th{"최상위 ≥ 0.50?"}
-    ok2["status=ok"]
-    no["status=no_match<br/>엉뚱한 매장 반환 금지"]
+    req["POST /query/ai<br/>{text, building_id, current_floor_id?,<br/>selected_facets?, show_all?}"]
+    light["경량 1차: _rank_with_candidate()<br/>정확 이름·동의어·카테고리"]
+    conf{"선택 없고<br/>단일 대상 확정?"}
+    direct["mode=direct — 1건 바로 안내"]
+    pool["후보 집합<br/>경량 후보 우선, 없으면 2차"]
+    imp["지연 import: query_semantic<br/>(탐색 후보 0건일 때만 torch 로드)"]
+    sem["2차: search_many()<br/>FAISS 코사인, 임계값 0.50"]
+    narrow["selected_facets로 좁힘<br/>0건이면 선택 해제(막다른 흐름 방지)"]
+    dedupe["_dedupe_by_name → candidates"]
+    empty{"candidates 0건?"}
+    none["mode=no_match / degraded"]
+    branch{"후보 > 5 & 구분력 있는 축?<br/>(show_all이면 clarify 건너뜀)"}
+    clarify["mode=clarify<br/>질문 + 옵션 + 초기 후보 3건"]
+    results["mode=results<br/>다양성 보정 상위 5건"]
 
-    req --> norm --> rank --> hit
-    hit -->|"Yes: 정확·카테고리·단일 이름 tier 2"| ok1
-    hit -->|"No: 0건·서로 다른 이름 tier 2 다수"| imp --> sem --> th
-    th -->|Yes| ok2
-    th -->|No| no
+    req --> light --> conf
+    conf -->|"예"| direct
+    conf -->|"아니오"| pool
+    pool -. "경량 후보 없음" .-> imp --> sem --> narrow
+    pool --> narrow --> dedupe --> empty
+    empty -->|"예"| none
+    empty -->|"아니오"| branch
+    branch -->|"예"| clarify
+    branch -->|"아니오"| results
 
     classDef good fill:#2a9d8f,color:#fff,stroke:none
     classDef bad fill:#e76f51,color:#fff,stroke:none
-    class ok1,ok2 good
-    class no bad
+    class direct,clarify,results good
+    class none bad
 ```
 
-- **브랜드명은 문자열 일치가 임베딩보다 정확하고 안전하다.** 그래서 1차가 먼저다.
+- **stateless 계약.** 서버가 대화 세션을 만들지 않는다. 클라이언트가 매 요청에 원문과
+  지금까지의 `selected_facets`(이전 clarify에서 고른 값)·`show_all`(전체 보기)을 다시 실어
+  보낸다. 그래서 `/query/ai` 요청 모델(`AiRequest`)만 destination·info와 달리 이 두 필드를 더 받는다.
+- **브랜드명은 문자열 일치가 임베딩보다 정확하고 안전하다.** 그래서 경량 1차가 먼저다.
+  2차 의미 검색(`search_many`)은 경량 후보가 **0건일 때만** torch를 지연 import해 돈다.
+- **임계값 0.50은 정밀도 우선 선택이다.** 길찾기에서는 틀린 매장을 안내하는 것이
+  "다시 말해 주세요"보다 나쁘다. 근거는 [`docs/backend/native/FAISS.md`](native/FAISS.md) 11-1절.
+  의미 검색 기능 자체를 못 쓰면 `mode=degraded`로 상태를 명시한다.
 - **정규화는 1차에만 적용된다.** 2차에는 질의 **원문**이 그대로 전달된다 — 문장 임베딩은 조사·어미가
   붙은 문장을 그대로 처리하는 게 낫고, 인덱스 텍스트를 바꾸면 임계값 튜닝 근거가 무효가 된다.
   형태소 정규화 설계는 [`docs/backend/native/KIWI.md`](native/KIWI.md).
-- **임계값 0.50은 정밀도 우선 선택이다.** 길찾기에서는 틀린 매장을 안내하는 것이
-  "다시 말해 주세요"보다 나쁘다. 근거는 [`docs/backend/native/FAISS.md`](native/FAISS.md) 11-1절.
-- `current_floor_id`는 **층 라벨("B2")과 내부 id("FL-…") 둘 다** 받는다. 클라이언트는
-  사용자가 보는 라벨만 들고 있기 때문이다.
+- `current_floor_id`는 **층 라벨("B2")과 내부 id("FL-…") 둘 다** 받는다. 1차 시설 질의
+  ("화장실")는 현재 층 스코프를 유지해 그 층에서 확정하고, 탐색 후보 집합은 건물 전체를 보되
+  같은 이름이 현재 층에도 있으면 그 층을 대표로 고른다.
+- 상한은 `MAX_DISCOVERY_MATCHES=5`(최종 추천), `CLARIFY_PREVIEW_MATCHES=3`(질문과 함께 보일
+  초기 후보). 전체 설계는 [`docs/backend/native/conversational-discovery.md`](native/conversational-discovery.md) 8절.
 
 ### 계층별 책임
 
@@ -362,9 +387,11 @@ def get_db() -> Iterator[Session]:
 | Pydantic 모델 타입 (`body: DestinationRequest`) | 요청 바디 JSON | `@RequestBody` |
 | `Depends(...)` | DI | `@Autowired` |
 
-검증 실패는 핸들러 실행 전에 **422**로 차단된다. 예: `/query/destination`의
-`QueryText`의 `Field(min_length=1, max_length=200)`와 `AfterValidator(_reject_blank_text)`는
-빈 문자열·공백-only·과도하게 긴 질의를 핸들러 도달 전에 막는다. 세 `/query` 요청 모델이 같은 타입을 쓴다.
+검증 실패는 핸들러 실행 전에 **422**로 차단된다. 예: 세 `/query` 요청이 공유하는 `text`
+필드 타입 `QueryText`의 `Field(min_length=1, max_length=MAX_QUERY_LENGTH)`(현재 200)와
+`AfterValidator(_reject_blank_text)`는 빈 문자열·공백-only·과도하게 긴 질의를 핸들러 도달 전에
+막는다. `text` 타입은 셋이 같지만 요청 모델이 완전히 같지는 않다 — `/query/ai`의 `AiRequest`만
+탐색용 `selected_facets`·`show_all`을 더 받고, destination·info는 구조가 같다.
 ORM 엔티티(`models/`)와 HTTP 계약(`dto/`)을 분리하는 이유는 Entity/DTO 분리 이유와 같다.
 
 ### 6단계. ★ sync vs async (가장 중요)
