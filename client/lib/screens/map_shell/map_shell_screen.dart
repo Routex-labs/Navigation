@@ -478,6 +478,22 @@ class _MapShellScreenState extends State<MapShellScreen> {
     await _startRoute(origin: result.origin, destination: result.destination!);
   }
 
+  /// 지도 화면이 "사용자 위치를 새로 잡았다"고 알려올 때. 기억해둔 출발지
+  /// 매장을 버려서, 다음 길찾기가 **방금 잡은 위치**에서 출발하게 한다.
+  ///
+  /// 이게 없으면 이런 상태가 된다: 매장 A를 출발지로 지정해 길을 찾은 뒤,
+  /// "위치 지정"으로 지금 서 있는 곳을 다시 찍고 다른 매장까지 길을 찾으면
+  /// 경로가 여전히 A에서 출발한다. 화면에는 새로 찍은 위치 아이콘이 있는데
+  /// 경로만 엉뚱한 데서 시작하니, 사용자는 위치 지정이 무시됐다고 본다.
+  ///
+  /// 출발지를 "매장 선택"으로 갱신하는 경로는 [_showStoreInfo]·[_openDirections]가
+  /// 이미 [_selectedOrigin]을 새 값으로 덮어쓴다. 그래서 두 경로 모두 "마지막에
+  /// 갱신한 위치"가 출발지가 된다.
+  void _onLocationAnchored() {
+    if (_selectedOrigin == null) return;
+    setState(() => _selectedOrigin = null);
+  }
+
   /// 지도에서 도착지 고르기를 끝낸다(선택 완료·취소 공통).
   void _stopPickingDestinationOnMap() {
     if (!_pickingDestinationOnMap) return;
@@ -727,6 +743,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                   setState(() => _outdoorIndoorEntered = entered);
                 },
                 onStoreTap: _onMapStoreTap,
+                onLocationAnchored: _onLocationAnchored,
                 // 실내 화면과 같은 목록을 넘긴다. 야외 지도도 실내 진입
                 // 오버레이가 켜지면 층 선택기·위치 지정을 함께 쓰므로, 상단
                 // 검색창이나 하단 바를 누른 탭이 지도 탭으로 새어들어가면
@@ -746,6 +763,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                 onRouteVisibleChanged: (visible) =>
                     setState(() => _indoorRouteVisible = visible),
                 onStoreTap: _onMapStoreTap,
+                onLocationAnchored: _onLocationAnchored,
                 onPlacingLocationChanged: (placing) {
                   if (_indoorPlacingLocation == placing) return;
                   setState(() => _indoorPlacingLocation = placing);

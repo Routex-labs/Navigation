@@ -467,6 +467,7 @@ class OutdoorMapBody extends StatefulWidget {
     this.onPlacingLocationChanged,
     this.onIndoorEnteredChanged,
     this.onStoreTap,
+    this.onLocationAnchored,
     this.outerOverlayKeys = const [],
   });
 
@@ -492,6 +493,14 @@ class OutdoorMapBody extends StatefulWidget {
   /// 실내 진입 오버레이에서 매장 폴리곤을 탭했을 때 호출된다. 상위
   /// (MapShellScreen)가 실내 화면과 동일한 매장 정보 시트를 띄운다.
   final ValueChanged<PoiSearchResult>? onStoreTap;
+
+  /// 사용자의 현재 위치가 새로 잡혔을 때 호출된다 — "위치 지정"으로 지도를
+  /// 탭했을 때와 입구 자동 배치가 여기에 해당한다.
+  ///
+  /// 상위(MapShellScreen)는 이 신호로 **기억해둔 출발지 매장을 버린다.** 그러지
+  /// 않으면 매장을 출발지로 지정해 길찾기를 한 뒤 위치를 다시 잡아도, 다음
+  /// 길찾기가 방금 잡은 위치가 아니라 예전에 고른 매장에서 출발한다.
+  final VoidCallback? onLocationAnchored;
 
   /// 상위(MapShellScreen)가 지도 위에 얹은 오버레이(검색창·저장한 장소 pill·
   /// 카테고리 chip 열·하단 공용 바 등)의 GlobalKey들. 이 영역 안의 탭은
@@ -1311,6 +1320,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
     _syncPdrCurrentLayer();
     unawaited(_syncDebugPdrLayers());
+    // 입구에서 위치를 새로 잡았으므로, 건물에 들어오기 전에 골라둔 출발지 매장은
+    // 더 이상 "지금 내가 있는 곳"이 아니다. 상위가 그 값을 버리게 알린다.
+    widget.onLocationAnchored?.call();
     _replaceSnack('입구를 기준으로 실내 위치를 잡았습니다. 걸음 추적을 시작합니다.');
   }
 
@@ -1692,7 +1704,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
 
     if (!await _bindPdrSessionToFloor(floor)) return;
-    await _confirmPdrAnchor(floorPoint);
+    await _confirmPdrAnchor(floorPoint, notifyLocationChanged: false);
   }
 
   /// 같은 층 안에서 계산한 실내 경로를 지도에 얹는다. 활성 층이 목적지 층과
@@ -3587,7 +3599,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await _confirmPdrAnchor(snapped.point);
   }
 
-  Future<void> _confirmPdrAnchor(PdrLocalPoint floorPoint) async {
+  /// [notifyLocationChanged]는 "사용자의 현재 위치가 새로 잡혔다"를 상위에
+  /// 알릴지다. 기본은 알린다 — 지도 탭·입구 자동 배치처럼 **새 위치가 생긴**
+  /// 경우이기 때문이다. 출발지 매장을 따라 찍는 경우([_anchorAtStoreOrigin])만
+  /// 끈다. 그쪽은 상위가 방금 정한 출발지를 되짚어 찍는 것이라, 다시 알리면
+  /// 상위가 그 출발지를 스스로 버리게 된다.
+  Future<void> _confirmPdrAnchor(
+    PdrLocalPoint floorPoint, {
+    bool notifyLocationChanged = true,
+  }) async {
     final graph = _floorGraph;
     final axes = graph == null
         ? const PdrToFloorAxes.identity()
@@ -3615,6 +3635,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _setPlacingAnchor(false);
     _syncPdrCurrentLayer();
     unawaited(_syncDebugPdrLayers());
+    if (notifyLocationChanged) widget.onLocationAnchored?.call();
     // 배치가 끝났다는 안내는 따로 띄우지 않는다. 지도에 위치 마커가 바로
     // 찍히고 안내 배너가 사라지는 것으로 이미 결과가 보이는데, 토스트까지
     // 겹치면 방금 지정한 지점을 가린다.

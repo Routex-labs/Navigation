@@ -250,6 +250,83 @@ void main() {
       closeTo(before.anchorLocalM.northM, 1e-9),
     );
   });
+
+  testWidgets('수동으로 위치를 잡으면 "위치가 갱신됐다"고 상위에 알린다', (
+    WidgetTester tester,
+  ) async {
+    // 사용자가 보고한 순서: 매장 A를 출발지로 길을 찾은 뒤, 지도를 탭해 지금
+    // 서 있는 곳을 다시 찍고 다시 길을 찾으면 경로가 방금 찍은 자리에서
+    // 출발해야 한다. 상위(MapShellScreen)는 이 신호로 기억해둔 매장 A를 버린다.
+    // 신호가 안 오면 새 위치 아이콘과 경로 시작점이 따로 논다.
+    var anchored = 0;
+    final key = GlobalKey<IndoorMapBodyState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: IndoorMapBody(
+            key: key,
+            buildingId: demoBuildingId,
+            onLocationAnchored: () => anchored++,
+          ),
+        ),
+      ),
+    );
+    await drain(tester);
+
+    await key.currentState!.startLocationPlacement();
+    await drain(tester);
+    // ignore: invalid_use_of_visible_for_testing_member
+    final handled = key.currentState!.handleMapPressForTest(wgs84(18, 52));
+    await drain(tester);
+    if (find.text('위쪽').evaluate().isNotEmpty) {
+      await tester.tap(find.text('위쪽'));
+      await drain(tester);
+    }
+
+    expect(handled, isTrue);
+    expect(anchored, 1);
+    // 새로 찍은 자리(n-c: 18, 52)가 반영돼야 한다.
+    final anchor = indoorNavigationDriver.currentCalibration.anchor!;
+    expect(anchor.anchorLocalM.eastM, closeTo(18, 0.5));
+    expect(anchor.anchorLocalM.northM, closeTo(52, 0.5));
+  });
+
+  testWidgets('출발지 매장을 따라 찍는 앵커는 갱신 신호를 보내지 않는다', (
+    WidgetTester tester,
+  ) async {
+    // 이때의 앵커는 상위가 방금 정한 출발지를 되짚어 찍는 것이다. 여기서도
+    // 신호를 보내면 상위가 그 출발지를 스스로 버려, 매장을 골라도 다음 길찾기가
+    // "현재 위치"에서 출발하게 된다.
+    var anchored = 0;
+    final key = GlobalKey<IndoorMapBodyState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: IndoorMapBody(
+            key: key,
+            buildingId: demoBuildingId,
+            onLocationAnchored: () => anchored++,
+          ),
+        ),
+      ),
+    );
+    await drain(tester);
+
+    await startRoute(
+      tester,
+      key.currentState!,
+      PoiSearchResult(
+        name: '올리브영',
+        floor: '1F',
+        point: wgs84(48, 22),
+        nodeId: 'n-b',
+      ),
+      origin: storeOn('1F'),
+    );
+
+    expect(indoorNavigationDriver.currentCalibration.canRenderPosition, isTrue);
+    expect(anchored, 0);
+  });
 }
 
 /// 두 층 모두 같은 navigation_graph를 내려주는 가짜 저장소.

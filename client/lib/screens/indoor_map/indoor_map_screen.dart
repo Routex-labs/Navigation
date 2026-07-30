@@ -78,6 +78,7 @@ class IndoorMapBody extends StatefulWidget {
     this.onRouteVisibleChanged,
     this.onStoreTap,
     this.onPlacingLocationChanged,
+    this.onLocationAnchored,
     this.outerOverlayKeys = const [],
   });
 
@@ -95,6 +96,14 @@ class IndoorMapBody extends StatefulWidget {
   /// 상위(MapShellScreen)가 이 값으로 하단 바의 "위치 지정" 버튼을 눌린
   /// 상태로 표시해서, 사용자가 다음 동작(지도 탭)을 알 수 있게 한다.
   final ValueChanged<bool>? onPlacingLocationChanged;
+
+  /// 사용자의 현재 위치가 새로 잡혔을 때 호출된다 — "위치 지정"으로 지도를
+  /// 탭했을 때가 여기에 해당한다.
+  ///
+  /// 상위(MapShellScreen)는 이 신호로 **기억해둔 출발지 매장을 버린다.** 그러지
+  /// 않으면 매장을 출발지로 지정해 길찾기를 한 뒤 위치를 다시 잡아도, 다음
+  /// 길찾기가 방금 잡은 위치가 아니라 예전에 고른 매장에서 출발한다.
+  final VoidCallback? onLocationAnchored;
 
   /// 상위(MapShellScreen)가 지도 위에 얹은 오버레이(검색창·저장한 장소 pill·
   /// 하단 공용 바 등)의 GlobalKey들. 이 영역 안의 탭은 뒤의 매장 선택으로
@@ -1007,8 +1016,17 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     }
 
     if (!await _bindPdrSessionToFloor(floor)) return;
-    await _confirmPdrAnchor(floorPoint);
+    await _confirmPdrAnchor(floorPoint, notifyLocationChanged: false);
   }
+
+  /// 지도 탭으로 앵커를 배치하는 경로의 테스트 진입점.
+  ///
+  /// FloorPlanView는 위젯 테스트에서 실제 탭 좌표를 위경도로 되돌려 주지
+  /// 않으므로, 실기기에서 쓰이는 것과 **같은 함수**를 직접 부른다 — 테스트용
+  /// 축약 경로를 따로 두면 정작 검증하려는 분기를 우회한다. 야외 화면의
+  /// `handleMapClickForTest`와 같은 목적이다.
+  @visibleForTesting
+  bool handleMapPressForTest(ll.LatLng point) => _onMapPressedForPdr(point);
 
   bool _onMapPressedForPdr(ll.LatLng point) {
     if (!_placingPdrAnchor) return false;
@@ -1035,7 +1053,15 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     return true;
   }
 
-  Future<void> _confirmPdrAnchor(PdrLocalPoint floorPoint) async {
+  /// [notifyLocationChanged]는 "사용자의 현재 위치가 새로 잡혔다"를 상위에
+  /// 알릴지다. 기본은 알린다 — 지도 탭처럼 **새 위치가 생긴** 경우이기 때문이다.
+  /// 출발지 매장을 따라 찍는 경우([_anchorAtStoreOrigin])만 끈다. 그쪽은 상위가
+  /// 방금 정한 출발지를 되짚어 찍는 것이라, 다시 알리면 상위가 그 출발지를
+  /// 스스로 버리게 된다.
+  Future<void> _confirmPdrAnchor(
+    PdrLocalPoint floorPoint, {
+    bool notifyLocationChanged = true,
+  }) async {
     final graph = _floorGraph;
     final axes = graph == null
         ? const PdrToFloorAxes.identity()
@@ -1060,6 +1086,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     }
     if (!mounted) return;
     _setPlacingAnchor(false);
+    if (notifyLocationChanged) widget.onLocationAnchored?.call();
     // 배치가 끝났다는 안내는 따로 띄우지 않는다. 도면에 위치 마커가 바로
     // 찍히고 안내 배너가 사라지는 것으로 이미 결과가 보이는데, 토스트까지
     // 겹치면 방금 지정한 지점을 가린다.
