@@ -10,91 +10,23 @@
 
 ## 프로젝트 세션 규칙
 
-이 저장소는 Flutter 클라이언트 + FastAPI·SQLAlchemy·SQLite 백엔드 데모다. 개발자는 Windows(PowerShell)와 macOS 양쪽에 있다. 작업할 때:
+이 저장소는 Flutter 클라이언트 + FastAPI·SQLAlchemy·SQLite 백엔드 데모다. 개발자는 Windows(PowerShell)와 macOS 양쪽에 있다.
 
-- **개발 실행은 사용자가 볼 수 있는 창 2개(백엔드·프론트)를 foreground로 띄우고, 동시에 로그를 파일로 tee 해서 에이전트도 추적한다.** 백그라운드로 숨기지 않는다.
-  - 쉘 버전(PowerShell 5.1/7, bash/zsh)에 따라 `&&`·`;` 체이닝이 깨질 수 있으므로 **명령은 체이닝하지 말고 한 줄씩 순서대로 실행한다.** `cd A && B` 대신 창을 해당 폴더에서 연 뒤 명령만 실행한다. (파이프 `|`는 버전 무관하게 동작하므로 tee에는 파이프를 쓴다.)
-
-  **1) 창 먼저 연다 (해당 작업 폴더에서 + UTF-8 고정)**
-    - **저장소 위치를 하드코딩하지 않는다.** 먼저 현재 저장소의 루트를 찾아 이후 창의 작업 폴더 기준으로 쓴다. 다른 로컬에서는 이 값이 예를 들어 `C:\work\Navigation` 또는 `~/src/Navigation`일 수 있다.
+- **백엔드는 배포된 Cloud Run에 붙고, 로컬에선 클라이언트만 띄운다.** 백엔드를 직접 고치지 않는 한 로컬 서버는 실행하지 않는다.
+  - 최초 1회 `client/config.example.json`을 `config.local.json`으로 복사하고 배포 백엔드 주소(`API_BASE_URL`)·키를 채운다. (`config.local.json`은 `.gitignore`라 커밋되지 않는다.)
+  - `client/` 폴더에서 실행한다. 창은 foreground로 띄우고(백그라운드로 숨기지 않는다), 명령은 체이닝하지 말고 한 줄씩 실행한다(쉘 버전에 따라 `&&`·`;`가 깨질 수 있음).
     ```powershell
-    # Windows PowerShell — 저장소 안에서 실행
-    $repoRoot = git rev-parse --show-toplevel
-    $backendRoot = Join-Path $repoRoot 'backend'
-    $clientRoot = Join-Path $repoRoot 'client'
-    ```
-    ```bash
-    # macOS/Linux shell — 저장소 안에서 실행
-    repo_root="$(git rev-parse --show-toplevel)"
-    backend_root="$repo_root/backend"
-    client_root="$repo_root/client"
-    ```
-    - Python/flutter/uvicorn 출력에 한글이 섞이므로 **콘솔·출력·로그 인코딩을 UTF-8로 고정**한다. 안 하면 로그가 UTF-16이나 깨진 문자로 남는다. 창을 열 때 프렐류드로 박아 둔다.
-    ```powershell
-    # Windows — 백엔드 창(backend), 프론트 창(client). -Command로 UTF-8 고정 후 -NoExit로 남는다.
-    Start-Process powershell -ArgumentList '-NoExit','-Command','[Console]::OutputEncoding=[Text.Encoding]::UTF8; $OutputEncoding=[Text.Encoding]::UTF8; $PSDefaultParameterValues[''Out-File:Encoding'']=''utf8''' -WorkingDirectory $backendRoot
-    Start-Process powershell -ArgumentList '-NoExit','-Command','[Console]::OutputEncoding=[Text.Encoding]::UTF8; $OutputEncoding=[Text.Encoding]::UTF8; $PSDefaultParameterValues[''Out-File:Encoding'']=''utf8''' -WorkingDirectory $clientRoot
-    ```
-    ```bash
-    # macOS — Terminal 창 2개 (macOS 터미널은 기본 UTF-8이라 별도 설정 불필요)
-    osascript -e "tell app \"Terminal\" to do script \"cd '$backend_root'\""
-    osascript -e "tell app \"Terminal\" to do script \"cd '$client_root'\""
-    ```
-
-  **2) 백엔드 창에서 순서대로 실행 — 로컬 Python이 기본**
-    - Docker 이미지 콜드 빌드·기동 비용을 피하기 위해 **일상 개발과 기능 검증은 로컬 가상환경으로 실행한다.**
-    - 최초 1회 또는 `requirements*.txt`가 바뀌었을 때:
-    ```powershell
-    # Windows (backend 폴더)
-    py -3.12 -m venv .venv
-    .\.venv\Scripts\Activate.ps1
-    python -m pip install -r requirements.txt
-    python -m scripts.warm_embedding_model
-    ```
-    ```bash
-    # macOS (backend 폴더)
-    python3 -m venv .venv
-    source .venv/bin/activate
-    python -m pip install -r requirements.txt
-    python -m scripts.warm_embedding_model
-    ```
-    - `warm_embedding_model`은 `/query/ai`용 임베딩 모델(약 420MB)을 로컬 HF 캐시에 미리 받아 둔다. **빼먹으면 첫 AI 질의가 다운로드를 통째로 기다린다**(실측 3분 29초, 그동안 프론트는 "찾는 중…"만 돈다). 캐시가 이미 있으면 즉시 끝난다.
-    - 검증할 때마다:
-    ```powershell
-    # Windows — 콘솔엔 전부, 파일엔 WARNING/ERROR + 트레이스백만. PS 5.1 Tee-Object는 UTF-16으로 쓰므로 패스스루로 tee한다.
-    .\.venv\Scripts\Activate.ps1
-    python -m scripts.seed.reset_and_seed
-    $env:NAV_WARM_EMBEDDING = '1'
-    python -m uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8001 2>&1 | ForEach-Object { $_; if ($_ -match '^(\d{4}-\d\d-\d\d|INFO:|WARNING:|ERROR:|CRITICAL:|DEBUG:)') { $keep = ($_ -cmatch 'ERROR|WARNING|CRITICAL') }; if ($keep) { $_ | Out-File ..\backend-local.log -Append -Encoding utf8 } }
-    ```
-    ```bash
-    # macOS — tee로 콘솔엔 전부, awk로 파일엔 WARNING/ERROR + 트레이스백만
-    source .venv/bin/activate
-    python -m scripts.seed.reset_and_seed
-    export NAV_WARM_EMBEDDING=1
-    python -m uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8001 2>&1 | tee >(awk '/^([0-9]{4}-[0-9][0-9]-[0-9][0-9]|INFO:|WARNING:|ERROR:|CRITICAL:|DEBUG:)/{keep=/ERROR|WARNING|CRITICAL/} keep' > ../backend-local.log)
-    ```
-    - `NAV_WARM_EMBEDDING=1`은 기동 직후 백그라운드로 임베딩 모델을 올려 첫 `/query/ai`의 로드 대기(캐시 히트여도 약 6.5초)를 없앤다. 기본값이 꺼짐이라 **안 켜면 재시작할 때마다 첫 AI 질의가 그 시간을 뒤집어쓴다.** AI 질의를 안 건드리는 작업이면 생략해도 되지만, 켜 두면 400MB대 메모리를 상주시킨다는 점만 알아 둔다.
-    - `--reload-dir app`으로 **감시 범위를 `app/` 코드로만 한정**한다. 안 그러면 `tests/`·`resources/` 편집도 리로드를 트리거해 서버가 리로드되다 죽는다(Windows에서 특히).
-
-  **2') Docker는 배포 준비 때만 사용**
-    - 배포 이미지·컨테이너 환경 호환성을 명시적으로 확인할 때만 저장소 루트에서 `docker compose up --build backend`를 실행한다.
-    - 평소 기능 검증에서는 Docker 가용 여부를 확인하지 않고 위 로컬 Python 경로를 사용한다. 실제 Cloud Run 배포 절차는 `docs/guide/gcp-instance.md`를 따른다.
-
-  **3) 프론트 창에서 실행 (client 폴더에서)**
-    ```powershell
-    # Windows — UTF-8 로그 패스스루
-    flutter run -d chrome 2>&1 | ForEach-Object { $_; $_ | Out-File frontend.log -Append -Encoding utf8 }
+    # Windows — UTF-8 콘솔 창에서. 로그는 패스스루로 frontend.log에 남긴다(PS 5.1 Tee-Object는 UTF-16).
+    flutter run --dart-define-from-file=config.local.json 2>&1 | ForEach-Object { $_; $_ | Out-File frontend.log -Append -Encoding utf8 }
     ```
     ```bash
     # macOS
-    flutter run -d chrome 2>&1 | tee frontend.log
+    flutter run --dart-define-from-file=config.local.json 2>&1 | tee frontend.log
     ```
+  - 사용자는 창에서 실시간 로그를, 에이전트는 `frontend.log`(`.gitignore`)를 읽어 추적한다. 주입 값은 컴파일 타임에 박히므로 URL·키를 바꾸면 hot reload가 아니라 `flutter run`을 재시작한다.
+  - 한글 로그가 깨지지 않게 Windows는 콘솔·출력 인코딩을 UTF-8로 고정한 창에서 실행하고, 소스·리소스 JSON도 UTF-8로 저장한다.
 
-  - **백엔드·프론트 창 모두 UTF-8로 실행한다.** Windows는 (a) 창 프렐류드로 콘솔 인코딩을 UTF-8로 고정하고(콘솔 표시·네이티브 출력 디코딩), (b) 로그 파일은 `Tee-Object` 대신 **패스스루 `... | ForEach-Object { $_; ... | Out-File <log> -Append -Encoding utf8 }`** 로 쓴다(PS 5.1 Tee-Object는 파일을 UTF-16으로 씀). 소스 파일·리소스 JSON도 UTF-8로 저장한다. 한글 로그가 UTF-16/깨짐으로 남으면 에이전트가 로그를 못 읽는다.
-  - 사용자는 창에서 실시간 로그를 보고, 에이전트는 `backend-local.log`·`frontend.log`를 읽어 추적한다. (두 로그 파일은 `.gitignore`에 둔다.)
-  - **백엔드 로그는 콘솔엔 전부 남기고, 파일(`backend-local.log`)엔 `WARNING`/`ERROR`/`CRITICAL` 줄과 그 뒤 트레이스백만 남긴다.** uvicorn access 로그(요청·상태 코드)는 INFO라 파일엔 안 쌓이고 창에서만 실시간으로 본다 — 파일은 문제 상황만 모아 두는 용도다. 필터는 "새 로그 줄(타임스탬프/`INFO:`·`ERROR:` 등으로 시작)을 만나면 레벨을 다시 판정하고, 들여쓰기된 후속 줄(트레이스백 스택)은 직전 판정을 그대로 잇는" 방식이라 예외 스택이 잘리지 않는다. 파일에서도 요청 흐름까지 다 보고 싶으면 필터를 빼고 `... | Out-File ..\backend-local.log -Append -Encoding utf8`(mac은 `tee`)로 되돌린다.
-  - 우리 코드(`app.*`)의 예외 로깅은 `app/core/logging.py`가 잡는다: 5xx는 `ERROR`, 4xx·422 검증 실패는 `WARNING`. 미처리 500은 uvicorn.error가 트레이스백을 남긴다. 파일 기반 SQL/요청 진단 캡처(옛 `NAV_SQL_ECHO`/`NAV_HTTP_CAPTURE`)는 제거됐다 — 요청 단위 상세 로그가 필요하면 `NAV_LOG_LEVEL=DEBUG`로 실행한다.
+- **백엔드를 직접 수정·검증해야 할 때만** 로컬 Python으로 띄운다. venv·시드·uvicorn·로그 필터·Docker 절차는 [로컬 개발 가이드](docs/guide/local-development-guide.md)를, 실제 Cloud Run 배포는 [GCP 배포 문서](docs/guide/gcp-instance.md)를 따른다.
 
 - **경로 계산은 클라이언트 온디바이스(Dijkstra, `client/lib/domain/dijkstra.dart`)가 담당한다.** 서버는 그래프(nodes·edges)만 제공하며, 최단 경로 로직을 서버로 옮기지 않는다.
 - **API 계약(JSON)은 Flutter 클라이언트가 소비하는 형태를 우선으로 유지한다.** 백엔드 응답 스키마를 바꾸면 클라이언트의 모델·파싱도 함께 확인한다.
