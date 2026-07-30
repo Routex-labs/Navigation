@@ -3143,6 +3143,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         name: store.name,
         floor: floor,
         point: store.centroid,
+        placeId: store.id,
         nodeId: store.entranceNodeId,
         category: store.category,
         subcategory: store.subcategory,

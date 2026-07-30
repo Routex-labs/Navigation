@@ -89,6 +89,9 @@ class MockDestinationRepository implements DestinationRepository {
             name: store.name,
             floor: floor,
             point: store.centroid,
+            // 층 지도 응답의 매장 id라 백엔드 Store.id와 같은 값이다 —
+            // 바로 위 _toDiscoveryMatch의 합성 placeholder와 달리 실제 키다.
+            placeId: store.id,
             nodeId: store.entranceNodeId,
           ),
         );

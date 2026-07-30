@@ -2507,6 +2507,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
                 name: selected.name,
                 floor: _selectedFloor!,
                 point: selected.centroid,
+                placeId: selected.id,
                 nodeId: selected.entranceNodeId,
                 category: selected.category,
                 subcategory: selected.subcategory,
