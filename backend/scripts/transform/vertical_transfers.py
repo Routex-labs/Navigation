@@ -196,21 +196,48 @@ def _escalator_transfers(
             )
 
 
+# 샤프트의 대표 위치. 가장 최근(=바로 아래 인접 층)에 붙은 노드를 쓴다 — 정규화 잔차가
+# 작아 인접 층 위치가 다음 층 노드와 가장 잘 정렬되기 때문이다.
+def _shaft_rep(shaft: list[tuple[dict, dict]]) -> dict:
+    return shaft[-1][1]
+
+
 # 엘리베이터 노드를 층을 가로질러 같은 자리(샤프트)끼리 묶는다.
 # 반환: [[(floor, node), ...]] — 각 리스트가 한 샤프트, level 오름차순.
+#
+# 예전 방식은 "첫 대표 노드 반경 + 그 층 미포함"으로 탐욕 배치해, 입력 순서에 따라 같은
+# 샤프트가 갈라지거나 인접 샤프트에 잘못 붙었다. 여기서는 **층을 level 순서로 훑으며** 각 층의
+# 엘리베이터 노드를 기존 샤프트에 최소비용 매칭(vertical_matching)으로 추적한다. 매칭 1:1이라
+# 한 층에서 한 샤프트에 최대 하나만 붙고, 짝을 못 얻은 노드는 새 샤프트를 시작한다.
+#
+# 순수 union-find(반경 내 전부 합치기)를 쓰지 않는 이유: 나란히 붙은 엘리베이터 뱅크는
+# 서로 반경(8m) 안이라 한 덩어리로 합쳐지고, 그러면 한 층에 여러 노드가 들어가 샤프트를
+# 특정할 수 없게 된다. 층별 추적은 뱅크의 각 열을 자기 샤프트로 분리한다. 층 순서·매칭이
+# 모두 결정적이라 입력 순서를 바꿔도 결과가 같다.
 def _elevator_shafts(ordered: list[dict]) -> list[list[tuple[dict, dict]]]:
     shafts: list[list[tuple[dict, dict]]] = []
     for floor in ordered:
-        for node in _by_type(floor["nodes"], "elevator"):
-            # 이미 있는 샤프트 중 대표 노드가 반경 안이고, 그 층이 아직 안 들어간 것을 찾는다.
-            placed = False
-            for shaft in shafts:
-                rep_node = shaft[0][1]
-                if _distance(node, rep_node) <= MATCH_RADIUS_M and all(f["name"] != floor["name"] for f, _n in shaft):
-                    shaft.append((floor, node))
-                    placed = True
-                    break
-            if not placed:
+        # 새 샤프트 생성 순서까지 결정적이도록 이 층 노드를 id로 정렬해 둔다.
+        nodes = sorted(_by_type(floor["nodes"], "elevator"), key=lambda node: node["id"])
+        if not nodes:
+            continue
+
+        node_by_id = {node["id"]: node for node in nodes}
+        reps = [_shaft_rep(shaft) for shaft in shafts]  # 이 층을 붙이기 전 스냅샷
+        shaft_ids = [str(index) for index in range(len(reps))]
+
+        # b=샤프트 인덱스. 대표 위치와 반경 안이면 거리, 아니면 금지(None).
+        def cost(node_id: str, shaft_id: str, node_by_id=node_by_id, reps=reps) -> float | None:
+            distance = _distance(node_by_id[node_id], reps[int(shaft_id)])
+            return distance if distance <= MATCH_RADIUS_M else None
+
+        matched = min_cost_matching(list(node_by_id), shaft_ids, cost) if shaft_ids else []
+        matched_ids = {node_id for node_id, _shaft_id in matched}
+        for node_id, shaft_id in matched:
+            shafts[int(shaft_id)].append((floor, node_by_id[node_id]))
+        # 어느 샤프트와도 안 맞은 노드는 새 샤프트를 연다(뱅크의 새 열, 혹은 첫 층).
+        for node in nodes:
+            if node["id"] not in matched_ids:
                 shafts.append([(floor, node)])
     return shafts
 

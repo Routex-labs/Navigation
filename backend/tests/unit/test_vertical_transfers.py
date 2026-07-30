@@ -96,6 +96,28 @@ def test_엘리베이터는_샤프트_전_층쌍을_직행_연결한다():
     assert pairs == {frozenset(["1F", "2F"]), frozenset(["2F", "3F"]), frozenset(["1F", "3F"])}
 
 
+# 나란히 붙은 엘리베이터 뱅크(반경 안이라도)는 각 열이 독립 샤프트로 분리된다.
+# 순수 union-find면 한 덩어리로 뭉쳐 한 층에 여러 노드가 들어가 전부 버려진다.
+def test_인접한_엘리베이터_뱅크는_열별로_분리된다():
+    # 3m 떨어진 두 열(반경 8m 안)이 3개 층에 나란히 있다.
+    floors = [
+        _floor("1F", 1, [_elev("1F:a", 10, 10), _elev("1F:b", 13, 10)]),
+        _floor("2F", 2, [_elev("2F:a", 10, 10), _elev("2F:b", 13, 10)]),
+        _floor("3F", 3, [_elev("3F:a", 10, 10), _elev("3F:b", 13, 10)]),
+    ]
+    transfers, unresolved = vt.build_transfers(floors)
+    ele = [t for t in transfers if t["mode"] == "elevator"]
+
+    # 두 샤프트 각각 3개 층쌍(1-2,2-3,1-3) → 총 6개. 충돌로 버려진 노드가 없어야 한다.
+    assert len(ele) == 6
+    assert not [u for u in unresolved if u["mode"] == "elevator"]
+    # 각 간선은 같은 열끼리만 잇는다(a열은 a끼리, b열은 b끼리).
+    for edge in ele:
+        suffix_from = edge["from"].split(":")[1][0]
+        suffix_to = edge["to"].split(":")[1][0]
+        assert suffix_from == suffix_to, f"열이 섞였다: {edge['from']} -> {edge['to']}"
+
+
 # V2 — 층수 기반 비용: 1~2층은 에스컬레이터, 3층+는 엘리베이터가 최단.
 def test_비용모델이_층수에_따라_수단을_가른다():
     # 순수 비용 함수로 교차점을 고정한다. 에스컬 = 20×n, 엘리베 = 35 + 5×n.
