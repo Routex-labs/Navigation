@@ -3,6 +3,9 @@ import 'package:flutter/foundation.dart'
 
 /// dart-define으로 넘기면 플랫폼 무관하게 최우선 적용된다(실기기 등):
 ///   flutter run --dart-define=API_BASE_URL=http://192.168.0.10:8001
+/// 배포 URL·외부 API 키를 매번 치기 번거로우면 git에 안 올리는 로컬 파일에 모아
+/// 한 번에 주입한다(형식은 client/config.example.json 참고):
+///   flutter run --dart-define-from-file=config.local.json
 const _apiBaseUrlOverride = String.fromEnvironment('API_BASE_URL');
 
 /// 안드로이드 에뮬레이터는 호스트의 localhost를 `10.0.2.2`로 가리켜야 접속되고,

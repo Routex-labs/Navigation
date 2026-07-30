@@ -1,3 +1,7 @@
+# 로컬 전용 dart-define 설정 (배포 URL·TMAP·VWorld 키 등, git에 올리지 않는다)
+# 실제 값은 config.local.json 에 두고, 형식은 config.example.json 을 커밋해 공유한다.
+config.local.json
+
 # Miscellaneous
 *.class
 *.log
