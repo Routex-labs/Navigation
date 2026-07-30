@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/core/service_locator.dart';
+import 'package:navigation_client/features/indoor_navigation/platform/android_pdr_motion_source.dart';
+import 'package:navigation_client/features/indoor_navigation/platform/ios_pdr_motion_source.dart';
+import 'package:navigation_client/features/indoor_navigation/platform/pdr_motion_source.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 void main() {
@@ -14,9 +17,43 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
-  test('권한 플러그인을 쓸 수 없으면 자동 시작을 막지 않는다', () async {
-    // 웹 개발 실행·테스트 환경에서 false를 돌려주면 플러그인이 없다는 이유만으로
-    // PDR이 아예 시작하지 못한다. 센서 시작 실패는 driver가 degraded로 알린다.
+  test('모바일 테스트에서 권한 플러그인만 없으면 자동 시작을 막지 않는다', () async {
+    // Flutter 단위 테스트의 기본 Android 환경에서는 플러그인이 없더라도 센서
+    // 시작 실패를 driver의 degraded 상태로 처리한다.
     expect(await defaultIsPedometerPermissionGranted(), isTrue);
+  });
+
+  test('PDR 센서 소스는 모바일 네이티브 플랫폼에서만 생성한다', () {
+    expect(
+      createDefaultPdrMotionSource(platform: TargetPlatform.iOS, isWeb: false),
+      isA<IosPdrMotionSource>(),
+    );
+    expect(
+      createDefaultPdrMotionSource(
+        platform: TargetPlatform.android,
+        isWeb: false,
+      ),
+      isA<AndroidPdrMotionSource>(),
+    );
+    expect(
+      createDefaultPdrMotionSource(
+        platform: TargetPlatform.linux,
+        isWeb: false,
+      ),
+      isA<UnsupportedPdrMotionSource>(),
+    );
+    expect(
+      createDefaultPdrMotionSource(platform: TargetPlatform.iOS, isWeb: true),
+      isA<UnsupportedPdrMotionSource>(),
+    );
+  });
+
+  test('Linux에서는 네이티브 채널을 열지 않도록 PDR 자동 시작을 막는다', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    try {
+      expect(await defaultIsPedometerPermissionGranted(), isFalse);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 }

@@ -32,3 +32,32 @@ abstract interface class PdrMotionSource {
   /// 리소스 해제.
   Future<void> dispose();
 }
+
+/// PDR 네이티브 브리지가 없는 플랫폼의 명시적 구현.
+///
+/// Linux CI·macOS 데스크톱·웹에서 iOS/Android EventChannel을 잘못 열면
+/// `MissingPluginException`이 비동기 서비스 오류로 새어 앱 부팅 자체가
+/// 실패한다. 빈 이벤트 스트림을 제공하되 직접 시작 요청은 명확히 실패시켜,
+/// 호출자가 미지원 상태를 정상적인 degraded 경로로 처리하게 한다.
+class UnsupportedPdrMotionSource implements PdrMotionSource {
+  const UnsupportedPdrMotionSource();
+
+  @override
+  Stream<NativePdrEvent> get events => const Stream.empty();
+
+  @override
+  Future<void> start() =>
+      Future.error(UnsupportedError('PDR sensors are not supported'));
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<int?> resetPedometer() async => null;
+
+  @override
+  Future<Map<String, Object?>?> finalizePedometer() async => null;
+
+  @override
+  Future<void> dispose() async {}
+}

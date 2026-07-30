@@ -20,10 +20,19 @@ import '../state/favorites_controller.dart';
 
 /// 앱 전체에서 공유하는 PDR 센서 소스와 세션 드라이버다. 화면이 바뀌어도
 /// 센서 세션을 다시 만들지 않도록 singleton으로 유지한다.
-final PdrMotionSource pdrMotionSource = switch (defaultTargetPlatform) {
-  TargetPlatform.android => AndroidPdrMotionSource(),
-  _ => IosPdrMotionSource(),
-};
+PdrMotionSource createDefaultPdrMotionSource({
+  TargetPlatform? platform,
+  bool? isWeb,
+}) {
+  if (isWeb ?? kIsWeb) return const UnsupportedPdrMotionSource();
+  return switch (platform ?? defaultTargetPlatform) {
+    TargetPlatform.iOS => IosPdrMotionSource(),
+    TargetPlatform.android => AndroidPdrMotionSource(),
+    _ => const UnsupportedPdrMotionSource(),
+  };
+}
+
+final PdrMotionSource pdrMotionSource = createDefaultPdrMotionSource();
 final IndoorNavigationDriver indoorNavigationDriver = IndoorNavigationDriver(
   source: pdrMotionSource,
 );
@@ -108,11 +117,16 @@ Future<Map<Permission, PermissionStatus>> Function() requestStartupPermissions =
 /// 시작을 시도하면 `sensorStartFailed` degraded가 반복해서 쌓인다. 자동 시작
 /// 전에 이 값으로 걸러낸다.
 ///
-/// 권한 플러그인을 쓸 수 없는 환경(웹 개발 실행, 테스트)에서는 **허용으로 본다.**
-/// 여기서 false를 돌려주면 그 환경에서는 PDR이 아예 시작하지 못해, 플러그인이
-/// 없다는 이유만으로 기능 전체가 사라진다. 센서 시작 자체가 실패하면 driver가
-/// degraded warning으로 알려주므로 그 경로에 맡기는 편이 안전하다.
+/// iOS/Android가 아닌 플랫폼은 네이티브 PDR 구현 자체가 없으므로 false다.
+/// 모바일 테스트에서 권한 플러그인만 빠진 경우에는 **허용으로 본다**. 이 경우
+/// 센서 시작 실패는 driver가 degraded warning으로 바꿔 플랫폼 경계 안에서
+/// 처리한다.
 Future<bool> defaultIsPedometerPermissionGranted() async {
+  if (kIsWeb ||
+      defaultTargetPlatform != TargetPlatform.iOS &&
+          defaultTargetPlatform != TargetPlatform.android) {
+    return false;
+  }
   try {
     return (await pedometerPermission.status).isGranted;
   } on Object {
