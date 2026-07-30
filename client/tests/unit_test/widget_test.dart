@@ -656,33 +656,6 @@ void main() {
     expect(find.textContaining('목적지까지'), findsWidgets);
   });
 
-  testWidgets('route guide shows the ETA card and building info FAB', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        routes: {
-          '/': (context) => const DestinationScreen(),
-          AppRoutes.routeGuide: (context) => const RouteGuideScreen(),
-        },
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('강의실 201'));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(FloatingActionButton), findsOneWidget);
-
-    // FAB는 하드코딩 Q&A 껍데기가 아니라 실제 /query/ai를 쓰는 매장 찾기 패널을
-    // 연다. 백엔드는 문장으로 답하지 않고 매장 1건을 돌려주므로 UI도 검색형이다.
-    await tester.tap(find.byIcon(Icons.search));
-    await tester.pumpAndSettle();
-
-    expect(find.text('AI 매장 찾기'), findsOneWidget);
-    expect(find.byType(TextField), findsWidgets);
-  });
-
   testWidgets('arrival screen shows a generic message and navigates on tap', (
     WidgetTester tester,
   ) async {

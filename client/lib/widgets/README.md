@@ -10,7 +10,7 @@
 | 지도 | [`floor_plan_view.dart`](floor_plan_view.dart) | MapLibre 층 지도, 매장·POI·현재 위치·경로 표시 |
 | 지도 | [`route_polyline.dart`](route_polyline.dart), [`location_marker.dart`](location_marker.dart), [`uncertainty_circle.dart`](uncertainty_circle.dart) | 경로선, 위치와 불확실성 표현 |
 | 지도 셸 | [`map_top_bar.dart`](map_top_bar.dart), [`map_bottom_bar.dart`](map_bottom_bar.dart), [`eta_card.dart`](eta_card.dart), [`status_badge.dart`](status_badge.dart) | 지도 화면 공통 조작·상태 |
-| 탐색 | [`search_panel.dart`](search_panel.dart), [`ai_search_sheet.dart`](ai_search_sheet.dart), [`directions_sheet.dart`](directions_sheet.dart), [`building_switcher_sheet.dart`](building_switcher_sheet.dart) | 매장 검색(경량)·AI 검색(의미), 출발/도착 검색, 건물 전환 |
+| 탐색 | [`search_panel.dart`](search_panel.dart), [`directions_sheet.dart`](directions_sheet.dart), [`building_switcher_sheet.dart`](building_switcher_sheet.dart) | 매장 검색(경량)·AI 검색(의미), 출발/도착 검색, 건물 전환 |
 | 장소 시트 | [`category_stores_sheet.dart`](category_stores_sheet.dart), [`store_info_sheet.dart`](store_info_sheet.dart), [`favorites_sheet.dart`](favorites_sheet.dart) | 카테고리 매장·매장 정보·즐겨찾기 |
 | 공통 | [`sheet_header.dart`](sheet_header.dart) | 시트 헤더 |
 
@@ -51,8 +51,10 @@
 모델을 로드하면 첫 호출이 20초대까지 가므로, 글자마다 던지면 "밥"·"밥 먹"이 전부 모델을
 태운다. **이 조건을 지우면 검색이 느려지는 게 아니라 멈춘 것처럼 보인다.**
 
-[`ai_search_sheet.dart`](ai_search_sheet.dart)는 경로 안내 화면의 FAB에서만 쓰는 대화형
-검색 패널로 남아 있다.
+예전에는 경로 안내 화면(`route_guide_screen.dart`)의 FAB가 `ai_search_sheet.dart`라는
+별도 대화형 검색 시트를 열었다. 검색 진입점을 상단 검색 하나로 일원화하기로 하면서
+그 시트와 FAB를 제거했다(W12) — 경로 안내 화면은 상단 검색 인프라(포커스 상태·지도
+잠금 배선)를 갖고 있지 않아, 그 화면에 검색을 다시 붙이는 대신 진입점 자체를 없앴다.
 
 ## `FloorPlanView` 경계
 

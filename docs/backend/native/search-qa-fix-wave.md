@@ -361,7 +361,7 @@ Wave 2-a + Wave 1을 한 PR로 묶는다. 둘 다 `search_panel.dart` 요청 조
 | W6 (DiscoveryResponse) | 완료 — "패션" clarify·"신발" results 5건 실데이터 확인 | `d20d629` |
 | W10 (클라이언트 파서) | 완료 — clarify 상태 보관까지, UI는 미구현 | `a1db077` |
 | **W11 (clarify UI)** | **완료** — 질문·option chip·선택 facet 표시/해제·`전체 보기`·`다시 선택`·`reason` 노출·기존 `onStorePicked` 재사용까지 구현, 회귀 테스트(`widgets_test.dart`) 추가. Chrome 실기 확인은 미실시 | `ddc2926` |
-| W12 (시트 일원화) | 미착수 (상단 검색 일원화로 확정됨) | — |
+| W12 (시트 일원화) | 완료 — `ai_search_sheet.dart`·FAB 제거, 상단 검색으로 일원화 | — |
 | W7 (임베딩 보강·재평가) | 미착수 — W8-a 검수 확정 선행 | — |
 | W8-b~d (검수 254건) | 미착수 (사람 작업) | — |
 | W9 (재시딩 검증) | 미착수 — W8 확정 후 | — |
