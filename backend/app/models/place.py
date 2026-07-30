@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Float, ForeignKey, Index, JSON, String
+from sqlalchemy import JSON, Float, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -35,14 +35,16 @@ class Store(Base):
     entrance_x_m: Mapped[float | None] = mapped_column(Float)  # 입구 로컬 좌표 X (미터), 선택
     entrance_y_m: Mapped[float | None] = mapped_column(Float)  # 입구 로컬 좌표 Y (미터), 선택
 
-    entrance_node_id: Mapped[str | None] = mapped_column(ForeignKey("nodes.id"))  # 입구와 이어진 그래프 노드 FK. 온디바이스 경로의 도착 노드. 없으면 경로 계산 불가
+    # 입구와 이어진 그래프 노드 FK. 온디바이스 경로의 도착 노드. 없으면 경로 계산 불가
+    entrance_node_id: Mapped[str | None] = mapped_column(ForeignKey("nodes.id"))
 
     polygon: Mapped[list[dict] | None] = mapped_column(JSON)  # 매장 외곽 폴리곤 좌표(local_m), 선택
 
-    search_facets: Mapped[dict[str, list[str]] | None] = mapped_column(JSON)  # 검색 전용 추천 태그(intents/styles/...), 대부분 매장은 미지정. 선택
+    # 검색 전용 추천 태그(intents/styles/...), 대부분 매장은 미지정. 선택
+    search_facets: Mapped[dict[str, list[str]] | None] = mapped_column(JSON)
 
-    floor: Mapped["Floor"] = relationship(back_populates="stores")  # 소속 층 (N:1)
-    entrance_node: Mapped["Node | None"] = relationship(
+    floor: Mapped[Floor] = relationship(back_populates="stores")  # 소속 층 (N:1)
+    entrance_node: Mapped[Node | None] = relationship(
         foreign_keys=[entrance_node_id],
     )  # 입구 노드 객체 (entrance_node_id 대응), 선택
 
@@ -64,10 +66,11 @@ class Poi(Base):
     x_m: Mapped[float] = mapped_column(Float, nullable=False)  # 마커 로컬 좌표 X (미터)
     y_m: Mapped[float] = mapped_column(Float, nullable=False)  # 마커 로컬 좌표 Y (미터)
 
-    linked_node_id: Mapped[str | None] = mapped_column(ForeignKey("nodes.id"))  # 원본 그래프 노드 FK (이 마커가 승격된 노드)
+    # 원본 그래프 노드 FK (이 마커가 승격된 노드)
+    linked_node_id: Mapped[str | None] = mapped_column(ForeignKey("nodes.id"))
 
-    floor: Mapped["Floor"] = relationship(back_populates="pois")  # 소속 층 (N:1)
-    linked_node: Mapped["Node | None"] = relationship(
+    floor: Mapped[Floor] = relationship(back_populates="pois")  # 소속 층 (N:1)
+    linked_node: Mapped[Node | None] = relationship(
         foreign_keys=[linked_node_id],
     )  # 원본 노드 객체 (linked_node_id 대응), 선택
 

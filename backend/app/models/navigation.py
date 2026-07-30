@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Float, ForeignKey, Index, JSON, String
+from sqlalchemy import JSON, Boolean, Float, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -35,7 +35,7 @@ class Node(Base):
     source_x: Mapped[float | None] = mapped_column(Float)  # 원천 데이터 원좌표 X (디버그·역추적용), 선택
     source_y: Mapped[float | None] = mapped_column(Float)  # 원천 데이터 원좌표 Y (디버그·역추적용), 선택
 
-    floor: Mapped["Floor"] = relationship(back_populates="nodes")  # 소속 층 (N:1)
+    floor: Mapped[Floor] = relationship(back_populates="nodes")  # 소속 층 (N:1)
 
 
 class Edge(Base):
@@ -58,6 +58,6 @@ class Edge(Base):
     # 수직 전이 간선 여부(elevator/escalator 환승). 층 내부 간선은 None.
     transfer_mode: Mapped[str | None] = mapped_column(String)
 
-    floor: Mapped["Floor"] = relationship(back_populates="edges")  # 소속 층 (N:1, 전이 간선은 None)
+    floor: Mapped[Floor] = relationship(back_populates="edges")  # 소속 층 (N:1, 전이 간선은 None)
     from_node: Mapped[Node] = relationship(foreign_keys=[from_node_id])  # 시작 노드 객체
     to_node: Mapped[Node] = relationship(foreign_keys=[to_node_id])      # 끝 노드 객체

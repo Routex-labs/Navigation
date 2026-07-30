@@ -1,6 +1,6 @@
 """서버 상태와 건물 HTTP API 통합 테스트."""
 
-from tests.conftest import BUILDING_ID, DEFAULT_FLOOR, FLOOR_NAME, FLOOR_NAMES
+from tests.conftest import BUILDING_ID, DEFAULT_FLOOR, FLOOR_NAMES
 
 
 # 서버 생존 확인 API가 정상 상태를 반환하는지 검증한다.

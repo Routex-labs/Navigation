@@ -174,7 +174,7 @@ def _angular_distance(a: float, b: float) -> float:
 
 def _fit_pairs(gcps, corners, perm) -> tuple[GeoTransform, list[float]]:
     """corner 순열 하나에 대해 fit + 각 GCP 잔차."""
-    from app.geo.georeference import fit_wgs84_transform, PointPair
+    from app.geo.georeference import PointPair, fit_wgs84_transform
     pairs = [
         PointPair(x=corners[perm[i]].x, y=corners[perm[i]].y,
                   u=gcps[i]["outdoor"]["lng"], v=gcps[i]["outdoor"]["lat"])
@@ -263,7 +263,10 @@ def compass_match(
 
     print("\n== compass 후보별 fit (start_idx는 N GCP를 어느 local corner에 배정하는지) ==")
     for c in candidates:
-        print(f"  start={c['start']} → N→{corners[c['start']].name:<14} aniso={c['aniso']:.4f} rotate_deg={c['rot']:+.3f}")
+        print(
+            f"  start={c['start']} → N→{corners[c['start']].name:<14} "
+            f"aniso={c['aniso']:.4f} rotate_deg={c['rot']:+.3f}"
+        )
 
     # (1) 이방성 필터 — 90° 뒤틀림 후보 제거
     aniso_sorted = sorted(candidates, key=lambda c: round(c["aniso"], 3))
@@ -284,11 +287,17 @@ def compass_match(
         return min(d, 360.0 - d)
 
     chosen = min(uniform, key=lambda c: angular_diff(c["rot"], prior_rotate_deg))
-    print(f"** prior_rotate_deg={prior_rotate_deg:+.3f} 기준으로 start={chosen['start']} (rotate_deg={chosen['rot']:+.3f}) 채택")
+    print(
+        f"** prior_rotate_deg={prior_rotate_deg:+.3f} 기준으로 "
+        f"start={chosen['start']} (rotate_deg={chosen['rot']:+.3f}) 채택"
+    )
     other = [c for c in uniform if c["start"] != chosen["start"]]
     if other:
         c = other[0]
-        print(f"   (기각: start={c['start']} rotate_deg={c['rot']:+.3f}, prior와 {angular_diff(c['rot'], prior_rotate_deg):.1f}° 차이)")
+        print(
+            f"   (기각: start={c['start']} rotate_deg={c['rot']:+.3f}, "
+            f"prior와 {angular_diff(c['rot'], prior_rotate_deg):.1f}° 차이)"
+        )
     return chosen["matches"]
 
 
@@ -481,7 +490,7 @@ def _write_geojson_preview(
     out_path: Path,
     reference: dict,
     new_t: GeoTransform,
-    matches: list["Match"],
+    matches: list[Match],
 ) -> None:
     footprint = reference["building_footprint_local_m"]
     ring = []
@@ -535,7 +544,10 @@ def _write_geojson_preview(
 
 
 def print_matches(matches: list[Match]) -> None:
-    print(f"{'label':<10} {'corner':<14} {'gcp_lat':>13} {'gcp_lng':>13} {'local_x':>10} {'local_y':>10} {'before(m)':>10}")
+    print(
+        f"{'label':<10} {'corner':<14} {'gcp_lat':>13} {'gcp_lng':>13} "
+        f"{'local_x':>10} {'local_y':>10} {'before(m)':>10}"
+    )
     for m in matches:
         print(
             f"{m.label:<10} {m.corner.name:<14} "
@@ -611,16 +623,16 @@ def main() -> None:
 
     rot, sx, sy = rotate_and_scale(new_t)
     old_rot = reference["coordinate_system"]["affine_transforms"]["local_m_to_wgs84"].get("rotate_deg")
-    print(f"\n== 새 아핀 요약 ==")
+    print("\n== 새 아핀 요약 ==")
     print(f"회전각: {rot:.3f} deg (기존: {old_rot})")
     print(f"축별 스케일 (실측 m per local_m 단위): x={sx:.4f}, y={sy:.4f}")
     if abs(sx - sy) / max(sx, sy) > 0.1:
-        print(f"  * x, y 스케일 차이가 큼 -> local_m 좌표계가 이방적(anisotropic). 6-DOF affine 필요.")
+        print("  * x, y 스케일 차이가 큼 -> local_m 좌표계가 이방적(anisotropic). 6-DOF affine 필요.")
     if args.geojson_out:
         _write_geojson_preview(args.geojson_out, reference, new_t, matches)
         print(f"\nGeoJSON 시각검증 파일: {args.geojson_out}")
-        print(f"  geojson.io 또는 QGIS에 열어 VWorld 배경 위에 얹어 실제 건물과 정합 확인.")
-        print(f"  빨간 점=GCP 클릭점, 초록 점=매칭된 극점 예측 위치, 주황 선=잔차 벡터.")
+        print("  geojson.io 또는 QGIS에 열어 VWorld 배경 위에 얹어 실제 건물과 정합 확인.")
+        print("  빨간 점=GCP 클릭점, 초록 점=매칭된 극점 예측 위치, 주황 선=잔차 벡터.")
 
     if args.write:
         print("\n== studio JSON 덮어쓰기 ==")

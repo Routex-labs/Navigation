@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
 
-
 # 커넥션 풀을 들고 있는 무거운 객체라 프로세스 전역 1개만 만든다.
 # check_same_thread=False는 SQLite 전용 — 동기 def 핸들러가 anyio 스레드풀에서
 # 돌기 때문에, 커넥션을 만든 스레드와 만지는 스레드가 다를 수 있다.

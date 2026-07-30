@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Float, ForeignKey, Integer, JSON, String, UniqueConstraint
+from sqlalchemy import JSON, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -23,7 +23,7 @@ class Building(Base):
     perimeter_m: Mapped[float | None] = mapped_column(Float)    # 건물 둘레(m), 선택
     footprint_local_m: Mapped[list[dict] | None] = mapped_column(JSON)  # 건물 외곽선 좌표(local_m 점 목록), 선택
 
-    floors: Mapped[list["Floor"]] = relationship(back_populates="building")  # 소속 층들 (1:N)
+    floors: Mapped[list[Floor]] = relationship(back_populates="building")  # 소속 층들 (1:N)
 
 
 class Floor(Base):
@@ -39,8 +39,10 @@ class Floor(Base):
         nullable=False,
     )  # 소속 건물 FK
 
-    name: Mapped[str] = mapped_column(String, nullable=False)  # 사람이 보는 층 라벨 (예: B2, 1F). 사이니지 표기이며 "지하 2층"이 아님
-    level: Mapped[int] = mapped_column(Integer, nullable=False)  # 층 정렬용 정수 (지하 음수 B2=-2, 지상 양수 1F=1). 문자열 name은 정렬 불가라 별도로 둠
+    # 사람이 보는 층 라벨 (예: B2, 1F). 사이니지 표기이며 "지하 2층"이 아님
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    # 층 정렬용 정수 (지하 음수 B2=-2, 지상 양수 1F=1). 문자열 name은 정렬 불가라 별도로 둠
+    level: Mapped[int] = mapped_column(Integer, nullable=False)
     map_calibration_version: Mapped[str] = mapped_column(
         String,
         nullable=False,
@@ -50,8 +52,8 @@ class Floor(Base):
     # footprint를 전 층에 돌려쓰면 어느 층이든 1F 모양이 그려진다.
     footprint_local_m: Mapped[list[dict] | None] = mapped_column(JSON) # 미터 좌표 점들의 리스트로 구현한 외곽 폴리곤
 
-    building: Mapped["Building"] = relationship(back_populates="floors")  # 소속 건물 (N:1)
-    nodes: Mapped[list["Node"]] = relationship(back_populates="floor")    # 이 층의 그래프 노드들
-    edges: Mapped[list["Edge"]] = relationship(back_populates="floor")    # 이 층의 그래프 간선들
-    stores: Mapped[list["Store"]] = relationship(back_populates="floor")  # 이 층의 매장들
-    pois: Mapped[list["Poi"]] = relationship(back_populates="floor")      # 이 층의 POI(엘리베이터·에스컬레이터 마커)들
+    building: Mapped[Building] = relationship(back_populates="floors")  # 소속 건물 (N:1)
+    nodes: Mapped[list[Node]] = relationship(back_populates="floor")    # 이 층의 그래프 노드들
+    edges: Mapped[list[Edge]] = relationship(back_populates="floor")    # 이 층의 그래프 간선들
+    stores: Mapped[list[Store]] = relationship(back_populates="floor")  # 이 층의 매장들
+    pois: Mapped[list[Poi]] = relationship(back_populates="floor")      # 이 층의 POI(엘리베이터·에스컬레이터 마커)들

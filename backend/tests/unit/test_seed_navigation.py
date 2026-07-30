@@ -4,9 +4,9 @@ import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
+import app.models  # noqa: F401  # 모든 모델을 Base.metadata에 등록
 from app.models.base import Base
 from app.models.place import Store
-import app.models  # noqa: F401  # 모든 모델을 Base.metadata에 등록
 from scripts.seed.seed_navigation import add_dataset, edge_geometry_and_length
 
 

@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import json
 
-from app.repositories import store_facets
+import pytest
 
+from app.repositories import store_facets
 
 # ── derive_facets ────────────────────────────────────────────────────────
 
@@ -119,11 +120,9 @@ def test_같은_store_id가_두_파일에_있으면_오류다(tmp_path):
         encoding="utf-8",
     )
 
-    try:
+    # 중복 store_id는 예외를 던져야 한다.
+    with pytest.raises(ValueError, match="PO-1"):
         store_facets.load_overlay(tmp_path)
-        assert False, "중복 store_id는 예외를 던져야 한다"
-    except ValueError as exc:
-        assert "PO-1" in str(exc)
 
 
 # ── validate_overlay ─────────────────────────────────────────────────────
@@ -304,11 +303,9 @@ def test_모르는_intent는_빈_집합이다():
 # 규칙 필드 오타를 조용히 무시하면 조건이 사라져 후보가 넓어지는 방향으로 틀린다.
 def test_규칙에_쓸_수_없는_필드는_예외다():
     intents = {"신발": {"rules": {"subcategory_kr": ["슈즈"]}}}
-    try:
+    # 지원하지 않는 규칙 필드는 예외를 던져야 한다.
+    with pytest.raises(ValueError, match="subcategory_kr"):
         store_facets.resolve_intent_store_ids("신발", INTENT_STORES, intents)
-        assert False, "지원하지 않는 규칙 필드는 예외를 던져야 한다"
-    except ValueError as exc:
-        assert "subcategory_kr" in str(exc)
 
 
 def test_intents_파일이_없으면_빈_dict다(tmp_path):

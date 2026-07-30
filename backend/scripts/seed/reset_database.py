@@ -3,8 +3,8 @@
 
 from pathlib import Path
 
-from app.core.database import engine
 import app.models  # noqa: F401  # 모든 모델을 Base.metadata에 등록
+from app.core.database import engine
 from app.models.base import Base
 
 

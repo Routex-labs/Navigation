@@ -9,8 +9,8 @@
 재계산해, 지문이 바뀌었을 때만 재빌드하도록 고쳤다.
 """
 
-from app.repositories import query_semantic
 from app.models import Store
+from app.repositories import query_semantic
 from tests.conftest import BUILDING_ID, FLOOR_ID
 
 
