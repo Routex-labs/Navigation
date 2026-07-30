@@ -212,6 +212,23 @@ class _MapShellScreenState extends State<MapShellScreen> {
   bool get _indoorContextActive =>
       _mode == MapMode.indoor || _outdoorIndoorEntered;
 
+  /// 지금 "현재 위치에서 출발"로 경로를 그릴 수 있는지.
+  ///
+  /// [_selectedOrigin]이 null인 것은 **두 가지를 겹쳐서** 뜻한다 — "현재 위치에서
+  /// 출발"(위치 지정·PDR로 위치가 이미 잡혀 있음)과 "출발지가 아직 없음". 앞쪽은
+  /// 도착지를 고르는 순간 바로 경로를 그려야 하고, 뒤쪽은 계산해도 실패 안내만
+  /// 나오므로 상단 초안 바를 남겨 사용자가 출발지를 고르게 해야 한다. 둘을 null
+  /// 하나로 뭉개면 "위치 지정으로 현재 위치를 찍은 뒤 매장에서 도착을 눌렀는데
+  /// 아무 일도 안 일어나는" 상태가 된다.
+  ///
+  /// 건물 안을 보고 있으면 기준은 PDR 앵커다. 앵커가 없으면 실내 라우팅이 시작할
+  /// 노드를 고르지 못한다([IndoorMapBodyState.showRouteTo]가 "출발 위치를 먼저
+  /// 지정해주세요"로 되돌린다). 야외는 GPS가 출발점이고, 위치가 아직 없을 때의
+  /// 안내는 야외 화면이 맡는다.
+  bool get _canRouteFromCurrentLocation => _indoorContextActive
+      ? indoorNavigationDriver.currentCalibration.canRenderPosition
+      : true;
+
   /// 지금 보고 있는 층. 실내 탭이면 실내 화면의 층, 야외 탭에서 실내 진입
   /// 오버레이를 보고 있으면 그 오버레이의 층. 어느 쪽도 아니면 null이라
   /// 호출부가 "층 개념 없음"으로 처리한다.
@@ -397,13 +414,17 @@ class _MapShellScreenState extends State<MapShellScreen> {
         await _openDirections(presetOrigin: candidate);
       }
     } else if (action == StoreInfoAction.setDestination) {
-      // 도착지를 먼저 고르는 흐름에서는 경로를 성급하게 계산하지 않는다.
-      // 출발지가 없으면 상단 초안 바가 남아 사용자가 출발 행을 눌러 기존
-      // DirectionsSheet 검색 흐름으로 이어갈 수 있다. 명시적 출발지가 이미
-      // 있으면 그때만 기존 온디바이스 Dijkstra 경로 계산을 바로 시작한다.
+      // 출발지가 준비돼 있으면 바로 경로를 그린다. 명시적으로 고른 매장이거나,
+      // 위치 지정·PDR로 현재 위치가 잡혀 있으면([_canRouteFromCurrentLocation])
+      // 둘 다 출발지로 완전하다 — 후자를 빼면 위치를 찍어둔 사용자가 "도착"을
+      // 눌러도 아무 일도 안 일어난다.
+      //
+      // 어느 쪽도 없을 때만 계산을 미루고 상단 초안 바를 남긴다. 그 상태에서
+      // 계산하면 실패 안내만 나오고, 초안 바가 있으면 사용자가 출발 행을 눌러
+      // DirectionsSheet 검색 흐름으로 이어갈 수 있다.
       setState(() => _routeDraftDestination = candidate);
       final origin = _selectedOrigin;
-      if (origin != null) {
+      if (origin != null || _canRouteFromCurrentLocation) {
         await _startRoute(origin: origin, destination: candidate);
       }
     }
