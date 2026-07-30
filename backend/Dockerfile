@@ -1,4 +1,7 @@
-FROM python:3.12-slim
+# base image를 digest로 고정한다(공급망 재현성) — 같은 소스가 항상 같은 base 레이어를
+# 받도록. 태그(python:3.12-slim)는 이동하므로 digest를 병기한다. 값 갱신 시 태그의
+# 현재 digest를 `docker buildx imagetools inspect python:3.12-slim`으로 재확인한다.
+FROM python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
