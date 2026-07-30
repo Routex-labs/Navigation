@@ -16,15 +16,17 @@ import mapbox_vector_tile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.geo.tiling import build_floor_tile_layers, tile_bounds
 from app.models import Building, Floor, Poi, Store
-from app.repositories.building_queries import _find_floor
+from app.repositories.building_queries import _default_floor, _find_floor
 from app.repositories.geo_transform import fit_building_geo_transform
+from app.repositories.tile_cache import BoundedTileCache
 
 logger = logging.getLogger(__name__)
 
 
-# (building_id, floor_name, z, x, y) → MVT 바이트 캐시.
+# (building_id, floor_name, z, x, y, revision) → MVT 바이트 캐시.
 #
 # MVT 인코딩은 CPU-바운드(층 하나 9개 타일 인코딩에 ~1s 이상)라, 클라이언트가 층을
 # 전환할 때 MapLibre가 격자 여러 개를 병렬 요청하면 uvicorn 단일 워커가 직렬로
@@ -35,19 +37,33 @@ logger = logging.getLogger(__name__)
 # 메모리에 캐싱해도 안전하다 — 첫 요청 후 나머지는 마이크로초 반환이라 병렬
 # 요청 폭풍이 사라진다.
 #
-# 단, "재시드하면 프로세스가 재시작되니 stale 걱정이 없다"는 전제는 이 저장소의
-# 개발 절차에서 성립하지 않는다(AGENTS.md 참고). reset_and_seed는 별도 프로세스로
-# 돌고 uvicorn은 --reload-dir app으로 app/ 코드만 감시하므로, 재시드는 DB 파일만
-# 바꿀 뿐 리로드를 트리거하지 않는다. 그대로 두면 서버가 시드 이전 타일을 계속
-# 내보낸다. 그래서 DB 파일의 mtime을 캐시 "세대"로 삼아 자동 무효화한다.
-_TILE_BYTES_CACHE: dict[tuple[str, str, int, int, int], bytes] = {}
+# 예전 구현은 무제한 전역 dict였다 — 오래 사는 배포 프로세스에서 조합이 쌓이면
+# 메모리가 상한 없이 커졌다. 이제 바이트·항목 수 상한을 둔 BoundedTileCache로
+# 바꿔 LRU로 축출하고, 같은 키 동시 요청은 single-flight로 한 번만 인코딩한다.
+_TILE_CACHE = BoundedTileCache(
+    max_entries=settings.tile_cache_max_entries,
+    max_bytes=settings.tile_cache_max_bytes,
+)
 
-# 현재 캐시가 어느 DB 상태에서 만들어졌는지 — (파일 경로, mtime_ns).
-# 경로까지 넣는 이유는 서로 다른 DB가 우연히 같은 mtime을 가질 수 있어서다
-# (테스트가 임시 DB를 갈아끼울 때 실제로 일어날 수 있다).
+# 캐시 무효화 revision — 왜 graph_revision이 아니라 DB 파일 세대인가.
+#
+#   "재시드하면 프로세스가 재시작되니 stale 걱정이 없다"는 전제는 이 저장소의
+#   개발 절차에서 성립하지 않는다(AGENTS.md 참고). reset_and_seed는 별도
+#   프로세스로 돌고 uvicorn은 --reload-dir app으로 app/ 코드만 감시하므로,
+#   재시드는 DB 파일만 바꿀 뿐 리로드를 트리거하지 않는다. 그대로 두면 서버가
+#   시드 이전 타일을 계속 내보낸다.
+#
+#   타일이 그리는 것은 stores·POI·footprint(+geo transform)다. 반면
+#   app/graph/revision.py의 graph_revision(nodes, edges)은 길찾기 그래프의
+#   노드·간선만 해싱하므로, 매장 이름/폴리곤 편집 같은 "타일에는 보이지만
+#   그래프에는 없는" 변경을 잡지 못한다. 그래서 타일의 revision으로는 그래프
+#   체크섬 대신 DB 파일 세대 (경로, mtime_ns)를 쓴다 — 재시드가 곧 mtime 변경
+#   이므로 모든 타일 입력 변경을 정확히 포괄한다. 경로까지 넣는 이유는 서로
+#   다른 DB가 우연히 같은 mtime을 가질 수 있어서다(테스트가 임시 DB를 갈아끼울
+#   때 실제로 일어난다).
 _CACHE_GENERATION: tuple[str, int] | None = None
 
-# 워밍업 데몬 스레드와 요청 처리 스레드가 같은 dict을 만지므로 교체는 락으로 묶는다.
+# 워밍업 데몬 스레드와 요청 처리 스레드가 세대 전역을 함께 만지므로 교체는 락으로 묶는다.
 _CACHE_LOCK = threading.Lock()
 
 
@@ -70,7 +86,9 @@ def _cache_generation(session: Session) -> tuple[str, int] | None:
         return None
 
 
-# DB가 바뀌었으면(=재시드) 타일 캐시를 통째로 버린다.
+# DB가 바뀌었으면(=재시드) 타일 캐시를 통째로 버려 메모리를 즉시 회수한다.
+# revision을 캐시 키에도 넣지만(아래), 이 선제 무효화는 낡은 세대의 바이트가
+# LRU 축출을 기다리며 상주하지 않게 한다.
 def _invalidate_if_reseeded(session: Session) -> None:
     global _CACHE_GENERATION
 
@@ -81,11 +99,22 @@ def _invalidate_if_reseeded(session: Session) -> None:
     with _CACHE_LOCK:
         if generation != _CACHE_GENERATION:
             _CACHE_GENERATION = generation
-            _TILE_BYTES_CACHE.clear()
+            _TILE_CACHE.invalidate_all()
 
 
-# 층 지도를 MVT 바이트로 렌더링한다. 건물/층이 없으면 None.
-def render_floor_tile(
+# 캐시 키에 실을 revision 토큰. DB 세대가 있으면 "경로@mtime_ns", 없으면
+# (메모리 DB 등 무효화 근거 없음) 고정 토큰. 세대가 바뀌면 토큰이 바뀌어 기존
+# 키가 더는 조회되지 않으므로, 선제 무효화와 별개로도 stale 타일이 안 나간다.
+def _cache_revision(session: Session) -> str:
+    generation = _cache_generation(session)
+    if generation is None:
+        return "no-generation"
+    path, mtime_ns = generation
+    return f"{path}@{mtime_ns}"
+
+
+# 캐시를 거치지 않는 순수 렌더. 건물/층이 없으면 None.
+def _render_tile_bytes(
     session: Session,
     building_id: str,
     floor_name: str,
@@ -93,13 +122,6 @@ def render_floor_tile(
     x: int,
     y: int,
 ) -> bytes | None:
-    _invalidate_if_reseeded(session)
-
-    cache_key = (building_id, floor_name, z, x, y)
-    cached = _TILE_BYTES_CACHE.get(cache_key)
-    if cached is not None:
-        return cached
-
     floor = _find_floor(session, building_id, floor_name)
     if floor is None:
         return None
@@ -124,14 +146,62 @@ def render_floor_tile(
         footprint_local_m=floor.footprint_local_m,
     )
 
-    tile_bytes = mapbox_vector_tile.encode(
+    return mapbox_vector_tile.encode(
         layers,
         default_options={
             "quantize_bounds": (bounds.west, bounds.south, bounds.east, bounds.north),
         },
     )
-    _TILE_BYTES_CACHE[cache_key] = tile_bytes
-    return tile_bytes
+
+
+# 층 지도를 MVT 바이트로 렌더링한다(캐시 경유). 건물/층이 없으면 None.
+def render_floor_tile(
+    session: Session,
+    building_id: str,
+    floor_name: str,
+    z: int,
+    x: int,
+    y: int,
+) -> bytes | None:
+    _invalidate_if_reseeded(session)
+
+    revision = _cache_revision(session)
+    cache_key = (building_id, floor_name, z, x, y, revision)
+    return _TILE_CACHE.get_or_render(
+        cache_key,
+        lambda: _render_tile_bytes(session, building_id, floor_name, z, x, y),
+    )
+
+
+# 캐시 메트릭(hit/miss/coalesced/eviction/current_bytes 등). 관측·07번 배선용.
+def tile_cache_metrics() -> dict[str, int]:
+    return _TILE_CACHE.metrics()
+
+
+# 워밍업 진행 상태 — 준비(readiness)와 분리한다.
+#
+# 워밍업은 성능 최적화(첫 요청 소켓 폭주 제거)일 뿐, 실패해도 서비스는 lazy
+# 캐시로 정상 동작한다. 따라서 워밍 실패를 readiness 실패로 오인하면 안 된다.
+# 06번은 상태 조회 함수만 노출하고, /health readiness 배선은 07번이 이 값을
+# 어떻게 쓸지(예: "실패여도 ready") 결정한다.
+#   idle    — 아직 시작 안 함
+#   running — 워밍 스레드가 도는 중
+#   done    — 정상 완료
+#   failed  — 예외로 중단(서비스는 계속 lazy 폴백)
+_WARM_STATUS = "idle"
+_WARM_STATUS_LOCK = threading.Lock()
+
+
+def _set_warm_status(status: str) -> None:
+    global _WARM_STATUS
+    with _WARM_STATUS_LOCK:
+        _WARM_STATUS = status
+
+
+# 현재 워밍업 상태 문자열. readiness와 독립적으로 조회된다(07번 배선용).
+def tile_cache_warm_status() -> str:
+    with _WARM_STATUS_LOCK:
+        return _WARM_STATUS
 
 
 # 클라이언트가 실내 MVT 소스를 등록하는 zoom 범위 전체.
@@ -159,15 +229,36 @@ def _lnglat_to_tile(lng: float, lat: float, z: int) -> tuple[int, int]:
     return x, y
 
 
+# 이 건물에서 워밍업할 층을 고른다. 기본은 앱이 처음 여는 층(지상 1층) 하나만.
+#
+# 기동 워밍업의 목적은 "사용자가 처음 보는 화면"의 소켓 폭주 제거다. 앱은
+# default_floor(지상 1층)로 열리므로 그 층만 미리 채우면 첫인상 구간은 덮인다.
+# 나머지 층은 첫 방문 때 lazy로 채워지고, single-flight가 그 순간의 동시 요청도
+# 한 번 인코딩으로 합친다. 전 층을 미리 인코딩하는 것 대비 워밍 작업량과 상주
+# 메모리를 층 수만큼 줄인다(데모: 층 여러 개 → 1개). 전 층 워밍이 필요하면
+# NAV_TILE_WARM_DEFAULT_FLOOR_ONLY=0으로 되돌린다.
+def _floors_to_warm(floors: list[Floor]) -> list[Floor]:
+    if not settings.tile_warm_default_floor_only:
+        return floors
+    default_name = _default_floor(floors)
+    if default_name is None:
+        return floors
+    selected = [floor for floor in floors if floor.name == default_name]
+    return selected or floors
+
+
 def _warm_tile_cache(session_factory) -> None:
-    """모든 (건물, 층, z, x, y) 조합의 MVT 바이트를 미리 생성해 캐시에 채운다.
+    """워밍 대상 (건물, 층, z, x, y) 조합의 MVT 바이트를 미리 생성해 캐시에 채운다.
 
     클라이언트가 층을 전환하면 MapLibre가 격자 여러 개를 병렬 요청하는데,
     첫 방문 때는 각 인코딩이 CPU 바운드라 uvicorn 단일 워커에서 직렬 처리되며
     수 초씩 걸린다. 그 사이 클라이언트 쪽에서 소켓이 취소·재사용되며 "Socket
     closed"가 튀고 몇몇 타일이 로드되지 않는다. 기동 직후에 여기서 미리 인코딩
     해두면 사용자 첫 요청부터 캐시 히트라 즉시 반환된다.
+
+    대상 층은 _floors_to_warm이 고른다(기본: 앱이 처음 여는 층만).
     """
+    _set_warm_status("running")
     session = session_factory()
     try:
         buildings = session.scalars(select(Building)).all()
@@ -182,7 +273,8 @@ def _warm_tile_cache(session_factory) -> None:
             lngs = [lng for _, lng in wgs]
             min_lat, max_lat = min(lats), max(lats)
             min_lng, max_lng = min(lngs), max(lngs)
-            floors = session.scalars(select(Floor).where(Floor.building_id == building.id)).all()
+            all_floors = session.scalars(select(Floor).where(Floor.building_id == building.id)).all()
+            floors = _floors_to_warm(list(all_floors))
             for z in _WARM_ZOOMS:
                 x0, y_north = _lnglat_to_tile(min_lng, max_lat, z)
                 x1, y_south = _lnglat_to_tile(max_lng, min_lat, z)
@@ -192,9 +284,11 @@ def _warm_tile_cache(session_factory) -> None:
                             continue
                         for floor in floors:
                             render_floor_tile(session, building.id, floor.name, z, x, y)
-        logger.info("[tile-warmup] MVT 캐시 준비 완료: %d개 타일", len(_TILE_BYTES_CACHE))
+        logger.info("[tile-warmup] MVT 캐시 준비 완료: %d개 항목", tile_cache_metrics()["entries"])
+        _set_warm_status("done")
     except Exception as error:  # pragma: no cover — 워밍 실패는 조용히 degrade
         logger.warning("[tile-warmup] 실패(무시하고 lazy 캐시로 폴백): %s", error)
+        _set_warm_status("failed")
     finally:
         session.close()
 
@@ -203,10 +297,9 @@ def warm_tile_cache_in_background(session_factory) -> threading.Thread:
     """MVT 캐시 워밍을 데몬 스레드로 미리 돌린다.
 
     daemon=True — 워밍이 남아 있어도 서버 종료를 막지 않는다. 워밍 중 사용자
-    요청이 들어와도 그 요청은 정상 렌더링 후 캐시에 결과가 저장되므로 중복
-    작업만 있을 뿐 결과에는 영향이 없다(캐시는 dict.setdefault가 아니라 최신
-    값으로 덮어쓴다). 뮤텍스 없이 무해한 이유는 값이 결정적이기 때문이다 —
-    같은 (building, floor, z, x, y)에 대해 어떤 스레드가 인코딩하든 같은 bytes.
+    요청이 들어와도 같은 키는 single-flight로 한 번만 인코딩되고(BoundedTileCache),
+    값이 결정적이라 어떤 스레드가 인코딩하든 같은 bytes다 —
+    같은 (building, floor, z, x, y, revision)에 대해 결과가 동일하다.
     """
     thread = threading.Thread(
         target=_warm_tile_cache,
