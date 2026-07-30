@@ -22,6 +22,7 @@ import하지 않아도 각자 완결되도록 하기 위해서다(경계는
 ```
 backend/resources/store_search_facets/
 ├─ _vocabulary.json    ← 어휘 선언. `_`로 시작해 오버레이 대상에서 제외된다.
+├─ _intents.json       ← intent별 규칙 + 예외 매장. 역시 `_` 접두라 오버레이가 아니다.
 └─ fashion.json         ← 카테고리별로 쪼갠 수작업 오버레이. 여러 파일로 나눌 수 있다.
 ```
 
@@ -29,6 +30,30 @@ vocabulary 파일과 오버레이 파일을 분리한 이유: vocabulary는 "어
 선언하는 스키마이고, 오버레이는 "이 매장에 어떤 값을 붙일까"라는 데이터다. 성격이
 다른 두 가지를 한 파일에 두면 vocabulary 값 하나를 늘릴 때마다 거대한 데이터 파일을
 열어야 한다. 오버레이는 카테고리별로 쪼갤 수 있어야 리뷰 단위가 작아진다(요구사항).
+
+## 왜 intents는 매장 태그가 아니라 "규칙 + 예외" 파일인가
+
+설계 문서 12절이 미결로 남겨 둔 intents 스키마를 **소분류 규칙 객체 + 예외 매장 id**로
+확정했다(wave0 D 조사 보고서 제안). intent는 사용자가 치는 말("신발"·"밥집")이고,
+후보 대부분은 소분류에서 규칙으로 유도된다. 145건을 매장별 배열(`"intents": ["신발"]`)로
+손으로 나열하면 `styles`에서 이미 겪은 드리프트가 그대로 재현된다 — Studio에서 소분류가
+바뀌어도 JSON은 조용히 낡은 후보 집합을 들고 있게 된다. 그래서
+
+- 규칙(`rules`)이 소분류로 대부분을 잡고,
+- 규칙으로 잡히지 않는 것(예: 나이키 라이즈처럼 소분류는 `캐주얼·스트리트`인데 신발을
+  파는 매장 145건)만 `extra_store_ids`로 보태고,
+- 규칙이 잘못 끌어온 매장은 `excluded_store_ids`로 뺀다.
+
+`rules`를 `{"subcategory": [...]}`처럼 **필드 이름을 적는 객체**로 둔 이유: `식사`는
+`category=식음료`(138건)가 아니라 `subcategory=레스토랑`(57건)을 기준으로 한다는 결정이
+설계의 핵심인데(전자로 하면 "밥집" 질의에 야채·정육·수산이 섞인다), 규칙을 소분류
+문자열 배열로만 두면 그 "어느 필드를 보는지"가 코드에 숨는다. 파일에 필드 이름을 적으면
+리뷰어가 파일만 보고 판단할 수 있다. JSON은 주석을 못 달기 때문에 이 근거는 여기 남긴다.
+
+intent 이름은 `_vocabulary.json`에 **넣지 않는다.** vocabulary는 "매장에 붙일 수 있는
+태그 값"의 선언이고, vocabulary에 `intents` 축을 만들면 오버레이 파일이 매장별로
+`"intents": [...]`를 적을 수 있게 되어 위에서 배제한 방식이 뒷문으로 들어온다.
+intent 이름의 선언은 `_intents.json`의 `intents` 키 자체다.
 """
 
 from __future__ import annotations
@@ -52,6 +77,13 @@ _SUBCATEGORY_TO_STYLES: dict[str, list[str]] = {
 _RESERVED_OVERLAY_KEYS = {"name"}
 
 SUPPORTED_VERSION = 1
+
+# intents 정의 파일명. `_` 접두라 `_iter_overlay_files`가 오버레이로 읽지 않는다.
+INTENTS_FILENAME = "_intents.json"
+
+# `rules`에서 조건으로 쓸 수 있는 매장 필드. 임의 키를 허용하지 않는 이유는 오타가
+# "아무 매장도 안 잡히는 규칙"으로 조용히 통과하는 것을 막기 위해서다.
+_ALLOWED_RULE_FIELDS = {"category", "subcategory"}
 
 
 def derive_facets(category: str | None, subcategory: str | None) -> dict[str, list[str]]:
@@ -272,3 +304,204 @@ def facet_coverage_report(
                 entry["tagged"] += 1
 
     return {"by_building": by_building, "by_category": by_category}
+
+
+# ── intents — 소분류 규칙 + 예외 매장 ─────────────────────────────────────
+
+
+def load_intents(path: Path) -> dict[str, dict]:
+    """intent 정의를 `{intent: 정의}`로 읽는다. 파일이 없으면 빈 dict.
+
+    `path`는 정의 파일(`_intents.json`) 자체거나 그 파일이 들어 있는 디렉터리
+    (`resources/store_search_facets/`)여도 된다. 호출부가 이미 오버레이 디렉터리
+    상수를 들고 있으므로 같은 값을 그대로 넘길 수 있게 하기 위한 편의다.
+
+    파일이 없을 때 예외가 아니라 빈 dict인 것은 `load_overlay`와 같은 관용이다 —
+    intent 정의 없이도 시드·검색은 (탐색 후보 없이) 돌아야 한다.
+
+    `version`은 여기서 검사하지 않는다. `validate_intents`가 오류 목록으로 돌려주고
+    호출부가 실패시킬지 경고할지 정하는 편이, 로더가 예외로 시드를 끊는 것보다
+    기존 검증 흐름(`validate_overlay`)과 일관된다.
+    """
+    file = path / INTENTS_FILENAME if path.is_dir() else path
+    if not file.exists():
+        return {}
+    payload = json.loads(file.read_text(encoding="utf-8"))
+    return payload.get("intents", {})
+
+
+def _matches_rules(store: dict, rules: dict[str, list[str]]) -> bool:
+    """매장 하나가 규칙을 만족하는지. 필드 간 AND, 같은 필드의 값들끼리 OR.
+
+    지원하지 않는 필드는 예외를 던진다. 조용히 무시하면 조건이 하나 사라져 후보
+    집합이 **넓어지는** 방향으로 틀리는데, 그건 "밥집에 정육점이 섞인다"와 같은
+    실패다. 파일은 `validate_intents`가 먼저 걸러야 한다는 계약을 예외로 강제한다.
+    """
+    for field, values in rules.items():
+        if field not in _ALLOWED_RULE_FIELDS:
+            raise ValueError(
+                f"규칙에 쓸 수 없는 필드입니다: {field!r} (허용: {sorted(_ALLOWED_RULE_FIELDS)})"
+            )
+        if store.get(field) not in values:
+            return False
+    return True
+
+
+def resolve_intent_store_ids(
+    intent: str,
+    stores: list[dict],
+    intents: dict[str, dict],
+) -> set[str]:
+    """intent 하나의 후보 store_id 집합 = 규칙 유도분 ∪ extra − excluded.
+
+    `stores`는 `facet_coverage_report`와 같은 순수 dict 목록이다
+    (`[{"store_id": ..., "category": ..., "subcategory": ...}, ...]`) — 이 모듈은
+    ORM을 모르므로 호출부가 Store 행을 이 모양으로 변환해 넘긴다.
+
+    모르는 intent는 빈 집합이다. 사용자 질의어를 intent로 옮기는 책임은 호출부에
+    있고, 매핑이 실패했을 때 후보가 없다는 결과는 정상 흐름(no_match)이다.
+
+    `excluded_store_ids`를 마지막에 빼는 순서가 중요하다 — 규칙이 잘못 끌어온 매장을
+    빼는 것이 이 키의 유일한 용도이므로, extra보다 뒤에 적용해야 "규칙으로 들어왔든
+    손으로 넣었든 결국 제외"라는 뜻이 된다.
+    """
+    definition = intents.get(intent)
+    if not definition:
+        return set()
+
+    rules = definition.get("rules") or {}
+    matched = {
+        store["store_id"] for store in stores if rules and _matches_rules(store, rules)
+    }
+    matched |= set(definition.get("extra_store_ids") or {})
+    return matched - set(definition.get("excluded_store_ids") or {})
+
+
+def _iter_store_id_entries(definition: dict, key: str):
+    """`extra_store_ids`/`excluded_store_ids`를 `(store_id, name)`으로 순회한다.
+
+    두 키는 `{store_id: 매장명}` 객체다. 값이 이름인 이유는 오버레이의 `name`과 같다 —
+    사람이 145줄 diff를 검토할 수 있어야 하는데 JSON에는 주석을 달 수 없다. 이름은
+    검토용 중복 정보이며 조인 키가 아니다(`validate_intents`가 실데이터와 대조만 한다).
+    """
+    entries = definition.get(key) or {}
+    if not isinstance(entries, dict):
+        return
+    yield from entries.items()
+
+
+def validate_intents(payload: dict, stores: list[dict]) -> list[str]:
+    """intents 정의 파일의 실패 조건을 검사하고 **오류 메시지 목록**을 돌려준다.
+
+    `validate_overlay`와 같은 관용이다 — 예외를 던지지 않으므로 호출부가 실패시킬지
+    경고만 할지 정한다. `payload`는 파일을 그대로 파싱한 dict
+    (`{"version": 1, "intents": {...}}`)이고, `stores`는 `resolve_intent_store_ids`와
+    같은 순수 dict 목록이다.
+
+    잡는 것:
+
+    1. `version` 미지원
+    2. intent 정의가 비어 있음(규칙도 extra도 없는 intent는 후보를 못 만든다)
+    3. 규칙에 쓸 수 없는 필드
+    4. 실데이터에 존재하지 않는 규칙 값(예: 소분류 오타 `"레스토랑 "`)
+    5. `extra_store_ids`/`excluded_store_ids`의 고아 store_id
+    6. 이름 불일치(오버레이의 `name` 검사와 같은 목적)
+    7. 규칙이 이미 잡는 매장을 `extra_store_ids`에 또 적은 중복
+    8. 규칙도 extra도 잡지 않는 매장을 `excluded_store_ids`에 적은 무의미한 제외
+
+    4번과 7번이 이 스키마의 핵심 방어다. 4번은 소분류가 Studio에서 바뀌었을 때
+    규칙이 조용히 0건이 되는 것을 잡고, 7번은 규칙과 손 목록이 같은 매장을 두 벌로
+    들고 있는 상태(= 드리프트의 씨앗)를 잡는다.
+    """
+    errors: list[str] = []
+
+    version = payload.get("version")
+    if version != SUPPORTED_VERSION:
+        errors.append(
+            f"지원하지 않는 version입니다: {version!r} (지원: {SUPPORTED_VERSION})"
+        )
+        return errors
+
+    known_ids = {store["store_id"] for store in stores}
+    names = {store["store_id"]: store.get("name") for store in stores}
+    field_values: dict[str, set] = {
+        field: {store.get(field) for store in stores} for field in _ALLOWED_RULE_FIELDS
+    }
+
+    intents = payload.get("intents", {})
+    for intent, definition in intents.items():
+        rules = definition.get("rules") or {}
+
+        # 2. 규칙도 extra도 없으면 후보가 영원히 0건이다.
+        if not rules and not (definition.get("extra_store_ids") or {}):
+            errors.append(f"{intent!r}: rules도 extra_store_ids도 없습니다.")
+
+        for field, values in rules.items():
+            # 3. 지원하지 않는 필드
+            if field not in _ALLOWED_RULE_FIELDS:
+                errors.append(
+                    f"{intent!r}.rules: 규칙에 쓸 수 없는 필드입니다: {field!r} "
+                    f"(허용: {sorted(_ALLOWED_RULE_FIELDS)})"
+                )
+                continue
+            if not isinstance(values, list) or not values:
+                errors.append(
+                    f"{intent!r}.rules.{field}: 비어 있지 않은 배열이어야 합니다: {values!r}"
+                )
+                continue
+            for value in values:
+                # 4. 실데이터에 없는 값 — 소분류가 바뀌어 규칙이 죽은 경우를 잡는다.
+                if value not in field_values[field]:
+                    errors.append(
+                        f"{intent!r}.rules.{field}: 실데이터에 없는 값입니다: {value!r}"
+                    )
+
+        # 규칙이 잡는 집합. 필드가 잘못돼 있으면 위에서 이미 오류로 잡았으므로
+        # 여기서 예외가 나지 않게 허용 필드만 남겨서 계산한다.
+        safe_rules = {
+            field: values
+            for field, values in rules.items()
+            if field in _ALLOWED_RULE_FIELDS and isinstance(values, list) and values
+        }
+        rule_matched = {
+            store["store_id"]
+            for store in stores
+            if safe_rules and _matches_rules(store, safe_rules)
+        }
+
+        extra_ids: set[str] = set()
+        for store_id, name in _iter_store_id_entries(definition, "extra_store_ids"):
+            extra_ids.add(store_id)
+            # 5. 고아 id
+            if store_id not in known_ids:
+                errors.append(
+                    f"{intent!r}.extra_store_ids: 존재하지 않는 store_id입니다: {store_id!r}"
+                )
+                continue
+            # 6. 이름 불일치
+            actual = names.get(store_id)
+            if isinstance(name, str) and actual is not None and name != actual:
+                errors.append(
+                    f"{intent!r}.extra_store_ids: {store_id!r}의 name이 실제 매장명과 "
+                    f"다릅니다: overlay={name!r} actual={actual!r}"
+                )
+            # 7. 규칙이 이미 잡는 매장
+            if store_id in rule_matched:
+                errors.append(
+                    f"{intent!r}.extra_store_ids: 규칙이 이미 잡는 매장입니다(중복): {store_id!r}"
+                )
+
+        for store_id, _name in _iter_store_id_entries(definition, "excluded_store_ids"):
+            # 5. 고아 id
+            if store_id not in known_ids:
+                errors.append(
+                    f"{intent!r}.excluded_store_ids: 존재하지 않는 store_id입니다: {store_id!r}"
+                )
+                continue
+            # 8. 뺄 대상이 애초에 후보가 아니다 = 규칙이 바뀐 뒤 남은 찌꺼기
+            if store_id not in rule_matched and store_id not in extra_ids:
+                errors.append(
+                    f"{intent!r}.excluded_store_ids: 규칙도 extra도 잡지 않는 매장입니다: {store_id!r}"
+                )
+
+    return errors
