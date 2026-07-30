@@ -360,18 +360,16 @@ Wave 2-a + Wave 1을 한 PR로 묶는다. 둘 다 `search_panel.dart` 요청 조
 | facet 시드 배선 버그 | 완료 (W6 중 발견·수정, styles 204건 적재) | `f715e10` |
 | W6 (DiscoveryResponse) | 완료 — "패션" clarify·"신발" results 5건 실데이터 확인 | `d20d629` |
 | W10 (클라이언트 파서) | 완료 — clarify 상태 보관까지, UI는 미구현 | `a1db077` |
-| **W11 (clarify UI)** | **중단됨(착수 직전) — 다음 세션 첫 작업.** 프롬프트는 이 문서 W11 절 + W10 보고의 "이어받을 지점" 참고 | — |
+| **W11 (clarify UI)** | **완료** — 질문·option chip·선택 facet 표시/해제·`전체 보기`·`다시 선택`·`reason` 노출·기존 `onStorePicked` 재사용까지 구현, 회귀 테스트(`widgets_test.dart`) 추가. Chrome 실기 확인은 미실시 | `ddc2926` |
 | W12 (시트 일원화) | 미착수 (상단 검색 일원화로 확정됨) | — |
 | W7 (임베딩 보강·재평가) | 미착수 — W8-a 검수 확정 선행 | — |
 | W8-b~d (검수 254건) | 미착수 (사람 작업) | — |
 | W9 (재시딩 검증) | 미착수 — W8 확정 후 | — |
 | W14 (운영 품질) | 미착수 | — |
 
-다음 세션 재개 지점: ① W11 clarify UI(Opus→Sonnet, `search_panel.dart`의
-`_discoveryMode`/`discoveryQuestion`/`discoveryOptions` getter가 준비돼 있음) →
-② W12 시트 일원화 → ③ 사용자 검수(facet-review-p2-shoes.md) 확정 시 오버레이 반영 +
-W9. Chrome 실기 확인은 아직 안 했다 — 백엔드·클라이언트 함께 띄워 "패션"(clarify),
-"신발"(5건), "화장실"(현재 층) 확인 필요.
+다음 세션 재개 지점: ① W12 시트 일원화 → ② 사용자 검수(facet-review-p2-shoes.md) 확정 시
+오버레이 반영 + W9. Chrome 실기 확인은 아직 안 했다 — 백엔드·클라이언트 함께 띄워
+"패션"(clarify), "신발"(5건), "화장실"(현재 층) 확인 필요.
 
 ---
 
