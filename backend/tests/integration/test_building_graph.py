@@ -93,3 +93,50 @@ def test_실데이터_에스컬레이터_전이는_방향을_지킨다(real_api_
         assert edge["bidirectional"] is False  # 단방향
         # 같은 층을 잇지 않는다(방향이 층과 일치, 불가능 경로 아님).
         assert level_by_node[edge["from"]] != level_by_node[edge["to"]]
+
+
+# 응답이 실제 거리(length_m)와 라우팅 비용(cost_m)을 따로 싣는다.
+#
+# 층 내부 간선은 두 값이 같고, 수직 전이 간선만 갈라진다. 클라이언트는 탐색에 cost_m을,
+# 사용자에게 보여 줄 거리에 length_m을 쓴다 — 한 값으로 겸하면 튜닝 비용이 표시 거리로
+# 새어 나가 총 거리가 부풀려진다.
+def test_그래프_응답이_거리와_비용을_분리해_싣는다(api_client):
+    body = api_client.get(f"/buildings/{BUILDING_ID}/graph").json()
+
+    intra = [edge for edge in body["edges"] if edge["transfer_mode"] is None]
+    assert intra, "층 내부 간선이 있어야 비교가 성립한다"
+    assert all(edge["cost_m"] == edge["length_m"] for edge in intra)
+
+    transfers = _transfer_edges(body)
+    assert transfers, "전이 간선이 있어야 분리를 확인할 수 있다"
+    # 전이는 비용이 실제 거리보다 크다(층 이동을 함부로 고르지 않게 하는 튜닝값이라).
+    assert all(edge["cost_m"] > edge["length_m"] for edge in transfers)
+
+
+# 전이 간선이 어느 층에서 어느 층으로 가는지 응답에 명시된다.
+#
+# 이 값과 to 노드가 수직 전이 도착 지점의 단일 원천이다. 클라이언트가 이름·그룹으로
+# 도착 노드를 다시 고르면 서버 그래프와 어긋나므로, 계약으로 못박아 둔다.
+def test_전이_간선이_출발층과_도착층을_명시한다(api_client):
+    body = api_client.get(f"/buildings/{BUILDING_ID}/graph").json()
+    node_floor_ids = {node["id"]: node["floor_id"] for node in body["nodes"]}
+
+    transfers = _transfer_edges(body)
+    assert transfers
+
+    for edge in transfers:
+        # 층이 채워져 있고, 서로 다른 층을 잇는다(같은 층이면 전이가 아니다).
+        assert edge["from_floor_id"] is not None
+        assert edge["to_floor_id"] is not None
+        assert edge["from_floor_id"] != edge["to_floor_id"]
+        # 그리고 그 층은 실제 endpoint 노드의 소속 층과 일치한다.
+        assert edge["from_floor_id"] == node_floor_ids[edge["from"]]
+        assert edge["to_floor_id"] == node_floor_ids[edge["to"]]
+
+
+# 층 내부 간선은 양 끝이 같은 층이다.
+def test_층_내부_간선은_양끝_층이_같다(api_client):
+    body = api_client.get(f"/buildings/{BUILDING_ID}/graph").json()
+
+    intra = [edge for edge in body["edges"] if edge["transfer_mode"] is None]
+    assert all(edge["from_floor_id"] == edge["to_floor_id"] for edge in intra)

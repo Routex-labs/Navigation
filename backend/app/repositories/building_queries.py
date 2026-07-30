@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from sqlalchemy import select
@@ -151,12 +152,16 @@ def get_building_graph(
     ).all()
     edges = list(intra_edges) + [edge for edge in transfer_edges if _vertical_allows(vertical, edge.transfer_mode)]
 
+    # 전이 간선의 양 끝 층을 노드에서 되찾기 위한 맵. 이미 읽어 둔 nodes를 재사용해
+    # 간선마다 노드를 다시 조회하지 않는다.
+    node_floor_ids = {node.id: node.floor_id for node in nodes}
+
     return {
         "building": {"id": building.id, "name": building.name},
         "vertical": vertical,
         "floors": [{"id": floor.id, "name": floor.name} for floor in floors],
         "nodes": [_to_graph_node_dict(node) for node in nodes],
-        "edges": [_to_edge_dict(edge) for edge in edges],
+        "edges": [_to_edge_dict(edge, node_floor_ids) for edge in edges],
     }
 
 
@@ -236,18 +241,33 @@ def _to_graph_node_dict(node: Node) -> dict[str, Any]:
     return {**_to_node_dict(node), "floor_id": node.floor_id}
 
 
-def _to_edge_dict(edge: Edge) -> dict[str, Any]:
+# node_floor_ids: 노드 id → 소속 층 id. 전이 간선은 edge.floor_id가 None이라
+# 양 끝 층을 노드에서만 알 수 있다. 넘기지 않으면(단일 층 그래프) 간선의 층을 쓴다.
+def _to_edge_dict(edge: Edge, node_floor_ids: Mapping[str, str] | None = None) -> dict[str, Any]:
     # 내부 from_node_id/to_node_id를 API에서는 짧은 from/to 키로 노출한다.
+    if node_floor_ids is None:
+        from_floor_id = to_floor_id = edge.floor_id
+    else:
+        from_floor_id = node_floor_ids.get(edge.from_node_id)
+        to_floor_id = node_floor_ids.get(edge.to_node_id)
+
     return {
         "id": edge.id,
         "from": edge.from_node_id,
         "to": edge.to_node_id,
+        # 실제 이동 거리(표시용)와 라우팅 비용(Dijkstra 가중치)은 다르다.
+        # 전이 간선에서만 갈라지며, 층 내부 간선은 두 값이 같다.
         "length_m": edge.length_m,
+        "cost_m": edge.cost_m,
         "bidirectional": edge.bidirectional,
         "geometry_local_m": edge.geometry or [],
         # 층 내부 간선은 None, 수직 전이 간선은 elevator/escalator. 클라이언트가
         # 경로 안내에서 "엘리베이터 이용" 같은 문구·아이콘을 고르는 근거.
         "transfer_mode": edge.transfer_mode,
+        # 전이가 어느 층에서 어느 층으로 가는지. 클라이언트는 이 값과 to 노드를
+        # 그대로 써야 하며, 이름으로 도착 노드를 다시 찾지 않는다.
+        "from_floor_id": from_floor_id,
+        "to_floor_id": to_floor_id,
     }
 
 

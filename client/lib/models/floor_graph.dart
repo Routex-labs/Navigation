@@ -53,20 +53,39 @@ class GraphNode {
 }
 
 class GraphEdge {
+  /// [costM]을 생략하면 [lengthM]과 같다고 본다 — 층 내부 간선의 정의가 그렇고,
+  /// 값이 갈라지는 것은 서버가 비용을 따로 실어 주는 수직 전이 간선뿐이다.
   const GraphEdge({
     required this.id,
     required this.fromNodeId,
     required this.toNodeId,
     required this.lengthM,
+    this.costM,
     required this.bidirectional,
     required this.geometryLocalM,
     this.transferMode,
+    this.fromFloorId,
+    this.toFloorId,
   });
 
   final String id;
   final String fromNodeId;
   final String toNodeId;
+
+  /// 실제 이동 거리(m). 사용자에게 보여 주는 거리·진행률에 쓴다.
   final double lengthM;
+
+  /// 서버가 내려준 라우팅 비용. 아직 cost_m을 주지 않는 서버·구 테스트에서는 null이다.
+  /// 탐색에는 이 값 대신 [routingCostM]을 쓴다.
+  final double? costM;
+
+  /// 최단 경로 탐색이 최소화하는 가중치(m 단위). [costM]이 없으면 [lengthM]으로 폴백한다.
+  ///
+  /// 층 내부 간선은 [lengthM]과 같아 폴백이 곧 정답이다. 수직 전이 간선만 값이
+  /// 갈라지는데, 서버가 수단 선호(에스컬레이터 vs 엘리베이터)를 인코딩한 튜닝값이기
+  /// 때문이다. 이 값을 표시 거리로 쓰면 총 거리가 부풀려지므로 용도를 섞지 않는다.
+  double get routingCostM => costM ?? lengthM;
+
   final bool bidirectional;
 
   /// fromNodeId -> toNodeId 진행 방향의 폴리라인. 비어 있으면 두 노드를
@@ -77,17 +96,32 @@ class GraphEdge {
   /// 이 간선을 지날 때 사용자에게 어떤 이동 수단을 안내해야 하는지의 근거다.
   final String? transferMode;
 
-  factory GraphEdge.fromJson(Map<String, dynamic> json) => GraphEdge(
-    id: json['id'] as String,
-    fromNodeId: json['from'] as String,
-    toNodeId: json['to'] as String,
-    lengthM: (json['length_m'] as num).toDouble(),
-    bidirectional: json['bidirectional'] as bool,
-    geometryLocalM: ((json['geometry_local_m'] as List<dynamic>?) ?? const [])
-        .map((point) => LocalPoint.fromJson(point as Map<String, dynamic>))
-        .toList(),
-    transferMode: json['transfer_mode'] as String?,
-  );
+  /// 이 간선이 잇는 층. 전이 간선은 두 값이 다르고 층 내부 간선은 같다.
+  ///
+  /// 수직 전이의 도착 지점은 [toNodeId]와 [toFloorId]가 단일 원천이다 —
+  /// 이름·그룹을 파싱해 도착 노드를 다시 고르면 서버 그래프와 어긋난다.
+  final String? fromFloorId;
+  final String? toFloorId;
+
+  factory GraphEdge.fromJson(Map<String, dynamic> json) {
+    final lengthM = (json['length_m'] as num).toDouble();
+    return GraphEdge(
+      id: json['id'] as String,
+      fromNodeId: json['from'] as String,
+      toNodeId: json['to'] as String,
+      lengthM: lengthM,
+      // cost_m을 아직 안 내려주는 서버면 null로 두고, routingCostM이 lengthM으로
+      // 폴백한다(층 내부 간선은 두 값이 같으므로 폴백이 곧 정답이다).
+      costM: (json['cost_m'] as num?)?.toDouble(),
+      bidirectional: json['bidirectional'] as bool,
+      geometryLocalM: ((json['geometry_local_m'] as List<dynamic>?) ?? const [])
+          .map((point) => LocalPoint.fromJson(point as Map<String, dynamic>))
+          .toList(),
+      transferMode: json['transfer_mode'] as String?,
+      fromFloorId: json['from_floor_id'] as String?,
+      toFloorId: json['to_floor_id'] as String?,
+    );
+  }
 }
 
 class FloorGraph {

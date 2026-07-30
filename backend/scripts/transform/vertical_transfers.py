@@ -31,9 +31,15 @@ TRANSFER_TYPES = ("elevator", "escalator")
 # 같은 수직 통로로 볼 최대 수평 거리(m). 정규화 잔차(~1-3m)를 감안한 값.
 MATCH_RADIUS_M = 8.0
 
-# --- 비용(=Dijkstra 가중치, m) ------------------------------------------------
+# 층고 추정치(m). 전이 간선의 **실제 이동 거리**(length_m)를 구할 때만 쓴다.
+# 원천 데이터에 층별 높이가 없어 백화점 기준 통상값을 상수로 둔다 — 정확한 실측이
+# 생기면 층 데이터에서 읽도록 바꾼다. 라우팅 결과에는 영향이 없다(그쪽은 cost_m).
+FLOOR_HEIGHT_M = 4.5
+
+# --- 라우팅 비용(=Dijkstra 가중치, m) -----------------------------------------
 # 실제 높이가 아니라 "어떤 수단으로 몇 층을 이동할지"를 라우팅이 고르게 만드는 값이다.
-# 클라이언트 Dijkstra는 순수 거리 합만 보므로, 수단 선호는 전적으로 이 가중치로 인코딩된다.
+# 클라이언트 Dijkstra는 이 비용 합만 보므로, 수단 선호는 전적으로 이 가중치로 인코딩된다.
+# 실제 이동 거리는 별도로 length_m에 싣는다(사용자에게 보이는 거리는 그쪽을 쓴다).
 #
 # 에스컬레이터는 한 층 세그먼트마다 이 비용을 문다(n층 이동 = ESCALATOR_HOP_M × n).
 ESCALATOR_HOP_M = 20.0
@@ -116,6 +122,7 @@ def _edge(
     mode: str,
     floors: list[str],
     length_m: float,
+    cost_m: float,
     bidirectional: bool,
     distance: float,
 ) -> dict:
@@ -126,7 +133,10 @@ def _edge(
         "to": to_node["id"],
         "mode": mode,
         "floors": floors,
-        "length_m": length_m,
+        # length_m은 실제 이동 거리(표시용), cost_m은 라우팅 가중치다. 둘을 겸하면
+        # 튜닝 비용이 사용자에게 보이는 총 거리에 그대로 새어 들어간다.
+        "length_m": round(length_m, 3),
+        "cost_m": cost_m,
         "bidirectional": bidirectional,
         "horizontal_offset_m": round(distance, 3),
     }
@@ -165,7 +175,9 @@ def _escalator_transfers(
                     to_node=b,
                     mode="escalator",
                     floors=floors,
-                    length_m=ESCALATOR_HOP_M,
+                    # 실제 이동 거리는 경사면 길이 — 수평 주행거리와 층고의 빗변이다.
+                    length_m=hypot(distance, FLOOR_HEIGHT_M),
+                    cost_m=ESCALATOR_HOP_M,
                     bidirectional=False,
                     distance=distance,
                 )
@@ -219,16 +231,18 @@ def _elevator_transfers(
                 lower_floor, lower_node = shaft[i]
                 upper_floor, upper_node = shaft[j]
                 hops = abs(rank[upper_floor["name"]] - rank[lower_floor["name"]])
-                length_m = ELEVATOR_BOARD_M + ELEVATOR_PER_FLOOR_M * hops
+                horizontal = _distance(lower_node, upper_node)
                 transfers.append(
                     _edge(
                         from_node=lower_node,
                         to_node=upper_node,
                         mode="elevator",
                         floors=[lower_floor["name"], upper_floor["name"]],
-                        length_m=length_m,
+                        # 실제 이동 거리는 샤프트를 오르내린 높이다(같은 샤프트라 수평 이동은 정렬 잔차 수준).
+                        length_m=hypot(horizontal, FLOOR_HEIGHT_M * hops),
+                        cost_m=ELEVATOR_BOARD_M + ELEVATOR_PER_FLOOR_M * hops,
                         bidirectional=True,
-                        distance=_distance(lower_node, upper_node),
+                        distance=horizontal,
                     )
                 )
 

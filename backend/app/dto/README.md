@@ -135,9 +135,12 @@ classDiagram
         +str id
         +str from_node_id
         +str to_node_id
-        +float length_m
+        +float length_m 「실제 이동 거리, 표시용」
+        +float cost_m 「라우팅 비용, Dijkstra 가중치」
         +bool bidirectional
         +str transfer_mode ?
+        +str from_floor_id ?
+        +str to_floor_id ?
     }
 
     FloorGraphResponse *-- GraphFloorResponse : floor
