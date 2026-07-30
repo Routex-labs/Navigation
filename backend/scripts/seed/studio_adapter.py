@@ -130,19 +130,17 @@ def validate_facet_resources(directory: Path = STUDIO_DIR) -> list[str]:
         payload = json.loads(path.read_text(encoding="utf-8"))
         errors += [
             f"{path.name}: {message}"
-            for message in store_facets.validate_overlay(
-                payload, vocabulary, known_ids, names
-            )
+            for message in store_facets.validate_overlay(payload, vocabulary, known_ids, names)
         ]
 
     intents_path = STORE_SEARCH_FACETS_DIR / store_facets.INTENTS_FILENAME
     if intents_path.exists():
         payload = json.loads(intents_path.read_text(encoding="utf-8"))
         errors += [
-            f"{store_facets.INTENTS_FILENAME}: {message}"
-            for message in store_facets.validate_intents(payload, rows)
+            f"{store_facets.INTENTS_FILENAME}: {message}" for message in store_facets.validate_intents(payload, rows)
         ]
     return errors
+
 
 # 기준층: 건물 공통 프레임의 wgs84 앵커를 가진 층. 좌표 자체는 전 층이 공유하므로
 # 여기서 가져오는 것은 local_m -> wgs84 아핀뿐이다.
@@ -155,9 +153,7 @@ POI_NODE_TYPES = {"elevator", "escalator"}
 # {층}.json이 있는 층 코드를 찾아 기준층을 맨 앞에 둔 순서로 돌려준다.
 def discover_floor_codes(directory: Path = STUDIO_DIR) -> list[str]:
     codes = sorted(
-        path.stem
-        for path in directory.glob("*.json")
-        if not path.stem.startswith(("stores_", "transfers_"))
+        path.stem for path in directory.glob("*.json") if not path.stem.startswith(("stores_", "transfers_"))
     )
     if REFERENCE_FLOOR in codes:
         codes.remove(REFERENCE_FLOOR)
@@ -183,12 +179,7 @@ def _scoped(floor_id: str, raw_id: str | None) -> str | None:
 
 # 기준층의 local_m -> wgs84 아핀. 출력은 (lng, lat) 순서다.
 def _wgs84_transform(reference: dict) -> floor_alignment.Affine | None:
-    matrix = (
-        reference["coordinate_system"]
-        .get("affine_transforms", {})
-        .get("local_m_to_wgs84", {})
-        .get("matrix")
-    )
+    matrix = reference["coordinate_system"].get("affine_transforms", {}).get("local_m_to_wgs84", {}).get("matrix")
     if not matrix:
         return None
     return (
@@ -296,9 +287,7 @@ def _reshape_stores(
         category, subcategory = _resolved_category(store, category_overrides, category_by_name)
         # 파생(소분류) + 수작업 오버레이. 빈 dict는 저장하지 않는다 — 컬럼을 None으로 둬야
         # "태그 없음"과 "빈 태그"가 DB에서 구분 없이 하나로 남는다(설계 5-1 빈 배열 금지).
-        facets = store_facets.resolve_facets(
-            store["id"], category, subcategory, facet_overlay
-        )
+        facets = store_facets.resolve_facets(store["id"], category, subcategory, facet_overlay)
         reshaped.append(
             {
                 "id": store["id"],  # store id는 층별로 이미 유일(네임스페이싱 불필요)
@@ -365,9 +354,7 @@ def build_seed_dict(
                 "level": floor["level"],
                 "footprint_local_m": footprint,
             },
-            "map_calibration_version": studio.get("coordinate_system", {}).get(
-                "calibration_version", "unversioned"
-            ),
+            "map_calibration_version": studio.get("coordinate_system", {}).get("calibration_version", "unversioned"),
         },
         "nodes": nodes,
         "edges": _scope_edges(floor_id, studio["edges"]),
@@ -391,10 +378,7 @@ def seed_studio(
     # 적재 전에 검증한다 — 잘못된 태그가 DB에 들어간 뒤 실패하면 반쯤 시드된 DB가 남는다.
     facet_errors = validate_facet_resources(directory)
     if facet_errors:
-        raise ValueError(
-            "검색 facet 리소스 검증 실패 "
-            f"({len(facet_errors)}건):\n  - " + "\n  - ".join(facet_errors)
-        )
+        raise ValueError(f"검색 facet 리소스 검증 실패 ({len(facet_errors)}건):\n  - " + "\n  - ".join(facet_errors))
 
     own_session = session or SessionLocal()
     try:
@@ -445,10 +429,7 @@ def main() -> None:
         if "transfers" in row:
             print(f"[전이] 간선={row['transfers']} 미해결={row['unresolved']}")
             continue
-        print(
-            f"[{row['name']}] nodes={row['nodes']} edges={row['edges']} "
-            f"stores={row['stores']} pois={row['pois']}"
-        )
+        print(f"[{row['name']}] nodes={row['nodes']} edges={row['edges']} stores={row['stores']} pois={row['pois']}")
     print("Studio 데이터 적재 완료")
 
 

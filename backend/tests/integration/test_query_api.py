@@ -92,9 +92,7 @@ def test_문장끝_구두점이_붙어도_단일목적지_계약에서_매칭된
 # 경량 정규화를 쓰므로 여기서도 동일하게 direct 1건이 나와야 한다.
 @pytest.mark.parametrize("text", _PUNCTUATED)
 def test_문장끝_구두점이_붙어도_탐색은_direct_1건이다(api_client, text):
-    response = api_client.post(
-        "/query/ai", json={"text": text, "building_id": BUILDING_ID}
-    )
+    response = api_client.post("/query/ai", json={"text": text, "building_id": BUILDING_ID})
 
     assert response.status_code == 200
     body = response.json()
@@ -258,14 +256,10 @@ def test_ai_질의_매칭이_없으면_no_match다(api_client, monkeypatch):
     monkeypatch.setattr(
         query_semantic,
         "search_many",
-        lambda *a, **k: query_semantic.SemanticResults(
-            query_semantic.SemanticReason.BELOW_THRESHOLD
-        ),
+        lambda *a, **k: query_semantic.SemanticResults(query_semantic.SemanticReason.BELOW_THRESHOLD),
     )
 
-    response = api_client.post(
-        "/query/ai", json={"text": "존재하지않는가게", "building_id": BUILDING_ID}
-    )
+    response = api_client.post("/query/ai", json={"text": "존재하지않는가게", "building_id": BUILDING_ID})
 
     assert response.status_code == 200
     body = response.json()
@@ -312,12 +306,8 @@ def test_현재_층을_층라벨로_지정해도_그_층의_대상만_반환한�
 def test_층라벨과_내부id는_같은_결과를_준다(api_client):
     base = {"text": "가게A", "building_id": BUILDING_ID}
 
-    by_name = api_client.post(
-        "/query/destination", json={**base, "current_floor_id": FLOOR_NAME}
-    ).json()
-    by_id = api_client.post(
-        "/query/destination", json={**base, "current_floor_id": FLOOR_ID}
-    ).json()
+    by_name = api_client.post("/query/destination", json={**base, "current_floor_id": FLOOR_NAME}).json()
+    by_id = api_client.post("/query/destination", json={**base, "current_floor_id": FLOOR_ID}).json()
 
     assert by_name == by_id
 

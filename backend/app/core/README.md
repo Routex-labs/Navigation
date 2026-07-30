@@ -27,18 +27,18 @@
 ## `config.py` — 설정
 
 ```python
-API_ROOT = Path(__file__).resolve().parents[2]          # backend/
+API_ROOT = Path(__file__).resolve().parents[2]  # backend/
 DEFAULT_DATABASE_URL = f"sqlite:///{(API_ROOT / 'data' / 'navigation.db').as_posix()}"
 
 
 class Settings(BaseSettings):
     database_url: str = DEFAULT_DATABASE_URL
     warm_embedding: bool = False  # NAV_WARM_EMBEDDING — 기동 시 임베딩 모델 백그라운드 선로드
-    log_level: str = "INFO"       # NAV_LOG_LEVEL — 로그 레벨(DEBUG로 상세 로그)
+    log_level: str = "INFO"  # NAV_LOG_LEVEL — 로그 레벨(DEBUG로 상세 로그)
     model_config = SettingsConfigDict(env_prefix="NAV_", case_sensitive=False)
 
 
-settings = Settings()   # import 시 1회 생성, 프로세스 전역 재사용
+settings = Settings()  # import 시 1회 생성, 프로세스 전역 재사용
 ```
 
 - **`settings`는 모듈 전역 싱글턴이다.** 다른 모듈은 `from app.core.config import settings`로 가져다 쓴다.
@@ -76,9 +76,7 @@ Docker Compose는 `NAV_DATABASE_URL: sqlite:////app/data/navigation.db`를 주�
 ```python
 engine = create_engine(
     settings.database_url,
-    connect_args={"check_same_thread": False}
-    if settings.database_url.startswith("sqlite")
-    else {},
+    connect_args={"check_same_thread": False} if settings.database_url.startswith("sqlite") else {},
 )
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 ```
@@ -106,8 +104,7 @@ def get_db() -> Iterator[Session]:
 - 라우터에서:
   ```python
   @router.get(...)
-  def handler(session: Session = Depends(get_db)):
-      ...
+  def handler(session: Session = Depends(get_db)): ...
   ```
 - 핸들러가 예외를 던지면 `except`에서 **rollback**, 정상이든 아니든 `finally`에서 **close**.
 - 테스트는 이 의존성을 시드된 임시 DB로 교체한다(`tests/conftest.py`의 `app.dependency_overrides[get_db]`).
@@ -122,8 +119,8 @@ def get_db() -> Iterator[Session]:
 `install_exception_logging()`으로 예외 로깅 핸들러를 건다.
 
 ```python
-configure_logging()               # main.py, 앱 생성 맨 앞
-install_exception_logging(app)    # main.py
+configure_logging()  # main.py, 앱 생성 맨 앞
+install_exception_logging(app)  # main.py
 ```
 
 - **stdout 한 곳으로 통일.** uvicorn access(요청·상태 코드)·error(예외 트레이스백)와 우리

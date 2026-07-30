@@ -91,17 +91,17 @@ def _match_by_position(
     used: set[str] = set()
     pairs: list[tuple[dict, dict, float]] = []
     for a in a_nodes:
-        candidates = [
-            (_distance(a, b), b) for b in b_nodes if b["id"] not in used
-        ]
+        candidates = [(_distance(a, b), b) for b in b_nodes if b["id"] not in used]
         near = [c for c in candidates if c[0] <= MATCH_RADIUS_M]
         if not near:
-            unresolved.append({
-                "node_id": a["id"],
-                "floor": a_floor["name"],
-                "mode": mode,
-                "reason": f"{b_floor['name']}에 {MATCH_RADIUS_M}m 이내 대응 없음",
-            })
+            unresolved.append(
+                {
+                    "node_id": a["id"],
+                    "floor": a_floor["name"],
+                    "mode": mode,
+                    "reason": f"{b_floor['name']}에 {MATCH_RADIUS_M}m 이내 대응 없음",
+                }
+            )
             continue
         distance, b = min(near, key=lambda c: c[0])
         used.add(b["id"])
@@ -159,15 +159,17 @@ def _escalator_transfers(
             unresolved=unresolved,
         )
         for a, b, distance in pairs:
-            transfers.append(_edge(
-                from_node=a,
-                to_node=b,
-                mode="escalator",
-                floors=floors,
-                length_m=ESCALATOR_HOP_M,
-                bidirectional=False,
-                distance=distance,
-            ))
+            transfers.append(
+                _edge(
+                    from_node=a,
+                    to_node=b,
+                    mode="escalator",
+                    floors=floors,
+                    length_m=ESCALATOR_HOP_M,
+                    bidirectional=False,
+                    distance=distance,
+                )
+            )
 
 
 # 엘리베이터 노드를 층을 가로질러 같은 자리(샤프트)끼리 묶는다.
@@ -180,9 +182,7 @@ def _elevator_shafts(ordered: list[dict]) -> list[list[tuple[dict, dict]]]:
             placed = False
             for shaft in shafts:
                 rep_node = shaft[0][1]
-                if _distance(node, rep_node) <= MATCH_RADIUS_M and all(
-                    f["name"] != floor["name"] for f, _n in shaft
-                ):
+                if _distance(node, rep_node) <= MATCH_RADIUS_M and all(f["name"] != floor["name"] for f, _n in shaft):
                     shaft.append((floor, node))
                     placed = True
                     break
@@ -205,12 +205,14 @@ def _elevator_transfers(
     for shaft in _elevator_shafts(ordered):
         if len(shaft) < 2:
             floor, node = shaft[0]
-            unresolved.append({
-                "node_id": node["id"],
-                "floor": floor["name"],
-                "mode": "elevator",
-                "reason": "다른 층에 같은 샤프트 대응 없음",
-            })
+            unresolved.append(
+                {
+                    "node_id": node["id"],
+                    "floor": floor["name"],
+                    "mode": "elevator",
+                    "reason": "다른 층에 같은 샤프트 대응 없음",
+                }
+            )
             continue
         for i in range(len(shaft)):
             for j in range(i + 1, len(shaft)):
@@ -218,15 +220,17 @@ def _elevator_transfers(
                 upper_floor, upper_node = shaft[j]
                 hops = abs(rank[upper_floor["name"]] - rank[lower_floor["name"]])
                 length_m = ELEVATOR_BOARD_M + ELEVATOR_PER_FLOOR_M * hops
-                transfers.append(_edge(
-                    from_node=lower_node,
-                    to_node=upper_node,
-                    mode="elevator",
-                    floors=[lower_floor["name"], upper_floor["name"]],
-                    length_m=length_m,
-                    bidirectional=True,
-                    distance=_distance(lower_node, upper_node),
-                ))
+                transfers.append(
+                    _edge(
+                        from_node=lower_node,
+                        to_node=upper_node,
+                        mode="elevator",
+                        floors=[lower_floor["name"], upper_floor["name"]],
+                        length_m=length_m,
+                        bidirectional=True,
+                        distance=_distance(lower_node, upper_node),
+                    )
+                )
 
 
 # 층 간 수직 전이 간선을 만든다.

@@ -68,9 +68,7 @@ def _content_tile(factory) -> tuple[int, int, int]:
 
 def _render(factory, tile: tuple[int, int, int]) -> bytes:
     with factory() as session:
-        rendered = tile_queries.render_floor_tile(
-            session, BUILDING_ID, FLOOR_NAME, *tile
-        )
+        rendered = tile_queries.render_floor_tile(session, BUILDING_ID, FLOOR_NAME, *tile)
     assert rendered is not None
     return rendered
 

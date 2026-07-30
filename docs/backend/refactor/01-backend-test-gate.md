@@ -29,10 +29,54 @@ GitHub Actions에서 실제로 강제되는지 확인하고, 기준선(baseline)
 
 ## 완료 기준
 
-- [ ] `backend/` 테스트 전체가 CI에서 실행된다(하위 폴더 누락 없음).
-- [ ] ruff·(mypy/pyright)·pytest·pip-audit이 PR 체크로 노출된다.
-- [ ] 필수 상태 체크 없이 `main`에 머지할 수 없도록 브랜치 보호 설정을 확인한다(리포지토리 설정 변경이 필요하면 사용자에게 요청 — 이 저장소 설정은 GitHub 쪽 권한이 필요할 수 있음).
-- [ ] 기준선 테스트 통과 로그가 PR에 남는다.
+- [x] `backend/` 테스트 전체가 CI에서 실행된다(하위 폴더 누락 없음).
+- [x] ruff·mypy·pytest·pip-audit이 PR 체크로 노출된다.
+- [ ] 필수 상태 체크 없이 `main`에 머지할 수 없도록 브랜치 보호 설정을 확인한다 —
+      **GitHub 저장소 설정 권한이 필요해 코드로는 못 한다. 사람이 Settings → Branches에서
+      `Backend (FastAPI)`·`Frontend (Flutter)`를 required status check로 지정해야 한다.**
+- [x] 기준선 테스트 통과 로그가 PR에 남는다.
+
+## 적용 결과 (2026-07-30)
+
+### 실제로 있던 문제
+
+CI가 `pytest tests/unit`·`pytest tests/integration`으로 **하위 폴더를 하드코딩**하고 있었다.
+지금은 모든 테스트가 그 두 폴더에 있어 증상이 없지만, `tests/e2e/`나 `tests/` 바로 아래에
+파일을 추가하면 조용히 실행에서 빠진다. 임시 파일로 재현해 확인했다 — 새 방식 357개 수집,
+옛 방식 356개(누락). 감사 문서가 지적한 "테스트는 있는데 CI가 안 돌린다"와 같은 구조다.
+
+### 도입한 게이트 (`.github/workflows/ci.yml`의 backend job)
+
+| 게이트 | 명령 | 설정 |
+| --- | --- | --- |
+| lint | `ruff check` | `pyproject.toml` — E/F/I/UP/B, line-length 120 |
+| format | `ruff format --check` | 전체 적용 완료(38파일 기계적 변경) |
+| 타입 | `mypy` | `app/` 대상 점진 도입 |
+| 테스트 | `pytest` | `testpaths = ["tests"]`로 경로 드리프트 차단 |
+| 취약점 | `pip-audit -r requirements.txt` | 알려진 7건만 제외, 새 항목은 실패 |
+
+### 기준선 (커밋 `1522958` 기준, 로컬 실측)
+
+```
+ruff check          : All checks passed!
+ruff format --check : 78 files already formatted
+mypy                : Success: no issues found in 33 source files
+pytest              : 353 passed, 3 skipped
+pip-audit           : No known vulnerabilities found, 9 ignored
+```
+
+### 판단이 필요했던 항목
+
+- **B008(FastAPI `Depends()` 기본 인자)** — 10건 전부 오탐. FastAPI 정상 사용법이라
+  `extend-immutable-calls`로 제외.
+- **B905(`zip(strict=)`)·UP042(`StrEnum`)** — 런타임 의미가 바뀐다(조용한 절단 → 예외,
+  `str()` 출력 변경). 근거를 남기고 제외했고, 필요하면 별도 작업으로 다룬다.
+- **starlette 취약점 9건(고유 7 ID)** — `fastapi 0.115`가 `starlette<0.47`을 요구하는데
+  수정본은 `0.47.2`부터라 FastAPI를 함께 올려야 해소된다. 이 작업 범위를 넘어
+  [08번](08-dependency-model-supply-chain.md)으로 넘긴다. 그동안 게이트가 무력해지지 않도록
+  `--ignore-vuln`으로 **해당 ID만** 제외해, 새 취약점은 여전히 CI를 실패시킨다.
+- **CI 도구 위치** — `requirements-ci.txt`로 분리했다. 운영 이미지에 lint·타입 도구를
+  넣지 않기 위해서이며, 08번의 requirements 분리 방향과 같다.
 
 ## 참고
 

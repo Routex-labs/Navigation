@@ -215,11 +215,12 @@ classDiagram
 ```python
 # models/building.py — 저장되는 모양
 class Building(Base):
-    floors: Mapped[list["Floor"]]      # Floor 객체(관계)
+    floors: Mapped[list["Floor"]]  # Floor 객체(관계)
+
 
 # dto/building.py — 나가는 모양
 class BuildingSummaryResponse(BaseModel):
-    floors: list[str]                  # 층 "이름" 문자열만
+    floors: list[str]  # 층 "이름" 문자열만
 ```
 
 ORM을 그대로 반환하면 DB 컬럼을 바꾸는 순간 API가 깨지고 내부 구조가 샌다. dto로 끊으면

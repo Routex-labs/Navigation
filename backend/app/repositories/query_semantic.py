@@ -80,9 +80,7 @@ class SemanticReason(str, Enum):
 # degraded로 안내해야 하는 사유들. "의미 검색 기능 자체를 지금 못 쓴다"는 뜻이며,
 # 질의를 바꿔도 결과가 달라지지 않는다. BELOW_THRESHOLD는 여기 들어가지 않는다 —
 # 그건 기능은 정상이고 이 질의만 안 닮은 것이라 "다른 말로 다시"가 맞는 안내다.
-_DEGRADED_REASONS = frozenset(
-    {SemanticReason.MODEL_UNAVAILABLE, SemanticReason.INDEX_UNAVAILABLE}
-)
+_DEGRADED_REASONS = frozenset({SemanticReason.MODEL_UNAVAILABLE, SemanticReason.INDEX_UNAVAILABLE})
 
 
 @dataclass(frozen=True)
@@ -94,7 +92,7 @@ class SemanticResult:
     """
 
     reason: SemanticReason
-    hit: tuple[float, "Store", "Floor"] | None = None
+    hit: tuple[float, Store, Floor] | None = None
 
     @property
     def is_degraded(self) -> bool:
@@ -111,7 +109,7 @@ class SemanticResults:
     """
 
     reason: SemanticReason
-    hits: tuple[tuple[float, "Store", "Floor"], ...] = ()
+    hits: tuple[tuple[float, Store, Floor], ...] = ()
 
     @property
     def is_degraded(self) -> bool:
@@ -125,7 +123,7 @@ _model_load_failed = False
 _index_lock = threading.Lock()
 # building_id -> (faiss.Index, [store_id ...], fingerprint) — 벡터 행 순서와 store_id를
 # 짝지어 역참조하고, fingerprint로 이 인덱스가 어느 시점의 DB 데이터를 반영하는지 기억한다.
-_indexes: dict[str, tuple[Any, list[str], "_Fingerprint"]] = {}
+_indexes: dict[str, tuple[Any, list[str], _Fingerprint]] = {}
 
 # 매장 수 + max(store.id)의 건물별 지문. 별도 프로세스(reset_and_seed)가 재시딩해도
 # 서버 프로세스는 그 사실을 모른다 — semantic_search 진입 때마다 이 지문을 값싼 SQL로
@@ -138,7 +136,7 @@ _indexes: dict[str, tuple[Any, list[str], "_Fingerprint"]] = {}
 _Fingerprint = tuple[int, str | None]
 
 
-def _compute_fingerprint(session: "Session", building_id: str) -> _Fingerprint:
+def _compute_fingerprint(session: Session, building_id: str) -> _Fingerprint:
     """건물의 매장 수 + 최대 id를 값싼 집계 쿼리 한 번으로 계산한다."""
     row = session.execute(
         select(func.count(Store.id), func.max(Store.id))
@@ -207,7 +205,7 @@ def warm_model_in_background() -> threading.Thread:
     return thread
 
 
-def _document_text(store: "Store") -> str:
+def _document_text(store: Store) -> str:
     # 매장을 임베딩할 텍스트. 이름 + 카테고리 + 검증된 검색 facet(styles·cuisines)으로
     # 의미 신호를 만든다.
     #
@@ -236,7 +234,7 @@ def _encode(model: Any, texts: list[str]) -> np.ndarray:
     return np.ascontiguousarray(vectors, dtype="float32")
 
 
-def _build_index(session: "Session", building_id: str) -> tuple[Any, list[str]] | None:
+def _build_index(session: Session, building_id: str) -> tuple[Any, list[str]] | None:
     model = _get_model()
     if model is None:
         return None
@@ -257,7 +255,7 @@ def _build_index(session: "Session", building_id: str) -> tuple[Any, list[str]] 
     return index, store_ids
 
 
-def _get_index(session: "Session", building_id: str) -> tuple[Any, list[str]] | None:
+def _get_index(session: Session, building_id: str) -> tuple[Any, list[str]] | None:
     # 값싼 지문 재계산(count(*) + max(id) 한 번) — 매 질의마다 실행되므로 반드시 저렴해야
     # 한다. 지문이 캐시와 같으면 임베딩 재계산(수 초) 없이 그대로 재사용한다.
     fingerprint = _compute_fingerprint(session, building_id)
@@ -287,7 +285,7 @@ def reset_indexes() -> None:
 
 
 def search_many(
-    session: "Session",
+    session: Session,
     building_id: str,
     text: str,
     *,
@@ -320,7 +318,7 @@ def search_many(
     k = min(max(limit, _TOP_K), index.ntotal)
     scores, positions = index.search(query_vec, k)
 
-    hits: list[tuple[float, "Store", "Floor"]] = []
+    hits: list[tuple[float, Store, Floor]] = []
     saw_alive = False
     for score, pos in zip(scores[0], positions[0]):
         if pos < 0:
@@ -344,7 +342,7 @@ def search_many(
 
 
 def search(
-    session: "Session",
+    session: Session,
     building_id: str,
     text: str,
 ) -> SemanticResult:
@@ -368,10 +366,10 @@ def search(
 
 
 def semantic_search(
-    session: "Session",
+    session: Session,
     building_id: str,
     text: str,
-) -> tuple[float, "Store", "Floor"] | None:
+) -> tuple[float, Store, Floor] | None:
     """search()의 하위 호환 래퍼. 임계값 이상 최상위 (score, Store, Floor) 1건, 없으면 None.
 
     사유가 필요 없는 기존 호출부(match_ai_destination·평가 스크립트)를 그대로 두기 위한

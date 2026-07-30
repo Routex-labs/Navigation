@@ -75,9 +75,7 @@ NEGATIVE_QUERIES = ["asdfqwerzxcv", "ㅋㅋㅋㅋㅋ", "zzzzzzz", "19283746"]
 def _match_text(match: dict[str, Any] | None) -> str:
     if match is None:
         return ""
-    return " ".join(
-        str(match.get(key) or "") for key in ("name", "category", "subcategory")
-    )
+    return " ".join(str(match.get(key) or "") for key in ("name", "category", "subcategory"))
 
 
 def _semantic_text(hit: tuple[Any, Any, Any] | None) -> str:
@@ -147,11 +145,7 @@ def evaluate() -> dict[str, Any]:
                     "label": label,
                     "query": text,
                     "expected": expected_pattern,
-                    "route": (
-                        "light"
-                        if query_search._is_confident_light_match(light)
-                        else "semantic"
-                    ),
+                    "route": ("light" if query_search._is_confident_light_match(light) else "semantic"),
                     "light_tier": light_tier,
                     "light_name": light_name,
                     "final_status": final["status"],
@@ -162,9 +156,7 @@ def evaluate() -> dict[str, Any]:
                     "semantic_floor": semantic[2].name if semantic else None,
                     "semantic_score": round(semantic[0], 3) if semantic else None,
                     "semantic_reason": reason,
-                    "semantic_pass": _matches(
-                        expected_pattern, _semantic_text(semantic)
-                    ),
+                    "semantic_pass": _matches(expected_pattern, _semantic_text(semantic)),
                     "elapsed_sec": elapsed,
                 }
             )
@@ -183,9 +175,7 @@ def evaluate() -> dict[str, Any]:
                     "light_name": None,
                     "final_status": final["status"],
                     "final_name": final["match"]["name"] if final["match"] else None,
-                    "final_floor": (
-                        final["match"]["floor_name"] if final["match"] else None
-                    ),
+                    "final_floor": (final["match"]["floor_name"] if final["match"] else None),
                     "final_pass": final["status"] == "no_match",
                     "semantic_name": semantic[1].name if semantic else None,
                     "semantic_floor": semantic[2].name if semantic else None,
@@ -297,9 +287,7 @@ def main() -> None:
 
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(
-            json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        args.out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"\n결과 저장: {args.out}")
 
     if args.baseline:

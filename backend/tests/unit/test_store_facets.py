@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import json
 
-from app.repositories import store_facets
+import pytest
 
+from app.repositories import store_facets
 
 # ── derive_facets ────────────────────────────────────────────────────────
 
@@ -119,11 +120,9 @@ def test_같은_store_id가_두_파일에_있으면_오류다(tmp_path):
         encoding="utf-8",
     )
 
-    try:
+    # 중복 store_id는 예외를 던져야 한다.
+    with pytest.raises(ValueError, match="PO-1"):
         store_facets.load_overlay(tmp_path)
-        assert False, "중복 store_id는 예외를 던져야 한다"
-    except ValueError as exc:
-        assert "PO-1" in str(exc)
 
 
 # ── validate_overlay ─────────────────────────────────────────────────────
@@ -282,9 +281,7 @@ def test_식사는_category가_아니라_subcategory_기준이다():
     # 대조군: 같은 스키마로 category 규칙을 쓰면 정육이 실제로 섞인다 — 왜 subcategory를
     # 골랐는지 코드로 남겨 두는 회귀 테스트다.
     category_based = {"식사": {"rules": {"category": ["식음료"]}}}
-    assert "PO-정육" in store_facets.resolve_intent_store_ids(
-        "식사", INTENT_STORES, category_based
-    )
+    assert "PO-정육" in store_facets.resolve_intent_store_ids("식사", INTENT_STORES, category_based)
 
 
 def test_excluded_store_ids는_규칙_결과에서_빠진다():
@@ -304,11 +301,9 @@ def test_모르는_intent는_빈_집합이다():
 # 규칙 필드 오타를 조용히 무시하면 조건이 사라져 후보가 넓어지는 방향으로 틀린다.
 def test_규칙에_쓸_수_없는_필드는_예외다():
     intents = {"신발": {"rules": {"subcategory_kr": ["슈즈"]}}}
-    try:
+    # 지원하지 않는 규칙 필드는 예외를 던져야 한다.
+    with pytest.raises(ValueError, match="subcategory_kr"):
         store_facets.resolve_intent_store_ids("신발", INTENT_STORES, intents)
-        assert False, "지원하지 않는 규칙 필드는 예외를 던져야 한다"
-    except ValueError as exc:
-        assert "subcategory_kr" in str(exc)
 
 
 def test_intents_파일이_없으면_빈_dict다(tmp_path):
@@ -359,9 +354,7 @@ def test_extra의_고아_id를_잡는다():
 
 # 규칙이 이미 잡는 매장을 extra에 또 적으면 같은 정보를 두 벌로 들게 된다(드리프트의 씨앗).
 def test_규칙이_이미_잡는_매장이_extra에_있으면_중복으로_잡는다():
-    payload = _intents_payload(
-        {"신발": {"rules": {"subcategory": ["슈즈"]}, "extra_store_ids": {"PO-슈즈1": "탠디"}}}
-    )
+    payload = _intents_payload({"신발": {"rules": {"subcategory": ["슈즈"]}, "extra_store_ids": {"PO-슈즈1": "탠디"}}})
     errors = store_facets.validate_intents(payload, INTENT_STORES)
     assert any("PO-슈즈1" in e and "중복" in e for e in errors)
 

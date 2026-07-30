@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from math import atan, degrees, pi, sinh
 from typing import TYPE_CHECKING
@@ -69,7 +70,7 @@ def _polygon_bbox(ring: list[list[float]]) -> tuple[float, float, float, float]:
 
 
 # local_m 점 목록을 [lng, lat] 목록으로 옮긴다(폴리곤을 닫지는 않음).
-def local_points_to_lnglat(points: list[dict], transform: "GeoTransform") -> list[list[float]]:
+def local_points_to_lnglat(points: list[dict], transform: GeoTransform) -> list[list[float]]:
     return [list(reversed(transform.apply(p["x"], p["y"]))) for p in points]
 
 
@@ -79,7 +80,7 @@ def _close_ring(ring: list[list[float]]) -> list[list[float]]:
     return ring
 
 
-def _local_polygon_ring(points: list[dict], transform: "GeoTransform") -> list[list[float]]:
+def _local_polygon_ring(points: list[dict], transform: GeoTransform) -> list[list[float]]:
     return _close_ring(local_points_to_lnglat(points, transform))
 
 
@@ -89,10 +90,11 @@ def _local_polygon_ring(points: list[dict], transform: "GeoTransform") -> list[l
 # transform이 None이면 빈 레이어만 담은 유효한 빈 타일을 돌려준다 — 404 대신
 # "표시할 게 없다"로 처리해 MapLibre가 에러 없이 조용히 아무것도 안 그리게 한다.
 def build_floor_tile_layers(
-    building: "Building",
-    stores: list["Store"],
-    pois: list["Poi"],
-    transform: "GeoTransform | None",
+    building: Building,
+    # 호출부가 session.scalars(...).all()의 Sequence를 그대로 넘긴다 — list로 좁히지 않는다.
+    stores: Sequence[Store],
+    pois: Sequence[Poi],
+    transform: GeoTransform | None,
     bounds: TileBounds,
     footprint_local_m: list[dict] | None = None,
 ) -> list[dict]:

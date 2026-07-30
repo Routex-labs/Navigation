@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Float, ForeignKey, Index, JSON, String
+from sqlalchemy import JSON, Boolean, Float, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -35,7 +35,7 @@ class Node(Base):
     source_x: Mapped[float | None] = mapped_column(Float)  # 원천 데이터 원좌표 X (디버그·역추적용), 선택
     source_y: Mapped[float | None] = mapped_column(Float)  # 원천 데이터 원좌표 Y (디버그·역추적용), 선택
 
-    floor: Mapped["Floor"] = relationship(back_populates="nodes")  # 소속 층 (N:1)
+    floor: Mapped[Floor] = relationship(back_populates="nodes")  # 소속 층 (N:1)
 
 
 class Edge(Base):
@@ -51,13 +51,13 @@ class Edge(Base):
     # 특정 층에 속하지 않으므로 NULL이다. (단일 층 조회는 floor_id로 필터되어 제외됨)
     floor_id: Mapped[str | None] = mapped_column(ForeignKey("floors.id"))
     from_node_id: Mapped[str] = mapped_column(ForeignKey("nodes.id"), nullable=False)  # 시작 노드 FK
-    to_node_id: Mapped[str] = mapped_column(ForeignKey("nodes.id"), nullable=False)    # 끝 노드 FK
+    to_node_id: Mapped[str] = mapped_column(ForeignKey("nodes.id"), nullable=False)  # 끝 노드 FK
     length_m: Mapped[float] = mapped_column(Float, nullable=False)  # 간선 길이(미터) = Dijkstra 가중치
     bidirectional: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)  # 양방향 통행 가능 여부
     geometry: Mapped[list[dict] | None] = mapped_column(JSON)  # 간선 경로 폴리라인 좌표(local_m), 선택 (직선이면 없음)
     # 수직 전이 간선 여부(elevator/escalator 환승). 층 내부 간선은 None.
     transfer_mode: Mapped[str | None] = mapped_column(String)
 
-    floor: Mapped["Floor"] = relationship(back_populates="edges")  # 소속 층 (N:1, 전이 간선은 None)
+    floor: Mapped[Floor] = relationship(back_populates="edges")  # 소속 층 (N:1, 전이 간선은 None)
     from_node: Mapped[Node] = relationship(foreign_keys=[from_node_id])  # 시작 노드 객체
-    to_node: Mapped[Node] = relationship(foreign_keys=[to_node_id])      # 끝 노드 객체
+    to_node: Mapped[Node] = relationship(foreign_keys=[to_node_id])  # 끝 노드 객체

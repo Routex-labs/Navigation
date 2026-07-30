@@ -59,7 +59,9 @@ _CACHE_LOCK = threading.Lock()
 # 없는 상태에서 세대를 지어내면 조용히 낡은 타일을 내보내게 되므로, 그때는
 # 세대 판정을 아예 건너뛴다.
 def _cache_generation(session: Session) -> tuple[str, int] | None:
-    url = session.get_bind().url
+    # get_bind()는 Engine 또는 Connection을 준다. .engine은 Engine이면 자기 자신,
+    # Connection이면 소속 Engine이라 어느 쪽이든 같은 URL에 닿는다.
+    url = session.get_bind().engine.url
     if url.get_backend_name() != "sqlite" or not url.database:
         return None
     try:
@@ -150,7 +152,7 @@ _WARM_TILE_PADDING = 1
 
 
 def _lnglat_to_tile(lng: float, lat: float, z: int) -> tuple[int, int]:
-    n = 2 ** z
+    n = 2**z
     x = int((lng + 180.0) / 360.0 * n)
     lat_rad = math.radians(max(min(lat, 85.05112878), -85.05112878))
     y = int((1.0 - math.log(math.tan(lat_rad) + 1 / math.cos(lat_rad)) / math.pi) / 2.0 * n)
@@ -180,15 +182,13 @@ def _warm_tile_cache(session_factory) -> None:
             lngs = [lng for _, lng in wgs]
             min_lat, max_lat = min(lats), max(lats)
             min_lng, max_lng = min(lngs), max(lngs)
-            floors = session.scalars(
-                select(Floor).where(Floor.building_id == building.id)
-            ).all()
+            floors = session.scalars(select(Floor).where(Floor.building_id == building.id)).all()
             for z in _WARM_ZOOMS:
                 x0, y_north = _lnglat_to_tile(min_lng, max_lat, z)
                 x1, y_south = _lnglat_to_tile(max_lng, min_lat, z)
                 for x in range(x0 - _WARM_TILE_PADDING, x1 + _WARM_TILE_PADDING + 1):
                     for y in range(y_north - _WARM_TILE_PADDING, y_south + _WARM_TILE_PADDING + 1):
-                        if x < 0 or y < 0 or x >= 2 ** z or y >= 2 ** z:
+                        if x < 0 or y < 0 or x >= 2**z or y >= 2**z:
                             continue
                         for floor in floors:
                             render_floor_tile(session, building.id, floor.name, z, x, y)

@@ -18,12 +18,9 @@ from tests.conftest import BUILDING_ID
 
 
 def _nodes_by_floor(session, floor_name):
-    floor = session.scalars(
-        select(Floor).where(Floor.building_id == BUILDING_ID, Floor.name == floor_name)
-    ).one()
+    floor = session.scalars(select(Floor).where(Floor.building_id == BUILDING_ID, Floor.name == floor_name)).one()
     return {
-        node.id.split(":")[-1]: node
-        for node in session.scalars(select(Node).where(Node.floor_id == floor.id)).all()
+        node.id.split(":")[-1]: node for node in session.scalars(select(Node).where(Node.floor_id == floor.id)).all()
     }
 
 
@@ -61,19 +58,14 @@ def test_모든_층의_wgs84가_기준층_변환으로_계산된다(db_session):
 
 # 겹치는 엘리베이터마다 수직 전이 간선이 생겨야 한다.
 def test_엘리베이터마다_수직_전이_간선이_생성된다(db_session):
-    transfers = db_session.scalars(
-        select(Edge).where(Edge.transfer_mode.is_not(None))
-    ).all()
+    transfers = db_session.scalars(select(Edge).where(Edge.transfer_mode.is_not(None))).all()
 
     assert len(transfers) == 4  # 엘리베이터 4개
     assert {edge.transfer_mode for edge in transfers} == {"elevator"}
     # 전이 간선은 특정 층에 속하지 않는다.
     assert all(edge.floor_id is None for edge in transfers)
     # 1F EV-A <-> 2F EV-A 를 잇는다(양방향 간선이라 방향은 따지지 않는다).
-    assert {
-        frozenset((edge.from_node_id, edge.to_node_id)) for edge in transfers
-    } == {
-        frozenset((f"FL-TEST-1F:{ev}", f"FL-TEST-2F:{ev}"))
-        for ev in ("EV-A", "EV-B", "EV-C", "EV-D")
+    assert {frozenset((edge.from_node_id, edge.to_node_id)) for edge in transfers} == {
+        frozenset((f"FL-TEST-1F:{ev}", f"FL-TEST-2F:{ev}")) for ev in ("EV-A", "EV-B", "EV-C", "EV-D")
     }
     assert all(edge.bidirectional for edge in transfers)

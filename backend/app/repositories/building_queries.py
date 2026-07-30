@@ -18,18 +18,14 @@ from app.repositories.geo_transform import fit_building_geo_transform
 
 # 전체 건물 요약 목록. selectinload로 층 목록 N+1을 제거한다.
 def list_buildings(session: Session) -> list[dict[str, Any]]:
-    buildings = session.scalars(
-        select(Building).options(selectinload(Building.floors))
-    ).all()
+    buildings = session.scalars(select(Building).options(selectinload(Building.floors))).all()
     return [_to_building_summary(building) for building in buildings]
 
 
 # 건물 상세(footprint 포함). 없으면 None.
 def get_building(session: Session, building_id: str) -> dict[str, Any] | None:
     building = session.scalars(
-        select(Building)
-        .where(Building.id == building_id)
-        .options(selectinload(Building.floors))
+        select(Building).where(Building.id == building_id).options(selectinload(Building.floors))
     ).one_or_none()
     if building is None:
         return None
@@ -78,9 +74,7 @@ def get_floor_map(
 
     # 한 층을 그리는 데 필요한 재료를 모은다.
     building = session.get(Building, building_id)
-    stores = session.scalars(
-        select(Store).where(Store.floor_id == floor.id)
-    ).all()
+    stores = session.scalars(select(Store).where(Store.floor_id == floor.id)).all()
     pois = session.scalars(select(Poi).where(Poi.floor_id == floor.id)).all()
     transform = fit_building_geo_transform(session, building_id)
 
@@ -141,9 +135,7 @@ def get_building_graph(
     if building is None:
         return None
 
-    floors = session.scalars(
-        select(Floor).where(Floor.building_id == building_id)
-    ).all()
+    floors = session.scalars(select(Floor).where(Floor.building_id == building_id)).all()
     floor_ids = [floor.id for floor in floors]
     nodes = session.scalars(select(Node).where(Node.floor_id.in_(floor_ids))).all()
     node_ids = {node.id for node in nodes}
@@ -157,9 +149,7 @@ def get_building_graph(
             Edge.from_node_id.in_(node_ids),
         )
     ).all()
-    edges = list(intra_edges) + [
-        edge for edge in transfer_edges if _vertical_allows(vertical, edge.transfer_mode)
-    ]
+    edges = list(intra_edges) + [edge for edge in transfer_edges if _vertical_allows(vertical, edge.transfer_mode)]
 
     return {
         "building": {"id": building.id, "name": building.name},
@@ -269,10 +259,7 @@ def _to_store_dict(store: Store, transform: GeoTransform | None) -> dict[str, An
         lat, lng = transform.apply(store.centroid_x_m, store.centroid_y_m)
         centroid_wgs84 = {"lat": lat, "lng": lng}
         if store.polygon:
-            polygon_wgs84 = [
-                {"lng": lng, "lat": lat}
-                for lng, lat in local_points_to_lnglat(store.polygon, transform)
-            ]
+            polygon_wgs84 = [{"lng": lng, "lat": lat} for lng, lat in local_points_to_lnglat(store.polygon, transform)]
 
     return {
         "id": store.id,
