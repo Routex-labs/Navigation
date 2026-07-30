@@ -57,6 +57,7 @@ classDiagram
         +float cost_m 「라우팅 비용, 전이만 length와 다름」
         +bool bidirectional
         +JSON geometry ?
+        +str transfer_mode ? 「elevator·escalator, 층내부는 NULL」
     }
     class Store {
         +str id 🔑
@@ -96,6 +97,7 @@ classDiagram
 
 - **`Floor`가 허브다.** Node·Edge·Store·Poi 모두 `floor_id`로 층에 매인다.
 - **`Edge.floor_id`는 nullable.** 층 내부 간선은 층 id를, **층을 잇는 수직 전이 간선(엘리베이터/에스컬레이터)은 `NULL`**을 가진다. 단일 층 조회(`get_floor_graph`)는 `floor_id`로 필터되어 전이 간선을 자연히 제외하고, 건물 전체 그래프(`get_building_graph`)만 전이 간선을 합쳐 층 간 경로에 쓴다(`Edge.transfer_mode`·`Edge.bidirectional` 참고 — 에스컬레이터는 방향이 있어 단방향이다).
+- **`Edge`는 CheckConstraint로 핵심 불변식을 DB에서 강제한다.** `length_m >= 0`, `cost_m >= 0`, `from_node_id <> to_node_id`, `transfer_mode`는 NULL이거나 `elevator`/`escalator`. 여기에 연결 시점 `PRAGMA foreign_keys=ON`(`app/core/database.py`)이 더해져 고아 참조 간선도 막힌다. 그 위에서 그래프 검증기(`app/graph/integrity.py`)가 DB로는 못 잡는 의미·위상 위반(타 건물 연결, 전이 간선 동일 층, NaN/Infinity, 고립 컴포넌트 등)을 시드 커밋 전에 검사한다.
 
 ---
 

@@ -111,6 +111,7 @@ classDiagram
     class BuildingGraphResponse {
         +GraphBuildingResponse building
         +str vertical
+        +str revision 「그래프 내용 체크섬, 캐시 무효화 키」
         +list~GraphNodeResponse~ nodes
         +list~GraphEdgeResponse~ edges
     }
@@ -156,6 +157,8 @@ classDiagram
 - `GraphNodeResponse.floor_id`는 건물 전체 그래프에서 node가 속한 층을 구분한다.
 - `transfer_mode`는 `elevator`·`escalator` 같은 수직 이동 edge에만 있다.
 - `BuildingGraphResponse.vertical`은 `auto`·`elevator`·`escalator` 정책을 나타낸다.
+- `BuildingGraphResponse.revision`은 그래프 내용(노드·간선)의 순서 무관 체크섬이다. 클라이언트·타일 캐시가 "그래프가 그대로인가"를 판단하는 무효화 키로 쓴다(`app/graph/revision.py`).
+- **그래프 수치 필드는 유한값만 허용한다.** 좌표·거리·비용은 `allow_inf_nan=False`로 NaN·±Infinity를 응답 검증에서 거부하고, 거리·비용은 음수도 거부한다(`ge=0`). 오염된 값이 표준 아닌 JSON으로 나가 클라이언트 파서·경로 탐색을 깨는 것을 막는다.
 
 ### 3. 자연어 목적지·정보 질의
 
