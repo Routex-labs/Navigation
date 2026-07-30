@@ -37,6 +37,8 @@ const _tileSourceId = 'floor-tiles';
 // 워밍업이 덮지 못하는 zoom이 생겨 그 타일만 쿼리를 새로 낸다. 값의 근거는
 // indoorTilesMinZoom/indoorTilesMaxZoom 정의 위 주석에 정리되어 있다.
 const _routeSourceId = 'floor-route';
+const _completedRouteSourceId = 'floor-completed-route';
+const _transferRouteSourceId = 'floor-transfer-route';
 const _pdrTrailSourceId = 'floor-pdr-trail';
 const _pdrPreviewTrailSourceId = 'floor-pdr-preview-trail';
 const _pdrRawTrailSourceId = 'floor-pdr-raw-trail';
@@ -209,6 +211,8 @@ class FloorPlanView extends StatefulWidget {
     this.currentHeadingDegrees,
     this.destination,
     this.routePoints = const [],
+    this.completedRoutePoints = const [],
+    this.transferRoutePoints = const [],
     this.pdrPathPoints = const [],
     this.pdrPreviewPathPoints = const [],
     this.pdrRawPathPoints = const [],
@@ -265,6 +269,13 @@ class FloorPlanView extends StatefulWidget {
 
   /// 시작점→목적지 경로선. 2개 미만이면 그리지 않는다.
   final List<ll.LatLng> routePoints;
+
+  /// 현재 위치 이전의 안내 경로. 남은 파란선보다 뒤에 회색으로 그린다.
+  final List<ll.LatLng> completedRoutePoints;
+
+  /// 현재 층의 에스컬레이터 탑승점과 다음 층 도착점을 잇는 수직 이동 안내선.
+  /// 일반 경로와 달리 파선으로 그려 "이 구간에서 층을 바꾼다"는 뜻을 준다.
+  final List<ll.LatLng> transferRoutePoints;
 
   /// navigation graph에 부착한 PDR 경로. 보라색 실선으로 렌더한다.
   /// 기존 호출부 호환을 위해 필드 이름은 유지한다.
@@ -498,6 +509,12 @@ class FloorPlanViewState extends State<FloorPlanView> {
         _fitToRouteBounds(widget.routePoints);
       }
     }
+    if (oldWidget.completedRoutePoints != widget.completedRoutePoints) {
+      _updateCompletedRouteSource();
+    }
+    if (oldWidget.transferRoutePoints != widget.transferRoutePoints) {
+      _updateTransferRouteSource();
+    }
     if (oldWidget.pdrPathPoints != widget.pdrPathPoints) {
       _updatePdrTrailSource();
     }
@@ -729,6 +746,22 @@ class FloorPlanViewState extends State<FloorPlanView> {
       enableInteraction: false,
     );
 
+    await controller.addGeoJsonSource(
+      _completedRouteSourceId,
+      _emptyFeatureCollection,
+    );
+    await controller.addLineLayer(
+      _completedRouteSourceId,
+      'floor-completed-route-line',
+      const LineLayerProperties(
+        lineColor: '#9AA0A6',
+        lineWidth: 5,
+        lineOpacity: 0.72,
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      enableInteraction: false,
+    );
     await controller.addGeoJsonSource(_routeSourceId, _emptyFeatureCollection);
     await controller.addLineLayer(
       _routeSourceId,
@@ -737,6 +770,23 @@ class FloorPlanViewState extends State<FloorPlanView> {
         lineColor: '#1A73E8',
         lineWidth: 5,
         lineOpacity: 0.6,
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      enableInteraction: false,
+    );
+    await controller.addGeoJsonSource(
+      _transferRouteSourceId,
+      _emptyFeatureCollection,
+    );
+    await controller.addLineLayer(
+      _transferRouteSourceId,
+      'floor-transfer-route-line',
+      const LineLayerProperties(
+        lineColor: '#1A73E8',
+        lineWidth: 5,
+        lineOpacity: 0.82,
+        lineDasharray: [1.2, 1.1],
         lineCap: 'round',
         lineJoin: 'round',
       ),
@@ -1048,7 +1098,9 @@ class FloorPlanViewState extends State<FloorPlanView> {
     );
 
     _styleReady = true;
+    await _updateCompletedRouteSource();
     await _updateRouteSource();
+    await _updateTransferRouteSource();
     await _updateDebugGraphSource();
     await _updatePdrRawTrailSource();
     await _updatePdrConfirmedTrailSource();
@@ -1344,7 +1396,11 @@ class FloorPlanViewState extends State<FloorPlanView> {
     );
 
     const blue = Color(0xFF1976D2);
-    canvas.drawCircle(center, _currentLocationCoreRadius, Paint()..color = blue);
+    canvas.drawCircle(
+      center,
+      _currentLocationCoreRadius,
+      Paint()..color = blue,
+    );
     // 코어 왼쪽 위의 광택 점. 코어 크기를 바꿔도 비율이 유지되도록 코어 반지름에서
     // 파생시킨다(원본 디자인의 코어 18 / offset 5 / 반지름 4.5 비율).
     const glossOffset = _currentLocationCoreRadius * 0.28;
@@ -1528,6 +1584,17 @@ class FloorPlanViewState extends State<FloorPlanView> {
         },
       ],
     });
+  }
+
+  Future<void> _updateTransferRouteSource() async {
+    await _updateLineSource(_transferRouteSourceId, widget.transferRoutePoints);
+  }
+
+  Future<void> _updateCompletedRouteSource() async {
+    await _updateLineSource(
+      _completedRouteSourceId,
+      widget.completedRoutePoints,
+    );
   }
 
   Future<void> _updatePdrTrailSource() async {

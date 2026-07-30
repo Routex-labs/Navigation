@@ -4,6 +4,8 @@
 /// 있다.
 library;
 
+import 'package:latlong2/latlong.dart';
+
 import 'floor_graph.dart';
 import 'indoor_route.dart';
 
@@ -62,6 +64,8 @@ class IndoorRouteSegment {
     required this.floorName,
     required this.route,
     this.transferModeToNext,
+    this.transferPointsToNext = const [],
+    this.transferDistanceMeters = 0,
   });
 
   /// 이 세그먼트가 속한 층의 내부 id (Floor.id).
@@ -78,6 +82,14 @@ class IndoorRouteSegment {
   /// 이 세그먼트 마지막 지점에서 다음 세그먼트 층으로 갈아탈 때 쓸 수단.
   /// "elevator" / "escalator" / null(마지막 세그먼트).
   final String? transferModeToNext;
+
+  /// 현재 층 탑승 노드와 다음 층 도착 노드를 WGS84로 연결한 수직 이동 표시선.
+  /// 백엔드 수직 간선에는 geometry가 없으므로 두 끝점을 사용해 합성한다.
+  /// 일반 보행 경로와 섞지 않아 층별 진행률 계산에는 들어가지 않는다.
+  final List<LatLng> transferPointsToNext;
+
+  /// 수직 간선 비용. ETA에는 포함하지만 층 내부 경로 진행률에는 포함하지 않는다.
+  final double transferDistanceMeters;
 }
 
 /// 층 간 경로를 층별로 나누어 담은 결과. [totalDistanceMeters]는 전 세그먼트
