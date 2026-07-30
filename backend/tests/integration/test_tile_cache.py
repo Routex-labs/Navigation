@@ -116,7 +116,7 @@ def test_파일_mtime만_바뀌어도_캐시_세대가_갱신된다(seeded_sessi
         tile_queries._invalidate_if_reseeded(session)
 
     assert generation_before != generation_after
-    assert tile_queries._TILE_BYTES_CACHE == {}
+    assert tile_queries._TILE_CACHE.metrics()["entries"] == 0
 
 
 # 무효화 근거가 없는 백엔드에서는 세대 판정을 건너뛴다(캐시를 지어내지 않는다).
