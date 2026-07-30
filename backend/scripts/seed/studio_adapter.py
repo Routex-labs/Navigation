@@ -524,12 +524,17 @@ def seed_studio(
                 }
             )
 
-        transfers, unresolved = vertical_transfers.build_transfers(
+        built = vertical_transfers.build_transfers(
             floors_for_transfer,
             _scope_transfer_edges(floors_for_transfer, raw_transfer_edges),
         )
-        seed_navigation.add_transfer_edges(own_session, transfers)
-        summaries.append({"code": "-", "transfers": len(transfers), "unresolved": len(unresolved)})
+        seed_navigation.add_transfer_edges(own_session, built.edges)
+        summaries.append({
+            "code": "-",
+            "transfers": len(built.edges),
+            "unresolved": len(built.unresolved),
+            "warnings": len(built.warnings),
+        })
 
         # 커밋 전 그래프 무결성 게이트. 타 건물 연결·동일 층 전이·NaN 같은 에러가 있으면
         # 여기서 GraphIntegrityError로 중단되어 아래 except가 롤백한다(반쯤 시드된 DB 방지).
@@ -551,7 +556,10 @@ def seed_studio(
 def main() -> None:
     for row in seed_studio():
         if "transfers" in row:
-            print(f"[전이] 간선={row['transfers']} 미해결={row['unresolved']}")
+            print(
+                f"[전이] 간선={row['transfers']} 미해결={row['unresolved']} "
+                f"경고={row['warnings']}"
+            )
             continue
         print(f"[{row['name']}] nodes={row['nodes']} edges={row['edges']} stores={row['stores']} pois={row['pois']}")
     print("Studio 데이터 적재 완료")

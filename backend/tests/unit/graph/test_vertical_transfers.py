@@ -52,7 +52,7 @@ def test_에스컬레이터는_방향을_지켜_단방향으로_잇는다():
         _floor("1F", 1, [_esc("1F:up", 10, 10, "up"), _esc("1F:dn", 20, 20, "down")]),
         _floor("2F", 2, [_esc("2F:up", 10, 10, "up"), _esc("2F:dn", 20, 20, "down")]),
     ]
-    transfers, _unresolved = vt.build_transfers(floors)
+    transfers = vt.build_transfers(floors).edges
     esc = [t for t in transfers if t["mode"] == "escalator"]
 
     assert esc, "에스컬레이터 전이 간선이 있어야 한다"
@@ -73,7 +73,7 @@ def test_상행_전용은_하행_간선을_만들지_않는다():
         _floor("1F", 1, [_esc("1F:up", 10, 10, "up")]),
         _floor("2F", 2, [_esc("2F:up", 10, 10, "up")]),
     ]
-    transfers, _ = vt.build_transfers(floors)
+    transfers = vt.build_transfers(floors).edges
     esc = [t for t in transfers if t["mode"] == "escalator"]
 
     assert len(esc) == 1
@@ -98,7 +98,7 @@ def _b1_b2_floors() -> list[dict]:
 def test_원본_간선으로_에스컬레이터_탑승구와_하차구를_잇는다():
     floors = _b1_b2_floors()
     source = [{"from": "B1:to", "to": "B2:fr", "passable": True}]
-    transfers, unresolved = vt.build_transfers(floors, source)
+    transfers, unresolved, warnings = vt.build_transfers(floors, source)
     esc = [t for t in transfers if t["mode"] == "escalator"]
 
     assert len(esc) == 1
@@ -113,7 +113,7 @@ def test_원본_간선으로_에스컬레이터_탑승구와_하차구를_잇는
 def test_원본_간선이_없으면_근접_폴백이_짝을_못_찾는다():
     # 이 회귀가 실제 증상이었다: 바로 옆 에스컬레이터에 간선이 없어 라우팅이
     # 멀리 돌아가는 기기를 골랐다.
-    transfers, unresolved = vt.build_transfers(_b1_b2_floors())
+    transfers, unresolved, _warnings = vt.build_transfers(_b1_b2_floors())
     esc = [t for t in transfers if t["mode"] == "escalator"]
 
     assert not [t for t in esc if t["from"] == "B1:to" and t["to"] == "B2:fr"]
@@ -123,7 +123,7 @@ def test_원본_간선이_없으면_근접_폴백이_짝을_못_찾는다():
 def test_통행_불가로_표시된_원본_간선은_만들지_않는다():
     floors = _b1_b2_floors()
     source = [{"from": "B1:to", "to": "B2:fr", "passable": False}]
-    transfers, unresolved = vt.build_transfers(floors, source)
+    transfers, unresolved, warnings = vt.build_transfers(floors, source)
 
     assert not [t for t in transfers if t["mode"] == "escalator"]
     assert [u for u in unresolved if "통행 불가" in u["reason"]]
@@ -137,9 +137,62 @@ def test_양쪽_층_파일의_passable이_엇갈리면_통행_가능으로_본�
         {"from": "B1:to", "to": "B2:fr", "passable": False},
         {"from": "B2:fr", "to": "B1:to", "passable": True},
     ]
-    transfers, _ = vt.build_transfers(floors, source)
+    transfers = vt.build_transfers(floors, source).edges
 
     assert len([t for t in transfers if t["mode"] == "escalator"]) == 1
+
+
+# P1 회귀: 거부한 쌍이 근접 폴백으로 되살아나면 존재하지 않는 경로를 안내하게 된다.
+def test_통행_불가로_거부한_노드는_근접_폴백에서도_제외된다():
+    # 폴백이 짝지을 수 있는 8m 이내 상대를 일부러 같은 층에 둔다.
+    floors = [
+        _floor("2F", 2, [
+            _esc("2F:a", 10, 10, "down", name="ES1-DN(FR1F)"),
+            _esc("2F:b", 13, 10, "down", name="ES2-DN(FR1F)"),
+        ]),
+        _floor("3F", 3, [
+            _esc("3F:a", 11, 10, "down", name="ES1-DN(TO2F)"),
+            _esc("3F:b", 14, 10, "down", name="ES2-DN(TO2F)"),
+        ]),
+    ]
+    source = [{"from": "3F:a", "to": "2F:a", "passable": False}]
+    transfers, unresolved, _warnings = vt.build_transfers(floors, source)
+    esc = [t for t in transfers if t["mode"] == "escalator"]
+
+    # 3F:a / 2F:a는 통행 불가로 거부됐으므로 어떤 간선에도 등장하지 않아야 한다.
+    touched = {node for t in esc for node in (t["from"], t["to"])}
+    assert "3F:a" not in touched and "2F:a" not in touched
+    assert [u for u in unresolved if "통행 불가" in u["reason"]]
+
+
+# P2 회귀: "간선을 못 만들었다"와 "만들었지만 이름이 이상하다"를 섞지 않는다.
+def test_이름_규칙_불일치는_미해결이_아니라_경고로_보고한다():
+    floors = [
+        _floor("2F", -2, [_esc("2F:fr", 152, 141, "down", name="ES9-DN(FRB1)")]),
+        _floor("1F", -1, [_esc("1F:to", 158, 160, "down", name="ES2-1-DN(TOB2)")]),
+    ]
+    source = [{"from": "1F:to", "to": "2F:fr", "passable": True}]
+    transfers, unresolved, warnings = vt.build_transfers(floors, source)
+
+    # 그룹이 다르지만(ES2-1 vs ES9) 토폴로지가 1차 근거이므로 간선은 만든다.
+    assert len([t for t in transfers if t["mode"] == "escalator"]) == 1
+    assert [w for w in warnings if "이름 규칙 불일치" in w["reason"]]
+    assert not [u for u in unresolved if "이름 규칙" in u["reason"]]
+
+
+# 진단 기록은 dict 순서가 아니라 층 순서를 기준으로 남는다(같은 입력 → 같은 보고).
+def test_미해결_기록은_아래층_노드를_기준으로_남는다():
+    floors = [
+        _floor("B2", -2, [_esc("B2:zzz", 10, 10, "down", name="ES1-DN(FRB1)")]),
+        _floor("B1", -1, [_esc("B1:aaa", 10, 10, "up", name="ES1-UP(TOB1)")]),
+    ]
+    source = [{"from": "B1:aaa", "to": "B2:zzz", "passable": True}]
+    _transfers, unresolved, _warnings = vt.build_transfers(floors, source)
+
+    entry = next(u for u in unresolved if "진행 방향" in u["reason"])
+    assert entry["node_id"] == "B2:zzz"  # 아래층
+    assert entry["floor"] == "B2"
+    assert entry["paired_node_id"] == "B1:aaa"
 
 
 def test_원본_간선의_방향이_엇갈리면_잇지_않는다():
@@ -147,7 +200,7 @@ def test_원본_간선의_방향이_엇갈리면_잇지_않는다():
         _floor("1F", 1, [_esc("1F:up", 10, 10, "up")]),
         _floor("2F", 2, [_esc("2F:dn", 10, 10, "down")]),
     ]
-    transfers, unresolved = vt.build_transfers(
+    transfers, unresolved, _warnings = vt.build_transfers(
         floors, [{"from": "1F:up", "to": "2F:dn", "passable": True}]
     )
 
@@ -163,7 +216,7 @@ def test_엘리베이터는_샤프트_전_층쌍을_직행_연결한다():
         _floor("2F", 2, [_elev("2F:ev", 10, 10)]),
         _floor("3F", 3, [_elev("3F:ev", 10, 10)]),
     ]
-    transfers, _ = vt.build_transfers(floors)
+    transfers = vt.build_transfers(floors).edges
     ele = [t for t in transfers if t["mode"] == "elevator"]
 
     # 3개 층 → 층쌍 3개(1-2, 2-3, 1-3) 모두 직행 간선.
@@ -199,7 +252,7 @@ def test_엘리베이터_비용은_층수에_비례한다():
         _floor("2F", 2, [_elev("2F:ev", 10, 10)]),
         _floor("3F", 3, [_elev("3F:ev", 10, 10)]),
     ]
-    transfers, _ = vt.build_transfers(floors)
+    transfers = vt.build_transfers(floors).edges
     # 비용은 cost_m이다 — length_m은 실제 이동 거리라 공식과 다르다.
     ele = {frozenset(t["floors"]): t["cost_m"] for t in transfers if t["mode"] == "elevator"}
 
@@ -219,7 +272,7 @@ def test_전이_간선은_실제_거리와_라우팅_비용을_분리한다():
         _floor("1F", 1, [_esc("1F:up", 10, 10, "up")]),
         _floor("2F", 2, [_esc("2F:up", 12, 10, "up")]),
     ]
-    transfers, _ = vt.build_transfers(floors)
+    transfers = vt.build_transfers(floors).edges
     esc = next(t for t in transfers if t["mode"] == "escalator")
 
     # 비용은 튜닝 상수 그대로다.
@@ -236,7 +289,7 @@ def test_엘리베이터도_거리와_비용이_따로_늘어난다():
         _floor("2F", 2, [_elev("2F:ev", 10, 10)]),
         _floor("3F", 3, [_elev("3F:ev", 10, 10)]),
     ]
-    transfers, _ = vt.build_transfers(floors)
+    transfers = vt.build_transfers(floors).edges
     by_floors = {frozenset(t["floors"]): t for t in transfers if t["mode"] == "elevator"}
 
     one_hop = by_floors[frozenset(["1F", "2F"])]

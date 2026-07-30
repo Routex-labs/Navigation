@@ -29,12 +29,19 @@ Edge 모델은 이미 이걸 전제한다(app/models/navigation.py):
   간선이 아예 안 생긴다. 그래서 에스컬레이터는 **원본(다베오) 층간 간선을
   1차 근거**로 쓰고, 방향(from/to)만 trans_code로 정한다. 위치 근접은 원본
   간선이 없는 노드의 폴백으로만 남긴다.
+
+거리와 비용:
+  전이 간선은 length_m(실제 수평 이동 거리)과 cost_m(Dijkstra 가중치)이 서로 다르다.
+  에스컬레이터는 탑승구~하차구가 20m쯤 떨어져 있지만 부담은 탑승 시간 21초(=25m 보행
+  등가)이고, 엘리베이터는 사실상 같은 자리(수평 0~3m)인데 부담은 대기까지 50초다.
+  한 필드로 겸하면 사용자에게 보여주는 남은거리가 비용만큼 부풀어 오른다.
 """
 
 from __future__ import annotations
 
 import re
 from math import hypot
+from typing import NamedTuple
 
 # 수직 이동 수단으로 볼 노드 타입
 TRANSFER_TYPES = ("elevator", "escalator")
@@ -140,17 +147,21 @@ def _escalator_name_mismatch(from_node: dict, to_node: dict) -> str | None:
     return None
 
 
-# 원본(다베오) 층간 간선으로 에스컬레이터 전이를 만든다.
+# 원본(다베오) 층간 간선으로 에스컬레이터 전이를 만든다(근거는 모듈 docstring).
 #
 # source_edges: [{"from","to","passable"?}] — 노드 id는 이미 층 스코프가 붙은 값.
 # 같은 간선이 양쪽 층 파일에 한 번씩 들어 있어 중복으로 들어오므로 무순서 쌍으로 묶는다.
 # from/to는 진행 방향에 맞춘다: 상행은 아래 층이 탑승구, 하행은 위 층이 탑승구다.
-# 반환: 간선이 만들어진(=폴백이 필요 없는) 노드 id 집합.
+#
+# 반환: **원본이 짝을 지목한 모든 노드** id 집합(간선을 만들었든 거부했든).
+#   폴백에서 이 노드들을 전부 빼기 위한 값이다. 거부한 쌍의 노드를 빼지 않으면,
+#   "통행 불가"로 판정한 기기가 근접 매칭으로 되살아나 존재하지 않는 경로가 생긴다.
 def _escalator_transfers_from_source(
     ordered: list[dict],
     source_edges: list[dict],
     transfers: list[dict],
     unresolved: list[dict],
+    warnings: list[dict],
 ) -> set[str]:
     rank = {floor["name"]: index for index, floor in enumerate(ordered)}
     owner: dict[str, tuple[dict, dict]] = {}
@@ -166,55 +177,55 @@ def _escalator_transfers_from_source(
             continue  # 엘리베이터·junction 등은 각자의 규칙으로 처리한다.
         grouped.setdefault(key, []).append(bool(edge.get("passable", True)))
 
-    covered: set[str] = set()
-    for (left_id, right_id), passables in grouped.items():
-        left_floor, left = owner[left_id]
-        right_floor, right = owner[right_id]
-        note = {"mode": "escalator", "floor": left_floor["name"], "node_id": left_id}
+    handled: set[str] = set()
+    for pair_ids, passables in grouped.items():
+        handled.update(pair_ids)
+        # 층 순서로 아래/위를 먼저 정한다. 진단 기록도 이 기준으로 남겨야 어느 층의
+        # 어느 노드가 문제인지가 dict 순서에 따라 흔들리지 않는다.
+        (lower_floor, lower), (upper_floor, upper) = sorted(
+            (owner[pair_ids[0]], owner[pair_ids[1]]),
+            key=lambda entry: (rank[entry[0]["name"]], entry[1]["id"]),
+        )
+        note = {
+            "mode": "escalator",
+            "node_id": lower["id"],
+            "floor": lower_floor["name"],
+            "paired_node_id": upper["id"],
+        }
 
         # 층 파일마다 passable이 엇갈리는 쌍이 있다(원본 노이즈). 한쪽이라도
         # 통행 가능이면 살린다 — 실재하는 기기를 통째로 지우는 쪽이 더 위험하다.
         if not any(passables):
             unresolved.append({**note, "reason": "원본 간선이 통행 불가로 표시됨"})
             continue
-        direction = _escalator_direction(left)
-        if direction is None or direction != _escalator_direction(right):
+        direction = _escalator_direction(lower)
+        if direction is None or direction != _escalator_direction(upper):
             unresolved.append({**note, "reason": "원본 간선 양끝의 진행 방향이 다름"})
             continue
-        if left_floor["name"] == right_floor["name"]:
+        if lower_floor["name"] == upper_floor["name"]:
             unresolved.append({**note, "reason": "원본 간선이 같은 층을 잇는다"})
             continue
-        if abs(rank[left_floor["name"]] - rank[right_floor["name"]]) != 1:
+        if rank[upper_floor["name"]] - rank[lower_floor["name"]] != 1:
             unresolved.append({**note, "reason": "원본 간선이 인접하지 않은 층을 잇는다"})
             continue
 
-        lower, upper = (
-            (left, right)
-            if rank[left_floor["name"]] < rank[right_floor["name"]]
-            else (right, left)
-        )
         from_node, to_node = (lower, upper) if direction == "up" else (upper, lower)
         mismatch = _escalator_name_mismatch(from_node, to_node)
         if mismatch is not None:
-            unresolved.append({**note, "reason": f"이름 규칙 불일치: {mismatch}"})
+            # 간선은 만든다 — 경고와 미해결을 섞으면 "간선이 빠졌다"로 오해된다.
+            warnings.append({**note, "reason": f"이름 규칙 불일치: {mismatch}"})
         transfers.append(_edge(
             from_node=from_node,
             to_node=to_node,
             mode="escalator",
-            # 기존 근접 매칭과 같은 규칙: [아래층, 위층] 순서.
-            floors=sorted(
-                (left_floor["name"], right_floor["name"]),
-                key=lambda name: rank[name],
-            ),
-            # main과 같은 규칙: 표시 거리는 수평+층고의 3D 거리, 비용은 탑승 부담.
+            floors=[lower_floor["name"], upper_floor["name"]],
+            # 표시 거리는 수평+층고의 3D 거리, 비용은 탑승 부담.
             length_m=hypot(_distance(from_node, to_node), FLOOR_HEIGHT_M),
             cost_m=ESCALATOR_HOP_M,
             bidirectional=False,
             distance=_distance(from_node, to_node),
         ))
-        covered.add(left_id)
-        covered.add(right_id)
-    return covered
+    return handled
 
 
 # a쪽 노드들을 b쪽 노드에 최근접 1:1로 짝짓는다. 반경 밖이면 unresolved에 남긴다.
@@ -249,6 +260,8 @@ def _match_by_position(
     return pairs
 
 
+# 전이 간선 dict. length_m(실제 이동 거리)과 cost_m(Dijkstra 가중치)은 다른 값이다
+# — 이유와 근거는 모듈 docstring "거리와 비용" 항목에 있다.
 def _edge(
     *,
     from_node: dict,
@@ -280,8 +293,8 @@ def _edge(
 # 방향별로 나눠 매칭한다 — 상행 노드는 상행끼리, 하행 노드는 하행끼리 이어야
 # 물리적으로 존재하는 세그먼트만 남고 반대 방향 통행이 끼지 않는다.
 #
-# **원본 간선이 없는 노드에만 쓰는 폴백이다**(skip_node_ids로 제외). 모듈 docstring의
-# 이유대로 탑승/하차구는 같은 자리가 아니라서, 이 매칭은 짝을 틀리게 잡을 수 있다.
+# **원본 간선이 짝을 지목하지 않은 노드에만 쓰는 폴백이다**(skip_node_ids로 제외).
+# 에스컬레이터에서 위치 근접이 왜 틀리는지는 모듈 docstring에 있다.
 def _escalator_transfers(
     lower: dict,
     upper: dict,
@@ -386,32 +399,44 @@ def _elevator_transfers(
                 )
 
 
+# build_transfers의 반환값. unresolved와 warnings를 한 리스트로 합치면 "간선이 빠졌다"와
+# "간선은 있지만 검증에 걸렸다"가 섞여, 시드 로그의 개수만 보고는 구분할 수 없다.
+class TransferBuild(NamedTuple):
+    edges: list[dict]
+    # 간선을 만들지 못한 노드. 개수가 늘면 그래프에 구멍이 생긴 것이다.
+    unresolved: list[dict]
+    # 간선은 만들었지만 검증에 걸린 것(이름 규칙 불일치 등). 데이터 품질 신호다.
+    warnings: list[dict]
+
+
 # 층 간 수직 전이 간선을 만든다.
 # floors: [{"code","floor_id","name","level","nodes"}] — nodes는 건물 공통 프레임으로
 # 정규화된 뒤여야 한다. level은 위층일수록 크다(6F=6 … 1F=1 … B6=-6).
 # source_edges: 원본(다베오) 층간 간선. 노드 id는 floors의 노드 id와 같은 스코프여야
 #   한다. 에스컬레이터 짝을 여기서 읽는다. 없으면 전부 위치 근접 폴백으로 떨어진다.
-# 반환: (전이 간선 목록, 짝을 못 찾은 노드 목록)
 def build_transfers(
     floors: list[dict],
     source_edges: list[dict] | None = None,
-) -> tuple[list[dict], list[dict]]:
+) -> TransferBuild:
     ordered = sorted(floors, key=lambda f: f["level"])
     transfers: list[dict] = []
     unresolved: list[dict] = []
+    warnings: list[dict] = []
 
-    # 에스컬레이터: 원본 간선이 1차 근거, 남은 노드만 위치 근접 폴백.
-    covered = (
-        _escalator_transfers_from_source(ordered, source_edges, transfers, unresolved)
+    # 에스컬레이터: 원본 간선이 1차 근거, 원본이 언급하지 않은 노드만 근접 폴백.
+    handled = (
+        _escalator_transfers_from_source(
+            ordered, source_edges, transfers, unresolved, warnings
+        )
         if source_edges
         else set()
     )
     for lower, upper in zip(ordered, ordered[1:]):
         _escalator_transfers(
-            lower, upper, transfers, unresolved, skip_node_ids=covered
+            lower, upper, transfers, unresolved, skip_node_ids=handled
         )
 
     # 엘리베이터: 샤프트 단위로 서비스 층 전체를 직행 연결.
     _elevator_transfers(ordered, transfers, unresolved)
 
-    return transfers, unresolved
+    return TransferBuild(transfers, unresolved, warnings)
