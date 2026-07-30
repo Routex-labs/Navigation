@@ -238,7 +238,11 @@ void main() {
     final query = ValueNotifier<String>('');
     final submitTick = ValueNotifier<int>(0);
 
-    Future<void> pumpPanel(WidgetTester tester, {String? currentFloorId}) {
+    Future<void> pumpPanel(
+      WidgetTester tester, {
+      String? currentFloorId,
+      ValueChanged<PoiSearchResult>? onStorePicked,
+    }) {
       query.value = '';
       submitTick.value = 0;
       return tester.pumpWidget(
@@ -250,7 +254,7 @@ void main() {
                 buildingId: 'thehyundai-seoul',
                 query: query.value,
                 submitTick: submitTick.value,
-                onStorePicked: (_) {},
+                onStorePicked: onStorePicked ?? (_) {},
                 onBuildingPicked: (_) {},
                 currentFloorId: currentFloorId,
               ),
@@ -639,6 +643,56 @@ void main() {
         null,
       ]);
       expect(find.text('어떤 스타일의 신발을 찾으세요?'), findsOneWidget);
+    });
+
+    testWidgets('탐색 결과의 매장을 고르면 기존 길찾기 콜백으로 그대로 연결된다', (
+      WidgetTester tester,
+    ) async {
+      // clarify에도 초기 후보(matches)가 함께 오므로, 질문에 답하기 전에도
+      // 매장을 바로 선택할 수 있어야 한다 — 별도 경로를 새로 만들지 않고
+      // 기존 onStorePicked 콜백을 그대로 탄다.
+      const match = DiscoveryMatch(
+        storeId: 'ST-NIKE',
+        name: '나이키 라이즈',
+        category: '패션',
+        subcategory: '스포츠',
+        floorId: 'FL-3',
+        floorName: '3F',
+        entranceNodeId: 'FL-3:ND-1',
+        point: LatLng(37.52, 126.92),
+        matchedFacets: {'styles': ['스포츠']},
+        reason: '스포츠 신발을 찾을 때 볼 만해요.',
+      );
+      final repository = _ScriptedDiscoveryRepository([
+        const DiscoveryResult(
+          mode: DiscoveryMode.clarify,
+          query: '신발',
+          question: '어떤 스타일의 신발을 찾으세요?',
+          options: [
+            DiscoveryOption(
+              facet: 'styles',
+              value: '스포츠',
+              label: '스포츠',
+              count: 3,
+            ),
+          ],
+          matches: [match],
+        ),
+      ]);
+      destinationRepository = repository;
+      PoiSearchResult? picked;
+      await pumpPanel(tester, onStorePicked: (store) => picked = store);
+
+      query.value = '신발';
+      await tester.pump();
+      await settleSearch(tester);
+
+      await tester.tap(find.text('나이키 라이즈'));
+      await flush(tester);
+
+      expect(picked, isNotNull);
+      expect(picked!.name, '나이키 라이즈');
+      expect(picked!.nodeId, 'FL-3:ND-1');
     });
   });
 }
