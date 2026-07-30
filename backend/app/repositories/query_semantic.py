@@ -1,9 +1,18 @@
 # 자연어 질의 의미 검색 (문장 임베딩 + FAISS).
 # 형태소 정규화(query_morph)는 경량 1차에만 적용된다 — 여기엔 질의 원문이 그대로 들어온다.
-# 문장 임베딩은 조사·어미가 붙은 문장을 그대로 처리하는 게 낫고, 인덱스 텍스트를 바꾸면
-# 임계값 0.50의 튜닝 근거(8절)가 무효가 되기 때문이다.
+# 문장 임베딩은 조사·어미가 붙은 문장을 그대로 처리하는 게 낫다.
 # 경량 매칭이 놓쳤거나 서로 다른 이름을 여럿 잡은 부분 일치를 의미로 보완한다 — 하이브리드의 2차.
-# 설계 근거: docs/backend/native/FAISS.md
+# 설계 근거: docs/backend/native/FAISS.md, docs/backend/native/conversational-discovery.md 7-1절
+#
+# W7(2026-07-30)에서 `_document_text`가 name+category+subcategory에
+# `store.search_facets`(styles·cuisines, 사람 검수 태그)를 추가했다. **인덱스 문서
+# 텍스트를 또 바꾸면 아래 SIMILARITY_THRESHOLD의 튜닝 근거가 다시 무효가 된다** —
+# `backend/scripts/evaluate_query_hybrid.py`로 재평가하고 이 파일·FAISS.md 11-1절
+# 수치를 함께 갱신할 것. W7 재평가 결과: 총점 23/29 그대로(회귀 없음, 답이 바뀐 2건은
+# 둘 다 이미 통과 중이던 행 — "밥 먹을 곳" 요즘김밥→나의 가야, "명품 매장" 루이비통→버버리).
+# ATM 질의(현재 유효 마진 최상단) 0.464와 무의미 문자열 상단 asdfqwerzxcv 0.458은
+# **둘 다 값 그대로**다 — 두 매장 모두 facet이 없어 그대로였다. 임계값 0.50 유지 근거
+# 불변. 상세는 FAISS.md 11-1절.
 #
 # 핵심 원칙:
 # - 모델(ko-sroberta-multitask)은 지연 로드 싱글턴. 로드가 실패해도 예외를 삼켜서
@@ -196,12 +205,25 @@ def warm_model_in_background() -> threading.Thread:
 
 
 def _document_text(store: "Store") -> str:
-    # 매장을 임베딩할 텍스트. 이름 + 카테고리로 의미 신호를 만든다.
+    # 매장을 임베딩할 텍스트. 이름 + 카테고리 + 검증된 검색 facet(styles·cuisines)으로
+    # 의미 신호를 만든다.
+    #
+    # W7(conversational-discovery.md 7-1절)에서 facet을 추가했다. `store.search_facets`는
+    # 사람이 검수한 태그만 담는다(app/repositories/store_facets.py) — 매장명에서 추측한
+    # 값이 아니므로 "추천 이유는 검증 태그에서만 조립한다"는 원칙(2절)에 어긋나지 않는다.
+    # 태그가 없는 매장(1382건, 2026-07-30 시드 기준)은 문서 텍스트가 기존과 동일하다.
+    # 축 순회 순서를 고정(styles, cuisines)해 같은 매장은 항상 같은 문서 텍스트를
+    # 만든다 — dict 순회 순서에 기대면 재현성이 흔들린다.
     parts = [store.name or ""]
     if store.category:
         parts.append(store.category)
     if store.subcategory:
         parts.append(store.subcategory)
+    facets = store.search_facets or {}
+    for axis in ("styles", "cuisines"):
+        values = facets.get(axis)
+        if values:
+            parts.extend(values)
     return " ".join(part for part in parts if part).strip()
 
 
