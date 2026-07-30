@@ -75,6 +75,29 @@ void main() {
     }
   }
 
+  /// 진행 방향 모달이 떠 있으면 눌러 닫는다. 자북 heading을 못 얻는 기기(테스트
+  /// 환경이 그렇다)는 앵커 확정 도중 이 모달로 진행 방향을 물어본다.
+  Future<void> answerHeadingPromptIfShown(WidgetTester tester) async {
+    if (find.text('위쪽').evaluate().isEmpty) return;
+    await tester.tap(find.text('위쪽'));
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+
+  /// [condition]이 참이 될 때까지 프레임을 진행시킨다.
+  ///
+  /// 앵커 확정은 heading이 수렴할 때까지 몇 초를 기다리는데(실내 화면의
+  /// `_waitForHeadingToSettle`), 그 대기는 **실제 시계**를 보면서 100ms 타이머로
+  /// 잰다. 타이머는 프레임을 진행시켜야 깨어나므로 고정 횟수 pump로는 대기가
+  /// 끝나기 전에 테스트가 앞서 나간다. 그래서 실제 시간을 한도로 두고 돈다.
+  Future<void> pumpUntil(WidgetTester tester, bool Function() condition) async {
+    final giveUpAt = DateTime.now().add(const Duration(seconds: 30));
+    while (!condition() && DateTime.now().isBefore(giveUpAt)) {
+      await tester.pump(const Duration(milliseconds: 100));
+      await answerHeadingPromptIfShown(tester);
+    }
+    await drain(tester);
+  }
+
   const commandChannel = MethodChannel('navigation_client/pdr_motion_cmd');
   const eventChannel = EventChannel('navigation_client/pdr_motion');
   TestDefaultBinaryMessenger messenger() =>
@@ -86,6 +109,9 @@ void main() {
     await debugModeController.reload();
     originalBuildingRepository = buildingRepository;
     originalDestinationRepository = destinationRepository;
+    // 위치 지정은 권한 게이트를 지나야 세션을 시작한다. 실제 plugin을 부르면
+    // 테스트에서 응답이 오지 않으므로 service_locator의 seam을 교체한다.
+    isPedometerPermissionGranted = () async => true;
     messenger().setMockMethodCallHandler(commandChannel, (call) async => 1);
     messenger().setMockStreamHandler(
       eventChannel,
@@ -104,6 +130,7 @@ void main() {
     messenger().setMockStreamHandler(eventChannel, null);
     buildingRepository = originalBuildingRepository;
     destinationRepository = originalDestinationRepository;
+    isPedometerPermissionGranted = defaultIsPedometerPermissionGranted;
   });
 
   Future<GlobalKey<IndoorMapBodyState>> openIndoorMap(
@@ -126,21 +153,21 @@ void main() {
   ///
   /// **future를 바로 await하면 안 된다.** 자북 heading을 못 얻는 기기(테스트
   /// 환경이 그렇다)는 앵커 확정 도중 모달로 진행 방향을 물어보는데, 그 모달은
-  /// 프레임을 진행시켜야 뜨고 탭해야 닫힌다. 테스트 본문이 future를 붙잡고
-  /// 있으면 둘 다 못 해 그대로 멈춘다.
+  /// 프레임을 진행시켜야 뜨고 탭해야 닫힌다. 앵커 확정 전 heading 수렴 대기도
+  /// 100ms 타이머로 돌아 프레임이 멈추면 깨어나지 않는다. 테스트 본문이 future를
+  /// 붙잡고 있으면 둘 다 못 해 그대로 멈춘다.
   Future<void> startRoute(
     WidgetTester tester,
     IndoorMapBodyState state,
     PoiSearchResult destination, {
     PoiSearchResult? origin,
   }) async {
-    final done = state.showRouteTo(destination, origin: origin);
-    await drain(tester);
-    if (find.text('위쪽').evaluate().isNotEmpty) {
-      await tester.tap(find.text('위쪽'));
-      await drain(tester);
-    }
-    await done;
+    var done = false;
+    final tracked = state
+        .showRouteTo(destination, origin: origin)
+        .whenComplete(() => done = true);
+    await pumpUntil(tester, () => done);
+    await tracked;
     await drain(tester);
   }
 
@@ -277,11 +304,12 @@ void main() {
     await drain(tester);
     // ignore: invalid_use_of_visible_for_testing_member
     final handled = key.currentState!.handleMapPressForTest(wgs84(18, 52));
-    await drain(tester);
-    if (find.text('위쪽').evaluate().isNotEmpty) {
-      await tester.tap(find.text('위쪽'));
-      await drain(tester);
-    }
+    // 앵커 확정은 지도 탭 처리와 분리돼 돌아간다(unawaited). 확정될 때까지
+    // 프레임을 진행시켜야 heading 대기와 진행 방향 모달이 흐른다.
+    await pumpUntil(
+      tester,
+      () => indoorNavigationDriver.currentCalibration.anchor != null,
+    );
 
     expect(handled, isTrue);
     expect(anchored, 1);

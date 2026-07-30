@@ -12,7 +12,7 @@ from sqlalchemy import select
 
 from app.core.config import API_ROOT
 from app.models import Building, Edge, Floor, Node, Store
-from app.repositories import query_search
+from app.repositories import query_search, query_semantic
 from tests.conftest import REAL_BUILDING_ID, REAL_FLOOR_NAME
 
 
@@ -170,6 +170,18 @@ def test_편의시설은_조사가_붙어도_여러_층에서_매칭된다(
     assert len(result["floors"]) >= min_floors, f"{facility} 층 목록: {result['floors']}"
 
 
+# 오탐 회귀 가드 — query_morph.normalize가 형태소 분해로 오타·조사를 지우면서
+# 질의가 1글자로 축소되면("샤낼"→"샤", "물 사고싶어"→"물") 그 1글자가 무관한 매장
+# 이름 접두와 우연히 맞아 지하층 매장(B1 샤브미담, B4 물품보관함, B6 1C 등)을 오탐으로
+# 뽑던 문제. tier 2(이름 부분 일치)에 질의 길이 2 이상 하한을 걸어 막는다.
+@pytest.mark.parametrize("query", ["샤낼", "물 사고싶어", "1", "a", "..."])
+def test_짧게_축소되는_질의는_오탐없이_no_match다(real_db_session, query):
+    result = query_search.match_destination(real_db_session, REAL_BUILDING_ID, query)
+
+    assert result is not None
+    assert result["status"] == "no_match", f"{query!r} -> {result['match']}"
+
+
 # 실데이터로 층 지도 API가 그래프와 매장 폴리곤을 함께 응답하는지 확인한다.
 def test_층지도는_그래프와_매장_폴리곤을_함께_응답한다(real_api_client):
     response = real_api_client.get(
@@ -185,3 +197,85 @@ def test_층지도는_그래프와_매장_폴리곤을_함께_응답한다(real_
     with_polygon = [store for store in body["stores"] if store["polygon_local_m"]]
     assert with_polygon
     assert all(store["polygon_wgs84"] for store in with_polygon)
+
+
+def test_elevator_typo_resolves_on_b2_without_semantic_fallback(
+    real_db_session, monkeypatch
+):
+    """A known typo must remain in the current-floor light matching path."""
+    calls = {"count": 0}
+
+    def semantic_spy(*_args, **_kwargs):
+        calls["count"] += 1
+        return query_semantic.SemanticResults(
+            query_semantic.SemanticReason.BELOW_THRESHOLD
+        )
+
+    monkeypatch.setattr(query_semantic, "search_many", semantic_spy)
+
+    direct = query_search.match_destination(
+        real_db_session,
+        REAL_BUILDING_ID,
+        "엘레베이터",
+        current_floor_id="B2",
+    )
+    discovery = query_search.discover(
+        real_db_session,
+        REAL_BUILDING_ID,
+        "엘레베이터",
+        current_floor_id="B2",
+    )
+
+    assert direct["match"]["name"] == "엘리베이터"
+    assert direct["match"]["floor_name"] == "B2"
+    assert discovery["mode"] == "direct"
+    assert [match["floor_name"] for match in discovery["matches"]] == ["B2"]
+    assert calls["count"] == 0
+
+
+def test_current_floor_multiple_exits_are_returned_as_physical_choices(
+    real_db_session,
+):
+    """Same-name exits are distinct physical choices, not duplicate stores."""
+    rows = [
+        (store, floor)
+        for store, floor in query_search._load_stores(
+            real_db_session,
+            REAL_BUILDING_ID,
+            current_floor_id="1F",
+        )
+        if store.name == "출구"
+    ]
+    assert len(rows) >= 2
+
+    direct = query_search.match_destination(
+        real_db_session,
+        REAL_BUILDING_ID,
+        "출구",
+        current_floor_id="1F",
+    )
+    discovery = query_search.discover(
+        real_db_session,
+        REAL_BUILDING_ID,
+        "출구",
+        current_floor_id="1F",
+    )
+
+    assert direct["status"] == "ambiguous"
+    assert direct["match"] is None
+
+    # 현재 층 정보가 없어도 물리적으로 다른 출구 하나를 ID 정렬 순서로 임의
+    # 확정하지 않는다. 빈 경량 결과가 discovery 목록으로 이어진다.
+    unscoped_direct = query_search.match_destination(
+        real_db_session,
+        REAL_BUILDING_ID,
+        "출구",
+    )
+    assert unscoped_direct["status"] == "ambiguous"
+    assert unscoped_direct["match"] is None
+
+    assert discovery["mode"] == "results"
+    assert {match["store_id"] for match in discovery["matches"]} == {
+        store.id for store, _floor in rows
+    }
+    assert {match["floor_name"] for match in discovery["matches"]} == {"1F"}

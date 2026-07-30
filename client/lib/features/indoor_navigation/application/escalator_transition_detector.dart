@@ -1,0 +1,932 @@
+/// 기압 변화로 **에스컬레이터 층 이동**을 판정한다.
+///
+/// 설계 원칙 세 개가 이 파일의 모든 임계값을 결정한다.
+///
+/// 1. **오탐 비용이 미탐 비용보다 훨씬 크다.** 층을 잘못 바꾸면 도면·경로·현재
+///    위치가 통째로 엉뚱한 층으로 가고, 사용자는 복구 방법을 모른다. 놓치면
+///    지금까지의 동작(수동 층 선택)과 같다. 그래서 애매하면 판정하지 않는다.
+/// 2. **그래프 노드는 "허가"이고 기압이 "근거"다.** 에스컬레이터 노드 근처를
+///    지나는 것만으로는 아무것도 확정하지 않는다. 반대로 노드 근처가 아니면
+///    기압이 얼마나 변해도 층을 바꾸지 않는다(HVAC·자동문·기상 변화 방어).
+/// 3. **절대 고도는 쓸 수 없다.** 해면기압이 시간당 1~2 hPa(8~16 m) 움직이므로,
+///    직전 확정 층에서 다시 잡은 baseline과의 **차이**만 본다.
+///
+/// 방향 판단도 노드가 하지 않는다. 한 랜딩에는 상행 탑승 노드와 상행 도착
+/// 노드가 1.5m 거리로 붙어 있어(실측 데이터) 반경 안에 둘 다 들어온다. 그래서
+/// 올라갔는지 내려갔는지는 기압 부호가 정하고, 노드는 "어느 에스컬레이터
+/// 뱅크(그룹) 근처인가"만 알려준다.
+///
+/// HTTP·플러그인·UI를 알지 못하는 순수 로직이다. 합성 기압 시계열로 전부
+/// 테스트된다: `client/test/features/indoor_navigation/escalator_transition_detector_test.dart`.
+library;
+
+import 'dart:math' as math;
+
+import 'package:indoor_pdr_core/indoor_pdr_core.dart';
+
+import '../../../models/floor_graph.dart';
+import '../contract/altitude_sample.dart';
+import 'escalator_node_naming.dart';
+
+/// 판정 임계값. 전부 **초안값**이며 실측 로그(schema v12의
+/// `altimeter_samples`·`floor_transition_events`)를 보고 조정해야 한다.
+class EscalatorDetectorConfig {
+  const EscalatorDetectorConfig({
+    this.armRadiusM = 6.0,
+    this.armHoldMs = 60000,
+    this.smoothingWindowMs = 4000,
+    this.minSmoothingSamples = 3,
+    this.maxSampleAgeMs = 15000,
+    this.minDeltaM = 1.8,
+    this.minConfirmDeltaM = 2.2,
+    this.rampConsistencyWindowMs = 5000,
+    this.minDirectionalRampSamples = 3,
+    this.minDirectionalSampleDeltaM = 0.04,
+    this.minRampMs = 2500,
+    this.settleWindowMs = 2500,
+    this.minRampRiseM = 0.35,
+    this.settleSlopeM = 0.25,
+    this.fastAltitudeAlpha = 0.65,
+    this.fastExitSlopeMps = 0.12,
+    this.fastExitWithStepSlopeMps = 0.18,
+    this.fastExitConsecutiveSamples = 2,
+    this.candidateTimeoutMs = 90000,
+    this.multiFloorRejectM = 10.0,
+    this.baselineTrackAlpha = 0.02,
+  });
+
+  /// 에스컬레이터 노드에 이만큼 다가오면 판정을 "허가"한다. 랜딩 폭과 보정
+  /// 위치 오차를 감안한 값이다.
+  final double armRadiusM;
+
+  /// 허가 유지 시간. 탑승 뒤에는 걸음이 멈춰 위치가 갱신되지 않으므로, 노드에서
+  /// 멀어진 것으로 계산되는 동안에도 판정할 수 있어야 한다.
+  final int armHoldMs;
+
+  /// 중앙값 평활 창. 기압 단기 노이즈(±0.1~0.3 hPa ≈ ±1~2.5 m)를 눌러야
+  /// 층 간격(4~6 m)과 구분된다.
+  ///
+  /// 2000ms였을 때 iOS에서 판정이 **한 번도 돌지 않았다**. `CMAltimeter` 실측
+  /// 간격이 1069ms여서 2초 창에는 항상 2개만 들어오고, [minSmoothingSamples]를
+  /// 영원히 못 채웠다(실측 로그의 `smoothed_m`이 전 구간 null). 창을 넓히는
+  /// 동시에 아래 [minSmoothingSamples] 개수는 창과 무관하게 항상 보장한다.
+  final int smoothingWindowMs;
+
+  /// 평활에 쓸 최소 샘플 수. iOS ~0.93Hz, Android 5Hz로 간격이 5배 다르므로
+  /// 시간 창만으로는 개수가 보장되지 않는다. 창보다 오래된 샘플이라도 최근
+  /// 이 개수는 남겨 두어, 센서 주기가 어떻든 판정이 돌게 한다.
+  final int minSmoothingSamples;
+
+  /// 이보다 오래된 샘플은 평활에 쓰지 않는다.
+  ///
+  /// [minSmoothingSamples] 보장이 "오래된 샘플이라도 남긴다"는 뜻이라, 앱이
+  /// background에 다녀오는 등 시계열이 끊긴 뒤에는 몇 분 전 고도가 중앙값에
+  /// 섞일 수 있다. 그 구간은 판정하지 않고 창을 다시 채운다.
+  final int maxSampleAgeMs;
+
+  /// 후보를 열기 위한 최소 고도 변화(m). 건물마다 층고가 다르고 세션 시작
+  /// 기압도 달라 절대 층고 대신, 사람이 한 번에 점프하기 어려운 변화량과
+  /// 아래의 지속 방향 조건을 함께 쓴다.
+  final double minDeltaM;
+
+  /// PDR 고정을 풀고 층 이동을 최종 확정할 최소 변화량. 고정된 한 층 높이를
+  /// 맞히려 하지 않고, 같은 방향의 등속 변화와 하차 시 수직 속도 감소가 함께
+  /// 확인될 때만 쓴다. 더현대 실측 한 층은 약 4.4~6.2m였지만 더 낮은 층고도
+  /// 놓치지 않도록 이 문턱 자체는 낮게 둔다.
+  final double minConfirmDeltaM;
+
+  /// 후보 시작 전 상승·하강이 한 번의 압력 튐이 아니라 같은 방향으로 이어졌는지
+  /// 확인하는 시간 창과 최소 표본 수다.
+  final int rampConsistencyWindowMs;
+  final int minDirectionalRampSamples;
+  final double minDirectionalSampleDeltaM;
+
+  /// 후보가 최소 이만큼 유지돼야 확정 판단으로 넘어간다.
+  ///
+  /// 중앙값 평활은 상승이 하강으로 꺾이는 지점에서 **평평한 구간**을 만든다.
+  /// 그래서 짧게 올라갔다 바로 내려오면 꼭대기에서 "안정됨" 조건이 만족돼
+  /// 확정될 수 있다. 다만 후보가 반 층(Δ 2.5m)에서 이미 열리고 빠른 확정은
+  /// 별도로 수직 속도 감소까지 요구하므로, 오래 기다리면 하차 뒤에도 마커가
+  /// 얼어 있었다. 되돌림 방어는 유지하면서 2.5초만 둔다.
+  final int minRampMs;
+
+  /// 상승/하강이 멈췄는지 보는 창. "움직이는 중"인지도 같은 창으로 본다.
+  final int settleWindowMs;
+
+  /// 후보를 열려면 [settleWindowMs] 동안 이만큼은 실제로 움직이고 있어야 한다.
+  ///
+  /// **누적 변화량만으로는 부족하다.** 기상 변화로 5분에 3m가 흐르면 누적
+  /// [minDeltaM]을 넘고, 순간 기울기는 0에 가까워 "안정됨" 조건까지 통과해
+  /// 층이 바뀐다(실제로 이 테스트에서 오탐이 났다). 에스컬레이터의 수직 속도는
+  /// 0.2~0.3 m/s(≈0.5~0.75 m / 2.5초)이고 기상 드리프트는 0.01 m/s 수준이라,
+  /// 속도 조건 하나로 두 경우가 10배 이상 벌어진다.
+  final double minRampRiseM;
+
+  /// 이 창 동안 고도 변화가 이 값 이하면 "멈췄다"로 본다. 확정 시점을 하차
+  /// 순간에 맞추려면 임계값 통과가 아니라 **정지**를 기다려야 한다. 임계값
+  /// 통과에서 바로 확정하면 아직 탑승 중인데 지도가 바뀐다.
+  final double settleSlopeM;
+
+  /// 하차 직후를 빠르게 잡기 위한 저지연 EMA 계수. 기존 중앙값 평활은 오탐
+  /// 방어에는 좋지만 iOS 1Hz 샘플에서 3~4초 늦는다. 후보가 이미 열린 뒤에는
+  /// 이 빠른 필터를 "움직임이 잦아들었는지" 확인하는 보조 근거로만 쓴다.
+  final double fastAltitudeAlpha;
+
+  /// 빠른 EMA의 수직 속도가 이 값 이하인 샘플이 연속되면 하차로 본다.
+  final double fastExitSlopeMps;
+
+  /// 새 걸음이 함께 관측된 경우의 완화된 속도 상한. 사용자가 에스컬레이터에서
+  /// 걷더라도 수직 속도가 계속 크면 통과하지 않고, 하차 뒤 첫 걸음과 수직 속도
+  /// 감소가 겹치면 한 샘플 만에 재개한다.
+  final double fastExitWithStepSlopeMps;
+
+  /// 걸음 근거가 없을 때 필요한 연속 저속 샘플 수.
+  final int fastExitConsecutiveSamples;
+
+  /// 후보가 이 시간 안에 안정되지 않으면 기상 변화·센서 드리프트로 보고 버린다.
+  final int candidateTimeoutMs;
+
+  /// 이만큼 큰 변화는 에스컬레이터 한 층으로 설명되지 않는다(엘리베이터이거나
+  /// 연속 에스컬레이터를 쉬지 않고 탄 경우). v1은 ±1층만 지원하므로 확정하지
+  /// 않고 거부하되, 얼마나 자주 생기는지 로그로 남긴다.
+  ///
+  /// 더현대 실측에서 한 층(B2→B1) 상승이 **6.2m**였다. 처음 잡은 8.0m는 한 층
+  /// 이동의 1.3배밖에 안 돼 정상 이동을 거부할 위험이 있어 10.0m로 올렸다.
+  /// 두 층(약 12m)과는 여전히 구분된다.
+  final double multiFloorRejectM;
+
+  /// 허가/후보가 없는 동안 baseline을 천천히 따라가는 비율. 기상 드리프트를
+  /// 흡수한다. 허가 중에는 추적하지 않는다 — 상승분을 같이 먹어버린다.
+  final double baselineTrackAlpha;
+}
+
+/// 확정된 층 이동.
+class EscalatorTransition {
+  const EscalatorTransition({
+    required this.group,
+    required this.direction,
+    required this.fromFloorLabel,
+    required this.toFloorLabel,
+    required this.deltaM,
+    required this.durationMs,
+    required this.stepsDuring,
+    required this.boardingNodeId,
+    required this.boardingNodeName,
+    required this.boardingDistanceM,
+  });
+
+  /// 에스컬레이터 뱅크 식별자(`ES1`…). 도착 노드를 새 층에서 찾을 때 쓴다.
+  final String group;
+
+  final EscalatorDirection direction;
+  final String fromFloorLabel;
+  final String toFloorLabel;
+
+  /// baseline 대비 고도 변화(m). 상행이면 양수.
+  final double deltaM;
+
+  /// 후보가 열린 시점부터 확정까지 걸린 시간.
+  final int durationMs;
+
+  /// 그 사이 늘어난 걸음 수. 에스컬레이터는 거의 0, 계단은 크다 — 사후 분석에서
+  /// 두 경우를 가르는 값이다.
+  final int stepsDuring;
+
+  final String boardingNodeId;
+  final String? boardingNodeName;
+
+  /// 허가 시점에 관측한 탑승 노드까지의 거리(m).
+  final double boardingDistanceM;
+}
+
+/// 판정 과정 진단 이벤트. 확정뿐 아니라 **거부도 남긴다** — 임계값 튜닝은
+/// 거부 이유가 있어야 가능하다.
+class EscalatorDetectionEvent {
+  const EscalatorDetectionEvent({
+    required this.atMs,
+    required this.kind,
+    required this.reason,
+    required this.deltaM,
+    required this.fromFloorLabel,
+    this.toFloorLabel,
+    this.group,
+    this.durationMs,
+    this.stepsDuring,
+  });
+
+  final int atMs;
+
+  /// `armed` · `candidate` · `confirmed` · `rejected`.
+  final String kind;
+
+  /// 거부 이유(`reverted`·`noSettle`·`multiFloorUnsupported`·`noBoardingNode`·
+  /// `unknownTargetFloor`) 또는 진행 사유.
+  final String reason;
+
+  final double deltaM;
+  final String fromFloorLabel;
+  final String? toFloorLabel;
+  final String? group;
+  final int? durationMs;
+  final int? stepsDuring;
+
+  Map<String, Object?> toJson() => {
+    'at_ms': atMs,
+    'kind': kind,
+    'reason': reason,
+    'delta_m': deltaM,
+    'from_floor': fromFloorLabel,
+    'to_floor': toFloorLabel,
+    'group': group,
+    'duration_ms': durationMs,
+    'steps_during': stepsDuring,
+  };
+}
+
+/// 기압 시계열 + 에스컬레이터 노드 근접으로 층 이동을 판정하는 상태기.
+///
+/// 입력은 두 갈래다. [updateContext]·[onPosition]이 "지금 어느 층의 어느
+/// 에스컬레이터 근처인가"를 알려주고, [onAltitude]가 기압을 넣으며 판정한다.
+class EscalatorTransitionDetector {
+  EscalatorTransitionDetector({
+    this.config = const EscalatorDetectorConfig(),
+    this.maxEvents = 200,
+  });
+
+  final EscalatorDetectorConfig config;
+
+  /// 진단 이벤트 보관 상한. 넘으면 오래된 쪽을 버린다.
+  final int maxEvents;
+
+  // 컨텍스트.
+  String? _floorLabel;
+  FloorGraph? _graph;
+  List<String> _floorLabels = const [];
+  List<_EscalatorNode> _escalatorNodes = const [];
+
+  // 기압 상태.
+  final List<AltitudeSample> _window = [];
+  final List<_Smoothed> _smoothedHistory = [];
+  double? _baselineM;
+  double? _lastSmoothedM;
+
+  // 허가 상태. 그룹 → 그 그룹에서 관측한 가장 가까운 탑승 노드.
+  final Map<String, _ArmedGroup> _armedGroups = {};
+  int? _armedUntilMs;
+  int _lastSteps = 0;
+
+  // 후보 상태.
+  int? _candidateStartMs;
+  int _candidateSign = 0;
+  int _candidateStartSteps = 0;
+  _EscalatorNode? _candidateBoarding;
+  String? _candidateToFloor;
+
+  // 중앙값 평활보다 빠른 하차 판정 상태.
+  double? _fastAltitudeM;
+  int? _lastFastAltitudeAtMs;
+  int _fastExitLowSlopeSamples = 0;
+  int _lastAltitudeSteps = 0;
+
+  // UI가 "층은 먼저 바꾸고 마커는 고정"하는 두 단계 전환을 적용할 수 있도록
+  // 후보 시작/취소 신호를 한 번씩 보관한다. 최종 확정은 onAltitude 반환값이다.
+  EscalatorTransition? _startedTransition;
+  EscalatorTransition? _cancelledTransition;
+  EscalatorTransition? _pendingTransition;
+
+  final List<EscalatorDetectionEvent> _events = [];
+
+  /// 디버그 오버레이·로그용 현재 관측값.
+  double? get baselineM => _baselineM;
+  double? get smoothedAltitudeM => _lastSmoothedM;
+  double? get deltaM => (_baselineM == null || _lastSmoothedM == null)
+      ? null
+      : _lastSmoothedM! - _baselineM!;
+  bool get isArmed => _armedGroups.isNotEmpty;
+  bool get hasCandidate => _candidateStartMs != null;
+  EscalatorTransition? get pendingTransition => _pendingTransition;
+
+  EscalatorTransition? takeStartedTransition() {
+    final transition = _startedTransition;
+    _startedTransition = null;
+    return transition;
+  }
+
+  EscalatorTransition? takeCancelledTransition() {
+    final transition = _cancelledTransition;
+    _cancelledTransition = null;
+    return transition;
+  }
+
+  /// 기록된 진단 이벤트를 비우며 가져간다.
+  List<EscalatorDetectionEvent> takeEvents() {
+    final drained = List<EscalatorDetectionEvent>.unmodifiable(_events);
+    _events.clear();
+    return drained;
+  }
+
+  /// 층·그래프·층 목록을 갱신한다.
+  ///
+  /// 층 라벨이 바뀌면(수동 선택이든 확정된 이동이든) baseline과 허가·후보를
+  /// 전부 버린다. 이전 층 기준 baseline을 그대로 들고 가면 다음 판정이 이미
+  /// 기울어진 값에서 시작한다.
+  void updateContext({
+    required String? floorLabel,
+    required FloorGraph? graph,
+    required List<String> floorLabels,
+  }) {
+    _floorLabels = floorLabels;
+    final floorChanged = floorLabel != _floorLabel;
+    final graphChanged = !identical(graph, _graph);
+    _floorLabel = floorLabel;
+    if (graphChanged) {
+      _graph = graph;
+      _escalatorNodes = _parseEscalatorNodes(graph);
+    }
+    if (floorChanged) {
+      _resetForNewFloor();
+    }
+  }
+
+  /// 보정된 현재 위치를 넣어 허가 상태를 갱신한다.
+  ///
+  /// [positionM]은 층 `local_m` 좌표(복도 보정 결과)여야 한다. 원시 PDR 좌표를
+  /// 넣으면 노드 근접 판정이 앵커 오차만큼 어긋난다.
+  void onPosition({
+    required PdrLocalPoint positionM,
+    required int steps,
+    required int timestampMs,
+  }) {
+    _lastSteps = steps;
+    if (_escalatorNodes.isEmpty) return;
+
+    var armedNow = false;
+    for (final node in _escalatorNodes) {
+      // 도착 노드도 반경에 들어오지만 여기서 걸러내지 않는다. 그룹만 알아내면
+      // 되고, 탑승/도착 구분은 확정 시점에 방향과 함께 다시 본다.
+      final distance = math.sqrt(
+        math.pow(positionM.eastM - node.xM, 2) +
+            math.pow(positionM.northM - node.yM, 2),
+      );
+      if (distance > config.armRadiusM) continue;
+      armedNow = true;
+      final existing = _armedGroups[node.name.group];
+      if (existing == null || distance < existing.distanceM) {
+        _armedGroups[node.name.group] = _ArmedGroup(
+          group: node.name.group,
+          distanceM: distance,
+          atMs: timestampMs,
+        );
+      }
+    }
+    if (armedNow) {
+      final wasArmed = _armedUntilMs != null && timestampMs <= _armedUntilMs!;
+      _armedUntilMs = timestampMs + config.armHoldMs;
+      if (!wasArmed) {
+        _pushEvent(
+          atMs: timestampMs,
+          kind: 'armed',
+          reason: _armedGroups.keys.join(','),
+        );
+      }
+    }
+  }
+
+  /// 기압 샘플을 넣고 판정한다. 층 이동이 확정된 순간에만 non-null.
+  EscalatorTransition? onAltitude(AltitudeSample sample) {
+    final previousFastAltitude = _fastAltitudeM;
+    final previousFastAtMs = _lastFastAltitudeAtMs;
+    final hadNewSteps = _lastSteps > _lastAltitudeSteps;
+    _lastAltitudeSteps = _lastSteps;
+
+    // 1) 시계열이 끊겼으면(background 복귀 등) 이전 관측을 통째로 버린다.
+    //    공백 동안 층이 바뀌었을 수 있어 baseline과 후보도 함께 무효다.
+    final previous = _window.isEmpty ? null : _window.last;
+    final timelineGap =
+        previous != null &&
+        sample.timestampMs - previous.timestampMs > config.maxSampleAgeMs;
+    if (timelineGap) {
+      _window.clear();
+      _smoothedHistory.clear();
+      _baselineM = null;
+      _lastSmoothedM = null;
+      _candidateStartMs = null;
+      _candidateSign = 0;
+      _candidateBoarding = null;
+      _candidateToFloor = null;
+      _pendingTransition = null;
+      _fastAltitudeM = null;
+      _lastFastAltitudeAtMs = null;
+      _fastExitLowSlopeSamples = 0;
+    }
+
+    final rawAltitude = sample.altitudeM;
+    _fastAltitudeM = _fastAltitudeM == null
+        ? rawAltitude
+        : _fastAltitudeM! +
+              config.fastAltitudeAlpha * (rawAltitude - _fastAltitudeM!);
+    _lastFastAltitudeAtMs = sample.timestampMs;
+    final fastDeltaSeconds = timelineGap || previousFastAtMs == null
+        ? null
+        : (sample.timestampMs - previousFastAtMs) / 1000.0;
+    final fastSpeedMps =
+        previousFastAltitude == null ||
+            fastDeltaSeconds == null ||
+            fastDeltaSeconds <= 0
+        ? null
+        : (_fastAltitudeM! - previousFastAltitude) / fastDeltaSeconds;
+
+    _window.add(sample);
+    // 2) 시간 창으로 자르되 최근 minSmoothingSamples개는 항상 남긴다. 센서
+    //    주기가 창 대비 크면(iOS 1069ms) 창만으로는 개수를 못 채운다.
+    final windowStart = sample.timestampMs - config.smoothingWindowMs;
+    while (_window.length > config.minSmoothingSamples &&
+        _window.first.timestampMs < windowStart) {
+      _window.removeAt(0);
+    }
+    if (_window.length < config.minSmoothingSamples) {
+      // 아직 평활할 근거가 없다. 디버그 표시가 지난 값을 "지금 관측"으로
+      // 보이지 않도록 비워 둔다.
+      _lastSmoothedM = null;
+      return null;
+    }
+
+    final smoothed = _median(
+      _window.map((item) => item.altitudeM).toList(growable: false),
+    );
+    _lastSmoothedM = smoothed;
+    _smoothedHistory.add(_Smoothed(sample.timestampMs, smoothed));
+    // 안정 판단은 settleWindow만 보면 되지만, 타임아웃 구간까지 넉넉히 남긴다.
+    final historyStart =
+        sample.timestampMs - config.candidateTimeoutMs - config.settleWindowMs;
+    _smoothedHistory.removeWhere((item) => item.atMs < historyStart);
+
+    _baselineM ??= smoothed;
+    final armed = _armedUntilMs != null && sample.timestampMs <= _armedUntilMs!;
+    if (!armed) {
+      _armedGroups.clear();
+    }
+    final delta = smoothed - _baselineM!;
+
+    if (_candidateStartMs == null) {
+      // 허가도 후보도 없는 구간에서만 baseline이 기상 드리프트를 따라간다.
+      if (!armed) {
+        _baselineM = _baselineM! + config.baselineTrackAlpha * delta;
+        return null;
+      }
+      if (delta.abs() < config.minDeltaM) return null;
+      // 누적 변화량 + 지금도 그 방향으로 움직이는 중일 때만 후보를 연다.
+      final rise = _riseOver(sample.timestampMs, smoothed);
+      if (rise == null) return null;
+      final sign = delta > 0 ? 1 : -1;
+      if (rise * sign < config.minRampRiseM) return null;
+      if (!_hasConsistentRamp(sample.timestampMs, sign)) return null;
+      _candidateStartMs = sample.timestampMs;
+      _candidateSign = sign;
+      _candidateStartSteps = _lastSteps;
+      _fastExitLowSlopeSamples = 0;
+      _pushEvent(
+        atMs: sample.timestampMs,
+        kind: 'candidate',
+        reason: _candidateSign > 0 ? 'rising' : 'falling',
+        deltaM: delta,
+      );
+
+      final direction = sign > 0
+          ? EscalatorDirection.up
+          : EscalatorDirection.down;
+      final boarding = _pickBoardingNode(direction);
+      final fromFloor = _floorLabel;
+      if (fromFloor == null || boarding == null) {
+        _closeCandidate(
+          atMs: sample.timestampMs,
+          reason: 'noBoardingNode',
+          deltaM: delta,
+          elapsedMs: 0,
+        );
+        return null;
+      }
+      final toFloor = boarding.name.otherFloorLabel;
+      if (_floorLabels.isNotEmpty && !_floorLabels.contains(toFloor)) {
+        _closeCandidate(
+          atMs: sample.timestampMs,
+          reason: 'unknownTargetFloor',
+          deltaM: delta,
+          elapsedMs: 0,
+          toFloorLabel: toFloor,
+          group: boarding.name.group,
+        );
+        return null;
+      }
+      _candidateBoarding = boarding;
+      _candidateToFloor = toFloor;
+      final started = _buildTransition(
+        boarding: boarding,
+        direction: direction,
+        fromFloor: fromFloor,
+        toFloor: toFloor,
+        deltaM: delta,
+        elapsedMs: 0,
+      );
+      _pendingTransition = started;
+      _startedTransition = started;
+      return null;
+    }
+
+    final candidateStartMs = _candidateStartMs!;
+    final elapsedMs = sample.timestampMs - candidateStartMs;
+
+    // 부호가 뒤집혔거나 baseline 근처로 돌아왔다 = 층을 옮긴 게 아니다.
+    if (delta * _candidateSign < config.minDeltaM * 0.5) {
+      _closeCandidate(
+        atMs: sample.timestampMs,
+        reason: 'reverted',
+        deltaM: delta,
+        elapsedMs: elapsedMs,
+      );
+      return null;
+    }
+
+    if (delta.abs() >= config.multiFloorRejectM) {
+      // 여러 층을 한 번에 이동했다. 몇 층인지 추정하려면 층고 가정이 필요하고,
+      // 그 가정이 틀리면 2층 어긋난 위치를 조용히 보여준다. 거부가 안전하다.
+      _closeCandidate(
+        atMs: sample.timestampMs,
+        reason: 'multiFloorUnsupported',
+        deltaM: delta,
+        elapsedMs: elapsedMs,
+        rebaselineTo: smoothed,
+      );
+      return null;
+    }
+
+    if (elapsedMs > config.candidateTimeoutMs) {
+      _closeCandidate(
+        atMs: sample.timestampMs,
+        reason: 'noSettle',
+        deltaM: delta,
+        elapsedMs: elapsedMs,
+        rebaselineTo: smoothed,
+      );
+      return null;
+    }
+
+    if (elapsedMs < config.minRampMs) return null;
+    if (delta.abs() < config.minConfirmDeltaM) return null;
+
+    // 중앙값 settle 창보다 먼저, 저지연 EMA의 수직 속도가 잦아드는 순간을
+    // 잡는다. 하차 뒤 첫 걸음이 함께 들어오면 한 샘플, 걸음이 없으면 두 샘플
+    // 연속으로 확인한다. 에스컬레이터 위에서 걷는 동안에는 수직 속도가 계속
+    // 커서 걸음만으로 확정되지 않는다.
+    if (fastSpeedMps != null) {
+      final slopeLimit = hadNewSteps
+          ? config.fastExitWithStepSlopeMps
+          : config.fastExitSlopeMps;
+      if (fastSpeedMps.abs() <= slopeLimit) {
+        _fastExitLowSlopeSamples++;
+      } else {
+        _fastExitLowSlopeSamples = 0;
+      }
+      final fastSettled = hadNewSteps
+          ? _fastExitLowSlopeSamples >= 1
+          : _fastExitLowSlopeSamples >= config.fastExitConsecutiveSamples;
+      if (fastSettled) {
+        return _confirm(
+          atMs: sample.timestampMs,
+          smoothed: smoothed,
+          deltaM: delta,
+          elapsedMs: elapsedMs,
+        );
+      }
+    }
+
+    // fast EMA가 준비된 뒤에는 중앙값 창의 꼭대기를 정지로 오인하지 않는다.
+    // 실제 하차는 저속 샘플이 연속되지만, 올라갔다 바로 내려오는 삼각형
+    // 움직임은 방향 전환 지점의 한 샘플만 평평해질 수 있다.
+    if (fastSpeedMps == null && _hasSettled(sample.timestampMs, smoothed)) {
+      return _confirm(
+        atMs: sample.timestampMs,
+        smoothed: smoothed,
+        deltaM: delta,
+        elapsedMs: elapsedMs,
+      );
+    }
+    return null;
+  }
+
+  // ── 내부 ──
+
+  EscalatorTransition? _confirm({
+    required int atMs,
+    required double smoothed,
+    required double deltaM,
+    required int elapsedMs,
+  }) {
+    final direction = _candidateSign > 0
+        ? EscalatorDirection.up
+        : EscalatorDirection.down;
+    final fromFloor = _floorLabel;
+    final boarding = _candidateBoarding;
+
+    if (fromFloor == null || boarding == null || _candidateToFloor == null) {
+      // 기압은 층 이동이라 말하는데 그 방향의 탑승 노드가 허가된 그룹에 없다.
+      // 반대 방향 에스컬레이터 옆을 지나간 경우이거나 이름 규칙이 없는 데이터다.
+      _closeCandidate(
+        atMs: atMs,
+        reason: 'noBoardingNode',
+        deltaM: deltaM,
+        elapsedMs: elapsedMs,
+        rebaselineTo: smoothed,
+      );
+      return null;
+    }
+
+    final toFloor = _candidateToFloor!;
+    if (_floorLabels.isNotEmpty && !_floorLabels.contains(toFloor)) {
+      // 이름이 가리키는 층이 건물 층 목록에 없다 = 데이터가 어긋났다.
+      _closeCandidate(
+        atMs: atMs,
+        reason: 'unknownTargetFloor',
+        deltaM: deltaM,
+        elapsedMs: elapsedMs,
+        rebaselineTo: smoothed,
+        toFloorLabel: toFloor,
+        group: boarding.name.group,
+      );
+      return null;
+    }
+
+    final stepsDuring = _lastSteps - _candidateStartSteps;
+    _pushEvent(
+      atMs: atMs,
+      kind: 'confirmed',
+      reason: direction == EscalatorDirection.up ? 'up' : 'down',
+      deltaM: deltaM,
+      toFloorLabel: toFloor,
+      group: boarding.name.group,
+      durationMs: elapsedMs,
+      stepsDuring: stepsDuring,
+    );
+
+    final transition = _buildTransition(
+      boarding: boarding,
+      direction: direction,
+      fromFloor: fromFloor,
+      toFloor: toFloor,
+      deltaM: deltaM,
+      elapsedMs: elapsedMs,
+      stepsDuring: stepsDuring,
+    );
+
+    // 확정했으면 새 층 기준으로 처음부터 다시 본다. 호출자가 updateContext로
+    // 새 층을 알려주면 한 번 더 초기화되지만, 그 사이 도착하는 샘플이 방금 끝난
+    // 상승을 다시 후보로 열지 않도록 여기서 먼저 끊는다.
+    _candidateStartMs = null;
+    _candidateSign = 0;
+    _candidateBoarding = null;
+    _candidateToFloor = null;
+    _pendingTransition = null;
+    _fastExitLowSlopeSamples = 0;
+    _baselineM = smoothed;
+    _armedGroups.clear();
+    _armedUntilMs = null;
+    return transition;
+  }
+
+  EscalatorTransition _buildTransition({
+    required _EscalatorNode boarding,
+    required EscalatorDirection direction,
+    required String fromFloor,
+    required String toFloor,
+    required double deltaM,
+    required int elapsedMs,
+    int stepsDuring = 0,
+  }) => EscalatorTransition(
+    group: boarding.name.group,
+    direction: direction,
+    fromFloorLabel: fromFloor,
+    toFloorLabel: toFloor,
+    deltaM: deltaM,
+    durationMs: elapsedMs,
+    stepsDuring: stepsDuring,
+    boardingNodeId: boarding.id,
+    boardingNodeName: boarding.rawName,
+    boardingDistanceM:
+        _armedGroups[boarding.name.group]?.distanceM ?? double.nan,
+  );
+
+  /// 허가된 그룹 중 [direction] 방향 탑승 노드를 가진 가장 가까운 그룹을 고른다.
+  _EscalatorNode? _pickBoardingNode(EscalatorDirection direction) {
+    _EscalatorNode? best;
+    var bestDistance = double.infinity;
+    for (final armed in _armedGroups.values) {
+      for (final node in _escalatorNodes) {
+        if (node.name.group != armed.group) continue;
+        if (node.name.role != EscalatorNodeRole.boarding) continue;
+        if (node.name.direction != direction) continue;
+        if (armed.distanceM < bestDistance) {
+          bestDistance = armed.distanceM;
+          best = node;
+        }
+      }
+    }
+    return best;
+  }
+
+  bool _hasSettled(int atMs, double smoothed) {
+    final rise = _riseOver(atMs, smoothed);
+    if (rise == null) return false;
+    return rise.abs() <= config.settleSlopeM;
+  }
+
+  /// 최근 [EscalatorDetectorConfig.settleWindowMs] 동안의 평활 고도 변화량.
+  ///
+  /// 창을 채울 이력이 없으면 null — "안 움직였다"와 "아직 모른다"를 섞으면
+  /// 세션 시작 직후 첫 샘플들이 곧바로 확정으로 넘어간다.
+  double? _riseOver(int atMs, double smoothed) {
+    final windowStart = atMs - config.settleWindowMs;
+    _Smoothed? reference;
+    for (final item in _smoothedHistory) {
+      if (item.atMs <= windowStart) {
+        reference = item;
+      } else {
+        break;
+      }
+    }
+    if (reference == null) return null;
+    return smoothed - reference.value;
+  }
+
+  bool _hasConsistentRamp(int atMs, int sign) {
+    final windowStart = atMs - config.rampConsistencyWindowMs;
+    _Smoothed? previous;
+    var directionalSamples = 0;
+    var opposingSamples = 0;
+    int? firstAtMs;
+    int? lastAtMs;
+    for (final item in _smoothedHistory) {
+      if (item.atMs < windowStart) continue;
+      firstAtMs ??= item.atMs;
+      lastAtMs = item.atMs;
+      final before = previous;
+      previous = item;
+      if (before == null) continue;
+      final directionalDelta = (item.value - before.value) * sign;
+      if (directionalDelta >= config.minDirectionalSampleDeltaM) {
+        directionalSamples++;
+      } else if (directionalDelta <= -config.minDirectionalSampleDeltaM) {
+        opposingSamples++;
+      }
+    }
+    final durationMs = firstAtMs == null || lastAtMs == null
+        ? 0
+        : lastAtMs - firstAtMs;
+    return durationMs >= config.settleWindowMs &&
+        directionalSamples >= config.minDirectionalRampSamples &&
+        opposingSamples == 0;
+  }
+
+  void _closeCandidate({
+    required int atMs,
+    required String reason,
+    required double deltaM,
+    required int elapsedMs,
+    double? rebaselineTo,
+    String? toFloorLabel,
+    String? group,
+  }) {
+    if (_pendingTransition != null) {
+      _cancelledTransition = _pendingTransition;
+    }
+    _candidateStartMs = null;
+    _candidateSign = 0;
+    _candidateBoarding = null;
+    _candidateToFloor = null;
+    _pendingTransition = null;
+    _fastExitLowSlopeSamples = 0;
+    if (rebaselineTo != null) {
+      _baselineM = rebaselineTo;
+    }
+    _pushEvent(
+      atMs: atMs,
+      kind: 'rejected',
+      reason: reason,
+      deltaM: deltaM,
+      toFloorLabel: toFloorLabel,
+      group: group,
+      durationMs: elapsedMs,
+      stepsDuring: _lastSteps - _candidateStartSteps,
+    );
+  }
+
+  void _resetForNewFloor() {
+    _window.clear();
+    _smoothedHistory.clear();
+    _baselineM = null;
+    _lastSmoothedM = null;
+    _armedGroups.clear();
+    _armedUntilMs = null;
+    _candidateStartMs = null;
+    _candidateSign = 0;
+    _candidateBoarding = null;
+    _candidateToFloor = null;
+    _pendingTransition = null;
+    _startedTransition = null;
+    _cancelledTransition = null;
+    _fastAltitudeM = null;
+    _lastFastAltitudeAtMs = null;
+    _fastExitLowSlopeSamples = 0;
+    _lastAltitudeSteps = _lastSteps;
+  }
+
+  void _pushEvent({
+    required int atMs,
+    required String kind,
+    required String reason,
+    double deltaM = 0,
+    String? toFloorLabel,
+    String? group,
+    int? durationMs,
+    int? stepsDuring,
+  }) {
+    if (_events.length >= maxEvents) {
+      _events.removeAt(0);
+    }
+    _events.add(
+      EscalatorDetectionEvent(
+        atMs: atMs,
+        kind: kind,
+        reason: reason,
+        deltaM: deltaM,
+        fromFloorLabel: _floorLabel ?? '',
+        toFloorLabel: toFloorLabel,
+        group: group,
+        durationMs: durationMs,
+        stepsDuring: stepsDuring,
+      ),
+    );
+  }
+
+  static List<_EscalatorNode> _parseEscalatorNodes(FloorGraph? graph) {
+    if (graph == null) return const [];
+    final nodes = <_EscalatorNode>[];
+    for (final node in graph.nodes) {
+      if (node.type != 'escalator') continue;
+      final parsed = EscalatorNodeName.tryParse(node.name);
+      // 이름 규칙이 없는 노드는 방향·목표 층을 알 수 없어 판정에 쓸 수 없다.
+      if (parsed == null) continue;
+      nodes.add(
+        _EscalatorNode(
+          id: node.id,
+          rawName: node.name,
+          name: parsed,
+          xM: node.xM,
+          yM: node.yM,
+        ),
+      );
+    }
+    return List.unmodifiable(nodes);
+  }
+
+  static double _median(List<double> values) {
+    final sorted = List<double>.from(values)..sort();
+    final middle = sorted.length ~/ 2;
+    if (sorted.length.isOdd) return sorted[middle];
+    return (sorted[middle - 1] + sorted[middle]) / 2;
+  }
+}
+
+class _EscalatorNode {
+  const _EscalatorNode({
+    required this.id,
+    required this.rawName,
+    required this.name,
+    required this.xM,
+    required this.yM,
+  });
+
+  final String id;
+  final String? rawName;
+  final EscalatorNodeName name;
+  final double xM;
+  final double yM;
+}
+
+class _ArmedGroup {
+  const _ArmedGroup({
+    required this.group,
+    required this.distanceM,
+    required this.atMs,
+  });
+
+  final String group;
+  final double distanceM;
+  final int atMs;
+}
+
+class _Smoothed {
+  const _Smoothed(this.atMs, this.value);
+
+  final int atMs;
+  final double value;
+}

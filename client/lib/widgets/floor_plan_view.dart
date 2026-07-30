@@ -37,9 +37,13 @@ const _tileSourceId = 'floor-tiles';
 // 워밍업이 덮지 못하는 zoom이 생겨 그 타일만 쿼리를 새로 낸다. 값의 근거는
 // indoorTilesMinZoom/indoorTilesMaxZoom 정의 위 주석에 정리되어 있다.
 const _routeSourceId = 'floor-route';
+const _completedRouteSourceId = 'floor-completed-route';
+const _transferRouteSourceId = 'floor-transfer-route';
 const _pdrTrailSourceId = 'floor-pdr-trail';
+const _pdrPreviewTrailSourceId = 'floor-pdr-preview-trail';
 const _pdrRawTrailSourceId = 'floor-pdr-raw-trail';
 const _pdrConfirmedTrailSourceId = 'floor-pdr-confirmed-trail';
+const _pdrRoninTrailSourceId = 'floor-pdr-ronin-trail';
 const _debugGraphSourceId = 'floor-debug-graph';
 const _markersSourceId = 'floor-markers';
 const _highlightSourceId = 'floor-highlight';
@@ -207,9 +211,13 @@ class FloorPlanView extends StatefulWidget {
     this.currentHeadingDegrees,
     this.destination,
     this.routePoints = const [],
+    this.completedRoutePoints = const [],
+    this.transferRoutePoints = const [],
     this.pdrPathPoints = const [],
+    this.pdrPreviewPathPoints = const [],
     this.pdrRawPathPoints = const [],
     this.pdrConfirmedPathPoints = const [],
+    this.pdrRoninPathPoints = const [],
     this.debugMapOverlay = const DebugMapOverlay(),
     this.interactive = true,
     this.highlightedStoreId,
@@ -262,15 +270,29 @@ class FloorPlanView extends StatefulWidget {
   /// 시작점→목적지 경로선. 2개 미만이면 그리지 않는다.
   final List<ll.LatLng> routePoints;
 
+  /// 현재 위치 이전의 안내 경로. 남은 파란선보다 뒤에 회색으로 그린다.
+  final List<ll.LatLng> completedRoutePoints;
+
+  /// 현재 층의 에스컬레이터 탑승점과 다음 층 도착점을 잇는 수직 이동 안내선.
+  /// 일반 경로와 달리 파선으로 그려 "이 구간에서 층을 바꾼다"는 뜻을 준다.
+  final List<ll.LatLng> transferRoutePoints;
+
   /// navigation graph에 부착한 PDR 경로. 보라색 실선으로 렌더한다.
   /// 기존 호출부 호환을 위해 필드 이름은 유지한다.
   final List<ll.LatLng> pdrPathPoints;
+
+  /// 주황 걸음으로 간선 위에 임시 적분한 보라색 preview 꼬리.
+  /// 확정 경로와 구분되도록 반투명 점선으로 렌더한다.
+  final List<ll.LatLng> pdrPreviewPathPoints;
 
   /// 아직 확정되지 않은 accel preview 경로. 주황색 점선으로 렌더한다.
   final List<ll.LatLng> pdrRawPathPoints;
 
   /// 센서 파이프라인이 자체 확정한 PDR 경로. 초록색 실선으로 렌더한다.
   final List<ll.LatLng> pdrConfirmedPathPoints;
+
+  /// Android RoNIN 속도에서 구한 자동보폭 비교 경로. 분홍 파선으로 렌더한다.
+  final List<ll.LatLng> pdrRoninPathPoints;
 
   /// 디버그 모드에서만 채워지는 navigation graph 노드·간선 데이터.
   final DebugMapOverlay debugMapOverlay;
@@ -487,14 +509,26 @@ class FloorPlanViewState extends State<FloorPlanView> {
         _fitToRouteBounds(widget.routePoints);
       }
     }
+    if (oldWidget.completedRoutePoints != widget.completedRoutePoints) {
+      _updateCompletedRouteSource();
+    }
+    if (oldWidget.transferRoutePoints != widget.transferRoutePoints) {
+      _updateTransferRouteSource();
+    }
     if (oldWidget.pdrPathPoints != widget.pdrPathPoints) {
       _updatePdrTrailSource();
+    }
+    if (oldWidget.pdrPreviewPathPoints != widget.pdrPreviewPathPoints) {
+      _updatePdrPreviewTrailSource();
     }
     if (oldWidget.pdrRawPathPoints != widget.pdrRawPathPoints) {
       _updatePdrRawTrailSource();
     }
     if (oldWidget.pdrConfirmedPathPoints != widget.pdrConfirmedPathPoints) {
       _updatePdrConfirmedTrailSource();
+    }
+    if (oldWidget.pdrRoninPathPoints != widget.pdrRoninPathPoints) {
+      _updatePdrRoninTrailSource();
     }
     if (oldWidget.debugMapOverlay != widget.debugMapOverlay) {
       _updateDebugGraphSource();
@@ -713,6 +747,22 @@ class FloorPlanViewState extends State<FloorPlanView> {
       enableInteraction: false,
     );
 
+    await controller.addGeoJsonSource(
+      _completedRouteSourceId,
+      _emptyFeatureCollection,
+    );
+    await controller.addLineLayer(
+      _completedRouteSourceId,
+      'floor-completed-route-line',
+      const LineLayerProperties(
+        lineColor: '#9AA0A6',
+        lineWidth: 5,
+        lineOpacity: 0.72,
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      enableInteraction: false,
+    );
     await controller.addGeoJsonSource(_routeSourceId, _emptyFeatureCollection);
     await controller.addLineLayer(
       _routeSourceId,
@@ -721,6 +771,23 @@ class FloorPlanViewState extends State<FloorPlanView> {
         lineColor: '#1A73E8',
         lineWidth: 5,
         lineOpacity: 0.6,
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      enableInteraction: false,
+    );
+    await controller.addGeoJsonSource(
+      _transferRouteSourceId,
+      _emptyFeatureCollection,
+    );
+    await controller.addLineLayer(
+      _transferRouteSourceId,
+      'floor-transfer-route-line',
+      const LineLayerProperties(
+        lineColor: '#1A73E8',
+        lineWidth: 5,
+        lineOpacity: 0.82,
+        lineDasharray: [1.2, 1.1],
         lineCap: 'round',
         lineJoin: 'round',
       ),
@@ -862,6 +929,36 @@ class FloorPlanViewState extends State<FloorPlanView> {
     );
 
     await controller.addGeoJsonSource(
+      _pdrRoninTrailSourceId,
+      _emptyFeatureCollection,
+    );
+    await controller.addLineLayer(
+      _pdrRoninTrailSourceId,
+      'floor-pdr-ronin-trail-casing',
+      const LineLayerProperties(
+        lineColor: '#FFFFFF',
+        lineWidth: 6.25,
+        lineOpacity: 0.82,
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      enableInteraction: false,
+    );
+    await controller.addLineLayer(
+      _pdrRoninTrailSourceId,
+      'floor-pdr-ronin-trail-line',
+      const LineLayerProperties(
+        lineColor: '#D81B60',
+        lineWidth: 3.5,
+        lineOpacity: 0.96,
+        lineDasharray: [3.0, 1.5],
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      enableInteraction: false,
+    );
+
+    await controller.addGeoJsonSource(
       _pdrTrailSourceId,
       _emptyFeatureCollection,
     );
@@ -886,6 +983,23 @@ class FloorPlanViewState extends State<FloorPlanView> {
         lineColor: '#7E57C2',
         lineWidth: 3.25,
         lineOpacity: 0.96,
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      enableInteraction: false,
+    );
+    await controller.addGeoJsonSource(
+      _pdrPreviewTrailSourceId,
+      _emptyFeatureCollection,
+    );
+    await controller.addLineLayer(
+      _pdrPreviewTrailSourceId,
+      'floor-pdr-preview-trail-line',
+      const LineLayerProperties(
+        lineColor: '#7E57C2',
+        lineWidth: 3.25,
+        lineOpacity: 0.68,
+        lineDasharray: [1.5, 1.5],
         lineCap: 'round',
         lineJoin: 'round',
       ),
@@ -985,11 +1099,15 @@ class FloorPlanViewState extends State<FloorPlanView> {
     );
 
     _styleReady = true;
+    await _updateCompletedRouteSource();
     await _updateRouteSource();
+    await _updateTransferRouteSource();
     await _updateDebugGraphSource();
     await _updatePdrRawTrailSource();
     await _updatePdrConfirmedTrailSource();
+    await _updatePdrRoninTrailSource();
     await _updatePdrTrailSource();
+    await _updatePdrPreviewTrailSource();
     await _updateMarkersSource();
     await _updateHighlightSource();
     if (widget.routePoints.isNotEmpty) {
@@ -1134,7 +1252,9 @@ class FloorPlanViewState extends State<FloorPlanView> {
   Future<void> centerOn(ll.LatLng target) async {
     final controller = _controller;
     if (controller == null) return;
-    await controller.moveCamera(CameraUpdate.newLatLng(_toMapLibreLatLng(target)));
+    await controller.moveCamera(
+      CameraUpdate.newLatLng(_toMapLibreLatLng(target)),
+    );
   }
 
   Future<void> _fitToFootprint() async {
@@ -1277,7 +1397,11 @@ class FloorPlanViewState extends State<FloorPlanView> {
     );
 
     const blue = Color(0xFF1976D2);
-    canvas.drawCircle(center, _currentLocationCoreRadius, Paint()..color = blue);
+    canvas.drawCircle(
+      center,
+      _currentLocationCoreRadius,
+      Paint()..color = blue,
+    );
     // 코어 왼쪽 위의 광택 점. 코어 크기를 바꿔도 비율이 유지되도록 코어 반지름에서
     // 파생시킨다(원본 디자인의 코어 18 / offset 5 / 반지름 4.5 비율).
     const glossOffset = _currentLocationCoreRadius * 0.28;
@@ -1463,8 +1587,26 @@ class FloorPlanViewState extends State<FloorPlanView> {
     });
   }
 
+  Future<void> _updateTransferRouteSource() async {
+    await _updateLineSource(_transferRouteSourceId, widget.transferRoutePoints);
+  }
+
+  Future<void> _updateCompletedRouteSource() async {
+    await _updateLineSource(
+      _completedRouteSourceId,
+      widget.completedRoutePoints,
+    );
+  }
+
   Future<void> _updatePdrTrailSource() async {
     await _updateLineSource(_pdrTrailSourceId, widget.pdrPathPoints);
+  }
+
+  Future<void> _updatePdrPreviewTrailSource() async {
+    await _updateLineSource(
+      _pdrPreviewTrailSourceId,
+      widget.pdrPreviewPathPoints,
+    );
   }
 
   Future<void> _updatePdrRawTrailSource() async {
@@ -1476,6 +1618,10 @@ class FloorPlanViewState extends State<FloorPlanView> {
       _pdrConfirmedTrailSourceId,
       widget.pdrConfirmedPathPoints,
     );
+  }
+
+  Future<void> _updatePdrRoninTrailSource() async {
+    await _updateLineSource(_pdrRoninTrailSourceId, widget.pdrRoninPathPoints);
   }
 
   Future<void> _updateLineSource(
@@ -1617,8 +1763,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
     // 가 계속 그 버튼에 남아 매장 탭을 포함한 모든 지도 클릭이 삼켜졌다. 실제
     // 판정은 뷰포트 하단이 소프트키보드에 잘려있는지로 한다 — 웹/데스크톱에서
     // 이 값은 항상 0이라 자연스럽게 지도 탭이 통과된다.
-    final keyboardHeight =
-        MediaQuery.maybeOf(context)?.viewInsets.bottom ?? 0;
+    final keyboardHeight = MediaQuery.maybeOf(context)?.viewInsets.bottom ?? 0;
     if (keyboardHeight > 0) {
       FocusManager.instance.primaryFocus?.unfocus();
       return;

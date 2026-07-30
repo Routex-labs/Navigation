@@ -5,6 +5,7 @@
 
 import pytest
 
+from app.repositories import query_search
 from tests.conftest import BUILDING_ID, FLOOR_ID, FLOOR_NAME
 
 
@@ -73,20 +74,32 @@ def test_질의가_200자를_넘으면_모든_엔드포인트에서_422다(api_c
     assert response.status_code == 422
 
 
-@pytest.mark.parametrize("path", ["/query/destination", "/query/info", "/query/ai"])
-@pytest.mark.parametrize(
-    "text",
-    ["가게A?", "가게A 어디야?", "가게A 어디야!", "가게A 어디야.", "가게A 어디야,"],
-)
-def test_문장끝_구두점이_붙어도_모든_엔드포인트에서_매칭된다(
-    api_client, path, text
-):
+_PUNCTUATED = ["가게A?", "가게A 어디야?", "가게A 어디야!", "가게A 어디야.", "가게A 어디야,"]
+
+
+@pytest.mark.parametrize("path", ["/query/destination", "/query/info"])
+@pytest.mark.parametrize("text", _PUNCTUATED)
+def test_문장끝_구두점이_붙어도_단일목적지_계약에서_매칭된다(api_client, path, text):
     response = api_client.post(path, json={"text": text, "building_id": BUILDING_ID})
 
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"
     assert body["match"]["name"] == "가게A"
+
+
+# /query/ai는 탐색 계약(mode/matches)이라 status/match가 아니다. 구두점 처리는 같은
+# 경량 정규화를 쓰므로 여기서도 동일하게 direct 1건이 나와야 한다.
+@pytest.mark.parametrize("text", _PUNCTUATED)
+def test_문장끝_구두점이_붙어도_탐색은_direct_1건이다(api_client, text):
+    response = api_client.post(
+        "/query/ai", json={"text": text, "building_id": BUILDING_ID}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "direct"
+    assert [match["name"] for match in body["matches"]] == ["가게A"]
 
 
 def test_공백_검증은_통과한_질의의_원문을_보존한다(api_client):
@@ -155,20 +168,112 @@ def test_정보_질의_매칭_없으면_no_match(api_client):
     assert response.json()["status"] == "no_match"
 
 
-# AI 질의도 정확한 이름은 1차 경량 경로로 확정된다(임베딩·torch 없이 동작).
-def test_ai_질의가_정확한_이름을_경량으로_확정한다(api_client):
+# --- /query/ai 탐색 계약 (conversational-discovery.md 8-3절) ---
+# 응답은 {mode, query, question, options, matches}다. destination의 status/match가 아니다.
+
+
+# 정확한 이름은 되묻지 않고 바로 1건(direct) — 임베딩·torch 없이 경량 1차로 확정된다.
+def test_ai_질의가_정확한_이름을_direct_1건으로_확정한다(api_client):
     payload = {"text": "가게A", "building_id": BUILDING_ID}
 
     response = api_client.post("/query/ai", json=payload)
 
     assert response.status_code == 200
     body = response.json()
-    assert body["status"] == "ok"
-    assert body["match"]["name"] == "가게A"
-    assert body["match"]["entrance_node_id"]  # 경로용 노드가 채워져 있어야 한다
+    assert body["mode"] == "direct"
+    assert body["query"] == "가게A"
+    assert body["question"] is None
+    assert body["options"] == []
+    assert len(body["matches"]) == 1
+    match = body["matches"][0]
+    assert match["name"] == "가게A"
+    assert match["entrance_node_id"]  # 경로용 노드가 채워져 있어야 한다
+    assert match["floor_name"] in ("1F", "2F")
+    # 근거 태그가 없으면 이유를 만들지 않는다(추측 금지, 2절).
+    assert match["matched_facets"] == {}
+    assert match["reason"] is None
 
 
-# AI 질의도 응답 계약(status/query/match)은 destination과 같다 — 빈 질의는 422.
+# 서로 다른 이름이 여럿 걸리는 부분 일치는 확정하지 않고 여러 후보를 준다.
+def test_ai_질의가_여러_후보를_results로_반환한다(api_client):
+    payload = {"text": "가게", "building_id": BUILDING_ID}
+
+    response = api_client.post("/query/ai", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "results"
+    names = [match["name"] for match in body["matches"]]
+    assert set(names) == {"가게A", "가게B"}
+    assert len(names) == len(set(names))  # 같은 이름이 층만 달리해 반복되지 않는다
+    assert len(body["matches"]) <= 5
+
+
+def test_ai_전체_보기_wire_필드를_서비스까지_전달한다(api_client, monkeypatch):
+    captured = {}
+    original_discover = query_search.discover
+
+    def spy(*args, **kwargs):
+        captured["show_all"] = kwargs["show_all"]
+        return original_discover(*args, **kwargs)
+
+    monkeypatch.setattr(query_search, "discover", spy)
+
+    response = api_client.post(
+        "/query/ai",
+        json={
+            "text": "가게",
+            "building_id": BUILDING_ID,
+            "selected_facets": {},
+            "show_all": True,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["mode"] == "results"
+    assert captured == {"show_all": True}
+
+
+# 태그가 붙지 않은 매장에 selected_facets를 걸면 좁혀지지 않는다 — 막다른 흐름 대신
+# 선택을 해제하고 전체 후보를 보여준다(2절).
+def test_ai_질의_선택이_후보를_0건으로_만들면_전체_결과로_되돌린다(api_client):
+    payload = {
+        "text": "가게",
+        "building_id": BUILDING_ID,
+        "selected_facets": {"styles": ["스포츠"]},
+    }
+
+    response = api_client.post("/query/ai", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "results"
+    assert {match["name"] for match in body["matches"]} == {"가게A", "가게B"}
+
+
+def test_ai_질의_매칭이_없으면_no_match다(api_client, monkeypatch):
+    from app.repositories import query_semantic
+
+    # 임베딩 2차는 "임계값 미달"로 흉내 낸다 — degraded가 아니라 no_match여야 한다.
+    monkeypatch.setattr(
+        query_semantic,
+        "search_many",
+        lambda *a, **k: query_semantic.SemanticResults(
+            query_semantic.SemanticReason.BELOW_THRESHOLD
+        ),
+    )
+
+    response = api_client.post(
+        "/query/ai", json={"text": "존재하지않는가게", "building_id": BUILDING_ID}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "no_match"
+    assert body["matches"] == []
+
+
+# AI 질의도 요청 검증은 destination과 같다 — 빈 질의는 422.
 def test_ai_질의_빈_텍스트는_422를_반환한다(api_client):
     payload = {"text": "", "building_id": BUILDING_ID}
 

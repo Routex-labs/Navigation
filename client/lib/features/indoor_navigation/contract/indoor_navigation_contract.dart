@@ -22,6 +22,7 @@ export 'package:indoor_pdr_core/indoor_pdr_core.dart'
         PdrLocalPoint,
         HeadingReference;
 
+export 'altitude_sample.dart';
 export 'calibration_state.dart';
 export 'indoor_navigation_intents.dart';
 export 'indoor_navigation_view.dart';

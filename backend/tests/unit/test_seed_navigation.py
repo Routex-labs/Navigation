@@ -1,8 +1,13 @@
-"""Studio 간선 입력 보완 로직 단위 테스트."""
+"""Studio 간선 입력 보완 로직 및 매장 적재(add_dataset) 단위 테스트."""
 
 import pytest
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import sessionmaker
 
-from scripts.seed.seed_navigation import edge_geometry_and_length
+from app.models.base import Base
+from app.models.place import Store
+import app.models  # noqa: F401  # 모든 모델을 Base.metadata에 등록
+from scripts.seed.seed_navigation import add_dataset, edge_geometry_and_length
 
 
 # 간선 경로선이 생략되면 양 끝 노드 좌표로 보완하는지 검증한다.
@@ -39,3 +44,98 @@ def test_간선_거리가_없으면_경로선_전체_길이를_계산한다():
     )
 
     assert length_m == pytest.approx(8.0)
+
+
+# --- add_dataset의 search_facets 배선 검증 ---
+# 값 계산(파생·오버레이)은 다루지 않는다. seed dict에 실려 온 값을
+# 컬럼에 그대로 옮기는 배선만 검증한다.
+
+
+@pytest.fixture
+def db_session():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine)()
+    yield session
+    session.close()
+    engine.dispose()
+
+
+def _minimal_dataset(stores: list[dict]) -> dict:
+    return {
+        "building": {
+            "id": "test-building",
+            "name": "테스트 빌딩",
+            "floor": {"id": "FL-1F", "name": "1F", "level": 1},
+        },
+        "nodes": [],
+        "edges": [],
+        "stores": stores,
+        "pois": [],
+    }
+
+
+def _base_store(store_id: str, **overrides: object) -> dict:
+    store = {
+        "id": store_id,
+        "name": f"매장-{store_id}",
+        "category": "패션",
+        "subcategory": "캐주얼·스트리트",
+        "centroid": {"local_m": {"x": 1.0, "y": 2.0}},
+    }
+    store.update(overrides)
+    return store
+
+
+# search_facets가 있는 store dict를 시드하면 컬럼에 그대로 저장되는지 검증한다.
+def test_search_facets가_있으면_컬럼에_그대로_저장된다(db_session):
+    facets = {"styles": ["캐주얼"]}
+    add_dataset(
+        db_session,
+        _minimal_dataset([_base_store("PO-1", search_facets=facets)]),
+    )
+    db_session.flush()
+
+    store = db_session.scalars(select(Store).where(Store.id == "PO-1")).one()
+
+    assert store.search_facets == facets
+
+
+# search_facets 키가 없는 store dict는 컬럼이 None으로 저장되는지 검증한다.
+def test_search_facets_키가_없으면_None이다(db_session):
+    add_dataset(db_session, _minimal_dataset([_base_store("PO-2")]))
+    db_session.flush()
+
+    store = db_session.scalars(select(Store).where(Store.id == "PO-2")).one()
+
+    assert store.search_facets is None
+
+
+# search_facets 배선을 추가해도 기존 필드(카테고리·좌표 등) 적재가 그대로인지 검증한다.
+def test_기존_필드_적재는_그대로다(db_session):
+    add_dataset(
+        db_session,
+        _minimal_dataset([
+            _base_store(
+                "PO-3",
+                name="나이키 라이즈",
+                category="패션",
+                subcategory="캐주얼·스트리트",
+                entrance_local_m={"x": 3.0, "y": 4.0},
+                entrance_node_id=None,
+                polygon_local_m=[{"x": 0.0, "y": 0.0}],
+            )
+        ]),
+    )
+    db_session.flush()
+
+    store = db_session.scalars(select(Store).where(Store.id == "PO-3")).one()
+
+    assert store.name == "나이키 라이즈"
+    assert store.category == "패션"
+    assert store.subcategory == "캐주얼·스트리트"
+    assert store.centroid_x_m == 1.0
+    assert store.centroid_y_m == 2.0
+    assert store.entrance_x_m == 3.0
+    assert store.entrance_y_m == 4.0
+    assert store.polygon == [{"x": 0.0, "y": 0.0}]

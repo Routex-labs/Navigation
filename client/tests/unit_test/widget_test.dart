@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:navigation_client/app.dart';
 import 'package:navigation_client/core/api_config.dart';
 import 'package:navigation_client/core/service_locator.dart';
+import 'package:navigation_client/models/discovery_result.dart';
 import 'package:navigation_client/models/poi_search_result.dart';
 import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/repositories/mock_building_repository.dart';
@@ -344,46 +345,30 @@ void main() {
     expect(find.text('PDR 시작'), findsNothing);
   });
 
-  testWidgets(
-    'PDR control sits beside the bottom mode segment without overlap',
-    (WidgetTester tester) async {
-      // ignore: invalid_use_of_visible_for_testing_member
-      SharedPreferences.setMockInitialValues({'debug_mode.enabled': true});
-      // setUp이 이미 빈 mock으로 로드해 둔 상태라, 여기서 다시 읽어야 방금 켠
-      // 디버그 모드가 전역 컨트롤러에 반영된다.
-      await debugModeController.reload();
+  testWidgets('debug mode keeps always-on PDR free of a manual start control', (
+    WidgetTester tester,
+  ) async {
+    // ignore: invalid_use_of_visible_for_testing_member
+    SharedPreferences.setMockInitialValues({'debug_mode.enabled': true});
+    // setUp이 이미 빈 mock으로 로드해 둔 상태라, 여기서 다시 읽어야 방금 켠
+    // 디버그 모드가 전역 컨트롤러에 반영된다.
+    await debugModeController.reload();
 
-      tester.view.physicalSize = const Size(390, 844);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.pumpWidget(
-        const MaterialApp(home: MapShellScreen(initialMode: MapMode.indoor)),
-      );
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(
+      const MaterialApp(home: MapShellScreen(initialMode: MapMode.indoor)),
+    );
+    await tester.pumpAndSettle();
 
-      final debugButtonY = tester
-          .getCenter(find.byIcon(Icons.bug_report_outlined))
-          .dy;
-      final pdrTextRect = tester.getRect(find.text('PDR 시작'));
-      final homeTextRect = tester.getRect(find.text('홈'));
-
-      expect(
-        (pdrTextRect.center.dy - homeTextRect.center.dy).abs(),
-        lessThan(2),
-      );
-      expect(pdrTextRect.right, lessThan(homeTextRect.left));
-      expect(
-        (debugButtonY - pdrTextRect.center.dy).abs(),
-        lessThanOrEqualTo(2),
-      );
-      expect(
-        tester.getRect(find.byIcon(Icons.bug_report_outlined)).right,
-        lessThan(pdrTextRect.left),
-      );
-    },
-  );
+    expect(find.byIcon(Icons.bug_report_outlined), findsOneWidget);
+    expect(find.text('PDR 시작'), findsNothing);
+    // 진단 공유 버튼도 실제 길안내 기록이 생긴 뒤에만 나타난다.
+    expect(find.byTooltip('PDR 진단 JSON 공유'), findsNothing);
+  });
 
   testWidgets('indoor map switches floor via the floor tabs', (
     WidgetTester tester,
@@ -495,10 +480,26 @@ void main() {
     expect(find.text('뜻이 비슷한 매장을 찾았어요'), findsNothing);
   });
 
-  testWidgets('타이핑 중에는 의미 검색을 부르지 않는다', (WidgetTester tester) async {
-    // 의미 검색은 첫 호출이 20초대까지 간다. 글자마다 던지면 "밥"·"밥 먹"이
-    // 전부 모델을 태우므로, 확정(엔터) 전에는 절대 타면 안 된다.
-    final repository = _FallbackDestinationRepository();
+  testWidgets('엔터를 누르지 않아도 타이핑이 멎으면 의미 검색까지 간다', (
+    WidgetTester tester,
+  ) async {
+    // 회귀: 예전에는 의미 검색이 onSubmitted(엔터)에만 붙어 있었다. 한글 IME에서
+    // 첫 엔터가 조합 확정에 쓰이면 onSubmitted가 오지 않아 의미 검색이 아예
+    // 시작되지 않았고, 화면에는 경량이 빈손이라는 이유만으로 "찾지 못했어요"가
+    // 최종 결론처럼 떠 있었다. "신발"·"밥집"은 어떤 매장명과도 정확히 일치하지
+    // 않으므로 타이핑만으로는 항상 그 화면이었다.
+    //
+    // 대신 비용은 디바운스 두 단(경량 300ms + 의미 400ms)으로 막는다. 중간
+    // 글자로 모델을 태우지 않는지는 widgets_test.dart의 SearchPanel 그룹이
+    // 타이머 단위로 확인한다.
+    final repository = _FallbackDestinationRepository(
+      aiResult: const PoiSearchResult(
+        name: '요즘김밥',
+        floor: 'B1',
+        point: LatLng(37.52, 126.92),
+        nodeId: 'FL-1:ND-1',
+      ),
+    );
     destinationRepository = repository;
 
     await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
@@ -507,11 +508,15 @@ void main() {
     await tester.tap(find.byType(TextField));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '밥 먹을');
-    // 디바운스가 끝나 경량 검색은 돌지만, 의미 검색은 아직이다.
-    await tester.pumpAndSettle(const Duration(milliseconds: 500));
+    // receiveAction(엔터)을 일부러 보내지 않는다. 시간만 흘린다.
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 450));
+    await tester.pumpAndSettle();
 
     expect(repository.lightQueries, ['밥 먹을']);
-    expect(repository.aiQueries, isEmpty);
+    expect(repository.aiQueries, ['밥 먹을']);
+    expect(find.textContaining('요즘김밥'), findsOneWidget);
   });
 
   testWidgets('검색창을 눌러도 두 번째 입력창이 생기지 않는다', (WidgetTester tester) async {
@@ -558,10 +563,12 @@ void main() {
     expect(find.textContaining('건물 ·'), findsOneWidget);
   });
 
-  testWidgets('상단 검색은 실내에서도 현재 층으로 좁히지 않는다', (WidgetTester tester) async {
-    // 이름을 알고 검색하는 사용자는 그 매장이 몇 층인지 모른다. 현재 층으로
-    // 좁히면 분명히 있는 매장이 "결과 없음"으로 나온다. 층 스코프는 길찾기·
-    // 카테고리 시트만 쓴다.
+  testWidgets('상단 검색은 실내에서 현재 층을 요청에 함께 보낸다', (WidgetTester tester) async {
+    // "화장실"처럼 시설 질의가 건물 전체 정렬 순서상 우연히 걸리는 층이 아니라
+    // 지금 보고 있는 층으로 확정되도록, 실내 탭에서는 현재 층(_activeIndoorFloor)을
+    // 경량 요청에 실어 보낸다. 매장 이름을 아는 검색이 다른 층에 있어 이 때문에
+    // 경량이 빈손이 되더라도 의미 검색은 층을 무시하고 건물 전체를 보므로 여전히
+    // 찾아낸다(백엔드 query_search.match_ai_destination).
     final repository = _FallbackDestinationRepository(
       lightResult: const PoiSearchResult(
         name: 'MLB',
@@ -579,7 +586,7 @@ void main() {
     await tester.pumpAndSettle();
     await searchFromTopBar(tester, 'MLB');
 
-    expect(repository.lightFloorScopes, [null]);
+    expect(repository.lightFloorScopes, isNot(contains(null)));
     expect(find.text('B2'), findsOneWidget);
   });
 
@@ -631,33 +638,6 @@ void main() {
     // 화면 AppBar에만 있는 정확한 제목으로 확인한다.
     expect(find.text('강의실 101(으)로 안내'), findsOneWidget);
     expect(find.textContaining('목적지까지'), findsWidgets);
-  });
-
-  testWidgets('route guide shows the ETA card and building info FAB', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        routes: {
-          '/': (context) => const DestinationScreen(),
-          AppRoutes.routeGuide: (context) => const RouteGuideScreen(),
-        },
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('강의실 201'));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(FloatingActionButton), findsOneWidget);
-
-    // FAB는 하드코딩 Q&A 껍데기가 아니라 실제 /query/ai를 쓰는 매장 찾기 패널을
-    // 연다. 백엔드는 문장으로 답하지 않고 매장 1건을 돌려주므로 UI도 검색형이다.
-    await tester.tap(find.byIcon(Icons.search));
-    await tester.pumpAndSettle();
-
-    expect(find.text('AI 매장 찾기'), findsOneWidget);
-    expect(find.byType(TextField), findsWidgets);
   });
 
   testWidgets('arrival screen shows a generic message and navigates on tap', (
@@ -741,13 +721,36 @@ class _FallbackDestinationRepository implements DestinationRepository {
   }
 
   @override
-  Future<List<PoiSearchResult>> searchDestinationsAi(
+  Future<DiscoveryResult> searchDestinationsAi(
     String buildingId,
     String query, {
     String? currentFloorId,
+    Map<String, List<String>>? selectedFacets,
+    bool showAll = false,
   }) async {
     aiQueries.add(query);
     aiFloorScopes.add(currentFloorId);
-    return aiResult == null ? const [] : [aiResult!];
+    if (aiResult == null) {
+      return DiscoveryResult(mode: DiscoveryMode.noMatch, query: query);
+    }
+    final result = aiResult!;
+    return DiscoveryResult(
+      mode: DiscoveryMode.direct,
+      query: query,
+      matches: [
+        DiscoveryMatch(
+          storeId: '${result.floor}:${result.name}',
+          name: result.name,
+          category: result.category,
+          subcategory: result.subcategory,
+          floorId: result.floor,
+          floorName: result.floor,
+          entranceNodeId: result.nodeId,
+          point: result.point,
+          matchedFacets: const {},
+          reason: null,
+        ),
+      ],
+    );
   }
 }

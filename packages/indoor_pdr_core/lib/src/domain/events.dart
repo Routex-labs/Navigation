@@ -63,6 +63,14 @@ class PedometerBatchEvent {
     this.stepCounterDelta,
     this.counterLastEventAtMs,
     this.stepAccelAmplitudeMps2,
+    this.roninSupported = false,
+    this.roninReady = false,
+    this.roninModel,
+    this.roninStatus,
+    this.roninSpeedMps,
+    this.roninSpeedStdMps,
+    this.roninCadenceHz,
+    this.roninStrideMeters,
   });
 
   final int steps;
@@ -87,6 +95,17 @@ class PedometerBatchEvent {
   final int? stepCounterDelta;
   final double? counterLastEventAtMs;
   final double? stepAccelAmplitudeMps2;
+
+  /// Android 전용 RoNIN shadow 추론값. confirmed(초록) 거리에는 반영하지 않고
+  /// 동일 step/heading으로 누적하는 별도 비교 경로에서만 사용한다.
+  final bool roninSupported;
+  final bool roninReady;
+  final String? roninModel;
+  final String? roninStatus;
+  final double? roninSpeedMps;
+  final double? roninSpeedStdMps;
+  final double? roninCadenceHz;
+  final double? roninStrideMeters;
 }
 
 /// native accel step-peak 카운터 신호. 주황(preview) 경로 전용.

@@ -9,12 +9,102 @@ class PdrPreview {
     required this.path,
     required this.steps,
     required this.distanceM,
+    this.acceptedPeakTimesMs = const [null],
   });
 
   final PdrLocalPoint position;
   final List<PdrLocalPoint> path;
   final int steps;
   final double distanceM;
+
+  /// [path]와 **같은 길이·같은 인덱스**로 정렬된, 실제 preview에 반영된 peak 시각.
+  ///
+  /// 네이티브 `stepPeakTimes` 원본이 아니다. [AccelPreviewTrack]이 간격·cadence·
+  /// lead cap으로 거부한 peak는 경로에도 없고 여기에도 없다. 소비자는
+  /// `acceptedPeakTimesMs[i]`가 `path[i]`를 만든 peak라고 가정해도 된다.
+  ///
+  /// 시작점(원점)에는 대응하는 peak가 없으므로 `null`이다. 한 이벤트가 여러 peak를
+  /// 한꺼번에 실어 오면(`delta > 1`) 코어가 아는 시각은 `latestPeakMs` 하나뿐이라
+  /// 같은 값이 반복 저장된다 — 인덱스 정렬을 깨지 않기 위한 의도된 동작이다.
+  ///
+  /// 네이티브는 peak 시각을 최근 20초만 보관하지만 이 배열은 코어가 독립적으로
+  /// 들고 있으므로 path가 trim되기 전까지 남는다.
+  final List<int?> acceptedPeakTimesMs;
+}
+
+/// confirmed(초록) 경로에 마지막으로 반영된 CMPedometer 배치의 식별 정보.
+///
+/// snapshot은 motion 이벤트마다 반복 방출되므로, 시간창만 보고 소비하면 같은
+/// 배치를 여러 번 소비하게 된다. [batchId]로 중복 소비를 막을 수 있다.
+class PdrAppliedBatch {
+  const PdrAppliedBatch({
+    required this.batchId,
+    required this.spanStartMs,
+    required this.spanEndMs,
+    required this.appliedSteps,
+    required this.appliedDistanceM,
+  });
+
+  /// 세션 안에서 단조 증가한다. 같은 값이면 이미 소비한 배치다.
+  final int batchId;
+
+  /// 이 배치가 덮는 시간창. tracking split이 적용된 뒤의 값이다.
+  final int? spanStartMs;
+  final int? spanEndMs;
+
+  final int appliedSteps;
+  final double appliedDistanceM;
+}
+
+/// Android RoNIN 자동보폭 비교 경로.
+///
+/// STEP_COUNTER와 기존 heading은 confirmed 경로와 동일하고, 한 걸음 거리만
+/// RoNIN 수평 속도/cadence 후보로 바꾼다. 제품 위치에는 사용하지 않는다.
+class PdrRoninTrack {
+  const PdrRoninTrack({
+    required this.supported,
+    required this.modelReady,
+    required this.position,
+    required this.path,
+    required this.steps,
+    required this.distanceM,
+    required this.effectiveStrideM,
+    required this.model,
+    required this.status,
+    this.rawStrideM,
+    this.speedMps,
+    this.speedStdMps,
+    this.cadenceHz,
+  });
+
+  const PdrRoninTrack.empty()
+    : supported = false,
+      modelReady = false,
+      position = PdrLocalPoint.zero,
+      path = const [PdrLocalPoint.zero],
+      steps = 0,
+      distanceM = 0,
+      effectiveStrideM = 0.70,
+      model = null,
+      status = 'unsupported',
+      rawStrideM = null,
+      speedMps = null,
+      speedStdMps = null,
+      cadenceHz = null;
+
+  final bool supported;
+  final bool modelReady;
+  final PdrLocalPoint position;
+  final List<PdrLocalPoint> path;
+  final int steps;
+  final double distanceM;
+  final double effectiveStrideM;
+  final String? model;
+  final String status;
+  final double? rawStrideM;
+  final double? speedMps;
+  final double? speedStdMps;
+  final double? cadenceHz;
 }
 
 /// 코어가 내보내는 관측 스냅샷. UI는 이것을 구독해 렌더한다.
@@ -28,9 +118,14 @@ class PdrSnapshot {
     required this.hasHeading,
     required this.preview,
     required this.quality,
+    this.ronin = const PdrRoninTrack.empty(),
+    this.lastAppliedBatch,
   });
 
-  /// 초록 confirmed 위치(제품 위치). 로컬 미터, 세션 시작점 기준.
+  /// 초록 confirmed 센서 원본 위치. 로컬 미터, 세션 시작점 기준.
+  ///
+  /// 제품 현재 위치는 클라이언트가 이 원본을 복도 graph 제약 상태기에 넣어
+  /// 별도로 유지한다. 원본은 진단·비교를 위해 수정하지 않는다.
   final PdrLocalPoint position;
   final List<PdrLocalPoint> path;
   final int steps;
@@ -41,5 +136,13 @@ class PdrSnapshot {
   final bool hasHeading;
 
   final PdrPreview preview;
+  final PdrRoninTrack ronin;
   final PdrQuality quality;
+
+  /// 마지막으로 confirmed 경로에 반영된 배치. 아직 없으면 null.
+  ///
+  /// preview의 어느 구간까지 확정으로 소비할지 판단하는 기준이다.
+  /// `preview.acceptedPeakTimesMs[i] <= lastAppliedBatch.spanEndMs`인 점까지가
+  /// 확정 시간창 안에 들어온 preview 걸음이다.
+  final PdrAppliedBatch? lastAppliedBatch;
 }

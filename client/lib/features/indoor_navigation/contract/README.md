@@ -13,6 +13,7 @@ UI가 호출할 명령, UI가 구독할 상태, PDR 좌표를 층 좌표에 고�
 | [`calibration_state.dart`](calibration_state.dart) | anchor 확정 단계와 렌더 가능 여부 | `CalibrationPhase`, `CalibrationStatus` |
 | [`pdr_anchor.dart`](pdr_anchor.dart) | PDR east/north → 층 `local_m` 변환 | `PdrAnchor`, `PdrToFloorAxes`, `FloorCoordinateTransform` |
 | [`pdr_runtime_status.dart`](pdr_runtime_status.dart) | 센서 파이프라인 실행 상태 | `PdrRuntimeState`, `PdrRuntimeStatus` |
+| [`altitude_sample.dart`](altitude_sample.dart) | 기압 샘플과 기압계 가용 상태 | `AltitudeSample`, `AltimeterStatus`, `pressureAltitudeM` |
 
 ## 계약 관계
 
@@ -70,6 +71,16 @@ floor = anchorLocalM + PdrToFloorAxes × Rotation(rotationDeg) × pdr
 - `PdrRuntimeStatus.warnings`는 사용자 문구가 아니라 식별자다. 화면에서 그대로 노출하지 않는다.
 - anchor 확정 때와 위치 변환 때 서로 다른 `PdrToFloorAxes`를 쓰면 이동 방향이 반전된다.
 - `awaitingPin` 또는 `awaitingHeading`에서 위치를 렌더하면 보정 전 좌표가 실제 위치처럼 보인다.
+- `AltitudeSample.altitudeM`을 절대 고도로 쓰면 안 된다. 해면기압이 시간당 1~2 hPa(8~16 m)
+  움직이므로 baseline과의 **차이**로만 의미가 있다.
+- 기압을 위치 추정에 섞으면 HVAC 교란이 걸음 배치까지 흔든다. 층 전이 판정만 이 값을 본다.
+
+## 수직 이동
+
+`applyVerticalTransfer`는 `changeFloor`와 다르다. 층만 바꾸고 사용자 pin을 다시 받는 게 아니라,
+확인된 도착 지점을 새 anchor로 놓고 **회전값을 직전 anchor에서 물려받는다**(같은 센서 세션이라
+heading frame이 끊기지 않는다). 직전 anchor가 없으면 물려받을 회전값이 없어 아무 일도 하지
+않으므로, 그 경우는 `changeFloor` + 사용자 pin으로 가야 한다.
 
 ## 검증
 

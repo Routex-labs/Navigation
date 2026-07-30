@@ -128,6 +128,9 @@ def add_dataset(session: Session, data: dict) -> None:
             entrance_y_m=(store.get("entrance_local_m") or {}).get("y"),
             entrance_node_id=store.get("entrance_node_id"),
             polygon=store.get("polygon_local_m"),
+            # 파생·오버레이 계산은 이 모듈 밖(Wave 2)에서 하고, 여기서는 dict에
+            # 이미 실려 온 값을 컬럼에 그대로 옮기기만 한다. 키가 없으면 None.
+            search_facets=store.get("search_facets"),
         )
         for store in data.get("stores", [])
     )

@@ -1,3 +1,4 @@
+import '../models/discovery_result.dart';
 import '../models/floor_plan.dart';
 import '../models/poi_search_result.dart';
 import 'building_repository.dart';
@@ -10,22 +11,49 @@ class MockDestinationRepository implements DestinationRepository {
 
   final BuildingRepository _buildingRepository;
 
-  /// Mock에는 임베딩 인덱스가 없으므로 이름 부분 일치 검색을 그대로 쓰고,
-  /// 백엔드의 "최대 1건" 규약만 맞춘다. 자연어 의미 검색은 재현하지 않는다 —
-  /// 흉내 낸 결과로 테스트를 통과시키면 실제 연동에서만 깨지는 차이가 숨는다.
+  /// Mock에는 임베딩 인덱스도 facet 로더도 없으므로, 이름 부분 일치 검색
+  /// 결과를 최상위 1건으로 감싸 `direct`로 돌려준다. clarify·results·
+  /// degraded 판정과 matched_facets/reason 조립은 재현하지 않는다 — 흉내 낸
+  /// 되물음·추천 이유로 테스트를 통과시키면 실제 연동에서만 깨지는 차이가
+  /// 숨는다.
   @override
-  Future<List<PoiSearchResult>> searchDestinationsAi(
+  Future<DiscoveryResult> searchDestinationsAi(
     String buildingId,
     String query, {
     String? currentFloorId,
+    Map<String, List<String>>? selectedFacets,
+    bool showAll = false,
   }) async {
     final results = await searchDestinations(
       buildingId,
       query,
       currentFloorId: currentFloorId,
     );
-    return results.isEmpty ? const [] : [results.first];
+    if (results.isEmpty) {
+      return DiscoveryResult(mode: DiscoveryMode.noMatch, query: query);
+    }
+    return DiscoveryResult(
+      mode: DiscoveryMode.direct,
+      query: query,
+      matches: [_toDiscoveryMatch(results.first)],
+    );
   }
+
+  /// Mock 데이터에는 백엔드의 store_id/floor_id 구분이 없으므로(아래 참고)
+  /// 층 라벨과 이름을 이어붙인 placeholder를 쓴다. 실제 백엔드 id 형식과
+  /// 다르므로 이 값 자체를 단정적으로(equality 등) 검증하는 테스트를 짜면 안 된다.
+  DiscoveryMatch _toDiscoveryMatch(PoiSearchResult result) => DiscoveryMatch(
+    storeId: '${result.floor}:${result.name}',
+    name: result.name,
+    category: result.category,
+    subcategory: result.subcategory,
+    floorId: result.floor,
+    floorName: result.floor,
+    entranceNodeId: result.nodeId,
+    point: result.point,
+    matchedFacets: const {},
+    reason: null,
+  );
 
   @override
   Future<List<PoiSearchResult>> searchDestinations(

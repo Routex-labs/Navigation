@@ -255,6 +255,7 @@ flowchart TD
 - **모델 로드는 로컬 캐시 우선(`_load_model`)이다.** `local_files_only=True`로 먼저 시도해 HF Hub 왕복(경고·지연)을 없애고, 캐시가 없을 때만 Hub로 폴백한다. 배포 이미지는 빌드 때 `scripts.warm_embedding_model`로 캐시를 채운다.
 - **`warm_model_in_background()`는 기동 시 워밍용이다.** `NAV_WARM_EMBEDDING=1`이면 `main.create_app()`이 이 데몬 스레드를 띄워 `_get_model()`을 미리 돌린다. `_model_lock`이 직렬화하므로 워밍 중 첫 질의가 들어와도 중복 로드 없이 같은 인스턴스를 쓴다.
 - **인덱스는 `store_id`만 캐시한다.** ORM 객체는 매 요청 현재 세션으로 새로 읽는다(`semantic_search → _load_stores`) — detached 객체와 stale 층 정보를 피하기 위해서다.
+- **`semantic_search`는 층 스코프를 받지 않는다.** 검색 범위는 항상 건물 전체다. 층 우선순위는 `match_ai_destination`의 1차 경량(현재 층 한정)이 담당하고, 1차가 놓친 자연어만 2차가 건물 전체에서 찾는다. 2차에도 층 필터를 걸면 현재 층에 그 업종이 없는 질의(1F에서 "밥집")가 항상 `no_match`가 된다 — [FAISS.md](../../../docs/backend/native/FAISS.md) 10절.
 - 모델 로드가 실패하면 `_get_model()`이 `None`을 돌려주고 AI 경로만 조용히 비활성된다. 경량 매칭은 계속 동작한다. 백그라운드 워밍이 실패해도 같은 방식으로 degrade한다.
 
 ---

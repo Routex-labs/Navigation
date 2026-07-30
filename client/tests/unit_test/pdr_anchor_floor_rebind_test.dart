@@ -88,6 +88,9 @@ void main() {
     await debugModeController.reload();
     originalBuildingRepository = buildingRepository;
     originalDestinationRepository = destinationRepository;
+    // 위치 지정은 권한 게이트를 지나야 세션을 시작한다. 실제 plugin을 부르면
+    // 테스트에서 응답이 오지 않으므로 service_locator의 seam을 교체한다.
+    isPedometerPermissionGranted = () async => true;
     messenger().setMockMethodCallHandler(commandChannel, (call) async => 1);
     messenger().setMockStreamHandler(
       eventChannel,
@@ -106,6 +109,7 @@ void main() {
     messenger().setMockStreamHandler(eventChannel, null);
     buildingRepository = originalBuildingRepository;
     destinationRepository = originalDestinationRepository;
+    isPedometerPermissionGranted = defaultIsPedometerPermissionGranted;
   });
 
   Future<GlobalKey<IndoorMapBodyState>> openIndoorMap(

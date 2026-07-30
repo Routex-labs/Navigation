@@ -9,6 +9,8 @@ Flutter 화면이나 HTTP를 모르는 계산 계층이다. 백엔드가 제공�
 |---|---|---|
 | [`dijkstra.dart`](dijkstra.dart) | 가중 그래프 최단 경로 | `ShortestPath`, `dijkstra` |
 | [`floor_router.dart`](floor_router.dart) | node/edge 경로를 지도용 경로점으로 변환 | `computeShortestRoute` |
+| [`multi_floor_router.dart`](multi_floor_router.dart) | 건물 전체 그래프 경로를 층별 세그먼트로 분할 | `computeMultiFloorRoute` |
+| [`route_progress.dart`](route_progress.dart) | 현재 위치를 경로에 투영해 진행·남은거리·이탈 판정 | `RouteProgress`, `computeRouteProgress` |
 | [`geo_transform.dart`](geo_transform.dart) | 2D affine 피팅·적용, PDR/층 좌표 연결 | `AffineTransform` |
 
 ## 단일 층 경로 계산
@@ -30,6 +32,26 @@ flowchart LR
 임의로 섞지 않는다. 설계는
 [`../../../docs/backend/navigate/client-handoff.md`](../../../docs/backend/navigate/client-handoff.md)를 참고한다.
 
+## 경로 기준 위치 해석 — 단방향
+
+PDR 위치 추정은 층 그래프 전체를 상대로 하고 경로를 모른다. `route_progress.dart`는
+그 결과를 **소비만** 한다.
+
+```mermaid
+flowchart LR
+    TRACKER["CorridorPositionTracker<br/>그래프 위 보정 위치 · currentEdgeId"]
+    PROGRESS["route_progress.dart<br/>경로 폴리라인 투영"]
+    UI["남은거리 · ETA · 이탈 표시"]
+
+    TRACKER -->|"위치 · 현재 간선"| PROGRESS --> UI
+    PROGRESS -. "되돌려주지 않는다" .-x TRACKER
+```
+
+역방향(경로 간선을 우선해 위치를 끌어당기기)을 허용하면, 사용자가 실제로 다른 길로
+갔을 때도 화면 위치는 경로에 붙어 있어 앱이 조용히 거짓 안내를 계속한다. 잘못된 이탈
+판정은 사용자가 알아채지만 조용히 틀린 위치는 아무도 알아채지 못하므로, 이 방향
+제약은 성능 문제와 무관하게 유지한다.
+
 ## 의존 경계
 
 - `domain`은 `screens`, `widgets`, `repositories`, HTTP를 import하지 않는다.
@@ -43,6 +65,10 @@ flowchart LR
 - edge `lengthM`이 음수·비정상이면 Dijkstra 전제가 깨진다.
 - 좌표 대응점이 부족하거나 거의 일직선이면 affine 피팅이 불안정하다.
 - 층별 그래프만으로 수직 전이 edge를 찾을 수 없다.
+- 경로 이탈을 좌표 거리로 판정하면 경로와 나란한 옆 복도에 잘못 붙었을 때도 "경로 위"로 보인다. 판정은 간선 동일성으로만 한다.
+- 진행률을 매번 전역 최소 투영으로 구하면 ㄷ자 경로에서 마주보는 구간이 가까워 진행거리가 순간이동한다. 이전 진행거리 기준 지역 탐색이 필요하다.
+- 이전 진행거리 근처 후보라도 실제 걸음으로 설명할 수 없는 폭으로 튀면 다음 행동과 파란선이 건너뛴다. 마지막 채택 이후 걸음 수로 허용 이동량을 제한해야 한다.
+- 경로·층 세그먼트가 바뀔 때 이전 진행거리를 기준으로 남겨두면 매 걸음 재획득이 켜진다. 호출자가 기준점을 초기화해야 한다.
 
 ## 검증 기준
 
@@ -50,6 +76,10 @@ flowchart LR
 - 단방향 edge는 역방향으로 통과하지 못한다.
 - 선택된 edge 길이 합과 `IndoorRoute.distanceMeters`가 일치한다.
 - 경로점의 첫·끝이 선택 node와 일치하고 WGS84 순서가 뒤바뀌지 않는다.
+- 경로를 따라 걸으면 진행거리는 단조 증가하고 남은거리는 단조 감소하며, 두 값의 합은 폴리라인 전체 길이다.
+- 이탈거리가 작아도 현재 간선이 경로에 없으면 경로 위로 판정하지 않는다.
+- 걸음 없는 큰 진행거리 점프는 표시에서 보류하고, 누적 걸음으로 설명되는 이동은 반영한다.
+  ([`../../test/domain/route_progress_test.dart`](../../test/domain/route_progress_test.dart))
 
 ---
 

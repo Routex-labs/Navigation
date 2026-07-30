@@ -13,6 +13,7 @@ import '../../models/poi_search_result.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/building_switcher_sheet.dart';
 import '../../widgets/category_icon.dart';
+import '../../widgets/category_label_order.dart';
 import '../../widgets/category_stores_sheet.dart';
 import '../../widgets/directions_sheet.dart';
 import '../../widgets/favorites_sheet.dart';
@@ -73,6 +74,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 이 상태를 화면에 안내로 띄우는 것이 중요하다. 시트가 닫히기만 하면
   /// 사용자는 "지도에서 선택"을 눌렀는데 아무 일도 안 일어난 것으로 본다.
   bool _pickingDestinationOnMap = false;
+
+  /// 도착지를 먼저 고른 길찾기 초안. 이전에는 `도착`을 누르는 즉시 경로
+  /// 계산을 시도해서, 출발 위치가 준비되지 않은 경우 이 후보가 화면과 함께
+  /// 사라졌다. 이 값은 검색 취소·시트 닫힘과 분리된 MapShell 상태로 두고,
+  /// 명시적 초기화 또는 다른 도착지 선택 때만 바꾼다.
+  DirectionsCandidate? _routeDraftDestination;
 
   final _outdoorKey = GlobalKey<OutdoorMapBodyState>();
   final _indoorKey = GlobalKey<IndoorMapBodyState>();
@@ -146,6 +153,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 예전에는 스플래시 화면이 이 요청을 진행 중 화면과 함께 보여줬지만,
   /// 이제 앱이 바로 지도 화면으로 시작하므로 화면을 막지 않고 백그라운드로
   /// 요청만 하고, 거부된 게 있으면 지도 위에 짧게 안내만 띄운다.
+  ///
+  /// 권한 요청은 한 번에 하나씩 순서대로 뜬다([requestStartupPermissions]).
   Future<void> _requestStartupPermissions() async {
     try {
       final statuses = await requestStartupPermissions();
@@ -289,6 +298,19 @@ class _MapShellScreenState extends State<MapShellScreen> {
     });
   }
 
+  void _resumeSearchFromRouteDraft() {
+    _activateSearch();
+    _searchFocus.requestFocus();
+  }
+
+  void _clearRouteDraft() {
+    _closeSearch();
+    setState(() {
+      _selectedOrigin = null;
+      _routeDraftDestination = null;
+    });
+  }
+
   void _onSearchChanged(String value) {
     _activateSearch();
     if (_searchQuery == value) return;
@@ -365,20 +387,25 @@ class _MapShellScreenState extends State<MapShellScreen> {
     );
     if (action == StoreInfoAction.setOrigin) {
       // 출발지를 지정하면 다음 "도착" 탭이 시트를 다시 열지 않고 바로 이
-      // 매장을 출발지로 쓸 수 있도록 상위 상태에도 기억해둔다. 시트는
-      // 도착지를 골라야 실제 경로를 그릴 수 있으므로 그대로 연다.
+      // 매장을 출발지로 쓸 수 있도록 상위 상태에도 기억해둔다. 이미 도착
+      // 초안이 있으면 이 선택으로만 경로 조건이 완성되므로 즉시 계산한다.
       setState(() => _selectedOrigin = candidate);
-      await _openDirections(presetOrigin: candidate);
+      final destination = _routeDraftDestination;
+      if (destination != null) {
+        await _startRoute(origin: candidate, destination: destination);
+      } else {
+        await _openDirections(presetOrigin: candidate);
+      }
     } else if (action == StoreInfoAction.setDestination) {
-      // 도착 버튼은 언제나 시트를 거치지 않고 바로 경로를 그린다.
-      // - 명시적으로 고른 출발지가 있으면 그 매장에서 → 새 도착지
-      // - 없으면 origin=null 로 넘겨 showRouteTo가 PDR 현재 위치(또는 위치
-      //   지정으로 잡아둔 앵커) 기준으로 가장 가까운 통로 노드를 골라 라우팅
-      // 어느 쪽도 준비되지 않은 경우(출발지·PDR 둘 다 없음)는 showRouteTo가
-      // "출발 위치를 먼저 지정해주세요" 안내를 띄우므로, 여기서는 조용히
-      // 시트를 다시 여는 이전 동작을 재현하지 않는다 — 사용자가 시트로
-      // 되돌아가지 않고 바로 결과(경로 또는 안내)를 보게 하는 게 요청사항.
-      await _startRoute(origin: _selectedOrigin, destination: candidate);
+      // 도착지를 먼저 고르는 흐름에서는 경로를 성급하게 계산하지 않는다.
+      // 출발지가 없으면 상단 초안 바가 남아 사용자가 출발 행을 눌러 기존
+      // DirectionsSheet 검색 흐름으로 이어갈 수 있다. 명시적 출발지가 이미
+      // 있으면 그때만 기존 온디바이스 Dijkstra 경로 계산을 바로 시작한다.
+      setState(() => _routeDraftDestination = candidate);
+      final origin = _selectedOrigin;
+      if (origin != null) {
+        await _startRoute(origin: origin, destination: candidate);
+      }
     }
     return true;
   }
@@ -456,9 +483,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   /// 길찾기 시트를 연다. [presetOrigin]/[presetDestination]은 매장 정보
   /// 시트의 "출발지로 설정"/"도착지로 설정"에서 넘어올 때 그 매장으로 채워
-  /// 둘 값이다 — 상단 바 길찾기 아이콘으로 직접 열 때는 둘 다 비워 기존처럼
-  /// 현재 위치 → 검색한 도착지 흐름을 그대로 쓴다. 시트 안에서 출발지를
-  /// 직접 고르면(맨 위 "현재 위치" 포함) 그 선택이 [presetOrigin]보다 우선한다.
+  /// 둘 값이다. 저장된 도착 초안이 있으면 [presetDestination]이 없어도 그
+  /// 값을 채워, 상단 출발 행에서 끊긴 흐름을 그대로 이어 간다. 시트 안에서
+  /// 출발지를 직접 고르면(맨 위 "현재 위치" 포함) 그 선택이 [presetOrigin]보다
+  /// 우선한다.
   Future<void> _openDirections({
     DirectionsCandidate? presetOrigin,
     DirectionsCandidate? presetDestination,
@@ -471,12 +499,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 입력하지 않아도 되게 한다. presetOrigin(이번 진입점에서 명시적으로 넘긴
     // 값)이 있으면 그 값이 우선한다.
     final initialOrigin = presetOrigin ?? _selectedOrigin;
+    final initialDestination = presetDestination ?? _routeDraftDestination;
     final result = await _withMapsLocked(
       () => DirectionsSheet.show(
         context,
         originLabel: '현재 위치',
         initialOrigin: initialOrigin,
-        initialDestination: presetDestination,
+        initialDestination: initialDestination,
         search: _searchDirectionsCandidates,
         currentFloorLabel: currentFloorLabel,
       ),
@@ -490,6 +519,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
     if (result.pickDestinationOnMap) {
       // 시트는 닫혔고, 이제 지도에서 매장을 누르는 것이 도착지 선택이다.
+      // 도착 초안은 지우지 않는다 — 아직 새 도착지가 정해지지 않았고, 지도 탭이
+      // 확정하는 순간 [_onMapStoreTap]이 덮어쓴다.
       setState(() {
         _pickingDestinationOnMap = true;
         // 안내 카드와 자리가 겹치므로 장소 카드는 접는다.
@@ -498,7 +529,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
       return;
     }
 
-    await _startRoute(origin: result.origin, destination: result.destination!);
+    // 시트 안에서 확정한 도착지는 상단 초안에도 반영한다. 출발 위치가 아직
+    // 준비되지 않아 경로가 끊겨도 이 후보가 화면과 함께 사라지지 않게 한다.
+    final destination = result.destination!;
+    setState(() => _routeDraftDestination = destination);
+    await _startRoute(origin: result.origin, destination: destination);
   }
 
   /// 지도 화면이 "사용자 위치를 새로 잡았다"고 알려올 때. 기억해둔 출발지
@@ -537,18 +572,17 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 강조 표시는 남겨두지 않는다 — 곧 경로와 도착 핀이 그 자리를 대신한다.
     _indoorKey.currentState?.clearHighlight();
     _outdoorKey.currentState?.clearHighlight();
-    unawaited(
-      _startRoute(
-        origin: _selectedOrigin,
-        destination: DirectionsCandidate(
-          title: match.name,
-          subtitle: match.floor,
-          point: match.point,
-          nodeId: match.nodeId,
-          floor: match.floor,
-        ),
-      ),
+    final destination = DirectionsCandidate(
+      title: match.name,
+      subtitle: match.floor,
+      point: match.point,
+      nodeId: match.nodeId,
+      floor: match.floor,
     );
+    // 지도 탭도 도착지를 확정하는 경로다. 다른 확정 경로와 같이 상단 초안에
+    // 남겨, 출발 위치가 없어 경로가 끊겨도 후보가 사라지지 않게 한다.
+    setState(() => _routeDraftDestination = destination);
+    unawaited(_startRoute(origin: _selectedOrigin, destination: destination));
   }
 
   /// 실제 경로 표시. 길찾기 시트를 거치는 경로와, 이미 기억해둔 출발지로 바로
@@ -847,6 +881,18 @@ class _MapShellScreenState extends State<MapShellScreen> {
               searchActive: _searchActive,
               onCancelSearch: _closeSearch,
               onDirectionsTap: _openDirections,
+              onSearchRequested: _resumeSearchFromRouteDraft,
+              routeOriginLabel: _selectedOrigin?.title,
+              routeDestinationLabel: _routeDraftDestination?.title,
+              onRouteOriginTap: () => _openDirections(
+                presetDestination: _routeDraftDestination,
+              ),
+              onRouteDestinationTap: () => _openDirections(
+                presetDestination: _routeDraftDestination,
+              ),
+              onClearRouteDraft: _routeDraftDestination == null
+                  ? null
+                  : _clearRouteDraft,
             ),
           ),
 
@@ -873,6 +919,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                     submitTick: _searchSubmitTick,
                     onStorePicked: _onSearchStorePicked,
                     onBuildingPicked: _onSearchBuildingPicked,
+                    currentFloorId: _activeIndoorFloor,
                   ),
                 ),
               ),
@@ -1122,7 +1169,7 @@ class _FavoritesPill extends StatelessWidget {
 /// pill → 카테고리 목록 시트 → 매장 목록 시트로 두 단계였음).
 ///
 /// 카테고리 enumeration은 건물 전 층의 `stores[].category`를 unique하게 뽑아
-/// 매장 수 많은 순으로 정렬한다. HttpBuildingRepository가 층별 응답을
+/// 사용자에게 보이는 label 기준 가나다 순으로 정렬한다. HttpBuildingRepository가 층별 응답을
 /// 캐시하므로 첫 로드 이후엔 즉시.
 class _CategoryChipsRow extends StatefulWidget {
   const _CategoryChipsRow({
@@ -1152,7 +1199,7 @@ class _CategoryChipsRowState extends State<_CategoryChipsRow> {
   Future<List<String>> _load() async {
     final building = await buildingRepository.getBuilding(widget.buildingId);
     if (building == null) return const [];
-    final counts = <String, int>{};
+    final categories = <String?>[];
     for (final floor in building.floors) {
       final json = await buildingRepository.getFloorGeoJson(
         widget.buildingId,
@@ -1161,17 +1208,10 @@ class _CategoryChipsRowState extends State<_CategoryChipsRow> {
       if (json == null) continue;
       final plan = FloorPlan.fromJson(json);
       for (final store in plan.stores) {
-        final c = store.category;
-        if (c == null || c.isEmpty) continue;
-        counts[c] = (counts[c] ?? 0) + 1;
+        categories.add(store.category);
       }
     }
-    final entries = counts.entries.toList()
-      ..sort((a, b) {
-        final c = b.value.compareTo(a.value);
-        return c != 0 ? c : a.key.compareTo(b.key);
-      });
-    return entries.map((e) => e.key).toList();
+    return sortedCategoryLabels(categories);
   }
 
   @override

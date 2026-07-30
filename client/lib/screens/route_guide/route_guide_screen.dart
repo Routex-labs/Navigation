@@ -10,7 +10,6 @@ import '../../routing/app_routes.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/eta_card.dart';
 import '../../widgets/floor_plan_view.dart';
-import '../../widgets/ai_search_sheet.dart';
 
 const _fallbackCenter = LatLng(37.5665, 126.9780);
 const _walkingSpeedMetersPerSecond = 1.2;
@@ -96,17 +95,6 @@ class _RouteGuideScreenState extends State<RouteGuideScreen> {
     return nearest?.entranceNodeId;
   }
 
-  void _openBuildingInfo() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) => const AiSearchSheet(buildingId: demoBuildingId),
-    );
-  }
-
   LatLng _currentLocation() {
     return _floorPlan?.approximateCurrentLocation() ?? _fallbackCenter;
   }
@@ -150,21 +138,7 @@ class _RouteGuideScreenState extends State<RouteGuideScreen> {
                   ? const Center(child: CircularProgressIndicator())
                   : destination == null
                       ? const Center(child: Text('목적지 정보가 없습니다'))
-                      : Stack(
-                          children: [
-                            _buildMap(destination),
-                            Positioned(
-                              bottom: 12,
-                              right: 12,
-                              child: FloatingActionButton(
-                                heroTag: 'rag-info',
-                                onPressed: _openBuildingInfo,
-                                tooltip: 'AI 매장 찾기',
-                                child: const Icon(Icons.search),
-                              ),
-                            ),
-                          ],
-                        ),
+                      : _buildMap(destination),
             ),
             if (destination != null)
               _BottomEta(

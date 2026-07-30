@@ -71,6 +71,70 @@ void main() {
     });
   });
 
+  group('RoNIN 자동보폭(분홍) 경로', () {
+    test('같은 Android step과 heading에서 보폭만 독립적으로 바꾼다', () {
+      final s = newSession();
+      s.onHeading(
+        const HeadingEvent(
+          motionTimestampMs: 1000,
+          fusedHeadingDeg: 0,
+          headingStable: true,
+          headingSource: 'sensor_manager/rotation_vector',
+        ),
+      );
+
+      s.onPedometerBatch(
+        const PedometerBatchEvent(
+          steps: 4,
+          stepSessionId: 1,
+          sessionStartMs: 900,
+          timestampMs: 2000,
+          isAndroid: true,
+          roninSupported: true,
+          roninReady: true,
+          roninModel: 'ronin-tcn-200hz',
+          roninStatus: 'ready',
+          roninSpeedMps: 0.8,
+          roninCadenceHz: 1.6,
+          roninStrideMeters: 0.5,
+        ),
+      );
+
+      final snapshot = s.snapshot;
+      expect(snapshot.distanceM, closeTo(2.8, 1e-9));
+      expect(snapshot.ronin.supported, isTrue);
+      expect(snapshot.ronin.modelReady, isTrue);
+      expect(snapshot.ronin.steps, 4);
+      // 0.70 → 후보 0.50은 배치 급변 제한과 EMA를 거쳐 0.651m가 된다.
+      expect(snapshot.ronin.effectiveStrideM, closeTo(0.651, 1e-9));
+      expect(snapshot.ronin.distanceM, closeTo(2.604, 1e-9));
+      expect(snapshot.ronin.position.eastM, closeTo(0, 1e-9));
+      expect(snapshot.ronin.position.northM, closeTo(2.604, 1e-9));
+      expect(snapshot.position.northM, closeTo(2.8, 1e-9));
+    });
+
+    test('RoNIN 필드가 없는 iOS 배치는 비교 경로를 만들지 않는다', () {
+      final s = newSession();
+      s.onHeading(
+        const HeadingEvent(motionTimestampMs: 1000, fusedHeadingDeg: 0),
+      );
+      s.onPedometerBatch(
+        const PedometerBatchEvent(
+          steps: 2,
+          stepSessionId: 1,
+          sessionStartMs: 900,
+          timestampMs: 1500,
+          distanceM: 1.4,
+          distanceAvailable: true,
+        ),
+      );
+
+      expect(s.snapshot.ronin.supported, isFalse);
+      expect(s.snapshot.ronin.steps, 0);
+      expect(s.snapshot.ronin.path, const [PdrLocalPoint.zero]);
+    });
+  });
+
   test('snapshots 스트림은 배치 반영 시 이벤트를 낸다', () async {
     final s = newSession();
     final future = s.snapshots.first;

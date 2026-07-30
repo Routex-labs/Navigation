@@ -37,6 +37,10 @@ IndoorRoute? computeShortestRoute(
   return IndoorRoute(
     points: [for (final (lat, lng) in wgs84Points) LatLng(lat, lng)],
     distanceMeters: path.totalDistanceM,
+    // 경로 진행률·이탈 판정이 쓰는 값이다. 다익스트라가 이미 알고 있는 것을
+    // 그리기용 WGS84로 변환하면서 버리지 않고 그대로 실어 보낸다.
+    pointsLocalM: localPoints,
+    edgeIds: path.edgeIds,
   );
 }
 
