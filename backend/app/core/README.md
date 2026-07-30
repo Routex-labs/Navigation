@@ -33,6 +33,10 @@ DEFAULT_DATABASE_URL = f"sqlite:///{(API_ROOT / 'data' / 'navigation.db').as_pos
 
 class Settings(BaseSettings):
     database_url: str = DEFAULT_DATABASE_URL
+    environment: str = "development"  # NAV_ENVIRONMENT — production이면 CORS 기본이 잠긴다
+    cors_origins: str = ""  # NAV_CORS_ORIGINS — 콤마 구분 화이트리스트(와일드카드 금지)
+    allowed_hosts: str = ""  # NAV_ALLOWED_HOSTS — TrustedHost 화이트리스트(비면 미적용)
+    max_request_body_bytes: int = 1_000_000  # NAV_MAX_REQUEST_BODY_BYTES — 초과 시 413
     warm_embedding: bool = False  # NAV_WARM_EMBEDDING — 기동 시 임베딩 모델 백그라운드 선로드
     log_level: str = "INFO"  # NAV_LOG_LEVEL — 로그 레벨(DEBUG로 상세 로그)
     model_config = SettingsConfigDict(env_prefix="NAV_", case_sensitive=False)
@@ -40,6 +44,13 @@ class Settings(BaseSettings):
 
 settings = Settings()  # import 시 1회 생성, 프로세스 전역 재사용
 ```
+
+- **CORS는 환경 기준으로 잠근다(운영 와일드카드 금지).** `main._configure_cors()`가
+  `NAV_CORS_ORIGINS`(콤마 구분)를 화이트리스트로 쓴다. 비어 있으면 개발에서는 localhost
+  임의 포트만, 운영(`NAV_ENVIRONMENT=production`)에서는 교차 출처를 전부 막는다.
+- **`NAV_ALLOWED_HOSTS`가 지정되면** TrustedHost 미들웨어가 Host 헤더를 그 목록으로 제한한다.
+  비어 있으면 미적용(Cloud Run 동적 호스트·테스트 클라이언트 호환).
+- **`NAV_MAX_REQUEST_BODY_BYTES`(기본 1MB)** 를 넘는 본문은 `BodySizeLimitMiddleware`가 413으로 끊는다.
 
 - **`settings`는 모듈 전역 싱글턴이다.** 다른 모듈은 `from app.core.config import settings`로 가져다 쓴다.
 - **환경변수 접두사는 `NAV_`.** `database_url` 필드는 환경변수 `NAV_DATABASE_URL`로 덮어쓴다 (`case_sensitive=False`라 대소문자 무관).

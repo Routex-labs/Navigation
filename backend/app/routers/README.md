@@ -11,12 +11,15 @@ URL·쿼리 파라미터 파싱, `Depends(get_db)` 주입, `response_model`(=`dt
 
 | 파일 | prefix | 담당 |
 |---|---|---|
+| `health.py` | — | liveness `/health`·`/health/live`, readiness `/health/ready`(DB 확인) |
 | `buildings.py` | `/buildings` | 건물/층/지도/그래프/타일 |
 | `fonts.py` | `/fonts` | MapLibre 글리프(.pbf) 서빙 |
 | `query.py` | `/query` | 자연어 질의 (경량 매칭 + AI 임베딩 검색) |
 | `__init__.py` | — | 패키지 표식 |
 
-라우터 등록은 `app/main.py`의 `create_app()`에서 `include_router`로 한다. `/health`도 거기 있다.
+라우터 등록은 `app/main.py`의 `create_app()`에서 `include_router`로 한다.
+`/health`(liveness)는 항상 `{"status":"ok"}`를 주고, `/health/ready`(readiness)는 DB가
+응답할 때만 200, 아니면 503으로 떨어져 트래픽에서 제외되게 한다.
 
 ---
 

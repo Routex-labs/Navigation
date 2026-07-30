@@ -67,8 +67,28 @@
 
 ## 아키텍처 특성
 
-- **DB는 휘발성 SQLite**입니다. 컨테이너가 시작될 때마다 `scripts.seed.reset_and_seed`로 더현대 서울 데이터(B6~6F, 12개 층)를 다시 적재합니다. 이 앱은 읽기 위주라 데모에 문제없습니다.
+- **DB는 휘발성 SQLite**입니다. 컨테이너 시작은 기본적으로 서버만 띄우고 시드하지 않습니다
+  (재시작이 DB를 초기화하지 않게 하기 위함 — `backend/Dockerfile` 참고). 다만 Cloud Run
+  파일시스템은 휘발성이라 매 시작마다 빈 DB로 뜨므로, **이 데모에서는 환경변수
+  `NAV_SEED_ON_START=1`을 명시해** 기동 직전 1회 `scripts.seed.reset_and_seed`로 더현대 서울
+  데이터(B6~6F, 12개 층)를 적재합니다. 이 앱은 읽기 위주라 데모에 문제없습니다.
+- **영속 DB(Cloud SQL 등)로 전환하면 `NAV_SEED_ON_START`를 켜지 마세요** — 시드는 배포와
+  분리된 1회성 작업으로 돌립니다(로컬: `python -m scripts.seed.reset_and_seed`). 그래야
+  재시작이 데이터를 지우지 않습니다.
 - 시드 후 데이터가 사라지는 쓰기 작업이 필요해지면 Cloud SQL 등 외부 DB로 전환해야 합니다.
+
+## 운영 환경변수(보안·안정화)
+
+| 환경변수 | 기본값 | 운영 권장 |
+|---|---|---|
+| `NAV_ENVIRONMENT` | `development` | `production` (CORS 기본을 잠근다) |
+| `NAV_CORS_ORIGINS` | (없음) | Flutter 앱 도메인을 콤마로 명시 (와일드카드 금지) |
+| `NAV_ALLOWED_HOSTS` | (없음) | 서비스 도메인 지정 시 Host 헤더를 제한 (비면 미적용) |
+| `NAV_MAX_REQUEST_BODY_BYTES` | `1000000` | 필요 시 조정. 초과 본문은 413 |
+| `NAV_SEED_ON_START` | (없음/미시드) | 휘발성 DB 데모에서만 `1` |
+
+> `NAV_ENVIRONMENT=production`인데 `NAV_CORS_ORIGINS`를 비워 두면 교차 출처 요청이 전부
+> 막힙니다(경고 로그가 남습니다). Flutter 웹을 다른 도메인에서 붙인다면 반드시 origin을 넣으세요.
 
 ## 재배포
 
@@ -82,12 +102,16 @@ gcloud run deploy navigation-api `
   --region asia-northeast3 `
   --allow-unauthenticated `
   --memory 2Gi `
-  --min-instances 1
+  --min-instances 1 `
+  --set-env-vars NAV_SEED_ON_START=1
 ```
 
 > `--memory 2Gi`는 임베딩 모델 상주 때문에 필수다(위 "주의할 배포 스펙" 참고).
-> `--source .`는 Cloud Build가 `Dockerfile`을 그대로 쓰므로 CPU 전용 torch 고정과
-> 모델 굽기가 자동 적용된다. 최초 빌드는 이미지가 커서(수 GB) 몇 분 걸린다.
+> `--source .`는 `backend/`에서 실행하므로 Cloud Build가 `backend/Dockerfile`을 그대로 쓴다
+> (운영 이미지는 이 하나뿐 — 옛 루트 `Dockerfile`은 제거됐다). CPU 전용 torch 고정과 모델
+> 굽기가 자동 적용된다. 최초 빌드는 이미지가 커서(수 GB) 몇 분 걸린다.
+> `NAV_SEED_ON_START=1`은 휘발성 DB 데모라 매 시작 시 시드하기 위한 것이다 — 영속 DB로
+> 바꾸면 빼라(위 "운영 환경변수" 참고).
 
 ## 상태 확인
 

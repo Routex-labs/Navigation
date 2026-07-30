@@ -11,6 +11,22 @@ DEFAULT_DATABASE_URL = f"sqlite:///{(API_ROOT / 'data' / 'navigation.db').as_pos
 # 프로세스 단위로 재사용하는 설정값.
 class Settings(BaseSettings):
     database_url: str = DEFAULT_DATABASE_URL
+    # 실행 환경. "production"이면 CORS 기본값이 localhost 허용을 버리고, 명시된
+    # origin만 허용한다(아무것도 지정하지 않으면 교차 출처를 전부 막는다). 개발
+    # 기본값에서는 localhost의 임의 포트를 허용해 Flutter 웹(random 포트)을 편하게 붙인다.
+    environment: str = "development"
+    # 운영 CORS 화이트리스트. 콤마로 여러 개(예: "https://app.example.com,https://admin.example.com").
+    # 와일드카드('*')는 절대 기본값으로 두지 않는다 — 필요하면 origin을 명시해서 넣는다.
+    # 콤마 구분 문자열로 받는 이유: pydantic-settings는 list 필드를 JSON으로 파싱하려 해
+    # "a,b" 같은 평범한 env 값에서 깨진다. 파싱은 cors_origins_list 프로퍼티가 담당한다.
+    cors_origins: str = ""
+    # TrustedHost 화이트리스트(Host 헤더). 비어 있으면 미들웨어를 아예 걸지 않아(=필터 없음)
+    # 기존 동작과 Cloud Run의 동적 호스트명·테스트 클라이언트를 깨지 않는다. 운영에서
+    # 잠그려면 콤마로 호스트를 지정한다(예: "navigation-api-....run.app").
+    allowed_hosts: str = ""
+    # 요청 본문 최대 크기(바이트). 초과 요청은 본문을 다 읽기 전에 413으로 거절한다.
+    # 우리 API는 짧은 JSON 질의만 받으므로 1MB면 충분하다. 0 이하면 제한을 끈다.
+    max_request_body_bytes: int = 1_000_000
     # MVT 타일 응답의 Cache-Control max-age(초). 짧게 잡는 이유는 재시드가
     # 서버 재시작 없이 일어날 수 있어서다 — 60초면 줌 전환·층 재방문으로 요청이
     # 몰리는 구간은 덮으면서, 시드를 다시 돌린 개발자가 오래 기다리지는 않는다.
@@ -50,6 +66,21 @@ class Settings(BaseSettings):
     store_entrance_snap_max_m: float = 25.0
 
     model_config = SettingsConfigDict(env_prefix="NAV_", case_sensitive=False)
+
+    # 운영 환경 여부. CORS 기본 정책을 가른다.
+    @property
+    def is_production(self) -> bool:
+        return self.environment.strip().lower() == "production"
+
+    # 콤마 구분 env를 origin 리스트로 정리한다(공백·빈 항목 제거).
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
+
+    # 콤마 구분 env를 Host 리스트로 정리한다(공백·빈 항목 제거).
+    @property
+    def allowed_hosts_list(self) -> list[str]:
+        return [item.strip() for item in self.allowed_hosts.split(",") if item.strip()]
 
 
 settings = Settings()

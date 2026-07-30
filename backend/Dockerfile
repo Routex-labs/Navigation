@@ -1,4 +1,7 @@
-FROM python:3.12-slim
+# base image를 digest로 고정한다(공급망 재현성) — 같은 소스가 항상 같은 base 레이어를
+# 받도록. 태그(python:3.12-slim)는 이동하므로 digest를 병기한다. 값 갱신 시 태그의
+# 현재 digest를 `docker buildx imagetools inspect python:3.12-slim`으로 재확인한다.
+FROM python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
@@ -42,6 +45,12 @@ RUN python -m scripts.warm_embedding_model
 # Cloud Run은 $PORT(기본 8080)로 요청을 보낸다. 로컬 실행 시에는 8080으로 뜬다.
 EXPOSE 8080
 
-# 컨테이너 시작 시 개발 DB를 시드한 뒤 서버를 띄운다.
-# (data/는 .dockerignore로 이미지에 포함되지 않고, Cloud Run 파일시스템은 휘발성이므로 매 시작마다 시드)
-CMD ["sh", "-c", "python -m scripts.seed.reset_and_seed && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
+# 컨테이너 시작 = 서버 실행만. 시드는 기본적으로 하지 않는다 — 매 시작마다
+# reset-and-seed를 돌리면 재시작이 DB를 통째로 초기화한다(운영에서는 데이터 파괴).
+# 시드는 별도 1회성 명령으로 분리한다(로컬: `python -m scripts.seed.reset_and_seed`,
+# compose: `docker compose run --rm seed`).
+#
+# 예외: 휘발성 파일시스템(현재 Cloud Run 데모)은 재시작마다 빈 DB로 뜨므로, 그때만
+# NAV_SEED_ON_START=1을 명시해 기동 직전 1회 시드하게 열어 둔다. 기본값(미설정)은
+# 시드하지 않는다 — 즉 영속 DB에서는 재시작이 DB를 건드리지 않는다.
+CMD ["sh", "-c", "if [ \"$NAV_SEED_ON_START\" = \"1\" ]; then python -m scripts.seed.reset_and_seed; fi; exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
