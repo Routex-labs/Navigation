@@ -59,7 +59,9 @@ _CACHE_LOCK = threading.Lock()
 # 없는 상태에서 세대를 지어내면 조용히 낡은 타일을 내보내게 되므로, 그때는
 # 세대 판정을 아예 건너뛴다.
 def _cache_generation(session: Session) -> tuple[str, int] | None:
-    url = session.get_bind().url
+    # get_bind()는 Engine 또는 Connection을 준다. .engine은 Engine이면 자기 자신,
+    # Connection이면 소속 Engine이라 어느 쪽이든 같은 URL에 닿는다.
+    url = session.get_bind().engine.url
     if url.get_backend_name() != "sqlite" or not url.database:
         return None
     try:

@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from math import atan, degrees, pi, sinh
 from typing import TYPE_CHECKING
@@ -90,8 +91,9 @@ def _local_polygon_ring(points: list[dict], transform: GeoTransform) -> list[lis
 # "표시할 게 없다"로 처리해 MapLibre가 에러 없이 조용히 아무것도 안 그리게 한다.
 def build_floor_tile_layers(
     building: Building,
-    stores: list[Store],
-    pois: list[Poi],
+    # 호출부가 session.scalars(...).all()의 Sequence를 그대로 넘긴다 — list로 좁히지 않는다.
+    stores: Sequence[Store],
+    pois: Sequence[Poi],
     transform: GeoTransform | None,
     bounds: TileBounds,
     footprint_local_m: list[dict] | None = None,

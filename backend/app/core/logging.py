@@ -94,5 +94,8 @@ async def _log_validation_exception(request: Request, exc: RequestValidationErro
 # ASGI application" 트레이스백을 uvicorn.error로 이미 남기므로 따로 잡지 않는다 —
 # configure_logging()이 그 로거도 stdout으로 통일한다.
 def install_exception_logging(app: FastAPI) -> None:
-    app.add_exception_handler(StarletteHTTPException, _log_http_exception)
-    app.add_exception_handler(RequestValidationError, _log_validation_exception)
+    # add_exception_handler의 타입 힌트는 두 번째 인자를 Exception으로 넓게 잡지만,
+    # 실제로는 첫 인자에 등록한 예외 타입만 전달된다. 핸들러를 구체 타입으로 두는 편이
+    # 안전해서 여기서만 타입 검사를 눌러 둔다(Starlette 알려진 제약).
+    app.add_exception_handler(StarletteHTTPException, _log_http_exception)  # type: ignore[arg-type]
+    app.add_exception_handler(RequestValidationError, _log_validation_exception)  # type: ignore[arg-type]

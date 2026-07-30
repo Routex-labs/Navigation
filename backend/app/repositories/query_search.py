@@ -297,7 +297,8 @@ def _load_stores(
 
     if current_floor_id is not None:
         statement = statement.where((Floor.name == current_floor_id) | (Floor.id == current_floor_id))
-    return session.execute(statement).all()
+    # .tuples()는 Row가 아니라 (Store, Floor) 튜플로 받게 해 반환 타입과 실제가 일치한다.
+    return list(session.execute(statement).tuples().all())
 
 
 # 목적지 질의. Building 없으면 None(→404). 매칭 최적 1건을 입구 노드와 함께 반환.
