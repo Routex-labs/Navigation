@@ -45,6 +45,15 @@ _load_failed = False
 # 이미 사용자 사전에 넣은 단어. 같은 단어를 매 요청 다시 등록하지 않기 위한 캐시.
 _registered: set[str] = set()
 
+# 등록된 단어의 소문자 사본. 질의는 `query_search._norm`으로 소문자화된 뒤 들어오므로
+# 원본 대소문자와 직접 비교할 수 없다("MLB" 등록 / "mlb" 질의).
+_registered_lower: set[str] = set()
+
+# 이름 복원(_restore_truncated_name)에서 접두로 인정할 최소 길이.
+# query_search._MIN_NAME_PARTIAL_MATCH_LEN과 같은 이유로 2다 — 한 글자 이름("송")까지
+# 접두로 인정하면 무관한 질의가 그 이름으로 복원돼 오탐이 된다.
+_MIN_RESTORE_LEN = 2
+
 
 def _user_words() -> list[str]:
     # 브랜드 신조어가 "마뗑킴" → "마"+"뗑킴"으로 오분해되는 걸 막는다.
@@ -107,6 +116,7 @@ def register_words(words: Iterable[str]) -> None:
             except Exception as error:  # noqa: BLE001 - 한 단어 실패가 전체를 막지 않게
                 print(f"사용자 사전 등록 실패({word!r}): {error}")
             _registered.add(word)  # 실패한 단어도 기록 — 매 요청 재시도하지 않는다
+            _registered_lower.add(word.lower())
 
 
 def normalize(text: str) -> str | None:
@@ -138,4 +148,34 @@ def normalize(text: str) -> str | None:
         return _WHITESPACE.sub(" ", text).strip() or None
 
     result = _WHITESPACE.sub(" ", "".join(chars)).strip()
-    return result or None  # 전부 떨어져 나갔으면 폴백 — 분석기가 브랜드명을 날린 경우 방어
+    if not result:
+        return None  # 전부 떨어져 나갔으면 폴백 — 분석기가 브랜드명을 날린 경우 방어
+    return _restore_truncated_name(text, result)
+
+
+def _restore_truncated_name(text: str, result: str) -> str:
+    """분석기가 등록된 매장명을 잘라먹었으면 원래 이름으로 되돌린다.
+
+    `add_user_word`로 매장명을 등록해도 **공백이 들어간 이름은 한 형태소로 인정되지
+    않을 수 있다.** 실제로 `"물품 보관함은 몇 층이야"`가 리눅스 CI에서
+    `"물품 보관"`으로 잘렸다(같은 kiwipiepy 0.23.2·같은 모델인데 Windows에서는
+    잘리지 않아 로컬로는 재현되지 않았다). 등록이 통했는지에 기대는 대신, 잘린 결과를
+    여기서 바로잡아 플랫폼·등록 시점에 무관하게 만든다.
+
+    보정은 **분석기가 실제로 이름을 잘랐을 때만** 한다 — 질의가 등록된 이름으로
+    시작하고, 그 이름이 분석 결과보다 길고, 결과가 그 이름의 접두일 때. 그래서
+    `"화장실이 어디야"`(결과와 이름이 같음)나 `"스타벅스에서"`(조사만 떨어짐)처럼
+    정상 동작하던 경로는 건드리지 않는다.
+
+    가장 긴 이름을 먼저 본다 — `"타임"`과 `"타임옴므"`가 모두 매장일 때
+    `"타임옴므"` 질의가 `"타임"`으로 축소되면 안 된다.
+    """
+    lowered = text.lower()
+    for end in range(len(lowered), _MIN_RESTORE_LEN - 1, -1):
+        if lowered[:end] not in _registered_lower:
+            continue
+        name = text[:end]
+        if len(name) > len(result) and name.lower().startswith(result.lower()):
+            return name
+        return result  # 이름은 온전하다 — 분석기 결과를 그대로 쓴다
+    return result
