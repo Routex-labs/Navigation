@@ -146,6 +146,8 @@ gcloud run services describe navigation-api --region asia-northeast3
 
 ```powershell
 Set-Location client
+[Console]::OutputEncoding = [Text.Encoding]::UTF8   # 한글 로그가 CP949로 깨지지 않게 UTF-8 고정
+$OutputEncoding = [Text.Encoding]::UTF8
 # config.example.json을 config.local.json으로 복사한 뒤 API_BASE_URL에 위 서비스 URL,
 # TMAP_APP_KEY·VWORLD_API_KEY에 발급받은 키를 채운다.
 flutter run --dart-define-from-file=config.local.json

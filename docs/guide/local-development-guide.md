@@ -36,6 +36,11 @@ python -m pip install -r requirements.txt
 
 ```powershell
 Set-Location backend
+# 콘솔을 UTF-8로 고정하고, python도 UTF-8로 출력하게 한다. 둘을 맞춰야 한글 로그가 안 깨진다
+# (python은 파이프될 때 기본 CP949로 출력하므로 콘솔만 UTF-8로 바꾸면 오히려 깨진다).
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+$OutputEncoding = [Text.Encoding]::UTF8
+$env:PYTHONUTF8 = '1'
 .\.venv\Scripts\Activate.ps1
 python -m scripts.seed.reset_and_seed
 python -m uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8001 2>&1 | ForEach-Object { $_; $_ | Out-File ..\backend-local.log -Append -Encoding utf8 }
@@ -61,19 +66,31 @@ Docker Compose는 일상 개발 실행에 사용하지 않는다. 배포 이미�
 
 ## Flutter 실행
 
-`client/`에서 실행한다.
+`client/`에서 실행한다. 실행 값(배포 URL·API 키)은 [API 키 주입](#api-키-주입)의 `config.local.json`으로 넣는다.
 
 ```powershell
 Set-Location client
+# 콘솔 인코딩을 UTF-8로 고정한다. 안 하면 flutter의 한글 출력이 기본 코드페이지(CP949)로 디코딩돼 로그가 중국어처럼 깨진다.
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+$OutputEncoding = [Text.Encoding]::UTF8
 flutter pub get
-flutter run
+# 콘솔엔 전부, frontend.log엔 UTF-8로 남긴다(PS 5.1 Tee-Object는 파일을 UTF-16으로 쓰므로 패스스루로 tee).
+flutter run --dart-define-from-file=config.local.json 2>&1 | ForEach-Object { $_; $_ | Out-File frontend.log -Append -Encoding utf8 }
+```
+
+macOS 터미널은 기본 UTF-8이라 프렐류드가 필요 없다.
+
+```bash
+cd client
+flutter pub get
+flutter run --dart-define-from-file=config.local.json 2>&1 | tee frontend.log
 ```
 
 특정 기기를 지정하려면 다음을 사용한다.
 
 ```powershell
 flutter devices
-flutter run -d <device-id>
+flutter run -d <device-id> --dart-define-from-file=config.local.json
 ```
 
 ## 실행 대상별 API 주소
@@ -133,6 +150,7 @@ flutter run --dart-define=TMAP_APP_KEY=<TMAP_KEY> --dart-define=VWORLD_API_KEY=<
 
 | 증상 | 먼저 확인할 것 |
 |---|---|
+| 콘솔·`*.log`의 한글이 중국어처럼 깨짐 | 출력 주체와 콘솔 인코딩 불일치. flutter(항상 UTF-8 출력)는 콘솔을 UTF-8로 고정(`[Console]::OutputEncoding`), python은 여기에 `$env:PYTHONUTF8=1`까지 줘서 양쪽을 UTF-8로 맞춘다. 위 실행 블록의 프렐류드를 빠뜨리지 않았는지 확인한다 |
 | 앱에서 API 연결 실패 | Uvicorn 실행 여부, `/health`, 포트 `8001`, `API_BASE_URL` |
 | Android 에뮬레이터가 `localhost`를 못 찾음 | `localhost` 대신 기본값 `10.0.2.2` 사용 |
 | Android 실기기에서 연결 실패 | 같은 Wi-Fi, PC LAN IP, 방화벽, HTTP cleartext 정책 |

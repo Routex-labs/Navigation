@@ -16,17 +16,20 @@
   - 최초 1회 `client/config.example.json`을 `config.local.json`으로 복사하고 배포 백엔드 주소(`API_BASE_URL`)·키를 채운다. (`config.local.json`은 `.gitignore`라 커밋되지 않는다.)
   - `client/` 폴더에서 실행한다. 창은 foreground로 띄우고(백그라운드로 숨기지 않는다), 명령은 체이닝하지 말고 한 줄씩 실행한다(쉘 버전에 따라 `&&`·`;`가 깨질 수 있음).
     ```powershell
-    # Windows — UTF-8 콘솔 창에서. 로그는 패스스루로 frontend.log에 남긴다(PS 5.1 Tee-Object는 UTF-16).
+    # Windows — flutter 실행 전 콘솔 인코딩을 UTF-8로 고정한다(아래 두 줄). 안 하면 한글 출력이 기본 코드페이지(CP949)로 디코딩돼 로그가 중국어처럼 깨진다.
+    [Console]::OutputEncoding = [Text.Encoding]::UTF8
+    $OutputEncoding = [Text.Encoding]::UTF8
+    # 콘솔엔 전부, frontend.log엔 UTF-8로 남긴다(PS 5.1 Tee-Object는 UTF-16이라 패스스루로 tee).
     flutter run --dart-define-from-file=config.local.json 2>&1 | ForEach-Object { $_; $_ | Out-File frontend.log -Append -Encoding utf8 }
     ```
     ```bash
-    # macOS
+    # macOS — 터미널이 기본 UTF-8이라 프렐류드 불필요
     flutter run --dart-define-from-file=config.local.json 2>&1 | tee frontend.log
     ```
   - 사용자는 창에서 실시간 로그를, 에이전트는 `frontend.log`(`.gitignore`)를 읽어 추적한다. 주입 값은 컴파일 타임에 박히므로 URL·키를 바꾸면 hot reload가 아니라 `flutter run`을 재시작한다.
-  - 한글 로그가 깨지지 않게 Windows는 콘솔·출력 인코딩을 UTF-8로 고정한 창에서 실행하고, 소스·리소스 JSON도 UTF-8로 저장한다.
+  - **로그가 중국어처럼 깨지면 콘솔 인코딩 문제다.** flutter는 항상 UTF-8로 출력하는데 Windows 기본 콘솔은 CP949라 잘못 디코딩한다. 위 프렐류드 두 줄로 콘솔을 UTF-8로 맞춰야 하고, 소스·리소스 JSON도 UTF-8로 저장한다. (백엔드 python은 반대로 기본 CP949 출력이라, 콘솔을 UTF-8로 바꾸면 `$env:PYTHONUTF8=1`도 함께 줘야 맞는다.)
 
-- **백엔드를 직접 수정·검증해야 할 때만** 로컬 Python으로 띄운다. venv·시드·uvicorn·로그 필터·Docker 절차는 [로컬 개발 가이드](docs/guide/local-development-guide.md)를, 실제 Cloud Run 배포는 [GCP 배포 문서](docs/guide/gcp-instance.md)를 따른다.
+- **백엔드를 직접 수정·검증해야 할 때만** 로컬 Python으로 띄운다. venv·시드·uvicorn·Docker 절차는 [로컬 개발 가이드](docs/guide/local-development-guide.md)를(백엔드 창은 UTF-8 프렐류드에 더해 `$env:PYTHONUTF8=1`도 준다 — python은 기본 CP949 출력), 실제 Cloud Run 배포는 [GCP 배포 문서](docs/guide/gcp-instance.md)를 따른다.
 
 - **경로 계산은 클라이언트 온디바이스(Dijkstra, `client/lib/domain/dijkstra.dart`)가 담당한다.** 서버는 그래프(nodes·edges)만 제공하며, 최단 경로 로직을 서버로 옮기지 않는다.
 - **API 계약(JSON)은 Flutter 클라이언트가 소비하는 형태를 우선으로 유지한다.** 백엔드 응답 스키마를 바꾸면 클라이언트의 모델·파싱도 함께 확인한다.

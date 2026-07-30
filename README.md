@@ -28,6 +28,8 @@ Flutter 앱 ──HTTP──> FastAPI ──> SQLite
 
 ```powershell
 Set-Location client
+[Console]::OutputEncoding = [Text.Encoding]::UTF8   # 한글 로그가 CP949로 깨지지 않게 UTF-8 고정
+$OutputEncoding = [Text.Encoding]::UTF8
 Copy-Item config.example.json config.local.json   # 최초 1회
 # config.local.json의 API_BASE_URL에 배포 서비스 주소(→ docs/guide/gcp-instance.md),
 # TMAP_APP_KEY·VWORLD_API_KEY에 발급받은 키를 채운다. 키는 비워도 앱은 뜬다.
@@ -43,6 +45,9 @@ flutter run --dart-define-from-file=config.local.json
 
 ```powershell
 Set-Location backend
+[Console]::OutputEncoding = [Text.Encoding]::UTF8   # 콘솔을 UTF-8로 고정
+$OutputEncoding = [Text.Encoding]::UTF8
+$env:PYTHONUTF8 = '1'                               # python도 UTF-8로 출력(기본은 CP949) → 콘솔과 맞아 한글 로그가 안 깨진다
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
