@@ -6,17 +6,21 @@ import 'package:navigation_client/models/floor_graph.dart';
 GraphNode _node(String id, String floor, double x, double y) =>
     GraphNode(id: id, type: 'junction', xM: x, yM: y, floorId: floor);
 
+// length = 실제 수평 거리, cost = 다익스트라 가중치. 층 내부 간선은 둘이 같고,
+// 수직 전이 간선만 갈린다(탑승구~하차구 20m를 걷지만 부담은 탑승 시간 25m 등가).
 GraphEdge _edge(
   String id,
   String from,
   String to,
   double length, {
+  double? cost,
   String? transferMode,
 }) => GraphEdge(
   id: id,
   fromNodeId: from,
   toNodeId: to,
   lengthM: length,
+  costM: cost,
   bidirectional: true,
   geometryLocalM: const [],
   transferMode: transferMode,
@@ -41,6 +45,7 @@ void main() {
           'boarding',
           'arrival',
           20,
+          cost: 25,
           transferMode: 'escalator',
         ),
         _edge('walk-2', 'arrival', 'end', 7),
@@ -51,10 +56,13 @@ void main() {
 
     expect(route, isNotNull);
     expect(route!.segments, hasLength(2));
+    // 거리는 실거리 합(10+20+7), 비용은 탑승 비용이 들어간 합(10+25+7).
     expect(route.totalDistanceMeters, 37);
+    expect(route.totalCostMeters, 42);
     expect(route.segments.first.route.distanceMeters, 10);
     expect(route.segments.first.transferModeToNext, 'escalator');
     expect(route.segments.first.transferDistanceMeters, 20);
+    expect(route.segments.first.transferCostMeters, 25);
     expect(route.segments.first.transferPointsToNext, hasLength(2));
     expect(route.segments.last.route.distanceMeters, 7);
     expect(route.segments.last.transferPointsToNext, isEmpty);
@@ -159,6 +167,37 @@ void main() {
     // 가중치를 그대로 적용하면 엘리베이터가 85가 되어 뒤집히지만, 가드가 막는다.
     expect(route!.totalDistanceMeters, 70);
     expect(route.segments.first.transferModeToNext, 'elevator');
+  });
+
+  // 이 회귀가 실제 증상이었다: 엘리베이터 탑승 1회가 "남은 거리 65m"로 표시됐다.
+  // 실제 수평 이동은 샤프트 오프셋 1m뿐이다.
+  test('엘리베이터 대기·탑승 비용이 표시 거리로 새지 않는다', () {
+    final graph = BuildingGraph(
+      buildingId: 'building',
+      vertical: 'auto',
+      floorNamesById: const {'b1': 'B1', 'f1': '1F'},
+      nodes: [
+        _node('start', 'b1', 0, 0),
+        _node('ev-b1', 'b1', 10, 0),
+        _node('ev-f1', 'f1', 10, 1),
+        _node('end', 'f1', 10, 6),
+      ],
+      edges: [
+        _edge('walk-b1', 'start', 'ev-b1', 10),
+        // 실데이터와 같은 값: 수평 오프셋 1m, 비용 65m(대기 40초 + 승하차 10초 + 1층).
+        _edge('ev', 'ev-b1', 'ev-f1', 1, cost: 65, transferMode: 'elevator'),
+        _edge('walk-f1', 'ev-f1', 'end', 5),
+      ],
+    );
+
+    final route = computeMultiFloorRoute(graph, 'start', 'end');
+
+    // 걸어야 하는 거리는 10 + 1 + 5 = 16m.
+    expect(route!.totalDistanceMeters, 16);
+    // 소요 시간 추정에는 대기·탑승이 들어간다: 10 + 65 + 5 = 80m 등가.
+    expect(route.totalCostMeters, 80);
+    expect(route.segments.first.transferDistanceMeters, 1);
+    expect(route.segments.first.transferCostMeters, 65);
   });
 
   test('ETA용 거리는 가중치가 아니라 실거리로 남는다', () {

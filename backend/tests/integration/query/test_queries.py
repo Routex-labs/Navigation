@@ -49,4 +49,6 @@ def test_층_그래프의_간선은_from_to_키를_사용한다(db_session):
     result = building_queries.get_floor_graph(db_session, BUILDING_ID, FLOOR_NAME)
 
     assert result["nodes"] and result["edges"]
-    assert {"id", "from", "to", "length_m", "bidirectional"} <= set(result["edges"][0])
+    assert {"id", "from", "to", "length_m", "cost_m", "bidirectional"} <= set(
+        result["edges"][0]
+    )

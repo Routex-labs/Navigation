@@ -1157,10 +1157,13 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       transferModeToNext: original.transferModeToNext,
       transferPointsToNext: original.transferPointsToNext,
       transferDistanceMeters: original.transferDistanceMeters,
+      transferCostMeters: original.transferCostMeters,
     );
     return MultiFloorRoute(
       segments: [first, ...route.segments.skip(1)],
       totalDistanceMeters: route.totalDistanceMeters + addedDistance,
+      // 현재 위치까지의 연결선은 보행이라 거리와 비용이 같은 만큼 늘어난다.
+      totalCostMeters: route.totalCostMeters + addedDistance,
     );
   }
 
@@ -1204,25 +1207,39 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   /// 노출한다 — 사용자가 "여기서 어디로 얼마 걸어가야 하는지" 상시 알기 위함.
   bool get _hasActiveRoute => _multiFloorRoute != null || _route != null;
 
-  /// ETA에 쓸 **남은** 거리.
+  /// ETA에 쓸 **남은** 거리. 사용자에게 "m 남음"으로 보이는 값이다.
   ///
   /// PDR 진행률이 있으면 현재 위치 이후만 센다. 없으면(PDR 미실행, 보고 있는
   /// 층에 세그먼트가 없음 등) 이전과 같이 경로 전체 길이를 쓴다 — 이 경우엔
   /// "출발 전 총 거리"라는 뜻이라 그대로도 맞다.
-  double _etaDistanceMeters(IndoorRoute? currentFloorRoute) {
+  ///
+  /// 수직 이동은 **실제 수평 거리**만 더한다(에스컬 약 20m, 엘리베 약 0~3m).
+  /// 탑승·대기 비용은 [_etaCostMeters]가 따로 세어 소요 시간에만 반영한다.
+  double _etaDistanceMeters(IndoorRoute? currentFloorRoute) =>
+      _etaRemaining(currentFloorRoute, cost: false);
+
+  /// ETA에 쓸 남은 **비용**(보행 등가 m). 탑승·대기 시간이 들어 있어, 보행 속도로
+  /// 나누면 소요 시간이 된다. 거리 표시에는 쓰지 않는다.
+  double _etaCostMeters(IndoorRoute? currentFloorRoute) =>
+      _etaRemaining(currentFloorRoute, cost: true);
+
+  double _etaRemaining(IndoorRoute? currentFloorRoute, {required bool cost}) {
     final multi = _multiFloorRoute;
     final progress = _routeProgress;
 
     if (multi != null) {
-      if (progress == null) return multi.totalDistanceMeters;
+      double total() => cost ? multi.totalCostMeters : multi.totalDistanceMeters;
+      double transferOf(IndoorRouteSegment segment) => cost
+          ? segment.transferCostMeters
+          : segment.transferDistanceMeters;
+      if (progress == null) return total();
       // 지금 층 세그먼트의 남은 거리 + 아직 밟지 않은 이후 세그먼트 길이 합.
       // 현재 세그먼트를 못 찾으면(층 selector로 다른 층을 보는 중) 총 거리로
       // 되돌린다 — 그 화면에서는 진행률이 지금 층과 무관하다.
       final currentIndex = _currentSegmentIndex(multi);
-      if (currentIndex == null) return multi.totalDistanceMeters;
+      if (currentIndex == null) return total();
       var remainingM =
-          progress.remainingM +
-          multi.segments[currentIndex].transferDistanceMeters;
+          progress.remainingM + transferOf(multi.segments[currentIndex]);
       for (
         var index = currentIndex + 1;
         index < multi.segments.length;
@@ -1230,11 +1247,12 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       ) {
         remainingM +=
             multi.segments[index].route.distanceMeters +
-            multi.segments[index].transferDistanceMeters;
+            transferOf(multi.segments[index]);
       }
       return remainingM;
     }
 
+    // 단층 경로에는 수직 이동이 없어 거리와 비용이 같다.
     if (progress != null) return progress.remainingM;
     return currentFloorRoute?.distanceMeters ?? 0;
   }
@@ -2650,8 +2668,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
                 child: EtaCard(
                   key: _etaCardKey,
                   distanceMeters: _etaDistanceMeters(route),
+                  // 시간은 비용 기준이다 — 엘리베이터 대기·탑승 시간이 여기 들어 있다.
                   minutes:
-                      (_etaDistanceMeters(route) /
+                      (_etaCostMeters(route) /
                               _walkingSpeedMetersPerSecond /
                               60)
                           .ceil()

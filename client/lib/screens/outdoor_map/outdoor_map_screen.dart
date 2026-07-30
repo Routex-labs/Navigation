@@ -2018,9 +2018,19 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   /// ETA 카드에 쓸 거리. 다층 경로면 전 세그먼트 합, 단일 층이면 그 세그먼트
   /// 거리. 실내 화면과 같은 규칙.
+  ///
+  /// 수직 이동은 실제 수평 거리만 들어간다. 탑승·대기 시간은 [_indoorEtaCostMeters]로
+  /// 분리해 소요 시간에만 반영한다 — 한 값으로 겸하면 남은거리가 비용만큼 부풀어 보인다.
   double _indoorEtaDistanceMeters() {
     final multi = _indoorMultiFloorRoute;
     if (multi != null) return multi.totalDistanceMeters;
+    return _indoorRouteSegment?.distanceMeters ?? 0;
+  }
+
+  /// ETA 카드 소요 시간에 쓸 비용(보행 등가 m). 단층 경로는 수직 이동이 없어 거리와 같다.
+  double _indoorEtaCostMeters() {
+    final multi = _indoorMultiFloorRoute;
+    if (multi != null) return multi.totalCostMeters;
     return _indoorRouteSegment?.distanceMeters ?? 0;
   }
 
@@ -4185,8 +4195,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
                 child: EtaCard(
                   key: _etaCardKey,
                   distanceMeters: _indoorEtaDistanceMeters(),
+                  // 시간은 비용 기준 — 엘리베이터 대기·탑승 시간이 여기 들어 있다.
                   minutes:
-                      (_indoorEtaDistanceMeters() /
+                      (_indoorEtaCostMeters() /
                               _indoorWalkingSpeedMetersPerSecond /
                               60)
                           .ceil()

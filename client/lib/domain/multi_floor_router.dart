@@ -62,7 +62,9 @@ MultiFloorRoute? computeMultiFloorRoute(
 
   final segments = <_PendingSegment>[];
   _PendingSegment? current;
+  // 표시용 실거리 합과, 소요 시간 추정용 비용 합을 따로 센다.
   var totalDistance = 0.0;
+  var totalCost = 0.0;
 
   for (var index = 0; index < path.edgeIds.length; index++) {
     final edge = edgesById[path.edgeIds[index]]!;
@@ -79,10 +81,12 @@ MultiFloorRoute? computeMultiFloorRoute(
       current.addNode(fromNode);
       current.transferModeToNext = edge.transferMode;
       current.transferDistanceM = edge.lengthM;
+      current.transferCostM = edge.routingCostM;
       current.transferFromNode = fromNode;
       current.transferToNode = toNode;
       segments.add(current);
       totalDistance += current.distanceM + edge.lengthM;
+      totalCost += current.distanceM + edge.routingCostM;
       current = _PendingSegment(toNode.floorId!)..addNode(toNode);
       continue;
     }
@@ -107,6 +111,7 @@ MultiFloorRoute? computeMultiFloorRoute(
   if (current != null) {
     segments.add(current);
     totalDistance += current.distanceM;
+    totalCost += current.distanceM;
   } else if (path.edgeIds.isEmpty) {
     // 시작=도착 노드인 특수 케이스. 지도에 그릴 게 없다.
     final node = nodesById[path.nodeIds.first]!;
@@ -155,11 +160,16 @@ MultiFloorRoute? computeMultiFloorRoute(
         transferModeToNext: segment.transferModeToNext,
         transferPointsToNext: transferPoints,
         transferDistanceMeters: segment.transferDistanceM,
+        transferCostMeters: segment.transferCostM,
       ),
     );
   }
 
-  return MultiFloorRoute(segments: built, totalDistanceMeters: totalDistance);
+  return MultiFloorRoute(
+    segments: built,
+    totalDistanceMeters: totalDistance,
+    totalCostMeters: totalCost,
+  );
 }
 
 /// 경로를 고른다. 중간층 보행 가중치는 **수단 선택을 바꾸지 않는 선에서만** 쓴다.
@@ -247,7 +257,8 @@ List<GraphEdge> _weightedForSelection(
               id: edge.id,
               fromNodeId: edge.fromNodeId,
               toNodeId: edge.toNodeId,
-              lengthM: edge.lengthM * kIntermediateFloorWalkPenalty,
+              lengthM: edge.lengthM,
+              costM: edge.routingCostM * kIntermediateFloorWalkPenalty,
               bidirectional: edge.bidirectional,
               geometryLocalM: edge.geometryLocalM,
               transferMode: edge.transferMode,
@@ -277,6 +288,7 @@ class _PendingSegment {
   double distanceM = 0.0;
   String? transferModeToNext;
   double transferDistanceM = 0.0;
+  double transferCostM = 0.0;
   GraphNode? transferFromNode;
   GraphNode? transferToNode;
 

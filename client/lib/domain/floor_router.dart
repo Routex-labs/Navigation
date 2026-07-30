@@ -28,6 +28,14 @@ IndoorRoute? computeShortestRoute(
   );
   if (path == null) return null;
 
+  // 표시 거리는 간선의 실거리(lengthM) 합이다. path.totalDistanceM은 다익스트라가
+  // 최소화한 **비용** 합이라 쓰지 않는다 — 층 내부 간선은 둘이 같지만, 의미가 다른
+  // 값을 거리 자리에 넣어두면 나중에 전이 간선이 섞일 때 조용히 틀린다.
+  final edgesById = {for (final edge in graph.edges) edge.id: edge};
+  final distanceMeters = path.edgeIds.fold<double>(
+    0,
+    (sum, edgeId) => sum + edgesById[edgeId]!.lengthM,
+  );
   final localPoints = _buildPathPoints(path, graph);
   final transform = fitFloorGeoTransform(graph.nodes);
   final wgs84Points = [
@@ -36,7 +44,7 @@ IndoorRoute? computeShortestRoute(
 
   return IndoorRoute(
     points: [for (final (lat, lng) in wgs84Points) LatLng(lat, lng)],
-    distanceMeters: path.totalDistanceM,
+    distanceMeters: distanceMeters,
     // 경로 진행률·이탈 판정이 쓰는 값이다. 다익스트라가 이미 알고 있는 것을
     // 그리기용 WGS84로 변환하면서 버리지 않고 그대로 실어 보낸다.
     pointsLocalM: localPoints,
