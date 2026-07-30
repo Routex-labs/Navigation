@@ -32,6 +32,7 @@ DB에 넣으면 재시드할 때마다 날아가거나 시드 스크립트가 �
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -66,3 +67,113 @@ def load_overlays(resource_dir: Path | None = None) -> dict[str, dict[str, Any]]
             if isinstance(overlay, dict):
                 merged[place_id] = overlay
     return merged
+
+
+# 스키마 선언 파일. 오버레이가 아니므로 `_` 접두를 쓴다.
+SCHEMA_FILENAME = "_schema.json"
+
+_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_ALLOWED_FIELDS = {"summary", "tags", "keyValue", "notice"}
+
+
+# 오버레이 한 파일을 검증한다. 오류 메시지 목록(빈 목록이면 정상).
+#
+# 시드가 적재 **전에** 호출한다. 잘못된 내용이 DB에 들어간 뒤 실패하면 반쯤 시드된
+# DB가 남고, 무엇보다 틀린 정보가 사용자에게 한 번은 보인다.
+#
+# `today`를 인자로 받는 이유: 만료 검사는 "오늘"에 의존하는데 함수 안에서 날짜를
+# 읽으면 테스트가 시간에 따라 통과했다 실패했다 한다.
+def validate_overlay(
+    payload: dict[str, Any],
+    known_ids: set[str],
+    names: dict[str, str],
+    schema: dict[str, Any],
+    today: str,
+) -> list[str]:
+    errors: list[str] = []
+    forbidden = {label.strip() for label in schema.get("forbidden_labels", [])}
+
+    for place_id, overlay in payload.items():
+        if not isinstance(overlay, dict):
+            errors.append(f"{place_id}: 오버레이는 객체여야 합니다")
+            continue
+
+        # 고아 id. 매장이 사라졌거나 오타다. 이름으로 폴백하지 않는다 —
+        # 동명 매장이 있어 엉뚱한 곳에 붙을 수 있다.
+        if place_id not in known_ids:
+            errors.append(f"{place_id}: 원본에 없는 매장 id")
+            continue
+
+        # 이름 드리프트. 이름이 바뀌었다면 적어 둔 내용도 낡았을 가능성이 크므로
+        # 조용히 넘기지 않고 사람이 다시 보게 만든다.
+        written_name = overlay.get("name")
+        if written_name is not None and written_name != names.get(place_id):
+            errors.append(
+                f"{place_id}: 이름 불일치 (오버레이 '{written_name}' ≠ 원본 '{names.get(place_id)}')"
+            )
+
+        unknown = set(overlay) - _ALLOWED_FIELDS - RESERVED_KEYS
+        if unknown:
+            errors.append(f"{place_id}: 스키마에 없는 키 {sorted(unknown)}")
+
+        errors += _validate_values(place_id, overlay, schema, forbidden, today)
+
+    return errors
+
+
+def _validate_values(
+    place_id: str,
+    overlay: dict[str, Any],
+    schema: dict[str, Any],
+    forbidden: set[str],
+    today: str,
+) -> list[str]:
+    errors: list[str] = []
+    fields = schema.get("fields", {})
+
+    summary = overlay.get("summary")
+    if summary is not None:
+        max_length = fields.get("summary", {}).get("max_length", 60)
+        if not isinstance(summary, str) or not summary.strip():
+            errors.append(f"{place_id}: summary가 비어 있습니다")
+        elif len(summary) > max_length:
+            errors.append(f"{place_id}: summary가 {max_length}자를 넘습니다")
+
+    tags = overlay.get("tags")
+    if tags is not None:
+        max_items = fields.get("tags", {}).get("max_items", 6)
+        if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
+            errors.append(f"{place_id}: tags는 문자열 배열이어야 합니다")
+        elif len(tags) > max_items:
+            errors.append(f"{place_id}: tags가 {max_items}개를 넘습니다")
+
+    for item in overlay.get("keyValue") or []:
+        if not isinstance(item, dict) or "label" not in item or "value" not in item:
+            errors.append(f"{place_id}: keyValue 항목에 label/value가 필요합니다")
+            continue
+        # 출처 없는 값(영업시간·전화·평점)을 막는 지점. 영업시간류는 시간이
+        # 지나면 자동으로 거짓이 되므로 규칙을 리뷰어 눈이 아니라 코드에 둔다.
+        if str(item["label"]).strip() in forbidden:
+            errors.append(
+                f"{place_id}: '{item['label']}'은(는) 출처가 없어 넣을 수 없는 항목입니다"
+            )
+
+    notice = overlay.get("notice")
+    if notice is not None:
+        if not isinstance(notice, dict) or not str(notice.get("text", "")).strip():
+            errors.append(f"{place_id}: notice에 text가 필요합니다")
+        else:
+            until = notice.get("until")
+            if until is None:
+                errors.append(f"{place_id}: notice에는 until(종료일)이 필요합니다")
+            elif not _DATE_PATTERN.match(str(until)):
+                errors.append(f"{place_id}: notice.until 형식은 YYYY-MM-DD입니다")
+            elif str(until) < today:
+                # 만료된 고지가 남아 있으면 지난 팝업을 안내하게 된다.
+                errors.append(f"{place_id}: notice가 {until}에 만료됐습니다")
+
+    updated_at = overlay.get("updated_at")
+    if updated_at is not None and not _DATE_PATTERN.match(str(updated_at)):
+        errors.append(f"{place_id}: updated_at 형식은 YYYY-MM-DD입니다")
+
+    return errors

@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "description": "매장 상세 오버레이 스키마. 이 파일 자체는 오버레이가 아니다(_ 접두). 값은 backend/scripts/validate_store_details.py가 강제한다.",
+  "join_key": "id",
+  "reserved_keys": {
+    "name": "사람이 diff를 읽기 위한 중복 정보. 병합 키가 아니며, Studio 원본과 다르면 검증 실패한다.",
+    "updated_at": "최종 확인일(YYYY-MM-DD). 응답의 provenance.updated_at로 올라간다."
+  },
+  "fields": {
+    "summary": {
+      "type": "string",
+      "max_length": 60,
+      "note": "한 줄 소개. 사실 주장이 아니라 매장이 스스로 내세우는 성격을 적는다."
+    },
+    "tags": {
+      "type": "string_array",
+      "max_items": 6,
+      "max_length": 12,
+      "note": "특징 chip. 포장·예약 가능처럼 확인 가능한 것만."
+    },
+    "keyValue": {
+      "type": "object_array",
+      "item_keys": ["label", "value"],
+      "max_items": 6,
+      "note": "라벨:값 목록."
+    },
+    "notice": {
+      "type": "object",
+      "item_keys": ["text", "until"],
+      "note": "기간이 명시된 고지만 허용. until은 YYYY-MM-DD이며 지나면 검증이 실패한다."
+    }
+  },
+  "forbidden_labels": [
+    "영업시간",
+    "영업 시간",
+    "운영시간",
+    "운영 시간",
+    "전화",
+    "전화번호",
+    "연락처",
+    "평점",
+    "리뷰"
+  ],
+  "forbidden_labels_note": "출처가 없어 검증할 수 없고, 영업시간류는 시간이 지나면 자동으로 거짓이 된다. 값을 채우고 싶으면 먼저 출처를 정하고 이 목록에서 빼야 한다."
+}

@@ -2,7 +2,7 @@
 
 작성일: 2026-07-30
 
-상태: Planning
+상태: Wave 1 진행 중 (갈래 A 완료, 갈래 B 완료 — Wave 2부터 남음)
 
 브랜치: `feature/store-detail`
 

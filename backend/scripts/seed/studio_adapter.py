@@ -20,13 +20,14 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from math import hypot
 from pathlib import Path
 
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.graph import integrity as graph_integrity
-from app.repositories import store_facets
+from app.repositories import place_details, store_facets
 from scripts.seed import seed_navigation
 from scripts.transform import floor_alignment, vertical_transfers
 
@@ -47,6 +48,10 @@ STORE_CATEGORIES_BY_NAME_PATH = API_ROOT / "resources" / "store_category_by_name
 # 검색 전용 facet 오버레이 디렉터리. 파생 규칙(store_facets._SUBCATEGORY_TO_STYLES)과
 # 합쳐 stores.search_facets 컬럼을 채운다. 디렉터리가 없으면 파생분만 적재된다.
 STORE_SEARCH_FACETS_DIR = API_ROOT / "resources" / "store_search_facets"
+# 매장 상세 표시용 수작업 오버레이 디렉터리. DB에 적재하지 않고 API가 조회 시점에
+# 읽는다(app/repositories/place_details.py) — 재시드가 사람이 쓴 내용을 덮어쓰지
+# 않게 하려는 것이다. 여기서는 적재 전에 내용이 원본과 어긋나지 않는지만 검증한다.
+STORE_DETAILS_DIR = API_ROOT / "resources" / "store_details"
 
 
 def _load_store_categories(path: Path = STORE_CATEGORIES_PATH) -> dict[str, dict]:
@@ -140,6 +145,47 @@ def validate_facet_resources(directory: Path = STUDIO_DIR) -> list[str]:
         payload = json.loads(intents_path.read_text(encoding="utf-8"))
         errors += [
             f"{store_facets.INTENTS_FILENAME}: {message}" for message in store_facets.validate_intents(payload, rows)
+        ]
+    return errors
+
+
+def validate_store_detail_resources(
+    directory: Path = STUDIO_DIR,
+    today: str | None = None,
+) -> list[str]:
+    """매장 상세 오버레이를 실데이터와 대조한다. 오류 메시지 목록(빈 목록이면 정상).
+
+    facet 검증과 같은 이유로 **실데이터를 시드할 때만** 돈다 — 합성 픽스처에는
+    오버레이가 가리키는 매장이 없어 전부 고아 id로 잡힌다.
+
+    상세 오버레이가 아직 한 건도 없어도 정상이다(빈 목록). 데이터 작성이 API보다
+    늦게 끝나는 순서를 전제로 하기 때문이다.
+    """
+    if directory != STUDIO_DIR or not STORE_DETAILS_DIR.exists():
+        return []
+
+    schema_path = STORE_DETAILS_DIR / place_details.SCHEMA_FILENAME
+    schema = (
+        json.loads(schema_path.read_text(encoding="utf-8"))
+        if schema_path.exists()
+        else {}
+    )
+
+    rows = _all_store_rows(directory)
+    known_ids = {row["store_id"] for row in rows}
+    names = {row["store_id"]: row["name"] for row in rows}
+    reference_date = today or date.today().isoformat()
+
+    errors: list[str] = []
+    for path in sorted(STORE_DETAILS_DIR.glob("*.json")):
+        if path.name.startswith("_"):
+            continue
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        errors += [
+            f"{path.name}: {message}"
+            for message in place_details.validate_overlay(
+                payload, known_ids, names, schema, reference_date
+            )
         ]
     return errors
 
@@ -421,6 +467,13 @@ def seed_studio(
     facet_errors = validate_facet_resources(directory)
     if facet_errors:
         raise ValueError(f"검색 facet 리소스 검증 실패 ({len(facet_errors)}건):\n  - " + "\n  - ".join(facet_errors))
+
+    detail_errors = validate_store_detail_resources(directory)
+    if detail_errors:
+        raise ValueError(
+            "매장 상세 오버레이 검증 실패 "
+            f"({len(detail_errors)}건):\n  - " + "\n  - ".join(detail_errors)
+        )
 
     own_session = session or SessionLocal()
     try:
