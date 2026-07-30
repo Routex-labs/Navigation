@@ -15,6 +15,7 @@
 | [`debug_pdr_trail_state.dart`](debug_pdr_trail_state.dart) | PDR 이동 흔적 상태 |
 | [`debug_toast.dart`](debug_toast.dart) | 개발 메시지 표시 |
 | [`altimeter_debug_chip.dart`](altimeter_debug_chip.dart) | 기압·Δ고도·층 전이 판정 상태 한 줄 표시 |
+| [`pdr_map_control.dart`](pdr_map_control.dart) | 디버그 모드에서 지도 위에 뜨는 진단 JSON 공유 버튼(`PdrMapControl`) |
 | [`debug_mode.dart`](debug_mode.dart) | 외부 공개 진입점 |
 
 ## 연관 관계
@@ -22,7 +23,7 @@
 ```mermaid
 flowchart LR
     SCREEN["IndoorMapScreen"]
-    SHEET["DebugModeSettingsSheet"]
+    SHEET["DebugModeSettingsButton"]
     CONTROLLER["DebugModeController"]
     MAP["DebugMapOverlay"]
     GRID["CardinalGridOverlay"]

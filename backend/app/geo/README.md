@@ -76,4 +76,4 @@ repositories/building_queries.py, tile_queries.py ──►  geo.tiling, geo.geo
 
 ---
 
-> **다음 읽기:** [`app/repositories` — DB 조회와 응답 조립](../repositories/README.md)
+> **다음 읽기:** [`app/graph` — 그래프 무결성 검증·리비전](../graph/README.md)

@@ -204,7 +204,7 @@ sequenceDiagram
 | 리포지토리 | 대상 | 사용 API |
 |---|---|---|
 | `HttpBuildingRepository` | 백엔드 | `GET /buildings`, `/floors/{floor}`(지도+`navigation_graph`), `/floors/{floor}/graph` |
-| `HttpDestinationRepository` | 백엔드 | `POST /query/destination` (경량 검색) |
+| `HttpDestinationRepository` | 백엔드 | `POST /query/destination` (경량 검색), `POST /query/ai` (탐색·의미 검색) |
 | `TmapDirectionsRepository` | TMAP | 실외 보행자 경로 |
 | `Mock*Repository` | 없음 | 오프라인·위젯 테스트용 대체 구현 |
 
@@ -213,7 +213,7 @@ sequenceDiagram
 전역 변수로 싱글턴을 주입하고, **테스트·오프라인에서는 그 변수만 Mock으로 교체**한다.
 
 - `buildingRepository = HttpBuildingRepository()` — 오프라인 확인 시 `MockBuildingRepository()`로.
-- `destinationRepository = MockDestinationRepository(...)` — 현재 Mock. 백엔드 검색을 붙이려면 `HttpDestinationRepository`로.
+- `destinationRepository = HttpDestinationRepository()` — 오프라인 확인 시 `MockDestinationRepository(...)`로.
 - `directionsRepository` — `--dart-define=TMAP_APP_KEY=…`가 있으면 실제 TMAP, 없으면 직선 Mock.
 - `pdrMotionSource` / `indoorNavigationDriver` — 화면이 바뀌어도 센서 세션을 유지하는 싱글턴.
 
@@ -221,16 +221,20 @@ API 주소는 `core/api_config.dart`가 플랫폼별 기본값을 고르고(`--d
 
 ## 온디바이스로 도는 것 (서버에 없음)
 
-- **경로 계산**: `domain/dijkstra.dart`(최단 경로) + `domain/floor_router.dart`(→ 지도용 폴리라인).
+- **경로 계산**: `domain/dijkstra.dart`(최단 경로) + `domain/floor_router.dart`(→ 지도용 폴리라인) + `domain/multi_floor_router.dart`(건물 전체 그래프를 층별 세그먼트로 분할).
 - **좌표 변환**: `domain/geo_transform.dart`(`local_m` ↔ WGS84).
 - **실내 측위(PDR)**: `features/indoor_navigation/`. 기기 센서로 위치를 추정해 지도 마커·경로에 반영.
 
-## 현재 상태 / 남은 연동
+## 현재 상태
 
-- **목적지 검색은 `/query/destination`(경량)만 사용**한다. FAISS 자연어(`/query/ai`)는 백엔드에
-  있으나 미연동 → [AI 질의 인수인계](../docs/backend/native/client-handoff.md).
-- **경로는 단일 층 안에서만** 계산된다(`getShortestRoute`가 층별 그래프 사용). 층 간 이동
-  (엘리베이터·에스컬레이터)은 미연동 → [층 간 라우팅 인수인계](../docs/backend/navigate/client-handoff.md).
+- **목적지 검색은 경량 `/query/destination`과 탐색 `/query/ai`를 함께 쓴다.** 매장 이름은
+  경량 경로(`searchDestinations`)로 즉시 걸리고, 경량이 빈손이면 의미 검색
+  (`searchDestinationsAi` → `/query/ai`, Discovery: direct/clarify/results/no_match/degraded)이
+  이어 붙는다 → [AI 질의 인수인계](../docs/backend/native/client-handoff.md).
+- **층 간 이동도 연동됐다.** `buildingRepository.getBuildingGraph`가 전 층 노드 + 수직 전이
+  간선(엘리베이터·에스컬레이터)을 담은 건물 전체 그래프를 받고,
+  `domain/multi_floor_router.dart`의 `computeMultiFloorRoute`가 이를 층별 세그먼트로 나눠
+  층 간 경로까지 온디바이스로 계산한다 → [층 간 라우팅 인수인계](../docs/backend/navigate/client-handoff.md).
 
 ## 자주 하는 작업
 

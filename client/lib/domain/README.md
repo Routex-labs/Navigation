@@ -11,6 +11,7 @@ Flutter 화면이나 HTTP를 모르는 계산 계층이다. 백엔드가 제공�
 | [`floor_router.dart`](floor_router.dart) | node/edge 경로를 지도용 경로점으로 변환 | `computeShortestRoute` |
 | [`multi_floor_router.dart`](multi_floor_router.dart) | 건물 전체 그래프 경로를 층별 세그먼트로 분할 | `computeMultiFloorRoute` |
 | [`route_progress.dart`](route_progress.dart) | 현재 위치를 경로에 투영해 진행·남은거리·이탈 판정 | `RouteProgress`, `computeRouteProgress` |
+| [`route_guidance.dart`](route_guidance.dart) | 다음 행동 한 줄 안내와 진행 지점 기준 경로선 분할(지나온/남은) | `RouteGuidanceAction`, `RouteGuidanceInstruction`, `RoutePolylineSplit`, `splitRouteAtProgress` |
 | [`geo_transform.dart`](geo_transform.dart) | 2D affine 피팅·적용, PDR/층 좌표 연결 | `AffineTransform` |
 
 ## 단일 층 경로 계산

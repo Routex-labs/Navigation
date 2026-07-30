@@ -12,11 +12,13 @@ Session으로 DB를 읽어 **기존 API 응답과 같은 모양의 순수 dict**
 | 파일 | 역할 | 핵심 함수 |
 |---|---|---|
 | `building_queries.py` | 건물/층/매장/지도/그래프 조회 + dict 조립 | `list_buildings`, `get_building`, `search_stores`, `get_floor_map`, `get_floor_graph`, `get_building_graph` |
-| `query_search.py` | 자연어 질의 경량 매칭(이름·카테고리·동의어) | `match_destination`, `match_info`, `match_ai_destination` |
+| `query_search.py` | 자연어 질의 경량 매칭(이름·카테고리·동의어) + 탐색 조립 | `match_destination`, `match_info`, `discover`, `match_ai_destination` |
+| `store_facets.py` | 매장 카테고리→facet 파생·오버레이 병합·intent 해석 | `derive_facets`, `load_overlay`, `resolve_facets`, `resolve_intent_store_ids` |
 | `query_morph.py` | 질의 형태소 정규화(Kiwi). 조사·어미 제거 | `normalize` |
 | `query_semantic.py` | 임베딩 의미 검색(FAISS). 경량 미스·모호한 부분 일치 보완 | `semantic_search`, `reset_indexes`, `warm_model_in_background` |
 | `geo_transform.py` | 건물 `local_m → wgs84` 변환을 요청 시점에 피팅 | `fit_building_geo_transform` |
 | `tile_queries.py` | 층 지도를 MVT 바이트로 렌더링 | `render_floor_tile` |
+| `tile_cache.py` | MVT 타일 바이트의 상한 있는 LRU 메모리 캐시 | `BoundedTileCache` |
 | `__init__.py` | 패키지 표식 | — |
 
 ---
@@ -181,24 +183,40 @@ flowchart LR
     MATCH --> INFO_RESPONSE
 ```
 
-### AI 하이브리드 분기
+### AI 탐색 분기
+
+`/query/ai`의 진입점은 `discover()`다(라우터가 이 함수를 호출한다). 경량 1차가 단일
+대상으로 확정되면 바로 안내(`direct`)하고, 아니면 후보 집합(경량 후보 우선, 없으면 2차 의미
+검색)을 만들어 되묻거나(`clarify`) 여러 후보를 추천한다(`results`).
 
 ```mermaid
 flowchart TD
-    AI["match_ai_destination()"]
+    AI["discover() ← /query/ai 진입점"]
     LOAD["_load_stores()"]
     LIGHT["_rank_with_candidate()"]
-    CONF{"경량 결과가<br/>충분히 확실한가?"}
-    SEMANTIC["query_semantic<br/>semantic_search()"]
-    MATCH["_to_match()"]
-    NONE["no_match"]
+    CONF{"경량 1차가<br/>단일 대상으로 확정?"}
+    DIRECT["direct — 1건 바로 안내"]
+    POOL["후보 집합<br/>경량 후보 or 2차 의미 검색"]
+    SEMANTIC["query_semantic<br/>search_many()"]
+    NARROW["selected_facets로 좁힘<br/>_dedupe_by_name()"]
+    BRANCH{"후보가 넓고<br/>구분력 있는 축?"}
+    CLARIFY["clarify — 되물음 + 옵션"]
+    RESULTS["results — 다양성 보정 상위 N"]
+    NONE["no_match · degraded"]
 
     AI --> LOAD --> LIGHT --> CONF
-    CONF -->|"예"| MATCH
-    CONF -->|"아니오"| SEMANTIC
-    SEMANTIC -->|"검색 성공"| MATCH
-    SEMANTIC -->|"실패 · 모델 없음"| NONE
+    CONF -->|"예"| DIRECT
+    CONF -->|"아니오"| POOL
+    POOL -. "경량 후보 없음" .-> SEMANTIC --> NARROW
+    POOL --> NARROW
+    NARROW --> BRANCH
+    BRANCH -->|"예"| CLARIFY
+    BRANCH -->|"아니오"| RESULTS
+    NARROW -. "후보 0건" .-> NONE
 ```
+
+- 단일 목적지 1건만 돌려주던 옛 `match_ai_destination()`은 모듈에 남아 있지만, 라우터의
+  `/query/ai` 진입점은 이제 탐색 계약(`DiscoveryResponse`)을 만드는 `discover()`다.
 
 ### 후보 정규화와 순위 계산
 

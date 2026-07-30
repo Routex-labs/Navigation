@@ -15,8 +15,8 @@ HTTP로 **오가는 데이터의 모양**을 Pydantic 모델로 정의한다. Fa
 | `building.py` | 건물 목록/상세 | `BuildingSummaryResponse`, `BuildingDetailResponse` |
 | `floor_map.py` | 층 지도 화면 | `FloorMapResponse`, `StoreResponse`, `PoiResponse` |
 | `route.py` | 길찾기 그래프 | `FloorGraphResponse`, `BuildingGraphResponse`, `GraphNodeResponse`, `GraphEdgeResponse` |
-| `query.py` | 자연어 질의 | `DestinationResponse`, `InfoResponse`, `QueryMatch` |
-| `health.py` | 헬스 체크 | `HealthResponse` |
+| `query.py` | 자연어 질의 | `DestinationResponse`, `InfoResponse`, `QueryMatch`, `DiscoveryResponse`, `DiscoveryMatch`, `DiscoveryOption` |
+| `health.py` | 헬스 체크 | `HealthResponse`, `ReadinessResponse` |
 | `__init__.py` | 패키지 표식 | — |
 
 ---
@@ -181,6 +181,8 @@ classDiagram
     class QueryMatch {
         +str store_id
         +str name
+        +str category ?
+        +str subcategory ?
         +str floor_id
         +str floor_name
         +str entrance_node_id ?
@@ -192,9 +194,9 @@ classDiagram
     InfoResponse *-- QueryMatch : match ?
 ```
 
-- `DestinationResponse.status`: `ok`, `ok_no_route`, `no_match`.
+- `DestinationResponse.status`: `ok`, `ok_no_route`, `no_match`, `ambiguous`.
 - `InfoResponse.status`: `ok`, `no_match`.
-- `/query/destination`과 `/query/ai`는 같은 `DestinationResponse`를 사용한다.
+- `/query/destination`은 `DestinationResponse`(단일 목적지)를, `/query/ai`는 `DiscoveryResponse`(탐색 — 여러 후보 + 되물음)를 쓴다. 응답 계약이 서로 다르다.
 
 ### 공통으로 생략한 타입
 

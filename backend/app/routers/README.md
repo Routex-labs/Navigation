@@ -39,7 +39,8 @@ flowchart LR
         e8["POST /query/ai"]
         e9["POST /query/info"]
         e10["GET /fonts/…"]
-        e11["GET /health"]
+        e11["GET /health · /health/live"]
+        e11b["GET /health/ready"]
     end
 
     subgraph RP["repositories/"]
@@ -51,7 +52,7 @@ flowchart LR
         f5b["get_building_graph()"]
         f6["render_floor_tile()"]
         f7["match_destination()"]
-        f8["match_ai_destination()"]
+        f8["query_search.discover()"]
         f9["match_info()"]
     end
 
@@ -65,6 +66,8 @@ flowchart LR
         d6["DestinationResponse"]
         d7["InfoResponse"]
         d8["HealthResponse"]
+        d9["DiscoveryResponse"]
+        d10["ReadinessResponse"]
     end
 
     e1 --> f1 --> d1
@@ -75,16 +78,17 @@ flowchart LR
     e5b --> f5b --> d5b
     e6 --> f6
     e7 --> f7 --> d6
-    e8 --> f8 --> d6
+    e8 --> f8 --> d9
     e9 --> f9 --> d7
     e11 --> d8
+    e11b --> d10
 
     e6 -. "bytes 그대로" .-> mvt["Response(media_type=mvt)"]
     e10 -. "파일 스트림" .-> pbf[".pbf 파일"]
 ```
 
 - **대부분의 엔드포인트는 조회 함수 하나에 dto 하나로 1:1 대응한다.** 라우터에 로직이 없다는 뜻이다.
-- **`/query/destination`과 `/query/ai`는 같은 `DestinationResponse`를 쓴다.** 응답 계약이 같아야 클라이언트가 두 경로를 갈아끼울 수 있다.
+- **`/query/destination`과 `/query/ai`는 응답 계약이 다르다.** 목적지는 단일 매장을 담는 `DestinationResponse`, AI 탐색은 여러 후보·되물음을 담는 `DiscoveryResponse`를 쓴다.
 - **타일과 글리프만 `response_model`이 없다.** JSON이 아니라 바이너리를 그대로 내보낸다.
 
 ---

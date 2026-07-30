@@ -13,6 +13,7 @@ HTTP 요청을 받아 SQLite 데이터를 조회하고 Flutter가 소비하는 J
 | 조회 | [`repositories/`](repositories/README.md) | SQL 조회, 검색, 응답 dict·타일 조립 |
 | 저장 | [`models/`](models/README.md) | SQLAlchemy ORM 테이블 |
 | 계산 | [`geo/`](geo/README.md) | 좌표 변환과 지도 타일 순수 수학 |
+| 그래프 | [`graph/`](graph/README.md) | 길찾기 그래프 도메인 (무결성 검증, 리비전 체크섬) |
 | 기반 | [`core/`](core/README.md) | 설정, DB Session, 로깅 |
 
 ## 요청 흐름
@@ -45,7 +46,7 @@ flowchart LR
 
 - `create_app()`을 uvicorn과 테스트가 함께 사용한다.
 - `configure_logging()`으로 로깅을 통일하고 `install_exception_logging()`으로 4xx/422 예외를 로그로 남긴다.
-- `buildings`, `fonts`, `query` 라우터를 등록한다.
+- `health`, `buildings`, `fonts`, `query` 네 라우터를 등록한다.
 - `NAV_WARM_EMBEDDING=1`이면 임베딩 모델을 백그라운드에서 미리 로드한다.
 - 모듈 전역 `app = create_app()`이 `app.main:app` 실행 경로다.
 

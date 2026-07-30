@@ -7,7 +7,7 @@
 
 | 계약 | 실제 구현 | 대체 구현 | 책임 |
 |---|---|---|---|
-| [`building_repository.dart`](building_repository.dart) | [`http_building_repository.dart`](http_building_repository.dart) | [`mock_building_repository.dart`](mock_building_repository.dart) | 건물·층 지도·층 그래프와 단일 층 최단 경로 |
+| [`building_repository.dart`](building_repository.dart) | [`http_building_repository.dart`](http_building_repository.dart) | [`mock_building_repository.dart`](mock_building_repository.dart) | 건물·층 지도·층 그래프·건물 전체 그래프, 단일 층 최단 경로 |
 | [`destination_repository.dart`](destination_repository.dart) | [`http_destination_repository.dart`](http_destination_repository.dart) | [`mock_destination_repository.dart`](mock_destination_repository.dart) | 목적지·시설 검색과 현재 층 필터 |
 | [`directions_repository.dart`](directions_repository.dart) | [`tmap_directions_repository.dart`](tmap_directions_repository.dart) | [`mock_directions_repository.dart`](mock_directions_repository.dart) | 실외 도보 경로 |
 
@@ -39,12 +39,18 @@ flowchart LR
 
 ## 목적지 검색
 
-`DestinationRepository.searchDestinations`는 `currentFloorId`가 있으면 현재 층만,
-`null`이면 건물 전체를 검색한다. `HttpDestinationRepository`는 경량
-`POST /query/destination` 계약을 사용하고, Mock은 이미 로드된 건물 데이터에서 검색한다.
+`DestinationRepository`는 두 계약을 노출한다.
 
-현재 앱 배선은 Mock 목적지 검색이다. 실제 백엔드 자연어 검색 전환 범위는
-[`../../../docs/backend/native/client-handoff.md`](../../../docs/backend/native/client-handoff.md)를 따른다.
+- `searchDestinations` — 경량 `POST /query/destination`. 최적 매장 1건을 돌려주며,
+  `currentFloorId`가 있으면 현재 층만, `null`이면 건물 전체를 검색한다.
+- `searchDestinationsAi` — 탐색(Discovery) `POST /query/ai`. `mode`(direct·clarify·results·
+  no_match·degraded) + 질문/선택지 + 여러 후보를 담은 `DiscoveryResult`를 돌려준다. 응답
+  계약이 destination과 다르고, 임베딩 의미 검색까지 이어질 수 있어 첫 호출이 수 초 걸릴 수 있다.
+
+`HttpDestinationRepository`가 두 엔드포인트를 모두 호출하고, Mock은 이미 로드된 건물
+데이터에서 검색한다. 앱 배선은 기본이 `HttpDestinationRepository`다
+(`../core/service_locator.dart`) — 자연어·탐색 검색 설계는
+[`../../../docs/backend/native/client-handoff.md`](../../../docs/backend/native/client-handoff.md)를 참고한다.
 
 ## 반환·오류 규칙
 
@@ -56,7 +62,7 @@ flowchart LR
 
 - HTTP 200이어도 `navigation_graph`가 비었거나 node ID가 없으면 경로는 `null`이다.
 - `currentFloorId`에 층 표시명(`1F`)을 넘기고 API가 불투명 ID를 기대하면 필터가 실패한다.
-- 단일 층 `/floors/{floor}` 그래프로 층 간 경로를 만들 수 없다. 전체 건물 그래프 연동은 별도 작업이다.
+- 단일 층 `/floors/{floor}` 그래프로는 층 간 경로를 만들 수 없다. 층 간 경로는 `getBuildingGraph`가 받는 건물 전체 그래프(전 층 노드 + 수직 전이 간선)를 `domain/multi_floor_router.dart`에 넘겨 계산하며, 두 경로를 섞지 않는다.
 - Mock과 HTTP 구현의 빈 검색어·없는 데이터 동작이 다르면 테스트만 통과하고 실제 화면이 달라진다.
 
 ## 자주 하는 작업

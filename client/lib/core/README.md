@@ -43,8 +43,8 @@ flowchart LR
 ```
 
 - `buildingRepository`와 `destinationRepository`는 테스트에서 교체할 수 있어 `final`이 아니다.
-- `destinationRepository`는 현재 `MockDestinationRepository`다. 실제 경량 검색을 붙일 때
-  `HttpDestinationRepository`로 바꾼다.
+- `destinationRepository`는 기본이 `HttpDestinationRepository`다(경량 `/query/destination`과
+  탐색 `/query/ai`를 함께 쓴다). 오프라인·테스트에서만 `MockDestinationRepository`로 바꾼다.
 - `pdrMotionSource`와 `indoorNavigationDriver`는 화면 전환 중에도 측위 세션이 유지되도록
   앱 범위 싱글턴이다.
 - 권한 요청과 GPS 스트림도 함수 변수로 노출해 플랫폼 채널이 없는 테스트에서 가짜 구현으로 바꾼다.

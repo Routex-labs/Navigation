@@ -9,6 +9,8 @@ DB를 재생성할 수 있는 Studio 입력, MapLibre 글리프, 자연어 검�
 |---|---|---|
 | [`studio/`](studio/README.md) | 층별 그래프·매장·좌표 입력 | `scripts/seed/studio_adapter.py` |
 | [`fonts/`](fonts/README.md) | MapLibre SDF glyph 범위와 라이선스 | `app/routers/fonts.py` |
+| [`calibration/`](calibration/README.md) | 건물 좌표 정합 GCP 관측치 | `scripts/transform/refit_building_wgs84.py` |
+| [`store_search_facets/`](store_search_facets/) | 패싯 검색 사전·의도·카테고리(`_intents.json`, `_vocabulary.json`, `fashion.json`, `restaurants.json`, `shoes.json`) | `repositories/store_facets.py` |
 | [`query_synonyms.json`](query_synonyms.json) | 사용자 표현 → 표준 검색어 | `repositories/query_search.py`, `query_morph.py` |
 | [`store_categories.json`](store_categories.json) | 매장 ID 기반 카테고리 보정 | `scripts/seed/studio_adapter.py` |
 | [`store_category_by_name.json`](store_category_by_name.json) | 매장명 기반 카테고리 fallback | `scripts/seed/studio_adapter.py` |

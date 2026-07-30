@@ -20,6 +20,8 @@
 | `config.py` | 환경변수 → 설정 객체 | `settings`, `Settings`, `DEFAULT_DATABASE_URL` |
 | `database.py` | 엔진·세션·요청 의존성 | `engine`, `SessionLocal`, `get_db()` |
 | `logging.py` | 로그 포맷·레벨 통일 + 예외 로깅 핸들러 | `configure_logging()`, `install_exception_logging()` |
+| `http_cache.py` | ETag/Cache-Control 헤더·If-None-Match 재검증 헬퍼 | `etag_matches()`, `cache_headers()` |
+| `request_limits.py` | 요청 본문 크기 제한(순수 ASGI 미들웨어) | `BodySizeLimitMiddleware` |
 | `__init__.py` | 패키지 표식 | — |
 
 ---
@@ -37,9 +39,26 @@ class Settings(BaseSettings):
     cors_origins: str = ""  # NAV_CORS_ORIGINS — 콤마 구분 화이트리스트(와일드카드 금지)
     allowed_hosts: str = ""  # NAV_ALLOWED_HOSTS — TrustedHost 화이트리스트(비면 미적용)
     max_request_body_bytes: int = 1_000_000  # NAV_MAX_REQUEST_BODY_BYTES — 초과 시 413
+    tile_cache_max_age: int = 60  # NAV_TILE_CACHE_MAX_AGE — MVT 타일 Cache-Control(초)
+    glyph_cache_max_age: int = 86400  # NAV_GLYPH_CACHE_MAX_AGE — 글리프(.pbf) Cache-Control(초)
+    tile_cache_max_entries: int = 2048  # NAV_TILE_CACHE_MAX_ENTRIES — 타일 메모리 캐시 항목 상한
+    tile_cache_max_bytes: int = 64 * 1024 * 1024  # NAV_TILE_CACHE_MAX_BYTES — 타일 캐시 바이트 상한
+    tile_warm_default_floor_only: bool = True  # NAV_TILE_WARM_DEFAULT_FLOOR_ONLY — 기동 워밍을 기본 층만
     warm_embedding: bool = False  # NAV_WARM_EMBEDDING — 기동 시 임베딩 모델 백그라운드 선로드
     log_level: str = "INFO"  # NAV_LOG_LEVEL — 로그 레벨(DEBUG로 상세 로그)
+    store_entrance_snap_max_m: float = 25.0  # NAV_STORE_ENTRANCE_SNAP_MAX_M — 입구 스냅 허용 거리(m)
     model_config = SettingsConfigDict(env_prefix="NAV_", case_sensitive=False)
+
+    # 콤마 구분 env를 실제 리스트/판정으로 풀어 주는 파생 프로퍼티.
+    # main.py는 CORS·TrustedHost를 걸 때 *_list와 is_production을 소비한다.
+    @property
+    def is_production(self) -> bool: ...  # environment == "production"
+
+    @property
+    def cors_origins_list(self) -> list[str]: ...  # cors_origins.split(",") 정리
+
+    @property
+    def allowed_hosts_list(self) -> list[str]: ...  # allowed_hosts.split(",") 정리
 
 
 settings = Settings()  # import 시 1회 생성, 프로세스 전역 재사용

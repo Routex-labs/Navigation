@@ -15,8 +15,8 @@
 
 ## 스택 근거
 
-상세 스택·버전·디렉토리 구조는 [docs/research/06-tech-stack.md](../../docs/research/06-tech-stack.md)와
-[VERSION.md](../../VERSION.md)를 단일 출처로 따른다. 이 마일스톤은 그 설계를 **실제 파일로 옮기는** 단계다.
+상세 스택·버전·디렉토리 구조는 [VERSION.md](../../VERSION.md)를 단일 출처로 따른다.
+이 마일스톤은 그 설계를 **실제 파일로 옮기는** 단계다.
 
 ## 이슈 목록
 

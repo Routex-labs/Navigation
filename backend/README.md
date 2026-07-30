@@ -16,6 +16,7 @@ FastAPI 기반 실내 내비게이션 API 서버.
 | 접근 | [`app/repositories/`](app/repositories/README.md) | DB 조회 + 응답 dict 조립 |
 | 데이터 | [`app/models/`](app/models/README.md) | SQLAlchemy ORM 엔티티 (테이블) |
 | 순수 로직 | [`app/geo/`](app/geo/README.md) | 좌표 변환 · 지도 타일 |
+| 그래프 | [`app/graph/`](app/graph/README.md) | 그래프 무결성 검증 · 리비전 체크섬 |
 | 인프라 | [`app/core/`](app/core/README.md) | 설정 · DB 엔진/세션 |
 | 스크립트 목차 | [`scripts/`](scripts/README.md) | 시드 · 변환 · 검색 평가 · 모델 워밍 |
 | 스크립트 | [`scripts/seed/`](scripts/seed/README.md) | DB 초기화 · 시드 (DB 접근) |
@@ -31,7 +32,7 @@ FastAPI 기반 실내 내비게이션 API 서버.
 
 ```text
 backend README
-→ app → core → models → dto → geo → repositories → routers
+→ app → core → models → dto → geo → graph → repositories → routers
 → scripts → transform → resources → studio → fonts → seed
 → notebooks → tests → fixtures → unit → integration
 ```
@@ -47,11 +48,14 @@ backend/
 │   ├── dto/             # Pydantic 요청/응답 스키마
 │   ├── repositories/    # DB 쿼리 계층 (건물·타일 조회, 좌표 변환)
 │   ├── geo/             # 지리 계산 (georeference, tiling)
+│   ├── graph/           # 길찾기 그래프 도메인 (무결성 검증, 리비전 체크섬)
 │   └── routers/         # HTTP 엔드포인트 (buildings, query, fonts)
 ├── scripts/             # 오프라인 실행용 스크립트
 │   ├── evaluate_query_hybrid.py  # 최종 AI 경로 29개 실데이터 평가
+│   ├── warm_embedding_model.py   # 임베딩 모델을 로컬 HF 캐시에 선다운로드
 │   ├── seed/            # DB 초기화·시드 (reset_and_seed 등)
-│   └── transform/       # 데이터 가공 (글리프 생성, 층 정렬 등)
+│   ├── transform/       # 데이터 가공 (글리프 생성, 층 정렬 등)
+│   └── tools/           # 보조 도구 (GCP 리전 선택 HTML 등)
 ├── notebooks/           # FAISS·Kiwi 품질 평가 (선택 개발 의존성)
 ├── resources/           # 정적 리소스
 │   ├── fonts/           # MapLibre SDF 글리프 (Noto Sans KR)

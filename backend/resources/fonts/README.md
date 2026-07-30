@@ -36,9 +36,10 @@ glyph 생성 도구는 [`../../scripts/transform/make_glyphs.js`](../../scripts/
 
 ## 검증
 
-현재 fonts router 전용 자동 테스트는 없다. 서버에서 서로 다른 glyph 범위 URL의 status,
-media type, body를 확인하고 실제 Flutter 지도에서 서로 다른 초성의 한글 매장명이
-표시되는지 함께 본다.
+fonts router 전용 통합 테스트는 [`tests/integration/test_fonts.py`](../../tests/integration/test_fonts.py)가
+있다. 있는/없는 glyph 범위의 status·media type·body, 캐시 헤더(`Cache-Control`·`ETag`·304),
+잘못된 범위 400, 경로 조작 방어까지 확인한다. 실제 Flutter 지도에서 서로 다른 초성의
+한글 매장명이 표시되는지는 함께 눈으로 본다.
 
 ---
 
