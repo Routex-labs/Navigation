@@ -26,9 +26,7 @@ def test_1차_경량이_맞으면_임베딩을_호출하지_않는다(db_session
 
     monkeypatch.setattr(query_semantic, "semantic_search", spy)
 
-    result = query_search.match_ai_destination(
-        db_session, BUILDING_ID, "가게A 어디야?"
-    )
+    result = query_search.match_ai_destination(db_session, BUILDING_ID, "가게A 어디야?")
 
     assert result["status"] in ("ok", "ok_no_route")
     assert result["match"]["name"] == "가게A"
@@ -37,14 +35,10 @@ def test_1차_경량이_맞으면_임베딩을_호출하지_않는다(db_session
 
 # 2차는 건물 전체를 본다. 1차가 현재 층에서 이미 실패한 뒤라 층을 또 좁히면
 # 현재 층에 대상이 없는 질의(1F에서 "밥집")가 항상 no_match로 끝난다.
-def test_서로_다른_부분일치가_여럿이면_현재층없이_원문만_2차에_전달한다(
-    db_session, monkeypatch
-):
+def test_서로_다른_부분일치가_여럿이면_현재층없이_원문만_2차에_전달한다(db_session, monkeypatch):
     store, floor = next(
         (store, floor)
-        for store, floor in _load_stores(
-            db_session, BUILDING_ID, current_floor_id="1F"
-        )
+        for store, floor in _load_stores(db_session, BUILDING_ID, current_floor_id="1F")
         if store.name == "가게B"
     )
     captured = {}
@@ -78,9 +72,7 @@ def test_서로_다른_부분일치가_여럿이면_현재층없이_원문만_2�
     }
 
 
-def test_부분일치여도_최상위_매장명이_하나면_1차에서_확정한다(
-    db_session, monkeypatch
-):
+def test_부분일치여도_최상위_매장명이_하나면_1차에서_확정한다(db_session, monkeypatch):
     calls = {"n": 0}
 
     def spy(*_args, **_kwargs):
@@ -106,9 +98,7 @@ def test_부분일치여도_최상위_매장명이_하나면_1차에서_확정�
 # docs/backend/native/conversational-discovery.md 7-2절, search-qa-fix-wave.md Wave 5-a.
 
 
-def test_tier1_서로_다른_이름이_2개_이상이면_1차에서_확정하지_않는다(
-    db_session, monkeypatch
-):
+def test_tier1_서로_다른_이름이_2개_이상이면_1차에서_확정하지_않는다(db_session, monkeypatch):
     # 가게A(패션/여성패션)와 같은 subcategory("여성패션")를 갖되 이름이 다른 매장을
     # 추가해, tier 1 후보의 서로 다른 이름이 2개("가게A", "가게C")가 되게 만든다.
     extra = Store(
@@ -138,9 +128,7 @@ def test_tier1_서로_다른_이름이_2개_이상이면_1차에서_확정하지
     assert result["match"]["store_id"] == store.id
 
 
-def test_tier1_후보가_같은_이름_1개뿐이면_층만_달라도_확정한다(
-    db_session, monkeypatch
-):
+def test_tier1_후보가_같은_이름_1개뿐이면_층만_달라도_확정한다(db_session, monkeypatch):
     calls = {"n": 0}
 
     def spy(*_args, **_kwargs):
@@ -185,9 +173,7 @@ def test_모호한_부분일치에서_2차도_실패하면_no_match다(db_sessio
 # 경량이 놓친 자연어는 2차 임베딩 결과로 확정된다.
 def test_경량이_놓치면_임베딩_2차로_확정한다(db_session, monkeypatch):
     store, floor = _load_stores(db_session, BUILDING_ID)[0]
-    monkeypatch.setattr(
-        query_semantic, "semantic_search", lambda *a, **k: (0.71, store, floor)
-    )
+    monkeypatch.setattr(query_semantic, "semantic_search", lambda *a, **k: (0.71, store, floor))
 
     result = query_search.match_ai_destination(db_session, BUILDING_ID, "밥 먹을 데")
 
@@ -200,14 +186,10 @@ def test_경량이_놓치면_임베딩_2차로_확정한다(db_session, monkeypa
 # (1F에서 "밥집" → 상위 후보가 전부 B1이라 전멸).
 def test_현재층에_없는_대상도_2차가_찾은_타층_매장을_반환한다(db_session, monkeypatch):
     other_floor_store = next(
-        (store, floor)
-        for store, floor in _load_stores(db_session, BUILDING_ID)
-        if floor.name != "1F"
+        (store, floor) for store, floor in _load_stores(db_session, BUILDING_ID) if floor.name != "1F"
     )
     store, floor = other_floor_store
-    monkeypatch.setattr(
-        query_semantic, "semantic_search", lambda *a, **k: (0.61, store, floor)
-    )
+    monkeypatch.setattr(query_semantic, "semantic_search", lambda *a, **k: (0.61, store, floor))
 
     result = query_search.match_ai_destination(
         db_session,
@@ -271,9 +253,7 @@ def test_인덱스를_못_만들면_INDEX_UNAVAILABLE_사유로_degraded다(db_s
     assert result.is_degraded is True
 
 
-def test_임계값_미달이면_BELOW_THRESHOLD_사유이고_degraded가_아니다(
-    db_session, monkeypatch
-):
+def test_임계값_미달이면_BELOW_THRESHOLD_사유이고_degraded가_아니다(db_session, monkeypatch):
     _stub_index(db_session, monkeypatch, top_score=query_semantic.SIMILARITY_THRESHOLD - 0.01)
 
     result = query_semantic.search(db_session, BUILDING_ID, "밥 먹을 데")
@@ -284,9 +264,7 @@ def test_임계값_미달이면_BELOW_THRESHOLD_사유이고_degraded가_아니�
 
 
 def test_임계값_이상이면_OK_사유와_함께_1건을_돌려준다(db_session, monkeypatch):
-    store, floor = _stub_index(
-        db_session, monkeypatch, top_score=query_semantic.SIMILARITY_THRESHOLD + 0.2
-    )
+    store, floor = _stub_index(db_session, monkeypatch, top_score=query_semantic.SIMILARITY_THRESHOLD + 0.2)
 
     result = query_semantic.search(db_session, BUILDING_ID, "밥 먹을 데")
 
@@ -526,9 +504,7 @@ def test_discover_같은_이름_시설은_층만_달라도_한_번만_나온다(
 def test_discover_이름_중복_제거는_현재_층을_대표로_고른다(db_session, monkeypatch):
     _no_semantic(monkeypatch)
 
-    result = query_search.discover(
-        db_session, BUILDING_ID, "가게", current_floor_id="2F"
-    )
+    result = query_search.discover(db_session, BUILDING_ID, "가게", current_floor_id="2F")
 
     # 후보 제거가 아니라 정렬 보조다 — 후보 수는 그대로고 대표 층만 현재 층이 된다.
     assert {match["name"] for match in result["matches"]} == {"가게A", "가게B"}
@@ -539,9 +515,7 @@ def test_discover_2차도_못_찾으면_no_match다(db_session, monkeypatch):
     monkeypatch.setattr(
         query_semantic,
         "search_many",
-        lambda *a, **k: query_semantic.SemanticResults(
-            query_semantic.SemanticReason.BELOW_THRESHOLD
-        ),
+        lambda *a, **k: query_semantic.SemanticResults(query_semantic.SemanticReason.BELOW_THRESHOLD),
     )
 
     result = query_search.discover(db_session, BUILDING_ID, "존재하지않는것")
@@ -555,9 +529,7 @@ def test_discover_모델이_없으면_degraded다(db_session, monkeypatch):
     monkeypatch.setattr(
         query_semantic,
         "search_many",
-        lambda *a, **k: query_semantic.SemanticResults(
-            query_semantic.SemanticReason.MODEL_UNAVAILABLE
-        ),
+        lambda *a, **k: query_semantic.SemanticResults(query_semantic.SemanticReason.MODEL_UNAVAILABLE),
     )
 
     result = query_search.discover(db_session, BUILDING_ID, "밥 먹을 데")
@@ -572,9 +544,7 @@ def test_discover_경량이_놓치면_2차_상위_N을_후보로_쓴다(db_sessi
     monkeypatch.setattr(
         query_semantic,
         "search_many",
-        lambda *a, **k: query_semantic.SemanticResults(
-            query_semantic.SemanticReason.OK, hits
-        ),
+        lambda *a, **k: query_semantic.SemanticResults(query_semantic.SemanticReason.OK, hits),
     )
 
     result = query_search.discover(db_session, BUILDING_ID, "밥 먹을 데")
@@ -606,10 +576,6 @@ def _stub_index(db_session, monkeypatch, *, top_score):
             return np.array([[top_score]], dtype="float32"), np.array([[0]])
 
     monkeypatch.setattr(query_semantic, "_get_model", lambda: object())
-    monkeypatch.setattr(
-        query_semantic, "_get_index", lambda *a, **k: (_FakeIndex(), [store.id])
-    )
-    monkeypatch.setattr(
-        query_semantic, "_encode", lambda *a, **k: np.zeros((1, 3), dtype="float32")
-    )
+    monkeypatch.setattr(query_semantic, "_get_index", lambda *a, **k: (_FakeIndex(), [store.id]))
+    monkeypatch.setattr(query_semantic, "_encode", lambda *a, **k: np.zeros((1, 3), dtype="float32"))
     return store, floor

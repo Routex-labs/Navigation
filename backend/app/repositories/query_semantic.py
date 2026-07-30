@@ -80,9 +80,7 @@ class SemanticReason(str, Enum):
 # degraded로 안내해야 하는 사유들. "의미 검색 기능 자체를 지금 못 쓴다"는 뜻이며,
 # 질의를 바꿔도 결과가 달라지지 않는다. BELOW_THRESHOLD는 여기 들어가지 않는다 —
 # 그건 기능은 정상이고 이 질의만 안 닮은 것이라 "다른 말로 다시"가 맞는 안내다.
-_DEGRADED_REASONS = frozenset(
-    {SemanticReason.MODEL_UNAVAILABLE, SemanticReason.INDEX_UNAVAILABLE}
-)
+_DEGRADED_REASONS = frozenset({SemanticReason.MODEL_UNAVAILABLE, SemanticReason.INDEX_UNAVAILABLE})
 
 
 @dataclass(frozen=True)

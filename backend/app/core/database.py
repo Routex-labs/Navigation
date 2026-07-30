@@ -12,9 +12,7 @@ from app.core.config import settings
 # 돌기 때문에, 커넥션을 만든 스레드와 만지는 스레드가 다를 수 있다.
 engine = create_engine(
     settings.database_url,
-    connect_args={"check_same_thread": False}
-    if settings.database_url.startswith("sqlite")
-    else {},
+    connect_args={"check_same_thread": False} if settings.database_url.startswith("sqlite") else {},
 )
 
 
@@ -27,9 +25,9 @@ SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 def get_db() -> Iterator[Session]:
     session = SessionLocal()
     try:
-        yield session       # 여기서 핸들러가 실행된다
+        yield session  # 여기서 핸들러가 실행된다
     except Exception:
         session.rollback()  # 핸들러 밖 예외의 최종 안전망
         raise
     finally:
-        session.close()     # 응답 전송이 끝난 뒤 실행된다
+        session.close()  # 응답 전송이 끝난 뒤 실행된다

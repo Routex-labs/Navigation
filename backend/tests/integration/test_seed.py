@@ -29,10 +29,7 @@ def test_시드데이터가_ORM_지도그래프로_조회된다(db_session):
     # 빈 목록에서는 all(...)이 True가 되므로 존재 여부를 먼저 확인한다.
     assert nodes and all(node.floor_id == floor.id for node in nodes)
     assert edges and all(
-        edge.floor_id == floor.id
-        and edge.from_node_id in node_ids
-        and edge.to_node_id in node_ids
-        for edge in edges
+        edge.floor_id == floor.id and edge.from_node_id in node_ids and edge.to_node_id in node_ids for edge in edges
     )
     assert any(len(edge.geometry) >= 2 for edge in edges)
 

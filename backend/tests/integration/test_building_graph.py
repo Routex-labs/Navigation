@@ -49,9 +49,7 @@ def test_전이간선은_그래프_노드를_가리킨다(api_client):
 
 # vertical=escalator 정책은 에스컬레이터 전이만 남긴다 — 픽스처엔 없으므로 전이 0.
 def test_정책_escalator는_엘리베이터_전이를_제외한다(api_client):
-    body = api_client.get(
-        f"/buildings/{BUILDING_ID}/graph", params={"vertical": "escalator"}
-    ).json()
+    body = api_client.get(f"/buildings/{BUILDING_ID}/graph", params={"vertical": "escalator"}).json()
 
     assert body["vertical"] == "escalator"
     assert _transfer_edges(body) == []  # 픽스처엔 에스컬레이터가 없다
@@ -61,9 +59,7 @@ def test_정책_escalator는_엘리베이터_전이를_제외한다(api_client):
 
 # vertical=elevator 정책은 엘리베이터 전이만 남긴다.
 def test_정책_elevator는_엘리베이터_전이만_남긴다(api_client):
-    body = api_client.get(
-        f"/buildings/{BUILDING_ID}/graph", params={"vertical": "elevator"}
-    ).json()
+    body = api_client.get(f"/buildings/{BUILDING_ID}/graph", params={"vertical": "elevator"}).json()
 
     transfers = _transfer_edges(body)
     assert transfers
@@ -72,9 +68,7 @@ def test_정책_elevator는_엘리베이터_전이만_남긴다(api_client):
 
 # 잘못된 정책 값은 422.
 def test_잘못된_vertical_값은_422다(api_client):
-    response = api_client.get(
-        f"/buildings/{BUILDING_ID}/graph", params={"vertical": "stairs"}
-    )
+    response = api_client.get(f"/buildings/{BUILDING_ID}/graph", params={"vertical": "stairs"})
     assert response.status_code == 422
 
 
@@ -90,9 +84,7 @@ def test_실데이터_에스컬레이터_전이는_방향을_지킨다(real_api_
 
     # 노드 id -> 층 level. 전이 간선의 from/to가 실제로 위·아래 층을 잇는지 본다.
     level_by_node = dict(
-        real_db_session.execute(
-            select(Node.id, Floor.level).join(Floor, Node.floor_id == Floor.id)
-        ).all()
+        real_db_session.execute(select(Node.id, Floor.level).join(Floor, Node.floor_id == Floor.id)).all()
     )
 
     escalators = [e for e in body["edges"] if e.get("transfer_mode") == "escalator"]

@@ -115,17 +115,19 @@ def test_search_facets_키가_없으면_None이다(db_session):
 def test_기존_필드_적재는_그대로다(db_session):
     add_dataset(
         db_session,
-        _minimal_dataset([
-            _base_store(
-                "PO-3",
-                name="나이키 라이즈",
-                category="패션",
-                subcategory="캐주얼·스트리트",
-                entrance_local_m={"x": 3.0, "y": 4.0},
-                entrance_node_id=None,
-                polygon_local_m=[{"x": 0.0, "y": 0.0}],
-            )
-        ]),
+        _minimal_dataset(
+            [
+                _base_store(
+                    "PO-3",
+                    name="나이키 라이즈",
+                    category="패션",
+                    subcategory="캐주얼·스트리트",
+                    entrance_local_m={"x": 3.0, "y": 4.0},
+                    entrance_node_id=None,
+                    polygon_local_m=[{"x": 0.0, "y": 0.0}],
+                )
+            ]
+        ),
     )
     db_session.flush()
 

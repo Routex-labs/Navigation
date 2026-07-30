@@ -32,8 +32,7 @@ _MULTI_PHYSICAL_POI_NAMES = frozenset({"출구"})
 
 # 질의 꼬리(조사·의문형) — 정규화 때 최대 1개 제거. 긴 것부터 검사한다.
 _TAILS = tuple(
-    sorted(("몇 층이야", "몇층이야", "몇 층", "몇층", "어디야", "어디", "위치", "알려줘"),
-           key=len, reverse=True)
+    sorted(("몇 층이야", "몇층이야", "몇 층", "몇층", "어디야", "어디", "위치", "알려줘"), key=len, reverse=True)
 )
 
 # 문장 끝에서 후보로 벗겨 볼 구두점. 원문 후보도 항상 남기므로 "A.P.C."처럼
@@ -114,9 +113,9 @@ def _strip_tail(t: str) -> str:
 # 사용자는 이름 앞에서부터 친다 — "레이어드"는 "카페 레이어드"를 찾는 것이지 다른 이름의
 # 중간 어딘가를 찾는 게 아니다. 이 순위가 없으면 둘 다 같은 tier 2라 층·ID순으로 갈려,
 # 몇 글자를 친 순간 엉뚱한 시설이 먼저 뜬다(KIWI.md 9절이 예고한 한 글자 과매칭).
-_NAME_PREFIX = 0   # 이름이 질의로 시작 — "이솝화" → "이솝 화장품"(2글자부터, 아래 참고)
-_WORD_PREFIX = 1   # 이름 속 단어가 질의로 시작 — "레이어드" → "카페 레이어드"
-_CONTAINS = 2      # 그 밖의 중간 포함 — "이솝" → "엘리베이터솝"(가상의 예)
+_NAME_PREFIX = 0  # 이름이 질의로 시작 — "이솝화" → "이솝 화장품"(2글자부터, 아래 참고)
+_WORD_PREFIX = 1  # 이름 속 단어가 질의로 시작 — "레이어드" → "카페 레이어드"
+_CONTAINS = 2  # 그 밖의 중간 포함 — "이솝" → "엘리베이터솝"(가상의 예)
 
 # tier 2(이름 부분 일치)에 들어가려면 질의가 최소 2글자여야 한다. query_morph.normalize가
 # 형태소 분해로 오타·조사를 지우면서 질의가 1글자로 축소되는 경우가 있다("샤낼"→"샤",
@@ -146,11 +145,7 @@ def _tier(store: Store, q: str, canon: str) -> tuple[int, int] | None:
     if q in (cat, sub) or canon in (cat, sub):
         return 1, 0  # 카테고리/서브카테고리 일치
     # 질의 원문과 동의어 표준형 중 더 정밀하게 걸린 쪽을 쓴다.
-    ranks = [
-        rank
-        for rank in (_name_match_rank(name, q), _name_match_rank(name, canon))
-        if rank is not None
-    ]
+    ranks = [rank for rank in (_name_match_rank(name, q), _name_match_rank(name, canon)) if rank is not None]
     if ranks:
         return 2, min(ranks)  # 이름 부분 일치
     return None
@@ -187,9 +182,7 @@ def _rank_with_candidate(
                 best = key
         if best is not None:
             tier, candidate_order, precision = best
-            scored_with_candidate.append(
-                (tier, candidate_order, precision, floor.level, store.id, store, floor)
-            )
+            scored_with_candidate.append((tier, candidate_order, precision, floor.level, store.id, store, floor))
 
     scored_with_candidate.sort(key=lambda row: (row[0], row[1], row[2], row[3], row[4]))
     return scored_with_candidate
@@ -246,10 +239,7 @@ def _is_confident_light_match(
 
     # 출구처럼 이름은 같아도 좌표가 다른 POI들은 사용자가 고를 목록이어야
     # 한다. 일반 매장명이 여러 층에 반복되는 기존 direct 동작은 그대로 둔다.
-    return not (
-        len(best_rows) > 1
-        and all(_is_multi_physical_store(store) for store, _floor in best_rows)
-    )
+    return not (len(best_rows) > 1 and all(_is_multi_physical_store(store) for store, _floor in best_rows))
 
 
 def _floor_names_for_match(
@@ -303,16 +293,10 @@ def _load_stores(
     *,
     current_floor_id: str | None = None,
 ) -> list[tuple[Store, Floor]]:
-    statement = (
-        select(Store, Floor)
-        .join(Floor, Store.floor_id == Floor.id)
-        .where(Floor.building_id == building_id)
-    )
+    statement = select(Store, Floor).join(Floor, Store.floor_id == Floor.id).where(Floor.building_id == building_id)
 
     if current_floor_id is not None:
-        statement = statement.where(
-            (Floor.name == current_floor_id) | (Floor.id == current_floor_id)
-        )
+        statement = statement.where((Floor.name == current_floor_id) | (Floor.id == current_floor_id))
     return session.execute(statement).all()
 
 
@@ -336,9 +320,7 @@ def match_destination(
 
     if _is_multi_physical_query(text):
         physical_matches = [
-            store
-            for _tier, _level, _store_id, store, _floor in scored
-            if _is_multi_physical_store(store)
+            store for _tier, _level, _store_id, store, _floor in scored if _is_multi_physical_store(store)
         ]
         if len(physical_matches) > 1:
             # DestinationResponse는 단일 목적지 계약이다. 클라이언트가 빈
@@ -406,8 +388,8 @@ def match_ai_destination(
 # 단일 목적지(match_destination)와 달리 "여러 후보 + 되물음"을 만든다.
 # --------------------------------------------------------------------------
 
-MAX_DISCOVERY_MATCHES = 5      # 최종 추천 상한(12절 확정)
-CLARIFY_PREVIEW_MATCHES = 3    # 질문과 함께 보여줄 초기 후보 수(12절 확정)
+MAX_DISCOVERY_MATCHES = 5  # 최종 추천 상한(12절 확정)
+CLARIFY_PREVIEW_MATCHES = 3  # 질문과 함께 보여줄 초기 후보 수(12절 확정)
 
 # 되물을 축의 우선순위. 한 번에 한 축만 묻는다(2절). 앞에 있는 축부터 구분력을 본다.
 _QUESTION_AXIS_ORDER = ("intents", "cuisines", "styles", "menus", "occasions", "audiences")
@@ -540,17 +522,11 @@ def _dedupe_by_name(
     for store, floor in rows:
         # 일반 매장·전 층 공용 시설은 이름으로 묶되, 출구는 같은 층에서도
         # 서로 다른 물리 선택지라 store id를 유지한다.
-        key = (
-            store.id
-            if _is_multi_physical_store(store)
-            else (_norm(store.name or "") or store.id)
-        )
+        key = store.id if _is_multi_physical_store(store) else (_norm(store.name or "") or store.id)
         if key not in picked:
             picked[key] = (store, floor)
             order.append(key)
-        elif _is_current_floor(floor, current_floor_id) and not _is_current_floor(
-            picked[key][1], current_floor_id
-        ):
+        elif _is_current_floor(floor, current_floor_id) and not _is_current_floor(picked[key][1], current_floor_id):
             picked[key] = (store, floor)
     return [picked[key] for key in order]
 
@@ -612,8 +588,7 @@ def _discovery_matches(
     axis: str | None = None,
 ) -> list[dict[str, Any]]:
     return [
-        _to_discovery_match(store, floor, transform, basis)
-        for store, floor in _diversify(candidates, limit, axis=axis)
+        _to_discovery_match(store, floor, transform, basis) for store, floor in _diversify(candidates, limit, axis=axis)
     ]
 
 
@@ -664,11 +639,7 @@ def discover(
     if session.get(Building, building_id) is None:
         return None
 
-    selection = {
-        axis: list(values)
-        for axis, values in (selected_facets or {}).items()
-        if values
-    }
+    selection = {axis: list(values) for axis, values in (selected_facets or {}).items() if values}
     transform = fit_building_geo_transform(session, building_id)
 
     building_rows = _load_stores(session, building_id)
@@ -699,13 +670,9 @@ def discover(
     # 정책은 Store에 시설 kind가 없는 데모 데이터의 명시적 보완이다.
     if current_floor_id is not None and _is_multi_physical_query(text):
         current_floor_physical = [
-            (store, floor)
-            for *_rank, store, floor in floor_scoped
-            if _is_multi_physical_store(store)
+            (store, floor) for *_rank, store, floor in floor_scoped if _is_multi_physical_store(store)
         ]
-        pool = current_floor_physical or [
-            (store, floor) for *_rank, store, floor in building_scored
-        ]
+        pool = current_floor_physical or [(store, floor) for *_rank, store, floor in building_scored]
     else:
         pool = [(store, floor) for *_rank, store, floor in building_scored]
 
@@ -746,9 +713,7 @@ def discover(
         return _discovery(
             text,
             "results",
-            matches=_discovery_matches(
-                candidates, MAX_DISCOVERY_MATCHES, selection, transform
-            ),
+            matches=_discovery_matches(candidates, MAX_DISCOVERY_MATCHES, selection, transform),
         )
 
     if len(candidates) > MAX_DISCOVERY_MATCHES:

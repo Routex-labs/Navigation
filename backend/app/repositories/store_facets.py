@@ -198,15 +198,11 @@ def validate_overlay(
     # 1. version 미지원
     version = overlay.get("version")
     if version != SUPPORTED_VERSION:
-        errors.append(
-            f"지원하지 않는 version입니다: {version!r} (지원: {SUPPORTED_VERSION})"
-        )
+        errors.append(f"지원하지 않는 version입니다: {version!r} (지원: {SUPPORTED_VERSION})")
         # version이 안 맞으면 아래 구조 자체를 신뢰할 수 없으므로 더 진행하지 않는다.
         return errors
 
-    allowed_values: dict[str, set[str]] = {
-        axis: set(values) for axis, values in vocabulary.items()
-    }
+    allowed_values: dict[str, set[str]] = {axis: set(values) for axis, values in vocabulary.items()}
 
     stores = overlay.get("stores", {})
     for store_id, facets in stores.items():
@@ -220,8 +216,7 @@ def validate_overlay(
         actual_name = store_names.get(store_id)
         if overlay_name is not None and actual_name is not None and overlay_name != actual_name:
             errors.append(
-                f"{store_id!r}의 name이 실제 매장명과 다릅니다: "
-                f"overlay={overlay_name!r} actual={actual_name!r}"
+                f"{store_id!r}의 name이 실제 매장명과 다릅니다: overlay={overlay_name!r} actual={actual_name!r}"
             )
 
         for axis, values in facets.items():
@@ -241,9 +236,7 @@ def validate_overlay(
             seen: set[str] = set()
             for value in values:
                 if not isinstance(value, str):
-                    errors.append(
-                        f"{store_id!r}.{axis}: 문자열이 아닌 태그 값입니다: {value!r}"
-                    )
+                    errors.append(f"{store_id!r}.{axis}: 문자열이 아닌 태그 값입니다: {value!r}")
                     continue
 
                 # 5. 같은 배열 안의 중복 태그
@@ -254,9 +247,7 @@ def validate_overlay(
 
                 # 4. vocabulary에 없는 태그 값
                 if value not in allowed_values[axis]:
-                    errors.append(
-                        f"{store_id!r}.{axis}: vocabulary에 없는 값입니다: {value!r}"
-                    )
+                    errors.append(f"{store_id!r}.{axis}: vocabulary에 없는 값입니다: {value!r}")
 
     return errors
 
@@ -339,9 +330,7 @@ def _matches_rules(store: dict, rules: dict[str, list[str]]) -> bool:
     """
     for field, values in rules.items():
         if field not in _ALLOWED_RULE_FIELDS:
-            raise ValueError(
-                f"규칙에 쓸 수 없는 필드입니다: {field!r} (허용: {sorted(_ALLOWED_RULE_FIELDS)})"
-            )
+            raise ValueError(f"규칙에 쓸 수 없는 필드입니다: {field!r} (허용: {sorted(_ALLOWED_RULE_FIELDS)})")
         if store.get(field) not in values:
             return False
     return True
@@ -370,9 +359,7 @@ def resolve_intent_store_ids(
         return set()
 
     rules = definition.get("rules") or {}
-    matched = {
-        store["store_id"] for store in stores if rules and _matches_rules(store, rules)
-    }
+    matched = {store["store_id"] for store in stores if rules and _matches_rules(store, rules)}
     matched |= set(definition.get("extra_store_ids") or {})
     return matched - set(definition.get("excluded_store_ids") or {})
 
@@ -417,16 +404,12 @@ def validate_intents(payload: dict, stores: list[dict]) -> list[str]:
 
     version = payload.get("version")
     if version != SUPPORTED_VERSION:
-        errors.append(
-            f"지원하지 않는 version입니다: {version!r} (지원: {SUPPORTED_VERSION})"
-        )
+        errors.append(f"지원하지 않는 version입니다: {version!r} (지원: {SUPPORTED_VERSION})")
         return errors
 
     known_ids = {store["store_id"] for store in stores}
     names = {store["store_id"]: store.get("name") for store in stores}
-    field_values: dict[str, set] = {
-        field: {store.get(field) for store in stores} for field in _ALLOWED_RULE_FIELDS
-    }
+    field_values: dict[str, set] = {field: {store.get(field) for store in stores} for field in _ALLOWED_RULE_FIELDS}
 
     intents = payload.get("intents", {})
     for intent, definition in intents.items():
@@ -440,21 +423,16 @@ def validate_intents(payload: dict, stores: list[dict]) -> list[str]:
             # 3. 지원하지 않는 필드
             if field not in _ALLOWED_RULE_FIELDS:
                 errors.append(
-                    f"{intent!r}.rules: 규칙에 쓸 수 없는 필드입니다: {field!r} "
-                    f"(허용: {sorted(_ALLOWED_RULE_FIELDS)})"
+                    f"{intent!r}.rules: 규칙에 쓸 수 없는 필드입니다: {field!r} (허용: {sorted(_ALLOWED_RULE_FIELDS)})"
                 )
                 continue
             if not isinstance(values, list) or not values:
-                errors.append(
-                    f"{intent!r}.rules.{field}: 비어 있지 않은 배열이어야 합니다: {values!r}"
-                )
+                errors.append(f"{intent!r}.rules.{field}: 비어 있지 않은 배열이어야 합니다: {values!r}")
                 continue
             for value in values:
                 # 4. 실데이터에 없는 값 — 소분류가 바뀌어 규칙이 죽은 경우를 잡는다.
                 if value not in field_values[field]:
-                    errors.append(
-                        f"{intent!r}.rules.{field}: 실데이터에 없는 값입니다: {value!r}"
-                    )
+                    errors.append(f"{intent!r}.rules.{field}: 실데이터에 없는 값입니다: {value!r}")
 
         # 규칙이 잡는 집합. 필드가 잘못돼 있으면 위에서 이미 오류로 잡았으므로
         # 여기서 예외가 나지 않게 허용 필드만 남겨서 계산한다.
@@ -463,20 +441,14 @@ def validate_intents(payload: dict, stores: list[dict]) -> list[str]:
             for field, values in rules.items()
             if field in _ALLOWED_RULE_FIELDS and isinstance(values, list) and values
         }
-        rule_matched = {
-            store["store_id"]
-            for store in stores
-            if safe_rules and _matches_rules(store, safe_rules)
-        }
+        rule_matched = {store["store_id"] for store in stores if safe_rules and _matches_rules(store, safe_rules)}
 
         extra_ids: set[str] = set()
         for store_id, name in _iter_store_id_entries(definition, "extra_store_ids"):
             extra_ids.add(store_id)
             # 5. 고아 id
             if store_id not in known_ids:
-                errors.append(
-                    f"{intent!r}.extra_store_ids: 존재하지 않는 store_id입니다: {store_id!r}"
-                )
+                errors.append(f"{intent!r}.extra_store_ids: 존재하지 않는 store_id입니다: {store_id!r}")
                 continue
             # 6. 이름 불일치
             actual = names.get(store_id)
@@ -487,21 +459,15 @@ def validate_intents(payload: dict, stores: list[dict]) -> list[str]:
                 )
             # 7. 규칙이 이미 잡는 매장
             if store_id in rule_matched:
-                errors.append(
-                    f"{intent!r}.extra_store_ids: 규칙이 이미 잡는 매장입니다(중복): {store_id!r}"
-                )
+                errors.append(f"{intent!r}.extra_store_ids: 규칙이 이미 잡는 매장입니다(중복): {store_id!r}")
 
         for store_id, _name in _iter_store_id_entries(definition, "excluded_store_ids"):
             # 5. 고아 id
             if store_id not in known_ids:
-                errors.append(
-                    f"{intent!r}.excluded_store_ids: 존재하지 않는 store_id입니다: {store_id!r}"
-                )
+                errors.append(f"{intent!r}.excluded_store_ids: 존재하지 않는 store_id입니다: {store_id!r}")
                 continue
             # 8. 뺄 대상이 애초에 후보가 아니다 = 규칙이 바뀐 뒤 남은 찌꺼기
             if store_id not in rule_matched and store_id not in extra_ids:
-                errors.append(
-                    f"{intent!r}.excluded_store_ids: 규칙도 extra도 잡지 않는 매장입니다: {store_id!r}"
-                )
+                errors.append(f"{intent!r}.excluded_store_ids: 규칙도 extra도 잡지 않는 매장입니다: {store_id!r}")
 
     return errors

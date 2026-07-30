@@ -4,16 +4,18 @@ from scripts.seed.studio_adapter import _scope_edges
 
 
 def test_scope_edges_preserves_polyline_and_recomputes_length():
-    edges = [{
-        "id": "edge-1",
-        "from": "a",
-        "to": "b",
-        "length_m": 999,  # Studio가 준 값은 버리고 geometry로 다시 잰다
-        "geometry": {
-            "source": [{"x": 1, "y": 1}, {"x": 2, "y": 2}],
-            "local_m": [{"x": 0, "y": 0}, {"x": 3, "y": 0}, {"x": 3, "y": 4}],
-        },
-    }]
+    edges = [
+        {
+            "id": "edge-1",
+            "from": "a",
+            "to": "b",
+            "length_m": 999,  # Studio가 준 값은 버리고 geometry로 다시 잰다
+            "geometry": {
+                "source": [{"x": 1, "y": 1}, {"x": 2, "y": 2}],
+                "local_m": [{"x": 0, "y": 0}, {"x": 3, "y": 0}, {"x": 3, "y": 4}],
+            },
+        }
+    ]
 
     result = _scope_edges("floor", edges)[0]
 
@@ -41,21 +43,15 @@ def test_배포된_facet_리소스는_검증을_통과한다():
     ("깨뜨리기", "기대_메시지"),
     [
         (
-            lambda payload: payload["stores"].update(
-                {"PO-없는매장": {"name": "유령매장", "styles": ["명품"]}}
-            ),
+            lambda payload: payload["stores"].update({"PO-없는매장": {"name": "유령매장", "styles": ["명품"]}}),
             "존재하지 않는 store_id",
         ),
         (
-            lambda payload: payload["stores"]["PO-SZt1uLq2l0305"].update(
-                {"styles": ["없는스타일"]}
-            ),
+            lambda payload: payload["stores"]["PO-SZt1uLq2l0305"].update({"styles": ["없는스타일"]}),
             "vocabulary에 없는 값",
         ),
         (
-            lambda payload: payload["stores"]["PO-SZt1uLq2l0305"].update(
-                {"name": "이름이 다른 매장"}
-            ),
+            lambda payload: payload["stores"]["PO-SZt1uLq2l0305"].update({"name": "이름이 다른 매장"}),
             "이름",
         ),
     ],
@@ -86,8 +82,6 @@ def test_검증_실패하면_시드가_예외로_멈춘다(tmp_path, monkeypatch
     """반쯤 시드된 DB가 남지 않도록 적재 전에 멈춰야 한다."""
     from scripts.seed import studio_adapter
 
-    monkeypatch.setattr(
-        studio_adapter, "validate_facet_resources", lambda *a, **kw: ["일부러 만든 오류"]
-    )
+    monkeypatch.setattr(studio_adapter, "validate_facet_resources", lambda *a, **kw: ["일부러 만든 오류"])
     with pytest.raises(ValueError, match="검색 facet 리소스 검증 실패"):
         studio_adapter.seed_studio()

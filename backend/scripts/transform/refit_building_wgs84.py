@@ -175,19 +175,23 @@ def _angular_distance(a: float, b: float) -> float:
 def _fit_pairs(gcps, corners, perm) -> tuple[GeoTransform, list[float]]:
     """corner 순열 하나에 대해 fit + 각 GCP 잔차."""
     from app.geo.georeference import PointPair, fit_wgs84_transform
+
     pairs = [
-        PointPair(x=corners[perm[i]].x, y=corners[perm[i]].y,
-                  u=gcps[i]["outdoor"]["lng"], v=gcps[i]["outdoor"]["lat"])
+        PointPair(x=corners[perm[i]].x, y=corners[perm[i]].y, u=gcps[i]["outdoor"]["lng"], v=gcps[i]["outdoor"]["lat"])
         for i in range(len(gcps))
     ]
     t = fit_wgs84_transform(pairs)
     residuals = []
     for i in range(len(gcps)):
         pred_lat, pred_lng = t.apply(corners[perm[i]].x, corners[perm[i]].y)
-        residuals.append(haversine_m(
-            gcps[i]["outdoor"]["lat"], gcps[i]["outdoor"]["lng"],
-            pred_lat, pred_lng,
-        ))
+        residuals.append(
+            haversine_m(
+                gcps[i]["outdoor"]["lat"],
+                gcps[i]["outdoor"]["lng"],
+                pred_lat,
+                pred_lng,
+            )
+        )
     return t, residuals
 
 
@@ -250,10 +254,15 @@ def compass_match(
             lat = g["outdoor"]["lat"]
             lng = g["outdoor"]["lng"]
             pairs.append(PointPair(x=c.x, y=c.y, u=lng, v=lat))
-            matches.append(Match(
-                label=f'{g["label"]}({compass})', gcp_lat=lat, gcp_lng=lng, corner=c,
-                dist_before_m=0.0,
-            ))
+            matches.append(
+                Match(
+                    label=f"{g['label']}({compass})",
+                    gcp_lat=lat,
+                    gcp_lng=lng,
+                    corner=c,
+                    dist_before_m=0.0,
+                )
+            )
         t = fit_wgs84_transform(pairs)
         sx = math.hypot(t.a, t.c) * METERS_PER_DEGREE_LAT
         sy = math.hypot(t.b, t.d) * METERS_PER_DEGREE_LAT
@@ -264,8 +273,7 @@ def compass_match(
     print("\n== compass 후보별 fit (start_idx는 N GCP를 어느 local corner에 배정하는지) ==")
     for c in candidates:
         print(
-            f"  start={c['start']} → N→{corners[c['start']].name:<14} "
-            f"aniso={c['aniso']:.4f} rotate_deg={c['rot']:+.3f}"
+            f"  start={c['start']} → N→{corners[c['start']].name:<14} aniso={c['aniso']:.4f} rotate_deg={c['rot']:+.3f}"
         )
 
     # (1) 이방성 필터 — 90° 뒤틀림 후보 제거
@@ -278,8 +286,10 @@ def compass_match(
 
     # (2) prior_rotate_deg 근접도 — 180° 대칭 후보 사이 확정
     if prior_rotate_deg is None:
-        print("[경고] uniform-scale 후보가 여럿(180° 대칭)인데 prior_rotate_deg가 없음. "
-              "첫 후보를 임의 선택하니 스토어 배치를 반드시 시각 검증하세요.")
+        print(
+            "[경고] uniform-scale 후보가 여럿(180° 대칭)인데 prior_rotate_deg가 없음. "
+            "첫 후보를 임의 선택하니 스토어 배치를 반드시 시각 검증하세요."
+        )
         return uniform[0]["matches"]
 
     def angular_diff(a: float, b: float) -> float:
@@ -328,9 +338,7 @@ def angle_nearest_match(gcps: list[dict], corners: list[Corner], current: GeoTra
 
     n = len(gcps)
     if n != len(corners):
-        raise SystemExit(
-            f"GCP {n}개 vs footprint 극점 {len(corners)}개. 지금은 4점 GCP → 4극점만 지원."
-        )
+        raise SystemExit(f"GCP {n}개 vs footprint 극점 {len(corners)}개. 지금은 4점 GCP → 4극점만 지원.")
 
     # base: 각도만으로 최적 순열
     base_perm = None
@@ -377,10 +385,15 @@ def angle_nearest_match(gcps: list[dict], corners: list[Corner], current: GeoTra
         c = corners[corner_idx]
         lat, lng = g["outdoor"]["lat"], g["outdoor"]["lng"]
         pred_lat, pred_lng = project_current(current, c.x, c.y)
-        matches.append(Match(
-            label=g["label"], gcp_lat=lat, gcp_lng=lng, corner=c,
-            dist_before_m=haversine_m(lat, lng, pred_lat, pred_lng),
-        ))
+        matches.append(
+            Match(
+                label=g["label"],
+                gcp_lat=lat,
+                gcp_lng=lng,
+                corner=c,
+                dist_before_m=haversine_m(lat, lng, pred_lat, pred_lng),
+            )
+        )
     return matches
 
 
@@ -409,10 +422,15 @@ def explicit_match(gcps: list[dict], corners: list[Corner], mapping: str, curren
         g = gcp_by_label[label]
         lat, lng = g["outdoor"]["lat"], g["outdoor"]["lng"]
         pred_lat, pred_lng = project_current(current, c.x, c.y)
-        matches.append(Match(
-            label=f"{label}({compass})", gcp_lat=lat, gcp_lng=lng, corner=c,
-            dist_before_m=haversine_m(lat, lng, pred_lat, pred_lng),
-        ))
+        matches.append(
+            Match(
+                label=f"{label}({compass})",
+                gcp_lat=lat,
+                gcp_lng=lng,
+                corner=c,
+                dist_before_m=haversine_m(lat, lng, pred_lat, pred_lng),
+            )
+        )
     return matches
 
 
@@ -443,7 +461,7 @@ def studio_matrix_from(new_t: GeoTransform) -> list[list[float]]:
     s = new_t.lng_scale
     return [
         [new_t.a / s, new_t.b / s, new_t.tx / s],
-        [new_t.c,     new_t.d,     new_t.ty     ],
+        [new_t.c, new_t.d, new_t.ty],
         [0.0, 0.0, 1.0],
     ]
 
@@ -506,7 +524,10 @@ def _write_geojson_preview(
             "geometry": {"type": "Polygon", "coordinates": [ring]},
             "properties": {
                 "name": f"{reference.get('building_id', 'building')}_footprint_refit",
-                "stroke": "#3b82f6", "stroke-width": 2, "fill": "#3b82f6", "fill-opacity": 0.20,
+                "stroke": "#3b82f6",
+                "stroke-width": 2,
+                "fill": "#3b82f6",
+                "fill-opacity": 0.20,
             },
         }
     ]
@@ -514,28 +535,39 @@ def _write_geojson_preview(
     # 두 점을 잇는 얇은 선 (잔차 벡터, 이상적으로 겹쳐서 안 보임).
     for m in matches:
         pred_lat, pred_lng = new_t.apply(m.corner.x, m.corner.y)
-        features.append({
-            "type": "Feature",
-            "geometry": {"type": "Point", "coordinates": [m.gcp_lng, m.gcp_lat]},
-            "properties": {
-                "name": f"GCP {m.label}", "marker-color": "#ef4444", "marker-size": "small",
-            },
-        })
-        features.append({
-            "type": "Feature",
-            "geometry": {"type": "Point", "coordinates": [pred_lng, pred_lat]},
-            "properties": {
-                "name": f"{m.corner.name}", "marker-color": "#22c55e", "marker-size": "small",
-            },
-        })
-        features.append({
-            "type": "Feature",
-            "geometry": {"type": "LineString", "coordinates": [[m.gcp_lng, m.gcp_lat], [pred_lng, pred_lat]]},
-            "properties": {
-                "name": f"residual {m.label} ({m.residual_after_m:.2f}m)",
-                "stroke": "#f97316", "stroke-width": 2,
-            },
-        })
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [m.gcp_lng, m.gcp_lat]},
+                "properties": {
+                    "name": f"GCP {m.label}",
+                    "marker-color": "#ef4444",
+                    "marker-size": "small",
+                },
+            }
+        )
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [pred_lng, pred_lat]},
+                "properties": {
+                    "name": f"{m.corner.name}",
+                    "marker-color": "#22c55e",
+                    "marker-size": "small",
+                },
+            }
+        )
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": {"type": "LineString", "coordinates": [[m.gcp_lng, m.gcp_lat], [pred_lng, pred_lat]]},
+                "properties": {
+                    "name": f"residual {m.label} ({m.residual_after_m:.2f}m)",
+                    "stroke": "#f97316",
+                    "stroke-width": 2,
+                },
+            }
+        )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(
         json.dumps({"type": "FeatureCollection", "features": features}, ensure_ascii=False, indent=2),
@@ -568,17 +600,26 @@ def print_residuals(matches: list[Match]) -> tuple[float, float]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--studio", type=Path, required=True,
-                        help="studio 폴더 경로 (예: resources/studio/thehyundai-seoul-dabeeo)")
-    parser.add_argument("--gcps", type=Path, required=True,
-                        help="gcp_picker.html에서 export한 JSON 경로")
-    parser.add_argument("--map", dest="mapping", default=None,
-                        help='명시적 매칭 (예: "N=1,W=2,S=3,E=4"). 미지정 시 각도 정렬 자동 매칭.')
-    parser.add_argument("--write", action="store_true",
-                        help="studio JSON들의 local_m_to_wgs84를 덮어쓴다 (기본: dry-run)")
-    parser.add_argument("--geojson-out", type=Path, default=None,
-                        help="새 아핀으로 변환한 건물 footprint 폴리곤을 GeoJSON으로 저장. "
-                             "geojson.io에 VWorld 배경으로 얹어 시각 검증.")
+    parser.add_argument(
+        "--studio", type=Path, required=True, help="studio 폴더 경로 (예: resources/studio/thehyundai-seoul-dabeeo)"
+    )
+    parser.add_argument("--gcps", type=Path, required=True, help="gcp_picker.html에서 export한 JSON 경로")
+    parser.add_argument(
+        "--map",
+        dest="mapping",
+        default=None,
+        help='명시적 매칭 (예: "N=1,W=2,S=3,E=4"). 미지정 시 각도 정렬 자동 매칭.',
+    )
+    parser.add_argument(
+        "--write", action="store_true", help="studio JSON들의 local_m_to_wgs84를 덮어쓴다 (기본: dry-run)"
+    )
+    parser.add_argument(
+        "--geojson-out",
+        type=Path,
+        default=None,
+        help="새 아핀으로 변환한 건물 footprint 폴리곤을 GeoJSON으로 저장. "
+        "geojson.io에 VWorld 배경으로 얹어 시각 검증.",
+    )
     args = parser.parse_args()
 
     reference = load_studio_reference(args.studio)
@@ -603,7 +644,7 @@ def main() -> None:
         print(f"  {c.name:<14} local=({c.x:>8.3f}, {c.y:>8.3f}) → 현재 아핀 예측 ({lat:.7f}, {lng:.7f})")
 
     if args.mapping:
-        print(f"\n== 명시적 매칭 (--map \"{args.mapping}\") ==")
+        print(f'\n== 명시적 매칭 (--map "{args.mapping}") ==')
         matches = explicit_match(gcps, corners, args.mapping, current)
     elif _compass_hints_present(gcps):
         print("\n== GCP compass 힌트 기반 자동 매칭 (world CW N→E→S→W 규약) ==")

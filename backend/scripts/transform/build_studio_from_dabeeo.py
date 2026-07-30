@@ -32,8 +32,18 @@ SCALE_M_PER_UNIT = 0.1
 # 다베오 층 이름 -> 우리 층 코드. level은 위층일수록 커지는 단조 정수로 둔다
 # (vertical_transfers가 level 정렬로 인접 층을 잇는다).
 FLOOR_LEVELS = {
-    "6F": 6, "5F": 5, "4F": 4, "3F": 3, "2F": 2, "1F": 1,
-    "B1": -1, "B2": -2, "B3": -3, "B4": -4, "B5": -5, "B6": -6,
+    "6F": 6,
+    "5F": 5,
+    "4F": 4,
+    "3F": 3,
+    "2F": 2,
+    "1F": 1,
+    "B1": -1,
+    "B2": -2,
+    "B3": -3,
+    "B4": -4,
+    "B5": -5,
+    "B6": -6,
 }
 
 # node.transCode -> 우리 노드 타입. 나머지는 통로 교차점이다.
@@ -139,10 +149,7 @@ def polygon_area(points: list[dict]) -> float:
     n = len(points)
     if n < 3:
         return 0.0
-    total = sum(
-        points[i]["x"] * points[(i + 1) % n]["y"] - points[(i + 1) % n]["x"] * points[i]["y"]
-        for i in range(n)
-    )
+    total = sum(points[i]["x"] * points[(i + 1) % n]["y"] - points[(i + 1) % n]["x"] * points[i]["y"] for i in range(n))
     return abs(total) / 2
 
 
@@ -186,8 +193,7 @@ def build_floor(payload: dict, floor: dict, geo: dict) -> tuple[dict, dict]:
                 "source": source_point(node.get("position") or {}),
                 "local_m": to_local(node.get("position") or {}),
             },
-            "source": {"kind": "dabeeo_node", "trans_code": trans,
-                       "object_ids": node.get("objectIds") or []},
+            "source": {"kind": "dabeeo_node", "trans_code": trans, "object_ids": node.get("objectIds") or []},
         }
         if title and title != "NODE":
             record["name"] = title
@@ -259,17 +265,21 @@ def build_floor(payload: dict, floor: dict, geo: dict) -> tuple[dict, dict]:
             "entrance_wgs84": None,
             "centroid_local_m": centroid(shape) if shape else to_local(poi.get("position") or {}),
             "polygon_local_m": shape,
-            "match": {"method": "dabeeo_official_poi", "object_id": poi.get("objectId"),
-                      "review_required": False},
+            "match": {"method": "dabeeo_official_poi", "object_id": poi.get("objectId"), "review_required": False},
         }
         stores.append(record)
         if shape:
             polygons.append(shape)
-            metadata.append({
-                "id": store_id, "name": title,
-                "category": record["category"], "subcategory": record["subcategory"],
-                "entrance_node_id": None, "centroid_local_m": record["centroid_local_m"],
-            })
+            metadata.append(
+                {
+                    "id": store_id,
+                    "name": title,
+                    "category": record["category"],
+                    "subcategory": record["subcategory"],
+                    "entrance_node_id": None,
+                    "centroid_local_m": record["centroid_local_m"],
+                }
+            )
 
     footprint = floor_footprint(floor)
     graph = {
@@ -286,13 +296,13 @@ def build_floor(payload: dict, floor: dict, geo: dict) -> tuple[dict, dict]:
             "type": "dabeeo_map_units_scaled",
             "calibration_version": f"dabeeo-official-v{payload.get('versionString')}",
             "source_map_size": payload.get("size"),
-            "scale": {"x_m_per_source_unit": SCALE_M_PER_UNIT,
-                      "y_m_per_source_unit": SCALE_M_PER_UNIT},
+            "scale": {"x_m_per_source_unit": SCALE_M_PER_UNIT, "y_m_per_source_unit": SCALE_M_PER_UNIT},
             "affine_transforms": {
                 "source_to_local_m": {
                     "type": "affine_2d",
                     "matrix": [[SCALE_M_PER_UNIT, 0, 0], [0, SCALE_M_PER_UNIT, 0], [0, 0, 1]],
-                    "input_axes": ["x", "y"], "output_axes": ["x", "y"],
+                    "input_axes": ["x", "y"],
+                    "output_axes": ["x", "y"],
                 },
                 "local_m_to_wgs84": geo,
             },
@@ -316,8 +326,13 @@ def build_floor(payload: dict, floor: dict, geo: dict) -> tuple[dict, dict]:
         "store_polygons_imported": True,
         "store_polygon_metadata": metadata,
         "manual_review_candidates": [],
-        "counts": {"nodes": len(nodes), "edges": len(edges), "transfers": len(transfers),
-                   "stores": len(stores), "polygons": len(polygons)},
+        "counts": {
+            "nodes": len(nodes),
+            "edges": len(edges),
+            "transfers": len(transfers),
+            "stores": len(stores),
+            "polygons": len(polygons),
+        },
         "building_footprint_local_m": footprint,
     }
     store_payload = {
@@ -326,8 +341,12 @@ def build_floor(payload: dict, floor: dict, geo: dict) -> tuple[dict, dict]:
         "coordinate_frame": "dabeeo_local_m",
         "stores": stores,
         "unmatched": [],
-        "summary": {"source": "dabeeo official map", "store_count": len(stores),
-                    "polygon_count": len(polygons), "review_required": False},
+        "summary": {
+            "source": "dabeeo official map",
+            "store_count": len(stores),
+            "polygon_count": len(polygons),
+            "review_required": False,
+        },
     }
     return code, {"graph": graph, "stores": store_payload}
 
@@ -341,16 +360,20 @@ def main(payload_path: Path) -> None:
     for floor in payload.get("floors") or []:
         code, built = build_floor(payload, floor, geo)
         (OUT / f"{code}.json").write_text(
-            json.dumps(built["graph"], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            json.dumps(built["graph"], ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
         (OUT / f"stores_{code}.json").write_text(
-            json.dumps(built["stores"], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            json.dumps(built["stores"], ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
         c = built["graph"]["counts"]
         fp = built["graph"]["building_footprint_local_m"]
         xs = [p["x"] for p in fp] or [0]
         ys = [p["y"] for p in fp] or [0]
-        print(f"{code:5s}{c['nodes']:6d}{c['edges']:7d}{c['transfers']:6d}"
-              f"{c['stores']:6d}{c['polygons']:7d}  {len(fp)}각형 "
-              f"{max(xs) - min(xs):.1f}x{max(ys) - min(ys):.1f}m")
+        print(
+            f"{code:5s}{c['nodes']:6d}{c['edges']:7d}{c['transfers']:6d}"
+            f"{c['stores']:6d}{c['polygons']:7d}  {len(fp)}각형 "
+            f"{max(xs) - min(xs):.1f}x{max(ys) - min(ys):.1f}m"
+        )
     print(f"\n생성 위치: {OUT}")
 
 

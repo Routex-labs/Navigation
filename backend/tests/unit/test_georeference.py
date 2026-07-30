@@ -33,11 +33,7 @@ def test_알려진_affine_변환을_정확히_복원한다():
     true_transform = GeoTransform(a=0.9, b=0.15, c=-0.05, d=1.3, tx=126.9283, ty=37.5265)
 
     local_points = [(0.0, 0.0), (30.0, 0.0), (0.0, 40.0), (15.0, 25.0), (50.0, 10.0)]
-    pairs = [
-        PointPair(x=x, y=y, u=u, v=v)
-        for x, y in local_points
-        for u, v in [true_transform.apply_uv(x, y)]
-    ]
+    pairs = [PointPair(x=x, y=y, u=u, v=v) for x, y in local_points for u, v in [true_transform.apply_uv(x, y)]]
 
     fitted = fit_affine_transform(pairs)
 
@@ -63,18 +59,14 @@ def test_apply는_lat_lng_순서를_지킨다():
 # 부족함) 명시적으로 거부한다.
 def test_대응점이_3개_미만이면_에러를_낸다():
     with pytest.raises(ValueError):
-        fit_affine_transform(
-            [PointPair(x=0, y=0, u=127.0, v=37.0), PointPair(x=1, y=0, u=128.0, v=37.0)]
-        )
+        fit_affine_transform([PointPair(x=0, y=0, u=127.0, v=37.0), PointPair(x=1, y=0, u=128.0, v=37.0)])
 
 
 # fit_wgs84_transform으로 피팅한 변환이, 원래 변환(lng_scale 포함)과 같은
 # 결과를 내는지 확인한다(왕복 정확도).
 def test_fit_wgs84_transform은_원래_변환을_복원한다():
     true_lng_scale = math.cos(math.radians(37.5))
-    true_transform = GeoTransform(
-        a=1e-5, b=2e-6, c=-1e-6, d=1.1e-5, tx=127.0, ty=37.5, lng_scale=true_lng_scale
-    )
+    true_transform = GeoTransform(a=1e-5, b=2e-6, c=-1e-6, d=1.1e-5, tx=127.0, ty=37.5, lng_scale=true_lng_scale)
 
     local_points = [
         (0.0, 0.0),
@@ -84,11 +76,7 @@ def test_fit_wgs84_transform은_원래_변환을_복원한다():
         (-30.0, 90.0),
         (20.0, -15.0),
     ]
-    pairs = [
-        PointPair(x=x, y=y, u=lng, v=lat)
-        for x, y in local_points
-        for lat, lng in [true_transform.apply(x, y)]
-    ]
+    pairs = [PointPair(x=x, y=y, u=lng, v=lat) for x, y in local_points for lat, lng in [true_transform.apply(x, y)]]
 
     fitted = fit_wgs84_transform(pairs)
 
@@ -117,17 +105,12 @@ def test_fit_wgs84_transform은_비등방_affine_관계와_경위도_스케일�
     base_lat, base_lng = 37.5, 127.0
     rect_m = [(0.0, 0.0), (100.0, 0.0), (100.0, 80.0), (0.0, 80.0)]
     y_stretch = 1.5  # x와 y의 실제 물리적 스케일이 다르다는 것을 흉내낸다.
-    wgs84_rect = [
-        (base_lat + (y * y_stretch) / m_per_deg_lat, base_lng + x / m_per_deg_lng)
-        for x, y in rect_m
-    ]
+    wgs84_rect = [(base_lat + (y * y_stretch) / m_per_deg_lat, base_lng + x / m_per_deg_lng) for x, y in rect_m]
     true_area = _polygon_area_m2(wgs84_rect)
     expected_area = 100.0 * (80.0 * y_stretch)
     assert true_area == pytest.approx(expected_area, rel=1e-3)
 
-    pairs = [
-        PointPair(x=x, y=y, u=lng, v=lat) for (x, y), (lat, lng) in zip(rect_m, wgs84_rect)
-    ]
+    pairs = [PointPair(x=x, y=y, u=lng, v=lat) for (x, y), (lat, lng) in zip(rect_m, wgs84_rect)]
 
     correctly_fitted = fit_wgs84_transform(pairs)
     correct_rect = [correctly_fitted.apply(x, y) for x, y in rect_m]

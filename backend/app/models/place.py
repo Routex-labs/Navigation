@@ -26,7 +26,7 @@ class Store(Base):
 
     name: Mapped[str] = mapped_column(String, nullable=False)  # 매장명 (화장실·엘리베이터도 매장으로 저장됨)
 
-    category: Mapped[str | None] = mapped_column(String)     # 카테고리 (예: 편의점·패션), 선택
+    category: Mapped[str | None] = mapped_column(String)  # 카테고리 (예: 편의점·패션), 선택
     subcategory: Mapped[str | None] = mapped_column(String)  # 세부 카테고리, 선택
 
     centroid_x_m: Mapped[float] = mapped_column(Float, nullable=False)  # 매장 중심점 로컬 좌표 X (미터)
@@ -73,5 +73,3 @@ class Poi(Base):
     linked_node: Mapped[Node | None] = relationship(
         foreign_keys=[linked_node_id],
     )  # 원본 노드 객체 (linked_node_id 대응), 선택
-
-

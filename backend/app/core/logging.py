@@ -80,9 +80,7 @@ async def _log_http_exception(request: Request, exc: StarletteHTTPException) -> 
 
 # 요청 검증 실패(422)를 어느 필드가 왜 막혔는지와 함께 남기고, 응답은 기본 핸들러에
 # 위임한다. 클라이언트 버그 추적용이라 WARNING.
-async def _log_validation_exception(
-    request: Request, exc: RequestValidationError
-) -> Response:
+async def _log_validation_exception(request: Request, exc: RequestValidationError) -> Response:
     logger.warning(
         "%s %s -> 422 검증 실패: %s",
         request.method,

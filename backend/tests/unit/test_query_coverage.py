@@ -31,11 +31,7 @@ def _load_store_names() -> dict[str, list[str]]:
         floor = path.stem.replace("stores_", "").upper()
         raw = json.loads(path.read_text(encoding="utf-8"))
         items = raw if isinstance(raw, list) else raw.get("data") or raw.get("stores") or []
-        by_floor[floor] = [
-            str(item["name"])
-            for item in items
-            if isinstance(item, dict) and item.get("name")
-        ]
+        by_floor[floor] = [str(item["name"]) for item in items if isinstance(item, dict) and item.get("name")]
     return by_floor
 
 
@@ -126,9 +122,7 @@ def test_수직이동수단과_편의시설_질의가_정규화된다(facility, 
 # 이 시설들이 실제로 여러 층에 걸쳐 존재하는지 — 층 목록 응답(match_info)의 전제다.
 @pytest.mark.parametrize(("facility", "floor_count"), sorted(_FACILITIES.items()))
 def test_편의시설이_여러_층에_존재한다(facility, floor_count):
-    floors = [
-        floor for floor, names in _NAMES_BY_FLOOR.items() if facility in names
-    ]
+    floors = [floor for floor, names in _NAMES_BY_FLOOR.items() if facility in names]
     assert len(floors) == floor_count, f"{facility} 존재 층: {sorted(floors)}"
 
 

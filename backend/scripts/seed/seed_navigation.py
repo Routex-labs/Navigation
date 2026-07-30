@@ -52,10 +52,7 @@ def add_dataset(session: Session, data: dict) -> None:
     floor_data = building_data["floor"]
     building_id = building_data["id"]
     floor_id = floor_data["id"]
-    node_points = {
-        node["id"]: node["position"]["local_m"]
-        for node in data["nodes"]
-    }
+    node_points = {node["id"]: node["position"]["local_m"] for node in data["nodes"]}
 
     # 같은 건물의 여러 층을 이어서 시드할 때 Building은 한 번만 생성한다.
     # autoflush=False이므로 직후 flush로 identity map에 올려 다음 층 조회가 찾도록 한다.
@@ -76,9 +73,7 @@ def add_dataset(session: Session, data: dict) -> None:
             building_id=building_id,
             name=floor_data["name"],
             level=floor_data["level"],
-            map_calibration_version=building_data.get(
-                "map_calibration_version", "unversioned"
-            ),
+            map_calibration_version=building_data.get("map_calibration_version", "unversioned"),
             footprint_local_m=floor_data.get("footprint_local_m"),
         )
     )
@@ -165,4 +160,3 @@ def add_transfer_edges(session: Session, transfers: list[dict]) -> None:
         )
         for transfer in transfers
     )
-
