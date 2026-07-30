@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/service_locator.dart';
 import '../models/poi_search_result.dart';
 import '../theme/app_theme.dart';
+import 'sheet_grab_handle.dart';
 
 /// 자연어로 매장을 찾는 패널. 백엔드의 하이브리드 질의(`POST /query/ai`)를
 /// 그대로 호출한다.
@@ -144,6 +145,7 @@ class _AiSearchSheetState extends State<AiSearchSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const SheetGrabHandle(),
             _header(context),
             const Divider(height: 1),
             Flexible(child: _body(context)),

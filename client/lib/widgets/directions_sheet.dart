@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../theme/app_theme.dart';
+import 'sheet_grab_handle.dart';
 
 /// 길찾기 시트에서 고를 수 있는 출발지/도착지 후보. 야외 모드에서는 [Building],
 /// 실내 모드에서는 [PoiSearchResult]를 이 공통 형태로 변환해 검색·선택
@@ -304,8 +305,12 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
           return Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // 이 시트는 헤더(제목·입력창)가 스크롤 밖에 있어서 손잡이를 끌면
+              // 크기 조절이 아니라 시트 자체가 끌린다(끌어서 닫기). 표시의
+              // 의미는 같으므로 다른 시트와 같은 자리에 같은 모양으로 둔다.
+              const SheetGrabHandle(),
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
