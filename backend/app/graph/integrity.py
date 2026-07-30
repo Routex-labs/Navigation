@@ -42,7 +42,7 @@ class GraphIntegrityError(ValueError):
     데이터가 DB에 반쯤 들어간 채 실패하지 않도록, commit 전에 던져 롤백을 유도한다.
     """
 
-    def __init__(self, report: "GraphReport") -> None:
+    def __init__(self, report: GraphReport) -> None:
         self.report = report
         detail = "\n  - ".join(f"[{issue.code}] {issue.message}" for issue in report.errors)
         super().__init__(f"그래프 무결성 검증 실패 ({len(report.errors)}건):\n  - {detail}")
@@ -419,9 +419,10 @@ def _build_stats(data: GraphData, floor_by_id: dict[str, FloorInfo]) -> dict[str
         if building is not None:
             by_building[building]["nodes"] += 1
     for edge in data.edges:
-        floor = floor_by_id.get(edge.floor_id) if edge.floor_id else None
-        # 전이 간선은 floor_id가 없으므로 from endpoint의 건물로 집계한다.
-        building = floor.building_id if floor else None
+        # 층 내부 간선만 건물별로 집계한다. 전이 간선은 floor_id가 없어 여기서 빠지고,
+        # 최상위 edges·transfer_edges 합계에서 별도로 센다(건물별 전이 수는 통계 목적이 아니다).
+        edge_floor = floor_by_id.get(edge.floor_id) if edge.floor_id else None
+        building = edge_floor.building_id if edge_floor else None
         if building is not None:
             by_building[building]["edges"] += 1
 

@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from app.core.config import API_ROOT
@@ -32,7 +32,7 @@ def write_seed_report(path: Path = SEED_REPORT_PATH) -> graph_integrity.GraphRep
     finally:
         session.close()
 
-    payload = {"generated_at": datetime.now(timezone.utc).isoformat(), **report.to_dict()}
+    payload = {"generated_at": datetime.now(UTC).isoformat(), **report.to_dict()}
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return report
