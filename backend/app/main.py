@@ -1,16 +1,56 @@
 # FastAPI 애플리케이션 진입점(entry point)
-# 앱 생성, CORS, Router 등록, /health를 이 모듈이 담당한다.
+# 앱 생성, 미들웨어(CORS·TrustedHost·본문 크기 제한), Router 등록을 이 모듈이 담당한다.
+# /health(liveness)·/health/ready(readiness)는 routers/health.py로 분리했다.
 # DB 설정과 Session은 core/config.py, core/database.py에 있다.
 # 실행 방법 (backend/ 디렉토리에서):
 #   1) 최초 1회 DB 적재: python -m scripts.seed.reset_and_seed
 #   2) 서버 실행:        uvicorn app.main:app --reload
 
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.core.config import settings
 from app.core.logging import configure_logging, install_exception_logging
-from app.dto.health import HealthResponse
+from app.core.request_limits import BodySizeLimitMiddleware
+
+logger = logging.getLogger("app")
+
+# 개발 기본값: localhost의 임의 포트만 허용한다(Flutter 웹은 실행마다 포트가 바뀐다).
+# 와일드카드('*')가 아니라 정규식으로 localhost/127.0.0.1에 한정한다.
+_DEV_CORS_ORIGIN_REGEX = r"http://(localhost|127\.0\.0\.1)(:\d+)?"
+
+
+# CORS 미들웨어를 환경 기준으로 건다. 운영에서는 절대 와일드카드를 쓰지 않는다.
+#   - NAV_CORS_ORIGINS가 있으면(개발·운영 무관) 그 화이트리스트만 허용한다.
+#   - 없고 개발 환경이면 localhost 임의 포트만 정규식으로 허용한다(편의).
+#   - 없고 운영 환경이면 교차 출처를 전부 막는다(동일 출처 요청은 그대로 동작).
+def _configure_cors(app: FastAPI) -> None:
+    origins = settings.cors_origins_list
+    if origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=origins,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+        return
+    if not settings.is_production:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origin_regex=_DEV_CORS_ORIGIN_REGEX,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+        return
+    # 운영인데 origin이 하나도 지정되지 않았다. 교차 출처를 막되(미들웨어 미등록),
+    # 잘못된 배포를 알아채도록 경고를 남긴다.
+    logger.warning(
+        "운영(environment=production)인데 NAV_CORS_ORIGINS가 비어 있다 — "
+        "교차 출처 요청을 전부 차단한다. Flutter 앱 도메인을 지정하라."
+    )
 
 
 # FastAPI 앱 팩토리. uvicorn과 테스트가 이 함수로 앱을 만든다.
@@ -18,29 +58,29 @@ def create_app() -> FastAPI:
     # 로그 포맷·레벨을 먼저 통일한다(요청 상태·에러는 stdout으로 남는다).
     configure_logging()
 
-    from app.routers import buildings, fonts, query
+    from app.routers import buildings, fonts, health, query
 
     app = FastAPI(title="Navigation API", version="0.3.0")
 
-    # 개발 중에는 모든 출처(*) 허용. 운영 배포 시 Flutter 앱 도메인으로 교체 필요
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # 요청 본문 크기 제한. 거대한 본문 하나로 메모리를 밀어 넣는 요청을 413으로 끊는다.
+    app.add_middleware(BodySizeLimitMiddleware, max_body_bytes=settings.max_request_body_bytes)
+
+    # CORS는 환경 기준 화이트리스트로 건다(운영 와일드카드 금지).
+    _configure_cors(app)
+
+    # TrustedHost는 화이트리스트가 지정됐을 때만 건다. 비어 있으면 필터하지 않아
+    # Cloud Run의 동적 호스트명·테스트 클라이언트를 깨지 않는다(운영에서 env로 잠근다).
+    if settings.allowed_hosts_list:
+        app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts_list)
+
     # 4xx/422 예외를 이유와 함께 로그로 남긴다(500 트레이스백은 uvicorn.error가 담당).
     install_exception_logging(app)
 
     # 라우터 등록.
+    app.include_router(health.router)  # liveness /health · readiness /health/ready
     app.include_router(buildings.router)  # 건물/지도/그래프/경로 API
     app.include_router(fonts.router)  # MapLibre 심볼 레이어용 글리프
     app.include_router(query.router)  # 자연어 질의 API(경량 매칭 + AI 임베딩 검색)
-
-    # 서버 생존 확인. Flutter가 서버 연결 전 호출.
-    @app.get("/health", tags=["health"], response_model=HealthResponse)
-    def health():
-        return {"status": "ok"}
 
     # AI 질의용 임베딩 모델을 백그라운드로 미리 올린다(NAV_WARM_EMBEDDING=1일 때만).
     # import까지 이 안에 두는 이유: 끄고 실행하는 프로세스(테스트 등)는 torch를
