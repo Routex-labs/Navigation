@@ -143,12 +143,15 @@ def get_building_graph(
     node_ids = {node.id for node in nodes}
 
     # 층 내부 간선 + 이 건물 노드를 잇는 전이 간선(floor_id=None). 전이 간선은
-    # 건물 스코프가 없으므로 from 노드가 이 건물 소속인 것만 고른다.
+    # 건물 스코프가 없으므로 **양 끝 노드가 모두** 이 건물 소속인 것만 고른다.
+    # from만 확인하면 to가 다른 건물 노드인 간선이 딸려 와, 그래프에 없는 노드를
+    # 가리키는 dangling 간선(to_floor_id=None)이 응답에 실린다.
     intra_edges = session.scalars(select(Edge).where(Edge.floor_id.in_(floor_ids))).all()
     transfer_edges = session.scalars(
         select(Edge).where(
             Edge.floor_id.is_(None),
             Edge.from_node_id.in_(node_ids),
+            Edge.to_node_id.in_(node_ids),
         )
     ).all()
     edges = list(intra_edges) + [edge for edge in transfer_edges if _vertical_allows(vertical, edge.transfer_mode)]
