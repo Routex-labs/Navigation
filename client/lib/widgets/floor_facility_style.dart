@@ -32,6 +32,14 @@ const kPoiIconByType = <String, IconData>{
 const kDefaultPoiIcon = Icons.place;
 const kPoiIconBackgroundColor = Color(0xFF76AE6D);
 
+/// 실내 지도에서 POI·편의시설 아이콘을 그릴 배율. 아이콘 비트맵이 96px 캔버스라
+/// 화면 지름은 `96 * 이 값`(=약 42px)이다. 처음 0.28(약 27px)로 뒀더니 화장실·
+/// 장애인화장실·정수기 같은 시설이 매장 라벨에 묻혀 안 보인다는 피드백을 받아
+/// 1.5배로 올렸다. 원본이 96px이므로 이 값까지는 확대가 아니라 축소 렌더링이라
+/// 아이콘이 흐려지지 않는다. 더 키우려면 [renderPoiIconPng]·
+/// [renderFacilityIconPng]의 캔버스 크기도 같이 올려야 한다.
+const kIndoorPoiIconSize = 0.42;
+
 /// 매장 폴리곤이지만 이름이 이 표에 있는 시설(화장실·정수기 등)은 라벨 옆에
 /// 종류별 아이콘을 함께 얹는다. POI(엘리베이터·에스컬레이터 등)와 달리 이
 /// 시설들은 백엔드에서 `pois` 레이어가 아니라 `stores` 레이어에 들어오기 때문에

@@ -45,16 +45,19 @@ extension MapColorHex on Color {
 
 /// POI/시설 아이콘 크기. 오버레이가 페이드인되는 구간에서는 살짝 작게, 사용자가
 /// 실내로 더 확대해 들어갈수록 실내 화면과 비슷한 크기로 커진다. 아이콘 캔버스
-/// 96px 기준으로 실내 화면은 0.28 고정이지만, 야외 오버레이는 화면 시야가 훨씬
-/// 넓어 그대로 두면 라벨을 가릴 만큼 크게 보인다.
+/// 96px 기준으로 실내 화면은 [kIndoorPoiIconSize] 고정이지만, 야외 오버레이는
+/// 화면 시야가 훨씬 넓어 그대로 두면 라벨을 가릴 만큼 크게 보인다. 화장실·정수기
+/// 같은 시설이 잘 안 보인다는 피드백에 맞춰 실내 배율과 같은 1.5배로 올렸고,
+/// 최대값은 실내 화면(0.42)보다 크게 잡아 확대해 들어갈수록 실내와 비슷하게
+/// 읽히도록 둔다.
 const indoorIconSizeExpr = [
   'interpolate',
   ['linear'],
   ['zoom'],
   indoorOverlayFadeInEndZoom,
-  0.22,
+  0.33,
   20,
-  0.42,
+  0.6,
 ];
 
 /// 야외 건물 폴리곤 fill. 탭 피드백으로 opacity만 오르내리지만, 그때도 색을
@@ -144,5 +147,7 @@ SymbolLayerProperties indoorFacilityIconProps(List<Object> fadeExpr) =>
       iconSize: indoorIconSizeExpr,
       iconOpacity: fadeExpr,
       iconAllowOverlap: true,
-      iconOffset: [0, -18],
+      // iconOffset 없음 = 폴리곤 중심(centroid)에 그린다. 실내 화면
+      // (`FloorPlanView`)의 편의시설 아이콘과 같은 기준이라 두 화면 사이에서
+      // 아이콘 위치가 어긋나지 않는다.
     );

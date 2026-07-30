@@ -89,6 +89,7 @@ class IndoorMapBody extends StatefulWidget {
     this.onRouteVisibleChanged,
     this.onStoreTap,
     this.onPlacingLocationChanged,
+    this.onLocationAnchored,
     this.outerOverlayKeys = const [],
   });
 
@@ -106,6 +107,14 @@ class IndoorMapBody extends StatefulWidget {
   /// 상위(MapShellScreen)가 이 값으로 하단 바의 "위치 지정" 버튼을 눌린
   /// 상태로 표시해서, 사용자가 다음 동작(지도 탭)을 알 수 있게 한다.
   final ValueChanged<bool>? onPlacingLocationChanged;
+
+  /// 사용자의 현재 위치가 새로 잡혔을 때 호출된다 — "위치 지정"으로 지도를
+  /// 탭했을 때가 여기에 해당한다.
+  ///
+  /// 상위(MapShellScreen)는 이 신호로 **기억해둔 출발지 매장을 버린다.** 그러지
+  /// 않으면 매장을 출발지로 지정해 길찾기를 한 뒤 위치를 다시 잡아도, 다음
+  /// 길찾기가 방금 잡은 위치가 아니라 예전에 고른 매장에서 출발한다.
+  final VoidCallback? onLocationAnchored;
 
   /// 상위(MapShellScreen)가 지도 위에 얹은 오버레이(검색창·저장한 장소 pill·
   /// 하단 공용 바 등)의 GlobalKey들. 이 영역 안의 탭은 뒤의 매장 선택으로
@@ -645,30 +654,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       _showPdrMessage('이 층은 위치 지정에 필요한 지도 정보가 아직 없습니다.');
       return;
     }
-    if (indoorNavigationDriver.currentRuntimeStatus.state ==
-        PdrRuntimeState.idle) {
-      await _startPdrIfIdle();
-      if (!mounted) return;
-      if (indoorNavigationDriver.currentRuntimeStatus.state ==
-          PdrRuntimeState.idle) {
-        _showPdrMessage(
-          '걸음 센서 권한이 없어 위치를 추적할 수 없습니다. 설정에서 동작·피트니스 권한을 허용해주세요.',
-        );
-        return;
-      }
-    }
-    // 위치를 다시 지정하는 것은 기준점을 새로 잡는 것이다. 이전 anchor 기준의
-    // 궤적과 보정 상태를 비워야 새 기준점에서 이어지지 않은 선이 남지 않는다.
-    setState(() {
-      _pdrTrailState.beginNewSession();
-      _corridorTrackingSession.reset();
-      _routeProgress = null;
-      _lastRouteTraveledM = null;
-      _lastRouteProgressAcceptedSteps = null;
-      _lastRouteEvaluatedSteps = null;
-      _offRouteEvidenceUpdates = 0;
-      _offRouteFirstEvidenceAtMs = null;
-    });
+    // 위치를 다시 지정하는 것은 기준점을 새로 잡는 것이다. 세션을 이 층에 맞추고
+    // 이전 anchor 기준의 궤적·보정 상태를 비우는 일은 모두 여기서 처리한다.
+    if (!await _bindPdrSessionToFloor(floor, announceFailure: true)) return;
     _setPlacingAnchor(true);
     _showPdrMessage('지도에서 현재 서 있는 위치를 탭해 지정해주세요.');
   }
@@ -701,6 +689,19 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     setState(() {
       _routeDestination = destination;
     });
+
+    // 매장을 출발지로 골랐으면 현재 위치도 그 매장으로 옮긴다. 이걸 안 하면
+    // 경로는 그 매장에서 뻗어 나가는데 위치 아이콘만 예전 자리(또는 아무 데도)
+    // 남아, 사용자는 자기가 어디 있다고 표시되는지와 경로가 어긋난 화면을 본다.
+    final originNodeId = origin?.nodeId;
+    if (originNodeId != null && startFloor.isNotEmpty) {
+      await _anchorAtStoreOrigin(
+        floor: startFloor,
+        nodeId: originNodeId,
+        storePoint: origin!.point,
+      );
+      if (!mounted) return;
+    }
 
     if (startFloor == endFloor) {
       await _computeAndShowSingleFloorRoute(
@@ -2033,6 +2034,105 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     }
   }
 
+  /// PDR 세션을 [floor]에 맞춘다. 이어서 앵커를 찍어도 되면 true.
+  ///
+  /// **다른 층에서 이미 돌고 있는 세션을 그냥 재사용하면 안 된다.** 앵커에
+  /// 찍히는 층은 세션의 층([IndoorNavigationView.currentFloorId])이고, 위치
+  /// 마커·경로는 `anchor.floorId == 지금 보고 있는 층`일 때만 그려진다. 그래서
+  /// 1층에서 위치를 지정한 뒤 2층에서 다시 지정하면, 새 앵커가 여전히 1층으로
+  /// 기록돼 2층 지도에는 아무것도 나타나지 않았다.
+  ///
+  /// 어느 경로로 들어와도 앵커를 새로 찍는 것은 **기준점을 새로 잡는 것**이므로,
+  /// 이전 기준점 기준의 궤적·복도 보정·경로 진행 상태를 함께 비운다. 남겨두면 새
+  /// 기준점에서 이어지지 않은 선이 남고 남은거리가 튄다.
+  ///
+  /// [announceFailure]는 센서를 못 켠 이유를 사용자에게 알릴지다. 사용자가 직접
+  /// "위치 지정"을 누른 경우에만 켠다 — 자동으로 출발지 앵커를 찍는 경로는 조용히
+  /// 포기하고 경로만 그린다.
+  Future<bool> _bindPdrSessionToFloor(
+    String floor, {
+    bool announceFailure = false,
+  }) async {
+    if (indoorNavigationDriver.currentRuntimeStatus.state ==
+        PdrRuntimeState.idle) {
+      await _startPdrIfIdle();
+      if (!mounted) return false;
+      if (indoorNavigationDriver.currentRuntimeStatus.state ==
+          PdrRuntimeState.idle) {
+        if (announceFailure) {
+          _showPdrMessage(
+            '걸음 센서 권한이 없어 위치를 추적할 수 없습니다. 설정에서 동작·피트니스 권한을 허용해주세요.',
+          );
+        }
+        return false;
+      }
+    } else if (indoorNavigationDriver.currentFloorId != floor) {
+      await indoorNavigationDriver.changeFloor(floorId: floor);
+      if (!mounted) return false;
+    }
+    _pdrDebugRecorder?.recordRuntime(
+      indoorNavigationDriver.currentRuntimeStatus,
+    );
+    setState(() {
+      _pdrTrailState.beginNewSession();
+      _corridorTrackingSession.reset();
+      _routeProgress = null;
+      _lastRouteTraveledM = null;
+      _lastRouteProgressAcceptedSteps = null;
+      _lastRouteEvaluatedSteps = null;
+      _offRouteEvidenceUpdates = 0;
+      _offRouteFirstEvidenceAtMs = null;
+    });
+    return true;
+  }
+
+  /// 출발지로 고른 매장 자리에 PDR 앵커를 다시 찍어, 현재 위치 아이콘을 그
+  /// 매장으로 옮긴다. 근거와 실패 처리는 야외 화면의 동명 함수와 같다.
+  Future<void> _anchorAtStoreOrigin({
+    required String floor,
+    required String nodeId,
+    required ll.LatLng storePoint,
+  }) async {
+    // [_confirmPdrAnchor]가 축 변환(axes)을 [_floorGraph]에서 가져오므로,
+    // 앵커를 찍기 전에 그 층 도면이 화면에 올라와 있어야 한다.
+    if (floor != _selectedFloor) {
+      await _selectFloor(floor);
+      if (!mounted) return;
+    }
+    final graph = _floorGraph;
+    if (graph == null || graph.nodes.isEmpty) return;
+
+    // 매장의 입구 노드를 그대로 쓴다. 이미 통로 위에 있어 스냅이 필요 없고,
+    // 경로 탐색이 시작하는 지점과도 정확히 같은 자리가 된다.
+    final node = graph.nodes.where((n) => n.id == nodeId).firstOrNull;
+    final PdrLocalPoint floorPoint;
+    if (node != null) {
+      floorPoint = PdrLocalPoint(node.xM, node.yM);
+    } else {
+      final local = fitFloorGeoTransform(
+        graph.nodes,
+      ).invert(storePoint.latitude, storePoint.longitude);
+      if (local == null) return;
+      final snapped = FloorMapMatcher(
+        graph,
+      ).snapToWalkableNetwork(PdrLocalPoint(local.$1, local.$2));
+      if (snapped == null) return;
+      floorPoint = snapped.point;
+    }
+
+    if (!await _bindPdrSessionToFloor(floor)) return;
+    await _confirmPdrAnchor(floorPoint, notifyLocationChanged: false);
+  }
+
+  /// 지도 탭으로 앵커를 배치하는 경로의 테스트 진입점.
+  ///
+  /// FloorPlanView는 위젯 테스트에서 실제 탭 좌표를 위경도로 되돌려 주지
+  /// 않으므로, 실기기에서 쓰이는 것과 **같은 함수**를 직접 부른다 — 테스트용
+  /// 축약 경로를 따로 두면 정작 검증하려는 분기를 우회한다. 야외 화면의
+  /// `handleMapClickForTest`와 같은 목적이다.
+  @visibleForTesting
+  bool handleMapPressForTest(ll.LatLng point) => _onMapPressedForPdr(point);
+
   bool _onMapPressedForPdr(ll.LatLng point) {
     if (!_placingPdrAnchor) return false;
     final graph = _floorGraph;
@@ -2076,7 +2176,15 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     return false;
   }
 
-  Future<void> _confirmPdrAnchor(PdrLocalPoint floorPoint) async {
+  /// [notifyLocationChanged]는 "사용자의 현재 위치가 새로 잡혔다"를 상위에
+  /// 알릴지다. 기본은 알린다 — 지도 탭처럼 **새 위치가 생긴** 경우이기 때문이다.
+  /// 출발지 매장을 따라 찍는 경우([_anchorAtStoreOrigin])만 끈다. 그쪽은 상위가
+  /// 방금 정한 출발지를 되짚어 찍는 것이라, 다시 알리면 상위가 그 출발지를
+  /// 스스로 버리게 된다.
+  Future<void> _confirmPdrAnchor(
+    PdrLocalPoint floorPoint, {
+    bool notifyLocationChanged = true,
+  }) async {
     final settled = await _waitForHeadingToSettle();
     if (!mounted) return;
     if (!settled) {
@@ -2106,6 +2214,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     }
     if (!mounted) return;
     _setPlacingAnchor(false);
+    if (notifyLocationChanged) widget.onLocationAnchored?.call();
     // 배치가 끝났다는 안내는 따로 띄우지 않는다. 도면에 위치 마커가 바로
     // 찍히고 안내 배너가 사라지는 것으로 이미 결과가 보이는데, 토스트까지
     // 겹치면 방금 지정한 지점을 가린다.

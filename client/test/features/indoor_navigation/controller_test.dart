@@ -370,4 +370,36 @@ void main() {
     expect(source.resetCount, 2);
     expect(driver.currentCalibration.phase, CalibrationPhase.awaitingPin);
   });
+
+  test('anchor에는 지금 세션의 층이 찍힌다', () async {
+    // 화면 쪽 규칙의 근거. 위치 마커·경로는 `anchor.floorId == 보고 있는 층`일
+    // 때만 그려지므로, 세션의 층이 옛 층에 묶여 있으면 새로 찍은 anchor가
+    // 통째로 무시된다("다른 층에서는 위치 지정이 안 된다"의 정체).
+    await driver.startGuidance(floorId: 'F1');
+    source.emitRaw(motionEvent(tMs: 1000, heading: 0));
+    await settle();
+    await driver.confirmAnchorByPin(floorPointM: const PdrLocalPoint(1, 2));
+
+    expect(driver.currentFloorId, 'F1');
+    expect(driver.currentCalibration.anchor?.floorId, 'F1');
+  });
+
+  test('changeFloor 뒤 확정한 anchor는 새 층으로 기록된다', () async {
+    await driver.startGuidance(floorId: 'F1');
+    source.emitRaw(motionEvent(tMs: 1000, heading: 0));
+    await settle();
+    await driver.confirmAnchorByPin(floorPointM: const PdrLocalPoint(1, 2));
+
+    await driver.changeFloor(floorId: 'F2');
+    // 층을 바꾸면 이전 anchor는 버려진다. 그래서 화면은 층이 **실제로 다를 때만**
+    // 이걸 불러야 한다 — 같은 층에서 위치만 다시 찍는 사용자의 anchor까지 날린다.
+    expect(driver.currentCalibration.anchor, isNull);
+
+    source.emitRaw(motionEvent(tMs: 2000, heading: 0));
+    await settle();
+    await driver.confirmAnchorByPin(floorPointM: const PdrLocalPoint(3, 4));
+
+    expect(driver.currentFloorId, 'F2');
+    expect(driver.currentCalibration.anchor?.floorId, 'F2');
+  });
 }

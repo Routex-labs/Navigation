@@ -77,6 +77,9 @@ class IndoorNavigationDriver implements IndoorNavigationController {
   PdrRuntimeStatus get currentRuntimeStatus => _runtimeStatus;
 
   @override
+  String? get currentFloorId => _floorId;
+
+  @override
   Stream<AltitudeSample> get altitudeSamples => _altitudes.stream;
 
   @override

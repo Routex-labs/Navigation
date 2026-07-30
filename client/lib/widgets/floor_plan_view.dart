@@ -684,7 +684,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
           ],
           poiIconImageName(kDefaultPoiIcon),
         ],
-        iconSize: 0.28,
+        iconSize: kIndoorPoiIconSize,
         iconOpacity: 0.92,
         iconAllowOverlap: true,
       ),
@@ -725,13 +725,14 @@ class FloorPlanViewState extends State<FloorPlanView> {
           ],
           poiIconImageName(kDefaultPoiIcon),
         ],
-        iconSize: 0.28,
+        iconSize: kIndoorPoiIconSize,
         iconOpacity: 0.92,
         iconAllowOverlap: true,
-        // 라벨(textOffset 없음, centroid에 그려짐) 위쪽으로 아이콘이 살짝
-        // 뜨도록 y를 음수(=위)로 준다. 폴리곤이 작아도 아이콘과 라벨이
-        // 서로 가리지 않고 위·아래로 정렬돼 읽힌다.
-        iconOffset: [0, -18],
+        // iconOffset을 주지 않아 아이콘이 폴리곤 중심(centroid)에 그려진다.
+        // 벡터 타일 심볼의 기준점이 폴리곤 centroid이므로, 오프셋이 없으면
+        // 시설 블록 정중앙에 아이콘이 놓인다. 같은 centroid에 그려지는 매장명
+        // 라벨은 아이콘 아래에 깔리므로, 이 시설들은 이름 텍스트보다 아이콘으로
+        // 식별하게 된다.
       ),
       sourceLayer: 'stores',
       filter: [

@@ -4,6 +4,7 @@ import '../core/service_locator.dart';
 import '../models/favorite_place.dart';
 import '../state/favorites_controller.dart';
 import '../theme/app_theme.dart';
+import 'sheet_grab_handle.dart';
 import 'sheet_header.dart';
 
 /// 매장 정보 시트에서 사용자가 고를 수 있는 다음 동작.
@@ -169,6 +170,7 @@ class _StoreInfoSheetState extends State<StoreInfoSheet> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    const SheetGrabHandle(),
                     SheetHeader(
                       onCloseAll: widget.onCloseAll,
                       onIntentionalPop: _markIntentional,

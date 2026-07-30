@@ -480,6 +480,8 @@ class OutdoorMapBody extends StatefulWidget {
     this.onPlacingLocationChanged,
     this.onIndoorEnteredChanged,
     this.onStoreTap,
+    this.onLocationAnchored,
+    this.outerOverlayKeys = const [],
   });
 
   /// 이 야외 지도가 지금 화면에 보이는지. [MapShellScreen]은 야외/실내를
@@ -504,6 +506,21 @@ class OutdoorMapBody extends StatefulWidget {
   /// 실내 진입 오버레이에서 매장 폴리곤을 탭했을 때 호출된다. 상위
   /// (MapShellScreen)가 실내 화면과 동일한 매장 정보 시트를 띄운다.
   final ValueChanged<PoiSearchResult>? onStoreTap;
+
+  /// 사용자의 현재 위치가 새로 잡혔을 때 호출된다 — "위치 지정"으로 지도를
+  /// 탭했을 때와 입구 자동 배치가 여기에 해당한다.
+  ///
+  /// 상위(MapShellScreen)는 이 신호로 **기억해둔 출발지 매장을 버린다.** 그러지
+  /// 않으면 매장을 출발지로 지정해 길찾기를 한 뒤 위치를 다시 잡아도, 다음
+  /// 길찾기가 방금 잡은 위치가 아니라 예전에 고른 매장에서 출발한다.
+  final VoidCallback? onLocationAnchored;
+
+  /// 상위(MapShellScreen)가 지도 위에 얹은 오버레이(검색창·저장한 장소 pill·
+  /// 카테고리 chip 열·하단 공용 바 등)의 GlobalKey들. 이 영역 안의 탭은
+  /// [_handleMapClick]에서 제외한다 — MapLibre 플랫폼 뷰가 Flutter gesture
+  /// arena를 우회해 오버레이를 누른 탭도 지도 탭으로 함께 도착하기 때문이다.
+  /// 실내 화면(IndoorMapBody)이 같은 목적으로 쓰는 것과 같은 목록이다.
+  final List<GlobalKey> outerOverlayKeys;
 
   @override
   State<OutdoorMapBody> createState() => OutdoorMapBodyState();
@@ -661,6 +678,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   final _mapOverlayTapGuard = MapOverlayTapGuard();
   Offset? _etaClosePointerDown;
 
+  /// 층 선택기. **가장 중요한 항목이다.** 이 열은 실내 진입 상태에서만 뜨는데,
+  /// 그 상태에서 chip을 누른 탭이 지도까지 새어들어가면 그 좌표가 건물 밖으로
+  /// 판정돼 `_exitIndoorByOutsideTap`이 걸린다 — 층을 바꿨을 뿐인데 야외로
+  /// 튕겨 나간다. 지도를 크게 확대해 두면 chip 자리도 건물 안이라 증상이 숨고,
+  /// 건물이 화면 일부만 차지할 만큼 축소했을 때만 재현된다.
+  final GlobalKey _floorSelectorKey = GlobalKey();
+
   /// 위치 지정 안내 배너. 오른쪽 상단 X를 누른 탭이 지도까지 새어들어가 배너
   /// 아래 지점에 앵커가 찍히는 것을 막는다 — 취소했는데 위치가 지정되면
   /// 사용자 입장에선 취소가 안 먹은 것으로 보인다.
@@ -729,8 +753,56 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 문구를 "다시 불러오는 중"으로 바꿔 사용자가 눌린 걸 알 수 있게 한다.
   bool _retryingBuildingLoad = false;
 
+  /// 실패했을 때 스스로 다시 시도하는 간격.
+  ///
+  /// **한 번 실패하면 영영 복구되지 않는 것이 실제 문제였다.** 이 로드는
+  /// initState에서 딱 한 번 돌고, 실패하면 사람이 배지를 누를 때까지 그대로
+  /// 남는다. 그런데 개발 중에는 `uvicorn --reload`가 백엔드 코드를 고칠 때마다
+  /// 서버를 잠깐 내리므로, 하필 그 순간 화면이 열려 있으면 층 선택기·위치
+  /// 지정·실내 진입·실내 도면이 통째로 죽은 채 남는다. 클라이언트를 hot
+  /// reload해도 initState는 다시 돌지 않아 그대로다.
+  ///
+  /// 간격을 늘려 가는 이유는 두 경우를 한 사다리로 덮기 위해서다 — 서버가
+  /// 리로드 중이라 곧 살아나는 경우(앞쪽 짧은 간격)와, 아직 뜨지도 않아 한참
+  /// 걸리는 경우(뒤쪽 긴 간격). 다 쓰면 약 1분간 6번 시도한다.
+  ///
+  /// **무한히 재시도하지는 않는다.** 백엔드가 아예 없는 환경(기기에서 서버
+  /// 없이 실행)에서 영원히 요청을 날리면 배터리와 로그만 태운다. 사다리를 다
+  /// 쓴 뒤에는 배지의 "다시 시도"에 맡긴다.
+  static const _buildingRetryDelays = <Duration>[
+    Duration(seconds: 1),
+    Duration(seconds: 2),
+    Duration(seconds: 4),
+    Duration(seconds: 8),
+    Duration(seconds: 16),
+    Duration(seconds: 30),
+  ];
+
+  int _buildingRetryAttempt = 0;
+  Timer? _buildingRetryTimer;
+
+  /// 다음 자동 재시도를 예약한다. 이미 예약돼 있거나 사다리를 다 썼으면 아무
+  /// 것도 하지 않는다.
+  void _scheduleBuildingRetry() {
+    if (_buildingRetryTimer != null) return;
+    if (_buildingRetryAttempt >= _buildingRetryDelays.length) return;
+    final delay = _buildingRetryDelays[_buildingRetryAttempt++];
+    _buildingRetryTimer = Timer(delay, () {
+      _buildingRetryTimer = null;
+      // 사람이 누른 재시도가 도는 중이면 그 결과를 기다린다. 실패하면 그쪽이
+      // 다시 사다리를 이어 준다.
+      if (!mounted || _retryingBuildingLoad) return;
+      unawaited(_loadBuildingEntrance());
+    });
+  }
+
   Future<void> _retryBuildingLoad() async {
     if (_retryingBuildingLoad) return;
+    // 사람이 직접 눌렀다는 것은 "지금은 될 것 같다"는 신호다. 사다리를 처음
+    // 부터 다시 쓸 수 있게 되돌려, 이번에도 실패하면 짧은 간격부터 다시 시도한다.
+    _buildingRetryTimer?.cancel();
+    _buildingRetryTimer = null;
+    _buildingRetryAttempt = 0;
     setState(() => _retryingBuildingLoad = true);
     await _loadBuildingEntrance();
     if (!mounted) return;
@@ -746,6 +818,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   @override
   void dispose() {
+    _buildingRetryTimer?.cancel();
     _entranceWatchGraceTimer?.cancel();
     _positionSubscription?.cancel();
     _pdrSnapshotSub?.cancel();
@@ -814,10 +887,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       building = await buildingRepository.getBuilding(demoBuildingId);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _buildingLoadFailed = true);
+      if (!_buildingLoadFailed) setState(() => _buildingLoadFailed = true);
+      _scheduleBuildingRetry();
       return;
     }
     if (!mounted) return;
+    // 성공했으면 예약된 재시도는 필요 없다. 사다리도 되돌려, 나중에 다시
+    // 끊겼을 때 짧은 간격부터 새로 시작하게 한다.
+    _buildingRetryTimer?.cancel();
+    _buildingRetryTimer = null;
+    _buildingRetryAttempt = 0;
     setState(() {
       _buildingLoadFailed = false;
       _building = building;
@@ -1058,6 +1137,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 찍히고(예전 버그), 위치가 비어 있다는 이유만으로 신호 배지가 뜬다.
   bool get _outdoorGpsVisible => widget.active && !_indoorEntered;
 
+  /// 실내(PDR) 위치를 화면과 길찾기에 써도 되는 상태인지 — [_outdoorGpsVisible]의
+  /// 반대쪽 짝이다. 두 값은 **동시에 true가 되지 않는다**: 실내 오버레이가 켜져
+  /// 있으면 PDR만, 야외 상태면 GPS만 쓴다.
+  ///
+  /// 이 구분이 없으면 실내에서 위치를 지정한 뒤 축소해 야외로 나왔을 때, 야외
+  /// 지도 위에 실내 위치 아이콘이 그대로 남고(도면은 페이드로 사라졌는데 파란
+  /// 점만 공중에 떠 있는 상태) 길찾기 출발지도 그 실내 앵커로 잡힌다. 야외에서는
+  /// GPS가 위치의 유일한 출처여야 한다.
+  bool get _indoorLocationVisible => _indoorEntered;
+
   /// GPS 구독을 [_gpsTrackingWanted] 상태에 맞춘다. 구독 시작/해제의 유일한
   /// 진입점이라 중복 구독이나 해제 누락이 생기지 않는다.
   void _syncGpsSubscription() {
@@ -1290,12 +1379,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     );
     unawaited(_syncPdrCurrentLayer());
 
-    if (indoorNavigationDriver.currentRuntimeStatus.state ==
-        PdrRuntimeState.idle) {
-      setState(() => _pdrTrailState.beginNewSession());
-      await indoorNavigationDriver.startGuidance(floorId: floor);
-      if (!mounted) return;
-    }
+    // GPS로 건물 안임을 이미 확인했으므로 권한 게이트를 다시 두지 않는다. 세션이
+    // 다른 층에서 돌고 있으면 이 층으로 옮겨야 앵커가 이 층으로 기록된다.
+    if (!await _bindPdrSessionToFloor(floor, gatePermission: false)) return;
     await _awaitSensorWarmup();
     if (!mounted || !_indoorEntered) return;
 
@@ -1330,6 +1416,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
     _syncPdrCurrentLayer();
     unawaited(_syncDebugPdrLayers());
+    // 입구에서 위치를 새로 잡았으므로, 건물에 들어오기 전에 골라둔 출발지 매장은
+    // 더 이상 "지금 내가 있는 곳"이 아니다. 상위가 그 값을 버리게 알린다.
+    widget.onLocationAnchored?.call();
     _replaceSnack('입구를 기준으로 실내 위치를 잡았습니다. 걸음 추적을 시작합니다.');
   }
 
@@ -1569,8 +1658,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       return;
     }
 
+    // 야외 길찾기의 출발지는 GPS 현재 위치뿐이다(실내 앵커는 쓰지 않는다).
+    // 아직 신호를 못 잡았으면 경로를 계산할 수 없으므로, 조용히 끝내지 않고
+    // 이유를 알린다 — 안내가 없으면 "도착을 눌렀는데 아무 일도 안 일어남"이 된다.
     final position = _position;
-    if (position == null) return;
+    if (position == null) {
+      _showSnack('현재 위치를 아직 못 잡았습니다. GPS 신호를 확인해주세요.');
+      return;
+    }
     await _updateRoute(position);
   }
 
@@ -1620,6 +1715,17 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
     final startFloor = hasExplicitOrigin ? originFloor : anchor!.floorId;
     final explicitStartNodeId = hasExplicitOrigin ? originNodeId : null;
+    // 매장을 출발지로 골랐으면 현재 위치도 그 매장으로 옮긴다. 이걸 안 하면
+    // 경로는 그 매장에서 뻗어 나가는데 위치 아이콘만 예전 자리(또는 아무 데도)
+    // 남아, 사용자는 자기가 어디 있다고 표시되는지와 경로가 어긋난 화면을 본다.
+    if (hasExplicitOrigin) {
+      await _anchorAtStoreOrigin(
+        floor: originFloor,
+        nodeId: originNodeId,
+        storePoint: origin!.point,
+      );
+      if (!mounted) return;
+    }
     // 이전 걷기 경로가 남아 있으면 함께 지워, 실내 경로만 화면에 뜨도록 한다.
     setState(() {
       _route = null;
@@ -1653,6 +1759,56 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         startNodeId: explicitStartNodeId,
       );
     }
+  }
+
+  /// 출발지로 고른 매장 자리에 PDR 앵커를 다시 찍어, 현재 위치 아이콘을 그
+  /// 매장으로 옮긴다.
+  ///
+  /// 사용자가 "이 매장에서 출발한다"고 말한 것은 곧 "나는 지금 여기 있다"는
+  /// 뜻이므로, 지도를 탭해 직접 지정한 것과 같은 취급을 한다 — 그래서 배치도
+  /// 수동 배치와 **같은 함수**([_confirmPdrAnchor])를 쓴다. 자북 heading을 주는
+  /// 기기는 그 자리에서 조용히 확정되고, 그렇지 못한 기기는 수동 배치와 똑같이
+  /// 진행 방향을 한 번 물어본다. 방향을 0으로 가정해 조용히 넘어가면 이후
+  /// 걸음 궤적 전체가 그만큼 돌아간 채로 쌓인다.
+  ///
+  /// 실패는 조용히 넘긴다. 위치 아이콘을 못 옮기더라도 경로 자체는 그려져야
+  /// 한다 — 여기서 return해 버리면 길찾기가 통째로 죽는다.
+  Future<void> _anchorAtStoreOrigin({
+    required String floor,
+    required String nodeId,
+    required ll.LatLng storePoint,
+  }) async {
+    // [_confirmPdrAnchor]가 축 변환(axes)을 [_floorGraph]에서 가져오므로,
+    // 앵커를 찍기 전에 그 층 그래프가 화면에 올라와 있어야 한다.
+    if (floor != _activeFloor) {
+      await _switchOverlayFloor(floor);
+      if (!mounted) return;
+    }
+    final graph = _floorGraph;
+    if (graph == null || graph.nodes.isEmpty) return;
+
+    // 매장의 입구 노드를 그대로 쓴다. 그 노드는 이미 통로 위에 있으므로 스냅이
+    // 필요 없고, 경로 탐색이 시작하는 지점과도 정확히 같은 자리가 된다.
+    final node = graph.nodes.where((n) => n.id == nodeId).firstOrNull;
+    final PdrLocalPoint floorPoint;
+    if (node != null) {
+      floorPoint = PdrLocalPoint(node.xM, node.yM);
+    } else {
+      // 노드를 못 찾는 경우(그래프 갱신 시차 등)는 매장 좌표를 층 좌표로 되돌려
+      // 가장 가까운 통로에 붙인다 — 수동 배치가 탭 좌표에 하는 것과 같다.
+      final local = fitFloorGeoTransform(
+        graph.nodes,
+      ).invert(storePoint.latitude, storePoint.longitude);
+      if (local == null) return;
+      final snapped = FloorMapMatcher(
+        graph,
+      ).snapToWalkableNetwork(PdrLocalPoint(local.$1, local.$2));
+      if (snapped == null) return;
+      floorPoint = snapped.point;
+    }
+
+    if (!await _bindPdrSessionToFloor(floor)) return;
+    await _confirmPdrAnchor(floorPoint, notifyLocationChanged: false);
   }
 
   /// 같은 층 안에서 계산한 실내 경로를 지도에 얹는다. 활성 층이 목적지 층과
@@ -2392,9 +2548,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 않는다. 그래서 실기기에서 쓰이는 것과 **같은 함수**를 직접 부른다 —
   /// 테스트용 축약 경로를 따로 두면 정작 검증하려는 분기(건물 밖 탭 → 야외
   /// 전환)를 우회해 버린다.
+  ///
+  /// [screenPoint]는 지도 위젯 로컬 픽셀 좌표다. 오버레이(층 선택기 등) 위를
+  /// 누른 탭이 지도 탭으로 새어들어가는 경우를 재현하려면 이 값이 필요하다 —
+  /// 좌표가 늘 (0,0)이면 오버레이 배제 로직 자체가 검증되지 않는다.
   @visibleForTesting
-  Future<void> handleMapClickForTest(ll.LatLng point) => _handleMapClick(
-    const Point<double>(0, 0),
+  Future<void> handleMapClickForTest(
+    ll.LatLng point, {
+    Offset screenPoint = Offset.zero,
+  }) => _handleMapClick(
+    Point<double>(screenPoint.dx, screenPoint.dy),
     LatLng(point.latitude, point.longitude),
   );
 
@@ -2491,6 +2654,33 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _setIndoorEntered(false);
   }
 
+  /// 하단 바에서 '홈'(야외)을 눌러 이 화면으로 돌아왔을 때의 이탈. 상위
+  /// (MapShellScreen)가 모드를 야외로 바꿀 때 호출한다.
+  ///
+  /// 여기서는 오버레이만 끄는 것으로 끝나지 않는다. 카메라가 건물을 크게 확대한
+  /// 자리에 그대로 남아 있으면, 오버레이를 껐어도 도면은 진입 램프
+  /// ([indoorOverlayFadeExpr])에 따라 그대로 보인다 — "홈을 눌렀는데 실내가
+  /// 보이는" 상태다. 그래서 카메라도 야외 시야([outdoorReturnZoom])로 함께
+  /// 축소한다.
+  ///
+  /// 실내 앵커에서 계산한 경로도 지운다. 야외에서 쓰는 위치는 GPS뿐이므로,
+  /// 실내 위치에서 출발하던 경로만 남으면 화면의 위치 아이콘과 경로 시작점이
+  /// 어긋난다.
+  ///
+  /// [_exitIndoorByOutsideTap]과 달리 **재무장한다**([_autoIndoorEntryArmed]).
+  /// 축소까지 함께 하므로 곧바로 다시 끌려 들어갈 위험이 없고, 사용자가 건물로
+  /// 다시 확대하면 예전처럼 자연스럽게 실내로 들어가야 한다.
+  Future<void> returnToOutdoorView() async {
+    if (!_indoorEntered) return;
+    if (_placingPdrAnchor) _setPlacingAnchor(false);
+    _clearIndoorRoute();
+    _autoIndoorEntryArmed = true;
+    _setIndoorEntered(false);
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    await controller.animateCamera(CameraUpdate.zoomTo(outdoorReturnZoom));
+  }
+
   /// [_indoorEntered] 상태 변경을 한 곳으로 모은 헬퍼. setState + 상위 콜백 통지에
   /// 더해 dim scrim의 fillOpacity도 함께 갱신해, 실내 진입/이탈에 스포트라이트
   /// 효과가 즉시 반영되게 한다.
@@ -2521,6 +2711,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     widget.onIndoorEnteredChanged?.call(value);
     // 실내로 들어가면 GPS 구독을 끊고 마커를 지운다. 다시 나가면 재구독한다.
     _syncGpsSubscription();
+    // 위치 아이콘의 주인이 바뀌는 순간이다. 야외로 나가면 실내 위치 마커를
+    // 지우고(GPS 마커가 그 역할을 받는다), 실내로 들어가면 다시 그린다.
+    unawaited(_syncPdrCurrentLayer());
     _syncDimScrimLayer();
     // 외곽선은 실내 진입 상태에서만 그린다 — 이탈하면 여기서 소스가 비워진다.
     unawaited(_syncFloorOutlineLayer());
@@ -3131,10 +3324,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     );
   }
 
+  /// 실내 위치(PDR) 마커. 야외 상태에서는 [_indoorLocationVisible]이 false라
+  /// 항상 빈 소스를 밀어 넣어 마커가 사라진다 — 야외에서는 GPS 마커
+  /// ([_syncCurrentLayer])만 보이고, 실내에서는 이쪽만 보인다.
   Future<void> _syncPdrCurrentLayer() async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
-    final location = _pdrCurrentWgs84();
+    final location = _indoorLocationVisible ? _pdrCurrentWgs84() : null;
     if (location == null) {
       await controller.setGeoJsonSource(
         _pdrCurrentSourceId,
@@ -3432,6 +3628,63 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncHighlightLayer();
   }
 
+  /// PDR 세션이 [floor]를 가리키게 맞춘다. 이어서 앵커를 찍어도 되면 true.
+  ///
+  /// **다른 층에서 이미 돌고 있는 세션을 그냥 재사용하면 안 된다.** 앵커에
+  /// 찍히는 층은 세션의 층([IndoorNavigationView.currentFloorId])이고, 위치
+  /// 마커·경로는 `anchor.floorId == 지금 보고 있는 층`일 때만 그려진다. 그래서
+  /// 1층에서 위치를 지정한 뒤 2층에서 다시 지정하면, 새 앵커가 여전히 1층으로
+  /// 기록돼 2층 지도에는 아무것도 나타나지 않았다 — 사용자 눈에는 "첫 층 말고는
+  /// 위치 지정이 안 되는" 버그였다. 오류도 안 뜨니 원인을 짚을 단서도 없었다.
+  ///
+  /// 앵커를 새로 찍는 것은 **기준점을 새로 잡는 것**이므로, 이전 기준점 기준의
+  /// 궤적·복도 보정을 함께 비운다. 이전 층에서 쌓은 걸음·궤적을 그대로 이어받으면
+  /// 새 앵커 기준 위치가 처음부터 어긋난 채 시작한다.
+  ///
+  /// [gatePermission]이 false면 권한을 확인하지 않고 곧바로 세션을 시작한다. GPS로
+  /// 건물 안임을 이미 확인한 **자동 진입** 경로만 그렇게 쓴다 — 거기서 게이트를 한
+  /// 번 더 두면 자동 추적 자체가 시작되지 않는다. 자동 진입은 또 세션이 이미 같은
+  /// 층에서 돌고 있으면 아무것도 건드리지 않는다. 사용자가 쌓아온 궤적을 GPS 틱이
+  /// 지울 이유가 없다.
+  ///
+  /// [announceFailure]는 센서를 못 켠 이유를 사용자에게 알릴지다. 사용자가 직접
+  /// "위치 지정"을 누른 경우에만 켠다 — 출발지 매장을 따라 찍는 경로는 조용히
+  /// 포기하고 경로만 그린다.
+  Future<bool> _bindPdrSessionToFloor(
+    String floor, {
+    bool gatePermission = true,
+    bool announceFailure = false,
+  }) async {
+    if (indoorNavigationDriver.currentRuntimeStatus.state ==
+        PdrRuntimeState.idle) {
+      if (!gatePermission) {
+        setState(() => _pdrTrailState.beginNewSession());
+        await indoorNavigationDriver.startGuidance(floorId: floor);
+        return mounted;
+      }
+      await _startPdrIfIdle();
+      if (!mounted) return false;
+      if (indoorNavigationDriver.currentRuntimeStatus.state ==
+          PdrRuntimeState.idle) {
+        if (announceFailure) {
+          _showSnack('걸음 센서 권한이 없어 위치를 추적할 수 없습니다. 설정에서 동작·피트니스 권한을 허용해주세요.');
+        }
+        return false;
+      }
+    } else if (indoorNavigationDriver.currentFloorId != floor) {
+      await indoorNavigationDriver.changeFloor(floorId: floor);
+      if (!mounted) return false;
+    } else if (!gatePermission) {
+      // 자동 진입인데 이미 이 층 세션이 돌고 있다. 그대로 이어 쓴다.
+      return true;
+    }
+    setState(() {
+      _pdrTrailState.beginNewSession();
+      _corridorTrackingSession.reset();
+    });
+    return true;
+  }
+
   /// 앵커 배치 대기 상태 전환. 상위(MapShellScreen)에 알려 하단 바 "위치 지정"
   /// 버튼의 활성 톤을 함께 갱신한다.
   void _setPlacingAnchor(bool value) {
@@ -3460,21 +3713,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _showSnack('이 층은 위치 지정에 필요한 지도 정보가 아직 없습니다.');
       return;
     }
-    if (indoorNavigationDriver.currentRuntimeStatus.state ==
-        PdrRuntimeState.idle) {
-      await _startPdrIfIdle();
-      if (!mounted) return;
-      if (indoorNavigationDriver.currentRuntimeStatus.state ==
-          PdrRuntimeState.idle) {
-        _showSnack('걸음 센서 권한이 없어 위치를 추적할 수 없습니다. 설정에서 동작·피트니스 권한을 허용해주세요.');
-        return;
-      }
-    }
-    // 위치를 다시 지정하는 것은 기준점을 새로 잡는 것이다.
-    setState(() {
-      _pdrTrailState.beginNewSession();
-      _corridorTrackingSession.reset();
-    });
+    // 위치를 다시 지정하는 것은 기준점을 새로 잡는 것이다. 세션을 이 층에 맞추고
+    // 이전 기준점 기준의 궤적·보정을 비우는 일은 모두 여기서 처리한다.
+    if (!await _bindPdrSessionToFloor(floor, announceFailure: true)) return;
     _setPlacingAnchor(true);
     _showSnack('지도에서 현재 서 있는 위치를 탭해 지정해주세요.');
   }
@@ -3560,8 +3801,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     return null;
   }
 
-  /// [localPoint]가 지도 위 Flutter 오버레이(PDR 제어·디버그 설정) 영역이면
-  /// true. 인자는 MapLibre가 준 지도 위젯 로컬 좌표라 전역 좌표로 바꿔 비교한다.
+  /// [localPoint]가 지도 위 Flutter 오버레이(층 선택기·PDR 제어·디버그 설정과
+  /// 상위가 얹은 검색창·카테고리 열·하단 바) 영역이면 true. 인자는 MapLibre가
+  /// 준 지도 위젯 로컬 좌표라 전역 좌표로 바꿔 비교한다.
   bool _isTapOnMapOverlay(Offset localPoint) {
     final mapBox = context.findRenderObject() as RenderBox?;
     if (mapBox == null || !mapBox.attached) return false;
@@ -3569,11 +3811,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (_mapOverlayTapGuard.consumeIfBlocked(globalPoint)) return true;
 
     for (final key in [
+      _floorSelectorKey,
       _pdrControlKey,
       _debugModeSettingsKey,
       _placingHintKey,
       _buildingLoadFailedKey,
       _etaCardKey,
+      ...widget.outerOverlayKeys,
     ]) {
       final ctx = key.currentContext;
       if (ctx == null) continue;
@@ -3617,7 +3861,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await _confirmPdrAnchor(snapped.point);
   }
 
-  Future<void> _confirmPdrAnchor(PdrLocalPoint floorPoint) async {
+  /// [notifyLocationChanged]는 "사용자의 현재 위치가 새로 잡혔다"를 상위에
+  /// 알릴지다. 기본은 알린다 — 지도 탭·입구 자동 배치처럼 **새 위치가 생긴**
+  /// 경우이기 때문이다. 출발지 매장을 따라 찍는 경우([_anchorAtStoreOrigin])만
+  /// 끈다. 그쪽은 상위가 방금 정한 출발지를 되짚어 찍는 것이라, 다시 알리면
+  /// 상위가 그 출발지를 스스로 버리게 된다.
+  Future<void> _confirmPdrAnchor(
+    PdrLocalPoint floorPoint, {
+    bool notifyLocationChanged = true,
+  }) async {
     final graph = _floorGraph;
     final axes = graph == null
         ? const PdrToFloorAxes.identity()
@@ -3645,6 +3897,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _setPlacingAnchor(false);
     _syncPdrCurrentLayer();
     unawaited(_syncDebugPdrLayers());
+    if (notifyLocationChanged) widget.onLocationAnchored?.call();
     // 배치가 끝났다는 안내는 따로 띄우지 않는다. 지도에 위치 마커가 바로
     // 찍히고 안내 배너가 사라지는 것으로 이미 결과가 보이는데, 토스트까지
     // 겹치면 방금 지정한 지점을 가린다.
@@ -3836,6 +4089,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
             child: SafeArea(
               top: false,
               child: FloorSelector(
+                key: _floorSelectorKey,
                 floors: _building!.floors,
                 selectedFloor: _activeFloor!,
                 onSelectFloor: _switchOverlayFloor,

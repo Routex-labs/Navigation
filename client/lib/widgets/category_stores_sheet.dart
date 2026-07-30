@@ -5,6 +5,7 @@ import '../models/floor_plan.dart';
 import '../models/poi_search_result.dart';
 import '../theme/app_theme.dart';
 import 'category_icon.dart';
+import 'sheet_grab_handle.dart';
 import 'sheet_header.dart';
 
 /// 매장 정보 시트에서 카테고리 chip을 누르면 뜨는, 같은 대분류에 속하는
@@ -191,6 +192,7 @@ class _CategoryStoresSheetState extends State<CategoryStoresSheet> {
                   return CustomScrollView(
                     controller: scrollController,
                     slivers: [
+                      const SliverToBoxAdapter(child: SheetGrabHandle()),
                       SliverToBoxAdapter(
                         child: SheetHeader(
                           title: widget.category,

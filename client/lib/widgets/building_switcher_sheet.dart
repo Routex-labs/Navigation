@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/service_locator.dart';
 import '../models/building.dart';
 import '../theme/app_theme.dart';
+import 'sheet_grab_handle.dart';
 
 /// 실내 모드 햄버거 버튼으로 여는 건물 선택 시트. 테스트용으로 백엔드에
 /// 적재된 건물 목록(더현대서울/데모 건물 등)을 그대로 보여주고, 고르면
@@ -40,11 +41,13 @@ class _BuildingSwitcherSheetState extends State<BuildingSwitcherSheet> {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const SheetGrabHandle(),
+            const SizedBox(height: 10),
             const Text(
               '건물 선택 (테스트)',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.text),

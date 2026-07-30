@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/service_locator.dart';
 import '../models/favorite_place.dart';
 import '../theme/app_theme.dart';
+import 'sheet_grab_handle.dart';
 import 'sheet_header.dart';
 
 /// 사용자가 저장해둔 매장 목록을 보여주는 바텀시트.
@@ -65,6 +66,9 @@ class _FavoritesSheetState extends State<FavoritesSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            // 이 시트는 높이가 고정이라 손잡이를 끌면 크기가 아니라 시트가
+            // 통째로 끌린다(끌어서 닫기). 표시는 다른 시트와 같게 둔다.
+            const SheetGrabHandle(),
             SheetHeader(
               title: '저장한 장소',
               onCloseAll: widget.onCloseAll,
