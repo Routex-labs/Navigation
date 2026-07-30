@@ -8,6 +8,8 @@ tests/integration/test_real_data_smoke.py가, 서빙은 test_building_graph.py�
     V2  1~2층은 에스컬레이터, 3층+는 엘리베이터가 더 싸다(층수 기반 수단 선택).
     V3  실제 이동 거리(length_m)와 라우팅 비용(cost_m)이 분리돼 있다 —
         비용이 표시 거리로 새어 나가면 사용자에게 보이는 총 거리가 부풀려진다.
+    V4  에스컬레이터 짝은 원본 층간 간선으로 정한다 — 탑승구와 하차구는 20m쯤
+        떨어져 있어 위치 근접으로는 같은 기기의 반대쪽 끝을 못 찾는다.
 """
 
 from math import hypot
@@ -17,13 +19,13 @@ import pytest
 from scripts.transform import vertical_transfers as vt
 
 
-def _esc(node_id: str, x: float, y: float, direction: str) -> dict:
+def _esc(node_id: str, x: float, y: float, direction: str, name: str | None = None) -> dict:
     # trans_code로 방향을 준다 — 실데이터(OB-ESCALATOR_UP/DOWN)와 같은 경로.
     code = "OB-ESCALATOR_UP" if direction == "up" else "OB-ESCALATOR_DOWN"
     return {
         "id": node_id,
         "type": "escalator",
-        "name": node_id,
+        "name": name or node_id,
         "position": {"local_m": {"x": x, "y": y}},
         "source": {"trans_code": code},
     }
@@ -76,6 +78,81 @@ def test_상행_전용은_하행_간선을_만들지_않는다():
 
     assert len(esc) == 1
     assert esc[0]["from"] == "1F:up" and esc[0]["to"] == "2F:up"  # 상행뿐
+
+
+# V3 — 실데이터 배치를 그대로 옮긴 케이스.
+#
+# B1 탑승구(TOB2)는 y=160, 그 기기의 B2 하차구(FRB1)는 y=141로 약 19m 떨어져 있고,
+# B1 탑승구 근처(8m 안)에는 옆 기기의 B2 탑승구(TOB3)만 있다. 근접 매칭은 여기서
+# 탑승구↔탑승구를 잇거나 아무것도 못 잇는다. 원본 간선을 주면 올바른 짝을 만든다.
+def _b1_b2_floors() -> list[dict]:
+    return [
+        _floor("B2", -2, [
+            _esc("B2:fr", 152, 141, "down", name="ES2-1-DN(FRB1)"),
+            _esc("B2:to", 154, 141, "down", name="ES2-1-DN(TOB3)"),
+        ]),
+        _floor("B1", -1, [_esc("B1:to", 158, 160, "down", name="ES2-1-DN(TOB2)")]),
+    ]
+
+
+def test_원본_간선으로_에스컬레이터_탑승구와_하차구를_잇는다():
+    floors = _b1_b2_floors()
+    source = [{"from": "B1:to", "to": "B2:fr", "passable": True}]
+    transfers, unresolved = vt.build_transfers(floors, source)
+    esc = [t for t in transfers if t["mode"] == "escalator"]
+
+    assert len(esc) == 1
+    assert esc[0]["from"] == "B1:to" and esc[0]["to"] == "B2:fr"  # 하행: 위층 → 아래층
+    assert esc[0]["bidirectional"] is False
+    assert esc[0]["cost_m"] == vt.ESCALATOR_HOP_M
+    # length_m은 비용이 아니라 실제 이동 거리다(수평 약 19m + 층고).
+    # 원본으로 이어진 노드는 근접 폴백을 타지 않으므로 미해결로 남지 않는다.
+    assert not [u for u in unresolved if u["node_id"] == "B1:to"]
+
+
+def test_원본_간선이_없으면_근접_폴백이_짝을_못_찾는다():
+    # 이 회귀가 실제 증상이었다: 바로 옆 에스컬레이터에 간선이 없어 라우팅이
+    # 멀리 돌아가는 기기를 골랐다.
+    transfers, unresolved = vt.build_transfers(_b1_b2_floors())
+    esc = [t for t in transfers if t["mode"] == "escalator"]
+
+    assert not [t for t in esc if t["from"] == "B1:to" and t["to"] == "B2:fr"]
+    assert [u for u in unresolved if u["node_id"] == "B1:to"]
+
+
+def test_통행_불가로_표시된_원본_간선은_만들지_않는다():
+    floors = _b1_b2_floors()
+    source = [{"from": "B1:to", "to": "B2:fr", "passable": False}]
+    transfers, unresolved = vt.build_transfers(floors, source)
+
+    assert not [t for t in transfers if t["mode"] == "escalator"]
+    assert [u for u in unresolved if "통행 불가" in u["reason"]]
+
+
+def test_양쪽_층_파일의_passable이_엇갈리면_통행_가능으로_본다():
+    # 원본은 같은 간선을 양쪽 층 파일에 한 번씩 넣는데, 실데이터에서 4쌍은
+    # 한쪽만 passable=False다. 실재하는 기기를 통째로 지우는 쪽이 더 위험하다.
+    floors = _b1_b2_floors()
+    source = [
+        {"from": "B1:to", "to": "B2:fr", "passable": False},
+        {"from": "B2:fr", "to": "B1:to", "passable": True},
+    ]
+    transfers, _ = vt.build_transfers(floors, source)
+
+    assert len([t for t in transfers if t["mode"] == "escalator"]) == 1
+
+
+def test_원본_간선의_방향이_엇갈리면_잇지_않는다():
+    floors = [
+        _floor("1F", 1, [_esc("1F:up", 10, 10, "up")]),
+        _floor("2F", 2, [_esc("2F:dn", 10, 10, "down")]),
+    ]
+    transfers, unresolved = vt.build_transfers(
+        floors, [{"from": "1F:up", "to": "2F:dn", "passable": True}]
+    )
+
+    assert not [t for t in transfers if t["mode"] == "escalator"]
+    assert [u for u in unresolved if "진행 방향" in u["reason"]]
 
 
 # 엘리베이터는 샤프트가 서비스하는 모든 층쌍을 양방향으로 잇는다.

@@ -20,10 +20,20 @@ Edge 모델은 이미 이걸 전제한다(app/models/navigation.py):
   Studio에서 새로 만든 층은 이름이 전부 "엘리베이터"라 이름으로는 구분되지 않는다.
   대신 모든 층을 건물 공통 프레임으로 정규화한 뒤(floor_alignment) **위치 근접**으로
   맞춘다. 엘리베이터/에스컬레이터는 층이 달라도 같은 자리에 있기 때문이다.
+
+  단 **에스컬레이터는 위치 근접이 원리적으로 틀린다.** 탑승구와 하차구는 같은
+  자리가 아니라 경사로의 양 끝이라, 층을 겹쳐 보면 공통 프레임에서 20m쯤 떨어져
+  있다(실측: ES1 19.6m, ES2 20.2m, ES2-1 19.9m). MATCH_RADIUS_M(8m) 안에서
+  최근접을 고르면 같은 기기의 반대쪽 끝이 아니라 옆 기기의 같은 쪽 끝
+  (탑승구↔탑승구, 하차구↔하차구)이 잡히고, 정작 필요한 탑승구는 짝을 못 찾아
+  간선이 아예 안 생긴다. 그래서 에스컬레이터는 **원본(다베오) 층간 간선을
+  1차 근거**로 쓰고, 방향(from/to)만 trans_code로 정한다. 위치 근접은 원본
+  간선이 없는 노드의 폴백으로만 남긴다.
 """
 
 from __future__ import annotations
 
+import re
 from math import hypot
 
 # 수직 이동 수단으로 볼 노드 타입
@@ -81,6 +91,117 @@ def _escalator_direction(node: dict) -> str | None:
     if "-DN" in name or "-DOWN" in name:
         return "down"
     return None
+
+
+# 에스컬레이터 이름 규칙: "<그룹>-<UP|DN>(<TO|FR><층>)".
+#   B1 "ES2-1-DN(TOB2)"  = B1에서 B2로 내려가는 **탑승구**
+#   B2 "ES2-1-DN(FRB1)"  = 그 기기가 B2에 내려놓는 **하차구**
+# 원본 간선 검증용으로만 쓴다(간선 생성의 근거는 원본 토폴로지 + trans_code).
+_ESCALATOR_NAME = re.compile(
+    r"^(?P<group>ES[0-9\-]*?)-(?P<dir>UP|DN|DOWN)\((?P<role>TO|FR)(?P<floor>[A-Z0-9]+)\)$"
+)
+
+
+def _parse_escalator_name(node: dict) -> dict | None:
+    match = _ESCALATOR_NAME.match((node.get("name") or "").strip().upper())
+    if match is None:
+        return None
+    group = match.group("group")
+    direction = "up" if match.group("dir") == "UP" else "down"
+    return {"group": group, "direction": direction, "role": match.group("role")}
+
+
+# 원본 간선이 이름 규칙(같은 그룹·같은 방향, 탑승구 TO → 하차구 FR)과 어긋나는지.
+# 어긋나도 간선은 만든다 — 토폴로지가 1차 근거이고 이름은 오탈자가 있을 수 있다
+# (예: "ES3-DN(TOB2F)"처럼 층 표기가 흔들린다). 대신 개수를 보고할 수 있게 남긴다.
+def _escalator_name_mismatch(from_node: dict, to_node: dict) -> str | None:
+    a, b = _parse_escalator_name(from_node), _parse_escalator_name(to_node)
+    if a is None or b is None:
+        return "이름 규칙으로 해석 불가"
+    if a["group"] != b["group"]:
+        return f"그룹 불일치({a['group']} vs {b['group']})"
+    if a["direction"] != b["direction"]:
+        return f"방향 불일치({a['direction']} vs {b['direction']})"
+    if (a["role"], b["role"]) != ("TO", "FR"):
+        return f"탑승/하차 역할 불일치({a['role']} -> {b['role']})"
+    return None
+
+
+# 원본(다베오) 층간 간선으로 에스컬레이터 전이를 만든다.
+#
+# source_edges: [{"from","to","passable"?}] — 노드 id는 이미 층 스코프가 붙은 값.
+# 같은 간선이 양쪽 층 파일에 한 번씩 들어 있어 중복으로 들어오므로 무순서 쌍으로 묶는다.
+# from/to는 진행 방향에 맞춘다: 상행은 아래 층이 탑승구, 하행은 위 층이 탑승구다.
+# 반환: 간선이 만들어진(=폴백이 필요 없는) 노드 id 집합.
+def _escalator_transfers_from_source(
+    ordered: list[dict],
+    source_edges: list[dict],
+    transfers: list[dict],
+    unresolved: list[dict],
+) -> set[str]:
+    rank = {floor["name"]: index for index, floor in enumerate(ordered)}
+    owner: dict[str, tuple[dict, dict]] = {}
+    for floor in ordered:
+        for node in _by_type(floor["nodes"], "escalator"):
+            owner[node["id"]] = (floor, node)
+
+    # 무순서 쌍 → 원본이 준 passable 플래그들.
+    grouped: dict[tuple[str, str], list[bool]] = {}
+    for edge in source_edges:
+        key = tuple(sorted((edge["from"], edge["to"])))
+        if key[0] not in owner or key[1] not in owner:
+            continue  # 엘리베이터·junction 등은 각자의 규칙으로 처리한다.
+        grouped.setdefault(key, []).append(bool(edge.get("passable", True)))
+
+    covered: set[str] = set()
+    for (left_id, right_id), passables in grouped.items():
+        left_floor, left = owner[left_id]
+        right_floor, right = owner[right_id]
+        note = {"mode": "escalator", "floor": left_floor["name"], "node_id": left_id}
+
+        # 층 파일마다 passable이 엇갈리는 쌍이 있다(원본 노이즈). 한쪽이라도
+        # 통행 가능이면 살린다 — 실재하는 기기를 통째로 지우는 쪽이 더 위험하다.
+        if not any(passables):
+            unresolved.append({**note, "reason": "원본 간선이 통행 불가로 표시됨"})
+            continue
+        direction = _escalator_direction(left)
+        if direction is None or direction != _escalator_direction(right):
+            unresolved.append({**note, "reason": "원본 간선 양끝의 진행 방향이 다름"})
+            continue
+        if left_floor["name"] == right_floor["name"]:
+            unresolved.append({**note, "reason": "원본 간선이 같은 층을 잇는다"})
+            continue
+        if abs(rank[left_floor["name"]] - rank[right_floor["name"]]) != 1:
+            unresolved.append({**note, "reason": "원본 간선이 인접하지 않은 층을 잇는다"})
+            continue
+
+        lower, upper = (
+            (left, right)
+            if rank[left_floor["name"]] < rank[right_floor["name"]]
+            else (right, left)
+        )
+        from_node, to_node = (lower, upper) if direction == "up" else (upper, lower)
+        mismatch = _escalator_name_mismatch(from_node, to_node)
+        if mismatch is not None:
+            unresolved.append({**note, "reason": f"이름 규칙 불일치: {mismatch}"})
+        transfers.append(_edge(
+            from_node=from_node,
+            to_node=to_node,
+            mode="escalator",
+            # 기존 근접 매칭과 같은 규칙: [아래층, 위층] 순서.
+            floors=sorted(
+                (left_floor["name"], right_floor["name"]),
+                key=lambda name: rank[name],
+            ),
+            # main과 같은 규칙: 표시 거리는 수평+층고의 3D 거리, 비용은 탑승 부담.
+            length_m=hypot(_distance(from_node, to_node), FLOOR_HEIGHT_M),
+            cost_m=ESCALATOR_HOP_M,
+            bidirectional=False,
+            distance=_distance(from_node, to_node),
+        ))
+        covered.add(left_id)
+        covered.add(right_id)
+    return covered
 
 
 # a쪽 노드들을 b쪽 노드에 최근접 1:1로 짝짓는다. 반경 밖이면 unresolved에 남긴다.
@@ -145,14 +266,19 @@ def _edge(
 # 인접한 두 층 사이의 에스컬레이터 단방향 전이 간선. lower/upper는 level 오름차순.
 # 방향별로 나눠 매칭한다 — 상행 노드는 상행끼리, 하행 노드는 하행끼리 이어야
 # 물리적으로 존재하는 세그먼트만 남고 반대 방향 통행이 끼지 않는다.
+#
+# **원본 간선이 없는 노드에만 쓰는 폴백이다**(skip_node_ids로 제외). 모듈 docstring의
+# 이유대로 탑승/하차구는 같은 자리가 아니라서, 이 매칭은 짝을 틀리게 잡을 수 있다.
 def _escalator_transfers(
     lower: dict,
     upper: dict,
     transfers: list[dict],
     unresolved: list[dict],
+    skip_node_ids: set[str] | None = None,
 ) -> None:
-    lower_esc = _by_type(lower["nodes"], "escalator")
-    upper_esc = _by_type(upper["nodes"], "escalator")
+    skip = skip_node_ids or set()
+    lower_esc = [n for n in _by_type(lower["nodes"], "escalator") if n["id"] not in skip]
+    upper_esc = [n for n in _by_type(upper["nodes"], "escalator") if n["id"] not in skip]
     floors = [lower["name"], upper["name"]]
 
     for direction in ("up", "down"):
@@ -250,15 +376,27 @@ def _elevator_transfers(
 # 층 간 수직 전이 간선을 만든다.
 # floors: [{"code","floor_id","name","level","nodes"}] — nodes는 건물 공통 프레임으로
 # 정규화된 뒤여야 한다. level은 위층일수록 크다(6F=6 … 1F=1 … B6=-6).
+# source_edges: 원본(다베오) 층간 간선. 노드 id는 floors의 노드 id와 같은 스코프여야
+#   한다. 에스컬레이터 짝을 여기서 읽는다. 없으면 전부 위치 근접 폴백으로 떨어진다.
 # 반환: (전이 간선 목록, 짝을 못 찾은 노드 목록)
-def build_transfers(floors: list[dict]) -> tuple[list[dict], list[dict]]:
+def build_transfers(
+    floors: list[dict],
+    source_edges: list[dict] | None = None,
+) -> tuple[list[dict], list[dict]]:
     ordered = sorted(floors, key=lambda f: f["level"])
     transfers: list[dict] = []
     unresolved: list[dict] = []
 
-    # 에스컬레이터: 인접 층끼리만, 방향을 지켜 단방향으로.
+    # 에스컬레이터: 원본 간선이 1차 근거, 남은 노드만 위치 근접 폴백.
+    covered = (
+        _escalator_transfers_from_source(ordered, source_edges, transfers, unresolved)
+        if source_edges
+        else set()
+    )
     for lower, upper in zip(ordered, ordered[1:]):
-        _escalator_transfers(lower, upper, transfers, unresolved)
+        _escalator_transfers(
+            lower, upper, transfers, unresolved, skip_node_ids=covered
+        )
 
     # 엘리베이터: 샤프트 단위로 서비스 층 전체를 직행 연결.
     _elevator_transfers(ordered, transfers, unresolved)
