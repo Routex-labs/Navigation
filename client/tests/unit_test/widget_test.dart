@@ -345,46 +345,30 @@ void main() {
     expect(find.text('PDR 시작'), findsNothing);
   });
 
-  testWidgets(
-    'PDR control sits beside the bottom mode segment without overlap',
-    (WidgetTester tester) async {
-      // ignore: invalid_use_of_visible_for_testing_member
-      SharedPreferences.setMockInitialValues({'debug_mode.enabled': true});
-      // setUp이 이미 빈 mock으로 로드해 둔 상태라, 여기서 다시 읽어야 방금 켠
-      // 디버그 모드가 전역 컨트롤러에 반영된다.
-      await debugModeController.reload();
+  testWidgets('debug mode keeps always-on PDR free of a manual start control', (
+    WidgetTester tester,
+  ) async {
+    // ignore: invalid_use_of_visible_for_testing_member
+    SharedPreferences.setMockInitialValues({'debug_mode.enabled': true});
+    // setUp이 이미 빈 mock으로 로드해 둔 상태라, 여기서 다시 읽어야 방금 켠
+    // 디버그 모드가 전역 컨트롤러에 반영된다.
+    await debugModeController.reload();
 
-      tester.view.physicalSize = const Size(390, 844);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.pumpWidget(
-        const MaterialApp(home: MapShellScreen(initialMode: MapMode.indoor)),
-      );
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(
+      const MaterialApp(home: MapShellScreen(initialMode: MapMode.indoor)),
+    );
+    await tester.pumpAndSettle();
 
-      final debugButtonY = tester
-          .getCenter(find.byIcon(Icons.bug_report_outlined))
-          .dy;
-      final pdrTextRect = tester.getRect(find.text('PDR 시작'));
-      final homeTextRect = tester.getRect(find.text('홈'));
-
-      expect(
-        (pdrTextRect.center.dy - homeTextRect.center.dy).abs(),
-        lessThan(2),
-      );
-      expect(pdrTextRect.right, lessThan(homeTextRect.left));
-      expect(
-        (debugButtonY - pdrTextRect.center.dy).abs(),
-        lessThanOrEqualTo(2),
-      );
-      expect(
-        tester.getRect(find.byIcon(Icons.bug_report_outlined)).right,
-        lessThan(pdrTextRect.left),
-      );
-    },
-  );
+    expect(find.byIcon(Icons.bug_report_outlined), findsOneWidget);
+    expect(find.text('PDR 시작'), findsNothing);
+    // 진단 공유 버튼도 실제 길안내 기록이 생긴 뒤에만 나타난다.
+    expect(find.byTooltip('PDR 진단 JSON 공유'), findsNothing);
+  });
 
   testWidgets('indoor map switches floor via the floor tabs', (
     WidgetTester tester,
