@@ -6,7 +6,13 @@ tests/integration/test_real_data_smoke.py가, 서빙은 test_building_graph.py�
 검증 기준:
     V1  에스컬레이터는 단방향이고 방향이 층 level과 일치한다(불가능 경로 제거).
     V2  1~2층은 에스컬레이터, 3층+는 엘리베이터가 더 싸다(층수 기반 수단 선택).
+    V3  실제 이동 거리(length_m)와 라우팅 비용(cost_m)이 분리돼 있다 —
+        비용이 표시 거리로 새어 나가면 사용자에게 보이는 총 거리가 부풀려진다.
 """
+
+from math import hypot
+
+import pytest
 
 from scripts.transform import vertical_transfers as vt
 
@@ -113,10 +119,51 @@ def test_엘리베이터_비용은_층수에_비례한다():
         _floor("3F", 3, [_elev("3F:ev", 10, 10)]),
     ]
     transfers, _ = vt.build_transfers(floors)
-    ele = {frozenset(t["floors"]): t["length_m"] for t in transfers if t["mode"] == "elevator"}
+    # 비용은 cost_m이다 — length_m은 실제 이동 거리라 공식과 다르다.
+    ele = {frozenset(t["floors"]): t["cost_m"] for t in transfers if t["mode"] == "elevator"}
 
     one_hop = ele[frozenset(["1F", "2F"])]
     two_hop = ele[frozenset(["1F", "3F"])]
     assert one_hop == vt.ELEVATOR_BOARD_M + vt.ELEVATOR_PER_FLOOR_M * 1
     assert two_hop == vt.ELEVATOR_BOARD_M + vt.ELEVATOR_PER_FLOOR_M * 2
     assert two_hop > one_hop
+
+
+# V3 — 전이 간선은 실제 이동 거리와 라우팅 비용을 각각 따로 싣는다.
+#
+# 예전에는 length_m 하나가 둘을 겸했다. 그러면 에스컬레이터 한 칸이 실제로는 6m쯤인데
+# 라우팅 튜닝값 20m가 그대로 사용자 표시 거리에 더해진다. 두 값이 섞이지 않는지 본다.
+def test_전이_간선은_실제_거리와_라우팅_비용을_분리한다():
+    floors = [
+        _floor("1F", 1, [_esc("1F:up", 10, 10, "up")]),
+        _floor("2F", 2, [_esc("2F:up", 12, 10, "up")]),
+    ]
+    transfers, _ = vt.build_transfers(floors)
+    esc = next(t for t in transfers if t["mode"] == "escalator")
+
+    # 비용은 튜닝 상수 그대로다.
+    assert esc["cost_m"] == vt.ESCALATOR_HOP_M
+    # 거리는 수평 주행(2m)과 층고의 빗변 — 비용과 무관하게 실제 기하로 나온다.
+    assert esc["length_m"] == pytest.approx(hypot(2.0, vt.FLOOR_HEIGHT_M), abs=1e-3)
+    assert esc["length_m"] != esc["cost_m"]
+
+
+# 엘리베이터도 같다. 층을 많이 갈수록 실제 거리와 비용이 함께 늘지만 값 자체는 다르다.
+def test_엘리베이터도_거리와_비용이_따로_늘어난다():
+    floors = [
+        _floor("1F", 1, [_elev("1F:ev", 10, 10)]),
+        _floor("2F", 2, [_elev("2F:ev", 10, 10)]),
+        _floor("3F", 3, [_elev("3F:ev", 10, 10)]),
+    ]
+    transfers, _ = vt.build_transfers(floors)
+    by_floors = {frozenset(t["floors"]): t for t in transfers if t["mode"] == "elevator"}
+
+    one_hop = by_floors[frozenset(["1F", "2F"])]
+    two_hop = by_floors[frozenset(["1F", "3F"])]
+
+    # 같은 샤프트라 수평 이동은 0 — 실제 거리는 층고 × 홉 수다.
+    assert one_hop["length_m"] == pytest.approx(vt.FLOOR_HEIGHT_M, abs=1e-3)
+    assert two_hop["length_m"] == pytest.approx(vt.FLOOR_HEIGHT_M * 2, abs=1e-3)
+    # 비용에는 고정 탑승비가 붙어 거리와 전혀 다른 값이 된다.
+    assert one_hop["cost_m"] == vt.ELEVATOR_BOARD_M + vt.ELEVATOR_PER_FLOOR_M
+    assert one_hop["cost_m"] > one_hop["length_m"]
