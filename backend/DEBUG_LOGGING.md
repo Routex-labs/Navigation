@@ -1,31 +1,33 @@
-# 개발 요청·SQL 로그
+# 로깅
 
-기본 실행에서는 진단 파일을 만들지 않는다. PowerShell에서 환경변수를 켠 뒤 서버를 시작한다.
+백엔드는 요청 상태와 에러를 **stdout**으로 남긴다. 별도 파일 캡처는 없다 — Cloud Run 등
+컨테이너 환경이 stdout을 자동 수집한다. 로컬에서는 창에 그대로 찍히고, 개발 실행에서는
+`backend-local.log`로 tee 한다(AGENTS.md 참고).
+
+## 무엇이 남는가
+
+- **요청·상태 코드**: uvicorn access 로그. 예) `... "POST /query/ai HTTP/1.1" 422`
+- **우리 코드 로그**(`app.*`): 각 모듈이 `logging.getLogger(__name__)`으로 찍는다.
+- **4xx/422 상세**: 어느 필드가 왜 막혔는지, `HTTPException`의 `detail`. (`app/core/logging.py`)
+- **500 트레이스백**: uvicorn이 `uvicorn.error`로 남긴다.
+
+## 상세 로그 켜기
+
+기본 레벨은 `INFO`다. 우리 코드의 상세 로그까지 보려면 `NAV_LOG_LEVEL=DEBUG`로 실행한다.
 
 ```powershell
-$env:NAV_SQL_ECHO = '1'
-$env:NAV_HTTP_CAPTURE = '1'
-python -m uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8001 2>&1 | ForEach-Object { $_; $_ | Out-File ..\backend-local.log -Append -Encoding utf8 }
+# Windows
+$env:NAV_LOG_LEVEL = 'DEBUG'
+python -m uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8001
 ```
-
-macOS/Linux:
 
 ```bash
-export NAV_SQL_ECHO=1
-export NAV_HTTP_CAPTURE=1
-python -m uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8001 2>&1 | tee ../backend-local.log
+# macOS/Linux
+export NAV_LOG_LEVEL=DEBUG
+python -m uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8001
 ```
 
-- `backend/app/sql/queries.sql`: SQLAlchemy가 DB에 전달한 SQL과 바인딩 파라미터
-- `backend/app/args/*.json`: API의 실제 GET/POST 요청 경로·쿼리·JSON 인자와 응답 상태 코드
-- `backend-local.log`: 사용자가 창에서 본 Uvicorn 로그와 같은 UTF-8 출력
+## 민감정보
 
-`args` 로그의 GET 요청은 `query_string`에 쿼리 파라미터가 남고 `json`은 `null`이다. 응답 본문과
-헤더는 저장하지 않는다. 필요한 값은 실제 요청 인자(예: 매장명·건물 ID·현재 층)와 상태 코드뿐이다.
-
-`/health`는 Docker healthcheck가 주기적으로 호출하더라도 서버 프로세스당 첫 요청 한 건만 남긴다.
-FastAPI 서버가 정상 종료되면 `backend/app/sql/`과 `backend/app/args/`는 자동 삭제된다.
-
-`Authorization`, `token`, `password`, `secret`, `api_key`/`apikey`를 포함하는 헤더·JSON 키·이름 있는
-SQL 파라미터는 `***`로 마스킹된다. TMAP처럼 Flutter가 외부 API로 직접 보내는 요청은 백엔드를 거치지
-않으므로 이 로그에 나타나지 않는다.
+로그에 비밀값(토큰·비밀번호 등)을 직접 찍지 않는다. TMAP처럼 Flutter가 외부 API로 직접
+보내는 요청은 백엔드를 거치지 않으므로 이 로그에 나타나지 않는다.

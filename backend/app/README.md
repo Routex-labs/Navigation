@@ -7,20 +7,20 @@ HTTP 요청을 받아 SQLite 데이터를 조회하고 Flutter가 소비하는 J
 
 | 경계 | 디렉터리 | 역할 |
 |---|---|---|
-| 진입점 | [`main.py`](main.py) | 앱 팩토리, CORS, lifespan, 라우터, `/health` |
+| 진입점 | [`main.py`](main.py) | 앱 팩토리, CORS, 로깅, 라우터, `/health` |
 | HTTP | [`routers/`](routers/README.md) | 파라미터·의존성·상태 코드 번역 |
 | 계약 | [`dto/`](dto/README.md) | Pydantic 요청/응답 스키마 |
 | 조회 | [`repositories/`](repositories/README.md) | SQL 조회, 검색, 응답 dict·타일 조립 |
 | 저장 | [`models/`](models/README.md) | SQLAlchemy ORM 테이블 |
 | 계산 | [`geo/`](geo/README.md) | 좌표 변환과 지도 타일 순수 수학 |
-| 기반 | [`core/`](core/README.md) | 설정, DB Session, 개발 진단 로그 |
+| 기반 | [`core/`](core/README.md) | 설정, DB Session, 로깅 |
 
 ## 요청 흐름
 
 ```mermaid
 flowchart LR
     CLIENT["Flutter client"]
-    MAIN["main.py<br/>FastAPI · CORS · lifespan"]
+    MAIN["main.py<br/>FastAPI · CORS · 로깅"]
     ROUTER["routers"]
     DTO["dto"]
     REPO["repositories"]
@@ -44,7 +44,7 @@ flowchart LR
 ## `main.py`
 
 - `create_app()`을 uvicorn과 테스트가 함께 사용한다.
-- `NAV_HTTP_CAPTURE=1`일 때만 요청 캡처 미들웨어와 로그 정리 lifespan을 붙인다.
+- `configure_logging()`으로 로깅을 통일하고 `install_exception_logging()`으로 4xx/422 예외를 로그로 남긴다.
 - `buildings`, `fonts`, `query` 라우터를 등록한다.
 - `NAV_WARM_EMBEDDING=1`이면 임베딩 모델을 백그라운드에서 미리 로드한다.
 - 모듈 전역 `app = create_app()`이 `app.main:app` 실행 경로다.
@@ -61,7 +61,7 @@ flowchart LR
 | 하고 싶은 것 | 위치 |
 |---|---|
 | 새 HTTP API | `dto` → `repositories` → `routers` 순으로 연결 |
-| 앱 시작/종료 동작 | `main.py` lifespan |
+| 앱 시작 동작(로깅·워밍업) | `main.py` `create_app()` |
 | 새 환경변수·DB 설정 | `core/` |
 | 좌표·타일 수학 | `geo/` |
 

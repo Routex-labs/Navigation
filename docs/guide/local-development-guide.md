@@ -38,8 +38,6 @@ python -m pip install -r requirements.txt
 Set-Location backend
 .\.venv\Scripts\Activate.ps1
 python -m scripts.seed.reset_and_seed
-$env:NAV_SQL_ECHO = '1'
-$env:NAV_HTTP_CAPTURE = '1'
 python -m uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8001 2>&1 | ForEach-Object { $_; $_ | Out-File ..\backend-local.log -Append -Encoding utf8 }
 ```
 
@@ -49,8 +47,6 @@ macOS에서도 저장소 루트에서 `backend/`로 이동하고 같은 순서�
 cd backend
 source .venv/bin/activate
 python -m scripts.seed.reset_and_seed
-export NAV_SQL_ECHO=1
-export NAV_HTTP_CAPTURE=1
 python -m uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8001 2>&1 | tee ../backend-local.log
 ```
 

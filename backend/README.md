@@ -118,19 +118,16 @@ python -m scripts.seed.reset_and_seed
 python -m pytest
 ```
 
-서버는 진단 환경변수를 켜고 보이는 창에서 실행하며, 같은 출력을 `backend-local.log`에 남긴다.
+서버는 보이는 창에서 실행하며, 같은 출력을 `backend-local.log`에 남긴다. 상세 로그가
+필요하면 `NAV_LOG_LEVEL=DEBUG`를 앞에 붙인다.
 
 ```powershell
 # Windows PowerShell
-$env:NAV_SQL_ECHO = '1'
-$env:NAV_HTTP_CAPTURE = '1'
 python -m uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8001 2>&1 | ForEach-Object { $_; $_ | Out-File ..\backend-local.log -Append -Encoding utf8 }
 ```
 
 ```bash
 # macOS
-export NAV_SQL_ECHO=1
-export NAV_HTTP_CAPTURE=1
 python -m uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8001 2>&1 | tee ../backend-local.log
 ```
 

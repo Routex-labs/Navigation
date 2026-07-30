@@ -30,8 +30,6 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 python -m scripts.seed.reset_and_seed
-$env:NAV_SQL_ECHO = '1'
-$env:NAV_HTTP_CAPTURE = '1'
 python -m uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8001 2>&1 | ForEach-Object { $_; $_ | Out-File ..\backend-local.log -Append -Encoding utf8 }
 ```
 

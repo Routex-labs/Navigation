@@ -93,7 +93,6 @@ flowchart TD
 
     subgraph APP["FastAPI app — main.create_app() ≒ DispatcherServlet"]
         cors["CORSMiddleware ≒ Servlet Filter<br/>OPTIONS preflight 즉시 응답"]
-        cap["RequestCaptureMiddleware<br/>개발 실행에서만(NAV_HTTP_CAPTURE)"]
         route["Router (Starlette) ≒ HandlerMapping<br/>등록 순서대로 첫 매칭 · 없음 404 · 메서드 다름 405"]
         dep["Depends(get_db) ≒ Spring DI<br/>SessionLocal() → yield → rollback/close"]
         valid["Pydantic 바인딩/검증<br/>실패 시 핸들러 실행 전 422 차단"]
@@ -107,7 +106,7 @@ flowchart TD
 
     C -->|"① 요청"| parse
     parse -->|"② await app(scope, receive, send)"| cors
-    cors --> cap --> route --> dep --> valid --> fork
+    cors --> route --> dep --> valid --> fork
     fork -->|"def → anyio 스레드풀<br/>(블로킹 OK)"| handler
     fork -.->|"async def → 이벤트 루프 직접<br/>(동기 DB 호출 시 서버 정지)"| handler
     handler -->|"③ 여기부터 프레임워크 없음"| repo
@@ -117,7 +116,7 @@ flowchart TD
     classDef infra fill:#264653,color:#fff,stroke:none
     classDef core fill:#2a9d8f,color:#fff,stroke:none
     class fork danger
-    class parse,cors,cap,route,dep,valid infra
+    class parse,cors,route,dep,valid infra
     class handler,repo,orm core
 ```
 
@@ -299,24 +298,10 @@ DB는 데이터 선별과 저장을, 서버는 조회·직렬화를, 최단 경�
 2. `app.core.database` import 시점에 `Settings` 로드(환경변수 `NAV_DATABASE_URL`)와
    **Engine 생성**이 한 번 일어난다. Engine·SessionLocal은 프로세스 전역이다.
 3. 소켓(개발·Docker 모두 8001)을 열고 **asyncio 이벤트 루프** 시작.
-4. **`lifespan`에서 DB를 초기화하지 않는다.** `drop_all/create_all/seed`는
-   `python -m scripts.seed.reset_and_seed` CLI에서만 실행한다.
-   현재 lifespan이 하는 일은 **개발 진단 로그 정리뿐**이며, `NAV_HTTP_CAPTURE`가
-   켜졌을 때만 등록된다(`main._development_log_lifespan`).
-
-```python
-# main.py — on_event는 FastAPI 0.115에서 deprecated라 lifespan을 쓴다.
-@asynccontextmanager
-async def _development_log_lifespan(app: FastAPI) -> AsyncIterator[None]:
-    start_runtime_logs()      # ← startup: 이전 실행의 로그를 비운다
-    try:
-        yield                 # ← 여기서 서버가 요청을 받는다
-    finally:
-        clear_runtime_logs()  # ← shutdown: 진단 파일을 지운다
-```
-
-`lifespan`은 `FastAPI()` **생성자 인자**라서, 진단 캡처 여부를 앱을 만들기 전에
-결정해야 한다(`on_event`는 앱 생성 후 등록이 가능했다).
+4. **`create_app()` 맨 앞에서 `configure_logging()`으로 로깅을 통일한다.** DB는
+   초기화하지 않는다 — `drop_all/create_all/seed`는 `python -m scripts.seed.reset_and_seed`
+   CLI에서만 실행한다. 요청 상태·에러는 stdout으로 남고(`app/core/logging.py`), 파일 기반
+   진단 캡처(옛 `NAV_SQL_ECHO`/`NAV_HTTP_CAPTURE`)는 제거됐다.
 
 ### 1단계. uvicorn — TCP → scope
 
@@ -330,11 +315,10 @@ HTTP 바이트를 파싱해 `scope`(dict)를 만든다. method, path, 헤더, �
 - **CORSMiddleware**는 브라우저의 **preflight OPTIONS**를 라우터 도달 전에 가로채
   즉시 응답하고, 실제 응답에는 `Access-Control-Allow-Origin`을 붙인다.
   CORS는 **브라우저 보안 모델**이다. Flutter 모바일 앱/curl에는 관여하지 않는다.
-- **RequestCaptureMiddleware**는 개발 실행에서만 붙는다(`NAV_HTTP_CAPTURE=1`).
-  요청 JSON과 응답 상태를 `backend/app/args/*.json`에 남긴다. 비밀값으로 보이는
-  키(`password`, `token` 등)는 `***`로 마스킹하고, `/health`는 Docker healthcheck가
-  주기적으로 때리므로 **기동 후 첫 한 건만** 기록한다.
-  파일 쓰기가 실패해도 실제 API 응답을 막지 않는다(`except OSError: pass`).
+  현재 앱에 등록된 미들웨어는 이 CORS 하나뿐이다.
+- **예외 로깅**은 미들웨어가 아니라 FastAPI 예외 핸들러로 처리한다
+  (`install_exception_logging`). 4xx/422는 이유와 함께 `WARNING`, 5xx는 `ERROR`로
+  stdout에 남기고, 응답 본문은 FastAPI 기본 핸들러에 위임한다(`app/core/logging.py`).
 
 ### 3단계. 라우팅
 
@@ -449,7 +433,7 @@ HTTP 바이트로 조립해 소켓에 쓴다. yield dependency의 `finally`(sess
    (`async def` + 동기 DB = 서버 정지).
 3. Depends는 **요청 스코프가 기본**. Session은 요청마다, Engine은 프로세스마다.
 4. 자원 정리는 **yield dependency** (`rollback`/`close`). 서버 기동 시 DB 초기화 금지 —
-   `lifespan`이 하는 일은 개발 진단 로그 정리뿐이다.
+   `create_app()`은 로깅 설정과 캐시·모델 워밍업만 한다.
 5. 컬렉션 로딩은 **selectinload**, 그래프는 **Floor 단위 명시 조회로 내려주고 탐색은
    클라이언트가** — 서버는 경로를 계산하지 않는다(온디바이스 Dijkstra).
 6. 라우트는 **등록 순서 매칭** → 고정 경로를 파라미터 경로보다 먼저.

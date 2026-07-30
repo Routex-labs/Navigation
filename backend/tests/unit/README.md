@@ -1,6 +1,6 @@
 # `tests/unit` — 순수 로직과 작은 경계 검증
 
-HTTP 요청 전체를 띄우지 않고 함수·변환·진단 수명주기를 좁게 검증한다. 필요한 경우
+HTTP 요청 전체를 띄우지 않고 함수·변환을 좁게 검증한다. 필요한 경우
 임시 DB Session을 쓰지만 endpoint 계약은 integration 테스트에 맡긴다.
 
 ## 테스트 영역
@@ -10,7 +10,6 @@ HTTP 요청 전체를 띄우지 않고 함수·변환·진단 수명주기를 �
 | 좌표·타일 | `test_georeference.py`, `test_tiling.py`, `test_floor_alignment.py` |
 | 질의 | `test_query_search.py`, `test_query_morph.py`, `test_query_ai.py`, `test_query_coverage.py` |
 | 시드·변환 | `test_seed_navigation.py`, `test_studio_adapter_edges.py`, `test_vertical_transfers.py`, `test_reset_and_seed.py` |
-| 진단 | `test_request_capture.py` |
 
 ## 코드 관계
 
@@ -20,13 +19,11 @@ flowchart LR
     QUERY["repositories/query_*"]
     SEED["scripts/seed"]
     TRANSFORM["scripts/transform"]
-    CORE["core/request_capture"]
 
     T_GEO["좌표 · 타일 테스트"] --> GEO
     T_QUERY["검색 테스트"] --> QUERY
     T_SEED["시드 테스트"] --> SEED
     T_SEED --> TRANSFORM
-    T_LOG["진단 테스트"] --> CORE
 ```
 
 ## 작성 기준
