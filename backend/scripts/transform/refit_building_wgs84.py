@@ -2,7 +2,7 @@
 
 지금 studio JSON들의 `local_m_to_wgs84`는 `status: "unverified"`고, 절대 배율이
 실측 대비 ~1.33× 부풀려져 있다(1F LEVEL이 데이터상 167×98m인데 VWorld 실측은 126×68m).
-이 스크립트는 사람이 뽑아 온 GCP(gcp_picker.html)를 이용해 그 아핀을 다시 피팅한다.
+이 스크립트는 사람이 뽑아 온 GCP(resources/calibration/*-gcps.json)를 이용해 그 아핀을 다시 피팅한다.
 
 동작
   1. 대상 건물의 기준층(1f.json)에서 현재 아핀 + `building_footprint_local_m` 로드.
@@ -603,7 +603,7 @@ def main() -> None:
     parser.add_argument(
         "--studio", type=Path, required=True, help="studio 폴더 경로 (예: resources/studio/thehyundai-seoul-dabeeo)"
     )
-    parser.add_argument("--gcps", type=Path, required=True, help="gcp_picker.html에서 export한 JSON 경로")
+    parser.add_argument("--gcps", type=Path, required=True, help="GCP JSON 경로 (resources/calibration/*-gcps.json)")
     parser.add_argument(
         "--map",
         dest="mapping",

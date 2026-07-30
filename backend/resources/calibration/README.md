@@ -7,21 +7,18 @@
 ## 지금 있는 것
 
 - `thehyundai-seoul-gcps.json` — 더현대 서울 GCP 4점(건물 북/서/남/동 꼭지점).
-  `backend/scripts/tools/gcp_picker.html`에서 VWorld 위성 지도로 뽑은 lat/lng.
+  OSM Overpass(way 874639191, 더현대 서울 building=retail) 꼭지점에서 뽑은 lat/lng.
+  클라이언트 base 지도가 OSM 타일이라 GCP도 OSM 좌표계로 잡아야 실내 오버레이가 base 타일 건물 외곽과 정렬된다.
 
 ## GCP 다시 뽑는 법
 
-1. `backend/scripts/tools/gcp_picker.html`을 로컬 HTTP로 열고 VWorld 인증키 입력
-   ```
-   python -m http.server -d backend/scripts/tools 8765
-   ```
-   그리고 <http://localhost:8765/gcp_picker.html>
+1. 건물 외곽 꼭지점의 lat/lng를 확보한다. 극점 4~6점(방위 N/W/S/E 또는 순서 1, 2, 3, ...)을 잡는다.
+   - 기본: OSM에서 대상 건물 way를 찾아(Overpass 등) 극점 좌표를 뽑는다. base 타일이 OSM인 한 이 좌표계가 정렬 기준이다.
+   - VWorld 위성 배경(vworldApiKey 설정 시)으로 배포한다면 대신 VWorld 위성 지도에서 같은 꼭지점을 클릭해 뽑는다.
 
-2. 건물을 최대 줌으로 잡고 모서리 4~6점을 클릭. 라벨은 순서(1, 2, 3, ...) 또는 방위(N, W, S, E) 어느 쪽이든 좋음.
+2. 이 폴더 JSON 형식(`gcps[]`의 `label`/`compass`/`outdoor.lat`·`lng`)에 맞춰 값을 채워 덮어쓴다.
 
-3. Export JSON으로 내려받아 이 폴더에 덮어쓰기.
-
-4. 재정합 실행 (dry-run):
+3. 재정합 실행 (dry-run):
    ```
    cd backend
    python -m scripts.transform.refit_building_wgs84 \
@@ -30,4 +27,4 @@
    ```
    잔차와 새 아핀을 출력한다. 자동 매칭이 이상하면 `--map "N=1,W=2,S=3,E=4"`처럼 명시.
 
-5. 결과 만족스러우면 `--write`로 studio JSON들의 아핀을 덮어쓰기.
+4. 결과 만족스러우면 `--write`로 studio JSON들의 아핀을 덮어쓰기.

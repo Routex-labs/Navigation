@@ -9,7 +9,6 @@ Studio 형식으로 바꾸는 작업, 검색 품질 평가, 임베딩 모델 사
 |---|---|
 | [`seed/`](seed/README.md) | SQLite 초기화와 Studio 데이터 적재 |
 | [`transform/`](transform/README.md) | 원본 데이터·층 정렬·수직 전이·글리프 변환 |
-| [`tools/`](tools/gcp_picker.html) | GCP 정합용 브라우저 도구(`gcp_picker.html`) — VWorld 위성 지도로 건물 꼭지점 lat/lng 뽑기 |
 | [`evaluate_query_hybrid.py`](evaluate_query_hybrid.py) | 29개 질의로 경량+FAISS 최종 경로와 FAISS 단독 비교 |
 | [`warm_embedding_model.py`](warm_embedding_model.py) | 문장 임베딩 모델을 캐시에 받고 실제 encode까지 확인 |
 
