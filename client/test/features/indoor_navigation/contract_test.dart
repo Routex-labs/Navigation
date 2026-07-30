@@ -34,7 +34,13 @@ class FakeIndoorNavigation implements IndoorNavigationController {
   PdrRuntimeStatus get currentRuntimeStatus => _runtimeStatus;
 
   @override
+  String? get currentFloorId => _floorId;
+
+  String? _floorId;
+
+  @override
   Future<void> startGuidance({required String floorId}) async {
+    _floorId = floorId;
     log.add('start:$floorId');
   }
 
@@ -58,6 +64,7 @@ class FakeIndoorNavigation implements IndoorNavigationController {
 
   @override
   Future<void> changeFloor({required String floorId}) async {
+    _floorId = floorId;
     log.add('floor:$floorId');
   }
 

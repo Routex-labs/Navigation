@@ -26,4 +26,13 @@ abstract interface class IndoorNavigationView {
 
   /// 가장 최근 센서 파이프라인 실행 상태.
   PdrRuntimeStatus get currentRuntimeStatus;
+
+  /// 지금 세션이 붙어 있는 층. 세션을 한 번도 시작하지 않았으면 null.
+  ///
+  /// 확정되는 anchor에는 **이 값**이 층으로 찍힌다([PdrAnchor.floorId]). 그리고
+  /// 위치 마커·경로는 `anchor.floorId == 화면이 보여주는 층`일 때만 그려진다.
+  /// 그래서 UI는 위치를 다시 지정하기 전에 이 값이 지금 층과 같은지 확인하고,
+  /// 다르면 [IndoorNavigationIntents.changeFloor]로 맞춰야 한다 — 그러지 않으면
+  /// 새로 찍은 anchor가 옛 층으로 기록돼 화면에 아무것도 나타나지 않는다.
+  String? get currentFloorId;
 }

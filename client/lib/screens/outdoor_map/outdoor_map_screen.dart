@@ -1276,12 +1276,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       return;
     }
 
-    if (indoorNavigationDriver.currentRuntimeStatus.state ==
-        PdrRuntimeState.idle) {
-      setState(() => _pdrTrailState.beginNewSession());
-      await indoorNavigationDriver.startGuidance(floorId: floor);
-      if (!mounted) return;
-    }
+    if (!await _bindPdrSessionToFloor(floor)) return;
     await _awaitSensorWarmup();
     if (!mounted || !_indoorEntered) return;
 
@@ -3320,6 +3315,31 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncHighlightLayer();
   }
 
+  /// PDR 세션이 [floor]를 가리키게 맞춘다. 이어서 앵커를 찍어도 되면 true.
+  ///
+  /// **다른 층에서 이미 돌고 있는 세션을 그냥 재사용하면 안 된다.** 앵커에
+  /// 찍히는 층은 세션의 층([IndoorNavigationView.currentFloorId])이고, 위치
+  /// 마커·경로는 `anchor.floorId == 지금 보고 있는 층`일 때만 그려진다. 그래서
+  /// 1층에서 위치를 지정한 뒤 2층에서 다시 지정하면, 새 앵커가 여전히 1층으로
+  /// 기록돼 2층 지도에는 아무것도 나타나지 않았다 — 사용자 눈에는 "첫 층 말고는
+  /// 위치 지정이 안 되는" 버그였다. 오류도 안 뜨니 원인을 짚을 단서도 없었다.
+  ///
+  /// 층이 바뀌면 걸음 세션도 함께 리셋한다([IndoorNavigationIntents.changeFloor]).
+  /// 이전 층에서 쌓은 걸음·궤적을 그대로 이어받으면 새 앵커 기준 위치가 처음부터
+  /// 어긋난 채 시작한다.
+  Future<bool> _bindPdrSessionToFloor(String floor) async {
+    if (indoorNavigationDriver.currentRuntimeStatus.state ==
+        PdrRuntimeState.idle) {
+      setState(() => _pdrTrailState.beginNewSession());
+      await indoorNavigationDriver.startGuidance(floorId: floor);
+      return mounted;
+    }
+    if (indoorNavigationDriver.currentFloorId == floor) return true;
+    setState(() => _pdrTrailState.beginNewSession());
+    await indoorNavigationDriver.changeFloor(floorId: floor);
+    return mounted;
+  }
+
   /// 앵커 배치 대기 상태 전환. 상위(MapShellScreen)에 알려 하단 바 "위치 지정"
   /// 버튼의 활성 톤을 함께 갱신한다.
   void _setPlacingAnchor(bool value) {
@@ -3348,12 +3368,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _showSnack('이 층은 위치 지정에 필요한 지도 정보가 아직 없습니다.');
       return;
     }
-    if (indoorNavigationDriver.currentRuntimeStatus.state ==
-        PdrRuntimeState.idle) {
-      setState(() => _pdrTrailState.beginNewSession());
-      await indoorNavigationDriver.startGuidance(floorId: floor);
-      if (!mounted) return;
-    }
+    if (!await _bindPdrSessionToFloor(floor)) return;
     _setPlacingAnchor(true);
     _showSnack('지도에서 현재 서 있는 위치를 탭해 지정해주세요.');
   }

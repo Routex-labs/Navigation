@@ -71,6 +71,9 @@ class IndoorNavigationDriver implements IndoorNavigationController {
   @override
   PdrRuntimeStatus get currentRuntimeStatus => _runtimeStatus;
 
+  @override
+  String? get currentFloorId => _floorId;
+
   // ── IndoorNavigationIntents ──
 
   @override

@@ -459,6 +459,23 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         indoorNavigationDriver.currentRuntimeStatus,
       );
       if (!mounted) return;
+    } else if (indoorNavigationDriver.currentFloorId != floor) {
+      // **다른 층에서 돌던 세션을 그냥 재사용하면 안 된다.** 앵커에 찍히는 층은
+      // 세션의 층이고, 위치 마커·경로는 `anchor.floorId == 지금 보고 있는 층`일
+      // 때만 그려진다. 그래서 1층에서 위치를 지정한 뒤 2층에서 다시 지정하면
+      // 새 앵커가 여전히 1층으로 기록돼 2층 지도에는 아무것도 나타나지 않았다 —
+      // 사용자 눈에는 "첫 층 말고는 위치 지정이 안 되는" 버그였다.
+      //
+      // 걸음 세션도 함께 리셋한다. 이전 층에서 쌓은 걸음·궤적을 그대로 이어받으면
+      // 새 앵커 기준 위치가 처음부터 어긋난 채 시작한다.
+      setState(() {
+        _pdrTrailState.beginNewSession();
+      });
+      await indoorNavigationDriver.changeFloor(floorId: floor);
+      _pdrDebugRecorder?.recordRuntime(
+        indoorNavigationDriver.currentRuntimeStatus,
+      );
+      if (!mounted) return;
     }
     _setPlacingAnchor(true);
     _showPdrMessage('지도에서 현재 서 있는 위치를 탭해 지정해주세요.');
