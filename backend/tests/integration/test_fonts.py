@@ -83,3 +83,29 @@ def test_경로_조작은_빈_응답으로_떨어진다(api_client):
     assert response.status_code in {200, 404}
     if response.status_code == 200:
         assert response.content == b""
+
+
+# 역슬래시(Windows 구분자)로도 상위 디렉터리를 탈출할 수 없어야 한다.
+def test_역슬래시_경로_조작도_막힌다(api_client):
+    response = api_client.get(f"/fonts/..%5C..%5Capp/{EXISTING_RANGE}.pbf")
+
+    assert response.status_code in {200, 404}
+    if response.status_code == 200:
+        assert response.content == b""
+
+
+# 점으로 시작하는 이름(숨김/상위 참조)도 실 파일을 열지 않고 빈 응답으로 떨어진다.
+def test_점으로_시작하는_폰트명은_빈_응답으로_떨어진다(api_client):
+    response = api_client.get(f"/fonts/.hidden/{EXISTING_RANGE}.pbf")
+
+    assert response.status_code in {200, 404}
+    if response.status_code == 200:
+        assert response.content == b""
+
+
+# 여러 폰트 중 조작된 이름은 건너뛰고, 실재하는 폰트가 있으면 그걸 돌려준다.
+def test_여러_폰트스택에서_조작된_이름은_건너뛴다(api_client):
+    response = api_client.get(f"/fonts/.evil,{FONTSTACK}/{EXISTING_RANGE}.pbf")
+
+    assert response.status_code == 200
+    assert response.content
