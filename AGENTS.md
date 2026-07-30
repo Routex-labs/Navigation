@@ -61,18 +61,18 @@
     - `warm_embedding_model`은 `/query/ai`용 임베딩 모델(약 420MB)을 로컬 HF 캐시에 미리 받아 둔다. **빼먹으면 첫 AI 질의가 다운로드를 통째로 기다린다**(실측 3분 29초, 그동안 프론트는 "찾는 중…"만 돈다). 캐시가 이미 있으면 즉시 끝난다.
     - 검증할 때마다:
     ```powershell
-    # Windows — UTF-8 로그. PS 5.1의 Tee-Object는 파일을 UTF-16으로 쓰므로 패스스루로 tee한다.
+    # Windows — 콘솔엔 전부, 파일엔 WARNING/ERROR + 트레이스백만. PS 5.1 Tee-Object는 UTF-16으로 쓰므로 패스스루로 tee한다.
     .\.venv\Scripts\Activate.ps1
     python -m scripts.seed.reset_and_seed
     $env:NAV_WARM_EMBEDDING = '1'
-    python -m uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8001 2>&1 | ForEach-Object { $_; $_ | Out-File ..\backend-local.log -Append -Encoding utf8 }
+    python -m uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8001 2>&1 | ForEach-Object { $_; if ($_ -match '^(\d{4}-\d\d-\d\d|INFO:|WARNING:|ERROR:|CRITICAL:|DEBUG:)') { $keep = ($_ -cmatch 'ERROR|WARNING|CRITICAL') }; if ($keep) { $_ | Out-File ..\backend-local.log -Append -Encoding utf8 } }
     ```
     ```bash
-    # macOS — tee는 UTF-8
+    # macOS — tee로 콘솔엔 전부, awk로 파일엔 WARNING/ERROR + 트레이스백만
     source .venv/bin/activate
     python -m scripts.seed.reset_and_seed
     export NAV_WARM_EMBEDDING=1
-    python -m uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8001 2>&1 | tee ../backend-local.log
+    python -m uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8001 2>&1 | tee >(awk '/^([0-9]{4}-[0-9][0-9]-[0-9][0-9]|INFO:|WARNING:|ERROR:|CRITICAL:|DEBUG:)/{keep=/ERROR|WARNING|CRITICAL/} keep' > ../backend-local.log)
     ```
     - `NAV_WARM_EMBEDDING=1`은 기동 직후 백그라운드로 임베딩 모델을 올려 첫 `/query/ai`의 로드 대기(캐시 히트여도 약 6.5초)를 없앤다. 기본값이 꺼짐이라 **안 켜면 재시작할 때마다 첫 AI 질의가 그 시간을 뒤집어쓴다.** AI 질의를 안 건드리는 작업이면 생략해도 되지만, 켜 두면 400MB대 메모리를 상주시킨다는 점만 알아 둔다.
     - `--reload-dir app`으로 **감시 범위를 `app/` 코드로만 한정**한다. 안 그러면 `tests/`·`resources/` 편집도 리로드를 트리거해 서버가 리로드되다 죽는다(Windows에서 특히).
@@ -91,9 +91,10 @@
     flutter run -d chrome 2>&1 | tee frontend.log
     ```
 
-  - **백엔드·프론트 창 모두 UTF-8로 실행한다.** Windows는 (a) 창 프렐류드로 콘솔 인코딩을 UTF-8로 고정하고(콘솔 표시·네이티브 출력 디코딩), (b) 로그 파일은 `Tee-Object` 대신 **패스스루 `... | ForEach-Object { $_; $_ | Out-File <log> -Append -Encoding utf8 }`** 로 쓴다(PS 5.1 Tee-Object는 파일을 UTF-16으로 씀). 소스 파일·리소스 JSON도 UTF-8로 저장한다. 한글 로그가 UTF-16/깨짐으로 남으면 에이전트가 로그를 못 읽는다.
+  - **백엔드·프론트 창 모두 UTF-8로 실행한다.** Windows는 (a) 창 프렐류드로 콘솔 인코딩을 UTF-8로 고정하고(콘솔 표시·네이티브 출력 디코딩), (b) 로그 파일은 `Tee-Object` 대신 **패스스루 `... | ForEach-Object { $_; ... | Out-File <log> -Append -Encoding utf8 }`** 로 쓴다(PS 5.1 Tee-Object는 파일을 UTF-16으로 씀). 소스 파일·리소스 JSON도 UTF-8로 저장한다. 한글 로그가 UTF-16/깨짐으로 남으면 에이전트가 로그를 못 읽는다.
   - 사용자는 창에서 실시간 로그를 보고, 에이전트는 `backend-local.log`·`frontend.log`를 읽어 추적한다. (두 로그 파일은 `.gitignore`에 둔다.)
-  - 백엔드 로그는 uvicorn access 로그(요청·상태 코드)와 우리 코드(`app.*`)의 로그, 예외 트레이스백을 모두 stdout으로 남긴다(`app/core/logging.py`). 파일 기반 SQL/요청 진단 캡처(옛 `NAV_SQL_ECHO`/`NAV_HTTP_CAPTURE`)는 제거됐다 — 상세 로그가 필요하면 `NAV_LOG_LEVEL=DEBUG`로 실행한다.
+  - **백엔드 로그는 콘솔엔 전부 남기고, 파일(`backend-local.log`)엔 `WARNING`/`ERROR`/`CRITICAL` 줄과 그 뒤 트레이스백만 남긴다.** uvicorn access 로그(요청·상태 코드)는 INFO라 파일엔 안 쌓이고 창에서만 실시간으로 본다 — 파일은 문제 상황만 모아 두는 용도다. 필터는 "새 로그 줄(타임스탬프/`INFO:`·`ERROR:` 등으로 시작)을 만나면 레벨을 다시 판정하고, 들여쓰기된 후속 줄(트레이스백 스택)은 직전 판정을 그대로 잇는" 방식이라 예외 스택이 잘리지 않는다. 파일에서도 요청 흐름까지 다 보고 싶으면 필터를 빼고 `... | Out-File ..\backend-local.log -Append -Encoding utf8`(mac은 `tee`)로 되돌린다.
+  - 우리 코드(`app.*`)의 예외 로깅은 `app/core/logging.py`가 잡는다: 5xx는 `ERROR`, 4xx·422 검증 실패는 `WARNING`. 미처리 500은 uvicorn.error가 트레이스백을 남긴다. 파일 기반 SQL/요청 진단 캡처(옛 `NAV_SQL_ECHO`/`NAV_HTTP_CAPTURE`)는 제거됐다 — 요청 단위 상세 로그가 필요하면 `NAV_LOG_LEVEL=DEBUG`로 실행한다.
 
 - **경로 계산은 클라이언트 온디바이스(Dijkstra, `client/lib/domain/dijkstra.dart`)가 담당한다.** 서버는 그래프(nodes·edges)만 제공하며, 최단 경로 로직을 서버로 옮기지 않는다.
 - **API 계약(JSON)은 Flutter 클라이언트가 소비하는 형태를 우선으로 유지한다.** 백엔드 응답 스키마를 바꾸면 클라이언트의 모델·파싱도 함께 확인한다.
