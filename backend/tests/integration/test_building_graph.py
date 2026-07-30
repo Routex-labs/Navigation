@@ -140,3 +140,22 @@ def test_층_내부_간선은_양끝_층이_같다(api_client):
 
     intra = [edge for edge in body["edges"] if edge["transfer_mode"] is None]
     assert all(edge["from_floor_id"] == edge["to_floor_id"] for edge in intra)
+
+
+# 응답에 그래프 리비전(체크섬)이 실리고, 같은 요청은 같은 값이다(캐시 무효화 키).
+def test_그래프_응답에_안정적인_리비전이_실린다(api_client):
+    first = api_client.get(f"/buildings/{BUILDING_ID}/graph").json()
+    second = api_client.get(f"/buildings/{BUILDING_ID}/graph").json()
+
+    assert isinstance(first["revision"], str) and first["revision"]
+    # 데이터가 그대로면 재요청해도 같은 리비전이어야 캐시가 유효하다.
+    assert first["revision"] == second["revision"]
+
+
+# vertical 정책이 다르면 실리는 간선이 달라지므로 리비전도 달라진다.
+def test_정책이_다르면_리비전이_다르다(api_client):
+    auto = api_client.get(f"/buildings/{BUILDING_ID}/graph", params={"vertical": "auto"}).json()
+    escalator = api_client.get(f"/buildings/{BUILDING_ID}/graph", params={"vertical": "escalator"}).json()
+
+    # 픽스처는 엘리베이터만 있어 escalator 정책은 전이 간선을 뺀다 → 다른 payload, 다른 리비전.
+    assert auto["revision"] != escalator["revision"]
