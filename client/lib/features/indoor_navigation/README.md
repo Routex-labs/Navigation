@@ -25,6 +25,7 @@ flowchart LR
     UI["IndoorMapScreen"]
     MATCHER["FloorMapMatcher"]
     GRAPH["FloorGraph"]
+    FLOORDET["application/<br/>EscalatorTransitionDetector"]
 
     SENSOR --> SOURCE --> DRIVER
     DRIVER <--> CORE
@@ -34,12 +35,18 @@ flowchart LR
     UI -->|"PDR 이동 경로"| MATCHER
     GRAPH --> MATCHER
     MATCHER -->|"그래프에 맞춘 위치"| UI
+    DRIVER -->|"기압 샘플"| FLOORDET
+    GRAPH --> FLOORDET
+    FLOORDET -->|"층 이동 확정"| UI
+    UI -->|"applyVerticalTransfer"| CONTRACT
 ```
 
 ## 세션 수명주기
 
 - `startGuidance(floorId)`에서 센서와 새 pedometer 세션을 시작한다.
 - 화면 전환만으로 세션을 중지하지 않는다.
+- 에스컬레이터 층 이동이 확인되면 `applyVerticalTransfer`가 걸음 세션을 새로 열고 도착
+  노드를 새 anchor로 놓는다(회전값은 물려받으므로 방향 재보정 없음).
 - 앱 background에서는 pause하고 센서를 멈추며, foreground 복귀 시 resume한다.
 - 층 변경은 pedometer와 보정 anchor를 새 층 기준으로 초기화한다.
 - 안내 종료에서 마지막 pedometer 값을 확정한 뒤 센서를 멈춘다.
@@ -75,6 +82,18 @@ flowchart LR
 `FloorMapMatcher`는 anchor 스냅과 기존 진단/호환 경로 계산에 남아 있지만, 제품 현재
 위치를 정하기 위해 매 build마다 원본 경로 전체를 다시 계산하지 않는다.
 
+## 층 따라가기 (에스컬레이터)
+
+기압계로 층 이동을 감지해 도면·경로를 자동으로 바꾸고, 새 층의 에스컬레이터 **도착
+노드**로 위치를 옮긴다. 판정은 `application/escalator_transition_detector.dart`가 하고,
+근거 분담은 "노드 근접 = 허가, 기압 = 판정, 노드 이름 = 도착 층·지점"이다. 자세한 조건과
+범위 한계(±1층 에스컬레이터만, 엘리베이터·계단 제외)는
+[`application/README.md`](application/README.md)에 있다.
+
+층 선택기로 다른 층을 훑어보는 것과 이 자동 전환은 **다른 사건**이다. 전자는 PDR 세션과
+anchor를 건드리지 않고, 후자만 anchor를 새 층으로 옮긴다. 오탐 시 되돌릴 수 있도록 전환
+직후 토스트에 "아니에요"를 띄우고 직전 층·anchor를 복원한다.
+
 ## 실패 지점
 
 - 화면마다 드라이버를 만들면 센서 구독이 중복되고 화면 전환 때 보정이 사라진다.
@@ -84,6 +103,9 @@ flowchart LR
 - 맵 매칭 품질은 그래프 연결성과 좌표 정확도에 의존한다. PDR만 조정하기 전에 그래프를 확인한다.
 - `uncertain`에서 가까운 노드를 임의로 선택하면 평행 복도·벽 너머 복도로 순간이동한다.
 - 보라 점선은 저지연 임시 후보라 분기점에서 잠깐 다른 연결 간선을 가리킬 수 있지만, 초록 검증 전에는 길안내 위치로 사용하지 않는다.
+- 기압 누적 변화량만으로 층을 바꾸면 기상 드리프트가 층 이동으로 확정된다. 상승 **속도**가 함께 필요하다.
+- 기압계 없는 기기(Android 일부, iPhone 5s 이하)에서는 층 따라가기가 꺼진 채로 동작해야 한다.
+- 도착 노드를 이름으로 못 찾았을 때 아무 에스컬레이터 노드로 폴백하면 조용히 틀린 위치가 된다.
 
 ## 검증
 

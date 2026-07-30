@@ -1,6 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
+import 'package:navigation_client/domain/route_progress.dart';
 import 'package:navigation_client/features/indoor_navigation/application/corridor_position_tracker.dart';
+import 'package:navigation_client/features/indoor_navigation/application/escalator_transition_detector.dart';
+import 'package:navigation_client/features/indoor_navigation/contract/altitude_sample.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/calibration_state.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/pdr_anchor.dart';
 import 'package:navigation_client/features/indoor_navigation/debug/pdr_debug_session_recorder.dart';
@@ -136,7 +139,7 @@ void main() {
     final matched = paths['map_matched_floor_local_m']! as List<Object?>;
     final finalMatched = matched.last! as Map<String, double>;
 
-    expect(json['schema_version'], 10);
+    expect(json['schema_version'], 12);
     expect(
       (json['map_context']! as Map<String, Object?>)['map_calibration_version'],
       'thehyundai-seoul-1f-svg-v1',
@@ -155,6 +158,151 @@ void main() {
     expect(finalMatched['east_m'], closeTo(4, 1e-9));
     expect(finalMatched['north_m'], closeTo(0, 1e-9));
     expect((json['quality_samples_1hz']! as List<Object?>), hasLength(1));
+    // 길찾기 없이 걸은 세션에는 경로 계측이 없다 — null이어야 "이 파일로는
+    // 경로 기준 판단을 할 수 없다"가 분명해진다.
+    expect(json['route_context'], isNull);
+    expect(json['route_progress_summary'], isNull);
+  });
+
+  group('경로 기준 계측(v11)', () {
+    test('경로 컨텍스트와 진행률 시계열·요약을 남긴다', () {
+      final recorder = PdrDebugSessionRecorder(
+        startedAt: DateTime.utc(2026, 7, 18, 9),
+      );
+      recorder.recordSnapshot(
+        _snapshot(
+          steps: 4,
+          distanceM: 3.1,
+          path: const [PdrLocalPoint(0, 0), PdrLocalPoint(4, 1)],
+        ),
+        at: DateTime.utc(2026, 7, 18, 9, 0, 1),
+      );
+      recorder.recordRouteContext(
+        destinationName: '테스트 매장',
+        destinationNodeId: 'c',
+        floorId: '1F',
+        edgeIds: const ['ab', 'bc'],
+        routeDistanceM: 20,
+        isMultiFloor: false,
+      );
+      recorder.recordRouteProgress(
+        const RouteProgress(
+          traveledM: 4,
+          remainingM: 16,
+          offsetM: 0.3,
+          onRouteEdge: true,
+          reacquired: false,
+          segmentIndex: 0,
+        ),
+        at: DateTime.utc(2026, 7, 18, 9, 0, 1),
+      );
+      // 이탈로 바뀐 순간은 1초 간격을 기다리지 않고 즉시 남아야 한다.
+      recorder.recordRouteProgress(
+        const RouteProgress(
+          traveledM: 6,
+          remainingM: 14,
+          offsetM: 1.6,
+          onRouteEdge: false,
+          reacquired: false,
+          segmentIndex: 0,
+        ),
+        at: DateTime.utc(2026, 7, 18, 9, 0, 1, 200),
+      );
+
+      final json = recorder.buildJson(
+        buildingId: 'thehyundai-seoul',
+        selectedFloor: '1F',
+        mapCalibrationVersion: 'thehyundai-seoul-1f-svg-v1',
+        graph: _graph(),
+        device: const {'device_name': 'Test device'},
+        exportedAt: DateTime.utc(2026, 7, 18, 9, 1),
+      );
+
+      final context = json['route_context']! as Map<String, Object?>;
+      expect(context['destination_node_id'], 'c');
+      expect(context['edge_ids'], ['ab', 'bc']);
+
+      final samples = json['route_progress_samples']! as List<Object?>;
+      expect(samples, hasLength(2));
+
+      final summary = json['route_progress_summary']! as Map<String, Object?>;
+      expect(summary['sample_count'], 2);
+      expect(summary['on_route_ratio'], closeTo(0.5, 1e-9));
+      expect(summary['reacquired_count'], 0);
+      expect(summary['max_offset_m'], closeTo(1.6, 1e-9));
+      expect(summary['last_remaining_m'], closeTo(14, 1e-9));
+    });
+
+    test('상태 변화가 없으면 1초에 한 건으로 줄인다', () {
+      final recorder = PdrDebugSessionRecorder(
+        startedAt: DateTime.utc(2026, 7, 18, 9),
+      );
+      for (var index = 0; index < 5; index++) {
+        recorder.recordRouteProgress(
+          RouteProgress(
+            traveledM: index.toDouble(),
+            remainingM: 20 - index.toDouble(),
+            offsetM: 0.2,
+            onRouteEdge: true,
+            reacquired: false,
+            segmentIndex: 0,
+          ),
+          at: DateTime.utc(2026, 7, 18, 9, 0, 0, index * 200),
+        );
+      }
+
+      final json = recorder.buildJson(
+        buildingId: 'thehyundai-seoul',
+        selectedFloor: '1F',
+        mapCalibrationVersion: 'thehyundai-seoul-1f-svg-v1',
+        graph: _graph(),
+        device: const {'device_name': 'Test device'},
+        exportedAt: DateTime.utc(2026, 7, 18, 9, 1),
+      );
+
+      expect((json['route_progress_samples']! as List<Object?>), hasLength(1));
+    });
+
+    test('재획득이 켜지는 순간도 간격과 무관하게 남긴다', () {
+      final recorder = PdrDebugSessionRecorder(
+        startedAt: DateTime.utc(2026, 7, 18, 9),
+      );
+      recorder.recordRouteProgress(
+        const RouteProgress(
+          traveledM: 10,
+          remainingM: 10,
+          offsetM: 0.2,
+          onRouteEdge: true,
+          reacquired: false,
+          segmentIndex: 0,
+        ),
+        at: DateTime.utc(2026, 7, 18, 9, 0, 0),
+      );
+      recorder.recordRouteProgress(
+        const RouteProgress(
+          traveledM: 2,
+          remainingM: 18,
+          offsetM: 0.4,
+          onRouteEdge: true,
+          reacquired: true,
+          segmentIndex: 0,
+        ),
+        at: DateTime.utc(2026, 7, 18, 9, 0, 0, 100),
+      );
+
+      final json = recorder.buildJson(
+        buildingId: 'thehyundai-seoul',
+        selectedFloor: '1F',
+        mapCalibrationVersion: 'thehyundai-seoul-1f-svg-v1',
+        graph: _graph(),
+        device: const {'device_name': 'Test device'},
+        exportedAt: DateTime.utc(2026, 7, 18, 9, 1),
+      );
+
+      final summary = json['route_progress_summary']! as Map<String, Object?>;
+      expect(summary['sample_count'], 2);
+      expect(summary['reacquired_count'], 1);
+    });
   });
 
   test('1Hz 샘플에 주황(preview)도 같이 남긴다', () {
@@ -196,6 +344,136 @@ void main() {
     expect(sample['walk_offset_deg'], 10);
     expect(sample['device_heading_deg'], 82);
     expect(sample['heading_converged'], true);
+  });
+
+  group('기압계·층 전이 판정(v12)', () {
+    test('기압 원본 시계열과 판정 상태를 남긴다', () {
+      final recorder = PdrDebugSessionRecorder(
+        startedAt: DateTime.utc(2026, 7, 18, 9),
+      );
+      recorder.recordAltimeterStatus(
+        const AltimeterStatus(
+          available: true,
+          source: 'android_pressure',
+          sensorName: 'LPS22HH Pressure Sensor',
+        ),
+      );
+      recorder.recordAltitudeSample(
+        const AltitudeSample(
+          timestampMs: 1770000000000,
+          pressureHpa: 1008.2,
+          source: 'android_pressure',
+        ),
+        smoothedM: 42.1,
+        baselineM: 38.0,
+        deltaM: 4.1,
+        armed: true,
+        candidate: true,
+        at: DateTime.utc(2026, 7, 18, 9, 0, 20),
+      );
+      recorder.recordSnapshot(
+        _snapshot(
+          steps: 4,
+          distanceM: 3.1,
+          path: const [PdrLocalPoint(0, 0), PdrLocalPoint(4, 1)],
+        ),
+        at: DateTime.utc(2026, 7, 18, 9, 0, 21),
+      );
+      recorder.recordFloorTransitionEvents([
+        const EscalatorDetectionEvent(
+          atMs: 1770000000000,
+          kind: 'confirmed',
+          reason: 'up',
+          deltaM: 4.4,
+          fromFloorLabel: '2F',
+          toFloorLabel: '3F',
+          group: 'ES1',
+          durationMs: 21000,
+          stepsDuring: 0,
+        ),
+        // 거부도 남는다 — 임계값 조정은 거부 이유가 있어야 가능하다.
+        const EscalatorDetectionEvent(
+          atMs: 1770000030000,
+          kind: 'rejected',
+          reason: 'multiFloorUnsupported',
+          deltaM: 9.8,
+          fromFloorLabel: '3F',
+        ),
+      ], at: DateTime.utc(2026, 7, 18, 9, 0, 22));
+
+      final json = recorder.buildJson(
+        buildingId: 'thehyundai-seoul',
+        selectedFloor: '3F',
+        mapCalibrationVersion: 'v1',
+        graph: _graph(),
+        device: const {},
+      );
+
+      final altimeter = json['altimeter']! as Map<String, Object?>;
+      expect(altimeter['available'], true);
+      expect(altimeter['source'], 'android_pressure');
+      expect(altimeter['sensor_name'], 'LPS22HH Pressure Sensor');
+      expect(altimeter['sample_count'], 1);
+      expect(altimeter['dropped_samples'], 0);
+
+      final sample =
+          (json['altimeter_samples']! as List<Object?>).single!
+              as Map<String, Object?>;
+      expect(sample['pressure_hpa'], 1008.2);
+      expect(sample['altitude_m'], isA<double>());
+      expect(sample['smoothed_m'], 42.1);
+      expect(sample['baseline_m'], 38.0);
+      expect(sample['delta_m'], 4.1);
+      expect(sample['armed'], true);
+      expect(sample['candidate'], true);
+
+      // 걸음 시계열과 같은 줄에서 고도를 볼 수 있어야 에스컬레이터와 계단을 가른다.
+      final qualitySample =
+          (json['quality_samples_1hz']! as List<Object?>).single!
+              as Map<String, Object?>;
+      final inlineAltimeter =
+          qualitySample['altimeter']! as Map<String, Object?>;
+      expect(inlineAltimeter['delta_m'], 4.1);
+
+      final events = json['floor_transition_events']! as List<Object?>;
+      expect(events, hasLength(2));
+      expect((events.first! as Map<String, Object?>)['kind'], 'confirmed');
+      expect((events.first! as Map<String, Object?>)['to_floor'], '3F');
+      expect(
+        (events.last! as Map<String, Object?>)['reason'],
+        'multiFloorUnsupported',
+      );
+    });
+
+    test('기압계 없는 기기는 available=false로 남고 시계열이 비어 있다', () {
+      final recorder = PdrDebugSessionRecorder(
+        startedAt: DateTime.utc(2026, 7, 18, 9),
+      );
+      recorder.recordSnapshot(
+        _snapshot(
+          steps: 1,
+          distanceM: 0.7,
+          path: const [PdrLocalPoint(0, 0), PdrLocalPoint(0.7, 0)],
+        ),
+        at: DateTime.utc(2026, 7, 18, 9),
+      );
+
+      final json = recorder.buildJson(
+        buildingId: 'thehyundai-seoul',
+        selectedFloor: '1F',
+        mapCalibrationVersion: 'v1',
+        graph: _graph(),
+        device: const {},
+      );
+
+      expect((json['altimeter']! as Map<String, Object?>)['available'], false);
+      expect(json['altimeter_samples'], isEmpty);
+      expect(json['floor_transition_events'], isEmpty);
+      final qualitySample =
+          (json['quality_samples_1hz']! as List<Object?>).single!
+              as Map<String, Object?>;
+      expect(qualitySample['altimeter'], isNull);
+    });
   });
 
   test('pedometer live/재조회 대조를 남기고, 없으면 null이다', () {

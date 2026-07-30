@@ -18,6 +18,7 @@ import '../../domain/geo_transform.dart';
 import '../../features/debug_mode/debug_mode.dart';
 import '../../features/indoor_navigation/application/corridor_tracking_session.dart';
 import '../../features/indoor_navigation/application/floor_map_matcher.dart';
+import '../../features/indoor_navigation/application/indoor_location_estimate.dart';
 import '../../features/indoor_navigation/contract/indoor_navigation_contract.dart';
 import '../../features/indoor_navigation/debug/pdr_debug_device_info.dart';
 import '../../features/indoor_navigation/debug/pdr_debug_session_recorder.dart';
@@ -67,6 +68,11 @@ const _indoorWalkingSpeedMetersPerSecond = 1.2;
 // 그런 상태에서 억지로 스냅하면 건물 반대편 복도에 위치를 찍어 놓고 거기서부터
 // 걸음을 쌓는다 — 위치가 없는 것보다 나쁘다.
 const _maxEntranceAnchorSnapDistanceM = 25.0;
+
+// 실제 GPS 좌표를 실내 절대 추정점으로 쓸 수 있는 품질 기준. 이보다 나쁘면
+// GPS 점을 복도에 억지로 붙이지 않고, 검증된 건물 입구 좌표로 폴백한다.
+const _trustedIndoorGpsAccuracyM = 15.0;
+const _maxIndoorGpsSnapDistanceM = 12.0;
 
 // 자동 앵커를 확정하기 전에 센서 세션의 첫 보고를 기다리는 최대 시간.
 // 근거는 [_awaitSensorWarmup] 주석 참고.
@@ -118,6 +124,8 @@ const _indoorPoiIconLayerIdBase = 'outdoor-indoor-pois-icon';
 const _indoorStoreFacilityIconLayerIdBase =
     'outdoor-indoor-store-facility-icons';
 const _routeSourceId = 'outdoor-route';
+const _transferRouteSourceId = 'outdoor-transfer-route';
+const _transferRouteLayerId = 'outdoor-transfer-route-line';
 const _routeCasingLayerId = 'outdoor-route-casing';
 const _routeLineLayerId = 'outdoor-route-line';
 const _currentSourceId = 'outdoor-current';
@@ -230,8 +238,7 @@ const _maxPdrAnchorSnapDistanceM = 40.0;
 // map_bottom_bar.dart의 outer padding(14) + ModeSegment 실제 높이(≈45) + spacer(10).
 // 실내 화면과 동일한 상수로 계산해 두 화면 사이 pill 위치가 어긋나지 않게 한다.
 const _bottomBarInnerBottomPaddingPx = 14.0;
-const _floorSelectorBottomOffset =
-    _bottomBarInnerBottomPaddingPx + 45.0 + 10.0;
+const _floorSelectorBottomOffset = _bottomBarInnerBottomPaddingPx + 45.0 + 10.0;
 // 경로 ETA 카드가 화면에 뜨면 하단 바(=층 선택기 기준선)가 이만큼 위로 올라간다.
 // map_shell_screen.dart의 _etaBarLiftHeight와 동일해야 한다.
 const _bottomBarLiftPx = 92.0;
@@ -448,11 +455,15 @@ Map<String, dynamic> _lineFeature(List<ll.LatLng> points) {
   };
 }
 
-Map<String, dynamic> _emptyCollection() =>
-    {'type': 'FeatureCollection', 'features': const <Map<String, dynamic>>[]};
+Map<String, dynamic> _emptyCollection() => {
+  'type': 'FeatureCollection',
+  'features': const <Map<String, dynamic>>[],
+};
 
-Map<String, dynamic> _collection(List<Map<String, dynamic>> features) =>
-    {'type': 'FeatureCollection', 'features': features};
+Map<String, dynamic> _collection(List<Map<String, dynamic>> features) => {
+  'type': 'FeatureCollection',
+  'features': features,
+};
 
 /// 야외 지도 본문(지도 + 위치/경로 오버레이). 검색창·길찾기·건물 전환 같은
 /// 공통 UI는 [MapShellScreen]이 상단/하단 바로 얹으므로 여기서는 다루지 않는다.
@@ -564,12 +575,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   late String _indoorTilesSourceId = _idFor(_indoorTilesSourceIdBase);
   late String _indoorFootprintLayerId = _idFor(_indoorFootprintLayerIdBase);
   late String _indoorStoresFillLayerId = _idFor(_indoorStoresFillLayerIdBase);
-  late String _indoorVerticalTransportFillLayerId =
-      _idFor(_indoorVerticalTransportFillLayerIdBase);
+  late String _indoorVerticalTransportFillLayerId = _idFor(
+    _indoorVerticalTransportFillLayerIdBase,
+  );
   late String _indoorStoresLabelLayerId = _idFor(_indoorStoresLabelLayerIdBase);
   late String _indoorPoiIconLayerId = _idFor(_indoorPoiIconLayerIdBase);
-  late String _indoorStoreFacilityIconLayerId =
-      _idFor(_indoorStoreFacilityIconLayerIdBase);
+  late String _indoorStoreFacilityIconLayerId = _idFor(
+    _indoorStoreFacilityIconLayerIdBase,
+  );
 
   String _idFor(String base) => '$base-g$_indoorIdGeneration';
 
@@ -582,23 +595,25 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _indoorTilesSourceId = _idFor(_indoorTilesSourceIdBase);
     _indoorFootprintLayerId = _idFor(_indoorFootprintLayerIdBase);
     _indoorStoresFillLayerId = _idFor(_indoorStoresFillLayerIdBase);
-    _indoorVerticalTransportFillLayerId =
-        _idFor(_indoorVerticalTransportFillLayerIdBase);
+    _indoorVerticalTransportFillLayerId = _idFor(
+      _indoorVerticalTransportFillLayerIdBase,
+    );
     _indoorStoresLabelLayerId = _idFor(_indoorStoresLabelLayerIdBase);
     _indoorPoiIconLayerId = _idFor(_indoorPoiIconLayerIdBase);
-    _indoorStoreFacilityIconLayerId =
-        _idFor(_indoorStoreFacilityIconLayerIdBase);
+    _indoorStoreFacilityIconLayerId = _idFor(
+      _indoorStoreFacilityIconLayerIdBase,
+    );
   }
 
   /// 현재 세대의 실내 오버레이 레이어 ID 목록(위→아래 순). removeLayer 순서로
   /// 그대로 재사용할 수 있다 — 레이어는 반드시 소스보다 먼저 제거해야 한다.
   List<String> get _indoorOverlayLayerIds => [
-        _indoorStoreFacilityIconLayerId,
-        _indoorPoiIconLayerId,
-        _indoorStoresLabelLayerId,
-        _indoorVerticalTransportFillLayerId,
-        _indoorStoresFillLayerId,
-        _indoorFootprintLayerId,
+    _indoorStoreFacilityIconLayerId,
+    _indoorPoiIconLayerId,
+    _indoorStoresLabelLayerId,
+    _indoorVerticalTransportFillLayerId,
+    _indoorStoresFillLayerId,
+    _indoorFootprintLayerId,
   ];
 
   /// 실내 진입 오버레이 상태. true면 층 chip과 위치 지정 버튼 등 실내 UI를
@@ -741,25 +756,43 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     super.dispose();
   }
 
-  /// 디버그 모드를 끄면 PDR 진입점이 화면에서 사라진다. 세션이 켜져 있는 채로
-  /// 버튼만 없어지면 센서가 계속 돌면서 종료할 방법이 없으므로 함께 정리한다.
-  /// (실내 화면도 같은 처리를 하며, [stopGuidance]는 이미 idle이면 즉시
-  /// 리턴하므로 두 화면이 같이 호출해도 안전하다.)
+  /// 디버그 모드는 이제 **표시만** 바꾼다.
+  ///
+  /// 예전에는 디버그를 끄면 PDR 진입점(시작/종료 버튼)이 사라지므로 세션을 함께
+  /// 정지시켰다. PDR이 실내 진입 중 상시 실행이 된 뒤에는 끌 대상이 없고, 여기서
+  /// 정지시키면 "선을 숨기려다 위치 추적이 끊기는" 결과가 된다.
   void _onDebugModeChanged() {
-    if (!_debugModeController.enabled &&
-        indoorNavigationDriver.currentRuntimeStatus.state !=
-            PdrRuntimeState.idle) {
-      unawaited(_stopPdrWhenDebugModeTurnsOff());
-    }
     // 디버그 시트에서 개별 경로 토글을 켜고 끄면 여기로 들어온다. 레이어는
     // 이미 등록돼 있으므로 데이터만 다시 채우면 즉시 반영된다.
     unawaited(_syncDebugPdrLayers());
     if (mounted) setState(() {});
   }
 
-  Future<void> _stopPdrWhenDebugModeTurnsOff() async {
-    await indoorNavigationDriver.stopGuidance();
-    if (mounted) _setPlacingAnchor(false);
+  /// 실내 진입 중에는 PDR 세션을 켜 둔다.
+  ///
+  /// anchor가 없으면 위치를 도면에 놓을 수 없지만, 센서를 미리 돌려두면 사용자가
+  /// 위치를 지정하는 순간 heading이 이미 수렴한 상태다. 권한이 거부돼 있으면
+  /// 자동 시작을 시도하지 않는다 — 진입마다 재시도하면 degraded warning만 쌓인다.
+  Future<void> _startPdrIfIdle() async {
+    final floor = _activeFloor;
+    final graph = _floorGraph;
+    if (floor == null ||
+        graph == null ||
+        graph.nodes.isEmpty ||
+        graph.edges.isEmpty) {
+      return;
+    }
+    if (indoorNavigationDriver.currentRuntimeStatus.state !=
+        PdrRuntimeState.idle) {
+      return;
+    }
+    if (!await isPedometerPermissionGranted()) return;
+    if (!mounted || _activeFloor != floor) return;
+    if (indoorNavigationDriver.currentRuntimeStatus.state !=
+        PdrRuntimeState.idle) {
+      return;
+    }
+    await indoorNavigationDriver.startGuidance(floorId: floor);
   }
 
   /// 건물(입구·footprint·층 목록)을 로드한다.
@@ -1088,7 +1121,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   void _syncEntranceExitWatch() {
     // 야외 상태이거나 사용자가 직접 열어 둔 도면이면 감시하지 않는다.
     final watchable = _indoorEntered && _indoorEnteredByGps;
-    final next = watchable &&
+    final next =
+        watchable &&
         shouldWatchGpsNearEntrance(
           pdrPoint: _pdrCurrentWgs84(),
           entrance: _entrance,
@@ -1189,7 +1223,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
     final floor = _activeFloor;
     final graph = _floorGraph;
-    if (floor == null ||
+    final buildingId = _building?.id;
+    if (buildingId == null ||
+        floor == null ||
         graph == null ||
         graph.nodes.isEmpty ||
         graph.edges.isEmpty) {
@@ -1197,21 +1233,23 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       return;
     }
 
-    final local = fitFloorGeoTransform(
-      graph.nodes,
-    ).invert(entrance.latitude, entrance.longitude);
-    if (local == null) {
+    final transform = fitFloorGeoTransform(graph.nodes);
+    final entranceLocal = transform.invert(
+      entrance.latitude,
+      entrance.longitude,
+    );
+    if (entranceLocal == null) {
       _replaceSnack('입구 좌표를 이 층 좌표로 바꾸지 못했습니다. 위치 지정으로 직접 지정해주세요.');
       return;
     }
-    final snapped = FloorMapMatcher(
+    final entranceSnap = FloorMapMatcher(
       graph,
-    ).snapToWalkableNetwork(PdrLocalPoint(local.$1, local.$2));
-    if (snapped == null ||
-        snapped.distanceToGraphM > _maxEntranceAnchorSnapDistanceM) {
+    ).snapToWalkableNetwork(PdrLocalPoint(entranceLocal.$1, entranceLocal.$2));
+    if (entranceSnap == null ||
+        entranceSnap.distanceToGraphM > _maxEntranceAnchorSnapDistanceM) {
       // 수동 배치와 같은 이유로 실측 거리를 함께 노출한다 — 매번 같은 문구만
       // 나오면 입구 좌표가 틀린 건지 도면이 틀린 건지 구분할 수 없다.
-      final gapM = snapped?.distanceToGraphM.toStringAsFixed(1);
+      final gapM = entranceSnap?.distanceToGraphM.toStringAsFixed(1);
       _replaceSnack(
         gapM == null
             ? '입구 근처에서 통로를 찾지 못했습니다. 위치 지정으로 직접 지정해주세요.'
@@ -1219,6 +1257,38 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       );
       return;
     }
+
+    var estimatedPoint = entranceSnap.point;
+    var estimateSource = 'entrance';
+    if (position.accuracy <= _trustedIndoorGpsAccuracyM) {
+      final gpsLocal = transform.invert(position.latitude, position.longitude);
+      final gpsSnap = gpsLocal == null
+          ? null
+          : FloorMapMatcher(
+              graph,
+            ).snapToWalkableNetwork(PdrLocalPoint(gpsLocal.$1, gpsLocal.$2));
+      if (gpsSnap != null &&
+          gpsSnap.distanceToGraphM <= _maxIndoorGpsSnapDistanceM) {
+        estimatedPoint = gpsSnap.point;
+        estimateSource = 'gps';
+      }
+    }
+    final estimatedWgs84 = transform.apply(
+      estimatedPoint.eastM,
+      estimatedPoint.northM,
+    );
+    indoorLocationEstimateController.update(
+      IndoorLocationEstimate(
+        buildingId: buildingId,
+        floorId: floor,
+        localM: estimatedPoint,
+        wgs84: ll.LatLng(estimatedWgs84.$1, estimatedWgs84.$2),
+        accuracyMeters: position.accuracy,
+        observedAt: position.timestamp,
+        source: estimateSource,
+      ),
+    );
+    unawaited(_syncPdrCurrentLayer());
 
     if (indoorNavigationDriver.currentRuntimeStatus.state ==
         PdrRuntimeState.idle) {
@@ -1231,7 +1301,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
     final axes = fitPdrToFloorAxes(graph.nodes);
     await indoorNavigationDriver.confirmAnchorByPin(
-      floorPointM: snapped.point,
+      floorPointM: estimatedPoint,
       axes: axes,
     );
     if (!mounted) return;
@@ -1244,7 +1314,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         CalibrationPhase.awaitingHeading) {
       final direction = _entryFloorDirection(
         position: position,
-        anchorFloorPoint: snapped.point,
+        anchorFloorPoint: estimatedPoint,
         graph: graph,
         axes: axes,
       );
@@ -1399,7 +1469,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
     try {
       final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.best),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.best,
+        ),
       );
       _handlePosition(position);
       final controller = _mapController;
@@ -1410,9 +1482,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       }
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('위치를 다시 확인하지 못했습니다')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('위치를 다시 확인하지 못했습니다')));
     }
   }
 
@@ -1639,6 +1711,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncIndoorDestinationLayer();
     _notifyRouteVisibilityIfChanged();
     _fitCameraToIndoorRoute(route);
+    // 이 경로 한 건이 진단 세션 하나가 된다.
+    if (_pdrDebugRecorder != null) _endRouteRecordingSession();
+    _beginRouteRecordingSession();
   }
 
   /// 층이 다른 매장까지의 층 간 경로를 계산해 층별 세그먼트로 나누고, 현재
@@ -1696,6 +1771,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (segment != null && segment.route.points.length >= 2) {
       _fitCameraToIndoorRoute(segment.route);
     }
+    if (_pdrDebugRecorder != null) _endRouteRecordingSession();
+    _beginRouteRecordingSession();
   }
 
   String? _pickStartNodeIdInBuildingGraph({
@@ -1794,7 +1871,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final buffer = StringBuffer('${destination.name}까지');
     for (var index = 0; index < multi.segments.length; index++) {
       final segment = multi.segments[index];
-      buffer.write(index == 0 ? ' · ${segment.floorName}' : ' → ${segment.floorName}');
+      buffer.write(
+        index == 0 ? ' · ${segment.floorName}' : ' → ${segment.floorName}',
+      );
       final transferMode = segment.transferModeToNext;
       if (transferMode != null) {
         buffer.write(transferMode == 'elevator' ? ' (엘리베이터)' : ' (에스컬레이터)');
@@ -1814,6 +1893,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncRouteLayer();
     _syncIndoorDestinationLayer();
     _notifyRouteVisibilityIfChanged();
+    // 한 번의 길안내가 여기서 끝난다.
+    _endRouteRecordingSession();
   }
 
   void _dismissUserDestinationFromEtaCard() {
@@ -1899,6 +1980,23 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         lineJoin: 'round',
       ),
     );
+    await controller.addSource(
+      _transferRouteSourceId,
+      GeojsonSourceProperties(data: _emptyCollection()),
+    );
+    await controller.addLineLayer(
+      _transferRouteSourceId,
+      _transferRouteLayerId,
+      LineLayerProperties(
+        lineColor: AppColors.primary.toHexString(),
+        lineWidth: 5,
+        lineOpacity: 0.85,
+        lineDasharray: const [1.2, 1.1],
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      enableInteraction: false,
+    );
 
     // 현재 층 외곽선. **경로선 다음에** 등록하는 것이 핵심이다 — 실내 MVT
     // 오버레이는 나중에 `belowLayerId: _routeCasingLayerId`로 삽입되므로, 경로선
@@ -1916,9 +2014,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await controller.addLineLayer(
       _floorOutlineSourceId,
       _floorOutlineLayerId,
-      floorOutlineProps(
-        indoorOverlayFadeExpr(entered: true, maxOpacity: 0.9),
-      ),
+      floorOutlineProps(indoorOverlayFadeExpr(entered: true, maxOpacity: 0.9)),
       enableInteraction: false,
     );
 
@@ -2431,6 +2527,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 진입/이탈로 페이드 구간 자체가 바뀌므로 이미 붙어 있는 오버레이 레이어의
     // opacity 표현식도 함께 갈아 끼운다.
     unawaited(_syncIndoorOverlayFade());
+    // 실내로 들어온 시점이 PDR을 켤 지점이다. 야외로 나갈 때는 세션을 끄지
+    // 않는다 — 실내/야외 오버레이를 오가는 동안 세션이 껐다 켜지면 anchor와
+    // 걸음 누적이 매번 초기화된다.
+    if (value) unawaited(_startPdrIfIdle());
   }
 
   /// 지금 화면 폭에서 쓸 실내 진입 임계값.
@@ -2697,9 +2797,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
     await controller.setGeoJsonSource(
       _currentSourceId,
-      _collection([
-        _pointFeature(ll.LatLng(pos.latitude, pos.longitude)),
-      ]),
+      _collection([_pointFeature(ll.LatLng(pos.latitude, pos.longitude))]),
     );
   }
 
@@ -2755,7 +2853,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       return points.isNotEmpty ? points.last : destination.point;
     }
     final segment = _indoorRouteSegment;
-    if (segment != null && segment.points.isNotEmpty) return segment.points.last;
+    if (segment != null && segment.points.isNotEmpty) {
+      return segment.points.last;
+    }
     // 단일 층 경로는 목적지 층에서만 그려진다. 층을 옮기면 _switchOverlayFloor가
     // 세그먼트를 비우므로, 그때는 목적지 층이 아닌 곳에 centroid 폴백 핀이
     // 남지 않도록 층을 직접 확인한다.
@@ -2765,6 +2865,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Future<void> _syncRouteLayer() async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
+    final transferPoints = _indoorMultiFloorRoute
+        ?.segmentForFloor(_activeFloor ?? '')
+        ?.transferPointsToNext;
+    await controller.setGeoJsonSource(
+      _transferRouteSourceId,
+      transferPoints == null || transferPoints.length < 2
+          ? _emptyCollection()
+          : _collection([_lineFeature(transferPoints)]),
+    );
     // 실내 경로가 활성이면 그걸 우선 그린다(GPS 걷기 경로와 동시에 표시하지
     // 않는다 — 사용자는 지금 실내에 있고 실내 경로가 유일한 관심사).
     final indoor = _indoorRouteSegment;
@@ -2822,11 +2931,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
     List<dynamic> features;
     try {
-      features = await controller.queryRenderedFeatures(
-        pointPx,
-        [_indoorStoresFillLayerId],
-        null,
-      );
+      features = await controller.queryRenderedFeatures(pointPx, [
+        _indoorStoresFillLayerId,
+      ], null);
     } catch (_) {
       return false;
     }
@@ -2869,7 +2976,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         lineCap: 'round',
         lineJoin: 'round',
       ),
-      filter: ['==', ['get', 'kind'], 'edge'],
+      filter: [
+        '==',
+        ['get', 'kind'],
+        'edge',
+      ],
       enableInteraction: false,
     );
     // 현재 PDR이 올라타 있다고 판정된 간선만 굵은 청록으로 덧그린다.
@@ -2885,8 +2996,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       ),
       filter: [
         'all',
-        ['==', ['get', 'kind'], 'edge'],
-        ['==', ['get', 'active'], true],
+        [
+          '==',
+          ['get', 'kind'],
+          'edge',
+        ],
+        [
+          '==',
+          ['get', 'active'],
+          true,
+        ],
       ],
       enableInteraction: false,
     );
@@ -2899,7 +3018,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         circleStrokeColor: '#455A64',
         circleStrokeWidth: 2,
       ),
-      filter: ['==', ['get', 'kind'], 'node'],
+      filter: [
+        '==',
+        ['get', 'kind'],
+        'node',
+      ],
       enableInteraction: false,
     );
     await controller.addCircleLayer(
@@ -2913,8 +3036,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       ),
       filter: [
         'all',
-        ['==', ['get', 'kind'], 'node'],
-        ['==', ['get', 'active'], true],
+        [
+          '==',
+          ['get', 'kind'],
+          'node',
+        ],
+        [
+          '==',
+          ['get', 'active'],
+          true,
+        ],
       ],
       enableInteraction: false,
     );
@@ -3005,7 +3136,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (controller == null || !_styleReady) return;
     final location = _pdrCurrentWgs84();
     if (location == null) {
-      await controller.setGeoJsonSource(_pdrCurrentSourceId, _emptyCollection());
+      await controller.setGeoJsonSource(
+        _pdrCurrentSourceId,
+        _emptyCollection(),
+      );
       return;
     }
     final heading = _pdrCurrentHeadingDeg;
@@ -3014,9 +3148,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _collection([
         {
           'type': 'Feature',
-          'properties': <String, dynamic>{
-            'heading': ?heading,
-          },
+          'properties': <String, dynamic>{'heading': ?heading},
           'geometry': {
             'type': 'Point',
             'coordinates': [location.longitude, location.latitude],
@@ -3035,7 +3167,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final transform = fitFloorGeoTransform(graph.nodes);
     final snapshot = _pdrTrailState.snapshot;
     final anchor = _pdrTrailState.anchor;
-    if (anchor == null || anchor.floorId != _activeFloor) return null;
+    if (anchor == null || anchor.floorId != _activeFloor) {
+      final estimate = indoorLocationEstimateController.current;
+      if (estimate != null &&
+          estimate.buildingId == _building?.id &&
+          estimate.floorId == _activeFloor &&
+          estimate.isFresh(DateTime.now())) {
+        return estimate.wgs84;
+      }
+      return null;
+    }
 
     final corrected = _corridorTrackingSession.result?.previewPosition;
     if (snapshot != null && corrected != null) {
@@ -3188,7 +3329,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await _setTrail(
       controller,
       _pdrRawTrailSourceId,
-      on && debug.showRawPdrPath ? _floorPathToWgs84(_pdrRawFloorPath) : const [],
+      on && debug.showRawPdrPath
+          ? _floorPathToWgs84(_pdrRawFloorPath)
+          : const [],
     );
     await _setTrail(
       controller,
@@ -3214,7 +3357,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   ) async {
     await controller.setGeoJsonSource(
       sourceId,
-      points.length < 2 ? _emptyCollection() : _collection([_lineFeature(points)]),
+      points.length < 2
+          ? _emptyCollection()
+          : _collection([_lineFeature(points)]),
     );
   }
 
@@ -3229,9 +3374,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final correctedFloorHeading =
         _corridorTrackingSession.result?.previewHeadingDeg;
     return correctedFloorHeading == null
-        ? normalizePdrBearing(
-            snapshot.walkingHeadingDeg + anchor.rotationDeg,
-          )
+        ? normalizePdrBearing(snapshot.walkingHeadingDeg + anchor.rotationDeg)
         : FloorCoordinateTransform(
             anchor,
           ).floorBearingToMapBearing(correctedFloorHeading);
@@ -3319,59 +3462,50 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
     if (indoorNavigationDriver.currentRuntimeStatus.state ==
         PdrRuntimeState.idle) {
-      setState(() {
-        _pdrTrailState.beginNewSession();
-        _corridorTrackingSession.reset();
-      });
-      await indoorNavigationDriver.startGuidance(floorId: floor);
+      await _startPdrIfIdle();
       if (!mounted) return;
+      if (indoorNavigationDriver.currentRuntimeStatus.state ==
+          PdrRuntimeState.idle) {
+        _showSnack('걸음 센서 권한이 없어 위치를 추적할 수 없습니다. 설정에서 동작·피트니스 권한을 허용해주세요.');
+        return;
+      }
     }
+    // 위치를 다시 지정하는 것은 기준점을 새로 잡는 것이다.
+    setState(() {
+      _pdrTrailState.beginNewSession();
+      _corridorTrackingSession.reset();
+    });
     _setPlacingAnchor(true);
     _showSnack('지도에서 현재 서 있는 위치를 탭해 지정해주세요.');
   }
 
-  /// 디버그 모드의 "PDR 시작/종료" 버튼. 실내 지도 탭의 _togglePdr와 같은
-  /// 계약이다 — 시작하면 이번 세션 기록기를 새로 열고 앵커 배치 대기로 넘기며,
-  /// 종료하면 마지막 스냅샷까지 기록한 뒤 JSON 내보내기를 안내한다.
+  /// 진단 세션은 실내 지도 탭과 같은 경계를 쓴다 — **한 번의 길안내**.
   ///
-  /// 야외에서는 "활성 층"이 층 chip으로 정해지므로, 사용자가 지금 보고 있는
-  /// 층의 그래프가 없으면(타일만 있고 navigation_graph가 없는 층) 시작하지
-  /// 않는다 — 그래프가 없으면 PDR 좌표를 층 좌표로 옮길 수 없어 측정이
-  /// 무의미하다.
-  Future<void> _togglePdr() async {
-    final floor = _activeFloor;
-    final graph = _floorGraph;
-    if (indoorNavigationDriver.currentRuntimeStatus.state !=
-        PdrRuntimeState.idle) {
-      final recorder = _pdrDebugRecorder;
-      final snapshot = indoorNavigationDriver.currentSnapshot;
-      if (snapshot != null) recorder?.recordSnapshot(snapshot);
-      await indoorNavigationDriver.stopGuidance();
-      recorder?.recordRuntime(indoorNavigationDriver.currentRuntimeStatus);
-      if (!mounted) return;
-      _setPlacingAnchor(false);
-      if (recorder?.hasSnapshot ?? false) {
-        _showPdrMessageWithExport('PDR 세션이 종료됐습니다. JSON으로 내보내 분석할 수 있습니다.');
-      }
-      return;
-    }
-    if (floor == null ||
-        graph == null ||
-        graph.nodes.isEmpty ||
-        graph.edges.isEmpty) {
-      _showSnack('이 층은 PDR 좌표 변환용 navigation graph가 아직 없습니다.');
-      return;
-    }
-    setState(() => _pdrTrailState.beginNewSession());
+  /// 상세한 근거는 실내 화면의 `_beginRouteRecordingSession` 주석을 본다. 요지는
+  /// PDR이 상시 실행이 된 뒤 "시작~종료"를 경계로 쓸 수 없고, 그대로 두면 표본
+  /// 상한에 걸려 분석하려는 구간이 앞에서부터 잘려 나간다는 것이다.
+  void _beginRouteRecordingSession() {
     _pdrDebugRecorder = PdrDebugSessionRecorder()
       ..recordRuntime(indoorNavigationDriver.currentRuntimeStatus);
-    await indoorNavigationDriver.startGuidance(floorId: floor);
-    _pdrDebugRecorder?.recordRuntime(
-      indoorNavigationDriver.currentRuntimeStatus,
+    final snapshot = indoorNavigationDriver.currentSnapshot;
+    if (snapshot != null) _pdrDebugRecorder?.recordSnapshot(snapshot);
+    _pdrDebugRecorder?.recordCalibration(
+      indoorNavigationDriver.currentCalibration,
     );
+  }
+
+  /// 경로가 해제되면 세션을 닫고 내보내기 안내를 띄운다. "PDR 종료" 버튼이
+  /// 사라진 지금 이 안내가 실측 데이터를 꺼낼 유일한 트리거다.
+  void _endRouteRecordingSession() {
+    final recorder = _pdrDebugRecorder;
+    if (recorder == null) return;
+    final snapshot = indoorNavigationDriver.currentSnapshot;
+    if (snapshot != null) recorder.recordSnapshot(snapshot);
+    recorder.recordRuntime(indoorNavigationDriver.currentRuntimeStatus);
     if (!mounted) return;
-    _setPlacingAnchor(true);
-    _showSnack('현재 서 있는 위치를 지도에서 한 번 탭해 PDR 시작점을 맞춰주세요.');
+    if (recorder.hasSnapshot && _debugModeController.enabled) {
+      _showPdrMessageWithExport('길안내가 끝났습니다. 진단 JSON을 내보내 분석할 수 있습니다.');
+    }
   }
 
   void _showPdrMessageWithExport(String message) {
@@ -3557,7 +3691,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   void _showSnack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   /// 지금 떠 있는 안내를 걷어내고 새 안내를 띄운다.
@@ -3581,7 +3717,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // GPS를 쓰지 않는 실내 상태에서는 신호 품질 배지도 띄우지 않는다. 위치가
     // 비어 있다는 이유로 "GPS 신호 약함"이 뜨면, 실내에서 GPS를 기다리는 중인
     // 것처럼 읽혀 실제 동작(PDR 기반)과 어긋난다.
-    final lowAccuracy = _outdoorGpsVisible &&
+    final lowAccuracy =
+        _outdoorGpsVisible &&
         (position == null || accuracy > _lowAccuracyThresholdMeters);
     final route = _route;
     final userDestination = _userDestination;
@@ -3642,7 +3779,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         // 실내까지 어두워지는 문제가 있었다. 지금은 세계를 덮는 outer ring +
         // 건물 footprint를 hole로 뚫은 폴리곤을 스크림 레이어로 그리고, 실내
         // 오버레이 아래에 삽입해 건물 안쪽만 밝게 스포트라이트된다.
-
         if (lowAccuracy)
           const Positioned(
             top: 76,
@@ -3694,7 +3830,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOut,
             left: 16,
-            bottom: _floorSelectorBottomOffset +
+            bottom:
+                _floorSelectorBottomOffset +
                 (indoorRouteVisible ? _bottomBarLiftPx : 0),
             child: SafeArea(
               top: false,
@@ -3712,8 +3849,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         //
         // 노출 조건에 pdrActive를 함께 두는 이유: 세션이 도는 중에 사용자가
         // 지도를 축소하면 _handleCameraIdle이 실내 진입 오버레이를 끄는데,
-        // 그때 버튼까지 사라지면 센서는 계속 돌면서 종료·내보내기 수단이
-        // 없어진다. 진행 중인 세션은 언제나 끌 수 있어야 한다.
+        // 그때 버튼까지 사라지면 방금 걸은 세션을 내보낼 수단이 없어진다.
         if (debugEnabled && (_indoorEntered || pdrActive))
           AnimatedPositioned(
             duration: const Duration(milliseconds: 200),
@@ -3728,10 +3864,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
                 ),
                 child: PdrMapControl(
                   key: _pdrControlKey,
-                  active: pdrActive,
-                  onPressed: () => unawaited(_togglePdr()),
-                  canExport:
-                      !pdrActive && (_pdrDebugRecorder?.hasSnapshot ?? false),
+                  canExport: _pdrDebugRecorder?.hasSnapshot ?? false,
                   exporting: _exportingPdrDebugJson,
                   onExport: () => unawaited(_exportPdrDebugJson()),
                   shareButtonKey: _pdrShareButtonKey,
@@ -3887,6 +4020,7 @@ class _PlacingAnchorHint extends StatelessWidget {
     );
   }
 }
+
 /// 안내 배너 오른쪽 상단의 취소(X).
 ///
 /// Material `IconButton`을 쓰지 않는 이유: 기본 최소 탭 영역이 48x48이라

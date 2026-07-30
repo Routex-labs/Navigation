@@ -14,6 +14,7 @@
 | [`landmark_cardinal_calibration.dart`](landmark_cardinal_calibration.dart) | 랜드마크 기준 방위 보정 계산 |
 | [`debug_pdr_trail_state.dart`](debug_pdr_trail_state.dart) | PDR 이동 흔적 상태 |
 | [`debug_toast.dart`](debug_toast.dart) | 개발 메시지 표시 |
+| [`altimeter_debug_chip.dart`](altimeter_debug_chip.dart) | 기압·Δ고도·층 전이 판정 상태 한 줄 표시 |
 | [`debug_mode.dart`](debug_mode.dart) | 외부 공개 진입점 |
 
 ## 연관 관계

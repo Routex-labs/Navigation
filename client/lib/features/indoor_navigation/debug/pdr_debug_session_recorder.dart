@@ -2,9 +2,12 @@ import 'dart:math' as math;
 
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
+import '../../../domain/route_progress.dart';
 import '../../../models/floor_graph.dart';
 import '../application/corridor_position_tracker.dart';
+import '../application/escalator_transition_detector.dart';
 import '../application/floor_map_matcher.dart';
+import '../contract/altitude_sample.dart';
 import '../contract/calibration_state.dart';
 import '../contract/pdr_anchor.dart';
 import '../contract/pdr_runtime_status.dart';
@@ -31,9 +34,24 @@ class PdrDebugSessionRecorder {
   // 샘플)만 있어서 tracker를 정확히 재생할 수 없었다(주황 꼬리와 배치 경계가
   // 없었다). 이제 tracker가 실제로 받은 관측 전체 + 확정 배치 식별자 +
   // 그 시간창에서 소비된 accepted peak를 남겨 재생 fixture로 쓸 수 있다.
-  static const schemaVersion = 10;
+  // v11: 길찾기 경로 기준 진행률을 남긴다. v10까지는 "어느 복도든 하나에
+  // 붙었는지"만 알 수 있었고, 실사용에서 정작 중요한 "사용자가 따라가는 그
+  // 경로에 붙었는지"는 파일에서 계산조차 할 수 없었다. 경로 컨텍스트(목적지·
+  // 간선 목록)와 진행률 시계열을 남겨 on-route 비율·진행거리·재획득 횟수를
+  // 사후에 뽑을 수 있게 한다.
+  // v12: 기압계 시계열과 층 전이 판정 이벤트를 남긴다. 에스컬레이터 층 추종의
+  // 임계값(변화량·상승속도·허가 반경·유지 시간)은 전부 초안값이라, 실측 기압
+  // 원본과 **거부된 판정의 이유**가 파일에 없으면 조정할 근거가 없다. 확정만
+  // 남기면 미탐은 파일에서 아예 보이지 않는다.
+  static const schemaVersion = 12;
   static const _maxQualitySamples = 900;
   static const _maxTrackerInputEvents = 4000;
+  static const _maxRouteProgressSamples = 900;
+
+  /// 기압 원본 시계열 상한. Android 5Hz·iOS 1Hz라 3000개면 10분(Android) 이상이다.
+  /// 초과하면 오래된 쪽을 버린다 — tracker 입력과 달리 재생 순서 의존이 없다.
+  static const _maxAltimeterSamples = 3000;
+  static const _maxFloorTransitionEvents = 200;
 
   /// 걸음 변화가 없어도 이 간격마다 한 건은 남긴다. turnPending 타임아웃처럼
   /// 시간만으로 진행되는 전이를 재생하려면 무입력 구간의 시각도 필요하다.
@@ -43,6 +61,7 @@ class PdrDebugSessionRecorder {
   final List<_PdrQualitySample> _qualitySamples = [];
   final List<Map<String, Object?>> _corridorSamples = [];
   final List<Map<String, Object?>> _trackerInputEvents = [];
+  final List<Map<String, Object?>> _routeProgressSamples = [];
 
   int? _lastLoggedBatchId;
   int? _lastLoggedBatchSpanEndMs;
@@ -58,6 +77,14 @@ class PdrDebugSessionRecorder {
   Map<String, Object?>? _pedometerFinalize;
   DateTime? _lastQualitySampleAt;
   int? _lastSampledSteps;
+  Map<String, Object?>? _routeContext;
+  DateTime? _lastRouteProgressSampleAt;
+
+  final List<Map<String, Object?>> _altimeterSamples = [];
+  final List<Map<String, Object?>> _floorTransitionEvents = [];
+  int _droppedAltimeterSamples = 0;
+  AltimeterStatus _altimeterStatus = const AltimeterStatus.unavailable();
+  Map<String, Object?>? _latestAltimeterState;
 
   bool get hasSnapshot => _latestSnapshot != null;
 
@@ -70,7 +97,15 @@ class PdrDebugSessionRecorder {
         now.difference(_lastQualitySampleAt!).inMilliseconds >= 1000;
     if (!shouldSample) return;
 
-    _qualitySamples.add(_PdrQualitySample.fromSnapshot(now, snapshot));
+    _qualitySamples.add(
+      _PdrQualitySample.fromSnapshot(
+        now,
+        snapshot,
+        // 걸음 시계열과 고도를 같은 줄에서 볼 수 있어야, 에스컬레이터(걸음 정지 +
+        // 고도 변화)와 계단(걸음 증가 + 고도 변화)을 파일만으로 가를 수 있다.
+        altimeter: _latestAltimeterState,
+      ),
+    );
     if (_qualitySamples.length > _maxQualitySamples) {
       _qualitySamples.removeAt(0);
     }
@@ -85,6 +120,65 @@ class PdrDebugSessionRecorder {
   }
 
   void recordRuntime(PdrRuntimeStatus status) => _runtimeStatus = status;
+
+  /// 기압계 가용 상태. 층 전이 판정이 "안 걸린" 세션에서 센서가 없어서인지
+  /// 조건이 안 맞아서인지 파일만으로 가를 수 있어야 한다.
+  void recordAltimeterStatus(AltimeterStatus status) =>
+      _altimeterStatus = status;
+
+  /// 기압 원본 샘플 + 그 시점의 판정 상태.
+  ///
+  /// [smoothedM]·[baselineM]·[deltaM]은 판정기 내부값이다. 원본 기압만 남기면
+  /// 사후 분석에서 평활·baseline 로직을 다시 구현해야 하고, 그 재구현이 실제
+  /// 판정과 어긋나면 잘못된 결론이 나온다.
+  void recordAltitudeSample(
+    AltitudeSample sample, {
+    double? smoothedM,
+    double? baselineM,
+    double? deltaM,
+    bool armed = false,
+    bool candidate = false,
+    DateTime? at,
+  }) {
+    final now = (at ?? DateTime.now()).toUtc();
+    _latestAltimeterState = {
+      'pressure_hpa': sample.pressureHpa,
+      'altitude_m': sample.altitudeM,
+      'relative_altitude_m': sample.relativeAltitudeM,
+      'smoothed_m': smoothedM,
+      'baseline_m': baselineM,
+      'delta_m': deltaM,
+      'armed': armed,
+      'candidate': candidate,
+    };
+    if (_altimeterSamples.length >= _maxAltimeterSamples) {
+      _altimeterSamples.removeAt(0);
+      _droppedAltimeterSamples += 1;
+    }
+    _altimeterSamples.add({
+      'at_utc': now.toIso8601String(),
+      'timestamp_ms': sample.timestampMs,
+      'source': sample.source,
+      ..._latestAltimeterState!,
+    });
+  }
+
+  /// 층 전이 판정 이벤트(허가·후보·확정·거부).
+  void recordFloorTransitionEvents(
+    Iterable<EscalatorDetectionEvent> events, {
+    DateTime? at,
+  }) {
+    final now = (at ?? DateTime.now()).toUtc();
+    for (final event in events) {
+      if (_floorTransitionEvents.length >= _maxFloorTransitionEvents) {
+        _floorTransitionEvents.removeAt(0);
+      }
+      _floorTransitionEvents.add({
+        'at_utc': now.toIso8601String(),
+        ...event.toJson(),
+      });
+    }
+  }
 
   void recordCorridorCorrection(CorridorTrackingResult result, {DateTime? at}) {
     _latestCorridorCorrection = result;
@@ -245,6 +339,60 @@ class PdrDebugSessionRecorder {
   void recordPedometerFinalize(Map<String, Object?>? info) =>
       _pedometerFinalize = info;
 
+  /// 이번 세션에서 사용자가 따라간 경로가 무엇인지(v11).
+  ///
+  /// 경로가 새로 계산될 때마다 갱신하며, 마지막 경로만 남는다. 진행률 시계열을
+  /// 사후에 검증하려면 어떤 간선 집합을 기준으로 판정했는지가 함께 있어야 한다.
+  void recordRouteContext({
+    required String? destinationName,
+    required String? destinationNodeId,
+    required String? floorId,
+    required List<String> edgeIds,
+    required double routeDistanceM,
+    required bool isMultiFloor,
+  }) {
+    _routeContext = {
+      'destination_name': destinationName,
+      'destination_node_id': destinationNodeId,
+      'floor_id': floorId,
+      'edge_ids': edgeIds,
+      'route_distance_m': routeDistanceM,
+      'is_multi_floor': isMultiFloor,
+    };
+  }
+
+  /// 경로 기준 진행률 시계열(v11).
+  ///
+  /// on-route 여부나 재획득이 바뀐 순간은 무조건 남기고, 변화가 없으면 1초에
+  /// 한 건으로 줄인다. 이탈이 시작·종료된 정확한 시각을 잃으면 "몇 걸음 뒤에
+  /// 복구됐는지"를 사후에 셀 수 없다.
+  void recordRouteProgress(RouteProgress progress, {DateTime? at}) {
+    final now = (at ?? DateTime.now()).toUtc();
+    final previous = _routeProgressSamples.lastOrNull;
+    final changed =
+        previous == null ||
+        previous['on_route_edge'] != progress.onRouteEdge ||
+        previous['reacquired'] != progress.reacquired;
+    if (!changed &&
+        _lastRouteProgressSampleAt != null &&
+        now.difference(_lastRouteProgressSampleAt!).inMilliseconds < 1000) {
+      return;
+    }
+    _lastRouteProgressSampleAt = now;
+    _routeProgressSamples.add({
+      'at_utc': now.toIso8601String(),
+      'traveled_m': progress.traveledM,
+      'remaining_m': progress.remainingM,
+      'offset_m': progress.offsetM,
+      'on_route_edge': progress.onRouteEdge,
+      'reacquired': progress.reacquired,
+      'segment_index': progress.segmentIndex,
+    });
+    if (_routeProgressSamples.length > _maxRouteProgressSamples) {
+      _routeProgressSamples.removeAt(0);
+    }
+  }
+
   Map<String, Object?> buildJson({
     required String buildingId,
     required String? selectedFloor,
@@ -323,11 +471,59 @@ class PdrDebugSessionRecorder {
       // 상태를 다시 세우고, 이후 `update`를 순서대로 먹이면 재현된다.
       'tracker_input_events': _trackerInputEvents,
       'tracker_input_dropped': _droppedTrackerInputEvents,
+      // 경로 기준 계측(v11). route_context가 null이면 이번 세션은 길찾기 없이
+      // 자유보행만 한 것이다.
+      'route_context': _routeContext,
+      'route_progress_samples': _routeProgressSamples,
+      'route_progress_summary': _routeProgressSummaryJson(),
+      // 기압계·층 전이 판정(v12). available=false면 이 기기에서는 층 추종이
+      // 애초에 돌지 않은 세션이다.
+      'altimeter': {
+        'available': _altimeterStatus.available,
+        'source': _altimeterStatus.source,
+        'sensor_name': _altimeterStatus.sensorName,
+        'sample_count': _altimeterSamples.length,
+        'dropped_samples': _droppedAltimeterSamples,
+      },
+      'altimeter_samples': _altimeterSamples,
+      'floor_transition_events': _floorTransitionEvents,
       'runtime': {
         'state': _runtimeStatus.state.name,
         'warnings': _runtimeStatus.warnings,
       },
       'pedometer_finalize': _pedometerFinalizeJson(),
+    };
+  }
+
+  /// 경로 기준 지표 3개를 파일 안에서 바로 읽을 수 있게 요약한다(v11).
+  ///
+  /// 시계열만 남기면 매번 계산해야 하고, 실측 직후 현장에서 파일을 열어
+  /// "이번 주행이 쓸 만했는지"를 판단할 수 없다.
+  ///
+  /// `on_route_ratio`는 샘플 수 기준이지 시간·거리 가중이 아니다 — 샘플이
+  /// 상태 변화마다 추가되므로 이탈이 잦은 주행에서는 이탈 쪽이 과대 대표될
+  /// 수 있다. 주행 간 비교가 아니라 한 주행 안에서의 눈대중용 값이다.
+  Map<String, Object?>? _routeProgressSummaryJson() {
+    if (_routeProgressSamples.isEmpty) return null;
+    var onRouteCount = 0;
+    var reacquiredCount = 0;
+    var maxOffsetM = 0.0;
+    for (final sample in _routeProgressSamples) {
+      if (sample['on_route_edge'] == true) onRouteCount++;
+      if (sample['reacquired'] == true) reacquiredCount++;
+      final offsetM = (sample['offset_m'] as num?)?.toDouble() ?? 0;
+      if (offsetM > maxOffsetM) maxOffsetM = offsetM;
+    }
+    final first = _routeProgressSamples.first;
+    final last = _routeProgressSamples.last;
+    return {
+      'sample_count': _routeProgressSamples.length,
+      'on_route_ratio': onRouteCount / _routeProgressSamples.length,
+      'reacquired_count': reacquiredCount,
+      'max_offset_m': maxOffsetM,
+      'first_traveled_m': (first['traveled_m'] as num?)?.toDouble(),
+      'last_traveled_m': (last['traveled_m'] as num?)?.toDouble(),
+      'last_remaining_m': (last['remaining_m'] as num?)?.toDouble(),
     };
   }
 
@@ -520,6 +716,7 @@ class _PdrQualitySample {
     required this.previewDistanceM,
     required this.ronin,
     required this.headingBreakdown,
+    this.altimeter,
   });
 
   final DateTime at;
@@ -542,7 +739,14 @@ class _PdrQualitySample {
   /// 아니라 매 샘플에 남긴다.
   final Map<String, Object?> headingBreakdown;
 
-  factory _PdrQualitySample.fromSnapshot(DateTime at, PdrSnapshot snapshot) {
+  /// 이 시점의 마지막 기압 관측·판정 상태. 기압계가 없거나 첫 샘플 전이면 null.
+  final Map<String, Object?>? altimeter;
+
+  factory _PdrQualitySample.fromSnapshot(
+    DateTime at,
+    PdrSnapshot snapshot, {
+    Map<String, Object?>? altimeter,
+  }) {
     final features = snapshot.quality.features;
     return _PdrQualitySample(
       at: at,
@@ -567,6 +771,7 @@ class _PdrQualitySample {
         'cadence_hz': snapshot.ronin.cadenceHz,
       },
       headingBreakdown: PdrDebugSessionRecorder.headingBreakdownJson(features),
+      altimeter: altimeter,
     );
   }
 
@@ -582,6 +787,7 @@ class _PdrQualitySample {
     'magnetic_accuracy': magneticAccuracy,
     'rotation_heading_accuracy_deg': rotationHeadingAccuracyDeg,
     'cadence_hz': cadenceHz,
+    'altimeter': altimeter,
     ...headingBreakdown,
   };
 }

@@ -2,30 +2,27 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
 
-/// 지도 톤을 해치지 않는 compact PDR 시작/종료 제어. 강한 파란 큰 버튼 대신
-/// 실제 지도 앱처럼 흰 surface 위에 상태 색만 얹어, 지도와 현재 위치가
-/// 시각적으로 우선되게 한다.
+/// 진단 JSON 공유 버튼. 디버그 모드에서만 지도 위에 뜬다.
+///
+/// 예전에는 여기에 "PDR 시작/종료" 버튼이 함께 있었다. PDR이 실내 지도를 보는
+/// 동안 상시 실행으로 바뀐 뒤에는 켜고 끌 대상이 없고, 사용자가 시작을 눌러야
+/// 위치 추적이 시작되던 흐름도 "위치 지정" 하나로 합쳐졌다. 남은 역할은 마지막
+/// 길안내 세션을 파일로 꺼내는 것 하나뿐이라 아이콘 버튼만 남긴다.
 ///
 /// 실내 지도와 야외 지도의 실내 진입 오버레이가 같은 위젯을 쓴다 — 두 화면의
-/// PDR 진입점이 모양·위치·문구까지 같아야 사용자가 "지금 어느 화면인지"와
-/// 무관하게 같은 버튼으로 측정을 시작/종료할 수 있다.
+/// 진단 진입점이 모양·위치까지 같아야 사용자가 "지금 어느 화면인지"와 무관하게
+/// 같은 버튼으로 파일을 꺼낼 수 있다.
 class PdrMapControl extends StatelessWidget {
   const PdrMapControl({
     super.key,
-    required this.active,
-    required this.onPressed,
     required this.canExport,
     required this.exporting,
     required this.onExport,
     required this.shareButtonKey,
   });
 
-  /// PDR 세션이 진행 중인지. true면 버튼이 "종료" 톤(빨강)으로 바뀐다.
-  final bool active;
-  final VoidCallback onPressed;
-
-  /// 내보낼 수 있는(스냅샷이 쌓인) 종료된 세션이 있는지. true일 때만 공유
-  /// 아이콘이 붙는다.
+  /// 내보낼 수 있는(스냅샷이 쌓인) 진단 세션이 있는지. false면 아무것도 그리지
+  /// 않아, 꺼낼 게 없을 때 눌리지 않는 버튼이 지도를 가리지 않는다.
   final bool canExport;
   final bool exporting;
   final VoidCallback onExport;
@@ -35,79 +32,27 @@ class PdrMapControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? const Color(0xFFD93025) : AppColors.indoor;
-    return Tooltip(
-      message: active ? 'PDR 종료' : 'PDR 시작',
-      child: Material(
-        color: Colors.white.withValues(alpha: 0.96),
-        elevation: 3,
-        shadowColor: Colors.black.withValues(alpha: 0.16),
-        shape: StadiumBorder(
-          side: BorderSide(color: color.withValues(alpha: active ? 0.36 : 0.2)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            InkWell(
-              onTap: onPressed,
-              customBorder: const StadiumBorder(),
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(10, 9, canExport ? 7 : 13, 9),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 26,
-                      height: 26,
-                      decoration: BoxDecoration(
-                        color: color,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        active
-                            ? Icons.stop_rounded
-                            : Icons.directions_walk_rounded,
-                        size: 17,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(width: 7),
-                    Text(
-                      active ? 'PDR 종료' : 'PDR 시작',
-                      style: TextStyle(
-                        color: active
-                            ? const Color(0xFFB3261E)
-                            : const Color(0xFF202124),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            if (canExport) ...[
-              Container(width: 1, height: 24, color: AppColors.blue100),
-              IconButton(
-                key: shareButtonKey,
-                tooltip: 'PDR 디버그 JSON 공유',
-                onPressed: exporting ? null : onExport,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints.tightFor(
-                  width: 40,
-                  height: 44,
-                ),
-                icon: exporting
-                    ? const SizedBox(
-                        width: 17,
-                        height: 17,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.ios_share_rounded, size: 20),
-              ),
-            ],
-          ],
-        ),
+    if (!canExport) return const SizedBox.shrink();
+    return Material(
+      color: Colors.white.withValues(alpha: 0.96),
+      elevation: 3,
+      shadowColor: Colors.black.withValues(alpha: 0.16),
+      shape: StadiumBorder(
+        side: BorderSide(color: AppColors.indoor.withValues(alpha: 0.2)),
+      ),
+      child: IconButton(
+        key: shareButtonKey,
+        tooltip: 'PDR 진단 JSON 공유',
+        onPressed: exporting ? null : onExport,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(width: 44, height: 44),
+        icon: exporting
+            ? const SizedBox(
+                width: 17,
+                height: 17,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.ios_share_rounded, size: 20),
       ),
     );
   }
