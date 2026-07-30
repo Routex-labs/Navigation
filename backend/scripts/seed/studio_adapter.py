@@ -24,6 +24,7 @@ from math import hypot
 from pathlib import Path
 
 from app.core.database import SessionLocal
+from app.graph import integrity as graph_integrity
 from app.repositories import store_facets
 from scripts.seed import seed_navigation
 from scripts.transform import floor_alignment, vertical_transfers
@@ -411,6 +412,11 @@ def seed_studio(
         transfers, unresolved = vertical_transfers.build_transfers(floors_for_transfer)
         seed_navigation.add_transfer_edges(own_session, transfers)
         summaries.append({"code": "-", "transfers": len(transfers), "unresolved": len(unresolved)})
+
+        # 커밋 전 그래프 무결성 게이트. 타 건물 연결·동일 층 전이·NaN 같은 에러가 있으면
+        # 여기서 GraphIntegrityError로 중단되어 아래 except가 롤백한다(반쯤 시드된 DB 방지).
+        # facet 검증과 같은 위치·같은 철학이다.
+        graph_integrity.validate_seeded_graph(own_session)
 
         if session is None:
             own_session.commit()

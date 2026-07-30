@@ -35,6 +35,19 @@ ERROR = "error"
 WARNING = "warning"
 
 
+class GraphIntegrityError(ValueError):
+    """그래프 검증에서 에러가 나왔을 때 시드를 중단시키는 예외.
+
+    facet 검증(studio_adapter.validate_facet_resources)과 같은 철학 — 잘못된
+    데이터가 DB에 반쯤 들어간 채 실패하지 않도록, commit 전에 던져 롤백을 유도한다.
+    """
+
+    def __init__(self, report: "GraphReport") -> None:
+        self.report = report
+        detail = "\n  - ".join(f"[{issue.code}] {issue.message}" for issue in report.errors)
+        super().__init__(f"그래프 무결성 검증 실패 ({len(report.errors)}건):\n  - {detail}")
+
+
 # --- 입력 구조 (DB에 독립) ---------------------------------------------------
 
 
@@ -133,6 +146,19 @@ class GraphReport:
 
 
 # --- DB → GraphData ----------------------------------------------------------
+
+
+def validate_seeded_graph(session: Session) -> GraphReport:
+    """세션에 쌓인 그래프를 flush 후 검증하고, 에러가 있으면 GraphIntegrityError를 던진다.
+
+    시드 게이트로 쓴다 — commit 전에 호출해 손상된 그래프가 저장되지 못하게 한다.
+    경고는 통과시키므로, 반환된 리포트로 통계·경고를 artifact에 남길 수 있다.
+    """
+    session.flush()  # add_all로 대기 중인 노드·간선을 DB에 내보내 조회로 되읽을 수 있게 한다.
+    report = validate_graph(collect_graph_data(session))
+    if not report.ok:
+        raise GraphIntegrityError(report)
+    return report
 
 
 def collect_graph_data(session: Session) -> GraphData:
