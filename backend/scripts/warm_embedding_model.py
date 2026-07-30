@@ -12,10 +12,12 @@
 
 from __future__ import annotations
 
-from app.repositories.query_semantic import _MODEL_NAME, _load_model
+from app.repositories.query_semantic import _MODEL_NAME, _MODEL_REVISION, _load_model
 
 
 def warm_embedding_model() -> None:
+    # _load_model()은 _MODEL_NAME과 _MODEL_REVISION(commit hash)을 함께 고정해
+    # 받으므로, 워밍 캐시와 런타임 로드가 동일한 artifact를 가리킨다.
     model = _load_model()
     # 실제로 인코딩까지 돌려 가중치·토크나이저가 모두 갖춰졌는지 확인한다.
     # 파일만 받아지고 로드가 깨지는 경우를 빌드 시점에 잡기 위해서다.
@@ -24,4 +26,4 @@ def warm_embedding_model() -> None:
 
 if __name__ == "__main__":
     warm_embedding_model()
-    print(f"임베딩 모델 캐시 준비 완료({_MODEL_NAME})")
+    print(f"임베딩 모델 캐시 준비 완료({_MODEL_NAME}@{_MODEL_REVISION})")

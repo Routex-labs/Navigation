@@ -44,6 +44,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _MODEL_NAME = "jhgan/ko-sroberta-multitask"
+# 모델 revision(commit hash)까지 고정한다. 이름만 고정하면 upstream이 main을
+# 갱신했을 때 시점에 따라 다른 artifact를 받아 재현성이 깨진다. 값은
+# huggingface.co/api/models/jhgan/ko-sroberta-multitask/refs 의 main targetCommit.
+# 이 저장소는 단일 main 브랜치라 이 해시가 사실상의 안정 릴리스다.
+_MODEL_REVISION = "8fca7c9c98c26599be0e14b9916b11a756a26f19"
 
 # 코사인 유사도 임계값. 이 값 미만이면 no_match로 처리해 엉뚱한 매장 반환을 막는다.
 # thehyundai-seoul 실데이터로 튜닝(FAISS.md 8절·11절):
@@ -162,10 +167,10 @@ def _load_model() -> Any:
     from sentence_transformers import SentenceTransformer
 
     try:
-        return SentenceTransformer(_MODEL_NAME, local_files_only=True)
+        return SentenceTransformer(_MODEL_NAME, revision=_MODEL_REVISION, local_files_only=True)
     except Exception as error:  # noqa: BLE001 - 캐시 미스·손상 모두 Hub 재시도로 회복
         logger.warning("임베딩 모델 로컬 캐시 미스(%s): %s → Hub에서 내려받는다", _MODEL_NAME, error)
-        return SentenceTransformer(_MODEL_NAME)
+        return SentenceTransformer(_MODEL_NAME, revision=_MODEL_REVISION)
 
 
 def _get_model() -> Any | None:
