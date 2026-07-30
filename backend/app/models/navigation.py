@@ -4,13 +4,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, Boolean, Float, ForeignKey, Index, String
+from sqlalchemy import JSON, Boolean, CheckConstraint, Float, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
 if TYPE_CHECKING:
     from app.models.building import Floor
+
+# 수직 전이 간선이 가질 수 있는 이동 수단. 층 내부 간선은 transfer_mode가 NULL이다.
+# scripts/transform/vertical_transfers.TRANSFER_TYPES와 같은 집합을 DB 제약으로 못박는다.
+TRANSFER_MODES = ("elevator", "escalator")
 
 
 class Node(Base):
@@ -40,10 +44,22 @@ class Node(Base):
 
 class Edge(Base):
     __tablename__ = "edges"
+    # 주석·시드 로직에만 있던 핵심 불변식을 DB 제약으로 못박아, 손상된 간선이 애초에
+    # commit되지 못하게 한다(그래프 검증기와 함께 무결성의 두 겹 방어선).
     __table_args__ = (
         Index("idx_edges_floor", "floor_id"),
         Index("idx_edges_from", "from_node_id"),
         Index("idx_edges_to", "to_node_id"),
+        # 거리·비용은 음수일 수 없다(다익스트라 가중치 음수 = 잘못된 최단 경로).
+        CheckConstraint("length_m >= 0", name="ck_edges_length_nonneg"),
+        CheckConstraint("cost_m >= 0", name="ck_edges_cost_nonneg"),
+        # 자기 자신을 잇는 간선은 길찾기에서 의미가 없고 무한 루프의 씨앗이 된다.
+        CheckConstraint("from_node_id <> to_node_id", name="ck_edges_no_self_loop"),
+        # 전이 수단은 NULL(층 내부 간선)이거나 알려진 수단 중 하나여야 한다.
+        CheckConstraint(
+            "transfer_mode IS NULL OR transfer_mode IN ('elevator', 'escalator')",
+            name="ck_edges_transfer_mode",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String, primary_key=True)  # 간선 고유 id

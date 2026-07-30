@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.geo.georeference import GeoTransform
 from app.geo.tiling import local_points_to_lnglat
+from app.graph.revision import graph_revision
 from app.models import Building, Edge, Floor, Node, Poi, Store
 from app.repositories.geo_transform import fit_building_geo_transform
 
@@ -142,12 +143,15 @@ def get_building_graph(
     node_ids = {node.id for node in nodes}
 
     # 층 내부 간선 + 이 건물 노드를 잇는 전이 간선(floor_id=None). 전이 간선은
-    # 건물 스코프가 없으므로 from 노드가 이 건물 소속인 것만 고른다.
+    # 건물 스코프가 없으므로 **양 끝 노드가 모두** 이 건물 소속인 것만 고른다.
+    # from만 확인하면 to가 다른 건물 노드인 간선이 딸려 와, 그래프에 없는 노드를
+    # 가리키는 dangling 간선(to_floor_id=None)이 응답에 실린다.
     intra_edges = session.scalars(select(Edge).where(Edge.floor_id.in_(floor_ids))).all()
     transfer_edges = session.scalars(
         select(Edge).where(
             Edge.floor_id.is_(None),
             Edge.from_node_id.in_(node_ids),
+            Edge.to_node_id.in_(node_ids),
         )
     ).all()
     edges = list(intra_edges) + [edge for edge in transfer_edges if _vertical_allows(vertical, edge.transfer_mode)]
@@ -156,12 +160,18 @@ def get_building_graph(
     # 간선마다 노드를 다시 조회하지 않는다.
     node_floor_ids = {node.id: node.floor_id for node in nodes}
 
+    node_dicts = [_to_graph_node_dict(node) for node in nodes]
+    edge_dicts = [_to_edge_dict(edge, node_floor_ids) for edge in edges]
+
     return {
         "building": {"id": building.id, "name": building.name},
         "vertical": vertical,
+        # 이 그래프 내용의 체크섬. 클라이언트·타일 캐시(06번)가 무효화 키로 쓴다.
+        # vertical 정책에 따라 간선이 달라지면 리비전도 달라진다(payload가 실제로 다르므로).
+        "revision": graph_revision(node_dicts, edge_dicts),
         "floors": [{"id": floor.id, "name": floor.name} for floor in floors],
-        "nodes": [_to_graph_node_dict(node) for node in nodes],
-        "edges": [_to_edge_dict(edge, node_floor_ids) for edge in edges],
+        "nodes": node_dicts,
+        "edges": edge_dicts,
     }
 
 
