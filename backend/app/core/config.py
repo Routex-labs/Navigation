@@ -12,10 +12,6 @@ DEFAULT_DATABASE_URL = f"sqlite:///{(API_ROOT / 'data' / 'navigation.db').as_pos
 # 프로세스 단위로 재사용하는 설정값.
 class Settings(BaseSettings):
     database_url: str = DEFAULT_DATABASE_URL
-    # 개발 중 실제 SQL/파라미터를 sql/queries.sql에 남긴다. 기본은 비활성화한다.
-    sql_echo: bool = False
-    # Flutter 등 클라이언트가 API로 보낸 JSON과 JSON 응답을 args/에 남긴다.
-    http_capture: bool = False
     # MVT 타일 응답의 Cache-Control max-age(초). 짧게 잡는 이유는 재시드가
     # 서버 재시작 없이 일어날 수 있어서다 — 60초면 줌 전환·층 재방문으로 요청이
     # 몰리는 구간은 덮으면서, 시드를 다시 돌린 개발자가 오래 기다리지는 않는다.
@@ -30,6 +26,9 @@ class Settings(BaseSettings):
     # 기본은 비활성 — 켜면 앱을 만드는 모든 프로세스(테스트 포함)가 torch를 로드하고
     # 400MB대 메모리를 상주시킨다. 배포 이미지에서만 켠다.
     warm_embedding: bool = False
+    # 운영 로깅 레벨(요청 상태·에러). stdout으로 남으며 Cloud Run 등이 자동 수집한다.
+    # DEBUG로 내리면 우리 코드(app.*)의 상세 로그까지 볼 수 있다.
+    log_level: str = "INFO"
 
     model_config = SettingsConfigDict(env_prefix="NAV_", case_sensitive=False)
 

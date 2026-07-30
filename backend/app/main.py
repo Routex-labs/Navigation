@@ -5,43 +5,22 @@
 #   1) 최초 1회 DB 적재: python -m scripts.seed.reset_and_seed
 #   2) 서버 실행:        uvicorn app.main:app --reload
 
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.core.request_capture import RequestCaptureMiddleware, clear_runtime_logs, start_runtime_logs
+from app.core.logging import configure_logging, install_exception_logging
 from app.dto.health import HealthResponse
-
-
-# 개발 진단 로그의 수명주기. yield 앞이 startup, 뒤가 shutdown이다.
-# 새 서버 실행은 새 진단 세션이므로 이전 실행의 로그를 남기지 않고,
-# 정상 종료 때 파일을 비운다.
-@asynccontextmanager
-async def _development_log_lifespan(app: FastAPI) -> AsyncIterator[None]:
-    start_runtime_logs()
-    try:
-        yield
-    finally:
-        clear_runtime_logs()
 
 
 # FastAPI 앱 팩토리. uvicorn과 테스트가 이 함수로 앱을 만든다.
 def create_app() -> FastAPI:
+    # 로그 포맷·레벨을 먼저 통일한다(요청 상태·에러는 stdout으로 남는다).
+    configure_logging()
+
     from app.routers import buildings, fonts, query
 
-    # lifespan은 생성 시점에 넘겨야 해서, 진단 캡처 여부를 여기서 먼저 정한다.
-    # HTTP 캡처를 끄고 SQL 캡처만 켠 실행도 같은 진단 파일을 만들므로 종료 정리가
-    # 필요하다. 둘 중 하나라도 켜졌을 때 수명주기를 붙인다.
-    app = FastAPI(
-        title="Navigation API",
-        version="0.3.0",
-        lifespan=_development_log_lifespan
-        if settings.sql_echo or settings.http_capture
-        else None,
-    )
+    app = FastAPI(title="Navigation API", version="0.3.0")
 
     # 개발 중에는 모든 출처(*) 허용. 운영 배포 시 Flutter 앱 도메인으로 교체 필요
     app.add_middleware(
@@ -50,9 +29,8 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    # SQL·HTTP 진단 캡처는 개발 실행에서만 켠다(로그 파일 정리는 위 lifespan이 담당).
-    if settings.http_capture:
-        app.add_middleware(RequestCaptureMiddleware)
+    # 4xx/422 예외를 이유와 함께 로그로 남긴다(500 트레이스백은 uvicorn.error가 담당).
+    install_exception_logging(app)
 
     # 라우터 등록.
     app.include_router(buildings.router)  # 건물/지도/그래프/경로 API

@@ -42,10 +42,6 @@ htmlcov/
 .codex/
 .agents/
 .claude/
-sql/
-args/
-backend/app/sql/
-backend/app/args/
 fastapi-study/
 
 # IDE / OS

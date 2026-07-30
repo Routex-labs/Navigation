@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import threading
 from pathlib import Path
@@ -19,6 +20,8 @@ from app.geo.tiling import build_floor_tile_layers, tile_bounds
 from app.models import Building, Floor, Poi, Store
 from app.repositories.building_queries import _find_floor
 from app.repositories.geo_transform import fit_building_geo_transform
+
+logger = logging.getLogger(__name__)
 
 
 # (building_id, floor_name, z, x, y) → MVT 바이트 캐시.
@@ -189,9 +192,9 @@ def _warm_tile_cache(session_factory) -> None:
                             continue
                         for floor in floors:
                             render_floor_tile(session, building.id, floor.name, z, x, y)
-        print(f"[tile-warmup] MVT 캐시 준비 완료: {len(_TILE_BYTES_CACHE)}개 타일")
+        logger.info("[tile-warmup] MVT 캐시 준비 완료: %d개 타일", len(_TILE_BYTES_CACHE))
     except Exception as error:  # pragma: no cover — 워밍 실패는 조용히 degrade
-        print(f"[tile-warmup] 실패(무시하고 lazy 캐시로 폴백): {error}")
+        logger.warning("[tile-warmup] 실패(무시하고 lazy 캐시로 폴백): %s", error)
     finally:
         session.close()
 

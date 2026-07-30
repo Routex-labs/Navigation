@@ -26,6 +26,7 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 from dataclasses import dataclass
 from enum import Enum
@@ -39,6 +40,8 @@ from app.repositories.query_search import _load_stores  # 건물/층 조인 재�
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 _MODEL_NAME = "jhgan/ko-sroberta-multitask"
 
@@ -163,7 +166,7 @@ def _load_model() -> Any:
     try:
         return SentenceTransformer(_MODEL_NAME, local_files_only=True)
     except Exception as error:  # noqa: BLE001 - 캐시 미스·손상 모두 Hub 재시도로 회복
-        print(f"임베딩 모델 로컬 캐시 미스({_MODEL_NAME}): {error} → Hub에서 내려받는다")
+        logger.warning("임베딩 모델 로컬 캐시 미스(%s): %s → Hub에서 내려받는다", _MODEL_NAME, error)
         return SentenceTransformer(_MODEL_NAME)
 
 
@@ -180,7 +183,7 @@ def _get_model() -> Any | None:
             try:
                 _model = _load_model()
             except Exception as error:  # noqa: BLE001 - 어떤 실패든 경량 경로는 살린다
-                print(f"임베딩 모델 로드 실패({_MODEL_NAME}): {error}")
+                logger.warning("임베딩 모델 로드 실패(%s): %s", _MODEL_NAME, error)
                 _model_load_failed = True
     return _model
 
