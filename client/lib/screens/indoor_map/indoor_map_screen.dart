@@ -890,9 +890,24 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     _startRouteRecording(route, isMultiFloor: false);
   }
 
-  /// 새 경로가 확정되면 이전 진단 세션을 닫고 이 경로용 세션을 새로 연다.
+  /// 새 경로가 확정되면 이 경로용 진단 세션을 준비한다.
+  ///
+  /// 이탈 재탐색(_rerouteFromCurrentPosition)은 **같은 길안내가 계속되는 것**이라
+  /// 세션을 갈아타지 않고 판정 기준 간선만 새 경로로 갱신한다. 층 세그먼트를
+  /// 갈아탈 때(_selectFloor)와 같은 처리다. 예전에는 여기서 이전 세션을 닫았고,
+  /// 세션 종료는 종료 사유를 구분하지 않아 재탐색마다 "길안내가 끝났습니다"
+  /// 안내가 떴다 — 아직 걷고 있는데 완료로 보이는 오해였고, 재탐색 전 주행
+  /// 구간도 함께 버려졌다.
   void _startRouteRecording(IndoorRoute route, {required bool isMultiFloor}) {
-    if (_pdrDebugRecorder != null) _endRouteRecordingSession();
+    if (_rerouteInFlight && _pdrDebugRecorder != null) {
+      _recordRouteContext(route, isMultiFloor: isMultiFloor);
+      return;
+    }
+    // 목적지가 새로 정해진 경우다. 이전 세션 데이터는 여기서 버려지므로
+    // 내보내기 안내를 띄우지 않는다(안내를 눌러도 꺼낼 게 없다).
+    if (_pdrDebugRecorder != null) {
+      _endRouteRecordingSession(announceExport: false);
+    }
     _beginRouteRecordingSession();
     _recordRouteContext(route, isMultiFloor: isMultiFloor);
   }
@@ -2017,19 +2032,21 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     );
   }
 
-  /// 경로가 해제되면 진단 세션을 닫고 내보내기 안내를 띄운다.
+  /// 경로가 해제되면 진단 세션을 닫는다.
   ///
-  /// 예전에는 "PDR 종료" 버튼이 이 안내의 유일한 트리거였다. 그 버튼이 없어진
-  /// 지금 여기서 안내하지 않으면, 사용자가 주행을 끝내고 앱을 닫는 순간 실측
-  /// 데이터를 꺼낼 기회가 사라진다.
-  void _endRouteRecordingSession() {
+  /// [announceExport]가 true일 때만 내보내기 안내를 띄운다. 예전에는 "PDR 종료"
+  /// 버튼이 이 안내의 유일한 트리거였다. 그 버튼이 없어진 지금 길안내가 실제로
+  /// 끝나는 지점(_clearRoute)에서 안내하지 않으면, 사용자가 주행을 끝내고 앱을
+  /// 닫는 순간 실측 데이터를 꺼낼 기회가 사라진다. 반대로 길안내가 계속되는
+  /// 상황(재탐색·목적지 변경)에서 띄우면 완료로 오해하게 된다.
+  void _endRouteRecordingSession({bool announceExport = true}) {
     final recorder = _pdrDebugRecorder;
     if (recorder == null) return;
     final snapshot = indoorNavigationDriver.currentSnapshot;
     if (snapshot != null) recorder.recordSnapshot(snapshot);
     recorder.recordRuntime(indoorNavigationDriver.currentRuntimeStatus);
     if (!mounted) return;
-    if (recorder.hasSnapshot && _debugModeController.enabled) {
+    if (announceExport && recorder.hasSnapshot && _debugModeController.enabled) {
       _showPdrMessageWithExport('길안내가 끝났습니다. 진단 JSON을 내보내 분석할 수 있습니다.');
     }
   }

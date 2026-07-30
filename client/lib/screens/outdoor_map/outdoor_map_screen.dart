@@ -1867,8 +1867,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncIndoorDestinationLayer();
     _notifyRouteVisibilityIfChanged();
     _fitCameraToIndoorRoute(route);
-    // 이 경로 한 건이 진단 세션 하나가 된다.
-    if (_pdrDebugRecorder != null) _endRouteRecordingSession();
+    // 이 경로 한 건이 진단 세션 하나가 된다. 이전 세션 데이터는 여기서
+    // 버려지므로 내보내기 안내는 띄우지 않는다 — 길안내가 끝난 게 아니라
+    // 목적지가 바뀐 것이고, 안내를 눌러도 꺼낼 게 없다.
+    if (_pdrDebugRecorder != null) {
+      _endRouteRecordingSession(announceExport: false);
+    }
     _beginRouteRecordingSession();
   }
 
@@ -1927,7 +1931,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (segment != null && segment.route.points.length >= 2) {
       _fitCameraToIndoorRoute(segment.route);
     }
-    if (_pdrDebugRecorder != null) _endRouteRecordingSession();
+    if (_pdrDebugRecorder != null) {
+      _endRouteRecordingSession(announceExport: false);
+    }
     _beginRouteRecordingSession();
   }
 
@@ -3736,16 +3742,17 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     );
   }
 
-  /// 경로가 해제되면 세션을 닫고 내보내기 안내를 띄운다. "PDR 종료" 버튼이
-  /// 사라진 지금 이 안내가 실측 데이터를 꺼낼 유일한 트리거다.
-  void _endRouteRecordingSession() {
+  /// 경로가 해제되면 세션을 닫는다. [announceExport]가 true일 때만 내보내기
+  /// 안내를 띄운다 — "PDR 종료" 버튼이 사라진 지금 길안내가 실제로 끝나는
+  /// 지점(_clearIndoorRoute)의 이 안내가 실측 데이터를 꺼낼 유일한 트리거다.
+  void _endRouteRecordingSession({bool announceExport = true}) {
     final recorder = _pdrDebugRecorder;
     if (recorder == null) return;
     final snapshot = indoorNavigationDriver.currentSnapshot;
     if (snapshot != null) recorder.recordSnapshot(snapshot);
     recorder.recordRuntime(indoorNavigationDriver.currentRuntimeStatus);
     if (!mounted) return;
-    if (recorder.hasSnapshot && _debugModeController.enabled) {
+    if (announceExport && recorder.hasSnapshot && _debugModeController.enabled) {
       _showPdrMessageWithExport('길안내가 끝났습니다. 진단 JSON을 내보내 분석할 수 있습니다.');
     }
   }
