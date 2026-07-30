@@ -23,6 +23,7 @@ import json
 from math import hypot
 from pathlib import Path
 
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.graph import integrity as graph_integrity
 from app.repositories import store_facets
@@ -232,16 +233,17 @@ def _scope_edges(floor_id: str, edges: list[dict]) -> list[dict]:
     return scoped
 
 
-# 입구 좌표(local_m)에서 가장 가까운 통행 노드 ID를 찾는다. Studio 원본은 매장에
+# 입구 좌표(local_m)에서 가장 가까운 통행 노드 ID와 그 거리를 찾는다. Studio 원본은 매장에
 # entrance_local_m(좌표)만 주고 entrance_node_id(그래프 연결)는 비워두므로, 이걸
 # 채워주지 않으면 클라이언트가 도착 노드를 못 찾아 다익스트라가 아예 돌지 않는다.
 # 교차점(junction) 우선으로 스냅해 엘리베이터/에스컬레이터 노드에 잘못 붙는 걸 막고,
 # junction이 하나도 없으면 아무 노드로나 폴백한다.
+# 반환: (노드 id, 거리). 노드가 하나도 없으면 (None, inf).
 def _nearest_node_id(
     nodes: list[dict],
     x: float,
     y: float,
-) -> str | None:
+) -> tuple[str | None, float]:
     candidates = [n for n in nodes if n.get("type") == "junction"] or nodes
     best_id: str | None = None
     best_distance = float("inf")
@@ -251,26 +253,29 @@ def _nearest_node_id(
         if distance < best_distance:
             best_distance = distance
             best_id = node["id"]
-    return best_id
+    return best_id, best_distance
 
 
 # 폴리곤을 포함한 stores_{층}.json을 seed용 store dict로 변환한다.
+# 반환: (store dict 목록, 스냅 거리 초과로 입구를 못 이은 unresolved 목록).
 def _reshape_stores(
     floor_code: str,
     floor_id: str,
     nodes: list[dict],
     directory: Path = STUDIO_DIR,
-) -> list[dict]:
+) -> tuple[list[dict], list[dict]]:
     stores_path = directory / f"stores_{floor_code}.json"
     if not stores_path.exists():
-        return []
+        return [], []
     payload = json.loads(stores_path.read_text(encoding="utf-8"))
     category_overrides = _load_store_categories()
     category_by_name = _load_store_categories(STORE_CATEGORIES_BY_NAME_PATH)
     # 검색 facet은 카테고리가 확정된 뒤에 계산한다 — 파생 규칙이 소분류를 보기 때문에
     # 오버라이드 적용 전 원본 소분류로 계산하면 태그가 통째로 어긋난다.
     facet_overlay = store_facets.load_overlay(STORE_SEARCH_FACETS_DIR)
+    max_snap_m = settings.store_entrance_snap_max_m
     reshaped: list[dict] = []
+    unresolved: list[dict] = []
     for store in payload.get("stores", []):
         entrance = store.get("entrance_local_m")
         centroid = store.get("centroid_local_m") or entrance
@@ -282,7 +287,28 @@ def _reshape_stores(
         # 데이터는 전부 null) 입구 좌표를 가장 가까운 통행 노드에 스냅해 채운다.
         entrance_node_id = _scoped(floor_id, store.get("entrance_node_id"))
         if entrance_node_id is None and entrance is not None:
-            entrance_node_id = _nearest_node_id(nodes, entrance["x"], entrance["y"])
+            snapped_id, snap_distance = _nearest_node_id(nodes, entrance["x"], entrance["y"])
+            if snapped_id is not None and snap_distance <= max_snap_m:
+                entrance_node_id = snapped_id
+            else:
+                # 최대 거리 초과 → 자동 연결 금지. 잘못된 원본 좌표를 벽 반대편·건물 반대편
+                # 노드에 강제로 이어 매장을 가로지르는 경로가 생기는 것을 막는다. 매장 자체는
+                # 그대로 시드하되(지도에는 보임) 경로 도착점만 비운 채 unresolved로 보고한다.
+                unresolved.append(
+                    {
+                        "store_id": store["id"],
+                        "name": store.get("name") or store["id"],
+                        "floor_code": floor_code,
+                        "floor_id": floor_id,
+                        "distance_m": round(snap_distance, 3) if snapped_id is not None else None,
+                        "max_m": max_snap_m,
+                        "reason": (
+                            f"가장 가까운 노드가 {snap_distance:.1f}m로 최대 {max_snap_m:.0f}m를 초과"
+                            if snapped_id is not None
+                            else "스냅할 노드가 없음"
+                        ),
+                    }
+                )
         # 실제 카테고리 오버라이드. id 기반(category_code 근거)이 최우선, 없으면
         # 매장명 기반 폴백, 둘 다 없으면 원본 값을 유지한다.
         category, subcategory = _resolved_category(store, category_overrides, category_by_name)
@@ -305,7 +331,7 @@ def _reshape_stores(
                 "search_facets": facets or None,
             }
         )
-    return reshaped
+    return reshaped, unresolved
 
 
 # elevator/escalator 노드를 POI(지도 마커)로 승격한다. nodes는 정규화·스코프 후.
@@ -338,6 +364,7 @@ def build_seed_dict(
     floor_id = floor["id"]
     nodes = _normalized_nodes(floor_id, studio["nodes"], to_wgs84)
     footprint = studio.get("building_footprint_local_m") or None
+    stores, unresolved_entrances = _reshape_stores(floor_code, floor_id, nodes, directory)
 
     return {
         "building": {
@@ -359,9 +386,23 @@ def build_seed_dict(
         },
         "nodes": nodes,
         "edges": _scope_edges(floor_id, studio["edges"]),
-        "stores": _reshape_stores(floor_code, floor_id, nodes, directory),
+        "stores": stores,
         "pois": _generate_pois(floor_id, nodes),
+        # 스냅 거리 초과로 입구를 못 이은 매장들(add_dataset은 무시, 시드 리포트가 소비).
+        "unresolved_store_entrances": unresolved_entrances,
     }
+
+
+# 전 층의 "입구 스냅 거리 초과" 매장을 모은다. DB를 거치지 않고 build_seed_dict를 다시 태워,
+# 시드가 실제로 내린 것과 같은 판정을 얻는다(같은 임계값·같은 스냅 로직). 시드 리포트가 쓴다.
+def collect_unresolved_store_entrances(directory: Path = STUDIO_DIR) -> list[dict]:
+    codes = discover_floor_codes(directory)
+    reference = _load(REFERENCE_FLOOR, directory)
+    unresolved: list[dict] = []
+    for code in codes:
+        data = build_seed_dict(code, reference, directory)
+        unresolved.extend(data.get("unresolved_store_entrances", []))
+    return unresolved
 
 
 # Studio 전 층 + 층 간 전이 간선을 하나의 트랜잭션으로 적재한다.
@@ -406,6 +447,7 @@ def seed_studio(
                     "edges": len(data["edges"]),
                     "stores": len(data["stores"]),
                     "pois": len(data["pois"]),
+                    "unresolved_entrances": len(data["unresolved_store_entrances"]),
                 }
             )
 

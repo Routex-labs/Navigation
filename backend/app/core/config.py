@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     # 운영 로깅 레벨(요청 상태·에러). stdout으로 남으며 Cloud Run 등이 자동 수집한다.
     # DEBUG로 내리면 우리 코드(app.*)의 상세 로그까지 볼 수 있다.
     log_level: str = "INFO"
+    # 매장 입구를 가장 가까운 그래프 노드에 스냅할 때 허용하는 최대 거리(m). 이보다 멀면
+    # 잘못된 원본 좌표가 벽 반대편·건물 반대편 노드에 강제 연결된 것으로 보고, 자동 연결하지
+    # 않고 시드 리포트에 unresolved로 남긴다(사람 검수 대상). 실데이터 분포상 정상 입구는
+    # 대부분 ~10m 안, p99≈18m이라 25m를 넘으면 오연결일 가능성이 크다. 건물 특성이 다르면
+    # NAV_STORE_ENTRANCE_SNAP_MAX_M로 조정한다.
+    store_entrance_snap_max_m: float = 25.0
 
     model_config = SettingsConfigDict(env_prefix="NAV_", case_sensitive=False)
 
