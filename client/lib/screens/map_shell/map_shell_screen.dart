@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -64,6 +66,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 기준으로 경로를 그린다. null이면 "현재 위치"(=PDR)을 기본 출발지로 쓴다.
   DirectionsCandidate? _selectedOrigin;
 
+  /// 길찾기 시트의 "지도에서 선택"을 눌러, 지금 지도에서 도착지로 쓸 매장을
+  /// 고르는 중인지. true인 동안에는 매장을 눌러도 매장 정보 시트가 뜨지 않고
+  /// 그 매장이 곧바로 도착지가 된다.
+  ///
+  /// 이 상태를 화면에 안내로 띄우는 것이 중요하다. 시트가 닫히기만 하면
+  /// 사용자는 "지도에서 선택"을 눌렀는데 아무 일도 안 일어난 것으로 본다.
+  bool _pickingDestinationOnMap = false;
+
   final _outdoorKey = GlobalKey<OutdoorMapBodyState>();
   final _indoorKey = GlobalKey<IndoorMapBodyState>();
 
@@ -76,6 +86,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
   final _categoryRowKey = GlobalKey();
   final _bottomBarKey = GlobalKey();
   final _searchPanelKey = GlobalKey();
+
+  /// "지도에서 도착지를 골라주세요" 안내. 이 카드의 X를 누른 탭이 지도까지
+  /// 새어들어가면, 취소를 누른 손가락이 그 아래 매장을 도착지로 지정해 버린다.
+  final _mapPickHintKey = GlobalKey();
 
   // 상단 검색창은 이제 여기(상위)가 소유한다. 결과 패널이 검색창 바로 아래에
   // 붙어야 하므로, 입력 상태를 검색창과 패널이 함께 볼 수 있는 이 자리에 둔다.
@@ -227,6 +241,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   void _activateSearch() {
     if (_searchActive) return;
+    // 검색을 시작했다는 것은 지도에서 고르는 걸 그만뒀다는 뜻이다. 안내만 남으면
+    // 검색 결과를 고른 뒤에도 다음 매장 탭이 도착지로 먹혀 버린다.
+    _stopPickingDestinationOnMap();
     setState(() => _searchActive = true);
     // 결과 패널이 지도 위에 떠 있는 동안 지도 제스처를 잠근다. 실내는 웹에서
     // 실제 DOM 캔버스(MapLibre)라 패널 위 휠 이벤트가 지도로 새어나간다.
@@ -447,7 +464,52 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 상위 상태에도 반영한다. "현재 위치"(=null)를 골랐다면 명시적 출발지가
     // 없다는 뜻이므로 저장된 값도 지워, 다음번엔 시트가 다시 열리게 한다.
     setState(() => _selectedOrigin = result.origin);
-    await _startRoute(origin: result.origin, destination: result.destination);
+
+    if (result.pickDestinationOnMap) {
+      // 시트는 닫혔고, 이제 지도에서 매장을 누르는 것이 도착지 선택이다.
+      setState(() {
+        _pickingDestinationOnMap = true;
+        // 안내 카드와 자리가 겹치므로 장소 카드는 접는다.
+        _placeInfo = null;
+      });
+      return;
+    }
+
+    await _startRoute(origin: result.origin, destination: result.destination!);
+  }
+
+  /// 지도에서 도착지 고르기를 끝낸다(선택 완료·취소 공통).
+  void _stopPickingDestinationOnMap() {
+    if (!_pickingDestinationOnMap) return;
+    setState(() => _pickingDestinationOnMap = false);
+  }
+
+  /// 지도에서 매장을 눌렀을 때의 분기점. 도착지 고르기 중이면 매장 정보 시트를
+  /// 열지 않고 그 매장으로 바로 경로를 그린다.
+  ///
+  /// 두 지도(야외의 실내 진입 오버레이·실내 탭)가 같은 콜백을 쓰므로, 어느 쪽에서
+  /// 골라도 동일하게 동작한다.
+  void _onMapStoreTap(PoiSearchResult match) {
+    if (!_pickingDestinationOnMap) {
+      _runSheetChain(() => _showStoreInfo(match));
+      return;
+    }
+    _stopPickingDestinationOnMap();
+    // 강조 표시는 남겨두지 않는다 — 곧 경로와 도착 핀이 그 자리를 대신한다.
+    _indoorKey.currentState?.clearHighlight();
+    _outdoorKey.currentState?.clearHighlight();
+    unawaited(
+      _startRoute(
+        origin: _selectedOrigin,
+        destination: DirectionsCandidate(
+          title: match.name,
+          subtitle: match.floor,
+          point: match.point,
+          nodeId: match.nodeId,
+          floor: match.floor,
+        ),
+      ),
+    );
   }
 
   /// 실제 경로 표시. 길찾기 시트를 거치는 경로와, 이미 기억해둔 출발지로 바로
@@ -664,9 +726,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                   if (_outdoorIndoorEntered == entered) return;
                   setState(() => _outdoorIndoorEntered = entered);
                 },
-                onStoreTap: (match) {
-                  _runSheetChain(() => _showStoreInfo(match));
-                },
+                onStoreTap: _onMapStoreTap,
                 // 실내 화면과 같은 목록을 넘긴다. 야외 지도도 실내 진입
                 // 오버레이가 켜지면 층 선택기·위치 지정을 함께 쓰므로, 상단
                 // 검색창이나 하단 바를 누른 탭이 지도 탭으로 새어들어가면
@@ -677,6 +737,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                   _categoryRowKey,
                   _searchPanelKey,
                   _bottomBarKey,
+                  _mapPickHintKey,
                 ],
               ),
               IndoorMapBody(
@@ -684,9 +745,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                 buildingId: _buildingId,
                 onRouteVisibleChanged: (visible) =>
                     setState(() => _indoorRouteVisible = visible),
-                onStoreTap: (match) {
-                  _runSheetChain(() => _showStoreInfo(match));
-                },
+                onStoreTap: _onMapStoreTap,
                 onPlacingLocationChanged: (placing) {
                   if (_indoorPlacingLocation == placing) return;
                   setState(() => _indoorPlacingLocation = placing);
@@ -697,6 +756,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                   _categoryRowKey,
                   _searchPanelKey,
                   _bottomBarKey,
+                  _mapPickHintKey,
                 ],
               ),
             ],
@@ -796,7 +856,20 @@ class _MapShellScreenState extends State<MapShellScreen> {
               ),
             ),
 
-          if (placeInfo != null && !_searchActive)
+          // 지도에서 도착지를 고르는 중이라는 안내. 이게 없으면 "지도에서 선택"을
+          // 눌렀을 때 시트만 닫히고 아무 일도 안 일어난 것처럼 보인다.
+          if (_pickingDestinationOnMap && !_searchActive)
+            Positioned(
+              top: 128,
+              left: 12,
+              right: 12,
+              child: _MapPickHintCard(
+                key: _mapPickHintKey,
+                originLabel: _selectedOrigin?.title ?? '현재 위치',
+                onCancel: _stopPickingDestinationOnMap,
+              ),
+            )
+          else if (placeInfo != null && !_searchActive)
             Positioned(
               top: 128,
               left: 12,
@@ -1104,6 +1177,72 @@ class _CategoryChip extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "지도에서 선택"을 누른 뒤 지도 위에 뜨는 안내.
+///
+/// 시트가 닫힌 자리에 아무 표시도 없으면, 사용자는 방금 누른 버튼이 먹지 않은
+/// 것으로 본다. 지금 무엇을 눌러야 하는지와 출발지가 무엇으로 잡혀 있는지를
+/// 함께 보여주고, 마음이 바뀌면 그 자리에서 취소할 수 있게 한다.
+class _MapPickHintCard extends StatelessWidget {
+  const _MapPickHintCard({
+    super.key,
+    required this.originLabel,
+    required this.onCancel,
+  });
+
+  /// 지금 출발지로 잡혀 있는 것. 명시적으로 고른 매장이 없으면 "현재 위치".
+  final String originLabel;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: AppColors.blue50,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.touch_app_outlined,
+              color: AppColors.primary,
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    '도착지로 지정할 매장을 지도에서 눌러주세요',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.text,
+                    ),
+                  ),
+                  Text(
+                    '출발: $originLabel',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.muted,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: '지도에서 선택 취소',
+              onPressed: onCancel,
+              icon: const Icon(Icons.close, size: 18, color: AppColors.muted),
+            ),
+          ],
         ),
       ),
     );
