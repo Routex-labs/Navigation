@@ -93,4 +93,24 @@ void main() {
       reason: '출발지가 null(=현재 위치)이라는 이유로 경로 계산이 건너뛰어졌다',
     );
   });
+
+  testWidgets('상단 출발 행은 매장을 안 골랐어도 "현재 위치"로 적는다', (
+    WidgetTester tester,
+  ) async {
+    // 같은 null 겹침이 라벨에서도 드러난다. 상위가 출발지를 null로 넘기면 상단
+    // 바는 "출발지를 선택하세요" placeholder를 띄우는데, 그건 위치를 방금 찍어둔
+    // 사용자에게 출발지가 비어 있다고 잘못 알리는 것이다. 그 상태에서는 출발 행을
+    // 눌러 매장을 고르지 않는 한 문구가 바뀌지 않아, 위치 지정이 무시된 것처럼 보인다.
+    await openStoreInfoBySearch(tester);
+
+    await tester.tap(find.text('도착'));
+    await drain(tester);
+
+    expect(
+      find.text('출발지를 선택하세요'),
+      findsNothing,
+      reason: '현재 위치를 출발지로 쓸 수 있는데도 출발지가 비어 있다고 표시했다',
+    );
+    expect(find.text('현재 위치'), findsOneWidget);
+  });
 }

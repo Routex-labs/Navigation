@@ -568,8 +568,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 출발지를 "매장 선택"으로 갱신하는 경로는 [_showStoreInfo]·[_openDirections]가
   /// 이미 [_selectedOrigin]을 새 값으로 덮어쓴다. 그래서 두 경로 모두 "마지막에
   /// 갱신한 위치"가 출발지가 된다.
+  ///
+  /// 버릴 매장 출발지가 없어도 **다시 그린다.** 상단 출발 행의 라벨은
+  /// [_canRouteFromCurrentLocation]으로 갈리는데, 그 값은 이 시점에 막 참이 된다.
+  /// 여기서 조기 반환하면 도착 초안을 먼저 잡아둔 상태에서 위치를 찍었을 때
+  /// "출발지를 선택하세요"가 그대로 남는다 — 위치는 찍혔는데 화면만 아니라고 한다.
   void _onLocationAnchored() {
-    if (_selectedOrigin == null) return;
     setState(() => _selectedOrigin = null);
   }
 
@@ -903,7 +907,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
               onCancelSearch: _closeSearch,
               onDirectionsTap: _openDirections,
               onSearchRequested: _resumeSearchFromRouteDraft,
-              routeOriginLabel: _selectedOrigin?.title,
+              // 명시적으로 고른 매장이 없어도 현재 위치를 출발지로 쓸 수 있으면
+              // 그렇게 적는다. null을 그대로 넘기면 상단 바가 "출발지를
+              // 선택하세요" placeholder를 띄워, 위치를 방금 찍어둔 사용자에게
+              // 출발지가 비어 있다고 잘못 알린다.
+              routeOriginLabel:
+                  _selectedOrigin?.title ??
+                  (_canRouteFromCurrentLocation ? '현재 위치' : null),
               routeDestinationLabel: _routeDraftDestination?.title,
               onRouteOriginTap: () => _openDirections(
                 presetDestination: _routeDraftDestination,
