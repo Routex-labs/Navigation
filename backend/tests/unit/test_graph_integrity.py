@@ -20,7 +20,18 @@ from app.graph.integrity import (
 )
 
 
-def _edge(edge_id, from_id, to_id, *, transfer_mode=None, floor_id="f1", length_m=1.0, cost_m=1.0, bidirectional=True, geometry_point_count=2):
+def _edge(
+    edge_id,
+    from_id,
+    to_id,
+    *,
+    transfer_mode=None,
+    floor_id="f1",
+    length_m=1.0,
+    cost_m=1.0,
+    bidirectional=True,
+    geometry_point_count=2,
+):
     return EdgeInfo(
         id=edge_id,
         from_id=from_id,
@@ -112,7 +123,9 @@ def test_층_내부_간선이_다른_층을_잇으면_잡는다():
 def test_에스컬레이터_전이가_양방향이면_잡는다():
     graph = _base_graph()
     graph.edges.append(
-        _edge("bad", "n1", "n3", transfer_mode="escalator", floor_id=None, bidirectional=True, geometry_point_count=None)
+        _edge(
+            "bad", "n1", "n3", transfer_mode="escalator", floor_id=None, bidirectional=True, geometry_point_count=None
+        )
     )
     report = validate_graph(graph)
     assert "escalator_bidirectional" in _codes(report)

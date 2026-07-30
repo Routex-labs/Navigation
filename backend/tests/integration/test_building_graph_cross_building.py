@@ -41,8 +41,24 @@ def session(tmp_path):
     # 건물 A 안의 정상 전이(1F↔2F)와, A→B로 새는 전이 간선.
     session.add_all(
         [
-            Edge(id="xfer_ok", floor_id=None, from_node_id="A:n1", to_node_id="A:n2", length_m=4.5, cost_m=40.0, transfer_mode="elevator"),
-            Edge(id="xfer_cross", floor_id=None, from_node_id="A:n1", to_node_id="B:n1", length_m=4.5, cost_m=40.0, transfer_mode="elevator"),
+            Edge(
+                id="xfer_ok",
+                floor_id=None,
+                from_node_id="A:n1",
+                to_node_id="A:n2",
+                length_m=4.5,
+                cost_m=40.0,
+                transfer_mode="elevator",
+            ),
+            Edge(
+                id="xfer_cross",
+                floor_id=None,
+                from_node_id="A:n1",
+                to_node_id="B:n1",
+                length_m=4.5,
+                cost_m=40.0,
+                transfer_mode="elevator",
+            ),
         ]
     )
     session.commit()
