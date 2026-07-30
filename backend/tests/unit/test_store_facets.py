@@ -1,0 +1,426 @@
+"""store_facets 순수 함수 단위 테스트.
+
+이 모듈은 DB·시드를 모르는 순수 함수라서 db_session fixture가 필요 없다.
+파일 I/O가 필요한 load_overlay 테스트만 tmp_path로 임시 디렉터리를 만든다.
+"""
+
+from __future__ import annotations
+
+import json
+
+from app.repositories import store_facets
+
+
+# ── derive_facets ────────────────────────────────────────────────────────
+
+
+# wave1/README.md에 확정된 5줄 매핑이 그대로 구현됐는지 하나씩 확인한다.
+def test_소분류_5개가_각각_맞는_styles로_파생된다():
+    assert store_facets.derive_facets("패션", "스포츠·아웃도어") == {"styles": ["스포츠"]}
+    assert store_facets.derive_facets("패션", "캐주얼·스트리트") == {"styles": ["캐주얼"]}
+    assert store_facets.derive_facets("패션", "컨템포러리") == {"styles": ["컨템포러리"]}
+    assert store_facets.derive_facets("패션", "명품") == {"styles": ["명품"]}
+    assert store_facets.derive_facets("패션", "골프") == {"styles": ["골프"]}
+
+
+# 매핑에 없는 소분류(품목 축)는 styles 키 자체가 생기면 안 된다 — 빈 배열도 금지.
+def test_매핑에_없는_소분류는_키가_안_생긴다():
+    assert store_facets.derive_facets("패션", "슈즈") == {}
+    assert store_facets.derive_facets("패션", "잡화·액세서리") == {}
+    assert store_facets.derive_facets("패션", "시계·주얼리") == {}
+    assert store_facets.derive_facets(None, None) == {}
+
+
+def test_derive_facets는_category를_쓰지_않고_subcategory만_본다():
+    # category가 달라도 subcategory가 같으면 같은 결과 — 함수가 category를 무시한다는
+    # 계약을 문서화하는 회귀 테스트.
+    assert store_facets.derive_facets("아무거나", "골프") == {"styles": ["골프"]}
+
+
+# ── resolve_facets ───────────────────────────────────────────────────────
+
+
+def test_오버레이가_없으면_파생값만_돌아온다():
+    result = store_facets.resolve_facets("PO-1", "패션", "명품", overlay={})
+    assert result == {"styles": ["명품"]}
+
+
+# 오버레이가 파생을 이긴다 — 축 단위 병합(다른 축은 파생값을 유지).
+def test_오버레이가_같은_축의_파생값을_이긴다():
+    overlay = {"PO-1": {"name": "탠디", "styles": ["스포츠", "캐주얼"]}}
+    result = store_facets.resolve_facets("PO-1", "패션", "슈즈", overlay=overlay)
+    # 슈즈는 파생이 없으므로 오버레이 값이 그대로 최종 결과다.
+    assert result == {"styles": ["스포츠", "캐주얼"]}
+
+
+def test_오버레이는_축_단위로만_덮고_다른_축의_파생값은_보존한다():
+    # cuisines처럼 아직 derive_facets가 모르는 축이라도, 오버레이가 그 축만 추가하면
+    # styles 파생값은 그대로 남아야 한다(통째로 갈아치우지 않는다는 설계 근거).
+    overlay = {"PO-1": {"cuisines": ["일식"]}}
+    result = store_facets.resolve_facets("PO-1", "패션", "명품", overlay=overlay)
+    assert result == {"styles": ["명품"], "cuisines": ["일식"]}
+
+
+def test_오버레이가_빈_배열을_주면_해당_축을_제거한다():
+    overlay = {"PO-1": {"styles": []}}
+    result = store_facets.resolve_facets("PO-1", "패션", "명품", overlay=overlay)
+    assert result == {}
+
+
+def test_name은_facet_축으로_취급하지_않는다():
+    overlay = {"PO-1": {"name": "탠디"}}
+    result = store_facets.resolve_facets("PO-1", "패션", "슈즈", overlay=overlay)
+    assert result == {}
+
+
+# ── load_overlay ─────────────────────────────────────────────────────────
+
+
+def test_파일도_디렉터리도_없으면_빈_dict를_돌려준다(tmp_path):
+    missing = tmp_path / "does-not-exist"
+    assert store_facets.load_overlay(missing) == {}
+
+
+def test_밑줄로_시작하는_파일은_무시하고_나머지_json을_병합한다(tmp_path):
+    (tmp_path / "_vocabulary.json").write_text(
+        json.dumps({"version": 1, "vocabulary": {"styles": ["스포츠"]}}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (tmp_path / "fashion.json").write_text(
+        json.dumps(
+            {"version": 1, "stores": {"PO-1": {"name": "탠디", "styles": ["캐주얼"]}}},
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "food.json").write_text(
+        json.dumps(
+            {"version": 1, "stores": {"PO-2": {"name": "본가 스시", "cuisines": ["일식"]}}},
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = store_facets.load_overlay(tmp_path)
+
+    assert result == {
+        "PO-1": {"name": "탠디", "styles": ["캐주얼"]},
+        "PO-2": {"name": "본가 스시", "cuisines": ["일식"]},
+    }
+
+
+def test_같은_store_id가_두_파일에_있으면_오류다(tmp_path):
+    (tmp_path / "a.json").write_text(
+        json.dumps({"version": 1, "stores": {"PO-1": {"styles": ["캐주얼"]}}}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (tmp_path / "b.json").write_text(
+        json.dumps({"version": 1, "stores": {"PO-1": {"styles": ["명품"]}}}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    try:
+        store_facets.load_overlay(tmp_path)
+        assert False, "중복 store_id는 예외를 던져야 한다"
+    except ValueError as exc:
+        assert "PO-1" in str(exc)
+
+
+# ── validate_overlay ─────────────────────────────────────────────────────
+
+
+VOCAB = {"styles": ["스포츠", "캐주얼", "컨템포러리", "명품", "골프"]}
+KNOWN_IDS = {"PO-1", "PO-2"}
+NAMES = {"PO-1": "탠디", "PO-2": "본가 스시"}
+
+
+def _overlay(stores: dict) -> dict:
+    return {"version": 1, "stores": stores}
+
+
+def test_정상_오버레이는_오류가_없다():
+    overlay = _overlay({"PO-1": {"name": "탠디", "styles": ["캐주얼"]}})
+    assert store_facets.validate_overlay(overlay, VOCAB, KNOWN_IDS, NAMES) == []
+
+
+def test_version_미지원을_잡는다():
+    overlay = {"version": 2, "stores": {}}
+    errors = store_facets.validate_overlay(overlay, VOCAB, KNOWN_IDS, NAMES)
+    assert len(errors) == 1
+    assert "version" in errors[0]
+
+
+def test_고아_store_id를_잡는다():
+    overlay = _overlay({"PO-999": {"styles": ["캐주얼"]}})
+    errors = store_facets.validate_overlay(overlay, VOCAB, KNOWN_IDS, NAMES)
+    assert any("PO-999" in e and "존재하지 않는" in e for e in errors)
+
+
+def test_name_불일치를_잡는다():
+    overlay = _overlay({"PO-1": {"name": "완전 다른 이름", "styles": ["캐주얼"]}})
+    errors = store_facets.validate_overlay(overlay, VOCAB, KNOWN_IDS, NAMES)
+    assert any("name" in e for e in errors)
+
+
+def test_vocabulary_밖의_값을_잡는다():
+    overlay = _overlay({"PO-1": {"styles": ["구두·정장"]}})
+    errors = store_facets.validate_overlay(overlay, VOCAB, KNOWN_IDS, NAMES)
+    assert any("구두·정장" in e for e in errors)
+
+
+def test_배열_내_중복_태그를_잡는다():
+    overlay = _overlay({"PO-1": {"styles": ["캐주얼", "캐주얼"]}})
+    errors = store_facets.validate_overlay(overlay, VOCAB, KNOWN_IDS, NAMES)
+    assert any("중복" in e for e in errors)
+
+
+def test_문자열이_아닌_태그_값을_잡는다():
+    overlay = _overlay({"PO-1": {"styles": ["캐주얼", 123]}})
+    errors = store_facets.validate_overlay(overlay, VOCAB, KNOWN_IDS, NAMES)
+    assert any("문자열이 아닌" in e for e in errors)
+
+
+def test_vocabulary에_없는_축_자체도_잡는다():
+    overlay = _overlay({"PO-1": {"cuisines": ["일식"]}})
+    errors = store_facets.validate_overlay(overlay, VOCAB, KNOWN_IDS, NAMES)
+    assert any("cuisines" in e for e in errors)
+
+
+def test_한_매장에_여러_오류가_있으면_전부_모은다():
+    overlay = _overlay(
+        {
+            "PO-999": {"styles": ["캐주얼"]},  # 고아
+            "PO-1": {"styles": ["구두·정장", "구두·정장"]},  # vocab 밖 + 중복
+        }
+    )
+    errors = store_facets.validate_overlay(overlay, VOCAB, KNOWN_IDS, NAMES)
+    assert len(errors) >= 2
+
+
+# ── facet_coverage_report ────────────────────────────────────────────────
+
+
+def test_커버리지_보고서는_건물별_대분류별_적용률을_센다():
+    stores = [
+        {
+            "store_id": "PO-1",
+            "building_id": "thehyundai-seoul",
+            "category": "패션",
+            "subcategory": "명품",
+        },
+        {
+            "store_id": "PO-2",
+            "building_id": "thehyundai-seoul",
+            "category": "패션",
+            "subcategory": "슈즈",  # 파생도 오버레이도 없음 → 태그 없음
+        },
+    ]
+    report = store_facets.facet_coverage_report(stores, overlay={})
+
+    assert report["by_building"]["thehyundai-seoul"] == {"total": 2, "tagged": 1}
+    assert report["by_category"]["패션"] == {"total": 2, "tagged": 1}
+
+
+def test_태그_없는_매장은_실패가_아니라_커버리지_분모에만_잡힌다():
+    stores = [
+        {"store_id": "PO-2", "building_id": "b1", "category": "패션", "subcategory": "슈즈"},
+    ]
+    report = store_facets.facet_coverage_report(stores, overlay={})
+    assert report["by_building"]["b1"]["total"] == 1
+    assert report["by_building"]["b1"]["tagged"] == 0
+
+
+# ── intents (load_intents / resolve_intent_store_ids / validate_intents) ──
+
+
+# 규칙·extra·제외를 한 번에 확인할 수 있는 최소 매장 목록.
+# 슈즈 2건 + 레스토랑 2건 + 규칙에 안 잡히는 캐주얼·스트리트 1건(= extra 대상) 구성.
+INTENT_STORES = [
+    {"store_id": "PO-슈즈1", "name": "탠디", "category": "패션", "subcategory": "슈즈"},
+    {"store_id": "PO-슈즈2", "name": "크록스", "category": "패션", "subcategory": "슈즈"},
+    {
+        "store_id": "PO-나이키",
+        "name": "나이키 라이즈",
+        "category": "패션",
+        "subcategory": "캐주얼·스트리트",
+    },
+    {"store_id": "PO-식당1", "name": "본가 스시", "category": "식음료", "subcategory": "레스토랑"},
+    {"store_id": "PO-식당2", "name": "공탕", "category": "식음료", "subcategory": "레스토랑"},
+    # 식음료지만 밥집이 아닌 것 — "식사"가 category 기준이면 여기가 섞여 들어온다.
+    {"store_id": "PO-정육", "name": "정육 코너", "category": "식음료", "subcategory": "정육"},
+]
+
+INTENTS = {
+    "신발": {
+        "rules": {"subcategory": ["슈즈"]},
+        "extra_store_ids": {"PO-나이키": "나이키 라이즈"},
+    },
+    "식사": {"rules": {"subcategory": ["레스토랑"]}},
+}
+
+
+def test_규칙이_소분류로_후보를_유도한다():
+    assert store_facets.resolve_intent_store_ids("식사", INTENT_STORES, INTENTS) == {
+        "PO-식당1",
+        "PO-식당2",
+    }
+
+
+def test_extra_store_ids가_규칙_결과에_합쳐진다():
+    assert store_facets.resolve_intent_store_ids("신발", INTENT_STORES, INTENTS) == {
+        "PO-슈즈1",
+        "PO-슈즈2",
+        "PO-나이키",
+    }
+
+
+# "식사"는 category=식음료가 아니라 subcategory=레스토랑 기준이다(설계 문서 결정).
+# category 기준이면 정육·야채·수산이 "밥집" 질의에 섞여 들어온다.
+def test_식사는_category가_아니라_subcategory_기준이다():
+    result = store_facets.resolve_intent_store_ids("식사", INTENT_STORES, INTENTS)
+    assert "PO-정육" not in result
+    # 대조군: 같은 스키마로 category 규칙을 쓰면 정육이 실제로 섞인다 — 왜 subcategory를
+    # 골랐는지 코드로 남겨 두는 회귀 테스트다.
+    category_based = {"식사": {"rules": {"category": ["식음료"]}}}
+    assert "PO-정육" in store_facets.resolve_intent_store_ids(
+        "식사", INTENT_STORES, category_based
+    )
+
+
+def test_excluded_store_ids는_규칙_결과에서_빠진다():
+    intents = {
+        "신발": {
+            "rules": {"subcategory": ["슈즈"]},
+            "excluded_store_ids": {"PO-슈즈2": "크록스"},
+        }
+    }
+    assert store_facets.resolve_intent_store_ids("신발", INTENT_STORES, intents) == {"PO-슈즈1"}
+
+
+def test_모르는_intent는_빈_집합이다():
+    assert store_facets.resolve_intent_store_ids("카페", INTENT_STORES, INTENTS) == set()
+
+
+# 규칙 필드 오타를 조용히 무시하면 조건이 사라져 후보가 넓어지는 방향으로 틀린다.
+def test_규칙에_쓸_수_없는_필드는_예외다():
+    intents = {"신발": {"rules": {"subcategory_kr": ["슈즈"]}}}
+    try:
+        store_facets.resolve_intent_store_ids("신발", INTENT_STORES, intents)
+        assert False, "지원하지 않는 규칙 필드는 예외를 던져야 한다"
+    except ValueError as exc:
+        assert "subcategory_kr" in str(exc)
+
+
+def test_intents_파일이_없으면_빈_dict다(tmp_path):
+    # 디렉터리는 있지만 _intents.json이 없는 경우와, 경로 자체가 없는 경우 모두.
+    assert store_facets.load_intents(tmp_path) == {}
+    assert store_facets.load_intents(tmp_path / "없는파일.json") == {}
+
+
+def test_load_intents는_디렉터리와_파일_경로를_모두_받는다(tmp_path):
+    payload = {"version": 1, "intents": {"신발": {"rules": {"subcategory": ["슈즈"]}}}}
+    file = tmp_path / store_facets.INTENTS_FILENAME
+    file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    assert store_facets.load_intents(tmp_path) == payload["intents"]
+    assert store_facets.load_intents(file) == payload["intents"]
+
+
+# _로 시작하므로 오버레이 로더는 이 파일을 매장 태그로 읽어선 안 된다.
+def test_intents_파일은_오버레이로_읽히지_않는다(tmp_path):
+    (tmp_path / store_facets.INTENTS_FILENAME).write_text(
+        json.dumps({"version": 1, "intents": {"신발": {"rules": {"subcategory": ["슈즈"]}}}}),
+        encoding="utf-8",
+    )
+    assert store_facets.load_overlay(tmp_path) == {}
+
+
+def _intents_payload(intents: dict) -> dict:
+    return {"version": 1, "intents": intents}
+
+
+def test_정상_intents는_오류가_없다():
+    assert store_facets.validate_intents(_intents_payload(INTENTS), INTENT_STORES) == []
+
+
+def test_intents_version_미지원을_잡는다():
+    errors = store_facets.validate_intents({"version": 2, "intents": {}}, INTENT_STORES)
+    assert len(errors) == 1
+    assert "version" in errors[0]
+
+
+def test_extra의_고아_id를_잡는다():
+    payload = _intents_payload(
+        {"신발": {"rules": {"subcategory": ["슈즈"]}}, "선물": {"extra_store_ids": {"PO-없음": "유령"}}}
+    )
+    errors = store_facets.validate_intents(payload, INTENT_STORES)
+    assert any("PO-없음" in e and "존재하지 않는" in e for e in errors)
+
+
+# 규칙이 이미 잡는 매장을 extra에 또 적으면 같은 정보를 두 벌로 들게 된다(드리프트의 씨앗).
+def test_규칙이_이미_잡는_매장이_extra에_있으면_중복으로_잡는다():
+    payload = _intents_payload(
+        {"신발": {"rules": {"subcategory": ["슈즈"]}, "extra_store_ids": {"PO-슈즈1": "탠디"}}}
+    )
+    errors = store_facets.validate_intents(payload, INTENT_STORES)
+    assert any("PO-슈즈1" in e and "중복" in e for e in errors)
+
+
+# 소분류가 Studio에서 바뀌면 규칙이 조용히 0건이 된다 — 그걸 잡는 검사.
+def test_실데이터에_없는_규칙_값을_잡는다():
+    payload = _intents_payload({"식사": {"rules": {"subcategory": ["레스토랑 "]}}})
+    errors = store_facets.validate_intents(payload, INTENT_STORES)
+    assert any("레스토랑 " in e and "실데이터에 없는" in e for e in errors)
+
+
+def test_규칙에_쓸_수_없는_필드를_검증에서도_잡는다():
+    payload = _intents_payload({"신발": {"rules": {"floor": ["4F"]}}})
+    errors = store_facets.validate_intents(payload, INTENT_STORES)
+    assert any("floor" in e for e in errors)
+
+
+def test_extra의_name_불일치를_잡는다():
+    payload = _intents_payload(
+        {"신발": {"rules": {"subcategory": ["슈즈"]}, "extra_store_ids": {"PO-나이키": "다른 이름"}}}
+    )
+    errors = store_facets.validate_intents(payload, INTENT_STORES)
+    assert any("PO-나이키" in e and "name" in e for e in errors)
+
+
+def test_규칙도_extra도_없는_intent를_잡는다():
+    errors = store_facets.validate_intents(_intents_payload({"카페": {}}), INTENT_STORES)
+    assert any("카페" in e for e in errors)
+
+
+def test_빈_규칙_배열을_잡는다():
+    payload = _intents_payload({"신발": {"rules": {"subcategory": []}}})
+    errors = store_facets.validate_intents(payload, INTENT_STORES)
+    assert any("subcategory" in e for e in errors)
+
+
+# 규칙이 바뀌어 후보가 아니게 된 매장이 excluded에 남아 있으면 찌꺼기다.
+def test_후보가_아닌_매장을_excluded에_적으면_잡는다():
+    payload = _intents_payload(
+        {"신발": {"rules": {"subcategory": ["슈즈"]}, "excluded_store_ids": {"PO-식당1": "본가 스시"}}}
+    )
+    errors = store_facets.validate_intents(payload, INTENT_STORES)
+    assert any("PO-식당1" in e for e in errors)
+
+
+# ── 실제 배포 파일 회귀 검사 ──────────────────────────────────────────────
+
+
+# 실데이터 대조(고아 id·소분류 일치)는 시드 경로에서 validate_intents가 하고, 여기서는
+# 파일이 파싱되고 Phase 1 범위(intent 2개 + P3 판정 예 145건)가 그대로인지만 지킨다.
+def test_배포된_intents_파일이_Phase_1_범위를_유지한다():
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "resources" / "store_search_facets"
+    intents = store_facets.load_intents(path)
+
+    assert set(intents) == {"신발", "식사"}
+    assert intents["신발"]["rules"] == {"subcategory": ["슈즈"]}
+    assert intents["식사"]["rules"] == {"subcategory": ["레스토랑"]}
+    # P3 검수 결과 = 예 145건. 규칙이 잡는 슈즈 8건은 extra에 없어야 한다.
+    assert len(intents["신발"]["extra_store_ids"]) == 145
+    assert "extra_store_ids" not in intents["식사"]

@@ -376,8 +376,8 @@
   "subcategory": "캐주얼·스트리트"
  },
  "ARKET CAFE": {
-  "category": "패션",
-  "subcategory": "캐주얼·스트리트"
+  "category": "식음료",
+  "subcategory": "카페·베이커리"
  },
  "ATM (하나은행)": {
   "category": "편의시설",
@@ -420,8 +420,8 @@
   "subcategory": "스포츠·아웃도어"
  },
  "ETF 베이커리": {
-  "category": "패션",
-  "subcategory": "캐주얼·스트리트"
+  "category": "식음료",
+  "subcategory": "카페·베이커리"
  },
  "HBYH": {
   "category": "리빙",
@@ -565,7 +565,7 @@
  },
  "[언더 웨어] 캘빈클라인": {
   "category": "패션",
-  "subcategory": "캐주얼·스트리트"
+  "subcategory": "이너웨어"
  },
  "가니": {
   "category": "패션",
@@ -736,8 +736,8 @@
   "subcategory": "컨템포러리"
  },
  "더치랩": {
-  "category": "패션",
-  "subcategory": "캐주얼·스트리트"
+  "category": "식음료",
+  "subcategory": "카페·베이커리"
  },
  "더현대 수비니어": {
   "category": "서비스",
@@ -949,7 +949,7 @@
  },
  "마사비스": {
   "category": "식음료",
-  "subcategory": "레스토랑"
+  "subcategory": "카페·베이커리"
  },
  "마인": {
   "category": "패션",
@@ -1072,8 +1072,8 @@
   "subcategory": "잡화·액세서리"
  },
  "바이리네": {
-  "category": "패션",
-  "subcategory": "스포츠·아웃도어"
+  "category": "리빙",
+  "subcategory": "침구·매트리스"
  },
  "박선기 작품": {
   "category": "서비스",
@@ -1213,7 +1213,7 @@
  },
  "세띠 엠므": {
   "category": "식음료",
-  "subcategory": "레스토랑"
+  "subcategory": "카페·베이커리"
  },
  "세라젬": {
   "category": "리빙",
@@ -1460,8 +1460,8 @@
   "subcategory": "가전·디지털"
  },
  "에이스 프리미엄 스토어": {
-  "category": "패션",
-  "subcategory": "스포츠·아웃도어"
+  "category": "리빙",
+  "subcategory": "침구·매트리스"
  },
  "에코맘의 산골이유식": {
   "category": "식음료",
@@ -1521,7 +1521,7 @@
  },
  "우나하우스": {
   "category": "식음료",
-  "subcategory": "레스토랑"
+  "subcategory": "카페·베이커리"
  },
  "우영미": {
   "category": "패션",
@@ -1912,8 +1912,8 @@
   "subcategory": "컨템포러리"
  },
  "프롤라": {
-  "category": "패션",
-  "subcategory": "스포츠·아웃도어"
+  "category": "식음료",
+  "subcategory": "카페·베이커리"
  },
  "플레이 인더박스": {
   "category": "키즈",

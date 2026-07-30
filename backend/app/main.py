@@ -33,10 +33,14 @@ def create_app() -> FastAPI:
     from app.routers import buildings, fonts, query
 
     # lifespan은 생성 시점에 넘겨야 해서, 진단 캡처 여부를 여기서 먼저 정한다.
+    # HTTP 캡처를 끄고 SQL 캡처만 켠 실행도 같은 진단 파일을 만들므로 종료 정리가
+    # 필요하다. 둘 중 하나라도 켜졌을 때 수명주기를 붙인다.
     app = FastAPI(
         title="Navigation API",
         version="0.3.0",
-        lifespan=_development_log_lifespan if settings.http_capture else None,
+        lifespan=_development_log_lifespan
+        if settings.sql_echo or settings.http_capture
+        else None,
     )
 
     # 개발 중에는 모든 출처(*) 허용. 운영 배포 시 Flutter 앱 도메인으로 교체 필요

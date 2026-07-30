@@ -26,6 +26,12 @@ class MapTopBar extends StatelessWidget {
     required this.searchActive,
     required this.onCancelSearch,
     required this.onDirectionsTap,
+    required this.onSearchRequested,
+    this.routeOriginLabel,
+    this.routeDestinationLabel,
+    this.onRouteOriginTap,
+    this.onRouteDestinationTap,
+    this.onClearRouteDraft,
     this.hintText = '건물, 장소를 검색하세요',
   });
 
@@ -36,7 +42,9 @@ class MapTopBar extends StatelessWidget {
   final FocusNode focusNode;
   final ValueChanged<String> onChanged;
 
-  /// 엔터로 확정. 상위가 이때만 의미 검색까지 이어 붙인다.
+  /// 엔터로 확정. 의미 검색은 타이핑이 멎어도 알아서 이어지므로 이 콜백은
+  /// **유일한 트리거가 아니라 지름길**이다 — 한글 IME에서 첫 엔터가 조합 확정에
+  /// 쓰여 여기까지 오지 않아도 검색은 끝까지 간다.
   final ValueChanged<String> onSubmitted;
 
   /// 검색이 활성(포커스 또는 입력 중)인지. true면 왼쪽 버튼이 햄버거 대신
@@ -45,20 +53,43 @@ class MapTopBar extends StatelessWidget {
   final VoidCallback onCancelSearch;
 
   final VoidCallback onDirectionsTap;
+
+  /// 도착지를 먼저 고른 길찾기 초안이다. 실제 후보 객체는 상위 화면이
+  /// 소유하고, 이 위젯은 표시와 탭 전달만 맡아 검색 취소·시트 닫힘으로
+  /// 초안이 사라지지 않게 한다.
+  final String? routeOriginLabel;
+  final String? routeDestinationLabel;
+  final VoidCallback? onRouteOriginTap;
+  final VoidCallback? onRouteDestinationTap;
+  final VoidCallback? onClearRouteDraft;
+
+  /// 길찾기 초안을 보고 있는 중에도 일반 장소 검색으로 돌아갈 수 있는
+  /// 진입점이다. 검색을 닫으면 상위가 같은 초안을 다시 넘겨준다.
+  final VoidCallback onSearchRequested;
   final String hintText;
 
   @override
   Widget build(BuildContext context) {
+    final showRouteDraft = !searchActive && routeDestinationLabel != null;
     return SafeArea(
       bottom: false,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
         child: Material(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(showRouteDraft ? 18 : 28),
           elevation: 6,
           shadowColor: Colors.black.withValues(alpha: 0.15),
-          child: Row(
+          child: showRouteDraft
+              ? _RouteDraftBar(
+                  originLabel: routeOriginLabel ?? '출발지를 선택하세요',
+                  destinationLabel: routeDestinationLabel!,
+                  onOriginTap: onRouteOriginTap ?? onDirectionsTap,
+                  onDestinationTap: onRouteDestinationTap ?? onDirectionsTap,
+                  onSearchRequested: onSearchRequested,
+                  onClear: onClearRouteDraft,
+                )
+              : Row(
             children: [
               if (searchActive)
                 IconButton(
@@ -137,6 +168,116 @@ class MapTopBar extends StatelessWidget {
               const SizedBox(width: 4),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 네이버·카카오 지도처럼 도착지를 먼저 고른 뒤에도 출발/도착을 한눈에
+/// 확인하는 상단 경로 초안 바. 행을 누르면 상위의 기존 길찾기 선택 시트로
+/// 연결한다. X만 초안을 지우는 명시적 초기화다.
+class _RouteDraftBar extends StatelessWidget {
+  const _RouteDraftBar({
+    required this.originLabel,
+    required this.destinationLabel,
+    required this.onOriginTap,
+    required this.onDestinationTap,
+    required this.onSearchRequested,
+    required this.onClear,
+  });
+
+  final String originLabel;
+  final String destinationLabel;
+  final VoidCallback onOriginTap;
+  final VoidCallback onDestinationTap;
+  final VoidCallback onSearchRequested;
+  final VoidCallback? onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 4, 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _RouteDraftField(
+                  key: const Key('route-draft-origin'),
+                  icon: Icons.my_location,
+                  label: originLabel,
+                  isPlaceholder: originLabel == '출발지를 선택하세요',
+                  onTap: onOriginTap,
+                ),
+                const Divider(height: 1, indent: 34),
+                _RouteDraftField(
+                  key: const Key('route-draft-destination'),
+                  icon: Icons.place_outlined,
+                  label: destinationLabel,
+                  onTap: onDestinationTap,
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            key: const Key('route-draft-search'),
+            onPressed: onSearchRequested,
+            icon: const Icon(Icons.search, color: AppColors.muted),
+            tooltip: '장소 검색',
+          ),
+          if (onClear != null)
+            IconButton(
+              key: const Key('route-draft-clear'),
+              onPressed: onClear,
+              icon: const Icon(Icons.close, color: AppColors.muted),
+              tooltip: '길찾기 초기화',
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RouteDraftField extends StatelessWidget {
+  const _RouteDraftField({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.isPlaceholder = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool isPlaceholder;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: AppColors.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: isPlaceholder ? FontWeight.w500 : FontWeight.w700,
+                  color: isPlaceholder ? AppColors.muted : AppColors.text,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

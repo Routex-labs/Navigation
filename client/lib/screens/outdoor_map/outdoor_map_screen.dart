@@ -33,6 +33,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/eta_card.dart';
 import '../../widgets/floor_facility_style.dart';
 import '../../widgets/floor_selector.dart';
+import '../../widgets/map_overlay_tap_guard.dart';
 import '../../widgets/status_badge.dart';
 import 'floor_outline.dart';
 import 'indoor_entry_gps.dart';
@@ -638,6 +639,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   final GlobalKey _pdrControlKey = GlobalKey();
   final GlobalKey _debugModeSettingsKey = GlobalKey();
   final GlobalKey _pdrShareButtonKey = GlobalKey();
+  final GlobalKey _etaCardKey = GlobalKey();
+  final _mapOverlayTapGuard = MapOverlayTapGuard();
+  Offset? _etaClosePointerDown;
 
   /// 위치 지정 안내 배너. 오른쪽 상단 X를 누른 탭이 지도까지 새어들어가 배너
   /// 아래 지점에 앵커가 찍히는 것을 막는다 — 취소했는데 위치가 지정되면
@@ -1800,6 +1804,24 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncRouteLayer();
     _syncIndoorDestinationLayer();
     _notifyRouteVisibilityIfChanged();
+  }
+
+  void _dismissUserDestinationFromEtaCard() {
+    _retainEtaClosePointer();
+    _clearUserDestination();
+  }
+
+  void _dismissIndoorRouteFromEtaCard() {
+    _retainEtaClosePointer();
+    _clearIndoorRoute();
+  }
+
+  void _retainEtaClosePointer() {
+    final pointerDown = _etaClosePointerDown;
+    _etaClosePointerDown = null;
+    if (pointerDown != null) {
+      _mapOverlayTapGuard.retainPointerDown(pointerDown);
+    }
   }
 
   // --- MapLibre 스타일/레이어 설정 ---
@@ -3383,11 +3405,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final mapBox = context.findRenderObject() as RenderBox?;
     if (mapBox == null || !mapBox.attached) return false;
     final globalPoint = mapBox.localToGlobal(localPoint);
+    if (_mapOverlayTapGuard.consumeIfBlocked(globalPoint)) return true;
+
     for (final key in [
       _pdrControlKey,
       _debugModeSettingsKey,
       _placingHintKey,
       _buildingLoadFailedKey,
+      _etaCardKey,
     ]) {
       final ctx = key.currentContext;
       if (ctx == null) continue;
@@ -3736,6 +3761,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                 child: EtaCard(
+                  key: _etaCardKey,
                   distanceMeters: _indoorEtaDistanceMeters(),
                   minutes:
                       (_indoorEtaDistanceMeters() /
@@ -3744,7 +3770,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
                           .ceil()
                           .clamp(1, 999),
                   label: _indoorEtaLabel(indoorRouteDestination),
-                  onClose: _clearIndoorRoute,
+                  onClose: _dismissIndoorRouteFromEtaCard,
+                  onClosePointerDown: (position) =>
+                      _etaClosePointerDown = position,
                 ),
               ),
             ),
@@ -3759,12 +3787,18 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                 child: EtaCard(
+                  key: _etaCardKey,
                   distanceMeters: route.distanceMeters,
                   minutes: (route.durationSeconds / 60).ceil().clamp(1, 999),
                   label: userDestination != null
                       ? (_userDestinationLabel ?? '목적지까지')
                       : '건물 입구까지',
-                  onClose: userDestination != null ? _clearUserDestination : null,
+                  onClose: userDestination != null
+                      ? _dismissUserDestinationFromEtaCard
+                      : null,
+                  onClosePointerDown: userDestination != null
+                      ? (position) => _etaClosePointerDown = position
+                      : null,
                 ),
               ),
             ),

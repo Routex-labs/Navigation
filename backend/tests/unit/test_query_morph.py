@@ -183,3 +183,42 @@ def test_구두점뿐인_질의는_빈_카테고리와_일치하지_않는다():
 
 def test_저장소를_직접_호출해도_질의_길이_상한을_지킨다():
     assert query_search._query_candidates("?" * 201) == ()
+
+
+# --- 공백 포함 매장명 회귀 (리눅스 CI 실패 재현) ---
+# `add_user_word`는 공백이 든 이름을 한 형태소로 인정하지 않을 수 있다. 실제로
+# "물품 보관함은 몇 층이야"가 리눅스 CI에서 "물품 보관"으로 잘렸는데, 같은
+# kiwipiepy 0.23.2·같은 모델인 Windows에서는 재현되지 않았다. 그래서 등록 실패를
+# 강제해 플랫폼과 무관하게 이 회귀를 잡는다.
+@pytest.fixture
+def 사전등록_실패(monkeypatch):
+    """공백이 든 단어의 `add_user_word`만 실패시킨다."""
+    kiwi = query_morph._get_kiwi()
+    if kiwi is None:
+        pytest.skip("kiwipiepy 미설치 — 폴백 경로라 검증 대상이 아니다")
+
+    original = kiwi.add_user_word
+
+    def 거부(word, tag="NNP", *args, **kwargs):
+        if " " in word:
+            raise ValueError("공백 포함 단어 거부")
+        return original(word, tag, *args, **kwargs)
+
+    monkeypatch.setattr(kiwi, "add_user_word", 거부)
+    monkeypatch.setattr(query_morph, "_registered", set())
+    monkeypatch.setattr(query_morph, "_registered_lower", set())
+    query_morph.register_words(["물품 보관함", "스타벅스", "타임", "타임옴므"])
+
+
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        ("물품 보관함", "물품 보관함"),          # 원문 그대로
+        ("물품 보관함은", "물품 보관함"),        # 보조사
+        ("물품 보관함 어디", "물품 보관함"),     # 공백 + 꼬리
+        ("스타벅스에서", "스타벅스"),            # 공백 없는 이름은 기존 경로 유지
+        ("타임옴므", "타임옴므"),                # 더 긴 이름이 짧은 이름으로 축소되지 않는다
+    ],
+)
+def test_공백_포함_매장명은_사전등록이_실패해도_잘리지_않는다(사전등록_실패, query, expected):
+    assert query_morph.normalize(query) == expected

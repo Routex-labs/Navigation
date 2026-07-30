@@ -39,6 +39,8 @@ class Store(Base):
 
     polygon: Mapped[list[dict] | None] = mapped_column(JSON)  # 매장 외곽 폴리곤 좌표(local_m), 선택
 
+    search_facets: Mapped[dict[str, list[str]] | None] = mapped_column(JSON)  # 검색 전용 추천 태그(intents/styles/...), 대부분 매장은 미지정. 선택
+
     floor: Mapped["Floor"] = relationship(back_populates="stores")  # 소속 층 (N:1)
     entrance_node: Mapped["Node | None"] = relationship(
         foreign_keys=[entrance_node_id],

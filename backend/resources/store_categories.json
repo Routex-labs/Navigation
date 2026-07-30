@@ -46,8 +46,8 @@
   },
   "PO-RVDD0gwWA0601": {
     "name": "티파니앤코",
-    "category": "뷰티",
-    "subcategory": "화장품·향수"
+    "category": "패션",
+    "subcategory": "시계·주얼리"
   },
   "PO-gm_1EWj5f2065": {
     "name": "샤넬 뷰티",
@@ -201,8 +201,8 @@
   },
   "PO-LkwW7ARVY5105": {
     "name": "탬버린즈",
-    "category": "패션",
-    "subcategory": "아이웨어·액세서리"
+    "category": "뷰티",
+    "subcategory": "화장품·향수"
   },
   "PO-EIdQCH0YT6586": {
     "name": "오휘/후",
@@ -217,7 +217,7 @@
   "PO-ZUUKB6sdh1593": {
     "name": "젠틀몬스터",
     "category": "패션",
-    "subcategory": "아이웨어·액세서리"
+    "subcategory": "아이웨어"
   },
   "PO-2-rJKPQYe3337": {
     "name": "바이 레도",
@@ -271,8 +271,8 @@
   },
   "PO-KUcsEB8l37533": {
     "name": "스킨 케어룸",
-    "category": "패션",
-    "subcategory": "명품"
+    "category": "뷰티",
+    "subcategory": "화장품·향수"
   },
   "PO-07DinRnZI3871": {
     "name": "커뮤니티 라운지",
@@ -286,8 +286,8 @@
   },
   "PO-JX50wNRGi2737": {
     "name": "다미아니",
-    "category": "뷰티",
-    "subcategory": "화장품·향수"
+    "category": "패션",
+    "subcategory": "시계·주얼리"
   },
   "PO-0d_J1ehum94259": {
     "name": "정수기",
@@ -303,5 +303,30 @@
     "name": "반클리프아펠",
     "category": "패션",
     "subcategory": "명품"
+  },
+  "PO-Azlfnmzx76821": {
+    "name": "맥코이",
+    "category": "식음료",
+    "subcategory": "카페·베이커리"
+  },
+  "PO-bawy_CfOO1219": {
+    "name": "베르그",
+    "category": "식음료",
+    "subcategory": "카페·베이커리"
+  },
+  "PO-MLIPLJflI7169": {
+    "name": "코코밥",
+    "category": "식음료",
+    "subcategory": "카페·베이커리"
+  },
+  "PO-tEX9PFDuM0831": {
+    "name": "이모야킨지로",
+    "category": "식음료",
+    "subcategory": "카페·베이커리"
+  },
+  "PO-yjdp4u_E24495": {
+    "name": "하네단",
+    "category": "식음료",
+    "subcategory": "카페·베이커리"
   }
 }
