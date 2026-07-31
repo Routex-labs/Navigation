@@ -12,8 +12,8 @@ import 'package:navigation_client/widgets/building_switcher_sheet.dart';
 import 'package:navigation_client/widgets/category_stores_sheet.dart';
 import 'package:navigation_client/widgets/directions_sheet.dart';
 import 'package:navigation_client/widgets/favorites_sheet.dart';
+import 'package:navigation_client/widgets/place_detail_sheet.dart';
 import 'package:navigation_client/widgets/sheet_grab_handle.dart';
-import 'package:navigation_client/widgets/store_info_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 아래에서 올라오는 모달 바텀 시트에 크기 조절 손잡이가 빠지지 않는지 고정한다.
@@ -68,13 +68,16 @@ void main() {
     expect(find.byType(SheetGrabHandle), findsOneWidget);
   }
 
-  testWidgets('매장 정보 시트에 손잡이가 있다', (WidgetTester tester) async {
+  testWidgets('매장 상세 시트에 손잡이가 있다', (WidgetTester tester) async {
     await expectGrabHandle(
       tester,
-      (context) => StoreInfoSheet.show(
+      (context) => PlaceDetailSheet.show(
         context,
         title: 'MLB',
         subtitle: 'B2',
+        buildingId: demoBuildingId,
+        // 상세를 부르지 않는 경로(구버전 저장 항목)로 열어 손잡이만 본다.
+        placeId: null,
         onCloseAll: () {},
       ),
     );
@@ -127,14 +130,17 @@ void main() {
   });
 
   testWidgets('손잡이는 시트 콘텐츠보다 위에 그려진다', (WidgetTester tester) async {
-    // 자리를 안 지키면(예: 헤더 아래) 표시의 의미가 사라진다. 매장 정보 시트를
+    // 자리를 안 지키면(예: 헤더 아래) 표시의 의미가 사라진다. 매장 상세 시트를
     // 기준으로 세로 위치를 고정한다.
     await expectGrabHandle(
       tester,
-      (context) => StoreInfoSheet.show(
+      (context) => PlaceDetailSheet.show(
         context,
         title: 'MLB',
         subtitle: 'B2',
+        buildingId: demoBuildingId,
+        // 상세를 부르지 않는 경로(구버전 저장 항목)로 열어 손잡이만 본다.
+        placeId: null,
         onCloseAll: () {},
       ),
     );
