@@ -15,6 +15,9 @@ SCHEMA = {
     "fields": {
         "summary": {"max_length": 60},
         "tags": {"max_items": 6},
+        "hero": {"max_items": 6},
+        "menu": {"max_items": 12},
+        "businessInfo": {"max_items": 8},
     },
     "forbidden_labels": ["영업시간", "전화번호"],
 }
@@ -133,3 +136,63 @@ def test_summary_길이_초과를_잡는다():
     errors = _validate({"PO-a": {"summary": "가" * 61}})
 
     assert any("60자" in error for error in errors)
+
+
+def test_리치_상세_오버레이는_검증을_통과한다():
+    assert _validate(
+        {
+            "PO-a": {
+                "name": "가게A",
+                "updated_at": "2026-07-30",
+                "hero": [{"local_asset": "assets/place_details/store.jpg"}],
+                "menu": [
+                    {
+                        "name": "카페 아메리카노",
+                        "price": "4,700원",
+                        "description": "에스프레소와 물을 더한 커피",
+                        "image_asset": "assets/place_details/menu.jpg",
+                    }
+                ],
+                "businessInfo": [{"label": "주차", "value": "주차 지원 불가"}],
+            }
+        }
+    ) == []
+
+
+def test_리치_상세_필수_필드가_없는_메뉴를_잡는다():
+    errors = _validate(
+        {
+            "PO-a": {
+                "menu": [
+                    {
+                        "name": "카페 아메리카노",
+                        "price": "4,700원",
+                        "image_asset": "assets/place_details/menu.jpg",
+                    }
+                ]
+            }
+        }
+    )
+
+    assert any("menu 항목에 name/price/description/image_asset가 필요" in error for error in errors)
+
+
+# --- businessInfo 금지 라벨 (회귀 방지) ---
+#
+# businessInfo는 한동안 금지 라벨 검사를 통째로 건너뛰었고, 그 상태로 출처 없는
+# `영업시간`·`대표번호`가 응답에 실려 나갔다. 검증기·시드·테스트가 전부 통과하는
+# 채로였다. 아래 두 건이 그 구멍이 다시 열리는지를 본다.
+
+
+def test_businessInfo의_금지_라벨을_잡는다():
+    errors = _validate(
+        {"PO-a": {"businessInfo": [{"label": "영업시간", "value": "월~목 10:30~20:00"}]}}
+    )
+
+    assert any("넣을 수 없는 항목" in error for error in errors)
+
+
+def test_businessInfo의_정상_항목은_통과한다():
+    assert _validate(
+        {"PO-a": {"businessInfo": [{"label": "주차", "value": "주차 지원 불가"}]}}
+    ) == []

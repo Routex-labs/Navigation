@@ -73,7 +73,15 @@ def load_overlays(resource_dir: Path | None = None) -> dict[str, dict[str, Any]]
 SCHEMA_FILENAME = "_schema.json"
 
 _DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_ALLOWED_FIELDS = {"summary", "tags", "keyValue", "notice"}
+_ALLOWED_FIELDS = {
+    "summary",
+    "tags",
+    "keyValue",
+    "notice",
+    "hero",
+    "menu",
+    "businessInfo",
+}
 
 
 # 오버레이 한 파일을 검증한다. 오류 메시지 목록(빈 목록이면 정상).
@@ -147,6 +155,24 @@ def _validate_values(
         elif len(tags) > max_items:
             errors.append(f"{place_id}: tags가 {max_items}개를 넘습니다")
 
+    errors += _validate_asset_items(
+        place_id,
+        overlay.get("hero"),
+        "hero",
+        ("local_asset",),
+        fields,
+    )
+    errors += _validate_asset_items(
+        place_id,
+        overlay.get("menu"),
+        "menu",
+        ("name", "price", "description", "image_asset"),
+        fields,
+    )
+    errors += _validate_business_info(
+        place_id, overlay.get("businessInfo"), fields, forbidden
+    )
+
     for item in overlay.get("keyValue") or []:
         if not isinstance(item, dict) or "label" not in item or "value" not in item:
             errors.append(f"{place_id}: keyValue 항목에 label/value가 필요합니다")
@@ -175,5 +201,79 @@ def _validate_values(
     updated_at = overlay.get("updated_at")
     if updated_at is not None and not _DATE_PATTERN.match(str(updated_at)):
         errors.append(f"{place_id}: updated_at 형식은 YYYY-MM-DD입니다")
+
+    return errors
+
+
+def _validate_asset_items(
+    place_id: str,
+    value: Any,
+    field_name: str,
+    required_keys: tuple[str, ...],
+    fields: dict[str, Any],
+) -> list[str]:
+    if value is None:
+        return []
+
+    errors: list[str] = []
+    if not isinstance(value, list):
+        return [f"{place_id}: {field_name}는 객체 배열이어야 합니다"]
+
+    max_items = fields.get(field_name, {}).get("max_items")
+    if isinstance(max_items, int) and len(value) > max_items:
+        errors.append(f"{place_id}: {field_name}가 {max_items}개를 넘습니다")
+
+    required_label = "/".join(required_keys)
+    for item in value:
+        if not isinstance(item, dict) or any(
+            not isinstance(item.get(key), str) or not item[key].strip()
+            for key in required_keys
+        ):
+            errors.append(f"{place_id}: {field_name} 항목에 {required_label}가 필요합니다")
+    return errors
+
+
+# businessInfo가 별도 함수인 이유
+#
+# 이 필드는 `keyValue`와 모양이 같은데(label/value) 한동안 `_validate_asset_items`를
+# 타면서 **금지 라벨 검사를 통째로 건너뛰었다.** 그 결과 검증기·시드·테스트가 전부
+# 통과한 채로 출처 없는 `영업시간`·`대표번호`가 응답에 실려 나갔다. 가드레일이 새 필드를
+# 따라오지 못한 전형적인 경우라, 같은 실수가 반복되지 않도록 검사를 명시적으로 둔다.
+#
+# 규칙은 `keyValue`와 동일하다 — 금지 라벨은 조건 없이 막는다. 한때 "출처를 붙이면
+# 통과"라는 예외를 뒀다가 철회했다(설계 9-1). 영업시간처럼 시간이 지나면 자동으로
+# 거짓이 되는 값은 근거를 적어 두더라도 낡는 것을 막지 못하기 때문이다.
+def _validate_business_info(
+    place_id: str,
+    value: Any,
+    fields: dict[str, Any],
+    forbidden: set[str],
+) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        return [f"{place_id}: businessInfo는 객체 배열이어야 합니다"]
+
+    errors: list[str] = []
+    max_items = fields.get("businessInfo", {}).get("max_items")
+    if isinstance(max_items, int) and len(value) > max_items:
+        errors.append(f"{place_id}: businessInfo가 {max_items}개를 넘습니다")
+
+    for item in value:
+        if not isinstance(item, dict):
+            errors.append(f"{place_id}: businessInfo 항목은 객체여야 합니다")
+            continue
+
+        label = item.get("label")
+        label = label.strip() if isinstance(label, str) else ""
+        raw_value = item.get("value")
+        if not label or not (isinstance(raw_value, str) and raw_value.strip()):
+            errors.append(f"{place_id}: businessInfo 항목에 label/value가 필요합니다")
+            continue
+
+        if label in forbidden:
+            errors.append(
+                f"{place_id}: '{label}'은(는) 출처가 없어 넣을 수 없는 항목입니다"
+            )
 
     return errors

@@ -24,6 +24,24 @@
       "max_items": 6,
       "note": "라벨:값 목록."
     },
+    "hero": {
+      "type": "object_array",
+      "item_keys": ["local_asset"],
+      "max_items": 6,
+      "note": "앱 번들에 포함된 대표·갤러리 사진 경로."
+    },
+    "menu": {
+      "type": "object_array",
+      "item_keys": ["name", "price", "description", "image_asset"],
+      "max_items": 12,
+      "note": "매장 상세에 표시할 메뉴. 가격과 설명은 updated_at 기준 확인 값이다."
+    },
+    "businessInfo": {
+      "type": "object_array",
+      "item_keys": ["label", "value"],
+      "max_items": 8,
+      "note": "매장을 설명하는 운영 정보. forbidden_labels가 keyValue와 똑같이 적용된다 — 영업시간·연락처류는 넣을 수 없다."
+    },
     "notice": {
       "type": "object",
       "item_keys": ["text", "until"],
@@ -37,9 +55,12 @@
     "운영 시간",
     "전화",
     "전화번호",
+    "대표번호",
+    "대표 번호",
     "연락처",
+    "문의",
     "평점",
     "리뷰"
   ],
-  "forbidden_labels_note": "출처가 없어 검증할 수 없고, 영업시간류는 시간이 지나면 자동으로 거짓이 된다. 값을 채우고 싶으면 먼저 출처를 정하고 이 목록에서 빼야 한다."
+  "forbidden_labels_note": "출처가 없어 검증할 수 없고, 영업시간류는 시간이 지나면 자동으로 거짓이 된다. keyValue와 businessInfo 양쪽에 적용된다 — 한때 businessInfo가 이 검사를 건너뛰어 출처 없는 영업시간·대표번호가 응답에 실려 나간 적이 있다. 값을 채우고 싶으면 먼저 출처를 정하고 이 목록에서 빼야 한다."
 }

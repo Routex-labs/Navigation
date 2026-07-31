@@ -114,6 +114,10 @@ def _sections(
     if isinstance(summary, str) and summary.strip():
         sections.append({"type": "summary", "text": summary.strip()})
 
+    hero_items = _rich_items(overlay.get("hero"), ("local_asset",))
+    if hero_items:
+        sections.append({"type": "hero", "items": hero_items})
+
     tags = overlay.get("tags")
     if isinstance(tags, list) and tags:
         sections.append({"type": "tags", "tags": [str(tag) for tag in tags]})
@@ -121,6 +125,16 @@ def _sections(
     items = _key_value_items(overlay)
     if items:
         sections.append({"type": "keyValue", "items": items})
+
+    menu_items = _rich_items(
+        overlay.get("menu"), ("name", "price", "description", "image_asset")
+    )
+    if menu_items:
+        sections.append({"type": "menu", "items": menu_items})
+
+    business_info_items = _rich_items(overlay.get("businessInfo"), ("label", "value"))
+    if business_info_items:
+        sections.append({"type": "businessInfo", "items": business_info_items})
 
     notice = overlay.get("notice")
     if isinstance(notice, dict) and str(notice.get("text", "")).strip():
@@ -152,6 +166,20 @@ def _key_value_items(overlay: dict[str, Any]) -> list[dict[str, str]]:
         # 값이 빈 항목을 내려보내면 클라이언트에 "빈 줄" 분기가 생긴다.
         if label and value:
             items.append({"label": label, "value": value})
+    return items
+
+
+def _rich_items(raw: Any, keys: tuple[str, ...]) -> list[dict[str, str]]:
+    if not isinstance(raw, list):
+        return []
+
+    items: list[dict[str, str]] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        item = {key: str(entry.get(key, "")).strip() for key in keys}
+        if all(item.values()):
+            items.append(item)
     return items
 
 

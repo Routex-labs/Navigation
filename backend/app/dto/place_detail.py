@@ -88,6 +88,39 @@ class TagsSection(BaseModel):
     tags: list[str]
 
 
+class HeroItem(BaseModel):
+    # Flutter 자산 경로. 원격 URL을 내려 보내지 않아도 앱에 포함한 사진을 안전하게
+    # 참조할 수 있다.
+    local_asset: str
+
+
+class HeroSection(BaseModel):
+    type: Literal["hero"] = "hero"
+    items: list[HeroItem]
+
+
+class MenuItem(BaseModel):
+    name: str
+    price: str
+    description: str
+    image_asset: str
+
+
+class MenuSection(BaseModel):
+    type: Literal["menu"] = "menu"
+    items: list[MenuItem]
+
+
+class BusinessInfoItem(BaseModel):
+    label: str
+    value: str
+
+
+class BusinessInfoSection(BaseModel):
+    type: Literal["businessInfo"] = "businessInfo"
+    items: list[BusinessInfoItem]
+
+
 class NoticeSection(BaseModel):
     type: Literal["notice"] = "notice"
     text: str
@@ -121,6 +154,9 @@ DetailSection = (
     SummarySection
     | KeyValueSection
     | TagsSection
+    | HeroSection
+    | MenuSection
+    | BusinessInfoSection
     | NoticeSection
     | MapSection
     | ChildListSection
