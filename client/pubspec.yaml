@@ -87,6 +87,17 @@ flutter:
   #   - images/a_dot_ham.jpeg
 
   assets:
+    - assets/place_details/starbucks_logo.svg
+    - assets/place_details/starbucks_reserve_hero.jpg
+    - assets/place_details/starbucks_reserve_menu.jpg
+    - assets/place_details/starbucks_menu_americano.jpg
+    - assets/place_details/starbucks_menu_latte.jpg
+    - assets/place_details/starbucks_menu_dolce_latte.jpg
+    - assets/place_details/starbucks_menu_caramel_macchiato.jpg
+    - assets/place_details/starbucks_reserve_store_01.png
+    - assets/place_details/starbucks_reserve_store_02.png
+    - assets/place_details/starbucks_reserve_store_03.png
+    - assets/place_details/starbucks_reserve_store_04.png
     - assets/mock/sample_building.json
     - assets/mock/hyundai_floor_1f.json
     - assets/mock/hyundai_floor_map.svg
