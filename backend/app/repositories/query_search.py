@@ -1,7 +1,9 @@
 # 자연어 질의 매칭.
 # 매장 이름·카테고리·동의어를 텍스트로 매칭해 최적 1건을 고른다(경량, 임베딩 없음).
 # 질의는 꼬리 제거 + 형태소 정규화(query_morph)를 거쳐 조사·어미가 붙어도 매칭된다.
-# - match_destination:    최적 매장 1건 + 입구 노드(온디바이스 경로용).
+# - match_destination:    확정 가능한 1건 + 입구 노드(온디바이스 경로용).
+#                         한 곳을 지목할 수 없으면 status="ambiguous"로 비워 보낸다 —
+#                         클라이언트가 /query/ai 목록 계약으로 이어 간다.
 # - match_info:           최적 1건 + 대상이 존재하는 층 목록.
 # - match_ai_destination: 하이브리드 — 1차 경량 확정, 미스·모호한 부분 일치는 2차 의미 검색.
 # Building이 없으면 None(→ Router가 404). 매칭 0건은 status="no_match"로 정상 응답.
@@ -210,7 +212,12 @@ def _rank(
 def _is_confident_light_match(
     scored: list[tuple[int, int, int, int, str, Store, Floor]],
 ) -> bool:
-    """AI 경로에서 경량 결과를 바로 확정해도 되는지 판단한다.
+    """경량 결과를 바로 한 건으로 확정해도 되는지 판단한다.
+
+    **두 경로가 이 함수 하나를 공유한다** — `match_destination`(단일 목적지)과
+    `discover`(탐색)가 같은 질의에 다른 결론을 내면, 어느 경로로 들어왔는지에 따라
+    사용자가 보는 결과가 달라진다. 실제로 그랬다: destination만 이 판정을 건너뛰어
+    "명품"을 42건 중 첫 매장으로 고정했다.
 
     tier 0(정확 이름)·tier 1(카테고리·소분류 정확 일치)·tier 2(이름 부분 일치) 모두
     같은 기준으로 판단한다 — 최상위 (tier, 후보 순서, 정밀도) 그룹 안에서 서로 다른
@@ -312,24 +319,39 @@ def match_destination(
     if session.get(Building, building_id) is None:
         return None
 
-    scored = _rank(
+    scored = _rank_with_candidate(
         _load_stores(session, building_id, current_floor_id=current_floor_id),
         text,
     )
     if not scored:
         return {"status": "no_match", "query": text, "match": None}
 
-    if _is_multi_physical_query(text):
-        physical_matches = [
-            store for _tier, _level, _store_id, store, _floor in scored if _is_multi_physical_store(store)
-        ]
-        if len(physical_matches) > 1:
-            # DestinationResponse는 단일 목적지 계약이다. 클라이언트가 빈
-            # light 결과를 받으면 /query/ai 목록 계약으로 자연스럽게 이어진다.
-            return {"status": "ambiguous", "query": text, "match": None}
+    # 확정할 수 없는 매칭은 1건으로 좁히지 않는다.
+    #
+    # 이 판정을 AI 경로(discover)와 **같은 함수로** 한다. 예전에는 여기만 확정 판정
+    # 없이 scored[0]을 무조건 돌려줬고, 그래서 "명품"(서로 다른 이름 42건)·
+    # "레스토랑"(57건)이 몽클레르·데이릿 한 건으로 고정됐다. 클라이언트는
+    # /query/destination이 성공하면 /query/ai를 부르지 않으므로(search_panel.dart),
+    # 카테고리성 질의는 사용자가 목록을 볼 기회 자체가 없었다.
+    #
+    # 여기서 "목록을 원하는 질의"를 따로 분류하지 않는 게 핵심이다. 카테고리 단어
+    # 사전을 만들면 `제일`은 되는데 `가장`은 안 되는 식으로 예외가 계속 늘어난다.
+    # 이미 있는 기준 — 최상위 (tier, 후보 순서, 정밀도) 그룹 안에 서로 다른 매장명이
+    # 둘 이상인가 — 하나로 충분하다. 그 기준은 tier와 무관하게 "이 질의로는 한 곳을
+    # 지목할 수 없다"는 뜻이고, 그게 곧 목록을 보여줄 조건이다.
+    #
+    # 출구처럼 이름은 같아도 물리적으로 다른 POI들도 이 함수가 이미 걸러낸다
+    # (_is_confident_light_match 마지막 줄). 그래서 여기 있던 _is_multi_physical_query
+    # 특수 분기를 지웠다 — 같은 판정을 두 곳에서 따로 하고 있었다.
+    #
+    # DestinationResponse는 단일 목적지 계약이라 후보를 담을 자리가 없다. match=null로
+    # 돌려주면 클라이언트가 빈 결과로 파싱해(http_destination_repository.dart)
+    # /query/ai 목록 계약으로 자연스럽게 이어진다 — 클라이언트 변경이 필요 없다.
+    if not _is_confident_light_match(scored):
+        return {"status": "ambiguous", "query": text, "match": None}
 
     # 정렬이 결정적이라 [0]이 곧 최적 1건.
-    _, _, _, store, floor = scored[0]
+    *_, store, floor = scored[0]
     transform = fit_building_geo_transform(session, building_id)
 
     return {"status": _status(store), "query": text, "match": _to_match(store, floor, transform)}
@@ -391,6 +413,12 @@ def match_ai_destination(
 
 MAX_DISCOVERY_MATCHES = 5  # 최종 추천 상한(12절 확정)
 CLARIFY_PREVIEW_MATCHES = 3  # 질문과 함께 보여줄 초기 후보 수(12절 확정)
+
+# "전체 보기"의 상한. 추천 상한(5)과 **분리한다** — 예전에는 같은 상수를 써서
+# 전체 보기를 눌러도 5건만 왔다. 사용자가 "더 있는 걸 아는데 안 보여준다"고
+# 읽는 자리라, 추천을 좁게 유지하는 이유(고르기 쉽게)가 여기엔 적용되지 않는다.
+# 상한 자체를 없애지는 않는다 — 주차 787건 같은 축이 걸리면 응답이 통째로 커진다.
+MAX_SHOW_ALL_MATCHES = 30
 
 # 되물을 축의 우선순위. 한 번에 한 축만 묻는다(2절). 앞에 있는 축부터 구분력을 본다.
 _QUESTION_AXIS_ORDER = ("intents", "cuisines", "styles", "menus", "occasions", "audiences")
@@ -711,10 +739,13 @@ def discover(
         )
 
     if selection or show_all:
+        # 전체 보기는 더 넓은 상한을 쓴다. 선택(facet)으로 좁힌 결과는 이미 사용자가
+        # 조건을 준 목록이라 추천 상한을 그대로 둔다 — 둘이 겹치면 전체 보기가 이긴다.
+        limit = MAX_SHOW_ALL_MATCHES if show_all else MAX_DISCOVERY_MATCHES
         return _discovery(
             text,
             "results",
-            matches=_discovery_matches(candidates, MAX_DISCOVERY_MATCHES, selection, transform),
+            matches=_discovery_matches(candidates, limit, selection, transform),
         )
 
     if len(candidates) > MAX_DISCOVERY_MATCHES:
