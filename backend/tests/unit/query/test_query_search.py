@@ -10,13 +10,14 @@ from app.models import Floor, Store
 from app.repositories import query_search
 
 
-def _store(store_id: str, name: str, *, category=None, subcategory=None, entrance="N-1"):
+def _store(store_id: str, name: str, *, category=None, subcategory=None, entrance="N-1", facets=None):
     return Store(
         id=store_id,
         floor_id="F1",
         name=name,
         category=category,
         subcategory=subcategory,
+        search_facets=facets,
         centroid_x_m=0.0,
         centroid_y_m=0.0,
         entrance_node_id=entrance,
@@ -47,6 +48,43 @@ def test_카테고리로_매칭한다():
     rows = [(_store("s1", "MLB", category="편의시설"), _floor())]
     scored = query_search._rank(rows, "편의시설")
     assert scored and scored[0][3].id == "s1"
+
+
+# intent 태그로도 매칭된다 — 사용자가 치는 말("신발")과 분류 라벨("슈즈")은 어긋나는 게
+# 정상이다. 나이키 라이즈는 소분류가 캐주얼·스트리트라 라벨만 보면 영원히 안 잡힌다.
+# 값의 출처는 시드가 _intents.json(규칙 + 검수된 예외 145건)에서 구운 search_facets다.
+def test_intent_태그로_매칭한다():
+    rows = [
+        (
+            _store("s1", "나이키 라이즈", subcategory="캐주얼·스트리트", facets={"intents": ["신발"]}),
+            _floor(),
+        )
+    ]
+    scored = query_search._rank(rows, "신발")
+
+    assert scored and scored[0][3].id == "s1"
+    assert scored[0][0] == 1  # 카테고리 일치와 같은 tier
+
+
+# 태그가 없으면 잡히지 않는다 — "캐주얼·스트리트니까 신발일 것"이라는 추측을 하지 않는다
+# (evaluate_query_hybrid.py가 기각한 "원리 없는 완화").
+def test_intent_태그가_없으면_소분류로_추측하지_않는다():
+    rows = [(_store("s1", "나이키 라이즈", subcategory="캐주얼·스트리트"), _floor())]
+
+    assert query_search._rank(rows, "신발") == []
+
+
+# 정확한 이름(tier 0)이 intent 일치(tier 1)보다 우선한다 — "신발"이라는 이름의 매장이
+# 있다면 그게 먼저다.
+def test_정확한_이름이_intent_일치보다_우선한다():
+    floor = _floor()
+    rows = [
+        (_store("s1", "나이키 라이즈", facets={"intents": ["신발"]}), floor),
+        (_store("s2", "신발"), floor),
+    ]
+    scored = query_search._rank(rows, "신발")
+
+    assert scored[0][3].id == "s2"
 
 
 # 동의어("엠엘비"→"MLB")로 매칭된다.

@@ -127,6 +127,17 @@ _CONTAINS = 2  # 그 밖의 중간 포함 — "이솝" → "엘리베이터솝"(
 _MIN_NAME_PARTIAL_MATCH_LEN = 2
 
 
+def _intent_names(store: Store) -> tuple[str, ...]:
+    """이 매장이 속한 intent 이름들(정규화). 태그가 없으면 빈 튜플.
+
+    값의 출처는 `Store.search_facets["intents"]`이고, 시드가
+    `store_facets.resolve_intents`로 규칙 + 예외에서 유도해 구워 둔 것이다. 매칭
+    시점에 규칙을 다시 푸는 게 아니라 이미 구워진 결과만 읽는다 — 질의마다 1640건에
+    규칙을 돌리면 경량 경로가 경량이 아니게 된다.
+    """
+    return tuple(_norm(value) for value in _facets(store).get("intents", ()))
+
+
 def _name_match_rank(name: str, q: str) -> int | None:
     if not q or len(q) < _MIN_NAME_PARTIAL_MATCH_LEN or q not in name:
         return None
@@ -146,6 +157,16 @@ def _tier(store: Store, q: str, canon: str) -> tuple[int, int] | None:
         return 0, 0  # 정확 이름 일치
     if q in (cat, sub) or canon in (cat, sub):
         return 1, 0  # 카테고리/서브카테고리 일치
+    # intent 일치도 카테고리와 같은 tier 1이다.
+    #
+    # intent는 "사용자가 치는 말"이고(`신발`·`밥집`), 분류 라벨은 운영자가 쓰는 말이다
+    # (`슈즈`·`레스토랑`). 둘이 어긋나는 게 정상이라 라벨만 보면 `신발`·`음식점`은
+    # 영원히 no_match였다. 여기서 새 규칙을 쓰지 않는 게 핵심이다 — 어떤 매장이 신발을
+    # 파는지는 사람이 검수한 `_intents.json`(규칙 + 예외 145건)에 데이터로 들어 있고,
+    # 시드가 그걸 풀어 search_facets에 구워 둔다. 동의어를 하나씩 늘리는 방식과 달리
+    # 예외가 늘어도 코드가 아니라 검수 대상 JSON이 늘어난다.
+    if q in (intents := _intent_names(store)) or canon in intents:
+        return 1, 0
     # 질의 원문과 동의어 표준형 중 더 정밀하게 걸린 쪽을 쓴다.
     ranks = [rank for rank in (_name_match_rank(name, q), _name_match_rank(name, canon)) if rank is not None]
     if ranks:
