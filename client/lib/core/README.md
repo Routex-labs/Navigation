@@ -22,6 +22,9 @@
 TMAP·VWorld 키도 소스에 넣지 않고 `TMAP_APP_KEY`, `VWORLD_API_KEY`로 주입한다.
 TMAP 키가 없으면 `directionsRepository`는 직선 경로를 만드는 Mock을 사용한다.
 
+값을 매번 명령줄에 적는 대신 `client/config.local.json`(gitignore 대상, 템플릿은 `config.example.json`)에 모아 두고
+`flutter run --dart-define-from-file=config.local.json`으로 넘긴다. JSON의 키 이름은 위 `String.fromEnvironment` 이름과 같아야 한다.
+
 ## 전역 조립
 
 ```mermaid

@@ -141,10 +141,14 @@ flutter run --dart-define-from-file=config.local.json
 키를 하나만 즉석에서 넘길 땐 단건 방식도 그대로 동작한다.
 
 ```powershell
-flutter run --dart-define=TMAP_APP_KEY=<TMAP_KEY> --dart-define=VWORLD_API_KEY=<VWORLD_KEY>
+Copy-Item client\config.example.json client\config.local.json
 ```
 
 > **주입 값은 컴파일 타임에 박힌다.** 키·URL을 바꾸면 hot reload로는 안 먹으므로 `flutter run`을 재시작한다.
+
+JSON이라 주석은 쓸 수 없고, 키 이름은 `api_config.dart`의 `String.fromEnvironment` 이름과
+정확히 같아야 한다. `API_BASE_URL`을 Cloud Run 주소로 채우면 로컬 백엔드를 띄우지 않고도
+붙는다.
 
 ## 문제 해결
 

@@ -1,6 +1,10 @@
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kIsWeb;
 
+/// 아래 dart-define 값들은 `client/config.local.json`(gitignore 대상, 템플릿은
+/// `config.example.json`)에 모아 두고 한 번에 넘길 수 있다:
+///   flutter run --dart-define-from-file=config.local.json
+///
 /// dart-define으로 넘기면 플랫폼 무관하게 최우선 적용된다(실기기 등):
 ///   flutter run --dart-define=API_BASE_URL=http://192.168.0.10:8001
 /// 배포 URL·외부 API 키를 매번 치기 번거로우면 git에 안 올리는 로컬 파일에 모아
