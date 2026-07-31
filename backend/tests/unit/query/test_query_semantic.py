@@ -83,3 +83,44 @@ def test_지문_계산은_매장_수와_최대_id를_반영한다(db_session, mo
 
     assert after[0] == before[0] + 1  # count(*) 증가
     assert after != before
+
+
+# ── 문서 텍스트 — 임베딩 인덱스가 매장을 어떤 글자로 표현하는가 ──────────────
+
+
+def test_문서_텍스트는_intents를_포함한다():
+    """intents가 문서에 들어가야 "운동화 사고 싶다"가 나이키 라이즈에 닿을 근거가 생긴다.
+
+    나이키 라이즈의 분류 라벨은 캐주얼·스트리트뿐이라, 검수된 intents 태그가 문서에
+    없으면 신발 관련 질의가 의미상 가까워질 글자가 문서 어디에도 없다. 축 순서는
+    (intents, styles, cuisines)로 고정이다 — 흔들리면 같은 매장이 실행마다 다른
+    문서 텍스트를 만들어 재현성이 깨진다.
+    """
+    store = Store(
+        id="doc-1",
+        floor_id=FLOOR_ID,
+        name="나이키 라이즈",
+        category="패션",
+        subcategory="캐주얼·스트리트",
+        search_facets={"styles": ["캐주얼"], "intents": ["신발"]},
+        centroid_x_m=0.0,
+        centroid_y_m=0.0,
+    )
+
+    assert query_semantic._document_text(store) == "나이키 라이즈 패션 캐주얼·스트리트 신발 캐주얼"
+
+
+def test_문서_텍스트는_태그가_없으면_기존과_같다():
+    """미태깅 매장(대다수)의 문서는 이름+카테고리 그대로다 — 임계값 분포가 흔들리지 않는다."""
+    store = Store(
+        id="doc-2",
+        floor_id=FLOOR_ID,
+        name="가게A",
+        category="편의시설",
+        subcategory=None,
+        search_facets=None,
+        centroid_x_m=0.0,
+        centroid_y_m=0.0,
+    )
+
+    assert query_semantic._document_text(store) == "가게A 편의시설"

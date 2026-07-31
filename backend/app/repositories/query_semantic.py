@@ -10,9 +10,15 @@
 # `backend/scripts/evaluate_query_hybrid.py`로 재평가하고 이 파일·FAISS.md 11-1절
 # 수치를 함께 갱신할 것. W7 재평가 결과: 총점 23/29 그대로(회귀 없음, 답이 바뀐 2건은
 # 둘 다 이미 통과 중이던 행 — "밥 먹을 곳" 요즘김밥→나의 가야, "명품 매장" 루이비통→버버리).
+#
+# W8(2026-07-31)에서 `intents` 축을 문서 텍스트에 추가했다(신발 153 + 식사 57 = 210건).
+# 재평가: 총점 23/29 그대로, 부정 4건 모두 no_match 유지. 답이 바뀐 2건은 둘 다 통과
+# 중이던 행("밥 먹을 곳" 나의 가야→대도 깍밥, "명품 매장" 버버리→리모와). 긍정 점수는
+# +0.05 안팎 상승("운동화 사고 싶다" 0.530→0.582, "신발 파는 데" 0.631→0.692).
 # ATM 질의(현재 유효 마진 최상단) 0.464와 무의미 문자열 상단 asdfqwerzxcv 0.458은
-# **둘 다 값 그대로**다 — 두 매장 모두 facet이 없어 그대로였다. 임계값 0.50 유지 근거
-# 불변. 상세는 FAISS.md 11-1절.
+# W7·W8 모두 **값 그대로**다 — 세 질의의 top 후보가 전부 facet·intents 태그가 없는
+# 매장이라 문서가 바뀌지 않았다. 마진 0.006 불변, 임계값 0.50 유지 근거 불변.
+# 상세는 FAISS.md 11-1·11-3절.
 #
 # 핵심 원칙:
 # - 모델(ko-sroberta-multitask)은 지연 로드 싱글턴. 로드가 실패해도 예외를 삼켜서
@@ -226,7 +232,13 @@ def _document_text(store: Store) -> str:
     if store.subcategory:
         parts.append(store.subcategory)
     facets = store.search_facets or {}
-    for axis in ("styles", "cuisines"):
+    # 축 순회 순서를 고정한다(intents, styles, cuisines) — 7-1절이 정한 순서이고,
+    # dict 순회 순서에 기대면 같은 매장이 실행마다 다른 문서 텍스트를 만든다.
+    #
+    # intents는 "사용자가 치는 말"이라 이 자리에서 가장 값이 크다. 나이키 라이즈의
+    # 분류 라벨은 `캐주얼·스트리트`뿐이라, 문서에 `신발`이 없으면 "운동화 사고 싶다"가
+    # 의미상 가까워질 근거가 문서 어디에도 없었다.
+    for axis in ("intents", "styles", "cuisines"):
         values = facets.get(axis)
         if values:
             parts.extend(values)
