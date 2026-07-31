@@ -97,6 +97,10 @@ class HttpDestinationRepository implements DestinationRepository {
         // 층 선택·필터에 쓸 수 있다.
         floor: match['floor_name'] as String,
         point: LatLng(lat, lng),
+        // 매장 상세 조회 키. 서버가 QueryMatch.store_id로 늘 내려주지만,
+        // 계약이 바뀌어 빠지더라도 검색 자체는 계속 동작해야 하므로
+        // 캐스팅은 nullable로 둔다(상세만 조용히 비는 쪽이 안전하다).
+        placeId: match['store_id'] as String?,
         // 온디바이스 다익스트라의 도착 노드. status == "ok_no_route"면
         // 서버가 이 필드를 null로 준다(입구 노드가 아직 스냅되지 않은
         // 매장) — 그 경우엔 nodeId 없이 후보만 노출하고 실제 경로 계산은

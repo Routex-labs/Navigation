@@ -39,6 +39,8 @@ htmlcov/
 .env
 .env.*
 !.env.example
+# Flutter --dart-define-from-file (TMAP/VWorld 키 등 로컬 전용 값)
+client/config.local.json
 .codex/
 .agents/
 .claude/

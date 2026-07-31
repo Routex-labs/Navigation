@@ -15,6 +15,8 @@ import '../repositories/directions_repository.dart';
 import '../repositories/http_building_repository.dart';
 import '../repositories/http_destination_repository.dart';
 import '../repositories/mock_directions_repository.dart';
+import '../repositories/http_place_detail_repository.dart';
+import '../repositories/place_detail_repository.dart';
 import '../repositories/tmap_directions_repository.dart';
 import '../state/favorites_controller.dart';
 
@@ -66,6 +68,10 @@ BuildingRepository buildingRepository = HttpBuildingRepository();
 /// 기본은 실제 API를 붙여야 상단 검색·길찾기 시트가 서버의 정규화/동의어
 /// 사전을 함께 쓴다.
 DestinationRepository destinationRepository = HttpDestinationRepository();
+
+/// 장소 상세는 실패해도 길찾기 흐름을 막지 않는 별도 조회다. 위젯 테스트에서
+/// HTTP를 피해야 할 때는 이 변수를 MockPlaceDetailRepository로 교체한다.
+PlaceDetailRepository placeDetailRepository = HttpPlaceDetailRepository();
 
 /// --dart-define=TMAP_APP_KEY=... 로 키를 넘기면 자동으로 실제 API를 쓰고,
 /// 안 넘기면(테스트·키 미발급 상태) 직선 경로로 동작하는 Mock을 쓴다.

@@ -115,13 +115,14 @@ class DiscoveryMatch {
   final String? reason;
 
   /// 기존 화면(PoiSearchResult 리스트 기반)에 그대로 얹기 위한 변환.
-  /// storeId·floorId·matchedFacets·reason은 Wave 11 전까지 화면에서 쓰이지
-  /// 않으므로 여기서는 버려진다 — 그 화면이 필요해지면 이 변환을 걷어내고
-  /// DiscoveryMatch를 직접 그리면 된다.
+  /// floorId·matchedFacets·reason은 아직 화면에서 쓰이지 않으므로 여기서
+  /// 버려진다 — 그 화면이 필요해지면 이 변환을 걷어내고 DiscoveryMatch를
+  /// 직접 그리면 된다. storeId는 매장 상세 조회 키라서 placeId로 넘긴다.
   PoiSearchResult toPoiSearchResult() => PoiSearchResult(
     name: name,
     floor: floorName,
     point: point,
+    placeId: storeId,
     nodeId: entranceNodeId,
     category: category,
     subcategory: subcategory,

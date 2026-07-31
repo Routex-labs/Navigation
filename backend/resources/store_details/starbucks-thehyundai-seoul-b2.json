@@ -1,0 +1,42 @@
+{
+  "PO-HU40njvml1512": {
+    "name": "스타벅스 리저브",
+    "updated_at": "2026-07-30",
+    "summary": "프리미엄 커피와 스페셜한 공간이 있는 더현대서울(B2)R점입니다.",
+    "hero": [
+      { "local_asset": "assets/place_details/starbucks_reserve_store_01.png" },
+      { "local_asset": "assets/place_details/starbucks_reserve_store_02.png" },
+      { "local_asset": "assets/place_details/starbucks_reserve_store_03.png" },
+      { "local_asset": "assets/place_details/starbucks_reserve_store_04.png" }
+    ],
+    "menu": [
+      {
+        "name": "카페 아메리카노",
+        "price": "4,700원",
+        "description": "에스프레소에 물을 더한 커피입니다.",
+        "image_asset": "assets/place_details/starbucks_menu_americano.jpg"
+      },
+      {
+        "name": "카페 라떼",
+        "price": "5,200원",
+        "description": "에스프레소와 우유가 어우러진 라떼입니다.",
+        "image_asset": "assets/place_details/starbucks_menu_latte.jpg"
+      },
+      {
+        "name": "스타벅스 돌체 라떼",
+        "price": "6,100원",
+        "description": "연유 풍미를 더한 스타벅스 라떼입니다.",
+        "image_asset": "assets/place_details/starbucks_menu_dolce_latte.jpg"
+      },
+      {
+        "name": "카라멜 마키아또",
+        "price": "6,100원",
+        "description": "바닐라와 카라멜 풍미를 더한 에스프레소 음료입니다.",
+        "image_asset": "assets/place_details/starbucks_menu_caramel_macchiato.jpg"
+      }
+    ],
+    "businessInfo": [
+      { "label": "주소", "value": "서울특별시 영등포구 여의대로 108, 더현대서울 B2" }
+    ]
+  }
+}

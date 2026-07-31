@@ -19,8 +19,8 @@ import '../../widgets/directions_sheet.dart';
 import '../../widgets/favorites_sheet.dart';
 import '../../widgets/map_bottom_bar.dart';
 import '../../widgets/map_top_bar.dart';
+import '../../widgets/place_detail_sheet.dart';
 import '../../widgets/search_panel.dart';
-import '../../widgets/store_info_sheet.dart';
 import '../indoor_map/indoor_map_screen.dart';
 import '../outdoor_map/outdoor_map_screen.dart';
 
@@ -371,10 +371,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
       buildingId: _buildingId,
     );
     final action = await _withMapsLocked(
-      () => StoreInfoSheet.show(
+      () => PlaceDetailSheet.show(
         context,
         title: match.name,
         subtitle: match.floor,
+        buildingId: _buildingId,
+        placeId: match.placeId,
         favorite: favorite,
         category: match.category,
         subcategory: match.subcategory,
