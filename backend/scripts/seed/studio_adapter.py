@@ -313,6 +313,11 @@ def _reshape_stores(
     # 검색 facet은 카테고리가 확정된 뒤에 계산한다 — 파생 규칙이 소분류를 보기 때문에
     # 오버라이드 적용 전 원본 소분류로 계산하면 태그가 통째로 어긋난다.
     facet_overlay = store_facets.load_overlay(STORE_SEARCH_FACETS_DIR)
+    # intent 정의(`_intents.json`)는 지금까지 validate_facet_resources가 **검증만** 하고
+    # 아무도 적재하지 않았다. 그래서 사람이 검수한 "나이키 라이즈는 신발을 판다" 145건이
+    # DB에도 검색에도 존재하지 않았고, `신발` 질의는 소분류 슈즈 8건조차 라벨이 안 맞아
+    # 못 잡았다. 여기서 매장별 intent를 풀어 search_facets에 함께 굽는다.
+    intent_definitions = store_facets.load_intents(STORE_SEARCH_FACETS_DIR)
     max_snap_m = settings.store_entrance_snap_max_m
     reshaped: list[dict] = []
     unresolved: list[dict] = []
@@ -355,6 +360,16 @@ def _reshape_stores(
         # 파생(소분류) + 수작업 오버레이. 빈 dict는 저장하지 않는다 — 컬럼을 None으로 둬야
         # "태그 없음"과 "빈 태그"가 DB에서 구분 없이 하나로 남는다(설계 5-1 빈 배열 금지).
         facets = store_facets.resolve_facets(store["id"], category, subcategory, facet_overlay)
+        # intents는 오버레이가 아니라 규칙+예외에서 유도한다 — 매장별로 손으로 적게
+        # 하면 소분류가 Studio에서 바뀔 때 JSON이 조용히 낡은 후보를 들고 있게 된다
+        # (store_facets 모듈 docstring "왜 intents는 규칙 + 예외 파일인가").
+        # `_all_store_rows`와 같은 순수 dict 모양으로 넘긴다.
+        intents = store_facets.resolve_intents(
+            {"store_id": store["id"], "category": category, "subcategory": subcategory},
+            intent_definitions,
+        )
+        if intents:
+            facets = {**facets, "intents": intents}
         reshaped.append(
             {
                 "id": store["id"],  # store id는 층별로 이미 유일(네임스페이싱 불필요)
