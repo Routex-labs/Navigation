@@ -30,7 +30,6 @@ from pydantic import BaseModel
 
 from app.dto.floor_map import PointResponse
 
-
 # 상세 대상의 종류. 클라이언트가 아이콘과 기본 액션을 고르는 키이자,
 # 상세 시트를 열지 말지 판단하는 근거다 — 주차구역·에스컬레이터·엘리베이터
 # 1,007건은 "설명"이라는 개념이 없어 excluded로 내려간다.

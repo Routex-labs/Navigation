@@ -165,11 +165,7 @@ def validate_store_detail_resources(
         return []
 
     schema_path = STORE_DETAILS_DIR / place_details.SCHEMA_FILENAME
-    schema = (
-        json.loads(schema_path.read_text(encoding="utf-8"))
-        if schema_path.exists()
-        else {}
-    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8")) if schema_path.exists() else {}
 
     rows = _all_store_rows(directory)
     known_ids = {row["store_id"] for row in rows}
@@ -183,9 +179,7 @@ def validate_store_detail_resources(
         payload = json.loads(path.read_text(encoding="utf-8"))
         errors += [
             f"{path.name}: {message}"
-            for message in place_details.validate_overlay(
-                payload, known_ids, names, schema, reference_date
-            )
+            for message in place_details.validate_overlay(payload, known_ids, names, schema, reference_date)
         ]
     return errors
 
@@ -470,10 +464,7 @@ def seed_studio(
 
     detail_errors = validate_store_detail_resources(directory)
     if detail_errors:
-        raise ValueError(
-            "매장 상세 오버레이 검증 실패 "
-            f"({len(detail_errors)}건):\n  - " + "\n  - ".join(detail_errors)
-        )
+        raise ValueError(f"매장 상세 오버레이 검증 실패 ({len(detail_errors)}건):\n  - " + "\n  - ".join(detail_errors))
 
     own_session = session or SessionLocal()
     try:

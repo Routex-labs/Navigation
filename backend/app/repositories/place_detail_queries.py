@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import Building, Floor, Store
+from app.models import Building, Store
 from app.repositories import place_details
 
 # 상세 시트를 열지 않는 소분류. 주차구역 787 + 에스컬레이터 152 + 엘리베이터 68 =
@@ -33,11 +33,7 @@ def get_place_detail(
     if session.get(Building, building_id) is None:
         return None
 
-    store = session.scalars(
-        select(Store)
-        .where(Store.id == place_id)
-        .options(selectinload(Store.floor))
-    ).one_or_none()
+    store = session.scalars(select(Store).where(Store.id == place_id).options(selectinload(Store.floor))).one_or_none()
     # 다른 건물의 매장 id로 조회하면 존재하지 않는 것으로 취급한다 — 건물별
     # URL인데 남의 건물 매장이 열리면 층 라벨·길찾기가 전부 어긋난다.
     if store is None or store.floor is None or store.floor.building_id != building_id:
@@ -126,9 +122,7 @@ def _sections(
     if items:
         sections.append({"type": "keyValue", "items": items})
 
-    menu_items = _rich_items(
-        overlay.get("menu"), ("name", "price", "description", "image_asset")
-    )
+    menu_items = _rich_items(overlay.get("menu"), ("name", "price", "description", "image_asset"))
     if menu_items:
         sections.append({"type": "menu", "items": menu_items})
 

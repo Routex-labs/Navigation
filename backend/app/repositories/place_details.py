@@ -116,9 +116,7 @@ def validate_overlay(
         # 조용히 넘기지 않고 사람이 다시 보게 만든다.
         written_name = overlay.get("name")
         if written_name is not None and written_name != names.get(place_id):
-            errors.append(
-                f"{place_id}: 이름 불일치 (오버레이 '{written_name}' ≠ 원본 '{names.get(place_id)}')"
-            )
+            errors.append(f"{place_id}: 이름 불일치 (오버레이 '{written_name}' ≠ 원본 '{names.get(place_id)}')")
 
         unknown = set(overlay) - _ALLOWED_FIELDS - RESERVED_KEYS
         if unknown:
@@ -169,9 +167,7 @@ def _validate_values(
         ("name", "price", "description", "image_asset"),
         fields,
     )
-    errors += _validate_business_info(
-        place_id, overlay.get("businessInfo"), fields, forbidden
-    )
+    errors += _validate_business_info(place_id, overlay.get("businessInfo"), fields, forbidden)
 
     for item in overlay.get("keyValue") or []:
         if not isinstance(item, dict) or "label" not in item or "value" not in item:
@@ -180,9 +176,7 @@ def _validate_values(
         # 출처 없는 값(영업시간·전화·평점)을 막는 지점. 영업시간류는 시간이
         # 지나면 자동으로 거짓이 되므로 규칙을 리뷰어 눈이 아니라 코드에 둔다.
         if str(item["label"]).strip() in forbidden:
-            errors.append(
-                f"{place_id}: '{item['label']}'은(는) 출처가 없어 넣을 수 없는 항목입니다"
-            )
+            errors.append(f"{place_id}: '{item['label']}'은(는) 출처가 없어 넣을 수 없는 항목입니다")
 
     notice = overlay.get("notice")
     if notice is not None:
@@ -226,8 +220,7 @@ def _validate_asset_items(
     required_label = "/".join(required_keys)
     for item in value:
         if not isinstance(item, dict) or any(
-            not isinstance(item.get(key), str) or not item[key].strip()
-            for key in required_keys
+            not isinstance(item.get(key), str) or not item[key].strip() for key in required_keys
         ):
             errors.append(f"{place_id}: {field_name} 항목에 {required_label}가 필요합니다")
     return errors
@@ -272,8 +265,6 @@ def _validate_business_info(
             continue
 
         if label in forbidden:
-            errors.append(
-                f"{place_id}: '{label}'은(는) 출처가 없어 넣을 수 없는 항목입니다"
-            )
+            errors.append(f"{place_id}: '{label}'은(는) 출처가 없어 넣을 수 없는 항목입니다")
 
     return errors

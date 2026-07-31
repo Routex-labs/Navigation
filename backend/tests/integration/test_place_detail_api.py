@@ -54,7 +54,7 @@ def test_없는_매장은_404다(api_client):
 
 # 다른 건물의 매장 id로는 열리지 않는다. 열리면 층 라벨·길찾기가 전부 어긋난다.
 def test_다른_건물의_매장은_404다(api_client):
-    response = api_client.get(f"/buildings/no-such-building/places/shop-a-1f")
+    response = api_client.get("/buildings/no-such-building/places/shop-a-1f")
 
     assert response.status_code == 404
 
@@ -105,9 +105,7 @@ def test_실데이터_주차구역은_excluded로_내려간다(real_api_client, 
     ).one_or_none()
     assert parking is not None, "실데이터에 주차구역이 있어야 한다"
 
-    response = real_api_client.get(
-        f"/buildings/{REAL_BUILDING_ID}/places/{parking.id}"
-    )
+    response = real_api_client.get(f"/buildings/{REAL_BUILDING_ID}/places/{parking.id}")
 
     assert response.status_code == 200
     body = response.json()
@@ -129,9 +127,7 @@ def test_실데이터_화장실은_facility로_내려간다(real_api_client, rea
     ).one_or_none()
     assert restroom is not None, "실데이터에 화장실이 있어야 한다"
 
-    response = real_api_client.get(
-        f"/buildings/{REAL_BUILDING_ID}/places/{restroom.id}"
-    )
+    response = real_api_client.get(f"/buildings/{REAL_BUILDING_ID}/places/{restroom.id}")
 
     assert response.status_code == 200
     assert response.json()["kind"] == "facility"
