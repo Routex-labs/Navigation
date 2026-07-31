@@ -124,3 +124,29 @@ def test_문서_텍스트는_태그가_없으면_기존과_같다():
     )
 
     assert query_semantic._document_text(store) == "가게A 편의시설"
+
+def test_워밍이_건물마다_인덱스를_미리_빌드한다(session_factory, monkeypatch):
+    """모델만 올리는 게 아니라 인덱스까지 채워야 첫 질의가 빌드를 안 기다린다."""
+    query_semantic.reset_indexes()
+    calls = _build_spy(monkeypatch)
+
+    query_semantic._warm(session_factory)
+
+    assert len(calls) == 1  # 합성 픽스처는 건물 1개
+    assert BUILDING_ID in query_semantic._indexes
+
+    query_semantic.reset_indexes()  # 스텁 인덱스를 다른 테스트로 흘리지 않는다
+
+
+def test_워밍이_실패해도_예외가_새지_않는다(session_factory, monkeypatch):
+    """워밍 실패가 서버 기동을 막으면 안 된다 — 첫 질의가 lazy로 다시 빌드한다."""
+    query_semantic.reset_indexes()
+
+    def 실패하는_빌드(session, building_id):
+        raise RuntimeError("인덱스 빌드 실패")
+
+    monkeypatch.setattr(query_semantic, "_build_index", 실패하는_빌드)
+
+    query_semantic._warm(session_factory)  # 예외가 올라오면 이 줄에서 실패한다
+
+    assert query_semantic._indexes == {}  # 실패한 인덱스를 캐시하지 않는다

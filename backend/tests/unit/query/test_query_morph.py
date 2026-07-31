@@ -222,3 +222,31 @@ def 사전등록_실패(monkeypatch):
 )
 def test_공백_포함_매장명은_사전등록이_실패해도_잘리지_않는다(사전등록_실패, query, expected):
     assert query_morph.normalize(query) == expected
+
+
+# --- 기동 워밍: 첫 질의가 Kiwi 생성·첫 tokenize(합 약 2.2초)를 물지 않게 한다 ---
+def test_워밍이_매장명_등록과_첫_분석을_모두_돌린다(session_factory, monkeypatch):
+    """인스턴스만 만들면 안 된다 — 첫 tokenize가 인스턴스 생성보다 비싸다."""
+    등록된_단어: list[list[str]] = []
+    분석된_질의: list[str] = []
+
+    monkeypatch.setattr(
+        query_morph, "register_words", lambda words: 등록된_단어.append(list(words))
+    )
+    monkeypatch.setattr(query_morph, "normalize", lambda text: 분석된_질의.append(text))
+
+    query_morph._warm(session_factory)
+
+    assert 등록된_단어 and 등록된_단어[0]  # 픽스처 매장명이 실려 왔다
+    assert 분석된_질의  # 첫 tokenize 비용을 기동에서 치렀다
+
+
+def test_형태소_워밍이_실패해도_예외가_새지_않는다(session_factory, monkeypatch):
+    """워밍 실패가 서버 기동을 막으면 안 된다 — 첫 질의가 lazy로 다시 만든다."""
+
+    def 실패하는_등록(words):
+        raise RuntimeError("사전 등록 실패")
+
+    monkeypatch.setattr(query_morph, "register_words", 실패하는_등록)
+
+    query_morph._warm(session_factory)  # 예외가 올라오면 이 줄에서 실패한다

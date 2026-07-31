@@ -82,19 +82,29 @@ def create_app() -> FastAPI:
     app.include_router(fonts.router)  # MapLibre 심볼 레이어용 글리프
     app.include_router(query.router)  # 자연어 질의 API(경량 매칭 + AI 임베딩 검색)
 
-    # AI 질의용 임베딩 모델을 백그라운드로 미리 올린다(NAV_WARM_EMBEDDING=1일 때만).
+    from app.core.database import SessionLocal
+
+    # AI 질의용 임베딩 모델과 건물별 검색 인덱스를 백그라운드로 미리 올린다
+    # (NAV_WARM_EMBEDDING=1일 때만). 모델만 올리면 첫 질의가 인덱스 빌드(전 매장
+    # 인코딩)를 그대로 기다리므로 둘을 함께 굽는다(query_semantic._warm).
     # import까지 이 안에 두는 이유: 끄고 실행하는 프로세스(테스트 등)는 torch를
     # 건드리지 않는다는 query_semantic의 지연 로드 원칙을 그대로 유지하기 위해서다.
     if settings.warm_embedding:
         from app.repositories import query_semantic
 
-        query_semantic.warm_model_in_background()
+        query_semantic.warm_in_background(SessionLocal)
+
+    # 형태소 분석기(Kiwi)와 매장 사전을 미리 만든다. 임베딩과 달리 이건 **1차 경량
+    # 경로**라 2차를 안 타는 질의("MLB")도 첫 번째면 약 2.2초를 문다(실측: 인스턴스
+    # 816ms + 첫 tokenize 1397ms). NAV_WARM_EMBEDDING과 묶지 않고 항상 켠다.
+    from app.repositories import query_morph
+
+    query_morph.warm_in_background(SessionLocal)
 
     # 실내 오버레이 MVT 타일을 기동 시점에 미리 인코딩해 캐시에 채운다. 그러지
     # 않으면 사용자가 처음 층을 훑을 때 CPU 바운드 인코딩이 직렬 처리되며 몇 초씩
     # 걸리고, 그 사이 MapLibre 네이티브의 소켓 취소·재사용 경쟁으로 "Socket
     # closed"가 튀어 일부 층 오버레이가 빈 채로 남던 증상을 사전에 없앤다.
-    from app.core.database import SessionLocal
     from app.repositories import tile_queries
 
     tile_queries.warm_tile_cache_in_background(SessionLocal)
