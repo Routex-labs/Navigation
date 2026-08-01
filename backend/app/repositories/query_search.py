@@ -1,7 +1,9 @@
 # 자연어 질의 매칭.
 # 매장 이름·카테고리·동의어를 텍스트로 매칭해 최적 1건을 고른다(경량, 임베딩 없음).
 # 질의는 꼬리 제거 + 형태소 정규화(query_morph)를 거쳐 조사·어미가 붙어도 매칭된다.
-# - match_destination:    최적 매장 1건 + 입구 노드(온디바이스 경로용).
+# - match_destination:    확정 가능한 1건 + 입구 노드(온디바이스 경로용).
+#                         한 곳을 지목할 수 없으면 status="ambiguous"로 비워 보낸다 —
+#                         클라이언트가 /query/ai 목록 계약으로 이어 간다.
 # - match_info:           최적 1건 + 대상이 존재하는 층 목록.
 # - match_ai_destination: 하이브리드 — 1차 경량 확정, 미스·모호한 부분 일치는 2차 의미 검색.
 # Building이 없으면 None(→ Router가 404). 매칭 0건은 status="no_match"로 정상 응답.
@@ -125,6 +127,17 @@ _CONTAINS = 2  # 그 밖의 중간 포함 — "이솝" → "엘리베이터솝"(
 _MIN_NAME_PARTIAL_MATCH_LEN = 2
 
 
+def _intent_names(store: Store) -> tuple[str, ...]:
+    """이 매장이 속한 intent 이름들(정규화). 태그가 없으면 빈 튜플.
+
+    값의 출처는 `Store.search_facets["intents"]`이고, 시드가
+    `store_facets.resolve_intents`로 규칙 + 예외에서 유도해 구워 둔 것이다. 매칭
+    시점에 규칙을 다시 푸는 게 아니라 이미 구워진 결과만 읽는다 — 질의마다 1640건에
+    규칙을 돌리면 경량 경로가 경량이 아니게 된다.
+    """
+    return tuple(_norm(value) for value in _facets(store).get("intents", ()))
+
+
 def _name_match_rank(name: str, q: str) -> int | None:
     if not q or len(q) < _MIN_NAME_PARTIAL_MATCH_LEN or q not in name:
         return None
@@ -144,6 +157,16 @@ def _tier(store: Store, q: str, canon: str) -> tuple[int, int] | None:
         return 0, 0  # 정확 이름 일치
     if q in (cat, sub) or canon in (cat, sub):
         return 1, 0  # 카테고리/서브카테고리 일치
+    # intent 일치도 카테고리와 같은 tier 1이다.
+    #
+    # intent는 "사용자가 치는 말"이고(`신발`·`밥집`), 분류 라벨은 운영자가 쓰는 말이다
+    # (`슈즈`·`레스토랑`). 둘이 어긋나는 게 정상이라 라벨만 보면 `신발`·`음식점`은
+    # 영원히 no_match였다. 여기서 새 규칙을 쓰지 않는 게 핵심이다 — 어떤 매장이 신발을
+    # 파는지는 사람이 검수한 `_intents.json`(규칙 + 예외 145건)에 데이터로 들어 있고,
+    # 시드가 그걸 풀어 search_facets에 구워 둔다. 동의어를 하나씩 늘리는 방식과 달리
+    # 예외가 늘어도 코드가 아니라 검수 대상 JSON이 늘어난다.
+    if q in (intents := _intent_names(store)) or canon in intents:
+        return 1, 0
     # 질의 원문과 동의어 표준형 중 더 정밀하게 걸린 쪽을 쓴다.
     ranks = [rank for rank in (_name_match_rank(name, q), _name_match_rank(name, canon)) if rank is not None]
     if ranks:
@@ -210,7 +233,12 @@ def _rank(
 def _is_confident_light_match(
     scored: list[tuple[int, int, int, int, str, Store, Floor]],
 ) -> bool:
-    """AI 경로에서 경량 결과를 바로 확정해도 되는지 판단한다.
+    """경량 결과를 바로 한 건으로 확정해도 되는지 판단한다.
+
+    **두 경로가 이 함수 하나를 공유한다** — `match_destination`(단일 목적지)과
+    `discover`(탐색)가 같은 질의에 다른 결론을 내면, 어느 경로로 들어왔는지에 따라
+    사용자가 보는 결과가 달라진다. 실제로 그랬다: destination만 이 판정을 건너뛰어
+    "명품"을 42건 중 첫 매장으로 고정했다.
 
     tier 0(정확 이름)·tier 1(카테고리·소분류 정확 일치)·tier 2(이름 부분 일치) 모두
     같은 기준으로 판단한다 — 최상위 (tier, 후보 순서, 정밀도) 그룹 안에서 서로 다른
@@ -312,24 +340,39 @@ def match_destination(
     if session.get(Building, building_id) is None:
         return None
 
-    scored = _rank(
+    scored = _rank_with_candidate(
         _load_stores(session, building_id, current_floor_id=current_floor_id),
         text,
     )
     if not scored:
         return {"status": "no_match", "query": text, "match": None}
 
-    if _is_multi_physical_query(text):
-        physical_matches = [
-            store for _tier, _level, _store_id, store, _floor in scored if _is_multi_physical_store(store)
-        ]
-        if len(physical_matches) > 1:
-            # DestinationResponse는 단일 목적지 계약이다. 클라이언트가 빈
-            # light 결과를 받으면 /query/ai 목록 계약으로 자연스럽게 이어진다.
-            return {"status": "ambiguous", "query": text, "match": None}
+    # 확정할 수 없는 매칭은 1건으로 좁히지 않는다.
+    #
+    # 이 판정을 AI 경로(discover)와 **같은 함수로** 한다. 예전에는 여기만 확정 판정
+    # 없이 scored[0]을 무조건 돌려줬고, 그래서 "명품"(서로 다른 이름 42건)·
+    # "레스토랑"(57건)이 몽클레르·데이릿 한 건으로 고정됐다. 클라이언트는
+    # /query/destination이 성공하면 /query/ai를 부르지 않으므로(search_panel.dart),
+    # 카테고리성 질의는 사용자가 목록을 볼 기회 자체가 없었다.
+    #
+    # 여기서 "목록을 원하는 질의"를 따로 분류하지 않는 게 핵심이다. 카테고리 단어
+    # 사전을 만들면 `제일`은 되는데 `가장`은 안 되는 식으로 예외가 계속 늘어난다.
+    # 이미 있는 기준 — 최상위 (tier, 후보 순서, 정밀도) 그룹 안에 서로 다른 매장명이
+    # 둘 이상인가 — 하나로 충분하다. 그 기준은 tier와 무관하게 "이 질의로는 한 곳을
+    # 지목할 수 없다"는 뜻이고, 그게 곧 목록을 보여줄 조건이다.
+    #
+    # 출구처럼 이름은 같아도 물리적으로 다른 POI들도 이 함수가 이미 걸러낸다
+    # (_is_confident_light_match 마지막 줄). 그래서 여기 있던 _is_multi_physical_query
+    # 특수 분기를 지웠다 — 같은 판정을 두 곳에서 따로 하고 있었다.
+    #
+    # DestinationResponse는 단일 목적지 계약이라 후보를 담을 자리가 없다. match=null로
+    # 돌려주면 클라이언트가 빈 결과로 파싱해(http_destination_repository.dart)
+    # /query/ai 목록 계약으로 자연스럽게 이어진다 — 클라이언트 변경이 필요 없다.
+    if not _is_confident_light_match(scored):
+        return {"status": "ambiguous", "query": text, "match": None}
 
     # 정렬이 결정적이라 [0]이 곧 최적 1건.
-    _, _, _, store, floor = scored[0]
+    *_, store, floor = scored[0]
     transform = fit_building_geo_transform(session, building_id)
 
     return {"status": _status(store), "query": text, "match": _to_match(store, floor, transform)}
@@ -389,8 +432,22 @@ def match_ai_destination(
 # 단일 목적지(match_destination)와 달리 "여러 후보 + 되물음"을 만든다.
 # --------------------------------------------------------------------------
 
-MAX_DISCOVERY_MATCHES = 5  # 최종 추천 상한(12절 확정)
+MAX_DISCOVERY_MATCHES = 5  # 되물을 수 없는 제한 상태(degraded)의 추천 상한
 CLARIFY_PREVIEW_MATCHES = 3  # 질문과 함께 보여줄 초기 후보 수(12절 확정)
+
+# 목록(results) 상한.
+#
+# 12절이 정한 "추천 최대 5건"은 **질문이 아직 서 있는 화면**의 규칙이다. 되물을 축이
+# 있으면 clarify가 미리보기 3건만 보여주고 사용자가 좁혀 나간다. 그런데 되물을 축이
+# 없는 질의("커피" — 후보 53건이 전부 카페·베이커리라 나눌 축이 없다)는 그 5건이
+# 곧 최종 답이 되고, 그 화면에는 "전체 보기" 버튼도 없다. 53곳 중 5곳만 보여주고
+# 나머지 48곳으로 갈 길이 아예 없는 막다른 화면이었다.
+#
+# 그래서 "이게 최종 목록"인 자리는 전부 이 상한 하나를 쓴다 — 선택으로 좁힌 결과,
+# 전체 보기, 되물을 축이 없는 결과. 100은 실제 데이터의 한 카테고리를 통째로
+# 담는 크기다(카페 53, 컨템포러리 61). 상한 자체를 없애지는 않는다 — 이름이 제각각인
+# 787건짜리 축이 걸리면 응답이 통째로 커진다.
+MAX_RESULT_MATCHES = 100
 
 # 되물을 축의 우선순위. 한 번에 한 축만 묻는다(2절). 앞에 있는 축부터 구분력을 본다.
 _QUESTION_AXIS_ORDER = ("intents", "cuisines", "styles", "menus", "occasions", "audiences")
@@ -429,6 +486,43 @@ def _facets(store: Store) -> dict[str, list[str]]:
     }
 
 
+def _query_matched_intents(
+    candidates: list[tuple[Store, Floor]],
+    text: str,
+) -> list[str]:
+    """질의어 자체가 가리킨 intent 값들. 후보에 실제로 있는 값만 남긴다.
+
+    `_tier`가 tier 1을 주는 조건(`q in intents or canon in intents`)을 질의 관점에서
+    되짚은 것이다 — 후보 집합이 왜 이렇게 모였는지를 매장이 아니라 **질의**가 알고
+    있으므로, 그 근거를 `basis`로 흘려보내야 `reason`이 사용자가 친 말과 이어진다.
+
+    이게 없으면 `신발` 질의의 추천 이유가 "명품 스타일 매장이에요"로만 나온다.
+    질문 축(styles)만 basis에 담기기 때문인데, 사용자 입장에서는 신발을 물었는데
+    신발 이야기가 한 마디도 없는 문장이 된다(2절 "근거를 말한다"의 실패).
+
+    후보에 없는 값을 지우는 이유: `_matched_facets`가 어차피 매장 태그와 교집합을
+    내므로 결과는 같지만, 여기서 걸러 두면 `basis`가 곧 "이 화면에서 쓰인 근거"라는
+    뜻을 유지한다.
+    """
+    synonyms = _synonyms()
+    wanted: set[str] = set()
+    for q in _query_candidates(text):
+        wanted.add(q)
+        wanted.add(synonyms.get(q, q))
+
+    matched: list[str] = []
+    for store, _floor in candidates:
+        for value in _facets(store).get("intents", ()):
+            if _norm(value) in wanted and value not in matched:
+                matched.append(value)
+    return matched
+
+
+def _intent_basis(intents: list[str]) -> dict[str, list[str]]:
+    """intent 근거를 basis 모양으로. 없으면 빈 dict — 빈 축을 만들지 않는다(5-1절)."""
+    return {"intents": intents} if intents else {}
+
+
 def _matches_selection(store: Store, selection: dict[str, list[str]]) -> bool:
     """축 사이는 AND, 축 안의 값들은 OR. 태그가 없는 매장은 선택된 축에서 탈락한다."""
     facets = _facets(store)
@@ -455,6 +549,7 @@ def _facet_options(
 
 def _pick_question(
     candidates: list[tuple[Store, Floor]],
+    asked_intents: list[str] | None = None,
 ) -> tuple[str | None, list[dict[str, Any]]]:
     """현재 후보를 실제로 둘 이상으로 나누는 축을 고른다. 없으면 (None, []).
 
@@ -466,9 +561,18 @@ def _pick_question(
     2. 그 축을 가진 후보가 절반 이상 — 태깅이 아직 얇은 지금 데이터에서는, 상위 10건 중
        2건만 태그가 있어도 "값이 2개"라는 조건은 통과해 버린다. 그 질문에 답하면
        태그 없는 8건이 통째로 사라진다(2절 "미표기 매장이 통째로 사라진다").
+
+    `asked_intents`(질의가 이미 가리킨 intent 값)는 intents 축의 선택지에서 뺀다.
+    사용자가 방금 친 말을 선택지로 되돌려주는 건 질문이 아니라 메아리다 — 한 매장이
+    여러 intent를 갖게 되면(`신발`과 `의류`를 함께 파는 매장) "신발"에 대고
+    "신발/의류 중 무엇을 찾으세요?"를 묻게 된다. 뺀 뒤 선택지가 2개 미만이면 이 축은
+    구분력이 없는 것이므로 다음 축(styles 등)으로 넘어간다.
     """
+    excluded = set(asked_intents or ())
     for axis in _QUESTION_AXIS_ORDER:
         options = _facet_options(candidates, axis)
+        if axis == "intents" and excluded:
+            options = [option for option in options if option["value"] not in excluded]
         if len(options) < 2:
             continue
         covered = sum(1 for store, _floor in candidates if _facets(store).get(axis))
@@ -659,10 +763,13 @@ def discover(
         for scored in (floor_scoped, building_scored):
             if _is_confident_light_match(scored):
                 *_, store, floor = scored[0]
+                # 한 건으로 확정돼도 intent로 걸린 것이면 그 근거를 남긴다 —
+                # 확정 여부와 "왜 이게 답인지"는 별개다.
+                basis = _intent_basis(_query_matched_intents([(store, floor)], text))
                 return _discovery(
                     text,
                     "direct",
-                    matches=[_to_discovery_match(store, floor, transform, {})],
+                    matches=[_to_discovery_match(store, floor, transform, basis)],
                 )
 
     # 탐색 후보 집합. 경량이 잡은 게 있으면(카테고리·소분류 정확 일치 등) 그것이
@@ -710,17 +817,25 @@ def discover(
             matches=_discovery_matches(candidates, MAX_DISCOVERY_MATCHES, {}, transform),
         )
 
+    # 후보 집합이 왜 모였는지의 근거. 질문 축과 별개로 모든 mode에 실린다.
+    intent_basis = _intent_basis(_query_matched_intents(candidates, text))
+
     if selection or show_all:
+        # 선택으로 좁힌 결과도 목록 상한을 쓴다. chip에는 `컨템포러리 (61)`처럼
+        # **후보 수가 적혀 있다.** 61이라고 적힌 것을 눌렀는데 5건이 오면 나머지 56건은
+        # 어디로 갔는지 알 방법이 없다. 숫자를 보여 준 이상 그만큼 도달할 수 있어야 한다.
         return _discovery(
             text,
             "results",
-            matches=_discovery_matches(candidates, MAX_DISCOVERY_MATCHES, selection, transform),
+            matches=_discovery_matches(candidates, MAX_RESULT_MATCHES, {**intent_basis, **selection}, transform),
         )
 
     if len(candidates) > MAX_DISCOVERY_MATCHES:
-        axis, options = _pick_question(candidates)
+        axis, options = _pick_question(candidates, intent_basis.get("intents"))
         if axis is not None:
-            basis = {axis: [option["value"] for option in options]}
+            # 질문 축이 intents면 그 축의 선택지가 이긴다(뒤 키가 앞을 덮는다) —
+            # 같은 축을 두 벌로 들고 있으면 matched_facets가 어느 쪽 근거인지 흐려진다.
+            basis = {**intent_basis, axis: [option["value"] for option in options]}
             # 초기 후보는 그 축의 태그가 있는 매장에서 고른다 — 미태깅 매장이 섞이면
             # 질문의 근거(reason)가 비어 보인다. 태그된 후보가 없으면 전체에서 고른다.
             preview = [row for row in candidates if _facets(row[0]).get(axis)]
@@ -738,11 +853,15 @@ def discover(
                 ),
             )
 
-    # 구분력 있는 축이 없으면 억지로 되묻지 않는다 — 다양성 보정된 상위 N을 그대로 준다.
+    # 구분력 있는 축이 없으면 억지로 되묻지 않는다 — 다양성 보정된 목록을 그대로 준다.
+    #
+    # 이 자리가 곧 최종 답이라 목록 상한을 쓴다. 추천 상한(5)을 쓰던 시절 "커피"는
+    # 카페 53곳 중 5곳만 보여줬고, 되물음이 없으니 화면에 "전체 보기"도 없어서
+    # 나머지로 갈 길이 아예 없었다.
     return _discovery(
         text,
         "results",
-        matches=_discovery_matches(candidates, MAX_DISCOVERY_MATCHES, {}, transform),
+        matches=_discovery_matches(candidates, MAX_RESULT_MATCHES, intent_basis, transform),
     )
 
 

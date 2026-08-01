@@ -117,6 +117,12 @@ def test_모든_노드가_wgs84를_갖는다(real_db_session):
 
 # 선언된 동의어가 모두 실존 장소로 매칭되는지 확인한다(죽은 항목 방지).
 # 브랜드가 데이터에서 사라지면 이 테스트가 그 동의어를 잡아낸다.
+#
+# 판정 기준은 `match`가 있는지가 아니라 status가 `no_match`가 **아닌지**다.
+# 표준형이 intent를 가리키는 동의어("커피"→"카페", "옷"→"의류")는 수십 건에 걸리므로
+# `match_destination`이 의도적으로 `ambiguous`(match=null)를 준다 — 확정할 수 없는
+# 질의를 임의의 1건으로 고정하지 않는다는 규칙이다. 이걸 죽은 항목으로 세면 테스트가
+# 그 규칙과 정반대를 요구하게 된다. 죽은 동의어는 후보가 0건인 `no_match`뿐이다.
 def test_동의어_사전은_실존_장소로_매칭된다(real_db_session):
     synonyms = json.loads((API_ROOT / "resources" / "query_synonyms.json").read_text(encoding="utf-8"))
 
@@ -124,7 +130,8 @@ def test_동의어_사전은_실존_장소로_매칭된다(real_db_session):
     dead = [
         alias
         for alias in synonyms
-        if (query_search.match_destination(real_db_session, REAL_BUILDING_ID, alias) or {}).get("match") is None
+        if (query_search.match_destination(real_db_session, REAL_BUILDING_ID, alias) or {}).get("status")
+        in (None, "no_match")
     ]
     assert dead == [], f"매칭되지 않는 동의어(죽은 항목): {dead}"
 
@@ -248,3 +255,105 @@ def test_current_floor_multiple_exits_are_returned_as_physical_choices(
     assert discovery["mode"] == "results"
     assert {match["store_id"] for match in discovery["matches"]} == {store.id for store, _floor in rows}
     assert {match["floor_name"] for match in discovery["matches"]} == {"1F"}
+
+
+# ── intent 태깅 확장(W9) 실데이터 회귀 가드 ─────────────────────────────────
+
+
+# 복합 라벨("카페·베이커리")은 tier 1 정확 일치가 못 잡아, 예전에는 "커피"가 상호에
+# 그 글자가 든 1건으로만 확정됐다. intent "카페" + 동의어 "커피"→"카페"로 메운 지점이다.
+def test_커피_질의가_카페_매장들을_후보로_준다(real_db_session):
+    discovery = query_search.discover(real_db_session, REAL_BUILDING_ID, "커피")
+
+    assert discovery["mode"] in ("clarify", "results")
+    matches = discovery["matches"]
+    assert len(matches) >= 3, f"후보가 너무 적다: {[m['name'] for m in matches]}"
+    # 후보가 실제로 카페 계열이어야 한다 — 이름에 '커피'가 든 매장 긁어오기가 아니다.
+    assert all(match["subcategory"] == "카페·베이커리" for match in matches), [
+        (match["name"], match["subcategory"]) for match in matches
+    ]
+
+
+# 지하철 출입구는 소분류가 교통/facility로 갈려 있어 라벨만으로는 한쪽이 누락됐다.
+def test_출구_질의가_지하철_출입구까지_포함한다(real_db_session):
+    discovery = query_search.discover(real_db_session, REAL_BUILDING_ID, "출구")
+
+    names = [match["name"] for match in discovery["matches"]]
+    assert any("지하철" in name for name in names), names
+
+
+# 추천 이유가 사용자가 친 말과 이어지는지. 질문 축(styles)만 basis에 담기던 시절에는
+# "신발"을 물어도 "명품 스타일 매장이에요"만 나와 신발 근거가 사라졌다.
+def test_신발_질의의_추천_이유가_신발을_말한다(real_db_session):
+    discovery = query_search.discover(real_db_session, REAL_BUILDING_ID, "신발")
+
+    reasons = [match["reason"] for match in discovery["matches"]]
+    assert reasons, "후보가 없다"
+    assert all(reason and "신발" in reason for reason in reasons), reasons
+
+
+# 사용자가 방금 친 말을 선택지로 되돌려주지 않는다. 한 매장이 신발·의류를 함께 가지므로
+# 이 가드가 없으면 "신발"에 "신발/의류 중 무엇을 찾으세요?"라는 메아리 질문이 선다.
+def test_신발_질의는_신발을_선택지로_되묻지_않는다(real_db_session):
+    discovery = query_search.discover(real_db_session, REAL_BUILDING_ID, "신발")
+
+    values = [option["value"] for option in discovery["options"]]
+    assert "신발" not in values, values
+
+
+# chip에 적힌 후보 수(`컨템포러리 (61)`)를 눌렀는데 5건만 오면 나머지는 도달할 방법이
+# 없다. 숫자를 보여 준 이상 그 숫자만큼 갈 수 있어야 한다.
+def test_선택으로_좁힌_결과는_추천_상한에_묶이지_않는다(real_db_session):
+    clarify = query_search.discover(real_db_session, REAL_BUILDING_ID, "의류")
+    option = next(o for o in clarify["options"] if o["value"] == "컨템포러리")
+    assert option["count"] > query_search.MAX_DISCOVERY_MATCHES, "이 검증에는 넓은 축이 필요하다"
+
+    narrowed = query_search.discover(
+        real_db_session,
+        REAL_BUILDING_ID,
+        "의류",
+        selected_facets={"styles": ["컨템포러리"]},
+    )
+
+    assert narrowed["mode"] == "results"
+    assert len(narrowed["matches"]) > query_search.MAX_DISCOVERY_MATCHES
+    assert len(narrowed["matches"]) <= query_search.MAX_RESULT_MATCHES
+
+
+# 되물을 축이 없는 질의는 그 목록이 곧 최종 답이다. 추천 상한(5)을 쓰면 카페 53곳 중
+# 5곳만 보여주는데, 그 화면에는 "전체 보기"도 없어서 나머지로 갈 길이 없다.
+def test_되물을_축이_없는_질의도_후보를_통째로_준다(real_db_session):
+    discovery = query_search.discover(real_db_session, REAL_BUILDING_ID, "커피")
+
+    assert discovery["mode"] == "results"
+    assert discovery["question"] is None
+    assert discovery["options"] == []
+    matches = discovery["matches"]
+    assert len(matches) > query_search.MAX_DISCOVERY_MATCHES, [m["name"] for m in matches]
+    assert all(match["subcategory"] == "카페·베이커리" for match in matches)
+
+
+# 사용자가 쓰는 말과 intent 이름이 다르면 "이미 물은 값" 제외가 안 걸려, 방금 친 말을
+# 선택지로 되돌려주는 메아리 질문이 선다("운동화"에 대고 "신발/의류 중 무엇?").
+# 개념당 intent는 하나만 두고 다른 말은 동의어로 잇는다.
+def test_운동화는_신발_질의와_같은_결과를_준다(real_db_session):
+    shoes = query_search.discover(real_db_session, REAL_BUILDING_ID, "신발")
+    sneakers = query_search.discover(real_db_session, REAL_BUILDING_ID, "운동화")
+
+    assert sneakers["mode"] == shoes["mode"]
+    assert [o["value"] for o in sneakers["options"]] == [o["value"] for o in shoes["options"]]
+    assert [m["store_id"] for m in sneakers["matches"]] == [m["store_id"] for m in shoes["matches"]]
+    # 되물음에 "신발"이 선택지로 돌아오지 않는다 — 사용자가 이미 물은 값이다.
+    assert "신발" not in [o["value"] for o in sneakers["options"]]
+    # 추천 이유는 intent 이름(신발)으로 말한다.
+    assert all("신발" in (m["reason"] or "") for m in sneakers["matches"])
+
+
+# 조사·어미가 붙어도 같은 결과여야 한다. 형태소 정규화가 꼬리를 떼고 나서 동의어를
+# 찾으므로, 정규화가 질의를 다른 모양으로 바꾸면 동의어가 조용히 안 걸린다.
+@pytest.mark.parametrize("text", ["운동화", "운동화 어디야", "운동화 사고 싶다"])
+def test_운동화는_꼬리가_붙어도_신발로_이어진다(real_db_session, text):
+    discovery = query_search.discover(real_db_session, REAL_BUILDING_ID, text)
+
+    assert discovery["matches"], text
+    assert all("신발" in (match["reason"] or "") for match in discovery["matches"]), text

@@ -10,13 +10,14 @@ from app.models import Floor, Store
 from app.repositories import query_search
 
 
-def _store(store_id: str, name: str, *, category=None, subcategory=None, entrance="N-1"):
+def _store(store_id: str, name: str, *, category=None, subcategory=None, entrance="N-1", facets=None):
     return Store(
         id=store_id,
         floor_id="F1",
         name=name,
         category=category,
         subcategory=subcategory,
+        search_facets=facets,
         centroid_x_m=0.0,
         centroid_y_m=0.0,
         entrance_node_id=entrance,
@@ -47,6 +48,43 @@ def test_카테고리로_매칭한다():
     rows = [(_store("s1", "MLB", category="편의시설"), _floor())]
     scored = query_search._rank(rows, "편의시설")
     assert scored and scored[0][3].id == "s1"
+
+
+# intent 태그로도 매칭된다 — 사용자가 치는 말("신발")과 분류 라벨("슈즈")은 어긋나는 게
+# 정상이다. 나이키 라이즈는 소분류가 캐주얼·스트리트라 라벨만 보면 영원히 안 잡힌다.
+# 값의 출처는 시드가 _intents.json(규칙 + 검수된 예외 145건)에서 구운 search_facets다.
+def test_intent_태그로_매칭한다():
+    rows = [
+        (
+            _store("s1", "나이키 라이즈", subcategory="캐주얼·스트리트", facets={"intents": ["신발"]}),
+            _floor(),
+        )
+    ]
+    scored = query_search._rank(rows, "신발")
+
+    assert scored and scored[0][3].id == "s1"
+    assert scored[0][0] == 1  # 카테고리 일치와 같은 tier
+
+
+# 태그가 없으면 잡히지 않는다 — "캐주얼·스트리트니까 신발일 것"이라는 추측을 하지 않는다
+# (evaluate_query_hybrid.py가 기각한 "원리 없는 완화").
+def test_intent_태그가_없으면_소분류로_추측하지_않는다():
+    rows = [(_store("s1", "나이키 라이즈", subcategory="캐주얼·스트리트"), _floor())]
+
+    assert query_search._rank(rows, "신발") == []
+
+
+# 정확한 이름(tier 0)이 intent 일치(tier 1)보다 우선한다 — "신발"이라는 이름의 매장이
+# 있다면 그게 먼저다.
+def test_정확한_이름이_intent_일치보다_우선한다():
+    floor = _floor()
+    rows = [
+        (_store("s1", "나이키 라이즈", facets={"intents": ["신발"]}), floor),
+        (_store("s2", "신발"), floor),
+    ]
+    scored = query_search._rank(rows, "신발")
+
+    assert scored[0][3].id == "s2"
 
 
 # 동의어("엠엘비"→"MLB")로 매칭된다.
@@ -175,3 +213,56 @@ def test_1글자_카테고리는_길이_무관하게_매칭된다():
     scored = query_search._rank(rows, "편")
     assert scored and scored[0][3].id == "s1"
     assert scored[0][0] == 1  # tier 1
+
+
+# ── 추천 이유의 근거(basis)에 질의 intent가 실리는가 ──────────────────────────
+
+
+# 질의가 맞힌 intent를 후보 집합에서 되짚는다. reason이 사용자가 친 말과 이어지려면
+# 후보가 왜 모였는지를 basis로 넘겨야 한다.
+def test_질의가_맞힌_intent를_후보에서_되짚는다():
+    floor = _floor()
+    rows = [
+        (_store("s1", "폴리테루", subcategory="캐주얼·스트리트", facets={"intents": ["신발", "의류"]}), floor),
+        (_store("s2", "무태그", subcategory="잡화·액세서리"), floor),
+    ]
+    assert query_search._query_matched_intents(rows, "신발") == ["신발"]
+    # 후보에 없는 값은 근거가 아니다.
+    assert query_search._query_matched_intents(rows, "화장품") == []
+
+
+# 동의어 표준형으로도 되짚는다 — "커피"는 intent "카페"를 가리킨다.
+def test_동의어_표준형으로도_intent를_되짚는다():
+    rows = [(_store("s1", "블루보틀", subcategory="카페·베이커리", facets={"intents": ["카페"]}), _floor())]
+    assert query_search._query_matched_intents(rows, "커피") == ["카페"]
+
+
+# 사용자가 방금 친 intent는 되물음 선택지에서 빠진다. 안 빼면 "신발"에 대고
+# "신발/의류 중 무엇을 찾으세요?"라는 메아리 질문이 선다.
+def test_질의가_가리킨_intent는_선택지에서_빠진다():
+    floor = _floor()
+    rows = [
+        (_store(f"s{i}", f"매장{i}", subcategory="캐주얼·스트리트", facets={"intents": ["신발", "의류"]}), floor)
+        for i in range(6)
+    ]
+    axis, options = query_search._pick_question(rows)
+    assert axis == "intents"  # 아무것도 안 뺐을 때는 두 값이 선택지가 된다
+
+    # "신발"을 뺀 뒤에는 남는 값이 하나뿐이라 이 축은 구분력이 없다.
+    axis, options = query_search._pick_question(rows, ["신발"])
+    assert axis is None
+    assert options == []
+
+
+# 질문 축(styles)만 basis에 담기던 버그의 회귀 가드. "신발"로 모인 후보의 추천 이유가
+# "명품 스타일 매장이에요"로만 나오면 신발을 물은 사용자에게 근거가 사라진다.
+def test_추천_이유는_질문축과_질의_intent를_함께_말한다():
+    matched = {"intents": ["신발"], "styles": ["명품"]}
+    assert query_search._reason(matched) == "신발 관련 매장이에요. 명품 스타일 매장이에요."
+
+
+# 근거가 없으면 이유를 만들지 않는다(추측 금지, 2절).
+def test_근거가_없으면_추천_이유는_없다():
+    assert query_search._reason({}) is None
+    assert query_search._intent_basis([]) == {}
+    assert query_search._intent_basis(["신발"]) == {"intents": ["신발"]}

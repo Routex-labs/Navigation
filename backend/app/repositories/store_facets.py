@@ -33,11 +33,12 @@ vocabulary 파일과 오버레이 파일을 분리한 이유: vocabulary는 "어
 
 ## 왜 intents는 매장 태그가 아니라 "규칙 + 예외" 파일인가
 
-설계 문서 12절이 미결로 남겨 둔 intents 스키마를 **소분류 규칙 객체 + 예외 매장 id**로
-확정했다(wave0 D 조사 보고서 제안). intent는 사용자가 치는 말("신발"·"밥집")이고,
-후보 대부분은 소분류에서 규칙으로 유도된다. 145건을 매장별 배열(`"intents": ["신발"]`)로
-손으로 나열하면 `styles`에서 이미 겪은 드리프트가 그대로 재현된다 — Studio에서 소분류가
-바뀌어도 JSON은 조용히 낡은 후보 집합을 들고 있게 된다. 그래서
+intents 스키마는 **소분류 규칙 객체 + 예외 매장 id**로 확정했고(wave0 D 조사 보고서 제안),
+설계 문서 12절 "확정" 목록과 5-1-1절도 이 결정으로 갱신됐다. intent는 사용자가 치는
+말("신발"·"밥집")이고, 후보 대부분은 소분류에서 규칙으로 유도된다. 145건을 매장별
+배열(`"intents": ["신발"]`)로 손으로 나열하면 `styles`에서 이미 겪은 드리프트가
+그대로 재현된다 — Studio에서 소분류가 바뀌어도 JSON은 조용히 낡은 후보 집합을
+들고 있게 된다. 그래서
 
 - 규칙(`rules`)이 소분류로 대부분을 잡고,
 - 규칙으로 잡히지 않는 것(예: 나이키 라이즈처럼 소분류는 `캐주얼·스트리트`인데 신발을
@@ -336,6 +337,41 @@ def _matches_rules(store: dict, rules: dict[str, list[str]]) -> bool:
     return True
 
 
+def _matches_intent(store: dict, definition: dict) -> bool:
+    """매장 하나가 intent 정의에 걸리는가 = (규칙 유도 ∪ extra) − excluded.
+
+    intent 하나를 매장 관점에서 판정하는 **단일 지점**이다. 집합 함수
+    (`resolve_intent_store_ids`)와 매장별 함수(`resolve_intents`)가 이 규칙을 각자
+    구현하면, 한쪽만 고쳤을 때 시드가 붙인 태그와 검색이 세는 후보가 조용히 갈린다.
+
+    `excluded`를 맨 먼저 보는 이유는 그 키의 유일한 용도가 "규칙으로 들어왔든 손으로
+    넣었든 결국 제외"이기 때문이다 — 순서가 곧 의미다.
+    """
+    store_id = store["store_id"]
+    if store_id in (definition.get("excluded_store_ids") or {}):
+        return False
+    rules = definition.get("rules") or {}
+    if rules and _matches_rules(store, rules):
+        return True
+    return store_id in (definition.get("extra_store_ids") or {})
+
+
+def resolve_intents(store: dict, intents: dict[str, dict]) -> list[str]:
+    """매장 하나가 속하는 intent 이름들. 정의 파일의 선언 순서를 유지한다.
+
+    `resolve_intent_store_ids`를 매장 관점으로 뒤집은 것이다. 시드는 매장을 한 건씩
+    조립하므로(`studio_adapter._reshape_stores`) 매장마다 intent별 전 매장 스캔을
+    돌릴 이유가 없다.
+
+    **순서를 정의 파일 순서로 고정하는 게 계약이다.** 이 값은 `Store.search_facets`에
+    그대로 저장되고 임베딩 문서 텍스트로도 들어가므로(`query_semantic._document_text`),
+    순서가 흔들리면 같은 매장이 실행마다 다른 문서 텍스트를 만들어 재현성이 깨진다.
+
+    빈 목록을 돌려줄 수 있다 — 호출부가 5-1절 규칙대로 빈 축을 저장하지 않는다.
+    """
+    return [intent for intent, definition in intents.items() if definition and _matches_intent(store, definition)]
+
+
 def resolve_intent_store_ids(
     intent: str,
     stores: list[dict],
@@ -358,8 +394,10 @@ def resolve_intent_store_ids(
     if not definition:
         return set()
 
-    rules = definition.get("rules") or {}
-    matched = {store["store_id"] for store in stores if rules and _matches_rules(store, rules)}
+    matched = {store["store_id"] for store in stores if _matches_intent(store, definition)}
+    # `_matches_intent`는 `stores`에 있는 매장만 본다. 실데이터에 없는 extra id(고아)도
+    # 정의가 가리키는 집합의 일부라 여기서 다시 합친다 — 고아 자체는 `validate_intents`가
+    # 오류로 잡는 몫이고, 이 함수가 조용히 지워 버리면 그 오류가 보이지 않게 된다.
     matched |= set(definition.get("extra_store_ids") or {})
     return matched - set(definition.get("excluded_store_ids") or {})
 

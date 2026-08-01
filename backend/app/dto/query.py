@@ -76,7 +76,8 @@ class DiscoveryMatch(QueryMatch):
 class DiscoveryResponse(BaseModel):
     # direct   : 명확한 목적지 1건 — matches 1건, 질문 없음
     # clarify  : 후보가 넓고 구분력 있는 축이 있음 — question + options + 초기 후보 3건
-    # results  : 충분히 좁혀졌거나 되물을 축이 없음 — 다양성 보정된 최대 5건
+    # results  : 충분히 좁혀졌거나 되물을 축이 없음 — 다양성 보정된 MAX_RESULT_MATCHES까지.
+    #            되물음이 없는 화면이므로 이 목록이 곧 최종 답이다
     # no_match : 후보 없음
     # degraded : 의미 검색 기능 자체를 못 쓰는 상태(모델·인덱스 미가용). 경량 결과가 있으면 함께 담는다
     mode: str

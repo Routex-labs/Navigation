@@ -153,6 +153,34 @@
     },
     "식사": {
       "rules": { "subcategory": ["레스토랑"] }
+    },
+    "카페": {
+      "rules": { "subcategory": ["카페·베이커리"] }
+    },
+    "화장품": {
+      "rules": { "subcategory": ["화장품·향수"] }
+    },
+    "향수": {
+      "rules": { "subcategory": ["화장품·향수"] }
+    },
+    "의류": {
+      "rules": {
+        "subcategory": [
+          "컨템포러리",
+          "캐주얼·스트리트",
+          "명품",
+          "스포츠·아웃도어",
+          "골프",
+          "이너웨어"
+        ]
+      }
+    },
+    "출구": {
+      "rules": { "subcategory": ["교통"] },
+      "extra_store_ids": {
+        "PO-IwrFRbR4j4030": "지하철 5/9호선 여의도역",
+        "PO-QH5bALbbs2639": "지하철 5/9호선 여의도역"
+      }
     }
   }
 }

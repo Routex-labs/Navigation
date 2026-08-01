@@ -203,8 +203,17 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 복귀시킨다. 각 축은 현재 한 값을 선택하게 하므로 `(facet, value)`로 둔다.
   final List<(String facet, String value)> _facetSelectionOrder = [];
 
+  /// 직전 요청이 "전체 보기"였는가. 선택(facet) 없이 질문만 건너뛴 상태를
+  /// 가리키므로 `_selectedFacets`로는 표현되지 않는다. 이 상태에서만 "다시 선택"이
+  /// 질문으로 돌아가는 유일한 길이라, 헤더 버튼 노출 조건에 필요하다.
+  bool _showingAll = false;
+
   /// 늦게 도착한 응답이 최신 결과를 덮어쓰지 않게 하는 순번.
   int _requestId = 0;
+
+  /// 결과 목록의 스크롤. Scrollbar와 스크롤뷰가 같은 컨트롤러를 봐야 막대가
+  /// 실제 위치를 따라간다.
+  final _resultScrollController = ScrollController();
 
   @override
   void initState() {
@@ -229,6 +238,7 @@ class _SearchPanelState extends State<SearchPanel> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _resultScrollController.dispose();
     super.dispose();
   }
 
@@ -262,6 +272,7 @@ class _SearchPanelState extends State<SearchPanel> {
         _discoveryOptions = const [];
         _selectedFacets = const {};
         _facetSelectionOrder.clear();
+        _showingAll = false;
         _phase = _SearchPhase.idle;
       });
       return;
@@ -273,6 +284,7 @@ class _SearchPanelState extends State<SearchPanel> {
       // 문장에 이전 facet이 섞여 stateless 계약의 의미가 깨진다.
       _selectedFacets = const {};
       _facetSelectionOrder.clear();
+      _showingAll = false;
       _phase = _SearchPhase.typingLightSearch;
     });
 
@@ -436,6 +448,7 @@ class _SearchPanelState extends State<SearchPanel> {
         _discoveryMode = discovery.mode;
         _discoveryQuestion = discovery.question;
         _discoveryOptions = discovery.options;
+        _showingAll = showAll;
         _phase = _phaseForDiscovery(discovery);
       });
     } on Object {
@@ -504,6 +517,7 @@ class _SearchPanelState extends State<SearchPanel> {
       _discoveryOptions = const [];
       _selectedFacets = const {};
       _facetSelectionOrder.clear();
+      _showingAll = false;
       _phase = _SearchPhase.error;
     });
   }
@@ -624,17 +638,51 @@ class _SearchPanelState extends State<SearchPanel> {
       rows.add(_storeTile(_results[index], match));
     }
 
-    return ListView.separated(
-      shrinkWrap: true,
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      itemCount: rows.length,
-      separatorBuilder: (_, _) => const Divider(height: 1, indent: 16),
-      itemBuilder: (_, index) => rows[index],
+    // 왜 ListView(shrinkWrap)가 아니라 SingleChildScrollView + Column인가.
+    //
+    // 이 패널은 결과가 적으면 내용만큼만 높고, 많으면 상위가 준 maxHeight 안에서
+    // 스크롤돼야 한다. `ListView(shrinkWrap: true)`가 그 두 가지를 다 해줄 것 같지만,
+    // 느슨한 제약(maxHeight만 있고 tight가 아닌) 안에서는 스크롤 범위를 실제 내용보다
+    // 짧게 잡아 **목록의 마지막 항목에 영영 도달하지 못했다.** 30건을 받아 끝까지
+    // 내려도 29번째에서 멈췄다(스크롤 위치는 최대값인데 마지막 타일이 안 나온다).
+    //
+    // Column은 자식을 전부 즉시 만들지만, 이 목록의 상한은 서버 쪽
+    // MAX_SHOW_ALL_MATCHES(30)이라 지연 생성으로 아낄 것이 없다. 상한이 크게 늘면
+    // 그때 다시 볼 문제다.
+    final children = <Widget>[];
+    for (var index = 0; index < rows.length; index++) {
+      if (index > 0) {
+        children.add(const Divider(height: 1, indent: 16));
+      }
+      children.add(rows[index]);
+    }
+
+    return Scrollbar(
+      controller: _resultScrollController,
+      child: SingleChildScrollView(
+        controller: _resultScrollController,
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(mainAxisSize: MainAxisSize.min, children: children),
+      ),
     );
   }
 
   Widget _discoveryHeader() {
     final isClarify = _discoveryMode == DiscoveryMode.clarify;
+    final hasSelection = _selectedFacets.isNotEmpty;
+
+    // 두 버튼은 clarify 흐름의 조작 수단이라, 되물음이 없는 화면에 두면 누를 대상이
+    // 없는 버튼이 된다. 예전에는 이 Wrap이 조건 없이 렌더돼 direct("커피" 1건)·
+    // no_match에서도 떴다. mode가 화면 분기의 유일한 근거라는 계약(DiscoveryResponse
+    // 주석)을 헤더에서도 지킨다.
+    //
+    // "전체 보기"는 아직 안 본 후보가 남아 있을 때만 뜻이 있다 — 질문이 서 있거나
+    // (clarify) 선택으로 좁혀진 상태다. 이미 전체를 보고 있으면 다시 눌러야 그대로다.
+    final canShowAll = (isClarify || hasSelection) && !_showingAll;
+    // "다시 선택"은 되돌릴 답이 있을 때다. 선택 없이 전체 보기로 질문을 건너뛴
+    // 상태도 포함한다 — 그 화면에서는 이 버튼이 질문으로 돌아가는 유일한 길이다.
+    final canChooseAgain = hasSelection || _showingAll;
+
     final selectedChips = <Widget>[];
     for (final entry in _selectedFacets.entries) {
       for (final value in entry.value) {
@@ -683,22 +731,26 @@ class _SearchPanelState extends State<SearchPanel> {
             const SizedBox(height: 10),
             Wrap(spacing: 8, runSpacing: 6, children: selectedChips),
           ],
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 4,
-            children: [
-              TextButton(
-                key: const Key('show-all'),
-                onPressed: () => _requestDiscovery(showAll: true),
-                child: const Text('전체 보기'),
-              ),
-              TextButton(
-                key: const Key('choose-again'),
-                onPressed: _chooseAgain,
-                child: const Text('다시 선택'),
-              ),
-            ],
-          ),
+          if (canShowAll || canChooseAgain) ...[
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 4,
+              children: [
+                if (canShowAll)
+                  TextButton(
+                    key: const Key('show-all'),
+                    onPressed: () => _requestDiscovery(showAll: true),
+                    child: const Text('전체 보기'),
+                  ),
+                if (canChooseAgain)
+                  TextButton(
+                    key: const Key('choose-again'),
+                    onPressed: _chooseAgain,
+                    child: const Text('다시 선택'),
+                  ),
+              ],
+            ),
+          ],
         ],
       ),
     );

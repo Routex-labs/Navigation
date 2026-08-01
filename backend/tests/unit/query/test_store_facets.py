@@ -294,6 +294,57 @@ def test_excluded_store_ids는_규칙_결과에서_빠진다():
     assert store_facets.resolve_intent_store_ids("신발", INTENT_STORES, intents) == {"PO-슈즈1"}
 
 
+# ── resolve_intents — 같은 규칙을 매장 관점에서 본다 ─────────────────────────
+# 시드가 매장을 한 건씩 조립하므로 매장별 함수가 필요하다. 집합 함수와 결과가
+# 갈리면 "시드가 붙인 태그"와 "검색이 세는 후보"가 어긋나므로 함께 검증한다.
+
+
+def test_resolve_intents는_규칙과_extra를_모두_돌려준다():
+    by_id = {store["store_id"]: store for store in INTENT_STORES}
+
+    assert store_facets.resolve_intents(by_id["PO-슈즈1"], INTENTS) == ["신발"]
+    assert store_facets.resolve_intents(by_id["PO-나이키"], INTENTS) == ["신발"]
+    assert store_facets.resolve_intents(by_id["PO-식당1"], INTENTS) == ["식사"]
+    assert store_facets.resolve_intents(by_id["PO-정육"], INTENTS) == []
+
+
+def test_resolve_intents는_excluded를_뺀다():
+    intents = {
+        "신발": {
+            "rules": {"subcategory": ["슈즈"]},
+            # 규칙으로 들어왔든 손으로 넣었든 결국 제외 — 두 경우를 모두 확인한다.
+            "excluded_store_ids": {"PO-슈즈2": "크록스", "PO-나이키": "나이키 라이즈"},
+            "extra_store_ids": {"PO-나이키": "나이키 라이즈"},
+        }
+    }
+    by_id = {store["store_id"]: store for store in INTENT_STORES}
+
+    assert store_facets.resolve_intents(by_id["PO-슈즈1"], intents) == ["신발"]
+    assert store_facets.resolve_intents(by_id["PO-슈즈2"], intents) == []
+    assert store_facets.resolve_intents(by_id["PO-나이키"], intents) == []
+
+
+# 순서가 흔들리면 같은 매장이 실행마다 다른 임베딩 문서 텍스트를 만든다
+# (query_semantic._document_text가 이 값을 그대로 쓴다).
+def test_resolve_intents는_정의_파일_순서를_지킨다():
+    store = {"store_id": "PO-슈즈1", "category": "패션", "subcategory": "슈즈"}
+    forward = {"신발": {"rules": {"subcategory": ["슈즈"]}}, "선물": {"rules": {"subcategory": ["슈즈"]}}}
+    backward = {"선물": {"rules": {"subcategory": ["슈즈"]}}, "신발": {"rules": {"subcategory": ["슈즈"]}}}
+
+    assert store_facets.resolve_intents(store, forward) == ["신발", "선물"]
+    assert store_facets.resolve_intents(store, backward) == ["선물", "신발"]
+
+
+# 두 함수가 같은 규칙을 본다는 것을 실제 데이터 모양으로 못 박는다.
+def test_resolve_intents와_집합_함수의_결과가_일치한다():
+    for intent in INTENTS:
+        by_set = store_facets.resolve_intent_store_ids(intent, INTENT_STORES, INTENTS)
+        by_store = {
+            store["store_id"] for store in INTENT_STORES if intent in store_facets.resolve_intents(store, INTENTS)
+        }
+        assert by_set == by_store, intent
+
+
 def test_모르는_intent는_빈_집합이다():
     assert store_facets.resolve_intent_store_ids("카페", INTENT_STORES, INTENTS) == set()
 
@@ -404,17 +455,24 @@ def test_후보가_아닌_매장을_excluded에_적으면_잡는다():
 
 
 # 실데이터 대조(고아 id·소분류 일치)는 시드 경로에서 validate_intents가 하고, 여기서는
-# 파일이 파싱되고 Phase 1 범위(intent 2개 + P3 판정 예 145건)가 그대로인지만 지킨다.
-def test_배포된_intents_파일이_Phase_1_범위를_유지한다():
+# 파일이 파싱되고 사람이 검수한 범위(P3 판정 예 145건)가 그대로인지만 지킨다.
+def test_배포된_intents_파일이_검수_범위를_유지한다():
     from pathlib import Path
 
     # 이 파일 위치(tests/unit/query) 기준 backend 루트는 3단계 위다.
     path = Path(__file__).resolve().parents[3] / "resources" / "store_search_facets"
     intents = store_facets.load_intents(path)
 
-    assert set(intents) == {"신발", "식사"}
+    assert set(intents) == {"신발", "식사", "카페", "화장품", "향수", "의류", "출구"}
     assert intents["신발"]["rules"] == {"subcategory": ["슈즈"]}
     assert intents["식사"]["rules"] == {"subcategory": ["레스토랑"]}
     # P3 검수 결과 = 예 145건. 규칙이 잡는 슈즈 8건은 extra에 없어야 한다.
     assert len(intents["신발"]["extra_store_ids"]) == 145
     assert "extra_store_ids" not in intents["식사"]
+
+    # 확장분(W9)은 소분류에서 결정적으로 유도되는 규칙만 쓴다. 매장별 판단이 필요한
+    # extra 목록을 사람 검수 없이 늘리지 않는다는 게 이 단언의 요지다 — 유일한 예외는
+    # 소분류가 facility로 잘못 붙은 지하철 출입구 2건이다.
+    for intent in ("카페", "화장품", "향수", "의류"):
+        assert "extra_store_ids" not in intents[intent], intent
+    assert len(intents["출구"]["extra_store_ids"]) == 2

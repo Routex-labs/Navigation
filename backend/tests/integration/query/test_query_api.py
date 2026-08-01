@@ -38,6 +38,47 @@ def test_매칭_없으면_no_match를_반환한다(api_client):
     assert body["match"] is None
 
 
+# 한 곳을 지목할 수 없는 질의는 임의의 1건으로 확정하지 않는다.
+#
+# 회귀 대상: 실데이터에서 "명품"(서로 다른 이름 42건)·"레스토랑"(57건)이 몽클레르·
+# 데이릿 한 건으로 고정됐다. 클라이언트는 /query/destination이 성공하면 /query/ai를
+# 부르지 않으므로(search_panel.dart), 카테고리성 질의는 목록을 볼 기회가 없었다.
+# 여기서는 픽스처의 가게A·가게B가 같은 이유로 걸린다(이름 부분 일치 2건).
+def test_여러_이름이_걸리면_임의로_확정하지_않고_ambiguous다(api_client):
+    payload = {"text": "가게", "building_id": BUILDING_ID}
+
+    response = api_client.post("/query/destination", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ambiguous"
+    # match=null이라야 클라이언트가 빈 결과로 파싱해 /query/ai로 이어 간다.
+    assert body["match"] is None
+
+
+# 위 ambiguous가 실제로 목록으로 이어지는지 — 클라이언트가 타는 경로 그대로.
+def test_ambiguous로_비운_질의는_탐색에서_여러_후보가_된다(api_client):
+    payload = {"text": "가게", "building_id": BUILDING_ID}
+
+    direct = api_client.post("/query/destination", json=payload).json()
+    discovery = api_client.post("/query/ai", json=payload).json()
+
+    assert direct["match"] is None
+    assert discovery["mode"] == "results"
+    assert {match["name"] for match in discovery["matches"]} == {"가게A", "가게B"}
+
+
+# 이름이 하나뿐이면 예전처럼 바로 1건이다 — 같은 이름이 여러 층에 있어도 한 대상이다.
+def test_이름이_하나면_여러_층에_있어도_direct_1건이다(api_client):
+    payload = {"text": "가게A", "building_id": BUILDING_ID}
+
+    response = api_client.post("/query/destination", json=payload)
+
+    body = response.json()
+    assert body["status"] in ("ok", "ok_no_route")
+    assert body["match"]["name"] == "가게A"
+
+
 # 없는 건물은 404.
 def test_없는_건물은_404를_반환한다(api_client):
     payload = {"text": "가게A", "building_id": "no-such-building"}

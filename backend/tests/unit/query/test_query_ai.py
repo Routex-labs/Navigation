@@ -13,6 +13,7 @@ from app.repositories.query_search import _load_stores
 from tests.conftest import BUILDING_ID, FLOOR_ID
 
 MAX_MATCHES = query_search.MAX_DISCOVERY_MATCHES
+MAX_SHOW_ALL = query_search.MAX_RESULT_MATCHES
 CLARIFY_PREVIEW = query_search.CLARIFY_PREVIEW_MATCHES
 
 
@@ -390,7 +391,25 @@ def test_discover_전체_보기는_빈_선택에서도_clarify를_건너뛴다(d
     assert result["mode"] == "results"
     assert result["question"] is None
     assert result["options"] == []
-    assert len(result["matches"]) == MAX_MATCHES
+    # 후보 7건(패션 6 + 기본 매장 1)이 전부 온다. 예전에는 여기가 추천 상한(5)에
+    # 걸려 "전체 보기"를 눌러도 5건뿐이었다 — 사용자가 더 있는 줄 아는 자리라
+    # 상한을 분리했다. 아래 상한 테스트가 무제한이 아님을 함께 고정한다.
+    assert len(result["matches"]) == 7
+    assert len(result["matches"]) > MAX_MATCHES
+
+
+# 전체 보기도 무제한은 아니다. 주차 787건 같은 축이 걸리면 응답이 통째로 커진다.
+def test_discover_전체_보기는_show_all_상한까지만_준다(db_session, monkeypatch):
+    _no_semantic(monkeypatch)
+    # 상한을 넘기도록 tier 1("패션") 후보를 상한 + 5건 만든다.
+    for index in range(MAX_SHOW_ALL + 5):
+        _add_store(db_session, f"bulk-{index}", f"패션샵{index}", subcategory="컨템포러리")
+    db_session.flush()
+
+    result = query_search.discover(db_session, BUILDING_ID, "패션", show_all=True)
+
+    assert result["mode"] == "results"
+    assert len(result["matches"]) == MAX_SHOW_ALL
 
 
 def test_discover_clarify_초기후보는_서로_다른_소분류로_퍼진다(db_session, monkeypatch):
@@ -435,7 +454,10 @@ def test_discover_구분력_있는_축이_없으면_clarify_대신_results다(db
     assert result["mode"] == "results"
     assert result["question"] is None
     assert result["options"] == []
-    assert len(result["matches"]) == MAX_MATCHES
+    # 되물음이 없으면 이 목록이 곧 최종 답이라 추천 상한(5)으로 자르지 않는다.
+    # 자르면 6번째 매장으로 갈 방법이 화면에 남지 않는다("전체 보기"는 clarify 전용).
+    assert len(result["matches"]) == 6
+    assert len(result["matches"]) <= MAX_SHOW_ALL
 
 
 def test_discover_태그가_얇은_축은_질문으로_쓰지_않는다(db_session, monkeypatch):
