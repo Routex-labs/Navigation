@@ -211,6 +211,10 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 늦게 도착한 응답이 최신 결과를 덮어쓰지 않게 하는 순번.
   int _requestId = 0;
 
+  /// 결과 목록의 스크롤. Scrollbar와 스크롤뷰가 같은 컨트롤러를 봐야 막대가
+  /// 실제 위치를 따라간다.
+  final _resultScrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
@@ -234,6 +238,7 @@ class _SearchPanelState extends State<SearchPanel> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _resultScrollController.dispose();
     super.dispose();
   }
 
@@ -633,12 +638,32 @@ class _SearchPanelState extends State<SearchPanel> {
       rows.add(_storeTile(_results[index], match));
     }
 
-    return ListView.separated(
-      shrinkWrap: true,
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      itemCount: rows.length,
-      separatorBuilder: (_, _) => const Divider(height: 1, indent: 16),
-      itemBuilder: (_, index) => rows[index],
+    // 왜 ListView(shrinkWrap)가 아니라 SingleChildScrollView + Column인가.
+    //
+    // 이 패널은 결과가 적으면 내용만큼만 높고, 많으면 상위가 준 maxHeight 안에서
+    // 스크롤돼야 한다. `ListView(shrinkWrap: true)`가 그 두 가지를 다 해줄 것 같지만,
+    // 느슨한 제약(maxHeight만 있고 tight가 아닌) 안에서는 스크롤 범위를 실제 내용보다
+    // 짧게 잡아 **목록의 마지막 항목에 영영 도달하지 못했다.** 30건을 받아 끝까지
+    // 내려도 29번째에서 멈췄다(스크롤 위치는 최대값인데 마지막 타일이 안 나온다).
+    //
+    // Column은 자식을 전부 즉시 만들지만, 이 목록의 상한은 서버 쪽
+    // MAX_SHOW_ALL_MATCHES(30)이라 지연 생성으로 아낄 것이 없다. 상한이 크게 늘면
+    // 그때 다시 볼 문제다.
+    final children = <Widget>[];
+    for (var index = 0; index < rows.length; index++) {
+      if (index > 0) {
+        children.add(const Divider(height: 1, indent: 16));
+      }
+      children.add(rows[index]);
+    }
+
+    return Scrollbar(
+      controller: _resultScrollController,
+      child: SingleChildScrollView(
+        controller: _resultScrollController,
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(mainAxisSize: MainAxisSize.min, children: children),
+      ),
     );
   }
 

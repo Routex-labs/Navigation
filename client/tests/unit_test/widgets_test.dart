@@ -658,6 +658,78 @@ void main() {
       expect(find.byKey(const Key('choose-again')), findsOneWidget);
     });
 
+    testWidgets('결과가 패널 높이를 넘으면 스크롤로 끝까지 볼 수 있다', (
+      WidgetTester tester,
+    ) async {
+      // 패널은 상위(map_shell)가 maxHeight로 묶는다. 그 높이를 넘는 결과가
+      // 왔을 때 목록이 스크롤되지 않으면 뒤쪽 후보는 영영 못 본다.
+      final matches = [
+        for (var i = 0; i < 30; i++)
+          DiscoveryMatch(
+            storeId: 'ST-$i',
+            name: '매장$i',
+            category: '패션',
+            subcategory: '컨템포러리',
+            floorId: 'FL-1',
+            floorName: '1F',
+            entranceNodeId: 'FL-1:ND-1',
+            point: const LatLng(37.52, 126.92),
+            matchedFacets: const {},
+            reason: null,
+          ),
+      ];
+      destinationRepository = _ScriptedDiscoveryRepository([
+        DiscoveryResult(
+          mode: DiscoveryMode.results,
+          query: '의류',
+          matches: matches,
+        ),
+      ]);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ListenableBuilder(
+              listenable: Listenable.merge([query, submitTick]),
+              builder: (_, _) => ConstrainedBox(
+                // 상위가 거는 maxHeight를 그대로 흉내낸다.
+                constraints: const BoxConstraints(maxHeight: 400),
+                child: SearchPanel(
+                  buildingId: 'thehyundai-seoul',
+                  query: query.value,
+                  submitTick: submitTick.value,
+                  onStorePicked: (_) {},
+                  onBuildingPicked: (_) {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      query.value = '의류';
+      await tester.pump();
+      await settleSearch(tester);
+
+      // 존재 여부가 아니라 **뷰포트 안에 보이는지**로 본다. 목록을 한꺼번에
+      // 만들므로 마지막 항목도 트리에는 처음부터 있다.
+      expect(find.text('매장0'), findsOneWidget);
+      final viewport = tester.getRect(find.byType(SingleChildScrollView));
+      expect(
+        tester.getRect(find.text('매장29')).top,
+        greaterThan(viewport.bottom),
+        reason: '스크롤 전에는 마지막 항목이 패널 아래에 있어야 한다',
+      );
+
+      await tester.drag(find.text('매장0'), const Offset(0, -2000));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getRect(find.text('매장29')).bottom,
+        lessThanOrEqualTo(viewport.bottom),
+        reason: '끝까지 스크롤하면 마지막 항목이 보여야 한다',
+      );
+    });
+
     testWidgets('탐색 결과의 매장을 고르면 기존 길찾기 콜백으로 그대로 연결된다', (
       WidgetTester tester,
     ) async {
