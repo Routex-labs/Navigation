@@ -6,6 +6,8 @@ import '../theme/app_theme.dart';
 import 'sheet_grab_handle.dart';
 import 'sheet_header.dart';
 
+import 'map_overlay_guard.dart';
+
 /// 사용자가 저장해둔 매장 목록을 보여주는 바텀시트.
 ///
 /// 각 항목은 탭하면 [FavoritePlace]를 반환하며(호출자가 매장 정보 시트로
@@ -32,7 +34,9 @@ class FavoritesSheet extends StatefulWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => FavoritesSheet(onCloseAll: onCloseAll),
+      builder: (context) => MapOverlayGuard(
+        child: FavoritesSheet(onCloseAll: onCloseAll),
+      ),
     );
   }
 

@@ -10,6 +10,8 @@ import 'place_detail/place_detail_sections.dart';
 import 'sheet_grab_handle.dart';
 import 'sheet_header.dart';
 
+import 'map_overlay_guard.dart';
+
 /// 장소 상세 시트에서 호출자에게 돌려주는 다음 동작.
 ///
 /// 호출부의 출발·도착·카테고리 시트 chain 계약은 기존과 동일하게 유지한다.
@@ -64,16 +66,18 @@ class PlaceDetailSheet extends StatefulWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => PlaceDetailSheet(
-        title: title,
-        subtitle: subtitle,
-        buildingId: buildingId,
-        placeId: placeId,
-        favorite: favorite,
-        category: category,
-        subcategory: subcategory,
-        repository: repository,
-        onCloseAll: onCloseAll,
+      builder: (context) => MapOverlayGuard(
+        child: PlaceDetailSheet(
+          title: title,
+          subtitle: subtitle,
+          buildingId: buildingId,
+          placeId: placeId,
+          favorite: favorite,
+          category: category,
+          subcategory: subcategory,
+          repository: repository,
+          onCloseAll: onCloseAll,
+        ),
       ),
     );
   }
