@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 316" width="840" height="316" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif">
+  <rect width="840" height="316" fill="#ffffff"/>
+
+  <text x="24" y="28" font-size="13" font-weight="700" fill="#57606A">지도 팔레트 — 아웃라인은 이미 있다. 문제는 대비다</text>
+
+  <!-- 변경 전 -->
+  <g transform="translate(24 60)">
+    <text x="0" y="0" font-size="11.5" font-weight="700" fill="#CF222E">변경 전 — 통로와 매장의 명도 차 2% 미만</text>
+    <rect x="0" y="12" width="330" height="176" fill="#FFFFFF" stroke="#00000088"/>
+    <!-- 매장 폴리곤들 -->
+    <g fill="#F3F1EF" stroke="#D8D4D1">
+      <rect x="16" y="28" width="86" height="52"/>
+      <rect x="110" y="28" width="86" height="52"/>
+      <rect x="204" y="28" width="110" height="52"/>
+      <rect x="16" y="120" width="120" height="52"/>
+      <rect x="144" y="120" width="80" height="52"/>
+      <rect x="232" y="120" width="82" height="52"/>
+    </g>
+    <text x="59" y="58" font-size="9.5" fill="#333" text-anchor="middle">노스페이스</text>
+    <text x="153" y="58" font-size="9.5" fill="#333" text-anchor="middle">코이세이오</text>
+    <text x="259" y="58" font-size="9.5" fill="#333" text-anchor="middle">산산기어</text>
+    <text x="76" y="150" font-size="9.5" fill="#333" text-anchor="middle">하이츠 익스체인지</text>
+    <text x="184" y="150" font-size="9.5" fill="#333" text-anchor="middle">팝마트</text>
+    <text x="273" y="150" font-size="9.5" fill="#333" text-anchor="middle">론론</text>
+    <!-- 통로 라벨 -->
+    <text x="165" y="104" font-size="9.5" fill="#8C959F" text-anchor="middle">↑ 통로 #FFFFFF · 매장 #F3F1EF ↑</text>
+  </g>
+
+  <!-- 화살표 -->
+  <g transform="translate(384 146)">
+    <path d="M0 8 L34 8 M26 2 L34 8 L26 14" stroke="#8C959F" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- 변경 후 -->
+  <g transform="translate(436 60)">
+    <text x="0" y="0" font-size="11.5" font-weight="700" fill="#1A7F37">변경 후 — 명도 차이를 약 3배로</text>
+    <rect x="0" y="12" width="330" height="176" fill="#FFFFFF" stroke="#00000088"/>
+    <g fill="#EAE6E1" stroke="#CFC9C2">
+      <rect x="16" y="28" width="86" height="52"/>
+      <rect x="110" y="28" width="86" height="52"/>
+      <rect x="204" y="28" width="110" height="52"/>
+      <rect x="16" y="120" width="120" height="52"/>
+      <rect x="144" y="120" width="80" height="52"/>
+      <rect x="232" y="120" width="82" height="52"/>
+    </g>
+    <text x="59" y="58" font-size="9.5" fill="#333" text-anchor="middle">노스페이스</text>
+    <text x="153" y="58" font-size="9.5" fill="#333" text-anchor="middle">코이세이오</text>
+    <text x="259" y="58" font-size="9.5" fill="#333" text-anchor="middle">산산기어</text>
+    <text x="76" y="150" font-size="9.5" fill="#333" text-anchor="middle">하이츠 익스체인지</text>
+    <text x="184" y="150" font-size="9.5" fill="#333" text-anchor="middle">팝마트</text>
+    <text x="273" y="150" font-size="9.5" fill="#333" text-anchor="middle">론론</text>
+    <text x="165" y="104" font-size="9.5" fill="#1A7F37" text-anchor="middle">↑ 걸을 수 있는 곳이 읽힌다 ↑</text>
+  </g>
+
+  <!-- 색 스와치 -->
+  <g transform="translate(24 266)">
+    <rect x="0" y="-12" width="16" height="16" fill="#FFFFFF" stroke="#D0D7DE"/>
+    <text x="22" y="0" font-size="10.5" fill="#57606A">통로 #FFFFFF (유지)</text>
+
+    <rect x="160" y="-12" width="16" height="16" fill="#F3F1EF" stroke="#D0D7DE"/>
+    <text x="182" y="0" font-size="10.5" fill="#57606A">매장 #F3F1EF</text>
+    <text x="262" y="0" font-size="10.5" fill="#8C959F">→</text>
+    <rect x="278" y="-12" width="16" height="16" fill="#EAE6E1" stroke="#D0D7DE"/>
+    <text x="300" y="0" font-size="10.5" font-weight="700" fill="#1A7F37">#EAE6E1</text>
+
+    <rect x="400" y="-12" width="16" height="16" fill="#D8D4D1" stroke="#D0D7DE"/>
+    <text x="422" y="0" font-size="10.5" fill="#57606A">외곽선 #D8D4D1</text>
+    <text x="512" y="0" font-size="10.5" fill="#8C959F">→</text>
+    <rect x="528" y="-12" width="16" height="16" fill="#CFC9C2" stroke="#D0D7DE"/>
+    <text x="550" y="0" font-size="10.5" font-weight="700" fill="#1A7F37">#CFC9C2</text>
+  </g>
+
+  <text x="24" y="300" font-size="11" fill="#57606A">네이버·카카오도 &quot;걸을 수 있는 곳은 밝게, 막힌 곳은 어둡게&quot; 규칙을 쓴다. 방향은 이미 맞고 세기만 부족하다.</text>
+</svg>

@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 260" width="840" height="260" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif">
+  <rect width="840" height="260" fill="#ffffff"/>
+
+  <!-- ── 변경 전 ── -->
+  <text x="32" y="34" font-size="13" font-weight="700" fill="#57606A">변경 전</text>
+
+  <g transform="translate(32 52)">
+    <rect x="0" y="0" width="360" height="132" rx="14" fill="#fff" stroke="#E1E4E8"/>
+    <!-- 층 배지 -->
+    <rect x="20" y="26" width="44" height="44" rx="13" fill="#EEF4FE"/>
+    <text x="42" y="54" font-size="15" font-weight="800" fill="#4A87F1" text-anchor="middle">B2</text>
+    <!-- 텍스트 -->
+    <text x="78" y="46" font-size="19" font-weight="800" fill="#242424">스타벅스 리저브</text>
+    <text x="78" y="68" font-size="12.5" fill="#757575">카페·베이커리</text>
+    <!-- 지적 -->
+    <path d="M42 82 L42 100" stroke="#CF222E" stroke-width="1.5" stroke-dasharray="3 3"/>
+    <text x="20" y="116" font-size="11.5" fill="#CF222E">44px 사각형 = 로고 자리 → 브랜드 마크로 오독</text>
+  </g>
+
+  <!-- 화살표 -->
+  <g transform="translate(408 110)">
+    <path d="M0 8 L34 8 M26 2 L34 8 L26 14" stroke="#8C959F" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- ── 변경 후 ── -->
+  <text x="464" y="34" font-size="13" font-weight="700" fill="#1A7F37">변경 후</text>
+
+  <g transform="translate(464 52)">
+    <rect x="0" y="0" width="344" height="132" rx="14" fill="#fff" stroke="#E1E4E8"/>
+    <!-- 카테고리 아이콘 -->
+    <rect x="20" y="26" width="44" height="44" rx="13" fill="#F57C00" fill-opacity="0.12"/>
+    <g transform="translate(42 48)" stroke="#F57C00" stroke-width="1.9" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M-8 -7 h12 v7 a6 6 0 0 1 -12 0 z"/>
+      <path d="M4 -5 h3 a3 3 0 0 1 0 6 h-3"/>
+      <path d="M-9 6 h14"/>
+    </g>
+    <!-- 텍스트 -->
+    <text x="78" y="46" font-size="19" font-weight="800" fill="#242424">스타벅스 리저브</text>
+    <text x="78" y="68" font-size="12.5">
+      <tspan font-weight="700" fill="#4A87F1">B2</tspan><tspan fill="#D6E4FC"> · </tspan><tspan fill="#757575">카페·베이커리</tspan>
+    </text>
+    <text x="20" y="100" font-size="11.5" fill="#1A7F37">목록·칩과 같은 카테고리 아이콘 · 색</text>
+    <text x="20" y="116" font-size="11.5" fill="#1A7F37">층은 업종과 한 문장 (간격을 폰트가 정함)</text>
+  </g>
+
+  <text x="32" y="216" font-size="11.5" fill="#57606A">· 컬러 앵커를 하나로 정리 — 아이콘이 색을, 층이 굵기를, 업종이 회색을 맡는다.</text>
+  <text x="32" y="236" font-size="11.5" fill="#57606A">· 층·업종을 위젯 3개로 나열하면 사이 간격을 padding 상수로 찍어야 해서 층만 동떨어져 보였다.</text>
+</svg>

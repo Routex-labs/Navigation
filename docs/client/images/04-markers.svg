@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 330" width="840" height="330" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif">
+  <rect width="840" height="330" fill="#ffffff"/>
+
+  <!-- ===== 4-a 도착 핀 ===== -->
+  <text x="24" y="28" font-size="13" font-weight="700" fill="#57606A">4-a. 도착 핀 — 두 화면이 다르다</text>
+
+  <g transform="translate(24 44)">
+    <rect x="0" y="0" width="360" height="150" rx="12" fill="#F6F8FA" stroke="#E1E4E8"/>
+
+    <!-- 야외 (현재) -->
+    <text x="60" y="24" font-size="10.5" font-weight="700" fill="#CF222E" text-anchor="middle">야외 오버레이 (현재)</text>
+    <g transform="translate(60 66)">
+      <circle cx="0" cy="0" r="20" fill="#E53935"/>
+      <path d="M0 34 L7.6 15 L-7.6 15 Z" fill="#E53935"/>
+    </g>
+    <text x="60" y="124" font-size="10" fill="#CF222E" text-anchor="middle">단색 — 정보 없음</text>
+
+    <!-- 실내 (현재) -->
+    <text x="180" y="24" font-size="10.5" font-weight="700" fill="#57606A" text-anchor="middle">실내 화면 (현재)</text>
+    <g transform="translate(180 66)">
+      <circle cx="0" cy="0" r="20" fill="#E53935"/>
+      <path d="M0 34 L7.6 15 L-7.6 15 Z" fill="#E53935"/>
+      <circle cx="0" cy="0" r="14" fill="#fff"/>
+      <text x="0" y="4" font-size="9.5" font-weight="700" fill="#1E2033" text-anchor="middle">도착</text>
+    </g>
+    <text x="180" y="124" font-size="10" fill="#57606A" text-anchor="middle">흰 원 + textField</text>
+
+    <!-- 화살표 -->
+    <path d="M240 66 L268 66 M261 60 L268 66 L261 72" stroke="#8C959F" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- 통일 -->
+    <text x="310" y="24" font-size="10.5" font-weight="700" fill="#1A7F37" text-anchor="middle">양쪽 통일</text>
+    <g transform="translate(310 66)">
+      <circle cx="0" cy="0" r="20" fill="#E53935"/>
+      <path d="M0 34 L7.6 15 L-7.6 15 Z" fill="#E53935"/>
+      <circle cx="0" cy="0" r="14" fill="#fff"/>
+      <text x="0" y="4" font-size="9.5" font-weight="700" fill="#1E2033" text-anchor="middle">도착</text>
+    </g>
+    <text x="310" y="124" font-size="10" fill="#1A7F37" text-anchor="middle">실내 구현 이식</text>
+  </g>
+
+  <text x="24" y="216" font-size="11" fill="#57606A">두부(tofu) 현상은 <tspan font-weight="700">캔버스에 굽는 쪽</tspan>의 문제이고 textField는 검증된 해결책이다.</text>
+  <text x="24" y="234" font-size="11" fill="#57606A">흰 원은 글리프와 무관하므로 캔버스로 그리고, 텍스트만 textField로 얹는다.</text>
+
+  <!-- ===== 4-c 시설 라벨 ===== -->
+  <text x="440" y="28" font-size="13" font-weight="700" fill="#57606A">4-c. 시설물 텍스트 라벨 제거</text>
+
+  <g transform="translate(440 44)">
+    <rect x="0" y="0" width="376" height="150" rx="12" fill="#F6F8FA" stroke="#E1E4E8"/>
+
+    <!-- 현재 -->
+    <text x="12" y="22" font-size="10.5" font-weight="700" fill="#CF222E">현재 — 에스컬레이터 152 · 엘리베이터 68</text>
+    <g transform="translate(14 32)">
+      <g>
+        <circle cx="12" cy="12" r="11" fill="#7EA96F"/>
+        <path d="M7 15 l4 -5 h4" stroke="#fff" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <text x="30" y="16" font-size="10" fill="#4F5451">에스컬레이터</text>
+      </g>
+      <g transform="translate(0 26)">
+        <circle cx="12" cy="12" r="11" fill="#7EA96F"/>
+        <path d="M7 15 l4 -5 h4" stroke="#fff" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <text x="30" y="16" font-size="10" fill="#4F5451">에스컬레이터</text>
+      </g>
+      <g transform="translate(0 52)">
+        <circle cx="12" cy="12" r="11" fill="#7EA96F"/>
+        <path d="M7 15 l4 -5 h4" stroke="#fff" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <text x="30" y="16" font-size="10" fill="#4F5451">에스컬레이터</text>
+      </g>
+      <g transform="translate(0 78)">
+        <circle cx="12" cy="12" r="11" fill="#7EA96F"/>
+        <path d="M7 15 l4 -5 h4" stroke="#fff" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <text x="30" y="16" font-size="10" fill="#4F5451">에스컬레이터</text>
+      </g>
+    </g>
+
+    <path d="M186 76 L214 76 M207 70 L214 76 L207 82" stroke="#8C959F" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- 변경 후 -->
+    <text x="238" y="22" font-size="10.5" font-weight="700" fill="#1A7F37">아이콘만</text>
+    <g transform="translate(248 32)">
+      <g><circle cx="12" cy="12" r="11" fill="#7EA96F"/><path d="M7 15 l4 -5 h4" stroke="#fff" stroke-width="1.8" fill="none" stroke-linecap="round"/></g>
+      <g transform="translate(0 26)"><circle cx="12" cy="12" r="11" fill="#7EA96F"/><path d="M7 15 l4 -5 h4" stroke="#fff" stroke-width="1.8" fill="none" stroke-linecap="round"/></g>
+      <g transform="translate(0 52)"><circle cx="12" cy="12" r="11" fill="#7EA96F"/><path d="M7 15 l4 -5 h4" stroke="#fff" stroke-width="1.8" fill="none" stroke-linecap="round"/></g>
+      <g transform="translate(0 78)"><circle cx="12" cy="12" r="11" fill="#7EA96F"/><path d="M7 15 l4 -5 h4" stroke="#fff" stroke-width="1.8" fill="none" stroke-linecap="round"/></g>
+    </g>
+    <text x="292" y="50" font-size="10" fill="#1A7F37">아이콘이 이미</text>
+    <text x="292" y="66" font-size="10" fill="#1A7F37">무슨 시설인지</text>
+    <text x="292" y="82" font-size="10" fill="#1A7F37">말한다</text>
+  </g>
+
+  <text x="440" y="216" font-size="11" fill="#57606A">도면이 &quot;에스컬레이터&quot;로 도배되어 정작 읽어야 할 매장명이 묻힌다.</text>
+  <text x="440" y="234" font-size="11" fill="#57606A">구글·네이버도 에스컬레이터에 텍스트를 붙이지 않는다.</text>
+
+  <!-- ===== 4-b 크기 ===== -->
+  <g transform="translate(24 258)">
+    <rect x="0" y="0" width="792" height="52" rx="10" fill="#FFF8E5" stroke="#D4A72C" stroke-opacity="0.5"/>
+    <text x="16" y="21" font-size="11.5" font-weight="700" fill="#7D4E00">4-b. 시설 아이콘 크기 — 과거 피드백을 뒤집는 변경</text>
+    <text x="16" y="40" font-size="11" fill="#7D4E00">z20 최대값 0.6 → 0.45로 낮춘다. 단, &quot;잘 안 보인다&quot;는 과거 피드백에 맞춰 키운 값이므로 <tspan font-weight="700">z16 줌아웃 상태를 반드시 같이 확인</tspan>한다. 최소값 0.33은 유지.</text>
+  </g>
+</svg>
