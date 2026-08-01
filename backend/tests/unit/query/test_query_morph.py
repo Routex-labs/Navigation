@@ -230,9 +230,7 @@ def test_워밍이_매장명_등록과_첫_분석을_모두_돌린다(session_fa
     등록된_단어: list[list[str]] = []
     분석된_질의: list[str] = []
 
-    monkeypatch.setattr(
-        query_morph, "register_words", lambda words: 등록된_단어.append(list(words))
-    )
+    monkeypatch.setattr(query_morph, "register_words", lambda words: 등록된_단어.append(list(words)))
     monkeypatch.setattr(query_morph, "normalize", lambda text: 분석된_질의.append(text))
 
     query_morph._warm(session_factory)

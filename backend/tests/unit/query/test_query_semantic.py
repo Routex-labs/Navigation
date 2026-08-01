@@ -125,6 +125,7 @@ def test_문서_텍스트는_태그가_없으면_기존과_같다():
 
     assert query_semantic._document_text(store) == "가게A 편의시설"
 
+
 def test_워밍이_건물마다_인덱스를_미리_빌드한다(session_factory, monkeypatch):
     """모델만 올리는 게 아니라 인덱스까지 채워야 첫 질의가 빌드를 안 기다린다."""
     query_semantic.reset_indexes()

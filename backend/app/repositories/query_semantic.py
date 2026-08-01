@@ -233,9 +233,7 @@ def _warm(session_factory) -> None:
         building_ids = list(session.scalars(select(Building.id)))
         for building_id in building_ids:
             _get_index(session, building_id)
-        logger.info(
-            "임베딩 워밍 완료: 건물 %d개 중 인덱스 %d개 준비", len(building_ids), len(_indexes)
-        )
+        logger.info("임베딩 워밍 완료: 건물 %d개 중 인덱스 %d개 준비", len(building_ids), len(_indexes))
     except Exception as error:  # noqa: BLE001 - 워밍 실패는 lazy 빌드로 폴백
         logger.warning("임베딩 워밍 실패(첫 질의에서 다시 빌드한다): %s", error)
     finally:
