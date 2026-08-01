@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/widgets/place_detail/korean_line_break.dart';
 import 'package:navigation_client/widgets/place_detail/place_detail_rich_sections.dart';
 
 void main() {
@@ -82,8 +83,8 @@ void main() {
 
       expect(find.text('매장 정보'), findsOneWidget);
       expect(find.text('주소'), findsOneWidget);
-      expect(find.text('서울 영등포구 여의대로 108'), findsOneWidget);
-      expect(find.text('주차 지원 불가'), findsOneWidget);
+      expect(find.text(keepWordsWhole('서울 영등포구 여의대로 108')), findsOneWidget);
+      expect(find.text(keepWordsWhole('주차 지원 불가')), findsOneWidget);
     });
   });
 }

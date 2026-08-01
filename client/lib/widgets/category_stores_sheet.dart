@@ -8,6 +8,8 @@ import 'category_icon.dart';
 import 'sheet_grab_handle.dart';
 import 'sheet_header.dart';
 
+import 'map_overlay_guard.dart';
+
 /// 매장 정보 시트에서 카테고리 chip을 누르면 뜨는, 같은 대분류에 속하는
 /// 매장을 층별로 훑어볼 수 있는 목록 시트. 사용자가 항목을 탭하면 그 매장의
 /// [PoiSearchResult]로 pop해서 호출자가 다시 매장 정보 시트를 띄우게 한다.
@@ -51,11 +53,13 @@ class CategoryStoresSheet extends StatefulWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => CategoryStoresSheet(
-        buildingId: buildingId,
-        category: category,
-        onCloseAll: onCloseAll,
-        currentFloor: currentFloor,
+      builder: (context) => MapOverlayGuard(
+        child: CategoryStoresSheet(
+          buildingId: buildingId,
+          category: category,
+          onCloseAll: onCloseAll,
+          currentFloor: currentFloor,
+        ),
       ),
     );
   }

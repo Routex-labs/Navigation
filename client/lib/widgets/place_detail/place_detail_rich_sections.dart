@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import 'korean_line_break.dart';
 
 /// 매장 대표 사진의 로컬 asset 정보다. 네트워크 모델과 분리해 화면에 필요한
 /// 최소 표시 정보만 가진다.
@@ -28,8 +29,10 @@ class _PlaceHeroCarouselState extends State<PlaceHeroCarousel> {
   Widget build(BuildContext context) {
     if (widget.images.isEmpty) return const SizedBox.shrink();
 
+    // 본문과 같은 좌우 여백에 맞추고 모서리를 깎는다. 끝까지 채우면 사진이 시트
+    // 밖으로 이어지는 것처럼 보여서 다음 섹션과의 경계가 흐려진다.
     return SizedBox(
-      height: 220,
+      height: 210,
       child: Stack(
         children: [
           PageView.builder(
@@ -37,20 +40,26 @@ class _PlaceHeroCarouselState extends State<PlaceHeroCarousel> {
             onPageChanged: (index) => setState(() => _activeIndex = index),
             itemBuilder: (context, index) {
               final image = widget.images[index];
-              return ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Image.asset(
-                  image.assetPath,
-                  fit: BoxFit.cover,
-                  semanticLabel: image.semanticLabel,
-                  width: double.infinity,
+              // PageView는 시트 폭 전체를 쓰고 여백은 페이지 안쪽에 준다. 그래야
+              // 넘길 때 두 장 사이가 좌우 여백만큼 벌어진다.
+              return Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: placeSectionGutter),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.asset(
+                    image.assetPath,
+                    fit: BoxFit.cover,
+                    semanticLabel: image.semanticLabel,
+                    width: double.infinity,
+                  ),
                 ),
               );
             },
           ),
           if (widget.images.length > 1)
             Positioned(
-              right: 12,
+              right: placeSectionGutter + 12,
               bottom: 12,
               child: DecoratedBox(
                 decoration: BoxDecoration(
@@ -105,12 +114,18 @@ class PlaceMenuSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('메뉴', style: _sectionTitleStyle),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: placeSectionGutter),
+          child: PlaceSectionTitle('메뉴'),
+        ),
         const SizedBox(height: 10),
         SizedBox(
           height: 230,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
+            // 가로 리스트는 본문 거터를 스스로 갖는다. 그래야 첫 카드가 시트
+            // 가장자리에서 시작하면서도 끝까지 스크롤된다.
+            padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
             itemCount: items.length,
             separatorBuilder: (_, _) => const SizedBox(width: 12),
             itemBuilder: (context, index) => _PlaceMenuCard(item: items[index]),
@@ -212,14 +227,17 @@ class PlaceBusinessInfoSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('매장 정보', style: _sectionTitleStyle),
-        const SizedBox(height: 4),
+        const PlaceSectionTitle('매장 정보'),
+        const SizedBox(height: 10),
+        // 여백은 항목 사이에만 둔다. 첫·마지막 행에 붙이면 섹션 아래위가 다른
+        // 섹션보다 더 벌어져서 구분선 간격이 제각각으로 보인다.
         for (var index = 0; index < items.length; index++) ...[
-          if (index > 0) const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: _BusinessInfoRow(item: items[index]),
-          ),
+          if (index > 0) ...[
+            const SizedBox(height: 10),
+            const Divider(height: 1),
+            const SizedBox(height: 10),
+          ],
+          _BusinessInfoRow(item: items[index]),
         ],
       ],
     );
@@ -231,26 +249,42 @@ class _BusinessInfoRow extends StatelessWidget {
 
   final PlaceBusinessInfo item;
 
+  // 라벨을 왼쪽 열로 두면 값이 쓸 수 있는 폭이 72px 줄어, 주소처럼 긴 값이 두
+  // 줄로 갈라진다. 라벨을 값 위 캡션으로 올려 값이 본문 폭을 그대로 쓰게 한다.
   @override
-  Widget build(BuildContext context) => Row(
+  Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      SizedBox(
-        width: 72,
-        child: Text(item.label, style: const TextStyle(fontSize: 13, color: AppColors.muted)),
+      Text(
+        item.label,
+        style: const TextStyle(fontSize: 12, color: AppColors.muted),
       ),
-      Expanded(
-        child: Text(
-          item.value,
-          style: const TextStyle(fontSize: 13, height: 1.4, color: AppColors.text),
-        ),
+      const SizedBox(height: 3),
+      Text(
+        keepWordsWhole(item.value),
+        style: const TextStyle(fontSize: 13.5, height: 1.4, color: AppColors.text),
       ),
     ],
   );
 }
 
-const _sectionTitleStyle = TextStyle(
-  fontSize: 17,
-  fontWeight: FontWeight.w800,
-  color: AppColors.text,
-);
+/// 상세 본문의 좌우 여백. 사진처럼 끝까지 채우는 섹션만 이 값을 쓰지 않는다.
+const placeSectionGutter = 20.0;
+
+/// 섹션 제목. 카드 테두리를 걷어낸 뒤로는 이 제목과 여백이 섹션 경계를 만드는
+/// 유일한 장치라, 모든 섹션이 같은 굵기·크기를 쓰게 한곳에 둔다.
+class PlaceSectionTitle extends StatelessWidget {
+  const PlaceSectionTitle(this.text, {super.key});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    text,
+    style: const TextStyle(
+      fontSize: 17,
+      fontWeight: FontWeight.w800,
+      color: AppColors.text,
+    ),
+  );
+}

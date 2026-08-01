@@ -5,6 +5,28 @@ import 'package:navigation_client/domain/route_progress.dart';
 import 'package:navigation_client/models/floor_graph.dart';
 
 void main() {
+  test('역주행이면 다음 회전보다 먼저 되돌아가라는 안내를 만든다', () {
+    const progress = RouteProgress(
+      traveledM: 5,
+      remainingM: 15,
+      offsetM: 0,
+      onRouteEdge: true,
+      reacquired: false,
+      segmentIndex: 0,
+      headingErrorDeg: 180,
+      wrongWay: true,
+    );
+
+    final instruction = buildRouteGuidance(
+      localPoints: const [LocalPoint(0, 0), LocalPoint(20, 0)],
+      wgs84Points: const [LatLng(37, 127), LatLng(37, 127.001)],
+      progress: progress,
+    );
+
+    expect(instruction.action, RouteGuidanceAction.wrongWay);
+    expect(instruction.primaryText, contains('반대 방향'));
+  });
+
   const points = [LocalPoint(0, 0), LocalPoint(0, 10), LocalPoint(10, 10)];
   const wgs84 = [
     LatLng(37, 127),
@@ -117,5 +139,46 @@ void main() {
 
     expect(instruction.action, isNot(RouteGuidanceAction.arrived));
     expect(instruction.primaryText, '다음 층 이동 지점입니다');
+  });
+
+  test('최종 목적지는 5m 안에서 도착으로 안내한다', () {
+    const progress = RouteProgress(
+      traveledM: 15.5,
+      remainingM: 4.5,
+      offsetM: 0,
+      onRouteEdge: true,
+      reacquired: false,
+      segmentIndex: 0,
+    );
+
+    final instruction = buildRouteGuidance(
+      localPoints: const [LocalPoint(0, 0), LocalPoint(20, 0)],
+      wgs84Points: const [LatLng(37, 127), LatLng(37, 127.001)],
+      progress: progress,
+      allowArrival: true,
+    );
+
+    expect(instruction.action, RouteGuidanceAction.arrived);
+  });
+
+  test('다층 중간 지점은 5m 안이어도 도착으로 안내하지 않는다', () {
+    const progress = RouteProgress(
+      traveledM: 15.5,
+      remainingM: 4.5,
+      offsetM: 0,
+      onRouteEdge: true,
+      reacquired: false,
+      segmentIndex: 0,
+    );
+
+    final instruction = buildRouteGuidance(
+      localPoints: const [LocalPoint(0, 0), LocalPoint(20, 0)],
+      wgs84Points: const [LatLng(37, 127), LatLng(37, 127.001)],
+      progress: progress,
+      transferMode: 'escalator',
+      allowArrival: false,
+    );
+
+    expect(instruction.action, RouteGuidanceAction.escalator);
   });
 }

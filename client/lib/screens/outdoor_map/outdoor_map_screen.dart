@@ -1867,8 +1867,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncIndoorDestinationLayer();
     _notifyRouteVisibilityIfChanged();
     _fitCameraToIndoorRoute(route);
-    // 이 경로 한 건이 진단 세션 하나가 된다.
-    if (_pdrDebugRecorder != null) _endRouteRecordingSession();
+    // 이 경로 한 건이 진단 세션 하나가 된다. 이전 세션 데이터는 여기서
+    // 버려지므로 내보내기 안내는 띄우지 않는다 — 길안내가 끝난 게 아니라
+    // 목적지가 바뀐 것이고, 안내를 눌러도 꺼낼 게 없다.
+    if (_pdrDebugRecorder != null) {
+      _endRouteRecordingSession(announceExport: false);
+    }
     _beginRouteRecordingSession();
   }
 
@@ -1927,7 +1931,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (segment != null && segment.route.points.length >= 2) {
       _fitCameraToIndoorRoute(segment.route);
     }
-    if (_pdrDebugRecorder != null) _endRouteRecordingSession();
+    if (_pdrDebugRecorder != null) {
+      _endRouteRecordingSession(announceExport: false);
+    }
     _beginRouteRecordingSession();
   }
 
@@ -2010,12 +2016,22 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     );
   }
 
-  /// ETA 카드에 쓸 거리. 다층 경로면 전 세그먼트 합, 단일 층이면 그 세그먼트
-  /// 거리. 실내 화면과 같은 규칙.
-  double _indoorEtaDistanceMeters() {
+  /// ETA 카드에 쓸 거리와 비용. 다층 경로면 전 세그먼트 합, 단일 층이면 그 세그먼트
+  /// 값. 실내 화면과 같은 규칙이다.
+  ///
+  /// `distanceM`은 실제 수평 거리만("m 남음"), `costM`은 탑승·대기 시간까지 담은 보행
+  /// 등가값(소요 시간)이다. 한 값으로 겸하면 남은거리가 비용만큼 부풀어 보인다.
+  ({double distanceM, double costM}) _indoorEta() {
     final multi = _indoorMultiFloorRoute;
-    if (multi != null) return multi.totalDistanceMeters;
-    return _indoorRouteSegment?.distanceMeters ?? 0;
+    if (multi != null) {
+      return (
+        distanceM: multi.totalDistanceMeters,
+        costM: multi.totalCostMeters,
+      );
+    }
+    // 단층 경로에는 수직 이동이 없어 거리와 비용이 같다.
+    final remainingM = _indoorRouteSegment?.distanceMeters ?? 0;
+    return (distanceM: remainingM, costM: remainingM);
   }
 
   /// ETA 카드 라벨. 다층 경로는 층별 이동수단(엘리베이터/에스컬레이터)까지 요약
@@ -3420,7 +3436,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       return const [];
     }
     final pdrToFloor = FloorCoordinateTransform(anchor);
-    return snapshot.preview.path
+    return snapshot.reconciledPreviewPath
         .map(pdrToFloor.toFloor)
         .toList(growable: false);
   }
@@ -3736,16 +3752,17 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     );
   }
 
-  /// 경로가 해제되면 세션을 닫고 내보내기 안내를 띄운다. "PDR 종료" 버튼이
-  /// 사라진 지금 이 안내가 실측 데이터를 꺼낼 유일한 트리거다.
-  void _endRouteRecordingSession() {
+  /// 경로가 해제되면 세션을 닫는다. [announceExport]가 true일 때만 내보내기
+  /// 안내를 띄운다 — "PDR 종료" 버튼이 사라진 지금 길안내가 실제로 끝나는
+  /// 지점(_clearIndoorRoute)의 이 안내가 실측 데이터를 꺼낼 유일한 트리거다.
+  void _endRouteRecordingSession({bool announceExport = true}) {
     final recorder = _pdrDebugRecorder;
     if (recorder == null) return;
     final snapshot = indoorNavigationDriver.currentSnapshot;
     if (snapshot != null) recorder.recordSnapshot(snapshot);
     recorder.recordRuntime(indoorNavigationDriver.currentRuntimeStatus);
     if (!mounted) return;
-    if (recorder.hasSnapshot && _debugModeController.enabled) {
+    if (announceExport && recorder.hasSnapshot && _debugModeController.enabled) {
       _showPdrMessageWithExport('길안내가 끝났습니다. 진단 JSON을 내보내 분석할 수 있습니다.');
     }
   }
@@ -3977,6 +3994,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final route = _route;
     final userDestination = _userDestination;
     final indoorRouteDestination = _indoorRouteDestination;
+    // 거리·시간을 한 번에 계산한다(예전엔 같은 계산을 두 번 돌았다).
+    final indoorEta = _indoorEta();
     final indoorRouteVisible = _hasAnyRouteVisible;
     final debugEnabled = _debugModeController.enabled;
     final pdrActive =
@@ -4177,9 +4196,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                 child: EtaCard(
                   key: _etaCardKey,
-                  distanceMeters: _indoorEtaDistanceMeters(),
+                  distanceMeters: indoorEta.distanceM,
+                  // 시간은 비용 기준 — 엘리베이터 대기·탑승 시간이 여기 들어 있다.
                   minutes:
-                      (_indoorEtaDistanceMeters() /
+                      (indoorEta.costM /
                               _indoorWalkingSpeedMetersPerSecond /
                               60)
                           .ceil()

@@ -192,3 +192,36 @@ def test_businessInfo의_금지_라벨을_잡는다():
 
 def test_businessInfo의_정상_항목은_통과한다():
     assert _validate({"PO-a": {"businessInfo": [{"label": "주차", "value": "주차 지원 불가"}]}}) == []
+
+
+# 섹션 순서는 서버가 고정한다. 사진 → 소개 → 메뉴 → 주소 순이고, 건물 안에서
+# 길을 찾는 사용자에게 이미 아는 정보인 주소는 맨 아래다.
+def test_섹션_순서를_서버가_고정한다():
+    from app.repositories.place_detail_queries import _sections
+
+    overlay = {
+        "summary": "한 줄 소개",
+        "hero": [{"local_asset": "assets/a.jpg", "source": "촬영"}],
+        "menu": [
+            {
+                "name": "라떼",
+                "price": "5,200원",
+                "description": "에스프레소와 우유",
+                "image_asset": "assets/latte.jpg",
+                "source": "매장",
+            }
+        ],
+        "businessInfo": [{"label": "주소", "value": "여의대로 108", "source": "매장"}],
+        "tags": ["포장"],
+        "notice": {"text": "팝업", "until": "2099-01-01"},
+    }
+
+    types = [section["type"] for section in _sections(_StubStore(), "store", overlay)]
+
+    assert types == ["hero", "notice", "tags", "summary", "menu", "businessInfo"]
+
+
+class _StubStore:
+    """폴리곤이 없는 매장. map 섹션은 오버레이가 아니라 도형에서 파생된다."""
+
+    polygon = None

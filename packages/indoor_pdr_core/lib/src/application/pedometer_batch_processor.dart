@@ -91,6 +91,23 @@ class PedometerBatchProcessor {
     }
   }
 
+  /// 네이티브 누적 counter는 유지하고 지금 시각을 새 경로의 시작 경계로 삼는다.
+  ///
+  /// 다음 iOS batch가 재기준화 이전/이후를 함께 포함해도 tracking timeline이
+  /// [atMs] 이후 걸음만 남긴다. `_lastNativeSteps`를 보존하므로 이미 반영한 누적
+  /// 걸음이 새 경로에 다시 들어오지 않는다.
+  void rebasePath({required int atMs, required bool initialTrackingOn}) {
+    lastStepDelta = 0;
+    lastStepAtMs = null;
+    gapMs = 0;
+    _batches.clear();
+    _nextBatchId = 1;
+    _trackingTimeline.reset(initialOn: false);
+    if (initialTrackingOn) {
+      _trackingTimeline.addTransition(atMs: atMs, on: true);
+    }
+  }
+
   PedometerBatchApplication? process(
     PedometerBatchEvent event, {
     required int receivedAtMs,

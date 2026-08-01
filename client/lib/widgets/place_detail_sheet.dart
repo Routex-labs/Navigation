@@ -10,6 +10,8 @@ import 'place_detail/place_detail_sections.dart';
 import 'sheet_grab_handle.dart';
 import 'sheet_header.dart';
 
+import 'map_overlay_guard.dart';
+
 /// 장소 상세 시트에서 호출자에게 돌려주는 다음 동작.
 ///
 /// 호출부의 출발·도착·카테고리 시트 chain 계약은 기존과 동일하게 유지한다.
@@ -27,7 +29,6 @@ class PlaceDetailSheet extends StatefulWidget {
     required this.buildingId,
     required this.placeId,
     this.favorite,
-    this.category,
     this.subcategory,
     this.repository,
     required this.onCloseAll,
@@ -38,7 +39,6 @@ class PlaceDetailSheet extends StatefulWidget {
   final String buildingId;
   final String? placeId;
   final FavoritePlace? favorite;
-  final String? category;
   final String? subcategory;
   /// 테스트에서는 가짜를 넣고, 앱에서는 service locator의 전역 저장소를 쓴다.
   final PlaceDetailRepository? repository;
@@ -51,7 +51,6 @@ class PlaceDetailSheet extends StatefulWidget {
     required String buildingId,
     required String? placeId,
     FavoritePlace? favorite,
-    String? category,
     String? subcategory,
     PlaceDetailRepository? repository,
     required VoidCallback onCloseAll,
@@ -64,16 +63,17 @@ class PlaceDetailSheet extends StatefulWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => PlaceDetailSheet(
-        title: title,
-        subtitle: subtitle,
-        buildingId: buildingId,
-        placeId: placeId,
-        favorite: favorite,
-        category: category,
-        subcategory: subcategory,
-        repository: repository,
-        onCloseAll: onCloseAll,
+      builder: (context) => MapOverlayGuard(
+        child: PlaceDetailSheet(
+          title: title,
+          subtitle: subtitle,
+          buildingId: buildingId,
+          placeId: placeId,
+          favorite: favorite,
+          subcategory: subcategory,
+          repository: repository,
+          onCloseAll: onCloseAll,
+        ),
       ),
     );
   }
@@ -97,27 +97,18 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
   bool get _isExcluded => _detail?.kind == PlaceKind.excluded;
 
   /// 본문에 그릴 섹션. excluded면 비운다.
-  List<PlaceDetailSection> get _visibleSections =>
-      _isExcluded ? const [] : (_detail?.sections ?? const []);
+  ///
+  /// `map`은 걸러 낸다. 지도 미리보기가 아직 없어서 층 이름만 적힌 블록인데,
+  /// 그 층은 헤더 배지에 이미 있다. 누를 수도 없는 중복이라 자리만 차지했다.
+  /// 서버 계약은 그대로 두고 화면에서만 뺀다 — 지도 이동을 붙이는 날 되살린다.
+  List<PlaceDetailSection> get _visibleSections => _isExcluded
+      ? const []
+      : (_detail?.sections ?? const [])
+            .where((section) => section is! MapSection)
+            .toList();
 
-  /// 코어 행이 스크롤로 가려졌는지. 이 높이를 넘어가면 이름 옆 길찾기 버튼이
-  /// 화면 밖으로 나간다.
-  static const _coreRowExtent = 92.0;
-  static const _floatingBarHeight = 60.0;
-
-  bool _showFloatingActions = false;
-
-  bool _onScroll(ScrollNotification notification) {
-    if (notification.metrics.axis != Axis.vertical) return false;
-    final shouldShow = notification.metrics.pixels > _coreRowExtent;
-    if (shouldShow != _showFloatingActions) {
-      setState(() => _showFloatingActions = shouldShow);
-    }
-    return false;
-  }
-
-  /// 길찾기 버튼은 시트 위·아래 두 곳에 있지만 반환 계약은 하나다. chain 규약을
-  /// 타지 않도록 두 경로 모두 `_markIntentional`을 거친다(F5).
+  /// 길찾기 버튼은 하단 고정 바 한 곳에만 있다. chain 규약을 타지 않도록
+  /// `_markIntentional`을 거친다(F5).
   void _pop(StoreInfoAction action) {
     _markIntentional();
     Navigator.of(context).pop(action);
@@ -178,7 +169,6 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
   Widget build(BuildContext context) {
     final favorite = widget.favorite;
     final saved = favorite != null && favoritesController.contains(favorite.key);
-    final category = widget.category;
     final subcategory = widget.subcategory;
     final sections = _visibleSections;
 
@@ -191,7 +181,9 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
         onTap: () => Navigator.of(context).maybePop(),
         behavior: HitTestBehavior.opaque,
         child: DraggableScrollableSheet(
-          initialChildSize: 0.58,
+          // 이름·길찾기·사진·소개까지가 한 화면에 들어오고 아래에 여백이 조금
+          // 남는 높이다. 문장 중간에서 끊기면 잘린 것처럼 보인다.
+          initialChildSize: 0.64,
           minChildSize: 0.3,
           maxChildSize: 0.92,
           expand: false,
@@ -204,18 +196,10 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                 borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
               ),
               clipBehavior: Clip.antiAlias,
-              child: Stack(
-                children: [
-                  NotificationListener<ScrollNotification>(
-                    onNotification: _onScroll,
-                    child: SingleChildScrollView(
+              child: SingleChildScrollView(
                       controller: scrollController,
-                      padding: EdgeInsets.fromLTRB(
-                        8,
-                        4,
-                        8,
-                        // 떠 있는 액션 바가 마지막 섹션을 가리지 않도록 그만큼 비운다.
-                        _showFloatingActions ? _floatingBarHeight + 12 : 20,
+                      padding: EdgeInsets.only(
+                        bottom: 20 + MediaQuery.paddingOf(context).bottom,
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -227,30 +211,36 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                             onIntentionalPop: _markIntentional,
                           ),
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+                            padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
                             child: _PlaceCore(
                               title: widget.title,
                               subtitle: widget.subtitle,
-                              category: category,
                               subcategory: subcategory,
+                            ),
+                          ),
+                          // 이름을 읽은 직후가 길찾기를 누르는 자리다. 사진·메뉴를
+                          // 지나 하단까지 내려가야 한다면 흐름이 한 번 끊긴다.
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                            child: _PlaceActions(
                               favorite: favorite,
                               isSaved: saved,
                               onToggleFavorite: _onToggleFavorite,
-                              actions: _PlaceActions(
-                                onOrigin: () => _pop(StoreInfoAction.setOrigin),
-                                onDestination: () =>
-                                    _pop(StoreInfoAction.setDestination),
-                              ),
+                              onOrigin: () => _pop(StoreInfoAction.setOrigin),
+                              onDestination: () =>
+                                  _pop(StoreInfoAction.setDestination),
                             ),
                           ),
                           if (_isLoading)
                             const Padding(
-                              padding: EdgeInsets.fromLTRB(12, 24, 12, 8),
+                              padding: EdgeInsets.fromLTRB(20, 24, 20, 8),
                               child: _DetailLoadingPlaceholder(),
                             )
                           else if (sections.isNotEmpty)
                             Padding(
-                              padding: const EdgeInsets.fromLTRB(12, 20, 12, 8),
+                              // 좌우 여백은 섹션이 스스로 갖는다. 사진·메뉴는
+                              // 시트 끝까지 써야 해서 여기서 일괄로 줄 수 없다.
+                              padding: const EdgeInsets.only(top: 20),
                               child: PlaceDetailSections(
                                 sections: sections,
                                 floorLabel: _detail?.location.floorLabel,
@@ -258,22 +248,6 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                             ),
                         ],
                       ),
-                    ),
-                  ),
-                  // 코어 행이 위로 밀려 올라가면 길찾기 버튼이 화면에서 사라진다.
-                  // 상세가 길어도 길찾기는 언제나 한 번에 눌러야 하므로(F5) 그때만
-                  // 같은 버튼을 하단에 띄운다.
-                  if (_showFloatingActions)
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: _FloatingActionBar(
-                        onOrigin: () => _pop(StoreInfoAction.setOrigin),
-                        onDestination: () => _pop(StoreInfoAction.setDestination),
-                      ),
-                    ),
-                ],
               ),
             ),
           ),
@@ -283,33 +257,29 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
   }
 }
 
+/// 시트 최상단의 이름·층·업종 블록.
+///
+/// 길찾기 버튼을 하단으로 내렸기 때문에 제목이 가로폭을 거의 다 쓴다. 대분류
+/// 칩(`category`)은 층 아래 `subcategory`와 같은 축의 정보라 중복이어서 뺐다.
 class _PlaceCore extends StatelessWidget {
   const _PlaceCore({
     required this.title,
     required this.subtitle,
-    required this.category,
     required this.subcategory,
-    required this.favorite,
-    required this.isSaved,
-    required this.onToggleFavorite,
-    required this.actions,
   });
 
   final String title;
   final String subtitle;
-  final String? category;
   final String? subcategory;
-  final FavoritePlace? favorite;
-  final bool isSaved;
-  final VoidCallback onToggleFavorite;
-
-  /// 이름 바로 오른쪽에 붙는 길찾기 버튼. 상세 로딩·실패와 무관하게 항상 그린다.
-  final Widget actions;
 
   @override
   Widget build(BuildContext context) {
+    final hasSubcategory = subcategory != null && subcategory!.isNotEmpty;
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // 가게 아이콘 자리에 층을 넣는다. 어느 매장에나 똑같이 붙던 storefront
+        // 글리프는 알려 주는 게 없었고, 실내에서 찾을 때 정작 필요한 건 층이다.
         Container(
           width: 44,
           height: 44,
@@ -318,7 +288,16 @@ class _PlaceCore extends StatelessWidget {
             borderRadius: BorderRadius.circular(13),
           ),
           alignment: Alignment.center,
-          child: const Icon(Icons.storefront, color: AppColors.primary, size: 22),
+          child: Text(
+            subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: AppColors.primary,
+            ),
+          ),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -326,115 +305,106 @@ class _PlaceCore extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.text,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (category != null) ...[
-                    const SizedBox(width: 8),
-                    _CategoryChip(label: category!),
-                  ],
-                  if (favorite != null) ...[
-                    const SizedBox(width: 6),
-                    IconButton(
-                      onPressed: onToggleFavorite,
-                      iconSize: 20,
-                      padding: EdgeInsets.zero,
-                      visualDensity: VisualDensity.compact,
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                      tooltip: isSaved ? '저장 취소' : '장소로 저장',
-                      icon: Icon(
-                        isSaved ? Icons.check_circle : Icons.add_circle_outline,
-                        color: isSaved ? Colors.green : AppColors.primary,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
               Text(
-                subcategory != null && category != null && subcategory != category
-                    ? '$subtitle · $subcategory'
-                    : subtitle,
-                style: const TextStyle(fontSize: 12.5, color: AppColors.muted),
+                title,
+                // 긴 이름은 잘라내기 전에 두 줄까지 준다. 그 이상은 헤더 높이가
+                // 튀어서 본문 첫 화면을 먹는다.
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 20,
+                  height: 1.15,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.text,
+                ),
               ),
+              // 층이 배지로 빠졌으므로 이 줄은 업종만 맡는다. 업종이 없으면
+              // 줄 자체를 만들지 않는다 — 빈 줄이 제목 아래 여백만 늘린다.
+              if (hasSubcategory) ...[
+                const SizedBox(height: 3),
+                Text(
+                  subcategory!,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.3,
+                    color: AppColors.muted,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
-        const SizedBox(width: 8),
-        actions,
       ],
     );
   }
 }
 
-/// 출발·도착 한 쌍. 시트 상단(이름 옆)과 하단 고정 바가 같은 위젯을 쓴다.
+/// 이름 바로 아래에 놓는 출발·도착·저장 한 줄.
+///
+/// 길찾기는 이 시트의 목적이라 사진·메뉴보다 먼저 눈에 닿아야 한다. 저장도 같은
+/// 줄에 두되, 무엇을 하는 버튼인지 아이콘만으로 짐작하게 두지 않고 글자를 붙인다.
 class _PlaceActions extends StatelessWidget {
-  const _PlaceActions({required this.onOrigin, required this.onDestination});
+  const _PlaceActions({
+    required this.favorite,
+    required this.isSaved,
+    required this.onToggleFavorite,
+    required this.onOrigin,
+    required this.onDestination,
+  });
 
+  final FavoritePlace? favorite;
+  final bool isSaved;
+  final VoidCallback onToggleFavorite;
   final VoidCallback onOrigin;
   final VoidCallback onDestination;
 
+  // 버튼을 가로폭에 맞춰 늘리지 않는다. 글자가 두 자뿐이라 늘리면 여백만 커지고
+  // 이름·업종 줄과 무게가 맞지 않는다. 길찾기 두 개를 왼쪽에 붙여 한 쌍으로 읽히게
+  // 하고, 성격이 다른 저장은 반대쪽 끝으로 민다.
   @override
   Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
+    key: const ValueKey('place-detail-actions'),
     children: [
-      _CompactFilledButton(label: '출발', onPressed: onOrigin),
-      const SizedBox(width: 6),
-      _CompactFilledButton(label: '도착', onPressed: onDestination),
+      FilledButton(
+        onPressed: onOrigin,
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.blue50,
+          foregroundColor: AppColors.primary,
+          padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 12),
+        ),
+        child: const Text('출발'),
+      ),
+      const SizedBox(width: 8),
+      FilledButton(
+        onPressed: onDestination,
+        style: FilledButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 12),
+        ),
+        child: const Text('도착'),
+      ),
+      if (favorite != null) ...[
+        const Spacer(),
+        OutlinedButton.icon(
+          onPressed: onToggleFavorite,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: isSaved ? AppColors.primary : AppColors.muted,
+            side: BorderSide(
+              color: isSaved ? AppColors.primary : AppColors.blue100,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+            textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          ),
+          icon: Icon(
+            isSaved ? Icons.bookmark : Icons.bookmark_border,
+            size: 18,
+          ),
+          label: Text(isSaved ? '저장됨' : '저장'),
+        ),
+      ],
     ],
-  );
-}
-
-/// 이름 옆에 두 개가 들어가야 하므로 기본 FilledButton보다 좁게 만든다.
-class _CompactFilledButton extends StatelessWidget {
-  const _CompactFilledButton({required this.label, required this.onPressed});
-
-  final String label;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) => FilledButton(
-    onPressed: onPressed,
-    style: FilledButton.styleFrom(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      minimumSize: const Size(0, 36),
-      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
-    ),
-    child: Text(label),
-  );
-}
-
-/// 스크롤로 이름 옆 버튼이 가려졌을 때 시트 하단에 뜨는 같은 액션.
-///
-/// 본문이 비쳐 보이면 안 되므로 불투명 배경과 상단 경계선을 둔다.
-class _FloatingActionBar extends StatelessWidget {
-  const _FloatingActionBar({required this.onOrigin, required this.onDestination});
-
-  final VoidCallback onOrigin;
-  final VoidCallback onDestination;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    key: const ValueKey('place-detail-floating-actions'),
-    padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-    decoration: const BoxDecoration(
-      color: Colors.white,
-      border: Border(top: BorderSide(color: AppColors.blue100)),
-    ),
-    child: Align(
-      alignment: Alignment.centerRight,
-      child: _PlaceActions(onOrigin: onOrigin, onDestination: onDestination),
-    ),
   );
 }
 
@@ -471,7 +441,10 @@ class PlaceDetailSections extends StatelessWidget {
     final widgets = <Widget>[];
     for (final section in sections) {
       final widget = switch (section) {
-        SummarySection(:final text) => PlaceSummarySection(text: text),
+        SummarySection(:final text) => _TitledSection(
+            title: '소개',
+            child: PlaceSummarySection(text: text),
+          ),
         HeroSection(:final items) => PlaceHeroCarousel(
             images: [
               for (final item in items)
@@ -506,8 +479,20 @@ class PlaceDetailSections extends StatelessWidget {
             ],
           ),
       };
-      if (widgets.isNotEmpty) widgets.add(const SizedBox(height: 12));
-      widgets.add(widget);
+      // 사진은 시트 끝까지, 메뉴는 가로 스크롤이 끝까지 흐르도록 스스로 여백을
+      // 갖는다. 나머지 섹션만 여기서 본문 거터를 씌운다.
+      final fullBleed = section is HeroSection || section is MenuSection;
+      final padded = fullBleed
+          ? widget
+          : Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: placeSectionGutter),
+              child: widget,
+            );
+      // 여백만으로는 섹션이 어디서 끝났는지 읽히지 않는다. 카드로 감싸는 대신
+      // 시트 폭을 가로지르는 얇은 선 하나로만 끊는다.
+      if (widgets.isNotEmpty) widgets.add(const _SectionBreak());
+      widgets.add(padded);
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -516,27 +501,31 @@ class PlaceDetailSections extends StatelessWidget {
   }
 }
 
-class _CategoryChip extends StatelessWidget {
-  const _CategoryChip({required this.label});
-
-  final String label;
+/// 섹션과 섹션 사이의 경계. 여백 + 시트 폭을 가로지르는 선 한 줄이다.
+class _SectionBreak extends StatelessWidget {
+  const _SectionBreak();
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: ShapeDecoration(
-          color: AppColors.blue50,
-          shape: StadiumBorder(
-            side: BorderSide(color: AppColors.primary.withValues(alpha: 0.28)),
-          ),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            fontSize: 11.5,
-            fontWeight: FontWeight.w700,
-            color: AppColors.primary,
-          ),
-        ),
-      );
+  Widget build(BuildContext context) => const Padding(
+    padding: EdgeInsets.symmetric(vertical: 16),
+    child: Divider(height: 1, thickness: 1, color: AppColors.blue100),
+  );
+}
+
+/// 제목 + 본문 한 쌍. 섹션 위젯 자체가 제목을 갖지 않는 경우(소개)에 씌운다.
+class _TitledSection extends StatelessWidget {
+  const _TitledSection({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      PlaceSectionTitle(title),
+      const SizedBox(height: 10),
+      child,
+    ],
+  );
 }

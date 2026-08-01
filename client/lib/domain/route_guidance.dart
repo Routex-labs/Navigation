@@ -6,6 +6,7 @@ import '../models/floor_graph.dart';
 import 'route_progress.dart';
 
 enum RouteGuidanceAction {
+  wrongWay,
   straight,
   turnLeft,
   turnRight,
@@ -54,9 +55,17 @@ RouteGuidanceInstruction buildRouteGuidance({
   required RouteProgress? progress,
   String? transferMode,
   bool allowArrival = true,
+  double arrivalThresholdM = 5,
 }) {
+  if (progress?.wrongWay ?? false) {
+    return const RouteGuidanceInstruction(
+      action: RouteGuidanceAction.wrongWay,
+      primaryText: '반대 방향입니다 · 뒤로 돌아가세요',
+      distanceToActionM: 0,
+    );
+  }
   final remainingM = progress?.remainingM ?? _polylineLength(localPoints);
-  if (remainingM <= 3) {
+  if (remainingM <= arrivalThresholdM) {
     if (transferMode == 'escalator') {
       return const RouteGuidanceInstruction(
         action: RouteGuidanceAction.escalator,

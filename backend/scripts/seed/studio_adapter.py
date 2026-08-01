@@ -445,6 +445,32 @@ def collect_unresolved_store_entrances(directory: Path = STUDIO_DIR) -> list[dic
     return unresolved
 
 
+# 원본 층간 간선의 노드 ID를 층 스코프 ID로 바꾼다.
+#
+# 층 내부 간선(_scope_edges)과 달리 양 끝점이 서로 다른 층에 있어 "이 간선의 층"으로는
+# 스코프를 정할 수 없다. 그래서 전 층 노드에서 raw ID -> 스코프 ID 표를 먼저 만든다.
+# 다베오 원본 노드 ID는 건물 전체에서 유일하므로(전 층 1931개, 중복 0) 표가 성립한다.
+# 양 끝 중 하나라도 표에 없으면(원본에 노드가 빠진 간선) 버린다.
+def _scope_transfer_edges(
+    floors_for_transfer: list[dict],
+    raw_edges: list[dict],
+) -> list[dict]:
+    scoped_by_raw: dict[str, str] = {}
+    for floor in floors_for_transfer:
+        for node in floor["nodes"]:
+            raw_id = node["id"].split(":", 1)[-1]
+            scoped_by_raw[raw_id] = node["id"]
+
+    out: list[dict] = []
+    for edge in raw_edges:
+        from_id = scoped_by_raw.get(edge.get("from"))
+        to_id = scoped_by_raw.get(edge.get("to"))
+        if from_id is None or to_id is None:
+            continue
+        out.append({**edge, "from": from_id, "to": to_id})
+    return out
+
+
 # Studio 전 층 + 층 간 전이 간선을 하나의 트랜잭션으로 적재한다.
 def seed_studio(
     *,
@@ -470,10 +496,12 @@ def seed_studio(
     try:
         summaries: list[dict] = []
         floors_for_transfer: list[dict] = []
+        raw_transfer_edges: list[dict] = []
         for code in codes:
             data = build_seed_dict(code, reference, directory)
             seed_navigation.add_dataset(own_session, data)
             floor = data["building"]["floor"]
+            raw_transfer_edges.extend(_load(code, directory).get("vertical_transfer_edges") or [])
             floors_for_transfer.append(
                 {
                     "code": code,
@@ -495,9 +523,19 @@ def seed_studio(
                 }
             )
 
-        transfers, unresolved = vertical_transfers.build_transfers(floors_for_transfer)
-        seed_navigation.add_transfer_edges(own_session, transfers)
-        summaries.append({"code": "-", "transfers": len(transfers), "unresolved": len(unresolved)})
+        built = vertical_transfers.build_transfers(
+            floors_for_transfer,
+            _scope_transfer_edges(floors_for_transfer, raw_transfer_edges),
+        )
+        seed_navigation.add_transfer_edges(own_session, built.edges)
+        summaries.append(
+            {
+                "code": "-",
+                "transfers": len(built.edges),
+                "unresolved": len(built.unresolved),
+                "warnings": len(built.warnings),
+            }
+        )
 
         # 커밋 전 그래프 무결성 게이트. 타 건물 연결·동일 층 전이·NaN 같은 에러가 있으면
         # 여기서 GraphIntegrityError로 중단되어 아래 except가 롤백한다(반쯤 시드된 DB 방지).
@@ -519,7 +557,7 @@ def seed_studio(
 def main() -> None:
     for row in seed_studio():
         if "transfers" in row:
-            print(f"[전이] 간선={row['transfers']} 미해결={row['unresolved']}")
+            print(f"[전이] 간선={row['transfers']} 미해결={row['unresolved']} 경고={row['warnings']}")
             continue
         print(f"[{row['name']}] nodes={row['nodes']} edges={row['edges']} stores={row['stores']} pois={row['pois']}")
     print("Studio 데이터 적재 완료")

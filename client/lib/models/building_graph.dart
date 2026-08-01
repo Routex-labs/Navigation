@@ -66,6 +66,10 @@ class IndoorRouteSegment {
     this.transferModeToNext,
     this.transferPointsToNext = const [],
     this.transferDistanceMeters = 0,
+    this.transferCostMeters = 0,
+    this.transferEdgeId,
+    this.transferFromNodeId,
+    this.transferToNodeId,
   });
 
   /// 이 세그먼트가 속한 층의 내부 id (Floor.id).
@@ -88,20 +92,36 @@ class IndoorRouteSegment {
   /// 일반 보행 경로와 섞지 않아 층별 진행률 계산에는 들어가지 않는다.
   final List<LatLng> transferPointsToNext;
 
-  /// 수직 간선 비용. ETA에는 포함하지만 층 내부 경로 진행률에는 포함하지 않는다.
+  /// 수직 이동의 **실제 수평 거리**(탑승구~하차구 오프셋). 에스컬레이터는 약 20m,
+  /// 엘리베이터는 약 0~3m다. 남은거리 표시에 더하지만 층 내부 진행률에는 넣지 않는다.
   final double transferDistanceMeters;
+
+  /// 수직 이동의 **경로 탐색 비용**(보행 등가 m). 탑승·대기 시간을 담고 있어
+  /// 소요 시간 추정에 쓴다 — 거리 표시에는 쓰지 않는다(거리가 비용만큼 부풀어 보인다).
+  final double transferCostMeters;
+
+  /// 수직 이동에 실제로 선택된 간선과 양 끝 노드. 중앙 에스컬레이터처럼
+  /// 여러 레인이 붙어 있을 때 좌표·그룹명만으로 다시 추정하지 않게 보존한다.
+  final String? transferEdgeId;
+  final String? transferFromNodeId;
+  final String? transferToNodeId;
 }
 
-/// 층 간 경로를 층별로 나누어 담은 결과. [totalDistanceMeters]는 전 세그먼트
-/// 거리의 합이며, ETA 카드에서 목적지까지 총 거리로 쓴다.
+/// 층 간 경로를 층별로 나누어 담은 결과.
+///
+/// [totalDistanceMeters]는 전 세그먼트의 **실제 이동 거리** 합이고(ETA 카드의 "m 남음"),
+/// [totalCostMeters]는 탑승·대기 비용까지 포함한 **보행 등가** 합이다(소요 시간 추정).
+/// 둘을 한 값으로 겸하면 엘리베이터 경로의 남은거리가 비용만큼 부풀어 보인다.
 class MultiFloorRoute {
   const MultiFloorRoute({
     required this.segments,
     required this.totalDistanceMeters,
+    required this.totalCostMeters,
   });
 
   final List<IndoorRouteSegment> segments;
   final double totalDistanceMeters;
+  final double totalCostMeters;
 
   bool get isEmpty => segments.isEmpty;
   bool get isNotEmpty => segments.isNotEmpty;

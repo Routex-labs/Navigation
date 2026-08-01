@@ -67,6 +67,7 @@ class FakeIndoorNavigation implements IndoorNavigationController {
   Future<void> confirmAnchorByPin({
     required PdrLocalPoint floorPointM,
     PdrToFloorAxes axes = const PdrToFloorAxes.identity(),
+    String? floorId,
   }) async {
     log.add('pin:${floorPointM.eastM},${floorPointM.northM}');
   }
@@ -90,9 +91,7 @@ class FakeIndoorNavigation implements IndoorNavigationController {
     required PdrLocalPoint anchorLocalM,
     PdrToFloorAxes? axes,
   }) async {
-    log.add(
-      'transfer:$floorId@${anchorLocalM.eastM},${anchorLocalM.northM}',
-    );
+    log.add('transfer:$floorId@${anchorLocalM.eastM},${anchorLocalM.northM}');
   }
 
   // 테스트 구동용.

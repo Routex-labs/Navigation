@@ -212,6 +212,7 @@ class FloorPlanView extends StatefulWidget {
     this.destination,
     this.routePoints = const [],
     this.completedRoutePoints = const [],
+    this.walkedRouteSegments = const [],
     this.transferRoutePoints = const [],
     this.pdrPathPoints = const [],
     this.pdrPreviewPathPoints = const [],
@@ -272,6 +273,10 @@ class FloorPlanView extends StatefulWidget {
 
   /// 현재 위치 이전의 안내 경로. 남은 파란선보다 뒤에 회색으로 그린다.
   final List<ll.LatLng> completedRoutePoints;
+
+  /// 길안내 시작 이후 실제로 누적한 보정 보행 궤적. 재탐색으로 파란 경로가
+  /// 교체돼도 유지하며, 층 전환·재보정 점프는 서로 다른 선으로 전달한다.
+  final List<List<ll.LatLng>> walkedRouteSegments;
 
   /// 현재 층의 에스컬레이터 탑승점과 다음 층 도착점을 잇는 수직 이동 안내선.
   /// 일반 경로와 달리 파선으로 그려 "이 구간에서 층을 바꾼다"는 뜻을 준다.
@@ -510,6 +515,9 @@ class FloorPlanViewState extends State<FloorPlanView> {
       }
     }
     if (oldWidget.completedRoutePoints != widget.completedRoutePoints) {
+      _updateCompletedRouteSource();
+    }
+    if (oldWidget.walkedRouteSegments != widget.walkedRouteSegments) {
       _updateCompletedRouteSource();
     }
     if (oldWidget.transferRoutePoints != widget.transferRoutePoints) {
@@ -1592,10 +1600,37 @@ class FloorPlanViewState extends State<FloorPlanView> {
   }
 
   Future<void> _updateCompletedRouteSource() async {
-    await _updateLineSource(
-      _completedRouteSourceId,
-      widget.completedRoutePoints,
-    );
+    final segments = widget.walkedRouteSegments.isNotEmpty
+        ? widget.walkedRouteSegments
+        : [widget.completedRoutePoints];
+    final drawable = segments
+        .where((segment) => segment.length >= 2)
+        .toList(growable: false);
+    final controller = _controller;
+    if (controller == null) return;
+    if (drawable.isEmpty) {
+      await controller.setGeoJsonSource(
+        _completedRouteSourceId,
+        _emptyFeatureCollection,
+      );
+      return;
+    }
+    await controller.setGeoJsonSource(_completedRouteSourceId, {
+      'type': 'FeatureCollection',
+      'features': [
+        for (final segment in drawable)
+          {
+            'type': 'Feature',
+            'properties': const <String, dynamic>{},
+            'geometry': {
+              'type': 'LineString',
+              'coordinates': [
+                for (final point in segment) [point.longitude, point.latitude],
+              ],
+            },
+          },
+      ],
+    });
   }
 
   Future<void> _updatePdrTrailSource() async {

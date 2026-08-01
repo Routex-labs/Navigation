@@ -145,6 +145,7 @@ void main() {
       expect(transition.toFloorLabel, '3F');
       expect(transition.group, 'ES1');
       expect(transition.boardingNodeId, 'n-up-to3f');
+      expect(transition.boardingEvidence, 'observed');
       expect(transition.stepsDuring, 0);
       expect(transition.deltaM, closeTo(4.5, 0.5));
     });
@@ -298,17 +299,123 @@ void main() {
       expect(fixture.confirmed, hasLength(1));
       expect(fixture.confirmed.single.direction, EscalatorDirection.down);
       expect(fixture.confirmed.single.toFloorLabel, '1F');
+      expect(fixture.confirmed.single.boardingEvidence, 'observed');
       expect(fixture.confirmed.single.boardingNodeId, 'n-dn-to1f');
+    });
+
+    test('활성 경로가 하행 탑승점을 가리키면 12m 위치 오차에서도 확정한다', () {
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.detector.onEscalatorRouteApproach(
+        // 실측 로그처럼 보정 위치는 탑승점보다 늦게 따라온다.
+        positionM: const PdrLocalPoint(15, 0),
+        routeEndM: const PdrLocalPoint(3, 0),
+        expectedBoardingNodeId: 'n-dn-to1f',
+        expectedArrivalNodeId: 'n1-dn-fr2f',
+        steps: fixture.steps,
+        timestampMs: fixture.nowMs,
+      );
+      fixture.ramp(fromM: 0, toM: -5.5, seconds: 24);
+      fixture.hold(atM: -5.5, seconds: 6);
+
+      expect(fixture.confirmed, hasLength(1));
+      expect(fixture.confirmed.single.direction, EscalatorDirection.down);
+      expect(fixture.confirmed.single.toFloorLabel, '1F');
+      expect(fixture.confirmed.single.boardingEvidence, 'routeExpected');
+      expect(fixture.confirmed.single.expectedArrivalNodeId, 'n1-dn-fr2f');
     });
   });
 
   group('오탐 방어', () {
+    test('가까운 도착 노드가 같은 그룹의 먼 탑승 노드를 대신 허가하지 않는다', () {
+      final fixture = _Fixture(
+        graph: FloorGraph(
+          nodes: [
+            _escalator('arrival', 'ES2-UP(FR1F)', 0, 0),
+            _escalator('far-boarding', 'ES2-UP(TO3F)', 15, 0),
+          ],
+          edges: const [],
+        ),
+      );
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standNearBoarding(x: 0, y: 0);
+      fixture.ramp(fromM: 0, toM: 4.5, seconds: 20);
+      fixture.hold(atM: 4.5, seconds: 5);
+
+      expect(fixture.confirmed, isEmpty);
+      expect(fixture.detector.isArmed, isFalse);
+    });
+
+    test('붙어 있는 같은 방향 두 레인은 경로가 없으면 가장 가까운 것을 쓴다', () {
+      final fixture = _Fixture(
+        graph: FloorGraph(
+          nodes: [
+            _escalator('lane-a', 'ES2-UP(TO3F)', 0, 0),
+            _escalator('lane-b', 'ES2-1-UP(TO3F)', 1, 0),
+          ],
+          edges: const [],
+        ),
+      );
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standNearBoarding(x: 0.5, y: 0);
+      fixture.ramp(fromM: 0, toM: 4.5, seconds: 20);
+      fixture.hold(atM: 4.5, seconds: 5);
+
+      expect(fixture.confirmed, hasLength(1));
+      expect(fixture.confirmed.single.boardingNodeId, 'lane-a');
+    });
+
+    test('붙어 있는 레인에서는 활성 경로가 고른 정확한 탑승 노드를 우선한다', () {
+      final fixture = _Fixture(
+        graph: FloorGraph(
+          nodes: [
+            _escalator('lane-a', 'ES2-UP(TO3F)', 0, 0),
+            _escalator('lane-b', 'ES2-1-UP(TO3F)', 1, 0),
+          ],
+          edges: const [],
+        ),
+      );
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standNearBoarding(x: 0.5, y: 0);
+      fixture.detector.onEscalatorRouteApproach(
+        positionM: const PdrLocalPoint(0.5, 0),
+        routeEndM: const PdrLocalPoint(1, 0),
+        expectedBoardingNodeId: 'lane-b',
+        expectedArrivalNodeId: 'lane-b-arrival',
+        steps: fixture.steps,
+        timestampMs: fixture.nowMs,
+      );
+      fixture.ramp(fromM: 0, toM: 4.5, seconds: 20);
+      fixture.hold(atM: 4.5, seconds: 5);
+
+      expect(fixture.confirmed, hasLength(1));
+      expect(fixture.confirmed.single.boardingNodeId, 'lane-b');
+      expect(fixture.confirmed.single.expectedArrivalNodeId, 'lane-b-arrival');
+      expect(fixture.confirmed.single.boardingEvidence, 'routeAndObserved');
+    });
+
     test('에스컬레이터에서 멀면 같은 상승에도 층을 바꾸지 않는다', () {
       final fixture = _Fixture();
       fixture.hold(atM: 0, seconds: 5);
       fixture.standFarAway();
       fixture.ramp(fromM: 0, toM: 4.5, seconds: 20);
       fixture.hold(atM: 4.5, seconds: 10);
+
+      expect(fixture.confirmed, isEmpty);
+    });
+
+    test('활성 경로가 있어도 16m 밖이면 기압 변화만으로 허가하지 않는다', () {
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.detector.onEscalatorRouteApproach(
+        positionM: const PdrLocalPoint(25, 0),
+        routeEndM: const PdrLocalPoint(3, 0),
+        expectedBoardingNodeId: 'n-dn-to1f',
+        steps: fixture.steps,
+        timestampMs: fixture.nowMs,
+      );
+      fixture.ramp(fromM: 0, toM: -5.5, seconds: 24);
+      fixture.hold(atM: -5.5, seconds: 6);
 
       expect(fixture.confirmed, isEmpty);
     });

@@ -14,6 +14,21 @@ import '../models/indoor_route.dart';
 import 'dijkstra.dart';
 import 'geo_transform.dart';
 
+/// 중간층 보행에 매기는 가중치.
+///
+/// 거리 합만 최소화하면 "중간층을 가로질러 다른 에스컬레이터로 갈아타기"와
+/// "목적층에서 걷기"가 같은 값이 된다. 사람에게는 전혀 같지 않다 — 중간층 보행은
+/// 목적지로 가는 진척이 아니고, 그 층에서 다음 기기를 다시 찾아야 하며, 층 전환
+/// 감지가 흔들릴 구간도 늘어난다. 그래서 **출발층도 목적층도 아닌 층**의 보행만
+/// 이 배수로 비싸게 매겨, 걸어야 할 거리를 사용자가 이미 서 있는 출발층으로 옮긴다.
+///
+/// 실측(현대 서울, B1 출발): 이 값이 1.0이면 B1→2F가 1F를 69.6m 가로질러 뱅크를
+/// 갈아탔다. 1.3~2.0 구간은 모두 "처음부터 같은 뱅크를 타고 직행"을 고르며(중간층
+/// 보행 2.0m), 대가는 실거리 +10.6m다. 안정 구간의 가운데를 취한다.
+///
+/// 선택에만 쓰는 값이다 — ETA·남은거리는 아래에서 원본 `length_m`으로 계산한다.
+const double kIntermediateFloorWalkPenalty = 1.5;
+
 /// 두 노드 사이 층 간 최단 경로를 계산한다. 경로가 없거나 층 매핑이 부족해
 /// 세그먼트를 만들 수 없으면 null.
 MultiFloorRoute? computeMultiFloorRoute(
@@ -21,38 +36,43 @@ MultiFloorRoute? computeMultiFloorRoute(
   String startNodeId,
   String endNodeId,
 ) {
+  // 노드·간선 조회 맵은 경로 선택과 세그먼트 조립이 함께 쓴다. 각자 만들면
+  // 2천 개 넘는 목록을 여러 번 훑게 된다.
+  final nodesById = {for (final node in graph.nodes) node.id: node};
+  final edgesById = {for (final edge in graph.edges) edge.id: edge};
+
   final ShortestPath? path;
   try {
-    path = findShortestPath(
-      nodes: graph.nodes,
-      edges: graph.edges,
-      startNodeId: startNodeId,
-      endNodeId: endNodeId,
-    );
+    path = _selectPath(graph, nodesById, edgesById, startNodeId, endNodeId);
   } on ArgumentError {
     return null;
   }
   if (path == null) return null;
 
-  final nodesById = {for (final node in graph.nodes) node.id: node};
-  final edgesById = {for (final edge in graph.edges) edge.id: edge};
-
   // 층별 노드 목록 → 층별 좌표 변환. 층마다 앵커 노드가 달라 서버가 층별로
   // 피팅하는 것과 같은 결과를 얻으려면 여기서도 층별로 나눠 피팅해야 한다.
+  // 피팅은 **경로가 실제로 지나는 층만** 한다(12개 층 전부 피팅할 이유가 없다).
   final nodesByFloor = <String, List<GraphNode>>{};
   for (final node in graph.nodes) {
     final floorId = node.floorId;
     if (floorId == null) continue;
     nodesByFloor.putIfAbsent(floorId, () => <GraphNode>[]).add(node);
   }
-  final transformByFloor = <String, AffineTransform>{
-    for (final entry in nodesByFloor.entries)
-      entry.key: fitFloorGeoTransform(entry.value),
-  };
+  final transformByFloor = <String, AffineTransform>{};
+  AffineTransform? transformFor(String floorId) {
+    final nodes = nodesByFloor[floorId];
+    if (nodes == null) return null;
+    return transformByFloor.putIfAbsent(
+      floorId,
+      () => fitFloorGeoTransform(nodes),
+    );
+  }
 
   final segments = <_PendingSegment>[];
   _PendingSegment? current;
+  // 표시용 실거리 합과, 소요 시간 추정용 비용 합을 따로 센다.
   var totalDistance = 0.0;
+  var totalCost = 0.0;
 
   for (var index = 0; index < path.edgeIds.length; index++) {
     final edge = edgesById[path.edgeIds[index]]!;
@@ -69,10 +89,13 @@ MultiFloorRoute? computeMultiFloorRoute(
       current.addNode(fromNode);
       current.transferModeToNext = edge.transferMode;
       current.transferDistanceM = edge.lengthM;
+      current.transferCostM = edge.routingCostM;
+      current.transferEdgeId = edge.id;
       current.transferFromNode = fromNode;
       current.transferToNode = toNode;
       segments.add(current);
       totalDistance += current.distanceM + edge.lengthM;
+      totalCost += current.distanceM + edge.routingCostM;
       current = _PendingSegment(toNode.floorId!)..addNode(toNode);
       continue;
     }
@@ -97,6 +120,7 @@ MultiFloorRoute? computeMultiFloorRoute(
   if (current != null) {
     segments.add(current);
     totalDistance += current.distanceM;
+    totalCost += current.distanceM;
   } else if (path.edgeIds.isEmpty) {
     // 시작=도착 노드인 특수 케이스. 지도에 그릴 게 없다.
     final node = nodesById[path.nodeIds.first]!;
@@ -108,7 +132,7 @@ MultiFloorRoute? computeMultiFloorRoute(
 
   final built = <IndoorRouteSegment>[];
   for (final segment in segments) {
-    final transform = transformByFloor[segment.floorId];
+    final transform = transformFor(segment.floorId);
     if (transform == null) return null;
     final floorName = graph.floorNamesById[segment.floorId];
     if (floorName == null) return null;
@@ -119,7 +143,7 @@ MultiFloorRoute? computeMultiFloorRoute(
     final transferTo = segment.transferToNode;
     final transferToTransform = transferTo?.floorId == null
         ? null
-        : transformByFloor[transferTo!.floorId!];
+        : transformFor(transferTo!.floorId!);
     final transferPoints =
         transferFrom == null ||
             transferTo == null ||
@@ -145,11 +169,91 @@ MultiFloorRoute? computeMultiFloorRoute(
         transferModeToNext: segment.transferModeToNext,
         transferPointsToNext: transferPoints,
         transferDistanceMeters: segment.transferDistanceM,
+        transferCostMeters: segment.transferCostM,
+        transferEdgeId: segment.transferEdgeId,
+        transferFromNodeId: transferFrom?.id,
+        transferToNodeId: transferTo?.id,
       ),
     );
   }
 
-  return MultiFloorRoute(segments: built, totalDistanceMeters: totalDistance);
+  return MultiFloorRoute(
+    segments: built,
+    totalDistanceMeters: totalDistance,
+    totalCostMeters: totalCost,
+  );
+}
+
+/// 경로를 고른다. 중간층 보행 가중치는 **수단 선택을 바꾸지 않는 선에서만** 쓴다.
+///
+/// 가중치를 무조건 적용하면 엘리베이터 경로의 환승 보행(샤프트가 전 층을 서비스하지
+/// 않아 중간층에서 갈아타는 구간)까지 비싸져, 긴 이동이 에스컬레이터 연속 탑승으로
+/// 뒤집힌다. 실측에서 200쌍 중 13건이 그렇게 바뀌었고 전부 4~9홉짜리였다
+/// (예: 6F→B4가 엘리베이터 3회 → 에스컬레이터 9회). 층수에 따른 수단 선택은
+/// 백엔드 비용 상수(ESCALATOR_HOP_M·ELEVATOR_BOARD_M)의 소관이고, 이 가중치가
+/// 뒤집을 문제가 아니다.
+///
+/// 그래서 원본 가중치 경로가 엘리베이터를 쓰면 그대로 두고, 에스컬레이터만 쓰는
+/// 경로일 때만 가중치를 적용하며, 그 결과가 엘리베이터를 끌어들이면 되돌린다.
+/// 이 규칙으로 같은 200쌍에서 수단이 바뀐 경로는 0건이 된다.
+ShortestPath? _selectPath(
+  BuildingGraph graph,
+  Map<String, GraphNode> nodesById,
+  Map<String, GraphEdge> edgesById,
+  String startNodeId,
+  String endNodeId,
+) {
+  ShortestPath? solve({double Function(GraphEdge edge)? weight}) =>
+      findShortestPath(
+        nodes: graph.nodes,
+        edges: graph.edges,
+        startNodeId: startNodeId,
+        endNodeId: endNodeId,
+        weight: weight,
+      );
+  bool usesElevator(ShortestPath path) =>
+      path.edgeIds.any((id) => edgesById[id]?.transferMode == 'elevator');
+
+  final raw = solve();
+  if (raw == null || usesElevator(raw)) return raw;
+
+  final penalize = _intermediateFloorWeight(nodesById, startNodeId, endNodeId);
+  if (penalize == null) return raw;
+  final weighted = solve(weight: penalize);
+  if (weighted == null || usesElevator(weighted)) return raw;
+  return weighted;
+}
+
+/// 중간층 보행에 가중치를 매기는 함수. 가중할 대상이 없으면 null.
+///
+/// 어느 층이 중간층인지는 경로를 풀기 전에 알 수 있다 — 출발/목적 노드의 층이
+/// 아닌 모든 층이다. 그래서 상태 확장이나 k-최단경로 없이, 같은 다익스트라에
+/// 가중치 함수만 넘기면 된다. 수직 전이 간선은 건드리지 않는다(수단 선택 교차점은
+/// 백엔드 비용 상수가 정한다).
+double Function(GraphEdge edge)? _intermediateFloorWeight(
+  Map<String, GraphNode> nodesById,
+  String startNodeId,
+  String endNodeId,
+) {
+  if (kIntermediateFloorWalkPenalty == 1.0) return null;
+  final startFloorId = nodesById[startNodeId]?.floorId;
+  final endFloorId = nodesById[endNodeId]?.floorId;
+  // 같은 층 안의 경로면 중간층이 없다 — 가중할 대상도 없다.
+  if (startFloorId == null ||
+      endFloorId == null ||
+      startFloorId == endFloorId) {
+    return null;
+  }
+  return (edge) {
+    if (edge.transferMode != null) return edge.routingCostM;
+    final floorId =
+        nodesById[edge.fromNodeId]?.floorId ??
+        nodesById[edge.toNodeId]?.floorId;
+    if (floorId == null || floorId == startFloorId || floorId == endFloorId) {
+      return edge.routingCostM;
+    }
+    return edge.routingCostM * kIntermediateFloorWalkPenalty;
+  };
 }
 
 LatLng _apply(AffineTransform transform, double xM, double yM) {
@@ -171,8 +275,10 @@ class _PendingSegment {
   double distanceM = 0.0;
   String? transferModeToNext;
   double transferDistanceM = 0.0;
+  double transferCostM = 0.0;
   GraphNode? transferFromNode;
   GraphNode? transferToNode;
+  String? transferEdgeId;
 
   void addNode(GraphNode node) {
     if (points.isNotEmpty &&

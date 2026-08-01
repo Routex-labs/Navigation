@@ -4,6 +4,8 @@ import 'package:latlong2/latlong.dart';
 import '../theme/app_theme.dart';
 import 'sheet_grab_handle.dart';
 
+import 'map_overlay_guard.dart';
+
 /// 길찾기 시트에서 고를 수 있는 출발지/도착지 후보. 야외 모드에서는 [Building],
 /// 실내 모드에서는 [PoiSearchResult]를 이 공통 형태로 변환해 검색·선택
 /// 로직을 하나의 시트 위젯으로 공유한다.
@@ -112,13 +114,15 @@ class DirectionsSheet extends StatefulWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => DirectionsSheet(
-        originLabel: originLabel,
-        search: search,
-        initialOrigin: initialOrigin,
-        initialDestination: initialDestination,
-        currentFloorLabel: currentFloorLabel,
-        focusOrigin: focusOrigin,
+      builder: (context) => MapOverlayGuard(
+        child: DirectionsSheet(
+          originLabel: originLabel,
+          search: search,
+          initialOrigin: initialOrigin,
+          initialDestination: initialDestination,
+          currentFloorLabel: currentFloorLabel,
+          focusOrigin: focusOrigin,
+        ),
       ),
     );
   }

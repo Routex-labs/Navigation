@@ -74,7 +74,6 @@ const _longStraightGraph = FloorGraph(
   ],
 );
 
-
 CorridorObservation _observation({
   required int atMs,
   required int confirmedSteps,
@@ -98,6 +97,45 @@ CorridorObservation _observation({
 );
 
 void main() {
+  group('preview 선행 거리 안정화', () {
+    test('정상 확정 배치는 이미 보인 선행분을 확정 거리만큼 소비한다', () {
+      expect(
+        stabilizePreviewLeadM(
+          previousLeadM: 5,
+          targetLeadM: 0,
+          fullLeadM: 5,
+          confirmedConsumedM: 1.4,
+        ),
+        closeTo(3.6, 1e-9),
+      );
+    });
+
+    test('대표 가설 재배치 때도 실제 확정 보행 거리만 소비한다', () {
+      expect(
+        stabilizePreviewLeadM(
+          previousLeadM: 5,
+          targetLeadM: 0,
+          fullLeadM: 5,
+          confirmedConsumedM: 1.4,
+        ),
+        closeTo(3.6, 1e-9),
+        reason: '재배치된 4m를 빼지 않고 이번 배치의 확정 1.4m만 빼야 한다',
+      );
+    });
+
+    test('재배치 중에도 현재 후보 경로 길이를 넘겨 표시하지 않는다', () {
+      expect(
+        stabilizePreviewLeadM(
+          previousLeadM: 5,
+          targetLeadM: 1,
+          fullLeadM: 2,
+          confirmedConsumedM: 0,
+        ),
+        closeTo(2, 1e-9),
+      );
+    });
+  });
+
   test('도면 y축이 반전되면 위치와 동일하게 heading도 반전한다', () {
     const anchor = PdrAnchor(
       floorId: '1F',
@@ -266,8 +304,6 @@ void main() {
       expect(result.previewCandidateEdgeIds, contains('bc'));
     });
 
-
-
     test('교차로에서 먼 곳에서 휴대폰만 돌리면 회전 후보로 진입하지 않는다', () {
       final tracker = CorridorPositionTracker(_crossGraph)
         ..reset(
@@ -289,13 +325,6 @@ void main() {
       expect(result.state, CorridorTrackingState.straightTracking);
       expect(result.currentEdgeId, 'ab');
     });
-
-
-
-
-
-
-
 
     test('복도 중간 유턴은 교차로 진입이나 다른 간선 전환으로 보지 않는다', () {
       final tracker = CorridorPositionTracker(_crossGraph)
@@ -354,7 +383,6 @@ void main() {
         isTrue,
       );
     });
-
 
     test('시간 변화가 없는 heading 오차는 교차로 회전으로 오인하지 않는다', () {
       final tracker = CorridorPositionTracker(_crossGraph)

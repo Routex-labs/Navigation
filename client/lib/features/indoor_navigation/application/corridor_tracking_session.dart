@@ -170,9 +170,24 @@ class CorridorTrackingSession {
   }
 
   int? _previewTailStart(PdrSnapshot snapshot) {
-    final leadSteps = snapshot.preview.steps - snapshot.steps;
     final path = snapshot.preview.path;
-    if (leadSteps <= 0 || path.length < 2) return null;
+    if (path.length < 2) return null;
+    final times = snapshot.preview.acceptedPeakTimesMs;
+    final confirmedThroughMs = snapshot.lastAppliedBatch?.spanEndMs;
+    if (confirmedThroughMs != null && times.length == path.length) {
+      for (var index = 1; index < times.length; index++) {
+        final peakMs = times[index];
+        if (peakMs != null && peakMs > confirmedThroughMs) {
+          // 첫 pending 점의 이동 벡터를 만들 수 있게 직전 점부터 돌려준다.
+          return index - 1;
+        }
+      }
+      return null;
+    }
+
+    // 시간 정보가 없는 Android/옛 fixture만 기존 걸음 수 차이로 폴백한다.
+    final leadSteps = snapshot.preview.steps - snapshot.steps;
+    if (leadSteps <= 0) return null;
     final movementCount = math.min(leadSteps, path.length - 1);
     return path.length - movementCount - 1;
   }

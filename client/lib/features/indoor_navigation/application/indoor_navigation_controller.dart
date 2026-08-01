@@ -49,6 +49,7 @@ class IndoorNavigationDriver implements IndoorNavigationController {
   Map<String, Object?>? _lastPedometerFinalizeInfo;
   bool _guiding = false;
   bool _backgrounded = false;
+  Future<void> _lifecycleTransition = Future<void>.value();
   String? _floorId;
 
   // 캘리브레이션 진행 중 임시 상태.
@@ -159,12 +160,23 @@ class IndoorNavigationDriver implements IndoorNavigationController {
   Future<void> confirmAnchorByPin({
     required PdrLocalPoint floorPointM,
     PdrToFloorAxes axes = const PdrToFloorAxes.identity(),
+    String? floorId,
   }) async {
     if (!_guiding) {
       return;
     }
+    // 길찾기에서 다른 층의 출발지를 직접 고르면 좌표뿐 아니라 현재 층도 함께
+    // 바뀌어야 한다. 좌표만 새 층 값으로 넣고 _floorId를 이전 층에 두면
+    // calibration은 성공해도 화면의 floor gate가 마커·PDR을 전부 숨긴다.
+    if (floorId != null) {
+      _floorId = floorId;
+    }
+    // 위치 재지정은 새 경로의 시작이지만 센서를 다시 켜는 동작은 아니다.
+    // native 누적 counter/heading은 유지하고 Dart 경로만 지금 시각으로 재기준화해,
+    // iOS CMPedometer의 느린 첫 batch를 다시 기다리지 않게 한다.
+    _rebasePathForNewOrigin();
     _pendingPinFloorM = floorPointM;
-    _pendingPinPdrM = _session.position;
+    _pendingPinPdrM = PdrLocalPoint.zero;
     _pendingAxes = axes;
     if (_session.headingReference == HeadingReference.magneticNorth) {
       // 자북 기준: 서버 north_alignment 오프셋을 Phase 3에서 주입한다. 지금은 0.
@@ -202,15 +214,7 @@ class IndoorNavigationDriver implements IndoorNavigationController {
     _pendingPinFloorM = null;
     _pendingPinPdrM = null;
     _pendingAxes = const PdrToFloorAxes.identity();
-    try {
-      await _resetSessionForNewFloor();
-    } on Object {
-      _session.reset();
-      _updateRuntime(
-        PdrRuntimeState.degraded,
-        warnings: const ['pedometerResetFailed'],
-      );
-    }
+    _rebasePathForNewOrigin();
     _updateCalibration(CalibrationPhase.awaitingPin);
   }
 
@@ -230,18 +234,9 @@ class IndoorNavigationDriver implements IndoorNavigationController {
     _pendingPinFloorM = null;
     _pendingPinPdrM = null;
     _pendingAxes = const PdrToFloorAxes.identity();
-    // 걸음 세션을 새로 열어야 PDR 원점이 "지금 여기"가 된다. 그래야 도착 노드를
-    // 원점에 놓는 아래 anchor가 곧 현재 위치가 된다. reset을 빼면 수직 이동 전
-    // 층에서 걸은 거리가 새 층 위치에 그대로 더해진다.
-    try {
-      await _resetSessionForNewFloor();
-    } on Object {
-      _session.reset();
-      _updateRuntime(
-        PdrRuntimeState.degraded,
-        warnings: const ['pedometerResetFailed'],
-      );
-    }
+    // 센서 세션은 이어가되 경로 원점만 지금으로 옮긴다. 이전 층의 늦은 batch는
+    // 시간 경계로 잘라 새 층 경로에 붙지 않게 한다.
+    _rebasePathForNewOrigin();
     final reference = _session.headingReference;
     _updateCalibration(
       CalibrationPhase.calibrated,
@@ -266,7 +261,10 @@ class IndoorNavigationDriver implements IndoorNavigationController {
   // ── 앱 lifecycle (앱 셸이 호출) ──
 
   /// 앱이 background로 가면 tracking pause.
-  Future<void> onAppBackgrounded() async {
+  Future<void> onAppBackgrounded() =>
+      _enqueueLifecycleTransition(_applyAppBackgrounded);
+
+  Future<void> _applyAppBackgrounded() async {
     if (!_guiding || _backgrounded) {
       return;
     }
@@ -284,7 +282,10 @@ class IndoorNavigationDriver implements IndoorNavigationController {
   }
 
   /// 앱이 foreground로 돌아오면 tracking resume.
-  Future<void> onAppForegrounded() async {
+  Future<void> onAppForegrounded() =>
+      _enqueueLifecycleTransition(_applyAppForegrounded);
+
+  Future<void> _applyAppForegrounded() async {
     if (!_guiding || !_backgrounded) {
       return;
     }
@@ -299,6 +300,16 @@ class IndoorNavigationDriver implements IndoorNavigationController {
         warnings: const ['sensorResumeFailed'],
       );
     }
+  }
+
+  Future<void> _enqueueLifecycleTransition(Future<void> Function() operation) {
+    // paused/resumed callback은 UI에서 기다리지 않으므로 빠르게 연달아 들어올 수
+    // 있다. stop이 끝나기 전에 start가 `_rawSub != null`을 보고 no-op이 되는
+    // 경합을 막기 위해 실제 센서 전환은 반드시 순서대로 실행한다.
+    _lifecycleTransition = _lifecycleTransition
+        .catchError((Object _) {})
+        .then((_) => operation());
+    return _lifecycleTransition;
   }
 
   Future<void> dispose() async {
@@ -386,9 +397,8 @@ class IndoorNavigationDriver implements IndoorNavigationController {
     );
   }
 
-  Future<void> _resetSessionForNewFloor() async {
-    final newSessionId = await _source.resetPedometer();
-    _session.reset(newStepSessionId: newSessionId);
+  void _rebasePathForNewOrigin() {
+    _session.rebasePath(atMs: _nowMs());
   }
 
   void _finalizeAnchor({

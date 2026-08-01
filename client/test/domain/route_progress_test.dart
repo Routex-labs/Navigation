@@ -15,6 +15,27 @@ const _uTurnRoute = [
 ];
 
 void main() {
+  group('새 경로 시작 진행률', () {
+    test('현재점과 뒷 구간이 겹쳐도 반드시 0m에서 시작한다', () {
+      final progress = seedRouteProgressAtRouteStart(
+        routePointsLocalM: const [
+          LocalPoint(0, 0),
+          LocalPoint(10, 0),
+          LocalPoint(0, 0),
+        ],
+        routeEdgeIds: const {'ab', 'ba'},
+        currentEdgeId: 'ab',
+        headingDeg: 90,
+      );
+
+      expect(progress, isNotNull);
+      expect(progress!.traveledM, 0);
+      expect(progress.remainingM, 20);
+      expect(progress.projectedPoint, const LocalPoint(0, 0));
+      expect(progress.reacquired, isFalse);
+    });
+  });
+
   group('진행 표시 안정화', () {
     const previous = RouteProgress(
       traveledM: 10,
@@ -95,6 +116,41 @@ void main() {
 
       expect(traveled, orderedEquals(<double>[0, 4, 8, 12, 16, 20]));
       expect(remaining, orderedEquals(<double>[20, 16, 12, 8, 4, 0]));
+    });
+
+    test('경로와 같은 간선에서 120도 이상 반대로 향하면 역주행이다', () {
+      final progress = computeRouteProgress(
+        routePointsLocalM: _straightRoute,
+        routeEdgeIds: const {'ab'},
+        position: const LocalPoint(10, 0),
+        currentEdgeId: 'ab',
+        // (0,0) → (20,0)은 동쪽 90°, 270°는 정확한 반대 방향.
+        headingDeg: 270,
+      )!;
+
+      expect(progress.headingErrorDeg, closeTo(180, 1e-9));
+      expect(progress.wrongWay, isTrue);
+    });
+
+    test('코너 수준의 heading 차이와 경로 밖 간선은 역주행으로 단정하지 않는다', () {
+      final corner = computeRouteProgress(
+        routePointsLocalM: _straightRoute,
+        routeEdgeIds: const {'ab'},
+        position: const LocalPoint(10, 0),
+        currentEdgeId: 'ab',
+        headingDeg: 190,
+      )!;
+      final offRoute = computeRouteProgress(
+        routePointsLocalM: _straightRoute,
+        routeEdgeIds: const {'ab'},
+        position: const LocalPoint(10, 1),
+        currentEdgeId: 'other',
+        headingDeg: 270,
+      )!;
+
+      expect(corner.headingErrorDeg, closeTo(100, 1e-9));
+      expect(corner.wrongWay, isFalse);
+      expect(offRoute.wrongWay, isFalse);
     });
 
     test('경로 시작 이전·끝 이후로 나가도 진행거리가 경로 범위를 벗어나지 않는다', () {

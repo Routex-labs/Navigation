@@ -113,6 +113,7 @@ class _GuidanceIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final icon = switch (action) {
+      RouteGuidanceAction.wrongWay => Icons.u_turn_right_rounded,
       RouteGuidanceAction.turnLeft => Icons.turn_left_rounded,
       RouteGuidanceAction.turnRight => Icons.turn_right_rounded,
       RouteGuidanceAction.escalator => Icons.escalator_rounded,
@@ -124,10 +125,18 @@ class _GuidanceIcon extends StatelessWidget {
       width: 46,
       height: 46,
       decoration: BoxDecoration(
-        color: const Color(0xFFE8F0FE),
+        color: action == RouteGuidanceAction.wrongWay
+            ? const Color(0xFFFCE8E6)
+            : const Color(0xFFE8F0FE),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Icon(icon, size: 30, color: const Color(0xFF1A73E8)),
+      child: Icon(
+        icon,
+        size: 30,
+        color: action == RouteGuidanceAction.wrongWay
+            ? const Color(0xFFD93025)
+            : const Color(0xFF1A73E8),
+      ),
     );
   }
 }

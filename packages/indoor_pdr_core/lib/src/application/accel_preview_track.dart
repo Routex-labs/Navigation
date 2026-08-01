@@ -75,6 +75,7 @@ class AccelPreviewTrack {
     required double fallbackStrideMeters,
     required int confirmedSteps,
     required double confirmedDistanceM,
+    int? confirmedThroughMs,
     required double? pedometerCadenceHz,
     required HeadingSample? Function(int ms) headingAt,
     required double fallbackHeadingDeg,
@@ -111,13 +112,19 @@ class AccelPreviewTrack {
     }
 
     if (delta > 1) {
-      _recordReject(reason: batchedPeaksCapped, deltaPeaks: delta - 1,
-          counted: false);
+      _recordReject(
+        reason: batchedPeaksCapped,
+        deltaPeaks: delta - 1,
+        counted: false,
+      );
     }
     final intervalCheck = _checkInterval(peakMs, pedometerCadenceHz);
     if (intervalCheck.reason != null) {
-      _recordReject(reason: intervalCheck.reason!, deltaPeaks: 1,
-          counted: false);
+      _recordReject(
+        reason: intervalCheck.reason!,
+        deltaPeaks: 1,
+        counted: false,
+      );
       if (intervalCheck.resync) {
         _resyncGate(peakMs);
       }
@@ -133,6 +140,7 @@ class AccelPreviewTrack {
       stride.meters,
       confirmedSteps: confirmedSteps,
       confirmedDistanceM: confirmedDistanceM,
+      confirmedThroughMs: confirmedThroughMs,
     );
     if (leadReason != null) {
       // 실제로 걸음을 버려야 lead cap이 의미가 있다. 예전에는 여기서 reject만
@@ -168,7 +176,8 @@ class AccelPreviewTrack {
     return true;
   }
 
-  void reset() {
+  void reset({bool preserveNativePeakBaseline = false}) {
+    final nativePeakBaseline = _lastPeakCount;
     path
       ..clear()
       ..add(PdrLocalPoint.zero);
@@ -185,7 +194,9 @@ class AccelPreviewTrack {
     for (final key in rejectReasons.keys.toList()) {
       rejectReasons[key] = 0;
     }
-    _lastPeakCount = null;
+    // 위치 재지정은 센서를 재시작하는 동작이 아니다. 네이티브 누적 peak count를
+    // 기억해야 다음 count가 이전 전체 누적이 아니라 정확히 한 걸음 delta가 된다.
+    _lastPeakCount = preserveNativePeakBaseline ? nativePeakBaseline : null;
     _lastAcceptedPeakMs = null;
     _lastGatePeakMs = null;
   }
@@ -256,7 +267,25 @@ class AccelPreviewTrack {
     double stepDistance, {
     required int confirmedSteps,
     required double confirmedDistanceM,
+    int? confirmedThroughMs,
   }) {
+    if (confirmedThroughMs != null) {
+      var pendingSteps = 0;
+      var pendingDistanceM = 0.0;
+      for (var index = 1; index < acceptedPeakTimesMs.length; index++) {
+        final peakMs = acceptedPeakTimesMs[index];
+        if (peakMs == null || peakMs <= confirmedThroughMs) continue;
+        pendingSteps++;
+        if (index < path.length) {
+          pendingDistanceM += (path[index] - path[index - 1]).distance;
+        }
+      }
+      if (pendingSteps + 1 > maxStepLead) return stepLeadCap;
+      if (pendingDistanceM + stepDistance > maxDistanceLeadMeters) {
+        return distanceLeadCap;
+      }
+      return null;
+    }
     // 첫 CMPedometer batch는 실제 기기에서 7~10초 늦게 올 수 있다.
     // confirmed가 아직 0이면 일반 lead cap보다 넓게 허용해서 preview가 초반에
     // 12 step에서 멈추지 않게 한다. confirmed가 한 번이라도 들어오면 기존 cap으로

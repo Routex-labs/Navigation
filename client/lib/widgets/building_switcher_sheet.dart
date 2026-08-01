@@ -5,6 +5,8 @@ import '../models/building.dart';
 import '../theme/app_theme.dart';
 import 'sheet_grab_handle.dart';
 
+import 'map_overlay_guard.dart';
+
 /// 실내 모드 햄버거 버튼으로 여는 건물 선택 시트. 테스트용으로 백엔드에
 /// 적재된 건물 목록(더현대서울/데모 건물 등)을 그대로 보여주고, 고르면
 /// 그 건물 ID를 반환한다.
@@ -19,7 +21,9 @@ class BuildingSwitcherSheet extends StatefulWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => BuildingSwitcherSheet(selectedBuildingId: selectedBuildingId),
+      builder: (context) => MapOverlayGuard(
+        child: BuildingSwitcherSheet(selectedBuildingId: selectedBuildingId),
+      ),
     );
   }
 

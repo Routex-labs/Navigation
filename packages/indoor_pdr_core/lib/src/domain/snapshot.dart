@@ -145,4 +145,42 @@ class PdrSnapshot {
   /// `preview.acceptedPeakTimesMs[i] <= lastAppliedBatch.spanEndMs`인 점까지가
   /// 확정 시간창 안에 들어온 preview 걸음이다.
   final PdrAppliedBatch? lastAppliedBatch;
+
+  /// 확정 경로 끝에서 아직 확정되지 않은 preview peak만 다시 이어 붙인 표시
+  /// 경로. [preview.path] 원본은 진단·품질 계산을 위해 그대로 보존한다.
+  ///
+  /// 초록 배치가 도착했다고 주황 전체를 reset하지 않는다. 배치 끝 시각 이하의
+  /// peak만 소비하고, 이후 peak의 이동 벡터를 새 초록 끝점에 재부착하므로
+  /// 마커가 과거 위치로 튀었다 다시 전진하는 현상을 막는다.
+  List<PdrLocalPoint> get reconciledPreviewPath {
+    final spanEndMs = lastAppliedBatch?.spanEndMs;
+    final rawPath = preview.path;
+    final times = preview.acceptedPeakTimesMs;
+    if (spanEndMs == null ||
+        rawPath.length < 2 ||
+        times.length != rawPath.length) {
+      return rawPath;
+    }
+
+    var firstPending = -1;
+    for (var index = 1; index < times.length; index++) {
+      final peakMs = times[index];
+      if (peakMs != null && peakMs > spanEndMs) {
+        firstPending = index;
+        break;
+      }
+    }
+    final output = <PdrLocalPoint>[...path];
+    if (firstPending < 0) return List.unmodifiable(output);
+
+    var current = position;
+    for (var index = firstPending; index < rawPath.length; index++) {
+      current += rawPath[index] - rawPath[index - 1];
+      output.add(current);
+    }
+    return List.unmodifiable(output);
+  }
+
+  PdrLocalPoint get reconciledPreviewPosition =>
+      reconciledPreviewPath.isEmpty ? position : reconciledPreviewPath.last;
 }
