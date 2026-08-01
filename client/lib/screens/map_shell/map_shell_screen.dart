@@ -378,8 +378,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
         buildingId: _buildingId,
         placeId: match.placeId,
         favorite: favorite,
-        category: match.category,
-        subcategory: match.subcategory,
+        // 대분류 칩을 없앴으므로 업종은 한 줄로만 보여 준다. 소분류가 없는
+        // 장소에서 업종이 통째로 사라지지 않도록 대분류로 떨어뜨린다.
+        subcategory: match.subcategory ?? match.category,
         onCloseAll: _requestCloseSheetChain,
       ),
     );

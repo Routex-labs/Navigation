@@ -101,9 +101,9 @@ void main() {
     expect(find.text('서울특별시 영등포구 여의대로 108'), findsOneWidget);
   });
 
-  // 길찾기 버튼은 이름 옆에 있어서 상세가 길면 스크롤로 사라진다. 그때 하단에
-  // 같은 버튼이 떠야 "언제든 길찾기"(F5)가 유지된다.
-  testWidgets('스크롤로 이름 옆 버튼이 가려지면 하단 액션 바가 뜬다', (tester) async {
+  // 액션 바는 스크롤 위치와 무관하게 하단에 고정이다. 본문이 길어도 "언제든
+  // 길찾기"(F5)가 유지되는지 확인한다.
+  testWidgets('본문이 길어도 하단 액션 바는 스크롤과 무관하게 남는다', (tester) async {
     await tester.pumpWidget(
       buildSubject(
         repository: _FakeRepository(
@@ -120,8 +120,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final bar = find.byKey(const ValueKey('place-detail-floating-actions'));
-    expect(bar, findsNothing);
+    final bar = find.byKey(const ValueKey('place-detail-actions'));
+    expect(bar, findsOneWidget);
 
     // DraggableScrollableSheet는 첫 드래그를 시트 확장에 쓴다. 실제 본문 스크롤은
     // 시트가 maxChildSize에 닿은 뒤부터라서 두 번 끈다.
@@ -132,7 +132,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(bar, findsOneWidget);
-    expect(find.text('출발'), findsNWidgets(2));
+    // 상단에 복제본이 없으므로 버튼은 항상 하나씩이다.
+    expect(find.text('출발'), findsOneWidget);
+    expect(find.text('도착'), findsOneWidget);
   });
 
   testWidgets('출발 버튼은 기존 StoreInfoAction 계약으로 닫힌다', (tester) async {
