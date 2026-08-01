@@ -221,7 +221,9 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                             )
                           else if (sections.isNotEmpty)
                             Padding(
-                              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                              // 좌우 여백은 섹션이 스스로 갖는다. 사진·메뉴는
+                              // 시트 끝까지 써야 해서 여기서 일괄로 줄 수 없다.
+                              padding: const EdgeInsets.only(top: 20),
                               child: PlaceDetailSections(
                                 sections: sections,
                                 floorLabel: _detail?.location.floorLabel,
@@ -461,6 +463,16 @@ class PlaceDetailSections extends StatelessWidget {
             ],
           ),
       };
+      // 사진은 시트 끝까지, 메뉴는 가로 스크롤이 끝까지 흐르도록 스스로 여백을
+      // 갖는다. 나머지 섹션만 여기서 본문 거터를 씌운다.
+      final fullBleed = section is HeroSection || section is MenuSection;
+      final padded = fullBleed
+          ? widget
+          : Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: placeSectionGutter),
+              child: widget,
+            );
       if (widgets.isNotEmpty) {
         // 같은 묶음 안(소개 → 매장 정보)은 좁게, 다른 섹션 사이는 넓게. 테두리를
         // 걷어낸 뒤로는 섹션을 나누는 게 여백뿐이라 이 차이가 곧 그룹핑이다.
@@ -469,7 +481,7 @@ class PlaceDetailSections extends StatelessWidget {
             section is BusinessInfoSection;
         widgets.add(SizedBox(height: sameGroup ? 12 : 24));
       }
-      widgets.add(widget);
+      widgets.add(padded);
       previous = section;
     }
     return Column(

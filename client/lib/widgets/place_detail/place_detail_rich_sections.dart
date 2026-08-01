@@ -28,8 +28,10 @@ class _PlaceHeroCarouselState extends State<PlaceHeroCarousel> {
   Widget build(BuildContext context) {
     if (widget.images.isEmpty) return const SizedBox.shrink();
 
+    // 시트 좌우 여백을 무시하고 끝까지 채운다. 사진을 카드로 감싸면 상자가 하나
+    // 더 생기고, 실제로도 사진은 시트의 배경에 가까운 요소다.
     return SizedBox(
-      height: 220,
+      height: 240,
       child: Stack(
         children: [
           PageView.builder(
@@ -37,8 +39,10 @@ class _PlaceHeroCarouselState extends State<PlaceHeroCarousel> {
             onPageChanged: (index) => setState(() => _activeIndex = index),
             itemBuilder: (context, index) {
               final image = widget.images[index];
-              return ClipRRect(
-                borderRadius: BorderRadius.circular(16),
+              // 페이지가 화면 폭 그대로면 넘길 때 사진끼리 맞닿는다. 양쪽을 조금씩
+              // 비워 두 장 사이에 틈이 생기게 한다.
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 3),
                 child: Image.asset(
                   image.assetPath,
                   fit: BoxFit.cover,
@@ -105,12 +109,18 @@ class PlaceMenuSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const PlaceSectionTitle('메뉴'),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: placeSectionGutter),
+          child: PlaceSectionTitle('메뉴'),
+        ),
         const SizedBox(height: 10),
         SizedBox(
           height: 230,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
+            // 가로 리스트는 본문 거터를 스스로 갖는다. 그래야 첫 카드가 시트
+            // 가장자리에서 시작하면서도 끝까지 스크롤된다.
+            padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
             itemCount: items.length,
             separatorBuilder: (_, _) => const SizedBox(width: 12),
             itemBuilder: (context, index) => _PlaceMenuCard(item: items[index]),
@@ -258,6 +268,9 @@ class _BusinessInfoRow extends StatelessWidget {
     ],
   );
 }
+
+/// 상세 본문의 좌우 여백. 사진처럼 끝까지 채우는 섹션만 이 값을 쓰지 않는다.
+const placeSectionGutter = 20.0;
 
 /// 섹션 제목. 카드 테두리를 걷어낸 뒤로는 이 제목과 여백이 섹션 경계를 만드는
 /// 유일한 장치라, 모든 섹션이 같은 굵기·크기를 쓰게 한곳에 둔다.
