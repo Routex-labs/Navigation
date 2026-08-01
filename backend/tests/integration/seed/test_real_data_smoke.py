@@ -331,3 +331,29 @@ def test_되물을_축이_없는_질의도_후보를_통째로_준다(real_db_se
     matches = discovery["matches"]
     assert len(matches) > query_search.MAX_DISCOVERY_MATCHES, [m["name"] for m in matches]
     assert all(match["subcategory"] == "카페·베이커리" for match in matches)
+
+
+# 사용자가 쓰는 말과 intent 이름이 다르면 "이미 물은 값" 제외가 안 걸려, 방금 친 말을
+# 선택지로 되돌려주는 메아리 질문이 선다("운동화"에 대고 "신발/의류 중 무엇?").
+# 개념당 intent는 하나만 두고 다른 말은 동의어로 잇는다.
+def test_운동화는_신발_질의와_같은_결과를_준다(real_db_session):
+    shoes = query_search.discover(real_db_session, REAL_BUILDING_ID, "신발")
+    sneakers = query_search.discover(real_db_session, REAL_BUILDING_ID, "운동화")
+
+    assert sneakers["mode"] == shoes["mode"]
+    assert [o["value"] for o in sneakers["options"]] == [o["value"] for o in shoes["options"]]
+    assert [m["store_id"] for m in sneakers["matches"]] == [m["store_id"] for m in shoes["matches"]]
+    # 되물음에 "신발"이 선택지로 돌아오지 않는다 — 사용자가 이미 물은 값이다.
+    assert "신발" not in [o["value"] for o in sneakers["options"]]
+    # 추천 이유는 intent 이름(신발)으로 말한다.
+    assert all("신발" in (m["reason"] or "") for m in sneakers["matches"])
+
+
+# 조사·어미가 붙어도 같은 결과여야 한다. 형태소 정규화가 꼬리를 떼고 나서 동의어를
+# 찾으므로, 정규화가 질의를 다른 모양으로 바꾸면 동의어가 조용히 안 걸린다.
+@pytest.mark.parametrize("text", ["운동화", "운동화 어디야", "운동화 사고 싶다"])
+def test_운동화는_꼬리가_붙어도_신발로_이어진다(real_db_session, text):
+    discovery = query_search.discover(real_db_session, REAL_BUILDING_ID, text)
+
+    assert discovery["matches"], text
+    assert all("신발" in (match["reason"] or "") for match in discovery["matches"]), text
