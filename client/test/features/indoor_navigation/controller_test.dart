@@ -19,6 +19,7 @@ class FakePdrMotionSource implements PdrMotionSource {
   Object? startError;
   Object? stopError;
   Object? resetError;
+  Completer<void>? stopGate;
 
   @override
   Stream<NativePdrEvent> get events => _controller.stream;
@@ -33,6 +34,7 @@ class FakePdrMotionSource implements PdrMotionSource {
   Future<void> stop() async {
     stopCount++;
     if (stopError case final error?) throw error;
+    await stopGate?.future;
   }
 
   @override
@@ -105,10 +107,12 @@ Future<void> settle() async {
 void main() {
   late FakePdrMotionSource source;
   late IndoorNavigationDriver driver;
+  late int nowMs;
 
   setUp(() {
     source = FakePdrMotionSource();
-    driver = IndoorNavigationDriver(source: source, nowMs: () => 0);
+    nowMs = 0;
+    driver = IndoorNavigationDriver(source: source, nowMs: () => nowMs);
   });
 
   tearDown(() async {
@@ -179,7 +183,9 @@ void main() {
     final seen = <PdrSnapshot>[];
     driver.snapshots.listen(seen.add);
 
-    source.emitRaw(motionEvent(tMs: 1000, heading: 0));
+    source.emitRaw(
+      motionEvent(tMs: 1000, heading: 0, stepPeakCount: 0, latestStepPeakMs: 0),
+    );
     source.emitRaw(
       pedometerEvent(
         steps: 10,
@@ -215,6 +221,75 @@ void main() {
     expect(driver.currentCalibration.canRenderPosition, isTrue);
     expect(driver.currentCalibration.anchor, isNotNull);
     expect(driver.currentCalibration.anchor!.axes.northToY, -1);
+  });
+
+  test('시작 위치를 다시 찍으면 native는 유지하고 PDR 경로만 재기준화한다', () async {
+    await driver.startGuidance(floorId: 'F1');
+    source.emitRaw(
+      motionEvent(tMs: 1000, heading: 0, stepPeakCount: 0, latestStepPeakMs: 0),
+    );
+    source.emitRaw(
+      pedometerEvent(
+        steps: 8,
+        sessionStartMs: 900,
+        endMs: 2000,
+        distanceM: 5.6,
+        peaks: [1100, 1300, 1500, 1700, 1900],
+      ),
+    );
+    await settle();
+    expect(driver.currentSnapshot!.steps, 8);
+
+    nowMs = 2500;
+    await driver.confirmAnchorByPin(floorPointM: const PdrLocalPoint(30, 40));
+    await settle();
+
+    expect(source.resetCount, 1);
+    expect(driver.currentSnapshot!.steps, 0);
+    expect(driver.currentSnapshot!.preview.steps, 0);
+    expect(driver.currentSnapshot!.path, [PdrLocalPoint.zero]);
+    expect(driver.currentSnapshot!.hasHeading, isTrue);
+    expect(driver.currentCalibration.anchor!.anchorLocalM.eastM, 30);
+    expect(driver.currentCalibration.anchor!.anchorLocalM.northM, 40);
+
+    source.emitRaw(
+      motionEvent(
+        tMs: 3000,
+        heading: 0,
+        stepPeakCount: 1,
+        latestStepPeakMs: 3000,
+      ),
+    );
+    await settle();
+    expect(driver.currentSnapshot!.preview.steps, 1);
+
+    source.emitRaw(
+      pedometerEvent(
+        steps: 12,
+        sessionStartMs: 900,
+        endMs: 4000,
+        distanceM: 8.4,
+        peaks: [2200, 2800, 3400, 3900],
+      ),
+    );
+    await settle();
+    expect(driver.currentSnapshot!.steps, 3);
+  });
+
+  test('다른 층 출발지를 지정하면 새 anchor의 층도 함께 바뀐다', () async {
+    await driver.startGuidance(floorId: '1F');
+    source.emitRaw(motionEvent(tMs: 1000, heading: 0));
+    await settle();
+
+    await driver.confirmAnchorByPin(
+      floorId: 'B2',
+      floorPointM: const PdrLocalPoint(12, 34),
+    );
+
+    expect(driver.currentCalibration.phase, CalibrationPhase.calibrated);
+    expect(driver.currentCalibration.anchor!.floorId, 'B2');
+    expect(driver.currentCalibration.anchor!.anchorLocalM.eastM, 12);
+    expect(driver.currentCalibration.anchor!.anchorLocalM.northM, 34);
   });
 
   test('arbitrary 기준: pin 후 heading 보정까지 요구한다', () async {
@@ -301,6 +376,25 @@ void main() {
     expect(driver.currentRuntimeStatus.state, PdrRuntimeState.starting);
   });
 
+  test('빠른 background와 foreground 전환도 stop 뒤 start 순서로 직렬화한다', () async {
+    await driver.startGuidance(floorId: 'F1');
+    source.stopGate = Completer<void>();
+
+    final background = driver.onAppBackgrounded();
+    await settle();
+    final foreground = driver.onAppForegrounded();
+    await settle();
+
+    expect(source.stopCount, 1);
+    expect(source.startCount, 1, reason: 'stop 완료 전 start가 실행되면 안 된다');
+
+    source.stopGate!.complete();
+    await Future.wait([background, foreground]);
+
+    expect(source.startCount, 2);
+    expect(driver.currentRuntimeStatus.state, PdrRuntimeState.starting);
+  });
+
   test('안내 중이 아니면 lifecycle이 source를 호출하지 않는다', () async {
     await driver.onAppBackgrounded();
     await driver.onAppForegrounded();
@@ -364,10 +458,10 @@ void main() {
     expect(driver.currentCalibration.phase, CalibrationPhase.uncalibrated);
   });
 
-  test('changeFloor는 pedometer를 reset하고 awaitingPin으로 간다', () async {
+  test('changeFloor는 native sensor를 유지하고 awaitingPin으로 간다', () async {
     await driver.startGuidance(floorId: 'F1');
     await driver.changeFloor(floorId: 'F2');
-    expect(source.resetCount, 2);
+    expect(source.resetCount, 1);
     expect(driver.currentCalibration.phase, CalibrationPhase.awaitingPin);
   });
 

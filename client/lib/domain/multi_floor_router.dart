@@ -90,6 +90,7 @@ MultiFloorRoute? computeMultiFloorRoute(
       current.transferModeToNext = edge.transferMode;
       current.transferDistanceM = edge.lengthM;
       current.transferCostM = edge.routingCostM;
+      current.transferEdgeId = edge.id;
       current.transferFromNode = fromNode;
       current.transferToNode = toNode;
       segments.add(current);
@@ -169,6 +170,9 @@ MultiFloorRoute? computeMultiFloorRoute(
         transferPointsToNext: transferPoints,
         transferDistanceMeters: segment.transferDistanceM,
         transferCostMeters: segment.transferCostM,
+        transferEdgeId: segment.transferEdgeId,
+        transferFromNodeId: transferFrom?.id,
+        transferToNodeId: transferTo?.id,
       ),
     );
   }
@@ -207,18 +211,13 @@ ShortestPath? _selectPath(
         endNodeId: endNodeId,
         weight: weight,
       );
-  bool usesElevator(ShortestPath path) => path.edgeIds.any(
-    (id) => edgesById[id]?.transferMode == 'elevator',
-  );
+  bool usesElevator(ShortestPath path) =>
+      path.edgeIds.any((id) => edgesById[id]?.transferMode == 'elevator');
 
   final raw = solve();
   if (raw == null || usesElevator(raw)) return raw;
 
-  final penalize = _intermediateFloorWeight(
-    nodesById,
-    startNodeId,
-    endNodeId,
-  );
+  final penalize = _intermediateFloorWeight(nodesById, startNodeId, endNodeId);
   if (penalize == null) return raw;
   final weighted = solve(weight: penalize);
   if (weighted == null || usesElevator(weighted)) return raw;
@@ -248,7 +247,8 @@ double Function(GraphEdge edge)? _intermediateFloorWeight(
   return (edge) {
     if (edge.transferMode != null) return edge.routingCostM;
     final floorId =
-        nodesById[edge.fromNodeId]?.floorId ?? nodesById[edge.toNodeId]?.floorId;
+        nodesById[edge.fromNodeId]?.floorId ??
+        nodesById[edge.toNodeId]?.floorId;
     if (floorId == null || floorId == startFloorId || floorId == endFloorId) {
       return edge.routingCostM;
     }
@@ -278,6 +278,7 @@ class _PendingSegment {
   double transferCostM = 0.0;
   GraphNode? transferFromNode;
   GraphNode? transferToNode;
+  String? transferEdgeId;
 
   void addNode(GraphNode node) {
     if (points.isNotEmpty &&

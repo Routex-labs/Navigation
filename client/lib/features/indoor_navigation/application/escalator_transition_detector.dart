@@ -11,10 +11,10 @@
 /// 3. **절대 고도는 쓸 수 없다.** 해면기압이 시간당 1~2 hPa(8~16 m) 움직이므로,
 ///    직전 확정 층에서 다시 잡은 baseline과의 **차이**만 본다.
 ///
-/// 방향 판단도 노드가 하지 않는다. 한 랜딩에는 상행 탑승 노드와 상행 도착
-/// 노드가 1.5m 거리로 붙어 있어(실측 데이터) 반경 안에 둘 다 들어온다. 그래서
-/// 올라갔는지 내려갔는지는 기압 부호가 정하고, 노드는 "어느 에스컬레이터
-/// 뱅크(그룹) 근처인가"만 알려준다.
+/// 올라갔는지 내려갔는지는 노드가 아니라 기압 부호가 정한다. 그 방향과 반대인
+/// 탑승 노드는 후보에서 제외하고, 붙어 있는 레인은 활성 경로가 고른 정확한
+/// 노드를 우선한다. 경로가 없으면 같은 방향 중 현재 위치에 가장 가까운 탑승
+/// 노드를 쓴다. 도착 역할 노드는 탑승 허가에 사용하지 않는다.
 ///
 /// HTTP·플러그인·UI를 알지 못하는 순수 로직이다. 합성 기압 시계열로 전부
 /// 테스트된다: `client/test/features/indoor_navigation/escalator_transition_detector_test.dart`.
@@ -33,6 +33,7 @@ import 'escalator_node_naming.dart';
 class EscalatorDetectorConfig {
   const EscalatorDetectorConfig({
     this.armRadiusM = 6.0,
+    this.routeApproachArmRadiusM = 16.0,
     this.armHoldMs = 60000,
     this.smoothingWindowMs = 4000,
     this.minSmoothingSamples = 3,
@@ -58,6 +59,15 @@ class EscalatorDetectorConfig {
   /// 에스컬레이터 노드에 이만큼 다가오면 판정을 "허가"한다. 랜딩 폭과 보정
   /// 위치 오차를 감안한 값이다.
   final double armRadiusM;
+
+  /// 활성 다층 경로가 에스컬레이터 탑승 노드를 정확히 가리킬 때 허용하는 현재
+  /// 위치 오차. 일반 근접 허가보다 넓지만 **경로 끝이 에스컬레이터인 경우에만**
+  /// 사용하므로, 평소 복도에서 기압 변화만으로 층이 바뀌지는 않는다.
+  ///
+  /// 2026-07-30 하행 로그는 실제 -5.46m가 관측됐지만 map-matched 위치가 탑승
+  /// 노드에서 약 12m 어긋나 `armed=false`로 끝났다. 16m는 그 실측 오차를
+  /// 포함하면서 인접 에스컬레이터 뱅크까지 무제한 허가하지 않는 범위다.
+  final double routeApproachArmRadiusM;
 
   /// 허가 유지 시간. 탑승 뒤에는 걸음이 멈춰 위치가 갱신되지 않으므로, 노드에서
   /// 멀어진 것으로 계산되는 동안에도 판정할 수 있어야 한다.
@@ -173,6 +183,8 @@ class EscalatorTransition {
     required this.boardingNodeId,
     required this.boardingNodeName,
     required this.boardingDistanceM,
+    required this.boardingEvidence,
+    this.expectedArrivalNodeId,
   });
 
   /// 에스컬레이터 뱅크 식별자(`ES1`…). 도착 노드를 새 층에서 찾을 때 쓴다.
@@ -197,6 +209,14 @@ class EscalatorTransition {
 
   /// 허가 시점에 관측한 탑승 노드까지의 거리(m).
   final double boardingDistanceM;
+
+  /// `observed`(위치로 단일 후보), `routeAndObserved`(예정 노드도 근접 관측),
+  /// `routeExpected`(위치 오차 때문에 활성 경로의 예정 노드만 사용).
+  final String boardingEvidence;
+
+  /// 활성 경로가 선택한 정확한 도착 노드. 붙어 있는 레인은 센서로 억지
+  /// 재구분하지 않고 길찾기가 고른 전이를 따라 새 층 앵커를 복원한다.
+  final String? expectedArrivalNodeId;
 }
 
 /// 판정 과정 진단 이벤트. 확정뿐 아니라 **거부도 남긴다** — 임계값 튜닝은
@@ -212,6 +232,7 @@ class EscalatorDetectionEvent {
     this.group,
     this.durationMs,
     this.stepsDuring,
+    this.boardingEvidence,
   });
 
   final int atMs;
@@ -229,6 +250,7 @@ class EscalatorDetectionEvent {
   final String? group;
   final int? durationMs;
   final int? stepsDuring;
+  final String? boardingEvidence;
 
   Map<String, Object?> toJson() => {
     'at_ms': atMs,
@@ -240,6 +262,7 @@ class EscalatorDetectionEvent {
     'group': group,
     'duration_ms': durationMs,
     'steps_during': stepsDuring,
+    'boarding_evidence': boardingEvidence,
   };
 }
 
@@ -270,8 +293,13 @@ class EscalatorTransitionDetector {
   double? _baselineM;
   double? _lastSmoothedM;
 
-  // 허가 상태. 그룹 → 그 그룹에서 관측한 가장 가까운 탑승 노드.
-  final Map<String, _ArmedGroup> _armedGroups = {};
+  // 허가 상태. 도착 노드나 같은 그룹의 다른 레인이 대신 허가하지 못하도록
+  // 탑승 노드 id별로 보관한다.
+  final Map<String, _ArmedNode> _armedNodes = {};
+  final Map<String, double> _observedBoardingDistances = {};
+  String? _expectedBoardingNodeId;
+  String? _expectedArrivalNodeId;
+  String _boardingEvidence = 'observed';
   int? _armedUntilMs;
   int _lastSteps = 0;
 
@@ -302,7 +330,7 @@ class EscalatorTransitionDetector {
   double? get deltaM => (_baselineM == null || _lastSmoothedM == null)
       ? null
       : _lastSmoothedM! - _baselineM!;
-  bool get isArmed => _armedGroups.isNotEmpty;
+  bool get isArmed => _armedNodes.isNotEmpty;
   bool get hasCandidate => _candidateStartMs != null;
   EscalatorTransition? get pendingTransition => _pendingTransition;
 
@@ -362,21 +390,24 @@ class EscalatorTransitionDetector {
 
     var armedNow = false;
     for (final node in _escalatorNodes) {
-      // 도착 노드도 반경에 들어오지만 여기서 걸러내지 않는다. 그룹만 알아내면
-      // 되고, 탑승/도착 구분은 확정 시점에 방향과 함께 다시 본다.
+      if (node.name.role != EscalatorNodeRole.boarding) continue;
       final distance = math.sqrt(
         math.pow(positionM.eastM - node.xM, 2) +
             math.pow(positionM.northM - node.yM, 2),
       );
       if (distance > config.armRadiusM) continue;
       armedNow = true;
-      final existing = _armedGroups[node.name.group];
+      final existing = _armedNodes[node.id];
       if (existing == null || distance < existing.distanceM) {
-        _armedGroups[node.name.group] = _ArmedGroup(
-          group: node.name.group,
+        _armedNodes[node.id] = _ArmedNode(
+          nodeId: node.id,
           distanceM: distance,
           atMs: timestampMs,
         );
+      }
+      final observedDistance = _observedBoardingDistances[node.id];
+      if (observedDistance == null || distance < observedDistance) {
+        _observedBoardingDistances[node.id] = distance;
       }
     }
     if (armedNow) {
@@ -386,10 +417,44 @@ class EscalatorTransitionDetector {
         _pushEvent(
           atMs: timestampMs,
           kind: 'armed',
-          reason: _armedGroups.keys.join(','),
+          reason: _armedNodes.keys.join(','),
         );
       }
     }
+  }
+
+  /// 활성 다층 경로의 마지막 점이 에스컬레이터 탑승점일 때 쓰는 보조 허가.
+  ///
+  /// [routeEndM] 자체가 실제 그래프 경로에서 나온 탑승점이라는 강한 근거가
+  /// 있으므로, 현재 위치 보정이 조금 늦어도 사용자가 그 지점에 접근했다면
+  /// 해당 뱅크를 허가한다. 경로가 없는 수동 이동에는 호출하지 않는다.
+  void onEscalatorRouteApproach({
+    required PdrLocalPoint positionM,
+    required PdrLocalPoint routeEndM,
+    required String expectedBoardingNodeId,
+    String? expectedArrivalNodeId,
+    required int steps,
+    required int timestampMs,
+  }) {
+    final approachDistance = (positionM - routeEndM).distance;
+    if (approachDistance > config.routeApproachArmRadiusM) return;
+    _lastSteps = steps;
+    final expected = _escalatorNodes
+        .where(
+          (node) =>
+              node.id == expectedBoardingNodeId &&
+              node.name.role == EscalatorNodeRole.boarding,
+        )
+        .firstOrNull;
+    if (expected == null) return;
+    _expectedBoardingNodeId = expectedBoardingNodeId;
+    _expectedArrivalNodeId = expectedArrivalNodeId;
+    _armedNodes[expected.id] = _ArmedNode(
+      nodeId: expected.id,
+      distanceM: approachDistance,
+      atMs: timestampMs,
+    );
+    _armedUntilMs = timestampMs + config.armHoldMs;
   }
 
   /// 기압 샘플을 넣고 판정한다. 층 이동이 확정된 순간에만 non-null.
@@ -464,7 +529,8 @@ class EscalatorTransitionDetector {
     _baselineM ??= smoothed;
     final armed = _armedUntilMs != null && sample.timestampMs <= _armedUntilMs!;
     if (!armed) {
-      _armedGroups.clear();
+      _armedNodes.clear();
+      _observedBoardingDistances.clear();
     }
     final delta = smoothed - _baselineM!;
 
@@ -666,6 +732,7 @@ class EscalatorTransitionDetector {
       group: boarding.name.group,
       durationMs: elapsedMs,
       stepsDuring: stepsDuring,
+      boardingEvidence: _boardingEvidence,
     );
 
     final transition = _buildTransition(
@@ -688,7 +755,8 @@ class EscalatorTransitionDetector {
     _pendingTransition = null;
     _fastExitLowSlopeSamples = 0;
     _baselineM = smoothed;
-    _armedGroups.clear();
+    _armedNodes.clear();
+    _observedBoardingDistances.clear();
     _armedUntilMs = null;
     return transition;
   }
@@ -711,26 +779,50 @@ class EscalatorTransitionDetector {
     stepsDuring: stepsDuring,
     boardingNodeId: boarding.id,
     boardingNodeName: boarding.rawName,
-    boardingDistanceM:
-        _armedGroups[boarding.name.group]?.distanceM ?? double.nan,
+    boardingDistanceM: _armedNodes[boarding.id]?.distanceM ?? double.nan,
+    boardingEvidence: _boardingEvidence,
+    expectedArrivalNodeId: boarding.id == _expectedBoardingNodeId
+        ? _expectedArrivalNodeId
+        : null,
   );
 
-  /// 허가된 그룹 중 [direction] 방향 탑승 노드를 가진 가장 가까운 그룹을 고른다.
+  /// 허가된 탑승 노드 중 방향이 맞는 가장 가까운 노드를 고른다. 활성 경로의
+  /// 정확한 id가 있으면 그것을 우선한다. 경로가 없으면 같은 방향 후보 중
+  /// 가장 가까운 것을 쓴다. 기압 방향으로 상·하행을 먼저 거르므로 붙어 있는
+  /// 반대 방향 레인을 선택하지 않는다.
   _EscalatorNode? _pickBoardingNode(EscalatorDirection direction) {
-    _EscalatorNode? best;
-    var bestDistance = double.infinity;
-    for (final armed in _armedGroups.values) {
-      for (final node in _escalatorNodes) {
-        if (node.name.group != armed.group) continue;
-        if (node.name.role != EscalatorNodeRole.boarding) continue;
-        if (node.name.direction != direction) continue;
-        if (armed.distanceM < bestDistance) {
-          bestDistance = armed.distanceM;
-          best = node;
-        }
-      }
+    _boardingEvidence = 'observed';
+    final candidates = <(_EscalatorNode, double)>[];
+    for (final armed in _armedNodes.values) {
+      final node = _escalatorNodes
+          .where((candidate) => candidate.id == armed.nodeId)
+          .firstOrNull;
+      if (node == null || node.name.direction != direction) continue;
+      candidates.add((node, armed.distanceM));
     }
-    return best;
+    final expected = candidates
+        .where((candidate) => candidate.$1.id == _expectedBoardingNodeId)
+        .firstOrNull;
+    if (expected != null) {
+      _boardingEvidence = _observedBoardingDistances.containsKey(expected.$1.id)
+          ? 'routeAndObserved'
+          : 'routeExpected';
+      return expected.$1;
+    }
+
+    final observedCandidates = candidates
+        .where(
+          (candidate) =>
+              _observedBoardingDistances.containsKey(candidate.$1.id),
+        )
+        .map(
+          (candidate) =>
+              (candidate.$1, _observedBoardingDistances[candidate.$1.id]!),
+        )
+        .toList();
+    observedCandidates.sort((a, b) => a.$2.compareTo(b.$2));
+    if (observedCandidates.isNotEmpty) return observedCandidates.first.$1;
+    return null;
   }
 
   bool _hasSettled(int atMs, double smoothed) {
@@ -824,7 +916,10 @@ class EscalatorTransitionDetector {
     _smoothedHistory.clear();
     _baselineM = null;
     _lastSmoothedM = null;
-    _armedGroups.clear();
+    _armedNodes.clear();
+    _observedBoardingDistances.clear();
+    _expectedBoardingNodeId = null;
+    _expectedArrivalNodeId = null;
     _armedUntilMs = null;
     _candidateStartMs = null;
     _candidateSign = 0;
@@ -848,6 +943,7 @@ class EscalatorTransitionDetector {
     String? group,
     int? durationMs,
     int? stepsDuring,
+    String? boardingEvidence,
   }) {
     if (_events.length >= maxEvents) {
       _events.removeAt(0);
@@ -863,6 +959,7 @@ class EscalatorTransitionDetector {
         group: group,
         durationMs: durationMs,
         stepsDuring: stepsDuring,
+        boardingEvidence: boardingEvidence,
       ),
     );
   }
@@ -912,14 +1009,14 @@ class _EscalatorNode {
   final double yM;
 }
 
-class _ArmedGroup {
-  const _ArmedGroup({
-    required this.group,
+class _ArmedNode {
+  const _ArmedNode({
+    required this.nodeId,
     required this.distanceM,
     required this.atMs,
   });
 
-  final String group;
+  final String nodeId;
   final double distanceM;
   final int atMs;
 }

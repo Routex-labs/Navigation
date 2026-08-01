@@ -67,6 +67,9 @@ class IndoorRouteSegment {
     this.transferPointsToNext = const [],
     this.transferDistanceMeters = 0,
     this.transferCostMeters = 0,
+    this.transferEdgeId,
+    this.transferFromNodeId,
+    this.transferToNodeId,
   });
 
   /// 이 세그먼트가 속한 층의 내부 id (Floor.id).
@@ -96,6 +99,12 @@ class IndoorRouteSegment {
   /// 수직 이동의 **경로 탐색 비용**(보행 등가 m). 탑승·대기 시간을 담고 있어
   /// 소요 시간 추정에 쓴다 — 거리 표시에는 쓰지 않는다(거리가 비용만큼 부풀어 보인다).
   final double transferCostMeters;
+
+  /// 수직 이동에 실제로 선택된 간선과 양 끝 노드. 중앙 에스컬레이터처럼
+  /// 여러 레인이 붙어 있을 때 좌표·그룹명만으로 다시 추정하지 않게 보존한다.
+  final String? transferEdgeId;
+  final String? transferFromNodeId;
+  final String? transferToNodeId;
 }
 
 /// 층 간 경로를 층별로 나누어 담은 결과.

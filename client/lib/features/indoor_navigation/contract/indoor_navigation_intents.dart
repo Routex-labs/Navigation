@@ -13,12 +13,14 @@ abstract interface class IndoorNavigationIntents {
   /// 실내 안내 종료. 센서 세션을 끈다.
   Future<void> stopGuidance();
 
-  /// 사용자가 지도에 현재 위치를 찍어 anchor 위치를 확정한다.
+  /// 사용자가 지도에 현재 위치를 찍어 anchor 위치를 확정한다. 이전 누적
+  /// 걸음·경로·preview는 버리고 새 pin을 센서 세션의 원점으로 삼는다.
   /// [floorPointM]은 사용자가 지목한 floor local_m 좌표이고, [axes]는 PDR의
   /// east/north를 이 floor의 축 규약으로 바꾸는 변환이다.
   Future<void> confirmAnchorByPin({
     required PdrLocalPoint floorPointM,
     PdrToFloorAxes axes = const PdrToFloorAxes.identity(),
+    String? floorId,
   });
 
   /// 사용자가 현재 진행 방향을 floor local_m 방향으로 맞춰 rotation을 확정한다.
