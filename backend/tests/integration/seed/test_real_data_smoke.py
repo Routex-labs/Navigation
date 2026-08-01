@@ -299,3 +299,22 @@ def test_신발_질의는_신발을_선택지로_되묻지_않는다(real_db_ses
 
     values = [option["value"] for option in discovery["options"]]
     assert "신발" not in values, values
+
+
+# chip에 적힌 후보 수(`컨템포러리 (61)`)를 눌렀는데 5건만 오면 나머지는 도달할 방법이
+# 없다. 숫자를 보여 준 이상 그 숫자만큼 갈 수 있어야 한다.
+def test_선택으로_좁힌_결과는_추천_상한에_묶이지_않는다(real_db_session):
+    clarify = query_search.discover(real_db_session, REAL_BUILDING_ID, "의류")
+    option = next(o for o in clarify["options"] if o["value"] == "컨템포러리")
+    assert option["count"] > query_search.MAX_DISCOVERY_MATCHES, "이 검증에는 넓은 축이 필요하다"
+
+    narrowed = query_search.discover(
+        real_db_session,
+        REAL_BUILDING_ID,
+        "의류",
+        selected_facets={"styles": ["컨템포러리"]},
+    )
+
+    assert narrowed["mode"] == "results"
+    assert len(narrowed["matches"]) > query_search.MAX_DISCOVERY_MATCHES
+    assert len(narrowed["matches"]) <= query_search.MAX_SHOW_ALL_MATCHES

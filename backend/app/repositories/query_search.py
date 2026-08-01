@@ -813,13 +813,20 @@ def discover(
     intent_basis = _intent_basis(_query_matched_intents(candidates, text))
 
     if selection or show_all:
-        # 전체 보기는 더 넓은 상한을 쓴다. 선택(facet)으로 좁힌 결과는 이미 사용자가
-        # 조건을 준 목록이라 추천 상한을 그대로 둔다 — 둘이 겹치면 전체 보기가 이긴다.
-        limit = MAX_SHOW_ALL_MATCHES if show_all else MAX_DISCOVERY_MATCHES
+        # 선택으로 좁힌 결과도 전체 보기와 같은 상한을 쓴다.
+        #
+        # 예전에는 여기서 추천 상한(5)을 유지했다 — "선택은 이미 사용자가 조건을 준
+        # 목록이라 좁게 둔다"는 논리였는데, 화면을 보면 그 논리가 뒤집힌다. chip에는
+        # `컨템포러리 (61)`처럼 **후보 수가 적혀 있다.** 61이라고 적힌 것을 눌렀는데
+        # 5건이 오면 나머지 56건은 어디로 갔는지 알 방법이 없다. 숫자를 보여 준 이상
+        # 그 숫자만큼 도달할 수 있어야 한다.
+        #
+        # 추천 상한(5)이 남아 있는 자리는 "사용자가 아직 아무 조건도 주지 않은" 화면
+        # 뿐이다 — 거기서는 고르기 쉽게 좁히는 게 맞다.
         return _discovery(
             text,
             "results",
-            matches=_discovery_matches(candidates, limit, {**intent_basis, **selection}, transform),
+            matches=_discovery_matches(candidates, MAX_SHOW_ALL_MATCHES, {**intent_basis, **selection}, transform),
         )
 
     if len(candidates) > MAX_DISCOVERY_MATCHES:
