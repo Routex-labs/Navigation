@@ -11,14 +11,19 @@ void main() {
   Widget buildSubject({
     PlaceDetailRepository? repository,
     VoidCallback? onCloseAll,
+    String subtitle = '1F',
+    String? category,
+    String? subcategory,
   }) {
     return MaterialApp(
       home: Scaffold(
         body: PlaceDetailSheet(
           title: '테스트 매장',
-          subtitle: '1F',
+          subtitle: subtitle,
           buildingId: 'building-1',
           placeId: 'place-1',
+          category: category,
+          subcategory: subcategory,
           onCloseAll: onCloseAll ?? () {},
           repository: repository,
         ),
@@ -289,6 +294,84 @@ void main() {
 
     expect(closedAll, isFalse);
     expect(find.text('테스트 매장'), findsNothing);
+  });
+
+  // --- 헤더: 카테고리 아이콘 + 층 pill ---
+
+  testWidgets('층이 없으면 pill을 그리지 않는다', (tester) async {
+    await tester.pumpWidget(
+      buildSubject(
+        subtitle: '',
+        subcategory: '카페·베이커리',
+        repository: _FakeRepository(Future.value(null)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('카페·베이커리'), findsOneWidget);
+    expect(find.text('1F'), findsNothing);
+  });
+
+  testWidgets('층도 업종도 없으면 이름만 남는다', (tester) async {
+    await tester.pumpWidget(
+      buildSubject(subtitle: '', repository: _FakeRepository(Future.value(null))),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('테스트 매장'), findsOneWidget);
+  });
+
+  testWidgets('영어 subcategory는 한글 라벨로 바꿔 그린다', (tester) async {
+    await tester.pumpWidget(
+      buildSubject(
+        category: '편의시설',
+        subcategory: 'restroom',
+        repository: _FakeRepository(Future.value(null)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 층과 한 줄로 합쳐 그리므로 부분 일치로 본다.
+    expect(find.textContaining('화장실'), findsOneWidget);
+    expect(find.textContaining('restroom'), findsNothing);
+  });
+
+  testWidgets('헤더 아이콘은 세부 규칙을 대분류보다 먼저 쓴다', (tester) async {
+    await tester.pumpWidget(
+      buildSubject(
+        category: '식음료',
+        subcategory: '카페·베이커리',
+        repository: _FakeRepository(Future.value(null)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 식음료 대분류는 restaurant지만, 카페 세부 규칙이 이겨야 한다.
+    expect(find.byIcon(Icons.local_cafe_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.restaurant), findsNothing);
+  });
+
+  testWidgets('세부 규칙에 걸리지 않으면 대분류 아이콘으로 떨어진다', (tester) async {
+    await tester.pumpWidget(
+      buildSubject(
+        category: '패션',
+        subcategory: '명품',
+        repository: _FakeRepository(Future.value(null)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.checkroom), findsOneWidget);
+    expect(find.byIcon(Icons.storefront), findsNothing);
+  });
+
+  testWidgets('카테고리가 없으면 상점 아이콘으로 떨어진다', (tester) async {
+    await tester.pumpWidget(
+      buildSubject(repository: _FakeRepository(Future.value(null))),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.storefront), findsOneWidget);
   });
 }
 

@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 320" width="840" height="320" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif">
+  <rect width="840" height="320" fill="#ffffff"/>
+
+  <text x="24" y="28" font-size="13" font-weight="700" fill="#57606A">현재 — 오버레이가 하드코딩 offset으로 쌓여 있다</text>
+
+  <!-- ============ 평소 ============ -->
+  <g transform="translate(24 46)">
+    <rect x="0" y="0" width="230" height="232" rx="12" fill="#F6F8FA" stroke="#E1E4E8"/>
+    <text x="12" y="22" font-size="11.5" font-weight="700" fill="#57606A">평소 — 바가 낮음</text>
+
+    <!-- top:0 기준선 -->
+    <line x1="0" y1="34" x2="230" y2="34" stroke="#D0D7DE" stroke-dasharray="4 3"/>
+    <text x="196" y="31" font-size="9" fill="#8C959F">top:0</text>
+
+    <!-- 검색바 -->
+    <rect x="14" y="42" width="202" height="42" rx="21" fill="#fff" stroke="#D0D7DE"/>
+    <circle cx="34" cy="63" r="6" fill="none" stroke="#757575" stroke-width="1.6"/>
+    <line x1="38" y1="67" x2="42" y2="71" stroke="#757575" stroke-width="1.6" stroke-linecap="round"/>
+    <text x="54" y="67" font-size="11.5" fill="#9AA0A6">건물, 장소를 검색하세요</text>
+
+    <!-- 여백 -->
+    <line x1="0" y1="112" x2="230" y2="112" stroke="#CF222E" stroke-dasharray="4 3"/>
+    <text x="180" y="109" font-size="9" fill="#CF222E">top:78</text>
+    <path d="M115 88 L115 108 M111 102 L115 108 L119 102 M111 94 L115 88 L119 94" stroke="#CF222E" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="128" y="102" font-size="10.5" fill="#CF222E">여백 과다</text>
+
+    <!-- 칩 -->
+    <g transform="translate(14 120)">
+      <rect x="0" y="0" width="52" height="30" rx="15" fill="#fff" stroke="#D0D7DE"/>
+      <text x="26" y="19" font-size="11" fill="#242424" text-anchor="middle">장소</text>
+      <rect x="58" y="0" width="52" height="30" rx="15" fill="#fff" stroke="#D0D7DE"/>
+      <text x="84" y="19" font-size="11" fill="#242424" text-anchor="middle">리빙</text>
+      <rect x="116" y="0" width="52" height="30" rx="15" fill="#fff" stroke="#D0D7DE"/>
+      <text x="142" y="19" font-size="11" fill="#242424" text-anchor="middle">뷰티</text>
+      <rect x="174" y="0" width="28" height="30" rx="15" fill="#fff" stroke="#D0D7DE"/>
+    </g>
+  </g>
+
+  <!-- ============ 길찾기 ============ -->
+  <g transform="translate(288 46)">
+    <rect x="0" y="0" width="230" height="232" rx="12" fill="#F6F8FA" stroke="#E1E4E8"/>
+    <text x="12" y="22" font-size="11.5" font-weight="700" fill="#57606A">길찾기 — 바가 두 줄로 커짐</text>
+
+    <line x1="0" y1="34" x2="230" y2="34" stroke="#D0D7DE" stroke-dasharray="4 3"/>
+    <text x="196" y="31" font-size="9" fill="#8C959F">top:0</text>
+
+    <!-- 두 줄 바 -->
+    <rect x="14" y="42" width="202" height="74" rx="16" fill="#fff" stroke="#D0D7DE"/>
+    <circle cx="34" cy="61" r="5.5" fill="none" stroke="#4A87F1" stroke-width="1.8"/>
+    <circle cx="34" cy="61" r="1.8" fill="#4A87F1"/>
+    <text x="50" y="65" font-size="11.5" fill="#242424">현재 위치</text>
+    <line x1="46" y1="79" x2="206" y2="79" stroke="#E1E4E8"/>
+    <path d="M34 92 a5 5 0 1 1 0 0.1 M34 97 l0 5" stroke="#E53935" stroke-width="1.8" fill="none"/>
+    <text x="50" y="101" font-size="11.5" fill="#242424">POP-UP WEST</text>
+
+    <!-- 겹침 표시 -->
+    <rect x="14" y="98" width="202" height="30" rx="15" fill="#CF222E" fill-opacity="0.10" stroke="#CF222E" stroke-dasharray="3 2"/>
+
+    <line x1="0" y1="112" x2="230" y2="112" stroke="#CF222E" stroke-dasharray="4 3"/>
+    <text x="180" y="109" font-size="9" fill="#CF222E">top:78</text>
+
+    <!-- 칩 (겹침) -->
+    <g transform="translate(14 98)">
+      <rect x="0" y="0" width="52" height="30" rx="15" fill="#fff" stroke="#CF222E"/>
+      <text x="26" y="19" font-size="11" fill="#242424" text-anchor="middle">장소</text>
+      <rect x="58" y="0" width="52" height="30" rx="15" fill="#fff" stroke="#CF222E"/>
+      <text x="84" y="19" font-size="11" fill="#242424" text-anchor="middle">리빙</text>
+      <rect x="116" y="0" width="52" height="30" rx="15" fill="#fff" stroke="#CF222E"/>
+      <text x="142" y="19" font-size="11" fill="#242424" text-anchor="middle">뷰티</text>
+    </g>
+    <text x="14" y="150" font-size="10.5" font-weight="700" fill="#CF222E">겹침</text>
+  </g>
+
+  <!-- 화살표 -->
+  <g transform="translate(534 190)">
+    <path d="M0 8 L34 8 M26 2 L34 8 L26 14" stroke="#8C959F" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- ============ 변경 후 ============ -->
+  <g transform="translate(586 46)">
+    <rect x="0" y="0" width="230" height="232" rx="12" fill="#F6F8FA" stroke="#1A7F37" stroke-opacity="0.35"/>
+    <text x="12" y="22" font-size="11.5" font-weight="700" fill="#1A7F37">변경 후 — Column 스택</text>
+
+    <rect x="14" y="42" width="202" height="74" rx="16" fill="#fff" stroke="#D0D7DE"/>
+    <circle cx="34" cy="61" r="5.5" fill="none" stroke="#4A87F1" stroke-width="1.8"/>
+    <circle cx="34" cy="61" r="1.8" fill="#4A87F1"/>
+    <text x="50" y="65" font-size="11.5" fill="#242424">현재 위치</text>
+    <line x1="46" y1="79" x2="206" y2="79" stroke="#E1E4E8"/>
+    <path d="M34 92 a5 5 0 1 1 0 0.1 M34 97 l0 5" stroke="#E53935" stroke-width="1.8" fill="none"/>
+    <text x="50" y="101" font-size="11.5" fill="#242424">POP-UP WEST</text>
+
+    <path d="M115 120 L115 132 M111 126 L115 132 L119 126 M111 126 L115 120 L119 126" stroke="#1A7F37" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="128" y="130" font-size="10" fill="#1A7F37">간격 상수 1개</text>
+
+    <text x="14" y="160" font-size="11" fill="#1A7F37">길찾기 모드에선 칩을 숨긴다</text>
+    <text x="14" y="178" font-size="10.5" fill="#57606A">칩은 &quot;뭘 찾을까&quot; 탐색 도구인데</text>
+    <text x="14" y="194" font-size="10.5" fill="#57606A">draft 상태는 이미 목적지를 정한 뒤다.</text>
+    <text x="14" y="216" font-size="10.5" fill="#57606A">검색 모드에 같은 선례가 있다.</text>
+  </g>
+
+  <text x="24" y="296" font-size="11.5" fill="#57606A">겹침과 여백 과다는 같은 원인의 앞뒷면이다 — 78이 두 상태의 어중간한 타협치라 한쪽에선 모자라고 한쪽에선 남는다.</text>
+</svg>

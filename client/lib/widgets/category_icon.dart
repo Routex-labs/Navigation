@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 
-/// 카테고리 대분류 이름에 대응하는 아이콘·색상. chip과 시트 헤더가 같은
-/// 시각 정체성을 갖도록 두 곳에서 공유한다. 예상치 못한 카테고리는
+/// 카테고리 대분류 이름에 대응하는 아이콘·색상·표시 라벨. chip과 시트 헤더가
+/// 같은 시각 정체성을 갖도록 여러 곳에서 공유한다. 예상치 못한 카테고리는
 /// 상점 기본 아이콘과 앱 primary 색으로 폴백한다.
 const _iconByCategory = <String, IconData>{
   '패션': Icons.checkroom,
@@ -40,7 +40,11 @@ Color categoryColorFor(String category) =>
 /// subcategory 표기가 두 갈래라 양쪽을 모두 받는다. 층 원본(studio JSON)에서
 /// 온 시설물은 `restroom`·`elevator` 같은 영어 소문자이고, 카테고리 오버라이드
 /// (store_categories*.json)를 거친 매장은 `레스토랑`·`카페·베이커리` 같은 한글이다.
-IconData storeIconFor({String? name, String? subcategory}) {
+///
+/// [category]를 주면 어느 세부 규칙에도 걸리지 않았을 때 상점 아이콘 대신 대분류
+/// 아이콘으로 떨어진다. 매장의 78%가 Studio 원본에서 `매장`이라는 무의미한
+/// subcategory를 갖고 있어, 세부 규칙만으로는 대부분이 같은 글리프가 된다.
+IconData storeIconFor({String? name, String? subcategory, String? category}) {
   final sub = subcategory?.toLowerCase();
   switch (sub) {
     case 'restroom':
@@ -70,5 +74,27 @@ IconData storeIconFor({String? name, String? subcategory}) {
   if (n.contains('엘리베이터')) return Icons.elevator;
   if (n.contains('에스컬레이터')) return Icons.escalator;
   if (n.contains('물품보관') || n.contains('락커')) return Icons.lock_outline;
+  if (category != null && _iconByCategory.containsKey(category)) {
+    return _iconByCategory[category]!;
+  }
   return Icons.storefront;
+}
+
+/// 사용자에게 보여 줄 subcategory 문구.
+///
+/// Studio 원본을 그대로 쓰는 시설물은 subcategory가 `restroom`·`facility` 같은
+/// 영어 열거값이라 화면에 그대로 나가면 안 된다(화장실 27곳, 편의시설 52곳).
+/// 매핑에 없는 값은 이미 한글 오버라이드를 거친 값이므로 그대로 돌려준다.
+const _subcategoryLabels = <String, String>{
+  'restroom': '화장실',
+  'elevator': '엘리베이터',
+  'escalator': '에스컬레이터',
+  'facility': '편의시설',
+  'cafe': '카페·베이커리',
+  'restaurant': '레스토랑',
+};
+
+String? subcategoryLabelFor(String? subcategory) {
+  if (subcategory == null || subcategory.isEmpty) return null;
+  return _subcategoryLabels[subcategory.toLowerCase()] ?? subcategory;
 }

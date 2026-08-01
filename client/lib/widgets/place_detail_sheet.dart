@@ -7,6 +7,7 @@ import '../repositories/place_detail_repository.dart';
 import '../theme/app_theme.dart';
 import 'place_detail/place_detail_rich_sections.dart';
 import 'place_detail/place_detail_sections.dart';
+import 'category_icon.dart';
 import 'sheet_grab_handle.dart';
 import 'sheet_header.dart';
 
@@ -29,6 +30,7 @@ class PlaceDetailSheet extends StatefulWidget {
     required this.buildingId,
     required this.placeId,
     this.favorite,
+    this.category,
     this.subcategory,
     this.repository,
     required this.onCloseAll,
@@ -39,6 +41,9 @@ class PlaceDetailSheet extends StatefulWidget {
   final String buildingId;
   final String? placeId;
   final FavoritePlace? favorite;
+  /// 헤더 아이콘의 대분류 폴백·강조색. 세부 규칙(`카페·베이커리` 등)이 먼저고,
+  /// 거기 걸리지 않는 일반 매장이 이 값으로 떨어진다.
+  final String? category;
   final String? subcategory;
   /// 테스트에서는 가짜를 넣고, 앱에서는 service locator의 전역 저장소를 쓴다.
   final PlaceDetailRepository? repository;
@@ -51,6 +56,7 @@ class PlaceDetailSheet extends StatefulWidget {
     required String buildingId,
     required String? placeId,
     FavoritePlace? favorite,
+    String? category,
     String? subcategory,
     PlaceDetailRepository? repository,
     required VoidCallback onCloseAll,
@@ -70,6 +76,7 @@ class PlaceDetailSheet extends StatefulWidget {
           buildingId: buildingId,
           placeId: placeId,
           favorite: favorite,
+          category: category,
           subcategory: subcategory,
           repository: repository,
           onCloseAll: onCloseAll,
@@ -215,6 +222,7 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                             child: _PlaceCore(
                               title: widget.title,
                               subtitle: widget.subtitle,
+                              category: widget.category,
                               subcategory: subcategory,
                             ),
                           ),
@@ -257,46 +265,54 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
   }
 }
 
-/// 시트 최상단의 이름·층·업종 블록.
+/// 시트 최상단의 아이콘·이름·층·업종 블록.
 ///
-/// 길찾기 버튼을 하단으로 내렸기 때문에 제목이 가로폭을 거의 다 쓴다. 대분류
-/// 칩(`category`)은 층 아래 `subcategory`와 같은 축의 정보라 중복이어서 뺐다.
+/// 왼쪽 아이콘은 카테고리 칩·카테고리 매장 목록과 같은 [storeIconFor] 규칙을
+/// 쓴다. 목록에서 보던 글리프가 상세에서도 같은 자리에 있어야 "방금 누른 그것"이
+/// 이어진다. 한때 이 자리에 있던 건 모든 매장에 똑같이 붙는 storefront 하나라
+/// 알려 주는 게 없었는데, 지금은 대분류 폴백이 있어 매장마다 달라진다.
+///
+/// 층은 배지가 아니라 업종 줄 앞의 pill이다. 44px 정사각형은 로고 자리로 읽혀서
+/// 텍스트를 넣으면 브랜드 마크처럼 오독된다.
 class _PlaceCore extends StatelessWidget {
   const _PlaceCore({
     required this.title,
     required this.subtitle,
+    required this.category,
     required this.subcategory,
   });
 
   final String title;
   final String subtitle;
+  final String? category;
   final String? subcategory;
 
   @override
   Widget build(BuildContext context) {
-    final hasSubcategory = subcategory != null && subcategory!.isNotEmpty;
+    final label = subcategoryLabelFor(subcategory);
+    final hasFloor = subtitle.isNotEmpty;
+    final accent = category == null
+        ? AppColors.primary
+        : categoryColorFor(category!);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 가게 아이콘 자리에 층을 넣는다. 어느 매장에나 똑같이 붙던 storefront
-        // 글리프는 알려 주는 게 없었고, 실내에서 찾을 때 정작 필요한 건 층이다.
         Container(
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: AppColors.blue50,
+            color: accent.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(13),
           ),
           alignment: Alignment.center,
-          child: Text(
-            subtitle,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              color: AppColors.primary,
+          child: Icon(
+            storeIconFor(
+              name: title,
+              subcategory: subcategory,
+              category: category,
             ),
+            size: 22,
+            color: accent,
           ),
         ),
         const SizedBox(width: 12),
@@ -318,12 +334,35 @@ class _PlaceCore extends StatelessWidget {
                   color: AppColors.text,
                 ),
               ),
-              // 층이 배지로 빠졌으므로 이 줄은 업종만 맡는다. 업종이 없으면
-              // 줄 자체를 만들지 않는다 — 빈 줄이 제목 아래 여백만 늘린다.
-              if (hasSubcategory) ...[
-                const SizedBox(height: 3),
-                Text(
-                  subcategory!,
+              // 층도 업종도 없으면 줄 자체를 만들지 않는다 — 빈 줄이 제목 아래
+              // 여백만 늘린다.
+              if (hasFloor || label != null) ...[
+                const SizedBox(height: 5),
+                // 층·구분점·업종을 위젯 세 개로 나열하지 않고 한 문장으로 그린다.
+                // 위젯으로 나누면 사이 간격을 padding 상수로 찍어야 하는데, 그
+                // 값이 글자 사이 자연스러운 간격과 어긋나 층만 동떨어져 보였다.
+                // 하나의 텍스트로 두면 간격을 폰트가 정한다.
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      if (hasFloor)
+                        TextSpan(
+                          text: subtitle,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      if (hasFloor && label != null)
+                        const TextSpan(
+                          text: ' · ',
+                          style: TextStyle(color: AppColors.blue100),
+                        ),
+                      if (label != null) TextSpan(text: label),
+                    ],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 13,
                     height: 1.3,

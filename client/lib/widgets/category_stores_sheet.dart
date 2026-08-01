@@ -376,14 +376,18 @@ class _StoreTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final store = entry.store;
-    final subcategory = store.subcategory;
+    final subcategory = subcategoryLabelFor(store.subcategory);
     final subtitle = subcategory != null && subcategory != store.category
         ? '${entry.floor} · $subcategory'
         : entry.floor;
     return ListTile(
       onTap: onTap,
       leading: Icon(
-        storeIconFor(name: store.name, subcategory: store.subcategory),
+        storeIconFor(
+          name: store.name,
+          subcategory: store.subcategory,
+          category: store.category,
+        ),
         size: 20,
         color: AppColors.primary,
       ),
