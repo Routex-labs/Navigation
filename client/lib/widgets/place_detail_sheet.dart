@@ -409,10 +409,23 @@ class PlaceDetailSections extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 소개와 매장 정보는 둘 다 "이 매장이 뭔지" 설명하는 글이라 한 덩어리로 묶는다.
+    // 서버가 summary를 businessInfo 바로 앞에 놓아 주므로, 여기서는 제목을
+    // 소개 쪽에 한 번만 붙이고 businessInfo의 제목을 끈다.
+    final hasSummary = sections.any((section) => section is SummarySection);
+    final hasBusinessInfo =
+        sections.any((section) => section is BusinessInfoSection);
+    final groupSummary = hasSummary && hasBusinessInfo;
+
     final widgets = <Widget>[];
+    PlaceDetailSection? previous;
     for (final section in sections) {
       final widget = switch (section) {
-        SummarySection(:final text) => PlaceSummarySection(text: text),
+        SummarySection(:final text) => _TitledSection(
+            // 매장 정보가 없으면 소개 문단만 제목 없이 떠 버리므로 제 이름을 준다.
+            title: groupSummary ? '매장 정보' : '소개',
+            child: PlaceSummarySection(text: text),
+          ),
         HeroSection(:final items) => PlaceHeroCarousel(
             images: [
               for (final item in items)
@@ -441,20 +454,45 @@ class PlaceDetailSections extends StatelessWidget {
             ],
           ),
         BusinessInfoSection(:final items) => PlaceBusinessInfoSection(
+            showTitle: !groupSummary,
             items: [
               for (final item in items)
                 PlaceBusinessInfo(label: item.label, value: item.value),
             ],
           ),
       };
-      // 테두리를 걷어낸 뒤로는 섹션을 나누는 게 여백뿐이다. 카드 시절의 12px로는
-      // 문단이 서로 붙어 보여서 넉넉하게 준다.
-      if (widgets.isNotEmpty) widgets.add(const SizedBox(height: 24));
+      if (widgets.isNotEmpty) {
+        // 같은 묶음 안(소개 → 매장 정보)은 좁게, 다른 섹션 사이는 넓게. 테두리를
+        // 걷어낸 뒤로는 섹션을 나누는 게 여백뿐이라 이 차이가 곧 그룹핑이다.
+        final sameGroup = groupSummary &&
+            previous is SummarySection &&
+            section is BusinessInfoSection;
+        widgets.add(SizedBox(height: sameGroup ? 12 : 24));
+      }
       widgets.add(widget);
+      previous = section;
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: widgets,
     );
   }
+}
+
+/// 제목 + 본문 한 쌍. 섹션 위젯 자체가 제목을 갖지 않는 경우(소개)에 씌운다.
+class _TitledSection extends StatelessWidget {
+  const _TitledSection({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      PlaceSectionTitle(title),
+      const SizedBox(height: 8),
+      child,
+    ],
+  );
 }

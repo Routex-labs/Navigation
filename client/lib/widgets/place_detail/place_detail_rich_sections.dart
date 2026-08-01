@@ -105,7 +105,7 @@ class PlaceMenuSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('메뉴', style: _sectionTitleStyle),
+        const PlaceSectionTitle('메뉴'),
         const SizedBox(height: 10),
         SizedBox(
           height: 230,
@@ -200,10 +200,18 @@ class PlaceBusinessInfo {
 ///
 /// 카드 테두리 없이 구분선만 쓴다. 위쪽 summary·hero가 이미 시각적으로 묶여 있어서
 /// 여기에 상자를 하나 더 두면 시트가 카드의 나열처럼 보인다.
+///
+/// [showTitle]이 false면 제목을 그리지 않는다. 바로 위 소개 문단이 이미 같은
+/// `매장 정보` 제목 아래 있을 때 제목이 두 번 나오는 걸 막는다.
 class PlaceBusinessInfoSection extends StatelessWidget {
-  const PlaceBusinessInfoSection({super.key, required this.items});
+  const PlaceBusinessInfoSection({
+    super.key,
+    required this.items,
+    this.showTitle = true,
+  });
 
   final List<PlaceBusinessInfo> items;
+  final bool showTitle;
 
   @override
   Widget build(BuildContext context) {
@@ -212,8 +220,10 @@ class PlaceBusinessInfoSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('매장 정보', style: _sectionTitleStyle),
-        const SizedBox(height: 4),
+        if (showTitle) ...[
+          const PlaceSectionTitle('매장 정보'),
+          const SizedBox(height: 4),
+        ],
         for (var index = 0; index < items.length; index++) ...[
           if (index > 0) const Divider(height: 1),
           Padding(
@@ -249,8 +259,20 @@ class _BusinessInfoRow extends StatelessWidget {
   );
 }
 
-const _sectionTitleStyle = TextStyle(
-  fontSize: 17,
-  fontWeight: FontWeight.w800,
-  color: AppColors.text,
-);
+/// 섹션 제목. 카드 테두리를 걷어낸 뒤로는 이 제목과 여백이 섹션 경계를 만드는
+/// 유일한 장치라, 모든 섹션이 같은 굵기·크기를 쓰게 한곳에 둔다.
+class PlaceSectionTitle extends StatelessWidget {
+  const PlaceSectionTitle(this.text, {super.key});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    text,
+    style: const TextStyle(
+      fontSize: 17,
+      fontWeight: FontWeight.w800,
+      color: AppColors.text,
+    ),
+  );
+}

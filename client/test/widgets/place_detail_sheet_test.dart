@@ -101,6 +101,47 @@ void main() {
     expect(find.text('서울특별시 영등포구 여의대로 108'), findsOneWidget);
   });
 
+  // 소개와 매장 정보는 한 덩어리로 읽혀야 한다. 제목이 두 번 나오면 같은 내용이
+  // 두 섹션으로 갈라져 보인다.
+  testWidgets('소개와 매장 정보가 함께 오면 매장 정보 제목 하나로 묶는다', (tester) async {
+    await tester.pumpWidget(
+      buildSubject(
+        repository: _FakeRepository(
+          Future.value(
+            _detail(
+              sections: const [
+                {'type': 'summary', 'text': '한 줄 소개'},
+                {
+                  'type': 'businessInfo',
+                  'items': [
+                    {'label': '주소', 'value': '여의대로 108'},
+                  ],
+                },
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('매장 정보'), findsOneWidget);
+    expect(find.text('소개'), findsNothing);
+    expect(find.text('한 줄 소개'), findsOneWidget);
+    expect(find.text('여의대로 108'), findsOneWidget);
+  });
+
+  // 반대로 매장 정보가 없으면 소개 문단만 제목 없이 떠 버린다. 그때는 제 이름을 준다.
+  testWidgets('소개만 있으면 소개 제목을 붙인다', (tester) async {
+    await tester.pumpWidget(
+      buildSubject(repository: _FakeRepository(Future.value(_detailWithSummary()))),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('소개'), findsOneWidget);
+    expect(find.text('매장 정보'), findsNothing);
+  });
+
   // 액션 바는 스크롤 위치와 무관하게 하단에 고정이다. 본문이 길어도 "언제든
   // 길찾기"(F5)가 유지되는지 확인한다.
   testWidgets('본문이 길어도 하단 액션 바는 스크롤과 무관하게 남는다', (tester) async {
