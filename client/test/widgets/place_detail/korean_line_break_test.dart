@@ -15,7 +15,7 @@ void main() {
 
   test('한 줄보다 길 수 있는 어절은 묶지 않는다', () {
     // 묶어 버리면 줄바꿈 대신 넘침이 되어 글자가 잘린다.
-    const long = '더현대서울지하이층리저브매장입니다요';
+    const long = '더현대서울지하이층리저브매장에서만드는아메리카노입니다';
     expect(keepWordsWhole(long), long);
   });
 

@@ -242,7 +242,7 @@ class PlaceBusinessInfoSection extends StatelessWidget {
         for (var index = 0; index < items.length; index++) ...[
           if (index > 0) const Divider(height: 1),
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
+            padding: const EdgeInsets.symmetric(vertical: 10),
             child: _BusinessInfoRow(item: items[index]),
           ),
         ],
@@ -256,19 +256,20 @@ class _BusinessInfoRow extends StatelessWidget {
 
   final PlaceBusinessInfo item;
 
+  // 라벨을 왼쪽 열로 두면 값이 쓸 수 있는 폭이 72px 줄어, 주소처럼 긴 값이 두
+  // 줄로 갈라진다. 라벨을 값 위 캡션으로 올려 값이 본문 폭을 그대로 쓰게 한다.
   @override
-  Widget build(BuildContext context) => Row(
+  Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      SizedBox(
-        width: 72,
-        child: Text(item.label, style: const TextStyle(fontSize: 13, color: AppColors.muted)),
+      Text(
+        item.label,
+        style: const TextStyle(fontSize: 12, color: AppColors.muted),
       ),
-      Expanded(
-        child: Text(
-          keepWordsWhole(item.value),
-          style: const TextStyle(fontSize: 13, height: 1.4, color: AppColors.text),
-        ),
+      const SizedBox(height: 3),
+      Text(
+        keepWordsWhole(item.value),
+        style: const TextStyle(fontSize: 13.5, height: 1.4, color: AppColors.text),
       ),
     ],
   );

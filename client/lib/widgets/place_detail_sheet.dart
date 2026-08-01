@@ -174,9 +174,9 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
         onTap: () => Navigator.of(context).maybePop(),
         behavior: HitTestBehavior.opaque,
         child: DraggableScrollableSheet(
-          // 이름·길찾기·사진 한 장이 온전히 들어오고 다음 섹션 제목이 살짝 걸치는
-          // 높이다. 사진에서 뚝 끊기면 아래에 더 있다는 게 보이지 않는다.
-          initialChildSize: 0.62,
+          // 이름·길찾기·사진·매장 정보까지가 한 화면에 들어오고 아래에 여백이
+          // 조금 남는 높이다. 문장 중간에서 끊기면 잘린 것처럼 보인다.
+          initialChildSize: 0.7,
           minChildSize: 0.3,
           maxChildSize: 0.92,
           expand: false,
@@ -214,7 +214,7 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                           // 이름을 읽은 직후가 길찾기를 누르는 자리다. 사진·메뉴를
                           // 지나 하단까지 내려가야 한다면 흐름이 한 번 끊긴다.
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                            padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
                             child: _PlaceActions(
                               favorite: favorite,
                               isSaved: saved,
@@ -295,15 +295,33 @@ class _PlaceCore extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontSize: 20,
-                  height: 1.25,
+                  height: 1.15,
                   fontWeight: FontWeight.w800,
                   color: AppColors.text,
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                hasSubcategory ? '$subtitle · $subcategory' : subtitle,
-                style: const TextStyle(fontSize: 13, color: AppColors.muted),
+              const SizedBox(height: 2),
+              // 층은 "여기 어디로 가야 하나"의 답이라 업종보다 세다. 같은 줄에
+              // 두되 색과 굵기로만 구분한다.
+              Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: subtitle,
+                      style: const TextStyle(
+                        color: AppColors.text,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (hasSubcategory)
+                      TextSpan(text: ' · $subcategory'),
+                  ],
+                ),
+                style: const TextStyle(
+                  fontSize: 13,
+                  height: 1.3,
+                  color: AppColors.muted,
+                ),
               ),
             ],
           ),

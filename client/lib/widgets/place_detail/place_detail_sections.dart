@@ -58,22 +58,20 @@ class _KeyValueRow extends StatelessWidget {
 
   final PlaceKeyValue item;
 
+  // 라벨을 값 위 캡션으로 둔다 — `PlaceBusinessInfoSection`과 같은 이유이자 같은
+  // 리듬이다.
   @override
-  Widget build(BuildContext context) => Row(
+  Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      SizedBox(
-        width: 72,
-        child: Text(
-          item.label,
-          style: const TextStyle(fontSize: 13, color: AppColors.muted),
-        ),
+      Text(
+        item.label,
+        style: const TextStyle(fontSize: 12, color: AppColors.muted),
       ),
-      Expanded(
-        child: Text(
-          keepWordsWhole(item.value),
-          style: const TextStyle(fontSize: 13, height: 1.35, color: AppColors.text),
-        ),
+      const SizedBox(height: 3),
+      Text(
+        keepWordsWhole(item.value),
+        style: const TextStyle(fontSize: 13.5, height: 1.4, color: AppColors.text),
       ),
     ],
   );
