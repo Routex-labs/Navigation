@@ -28,7 +28,7 @@ IndoorRoute? computeShortestRoute(
   );
   if (path == null) return null;
 
-  // 표시 거리는 간선의 실거리(lengthM) 합이다. path.totalDistanceM은 다익스트라가
+  // 표시 거리는 간선의 실거리(lengthM) 합이다. path.totalCostM은 다익스트라가
   // 최소화한 **비용** 합이라 쓰지 않는다 — 층 내부 간선은 둘이 같지만, 의미가 다른
   // 값을 거리 자리에 넣어두면 나중에 전이 간선이 섞일 때 조용히 틀린다.
   final edgesById = {for (final edge in graph.edges) edge.id: edge};

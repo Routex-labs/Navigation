@@ -36,29 +36,37 @@ MultiFloorRoute? computeMultiFloorRoute(
   String startNodeId,
   String endNodeId,
 ) {
+  // 노드·간선 조회 맵은 경로 선택과 세그먼트 조립이 함께 쓴다. 각자 만들면
+  // 2천 개 넘는 목록을 여러 번 훑게 된다.
+  final nodesById = {for (final node in graph.nodes) node.id: node};
+  final edgesById = {for (final edge in graph.edges) edge.id: edge};
+
   final ShortestPath? path;
   try {
-    path = _selectPath(graph, startNodeId, endNodeId);
+    path = _selectPath(graph, nodesById, edgesById, startNodeId, endNodeId);
   } on ArgumentError {
     return null;
   }
   if (path == null) return null;
 
-  final nodesById = {for (final node in graph.nodes) node.id: node};
-  final edgesById = {for (final edge in graph.edges) edge.id: edge};
-
   // 층별 노드 목록 → 층별 좌표 변환. 층마다 앵커 노드가 달라 서버가 층별로
   // 피팅하는 것과 같은 결과를 얻으려면 여기서도 층별로 나눠 피팅해야 한다.
+  // 피팅은 **경로가 실제로 지나는 층만** 한다(12개 층 전부 피팅할 이유가 없다).
   final nodesByFloor = <String, List<GraphNode>>{};
   for (final node in graph.nodes) {
     final floorId = node.floorId;
     if (floorId == null) continue;
     nodesByFloor.putIfAbsent(floorId, () => <GraphNode>[]).add(node);
   }
-  final transformByFloor = <String, AffineTransform>{
-    for (final entry in nodesByFloor.entries)
-      entry.key: fitFloorGeoTransform(entry.value),
-  };
+  final transformByFloor = <String, AffineTransform>{};
+  AffineTransform? transformFor(String floorId) {
+    final nodes = nodesByFloor[floorId];
+    if (nodes == null) return null;
+    return transformByFloor.putIfAbsent(
+      floorId,
+      () => fitFloorGeoTransform(nodes),
+    );
+  }
 
   final segments = <_PendingSegment>[];
   _PendingSegment? current;
@@ -123,7 +131,7 @@ MultiFloorRoute? computeMultiFloorRoute(
 
   final built = <IndoorRouteSegment>[];
   for (final segment in segments) {
-    final transform = transformByFloor[segment.floorId];
+    final transform = transformFor(segment.floorId);
     if (transform == null) return null;
     final floorName = graph.floorNamesById[segment.floorId];
     if (floorName == null) return null;
@@ -134,7 +142,7 @@ MultiFloorRoute? computeMultiFloorRoute(
     final transferTo = segment.transferToNode;
     final transferToTransform = transferTo?.floorId == null
         ? null
-        : transformByFloor[transferTo!.floorId!];
+        : transformFor(transferTo!.floorId!);
     final transferPoints =
         transferFrom == null ||
             transferTo == null ||
@@ -186,87 +194,66 @@ MultiFloorRoute? computeMultiFloorRoute(
 /// 이 규칙으로 같은 200쌍에서 수단이 바뀐 경로는 0건이 된다.
 ShortestPath? _selectPath(
   BuildingGraph graph,
+  Map<String, GraphNode> nodesById,
+  Map<String, GraphEdge> edgesById,
   String startNodeId,
   String endNodeId,
 ) {
-  final raw = findShortestPath(
-    nodes: graph.nodes,
-    edges: graph.edges,
-    startNodeId: startNodeId,
-    endNodeId: endNodeId,
+  ShortestPath? solve({double Function(GraphEdge edge)? weight}) =>
+      findShortestPath(
+        nodes: graph.nodes,
+        edges: graph.edges,
+        startNodeId: startNodeId,
+        endNodeId: endNodeId,
+        weight: weight,
+      );
+  bool usesElevator(ShortestPath path) => path.edgeIds.any(
+    (id) => edgesById[id]?.transferMode == 'elevator',
   );
-  if (raw == null) return null;
 
-  final transferModeById = <String, String>{
-    for (final edge in graph.edges)
-      if (edge.transferMode != null) edge.id: edge.transferMode!,
-  };
-  bool usesElevator(ShortestPath path) =>
-      path.edgeIds.any((id) => transferModeById[id] == 'elevator');
-  if (usesElevator(raw)) return raw;
+  final raw = solve();
+  if (raw == null || usesElevator(raw)) return raw;
 
-  final weightedEdges = _weightedForSelection(graph, startNodeId, endNodeId);
-  if (identical(weightedEdges, graph.edges)) return raw;
-  final weighted = findShortestPath(
-    nodes: graph.nodes,
-    edges: weightedEdges,
-    startNodeId: startNodeId,
-    endNodeId: endNodeId,
+  final penalize = _intermediateFloorWeight(
+    nodesById,
+    startNodeId,
+    endNodeId,
   );
+  if (penalize == null) return raw;
+  final weighted = solve(weight: penalize);
   if (weighted == null || usesElevator(weighted)) return raw;
   return weighted;
 }
 
-/// 경로 **선택용** 간선 목록. 중간층의 층 내부 간선만 길이를 부풀린 사본이다.
+/// 중간층 보행에 가중치를 매기는 함수. 가중할 대상이 없으면 null.
 ///
 /// 어느 층이 중간층인지는 경로를 풀기 전에 알 수 있다 — 출발/목적 노드의 층이
 /// 아닌 모든 층이다. 그래서 상태 확장이나 k-최단경로 없이, 같은 다익스트라에
-/// 다시 매긴 가중치만 넘기면 된다. 수직 전이 간선은 건드리지 않는다(수단 선택
-/// 교차점은 백엔드 비용 상수가 정한다).
-List<GraphEdge> _weightedForSelection(
-  BuildingGraph graph,
+/// 가중치 함수만 넘기면 된다. 수직 전이 간선은 건드리지 않는다(수단 선택 교차점은
+/// 백엔드 비용 상수가 정한다).
+double Function(GraphEdge edge)? _intermediateFloorWeight(
+  Map<String, GraphNode> nodesById,
   String startNodeId,
   String endNodeId,
 ) {
-  if (kIntermediateFloorWalkPenalty == 1.0) return graph.edges;
-
-  final floorIdByNodeId = {
-    for (final node in graph.nodes) node.id: node.floorId,
-  };
-  final startFloorId = floorIdByNodeId[startNodeId];
-  final endFloorId = floorIdByNodeId[endNodeId];
-  // 같은 층 안의 경로면 중간층이 없다 — 부풀릴 대상도 없다.
+  if (kIntermediateFloorWalkPenalty == 1.0) return null;
+  final startFloorId = nodesById[startNodeId]?.floorId;
+  final endFloorId = nodesById[endNodeId]?.floorId;
+  // 같은 층 안의 경로면 중간층이 없다 — 가중할 대상도 없다.
   if (startFloorId == null ||
       endFloorId == null ||
       startFloorId == endFloorId) {
-    return graph.edges;
+    return null;
   }
-
-  final weighted = <GraphEdge>[];
-  for (final edge in graph.edges) {
+  return (edge) {
+    if (edge.transferMode != null) return edge.routingCostM;
     final floorId =
-        floorIdByNodeId[edge.fromNodeId] ?? floorIdByNodeId[edge.toNodeId];
-    final intermediate =
-        edge.transferMode == null &&
-        floorId != null &&
-        floorId != startFloorId &&
-        floorId != endFloorId;
-    weighted.add(
-      intermediate
-          ? GraphEdge(
-              id: edge.id,
-              fromNodeId: edge.fromNodeId,
-              toNodeId: edge.toNodeId,
-              lengthM: edge.lengthM,
-              costM: edge.routingCostM * kIntermediateFloorWalkPenalty,
-              bidirectional: edge.bidirectional,
-              geometryLocalM: edge.geometryLocalM,
-              transferMode: edge.transferMode,
-            )
-          : edge,
-    );
-  }
-  return weighted;
+        nodesById[edge.fromNodeId]?.floorId ?? nodesById[edge.toNodeId]?.floorId;
+    if (floorId == null || floorId == startFloorId || floorId == endFloorId) {
+      return edge.routingCostM;
+    }
+    return edge.routingCostM * kIntermediateFloorWalkPenalty;
+  };
 }
 
 LatLng _apply(AffineTransform transform, double xM, double yM) {
