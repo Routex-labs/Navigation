@@ -62,6 +62,10 @@ class _NavigationAppState extends State<NavigationApp>
       widget.onPdrForegrounded();
       return;
     }
+    // iOS의 inactive는 알림 센터·시스템 시트·권한 UI에서도 잠깐 발생한다.
+    // 이 짧은 상태에서 센서를 stop하면 곧바로 오는 resumed의 start와 경합해
+    // EventChannel 구독만 남고 native motion이 멈출 수 있다.
+    if (state == AppLifecycleState.inactive) return;
     if (_pdrBackgrounded) return;
     _pdrBackgrounded = true;
     widget.onPdrBackgrounded();

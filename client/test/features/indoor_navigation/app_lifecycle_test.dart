@@ -44,4 +44,24 @@ void main() {
     expect(backgrounds, 1);
     expect(foregrounds, 1);
   });
+
+  testWidgets('iOS의 짧은 inactive는 PDR 센서를 중단하지 않는다', (tester) async {
+    var backgrounds = 0;
+    var foregrounds = 0;
+    await tester.pumpWidget(
+      NavigationApp(
+        onPdrBackgrounded: () => backgrounds++,
+        onPdrForegrounded: () => foregrounds++,
+        home: const SizedBox(),
+      ),
+    );
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+
+    expect(backgrounds, 0);
+    expect(foregrounds, 0);
+  });
 }
