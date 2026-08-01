@@ -14,40 +14,41 @@ class PlaceKeyValue {
 }
 
 /// 한 줄 소개 섹션.
+///
+/// 흰 시트 위에 흰 카드를 얹으면 테두리가 구분하는 대상이 없어 상자만 늘어난다.
+/// 소개는 본문 문단 그대로 두고 여백으로만 앞뒤와 떨어뜨린다.
 class PlaceSummarySection extends StatelessWidget {
   const PlaceSummarySection({super.key, required this.text});
 
   final String text;
 
   @override
-  Widget build(BuildContext context) => _SectionCard(
-    child: Text(
-      text,
-      style: const TextStyle(fontSize: 14, height: 1.45, color: AppColors.text),
-    ),
+  Widget build(BuildContext context) => Text(
+    text,
+    style: const TextStyle(fontSize: 14.5, height: 1.5, color: AppColors.text),
   );
 }
 
 /// 위치 안내처럼 라벨과 값이 한 쌍인 섹션.
+///
+/// 카드 대신 구분선만 쓴다. 같은 라벨-값 형태인 `PlaceBusinessInfoSection`과
+/// 리듬을 맞춰 시트가 카드의 나열로 보이지 않게 한다.
 class PlaceKeyValueSection extends StatelessWidget {
   const PlaceKeyValueSection({super.key, required this.items});
 
   final List<PlaceKeyValue> items;
 
   @override
-  Widget build(BuildContext context) => _SectionCard(
-    child: Column(
-      children: [
-        for (var index = 0; index < items.length; index++) ...[
-          _KeyValueRow(item: items[index]),
-          if (index != items.length - 1)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 10),
-              child: Divider(height: 1),
-            ),
-        ],
+  Widget build(BuildContext context) => Column(
+    children: [
+      for (var index = 0; index < items.length; index++) ...[
+        if (index > 0) const Divider(height: 1),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: _KeyValueRow(item: items[index]),
+        ),
       ],
-    ),
+    ],
   );
 }
 
@@ -113,8 +114,7 @@ class PlaceNoticeSection extends StatelessWidget {
   final String? until;
 
   @override
-  Widget build(BuildContext context) => _SectionCard(
-    color: AppColors.blue50,
+  Widget build(BuildContext context) => _TintedBlock(
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -156,36 +156,38 @@ class PlaceMapSection extends StatelessWidget {
     final label = floorLabel == null || floorLabel!.isEmpty
         ? '지도에서 위치 확인'
         : '${floorLabel!} 위치';
-    return _SectionCard(
-      color: AppColors.blue50,
+    return _TintedBlock(
       child: Row(
         children: [
           const Icon(Icons.map_outlined, color: AppColors.primary),
           const SizedBox(width: 10),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+            ),
           ),
+          const Icon(Icons.chevron_right, size: 20, color: AppColors.muted),
         ],
       ),
     );
   }
 }
 
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.child, this.color = AppColors.surface});
+/// 배경색으로만 구분하는 블록. 공지·지도 바로가기처럼 "본문이 아니라 하나의
+/// 덩어리"인 것에만 쓴다. 테두리는 두지 않는다 — 배경색만으로 이미 구분된다.
+class _TintedBlock extends StatelessWidget {
+  const _TintedBlock({required this.child});
 
   final Widget child;
-  final Color color;
 
   @override
   Widget build(BuildContext context) => Container(
     width: double.infinity,
     padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(
-      color: color,
+      color: AppColors.blue50,
       borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: AppColors.blue100),
     ),
     child: child,
   );

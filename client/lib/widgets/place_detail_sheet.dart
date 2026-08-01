@@ -447,7 +447,9 @@ class PlaceDetailSections extends StatelessWidget {
             ],
           ),
       };
-      if (widgets.isNotEmpty) widgets.add(const SizedBox(height: 12));
+      // 테두리를 걷어낸 뒤로는 섹션을 나누는 게 여백뿐이다. 카드 시절의 12px로는
+      // 문단이 서로 붙어 보여서 넉넉하게 준다.
+      if (widgets.isNotEmpty) widgets.add(const SizedBox(height: 24));
       widgets.add(widget);
     }
     return Column(
