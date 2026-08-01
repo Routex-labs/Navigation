@@ -131,6 +131,29 @@ void main() {
     expect(find.text(keepWordsWhole('여의대로 108')), findsOneWidget);
   });
 
+  // 지도 미리보기가 붙기 전까지 map 섹션은 층 이름만 적힌 중복 블록이다.
+  // 그 층은 헤더 배지에 이미 있으므로 본문에 그리지 않는다.
+  testWidgets('map 섹션은 본문에 그리지 않는다', (tester) async {
+    await tester.pumpWidget(
+      buildSubject(
+        repository: _FakeRepository(
+          Future.value(
+            _detail(
+              sections: const [
+                {'type': 'map', 'polygon_local_m': []},
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('1F 위치'), findsNothing);
+    // 층은 헤더 배지로 여전히 보인다.
+    expect(find.text('1F'), findsOneWidget);
+  });
+
   testWidgets('매장 정보가 없어도 소개는 제목을 갖는다', (tester) async {
     await tester.pumpWidget(
       buildSubject(repository: _FakeRepository(Future.value(_detailWithSummary()))),

@@ -97,8 +97,15 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
   bool get _isExcluded => _detail?.kind == PlaceKind.excluded;
 
   /// 본문에 그릴 섹션. excluded면 비운다.
-  List<PlaceDetailSection> get _visibleSections =>
-      _isExcluded ? const [] : (_detail?.sections ?? const []);
+  ///
+  /// `map`은 걸러 낸다. 지도 미리보기가 아직 없어서 층 이름만 적힌 블록인데,
+  /// 그 층은 헤더 배지에 이미 있다. 누를 수도 없는 중복이라 자리만 차지했다.
+  /// 서버 계약은 그대로 두고 화면에서만 뺀다 — 지도 이동을 붙이는 날 되살린다.
+  List<PlaceDetailSection> get _visibleSections => _isExcluded
+      ? const []
+      : (_detail?.sections ?? const [])
+            .where((section) => section is! MapSection)
+            .toList();
 
   /// 길찾기 버튼은 하단 고정 바 한 곳에만 있다. chain 규약을 타지 않도록
   /// `_markIntentional`을 거친다(F5).
@@ -271,6 +278,8 @@ class _PlaceCore extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // 가게 아이콘 자리에 층을 넣는다. 어느 매장에나 똑같이 붙던 storefront
+        // 글리프는 알려 주는 게 없었고, 실내에서 찾을 때 정작 필요한 건 층이다.
         Container(
           width: 44,
           height: 44,
@@ -279,7 +288,16 @@ class _PlaceCore extends StatelessWidget {
             borderRadius: BorderRadius.circular(13),
           ),
           alignment: Alignment.center,
-          child: const Icon(Icons.storefront, color: AppColors.primary, size: 22),
+          child: Text(
+            subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: AppColors.primary,
+            ),
+          ),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -300,18 +318,19 @@ class _PlaceCore extends StatelessWidget {
                   color: AppColors.text,
                 ),
               ),
-              const SizedBox(height: 2),
-              // 층을 업종보다 앞에 둔다. 검색 결과 목록도 이름 아래에 층을 먼저
-              // 보여 주므로, 순서를 뒤집으면 같은 정보를 목록과 상세에서 다른
-              // 자리에서 찾게 된다.
-              Text(
-                hasSubcategory ? '$subtitle · $subcategory' : subtitle,
-                style: const TextStyle(
-                  fontSize: 13,
-                  height: 1.3,
-                  color: AppColors.muted,
+              // 층이 배지로 빠졌으므로 이 줄은 업종만 맡는다. 업종이 없으면
+              // 줄 자체를 만들지 않는다 — 빈 줄이 제목 아래 여백만 늘린다.
+              if (hasSubcategory) ...[
+                const SizedBox(height: 3),
+                Text(
+                  subcategory!,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.3,
+                    color: AppColors.muted,
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),
