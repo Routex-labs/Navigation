@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import 'korean_line_break.dart';
 
 /// 상세 API의 `keyValue` 항목을 렌더러에 넘길 때 쓰는 작은 표시 모델.
 ///
@@ -24,7 +25,7 @@ class PlaceSummarySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(
-    text,
+    keepWordsWhole(text),
     style: const TextStyle(fontSize: 14.5, height: 1.5, color: AppColors.text),
   );
 }
@@ -70,7 +71,7 @@ class _KeyValueRow extends StatelessWidget {
       ),
       Expanded(
         child: Text(
-          item.value,
+          keepWordsWhole(item.value),
           style: const TextStyle(fontSize: 13, height: 1.35, color: AppColors.text),
         ),
       ),
@@ -127,7 +128,10 @@ class PlaceNoticeSection extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(text, style: const TextStyle(fontSize: 13, color: AppColors.text)),
+              Text(
+                keepWordsWhole(text),
+                style: const TextStyle(fontSize: 13, color: AppColors.text),
+              ),
               if (until != null) ...[
                 const SizedBox(height: 4),
                 Text(

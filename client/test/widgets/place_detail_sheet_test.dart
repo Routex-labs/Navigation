@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/models/place_detail.dart';
 import 'package:navigation_client/repositories/place_detail_repository.dart';
+import 'package:navigation_client/widgets/place_detail/korean_line_break.dart';
 import 'package:navigation_client/widgets/place_detail_sheet.dart';
 
 void main() {
@@ -42,7 +43,7 @@ void main() {
     completer.complete(_detailWithSummary());
     await tester.pumpAndSettle();
 
-    expect(find.text('상세 섹션'), findsOneWidget);
+    expect(find.text(keepWordsWhole('상세 섹션')), findsOneWidget);
     expect(find.byKey(const ValueKey('place-detail-loading')), findsNothing);
   });
 
@@ -70,7 +71,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('상세 섹션'), findsNothing);
+    expect(find.text(keepWordsWhole('상세 섹션')), findsNothing);
     expect(find.text('출발'), findsOneWidget);
     expect(find.text('도착'), findsOneWidget);
   });
@@ -98,7 +99,7 @@ void main() {
 
     expect(find.text('매장 정보'), findsOneWidget);
     expect(find.text('주소'), findsOneWidget);
-    expect(find.text('서울특별시 영등포구 여의대로 108'), findsOneWidget);
+    expect(find.text(keepWordsWhole('서울특별시 영등포구 여의대로 108')), findsOneWidget);
   });
 
   // 소개와 매장 정보는 한 덩어리로 읽혀야 한다. 제목이 두 번 나오면 같은 내용이
@@ -127,8 +128,8 @@ void main() {
 
     expect(find.text('매장 정보'), findsOneWidget);
     expect(find.text('소개'), findsNothing);
-    expect(find.text('한 줄 소개'), findsOneWidget);
-    expect(find.text('여의대로 108'), findsOneWidget);
+    expect(find.text(keepWordsWhole('한 줄 소개')), findsOneWidget);
+    expect(find.text(keepWordsWhole('여의대로 108')), findsOneWidget);
   });
 
   // 반대로 매장 정보가 없으면 소개 문단만 제목 없이 떠 버린다. 그때는 제 이름을 준다.

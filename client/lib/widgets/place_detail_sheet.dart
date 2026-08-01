@@ -174,7 +174,9 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
         onTap: () => Navigator.of(context).maybePop(),
         behavior: HitTestBehavior.opaque,
         child: DraggableScrollableSheet(
-          initialChildSize: 0.58,
+          // 이름·길찾기·사진 한 장이 온전히 들어오고 다음 섹션 제목이 살짝 걸치는
+          // 높이다. 사진에서 뚝 끊기면 아래에 더 있다는 게 보이지 않는다.
+          initialChildSize: 0.62,
           minChildSize: 0.3,
           maxChildSize: 0.92,
           expand: false,
@@ -477,12 +479,8 @@ class PlaceDetailSections extends StatelessWidget {
         final sameGroup = groupSummary &&
             previous is SummarySection &&
             section is BusinessInfoSection;
-        // 사진 바로 다음은 사진의 아래 모서리가 이미 경계라 선을 또 긋지 않는다.
-        final afterHero = previous is HeroSection;
         if (sameGroup) {
           widgets.add(const SizedBox(height: 12));
-        } else if (afterHero) {
-          widgets.add(const SizedBox(height: 24));
         } else {
           // 여백만으로는 섹션이 어디서 끝났는지 읽히지 않는다. 카드로 감싸는 대신
           // 시트 폭을 가로지르는 얇은 선 하나로만 끊는다.

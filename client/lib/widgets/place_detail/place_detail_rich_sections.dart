@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import 'korean_line_break.dart';
 
 /// 매장 대표 사진의 로컬 asset 정보다. 네트워크 모델과 분리해 화면에 필요한
 /// 최소 표시 정보만 가진다.
@@ -28,10 +29,10 @@ class _PlaceHeroCarouselState extends State<PlaceHeroCarousel> {
   Widget build(BuildContext context) {
     if (widget.images.isEmpty) return const SizedBox.shrink();
 
-    // 시트 좌우 여백을 무시하고 끝까지 채운다. 사진을 카드로 감싸면 상자가 하나
-    // 더 생기고, 실제로도 사진은 시트의 배경에 가까운 요소다.
+    // 본문과 같은 좌우 여백에 맞추고 모서리를 깎는다. 끝까지 채우면 사진이 시트
+    // 밖으로 이어지는 것처럼 보여서 다음 섹션과의 경계가 흐려진다.
     return SizedBox(
-      height: 240,
+      height: 210,
       child: Stack(
         children: [
           PageView.builder(
@@ -39,22 +40,26 @@ class _PlaceHeroCarouselState extends State<PlaceHeroCarousel> {
             onPageChanged: (index) => setState(() => _activeIndex = index),
             itemBuilder: (context, index) {
               final image = widget.images[index];
-              // 페이지가 화면 폭 그대로면 넘길 때 사진끼리 맞닿는다. 양쪽을 조금씩
-              // 비워 두 장 사이에 틈이 생기게 한다.
+              // PageView는 시트 폭 전체를 쓰고 여백은 페이지 안쪽에 준다. 그래야
+              // 넘길 때 두 장 사이가 좌우 여백만큼 벌어진다.
               return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 3),
-                child: Image.asset(
-                  image.assetPath,
-                  fit: BoxFit.cover,
-                  semanticLabel: image.semanticLabel,
-                  width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: placeSectionGutter),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.asset(
+                    image.assetPath,
+                    fit: BoxFit.cover,
+                    semanticLabel: image.semanticLabel,
+                    width: double.infinity,
+                  ),
                 ),
               );
             },
           ),
           if (widget.images.length > 1)
             Positioned(
-              right: 12,
+              right: placeSectionGutter + 12,
               bottom: 12,
               child: DecoratedBox(
                 decoration: BoxDecoration(
@@ -261,7 +266,7 @@ class _BusinessInfoRow extends StatelessWidget {
       ),
       Expanded(
         child: Text(
-          item.value,
+          keepWordsWhole(item.value),
           style: const TextStyle(fontSize: 13, height: 1.4, color: AppColors.text),
         ),
       ),
