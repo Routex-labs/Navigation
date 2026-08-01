@@ -14,6 +14,7 @@ import '../../features/indoor_navigation/debug/pdr_debug_session_recorder.dart';
 import '../../features/indoor_navigation/debug/pdr_debug_session_share.dart';
 import '../../features/indoor_navigation/application/corridor_position_tracker.dart';
 import '../../features/indoor_navigation/application/corridor_tracking_session.dart';
+import '../../features/indoor_navigation/application/guidance_trail_session.dart';
 import '../../features/indoor_navigation/application/escalator_node_naming.dart';
 import '../../features/indoor_navigation/application/escalator_transition_detector.dart';
 import '../../features/indoor_navigation/application/indoor_location_estimate.dart';
@@ -202,6 +203,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   late final DebugPdrTrailState _pdrTrailState;
   final CorridorTrackingSession _corridorTrackingSession =
       CorridorTrackingSession();
+  final GuidanceTrailSession _guidanceTrailSession = GuidanceTrailSession();
   StreamSubscription<PdrSnapshot>? _pdrSnapshotSub;
   StreamSubscription<CalibrationStatus>? _pdrCalibrationSub;
   StreamSubscription<AltitudeSample>? _pdrAltitudeSub;
@@ -798,7 +800,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       _offRouteEvidenceUpdates = 0;
       _offRouteFirstEvidenceAtMs = null;
     });
-    await _confirmPdrAnchor(PdrLocalPoint(node.xM, node.yM));
+    await _confirmPdrAnchor(
+      PdrLocalPoint(node.xM, node.yM),
+      floorId: startFloor,
+    );
     if (!mounted) return;
     if (!indoorNavigationDriver.currentCalibration.canRenderPosition) return;
     showDebugToast(
@@ -876,12 +881,16 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     final route = explicitOriginNodeId == null || preserveVisibleRoute
         ? _routeStartingAtCurrent(computedRoute, floor)
         : computedRoute;
+    final seededProgress = _seedProgressAtCurrentRouteStart(route);
+    final seededSteps = _pdrTrailState.snapshot?.preview.steps;
     setState(() {
       _route = route;
       _multiFloorRoute = null;
-      _routeProgress = null;
-      _lastRouteTraveledM = null;
-      _lastRouteProgressAcceptedSteps = null;
+      _routeProgress = seededProgress;
+      _lastRouteTraveledM = seededProgress?.traveledM;
+      _lastRouteProgressAcceptedSteps = seededProgress == null
+          ? null
+          : seededSteps;
       _lastRouteEvaluatedSteps = null;
       _offRouteEvidenceUpdates = 0;
       _offRouteFirstEvidenceAtMs = null;
@@ -899,7 +908,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   /// 안내가 떴다 — 아직 걷고 있는데 완료로 보이는 오해였고, 재탐색 전 주행
   /// 구간도 함께 버려졌다.
   void _startRouteRecording(IndoorRoute route, {required bool isMultiFloor}) {
-    if (_rerouteInFlight && _pdrDebugRecorder != null) {
+    final continuingGuidance =
+        _pdrDebugRecorder != null &&
+        (_rerouteInFlight || _preTransferDestination != null);
+    if (continuingGuidance) {
       _recordRouteContext(route, isMultiFloor: isMultiFloor);
       return;
     }
@@ -907,6 +919,13 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     // 내보내기 안내를 띄우지 않는다(안내를 눌러도 꺼낼 게 없다).
     if (_pdrDebugRecorder != null) {
       _endRouteRecordingSession(announceExport: false);
+    }
+    final floor = _pdrTrailState.anchor?.floorId ?? _selectedFloor;
+    if (floor != null) {
+      _guidanceTrailSession.start(
+        floorId: floor,
+        result: _corridorTrackingSession.result,
+      );
     }
     _beginRouteRecordingSession();
     _recordRouteContext(route, isMultiFloor: isMultiFloor);
@@ -974,6 +993,11 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       return;
     }
     final route = _multiRouteStartingAtCurrent(computedRoute, startFloor);
+    final startSegment = route.segmentForFloor(startFloor)?.route;
+    final seededProgress = startSegment == null
+        ? null
+        : _seedProgressAtCurrentRouteStart(startSegment);
+    final seededSteps = _pdrTrailState.snapshot?.preview.steps;
 
     // 다층 경로 상태로 확정. 현재 표시 중인 층이 세그먼트를 가지고 있으면
     // 그 세그먼트를 화면에 그리고, 아니면 상단 층 selector로 갈아탈 때
@@ -981,9 +1005,11 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     setState(() {
       _multiFloorRoute = route;
       _route = route.segmentForFloor(_selectedFloor ?? '')?.route;
-      _routeProgress = null;
-      _lastRouteTraveledM = null;
-      _lastRouteProgressAcceptedSteps = null;
+      _routeProgress = _selectedFloor == startFloor ? seededProgress : null;
+      _lastRouteTraveledM = _routeProgress?.traveledM;
+      _lastRouteProgressAcceptedSteps = _routeProgress == null
+          ? null
+          : seededSteps;
       _lastRouteEvaluatedSteps = null;
       _offRouteEvidenceUpdates = 0;
       _offRouteFirstEvidenceAtMs = null;
@@ -1138,6 +1164,25 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     );
   }
 
+  RouteProgress? _seedProgressAtCurrentRouteStart(IndoorRoute route) {
+    final result = _corridorTrackingSession.result;
+    if (result == null || route.pointsLocalM.isEmpty) return null;
+    final first = route.pointsLocalM.first;
+    final distanceToStartM = math.sqrt(
+      math.pow(result.previewPosition.eastM - first.x, 2) +
+          math.pow(result.previewPosition.northM - first.y, 2),
+    );
+    // 현재 위치를 앞에 붙인 경로에만 0m 기준점을 심는다. 명시적 노드에서
+    // 출발하는 경로가 멀리 있는데 억지로 0m로 잡으면 마커가 순간이동한다.
+    if (distanceToStartM > 0.5) return null;
+    return seedRouteProgressAtRouteStart(
+      routePointsLocalM: route.pointsLocalM,
+      routeEdgeIds: route.edgeIds.toSet(),
+      currentEdgeId: result.currentEdgeId,
+      headingDeg: result.previewHeadingDeg,
+    );
+  }
+
   MultiFloorRoute _multiRouteStartingAtCurrent(
     MultiFloorRoute route,
     String floor,
@@ -1158,6 +1203,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       transferPointsToNext: original.transferPointsToNext,
       transferDistanceMeters: original.transferDistanceMeters,
       transferCostMeters: original.transferCostMeters,
+      transferEdgeId: original.transferEdgeId,
+      transferFromNodeId: original.transferFromNodeId,
+      transferToNodeId: original.transferToNodeId,
     );
     return MultiFloorRoute(
       segments: [first, ...route.segments.skip(1)],
@@ -1196,6 +1244,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       _lastRouteEvaluatedSteps = null;
       _offRouteEvidenceUpdates = 0;
       _offRouteFirstEvidenceAtMs = null;
+      _guidanceTrailSession.clear();
     });
     widget.onRouteVisibleChanged?.call(false);
     // 한 번의 길안내가 여기서 끝난다. 세션을 닫고 내보내기 기회를 준다.
@@ -1207,54 +1256,54 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   /// 노출한다 — 사용자가 "여기서 어디로 얼마 걸어가야 하는지" 상시 알기 위함.
   bool get _hasActiveRoute => _multiFloorRoute != null || _route != null;
 
-  /// ETA에 쓸 **남은** 거리. 사용자에게 "m 남음"으로 보이는 값이다.
+  /// ETA에 쓸 **남은** 거리와 비용을 한 번에 계산한다.
   ///
-  /// PDR 진행률이 있으면 현재 위치 이후만 센다. 없으면(PDR 미실행, 보고 있는
-  /// 층에 세그먼트가 없음 등) 이전과 같이 경로 전체 길이를 쓴다 — 이 경우엔
-  /// "출발 전 총 거리"라는 뜻이라 그대로도 맞다.
+  /// - `distanceM`: 사용자에게 "m 남음"으로 보이는 값. 수직 이동은 실제 수평 거리만
+  ///   더한다(에스컬 약 20m, 엘리베 약 0~3m).
+  /// - `costM`: 보행 등가 비용. 탑승·대기 시간이 들어 있어 보행 속도로 나누면 소요
+  ///   시간이 된다. 거리 표시에는 쓰지 않는다 — 거리가 비용만큼 부풀어 보인다.
   ///
-  /// 수직 이동은 **실제 수평 거리**만 더한다(에스컬 약 20m, 엘리베 약 0~3m).
-  /// 탑승·대기 비용은 [_etaCostMeters]가 따로 세어 소요 시간에만 반영한다.
-  double _etaDistanceMeters(IndoorRoute? currentFloorRoute) =>
-      _etaRemaining(currentFloorRoute, cost: false);
-
-  /// ETA에 쓸 남은 **비용**(보행 등가 m). 탑승·대기 시간이 들어 있어, 보행 속도로
-  /// 나누면 소요 시간이 된다. 거리 표시에는 쓰지 않는다.
-  double _etaCostMeters(IndoorRoute? currentFloorRoute) =>
-      _etaRemaining(currentFloorRoute, cost: true);
-
-  double _etaRemaining(IndoorRoute? currentFloorRoute, {required bool cost}) {
+  /// PDR 진행률이 있으면 현재 위치 이후만 센다. 없으면(PDR 미실행, 보고 있는 층에
+  /// 세그먼트가 없음 등) 경로 전체를 쓴다 — 이 경우엔 "출발 전 총량"이라 그대로 맞다.
+  ({double distanceM, double costM}) _etaRemaining(
+    IndoorRoute? currentFloorRoute,
+  ) {
     final multi = _multiFloorRoute;
     final progress = _routeProgress;
 
     if (multi != null) {
-      double total() => cost ? multi.totalCostMeters : multi.totalDistanceMeters;
-      double transferOf(IndoorRouteSegment segment) => cost
-          ? segment.transferCostMeters
-          : segment.transferDistanceMeters;
-      if (progress == null) return total();
+      final total = (
+        distanceM: multi.totalDistanceMeters,
+        costM: multi.totalCostMeters,
+      );
+      if (progress == null) return total;
       // 지금 층 세그먼트의 남은 거리 + 아직 밟지 않은 이후 세그먼트 길이 합.
-      // 현재 세그먼트를 못 찾으면(층 selector로 다른 층을 보는 중) 총 거리로
+      // 현재 세그먼트를 못 찾으면(층 selector로 다른 층을 보는 중) 총량으로
       // 되돌린다 — 그 화면에서는 진행률이 지금 층과 무관하다.
       final currentIndex = _currentSegmentIndex(multi);
-      if (currentIndex == null) return total();
-      var remainingM =
-          progress.remainingM + transferOf(multi.segments[currentIndex]);
+      if (currentIndex == null) return total;
+      var distanceM =
+          progress.remainingM +
+          multi.segments[currentIndex].transferDistanceMeters;
+      var costM =
+          progress.remainingM + multi.segments[currentIndex].transferCostMeters;
       for (
         var index = currentIndex + 1;
         index < multi.segments.length;
         index++
       ) {
-        remainingM +=
-            multi.segments[index].route.distanceMeters +
-            transferOf(multi.segments[index]);
+        final segment = multi.segments[index];
+        distanceM +=
+            segment.route.distanceMeters + segment.transferDistanceMeters;
+        costM += segment.route.distanceMeters + segment.transferCostMeters;
       }
-      return remainingM;
+      return (distanceM: distanceM, costM: costM);
     }
 
     // 단층 경로에는 수직 이동이 없어 거리와 비용이 같다.
-    if (progress != null) return progress.remainingM;
-    return currentFloorRoute?.distanceMeters ?? 0;
+    final remainingM =
+        progress?.remainingM ?? currentFloorRoute?.distanceMeters ?? 0;
+    return (distanceM: remainingM, costM: remainingM);
   }
 
   ({List<ll.LatLng> remaining, List<ll.LatLng> completed}) _routeVisuals(
@@ -1381,7 +1430,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       return const [];
     }
     final pdrToFloor = FloorCoordinateTransform(anchor);
-    return snapshot.preview.path
+    return snapshot.reconciledPreviewPath
         .map(pdrToFloor.toFloor)
         .toList(growable: false);
   }
@@ -1442,7 +1491,22 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     final graph = _floorGraph;
     final result = _corridorTrackingSession.result;
     if (graph == null || result == null) return null;
-    final current = result.previewPosition;
+    final progress = _routeProgress;
+    final projected = progress?.projectedPoint;
+    final canFollowGuidance =
+        _hasActiveRoute &&
+        projected != null &&
+        result.state != CorridorTrackingState.uncertain &&
+        (progress!.onRouteEdge ||
+            (!progress.reacquired &&
+                progress.offsetM < 4 &&
+                _offRouteEvidenceUpdates < 3));
+    // 센서·복도 보정의 원본은 그대로 두고 화면 마커만 수용된 경로 투영점을
+    // 따른다. 이탈 증거가 확정되면 원시 보정 위치로 돌아가 재탐색 결과를
+    // 기다리므로 실제 이탈을 파란선 위에 숨기지 않는다.
+    final current = canFollowGuidance
+        ? PdrLocalPoint(projected.x, projected.y)
+        : result.previewPosition;
     final wgs84 = fitFloorGeoTransform(
       graph.nodes,
     ).apply(current.eastM, current.northM);
@@ -1791,6 +1855,14 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     EscalatorTransition transition,
   ) {
     if (graph == null) return null;
+    final expectedArrivalNodeId = transition.expectedArrivalNodeId;
+    if (expectedArrivalNodeId != null) {
+      for (final node in graph.nodes) {
+        if (node.id == expectedArrivalNodeId && node.type == 'escalator') {
+          return node;
+        }
+      }
+    }
     GraphNode? sameGroupFallback;
     for (final node in graph.nodes) {
       if (node.type != 'escalator') continue;
@@ -1823,6 +1895,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       timestampMs: nowMs,
     );
     if (result != null) {
+      _guidanceTrailSession.update(floorId: anchor.floorId, result: result);
       // 층 전이 판정에는 **보정된** 위치를 준다. 원시 PDR 좌표를 주면 앵커
       // 오차만큼 에스컬레이터 노드 근접 판정이 어긋난다.
       _escalatorDetector.onPosition(
@@ -1830,6 +1903,22 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         steps: snapshot?.steps ?? 0,
         timestampMs: nowMs,
       );
+      final currentSegment = _multiFloorRoute?.segmentForFloor(anchor.floorId);
+      final currentRoute = currentSegment?.route;
+      if (currentSegment?.transferModeToNext == 'escalator' &&
+          currentSegment?.transferFromNodeId != null &&
+          currentRoute != null &&
+          currentRoute.pointsLocalM.isNotEmpty) {
+        final routeEnd = currentRoute.pointsLocalM.last;
+        _escalatorDetector.onEscalatorRouteApproach(
+          positionM: result.previewPosition,
+          routeEndM: PdrLocalPoint(routeEnd.x, routeEnd.y),
+          expectedBoardingNodeId: currentSegment!.transferFromNodeId!,
+          expectedArrivalNodeId: currentSegment.transferToNodeId,
+          steps: snapshot?.steps ?? 0,
+          timestampMs: nowMs,
+        );
+      }
     }
     if (result != null) {
       _pdrDebugRecorder?.recordCorridorCorrection(result);
@@ -1844,7 +1933,11 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         );
       }
     }
-    _syncRouteProgress(result, steps: snapshot?.steps);
+    _syncRouteProgress(
+      result,
+      confirmedSteps: snapshot?.steps,
+      previewSteps: snapshot?.preview.steps,
+    );
   }
 
   /// 보정 위치를 지금 층의 경로 세그먼트에 투영해 진행 상태를 갱신한다.
@@ -1852,7 +1945,11 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   /// 경로는 이 계산의 **입력이 아니라 출력 쪽**에만 있다 — tracker에는 아무것도
   /// 되돌려주지 않으므로, 경로가 위치 추정을 끌어당기는 일이 구조적으로
   /// 불가능하다.
-  void _syncRouteProgress(CorridorTrackingResult? result, {int? steps}) {
+  void _syncRouteProgress(
+    CorridorTrackingResult? result, {
+    int? confirmedSteps,
+    int? previewSteps,
+  }) {
     final route = _route;
     if (route == null || result == null) {
       if (_routeProgress != null || _lastRouteTraveledM != null) {
@@ -1868,22 +1965,41 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       return;
     }
 
-    final progress = computeRouteProgress(
-      routePointsLocalM: route.pointsLocalM,
-      routeEdgeIds: route.edgeIds.toSet(),
-      // 표시 위치와 같은 값을 쓴다. 확정(초록) 위치로 계산하면 화면의 마커와
-      // 남은거리가 서로 다른 시점을 가리킨다.
-      position: LocalPoint(
-        result.previewPosition.eastM,
-        result.previewPosition.northM,
-      ),
-      currentEdgeId: result.currentEdgeId,
-      previousTraveledM: _lastRouteTraveledM,
+    final localPosition = LocalPoint(
+      result.previewPosition.eastM,
+      result.previewPosition.northM,
     );
+    final first = route.pointsLocalM.isEmpty ? null : route.pointsLocalM.first;
+    final atNewRouteStart =
+        _routeProgress == null &&
+        first != null &&
+        math.sqrt(
+              math.pow(localPosition.x - first.x, 2) +
+                  math.pow(localPosition.y - first.y, 2),
+            ) <=
+            0.5;
+    final progress = atNewRouteStart
+        ? seedRouteProgressAtRouteStart(
+            routePointsLocalM: route.pointsLocalM,
+            routeEdgeIds: route.edgeIds.toSet(),
+            currentEdgeId: result.currentEdgeId,
+            headingDeg: result.previewHeadingDeg,
+          )
+        : computeRouteProgress(
+            routePointsLocalM: route.pointsLocalM,
+            routeEdgeIds: route.edgeIds.toSet(),
+            // 표시 위치와 같은 값을 쓴다. 확정(초록) 위치로 계산하면 화면의
+            // 마커와 남은거리가 서로 다른 시점을 가리킨다.
+            position: localPosition,
+            currentEdgeId: result.currentEdgeId,
+            headingDeg: result.previewHeadingDeg,
+            previousTraveledM: _lastRouteTraveledM,
+          );
     if (progress == null) return;
 
     final previousDisplayProgress = _routeProgress;
-    _maybeRerouteAfterDeviation(progress, result, steps);
+    final responsiveSteps = previewSteps ?? confirmedSteps;
+    _maybeRerouteAfterDeviation(progress, result, responsiveSteps);
     final holdForPendingDeviation =
         !progress.onRouteEdge &&
         _offRouteEvidenceUpdates > 0 &&
@@ -1892,7 +2008,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       previous: previousDisplayProgress,
       candidate: progress,
       acceptedAtSteps: _lastRouteProgressAcceptedSteps,
-      currentSteps: steps,
+      currentSteps: responsiveSteps,
     );
     final holdPrevious = holdForPendingDeviation || holdForImplausibleJump;
     final displayProgress = holdPrevious ? previousDisplayProgress! : progress;
@@ -1900,25 +2016,29 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       _routeProgress = displayProgress;
       _lastRouteTraveledM = displayProgress.traveledM;
       if (!holdPrevious) {
-        _lastRouteProgressAcceptedSteps = steps;
+        _lastRouteProgressAcceptedSteps = responsiveSteps;
       }
     });
     _pdrDebugRecorder?.recordRouteProgress(progress);
   }
 
-  /// 현재 간선이 안내 경로에 속하지 않는 상태가 서로 다른 위치 갱신 3회,
-  /// 2초 이상 이어지면 목적지는 유지하고 현 위치에서 경로만 다시 계산한다.
+  /// 현재 간선이 안내 경로에 속하지 않거나 경로에서 확연히 떨어진 상태가
+  /// preview 기준 여러 위치 갱신 동안 이어지면 목적지는 유지하고 현 위치에서
+  /// 경로만 다시 계산한다.
   ///
   /// 걸음 개수를 임계값으로 쓰면 네이티브 이벤트 한 번에 여러 걸음이 묶여
   /// 들어올 때 한 프레임만으로 이탈이 확정될 수 있다. 시간과 독립 갱신 횟수를
-  /// 함께 요구해 교차점 흔들림은 흡수하되 실제 이탈은 보행 중 약 2~3초 안에
-  /// 재탐색한다.
+  /// 함께 요구해 교차점 흔들림은 흡수하되 실제 이탈은 보행 중 약 1~2초 안에
+  /// 재탐색한다. confirmed 배치가 아니라 주황 preview 걸음을 써서 iOS의
+  /// 2.5초 pedometer batch를 세 번 기다리지 않는다.
   void _maybeRerouteAfterDeviation(
     RouteProgress progress,
     CorridorTrackingResult result,
     int? steps,
   ) {
-    if (progress.onRouteEdge ||
+    final strongDeviation = progress.offsetM >= 4 || progress.reacquired;
+    final deviated = !progress.onRouteEdge || strongDeviation;
+    if (!deviated ||
         result.currentEdgeId == null ||
         result.state == CorridorTrackingState.uncertain) {
       _offRouteEvidenceUpdates = 0;
@@ -1932,8 +2052,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     _offRouteFirstEvidenceAtMs ??= nowMs;
     _offRouteEvidenceUpdates++;
     final evidenceDurationMs = nowMs - _offRouteFirstEvidenceAtMs!;
-    if (_offRouteEvidenceUpdates < 3 ||
-        evidenceDurationMs < 2000 ||
+    final requiredUpdates = strongDeviation ? 2 : 3;
+    final requiredDurationMs = strongDeviation ? 700 : 1200;
+    if (_offRouteEvidenceUpdates < requiredUpdates ||
+        evidenceDurationMs < requiredDurationMs ||
         _rerouteInFlight) {
       return;
     }
@@ -1944,7 +2066,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   Future<void> _rerouteFromCurrentPosition() async {
     final destination = _routeDestination;
     final destinationNodeId = destination?.nodeId;
-    final floor = _selectedFloor;
+    // 층 selector는 사용자가 다른 층을 둘러보는 UI 상태일 뿐 실제 현재 층이
+    // 아니다. 다층 안내 중 selector 층을 기준으로 재탐색하면 중간 세그먼트가
+    // 단층 경로로 바뀌어 최종 도착처럼 보일 수 있다.
+    final floor = _pdrTrailState.anchor?.floorId;
     final graph = _floorGraph;
     final current = _corridorTrackingSession.result?.previewPosition;
     if (destination == null ||
@@ -2023,6 +2148,18 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   List<ll.LatLng> get _pdrMatchedPreviewPathPoints =>
       _floorPathToWgs84(_pdrMatchedPreviewFloorPath);
 
+  List<List<ll.LatLng>> get _walkedGuidanceSegments {
+    final floor = _selectedFloor;
+    if (floor == null) return const [];
+    return [
+      for (final segment in _guidanceTrailSession.segmentsForFloor(
+        floor,
+        previewPath: _pdrMatchedPreviewFloorPath,
+      ))
+        _floorPathToWgs84(segment),
+    ];
+  }
+
   List<ll.LatLng> get _pdrConfirmedPathPoints =>
       _floorPathToWgs84(_pdrConfirmedFloorPath);
 
@@ -2064,7 +2201,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     if (snapshot != null) recorder.recordSnapshot(snapshot);
     recorder.recordRuntime(indoorNavigationDriver.currentRuntimeStatus);
     if (!mounted) return;
-    if (announceExport && recorder.hasSnapshot && _debugModeController.enabled) {
+    if (announceExport &&
+        recorder.hasSnapshot &&
+        _debugModeController.enabled) {
       _showPdrMessageWithExport('길안내가 끝났습니다. 진단 JSON을 내보내 분석할 수 있습니다.');
     }
   }
@@ -2219,6 +2358,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   Future<void> _confirmPdrAnchor(
     PdrLocalPoint floorPoint, {
     bool notifyLocationChanged = true,
+    String? floorId,
   }) async {
     final settled = await _waitForHeadingToSettle();
     if (!mounted) return;
@@ -2232,6 +2372,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     await indoorNavigationDriver.confirmAnchorByPin(
       floorPointM: floorPoint,
       axes: axes,
+      floorId: floorId ?? _selectedFloor,
     );
     if (!mounted) return;
     if (indoorNavigationDriver.currentCalibration.phase ==
@@ -2429,6 +2570,8 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 
     final route = _route;
     final routeDestination = _routeDestination;
+    // 거리·시간을 한 번에 계산한다(예전엔 같은 순회를 두 번 돌았다).
+    final eta = _etaRemaining(route);
     final routeVisuals = _routeVisuals(route);
     final routeGuidance = _currentRouteGuidance(route);
     final debugEnabled = _debugModeController.enabled;
@@ -2507,7 +2650,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           // 때만 도착 핀을 표시한다(중간 층은 지나가는 층이라 핀이 없어야 함).
           destination: _destinationPinForCurrentFloor(route, routeDestination),
           routePoints: routeVisuals.remaining,
-          completedRoutePoints: routeVisuals.completed,
+          // 완료된 "기존 계획선"이 아니라 실제로 걸어온 graph-matched 궤적을
+          // 회색으로 그린다. 따라서 재탐색은 파란 미래만 교체한다.
+          walkedRouteSegments: _walkedGuidanceSegments,
           transferRoutePoints:
               _multiFloorRoute
                   ?.segmentForFloor(_selectedFloor ?? '')
@@ -2667,14 +2812,11 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                 child: EtaCard(
                   key: _etaCardKey,
-                  distanceMeters: _etaDistanceMeters(route),
+                  distanceMeters: eta.distanceM,
                   // 시간은 비용 기준이다 — 엘리베이터 대기·탑승 시간이 여기 들어 있다.
-                  minutes:
-                      (_etaCostMeters(route) /
-                              _walkingSpeedMetersPerSecond /
-                              60)
-                          .ceil()
-                          .clamp(1, 999),
+                  minutes: (eta.costM / _walkingSpeedMetersPerSecond / 60)
+                      .ceil()
+                      .clamp(1, 999),
                   label: _etaLabel(routeDestination),
                   instruction: routeGuidance,
                   onClose: _clearRoute,
@@ -2801,7 +2943,8 @@ class _RouteProgressBadge extends StatelessWidget {
               '진행 ${progress.traveledM.toStringAsFixed(1)}m / '
               '남음 ${progress.remainingM.toStringAsFixed(1)}m · '
               '오차 ${progress.offsetM.toStringAsFixed(1)}m'
-              '${progress.reacquired ? ' · 재획득' : ''}',
+              '${progress.reacquired ? ' · 재획득' : ''}'
+              '${progress.wrongWay ? ' · 역주행' : ''}',
               style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w600,

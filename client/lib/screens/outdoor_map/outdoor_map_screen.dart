@@ -2016,22 +2016,22 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     );
   }
 
-  /// ETA 카드에 쓸 거리. 다층 경로면 전 세그먼트 합, 단일 층이면 그 세그먼트
-  /// 거리. 실내 화면과 같은 규칙.
+  /// ETA 카드에 쓸 거리와 비용. 다층 경로면 전 세그먼트 합, 단일 층이면 그 세그먼트
+  /// 값. 실내 화면과 같은 규칙이다.
   ///
-  /// 수직 이동은 실제 수평 거리만 들어간다. 탑승·대기 시간은 [_indoorEtaCostMeters]로
-  /// 분리해 소요 시간에만 반영한다 — 한 값으로 겸하면 남은거리가 비용만큼 부풀어 보인다.
-  double _indoorEtaDistanceMeters() {
+  /// `distanceM`은 실제 수평 거리만("m 남음"), `costM`은 탑승·대기 시간까지 담은 보행
+  /// 등가값(소요 시간)이다. 한 값으로 겸하면 남은거리가 비용만큼 부풀어 보인다.
+  ({double distanceM, double costM}) _indoorEta() {
     final multi = _indoorMultiFloorRoute;
-    if (multi != null) return multi.totalDistanceMeters;
-    return _indoorRouteSegment?.distanceMeters ?? 0;
-  }
-
-  /// ETA 카드 소요 시간에 쓸 비용(보행 등가 m). 단층 경로는 수직 이동이 없어 거리와 같다.
-  double _indoorEtaCostMeters() {
-    final multi = _indoorMultiFloorRoute;
-    if (multi != null) return multi.totalCostMeters;
-    return _indoorRouteSegment?.distanceMeters ?? 0;
+    if (multi != null) {
+      return (
+        distanceM: multi.totalDistanceMeters,
+        costM: multi.totalCostMeters,
+      );
+    }
+    // 단층 경로에는 수직 이동이 없어 거리와 비용이 같다.
+    final remainingM = _indoorRouteSegment?.distanceMeters ?? 0;
+    return (distanceM: remainingM, costM: remainingM);
   }
 
   /// ETA 카드 라벨. 다층 경로는 층별 이동수단(엘리베이터/에스컬레이터)까지 요약
@@ -3436,7 +3436,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       return const [];
     }
     final pdrToFloor = FloorCoordinateTransform(anchor);
-    return snapshot.preview.path
+    return snapshot.reconciledPreviewPath
         .map(pdrToFloor.toFloor)
         .toList(growable: false);
   }
@@ -3994,6 +3994,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final route = _route;
     final userDestination = _userDestination;
     final indoorRouteDestination = _indoorRouteDestination;
+    // 거리·시간을 한 번에 계산한다(예전엔 같은 계산을 두 번 돌았다).
+    final indoorEta = _indoorEta();
     final indoorRouteVisible = _hasAnyRouteVisible;
     final debugEnabled = _debugModeController.enabled;
     final pdrActive =
@@ -4194,10 +4196,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                 child: EtaCard(
                   key: _etaCardKey,
-                  distanceMeters: _indoorEtaDistanceMeters(),
+                  distanceMeters: indoorEta.distanceM,
                   // 시간은 비용 기준 — 엘리베이터 대기·탑승 시간이 여기 들어 있다.
                   minutes:
-                      (_indoorEtaCostMeters() /
+                      (indoorEta.costM /
                               _indoorWalkingSpeedMetersPerSecond /
                               60)
                           .ceil()

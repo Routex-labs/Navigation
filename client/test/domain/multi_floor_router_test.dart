@@ -15,18 +15,66 @@ GraphEdge _edge(
   double length, {
   double? cost,
   String? transferMode,
+  bool bidirectional = true,
 }) => GraphEdge(
   id: id,
   fromNodeId: from,
   toNodeId: to,
   lengthM: length,
   costM: cost,
-  bidirectional: true,
+  bidirectional: bidirectional,
   geometryLocalM: const [],
   transferMode: transferMode,
 );
 
 void main() {
+  test('같은 방향 에스컬레이터가 붙어 있으면 현재 위치에서 가까운 전이를 고른다', () {
+    final graph = BuildingGraph(
+      buildingId: 'building',
+      vertical: 'auto',
+      floorNamesById: const {'f1': '1F', 'f2': '2F'},
+      nodes: [
+        _node('start', 'f1', 0, 0),
+        _node('near-boarding', 'f1', 2, 0),
+        _node('far-boarding', 'f1', 10, 0),
+        _node('near-arrival', 'f2', 2, 2),
+        _node('far-arrival', 'f2', 10, 2),
+        _node('end', 'f2', 6, 6),
+      ],
+      edges: [
+        _edge('walk-near', 'start', 'near-boarding', 2),
+        _edge('walk-far', 'start', 'far-boarding', 10),
+        _edge(
+          'near-up',
+          'near-boarding',
+          'near-arrival',
+          20,
+          cost: 25,
+          transferMode: 'escalator',
+          bidirectional: false,
+        ),
+        _edge(
+          'far-up',
+          'far-boarding',
+          'far-arrival',
+          20,
+          cost: 25,
+          transferMode: 'escalator',
+          bidirectional: false,
+        ),
+        _edge('near-to-end', 'near-arrival', 'end', 6),
+        _edge('far-to-end', 'far-arrival', 'end', 6),
+      ],
+    );
+
+    final route = computeMultiFloorRoute(graph, 'start', 'end');
+
+    expect(route, isNotNull);
+    expect(route!.segments.first.transferEdgeId, 'near-up');
+    expect(route.segments.first.transferFromNodeId, 'near-boarding');
+    expect(route.segments.first.transferToNodeId, 'near-arrival');
+  });
+
   test('에스컬레이터 비용과 두 층 끝점을 별도 전환 구간으로 보존한다', () {
     final graph = BuildingGraph(
       buildingId: 'building',
@@ -63,6 +111,9 @@ void main() {
     expect(route.segments.first.transferModeToNext, 'escalator');
     expect(route.segments.first.transferDistanceMeters, 20);
     expect(route.segments.first.transferCostMeters, 25);
+    expect(route.segments.first.transferEdgeId, 'escalator');
+    expect(route.segments.first.transferFromNodeId, 'boarding');
+    expect(route.segments.first.transferToNodeId, 'arrival');
     expect(route.segments.first.transferPointsToNext, hasLength(2));
     expect(route.segments.last.route.distanceMeters, 7);
     expect(route.segments.last.transferPointsToNext, isEmpty);
@@ -92,16 +143,31 @@ void main() {
     edges: [
       _edge('b1-walk-es1', 'start', 'es1-board-b1', 5),
       _edge('b1-walk-es2', 'start', 'es2-board-b1', 25),
-      _edge('es1-up', 'es1-board-b1', 'es1-arrive-f1', 20,
-          transferMode: 'escalator'),
-      _edge('es2-up-1', 'es2-board-b1', 'es2-arrive-f1', 20,
-          transferMode: 'escalator'),
+      _edge(
+        'es1-up',
+        'es1-board-b1',
+        'es1-arrive-f1',
+        20,
+        transferMode: 'escalator',
+      ),
+      _edge(
+        'es2-up-1',
+        'es2-board-b1',
+        'es2-arrive-f1',
+        20,
+        transferMode: 'escalator',
+      ),
       // 1F에서 뱅크를 갈아타려면 층을 가로질러야 한다.
       _edge('f1-cross', 'es1-arrive-f1', 'es2-board-f1', 20),
       // 같은 뱅크는 하차구에서 다음 탑승구가 바로 옆이다.
       _edge('f1-same-bank', 'es2-arrive-f1', 'es2-board-f1', 2),
-      _edge('es2-up-2', 'es2-board-f1', 'es2-arrive-f2', 20,
-          transferMode: 'escalator'),
+      _edge(
+        'es2-up-2',
+        'es2-board-f1',
+        'es2-arrive-f2',
+        20,
+        transferMode: 'escalator',
+      ),
       _edge('f2-walk', 'es2-arrive-f2', 'end', 5),
     ],
   );
@@ -146,16 +212,36 @@ void main() {
       edges: [
         _edge('b1-walk-ev', 'start', 'ev-board-b1', 5),
         _edge('b1-walk-es', 'start', 'es-board-b1', 25),
-        _edge('ev-1', 'ev-board-b1', 'ev-arrive-f1', 15,
-            transferMode: 'elevator'),
+        _edge(
+          'ev-1',
+          'ev-board-b1',
+          'ev-arrive-f1',
+          15,
+          transferMode: 'elevator',
+        ),
         _edge('f1-ev-cross', 'ev-arrive-f1', 'ev-board-f1', 30),
-        _edge('ev-2', 'ev-board-f1', 'ev-arrive-f2', 15,
-            transferMode: 'elevator'),
-        _edge('es-1', 'es-board-b1', 'es-arrive-f1', 20,
-            transferMode: 'escalator'),
+        _edge(
+          'ev-2',
+          'ev-board-f1',
+          'ev-arrive-f2',
+          15,
+          transferMode: 'elevator',
+        ),
+        _edge(
+          'es-1',
+          'es-board-b1',
+          'es-arrive-f1',
+          20,
+          transferMode: 'escalator',
+        ),
         _edge('f1-same-bank', 'es-arrive-f1', 'es-board-f1', 2),
-        _edge('es-2', 'es-board-f1', 'es-arrive-f2', 20,
-            transferMode: 'escalator'),
+        _edge(
+          'es-2',
+          'es-board-f1',
+          'es-arrive-f2',
+          20,
+          transferMode: 'escalator',
+        ),
         _edge('f2-walk-es', 'es-arrive-f2', 'end', 8),
         _edge('f2-walk-ev', 'ev-arrive-f2', 'end', 5),
       ],
