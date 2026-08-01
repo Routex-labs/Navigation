@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/widgets/place_detail/korean_line_break.dart';
 import 'package:navigation_client/widgets/place_detail/place_detail_sections.dart';
 
 void main() {
@@ -11,7 +12,7 @@ void main() {
     testWidgets('summary renders its supplied text', (tester) async {
       await tester.pumpWidget(subject(const PlaceSummarySection(text: '한 줄 소개')));
 
-      expect(find.text('한 줄 소개'), findsOneWidget);
+      expect(find.text(keepWordsWhole('한 줄 소개')), findsOneWidget);
     });
 
     testWidgets('key-value section renders each label and value', (tester) async {
@@ -27,9 +28,9 @@ void main() {
       );
 
       expect(find.text('위치'), findsOneWidget);
-      expect(find.text('B2 서편'), findsOneWidget);
+      expect(find.text(keepWordsWhole('B2 서편')), findsOneWidget);
       expect(find.text('안내'), findsOneWidget);
-      expect(find.text('에스컬레이터 옆'), findsOneWidget);
+      expect(find.text(keepWordsWhole('에스컬레이터 옆')), findsOneWidget);
     });
 
     testWidgets('tags are individually visible chips', (tester) async {
@@ -52,10 +53,11 @@ void main() {
         ),
       );
 
-      expect(find.text('팝업 운영'), findsOneWidget);
+      expect(find.text(keepWordsWhole('팝업 운영')), findsOneWidget);
       expect(find.text('2026-08-31까지'), findsOneWidget);
     });
 
+    // 탭 핸들러가 없는 블록이라 버튼처럼 보이면 안 된다.
     testWidgets('map section is a local visual hint without an image provider', (
       tester,
     ) async {
@@ -64,8 +66,9 @@ void main() {
       );
 
       expect(find.text('B2 위치'), findsOneWidget);
-      expect(find.byIcon(Icons.map_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.place_outlined), findsOneWidget);
       expect(find.byType(Image), findsNothing);
+      expect(find.byIcon(Icons.chevron_right), findsNothing);
     });
   });
 }

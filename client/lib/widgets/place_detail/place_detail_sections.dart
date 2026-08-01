@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import 'korean_line_break.dart';
 
 /// 상세 API의 `keyValue` 항목을 렌더러에 넘길 때 쓰는 작은 표시 모델.
 ///
@@ -14,40 +15,44 @@ class PlaceKeyValue {
 }
 
 /// 한 줄 소개 섹션.
+///
+/// 흰 시트 위에 흰 카드를 얹으면 테두리가 구분하는 대상이 없어 상자만 늘어난다.
+/// 소개는 본문 문단 그대로 두고 여백으로만 앞뒤와 떨어뜨린다.
 class PlaceSummarySection extends StatelessWidget {
   const PlaceSummarySection({super.key, required this.text});
 
   final String text;
 
   @override
-  Widget build(BuildContext context) => _SectionCard(
-    child: Text(
-      text,
-      style: const TextStyle(fontSize: 14, height: 1.45, color: AppColors.text),
-    ),
+  Widget build(BuildContext context) => Text(
+    keepWordsWhole(text),
+    style: const TextStyle(fontSize: 14.5, height: 1.5, color: AppColors.text),
   );
 }
 
 /// 위치 안내처럼 라벨과 값이 한 쌍인 섹션.
+///
+/// 카드 대신 구분선만 쓴다. 같은 라벨-값 형태인 `PlaceBusinessInfoSection`과
+/// 리듬을 맞춰 시트가 카드의 나열로 보이지 않게 한다.
 class PlaceKeyValueSection extends StatelessWidget {
   const PlaceKeyValueSection({super.key, required this.items});
 
   final List<PlaceKeyValue> items;
 
   @override
-  Widget build(BuildContext context) => _SectionCard(
-    child: Column(
-      children: [
-        for (var index = 0; index < items.length; index++) ...[
-          _KeyValueRow(item: items[index]),
-          if (index != items.length - 1)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 10),
-              child: Divider(height: 1),
-            ),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      // 여백은 항목 사이에만 — `PlaceBusinessInfoSection`과 같은 규칙이다.
+      for (var index = 0; index < items.length; index++) ...[
+        if (index > 0) ...[
+          const SizedBox(height: 10),
+          const Divider(height: 1),
+          const SizedBox(height: 10),
         ],
+        _KeyValueRow(item: items[index]),
       ],
-    ),
+    ],
   );
 }
 
@@ -56,22 +61,20 @@ class _KeyValueRow extends StatelessWidget {
 
   final PlaceKeyValue item;
 
+  // 라벨을 값 위 캡션으로 둔다 — `PlaceBusinessInfoSection`과 같은 이유이자 같은
+  // 리듬이다.
   @override
-  Widget build(BuildContext context) => Row(
+  Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      SizedBox(
-        width: 72,
-        child: Text(
-          item.label,
-          style: const TextStyle(fontSize: 13, color: AppColors.muted),
-        ),
+      Text(
+        item.label,
+        style: const TextStyle(fontSize: 12, color: AppColors.muted),
       ),
-      Expanded(
-        child: Text(
-          item.value,
-          style: const TextStyle(fontSize: 13, height: 1.35, color: AppColors.text),
-        ),
+      const SizedBox(height: 3),
+      Text(
+        keepWordsWhole(item.value),
+        style: const TextStyle(fontSize: 13.5, height: 1.4, color: AppColors.text),
       ),
     ],
   );
@@ -113,8 +116,7 @@ class PlaceNoticeSection extends StatelessWidget {
   final String? until;
 
   @override
-  Widget build(BuildContext context) => _SectionCard(
-    color: AppColors.blue50,
+  Widget build(BuildContext context) => _TintedBlock(
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -127,7 +129,10 @@ class PlaceNoticeSection extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(text, style: const TextStyle(fontSize: 13, color: AppColors.text)),
+              Text(
+                keepWordsWhole(text),
+                style: const TextStyle(fontSize: 13, color: AppColors.text),
+              ),
               if (until != null) ...[
                 const SizedBox(height: 4),
                 Text(
@@ -146,6 +151,9 @@ class PlaceNoticeSection extends StatelessWidget {
 /// MapLibre 미리보기는 첫 프레임에 별도 지도·타일 요청을 만들기 때문에 이 Wave에서
 /// 넣지 않는다. 이 섹션은 위치가 있다는 사실만 가볍게 알려 주고, 실제 지도 이동은
 /// 기존 지도 화면과 후속 상호작용에 맡긴다.
+///
+/// **눌리는 것처럼 보이면 안 된다.** 탭 핸들러가 없으므로 화살표 같은 버튼
+/// 기표를 두지 않는다. 지도 이동을 붙이는 날 그때 버튼으로 바꾼다.
 class PlaceMapSection extends StatelessWidget {
   const PlaceMapSection({super.key, this.floorLabel});
 
@@ -156,15 +164,16 @@ class PlaceMapSection extends StatelessWidget {
     final label = floorLabel == null || floorLabel!.isEmpty
         ? '지도에서 위치 확인'
         : '${floorLabel!} 위치';
-    return _SectionCard(
-      color: AppColors.blue50,
+    return _TintedBlock(
       child: Row(
         children: [
-          const Icon(Icons.map_outlined, color: AppColors.primary),
+          const Icon(Icons.place_outlined, color: AppColors.primary, size: 20),
           const SizedBox(width: 10),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -172,20 +181,20 @@ class PlaceMapSection extends StatelessWidget {
   }
 }
 
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.child, this.color = AppColors.surface});
+/// 배경색으로만 구분하는 블록. 공지·지도 바로가기처럼 "본문이 아니라 하나의
+/// 덩어리"인 것에만 쓴다. 테두리는 두지 않는다 — 배경색만으로 이미 구분된다.
+class _TintedBlock extends StatelessWidget {
+  const _TintedBlock({required this.child});
 
   final Widget child;
-  final Color color;
 
   @override
   Widget build(BuildContext context) => Container(
     width: double.infinity,
     padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(
-      color: color,
+      color: AppColors.blue50,
       borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: AppColors.blue100),
     ),
     child: child,
   );

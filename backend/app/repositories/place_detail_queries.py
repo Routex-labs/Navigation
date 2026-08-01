@@ -106,29 +106,13 @@ def _sections(
 
     # 오버레이가 준 순서를 따르지 않고 서버가 순서를 고정한다 — 매장마다 순서가
     # 달라지면 사용자가 같은 정보를 같은 자리에서 찾지 못한다.
-    summary = overlay.get("summary")
-    if isinstance(summary, str) and summary.strip():
-        sections.append({"type": "summary", "text": summary.strip()})
-
+    #
+    # 순서는 "사진 → 소개 → 메뉴 → 위치"다. 사진으로 매장을 알아보고 어떤 곳인지
+    # 읽은 다음 메뉴를 본다. 주소(businessInfo)는 맨 아래다 — 건물 안에서 길을 찾는
+    # 사용자에게 건물 주소는 이미 아는 정보라, 위쪽 자리를 쓸 값어치가 없다.
     hero_items = _rich_items(overlay.get("hero"), ("local_asset",))
     if hero_items:
         sections.append({"type": "hero", "items": hero_items})
-
-    tags = overlay.get("tags")
-    if isinstance(tags, list) and tags:
-        sections.append({"type": "tags", "tags": [str(tag) for tag in tags]})
-
-    items = _key_value_items(overlay)
-    if items:
-        sections.append({"type": "keyValue", "items": items})
-
-    menu_items = _rich_items(overlay.get("menu"), ("name", "price", "description", "image_asset"))
-    if menu_items:
-        sections.append({"type": "menu", "items": menu_items})
-
-    business_info_items = _rich_items(overlay.get("businessInfo"), ("label", "value"))
-    if business_info_items:
-        sections.append({"type": "businessInfo", "items": business_info_items})
 
     notice = overlay.get("notice")
     if isinstance(notice, dict) and str(notice.get("text", "")).strip():
@@ -139,6 +123,26 @@ def _sections(
                 "until": notice.get("until"),
             }
         )
+
+    tags = overlay.get("tags")
+    if isinstance(tags, list) and tags:
+        sections.append({"type": "tags", "tags": [str(tag) for tag in tags]})
+
+    summary = overlay.get("summary")
+    if isinstance(summary, str) and summary.strip():
+        sections.append({"type": "summary", "text": summary.strip()})
+
+    menu_items = _rich_items(overlay.get("menu"), ("name", "price", "description", "image_asset"))
+    if menu_items:
+        sections.append({"type": "menu", "items": menu_items})
+
+    items = _key_value_items(overlay)
+    if items:
+        sections.append({"type": "keyValue", "items": items})
+
+    business_info_items = _rich_items(overlay.get("businessInfo"), ("label", "value"))
+    if business_info_items:
+        sections.append({"type": "businessInfo", "items": business_info_items})
 
     polygon = _polygon_points(store)
     if polygon:
