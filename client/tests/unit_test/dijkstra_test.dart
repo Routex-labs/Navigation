@@ -4,7 +4,8 @@ import 'package:navigation_client/models/floor_graph.dart';
 
 /// api/tests/unit/test_dijkstra.py의 케이스를 그대로 옮긴 것.
 void main() {
-  GraphNode node(String id) => GraphNode(id: id, type: 'corridor', xM: 0, yM: 0);
+  GraphNode node(String id) =>
+      GraphNode(id: id, type: 'corridor', xM: 0, yM: 0);
 
   GraphEdge edge(
     String id,
@@ -35,7 +36,7 @@ void main() {
 
     expect(path?.nodeIds, ['A', 'B', 'C']);
     expect(path?.edgeIds, ['AB', 'BC']);
-    expect(path?.totalDistanceM, 5.0);
+    expect(path?.totalCostM, 5.0);
   });
 
   test('단방향 간선은 역방향으로 이동할 수 없다', () {
@@ -59,7 +60,7 @@ void main() {
 
     expect(path?.nodeIds, ['A']);
     expect(path?.edgeIds, isEmpty);
-    expect(path?.totalDistanceM, 0.0);
+    expect(path?.totalCostM, 0.0);
   });
 
   test('연결되지 않은 노드는 경로가 없다', () {
