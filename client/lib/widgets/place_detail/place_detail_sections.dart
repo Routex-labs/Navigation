@@ -151,6 +151,9 @@ class PlaceNoticeSection extends StatelessWidget {
 /// MapLibre 미리보기는 첫 프레임에 별도 지도·타일 요청을 만들기 때문에 이 Wave에서
 /// 넣지 않는다. 이 섹션은 위치가 있다는 사실만 가볍게 알려 주고, 실제 지도 이동은
 /// 기존 지도 화면과 후속 상호작용에 맡긴다.
+///
+/// **눌리는 것처럼 보이면 안 된다.** 탭 핸들러가 없으므로 화살표 같은 버튼
+/// 기표를 두지 않는다. 지도 이동을 붙이는 날 그때 버튼으로 바꾼다.
 class PlaceMapSection extends StatelessWidget {
   const PlaceMapSection({super.key, this.floorLabel});
 
@@ -164,7 +167,7 @@ class PlaceMapSection extends StatelessWidget {
     return _TintedBlock(
       child: Row(
         children: [
-          const Icon(Icons.map_outlined, color: AppColors.primary),
+          const Icon(Icons.place_outlined, color: AppColors.primary, size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -172,7 +175,6 @@ class PlaceMapSection extends StatelessWidget {
               style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
             ),
           ),
-          const Icon(Icons.chevron_right, size: 20, color: AppColors.muted),
         ],
       ),
     );

@@ -215,18 +215,10 @@ class PlaceBusinessInfo {
 ///
 /// 카드 테두리 없이 구분선만 쓴다. 위쪽 summary·hero가 이미 시각적으로 묶여 있어서
 /// 여기에 상자를 하나 더 두면 시트가 카드의 나열처럼 보인다.
-///
-/// [showTitle]이 false면 제목을 그리지 않는다. 바로 위 소개 문단이 이미 같은
-/// `매장 정보` 제목 아래 있을 때 제목이 두 번 나오는 걸 막는다.
 class PlaceBusinessInfoSection extends StatelessWidget {
-  const PlaceBusinessInfoSection({
-    super.key,
-    required this.items,
-    this.showTitle = true,
-  });
+  const PlaceBusinessInfoSection({super.key, required this.items});
 
   final List<PlaceBusinessInfo> items;
-  final bool showTitle;
 
   @override
   Widget build(BuildContext context) {
@@ -235,10 +227,8 @@ class PlaceBusinessInfoSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (showTitle) ...[
-          const PlaceSectionTitle('매장 정보'),
-          const SizedBox(height: 10),
-        ],
+        const PlaceSectionTitle('매장 정보'),
+        const SizedBox(height: 10),
         // 여백은 항목 사이에만 둔다. 첫·마지막 행에 붙이면 섹션 아래위가 다른
         // 섹션보다 더 벌어져서 구분선 간격이 제각각으로 보인다.
         for (var index = 0; index < items.length; index++) ...[

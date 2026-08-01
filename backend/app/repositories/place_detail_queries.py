@@ -107,9 +107,9 @@ def _sections(
     # 오버레이가 준 순서를 따르지 않고 서버가 순서를 고정한다 — 매장마다 순서가
     # 달라지면 사용자가 같은 정보를 같은 자리에서 찾지 못한다.
     #
-    # 순서는 "사진 → 매장 정보 → 메뉴"다. 사진으로 매장을 알아본 뒤 어떤 곳인지
-    # 읽고, 메뉴처럼 긴 목록은 맨 뒤에 둔다. summary는 businessInfo 바로 앞에 두어
-    # 클라이언트가 둘을 하나의 `매장 정보` 묶음으로 그릴 수 있게 한다.
+    # 순서는 "사진 → 소개 → 메뉴 → 위치"다. 사진으로 매장을 알아보고 어떤 곳인지
+    # 읽은 다음 메뉴를 본다. 주소(businessInfo)는 맨 아래다 — 건물 안에서 길을 찾는
+    # 사용자에게 건물 주소는 이미 아는 정보라, 위쪽 자리를 쓸 값어치가 없다.
     hero_items = _rich_items(overlay.get("hero"), ("local_asset",))
     if hero_items:
         sections.append({"type": "hero", "items": hero_items})
@@ -132,17 +132,17 @@ def _sections(
     if isinstance(summary, str) and summary.strip():
         sections.append({"type": "summary", "text": summary.strip()})
 
-    business_info_items = _rich_items(overlay.get("businessInfo"), ("label", "value"))
-    if business_info_items:
-        sections.append({"type": "businessInfo", "items": business_info_items})
+    menu_items = _rich_items(overlay.get("menu"), ("name", "price", "description", "image_asset"))
+    if menu_items:
+        sections.append({"type": "menu", "items": menu_items})
 
     items = _key_value_items(overlay)
     if items:
         sections.append({"type": "keyValue", "items": items})
 
-    menu_items = _rich_items(overlay.get("menu"), ("name", "price", "description", "image_asset"))
-    if menu_items:
-        sections.append({"type": "menu", "items": menu_items})
+    business_info_items = _rich_items(overlay.get("businessInfo"), ("label", "value"))
+    if business_info_items:
+        sections.append({"type": "businessInfo", "items": business_info_items})
 
     polygon = _polygon_points(store)
     if polygon:

@@ -174,9 +174,9 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
         onTap: () => Navigator.of(context).maybePop(),
         behavior: HitTestBehavior.opaque,
         child: DraggableScrollableSheet(
-          // 이름·길찾기·사진·매장 정보까지가 한 화면에 들어오고 아래에 여백이
-          // 조금 남는 높이다. 문장 중간에서 끊기면 잘린 것처럼 보인다.
-          initialChildSize: 0.68,
+          // 이름·길찾기·사진·소개까지가 한 화면에 들어오고 아래에 여백이 조금
+          // 남는 높이다. 문장 중간에서 끊기면 잘린 것처럼 보인다.
+          initialChildSize: 0.64,
           minChildSize: 0.3,
           maxChildSize: 0.92,
           expand: false,
@@ -419,21 +419,11 @@ class PlaceDetailSections extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 소개와 매장 정보는 둘 다 "이 매장이 뭔지" 설명하는 글이라 한 덩어리로 묶는다.
-    // 서버가 summary를 businessInfo 바로 앞에 놓아 주므로, 여기서는 제목을
-    // 소개 쪽에 한 번만 붙이고 businessInfo의 제목을 끈다.
-    final hasSummary = sections.any((section) => section is SummarySection);
-    final hasBusinessInfo =
-        sections.any((section) => section is BusinessInfoSection);
-    final groupSummary = hasSummary && hasBusinessInfo;
-
     final widgets = <Widget>[];
-    PlaceDetailSection? previous;
     for (final section in sections) {
       final widget = switch (section) {
         SummarySection(:final text) => _TitledSection(
-            // 매장 정보가 없으면 소개 문단만 제목 없이 떠 버리므로 제 이름을 준다.
-            title: groupSummary ? '매장 정보' : '소개',
+            title: '소개',
             child: PlaceSummarySection(text: text),
           ),
         HeroSection(:final items) => PlaceHeroCarousel(
@@ -464,7 +454,6 @@ class PlaceDetailSections extends StatelessWidget {
             ],
           ),
         BusinessInfoSection(:final items) => PlaceBusinessInfoSection(
-            showTitle: !groupSummary,
             items: [
               for (final item in items)
                 PlaceBusinessInfo(label: item.label, value: item.value),
@@ -481,21 +470,10 @@ class PlaceDetailSections extends StatelessWidget {
                   const EdgeInsets.symmetric(horizontal: placeSectionGutter),
               child: widget,
             );
-      if (widgets.isNotEmpty) {
-        // 같은 묶음 안(소개 → 매장 정보)은 여백만 좁게 줘서 한 덩어리로 읽히게 한다.
-        final sameGroup = groupSummary &&
-            previous is SummarySection &&
-            section is BusinessInfoSection;
-        if (sameGroup) {
-          widgets.add(const SizedBox(height: 12));
-        } else {
-          // 여백만으로는 섹션이 어디서 끝났는지 읽히지 않는다. 카드로 감싸는 대신
-          // 시트 폭을 가로지르는 얇은 선 하나로만 끊는다.
-          widgets.add(const _SectionBreak());
-        }
-      }
+      // 여백만으로는 섹션이 어디서 끝났는지 읽히지 않는다. 카드로 감싸는 대신
+      // 시트 폭을 가로지르는 얇은 선 하나로만 끊는다.
+      if (widgets.isNotEmpty) widgets.add(const _SectionBreak());
       widgets.add(padded);
-      previous = section;
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
