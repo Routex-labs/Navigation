@@ -66,7 +66,10 @@ void main() {
         confirmedDistanceM: 0,
       ).track;
 
-      expect(track.rejectReasons[AccelPreviewTrack.stepLeadCap], greaterThan(0));
+      expect(
+        track.rejectReasons[AccelPreviewTrack.stepLeadCap],
+        greaterThan(0),
+      );
       expect(track.steps, AccelPreviewTrack.maxInitialStepLead);
       // 핵심: 거부분이 시각 배열에 새지 않는다.
       expect(track.acceptedPeakTimesMs.length, track.path.length);
@@ -124,6 +127,31 @@ void main() {
 
       expect(track.acceptedPeakTimesMs, [null]);
       expect(track.acceptedPeakTimesMs.length, track.path.length);
+    });
+
+    test('경로 재기준화는 native peak baseline을 보존해 다음 한 걸음을 즉시 받는다', () {
+      final track = AccelPreviewTrack();
+      bool peak(int count, int peakMs) => track.applyRealtimePeaks(
+        AccelPeakEvent(count: count, latestPeakMs: peakMs),
+        tracking: true,
+        hasHeading: true,
+        effectiveStrideMeters: 0.7,
+        fallbackStrideMeters: 0.7,
+        confirmedSteps: 100,
+        confirmedDistanceM: 70,
+        pedometerCadenceHz: null,
+        headingAt: (_) => null,
+        fallbackHeadingDeg: 0,
+      );
+
+      expect(peak(1, 1000), isFalse); // 최초 센서 baseline
+      expect(peak(2, 1500), isTrue);
+      track.reset(preserveNativePeakBaseline: true);
+
+      expect(track.steps, 0);
+      expect(peak(3, 2000), isTrue);
+      expect(track.steps, 1);
+      expect(track.path, hasLength(2));
     });
   });
 
@@ -229,6 +257,50 @@ void main() {
       // 남겨두면 새 세션의 batchId=1을 "이미 소비함"으로 오판한다.
       expect(s.snapshot.lastAppliedBatch, isNull);
     });
+
+    test('경로 재기준화는 heading과 native 누적 baseline을 유지한다', () {
+      final s = seededSession();
+      s.onAccelPeak(const AccelPeakEvent(count: 1, latestPeakMs: 1100));
+      s.onAccelPeak(const AccelPeakEvent(count: 2, latestPeakMs: 1600));
+      s.onPedometerBatch(
+        const PedometerBatchEvent(
+          steps: 4,
+          stepSessionId: 1,
+          sessionStartMs: 900,
+          timestampMs: 2000,
+          distanceM: 2.8,
+          distanceAvailable: true,
+          stepPeakTimes: [1100, 1400, 1700, 1900],
+        ),
+      );
+      expect(s.snapshot.steps, 4);
+
+      s.rebasePath(atMs: 2500);
+      expect(s.snapshot.hasHeading, isTrue);
+      expect(s.snapshot.steps, 0);
+      expect(s.snapshot.preview.steps, 0);
+      expect(s.snapshot.path, [PdrLocalPoint.zero]);
+
+      // native count를 0으로 되돌리지 않았으므로 다음 count=3이 곧 한 걸음이다.
+      s.onAccelPeak(const AccelPeakEvent(count: 3, latestPeakMs: 3000));
+      expect(s.snapshot.preview.steps, 1);
+
+      // 누적 steps=8 중 이전 4걸음은 baseline으로 보존되고, 새 delta 4걸음 중
+      // 재기준화 경계(2500ms) 이후 peak 3개만 새 경로에 들어간다.
+      s.onPedometerBatch(
+        const PedometerBatchEvent(
+          steps: 8,
+          stepSessionId: 1,
+          sessionStartMs: 900,
+          timestampMs: 3500,
+          distanceM: 5.6,
+          distanceAvailable: true,
+          stepPeakTimes: [2200, 2700, 3000, 3300],
+        ),
+      );
+      expect(s.snapshot.steps, 3);
+      expect(s.snapshot.distanceM, closeTo(2.1, 1e-9));
+    });
   });
 
   group('확정 시간창 기준 preview 소비', () {
@@ -266,18 +338,69 @@ void main() {
       final times = snapshot.preview.acceptedPeakTimesMs;
       expect(times.length, snapshot.preview.path.length);
 
-      final consumed = times
-          .where((t) => t != null && t <= spanEndMs)
-          .length;
-      final pending = times
-          .where((t) => t != null && t > spanEndMs)
-          .length;
+      final consumed = times.where((t) => t != null && t <= spanEndMs).length;
+      final pending = times.where((t) => t != null && t > spanEndMs).length;
       // 확정 시간창 안의 주황 걸음 3개만 소비되고, 이후 3개는 선행분으로 남는다.
       expect(consumed, 3);
       expect(pending, 3);
       // 초록 걸음 수(3)가 아니라 시간창이 기준이라는 점을 함께 고정한다.
       expect(snapshot.preview.steps, 6);
       expect(snapshot.steps, 3);
+      // 표시 경로는 초록 3걸음 끝에서 미래 주황 3걸음만 다시 이어진다.
+      expect(snapshot.reconciledPreviewPath.length, snapshot.path.length + 3);
+      expect(
+        snapshot.reconciledPreviewPath[snapshot.path.length - 1],
+        snapshot.position,
+      );
+      expect(
+        snapshot.reconciledPreviewPosition.northM,
+        greaterThan(snapshot.position.northM),
+      );
+    });
+
+    test('새 초록 배치가 오면 총 누적 차이와 무관하게 미확정 12걸음 여유가 다시 열린다', () {
+      final track = AccelPreviewTrack();
+      var peakMs = 1000;
+      for (var count = 1; count <= 14; count++) {
+        peakMs += 530;
+        track.applyRealtimePeaks(
+          AccelPeakEvent(count: count, latestPeakMs: peakMs),
+          tracking: true,
+          hasHeading: true,
+          effectiveStrideMeters: 0.75,
+          fallbackStrideMeters: 0.75,
+          confirmedSteps: 1,
+          confirmedDistanceM: 0.75,
+          confirmedThroughMs: 1530,
+          pedometerCadenceHz: 1.9,
+          headingAt: (_) => null,
+          fallbackHeadingDeg: 0,
+        );
+      }
+      final cappedSteps = track.steps;
+      expect(
+        track.rejectReasons[AccelPreviewTrack.stepLeadCap],
+        greaterThan(0),
+      );
+
+      // 다음 confirmed 배치가 기존 accepted peak 대부분의 시간창을 덮었다.
+      peakMs += 530;
+      final changed = track.applyRealtimePeaks(
+        AccelPeakEvent(count: 15, latestPeakMs: peakMs),
+        tracking: true,
+        hasHeading: true,
+        effectiveStrideMeters: 0.75,
+        fallbackStrideMeters: 0.75,
+        confirmedSteps: 2,
+        confirmedDistanceM: 1.5,
+        confirmedThroughMs: peakMs - 530,
+        pedometerCadenceHz: 1.9,
+        headingAt: (_) => null,
+        fallbackHeadingDeg: 0,
+      );
+
+      expect(changed, isTrue);
+      expect(track.steps, cappedSteps + 1);
     });
   });
 }

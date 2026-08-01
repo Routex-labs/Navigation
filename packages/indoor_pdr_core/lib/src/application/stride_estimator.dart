@@ -104,6 +104,13 @@ class StrideEstimator {
     trackedDistanceM += meters;
   }
 
+  /// 네이티브 거리 baseline과 학습된 보폭은 유지하고 표시 경로 거리만 0으로
+  /// 되돌린다. baseline을 버리면 다음 누적 distance가 이전 구간까지 포함한 값으로
+  /// 들어와 첫 배치 보폭을 왜곡한다.
+  void rebaseTrackedDistance() {
+    trackedDistanceM = 0;
+  }
+
   void reset() {
     iosDistanceM = 0;
     distanceAvailable = false;

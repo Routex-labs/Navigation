@@ -193,6 +193,10 @@ class PdrSession {
       fallbackStrideMeters: _stride.fallbackMeters,
       confirmedSteps: iosTrackedSteps,
       confirmedDistanceM: _stride.trackedDistanceM,
+      // 총 주황/초록 걸음 수의 차이가 아니라, 마지막 초록 배치 뒤 아직
+      // 확정되지 않은 주황 꼬리만 제한한다. 배치가 올 때마다 그 시간창 안의
+      // peak가 자연스럽게 소비돼 새 초록 끝점에서 preview 여유가 다시 열린다.
+      confirmedThroughMs: _lastAppliedBatch?.spanEndMs,
       pedometerCadenceHz: _stride.cadenceAvailable ? _stride.cadenceHz : null,
       headingAt: _headingHistory.at,
       fallbackHeadingDeg: walkingHeadingDeg,
@@ -280,6 +284,22 @@ class PdrSession {
     walkDirConfidence = 0;
     _walkOffset.reset();
     _headingConvergence.reset();
+    _emit();
+  }
+
+  /// 네이티브 센서 스트림과 heading 수렴 상태를 유지한 채 경로 원점만 다시 잡는다.
+  ///
+  /// 위치 재지정·층 전환 때 `CMPedometer.stop/start`를 호출하지 않기 위한 경로다.
+  /// 누적 counter baseline은 보존하고 [atMs] 이전 걸음은 tracking timeline에서
+  /// 제외하므로 다음 늦은 batch가 이전 이동을 새 원점 뒤에 다시 붙이지 않는다.
+  void rebasePath({required int atMs}) {
+    _paths.reset();
+    _accelPreview.reset(preserveNativePeakBaseline: true);
+    _roninTrack.rebasePath();
+    iosTrackedSteps = 0;
+    _lastAppliedBatch = null;
+    _pedometer.rebasePath(atMs: atMs, initialTrackingOn: _tracking);
+    _stride.rebaseTrackedDistance();
     _emit();
   }
 

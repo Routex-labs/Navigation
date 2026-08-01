@@ -130,4 +130,11 @@ class RoninStrideTrack {
     model = null;
     status = 'unsupported';
   }
+
+  /// 센서/모델 상태는 유지하고 비교 경로의 원점과 누적 표시값만 초기화한다.
+  void rebasePath() {
+    _paths.reset();
+    steps = 0;
+    distanceM = 0;
+  }
 }
