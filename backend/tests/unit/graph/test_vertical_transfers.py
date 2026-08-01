@@ -87,10 +87,14 @@ def test_상행_전용은_하행_간선을_만들지_않는다():
 # 탑승구↔탑승구를 잇거나 아무것도 못 잇는다. 원본 간선을 주면 올바른 짝을 만든다.
 def _b1_b2_floors() -> list[dict]:
     return [
-        _floor("B2", -2, [
-            _esc("B2:fr", 152, 141, "down", name="ES2-1-DN(FRB1)"),
-            _esc("B2:to", 154, 141, "down", name="ES2-1-DN(TOB3)"),
-        ]),
+        _floor(
+            "B2",
+            -2,
+            [
+                _esc("B2:fr", 152, 141, "down", name="ES2-1-DN(FRB1)"),
+                _esc("B2:to", 154, 141, "down", name="ES2-1-DN(TOB3)"),
+            ],
+        ),
         _floor("B1", -1, [_esc("B1:to", 158, 160, "down", name="ES2-1-DN(TOB2)")]),
     ]
 
@@ -146,14 +150,22 @@ def test_양쪽_층_파일의_passable이_엇갈리면_통행_가능으로_본�
 def test_통행_불가로_거부한_노드는_근접_폴백에서도_제외된다():
     # 폴백이 짝지을 수 있는 8m 이내 상대를 일부러 같은 층에 둔다.
     floors = [
-        _floor("2F", 2, [
-            _esc("2F:a", 10, 10, "down", name="ES1-DN(FR1F)"),
-            _esc("2F:b", 13, 10, "down", name="ES2-DN(FR1F)"),
-        ]),
-        _floor("3F", 3, [
-            _esc("3F:a", 11, 10, "down", name="ES1-DN(TO2F)"),
-            _esc("3F:b", 14, 10, "down", name="ES2-DN(TO2F)"),
-        ]),
+        _floor(
+            "2F",
+            2,
+            [
+                _esc("2F:a", 10, 10, "down", name="ES1-DN(FR1F)"),
+                _esc("2F:b", 13, 10, "down", name="ES2-DN(FR1F)"),
+            ],
+        ),
+        _floor(
+            "3F",
+            3,
+            [
+                _esc("3F:a", 11, 10, "down", name="ES1-DN(TO2F)"),
+                _esc("3F:b", 14, 10, "down", name="ES2-DN(TO2F)"),
+            ],
+        ),
     ]
     source = [{"from": "3F:a", "to": "2F:a", "passable": False}]
     transfers, unresolved, _warnings = vt.build_transfers(floors, source)
@@ -200,9 +212,7 @@ def test_원본_간선의_방향이_엇갈리면_잇지_않는다():
         _floor("1F", 1, [_esc("1F:up", 10, 10, "up")]),
         _floor("2F", 2, [_esc("2F:dn", 10, 10, "down")]),
     ]
-    transfers, unresolved, _warnings = vt.build_transfers(
-        floors, [{"from": "1F:up", "to": "2F:dn", "passable": True}]
-    )
+    transfers, unresolved, _warnings = vt.build_transfers(floors, [{"from": "1F:up", "to": "2F:dn", "passable": True}])
 
     assert not [t for t in transfers if t["mode"] == "escalator"]
     assert [u for u in unresolved if "진행 방향" in u["reason"]]

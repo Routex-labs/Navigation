@@ -444,6 +444,7 @@ def collect_unresolved_store_entrances(directory: Path = STUDIO_DIR) -> list[dic
         unresolved.extend(data.get("unresolved_store_entrances", []))
     return unresolved
 
+
 # 원본 층간 간선의 노드 ID를 층 스코프 ID로 바꾼다.
 #
 # 층 내부 간선(_scope_edges)과 달리 양 끝점이 서로 다른 층에 있어 "이 간선의 층"으로는
@@ -500,9 +501,7 @@ def seed_studio(
             data = build_seed_dict(code, reference, directory)
             seed_navigation.add_dataset(own_session, data)
             floor = data["building"]["floor"]
-            raw_transfer_edges.extend(
-                _load(code, directory).get("vertical_transfer_edges") or []
-            )
+            raw_transfer_edges.extend(_load(code, directory).get("vertical_transfer_edges") or [])
             floors_for_transfer.append(
                 {
                     "code": code,
@@ -529,12 +528,14 @@ def seed_studio(
             _scope_transfer_edges(floors_for_transfer, raw_transfer_edges),
         )
         seed_navigation.add_transfer_edges(own_session, built.edges)
-        summaries.append({
-            "code": "-",
-            "transfers": len(built.edges),
-            "unresolved": len(built.unresolved),
-            "warnings": len(built.warnings),
-        })
+        summaries.append(
+            {
+                "code": "-",
+                "transfers": len(built.edges),
+                "unresolved": len(built.unresolved),
+                "warnings": len(built.warnings),
+            }
+        )
 
         # 커밋 전 그래프 무결성 게이트. 타 건물 연결·동일 층 전이·NaN 같은 에러가 있으면
         # 여기서 GraphIntegrityError로 중단되어 아래 except가 롤백한다(반쯤 시드된 DB 방지).
@@ -556,10 +557,7 @@ def seed_studio(
 def main() -> None:
     for row in seed_studio():
         if "transfers" in row:
-            print(
-                f"[전이] 간선={row['transfers']} 미해결={row['unresolved']} "
-                f"경고={row['warnings']}"
-            )
+            print(f"[전이] 간선={row['transfers']} 미해결={row['unresolved']} 경고={row['warnings']}")
             continue
         print(f"[{row['name']}] nodes={row['nodes']} edges={row['edges']} stores={row['stores']} pois={row['pois']}")
     print("Studio 데이터 적재 완료")

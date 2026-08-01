@@ -117,9 +117,7 @@ def _escalator_direction(node: dict) -> str | None:
 #   B1 "ES2-1-DN(TOB2)"  = B1에서 B2로 내려가는 **탑승구**
 #   B2 "ES2-1-DN(FRB1)"  = 그 기기가 B2에 내려놓는 **하차구**
 # 원본 간선 검증용으로만 쓴다(간선 생성의 근거는 원본 토폴로지 + trans_code).
-_ESCALATOR_NAME = re.compile(
-    r"^(?P<group>ES[0-9\-]*?)-(?P<dir>UP|DN|DOWN)\((?P<role>TO|FR)(?P<floor>[A-Z0-9]+)\)$"
-)
+_ESCALATOR_NAME = re.compile(r"^(?P<group>ES[0-9\-]*?)-(?P<dir>UP|DN|DOWN)\((?P<role>TO|FR)(?P<floor>[A-Z0-9]+)\)$")
 
 
 def _parse_escalator_name(node: dict) -> dict | None:
@@ -214,17 +212,19 @@ def _escalator_transfers_from_source(
         if mismatch is not None:
             # 간선은 만든다 — 경고와 미해결을 섞으면 "간선이 빠졌다"로 오해된다.
             warnings.append({**note, "reason": f"이름 규칙 불일치: {mismatch}"})
-        transfers.append(_edge(
-            from_node=from_node,
-            to_node=to_node,
-            mode="escalator",
-            floors=[lower_floor["name"], upper_floor["name"]],
-            # 표시 거리는 수평+층고의 3D 거리, 비용은 탑승 부담.
-            length_m=hypot(_distance(from_node, to_node), FLOOR_HEIGHT_M),
-            cost_m=ESCALATOR_HOP_M,
-            bidirectional=False,
-            distance=_distance(from_node, to_node),
-        ))
+        transfers.append(
+            _edge(
+                from_node=from_node,
+                to_node=to_node,
+                mode="escalator",
+                floors=[lower_floor["name"], upper_floor["name"]],
+                # 표시 거리는 수평+층고의 3D 거리, 비용은 탑승 부담.
+                length_m=hypot(_distance(from_node, to_node), FLOOR_HEIGHT_M),
+                cost_m=ESCALATOR_HOP_M,
+                bidirectional=False,
+                distance=_distance(from_node, to_node),
+            )
+        )
     return handled
 
 
@@ -425,16 +425,12 @@ def build_transfers(
 
     # 에스컬레이터: 원본 간선이 1차 근거, 원본이 언급하지 않은 노드만 근접 폴백.
     handled = (
-        _escalator_transfers_from_source(
-            ordered, source_edges, transfers, unresolved, warnings
-        )
+        _escalator_transfers_from_source(ordered, source_edges, transfers, unresolved, warnings)
         if source_edges
         else set()
     )
     for lower, upper in zip(ordered, ordered[1:]):
-        _escalator_transfers(
-            lower, upper, transfers, unresolved, skip_node_ids=handled
-        )
+        _escalator_transfers(lower, upper, transfers, unresolved, skip_node_ids=handled)
 
     # 엘리베이터: 샤프트 단위로 서비스 층 전체를 직행 연결.
     _elevator_transfers(ordered, transfers, unresolved)
