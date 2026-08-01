@@ -142,9 +142,9 @@ void main() {
     expect(find.text('매장 정보'), findsNothing);
   });
 
-  // 액션 바는 스크롤 위치와 무관하게 하단에 고정이다. 본문이 길어도 "언제든
-  // 길찾기"(F5)가 유지되는지 확인한다.
-  testWidgets('본문이 길어도 하단 액션 바는 스크롤과 무관하게 남는다', (tester) async {
+  // 길찾기는 이름 바로 아래 한 줄에만 있다. 본문이 길어도 중복 없이 하나씩이어야
+  // "언제든 길찾기"(F5)를 한 자리에서 지킨다.
+  testWidgets('본문이 길어도 길찾기 버튼은 이름 아래 한 벌만 있다', (tester) async {
     await tester.pumpWidget(
       buildSubject(
         repository: _FakeRepository(

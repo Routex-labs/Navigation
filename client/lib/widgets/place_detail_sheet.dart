@@ -187,13 +187,11 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                 borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
               ),
               clipBehavior: Clip.antiAlias,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Expanded(
-                    child: SingleChildScrollView(
+              child: SingleChildScrollView(
                       controller: scrollController,
-                      padding: const EdgeInsets.only(bottom: 20),
+                      padding: EdgeInsets.only(
+                        bottom: 20 + MediaQuery.paddingOf(context).bottom,
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
@@ -209,9 +207,19 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                               title: widget.title,
                               subtitle: widget.subtitle,
                               subcategory: subcategory,
+                            ),
+                          ),
+                          // 이름을 읽은 직후가 길찾기를 누르는 자리다. 사진·메뉴를
+                          // 지나 하단까지 내려가야 한다면 흐름이 한 번 끊긴다.
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                            child: _PlaceActions(
                               favorite: favorite,
                               isSaved: saved,
                               onToggleFavorite: _onToggleFavorite,
+                              onOrigin: () => _pop(StoreInfoAction.setOrigin),
+                              onDestination: () =>
+                                  _pop(StoreInfoAction.setDestination),
                             ),
                           ),
                           if (_isLoading)
@@ -231,15 +239,6 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                             ),
                         ],
                       ),
-                    ),
-                  ),
-                  // 상세가 아무리 길어도 길찾기는 한 번에 눌러야 한다(F5). 스크롤에
-                  // 따라 나타났다 사라지는 대신 처음부터 하단에 고정해 둔다.
-                  _StickyActionBar(
-                    onOrigin: () => _pop(StoreInfoAction.setOrigin),
-                    onDestination: () => _pop(StoreInfoAction.setDestination),
-                  ),
-                ],
               ),
             ),
           ),
@@ -258,17 +257,11 @@ class _PlaceCore extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.subcategory,
-    required this.favorite,
-    required this.isSaved,
-    required this.onToggleFavorite,
   });
 
   final String title;
   final String subtitle;
   final String? subcategory;
-  final FavoritePlace? favorite;
-  final bool isSaved;
-  final VoidCallback onToggleFavorite;
 
   @override
   Widget build(BuildContext context) {
@@ -313,72 +306,79 @@ class _PlaceCore extends StatelessWidget {
             ],
           ),
         ),
-        if (favorite != null) ...[
-          const SizedBox(width: 8),
-          IconButton(
-            onPressed: onToggleFavorite,
-            iconSize: 22,
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-            tooltip: isSaved ? '저장 취소' : '장소로 저장',
-            icon: Icon(
-              isSaved ? Icons.check_circle : Icons.add_circle_outline,
-              color: isSaved ? AppColors.success : AppColors.primary,
-            ),
-          ),
-        ],
       ],
     );
   }
 }
 
-/// 시트 하단에 항상 붙어 있는 출발·도착 바.
+/// 이름 바로 아래에 놓는 출발·도착·저장 한 줄.
 ///
-/// 본문이 비쳐 보이면 안 되므로 불투명 배경과 상단 경계선을 둔다. 홈 인디케이터
-/// 위로 겹치지 않도록 하단 safe area를 패딩에 더한다.
-class _StickyActionBar extends StatelessWidget {
-  const _StickyActionBar({required this.onOrigin, required this.onDestination});
+/// 길찾기는 이 시트의 목적이라 사진·메뉴보다 먼저 눈에 닿아야 한다. 저장도 같은
+/// 줄에 두되, 무엇을 하는 버튼인지 아이콘만으로 짐작하게 두지 않고 글자를 붙인다.
+class _PlaceActions extends StatelessWidget {
+  const _PlaceActions({
+    required this.favorite,
+    required this.isSaved,
+    required this.onToggleFavorite,
+    required this.onOrigin,
+    required this.onDestination,
+  });
 
+  final FavoritePlace? favorite;
+  final bool isSaved;
+  final VoidCallback onToggleFavorite;
   final VoidCallback onOrigin;
   final VoidCallback onDestination;
 
   @override
-  Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.paddingOf(context).bottom;
-    return Container(
-      key: const ValueKey('place-detail-actions'),
-      padding: EdgeInsets.fromLTRB(20, 12, 20, 12 + bottomInset),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.blue100)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: FilledButton(
-              onPressed: onOrigin,
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.blue50,
-                foregroundColor: AppColors.primary,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-              child: const Text('출발'),
-            ),
+  Widget build(BuildContext context) => Row(
+    key: const ValueKey('place-detail-actions'),
+    children: [
+      Expanded(
+        child: FilledButton(
+          onPressed: onOrigin,
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.blue50,
+            foregroundColor: AppColors.primary,
+            padding: const EdgeInsets.symmetric(vertical: 13),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: FilledButton(
-              onPressed: onDestination,
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-              child: const Text('도착'),
-            ),
-          ),
-        ],
+          child: const Text('출발'),
+        ),
       ),
-    );
-  }
+      const SizedBox(width: 8),
+      Expanded(
+        child: FilledButton(
+          onPressed: onDestination,
+          style: FilledButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 13),
+          ),
+          child: const Text('도착'),
+        ),
+      ),
+      if (favorite != null) ...[
+        const SizedBox(width: 8),
+        OutlinedButton.icon(
+          onPressed: onToggleFavorite,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: isSaved ? AppColors.primary : AppColors.muted,
+            side: BorderSide(
+              color: isSaved ? AppColors.primary : AppColors.blue100,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+            textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          ),
+          icon: Icon(
+            isSaved ? Icons.bookmark : Icons.bookmark_border,
+            size: 18,
+          ),
+          label: Text(isSaved ? '저장됨' : '저장'),
+        ),
+      ],
+    ],
+  );
 }
 
 class _DetailLoadingPlaceholder extends StatelessWidget {

@@ -194,7 +194,7 @@ def test_businessInfo의_정상_항목은_통과한다():
     assert _validate({"PO-a": {"businessInfo": [{"label": "주차", "value": "주차 지원 불가"}]}}) == []
 
 
-# 섹션 순서는 서버가 고정한다. 사진·메뉴로 매장을 먼저 판단하고, 소개는 매장 정보
+# 섹션 순서는 서버가 고정한다. 사진 → 매장 정보 → 메뉴 순이고, 소개는 매장 정보
 # 바로 앞에 와야 클라이언트가 둘을 하나의 `매장 정보` 묶음으로 그릴 수 있다.
 def test_섹션_순서를_서버가_고정한다():
     from app.repositories.place_detail_queries import _sections
@@ -218,7 +218,7 @@ def test_섹션_순서를_서버가_고정한다():
 
     types = [section["type"] for section in _sections(_StubStore(), "store", overlay)]
 
-    assert types == ["hero", "notice", "menu", "tags", "summary", "businessInfo"]
+    assert types == ["hero", "notice", "tags", "summary", "businessInfo", "menu"]
     assert types.index("summary") + 1 == types.index("businessInfo")
 
 
