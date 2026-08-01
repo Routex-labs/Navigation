@@ -330,33 +330,32 @@ class _PlaceActions extends StatelessWidget {
   final VoidCallback onOrigin;
   final VoidCallback onDestination;
 
+  // 버튼을 가로폭에 맞춰 늘리지 않는다. 글자가 두 자뿐이라 늘리면 여백만 커지고
+  // 이름·업종 줄과 무게가 맞지 않는다. 길찾기 두 개를 왼쪽에 붙여 한 쌍으로 읽히게
+  // 하고, 성격이 다른 저장은 반대쪽 끝으로 민다.
   @override
   Widget build(BuildContext context) => Row(
     key: const ValueKey('place-detail-actions'),
     children: [
-      Expanded(
-        child: FilledButton(
-          onPressed: onOrigin,
-          style: FilledButton.styleFrom(
-            backgroundColor: AppColors.blue50,
-            foregroundColor: AppColors.primary,
-            padding: const EdgeInsets.symmetric(vertical: 13),
-          ),
-          child: const Text('출발'),
+      FilledButton(
+        onPressed: onOrigin,
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.blue50,
+          foregroundColor: AppColors.primary,
+          padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 12),
         ),
+        child: const Text('출발'),
       ),
       const SizedBox(width: 8),
-      Expanded(
-        child: FilledButton(
-          onPressed: onDestination,
-          style: FilledButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 13),
-          ),
-          child: const Text('도착'),
+      FilledButton(
+        onPressed: onDestination,
+        style: FilledButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 12),
         ),
+        child: const Text('도착'),
       ),
       if (favorite != null) ...[
-        const SizedBox(width: 8),
+        const Spacer(),
         OutlinedButton.icon(
           onPressed: onToggleFavorite,
           style: OutlinedButton.styleFrom(
@@ -364,7 +363,7 @@ class _PlaceActions extends StatelessWidget {
             side: BorderSide(
               color: isSaved ? AppColors.primary : AppColors.blue100,
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(18),
             ),
@@ -474,12 +473,21 @@ class PlaceDetailSections extends StatelessWidget {
               child: widget,
             );
       if (widgets.isNotEmpty) {
-        // 같은 묶음 안(소개 → 매장 정보)은 좁게, 다른 섹션 사이는 넓게. 테두리를
-        // 걷어낸 뒤로는 섹션을 나누는 게 여백뿐이라 이 차이가 곧 그룹핑이다.
+        // 같은 묶음 안(소개 → 매장 정보)은 여백만 좁게 줘서 한 덩어리로 읽히게 한다.
         final sameGroup = groupSummary &&
             previous is SummarySection &&
             section is BusinessInfoSection;
-        widgets.add(SizedBox(height: sameGroup ? 12 : 24));
+        // 사진 바로 다음은 사진의 아래 모서리가 이미 경계라 선을 또 긋지 않는다.
+        final afterHero = previous is HeroSection;
+        if (sameGroup) {
+          widgets.add(const SizedBox(height: 12));
+        } else if (afterHero) {
+          widgets.add(const SizedBox(height: 24));
+        } else {
+          // 여백만으로는 섹션이 어디서 끝났는지 읽히지 않는다. 카드로 감싸는 대신
+          // 시트 폭을 가로지르는 얇은 선 하나로만 끊는다.
+          widgets.add(const _SectionBreak());
+        }
       }
       widgets.add(padded);
       previous = section;
@@ -489,6 +497,17 @@ class PlaceDetailSections extends StatelessWidget {
       children: widgets,
     );
   }
+}
+
+/// 섹션과 섹션 사이의 경계. 여백 + 시트 폭을 가로지르는 선 한 줄이다.
+class _SectionBreak extends StatelessWidget {
+  const _SectionBreak();
+
+  @override
+  Widget build(BuildContext context) => const Padding(
+    padding: EdgeInsets.symmetric(vertical: 22),
+    child: Divider(height: 1, thickness: 1, color: AppColors.blue100),
+  );
 }
 
 /// 제목 + 본문 한 쌍. 섹션 위젯 자체가 제목을 갖지 않는 경우(소개)에 씌운다.
