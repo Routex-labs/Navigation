@@ -176,7 +176,7 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
         child: DraggableScrollableSheet(
           // 이름·길찾기·사진·매장 정보까지가 한 화면에 들어오고 아래에 여백이
           // 조금 남는 높이다. 문장 중간에서 끊기면 잘린 것처럼 보인다.
-          initialChildSize: 0.7,
+          initialChildSize: 0.68,
           minChildSize: 0.3,
           maxChildSize: 0.92,
           expand: false,
@@ -301,22 +301,11 @@ class _PlaceCore extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 2),
-              // 층은 "여기 어디로 가야 하나"의 답이라 업종보다 세다. 같은 줄에
-              // 두되 색과 굵기로만 구분한다.
-              Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(
-                      text: subtitle,
-                      style: const TextStyle(
-                        color: AppColors.text,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    if (hasSubcategory)
-                      TextSpan(text: ' · $subcategory'),
-                  ],
-                ),
+              // 층을 업종보다 앞에 둔다. 검색 결과 목록도 이름 아래에 층을 먼저
+              // 보여 주므로, 순서를 뒤집으면 같은 정보를 목록과 상세에서 다른
+              // 자리에서 찾게 된다.
+              Text(
+                hasSubcategory ? '$subtitle · $subcategory' : subtitle,
                 style: const TextStyle(
                   fontSize: 13,
                   height: 1.3,
@@ -521,7 +510,7 @@ class _SectionBreak extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const Padding(
-    padding: EdgeInsets.symmetric(vertical: 22),
+    padding: EdgeInsets.symmetric(vertical: 16),
     child: Divider(height: 1, thickness: 1, color: AppColors.blue100),
   );
 }
@@ -538,7 +527,7 @@ class _TitledSection extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       PlaceSectionTitle(title),
-      const SizedBox(height: 8),
+      const SizedBox(height: 10),
       child,
     ],
   );

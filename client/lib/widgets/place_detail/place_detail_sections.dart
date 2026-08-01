@@ -41,13 +41,16 @@ class PlaceKeyValueSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
     children: [
+      // 여백은 항목 사이에만 — `PlaceBusinessInfoSection`과 같은 규칙이다.
       for (var index = 0; index < items.length; index++) ...[
-        if (index > 0) const Divider(height: 1),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: _KeyValueRow(item: items[index]),
-        ),
+        if (index > 0) ...[
+          const SizedBox(height: 10),
+          const Divider(height: 1),
+          const SizedBox(height: 10),
+        ],
+        _KeyValueRow(item: items[index]),
       ],
     ],
   );

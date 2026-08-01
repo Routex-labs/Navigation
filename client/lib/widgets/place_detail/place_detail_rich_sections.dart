@@ -237,14 +237,17 @@ class PlaceBusinessInfoSection extends StatelessWidget {
       children: [
         if (showTitle) ...[
           const PlaceSectionTitle('매장 정보'),
-          const SizedBox(height: 4),
+          const SizedBox(height: 10),
         ],
+        // 여백은 항목 사이에만 둔다. 첫·마지막 행에 붙이면 섹션 아래위가 다른
+        // 섹션보다 더 벌어져서 구분선 간격이 제각각으로 보인다.
         for (var index = 0; index < items.length; index++) ...[
-          if (index > 0) const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: _BusinessInfoRow(item: items[index]),
-          ),
+          if (index > 0) ...[
+            const SizedBox(height: 10),
+            const Divider(height: 1),
+            const SizedBox(height: 10),
+          ],
+          _BusinessInfoRow(item: items[index]),
         ],
       ],
     );
