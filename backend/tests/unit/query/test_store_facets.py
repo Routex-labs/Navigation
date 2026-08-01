@@ -455,17 +455,24 @@ def test_후보가_아닌_매장을_excluded에_적으면_잡는다():
 
 
 # 실데이터 대조(고아 id·소분류 일치)는 시드 경로에서 validate_intents가 하고, 여기서는
-# 파일이 파싱되고 Phase 1 범위(intent 2개 + P3 판정 예 145건)가 그대로인지만 지킨다.
-def test_배포된_intents_파일이_Phase_1_범위를_유지한다():
+# 파일이 파싱되고 사람이 검수한 범위(P3 판정 예 145건)가 그대로인지만 지킨다.
+def test_배포된_intents_파일이_검수_범위를_유지한다():
     from pathlib import Path
 
     # 이 파일 위치(tests/unit/query) 기준 backend 루트는 3단계 위다.
     path = Path(__file__).resolve().parents[3] / "resources" / "store_search_facets"
     intents = store_facets.load_intents(path)
 
-    assert set(intents) == {"신발", "식사"}
+    assert set(intents) == {"신발", "식사", "카페", "화장품", "향수", "의류", "출구"}
     assert intents["신발"]["rules"] == {"subcategory": ["슈즈"]}
     assert intents["식사"]["rules"] == {"subcategory": ["레스토랑"]}
     # P3 검수 결과 = 예 145건. 규칙이 잡는 슈즈 8건은 extra에 없어야 한다.
     assert len(intents["신발"]["extra_store_ids"]) == 145
     assert "extra_store_ids" not in intents["식사"]
+
+    # 확장분(W9)은 소분류에서 결정적으로 유도되는 규칙만 쓴다. 매장별 판단이 필요한
+    # extra 목록을 사람 검수 없이 늘리지 않는다는 게 이 단언의 요지다 — 유일한 예외는
+    # 소분류가 facility로 잘못 붙은 지하철 출입구 2건이다.
+    for intent in ("카페", "화장품", "향수", "의류"):
+        assert "extra_store_ids" not in intents[intent], intent
+    assert len(intents["출구"]["extra_store_ids"]) == 2
