@@ -280,3 +280,22 @@ def test_출구_질의가_지하철_출입구까지_포함한다(real_db_session
 
     names = [match["name"] for match in discovery["matches"]]
     assert any("지하철" in name for name in names), names
+
+
+# 추천 이유가 사용자가 친 말과 이어지는지. 질문 축(styles)만 basis에 담기던 시절에는
+# "신발"을 물어도 "명품 스타일 매장이에요"만 나와 신발 근거가 사라졌다.
+def test_신발_질의의_추천_이유가_신발을_말한다(real_db_session):
+    discovery = query_search.discover(real_db_session, REAL_BUILDING_ID, "신발")
+
+    reasons = [match["reason"] for match in discovery["matches"]]
+    assert reasons, "후보가 없다"
+    assert all(reason and "신발" in reason for reason in reasons), reasons
+
+
+# 사용자가 방금 친 말을 선택지로 되돌려주지 않는다. 한 매장이 신발·의류를 함께 가지므로
+# 이 가드가 없으면 "신발"에 "신발/의류 중 무엇을 찾으세요?"라는 메아리 질문이 선다.
+def test_신발_질의는_신발을_선택지로_되묻지_않는다(real_db_session):
+    discovery = query_search.discover(real_db_session, REAL_BUILDING_ID, "신발")
+
+    values = [option["value"] for option in discovery["options"]]
+    assert "신발" not in values, values

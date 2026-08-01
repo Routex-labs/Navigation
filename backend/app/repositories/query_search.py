@@ -478,6 +478,43 @@ def _facets(store: Store) -> dict[str, list[str]]:
     }
 
 
+def _query_matched_intents(
+    candidates: list[tuple[Store, Floor]],
+    text: str,
+) -> list[str]:
+    """질의어 자체가 가리킨 intent 값들. 후보에 실제로 있는 값만 남긴다.
+
+    `_tier`가 tier 1을 주는 조건(`q in intents or canon in intents`)을 질의 관점에서
+    되짚은 것이다 — 후보 집합이 왜 이렇게 모였는지를 매장이 아니라 **질의**가 알고
+    있으므로, 그 근거를 `basis`로 흘려보내야 `reason`이 사용자가 친 말과 이어진다.
+
+    이게 없으면 `신발` 질의의 추천 이유가 "명품 스타일 매장이에요"로만 나온다.
+    질문 축(styles)만 basis에 담기기 때문인데, 사용자 입장에서는 신발을 물었는데
+    신발 이야기가 한 마디도 없는 문장이 된다(2절 "근거를 말한다"의 실패).
+
+    후보에 없는 값을 지우는 이유: `_matched_facets`가 어차피 매장 태그와 교집합을
+    내므로 결과는 같지만, 여기서 걸러 두면 `basis`가 곧 "이 화면에서 쓰인 근거"라는
+    뜻을 유지한다.
+    """
+    synonyms = _synonyms()
+    wanted: set[str] = set()
+    for q in _query_candidates(text):
+        wanted.add(q)
+        wanted.add(synonyms.get(q, q))
+
+    matched: list[str] = []
+    for store, _floor in candidates:
+        for value in _facets(store).get("intents", ()):
+            if _norm(value) in wanted and value not in matched:
+                matched.append(value)
+    return matched
+
+
+def _intent_basis(intents: list[str]) -> dict[str, list[str]]:
+    """intent 근거를 basis 모양으로. 없으면 빈 dict — 빈 축을 만들지 않는다(5-1절)."""
+    return {"intents": intents} if intents else {}
+
+
 def _matches_selection(store: Store, selection: dict[str, list[str]]) -> bool:
     """축 사이는 AND, 축 안의 값들은 OR. 태그가 없는 매장은 선택된 축에서 탈락한다."""
     facets = _facets(store)
@@ -504,6 +541,7 @@ def _facet_options(
 
 def _pick_question(
     candidates: list[tuple[Store, Floor]],
+    asked_intents: list[str] | None = None,
 ) -> tuple[str | None, list[dict[str, Any]]]:
     """현재 후보를 실제로 둘 이상으로 나누는 축을 고른다. 없으면 (None, []).
 
@@ -515,9 +553,18 @@ def _pick_question(
     2. 그 축을 가진 후보가 절반 이상 — 태깅이 아직 얇은 지금 데이터에서는, 상위 10건 중
        2건만 태그가 있어도 "값이 2개"라는 조건은 통과해 버린다. 그 질문에 답하면
        태그 없는 8건이 통째로 사라진다(2절 "미표기 매장이 통째로 사라진다").
+
+    `asked_intents`(질의가 이미 가리킨 intent 값)는 intents 축의 선택지에서 뺀다.
+    사용자가 방금 친 말을 선택지로 되돌려주는 건 질문이 아니라 메아리다 — 한 매장이
+    여러 intent를 갖게 되면(`신발`과 `의류`를 함께 파는 매장) "신발"에 대고
+    "신발/의류 중 무엇을 찾으세요?"를 묻게 된다. 뺀 뒤 선택지가 2개 미만이면 이 축은
+    구분력이 없는 것이므로 다음 축(styles 등)으로 넘어간다.
     """
+    excluded = set(asked_intents or ())
     for axis in _QUESTION_AXIS_ORDER:
         options = _facet_options(candidates, axis)
+        if axis == "intents" and excluded:
+            options = [option for option in options if option["value"] not in excluded]
         if len(options) < 2:
             continue
         covered = sum(1 for store, _floor in candidates if _facets(store).get(axis))
@@ -708,10 +755,13 @@ def discover(
         for scored in (floor_scoped, building_scored):
             if _is_confident_light_match(scored):
                 *_, store, floor = scored[0]
+                # 한 건으로 확정돼도 intent로 걸린 것이면 그 근거를 남긴다 —
+                # 확정 여부와 "왜 이게 답인지"는 별개다.
+                basis = _intent_basis(_query_matched_intents([(store, floor)], text))
                 return _discovery(
                     text,
                     "direct",
-                    matches=[_to_discovery_match(store, floor, transform, {})],
+                    matches=[_to_discovery_match(store, floor, transform, basis)],
                 )
 
     # 탐색 후보 집합. 경량이 잡은 게 있으면(카테고리·소분류 정확 일치 등) 그것이
@@ -759,6 +809,9 @@ def discover(
             matches=_discovery_matches(candidates, MAX_DISCOVERY_MATCHES, {}, transform),
         )
 
+    # 후보 집합이 왜 모였는지의 근거. 질문 축과 별개로 모든 mode에 실린다.
+    intent_basis = _intent_basis(_query_matched_intents(candidates, text))
+
     if selection or show_all:
         # 전체 보기는 더 넓은 상한을 쓴다. 선택(facet)으로 좁힌 결과는 이미 사용자가
         # 조건을 준 목록이라 추천 상한을 그대로 둔다 — 둘이 겹치면 전체 보기가 이긴다.
@@ -766,13 +819,15 @@ def discover(
         return _discovery(
             text,
             "results",
-            matches=_discovery_matches(candidates, limit, selection, transform),
+            matches=_discovery_matches(candidates, limit, {**intent_basis, **selection}, transform),
         )
 
     if len(candidates) > MAX_DISCOVERY_MATCHES:
-        axis, options = _pick_question(candidates)
+        axis, options = _pick_question(candidates, intent_basis.get("intents"))
         if axis is not None:
-            basis = {axis: [option["value"] for option in options]}
+            # 질문 축이 intents면 그 축의 선택지가 이긴다(뒤 키가 앞을 덮는다) —
+            # 같은 축을 두 벌로 들고 있으면 matched_facets가 어느 쪽 근거인지 흐려진다.
+            basis = {**intent_basis, axis: [option["value"] for option in options]}
             # 초기 후보는 그 축의 태그가 있는 매장에서 고른다 — 미태깅 매장이 섞이면
             # 질문의 근거(reason)가 비어 보인다. 태그된 후보가 없으면 전체에서 고른다.
             preview = [row for row in candidates if _facets(row[0]).get(axis)]
@@ -794,7 +849,7 @@ def discover(
     return _discovery(
         text,
         "results",
-        matches=_discovery_matches(candidates, MAX_DISCOVERY_MATCHES, {}, transform),
+        matches=_discovery_matches(candidates, MAX_DISCOVERY_MATCHES, intent_basis, transform),
     )
 
 

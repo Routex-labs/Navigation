@@ -213,3 +213,56 @@ def test_1글자_카테고리는_길이_무관하게_매칭된다():
     scored = query_search._rank(rows, "편")
     assert scored and scored[0][3].id == "s1"
     assert scored[0][0] == 1  # tier 1
+
+
+# ── 추천 이유의 근거(basis)에 질의 intent가 실리는가 ──────────────────────────
+
+
+# 질의가 맞힌 intent를 후보 집합에서 되짚는다. reason이 사용자가 친 말과 이어지려면
+# 후보가 왜 모였는지를 basis로 넘겨야 한다.
+def test_질의가_맞힌_intent를_후보에서_되짚는다():
+    floor = _floor()
+    rows = [
+        (_store("s1", "폴리테루", subcategory="캐주얼·스트리트", facets={"intents": ["신발", "의류"]}), floor),
+        (_store("s2", "무태그", subcategory="잡화·액세서리"), floor),
+    ]
+    assert query_search._query_matched_intents(rows, "신발") == ["신발"]
+    # 후보에 없는 값은 근거가 아니다.
+    assert query_search._query_matched_intents(rows, "화장품") == []
+
+
+# 동의어 표준형으로도 되짚는다 — "커피"는 intent "카페"를 가리킨다.
+def test_동의어_표준형으로도_intent를_되짚는다():
+    rows = [(_store("s1", "블루보틀", subcategory="카페·베이커리", facets={"intents": ["카페"]}), _floor())]
+    assert query_search._query_matched_intents(rows, "커피") == ["카페"]
+
+
+# 사용자가 방금 친 intent는 되물음 선택지에서 빠진다. 안 빼면 "신발"에 대고
+# "신발/의류 중 무엇을 찾으세요?"라는 메아리 질문이 선다.
+def test_질의가_가리킨_intent는_선택지에서_빠진다():
+    floor = _floor()
+    rows = [
+        (_store(f"s{i}", f"매장{i}", subcategory="캐주얼·스트리트", facets={"intents": ["신발", "의류"]}), floor)
+        for i in range(6)
+    ]
+    axis, options = query_search._pick_question(rows)
+    assert axis == "intents"  # 아무것도 안 뺐을 때는 두 값이 선택지가 된다
+
+    # "신발"을 뺀 뒤에는 남는 값이 하나뿐이라 이 축은 구분력이 없다.
+    axis, options = query_search._pick_question(rows, ["신발"])
+    assert axis is None
+    assert options == []
+
+
+# 질문 축(styles)만 basis에 담기던 버그의 회귀 가드. "신발"로 모인 후보의 추천 이유가
+# "명품 스타일 매장이에요"로만 나오면 신발을 물은 사용자에게 근거가 사라진다.
+def test_추천_이유는_질문축과_질의_intent를_함께_말한다():
+    matched = {"intents": ["신발"], "styles": ["명품"]}
+    assert query_search._reason(matched) == "신발 관련 매장이에요. 명품 스타일 매장이에요."
+
+
+# 근거가 없으면 이유를 만들지 않는다(추측 금지, 2절).
+def test_근거가_없으면_추천_이유는_없다():
+    assert query_search._reason({}) is None
+    assert query_search._intent_basis([]) == {}
+    assert query_search._intent_basis(["신발"]) == {"intents": ["신발"]}
