@@ -13,7 +13,7 @@ from app.repositories.query_search import _load_stores
 from tests.conftest import BUILDING_ID, FLOOR_ID
 
 MAX_MATCHES = query_search.MAX_DISCOVERY_MATCHES
-MAX_SHOW_ALL = query_search.MAX_SHOW_ALL_MATCHES
+MAX_SHOW_ALL = query_search.MAX_RESULT_MATCHES
 CLARIFY_PREVIEW = query_search.CLARIFY_PREVIEW_MATCHES
 
 
@@ -454,7 +454,10 @@ def test_discover_구분력_있는_축이_없으면_clarify_대신_results다(db
     assert result["mode"] == "results"
     assert result["question"] is None
     assert result["options"] == []
-    assert len(result["matches"]) == MAX_MATCHES
+    # 되물음이 없으면 이 목록이 곧 최종 답이라 추천 상한(5)으로 자르지 않는다.
+    # 자르면 6번째 매장으로 갈 방법이 화면에 남지 않는다("전체 보기"는 clarify 전용).
+    assert len(result["matches"]) == 6
+    assert len(result["matches"]) <= MAX_SHOW_ALL
 
 
 def test_discover_태그가_얇은_축은_질문으로_쓰지_않는다(db_session, monkeypatch):

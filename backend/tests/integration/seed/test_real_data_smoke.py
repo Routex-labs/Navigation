@@ -317,4 +317,17 @@ def test_선택으로_좁힌_결과는_추천_상한에_묶이지_않는다(real
 
     assert narrowed["mode"] == "results"
     assert len(narrowed["matches"]) > query_search.MAX_DISCOVERY_MATCHES
-    assert len(narrowed["matches"]) <= query_search.MAX_SHOW_ALL_MATCHES
+    assert len(narrowed["matches"]) <= query_search.MAX_RESULT_MATCHES
+
+
+# 되물을 축이 없는 질의는 그 목록이 곧 최종 답이다. 추천 상한(5)을 쓰면 카페 53곳 중
+# 5곳만 보여주는데, 그 화면에는 "전체 보기"도 없어서 나머지로 갈 길이 없다.
+def test_되물을_축이_없는_질의도_후보를_통째로_준다(real_db_session):
+    discovery = query_search.discover(real_db_session, REAL_BUILDING_ID, "커피")
+
+    assert discovery["mode"] == "results"
+    assert discovery["question"] is None
+    assert discovery["options"] == []
+    matches = discovery["matches"]
+    assert len(matches) > query_search.MAX_DISCOVERY_MATCHES, [m["name"] for m in matches]
+    assert all(match["subcategory"] == "카페·베이커리" for match in matches)

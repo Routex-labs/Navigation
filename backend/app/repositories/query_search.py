@@ -432,14 +432,22 @@ def match_ai_destination(
 # 단일 목적지(match_destination)와 달리 "여러 후보 + 되물음"을 만든다.
 # --------------------------------------------------------------------------
 
-MAX_DISCOVERY_MATCHES = 5  # 최종 추천 상한(12절 확정)
+MAX_DISCOVERY_MATCHES = 5  # 되물을 수 없는 제한 상태(degraded)의 추천 상한
 CLARIFY_PREVIEW_MATCHES = 3  # 질문과 함께 보여줄 초기 후보 수(12절 확정)
 
-# "전체 보기"의 상한. 추천 상한(5)과 **분리한다** — 예전에는 같은 상수를 써서
-# 전체 보기를 눌러도 5건만 왔다. 사용자가 "더 있는 걸 아는데 안 보여준다"고
-# 읽는 자리라, 추천을 좁게 유지하는 이유(고르기 쉽게)가 여기엔 적용되지 않는다.
-# 상한 자체를 없애지는 않는다 — 주차 787건 같은 축이 걸리면 응답이 통째로 커진다.
-MAX_SHOW_ALL_MATCHES = 30
+# 목록(results) 상한.
+#
+# 12절이 정한 "추천 최대 5건"은 **질문이 아직 서 있는 화면**의 규칙이다. 되물을 축이
+# 있으면 clarify가 미리보기 3건만 보여주고 사용자가 좁혀 나간다. 그런데 되물을 축이
+# 없는 질의("커피" — 후보 53건이 전부 카페·베이커리라 나눌 축이 없다)는 그 5건이
+# 곧 최종 답이 되고, 그 화면에는 "전체 보기" 버튼도 없다. 53곳 중 5곳만 보여주고
+# 나머지 48곳으로 갈 길이 아예 없는 막다른 화면이었다.
+#
+# 그래서 "이게 최종 목록"인 자리는 전부 이 상한 하나를 쓴다 — 선택으로 좁힌 결과,
+# 전체 보기, 되물을 축이 없는 결과. 100은 실제 데이터의 한 카테고리를 통째로
+# 담는 크기다(카페 53, 컨템포러리 61). 상한 자체를 없애지는 않는다 — 이름이 제각각인
+# 787건짜리 축이 걸리면 응답이 통째로 커진다.
+MAX_RESULT_MATCHES = 100
 
 # 되물을 축의 우선순위. 한 번에 한 축만 묻는다(2절). 앞에 있는 축부터 구분력을 본다.
 _QUESTION_AXIS_ORDER = ("intents", "cuisines", "styles", "menus", "occasions", "audiences")
@@ -813,20 +821,13 @@ def discover(
     intent_basis = _intent_basis(_query_matched_intents(candidates, text))
 
     if selection or show_all:
-        # 선택으로 좁힌 결과도 전체 보기와 같은 상한을 쓴다.
-        #
-        # 예전에는 여기서 추천 상한(5)을 유지했다 — "선택은 이미 사용자가 조건을 준
-        # 목록이라 좁게 둔다"는 논리였는데, 화면을 보면 그 논리가 뒤집힌다. chip에는
-        # `컨템포러리 (61)`처럼 **후보 수가 적혀 있다.** 61이라고 적힌 것을 눌렀는데
-        # 5건이 오면 나머지 56건은 어디로 갔는지 알 방법이 없다. 숫자를 보여 준 이상
-        # 그 숫자만큼 도달할 수 있어야 한다.
-        #
-        # 추천 상한(5)이 남아 있는 자리는 "사용자가 아직 아무 조건도 주지 않은" 화면
-        # 뿐이다 — 거기서는 고르기 쉽게 좁히는 게 맞다.
+        # 선택으로 좁힌 결과도 목록 상한을 쓴다. chip에는 `컨템포러리 (61)`처럼
+        # **후보 수가 적혀 있다.** 61이라고 적힌 것을 눌렀는데 5건이 오면 나머지 56건은
+        # 어디로 갔는지 알 방법이 없다. 숫자를 보여 준 이상 그만큼 도달할 수 있어야 한다.
         return _discovery(
             text,
             "results",
-            matches=_discovery_matches(candidates, MAX_SHOW_ALL_MATCHES, {**intent_basis, **selection}, transform),
+            matches=_discovery_matches(candidates, MAX_RESULT_MATCHES, {**intent_basis, **selection}, transform),
         )
 
     if len(candidates) > MAX_DISCOVERY_MATCHES:
@@ -852,11 +853,15 @@ def discover(
                 ),
             )
 
-    # 구분력 있는 축이 없으면 억지로 되묻지 않는다 — 다양성 보정된 상위 N을 그대로 준다.
+    # 구분력 있는 축이 없으면 억지로 되묻지 않는다 — 다양성 보정된 목록을 그대로 준다.
+    #
+    # 이 자리가 곧 최종 답이라 목록 상한을 쓴다. 추천 상한(5)을 쓰던 시절 "커피"는
+    # 카페 53곳 중 5곳만 보여줬고, 되물음이 없으니 화면에 "전체 보기"도 없어서
+    # 나머지로 갈 길이 아예 없었다.
     return _discovery(
         text,
         "results",
-        matches=_discovery_matches(candidates, MAX_DISCOVERY_MATCHES, intent_basis, transform),
+        matches=_discovery_matches(candidates, MAX_RESULT_MATCHES, intent_basis, transform),
     )
 
 
