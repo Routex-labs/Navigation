@@ -307,6 +307,9 @@ class PdrDebugSessionRecorder {
         'preview_candidate_edge_ids': result.previewCandidateEdgeIds,
         'preview_is_ambiguous': result.previewIsAmbiguous,
         'heading_bias_deg': result.headingBiasDeg,
+        'confirmed_displacement_m': result.confirmedDisplacementM,
+        'confirmed_consumed_preview_m': result.confirmedConsumedPreviewM,
+        'leader_relocated': result.leaderRelocated,
       },
     });
 

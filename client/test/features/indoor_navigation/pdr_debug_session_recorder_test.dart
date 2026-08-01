@@ -545,6 +545,9 @@ void main() {
         previewIsAmbiguous: false,
         rawConfirmedPosition: PdrLocalPoint(4, 1),
         rawPreviewPosition: PdrLocalPoint(4.5, 1.2),
+        confirmedDisplacementM: 4,
+        confirmedConsumedPreviewM: 3.1,
+        leaderRelocated: false,
       ),
       at: DateTime.utc(2026, 7, 18, 9, 0, 3),
     );
@@ -590,6 +593,9 @@ void main() {
       previewIsAmbiguous: false,
       rawConfirmedPosition: PdrLocalPoint(4, 1),
       rawPreviewPosition: PdrLocalPoint(4.5, 1.2),
+      confirmedDisplacementM: 4,
+      confirmedConsumedPreviewM: 3.1,
+      leaderRelocated: false,
     );
 
     CorridorObservation observation({
@@ -727,7 +733,10 @@ void main() {
       // 50ms 간격 20건 = 950ms. heartbeat(250ms)로 첫 건 + 3건만 남아야 한다.
       for (var i = 0; i < 20; i += 1) {
         recorder.recordTrackerInput(
-          observation: observation(timestampMs: 1000 + i * 50, confirmedSteps: 3),
+          observation: observation(
+            timestampMs: 1000 + i * 50,
+            confirmedSteps: 3,
+          ),
           wasReset: false,
           result: result,
           snapshot: snapshot,
@@ -739,9 +748,9 @@ void main() {
       final events = eventsOf(recorder);
       expect(events, hasLength(4));
       expect(
-        events
-            .cast<Map<String, Object?>>()
-            .map((event) => event['timestamp_ms']),
+        events.cast<Map<String, Object?>>().map(
+          (event) => event['timestamp_ms'],
+        ),
         [1000, 1250, 1500, 1750],
       );
     });
