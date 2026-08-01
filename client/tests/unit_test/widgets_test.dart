@@ -518,6 +518,146 @@ void main() {
       expect(find.text('어떤 스타일의 신발을 찾으세요?'), findsOneWidget);
     });
 
+    testWidgets('direct 1건에는 clarify 조작 버튼을 띄우지 않는다', (
+      WidgetTester tester,
+    ) async {
+      // 회귀 대상: 두 버튼이 조건 없이 렌더돼 되물음이 없는 화면에도 떴다.
+      // "커피"가 1건으로 확정된 direct 화면에서 누를 대상 없는 버튼이 보였다.
+      final repository = _ScriptedDiscoveryRepository([
+        const DiscoveryResult(
+          mode: DiscoveryMode.direct,
+          query: '커피',
+          matches: [
+            DiscoveryMatch(
+              storeId: 'ST-DOJO',
+              name: '도조 커피',
+              category: '식음료',
+              subcategory: '카페·베이커리',
+              floorId: 'FL-B1',
+              floorName: 'B1',
+              entranceNodeId: 'FL-B1:ND-1',
+              point: LatLng(37.52, 126.92),
+              matchedFacets: {},
+              reason: null,
+            ),
+          ],
+        ),
+      ]);
+      destinationRepository = repository;
+      await pumpPanel(tester);
+
+      query.value = '커피';
+      await tester.pump();
+      await settleSearch(tester);
+
+      expect(find.text('도조 커피'), findsOneWidget);
+      expect(find.byKey(const Key('show-all')), findsNothing);
+      expect(find.byKey(const Key('choose-again')), findsNothing);
+    });
+
+    testWidgets('clarify에서는 전체 보기만, 선택 뒤에는 다시 선택도 뜬다', (
+      WidgetTester tester,
+    ) async {
+      // 되돌릴 답이 없는 첫 clarify 화면에서 "다시 선택"은 같은 질문을 다시 부르는
+      // 빈 동작이라 노출하지 않는다. 선택이 생긴 뒤에만 의미가 있다.
+      const option = DiscoveryOption(
+        facet: 'styles',
+        value: '스포츠',
+        label: '스포츠',
+        count: 3,
+      );
+      const match = DiscoveryMatch(
+        storeId: 'ST-NIKE',
+        name: '나이키 라이즈',
+        category: '패션',
+        subcategory: '스포츠',
+        floorId: 'FL-3',
+        floorName: '3F',
+        entranceNodeId: 'FL-3:ND-1',
+        point: LatLng(37.52, 126.92),
+        matchedFacets: {'styles': ['스포츠']},
+        reason: '스포츠 스타일 매장이에요.',
+      );
+      final repository = _ScriptedDiscoveryRepository([
+        const DiscoveryResult(
+          mode: DiscoveryMode.clarify,
+          query: '신발',
+          question: '어떤 스타일을 찾으세요?',
+          options: [option],
+          matches: [match],
+        ),
+        const DiscoveryResult(
+          mode: DiscoveryMode.results,
+          query: '신발',
+          matches: [match],
+        ),
+      ]);
+      destinationRepository = repository;
+      await pumpPanel(tester);
+
+      query.value = '신발';
+      await tester.pump();
+      await settleSearch(tester);
+
+      expect(find.byKey(const Key('show-all')), findsOneWidget);
+      expect(find.byKey(const Key('choose-again')), findsNothing);
+
+      await tester.tap(find.byKey(const Key('facet-option-styles-스포츠')));
+      await flush(tester);
+
+      expect(find.byKey(const Key('choose-again')), findsOneWidget);
+    });
+
+    testWidgets('전체 보기로 넘어간 화면에는 다시 선택만 남는다', (
+      WidgetTester tester,
+    ) async {
+      // 선택 없이 질문만 건너뛴 상태다. 여기서 "다시 선택"은 질문으로 돌아가는
+      // 유일한 길이라 남아야 하고, "전체 보기"는 이미 전체라 눌러도 그대로다.
+      const option = DiscoveryOption(
+        facet: 'styles',
+        value: '스포츠',
+        label: '스포츠',
+        count: 3,
+      );
+      const match = DiscoveryMatch(
+        storeId: 'ST-NIKE',
+        name: '나이키 라이즈',
+        category: '패션',
+        subcategory: '스포츠',
+        floorId: 'FL-3',
+        floorName: '3F',
+        entranceNodeId: 'FL-3:ND-1',
+        point: LatLng(37.52, 126.92),
+        matchedFacets: {},
+        reason: null,
+      );
+      final repository = _ScriptedDiscoveryRepository([
+        const DiscoveryResult(
+          mode: DiscoveryMode.clarify,
+          query: '신발',
+          question: '어떤 스타일을 찾으세요?',
+          options: [option],
+          matches: [match],
+        ),
+        const DiscoveryResult(
+          mode: DiscoveryMode.results,
+          query: '신발',
+          matches: [match],
+        ),
+      ]);
+      destinationRepository = repository;
+      await pumpPanel(tester);
+
+      query.value = '신발';
+      await tester.pump();
+      await settleSearch(tester);
+      await tester.tap(find.byKey(const Key('show-all')));
+      await flush(tester);
+
+      expect(find.byKey(const Key('show-all')), findsNothing);
+      expect(find.byKey(const Key('choose-again')), findsOneWidget);
+    });
+
     testWidgets('탐색 결과의 매장을 고르면 기존 길찾기 콜백으로 그대로 연결된다', (
       WidgetTester tester,
     ) async {

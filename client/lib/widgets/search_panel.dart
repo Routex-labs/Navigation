@@ -203,6 +203,11 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 복귀시킨다. 각 축은 현재 한 값을 선택하게 하므로 `(facet, value)`로 둔다.
   final List<(String facet, String value)> _facetSelectionOrder = [];
 
+  /// 직전 요청이 "전체 보기"였는가. 선택(facet) 없이 질문만 건너뛴 상태를
+  /// 가리키므로 `_selectedFacets`로는 표현되지 않는다. 이 상태에서만 "다시 선택"이
+  /// 질문으로 돌아가는 유일한 길이라, 헤더 버튼 노출 조건에 필요하다.
+  bool _showingAll = false;
+
   /// 늦게 도착한 응답이 최신 결과를 덮어쓰지 않게 하는 순번.
   int _requestId = 0;
 
@@ -262,6 +267,7 @@ class _SearchPanelState extends State<SearchPanel> {
         _discoveryOptions = const [];
         _selectedFacets = const {};
         _facetSelectionOrder.clear();
+        _showingAll = false;
         _phase = _SearchPhase.idle;
       });
       return;
@@ -273,6 +279,7 @@ class _SearchPanelState extends State<SearchPanel> {
       // 문장에 이전 facet이 섞여 stateless 계약의 의미가 깨진다.
       _selectedFacets = const {};
       _facetSelectionOrder.clear();
+      _showingAll = false;
       _phase = _SearchPhase.typingLightSearch;
     });
 
@@ -436,6 +443,7 @@ class _SearchPanelState extends State<SearchPanel> {
         _discoveryMode = discovery.mode;
         _discoveryQuestion = discovery.question;
         _discoveryOptions = discovery.options;
+        _showingAll = showAll;
         _phase = _phaseForDiscovery(discovery);
       });
     } on Object {
@@ -504,6 +512,7 @@ class _SearchPanelState extends State<SearchPanel> {
       _discoveryOptions = const [];
       _selectedFacets = const {};
       _facetSelectionOrder.clear();
+      _showingAll = false;
       _phase = _SearchPhase.error;
     });
   }
@@ -635,6 +644,20 @@ class _SearchPanelState extends State<SearchPanel> {
 
   Widget _discoveryHeader() {
     final isClarify = _discoveryMode == DiscoveryMode.clarify;
+    final hasSelection = _selectedFacets.isNotEmpty;
+
+    // 두 버튼은 clarify 흐름의 조작 수단이라, 되물음이 없는 화면에 두면 누를 대상이
+    // 없는 버튼이 된다. 예전에는 이 Wrap이 조건 없이 렌더돼 direct("커피" 1건)·
+    // no_match에서도 떴다. mode가 화면 분기의 유일한 근거라는 계약(DiscoveryResponse
+    // 주석)을 헤더에서도 지킨다.
+    //
+    // "전체 보기"는 아직 안 본 후보가 남아 있을 때만 뜻이 있다 — 질문이 서 있거나
+    // (clarify) 선택으로 좁혀진 상태다. 이미 전체를 보고 있으면 다시 눌러야 그대로다.
+    final canShowAll = (isClarify || hasSelection) && !_showingAll;
+    // "다시 선택"은 되돌릴 답이 있을 때다. 선택 없이 전체 보기로 질문을 건너뛴
+    // 상태도 포함한다 — 그 화면에서는 이 버튼이 질문으로 돌아가는 유일한 길이다.
+    final canChooseAgain = hasSelection || _showingAll;
+
     final selectedChips = <Widget>[];
     for (final entry in _selectedFacets.entries) {
       for (final value in entry.value) {
@@ -683,22 +706,26 @@ class _SearchPanelState extends State<SearchPanel> {
             const SizedBox(height: 10),
             Wrap(spacing: 8, runSpacing: 6, children: selectedChips),
           ],
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 4,
-            children: [
-              TextButton(
-                key: const Key('show-all'),
-                onPressed: () => _requestDiscovery(showAll: true),
-                child: const Text('전체 보기'),
-              ),
-              TextButton(
-                key: const Key('choose-again'),
-                onPressed: _chooseAgain,
-                child: const Text('다시 선택'),
-              ),
-            ],
-          ),
+          if (canShowAll || canChooseAgain) ...[
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 4,
+              children: [
+                if (canShowAll)
+                  TextButton(
+                    key: const Key('show-all'),
+                    onPressed: () => _requestDiscovery(showAll: true),
+                    child: const Text('전체 보기'),
+                  ),
+                if (canChooseAgain)
+                  TextButton(
+                    key: const Key('choose-again'),
+                    onPressed: _chooseAgain,
+                    child: const Text('다시 선택'),
+                  ),
+              ],
+            ),
+          ],
         ],
       ),
     );
