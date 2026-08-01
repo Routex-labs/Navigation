@@ -201,6 +201,9 @@ class CorridorTrackingResult {
     required this.previewIsAmbiguous,
     required this.rawConfirmedPosition,
     required this.rawPreviewPosition,
+    required this.confirmedDisplacementM,
+    required this.confirmedConsumedPreviewM,
+    required this.leaderRelocated,
   });
 
   final CorridorTrackingState state;
@@ -220,6 +223,31 @@ class CorridorTrackingResult {
   final bool previewIsAmbiguous;
   final PdrLocalPoint rawConfirmedPosition;
   final PdrLocalPoint rawPreviewPosition;
+
+  /// 이번 확정 배치 전후 보정 위치의 직선거리. 대표 가설 교체로 생긴 위치
+  /// 재해석까지 포함할 수 있어 실제 보행 거리와는 구분한다.
+  final double confirmedDisplacementM;
+
+  /// 기존 preview 선행분에서 실제로 소비했다고 인정한 확정 거리.
+  final double confirmedConsumedPreviewM;
+
+  /// 보정 위치 변화가 이번 확정 보행 거리로 설명되지 않는 대표 가설 재배치인지.
+  final bool leaderRelocated;
+}
+
+/// 확정 배치 뒤 표시할 preview 선행 거리.
+///
+/// 정상 확정은 이미 주황으로 보였던 이동을 초록이 따라온 것이므로 그 거리만큼
+/// 기존 선행분을 줄인다. 대표 가설이 재배치되더라도 재배치된 직선거리가 아니라
+/// 이번 배치에서 실제 확정된 보행 거리만 소비한다.
+double stabilizePreviewLeadM({
+  required double previousLeadM,
+  required double targetLeadM,
+  required double fullLeadM,
+  required double confirmedConsumedM,
+}) {
+  final retainedLeadM = previousLeadM - confirmedConsumedM;
+  return math.max(targetLeadM, retainedLeadM).clamp(0.0, fullLeadM).toDouble();
 }
 
 /// 초록·주황 원본을 수정하지 않고 실제 위치만 graph 제약으로 보정한다.
@@ -273,6 +301,8 @@ class CorridorPositionTracker {
 
   /// 이번 갱신에서 확정 위치가 나아간 거리(m).
   double _confirmedAdvanceM = 0;
+  double _confirmedConsumedPreviewM = 0;
+  bool _leaderRelocated = false;
 
   bool get isInitialized => _beam.isNotEmpty;
 
@@ -298,6 +328,9 @@ class CorridorPositionTracker {
     previewIsAmbiguous: _previewIsAmbiguous,
     rawConfirmedPosition: _rawConfirmedPosition,
     rawPreviewPosition: _rawPreviewPosition,
+    confirmedDisplacementM: _confirmedAdvanceM,
+    confirmedConsumedPreviewM: _confirmedConsumedPreviewM,
+    leaderRelocated: _leaderRelocated,
   );
 
   void reset({
@@ -321,6 +354,8 @@ class CorridorPositionTracker {
     _leaderSign = 1;
     _previewLeadM = 0;
     _confirmedAdvanceM = 0;
+    _confirmedConsumedPreviewM = 0;
+    _leaderRelocated = false;
 
     // 시작 방향을 하나로 못 박지 않는다. 첫 걸음의 방위는 복도에 거의 수직인
     // 경우가 많고(실측에서 176.9°), 그것으로 진행 부호를 잠그면 6° 차이로
@@ -365,6 +400,8 @@ class CorridorPositionTracker {
 
     final previousCorrected = _correctedPosition;
     _confirmedAdvanceM = 0;
+    _confirmedConsumedPreviewM = 0;
+    _leaderRelocated = false;
     if (deltaSteps > 0 && deltaDistanceM > 0) {
       final segments = _rawSegments(
         deltaSteps: deltaSteps,
@@ -379,6 +416,14 @@ class CorridorPositionTracker {
       _updateHeadingBias();
       _publishConfirmed(transitionsBefore: transitionsBefore);
       _confirmedAdvanceM = (_correctedPosition - previousCorrected).distance;
+      // 그래프를 따라 실제로 걸었다면 두 끝점의 직선거리는 보행 경로 길이를
+      // 넘을 수 없다. 0.5m 여유를 넘는 차이는 빔 1등 교체로 위치 해석이
+      // 재배치된 것이다. preview에서는 이 변위가 아니라 실제 확정 보행
+      // 거리만 소비한다.
+      _leaderRelocated = _confirmedAdvanceM > deltaDistanceM + 0.5;
+      _confirmedConsumedPreviewM = _leaderRelocated
+          ? deltaDistanceM
+          : _confirmedAdvanceM;
     }
 
     _lastConfirmedSteps = math.max(
@@ -396,10 +441,7 @@ class CorridorPositionTracker {
 
   // ── 빔 ──
 
-  List<_Hypothesis> _seedHypotheses(
-    PdrLocalPoint position,
-    double headingDeg,
-  ) {
+  List<_Hypothesis> _seedHypotheses(PdrLocalPoint position, double headingDeg) {
     final seeds = <_Hypothesis>[];
     for (final projection in _network.nearbyProjections(
       position,
@@ -737,10 +779,12 @@ class CorridorPositionTracker {
     final targetLeadM = _previewIsAmbiguous && runnerUp != null
         ? _pathLength(_commonPrefix(leaderPath, runnerUp.path))
         : fullLeadM;
-    _previewLeadM = math
-        .max(targetLeadM, _previewLeadM - _confirmedAdvanceM)
-        .clamp(0.0, fullLeadM)
-        .toDouble();
+    _previewLeadM = stabilizePreviewLeadM(
+      previousLeadM: _previewLeadM,
+      targetLeadM: targetLeadM,
+      fullLeadM: fullLeadM,
+      confirmedConsumedM: _confirmedConsumedPreviewM,
+    );
     _previewPath
       ..clear()
       ..addAll(_truncateToLength(leaderPath, _previewLeadM));
@@ -876,7 +920,6 @@ class _Hypothesis {
   /// 그 이력 전체가 되어, 분기 대기 지점이 현재 위치보다 뒤로 잡힌다. 그러면
   /// 모호해질 때마다 preview가 꼬리 길이만큼 뒤로 튄다.
   _Hypothesis forPreview() => _copy(path: [edge.pointAt(progressM)]);
-
 
   _Hypothesis advance({
     required double observedHeadingDeg,

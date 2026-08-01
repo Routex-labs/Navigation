@@ -11,6 +11,7 @@
 | [`floor_map_matcher.dart`](floor_map_matcher.dart) | PDR 위치·경로를 보행 가능한 `FloorGraph` edge에 맞춤 | `FloorMapMatcher`, `MapMatchedFloorPoint`, `MapMatchState` |
 | [`corridor_position_tracker.dart`](corridor_position_tracker.dart) | 직선 위치·heading 보정과 교차로 회전 확정을 세션 상태로 유지 | `CorridorPositionTracker`, `CorridorTrackingState` |
 | [`corridor_tracking_session.dart`](corridor_tracking_session.dart) | snapshot 누적값에서 새 관측만 tracker에 전달 | `CorridorTrackingSession` |
+| [`guidance_trail_session.dart`](guidance_trail_session.dart) | 재탐색과 독립적으로 길안내 시작 이후 실제 보행 궤적을 누적 | `GuidanceTrailSession` |
 | [`escalator_transition_detector.dart`](escalator_transition_detector.dart) | 기압 변화 + 에스컬레이터 노드 근접으로 층 이동 판정 | `EscalatorTransitionDetector`, `EscalatorTransition`, `EscalatorDetectorConfig` |
 | [`escalator_node_naming.dart`](escalator_node_naming.dart) | 에스컬레이터 노드 이름에서 탑승/도착과 상대 층을 파싱 | `EscalatorNodeName`, `EscalatorDirection`, `EscalatorNodeRole` |
 | [`indoor_location_estimate.dart`](indoor_location_estimate.dart) | GPS 기반 절대 추정점을 PDR과 별개로 보존·검증(아래 "GPS 추정점과 PDR의 결합") | `IndoorLocationEstimate`, `IndoorLocationEstimateController` |
@@ -74,6 +75,7 @@ flowchart LR
 | 에스컬레이터 노드 근접(반경 6m·유지 60초) | 판정 **허가**만. 방향은 정하지 않는다 — 한 랜딩에 상행 탑승/도착 노드가 1.5m 거리로 붙어 있어 둘 다 반경에 들어온다 |
 | 기압(baseline 대비 Δ) | 올라갔는지 내려갔는지, 실제로 움직이는 중인지 |
 | 노드 이름 `{그룹}-UP(TO3F)` / `{그룹}-UP(FR2F)` | 도착 층과 도착 노드 확정 |
+| 활성 다층 경로의 전이 노드 ID | 붙어 있는 레인 중 길찾기가 선택한 정확한 탑승·도착 노드 유지 |
 
 - 누적 Δ ≥ 1.8m이고 최근 5초 동안 반대 방향 튐 없이 같은 방향 변화가 3회 이상
   이어지면 **도면을 먼저 새 층으로 전환**한다.
@@ -92,6 +94,10 @@ flowchart LR
   **회전값은 직전 anchor에서 물려받는다** — 같은 센서 세션이라 heading frame이 끊기지 않으므로
   사용자가 새 층에서 방향 보정을 다시 하지 않는다.
 - 확정·거부 이벤트는 모두 디버그 JSON(`floor_transition_events`)에 남는다.
+- 다층 길찾기는 단방향 전이 간선만 따라 같은 조건이면 현재 위치에서 가까운
+  에스컬레이터를 선택한다. 판정 때는 그 정확한 탑승·도착 노드 ID를 우선하며,
+  경로가 없는 경우에도 기압 방향과 같은 후보 중 가장 가까운 탑승 노드를 쓴다.
+  도착 노드는 근접한 다른 레인으로 다시 추정하지 않는다.
 - 기존 경로와 다른 에스컬레이터를 탔더라도 실제 도착 노드에서 같은 목적지까지 경로를
   다시 계산한다. 반 층 선전환 시점에 즉시 계산하므로 PDR 재활성화를 기다리지 않는다.
   수직 간선은 ETA에 포함하고, 두 층의 끝점을 잇는 파선으로 따로 표시한다.
@@ -103,8 +109,13 @@ flowchart LR
 
 ## 안내 경로 진행과 재탐색
 
-- 현재 투영점 이전은 회색, 이후는 파란색으로 나눠 지나온 경로와 남은 경로를 즉시
-  갱신한다. 교차점에서 현재 간선 확정이 잠깐 흔들려도 마지막 정상 진행점은 유지한다.
+- 길안내 시작 이후 실제 graph-matched 보행 궤적은 별도 세션에 회색으로 누적하고,
+  현재 투영점 이후의 안내 경로만 파란색으로 그린다. 재탐색은 파란 미래 경로만
+  교체하므로 출발점부터 걸어온 회색선은 사라지지 않는다.
+- 새 경로가 현재 위치에서 시작하면 진행률을 명시적으로 0m에 고정한 뒤 이후 걸음부터
+  누적한다. 경로가 겹쳐도 재탐색 직후 전역 투영으로 뒷구간에 붙지 않는다.
+- 이탈 문턱 안에서는 화면 마커만 수용된 파란 경로 투영점을 따른다. 센서 원본과 복도
+  보정 결과는 수정하지 않으며, 이탈이 확정되면 실제 보정 위치로 돌아가 재탐색한다.
 - 현재 간선이 안내 경로에 없다는 상태가 서로 다른 위치 갱신 3회이면서 2초 이상
   이어지면 같은 목적지를 유지한 채 현 위치에서 온디바이스 다익스트라를 다시 계산한다.
   한 네이티브 이벤트에 여러 걸음이 묶여도 한 번의 증거로만 센다.
@@ -149,10 +160,9 @@ GPS 자동 진입 위치와 사용자 핀 이후 PDR 위치는 같은 값으로 
   사라지고, 다른 좌표계의 마지막 위치가 현재 도면 위에 표시된다.
 - 층 전이 판정에 누적 변화량만 쓰면 기상 드리프트(5분에 3m)가 층 이동으로 확정된다. 이동
   **속도** 조건이 두 경우를 가른다.
-- 수직 전이 간선의 `to` 노드를 도착 위치로 쓰면 탑승/도착이 뒤바뀔 수 있다(백엔드가 위치
-  근접 8m로 짝지으므로). 이름 파싱이 1차 근거이고 간선은 폴백이다.
-- 도착 노드를 못 찾았을 때 아무 에스컬레이터 노드로 폴백하면 조용히 틀린 위치가 된다.
-  층만 바꾸고 사용자에게 위치 지정을 요청해야 한다.
+- 활성 경로가 없을 때 도착 노드를 못 찾았다고 아무 에스컬레이터 노드로 폴백하면
+  조용히 틀린 위치가 된다. 활성 경로에서는 보존한 정확한 도착 노드 ID를 쓰고,
+  수동 이동만 이름의 그룹·방향 규칙으로 찾는다.
 - native 이벤트 순서를 바꾸면 heading과 걸음이 서로 다른 시점 기준으로 계산될 수 있다.
 - 층 변경 때 pedometer를 reset하지 않으면 이전 층 걸음이 새 층에 누적된다.
 - 그래프 edge가 끊겼거나 좌표가 다른 기준이면 matcher 조정만으로 해결할 수 없다.
@@ -166,6 +176,7 @@ GPS 자동 진입 위치와 사용자 핀 이후 PDR 위치는 같은 값으로 
 - 세션·lifecycle: [`../../../../test/features/indoor_navigation/controller_test.dart`](../../../../test/features/indoor_navigation/controller_test.dart)
 - 맵 매칭: [`../../../../test/features/indoor_navigation/floor_map_matcher_test.dart`](../../../../test/features/indoor_navigation/floor_map_matcher_test.dart)
 - 복도 상태 보정: [`../../../../test/features/indoor_navigation/corridor_position_tracker_test.dart`](../../../../test/features/indoor_navigation/corridor_position_tracker_test.dart)
+- 누적 회색 보행 궤적: [`../../../../test/features/indoor_navigation/guidance_trail_session_test.dart`](../../../../test/features/indoor_navigation/guidance_trail_session_test.dart)
 - 층 전이 판정(합성 기압 시계열): [`../../../../test/features/indoor_navigation/escalator_transition_detector_test.dart`](../../../../test/features/indoor_navigation/escalator_transition_detector_test.dart)
 - 노드 이름 파싱: [`../../../../test/features/indoor_navigation/escalator_node_naming_test.dart`](../../../../test/features/indoor_navigation/escalator_node_naming_test.dart)
 
