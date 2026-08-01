@@ -58,7 +58,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from sqlalchemy import func, select
 
-from app.models import Floor, Store
+from app.models import Building, Floor, Store
 from app.repositories.query_search import _load_stores  # 건물/층 조인 재사용
 
 if TYPE_CHECKING:
@@ -214,21 +214,51 @@ def _get_model() -> Any | None:
     return _model
 
 
-def warm_model_in_background() -> threading.Thread:
-    """모델 로드를 데몬 스레드로 미리 돌려 첫 /query/ai의 대기를 없앤다.
+def _warm(session_factory) -> None:
+    """모델을 올리고 건물별 인덱스까지 미리 빌드한다.
 
-    로드 자체는 캐시가 있어도 CPU로 6초대가 걸린다(실측). 그 시간을 첫 질의가
-    아니라 기동 직후에 쓰면 사용자에게는 보이지 않는다. 그동안 /health·타일 같은
-    다른 요청은 정상 처리된다 — 이 스레드는 아무 락도 잡고 있지 않다.
+    **모델만 올려서는 첫 질의의 대기가 사라지지 않는다.** 모델 로드가 캐시 히트에도
+    CPU로 6초대인 건 맞지만, 그 뒤에 `_build_index`가 건물의 전 매장을 인코딩하는
+    비용이 남는다(2026-07 시드 기준 1640건). 실측에서 이쪽이 모델 로드보다 크다 —
+    둘 다 기동 직후로 옮겨야 첫 질의가 질의 문장 1건 인코딩만 하고 끝난다.
 
-    _get_model()이 _model_lock으로 직렬화하므로, 워밍이 끝나기 전에 질의가 들어와도
-    모델을 두 번 로드하지 않고 락에서 기다렸다가 같은 인스턴스를 쓴다.
-    daemon=True — 로드가 남아 있어도 서버 종료를 막지 않는다.
+    모델을 따로 부르지 않는 이유: `_build_index`가 `_get_model()`을 먼저 호출하므로
+    건물이 하나도 없어 인덱스를 못 만드는 경우에도 모델은 올라온다.
+
+    실패는 삼킨다 — 워밍이 깨져도 첫 질의가 lazy로 빌드하면 되므로 서버 기동을
+    막을 이유가 없다. 이 모듈의 "AI 경로만 조용히 degrade" 원칙과 같다.
+    """
+    session = session_factory()
+    try:
+        building_ids = list(session.scalars(select(Building.id)))
+        for building_id in building_ids:
+            _get_index(session, building_id)
+        logger.info("임베딩 워밍 완료: 건물 %d개 중 인덱스 %d개 준비", len(building_ids), len(_indexes))
+    except Exception as error:  # noqa: BLE001 - 워밍 실패는 lazy 빌드로 폴백
+        logger.warning("임베딩 워밍 실패(첫 질의에서 다시 빌드한다): %s", error)
+    finally:
+        session.close()
+
+
+def warm_in_background(session_factory) -> threading.Thread:
+    """워밍을 데몬 스레드로 미리 돌려 첫 /query/ai의 대기를 없앤다.
+
+    그동안 /health·타일 같은 다른 요청은 정상 처리된다 — 이 스레드는 요청 경로가
+    쓰는 락을 오래 붙들지 않는다. `_get_model`은 `_model_lock`이, `_get_index`는
+    `_index_lock`이 직렬화하므로, 워밍이 끝나기 전에 질의가 들어와도 모델·인덱스를
+    두 번 만들지 않고 락에서 기다렸다가 같은 것을 쓴다.
+
+    daemon=True — 워밍이 남아 있어도 서버 종료를 막지 않는다.
 
     주의: Cloud Run 기본 설정은 요청 처리 중이 아닐 때 CPU를 조인다. startup CPU
     boost나 min-instances 없이는 이 워밍이 기동 직후에 끝나지 않을 수 있다.
     """
-    thread = threading.Thread(target=_get_model, name="embedding-warmup", daemon=True)
+    thread = threading.Thread(
+        target=_warm,
+        args=(session_factory,),
+        name="embedding-warmup",
+        daemon=True,
+    )
     thread.start()
     return thread
 

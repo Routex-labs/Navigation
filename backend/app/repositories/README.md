@@ -15,7 +15,7 @@ Session으로 DB를 읽어 **기존 API 응답과 같은 모양의 순수 dict**
 | `query_search.py` | 자연어 질의 경량 매칭(이름·카테고리·동의어) + 탐색 조립 | `match_destination`, `match_info`, `discover`, `match_ai_destination` |
 | `store_facets.py` | 매장 카테고리→facet 파생·오버레이 병합·intent 해석 | `derive_facets`, `load_overlay`, `resolve_facets`, `resolve_intent_store_ids` |
 | `query_morph.py` | 질의 형태소 정규화(Kiwi). 조사·어미 제거 | `normalize` |
-| `query_semantic.py` | 임베딩 의미 검색(FAISS). 경량 미스·모호한 부분 일치 보완 | `semantic_search`, `reset_indexes`, `warm_model_in_background` |
+| `query_semantic.py` | 임베딩 의미 검색(FAISS). 경량 미스·모호한 부분 일치 보완 | `semantic_search`, `reset_indexes`, `warm_in_background` |
 | `geo_transform.py` | 건물 `local_m → wgs84` 변환을 요청 시점에 피팅 | `fit_building_geo_transform` |
 | `tile_queries.py` | 층 지도를 MVT 바이트로 렌더링 | `render_floor_tile` |
 | `tile_cache.py` | MVT 타일 바이트의 상한 있는 LRU 메모리 캐시 | `BoundedTileCache` |
@@ -271,7 +271,7 @@ flowchart TD
 
 - **`_get_model()`과 `_get_index()`는 둘 다 지연 로드 싱글턴**이다. 락 안에서 한 번 더 확인해 동시 요청이 모델·인덱스를 중복 생성하지 않게 한다.
 - **모델 로드는 로컬 캐시 우선(`_load_model`)이다.** `local_files_only=True`로 먼저 시도해 HF Hub 왕복(경고·지연)을 없애고, 캐시가 없을 때만 Hub로 폴백한다. 배포 이미지는 빌드 때 `scripts.warm_embedding_model`로 캐시를 채운다.
-- **`warm_model_in_background()`는 기동 시 워밍용이다.** `NAV_WARM_EMBEDDING=1`이면 `main.create_app()`이 이 데몬 스레드를 띄워 `_get_model()`을 미리 돌린다. `_model_lock`이 직렬화하므로 워밍 중 첫 질의가 들어와도 중복 로드 없이 같은 인스턴스를 쓴다.
+- **`warm_in_background(session_factory)`는 기동 시 워밍용이다.** `NAV_WARM_EMBEDDING=1`이면 `main.create_app()`이 이 데몬 스레드를 띄워 **모델 로드와 건물별 인덱스 빌드를 함께** 미리 돌린다. 모델만 올리면 첫 질의가 `_build_index`의 전 매장 인코딩을 그대로 기다리므로(실측상 모델 로드보다 큰 비용) 둘을 나누지 않는다. `_model_lock`·`_index_lock`이 직렬화하므로 워밍 중 첫 질의가 들어와도 중복 생성 없이 같은 것을 쓴다.
 - **인덱스는 `store_id`만 캐시한다.** ORM 객체는 매 요청 현재 세션으로 새로 읽는다(`semantic_search → _load_stores`) — detached 객체와 stale 층 정보를 피하기 위해서다.
 - **`semantic_search`는 층 스코프를 받지 않는다.** 검색 범위는 항상 건물 전체다. 층 우선순위는 `match_ai_destination`의 1차 경량(현재 층 한정)이 담당하고, 1차가 놓친 자연어만 2차가 건물 전체에서 찾는다. 2차에도 층 필터를 걸면 현재 층에 그 업종이 없는 질의(1F에서 "밥집")가 항상 `no_match`가 된다 — [FAISS.md](../../../docs/backend/native/FAISS.md) 10절.
 - 모델 로드가 실패하면 `_get_model()`이 `None`을 돌려주고 AI 경로만 조용히 비활성된다. 경량 매칭은 계속 동작한다. 백그라운드 워밍이 실패해도 같은 방식으로 degrade한다.

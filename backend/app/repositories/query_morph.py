@@ -11,10 +11,13 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import threading
 from collections.abc import Iterable
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # 제거할 품사 태그. 접두사로 검사한다.
 #   J*   조사        — "화장실이", "스타벅스는", "엘리베이터까지"
@@ -44,6 +47,10 @@ _load_failed = False
 
 # 이미 사용자 사전에 넣은 단어. 같은 단어를 매 요청 다시 등록하지 않기 위한 캐시.
 _registered: set[str] = set()
+
+# 기동 워밍을 이미 시작했는지. 워밍 대상(Kiwi 인스턴스·사전)이 프로세스 전역이라
+# 두 번째 워밍은 같은 일을 반복할 뿐이다. 자세한 이유는 warm_in_background 참고.
+_warm_started = False
 
 # 등록된 단어의 소문자 사본. 질의는 `query_search._norm`으로 소문자화된 뒤 들어오므로
 # 원본 대소문자와 직접 비교할 수 없다("MLB" 등록 / "mlb" 질의).
@@ -117,6 +124,71 @@ def register_words(words: Iterable[str]) -> None:
                 print(f"사용자 사전 등록 실패({word!r}): {error}")
             _registered.add(word)  # 실패한 단어도 기록 — 매 요청 재시도하지 않는다
             _registered_lower.add(word.lower())
+
+
+def _warm(session_factory) -> None:
+    """Kiwi 인스턴스와 매장 사전을 미리 만들어 첫 질의의 대기를 없앤다.
+
+    실측(매장 1640건): 인스턴스 생성 816ms + **첫 tokenize 1397ms** = 약 2.2초.
+    두 번째 호출부터는 0.09ms다. 첫 tokenize가 인스턴스 생성보다 비싼 이유는 Kiwi가
+    언어 모델을 그 시점에 올리기 때문이라, `_get_kiwi()`만 불러 두면 대기가 그대로
+    남는다. 여기서 `normalize`를 한 번 실제로 돌려 그 비용까지 기동으로 옮긴다.
+
+    **이 비용은 임베딩과 무관한 1차 경량 경로다.** `"MLB"`처럼 2차를 아예 안 타는
+    질의도 첫 번째면 그대로 문다. 그래서 `NAV_WARM_EMBEDDING`(임베딩 상주 여부)과
+    묶지 않고 항상 워밍한다 — Kiwi는 선택 의존성이 아니라 `requirements.txt`에
+    고정된 필수 의존성이고, 상주 비용도 임베딩 모델(400MB대)과 비교가 안 된다.
+
+    실패는 삼킨다 — 워밍이 깨져도 첫 질의가 lazy로 만들면 되므로 기동을 막지 않는다.
+    """
+    from sqlalchemy import select
+
+    from app.models import Store
+
+    session = session_factory()
+    try:
+        # 건물을 가리지 않고 전 매장을 등록한다. `_rank`는 건물별로 등록하지만
+        # 사전은 프로세스 전역이라 미리 채워 두면 어느 건물 질의든 첫 요청이 싸다.
+        register_words(session.scalars(select(Store.name)))  # _get_kiwi()를 포함한다
+        normalize("화장실")  # 첫 tokenize 비용을 여기서 치른다
+        logger.info("형태소 워밍 완료: 사전 %d개 단어", len(_registered))
+    except Exception as error:  # noqa: BLE001 - 워밍 실패는 lazy 생성으로 폴백
+        logger.warning("형태소 워밍 실패(첫 질의에서 다시 만든다): %s", error)
+    finally:
+        session.close()
+
+
+def warm_in_background(session_factory) -> threading.Thread | None:
+    """워밍을 데몬 스레드로 돌린다. 이미 시작했으면 아무것도 하지 않고 None.
+
+    `_lock`이 사전 등록·분석을 직렬화하므로, 워밍이 끝나기 전에 질의가 들어와도
+    Kiwi를 두 번 만들지 않고 락에서 기다렸다가 같은 인스턴스를 쓴다.
+    daemon=True — 워밍이 남아 있어도 서버 종료를 막지 않는다.
+
+    한 번만 도는 이유: Kiwi 인스턴스와 사전은 프로세스 전역이라 두 번째 워밍은
+    같은 일을 다시 할 뿐이다. 그런데 `create_app()`은 프로세스당 한 번이 아니다 —
+    테스트가 앱을 수십 번 만들고, 가드가 없으면 그때마다 스레드를 띄워 매장 전체를
+    다시 읽는다(개발 DB를 향해).
+
+    이 가드가 테스트 스위트를 눈에 띄게 빠르게 하지는 **않는다** — 워밍이 백그라운드
+    스레드라 `create_app()`의 반환 시간에는 잡히지 않는다(측정: 가드 유무 모두
+    15ms/회). 낭비를 없애는 위생 목적이지 성능 최적화가 아니다.
+    """
+    global _warm_started
+
+    with _lock:
+        if _warm_started:
+            return None
+        _warm_started = True
+
+    thread = threading.Thread(
+        target=_warm,
+        args=(session_factory,),
+        name="morph-warmup",
+        daemon=True,
+    )
+    thread.start()
+    return thread
 
 
 def normalize(text: str) -> str | None:
