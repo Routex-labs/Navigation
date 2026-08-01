@@ -25,6 +25,8 @@ class RouteProgress {
     required this.reacquired,
     required this.segmentIndex,
     this.projectedPoint,
+    this.headingErrorDeg,
+    this.wrongWay = false,
   });
 
   /// 경로 시작점부터 투영점까지의 폴리라인 거리.
@@ -63,6 +65,62 @@ class RouteProgress {
   /// 지나온 구간을 회색으로 나눌 때 쓴다. 예전 진단 로그를 만드는 테스트와의
   /// 호환을 위해 직접 생성 시에는 null일 수 있다.
   final LocalPoint? projectedPoint;
+
+  /// 현재 진행 heading과 목적지 방향 경로 접선의 차이(0~180°).
+  final double? headingErrorDeg;
+
+  /// 경로 위에 있지만 목적지 반대 방향으로 진행 중인지.
+  ///
+  /// 코너 한 프레임의 흔들림보다 명확한 역주행만 알리기 위해 120° 이상을
+  /// 사용한다. 화면은 이 값을 경로 재탐색보다 먼저 사용자에게 보여준다.
+  final bool wrongWay;
+}
+
+/// 현재 위치를 새 경로의 첫 점에 붙여 만든 진행률 기준점.
+///
+/// 재탐색 직후 일반 투영을 바로 실행하면, 물리적으로 가까운 뒷 구간을 골라
+/// 이미 걸은 것처럼 시작할 수 있다. 새 경로가 현재 위치를 첫 점으로 붙였다는
+/// 전제에서 진행거리는 항상 0으로 시작하고 이후 걸음만 누적한다.
+RouteProgress? seedRouteProgressAtRouteStart({
+  required List<LocalPoint> routePointsLocalM,
+  required Set<String> routeEdgeIds,
+  required String? currentEdgeId,
+  double? headingDeg,
+}) {
+  if (routePointsLocalM.length < 2) return null;
+  var firstSegmentIndex = -1;
+  var totalLengthM = 0.0;
+  for (var index = 0; index < routePointsLocalM.length - 1; index++) {
+    final start = routePointsLocalM[index];
+    final end = routePointsLocalM[index + 1];
+    final lengthM = math.sqrt(
+      math.pow(end.x - start.x, 2) + math.pow(end.y - start.y, 2),
+    );
+    if (lengthM > 0 && firstSegmentIndex < 0) firstSegmentIndex = index;
+    totalLengthM += lengthM;
+  }
+  if (firstSegmentIndex < 0) return null;
+  final first = routePointsLocalM.first;
+  final routeBearingDeg = _bearingForSegment(
+    routePointsLocalM[firstSegmentIndex],
+    routePointsLocalM[firstSegmentIndex + 1],
+  );
+  final headingErrorDeg = headingDeg == null
+      ? null
+      : _bearingError(headingDeg, routeBearingDeg);
+  final onRouteEdge =
+      currentEdgeId != null && routeEdgeIds.contains(currentEdgeId);
+  return RouteProgress(
+    traveledM: 0,
+    remainingM: totalLengthM,
+    offsetM: 0,
+    onRouteEdge: onRouteEdge,
+    reacquired: false,
+    segmentIndex: firstSegmentIndex,
+    projectedPoint: first,
+    headingErrorDeg: headingErrorDeg,
+    wrongWay: onRouteEdge && headingErrorDeg != null && headingErrorDeg >= 120,
+  );
 }
 
 /// 새 진행점이 마지막으로 받아들인 진행점에서 실제 걸음으로 설명할 수 없을
@@ -109,6 +167,7 @@ RouteProgress? computeRouteProgress({
   required Set<String> routeEdgeIds,
   required LocalPoint position,
   required String? currentEdgeId,
+  double? headingDeg,
   double? previousTraveledM,
   double searchWindowM = defaultRouteSearchWindowM,
 }) {
@@ -168,6 +227,13 @@ RouteProgress? computeRouteProgress({
     reacquired = chosen == null;
   }
   chosen ??= _nearestOffset(candidates)!;
+  final routeBearingDeg = _bearingForSegment(
+    routePointsLocalM[chosen.segmentIndex],
+    routePointsLocalM[chosen.segmentIndex + 1],
+  );
+  final headingErrorDeg = headingDeg == null
+      ? null
+      : _bearingError(headingDeg, routeBearingDeg);
 
   return RouteProgress(
     traveledM: chosen.traveledM,
@@ -177,7 +243,25 @@ RouteProgress? computeRouteProgress({
     reacquired: reacquired,
     segmentIndex: chosen.segmentIndex,
     projectedPoint: LocalPoint(chosen.footX, chosen.footY),
+    headingErrorDeg: headingErrorDeg,
+    wrongWay:
+        currentEdgeId != null &&
+        routeEdgeIds.contains(currentEdgeId) &&
+        headingErrorDeg != null &&
+        headingErrorDeg >= 120,
   );
+}
+
+double _bearingForSegment(LocalPoint start, LocalPoint end) {
+  final east = end.x - start.x;
+  final north = end.y - start.y;
+  final bearing = math.atan2(east, north) * 180 / math.pi;
+  return bearing < 0 ? bearing + 360 : bearing;
+}
+
+double _bearingError(double a, double b) {
+  final delta = ((a - b + 540) % 360) - 180;
+  return delta.abs();
 }
 
 _Projection? _nearestOffset(Iterable<_Projection> candidates) {
