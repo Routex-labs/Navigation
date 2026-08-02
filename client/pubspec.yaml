@@ -112,12 +112,21 @@ flutter:
   #
   # Flutter는 브라우저와 달리 글꼴을 동적으로 서브셋하지 않는다. 여기 올린 파일이
   # 웹에서 통째로 내려가므로(weight당 약 1.5MB) weight를 늘릴 때는 용량을 함께 본다.
+  # 앱이 실제로 요청하는 400·500·600·700·800은 모두 같은 Pretendard v1.3.9
+  # static face로 등록한다. 일부만 등록하면 엔진이 가장 가까운 굵기로 대체해
+  # (예: w600→w700) 화면마다 의도한 위계가 달라진다.
   fonts:
     - family: Pretendard
       fonts:
         - asset: assets/fonts/Pretendard-Regular.otf
+        - asset: assets/fonts/Pretendard-Medium.otf
+          weight: 500
+        - asset: assets/fonts/Pretendard-SemiBold.otf
+          weight: 600
         - asset: assets/fonts/Pretendard-Bold.otf
           weight: 700
+        - asset: assets/fonts/Pretendard-ExtraBold.otf
+          weight: 800
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

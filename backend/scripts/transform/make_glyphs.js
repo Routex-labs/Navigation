@@ -6,10 +6,12 @@
 // fontnik은 네이티브 애드온이라 Windows용 prebuilt가 없고, prebuilt가 GLIBC 2.33+를
 // 요구해서 bullseye 이하 이미지에서도 못 쓴다. 그래서 bookworm 기반 node로 돌린다:
 //
-//   curl -Lo NotoSansKR.ttf \
-//     "https://github.com/google/fonts/raw/main/ofl/notosanskr/NotoSansKR%5Bwght%5D.ttf"
-//   docker run --rm -v "$PWD:/work" -w /work node:20-bookworm \
-//     sh -c "npm install fontnik && node make_glyphs.js NotoSansKR.ttf out"
+//   # 저장소 루트에서 실행한다. app bundle의 Pretendard v1.3.9 파일을 입력으로
+//   # 써야 UI와 지도 라벨의 메트릭이 같아진다.
+//   docker run --rm -v "$PWD:/work" -w /work/backend/scripts/transform node:20-bookworm \
+//     sh -c "npm install --no-save fontnik && node make_glyphs.js \
+//       /work/client/assets/fonts/Pretendard-Regular.otf \
+//       '/work/backend/resources/fonts/Pretendard Regular'"
 //
 // 기본은 KEEP_RANGES(한글 음절/자모, 라틴, 문장부호)만 만든다 — 전체 0-65535는
 // 16MB고 이 범위만 8MB다. 여기 없는 범위를 클라이언트가 요청하면 fonts.py가 빈
@@ -31,7 +33,7 @@ const KEEP_RANGES = [
 
 const [, , fontPath, outDir] = process.argv;
 if (!fontPath || !outDir) {
-  console.error('usage: node make_glyphs.js <font.ttf> <outDir> [--all]');
+  console.error('usage: node make_glyphs.js <font.ttf|otf> <outDir> [--all]');
   process.exit(1);
 }
 

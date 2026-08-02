@@ -11,7 +11,3 @@
 library;
 
 const mapFontStackRegular = 'Pretendard Regular';
-
-/// 굵기로 위계를 주는 라벨용. Regular만 있던 시절에는 중요한 POI를 강조할
-/// 방법이 없었다.
-const mapFontStackBold = 'Pretendard Bold';

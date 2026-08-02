@@ -58,7 +58,7 @@ backend/
 │   └── tools/           # 보조 도구 (GCP 리전 선택 HTML 등)
 ├── notebooks/           # FAISS·Kiwi 품질 평가 (선택 개발 의존성)
 ├── resources/           # 정적 리소스
-│   ├── fonts/           # MapLibre SDF 글리프 (Noto Sans KR)
+│   ├── fonts/           # MapLibre SDF 글리프 (Pretendard)
 │   ├── studio/          # 스튜디오 원본 데이터
 │   ├── query_synonyms.json             # 자연어 질의 별칭 → 표준어
 │   ├── store_categories.json          # 매장 id → 카테고리 (category_code 근거)

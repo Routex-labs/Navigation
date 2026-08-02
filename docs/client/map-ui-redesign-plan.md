@@ -148,7 +148,7 @@ Studio 원본만 보면 1,640개 중 1,278개가 `category: "매장"`이라 무�
 같은 화면이 기기마다 다르게 보인다.
 
 **(2) 지도 라벨 폰트는 Regular 하나뿐이다.**
-`backend/resources/fonts/`에 `Noto Sans KR Regular` 딱 하나였다. 그래서 지도에서
+`backend/resources/fonts/`에는 지도용 Regular 글리프 하나만 둔다. 그래서 지도에서
 **굵기로 위계를 만들 수 없다.** 상용 지도는 중요한 POI를 굵게 해서 밀도 속에서도
 읽히게 하는데, 우리는 선택지가 없다.
 
@@ -166,9 +166,9 @@ Studio 원본만 보면 1,640개 중 1,278개가 `category: "매장"`이라 무�
 
 라이선스는 OFL이라 번들 가능하다.
 
-- 앱: `Pretendard-Regular.otf` / `Pretendard-Bold.otf` → `client/assets/fonts/`,
-  `pubspec.yaml`에 `Pretendard` family 등록 + `theme.fontFamily` 지정
-- 지도: 같은 파일로 glyph 생성 → `backend/resources/fonts/Pretendard Regular/`, `Pretendard Bold/`
+- 앱: `Pretendard-Regular/Medium/SemiBold/Bold/ExtraBold.otf` → `client/assets/fonts/`,
+  `pubspec.yaml`에 실제 사용 weight(400·500·600·700·800)를 모두 등록 + `theme.fontFamily` 지정
+- 지도: Regular glyph만 생성 → `backend/resources/fonts/Pretendard Regular/`
 - fontstack 이름은 `client/lib/core/map_fonts.dart` 상수 하나로 모은다
 
 ### 위험
@@ -181,7 +181,7 @@ Studio 원본만 보면 1,640개 중 1,278개가 `category: "매장"`이라 무�
 - [ ] 웹·iOS에서 같은 화면의 글자 모양이 동일
 - [ ] 상세 시트 헤더에서 제목이 2줄로 넘치지 않음 (긴 매장명: `마리떼프랑소와저버/LMC`)
 - [ ] 카테고리 칩 텍스트가 잘리지 않음
-- [ ] 지도에서 Bold fontstack이 404 없이 로드됨 (`/fonts/{fontstack}/{range}.pbf`)
+- [ ] 지도에서 Pretendard fontstack이 non-empty glyph를 로드함
 
 ---
 
