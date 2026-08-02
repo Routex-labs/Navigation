@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -29,6 +31,89 @@ void main() {
       expect(first?.name, '데모 건물');
       expect(second?.name, '데모 건물');
       expect(requestCount, 1);
+    });
+
+    // 야외 지도·실내 지도·카테고리 목록이 같은 프레임에 같은 건물을 부른다.
+    // 값만 캐시하면 await가 끝나기 전이라 셋 다 캐시 미스가 되어 각자 네트워크를
+    // 탄다 — 실측 로그에서 /buildings/{id}가 같은 초에 12건까지 나갔다.
+    test('동시에 부르면 요청 하나를 함께 기다린다', () async {
+      var requestCount = 0;
+      final gate = Completer<void>();
+      final client = MockClient((request) async {
+        requestCount++;
+        await gate.future; // 첫 요청을 일부러 붙잡아 "진행 중" 창을 만든다
+        return http.Response(
+          jsonEncode({
+            'id': 'bldg-001',
+            'name': '데모 건물',
+            'floors': ['1F'],
+          }),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+      final repository = HttpBuildingRepository(client: client);
+
+      final pending = Future.wait([
+        repository.getBuilding('bldg-001'),
+        repository.getBuilding('bldg-001'),
+        repository.getBuilding('bldg-001'),
+      ]);
+      gate.complete();
+      final results = await pending;
+
+      expect(results.map((b) => b?.name), everyElement('데모 건물'));
+      expect(requestCount, 1);
+    });
+
+    test('동시에 부른 층도 요청 하나로 합쳐진다', () async {
+      var requestCount = 0;
+      final gate = Completer<void>();
+      final client = MockClient((request) async {
+        requestCount++;
+        await gate.future;
+        return http.Response(
+          jsonEncode({'type': 'FeatureCollection', 'features': []}),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+      final repository = HttpBuildingRepository(client: client);
+
+      final pending = Future.wait([
+        repository.getFloorGeoJson('bldg-001', '1F'),
+        repository.getFloorGeoJson('bldg-001', '1F'),
+      ]);
+      gate.complete();
+      await pending;
+
+      expect(requestCount, 1);
+    });
+
+    // 잠깐 끊긴 네트워크가 영구 실패로 굳으면 재시도 경로(건물 로드 실패 배지)가
+    // 죽는다. 실패한 Future는 캐시에서 빠져야 한다.
+    test('실패는 캐시에 남지 않아 재시도가 다시 네트워크를 탄다', () async {
+      var requestCount = 0;
+      final client = MockClient((request) async {
+        requestCount++;
+        if (requestCount == 1) throw const SocketException('연결 실패');
+        return http.Response(
+          jsonEncode({
+            'id': 'bldg-001',
+            'name': '데모 건물',
+            'floors': ['1F'],
+          }),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+      final repository = HttpBuildingRepository(client: client);
+
+      await expectLater(repository.getBuilding('bldg-001'), throwsA(anything));
+      final retried = await repository.getBuilding('bldg-001');
+
+      expect(retried?.name, '데모 건물');
+      expect(requestCount, 2);
     });
 
     test('does not cache a 404 response', () async {
