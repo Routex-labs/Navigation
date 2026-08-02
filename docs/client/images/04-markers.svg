@@ -30,11 +30,12 @@
 
     <!-- 변경 후 -->
     <text x="330" y="26" font-size="10.5" font-weight="700" fill="#1A7F37" text-anchor="middle">변경 후</text>
-    <g transform="translate(330 74)">
-      <path d="M0 34 L7.6 15 A20 20 0 1 0 -7.6 15 Z" fill="#E53935" stroke="#FFFFFF" stroke-width="3.4" stroke-linejoin="round"/>
-      <text x="0" y="4" font-size="10.5" font-weight="800" fill="#FFFFFF" text-anchor="middle">도착</text>
+    <g transform="translate(330 64)">
+      <path d="M0 50 C -5 34 -19 20 -22.4 8.6 A24 24 0 1 1 22.4 8.6 C 19 20 5 34 0 50 Z"
+            fill="#E53935" stroke="#FFFFFF" stroke-width="3" stroke-linejoin="round"/>
+      <text x="0" y="4" font-size="14" font-weight="800" fill="#FFFFFF" text-anchor="middle">도착</text>
     </g>
-    <text x="330" y="132" font-size="9.5" fill="#1A7F37" text-anchor="middle">빨강 채움 · 흰 글씨 · 아웃라인</text>
+    <text x="330" y="132" font-size="9.5" fill="#1A7F37" text-anchor="middle">빨강 채움 · 흰 글씨 · 흰 아웃라인</text>
   </g>
 
   <text x="24" y="216" font-size="10.5" fill="#57606A">네이버·카카오 모두 같은 규칙이다 — 바탕은 빨강으로 채우고,</text>
