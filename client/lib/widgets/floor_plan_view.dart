@@ -236,6 +236,8 @@ class FloorPlanView extends StatefulWidget {
     this.interactive = true,
     this.highlightedStoreId,
     this.categorySelection,
+    this.focusTarget,
+    this.focusTick = 0,
     this.visibleInsets = EdgeInsets.zero,
     this.overlayHitTest,
     this.onCameraBearingChanged,
@@ -262,6 +264,20 @@ class FloorPlanView extends StatefulWidget {
   /// 층이 바뀌어도 상위(MapShellScreen)가 같은 값을 계속 내려주므로 선택은
   /// 층 전환을 넘어 유지된다.
   final CategorySelection? categorySelection;
+
+  /// 목록에서 고른 매장 위치. 값이 있으면 스타일 로드 직후(=층 전환으로 지도가
+  /// 새로 만들어진 경우) 또는 [focusTick]이 바뀔 때 카메라를 그리로 옮긴다.
+  ///
+  /// **상위가 직접 카메라를 조작하지 않고 이 값을 내려 주는 이유는 타이밍이다.**
+  /// 층을 바꾸면 FloorPlanView가 ValueKey 차이로 통째로 재생성되고 MapLibre
+  /// 스타일이 다시 로드된다. 상위가 층 전환 직후에 controller로 카메라를 밀면
+  /// 아직 준비되지 않은(또는 방금 detach된) state에 명령이 가서 조용히 무시된다.
+  /// 값으로 내려 주면 준비가 끝난 쪽이 스스로 적용하므로 그 경합이 사라진다.
+  final ll.LatLng? focusTarget;
+
+  /// 같은 매장을 다시 골랐을 때도 카메라를 다시 옮기기 위한 카운터.
+  /// [focusTarget]만 보면 값이 그대로라 didUpdateWidget이 변화를 못 본다.
+  final int focusTick;
 
   /// 지도 위에 얹은 Flutter 오버레이(층 selector 같은)가 자기 영역을 알려주는
   /// 콜백. 인자는 화면 전역 좌표. true 반환 시 그 좌표의 탭은 매장 선택으로
@@ -571,7 +587,57 @@ class FloorPlanViewState extends State<FloorPlanView> {
     if (oldWidget.categorySelection != widget.categorySelection) {
       _applyCategoryFilter();
     }
+    if (oldWidget.focusTick != widget.focusTick) {
+      _applyFocusTarget();
+    }
   }
+
+  /// 목록에서 고른 매장이 화면에 크게 보이도록 카메라를 옮긴다.
+  ///
+  /// 두 단계로 나눈다. 먼저 매장을 화면 정중앙에 놓고, 그 다음 아래쪽 시트가
+  /// 가리는 만큼 위로 밀어 올린다. 한 번에 계산하지 않는 이유는 실내 지도가
+  /// 건물에 맞춰 회전(bearing)돼 있어서다 — 위경도로 미리 빼면 회전 각도만큼
+  /// 엉뚱한 방향으로 밀린다. `scrollBy`는 화면 좌표라 회전을 알아서 반영한다.
+  Future<void> _applyFocusTarget() async {
+    final controller = _controller;
+    final target = widget.focusTarget;
+    if (controller == null || target == null || !_styleReady) return;
+
+    // 뷰포트는 await 전에 읽는다. 카메라 이동을 기다린 뒤 MediaQuery를 보면
+    // 그 사이 위젯이 트리에서 빠졌을 수 있다.
+    final viewport = _lastViewport ?? MediaQuery.sizeOf(context);
+
+    final current = controller.cameraPosition;
+    final currentZoom = current?.zoom ?? 0;
+    await controller.moveCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: _toMapLibreLatLng(target),
+          // 이미 더 가까이 들어가 있으면 그 배율을 유지한다. 목록에서 골랐다고
+          // 사용자가 맞춰 둔 확대를 되돌리면 방금 보던 맥락을 잃는다.
+          zoom: currentZoom > _storeFocusZoom ? currentZoom : _storeFocusZoom,
+          bearing: current?.bearing ?? 0,
+          tilt: current?.tilt ?? 0,
+        ),
+      ),
+    );
+
+    // 매장 정보 시트가 화면의 64%를 덮으므로(PlaceDetailSheet.initialChildSize)
+    // 정중앙에 놓으면 방금 고른 매장이 시트 뒤에 숨는다. 남는 위쪽 36% 안에서
+    // 다시 가운데로 오도록 밀어 올린다.
+    await controller.moveCamera(
+      CameraUpdate.scrollBy(0, viewport.height * _storeFocusLiftFraction),
+    );
+  }
+
+  /// 목록에서 고른 매장을 볼 때 최소한 이만큼은 확대한다. 매장 이름 라벨이
+  /// 읽히는 배율이다.
+  static const _storeFocusZoom = 19.0;
+
+  /// 시트에 가리지 않도록 매장을 화면 위쪽으로 올리는 비율.
+  /// 시트가 0.64를 덮으니 남는 영역의 중앙은 화면 위에서 0.18 지점이고,
+  /// 정중앙(0.5)에서 그만큼 올리면 0.32다.
+  static const _storeFocusLiftFraction = 0.32;
 
   /// 지금 선택에 해당하는 MapLibre 필터 표현식. 선택이 없으면 아무것도 맞지
   /// 않는 필터를 돌려준다 — 레이어 추가 시점과 갱신 시점이 같은 함수를 쓰게
@@ -1213,6 +1279,9 @@ class FloorPlanViewState extends State<FloorPlanView> {
     } else {
       await _fitToFootprint();
     }
+    // 층을 바꿔 들어온 경우 여기가 카메라를 잡는 마지막 지점이다. 건물 전체에
+    // 맞춘 뒤에 적용해야 그 fit이 포커스를 덮어쓰지 않는다.
+    await _applyFocusTarget();
   }
 
   void _enforceMinZoom() {

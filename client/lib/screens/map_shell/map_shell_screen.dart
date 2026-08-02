@@ -410,7 +410,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   Future<void> _onSearchStorePicked(PoiSearchResult store) async {
     _closeSearch();
-    await _runSheetChain(() => _showStoreInfo(store));
+    await _runSheetChain(() => _showStoreInfo(store, focusOnMap: true));
   }
 
   void _onSearchBuildingPicked(Building building) {
@@ -430,7 +430,18 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 반환값은 사용자가 출발/도착 액션을 실제로 골랐는지를 뜻한다. 저장된
   /// 장소 시트에서 넘어온 경우 호출자가 이 값을 보고 "그냥 닫힘"이면 다시
   /// 저장된 장소 시트로 돌려보내는 데 쓴다.
-  Future<bool> _showStoreInfo(PoiSearchResult match) async {
+  Future<bool> _showStoreInfo(
+    PoiSearchResult match, {
+    bool focusOnMap = false,
+  }) async {
+    // 목록에서 고른 매장은 지금 화면 어디에 있는지 알 수 없다. 시트를 띄우기
+    // 전에 지도를 그 매장으로 옮겨, 시트를 닫으면 바로 그 자리가 보이게 한다.
+    // 지도 폴리곤을 직접 탭한 경우에는 옮기지 않는다 — 이미 보고 있는 매장을
+    // 다시 중앙으로 끌어오면 방금 보던 주변 맥락이 사라진다.
+    if (focusOnMap) {
+      await _indoorKey.currentState?.focusStore(match);
+      if (!mounted) return false;
+    }
     final favorite = FavoritePlace.fromPoiSearchResult(
       match,
       buildingId: _buildingId,
@@ -519,7 +530,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
         ),
       );
       if (_closeSheetChainRequested || picked == null || !mounted) return false;
-      final tookAction = await _showStoreInfo(picked);
+      final tookAction = await _showStoreInfo(picked, focusOnMap: true);
       if (_closeSheetChainRequested || !mounted) return false;
       if (tookAction) return true;
     }
@@ -788,7 +799,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
         if (_closeSheetChainRequested || picked == null || !mounted) return;
         final enriched = await _favoriteWithCategory(picked);
         if (_closeSheetChainRequested || !mounted) return;
-        final tookAction = await _showStoreInfo(enriched.toPoiSearchResult());
+        final tookAction = await _showStoreInfo(
+          enriched.toPoiSearchResult(),
+          focusOnMap: true,
+        );
         if (_closeSheetChainRequested || !mounted) return;
         if (tookAction) return;
       }

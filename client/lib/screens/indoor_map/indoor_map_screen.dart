@@ -310,6 +310,29 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     setState(() => _highlightedStoreId = null);
   }
 
+  /// 목록(검색 결과·카테고리 매장 목록·저장한 장소)에서 고른 매장을 지도에서
+  /// 보여 준다. 다른 층이면 그 층으로 옮긴 뒤 카메라를 매장으로 가져간다.
+  ///
+  /// 카메라를 여기서 직접 밀지 않고 [FloorPlanView]에 값으로 내려 주는 이유는
+  /// 층 전환 타이밍이다 — 근거는 `FloorPlanView.focusTarget` 주석 참고.
+  Future<void> focusStore(PoiSearchResult store) async {
+    final floor = store.floor;
+    if (floor.isNotEmpty && floor != _selectedFloor) {
+      await _selectFloor(floor);
+      if (!mounted) return;
+    }
+    setState(() {
+      _highlightedStoreId = store.placeId;
+      _focusTarget = store.point;
+      _focusTick++;
+    });
+  }
+
+  /// 지도가 찾아가야 할 매장 위치와, 같은 매장을 다시 골라도 다시 움직이게
+  /// 하는 카운터. 자세한 이유는 `FloorPlanView.focusTarget`·`focusTick` 주석.
+  ll.LatLng? _focusTarget;
+  int _focusTick = 0;
+
   /// 백엔드 연결 실패 시 사용자에게 보여줄 메시지. null이면 정상 상태.
   /// 이게 없으면 fetch 예외가 조용히 삼켜져 로딩 스피너가 영원히 멈추지 않는다.
   String? _error;
@@ -2712,6 +2735,8 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           interactive: _interactive,
           highlightedStoreId: _highlightedStoreId,
           categorySelection: widget.categorySelection,
+          focusTarget: _focusTarget,
+          focusTick: _focusTick,
           visibleInsets: EdgeInsets.fromLTRB(0, topOverlay, 0, bottomOverlay),
           overlayHitTest: _isTapOnMapOverlay,
         ),
