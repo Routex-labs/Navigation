@@ -12,6 +12,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import '../core/api_config.dart';
 import '../core/map_fonts.dart';
 import '../core/map_palette.dart';
+import 'destination_pin.dart';
 import '../features/debug_mode/debug_map_overlay.dart';
 import '../models/floor_plan.dart';
 import '../screens/outdoor_map/indoor_entry_zoom.dart';
@@ -53,7 +54,9 @@ const _storesFillLayerId = 'floor-stores-fill';
 const _verticalTransportFillLayerId = 'floor-vertical-transport-fill';
 
 /// 목적지 핀 이미지의 addImage 등록 이름.
-const _destinationPinImageName = 'marker-destination-pin';
+// 디자인을 바꾸면 버전을 올린다 — 웹 addImage는 같은 이름이 이미 있으면
+// 새 비트맵을 버려서, 이름을 그대로 두면 살아 있는 지도에 반영되지 않는다.
+const _destinationPinImageName = 'marker-destination-pin-v2';
 
 /// 현재 위치 심볼의 addImage 등록 이름. **이름 끝에 코어 반지름을 박아 둔다.**
 ///
@@ -652,6 +655,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
         textAllowOverlap: false,
       ),
       sourceLayer: 'stores',
+      filter: storeLabelExcludingFacilitiesFilter(),
       enableInteraction: false,
     );
 
@@ -674,7 +678,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
     }
     await controller.addImage(
       _destinationPinImageName,
-      await _renderDestinationPinIcon(),
+      await renderDestinationPinIcon(),
     );
     await controller.addImage(
       _currentLocationImageName,
@@ -1027,20 +1031,13 @@ class FloorPlanViewState extends State<FloorPlanView> {
     // 목적지 핀 레이어보다 먼저 등록해, 겹칠 때 목적지 핀이 위에 오게 한다.
     await _addCurrentLocationSymbolLayer(controller);
 
-    // 목적지는 빨간 물방울 핀(_destinationPinImageName)에 "도착" 텍스트를
-    // 얹어서 표시한다. 텍스트는 아이콘에 미리 굽지 않고 MapLibre의 textField로
-    // 얹는데, 이는 Flutter 웹 CanvasKit에서 오프스크린 캔버스로 렌더링한
-    // 이미지에는 한글 글리프가 있는 폰트가 자동으로 딸려오지 않아 "도착"이
-    // 두부(tofu) 박스로 뭉개지기 때문이다(반면 MapLibre의 심볼 텍스트는
-    // 매장명 라벨과 동일한 경로를 타서 한글이 정상적으로 나온다).
+    // 목적지는 빨간 물방울 핀에 "도착" 텍스트를 얹어서 표시한다. 도형과 글씨를
+    // 나눠 그리는 이유, 치수와 textOffset 유도는 [destination_pin.dart]에 있다.
     //
-    // 아이콘 바닥(tip)이 실제 좌표에 오도록 iconAnchor는 bottom, 텍스트는
-    // 핀의 흰 원 안쪽 중앙에 오도록 textAnchor를 center로 잡고 textOffset
-    // y를 -3.7 em 만큼 올려 얹는다(핀 원본 이미지에서 흰 원 중앙이 밑변에서
-    // 위로 112px, iconSize/textSize 비율을 0.033으로 고정하면 offset은
-    // 112 × 0.033 ≈ 3.7 em이 되어 zoom과 무관하게 같은 위치를 유지한다).
+    // 아이콘 바닥(tip)이 실제 좌표에 오도록 iconAnchor는 bottom이다.
     // iconSize/textSize는 zoom 16↔20 구간에서 같이 커지는 interpolate 식으로
-    // 걸어, 축소했을 때 핀이 지도를 다 가리는 문제를 피한다.
+    // 걸어, 축소했을 때 핀이 지도를 다 가리는 문제를 피한다. 두 값의 비율은
+    // [kPinIconToTextRatio]로 고정돼 있어야 글씨가 머리 원 안에 남는다.
     //
     // 현재 위치는 이 소스에 함께 들어와 있어도 filter가 걸러낸다.
     await controller.addSymbolLayer(
@@ -1070,9 +1067,9 @@ class FloorPlanViewState extends State<FloorPlanView> {
           20,
           7.5,
         ],
-        textColor: '#1E2033',
+        textColor: kPinTextColor,
         textAnchor: 'center',
-        textOffset: [0, -3.7],
+        textOffset: [0, kPinTextOffsetEm],
         textAllowOverlap: true,
         textIgnorePlacement: true,
       ),
@@ -1305,53 +1302,6 @@ class FloorPlanViewState extends State<FloorPlanView> {
   /// 접선에 정확히 맞물리도록 tangentAngle(중심-끝점 축과 접점 사이의 각도,
   /// acos(r/d))로 계산해서 원과 이음매가 매끄럽게 이어진다.
   ///
-  /// "도착" 텍스트는 이 이미지에 굽지 않고 MapLibre 심볼 레이어의 textField로
-  /// 얹는다(자세한 이유는 심볼 레이어 등록부의 주석 참고). 흰 원 중심은
-  /// 이미지 밑변에서 위로 112px(= canvasHeight − tipPadding − headCenterY,
-  /// 즉 172 − 6 − 60) 위치에 있고, 이 값이 심볼 레이어 textOffset 계산의
-  /// 근거가 된다.
-  static Future<Uint8List> _renderDestinationPinIcon() async {
-    const canvasWidth = 128.0;
-    const canvasHeight = 172.0;
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(
-      recorder,
-      const Rect.fromLTWH(0, 0, canvasWidth, canvasHeight),
-    );
-
-    const cx = canvasWidth / 2;
-    const headRadius = 54.0;
-    const headCenterY = headRadius + 6;
-    const tipY = canvasHeight - 6;
-    const centerToTipDistance = tipY - headCenterY;
-
-    final tangentAngle = acos(headRadius / centerToTipDistance);
-    final tangentDx = headRadius * sin(tangentAngle);
-    final tangentDy = headRadius * cos(tangentAngle);
-
-    final pinPaint = Paint()..color = const Color(0xFFE53935);
-    canvas.drawCircle(const Offset(cx, headCenterY), headRadius, pinPaint);
-    final tail = Path()
-      ..moveTo(cx, tipY)
-      ..lineTo(cx + tangentDx, headCenterY + tangentDy)
-      ..lineTo(cx - tangentDx, headCenterY + tangentDy)
-      ..close();
-    canvas.drawPath(tail, pinPaint);
-
-    const innerRadius = 38.0;
-    canvas.drawCircle(
-      const Offset(cx, headCenterY),
-      innerRadius,
-      Paint()..color = Colors.white,
-    );
-
-    final image = await recorder.endRecording().toImage(
-      canvasWidth.toInt(),
-      canvasHeight.toInt(),
-    );
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    return byteData!.buffer.asUint8List();
-  }
 
   /// 상용 지도 앱처럼 흰 테두리의 파란 현재 위치 점 뒤로 반투명 heading cone이
   /// 퍼지는 하나의 심볼을 렌더링한다. MapLibre가 이 비트맵 전체를 회전하므로

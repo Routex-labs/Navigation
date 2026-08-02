@@ -33,6 +33,7 @@ import '../../models/indoor_route.dart';
 import '../../models/poi_search_result.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/eta_card.dart';
+import '../../widgets/destination_pin.dart';
 import '../../widgets/floor_facility_style.dart';
 import '../../widgets/floor_selector.dart';
 import '../../widgets/map_overlay_tap_guard.dart';
@@ -138,12 +139,11 @@ const _destLayerId = 'outdoor-destination-pin';
 // 노드에도 빨간 원이 함께 그려져 핀 밑에 원이 비어져 나온다.
 const _indoorDestSourceId = 'outdoor-indoor-destination';
 const _indoorDestLayerId = 'outdoor-indoor-destination-pin';
-// 도착 핀 비트맵의 addImage 등록 키. 실내 지도(floor_plan_view.dart)의 핀과
-// 같은 물방울 모양이지만 흰 원과 "도착" 텍스트가 없는 단색 빨강이라, 이름을
-// 나눠 두 디자인이 섞이지 않게 한다. 웹 addImage는 같은 이름이 이미 있으면
-// 새 비트맵을 버리므로(위 _pdrLocationImageName 주석 참고) 디자인을 바꿀 땐
-// 이름도 같이 바꿔야 살아 있는 지도에 반영된다.
-const _destinationPinImageName = 'outdoor-destination-pin-solid-v1';
+// 도착 핀 비트맵의 addImage 등록 키. 실내 지도와 같은 도형을
+// ([destination_pin.dart]) 공유하지만 등록 키는 화면마다 따로 둔다. 웹 addImage는
+// 같은 이름이 이미 있으면 새 비트맵을 버리므로(위 _pdrLocationImageName 주석 참고)
+// 디자인을 바꿀 땐 이름의 버전도 같이 올려야 살아 있는 지도에 반영된다.
+const _destinationPinImageName = 'outdoor-destination-pin-v2';
 // 도착 핀 iconSize의 zoom 보간 구간(z16 → z20). 원본 비트맵이 128x172px이라
 // 화면 높이는 172 x iconSize다.
 //
@@ -335,51 +335,6 @@ Future<Uint8List> _renderPdrLocationIcon({required bool showHeading}) async {
   return byteData!.buffer.asUint8List();
 }
 
-/// 실내 경로 도착 노드에 찍는 물방울 핀을 오프스크린 렌더링해 PNG 바이트로
-/// 돌려준다. 위쪽 원 + 아래쪽 삼각 꼬리를 같은 빨강으로 합쳐 물방울을 만들고,
-/// 꼬리의 두 밑변은 원의 접선에 정확히 맞물리도록 tangentAngle(중심-끝점 축과
-/// 접점 사이의 각도, acos(r/d))로 계산해 이음매가 매끄럽게 이어진다. 모양·크기는
-/// 실내 지도의 [floor_plan_view.dart:_renderDestinationPinIcon]과 같은 값이다.
-///
-/// 다른 점은 두 가지다 — 안쪽 흰 원을 그리지 않아 **단색 빨강**이고, "도착"
-/// 텍스트를 얹지 않는다. 그래서 실내 핀이 텍스트를 심볼 레이어 textField로
-/// 올리며 감수했던 제약(웹 CanvasKit에서 한글 글리프가 두부로 깨지는 문제,
-/// textOffset을 아이콘 흰 원 중심에 맞추는 계산)이 여기서는 아예 없다.
-Future<Uint8List> _renderDestinationPinIcon() async {
-  const canvasWidth = 128.0;
-  const canvasHeight = 172.0;
-  final recorder = ui.PictureRecorder();
-  final canvas = Canvas(
-    recorder,
-    const Rect.fromLTWH(0, 0, canvasWidth, canvasHeight),
-  );
-
-  const cx = canvasWidth / 2;
-  const headRadius = 54.0;
-  const headCenterY = headRadius + 6;
-  const tipY = canvasHeight - 6;
-  const centerToTipDistance = tipY - headCenterY;
-
-  final tangentAngle = math.acos(headRadius / centerToTipDistance);
-  final tangentDx = headRadius * math.sin(tangentAngle);
-  final tangentDy = headRadius * math.cos(tangentAngle);
-
-  final pinPaint = Paint()..color = AppColors.dest;
-  canvas.drawCircle(const Offset(cx, headCenterY), headRadius, pinPaint);
-  final tail = Path()
-    ..moveTo(cx, tipY)
-    ..lineTo(cx + tangentDx, headCenterY + tangentDy)
-    ..lineTo(cx - tangentDx, headCenterY + tangentDy)
-    ..close();
-  canvas.drawPath(tail, pinPaint);
-
-  final image = await recorder.endRecording().toImage(
-    canvasWidth.toInt(),
-    canvasHeight.toInt(),
-  );
-  final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-  return byteData!.buffer.asUint8List();
-}
 
 // 기본 지도 스타일. vworldApiKey가 있으면 VWorld Base 타일, 없으면 OSM으로 폴백해
 // 로컬 개발·테스트 환경에서도 지도가 항상 뜨도록 한다.
@@ -2311,7 +2266,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // allowOverlap을 켜 매장 라벨과 겹쳐도 핀은 항상 보인다.
     await controller.addImage(
       _destinationPinImageName,
-      await _renderDestinationPinIcon(),
+      await renderDestinationPinIcon(),
     );
     await controller.addSource(
       _indoorDestSourceId,
@@ -2334,6 +2289,24 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         iconAnchor: 'bottom',
         iconAllowOverlap: true,
         iconIgnorePlacement: true,
+        // 실내 화면과 같은 규칙으로 "도착"을 얹는다. textSize는 iconSize를
+        // [kPinIconToTextRatio]로 나눈 값이라, 두 값이 zoom을 따라 같이 커져도
+        // 글씨가 머리 원 안 같은 자리에 남는다.
+        textField: '도착',
+        textSize: [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          16,
+          _destinationPinIconSizeZ16 / kPinIconToTextRatio,
+          20,
+          _destinationPinIconSizeZ20 / kPinIconToTextRatio,
+        ],
+        textColor: kPinTextColor,
+        textAnchor: 'center',
+        textOffset: [0, kPinTextOffsetEm],
+        textAllowOverlap: true,
+        textIgnorePlacement: true,
       ),
       enableInteraction: false,
     );
@@ -2912,6 +2885,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _indoorStoresLabelLayerId,
         indoorStoresLabelProps(fadeExpr),
         sourceLayer: 'stores',
+        filter: storeLabelExcludingFacilitiesFilter(),
         belowLayerId: _routeCasingLayerId,
         enableInteraction: false,
       );
