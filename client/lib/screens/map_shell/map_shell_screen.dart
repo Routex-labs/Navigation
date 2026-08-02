@@ -41,6 +41,11 @@ class MapShellScreen extends StatefulWidget {
 const _etaBarLiftHeight = 92.0;
 
 class _MapShellScreenState extends State<MapShellScreen> {
+  /// 상단 오버레이 사이 간격. 예전 top: 78 / top: 128 같은 고정 offset을
+  /// 대신하는 유일한 값이다. 상단 바 높이가 상태에 따라 달라져도 이 간격은
+  /// 그대로라 어느 모드에서든 같은 여백으로 보인다.
+  static const _overlayGap = 8.0;
+
   late MapMode _mode = widget.initialMode;
   String _buildingId = demoBuildingId;
   ({String title, String subtitle})? _placeInfo;
@@ -161,9 +166,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
       final anyDenied = statuses.values.any((status) => !status.isGranted);
       if (!mounted || !anyDenied) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('일부 권한이 거부되어 위치·실내 이동 관련 기능이 제한될 수 있습니다'),
-        ),
+        const SnackBar(content: Text('일부 권한이 거부되어 위치·실내 이동 관련 기능이 제한될 수 있습니다')),
       );
     } catch (_) {
       // 권한 플러그인을 쓸 수 없는 환경(테스트 등)에서도 앱을 계속 진행한다.
@@ -473,7 +476,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
       final buildings = await buildingRepository.getAllBuildings();
       return buildings
           .where((b) => b.entrance != null)
-          .where((b) => normalized.isEmpty || b.name.toLowerCase().contains(normalized))
+          .where(
+            (b) =>
+                normalized.isEmpty || b.name.toLowerCase().contains(normalized),
+          )
           .map(
             (b) => DirectionsCandidate(
               title: b.name,
@@ -714,10 +720,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
     await _runSheetChain(() async {
       while (mounted) {
         final picked = await _withMapsLocked(
-          () => FavoritesSheet.show(
-            context,
-            onCloseAll: _requestCloseSheetChain,
-          ),
+          () =>
+              FavoritesSheet.show(context, onCloseAll: _requestCloseSheetChain),
         );
         if (_closeSheetChainRequested || picked == null || !mounted) return;
         final enriched = await _favoriteWithCategory(picked);
@@ -759,7 +763,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   Future<void> _onHamburgerTap() async {
     final selected = await _withMapsLocked(
-      () => BuildingSwitcherSheet.show(context, selectedBuildingId: _buildingId),
+      () =>
+          BuildingSwitcherSheet.show(context, selectedBuildingId: _buildingId),
     );
     if (selected == null || selected == _buildingId || !mounted) return;
     setState(() {
@@ -794,17 +799,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 올라온 소프트키보드 높이를 뺀 나머지다. 아주 좁은 화면에서 0 이하가
   /// 되지 않도록 하한을 둔다 — 0이면 패널이 아예 안 보여 검색이 죽은 것처럼
   /// 보인다.
-  double _searchPanelMaxHeight(BuildContext context) {
-    final media = MediaQuery.of(context);
-    final available =
-        media.size.height - media.padding.top - 78 - media.viewInsets.bottom - 16;
-    return available < 180 ? 180 : available;
-  }
-
   @override
   Widget build(BuildContext context) {
     final placeInfo = _placeInfo;
-    final routeVisible = _mode == MapMode.outdoor ? _outdoorRouteVisible : _indoorRouteVisible;
+    final routeVisible = _mode == MapMode.outdoor
+        ? _outdoorRouteVisible
+        : _indoorRouteVisible;
     // 시트였을 때는 뒤로가기가 시트만 닫았다. 패널로 바뀌었다고 뒤로가기가
     // 앱을 종료해 버리면 안 되므로, 검색 중에는 pop을 가로채 검색만 닫는다.
     return PopScope(
@@ -821,6 +821,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
     ({String title, String subtitle})? placeInfo,
     bool routeVisible,
   ) {
+    // MapTopBar가 출발/도착 두 줄로 커지는 조건과 같은 값이어야 한다. 한쪽만
+    // 바뀌면 칩이 접히는 시점과 바가 커지는 시점이 어긋나 다시 겹친다.
+    final showRouteDraft = !_searchActive && _routeDraftDestination != null;
     return Scaffold(
       // 상단 검색창(MapTopBar)에 포커스가 들어가 소프트키보드가 올라올 때
       // Scaffold body가 리사이즈되면 그 안의 MapLibre PlatformView(지도)도
@@ -896,136 +899,142 @@ class _MapShellScreenState extends State<MapShellScreen> {
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: _closeSearch,
-                child: ColoredBox(
-                  color: Colors.black.withValues(alpha: 0.12),
-                ),
+                child: ColoredBox(color: Colors.black.withValues(alpha: 0.12)),
               ),
             ),
 
+          // 상단 오버레이는 하나의 Column으로 쌓는다. 예전에는 검색 패널·카테고리
+          // 열이 top: 78, 안내 카드가 top: 128인 고정 offset이었는데, MapTopBar의
+          // 높이가 상태에 따라 달라진다 — 평소엔 검색창 한 줄이고 길찾기 draft에서는
+          // 출발/도착 두 줄 + Divider다. 그래서 78은 두 상태의 타협치가 되어 평소엔
+          // 여백이 남고 길찾기에서는 칩과 겹쳤다. Column이면 간격이 상수 하나로
+          // 통일되고 어느 상태에서도 어긋나지 않는다.
+          //
+          // 히트 테스트용 GlobalKey는 그대로 각 자식에 붙어 있다. 지도 제스처 잠금은
+          // 키의 RenderBox를 localToGlobal로 읽으므로 부모가 Stack이든 Column이든
+          // 같은 값이 나온다.
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            child: MapTopBar(
-              key: _topBarKey,
-              showHamburger: _mode == MapMode.indoor,
-              onHamburgerTap: _onHamburgerTap,
-              controller: _searchController,
-              focusNode: _searchFocus,
-              onChanged: _onSearchChanged,
-              onSubmitted: _onSearchSubmitted,
-              searchActive: _searchActive,
-              onCancelSearch: _closeSearch,
-              onDirectionsTap: _openDirections,
-              onSearchRequested: _resumeSearchFromRouteDraft,
-              // 명시적으로 고른 매장이 없어도 현재 위치를 출발지로 쓸 수 있으면
-              // 그렇게 적는다. null을 그대로 넘기면 상단 바가 "출발지를
-              // 선택하세요" placeholder를 띄워, 위치를 방금 찍어둔 사용자에게
-              // 출발지가 비어 있다고 잘못 알린다.
-              routeOriginLabel:
-                  _selectedOrigin?.title ??
-                  (_canRouteFromCurrentLocation ? '현재 위치' : null),
-              routeDestinationLabel: _routeDraftDestination?.title,
-              onRouteOriginTap: () => _openDirections(
-                presetDestination: _routeDraftDestination,
-                focusOrigin: true,
-              ),
-              onRouteDestinationTap: () => _openDirections(
-                presetDestination: _routeDraftDestination,
-              ),
-              onClearRouteDraft: _routeDraftDestination == null
-                  ? null
-                  : _clearRouteDraft,
+            // 키보드가 올라와도 Scaffold를 리사이즈하지 않으므로
+            // (resizeToAvoidBottomInset: false), 여기서 바닥을 직접 올려 검색
+            // 패널이 키보드 밑으로 들어가지 않게 한다. 예전에는 이 계산을
+            // _searchPanelMaxHeight가 상단 바 높이까지 상수로 가정해 따로 했다.
+            bottom: MediaQuery.viewInsetsOf(context).bottom,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                MapTopBar(
+                  key: _topBarKey,
+                  showHamburger: _mode == MapMode.indoor,
+                  onHamburgerTap: _onHamburgerTap,
+                  controller: _searchController,
+                  focusNode: _searchFocus,
+                  onChanged: _onSearchChanged,
+                  onSubmitted: _onSearchSubmitted,
+                  searchActive: _searchActive,
+                  onCancelSearch: _closeSearch,
+                  onDirectionsTap: _openDirections,
+                  onSearchRequested: _resumeSearchFromRouteDraft,
+                  // 명시적으로 고른 매장이 없어도 현재 위치를 출발지로 쓸 수 있으면
+                  // 그렇게 적는다. null을 그대로 넘기면 상단 바가 "출발지를
+                  // 선택하세요" placeholder를 띄워, 위치를 방금 찍어둔 사용자에게
+                  // 출발지가 비어 있다고 잘못 알린다.
+                  routeOriginLabel:
+                      _selectedOrigin?.title ??
+                      (_canRouteFromCurrentLocation ? '현재 위치' : null),
+                  routeDestinationLabel: _routeDraftDestination?.title,
+                  onRouteOriginTap: () => _openDirections(
+                    presetDestination: _routeDraftDestination,
+                    focusOrigin: true,
+                  ),
+                  onRouteDestinationTap: () => _openDirections(
+                    presetDestination: _routeDraftDestination,
+                  ),
+                  onClearRouteDraft: _routeDraftDestination == null
+                      ? null
+                      : _clearRouteDraft,
+                ),
+
+                // 결과 패널과 카테고리 열은 같은 자리를 쓴다. 검색 중에는
+                // 카테고리 열을 접어 두 오버레이가 겹치지 않게 한다.
+                if (_searchActive)
+                  Flexible(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        12,
+                        _overlayGap,
+                        12,
+                        12,
+                      ),
+                      child: SearchPanel(
+                        key: _searchPanelKey,
+                        buildingId: _buildingId,
+                        query: _searchQuery,
+                        submitTick: _searchSubmitTick,
+                        onStorePicked: _onSearchStorePicked,
+                        onBuildingPicked: _onSearchBuildingPicked,
+                        currentFloorId: _activeIndoorFloor,
+                      ),
+                    ),
+                  )
+                // 길찾기 draft에서도 접는다. 칩은 "뭘 찾을까"를 고르는 탐색
+                // 도구인데, 도착지를 이미 정한 사용자에게는 쓸 일이 없으면서
+                // 두 줄로 커진 상단 바 바로 밑에서 자리만 차지한다.
+                else if (!showRouteDraft)
+                  Padding(
+                    padding: const EdgeInsets.only(top: _overlayGap),
+                    child: _MapOverlayScrollRow(
+                      onPointerOverChanged: (over) => over
+                          ? _lockMaps(_mapLockOverlayHover)
+                          : _unlockMaps(_mapLockOverlayHover),
+                      onPointerDownChanged: (down) => down
+                          ? _lockMaps(_mapLockOverlayTouch)
+                          : _unlockMaps(_mapLockOverlayTouch),
+                      children: [
+                        _FavoritesPill(
+                          key: _favoritesPillKey,
+                          onTap: _openFavorites,
+                        ),
+                        const SizedBox(width: 8),
+                        // 야외·실내 모드 모두에서 노출한다. _buildingId가 항상
+                        // 현재 대상 건물(기본값 demoBuildingId)이라, 야외에서
+                        // chip을 눌러도 그 건물의 카테고리 시트가 정상적으로 뜬다.
+                        _CategoryChipsRow(
+                          key: _categoryRowKey,
+                          buildingId: _buildingId,
+                          onSelectCategory: (category) {
+                            _runSheetChain(() => _openCategoryStores(category));
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+
+                // 지도에서 도착지를 고르는 중이라는 안내. 이게 없으면 "지도에서
+                // 선택"을 눌렀을 때 시트만 닫히고 아무 일도 안 일어난 것처럼 보인다.
+                if (_pickingDestinationOnMap && !_searchActive)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, _overlayGap, 12, 0),
+                    child: _MapPickHintCard(
+                      key: _mapPickHintKey,
+                      originLabel: _selectedOrigin?.title ?? '현재 위치',
+                      onCancel: _stopPickingDestinationOnMap,
+                    ),
+                  )
+                else if (placeInfo != null && !_searchActive)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, _overlayGap, 12, 0),
+                    child: _PlaceInfoCard(
+                      title: placeInfo.title,
+                      subtitle: placeInfo.subtitle,
+                      onClose: () => setState(() => _placeInfo = null),
+                    ),
+                  ),
+              ],
             ),
           ),
-
-          // 결과 패널과 카테고리 열은 같은 자리를 쓴다. 검색 중에는 카테고리
-          // 열을 접어 두 오버레이가 겹치지 않게 한다.
-          if (_searchActive)
-            Positioned(
-              top: 78,
-              left: 12,
-              right: 12,
-              child: SafeArea(
-                bottom: false,
-                child: ConstrainedBox(
-                  // 키보드가 올라와도 Scaffold를 리사이즈하지 않으므로
-                  // (resizeToAvoidBottomInset: false), 패널이 키보드 밑으로
-                  // 들어가지 않도록 여기서 직접 높이를 깎는다.
-                  constraints: BoxConstraints(
-                    maxHeight: _searchPanelMaxHeight(context),
-                  ),
-                  child: SearchPanel(
-                    key: _searchPanelKey,
-                    buildingId: _buildingId,
-                    query: _searchQuery,
-                    submitTick: _searchSubmitTick,
-                    onStorePicked: _onSearchStorePicked,
-                    onBuildingPicked: _onSearchBuildingPicked,
-                    currentFloorId: _activeIndoorFloor,
-                  ),
-                ),
-              ),
-            )
-          else
-            Positioned(
-              top: 78,
-              left: 0,
-              right: 0,
-              child: SafeArea(
-                bottom: false,
-                child: _MapOverlayScrollRow(
-                  onPointerOverChanged: (over) => over
-                      ? _lockMaps(_mapLockOverlayHover)
-                      : _unlockMaps(_mapLockOverlayHover),
-                  onPointerDownChanged: (down) => down
-                      ? _lockMaps(_mapLockOverlayTouch)
-                      : _unlockMaps(_mapLockOverlayTouch),
-                  children: [
-                    _FavoritesPill(
-                      key: _favoritesPillKey,
-                      onTap: _openFavorites,
-                    ),
-                    const SizedBox(width: 8),
-                    // 야외·실내 모드 모두에서 노출한다. _buildingId가 항상
-                    // 현재 대상 건물(기본값 demoBuildingId)이라, 야외에서 chip을
-                    // 눌러도 그 건물의 카테고리 매장 시트가 정상적으로 뜬다.
-                    _CategoryChipsRow(
-                      key: _categoryRowKey,
-                      buildingId: _buildingId,
-                      onSelectCategory: (category) {
-                        _runSheetChain(() => _openCategoryStores(category));
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-          // 지도에서 도착지를 고르는 중이라는 안내. 이게 없으면 "지도에서 선택"을
-          // 눌렀을 때 시트만 닫히고 아무 일도 안 일어난 것처럼 보인다.
-          if (_pickingDestinationOnMap && !_searchActive)
-            Positioned(
-              top: 128,
-              left: 12,
-              right: 12,
-              child: _MapPickHintCard(
-                key: _mapPickHintKey,
-                originLabel: _selectedOrigin?.title ?? '현재 위치',
-                onCancel: _stopPickingDestinationOnMap,
-              ),
-            )
-          else if (placeInfo != null && !_searchActive)
-            Positioned(
-              top: 128,
-              left: 12,
-              right: 12,
-              child: _PlaceInfoCard(
-                title: placeInfo.title,
-                subtitle: placeInfo.subtitle,
-                onClose: () => setState(() => _placeInfo = null),
-              ),
-            ),
 
           AnimatedPositioned(
             duration: const Duration(milliseconds: 200),
@@ -1045,7 +1054,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
               // 야외에서는 실내 진입 오버레이가 켜져 있을 때만 위치 지정 버튼을
               // 노출한다. 오버레이가 꺼진 순수 야외 상태에서는 지정할 층 정보가
               // 없어 눌러도 의미가 없다.
-              showPlaceLocation: _mode == MapMode.indoor || _outdoorIndoorEntered,
+              showPlaceLocation:
+                  _mode == MapMode.indoor || _outdoorIndoorEntered,
             ),
           ),
         ],
@@ -1389,7 +1399,11 @@ class _MapPickHintCard extends StatelessWidget {
 }
 
 class _PlaceInfoCard extends StatelessWidget {
-  const _PlaceInfoCard({required this.title, required this.subtitle, required this.onClose});
+  const _PlaceInfoCard({
+    required this.title,
+    required this.subtitle,
+    required this.onClose,
+  });
 
   final String title;
   final String subtitle;
@@ -1411,12 +1425,18 @@ class _PlaceInfoCard extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
                     subtitle,
-                    style: const TextStyle(fontSize: 12, color: AppColors.muted),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.muted,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
