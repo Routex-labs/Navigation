@@ -58,6 +58,8 @@ const kPinTextColor = '#FFFFFF';
 /// 야외 지도 위에서도 경계가 살아난다.
 const _pinOutlineColor = Color(0xFFA81B18);
 const _pinOutlineWidth = 7.0;
+// 끝점이 외곽선 반두께와 정확히 맞닿으면 antialiasing이 마지막 행을 잘라낸다.
+const _pinCanvasBottomInset = 1.0;
 
 /// 빨간 물방울 핀을 PNG 바이트로 굽는다.
 ///
@@ -72,8 +74,8 @@ Future<Uint8List> renderDestinationPinIcon() async {
 
   const cx = kPinCanvasWidth / 2;
   const cy = kPinHeadCenterY;
-  // 테두리가 캔버스 밖으로 잘리지 않도록 끝점을 반 두께만큼 남긴다.
-  const tipY = kPinCanvasHeight - _pinOutlineWidth / 2;
+  // 테두리가 캔버스 밖으로 잘리지 않도록 반 두께와 1 raw pixel을 남긴다.
+  const tipY = kPinCanvasHeight - _pinOutlineWidth / 2 - _pinCanvasBottomInset;
 
   // 머리 원과 꼬리가 만나는 지점. 원 위의 점이어야 이어붙인 자리가 각지지 않는다.
   const joinDx = 50.4;
@@ -81,7 +83,14 @@ Future<Uint8List> renderDestinationPinIcon() async {
 
   final silhouette = Path()
     ..moveTo(cx, tipY)
-    ..cubicTo(cx - 11.25, cy + 76.5, cx - 42.75, cy + 45, cx - joinDx, cy + joinDy)
+    ..cubicTo(
+      cx - 11.25,
+      cy + 76.5,
+      cx - 42.75,
+      cy + 45,
+      cx - joinDx,
+      cy + joinDy,
+    )
     ..arcToPoint(
       const Offset(cx + joinDx, cy + joinDy),
       radius: const Radius.circular(kPinHeadRadius),

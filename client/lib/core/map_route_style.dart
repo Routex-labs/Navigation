@@ -4,7 +4,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
-
 /// 경로선 스타일. 실내 화면([FloorPlanView])과 야외 지도가 같은 경로를 그리므로
 /// 두 곳이 같은 값을 써야 한다.
 ///
@@ -63,6 +62,24 @@ const kRouteTransferWidthExpr = [
 /// 웹 addImage는 같은 이름이 이미 있으면 새 비트맵을 버린다.
 const kRouteArrowImageName = 'route-direction-arrow-v2';
 
+/// 축소할수록 진행 방향 화살표를 더 자주 배치하기 위한 화면 픽셀 간격.
+///
+/// `symbol-spacing`은 지도 길이가 아니라 화면 픽셀 기준이다. 고정값이면 경로를
+/// 화면에 맞추며 축소했을 때 경로의 투영 길이만 짧아져 화살표가 너무 적어진다.
+/// z16의 40px은 가장 작은 화살표(약 13px)의 세 배라 서로 겹치지 않고, z20에서는
+/// 72px까지 넓혀 확대 화면에서 선을 덮지 않는다.
+const kRouteArrowSpacingExpr = [
+  'interpolate',
+  ['linear'],
+  ['zoom'],
+  16,
+  40.0,
+  18,
+  56.0,
+  20,
+  72.0,
+];
+
 /// 화살표를 얹는 심볼 레이어 속성.
 ///
 /// `symbolPlacement: 'line'`이면 MapLibre가 선을 따라 일정 간격으로 아이콘을
@@ -83,9 +100,7 @@ SymbolLayerProperties routeArrowProps() => const SymbolLayerProperties(
     0.42,
   ],
   symbolPlacement: 'line',
-  // 선 길이에 비해 촘촘하면 화살표가 선을 덮는다. 화면에서 대략 한 화면에
-  // 두세 개 보이는 간격이다.
-  symbolSpacing: 72,
+  symbolSpacing: kRouteArrowSpacingExpr,
   // 회전은 지도 기준이어야 선을 따라 눕는다. viewport 기준이면 화면이 회전할 때
   // 화살표만 제자리에 서서 선과 어긋난다.
   iconRotationAlignment: 'map',

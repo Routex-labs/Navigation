@@ -919,8 +919,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
             right: 0,
             // 키보드가 올라와도 Scaffold를 리사이즈하지 않으므로
             // (resizeToAvoidBottomInset: false), 여기서 바닥을 직접 올려 검색
-            // 패널이 키보드 밑으로 들어가지 않게 한다. 예전에는 이 계산을
-            // _searchPanelMaxHeight가 상단 바 높이까지 상수로 가정해 따로 했다.
+            // 패널이 키보드 밑으로 들어가지 않게 한다. 예전에는 상단 바 높이를
+            // 상수로 가정해 별도 계산했지만, 이제는 Column의 실제 높이를 쓴다.
             bottom: MediaQuery.viewInsetsOf(context).bottom,
             child: Column(
               mainAxisSize: MainAxisSize.min,
