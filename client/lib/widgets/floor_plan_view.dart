@@ -10,6 +10,7 @@ import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../core/api_config.dart';
+import '../core/tile_url.dart';
 import '../core/map_fonts.dart';
 import '../core/map_palette.dart';
 import '../core/map_route_style.dart';
@@ -239,6 +240,7 @@ class FloorPlanView extends StatefulWidget {
     this.focusTarget,
     this.focusTick = 0,
     this.focusBottomSheetFraction = 0,
+    this.tileRevision,
     this.visibleInsets = EdgeInsets.zero,
     this.overlayHitTest,
     this.onCameraBearingChanged,
@@ -279,6 +281,10 @@ class FloorPlanView extends StatefulWidget {
   /// 같은 매장을 다시 골랐을 때도 카메라를 다시 옮기기 위한 카운터.
   /// [focusTarget]만 보면 값이 그대로라 didUpdateWidget이 변화를 못 본다.
   final int focusTick;
+
+  /// 벡터 타일 URL에 붙일 버전 토큰(`Building.tileRevision`). 근거는
+  /// `core/tile_url.dart` 주석.
+  final String? tileRevision;
 
   /// [focusTarget]으로 이동한 뒤 화면 아래쪽을 덮을 시트의 높이(화면 비율).
   /// 이만큼을 감안해 매장을 위로 밀어 올린다 — 0이면 정중앙에 놓는다.
@@ -681,8 +687,11 @@ class FloorPlanViewState extends State<FloorPlanView> {
     final controller = _controller;
     if (controller == null) return;
 
-    final tileUrl =
-        '$apiBaseUrl/buildings/${widget.buildingId}/floors/${widget.floorName}/tiles/{z}/{x}/{y}.mvt';
+    final tileUrl = indoorTileUrl(
+      buildingId: widget.buildingId,
+      floorName: widget.floorName,
+      tileRevision: widget.tileRevision,
+    );
 
     await controller.addSource(
       _tileSourceId,

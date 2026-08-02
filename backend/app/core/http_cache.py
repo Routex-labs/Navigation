@@ -31,8 +31,16 @@ def _drop_weak_prefix(etag: str) -> str:
 # 캐시 가능한 응답에 함께 붙일 헤더 묶음.
 # 304 응답에도 같은 헤더를 붙여야 브라우저가 만료 시각을 갱신한다 — 안 붙이면
 # 재검증 직후 곧바로 또 재검증하러 온다.
-def cache_headers(etag: str, max_age: int) -> dict[str, str]:
+#
+# immutable은 **URL 자체가 버전일 때만** 붙인다. 내용이 바뀌면 주소가 바뀌므로
+# 클라이언트가 만료 전에 다시 물어볼 이유가 없다는 선언이고, 그래서 재검증(304)
+# 왕복이 사라진다. 주소가 그대로인 채 내용만 바뀔 수 있는 응답에 붙이면 낡은
+# 데이터가 만료될 때까지 눌러앉는다.
+def cache_headers(etag: str, max_age: int, *, immutable: bool = False) -> dict[str, str]:
+    directives = f"public, max-age={max_age}"
+    if immutable:
+        directives += ", immutable"
     return {
-        "Cache-Control": f"public, max-age={max_age}",
+        "Cache-Control": directives,
         "ETag": etag,
     }

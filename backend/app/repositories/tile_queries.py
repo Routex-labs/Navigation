@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import math
 import threading
@@ -111,6 +112,20 @@ def _cache_revision(session: Session) -> str:
         return "no-generation"
     path, mtime_ns = generation
     return f"{path}@{mtime_ns}"
+
+
+# 클라이언트가 타일 URL에 붙일 revision 토큰.
+#
+# 왜 필요한가 — 타일은 `max-age`가 지나면 재검증(304)을 하러 온다. 본문은 안
+# 오지만 왕복은 그대로라, 층을 오갈 때마다 수십 건이 서버까지 닿는다. URL에
+# revision을 넣으면 내용이 바뀔 때 URL 자체가 바뀌므로 `immutable`을 붙여
+# **재검증조차 하지 않게** 만들 수 있다.
+#
+# `_cache_revision`을 그대로 쓰지 않는 이유는 두 가지다. 그 값은 서버 파일
+# 경로를 담고 있어 밖으로 내보낼 것이 아니고, URL에 넣기에도 길다. 짧은
+# 불투명 해시로 접는다 — 클라이언트는 "바뀌었는지"만 알면 된다.
+def tile_revision(session: Session) -> str:
+    return hashlib.blake2b(_cache_revision(session).encode(), digest_size=8).hexdigest()
 
 
 # 캐시를 거치지 않는 순수 렌더. 건물/층이 없으면 None.

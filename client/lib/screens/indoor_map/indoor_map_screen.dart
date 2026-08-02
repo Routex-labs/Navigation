@@ -2760,6 +2760,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           focusTarget: _focusTarget,
           focusTick: _focusTick,
           focusBottomSheetFraction: _focusBottomSheetFraction,
+          tileRevision: _building?.tileRevision,
           visibleInsets: EdgeInsets.fromLTRB(0, topOverlay, 0, bottomOverlay),
           overlayHitTest: _isTapOnMapOverlay,
         ),

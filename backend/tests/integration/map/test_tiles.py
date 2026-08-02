@@ -94,6 +94,36 @@ def test_타일_응답은_gzip으로_압축된다(real_api_client):
     assert mapbox_vector_tile.decode(response.content)
 
 
+# URL에 버전이 붙으면 재검증조차 필요 없다고 선언한다. 이게 빠지면 층을 오갈
+# 때마다 304 왕복이 다시 살아난다(실측 콜드 재시작 1회에 22건).
+def test_버전이_붙은_타일은_immutable로_길게_캐시된다(api_client):
+    revision = api_client.get(f"/buildings/{BUILDING_ID}").json()["tile_revision"]
+    assert revision
+
+    response = api_client.get(f"/buildings/{BUILDING_ID}/floors/{FLOOR_NAME}/tiles/0/0/0.mvt?v={revision}")
+
+    assert response.status_code == 200
+    cache_control = response.headers["cache-control"]
+    assert "immutable" in cache_control
+    # 60초짜리 기본값이 아니라 길게 잡혔는지 확인한다.
+    assert "max-age=31536000" in cache_control
+
+
+# 버전 없이 오는 요청(옛 클라이언트)은 지금까지와 똑같이 짧은 캐시 + 재검증이다.
+def test_버전이_없으면_기존_짧은_캐시를_유지한다(api_client):
+    response = api_client.get(f"/buildings/{BUILDING_ID}/floors/{FLOOR_NAME}/tiles/0/0/0.mvt")
+
+    assert response.headers["cache-control"] == "public, max-age=60"
+
+
+# 버전은 시드가 바뀌면 달라져야 한다. 안 바뀌면 낡은 타일이 1년간 눌러앉는다.
+def test_같은_DB에서는_버전이_안정적이다(api_client):
+    first = api_client.get(f"/buildings/{BUILDING_ID}").json()["tile_revision"]
+    second = api_client.get(f"/buildings/{BUILDING_ID}").json()["tile_revision"]
+
+    assert first == second
+
+
 # gzip을 못 받는 클라이언트에게는 그대로 원본을 준다. 미들웨어가 Accept-Encoding을
 # 무시하고 압축하면 MapLibre 네이티브가 타일을 못 읽는다.
 def test_gzip을_받지_않는_클라이언트에는_원본을_준다(real_api_client):

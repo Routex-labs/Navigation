@@ -14,6 +14,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../core/api_config.dart';
 import '../../core/service_locator.dart';
+import '../../core/tile_url.dart';
 import '../../domain/geo_transform.dart';
 import '../../features/debug_mode/debug_mode.dart';
 import '../../features/indoor_navigation/application/corridor_tracking_session.dart';
@@ -2813,8 +2814,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       return;
     }
 
-    final tileUrl =
-        '$apiBaseUrl/buildings/${building.id}/floors/$floor/tiles/{z}/{x}/{y}.mvt';
+    final tileUrl = indoorTileUrl(
+      buildingId: building.id,
+      floorName: floor,
+      tileRevision: building.tileRevision,
+    );
     debugPrint(
       '[outdoor overlay] registering MVT source url=$tileUrl '
       'apiBaseUrl=$apiBaseUrl',
