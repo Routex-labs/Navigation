@@ -238,6 +238,7 @@ class FloorPlanView extends StatefulWidget {
     this.categorySelection,
     this.focusTarget,
     this.focusTick = 0,
+    this.focusBottomSheetFraction = 0,
     this.visibleInsets = EdgeInsets.zero,
     this.overlayHitTest,
     this.onCameraBearingChanged,
@@ -278,6 +279,12 @@ class FloorPlanView extends StatefulWidget {
   /// 같은 매장을 다시 골랐을 때도 카메라를 다시 옮기기 위한 카운터.
   /// [focusTarget]만 보면 값이 그대로라 didUpdateWidget이 변화를 못 본다.
   final int focusTick;
+
+  /// [focusTarget]으로 이동한 뒤 화면 아래쪽을 덮을 시트의 높이(화면 비율).
+  /// 이만큼을 감안해 매장을 위로 밀어 올린다 — 0이면 정중앙에 놓는다.
+  ///
+  /// 지도 위젯이 시트의 존재를 직접 알면 안 되므로 상위가 값으로 넘긴다.
+  final double focusBottomSheetFraction;
 
   /// 지도 위에 얹은 Flutter 오버레이(층 selector 같은)가 자기 영역을 알려주는
   /// 콜백. 인자는 화면 전역 좌표. true 반환 시 그 좌표의 탭은 매장 선택으로
@@ -622,22 +629,29 @@ class FloorPlanViewState extends State<FloorPlanView> {
       ),
     );
 
-    // 매장 정보 시트가 화면의 64%를 덮으므로(PlaceDetailSheet.initialChildSize)
-    // 정중앙에 놓으면 방금 고른 매장이 시트 뒤에 숨는다. 남는 위쪽 36% 안에서
-    // 다시 가운데로 오도록 밀어 올린다.
+    // 정중앙에 놓으면 방금 고른 매장이 시트 뒤에 숨는다. 시트 위에 남는 영역의
+    // 한가운데로 오도록 밀어 올린다.
+    //
+    // 계산: 시트가 f를 덮으면 남는 높이는 (1 - f)이고 그 중앙은 화면 위에서
+    // (1 - f) / 2 지점이다. 정중앙(0.5)에서 그만큼 올리면 0.5 - (1 - f)/2 = f/2.
+    //
+    // 실기기로 확인한 `scrollBy`의 성질 두 가지를 여기 남긴다. 문서만 보고
+    // 고치면 두 번 다 틀린다.
+    //  1. 단위는 **논리 픽셀**이다. dpr(3배)을 곱해 보정하면 매장이 건물 밖으로
+    //     날아간다.
+    //  2. 부호는 **음수가 위로**다. 문서는 "양수 dy면 카메라 타깃이 남쪽으로
+    //     간다"고 적혀 있어 매장이 위로 올라갈 것처럼 읽히지만, 실제로는 매장이
+    //     그만큼 아래로 내려가 시트 뒤에 숨었다.
+    final lift = widget.focusBottomSheetFraction / 2;
+    if (lift <= 0) return;
     await controller.moveCamera(
-      CameraUpdate.scrollBy(0, viewport.height * _storeFocusLiftFraction),
+      CameraUpdate.scrollBy(0, -viewport.height * lift),
     );
   }
 
   /// 목록에서 고른 매장을 볼 때 최소한 이만큼은 확대한다. 매장 이름 라벨이
   /// 읽히는 배율이다.
   static const _storeFocusZoom = 19.0;
-
-  /// 시트에 가리지 않도록 매장을 화면 위쪽으로 올리는 비율.
-  /// 시트가 0.64를 덮으니 남는 영역의 중앙은 화면 위에서 0.18 지점이고,
-  /// 정중앙(0.5)에서 그만큼 올리면 0.32다.
-  static const _storeFocusLiftFraction = 0.32;
 
   /// 지금 선택에 해당하는 MapLibre 필터 표현식. 선택이 없으면 아무것도 맞지
   /// 않는 필터를 돌려준다 — 레이어 추가 시점과 갱신 시점이 같은 함수를 쓰게

@@ -315,7 +315,12 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   ///
   /// 카메라를 여기서 직접 밀지 않고 [FloorPlanView]에 값으로 내려 주는 이유는
   /// 층 전환 타이밍이다 — 근거는 `FloorPlanView.focusTarget` 주석 참고.
-  Future<void> focusStore(PoiSearchResult store) async {
+  /// [bottomSheetFraction]은 곧 화면 아래를 덮을 시트의 높이 비율이다. 그만큼
+  /// 매장을 위로 올려 시트 뒤에 숨지 않게 한다.
+  Future<void> focusStore(
+    PoiSearchResult store, {
+    double bottomSheetFraction = 0,
+  }) async {
     final floor = store.floor;
     if (floor.isNotEmpty && floor != _selectedFloor) {
       await _selectFloor(floor);
@@ -324,6 +329,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     setState(() {
       _highlightedStoreId = store.placeId;
       _focusTarget = store.point;
+      _focusBottomSheetFraction = bottomSheetFraction;
       _focusTick++;
     });
   }
@@ -332,6 +338,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   /// 하는 카운터. 자세한 이유는 `FloorPlanView.focusTarget`·`focusTick` 주석.
   ll.LatLng? _focusTarget;
   int _focusTick = 0;
+  double _focusBottomSheetFraction = 0;
 
   /// 백엔드 연결 실패 시 사용자에게 보여줄 메시지. null이면 정상 상태.
   /// 이게 없으면 fetch 예외가 조용히 삼켜져 로딩 스피너가 영원히 멈추지 않는다.
@@ -2737,6 +2744,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           categorySelection: widget.categorySelection,
           focusTarget: _focusTarget,
           focusTick: _focusTick,
+          focusBottomSheetFraction: _focusBottomSheetFraction,
           visibleInsets: EdgeInsets.fromLTRB(0, topOverlay, 0, bottomOverlay),
           overlayHitTest: _isTapOnMapOverlay,
         ),

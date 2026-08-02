@@ -439,7 +439,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 지도 폴리곤을 직접 탭한 경우에는 옮기지 않는다 — 이미 보고 있는 매장을
     // 다시 중앙으로 끌어오면 방금 보던 주변 맥락이 사라진다.
     if (focusOnMap) {
-      await _indoorKey.currentState?.focusStore(match);
+      // 곧 올라올 시트 높이를 함께 넘겨, 매장이 시트 뒤가 아니라 그 위 영역
+      // 한가운데에 놓이게 한다. 시트 높이를 바꾸면 카메라도 자동으로 따라온다.
+      await _indoorKey.currentState?.focusStore(
+        match,
+        bottomSheetFraction: kPlaceDetailSheetInitialSize,
+      );
       if (!mounted) return false;
     }
     final favorite = FavoritePlace.fromPoiSearchResult(

@@ -51,6 +51,10 @@ class CategoryStoresSheet extends StatefulWidget {
       isScrollControlled: true,
       isDismissible: true,
       backgroundColor: Colors.transparent,
+      // 상세 시트와 같은 이유로 뒤 지도를 어둡게 덮지 않는다 — 목록을 훑는
+      // 동안에도 지도 위 카테고리 강조가 그대로 보여야 어느 층 어디쯤인지
+      // 가늠할 수 있다.
+      barrierColor: Colors.transparent,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
