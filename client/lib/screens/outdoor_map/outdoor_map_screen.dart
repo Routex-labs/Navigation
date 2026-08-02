@@ -33,6 +33,7 @@ import '../../models/indoor_route.dart';
 import '../../models/poi_search_result.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/eta_card.dart';
+import '../../core/map_route_style.dart';
 import '../../widgets/destination_pin.dart';
 import '../../widgets/floor_facility_style.dart';
 import '../../widgets/floor_selector.dart';
@@ -129,6 +130,8 @@ const _transferRouteSourceId = 'outdoor-transfer-route';
 const _transferRouteLayerId = 'outdoor-transfer-route-line';
 const _routeCasingLayerId = 'outdoor-route-casing';
 const _routeLineLayerId = 'outdoor-route-line';
+// 진행 방향 화살표. 본선 위에 얹혀 선을 따라 흐른다.
+const _routeArrowLayerId = 'outdoor-route-arrow';
 const _currentSourceId = 'outdoor-current';
 const _accuracyLayerId = 'outdoor-accuracy';
 const _currentDotLayerId = 'outdoor-current-dot';
@@ -2082,7 +2085,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       enableInteraction: false,
     );
 
-    // 경로선: 두께 있는 파란 실선 + 흰 casing으로 배경 대비를 확보한다.
+    // 경로선: 진한 파랑 casing + 파란 본선 + 흰 화살표. 값과 근거는
+    // [map_route_style.dart]에 있다(실내 화면과 공유).
     await controller.addSource(
       _routeSourceId,
       GeojsonSourceProperties(data: _emptyCollection()),
@@ -2091,8 +2095,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _routeSourceId,
       _routeCasingLayerId,
       const LineLayerProperties(
-        lineColor: '#FFFFFF',
-        lineWidth: 8,
+        lineColor: kRouteCasingColor,
+        lineWidth: kRouteCasingWidthExpr,
         lineCap: 'round',
         lineJoin: 'round',
       ),
@@ -2100,12 +2104,22 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await controller.addLineLayer(
       _routeSourceId,
       _routeLineLayerId,
-      LineLayerProperties(
-        lineColor: AppColors.primary.toHexString(),
-        lineWidth: 5,
+      const LineLayerProperties(
+        lineColor: kRouteLineColor,
+        lineWidth: kRouteLineWidthExpr,
         lineCap: 'round',
         lineJoin: 'round',
       ),
+    );
+    await controller.addImage(
+      kRouteArrowImageName,
+      await renderRouteArrowIcon(),
+    );
+    await controller.addSymbolLayer(
+      _routeSourceId,
+      _routeArrowLayerId,
+      routeArrowProps(),
+      enableInteraction: false,
     );
     await controller.addSource(
       _transferRouteSourceId,
@@ -2114,11 +2128,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await controller.addLineLayer(
       _transferRouteSourceId,
       _transferRouteLayerId,
-      LineLayerProperties(
-        lineColor: AppColors.primary.toHexString(),
-        lineWidth: 5,
+      const LineLayerProperties(
+        lineColor: kRouteLineColor,
+        lineWidth: kRouteTransferWidthExpr,
         lineOpacity: 0.85,
-        lineDasharray: const [1.2, 1.1],
+        lineDasharray: [1.2, 1.1],
         lineCap: 'round',
         lineJoin: 'round',
       ),

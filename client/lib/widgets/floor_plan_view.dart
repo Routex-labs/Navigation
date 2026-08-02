@@ -12,6 +12,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import '../core/api_config.dart';
 import '../core/map_fonts.dart';
 import '../core/map_palette.dart';
+import '../core/map_route_style.dart';
 import 'destination_pin.dart';
 import '../features/debug_mode/debug_map_overlay.dart';
 import '../models/floor_plan.dart';
@@ -772,8 +773,8 @@ class FloorPlanViewState extends State<FloorPlanView> {
       _completedRouteSourceId,
       'floor-completed-route-line',
       const LineLayerProperties(
-        lineColor: '#9AA0A6',
-        lineWidth: 5,
+        lineColor: kRouteCompletedColor,
+        lineWidth: kRouteLineWidthExpr,
         lineOpacity: 0.72,
         lineCap: 'round',
         lineJoin: 'round',
@@ -781,16 +782,37 @@ class FloorPlanViewState extends State<FloorPlanView> {
       enableInteraction: false,
     );
     await controller.addGeoJsonSource(_routeSourceId, _emptyFeatureCollection);
+    // casing → 본선 → 화살표 순으로 얹는다. 값과 근거는 [map_route_style.dart].
+    await controller.addLineLayer(
+      _routeSourceId,
+      'floor-route-casing',
+      const LineLayerProperties(
+        lineColor: kRouteCasingColor,
+        lineWidth: kRouteCasingWidthExpr,
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      enableInteraction: false,
+    );
     await controller.addLineLayer(
       _routeSourceId,
       'floor-route-line',
       const LineLayerProperties(
-        lineColor: '#1A73E8',
-        lineWidth: 5,
-        lineOpacity: 0.6,
+        lineColor: kRouteLineColor,
+        lineWidth: kRouteLineWidthExpr,
         lineCap: 'round',
         lineJoin: 'round',
       ),
+      enableInteraction: false,
+    );
+    await controller.addImage(
+      kRouteArrowImageName,
+      await renderRouteArrowIcon(),
+    );
+    await controller.addSymbolLayer(
+      _routeSourceId,
+      'floor-route-arrow',
+      routeArrowProps(),
       enableInteraction: false,
     );
     await controller.addGeoJsonSource(
@@ -801,8 +823,8 @@ class FloorPlanViewState extends State<FloorPlanView> {
       _transferRouteSourceId,
       'floor-transfer-route-line',
       const LineLayerProperties(
-        lineColor: '#1A73E8',
-        lineWidth: 5,
+        lineColor: kRouteLineColor,
+        lineWidth: kRouteTransferWidthExpr,
         lineOpacity: 0.82,
         lineDasharray: [1.2, 1.1],
         lineCap: 'round',
