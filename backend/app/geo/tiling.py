@@ -84,6 +84,35 @@ def _local_polygon_ring(points: list[dict], transform: GeoTransform) -> list[lis
     return _close_ring(local_points_to_lnglat(points, transform))
 
 
+# 매장 feature의 properties. category/subcategory는 클라이언트가 MapLibre
+# setFilter로 카테고리 필터를 걸 때 쓴다.
+#
+# 두 컬럼 모두 nullable이라 값이 없는 매장이 실제로 있다. None일 때 **키 자체를
+# 넣지 않는다.** 이유:
+#
+#   mapbox_vector_tile 2.2.0의 인코더는 값 타입을 _can_handle_val로 거르는데
+#   (`isinstance(v, (str, bool, int, float))`), None은 여기에 걸려 예외도 null
+#   인코딩도 아니고 **그 키를 조용히 통째로 버린다**. 즉 None을 그대로 넘겨도
+#   지금은 "키 없음"으로 나온다 — 확인한 실제 동작이다.
+#
+#   그래도 여기서 명시적으로 빼는 건, 그 동작이 우리가 의존해도 되는 계약이
+#   아니기 때문이다. 라이브러리가 판올림하며 null 인코딩으로 바뀌면 타일 계약이
+#   조용히 달라지고(클라이언트 필터가 어긋난다), 무엇보다 "None이면 키가 없다"는
+#   결정이 코드에 안 남아 리뷰에서 보이지 않는다. 호출부에서 빼면 인코더 버전과
+#   무관하게 계약이 고정된다.
+#
+#   키 없음이 안전한 이유: MapLibre 필터에서 `['has', 'category']`로 값 유무를
+#   판정할 수 있다. 반대로 null이 실리면 `has`는 참이 되면서 비교는 어긋나
+#   "값이 없다"를 표현할 깔끔한 방법이 사라진다.
+def _store_properties(store: Store) -> dict:
+    properties: dict = {"id": store.id, "name": store.name, "kind": "store"}
+    if store.category is not None:
+        properties["category"] = store.category
+    if store.subcategory is not None:
+        properties["subcategory"] = store.subcategory
+    return properties
+
+
 # 건물 하나의 layers(footprint/stores/pois)를 wgs84 GeoJSON feature로 만든다.
 # 타일 경계 상자와 겹치지 않는 feature는 걸러낸다(정밀 클리핑 없이 bbox 교차만
 # 확인 — 실내 지도는 feature 수가 적어 이 정도로도 타일이 과도하게 커지지 않는다).
@@ -131,7 +160,7 @@ def build_floor_tile_layers(
         store_features.append(
             {
                 "geometry": {"type": "Polygon", "coordinates": [ring]},
-                "properties": {"id": store.id, "name": store.name, "kind": "store"},
+                "properties": _store_properties(store),
             }
         )
     layers.append({"name": "stores", "features": store_features})

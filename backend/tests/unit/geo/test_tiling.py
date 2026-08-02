@@ -1,5 +1,6 @@
 """벡터 타일용 좌표 변환/레이어 구성 단위 테스트."""
 
+import mapbox_vector_tile
 import pytest
 
 from app.geo.georeference import GeoTransform
@@ -116,6 +117,94 @@ def test_타일_밖의_매장은_제외된다():
     ids = {feature["properties"]["id"] for feature in store_layer["features"]}
 
     assert ids == {"near"}
+
+
+def _store_with_category(
+    store_id: str,
+    category: str | None,
+    subcategory: str | None,
+) -> Store:
+    return Store(
+        id=store_id,
+        floor_id="f1",
+        name=f"매장 {store_id}",
+        category=category,
+        subcategory=subcategory,
+        centroid_x_m=0.1,
+        centroid_y_m=0.1,
+        polygon=[
+            {"x": 0.1, "y": 0.1},
+            {"x": 0.2, "y": 0.1},
+            {"x": 0.2, "y": 0.2},
+        ],
+    )
+
+
+def _store_properties_by_id(stores: list[Store]) -> dict[str, dict]:
+    layers = build_floor_tile_layers(
+        _building(),
+        stores=stores,
+        pois=[],
+        transform=IDENTITY_TRANSFORM,
+        bounds=tile_bounds(0, 0, 0),
+    )
+
+    store_layer = next(layer for layer in layers if layer["name"] == "stores")
+    return {feature["properties"]["id"]: feature["properties"] for feature in store_layer["features"]}
+
+
+# 클라이언트가 MapLibre setFilter로 카테고리 필터를 걸려면 두 값이 타일에 실려야 한다.
+def test_매장_feature에_category와_subcategory가_실린다():
+    properties = _store_properties_by_id([_store_with_category("s1", "패션", "여성복")])["s1"]
+
+    assert properties["category"] == "패션"
+    assert properties["subcategory"] == "여성복"
+
+
+# category/subcategory는 nullable이다. None이면 null을 싣는 게 아니라 키 자체를
+# 빼는 것이 계약이다 — MapLibre 필터에서 ['has', 'category']로 판정할 수 있다.
+@pytest.mark.parametrize(
+    ("category", "subcategory", "expected_keys"),
+    [
+        (None, None, set()),
+        ("패션", None, {"category"}),
+        (None, "여성복", {"subcategory"}),
+    ],
+)
+def test_category가_없으면_해당_키를_아예_넣지_않는다(category, subcategory, expected_keys):
+    properties = _store_properties_by_id([_store_with_category("s1", category, subcategory)])["s1"]
+
+    assert {"category", "subcategory"} & set(properties) == expected_keys
+    # 값이 없어도 나머지 property는 그대로 있어야 한다.
+    assert properties["kind"] == "store"
+
+
+# 위 계약이 실제 MVT 바이트까지 살아남는지 확인한다. 인코더에 None을 넘겨도 지금은
+# 조용히 키가 빠지지만, 그 동작에 기대지 않는다는 것이 이 테스트의 요지다.
+def test_category가_없는_매장도_예외없이_MVT로_인코딩된다():
+    bounds = tile_bounds(0, 0, 0)
+    layers = build_floor_tile_layers(
+        _building(),
+        stores=[
+            _store_with_category("s1", None, None),
+            _store_with_category("s2", "패션", "여성복"),
+        ],
+        pois=[],
+        transform=IDENTITY_TRANSFORM,
+        bounds=bounds,
+    )
+
+    encoded = mapbox_vector_tile.encode(
+        layers,
+        default_options={"quantize_bounds": (bounds.west, bounds.south, bounds.east, bounds.north)},
+    )
+    decoded = mapbox_vector_tile.decode(encoded)
+
+    properties = {feature["properties"]["id"]: feature["properties"] for feature in decoded["stores"]["features"]}
+    assert "category" not in properties["s1"]
+    assert "subcategory" not in properties["s1"]
+    assert properties["s2"]["category"] == "패션"
+    assert properties["s2"]["subcategory"] == "여성복"
 
 
 # POI 좌표도 동일한 변환을 거치는지 확인한다.
