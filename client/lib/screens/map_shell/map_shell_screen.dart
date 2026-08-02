@@ -903,9 +903,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
     ({String title, String subtitle})? placeInfo,
     bool routeVisible,
   ) {
-    // MapTopBar가 출발/도착 두 줄로 커지는 조건과 같은 값이어야 한다. 한쪽만
-    // 바뀌면 칩이 접히는 시점과 바가 커지는 시점이 어긋나 다시 겹친다.
-    final showRouteDraft = !_searchActive && _routeDraftDestination != null;
     return Scaffold(
       // 상단 검색창(MapTopBar)에 포커스가 들어가 소프트키보드가 올라올 때
       // Scaffold body가 리사이즈되면 그 안의 MapLibre PlatformView(지도)도
@@ -1067,10 +1064,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
                       ),
                     ),
                   )
-                // 길찾기 draft에서도 접는다. 칩은 "뭘 찾을까"를 고르는 탐색
-                // 도구인데, 도착지를 이미 정한 사용자에게는 쓸 일이 없으면서
-                // 두 줄로 커진 상단 바 바로 밑에서 자리만 차지한다.
-                else if (!showRouteDraft)
+                // 길찾기 draft에서는 **접지 않고 내려온다.** 상단 바가 출발/도착
+                // 두 줄로 커지면 이 Column이 그만큼 아래로 밀어 주므로 겹치지
+                // 않는다. 한때 접어 뒀지만, 도착지를 정한 뒤에도 "그럼 저긴
+                // 뭐였지" 하고 카테고리를 다시 훑는 흐름이 끊겼다.
+                else
                   Padding(
                     padding: const EdgeInsets.only(top: _overlayGap),
                     // 대분류 줄과 소분류 줄을 세로로 쌓는다. 두 줄을 하나의 가로
