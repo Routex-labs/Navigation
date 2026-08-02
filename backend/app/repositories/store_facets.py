@@ -46,7 +46,8 @@ intents 스키마는 **소분류 규칙 객체 + 예외 매장 id**로 확정했
 - 규칙이 잘못 끌어온 매장은 `excluded_store_ids`로 뺀다.
 
 `rules`를 `{"subcategory": [...]}`처럼 **필드 이름을 적는 객체**로 둔 이유: `식사`는
-`category=식음료`(138건)가 아니라 `subcategory=레스토랑`(57건)을 기준으로 한다는 결정이
+먹거리 전체(옛 대분류 `식음료` 138건 — 지금은 음식점·카페·식품관으로 나뉘어 있다)가
+아니라 `subcategory=레스토랑`(57건)을 기준으로 한다는 결정이
 설계의 핵심인데(전자로 하면 "밥집" 질의에 야채·정육·수산이 섞인다), 규칙을 소분류
 문자열 배열로만 두면 그 "어느 필드를 보는지"가 코드에 숨는다. 파일에 필드 이름을 적으면
 리뷰어가 파일만 보고 판단할 수 있다. JSON은 주석을 못 달기 때문에 이 근거는 여기 남긴다.
@@ -91,7 +92,7 @@ def derive_facets(category: str | None, subcategory: str | None) -> dict[str, li
     """소분류에서 결정적으로 유도되는 facet. 없으면 빈 dict.
 
     `category`는 지금은 쓰지 않지만 시그니처에 남겨 둔다 — Wave 2에서 cuisines
-    (category=식음료 하위) 같은 축이 추가되면 대분류 조건이 필요해진다.
+    (category=음식점 하위) 같은 축이 추가되면 대분류 조건이 필요해진다.
     """
     del category  # 현재는 subcategory만으로 충분하다(Phase 1 = styles 하나).
     if subcategory in _SUBCATEGORY_TO_STYLES:

@@ -49,20 +49,27 @@ def test_매장_입구는_실존하는_노드를_가리킨다(real_db_session):
     assert dangling == []
 
 
-# 다베오 원본은 식음료 매장도 "시설 속성"(OB-RESTAURANT/OB-CAFE)으로 태깅하는 탓에
+# 다베오 원본은 먹거리 매장도 "시설 속성"(OB-RESTAURANT/OB-CAFE)으로 태깅하는 탓에
 # 변환기가 전부 편의시설로 뭉갤 수 있다. 층·소분류가 서로 다른 대표 매장 몇 곳만
-# 골라 대분류가 식음료로 유지되는지 확인한다. 개수는 데이터 편집마다 바뀌므로
-# 단언하지 않고, 소분류도 재조정 여지가 있어 대분류만 고정한다.
+# 골라 대분류가 먹거리 계열로 유지되는지 확인한다. 개수는 데이터 편집마다 바뀌므로
+# 단언하지 않고, 소분류도 재조정 여지가 있어 대분류 집합만 고정한다.
+#
+# 대분류 하나(옛 `식음료`)로 고정하지 않는 이유: 유통업계 용어라 사용자가 쓰지 않아
+# 음식점·카페·식품관 셋으로 나눴다. 이 테스트가 막으려는 실패는 "먹거리 매장이
+# 편의시설로 뭉개지는 것"이므로 셋 중 하나면 통과다.
+_FOOD_CATEGORIES = {"음식점", "카페", "식품관"}
+
+
 @pytest.mark.parametrize(
     "store_name",
     ["스타벅스 리저브", "런던베이글 뮤지엄", "파이브 가이즈", "정돈 프리미엄", "카페 H"],
 )
-def test_대표_식음료_매장은_편의시설로_분류되지_않는다(real_db_session, store_name):
+def test_대표_먹거리_매장은_편의시설로_분류되지_않는다(real_db_session, store_name):
     stores = real_db_session.scalars(select(Store).where(Store.name == store_name)).all()
 
     assert stores, f"{store_name!r}가 실데이터에 없다"
     for store in stores:
-        assert store.category == "식음료", f"{store_name} -> {store.category}"
+        assert store.category in _FOOD_CATEGORIES, f"{store_name} -> {store.category}"
 
 
 # 층을 잇는 수직 전이 간선이 생성되고, 서로 다른 층을 잇는지 확인한다.
@@ -274,7 +281,7 @@ def test_커피_질의가_카페_매장들을_후보로_준다(real_db_session):
     ]
 
 
-# 지하철 출입구는 소분류가 교통/facility로 갈려 있어 라벨만으로는 한쪽이 누락됐다.
+# 지하철 출입구는 소분류가 교통/생활편의로 갈려 있어 라벨만으로는 한쪽이 누락됐다.
 def test_출구_질의가_지하철_출입구까지_포함한다(real_db_session):
     discovery = query_search.discover(real_db_session, REAL_BUILDING_ID, "출구")
 

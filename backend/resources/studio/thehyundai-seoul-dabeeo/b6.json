@@ -10351,7 +10351,7 @@
       "id": "PO-V3nEODRQb3938",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 102.761559,
@@ -10362,7 +10362,7 @@
       "id": "PO-mcMqfw5X60450",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 167.653961,
@@ -10373,7 +10373,7 @@
       "id": "PO-_aFkHk1Z75010",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 221.846599,
@@ -10384,7 +10384,7 @@
       "id": "PO-6iRDKlGnv5442",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 109.306519,
@@ -10406,7 +10406,7 @@
       "id": "PO-KjH4SbYWi7614",
       "name": "화장실",
       "category": "편의시설",
-      "subcategory": "restroom",
+      "subcategory": "화장실",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 167.066667,
@@ -10417,7 +10417,7 @@
       "id": "PO-WE3CQZK3p-0999",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 220.869686,
@@ -10428,7 +10428,7 @@
       "id": "PO-m5RhUDpubM7503",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 112.333403,
@@ -10439,7 +10439,7 @@
       "id": "PO-Te-nVsjgY7049",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 220.871173,

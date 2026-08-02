@@ -292,7 +292,7 @@
   "PO-0d_J1ehum94259": {
     "name": "정수기",
     "category": "편의시설",
-    "subcategory": "facility"
+    "subcategory": "생활편의"
   },
   "PO-nwmgi9vgb5269": {
     "name": "페라가모",
@@ -306,27 +306,27 @@
   },
   "PO-Azlfnmzx76821": {
     "name": "맥코이",
-    "category": "식음료",
+    "category": "카페",
     "subcategory": "카페·베이커리"
   },
   "PO-bawy_CfOO1219": {
     "name": "베르그",
-    "category": "식음료",
+    "category": "카페",
     "subcategory": "카페·베이커리"
   },
   "PO-MLIPLJflI7169": {
     "name": "코코밥",
-    "category": "식음료",
+    "category": "카페",
     "subcategory": "카페·베이커리"
   },
   "PO-tEX9PFDuM0831": {
     "name": "이모야킨지로",
-    "category": "식음료",
+    "category": "카페",
     "subcategory": "카페·베이커리"
   },
   "PO-yjdp4u_E24495": {
     "name": "하네단",
-    "category": "식음료",
+    "category": "카페",
     "subcategory": "카페·베이커리"
   }
 }
