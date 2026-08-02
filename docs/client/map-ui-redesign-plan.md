@@ -442,24 +442,31 @@ casing이 안 보이는 것과 정확히 같은 실수를 마커에서 반복하
 
 ![매장 라벨 변경 전후](images/05-store-labels.svg)
 
-### ⚠️ 차단 요인 — 백엔드 선행 작업이 필수다
+### ✅ 차단 요인 해소 — 백엔드 선행 작업은 끝났다
 
-`backend/app/geo/tiling.py`의 stores 레이어 properties:
+`backend/app/geo/tiling.py`의 stores 레이어 properties에 `category`·`subcategory`가
+실린다(카테고리 필터 작업에서 함께 처리). MapLibre가 `['get', 'category']`로 색·아이콘을
+고를 수 있으므로 이제 클라이언트 스타일링만으로 가능하다.
 
-```python
-"properties": {"id": store.id, "name": store.name, "kind": "store"}
-```
+**6a. 백엔드 (선행) — 완료**
+- ~~`tiling.py` stores properties에 `category`·`subcategory` 추가~~ → 값이 `None`이면
+  키를 아예 넣지 않는다. 인코더(`mapbox_vector_tile`)가 `None`을 조용히 버리는 동작에
+  기대지 않고 계약을 호출부에 둔 것이라, `['has', 'category']`로 판정할 수 있다.
+- ~~`tile_cache` 무효화~~ → **추가 조치가 필요 없다.** 캐시는 프로세스 메모리라 배포 시
+  재시작으로 비워진다. 다만 응답의 `Cache-Control: max-age=60` 때문에 배포 직후 최대
+  60초간 클라이언트가 옛 타일을 들고 있을 수 있다(자연 만료로 자가 치유).
+- 타일 크기는 층별로 +7.4~9.4%(최대 +1.1KB) 늘었지만, 같은 작업에서 응답 gzip을 켜
+  **전체적으로는 오히려 절반이 됐다**(실측 48% 절감).
 
-**`category`가 실려 있지 않다.** MapLibre가 `['get', 'category']`로 색·아이콘을
-고를 수 없으므로 **클라이언트 스타일링만으로는 불가능하다.**
+**6b. 클라이언트가 참고할 것 — 대분류 어휘가 바뀌었다**
 
-**6a. 백엔드 (선행)**
-- `tiling.py` stores properties에 `category`·`subcategory` 추가
-- `tile_cache` 무효화 — 캐시된 타일에는 새 속성이 없다
+`_colorByCategory` 7종을 재사용하라고 아래에 적혀 있는데, 그 사이 대분류가 **9종**이
+됐다. `식음료`가 사용자 말이 아니어서 **음식점·카페·식품관**으로 나뉘었고, 편의시설
+소분류의 영어 원본값(`restroom`·`facility` 등)도 한글로 옮겼다. 색은
+`client/lib/widgets/category_icon.dart`가 계속 단일 출처다.
 
-**6b. 클라이언트**
 - 카테고리 아이콘 심볼 레이어 추가 (기존 시설 아이콘과 같은 `addImage` 패턴 재사용)
-- 라벨 `textColor`를 카테고리 색으로 (`_colorByCategory` 7종 재사용)
+- 라벨 `textColor`를 카테고리 색으로 (`_colorByCategory` **9종** 재사용)
 - 중요 매장은 Bold (1번의 선행 조건)
 
 ### 위험 — 라벨 폭주
@@ -472,12 +479,12 @@ casing이 안 보이는 것과 정확히 같은 실수를 마커에서 반복하
 
 ### 검증 기준
 
-- [ ] 타일 응답에 `category`가 실림 (`/buildings/.../tiles/{z}/{x}/{y}.mvt` 디코드 확인)
-- [ ] 캐시를 비운 뒤 새 타일이 나감
+- [x] 타일 응답에 `category`가 실림 (`/buildings/.../tiles/{z}/{x}/{y}.mvt` 디코드 확인)
+- [x] ~~캐시를 비운 뒤 새 타일이 나감~~ → 배포 재시작이 캐시를 비운다(위 6a)
 - [ ] z17 줌아웃에서 라벨이 겹치지 않음
 - [ ] z20에서 매장 대부분이 라벨을 가짐
 - [ ] 카테고리가 없는 매장(서버가 새 카테고리 추가 시)이 기본 색으로 폴백
-- [ ] 카테고리 색 7종이 배경(3번에서 바뀐 값) 위에서 모두 판독 가능
+- [ ] 카테고리 색 **9종**이 배경(2번에서 바뀐 값) 위에서 모두 판독 가능
 
 ---
 
