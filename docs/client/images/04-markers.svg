@@ -2,7 +2,7 @@
   <rect width="840" height="360" fill="#ffffff"/>
 
   <!-- ===== 4-a 도착 핀 ===== -->
-  <text x="24" y="28" font-size="13" font-weight="700" fill="#57606A">4-a. 도착 핀 — 빨간 원 + 흰 글씨 + 흰 아웃라인</text>
+  <text x="24" y="28" font-size="13" font-weight="700" fill="#57606A">4-a. 도착 핀 — 빨강 채움 + 흰 글씨 + 진한 빨강 아웃라인</text>
 
   <g transform="translate(24 44)">
     <rect x="0" y="0" width="404" height="152" rx="12" fill="#F6F8FA" stroke="#E1E4E8"/>
@@ -32,15 +32,15 @@
     <text x="330" y="26" font-size="10.5" font-weight="700" fill="#1A7F37" text-anchor="middle">변경 후</text>
     <g transform="translate(330 64)">
       <path d="M0 50 C -5 34 -19 20 -22.4 8.6 A24 24 0 1 1 22.4 8.6 C 19 20 5 34 0 50 Z"
-            fill="#E53935" stroke="#FFFFFF" stroke-width="3" stroke-linejoin="round"/>
+            fill="#E53935" stroke="#A81B18" stroke-width="2" stroke-linejoin="round"/>
       <text x="0" y="4" font-size="14" font-weight="800" fill="#FFFFFF" text-anchor="middle">도착</text>
     </g>
-    <text x="330" y="132" font-size="9.5" fill="#1A7F37" text-anchor="middle">빨강 채움 · 흰 글씨 · 흰 아웃라인</text>
+    <text x="330" y="132" font-size="9.5" fill="#1A7F37" text-anchor="middle">빨강 채움 · 흰 글씨 · 진한 테두리</text>
   </g>
 
-  <text x="24" y="216" font-size="10.5" fill="#57606A">네이버·카카오 모두 같은 규칙이다 — 바탕은 빨강으로 채우고,</text>
-  <text x="24" y="234" font-size="10.5" fill="#57606A">글씨는 흰색으로 안에 넣고, 실루엣 전체에 흰 아웃라인을 두른다.</text>
-  <text x="24" y="252" font-size="10.5" fill="#57606A">흰 배경 도면 위에서 마커 경계를 살리는 건 이 아웃라인이다.</text>
+  <text x="24" y="216" font-size="10.5" fill="#57606A">네이버·카카오 모두 같은 규칙이다 — 바탕은 빨강으로 채우고, 글씨는</text>
+  <text x="24" y="234" font-size="10.5" fill="#57606A">흰색으로 안에 넣고, 실루엣 전체에 한 톤 진한 빨강 테두리를 두른다.</text>
+  <text x="24" y="252" font-size="10.5" fill="#57606A">흰색 테두리는 쓰지 않는다 — 흰 도면 위에서는 경계가 사라진다.</text>
 
   <!-- ===== 4-c 시설 라벨 ===== -->
   <text x="456" y="28" font-size="13" font-weight="700" fill="#57606A">4-c. 시설물 텍스트 라벨 제거</text>
