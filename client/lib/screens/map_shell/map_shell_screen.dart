@@ -924,6 +924,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
             bottom: MediaQuery.viewInsetsOf(context).bottom,
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              // 예전 Positioned가 left·right로 강제하던 폭을 대신한다. 기본값
+              // (center)이면 자식이 제 내용 너비로 줄어들어, 검색 패널이 결과
+              // 개수에 따라 폭이 들쭉날쭉해진다.
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 MapTopBar(
                   key: _topBarKey,
