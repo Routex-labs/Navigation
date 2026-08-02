@@ -61,9 +61,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 실내·야외 지도에 같은 값을 내려 두 화면의 강조가 어긋나지 않게 한다.
   CategorySelection? _categorySelection;
 
-  /// 지금 보고 있는 층 라벨. 실내·야외 지도가 onFloorChanged로 알려준다.
+  /// 지금 보고 있는 층 라벨. 실내 지도가 onFloorChanged로 알려준다.
   /// [_activeIndoorFloor] getter와 값은 같지만, 이쪽은 **바뀔 때 rebuild가
   /// 도는** 상태다 — getter만 읽으면 층을 바꿔도 "이 층 N곳"이 옛 층에 머문다.
+  ///
+  /// 야외 지도는 알려주지 않는다. 카테고리 필터가 실내 전용이라 야외에서는
+  /// 이 값을 쓸 곳이 없다.
   String? _activeFloorLabel;
 
   /// 건물 전 층의 매장 (층·대분류·소분류) 목록. pill 목록과 개수 안내가 같은
@@ -915,8 +918,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
                 },
                 onStoreTap: _onMapStoreTap,
                 onLocationAnchored: _onLocationAnchored,
-                categorySelection: _categorySelection,
-                onFloorChanged: _onActiveFloorChanged,
                 // 실내 화면과 같은 목록을 넘긴다. 야외 지도도 실내 진입
                 // 오버레이가 켜지면 층 선택기·위치 지정을 함께 쓰므로, 상단
                 // 검색창이나 하단 바를 누른 탭이 지도 탭으로 새어들어가면

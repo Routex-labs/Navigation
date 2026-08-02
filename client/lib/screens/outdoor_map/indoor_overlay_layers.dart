@@ -32,7 +32,6 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import '../../core/map_fonts.dart';
 import '../../core/map_palette.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/category_map_filter.dart';
 import '../../widgets/floor_facility_style.dart';
 import 'indoor_entry_zoom.dart';
 
@@ -103,19 +102,6 @@ FillLayerProperties indoorStoresFillProps(List<Object> fadeExpr) =>
     FillLayerProperties(
       fillColor: mapStoreFill,
       fillOutlineColor: mapStoreOutline,
-      fillOpacity: fadeExpr,
-    );
-
-/// 카테고리 필터로 강조된 매장 fill. 색은 실내 화면과 같은 상수를 쓴다
-/// (`category_map_filter.dart`) — 두 화면에서 같은 선택이 다른 색으로 보이면
-/// 사용자는 다른 기능으로 읽는다.
-///
-/// opacity를 [fadeExpr]로 묶어 다른 실내 오버레이 레이어와 함께 페이드인된다.
-/// 그러지 않으면 야외로 축소하는 동안 도면은 사라졌는데 강조색만 남는다.
-FillLayerProperties indoorCategoryHighlightProps(List<Object> fadeExpr) =>
-    FillLayerProperties(
-      fillColor: kCategoryHighlightFillColor,
-      fillOutlineColor: kCategoryHighlightOutlineColor,
       fillOpacity: fadeExpr,
     );
 
