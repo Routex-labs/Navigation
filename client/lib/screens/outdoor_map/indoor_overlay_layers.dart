@@ -30,6 +30,7 @@ import 'package:flutter/painting.dart' show Color;
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../core/map_fonts.dart';
+import '../../core/map_palette.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/floor_facility_style.dart';
 import 'indoor_entry_zoom.dart';
@@ -87,15 +88,15 @@ FillLayerProperties dimScrimProps(Object fillOpacity) =>
 
 FillLayerProperties indoorFootprintProps(List<Object> fadeExpr) =>
     FillLayerProperties(
-      fillColor: '#FFFFFF',
-      fillOutlineColor: '#00000088',
+      fillColor: mapFootprintFill,
+      fillOutlineColor: mapFootprintOutline,
       fillOpacity: fadeExpr,
     );
 
 FillLayerProperties indoorStoresFillProps(List<Object> fadeExpr) =>
     FillLayerProperties(
-      fillColor: '#F3F1EF',
-      fillOutlineColor: '#D8D4D1',
+      fillColor: mapStoreFill,
+      fillOutlineColor: mapStoreOutline,
       fillOpacity: fadeExpr,
     );
 

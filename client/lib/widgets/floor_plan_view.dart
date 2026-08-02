@@ -11,6 +11,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../core/api_config.dart';
 import '../core/map_fonts.dart';
+import '../core/map_palette.dart';
 import '../features/debug_mode/debug_map_overlay.dart';
 import '../models/floor_plan.dart';
 import '../screens/outdoor_map/indoor_entry_zoom.dart';
@@ -104,7 +105,7 @@ const _currentLocationIconSize = 1.0 / _currentLocationIconPixelRatio;
 const _currentLocationCoreRadius = 16.0;
 
 /// 코어를 감싸는 흰 링의 반지름. 코어보다 5px 두껍게 잡아, 도면 바닥(#FFFFFF)
-/// 에서는 묻히더라도 매장 fill(#F3F1EF)이나 경로선 위에서는 코어가 배경과
+/// 에서는 묻히더라도 매장 fill([mapStoreFill])이나 경로선 위에서는 코어가 배경과
 /// 분리돼 보이게 한다.
 const _currentLocationRimRadius = _currentLocationCoreRadius + 5;
 
@@ -572,13 +573,16 @@ class FloorPlanViewState extends State<FloorPlanView> {
       ),
     );
 
-    // 원본 SVG 디자인(hyundai_floor_map_corrected_v6.svg)의 색상을 그대로 옮긴다.
+    // 도면 폴리곤 색은 [map_palette.dart]가 갖는다 — 야외 오버레이가 같은 도면을
+    // 그려서 두 곳이 어긋나면 층을 오갈 때 색이 바뀌어 보인다. 원본 SVG
+    // (hyundai_floor_map_corrected_v6.svg)에서 옮겨온 값이었으나 통로와 대비가
+    // 없어 지금은 의도적으로 다르다(사유는 map_palette.dart).
     await controller.addFillLayer(
       _tileSourceId,
       'floor-footprint-fill',
       const FillLayerProperties(
-        fillColor: '#FFFFFF',
-        fillOutlineColor: '#00000088',
+        fillColor: mapFootprintFill,
+        fillOutlineColor: mapFootprintOutline,
       ),
       sourceLayer: 'footprint',
       enableInteraction: false,
@@ -587,8 +591,8 @@ class FloorPlanViewState extends State<FloorPlanView> {
       _tileSourceId,
       _storesFillLayerId,
       const FillLayerProperties(
-        fillColor: '#F3F1EF',
-        fillOutlineColor: '#D8D4D1',
+        fillColor: mapStoreFill,
+        fillOutlineColor: mapStoreOutline,
       ),
       sourceLayer: 'stores',
     );
