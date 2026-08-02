@@ -531,7 +531,7 @@ void main() {
             DiscoveryMatch(
               storeId: 'ST-DOJO',
               name: '도조 커피',
-              category: '식음료',
+              category: '카페',
               subcategory: '카페·베이커리',
               floorId: 'FL-B1',
               floorName: 'B1',

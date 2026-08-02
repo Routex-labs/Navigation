@@ -69,13 +69,13 @@ void main() {
     test('정렬은 원본값이 아니라 표시 label 기준이다', () {
       final options = subcategoryOptionsFor('편의시설', [
         store('편의시설', 'restroom'), // 화장실
-        store('편의시설', 'facility'), // 편의시설
+        store('편의시설', 'facility'), // 생활편의
         store('편의시설', '락커'),
       ]);
 
       // 원본값 순이면 facility·restroom·락커지만, label 가나다 순은
-      // 락커 → 편의시설 → 화장실이다.
-      expect(options.map((o) => o.label), ['락커', '편의시설', '화장실']);
+      // 락커 → 생활편의 → 화장실이다.
+      expect(options.map((o) => o.label), ['락커', '생활편의', '화장실']);
     });
 
     test('전체 옵션은 붙이지 않는다', () {

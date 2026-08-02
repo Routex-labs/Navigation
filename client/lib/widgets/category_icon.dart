@@ -5,10 +5,19 @@ import '../theme/app_theme.dart';
 /// 카테고리 대분류 이름에 대응하는 아이콘·색상·표시 라벨. chip과 시트 헤더가
 /// 같은 시각 정체성을 갖도록 여러 곳에서 공유한다. 예상치 못한 카테고리는
 /// 상점 기본 아이콘과 앱 primary 색으로 폴백한다.
+/// 대분류 아이콘.
+///
+/// `식음료`는 **유통업계 용어라 사용자가 쓰는 말이 아니어서** 음식점·카페·식품관
+/// 셋으로 나눴다(네이버지도도 음식점과 카페를 따로 둔다). 옛 이름을 지우지 않고
+/// 남겨 두는 이유는 배포 시차다 — 클라이언트가 먼저 올라가고 백엔드 시드가
+/// 아직 옛 어휘를 주는 동안, 지우면 그 매장들이 회색 storefront로 떨어진다.
 const _iconByCategory = <String, IconData>{
   '패션': Icons.checkroom,
   '편의시설': Icons.info_outline,
-  '식음료': Icons.restaurant,
+  '음식점': Icons.restaurant,
+  '카페': Icons.local_cafe_outlined,
+  '식품관': Icons.local_grocery_store_outlined,
+  '식음료': Icons.restaurant, // 구 어휘 — 위 주석 참고
   '리빙': Icons.weekend_outlined,
   '서비스': Icons.support_agent,
   '키즈': Icons.child_care,
@@ -18,7 +27,12 @@ const _iconByCategory = <String, IconData>{
 const _colorByCategory = <String, Color>{
   '패션': Color(0xFF7E57C2),
   '편의시설': Color(0xFF607D8B),
-  '식음료': Color(0xFFF57C00),
+  // 음식점·카페·식품관은 한 갈래에서 나뉜 만큼 서로 붙어 있으면 구분이 안 된다.
+  // 주황(음식) → 갈색(커피) → 초록(식재료)으로 연상이 다른 색을 골랐다.
+  '음식점': Color(0xFFF57C00),
+  '카페': Color(0xFF8D6E63),
+  '식품관': Color(0xFF43A047),
+  '식음료': Color(0xFFF57C00), // 구 어휘 — 위 주석 참고
   '리빙': Color(0xFF00897B),
   '서비스': Color(0xFF3F51B5),
   '키즈': Color(0xFFEC407A),
@@ -47,11 +61,16 @@ Color categoryColorFor(String category) =>
 IconData storeIconFor({String? name, String? subcategory, String? category}) {
   final sub = subcategory?.toLowerCase();
   switch (sub) {
+    // 영어 원본값은 이제 시드에서 한글로 들어오지만, 배포 시차 동안 옛 타일·
+    // 옛 응답이 영어를 줄 수 있어 양쪽을 모두 받는다.
     case 'restroom':
+    case '화장실':
       return Icons.wc;
     case 'elevator':
+    case '엘리베이터':
       return Icons.elevator;
     case 'escalator':
+    case '에스컬레이터':
       return Icons.escalator;
     case 'cafe':
     case '카페·베이커리':
@@ -82,14 +101,20 @@ IconData storeIconFor({String? name, String? subcategory, String? category}) {
 
 /// 사용자에게 보여 줄 subcategory 문구.
 ///
-/// Studio 원본을 그대로 쓰는 시설물은 subcategory가 `restroom`·`facility` 같은
-/// 영어 열거값이라 화면에 그대로 나가면 안 된다(화장실 27곳, 편의시설 52곳).
-/// 매핑에 없는 값은 이미 한글 오버라이드를 거친 값이므로 그대로 돌려준다.
+/// **이 매핑은 이제 안전망이다.** 예전에는 Studio 원본의 영어 열거값
+/// (`restroom`·`facility` 등)이 그대로 DB에 들어와 화면 직전에 여기서 한글로
+/// 바꿔야 했지만, 지금은 시드가 한글로 적재한다. 그래도 지우지 않는 이유는
+/// 배포 시차와 캐시다 — 클라이언트가 먼저 올라가거나 옛 타일이 남아 있는 동안
+/// 영어값이 들어오면, 매핑이 없으면 화면에 영어가 그대로 샌다.
+///
+/// 매핑에 없는 값은 이미 한글이므로 그대로 돌려준다.
 const _subcategoryLabels = <String, String>{
   'restroom': '화장실',
   'elevator': '엘리베이터',
   'escalator': '에스컬레이터',
-  'facility': '편의시설',
+  // 새 시드는 `생활편의`로 적재한다. 대분류(편의시설)와 같은 이름을 쓰면
+  // "편의시설 > 편의시설"이 되어 읽히지 않기 때문이다. 옛 값만 여기서 받는다.
+  'facility': '생활편의',
   'cafe': '카페·베이커리',
   'restaurant': '레스토랑',
 };
