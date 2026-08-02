@@ -28,6 +28,7 @@ import '../../models/floor_plan.dart';
 import '../../models/indoor_route.dart';
 import '../../models/poi_search_result.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/category_map_filter.dart';
 import '../../widgets/eta_card.dart';
 import '../../widgets/floor_plan_view.dart';
 import '../../widgets/floor_selector.dart';
@@ -92,9 +93,21 @@ class IndoorMapBody extends StatefulWidget {
     this.onPlacingLocationChanged,
     this.onLocationAnchored,
     this.outerOverlayKeys = const [],
+    this.categorySelection,
+    this.onFloorChanged,
   });
 
+  /// 보고 있는 층이 바뀔 때 호출된다(최초 로드 포함). 상위(MapShellScreen)가
+  /// 카테고리 필터의 "이 층 N곳" 안내를 이 신호로 다시 계산한다 — getter로만
+  /// 읽으면 층이 바뀌어도 상위가 다시 그리지 않아 개수가 옛 층에 머문다.
+  final ValueChanged<String?>? onFloorChanged;
+
   final String buildingId;
+
+  /// 지도 위 카테고리 필터 pill에서 고른 카테고리. 상위(MapShellScreen)가
+  /// 소유하고 실내·야외 양쪽에 같은 값을 내려, 두 화면의 강조가 어긋나지
+  /// 않게 한다. null이면 강조하지 않는다.
+  final CategorySelection? categorySelection;
 
   /// ETA 카드가 화면 최하단에 새로 나타나거나 사라질 때 호출된다.
   /// 상위(MapShellScreen)가 이 값으로 하단 공용 바를 그 위로 띄운다.
@@ -441,6 +454,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         _selectedFloor = selectedFloor;
         _loading = false;
       });
+      widget.onFloorChanged?.call(selectedFloor);
       if (selectedFloor != null) await _loadFloorPlan(selectedFloor);
     } catch (_) {
       if (!mounted) return;
@@ -587,6 +601,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     if (hadRouteVisible != _hasActiveRoute) {
       widget.onRouteVisibleChanged?.call(_hasActiveRoute);
     }
+    widget.onFloorChanged?.call(floor);
     // 세그먼트를 갈아탔으면 판정 기준 간선 집합도 바뀐다.
     if (multiRoute != null && nextSegmentRoute != null) {
       _recordRouteContext(nextSegmentRoute, isMultiFloor: true);
@@ -2696,6 +2711,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           },
           interactive: _interactive,
           highlightedStoreId: _highlightedStoreId,
+          categorySelection: widget.categorySelection,
           visibleInsets: EdgeInsets.fromLTRB(0, topOverlay, 0, bottomOverlay),
           overlayHitTest: _isTapOnMapOverlay,
         ),

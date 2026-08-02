@@ -17,6 +17,7 @@ import 'destination_pin.dart';
 import '../features/debug_mode/debug_map_overlay.dart';
 import '../models/floor_plan.dart';
 import '../screens/outdoor_map/indoor_entry_zoom.dart';
+import 'category_map_filter.dart';
 import 'floor_facility_style.dart';
 
 /// maplibre_gl은 web/android/iOS만 지원한다(패키지 자체 pubspec에 명시된
@@ -52,6 +53,7 @@ const _debugGraphSourceId = 'floor-debug-graph';
 const _markersSourceId = 'floor-markers';
 const _highlightSourceId = 'floor-highlight';
 const _storesFillLayerId = 'floor-stores-fill';
+const _categoryHighlightFillLayerId = 'floor-category-highlight-fill';
 const _verticalTransportFillLayerId = 'floor-vertical-transport-fill';
 
 /// 목적지 핀 이미지의 addImage 등록 이름.
@@ -233,6 +235,7 @@ class FloorPlanView extends StatefulWidget {
     this.debugMapOverlay = const DebugMapOverlay(),
     this.interactive = true,
     this.highlightedStoreId,
+    this.categorySelection,
     this.visibleInsets = EdgeInsets.zero,
     this.overlayHitTest,
     this.onCameraBearingChanged,
@@ -254,6 +257,11 @@ class FloorPlanView extends StatefulWidget {
 
   /// 선택된(또는 포커스된) 매장의 [StorePolygon.id]. null이면 강조 표시가 없다.
   final String? highlightedStoreId;
+
+  /// 지도 위 카테고리 필터 pill에서 고른 카테고리. null이면 강조하지 않는다.
+  /// 층이 바뀌어도 상위(MapShellScreen)가 같은 값을 계속 내려주므로 선택은
+  /// 층 전환을 넘어 유지된다.
+  final CategorySelection? categorySelection;
 
   /// 지도 위에 얹은 Flutter 오버레이(층 selector 같은)가 자기 영역을 알려주는
   /// 콜백. 인자는 화면 전역 좌표. true 반환 시 그 좌표의 탭은 매장 선택으로
@@ -560,6 +568,33 @@ class FloorPlanViewState extends State<FloorPlanView> {
     if (oldWidget.highlightedStoreId != widget.highlightedStoreId) {
       _updateHighlightSource();
     }
+    if (oldWidget.categorySelection != widget.categorySelection) {
+      _applyCategoryFilter();
+    }
+  }
+
+  /// 지금 선택에 해당하는 MapLibre 필터 표현식. 선택이 없으면 아무것도 맞지
+  /// 않는 필터를 돌려준다 — 레이어 추가 시점과 갱신 시점이 같은 함수를 쓰게
+  /// 해서, 한쪽만 고쳐 어긋나는 일을 막는다(indoor_overlay_layers.dart의
+  /// "등록과 갱신이 같은 함수를 쓴다" 규칙과 같은 이유).
+  List<Object> _categoryFilterExpression() {
+    final selection = widget.categorySelection;
+    if (selection == null) return kCategoryHighlightNoneFilter;
+    return categoryHighlightFilter(selection);
+  }
+
+  /// 강조 레이어의 필터만 갈아 끼운다.
+  ///
+  /// `setLayerProperties`가 아니라 `setFilter`를 쓴다 — 전자는 넘기지 않은
+  /// 속성까지 null로 함께 보내 스펙 기본값(fill-color는 검정)으로 되돌리므로,
+  /// 실기기에서 지도가 검게 덮인다(indoor_overlay_layers.dart 상단 주석).
+  Future<void> _applyCategoryFilter() async {
+    final controller = _controller;
+    if (controller == null || !_styleReady) return;
+    await controller.setFilter(
+      _categoryHighlightFillLayerId,
+      _categoryFilterExpression(),
+    );
   }
 
   Future<void> _onStyleLoaded() async {
@@ -604,6 +639,30 @@ class FloorPlanViewState extends State<FloorPlanView> {
         fillOutlineColor: mapStoreOutline,
       ),
       sourceLayer: 'stores',
+    );
+    // 카테고리 필터 강조. 일반 매장 fill 바로 위에 얹어 선택한 카테고리의
+    // 매장만 파랗게 칠한다.
+    //
+    // **비매칭 매장을 숨기는 대신 매칭 매장을 강조하는 이유**는 도면 맥락이다.
+    // 매장을 걸러내면 층 도면이 텅 비어 사용자가 지금 어디를 보고 있는지 알 수
+    // 없고, 그 층에 해당 카테고리가 없으면 화면이 통째로 비어 앱이 깨진 것처럼
+    // 읽힌다. 강조 방식은 기본 레이어를 건드리지 않으므로 라벨만 남는 유령
+    // 매장도 생기지 않고, 필터를 끄면 원래 화면으로 정확히 돌아온다.
+    //
+    // 선택이 없을 때는 레이어를 지우지 않고 아무것도 맞지 않는 필터를 걸어 둔다
+    // (근거는 kCategoryHighlightNoneFilter 주석).
+    await controller.addFillLayer(
+      _tileSourceId,
+      _categoryHighlightFillLayerId,
+      const FillLayerProperties(
+        fillColor: kCategoryHighlightFillColor,
+        fillOutlineColor: kCategoryHighlightOutlineColor,
+      ),
+      sourceLayer: 'stores',
+      filter: _categoryFilterExpression(),
+      // 탭은 아래 일반 매장 fill이 받는다. 이 레이어까지 탭을 받으면 같은
+      // 폴리곤에 두 번 반응한다.
+      enableInteraction: false,
     );
     // 수직이동 구조물(에스컬레이터/엘리베이터) 전용 오버레이. 일반 매장 fill
     // 바로 위, 라벨/POI 아이콘보다 아래에 깔아서 초록 아이콘과 한 덩어리로
