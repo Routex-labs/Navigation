@@ -61,7 +61,7 @@ const kRouteTransferWidthExpr = [
 
 /// 진행 방향 화살표 비트맵의 addImage 등록 키. 디자인을 바꾸면 버전을 올린다 —
 /// 웹 addImage는 같은 이름이 이미 있으면 새 비트맵을 버린다.
-const kRouteArrowImageName = 'route-direction-arrow-v1';
+const kRouteArrowImageName = 'route-direction-arrow-v2';
 
 /// 화살표를 얹는 심볼 레이어 속성.
 ///
@@ -96,8 +96,9 @@ SymbolLayerProperties routeArrowProps() => const SymbolLayerProperties(
 /// 흰 chevron 비트맵. 글씨가 아니라 도형이라 캔버스에 구워도 안전하다
 /// (한글 글리프 문제는 텍스트에만 해당한다).
 ///
-/// 위를 향하도록 그린다 — `symbolPlacement: 'line'`이 선의 진행 방향에 맞춰
-/// 회전시키는데, MapLibre는 아이콘의 위쪽을 진행 방향으로 삼는다.
+/// **오른쪽을 향하도록** 그린다. `symbolPlacement: 'line'`은 아이콘의 +x축(오른쪽)
+/// 을 선의 진행 방향에 맞춰 회전시킨다 — 위를 향하게 그리면 90° 틀어져 보인다.
+/// Mapbox·MapLibre 기본 스타일의 일방통행 화살표가 모두 오른쪽을 보는 이유다.
 Future<Uint8List> renderRouteArrowIcon() async {
   const size = 48.0;
   final recorder = ui.PictureRecorder();
@@ -112,9 +113,9 @@ Future<Uint8List> renderRouteArrowIcon() async {
 
   canvas.drawPath(
     Path()
-      ..moveTo(12, 30)
-      ..lineTo(size / 2, 16)
-      ..lineTo(36, 30),
+      ..moveTo(18, 12)
+      ..lineTo(32, size / 2)
+      ..lineTo(18, 36),
     paint,
   );
 

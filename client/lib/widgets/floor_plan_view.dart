@@ -59,6 +59,11 @@ const _verticalTransportFillLayerId = 'floor-vertical-transport-fill';
 // 새 비트맵을 버려서, 이름을 그대로 두면 살아 있는 지도에 반영되지 않는다.
 const _destinationPinImageName = 'marker-destination-pin-v2';
 
+/// 도착 핀 iconSize의 zoom 보간 구간. textSize는 이 값을 [kPinIconToTextRatio]로
+/// 나눠 얻으므로, 여기를 바꾸면 글씨 크기도 함께 움직인다.
+const _destPinIconSizeZ16 = 0.115;
+const _destPinIconSizeZ20 = 0.25;
+
 /// 현재 위치 심볼의 addImage 등록 이름. **이름 끝에 코어 반지름을 박아 둔다.**
 ///
 /// maplibre_gl 웹 구현의 addImage는 같은 이름이 이미 등록돼 있으면 새 비트맵을
@@ -1072,22 +1077,24 @@ class FloorPlanViewState extends State<FloorPlanView> {
           ['linear'],
           ['zoom'],
           16,
-          0.115,
+          _destPinIconSizeZ16,
           20,
-          0.25,
+          _destPinIconSizeZ20,
         ],
         iconAnchor: 'bottom',
         iconAllowOverlap: true,
         iconIgnorePlacement: true,
         textField: '도착',
+        // 손으로 적지 않고 iconSize에서 나눈다 — 비율이 어긋나면 글씨가 머리
+        // 원을 벗어나고 textOffset도 같이 틀어진다.
         textSize: [
           'interpolate',
           ['linear'],
           ['zoom'],
           16,
-          3.5,
+          _destPinIconSizeZ16 / kPinIconToTextRatio,
           20,
-          7.5,
+          _destPinIconSizeZ20 / kPinIconToTextRatio,
         ],
         textColor: kPinTextColor,
         textAnchor: 'center',

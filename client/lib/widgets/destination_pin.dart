@@ -34,7 +34,12 @@ const kPinHeadCenterFromBottom = kPinCanvasHeight - kPinHeadCenterY;
 
 /// `iconSize / textSize` 비율. 두 값을 zoom 보간식으로 걸되 이 비율을 고정하면,
 /// 확대·축소해도 글씨가 머리 원 안 같은 자리에 남는다.
-const kPinIconToTextRatio = 0.033;
+///
+/// **이 값을 내리면 글씨가 커진다**(textSize = iconSize / 비율). 머리 지름은
+/// 캔버스 108px이므로 두 글자 "도착"의 폭은 대략 `2 × textSize`, 즉 지름의
+/// `2 × 비율 × (128/108)`쯤을 차지한다. 지금 값은 지름의 70% 언저리다 — 더
+/// 내리면 글씨가 원을 넘고, 올리면 핀 안에서 작아 보인다.
+const kPinIconToTextRatio = 0.026;
 
 /// 심볼 레이어에 줄 `textOffset`의 y값(단위: em).
 ///
