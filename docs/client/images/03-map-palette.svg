@@ -35,7 +35,7 @@
   <g transform="translate(436 60)">
     <text x="0" y="0" font-size="11.5" font-weight="700" fill="#1A7F37">변경 후 — 면은 그대로, 경계선으로 구분</text>
     <rect x="0" y="12" width="330" height="176" fill="#FFFFFF" stroke="#00000088"/>
-    <g fill="#F0EFF4" stroke="#A8A3BF" stroke-width="1.2">
+    <g fill="#F1EEEA" stroke="#A69C90" stroke-width="1.2">
       <rect x="16" y="28" width="86" height="52"/>
       <rect x="110" y="28" width="86" height="52"/>
       <rect x="204" y="28" width="110" height="52"/>
@@ -60,15 +60,15 @@
     <rect x="160" y="-12" width="16" height="16" fill="#F3F1EF" stroke="#D0D7DE"/>
     <text x="182" y="0" font-size="10.5" fill="#57606A">면 #F3F1EF</text>
     <text x="262" y="0" font-size="10.5" fill="#8C959F">→</text>
-    <rect x="278" y="-12" width="16" height="16" fill="#F0EFF4" stroke="#D0D7DE"/>
-    <text x="300" y="0" font-size="10.5" font-weight="700" fill="#1A7F37">#F0EFF4</text>
+    <rect x="278" y="-12" width="16" height="16" fill="#F1EEEA" stroke="#D0D7DE"/>
+    <text x="300" y="0" font-size="10.5" font-weight="700" fill="#1A7F37">#F1EEEA</text>
 
     <rect x="400" y="-12" width="16" height="16" fill="#D8D4D1" stroke="#D0D7DE"/>
     <text x="422" y="0" font-size="10.5" fill="#57606A">외곽선 #D8D4D1</text>
     <text x="512" y="0" font-size="10.5" fill="#8C959F">→</text>
-    <rect x="528" y="-12" width="16" height="16" fill="#A8A3BF" stroke="#D0D7DE"/>
-    <text x="550" y="0" font-size="10.5" font-weight="700" fill="#1A7F37">#A8A3BF</text>
+    <rect x="528" y="-12" width="16" height="16" fill="#A69C90" stroke="#D0D7DE"/>
+    <text x="550" y="0" font-size="10.5" font-weight="700" fill="#1A7F37">#A69C90</text>
   </g>
 
-  <text x="24" y="300" font-size="11" fill="#57606A">따뜻한 계열이라 무채색 선이 면에 묻혔다. 면·선을 같은 차가운 계열로 옮기면 면을 어둡히지 않아도 경계가 산다.</text>
+  <text x="24" y="300" font-size="11" fill="#57606A">레퍼런스의 방법(면 대신 선으로 구분)만 가져오고 색조는 따뜻한 계열로 둔다 — 베이스 지도(VWorld)가 따뜻해서다.</text>
 </svg>
