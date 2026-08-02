@@ -465,7 +465,12 @@ def test_배포된_intents_파일이_검수_범위를_유지한다():
 
     assert set(intents) == {"신발", "식사", "카페", "화장품", "향수", "의류", "출구"}
     assert intents["신발"]["rules"] == {"subcategory": ["슈즈"]}
-    assert intents["식사"]["rules"] == {"subcategory": ["레스토랑"]}
+    # 먹거리 intent는 소분류가 아니라 **대분류**를 본다. 대분류 재편으로
+    # category=음식점이 subcategory=레스토랑과 같은 집합이 됐고, 지도 필터 pill과
+    # 같은 축을 봐야 나중에 음식점 밑에 소분류가 늘어도 함께 따라온다.
+    # 근거는 store_facets.py 모듈 주석.
+    assert intents["식사"]["rules"] == {"category": ["음식점"]}
+    assert intents["카페"]["rules"] == {"category": ["카페"]}
     # P3 검수 결과 = 예 145건. 규칙이 잡는 슈즈 8건은 extra에 없어야 한다.
     assert len(intents["신발"]["extra_store_ids"]) == 145
     assert "extra_store_ids" not in intents["식사"]
