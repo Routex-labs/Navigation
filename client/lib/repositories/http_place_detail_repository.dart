@@ -10,7 +10,7 @@ import 'place_detail_repository.dart';
 /// 흡수한다. 상세가 부가 정보이므로 오류가 시트의 기본 길찾기를 막으면 안 된다.
 class HttpPlaceDetailRepository implements PlaceDetailRepository {
   HttpPlaceDetailRepository({http.Client? client})
-      : _client = client ?? http.Client();
+    : _client = client ?? http.Client();
 
   final http.Client _client;
 

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:navigation_client/models/category_count.dart';
 import 'package:navigation_client/core/service_locator.dart';
 import 'package:navigation_client/models/building.dart';
 import 'package:navigation_client/models/building_graph.dart';
@@ -37,13 +38,13 @@ void main() {
   const entrance = LatLng(37.5665, 126.9779);
 
   Map<String, dynamic> node(String id, double xM, double yM) => {
-        'id': id,
-        'type': 'corridor',
-        'x_m': xM,
-        'y_m': yM,
-        'lat': originLat + yM / metersPerDegreeLat,
-        'lng': originLng + xM / metersPerDegreeLng,
-      };
+    'id': id,
+    'type': 'corridor',
+    'x_m': xM,
+    'y_m': yM,
+    'lat': originLat + yM / metersPerDegreeLat,
+    'lng': originLng + xM / metersPerDegreeLng,
+  };
 
   // 입구는 층 로컬로 약 (17.6, 22.3)이라 n-a 바로 옆이다. 자동 앵커가 여기에
   // 찍히므로 PDR 위치도 입구 앞이 되고, 그래서 이탈 감시가 켜진다.
@@ -70,17 +71,17 @@ void main() {
   };
 
   Position fix(LatLng point, double accuracy) => Position(
-        latitude: point.latitude,
-        longitude: point.longitude,
-        timestamp: DateTime(2024, 1, 1),
-        accuracy: accuracy,
-        altitude: 0,
-        altitudeAccuracy: 0,
-        heading: 0,
-        headingAccuracy: 0,
-        speed: 0,
-        speedAccuracy: 0,
-      );
+    latitude: point.latitude,
+    longitude: point.longitude,
+    timestamp: DateTime(2024, 1, 1),
+    accuracy: accuracy,
+    altitude: 0,
+    altitudeAccuracy: 0,
+    heading: 0,
+    headingAccuracy: 0,
+    speed: 0,
+    speedAccuracy: 0,
+  );
 
   Future<void> drain(WidgetTester tester) async {
     for (var i = 0; i < 8; i++) {
@@ -146,9 +147,7 @@ void main() {
     await drain(tester);
   }
 
-  testWidgets('들어오자마자 돌아 나가도 앵커를 기다리지 않고 알아챈다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('들어오자마자 돌아 나가도 앵커를 기다리지 않고 알아챈다', (WidgetTester tester) async {
     // 진입 직후에는 앵커가 아직 없어 PDR이 위치를 말하지 못한다. 예전에는 그동안
     // GPS가 꺼져 있어서, 문을 통과했다 바로 돌아 나가는 사용자를 놓쳤다 —
     // 정작 가장 확인이 필요한 순간이다.
@@ -183,9 +182,7 @@ void main() {
     await drain(tester);
   });
 
-  testWidgets('입구 앞에서 신뢰 좌표가 잡히면 실내 도면을 접는다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('입구 앞에서 신뢰 좌표가 잡히면 실내 도면을 접는다', (WidgetTester tester) async {
     // 실내로 들어가면 구독이 끊기고 이탈 감시가 다시 붙으므로 broadcast여야 한다.
     final positions = StreamController<Position>.broadcast();
     await enterIndoorViaEntrance(tester, positions);
@@ -233,6 +230,11 @@ void main() {
 }
 
 class _GraphBuildingRepository implements BuildingRepository {
+  // 카테고리 pill은 이 테스트들의 관심사가 아니다. 빈 목록이면 pill 줄이 아예
+  // 뜨지 않아 검증 대상 화면이 그대로 유지된다.
+  @override
+  Future<List<CategoryCount>?> getCategoryCounts(String buildingId) async =>
+      const [];
   _GraphBuildingRepository(this.graphJson);
 
   final Map<String, dynamic> graphJson;
@@ -277,13 +279,11 @@ class _GraphBuildingRepository implements BuildingRepository {
     String floor,
     String startNodeId,
     String endNodeId,
-  ) async =>
-      null;
+  ) async => null;
 
   @override
   Future<BuildingGraph?> getBuildingGraph(
     String buildingId, {
     String vertical = 'auto',
-  }) async =>
-      null;
+  }) async => null;
 }

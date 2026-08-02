@@ -5,6 +5,8 @@ import 'place_detail_repository.dart';
 /// 반환한다. 실제 API와 달리 합성된 place id를 상세 조회 키로 쓰지 않는다.
 class MockPlaceDetailRepository implements PlaceDetailRepository {
   @override
-  Future<PlaceDetail?> getPlaceDetail(String buildingId, String placeId) async =>
-      null;
+  Future<PlaceDetail?> getPlaceDetail(
+    String buildingId,
+    String placeId,
+  ) async => null;
 }

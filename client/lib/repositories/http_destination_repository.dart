@@ -22,7 +22,7 @@ import 'destination_repository.dart';
 /// 돌려주는 리스트는 최대 원소 1개 또는 빈 리스트가 된다.
 class HttpDestinationRepository implements DestinationRepository {
   HttpDestinationRepository({http.Client? client})
-      : _client = client ?? http.Client();
+    : _client = client ?? http.Client();
 
   final http.Client _client;
 
@@ -54,11 +54,13 @@ class HttpDestinationRepository implements DestinationRepository {
     final response = await _client.post(
       Uri.parse('$apiBaseUrl/query/$endpoint'),
       headers: const {'Content-Type': 'application/json; charset=utf-8'},
-      body: utf8.encode(jsonEncode({
-        'text': query,
-        'building_id': buildingId,
-        'current_floor_id': ?currentFloorId,
-      })),
+      body: utf8.encode(
+        jsonEncode({
+          'text': query,
+          'building_id': buildingId,
+          'current_floor_id': ?currentFloorId,
+        }),
+      ),
     );
 
     // 건물이 없거나(404) 검증 실패(422) 등은 검색 UX 관점에서 "결과 없음"과
@@ -133,13 +135,15 @@ class HttpDestinationRepository implements DestinationRepository {
     final response = await _client.post(
       Uri.parse('$apiBaseUrl/query/ai'),
       headers: const {'Content-Type': 'application/json; charset=utf-8'},
-      body: utf8.encode(jsonEncode({
-        'text': query,
-        'building_id': buildingId,
-        'current_floor_id': ?currentFloorId,
-        'selected_facets': ?selectedFacets,
-        'show_all': showAll,
-      })),
+      body: utf8.encode(
+        jsonEncode({
+          'text': query,
+          'building_id': buildingId,
+          'current_floor_id': ?currentFloorId,
+          'selected_facets': ?selectedFacets,
+          'show_all': showAll,
+        }),
+      ),
     );
 
     // 건물이 없거나(404) 검증 실패(422)는 검색 UX 관점에서 "결과 없음"과
@@ -201,8 +205,7 @@ class HttpDestinationRepository implements DestinationRepository {
     final matchedFacetsJson =
         match['matched_facets'] as Map<String, dynamic>? ?? const {};
     final matchedFacets = matchedFacetsJson.map(
-      (key, value) =>
-          MapEntry(key, (value as List<dynamic>).cast<String>()),
+      (key, value) => MapEntry(key, (value as List<dynamic>).cast<String>()),
     );
 
     return DiscoveryMatch(

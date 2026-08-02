@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:navigation_client/models/category_count.dart';
 import 'package:navigation_client/core/api_config.dart';
 import 'package:navigation_client/core/service_locator.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/indoor_navigation_contract.dart';
@@ -144,9 +145,9 @@ void main() {
     GlobalKey<IndoorMapBodyState> key,
     String floor,
   ) async {
-    tester.widget<FloorSelector>(find.byType(FloorSelector)).onSelectFloor(
-      floor,
-    );
+    tester
+        .widget<FloorSelector>(find.byType(FloorSelector))
+        .onSelectFloor(floor);
     await drain(tester);
     expect(key.currentState!.currentFloor, floor);
   }
@@ -211,6 +212,11 @@ void main() {
 /// 두 층 모두 같은 navigation_graph를 내려주는 가짜 저장소. mock asset의 층에는
 /// 그래프가 없어 "위치 지정"이 시작 조건에서 걸린다.
 class _TwoFloorGraphRepository implements BuildingRepository {
+  // 카테고리 pill은 이 테스트들의 관심사가 아니다. 빈 목록이면 pill 줄이 아예
+  // 뜨지 않아 검증 대상 화면이 그대로 유지된다.
+  @override
+  Future<List<CategoryCount>?> getCategoryCounts(String buildingId) async =>
+      const [];
   _TwoFloorGraphRepository(this.graphJson);
 
   final Map<String, dynamic> graphJson;

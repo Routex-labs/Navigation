@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../models/building.dart';
 import '../models/building_graph.dart';
+import '../models/category_count.dart';
 import '../models/floor_plan.dart';
 import '../models/indoor_route.dart';
 import 'building_repository.dart';
@@ -12,9 +13,7 @@ import 'building_repository.dart';
 /// api/app/data/sample_building.json과 동일한 형태를 assets/mock/sample_building.json에
 /// 미러링해두고 읽는다. 백엔드가 준비되면 [HttpBuildingRepository]로 교체한다.
 class MockBuildingRepository implements BuildingRepository {
-  MockBuildingRepository({
-    this.assetPath = 'assets/mock/sample_building.json',
-  });
+  MockBuildingRepository({this.assetPath = 'assets/mock/sample_building.json'});
 
   final String assetPath;
   Map<String, dynamic>? _cache;
@@ -51,6 +50,48 @@ class MockBuildingRepository implements BuildingRepository {
     final floorData = data['floor_data'] as Map<String, dynamic>;
     final geojson = floorData[floor];
     return geojson == null ? null : geojson as Map<String, dynamic>;
+  }
+
+  /// 목업은 전용 응답이 없으므로 층 지도에서 직접 센다. 서버가 GROUP BY로
+  /// 접어 주는 것과 같은 결과를 만들면 되고, 목업은 층이 몇 개뿐이라 비용도
+  /// 문제되지 않는다.
+  @override
+  Future<List<CategoryCount>?> getCategoryCounts(String buildingId) async {
+    final data = await _load();
+    if (data['id'] != buildingId) return null;
+
+    // 키를 문자열로 이어 붙이지 않고 레코드로 둔다. 문자열 키는 되쪼갤 때
+    // 분류 이름에 든 구분자(`TAX REFUND`의 공백 같은)에서 조각이 어긋난다.
+    final counts =
+        <({String floor, String category, String? subcategory}), int>{};
+    final floorData = data['floor_data'] as Map<String, dynamic>;
+    for (final entry in floorData.entries) {
+      final plan = FloorPlan.fromJson(entry.value as Map<String, dynamic>);
+      for (final store in plan.stores) {
+        final category = store.category;
+        if (category == null || category.isEmpty) continue;
+        counts.update(
+          (
+            floor: entry.key,
+            category: category,
+            subcategory: store.subcategory,
+          ),
+          (value) => value + 1,
+          ifAbsent: () => 1,
+        );
+      }
+    }
+
+    return counts.entries
+        .map(
+          (entry) => CategoryCount(
+            floor: entry.key.floor,
+            category: entry.key.category,
+            subcategory: entry.key.subcategory,
+            count: entry.value,
+          ),
+        )
+        .toList();
   }
 
   @override

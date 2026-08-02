@@ -10,7 +10,8 @@ import 'directions_repository.dart';
 /// TMAP(SK Open API) 보행자 경로 안내 POST /routes/pedestrian 호출.
 /// https://openapi.sk.com/products/detail?linkMenuSeq=45
 class TmapDirectionsRepository implements DirectionsRepository {
-  TmapDirectionsRepository({http.Client? client}) : _client = client ?? http.Client();
+  TmapDirectionsRepository({http.Client? client})
+    : _client = client ?? http.Client();
 
   final http.Client _client;
 

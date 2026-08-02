@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:navigation_client/models/category_count.dart';
 import 'package:navigation_client/core/api_config.dart';
 import 'package:navigation_client/core/service_locator.dart';
 import 'package:navigation_client/models/building.dart';
@@ -179,9 +180,7 @@ void main() {
         nodeId: nodeId,
       );
 
-  testWidgets('매장을 출발지로 고르면 현재 위치가 그 매장 자리로 잡힌다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('매장을 출발지로 고르면 현재 위치가 그 매장 자리로 잡힌다', (WidgetTester tester) async {
     final key = await openIndoorMap(tester);
 
     await startRoute(
@@ -210,9 +209,7 @@ void main() {
     expect(anchor.anchorLocalM.northM, closeTo(22, 0.5));
   });
 
-  testWidgets('다른 층 매장을 출발지로 고르면 그 층에 위치가 잡힌다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('다른 층 매장을 출발지로 고르면 그 층에 위치가 잡힌다', (WidgetTester tester) async {
     // 2층 매장에서 출발한다고 했는데 앵커가 1층으로 찍히면, 위치 아이콘은
     // `anchor.floorId == 보고 있는 층` 게이팅에 걸려 어느 층에서도 안 보인다.
     final key = await openIndoorMap(tester);
@@ -235,9 +232,7 @@ void main() {
     expect(indoorNavigationDriver.currentFloorId, '2F');
   });
 
-  testWidgets('출발지를 고르지 않으면 기존 앵커를 건드리지 않는다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('출발지를 고르지 않으면 기존 앵커를 건드리지 않는다', (WidgetTester tester) async {
     // "현재 위치에서 출발"은 사용자가 이미 잡아둔 위치를 그대로 쓰겠다는 뜻이다.
     // 여기서 앵커를 다시 찍으면 방금 걸어온 궤적이 통째로 리셋된다.
     final key = await openIndoorMap(tester);
@@ -278,9 +273,7 @@ void main() {
     );
   });
 
-  testWidgets('수동으로 위치를 잡으면 "위치가 갱신됐다"고 상위에 알린다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('수동으로 위치를 잡으면 "위치가 갱신됐다"고 상위에 알린다', (WidgetTester tester) async {
     // 사용자가 보고한 순서: 매장 A를 출발지로 길을 찾은 뒤, 지도를 탭해 지금
     // 서 있는 곳을 다시 찍고 다시 길을 찾으면 경로가 방금 찍은 자리에서
     // 출발해야 한다. 상위(MapShellScreen)는 이 신호로 기억해둔 매장 A를 버린다.
@@ -319,9 +312,7 @@ void main() {
     expect(anchor.anchorLocalM.northM, closeTo(52, 0.5));
   });
 
-  testWidgets('출발지 매장을 따라 찍는 앵커는 갱신 신호를 보내지 않는다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('출발지 매장을 따라 찍는 앵커는 갱신 신호를 보내지 않는다', (WidgetTester tester) async {
     // 이때의 앵커는 상위가 방금 정한 출발지를 되짚어 찍는 것이다. 여기서도
     // 신호를 보내면 상위가 그 출발지를 스스로 버려, 매장을 골라도 다음 길찾기가
     // "현재 위치"에서 출발하게 된다.
@@ -359,6 +350,11 @@ void main() {
 
 /// 두 층 모두 같은 navigation_graph를 내려주는 가짜 저장소.
 class _TwoFloorGraphRepository implements BuildingRepository {
+  // 카테고리 pill은 이 테스트들의 관심사가 아니다. 빈 목록이면 pill 줄이 아예
+  // 뜨지 않아 검증 대상 화면이 그대로 유지된다.
+  @override
+  Future<List<CategoryCount>?> getCategoryCounts(String buildingId) async =>
+      const [];
   _TwoFloorGraphRepository(this.graphJson);
 
   final Map<String, dynamic> graphJson;

@@ -24,7 +24,11 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.http_cache import cache_headers, etag_matches
-from app.dto.building import BuildingDetailResponse, BuildingSummaryResponse
+from app.dto.building import (
+    BuildingDetailResponse,
+    BuildingSummaryResponse,
+    CategoryCountResponse,
+)
 from app.dto.floor_map import FloorMapResponse, StoreResponse
 from app.dto.place_detail import PlaceDetailResponse
 from app.dto.route import BuildingGraphResponse, FloorGraphResponse
@@ -43,6 +47,16 @@ def list_buildings(session: Session = Depends(get_db)):
 @router.get("/{building_id}", response_model=BuildingDetailResponse)
 def get_building(building_id: str, session: Session = Depends(get_db)):
     result = building_queries.get_building(session, building_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Building not found")
+    return result
+
+
+# 카테고리 필터용 (층·대분류·소분류)별 매장 수.
+# 지도 위 pill 목록과 개수 안내가 이 응답 하나로 만들어진다.
+@router.get("/{building_id}/categories", response_model=list[CategoryCountResponse])
+def list_building_categories(building_id: str, session: Session = Depends(get_db)):
+    result = building_queries.list_category_counts(session, building_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Building not found")
     return result

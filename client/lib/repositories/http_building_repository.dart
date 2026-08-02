@@ -7,6 +7,7 @@ import '../core/api_config.dart';
 import '../domain/floor_router.dart';
 import '../models/building.dart';
 import '../models/building_graph.dart';
+import '../models/category_count.dart';
 import '../models/floor_graph.dart';
 import '../models/indoor_route.dart';
 import 'building_repository.dart';
@@ -36,6 +37,7 @@ class HttpBuildingRepository implements BuildingRepository {
   final Map<String, Future<Building?>> _buildingFutures = {};
   final Map<String, Future<Map<String, dynamic>?>> _floorGeoJsonFutures = {};
   final Map<String, Future<BuildingGraph?>> _buildingGraphFutures = {};
+  final Map<String, Future<List<CategoryCount>?>> _categoryCountFutures = {};
 
   // 아래 둘은 네트워크가 아니라 계산 결과라 값 캐시로 충분하다.
   final Map<String, FloorGraph> _floorGraphCache = {};
@@ -120,6 +122,20 @@ class HttpBuildingRepository implements BuildingRepository {
       return Building.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>,
       );
+    });
+  }
+
+  @override
+  Future<List<CategoryCount>?> getCategoryCounts(String buildingId) {
+    return _shared(_categoryCountFutures, buildingId, () async {
+      final response = await _client.get(
+        Uri.parse('$apiBaseUrl/buildings/$buildingId/categories'),
+      );
+      if (response.statusCode == 404) return null;
+      final list = jsonDecode(response.body) as List<dynamic>;
+      return list
+          .map((item) => CategoryCount.fromJson(item as Map<String, dynamic>))
+          .toList();
     });
   }
 

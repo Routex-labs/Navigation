@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../core/api_config.dart';
 import '../../core/service_locator.dart';
 import '../../models/building.dart';
+import '../../models/category_count.dart';
 import '../../models/favorite_place.dart';
 import '../../models/floor_plan.dart';
 import '../../models/poi_search_result.dart';
@@ -42,11 +43,12 @@ class MapShellScreen extends StatefulWidget {
 /// 그 위로 띄워야 하는 높이. EtaCard 실제 높이(패딩 포함)에 여유를 더한 값.
 const _etaBarLiftHeight = 92.0;
 
-/// 카테고리 필터 pill이 쓰는 매장 한 건. 층까지 들고 있는 이유는 "이 층 N곳"
-/// 안내 때문이다 — 선택한 카테고리가 지금 보고 있는 층에 하나도 없으면 지도에
-/// 파란 강조가 아예 안 뜨는데, 그 상태와 "필터가 안 먹었다"를 사용자가 구분할
-/// 방법이 달리 없다.
-typedef _CategoryEntry = ({String floor, String? category, String? subcategory});
+/// 카테고리 필터 pill이 쓰는 (층·대분류·소분류)별 매장 수.
+///
+/// 층까지 들고 있는 이유는 "이 층 N곳" 안내 때문이다 — 선택한 카테고리가 지금
+/// 보고 있는 층에 하나도 없으면 지도에 파란 강조가 아예 안 뜨는데, 그 상태와
+/// "필터가 안 먹었다"를 사용자가 구분할 방법이 달리 없다.
+typedef _CategoryEntry = CategoryCount;
 
 class _MapShellScreenState extends State<MapShellScreen> {
   /// 상단 오버레이 사이 간격. 예전 top: 78 / top: 128 같은 고정 offset을
@@ -69,30 +71,17 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 이 값을 쓸 곳이 없다.
   String? _activeFloorLabel;
 
-  /// 건물 전 층의 매장 (층·대분류·소분류) 목록. pill 목록과 개수 안내가 같은
-  /// 데이터를 봐야 하므로 화면 하나가 소유하고 아래로 내려 준다.
-  /// HttpBuildingRepository가 층별 응답을 캐시하므로 첫 로드 이후엔 즉시.
+  /// 건물의 (층·대분류·소분류)별 매장 수. pill 목록과 개수 안내가 같은 데이터를
+  /// 봐야 하므로 화면 하나가 소유하고 아래로 내려 준다.
+  ///
+  /// **요청 하나다.** 예전에는 같은 정보를 얻으려고 층 지도를 층마다 받아
+  /// (더현대 서울 기준 12건) 매장을 직접 셌다. 매장 폴리곤·좌표·그래프까지
+  /// 따라오는 응답이라, 세 문자열과 개수를 얻는 값으로는 너무 비쌌다.
   late Future<List<_CategoryEntry>> _categoryEntriesFuture =
       _loadCategoryEntries();
 
   Future<List<_CategoryEntry>> _loadCategoryEntries() async {
-    final buildingId = _buildingId;
-    final building = await buildingRepository.getBuilding(buildingId);
-    if (building == null) return const [];
-    final entries = <_CategoryEntry>[];
-    for (final floor in building.floors) {
-      final json = await buildingRepository.getFloorGeoJson(buildingId, floor);
-      if (json == null) continue;
-      final plan = FloorPlan.fromJson(json);
-      for (final store in plan.stores) {
-        entries.add((
-          floor: floor,
-          category: store.category,
-          subcategory: store.subcategory,
-        ));
-      }
-    }
-    return entries;
+    return await buildingRepository.getCategoryCounts(_buildingId) ?? const [];
   }
 
   void _onActiveFloorChanged(String? floor) {
@@ -106,6 +95,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
     if (_categorySelection == selection) return;
     setState(() => _categorySelection = selection);
   }
+
   ({String title, String subtitle})? _placeInfo;
   bool _outdoorRouteVisible = false;
   bool _indoorRouteVisible = false;
@@ -1508,12 +1498,16 @@ class _CategoryFilterHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final matched = entries.where(_matches).toList();
-    final total = matched.length;
+    // 한 줄이 매장 하나가 아니라 (층·대분류·소분류) 묶음이라 **개수를 더해야**
+    // 한다. 줄 수를 세면 "카페 53곳"이 "카페 8곳"(층 수)으로 나온다.
+    final matched = entries.where(_matches);
+    final total = matched.fold<int>(0, (sum, entry) => sum + entry.count);
     final floor = activeFloor;
     final onThisFloor = floor == null
         ? total
-        : matched.where((entry) => entry.floor == floor).length;
+        : matched
+              .where((entry) => entry.floor == floor)
+              .fold<int>(0, (sum, entry) => sum + entry.count);
 
     final String text;
     if (total == 0) {
