@@ -152,10 +152,10 @@
       }
     },
     "식사": {
-      "rules": { "subcategory": ["레스토랑"] }
+      "rules": { "category": ["음식점"] }
     },
     "카페": {
-      "rules": { "subcategory": ["카페·베이커리"] }
+      "rules": { "category": ["카페"] }
     },
     "화장품": {
       "rules": { "subcategory": ["화장품·향수"] }

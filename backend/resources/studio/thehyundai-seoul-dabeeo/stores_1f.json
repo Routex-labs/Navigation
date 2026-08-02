@@ -2104,7 +2104,7 @@
       "id": "PO-NyezFOtR45461",
       "name": "투어리스트 데스크 서비스 - 유모차 대여",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -2224,7 +2224,7 @@
       "id": "PO-iVhobbC-v0998",
       "name": "발레 라운지",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -2390,7 +2390,7 @@
       "id": "PO-ZtznVXoG01054",
       "name": "유아차 전용 E/V",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -2622,7 +2622,7 @@
       "id": "PO-U6hZ2idzw9372",
       "name": "투어리스트 데스크 서비스 - 캐리어 보관 서비스",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -2702,7 +2702,7 @@
       "id": "PO-g-Qs2usRK5184",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -2742,7 +2742,7 @@
       "id": "PO-79T5tNCbX1542",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -2782,7 +2782,7 @@
       "id": "PO-CrRXuYr7I8723",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -2822,7 +2822,7 @@
       "id": "PO-ZDIiTbuxX7875",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -3082,7 +3082,7 @@
       "id": "PO-SbEjEmz0A5237",
       "name": "컨시어지 (안내데스크)",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -3162,7 +3162,7 @@
       "id": "PO-ScHxkQcAR4247",
       "name": "화장실",
       "category": "편의시설",
-      "subcategory": "restroom",
+      "subcategory": "화장실",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -3210,7 +3210,7 @@
       "id": "PO-QuY1qFi9vs4258",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -3250,7 +3250,7 @@
       "id": "PO-0d_J1ehum94259",
       "name": "정수기",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -3290,7 +3290,7 @@
       "id": "PO-6TUC1J65u8791",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -3330,7 +3330,7 @@
       "id": "PO-liVt_3V4D1703",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -3370,7 +3370,7 @@
       "id": "PO-G1_ZRKAf44894",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -3410,7 +3410,7 @@
       "id": "PO-lbJ6GZW007895",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -3450,7 +3450,7 @@
       "id": "PO-1D9bSv_Bv8346",
       "name": "장애인화장실",
       "category": "편의시설",
-      "subcategory": "restroom",
+      "subcategory": "화장실",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -3632,7 +3632,7 @@
       "id": "derived-escalator-1f-ND-5_0BwXc265244",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -3674,7 +3674,7 @@
       "id": "derived-escalator-1f-ND-DFWgcx5bA9876",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -3716,7 +3716,7 @@
       "id": "derived-escalator-1f-ND-HXaBphHsA1916",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -3758,7 +3758,7 @@
       "id": "derived-escalator-1f-ND-UGoSau5nz6732",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -3800,7 +3800,7 @@
       "id": "derived-escalator-1f-ND-Wpb0-uW9D3316",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -3842,7 +3842,7 @@
       "id": "derived-escalator-1f-ND-XIMqJJoY18387",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -3884,7 +3884,7 @@
       "id": "derived-escalator-1f-ND-XNAu6NkFC2236",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -3926,7 +3926,7 @@
       "id": "derived-escalator-1f-ND-amnSSqfMq7059",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -3968,7 +3968,7 @@
       "id": "derived-escalator-1f-ND-dxqdNpg1c4213",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -4010,7 +4010,7 @@
       "id": "derived-escalator-1f-ND-k4q-72JBh9364",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -4052,7 +4052,7 @@
       "id": "derived-escalator-1f-ND-p7mzWvDi61268",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -4094,7 +4094,7 @@
       "id": "derived-escalator-1f-ND-vNkzxL7bF9707",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "floor_id": "FL-soem999bnha10599",
       "entrance_node_id": null,
       "entrance_local_m": {

@@ -24,7 +24,11 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.http_cache import cache_headers, etag_matches
-from app.dto.building import BuildingDetailResponse, BuildingSummaryResponse
+from app.dto.building import (
+    BuildingDetailResponse,
+    BuildingSummaryResponse,
+    CategoryCountResponse,
+)
 from app.dto.floor_map import FloorMapResponse, StoreResponse
 from app.dto.place_detail import PlaceDetailResponse
 from app.dto.route import BuildingGraphResponse, FloorGraphResponse
@@ -43,6 +47,21 @@ def list_buildings(session: Session = Depends(get_db)):
 @router.get("/{building_id}", response_model=BuildingDetailResponse)
 def get_building(building_id: str, session: Session = Depends(get_db)):
     result = building_queries.get_building(session, building_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Building not found")
+    # 타일 URL에 붙일 버전. 건물 응답은 지도보다 먼저 받으므로 클라이언트가
+    # 첫 타일 요청부터 이 값을 쓸 수 있다. building_queries가 아니라 여기서
+    # 채우는 이유는 tile_queries가 building_queries를 import하고 있어서다
+    # (반대 방향으로 부르면 순환 import가 된다).
+    result["tile_revision"] = tile_queries.tile_revision(session)
+    return result
+
+
+# 카테고리 필터용 (층·대분류·소분류)별 매장 수.
+# 지도 위 pill 목록과 개수 안내가 이 응답 하나로 만들어진다.
+@router.get("/{building_id}/categories", response_model=list[CategoryCountResponse])
+def list_building_categories(building_id: str, session: Session = Depends(get_db)):
+    result = building_queries.list_category_counts(session, building_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Building not found")
     return result
@@ -136,6 +155,7 @@ def get_floor_tile(
     y: int,
     session: Session = Depends(get_db),
     if_none_match: str | None = Header(default=None),
+    v: str | None = None,
 ):
     try:
         tile_bytes = tile_queries.render_floor_tile(session, building_id, floor_name, z, x, y)
@@ -149,7 +169,16 @@ def get_floor_tile(
     # 재방문·부모 타일 프리페치). 캐시 헤더가 없으면 그 전부가 서버까지 온다.
     # ETag는 이미 만들어진 바이트에서 뽑으므로 추가 쿼리가 없다.
     etag = f'"{hashlib.blake2b(tile_bytes, digest_size=16).hexdigest()}"'
-    headers = cache_headers(etag, settings.tile_cache_max_age)
+
+    # `?v=`가 붙어 있으면 URL이 곧 버전이다(값은 /buildings/{id}의 tile_revision).
+    # 내용이 바뀌면 클라이언트가 새 주소로 오므로 길게 잡고 immutable을 준다 —
+    # 재검증조차 안 나가 층을 오갈 때의 304 왕복이 사라진다. 값 자체는 검사하지
+    # 않는다. 서버가 아는 것은 "이 주소로 온 바이트"뿐이고, 낡은 v로 온 요청은
+    # 낡은 주소에 현재 내용이 담길 뿐 다음 실행에서 새 주소로 갈아탄다.
+    if v:
+        headers = cache_headers(etag, settings.tile_versioned_cache_max_age, immutable=True)
+    else:
+        headers = cache_headers(etag, settings.tile_cache_max_age)
 
     if etag_matches(if_none_match, etag):
         return Response(status_code=304, headers=headers)

@@ -10,6 +10,7 @@ import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.core.config import settings
@@ -64,6 +65,23 @@ def create_app() -> FastAPI:
 
     # 요청 본문 크기 제한. 거대한 본문 하나로 메모리를 밀어 넣는 요청을 413으로 끊는다.
     app.add_middleware(BodySizeLimitMiddleware, max_body_bytes=settings.max_request_body_bytes)
+
+    # 응답 gzip. 가장 큰 수혜자는 MVT 타일이다 — protobuf라 이미 조밀할 것 같지만,
+    # 실측하면 **평균 48% 줄어든다**(더현대 서울 1F·B1·B4 × z15~18 12개 타일,
+    # 135KB → 70KB). MVT가 문자열을 값 테이블로 공유해도 매장명·카테고리 문자열
+    # 자체의 반복이 남아서다. 지하 주차층(B4)이 53%로 가장 잘 줄어든다 — 같은
+    # 이름의 주차 구획이 수백 개라 그렇다.
+    #
+    # Cloud Run은 응답을 자동으로 압축해 주지 않으므로 여기서 걸지 않으면 그대로
+    # 전송량이 된다.
+    #
+    # ETag와의 관계를 짚어 둔다: ETag는 압축 전 바이트에서 뽑히므로 gzip 여부와
+    # 무관하게 같은 값이다. 클라이언트 재검증(If-None-Match → 304)은 그대로
+    # 동작한다. 표현(content-coding)마다 ETag를 달리 두는 것이 엄밀한 스펙이지만,
+    # 그건 중간 캐시가 잘못된 인코딩을 서빙하는 경우를 막기 위한 것이고 우리는
+    # 클라이언트가 직접 Cloud Run에 붙는 구조라 해당되지 않는다. GZipMiddleware가
+    # `Vary: Accept-Encoding`을 붙이는 것으로 충분하다.
+    app.add_middleware(GZipMiddleware, minimum_size=500)
 
     # CORS는 환경 기준 화이트리스트로 건다(운영 와일드카드 금지).
     _configure_cors(app)

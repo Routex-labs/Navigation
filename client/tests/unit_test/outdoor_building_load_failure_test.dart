@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/models/category_count.dart';
 import 'package:navigation_client/core/service_locator.dart';
 import 'package:navigation_client/models/building.dart';
 import 'package:navigation_client/models/building_graph.dart';
@@ -106,9 +107,7 @@ void main() {
     expect(find.textContaining('건물 정보를 불러오지 못했습니다'), findsNothing);
   });
 
-  testWidgets('백엔드가 계속 죽어 있어도 재시도를 무한히 반복하지 않는다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('백엔드가 계속 죽어 있어도 재시도를 무한히 반복하지 않는다', (WidgetTester tester) async {
     // 서버 없이 실행하는 환경에서 영원히 요청을 날리면 배터리와 로그만 태운다.
     // 사다리를 다 쓰면 멈추고 배지의 "다시 시도"에 맡긴다.
     final failing = _FlakyBuildingRepository(inner)..failing = true;
@@ -152,6 +151,11 @@ void main() {
 /// "그런 건물이 없다"라 재시도해도 소용없지만, 여기서 재현하려는 것은 "서버에
 /// 못 붙었다"라 재시도가 의미 있는 경우다.
 class _FlakyBuildingRepository implements BuildingRepository {
+  // 카테고리 pill은 이 테스트들의 관심사가 아니다. 빈 목록이면 pill 줄이 아예
+  // 뜨지 않아 검증 대상 화면이 그대로 유지된다.
+  @override
+  Future<List<CategoryCount>?> getCategoryCounts(String buildingId) async =>
+      const [];
   _FlakyBuildingRepository(this._inner);
 
   final BuildingRepository _inner;

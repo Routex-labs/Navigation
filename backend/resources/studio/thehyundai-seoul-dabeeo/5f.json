@@ -5953,7 +5953,7 @@
       "id": "PO-wsc618xCD4054",
       "name": "쟈스민 라운지",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 108.420625,
@@ -6096,7 +6096,7 @@
       "id": "PO-MvkpbWmI78004",
       "name": "쁘띠 라운지 (유아휴게실)",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 73.525,
@@ -6206,7 +6206,7 @@
       "id": "PO-ysM_7PjFS7461",
       "name": "유모차 대여 (쁘띠 데스크)",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 73.525,
@@ -6228,7 +6228,7 @@
       "id": "PO-uTqh9H1va56591",
       "name": "유아차 전용 E/V",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 171.263992,
@@ -6250,7 +6250,7 @@
       "id": "PO-SH8WJrvlg6468",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 154.108606,
@@ -6261,7 +6261,7 @@
       "id": "PO-4YN8Zuv8V4433",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 130.279653,
@@ -6272,7 +6272,7 @@
       "id": "PO-ZeDYmCBOZ9682",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 87.115776,
@@ -6283,7 +6283,7 @@
       "id": "PO-n9e_40jwB5625",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 207.650214,
@@ -6294,7 +6294,7 @@
       "id": "PO-g6ffEy2Ly6663",
       "name": "화장실",
       "category": "편의시설",
-      "subcategory": "restroom",
+      "subcategory": "화장실",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 76.921402,
@@ -6305,7 +6305,7 @@
       "id": "PO-ktxy9-RZi8534",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 98.973895,
@@ -6327,7 +6327,7 @@
       "id": "PO-MXYKFdTM08224",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 93.216669,
@@ -6338,7 +6338,7 @@
       "id": "PO-pffC7nbjJ9600",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 205.100119,
@@ -6360,7 +6360,7 @@
       "id": "PO-dMz0sBtou4815",
       "name": "화장실",
       "category": "편의시설",
-      "subcategory": "restroom",
+      "subcategory": "화장실",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 223.697554,
@@ -6371,7 +6371,7 @@
       "id": "PO-iMZDg35hs6935",
       "name": "음수대",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 223.61446,
@@ -6382,7 +6382,7 @@
       "id": "PO-owQ919Uzo8351",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 203.988629,
@@ -6393,7 +6393,7 @@
       "id": "PO-jNgjmCMRM9671",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 171.263992,

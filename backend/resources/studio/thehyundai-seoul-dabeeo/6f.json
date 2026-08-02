@@ -4076,7 +4076,7 @@
       "id": "PO-Hw80tGf7m7933",
       "name": "세이지 라운지",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 110.524685,
@@ -4098,7 +4098,7 @@
       "id": "PO-C1rVUt6gL3899",
       "name": "티켓 부스",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 172.173572,
@@ -4108,7 +4108,7 @@
     {
       "id": "PO-fXXA1AR_G6628",
       "name": "고디바",
-      "category": "식음료",
+      "category": "카페",
       "subcategory": "카페·베이커리",
       "entrance_node_id": null,
       "centroid_local_m": {
@@ -4119,7 +4119,7 @@
     {
       "id": "PO-VL2v3hP5R0218",
       "name": "리스토란테 에오",
-      "category": "식음료",
+      "category": "음식점",
       "subcategory": "레스토랑",
       "entrance_node_id": null,
       "centroid_local_m": {
@@ -4130,7 +4130,7 @@
     {
       "id": "PO-NCpMNrEp82723",
       "name": "송",
-      "category": "식음료",
+      "category": "음식점",
       "subcategory": "레스토랑",
       "entrance_node_id": null,
       "centroid_local_m": {
@@ -4141,7 +4141,7 @@
     {
       "id": "PO-nA8T0s76X4138",
       "name": "사천화가",
-      "category": "식음료",
+      "category": "음식점",
       "subcategory": "레스토랑",
       "entrance_node_id": null,
       "centroid_local_m": {
@@ -4152,7 +4152,7 @@
     {
       "id": "PO-YMLJzrGIy5754",
       "name": "로바",
-      "category": "식음료",
+      "category": "음식점",
       "subcategory": "레스토랑",
       "entrance_node_id": null,
       "centroid_local_m": {
@@ -4163,7 +4163,7 @@
     {
       "id": "PO-vpJN8tesm7538",
       "name": "도원 스타일",
-      "category": "식음료",
+      "category": "음식점",
       "subcategory": "레스토랑",
       "entrance_node_id": null,
       "centroid_local_m": {
@@ -4174,7 +4174,7 @@
     {
       "id": "PO-f48w-34Od9066",
       "name": "상춘재",
-      "category": "식음료",
+      "category": "음식점",
       "subcategory": "레스토랑",
       "entrance_node_id": null,
       "centroid_local_m": {
@@ -4185,7 +4185,7 @@
     {
       "id": "PO-bawy_CfOO1219",
       "name": "베르그",
-      "category": "식음료",
+      "category": "음식점",
       "subcategory": "레스토랑",
       "entrance_node_id": null,
       "centroid_local_m": {
@@ -4197,7 +4197,7 @@
       "id": "PO-oneB-3Fe-8051",
       "name": "현대백화점 카드 (서비스 라운지 안)",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 76.000113,
@@ -4218,7 +4218,7 @@
     {
       "id": "PO-amsqf8JE40283",
       "name": "나의 가야",
-      "category": "식음료",
+      "category": "음식점",
       "subcategory": "레스토랑",
       "entrance_node_id": null,
       "centroid_local_m": {
@@ -4229,7 +4229,7 @@
     {
       "id": "PO-eQJBf-yCx6756",
       "name": "정돈 프리미엄",
-      "category": "식음료",
+      "category": "음식점",
       "subcategory": "레스토랑",
       "entrance_node_id": null,
       "centroid_local_m": {
@@ -4252,7 +4252,7 @@
       "id": "PO-vc5dugm6O0661",
       "name": "TAX REFUND (Service Lounge)",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 74.575623,
@@ -4263,7 +4263,7 @@
       "id": "PO-srY9lgYZb1809",
       "name": "상품권(서비스 라운지 안)",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 77.23638,
@@ -4274,7 +4274,7 @@
       "id": "PO-zbWA20Ae85369",
       "name": "ALT. 1",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 176.440124,
@@ -4285,7 +4285,7 @@
       "id": "PO-irMt24efY8957",
       "name": "CH 1985",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 224.725049,
@@ -4295,7 +4295,7 @@
     {
       "id": "PO-uNkq7Zqnj3640",
       "name": "카페 H",
-      "category": "식음료",
+      "category": "카페",
       "subcategory": "카페·베이커리",
       "entrance_node_id": null,
       "centroid_local_m": {
@@ -4373,7 +4373,7 @@
       "id": "PO-V71mTQgbJ1923",
       "name": "여행사 데스크",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 78.472596,
@@ -4384,7 +4384,7 @@
       "id": "PO-iOfWonTJR3090",
       "name": "휴대전화 충전기 대여(유료)",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 179.350452,
@@ -4395,7 +4395,7 @@
       "id": "PO-qoZaOhAIb5644",
       "name": "TAX REFUND KIOSK Ⅱ",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 84.086525,
@@ -4406,7 +4406,7 @@
       "id": "PO-BJZC5vYmr8459",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 208.350213,
@@ -4417,7 +4417,7 @@
       "id": "PO-kMXEbYhDG7718",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 128.200823,
@@ -4428,7 +4428,7 @@
       "id": "PO-kwGd_76MF8007",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 86.33914,
@@ -4450,7 +4450,7 @@
       "id": "PO-c5qqbLiYj6214",
       "name": "화장실",
       "category": "편의시설",
-      "subcategory": "restroom",
+      "subcategory": "화장실",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 70.69996,
@@ -4461,7 +4461,7 @@
       "id": "PO-SaM_bwDZY7623",
       "name": "음수대",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 77.697172,
@@ -4472,7 +4472,7 @@
       "id": "PO-MlbKjIVF54310",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 98.55,
@@ -4483,7 +4483,7 @@
       "id": "PO-W5elJ10753753",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 170.696484,
@@ -4494,7 +4494,7 @@
       "id": "PO-_3i7eyewJ2444",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 204.9,
@@ -4505,7 +4505,7 @@
       "id": "PO-2W7__HlKy5480",
       "name": "화장실",
       "category": "편의시설",
-      "subcategory": "restroom",
+      "subcategory": "화장실",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 224.167428,
@@ -4538,7 +4538,7 @@
       "id": "PO-PwIyevH5U3558",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 207.242606,
@@ -4549,7 +4549,7 @@
       "id": "PO-3it-FOUoP8752",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 93.763928,
@@ -4560,7 +4560,7 @@
       "id": "PO-NTitM86308484",
       "name": "유아차 전용 E/V",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 170.696484,

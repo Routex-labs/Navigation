@@ -14,6 +14,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../core/api_config.dart';
 import '../../core/service_locator.dart';
+import '../../core/tile_url.dart';
 import '../../domain/geo_transform.dart';
 import '../../features/debug_mode/debug_mode.dart';
 import '../../features/indoor_navigation/application/corridor_tracking_session.dart';
@@ -261,7 +262,9 @@ const _etaCardHeightPx = 130.0;
 // 안내가 chip에 가려지지 않는다. 이 오버레이는 chip 열과 **다른 Stack**에
 // 있으므로 Positioned만으로는 겹침을 피할 수 없다 — SafeArea로 감싸 노치
 // 기기에서 chip 열이 상태바만큼 내려앉는 것까지 같이 따라가야 한다.
-// 실내 화면의 동명 상수와 같은 값이어야 두 화면에서 안내가 같은 자리에 뜬다.
+// 실내 화면의 동명 상수(184)와 **일부러 다르다.** 홈에서는 카테고리 칩을 아예
+// 노출하지 않기로 해서 여기 상단 오버레이는 장소 pill 한 줄뿐인 반면, 실내는
+// 대분류·소분류·개수 안내까지 3단이라 그만큼 더 내려야 한다.
 const _placingHintTopPx = 132.0;
 
 // latlong2 <-> MapLibre 타입 브릿지.
@@ -2811,8 +2814,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       return;
     }
 
-    final tileUrl =
-        '$apiBaseUrl/buildings/${building.id}/floors/$floor/tiles/{z}/{x}/{y}.mvt';
+    final tileUrl = indoorTileUrl(
+      buildingId: building.id,
+      floorName: floor,
+      tileRevision: building.tileRevision,
+    );
     debugPrint(
       '[outdoor overlay] registering MVT source url=$tileUrl '
       'apiBaseUrl=$apiBaseUrl',
@@ -3750,7 +3756,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (snapshot != null) recorder.recordSnapshot(snapshot);
     recorder.recordRuntime(indoorNavigationDriver.currentRuntimeStatus);
     if (!mounted) return;
-    if (announceExport && recorder.hasSnapshot && _debugModeController.enabled) {
+    if (announceExport &&
+        recorder.hasSnapshot &&
+        _debugModeController.enabled) {
       _showPdrMessageWithExport('길안내가 끝났습니다. 진단 JSON을 내보내 분석할 수 있습니다.');
     }
   }

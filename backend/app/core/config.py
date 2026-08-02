@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     # 몰리는 구간은 덮으면서, 시드를 다시 돌린 개발자가 오래 기다리지는 않는다.
     # 만료 뒤에도 ETag 재검증이 본문 없는 304로 끝난다.
     tile_cache_max_age: int = 60
+    # revision(`?v=`)이 붙은 타일 요청의 Cache-Control max-age(초). URL이 곧
+    # 버전이라 내용이 바뀌면 주소가 달라진다 — 그래서 길게 잡고 immutable을
+    # 함께 준다. 재검증(304)조차 나가지 않으므로 층을 오갈 때 왕복이 사라진다.
+    # 1년은 RFC가 권하는 사실상의 상한이다.
+    tile_versioned_cache_max_age: int = 31_536_000
     # 글리프(.pbf) 응답의 Cache-Control max-age(초). 글리프는 리소스로 커밋된
     # 사실상 불변 파일이라 하루로 길게 잡는다. 다만 URL이 내용이 아니라
     # (폰트, 범위) 이름 기반이라 immutable은 붙이지 않는다 — make_glyphs.js로

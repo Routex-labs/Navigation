@@ -28,6 +28,7 @@ import '../../models/floor_plan.dart';
 import '../../models/indoor_route.dart';
 import '../../models/poi_search_result.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/category_map_filter.dart';
 import '../../widgets/eta_card.dart';
 import '../../widgets/floor_plan_view.dart';
 import '../../widgets/floor_selector.dart';
@@ -47,12 +48,27 @@ const _mapShellBottomChromePx = 112.0;
 // 영향을 주지 않고 여기서 별도 상수로 잡지 않는다.
 const _etaCardHeightPx = 130.0;
 
-// 위치 지정 안내를 상단 chrome 아래에 놓기 위한 오프셋. MapShellScreen의
-// 검색창(top 0)과 그 아래 카테고리 chip 열(top 78, 높이 ≈32) 밑으로 내려야
-// 안내가 chip에 가려지지 않는다. SafeArea와 함께 써서 노치 기기에서 chip 열이
-// 상태바만큼 내려앉는 것까지 따라간다.
-// 야외 화면의 동명 상수와 같은 값이어야 두 화면에서 안내가 같은 자리에 뜬다.
-const _placingHintTopPx = 132.0;
+// 위치 지정 안내와 기압 디버그 칩을 상단 오버레이 아래에 놓기 위한 오프셋.
+// SafeArea와 함께 써서 노치 기기에서 오버레이가 상태바만큼 내려앉는 것까지 따라간다.
+//
+// MapShellScreen이 실내에서 쌓는 **최악의 경우**를 위에서부터 더한 값이다
+// (_overlayGap = 8, 상단 바 높이는 실기기 화면에서 실측):
+//   출발/도착 두 줄 바 111 + 8 + 대분류 pill 30 + 8 + 소분류 pill 26
+//   + 6 + 개수 안내 26 = 215
+// 여기에 여유 21을 더해 236이다.
+//
+// **최악의 경우로 고정하는 이유**: 실제 높이는 네 가지로 변한다 — 상단 바가 한 줄
+// (검색)이냐 두 줄(출발/도착)이냐, 소분류 줄이 뜨느냐(대분류에 소분류가 2개 이상),
+// 개수 안내가 뜨느냐(카테고리 선택 여부). 상태마다 칩이 위아래로 튀면 값을 읽기
+// 더 어렵고, 상위가 쌓는 실제 높이를 이 화면이 알 방법도 없다(다른 Stack이다).
+// 그래서 한 자리에 고정하고 흔한 상태에서는 여백이 남는 쪽을 택한다.
+//
+// 값을 줄이기 전에: 상단 바가 두 줄이면서 소분류·개수 안내가 함께 뜬 화면을
+// 반드시 확인할 것. 이 조합을 안 보고 고쳤다가 두 번 겹쳤다.
+//
+// 야외 화면의 동명 상수(132)와 **일부러 다르다.** 홈에서는 카테고리 칩을 아예
+// 노출하지 않기로 해서 그쪽 상단 오버레이는 장소 pill 한 줄뿐이다.
+const _placingHintTopPx = 236.0;
 
 // 사용자가 매장 내부/건물 밖을 탭했을 때 멀리 떨어진 복도로 강제 스냅하지
 // 않기 위한 상한이다. 입구나 매장 앞을 누르는 정상적인 경우에는 충분히
@@ -92,9 +108,21 @@ class IndoorMapBody extends StatefulWidget {
     this.onPlacingLocationChanged,
     this.onLocationAnchored,
     this.outerOverlayKeys = const [],
+    this.categorySelection,
+    this.onFloorChanged,
   });
 
+  /// 보고 있는 층이 바뀔 때 호출된다(최초 로드 포함). 상위(MapShellScreen)가
+  /// 카테고리 필터의 "이 층 N곳" 안내를 이 신호로 다시 계산한다 — getter로만
+  /// 읽으면 층이 바뀌어도 상위가 다시 그리지 않아 개수가 옛 층에 머문다.
+  final ValueChanged<String?>? onFloorChanged;
+
   final String buildingId;
+
+  /// 지도 위 카테고리 필터 pill에서 고른 카테고리. 상위(MapShellScreen)가
+  /// 소유하고 실내·야외 양쪽에 같은 값을 내려, 두 화면의 강조가 어긋나지
+  /// 않게 한다. null이면 강조하지 않는다.
+  final CategorySelection? categorySelection;
 
   /// ETA 카드가 화면 최하단에 새로 나타나거나 사라질 때 호출된다.
   /// 상위(MapShellScreen)가 이 값으로 하단 공용 바를 그 위로 띄운다.
@@ -297,6 +325,36 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     setState(() => _highlightedStoreId = null);
   }
 
+  /// 목록(검색 결과·카테고리 매장 목록·저장한 장소)에서 고른 매장을 지도에서
+  /// 보여 준다. 다른 층이면 그 층으로 옮긴 뒤 카메라를 매장으로 가져간다.
+  ///
+  /// 카메라를 여기서 직접 밀지 않고 [FloorPlanView]에 값으로 내려 주는 이유는
+  /// 층 전환 타이밍이다 — 근거는 `FloorPlanView.focusTarget` 주석 참고.
+  /// [bottomSheetFraction]은 곧 화면 아래를 덮을 시트의 높이 비율이다. 그만큼
+  /// 매장을 위로 올려 시트 뒤에 숨지 않게 한다.
+  Future<void> focusStore(
+    PoiSearchResult store, {
+    double bottomSheetFraction = 0,
+  }) async {
+    final floor = store.floor;
+    if (floor.isNotEmpty && floor != _selectedFloor) {
+      await _selectFloor(floor);
+      if (!mounted) return;
+    }
+    setState(() {
+      _highlightedStoreId = store.placeId;
+      _focusTarget = store.point;
+      _focusBottomSheetFraction = bottomSheetFraction;
+      _focusTick++;
+    });
+  }
+
+  /// 지도가 찾아가야 할 매장 위치와, 같은 매장을 다시 골라도 다시 움직이게
+  /// 하는 카운터. 자세한 이유는 `FloorPlanView.focusTarget`·`focusTick` 주석.
+  ll.LatLng? _focusTarget;
+  int _focusTick = 0;
+  double _focusBottomSheetFraction = 0;
+
   /// 백엔드 연결 실패 시 사용자에게 보여줄 메시지. null이면 정상 상태.
   /// 이게 없으면 fetch 예외가 조용히 삼켜져 로딩 스피너가 영원히 멈추지 않는다.
   String? _error;
@@ -441,6 +499,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         _selectedFloor = selectedFloor;
         _loading = false;
       });
+      widget.onFloorChanged?.call(selectedFloor);
       if (selectedFloor != null) await _loadFloorPlan(selectedFloor);
     } catch (_) {
       if (!mounted) return;
@@ -587,6 +646,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     if (hadRouteVisible != _hasActiveRoute) {
       widget.onRouteVisibleChanged?.call(_hasActiveRoute);
     }
+    widget.onFloorChanged?.call(floor);
     // 세그먼트를 갈아탔으면 판정 기준 간선 집합도 바뀐다.
     if (multiRoute != null && nextSegmentRoute != null) {
       _recordRouteContext(nextSegmentRoute, isMultiFloor: true);
@@ -2696,6 +2756,11 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           },
           interactive: _interactive,
           highlightedStoreId: _highlightedStoreId,
+          categorySelection: widget.categorySelection,
+          focusTarget: _focusTarget,
+          focusTick: _focusTick,
+          focusBottomSheetFraction: _focusBottomSheetFraction,
+          tileRevision: _building?.tileRevision,
           visibleInsets: EdgeInsets.fromLTRB(0, topOverlay, 0, bottomOverlay),
           overlayHitTest: _isTapOnMapOverlay,
         ),

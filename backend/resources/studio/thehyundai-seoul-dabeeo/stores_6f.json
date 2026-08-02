@@ -12,7 +12,7 @@
       "id": "PO-Hw80tGf7m7933",
       "name": "세이지 라운지",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -92,7 +92,7 @@
       "id": "PO-C1rVUt6gL3899",
       "name": "티켓 부스",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -131,7 +131,7 @@
     {
       "id": "PO-fXXA1AR_G6628",
       "name": "고디바",
-      "category": "식음료",
+      "category": "카페",
       "subcategory": "카페·베이커리",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
@@ -171,7 +171,7 @@
     {
       "id": "PO-VL2v3hP5R0218",
       "name": "리스토란테 에오",
-      "category": "식음료",
+      "category": "음식점",
       "subcategory": "레스토랑",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
@@ -219,7 +219,7 @@
     {
       "id": "PO-NCpMNrEp82723",
       "name": "송",
-      "category": "식음료",
+      "category": "음식점",
       "subcategory": "레스토랑",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
@@ -259,7 +259,7 @@
     {
       "id": "PO-nA8T0s76X4138",
       "name": "사천화가",
-      "category": "식음료",
+      "category": "음식점",
       "subcategory": "레스토랑",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
@@ -299,7 +299,7 @@
     {
       "id": "PO-YMLJzrGIy5754",
       "name": "로바",
-      "category": "식음료",
+      "category": "음식점",
       "subcategory": "레스토랑",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
@@ -339,7 +339,7 @@
     {
       "id": "PO-vpJN8tesm7538",
       "name": "도원 스타일",
-      "category": "식음료",
+      "category": "음식점",
       "subcategory": "레스토랑",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
@@ -403,7 +403,7 @@
     {
       "id": "PO-f48w-34Od9066",
       "name": "상춘재",
-      "category": "식음료",
+      "category": "음식점",
       "subcategory": "레스토랑",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
@@ -443,7 +443,7 @@
     {
       "id": "PO-bawy_CfOO1219",
       "name": "베르그",
-      "category": "식음료",
+      "category": "음식점",
       "subcategory": "레스토랑",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
@@ -484,7 +484,7 @@
       "id": "PO-oneB-3Fe-8051",
       "name": "현대백화점 카드 (서비스 라운지 안)",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -563,7 +563,7 @@
     {
       "id": "PO-amsqf8JE40283",
       "name": "나의 가야",
-      "category": "식음료",
+      "category": "음식점",
       "subcategory": "레스토랑",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
@@ -619,7 +619,7 @@
     {
       "id": "PO-eQJBf-yCx6756",
       "name": "정돈 프리미엄",
-      "category": "식음료",
+      "category": "음식점",
       "subcategory": "레스토랑",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
@@ -744,7 +744,7 @@
       "id": "PO-vc5dugm6O0661",
       "name": "TAX REFUND (Service Lounge)",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -784,7 +784,7 @@
       "id": "PO-srY9lgYZb1809",
       "name": "상품권(서비스 라운지 안)",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -840,7 +840,7 @@
       "id": "PO-zbWA20Ae85369",
       "name": "ALT. 1",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -884,7 +884,7 @@
       "id": "PO-irMt24efY8957",
       "name": "CH 1985",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -923,7 +923,7 @@
     {
       "id": "PO-uNkq7Zqnj3640",
       "name": "카페 H",
-      "category": "식음료",
+      "category": "카페",
       "subcategory": "카페·베이커리",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
@@ -1392,7 +1392,7 @@
       "id": "PO-V71mTQgbJ1923",
       "name": "여행사 데스크",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -1432,7 +1432,7 @@
       "id": "PO-iOfWonTJR3090",
       "name": "휴대전화 충전기 대여(유료)",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -1472,7 +1472,7 @@
       "id": "PO-qoZaOhAIb5644",
       "name": "TAX REFUND KIOSK Ⅱ",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -1512,7 +1512,7 @@
       "id": "PO-BJZC5vYmr8459",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -1552,7 +1552,7 @@
       "id": "PO-kMXEbYhDG7718",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -1592,7 +1592,7 @@
       "id": "PO-kwGd_76MF8007",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -1672,7 +1672,7 @@
       "id": "PO-c5qqbLiYj6214",
       "name": "화장실",
       "category": "편의시설",
-      "subcategory": "restroom",
+      "subcategory": "화장실",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -1712,7 +1712,7 @@
       "id": "PO-SaM_bwDZY7623",
       "name": "음수대",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -1752,7 +1752,7 @@
       "id": "PO-MlbKjIVF54310",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -1792,7 +1792,7 @@
       "id": "PO-W5elJ10753753",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -1832,7 +1832,7 @@
       "id": "PO-_3i7eyewJ2444",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -1872,7 +1872,7 @@
       "id": "PO-2W7__HlKy5480",
       "name": "화장실",
       "category": "편의시설",
-      "subcategory": "restroom",
+      "subcategory": "화장실",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -2000,7 +2000,7 @@
       "id": "PO-PwIyevH5U3558",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -2040,7 +2040,7 @@
       "id": "PO-3it-FOUoP8752",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -2080,7 +2080,7 @@
       "id": "PO-NTitM86308484",
       "name": "유아차 전용 E/V",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -2166,7 +2166,7 @@
       "id": "derived-escalator-6f-ND-AtTh7-cRg0617",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -2208,7 +2208,7 @@
       "id": "derived-escalator-6f-ND-FAxdWYXPn3593",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {
@@ -2250,7 +2250,7 @@
       "id": "derived-escalator-6f-ND-oeQipqFj08961",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "floor_id": "FL-t89mxdj9mxcy0524",
       "entrance_node_id": null,
       "entrance_local_m": {

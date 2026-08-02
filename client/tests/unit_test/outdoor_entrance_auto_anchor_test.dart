@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:navigation_client/models/category_count.dart';
 import 'package:navigation_client/core/service_locator.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/indoor_navigation_contract.dart';
 import 'package:navigation_client/models/building.dart';
@@ -39,22 +40,18 @@ void main() {
   const originLng = 126.9777;
 
   Map<String, dynamic> node(String id, double xM, double yM) => {
-        'id': id,
-        'type': 'corridor',
-        'x_m': xM,
-        'y_m': yM,
-        'lat': originLat + yM / metersPerDegreeLat,
-        'lng': originLng + xM / metersPerDegreeLng,
-      };
+    'id': id,
+    'type': 'corridor',
+    'x_m': xM,
+    'y_m': yM,
+    'lat': originLat + yM / metersPerDegreeLat,
+    'lng': originLng + xM / metersPerDegreeLng,
+  };
 
   // 입구(37.5665, 126.9779)는 층 로컬로 약 (17.6, 22.3)이라 n-a 바로 옆이다.
   // 세 노드는 한 직선 위에 있지 않아 affine 피팅이 유일하게 풀린다.
   final graphJson = <String, dynamic>{
-    'nodes': [
-      node('n-a', 18, 22),
-      node('n-b', 48, 22),
-      node('n-c', 18, 52),
-    ],
+    'nodes': [node('n-a', 18, 22), node('n-b', 48, 22), node('n-c', 18, 52)],
     'edges': [
       {
         'id': 'e-ab',
@@ -78,43 +75,43 @@ void main() {
   // 자동 진입은 "신호가 멀쩡했을 때 입구 앞에 있었다"는 근거를 요구한다.
   // 저하 표본만 흘리면 판정이 서지 않으므로 접근 표본을 먼저 보낸다.
   Position approachingEntrance() => Position(
-        latitude: 37.5665,
-        longitude: 126.9779,
-        timestamp: DateTime(2024, 1, 1),
-        accuracy: 10,
-        altitude: 0,
-        altitudeAccuracy: 0,
-        heading: 0,
-        headingAccuracy: 0,
-        speed: 0,
-        speedAccuracy: 0,
-      );
+    latitude: 37.5665,
+    longitude: 126.9779,
+    timestamp: DateTime(2024, 1, 1),
+    accuracy: 10,
+    altitude: 0,
+    altitudeAccuracy: 0,
+    heading: 0,
+    headingAccuracy: 0,
+    speed: 0,
+    speedAccuracy: 0,
+  );
 
   Position atEntrance() => Position(
-        latitude: 37.5665,
-        longitude: 126.9779,
-        timestamp: DateTime(2024, 1, 1),
-        accuracy: 60,
-        altitude: 0,
-        altitudeAccuracy: 0,
-        heading: 0,
-        headingAccuracy: 0,
-        speed: 0,
-        speedAccuracy: 0,
-      );
+    latitude: 37.5665,
+    longitude: 126.9779,
+    timestamp: DateTime(2024, 1, 1),
+    accuracy: 60,
+    altitude: 0,
+    altitudeAccuracy: 0,
+    heading: 0,
+    headingAccuracy: 0,
+    speed: 0,
+    speedAccuracy: 0,
+  );
 
   Position farAway() => Position(
-        latitude: 37.5665,
-        longitude: 126.9800,
-        timestamp: DateTime(2024, 1, 1),
-        accuracy: 40,
-        altitude: 0,
-        altitudeAccuracy: 0,
-        heading: 0,
-        headingAccuracy: 0,
-        speed: 0,
-        speedAccuracy: 0,
-      );
+    latitude: 37.5665,
+    longitude: 126.9800,
+    timestamp: DateTime(2024, 1, 1),
+    accuracy: 40,
+    altitude: 0,
+    altitudeAccuracy: 0,
+    heading: 0,
+    headingAccuracy: 0,
+    speed: 0,
+    speedAccuracy: 0,
+  );
 
   Future<void> drain(WidgetTester tester) async {
     for (var i = 0; i < 8; i++) {
@@ -227,7 +224,10 @@ void main() {
 
     // 이 유예가 없으면 나침반이 멀쩡한 기기까지 "heading 없음"으로 보여, 추정한
     // 진입 방향이 회전각으로 박히고 이후 궤적 전체가 그만큼 돌아간다.
-    expect(indoorNavigationDriver.currentCalibration.canRenderPosition, isFalse);
+    expect(
+      indoorNavigationDriver.currentCalibration.canRenderPosition,
+      isFalse,
+    );
     // 다만 센서 세션 자체는 이미 시작돼 있어야 한다.
     expect(
       indoorNavigationDriver.currentRuntimeStatus.state,
@@ -260,7 +260,10 @@ void main() {
     // 않는다 — 좌표를 옮길 근거가 없는데 배터리만 쓰는 세션이 남으면 안 된다.
     await tester.pump(const Duration(seconds: 3));
     await drain(tester);
-    expect(indoorNavigationDriver.currentCalibration.canRenderPosition, isFalse);
+    expect(
+      indoorNavigationDriver.currentCalibration.canRenderPosition,
+      isFalse,
+    );
     expect(
       indoorNavigationDriver.currentRuntimeStatus.state,
       PdrRuntimeState.idle,
@@ -271,6 +274,11 @@ void main() {
 /// navigation_graph가 들어 있는 층을 하나 가진 가짜 저장소. mock asset은 그래프가
 /// 없어 자동 앵커 경로를 끝까지 태울 수 없다.
 class _GraphBuildingRepository implements BuildingRepository {
+  // 카테고리 pill은 이 테스트들의 관심사가 아니다. 빈 목록이면 pill 줄이 아예
+  // 뜨지 않아 검증 대상 화면이 그대로 유지된다.
+  @override
+  Future<List<CategoryCount>?> getCategoryCounts(String buildingId) async =>
+      const [];
   _GraphBuildingRepository(this.graphJson);
 
   final Map<String, dynamic> graphJson;
@@ -315,13 +323,11 @@ class _GraphBuildingRepository implements BuildingRepository {
     String floor,
     String startNodeId,
     String endNodeId,
-  ) async =>
-      null;
+  ) async => null;
 
   @override
   Future<BuildingGraph?> getBuildingGraph(
     String buildingId, {
     String vertical = 'auto',
-  }) async =>
-      null;
+  }) async => null;
 }

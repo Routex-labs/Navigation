@@ -14340,7 +14340,7 @@
       "id": "PO-HUZC3FbRJ2320",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 101.161137,
@@ -14351,7 +14351,7 @@
       "id": "PO-Yx5bkGOVe2084",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 168.109962,
@@ -14362,7 +14362,7 @@
       "id": "PO-BFakHnjNE9908",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 221.846593,
@@ -14373,7 +14373,7 @@
       "id": "PO-8vuCvLn4Vz3209",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 220.869686,
@@ -14384,7 +14384,7 @@
       "id": "PO-KbUm5zZ9x63210",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 109.306519,
@@ -14395,7 +14395,7 @@
       "id": "PO-5B6Fy7EZb73210",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 112.333403,
@@ -14406,7 +14406,7 @@
       "id": "PO-GQGA46f_IX3211",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 220.871173,

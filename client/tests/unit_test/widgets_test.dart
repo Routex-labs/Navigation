@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:navigation_client/models/category_count.dart';
 import 'package:navigation_client/core/service_locator.dart';
 import 'package:navigation_client/models/building.dart';
 import 'package:navigation_client/models/building_graph.dart';
@@ -21,9 +22,7 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(
-        home: LocationMarker(mode: LocationMode.outdoor),
-      ),
+      const MaterialApp(home: LocationMarker(mode: LocationMode.outdoor)),
     );
 
     final icon = tester.widget<Icon>(find.byType(Icon));
@@ -61,13 +60,9 @@ void main() {
     expect(box.height, 40);
   });
 
-  testWidgets('StatusBadge shows the given label', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('StatusBadge shows the given label', (WidgetTester tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
-        home: StatusBadge(label: 'GPS 신호 약함'),
-      ),
+      const MaterialApp(home: StatusBadge(label: 'GPS 신호 약함')),
     );
 
     expect(find.text('GPS 신호 약함'), findsOneWidget);
@@ -77,9 +72,7 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(
-        home: EtaCard(distanceMeters: 150, minutes: 2),
-      ),
+      const MaterialApp(home: EtaCard(distanceMeters: 150, minutes: 2)),
     );
 
     expect(find.text('목적지까지'), findsOneWidget);
@@ -297,9 +290,7 @@ void main() {
       expect(find.text('뜻이 비슷한 매장을 찾았어요'), findsNothing);
     });
 
-    testWidgets('타이핑이 이어지면 중간 글자로 의미 검색을 태우지 않는다', (
-      WidgetTester tester,
-    ) async {
+    testWidgets('타이핑이 이어지면 중간 글자로 의미 검색을 태우지 않는다', (WidgetTester tester) async {
       // 의미 검색은 백엔드 모델 로드로 첫 호출이 6초대까지 간다. "신"·"신바"가
       // 각각 모델을 태우면 안 된다.
       final repository = _FakeSearchRepository();
@@ -409,7 +400,9 @@ void main() {
               floorName: '3F',
               entranceNodeId: 'FL-3:ND-1',
               point: LatLng(37.52, 126.92),
-              matchedFacets: {'styles': ['스포츠']},
+              matchedFacets: {
+                'styles': ['스포츠'],
+              },
               reason: '스포츠 신발을 찾을 때 볼 만해요.',
             ),
           ],
@@ -427,7 +420,9 @@ void main() {
               floorName: '3F',
               entranceNodeId: 'FL-3:ND-1',
               point: LatLng(37.52, 126.92),
-              matchedFacets: {'styles': ['스포츠']},
+              matchedFacets: {
+                'styles': ['스포츠'],
+              },
               reason: '스포츠 신발을 찾을 때 볼 만해요.',
             ),
           ],
@@ -447,15 +442,21 @@ void main() {
       await tester.tap(find.byKey(const Key('facet-option-styles-스포츠')));
       await flush(tester);
 
-      expect(find.byKey(const Key('selected-facet-styles-스포츠')), findsOneWidget);
-      expect(repository.selectedFacets, [null, {'styles': ['스포츠']}]);
+      expect(
+        find.byKey(const Key('selected-facet-styles-스포츠')),
+        findsOneWidget,
+      );
+      expect(repository.selectedFacets, [
+        null,
+        {
+          'styles': ['스포츠'],
+        },
+      ]);
       expect(repository.showAllValues, [false, false]);
       expect(repository.floorIds, ['1F', '1F']);
     });
 
-    testWidgets('전체 보기와 다시 선택은 새 요청으로 상태를 되돌린다', (
-      WidgetTester tester,
-    ) async {
+    testWidgets('전체 보기와 다시 선택은 새 요청으로 상태를 되돌린다', (WidgetTester tester) async {
       final clarify = DiscoveryResult(
         mode: DiscoveryMode.clarify,
         query: '신발',
@@ -478,7 +479,9 @@ void main() {
         floorName: '3F',
         entranceNodeId: 'FL-3:ND-1',
         point: LatLng(37.52, 126.92),
-        matchedFacets: {'styles': ['스포츠']},
+        matchedFacets: {
+          'styles': ['스포츠'],
+        },
         reason: '스포츠 신발을 찾을 때 볼 만해요.',
       );
       final repository = _ScriptedDiscoveryRepository([
@@ -511,8 +514,12 @@ void main() {
       expect(repository.showAllValues, [false, false, true, false]);
       expect(repository.selectedFacets, [
         null,
-        {'styles': ['스포츠']},
-        {'styles': ['스포츠']},
+        {
+          'styles': ['스포츠'],
+        },
+        {
+          'styles': ['스포츠'],
+        },
         null,
       ]);
       expect(find.text('어떤 스타일의 신발을 찾으세요?'), findsOneWidget);
@@ -531,7 +538,7 @@ void main() {
             DiscoveryMatch(
               storeId: 'ST-DOJO',
               name: '도조 커피',
-              category: '식음료',
+              category: '카페',
               subcategory: '카페·베이커리',
               floorId: 'FL-B1',
               floorName: 'B1',
@@ -575,7 +582,9 @@ void main() {
         floorName: '3F',
         entranceNodeId: 'FL-3:ND-1',
         point: LatLng(37.52, 126.92),
-        matchedFacets: {'styles': ['스포츠']},
+        matchedFacets: {
+          'styles': ['스포츠'],
+        },
         reason: '스포츠 스타일 매장이에요.',
       );
       final repository = _ScriptedDiscoveryRepository([
@@ -608,9 +617,7 @@ void main() {
       expect(find.byKey(const Key('choose-again')), findsOneWidget);
     });
 
-    testWidgets('전체 보기로 넘어간 화면에는 다시 선택만 남는다', (
-      WidgetTester tester,
-    ) async {
+    testWidgets('전체 보기로 넘어간 화면에는 다시 선택만 남는다', (WidgetTester tester) async {
       // 선택 없이 질문만 건너뛴 상태다. 여기서 "다시 선택"은 질문으로 돌아가는
       // 유일한 길이라 남아야 하고, "전체 보기"는 이미 전체라 눌러도 그대로다.
       const option = DiscoveryOption(
@@ -658,9 +665,7 @@ void main() {
       expect(find.byKey(const Key('choose-again')), findsOneWidget);
     });
 
-    testWidgets('결과가 패널 높이를 넘으면 스크롤로 끝까지 볼 수 있다', (
-      WidgetTester tester,
-    ) async {
+    testWidgets('결과가 패널 높이를 넘으면 스크롤로 끝까지 볼 수 있다', (WidgetTester tester) async {
       // 패널은 상위(map_shell)가 maxHeight로 묶는다. 그 높이를 넘는 결과가
       // 왔을 때 목록이 스크롤되지 않으면 뒤쪽 후보는 영영 못 본다.
       final matches = [
@@ -745,7 +750,9 @@ void main() {
         floorName: '3F',
         entranceNodeId: 'FL-3:ND-1',
         point: LatLng(37.52, 126.92),
-        matchedFacets: {'styles': ['스포츠']},
+        matchedFacets: {
+          'styles': ['스포츠'],
+        },
         reason: '스포츠 신발을 찾을 때 볼 만해요.',
       );
       final repository = _ScriptedDiscoveryRepository([
@@ -862,13 +869,15 @@ class _ScriptedDiscoveryRepository implements DestinationRepository {
     Map<String, List<String>>? selectedFacets,
     bool showAll = false,
   }) async {
-    this.selectedFacets.add(selectedFacets == null
-        ? null
-        : Map<String, List<String>>.fromEntries(
-            selectedFacets.entries.map(
-              (entry) => MapEntry(entry.key, List<String>.from(entry.value)),
+    this.selectedFacets.add(
+      selectedFacets == null
+          ? null
+          : Map<String, List<String>>.fromEntries(
+              selectedFacets.entries.map(
+                (entry) => MapEntry(entry.key, List<String>.from(entry.value)),
+              ),
             ),
-          ));
+    );
     showAllValues.add(showAll);
     floorIds.add(currentFloorId);
     if (_index >= _responses.length) {
@@ -897,6 +906,11 @@ DiscoveryMatch _toDiscoveryMatch(PoiSearchResult result) => DiscoveryMatch(
 /// 패널은 건물 이름 검색 때문에 getAllBuildings만 부른다. 나머지는 부르지
 /// 않으므로 호출되면 테스트가 틀린 것이라 그대로 던진다.
 class _FakeBuildingRepository implements BuildingRepository {
+  // 카테고리 pill은 이 테스트들의 관심사가 아니다. 빈 목록이면 pill 줄이 아예
+  // 뜨지 않아 검증 대상 화면이 그대로 유지된다.
+  @override
+  Future<List<CategoryCount>?> getCategoryCounts(String buildingId) async =>
+      const [];
   @override
   Future<List<Building>> getAllBuildings() async => const [];
 

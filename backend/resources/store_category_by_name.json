@@ -48,7 +48,7 @@
   "subcategory": "주차"
  },
  "22 FOOD TRUCK PIAZZA": {
-  "category": "식음료",
+  "category": "음식점",
   "subcategory": "레스토랑"
  },
  "29CM HOME": {
@@ -376,12 +376,12 @@
   "subcategory": "캐주얼·스트리트"
  },
  "ARKET CAFE": {
-  "category": "식음료",
+  "category": "카페",
   "subcategory": "카페·베이커리"
  },
  "ATM (하나은행)": {
   "category": "편의시설",
-  "subcategory": "facility"
+  "subcategory": "생활편의"
  },
  "ATTAG": {
   "category": "서비스",
@@ -420,7 +420,7 @@
   "subcategory": "스포츠·아웃도어"
  },
  "ETF 베이커리": {
-  "category": "식음료",
+  "category": "카페",
   "subcategory": "카페·베이커리"
  },
  "HBYH": {
@@ -436,7 +436,7 @@
   "subcategory": "고객서비스"
  },
  "HMR/ 간편식/ 주류": {
-  "category": "식음료",
+  "category": "식품관",
   "subcategory": "식품·그로서리"
  },
  "IWC": {
@@ -556,7 +556,7 @@
   "subcategory": "펫"
  },
  "Wine Works": {
-  "category": "식음료",
+  "category": "식품관",
   "subcategory": "와인·주류"
  },
  "Y-3": {
@@ -592,11 +592,11 @@
   "subcategory": "시계·주얼리"
  },
  "골든치즈": {
-  "category": "식음료",
+  "category": "카페",
   "subcategory": "카페·베이커리"
  },
  "과일": {
-  "category": "식음료",
+  "category": "식품관",
   "subcategory": "식품·그로서리"
  },
  "교환 / 환불 데스크": {
@@ -620,11 +620,11 @@
   "subcategory": "스포츠·아웃도어"
  },
  "그로서리/ 음료/ 유제품/ 치즈": {
-  "category": "식음료",
+  "category": "식품관",
   "subcategory": "식품·그로서리"
  },
  "근제 베이커리": {
-  "category": "식음료",
+  "category": "카페",
   "subcategory": "카페·베이커리"
  },
  "금강 안경": {
@@ -632,15 +632,15 @@
   "subcategory": "아이웨어"
  },
  "금양와인/롯데와인/나라와인/비노에이치": {
-  "category": "식음료",
+  "category": "식품관",
   "subcategory": "와인·주류"
  },
  "금옥당": {
-  "category": "식음료",
+  "category": "카페",
   "subcategory": "카페·베이커리"
  },
  "까브드뱅": {
-  "category": "식음료",
+  "category": "식품관",
   "subcategory": "와인·주류"
  },
  "꼼데가르송 (포켓/ 남성 컬렉션)": {
@@ -652,7 +652,7 @@
   "subcategory": "가구·인테리어"
  },
  "나라와인": {
-  "category": "식음료",
+  "category": "식품관",
   "subcategory": "와인·주류"
  },
  "나이스웨더": {
@@ -736,7 +736,7 @@
   "subcategory": "컨템포러리"
  },
  "더치랩": {
-  "category": "식음료",
+  "category": "카페",
   "subcategory": "카페·베이커리"
  },
  "더현대 수비니어": {
@@ -752,11 +752,11 @@
   "subcategory": "캐주얼·스트리트"
  },
  "도조 커피": {
-  "category": "식음료",
+  "category": "카페",
   "subcategory": "카페·베이커리"
  },
  "돌장각": {
-  "category": "식음료",
+  "category": "음식점",
   "subcategory": "레스토랑"
  },
  "두두두 쇼룸": {
@@ -804,7 +804,7 @@
   "subcategory": "컨템포러리"
  },
  "라그릴리아": {
-  "category": "식음료",
+  "category": "음식점",
   "subcategory": "레스토랑"
  },
  "라이다": {
@@ -848,11 +848,11 @@
   "subcategory": "리빙·주방"
  },
  "레뱅드매일": {
-  "category": "식음료",
+  "category": "식품관",
   "subcategory": "식품·그로서리"
  },
  "레솔베르 (시가)": {
-  "category": "식음료",
+  "category": "식품관",
   "subcategory": "와인·주류"
  },
  "레이로우": {
@@ -884,7 +884,7 @@
   "subcategory": "캐주얼·스트리트"
  },
  "롯데와인": {
-  "category": "식음료",
+  "category": "식품관",
   "subcategory": "와인·주류"
  },
  "롱샴": {
@@ -924,7 +924,7 @@
   "subcategory": "가구·인테리어"
  },
  "리치몬드 과자점": {
-  "category": "식음료",
+  "category": "카페",
   "subcategory": "카페·베이커리"
  },
  "리틀 그라운드": {
@@ -932,7 +932,7 @@
   "subcategory": "토이·완구"
  },
  "릴버거": {
-  "category": "식음료",
+  "category": "음식점",
   "subcategory": "레스토랑"
  },
  "마뗑킴": {
@@ -948,7 +948,7 @@
   "subcategory": "캐주얼·스트리트"
  },
  "마사비스": {
-  "category": "식음료",
+  "category": "카페",
   "subcategory": "카페·베이커리"
  },
  "마인": {
@@ -980,7 +980,7 @@
   "subcategory": "토이·완구"
  },
  "메이루": {
-  "category": "식음료",
+  "category": "음식점",
   "subcategory": "레스토랑"
  },
  "메이린 클리닉": {
@@ -1000,7 +1000,7 @@
   "subcategory": "컨템포러리"
  },
  "명인 명촌": {
-  "category": "식음료",
+  "category": "식품관",
   "subcategory": "와인·주류"
  },
  "모드맨": {
@@ -1064,7 +1064,7 @@
   "subcategory": "가구·인테리어"
  },
  "바오 서울": {
-  "category": "식음료",
+  "category": "음식점",
   "subcategory": "레스토랑"
  },
  "바오바오 (남/여)": {
@@ -1080,7 +1080,7 @@
   "subcategory": "문화·예술"
  },
  "방방＆든든행": {
-  "category": "식음료",
+  "category": "음식점",
   "subcategory": "레스토랑"
  },
  "배송 접수 데스크": {
@@ -1096,7 +1096,7 @@
   "subcategory": "슈즈"
  },
  "번패티번": {
-  "category": "식음료",
+  "category": "음식점",
   "subcategory": "레스토랑"
  },
  "베로니카 비어드": {
@@ -1136,7 +1136,7 @@
   "subcategory": "골프"
  },
  "블루보틀": {
-  "category": "식음료",
+  "category": "카페",
   "subcategory": "카페·베이커리"
  },
  "비너스": {
@@ -1172,11 +1172,11 @@
   "subcategory": "잡화·액세서리"
  },
  "빠리가옥": {
-  "category": "식음료",
+  "category": "음식점",
   "subcategory": "레스토랑"
  },
  "사루카메": {
-  "category": "식음료",
+  "category": "음식점",
   "subcategory": "레스토랑"
  },
  "사브르": {
@@ -1212,7 +1212,7 @@
   "subcategory": "문화·예술"
  },
  "세띠 엠므": {
-  "category": "식음료",
+  "category": "카페",
   "subcategory": "카페·베이커리"
  },
  "세라젬": {
@@ -1240,12 +1240,12 @@
   "subcategory": "컨템포러리"
  },
  "수산": {
-  "category": "식음료",
+  "category": "식품관",
   "subcategory": "식품·그로서리"
  },
  "수유실": {
   "category": "편의시설",
-  "subcategory": "facility"
+  "subcategory": "생활편의"
  },
  "수트 서플라이": {
   "category": "패션",
@@ -1288,7 +1288,7 @@
   "subcategory": "캐주얼·스트리트"
  },
  "스트릿": {
-  "category": "식음료",
+  "category": "음식점",
   "subcategory": "레스토랑"
  },
  "시다스": {
@@ -1332,7 +1332,7 @@
   "subcategory": "컨템포러리"
  },
  "신동와인": {
-  "category": "식음료",
+  "category": "식품관",
   "subcategory": "와인·주류"
  },
  "씰리": {
@@ -1380,7 +1380,7 @@
   "subcategory": "컨템포러리"
  },
  "아이캔 리부트": {
-  "category": "식음료",
+  "category": "식품관",
   "subcategory": "식품·그로서리"
  },
  "아크 테릭스": {
@@ -1416,7 +1416,7 @@
   "subcategory": "유아·아동"
  },
  "애니브": {
-  "category": "식음료",
+  "category": "식품관",
   "subcategory": "식품·그로서리"
  },
  "애브뉴준오 (헤어숍)": {
@@ -1428,7 +1428,7 @@
   "subcategory": "컨템포러리"
  },
  "야채": {
-  "category": "식음료",
+  "category": "식품관",
   "subcategory": "식품·그로서리"
  },
  "어그": {
@@ -1464,7 +1464,7 @@
   "subcategory": "침구·매트리스"
  },
  "에코맘의 산골이유식": {
-  "category": "식음료",
+  "category": "식품관",
   "subcategory": "식품·그로서리"
  },
  "에픽서울": {
@@ -1472,11 +1472,11 @@
   "subcategory": "가전·디지털"
  },
  "예향": {
-  "category": "식음료",
+  "category": "카페",
   "subcategory": "카페·베이커리"
  },
  "예향 아이캔 리부트 일미어담": {
-  "category": "식음료",
+  "category": "카페",
   "subcategory": "카페·베이커리"
  },
  "오메가": {
@@ -1484,11 +1484,11 @@
   "subcategory": "시계·주얼리"
  },
  "오설록": {
-  "category": "식음료",
+  "category": "카페",
   "subcategory": "카페·베이커리"
  },
  "오크베리": {
-  "category": "식음료",
+  "category": "카페",
   "subcategory": "카페·베이커리"
  },
  "오프레임": {
@@ -1504,7 +1504,7 @@
   "subcategory": "스포츠·아웃도어"
  },
  "온드린": {
-  "category": "식음료",
+  "category": "카페",
   "subcategory": "카페·베이커리"
  },
  "옴므플리세": {
@@ -1512,7 +1512,7 @@
   "subcategory": "명품"
  },
  "와인웍스(다이닝)": {
-  "category": "식음료",
+  "category": "식품관",
   "subcategory": "와인·주류"
  },
  "와코루": {
@@ -1520,7 +1520,7 @@
   "subcategory": "이너웨어"
  },
  "우나하우스": {
-  "category": "식음료",
+  "category": "카페",
   "subcategory": "카페·베이커리"
  },
  "우영미": {
@@ -1552,7 +1552,7 @@
   "subcategory": "캐주얼·스트리트"
  },
  "은비스브레드": {
-  "category": "식음료",
+  "category": "카페",
   "subcategory": "카페·베이커리"
  },
  "이미스": {
@@ -1568,15 +1568,15 @@
   "subcategory": "명품"
  },
  "이탈리": {
-  "category": "식음료",
+  "category": "음식점",
   "subcategory": "레스토랑"
  },
  "이탈리 마켓": {
-  "category": "식음료",
+  "category": "음식점",
   "subcategory": "레스토랑"
  },
  "익스첼": {
-  "category": "식음료",
+  "category": "카페",
   "subcategory": "카페·베이커리"
  },
  "인더 스토리": {
@@ -1592,31 +1592,31 @@
   "subcategory": "명품"
  },
  "일미어담": {
-  "category": "식음료",
+  "category": "식품관",
   "subcategory": "식품·그로서리"
  },
  "일상다완": {
-  "category": "식음료",
+  "category": "카페",
   "subcategory": "카페·베이커리"
  },
  "장애인화장실": {
   "category": "편의시설",
-  "subcategory": "restroom"
+  "subcategory": "화장실"
  },
  "전주선비빔": {
-  "category": "식음료",
+  "category": "음식점",
   "subcategory": "레스토랑"
  },
  "정관장": {
-  "category": "식음료",
+  "category": "식품관",
   "subcategory": "식품·그로서리"
  },
  "정수기": {
   "category": "편의시설",
-  "subcategory": "facility"
+  "subcategory": "생활편의"
  },
  "정육": {
-  "category": "식음료",
+  "category": "식품관",
   "subcategory": "식품·그로서리"
  },
  "제이린드 버그": {
@@ -1665,10 +1665,10 @@
  },
  "취식 가능장소": {
   "category": "편의시설",
-  "subcategory": "facility"
+  "subcategory": "생활편의"
  },
  "친환경농산물": {
-  "category": "식음료",
+  "category": "식품관",
   "subcategory": "식품·그로서리"
  },
  "카운테스마라": {
@@ -1700,7 +1700,7 @@
   "subcategory": "슈즈"
  },
  "커리샵 단풍": {
-  "category": "식음료",
+  "category": "음식점",
   "subcategory": "레스토랑"
  },
  "커뮤니티 라운지": {
@@ -1840,7 +1840,7 @@
   "subcategory": "캐주얼·스트리트"
  },
  "파리크라상": {
-  "category": "식음료",
+  "category": "카페",
   "subcategory": "카페·베이커리"
  },
  "파소티": {
@@ -1860,7 +1860,7 @@
   "subcategory": "호텔"
  },
  "포동 푸딩": {
-  "category": "식음료",
+  "category": "카페",
   "subcategory": "카페·베이커리"
  },
  "포스엘리먼트": {
@@ -1900,11 +1900,11 @@
   "subcategory": "명품"
  },
  "프레쉬테이블": {
-  "category": "식음료",
+  "category": "식품관",
   "subcategory": "식품·그로서리"
  },
  "프레쉬테이블 친환경농산물": {
-  "category": "식음료",
+  "category": "식품관",
   "subcategory": "식품·그로서리"
  },
  "프레이트": {
@@ -1912,7 +1912,7 @@
   "subcategory": "컨템포러리"
  },
  "프롤라": {
-  "category": "식음료",
+  "category": "카페",
   "subcategory": "카페·베이커리"
  },
  "플레이 인더박스": {
@@ -1944,11 +1944,11 @@
   "subcategory": "잡화·액세서리"
  },
  "한솔 냉면": {
-  "category": "식음료",
+  "category": "음식점",
   "subcategory": "레스토랑"
  },
  "한정선": {
-  "category": "식음료",
+  "category": "음식점",
   "subcategory": "레스토랑"
  },
  "해밀턴": {
@@ -1973,6 +1973,6 @@
  },
  "흡연실 (전자담배 전용)": {
   "category": "편의시설",
-  "subcategory": "facility"
+  "subcategory": "생활편의"
  }
 }

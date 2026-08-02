@@ -13,6 +13,18 @@ import 'sheet_header.dart';
 
 import 'map_overlay_guard.dart';
 
+/// 매장 상세 시트가 처음 올라오는 높이(화면 비율).
+///
+/// 이름·업종·길찾기 버튼에 **사진과 소개 앞부분까지**가 들어오는 선이다. 더
+/// 올리면 정보는 많이 보이지만 지도가 거의 안 남아, 방금 고른 매장이 건물
+/// 어디쯤인지 확인할 수 없다. 나머지는 시트를 끌어올려 본다.
+///
+/// **이 값은 지도 카메라와 짝을 이룬다.** 목록에서 매장을 고르면 지도가 그
+/// 매장으로 이동하는데, 시트가 덮는 만큼 위로 밀어 올려야 매장이 시트 뒤에
+/// 숨지 않는다. 그래서 상수를 공개해 `MapShellScreen`이 그대로 지도에 넘긴다 —
+/// 여기만 바꾸면 카메라도 따라온다.
+const double kPlaceDetailSheetInitialSize = 0.5;
+
 /// 장소 상세 시트에서 호출자에게 돌려주는 다음 동작.
 ///
 /// 호출부의 출발·도착·카테고리 시트 chain 계약은 기존과 동일하게 유지한다.
@@ -66,6 +78,11 @@ class PlaceDetailSheet extends StatefulWidget {
       isScrollControlled: true,
       isDismissible: true,
       backgroundColor: Colors.transparent,
+      // 시트 뒤 지도를 어둡게 덮지 않는다. 목록에서 매장을 고르면 지도가 그
+      // 매장으로 이동하는데, 기본 barrier(검정 54%)가 깔리면 정작 확인하러 온
+      // 그 매장이 어둠 속에 있다. 바깥을 눌러 닫는 동작은 시트 본문의
+      // GestureDetector가 그대로 처리하므로 잃는 기능은 없다.
+      barrierColor: Colors.transparent,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -188,9 +205,7 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
         onTap: () => Navigator.of(context).maybePop(),
         behavior: HitTestBehavior.opaque,
         child: DraggableScrollableSheet(
-          // 이름·길찾기·사진·소개까지가 한 화면에 들어오고 아래에 여백이 조금
-          // 남는 높이다. 문장 중간에서 끊기면 잘린 것처럼 보인다.
-          initialChildSize: 0.64,
+          initialChildSize: kPlaceDetailSheetInitialSize,
           minChildSize: 0.3,
           maxChildSize: 0.92,
           expand: false,

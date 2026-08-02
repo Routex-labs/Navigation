@@ -69,8 +69,8 @@ class MockDestinationRepository implements DestinationRepository {
     // 않기 위해서. 값이 실제 이 건물의 층 목록에 있을 때만 필터로 취급하고,
     // 없으면(층 이름이 바뀌었거나 아직 로드 전인 경우) 안전하게 전체 검색으로
     // 폴백해서 기존 흐름을 깨뜨리지 않는다.
-    final floorsToScan = (currentFloorId != null &&
-            building.floors.contains(currentFloorId))
+    final floorsToScan =
+        (currentFloorId != null && building.floors.contains(currentFloorId))
         ? [currentFloorId]
         : building.floors;
 

@@ -243,10 +243,10 @@ INTENT_STORES = [
         "category": "패션",
         "subcategory": "캐주얼·스트리트",
     },
-    {"store_id": "PO-식당1", "name": "본가 스시", "category": "식음료", "subcategory": "레스토랑"},
-    {"store_id": "PO-식당2", "name": "공탕", "category": "식음료", "subcategory": "레스토랑"},
-    # 식음료지만 밥집이 아닌 것 — "식사"가 category 기준이면 여기가 섞여 들어온다.
-    {"store_id": "PO-정육", "name": "정육 코너", "category": "식음료", "subcategory": "정육"},
+    {"store_id": "PO-식당1", "name": "본가 스시", "category": "음식점", "subcategory": "레스토랑"},
+    {"store_id": "PO-식당2", "name": "공탕", "category": "음식점", "subcategory": "레스토랑"},
+    # 먹거리지만 밥집이 아닌 것 — "식사"를 먹거리 대분류 기준으로 잡으면 여기가 섞인다.
+    {"store_id": "PO-정육", "name": "정육 코너", "category": "식품관", "subcategory": "정육"},
 ]
 
 INTENTS = {
@@ -273,14 +273,14 @@ def test_extra_store_ids가_규칙_결과에_합쳐진다():
     }
 
 
-# "식사"는 category=식음료가 아니라 subcategory=레스토랑 기준이다(설계 문서 결정).
-# category 기준이면 정육·야채·수산이 "밥집" 질의에 섞여 들어온다.
+# "식사"는 먹거리 대분류가 아니라 subcategory=레스토랑 기준이다(설계 문서 결정).
+# 대분류 기준이면 정육·야채·수산이 "밥집" 질의에 섞여 들어온다.
 def test_식사는_category가_아니라_subcategory_기준이다():
     result = store_facets.resolve_intent_store_ids("식사", INTENT_STORES, INTENTS)
     assert "PO-정육" not in result
-    # 대조군: 같은 스키마로 category 규칙을 쓰면 정육이 실제로 섞인다 — 왜 subcategory를
-    # 골랐는지 코드로 남겨 두는 회귀 테스트다.
-    category_based = {"식사": {"rules": {"category": ["식음료"]}}}
+    # 대조군: 같은 스키마로 먹거리 대분류(음식점·식품관)를 규칙에 적으면 정육이 실제로
+    # 섞인다 — 왜 subcategory를 골랐는지 코드로 남겨 두는 회귀 테스트다.
+    category_based = {"식사": {"rules": {"category": ["음식점", "식품관"]}}}
     assert "PO-정육" in store_facets.resolve_intent_store_ids("식사", INTENT_STORES, category_based)
 
 
@@ -465,14 +465,19 @@ def test_배포된_intents_파일이_검수_범위를_유지한다():
 
     assert set(intents) == {"신발", "식사", "카페", "화장품", "향수", "의류", "출구"}
     assert intents["신발"]["rules"] == {"subcategory": ["슈즈"]}
-    assert intents["식사"]["rules"] == {"subcategory": ["레스토랑"]}
+    # 먹거리 intent는 소분류가 아니라 **대분류**를 본다. 대분류 재편으로
+    # category=음식점이 subcategory=레스토랑과 같은 집합이 됐고, 지도 필터 pill과
+    # 같은 축을 봐야 나중에 음식점 밑에 소분류가 늘어도 함께 따라온다.
+    # 근거는 store_facets.py 모듈 주석.
+    assert intents["식사"]["rules"] == {"category": ["음식점"]}
+    assert intents["카페"]["rules"] == {"category": ["카페"]}
     # P3 검수 결과 = 예 145건. 규칙이 잡는 슈즈 8건은 extra에 없어야 한다.
     assert len(intents["신발"]["extra_store_ids"]) == 145
     assert "extra_store_ids" not in intents["식사"]
 
     # 확장분(W9)은 소분류에서 결정적으로 유도되는 규칙만 쓴다. 매장별 판단이 필요한
     # extra 목록을 사람 검수 없이 늘리지 않는다는 게 이 단언의 요지다 — 유일한 예외는
-    # 소분류가 facility로 잘못 붙은 지하철 출입구 2건이다.
+    # 소분류가 생활편의로 잘못 붙은 지하철 출입구 2건이다.
     for intent in ("카페", "화장품", "향수", "의류"):
         assert "extra_store_ids" not in intents[intent], intent
     assert len(intents["출구"]["extra_store_ids"]) == 2

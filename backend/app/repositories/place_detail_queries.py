@@ -17,11 +17,11 @@ from app.repositories import place_details
 # 1,007건으로 전체 1,640건의 61%다. 이들은 "설명"이라는 개념이 성립하지 않는다.
 # 404로 만들지 않는 이유: 존재하지 않는 것과 상세가 없는 것은 다르고, 클라이언트가
 # kind를 보고 시트를 열지 말지 결정하는 편이 id 규칙을 클라이언트에 심는 것보다 낫다.
-_EXCLUDED_SUBCATEGORIES = {"주차", "escalator", "elevator"}
+_EXCLUDED_SUBCATEGORIES = {"주차", "에스컬레이터", "엘리베이터"}
 
-# 사람이 설명을 쓰지 않고 위치 안내만 파생하는 시설. 화장실·락커·교통·기타 시설
+# 사람이 설명을 쓰지 않고 위치 안내만 파생하는 시설. 화장실·락커·교통·생활편의
 # 92건이 여기 해당한다.
-_FACILITY_SUBCATEGORIES = {"restroom", "facility", "교통", "락커"}
+_FACILITY_SUBCATEGORIES = {"화장실", "생활편의", "교통", "락커"}
 
 
 # 매장/시설 상세. 건물·매장이 없으면 None.

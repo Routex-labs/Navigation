@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.geo.georeference import GeoTransform
@@ -22,6 +22,47 @@ from app.repositories.geo_transform import fit_building_geo_transform
 def list_buildings(session: Session) -> list[dict[str, Any]]:
     buildings = session.scalars(select(Building).options(selectinload(Building.floors))).all()
     return [_to_building_summary(building) for building in buildings]
+
+
+# 건물의 (층·대분류·소분류)별 매장 수. 없는 건물이면 None.
+#
+# 지도 위 카테고리 필터가 쓰는 목록이다. 이게 없을 때 클라이언트는 pill 목록과
+# "이 층 N곳" 안내를 만들려고 **12개 층 GeoJSON을 통째로** 받았다(접근 로그 실측
+# 130건). 정작 쓰는 건 세 문자열과 개수뿐인데 매장 폴리곤·좌표·navigation_graph가
+# 전부 따라왔다.
+#
+# 개수를 서버가 세는 이유: 클라이언트가 세려면 결국 매장 목록을 받아야 한다.
+# GROUP BY로 접으면 응답이 조합 수(실데이터 150행 안팎)로 고정된다.
+def list_category_counts(session: Session, building_id: str) -> list[dict[str, Any]] | None:
+    building = session.scalars(select(Building).where(Building.id == building_id)).one_or_none()
+    if building is None:
+        return None
+
+    rows = session.execute(
+        select(
+            Floor.name,
+            Store.category,
+            Store.subcategory,
+            func.count(Store.id),
+        )
+        .join(Store, Store.floor_id == Floor.id)
+        .where(Floor.building_id == building_id)
+        # 대분류가 없는 매장은 pill을 만들 수 없어 클라이언트가 어차피 버린다.
+        # 여기서 걸러 응답을 더 줄인다.
+        .where(Store.category.is_not(None))
+        .group_by(Floor.name, Store.category, Store.subcategory)
+        .order_by(Floor.name, Store.category, Store.subcategory)
+    ).all()
+
+    return [
+        {
+            "floor": floor_name,
+            "category": category,
+            "subcategory": subcategory,
+            "count": count,
+        }
+        for floor_name, category, subcategory, count in rows
+    ]
 
 
 # 건물 상세(footprint 포함). 없으면 None.

@@ -5,6 +5,7 @@ import '../models/floor_plan.dart';
 import '../models/poi_search_result.dart';
 import '../theme/app_theme.dart';
 import 'category_icon.dart';
+import 'category_taxonomy.dart';
 import 'sheet_grab_handle.dart';
 import 'sheet_header.dart';
 
@@ -50,6 +51,10 @@ class CategoryStoresSheet extends StatefulWidget {
       isScrollControlled: true,
       isDismissible: true,
       backgroundColor: Colors.transparent,
+      // 상세 시트와 같은 이유로 뒤 지도를 어둡게 덮지 않는다 — 목록을 훑는
+      // 동안에도 지도 위 카테고리 강조가 그대로 보여야 어느 층 어디쯤인지
+      // 가늠할 수 있다.
+      barrierColor: Colors.transparent,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -100,31 +105,13 @@ class _CategoryStoresSheetState extends State<CategoryStoresSheet> {
     }).toList();
   }
 
-  /// 편의시설 카테고리에서 목록에 노출하지 않을 하위 카테고리.
-  /// - `주차`: 매장이 아니라 주차 구획이라 매장 검색 흐름에 노출할 필요가 없음.
-  /// - `교통`: 지하철 등 건물 외부 시설이라 실내 매장 탐색과 무관.
-  /// - `escalator`·`elevator` (및 한글 표기): 개별 도착지로 안내할 대상이
-  ///   아니므로 제외 — 경로 안내가 필요할 때는 다익스트라가 자동으로 층 이동
-  ///   수단으로 이 노드들을 사용한다.
-  ///
-  /// 실제 층 데이터의 subcategory는 영어 소문자이므로 그 표기를 우선으로 넣고,
-  /// 다른 seed 경로에서 한글로 들어올 가능성에 대비해 대응되는 한글 표기도 함께 둔다.
-  static const _hiddenSubcategoriesByCategory = <String, Set<String>>{
-    '편의시설': {
-      '주차',
-      '교통',
-      'escalator',
-      '에스컬레이터',
-      'elevator',
-      '엘리베이터',
-    },
-  };
-
   Future<List<_CategoryStoreEntry>> _load() async {
     final building = await buildingRepository.getBuilding(widget.buildingId);
     if (building == null) return const [];
-    final hiddenSubs =
-        _hiddenSubcategoriesByCategory[widget.category] ?? const <String>{};
+    // 제외 목록은 지도 필터 pill과 **같은 상수**를 쓴다. 예전에는 이 파일이
+    // 같은 값을 따로 들고 있었는데, 한쪽만 고치면 같은 항목이 시트에서는 빠지고
+    // pill에서는 나오는 상태가 된다(근거는 kHiddenSubcategoryValues 주석).
+    const hiddenSubs = kHiddenSubcategoryValues;
     final entries = <_CategoryStoreEntry>[];
     for (final floor in building.floors) {
       final json = await buildingRepository.getFloorGeoJson(

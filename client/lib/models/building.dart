@@ -8,6 +8,7 @@ class Building {
     this.defaultFloor,
     this.entrance,
     this.footprintWgs84,
+    this.tileRevision,
   });
 
   final String id;
@@ -30,6 +31,14 @@ class Building {
   /// 폴리곤의 마지막 점이 첫 점과 같지 않아도 되며(자동으로 닫힘 처리),
   /// 백엔드가 [{lat, lng}, ...] 형식으로 내려준다.
   final List<LatLng>? footprintWgs84;
+
+  /// 벡터 타일 URL에 `?v=`로 붙일 버전 토큰. 시드가 바뀌면 값이 바뀐다.
+  ///
+  /// 이걸 붙이면 서버가 타일에 `immutable`을 줘서 **재검증(304)조차 나가지
+  /// 않는다.** 층을 오갈 때마다 수십 건이 서버까지 닿던 왕복이 사라진다.
+  /// 응답에 없는 구버전 백엔드면 null이고, 그때는 URL을 그대로 써서 지금까지와
+  /// 같은 짧은 캐시 + 재검증으로 동작한다.
+  final String? tileRevision;
 
   /// 지도를 열 때 선택할 층. default_floor가 오면 그것을, 아니면 목록의 첫
   /// 항목을 쓴다. 층이 하나도 없으면 null.
@@ -54,6 +63,7 @@ class Building {
               (entrance['lat'] as num).toDouble(),
               (entrance['lng'] as num).toDouble(),
             ),
+      tileRevision: json['tile_revision'] as String?,
       footprintWgs84: footprint == null
           ? null
           : [

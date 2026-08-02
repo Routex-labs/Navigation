@@ -9585,7 +9585,7 @@
       "id": "PO-NyezFOtR45461",
       "name": "투어리스트 데스크 서비스 - 유모차 대여",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 138.651835,
@@ -9618,7 +9618,7 @@
       "id": "PO-iVhobbC-v0998",
       "name": "발레 라운지",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 72.932525,
@@ -9651,7 +9651,7 @@
       "id": "PO-ZtznVXoG01054",
       "name": "유아차 전용 E/V",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 170.213562,
@@ -9717,7 +9717,7 @@
       "id": "PO-U6hZ2idzw9372",
       "name": "투어리스트 데스크 서비스 - 캐리어 보관 서비스",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 138.651835,
@@ -9739,7 +9739,7 @@
       "id": "PO-g-Qs2usRK5184",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 85.615142,
@@ -9750,7 +9750,7 @@
       "id": "PO-79T5tNCbX1542",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 149.238795,
@@ -9761,7 +9761,7 @@
       "id": "PO-CrRXuYr7I8723",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 152.108185,
@@ -9772,7 +9772,7 @@
       "id": "PO-ZDIiTbuxX7875",
       "name": "에스컬레이터",
       "category": "편의시설",
-      "subcategory": "escalator",
+      "subcategory": "에스컬레이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 205.500385,
@@ -9849,7 +9849,7 @@
       "id": "PO-SbEjEmz0A5237",
       "name": "컨시어지 (안내데스크)",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 150.494155,
@@ -9871,7 +9871,7 @@
       "id": "PO-ScHxkQcAR4247",
       "name": "화장실",
       "category": "편의시설",
-      "subcategory": "restroom",
+      "subcategory": "화장실",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 159.374158,
@@ -9882,7 +9882,7 @@
       "id": "PO-QuY1qFi9vs4258",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 170.213562,
@@ -9893,7 +9893,7 @@
       "id": "PO-0d_J1ehum94259",
       "name": "정수기",
       "category": "편의시설",
-      "subcategory": "facility",
+      "subcategory": "생활편의",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 160.211393,
@@ -9904,7 +9904,7 @@
       "id": "PO-6TUC1J65u8791",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 204.363101,
@@ -9915,7 +9915,7 @@
       "id": "PO-liVt_3V4D1703",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 202.058131,
@@ -9926,7 +9926,7 @@
       "id": "PO-G1_ZRKAf44894",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 95.142747,
@@ -9937,7 +9937,7 @@
       "id": "PO-lbJ6GZW007895",
       "name": "엘리베이터",
       "category": "편의시설",
-      "subcategory": "elevator",
+      "subcategory": "엘리베이터",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 96.203863,
@@ -9948,7 +9948,7 @@
       "id": "PO-1D9bSv_Bv8346",
       "name": "장애인화장실",
       "category": "편의시설",
-      "subcategory": "restroom",
+      "subcategory": "화장실",
       "entrance_node_id": null,
       "centroid_local_m": {
         "x": 160.207491,

@@ -54,21 +54,27 @@ TRANS_CODE_TYPES = {
     "OB-STAIRS": "stairs",
 }
 
-# object.attributeCode -> (category, subcategory). 다베오는 식음료 매장도 "시설
+# object.attributeCode -> (category, subcategory). 다베오는 먹거리 매장도 "시설
 # 속성"으로 태깅하므로(OB-CAFE/OB-RESTAURANT), 속성이 붙었다는 이유만으로 전부
 # 편의시설로 넣으면 스타벅스 리저브·런던베이글 뮤지엄 같은 매장이 편의시설이 된다.
-# 대분류를 속성별로 명시해 식음료는 식음료로 떨어지게 한다.
+# 대분류를 속성별로 명시해 카페는 카페로, 식당은 음식점으로 떨어지게 한다.
+#
+# 값은 전부 사용자가 실제로 쓰는 말로 적는다. 유통업계 용어인 "식음료"를 대분류
+# 하나로 두면 사용자가 그 말로 찾지 않고, 소분류를 영어 원본(escalator·restroom)
+# 그대로 두면 화면·검색 라벨에 영어가 그대로 새어 나온다. OB-OTHER_FACILITIES는
+# "생활편의"다 — "편의시설"로 쓰면 대분류와 같아져 "편의시설 > 편의시설"이 된다.
+#
 # 주의: OB-RESTAURANT는 거친 태그라 레스토랑/카페·베이커리/식품·그로서리를 구분하지
 # 못한다. 여기서는 가장 흔한 값을 기본으로 주고, 매장별 세부 분류는 생성된
 # resources/studio/.../stores_{층}.json에서 손으로 다듬는다(재생성 시 재적용 필요).
 FACILITY_ATTRIBUTES = {
-    "OB-ELEVATOR": ("편의시설", "elevator"),
-    "OB-ESCALATOR_UP": ("편의시설", "escalator"),
-    "OB-ESCALATOR_DOWN": ("편의시설", "escalator"),
-    "OB-TOILET": ("편의시설", "restroom"),
-    "OB-CAFE": ("식음료", "카페·베이커리"),
-    "OB-RESTAURANT": ("식음료", "레스토랑"),
-    "OB-OTHER_FACILITIES": ("편의시설", "facility"),
+    "OB-ELEVATOR": ("편의시설", "엘리베이터"),
+    "OB-ESCALATOR_UP": ("편의시설", "에스컬레이터"),
+    "OB-ESCALATOR_DOWN": ("편의시설", "에스컬레이터"),
+    "OB-TOILET": ("편의시설", "화장실"),
+    "OB-CAFE": ("카페", "카페·베이커리"),
+    "OB-RESTAURANT": ("음식점", "레스토랑"),
+    "OB-OTHER_FACILITIES": ("편의시설", "생활편의"),
 }
 
 

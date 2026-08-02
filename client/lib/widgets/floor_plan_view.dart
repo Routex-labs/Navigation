@@ -10,6 +10,7 @@ import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../core/api_config.dart';
+import '../core/tile_url.dart';
 import '../core/map_fonts.dart';
 import '../core/map_palette.dart';
 import '../core/map_route_style.dart';
@@ -17,6 +18,7 @@ import 'destination_pin.dart';
 import '../features/debug_mode/debug_map_overlay.dart';
 import '../models/floor_plan.dart';
 import '../screens/outdoor_map/indoor_entry_zoom.dart';
+import 'category_map_filter.dart';
 import 'floor_facility_style.dart';
 
 /// maplibre_gl은 web/android/iOS만 지원한다(패키지 자체 pubspec에 명시된
@@ -52,6 +54,7 @@ const _debugGraphSourceId = 'floor-debug-graph';
 const _markersSourceId = 'floor-markers';
 const _highlightSourceId = 'floor-highlight';
 const _storesFillLayerId = 'floor-stores-fill';
+const _categoryHighlightFillLayerId = 'floor-category-highlight-fill';
 const _verticalTransportFillLayerId = 'floor-vertical-transport-fill';
 
 /// 목적지 핀 이미지의 addImage 등록 이름.
@@ -233,6 +236,11 @@ class FloorPlanView extends StatefulWidget {
     this.debugMapOverlay = const DebugMapOverlay(),
     this.interactive = true,
     this.highlightedStoreId,
+    this.categorySelection,
+    this.focusTarget,
+    this.focusTick = 0,
+    this.focusBottomSheetFraction = 0,
+    this.tileRevision,
     this.visibleInsets = EdgeInsets.zero,
     this.overlayHitTest,
     this.onCameraBearingChanged,
@@ -254,6 +262,35 @@ class FloorPlanView extends StatefulWidget {
 
   /// 선택된(또는 포커스된) 매장의 [StorePolygon.id]. null이면 강조 표시가 없다.
   final String? highlightedStoreId;
+
+  /// 지도 위 카테고리 필터 pill에서 고른 카테고리. null이면 강조하지 않는다.
+  /// 층이 바뀌어도 상위(MapShellScreen)가 같은 값을 계속 내려주므로 선택은
+  /// 층 전환을 넘어 유지된다.
+  final CategorySelection? categorySelection;
+
+  /// 목록에서 고른 매장 위치. 값이 있으면 스타일 로드 직후(=층 전환으로 지도가
+  /// 새로 만들어진 경우) 또는 [focusTick]이 바뀔 때 카메라를 그리로 옮긴다.
+  ///
+  /// **상위가 직접 카메라를 조작하지 않고 이 값을 내려 주는 이유는 타이밍이다.**
+  /// 층을 바꾸면 FloorPlanView가 ValueKey 차이로 통째로 재생성되고 MapLibre
+  /// 스타일이 다시 로드된다. 상위가 층 전환 직후에 controller로 카메라를 밀면
+  /// 아직 준비되지 않은(또는 방금 detach된) state에 명령이 가서 조용히 무시된다.
+  /// 값으로 내려 주면 준비가 끝난 쪽이 스스로 적용하므로 그 경합이 사라진다.
+  final ll.LatLng? focusTarget;
+
+  /// 같은 매장을 다시 골랐을 때도 카메라를 다시 옮기기 위한 카운터.
+  /// [focusTarget]만 보면 값이 그대로라 didUpdateWidget이 변화를 못 본다.
+  final int focusTick;
+
+  /// 벡터 타일 URL에 붙일 버전 토큰(`Building.tileRevision`). 근거는
+  /// `core/tile_url.dart` 주석.
+  final String? tileRevision;
+
+  /// [focusTarget]으로 이동한 뒤 화면 아래쪽을 덮을 시트의 높이(화면 비율).
+  /// 이만큼을 감안해 매장을 위로 밀어 올린다 — 0이면 정중앙에 놓는다.
+  ///
+  /// 지도 위젯이 시트의 존재를 직접 알면 안 되므로 상위가 값으로 넘긴다.
+  final double focusBottomSheetFraction;
 
   /// 지도 위에 얹은 Flutter 오버레이(층 selector 같은)가 자기 영역을 알려주는
   /// 콜백. 인자는 화면 전역 좌표. true 반환 시 그 좌표의 탭은 매장 선택으로
@@ -560,14 +597,101 @@ class FloorPlanViewState extends State<FloorPlanView> {
     if (oldWidget.highlightedStoreId != widget.highlightedStoreId) {
       _updateHighlightSource();
     }
+    if (oldWidget.categorySelection != widget.categorySelection) {
+      _applyCategoryFilter();
+    }
+    if (oldWidget.focusTick != widget.focusTick) {
+      _applyFocusTarget();
+    }
+  }
+
+  /// 목록에서 고른 매장이 화면에 크게 보이도록 카메라를 옮긴다.
+  ///
+  /// 두 단계로 나눈다. 먼저 매장을 화면 정중앙에 놓고, 그 다음 아래쪽 시트가
+  /// 가리는 만큼 위로 밀어 올린다. 한 번에 계산하지 않는 이유는 실내 지도가
+  /// 건물에 맞춰 회전(bearing)돼 있어서다 — 위경도로 미리 빼면 회전 각도만큼
+  /// 엉뚱한 방향으로 밀린다. `scrollBy`는 화면 좌표라 회전을 알아서 반영한다.
+  Future<void> _applyFocusTarget() async {
+    final controller = _controller;
+    final target = widget.focusTarget;
+    if (controller == null || target == null || !_styleReady) return;
+
+    // 뷰포트는 await 전에 읽는다. 카메라 이동을 기다린 뒤 MediaQuery를 보면
+    // 그 사이 위젯이 트리에서 빠졌을 수 있다.
+    final viewport = _lastViewport ?? MediaQuery.sizeOf(context);
+
+    final current = controller.cameraPosition;
+    final currentZoom = current?.zoom ?? 0;
+    await controller.moveCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: _toMapLibreLatLng(target),
+          // 이미 더 가까이 들어가 있으면 그 배율을 유지한다. 목록에서 골랐다고
+          // 사용자가 맞춰 둔 확대를 되돌리면 방금 보던 맥락을 잃는다.
+          zoom: currentZoom > _storeFocusZoom ? currentZoom : _storeFocusZoom,
+          bearing: current?.bearing ?? 0,
+          tilt: current?.tilt ?? 0,
+        ),
+      ),
+    );
+
+    // 정중앙에 놓으면 방금 고른 매장이 시트 뒤에 숨는다. 시트 위에 남는 영역의
+    // 한가운데로 오도록 밀어 올린다.
+    //
+    // 계산: 시트가 f를 덮으면 남는 높이는 (1 - f)이고 그 중앙은 화면 위에서
+    // (1 - f) / 2 지점이다. 정중앙(0.5)에서 그만큼 올리면 0.5 - (1 - f)/2 = f/2.
+    //
+    // 실기기로 확인한 `scrollBy`의 성질 두 가지를 여기 남긴다. 문서만 보고
+    // 고치면 두 번 다 틀린다.
+    //  1. 단위는 **논리 픽셀**이다. dpr(3배)을 곱해 보정하면 매장이 건물 밖으로
+    //     날아간다.
+    //  2. 부호는 **음수가 위로**다. 문서는 "양수 dy면 카메라 타깃이 남쪽으로
+    //     간다"고 적혀 있어 매장이 위로 올라갈 것처럼 읽히지만, 실제로는 매장이
+    //     그만큼 아래로 내려가 시트 뒤에 숨었다.
+    final lift = widget.focusBottomSheetFraction / 2;
+    if (lift <= 0) return;
+    await controller.moveCamera(
+      CameraUpdate.scrollBy(0, -viewport.height * lift),
+    );
+  }
+
+  /// 목록에서 고른 매장을 볼 때 최소한 이만큼은 확대한다. 매장 이름 라벨이
+  /// 읽히는 배율이다.
+  static const _storeFocusZoom = 19.0;
+
+  /// 지금 선택에 해당하는 MapLibre 필터 표현식. 선택이 없으면 아무것도 맞지
+  /// 않는 필터를 돌려준다 — 레이어 추가 시점과 갱신 시점이 같은 함수를 쓰게
+  /// 해서, 한쪽만 고쳐 어긋나는 일을 막는다(indoor_overlay_layers.dart의
+  /// "등록과 갱신이 같은 함수를 쓴다" 규칙과 같은 이유).
+  List<Object> _categoryFilterExpression() {
+    final selection = widget.categorySelection;
+    if (selection == null) return kCategoryHighlightNoneFilter;
+    return categoryHighlightFilter(selection);
+  }
+
+  /// 강조 레이어의 필터만 갈아 끼운다.
+  ///
+  /// `setLayerProperties`가 아니라 `setFilter`를 쓴다 — 전자는 넘기지 않은
+  /// 속성까지 null로 함께 보내 스펙 기본값(fill-color는 검정)으로 되돌리므로,
+  /// 실기기에서 지도가 검게 덮인다(indoor_overlay_layers.dart 상단 주석).
+  Future<void> _applyCategoryFilter() async {
+    final controller = _controller;
+    if (controller == null || !_styleReady) return;
+    await controller.setFilter(
+      _categoryHighlightFillLayerId,
+      _categoryFilterExpression(),
+    );
   }
 
   Future<void> _onStyleLoaded() async {
     final controller = _controller;
     if (controller == null) return;
 
-    final tileUrl =
-        '$apiBaseUrl/buildings/${widget.buildingId}/floors/${widget.floorName}/tiles/{z}/{x}/{y}.mvt';
+    final tileUrl = indoorTileUrl(
+      buildingId: widget.buildingId,
+      floorName: widget.floorName,
+      tileRevision: widget.tileRevision,
+    );
 
     await controller.addSource(
       _tileSourceId,
@@ -604,6 +728,30 @@ class FloorPlanViewState extends State<FloorPlanView> {
         fillOutlineColor: mapStoreOutline,
       ),
       sourceLayer: 'stores',
+    );
+    // 카테고리 필터 강조. 일반 매장 fill 바로 위에 얹어 선택한 카테고리의
+    // 매장만 파랗게 칠한다.
+    //
+    // **비매칭 매장을 숨기는 대신 매칭 매장을 강조하는 이유**는 도면 맥락이다.
+    // 매장을 걸러내면 층 도면이 텅 비어 사용자가 지금 어디를 보고 있는지 알 수
+    // 없고, 그 층에 해당 카테고리가 없으면 화면이 통째로 비어 앱이 깨진 것처럼
+    // 읽힌다. 강조 방식은 기본 레이어를 건드리지 않으므로 라벨만 남는 유령
+    // 매장도 생기지 않고, 필터를 끄면 원래 화면으로 정확히 돌아온다.
+    //
+    // 선택이 없을 때는 레이어를 지우지 않고 아무것도 맞지 않는 필터를 걸어 둔다
+    // (근거는 kCategoryHighlightNoneFilter 주석).
+    await controller.addFillLayer(
+      _tileSourceId,
+      _categoryHighlightFillLayerId,
+      const FillLayerProperties(
+        fillColor: kCategoryHighlightFillColor,
+        fillOutlineColor: kCategoryHighlightOutlineColor,
+      ),
+      sourceLayer: 'stores',
+      filter: _categoryFilterExpression(),
+      // 탭은 아래 일반 매장 fill이 받는다. 이 레이어까지 탭을 받으면 같은
+      // 폴리곤에 두 번 반응한다.
+      enableInteraction: false,
     );
     // 수직이동 구조물(에스컬레이터/엘리베이터) 전용 오버레이. 일반 매장 fill
     // 바로 위, 라벨/POI 아이콘보다 아래에 깔아서 초록 아이콘과 한 덩어리로
@@ -1154,6 +1302,9 @@ class FloorPlanViewState extends State<FloorPlanView> {
     } else {
       await _fitToFootprint();
     }
+    // 층을 바꿔 들어온 경우 여기가 카메라를 잡는 마지막 지점이다. 건물 전체에
+    // 맞춘 뒤에 적용해야 그 fit이 포커스를 덮어쓰지 않는다.
+    await _applyFocusTarget();
   }
 
   void _enforceMinZoom() {

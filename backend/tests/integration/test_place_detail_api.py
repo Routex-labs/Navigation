@@ -122,7 +122,7 @@ def test_실데이터_화장실은_facility로_내려간다(real_api_client, rea
     restroom = real_db_session.scalars(
         select(Store)
         .join(Floor, Store.floor_id == Floor.id)
-        .where(Floor.building_id == REAL_BUILDING_ID, Store.subcategory == "restroom")
+        .where(Floor.building_id == REAL_BUILDING_ID, Store.subcategory == "화장실")
         .limit(1)
     ).one_or_none()
     assert restroom is not None, "실데이터에 화장실이 있어야 한다"
