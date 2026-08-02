@@ -10,6 +10,10 @@ import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../core/api_config.dart';
+import '../core/map_fonts.dart';
+import '../core/map_palette.dart';
+import '../core/map_route_style.dart';
+import 'destination_pin.dart';
 import '../features/debug_mode/debug_map_overlay.dart';
 import '../models/floor_plan.dart';
 import '../screens/outdoor_map/indoor_entry_zoom.dart';
@@ -51,7 +55,14 @@ const _storesFillLayerId = 'floor-stores-fill';
 const _verticalTransportFillLayerId = 'floor-vertical-transport-fill';
 
 /// 목적지 핀 이미지의 addImage 등록 이름.
-const _destinationPinImageName = 'marker-destination-pin';
+// 디자인을 바꾸면 버전을 올린다 — 웹 addImage는 같은 이름이 이미 있으면
+// 새 비트맵을 버려서, 이름을 그대로 두면 살아 있는 지도에 반영되지 않는다.
+const _destinationPinImageName = 'marker-destination-pin-v2';
+
+/// 도착 핀 iconSize의 zoom 보간 구간. textSize는 이 값을 [kPinIconToTextRatio]로
+/// 나눠 얻으므로, 여기를 바꾸면 글씨 크기도 함께 움직인다.
+const _destPinIconSizeZ16 = 0.115;
+const _destPinIconSizeZ20 = 0.25;
 
 /// 현재 위치 심볼의 addImage 등록 이름. **이름 끝에 코어 반지름을 박아 둔다.**
 ///
@@ -103,7 +114,7 @@ const _currentLocationIconSize = 1.0 / _currentLocationIconPixelRatio;
 const _currentLocationCoreRadius = 16.0;
 
 /// 코어를 감싸는 흰 링의 반지름. 코어보다 5px 두껍게 잡아, 도면 바닥(#FFFFFF)
-/// 에서는 묻히더라도 매장 fill(#F3F1EF)이나 경로선 위에서는 코어가 배경과
+/// 에서는 묻히더라도 매장 fill([mapStoreFill])이나 경로선 위에서는 코어가 배경과
 /// 분리돼 보이게 한다.
 const _currentLocationRimRadius = _currentLocationCoreRadius + 5;
 
@@ -571,13 +582,16 @@ class FloorPlanViewState extends State<FloorPlanView> {
       ),
     );
 
-    // 원본 SVG 디자인(hyundai_floor_map_corrected_v6.svg)의 색상을 그대로 옮긴다.
+    // 도면 폴리곤 색은 [map_palette.dart]가 갖는다 — 야외 오버레이가 같은 도면을
+    // 그려서 두 곳이 어긋나면 층을 오갈 때 색이 바뀌어 보인다. 원본 SVG
+    // (hyundai_floor_map_corrected_v6.svg)에서 옮겨온 값이었으나 통로와 대비가
+    // 없어 지금은 의도적으로 다르다(사유는 map_palette.dart).
     await controller.addFillLayer(
       _tileSourceId,
       'floor-footprint-fill',
       const FillLayerProperties(
-        fillColor: '#FFFFFF',
-        fillOutlineColor: '#00000088',
+        fillColor: mapFootprintFill,
+        fillOutlineColor: mapFootprintOutline,
       ),
       sourceLayer: 'footprint',
       enableInteraction: false,
@@ -586,8 +600,8 @@ class FloorPlanViewState extends State<FloorPlanView> {
       _tileSourceId,
       _storesFillLayerId,
       const FillLayerProperties(
-        fillColor: '#F3F1EF',
-        fillOutlineColor: '#D8D4D1',
+        fillColor: mapStoreFill,
+        fillOutlineColor: mapStoreOutline,
       ),
       sourceLayer: 'stores',
     );
@@ -647,6 +661,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
         textAllowOverlap: false,
       ),
       sourceLayer: 'stores',
+      filter: storeLabelExcludingFacilitiesFilter(),
       enableInteraction: false,
     );
 
@@ -669,7 +684,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
     }
     await controller.addImage(
       _destinationPinImageName,
-      await _renderDestinationPinIcon(),
+      await renderDestinationPinIcon(),
     );
     await controller.addImage(
       _currentLocationImageName,
@@ -763,8 +778,8 @@ class FloorPlanViewState extends State<FloorPlanView> {
       _completedRouteSourceId,
       'floor-completed-route-line',
       const LineLayerProperties(
-        lineColor: '#9AA0A6',
-        lineWidth: 5,
+        lineColor: kRouteCompletedColor,
+        lineWidth: kRouteLineWidthExpr,
         lineOpacity: 0.72,
         lineCap: 'round',
         lineJoin: 'round',
@@ -772,16 +787,37 @@ class FloorPlanViewState extends State<FloorPlanView> {
       enableInteraction: false,
     );
     await controller.addGeoJsonSource(_routeSourceId, _emptyFeatureCollection);
+    // casing → 본선 → 화살표 순으로 얹는다. 값과 근거는 [map_route_style.dart].
+    await controller.addLineLayer(
+      _routeSourceId,
+      'floor-route-casing',
+      const LineLayerProperties(
+        lineColor: kRouteCasingColor,
+        lineWidth: kRouteCasingWidthExpr,
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      enableInteraction: false,
+    );
     await controller.addLineLayer(
       _routeSourceId,
       'floor-route-line',
       const LineLayerProperties(
-        lineColor: '#1A73E8',
-        lineWidth: 5,
-        lineOpacity: 0.6,
+        lineColor: kRouteLineColor,
+        lineWidth: kRouteLineWidthExpr,
         lineCap: 'round',
         lineJoin: 'round',
       ),
+      enableInteraction: false,
+    );
+    await controller.addImage(
+      kRouteArrowImageName,
+      await renderRouteArrowIcon(),
+    );
+    await controller.addSymbolLayer(
+      _routeSourceId,
+      'floor-route-arrow',
+      routeArrowProps(),
       enableInteraction: false,
     );
     await controller.addGeoJsonSource(
@@ -792,8 +828,8 @@ class FloorPlanViewState extends State<FloorPlanView> {
       _transferRouteSourceId,
       'floor-transfer-route-line',
       const LineLayerProperties(
-        lineColor: '#1A73E8',
-        lineWidth: 5,
+        lineColor: kRouteLineColor,
+        lineWidth: kRouteTransferWidthExpr,
         lineOpacity: 0.82,
         lineDasharray: [1.2, 1.1],
         lineCap: 'round',
@@ -1022,20 +1058,13 @@ class FloorPlanViewState extends State<FloorPlanView> {
     // 목적지 핀 레이어보다 먼저 등록해, 겹칠 때 목적지 핀이 위에 오게 한다.
     await _addCurrentLocationSymbolLayer(controller);
 
-    // 목적지는 빨간 물방울 핀(_destinationPinImageName)에 "도착" 텍스트를
-    // 얹어서 표시한다. 텍스트는 아이콘에 미리 굽지 않고 MapLibre의 textField로
-    // 얹는데, 이는 Flutter 웹 CanvasKit에서 오프스크린 캔버스로 렌더링한
-    // 이미지에는 한글 글리프가 있는 폰트가 자동으로 딸려오지 않아 "도착"이
-    // 두부(tofu) 박스로 뭉개지기 때문이다(반면 MapLibre의 심볼 텍스트는
-    // 매장명 라벨과 동일한 경로를 타서 한글이 정상적으로 나온다).
+    // 목적지는 빨간 물방울 핀에 "도착" 텍스트를 얹어서 표시한다. 도형과 글씨를
+    // 나눠 그리는 이유, 치수와 textOffset 유도는 [destination_pin.dart]에 있다.
     //
-    // 아이콘 바닥(tip)이 실제 좌표에 오도록 iconAnchor는 bottom, 텍스트는
-    // 핀의 흰 원 안쪽 중앙에 오도록 textAnchor를 center로 잡고 textOffset
-    // y를 -3.7 em 만큼 올려 얹는다(핀 원본 이미지에서 흰 원 중앙이 밑변에서
-    // 위로 112px, iconSize/textSize 비율을 0.033으로 고정하면 offset은
-    // 112 × 0.033 ≈ 3.7 em이 되어 zoom과 무관하게 같은 위치를 유지한다).
+    // 아이콘 바닥(tip)이 실제 좌표에 오도록 iconAnchor는 bottom이다.
     // iconSize/textSize는 zoom 16↔20 구간에서 같이 커지는 interpolate 식으로
-    // 걸어, 축소했을 때 핀이 지도를 다 가리는 문제를 피한다.
+    // 걸어, 축소했을 때 핀이 지도를 다 가리는 문제를 피한다. 두 값의 비율은
+    // [kPinIconToTextRatio]로 고정돼 있어야 글씨가 머리 원 안에 남는다.
     //
     // 현재 위치는 이 소스에 함께 들어와 있어도 filter가 걸러낸다.
     await controller.addSymbolLayer(
@@ -1048,26 +1077,28 @@ class FloorPlanViewState extends State<FloorPlanView> {
           ['linear'],
           ['zoom'],
           16,
-          0.115,
+          _destPinIconSizeZ16,
           20,
-          0.25,
+          _destPinIconSizeZ20,
         ],
         iconAnchor: 'bottom',
         iconAllowOverlap: true,
         iconIgnorePlacement: true,
         textField: '도착',
+        // 손으로 적지 않고 iconSize에서 나눈다 — 비율이 어긋나면 글씨가 머리
+        // 원을 벗어나고 textOffset도 같이 틀어진다.
         textSize: [
           'interpolate',
           ['linear'],
           ['zoom'],
           16,
-          3.5,
+          _destPinIconSizeZ16 / kPinIconToTextRatio,
           20,
-          7.5,
+          _destPinIconSizeZ20 / kPinIconToTextRatio,
         ],
-        textColor: '#1E2033',
+        textColor: kPinTextColor,
         textAnchor: 'center',
-        textOffset: [0, -3.7],
+        textOffset: [0, kPinTextOffsetEm],
         textAllowOverlap: true,
         textIgnorePlacement: true,
       ),
@@ -1300,53 +1331,6 @@ class FloorPlanViewState extends State<FloorPlanView> {
   /// 접선에 정확히 맞물리도록 tangentAngle(중심-끝점 축과 접점 사이의 각도,
   /// acos(r/d))로 계산해서 원과 이음매가 매끄럽게 이어진다.
   ///
-  /// "도착" 텍스트는 이 이미지에 굽지 않고 MapLibre 심볼 레이어의 textField로
-  /// 얹는다(자세한 이유는 심볼 레이어 등록부의 주석 참고). 흰 원 중심은
-  /// 이미지 밑변에서 위로 112px(= canvasHeight − tipPadding − headCenterY,
-  /// 즉 172 − 6 − 60) 위치에 있고, 이 값이 심볼 레이어 textOffset 계산의
-  /// 근거가 된다.
-  static Future<Uint8List> _renderDestinationPinIcon() async {
-    const canvasWidth = 128.0;
-    const canvasHeight = 172.0;
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(
-      recorder,
-      const Rect.fromLTWH(0, 0, canvasWidth, canvasHeight),
-    );
-
-    const cx = canvasWidth / 2;
-    const headRadius = 54.0;
-    const headCenterY = headRadius + 6;
-    const tipY = canvasHeight - 6;
-    const centerToTipDistance = tipY - headCenterY;
-
-    final tangentAngle = acos(headRadius / centerToTipDistance);
-    final tangentDx = headRadius * sin(tangentAngle);
-    final tangentDy = headRadius * cos(tangentAngle);
-
-    final pinPaint = Paint()..color = const Color(0xFFE53935);
-    canvas.drawCircle(const Offset(cx, headCenterY), headRadius, pinPaint);
-    final tail = Path()
-      ..moveTo(cx, tipY)
-      ..lineTo(cx + tangentDx, headCenterY + tangentDy)
-      ..lineTo(cx - tangentDx, headCenterY + tangentDy)
-      ..close();
-    canvas.drawPath(tail, pinPaint);
-
-    const innerRadius = 38.0;
-    canvas.drawCircle(
-      const Offset(cx, headCenterY),
-      innerRadius,
-      Paint()..color = Colors.white,
-    );
-
-    final image = await recorder.endRecording().toImage(
-      canvasWidth.toInt(),
-      canvasHeight.toInt(),
-    );
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    return byteData!.buffer.asUint8List();
-  }
 
   /// 상용 지도 앱처럼 흰 테두리의 파란 현재 위치 점 뒤로 반투명 heading cone이
   /// 퍼지는 하나의 심볼을 렌더링한다. MapLibre가 이 비트맵 전체를 회전하므로
@@ -1931,7 +1915,7 @@ const _emptyFeatureCollection = {
 /// 이름의 디렉터리로 글리프를 서빙한다(GET /fonts/{fontstack}/{range}.pbf).
 /// 매장명이 한글이라 한글 글리프가 있는 폰트여야 한다 — MapLibre 기본값인
 /// Open Sans에는 한글이 없어서 라벨이 깨진다.
-const _mapFontStack = ['Noto Sans KR Regular'];
+const _mapFontStack = [mapFontStackRegular];
 
 /// [_initialStyle]의 glyphs 템플릿. `{fontstack}`/`{range}`는 MapLibre가
 /// 치환하는 자리표시자라 Dart 보간과 섞이지 않게 따로 조립한다.

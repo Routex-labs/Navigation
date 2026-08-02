@@ -104,6 +104,30 @@ flutter:
     - assets/mock/hyundai_floor_map.svg
     - assets/mock/demo_floor_map_v5.svg
 
+  # 앱 전체 기본 글꼴. 지정하지 않으면 플랫폼 기본(iOS Apple SD Gothic Neo,
+  # Android Noto Sans CJK, 웹 브라우저 기본)이 쓰여 같은 화면이 기기마다 다르게
+  # 보인다. Pretendard는 Apple SD Gothic Neo를 대체하려고 만들어진 글꼴이라
+  # iOS 화면의 변화가 가장 작고, 자폭이 좁아 칩·업종 줄처럼 폭이 빠듯한 자리에
+  # 여유가 생긴다. 라이선스는 OFL이며 assets/fonts/OFL.txt를 함께 배포한다.
+  #
+  # Flutter는 브라우저와 달리 글꼴을 동적으로 서브셋하지 않는다. 여기 올린 파일이
+  # 웹에서 통째로 내려가므로(weight당 약 1.5MB) weight를 늘릴 때는 용량을 함께 본다.
+  # 앱이 실제로 요청하는 400·500·600·700·800은 모두 같은 Pretendard v1.3.9
+  # static face로 등록한다. 일부만 등록하면 엔진이 가장 가까운 굵기로 대체해
+  # (예: w600→w700) 화면마다 의도한 위계가 달라진다.
+  fonts:
+    - family: Pretendard
+      fonts:
+        - asset: assets/fonts/Pretendard-Regular.otf
+        - asset: assets/fonts/Pretendard-Medium.otf
+          weight: 500
+        - asset: assets/fonts/Pretendard-SemiBold.otf
+          weight: 600
+        - asset: assets/fonts/Pretendard-Bold.otf
+          weight: 700
+        - asset: assets/fonts/Pretendard-ExtraBold.otf
+          weight: 800
+
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 

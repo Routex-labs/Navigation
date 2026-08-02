@@ -5,7 +5,8 @@
 캐시 헤더가 빠지면 그것만으로 수 MB가 매번 다시 흐른다.
 """
 
-FONTSTACK = "Noto Sans KR Regular"
+FONTSTACK = "Pretendard Regular"
+UNSUPPORTED_FONTSTACK = "Noto Sans KR Regular"
 # resources/fonts/에 실제로 커밋되어 있는 범위(한글 음절 시작 구간).
 EXISTING_RANGE = "44032-44287"
 # 커밋 범위 밖 — 빈 200으로 떨어지는 경로.
@@ -18,6 +19,14 @@ def test_있는_글리프_범위를_돌려준다(api_client):
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/x-protobuf"
     assert response.content
+
+
+def test_등록하지_않은_폰트스택은_빈_응답으로_떨어진다(api_client):
+    response = api_client.get(f"/fonts/{UNSUPPORTED_FONTSTACK}/{EXISTING_RANGE}.pbf")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/x-protobuf"
+    assert response.content == b""
 
 
 def test_글리프_응답에_캐시_헤더가_붙는다(api_client):

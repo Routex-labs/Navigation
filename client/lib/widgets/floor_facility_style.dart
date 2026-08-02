@@ -16,6 +16,25 @@ const kVerticalTransportStoreNames = <String>[
   '유아차 전용 E/V',
 ];
 
+/// 매장명 라벨 레이어에서 수직이동 시설을 걸러내는 MapLibre 필터.
+///
+/// 이 건물에는 에스컬레이터 152개, 엘리베이터 68개가 있고 전부 매장과 **같은
+/// 무게의 텍스트 라벨**을 달고 있었다. 도면이 "에스컬레이터"로 도배되어 정작
+/// 읽어야 할 매장명이 그 사이에 묻혔다. 아이콘이 이미 무슨 시설인지 말하므로
+/// 이름은 중복이다 — 구글·네이버도 에스컬레이터에 텍스트를 붙이지 않는다.
+///
+/// `==`를 뒤집은 `!=`의 `all`이다. 같은 파일의 fill 필터가 `any` + `==`로
+/// 시설물만 고르는 것과 정확히 반대 집합이라, 한쪽을 고치면 다른 쪽도 본다.
+List<Object> storeLabelExcludingFacilitiesFilter() => [
+  'all',
+  for (final name in kVerticalTransportStoreNames)
+    [
+      '!=',
+      ['get', 'name'],
+      name,
+    ],
+];
+
 /// POI `type` 속성(백엔드 실데이터 값)을 지도 위 아이콘에 매핑한다. 건물마다
 /// 명명이 조금씩 달라(더현대는 elevator/escalator/toilet/exit, 다른 데이터셋은
 /// vertical-connection/core-entrance 등) 여러 값을 같은 아이콘으로 묶는다.

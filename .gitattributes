@@ -1,0 +1,4 @@
+# MapLibre glyph과 Flutter 글꼴은 소스 텍스트가 아니다. Git의 텍스트 공백 검증과
+# 줄 단위 diff에서 제외해 이진 파일을 깨진 문자로 보여 주지 않는다.
+*.pbf binary
+*.otf binary

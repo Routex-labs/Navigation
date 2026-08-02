@@ -60,7 +60,7 @@
     .open-feature{fill:none;stroke:#7e8581;stroke-width:3.2;stroke-linecap:round;vector-effect:non-scaling-stroke}
     .furniture{fill:none;stroke:#989d9a;stroke-width:3;stroke-linecap:square;stroke-linejoin:miter;vector-effect:non-scaling-stroke}
     .column{fill:#a7aba8}
-    .label,.small-label,.zone-label,.node-label{font-family:"NanumSquare","Noto Sans CJK KR","Apple SD Gothic Neo",sans-serif;text-anchor:middle;dominant-baseline:middle;pointer-events:none}
+    .label,.small-label,.zone-label,.node-label{font-family:"Pretendard",sans-serif;text-anchor:middle;dominant-baseline:middle;pointer-events:none}
     .label{fill:#333936;font-weight:750;letter-spacing:-.45px}.small-label{fill:#454c48;font-weight:680;letter-spacing:-.25px}
     .zone-label{fill:#505753;font-weight:750;letter-spacing:-.3px}
     .amenity{fill:#bde3b7;stroke:#527d51;stroke-width:1.5;vector-effect:non-scaling-stroke}.amenity-icon{color:#416d43}

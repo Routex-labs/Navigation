@@ -74,14 +74,14 @@
 </g>
 <g id="service-zones">
 <path style="fill:#ead8ea;stroke:#d2add2;stroke-width:1.1" d="M 51 789 L 51 912 L 114 912 L 114 789 Z"/>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#4f5451;font-weight:600;letter-spacing:-.25px" font-size="15"><tspan x="82.5" y="841.9">발레</tspan><tspan x="82.5" dy="16.2">라운지</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#4f5451;font-weight:600;letter-spacing:-.25px" font-size="15"><tspan x="82.5" y="841.9">발레</tspan><tspan x="82.5" dy="16.2">라운지</tspan></text>
 <path style="fill:#ead8ea;stroke:#d2add2;stroke-width:1.1" d="M 823 52 L 823 113 L 923 113 L 923 52 Z"/>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#4f5451;font-weight:600;letter-spacing:-.25px" font-size="10"><tspan x="873.0" y="71.8">투어리스트</tspan><tspan x="873.0" dy="10.2">데스크 서비스 -</tspan><tspan x="873.0" dy="10.2">유모차 대여</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#4f5451;font-weight:600;letter-spacing:-.25px" font-size="10"><tspan x="873.0" y="71.8">투어리스트</tspan><tspan x="873.0" dy="10.2">데스크 서비스 -</tspan><tspan x="873.0" dy="10.2">유모차 대여</tspan></text>
 <path style="fill:#ead8ea;stroke:#d2add2;stroke-width:1.1" d="M 823 117 L 823 173 L 923 173 L 923 117 Z"/>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#4f5451;font-weight:600;letter-spacing:-.25px" font-size="9"><tspan x="873.0" y="130.0">투어리스트</tspan><tspan x="873.0" dy="10.0">데스크 서비스 -</tspan><tspan x="873.0" dy="10.0">캐리어</tspan><tspan x="873.0" dy="10.0">보관 서비스</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#4f5451;font-weight:600;letter-spacing:-.25px" font-size="9"><tspan x="873.0" y="130.0">투어리스트</tspan><tspan x="873.0" dy="10.0">데스크 서비스 -</tspan><tspan x="873.0" dy="10.0">캐리어</tspan><tspan x="873.0" dy="10.0">보관 서비스</tspan></text>
 <path id="concierge-box" style="fill:#ead8ea;stroke:#d2add2;stroke-width:1.1" d="M 975 784 H 1056 V 853 H 975 Z"/>
 <use href="#icon-info" x="1002" y="788" width="27" height="27" style="color:#6c596d"/>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#4f5451;font-weight:600;letter-spacing:-.25px" font-size="11"><tspan x="1015.5" y="824">컨시어지</tspan><tspan x="1015.5" dy="13">(안내데스크)</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#4f5451;font-weight:600;letter-spacing:-.25px" font-size="11"><tspan x="1015.5" y="824">컨시어지</tspan><tspan x="1015.5" dy="13">(안내데스크)</tspan></text>
 </g>
 <g id="amenities">
 <path id="amenity-001" style="fill:#bde3b7;stroke:#76ae6d;stroke-width:1.3" d="M 1027 550 L 1027 741 L 1043 741 L 1043 666 L 1044 665 L 1046 667 L 1046 741 L 1062 741 L 1062 648 L 1061 647 L 1062 645 L 1062 550 L 1046 550 L 1046 631 L 1045 632 L 1043 631 L 1043 550 Z"/>
@@ -102,99 +102,99 @@
 <use href="#icon-escalator" x="1675.5" y="624" width="22" height="44" style="color:#537d51"/>
 <use href="#icon-restroom" x="1114" y="64" width="36" height="36" style="color:#537d51"/>
 <use href="#icon-wheelchair" x="1114" y="124" width="36" height="36" style="color:#537d51"/>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#4f5451;font-weight:600;letter-spacing:-.25px" x="1131.5" y="194" font-size="13">정수기</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#4f5451;font-weight:600;letter-spacing:-.25px" x="1131.5" y="194" font-size="13">정수기</text>
 <use href="#icon-elevator" x="334.5" y="241.5" width="30" height="30" style="color:#537d51"/>
 <use href="#icon-elevator" x="1620" y="250" width="30" height="30" style="color:#537d51"/>
 <use href="#icon-elevator" x="348" y="1133.5" width="30" height="30" style="color:#537d51"/>
 <use href="#icon-elevator" x="1237.5" y="1129.5" width="30" height="30" style="color:#537d51"/>
 <use href="#icon-elevator" x="1647.5" y="1139" width="30" height="30" style="color:#537d51"/>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#4f5451;font-weight:600;letter-spacing:-.25px" font-size="12"><tspan x="1252.0" y="1189.0">유아차</tspan><tspan x="1252.0" dy="12.0">전용 E/V</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#4f5451;font-weight:600;letter-spacing:-.25px" font-size="12"><tspan x="1252.0" y="1189.0">유아차</tspan><tspan x="1252.0" dy="12.0">전용 E/V</tspan></text>
 </g>
 <g id="store-labels">
 
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="204.0" y="389.0" font-size="22">발렌시아가</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="204.0" y="389.0" font-size="22">발렌시아가</text>
 
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="456.0" y="329.0" font-size="20">미우미우</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="456.0" y="329.0" font-size="20">미우미우</text>
 
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="583.0" y="312.0" font-size="20">발렌티노</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="583.0" y="312.0" font-size="20">발렌티노</text>
 
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="821.0" y="280.0" font-size="22">티파니앤코</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="821.0" y="280.0" font-size="22">티파니앤코</text>
 
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1168.0" y="283.0" font-size="20">로에베</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1168.0" y="283.0" font-size="20">로에베</text>
 
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1303.0" y="290.0" font-size="20">레페토</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1303.0" y="290.0" font-size="20">레페토</text>
 
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1518.0" y="326.0" font-size="22">구찌</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1518.0" y="326.0" font-size="22">구찌</text>
 
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1790.0" y="355.0" font-size="20">셀린느</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1790.0" y="355.0" font-size="20">셀린느</text>
 
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1962.0" y="523.0" font-size="20">생로랑</text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1958.0" y="632.0" font-size="19">다미아니</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1962.0" y="523.0" font-size="20">생로랑</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1958.0" y="632.0" font-size="19">다미아니</text>
 
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1957.0" y="808.0" font-size="13">몽클레르</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1957.0" y="808.0" font-size="13">몽클레르</text>
 
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1930.0" y="1123.0" font-size="21">페라가모</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1930.0" y="1123.0" font-size="21">페라가모</text>
 
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1338.0" y="645.0" font-size="25">루이비통</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1338.0" y="645.0" font-size="25">루이비통</text>
 
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1785.0" y="640.0" font-size="21">톰브라운</text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1132.0" y="507.0" font-size="14">르 라보</text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1132.0" y="652.0" font-size="15">딥티크</text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="12"><tspan x="1132.0" y="776.5">젠틀</tspan><tspan x="1132.0" dy="13.0">몬스터</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1785.0" y="640.0" font-size="21">톰브라운</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1132.0" y="507.0" font-size="14">르 라보</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1132.0" y="652.0" font-size="15">딥티크</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="12"><tspan x="1132.0" y="776.5">젠틀</tspan><tspan x="1132.0" dy="13.0">몬스터</tspan></text>
 
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="19"><tspan x="123.0" y="960.2">보테가</tspan><tspan x="123.0" dy="19.5">베네타</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="19"><tspan x="123.0" y="960.2">보테가</tspan><tspan x="123.0" dy="19.5">베네타</tspan></text>
 
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="296.0" y="937.0" font-size="21">펜디</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="296.0" y="937.0" font-size="21">펜디</text>
 
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="450.0" y="994.0" font-size="21">불가리</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="450.0" y="994.0" font-size="21">불가리</text>
 
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="550.0" y="1010.0" font-size="18">부쉐론</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="550.0" y="1010.0" font-size="18">부쉐론</text>
 
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="636.0" y="1018.0" font-size="19">리모와</text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="767.0" y="973.0" font-size="18">토즈</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="636.0" y="1018.0" font-size="19">리모와</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="767.0" y="973.0" font-size="18">토즈</text>
 
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="879.0" y="1042.0" font-size="21">버버리</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="879.0" y="1042.0" font-size="21">버버리</text>
 
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1156.0" y="1041.0" font-size="22">프라다</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1156.0" y="1041.0" font-size="22">프라다</text>
 
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="18"><tspan x="1498.0" y="939.3">크리스챤</tspan><tspan x="1498.0" dy="19.4">디올 (남/여)</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="18"><tspan x="1498.0" y="939.3">크리스챤</tspan><tspan x="1498.0" dy="19.4">디올 (남/여)</tspan></text>
 
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1739.0" y="944.0" font-size="18">반클리프아펠</text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="15"><tspan x="122.0" y="1053.9">스킨</tspan><tspan x="122.0" dy="16.2">케어룸</tspan></text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="15"><tspan x="122.0" y="1119.4">커뮤니티</tspan><tspan x="122.0" dy="15.2">라운지</tspan></text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="15"><tspan x="334.0" y="635.9">샤넬</tspan><tspan x="334.0" dy="16.2">뷰티</tspan></text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="13"><tspan x="390.0" y="552.5">바이</tspan><tspan x="390.0" dy="13.0">레도</tspan></text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="12"><tspan x="410.0" y="634.5">메모</tspan><tspan x="410.0" dy="13.0">파리</tspan></text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="13"><tspan x="487.0" y="622.0">조 말론</tspan><tspan x="487.0" dy="14.0">런던</tspan></text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="489.0" y="677.0" font-size="10">헤라</text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="11"><tspan x="385.0" y="722.1">톰 포드</tspan><tspan x="385.0" dy="11.9">뷰티</tspan></text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="8"><tspan x="456.0" y="714.4">메종</tspan><tspan x="456.0" dy="9.6">프란시스</tspan><tspan x="456.0" dy="9.6">커정</tspan></text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="8"><tspan x="494.0" y="753.2">프레데릭</tspan><tspan x="494.0" dy="9.6">말</tspan></text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="8"><tspan x="556.0" y="741.4">산타</tspan><tspan x="556.0" dy="9.6">마리아</tspan><tspan x="556.0" dy="9.6">노벨라</tspan></text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="597.0" y="779.0" font-size="11">록시땅</text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="584.0" y="683.0" font-size="15">키엘</text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="8"><tspan x="470.0" y="543.2">마티에</tspan><tspan x="470.0" dy="9.6">프리미에르</tspan></text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="515.0" y="520.0" font-size="12">쿠오카</text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="12"><tspan x="590.0" y="505.5">에르메스</tspan><tspan x="590.0" dy="13.0">뷰티</tspan></text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="691.0" y="500.0" font-size="13">탬버린즈</text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="10"><tspan x="771.0" y="493.6">구찌</tspan><tspan x="771.0" dy="10.8">뷰티</tspan></text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="808.0" y="474.0" font-size="11">나스</text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="889.0" y="477.0" font-size="13">MAC</text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="12"><tspan x="686.0" y="581.5">아르마니</tspan><tspan x="686.0" dy="13.0">뷰티</tspan></text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="791.0" y="570.0" font-size="13">입생로랑</text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="13"><tspan x="888.0" y="569.5">에스티</tspan><tspan x="888.0" dy="13.0">로더</tspan></text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="11"><tspan x="684.0" y="638.1">프라다</tspan><tspan x="684.0" dy="11.9">뷰티</tspan></text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="13"><tspan x="888.0" y="652.0">디올</tspan><tspan x="888.0" dy="14.0">뷰티</tspan></text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="11"><tspan x="686.0" y="689.1">아쿠아</tspan><tspan x="686.0" dy="11.9">디</tspan><tspan x="686.0" dy="11.9">파르마</tspan></text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="791.0" y="722.0" font-size="13">시슬리</text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="10"><tspan x="888.0" y="716.2">메종</tspan><tspan x="888.0" dy="10.8">마르지엘라</tspan><tspan x="888.0" dy="10.8">퍼퓸</tspan></text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="672.0" y="772.0" font-size="11">크리드</text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="702.0" y="798.0" font-size="10">오휘/후</text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="786.0" y="801.0" font-size="13">설화수</text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="887.0" y="809.0" font-size="13">이솝</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="1739.0" y="944.0" font-size="18">반클리프아펠</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="15"><tspan x="122.0" y="1053.9">스킨</tspan><tspan x="122.0" dy="16.2">케어룸</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="15"><tspan x="122.0" y="1119.4">커뮤니티</tspan><tspan x="122.0" dy="15.2">라운지</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="15"><tspan x="334.0" y="635.9">샤넬</tspan><tspan x="334.0" dy="16.2">뷰티</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="13"><tspan x="390.0" y="552.5">바이</tspan><tspan x="390.0" dy="13.0">레도</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="12"><tspan x="410.0" y="634.5">메모</tspan><tspan x="410.0" dy="13.0">파리</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="13"><tspan x="487.0" y="622.0">조 말론</tspan><tspan x="487.0" dy="14.0">런던</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="489.0" y="677.0" font-size="10">헤라</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="11"><tspan x="385.0" y="722.1">톰 포드</tspan><tspan x="385.0" dy="11.9">뷰티</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="8"><tspan x="456.0" y="714.4">메종</tspan><tspan x="456.0" dy="9.6">프란시스</tspan><tspan x="456.0" dy="9.6">커정</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="8"><tspan x="494.0" y="753.2">프레데릭</tspan><tspan x="494.0" dy="9.6">말</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="8"><tspan x="556.0" y="741.4">산타</tspan><tspan x="556.0" dy="9.6">마리아</tspan><tspan x="556.0" dy="9.6">노벨라</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="597.0" y="779.0" font-size="11">록시땅</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="584.0" y="683.0" font-size="15">키엘</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="8"><tspan x="470.0" y="543.2">마티에</tspan><tspan x="470.0" dy="9.6">프리미에르</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="515.0" y="520.0" font-size="12">쿠오카</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="12"><tspan x="590.0" y="505.5">에르메스</tspan><tspan x="590.0" dy="13.0">뷰티</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="691.0" y="500.0" font-size="13">탬버린즈</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="10"><tspan x="771.0" y="493.6">구찌</tspan><tspan x="771.0" dy="10.8">뷰티</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="808.0" y="474.0" font-size="11">나스</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="889.0" y="477.0" font-size="13">MAC</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="12"><tspan x="686.0" y="581.5">아르마니</tspan><tspan x="686.0" dy="13.0">뷰티</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="791.0" y="570.0" font-size="13">입생로랑</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="13"><tspan x="888.0" y="569.5">에스티</tspan><tspan x="888.0" dy="13.0">로더</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="11"><tspan x="684.0" y="638.1">프라다</tspan><tspan x="684.0" dy="11.9">뷰티</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="13"><tspan x="888.0" y="652.0">디올</tspan><tspan x="888.0" dy="14.0">뷰티</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="11"><tspan x="686.0" y="689.1">아쿠아</tspan><tspan x="686.0" dy="11.9">디</tspan><tspan x="686.0" dy="11.9">파르마</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="791.0" y="722.0" font-size="13">시슬리</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" font-size="10"><tspan x="888.0" y="716.2">메종</tspan><tspan x="888.0" dy="10.8">마르지엘라</tspan><tspan x="888.0" dy="10.8">퍼퓸</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="672.0" y="772.0" font-size="11">크리드</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="702.0" y="798.0" font-size="10">오휘/후</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="786.0" y="801.0" font-size="13">설화수</text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#444846;font-weight:700;letter-spacing:-.35px" x="887.0" y="809.0" font-size="13">이솝</text>
 </g>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#666b68;font-weight:600" font-size="15"><tspan x="735.0" y="882.5">박선기</tspan><tspan x="735.0" dy="15.0">작품</tspan></text>
-<text style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#515a57;font-weight:800;letter-spacing:.35px" x="1578" y="640" font-size="13"><tspan x="1578">WATERFALL</tspan><tspan x="1578" dy="15">GARDEN</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#666b68;font-weight:600" font-size="15"><tspan x="735.0" y="882.5">박선기</tspan><tspan x="735.0" dy="15.0">작품</tspan></text>
+<text style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;fill:#515a57;font-weight:800;letter-spacing:.35px" x="1578" y="640" font-size="13"><tspan x="1578">WATERFALL</tspan><tspan x="1578" dy="15">GARDEN</tspan></text>
 <path style="fill:none;stroke:#a979d8;stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round" id="outer-wall" d="
 M 16 52 H 1003
 M 1051 52 H 2030 V 207 L 1994 245
@@ -203,10 +203,10 @@ M 1984 1028 L 2029 1082 V 1232 H 1051
 M 1003 1232 H 17 V 1159 H 14 V 912 H 48 L 49 682
 M 50 624 V 499 H 17 V 52"/>
 <g id="gates">
-<g class="gate" id="gate-N"><rect x="1004" y="58" width="46" height="20" rx="5" style="fill:#fff;stroke:#a979d8;stroke-width:1.4"/><text x="1027" y="68.5" style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;font-size:12px;font-weight:800;fill:#8858be">GATE</text></g>
-<g class="gate" id="gate-W"><rect x="45" y="644" width="46" height="20" rx="5" style="fill:#fff;stroke:#a979d8;stroke-width:1.4"/><text x="68" y="654.5" style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;font-size:12px;font-weight:800;fill:#8858be">GATE</text></g>
-<g class="gate" id="gate-E1"><rect x="1952" y="268" width="46" height="20" rx="5" style="fill:#fff;stroke:#a979d8;stroke-width:1.4"/><text x="1975" y="278.5" style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;font-size:12px;font-weight:800;fill:#8858be">GATE</text></g>
-<g class="gate" id="gate-E2"><rect x="1950" y="952" width="46" height="20" rx="5" style="fill:#fff;stroke:#a979d8;stroke-width:1.4"/><text x="1973" y="962.5" style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;font-size:12px;font-weight:800;fill:#8858be">GATE</text></g>
-<g class="gate" id="gate-S"><rect x="1004" y="1208" width="46" height="20" rx="5" style="fill:#fff;stroke:#a979d8;stroke-width:1.4"/><text x="1027" y="1218.5" style="font-family:'NanumSquare','Noto Sans CJK KR','Apple SD Gothic Neo',sans-serif;text-anchor:middle;dominant-baseline:middle;font-size:12px;font-weight:800;fill:#8858be">GATE</text></g>
+<g class="gate" id="gate-N"><rect x="1004" y="58" width="46" height="20" rx="5" style="fill:#fff;stroke:#a979d8;stroke-width:1.4"/><text x="1027" y="68.5" style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;font-size:12px;font-weight:800;fill:#8858be">GATE</text></g>
+<g class="gate" id="gate-W"><rect x="45" y="644" width="46" height="20" rx="5" style="fill:#fff;stroke:#a979d8;stroke-width:1.4"/><text x="68" y="654.5" style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;font-size:12px;font-weight:800;fill:#8858be">GATE</text></g>
+<g class="gate" id="gate-E1"><rect x="1952" y="268" width="46" height="20" rx="5" style="fill:#fff;stroke:#a979d8;stroke-width:1.4"/><text x="1975" y="278.5" style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;font-size:12px;font-weight:800;fill:#8858be">GATE</text></g>
+<g class="gate" id="gate-E2"><rect x="1950" y="952" width="46" height="20" rx="5" style="fill:#fff;stroke:#a979d8;stroke-width:1.4"/><text x="1973" y="962.5" style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;font-size:12px;font-weight:800;fill:#8858be">GATE</text></g>
+<g class="gate" id="gate-S"><rect x="1004" y="1208" width="46" height="20" rx="5" style="fill:#fff;stroke:#a979d8;stroke-width:1.4"/><text x="1027" y="1218.5" style="font-family:'Pretendard',sans-serif;text-anchor:middle;dominant-baseline:middle;font-size:12px;font-weight:800;fill:#8858be">GATE</text></g>
 </g>
 </svg>

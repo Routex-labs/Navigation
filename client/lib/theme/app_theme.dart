@@ -37,6 +37,10 @@ abstract final class AppTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
+      // 이걸 비워 두면 플랫폼 기본 글꼴이 쓰여 같은 화면이 기기마다 다르게 보인다.
+      // 지도 심볼 라벨은 MapLibre가 서버 glyph로 따로 그리므로 여기서 정하는 것은
+      // 위젯 텍스트뿐이다 — 두 쪽을 같은 글꼴로 맞추려면 서버 fontstack도 함께 바꾼다.
+      fontFamily: 'Pretendard',
       scaffoldBackgroundColor: AppColors.background,
       appBarTheme: const AppBarTheme(
         backgroundColor: AppColors.surface,

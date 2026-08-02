@@ -5,7 +5,7 @@
 
   <!-- 변경 전 -->
   <g transform="translate(24 60)">
-    <text x="0" y="0" font-size="11.5" font-weight="700" fill="#CF222E">변경 전 — 통로와 매장의 명도 차 2% 미만</text>
+    <text x="0" y="0" font-size="11.5" font-weight="700" fill="#CF222E">변경 전 — 경계가 안 보인다</text>
     <rect x="0" y="12" width="330" height="176" fill="#FFFFFF" stroke="#00000088"/>
     <!-- 매장 폴리곤들 -->
     <g fill="#F3F1EF" stroke="#D8D4D1">
@@ -33,9 +33,9 @@
 
   <!-- 변경 후 -->
   <g transform="translate(436 60)">
-    <text x="0" y="0" font-size="11.5" font-weight="700" fill="#1A7F37">변경 후 — 명도 차이를 약 3배로</text>
+    <text x="0" y="0" font-size="11.5" font-weight="700" fill="#1A7F37">변경 후 — 면은 그대로, 경계선으로 구분</text>
     <rect x="0" y="12" width="330" height="176" fill="#FFFFFF" stroke="#00000088"/>
-    <g fill="#EAE6E1" stroke="#CFC9C2">
+    <g fill="#F1EEEA" stroke="#A69C90" stroke-width="1.2">
       <rect x="16" y="28" width="86" height="52"/>
       <rect x="110" y="28" width="86" height="52"/>
       <rect x="204" y="28" width="110" height="52"/>
@@ -49,7 +49,7 @@
     <text x="76" y="150" font-size="9.5" fill="#333" text-anchor="middle">하이츠 익스체인지</text>
     <text x="184" y="150" font-size="9.5" fill="#333" text-anchor="middle">팝마트</text>
     <text x="273" y="150" font-size="9.5" fill="#333" text-anchor="middle">론론</text>
-    <text x="165" y="104" font-size="9.5" fill="#1A7F37" text-anchor="middle">↑ 걸을 수 있는 곳이 읽힌다 ↑</text>
+    <text x="165" y="104" font-size="9.5" fill="#1A7F37" text-anchor="middle">↑ 경계선이 구분을 만든다 ↑</text>
   </g>
 
   <!-- 색 스와치 -->
@@ -58,17 +58,17 @@
     <text x="22" y="0" font-size="10.5" fill="#57606A">통로 #FFFFFF (유지)</text>
 
     <rect x="160" y="-12" width="16" height="16" fill="#F3F1EF" stroke="#D0D7DE"/>
-    <text x="182" y="0" font-size="10.5" fill="#57606A">매장 #F3F1EF</text>
+    <text x="182" y="0" font-size="10.5" fill="#57606A">면 #F3F1EF</text>
     <text x="262" y="0" font-size="10.5" fill="#8C959F">→</text>
-    <rect x="278" y="-12" width="16" height="16" fill="#EAE6E1" stroke="#D0D7DE"/>
-    <text x="300" y="0" font-size="10.5" font-weight="700" fill="#1A7F37">#EAE6E1</text>
+    <rect x="278" y="-12" width="16" height="16" fill="#F1EEEA" stroke="#D0D7DE"/>
+    <text x="300" y="0" font-size="10.5" font-weight="700" fill="#1A7F37">#F1EEEA</text>
 
     <rect x="400" y="-12" width="16" height="16" fill="#D8D4D1" stroke="#D0D7DE"/>
     <text x="422" y="0" font-size="10.5" fill="#57606A">외곽선 #D8D4D1</text>
     <text x="512" y="0" font-size="10.5" fill="#8C959F">→</text>
-    <rect x="528" y="-12" width="16" height="16" fill="#CFC9C2" stroke="#D0D7DE"/>
-    <text x="550" y="0" font-size="10.5" font-weight="700" fill="#1A7F37">#CFC9C2</text>
+    <rect x="528" y="-12" width="16" height="16" fill="#A69C90" stroke="#D0D7DE"/>
+    <text x="550" y="0" font-size="10.5" font-weight="700" fill="#1A7F37">#A69C90</text>
   </g>
 
-  <text x="24" y="300" font-size="11" fill="#57606A">네이버·카카오도 &quot;걸을 수 있는 곳은 밝게, 막힌 곳은 어둡게&quot; 규칙을 쓴다. 방향은 이미 맞고 세기만 부족하다.</text>
+  <text x="24" y="300" font-size="11" fill="#57606A">레퍼런스의 방법(면 대신 선으로 구분)만 가져오고 색조는 따뜻한 계열로 둔다 — 베이스 지도(VWorld)가 따뜻해서다.</text>
 </svg>
