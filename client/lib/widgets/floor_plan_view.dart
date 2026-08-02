@@ -10,6 +10,7 @@ import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../core/api_config.dart';
+import '../core/map_fonts.dart';
 import '../features/debug_mode/debug_map_overlay.dart';
 import '../models/floor_plan.dart';
 import '../screens/outdoor_map/indoor_entry_zoom.dart';
@@ -1931,7 +1932,7 @@ const _emptyFeatureCollection = {
 /// 이름의 디렉터리로 글리프를 서빙한다(GET /fonts/{fontstack}/{range}.pbf).
 /// 매장명이 한글이라 한글 글리프가 있는 폰트여야 한다 — MapLibre 기본값인
 /// Open Sans에는 한글이 없어서 라벨이 깨진다.
-const _mapFontStack = ['Noto Sans KR Regular'];
+const _mapFontStack = [mapFontStackRegular];
 
 /// [_initialStyle]의 glyphs 템플릿. `{fontstack}`/`{range}`는 MapLibre가
 /// 치환하는 자리표시자라 Dart 보간과 섞이지 않게 따로 조립한다.

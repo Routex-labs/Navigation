@@ -5,7 +5,7 @@
 # 없거나 응답이 실패하면 심볼 레이어의 레이아웃이 끝나지 않아 같은 타일의 fill
 # 레이어까지 통째로 렌더링되지 않으므로, 글리프는 지도 표시의 선택 사항이 아니다.
 # 글리프 파일은 resources/fonts/<fontstack>/ 아래에 커밋되어 있다(scripts/transform/make_glyphs.js
-# 가 Noto Sans KR에서 생성). 타일과 같은 출처에서 내려주므로 외부 폰트 CDN 없이
+# 가 Pretendard에서 생성). 타일과 같은 출처에서 내려주므로 외부 폰트 CDN 없이
 # 오프라인/사내망에서도 동작한다.
 
 from pathlib import Path

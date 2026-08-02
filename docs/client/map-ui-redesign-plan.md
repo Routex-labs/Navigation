@@ -148,17 +148,28 @@ Studio 원본만 보면 1,640개 중 1,278개가 `category: "매장"`이라 무�
 같은 화면이 기기마다 다르게 보인다.
 
 **(2) 지도 라벨 폰트는 Regular 하나뿐이다.**
-`backend/resources/fonts/`에 `Noto Sans KR Regular` 딱 하나. 그래서 지도에서
+`backend/resources/fonts/`에 `Noto Sans KR Regular` 딱 하나였다. 그래서 지도에서
 **굵기로 위계를 만들 수 없다.** 상용 지도는 중요한 POI를 굵게 해서 밀도 속에서도
 읽히게 하는데, 우리는 선택지가 없다.
 
 ### 제안
 
-**Noto Sans KR로 통일한다.** Pretendard가 더 현대적이지만 지도 glyph를 새로 구워야
-하고, 지도 쪽이 이미 Noto Sans KR이라 맞추는 편이 비용이 낮다.
+**Pretendard로 통일한다.** 세 가지 이유다.
 
-- 앱: `Noto Sans KR` Regular/Medium/Bold를 에셋에 추가, `theme.fontFamily` 지정
-- 백엔드: fontstack에 Bold 추가 → 지도 라벨 굵기 위계 확보 (보류 중인 6번의 선행 조건)
+1. **우리 문제가 "좁은 공간의 작은 글자"다.** 카테고리 칩, 업종 줄, 지도 라벨 모두 폭이
+   빠듯한 자리다. Pretendard는 자폭이 좁아 같은 자리에 여유가 생긴다.
+2. **iOS에서 변화가 가장 작다.** 지금 iOS는 Apple SD Gothic Neo를 쓰는데 Pretendard가
+   애초에 그걸 대체하려고 만들어진 글꼴이라 메트릭이 비슷하다. iOS는 거의 그대로 두고
+   웹·안드로이드만 끌어올리는 셈이 된다.
+3. **지도 라벨까지 같은 가족으로 간다.** `make_glyphs.js`는 글꼴 종류를 가리지 않으므로
+   같은 파일로 SDF를 구우면 UI와 지도가 진짜로 한 글꼴이 된다. 이 항목의 원래 목표다.
+
+라이선스는 OFL이라 번들 가능하다.
+
+- 앱: `Pretendard-Regular.otf` / `Pretendard-Bold.otf` → `client/assets/fonts/`,
+  `pubspec.yaml`에 `Pretendard` family 등록 + `theme.fontFamily` 지정
+- 지도: 같은 파일로 glyph 생성 → `backend/resources/fonts/Pretendard Regular/`, `Pretendard Bold/`
+- fontstack 이름은 `client/lib/core/map_fonts.dart` 상수 하나로 모은다
 
 ### 위험
 

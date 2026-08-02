@@ -1,4 +1,4 @@
-// Noto Sans KR TTF -> MapLibre SDF glyph(PBF) 범위 파일 생성기.
+// TTF/OTF -> MapLibre SDF glyph(PBF) 범위 파일 생성기.
 //
 // resources/fonts/<fontstack>/<start>-<end>.pbf 를 만든다. routers/fonts.py가
 // 이 파일들을 그대로 서빙하고, 클라이언트 스타일의 glyphs 템플릿이 여기를 가리킨다.

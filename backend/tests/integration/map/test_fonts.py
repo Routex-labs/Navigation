@@ -5,7 +5,7 @@
 캐시 헤더가 빠지면 그것만으로 수 MB가 매번 다시 흐른다.
 """
 
-FONTSTACK = "Noto Sans KR Regular"
+FONTSTACK = "Pretendard Regular"
 # resources/fonts/에 실제로 커밋되어 있는 범위(한글 음절 시작 구간).
 EXISTING_RANGE = "44032-44287"
 # 커밋 범위 밖 — 빈 200으로 떨어지는 경로.

@@ -29,6 +29,7 @@ library;
 import 'package:flutter/painting.dart' show Color;
 import 'package:maplibre_gl/maplibre_gl.dart';
 
+import '../../core/map_fonts.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/floor_facility_style.dart';
 import 'indoor_entry_zoom.dart';
@@ -108,7 +109,7 @@ FillLayerProperties indoorVerticalTransportProps(List<Object> fadeExpr) =>
 SymbolLayerProperties indoorStoresLabelProps(List<Object> fadeExpr) =>
     SymbolLayerProperties(
       textField: ['get', 'name'],
-      textFont: const ['Noto Sans KR Regular'],
+      textFont: const [mapFontStackRegular],
       textSize: 11,
       textColor: '#333333',
       textHaloColor: '#FFFFFF',
