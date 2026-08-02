@@ -31,8 +31,82 @@ class ShortestPath {
   final double totalCostM;
 }
 
+/// 출발 노드에서 어떤 노드까지 갔을 때의 거리와 비용.
+///
+/// [ShortestPath]와 같은 이유로 둘을 나눠 둔다 — 화면에 적는 거리는 실제
+/// 이동 거리이고, 소요 시간은 탑승·대기가 인코딩된 비용으로 추정해야 한다.
+/// 하나로 겸하면 엘리베이터가 낀 매장의 거리가 비용만큼 부풀어 보인다.
+class NodeReach {
+  const NodeReach({required this.distanceM, required this.costM});
+
+  /// 경로에 포함된 간선들의 **실제 거리** 합. 사용자에게 보여 주는 값이다.
+  final double distanceM;
+
+  /// 탐색이 최소화한 **라우팅 비용** 합. 소요 시간 추정에 쓴다.
+  final double costM;
+}
+
 typedef _Neighbor = (String nodeId, String edgeId, double costM);
 typedef _QueueItem = (double cost, String nodeId);
+
+/// 출발 노드에서 **도달 가능한 모든 노드**까지의 거리·비용을 한 번에 구한다.
+///
+/// **왜 [findShortestPath]를 반복하지 않나** — 그쪽은 도착 노드를 만나는 순간
+/// 멈춘다. 목적지가 하나일 때는 그게 맞지만, 검색 결과 목록처럼 "이 매장들이
+/// 각각 얼마나 먼가"를 묻는 화면에서는 결과 수만큼 탐색을 되풀이하게 된다
+/// (서버 상한 기준 최대 30번). 다익스트라는 원래 한 번 끝까지 돌면 모든
+/// 노드까지의 최솟값을 함께 얻으므로, 여기서는 조기 종료만 빼고 한 번 돌린다.
+///
+/// 반환 맵에는 [startNodeId] 자신도 거리 0으로 들어 있고, 간선으로 이어지지
+/// 않은 노드는 키가 아예 없다 — 호출부가 `null` 하나로 "도달 불가"를 구분한다.
+///
+/// 출발 노드가 없거나 간선 데이터가 올바르지 않으면 [findShortestPath]와 같이
+/// [ArgumentError]를 던진다.
+Map<String, NodeReach> reachableFrom({
+  required List<GraphNode> nodes,
+  required List<GraphEdge> edges,
+  required String startNodeId,
+  double Function(GraphEdge edge)? weight,
+}) {
+  final nodesById = {for (final node in nodes) node.id: node};
+  if (!nodesById.containsKey(startNodeId)) {
+    throw ArgumentError('출발 노드 $startNodeId가 존재하지 않습니다.');
+  }
+
+  final graph = _buildGraph(nodesById, edges, weight);
+  final lengthsByEdgeId = {for (final edge in edges) edge.id: edge.lengthM};
+
+  // 탐색은 비용으로 하고, 거리는 그때 확정된 간선을 따라 함께 누적한다.
+  // 나중에 경로를 되짚어 합산하지 않는 이유는 [_restorePath]와 달리 여기서는
+  // 복원할 경로가 노드 수만큼 있기 때문이다.
+  final reach = <String, NodeReach>{
+    startNodeId: const NodeReach(distanceM: 0.0, costM: 0.0),
+  };
+
+  final queue = HeapPriorityQueue<_QueueItem>((a, b) => a.$1.compareTo(b.$1));
+  queue.add((0.0, startNodeId));
+
+  while (queue.isNotEmpty) {
+    final (currentCost, currentNodeId) = queue.removeFirst();
+    final current = reach[currentNodeId];
+    // lazy-deletion: 같은 노드가 더 나쁜 비용으로 큐에 남아 있을 수 있다.
+    if (current == null || currentCost > current.costM) continue;
+
+    for (final (nextNodeId, edgeId, costM)
+        in graph[currentNodeId] ?? const <_Neighbor>[]) {
+      final nextCost = currentCost + costM;
+      if (nextCost >= (reach[nextNodeId]?.costM ?? double.infinity)) continue;
+
+      reach[nextNodeId] = NodeReach(
+        distanceM: current.distanceM + (lengthsByEdgeId[edgeId] ?? 0.0),
+        costM: nextCost,
+      );
+      queue.add((nextCost, nextNodeId));
+    }
+  }
+
+  return reach;
+}
 
 /// 출발 노드에서 도착 노드까지 비용 합이 가장 작은 경로를 찾는다.
 ///

@@ -6,6 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/api_config.dart';
 import '../../core/service_locator.dart';
+import '../../domain/dijkstra.dart';
 import '../../models/building.dart';
 import '../../models/category_count.dart';
 import '../../models/favorite_place.dart';
@@ -164,6 +165,31 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 엔터로 확정할 때마다 1씩 오른다. 같은 글자로 다시 엔터를 눌러도 의미
   /// 검색이 다시 돌아야 하므로 bool이 아니라 카운터다.
   int _searchSubmitTick = 0;
+
+  /// 현재 위치에서 각 그래프 노드까지의 거리·비용. 검색 결과가 매장마다
+  /// "몇 m · 도보 몇 분"을 붙이는 데 쓴다. 위치가 없거나 건물 안이 아니면 null.
+  ///
+  /// **검색어마다 다시 계산하지 않는다.** 이 값은 검색어와 무관하게 "지금 내
+  /// 위치"에만 딸려 있어서, 글자를 칠 때마다 갱신하면 건물 그래프 요청과
+  /// 다익스트라를 타이핑 속도로 태우게 된다. 검색을 시작할 때와 위치를 새로
+  /// 잡았을 때만 갱신한다.
+  Map<String, NodeReach>? _reachByNodeId;
+
+  /// 검색 결과 거리 표시용 도달 정보를 다시 계산한다.
+  ///
+  /// 건물 밖(순수 야외)에서는 실내 그래프 거리가 의미가 없으므로 비운다 —
+  /// 남겨 두면 야외로 나온 뒤에도 예전 실내 위치 기준 거리가 목록에 남는다.
+  Future<void> _refreshReach() async {
+    if (!_indoorContextActive) {
+      if (_reachByNodeId != null && mounted) {
+        setState(() => _reachByNodeId = null);
+      }
+      return;
+    }
+    final reach = await _indoorKey.currentState?.reachFromCurrentPosition();
+    if (!mounted) return;
+    setState(() => _reachByNodeId = reach);
+  }
 
   /// 시트 X 버튼이 눌리면 true가 된다. 시트 체인의 어떤 시점에서든 이 값이
   /// true면 부모 loop(_openFavorites, _openCategoryStores, _showStoreInfo)는
@@ -349,6 +375,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 검색 결과를 고른 뒤에도 다음 매장 탭이 도착지로 먹혀 버린다.
     _stopPickingDestinationOnMap();
     setState(() => _searchActive = true);
+    // 결과에 붙일 거리는 여기서 한 번만 준비한다. 결과가 나오기 전에 시작하므로
+    // 그래프 요청이 늦어도 목록은 먼저 뜨고, 거리 줄만 뒤늦게 채워진다.
+    unawaited(_refreshReach());
     // 결과 패널이 지도 위에 떠 있는 동안 지도 제스처를 잠근다. 실내는 웹에서
     // 실제 DOM 캔버스(MapLibre)라 패널 위 휠 이벤트가 지도로 새어나간다.
     _lockMaps(_mapLockSearch);
@@ -660,6 +689,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// "출발지를 선택하세요"가 그대로 남는다 — 위치는 찍혔는데 화면만 아니라고 한다.
   void _onLocationAnchored() {
     setState(() => _selectedOrigin = null);
+    // 출발점이 바뀌었으니 목록에 적힌 거리도 전부 옛 값이다. 다시 계산한다.
+    unawaited(_refreshReach());
   }
 
   /// 지도에서 도착지 고르기를 끝낸다(선택 완료·취소 공통).
@@ -1051,6 +1082,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                         onStorePicked: _onSearchStorePicked,
                         onBuildingPicked: _onSearchBuildingPicked,
                         currentFloorId: _activeIndoorFloor,
+                        reachByNodeId: _reachByNodeId,
                       ),
                     ),
                   )

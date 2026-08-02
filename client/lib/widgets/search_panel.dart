@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../core/service_locator.dart';
+import '../domain/dijkstra.dart';
 import '../models/building.dart';
 import '../models/discovery_result.dart';
 import '../models/poi_search_result.dart';
@@ -67,6 +68,7 @@ class SearchPanel extends StatefulWidget {
     required this.onStorePicked,
     required this.onBuildingPicked,
     this.currentFloorId,
+    this.reachByNodeId,
   });
 
   final String buildingId;
@@ -84,6 +86,15 @@ class SearchPanel extends StatefulWidget {
   /// 붙인다 — 같은 글자로 다시 엔터를 눌러도 재검색되게 하려고 bool이 아닌
   /// 카운터로 받는다.
   final int submitTick;
+
+  /// 현재 위치에서 각 그래프 노드까지의 거리·비용. 상위(MapShellScreen)가
+  /// 검색을 시작할 때 한 번 계산해 내려준다.
+  ///
+  /// null이거나 매장의 노드가 여기 없으면 **거리 줄을 그리지 않는다.** 위치를
+  /// 아직 안 잡았을 때 줄마다 "거리 알 수 없음"이 반복되면 목록이 읽히지 않고,
+  /// 그 상태에서 사용자가 할 수 있는 일도 "위치 지정" 하나뿐이라 매 줄에
+  /// 알릴 이유가 없다.
+  final Map<String, NodeReach>? reachByNodeId;
 
   final ValueChanged<PoiSearchResult> onStorePicked;
   final ValueChanged<Building> onBuildingPicked;
@@ -148,6 +159,26 @@ bool _isExactNameMatch(String query, List<PoiSearchResult> results) {
     final name = result.name.trim().toLowerCase();
     return name == normalizedQuery || name.startsWith(normalizedQuery);
   });
+}
+
+/// 실내 보행 속도(m/s). 값과 이름을 `indoor_map_screen.dart`의 ETA 계산과
+/// 맞춰, 목록에 적힌 "도보 N분"과 경로를 그린 뒤 ETA 카드의 분이 어긋나지
+/// 않게 한다. (같은 상수가 이 저장소에 다섯 군데 복제돼 있다 — 한곳으로
+/// 모으는 것은 이 항목의 범위가 아니라 그대로 둔다.)
+const _walkingSpeedMetersPerSecond = 1.2;
+
+/// 결과 한 줄에 적을 "몇 m · 도보 몇 분".
+///
+/// **거리와 시간의 출처가 다르다.** 거리는 실제 이동 거리([NodeReach.distanceM]),
+/// 시간은 라우팅 비용([NodeReach.costM]) 기준이다. 비용에는 엘리베이터 대기·
+/// 탑승이 인코딩돼 있어서, 시간까지 거리로 계산하면 다른 층 매장이 실제보다
+/// 가깝게 느껴진다. 반대로 거리를 비용으로 적으면 그만큼 부풀어 보인다.
+/// ETA 카드가 이미 같은 규칙을 쓴다.
+String reachLabel(NodeReach reach) {
+  final minutes = (reach.costM / _walkingSpeedMetersPerSecond / 60)
+      .ceil()
+      .clamp(1, 999);
+  return '${reach.distanceM.round()}m · 도보 $minutes분';
 }
 
 /// 이름에서 검색어와 일치하는 구간만 강조한 span 목록을 만든다.
@@ -814,6 +845,13 @@ class _SearchPanelState extends State<SearchPanel> {
     // 상세 시트를 여는 호출부(MapShellScreen._showStoreInfo)와 같은 규칙이다.
     final categoryLabel =
         subcategoryLabelFor(store.subcategory) ?? store.category;
+    // 노드가 없는 매장은 애초에 경로를 못 그리므로 거리도 없다. 그 사실은
+    // 아래 첫 줄의 "경로 안내 불가"가 이미 말한다.
+    final nodeId = store.nodeId;
+    final reach = nodeId == null ? null : widget.reachByNodeId?[nodeId];
+    final firstLine =
+        match?.reason ??
+        (nodeId == null ? '${store.floor} · 경로 안내 불가' : store.floor);
     return ListTile(
       leading: const Icon(Icons.place_outlined, color: AppColors.primary),
       title: Row(
@@ -845,11 +883,32 @@ class _SearchPanelState extends State<SearchPanel> {
           ],
         ],
       ),
-      subtitle: Text(
-        match?.reason ??
-            (store.nodeId == null ? '${store.floor} · 경로 안내 불가' : store.floor),
-        style: const TextStyle(fontSize: 12, color: AppColors.muted),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            firstLine,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12, color: AppColors.muted),
+          ),
+          if (reach != null)
+            Text(
+              reachLabel(reach),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              // 거리는 "지금 갈지"를 정하는 값이라 층보다 한 단계 진하게 둔다.
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.text,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+        ],
       ),
+      // 두 줄짜리 subtitle은 ListTile에 알려야 세로 정렬이 맞는다.
+      isThreeLine: reach != null,
       onTap: () => widget.onStorePicked(store),
     );
   }

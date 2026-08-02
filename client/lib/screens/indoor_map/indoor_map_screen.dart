@@ -18,6 +18,7 @@ import '../../features/indoor_navigation/application/guidance_trail_session.dart
 import '../../features/indoor_navigation/application/escalator_node_naming.dart';
 import '../../features/indoor_navigation/application/escalator_transition_detector.dart';
 import '../../features/indoor_navigation/application/indoor_location_estimate.dart';
+import '../../domain/dijkstra.dart';
 import '../../domain/multi_floor_router.dart';
 import '../../domain/route_guidance.dart';
 import '../../domain/route_progress.dart';
@@ -1150,6 +1151,43 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       current.northM,
       excludingNodeId: excludingNodeId,
     );
+  }
+
+  /// 현재 위치에서 건물 안 **모든 그래프 노드**까지의 거리·비용.
+  ///
+  /// 검색 결과 목록이 매장마다 "몇 m · 도보 몇 분"을 붙이는 데 쓴다. 목적지를
+  /// 아직 고르지 않은 시점에 부르는 값이라 [showRouteTo]와 달리 도착 노드가
+  /// 없고, 그래서 [reachableFrom]으로 한 번만 탐색해 전 노드 결과를 받는다.
+  ///
+  /// **null을 돌려주는 경우가 여러 가지다** — 위치(앵커)가 아직 없거나, 그래프를
+  /// 못 받았거나, 앵커 층에 그래프 노드가 없을 때다. 호출부는 어느 쪽이든
+  /// 거리 줄을 아예 그리지 않는다. 줄마다 "거리 알 수 없음"을 반복하면 목록이
+  /// 읽히지 않고, 사용자가 할 수 있는 일도 어차피 "위치 지정" 하나뿐이다.
+  Future<Map<String, NodeReach>?> reachFromCurrentPosition() async {
+    final anchor = _pdrTrailState.anchor;
+    if (anchor == null) return null;
+
+    final graph = await buildingRepository.getBuildingGraph(widget.buildingId);
+    if (!mounted || graph == null || graph.nodes.isEmpty) return null;
+
+    // 경로 계산과 **같은 시작 노드**를 쓴다. 여기서 다른 규칙으로 고르면 목록에
+    // 적힌 거리와 실제로 길찾기를 눌렀을 때 나오는 거리가 서로 달라진다.
+    final startNodeId = _pickStartNodeIdInBuildingGraph(
+      graph: graph,
+      startFloorName: anchor.floorId,
+    );
+    if (startNodeId == null) return null;
+
+    try {
+      return reachableFrom(
+        nodes: graph.nodes,
+        edges: graph.edges,
+        startNodeId: startNodeId,
+      );
+    } on ArgumentError {
+      // 그래프가 깨져 있어도 목록 자체는 계속 떠야 한다 — 거리만 빠진다.
+      return null;
+    }
   }
 
   String? _nearestNodeId(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/core/service_locator.dart';
+import 'package:navigation_client/domain/dijkstra.dart';
 import 'package:navigation_client/models/building.dart';
 import 'package:navigation_client/models/discovery_result.dart';
 import 'package:navigation_client/models/poi_search_result.dart';
@@ -76,7 +77,7 @@ void main() {
       buildingRepository = originalBuilding;
     });
 
-    Widget buildSubject() => MaterialApp(
+    Widget buildSubject({Map<String, NodeReach>? reachByNodeId}) => MaterialApp(
       home: Scaffold(
         body: SizedBox(
           height: 400,
@@ -86,6 +87,7 @@ void main() {
             submitTick: 0,
             onStorePicked: (_) {},
             onBuildingPicked: (_) {},
+            reachByNodeId: reachByNodeId,
           ),
         ),
       ),
@@ -145,6 +147,74 @@ void main() {
 
       expect(find.text('화장실'), findsOneWidget);
       expect(find.text('restroom'), findsNothing);
+    });
+
+    testWidgets('위치를 잡았으면 거리와 도보 시간을 함께 보여준다', (tester) async {
+      destinationRepository = _FakeDestinationRepository([
+        _result(subcategory: '여성패션', category: '패션'),
+      ]);
+
+      await tester.pumpWidget(
+        buildSubject(
+          reachByNodeId: const {
+            'node-1': NodeReach(distanceM: 124.4, costM: 124.4),
+          },
+        ),
+      );
+      await settleSearch(tester);
+
+      // 124.4m / 1.2m·s⁻¹ ≈ 104초 → 올림해서 2분.
+      expect(find.text('124m · 도보 2분'), findsOneWidget);
+    });
+
+    // 위치를 아직 안 잡은 상태가 정상 경로다. 줄마다 "거리 알 수 없음"을
+    // 반복하면 목록이 읽히지 않는다.
+    testWidgets('위치가 없으면 거리 줄을 아예 그리지 않는다', (tester) async {
+      destinationRepository = _FakeDestinationRepository([
+        _result(subcategory: '여성패션', category: '패션'),
+      ]);
+
+      await tester.pumpWidget(buildSubject());
+      await settleSearch(tester);
+
+      expect(find.textContaining('도보'), findsNothing);
+      expect(find.text('3F'), findsOneWidget);
+    });
+
+    // 그래프가 끊겨 있으면 그 노드는 맵에 키가 없다(reachableFrom 계약).
+    testWidgets('도달할 수 없는 매장은 거리 줄이 없다', (tester) async {
+      destinationRepository = _FakeDestinationRepository([
+        _result(subcategory: '여성패션', category: '패션'),
+      ]);
+
+      await tester.pumpWidget(
+        buildSubject(
+          reachByNodeId: const {
+            '다른-노드': NodeReach(distanceM: 10, costM: 10),
+          },
+        ),
+      );
+      await settleSearch(tester);
+
+      expect(find.textContaining('도보'), findsNothing);
+    });
+  });
+
+  group('reachLabel', () {
+    // 거리는 실제 이동 거리, 시간은 비용 기준이다. 엘리베이터 대기·탑승이
+    // 비용에만 들어 있어서, 시간까지 거리로 계산하면 다른 층 매장이 실제보다
+    // 가깝게 느껴진다.
+    test('거리는 distanceM으로, 시간은 costM으로 계산한다', () {
+      final label = reachLabel(const NodeReach(distanceM: 20, costM: 200));
+
+      // 거리 20m는 그대로, 시간은 200m 등가라 200/1.2/60 ≈ 2.8분 → 3분.
+      expect(label, '20m · 도보 3분');
+    });
+
+    test('아주 가까워도 0분이 아니라 1분으로 올린다', () {
+      final label = reachLabel(const NodeReach(distanceM: 3, costM: 3));
+
+      expect(label, '3m · 도보 1분');
     });
   });
 }
