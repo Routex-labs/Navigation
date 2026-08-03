@@ -2517,10 +2517,37 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     }
     if (!mounted) return;
     _setPlacingAnchor(false);
-    if (notifyLocationChanged) widget.onLocationAnchored?.call();
+    if (notifyLocationChanged) {
+      widget.onLocationAnchored?.call();
+      _restoreCameraToUser();
+    }
     // 배치가 끝났다는 안내는 따로 띄우지 않는다. 도면에 위치 마커가 바로
     // 찍히고 안내 배너가 사라지는 것으로 이미 결과가 보이는데, 토스트까지
     // 겹치면 방금 지정한 지점을 가린다.
+  }
+
+  /// 위치를 새로 지정한 뒤 원래 화면(내 위치 중심 + 바라보는 방향 정렬 + 추적
+  /// 재개)으로 되돌린다.
+  ///
+  /// 지도를 끌어 추적이 풀린 상태에서 위치를 다시 찍는 것은 "여기가 내 자리다"를
+  /// 다시 알려 주는 행동이다. 그런데 화면은 끌어 놓은 자리에 그대로 머물러서,
+  /// 방금 찍은 지점이 화면 밖인 경우까지 있었다.
+  ///
+  /// **다음 프레임에 부른다.** 앵커를 확정한 직후에는 아직 위젯이 새 위치로 다시
+  /// 그려지기 전이라, 지금 부르면 FloorPlanView가 들고 있는 예전 위치(또는
+  /// null)를 보고 아무 데도 못 간다.
+  ///
+  /// heading을 아직 모르면 중심만 맞추고 회전은 건너뛴다 — 앵커 직후에는 방향이
+  /// 아직 안 잡혔을 수 있고, 모르는 방향으로 돌리는 것보다 안 돌리는 게 낫다.
+  ///
+  /// 출발지 매장을 따라 조용히 찍는 경로(`notifyLocationChanged: false`)에서는
+  /// 부르지 않는다. 상위가 정한 출발지를 되짚는 것뿐인데 화면까지 움직이면
+  /// 사용자가 시키지 않은 일이 된다.
+  void _restoreCameraToUser() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_floorPlanController.isAttached) return;
+      unawaited(_floorPlanController.resumeFollow());
+    });
   }
 
   Future<void> _cancelPdrAnchor() async {
