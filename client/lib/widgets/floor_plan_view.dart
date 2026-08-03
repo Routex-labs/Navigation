@@ -71,8 +71,8 @@ const _facilityLabelLayerId = 'floor-store-facility-label';
 // v3: "도착" 글씨를 비트맵에 구워 넣었다(심볼 텍스트에서 이동).
 const _destinationPinImageName = 'marker-destination-pin-v3';
 
-/// 도착 핀 iconSize의 zoom 보간 구간. textSize는 이 값을 [kPinIconToTextRatio]로
-/// 나눠 얻으므로, 여기를 바꾸면 글씨 크기도 함께 움직인다.
+/// 도착 핀 iconSize의 zoom 보간 구간. "도착" 글씨가 비트맵에 구워져 있으므로
+/// 이 값을 바꾸면 글씨도 같은 비율로 함께 커지고 작아진다.
 const _destPinIconSizeZ16 = 0.115;
 const _destPinIconSizeZ20 = 0.25;
 
