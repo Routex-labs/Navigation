@@ -653,6 +653,16 @@ class FloorPlanViewState extends State<FloorPlanView> {
     final target = widget.focusTarget;
     if (controller == null || target == null || !_styleReady) return;
 
+    // 목록에서 고른 매장은 층 반대편일 수 있다. 그대로 두면 이 이동이 끝나자마자
+    // onCameraIdle이 카메라를 내 위치 근방으로 도로 끌어당겨 포커스가 통째로
+    // 깨진다. "딴 데를 보러 갔다"는 명시적 의사 표시이므로 위치 제한만 끈다
+    // (도면 제한은 그대로다). 내 위치로 돌아오는 [resumeFollow]에서 다시 켜진다.
+    //
+    // `widget.focusTarget != null`을 대신 볼 수는 없다 — 상위가 이 값을 한 번
+    // 정하면 null로 되돌리지 않아서, 매장을 한 번이라도 누르면 위치 제한이
+    // 영원히 꺼진다.
+    _userBoundsSuspended = true;
+
     // 뷰포트는 await 전에 읽는다. 카메라 이동을 기다린 뒤 MediaQuery를 보면
     // 그 사이 위젯이 트리에서 빠졌을 수 있다.
     final viewport = _lastViewport ?? MediaQuery.sizeOf(context);
@@ -1389,6 +1399,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
       widget.floorPlan.footprint,
       halfSpanLat: halfSpan?.lat ?? 0,
       halfSpanLng: halfSpan?.lng ?? 0,
+      userLocation: _userBoundsSuspended ? null : widget.currentLocation,
     );
     if (clamped == null) return;
 
@@ -1558,6 +1569,12 @@ class FloorPlanViewState extends State<FloorPlanView> {
   bool _following = true;
   bool get isFollowing => _following;
 
+  /// 내 위치 근방 제한([clampToFootprint]의 `userLocation`)을 꺼 둔 상태인지.
+  ///
+  /// 매장 포커스처럼 사용자가 **명시적으로 딴 데를 보러 간** 경우에만 켠다.
+  /// 자세한 이유는 [_applyFocusTarget] 주석에 있다.
+  bool _userBoundsSuspended = false;
+
   /// 이번 제스처에서 손가락이 움직인 누적 거리(논리 픽셀). 이 값이 임계를
   /// 넘어야 "끌었다"로 본다.
   double _gesturePanPx = 0;
@@ -1581,6 +1598,8 @@ class FloorPlanViewState extends State<FloorPlanView> {
       setState(() => _following = true);
       widget.onFollowingChanged?.call(true);
     }
+    // 내 위치로 돌아왔으니 매장 포커스 때문에 꺼 뒀던 위치 제한을 다시 켠다.
+    _userBoundsSuspended = false;
     final target = widget.currentLocation;
     if (target != null) await centerOn(target);
   }

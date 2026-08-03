@@ -141,4 +141,85 @@ void main() {
       );
     });
   });
+
+  group('clampToFootprint — 내 위치 근방 제한', () {
+    // 반경이 화면 절반이라는 건 "내 위치가 항상 화면 안에 남는다"와 같은 말이다.
+    test('내 위치에서 화면 절반보다 멀면 그 경계로 당긴다', () {
+      final clamped = clampToFootprint(
+        const ll.LatLng(37.1, 127.35),
+        _footprint,
+        halfSpanLat: 0.01,
+        halfSpanLng: 0.02,
+        userLocation: const ll.LatLng(37.1, 127.2),
+      )!;
+
+      expect(clamped.latitude, closeTo(37.1, 1e-9));
+      expect(clamped.longitude, closeTo(127.22, 1e-9));
+    });
+
+    test('화면 절반 이내면 그대로 둔다', () {
+      expect(
+        clampToFootprint(
+          const ll.LatLng(37.105, 127.21),
+          _footprint,
+          halfSpanLat: 0.01,
+          halfSpanLng: 0.02,
+          userLocation: const ll.LatLng(37.1, 127.2),
+        ),
+        isNull,
+      );
+    });
+
+    test('위치가 없으면 도면 제한만 걸린다', () {
+      expect(
+        clampToFootprint(
+          const ll.LatLng(37.1, 127.35),
+          _footprint,
+          halfSpanLat: 0.01,
+          halfSpanLng: 0.02,
+        ),
+        isNull,
+      );
+    });
+
+    // 반경이 화면 절반으로 정의돼 있으니, 화면 크기를 모르면 반경도 없다.
+    test('화면 크기를 모르면 위치 제한도 걸지 않는다', () {
+      expect(
+        clampToFootprint(
+          const ll.LatLng(37.1, 127.35),
+          _footprint,
+          userLocation: const ll.LatLng(37.1, 127.2),
+        ),
+        isNull,
+      );
+    });
+
+    test('도면 제한이 더 좁으면 그쪽이 이긴다', () {
+      final clamped = clampToFootprint(
+        const ll.LatLng(37.2, 127.2),
+        _footprint,
+        halfSpanLat: 0.05,
+        halfSpanLng: 0.02,
+        userLocation: const ll.LatLng(37.19, 127.2),
+      )!;
+
+      // 위치 기준으로는 37.24까지 허용되지만 도면 깎기가 37.15에서 막는다.
+      expect(clamped.latitude, closeTo(37.15, 1e-9));
+    });
+
+    // PDR이 도면 밖으로 흘렀을 때. 빈 공간을 피하자고 사용자를 화면 밖에 두면
+    // 자기가 어디 있는지 못 본다.
+    test('교집합이 비면 위치 쪽을 남긴다', () {
+      final clamped = clampToFootprint(
+        const ll.LatLng(37.1, 127.2),
+        _footprint,
+        halfSpanLat: 0.01,
+        halfSpanLng: 0.02,
+        userLocation: const ll.LatLng(36.5, 127.2),
+      )!;
+
+      // 도면(37.01~37.19)과 위치 근방(36.49~36.51)이 안 겹친다 → 위치 근방.
+      expect(clamped.latitude, closeTo(36.51, 1e-9));
+    });
+  });
 }

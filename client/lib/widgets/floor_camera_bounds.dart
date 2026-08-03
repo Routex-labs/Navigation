@@ -37,6 +37,17 @@ const _epsilonDeg = 1e-7;
 /// (`FloorPlanViewState._pullBackIntoFootprint`) 주석에 적었다 — 이 조합에서는
 /// 지도가 아예 렌더되지 않았다.
 ///
+/// [userLocation]이 있으면 허용 영역을 **내 위치에서 화면 절반 이내**로 한 번 더
+/// 좁힌다. 반경을 화면 절반으로 잡은 것은 그게 곧 "내 위치가 항상 화면 안에
+/// 남는다"와 같은 말이기 때문이다 — 고정 미터 값으로 잡으면 줌아웃에서는 지도가
+/// 잠기고 줌인에서는 한 화면보다 훨씬 넓게 밀린다. 화면 크기를 모르면
+/// ([halfSpanLat]·[halfSpanLng]가 0) 이 제한은 걸리지 않는다. 반경이 정의되지
+/// 않기 때문이다.
+///
+/// 도면 제한과 위치 제한의 교집합이 비면 **위치 쪽을 남긴다.** PDR이 도면 밖으로
+/// 흘렀을 때 벌어지는데, 그때 빈 공간을 피하자고 사용자를 화면 밖에 두면 자기가
+/// 어디 있는지 못 본다. 빈 공간보다 나쁘다.
+///
 /// footprint가 비어 있거나 한 축이 퇴화한 건물(실좌표 앵커 없음)에서는 **항상
 /// null이다.** 기준이 없는데 되돌리면 엉뚱한 데로 끌고 간다 — 무한히 밀리는
 /// 것보다 나쁜 상태다.
@@ -45,6 +56,7 @@ ll.LatLng? clampToFootprint(
   List<ll.LatLng> footprint, {
   double halfSpanLat = 0,
   double halfSpanLng = 0,
+  ll.LatLng? userLocation,
 }) {
   if (footprint.length < 2) return null;
 
@@ -60,8 +72,12 @@ ll.LatLng? clampToFootprint(
   }
   if (maxLat <= minLat || maxLng <= minLng) return null;
 
-  final latRange = _deflate(minLat, maxLat, halfSpanLat);
-  final lngRange = _deflate(minLng, maxLng, halfSpanLng);
+  var latRange = _deflate(minLat, maxLat, halfSpanLat);
+  var lngRange = _deflate(minLng, maxLng, halfSpanLng);
+  if (userLocation != null) {
+    latRange = _intersectAround(latRange, userLocation.latitude, halfSpanLat);
+    lngRange = _intersectAround(lngRange, userLocation.longitude, halfSpanLng);
+  }
 
   final lat = center.latitude.clamp(latRange.lo, latRange.hi);
   final lng = center.longitude.clamp(lngRange.lo, lngRange.hi);
@@ -85,4 +101,19 @@ ll.LatLng? clampToFootprint(
     return (lo: mid, hi: mid);
   }
   return (lo: deflatedLo, hi: deflatedHi);
+}
+
+/// [range]를 [user] ± [halfSpan]과 교차시킨다. 교집합이 비면 위치 쪽을 남긴다.
+({double lo, double hi}) _intersectAround(
+  ({double lo, double hi}) range,
+  double user,
+  double halfSpan,
+) {
+  if (!user.isFinite || !halfSpan.isFinite || halfSpan <= 0) return range;
+  final nearLo = user - halfSpan;
+  final nearHi = user + halfSpan;
+  final lo = max(range.lo, nearLo);
+  final hi = min(range.hi, nearHi);
+  if (lo > hi) return (lo: nearLo, hi: nearHi);
+  return (lo: lo, hi: hi);
 }
