@@ -589,9 +589,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
   }
 
   Future<List<DirectionsCandidate>> _searchDirectionsCandidates(
-    String query, {
-    required bool includeAllFloors,
-  }) async {
+    String query,
+  ) async {
     final normalized = query.trim().toLowerCase();
     // 건물 밖을 보고 있을 때만 건물 입구가 후보다. 실내 진입 오버레이가 켜져
     // 있으면 야외 탭이어도 아래 매장 검색으로 흘려보낸다 — 그러지 않으면 실내
@@ -613,16 +612,16 @@ class _MapShellScreenState extends State<MapShellScreen> {
           )
           .toList();
     }
-    // 실내에서는 기본적으로 현재 층 안에서만 매장/시설을 찾는다 — 시트를
-    // 통한 목적지 선택이 사용자 의도와 무관하게 다른 층으로 데려가지 않도록.
-    // 사용자가 시트의 "전체 층에서 찾기" 토글을 켜면 그때만 예전처럼 건물
-    // 전체를 뒤진다. 현재 층을 아직 알 수 없는 경우(층 미로드)에도 폴백으로
-    // 전체 검색을 허용해 검색 자체가 조용히 죽는 상태를 만들지 않는다.
-    final currentFloor = _activeIndoorFloor;
+    // 길찾기는 **항상 건물 전체**에서 찾는다(currentFloorId를 넘기지 않는다).
+    //
+    // 예전에는 현재 층으로 좁히고 "전체 층에서 찾기" 토글로 넓히게 했다. 그런데
+    // 길찾기를 여는 이유 자체가 대개 "지금 층에 없는 곳으로 가려고"라, 기본값이
+    // 사용자 의도의 반대였다 — 찾는 매장이 결과에 아예 없어서 매번 토글을 켜야
+    // 했다. 다른 층 결과에는 층 라벨이 부제로 붙으므로(아래 subtitle), 어느 층
+    // 매장인지는 목록에서 그대로 읽힌다.
     final results = await destinationRepository.searchDestinations(
       _buildingId,
       query,
-      currentFloorId: includeAllFloors ? null : currentFloor,
     );
     return results
         .map(
@@ -652,10 +651,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
     DirectionsCandidate? presetDestination,
     bool focusOrigin = false,
   }) async {
-    // 건물 안을 보고 있을 때만 현재 층 라벨을 시트에 넘겨 "B2에서 검색" 표시와
-    // "전체 층에서 찾기" 토글이 뜨게 한다. 순수 야외 상태는 층 개념 자체가
-    // 없으므로 null을 넘겨 토글을 숨긴다.
-    final currentFloorLabel = _activeIndoorFloor;
     // 상위가 기억해둔 출발지가 있으면 시트에도 미리 채워, 사용자가 매번 다시
     // 입력하지 않아도 되게 한다. presetOrigin(이번 진입점에서 명시적으로 넘긴
     // 값)이 있으면 그 값이 우선한다.
@@ -668,7 +663,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
         initialOrigin: initialOrigin,
         initialDestination: initialDestination,
         search: _searchDirectionsCandidates,
-        currentFloorLabel: currentFloorLabel,
         focusOrigin: focusOrigin,
       ),
     );

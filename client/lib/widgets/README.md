@@ -107,7 +107,7 @@ flowchart LR
 |---|---|
 | 지도 레이어·마커 변경 | `floor_plan_view.dart` |
 | 경로 모양 변경 | `domain/route_guidance.dart`(`RoutePolylineSplit`)와 `models/indoor_route.dart` |
-| 검색 입력/전체 층 토글 변경 | `directions_sheet.dart` |
+| 길찾기 출발/도착 검색 입력 변경 | `directions_sheet.dart` |
 | 공통 색·간격 변경 | [`../theme/README.md`](../theme/README.md) |
 
 ---

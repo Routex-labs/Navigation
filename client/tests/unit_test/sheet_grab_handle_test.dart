@@ -108,7 +108,7 @@ void main() {
       (context) => DirectionsSheet.show(
         context,
         originLabel: '현재 위치',
-        search: (query, {required includeAllFloors}) async => const [
+        search: (query) async => const [
           DirectionsCandidate(
             title: 'MLB',
             subtitle: 'B2',

@@ -39,7 +39,7 @@ void main() {
                   context,
                   originLabel: '현재 위치',
                   initialOrigin: initialOrigin,
-                  search: (query, {required includeAllFloors}) async => results,
+                  search: (query) async => results,
                 );
                 holder.settled = true;
               },

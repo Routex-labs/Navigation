@@ -54,13 +54,13 @@ class DirectionsResult {
 enum _ActiveField { origin, destination }
 
 /// [DirectionsSheet]가 부모(MapShellScreen)에 검색을 위임할 때 쓰는 콜백.
-/// [includeAllFloors]가 true면 "전체 층에서 찾기" 토글이 켜진 상태 —
-/// 부모는 리포지토리 호출에서 current_floor_id를 빼서 건물 전체를 검색한다.
+///
+/// 길찾기 검색은 **항상 건물 전체**를 뒤진다. 예전에는 현재 층으로 좁히고
+/// "전체 층에서 찾기" 토글로 넓히게 했는데, 길찾기는 원래 다른 층으로 가려고
+/// 여는 기능이라 기본값이 반대였다 — 찾는 매장이 대부분 다른 층에 있어서
+/// 사용자가 매번 토글을 켜야 결과가 나왔다.
 typedef DirectionsSearchCallback =
-    Future<List<DirectionsCandidate>> Function(
-      String query, {
-      required bool includeAllFloors,
-    });
+    Future<List<DirectionsCandidate>> Function(String query);
 
 /// "출발지 → 도착지" 입력 바텀시트. 두 입력 모두 탭하면 그 아래 검색 결과
 /// 목록이 그 필드 기준으로 바뀐다. 출발지 목록의 맨 위에는 "현재 위치"가
@@ -72,7 +72,6 @@ class DirectionsSheet extends StatefulWidget {
     required this.search,
     this.initialOrigin,
     this.initialDestination,
-    this.currentFloorLabel,
     this.focusOrigin = false,
   });
 
@@ -89,11 +88,6 @@ class DirectionsSheet extends StatefulWidget {
   /// 검색 결과 목록에서 그대로 골라도 되고, 다른 검색어로 바꿔도 된다.
   final DirectionsCandidate? initialDestination;
 
-  /// 지금 지도가 보여주는 층(예: "B2"). 값이 있으면 기본 검색을 이 층으로
-  /// 좁히고 "전체 층에서 찾기" 토글을 노출한다. 야외 모드거나 층이 아직
-  /// 로드되지 않은 경우 null이며, 이때는 기존처럼 건물 전체를 뒤진다.
-  final String? currentFloorLabel;
-
   /// 출발지 칸을 활성으로 열지. 상단 초안 바의 **출발 행**을 눌러 들어올 때 켠다 —
   /// 출발지를 바꾸려고 누른 것이므로 커서와 후보 목록이 그 칸에 맞아야 한다.
   /// 기본은 false로, 도착지를 고르는 기존 흐름이 그대로 유지된다.
@@ -105,7 +99,6 @@ class DirectionsSheet extends StatefulWidget {
     required DirectionsSearchCallback search,
     DirectionsCandidate? initialOrigin,
     DirectionsCandidate? initialDestination,
-    String? currentFloorLabel,
     bool focusOrigin = false,
   }) {
     return showModalBottomSheet<DirectionsResult>(
@@ -120,7 +113,6 @@ class DirectionsSheet extends StatefulWidget {
           search: search,
           initialOrigin: initialOrigin,
           initialDestination: initialDestination,
-          currentFloorLabel: currentFloorLabel,
           focusOrigin: focusOrigin,
         ),
       ),
@@ -176,60 +168,6 @@ class _PickOnMapTile extends StatelessWidget {
   }
 }
 
-/// 결과 목록 상단에 얹는 스코프 표시 + "전체 층에서 찾기" 스위치.
-/// 지금 어느 범위를 검색 중인지 사용자가 눈으로 확인하고 필요할 때만
-/// 다른 층까지 넓힐 수 있게 한다. 현재 층이 없으면 이 위젯 자체가 그려지지
-/// 않으므로(부모 build가 null 체크) 여기서는 라벨을 확정 값으로 받는다.
-class _AllFloorsToggle extends StatelessWidget {
-  const _AllFloorsToggle({
-    required this.currentFloorLabel,
-    required this.includeAllFloors,
-    required this.onChanged,
-  });
-
-  final String currentFloorLabel;
-  final bool includeAllFloors;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 12, 8),
-      child: Row(
-        children: [
-          Icon(
-            includeAllFloors ? Icons.layers : Icons.filter_alt_outlined,
-            size: 16,
-            color: AppColors.muted,
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              includeAllFloors
-                  ? '전체 층에서 찾는 중'
-                  : '$currentFloorLabel에서 검색',
-              style: const TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-                color: AppColors.muted,
-              ),
-            ),
-          ),
-          const Text(
-            '전체 층에서 찾기',
-            style: TextStyle(fontSize: 12, color: AppColors.muted),
-          ),
-          Switch(
-            value: includeAllFloors,
-            onChanged: onChanged,
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _DirectionsSheetState extends State<DirectionsSheet> {
   late final _originController = TextEditingController(
     text: widget.initialOrigin?.title ?? widget.originLabel,
@@ -245,10 +183,6 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
   late _ActiveField _activeField;
   List<DirectionsCandidate> _results = [];
   bool _loading = false;
-
-  /// "전체 층에서 찾기" 토글. 현재 층이 있을 때만 UI에 나타나고, 기본값은
-  /// off — 사용자가 명시적으로 켜기 전까지는 현재 층 안에서만 검색한다.
-  bool _includeAllFloors = false;
 
   int _searchSeq = 0;
 
@@ -281,28 +215,16 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
   }
 
   Future<void> _search(String query) async {
-    // 여러 검색이 겹쳐 뜰 수 있어(빠른 타이핑·토글 즉시 재검색 등) 마지막
-    // 요청 결과만 반영하도록 시퀀스로 스테일 응답을 버린다.
+    // 여러 검색이 겹쳐 뜰 수 있어(빠른 타이핑 등) 마지막 요청 결과만 반영하도록
+    // 시퀀스로 스테일 응답을 버린다.
     final seq = ++_searchSeq;
     setState(() => _loading = true);
-    final results = await widget.search(
-      query,
-      includeAllFloors: _includeAllFloors,
-    );
+    final results = await widget.search(query);
     if (!mounted || seq != _searchSeq) return;
     setState(() {
       _results = results;
       _loading = false;
     });
-  }
-
-  void _onToggleAllFloors(bool value) {
-    if (_includeAllFloors == value) return;
-    setState(() => _includeAllFloors = value);
-    final activeQuery = _activeField == _ActiveField.origin
-        ? _originController.text
-        : _destinationController.text;
-    _search(activeQuery);
   }
 
   /// 출발지 입력창을 처음 탭해 활성화할 때만 호출된다. 아직 명시적 출발지가
@@ -444,12 +366,6 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
               // 입력이 활성인 상태에서 띄우면 "지도에서 출발지를 고른다"는 뜻으로
               // 읽히는데, 그건 지원하지 않는 동작이다.
               if (!isOriginActive) _PickOnMapTile(onTap: _pickDestinationOnMap),
-              if (widget.currentFloorLabel != null)
-                _AllFloorsToggle(
-                  currentFloorLabel: widget.currentFloorLabel!,
-                  includeAllFloors: _includeAllFloors,
-                  onChanged: _onToggleAllFloors,
-                ),
               Expanded(
                 child: _loading
                     ? const Center(child: CircularProgressIndicator())
