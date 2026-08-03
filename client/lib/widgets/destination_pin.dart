@@ -2,7 +2,9 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:maplibre_gl/maplibre_gl.dart';
 
+import '../core/map_fonts.dart';
 import '../theme/app_theme.dart';
 
 /// 도착지 핀 아이콘과, 그 위에 "도착" 글씨를 얹는 데 필요한 치수.
@@ -60,6 +62,63 @@ const _pinOutlineColor = Color(0xFFA81B18);
 const _pinOutlineWidth = 7.0;
 // 끝점이 외곽선 반두께와 정확히 맞닿으면 antialiasing이 마지막 행을 잘라낸다.
 const _pinCanvasBottomInset = 1.0;
+
+/// 도착 핀 심볼 레이어의 **완성된** 속성 묶음.
+///
+/// 실내 화면과 야외 오버레이가 각자 같은 정의를 베껴 들고 있었고, **두 곳 모두
+/// `textFont`를 빠뜨렸다.** 생략하면 MapLibre 스펙 기본값(Open Sans / Arial
+/// Unicode MS)을 요청하는데 백엔드는 `Pretendard Regular` 하나만 서빙하므로
+/// 글리프를 못 받는다. 네이티브(Android/iOS)는 글리프가 없으면 심볼 레이아웃을
+/// 끝내지 못해 **글씨뿐 아니라 핀 아이콘까지 통째로 사라진다.** 웹은 CJK를
+/// 시스템 폰트로 로컬 렌더해서 멀쩡해 보이므로 Chrome에서만 확인하면 못 잡는다.
+///
+/// 그래서 정의를 여기 하나로 모은다 — 한 곳만 고쳐 두 화면이 어긋나는 일을
+/// 구조적으로 막는 게 이 함수의 목적이다(indoor_overlay_layers.dart의 "등록과
+/// 갱신이 같은 함수를 쓴다" 규칙과 같은 이유).
+///
+/// 화면마다 다른 것은 두 가지뿐이다.
+/// - [imageName]: addImage 등록 키. 웹 addImage는 같은 이름이 있으면 새 비트맵을
+///   버리므로 화면별로 따로 둔다.
+/// - [iconSizeZ16]·[iconSizeZ20]: 화면이 잡는 zoom 보간 구간. 야외 오버레이는
+///   시야가 넓어 실내보다 크게 잡는다.
+SymbolLayerProperties destinationPinSymbolProps({
+  required String imageName,
+  required double iconSizeZ16,
+  required double iconSizeZ20,
+}) => SymbolLayerProperties(
+  iconImage: imageName,
+  iconSize: [
+    'interpolate',
+    ['linear'],
+    ['zoom'],
+    16,
+    iconSizeZ16,
+    20,
+    iconSizeZ20,
+  ],
+  // 핀 바닥(tip)이 실제 좌표에 오도록.
+  iconAnchor: 'bottom',
+  iconAllowOverlap: true,
+  iconIgnorePlacement: true,
+  textField: '도착',
+  textFont: const [mapFontStackRegular],
+  // 손으로 적지 않고 iconSize에서 나눈다 — 비율이 어긋나면 글씨가 머리 원을
+  // 벗어나고 textOffset도 같이 틀어진다.
+  textSize: [
+    'interpolate',
+    ['linear'],
+    ['zoom'],
+    16,
+    iconSizeZ16 / kPinIconToTextRatio,
+    20,
+    iconSizeZ20 / kPinIconToTextRatio,
+  ],
+  textColor: kPinTextColor,
+  textAnchor: 'center',
+  textOffset: const [0, kPinTextOffsetEm],
+  textAllowOverlap: true,
+  textIgnorePlacement: true,
+);
 
 /// 빨간 물방울 핀을 PNG 바이트로 굽는다.
 ///

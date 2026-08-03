@@ -2355,38 +2355,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await controller.addSymbolLayer(
       _indoorDestSourceId,
       _indoorDestLayerId,
-      const SymbolLayerProperties(
-        iconImage: _destinationPinImageName,
-        iconSize: [
-          'interpolate',
-          ['linear'],
-          ['zoom'],
-          16,
-          _destinationPinIconSizeZ16,
-          20,
-          _destinationPinIconSizeZ20,
-        ],
-        iconAnchor: 'bottom',
-        iconAllowOverlap: true,
-        iconIgnorePlacement: true,
-        // 실내 화면과 같은 규칙으로 "도착"을 얹는다. textSize는 iconSize를
-        // [kPinIconToTextRatio]로 나눈 값이라, 두 값이 zoom을 따라 같이 커져도
-        // 글씨가 머리 원 안 같은 자리에 남는다.
-        textField: '도착',
-        textSize: [
-          'interpolate',
-          ['linear'],
-          ['zoom'],
-          16,
-          _destinationPinIconSizeZ16 / kPinIconToTextRatio,
-          20,
-          _destinationPinIconSizeZ20 / kPinIconToTextRatio,
-        ],
-        textColor: kPinTextColor,
-        textAnchor: 'center',
-        textOffset: [0, kPinTextOffsetEm],
-        textAllowOverlap: true,
-        textIgnorePlacement: true,
+      // 실내 화면과 **같은 함수**로 만든다. 예전에는 두 화면이 각자 같은 정의를
+      // 베껴 들고 있었고, 그래서 둘 다 textFont를 빠뜨려 네이티브에서 핀이
+      // 통째로 사라졌다([destination_pin.dart] 주석).
+      destinationPinSymbolProps(
+        imageName: _destinationPinImageName,
+        iconSizeZ16: _destinationPinIconSizeZ16,
+        iconSizeZ20: _destinationPinIconSizeZ20,
       ),
       enableInteraction: false,
     );

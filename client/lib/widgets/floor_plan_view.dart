@@ -1329,37 +1329,10 @@ class FloorPlanViewState extends State<FloorPlanView> {
     await controller.addSymbolLayer(
       _markersSourceId,
       _destinationMarkerLayerId,
-      const SymbolLayerProperties(
-        iconImage: _destinationPinImageName,
-        iconSize: [
-          'interpolate',
-          ['linear'],
-          ['zoom'],
-          16,
-          _destPinIconSizeZ16,
-          20,
-          _destPinIconSizeZ20,
-        ],
-        iconAnchor: 'bottom',
-        iconAllowOverlap: true,
-        iconIgnorePlacement: true,
-        textField: '도착',
-        // 손으로 적지 않고 iconSize에서 나눈다 — 비율이 어긋나면 글씨가 머리
-        // 원을 벗어나고 textOffset도 같이 틀어진다.
-        textSize: [
-          'interpolate',
-          ['linear'],
-          ['zoom'],
-          16,
-          _destPinIconSizeZ16 / kPinIconToTextRatio,
-          20,
-          _destPinIconSizeZ20 / kPinIconToTextRatio,
-        ],
-        textColor: kPinTextColor,
-        textAnchor: 'center',
-        textOffset: [0, kPinTextOffsetEm],
-        textAllowOverlap: true,
-        textIgnorePlacement: true,
+      destinationPinSymbolProps(
+        imageName: _destinationPinImageName,
+        iconSizeZ16: _destPinIconSizeZ16,
+        iconSizeZ20: _destPinIconSizeZ20,
       ),
       filter: [
         '==',
