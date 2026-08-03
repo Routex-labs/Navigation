@@ -32,6 +32,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import '../../core/map_fonts.dart';
 import '../../core/map_palette.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/category_map_icon.dart';
 import '../../widgets/floor_facility_style.dart';
 import 'indoor_entry_zoom.dart';
 
@@ -112,6 +113,31 @@ FillLayerProperties indoorVerticalTransportProps(List<Object> fadeExpr) =>
       fillOpacity: fadeExpr,
     );
 
+/// 야외 오버레이의 대분류 아이콘 배율.
+///
+/// 실내 화면([kStoreCategoryIconSizeIndoor])과 달리 글자 크기가 11로 고정이라
+/// 아이콘만 줌에 따라 조금 커진다. 시설 아이콘([indoorIconSizeExpr], 0.33~0.45)
+/// 보다 작게 두는 이유는 실내 화면과 같다 — 라벨 옆에 붙는 아이콘이 이름보다
+/// 커지면 도면이 아이콘 밭이 된다.
+///
+/// **z16 축소와 z20 확대를 반드시 함께 확인한다**([indoorIconSizeExpr] 주석의
+/// 함정이 여기에도 그대로 적용된다).
+const indoorCategoryIconSizeExpr = [
+  'interpolate',
+  ['linear'],
+  ['zoom'],
+  indoorOverlayFadeInEndZoom,
+  0.16,
+  20,
+  0.21,
+];
+
+/// 매장명 라벨 + 대분류 아이콘.
+///
+/// 아이콘을 별도 레이어로 두지 않고 같은 심볼에 얹는 이유, 이름이 아이콘 앞/뒤로
+/// 뒤집히는 방식과 그 한계는 [category_map_icon.dart]에 적어 두었다. 실내 화면
+/// (`FloorPlanView`)과 **같은 표현식·같은 앵커 규칙**을 써야 두 화면 사이에서
+/// 같은 매장이 다른 아이콘을 달지 않는다.
 SymbolLayerProperties indoorStoresLabelProps(List<Object> fadeExpr) =>
     SymbolLayerProperties(
       textField: ['get', 'name'],
@@ -122,6 +148,36 @@ SymbolLayerProperties indoorStoresLabelProps(List<Object> fadeExpr) =>
       textHaloWidth: 1,
       textMaxWidth: 6,
       textOpacity: fadeExpr,
+      iconImage: storeCategoryIconExpression(),
+      iconSize: indoorCategoryIconSizeExpr,
+      iconOpacity: fadeExpr,
+      textVariableAnchor: kStoreLabelVariableAnchor,
+      // 아이콘 가장자리부터의 여백이다(중심 거리가 아니다 —
+      // [kStoreLabelRadialOffset]의 실측표 참고). 실내(0.18em)보다 조금 큰 것은
+      // 글자가 11로 고정이라 같은 em이 더 작은 픽셀이 되기 때문이다.
+      textRadialOffset: 0.20,
+      textJustify: 'auto',
+      textAllowOverlap: false,
+      // 자리가 없으면 아이콘·이름 중 하나만이라도 남긴다. iconOptional이 없으면
+      // 심볼이 넓어진 만큼 이름이 밀려난다(실내 화면 주석의 실측 참고).
+      textOptional: true,
+      iconOptional: true,
+    );
+
+/// 편의시설의 텍스트 전용 라벨. 아이콘은 [indoorFacilityIconProps]가 그린다.
+SymbolLayerProperties indoorFacilityLabelProps(List<Object> fadeExpr) =>
+    SymbolLayerProperties(
+      textField: ['get', 'name'],
+      textFont: const [mapFontStackRegular],
+      textSize: 11,
+      textColor: '#333333',
+      textHaloColor: '#FFFFFF',
+      textHaloWidth: 1,
+      textMaxWidth: 6,
+      textOpacity: fadeExpr,
+      // 아이콘이 centroid를 차지하므로 이름은 아래로 내린다.
+      textOffset: const [0, 1.6],
+      textAllowOverlap: false,
     );
 
 SymbolLayerProperties indoorPoiIconProps(List<Object> fadeExpr) =>

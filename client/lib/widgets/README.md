@@ -16,6 +16,7 @@
 | 장소 시트 | [`category_stores_sheet.dart`](category_stores_sheet.dart), [`place_detail_sheet.dart`](place_detail_sheet.dart), [`favorites_sheet.dart`](favorites_sheet.dart) | 카테고리 매장·매장 상세·즐겨찾기 |
 | 장소 상세 | [`place_detail/`](place_detail/) | 상세 시트 본문의 섹션별 렌더러(summary·hero·menu·매장정보 등) |
 | 카테고리 | [`category_icon.dart`](category_icon.dart), [`category_label_order.dart`](category_label_order.dart) | 카테고리 대분류 아이콘·색상(chip·시트·리스트 공유), label 중복 제거·가나다 정렬 |
+| 카테고리 | [`category_map_filter.dart`](category_map_filter.dart), [`category_map_icon.dart`](category_map_icon.dart) | 지도 카테고리 강조 필터, 매장명 라벨 옆 대분류 아이콘·이름 좌우 배치 규칙 |
 | 공통 | [`sheet_header.dart`](sheet_header.dart), [`sheet_grab_handle.dart`](sheet_grab_handle.dart) | 시트 헤더, 시트 상단 크기 조절 손잡이 |
 
 ## 검색은 한 곳, 두 단계

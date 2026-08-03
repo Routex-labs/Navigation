@@ -36,6 +36,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/eta_card.dart';
 import '../../core/map_route_style.dart';
 import '../../widgets/destination_pin.dart';
+import '../../widgets/category_map_icon.dart';
 import '../../widgets/floor_facility_style.dart';
 import '../../widgets/floor_selector.dart';
 import '../../widgets/map_overlay_tap_guard.dart';
@@ -119,6 +120,10 @@ const _indoorStoresFillLayerIdBase = 'outdoor-indoor-stores-fill';
 const _indoorVerticalTransportFillLayerIdBase =
     'outdoor-indoor-vertical-transport-fill';
 const _indoorStoresLabelLayerIdBase = 'outdoor-indoor-stores-label';
+// 편의시설(화장실·정수기 등)의 텍스트 전용 라벨. 매장명 라벨에는 대분류 아이콘이
+// 붙는데, 시설은 이미 전용 아이콘 레이어가 있어 두 아이콘이 겹친다. 그래서 이름만
+// 따로 그린다(실내 화면의 floor-store-facility-label과 같은 이유).
+const _indoorFacilityLabelLayerIdBase = 'outdoor-indoor-store-facility-label';
 // POI(엘리베이터·에스컬레이터·화장실 등 `pois` 소스 레이어) 위 아이콘 심볼과
 // `stores` 소스 레이어에 이름으로 매칭되는 편의시설(화장실·정수기·수유실 등)
 // 위 아이콘 심볼. 실내 화면과 같은 아이콘/색을 써 두 화면 사이에서 위치를
@@ -557,6 +562,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _indoorVerticalTransportFillLayerIdBase,
   );
   late String _indoorStoresLabelLayerId = _idFor(_indoorStoresLabelLayerIdBase);
+  late String _indoorFacilityLabelLayerId = _idFor(
+    _indoorFacilityLabelLayerIdBase,
+  );
   late String _indoorPoiIconLayerId = _idFor(_indoorPoiIconLayerIdBase);
   late String _indoorStoreFacilityIconLayerId = _idFor(
     _indoorStoreFacilityIconLayerIdBase,
@@ -577,6 +585,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _indoorVerticalTransportFillLayerIdBase,
     );
     _indoorStoresLabelLayerId = _idFor(_indoorStoresLabelLayerIdBase);
+    _indoorFacilityLabelLayerId = _idFor(_indoorFacilityLabelLayerIdBase);
     _indoorPoiIconLayerId = _idFor(_indoorPoiIconLayerIdBase);
     _indoorStoreFacilityIconLayerId = _idFor(
       _indoorStoreFacilityIconLayerIdBase,
@@ -588,6 +597,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   List<String> get _indoorOverlayLayerIds => [
     _indoorStoreFacilityIconLayerId,
     _indoorPoiIconLayerId,
+    _indoorFacilityLabelLayerId,
     _indoorStoresLabelLayerId,
     _indoorVerticalTransportFillLayerId,
     _indoorStoresFillLayerId,
@@ -2523,6 +2533,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         indoorVerticalTransportProps(fadeExpr),
       ),
       (_indoorStoresLabelLayerId, indoorStoresLabelProps(fadeExpr)),
+      (_indoorFacilityLabelLayerId, indoorFacilityLabelProps(fadeExpr)),
       (_indoorPoiIconLayerId, indoorPoiIconProps(fadeExpr)),
       (_indoorStoreFacilityIconLayerId, indoorFacilityIconProps(fadeExpr)),
     ]) {
@@ -2905,7 +2916,18 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _indoorStoresLabelLayerId,
         indoorStoresLabelProps(fadeExpr),
         sourceLayer: 'stores',
-        filter: storeLabelExcludingFacilitiesFilter(),
+        filter: storeLabelWithCategoryIconFilter(),
+        belowLayerId: _routeCasingLayerId,
+        enableInteraction: false,
+      );
+      // 편의시설은 이름만 — 아이콘은 아래 _indoorStoreFacilityIconLayerId가
+      // 그린다. 위 레이어에 섞으면 아이콘이 두 개 뜬다.
+      await controller.addSymbolLayer(
+        _indoorTilesSourceId,
+        _indoorFacilityLabelLayerId,
+        indoorFacilityLabelProps(fadeExpr),
+        sourceLayer: 'stores',
+        filter: facilityStoreLabelFilter(),
         belowLayerId: _routeCasingLayerId,
         enableInteraction: false,
       );
@@ -2978,6 +3000,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       await controller.addImage(
         facilityIconImageName(entry.key),
         await renderFacilityIconPng(entry.value),
+      );
+    }
+    // 매장명 라벨에 붙는 대분류 아이콘. 실내 화면과 같은 이름·같은 비트맵이라
+    // 두 화면 사이를 오가도 같은 매장이 같은 아이콘을 단다.
+    for (final category in storeCategoryIconKeys) {
+      await controller.addImage(
+        storeCategoryIconImageName(category),
+        await renderStoreCategoryIconPng(category),
       );
     }
     _facilityIconImagesRegistered = true;

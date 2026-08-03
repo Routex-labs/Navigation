@@ -16,20 +16,48 @@ const kVerticalTransportStoreNames = <String>[
   '유아차 전용 E/V',
 ];
 
-/// 매장명 라벨 레이어에서 수직이동 시설을 걸러내는 MapLibre 필터.
+/// 매장명 라벨 레이어에서 **아이콘이 이미 말해 주는 것**을 걸러내는 MapLibre 필터.
 ///
-/// 이 건물에는 에스컬레이터 152개, 엘리베이터 68개가 있고 전부 매장과 **같은
-/// 무게의 텍스트 라벨**을 달고 있었다. 도면이 "에스컬레이터"로 도배되어 정작
-/// 읽어야 할 매장명이 그 사이에 묻혔다. 아이콘이 이미 무슨 시설인지 말하므로
-/// 이름은 중복이다 — 구글·네이버도 에스컬레이터에 텍스트를 붙이지 않는다.
+/// 두 종류를 뺀다.
+///
+/// **수직이동 시설** — 이 건물에는 에스컬레이터 152개, 엘리베이터 68개가 있고
+/// 전부 매장과 같은 무게의 텍스트 라벨을 달고 있었다. 도면이 "에스컬레이터"로
+/// 도배되어 정작 읽어야 할 매장명이 그 사이에 묻혔다. 아이콘이 이미 무슨
+/// 시설인지 말하므로 이름은 중복이다 — 구글·네이버도 에스컬레이터에 텍스트를
+/// 붙이지 않는다.
+///
+/// **[kStoreFacilityStyleByName]의 편의시설** — 이쪽은 이름을 **살려야 한다**
+/// (「ATM (하나은행)」은 이름이 정보다). 다만 전용 아이콘 레이어가 이미 아이콘을
+/// 그리고 있어서, 이 레이어까지 카테고리 아이콘을 붙이면 같은 폴리곤에 아이콘이
+/// 두 개 뜬다. 그래서 여기서 빼고 [facilityStoreLabelFilter]가 고른 **텍스트
+/// 전용** 레이어가 이름만 그린다.
 ///
 /// `==`를 뒤집은 `!=`의 `all`이다. 같은 파일의 fill 필터가 `any` + `==`로
 /// 시설물만 고르는 것과 정확히 반대 집합이라, 한쪽을 고치면 다른 쪽도 본다.
-List<Object> storeLabelExcludingFacilitiesFilter() => [
+List<Object> storeLabelWithCategoryIconFilter() => [
   'all',
   for (final name in kVerticalTransportStoreNames)
     [
       '!=',
+      ['get', 'name'],
+      name,
+    ],
+  for (final name in kStoreFacilityStyleByName.keys)
+    [
+      '!=',
+      ['get', 'name'],
+      name,
+    ],
+];
+
+/// 편의시설의 **텍스트 전용** 라벨 필터. [storeLabelWithCategoryIconFilter]가
+/// 뺀 집합을 정확히 되받아, 아이콘 없이 이름만 그리는 레이어에 건다.
+/// 아이콘은 `floor-store-facility-icons`(야외는 대응 레이어)가 그린다.
+List<Object> facilityStoreLabelFilter() => [
+  'any',
+  for (final name in kStoreFacilityStyleByName.keys)
+    [
+      '==',
       ['get', 'name'],
       name,
     ],
@@ -62,8 +90,12 @@ const kIndoorPoiIconSize = 0.42;
 /// 매장 폴리곤이지만 이름이 이 표에 있는 시설(화장실·정수기 등)은 라벨 옆에
 /// 종류별 아이콘을 함께 얹는다. POI(엘리베이터·에스컬레이터 등)와 달리 이
 /// 시설들은 백엔드에서 `pois` 레이어가 아니라 `stores` 레이어에 들어오기 때문에
-/// POI 아이콘 매핑만으로는 눈에 띄지 않는다. 벡터 타일에는 subcategory 속성이
-/// 없어(name/id/kind만 노출) name으로 매칭한다.
+/// POI 아이콘 매핑만으로는 눈에 띄지 않는다.
+///
+/// **subcategory가 아니라 name으로 매칭하는 이유**는 세밀함이다. 벡터 타일은
+/// `category`·`subcategory`를 싣지만(`backend/app/geo/tiling.py`의
+/// `_store_properties`), 이 표가 구분하려는 것은 소분류보다 잘다 — 화장실과
+/// 장애인화장실은 subcategory가 같은 `생활편의`인데 아이콘은 달라야 한다.
 ///
 /// 화장실은 흰 원 안에 파란 Icons.man과 분홍 Icons.woman을 나란히 얹어 남/여
 /// 화장실임이 한눈에 읽히도록 한다(duo 스타일에서 left/rightBackground 값은
@@ -161,7 +193,7 @@ Future<Uint8List> renderPoiIconPng(IconData icon) async {
     Paint()..color = kPoiIconBackgroundColor,
   );
 
-  _paintIconGlyph(
+  paintIconGlyph(
     canvas,
     icon: icon,
     color: Colors.white,
@@ -195,14 +227,14 @@ Future<Uint8List> renderFacilityIconPng(FacilityIconStyle style) async {
 
   if (style.isDuo) {
     canvas.drawCircle(center, innerRadius, Paint()..color = Colors.white);
-    _paintIconGlyph(
+    paintIconGlyph(
       canvas,
       icon: style.leftIcon!,
       color: style.leftBackground!,
       fontSize: canvasSize * 0.48,
       center: const Offset(canvasSize * 0.29, canvasSize / 2),
     );
-    _paintIconGlyph(
+    paintIconGlyph(
       canvas,
       icon: style.rightIcon!,
       color: style.rightBackground!,
@@ -211,7 +243,7 @@ Future<Uint8List> renderFacilityIconPng(FacilityIconStyle style) async {
     );
   } else {
     canvas.drawCircle(center, innerRadius, Paint()..color = style.background);
-    _paintIconGlyph(
+    paintIconGlyph(
       canvas,
       icon: style.icon,
       color: Colors.white,
@@ -228,7 +260,10 @@ Future<Uint8List> renderFacilityIconPng(FacilityIconStyle style) async {
   return byteData!.buffer.asUint8List();
 }
 
-void _paintIconGlyph(
+/// Material 아이콘 글리프를 캔버스 임의 위치에 그린다. POI·편의시설·대분류
+/// ([category_map_icon.dart]) 아이콘이 모두 같은 방식으로 비트맵을 만들기 때문에
+/// 이 함수만 공유한다.
+void paintIconGlyph(
   Canvas canvas, {
   required IconData icon,
   required Color color,

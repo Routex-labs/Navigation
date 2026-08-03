@@ -39,6 +39,16 @@ const _colorByCategory = <String, Color>{
   '뷰티': Color(0xFFE53935),
 };
 
+/// 아이콘·색이 정의된 대분류 목록.
+///
+/// 지도 심볼 레이어가 카테고리별 아이콘 비트맵을 **미리** 등록할 때 쓴다 —
+/// MapLibre는 사전 등록된 이미지만 참조할 수 있어서, 어떤 카테고리가 올지
+/// 런타임에 알아내는 방식이 통하지 않는다([category_map_icon.dart]).
+///
+/// 구 어휘(`식음료`)도 그대로 들어 있다. 등록 비용이 비트맵 한 장이라, 빼서
+/// 배포 시차 동안 그 매장들이 폴백 아이콘으로 떨어지는 쪽이 손해다.
+Iterable<String> get categoryIconCategories => _iconByCategory.keys;
+
 IconData categoryIconFor(String category) =>
     _iconByCategory[category] ?? Icons.storefront;
 
