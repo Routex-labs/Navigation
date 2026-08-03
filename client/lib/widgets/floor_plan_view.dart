@@ -15,6 +15,7 @@ import '../core/map_fonts.dart';
 import '../core/map_palette.dart';
 import '../core/map_route_style.dart';
 import 'destination_pin.dart';
+import 'floor_camera_bounds.dart';
 import '../features/debug_mode/debug_map_overlay.dart';
 import '../models/floor_plan.dart';
 import '../screens/outdoor_map/indoor_entry_zoom.dart';
@@ -201,6 +202,19 @@ class FloorPlanController {
   Future<void> centerOn(ll.LatLng target) async {
     await _state?.centerOn(target);
   }
+
+  /// 내 위치 추적을 다시 켜고 즉시 중앙으로 가져온다.
+  ///
+  /// 사용자가 지도를 직접 끌면 추적이 풀린다([FloorPlanView.followTarget] 주석).
+  /// 다시 켜는 유일한 경로가 이 메서드다 — 저절로 되살아나면, 주변을 보려고
+  /// 밀어 둔 지도가 몇 초 뒤 제멋대로 돌아온다.
+  Future<void> resumeFollow() async {
+    await _state?.resumeFollow();
+  }
+
+  /// 지금 내 위치를 따라가는 중인지. 상위가 "내 위치" 버튼의 눌린 상태를
+  /// 표시하는 데 쓴다.
+  bool get isFollowing => _state?.isFollowing ?? false;
 }
 
 /// 매장 폴리곤을 탭할 수 있는 실내 평면도 뷰.
@@ -244,8 +258,12 @@ class FloorPlanView extends StatefulWidget {
     this.visibleInsets = EdgeInsets.zero,
     this.overlayHitTest,
     this.onCameraBearingChanged,
+    this.onFollowingChanged,
     this.controller,
   });
+
+  /// 추적이 켜지고 꺼질 때 알린다. 상위가 "내 위치" 버튼 상태를 맞추는 데 쓴다.
+  final ValueChanged<bool>? onFollowingChanged;
 
   /// 카메라를 외부에서 조작(회전/중심 이동)하기 위한 controller. 상위 위젯이
   /// 재보정 버튼처럼 지도 밖에서 오는 명령을 이 controller로 전달한다.
@@ -494,6 +512,17 @@ class FloorPlanViewState extends State<FloorPlanView> {
       widget.visibleInsets,
     );
     _minZoom = minZoom;
+    // Listener는 gesture arena에 참여하지 않으므로 MapLibre PlatformView가
+    // 제스처를 가져가도 포인터 이벤트는 그대로 받는다. 지도 조작을 막지 않고
+    // "사용자가 끌었다"만 관찰하는 데는 이 방식이어야 한다.
+    return Listener(
+      onPointerDown: _onMapPointerDown,
+      onPointerMove: _onMapPointerMove,
+      child: _buildMapLibre(viewport, minZoom),
+    );
+  }
+
+  Widget _buildMapLibre(Size viewport, double? minZoom) {
     return MapLibreMap(
       styleString: _initialStyle,
       initialCameraPosition: CameraPosition(
@@ -543,6 +572,14 @@ class FloorPlanViewState extends State<FloorPlanView> {
     if (!identical(oldWidget.controller, widget.controller)) {
       oldWidget.controller?._detach(this);
       widget.controller?._attach(this);
+    }
+    // 내 위치가 갱신되면 카메라도 따라간다. 이게 없으면 걷는 동안 마커만
+    // 움직여 화면 밖으로 나가고, 사용자가 "위치 보정"을 누를 때까지 돌아오지
+    // 않는다 — 실내에서 걸으면 늘 그 상태가 된다.
+    if (_following &&
+        widget.currentLocation != null &&
+        widget.currentLocation != oldWidget.currentLocation) {
+      unawaited(centerOn(widget.currentLocation!));
     }
     if (!_styleReady) return;
     if (oldWidget.buildingId != widget.buildingId ||
@@ -1322,7 +1359,37 @@ class FloorPlanViewState extends State<FloorPlanView> {
 
   void _handleCameraIdle() {
     _enforceMinZoom();
+    _pullBackIntoFootprint();
     _notifyCameraBearing();
+  }
+
+  /// 카메라 중심이 도면 밖으로 나갔으면 가장자리로 되돌린다.
+  ///
+  /// **왜 MapLibre의 `cameraTargetBounds`를 안 쓰나** — 써 봤는데 이 조합
+  /// (maplibre_gl 0.26.2 + Android)에서는 지도가 아예 렌더되지 않았다. 도면이
+  /// 통째로 안 그려져서 실기 확인 때 바로 드러났다. 여기서는 이미 축소 하한
+  /// 강제([_enforceMinZoom])가 쓰고 있는, 동작이 검증된 훅으로 같은 목적을
+  /// 이룬다.
+  ///
+  /// 제스처가 **끝난 뒤에** 되돌린다. 미는 동안 붙잡으면 손가락과 지도가 계속
+  /// 싸우게 된다 — 놓으면 돌아오는 편이 예측 가능하다.
+  ///
+  /// wgs84 footprint가 없는 건물에서는 아무것도 하지 않는다. 기준이 없는데
+  /// 되돌리면 엉뚱한 데로 끌고 간다.
+  Future<void> _pullBackIntoFootprint() async {
+    final controller = _controller;
+    final center = controller?.cameraPosition?.target;
+    if (controller == null || center == null) return;
+
+    final clamped = clampToFootprint(
+      ll.LatLng(center.latitude, center.longitude),
+      widget.floorPlan.footprint,
+    );
+    if (clamped == null) return;
+
+    await controller.animateCamera(
+      CameraUpdate.newLatLng(_toMapLibreLatLng(clamped)),
+    );
   }
 
   void _notifyCameraBearing() {
@@ -1446,6 +1513,46 @@ class FloorPlanViewState extends State<FloorPlanView> {
       CameraUpdate.newLatLng(_toMapLibreLatLng(target)),
     );
   }
+
+  /// 내 위치를 따라갈지. 켜져 있으면 [FloorPlanView.currentLocation]이 바뀔
+  /// 때마다 카메라가 그 자리로 옮겨간다.
+  ///
+  /// **기본이 켜짐이다.** 실내에서 사용자가 하려는 일은 대부분 "내가 지금 어디
+  /// 있나"이고, 걷는 동안 마커가 화면 밖으로 나가면 그걸 알 방법이 없어진다.
+  ///
+  /// 사용자가 지도를 **끌면** 꺼진다. 주변을 보려고 밀어 둔 지도가 다음 걸음에
+  /// 제자리로 돌아오면 지도를 볼 수가 없다. 탭만으로는 꺼지지 않는다 —
+  /// 매장 하나 눌러 보는 것으로 따라가기가 멈추면 그것대로 당황스럽다.
+  bool _following = true;
+  bool get isFollowing => _following;
+
+  /// 이번 제스처에서 손가락이 움직인 누적 거리(논리 픽셀). 이 값이 임계를
+  /// 넘어야 "끌었다"로 본다.
+  double _gesturePanPx = 0;
+
+  /// 탭과 드래그를 가르는 값. Flutter 기본 터치 슬롭(18)보다 조금 작게 둬서,
+  /// 지도가 실제로 움직이기 시작하는 순간과 추적 해제 시점이 어긋나지 않게 한다.
+  static const _followBreakSlopPx = 12.0;
+
+  void _onMapPointerDown(PointerDownEvent event) => _gesturePanPx = 0;
+
+  void _onMapPointerMove(PointerMoveEvent event) {
+    if (!_following) return;
+    _gesturePanPx += event.delta.distance;
+    if (_gesturePanPx < _followBreakSlopPx) return;
+    setState(() => _following = false);
+    widget.onFollowingChanged?.call(false);
+  }
+
+  Future<void> resumeFollow() async {
+    if (!_following) {
+      setState(() => _following = true);
+      widget.onFollowingChanged?.call(true);
+    }
+    final target = widget.currentLocation;
+    if (target != null) await centerOn(target);
+  }
+
 
   Future<void> _fitToFootprint() async {
     final controller = _controller;

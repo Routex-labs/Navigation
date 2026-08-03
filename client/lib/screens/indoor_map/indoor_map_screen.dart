@@ -682,7 +682,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         _showPdrMessage('아직 현재 위치가 없습니다. 위치 지정 버튼으로 먼저 위치를 잡아주세요.');
         return;
       }
-      await _floorPlanController.centerOn(target);
+      // 중앙 정렬은 "내 위치로 돌아간다"는 뜻이다. 한 번 옮겨 놓고 끝내면 다음
+      // 걸음에 또 화면 밖으로 나가므로, 추적을 함께 다시 켠다. 사용자가 지도를
+      // 끌면 다시 풀리고, 그때 이 버튼이 유일한 복귀 경로가 된다.
+      await _floorPlanController.resumeFollow();
     } else {
       final heading = _pdrCurrentHeadingDeg;
       if (heading == null) {
