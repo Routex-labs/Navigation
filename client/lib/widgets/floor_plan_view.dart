@@ -878,10 +878,15 @@ class FloorPlanViewState extends State<FloorPlanView> {
         // variable-anchor는 충돌 판정 위에서만 동작한다. true로 바꾸면 앵커가
         // 항상 첫 번째 값으로 굳어 뒤집기가 조용히 죽는다.
         textAllowOverlap: false,
-        // 이름이 들어갈 자리가 없으면 아이콘만이라도 남긴다. 이 화면에서 라벨의
-        // 첫 번째 값어치는 "여기 이런 종류의 매장이 있다"이고, 그건 아이콘만으로
-        // 전달된다. 둘 다 버리면 폴리곤이 빈 회색 상자로 남는다.
+        // 둘 다 들어갈 자리가 없으면 하나만이라도 남긴다. 아이콘만 남으면 "여기
+        // 이런 종류의 매장이 있다"가, 이름만 남으면 "여기가 어디다"가 전달된다 —
+        // 둘 다 버려 폴리곤이 빈 회색 상자로 남는 것이 가장 나쁘다.
+        //
+        // **iconOptional이 없으면 라벨이 줄어든다.** 심볼 폭이 아이콘만큼 넓어져
+        // 붐비는 층에서 이름이 통째로 밀려난다(B1 한 화면에서 49개 → 38개로
+        // 줄던 것을 실측했다). 아이콘을 포기할 수 있게 해 두면 그 이름들이 돌아온다.
         textOptional: true,
+        iconOptional: true,
       ),
       sourceLayer: 'stores',
       filter: storeLabelWithCategoryIconFilter(),

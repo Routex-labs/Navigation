@@ -127,9 +127,9 @@ const indoorCategoryIconSizeExpr = [
   ['linear'],
   ['zoom'],
   indoorOverlayFadeInEndZoom,
-  0.20,
+  0.16,
   20,
-  0.26,
+  0.21,
 ];
 
 /// 매장명 라벨 + 대분류 아이콘.
@@ -152,12 +152,16 @@ SymbolLayerProperties indoorStoresLabelProps(List<Object> fadeExpr) =>
       iconSize: indoorCategoryIconSizeExpr,
       iconOpacity: fadeExpr,
       textVariableAnchor: kStoreLabelVariableAnchor,
-      // 아이콘 반지름(z20에서 12.5px)을 글자 크기 11로 나눈 값보다 커야 겹치지
-      // 않는다. 실내(1.0em)보다 큰 것은 글자가 고정 크기라서다.
-      textRadialOffset: 1.2,
+      // 아이콘 가장자리부터의 여백이다(중심 거리가 아니다 —
+      // [kStoreLabelRadialOffset]의 실측표 참고). 실내(0.18em)보다 조금 큰 것은
+      // 글자가 11로 고정이라 같은 em이 더 작은 픽셀이 되기 때문이다.
+      textRadialOffset: 0.20,
       textJustify: 'auto',
       textAllowOverlap: false,
+      // 자리가 없으면 아이콘·이름 중 하나만이라도 남긴다. iconOptional이 없으면
+      // 심볼이 넓어진 만큼 이름이 밀려난다(실내 화면 주석의 실측 참고).
       textOptional: true,
+      iconOptional: true,
     );
 
 /// 편의시설의 텍스트 전용 라벨. 아이콘은 [indoorFacilityIconProps]가 그린다.

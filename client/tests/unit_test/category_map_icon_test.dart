@@ -75,10 +75,34 @@ void main() {
       expect(kStoreLabelVariableAnchor, ['left', 'right']);
     });
 
-    test('글자를 아이콘 밖으로 밀어낼 만큼 띄운다', () {
-      // 아이콘 반지름 / 글자 크기보다 커야 겹치지 않는다. 실내 z16 기준
-      // 8px / 9px = 0.89em가 하한이다.
-      expect(kStoreLabelRadialOffset, greaterThan(0.89));
+    test('아이콘과 글자 사이 여백이 붙지도 벌어지지도 않는다', () {
+      // 이 값은 **아이콘 가장자리부터의 여백**이지 심볼 중심에서의 거리가
+      // 아니다. 중심 거리로 오해해 아이콘 반지름/글자크기(≈0.85)를 넣었더니
+      // 실기기에서 간격이 27px까지 벌어져 아이콘과 이름이 따로 놀았다.
+      //
+      // 실측으로 약 31.7px/em이라, 0.35를 넘으면 11px 이상 벌어진다.
+      expect(kStoreLabelRadialOffset, greaterThan(0));
+      expect(
+        kStoreLabelRadialOffset,
+        lessThanOrEqualTo(0.35),
+        reason: '아이콘 반지름 기준으로 계산한 값을 다시 넣지 말 것 — 그 가정은 틀렸다.',
+      );
+    });
+
+    test('아이콘이 이름보다 커지지 않는다', () {
+      // 아이콘 폭이 심볼 폭에 그대로 더해져 붐비는 층의 라벨 개수를 깎는다.
+      // 글자 크기의 1.5배를 넘기면 도면이 아이콘 밭이 되고 이름이 밀려난다.
+      const textSizeAtZ16 = 9.0;
+      const textSizeAtZ20 = 14.0;
+      const canvasSize = 96.0;
+      expect(
+        (kStoreCategoryIconSizeIndoor[4] as double) * canvasSize,
+        lessThan(textSizeAtZ16 * 1.5),
+      );
+      expect(
+        (kStoreCategoryIconSizeIndoor[6] as double) * canvasSize,
+        lessThan(textSizeAtZ20 * 1.5),
+      );
     });
   });
 

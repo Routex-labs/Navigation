@@ -84,6 +84,14 @@ void main() {
       expect(json['text-radial-offset'], isNotNull);
     });
 
+    test('매장 라벨 — 아이콘·이름 중 하나만이라도 남긴다', () {
+      final json = wireJson(indoorStoresLabelProps(fadeExpr));
+      // 둘 다 필수로 두면 심볼이 넓어진 만큼 붐비는 층에서 라벨이 통째로
+      // 밀려난다(B1 한 화면 49개 → 38개를 실측했다).
+      expect(json['text-optional'], isTrue);
+      expect(json['icon-optional'], isTrue);
+    });
+
     test('매장 라벨 — text-allow-overlap은 false다', () {
       // variable-anchor는 충돌 판정 위에서만 동작한다. true가 되면 앵커가 항상
       // 첫 번째 값으로 굳어 이름 뒤집기가 조용히 죽는다.
