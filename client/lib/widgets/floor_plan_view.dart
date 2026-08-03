@@ -1381,15 +1381,47 @@ class FloorPlanViewState extends State<FloorPlanView> {
     final center = controller?.cameraPosition?.target;
     if (controller == null || center == null) return;
 
+    final halfSpan = await _visibleHalfSpan(controller);
+    if (!mounted) return;
+
     final clamped = clampToFootprint(
       ll.LatLng(center.latitude, center.longitude),
       widget.floorPlan.footprint,
+      halfSpanLat: halfSpan?.lat ?? 0,
+      halfSpanLng: halfSpan?.lng ?? 0,
     );
     if (clamped == null) return;
 
     await controller.animateCamera(
       CameraUpdate.newLatLng(_toMapLibreLatLng(clamped)),
     );
+  }
+
+  /// 지금 화면이 덮는 위경도 범위의 **절반**. 못 구하면 null이다.
+  ///
+  /// 직접 삼각함수로 계산하지 않고 `getVisibleRegion()`을 쓴다. 실내 지도는
+  /// 건물에 맞춰 회전(bearing)돼 있어서 뷰포트의 위경도 범위가 화면 가로·세로와
+  /// 그대로 대응하지 않는데, 이 값은 회전을 반영한 뒤의 축정렬 bbox라 그 문제를
+  /// 알아서 넘긴다. 대신 45° 근처에서는 실제 뷰포트보다 넉넉하게 잡혀 필요보다
+  /// 조금 더 깎인다 — 건물 모서리를 화면 끝까지 못 미는 정도이고, 빈 공간이
+  /// 생기는 쪽보다 낫다고 보고 감수한다.
+  ///
+  /// **실패하면 null을 돌려주고 호출부는 깎기 없이(=예전 동작으로) 되돌린다.**
+  /// 화면 크기를 모른다고 되돌림 자체를 포기하면 무한히 밀리던 원래 문제로
+  /// 돌아가므로, 덜 좋은 쪽으로 폴백하되 기능은 남긴다.
+  Future<({double lat, double lng})?> _visibleHalfSpan(
+    MapLibreMapController controller,
+  ) async {
+    try {
+      final region = await controller.getVisibleRegion();
+      final lat = (region.northeast.latitude - region.southwest.latitude) / 2;
+      final lng = (region.northeast.longitude - region.southwest.longitude) / 2;
+      if (!lat.isFinite || !lng.isFinite || lat <= 0 || lng <= 0) return null;
+      return (lat: lat, lng: lng);
+    } catch (error, stackTrace) {
+      debugPrint('visible region query failed: $error\n$stackTrace');
+      return null;
+    }
   }
 
   void _notifyCameraBearing() {
