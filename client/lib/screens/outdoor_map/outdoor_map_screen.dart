@@ -159,7 +159,8 @@ const _indoorDestLayerId = 'outdoor-indoor-destination-pin';
 // ([destination_pin.dart]) 공유하지만 등록 키는 화면마다 따로 둔다. 웹 addImage는
 // 같은 이름이 이미 있으면 새 비트맵을 버리므로(위 _pdrLocationImageName 주석 참고)
 // 디자인을 바꿀 땐 이름의 버전도 같이 올려야 살아 있는 지도에 반영된다.
-const _destinationPinImageName = 'outdoor-destination-pin-v2';
+// v3: "도착" 글씨를 비트맵에 구워 넣었다(심볼 텍스트에서 이동).
+const _destinationPinImageName = 'outdoor-destination-pin-v3';
 // 도착 핀 iconSize의 zoom 보간 구간(z16 → z20). 원본 비트맵이 128x172px이라
 // 화면 높이는 172 x iconSize다.
 //

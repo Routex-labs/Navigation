@@ -68,7 +68,8 @@ const _facilityLabelLayerId = 'floor-store-facility-label';
 /// 목적지 핀 이미지의 addImage 등록 이름.
 // 디자인을 바꾸면 버전을 올린다 — 웹 addImage는 같은 이름이 이미 있으면
 // 새 비트맵을 버려서, 이름을 그대로 두면 살아 있는 지도에 반영되지 않는다.
-const _destinationPinImageName = 'marker-destination-pin-v2';
+// v3: "도착" 글씨를 비트맵에 구워 넣었다(심볼 텍스트에서 이동).
+const _destinationPinImageName = 'marker-destination-pin-v3';
 
 /// 도착 핀 iconSize의 zoom 보간 구간. textSize는 이 값을 [kPinIconToTextRatio]로
 /// 나눠 얻으므로, 여기를 바꾸면 글씨 크기도 함께 움직인다.
