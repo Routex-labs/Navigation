@@ -11,7 +11,12 @@ void main() {
       'assets/fonts/Pretendard-Bold.otf': 700,
       'assets/fonts/Pretendard-ExtraBold.otf': 800,
     };
-    final pubspec = File('pubspec.yaml').readAsStringSync();
+    // 줄바꿈을 LF로 맞춘 뒤 비교한다. 아래 weight 검사가 `\n` + 들여쓰기를
+    // 문자열로 직접 찾는데, Windows 체크아웃(core.autocrlf)에서는 파일이
+    // CRLF라 같은 내용인데도 매번 실패했다.
+    final pubspec = File(
+      'pubspec.yaml',
+    ).readAsStringSync().replaceAll('\r\n', '\n');
 
     for (final entry in assets.entries) {
       expect(File(entry.key).existsSync(), isTrue, reason: entry.key);

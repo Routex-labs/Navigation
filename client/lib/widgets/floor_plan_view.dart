@@ -15,6 +15,8 @@ import '../core/map_fonts.dart';
 import '../core/map_palette.dart';
 import '../core/map_route_style.dart';
 import 'destination_pin.dart';
+import 'floor_camera_bearing.dart';
+import 'floor_camera_bounds.dart';
 import '../features/debug_mode/debug_map_overlay.dart';
 import '../models/floor_plan.dart';
 import '../screens/outdoor_map/indoor_entry_zoom.dart';
@@ -186,21 +188,23 @@ class FloorPlanController {
   /// FloorPlanView가 아직 준비되지 않았거나 detach된 상태면 false.
   bool get isAttached => _state != null;
 
-  /// 카메라를 [bearingDeg](북쪽 기준 시계방향)로 돌린다. 사용자가 바라보는
-  /// 방향을 화면 위쪽에 오게 하는 나침반 모드에 쓴다.
-  ///
-  /// [center]를 주면 회전과 함께 그 지점을 화면 정중앙에 놓는다. 회전축을 화면
-  /// 중심에 고정하면, 사용자가 중앙 정렬 후 조금 걸어간 뒤 회전을 누를 때 내
-  /// 위치가 화면 가장자리로 밀려난다 — 나침반 모드는 "내가 보는 방향"을
-  /// 보여주는 기능이므로 내 위치가 항상 중심이어야 한다.
-  Future<void> rotateToBearing(double bearingDeg, {ll.LatLng? center}) async {
-    await _state?.rotateToBearing(bearingDeg, center: center);
-  }
-
   /// 카메라 중심만 [target]으로 옮긴다. bearing/줌은 유지.
   Future<void> centerOn(ll.LatLng target) async {
     await _state?.centerOn(target);
   }
+
+  /// 내 위치 추적을 다시 켜고 즉시 중앙으로 가져온다.
+  ///
+  /// 사용자가 지도를 직접 끌면 추적이 풀린다([FloorPlanView.followTarget] 주석).
+  /// 다시 켜는 유일한 경로가 이 메서드다 — 저절로 되살아나면, 주변을 보려고
+  /// 밀어 둔 지도가 몇 초 뒤 제멋대로 돌아온다.
+  Future<void> resumeFollow() async {
+    await _state?.resumeFollow();
+  }
+
+  /// 지금 내 위치를 따라가는 중인지. 상위가 "내 위치" 버튼의 눌린 상태를
+  /// 표시하는 데 쓴다.
+  bool get isFollowing => _state?.isFollowing ?? false;
 }
 
 /// 매장 폴리곤을 탭할 수 있는 실내 평면도 뷰.
@@ -244,8 +248,12 @@ class FloorPlanView extends StatefulWidget {
     this.visibleInsets = EdgeInsets.zero,
     this.overlayHitTest,
     this.onCameraBearingChanged,
+    this.onFollowingChanged,
     this.controller,
   });
+
+  /// 추적이 켜지고 꺼질 때 알린다. 상위가 "내 위치" 버튼 상태를 맞추는 데 쓴다.
+  final ValueChanged<bool>? onFollowingChanged;
 
   /// 카메라를 외부에서 조작(회전/중심 이동)하기 위한 controller. 상위 위젯이
   /// 재보정 버튼처럼 지도 밖에서 오는 명령을 이 controller로 전달한다.
@@ -494,6 +502,17 @@ class FloorPlanViewState extends State<FloorPlanView> {
       widget.visibleInsets,
     );
     _minZoom = minZoom;
+    // Listener는 gesture arena에 참여하지 않으므로 MapLibre PlatformView가
+    // 제스처를 가져가도 포인터 이벤트는 그대로 받는다. 지도 조작을 막지 않고
+    // "사용자가 끌었다"만 관찰하는 데는 이 방식이어야 한다.
+    return Listener(
+      onPointerDown: _onMapPointerDown,
+      onPointerMove: _onMapPointerMove,
+      child: _buildMapLibre(viewport, minZoom),
+    );
+  }
+
+  Widget _buildMapLibre(Size viewport, double? minZoom) {
     return MapLibreMap(
       styleString: _initialStyle,
       initialCameraPosition: CameraPosition(
@@ -543,6 +562,18 @@ class FloorPlanViewState extends State<FloorPlanView> {
     if (!identical(oldWidget.controller, widget.controller)) {
       oldWidget.controller?._detach(this);
       widget.controller?._attach(this);
+    }
+    // 내 위치가 갱신되면 카메라도 따라간다. 이게 없으면 걷는 동안 마커만
+    // 움직여 화면 밖으로 나가고, 사용자가 "위치 보정"을 누를 때까지 돌아오지
+    // 않는다 — 실내에서 걸으면 늘 그 상태가 된다.
+    //
+    // 바라보는 방향이 바뀌었을 때도 같이 부른다. 위치는 그대로인데 몸만 돌린
+    // 경우(코너에서 방향을 트는 순간)가 실제로 방향 정렬이 가장 필요한 때다.
+    if (_following &&
+        widget.currentLocation != null &&
+        (widget.currentLocation != oldWidget.currentLocation ||
+            widget.currentHeadingDegrees != oldWidget.currentHeadingDegrees)) {
+      unawaited(_followCamera());
     }
     if (!_styleReady) return;
     if (oldWidget.buildingId != widget.buildingId ||
@@ -615,6 +646,16 @@ class FloorPlanViewState extends State<FloorPlanView> {
     final controller = _controller;
     final target = widget.focusTarget;
     if (controller == null || target == null || !_styleReady) return;
+
+    // 목록에서 고른 매장은 층 반대편일 수 있다. 그대로 두면 이 이동이 끝나자마자
+    // onCameraIdle이 카메라를 내 위치 근방으로 도로 끌어당겨 포커스가 통째로
+    // 깨진다. "딴 데를 보러 갔다"는 명시적 의사 표시이므로 위치 제한만 끈다
+    // (도면 제한은 그대로다). 내 위치로 돌아오는 [resumeFollow]에서 다시 켜진다.
+    //
+    // `widget.focusTarget != null`을 대신 볼 수는 없다 — 상위가 이 값을 한 번
+    // 정하면 null로 되돌리지 않아서, 매장을 한 번이라도 누르면 위치 제한이
+    // 영원히 꺼진다.
+    _userBoundsSuspended = true;
 
     // 뷰포트는 await 전에 읽는다. 카메라 이동을 기다린 뒤 MediaQuery를 보면
     // 그 사이 위젯이 트리에서 빠졌을 수 있다.
@@ -1322,7 +1363,70 @@ class FloorPlanViewState extends State<FloorPlanView> {
 
   void _handleCameraIdle() {
     _enforceMinZoom();
+    _pullBackIntoFootprint();
     _notifyCameraBearing();
+  }
+
+  /// 카메라 중심이 도면 밖으로 나갔으면 가장자리로 되돌린다.
+  ///
+  /// **왜 MapLibre의 `cameraTargetBounds`를 안 쓰나** — 써 봤는데 이 조합
+  /// (maplibre_gl 0.26.2 + Android)에서는 지도가 아예 렌더되지 않았다. 도면이
+  /// 통째로 안 그려져서 실기 확인 때 바로 드러났다. 여기서는 이미 축소 하한
+  /// 강제([_enforceMinZoom])가 쓰고 있는, 동작이 검증된 훅으로 같은 목적을
+  /// 이룬다.
+  ///
+  /// 제스처가 **끝난 뒤에** 되돌린다. 미는 동안 붙잡으면 손가락과 지도가 계속
+  /// 싸우게 된다 — 놓으면 돌아오는 편이 예측 가능하다.
+  ///
+  /// wgs84 footprint가 없는 건물에서는 아무것도 하지 않는다. 기준이 없는데
+  /// 되돌리면 엉뚱한 데로 끌고 간다.
+  Future<void> _pullBackIntoFootprint() async {
+    final controller = _controller;
+    final center = controller?.cameraPosition?.target;
+    if (controller == null || center == null) return;
+
+    final halfSpan = await _visibleHalfSpan(controller);
+    if (!mounted) return;
+
+    final clamped = clampToFootprint(
+      ll.LatLng(center.latitude, center.longitude),
+      widget.floorPlan.footprint,
+      halfSpanLat: halfSpan?.lat ?? 0,
+      halfSpanLng: halfSpan?.lng ?? 0,
+      userLocation: _userBoundsSuspended ? null : widget.currentLocation,
+    );
+    if (clamped == null) return;
+
+    await controller.animateCamera(
+      CameraUpdate.newLatLng(_toMapLibreLatLng(clamped)),
+    );
+  }
+
+  /// 지금 화면이 덮는 위경도 범위의 **절반**. 못 구하면 null이다.
+  ///
+  /// 직접 삼각함수로 계산하지 않고 `getVisibleRegion()`을 쓴다. 실내 지도는
+  /// 건물에 맞춰 회전(bearing)돼 있어서 뷰포트의 위경도 범위가 화면 가로·세로와
+  /// 그대로 대응하지 않는데, 이 값은 회전을 반영한 뒤의 축정렬 bbox라 그 문제를
+  /// 알아서 넘긴다. 대신 45° 근처에서는 실제 뷰포트보다 넉넉하게 잡혀 필요보다
+  /// 조금 더 깎인다 — 건물 모서리를 화면 끝까지 못 미는 정도이고, 빈 공간이
+  /// 생기는 쪽보다 낫다고 보고 감수한다.
+  ///
+  /// **실패하면 null을 돌려주고 호출부는 깎기 없이(=예전 동작으로) 되돌린다.**
+  /// 화면 크기를 모른다고 되돌림 자체를 포기하면 무한히 밀리던 원래 문제로
+  /// 돌아가므로, 덜 좋은 쪽으로 폴백하되 기능은 남긴다.
+  Future<({double lat, double lng})?> _visibleHalfSpan(
+    MapLibreMapController controller,
+  ) async {
+    try {
+      final region = await controller.getVisibleRegion();
+      final lat = (region.northeast.latitude - region.southwest.latitude) / 2;
+      final lng = (region.northeast.longitude - region.southwest.longitude) / 2;
+      if (!lat.isFinite || !lng.isFinite || lat <= 0 || lng <= 0) return null;
+      return (lat: lat, lng: lng);
+    } catch (error, stackTrace) {
+      debugPrint('visible region query failed: $error\n$stackTrace');
+      return null;
+    }
   }
 
   void _notifyCameraBearing() {
@@ -1413,24 +1517,31 @@ class FloorPlanViewState extends State<FloorPlanView> {
   /// 외곽선에 맞춘 각도, 그리고 그걸 90도 돌린 각도) 각각에 대해 "그 각도로
   /// 봤을 때 건물이 뷰포트에 얼마나 크게 들어가는지"를 직접 계산해서 더 크게
   /// 보이는 쪽을 고른다.
-  /// 카메라 bearing만 [bearingDeg](북쪽 기준 시계방향, 0~360°)로 돌린다.
-  /// 사용자가 바라보는 방향을 화면 위쪽에 오게 하는 나침반 모드에 쓴다 —
-  /// 현재 중심/줌은 유지하고 회전만 한다.
-  Future<void> rotateToBearing(double bearingDeg, {ll.LatLng? center}) async {
+
+  /// 추적 중일 때 카메라를 내 위치와 바라보는 방향에 맞춘다.
+  ///
+  /// **중심 이동과 회전을 한 번의 `moveCamera`로 묶는다.** 나눠 부르면 걸음마다
+  /// 화면이 두 번 튄다(먼저 밀리고 그 다음 돈다).
+  ///
+  /// 회전할지 말지는 [bearingToFollow]가 정한다 — heading이 데드밴드 안에서
+  /// 흔들리는 동안에는 null을 돌려주고, 그때는 지금 각도를 그대로 쓴다.
+  /// [force]는 "위치 보정"처럼 사용자가 명시적으로 정렬을 요청한 경우다.
+  Future<void> _followCamera({bool force = false}) async {
     final controller = _controller;
-    if (controller == null || !bearingDeg.isFinite) return;
+    final target = widget.currentLocation;
+    if (controller == null || target == null) return;
     final current = controller.cameraPosition;
-    // [center]가 있으면 그 지점을 화면 중앙에 놓고 돌린다. 없으면(위치를 아직
-    // 모르는 경우) 지금 보고 있는 중심을 그대로 두고 bearing만 바꾼다.
-    final target = center != null
-        ? _toMapLibreLatLng(center)
-        : current?.target ?? _initialCenter(widget.floorPlan);
+    final bearing = bearingToFollow(
+      heading: widget.currentHeadingDegrees,
+      cameraBearing: current?.bearing,
+      force: force,
+    );
     await controller.moveCamera(
       CameraUpdate.newCameraPosition(
         CameraPosition(
-          target: target,
+          target: _toMapLibreLatLng(target),
           zoom: current?.zoom ?? 18,
-          bearing: bearingDeg,
+          bearing: bearing ?? current?.bearing ?? 0,
           tilt: current?.tilt ?? 0,
         ),
       ),
@@ -1446,6 +1557,56 @@ class FloorPlanViewState extends State<FloorPlanView> {
       CameraUpdate.newLatLng(_toMapLibreLatLng(target)),
     );
   }
+
+  /// 내 위치를 따라갈지. 켜져 있으면 [FloorPlanView.currentLocation]이 바뀔
+  /// 때마다 카메라가 그 자리로 옮겨간다.
+  ///
+  /// **기본이 켜짐이다.** 실내에서 사용자가 하려는 일은 대부분 "내가 지금 어디
+  /// 있나"이고, 걷는 동안 마커가 화면 밖으로 나가면 그걸 알 방법이 없어진다.
+  ///
+  /// 사용자가 지도를 **끌면** 꺼진다. 주변을 보려고 밀어 둔 지도가 다음 걸음에
+  /// 제자리로 돌아오면 지도를 볼 수가 없다. 탭만으로는 꺼지지 않는다 —
+  /// 매장 하나 눌러 보는 것으로 따라가기가 멈추면 그것대로 당황스럽다.
+  bool _following = true;
+  bool get isFollowing => _following;
+
+  /// 내 위치 근방 제한([clampToFootprint]의 `userLocation`)을 꺼 둔 상태인지.
+  ///
+  /// 매장 포커스처럼 사용자가 **명시적으로 딴 데를 보러 간** 경우에만 켠다.
+  /// 자세한 이유는 [_applyFocusTarget] 주석에 있다.
+  bool _userBoundsSuspended = false;
+
+  /// 이번 제스처에서 손가락이 움직인 누적 거리(논리 픽셀). 이 값이 임계를
+  /// 넘어야 "끌었다"로 본다.
+  double _gesturePanPx = 0;
+
+  /// 탭과 드래그를 가르는 값. Flutter 기본 터치 슬롭(18)보다 조금 작게 둬서,
+  /// 지도가 실제로 움직이기 시작하는 순간과 추적 해제 시점이 어긋나지 않게 한다.
+  static const _followBreakSlopPx = 12.0;
+
+  void _onMapPointerDown(PointerDownEvent event) => _gesturePanPx = 0;
+
+  void _onMapPointerMove(PointerMoveEvent event) {
+    if (!_following) return;
+    _gesturePanPx += event.delta.distance;
+    if (_gesturePanPx < _followBreakSlopPx) return;
+    setState(() => _following = false);
+    widget.onFollowingChanged?.call(false);
+  }
+
+  Future<void> resumeFollow() async {
+    if (!_following) {
+      setState(() => _following = true);
+      widget.onFollowingChanged?.call(true);
+    }
+    // 내 위치로 돌아왔으니 매장 포커스 때문에 꺼 뒀던 위치 제한을 다시 켠다.
+    _userBoundsSuspended = false;
+    // 중심만 맞추고 끝내지 않는다. 추적이 풀린 사이 사용자가 지도를 돌려 놨을
+    // 수 있고, 그러면 "내 위치로 돌아왔는데 방향은 딴 데를 보는" 화면이 된다.
+    // 명시적 요청이므로 데드밴드를 건너뛴다.
+    await _followCamera(force: true);
+  }
+
 
   Future<void> _fitToFootprint() async {
     final controller = _controller;

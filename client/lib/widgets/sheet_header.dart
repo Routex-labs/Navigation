@@ -17,6 +17,7 @@ class SheetHeader extends StatelessWidget {
     super.key,
     this.title,
     this.leading,
+    this.trailing,
     required this.onCloseAll,
     required this.onIntentionalPop,
   });
@@ -25,6 +26,14 @@ class SheetHeader extends StatelessWidget {
 
   /// 제목 왼쪽에 붙일 선택적 위젯(예: 아이콘 배지). null이면 자리 비움.
   final Widget? leading;
+
+  /// X 왼쪽에 붙일 선택적 위젯(예: 저장 토글).
+  ///
+  /// **화면을 바꾸지 않는 버튼의 자리다.** 뒤로·X는 시트를 닫고, 본문 아래
+  /// 액션 바의 출발·도착은 시트를 닫으며 경로로 넘어간다. 눌러도 제자리에
+  /// 남는 토글을 그 사이에 섞으면 무엇이 화면을 바꾸는 버튼인지 예측할 수
+  /// 없어진다. 여기 놓는 위젯은 pop을 일으키지 않아야 한다.
+  final Widget? trailing;
 
   /// X 버튼이 눌렸을 때 호출. 상위(MapShellScreen)가 chain-close 플래그를
   /// set하는 함수를 넘긴다.
@@ -65,6 +74,7 @@ class SheetHeader extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
           ),
+          ?trailing,
           IconButton(
             tooltip: '전체 닫기',
             onPressed: () {

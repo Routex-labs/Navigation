@@ -18,7 +18,9 @@ import '../../features/indoor_navigation/application/guidance_trail_session.dart
 import '../../features/indoor_navigation/application/escalator_node_naming.dart';
 import '../../features/indoor_navigation/application/escalator_transition_detector.dart';
 import '../../features/indoor_navigation/application/indoor_location_estimate.dart';
+import '../../domain/dijkstra.dart';
 import '../../domain/multi_floor_router.dart';
+import '../../domain/nearby_facilities.dart';
 import '../../domain/route_guidance.dart';
 import '../../domain/route_progress.dart';
 import '../../models/building.dart';
@@ -281,11 +283,6 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   /// 자동 attach 되므로 이 필드는 한 번만 만들어 재사용한다.
   final _floorPlanController = FloorPlanController();
 
-  /// 재보정 버튼 탭 카운터. 홀수 번째(1·3·5번째) 탭은 현재 위치를 화면 정중앙에
-  /// 놓고, 짝수 번째(2·4·6번째) 탭은 사용자가 바라보는 방향(heading)에 맞춰
-  /// 지도를 회전시킨다. 위치나 heading을 아직 몰라 실제 동작이 스킵된 탭은
-  /// 카운트를 올리지 않아, 다음 탭이 원하는 동작을 이어가도록 한다.
-  int _recalibrateTapCount = 0;
   bool _exportingPdrDebugJson = false;
   double _mapCameraBearingDeg = 0;
   final ValueNotifier<double> _mapCameraBearingNotifier = ValueNotifier(0);
@@ -660,42 +657,25 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     await _loadFloorPlan(floor);
   }
 
-  /// 하단 바 재보정 버튼(위치 지정 오른쪽). 탭할 때마다 두 동작을 번갈아
-  /// 수행한다:
-  ///  1) 첫 탭: 사용자의 현재 위치를 화면 정중앙에 오게 카메라를 옮긴다.
-  ///  2) 두 번째 탭: 사용자가 바라보는 방향(PDR heading)이 화면 위쪽에 오도록
-  ///     지도를 회전한다.
+  /// 하단 바 재보정 버튼(위치 지정 오른쪽). 내 위치를 화면 정중앙에 놓고,
+  /// 바라보는 방향이 화면 위쪽에 오도록 지도를 돌리고, 추적을 다시 켠다.
   ///
-  /// 위치/heading이 아직 없어 해당 동작을 수행할 수 없으면 안내만 띄우고
-  /// 카운트를 올리지 않아, 다음 탭이 원하는 동작을 이어서 시도한다.
+  /// **예전에는 탭마다 "중앙 정렬 → 회전"을 번갈아 했다.** 회전이 걷는 동안
+  /// 자동으로 따라가게 된 뒤로는 두 번째 탭이 할 일이 없어져서 하나로 합쳤다.
+  /// 한 번 옮겨 놓고 끝내면 다음 걸음에 또 화면 밖으로 나가므로 추적을 함께
+  /// 켠다 — 사용자가 지도를 끌면 다시 풀리고, 그때 이 버튼이 복귀 경로다.
+  ///
+  /// heading을 아직 모르면 중앙 정렬만 하고 회전은 건너뛴다. 예전엔 이때
+  /// 안내를 띄웠는데, 지금은 버튼이 항상 중앙 정렬은 해내므로 "아무 일도 안
+  /// 일어났다"가 아니다.
   Future<void> recalibrate() async {
     if (!_floorPlanController.isAttached) return;
 
-    // 홀수 번째 탭(1,3,5...) → 중앙 정렬, 짝수 번째 탭(2,4,6...) → 회전.
-    // 실제로 동작을 수행한 경우에만 카운트를 올린다.
-    final isCenterAction = _recalibrateTapCount.isEven;
-    if (isCenterAction) {
-      final target = _pdrCurrentLocation ?? _pdrAnchorLocation;
-      if (target == null) {
-        _showPdrMessage('아직 현재 위치가 없습니다. 위치 지정 버튼으로 먼저 위치를 잡아주세요.');
-        return;
-      }
-      await _floorPlanController.centerOn(target);
-    } else {
-      final heading = _pdrCurrentHeadingDeg;
-      if (heading == null) {
-        _showPdrMessage('아직 바라보는 방향을 알 수 없습니다. 위치 지정 후 조금 걸어 방향을 잡아주세요.');
-        return;
-      }
-      // 회전도 내 위치를 중심으로 한다. 중앙 정렬 후 걸어간 뒤 회전을 누르면
-      // 화면 중심과 내 위치가 이미 어긋나 있어, 중심을 그대로 두고 돌리면 내
-      // 위치가 화면 가장자리로 밀려난다.
-      await _floorPlanController.rotateToBearing(
-        heading,
-        center: _pdrCurrentLocation ?? _pdrAnchorLocation,
-      );
+    if ((_pdrCurrentLocation ?? _pdrAnchorLocation) == null) {
+      _showPdrMessage('아직 현재 위치가 없습니다. 위치 지정 버튼으로 먼저 위치를 잡아주세요.');
+      return;
     }
-    _recalibrateTapCount++;
+    await _floorPlanController.resumeFollow();
   }
 
   /// 하단 바의 "위치 지정" 버튼에서 호출된다. 지도를 사용하지 않고 건물에
@@ -1150,6 +1130,93 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       current.northM,
       excludingNodeId: excludingNodeId,
     );
+  }
+
+  /// 현재 위치에서 건물 안 **모든 그래프 노드**까지의 거리·비용.
+  ///
+  /// 검색 결과 목록이 매장마다 "몇 m · 도보 몇 분"을 붙이는 데 쓴다. 목적지를
+  /// 아직 고르지 않은 시점에 부르는 값이라 [showRouteTo]와 달리 도착 노드가
+  /// 없고, 그래서 [reachableFrom]으로 한 번만 탐색해 전 노드 결과를 받는다.
+  ///
+  /// **null을 돌려주는 경우가 여러 가지다** — 위치(앵커)가 아직 없거나, 그래프를
+  /// 못 받았거나, 앵커 층에 그래프 노드가 없을 때다. 호출부는 어느 쪽이든
+  /// 거리 줄을 아예 그리지 않는다. 줄마다 "거리 알 수 없음"을 반복하면 목록이
+  /// 읽히지 않고, 사용자가 할 수 있는 일도 어차피 "위치 지정" 하나뿐이다.
+  Future<Map<String, NodeReach>?> reachFromCurrentPosition() async {
+    final anchor = _pdrTrailState.anchor;
+    if (anchor == null) return null;
+
+    final graph = await buildingRepository.getBuildingGraph(widget.buildingId);
+    if (!mounted || graph == null || graph.nodes.isEmpty) return null;
+
+    // 경로 계산과 **같은 시작 노드**를 쓴다. 여기서 다른 규칙으로 고르면 목록에
+    // 적힌 거리와 실제로 길찾기를 눌렀을 때 나오는 거리가 서로 달라진다.
+    final startNodeId = _pickStartNodeIdInBuildingGraph(
+      graph: graph,
+      startFloorName: anchor.floorId,
+    );
+    if (startNodeId == null) return null;
+
+    try {
+      return reachableFrom(
+        nodes: graph.nodes,
+        edges: graph.edges,
+        startNodeId: startNodeId,
+      );
+    } on ArgumentError {
+      // 그래프가 깨져 있어도 목록 자체는 계속 떠야 한다 — 거리만 빠진다.
+      return null;
+    }
+  }
+
+  /// [store]에서 가장 가까운 화장실·엘리베이터.
+  ///
+  /// **기준이 사용자 위치가 아니라 그 매장이다.** 상세 시트에는 내 위치에서
+  /// 매장까지의 거리가 이미 윗줄에 있어서, 같은 기준을 한 번 더 적으면 알려
+  /// 주는 게 없다. 그래서 매장 입구 노드에서 [reachableFrom]을 한 번 더 돌린다
+  /// (그래프는 이미 받아 둔 것을 재사용하므로 계산만 몇 ms 든다).
+  ///
+  /// **같은 층만 본다.** 층 도면 하나로 후보를 뽑기 때문이기도 하고, 다른 층
+  /// 화장실을 "가장 가깝다"고 적으면 층 이동까지 함께 알려야 말이 되기 때문이다.
+  /// 이 층에 그 시설이 없으면 그 줄은 아예 빠진다.
+  ///
+  /// 실패는 전부 빈 목록이다 — 시설 안내는 부가 정보라 실패가 시트를 막으면 안 된다.
+  Future<List<NearbyFacility>> nearbyFacilitiesFor(PoiSearchResult store) async {
+    final startNodeId = store.nodeId;
+    if (startNodeId == null || store.floor.isEmpty) return const [];
+
+    final graph = await buildingRepository.getBuildingGraph(widget.buildingId);
+    if (!mounted || graph == null || graph.nodes.isEmpty) return const [];
+
+    final json = await buildingRepository.getFloorGeoJson(
+      widget.buildingId,
+      store.floor,
+    );
+    if (!mounted || json == null) return const [];
+
+    final candidates = <FacilityCandidate>[];
+    for (final floorStore in FloorPlan.fromJson(json).stores) {
+      final kind = facilityKindForSubcategory(floorStore.subcategory);
+      final nodeId = floorStore.entranceNodeId;
+      // 시설로 들어가는 노드를 모르면 거리도 잴 수 없다.
+      if (kind == null || nodeId == null || nodeId == startNodeId) continue;
+      candidates.add((kind: kind, nodeId: nodeId));
+    }
+    if (candidates.isEmpty) return const [];
+
+    try {
+      return nearestFacilities(
+        reach: reachableFrom(
+          nodes: graph.nodes,
+          edges: graph.edges,
+          startNodeId: startNodeId,
+        ),
+        candidates: candidates,
+      );
+    } on ArgumentError {
+      // 매장 입구 노드가 그래프에 없는 경우. 시트는 그대로 열린다.
+      return const [];
+    }
   }
 
   String? _nearestNodeId(
@@ -2450,10 +2517,37 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     }
     if (!mounted) return;
     _setPlacingAnchor(false);
-    if (notifyLocationChanged) widget.onLocationAnchored?.call();
+    if (notifyLocationChanged) {
+      widget.onLocationAnchored?.call();
+      _restoreCameraToUser();
+    }
     // 배치가 끝났다는 안내는 따로 띄우지 않는다. 도면에 위치 마커가 바로
     // 찍히고 안내 배너가 사라지는 것으로 이미 결과가 보이는데, 토스트까지
     // 겹치면 방금 지정한 지점을 가린다.
+  }
+
+  /// 위치를 새로 지정한 뒤 원래 화면(내 위치 중심 + 바라보는 방향 정렬 + 추적
+  /// 재개)으로 되돌린다.
+  ///
+  /// 지도를 끌어 추적이 풀린 상태에서 위치를 다시 찍는 것은 "여기가 내 자리다"를
+  /// 다시 알려 주는 행동이다. 그런데 화면은 끌어 놓은 자리에 그대로 머물러서,
+  /// 방금 찍은 지점이 화면 밖인 경우까지 있었다.
+  ///
+  /// **다음 프레임에 부른다.** 앵커를 확정한 직후에는 아직 위젯이 새 위치로 다시
+  /// 그려지기 전이라, 지금 부르면 FloorPlanView가 들고 있는 예전 위치(또는
+  /// null)를 보고 아무 데도 못 간다.
+  ///
+  /// heading을 아직 모르면 중심만 맞추고 회전은 건너뛴다 — 앵커 직후에는 방향이
+  /// 아직 안 잡혔을 수 있고, 모르는 방향으로 돌리는 것보다 안 돌리는 게 낫다.
+  ///
+  /// 출발지 매장을 따라 조용히 찍는 경로(`notifyLocationChanged: false`)에서는
+  /// 부르지 않는다. 상위가 정한 출발지를 되짚는 것뿐인데 화면까지 움직이면
+  /// 사용자가 시키지 않은 일이 된다.
+  void _restoreCameraToUser() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_floorPlanController.isAttached) return;
+      unawaited(_floorPlanController.resumeFollow());
+    });
   }
 
   Future<void> _cancelPdrAnchor() async {

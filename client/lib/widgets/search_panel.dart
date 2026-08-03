@@ -3,10 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../core/service_locator.dart';
+import '../domain/dijkstra.dart';
 import '../models/building.dart';
 import '../models/discovery_result.dart';
 import '../models/poi_search_result.dart';
 import '../theme/app_theme.dart';
+import 'category_icon.dart';
+import 'reach_label.dart';
 
 /// 상단 검색창 바로 아래에 붙는 결과 패널.
 ///
@@ -66,6 +69,7 @@ class SearchPanel extends StatefulWidget {
     required this.onStorePicked,
     required this.onBuildingPicked,
     this.currentFloorId,
+    this.reachByNodeId,
   });
 
   final String buildingId;
@@ -83,6 +87,15 @@ class SearchPanel extends StatefulWidget {
   /// 붙인다 — 같은 글자로 다시 엔터를 눌러도 재검색되게 하려고 bool이 아닌
   /// 카운터로 받는다.
   final int submitTick;
+
+  /// 현재 위치에서 각 그래프 노드까지의 거리·비용. 상위(MapShellScreen)가
+  /// 검색을 시작할 때 한 번 계산해 내려준다.
+  ///
+  /// null이거나 매장의 노드가 여기 없으면 **거리 줄을 그리지 않는다.** 위치를
+  /// 아직 안 잡았을 때 줄마다 "거리 알 수 없음"이 반복되면 목록이 읽히지 않고,
+  /// 그 상태에서 사용자가 할 수 있는 일도 "위치 지정" 하나뿐이라 매 줄에
+  /// 알릴 이유가 없다.
+  final Map<String, NodeReach>? reachByNodeId;
 
   final ValueChanged<PoiSearchResult> onStorePicked;
   final ValueChanged<Building> onBuildingPicked;
@@ -147,6 +160,49 @@ bool _isExactNameMatch(String query, List<PoiSearchResult> results) {
     final name = result.name.trim().toLowerCase();
     return name == normalizedQuery || name.startsWith(normalizedQuery);
   });
+}
+
+/// 이름에서 검색어와 일치하는 구간만 강조한 span 목록을 만든다.
+///
+/// **왜 강조하나** — 이 결과가 왜 나왔는지를 색으로 설명하기 위해서다. 예전에는
+/// 이름 전체가 같은 굵기의 검정이라, 검색어와 한 글자도 안 겹쳐 보이는 결과가
+/// 섞여 있어도 어디가 걸린 것인지 읽을 방법이 없었다.
+///
+/// **강조가 하나도 안 걸리는 것이 정상 상태다.** 의미 검색("밥 먹을 곳")은 이름에
+/// 검색어가 없는 결과를 돌려주는 게 목적이고, 그 화면은 [SearchPanel._fromSemantic]
+/// 배너가 대신 설명한다. 그래서 여기서는 못 찾았을 때 원문을 그대로 돌려줄 뿐
+/// 실패로 다루지 않는다.
+///
+/// 대소문자·앞뒤 공백만 정규화하고 그 밖의 정규화(형태소 분석 등)는 하지 않는다.
+/// 서버의 Kiwi 정규화까지 흉내내면 강조 구간이 오히려 서버 판정과 어긋난다 —
+/// [_isExactNameMatch]와 같은 이유다. 그 결과 "더현대 서울"로 검색하면 띄어쓰기가
+/// 다른 "더현대서울점"에는 강조가 걸리지 않는데, 이건 강조가 빠질 뿐 결과 자체는
+/// 그대로 나오므로 손실이 없는 쪽으로 둔 선택이다.
+List<TextSpan> highlightedNameSpans(String name, String query) {
+  final needle = query.trim().toLowerCase();
+  if (needle.isEmpty) return [TextSpan(text: name)];
+
+  final haystack = name.toLowerCase();
+  final spans = <TextSpan>[];
+  var cursor = 0;
+  while (true) {
+    final index = haystack.indexOf(needle, cursor);
+    if (index < 0) break;
+    if (index > cursor) {
+      spans.add(TextSpan(text: name.substring(cursor, index)));
+    }
+    spans.add(
+      TextSpan(
+        text: name.substring(index, index + needle.length),
+        style: const TextStyle(color: AppColors.primary),
+      ),
+    );
+    cursor = index + needle.length;
+  }
+
+  if (spans.isEmpty) return [TextSpan(text: name)];
+  if (cursor < name.length) spans.add(TextSpan(text: name.substring(cursor)));
+  return spans;
 }
 
 class _SearchPanelState extends State<SearchPanel> {
@@ -398,13 +454,11 @@ class _SearchPanelState extends State<SearchPanel> {
     // 서버가 새 mode를 추가하거나 계약을 어긴 경우에는 후보를 임의로 추천하지
     // 않는다. 사용자가 다른 표현으로 재검색할 수 있는 안전한 noMatch로 보낸다.
     return switch (discovery.mode) {
-      DiscoveryMode.direct => discovery.matches.isEmpty
-          ? _SearchPhase.noMatch
-          : _SearchPhase.results,
+      DiscoveryMode.direct =>
+        discovery.matches.isEmpty ? _SearchPhase.noMatch : _SearchPhase.results,
       DiscoveryMode.clarify => _SearchPhase.clarify,
-      DiscoveryMode.results => discovery.matches.isEmpty
-          ? _SearchPhase.noMatch
-          : _SearchPhase.results,
+      DiscoveryMode.results =>
+        discovery.matches.isEmpty ? _SearchPhase.noMatch : _SearchPhase.results,
       DiscoveryMode.noMatch || DiscoveryMode.unknown => _SearchPhase.noMatch,
       DiscoveryMode.degraded => _SearchPhase.degraded,
     };
@@ -428,7 +482,8 @@ class _SearchPanelState extends State<SearchPanel> {
             ? null
             : Map<String, List<String>>.fromEntries(
                 _selectedFacets.entries.map(
-                  (entry) => MapEntry(entry.key, List<String>.from(entry.value)),
+                  (entry) =>
+                      MapEntry(entry.key, List<String>.from(entry.value)),
                 ),
               ),
         showAll: showAll,
@@ -618,9 +673,16 @@ class _SearchPanelState extends State<SearchPanel> {
     if (building != null) {
       rows.add(
         ListTile(
-          leading: const Icon(Icons.apartment_outlined, color: AppColors.primary),
-          title: Text(
-            building.name,
+          leading: const Icon(
+            Icons.apartment_outlined,
+            color: AppColors.primary,
+          ),
+          title: Text.rich(
+            TextSpan(
+              children: highlightedNameSpans(building.name, _submittedQuery),
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
           ),
           subtitle: Text(
@@ -718,7 +780,9 @@ class _SearchPanelState extends State<SearchPanel> {
                 children: _discoveryOptions
                     .map(
                       (option) => ActionChip(
-                        key: Key('facet-option-${option.facet}-${option.value}'),
+                        key: Key(
+                          'facet-option-${option.facet}-${option.value}',
+                        ),
                         label: Text('${option.label} (${option.count})'),
                         onPressed: () => _selectFacet(option),
                       ),
@@ -756,19 +820,83 @@ class _SearchPanelState extends State<SearchPanel> {
     );
   }
 
-  Widget _storeTile(PoiSearchResult store, DiscoveryMatch? match) => ListTile(
-    leading: const Icon(Icons.place_outlined, color: AppColors.primary),
-    title: Text(
-      store.name,
-      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-    ),
-    subtitle: Text(
-      match?.reason ??
-          (store.nodeId == null ? '${store.floor} · 경로 안내 불가' : store.floor),
-      style: const TextStyle(fontSize: 12, color: AppColors.muted),
-    ),
-    onTap: () => widget.onStorePicked(store),
-  );
+  /// 결과 한 줄. 이름(검색어 강조) + 업종을 한 줄에 두고, 그 아래 층 또는 추천 이유.
+  ///
+  /// 업종을 왼쪽 아이콘이 아니라 **이름 오른쪽 회색 글자**로 두는 이유는, 매장마다
+  /// 다른 글리프를 만들지 않고도 소분류까지 그대로 읽히기 때문이다. 왼쪽 아이콘은
+  /// "이건 장소다"만 말하면 되므로 한 종류로 충분하다.
+  Widget _storeTile(PoiSearchResult store, DiscoveryMatch? match) {
+    // 소분류가 없는 장소에서 업종이 통째로 사라지지 않도록 대분류로 떨어뜨린다 —
+    // 상세 시트를 여는 호출부(MapShellScreen._showStoreInfo)와 같은 규칙이다.
+    final categoryLabel =
+        subcategoryLabelFor(store.subcategory) ?? store.category;
+    // 노드가 없는 매장은 애초에 경로를 못 그리므로 거리도 없다. 그 사실은
+    // 아래 첫 줄의 "경로 안내 불가"가 이미 말한다.
+    final nodeId = store.nodeId;
+    final reach = nodeId == null ? null : widget.reachByNodeId?[nodeId];
+    final firstLine =
+        match?.reason ??
+        (nodeId == null ? '${store.floor} · 경로 안내 불가' : store.floor);
+    return ListTile(
+      leading: const Icon(Icons.place_outlined, color: AppColors.primary),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                children: highlightedNameSpans(store.name, _submittedQuery),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+          ),
+          if (categoryLabel != null) ...[
+            const SizedBox(width: 8),
+            // 업종이 길어도 이름 자리를 먹지 않도록 상한을 둔다. 이름이 먼저
+            // 읽혀야 하는 줄이라 남는 폭은 이름 쪽에 준다.
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 84),
+              child: Text(
+                categoryLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: const TextStyle(fontSize: 12, color: AppColors.muted),
+              ),
+            ),
+          ],
+        ],
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            firstLine,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12, color: AppColors.muted),
+          ),
+          if (reach != null)
+            Text(
+              reachLabel(reach),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              // 거리는 "지금 갈지"를 정하는 값이라 층보다 한 단계 진하게 둔다.
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.text,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+        ],
+      ),
+      // 두 줄짜리 subtitle은 ListTile에 알려야 세로 정렬이 맞는다.
+      isThreeLine: reach != null,
+      onTap: () => widget.onStorePicked(store),
+    );
+  }
 
   Widget _emptyState(BuildContext context) {
     return Padding(
