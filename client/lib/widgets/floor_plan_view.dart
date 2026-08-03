@@ -15,6 +15,7 @@ import '../core/map_fonts.dart';
 import '../core/map_palette.dart';
 import '../core/map_route_style.dart';
 import 'destination_pin.dart';
+import 'floor_camera_bearing.dart';
 import 'floor_camera_bounds.dart';
 import '../features/debug_mode/debug_map_overlay.dart';
 import '../models/floor_plan.dart';
@@ -576,10 +577,14 @@ class FloorPlanViewState extends State<FloorPlanView> {
     // 내 위치가 갱신되면 카메라도 따라간다. 이게 없으면 걷는 동안 마커만
     // 움직여 화면 밖으로 나가고, 사용자가 "위치 보정"을 누를 때까지 돌아오지
     // 않는다 — 실내에서 걸으면 늘 그 상태가 된다.
+    //
+    // 바라보는 방향이 바뀌었을 때도 같이 부른다. 위치는 그대로인데 몸만 돌린
+    // 경우(코너에서 방향을 트는 순간)가 실제로 방향 정렬이 가장 필요한 때다.
     if (_following &&
         widget.currentLocation != null &&
-        widget.currentLocation != oldWidget.currentLocation) {
-      unawaited(centerOn(widget.currentLocation!));
+        (widget.currentLocation != oldWidget.currentLocation ||
+            widget.currentHeadingDegrees != oldWidget.currentHeadingDegrees)) {
+      unawaited(_followCamera());
     }
     if (!_styleReady) return;
     if (oldWidget.buildingId != widget.buildingId ||
@@ -1547,6 +1552,36 @@ class FloorPlanViewState extends State<FloorPlanView> {
     );
   }
 
+  /// 추적 중일 때 카메라를 내 위치와 바라보는 방향에 맞춘다.
+  ///
+  /// **중심 이동과 회전을 한 번의 `moveCamera`로 묶는다.** 나눠 부르면 걸음마다
+  /// 화면이 두 번 튄다(먼저 밀리고 그 다음 돈다).
+  ///
+  /// 회전할지 말지는 [bearingToFollow]가 정한다 — heading이 데드밴드 안에서
+  /// 흔들리는 동안에는 null을 돌려주고, 그때는 지금 각도를 그대로 쓴다.
+  /// [force]는 "위치 보정"처럼 사용자가 명시적으로 정렬을 요청한 경우다.
+  Future<void> _followCamera({bool force = false}) async {
+    final controller = _controller;
+    final target = widget.currentLocation;
+    if (controller == null || target == null) return;
+    final current = controller.cameraPosition;
+    final bearing = bearingToFollow(
+      heading: widget.currentHeadingDegrees,
+      cameraBearing: current?.bearing,
+      force: force,
+    );
+    await controller.moveCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: _toMapLibreLatLng(target),
+          zoom: current?.zoom ?? 18,
+          bearing: bearing ?? current?.bearing ?? 0,
+          tilt: current?.tilt ?? 0,
+        ),
+      ),
+    );
+  }
+
   /// 카메라 중심만 [target]으로 옮긴다. 현재 bearing/줌은 유지 — 사용자 위치를
   /// 화면 정중앙에 오게 하는 데 쓴다.
   Future<void> centerOn(ll.LatLng target) async {
@@ -1600,8 +1635,10 @@ class FloorPlanViewState extends State<FloorPlanView> {
     }
     // 내 위치로 돌아왔으니 매장 포커스 때문에 꺼 뒀던 위치 제한을 다시 켠다.
     _userBoundsSuspended = false;
-    final target = widget.currentLocation;
-    if (target != null) await centerOn(target);
+    // 중심만 맞추고 끝내지 않는다. 추적이 풀린 사이 사용자가 지도를 돌려 놨을
+    // 수 있고, 그러면 "내 위치로 돌아왔는데 방향은 딴 데를 보는" 화면이 된다.
+    // 명시적 요청이므로 데드밴드를 건너뛴다.
+    await _followCamera(force: true);
   }
 
 

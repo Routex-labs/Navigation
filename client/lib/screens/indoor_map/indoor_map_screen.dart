@@ -283,11 +283,6 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   /// 자동 attach 되므로 이 필드는 한 번만 만들어 재사용한다.
   final _floorPlanController = FloorPlanController();
 
-  /// 재보정 버튼 탭 카운터. 홀수 번째(1·3·5번째) 탭은 현재 위치를 화면 정중앙에
-  /// 놓고, 짝수 번째(2·4·6번째) 탭은 사용자가 바라보는 방향(heading)에 맞춰
-  /// 지도를 회전시킨다. 위치나 heading을 아직 몰라 실제 동작이 스킵된 탭은
-  /// 카운트를 올리지 않아, 다음 탭이 원하는 동작을 이어가도록 한다.
-  int _recalibrateTapCount = 0;
   bool _exportingPdrDebugJson = false;
   double _mapCameraBearingDeg = 0;
   final ValueNotifier<double> _mapCameraBearingNotifier = ValueNotifier(0);
@@ -662,45 +657,25 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     await _loadFloorPlan(floor);
   }
 
-  /// 하단 바 재보정 버튼(위치 지정 오른쪽). 탭할 때마다 두 동작을 번갈아
-  /// 수행한다:
-  ///  1) 첫 탭: 사용자의 현재 위치를 화면 정중앙에 오게 카메라를 옮긴다.
-  ///  2) 두 번째 탭: 사용자가 바라보는 방향(PDR heading)이 화면 위쪽에 오도록
-  ///     지도를 회전한다.
+  /// 하단 바 재보정 버튼(위치 지정 오른쪽). 내 위치를 화면 정중앙에 놓고,
+  /// 바라보는 방향이 화면 위쪽에 오도록 지도를 돌리고, 추적을 다시 켠다.
   ///
-  /// 위치/heading이 아직 없어 해당 동작을 수행할 수 없으면 안내만 띄우고
-  /// 카운트를 올리지 않아, 다음 탭이 원하는 동작을 이어서 시도한다.
+  /// **예전에는 탭마다 "중앙 정렬 → 회전"을 번갈아 했다.** 회전이 걷는 동안
+  /// 자동으로 따라가게 된 뒤로는 두 번째 탭이 할 일이 없어져서 하나로 합쳤다.
+  /// 한 번 옮겨 놓고 끝내면 다음 걸음에 또 화면 밖으로 나가므로 추적을 함께
+  /// 켠다 — 사용자가 지도를 끌면 다시 풀리고, 그때 이 버튼이 복귀 경로다.
+  ///
+  /// heading을 아직 모르면 중앙 정렬만 하고 회전은 건너뛴다. 예전엔 이때
+  /// 안내를 띄웠는데, 지금은 버튼이 항상 중앙 정렬은 해내므로 "아무 일도 안
+  /// 일어났다"가 아니다.
   Future<void> recalibrate() async {
     if (!_floorPlanController.isAttached) return;
 
-    // 홀수 번째 탭(1,3,5...) → 중앙 정렬, 짝수 번째 탭(2,4,6...) → 회전.
-    // 실제로 동작을 수행한 경우에만 카운트를 올린다.
-    final isCenterAction = _recalibrateTapCount.isEven;
-    if (isCenterAction) {
-      final target = _pdrCurrentLocation ?? _pdrAnchorLocation;
-      if (target == null) {
-        _showPdrMessage('아직 현재 위치가 없습니다. 위치 지정 버튼으로 먼저 위치를 잡아주세요.');
-        return;
-      }
-      // 중앙 정렬은 "내 위치로 돌아간다"는 뜻이다. 한 번 옮겨 놓고 끝내면 다음
-      // 걸음에 또 화면 밖으로 나가므로, 추적을 함께 다시 켠다. 사용자가 지도를
-      // 끌면 다시 풀리고, 그때 이 버튼이 유일한 복귀 경로가 된다.
-      await _floorPlanController.resumeFollow();
-    } else {
-      final heading = _pdrCurrentHeadingDeg;
-      if (heading == null) {
-        _showPdrMessage('아직 바라보는 방향을 알 수 없습니다. 위치 지정 후 조금 걸어 방향을 잡아주세요.');
-        return;
-      }
-      // 회전도 내 위치를 중심으로 한다. 중앙 정렬 후 걸어간 뒤 회전을 누르면
-      // 화면 중심과 내 위치가 이미 어긋나 있어, 중심을 그대로 두고 돌리면 내
-      // 위치가 화면 가장자리로 밀려난다.
-      await _floorPlanController.rotateToBearing(
-        heading,
-        center: _pdrCurrentLocation ?? _pdrAnchorLocation,
-      );
+    if ((_pdrCurrentLocation ?? _pdrAnchorLocation) == null) {
+      _showPdrMessage('아직 현재 위치가 없습니다. 위치 지정 버튼으로 먼저 위치를 잡아주세요.');
+      return;
     }
-    _recalibrateTapCount++;
+    await _floorPlanController.resumeFollow();
   }
 
   /// 하단 바의 "위치 지정" 버튼에서 호출된다. 지도를 사용하지 않고 건물에
