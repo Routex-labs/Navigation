@@ -7,10 +7,10 @@ import 'package:navigation_client/widgets/destination_pin.dart';
 /// 이 테스트가 있는 이유: 실내 화면과 야외 오버레이가 각자 같은 심볼 정의를
 /// 베껴 들고 있었고, **두 곳 모두 `text-font`를 빠뜨렸다.** 생략하면 MapLibre
 /// 스펙 기본값(Open Sans / Arial Unicode MS)을 요청하는데 백엔드는
-/// `Pretendard Regular` 하나만 서빙하므로 글리프를 받지 못한다. 네이티브
-/// (Android/iOS)는 글리프가 없으면 심볼 레이아웃을 끝내지 못해 글씨뿐 아니라
-/// **핀 아이콘까지 통째로 사라진다.** 웹은 CJK를 시스템 폰트로 로컬 렌더해서
-/// 멀쩡해 보이므로 Chrome 확인만으로는 절대 잡을 수 없다.
+/// `Pretendard Regular` 하나만 서빙하므로 글리프를 받지 못한다. 실기기에서 확인한
+/// 증상은 **핀 도형은 그려지고 "도착" 글씨만 빠지는 것**이다 — 아이콘 비트맵은
+/// 글리프와 무관해서 빨간 핀만 덩그러니 남는다. 웹은 CJK를 시스템 폰트로 로컬
+/// 렌더해서 멀쩡해 보이므로 Chrome 확인만으로는 절대 잡을 수 없다.
 void main() {
   final props = destinationPinSymbolProps(
     imageName: 'test-pin',

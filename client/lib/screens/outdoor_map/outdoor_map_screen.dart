@@ -838,6 +838,52 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
   }
 
+  /// MapLibre 지도는 PlatformView라 hot reload로도 살아남고, 스타일이 이미 로드된
+  /// 상태에서는 `onStyleLoadedCallback`이 다시 불리지 않는다. 레이어 등록이 전부
+  /// [_onStyleLoaded] 안에 있으므로, 이 훅이 없으면 **핀 디자인이나 레이어 속성을
+  /// 고쳐도 hot reload 화면은 그대로다.**
+  ///
+  /// 위젯 코드(예: 하단 바 아이콘)는 hot reload가 즉시 반영하기 때문에, 같은
+  /// 수정 세션에서 "버튼 아이콘은 바뀌었는데 지도 마커만 안 바뀐다"는 모습이
+  /// 나온다 — 코드를 의심하게 만드는 함정이라 훅으로 막아 둔다(실내 화면
+  /// `FloorPlanViewState.reassemble`과 같은 이유).
+  @override
+  void reassemble() {
+    super.reassemble();
+    unawaited(_refreshIndoorDestinationPin());
+  }
+
+  Future<void> _refreshIndoorDestinationPin() async {
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    try {
+      await controller.removeLayer(_indoorDestLayerId);
+      await _addIndoorDestinationPinLayer(controller);
+      await _syncIndoorDestinationLayer();
+    } catch (error, stackTrace) {
+      // hot reload 편의 기능이라 실패해도 앱을 죽이지 않는다.
+      debugPrint('destination pin refresh failed: $error\n$stackTrace');
+    }
+  }
+
+  /// 실내 경로 도착 핀 레이어를 얹는다. 실내 화면과 **같은 함수**로 속성을
+  /// 만든다 — 두 화면이 각자 정의를 베껴 들고 있던 탓에 둘 다 `text-font`를
+  /// 빠뜨렸던 이력이 있다([destination_pin.dart] 주석).
+  Future<void> _addIndoorDestinationPinLayer(
+    MapLibreMapController controller,
+  ) async {
+    await controller.addSymbolLayer(
+      _indoorDestSourceId,
+      _indoorDestLayerId,
+      destinationPinSymbolProps(
+        imageName: _destinationPinImageName,
+        iconSizeZ16: _destinationPinIconSizeZ16,
+        iconSizeZ20: _destinationPinIconSizeZ20,
+      ),
+      enableInteraction: false,
+    );
+  }
+
   @override
   void dispose() {
     _buildingRetryTimer?.cancel();
@@ -2352,19 +2398,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _indoorDestSourceId,
       GeojsonSourceProperties(data: _emptyCollection()),
     );
-    await controller.addSymbolLayer(
-      _indoorDestSourceId,
-      _indoorDestLayerId,
-      // 실내 화면과 **같은 함수**로 만든다. 예전에는 두 화면이 각자 같은 정의를
-      // 베껴 들고 있었고, 그래서 둘 다 textFont를 빠뜨려 네이티브에서 핀이
-      // 통째로 사라졌다([destination_pin.dart] 주석).
-      destinationPinSymbolProps(
-        imageName: _destinationPinImageName,
-        iconSizeZ16: _destinationPinIconSizeZ16,
-        iconSizeZ20: _destinationPinIconSizeZ20,
-      ),
-      enableInteraction: false,
-    );
+    await _addIndoorDestinationPinLayer(controller);
 
     if (!mounted) return;
     setState(() => _styleReady = true);
