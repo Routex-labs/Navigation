@@ -9,6 +9,7 @@ import '../models/discovery_result.dart';
 import '../models/poi_search_result.dart';
 import '../theme/app_theme.dart';
 import 'category_icon.dart';
+import 'reach_label.dart';
 
 /// 상단 검색창 바로 아래에 붙는 결과 패널.
 ///
@@ -159,26 +160,6 @@ bool _isExactNameMatch(String query, List<PoiSearchResult> results) {
     final name = result.name.trim().toLowerCase();
     return name == normalizedQuery || name.startsWith(normalizedQuery);
   });
-}
-
-/// 실내 보행 속도(m/s). 값과 이름을 `indoor_map_screen.dart`의 ETA 계산과
-/// 맞춰, 목록에 적힌 "도보 N분"과 경로를 그린 뒤 ETA 카드의 분이 어긋나지
-/// 않게 한다. (같은 상수가 이 저장소에 다섯 군데 복제돼 있다 — 한곳으로
-/// 모으는 것은 이 항목의 범위가 아니라 그대로 둔다.)
-const _walkingSpeedMetersPerSecond = 1.2;
-
-/// 결과 한 줄에 적을 "몇 m · 도보 몇 분".
-///
-/// **거리와 시간의 출처가 다르다.** 거리는 실제 이동 거리([NodeReach.distanceM]),
-/// 시간은 라우팅 비용([NodeReach.costM]) 기준이다. 비용에는 엘리베이터 대기·
-/// 탑승이 인코딩돼 있어서, 시간까지 거리로 계산하면 다른 층 매장이 실제보다
-/// 가깝게 느껴진다. 반대로 거리를 비용으로 적으면 그만큼 부풀어 보인다.
-/// ETA 카드가 이미 같은 규칙을 쓴다.
-String reachLabel(NodeReach reach) {
-  final minutes = (reach.costM / _walkingSpeedMetersPerSecond / 60)
-      .ceil()
-      .clamp(1, 999);
-  return '${reach.distanceM.round()}m · 도보 $minutes분';
 }
 
 /// 이름에서 검색어와 일치하는 구간만 강조한 span 목록을 만든다.
@@ -473,13 +454,11 @@ class _SearchPanelState extends State<SearchPanel> {
     // 서버가 새 mode를 추가하거나 계약을 어긴 경우에는 후보를 임의로 추천하지
     // 않는다. 사용자가 다른 표현으로 재검색할 수 있는 안전한 noMatch로 보낸다.
     return switch (discovery.mode) {
-      DiscoveryMode.direct => discovery.matches.isEmpty
-          ? _SearchPhase.noMatch
-          : _SearchPhase.results,
+      DiscoveryMode.direct =>
+        discovery.matches.isEmpty ? _SearchPhase.noMatch : _SearchPhase.results,
       DiscoveryMode.clarify => _SearchPhase.clarify,
-      DiscoveryMode.results => discovery.matches.isEmpty
-          ? _SearchPhase.noMatch
-          : _SearchPhase.results,
+      DiscoveryMode.results =>
+        discovery.matches.isEmpty ? _SearchPhase.noMatch : _SearchPhase.results,
       DiscoveryMode.noMatch || DiscoveryMode.unknown => _SearchPhase.noMatch,
       DiscoveryMode.degraded => _SearchPhase.degraded,
     };
@@ -503,7 +482,8 @@ class _SearchPanelState extends State<SearchPanel> {
             ? null
             : Map<String, List<String>>.fromEntries(
                 _selectedFacets.entries.map(
-                  (entry) => MapEntry(entry.key, List<String>.from(entry.value)),
+                  (entry) =>
+                      MapEntry(entry.key, List<String>.from(entry.value)),
                 ),
               ),
         showAll: showAll,
@@ -693,7 +673,10 @@ class _SearchPanelState extends State<SearchPanel> {
     if (building != null) {
       rows.add(
         ListTile(
-          leading: const Icon(Icons.apartment_outlined, color: AppColors.primary),
+          leading: const Icon(
+            Icons.apartment_outlined,
+            color: AppColors.primary,
+          ),
           title: Text.rich(
             TextSpan(
               children: highlightedNameSpans(building.name, _submittedQuery),
@@ -797,7 +780,9 @@ class _SearchPanelState extends State<SearchPanel> {
                 children: _discoveryOptions
                     .map(
                       (option) => ActionChip(
-                        key: Key('facet-option-${option.facet}-${option.value}'),
+                        key: Key(
+                          'facet-option-${option.facet}-${option.value}',
+                        ),
                         label: Text('${option.label} (${option.count})'),
                         onPressed: () => _selectFacet(option),
                       ),

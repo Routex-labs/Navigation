@@ -269,6 +269,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
       if (outdoor != null) unawaited(outdoor.returnToOutdoorView());
     }
     _dropIndoorOriginIfOutdoors();
+    // 건물 안으로 들어온 시점에 미리 계산해 둔다. 매장을 지도에서 바로 눌러
+    // 상세를 여는 흐름은 검색을 거치지 않으므로, 여기서 준비하지 않으면 상세에
+    // 거리 줄이 비어 있다가 나중에야 채워진다.
+    unawaited(_refreshReach());
   }
 
   /// 야외 컨텍스트로 나왔을 때, 실내 지점(층+노드)으로 잡아둔 출발지를 버린다.
@@ -483,6 +487,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
         // 대분류 칩을 없앴으므로 업종은 한 줄로만 보여 준다. 소분류가 없는
         // 장소에서 업종이 통째로 사라지지 않도록 대분류로 떨어뜨린다.
         subcategory: match.subcategory ?? match.category,
+        // 검색 결과 목록이 쓰는 것과 **같은 계산 결과**를 넘긴다. 두 화면이
+        // 같은 매장에 다른 거리를 적으면 어느 쪽도 못 믿게 된다.
+        reach: match.nodeId == null ? null : _reachByNodeId?[match.nodeId],
         onCloseAll: _requestCloseSheetChain,
       ),
     );
@@ -952,6 +959,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
                   setState(() => _outdoorIndoorEntered = entered);
                   // 오버레이를 닫고 야외로 나온 순간부터는 위치·출발지가 GPS다.
                   if (!entered) _dropIndoorOriginIfOutdoors();
+                  // 실내 컨텍스트가 켜지고 꺼질 때마다 거리 기준이 통째로 바뀐다.
+                  unawaited(_refreshReach());
                 },
                 onStoreTap: _onMapStoreTap,
                 onLocationAnchored: _onLocationAnchored,

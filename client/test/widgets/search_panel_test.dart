@@ -9,6 +9,7 @@ import 'package:navigation_client/models/poi_search_result.dart';
 import 'package:navigation_client/repositories/building_repository.dart';
 import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/theme/app_theme.dart';
+import 'package:navigation_client/widgets/reach_label.dart';
 import 'package:navigation_client/widgets/search_panel.dart';
 
 void main() {
