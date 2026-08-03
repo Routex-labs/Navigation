@@ -131,7 +131,7 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
             .where((section) => section is! MapSection)
             .toList();
 
-  /// 길찾기 버튼은 하단 고정 바 한 곳에만 있다. chain 규약을 타지 않도록
+  /// 길찾기 버튼은 이름 바로 아래 한 곳에만 있다. chain 규약을 타지 않도록
   /// `_markIntentional`을 거친다(F5).
   void _pop(StoreInfoAction action) {
     _markIntentional();
@@ -219,58 +219,63 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
               ),
               clipBehavior: Clip.antiAlias,
               child: SingleChildScrollView(
-                      controller: scrollController,
-                      padding: EdgeInsets.only(
-                        bottom: 20 + MediaQuery.paddingOf(context).bottom,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const SheetGrabHandle(),
-                          SheetHeader(
-                            onCloseAll: widget.onCloseAll,
-                            onIntentionalPop: _markIntentional,
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-                            child: _PlaceCore(
-                              title: widget.title,
-                              subtitle: widget.subtitle,
-                              category: widget.category,
-                              subcategory: subcategory,
-                            ),
-                          ),
-                          // 이름을 읽은 직후가 길찾기를 누르는 자리다. 사진·메뉴를
-                          // 지나 하단까지 내려가야 한다면 흐름이 한 번 끊긴다.
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-                            child: _PlaceActions(
-                              favorite: favorite,
+                controller: scrollController,
+                padding: EdgeInsets.only(
+                  bottom: 20 + MediaQuery.paddingOf(context).bottom,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SheetGrabHandle(),
+                    SheetHeader(
+                      onCloseAll: widget.onCloseAll,
+                      onIntentionalPop: _markIntentional,
+                      // 저장은 눌러도 시트가 그대로 남는 유일한 버튼이라 길찾기와
+                      // 같은 줄에 두지 않는다([SheetHeader.trailing] 주석).
+                      trailing: favorite == null
+                          ? null
+                          : _SaveToggle(
                               isSaved: saved,
-                              onToggleFavorite: _onToggleFavorite,
-                              onOrigin: () => _pop(StoreInfoAction.setOrigin),
-                              onDestination: () =>
-                                  _pop(StoreInfoAction.setDestination),
+                              onPressed: _onToggleFavorite,
                             ),
-                          ),
-                          if (_isLoading)
-                            const Padding(
-                              padding: EdgeInsets.fromLTRB(20, 24, 20, 8),
-                              child: _DetailLoadingPlaceholder(),
-                            )
-                          else if (sections.isNotEmpty)
-                            Padding(
-                              // 좌우 여백은 섹션이 스스로 갖는다. 사진·메뉴는
-                              // 시트 끝까지 써야 해서 여기서 일괄로 줄 수 없다.
-                              padding: const EdgeInsets.only(top: 20),
-                              child: PlaceDetailSections(
-                                sections: sections,
-                                floorLabel: _detail?.location.floorLabel,
-                              ),
-                            ),
-                        ],
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                      child: _PlaceCore(
+                        title: widget.title,
+                        subtitle: widget.subtitle,
+                        category: widget.category,
+                        subcategory: subcategory,
                       ),
+                    ),
+                    // 이름을 읽은 직후가 길찾기를 누르는 자리다. 사진·메뉴를
+                    // 지나 하단까지 내려가야 한다면 흐름이 한 번 끊긴다.
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                      child: _PlaceActions(
+                        onOrigin: () => _pop(StoreInfoAction.setOrigin),
+                        onDestination: () =>
+                            _pop(StoreInfoAction.setDestination),
+                      ),
+                    ),
+                    if (_isLoading)
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(20, 24, 20, 8),
+                        child: _DetailLoadingPlaceholder(),
+                      )
+                    else if (sections.isNotEmpty)
+                      Padding(
+                        // 좌우 여백은 섹션이 스스로 갖는다. 사진·메뉴는
+                        // 시트 끝까지 써야 해서 여기서 일괄로 줄 수 없다.
+                        padding: const EdgeInsets.only(top: 20),
+                        child: PlaceDetailSections(
+                          sections: sections,
+                          floorLabel: _detail?.location.floorLabel,
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -393,28 +398,22 @@ class _PlaceCore extends StatelessWidget {
   }
 }
 
-/// 이름 바로 아래에 놓는 출발·도착·저장 한 줄.
+/// 이름 바로 아래에 놓는 출발·도착 한 줄.
 ///
-/// 길찾기는 이 시트의 목적이라 사진·메뉴보다 먼저 눈에 닿아야 한다. 저장도 같은
-/// 줄에 두되, 무엇을 하는 버튼인지 아이콘만으로 짐작하게 두지 않고 글자를 붙인다.
+/// 길찾기는 이 시트의 목적이라 사진·메뉴보다 먼저 눈에 닿아야 한다. 저장은
+/// 여기 없다 — 눌러도 시트가 남는 유일한 버튼이라 헤더로 갔다
+/// ([SheetHeader.trailing] 주석).
+///
+/// **바닥 고정 바로 옮겨 본 적이 있는데 되돌렸다.** 스크롤 위치와 무관하게
+/// 닿는다는 이점보다, 두 자짜리 버튼이 늘 화면 바닥을 한 줄 차지하는 부담이
+/// 컸다. 같은 이유로 폭도 가로에 맞춰 늘리지 않는다 — 글자가 두 자뿐이라
+/// 늘리면 여백만 커진다. 왼쪽에 붙여 한 쌍으로 읽히게 둔다.
 class _PlaceActions extends StatelessWidget {
-  const _PlaceActions({
-    required this.favorite,
-    required this.isSaved,
-    required this.onToggleFavorite,
-    required this.onOrigin,
-    required this.onDestination,
-  });
+  const _PlaceActions({required this.onOrigin, required this.onDestination});
 
-  final FavoritePlace? favorite;
-  final bool isSaved;
-  final VoidCallback onToggleFavorite;
   final VoidCallback onOrigin;
   final VoidCallback onDestination;
 
-  // 버튼을 가로폭에 맞춰 늘리지 않는다. 글자가 두 자뿐이라 늘리면 여백만 커지고
-  // 이름·업종 줄과 무게가 맞지 않는다. 길찾기 두 개를 왼쪽에 붙여 한 쌍으로 읽히게
-  // 하고, 성격이 다른 저장은 반대쪽 끝으로 민다.
   @override
   Widget build(BuildContext context) => Row(
     key: const ValueKey('place-detail-actions'),
@@ -436,29 +435,33 @@ class _PlaceActions extends StatelessWidget {
         ),
         child: const Text('도착'),
       ),
-      if (favorite != null) ...[
-        const Spacer(),
-        OutlinedButton.icon(
-          onPressed: onToggleFavorite,
-          style: OutlinedButton.styleFrom(
-            foregroundColor: isSaved ? AppColors.primary : AppColors.muted,
-            side: BorderSide(
-              color: isSaved ? AppColors.primary : AppColors.blue100,
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
-            ),
-            textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-          ),
-          icon: Icon(
-            isSaved ? Icons.bookmark : Icons.bookmark_border,
-            size: 18,
-          ),
-          label: Text(isSaved ? '저장됨' : '저장'),
-        ),
-      ],
     ],
+  );
+}
+
+/// 헤더 우측의 저장 토글.
+///
+/// 예전에는 본문 액션 줄에서 "저장"/"저장됨" 글자를 달고 있었고, 그 주석은
+/// 아이콘만으로 짐작하게 두지 않으려는 것이라고 적고 있었다. 헤더는 자리가
+/// 아이콘 폭뿐이라 글자를 뗀다. **그 자리를 세 가지로 메운다** — 채움/윤곽으로
+/// 저장 여부를 구분하고, tooltip을 달고, 누른 결과를 스낵바가 문장으로 알린다.
+/// 셋 중 하나라도 빠지면 글자를 뗀 것이 그냥 후퇴가 된다.
+class _SaveToggle extends StatelessWidget {
+  const _SaveToggle({required this.isSaved, required this.onPressed});
+
+  final bool isSaved;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    key: const ValueKey('place-detail-save'),
+    tooltip: isSaved ? '저장 취소' : '장소에 저장',
+    onPressed: onPressed,
+    icon: Icon(
+      isSaved ? Icons.bookmark : Icons.bookmark_border,
+      size: 22,
+      color: isSaved ? AppColors.primary : AppColors.muted,
+    ),
   );
 }
 

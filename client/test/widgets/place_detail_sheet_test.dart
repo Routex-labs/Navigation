@@ -2,10 +2,28 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:navigation_client/core/service_locator.dart';
+import 'package:navigation_client/models/favorite_place.dart';
 import 'package:navigation_client/models/place_detail.dart';
+import 'package:navigation_client/models/poi_search_result.dart';
 import 'package:navigation_client/repositories/place_detail_repository.dart';
+import 'package:navigation_client/state/favorites_controller.dart';
 import 'package:navigation_client/widgets/place_detail/korean_line_break.dart';
 import 'package:navigation_client/widgets/place_detail_sheet.dart';
+import 'package:navigation_client/widgets/sheet_header.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+final _favorite = FavoritePlace.fromPoiSearchResult(
+  const PoiSearchResult(
+    name: '테스트 매장',
+    floor: '1F',
+    point: LatLng(37.5, 127.0),
+    placeId: 'place-1',
+    nodeId: 'node-1',
+  ),
+  buildingId: 'building-1',
+);
 
 void main() {
   Widget buildSubject({
@@ -14,6 +32,7 @@ void main() {
     String subtitle = '1F',
     String? category,
     String? subcategory,
+    FavoritePlace? favorite,
   }) {
     return MaterialApp(
       home: Scaffold(
@@ -24,6 +43,7 @@ void main() {
           placeId: 'place-1',
           category: category,
           subcategory: subcategory,
+          favorite: favorite,
           onCloseAll: onCloseAll ?? () {},
           repository: repository,
         ),
@@ -203,6 +223,77 @@ void main() {
     // 상단에 복제본이 없으므로 버튼은 항상 하나씩이다.
     expect(find.text('출발'), findsOneWidget);
     expect(find.text('도착'), findsOneWidget);
+  });
+
+  group('저장 토글', () {
+    late FavoritesController original;
+
+    setUp(() async {
+      original = favoritesController;
+      SharedPreferences.setMockInitialValues({});
+      favoritesController = FavoritesController(
+        prefs: await SharedPreferences.getInstance(),
+      );
+    });
+
+    tearDown(() => favoritesController = original);
+
+    // 저장은 눌러도 화면이 그대로 남는 유일한 버튼이다. 시트를 닫는 출발·도착과
+    // 같은 줄에 두면 무엇이 화면을 바꾸는 버튼인지 예측할 수 없다.
+    testWidgets('저장은 길찾기 줄이 아니라 헤더에 있다', (tester) async {
+      await tester.pumpWidget(
+        buildSubject(
+          favorite: _favorite,
+          repository: _FakeRepository(Future.value(null)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final save = find.byKey(const ValueKey('place-detail-save'));
+      expect(save, findsOneWidget);
+      expect(
+        find.descendant(of: find.byType(SheetHeader), matching: save),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('place-detail-actions')),
+          matching: save,
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('저장할 대상이 없으면 헤더에 토글을 그리지 않는다', (tester) async {
+      await tester.pumpWidget(
+        buildSubject(repository: _FakeRepository(Future.value(null))),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('place-detail-save')), findsNothing);
+      // 토글이 빠져도 헤더의 뒤로·X는 그대로다.
+      expect(find.byTooltip('뒤로'), findsOneWidget);
+      expect(find.byTooltip('전체 닫기'), findsOneWidget);
+    });
+
+    testWidgets('저장을 눌러도 시트가 닫히지 않고 상태만 바뀐다', (tester) async {
+      await tester.pumpWidget(
+        buildSubject(
+          favorite: _favorite,
+          repository: _FakeRepository(Future.value(null)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('장소에 저장'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('place-detail-save')));
+      await tester.pumpAndSettle();
+
+      // 시트는 그대로 있고, 토글만 저장됨 상태가 된다.
+      expect(find.text('테스트 매장'), findsOneWidget);
+      expect(find.byTooltip('저장 취소'), findsOneWidget);
+      expect(favoritesController.contains(_favorite.key), isTrue);
+    });
   });
 
   testWidgets('출발 버튼은 기존 StoreInfoAction 계약으로 닫힌다', (tester) async {
