@@ -29,26 +29,40 @@ class DirectionsCandidate {
   final String? floor;
 }
 
+/// "지도에서 선택"으로 정할 대상. 출발지·도착지 양쪽 모두 지도에서 고를 수
+/// 있으므로, 어느 칸을 채우려는 것인지 호출자에게 알려야 한다. bool 하나로는
+/// 표현할 수 없어 열거형으로 둔다.
+enum DirectionsMapPickTarget { origin, destination }
+
 /// 길찾기 시트가 닫힐 때 돌려주는 결과. [origin]이 null이면 "현재 위치"를
 /// 출발지로 쓴다는 뜻이다.
 class DirectionsResult {
   /// 도착지까지 정해져서 바로 경로를 그릴 수 있는 경우.
   const DirectionsResult({this.origin, required DirectionsCandidate this.destination})
-    : pickDestinationOnMap = false;
+    : pickOnMap = null;
 
-  /// "지도에서 선택"을 누른 경우. 도착지는 아직 없고, 호출자가 지도에서 매장을
-  /// 고르는 모드로 넘어가야 한다. 출발지는 시트에서 정한 값을 그대로 이어받는다.
+  /// 도착지 칸에서 "지도에서 선택"을 누른 경우. 도착지는 아직 없고, 호출자가
+  /// 지도에서 매장을 고르는 모드로 넘어가야 한다. 출발지는 시트에서 정한 값을
+  /// 그대로 이어받는다.
   const DirectionsResult.pickDestinationOnMap({this.origin})
     : destination = null,
-      pickDestinationOnMap = true;
+      pickOnMap = DirectionsMapPickTarget.destination;
+
+  /// 출발지 칸에서 "지도에서 선택"을 누른 경우. 대칭으로, 출발지는 아직 없고
+  /// **이미 고른 도착지를 되돌려준다** — 안 돌려주면 지도에서 출발지를 찍은
+  /// 순간 도착지가 사라져 사용자가 처음부터 다시 입력하게 된다.
+  const DirectionsResult.pickOriginOnMap({this.destination})
+    : origin = null,
+      pickOnMap = DirectionsMapPickTarget.origin;
 
   final DirectionsCandidate? origin;
 
-  /// [pickDestinationOnMap]이면 null이다. 그 경우 도착지는 지도 탭으로 정해진다.
+  /// [pickOnMap]이 [DirectionsMapPickTarget.destination]이면 null이다.
+  /// 그 경우 도착지는 지도 탭으로 정해진다.
   final DirectionsCandidate? destination;
 
-  /// true면 시트는 "지도에서 고르겠다"는 의사만 전달한 것이다.
-  final bool pickDestinationOnMap;
+  /// null이 아니면 시트는 "이 칸을 지도에서 고르겠다"는 의사만 전달한 것이다.
+  final DirectionsMapPickTarget? pickOnMap;
 }
 
 enum _ActiveField { origin, destination }
@@ -123,20 +137,26 @@ class DirectionsSheet extends StatefulWidget {
   State<DirectionsSheet> createState() => _DirectionsSheetState();
 }
 
-/// 검색창 바로 아래 줄. 도착지를 이름으로 찾지 않고 지도에서 직접 누르고 싶은
+/// 검색창 바로 아래 줄. 목적지를 이름으로 찾지 않고 지도에서 직접 누르고 싶은
 /// 사용자를 위한 지름길이다.
 ///
 /// 이 줄이 필요한 이유: 지도에서 매장을 눌러 "출발지로 설정"하면 이 시트가
-/// 곧바로 열리는데, 그 사용자는 방금 지도를 보고 있었으므로 도착지도 지도에서
-/// 고르려 한다. 그런데 시트가 지도를 덮고 있어 시트를 닫는 방법밖에 없었고,
-/// 닫으면 방금 지정한 출발지가 어디로 갔는지 알 수 없었다.
+/// 곧바로 열리는데, 그 사용자는 방금 지도를 보고 있었으므로 나머지 한 쪽도
+/// 지도에서 고르려 한다. 그런데 시트가 지도를 덮고 있어 시트를 닫는 방법밖에
+/// 없었고, 닫으면 방금 지정한 값이 어디로 갔는지 알 수 없었다.
+///
+/// **출발지·도착지 양쪽에 똑같이 필요하다.** 지금 활성인 칸이 어느 쪽이냐에
+/// 따라 [target]만 달라지고 자리와 생김새는 같다 — 두 칸의 조작 방법이 다르면
+/// 사용자는 한쪽에만 있는 기능을 없는 것으로 여긴다.
 class _PickOnMapTile extends StatelessWidget {
-  const _PickOnMapTile({required this.onTap});
+  const _PickOnMapTile({required this.target, required this.onTap});
 
+  final DirectionsMapPickTarget target;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final isOrigin = target == DirectionsMapPickTarget.origin;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -152,9 +172,13 @@ class _PickOnMapTile extends StatelessWidget {
             '지도에서 선택',
             style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
           ),
-          subtitle: const Text(
-            '지도에서 매장을 눌러 도착지로 지정합니다',
-            style: TextStyle(fontSize: 12, color: AppColors.muted),
+          // 제목은 같아도 부제는 갈라야 한다. 출발지 칸에서 눌렀는데 "도착지로
+          // 지정합니다"라고 적혀 있으면 사용자는 잘못 눌렀다고 판단해 되돌린다.
+          subtitle: Text(
+            isOrigin
+                ? '지도에서 매장을 눌러 출발지로 지정합니다'
+                : '지도에서 매장을 눌러 도착지로 지정합니다',
+            style: const TextStyle(fontSize: 12, color: AppColors.muted),
           ),
           trailing: const Icon(
             Icons.chevron_right,
@@ -290,6 +314,15 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
     ).pop(DirectionsResult.pickDestinationOnMap(origin: _selectedOrigin));
   }
 
+  /// "지도에서 선택" — 출발지 쪽. 도착지 쪽과 대칭이며, 이번에는 **이미 고른
+  /// 도착지**를 돌려준다. 안 돌려주면 지도에서 출발지를 찍는 순간 도착지가
+  /// 사라져, 방금까지 채워두었던 칸을 다시 입력하게 된다.
+  void _pickOriginOnMap() {
+    Navigator.of(
+      context,
+    ).pop(DirectionsResult.pickOriginOnMap(destination: _selectedDestination));
+  }
+
   /// 출발지를 고른 뒤 호출한다. 도착지가 이미 정해져 있으면(예: "도착지로
   /// 설정"에서 넘어와 미리 채워진 경우) 다시 도착지를 고르게 하지 않고
   /// 바로 시트를 닫아 길찾기 경로를 보여준다. 아직 도착지가 없으면 기존처럼
@@ -362,10 +395,16 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
                 ),
               ),
               const Divider(height: 1),
-              // 검색창 바로 아래. 도착지를 고르는 중일 때만 노출한다 — 출발지
-              // 입력이 활성인 상태에서 띄우면 "지도에서 출발지를 고른다"는 뜻으로
-              // 읽히는데, 그건 지원하지 않는 동작이다.
-              if (!isOriginActive) _PickOnMapTile(onTap: _pickDestinationOnMap),
+              // 검색창 바로 아래. 지금 활성인 칸을 지도에서 채운다 — 출발지
+              // 칸이면 출발지를, 도착지 칸이면 도착지를 고르는 모드로 넘어간다.
+              _PickOnMapTile(
+                target: isOriginActive
+                    ? DirectionsMapPickTarget.origin
+                    : DirectionsMapPickTarget.destination,
+                onTap: isOriginActive
+                    ? _pickOriginOnMap
+                    : _pickDestinationOnMap,
+              ),
               Expanded(
                 child: _loading
                     ? const Center(child: CircularProgressIndicator())
