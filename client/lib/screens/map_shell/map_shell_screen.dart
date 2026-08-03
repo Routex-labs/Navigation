@@ -474,6 +474,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
       match,
       buildingId: _buildingId,
     );
+    // 시트를 띄우기 전에 구한다. 그래프·층 도면은 이미 받아 둔 것을 재사용하고
+    // 다익스트라만 한 번 더 도는 정도라, 시트가 눈에 띄게 늦어지지 않는다.
+    // 실패는 빈 목록이므로 시설 줄만 빠지고 시트는 그대로 열린다.
+    final facilities =
+        await _indoorKey.currentState?.nearbyFacilitiesFor(match) ?? const [];
+    if (!mounted) return false;
     final action = await _withMapsLocked(
       () => PlaceDetailSheet.show(
         context,
@@ -490,6 +496,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
         // 검색 결과 목록이 쓰는 것과 **같은 계산 결과**를 넘긴다. 두 화면이
         // 같은 매장에 다른 거리를 적으면 어느 쪽도 못 믿게 된다.
         reach: match.nodeId == null ? null : _reachByNodeId?[match.nodeId],
+        // "이 매장에서" 가장 가까운 시설. 위 reach와 기준이 다르다.
+        facilities: facilities,
         onCloseAll: _requestCloseSheetChain,
       ),
     );
