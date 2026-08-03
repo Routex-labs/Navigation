@@ -68,8 +68,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// [_activeIndoorFloor] getter와 값은 같지만, 이쪽은 **바뀔 때 rebuild가
   /// 도는** 상태다 — getter만 읽으면 층을 바꿔도 "이 층 N곳"이 옛 층에 머문다.
   ///
-  /// 야외 지도는 알려주지 않는다. 카테고리 필터가 실내 전용이라 야외에서는
-  /// 이 값을 쓸 곳이 없다.
+  /// 야외 지도도 실내 진입 오버레이가 켜지면 같은 콜백으로 알려준다. 그쪽에서도
+  /// 카테고리 필터를 쓰므로, 안 받으면 "이 층 N곳"이 실내 탭에 들렀을 때의 옛
+  /// 층에 머문다. 오버레이가 꺼진 순수 야외에서는 null이 올라온다.
   String? _activeFloorLabel;
 
   /// 건물의 (층·대분류·소분류)별 매장 수. pill 목록과 개수 안내가 같은 데이터를
@@ -83,6 +84,17 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   Future<List<_CategoryEntry>> _loadCategoryEntries() async {
     return await buildingRepository.getCategoryCounts(_buildingId) ?? const [];
+  }
+
+  /// 카테고리 목록을 다시 읽는다.
+  ///
+  /// **이 화면이 Future를 한 번만 만들기 때문에 필요하다.** 리포지토리는 실패한
+  /// 요청을 캐시에 남기지 않지만([HttpBuildingRepository] `_shared` 주석), 이
+  /// 화면이 들고 있는 Future 자체는 실패한 그대로 남는다. 앱을 켠 직후 네트워크가
+  /// 아직 안 붙었거나 서버가 콜드 스타트 중이면 그 한 번의 실패가 세션 내내
+  /// "칩이 아예 없는 화면"으로 굳는다 — 새 Future를 만들어야 다시 시도된다.
+  void _reloadCategoryEntries() {
+    setState(() => _categoryEntriesFuture = _loadCategoryEntries());
   }
 
   void _onActiveFloorChanged(String? floor) {
@@ -964,7 +976,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
                 },
                 onIndoorEnteredChanged: (entered) {
                   if (_outdoorIndoorEntered == entered) return;
-                  setState(() => _outdoorIndoorEntered = entered);
+                  setState(() {
+                    _outdoorIndoorEntered = entered;
+                    // 오버레이가 닫히면 카테고리 칩 줄도 함께 사라진다. 선택만
+                    // 남겨 두면 사용자가 해제할 수단이 없는 채로, 다시 들어갔을
+                    // 때 영문 모를 강조가 걸려 있다(홈 탭으로 나갈 때와 같은 이유).
+                    if (!entered) _categorySelection = null;
+                  });
                   // 오버레이를 닫고 야외로 나온 순간부터는 위치·출발지가 GPS다.
                   if (!entered) _dropIndoorOriginIfOutdoors();
                   // 실내 컨텍스트가 켜지고 꺼질 때마다 거리 기준이 통째로 바뀐다.
@@ -972,6 +990,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
                 },
                 onStoreTap: _onMapStoreTap,
                 onLocationAnchored: _onLocationAnchored,
+                // 실내 화면과 같은 선택을 넘긴다. 야외 지도도 실내 진입
+                // 오버레이가 켜지면 같은 도면을 그리므로, 안 넘기면 칩을
+                // 눌러도 강조가 안 뜬다.
+                categorySelection: _categorySelection,
+                onFloorChanged: _onActiveFloorChanged,
                 // 실내 화면과 같은 목록을 넘긴다. 야외 지도도 실내 진입
                 // 오버레이가 켜지면 층 선택기·위치 지정을 함께 쓰므로, 상단
                 // 검색창이나 하단 바를 누른 탭이 지도 탭으로 새어들어가면
@@ -1130,23 +1153,31 @@ class _MapShellScreenState extends State<MapShellScreen> {
                               key: _favoritesPillKey,
                               onTap: _openFavorites,
                             ),
-                            // 카테고리 필터는 **실내에서만** 노출한다. 홈(야외)은
-                            // 건물을 고르는 화면이지 그 건물 안 매장을 훑는
-                            // 화면이 아니다. 야외에 칩을 두면 아직 들어가지도
-                            // 않은 건물의 카테고리를 누르게 되고, 강조는 실내
-                            // 도면 위에 그려지므로 누른 결과가 보이지 않는다.
-                            if (_mode == MapMode.indoor) ...[
+                            // 카테고리 필터는 **건물 안을 보고 있을 때만**
+                            // 노출한다. 기준은 모드(_mode)가 아니라
+                            // [_indoorContextActive]다 — 야외 탭이어도 건물을
+                            // 탭하거나 줌으로 실내 오버레이가 켜지면 사용자에게는
+                            // 실내 화면과 똑같은 도면이 떠 있고, 그 위에 강조가
+                            // 그려진다. 모드로 분기하면 그 상태에서 칩만 사라져,
+                            // 웹(마우스로 실내 탭을 눌러 들어감)에서는 보이고
+                            // 모바일(도면을 탭해 바로 진입)에서는 안 보인다.
+                            //
+                            // 반대로 오버레이가 꺼진 순수 야외에서는 계속 감춘다.
+                            // 아직 들어가지도 않은 건물의 카테고리를 누르게 되고,
+                            // 강조는 도면 위에 그려지므로 결과가 보이지 않는다.
+                            if (_indoorContextActive) ...[
                               const SizedBox(width: 8),
                               _CategoryChipsRow(
                                 entriesFuture: _categoryEntriesFuture,
                                 selection: _categorySelection,
                                 onSelectionChanged: _onCategorySelectionChanged,
+                                onRetry: _reloadCategoryEntries,
                               ),
                             ],
                           ],
                         ),
                         // 소분류 줄과 개수 안내는 대분류를 고른 뒤에만 뜬다.
-                        if (_mode == MapMode.indoor &&
+                        if (_indoorContextActive &&
                             _categorySelection != null) ...[
                           const SizedBox(height: _overlayGap),
                           _SubcategoryPillsRow(
@@ -1388,17 +1419,29 @@ class _CategoryChipsRow extends StatelessWidget {
     required this.entriesFuture,
     required this.selection,
     required this.onSelectionChanged,
+    required this.onRetry,
   });
 
   final Future<List<_CategoryEntry>> entriesFuture;
   final CategorySelection? selection;
   final ValueChanged<CategorySelection?> onSelectionChanged;
 
+  /// 목록 로드가 실패했을 때 다시 읽기.
+  final VoidCallback onRetry;
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<_CategoryEntry>>(
       future: entriesFuture,
       builder: (context, snapshot) {
+        // 실패를 빈 목록과 같이 취급하면 안 된다. 둘 다 `data == null`이지만
+        // 화면에서 아무것도 안 그리면 사용자에게는 "이 앱엔 원래 카테고리가
+        // 없다"로 보이고, 다시 시도할 방법도 없다. 실패는 눌러서 재시도할 수
+        // 있는 칩으로 드러낸다.
+        if (snapshot.connectionState == ConnectionState.done &&
+            snapshot.hasError) {
+          return _CategoryRetryChip(onTap: onRetry);
+        }
         final entries = snapshot.data ?? const <_CategoryEntry>[];
         if (entries.isEmpty) return const SizedBox.shrink();
         final categories = sortedCategoryLabels(
@@ -1693,6 +1736,48 @@ class _CategoryChip extends StatelessWidget {
                   fontSize: 12.5,
                   fontWeight: FontWeight.w700,
                   color: selected ? Colors.white : AppColors.text,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 카테고리 목록을 못 읽었을 때 칩 자리에 대신 뜨는 재시도 버튼.
+///
+/// 칩과 같은 모양·같은 자리에 둔다. 별도 배너로 띄우면 지도 위 오버레이가
+/// 한 줄 더 늘어나 검색창·안내 카드와 자리를 다투게 된다.
+class _CategoryRetryChip extends StatelessWidget {
+  const _CategoryRetryChip({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      elevation: 3,
+      shadowColor: Colors.black.withValues(alpha: 0.15),
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.refresh_rounded, size: 16, color: AppColors.muted),
+              SizedBox(width: 6),
+              Text(
+                '카테고리 다시 불러오기',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.text,
                 ),
               ),
             ],

@@ -36,6 +36,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/eta_card.dart';
 import '../../core/map_route_style.dart';
 import '../../widgets/destination_pin.dart';
+import '../../widgets/category_map_filter.dart';
 import '../../widgets/category_map_icon.dart';
 import '../../widgets/floor_facility_style.dart';
 import '../../widgets/floor_selector.dart';
@@ -113,6 +114,12 @@ const _floorOutlineLayerId = 'outdoor-floor-outline-line';
 const _indoorTilesSourceIdBase = 'outdoor-indoor-tiles';
 const _indoorFootprintLayerIdBase = 'outdoor-indoor-footprint';
 const _indoorStoresFillLayerIdBase = 'outdoor-indoor-stores-fill';
+// 카테고리 필터로 고른 매장만 파란톤으로 덧칠하는 fill. 일반 매장 fill 위,
+// 수직이동 오버레이 아래에 넣어 실내 화면(_categoryHighlightFillLayerId)과
+// 레이어 순서를 맞춘다 — 순서가 어긋나면 같은 선택인데 두 화면에서 강조가
+// 다른 것에 가려진다.
+const _indoorCategoryHighlightFillLayerIdBase =
+    'outdoor-indoor-category-highlight-fill';
 // 수직이동(에스컬레이터/엘리베이터) 구조물 폴리곤을 초록톤으로 덧칠하는 fill.
 // _indoorStoresFillLayerIdBase 위, 라벨/아이콘보다 아래에 삽입해 초록 배경 + 라벨/
 // 아이콘이 한 덩어리로 읽히게 한다. 실내 화면의 _verticalTransportFillLayerId와
@@ -447,6 +454,8 @@ class OutdoorMapBody extends StatefulWidget {
     this.onIndoorEnteredChanged,
     this.onStoreTap,
     this.onLocationAnchored,
+    this.categorySelection,
+    this.onFloorChanged,
     this.outerOverlayKeys = const [],
   });
 
@@ -480,6 +489,22 @@ class OutdoorMapBody extends StatefulWidget {
   /// 않으면 매장을 출발지로 지정해 길찾기를 한 뒤 위치를 다시 잡아도, 다음
   /// 길찾기가 방금 잡은 위치가 아니라 예전에 고른 매장에서 출발한다.
   final VoidCallback? onLocationAnchored;
+
+  /// 지금 카테고리 필터에서 고른 값. 실내 진입 오버레이의 매장 강조에 쓴다.
+  ///
+  /// **실내 화면과 같은 값을 받아야 한다.** 야외 지도는 건물을 탭하거나 줌
+  /// 임계값을 넘기면 그 자리에서 실내 도면을 띄우는데(=실내 탭으로 넘어가지
+  /// 않는다), 이 값을 안 받으면 사용자가 보고 있는 도면은 실내 화면과 똑같은데
+  /// 카테고리를 눌러도 아무것도 강조되지 않는다.
+  final CategorySelection? categorySelection;
+
+  /// 지금 보고 있는 층이 바뀔 때 호출된다. 실내 오버레이가 꺼져 있으면 층 개념이
+  /// 없으므로 null을 올린다.
+  ///
+  /// [IndoorMapBody.onFloorChanged]와 같은 계약이다. 카테고리 필터의 "이 층 N곳"
+  /// 안내가 이 값을 쓰는데, 안 올리면 실내 탭에 들렀다 온 사용자에게 **옛 층
+  /// 기준 개수**가 남는다.
+  final ValueChanged<String?>? onFloorChanged;
 
   /// 상위(MapShellScreen)가 지도 위에 얹은 오버레이(검색창·저장한 장소 pill·
   /// 카테고리 chip 열·하단 공용 바 등)의 GlobalKey들. 이 영역 안의 탭은
@@ -558,6 +583,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   late String _indoorTilesSourceId = _idFor(_indoorTilesSourceIdBase);
   late String _indoorFootprintLayerId = _idFor(_indoorFootprintLayerIdBase);
   late String _indoorStoresFillLayerId = _idFor(_indoorStoresFillLayerIdBase);
+  late String _indoorCategoryHighlightFillLayerId = _idFor(
+    _indoorCategoryHighlightFillLayerIdBase,
+  );
   late String _indoorVerticalTransportFillLayerId = _idFor(
     _indoorVerticalTransportFillLayerIdBase,
   );
@@ -581,6 +609,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _indoorTilesSourceId = _idFor(_indoorTilesSourceIdBase);
     _indoorFootprintLayerId = _idFor(_indoorFootprintLayerIdBase);
     _indoorStoresFillLayerId = _idFor(_indoorStoresFillLayerIdBase);
+    _indoorCategoryHighlightFillLayerId = _idFor(
+      _indoorCategoryHighlightFillLayerIdBase,
+    );
     _indoorVerticalTransportFillLayerId = _idFor(
       _indoorVerticalTransportFillLayerIdBase,
     );
@@ -600,6 +631,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _indoorFacilityLabelLayerId,
     _indoorStoresLabelLayerId,
     _indoorVerticalTransportFillLayerId,
+    _indoorCategoryHighlightFillLayerId,
     _indoorStoresFillLayerId,
     _indoorFootprintLayerId,
   ];
@@ -677,6 +709,20 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// [IndoorMapBodyState.currentFloor]와 같은 계약이라 상위가 두 화면을
   /// 동일하게 다룰 수 있다.
   String? get currentFloor => _activeFloor;
+
+  /// 마지막으로 상위에 알린 층. 같은 값을 반복해서 올리면 상위가 매번 setState를
+  /// 돌게 되므로 여기서 걸러 낸다.
+  String? _notifiedFloor;
+
+  /// 지금 보고 있는 층을 상위에 알린다. 실내 오버레이가 꺼져 있으면 층 개념이
+  /// 없으므로 null이다 — 층·진입 상태 둘 중 하나만 바뀌어도 결과가 달라지므로
+  /// 양쪽 변경 지점에서 모두 부른다.
+  void _notifyActiveFloor() {
+    final floor = _indoorEntered ? _activeFloor : null;
+    if (_notifiedFloor == floor) return;
+    _notifiedFloor = floor;
+    widget.onFloorChanged?.call(floor);
+  }
 
   @override
   void initState() {
@@ -785,6 +831,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     super.didUpdateWidget(oldWidget);
     // 실내 탭으로 넘어가면(active=false) GPS 구독을 끊고, 돌아오면 다시 붙인다.
     if (oldWidget.active != widget.active) _syncGpsSubscription();
+    // 카테고리 선택이 바뀌면 강조 레이어의 필터만 갈아 끼운다. 레이어를 지웠다
+    // 다시 만들지 않는 이유는 kCategoryHighlightNoneFilter 주석 참고.
+    if (oldWidget.categorySelection != widget.categorySelection) {
+      unawaited(_applyCategoryFilter());
+    }
   }
 
   @override
@@ -875,6 +926,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _buildingFootprint = building?.footprintWgs84;
       _activeFloor = building?.initialFloor;
     });
+    _notifyActiveFloor();
     _syncDestinationLayer();
     _syncBuildingLayer();
     // 스타일이 이미 로드된 뒤 건물이 늦게 도착한 케이스(테스트/느린 네트워크)를
@@ -966,6 +1018,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       // 층이 바뀌면 그 층에 강조하던 매장은 지도에 없다. 강조도 초기화.
       _highlightedStoreId = null;
     });
+    _notifyActiveFloor();
     // 층이 바뀐 순간 이전 층의 외곽선은 더 이상 맞지 않는다. 새 도면이 도착할
     // 때까지(지하 → 다른 층) 선을 지워 둔다 — 틀린 경계를 보여주지 않는다.
     unawaited(_syncFloorOutlineLayer());
@@ -2507,6 +2560,34 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
   }
 
+  /// 지금 선택에 해당하는 MapLibre 필터 표현식. 선택이 없으면 아무것도 맞지
+  /// 않는 필터를 돌려준다. 레이어 등록 시점과 갱신 시점이 같은 함수를 쓰게 해서
+  /// 한쪽만 고쳐 어긋나는 일을 막는다(indoor_overlay_layers.dart의 "등록과
+  /// 갱신이 같은 함수를 쓴다" 규칙과 같은 이유).
+  List<Object> _categoryFilterExpression() {
+    final selection = widget.categorySelection;
+    if (selection == null) return kCategoryHighlightNoneFilter;
+    return categoryHighlightFilter(selection);
+  }
+
+  /// 강조 레이어의 필터만 갈아 끼운다.
+  ///
+  /// `setLayerProperties`가 아니라 `setFilter`를 쓴다 — 전자는 넘기지 않은
+  /// 속성까지 null로 함께 보내 스펙 기본값(fill-color는 검정)으로 되돌리므로
+  /// 실기기에서 지도가 검게 덮인다(indoor_overlay_layers.dart 상단 주석).
+  Future<void> _applyCategoryFilter() async {
+    final controller = _mapController;
+    if (controller == null || !_styleReady || !_indoorTilesRegistered) return;
+    // 층 전환과 겹치면 이미 제거된 레이어를 가리킬 수 있다. 페이드 갱신과 같은
+    // 이유로 삼킨다 — 다음 등록이 어차피 현재 선택으로 필터를 넣어 준다.
+    try {
+      await controller.setFilter(
+        _indoorCategoryHighlightFillLayerId,
+        _categoryFilterExpression(),
+      );
+    } catch (_) {}
+  }
+
   /// 현재 진입 상태에 맞는 오버레이 페이드 표현식.
   /// 구간이 진입 전후로 왜 다른지는 [indoorOverlayFadeExpr] 쪽 주석 참고.
   List<Object> _fadeExpr({double maxOpacity = 1}) =>
@@ -2528,6 +2609,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     for (final (id, props) in [
       (_indoorFootprintLayerId, indoorFootprintProps(fadeExpr)),
       (_indoorStoresFillLayerId, indoorStoresFillProps(fadeExpr)),
+      (
+        _indoorCategoryHighlightFillLayerId,
+        indoorCategoryHighlightProps(fadeExpr),
+      ),
       (
         _indoorVerticalTransportFillLayerId,
         indoorVerticalTransportProps(fadeExpr),
@@ -2726,6 +2811,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
     setState(() => _indoorEntered = value);
     widget.onIndoorEnteredChanged?.call(value);
+    // 진입/이탈로 "지금 보고 있는 층"의 유무 자체가 바뀐다.
+    _notifyActiveFloor();
     // 실내로 들어가면 GPS 구독을 끊고 마커를 지운다. 다시 나가면 재구독한다.
     _syncGpsSubscription();
     // 위치 아이콘의 주인이 바뀌는 순간이다. 야외로 나가면 실내 위치 마커를
@@ -2888,6 +2975,20 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         indoorStoresFillProps(fadeExpr),
         sourceLayer: 'stores',
         belowLayerId: _routeCasingLayerId,
+      );
+      // 카테고리 강조. 일반 매장 fill 바로 위에 얹어 선택한 매장만 파랗게
+      // 덮는다. 선택이 없을 때도 레이어는 남겨 두고 아무것도 맞지 않는 필터를
+      // 걸어 둔다 — 이유는 kCategoryHighlightNoneFilter 주석.
+      await controller.addFillLayer(
+        _indoorTilesSourceId,
+        _indoorCategoryHighlightFillLayerId,
+        indoorCategoryHighlightProps(fadeExpr),
+        sourceLayer: 'stores',
+        belowLayerId: _routeCasingLayerId,
+        filter: _categoryFilterExpression(),
+        // 탭은 아래 일반 매장 fill이 받는다. 여기서도 받으면 같은 폴리곤에
+        // 두 번 반응한다(실내 화면과 같은 이유).
+        enableInteraction: false,
       );
       // 수직이동 구조물(에스컬레이터/엘리베이터) 전용 오버레이. 일반 매장 fill
       // 바로 위, 라벨/POI 아이콘보다 아래에 깔아서 초록 아이콘과 한 덩어리로
