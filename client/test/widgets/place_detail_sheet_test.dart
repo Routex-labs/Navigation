@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/core/service_locator.dart';
+import 'package:navigation_client/domain/dijkstra.dart';
 import 'package:navigation_client/models/favorite_place.dart';
 import 'package:navigation_client/models/place_detail.dart';
 import 'package:navigation_client/models/poi_search_result.dart';
@@ -33,6 +34,7 @@ void main() {
     String? category,
     String? subcategory,
     FavoritePlace? favorite,
+    NodeReach? reach,
   }) {
     return MaterialApp(
       home: Scaffold(
@@ -44,6 +46,7 @@ void main() {
           category: category,
           subcategory: subcategory,
           favorite: favorite,
+          reach: reach,
           onCloseAll: onCloseAll ?? () {},
           repository: repository,
         ),
@@ -223,6 +226,59 @@ void main() {
     // 상단에 복제본이 없으므로 버튼은 항상 하나씩이다.
     expect(find.text('출발'), findsOneWidget);
     expect(find.text('도착'), findsOneWidget);
+  });
+
+  // 이 시트는 스크롤 제스처를 이미 두 가지로 쓴다(위로 끌면 커지고, 끝에서
+  // 아래로 끌면 닫힌다). 끝에서 내용이 늘어나는 표시까지 겹치면 "더 볼 게
+  // 남았다"는 잘못된 신호가 된다.
+  testWidgets('본문 끝에서 늘어나는 overscroll 표시를 그리지 않는다', (tester) async {
+    await tester.pumpWidget(
+      buildSubject(
+        repository: _FakeRepository(
+          Future.value(
+            _detail(
+              sections: [
+                for (var i = 0; i < 12; i++)
+                  {'type': 'summary', 'text': '긴 본문 $i'},
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(StretchingOverscrollIndicator), findsNothing);
+    expect(find.byType(GlowingOverscrollIndicator), findsNothing);
+    // 표시만 끈 것이라 스크롤 자체는 그대로 동작해야 한다.
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
+  });
+
+  group('현재 위치 기준 거리', () {
+    // 목록에 74m라고 적혀 있는데 눌러 들어온 상세가 다른 값을 말하면 어느 쪽도
+    // 못 믿게 된다. 두 화면이 같은 reachLabel을 쓰는지 값으로 확인한다.
+    testWidgets('거리와 도보 시간을 층·업종 아래에 보여준다', (tester) async {
+      await tester.pumpWidget(
+        buildSubject(
+          repository: _FakeRepository(Future.value(null)),
+          reach: const NodeReach(distanceM: 124.4, costM: 124.4),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('124m · 도보 2분'), findsOneWidget);
+    });
+
+    testWidgets('위치가 없으면 거리 줄을 아예 그리지 않는다', (tester) async {
+      await tester.pumpWidget(
+        buildSubject(repository: _FakeRepository(Future.value(null))),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('도보'), findsNothing);
+      // 층·업종 줄은 그대로다.
+      expect(find.textContaining('1F'), findsOneWidget);
+    });
   });
 
   group('저장 토글', () {

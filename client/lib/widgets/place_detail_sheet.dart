@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/service_locator.dart';
+import '../domain/dijkstra.dart';
 import '../models/favorite_place.dart';
 import '../models/place_detail.dart';
 import '../repositories/place_detail_repository.dart';
@@ -8,6 +9,7 @@ import '../theme/app_theme.dart';
 import 'place_detail/place_detail_rich_sections.dart';
 import 'place_detail/place_detail_sections.dart';
 import 'category_icon.dart';
+import 'reach_label.dart';
 import 'sheet_grab_handle.dart';
 import 'sheet_header.dart';
 
@@ -44,6 +46,7 @@ class PlaceDetailSheet extends StatefulWidget {
     this.favorite,
     this.category,
     this.subcategory,
+    this.reach,
     this.repository,
     required this.onCloseAll,
   });
@@ -53,10 +56,21 @@ class PlaceDetailSheet extends StatefulWidget {
   final String buildingId;
   final String? placeId;
   final FavoritePlace? favorite;
+
+  /// 현재 위치에서 이 매장까지의 거리·비용. 상위(MapShellScreen)가 검색 결과
+  /// 목록과 **같은 계산 결과**를 그대로 넘긴다 — 목록에 74m라고 적혀 있는데
+  /// 눌러 들어온 상세가 다른 값을 말하면 어느 쪽도 못 믿게 된다.
+  ///
+  /// null이면 줄을 그리지 않는다. 위치를 아직 안 잡았거나 그래프가 끊긴
+  /// 경우이고, 그 상태에서 "거리 알 수 없음"을 적어 봐야 사용자가 할 수 있는
+  /// 일은 "위치 지정" 하나뿐이라 이 자리에서 알릴 이유가 없다.
+  final NodeReach? reach;
+
   /// 헤더 아이콘의 대분류 폴백·강조색. 세부 규칙(`카페·베이커리` 등)이 먼저고,
   /// 거기 걸리지 않는 일반 매장이 이 값으로 떨어진다.
   final String? category;
   final String? subcategory;
+
   /// 테스트에서는 가짜를 넣고, 앱에서는 service locator의 전역 저장소를 쓴다.
   final PlaceDetailRepository? repository;
   final VoidCallback onCloseAll;
@@ -70,6 +84,7 @@ class PlaceDetailSheet extends StatefulWidget {
     FavoritePlace? favorite,
     String? category,
     String? subcategory,
+    NodeReach? reach,
     PlaceDetailRepository? repository,
     required VoidCallback onCloseAll,
   }) {
@@ -95,6 +110,7 @@ class PlaceDetailSheet extends StatefulWidget {
           favorite: favorite,
           category: category,
           subcategory: subcategory,
+          reach: reach,
           repository: repository,
           onCloseAll: onCloseAll,
         ),
@@ -192,7 +208,8 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
   @override
   Widget build(BuildContext context) {
     final favorite = widget.favorite;
-    final saved = favorite != null && favoritesController.contains(favorite.key);
+    final saved =
+        favorite != null && favoritesController.contains(favorite.key);
     final subcategory = widget.subcategory;
     final sections = _visibleSections;
 
@@ -218,63 +235,67 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                 borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
               ),
               clipBehavior: Clip.antiAlias,
-              child: SingleChildScrollView(
-                controller: scrollController,
-                padding: EdgeInsets.only(
-                  bottom: 20 + MediaQuery.paddingOf(context).bottom,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SheetGrabHandle(),
-                    SheetHeader(
-                      onCloseAll: widget.onCloseAll,
-                      onIntentionalPop: _markIntentional,
-                      // 저장은 눌러도 시트가 그대로 남는 유일한 버튼이라 길찾기와
-                      // 같은 줄에 두지 않는다([SheetHeader.trailing] 주석).
-                      trailing: favorite == null
-                          ? null
-                          : _SaveToggle(
-                              isSaved: saved,
-                              onPressed: _onToggleFavorite,
-                            ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-                      child: _PlaceCore(
-                        title: widget.title,
-                        subtitle: widget.subtitle,
-                        category: widget.category,
-                        subcategory: subcategory,
+              child: ScrollConfiguration(
+                behavior: const _NoOverscrollIndicator(),
+                child: SingleChildScrollView(
+                  controller: scrollController,
+                  padding: EdgeInsets.only(
+                    bottom: 20 + MediaQuery.paddingOf(context).bottom,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SheetGrabHandle(),
+                      SheetHeader(
+                        onCloseAll: widget.onCloseAll,
+                        onIntentionalPop: _markIntentional,
+                        // 저장은 눌러도 시트가 그대로 남는 유일한 버튼이라 길찾기와
+                        // 같은 줄에 두지 않는다([SheetHeader.trailing] 주석).
+                        trailing: favorite == null
+                            ? null
+                            : _SaveToggle(
+                                isSaved: saved,
+                                onPressed: _onToggleFavorite,
+                              ),
                       ),
-                    ),
-                    // 이름을 읽은 직후가 길찾기를 누르는 자리다. 사진·메뉴를
-                    // 지나 하단까지 내려가야 한다면 흐름이 한 번 끊긴다.
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-                      child: _PlaceActions(
-                        onOrigin: () => _pop(StoreInfoAction.setOrigin),
-                        onDestination: () =>
-                            _pop(StoreInfoAction.setDestination),
-                      ),
-                    ),
-                    if (_isLoading)
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(20, 24, 20, 8),
-                        child: _DetailLoadingPlaceholder(),
-                      )
-                    else if (sections.isNotEmpty)
                       Padding(
-                        // 좌우 여백은 섹션이 스스로 갖는다. 사진·메뉴는
-                        // 시트 끝까지 써야 해서 여기서 일괄로 줄 수 없다.
-                        padding: const EdgeInsets.only(top: 20),
-                        child: PlaceDetailSections(
-                          sections: sections,
-                          floorLabel: _detail?.location.floorLabel,
+                        padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                        child: _PlaceCore(
+                          title: widget.title,
+                          subtitle: widget.subtitle,
+                          category: widget.category,
+                          subcategory: subcategory,
+                          reach: widget.reach,
                         ),
                       ),
-                  ],
+                      // 이름을 읽은 직후가 길찾기를 누르는 자리다. 사진·메뉴를
+                      // 지나 하단까지 내려가야 한다면 흐름이 한 번 끊긴다.
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                        child: _PlaceActions(
+                          onOrigin: () => _pop(StoreInfoAction.setOrigin),
+                          onDestination: () =>
+                              _pop(StoreInfoAction.setDestination),
+                        ),
+                      ),
+                      if (_isLoading)
+                        const Padding(
+                          padding: EdgeInsets.fromLTRB(20, 24, 20, 8),
+                          child: _DetailLoadingPlaceholder(),
+                        )
+                      else if (sections.isNotEmpty)
+                        Padding(
+                          // 좌우 여백은 섹션이 스스로 갖는다. 사진·메뉴는
+                          // 시트 끝까지 써야 해서 여기서 일괄로 줄 수 없다.
+                          padding: const EdgeInsets.only(top: 20),
+                          child: PlaceDetailSections(
+                            sections: sections,
+                            floorLabel: _detail?.location.floorLabel,
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -300,16 +321,19 @@ class _PlaceCore extends StatelessWidget {
     required this.subtitle,
     required this.category,
     required this.subcategory,
+    required this.reach,
   });
 
   final String title;
   final String subtitle;
   final String? category;
   final String? subcategory;
+  final NodeReach? reach;
 
   @override
   Widget build(BuildContext context) {
     final label = subcategoryLabelFor(subcategory);
+    final reach = this.reach;
     final hasFloor = subtitle.isNotEmpty;
     final accent = category == null
         ? AppColors.primary
@@ -390,12 +414,59 @@ class _PlaceCore extends StatelessWidget {
                   ),
                 ),
               ],
+              // "어디인가" 다음 줄이 "어떻게 닿는가"다. 목록에서 이미 본 값을
+              // 상세에서도 같은 자리에 두어, 눌러 들어온 뒤 다시 찾지 않게 한다.
+              if (reach != null) ...[
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.directions_walk,
+                      size: 14,
+                      color: AppColors.muted,
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        reachLabel(reach),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          height: 1.3,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.text,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
       ],
     );
   }
+}
+
+/// 본문 끝에서 내용이 늘어나는 overscroll 표시를 끈다.
+///
+/// 이 시트는 스크롤 제스처를 이미 두 가지로 쓰고 있다 — 위로 끌면 시트가 커지고,
+/// 끝에서 아래로 끌면 닫힌다([DraggableScrollableSheet]). 거기에 끝에서 내용이
+/// 늘어나는 표시까지 겹치면 "아직 더 볼 게 남았다"는 잘못된 신호가 된다.
+///
+/// **표시만 끄고 물리는 건드리지 않는다.** 스크롤 physics를 바꾸면 시트를
+/// 끌어 키우고 줄이는 동작 자체가 이 스크롤의 overscroll에 얹혀 있어서 함께 깨진다.
+class _NoOverscrollIndicator extends MaterialScrollBehavior {
+  const _NoOverscrollIndicator();
+
+  @override
+  Widget buildOverscrollIndicator(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) => child;
 }
 
 /// 이름 바로 아래에 놓는 출발·도착 한 줄.
@@ -499,42 +570,44 @@ class PlaceDetailSections extends StatelessWidget {
     for (final section in sections) {
       final widget = switch (section) {
         SummarySection(:final text) => _TitledSection(
-            title: '소개',
-            child: PlaceSummarySection(text: text),
-          ),
+          title: '소개',
+          child: PlaceSummarySection(text: text),
+        ),
         HeroSection(:final items) => PlaceHeroCarousel(
-            images: [
-              for (final item in items)
-                PlaceHeroImage(assetPath: item.localAsset),
-            ],
-          ),
+          images: [
+            for (final item in items)
+              PlaceHeroImage(assetPath: item.localAsset),
+          ],
+        ),
         KeyValueSection(:final items) => PlaceKeyValueSection(
-            items: [
-              for (final item in items)
-                PlaceKeyValue(label: item.label, value: item.value),
-            ],
-          ),
+          items: [
+            for (final item in items)
+              PlaceKeyValue(label: item.label, value: item.value),
+          ],
+        ),
         TagsSection(:final tags) => PlaceTagsSection(tags: tags),
-        NoticeSection(:final text, :final until) =>
-          PlaceNoticeSection(text: text, until: until),
+        NoticeSection(:final text, :final until) => PlaceNoticeSection(
+          text: text,
+          until: until,
+        ),
         MapSection() => PlaceMapSection(floorLabel: floorLabel),
         MenuSection(:final items) => PlaceMenuSection(
-            items: [
-              for (final item in items)
-                PlaceMenuItem(
-                  name: item.name,
-                  price: item.price,
-                  description: item.description,
-                  imageAssetPath: item.imageAsset,
-                ),
-            ],
-          ),
+          items: [
+            for (final item in items)
+              PlaceMenuItem(
+                name: item.name,
+                price: item.price,
+                description: item.description,
+                imageAssetPath: item.imageAsset,
+              ),
+          ],
+        ),
         BusinessInfoSection(:final items) => PlaceBusinessInfoSection(
-            items: [
-              for (final item in items)
-                PlaceBusinessInfo(label: item.label, value: item.value),
-            ],
-          ),
+          items: [
+            for (final item in items)
+              PlaceBusinessInfo(label: item.label, value: item.value),
+          ],
+        ),
       };
       // 사진은 시트 끝까지, 메뉴는 가로 스크롤이 끝까지 흐르도록 스스로 여백을
       // 갖는다. 나머지 섹션만 여기서 본문 거터를 씌운다.
@@ -542,8 +615,9 @@ class PlaceDetailSections extends StatelessWidget {
       final padded = fullBleed
           ? widget
           : Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: placeSectionGutter),
+              padding: const EdgeInsets.symmetric(
+                horizontal: placeSectionGutter,
+              ),
               child: widget,
             );
       // 여백만으로는 섹션이 어디서 끝났는지 읽히지 않는다. 카드로 감싸는 대신
@@ -579,10 +653,6 @@ class _TitledSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      PlaceSectionTitle(title),
-      const SizedBox(height: 10),
-      child,
-    ],
+    children: [PlaceSectionTitle(title), const SizedBox(height: 10), child],
   );
 }
