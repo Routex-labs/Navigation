@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../theme/app_theme.dart';
 
 /// 하단 바에서 전환 가능한 지도 모드. [outdoor]는 야외(GPS) 지도,
 /// [indoor]는 실내 지도 화면에 대응한다.
 enum MapMode { outdoor, indoor }
+
+/// "위치 지정" 버튼 아이콘. Material 아이콘 대신 전용 에셋을 쓰는 이유는
+/// 에셋 파일 상단 주석에 있다 — 색을 알파로만 표현해 활성/비활성 두 상태에서
+/// 같은 농담 차이를 유지해야 한다.
+const _placeLocationIconAsset = 'assets/icons/place_location_pin.svg';
 
 /// 지도 화면(야외/실내) 공통 하단 바. 위치 보정 버튼(우상단) + 홈/실내
 /// 전환 세그먼트로 구성된다. 화면 전환은 Navigator push 없이 [onModeChanged]
@@ -102,13 +108,16 @@ class _CalibrateButton extends StatelessWidget {
 
 /// 위치 보정 버튼 옆에 나란히 놓이는 "위치 지정" 버튼. 지도 없이 건물에
 /// 들어와 자동 위치 추정이 아직 되지 않은 상태에서, 사용자가 지도 위 한 점을
-/// 탭해 현재 위치를 직접 지정할 수 있게 해준다. 시각적 무게를 보정 버튼과
-/// 맞추면서도 다른 액션임을 알 수 있도록 실내 톤(indoor)의 파란 아이콘을 쓴다.
+/// 탭해 현재 위치를 직접 지정할 수 있게 해준다.
 ///
-/// [active]가 true이면 지도 탭 대기 중임을 알리기 위해 배경을 indoor 색으로
-/// 채우고 아이콘을 흰색으로 바꿔 "눌린" 상태로 보인다. 사용자가 지도의
-/// 아무 곳도 아직 탭하지 않은 시점에도 어떤 버튼이 현재 활성인지 헷갈리지
-/// 않게 하는 것이 목적이다.
+/// 아이콘은 [_placeLocationIconAsset]이고 **색은 옆 위치 보정 버튼과 같은
+/// [AppColors.primary]** 다. 예전에는 "다른 액션"임을 색으로 구분하려고 실내
+/// 톤(indoor)을 썼는데, 나란히 붙은 두 원형 버튼의 파랑이 미묘하게 달라 색이
+/// 바랜 것처럼 보였다. 두 버튼의 구분은 아이콘 모양이 맡는다.
+///
+/// [active]가 true이면 지도 탭 대기 중임을 알리기 위해 배경을 채우고 아이콘을
+/// 흰색으로 바꿔 "눌린" 상태로 보인다. 사용자가 지도의 아무 곳도 아직 탭하지
+/// 않은 시점에도 어떤 버튼이 현재 활성인지 헷갈리지 않게 하는 것이 목적이다.
 class _PlaceLocationButton extends StatelessWidget {
   const _PlaceLocationButton({required this.onPressed, this.active = false});
 
@@ -117,17 +126,17 @@ class _PlaceLocationButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 활성 상태는 채워진 indoor 색 + 흰 아이콘으로, 비활성은 흰 배경 + indoor
-    // 아이콘 색으로. 홈/실내 세그먼트의 활성 표시와 시각 언어를 맞춘다.
-    final backgroundColor = active ? AppColors.indoor : Colors.white;
-    final iconColor = active ? Colors.white : AppColors.indoor;
+    // 활성은 채워진 primary + 흰 아이콘, 비활성은 흰 배경 + primary 아이콘.
+    // 홈/실내 세그먼트의 활성 표시와 시각 언어를 맞춘다.
+    final backgroundColor = active ? AppColors.primary : Colors.white;
+    final iconColor = active ? Colors.white : AppColors.primary;
     return Tooltip(
       message: active ? '지도를 탭해 위치를 지정' : '지도에서 내 위치 지정',
       child: Material(
         color: backgroundColor,
         shape: const CircleBorder(),
         elevation: active ? 6 : 4,
-        shadowColor: (active ? AppColors.indoor : Colors.black).withValues(
+        shadowColor: (active ? AppColors.primary : Colors.black).withValues(
           alpha: active ? 0.35 : 0.18,
         ),
         child: InkWell(
@@ -135,10 +144,14 @@ class _PlaceLocationButton extends StatelessWidget {
           onTap: onPressed,
           child: Padding(
             padding: const EdgeInsets.all(12),
-            child: Icon(
-              Icons.edit_location_alt_outlined,
-              size: 20,
-              color: iconColor,
+            child: SvgPicture.asset(
+              _placeLocationIconAsset,
+              width: 20,
+              height: 20,
+              // SVG는 색을 알파로만 들고 있다. srcIn이 RGB를 갈아치우고 알파는
+              // 남기므로, 몸통(옅음)과 외곽선(진함)의 농담 차이가 두 상태에서
+              // 모두 유지된다(에셋 파일 주석 참고).
+              colorFilter: ColorFilter.mode(iconColor, BlendMode.srcIn),
             ),
           ),
         ),

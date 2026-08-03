@@ -32,6 +32,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import '../../core/map_fonts.dart';
 import '../../core/map_palette.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/category_map_filter.dart';
 import '../../widgets/category_map_icon.dart';
 import '../../widgets/floor_facility_style.dart';
 import 'indoor_entry_zoom.dart';
@@ -103,6 +104,22 @@ FillLayerProperties indoorStoresFillProps(List<Object> fadeExpr) =>
     FillLayerProperties(
       fillColor: mapStoreFill,
       fillOutlineColor: mapStoreOutline,
+      fillOpacity: fadeExpr,
+    );
+
+/// 카테고리 필터로 강조된 매장 fill.
+///
+/// 색은 실내 화면과 같은 상수([kCategoryHighlightFillColor])를 쓴다. 두 화면이
+/// 같은 MVT `stores` 레이어를 보는데 강조색이 다르면, 같은 매장이 야외 오버레이
+/// 에서와 실내 화면에서 다른 색으로 보인다.
+///
+/// 다른 점은 **opacity를 fadeExpr로 묶는다**는 것뿐이다. 야외 오버레이는 줌에
+/// 따라 통째로 페이드인/아웃되므로, 강조만 불투명하게 두면 도면이 아직 안 보이는
+/// 줌에서 파란 폴리곤만 공중에 뜬다.
+FillLayerProperties indoorCategoryHighlightProps(List<Object> fadeExpr) =>
+    FillLayerProperties(
+      fillColor: kCategoryHighlightFillColor,
+      fillOutlineColor: kCategoryHighlightOutlineColor,
       fillOpacity: fadeExpr,
     );
 

@@ -68,10 +68,11 @@ const _facilityLabelLayerId = 'floor-store-facility-label';
 /// 목적지 핀 이미지의 addImage 등록 이름.
 // 디자인을 바꾸면 버전을 올린다 — 웹 addImage는 같은 이름이 이미 있으면
 // 새 비트맵을 버려서, 이름을 그대로 두면 살아 있는 지도에 반영되지 않는다.
-const _destinationPinImageName = 'marker-destination-pin-v2';
+// v3: "도착" 글씨를 비트맵에 구워 넣었다(심볼 텍스트에서 이동).
+const _destinationPinImageName = 'marker-destination-pin-v3';
 
-/// 도착 핀 iconSize의 zoom 보간 구간. textSize는 이 값을 [kPinIconToTextRatio]로
-/// 나눠 얻으므로, 여기를 바꾸면 글씨 크기도 함께 움직인다.
+/// 도착 핀 iconSize의 zoom 보간 구간. "도착" 글씨가 비트맵에 구워져 있으므로
+/// 이 값을 바꾸면 글씨도 같은 비율로 함께 커지고 작아진다.
 const _destPinIconSizeZ16 = 0.115;
 const _destPinIconSizeZ20 = 0.25;
 
@@ -409,7 +410,56 @@ class FloorPlanViewState extends State<FloorPlanView> {
   @override
   void reassemble() {
     super.reassemble();
-    unawaited(_refreshCurrentLocationSymbol());
+    unawaited(_refreshMarkerSymbols());
+  }
+
+  /// 마커 심볼 레이어들을 지우고 다시 등록한다(hot reload 전용).
+  ///
+  /// **목적지 핀이 여기 빠져 있었다.** 현재 위치 마커만 갱신했기 때문에, 핀의
+  /// 생김새나 레이어 속성을 고쳐도 hot reload 화면은 그대로였다 — 코드는 맞는데
+  /// 화면만 안 바뀌니 "고쳤는데 반영이 안 된다"로 보인다. 위젯 코드(예: 하단 바
+  /// 아이콘)는 hot reload가 바로 반영하므로, 같은 세션에서 한쪽만 바뀌는 모습이
+  /// 특히 헷갈린다.
+  ///
+  /// 순서가 중요하다. 목적지 핀을 먼저 다시 올려야(맨 위) 그다음 현재 위치를
+  /// 그 아래로 끼워 넣을 수 있다 — 원래의 위/아래 관계가 유지된다.
+  Future<void> _refreshMarkerSymbols() async {
+    final controller = _controller;
+    if (controller == null || !_styleReady) return;
+    try {
+      await controller.removeLayer(_destinationMarkerLayerId);
+      await _addDestinationPinSymbolLayer(controller);
+      await _refreshCurrentLocationSymbol();
+    } catch (error, stackTrace) {
+      // hot reload 편의 기능이므로 실패해도 앱을 죽이지 않는다.
+      debugPrint('marker symbol refresh failed: $error\n$stackTrace');
+    }
+  }
+
+  /// 목적지 핀 심볼 레이어를 얹는다.
+  ///
+  /// 도형과 글씨를 나눠 그리는 이유, 치수와 textOffset 유도, `text-font`를 반드시
+  /// 명시해야 하는 이유는 전부 [destination_pin.dart]에 있다.
+  ///
+  /// 현재 위치는 같은 소스에 함께 들어와 있어도 filter가 걸러낸다.
+  Future<void> _addDestinationPinSymbolLayer(
+    MapLibreMapController controller,
+  ) async {
+    await controller.addSymbolLayer(
+      _markersSourceId,
+      _destinationMarkerLayerId,
+      destinationPinSymbolProps(
+        imageName: _destinationPinImageName,
+        iconSizeZ16: _destPinIconSizeZ16,
+        iconSizeZ20: _destPinIconSizeZ20,
+      ),
+      filter: [
+        '==',
+        ['get', 'kind'],
+        'destination',
+      ],
+      enableInteraction: false,
+    );
   }
 
   /// 현재 위치 비트맵을 등록하고 심볼 레이어를 얹는다.
@@ -1317,57 +1367,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
     // 목적지 핀 레이어보다 먼저 등록해, 겹칠 때 목적지 핀이 위에 오게 한다.
     await _addCurrentLocationSymbolLayer(controller);
 
-    // 목적지는 빨간 물방울 핀에 "도착" 텍스트를 얹어서 표시한다. 도형과 글씨를
-    // 나눠 그리는 이유, 치수와 textOffset 유도는 [destination_pin.dart]에 있다.
-    //
-    // 아이콘 바닥(tip)이 실제 좌표에 오도록 iconAnchor는 bottom이다.
-    // iconSize/textSize는 zoom 16↔20 구간에서 같이 커지는 interpolate 식으로
-    // 걸어, 축소했을 때 핀이 지도를 다 가리는 문제를 피한다. 두 값의 비율은
-    // [kPinIconToTextRatio]로 고정돼 있어야 글씨가 머리 원 안에 남는다.
-    //
-    // 현재 위치는 이 소스에 함께 들어와 있어도 filter가 걸러낸다.
-    await controller.addSymbolLayer(
-      _markersSourceId,
-      _destinationMarkerLayerId,
-      const SymbolLayerProperties(
-        iconImage: _destinationPinImageName,
-        iconSize: [
-          'interpolate',
-          ['linear'],
-          ['zoom'],
-          16,
-          _destPinIconSizeZ16,
-          20,
-          _destPinIconSizeZ20,
-        ],
-        iconAnchor: 'bottom',
-        iconAllowOverlap: true,
-        iconIgnorePlacement: true,
-        textField: '도착',
-        // 손으로 적지 않고 iconSize에서 나눈다 — 비율이 어긋나면 글씨가 머리
-        // 원을 벗어나고 textOffset도 같이 틀어진다.
-        textSize: [
-          'interpolate',
-          ['linear'],
-          ['zoom'],
-          16,
-          _destPinIconSizeZ16 / kPinIconToTextRatio,
-          20,
-          _destPinIconSizeZ20 / kPinIconToTextRatio,
-        ],
-        textColor: kPinTextColor,
-        textAnchor: 'center',
-        textOffset: [0, kPinTextOffsetEm],
-        textAllowOverlap: true,
-        textIgnorePlacement: true,
-      ),
-      filter: [
-        '==',
-        ['get', 'kind'],
-        'destination',
-      ],
-      enableInteraction: false,
-    );
+    await _addDestinationPinSymbolLayer(controller);
 
     await controller.addGeoJsonSource(
       _highlightSourceId,

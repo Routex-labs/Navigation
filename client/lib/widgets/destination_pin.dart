@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../theme/app_theme.dart';
 
@@ -12,13 +13,30 @@ import '../theme/app_theme.dart';
 /// 빨강, 실내는 흰 원 + 진한 글씨. 같은 목적지를 가리키는 마커가 화면마다
 /// 다르게 보일 이유가 없다.
 ///
-/// ## 글씨를 캔버스에 굽지 않는 이유
+/// ## 글씨를 심볼 텍스트가 아니라 **비트맵에 굽는** 이유
 ///
-/// Flutter 웹 CanvasKit에서 **오프스크린 캔버스로 렌더링한 이미지**에는 한글
-/// 글리프가 있는 폰트가 자동으로 딸려오지 않아 "도착"이 두부(tofu) 박스로
-/// 뭉개진다. 반면 MapLibre의 심볼 텍스트는 매장명 라벨과 같은 경로를 타서 한글이
-/// 정상이다. 그래서 **도형만 여기서 그리고 글씨는 심볼 레이어의 `textField`로
-/// 얹는다.** 이 분리를 깨고 캔버스에 글씨를 그리면 웹에서만 깨진다.
+/// 예전에는 도형만 굽고 "도착"은 심볼 레이어의 `textField`로 얹었다. 웹에서는
+/// 잘 보였지만 **실기기에서는 글씨만 사라졌다.** 원인은 글씨와 그림이 서로 다른
+/// 단위로 커지기 때문이다.
+///
+/// - `textOffset`은 em(=textSize의 배수) 단위라 **dp 기준**으로 움직인다.
+/// - 아이콘 크기는 `iconSize × 비트맵의 자연 크기`인데, 그 자연 크기가 플랫폼마다
+///   다르다. 웹은 비트맵을 픽셀비 1로 등록해 128×180이 그대로 dp가 되지만,
+///   네이티브 `addImage`는 화면 밀도를 반영해 등록하므로 같은 비트맵의 dp 높이가
+///   밀도(2~3배)만큼 작아진다.
+///
+/// 그래서 웹 기준으로 맞춘 오프셋(-3.12em)이 실기기에서는 핀 높이의 2~3배를 위로
+/// 올려 버렸다. 글씨는 핀을 한참 벗어난 허공에 **흰색으로, 헤일로도 없이** 그려졌고
+/// 도면 바닥이 흰색이라 그대로 안 보였다. 핀만 덩그러니 남으니 "디자인이 반영이
+/// 안 됐다"로 읽힌다.
+///
+/// 비트맵에 구우면 글씨가 도형과 **같은 좌표계**에 있으므로 어떤 밀도에서도, 어떤
+/// zoom에서도 절대 어긋나지 않는다. 서버 글리프(`Pretendard Regular`)에 의존하지도
+/// 않는다.
+///
+/// **단, 폰트 이름을 반드시 명시한다.** 오프스크린 캔버스는 기본 폰트 폴백이
+/// 빈약해서(특히 웹 CanvasKit) 이름을 비워 두면 한글이 두부(tofu) 박스로 뭉개진다.
+/// [kPinLabelFontFamily]는 pubspec에 번들된 앱 글꼴이라 두 플랫폼 모두에서 잡힌다.
 
 /// 핀 이미지의 원본 크기. 실제 화면 크기는 심볼 레이어의 `iconSize`가 정한다.
 const kPinCanvasWidth = 128.0;
@@ -28,29 +46,28 @@ const kPinCanvasHeight = 180.0;
 const kPinHeadRadius = 54.0;
 const kPinHeadCenterY = kPinHeadRadius + 6;
 
-/// 이미지 **밑변에서** 머리 중심까지의 거리. `iconAnchor: bottom`이라 밑변이
-/// 실제 좌표에 놓이므로, 글씨를 머리 중심에 맞추려면 이 값만큼 위로 올려야 한다.
-const kPinHeadCenterFromBottom = kPinCanvasHeight - kPinHeadCenterY;
+/// 핀에 굽는 라벨.
+const kPinLabelText = '도착';
 
-/// `iconSize / textSize` 비율. 두 값을 zoom 보간식으로 걸되 이 비율을 고정하면,
-/// 확대·축소해도 글씨가 머리 원 안 같은 자리에 남는다.
-///
-/// **이 값을 내리면 글씨가 커진다**(textSize = iconSize / 비율). 머리 지름은
-/// 캔버스 108px이므로 두 글자 "도착"의 폭은 대략 `2 × textSize`, 즉 지름의
-/// `2 × 비율 × (128/108)`쯤을 차지한다. 지금 값은 지름의 70% 언저리다 — 더
-/// 내리면 글씨가 원을 넘고, 올리면 핀 안에서 작아 보인다.
-const kPinIconToTextRatio = 0.026;
+/// 라벨 글꼴. **비워 두면 안 된다** — 위 주석의 tofu 함정. pubspec에 번들된
+/// 앱 글꼴이라 웹·네이티브 모두 폰트 매니저에 등록돼 있다.
+const kPinLabelFontFamily = 'Pretendard';
 
-/// 심볼 레이어에 줄 `textOffset`의 y값(단위: em).
-///
-/// 화면상 올려야 할 픽셀은 `kPinHeadCenterFromBottom × iconSize`이고, `textOffset`
-/// 단위는 textSize의 배수이므로 `iconSize / textSize`를 곱하면 zoom과 무관한
-/// 상수가 된다. 캔버스 치수를 바꾸면 이 값도 함께 움직인다 — 그래서 손으로 적지
-/// 않고 계산한다.
-const kPinTextOffsetEm = -kPinHeadCenterFromBottom * kPinIconToTextRatio;
+/// 번들 글꼴을 못 잡는 상황에 대비한 한글 폴백. 등록 실패는 예외를 던지지 않고
+/// 조용히 두부 박스로 나타나므로, 마지막 방어선을 깔아 둔다.
+const kPinLabelFontFallback = <String>[
+  'Noto Sans KR',
+  'Apple SD Gothic Neo',
+  'Malgun Gothic',
+  'sans-serif',
+];
+
+/// 라벨 글자 크기(캔버스 좌표계). 머리 지름이 108이므로 두 글자 폭이 대략 88이
+/// 되어 원 안에 여유 있게 들어간다. 키우면 원을 넘고, 줄이면 축소 시 먼저 뭉개진다.
+const kPinLabelFontSize = 44.0;
 
 /// 글씨 색. 빨간 바탕 위에 얹으므로 흰색이다.
-const kPinTextColor = '#FFFFFF';
+const kPinTextColor = Color(0xFFFFFFFF);
 
 /// 실루엣 테두리. **흰색이 아니다** — 실내 도면 바닥이 `#FFFFFF`라 흰 테두리는
 /// 흰 배경 위에서 아무 일도 하지 않는다(경로선의 흰 casing이 안 보이는 것과 같은
@@ -60,6 +77,43 @@ const _pinOutlineColor = Color(0xFFA81B18);
 const _pinOutlineWidth = 7.0;
 // 끝점이 외곽선 반두께와 정확히 맞닿으면 antialiasing이 마지막 행을 잘라낸다.
 const _pinCanvasBottomInset = 1.0;
+
+/// 도착 핀 심볼 레이어의 **완성된** 속성 묶음.
+///
+/// 정의를 여기 하나로 모으는 이유는 실내 화면과 야외 오버레이가 각자 같은 정의를
+/// 베껴 들고 있었기 때문이다 — 두 곳이 조용히 어긋나는 일을 구조적으로 막는다
+/// (indoor_overlay_layers.dart의 "등록과 갱신이 같은 함수를 쓴다" 규칙과 같은 이유).
+///
+/// **텍스트 속성은 여기 없다.** 라벨은 비트맵에 굽는다 — 이유는 파일 상단 주석.
+///
+/// 화면마다 다른 것은 두 가지뿐이다.
+/// - [imageName]: addImage 등록 키. 웹 addImage는 같은 이름이 있으면 새 비트맵을
+///   버리므로 화면별로 따로 둔다.
+/// - [iconSizeZ16]·[iconSizeZ20]: 화면이 잡는 zoom 보간 구간. 야외 오버레이는
+///   시야가 넓어 실내보다 크게 잡는다.
+SymbolLayerProperties destinationPinSymbolProps({
+  required String imageName,
+  required double iconSizeZ16,
+  required double iconSizeZ20,
+}) => SymbolLayerProperties(
+  iconImage: imageName,
+  iconSize: [
+    'interpolate',
+    ['linear'],
+    ['zoom'],
+    16,
+    iconSizeZ16,
+    20,
+    iconSizeZ20,
+  ],
+  // 핀 바닥(tip)이 실제 좌표에 오도록.
+  iconAnchor: 'bottom',
+  // 매장 라벨과 충돌한다고 도착 핀이 숨으면 정작 목적지가 화면에서 사라진다.
+  iconAllowOverlap: true,
+  iconIgnorePlacement: true,
+  // **텍스트 속성이 하나도 없다.** "도착"은 비트맵에 구워져 있다 — 심볼 텍스트로
+  // 얹으면 글씨와 그림이 다른 단위로 커져 실기기에서 어긋난다(파일 상단 주석).
+);
 
 /// 빨간 물방울 핀을 PNG 바이트로 굽는다.
 ///
@@ -107,6 +161,28 @@ Future<Uint8List> renderDestinationPinIcon() async {
       ..style = PaintingStyle.stroke
       ..strokeWidth = _pinOutlineWidth
       ..strokeJoin = StrokeJoin.round,
+  );
+
+  // 라벨을 머리 원 중앙에 굽는다. height를 1.0으로 두어 줄 상자에 붙는 여백을
+  // 없애야 painter.height의 절반이 실제 글자의 세로 중앙과 맞는다 — 기본값이면
+  // 글씨가 원 중심보다 살짝 아래로 앉는다.
+  final label = TextPainter(
+    text: const TextSpan(
+      text: kPinLabelText,
+      style: TextStyle(
+        color: kPinTextColor,
+        fontSize: kPinLabelFontSize,
+        fontWeight: FontWeight.w700,
+        fontFamily: kPinLabelFontFamily,
+        fontFamilyFallback: kPinLabelFontFallback,
+        height: 1.0,
+      ),
+    ),
+    textDirection: TextDirection.ltr,
+  )..layout();
+  label.paint(
+    canvas,
+    Offset(cx - label.width / 2, cy - label.height / 2),
   );
 
   final image = await recorder.endRecording().toImage(
