@@ -73,6 +73,35 @@ void main() {
       expect(json['text-opacity'], isNotNull);
     });
 
+    test('매장 라벨 — 대분류 아이콘 속성이 함께 살아 있다', () {
+      final json = wireJson(indoorStoresLabelProps(fadeExpr));
+      // 라벨과 아이콘이 같은 심볼이라, 이 중 하나라도 null로 가면 아이콘이
+      // 사라지거나(icon-image) 글자가 아이콘 위에 겹쳐 찍힌다(radial-offset).
+      expect(json['icon-image'], isNotNull);
+      expect(json['icon-size'], isNotNull);
+      expect(json['icon-opacity'], isNotNull);
+      expect(json['text-variable-anchor'], isNotNull);
+      expect(json['text-radial-offset'], isNotNull);
+    });
+
+    test('매장 라벨 — text-allow-overlap은 false다', () {
+      // variable-anchor는 충돌 판정 위에서만 동작한다. true가 되면 앵커가 항상
+      // 첫 번째 값으로 굳어 이름 뒤집기가 조용히 죽는다.
+      expect(wireJson(indoorStoresLabelProps(fadeExpr))['text-allow-overlap'], isFalse);
+    });
+
+    test('편의시설 라벨 — 텍스트 속성이 살아 있다', () {
+      final json = wireJson(indoorFacilityLabelProps(fadeExpr));
+      expect(json['text-field'], isNotNull);
+      expect(json['text-font'], isNotNull);
+      expect(json['text-color'], isNotNull);
+      expect(json['text-opacity'], isNotNull);
+      // 아이콘이 centroid를 차지하므로 이름은 아래로 내려가 있어야 한다.
+      expect(json['text-offset'], isNotNull);
+      // 이 레이어는 아이콘을 그리지 않는다 — 그리면 시설 아이콘과 겹친다.
+      expect(json['icon-image'], isNull);
+    });
+
     test('POI·시설 아이콘 — icon-image/icon-size가 살아 있다', () {
       for (final props in [
         indoorPoiIconProps(fadeExpr),

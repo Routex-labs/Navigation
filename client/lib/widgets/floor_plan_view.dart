@@ -21,6 +21,7 @@ import '../features/debug_mode/debug_map_overlay.dart';
 import '../models/floor_plan.dart';
 import '../screens/outdoor_map/indoor_entry_zoom.dart';
 import 'category_map_filter.dart';
+import 'category_map_icon.dart';
 import 'floor_facility_style.dart';
 
 /// maplibre_gl은 web/android/iOS만 지원한다(패키지 자체 pubspec에 명시된
@@ -58,6 +59,11 @@ const _highlightSourceId = 'floor-highlight';
 const _storesFillLayerId = 'floor-stores-fill';
 const _categoryHighlightFillLayerId = 'floor-category-highlight-fill';
 const _verticalTransportFillLayerId = 'floor-vertical-transport-fill';
+
+/// 편의시설의 텍스트 전용 라벨 레이어. 대분류 아이콘이 붙는 매장명 라벨
+/// (`floor-stores-label`)과 정확히 반대 집합을 그린다
+/// ([facilityStoreLabelFilter]).
+const _facilityLabelLayerId = 'floor-store-facility-label';
 
 /// 목적지 핀 이미지의 addImage 등록 이름.
 // 디자인을 바꾸면 버전을 올린다 — 웹 addImage는 같은 이름이 이미 있으면
@@ -823,9 +829,25 @@ class FloorPlanViewState extends State<FloorPlanView> {
       ],
       enableInteraction: false,
     );
+    // 대분류 아이콘 비트맵. 매장명 라벨 레이어가 참조하므로 **레이어보다 먼저**
+    // 등록한다. 없는 이름을 참조하면 아이콘 없이 텍스트만 그려지고 로그도
+    // 조용해서, 순서가 어긋나면 원인을 찾기 어렵다.
+    for (final category in storeCategoryIconKeys) {
+      await controller.addImage(
+        storeCategoryIconImageName(category),
+        await renderStoreCategoryIconPng(category),
+      );
+    }
     // 매장명 라벨: 폴리곤 크기에 맞춰 폰트를 직접 계산하던 예전 로직 대신
     // MapLibre의 자동 줄바꿈(text-max-width)과 충돌 감지에 맡긴다 —
     // 이게 벡터 타일로 바꾼 핵심 이유(텍스트가 매장 박스를 벗어나는 문제)다.
+    //
+    // 이름 옆에 대분류 아이콘을 **같은 심볼로** 얹는다. 아이콘을 별도 레이어로
+    // 두면 충돌 판정이 따로 돌아 아이콘만 남거나 이름만 남는 짝이 안 맞는 라벨이
+    // 생긴다. 한 심볼이면 둘이 함께 놓이고 함께 밀린다.
+    //
+    // 이름이 아이콘 앞/뒤 중 어디에 붙을지는 `text-variable-anchor`가 정한다
+    // (규칙과 한계는 [category_map_icon.dart] 주석).
     await controller.addSymbolLayer(
       _tileSourceId,
       'floor-stores-label',
@@ -842,15 +864,59 @@ class FloorPlanViewState extends State<FloorPlanView> {
           14,
         ],
         textMaxWidth: 6,
-        textVariableAnchor: const ['center'],
+        iconImage: storeCategoryIconExpression(),
+        iconSize: kStoreCategoryIconSizeIndoor,
+        textVariableAnchor: kStoreLabelVariableAnchor,
+        textRadialOffset: kStoreLabelRadialOffset,
+        // variable-anchor가 고른 방향에 맞춰 좌/우 정렬을 따라가게 한다.
+        // 기본값(center)으로 두면 두 줄로 접힌 이름이 아이콘 쪽으로 쏠린다.
+        textJustify: 'auto',
         textColor: '#444846',
         textHaloColor: '#FFFFFF',
         textHaloWidth: 1.2,
         symbolAvoidEdges: true,
+        // variable-anchor는 충돌 판정 위에서만 동작한다. true로 바꾸면 앵커가
+        // 항상 첫 번째 값으로 굳어 뒤집기가 조용히 죽는다.
+        textAllowOverlap: false,
+        // 이름이 들어갈 자리가 없으면 아이콘만이라도 남긴다. 이 화면에서 라벨의
+        // 첫 번째 값어치는 "여기 이런 종류의 매장이 있다"이고, 그건 아이콘만으로
+        // 전달된다. 둘 다 버리면 폴리곤이 빈 회색 상자로 남는다.
+        textOptional: true,
+      ),
+      sourceLayer: 'stores',
+      filter: storeLabelWithCategoryIconFilter(),
+      enableInteraction: false,
+    );
+
+    // 편의시설(화장실·정수기 등) 이름 — 아이콘은 아래 전용 레이어가 그리므로
+    // 여기서는 텍스트만 얹는다. 위 레이어에 섞으면 같은 폴리곤에 시설 아이콘과
+    // 대분류 아이콘이 둘 다 떠서 무엇을 봐야 할지 알 수 없게 된다.
+    await controller.addSymbolLayer(
+      _tileSourceId,
+      _facilityLabelLayerId,
+      SymbolLayerProperties(
+        textField: ['get', 'name'],
+        textFont: _mapFontStack,
+        textSize: [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          16,
+          9,
+          20,
+          14,
+        ],
+        textMaxWidth: 6,
+        // 아이콘이 centroid를 차지하므로 이름은 그 아래로 내린다. POI 라벨
+        // (`floor-pois-label`)이 쓰는 오프셋과 같은 값이라 두 라벨의 높이가 맞는다.
+        textOffset: const [0, 1.6],
+        textColor: '#444846',
+        textHaloColor: '#FFFFFF',
+        textHaloWidth: 1.2,
         textAllowOverlap: false,
       ),
       sourceLayer: 'stores',
-      filter: storeLabelExcludingFacilitiesFilter(),
+      filter: facilityStoreLabelFilter(),
       enableInteraction: false,
     );
 
@@ -942,9 +1008,8 @@ class FloorPlanViewState extends State<FloorPlanView> {
         iconAllowOverlap: true,
         // iconOffset을 주지 않아 아이콘이 폴리곤 중심(centroid)에 그려진다.
         // 벡터 타일 심볼의 기준점이 폴리곤 centroid이므로, 오프셋이 없으면
-        // 시설 블록 정중앙에 아이콘이 놓인다. 같은 centroid에 그려지는 매장명
-        // 라벨은 아이콘 아래에 깔리므로, 이 시설들은 이름 텍스트보다 아이콘으로
-        // 식별하게 된다.
+        // 시설 블록 정중앙에 아이콘이 놓인다. 이름은 [_facilityLabelLayerId]가
+        // 아이콘 아래로 내려 그리므로 둘이 겹치지 않는다.
       ),
       sourceLayer: 'stores',
       filter: [
