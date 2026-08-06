@@ -129,6 +129,29 @@ class DiscoveryMatch {
   );
 }
 
+/// 의미 검색 결과가 사실상 정확한 이름 일치인지 휴리스틱으로 판정한다. 서버가
+/// 어느 tier(정확 일치·동의어·의미)로 매칭했는지는 클라이언트로 내려오지
+/// 않으므로, 질의와 결과 이름을 직접 비교해 추정한다.
+///
+/// 1차 경량 검색이 층 스코프 등으로 빈손이 되어 2차 의미 검색으로 넘어오는
+/// 경우가 있다. 이때도 "뜻이 비슷한 매장을 찾았어요" 배너가 그대로 붙으면,
+/// 정확한 이름을 쳤는데 "뜻으로 찾았다"고 말하는 셈이라 부정확하다.
+///
+/// 대소문자·앞뒤 공백만 정규화하고 그 밖의 정규화(형태소 분석 등)는 하지
+/// 않는다. 서버의 Kiwi 정규화까지 흉내내려 하면 휴리스틱이 오히려 서버 판정과
+/// 어긋나는 경우가 늘어난다 — 여기서는 "누가 봐도 같은 이름"만 걸러낸다.
+///
+/// 상단 검색 패널과 길찾기 시트가 같은 배너 규칙을 써야 해서 모델 쪽에 둔다 —
+/// 한쪽만 고치면 같은 결과에 두 화면이 서로 다른 설명을 붙이게 된다.
+bool isExactNameMatch(String query, Iterable<String> names) {
+  final normalizedQuery = query.trim().toLowerCase();
+  if (normalizedQuery.isEmpty) return false;
+  return names.any((raw) {
+    final name = raw.trim().toLowerCase();
+    return name == normalizedQuery || name.startsWith(normalizedQuery);
+  });
+}
+
 /// 탐색(Discovery) 질의 응답. mode가 화면 분기의 유일한 근거다. 백엔드
 /// dto/query.py의 DiscoveryResponse와 1:1 대응.
 class DiscoveryResult {

@@ -125,8 +125,8 @@ void main() {
     expect(find.text('지도에서 선택'), findsOneWidget);
     // 부제까지 바뀌어야 한다. 출발지 칸에서 "도착지로 지정합니다"가 떠 있으면
     // 사용자는 잘못 눌렀다고 판단해 되돌린다.
-    expect(find.text('지도에서 매장을 눌러 출발지로 지정합니다'), findsOneWidget);
-    expect(find.text('지도에서 매장을 눌러 도착지로 지정합니다'), findsNothing);
+    expect(find.text('지도에서 매장이나 복도를 눌러 출발지로 지정합니다'), findsOneWidget);
+    expect(find.text('지도에서 매장이나 복도를 눌러 도착지로 지정합니다'), findsNothing);
   });
 
   testWidgets('출발지 칸에서 누르면 도착지를 지닌 채 출발지 선택으로 닫힌다', (
