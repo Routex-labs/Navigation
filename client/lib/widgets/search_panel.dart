@@ -439,9 +439,19 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 되던 검색이 같이 죽는다.
   Future<void> _searchOutdoorPois(String query, int requestId) async {
     final center = widget.outdoorSearchCenter;
-    if (center == null ||
-        widget.onOutdoorPoiPicked == null ||
-        !outdoorPoiRepository.isAvailable) {
+    // **건너뛰는 이유를 반드시 남긴다.** 이 세 조건 중 하나만 걸려도 화면에는
+    // "바깥 결과가 없다"와 똑같이 보인다. 실제로 기준점이 null이라 한 번도 안
+    // 돌던 시기를 로그 없이 지나쳤다.
+    if (center == null) {
+      debugPrint('[tmap-poi] 건너뜀: 검색 기준점 없음(위치·카메라 모두 미확보)');
+      return;
+    }
+    if (widget.onOutdoorPoiPicked == null) {
+      debugPrint('[tmap-poi] 건너뜀: 선택 콜백 없음');
+      return;
+    }
+    if (!outdoorPoiRepository.isAvailable) {
+      debugPrint('[tmap-poi] 건너뜀: TMAP_APP_KEY 미주입');
       return;
     }
     final pois = await outdoorPoiRepository.searchNearby(query, center: center);

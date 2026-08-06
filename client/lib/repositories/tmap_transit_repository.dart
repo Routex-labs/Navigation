@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
@@ -51,10 +52,12 @@ class TmapTransitRepository implements TransitRepository {
           'format': 'json',
         }),
       );
-    } on Object {
+    } on Object catch (error) {
+      _log('요청 실패: $error');
       return const TransitRoutes.failure(TransitRoutesStatus.failed);
     }
     if (response.statusCode != 200) {
+      _log('HTTP ${response.statusCode}');
       return const TransitRoutes.failure(TransitRoutesStatus.failed);
     }
 
@@ -73,6 +76,7 @@ class TmapTransitRepository implements TransitRepository {
     if (result is Map<String, dynamic>) {
       final status = result['status'];
       final code = status is num ? status.round() : int.tryParse('$status');
+      _log('경로 없음 (result.status=$code)');
       return TransitRoutes.failure(
         code == _statusTooClose
             ? TransitRoutesStatus.tooClose
@@ -108,6 +112,9 @@ class TmapTransitRepository implements TransitRepository {
     itineraries.sort(
       (a, b) => a.totalTimeSeconds.compareTo(b.totalTimeSeconds),
     );
+    _log('${itineraries.length}개 경로 (최단 ${itineraries.first.totalTimeSeconds}초)');
     return TransitRoutes.ok(itineraries);
   }
+
+  void _log(String message) => debugPrint('[tmap-transit] $message');
 }
