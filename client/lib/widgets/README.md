@@ -15,6 +15,7 @@
 | 탐색 | [`search_panel.dart`](search_panel.dart), [`directions_sheet.dart`](directions_sheet.dart), [`building_switcher_sheet.dart`](building_switcher_sheet.dart) | 매장 검색(경량)·AI 검색(의미), 출발/도착 검색, 건물 전환 |
 | 장소 시트 | [`category_stores_sheet.dart`](category_stores_sheet.dart), [`place_detail_sheet.dart`](place_detail_sheet.dart), [`favorites_sheet.dart`](favorites_sheet.dart) | 카테고리 매장·매장 상세·즐겨찾기 |
 | 장소 시트 | [`outdoor_poi_sheet.dart`](outdoor_poi_sheet.dart) | 건물 **밖** 장소 상세(주소·전화·거리) + 출발/도착/대중교통 |
+| 장소 시트 | [`building_sheet.dart`](building_sheet.dart) | 실내 도면을 가진 **건물** 한 채 + 매장 고르기 / 건물까지 출발·도착·대중교통 |
 | 대중교통 | [`transit_routes_sheet.dart`](transit_routes_sheet.dart), [`transit_summary_card.dart`](transit_summary_card.dart), [`transit_style.dart`](transit_style.dart) | 경로 후보 목록, 안내 중 하단 요약 카드, 셋이 공유하는 색·아이콘·시간/요금 표기 |
 | 장소 상세 | [`place_detail/`](place_detail/) | 상세 시트 본문의 섹션별 렌더러(summary·hero·menu·매장정보 등) |
 | 카테고리 | [`category_icon.dart`](category_icon.dart), [`category_label_order.dart`](category_label_order.dart) | 카테고리 대분류 아이콘·색상(chip·시트·리스트 공유), label 중복 제거·가나다 정렬 |
@@ -68,6 +69,32 @@
 의미 검색을 타이핑 중이 아니라 확정 시점에만 붙이는 이유는 비용이다. 백엔드가 임베딩
 모델을 로드하면 첫 호출이 20초대까지 가므로, 글자마다 던지면 "밥"·"밥 먹"이 전부 모델을
 태운다. **이 조건을 지우면 검색이 느려지는 게 아니라 멈춘 것처럼 보인다.**
+
+## 건물을 목적지로 골랐을 때 — 두 갈래를 묻는다
+
+검색 결과에는 매장·건물 밖 장소와 함께 **건물 한 줄**이 올라온다(`search_panel.dart`).
+이 줄을 누르면 지도가 그 건물로 이동하고 [`building_sheet.dart`](building_sheet.dart)가
+갈 곳을 묻는다. 좌표 하나로 끝내지 않고 묻는 이유는, 같은 검색어("더현대")의 의도가
+둘로 갈리기 때문이다.
+
+- **건물이 목적지다** — 도착/대중교통. 도착 좌표는 건물 중심이 아니라 출발 지점에서
+  가장 가까운 **지상 출입구**다(`OutdoorMapBodyState.entrancePointFor`). 중심을 주면 TMAP
+  보행자 경로가 건물 안쪽을 향하다 아무 도로로나 스냅해, 실제로 들어갈 수 있는 문과 다른
+  면에 사용자를 내려놓는다.
+- **건물은 경유지다** — "건물 안에서 매장 고르기". 지도를 건물로 확대해 실내 도면을 펴고,
+  이미 있는 지도 고르기 모드(`_mapPickTarget`)로 들어간다. 매장을 누르면 그대로 도착지가
+  된다. 시트로 매장 목록을 한 번 더 띄우지 않는 이유는, 이 버튼을 누르는 이유가 대개
+  "이름을 몰라서"이기 때문이다 — 이름을 안다면 검색창에 그 매장을 쳤을 것이다.
+
+미리보기(첫 이동)는 실내 진입 임계값보다 `buildingPreviewZoomGap`만큼 낮은 zoom에서
+멈춘다. 고정 zoom을 못 쓰는 이유는 임계값이 화면 폭에 따라 달라지기 때문이고
+(`indoor_entry_zoom.dart`), 그냥 확대하면 건물까지만 가려던 사용자에게 묻지도 않고 도면이
+펴진다.
+
+TMAP도 같은 건물을 POI로 한 건 돌려주므로, 건물 줄과 이름이 **완전히 같은**(공백·대소문자
+무시) 바깥 결과는 목록에서 뺀다. 두 줄이 나란히 뜨면 헷갈리는 것으로 끝나지 않고, 아래쪽을
+누른 사용자는 건물 안으로 못 들어간다. 판정을 `contains`로 넓히지 않는 이유는 "더현대서울
+스타벅스"처럼 건물 이름을 앞에 단 진짜 결과까지 함께 사라지기 때문이다.
 
 예전에는 경로 안내 화면(`route_guide_screen.dart`)의 FAB가 `ai_search_sheet.dart`라는
 별도 대화형 검색 시트를 열었다. 검색 진입점을 상단 검색 하나로 일원화하기로 하면서
