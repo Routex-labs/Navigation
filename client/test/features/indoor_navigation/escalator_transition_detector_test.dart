@@ -5,6 +5,7 @@ import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 import 'package:navigation_client/features/indoor_navigation/application/escalator_node_naming.dart';
 import 'package:navigation_client/features/indoor_navigation/application/escalator_transition_detector.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/altitude_sample.dart';
+import 'package:navigation_client/features/indoor_navigation/contract/raw_motion_activity.dart';
 import 'package:navigation_client/models/floor_graph.dart';
 
 /// 표준대기 고도 → 기압. [pressureAltitudeM]의 역함수라, 테스트는 "이 고도에
@@ -87,6 +88,7 @@ class _Fixture {
     required double toM,
     required int seconds,
     int stepsPerSecond = 0,
+    int rawPeaksPerSample = 0,
   }) {
     final sampleCount = (seconds * 1000 / sampleIntervalMs).round();
     for (var index = 1; index <= sampleCount; index++) {
@@ -96,6 +98,15 @@ class _Fixture {
         // 걸으면 snapshot이 갱신되므로 실제 앱과 같이 위치·걸음도 함께 들어온다.
         steps += (stepsPerSecond * sampleIntervalMs / 1000).round();
         standNearBoarding();
+      }
+      if (rawPeaksPerSample > 0) {
+        // 걸음 적용이 멈춘 동안에도 흐르는 원시 움직임. `steps`는 늘지 않는다.
+        detector.onRawMotion(
+          RawMotionActivity(
+            timestampMs: nowMs,
+            accelPeakDelta: rawPeaksPerSample,
+          ),
+        );
       }
       feed(altitude);
     }
@@ -311,6 +322,47 @@ void main() {
       expect(fixture.confirmed.single.toFloorLabel, '3F');
       // 후보가 열린 시점부터 센 값이라 전체 걸음보다 작다.
       expect(fixture.confirmed.single.stepsDuring, greaterThan(5));
+    });
+  });
+
+  group('원시 움직임과 하차 재개', () {
+    test('걸음 적용이 멈춰 있어도 원시 움직임으로 하차를 빠르게 확정한다', () {
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standNearBoarding();
+      // 탑승 중: 걸음 적용은 pause라 steps가 늘지 않는다.
+      fixture.ramp(fromM: 0, toM: 4.5, seconds: 20);
+      final beforeSteps = fixture.steps;
+      // 하차: 수직 속도가 잦아드는 첫 샘플에 원시 걸음이 함께 들어온다.
+      fixture.ramp(fromM: 4.5, toM: 4.5, seconds: 3, rawPeaksPerSample: 2);
+
+      expect(fixture.steps, beforeSteps, reason: '적용 걸음은 여전히 멈춰 있어야 한다');
+      expect(fixture.confirmed, hasLength(1));
+      expect(fixture.confirmed.single.toFloorLabel, '3F');
+    });
+
+    test('수직 이동 중 진동 peak로는 재개하지 않는다', () {
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standNearBoarding();
+      // 에스컬레이터 진동이 계속 peak로 잡히지만 수직 속도는 크다.
+      fixture.ramp(fromM: 0, toM: 4.5, seconds: 20, rawPeaksPerSample: 3);
+
+      expect(
+        fixture.confirmed,
+        isEmpty,
+        reason: '진동 peak가 아무리 많아도 오르내리는 중에는 확정하지 않는다',
+      );
+    });
+
+    test('원시 움직임이 없으면 연속 저속 샘플로 확정한다', () {
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standNearBoarding();
+      fixture.ramp(fromM: 0, toM: 4.5, seconds: 20);
+      fixture.hold(atM: 4.5, seconds: 5);
+
+      expect(fixture.confirmed, hasLength(1));
     });
   });
 

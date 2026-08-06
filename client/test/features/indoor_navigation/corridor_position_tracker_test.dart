@@ -512,6 +512,91 @@ void main() {
     });
   });
 
+  group('하차 직후 다음 간선 선택', () {
+    /// 에스컬레이터 도착 노드(10,0)에서 새 앵커를 잡은 직후를 재현한다.
+    ///
+    /// 사용자는 아직 동쪽을 보고 서 있고([initialHeadingDeg]), 그 상태에서
+    /// 실제로 [stepHeadingDeg] 방향으로 걷기 시작한다. 바라보는 방향은 약한
+    /// 근거일 뿐이고 실제 걸음이 간선을 정해야 한다.
+    CorridorPositionTracker landAndWalk({
+      required double stepHeadingDeg,
+      required PdrLocalPoint stepDelta,
+      int steps = 2,
+    }) {
+      final tracker = CorridorPositionTracker(_crossGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(10, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+      var raw = const PdrLocalPoint(10, 0);
+      for (var step = 1; step <= steps; step += 1) {
+        raw = PdrLocalPoint(
+          raw.eastM + stepDelta.eastM,
+          raw.northM + stepDelta.northM,
+        );
+        tracker.update(
+          _observation(
+            atMs: step * 500,
+            confirmedSteps: step,
+            confirmedDistanceM: step * 0.7,
+            previewSteps: step,
+            headingDeg: stepHeadingDeg,
+            raw: raw,
+            rawConfirmedStepPositions: [raw],
+          ),
+        );
+      }
+      return tracker;
+    }
+
+    test('직진 하차는 두 걸음 안에 정면 간선으로 수렴한다', () {
+      final tracker = landAndWalk(
+        stepHeadingDeg: 90,
+        stepDelta: const PdrLocalPoint(0.7, 0),
+      );
+      expect(tracker.result.currentEdgeId, 'bd');
+    });
+
+    test('좌회전 하차는 바라보던 방향이 아니라 걸음 방향을 따른다', () {
+      final tracker = landAndWalk(
+        stepHeadingDeg: 0,
+        stepDelta: const PdrLocalPoint(0, 0.7),
+      );
+      expect(tracker.result.currentEdgeId, 'bc');
+    });
+
+    test('우회전 하차도 두 걸음 안에 연결 간선으로 수렴한다', () {
+      final tracker = landAndWalk(
+        stepHeadingDeg: 270,
+        stepDelta: const PdrLocalPoint(-0.7, 0),
+      );
+      expect(tracker.result.currentEdgeId, 'ab');
+    });
+
+    test('걸음 전에는 도착 노드에 연결된 간선을 모두 후보로 둔다', () {
+      final tracker = CorridorPositionTracker(_crossGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(10, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+      final result = tracker.update(
+        _observation(
+          atMs: 300,
+          confirmedSteps: 0,
+          confirmedDistanceM: 0,
+          previewSteps: 0,
+          headingDeg: 90,
+          raw: const PdrLocalPoint(10, 0),
+        ),
+      );
+
+      expect(result.junctionNodeId, 'b');
+      expect(result.junctionCandidateEdgeIds, containsAll(['ab', 'bd', 'bc']));
+    });
+  });
+
   group('CorridorPositionTracker', () {
     test('직선에서는 위치를 간선에 고정하고 heading bias를 복도 방향으로 수렴시킨다', () {
       final tracker = CorridorPositionTracker(_longStraightGraph)

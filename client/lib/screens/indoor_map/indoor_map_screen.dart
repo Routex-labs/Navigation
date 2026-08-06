@@ -266,6 +266,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   StreamSubscription<PdrSnapshot>? _pdrSnapshotSub;
   StreamSubscription<CalibrationStatus>? _pdrCalibrationSub;
   StreamSubscription<AltitudeSample>? _pdrAltitudeSub;
+  StreamSubscription<RawMotionActivity>? _pdrRawMotionSub;
   bool _placingPdrAnchor = false;
   PdrDebugSessionRecorder? _pdrDebugRecorder;
 
@@ -449,6 +450,11 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     _pdrAltitudeSub = indoorNavigationDriver.altitudeSamples.listen(
       _onAltitudeSample,
     );
+    // 걸음 적용을 멈춘 동안에도 흐르는 원시 움직임. 하차 첫 걸음을 기압
+    // 샘플 하나로 잡는 유일한 근거라 pause 여부와 무관하게 계속 넣는다.
+    _pdrRawMotionSub = indoorNavigationDriver.rawMotion.listen(
+      _escalatorDetector.onRawMotion,
+    );
     _loadBuilding();
   }
 
@@ -457,11 +463,12 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     _pdrSnapshotSub?.cancel();
     _pdrCalibrationSub?.cancel();
     _pdrAltitudeSub?.cancel();
+    _pdrRawMotionSub?.cancel();
     _escalatorArrivalTimer?.cancel();
     // 층 도면을 받아 오는 동안 화면이 닫혀도 전역 PDR 세션을 pause 상태로
     // 남기지 않는다. dispose 뒤에는 _endEscalatorRide가 setState를 할 수 없어
     // 걸음 누적만 직접 복구한다.
-    if (_escalatorRide != null) {
+    if (_stepsPausedForRide) {
       unawaited(indoorNavigationDriver.resumeStepTracking());
     }
     // 앱 전역 인스턴스라 dispose하지 않는다 — 여기서 버리면 야외 지도가
@@ -1816,12 +1823,23 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     final snapshot = _pdrTrailState.snapshot;
     final anchor = _pdrTrailState.anchor;
     if (snapshot == null || anchor == null || !snapshot.hasHeading) return null;
-    final transform = FloorCoordinateTransform(anchor);
-    final deviceFloorHeading =
-        _corridorTrackingSession.result?.deviceHeadingDeg;
+    // 층 전환 중에는 anchor가 아직 출발 층이라 복도 보정 결과가 갱신되지
+    // 않는다. 그 값을 계속 쓰면 원뿔이 탑승 시점 방향에 얼어붙어, 탑승 중
+    // 몸을 돌려도 화면이 반응하지 않는다.
+    //
+    // heading 자체는 끊기지 않았다(`pauseStepTracking`은 센서를 끄지 않는다).
+    // 그래서 센서 heading + anchor rotation으로 직접 만든다 — 축 변환은 지도
+    // bearing으로 되돌릴 때 상쇄되므로 목적 층 도면에서도 방향이 맞다. 복도에서
+    // 학습한 bias만 잠시 빠지는데, 그건 새 층에서 다시 학습하는 값이고 옛 층
+    // 기준 bias를 새 층 frame에 섞는 것보다 안전하다.
+    final deviceFloorHeading = anchor.floorId == _selectedFloor
+        ? _corridorTrackingSession.result?.deviceHeadingDeg
+        : null;
     return deviceFloorHeading == null
         ? normalizePdrBearing(snapshot.walkingHeadingDeg + anchor.rotationDeg)
-        : transform.floorBearingToMapBearing(deviceFloorHeading);
+        : FloorCoordinateTransform(
+            anchor,
+          ).floorBearingToMapBearing(deviceFloorHeading);
   }
 
   /// 기압 샘플 한 건을 판정기에 넣고, 로그에 남기고, 확정이면 층을 옮긴다.
@@ -3120,10 +3138,12 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         _corridorTrackingSession.result?.state ==
         CorridorTrackingState.uncertain;
     final gpsEstimate = _freshGpsIndoorEstimate;
+    // 방향 원뿔은 "지금 어디를 보고 있나"만 말한다. 층 전환 중 도착 지점에
+    // 고정된 마커에도 그려야 한다 — 탑승 중 몸을 돌리면 내리는 방향을 미리
+    // 확인할 수 있고, 그게 하차 직후 첫 간선 선택과도 맞물린다.
     final currentUsesPdr =
-        _pendingTransferMarker == null &&
-        pdrCurrent != null &&
-        (!trackerUncertain || gpsEstimate == null);
+        _pendingTransferMarker != null ||
+        (pdrCurrent != null && (!trackerUncertain || gpsEstimate == null));
     final current =
         _pendingTransferMarker ??
         (!trackerUncertain ? pdrCurrent : null) ??

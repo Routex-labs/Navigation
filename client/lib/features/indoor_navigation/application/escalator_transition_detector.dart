@@ -26,6 +26,7 @@ import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
 import '../../../models/floor_graph.dart';
 import '../contract/altitude_sample.dart';
+import '../contract/raw_motion_activity.dart';
 import 'escalator_node_naming.dart';
 
 /// 판정 임계값. 전부 **초안값**이며 실측 로그(schema v12의
@@ -414,6 +415,10 @@ class EscalatorTransitionDetector {
   int _fastExitLowSlopeSamples = 0;
   int _lastAltitudeSteps = 0;
 
+  /// 위치 적용과 무관한 원시 움직임 누적. 걸음 pause 중에도 늘어난다.
+  int _rawMotionCount = 0;
+  int _lastAltitudeRawMotionCount = 0;
+
   // UI가 "층은 먼저 바꾸고 마커는 고정"하는 두 단계 전환을 적용할 수 있도록
   // 후보 시작/취소 신호를 한 번씩 보관한다. 최종 확정은 onAltitude 반환값이다.
   EscalatorTransition? _startedTransition;
@@ -689,12 +694,29 @@ class EscalatorTransitionDetector {
     );
   }
 
+  /// 위치에 반영되지 않은 원시 움직임을 넣는다.
+  ///
+  /// 탑승 중 걸음 적용을 멈추면 [onPosition]의 `steps`가 늘지 않아 하차 빠른
+  /// 확정 경로가 동작하지 않는다. 이 신호는 pause와 무관하게 흐르므로 "하차
+  /// 뒤 첫 걸음"을 한 샘플 만에 잡을 수 있다. **수직 속도가 충분히 낮을 때만**
+  /// 보조 근거로 쓰이므로 에스컬레이터 진동 peak로는 재개되지 않는다.
+  void onRawMotion(RawMotionActivity activity) {
+    if (!activity.hasMotion) return;
+    _rawMotionCount +=
+        activity.accelPeakDelta + (activity.nativeStepDelta ?? 0);
+  }
+
   /// 기압 샘플을 넣고 판정한다. 층 이동이 확정된 순간에만 non-null.
   EscalatorTransition? onAltitude(AltitudeSample sample) {
     final previousFastAltitude = _fastAltitudeM;
     final previousFastAtMs = _lastFastAltitudeAtMs;
-    final hadNewSteps = _lastSteps > _lastAltitudeSteps;
+    // 위치에 적용된 걸음 **또는** 원시 움직임 중 하나라도 늘었으면 근거로 본다.
+    // 탑승 중에는 앞의 값이 멈춰 있으므로 뒤의 값만 살아남는다.
+    final hadNewSteps =
+        _lastSteps > _lastAltitudeSteps ||
+        _rawMotionCount > _lastAltitudeRawMotionCount;
     _lastAltitudeSteps = _lastSteps;
+    _lastAltitudeRawMotionCount = _rawMotionCount;
 
     // 1) 시계열이 끊겼으면(background 복귀 등) 이전 관측을 통째로 버린다.
     //    공백 동안 층이 바뀌었을 수 있어 baseline과 후보도 함께 무효다.
@@ -1252,6 +1274,7 @@ class EscalatorTransitionDetector {
     _lastFastAltitudeAtMs = null;
     _fastExitLowSlopeSamples = 0;
     _lastAltitudeSteps = _lastSteps;
+    _lastAltitudeRawMotionCount = _rawMotionCount;
     // 층이 바뀌었으면 진행 중인 단계도 끝난 것이다. 남겨 두면 새 층에서 옛
     // 배너와 pause가 그대로 이어진다.
     if (_phase == EscalatorPhase.boardingDetected ||
