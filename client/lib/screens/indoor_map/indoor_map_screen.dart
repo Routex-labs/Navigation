@@ -113,6 +113,30 @@ const _pdrControlRightInsetPx = 184.0;
 // pill 하단을 이 값과 맞추면 층 선택기와 위 버튼들이 같은 층에 놓인 것처럼 보인다.
 const _floorSelectorBottomOffset = _bottomBarInnerBottomPaddingPx + 45.0 + 10.0;
 
+/// heading 수렴 polling이 화면 수명보다 오래 남지 않게 하는 취소 가능한 대기.
+///
+/// `Future.delayed`는 위젯이 dispose돼도 타이머를 취소할 수 없다. 자동 입구
+/// 앵커와 수동 위치 지정이 heading을 기다리는 중 화면이 닫히면 테스트에서는
+/// pending timer로 실패하고, 실제 앱에서는 끝난 화면의 비동기 작업이 뒤늦게
+/// 재개된다. dispose에서 [cancel]하면 대기 중 Future도 false로 끝나게 한다.
+class _CancelableHeadingDelay {
+  _CancelableHeadingDelay(Duration duration) {
+    _timer = Timer(duration, () {
+      if (!_completer.isCompleted) _completer.complete(true);
+    });
+  }
+
+  late final Timer _timer;
+  final Completer<bool> _completer = Completer<bool>();
+
+  Future<bool> get completed => _completer.future;
+
+  void cancel() {
+    _timer.cancel();
+    if (!_completer.isCompleted) _completer.complete(false);
+  }
+}
+
 /// 실내 지도 본문(층 평면도 + 경로/매장 오버레이). 검색창·길찾기·건물 전환 같은
 /// 공통 UI는 [MapShellScreen]이 상단/하단 바로 얹으므로 여기서는 다루지 않는다.
 class IndoorMapBody extends StatefulWidget {
@@ -333,6 +357,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   /// 기준 층과 위치가 덮이므로, 같은 건물·초기 층 키를 다시 실행하지 않는다.
   String? _autoEstimateAttemptKey;
 
+  /// 자동 앵커와 수동 앵커가 heading을 기다리는 동안 만들어진 짧은 대기들.
+  /// 화면 종료 시 모두 취소해 dispose 뒤 비동기 재개를 막는다.
+  final Set<_CancelableHeadingDelay> _headingSettleDelays = {};
+
   /// 전환 적용 중 재진입 방지. 층 도면을 불러오는 동안 다음 기압 샘플이 또
   /// 확정을 내면 두 번 전환되면서 앵커가 어긋난다.
   bool _applyingFloorTransition = false;
@@ -465,6 +493,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 
   @override
   void dispose() {
+    for (final delay in _headingSettleDelays) {
+      delay.cancel();
+    }
+    _headingSettleDelays.clear();
     _pdrSnapshotSub?.cancel();
     _pdrCalibrationSub?.cancel();
     _pdrAltitudeSub?.cancel();
@@ -505,6 +537,15 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     }
     _mapCameraBearingDeg = bearingDeg;
     _mapCameraBearingNotifier.value = bearingDeg;
+  }
+
+  Future<bool> _waitForHeadingPoll() async {
+    if (!mounted) return false;
+    final delay = _CancelableHeadingDelay(const Duration(milliseconds: 100));
+    _headingSettleDelays.add(delay);
+    final completed = await delay.completed;
+    _headingSettleDelays.remove(delay);
+    return completed && mounted;
   }
 
   /// 실내 지도를 보는 동안 PDR 세션을 켜 둔다.
@@ -708,7 +749,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     final deadline = DateTime.now().add(_headingSettleTimeout);
     while (!indoorNavigationDriver.isHeadingConverged &&
         DateTime.now().isBefore(deadline)) {
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      if (!await _waitForHeadingPoll()) return;
       if (!mounted || _selectedFloor != floor) return;
     }
     final snapshot = indoorNavigationDriver.currentSnapshot;
@@ -2878,7 +2919,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     _showPdrMessage('방향을 잡는 중입니다. 폰을 든 채로 잠시만 기다려주세요.');
     final deadline = DateTime.now().add(_headingSettleTimeout);
     while (DateTime.now().isBefore(deadline)) {
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      if (!await _waitForHeadingPoll()) return false;
       if (!mounted) return false;
       if (indoorNavigationDriver.isHeadingConverged) return true;
     }
