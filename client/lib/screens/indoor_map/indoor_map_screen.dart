@@ -33,7 +33,9 @@ import '../../models/poi_search_result.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/category_map_filter.dart';
 import '../../widgets/eta_card.dart';
+import '../../features/indoor_navigation/contract/floor_transition_ui_state.dart';
 import '../../widgets/floor_plan_view.dart';
+import '../../widgets/floor_transition_banner.dart';
 import '../../widgets/floor_selector.dart';
 import '../../widgets/map_overlay_tap_guard.dart';
 
@@ -292,6 +294,15 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   /// 방금 확정된 층 이동. 배너를 잠깐 "도착" 상태로 유지해 되돌릴 기회를 준다.
   EscalatorTransition? _escalatorArrival;
   Timer? _escalatorArrivalTimer;
+
+  /// 아직 층을 바꾸기 전의 탑승 단계(배너만 뜨는 구간).
+  ///
+  /// `boardingDetected`는 접근 근거만으로, `verticalMotionDetected`는 실제
+  /// 수직 이동 근거로 올라온다. 둘 다 목적 층 지도를 열지 않는다.
+  EscalatorPhaseChange? _escalatorStage;
+
+  /// 탑승 때문에 걸음 적용을 멈춘 상태인지. pause/resume 짝을 한 곳에서 센다.
+  bool _stepsPausedForRide = false;
 
   /// 자동 층 전환에서 새 층 지도에 그대로 물려줄 카메라.
   ///
@@ -1851,6 +1862,8 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         ? _altimeterDebugLine(sample)
         : null;
 
+    _handleEscalatorPhaseChanges();
+
     if (started != null) {
       _enqueueFloorTransition(() => _beginEscalatorTransition(started));
     }
@@ -1860,6 +1873,97 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     if (transition != null) {
       _enqueueFloorTransition(() => _completeEscalatorTransition(transition));
     }
+  }
+
+  /// 판정기의 단계 전이를 화면 동작으로 옮긴다.
+  ///
+  /// 단계마다 **하는 일이 다르다**. 배너는 근거가 약해도 띄우고(되돌리기 비용이
+  /// 없다), 걸음 pause는 실제 수직 이동에서 시작하며, 목적 층 지도는 midpoint
+  /// 근거에서만 연다. 층 전환과 하차 확정은 기존 started/confirmed 경로가
+  /// 그대로 담당한다 — 여기서 두 번 처리하지 않는다.
+  void _handleEscalatorPhaseChanges() {
+    final changes = _escalatorDetector.takePhaseChanges();
+    if (changes.isEmpty) return;
+    for (final change in changes) {
+      switch (change.phase) {
+        case EscalatorPhase.boardingDetected:
+        case EscalatorPhase.verticalMotionDetected:
+          if (!mounted) return;
+          setState(() => _escalatorStage = change);
+          if (change.phase == EscalatorPhase.verticalMotionDetected) {
+            _enqueueFloorTransition(_pauseStepsForRide);
+          }
+        case EscalatorPhase.cancelled:
+        case EscalatorPhase.failed:
+          if (!mounted) return;
+          setState(() => _escalatorStage = null);
+          // 후보가 열린 뒤의 취소는 층·경로 복원까지 해야 하므로 기존
+          // takeCancelledTransition 경로가 처리한다. 여기서는 배너만 띄운
+          // 단계에서 멈춘 걸음을 되살리는 것만 책임진다.
+          if (change.transition == null) {
+            _enqueueFloorTransition(_endEscalatorRide);
+          }
+        case EscalatorPhase.midpointReached:
+        case EscalatorPhase.landed:
+        case EscalatorPhase.idle:
+          if (!mounted) return;
+          setState(() => _escalatorStage = null);
+      }
+    }
+  }
+
+  /// 지금 화면이 그려야 하는 층 전환 상태. 없으면 null.
+  ///
+  /// 판정 단계를 UI 개념(문구·되돌리기)으로 한 번만 옮긴다. 화면은 여기서
+  /// 나온 값만 보고 그린다 — 임계값이나 노드 근접을 다시 계산하지 않는다.
+  FloorTransitionUiState? get _floorTransitionUiState {
+    final arrival = _escalatorArrival;
+    if (arrival != null && _escalatorRide == null) {
+      return FloorTransitionUiState(
+        stage: FloorTransitionStage.arrived,
+        fromFloorLabel: arrival.fromFloorLabel,
+        toFloorLabel: arrival.toFloorLabel,
+        goingUp: arrival.direction == EscalatorDirection.up,
+        canUndo: _preTransferFloor != null && _preTransferAnchor != null,
+      );
+    }
+    final ride = _escalatorRide;
+    if (ride != null) {
+      return FloorTransitionUiState(
+        stage: FloorTransitionStage.swapping,
+        fromFloorLabel: ride.fromFloorLabel,
+        toFloorLabel: ride.toFloorLabel,
+        goingUp: ride.direction == EscalatorDirection.up,
+      );
+    }
+    final stage = _escalatorStage;
+    if (stage == null || stage.toFloorLabel == null) return null;
+    return FloorTransitionUiState(
+      stage: stage.phase == EscalatorPhase.verticalMotionDetected
+          ? FloorTransitionStage.moving
+          : FloorTransitionStage.boarding,
+      fromFloorLabel: stage.fromFloorLabel,
+      toFloorLabel: stage.toFloorLabel!,
+      goingUp: stage.direction == EscalatorDirection.up,
+    );
+  }
+
+  void _undoFloorTransitionFromBanner() {
+    _escalatorArrivalTimer?.cancel();
+    setState(() => _escalatorArrival = null);
+    unawaited(_undoFloorTransition());
+  }
+
+  /// 위치에 반영하는 걸음만 멈춘다. 센서·기압·방향은 계속 흐른다.
+  Future<void> _pauseStepsForRide() async {
+    if (_stepsPausedForRide) return;
+    _stepsPausedForRide = true;
+    await indoorNavigationDriver.pauseStepTracking();
+    if (mounted) return;
+    // pause Future가 끝나기 직전에 화면이 닫히면 dispose는 pause된 사실을
+    // 볼 수 없다. 여기서 직접 되돌려 전역 PDR 세션을 살려 둔다.
+    _stepsPausedForRide = false;
+    await indoorNavigationDriver.resumeStepTracking();
   }
 
   void _enqueueFloorTransition(Future<void> Function() action) {
@@ -1921,17 +2025,14 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       _preTransferDestination = _routeDestination;
       _pendingArrivalRouteReady = false;
 
-      // 에스컬레이터 위에서는 pedometer가 진동을 걸음으로 세고 accel peak도
-      // 계속 잡힌다. 그 걸음이 위치에 쌓이면 하차 지점이 통째로 어긋나므로
-      // 걸음 누적만 멈춘다(센서는 그대로 — 하차 판정이 기압계다).
-      await indoorNavigationDriver.pauseStepTracking();
-      if (!mounted) {
-        // pause Future가 끝나기 직전에 화면이 닫히면 dispose는 아직 pause된
-        // 사실을 볼 수 없다. 여기서 직접 되돌려 전역 PDR 세션을 살려 둔다.
-        await indoorNavigationDriver.resumeStepTracking();
-        return;
-      }
-      setState(() => _escalatorRide = transition);
+      // 보통은 `verticalMotionDetected`에서 이미 멈췄다. 수직 속도 근거 없이
+      // 누적 고도만으로 여기 도달한 경우를 위해 한 번 더 보장한다(idempotent).
+      await _pauseStepsForRide();
+      if (!mounted) return;
+      setState(() {
+        _escalatorRide = transition;
+        _escalatorStage = null;
+      });
 
       if (!await _swapFloorSmoothly(transition.toFloorLabel)) {
         await _endEscalatorRide();
@@ -2069,14 +2170,18 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   /// 배너가 남고 걸음이 영영 멈춘 상태로 사용자가 복구할 방법이 없어진다.
   Future<void> _endEscalatorRide() async {
     if (_escalatorRide == null &&
+        _escalatorStage == null &&
+        !_stepsPausedForRide &&
         _floorHandoverCamera == null &&
         _floorSwapVeil == 0) {
       return;
     }
+    _stepsPausedForRide = false;
     await indoorNavigationDriver.resumeStepTracking();
     if (!mounted) return;
     setState(() {
       _escalatorRide = null;
+      _escalatorStage = null;
       _floorHandoverCamera = null;
       _floorSwapVeil = 0;
     });
@@ -2267,6 +2372,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           timestampMs: nowMs,
         );
       }
+      // 탑승점 접근 배너는 기압이 아니라 **걸음 갱신**에서 올라온다. 여기서
+      // 비우지 않으면 다음 기압 샘플(iOS는 1초)까지 배너가 늦는다.
+      _handleEscalatorPhaseChanges();
     }
     if (result != null) {
       _pdrDebugRecorder?.recordCorridorCorrection(result);
@@ -3137,22 +3245,15 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         // 걸음 누적이 멈춰 있으므로, 왜 위치가 안 움직이는지 사용자가 알아야
         // 한다 — 안 그러면 "앱이 멈췄다"로 읽힌다. 확정 뒤에는 같은 자리에서
         // 잠깐 "도착"으로 바뀌며 되돌리기를 제공한다(예전 검은 토스트 대체).
-        if ((_escalatorRide ?? _escalatorArrival) case final ride?)
+        if (_floorTransitionUiState case final transition?)
           Positioned(
             top: systemPadding.top + _escalatorBannerTopPx,
             left: 16,
             right: 16,
             child: Center(
-              child: _EscalatorRideBanner(
-                ride: ride,
-                arrived: _escalatorRide == null,
-                onUndo: _escalatorRide == null
-                    ? () {
-                        _escalatorArrivalTimer?.cancel();
-                        setState(() => _escalatorArrival = null);
-                        unawaited(_undoFloorTransition());
-                      }
-                    : null,
+              child: FloorTransitionBanner(
+                state: transition,
+                onUndo: _undoFloorTransitionFromBanner,
               ),
             ),
           ),
@@ -3375,76 +3476,6 @@ class _HintCancelButton extends StatelessWidget {
 /// 이 동안 위치 마커는 도착 지점에 고정되고 걸음 누적이 멈춰 있다. 아무 설명이
 /// 없으면 "내 위치가 안 따라온다 = 앱이 멈췄다"로 읽히므로, 지금이 의도된
 /// 상태라는 것과 어디로 가고 있는지를 함께 보여 준다.
-class _EscalatorRideBanner extends StatelessWidget {
-  const _EscalatorRideBanner({
-    required this.ride,
-    this.arrived = false,
-    this.onUndo,
-  });
-
-  final EscalatorTransition ride;
-
-  /// 이동이 확정된 뒤인지. 문구가 진행형에서 완료형으로 바뀐다.
-  final bool arrived;
-
-  /// 오탐이었을 때 되돌리는 콜백. [arrived]일 때만 준다.
-  final VoidCallback? onUndo;
-
-  @override
-  Widget build(BuildContext context) {
-    final goingUp = ride.direction == EscalatorDirection.up;
-    final undo = onUndo;
-    return Material(
-      color: const Color(0xFF1A73E8),
-      elevation: 3,
-      shadowColor: Colors.black.withValues(alpha: 0.2),
-      borderRadius: BorderRadius.circular(999),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(14, 9, undo == null ? 14 : 6, 9),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              goingUp ? Icons.arrow_upward : Icons.arrow_downward,
-              size: 16,
-              color: Colors.white,
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                arrived
-                    ? '${ride.toFloorLabel}에 도착한 것으로 보여 지도를 옮겼습니다'
-                    : '에스컬레이터로 ${goingUp ? '올라가는' : '내려가는'} 중 · '
-                          '${ride.toFloorLabel}',
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-            if (undo != null)
-              TextButton(
-                onPressed: undo,
-                style: TextButton.styleFrom(
-                  minimumSize: const Size(0, 32),
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text(
-                  '아니에요',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _RouteProgressBadge extends StatelessWidget {
   const _RouteProgressBadge({required this.progress});
 

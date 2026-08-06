@@ -117,7 +117,34 @@ class _Fixture {
     final cancelledTransition = detector.takeCancelledTransition();
     if (cancelledTransition != null) cancelled.add(cancelledTransition);
     if (transition != null) confirmed.add(transition);
+    phases.addAll(detector.takePhaseChanges());
   }
+
+  final phases = <EscalatorPhaseChange>[];
+
+  /// 활성 경로를 따라 탑승점으로 [steps]걸음 다가간다.
+  void approachBoarding({
+    required List<double> remainingM,
+    PdrLocalPoint routeEnd = const PdrLocalPoint(0, 0),
+    String boardingNodeId = 'n-up-to3f',
+    String? arrivalNodeId = 'n3-up-fr2f',
+  }) {
+    for (final remaining in remainingM) {
+      steps += 2;
+      nowMs += 700;
+      detector.onEscalatorRouteApproach(
+        positionM: PdrLocalPoint(routeEnd.eastM + remaining, routeEnd.northM),
+        routeEndM: routeEnd,
+        expectedBoardingNodeId: boardingNodeId,
+        expectedArrivalNodeId: arrivalNodeId,
+        steps: steps,
+        timestampMs: nowMs,
+      );
+      phases.addAll(detector.takePhaseChanges());
+    }
+  }
+
+  List<EscalatorPhase> phasesOf() => phases.map((c) => c.phase).toList();
 
   List<String> rejectionReasons() => detector
       .takeEvents()
@@ -323,6 +350,88 @@ void main() {
       expect(fixture.confirmed.single.toFloorLabel, '1F');
       expect(fixture.confirmed.single.boardingEvidence, 'routeExpected');
       expect(fixture.confirmed.single.expectedArrivalNodeId, 'n1-dn-fr2f');
+    });
+  });
+
+  group('단계 분리', () {
+    test('탑승점 접근만으로 배너 단계에 올라가고 층은 그대로다', () {
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.approachBoarding(remainingM: const [12, 8, 4, 2]);
+
+      expect(fixture.phasesOf(), contains(EscalatorPhase.boardingDetected));
+      final boarding = fixture.phases.firstWhere(
+        (change) => change.phase == EscalatorPhase.boardingDetected,
+      );
+      expect(boarding.fromFloorLabel, '2F');
+      expect(boarding.toFloorLabel, '3F');
+      expect(boarding.boardingNodeId, 'n-up-to3f');
+      expect(boarding.expectedArrivalNodeId, 'n3-up-fr2f');
+      expect(fixture.started, isEmpty, reason: '층 전환은 아직 시작하지 않는다');
+      expect(fixture.confirmed, isEmpty);
+    });
+
+    test('한 프레임 근접만으로는 배너를 띄우지 않는다', () {
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.approachBoarding(remainingM: const [2]);
+
+      expect(fixture.phasesOf(), isNot(contains(EscalatorPhase.boardingDetected)));
+    });
+
+    test('탑승점에서 다시 멀어지면 배너 단계를 되돌린다', () {
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.approachBoarding(remainingM: const [12, 8, 4, 2]);
+      fixture.approachBoarding(remainingM: const [6, 10]);
+
+      expect(fixture.phasesOf(), contains(EscalatorPhase.cancelled));
+    });
+
+    test('걸음 pause는 누적 1.8m 이전 수직 속도에서 시작한다', () {
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.approachBoarding(remainingM: const [12, 8, 4, 2]);
+      // 반 층(1.8m)에 못 미치는 1.2m만 오른다.
+      fixture.ramp(fromM: 0, toM: 1.2, seconds: 5);
+
+      expect(
+        fixture.phasesOf(),
+        contains(EscalatorPhase.verticalMotionDetected),
+      );
+      expect(
+        fixture.phasesOf(),
+        isNot(contains(EscalatorPhase.midpointReached)),
+        reason: '목적 층 지도는 midpoint 근거 전에는 열지 않는다',
+      );
+    });
+
+    test('층 지도 전환과 하차 재개는 서로 다른 시점이다', () {
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standNearBoarding();
+      fixture.ramp(fromM: 0, toM: 4.5, seconds: 20);
+      final midpointIndex = fixture
+          .phasesOf()
+          .indexOf(EscalatorPhase.midpointReached);
+      expect(midpointIndex, greaterThanOrEqualTo(0));
+      expect(fixture.phasesOf(), isNot(contains(EscalatorPhase.landed)));
+
+      fixture.hold(atM: 4.5, seconds: 5);
+      final landedIndex = fixture.phasesOf().indexOf(EscalatorPhase.landed);
+      expect(landedIndex, greaterThan(midpointIndex));
+    });
+
+    test('접근만 하고 지나가면 제한 시간 뒤 단계를 되돌린다', () {
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.approachBoarding(remainingM: const [12, 8, 4, 2]);
+      expect(fixture.phasesOf(), contains(EscalatorPhase.boardingDetected));
+
+      // 고도 변화 없이 제한 시간을 넘긴다.
+      fixture.hold(atM: 0, seconds: 50);
+
+      expect(fixture.phasesOf(), contains(EscalatorPhase.cancelled));
     });
   });
 
