@@ -596,26 +596,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
     String query,
   ) async {
     final normalized = query.trim().toLowerCase();
-    // 건물 밖을 보고 있을 때만 건물 입구가 후보다. 실내 진입 오버레이가 켜져
-    // 있으면 야외 탭이어도 아래 매장 검색으로 흘려보낸다 — 그러지 않으면 실내
-    // 도면을 보면서 길찾기를 열었는데 후보가 건물 이름뿐인 상태가 된다.
-    if (!_indoorContextActive) {
-      final buildings = await buildingRepository.getAllBuildings();
-      return buildings
-          .where((b) => b.entrance != null)
-          .where(
-            (b) =>
-                normalized.isEmpty || b.name.toLowerCase().contains(normalized),
-          )
-          .map(
-            (b) => DirectionsCandidate(
-              title: b.name,
-              subtitle: '${b.floors.length}개 층',
-              point: b.entrance!,
-            ),
-          )
-          .toList();
-    }
     // 길찾기는 **항상 건물 전체**에서 찾는다(currentFloorId를 넘기지 않는다).
     //
     // 예전에는 현재 층으로 좁히고 "전체 층에서 찾기" 토글로 넓히게 했다. 그런데
@@ -627,7 +607,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
       _buildingId,
       query,
     );
-    return results
+    final stores = results
         .map(
           (r) => DirectionsCandidate(
             title: r.name,
@@ -638,6 +618,36 @@ class _MapShellScreenState extends State<MapShellScreen> {
           ),
         )
         .toList();
+    if (_indoorContextActive) return stores;
+
+    // 건물 밖에서도 **매장이 후보다.**
+    //
+    // 예전에는 밖이면 건물만 후보로 뒀다. 건물 밖에서 실내 매장까지 이어지는
+    // 경로가 없던 시절의 규칙인데, 그 사이 두 가지가 겹쳐 이 화면은 사실상
+    // 죽어 있었다 — 후보를 `entrance != null`로 걸렀는데 백엔드가 건물 출입구
+    // 좌표를 내려주지 않아 그 조건을 통과하는 건물이 하나도 없었다. 즉 밖에서
+    // 길찾기를 열면 무엇을 쳐도 결과가 비었다.
+    //
+    // 이제 야외 화면이 "가장 가까운 지상 출입구를 경유해 매장까지" 안내할 수
+    // 있으므로([OutdoorMapBodyState.showOutdoorToIndoorRouteTo]), 밖에서 고른
+    // 매장이 그대로 목적지가 된다. 건물 자체도 후보로 남겨 두되(입구 좌표가
+    // 생기면 다시 살아난다) 매장보다 뒤에 놓는다 — 밖에서 길찾기를 여는 이유는
+    // 대개 특정 매장이다.
+    final buildings = await buildingRepository.getAllBuildings();
+    final buildingCandidates = buildings
+        .where((b) => b.entrance != null)
+        .where(
+          (b) =>
+              normalized.isEmpty || b.name.toLowerCase().contains(normalized),
+        )
+        .map(
+          (b) => DirectionsCandidate(
+            title: b.name,
+            subtitle: '${b.floors.length}개 층',
+            point: b.entrance!,
+          ),
+        );
+    return [...stores, ...buildingCandidates];
   }
 
   /// 길찾기 시트를 연다. [presetOrigin]/[presetDestination]은 매장 정보
@@ -826,6 +836,29 @@ class _MapShellScreenState extends State<MapShellScreen> {
                 point: origin.point,
                 nodeId: origin.nodeId,
               ),
+      );
+      return;
+    }
+
+    // 건물 **밖에서** 건물 안 매장을 고른 경우다. 목적지 좌표로 곧장 걷기 경로를
+    // 그리면 도착점이 건물 내부 좌표라 TMAP이 외벽 아무 곳으로나 안내하고, 거기서
+    // 안내가 끝난다. 대신 가장 가까운 지상 출입구를 경유하도록 야외 화면에 맡긴다
+    // — 실내 구간까지 미리 풀어 두었다가 건물에 들어가면 이어 붙인다.
+    //
+    // 출발지가 실내 지점이면 여기로 보내지 않는다. 그건 건물 안 두 지점 사이의
+    // 이동이라 "밖에서 문으로 들어간다"는 전제가 성립하지 않는다.
+    if (_mode == MapMode.outdoor &&
+        !_indoorContextActive &&
+        destination.floor != null &&
+        destination.nodeId != null &&
+        origin == null) {
+      await _outdoorKey.currentState?.showOutdoorToIndoorRouteTo(
+        PoiSearchResult(
+          name: destination.title,
+          floor: destination.floor!,
+          point: destination.point,
+          nodeId: destination.nodeId,
+        ),
       );
       return;
     }
