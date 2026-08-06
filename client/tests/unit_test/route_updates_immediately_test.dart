@@ -3,11 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/core/service_locator.dart';
+import 'package:navigation_client/models/outdoor_poi.dart';
 import 'package:navigation_client/repositories/building_repository.dart';
 import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/repositories/mock_building_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
+import 'package:navigation_client/repositories/outdoor_poi_repository.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:navigation_client/widgets/eta_card.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -25,6 +28,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   late BuildingRepository originalBuildingRepository;
   late DestinationRepository originalDestinationRepository;
+  late OutdoorPoiRepository originalPoiRepository;
 
   final repository = MockBuildingRepository();
 
@@ -55,6 +59,8 @@ void main() {
     originalDestinationRepository = destinationRepository;
     buildingRepository = repository;
     destinationRepository = MockDestinationRepository(repository);
+    originalPoiRepository = outdoorPoiRepository;
+    outdoorPoiRepository = _FixedOutdoorPoiRepository();
     requestStartupPermissions = () async => {};
     await repository.getAllBuildings();
   });
@@ -62,12 +68,18 @@ void main() {
   tearDown(() {
     buildingRepository = originalBuildingRepository;
     destinationRepository = originalDestinationRepository;
+    outdoorPoiRepository = originalPoiRepository;
     requestStartupPermissions = defaultRequestStartupPermissions;
     watchPosition = defaultWatchPosition;
   });
 
   /// 야외 지도에 실제로 경로가 그려진 상태를 만든다. 야외 걷기 경로는 GPS가
   /// 있어야 계산되므로 위치를 하나 흘려 넣는다.
+  ///
+  /// 첫 도착지는 **건물 밖 장소**(TMAP POI)로 잡는다. 밖에서의 검색은 건물과
+  /// 주변 장소만 찾고 건물 안 매장은 찾지 않는데
+  /// (`SearchPanel.indoorContextActive`), 뒤에서 도착지를 "데모 건물"로 바꿔
+  /// 이름이 실제로 바뀌었는지 봐야 하므로 첫 도착지는 건물이 아니어야 한다.
   Future<void> startGuidance(WidgetTester tester) async {
     // broadcast여야 한다. 화면이 상황에 따라 위치를 다시 구독하는데, 단일 구독
     // 스트림은 취소 뒤 재구독하면 'already been listened to'로 터진다.
@@ -82,9 +94,9 @@ void main() {
 
     await tester.tap(find.byType(TextField).first);
     await drain(tester);
-    await tester.enterText(find.byType(TextField).first, '강의실');
+    await tester.enterText(find.byType(TextField).first, '건너편카페');
     await drain(tester);
-    await tester.tap(find.text('강의실 101').first);
+    await tester.tap(find.byIcon(Icons.storefront_outlined).first);
     await drain(tester);
     await tester.tap(find.text('도착'));
     await drain(tester);
@@ -95,10 +107,7 @@ void main() {
       reason: '테스트 전제(도착을 누르면 경로가 그려짐)가 성립하지 않았다',
     );
     expect(
-      find.descendant(
-        of: find.byType(EtaCard),
-        matching: find.text('강의실 101'),
-      ),
+      find.descendant(of: find.byType(EtaCard), matching: find.text('건너편카페')),
       findsOneWidget,
       reason: '테스트 전제(ETA 카드가 지금 도착지를 가리킴)가 성립하지 않았다',
     );
@@ -133,12 +142,31 @@ void main() {
     );
     // 상단 초안 바에도 같은 이름이 적히므로 카드 안으로 좁힌다.
     expect(
-      find.descendant(
-        of: find.byType(EtaCard),
-        matching: find.text('데모 건물'),
-      ),
+      find.descendant(of: find.byType(EtaCard), matching: find.text('데모 건물')),
       findsOneWidget,
       reason: '바꾼 도착지가 경로에 반영되지 않았다',
     );
   });
+}
+
+/// 건물 밖 장소를 한 건 고정으로 돌려주는 리포지토리. TMAP 없이 "밖에서 고를 수
+/// 있는 목적지"를 하나 만들어 둔다.
+class _FixedOutdoorPoiRepository implements OutdoorPoiRepository {
+  @override
+  bool get isAvailable => true;
+
+  @override
+  Future<List<OutdoorPoi>> searchNearby(
+    String keyword, {
+    required LatLng center,
+    int radiusMeters = 1000,
+    int limit = 10,
+  }) async => const [
+    OutdoorPoi(
+      id: 'cafe-1',
+      name: '건너편카페',
+      point: LatLng(37.5670, 126.9782),
+      category: '커피전문점',
+    ),
+  ];
 }

@@ -870,63 +870,65 @@ class _MapShellScreenState extends State<MapShellScreen> {
     String query,
   ) async {
     final normalized = query.trim().toLowerCase();
-    // 길찾기는 **항상 건물 전체**에서 찾는다(currentFloorId를 넘기지 않는다).
+    // 건물 **안**을 보고 있으면 매장을 찾는다. 이때는 **항상 건물 전체**를
+    // 뒤진다(currentFloorId를 넘기지 않는다).
     //
     // 예전에는 현재 층으로 좁히고 "전체 층에서 찾기" 토글로 넓히게 했다. 그런데
     // 길찾기를 여는 이유 자체가 대개 "지금 층에 없는 곳으로 가려고"라, 기본값이
     // 사용자 의도의 반대였다 — 찾는 매장이 결과에 아예 없어서 매번 토글을 켜야
     // 했다. 다른 층 결과에는 층 라벨이 부제로 붙으므로(아래 subtitle), 어느 층
     // 매장인지는 목록에서 그대로 읽힌다.
-    final results = await destinationRepository.searchDestinations(
-      _buildingId,
-      query,
-    );
-    final stores = results
-        .map(
-          (r) => DirectionsCandidate(
-            title: r.name,
-            subtitle: r.floor,
-            point: r.point,
-            nodeId: r.nodeId,
-            floor: r.floor,
-          ),
-        )
-        .toList();
-    if (_indoorContextActive) return stores;
+    if (_indoorContextActive) {
+      final results = await destinationRepository.searchDestinations(
+        _buildingId,
+        query,
+      );
+      return results
+          .map(
+            (r) => DirectionsCandidate(
+              title: r.name,
+              subtitle: r.floor,
+              point: r.point,
+              nodeId: r.nodeId,
+              floor: r.floor,
+            ),
+          )
+          .toList();
+    }
 
-    // 건물 밖에서도 **매장이 후보다.**
+    // 건물 **밖에서는 건물만** 후보다. 매장은 넣지 않는다.
     //
-    // 예전에는 밖이면 건물만 후보로 뒀다. 건물 밖에서 실내 매장까지 이어지는
-    // 경로가 없던 시절의 규칙인데, 그 사이 두 가지가 겹쳐 이 화면은 사실상
-    // 죽어 있었다 — 후보를 `entrance != null`로 걸렀는데 백엔드가 건물 출입구
-    // 좌표를 내려주지 않아 그 조건을 통과하는 건물이 하나도 없었다. 즉 밖에서
-    // 길찾기를 열면 무엇을 쳐도 결과가 비었다.
+    // 밖에 있는 사람이 정하는 것은 "어느 건물로 갈지"이고, 어느 매장인지는
+    // 건물에 닿아서 정할 일이다. 매장을 섞으면 "더현대"를 쳤을 때 목록이 그
+    // 안의 매장 수십 개로 채워져, 정작 고르려던 건물이 뒤로 밀리거나 아예
+    // 안 보인다 — 사용자가 실제로 겪은 증상이 이것이다.
     //
-    // 이제 야외 화면이 "가장 가까운 지상 출입구를 경유해 매장까지" 안내할 수
-    // 있으므로([OutdoorMapBodyState.showOutdoorToIndoorRouteTo]), 밖에서 고른
-    // 매장이 그대로 목적지가 된다. 건물 자체도 후보로 남겨 두되 매장보다 뒤에
-    // 놓는다 — 밖에서 길찾기를 여는 이유는 대개 특정 매장이다.
+    // 건물 안 매장으로 가는 길은 막히지 않는다. 건물을 고르면 시트가 "건물
+    // 안에서 매장 고르기"를 함께 묻고([_showBuildingInfo]), 그쪽으로 들어가면
+    // 도면 위에서 매장을 직접 누를 수 있다.
     //
-    // 후보 조건이 `entrance != null`이 아니라 [Building.outdoorAnchor]인 것이
-    // 중요하다. 백엔드는 지금도 건물 출입구 좌표를 안 내려주므로, 앞의 조건으로
-    // 거르면 통과하는 건물이 **하나도 없어** 밖에서 "더현대"를 쳐도 후보가
-    // 비었다. 외곽선 중심이라도 있으면 건물을 목록에 올리고, 실제 도착 좌표는
-    // 야외 지도가 지상 출입구로 다듬는다([_showBuildingInfo]).
+    // **후보 좌표는 목록 응답만으로는 못 구한다.** `GET /buildings`는 id·이름·
+    // 층 목록만 주고 출입구·외곽선은 상세(`/buildings/{id}`)에만 있다. 그래서
+    // 야외 지도가 이미 상세로 받아 둔 값을 먼저 쓰고([_buildingDestinationPoint]),
+    // 그마저 없으면 후보에서 뺀다 — 좌표 없는 후보는 눌러도 경로가 안 나온다.
     final buildings = await buildingRepository.getAllBuildings();
-    final buildingCandidates = buildings
-        .where((b) => b.outdoorAnchor != null)
-        .where(
-          (b) =>
-              normalized.isEmpty || b.name.toLowerCase().contains(normalized),
-        )
-        .map(
-          (b) => DirectionsCandidate(
-            title: b.name,
-            subtitle: '${b.floors.length}개 층',
-            point: _buildingDestinationPoint(b)!,
-          ),
-        );
-    return [...stores, ...buildingCandidates];
+    final buildingCandidates = <DirectionsCandidate>[];
+    for (final building in buildings) {
+      if (normalized.isNotEmpty &&
+          !building.name.toLowerCase().contains(normalized)) {
+        continue;
+      }
+      final point = _buildingDestinationPoint(building);
+      if (point == null) continue;
+      buildingCandidates.add(
+        DirectionsCandidate(
+          title: building.name,
+          subtitle: '${building.floors.length}개 층',
+          point: point,
+        ),
+      );
+    }
+    return buildingCandidates;
   }
 
   /// 길찾기 시트를 연다. [presetOrigin]/[presetDestination]은 매장 정보
@@ -1554,6 +1556,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
                         outdoorSearchCenter: _outdoorSearchCenter,
                         onOutdoorPoiPicked: (poi) =>
                             unawaited(_onSearchPoiPicked(poi)),
+                        // 밖을 보고 있으면 건물 안 매장은 찾지 않는다. 밖에
+                        // 선 사람이 고르는 것은 건물이고, 매장은 건물에
+                        // 닿아서 고른다([SearchPanel.indoorContextActive]).
+                        indoorContextActive: _indoorContextActive,
                       ),
                     ),
                   )
