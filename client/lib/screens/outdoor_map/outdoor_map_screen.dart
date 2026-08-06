@@ -69,6 +69,18 @@ const _indoorWalkingSpeedMetersPerSecond = 1.2;
 // 줌만으로 실내 오버레이가 켜지면, 사용자는 고른 적 없는 도면을 보게 된다.
 const _poiFocusZoom = 17.0;
 
+// TMAP POI가 "이 건물의 가게"인지 볼 때 외곽선에서 허용하는 거리(m).
+//
+// TMAP POI 좌표는 건물 대표점이 아니라 도로에서 들어오는 접근점이라, 건물 안
+// 매장도 벽 바깥 인도에 찍힌다. 0으로 두면(=외곽선 안만 인정) 입점 매장이 전부
+// "건물 밖"이 되어 우리 실내 데이터와 합쳐지지 않는다.
+//
+// 40 m는 큰 건물의 접근점 어긋남을 덮으면서, 길 건너 가게(더현대 서울과 여의도
+// 브라이튼은 200 m 이상 떨어져 있다)는 삼키지 않는 거리다. 실내 진입 근접
+// 판정의 80 m(indoorEntryProximityMeters)보다 좁게 잡은 이유는 목적이 다르기
+// 때문이다 — 그쪽은 "건물을 보고 있는가", 여기는 "이 가게가 그 건물 것인가"다.
+const _poiBuildingProximityMeters = 40.0;
+
 // 건물 진입/이탈 판정 정책은 indoor_entry_gps.dart가 소유한다. 임계값과 그 근거,
 // "왜 직전 값 대비 비율이 아닌가"는 전부 그쪽 주석에 있다.
 
@@ -1933,9 +1945,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   /// 건물에 들어간 순간, 미리 풀어 둔 실내 구간을 실제 안내로 승격한다.
   ///
-  /// 승격하면서 야외 구간은 지운다. 두 구간을 동시에 남기면 지도에는 실내 경로가
-  /// 그려지는데([_syncRouteLayer]가 실내를 우선한다) ETA 카드는 야외 거리를
-  /// 말하는, 화면 안에서 서로 어긋나는 상태가 된다.
+  /// **야외 구간은 지우지 않고 들고 있는다.** 예전에는 지웠는데, 그러면 건물에
+  /// 들어갔다가 다시 밖으로 나온 사용자에게 아무 경로도 안 남는다 — 안내가
+  /// 통째로 사라진 것처럼 보이고, 처음부터 다시 검색해야 한다.
+  ///
+  /// 지웠던 이유(두 구간이 동시에 그려져 지도와 ETA 카드가 어긋난다)는 지우는
+  /// 대신 **지금 어디에 있는지로 골라 그려서** 푼다 — [_indoorEntered]가 참일
+  /// 때만 실내 구간을 그리고([_syncRouteLayer]) ETA 카드도 실내 것을 띄운다.
+  /// 밖으로 나오면 자동으로 야외 구간이 다시 보인다.
   Future<void> _activatePendingIndoorRoute() async {
     final route = _pendingIndoorRoute;
     final destination = _pendingIndoorDestination;
@@ -1948,9 +1965,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
     final segment = route.segmentForFloor(startFloor);
     setState(() {
-      _route = null;
-      _userDestination = null;
-      _userDestinationLabel = null;
+      // _route·_userDestination(야외 구간)은 그대로 둔다. 밖으로 나오면 다시
+      // 그려야 하는 값이다.
       _pendingIndoorRoute = null;
       _pendingIndoorDestination = null;
       _journeyEntrance = null;
@@ -2596,6 +2612,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   void _dismissIndoorRouteFromEtaCard() {
     _retainEtaClosePointer();
+    // 야외 구간도 함께 지운다. 실내 구간은 그 야외 구간의 뒷부분이라, 실내만
+    // 지우면 밖으로 나갔을 때 방금 끝낸 안내의 앞부분이 혼자 되살아난다.
+    _clearUserDestination();
     _clearIndoorRoute();
   }
 
@@ -3320,6 +3339,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
     setState(() => _indoorEntered = value);
     widget.onIndoorEnteredChanged?.call(value);
+    // 어느 구간을 그릴지가 이 값으로 갈린다([_syncRouteLayer]). 안 부르면
+    // 밖으로 나온 뒤에도 실내 선이 남아 있고, 야외 구간은 안 보인다.
+    unawaited(_syncRouteLayer());
     // 진입/이탈로 "지금 보고 있는 층"의 유무 자체가 바뀐다.
     _notifyActiveFloor();
     // 실내로 들어가면 GPS 구독을 끊고 마커를 지운다. 다시 나가면 재구독한다.
@@ -3724,9 +3746,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           ? _emptyCollection()
           : _collection([_lineFeature(transferPoints)]),
     );
-    // 실내 경로가 활성이면 그걸 우선 그린다(GPS 걷기 경로와 동시에 표시하지
-    // 않는다 — 사용자는 지금 실내에 있고 실내 경로가 유일한 관심사).
-    final indoor = _indoorRouteSegment;
+    // **건물 안에 있을 때만** 실내 경로를 그린다. 두 구간을 동시에 그리면
+    // 어느 쪽이 지금 안내인지 알 수 없고, 반대로 밖에 나왔는데 실내 경로만
+    // 남으면 걸어갈 길이 화면에서 사라진다.
+    //
+    // 야외 구간은 승격 뒤에도 상태로 남아 있으므로([_activatePendingIndoorRoute]),
+    // 이 조건 하나로 "안에서는 실내, 밖에서는 야외"가 자동으로 갈린다.
+    final indoor = _indoorEntered ? _indoorRouteSegment : null;
     if (indoor != null && indoor.points.length >= 2) {
       await controller.setGeoJsonSource(
         _routeSourceId,
@@ -3829,16 +3855,33 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 사용자를 내려놓는다. 좌표만으로 판정되므로 이름 맞추기와 달리 실패하지
   /// 않는다 — 안이면 문으로, 밖이면 그대로다.
   ll.LatLng? entranceIfInsideBuilding(ll.LatLng point) {
-    if (!isInsideIndoorBuilding(point)) return null;
+    // 여기는 **엄격한** 판정을 쓴다. 묻는 것이 "이 좌표를 도보 안내의 끝점으로
+    // 써도 되는가"이고, 그게 못 쓰는 좌표가 되는 건 정말로 건물 안일 때뿐이다.
+    // 아래 [isAtIndoorBuilding]처럼 여유를 주면, 건물 옆 노점까지 건물 문으로
+    // 안내하게 된다.
+    if (!_isInsideBuilding(point)) return null;
     return _building == null ? null : entrancePointFor(_building!.id);
   }
 
-  /// [point]가 우리 실내 도면이 있는 건물 외곽선 안인지.
+  /// [point]가 우리 실내 도면이 있는 건물에 **딸린 자리**인지.
   ///
-  /// 검색 결과를 합칠 때 "이 POI가 우리가 아는 건물 안인가"를 묻는 자리가
-  /// 있어서 밖으로 연다([dropPoisCoveredByIndoorStores]). 외곽선을 아직 못
-  /// 받았으면 false다 — 모르면 건드리지 않는 쪽이 안전하다.
-  bool isInsideIndoorBuilding(ll.LatLng point) => _isInsideBuilding(point);
+  /// 검색 결과를 합칠 때 "이 POI가 우리가 아는 건물의 가게인가"를 묻는
+  /// 자리가 있어서 밖으로 연다([dropPoisCoveredByIndoorStores]).
+  ///
+  /// **외곽선 안인지만 보면 안 된다.** TMAP이 주는 POI 좌표는 대표점이 아니라
+  /// `frontLat/frontLon`, 즉 **도로에서 들어오는 접근점**이다([OutdoorPoi.point]).
+  /// 백화점 입점 매장도 이 좌표가 건물 벽 바깥 인도에 찍히므로, 엄격한 폴리곤
+  /// 판정으로는 "건물 밖"이 된다 — 실제로 "스타벅스 더현대서울(B2)R점"이 그래서
+  /// 우리 "스타벅스 리저브"와 나란히 남아 있었다.
+  ///
+  /// [_poiBuildingProximityMeters]만큼 여유를 준다. 이 판정만으로 두 줄을 합치는
+  /// 것이 아니라 **브랜드 이름까지 맞아야** 합치므로(`looksLikeSameBrand`),
+  /// 여유가 남의 가게를 삼킬 여지는 좁다.
+  bool isAtIndoorBuilding(ll.LatLng point) {
+    final footprint = _buildingFootprint;
+    if (footprint == null || footprint.length < 3) return false;
+    return metersToPolygon(point, footprint) <= _poiBuildingProximityMeters;
+  }
 
   /// "이 건물까지" 안내할 때 쓸 도착 좌표.
   ///
@@ -4817,7 +4860,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         (position == null || accuracy > _lowAccuracyThresholdMeters);
     final route = _route;
     final transitItinerary = _transitItinerary;
-    final indoorRouteDestination = _indoorRouteDestination;
+    // 카드도 지도와 같은 규칙으로 고른다 — 건물 안에서는 실내, 밖에서는 야외.
+    // 두 값이 함께 살아 있을 수 있으므로([_activatePendingIndoorRoute]) 여기서
+    // 갈라 주지 않으면 지도에는 야외 선이 그려지는데 카드는 실내 거리를 말한다.
+    final indoorRouteDestination = _indoorEntered
+        ? _indoorRouteDestination
+        : null;
     // 거리·시간을 한 번에 계산한다(예전엔 같은 계산을 두 번 돌았다).
     final indoorEta = _indoorEta();
     final outdoorEta = route == null ? null : _outdoorEta(route);

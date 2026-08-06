@@ -69,7 +69,9 @@ void main() {
     // Scaffold로 감싼다 — 진입·안내 경로가 스낵바를 띄울 수 있고, 하위에
     // ScaffoldMessenger가 없으면 그 자리에서 예외로 끊긴다.
     await tester.pumpWidget(
-      MaterialApp(home: Scaffold(body: OutdoorMapBody(key: key))),
+      MaterialApp(
+        home: Scaffold(body: OutdoorMapBody(key: key)),
+      ),
     );
     await drain(tester);
 
@@ -99,6 +101,36 @@ void main() {
       find.byType(FloorSelector),
       findsNothing,
       reason: '안내를 시작했는데 도면이 그대로 펴져 있으면 실내 구간이 영영 안 그려진다',
+    );
+  });
+
+  testWidgets('건물 벽 바로 밖의 POI도 "이 건물의 가게"로 본다', (WidgetTester tester) async {
+    // TMAP POI 좌표는 건물 대표점이 아니라 **도로에서 들어오는 접근점**이라,
+    // 백화점 입점 매장도 벽 바깥 인도에 찍힌다. 외곽선 안인지만 보면 입점
+    // 매장이 전부 "건물 밖"이 되고, 우리 실내 데이터와 합쳐지지 않아 같은
+    // 가게가 두 줄로 남는다 — "스타벅스 리저브"와 "스타벅스 더현대서울(B2)R점"이
+    // 나란히 떴던 화면이 그것이다.
+    final key = GlobalKey<OutdoorMapBodyState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: OutdoorMapBody(key: key)),
+      ),
+    );
+    await drain(tester);
+
+    final state = key.currentState!;
+    expect(state.isAtIndoorBuilding(insideBuilding), isTrue);
+    // 북쪽 벽에서 약 20 m 밖(위도 0.00018° ≈ 20 m).
+    expect(
+      state.isAtIndoorBuilding(const ll.LatLng(37.56688, 126.9780)),
+      isTrue,
+      reason: '벽 바로 밖 접근점을 건물 밖으로 보면 입점 매장이 합쳐지지 않는다',
+    );
+    // 약 100 m 밖. 길 건너 가게까지 삼키면 남의 가게를 같은 곳으로 만든다.
+    expect(
+      state.isAtIndoorBuilding(const ll.LatLng(37.5676, 126.9780)),
+      isFalse,
+      reason: '여유를 너무 넓게 주면 길 건너 가게가 이 건물 것이 된다',
     );
   });
 }

@@ -917,7 +917,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
       relevant,
       indoorStores,
       isInsideBuilding: (poi) =>
-          outdoor?.isInsideIndoorBuilding(poi.point) ?? false,
+          outdoor?.isAtIndoorBuilding(poi.point) ?? false,
     );
 
     // 이미 건물 줄로 올라간 곳과 이름이 완전히 같은 POI도 뺀다.
@@ -1588,7 +1588,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                         // 같은 가게가 두 줄로 뜨지 않게 하는 판정. 길찾기
                         // 후보 목록도 같은 규칙을 쓴다.
                         isInsideIndoorBuilding: (point) =>
-                            _outdoorKey.currentState?.isInsideIndoorBuilding(
+                            _outdoorKey.currentState?.isAtIndoorBuilding(
                               point,
                             ) ??
                             false,
