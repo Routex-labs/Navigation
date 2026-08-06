@@ -110,4 +110,52 @@ void main() {
     // 방금 고른 목적지가 화면에서 사라지면 안 된다.
     expect(find.textContaining('데모 건물', findRichText: true), findsWidgets);
   });
+
+  testWidgets('길찾기 시트에서 건물을 골라도 같은 시트가 뜬다', (WidgetTester tester) async {
+    // 같은 건물을 어디서 골랐느냐에 따라 건물 안 매장까지 갈 수 있기도 하고
+    // 없기도 하면, 사용자는 두 입구를 각각 외워야 한다.
+    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await drain(tester);
+
+    await tester.tap(find.byTooltip('길찾기'));
+    await drain(tester);
+    // 화면의 TextField는 [상단 검색창, 시트 출발지, 시트 도착지] 순이다.
+    // 인덱스로 집으면 상단 바 상태(초안 바가 뜨면 검색창이 사라진다)에 따라
+    // 한 칸씩 밀리므로 마지막(=도착지)을 집는다.
+    await tester.enterText(find.byType(TextField).last, '데모');
+    await drain(tester);
+    await tester.tap(
+      find
+          .descendant(of: find.byType(ListTile), matching: find.text('데모 건물'))
+          .first,
+    );
+    await drain(tester);
+
+    expect(find.byType(BuildingSheet), findsOneWidget);
+    expect(find.text('건물 안에서 매장 고르기'), findsOneWidget);
+  });
+
+  testWidgets('길찾기 시트는 아무것도 치기 전에는 후보를 띄우지 않는다', (WidgetTester tester) async {
+    // 밖에서 후보로 남는 것은 건물 한 채뿐이라, 시트가 열리자마자 그 한 줄이
+    // 떠 있으면 사용자는 자기가 검색한 결과로 읽는다 — 치지도 않았는데 답이
+    // 정해져 있는 화면이 된다.
+    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await drain(tester);
+
+    await tester.tap(find.byTooltip('길찾기'));
+    await drain(tester);
+
+    expect(find.text('데모 건물'), findsNothing);
+
+    // 치면 그때 뜬다.
+    // 화면의 TextField는 [상단 검색창, 시트 출발지, 시트 도착지] 순이다.
+    // 인덱스로 집으면 상단 바 상태(초안 바가 뜨면 검색창이 사라진다)에 따라
+    // 한 칸씩 밀리므로 마지막(=도착지)을 집는다.
+    await tester.enterText(find.byType(TextField).last, '데모');
+    await drain(tester);
+    expect(
+      find.descendant(of: find.byType(ListTile), matching: find.text('데모 건물')),
+      findsOneWidget,
+    );
+  });
 }

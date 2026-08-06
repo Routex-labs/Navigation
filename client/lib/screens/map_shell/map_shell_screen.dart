@@ -644,6 +644,22 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 수 있는 문과 다른 면에 사용자를 내려놓는다. 야외 지도가 아직 그 건물을
   /// 로드하지 않았거나 문 데이터가 없으면 건물 응답의 출입구·외곽선 중심으로
   /// 떨어진다([Building.outdoorAnchor]). 그것마저 없으면 null.
+  /// id로 건물을 찾는다. 없거나 [buildingId]가 null이면 null.
+  ///
+  /// 목록은 리포지토리가 캐시하고 있어(진행 중인 Future까지 공유한다) 이 조회로
+  /// 네트워크가 다시 나가지 않는다.
+  Future<Building?> _buildingById(String? buildingId) async {
+    if (buildingId == null) return null;
+    try {
+      final buildings = await buildingRepository.getAllBuildings();
+      return buildings.where((b) => b.id == buildingId).firstOrNull;
+    } on Object {
+      // 못 찾으면 건물 시트를 건너뛰고 좌표로 안내한다. 되묻지 못하는 것보다
+      // 안내가 통째로 죽는 쪽이 나쁘다.
+      return null;
+    }
+  }
+
   LatLng? _buildingDestinationPoint(Building building) {
     return _outdoorKey.currentState?.entrancePointFor(building.id) ??
         building.outdoorAnchor;
@@ -896,6 +912,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
           .toList();
     }
 
+    // 밖에서는 **아무것도 안 쳤으면 아무것도 보여주지 않는다.**
+    //
+    // 건물 안에서는 빈 검색어가 "이 건물의 장소 전체 목록"이라는 뜻이라 그대로
+    // 훑어볼 수 있지만, 밖에서 후보로 남는 것은 건물 한 채뿐이다. 그 한 줄을
+    // 시트가 열리자마자 띄우면 사용자는 자기가 검색한 결과로 읽는다 — 치지도
+    // 않았는데 "더현대 서울"이 답으로 떠 있는 화면이 된다.
+    if (normalized.isEmpty) return const [];
+
     // 건물 **밖에서는 건물만** 후보다. 매장은 넣지 않는다.
     //
     // 밖에 있는 사람이 정하는 것은 "어느 건물로 갈지"이고, 어느 매장인지는
@@ -914,10 +938,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
     final buildings = await buildingRepository.getAllBuildings();
     final buildingCandidates = <DirectionsCandidate>[];
     for (final building in buildings) {
-      if (normalized.isNotEmpty &&
-          !building.name.toLowerCase().contains(normalized)) {
-        continue;
-      }
+      if (!building.name.toLowerCase().contains(normalized)) continue;
       final point = _buildingDestinationPoint(building);
       if (point == null) continue;
       buildingCandidates.add(
@@ -925,6 +946,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
           title: building.name,
           subtitle: '${building.floors.length}개 층',
           point: point,
+          // 이 후보가 건물이라는 표시. 도착지로 고르면 곧장 경로를 그리지 않고
+          // 건물 시트로 되묻는다([_openDirections]).
+          buildingId: building.id,
         ),
       );
     }
@@ -995,9 +1019,22 @@ class _MapShellScreenState extends State<MapShellScreen> {
       return;
     }
 
+    final destination = result.destination!;
+
+    // 도착지로 고른 것이 **건물 자체**면 곧장 경로를 그리지 않고 되묻는다.
+    //
+    // 상단 검색에서 건물을 고른 경우와 같은 화면이어야 한다. 여기서만 건물 앞
+    // 좌표로 안내를 끝내 버리면, 같은 건물을 어디서 골랐느냐에 따라 건물 안
+    // 매장까지 갈 수 있기도 하고 없기도 한 앱이 된다.
+    final pickedBuilding = await _buildingById(destination.buildingId);
+    if (!mounted) return;
+    if (pickedBuilding != null) {
+      await _showBuildingInfo(pickedBuilding);
+      return;
+    }
+
     // 시트 안에서 확정한 도착지는 상단 초안에도 반영한다. 출발 위치가 아직
     // 준비되지 않아 경로가 끊겨도 이 후보가 화면과 함께 사라지지 않게 한다.
-    final destination = result.destination!;
     setState(() => _routeDraftDestination = destination);
     await _startRoute(origin: result.origin, destination: destination);
   }

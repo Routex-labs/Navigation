@@ -119,17 +119,33 @@ void main() {
     await startGuidance(tester);
 
     // 상단 도착 행 → 시트. 도착지 칸이 활성인 채로 열리므로 검색어만 새로 넣고
-    // 후보를 고르면 시트가 닫히며 경로 계산으로 이어진다. 시트의 입력창은
-    // [출발지, 도착지] 순서다(초안 바가 떠 있는 동안 상단 바에는 입력창이 없다).
+    // 후보를 고른다. 도착지 칸은 화면의 **마지막** TextField다 — 인덱스로 집으면
+    // 상단 바에 검색창이 있느냐에 따라 한 칸씩 밀린다.
     await tester.tap(find.byKey(const Key('route-draft-destination')));
     await drain(tester);
-    await tester.enterText(find.byType(TextField).at(1), '데모');
+    await tester.enterText(find.byType(TextField).last, '데모');
     await drain(tester);
     await tester.tap(
       find
           .descendant(of: find.byType(ListTile), matching: find.text('데모 건물'))
           .first,
     );
+    await drain(tester);
+
+    // 고른 것이 **건물**이면 곧장 안내로 가지 않고 건물 시트가 되묻는다 —
+    // 건물 앞까지인지, 그 안의 매장까지인지. 상단 검색에서 건물을 고른 경우와
+    // 같은 화면이어야 한다. "건물 입구까지"를 고르면 그때 경로가 다시 그려진다.
+    final destinationButton = find.byKey(
+      const ValueKey('building-set-destination'),
+    );
+    expect(
+      destinationButton,
+      findsOneWidget,
+      reason: '길찾기에서 건물을 골랐는데 되묻는 시트가 뜨지 않았다',
+    );
+    await tester.ensureVisible(destinationButton);
+    await tester.pump();
+    await tester.tap(destinationButton);
     await drain(tester);
 
     // 경로가 새 도착지로 다시 계산됐다. 카드가 아직 이전 도착지를 가리키면

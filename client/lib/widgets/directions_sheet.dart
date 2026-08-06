@@ -16,6 +16,7 @@ class DirectionsCandidate {
     required this.point,
     this.nodeId,
     this.floor,
+    this.buildingId,
   });
 
   final String title;
@@ -27,6 +28,17 @@ class DirectionsCandidate {
 
   /// 실내 후보가 속한 층. 야외 후보에는 없다.
   final String? floor;
+
+  /// 이 후보가 **건물 그 자체**일 때 그 건물 id. 건물 안의 매장이면 null이다.
+  ///
+  /// 좌표만으로는 둘을 구분할 수 없어서 따로 둔다. 구분이 필요한 이유는 건물이
+  /// **목적지 하나로 끝나지 않기 때문**이다 — 사용자가 "더현대"를 골랐을 때
+  /// 원하는 것이 건물 앞인지 그 안의 매장인지는 고른 것만 보고 알 수 없어서,
+  /// 호출자가 이 값을 보고 되묻는 시트를 띄운다(`MapShellScreen._openDirections`).
+  ///
+  /// 목록의 아이콘도 이 값으로 갈린다. 건물과 매장이 같은 핀으로 보이면 무엇이
+  /// 건물인지 읽을 방법이 없다.
+  final String? buildingId;
 }
 
 /// "지도에서 선택"으로 정할 대상. 출발지·도착지 양쪽 모두 지도에서 고를 수
@@ -38,8 +50,10 @@ enum DirectionsMapPickTarget { origin, destination }
 /// 출발지로 쓴다는 뜻이다.
 class DirectionsResult {
   /// 도착지까지 정해져서 바로 경로를 그릴 수 있는 경우.
-  const DirectionsResult({this.origin, required DirectionsCandidate this.destination})
-    : pickOnMap = null;
+  const DirectionsResult({
+    this.origin,
+    required DirectionsCandidate this.destination,
+  }) : pickOnMap = null;
 
   /// 도착지 칸에서 "지도에서 선택"을 누른 경우. 도착지는 아직 없고, 호출자가
   /// 지도에서 매장을 고르는 모드로 넘어가야 한다. 출발지는 시트에서 정한 값을
@@ -175,9 +189,7 @@ class _PickOnMapTile extends StatelessWidget {
           // 제목은 같아도 부제는 갈라야 한다. 출발지 칸에서 눌렀는데 "도착지로
           // 지정합니다"라고 적혀 있으면 사용자는 잘못 눌렀다고 판단해 되돌린다.
           subtitle: Text(
-            isOrigin
-                ? '지도에서 매장을 눌러 출발지로 지정합니다'
-                : '지도에서 매장을 눌러 도착지로 지정합니다',
+            isOrigin ? '지도에서 매장을 눌러 출발지로 지정합니다' : '지도에서 매장을 눌러 도착지로 지정합니다',
             style: const TextStyle(fontSize: 12, color: AppColors.muted),
           ),
           trailing: const Icon(
@@ -330,9 +342,9 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
   void _afterOriginPicked() {
     final destination = _selectedDestination;
     if (destination != null) {
-      Navigator.of(
-        context,
-      ).pop(DirectionsResult(origin: _selectedOrigin, destination: destination));
+      Navigator.of(context).pop(
+        DirectionsResult(origin: _selectedOrigin, destination: destination),
+      );
       return;
     }
     _destinationFocusNode.requestFocus();
@@ -365,7 +377,11 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
                   children: [
                     const Text(
                       '길찾기',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.text),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.text,
+                      ),
                     ),
                     const SizedBox(height: 14),
                     TextField(
@@ -375,7 +391,11 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
                       onTap: _onOriginTap,
                       onChanged: _onOriginChanged,
                       decoration: const InputDecoration(
-                        prefixIcon: Icon(Icons.my_location, size: 18, color: AppColors.primary),
+                        prefixIcon: Icon(
+                          Icons.my_location,
+                          size: 18,
+                          color: AppColors.primary,
+                        ),
                         hintText: '출발지를 입력하세요',
                       ),
                     ),
@@ -384,10 +404,16 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
                       controller: _destinationController,
                       focusNode: _destinationFocusNode,
                       autofocus: !widget.focusOrigin,
-                      onTap: () => setState(() => _activeField = _ActiveField.destination),
+                      onTap: () => setState(
+                        () => _activeField = _ActiveField.destination,
+                      ),
                       onChanged: _onDestinationChanged,
                       decoration: const InputDecoration(
-                        prefixIcon: Icon(Icons.place_outlined, size: 20, color: AppColors.dest),
+                        prefixIcon: Icon(
+                          Icons.place_outlined,
+                          size: 20,
+                          color: AppColors.dest,
+                        ),
                         hintText: '도착지를 입력하세요',
                       ),
                     ),
@@ -409,37 +435,58 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
                 child: _loading
                     ? const Center(child: CircularProgressIndicator())
                     : (_results.isEmpty && !isOriginActive)
-                        ? const Center(
-                            child: Text('검색 결과가 없습니다', style: TextStyle(color: AppColors.muted)),
-                          )
-                        : ListView.separated(
-                            controller: scrollController,
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            itemCount: _results.length + (isOriginActive ? 1 : 0),
-                            separatorBuilder: (_, _) => const Divider(height: 1),
-                            itemBuilder: (context, index) {
-                              if (isOriginActive && index == 0) {
-                                return ListTile(
-                                  leading: const Icon(Icons.my_location, color: AppColors.primary),
-                                  title: const Text(
-                                    '현재 위치',
-                                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                                  ),
-                                  onTap: _selectCurrentLocationAsOrigin,
-                                );
-                              }
-                              final candidate = _results[index - (isOriginActive ? 1 : 0)];
-                              return ListTile(
-                                leading: const Icon(Icons.place, color: AppColors.primary),
-                                title: Text(
-                                  candidate.title,
-                                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                    ? const Center(
+                        child: Text(
+                          '검색 결과가 없습니다',
+                          style: TextStyle(color: AppColors.muted),
+                        ),
+                      )
+                    : ListView.separated(
+                        controller: scrollController,
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        itemCount: _results.length + (isOriginActive ? 1 : 0),
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          if (isOriginActive && index == 0) {
+                            return ListTile(
+                              leading: const Icon(
+                                Icons.my_location,
+                                color: AppColors.primary,
+                              ),
+                              title: const Text(
+                                '현재 위치',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
                                 ),
-                                subtitle: Text(candidate.subtitle),
-                                onTap: () => _selectCandidate(candidate),
-                              );
-                            },
-                          ),
+                              ),
+                              onTap: _selectCurrentLocationAsOrigin,
+                            );
+                          }
+                          final candidate =
+                              _results[index - (isOriginActive ? 1 : 0)];
+                          return ListTile(
+                            // 건물과 건물 안 매장을 아이콘으로 가른다. 같은
+                            // 핀으로 두면 목록에서 무엇이 건물인지 읽을
+                            // 방법이 없다.
+                            leading: Icon(
+                              candidate.buildingId == null
+                                  ? Icons.place
+                                  : Icons.apartment_outlined,
+                              color: AppColors.primary,
+                            ),
+                            title: Text(
+                              candidate.title,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
+                            ),
+                            subtitle: Text(candidate.subtitle),
+                            onTap: () => _selectCandidate(candidate),
+                          );
+                        },
+                      ),
               ),
             ],
           );
