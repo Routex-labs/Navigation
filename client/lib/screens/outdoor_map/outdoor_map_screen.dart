@@ -33,8 +33,11 @@ import '../../models/floor_graph.dart';
 import '../../models/floor_plan.dart';
 import '../../models/indoor_route.dart';
 import '../../models/poi_search_result.dart';
+import '../../models/transit_route.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/eta_card.dart';
+import '../../widgets/transit_style.dart';
+import '../../widgets/transit_summary_card.dart';
 import '../../core/map_route_style.dart';
 import '../../widgets/destination_pin.dart';
 import '../../widgets/category_map_filter.dart';
@@ -60,6 +63,11 @@ const _lowAccuracyThresholdMeters = degradedAccuracyMeters;
 // 실내 경로 ETA 분 계산에 쓰는 평균 걷기 속도. 실내 화면 상수와 일치시켜야
 // 같은 목적지 라우팅에서 두 화면 사이 표시가 어긋나지 않는다.
 const _indoorWalkingSpeedMetersPerSecond = 1.2;
+
+// 검색에서 고른 야외 장소로 카메라를 옮길 때의 줌. 실내 진입 임계값
+// (indoorEntryZoomThreshold)보다 **낮게** 잡는다 — 건물 밖 장소를 보러 갔는데
+// 줌만으로 실내 오버레이가 켜지면, 사용자는 고른 적 없는 도면을 보게 된다.
+const _poiFocusZoom = 17.0;
 
 // 건물 진입/이탈 판정 정책은 indoor_entry_gps.dart가 소유한다. 임계값과 그 근거,
 // "왜 직전 값 대비 비율이 아닌가"는 전부 그쪽 주석에 있다.
@@ -146,6 +154,14 @@ const _routeCasingLayerId = 'outdoor-route-casing';
 const _routeLineLayerId = 'outdoor-route-line';
 // 진행 방향 화살표. 본선 위에 얹혀 선을 따라 흐른다.
 const _routeArrowLayerId = 'outdoor-route-arrow';
+// 대중교통 경로. 도보 경로와 소스를 나누는 이유는 **선의 성격이 다르기**
+// 때문이다. 도보는 한 가지 색 한 줄이지만 대중교통은 구간마다 노선색이 다르고
+// 도보 구간만 점선이라, 하나의 소스에 넣고 feature 속성으로 색·패턴을 갈라야
+// 한다. 같은 소스를 쓰면 도보 안내가 켜질 때마다 이 선의 색 표현식까지 다시
+// 계산되어, 안내를 바꿀 때 잠깐 엉뚱한 색으로 깜빡인다.
+const _transitSourceId = 'outdoor-transit';
+const _transitRideLayerId = 'outdoor-transit-ride';
+const _transitWalkLayerId = 'outdoor-transit-walk';
 const _currentSourceId = 'outdoor-current';
 const _accuracyLayerId = 'outdoor-accuracy';
 const _currentDotLayerId = 'outdoor-current-dot';
@@ -568,6 +584,25 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   bool _interactive = true;
   ll.LatLng? _userDestination;
   String? _userDestinationLabel;
+
+  // --- 대중교통 경로(TMAP transit) ---
+  //
+  // 도보 경로([_route])와 **동시에 그리지 않는다.** 두 선이 겹치면 지금 안내
+  // 중인 것이 어느 쪽인지 알 수 없고, 하단 카드도 서로 다른 소요 시간을 말하게
+  // 된다. 대중교통을 고르는 순간 도보 구간은 지우고, "도보로 보기"를 누르면
+  // 반대로 되돌린다.
+
+  /// 지금 지도에 그려진 대중교통 경로. null이면 대중교통 안내 중이 아니다.
+  TransitItinerary? _transitItinerary;
+
+  /// 대중교통 요약 카드에 적을 도착지 문구와 좌표. 좌표는 "도보로 보기"로
+  /// 되돌아갈 때 같은 목적지로 도보 경로를 다시 그리는 데 쓴다.
+  String? _transitLabel;
+  ll.LatLng? _transitDestination;
+
+  /// 대중교통 경로를 요청할 때 쓴 출발점. 도보로 되돌릴 때 같은 지점에서
+  /// 시작해야 두 안내가 같은 여정을 말한다.
+  ll.LatLng? _transitOrigin;
 
   // --- 야외 → 실내 연결(문 경유 길안내) ---
   //
@@ -1933,7 +1968,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 출발점과 도착점이 사실상 같은 좌표면(예: 건물 입구 바로 앞) 경계 상자
     // 폭이 0에 가까워져 줌 계산이 발산한다 — 이 경우엔 화면에 맞출 "경로"랄
     // 게 없으니 자동 줌은 건너뛴다.
-    if (route.points.length < 2 || route.distanceMeters < 5) return;
+    if (route.distanceMeters < 5) return;
+    _fitCameraToPoints(route.points);
+  }
+
+  /// 좌표열 전체가 화면에 들어오도록 카메라를 맞춘다. 도보 경로와 대중교통
+  /// 경로가 같은 여백 규칙을 쓰도록 뽑아 두었다 — 값이 갈리면 안내를 바꿀
+  /// 때마다 경로가 화면에서 다른 크기로 잡힌다.
+  void _fitCameraToPoints(List<ll.LatLng> points) {
+    if (points.length < 2) return;
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
 
@@ -1941,12 +1984,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     var maxLat = double.negativeInfinity;
     var minLng = double.infinity;
     var maxLng = double.negativeInfinity;
-    for (final p in route.points) {
+    for (final p in points) {
       minLat = p.latitude < minLat ? p.latitude : minLat;
       maxLat = p.latitude > maxLat ? p.latitude : maxLat;
       minLng = p.longitude < minLng ? p.longitude : minLng;
       maxLng = p.longitude > maxLng ? p.longitude : maxLng;
     }
+    // 경계 상자가 한 점으로 수렴하면(모든 좌표가 같음) 줌 계산이 발산한다.
+    if (maxLat - minLat < 1e-7 && maxLng - minLng < 1e-7) return;
     controller.animateCamera(
       CameraUpdate.newLatLngBounds(
         LatLngBounds(
@@ -2067,6 +2112,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     bool keepPendingIndoorRoute = false,
   }) async {
     if (!keepPendingIndoorRoute) _clearPendingIndoorRoute();
+    // 새 도보 목적지를 받으면 이전 대중교통 안내는 끝난 것이다. 남겨 두면
+    // 다른 곳으로 걸어가는 화면 위에 예전 버스 노선이 계속 그려진다.
+    clearTransitRoute();
     setState(() {
       // 이번 안내의 출발지가 무엇인지 여기서 확정한다. origin이 없으면 GPS로
       // 되돌아가야 하므로 반드시 null로 지워야 한다 — 안 지우면 예전에 찍어 둔
@@ -2104,6 +2152,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   void _clearUserDestination() {
     _clearPendingIndoorRoute();
+    clearTransitRoute();
     setState(() {
       _userDestination = null;
       _userDestinationLabel = null;
@@ -2160,7 +2209,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       );
       if (!mounted) return;
     }
-    // 이전 걷기 경로가 남아 있으면 함께 지워, 실내 경로만 화면에 뜨도록 한다.
+    // 이전 걷기·대중교통 경로가 남아 있으면 함께 지워, 실내 경로만 화면에
+    // 뜨도록 한다.
+    clearTransitRoute();
     setState(() {
       _route = null;
       _userDestination = null;
@@ -2597,6 +2648,44 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       routeArrowProps(),
       enableInteraction: false,
     );
+    // 대중교통 경로. 도보 경로 **바로 위**에 올려, 두 안내가 잠깐 겹치는
+    // 순간에도 사용자가 방금 고른 대중교통 선이 가려지지 않게 한다.
+    //
+    // 색은 feature 속성에서 읽는다(`['get', 'color']`). 구간마다 노선색이 달라
+    // 레이어를 노선 수만큼 만들 수는 없고, 만들었다면 경로를 바꿀 때마다
+    // 레이어를 지웠다 다시 등록해야 한다 — 스타일 재등록은 이 파일이 이미
+    // 여러 번 데인 지점이다(파일 상단 addSource 주석).
+    await controller.addSource(
+      _transitSourceId,
+      GeojsonSourceProperties(data: _emptyCollection()),
+    );
+    await controller.addLineLayer(
+      _transitSourceId,
+      _transitRideLayerId,
+      const LineLayerProperties(
+        lineColor: ['get', 'color'],
+        lineWidth: 5.5,
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      // 탈것 구간만. 도보는 아래 점선 레이어가 따로 그린다.
+      filter: ['==', ['get', 'walk'], false],
+      enableInteraction: false,
+    );
+    await controller.addLineLayer(
+      _transitSourceId,
+      _transitWalkLayerId,
+      const LineLayerProperties(
+        lineColor: ['get', 'color'],
+        lineWidth: 3.5,
+        lineDasharray: [1.4, 1.2],
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      filter: ['==', ['get', 'walk'], true],
+      enableInteraction: false,
+    );
+
     await controller.addSource(
       _transferRouteSourceId,
       GeojsonSourceProperties(data: _emptyCollection()),
@@ -2770,6 +2859,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncCurrentLayer();
     _syncDestinationLayer();
     _syncRouteLayer();
+    _syncTransitLayer();
     _syncIndoorDestinationLayer();
     _syncPdrCurrentLayer();
     unawaited(_syncDebugPdrLayers());
@@ -3620,10 +3710,139 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     );
   }
 
-  /// 실내/야외 경로 중 하나라도 활성이면 true. ETA 카드 노출과 하단 바 리프트
-  /// 판정에 쓴다.
+  /// 대중교통 경로선을 지도에 반영한다.
+  ///
+  /// 구간(leg)마다 feature를 나눠 색과 도보 여부를 속성으로 실어 보낸다 —
+  /// 레이어 두 개(탈것 실선 / 도보 점선)가 그 속성으로 필터해 각자 그린다.
+  Future<void> _syncTransitLayer() async {
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    final itinerary = _transitItinerary;
+    if (itinerary == null) {
+      await controller.setGeoJsonSource(_transitSourceId, _emptyCollection());
+      return;
+    }
+    final features = <Map<String, dynamic>>[];
+    for (final leg in itinerary.legs) {
+      if (leg.points.length < 2) continue;
+      features.add({
+        'type': 'Feature',
+        'properties': {
+          'color': transitLegColorHex(leg),
+          'walk': leg.mode.isWalk,
+        },
+        'geometry': {
+          'type': 'LineString',
+          'coordinates': [
+            for (final p in leg.points) [p.longitude, p.latitude],
+          ],
+        },
+      });
+    }
+    await controller.setGeoJsonSource(
+      _transitSourceId,
+      features.isEmpty ? _emptyCollection() : _collection(features),
+    );
+  }
+
+  /// 대중교통 경로를 요청할 때 쓸 출발점. 지도에서 찍은 출발지가 있으면 그
+  /// 지점을, 없으면 GPS 현재 위치를 쓴다. 둘 다 없으면 null이고, 그때는
+  /// 호출부가 "위치를 못 잡았다"고 알린다.
+  ///
+  /// **실내 PDR 앵커는 쓰지 않는다.** 건물 안 좌표를 대중교통 출발지로 보내면
+  /// TMAP이 가장 가까운 정류장을 건물 반대편에서 찾아 준다.
+  ll.LatLng? get routeOriginPoint {
+    final fixed = _fixedRouteOrigin;
+    if (fixed != null) return fixed;
+    final position = _position;
+    if (position == null) return null;
+    return ll.LatLng(position.latitude, position.longitude);
+  }
+
+  /// 야외 POI 검색의 기준점.
+  ///
+  /// GPS를 먼저 쓰고, 아직 신호가 없으면 **지금 보고 있는 지도 중심**으로
+  /// 떨어진다. 후자를 폴백으로 두는 이유는, 기준점이 없으면 TMAP POI 검색이
+  /// 전국을 뒤져 걸어갈 수 없는 후보를 첫 줄에 올리기 때문이다. 사용자가 보고
+  /// 있는 화면 중심은 "여기 근처"라는 의도로 읽어도 무리가 없다.
+  ll.LatLng? get outdoorSearchCenter {
+    final position = _position;
+    if (position != null) return ll.LatLng(position.latitude, position.longitude);
+    final target = _mapController?.cameraPosition?.target;
+    if (target == null) return null;
+    return ll.LatLng(target.latitude, target.longitude);
+  }
+
+  /// 지도를 한 지점으로 옮긴다. 검색 결과에서 고른 야외 장소를 시트가 덮기 전에
+  /// 화면에 먼저 보여 주는 용도다.
+  Future<void> focusPoint(ll.LatLng point) async {
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    await controller.animateCamera(
+      CameraUpdate.newLatLngZoom(_toGl(point), _poiFocusZoom),
+    );
+  }
+
+  /// 고른 대중교통 경로를 지도에 그린다.
+  ///
+  /// 도보 안내는 여기서 **지운다.** 두 선을 겹쳐 두면 어느 쪽이 지금 안내인지
+  /// 알 수 없고, 하단 카드가 서로 다른 소요 시간을 말하게 된다.
+  Future<void> showTransitRoute(
+    TransitItinerary itinerary, {
+    required ll.LatLng destination,
+    required String label,
+    ll.LatLng? origin,
+  }) async {
+    _clearPendingIndoorRoute();
+    setState(() {
+      _transitItinerary = itinerary;
+      _transitDestination = destination;
+      _transitLabel = label;
+      _transitOrigin = origin ?? routeOriginPoint;
+      // 도보 경로와 그 목적지 핀은 접는다. 목적지 자체는 대중교통 경로의 끝점
+      // 으로 그대로 남아 있다.
+      _route = null;
+      _userDestination = destination;
+      _userDestinationLabel = label;
+    });
+    _syncRouteLayer();
+    _syncDestinationLayer();
+    await _syncTransitLayer();
+    _notifyRouteVisibilityIfChanged();
+    _fitCameraToPoints(itinerary.points);
+  }
+
+  /// 대중교통 안내를 끈다. 경로선·요약 카드가 함께 사라진다.
+  void clearTransitRoute() {
+    if (_transitItinerary == null) return;
+    setState(() {
+      _transitItinerary = null;
+      _transitLabel = null;
+      _transitDestination = null;
+      _transitOrigin = null;
+    });
+    _syncTransitLayer();
+    _notifyRouteVisibilityIfChanged();
+  }
+
+  /// 요약 카드의 "도보" — 같은 출발·도착으로 도보 경로를 다시 그린다.
+  ///
+  /// 대중교통이 더 오래 걸리는 짧은 거리에서 되돌아갈 길이다. 이게 없으면
+  /// 안내를 끄고 목적지부터 다시 골라야 한다.
+  Future<void> _switchTransitToWalking() async {
+    final destination = _transitDestination;
+    final label = _transitLabel;
+    final origin = _transitOrigin;
+    if (destination == null || label == null) return;
+    clearTransitRoute();
+    await showRouteTo(destination, label: label, origin: origin);
+  }
+
+  /// 실내/야외/대중교통 경로 중 하나라도 활성이면 true. ETA 카드 노출과 하단 바
+  /// 리프트 판정에 쓴다.
   bool get _hasAnyRouteVisible =>
       _route != null ||
+      _transitItinerary != null ||
       _indoorRouteSegment != null ||
       _indoorMultiFloorRoute != null;
 
@@ -4510,6 +4729,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _outdoorGpsVisible &&
         (position == null || accuracy > _lowAccuracyThresholdMeters);
     final route = _route;
+    final transitItinerary = _transitItinerary;
     final indoorRouteDestination = _indoorRouteDestination;
     // 거리·시간을 한 번에 계산한다(예전엔 같은 계산을 두 번 돌았다).
     final indoorEta = _indoorEta();
@@ -4724,6 +4944,30 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
                           .clamp(1, 999),
                   label: _indoorEtaLabel(indoorRouteDestination),
                   onClose: _dismissIndoorRouteFromEtaCard,
+                  onClosePointerDown: (position) =>
+                      _etaClosePointerDown = position,
+                ),
+              ),
+            ),
+          )
+        // 대중교통 안내는 도보 ETA 카드와 **같은 자리**를 쓰고 서로를 밀어낸다.
+        // 두 카드가 함께 뜨면 한 화면에서 소요 시간이 두 개가 되어, 지도에
+        // 그려진 선이 어느 쪽인지 알 수 없다.
+        else if (transitItinerary != null)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: TransitSummaryCard(
+                  key: _etaCardKey,
+                  itinerary: transitItinerary,
+                  label: _transitLabel ?? '목적지까지',
+                  onClose: _dismissUserDestinationFromEtaCard,
+                  onWalk: () => unawaited(_switchTransitToWalking()),
                   onClosePointerDown: (position) =>
                       _etaClosePointerDown = position,
                 ),
