@@ -154,24 +154,30 @@ bool shouldHoldImplausibleRouteJump({
 /// 재배치되거나 초록 보폭이 주황보다 커서 선행분이 깎일 때, 마커가 걸은 적
 /// 없는 방향으로 몇 미터 밀린다. 사용자에게는 "뒤로 튀었다"로 보인다.
 ///
-/// 되돌아 걷는 것은 정상이므로 후퇴 자체를 막으면 안 된다. 그래서 두 가지로
-/// 가른다: 늘어난 걸음으로 설명되는 후퇴는 그대로 통과시키고, 걸음이 없는데
-/// 생긴 후퇴만 [freeRegressionM]까지 참는다. 그 이상은 이번 갱신에서 보류하되,
-/// 실제로 되돌아 걷는 중이라면 걸음이 쌓이면서 곧 통과한다.
+/// 되돌아 걷는 것은 정상이므로 후퇴 자체를 막으면 안 된다. 문제는 **무엇이
+/// 되돌아 걸었다는 증거인가**다.
+///
+/// 걸음 수는 증거가 못 된다. pedometer는 방향을 모르기 때문에, 앞으로 걸은
+/// 걸음이 그대로 "뒤로 갈 여유"로 계산된다 — 앞으로 5걸음 걸었더니 6m 뒤로
+/// 튀는 것이 허용되는 식이다. 실제로 그렇게 동작했다.
+///
+/// 그래서 사용자가 향한 방향을 쓴다. 경로 방위와 [reverseHeadingErrorDeg] 이상
+/// 어긋나 있으면 몸을 돌린 것이므로 후퇴를 그대로 받아들이고, 아니면
+/// [freeRegressionM](투영 오차 수준)까지만 참고 그 이상은 보류한다.
 bool shouldHoldRouteRegression({
   required RouteProgress? previous,
   required RouteProgress candidate,
-  required int? acceptedAtSteps,
-  required int? currentSteps,
+  required double? deviceHeadingErrorDeg,
   double freeRegressionM = 2.0,
-  double maxStepLengthM = 1.2,
+  double reverseHeadingErrorDeg = 100,
 }) {
   if (previous == null) return false;
   final regressionM = previous.traveledM - candidate.traveledM;
   if (regressionM <= freeRegressionM) return false;
-  if (acceptedAtSteps == null || currentSteps == null) return true;
-  final stepDelta = math.max(0, currentSteps - acceptedAtSteps);
-  return regressionM > freeRegressionM + stepDelta * maxStepLengthM;
+  // 방향을 모르면 후퇴를 정당화할 수 없다. 모르는 채로 마커를 뒤로 보내는
+  // 것보다 이번 갱신을 넘기는 쪽이 낫다.
+  if (deviceHeadingErrorDeg == null) return true;
+  return deviceHeadingErrorDeg < reverseHeadingErrorDeg;
 }
 
 /// [previousTraveledM] 주변에서 후보를 찾는 기본 탐색 창(±m).

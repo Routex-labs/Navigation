@@ -194,6 +194,9 @@ class PdrDebugSessionRecorder {
       'last_confirmed_node_id': result.lastConfirmedNodeId,
       'position_floor_local_m': _pointJson(result.correctedPosition),
       'corrected_heading_deg': result.correctedHeadingDeg,
+      // 간선 방위와 별개로 사용자가 향한 방향. 둘의 차이가 "제자리 회전이
+      // 화면에 반영되는가"와 역주행 오판을 가른다.
+      'corridor_device_heading_deg': result.deviceHeadingDeg,
       'preview_position_floor_local_m': _pointJson(result.previewPosition),
       'preview_heading_deg': result.previewHeadingDeg,
       'preview_candidate_edge_ids': result.previewCandidateEdgeIds,
@@ -302,6 +305,7 @@ class PdrDebugSessionRecorder {
         'last_confirmed_node_id': result.lastConfirmedNodeId,
         'position': _pairJson(result.correctedPosition),
         'corrected_heading_deg': result.correctedHeadingDeg,
+        'corridor_device_heading_deg': result.deviceHeadingDeg,
         'preview_position': _pairJson(result.previewPosition),
         'preview_heading_deg': result.previewHeadingDeg,
         'preview_candidate_edge_ids': result.previewCandidateEdgeIds,
