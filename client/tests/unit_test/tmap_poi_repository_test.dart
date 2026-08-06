@@ -125,6 +125,28 @@ void main() {
     expect(requested.queryParameters['resCoordType'], 'WGS84GEO');
   });
 
+  test('반경을 안 주면 반경으로 자르지 않는다', () async {
+    // 반경을 걸면 "집에서 더현대 서울까지" 같은 검색이 통째로 죽는다. 20 km
+    // 떨어진 목적지가 반경 밖이라 결과가 비고, 화면에는 "찾지 못했어요"가 뜬다
+    // — 멀다는 것과 그런 곳이 없다는 것은 사용자에게 전혀 다른 이야기다.
+    late Uri requested;
+    final client = MockClient((request) async {
+      requested = request.url;
+      return http.Response('{"searchPoiInfo": null}', 200);
+    });
+    final repository = TmapPoiRepository(client: client, appKey: 'test-key');
+
+    await repository.searchNearby(
+      '더현대 서울',
+      center: const LatLng(37.5260, 126.9270),
+    );
+
+    expect(requested.queryParameters['radius'], '0');
+    // 대신 거리순 정렬은 그대로 둔다 — 같은 브랜드의 다른 지역 지점이 첫 줄에
+    // 오지 않게 막는 것이 이 값이다.
+    expect(requested.queryParameters['searchtypCd'], 'R');
+  });
+
   test('결과가 없으면 빈 목록이다', () async {
     final client = MockClient((request) async {
       return http.Response('{"searchPoiInfo": null}', 200);

@@ -25,17 +25,21 @@ class TmapPoiRepository implements OutdoorPoiRepository {
   Future<List<OutdoorPoi>> searchNearby(
     String keyword, {
     required LatLng center,
-    int radiusMeters = 1000,
+    int radiusMeters = 0,
     int limit = 10,
   }) async {
     final query = keyword.trim();
     if (query.isEmpty) return const [];
 
-    // radius는 **km 단위 정수**다. 1을 넘겨야 1km이고, 1000을 넘기면 1000km가
-    // 되어 전국 결과가 섞여 들어온다. 화면은 m로 말하는 게 자연스러우므로
-    // 경계인 여기서 바꾼다. 올림하는 이유는 500m를 0km로 깎아 버리지 않기
-    // 위해서다(0이면 TMAP이 반경 제한 없이 검색한다).
-    final radiusKm = (radiusMeters / 1000).ceil().clamp(1, 33);
+    // radius는 **km 단위 정수**이고, 0이면 TMAP이 반경으로 자르지 않는다.
+    //
+    // 기본값이 0인 이유는 인터페이스 주석에 적었다 — 반경을 걸면 멀리 있는
+    // 목적지가 "그런 곳 없음"으로 보인다. 화면은 m로 말하는 게 자연스러우므로
+    // 경계인 여기서 km로 바꾸고, 0보다 크면 올림한다(500m를 0km로 깎아 반경
+    // 제한이 통째로 풀리는 일이 없게).
+    final radiusKm = radiusMeters <= 0
+        ? 0
+        : (radiusMeters / 1000).ceil().clamp(1, 33);
 
     final uri = Uri.parse('$tmapBaseUrl/pois').replace(
       queryParameters: {
@@ -76,7 +80,8 @@ class TmapPoiRepository implements OutdoorPoiRepository {
     // bodyBytes에서 직접 UTF-8로 읽는다.
     final Map<String, dynamic> body;
     try {
-      body = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      body =
+          jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
     } on Object catch (error) {
       _log('"$query" 응답 파싱 실패: $error');
       return const [];

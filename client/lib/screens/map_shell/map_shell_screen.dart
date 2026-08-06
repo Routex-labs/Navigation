@@ -509,27 +509,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
     if (action == null) return false;
 
     // 야외 좌표뿐인 후보다. 노드·층이 없으므로 [_startRoute]는 이 값을 실내
-    // 라우팅으로 보내지 않고 도보 경로로 흘려보낸다.
-    //
-    // 다만 그 좌표가 **우리 건물 안**이면 문 좌표로 바꾼다. TMAP POI에는 백화점
-    // 입점 브랜드처럼 건물 안 매장이 섞여 있는데, 건물 내부 좌표를 도보 안내의
-    // 끝점으로 주면 TMAP이 가장 가까운 도로로 스냅해 실제로 들어갈 수 있는 문과
-    // 다른 면에 내려놓는다. 좌표만으로 판정하므로 이름 맞추기와 달리 실패하지
-    // 않는다.
-    //
-    // 그 매장이 우리 실내 데이터에도 있다면 사용자는 애초에 검색 결과 위쪽의
-    // 매장 줄(층·노드가 붙어 있어 실내까지 안내된다)을 골랐을 것이다. 여기까지
-    // 온 것은 우리가 그 매장을 모른다는 뜻이고, 그러면 문까지가 우리가 맞게
-    // 말할 수 있는 최대치다.
-    final insideEntrance = _outdoorKey.currentState?.entranceIfInsideBuilding(
-      poi.point,
-    );
+    // 라우팅으로 보내지 않고 도보 경로로 흘려보낸다. 좌표가 우리 건물 안일
+    // 때의 보정도 [_startRoute]가 한다 — 진입점마다 하면 또 갈린다.
     final candidate = DirectionsCandidate(
       title: poi.name,
-      subtitle: insideEntrance == null
-          ? (poi.address ?? '건물 밖 장소')
-          : '건물 입구까지 안내',
-      point: insideEntrance ?? poi.point,
+      subtitle: poi.address ?? '건물 밖 장소',
+      point: poi.point,
     );
     switch (action) {
       case OutdoorPoiAction.setOrigin:
@@ -814,51 +799,34 @@ class _MapShellScreenState extends State<MapShellScreen> {
     return false;
   }
 
+  /// **모든 검색 진입점이 함께 쓰는 후보 목록.**
+  ///
+  /// 상단 검색창과 길찾기 시트가 각자 검색을 구현하면 반드시 갈린다. 실제로
+  /// 갈렸다 — 한쪽에는 건물 밖 장소(TMAP)가 있고 다른 쪽에는 없어서, 같은
+  /// 검색어를 어디에 치느냐에 따라 나오는 곳이 달랐다. "무엇이 후보인가"를
+  /// 정하는 자리는 하나뿐이어야 한다.
+  ///
+  /// 세 가지 출처를 이 순서로 합친다.
+  ///
+  /// 1. **건물 안 매장**(우리 백엔드) — 층·노드가 붙어 있어 문을 경유하는 실내
+  ///    안내까지 이어진다. 밖에서 "루이비통"을 치는 사람의 목적지가 이것이다.
+  /// 2. **건물**(우리 백엔드) — 입구까지 안내한다.
+  /// 3. **건물 밖 장소**(TMAP POI) — 좌표까지 도보·대중교통.
+  ///
+  /// 건물 안을 보고 있으면 1번만 쓴다. 지금 서 있는 층 위에서 길을 찾는 중인데
+  /// 길 건너 편의점이 후보에 섞이면, 정작 찾던 매장이 뒤로 밀린다.
   Future<List<DirectionsCandidate>> _searchDirectionsCandidates(
     String query,
   ) async {
     final normalized = query.trim().toLowerCase();
-    // 건물 **안**을 보고 있으면 매장을 찾는다. 이때는 **항상 건물 전체**를
-    // 뒤진다(currentFloorId를 넘기지 않는다).
+
+    // 매장 검색은 **항상 건물 전체**를 뒤진다(currentFloorId를 넘기지 않는다).
     //
     // 예전에는 현재 층으로 좁히고 "전체 층에서 찾기" 토글로 넓히게 했다. 그런데
     // 길찾기를 여는 이유 자체가 대개 "지금 층에 없는 곳으로 가려고"라, 기본값이
     // 사용자 의도의 반대였다 — 찾는 매장이 결과에 아예 없어서 매번 토글을 켜야
-    // 했다. 다른 층 결과에는 층 라벨이 부제로 붙으므로(아래 subtitle), 어느 층
-    // 매장인지는 목록에서 그대로 읽힌다.
-    if (_indoorContextActive) {
-      final results = await destinationRepository.searchDestinations(
-        _buildingId,
-        query,
-      );
-      return results
-          .map(
-            (r) => DirectionsCandidate(
-              title: r.name,
-              subtitle: r.floor,
-              point: r.point,
-              nodeId: r.nodeId,
-              floor: r.floor,
-            ),
-          )
-          .toList();
-    }
-
-    // 밖에서는 **아무것도 안 쳤으면 아무것도 보여주지 않는다.**
-    //
-    // 건물 안에서는 빈 검색어가 "이 건물의 장소 전체 목록"이라는 뜻이라 그대로
-    // 훑어볼 수 있다. 밖에서는 그 목록이 "여기서 갈 만한 곳"이 아니라 남의 건물
-    // 내부 목록이라, 시트를 열자마자 띄우면 치지도 않은 답이 정해져 있는 화면이
-    // 된다.
-    if (normalized.isEmpty) return const [];
-
-    // 건물 밖에서도 **매장이 후보다.**
-    //
-    // 밖에서 "루이비통"을 치는 사람은 그 매장이 목적지다. 건물만 후보로 두면
-    // 건물을 고른 뒤 안에서 다시 찾아야 하는데, 정작 우리는 그 매장의 층과
-    // 노드를 이미 갖고 있다. 밖에서 고른 매장은 야외 화면이 "가장 가까운 지상
-    // 출입구를 경유해 매장까지" 안내한다
-    // ([OutdoorMapBodyState.showOutdoorToIndoorRouteTo]).
+    // 했다. 다른 층 결과에는 층 라벨이 부제로 붙으므로, 어느 층 매장인지는
+    // 목록에서 그대로 읽힌다.
     final results = await destinationRepository.searchDestinations(
       _buildingId,
       query,
@@ -874,6 +842,15 @@ class _MapShellScreenState extends State<MapShellScreen> {
           ),
         )
         .toList();
+    if (_indoorContextActive) return stores;
+
+    // 밖에서는 **아무것도 안 쳤으면 아무것도 보여주지 않는다.**
+    //
+    // 건물 안에서는 빈 검색어가 "이 건물의 장소 전체 목록"이라는 뜻이라 그대로
+    // 훑어볼 수 있다. 밖에서는 그 목록이 "여기서 갈 만한 곳"이 아니라 남의 건물
+    // 내부 목록이라, 시트를 열자마자 띄우면 치지도 않은 답이 정해져 있는 화면이
+    // 된다.
+    if (normalized.isEmpty) return const [];
 
     // 건물 자체도 후보로 남기되 매장보다 뒤에 놓는다 — 밖에서 길찾기를 여는
     // 이유는 대개 특정 매장이다.
@@ -898,8 +875,53 @@ class _MapShellScreenState extends State<MapShellScreen> {
         ),
       );
     }
-    return [...stores, ...buildingCandidates];
+
+    return [
+      ...stores,
+      ...buildingCandidates,
+      ...await _outdoorPoiCandidates(query, buildingCandidates),
+    ];
   }
+
+  /// 건물 밖 장소(TMAP POI) 후보. 기준점을 못 구했거나 TMAP을 쓸 수 없으면
+  /// 빈 목록이다 — 그 경우에도 위의 매장·건물 후보는 그대로 남는다.
+  ///
+  /// 이미 건물 줄로 올라간 곳과 이름이 **완전히 같은**(공백·대소문자 무시) POI는
+  /// 뺀다. TMAP도 같은 건물을 POI로 한 건 돌려주므로 그냥 두면 같은 곳이 목록에
+  /// 두 번 뜨는데, 둘이 하는 일이 다르다 — 건물 줄은 입구까지 안내하고 POI 줄은
+  /// 좌표로 간다. 상단 검색 패널이 쓰는 규칙과 같다.
+  Future<List<DirectionsCandidate>> _outdoorPoiCandidates(
+    String query,
+    List<DirectionsCandidate> buildingCandidates,
+  ) async {
+    if (!outdoorPoiRepository.isAvailable) return const [];
+    final center = _outdoorKey.currentState?.outdoorSearchCenter;
+    if (center == null) return const [];
+
+    final List<OutdoorPoi> pois;
+    try {
+      pois = await outdoorPoiRepository.searchNearby(query, center: center);
+    } on Object {
+      // 바깥 조회 실패로 길찾기 후보가 통째로 비면 안 된다. 매장·건물은 이미
+      // 손에 있다.
+      return const [];
+    }
+    final buildingNames = buildingCandidates
+        .map((c) => _collapseName(c.title))
+        .toSet();
+    return [
+      for (final poi in pois)
+        if (!buildingNames.contains(_collapseName(poi.name)))
+          DirectionsCandidate(
+            title: poi.name,
+            subtitle: poi.address ?? '건물 밖 장소',
+            point: poi.point,
+          ),
+    ];
+  }
+
+  static String _collapseName(String value) =>
+      value.replaceAll(RegExp(r'\s+'), '').toLowerCase();
 
   /// 길찾기 시트를 연다. [presetOrigin]/[presetDestination]은 매장 정보
   /// 시트의 "출발지로 설정"/"도착지로 설정"에서 넘어올 때 그 매장으로 채워
@@ -1186,8 +1208,27 @@ class _MapShellScreenState extends State<MapShellScreen> {
       // 함께 비우지만, 그 경로를 타지 않은 호출(모드 전환 없이 들어온 경우)에도
       // 같은 규칙이 적용되도록 여기서 한 번 더 막는다.
       final indoorOrigin = origin?.floor != null || origin?.nodeId != null;
+      // 도착 좌표가 **우리 건물 안**이면 문 좌표로 바꾼다.
+      //
+      // TMAP POI에는 백화점 입점 브랜드처럼 건물 안 매장이 섞여 있다. 건물 내부
+      // 좌표를 도보 안내의 끝점으로 주면 TMAP이 가장 가까운 도로로 스냅해,
+      // 실제로 들어갈 수 있는 문과 다른 면에 사용자를 내려놓는다.
+      //
+      // 여기 한 곳에서만 보정한다. 후보를 만드는 자리(상단 검색·길찾기 시트·
+      // 야외 장소 시트)마다 하면 한 곳을 빠뜨리는 순간 그 진입점만 조용히
+      // 달라진다 — 이 화면에서 반복된 실패가 정확히 그 모양이었다.
+      //
+      // 그 매장이 우리 실내 데이터에도 있다면 사용자는 애초에 목록 위쪽의 매장
+      // 줄(층·노드가 붙어 실내까지 안내된다)을 골랐을 것이다. 여기까지 왔다는
+      // 것은 우리가 그 매장을 모른다는 뜻이고, 그러면 문까지가 맞게 말할 수 있는
+      // 최대치다.
+      final endpoint =
+          _outdoorKey.currentState?.entranceIfInsideBuilding(
+            destination.point,
+          ) ??
+          destination.point;
       await _outdoorKey.currentState?.showRouteTo(
-        destination.point,
+        endpoint,
         label: destination.title,
         origin: indoorOrigin ? null : origin?.point,
       );
