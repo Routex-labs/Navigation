@@ -9,6 +9,13 @@
 /// (자식의 top 상수를 아무리 조정해도 부모 sibling 위로 올라갈 수 없다).
 library;
 
+/// 층 전환 UI 상태가 바뀔 때 상위 셸에 알리는 계약.
+///
+/// [banner]가 null이면 배너를 감춘다. [veilOpacity]는 실제 도면 swap 구간에만
+/// 0이 아니며, 그때는 뒤쪽 입력도 함께 막아야 한다.
+typedef FloorTransitionUiChanged =
+    void Function(FloorTransitionUiState? banner, double veilOpacity);
+
 /// 사용자에게 보이는 층 전환 진행 단계.
 enum FloorTransitionStage {
   /// 탑승점에 접근했다. 배너만 뜨고 지도·걸음은 그대로다.

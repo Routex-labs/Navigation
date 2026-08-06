@@ -35,7 +35,6 @@ import '../../widgets/category_map_filter.dart';
 import '../../widgets/eta_card.dart';
 import '../../features/indoor_navigation/contract/floor_transition_ui_state.dart';
 import '../../widgets/floor_plan_view.dart';
-import '../../widgets/floor_transition_banner.dart';
 import '../../widgets/floor_selector.dart';
 import '../../widgets/map_overlay_tap_guard.dart';
 
@@ -75,12 +74,6 @@ const _etaCardHeightPx = 130.0;
 // 노출하지 않기로 해서 그쪽 상단 오버레이는 장소 pill 한 줄뿐이다.
 const _placingHintTopPx = 236.0;
 
-/// 에스컬레이터 배너의 위치(safe area 아래 기준).
-///
-/// [_mapShellTopChromePx]는 검색 카드까지만 센 값이라 그 자리에 두면 상위 셸이
-/// 그리는 카테고리 pill 줄과 겹친다(실측에서 배너가 pill 뒤에 깔렸다).
-const _escalatorBannerTopPx = 92.0;
-
 /// 회전 허용 구간에서 이탈 재탐색을 유예하는 최대 시간.
 ///
 /// 정상 회전은 2~3걸음(약 2초) 안에 연결 간선으로 수렴한다. 상한을 두지 않으면
@@ -89,7 +82,6 @@ const _junctionRerouteHoldMs = 4000;
 
 /// 층 교체를 덮는 베일이 들어오는/빠지는 시간.
 const _floorSwapVeilFadeIn = Duration(milliseconds: 140);
-const _floorSwapVeilFadeOut = Duration(milliseconds: 260);
 
 /// 층 이동 확정 뒤 "아니에요"를 띄워 두는 시간.
 const _escalatorArrivalBannerHold = Duration(seconds: 6);
@@ -134,6 +126,7 @@ class IndoorMapBody extends StatefulWidget {
     this.outerOverlayKeys = const [],
     this.categorySelection,
     this.onFloorChanged,
+    this.onFloorTransitionChanged,
   });
 
   /// 보고 있는 층이 바뀔 때 호출된다(최초 로드 포함). 상위(MapShellScreen)가
@@ -151,6 +144,14 @@ class IndoorMapBody extends StatefulWidget {
   /// ETA 카드가 화면 최하단에 새로 나타나거나 사라질 때 호출된다.
   /// 상위(MapShellScreen)가 이 값으로 하단 공용 바를 그 위로 띄운다.
   final ValueChanged<bool>? onRouteVisibleChanged;
+
+  /// 층 전환 배너·베일 상태를 상위 셸에 넘긴다.
+  ///
+  /// 이 화면이 직접 그리지 않는 이유: 검색창·카테고리 줄·하단 바는 부모인
+  /// MapShellScreen이 **나중에** 그린다. 자식의 top 상수를 아무리 조정해도
+  /// 부모 sibling 위로 올라갈 수 없어서, 상단 UI가 최악 높이일 때 배너가 뒤에
+  /// 깔렸다. 판정과 상태는 여기가 소유하고 렌더링만 위로 올린다.
+  final FloorTransitionUiChanged? onFloorTransitionChanged;
 
   /// 지도 위 매장 폴리곤을 탭하면 호출된다. 상위(MapShellScreen)가 검색
   /// 결과를 탭했을 때와 똑같이 매장 정보 시트를 띄운다.
@@ -304,6 +305,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 
   /// 탑승 때문에 걸음 적용을 멈춘 상태인지. pause/resume 짝을 한 곳에서 센다.
   bool _stepsPausedForRide = false;
+
+  // 셸에 마지막으로 알린 층 전환 UI 상태. 같은 값이면 다시 알리지 않는다.
+  FloorTransitionUiState? _reportedFloorTransition;
+  double _reportedFloorSwapVeil = 0;
 
   /// 자동 층 전환에서 새 층 지도에 그대로 물려줄 카메라.
   ///
@@ -1966,10 +1971,32 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     );
   }
 
-  void _undoFloorTransitionFromBanner() {
+  /// 배너의 `아니에요`. 셸이 [IndoorMapBodyState]를 통해 호출한다.
+  void undoFloorTransition() {
     _escalatorArrivalTimer?.cancel();
     setState(() => _escalatorArrival = null);
     unawaited(_undoFloorTransition());
+  }
+
+  /// 층 전환 UI 상태가 바뀌었으면 셸에 알린다.
+  ///
+  /// 상태를 바꾸는 지점마다 콜백을 부르지 않고 build에서 비교한다. 취소·오류·
+  /// 되돌리기까지 출구가 여럿이라, 한 곳이라도 빠뜨리면 배너가 남고 사용자가
+  /// 복구할 방법이 없어진다 — 그 실패는 값 비교로 구조적으로 막는다.
+  void _reportFloorTransitionUi() {
+    final banner = _floorTransitionUiState;
+    final veil = _floorSwapVeil;
+    if (banner == _reportedFloorTransition && veil == _reportedFloorSwapVeil) {
+      return;
+    }
+    _reportedFloorTransition = banner;
+    _reportedFloorSwapVeil = veil;
+    final notify = widget.onFloorTransitionChanged;
+    if (notify == null) return;
+    // build 중에는 부모 setState를 호출할 수 없다.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) notify(banner, veil);
+    });
   }
 
   /// 위치에 반영하는 걸음만 멈춘다. 센서·기압·방향은 계속 흐른다.
@@ -3035,6 +3062,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 
   @override
   Widget build(BuildContext context) {
+    _reportFloorTransitionUi();
     final error = _error;
     final body = _loading
         ? const Center(child: CircularProgressIndicator())
@@ -3246,38 +3274,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           initialCamera: _floorHandoverCamera,
         ),
 
-        // 층 도면이 교체되는 한 프레임을 덮는다. 지도 위에만 얹고 나머지
-        // 오버레이는 그대로 보이게 이 자리에 둔다.
-        Positioned.fill(
-          child: IgnorePointer(
-            child: AnimatedOpacity(
-              opacity: _floorSwapVeil,
-              duration: _floorSwapVeil > 0
-                  ? _floorSwapVeilFadeIn
-                  : _floorSwapVeilFadeOut,
-              curve: Curves.easeOut,
-              child: ColoredBox(color: Theme.of(context).colorScheme.surface),
-            ),
-          ),
-        ),
-
         // 에스컬레이터 탑승 중 표시. 이 동안 마커는 도착 지점에 고정되고
         // 걸음 누적이 멈춰 있으므로, 왜 위치가 안 움직이는지 사용자가 알아야
         // 한다 — 안 그러면 "앱이 멈췄다"로 읽힌다. 확정 뒤에는 같은 자리에서
         // 잠깐 "도착"으로 바뀌며 되돌리기를 제공한다(예전 검은 토스트 대체).
-        if (_floorTransitionUiState case final transition?)
-          Positioned(
-            top: systemPadding.top + _escalatorBannerTopPx,
-            left: 16,
-            right: 16,
-            child: Center(
-              child: FloorTransitionBanner(
-                state: transition,
-                onUndo: _undoFloorTransitionFromBanner,
-              ),
-            ),
-          ),
-
         if (debugEnabled)
           Positioned(
             left: 12,
