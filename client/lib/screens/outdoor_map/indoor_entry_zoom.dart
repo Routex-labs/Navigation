@@ -92,6 +92,21 @@ const indoorEntryZoomThreshold = indoorOverlayFadeInEndZoom;
 /// 판정하지 않는다.
 const indoorExitZoomThreshold = 15.6;
 
+/// 검색에서 고른 **건물**을 보여줄 때, 그 화면의 진입 임계값보다 이만큼 낮게
+/// 멈춘다([OutdoorMapBodyState.focusBuilding]).
+///
+/// 고정 zoom을 쓸 수 없는 이유는 진입 임계값 자체가 화면 폭에 따라 달라지기
+/// 때문이다([indoorEntryZoomThresholdFor]). 폰에서는 16.8까지 내려오므로 야외
+/// POI와 같은 17.0으로 옮기면 그 순간 실내 오버레이가 켜진다 — "건물까지만
+/// 가겠다"고 고른 사용자에게 묻지도 않고 도면을 펴 주는 셈이다. 그래서 절대
+/// 값이 아니라 임계값에서 상대적으로 뺀다.
+///
+/// 0.3은 건물이 화면 폭의 약 1.23배(2^0.3)로 보이는 거리다. 건물이 화면을 꽉
+/// 채워 "이 건물이다"가 읽히면서도 진입 판정에는 닿지 않는다. 이 값이
+/// [indoorEntryZoomThreshold] - [indoorExitZoomThreshold](1.9)를 넘으면 미리보기
+/// 자체가 이탈 판정 구간으로 떨어지므로, 히스테리시스 밴드 안에 있어야 한다.
+const buildingPreviewZoomGap = 0.3;
+
 /// 하단 바에서 '홈'(야외)을 눌러 야외 지도로 돌아올 때 카메라를 맞출 zoom.
 ///
 /// [indoorExitZoomThreshold]보다 **낮아야 한다.** 이 값이 이탈 임계값 위에

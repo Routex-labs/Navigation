@@ -3800,6 +3800,73 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     );
   }
 
+  /// 검색에서 고른 **건물**로 지도를 옮긴다.
+  ///
+  /// [enterIndoor]가 거짓이면 진입 임계값 바로 아래([buildingPreviewZoomGap])
+  /// 에서 멈춘다 — 건물이 화면에 꽉 차되 실내 오버레이는 켜지지 않는다. 참이면
+  /// 임계값까지 확대하고 오버레이를 직접 켜서, 사용자가 그 자리에서 바로 매장을
+  /// 누를 수 있게 한다.
+  ///
+  /// 진입을 줌 판정에 맡기지 않고 [_triggerIndoorEntry]를 직접 부르는 이유는
+  /// 두 가지다. (1) 카메라 애니메이션이 끝나고 idle 콜백이 도는 시점이 시트가
+  /// 닫힌 뒤라, 그 사이 사용자는 "매장을 고르라"는 안내만 뜨고 도면은 없는
+  /// 화면을 본다. (2) 목록에서 명시적으로 고른 건물이라 "확대하다 우연히
+  /// 들어갔다"와 성격이 다르므로, 건물 폴리곤 직접 탭과 같이 줌 무장
+  /// ([_autoIndoorEntryArmed])을 건너뛴다.
+  ///
+  /// 외곽선도 출입구 좌표도 없으면(건물 미로드) 아무 것도 하지 않는다. 호출부는
+  /// 이 경우에도 시트를 그대로 띄운다 — 카메라가 안 움직였을 뿐 매장 선택은
+  /// 도면이 로드되는 대로 살아난다.
+  Future<void> focusBuilding({bool enterIndoor = false}) async {
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    final footprint = _buildingFootprint;
+    final center = (footprint != null && footprint.length >= 3)
+        ? _buildingCenter(footprint)
+        : _entrance;
+    if (center == null) return;
+
+    final entryZoom = _entryZoomThreshold();
+    await controller.animateCamera(
+      CameraUpdate.newLatLngZoom(
+        _toGl(center),
+        enterIndoor ? entryZoom : entryZoom - buildingPreviewZoomGap,
+      ),
+    );
+    if (!enterIndoor || !mounted) return;
+    _triggerIndoorEntry(ignoreZoomArming: true);
+  }
+
+  /// "이 건물까지" 안내할 때 쓸 도착 좌표.
+  ///
+  /// 지상 출입구를 **먼저** 고른다. 건물 중심을 도착점으로 주면 TMAP 보행자
+  /// 경로가 건물 안쪽을 향하다가 가장 가까운 도로로 스냅해, 실제로 들어갈 수
+  /// 있는 문과 다른 면에 사용자를 내려놓는다. 문은 출발 지점에서 가까운 것을
+  /// 고른다 — [showOutdoorToIndoorRouteTo]가 매장 안내에서 쓰는 규칙과 같다.
+  ///
+  /// 문 데이터가 없는 건물이면 [_entrance](백엔드 출입구 좌표)로, 그것도 없으면
+  /// 외곽선 중심으로 떨어진다. 셋 다 없으면 null이고, 호출부는 그때 도착·출발
+  /// 버튼 자체를 감춘다.
+  ///
+  /// [buildingId]를 받는 이유는 이 화면이 **한 채**의 건물만 로드하기
+  /// 때문이다(demoBuildingId). 인자 없이 좌표만 돌려주면, 호출부가 다른 건물을
+  /// 물었을 때도 이 건물의 문을 돌려줘 엉뚱한 좌표가 그 건물의 도착지로 박힌다.
+  /// 지금은 건물이 하나뿐이라 증상이 안 보이지만, 두 번째 건물이 들어오는 날
+  /// 조용히 틀리기 시작하는 종류의 코드다.
+  ll.LatLng? entrancePointFor(String buildingId) {
+    if (_building?.id != buildingId) return null;
+    final reference = routeOriginPoint;
+    if (reference != null) {
+      final door = nearestEntrance(_groundEntrances, reference);
+      if (door != null) return door.point;
+    }
+    final known = _entrance;
+    if (known != null) return known;
+    final footprint = _buildingFootprint;
+    if (footprint == null || footprint.isEmpty) return null;
+    return _buildingCenter(footprint);
+  }
+
   /// 고른 대중교통 경로를 지도에 그린다.
   ///
   /// 도보 안내는 여기서 **지운다.** 두 선을 겹쳐 두면 어느 쪽이 지금 안내인지

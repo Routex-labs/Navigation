@@ -779,9 +779,10 @@ class _SearchPanelState extends State<SearchPanel> {
     // 보는 것이 맞다. 대신 어디까지가 우리 건물이고 어디부터 바깥인지 헤더로
     // 명확히 가른다 — 안 가르면 다른 건물 매장을 우리 매장으로 오해한다.
     final onPoiPicked = widget.onOutdoorPoiPicked;
-    if (_pois.isNotEmpty && onPoiPicked != null) {
+    final pois = _poisExcludingBuilding(building);
+    if (pois.isNotEmpty && onPoiPicked != null) {
       rows.add(_outdoorHeader());
-      for (final poi in _pois) {
+      for (final poi in pois) {
         rows.add(_poiTile(poi, onPoiPicked));
       }
     }
@@ -814,6 +815,27 @@ class _SearchPanelState extends State<SearchPanel> {
       ),
     );
   }
+
+  /// 이미 위에 "건물" 줄로 올라간 곳과 같은 장소를 가리키는 바깥 결과를 뺀다.
+  ///
+  /// TMAP도 "더현대서울"을 POI 한 건으로 돌려주므로, 그냥 두면 같은 건물이
+  /// 목록에 두 번 뜬다. 헷갈리는 것으로 끝나지 않고 **둘이 하는 일이 다르다** —
+  /// 위쪽 건물 줄은 시트를 열어 건물 안 매장까지 이어 주지만, 아래쪽은 좌표
+  /// 하나짜리 야외 장소라 건물 앞에서 안내가 끝난다. 아래를 누른 사용자는
+  /// 기능이 반쯤 죽은 쪽으로 새는 셈이라 아예 지운다.
+  ///
+  /// 공백을 지우고 대소문자를 맞춘 뒤 **완전 일치**로만 판정한다("더현대 서울"
+  /// = "더현대서울"). contains로 넓히면 "더현대서울 스타벅스"처럼 건물 이름을
+  /// 앞에 달고 있는 진짜 결과까지 함께 사라진다 — 중복 한 줄을 지우려다 찾던
+  /// 매장을 지우는 쪽이 훨씬 나쁘다.
+  List<OutdoorPoi> _poisExcludingBuilding(Building? building) {
+    if (building == null || _pois.isEmpty) return _pois;
+    final key = _collapse(building.name);
+    return _pois.where((poi) => _collapse(poi.name) != key).toList();
+  }
+
+  static String _collapse(String value) =>
+      value.replaceAll(RegExp(r'\s+'), '').toLowerCase();
 
   Widget _discoveryHeader() {
     final isClarify = _discoveryMode == DiscoveryMode.clarify;
