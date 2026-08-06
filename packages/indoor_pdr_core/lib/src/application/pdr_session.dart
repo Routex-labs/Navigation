@@ -408,6 +408,7 @@ class PdrSession {
       path: List.unmodifiable(_paths.corrected),
       steps: iosTrackedSteps,
       distanceM: _stride.trackedDistanceM,
+      orientationHeadingDeg: fusedHeadingDeg,
       walkingHeadingDeg: walkingHeadingDeg,
       hasHeading: hasFusedHeading,
       preview: PdrPreview(

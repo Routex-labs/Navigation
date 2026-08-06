@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
 import '../../../domain/route_progress.dart';
+import '../../../domain/route_checkpoint.dart';
+import '../../../domain/route_movement.dart';
 import '../../../models/floor_graph.dart';
 import '../application/corridor_position_tracker.dart';
 import '../application/escalator_transition_detector.dart';
@@ -48,7 +50,9 @@ class PdrDebugSessionRecorder {
   // 화면이 뒤로 간 프레임이 배치 때문인지 후보 교체 때문인지 파일에서 가릴 수
   // 없었다. optimistic 간선·진행거리·선행분과 preview peak 식별자 합성 여부를
   // 함께 남겨, 배치 구성과 무관한 위치 시계열인지 사후에 검증한다.
-  static const schemaVersion = 13;
+  // v14: orientation/walking/map-matched/route heading, peak별 graph traversal,
+  // route signed 이동과 peak 기반 방향 상태, measured/display 진행률을 분리한다.
+  static const schemaVersion = 14;
   static const _maxQualitySamples = 900;
   static const _maxTrackerInputEvents = 4000;
   static const _maxRouteProgressSamples = 900;
@@ -67,6 +71,9 @@ class PdrDebugSessionRecorder {
   final List<Map<String, Object?>> _corridorSamples = [];
   final List<Map<String, Object?>> _trackerInputEvents = [];
   final List<Map<String, Object?>> _routeProgressSamples = [];
+  final List<Map<String, Object?>> _routeStepAdvances = [];
+  final List<Map<String, Object?>> _travelDirectionTransitions = [];
+  final List<Map<String, Object?>> _checkpointEvents = [];
 
   int? _lastLoggedBatchId;
   int? _lastLoggedBatchSpanEndMs;
@@ -80,6 +87,7 @@ class PdrDebugSessionRecorder {
   PdrAnchor? _anchor;
   PdrRuntimeStatus _runtimeStatus = const PdrRuntimeStatus.idle();
   Map<String, Object?>? _pedometerFinalize;
+  String _sessionBoundary = 'running';
   DateTime? _lastQualitySampleAt;
   int? _lastSampledSteps;
   Map<String, Object?>? _routeContext;
@@ -199,9 +207,6 @@ class PdrDebugSessionRecorder {
       'last_confirmed_node_id': result.lastConfirmedNodeId,
       'position_floor_local_m': _pointJson(result.correctedPosition),
       'corrected_heading_deg': result.correctedHeadingDeg,
-      // 간선 방위와 별개로 사용자가 향한 방향. 둘의 차이가 "제자리 회전이
-      // 화면에 반영되는가"와 역주행 오판을 가른다.
-      'corridor_device_heading_deg': result.deviceHeadingDeg,
       'preview_position_floor_local_m': _pointJson(result.previewPosition),
       'preview_heading_deg': result.previewHeadingDeg,
       'preview_candidate_edge_ids': result.previewCandidateEdgeIds,
@@ -268,6 +273,8 @@ class PdrDebugSessionRecorder {
       'at_utc': now.toIso8601String(),
       'timestamp_ms': ?atMs,
       'kind': wasReset ? 'reset' : 'update',
+      'orientation_heading_deg': snapshot.orientationHeadingDeg,
+      'walking_heading_deg': snapshot.walkingHeadingDeg,
       if (observation != null) ...{
         'confirmed_steps': observation.confirmedSteps,
         'confirmed_distance_m': observation.confirmedDistanceM,
@@ -310,9 +317,10 @@ class PdrDebugSessionRecorder {
         'last_confirmed_node_id': result.lastConfirmedNodeId,
         'position': _pairJson(result.correctedPosition),
         'corrected_heading_deg': result.correctedHeadingDeg,
-        'corridor_device_heading_deg': result.deviceHeadingDeg,
         'preview_position': _pairJson(result.previewPosition),
+        'actual_marker_position': _pairJson(result.previewPosition),
         'preview_heading_deg': result.previewHeadingDeg,
+        'map_matched_heading_deg': result.previewHeadingDeg,
         'preview_candidate_edge_ids': result.previewCandidateEdgeIds,
         'preview_is_ambiguous': result.previewIsAmbiguous,
         'heading_bias_deg': result.headingBiasDeg,
@@ -331,6 +339,10 @@ class PdrDebugSessionRecorder {
             : null,
         'junction_candidate_edge_ids': result.junctionCandidateEdgeIds,
         'leader_relocated': result.leaderRelocated,
+        'optimistic_step_advances': [
+          for (final step in result.optimisticStepAdvances)
+            _optimisticStepAdvanceJson(step),
+        ],
       },
     });
 
@@ -363,6 +375,8 @@ class PdrDebugSessionRecorder {
   void recordPedometerFinalize(Map<String, Object?>? info) =>
       _pedometerFinalize = info;
 
+  void recordSessionBoundary(String boundary) => _sessionBoundary = boundary;
+
   /// 이번 세션에서 사용자가 따라간 경로가 무엇인지(v11).
   ///
   /// 경로가 새로 계산될 때마다 갱신하며, 마지막 경로만 남는다. 진행률 시계열을
@@ -372,6 +386,8 @@ class PdrDebugSessionRecorder {
     required String? destinationNodeId,
     required String? floorId,
     required List<String> edgeIds,
+    List<String> nodeIds = const [],
+    int routeGeneration = 0,
     required double routeDistanceM,
     required bool isMultiFloor,
   }) {
@@ -380,6 +396,8 @@ class PdrDebugSessionRecorder {
       'destination_node_id': destinationNodeId,
       'floor_id': floorId,
       'edge_ids': edgeIds,
+      'node_ids': nodeIds,
+      'route_generation': routeGeneration,
       'route_distance_m': routeDistanceM,
       'is_multi_floor': isMultiFloor,
     };
@@ -390,13 +408,19 @@ class PdrDebugSessionRecorder {
   /// on-route 여부나 재획득이 바뀐 순간은 무조건 남기고, 변화가 없으면 1초에
   /// 한 건으로 줄인다. 이탈이 시작·종료된 정확한 시각을 잃으면 "몇 걸음 뒤에
   /// 복구됐는지"를 사후에 셀 수 없다.
-  void recordRouteProgress(RouteProgress progress, {DateTime? at}) {
+  void recordRouteProgress(
+    RouteProgress progress, {
+    RouteProgress? displayProgress,
+    String? holdReason,
+    DateTime? at,
+  }) {
     final now = (at ?? DateTime.now()).toUtc();
     final previous = _routeProgressSamples.lastOrNull;
     final changed =
         previous == null ||
         previous['on_route_edge'] != progress.onRouteEdge ||
-        previous['reacquired'] != progress.reacquired;
+        previous['reacquired'] != progress.reacquired ||
+        previous['hold_reason'] != holdReason;
     if (!changed &&
         _lastRouteProgressSampleAt != null &&
         now.difference(_lastRouteProgressSampleAt!).inMilliseconds < 1000) {
@@ -407,14 +431,77 @@ class PdrDebugSessionRecorder {
       'at_utc': now.toIso8601String(),
       'traveled_m': progress.traveledM,
       'remaining_m': progress.remainingM,
+      'measured_route_progress_m': progress.traveledM,
+      'display_route_progress_m': (displayProgress ?? progress).traveledM,
+      'display_remaining_m': (displayProgress ?? progress).remainingM,
+      'hold_reason': holdReason,
       'offset_m': progress.offsetM,
       'on_route_edge': progress.onRouteEdge,
       'reacquired': progress.reacquired,
       'segment_index': progress.segmentIndex,
+      'route_heading_deg': progress.routeHeadingDeg,
     });
     if (_routeProgressSamples.length > _maxRouteProgressSamples) {
       _routeProgressSamples.removeAt(0);
     }
+  }
+
+  void recordRouteStepAdvance(
+    RouteStepAdvance step, {
+    TravelDirectionTransition? transition,
+  }) {
+    if (_routeStepAdvances.length >= _maxTrackerInputEvents) {
+      _routeStepAdvances.removeAt(0);
+    }
+    _routeStepAdvances.add({
+      'peak_id': step.peakId,
+      'occurred_at_ms': step.occurredAtMs,
+      'signed_route_distance_m': step.signedRouteDistanceM,
+      'relation': step.relation.name,
+      'crossed_route_waypoint_ids': step.crossedRouteWaypointIds,
+      'optimistic_edge_id': step.optimisticEdgeId,
+      'preview_is_ambiguous': step.previewIsAmbiguous,
+      'actual_marker_position': step.actualMarkerPosition == null
+          ? null
+          : _pairJson(step.actualMarkerPosition!),
+      'orientation_heading_deg': step.orientationHeadingDeg,
+      'walking_heading_deg': step.walkingHeadingDeg,
+      'map_matched_heading_deg': step.mapMatchedHeadingDeg,
+      'route_heading_deg': step.routeHeadingDeg,
+      'heading_error_deg': step.headingErrorDeg,
+    });
+    if (transition == null) return;
+    if (_travelDirectionTransitions.length >= _maxTrackerInputEvents) {
+      _travelDirectionTransitions.removeAt(0);
+    }
+    _travelDirectionTransitions.add({
+      'from': transition.from.name,
+      'to': transition.to.name,
+      'peak_id': transition.peakId,
+      'occurred_at_ms': transition.occurredAtMs,
+      'evidence_peak_count': transition.evidencePeakCount,
+      'evidence_distance_m': transition.evidenceDistanceM,
+    });
+  }
+
+  void recordCheckpointEvent(RouteCheckpointEvent event) {
+    if (_checkpointEvents.length >= _maxTrackerInputEvents) {
+      _checkpointEvents.removeAt(0);
+    }
+    _checkpointEvents.add({
+      'route_generation': event.routeGeneration,
+      'waypoint_node_id': event.waypoint.nodeId,
+      'kind': event.waypoint.kind.name,
+      'route_distance_m': event.waypoint.routeDistanceM,
+      'incoming_edge_id': event.waypoint.incomingEdgeId,
+      'outgoing_edge_id': event.waypoint.outgoingEdgeId,
+      'decision': event.decision.name,
+      'reason': event.reason,
+      'peak_id': event.peakId,
+      'occurred_at_ms': event.occurredAtMs,
+      'waypoint_distance_m': event.waypointDistanceM,
+      'shadow': true,
+    });
   }
 
   Map<String, Object?> buildJson({
@@ -500,6 +587,9 @@ class PdrDebugSessionRecorder {
       'route_context': _routeContext,
       'route_progress_samples': _routeProgressSamples,
       'route_progress_summary': _routeProgressSummaryJson(),
+      'route_step_advances': _routeStepAdvances,
+      'travel_direction_transitions': _travelDirectionTransitions,
+      'checkpoint_events': _checkpointEvents,
       // 기압계·층 전이 판정(v12). available=false면 이 기기에서는 층 추종이
       // 애초에 돌지 않은 세션이다.
       'altimeter': {
@@ -516,6 +606,7 @@ class PdrDebugSessionRecorder {
         'warnings': _runtimeStatus.warnings,
       },
       'pedometer_finalize': _pedometerFinalizeJson(),
+      'session_boundary': _sessionBoundary,
     };
   }
 
@@ -613,6 +704,7 @@ class PdrDebugSessionRecorder {
       'floor_path_distance_m_before_matching': floorPathDistanceM,
       'map_matched_path_distance_m': mapMatchedDistanceM,
       'walking_heading_deg': snapshot.walkingHeadingDeg,
+      'orientation_heading_deg': snapshot.orientationHeadingDeg,
       'has_heading': snapshot.hasHeading,
       'preview_steps': snapshot.preview.steps,
       'preview_distance_m': snapshot.preview.distanceM,
@@ -666,7 +758,14 @@ class PdrDebugSessionRecorder {
               'preview_position_floor_local_m': _pointJson(
                 corridorCorrection.previewPosition,
               ),
+              'actual_marker_position': _pointJson(
+                corridorCorrection.previewPosition,
+              ),
               'preview_heading_deg': corridorCorrection.previewHeadingDeg,
+              'map_matched_heading_deg': corridorCorrection.previewHeadingDeg,
+              'optimistic_edge_id': corridorCorrection.optimisticEdgeId,
+              'optimistic_edge_progress_m':
+                  corridorCorrection.optimisticEdgeProgressM,
               'preview_candidate_edge_ids':
                   corridorCorrection.previewCandidateEdgeIds,
               'preview_is_ambiguous': corridorCorrection.previewIsAmbiguous,
@@ -715,6 +814,27 @@ class PdrDebugSessionRecorder {
 
   static double _round3(double value) => (value * 1000).roundToDouble() / 1000;
 
+  static Map<String, Object?> _optimisticStepAdvanceJson(
+    OptimisticStepAdvance step,
+  ) => {
+    'peak_id': step.peakId,
+    'occurred_at_ms': step.occurredAtMs,
+    'hypothesis_id': step.hypothesisId,
+    'parent_hypothesis_id': step.parentHypothesisId,
+    'distance_m': step.distanceM,
+    'position': _pairJson(step.position),
+    'traversals': [
+      for (final traversal in step.traversals)
+        {
+          'edge_id': traversal.edgeId,
+          'from_progress_m': traversal.fromProgressM,
+          'to_progress_m': traversal.toProgressM,
+        },
+    ],
+    'crossed_node_ids': step.crossedNodeIds,
+    'leader_relocated': step.leaderRelocated,
+  };
+
   static double _pathLength(List<PdrLocalPoint> points) {
     var total = 0.0;
     for (var index = 1; index < points.length; index++) {
@@ -731,6 +851,7 @@ class _PdrQualitySample {
     required this.at,
     required this.steps,
     required this.distanceM,
+    required this.orientationHeadingDeg,
     required this.walkingHeadingDeg,
     required this.headingStable,
     required this.magneticAccuracy,
@@ -746,6 +867,7 @@ class _PdrQualitySample {
   final DateTime at;
   final int steps;
   final double distanceM;
+  final double orientationHeadingDeg;
   final double walkingHeadingDeg;
   final bool headingStable;
   final String magneticAccuracy;
@@ -776,6 +898,7 @@ class _PdrQualitySample {
       at: at,
       steps: snapshot.steps,
       distanceM: snapshot.distanceM,
+      orientationHeadingDeg: snapshot.orientationHeadingDeg,
       walkingHeadingDeg: snapshot.walkingHeadingDeg,
       headingStable: features.headingStable,
       magneticAccuracy: features.magneticAccuracy,
@@ -806,6 +929,7 @@ class _PdrQualitySample {
     'preview_steps': previewSteps,
     'preview_distance_m': previewDistanceM,
     'ronin': ronin,
+    'orientation_heading_deg': orientationHeadingDeg,
     'walking_heading_deg': walkingHeadingDeg,
     'heading_stable': headingStable,
     'magnetic_accuracy': magneticAccuracy,

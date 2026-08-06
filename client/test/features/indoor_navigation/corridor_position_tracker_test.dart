@@ -134,6 +134,20 @@ void main() {
         ),
       );
       expect(afterPreview.previewPosition.eastM, closeTo(2.4, 1e-9));
+      expect(afterPreview.optimisticStepAdvances, hasLength(2));
+      expect(
+        afterPreview.optimisticStepAdvances
+            .map((event) => event.distanceM)
+            .toList(),
+        everyElement(closeTo(0.7, 1e-9)),
+      );
+      expect(
+        afterPreview.optimisticStepAdvances
+            .expand((event) => event.traversals)
+            .map((traversal) => traversal.edgeId)
+            .toSet(),
+        {'straight'},
+      );
 
       final afterFirstBatch = tracker.update(
         _observation(
@@ -174,6 +188,7 @@ void main() {
       );
       expect(afterSecondBatch.previewPosition.eastM, closeTo(2.4, 1e-9));
       expect(afterSecondBatch.optimisticLeadM, closeTo(0, 1e-9));
+      expect(afterSecondBatch.optimisticStepAdvances, isEmpty);
     });
 
     test('preview에 없이 배치로만 들어온 걸음도 한 번은 태운다', () {

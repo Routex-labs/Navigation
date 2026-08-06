@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/domain/route_guidance.dart';
+import 'package:navigation_client/domain/route_movement.dart';
 import 'package:navigation_client/domain/route_progress.dart';
 import 'package:navigation_client/models/floor_graph.dart';
 
@@ -81,10 +82,12 @@ void main() {
       RouteProgress? progress,
       bool allowArrival = true,
       String? transferMode,
+      TravelDirectionState travelDirectionState = TravelDirectionState.forward,
     }) => buildRouteGuidance(
       localPoints: localPoints,
       wgs84Points: wgs84Points,
       progress: progress,
+      travelDirectionState: travelDirectionState,
       allowArrival: allowArrival,
       transferMode: transferMode,
     );
@@ -144,7 +147,10 @@ void main() {
     });
 
     test('역주행 중에는 끝점 근처여도 끝내지 않는다', () {
-      const wrongWay = RouteProgress(
+      // 역주행 판단은 진행률이 아니라 traversal 상태기가 소유한다. 진행률의
+      // headingErrorDeg는 제자리 회전에도 175°가 되므로 그것만으로 역주행이라
+      // 부르지 않는다 — [TravelDirectionState.reverseConfirmed]만 안내를 뒤집는다.
+      const nearEnd = RouteProgress(
         traveledM: 29,
         remainingM: 1,
         offsetM: 0.2,
@@ -153,11 +159,13 @@ void main() {
         segmentIndex: 0,
         projectedPoint: LocalPoint(0, 29),
         headingErrorDeg: 175,
-        wrongWay: true,
       );
       expect(
         decideArrivalAutoClear(
-          action: guidance(progress: wrongWay).action,
+          action: guidance(
+            progress: nearEnd,
+            travelDirectionState: TravelDirectionState.reverseConfirmed,
+          ).action,
           hasMeasuredProgress: true,
           alreadyScheduled: false,
         ),

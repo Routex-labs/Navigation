@@ -14,6 +14,7 @@ library;
 import 'dart:math' as math;
 
 import '../models/floor_graph.dart';
+import 'route_movement.dart';
 
 /// 경로 기준으로 해석한 현재 위치.
 class RouteProgress {
@@ -26,7 +27,7 @@ class RouteProgress {
     required this.segmentIndex,
     this.projectedPoint,
     this.headingErrorDeg,
-    this.wrongWay = false,
+    this.routeHeadingDeg,
   });
 
   /// 경로 시작점부터 투영점까지의 폴리라인 거리.
@@ -69,11 +70,8 @@ class RouteProgress {
   /// 현재 진행 heading과 목적지 방향 경로 접선의 차이(0~180°).
   final double? headingErrorDeg;
 
-  /// 경로 위에 있지만 목적지 반대 방향으로 진행 중인지.
-  ///
-  /// 코너 한 프레임의 흔들림보다 명확한 역주행만 알리기 위해 120° 이상을
-  /// 사용한다. 화면은 이 값을 경로 재탐색보다 먼저 사용자에게 보여준다.
-  final bool wrongWay;
+  /// 현재 투영 segment의 목적지 방향 접선. heading 네 종류를 진단할 때 쓴다.
+  final double? routeHeadingDeg;
 }
 
 /// 현재 위치를 새 경로의 첫 점에 붙여 만든 진행률 기준점.
@@ -119,7 +117,7 @@ RouteProgress? seedRouteProgressAtRouteStart({
     segmentIndex: firstSegmentIndex,
     projectedPoint: first,
     headingErrorDeg: headingErrorDeg,
-    wrongWay: onRouteEdge && headingErrorDeg != null && headingErrorDeg >= 120,
+    routeHeadingDeg: routeBearingDeg,
   );
 }
 
@@ -147,7 +145,7 @@ bool shouldHoldImplausibleRouteJump({
   return (candidate.traveledM - previous.traveledM).abs() > plausibleDistanceM;
 }
 
-/// 걸음으로 설명되지 않는 **경로상 후퇴**인지 판단한다.
+/// 실제 역방향 걸음이 확정되기 전 **표시 진행률**의 큰 후퇴를 보류한다.
 ///
 /// [shouldHoldImplausibleRouteJump]는 앞·뒤를 가리지 않고 큰 점프만 막는다.
 /// 그런데 실제로 눈에 거슬리는 것은 크기가 작은 후퇴다 — 빔 1등이 옆 간선으로
@@ -161,23 +159,19 @@ bool shouldHoldImplausibleRouteJump({
 /// 걸음이 그대로 "뒤로 갈 여유"로 계산된다 — 앞으로 5걸음 걸었더니 6m 뒤로
 /// 튀는 것이 허용되는 식이다. 실제로 그렇게 동작했다.
 ///
-/// 그래서 사용자가 향한 방향을 쓴다. 경로 방위와 [reverseHeadingErrorDeg] 이상
-/// 어긋나 있으면 몸을 돌린 것이므로 후퇴를 그대로 받아들이고, 아니면
-/// [freeRegressionM](투영 오차 수준)까지만 참고 그 이상은 보류한다.
-bool shouldHoldRouteRegression({
+/// heading은 이 판정에 쓰지 않는다. 제자리 회전이나 늦은 heading 갱신이 실제
+/// 보행 방향으로 오인되지 않게, accepted preview peak의 traversal로 만든
+/// [TravelDirectionState.reverseConfirmed]만 후퇴를 승인한다.
+bool shouldHoldDisplayRouteRegression({
   required RouteProgress? previous,
   required RouteProgress candidate,
-  required double? deviceHeadingErrorDeg,
+  required TravelDirectionState travelDirectionState,
   double freeRegressionM = 2.0,
-  double reverseHeadingErrorDeg = 100,
 }) {
   if (previous == null) return false;
   final regressionM = previous.traveledM - candidate.traveledM;
   if (regressionM <= freeRegressionM) return false;
-  // 방향을 모르면 후퇴를 정당화할 수 없다. 모르는 채로 마커를 뒤로 보내는
-  // 것보다 이번 갱신을 넘기는 쪽이 낫다.
-  if (deviceHeadingErrorDeg == null) return true;
-  return deviceHeadingErrorDeg < reverseHeadingErrorDeg;
+  return travelDirectionState != TravelDirectionState.reverseConfirmed;
 }
 
 /// [previousTraveledM] 주변에서 후보를 찾는 기본 탐색 창(±m).
@@ -277,11 +271,7 @@ RouteProgress? computeRouteProgress({
     segmentIndex: chosen.segmentIndex,
     projectedPoint: LocalPoint(chosen.footX, chosen.footY),
     headingErrorDeg: headingErrorDeg,
-    wrongWay:
-        currentEdgeId != null &&
-        routeEdgeIds.contains(currentEdgeId) &&
-        headingErrorDeg != null &&
-        headingErrorDeg >= 120,
+    routeHeadingDeg: routeBearingDeg,
   );
 }
 

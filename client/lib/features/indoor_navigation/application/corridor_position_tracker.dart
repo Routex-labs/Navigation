@@ -292,12 +292,66 @@ class CorridorObservation {
   }
 }
 
+/// accepted preview peak 하나가 graph 위에서 실제로 지난 간선 조각.
+class OptimisticEdgeTraversal {
+  const OptimisticEdgeTraversal({
+    required this.edgeId,
+    required this.fromProgressM,
+    required this.toProgressM,
+  });
+
+  final String edgeId;
+  final double fromProgressM;
+  final double toProgressM;
+
+  double get distanceM => (toProgressM - fromProgressM).abs();
+  int get edgeDirectionSign => toProgressM >= fromProgressM ? 1 : -1;
+}
+
+/// accepted preview peak 하나가 선택된 optimistic 가설 안에서 만든 이동 사건.
+///
+/// 공개 leader의 전후 좌표 차이가 아니라, 선택된 가설이 자기 parent에서 실제로
+/// 전진한 조각을 보존한다. 그래서 node를 넘거나 graph 저장 방향이 반대여도 한
+/// 걸음의 거리와 부호를 잃지 않는다.
+class OptimisticStepAdvance {
+  const OptimisticStepAdvance({
+    required this.peakId,
+    required this.occurredAtMs,
+    required this.hypothesisId,
+    required this.parentHypothesisId,
+    required this.distanceM,
+    required this.edgeId,
+    required this.mapMatchedHeadingDeg,
+    required this.previewIsAmbiguous,
+    required this.position,
+    required this.traversals,
+    required this.crossedNodeIds,
+    required this.leaderRelocated,
+  });
+
+  final int peakId;
+  final int occurredAtMs;
+  final String hypothesisId;
+  final String parentHypothesisId;
+  final double distanceM;
+  final String edgeId;
+  final double mapMatchedHeadingDeg;
+  final bool previewIsAmbiguous;
+  final PdrLocalPoint position;
+  final List<OptimisticEdgeTraversal> traversals;
+  final List<String> crossedNodeIds;
+
+  /// 이 peak를 적용하는 동안 공개 leader의 lineage가 바뀌었는지.
+  ///
+  /// traversal은 진단·표시에 남기되 실제 이동 방향 확정 증거에서는 제외한다.
+  final bool leaderRelocated;
+}
+
 class CorridorTrackingResult {
   const CorridorTrackingResult({
     required this.state,
     required this.correctedPosition,
     required this.correctedHeadingDeg,
-    required this.deviceHeadingDeg,
     required this.headingBiasDeg,
     required this.currentEdgeId,
     required this.currentEdgeProgressM,
@@ -321,6 +375,7 @@ class CorridorTrackingResult {
     required this.junctionDistanceM,
     required this.junctionCandidateEdgeIds,
     required this.leaderRelocated,
+    this.optimisticStepAdvances = const [],
   });
 
   final CorridorTrackingState state;
@@ -328,14 +383,6 @@ class CorridorTrackingResult {
 
   /// 지금 걷고 있다고 보는 **간선의 방위**. 경로 진행·역주행 판정의 기준이다.
   final double correctedHeadingDeg;
-
-  /// 사용자가 실제로 **바라보는 방향**(센서 heading + 복도에서 학습한 bias).
-  ///
-  /// [correctedHeadingDeg]와 분리해야 하는 이유: 간선 방위는 걸음이 있어야
-  /// 갱신되고, 직선 복도에서는 제자리 회전에 아예 반응하지 않는다. 마커의 방향
-  /// 원뿔과 카메라 정렬은 "지금 어디를 보고 있나"를 물으므로 이 값을 쓰고,
-  /// "경로를 따라 어디까지 갔나"는 간선 방위를 쓴다.
-  final double deviceHeadingDeg;
 
   final double headingBiasDeg;
   final String? currentEdgeId;
@@ -383,6 +430,9 @@ class CorridorTrackingResult {
 
   /// 보정 위치 변화가 이번 확정 보행 거리로 설명되지 않는 대표 가설 재배치인지.
   final bool leaderRelocated;
+
+  /// 이번 update에서 처음 적용된 preview peak별 이동 사건.
+  final List<OptimisticStepAdvance> optimisticStepAdvances;
 }
 
 /// 초록·주황 원본을 수정하지 않고 실제 위치만 graph 제약으로 보정한다.
@@ -458,6 +508,7 @@ class CorridorPositionTracker {
   /// 이번 갱신에서 확정 위치가 나아간 거리(m).
   double _confirmedAdvanceM = 0;
   bool _leaderRelocated = false;
+  final List<OptimisticStepAdvance> _optimisticStepAdvances = [];
 
   bool get isInitialized => _beam.isNotEmpty;
 
@@ -475,7 +526,6 @@ class CorridorPositionTracker {
     correctedHeadingDeg:
         _best?.edge.bearingForTravel(_best!.progressM, _best!.travelSign) ??
         _normalizeBearing(_sensorHeadingDeg + _headingBiasDeg),
-    deviceHeadingDeg: _normalizeBearing(_sensorHeadingDeg + _headingBiasDeg),
     headingBiasDeg: _headingBiasDeg,
     currentEdgeId: _best?.edge.id,
     currentEdgeProgressM: _best?.progressM ?? 0,
@@ -499,6 +549,7 @@ class CorridorPositionTracker {
     junctionDistanceM: _junctionDistanceM,
     junctionCandidateEdgeIds: List.unmodifiable(_junctionCandidateEdgeIds),
     leaderRelocated: _leaderRelocated,
+    optimisticStepAdvances: List.unmodifiable(_optimisticStepAdvances),
   );
 
   void reset({
@@ -522,6 +573,7 @@ class CorridorPositionTracker {
     _leaderSign = 1;
     _confirmedAdvanceM = 0;
     _leaderRelocated = false;
+    _optimisticStepAdvances.clear();
     _lastConfirmedSegmentHeadingDeg = null;
     // 두 beam과 식별자 상태를 함께 초기화한다. 하나만 남기면 새 세션의 첫
     // peak가 "이미 태운 걸음"으로 걸러진다.
@@ -558,6 +610,7 @@ class CorridorPositionTracker {
         timestampMs: observation.timestampMs,
       );
     }
+    _optimisticStepAdvances.clear();
     final previousRawConfirmedPosition = _rawConfirmedPosition;
     _rawConfirmedPosition = observation.rawConfirmedPosition;
     _rawPreviewPosition = observation.rawPreviewPosition;
@@ -868,8 +921,7 @@ class CorridorPositionTracker {
       leader.edge.pointAt(leader.progressM),
       // 회전 중 진행한 거리는 창에서 빼 준다. `_junctionAlternatives`가 후보를
       // 열어 두는 구간과 재탐색을 유예하는 구간이 어긋나면 안 된다.
-      maxDistanceM:
-          _junctionZoneRadiusM(leader.edge) + leader.offEdgeDistanceM,
+      maxDistanceM: _junctionZoneRadiusM(leader.edge) + leader.offEdgeDistanceM,
     );
     if (junction == null) {
       _junctionNodeId = null;
@@ -930,7 +982,8 @@ class CorridorPositionTracker {
     final marginDeg = held != null && _isJunctionTurn(held, globalBest)
         ? config.junctionLeaderSwitchMarginDeg
         : config.leaderSwitchMarginDeg;
-    if (held == null || globalBest.meanErrorDeg < held.meanErrorDeg - marginDeg) {
+    if (held == null ||
+        globalBest.meanErrorDeg < held.meanErrorDeg - marginDeg) {
       _leaderEdgeId = globalBest.edge.id;
       _leaderSign = globalBest.travelSign;
       return;
@@ -1052,7 +1105,8 @@ class CorridorPositionTracker {
       _rebaseOptimistic(best);
       return;
     }
-    if (leader.edge.id == best.edge.id && leader.travelSign == best.travelSign) {
+    if (leader.edge.id == best.edge.id &&
+        leader.travelSign == best.travelSign) {
       return;
     }
     if (_network.isForwardReachable(
@@ -1092,6 +1146,8 @@ class CorridorPositionTracker {
         headingDeg: pdrBearingForDirection(movement),
         distanceM: movement.distance,
         rawPoint: step.rawPoint,
+        peakId: step.peakId,
+        occurredAtMs: step.peakId > 0 ? step.peakId : observation.timestampMs,
       );
       _optimisticTraveledM += movement.distance;
     }
@@ -1122,11 +1178,15 @@ class CorridorPositionTracker {
     required double headingDeg,
     required double distanceM,
     required PdrLocalPoint rawPoint,
+    int? peakId,
+    int? occurredAtMs,
   }) {
     if (_optimisticBeam.isEmpty) return;
+    final previousLeaderId = _optimisticBest!.diagnosticId;
     final observed = _normalizeBearing(headingDeg + _headingBiasDeg);
     final next = <_Hypothesis>[];
-    for (final hypothesis in _optimisticBeam) {
+    for (final original in _optimisticBeam) {
+      final hypothesis = original.beginStep();
       next.addAll(_advance(hypothesis, observed, distanceM, rawPoint));
       // 실제 유턴은 반영한다. 반대 부호 가설을 함께 만들어 두면 비용이
       // 판정하고, 이길 경우 cursor가 뒤로 가는 것도 허용된다.
@@ -1143,6 +1203,39 @@ class CorridorPositionTracker {
     }
     if (next.isEmpty) return;
     _optimisticBeam = _prune(next);
+    final leader = _optimisticBest!;
+    if (peakId != null && occurredAtMs != null) {
+      final runnerUp = _optimisticBeam.length > 1 ? _optimisticBeam[1] : null;
+      final previewIsAmbiguous =
+          runnerUp != null &&
+          runnerUp.edge.id != leader.edge.id &&
+          runnerUp.meanErrorDeg - leader.meanErrorDeg <
+              config.ambiguousMarginDeg;
+      final traversals = List<OptimisticEdgeTraversal>.unmodifiable(
+        leader.stepTraversals,
+      );
+      _optimisticStepAdvances.add(
+        OptimisticStepAdvance(
+          peakId: peakId,
+          occurredAtMs: occurredAtMs,
+          hypothesisId: leader.diagnosticId,
+          parentHypothesisId: leader.stepParentHypothesisId ?? previousLeaderId,
+          distanceM: traversals.fold(0, (sum, item) => sum + item.distanceM),
+          edgeId: leader.edge.id,
+          mapMatchedHeadingDeg: leader.edge.bearingForTravel(
+            leader.progressM,
+            leader.travelSign,
+          ),
+          previewIsAmbiguous: previewIsAmbiguous,
+          position: leader.edge.pointAt(leader.progressM),
+          traversals: traversals,
+          crossedNodeIds: List<String>.unmodifiable(leader.stepCrossedNodeIds),
+          leaderRelocated:
+              _leaderRelocated ||
+              leader.stepParentHypothesisId != previousLeaderId,
+        ),
+      );
+    }
   }
 
   /// 처음 보는 peak면 기억하고 true. 이미 태운 peak면 false.
@@ -1269,6 +1362,9 @@ class _Hypothesis {
     this.previousOffsetM = 0,
     this.seedPenaltyDegM = 0,
     this.offEdgeDistanceM = 0,
+    this.stepParentHypothesisId,
+    this.stepTraversals = const [],
+    this.stepCrossedNodeIds = const [],
   });
 
   final _CorridorEdge edge;
@@ -1304,12 +1400,39 @@ class _Hypothesis {
   /// 간선을 따라 걷고 있지 않다"는 구간에서는 창이 유지된다.
   final double offEdgeDistanceM;
 
+  /// 현재 preview peak를 적용하기 직전 lineage와, 그 peak 안에서 지난 graph
+  /// 조각. 다음 peak가 시작될 때 [beginStep]이 비운다.
+  final String? stepParentHypothesisId;
+  final List<OptimisticEdgeTraversal> stepTraversals;
+  final List<String> stepCrossedNodeIds;
+
+  String get diagnosticId =>
+      '${edge.id}:$travelSign:${progressM.toStringAsFixed(3)}:$transitions';
+
   /// 가설끼리 비교하는 값. 같은 걸음을 먹었으므로 거리 정규화만으로 공평하다.
   double get meanErrorDeg => matchedM <= 1e-6
       ? cost + seedPenaltyDegM
       : (cost + seedPenaltyDegM) / matchedM;
 
   _Hypothesis reversed() => _copy(travelSign: -travelSign);
+
+  _Hypothesis beginStep() => _Hypothesis(
+    edge: edge,
+    progressM: progressM,
+    travelSign: travelSign,
+    path: path,
+    cost: cost,
+    matchedM: matchedM,
+    unmatchedM: unmatchedM,
+    previousObservedHeadingDeg: previousObservedHeadingDeg,
+    previousGraphHeadingDeg: previousGraphHeadingDeg,
+    transitions: transitions,
+    lastNodeId: lastNodeId,
+    previousOffsetM: previousOffsetM,
+    seedPenaltyDegM: seedPenaltyDegM,
+    offEdgeDistanceM: offEdgeDistanceM,
+    stepParentHypothesisId: diagnosticId,
+  );
 
   /// preview 분기용 사본. 경로를 **현재 위치 한 점으로 리셋**한다.
   ///
@@ -1352,6 +1475,16 @@ class _Hypothesis {
         .clamp(0.0, edge.lengthM)
         .toDouble();
     final nextPoint = edge.pointAt(nextProgress);
+    final nextTraversals = nextProgress == progressM
+        ? stepTraversals
+        : [
+            ...stepTraversals,
+            OptimisticEdgeTraversal(
+              edgeId: edge.id,
+              fromProgressM: progressM,
+              toProgressM: nextProgress,
+            ),
+          ];
     // 나란한 복도를 가르는 신호. 다만 **절대 어긋남**을 벌하면 안 된다 —
     // PDR 원본은 heading 오차로 옆으로 밀리고(실측 안드로이드 87m 보행에서
     // north 방향 13m), 그러면 원본이 밀려간 쪽의 엉뚱한 평행 복도가 오히려
@@ -1393,6 +1526,7 @@ class _Hypothesis {
       previousOffsetM: offsetNowM,
       previousObservedHeadingDeg: observedHeadingDeg,
       previousGraphHeadingDeg: graphHeadingDeg,
+      stepTraversals: nextTraversals,
     );
   }
 
@@ -1415,11 +1549,7 @@ class _Hypothesis {
     //
     // 지나쳐 놓고 되돌아오는 경우(늦은 회전)에는 그 사이 그려 둔 꼬리를
     // 지운다. 남겨 두면 실제로 걷지 않은 왕복이 궤적에 남는다.
-    path: [
-      ..._dropLastLength(path, trimTailM),
-      ...approachPath,
-      nodePoint,
-    ],
+    path: [..._dropLastLength(path, trimTailM), ...approachPath, nodePoint],
     cost: cost + penaltyDegM,
     matchedM: matchedM,
     unmatchedM: unmatchedM,
@@ -1440,6 +1570,9 @@ class _Hypothesis {
     // 걸음 뒤에야 이겼다.
     previousOffsetM: (nodePoint - rawPoint).distance,
     seedPenaltyDegM: seedPenaltyDegM,
+    stepParentHypothesisId: stepParentHypothesisId,
+    stepTraversals: stepTraversals,
+    stepCrossedNodeIds: [...stepCrossedNodeIds, nodeId],
   );
 
   /// 그래프로 더 갈 수 없는 이동. 가설을 죽이지 않고 벌점만 준다.
@@ -1462,6 +1595,7 @@ class _Hypothesis {
     double? previousGraphHeadingDeg,
     double? previousOffsetM,
     double? offEdgeDistanceM,
+    List<OptimisticEdgeTraversal>? stepTraversals,
   }) => _Hypothesis(
     seedPenaltyDegM: seedPenaltyDegM,
     offEdgeDistanceM: offEdgeDistanceM ?? this.offEdgeDistanceM,
@@ -1479,6 +1613,9 @@ class _Hypothesis {
     transitions: transitions,
     lastNodeId: lastNodeId,
     previousOffsetM: previousOffsetM ?? this.previousOffsetM,
+    stepParentHypothesisId: stepParentHypothesisId,
+    stepTraversals: stepTraversals ?? this.stepTraversals,
+    stepCrossedNodeIds: stepCrossedNodeIds,
   );
 }
 

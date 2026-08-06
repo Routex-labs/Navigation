@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 import 'package:navigation_client/domain/route_progress.dart';
+import 'package:navigation_client/domain/route_checkpoint.dart';
+import 'package:navigation_client/domain/route_movement.dart';
 import 'package:navigation_client/features/indoor_navigation/application/corridor_position_tracker.dart';
 import 'package:navigation_client/features/indoor_navigation/application/escalator_transition_detector.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/altitude_sample.dart';
@@ -21,6 +23,7 @@ PdrSnapshot _snapshot({
   path: path,
   steps: steps,
   distanceM: distanceM,
+  orientationHeadingDeg: 80,
   walkingHeadingDeg: 90,
   hasHeading: true,
   lastAppliedBatch: lastAppliedBatch,
@@ -139,13 +142,15 @@ void main() {
     final matched = paths['map_matched_floor_local_m']! as List<Object?>;
     final finalMatched = matched.last! as Map<String, double>;
 
-    expect(json['schema_version'], 13);
+    expect(json['schema_version'], 14);
     expect(
       (json['map_context']! as Map<String, Object?>)['map_calibration_version'],
       'thehyundai-seoul-1f-svg-v1',
     );
     expect(summary['confirmed_steps'], 4);
     expect(summary['confirmed_distance_m'], 3.1);
+    expect(summary['orientation_heading_deg'], 80);
+    expect(summary['walking_heading_deg'], 90);
     expect(
       (summary['ronin']! as Map<String, Object?>)['distance_m'],
       closeTo(2.9, 1e-9),
@@ -303,6 +308,69 @@ void main() {
       expect(summary['sample_count'], 2);
       expect(summary['reacquired_count'], 1);
     });
+  });
+
+  test('peak 이동·방향 전이·shadow checkpoint를 한 JSON에서 재생할 수 있다', () {
+    final recorder = PdrDebugSessionRecorder();
+    const step = RouteStepAdvance(
+      peakId: 1000,
+      occurredAtMs: 1000,
+      signedRouteDistanceM: -0.7,
+      relation: RouteStepRelation.reverse,
+      crossedRouteWaypointIds: [],
+      optimisticEdgeId: 'ab',
+      walkingHeadingDeg: 260,
+      mapMatchedHeadingDeg: 270,
+      orientationHeadingDeg: 270,
+      routeHeadingDeg: 90,
+      headingErrorDeg: 180,
+    );
+    recorder.recordRouteStepAdvance(
+      step,
+      transition: const TravelDirectionTransition(
+        from: TravelDirectionState.forward,
+        to: TravelDirectionState.reverseCandidate,
+        peakId: 1000,
+        occurredAtMs: 1000,
+        evidencePeakCount: 1,
+        evidenceDistanceM: 0.7,
+      ),
+    );
+    recorder.recordCheckpointEvent(
+      const RouteCheckpointEvent(
+        routeGeneration: 2,
+        waypoint: RouteCheckpointWaypoint(
+          nodeId: 'b',
+          kind: RouteCheckpointKind.weakStraight,
+          routeDistanceM: 10,
+          incomingEdgeId: 'ab',
+          outgoingEdgeId: 'bc',
+        ),
+        decision: RouteCheckpointDecision.reject,
+        reason: 'travelDirectionNotForward',
+        peakId: 1000,
+        occurredAtMs: 1000,
+        waypointDistanceM: 0.4,
+      ),
+    );
+
+    final json = recorder.buildJson(
+      buildingId: 'test',
+      selectedFloor: '1F',
+      mapCalibrationVersion: 'v1',
+      graph: _graph(),
+      device: const {},
+    );
+
+    expect(json['route_step_advances'], hasLength(1));
+    final routeStep = (json['route_step_advances']! as List).single as Map;
+    expect(routeStep['optimistic_edge_id'], 'ab');
+    expect(routeStep['walking_heading_deg'], 260);
+    expect(routeStep['map_matched_heading_deg'], 270);
+    expect(json['travel_direction_transitions'], hasLength(1));
+    final checkpoint = (json['checkpoint_events']! as List).single as Map;
+    expect(checkpoint['decision'], 'reject');
+    expect(checkpoint['shadow'], isTrue);
   });
 
   test('1Hz 샘플에 주황(preview)도 같이 남긴다', () {
@@ -531,7 +599,6 @@ void main() {
         state: CorridorTrackingState.turnPending,
         correctedPosition: PdrLocalPoint(4, 0),
         correctedHeadingDeg: 90,
-        deviceHeadingDeg: 90,
         headingBiasDeg: 7,
         currentEdgeId: 'ab',
         currentEdgeProgressM: 4,
@@ -586,7 +653,6 @@ void main() {
       state: CorridorTrackingState.straightTracking,
       correctedPosition: PdrLocalPoint(4, 0),
       correctedHeadingDeg: 90,
-      deviceHeadingDeg: 90,
       headingBiasDeg: 0,
       currentEdgeId: 'ab',
       currentEdgeProgressM: 4,

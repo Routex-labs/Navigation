@@ -11,7 +11,6 @@ CorridorTrackingResult _result({
   state: CorridorTrackingState.straightTracking,
   correctedPosition: corrected,
   correctedHeadingDeg: 90,
-  deviceHeadingDeg: 90,
   headingBiasDeg: 0,
   currentEdgeId: 'edge',
   currentEdgeProgressM: corrected.eastM,

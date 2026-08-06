@@ -24,6 +24,8 @@ import '../../domain/dijkstra.dart';
 import '../../domain/multi_floor_router.dart';
 import '../../domain/nearby_facilities.dart';
 import '../../domain/route_guidance.dart';
+import '../../domain/route_checkpoint.dart';
+import '../../domain/route_movement.dart';
 import '../../domain/route_progress.dart';
 import '../../domain/transfer_route_geometry.dart';
 import '../../models/building.dart';
@@ -258,6 +260,13 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   /// 경로가 없거나 PDR 위치가 없으면 null이다. 위치 추정에는 영향을 주지
   /// 않으며(단방향), 남은거리 표시와 진단에만 쓴다.
   RouteProgress? _routeProgress;
+  RouteProgress? _measuredRouteProgress;
+  final TravelDirectionTracker _travelDirectionTracker =
+      TravelDirectionTracker();
+  final RouteCheckpointShadowTracker _checkpointShadowTracker =
+      RouteCheckpointShadowTracker();
+  IndoorRoute? _travelDirectionRoute;
+  int _routeGeneration = 0;
 
   /// 다음 진행률 계산의 지역 탐색 기준. 경로·층 세그먼트가 바뀔 때마다
   /// 반드시 null로 되돌려야 한다 — 이전 세그먼트 기준 진행거리를 그대로 두면
@@ -1242,6 +1251,8 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       destinationNodeId: _routeDestination?.nodeId,
       floorId: _selectedFloor,
       edgeIds: route.edgeIds,
+      nodeIds: route.nodeIds,
+      routeGeneration: _routeGeneration,
       routeDistanceM: route.distanceMeters,
       isMultiFloor: isMultiFloor,
     );
@@ -1533,7 +1544,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       math.pow(current.eastM - first.x, 2) +
           math.pow(current.northM - first.y, 2),
     );
-    final edgeId = result.currentEdgeId;
+    final edgeId = result.optimisticEdgeId;
     if (connectorM < 0.05) {
       if (edgeId == null || route.edgeIds.contains(edgeId)) return route;
       return IndoorRoute(
@@ -1541,6 +1552,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         distanceMeters: route.distanceMeters,
         pointsLocalM: route.pointsLocalM,
         edgeIds: [edgeId, ...route.edgeIds],
+        nodeIds: _nodeIdsStartingOnCurrentEdge(route, edgeId),
       );
     }
     final wgs84 = fitFloorGeoTransform(
@@ -1558,7 +1570,30 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         ...route.pointsLocalM,
       ],
       edgeIds: edgeIds,
+      nodeIds: _nodeIdsStartingOnCurrentEdge(route, edgeId),
     );
+  }
+
+  List<String> _nodeIdsStartingOnCurrentEdge(
+    IndoorRoute route,
+    String? edgeId,
+  ) {
+    if (edgeId == null || route.nodeIds.isEmpty) return route.nodeIds;
+    if (route.edgeIds.isNotEmpty && route.edgeIds.first == edgeId) {
+      return route.nodeIds;
+    }
+    final edge = _floorGraph?.edges
+        .where((item) => item.id == edgeId)
+        .firstOrNull;
+    final firstNodeId = route.nodeIds.first;
+    if (edge == null) return const [];
+    if (edge.fromNodeId == firstNodeId) {
+      return [edge.toNodeId, ...route.nodeIds];
+    }
+    if (edge.toNodeId == firstNodeId) {
+      return [edge.fromNodeId, ...route.nodeIds];
+    }
+    return const [];
   }
 
   RouteProgress? _seedProgressAtCurrentRouteStart(IndoorRoute route) {
@@ -1575,7 +1610,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     return seedRouteProgressAtRouteStart(
       routePointsLocalM: route.pointsLocalM,
       routeEdgeIds: route.edgeIds.toSet(),
-      currentEdgeId: result.currentEdgeId,
+      currentEdgeId: result.optimisticEdgeId,
       headingDeg: result.previewHeadingDeg,
     );
   }
@@ -1789,6 +1824,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       localPoints: route.pointsLocalM,
       wgs84Points: route.points,
       progress: _routeProgress,
+      travelDirectionState: _travelDirectionTracker.state,
       transferMode: segment?.transferModeToNext,
       allowArrival: allowArrival,
     );
@@ -1930,22 +1966,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     final graph = _floorGraph;
     final result = _corridorTrackingSession.result;
     if (graph == null || result == null) return null;
-    final progress = _routeProgress;
-    final projected = progress?.projectedPoint;
-    final canFollowGuidance =
-        _hasActiveRoute &&
-        projected != null &&
-        result.state != CorridorTrackingState.uncertain &&
-        (progress!.onRouteEdge ||
-            (!progress.reacquired &&
-                progress.offsetM < 4 &&
-                _offRouteEvidenceUpdates < 3));
-    // 센서·복도 보정의 원본은 그대로 두고 화면 마커만 수용된 경로 투영점을
-    // 따른다. 이탈 증거가 확정되면 원시 보정 위치로 돌아가 재탐색 결과를
-    // 기다리므로 실제 이탈을 파란선 위에 숨기지 않는다.
-    final current = canFollowGuidance
-        ? PdrLocalPoint(projected.x, projected.y)
-        : result.previewPosition;
+    // 안내 진행률은 파란선·ETA만 안정화한다. 실제 마커는 첫 preview peak부터
+    // tracker의 optimistic 위치를 그대로 따라야 역방향·이탈을 숨기지 않는다.
+    final current = result.previewPosition;
     final wgs84 = fitFloorGeoTransform(
       graph.nodes,
     ).apply(current.eastM, current.northM);
@@ -1967,8 +1990,8 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   ///
   /// **간선 방위(`previewHeadingDeg`)를 쓰지 않는다.** 그 값은 걸음이 있어야
   /// 갱신되고 직선 복도에서는 제자리 회전에 반응하지 않아서, 서서 몸을 돌리면
-  /// 화면의 방향이 그대로 얼어 있었다. 복도에서 학습한 bias는 그대로 반영된
-  /// 센서 heading을 쓴다.
+  /// 화면의 방향이 그대로 얼어 있었다. walkOffset과 복도 bias 적용 전의
+  /// orientation heading을 쓴다.
   double? get _pdrCurrentHeadingDeg {
     final snapshot = _pdrTrailState.snapshot;
     final anchor = _pdrTrailState.anchor;
@@ -1978,18 +2001,14 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     // 몸을 돌려도 화면이 반응하지 않는다.
     //
     // heading 자체는 끊기지 않았다(`pauseStepTracking`은 센서를 끄지 않는다).
-    // 그래서 센서 heading + anchor rotation으로 직접 만든다 — 축 변환은 지도
-    // bearing으로 되돌릴 때 상쇄되므로 목적 층 도면에서도 방향이 맞다. 복도에서
-    // 학습한 bias만 잠시 빠지는데, 그건 새 층에서 다시 학습하는 값이고 옛 층
-    // 기준 bias를 새 층 frame에 섞는 것보다 안전하다.
-    final deviceFloorHeading = anchor.floorId == _selectedFloor
-        ? _corridorTrackingSession.result?.deviceHeadingDeg
-        : null;
-    return deviceFloorHeading == null
-        ? normalizePdrBearing(snapshot.walkingHeadingDeg + anchor.rotationDeg)
-        : FloorCoordinateTransform(
-            anchor,
-          ).floorBearingToMapBearing(deviceFloorHeading);
+    // 그래서 orientation heading + anchor rotation으로 직접 만든다 — 축 변환은
+    // 지도 bearing으로 되돌릴 때 상쇄되므로 목적 층 도면에서도 방향이 맞다.
+    final orientationFloorHeading = FloorCoordinateTransform(
+      anchor,
+    ).toFloorBearing(snapshot.orientationHeadingDeg);
+    return FloorCoordinateTransform(
+      anchor,
+    ).floorBearingToMapBearing(orientationFloorHeading);
   }
 
   /// 기압 샘플 한 건을 판정기에 넣고, 로그에 남기고, 확정이면 층을 옮긴다.
@@ -2591,6 +2610,16 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       result,
       confirmedSteps: snapshot?.steps,
       previewSteps: snapshot?.preview.steps,
+      orientationHeadingDeg: snapshot == null
+          ? null
+          : FloorCoordinateTransform(
+              anchor,
+            ).toFloorBearing(snapshot.orientationHeadingDeg),
+      walkingHeadingDeg: snapshot == null
+          ? null
+          : FloorCoordinateTransform(
+              anchor,
+            ).toFloorBearing(snapshot.walkingHeadingDeg),
     );
   }
 
@@ -2603,12 +2632,19 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     CorridorTrackingResult? result, {
     int? confirmedSteps,
     int? previewSteps,
+    double? orientationHeadingDeg,
+    double? walkingHeadingDeg,
   }) {
     final route = _route;
     if (route == null || result == null) {
+      if (route == null) {
+        _travelDirectionRoute = null;
+        _travelDirectionTracker.reset();
+      }
       if (_routeProgress != null || _lastRouteTraveledM != null) {
         setState(() {
           _routeProgress = null;
+          _measuredRouteProgress = null;
           _lastRouteTraveledM = null;
           _lastRouteProgressAcceptedSteps = null;
           _lastRouteEvaluatedSteps = null;
@@ -2619,6 +2655,48 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       // 경로도 위치도 없는 상태다. 예약해 둔 자동 종료가 있으면 여기서 걷힌다.
       _syncArrivalAutoClear();
       return;
+    }
+
+    if (!identical(_travelDirectionRoute, route)) {
+      _travelDirectionRoute = route;
+      _routeGeneration += 1;
+      _travelDirectionTracker.reset();
+      final checkpointGraph = _floorGraph;
+      if (checkpointGraph != null) {
+        _checkpointShadowTracker.configure(
+          routeGeneration: _routeGeneration,
+          route: route,
+          graph: checkpointGraph,
+        );
+      }
+      _recordRouteContext(route, isMultiFloor: _multiFloorRoute != null);
+    }
+    final graph = _floorGraph;
+    if (graph != null) {
+      for (final optimisticStep in result.optimisticStepAdvances) {
+        final routeStep = adaptOptimisticStepToRoute(
+          step: optimisticStep,
+          graph: graph,
+          routeEdgeIds: route.edgeIds,
+          routeNodeIds: route.nodeIds,
+          orientationHeadingDeg: orientationHeadingDeg,
+          walkingHeadingDeg: walkingHeadingDeg,
+        );
+        final transition = _travelDirectionTracker.apply(routeStep);
+        _pdrDebugRecorder?.recordRouteStepAdvance(
+          routeStep,
+          transition: transition,
+        );
+        for (final checkpointEvent in _checkpointShadowTracker.apply(
+          step: routeStep,
+          travelDirectionState: _travelDirectionTracker.state,
+          tracker: result,
+          graph: graph,
+          rerouteInFlight: _rerouteInFlight,
+        )) {
+          _pdrDebugRecorder?.recordCheckpointEvent(checkpointEvent);
+        }
+      }
     }
 
     // 에스컬레이터 위에서는 진행 상태를 갱신하지 않는다. 위치는 도착 지점에
@@ -2643,8 +2721,8 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         ? seedRouteProgressAtRouteStart(
             routePointsLocalM: route.pointsLocalM,
             routeEdgeIds: route.edgeIds.toSet(),
-            currentEdgeId: result.currentEdgeId,
-            headingDeg: result.deviceHeadingDeg,
+            currentEdgeId: result.optimisticEdgeId,
+            headingDeg: orientationHeadingDeg,
           )
         : computeRouteProgress(
             routePointsLocalM: route.pointsLocalM,
@@ -2652,12 +2730,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
             // 표시 위치와 같은 값을 쓴다. 확정(초록) 위치로 계산하면 화면의
             // 마커와 남은거리가 서로 다른 시점을 가리킨다.
             position: localPosition,
-            currentEdgeId: result.currentEdgeId,
-            // 방향은 간선 방위가 아니라 **사용자가 향한 방향**을 쓴다.
-            // "반대 방향입니다"와 후퇴 허용 판단이 둘 다 "지금 어디를 보고
-            // 있나"를 묻기 때문이다. 간선 방위를 쓰면 빔이 고른 진행 부호가
-            // 그대로 답이 되어, 몸을 돌리지 않았는데도 역주행이 뜬다.
-            headingDeg: result.deviceHeadingDeg,
+            currentEdgeId: result.optimisticEdgeId,
+            // orientation은 경로 접선과의 오차를 진단하는 데만 쓴다. 역방향
+            // 안내와 display 후퇴 허용은 peak traversal 상태기가 결정한다.
+            headingDeg: orientationHeadingDeg,
             previousTraveledM: _lastRouteTraveledM,
           );
     if (progress == null) return;
@@ -2675,23 +2751,34 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       acceptedAtSteps: _lastRouteProgressAcceptedSteps,
       currentSteps: responsiveSteps,
     );
-    // 몸을 돌리지 않았는데 생긴 후퇴는 이번 갱신에서 보류한다.
-    final holdForRegression = shouldHoldRouteRegression(
+    // 실제 역방향 peak가 확정되기 전에 생긴 display 후퇴만 보류한다.
+    final holdForRegression = shouldHoldDisplayRouteRegression(
       previous: previousDisplayProgress,
       candidate: progress,
-      deviceHeadingErrorDeg: progress.headingErrorDeg,
+      travelDirectionState: _travelDirectionTracker.state,
     );
     final holdPrevious =
         holdForPendingDeviation || holdForImplausibleJump || holdForRegression;
     final displayProgress = holdPrevious ? previousDisplayProgress! : progress;
     setState(() {
       _routeProgress = displayProgress;
-      _lastRouteTraveledM = displayProgress.traveledM;
+      _measuredRouteProgress = progress;
+      _lastRouteTraveledM = progress.traveledM;
       if (!holdPrevious) {
         _lastRouteProgressAcceptedSteps = responsiveSteps;
       }
     });
-    _pdrDebugRecorder?.recordRouteProgress(progress);
+    _pdrDebugRecorder?.recordRouteProgress(
+      progress,
+      displayProgress: displayProgress,
+      holdReason: holdForPendingDeviation
+          ? 'pendingDeviation'
+          : holdForImplausibleJump
+          ? 'implausibleJump'
+          : holdForRegression
+          ? 'regression'
+          : null,
+    );
     _syncArrivalAutoClear();
   }
 
@@ -2719,7 +2806,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     final strongDeviation = progress.offsetM >= 4 || progress.reacquired;
     final deviated = !progress.onRouteEdge || strongDeviation;
     if (!deviated ||
-        result.currentEdgeId == null ||
+        result.optimisticEdgeId == null ||
         result.state == CorridorTrackingState.uncertain) {
       _offRouteEvidenceUpdates = 0;
       _offRouteFirstEvidenceAtMs = null;
@@ -2887,6 +2974,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     final snapshot = indoorNavigationDriver.currentSnapshot;
     if (snapshot != null) recorder.recordSnapshot(snapshot);
     recorder.recordRuntime(indoorNavigationDriver.currentRuntimeStatus);
+    recorder.recordSessionBoundary(
+      announceExport ? 'routeEnded' : 'routeReplaced',
+    );
     if (!mounted) return;
     if (announceExport &&
         recorder.hasSnapshot &&
@@ -3189,6 +3279,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   Future<void> _cancelPdrAnchor() async {
     if (!_placingPdrAnchor) return;
     await indoorNavigationDriver.stopGuidance();
+    _pdrDebugRecorder?.recordPedometerFinalize(
+      indoorNavigationDriver.lastPedometerFinalizeInfo,
+    );
+    _pdrDebugRecorder?.recordSessionBoundary('sensorStopped');
     _pdrDebugRecorder?.recordRuntime(
       indoorNavigationDriver.currentRuntimeStatus,
     );
@@ -3546,7 +3640,11 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           Positioned(
             top: topOverlay + 8,
             left: 16,
-            child: _RouteProgressBadge(progress: _routeProgress!),
+            child: _RouteProgressBadge(
+              progress: _routeProgress!,
+              measuredProgress: _measuredRouteProgress,
+              travelDirectionState: _travelDirectionTracker.state,
+            ),
           ),
 
         // PDR 제어는 하단 홈/실내 세그먼트 바로 왼쪽에 같은 baseline으로 둔다.
@@ -3713,9 +3811,15 @@ class _HintCancelButton extends StatelessWidget {
 /// 없으면 "내 위치가 안 따라온다 = 앱이 멈췄다"로 읽히므로, 지금이 의도된
 /// 상태라는 것과 어디로 가고 있는지를 함께 보여 준다.
 class _RouteProgressBadge extends StatelessWidget {
-  const _RouteProgressBadge({required this.progress});
+  const _RouteProgressBadge({
+    required this.progress,
+    required this.measuredProgress,
+    required this.travelDirectionState,
+  });
 
   final RouteProgress progress;
+  final RouteProgress? measuredProgress;
+  final TravelDirectionState travelDirectionState;
 
   @override
   Widget build(BuildContext context) {
@@ -3743,7 +3847,8 @@ class _RouteProgressBadge extends StatelessWidget {
               '남음 ${progress.remainingM.toStringAsFixed(1)}m · '
               '오차 ${progress.offsetM.toStringAsFixed(1)}m'
               '${progress.reacquired ? ' · 재획득' : ''}'
-              '${progress.wrongWay ? ' · 역주행' : ''}',
+              '${measuredProgress != null && (measuredProgress!.traveledM - progress.traveledM).abs() > 0.05 ? ' · 측정 ${measuredProgress!.traveledM.toStringAsFixed(1)}m' : ''}'
+              '${travelDirectionState == TravelDirectionState.reverseConfirmed ? ' · 역주행' : ''}',
               style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w600,

@@ -12,6 +12,7 @@ class IndoorRoute {
     required this.distanceMeters,
     this.pointsLocalM = const [],
     this.edgeIds = const [],
+    this.nodeIds = const [],
   });
 
   final List<LatLng> points;
@@ -30,6 +31,13 @@ class IndoorRoute {
   /// 붙었을 때도 "경로 위"로 보이므로, 간선 동일성으로만 판정한다.
   /// `fromJson`으로 만든 경로에는 없으므로 비어 있을 수 있다.
   final List<String> edgeIds;
+
+  /// 경로가 graph node를 지나는 순서.
+  ///
+  /// [edgeIds]의 각 간선을 어느 저장 방향으로 통과하는지 판별하는 단일 근거다.
+  /// `nodeIds.length == edgeIds.length + 1`일 때만 peak traversal의 경로 기준
+  /// 부호와 waypoint checkpoint 판정에 사용한다.
+  final List<String> nodeIds;
 
   factory IndoorRoute.fromJson(Map<String, dynamic> json) {
     final points = ((json['path_points_wgs84'] as List<dynamic>?) ?? const [])
