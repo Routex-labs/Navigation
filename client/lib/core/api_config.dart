@@ -32,8 +32,13 @@ const demoBuildingId = 'thehyundai-seoul';
 ///   flutter run --dart-define=TMAP_APP_KEY=발급받은키
 /// 값을 안 넘기면 빈 문자열이 되고, service_locator.dart가 이 경우 자동으로
 /// MockDirectionsRepository를 사용한다.
+/// 같은 키로 보행자 경로·POI 통합검색·대중교통 경로를 모두 호출한다.
 const tmapAppKey = String.fromEnvironment('TMAP_APP_KEY');
 const tmapBaseUrl = 'https://apis.openapi.sk.com/tmap';
+
+/// 대중교통 경로안내만 base path가 `/tmap`이 아니라 `/transit`이다. 같은
+/// 호스트라 헷갈리기 쉬운데, `/tmap/routes/transit`으로 부르면 404다.
+const tmapTransitBaseUrl = 'https://apis.openapi.sk.com/transit';
 
 /// VWorld(국토교통부) 배경지도 타일. https://www.vworld.kr/dev 에서 도메인 등록 후 발급.
 /// 키를 소스코드에 직접 적지 않고 실행 시점에 주입한다:

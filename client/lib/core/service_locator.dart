@@ -16,8 +16,12 @@ import '../repositories/http_building_repository.dart';
 import '../repositories/http_destination_repository.dart';
 import '../repositories/mock_directions_repository.dart';
 import '../repositories/http_place_detail_repository.dart';
+import '../repositories/outdoor_poi_repository.dart';
 import '../repositories/place_detail_repository.dart';
 import '../repositories/tmap_directions_repository.dart';
+import '../repositories/tmap_poi_repository.dart';
+import '../repositories/tmap_transit_repository.dart';
+import '../repositories/transit_repository.dart';
 import '../state/favorites_controller.dart';
 
 /// 앱 전체에서 공유하는 PDR 센서 소스와 세션 드라이버다. 화면이 바뀌어도
@@ -78,6 +82,22 @@ PlaceDetailRepository placeDetailRepository = HttpPlaceDetailRepository();
 final DirectionsRepository directionsRepository = tmapAppKey.isEmpty
     ? MockDirectionsRepository()
     : TmapDirectionsRepository();
+
+/// 건물 **밖** 장소 검색(TMAP POI 통합검색). 키가 없으면 기능 자체가 꺼진
+/// 구현이 들어가고, 검색 패널은 "주변 장소" 섹션을 아예 그리지 않는다.
+///
+/// 도보 경로와 달리 Mock을 두지 않는다. 직선 경로 Mock은 "대충 이 방향"이라도
+/// 맞지만, 없는 가게를 지어내면 사용자를 실제로 그 좌표까지 걸어가게 만든다.
+///
+/// 위젯 테스트에서 HTTP 없이 결과를 주입할 수 있도록 final이 아니다.
+OutdoorPoiRepository outdoorPoiRepository = tmapAppKey.isEmpty
+    ? const UnavailableOutdoorPoiRepository()
+    : TmapPoiRepository();
+
+/// 대중교통 경로(TMAP transit). 위와 같은 이유로 키가 없으면 꺼진 구현이다.
+TransitRepository transitRepository = tmapAppKey.isEmpty
+    ? const UnavailableTransitRepository()
+    : TmapTransitRepository();
 
 /// 사용자가 "장소" 탭에 저장해둔 매장 목록. SharedPreferences로 앱 재실행
 /// 뒤에도 유지된다. 테스트에서는 이 변수를 in-memory 컨트롤러로 교체한다.
