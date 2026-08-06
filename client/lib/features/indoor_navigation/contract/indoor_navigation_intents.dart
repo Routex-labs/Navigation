@@ -48,4 +48,18 @@ abstract interface class IndoorNavigationIntents {
     required PdrLocalPoint anchorLocalM,
     PdrToFloorAxes? axes,
   });
+
+  /// 걸음 누적만 멈춘다. 센서 구독은 그대로 둔다.
+  ///
+  /// 에스컬레이터에 탄 동안을 위한 것이다. 이때 pedometer는 진동을 걸음으로
+  /// 세고 accel peak도 계속 잡히는데, 사용자는 실제로 걷고 있지 않으므로 그
+  /// 걸음이 위치에 쌓이면 하차 지점이 통째로 어긋난다.
+  ///
+  /// **센서를 끄면 안 된다.** 하차 판정의 근거가 기압계이고 방향도 계속
+  /// 따라가야 하므로, [onAppBackgrounded]처럼 native source를 멈추는 경로와는
+  /// 구분한다. 여기서 멈추는 것은 tracking 플래그 하나다.
+  Future<void> pauseStepTracking();
+
+  /// [pauseStepTracking]으로 멈춘 걸음 누적을 다시 켠다.
+  Future<void> resumeStepTracking();
 }

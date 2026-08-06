@@ -8,6 +8,7 @@ import 'floor_map_matcher.dart';
 
 const trustedIndoorGpsAccuracyM = 15.0;
 const maxIndoorGpsSnapDistanceM = 12.0;
+const maxIndoorEntranceSnapDistanceM = 25.0;
 
 /// GPS 추정점을 사용자 입력 없이 PDR 기준점으로 승격해도 되는지 판단한다.
 ///
@@ -43,8 +44,8 @@ class IndoorLocationEstimate {
   final double accuracyMeters;
   final DateTime observedAt;
 
-  /// `gps`는 실제 GPS 좌표를 통로에 투영한 값, `entrance`는 GPS 품질이 낮아
-  /// 건물 입구 좌표를 대신 투영한 값이다.
+  /// `gps`는 실제 GPS 좌표를 통로에 투영한 폴백, `entrance`는 기본 정책으로
+  /// 건물 입구를 통로에 투영한 값이다.
   final String source;
 
   bool isFresh(DateTime now, {Duration maxAge = const Duration(seconds: 30)}) =>
@@ -116,4 +117,45 @@ IndoorLocationEstimate? estimateIndoorLocationFromGps({
     source: 'gps',
   );
   return estimate.isFresh(now ?? DateTime.now()) ? estimate : null;
+}
+
+/// 건물 입구를 해당 층 통행망에 붙여 기본 실내 기준점을 만든다.
+///
+/// 실내 GPS는 현재 층을 알 수 없고 신호가 크게 튀므로 자동 앵커의 기본값으로
+/// 쓰지 않는다. 입구와 통행망이 너무 멀면 잘못된 복도에 억지로 붙이지 않고 null을
+/// 반환해 수동 위치 지정으로 넘긴다.
+IndoorLocationEstimate? estimateIndoorLocationFromEntrance({
+  required String buildingId,
+  required String floorId,
+  required FloorGraph graph,
+  required double latitude,
+  required double longitude,
+  required DateTime observedAt,
+  double maxSnapDistanceMeters = maxIndoorEntranceSnapDistanceM,
+}) {
+  if (graph.nodes.isEmpty ||
+      graph.edges.isEmpty ||
+      !latitude.isFinite ||
+      !longitude.isFinite) {
+    return null;
+  }
+  final transform = fitFloorGeoTransform(graph.nodes);
+  final local = transform.invert(latitude, longitude);
+  if (local == null) return null;
+  final snapped = FloorMapMatcher(
+    graph,
+  ).snapToWalkableNetwork(PdrLocalPoint(local.$1, local.$2));
+  if (snapped == null || snapped.distanceToGraphM > maxSnapDistanceMeters) {
+    return null;
+  }
+  final wgs84 = transform.apply(snapped.point.eastM, snapped.point.northM);
+  return IndoorLocationEstimate(
+    buildingId: buildingId,
+    floorId: floorId,
+    localM: snapped.point,
+    wgs84: LatLng(wgs84.$1, wgs84.$2),
+    accuracyMeters: snapped.distanceToGraphM,
+    observedAt: observedAt,
+    source: 'entrance',
+  );
 }

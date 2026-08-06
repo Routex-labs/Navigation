@@ -25,6 +25,7 @@ import '../../features/indoor_navigation/debug/pdr_debug_device_info.dart';
 import '../../features/indoor_navigation/debug/pdr_debug_session_recorder.dart';
 import '../../features/indoor_navigation/debug/pdr_debug_session_share.dart';
 import '../../domain/multi_floor_router.dart';
+import '../../domain/transfer_route_geometry.dart';
 import '../../models/building.dart';
 import '../../models/building_graph.dart';
 import '../../models/directions_route.dart';
@@ -73,11 +74,6 @@ const _indoorWalkingSpeedMetersPerSecond = 1.2;
 // 그런 상태에서 억지로 스냅하면 건물 반대편 복도에 위치를 찍어 놓고 거기서부터
 // 걸음을 쌓는다 — 위치가 없는 것보다 나쁘다.
 const _maxEntranceAnchorSnapDistanceM = 25.0;
-
-// 실제 GPS 좌표를 실내 절대 추정점으로 쓸 수 있는 품질 기준. 이보다 나쁘면
-// GPS 점을 복도에 억지로 붙이지 않고, 검증된 건물 입구 좌표로 폴백한다.
-const _trustedIndoorGpsAccuracyM = 15.0;
-const _maxIndoorGpsSnapDistanceM = 12.0;
 
 // 자동 앵커를 확정하기 전에 센서 세션의 첫 보고를 기다리는 최대 시간.
 // 근거는 [_awaitSensorWarmup] 주석 참고.
@@ -354,7 +350,6 @@ Future<Uint8List> _renderPdrLocationIcon({required bool showHeading}) async {
   return byteData!.buffer.asUint8List();
 }
 
-
 // 기본 지도 스타일. vworldApiKey가 있으면 VWorld Base 타일, 없으면 OSM으로 폴백해
 // 로컬 개발·테스트 환경에서도 지도가 항상 뜨도록 한다.
 String _baseMapStyle() {
@@ -547,6 +542,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   IndoorRoute? _indoorRouteSegment;
   MultiFloorRoute? _indoorMultiFloorRoute;
   PoiSearchResult? _indoorRouteDestination;
+
   StreamSubscription<Position>? _positionSubscription;
   bool _interactive = true;
   ll.LatLng? _userDestination;
@@ -1418,21 +1414,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       return;
     }
 
-    var estimatedPoint = entranceSnap.point;
-    var estimateSource = 'entrance';
-    if (position.accuracy <= _trustedIndoorGpsAccuracyM) {
-      final gpsLocal = transform.invert(position.latitude, position.longitude);
-      final gpsSnap = gpsLocal == null
-          ? null
-          : FloorMapMatcher(
-              graph,
-            ).snapToWalkableNetwork(PdrLocalPoint(gpsLocal.$1, gpsLocal.$2));
-      if (gpsSnap != null &&
-          gpsSnap.distanceToGraphM <= _maxIndoorGpsSnapDistanceM) {
-        estimatedPoint = gpsSnap.point;
-        estimateSource = 'gps';
-      }
-    }
+    // GPS는 건물 진입 여부만 확인한다. 현재 층을 알 수 없는 GPS를 기준점으로
+    // 쓰면 다른 층의 복도에 붙어 마커가 튀므로 기본 앵커는 항상 입구다.
+    final estimatedPoint = entranceSnap.point;
     final estimatedWgs84 = transform.apply(
       estimatedPoint.eastM,
       estimatedPoint.northM,
@@ -1445,7 +1429,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         wgs84: ll.LatLng(estimatedWgs84.$1, estimatedWgs84.$2),
         accuracyMeters: position.accuracy,
         observedAt: position.timestamp,
-        source: estimateSource,
+        source: 'entrance',
       ),
     );
     unawaited(_syncPdrCurrentLayer());
@@ -3209,9 +3193,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Future<void> _syncRouteLayer() async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
-    final transferPoints = _indoorMultiFloorRoute
-        ?.segmentForFloor(_activeFloor ?? '')
-        ?.transferPointsToNext;
+    final transferSegment = _indoorMultiFloorRoute?.segmentForFloor(
+      _activeFloor ?? '',
+    );
+    final transferPoints = transferSegment == null
+        ? null
+        : transferRoutePointsOnFloor(transferSegment, _floorPlan, _floorGraph);
     await controller.setGeoJsonSource(
       _transferRouteSourceId,
       transferPoints == null || transferPoints.length < 2
@@ -3506,14 +3493,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     );
   }
 
-  /// 사용자의 PDR 위치를 WGS84로 돌려준다. 확정된 실시간 스냅샷이 있으면
-  /// 그것을, 아직 걷지 않아 스냅샷이 없으면 앵커 위치를 폴백으로 쓴다. 그
-  /// 어느 것도 없거나 활성 층과 다른 층에 앵커가 있으면 null(→ 마커 숨김).
+  /// 홈 실내 오버레이에서는 사용자가 확정한 앵커만 고정 표시한다.
+  ///
+  /// 홈은 실제 층을 확정할 수 없으므로 걸음 누적 위치를 계속 그리면 잘못된 층의
+  /// 지도 위에서 점이 튄다. 연속 PDR 안내는 실내 탭이 담당하고, 홈에서는 다음
+  /// 위치 지정 전까지 이 기준점만 유지한다.
   ll.LatLng? _pdrCurrentWgs84() {
     final graph = _floorGraph;
     if (graph == null || graph.nodes.isEmpty) return null;
     final transform = fitFloorGeoTransform(graph.nodes);
-    final snapshot = _pdrTrailState.snapshot;
     final anchor = _pdrTrailState.anchor;
     if (anchor == null || anchor.floorId != _activeFloor) {
       final estimate = indoorLocationEstimateController.current;
@@ -3526,11 +3514,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       return null;
     }
 
-    final corrected = _corridorTrackingSession.result?.previewPosition;
-    if (snapshot != null && corrected != null) {
-      final wgs84 = transform.apply(corrected.eastM, corrected.northM);
-      return ll.LatLng(wgs84.$1, wgs84.$2);
-    }
     final wgs84 = transform.apply(
       anchor.anchorLocalM.eastM,
       anchor.anchorLocalM.northM,
@@ -3719,13 +3702,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final snapshot = _pdrTrailState.snapshot;
     final anchor = _pdrTrailState.anchor;
     if (snapshot == null || anchor == null || !snapshot.hasHeading) return null;
-    final correctedFloorHeading =
-        _corridorTrackingSession.result?.previewHeadingDeg;
-    return correctedFloorHeading == null
+    // 간선 방위가 아니라 센서 heading(+복도 bias)을 쓴다. 간선 방위는 걸음이
+    // 있어야 갱신돼서, 서서 몸만 돌리면 방향이 얼어붙는다.
+    final deviceFloorHeading =
+        _corridorTrackingSession.result?.deviceHeadingDeg;
+    return deviceFloorHeading == null
         ? normalizePdrBearing(snapshot.walkingHeadingDeg + anchor.rotationDeg)
         : FloorCoordinateTransform(
             anchor,
-          ).floorBearingToMapBearing(correctedFloorHeading);
+          ).floorBearingToMapBearing(deviceFloorHeading);
   }
 
   void _syncCorridorTracking(PdrSnapshot? snapshot) {

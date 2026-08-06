@@ -25,7 +25,9 @@ library;
 
 /// 건물 바닥. 걸어 다니는 공간이라 가장 밝게 둔다.
 const mapFootprintFill = '#FFFFFF';
-const mapFootprintOutline = '#00000088';
+// 외곽선은 통로를 구획하는 보조 정보다. 검정 반투명은 iOS MapLibre에서
+// 예상보다 진하게 합성돼 도면을 격자처럼 보이게 했으므로 따뜻한 회색으로 낮춘다.
+const mapFootprintOutline = '#C8C1B8';
 
 /// 매장 폴리곤 면. 원본(`#F3F1EF`)보다 한 톤만 낮다 — 면으로 구분하려는 게
 /// 아니라 경계선이 얹힐 바탕을 주는 정도다.

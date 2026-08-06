@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../core/api_config.dart';
 import '../../core/service_locator.dart';
 import '../../domain/dijkstra.dart';
+import '../../features/indoor_navigation/contract/floor_transition_ui_state.dart';
 import '../../models/building.dart';
 import '../../models/category_count.dart';
 import '../../models/favorite_place.dart';
@@ -21,6 +22,7 @@ import '../../widgets/category_stores_sheet.dart';
 import '../../widgets/category_taxonomy.dart';
 import '../../widgets/directions_sheet.dart';
 import '../../widgets/favorites_sheet.dart';
+import '../../widgets/floor_transition_overlay.dart';
 import '../../widgets/map_bottom_bar.dart';
 import '../../widgets/map_top_bar.dart';
 import '../../widgets/place_detail_sheet.dart';
@@ -56,6 +58,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 대신하는 유일한 값이다. 상단 바 높이가 상태에 따라 달라져도 이 간격은
   /// 그대로라 어느 모드에서든 같은 여백으로 보인다.
   static const _overlayGap = 8.0;
+
+  /// 층 교체 베일의 페이드 시간. [IndoorMapBody]가 도면을 바꾸는 구간과 같다.
+  static const _floorSwapVeilFadeIn = Duration(milliseconds: 140);
+  static const _floorSwapVeilFadeOut = Duration(milliseconds: 260);
 
   late MapMode _mode = widget.initialMode;
   String _buildingId = demoBuildingId;
@@ -100,6 +106,25 @@ class _MapShellScreenState extends State<MapShellScreen> {
   void _onActiveFloorChanged(String? floor) {
     if (_activeFloorLabel == floor || !mounted) return;
     setState(() => _activeFloorLabel = floor);
+  }
+
+  /// 실내 지도가 알려 온 층 전환 상태를 받는다.
+  ///
+  /// 탑승이 감지되면 검색을 닫는다. 검색 패널은 상단 Column 전체를 차지해
+  /// 배너가 들어갈 자리가 없고, 그 순간 사용자에게 더 급한 정보는 길안내다.
+  void _onFloorTransitionChanged(
+    FloorTransitionUiState? banner,
+    double veilOpacity,
+  ) {
+    if (!mounted) return;
+    if (_floorTransition == banner && _floorSwapVeil == veilOpacity) return;
+    if (banner != null && _searchActive) {
+      _closeSearch();
+    }
+    setState(() {
+      _floorTransition = banner;
+      _floorSwapVeil = veilOpacity;
+    });
   }
 
   /// 카테고리 선택을 바꾼다. 지도 강조는 상태를 내려받은 두 지도가 알아서
@@ -153,6 +178,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   final _outdoorKey = GlobalKey<OutdoorMapBodyState>();
   final _indoorKey = GlobalKey<IndoorMapBodyState>();
+
+  /// 층 전환 배너·베일 상태. 판정과 상태 전이는 [IndoorMapBody]가 소유하고
+  /// 여기서는 그리기만 한다.
+  ///
+  /// 셸이 그려야 하는 이유: 검색창·카테고리 줄·하단 바가 이 Stack의 형제라,
+  /// 지도 안에서 그린 배너는 그 뒤에 깔린다.
+  FloorTransitionUiState? _floorTransition;
+  double _floorSwapVeil = 0;
 
   // 지도 위에 얹은 공용 오버레이(검색창·저장한 장소 pill·하단 홈/실내 바)의
   // 영역을 IndoorMapBody가 map click 처리에서 제외할 수 있게 넘겨줄 key들.
@@ -1052,6 +1085,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                 },
                 categorySelection: _categorySelection,
                 onFloorChanged: _onActiveFloorChanged,
+                onFloorTransitionChanged: _onFloorTransitionChanged,
                 outerOverlayKeys: [
                   _topBarKey,
                   _favoritesPillKey,
@@ -1134,6 +1168,22 @@ class _MapShellScreenState extends State<MapShellScreen> {
                       : _clearRouteDraft,
                 ),
 
+                // 층 전환 배너는 고정 top 숫자가 아니라 **이 Column 흐름**에
+                // 놓는다. 상단 바 높이는 상태마다 달라지므로(검색 한 줄 ↔
+                // 출발/도착 두 줄), 상수로 잡으면 어느 한쪽에서 반드시 겹친다.
+                // 전환 중에는 아래 카테고리 줄을 접어 자리를 보장한다.
+                if (_floorTransition case final transition?)
+                  Padding(
+                    padding: const EdgeInsets.only(top: _overlayGap),
+                    child: Center(
+                      child: FloorTransitionBanner(
+                        state: transition,
+                        onUndo: () =>
+                            _indoorKey.currentState?.undoFloorTransition(),
+                      ),
+                    ),
+                  ),
+
                 // 결과 패널과 카테고리 열은 같은 자리를 쓴다. 검색 중에는
                 // 카테고리 열을 접어 두 오버레이가 겹치지 않게 한다.
                 if (_searchActive)
@@ -1157,6 +1207,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
                       ),
                     ),
                   )
+                // 층 전환 중에는 카테고리 줄을 접는다. 배너가 상단 바 바로
+                // 아래에 오도록 자리를 비우는 것이고, 전환은 몇 초짜리 상태다.
+                else if (_floorTransition != null)
+                  const SizedBox.shrink()
                 // 길찾기 draft에서는 **접지 않고 내려온다.** 상단 바가 출발/도착
                 // 두 줄로 커지면 이 Column이 그만큼 아래로 밀어 주므로 겹치지
                 // 않는다. 한때 접어 뒀지만, 도착지를 정한 뒤에도 "그럼 저긴
@@ -1284,6 +1338,18 @@ class _MapShellScreenState extends State<MapShellScreen> {
               // 없어 눌러도 의미가 없다.
               showPlaceLocation:
                   _mode == MapMode.indoor || _outdoorIndoorEntered,
+            ),
+          ),
+
+          // 실제 도면 swap 구간을 덮는 베일. root Stack의 **마지막** 레이어라
+          // 지도뿐 아니라 검색창·카테고리·하단 바까지 함께 덮고, 페이드 중
+          // 뒤쪽 입력을 막는다.
+          Positioned.fill(
+            child: FloorSwapVeil(
+              opacity: _floorSwapVeil,
+              fadeIn: _floorSwapVeilFadeIn,
+              fadeOut: _floorSwapVeilFadeOut,
+              state: _floorTransition,
             ),
           ),
         ],

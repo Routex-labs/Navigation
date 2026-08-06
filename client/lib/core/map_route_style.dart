@@ -95,9 +95,9 @@ SymbolLayerProperties routeArrowProps() => const SymbolLayerProperties(
     ['linear'],
     ['zoom'],
     16,
-    0.28,
+    0.36,
     20,
-    0.42,
+    0.52,
   ],
   symbolPlacement: 'line',
   symbolSpacing: kRouteArrowSpacingExpr,
@@ -122,7 +122,7 @@ Future<Uint8List> renderRouteArrowIcon() async {
   final paint = Paint()
     ..color = Colors.white
     ..style = PaintingStyle.stroke
-    ..strokeWidth = 7
+    ..strokeWidth = 9
     ..strokeCap = StrokeCap.round
     ..strokeJoin = StrokeJoin.round;
 
