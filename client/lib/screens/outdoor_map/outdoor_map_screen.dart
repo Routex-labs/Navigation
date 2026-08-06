@@ -1701,6 +1701,33 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncDestinationLayer();
   }
 
+  /// 야외 구간 ETA. 문 경유 안내 중이면 미리 풀어 둔 실내 구간까지 더한다.
+  ///
+  /// 더하지 않으면 카드가 "이솝까지"라고 적어 두고 실제로는 **문까지의** 거리와
+  /// 시간만 보여 준다. 목적지가 위층 안쪽이면 실제의 절반에도 못 미치는 값이라,
+  /// 사용자는 도착했다고 생각한 지점에서 안내가 다시 시작되는 경험을 한다.
+  ///
+  /// 시간은 실내 구간의 **비용**(costM)으로 잰다 — 엘리베이터 대기·탑승이 거기
+  /// 들어 있어서다. 거리는 실거리로 더한다. 실내 ETA([_indoorEta])와 같은 규칙이다.
+  ({double distanceM, int minutes}) _outdoorEta(DirectionsRoute route) {
+    final leg = _pendingIndoorRoute;
+    if (leg == null) {
+      return (
+        distanceM: route.distanceMeters,
+        minutes: (route.durationSeconds / 60).ceil().clamp(1, 999),
+      );
+    }
+    final indoorSeconds =
+        leg.totalCostMeters / _indoorWalkingSpeedMetersPerSecond;
+    return (
+      distanceM: route.distanceMeters + leg.totalDistanceMeters,
+      minutes: ((route.durationSeconds + indoorSeconds) / 60).ceil().clamp(
+        1,
+        999,
+      ),
+    );
+  }
+
   /// 문 경유 안내의 ETA 카드 라벨. 목적지와 경유하는 문을 함께 적어, 왜 경로가
   /// 목적지가 아니라 건물 모서리로 향하는지 사용자가 화면에서 바로 알 수 있게 한다.
   String _journeyEtaLabel(
@@ -4416,6 +4443,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final indoorRouteDestination = _indoorRouteDestination;
     // 거리·시간을 한 번에 계산한다(예전엔 같은 계산을 두 번 돌았다).
     final indoorEta = _indoorEta();
+    final outdoorEta = route == null ? null : _outdoorEta(route);
     final indoorRouteVisible = _hasAnyRouteVisible;
     final debugEnabled = _debugModeController.enabled;
     final pdrActive =
@@ -4632,7 +4660,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
               ),
             ),
           )
-        else if (route != null)
+        else if (route != null && outdoorEta != null)
           Positioned(
             left: 0,
             right: 0,
@@ -4647,8 +4675,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
                 // 있었지만, 그 폴백이 사라져 도달할 수 없는 가지가 됐다.
                 child: EtaCard(
                   key: _etaCardKey,
-                  distanceMeters: route.distanceMeters,
-                  minutes: (route.durationSeconds / 60).ceil().clamp(1, 999),
+                  distanceMeters: outdoorEta.distanceM,
+                  minutes: outdoorEta.minutes,
                   label: _userDestinationLabel ?? '목적지까지',
                   onClose: _dismissUserDestinationFromEtaCard,
                   onClosePointerDown: (position) =>
