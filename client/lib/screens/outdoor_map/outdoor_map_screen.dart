@@ -1838,6 +1838,24 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     PoiSearchResult destination, {
     ll.LatLng? origin,
   }) async {
+    // **실내 오버레이가 켜져 있으면 먼저 접는다.**
+    //
+    // 이 메서드는 "사용자가 건물 밖에 있다"는 전제 위에 서 있다 — 안에 있으면
+    // 호출부가 실내 라우팅으로 보낸다. 그런데 오버레이는 확대·건물 탭·검색의
+    // "건물 안에서 매장 고르기"만으로도 켜지므로, 밖에 선 사용자가 도면을 펴
+    // 놓은 채로 여기 들어오는 경로가 실제로 있다.
+    //
+    // 접지 않으면 실내 구간이 **영영 안 그려진다.** 아래에서 쌓아 두는
+    // [_pendingIndoorRoute]를 실제 안내로 올리는 트리거가 "실내로 들어가는
+    // 순간"([_setIndoorEntered])인데, 이미 들어와 있으면 그 순간이 다시 오지
+    // 않는다. 화면에는 도면 위에 야외 구간만 얹힌 채로 남는다.
+    //
+    // 접어 두면 두 가지가 동시에 맞는다 — 지금 필요한 안내(문까지 걸어가기)가
+    // 야외 지도에 제대로 보이고, 사용자가 실제로 건물에 들어가거나 다시 확대하는
+    // 순간 그 트리거가 정상으로 발화해 실내 구간이 이어 붙는다.
+    await returnToOutdoorView();
+    if (!mounted) return;
+
     final building = _building;
     final endNodeId = destination.nodeId;
     if (building == null || endNodeId == null || destination.floor.isEmpty) {
