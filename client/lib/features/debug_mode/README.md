@@ -3,12 +3,18 @@
 운영 기능의 계산 결과를 바꾸지 않고, 개발 중 좌표·보정·PDR 상태를 화면에 겹쳐 보거나
 기록하기 위한 도구다.
 
+**진입점은 앱 메뉴 하나다** — 상단 바 햄버거 → `개발자` → `디버그 설정`
+([`../../widgets/app_menu_sheet.dart`](../../widgets/app_menu_sheet.dart)). 예전에는 지도
+왼쪽 아래에 원형 벌레 아이콘 버튼(`DebugModeSettingsButton`)이 떠 있었지만, 일반
+사용자가 볼 이유가 없는 개발 도구가 메인 지도를 차지했고 야외에서는 실내 진입 오버레이
+상태에 따라 나타났다 사라졌다. 그 버튼은 지웠다 — 지도에는 운영 화면만 남는다.
+
 ## 구성 파일
 
 | 파일 | 역할 |
 |---|---|
 | [`debug_mode_controller.dart`](debug_mode_controller.dart) | 디버그 옵션 상태와 변경 알림 |
-| [`debug_mode_sheet.dart`](debug_mode_sheet.dart) | 옵션 설정 UI |
+| [`debug_mode_sheet.dart`](debug_mode_sheet.dart) | 옵션 설정 UI(`showDebugModeSettingsSheet`) |
 | [`debug_map_overlay.dart`](debug_map_overlay.dart) | 지도 위 진단 레이어 조립 |
 | [`cardinal_grid_overlay.dart`](cardinal_grid_overlay.dart) | 방위·격자 표시 |
 | [`landmark_cardinal_calibration.dart`](landmark_cardinal_calibration.dart) | 랜드마크 기준 방위 보정 계산 |
@@ -22,8 +28,9 @@
 
 ```mermaid
 flowchart LR
+    MENU["AppMenuSheet(햄버거)"]
     SCREEN["IndoorMapScreen"]
-    SHEET["DebugModeSettingsButton"]
+    SHEET["showDebugModeSettingsSheet"]
     CONTROLLER["DebugModeController"]
     MAP["DebugMapOverlay"]
     GRID["CardinalGridOverlay"]
@@ -33,7 +40,7 @@ flowchart LR
     VIEW["FloorPlanView"]
     RENDER["실내 지도 렌더"]
 
-    SCREEN --> SHEET -->|"옵션 변경"| CONTROLLER
+    MENU --> SHEET -->|"옵션 변경"| CONTROLLER
     CONTROLLER -->|"상태 알림"| SCREEN
     TRAIL -->|"PDR 흔적"| SCREEN
     CAL -->|"북쪽 방위"| SCREEN
@@ -55,7 +62,9 @@ flowchart LR
 ## 실패 지점
 
 - overlay에서 좌표를 다시 변환하면 운영 마커와 진단점이 서로 다른 기준을 쓸 수 있다.
-- 디버그 상태를 영구 저장하면 다음 실행의 화면을 예기치 않게 바꿀 수 있다.
+- 디버그 상태를 영구 저장하면 다음 실행의 화면을 예기치 않게 바꿀 수 있다. 진입점이
+  메뉴 안으로 들어가 지도에 "켜져 있음" 표시가 없으므로, 켜 둔 사실은 앱 메뉴의 부제
+  ("사용 중 · …")로만 드러난다.
 - 많은 trail 점과 라벨을 매 프레임 다시 만들면 지도 성능 측정 자체를 왜곡한다.
 
 ## 자주 하는 작업
