@@ -10,14 +10,16 @@ import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/repositories/mock_building_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
 import 'package:navigation_client/repositories/outdoor_poi_repository.dart';
-import 'package:navigation_client/screens/outdoor_map/indoor_entry_zoom.dart';
 import 'package:navigation_client/widgets/search_panel.dart';
 
-/// "밖에서 건물을 목적지로 찾을 때" 쓰이는 재료들의 단위 테스트.
+/// **밖에서 검색했을 때 목록에 무엇이 올라오는가**에 대한 테스트.
 ///
-/// 건물을 고른 뒤의 화면 흐름은 `map_shell_building_sheet_test.dart`가 본다.
-/// 여기서는 그 흐름이 서 있는 바닥 세 가지를 고정한다 — 건물을 가리킬 좌표,
-/// 건물을 보여줄 지도 줌, 그리고 검색 결과에 무엇이 올라오는가.
+/// 규칙은 한 줄이다 — 밖에서도 건물 안 매장을 그대로 찾고, 건물 줄도 함께
+/// 올린다. 무엇을 골랐느냐가 곧 어디까지 안내할지를 정하므로(매장이면 문을
+/// 경유해 그 매장까지, 건물이면 입구까지) 화면이 의도를 되묻지 않는다.
+///
+/// 함께 고정하는 것: 건물을 가리킬 좌표([Building.outdoorAnchor])와, 같은 곳을
+/// 두 번 보여주지 않기 위한 중복 제거.
 void main() {
   group('Building.outdoorAnchor', () {
     test('출입구 좌표가 있으면 그것을 쓴다', () {
@@ -59,33 +61,6 @@ void main() {
       const building = Building(id: 'b', name: '건물', floors: ['1F']);
 
       expect(building.outdoorAnchor, isNull);
-    });
-  });
-
-  group('건물 미리보기 zoom', () {
-    test('미리보기 zoom은 실내로 끌고 들어가지 않는다', () {
-      // "건물까지만 가겠다"고 고른 사용자에게 도면을 펴 주면 안 된다.
-      // 화면 폭이 좁아 진입 임계값이 내려간 경우까지 함께 본다.
-      for (final entryZoom in [indoorEntryZoomThreshold, 16.8, 16.0]) {
-        expect(
-          indoorEntryTransitionForZoom(
-            entryZoom - buildingPreviewZoomGap,
-            buildingNearby: true,
-            entryZoom: entryZoom,
-          ),
-          IndoorEntryTransition.keep,
-          reason: '진입 임계값 $entryZoom에서 미리보기가 실내 진입을 발화시켰다',
-        );
-      }
-    });
-
-    test('미리보기 zoom은 야외로 튕겨 나가지도 않는다', () {
-      // 히스테리시스 밴드 밖으로 나가면 오버레이가 접히며 화면이 야외로 되돌아가,
-      // 방금 맞춘 건물 view를 잃는다.
-      expect(
-        indoorEntryZoomThreshold - buildingPreviewZoomGap,
-        greaterThan(indoorExitZoomThreshold),
-      );
     });
   });
 
@@ -163,7 +138,7 @@ void main() {
     });
   });
 
-  group('밖에서는 건물만 찾는다', () {
+  group('밖에서도 건물 안 매장을 찾는다', () {
     final originalBuildingRepository = buildingRepository;
     final originalDestinationRepository = destinationRepository;
     final originalPoiRepository = outdoorPoiRepository;
@@ -179,8 +154,6 @@ void main() {
         MockDestinationRepository(buildingRepository),
       );
       destinationRepository = counting;
-      // TMAP 키가 없는 상태를 흉내낸다. 바깥 조회가 그 자리에서 끝나므로,
-      // "결론을 누가 내는가"가 그대로 드러난다.
       outdoorPoiRepository = _FakeOutdoorPoiRepository(const []);
     });
 
@@ -190,59 +163,39 @@ void main() {
       outdoorPoiRepository = originalPoiRepository;
     });
 
-    Future<void> pumpPanel(
-      WidgetTester tester, {
-      required String query,
-      required bool indoorContextActive,
-    }) async {
+    testWidgets('밖에서 매장 이름을 치면 그 매장이 층과 함께 뜬다', (tester) async {
+      // 밖에서 "루이비통"을 치는 사람은 그 매장이 목적지다. 건물만 돌려주면
+      // 건물을 고른 뒤 안에서 다시 찾아야 하는데, 정작 그 매장의 층과 노드는
+      // 우리가 이미 갖고 있다. 층·노드가 붙어 있어야 문을 경유하는 실내 안내로
+      // 이어진다.
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: SearchPanel(
               buildingId: 'thehyundai-seoul',
-              query: query,
+              query: '강의실',
               submitTick: 0,
               onStorePicked: (_) {},
               onBuildingPicked: (_) {},
+              // 밖을 보고 있다는 뜻(야외 기준점이 있고 층은 없다).
               outdoorSearchCenter: const LatLng(37.5665, 126.9779),
               onOutdoorPoiPicked: (_) {},
-              indoorContextActive: indoorContextActive,
             ),
           ),
         ),
       );
-      // 경량 디바운스(300ms)와 의미 검색 대기(400ms)를 모두 지난다.
       await tester.pump(const Duration(milliseconds: 800));
-      // 리포지토리는 asset을 읽는 진짜 비동기라 pump 한 번으로는 다 안 풀린다.
       for (var i = 0; i < 5; i++) {
         await tester.pump();
       }
-    }
 
-    testWidgets('밖에서는 건물 안 매장을 아예 조회하지 않는다', (tester) async {
-      await pumpPanel(tester, query: '데모', indoorContextActive: false);
-
-      // 결과를 화면에서 숨기는 게 아니라 요청 자체를 안 보낸다. 숨기기만 하면
-      // 밖에 서 있는 사용자마다 쓰지도 않을 검색이 매번 서버로 나간다.
-      expect(counting.lightCalls, 0);
-      expect(counting.semanticCalls, 0);
-      // 대신 건물은 그대로 뜬다.
-      expect(find.text('데모 건물', findRichText: true), findsOneWidget);
-    });
-
-    testWidgets('건물 안에서는 매장을 그대로 찾는다', (tester) async {
-      await pumpPanel(tester, query: '데모', indoorContextActive: true);
-
+      // 화면에서 숨기는 게 아니라 요청을 실제로 보낸다.
       expect(counting.lightCalls, 1);
-    });
-
-    testWidgets('밖에서 아무것도 못 찾으면 스피너로 멈추지 않는다', (tester) async {
-      // 밖에서는 실내 검색도 의미 검색도 안 도니, 결론을 낼 사람이 바깥 조회
-      // 하나뿐이다. 여기서 결론을 안 내면 사용자는 영원히 도는 스피너를 본다.
-      await pumpPanel(tester, query: '없는건물이름', indoorContextActive: false);
-
-      expect(find.byType(CircularProgressIndicator), findsNothing);
-      expect(find.textContaining('찾지 못했어요'), findsOneWidget);
+      expect(find.text('강의실 101', findRichText: true), findsOneWidget);
+      // 층이 함께 적혀야 어느 층 매장인지 읽힌다. (목업 매장에는 노드가 없어
+      // "1F · 경로 안내 불가"로 나오므로 부분 일치로 본다 — 실데이터에는 노드가
+      // 있어 층만 적힌다.)
+      expect(find.textContaining('1F'), findsOneWidget);
     });
   });
 }

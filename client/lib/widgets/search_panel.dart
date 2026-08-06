@@ -21,12 +21,6 @@ import 'transit_style.dart';
 /// 입력창이 하나 더 있는 시트가 올라왔는데, 방금 누른 창과 실제로 입력하는
 /// 창이 달라 "왜 검색창이 두 개냐"는 인상을 줬다.
 ///
-/// ## 어디에 서 있느냐가 무엇을 찾을지 정한다
-///
-/// 아래의 경량·의미 두 단계는 **건물 안을 보고 있을 때만** 돈다
-/// ([indoorContextActive]). 밖에서는 건물 이름과 주변 장소만 찾고 건물 안
-/// 매장은 조회조차 하지 않는다 — 이유는 그 필드 주석에 적었다.
-///
 /// ## 검색 한 곳, 두 단계
 ///
 /// 사용자는 "일반 검색"과 "AI 검색"을 구분하지 않는다. 매장 이름을 치든
@@ -81,7 +75,6 @@ class SearchPanel extends StatefulWidget {
     this.reachByNodeId,
     this.outdoorSearchCenter,
     this.onOutdoorPoiPicked,
-    this.indoorContextActive = true,
   });
 
   final String buildingId;
@@ -119,19 +112,6 @@ class SearchPanel extends StatefulWidget {
   /// 야외 장소를 골랐을 때. null이면 바깥 결과 줄을 눌러도 아무 일이 없으므로,
   /// [outdoorSearchCenter]가 있어도 이 콜백이 없으면 섹션을 그리지 않는다.
   final ValueChanged<OutdoorPoi>? onOutdoorPoiPicked;
-
-  /// 지금 화면이 **건물 안**을 보고 있는지. 실내 탭이거나, 야외 탭이어도 실내
-  /// 진입 오버레이가 켜져 있으면 참이다.
-  ///
-  /// 이 값이 **건물 안 매장을 찾을지 말지**를 정한다. 밖에 서 있는 사람이
-  /// 정하는 것은 "어느 건물로 갈지"이지 그 안의 어느 매장인지가 아니다. 매장을
-  /// 섞으면 "더현대"를 쳤을 때 목록이 그 안의 매장으로 채워져, 정작 고르려던
-  /// 건물 줄이 뒤로 밀리거나 화면 밖으로 나간다.
-  ///
-  /// 건물 안 매장으로 가는 길이 막히는 것은 아니다. 건물 줄을 누르면 시트가
-  /// "건물 안에서 매장 고르기"를 함께 묻고, 그쪽으로 들어가면 도면 위에서
-  /// 매장을 직접 누를 수 있다.
-  final bool indoorContextActive;
 
   final ValueChanged<PoiSearchResult> onStorePicked;
   final ValueChanged<Building> onBuildingPicked;
@@ -308,11 +288,6 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 늦게 도착한 응답이 최신 결과를 덮어쓰지 않게 하는 순번.
   int _requestId = 0;
 
-  /// 이번 검색의 두 다리가 각각 끝났는지. 밖에서 보고 있을 때 "찾지 못했어요"를
-  /// 언제 띄울지 정하는 데만 쓴다([_concludeOutdoorOnly]).
-  bool _lightSearchDone = false;
-  bool _outdoorSearchDone = false;
-
   /// 결과 목록의 스크롤. Scrollbar와 스크롤뷰가 같은 컨트롤러를 봐야 막대가
   /// 실제 위치를 따라간다.
   final _resultScrollController = ScrollController();
@@ -391,15 +366,13 @@ class _SearchPanelState extends State<SearchPanel> {
       _pois = const [];
       _phase = _SearchPhase.typingLightSearch;
     });
-    _lightSearchDone = false;
-    _outdoorSearchDone = false;
 
     // 건물 밖 검색은 **기다리지 않는다.** 실내 검색과 나란히 출발시켜 두고,
     // 먼저 끝나는 쪽부터 화면에 붙인다. 순서대로 하면 실내 결과가 이미 나온
     // 화면에서 바깥 응답을 기다리느라 목록이 늦게 뜬다.
     unawaited(_searchOutdoorPois(query, requestId));
 
-    var results = const <PoiSearchResult>[];
+    List<PoiSearchResult> results;
     Building? building;
     try {
       // 1단계: 경량 매칭. 매장 이름·동의어는 여기서 즉시 걸린다.
@@ -408,16 +381,11 @@ class _SearchPanelState extends State<SearchPanel> {
       // 우연히 걸리는 층이 나온다). 매장을 이름으로 아는 검색이 다른 층에
       // 있어 여기서 빈손이 되더라도, 빈손이면 아래에서 층 제한이 없는 의미
       // 검색으로 자동으로 넘어가 그 매장을 여전히 찾아낸다.
-      //
-      // **밖에서는 이 요청을 아예 보내지 않는다**([indoorContextActive]).
-      // 밖에 선 사람이 고르는 것은 건물이고, 매장은 건물에 닿아서 고른다.
-      if (widget.indoorContextActive) {
-        results = await destinationRepository.searchDestinations(
-          widget.buildingId,
-          query,
-          currentFloorId: widget.currentFloorId,
-        );
-      }
+      results = await destinationRepository.searchDestinations(
+        widget.buildingId,
+        query,
+        currentFloorId: widget.currentFloorId,
+      );
       final buildings = await buildingRepository.getAllBuildings();
       building = buildings
           .where((b) => b.name.toLowerCase().contains(query.toLowerCase()))
@@ -428,30 +396,12 @@ class _SearchPanelState extends State<SearchPanel> {
     }
     // 이 응답을 기다리는 사이 사용자가 더 쳤다면 버린다.
     if (!mounted || requestId != _requestId) return;
-    _lightSearchDone = true;
 
     // 2단계로 넘길지 판단한다. 예전에는 여기에 `allowSemantic`(=엔터를 눌렀다)
     // 조건이 하나 더 있었다. 그 조건이 빠지면서 "찾지 못했어요"는 의미 검색을
     // 지난 뒤에만 나올 수 있게 된다. 경량이 한 건이라도 잡으면 그대로 보여준다
     // — 잘 되던 검색은 여전히 빠르다.
     if (results.isEmpty && building == null) {
-      // 밖에서는 의미 검색으로 넘어가지 않는다. 그 경로가 돌려주는 것도 결국
-      // 건물 안 매장이라, 여기서 태우면 방금 뺀 결과가 뒷문으로 다시 들어온다.
-      // 결론은 바깥 검색과 함께 [_concludeOutdoorOnly]가 낸다.
-      if (!widget.indoorContextActive) {
-        setState(() {
-          _submittedQuery = query;
-          _results = const [];
-          _building = null;
-          _fromSemantic = false;
-          _discoveryMatches = const [];
-          _discoveryMode = null;
-          _discoveryQuestion = null;
-          _discoveryOptions = const [];
-        });
-        _concludeOutdoorOnly(query, requestId);
-        return;
-      }
       if (immediate) {
         await _semanticSearch(query, requestId);
       } else {
@@ -494,61 +444,24 @@ class _SearchPanelState extends State<SearchPanel> {
     // 돌던 시기를 로그 없이 지나쳤다.
     if (center == null) {
       debugPrint('[tmap-poi] 건너뜀: 검색 기준점 없음(위치·카메라 모두 미확보)');
-      _finishOutdoorLeg(query, requestId, const []);
       return;
     }
     if (widget.onOutdoorPoiPicked == null) {
       debugPrint('[tmap-poi] 건너뜀: 선택 콜백 없음');
-      _finishOutdoorLeg(query, requestId, const []);
       return;
     }
     if (!outdoorPoiRepository.isAvailable) {
       debugPrint('[tmap-poi] 건너뜀: TMAP_APP_KEY 미주입');
-      _finishOutdoorLeg(query, requestId, const []);
       return;
     }
     final pois = await outdoorPoiRepository.searchNearby(query, center: center);
-    _finishOutdoorLeg(query, requestId, pois);
-  }
-
-  /// 바깥 조회가 끝났다(건너뛴 경우 포함). 결과를 반영하고 결론을 시도한다.
-  void _finishOutdoorLeg(String query, int requestId, List<OutdoorPoi> pois) {
     // 늦게 도착한 응답이 다음 검색어의 화면을 덮지 않게 한다(실내와 같은 규칙).
-    if (!mounted || requestId != _requestId) return;
-    _outdoorSearchDone = true;
-    if (pois.isNotEmpty) {
-      setState(() {
-        _pois = pois;
-        // 이름 강조가 쓰는 질의어. 실내 검색이 아직 안 끝났을 수 있어 여기서도
-        // 채운다 — 안 채우면 이전 검색어 기준으로 강조가 걸린다.
-        _submittedQuery = query;
-      });
-    }
-    _concludeOutdoorOnly(query, requestId);
-  }
-
-  /// 밖에서 보고 있을 때 화면을 결론짓는다.
-  ///
-  /// 밖에서는 실내 검색도 의미 검색도 돌리지 않으므로(그 결과를 일부러 뺐다)
-  /// 결론을 낼 사람이 이 함수뿐이다. 여기서 아무 것도 안 하면 스피너가 영원히
-  /// 돈다 — 사용자에게는 "검색이 멈춘 앱"으로 보인다.
-  ///
-  /// **두 다리가 모두 끝났을 때만 결론을 낸다.** 바깥 조회는 기준점이 없거나
-  /// TMAP 키가 없으면 그 자리에서 즉시 끝나는데, 그때는 건물 이름 조회가 아직
-  /// 돌고 있다. 한쪽만 보고 결론지으면 "찾지 못했어요"가 한 번 번쩍인 뒤 곧바로
-  /// 건물 줄로 바뀌는 화면이 된다.
-  ///
-  /// 건물 안을 보고 있을 때는 아무 것도 하지 않는다 — 그쪽은 실내 검색이 결론을
-  /// 갖고 있고, 여기서 손대면 아직 도는 중인 화면을 덮어쓴다.
-  void _concludeOutdoorOnly(String query, int requestId) {
-    if (!mounted || requestId != _requestId) return;
-    if (widget.indoorContextActive) return;
-    if (!_lightSearchDone || !_outdoorSearchDone) return;
+    if (!mounted || requestId != _requestId || pois.isEmpty) return;
     setState(() {
+      _pois = pois;
+      // 이름 강조가 쓰는 질의어. 실내 검색이 아직 안 끝났을 수 있어 여기서도
+      // 채운다 — 안 채우면 이전 검색어 기준으로 강조가 걸린다.
       _submittedQuery = query;
-      _phase = (_building == null && _pois.isEmpty)
-          ? _SearchPhase.noMatch
-          : _SearchPhase.results;
     });
   }
 
@@ -747,22 +660,12 @@ class _SearchPanelState extends State<SearchPanel> {
     final hasOutdoor = _pois.isNotEmpty;
     switch (_phase) {
       case _SearchPhase.idle:
-        // 안내 문구는 지금 실제로 찾아 줄 수 있는 것만 말한다. 밖에서
-        // "매장 이름을 입력하면 바로 찾아드려요"라고 해 놓고 매장을 안 찾아
-        // 주면, 사용자는 앱이 고장 났다고 읽는다.
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 22),
+        return const Padding(
+          padding: EdgeInsets.fromLTRB(16, 20, 16, 22),
           child: Text(
-            widget.indoorContextActive
-                ? '매장 이름을 입력하면 바로 찾아드려요.\n'
-                      '"밥 먹을 곳"처럼 뜻으로 물어도 됩니다.'
-                : '건물 이름이나 주변 장소를 입력해 보세요.\n'
-                      '건물을 고르면 그 안의 매장까지 이어서 안내해요.',
-            style: const TextStyle(
-              fontSize: 13,
-              color: AppColors.muted,
-              height: 1.5,
-            ),
+            '매장 이름을 입력하면 바로 찾아드려요.\n'
+            '"밥 먹을 곳"처럼 뜻으로 물어도 됩니다.',
+            style: TextStyle(fontSize: 13, color: AppColors.muted, height: 1.5),
           ),
         );
       case _SearchPhase.typingLightSearch:
@@ -772,9 +675,7 @@ class _SearchPanelState extends State<SearchPanel> {
       case _SearchPhase.results:
         return _resultList();
       case _SearchPhase.degraded:
-        return _results.isEmpty && !hasOutdoor
-            ? _degradedState()
-            : _resultList();
+        return _results.isEmpty && !hasOutdoor ? _degradedState() : _resultList();
       case _SearchPhase.error:
         return hasOutdoor ? _resultList() : _errorState();
       case _SearchPhase.noMatch:
@@ -813,12 +714,8 @@ class _SearchPanelState extends State<SearchPanel> {
     final rows = <Widget>[];
     // 바깥 결과 덕분에 목록이 먼저 떴을 뿐, 건물 안 검색은 아직 돌고 있을 수
     // 있다. 그 사실을 안 밝히면 사용자는 이게 최종 목록이라고 읽는다.
-    //
-    // 밖에서는 건물 안을 뒤지지 않으므로 이 줄도 뜨지 않는다 — 돌지도 않는
-    // 검색을 "찾는 중"이라고 말하면 오지 않을 결과를 기다리게 된다.
-    if (widget.indoorContextActive &&
-        (_phase == _SearchPhase.typingLightSearch ||
-            _phase == _SearchPhase.semanticSearching)) {
+    if (_phase == _SearchPhase.typingLightSearch ||
+        _phase == _SearchPhase.semanticSearching) {
       rows.add(const _IndoorSearchingRow());
     }
     final isDiscovery = _discoveryMode != null;
@@ -1113,26 +1010,23 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 결과라는 것도 함께 밝힌다 — 정보의 깊이가 다른 이유이고, 실제와 다를 때
   /// 사용자가 어디를 의심할지 알려 준다.
   Widget _outdoorHeader() {
-    // "건물 밖"은 **건물 안에서 볼 때** 뜻이 있는 말이다. 밖에 서서 보는
-    // 목록에서는 여기가 바깥인 게 당연하므로 그냥 "주변 장소"다.
-    final label = widget.indoorContextActive ? '건물 밖 주변 장소' : '주변 장소';
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(16, 14, 16, 8),
       child: Row(
         children: [
-          const Icon(Icons.explore_outlined, size: 14, color: AppColors.muted),
-          const SizedBox(width: 6),
+          Icon(Icons.explore_outlined, size: 14, color: AppColors.muted),
+          SizedBox(width: 6),
           Expanded(
             child: Text(
-              label,
-              style: const TextStyle(
+              '건물 밖 주변 장소',
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
                 color: AppColors.muted,
               ),
             ),
           ),
-          const Text(
+          Text(
             'TMAP',
             style: TextStyle(fontSize: 10.5, color: AppColors.muted),
           ),
@@ -1199,21 +1093,16 @@ class _SearchPanelState extends State<SearchPanel> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            widget.indoorContextActive
-                ? '"$_submittedQuery"에 맞는 매장을 찾지 못했어요.'
-                : '"$_submittedQuery"에 맞는 건물이나 장소를 찾지 못했어요.',
+            '"$_submittedQuery"에 맞는 매장을 찾지 못했어요.',
             style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 6),
-          // 이 문구가 나오는 시점에는 (건물 안이면) 경량과 의미 검색을 모두
-          // 돌린 뒤이고, 밖이면 건물 이름과 주변 장소를 모두 훑은 뒤다. 사용자가
-          // 더 눌러 볼 수단이 남아 있는 것처럼 보이면 안 되므로, 다른 말로 바꿔
-          // 보라고만 한다.
-          Text(
-            widget.indoorContextActive
-                ? '다른 말로 바꿔서 다시 찾아보세요.'
-                : '건물 이름으로 찾은 뒤, 건물 안에서 매장을 골라도 됩니다.',
-            style: const TextStyle(fontSize: 12.5, color: AppColors.muted),
+          // 이 문구가 나오는 시점에는 경량과 의미 검색을 모두 돌린 뒤다
+          // (_SearchPhase.noMatch에서만 그린다). 사용자가 더 눌러 볼 수단이
+          // 남아 있는 것처럼 보이면 안 되므로, 다른 말로 바꿔 보라고만 한다.
+          const Text(
+            '다른 말로 바꿔서 다시 찾아보세요.',
+            style: TextStyle(fontSize: 12.5, color: AppColors.muted),
           ),
         ],
       ),

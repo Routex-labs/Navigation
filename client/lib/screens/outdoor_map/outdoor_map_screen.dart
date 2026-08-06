@@ -3818,41 +3818,17 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     );
   }
 
-  /// 검색에서 고른 **건물**로 지도를 옮긴다.
+  /// [point]가 우리 실내 도면이 있는 건물 **안**이면, 그 건물의 지상 출입구
+  /// 좌표를 돌려준다. 밖이거나 건물을 아직 못 받았으면 null.
   ///
-  /// [enterIndoor]가 거짓이면 진입 임계값 바로 아래([buildingPreviewZoomGap])
-  /// 에서 멈춘다 — 건물이 화면에 꽉 차되 실내 오버레이는 켜지지 않는다. 참이면
-  /// 임계값까지 확대하고 오버레이를 직접 켜서, 사용자가 그 자리에서 바로 매장을
-  /// 누를 수 있게 한다.
-  ///
-  /// 진입을 줌 판정에 맡기지 않고 [_triggerIndoorEntry]를 직접 부르는 이유는
-  /// 두 가지다. (1) 카메라 애니메이션이 끝나고 idle 콜백이 도는 시점이 시트가
-  /// 닫힌 뒤라, 그 사이 사용자는 "매장을 고르라"는 안내만 뜨고 도면은 없는
-  /// 화면을 본다. (2) 목록에서 명시적으로 고른 건물이라 "확대하다 우연히
-  /// 들어갔다"와 성격이 다르므로, 건물 폴리곤 직접 탭과 같이 줌 무장
-  /// ([_autoIndoorEntryArmed])을 건너뛴다.
-  ///
-  /// 외곽선도 출입구 좌표도 없으면(건물 미로드) 아무 것도 하지 않는다. 호출부는
-  /// 이 경우에도 시트를 그대로 띄운다 — 카메라가 안 움직였을 뿐 매장 선택은
-  /// 도면이 로드되는 대로 살아난다.
-  Future<void> focusBuilding({bool enterIndoor = false}) async {
-    final controller = _mapController;
-    if (controller == null || !_styleReady) return;
-    final footprint = _buildingFootprint;
-    final center = (footprint != null && footprint.length >= 3)
-        ? _buildingCenter(footprint)
-        : _entrance;
-    if (center == null) return;
-
-    final entryZoom = _entryZoomThreshold();
-    await controller.animateCamera(
-      CameraUpdate.newLatLngZoom(
-        _toGl(center),
-        enterIndoor ? entryZoom : entryZoom - buildingPreviewZoomGap,
-      ),
-    );
-    if (!enterIndoor || !mounted) return;
-    _triggerIndoorEntry(ignoreZoomArming: true);
+  /// TMAP POI 중에는 건물 **안** 매장이 섞여 있다(예: 백화점 입점 브랜드).
+  /// 그 좌표를 도보 안내의 끝점으로 그대로 쓰면 도착점이 건물 내부라, TMAP이
+  /// 가장 가까운 도로로 스냅하면서 실제로 들어갈 수 있는 문과 다른 면에
+  /// 사용자를 내려놓는다. 좌표만으로 판정되므로 이름 맞추기와 달리 실패하지
+  /// 않는다 — 안이면 문으로, 밖이면 그대로다.
+  ll.LatLng? entranceIfInsideBuilding(ll.LatLng point) {
+    if (!_isInsideBuilding(point)) return null;
+    return _building == null ? null : entrancePointFor(_building!.id);
   }
 
   /// "이 건물까지" 안내할 때 쓸 도착 좌표.

@@ -49,27 +49,17 @@ void main() {
 
   /// 도착지를 정해 상단 초안 바가 뜬 상태를 만든다. 경로 계산까지 갈 필요는
   /// 없으므로(GPS 없음) 초안 바가 떴는지만 확인한다.
-  ///
-  /// 도착지로 건물을 쓰는 이유는 밖에서의 검색이 건물만 찾기 때문이다
-  /// (`SearchPanel.indoorContextActive`). 이 테스트가 보는 것은 초안 바의 어느
-  /// 행을 눌렀는지이므로, 도착지가 매장이든 건물이든 상관없다.
   Future<void> openRouteDraft(WidgetTester tester) async {
     await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
     await drain(tester);
 
     await tester.tap(find.byType(TextField).first);
     await drain(tester);
-    await tester.enterText(find.byType(TextField).first, '데모');
+    await tester.enterText(find.byType(TextField).first, '강의실');
     await drain(tester);
-    await tester.tap(find.byIcon(Icons.apartment_outlined));
+    await tester.tap(find.text('강의실 101').first);
     await drain(tester);
-
-    final destinationButton = find.byKey(
-      const ValueKey('building-set-destination'),
-    );
-    await tester.ensureVisible(destinationButton);
-    await tester.pump();
-    await tester.tap(destinationButton);
+    await tester.tap(find.text('도착'));
     await drain(tester);
 
     expect(
@@ -81,10 +71,14 @@ void main() {
 
   /// 후보 목록의 "현재 위치" 고정 행. 출발지 칸이 활성일 때만 붙는다. 상단 초안
   /// 바에도 같은 문구가 있으므로 목록 항목(ListTile)으로 좁힌다.
-  Finder currentLocationRow() =>
-      find.descendant(of: find.byType(ListTile), matching: find.text('현재 위치'));
+  Finder currentLocationRow() => find.descendant(
+    of: find.byType(ListTile),
+    matching: find.text('현재 위치'),
+  );
 
-  testWidgets('출발 행을 누르면 출발지 칸이 활성인 채로 시트가 열린다', (WidgetTester tester) async {
+  testWidgets('출발 행을 누르면 출발지 칸이 활성인 채로 시트가 열린다', (
+    WidgetTester tester,
+  ) async {
     await openRouteDraft(tester);
 
     await tester.tap(find.byKey(const Key('route-draft-origin')));
@@ -100,7 +94,9 @@ void main() {
     expect(find.text('출발지를 입력하세요'), findsOneWidget);
   });
 
-  testWidgets('도착 행을 누르면 도착지 칸이 활성인 채로 열린다', (WidgetTester tester) async {
+  testWidgets('도착 행을 누르면 도착지 칸이 활성인 채로 열린다', (
+    WidgetTester tester,
+  ) async {
     // 기본 흐름이 뒤집히지 않는지 함께 고정한다.
     await openRouteDraft(tester);
 

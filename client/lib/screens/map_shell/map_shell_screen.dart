@@ -16,7 +16,6 @@ import '../../models/outdoor_poi.dart';
 import '../../models/poi_search_result.dart';
 import '../../models/transit_route.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/building_sheet.dart';
 import '../../widgets/building_switcher_sheet.dart';
 import '../../widgets/category_icon.dart';
 import '../../widgets/category_label_order.dart';
@@ -511,10 +510,26 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
     // 야외 좌표뿐인 후보다. 노드·층이 없으므로 [_startRoute]는 이 값을 실내
     // 라우팅으로 보내지 않고 도보 경로로 흘려보낸다.
+    //
+    // 다만 그 좌표가 **우리 건물 안**이면 문 좌표로 바꾼다. TMAP POI에는 백화점
+    // 입점 브랜드처럼 건물 안 매장이 섞여 있는데, 건물 내부 좌표를 도보 안내의
+    // 끝점으로 주면 TMAP이 가장 가까운 도로로 스냅해 실제로 들어갈 수 있는 문과
+    // 다른 면에 내려놓는다. 좌표만으로 판정하므로 이름 맞추기와 달리 실패하지
+    // 않는다.
+    //
+    // 그 매장이 우리 실내 데이터에도 있다면 사용자는 애초에 검색 결과 위쪽의
+    // 매장 줄(층·노드가 붙어 있어 실내까지 안내된다)을 골랐을 것이다. 여기까지
+    // 온 것은 우리가 그 매장을 모른다는 뜻이고, 그러면 문까지가 우리가 맞게
+    // 말할 수 있는 최대치다.
+    final insideEntrance = _outdoorKey.currentState?.entranceIfInsideBuilding(
+      poi.point,
+    );
     final candidate = DirectionsCandidate(
       title: poi.name,
-      subtitle: poi.address ?? '건물 밖 장소',
-      point: poi.point,
+      subtitle: insideEntrance == null
+          ? (poi.address ?? '건물 밖 장소')
+          : '건물 입구까지 안내',
+      point: insideEntrance ?? poi.point,
     );
     switch (action) {
       case OutdoorPoiAction.setOrigin:
@@ -626,15 +641,35 @@ class _MapShellScreenState extends State<MapShellScreen> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  /// 검색 결과의 **건물**을 골랐을 때.
+  /// 검색 결과의 **건물**을 골랐을 때. 그 건물 입구까지 안내한다.
   ///
-  /// 예전에는 하단에 이름과 층 수만 적은 카드를 띄우고 끝났다. 그 화면에서
-  /// 사용자가 할 수 있는 일이 하나도 없다는 게 문제였다 — "더현대"를 도착지로
-  /// 치고 결과를 눌렀는데 길찾기로 이어지지도, 건물 안으로 들어가지도 못한 채
-  /// 이름표만 남았다. 이제는 지도를 그 건물로 옮기고 시트로 갈 곳을 묻는다.
+  /// 되묻지 않는다. 예전에는 "건물까지 갈지, 안의 매장까지 갈지"를 시트로
+  /// 물었는데, 그 질문 자체가 필요 없어졌다 — 밖에서도 건물 안 매장이 그대로
+  /// 검색되므로([SearchPanel]), 매장이 목적지인 사용자는 애초에 매장 줄을
+  /// 고른다. 건물 줄을 고른 사람은 건물이 목적지인 사람이다.
+  ///
+  /// 매장 줄을 고르면 [_showStoreInfo]를 거쳐 문을 경유하는 실내 안내로
+  /// 이어진다([_startRoute]). 즉 어느 줄을 골랐느냐가 곧 의도이고, 화면은 그
+  /// 의도를 다시 확인하지 않는다.
   void _onSearchBuildingPicked(Building building) {
     _closeSearch();
-    unawaited(_runSheetChain(() => _showBuildingInfo(building)));
+    final point = _buildingDestinationPoint(building);
+    if (point == null) {
+      // 좌표를 하나도 못 구한 건물이다. 안내를 못 하는 이유를 밝히지 않으면
+      // 사용자는 결과를 눌렀는데 아무 일도 안 일어난 화면을 본다.
+      _showSnack('이 건물의 위치를 아직 받아오지 못했습니다. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+    final candidate = DirectionsCandidate(
+      title: building.name,
+      subtitle: '건물 입구',
+      point: point,
+    );
+    setState(() => _routeDraftDestination = candidate);
+    final origin = _selectedOrigin;
+    if (origin != null || _canRouteFromCurrentLocation) {
+      unawaited(_startRoute(origin: origin, destination: candidate));
+    }
   }
 
   /// "이 건물까지" 안내할 때의 도착 좌표.
@@ -644,112 +679,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 수 있는 문과 다른 면에 사용자를 내려놓는다. 야외 지도가 아직 그 건물을
   /// 로드하지 않았거나 문 데이터가 없으면 건물 응답의 출입구·외곽선 중심으로
   /// 떨어진다([Building.outdoorAnchor]). 그것마저 없으면 null.
-  /// id로 건물을 찾는다. 없거나 [buildingId]가 null이면 null.
-  ///
-  /// 목록은 리포지토리가 캐시하고 있어(진행 중인 Future까지 공유한다) 이 조회로
-  /// 네트워크가 다시 나가지 않는다.
-  Future<Building?> _buildingById(String? buildingId) async {
-    if (buildingId == null) return null;
-    try {
-      final buildings = await buildingRepository.getAllBuildings();
-      return buildings.where((b) => b.id == buildingId).firstOrNull;
-    } on Object {
-      // 못 찾으면 건물 시트를 건너뛰고 좌표로 안내한다. 되묻지 못하는 것보다
-      // 안내가 통째로 죽는 쪽이 나쁘다.
-      return null;
-    }
-  }
-
   LatLng? _buildingDestinationPoint(Building building) {
     return _outdoorKey.currentState?.entrancePointFor(building.id) ??
         building.outdoorAnchor;
-  }
-
-  /// 건물 시트. 매장 시트·야외 POI 시트와 같은 규칙으로 "출발/도착을 실제로
-  /// 골랐는가"를 돌려준다 — 부모 loop가 그 값으로 이전 시트로 되돌릴지 정한다.
-  Future<bool> _showBuildingInfo(Building building) async {
-    // 시트가 덮기 전에 지도를 건물로 옮긴다. 목록에서 고른 건물은 지금 화면
-    // 어디에 있는지 알 수 없고, 시트를 닫으면 바로 그 자리가 보여야 한다.
-    // 실내 탭을 보는 중이면 이미 그 건물 도면 위에 있으므로 건드리지 않는다.
-    if (_mode == MapMode.outdoor) {
-      await _outdoorKey.currentState?.focusBuilding();
-      if (!mounted) return false;
-    }
-
-    // 셋 다 없으면 야외 안내 자체가 불가능하므로 시트에서 그 버튼들을 감춘다.
-    final anchor = _buildingDestinationPoint(building);
-
-    final action = await _withMapsLocked(
-      () => BuildingSheet.show(
-        context,
-        building: building,
-        onCloseAll: _requestCloseSheetChain,
-        transitEnabled: transitRepository.isAvailable,
-        routingEnabled: anchor != null,
-      ),
-    );
-    if (!mounted) return false;
-    if (_closeSheetChainRequested) return true;
-    if (action == null) return false;
-
-    // 건물 입구를 가리키는 야외 후보다. 노드·층이 없으므로 [_startRoute]는 이
-    // 값을 실내 라우팅으로 보내지 않고 도보 경로로 흘려보낸다.
-    final candidate = anchor == null
-        ? null
-        : DirectionsCandidate(
-            title: building.name,
-            subtitle: '건물 입구',
-            point: anchor,
-          );
-    switch (action) {
-      case BuildingAction.pickStore:
-        await _enterBuildingToPickStore();
-      case BuildingAction.setOrigin:
-        if (candidate == null) return false;
-        setState(() => _selectedOrigin = candidate);
-        final destination = _routeDraftDestination;
-        if (destination != null) {
-          await _startRoute(origin: candidate, destination: destination);
-        } else {
-          await _openDirections(presetOrigin: candidate);
-        }
-      case BuildingAction.setDestination:
-        if (candidate == null) return false;
-        setState(() => _routeDraftDestination = candidate);
-        final origin = _selectedOrigin;
-        if (origin != null || _canRouteFromCurrentLocation) {
-          await _startRoute(origin: origin, destination: candidate);
-        }
-      case BuildingAction.transit:
-        if (candidate == null) return false;
-        setState(() => _routeDraftDestination = candidate);
-        await _startTransitRoute(candidate);
-    }
-    return true;
-  }
-
-  /// "건물 안에서 매장 고르기". 지도를 건물로 확대해 실내 도면을 펴고, 그 다음
-  /// 탭이 **도착지 선택**이 되도록 지도 고르기 모드로 들어간다.
-  ///
-  /// 시트를 하나 더 띄워 매장 목록을 보여주지 않는 이유는, 사용자가 이 버튼을
-  /// 누른 이유가 대개 "이름을 몰라서"이기 때문이다. 이름을 안다면 검색창에 그
-  /// 매장을 쳤을 것이다. 목록 대신 도면을 펴 주면 위치로 고를 수 있다.
-  ///
-  /// 지도 고르기 모드는 이미 있는 흐름을 그대로 탄다([_mapPickTarget]) —
-  /// 상단에 "도착지를 지도에서 고르세요" 안내 카드와 취소 버튼이 뜨고, 매장을
-  /// 누르면 [_onMapStoreTap]이 그대로 도착지로 확정해 경로까지 그린다.
-  Future<void> _enterBuildingToPickStore() async {
-    if (_mode == MapMode.outdoor) {
-      await _outdoorKey.currentState?.focusBuilding(enterIndoor: true);
-      if (!mounted) return;
-    }
-    setState(() {
-      _mapPickTarget = DirectionsMapPickTarget.destination;
-      // 안내 카드와 자리가 겹치므로 장소 카드는 접는다(지도에서 고르기와 동일).
-      _placeInfo = null;
-    });
-    // 건물 안으로 들어왔으니 목록·시트에 붙일 거리도 이제 실내 기준이다.
-    unawaited(_refreshReach());
   }
 
   /// 매장 정보 시트를 띄운다. 검색 결과를 탭했을 때와 지도 위 매장 폴리곤을
@@ -915,21 +847,36 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 밖에서는 **아무것도 안 쳤으면 아무것도 보여주지 않는다.**
     //
     // 건물 안에서는 빈 검색어가 "이 건물의 장소 전체 목록"이라는 뜻이라 그대로
-    // 훑어볼 수 있지만, 밖에서 후보로 남는 것은 건물 한 채뿐이다. 그 한 줄을
-    // 시트가 열리자마자 띄우면 사용자는 자기가 검색한 결과로 읽는다 — 치지도
-    // 않았는데 "더현대 서울"이 답으로 떠 있는 화면이 된다.
+    // 훑어볼 수 있다. 밖에서는 그 목록이 "여기서 갈 만한 곳"이 아니라 남의 건물
+    // 내부 목록이라, 시트를 열자마자 띄우면 치지도 않은 답이 정해져 있는 화면이
+    // 된다.
     if (normalized.isEmpty) return const [];
 
-    // 건물 **밖에서는 건물만** 후보다. 매장은 넣지 않는다.
+    // 건물 밖에서도 **매장이 후보다.**
     //
-    // 밖에 있는 사람이 정하는 것은 "어느 건물로 갈지"이고, 어느 매장인지는
-    // 건물에 닿아서 정할 일이다. 매장을 섞으면 "더현대"를 쳤을 때 목록이 그
-    // 안의 매장 수십 개로 채워져, 정작 고르려던 건물이 뒤로 밀리거나 아예
-    // 안 보인다 — 사용자가 실제로 겪은 증상이 이것이다.
-    //
-    // 건물 안 매장으로 가는 길은 막히지 않는다. 건물을 고르면 시트가 "건물
-    // 안에서 매장 고르기"를 함께 묻고([_showBuildingInfo]), 그쪽으로 들어가면
-    // 도면 위에서 매장을 직접 누를 수 있다.
+    // 밖에서 "루이비통"을 치는 사람은 그 매장이 목적지다. 건물만 후보로 두면
+    // 건물을 고른 뒤 안에서 다시 찾아야 하는데, 정작 우리는 그 매장의 층과
+    // 노드를 이미 갖고 있다. 밖에서 고른 매장은 야외 화면이 "가장 가까운 지상
+    // 출입구를 경유해 매장까지" 안내한다
+    // ([OutdoorMapBodyState.showOutdoorToIndoorRouteTo]).
+    final results = await destinationRepository.searchDestinations(
+      _buildingId,
+      query,
+    );
+    final stores = results
+        .map(
+          (r) => DirectionsCandidate(
+            title: r.name,
+            subtitle: r.floor,
+            point: r.point,
+            nodeId: r.nodeId,
+            floor: r.floor,
+          ),
+        )
+        .toList();
+
+    // 건물 자체도 후보로 남기되 매장보다 뒤에 놓는다 — 밖에서 길찾기를 여는
+    // 이유는 대개 특정 매장이다.
     //
     // **후보 좌표는 목록 응답만으로는 못 구한다.** `GET /buildings`는 id·이름·
     // 층 목록만 주고 출입구·외곽선은 상세(`/buildings/{id}`)에만 있다. 그래서
@@ -946,13 +893,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
           title: building.name,
           subtitle: '${building.floors.length}개 층',
           point: point,
-          // 이 후보가 건물이라는 표시. 도착지로 고르면 곧장 경로를 그리지 않고
-          // 건물 시트로 되묻는다([_openDirections]).
+          // 이 후보가 건물이라는 표시. 목록의 아이콘(건물/핀)이 이 값으로 갈린다.
           buildingId: building.id,
         ),
       );
     }
-    return buildingCandidates;
+    return [...stores, ...buildingCandidates];
   }
 
   /// 길찾기 시트를 연다. [presetOrigin]/[presetDestination]은 매장 정보
@@ -1019,22 +965,15 @@ class _MapShellScreenState extends State<MapShellScreen> {
       return;
     }
 
-    final destination = result.destination!;
-
-    // 도착지로 고른 것이 **건물 자체**면 곧장 경로를 그리지 않고 되묻는다.
-    //
-    // 상단 검색에서 건물을 고른 경우와 같은 화면이어야 한다. 여기서만 건물 앞
-    // 좌표로 안내를 끝내 버리면, 같은 건물을 어디서 골랐느냐에 따라 건물 안
-    // 매장까지 갈 수 있기도 하고 없기도 한 앱이 된다.
-    final pickedBuilding = await _buildingById(destination.buildingId);
-    if (!mounted) return;
-    if (pickedBuilding != null) {
-      await _showBuildingInfo(pickedBuilding);
-      return;
-    }
-
     // 시트 안에서 확정한 도착지는 상단 초안에도 반영한다. 출발 위치가 아직
     // 준비되지 않아 경로가 끊겨도 이 후보가 화면과 함께 사라지지 않게 한다.
+    //
+    // 건물을 골랐든 매장을 골랐든 여기서 갈리지 않는다. 후보에 이미 답이
+    // 들어 있기 때문이다 — 매장 후보에는 층·노드가 붙어 있어 [_startRoute]가
+    // 문을 경유하는 실내 안내로 보내고, 건물 후보에는 없어서 입구까지의 도보
+    // 안내로 간다. 상단 검색에서 같은 것을 골랐을 때와 결과가 같아야 하므로,
+    // 두 진입점이 **같은 함수에서 갈라져야** 한다.
+    final destination = result.destination!;
     setState(() => _routeDraftDestination = destination);
     await _startRoute(origin: result.origin, destination: destination);
   }
@@ -1171,8 +1110,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
     //
     // 오버레이만으로는 부족하다 — **출발점이 실제로 건물 안에 있어야 한다.**
     // 오버레이는 건물을 확대하거나 탭하기만 해도 켜지므로, 밖에 서 있는
-    // 사용자에게도 켜져 있다. 특히 검색으로 건물을 고른 뒤 "건물 안에서 매장
-    // 고르기"로 들어온 경우가 정확히 그 상태다([_enterBuildingToPickStore]).
+    // 사용자에게도 켜져 있다. 밖에서 건물 안 매장을 검색해 고른 뒤 건물로
+    // 확대해 둔 상태가 정확히 그렇다.
     // 그때 실내 라우팅으로 보내면 시작 노드를 정할 실내 위치가 없어
     // "출발 위치를 먼저 지정해주세요"만 나오고 안내가 끝난다. 정작 그 사용자에게
     // 필요한 것은 아래의 "문을 경유해 매장까지"다. 그래서 출발지를 명시하지
@@ -1593,10 +1532,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
                         outdoorSearchCenter: _outdoorSearchCenter,
                         onOutdoorPoiPicked: (poi) =>
                             unawaited(_onSearchPoiPicked(poi)),
-                        // 밖을 보고 있으면 건물 안 매장은 찾지 않는다. 밖에
-                        // 선 사람이 고르는 것은 건물이고, 매장은 건물에
-                        // 닿아서 고른다([SearchPanel.indoorContextActive]).
-                        indoorContextActive: _indoorContextActive,
                       ),
                     ),
                   )
