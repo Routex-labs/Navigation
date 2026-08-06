@@ -551,6 +551,9 @@ void main() {
         optimisticEdgeId: 'ab',
         optimisticEdgeProgressM: 4.5,
         previewPeakIdsSynthetic: false,
+        junctionNodeId: null,
+        junctionDistanceM: double.infinity,
+        junctionCandidateEdgeIds: [],
         leaderRelocated: false,
       ),
       at: DateTime.utc(2026, 7, 18, 9, 0, 3),
@@ -603,6 +606,9 @@ void main() {
       optimisticEdgeId: 'ab',
       optimisticEdgeProgressM: 4.5,
       previewPeakIdsSynthetic: false,
+      junctionNodeId: null,
+      junctionDistanceM: double.infinity,
+      junctionCandidateEdgeIds: [],
       leaderRelocated: false,
     );
 

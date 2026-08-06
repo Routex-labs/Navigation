@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 import 'package:navigation_client/features/indoor_navigation/application/corridor_position_tracker.dart';
@@ -360,6 +362,154 @@ void main() {
     expect(transform.toFloorBearing(0), closeTo(180, 1e-9));
     expect(transform.toFloorBearing(90), closeTo(90, 1e-9));
     expect(transform.floorBearingToMapBearing(180), closeTo(0, 1e-9));
+  });
+
+  group('교차점 전후 회전 허용 구간', () {
+    /// [turnOffsetM]만큼 어긋난 지점에서 북쪽으로 꺾는 보행을 재생한다.
+    ///
+    /// 음수면 노드(10,0)보다 일찍, 양수면 늦게 꺾는다. 두 경우 모두 실제
+    /// 사람이 코너를 도는 방식이고, graph node 좌표를 정확히 밟지 않는다.
+    CorridorPositionTracker walkAndTurnNorth({
+      required double turnOffsetM,
+      int northSteps = 3,
+    }) {
+      final tracker = CorridorPositionTracker(_crossGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(4, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+      final turnEastM = 10 + turnOffsetM;
+      var atMs = 0;
+      var steps = 0;
+      var raw = const PdrLocalPoint(4, 0);
+
+      void walk(PdrLocalPoint next, double headingDeg) {
+        atMs += 500;
+        steps += 1;
+        tracker.update(
+          _observation(
+            atMs: atMs,
+            confirmedSteps: steps,
+            confirmedDistanceM: steps * 0.7,
+            previewSteps: steps,
+            headingDeg: headingDeg,
+            raw: next,
+            rawConfirmedStepPositions: [next],
+          ),
+        );
+        raw = next;
+      }
+
+      while (raw.eastM < turnEastM - 1e-9) {
+        walk(PdrLocalPoint(math.min(raw.eastM + 0.7, turnEastM), 0), 90);
+      }
+      for (var index = 1; index <= northSteps; index += 1) {
+        walk(PdrLocalPoint(turnEastM, index * 0.7), 0);
+      }
+      return tracker;
+    }
+
+    test('노드보다 3m 일찍 꺾어도 연결된 간선으로 수렴한다', () {
+      final tracker = walkAndTurnNorth(turnOffsetM: -3);
+      expect(tracker.result.currentEdgeId, 'bc');
+    });
+
+    test('노드 근처에서 꺾으면 연결된 간선으로 수렴한다', () {
+      final tracker = walkAndTurnNorth(turnOffsetM: 0);
+      expect(tracker.result.currentEdgeId, 'bc');
+    });
+
+    test('노드보다 3m 늦게 꺾어도 지나온 노드의 연결 간선으로 되돌아간다', () {
+      final tracker = walkAndTurnNorth(turnOffsetM: 3);
+      expect(tracker.result.currentEdgeId, 'bc');
+    });
+
+    test('교차점을 직진으로 통과하면 회전 후보로 넘어가지 않는다', () {
+      final tracker = CorridorPositionTracker(_crossGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(4, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+      for (var step = 1; step <= 14; step += 1) {
+        final raw = PdrLocalPoint(4 + step * 0.7, 0);
+        tracker.update(
+          _observation(
+            atMs: step * 500,
+            confirmedSteps: step,
+            confirmedDistanceM: step * 0.7,
+            previewSteps: step,
+            headingDeg: 90,
+            raw: raw,
+            rawConfirmedStepPositions: [raw],
+          ),
+        );
+      }
+
+      expect(tracker.result.currentEdgeId, 'bd');
+      expect(tracker.result.correctedPosition.northM.abs(), lessThan(1e-6));
+    });
+
+    test('전환 구간 안에서는 연결된 간선만 후보로 알린다', () {
+      final tracker = walkAndTurnNorth(turnOffsetM: -1, northSteps: 1);
+      final result = tracker.result;
+
+      expect(result.junctionNodeId, 'b');
+      expect(result.junctionDistanceM, lessThanOrEqualTo(3));
+      expect(result.junctionCandidateEdgeIds, containsAll(['ab', 'bd', 'bc']));
+      expect(
+        result.junctionCandidateEdgeIds,
+        isNot(contains('ef')),
+        reason: '노드 b에 연결되지 않은 평행 간선은 후보가 될 수 없다',
+      );
+    });
+
+    test('전환 구간 밖 직선 구간에서는 회전 구간 상태가 아니다', () {
+      final tracker = CorridorPositionTracker(_crossGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(4, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+      tracker.update(
+        _observation(
+          atMs: 500,
+          confirmedSteps: 1,
+          confirmedDistanceM: 0.7,
+          previewSteps: 1,
+          headingDeg: 90,
+          raw: const PdrLocalPoint(4.7, 0),
+          rawConfirmedStepPositions: const [PdrLocalPoint(4.7, 0)],
+        ),
+      );
+
+      expect(tracker.result.isInJunctionZone, isFalse);
+    });
+
+    test('걸음 없이 휴대폰만 돌려서는 간선이 바뀌지 않는다', () {
+      final tracker = CorridorPositionTracker(_crossGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(8.5, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+      for (var step = 1; step <= 5; step += 1) {
+        tracker.update(
+          _observation(
+            atMs: step * 400,
+            confirmedSteps: 0,
+            confirmedDistanceM: 0,
+            previewSteps: 0,
+            headingDeg: 0,
+            raw: const PdrLocalPoint(8.5, 0),
+          ),
+        );
+      }
+
+      expect(tracker.result.currentEdgeId, 'ab');
+      expect(tracker.result.correctedPosition.eastM, closeTo(8.5, 0.5));
+    });
   });
 
   group('CorridorPositionTracker', () {

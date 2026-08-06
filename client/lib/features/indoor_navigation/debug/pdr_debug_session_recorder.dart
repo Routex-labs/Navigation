@@ -323,6 +323,13 @@ class PdrDebugSessionRecorder {
         'optimistic_edge_id': result.optimisticEdgeId,
         'optimistic_edge_progress_m': result.optimisticEdgeProgressM,
         'preview_peak_ids_synthetic': result.previewPeakIdsSynthetic,
+        // 회전 허용 구간. 정지·재탐색이 "교차점을 지나는 중"이었는지 아니면
+        // 실제 이탈이었는지는 이 값이 없으면 파일에서 가릴 수 없다.
+        'junction_node_id': result.junctionNodeId,
+        'junction_distance_m': result.junctionDistanceM.isFinite
+            ? result.junctionDistanceM
+            : null,
+        'junction_candidate_edge_ids': result.junctionCandidateEdgeIds,
         'leader_relocated': result.leaderRelocated,
       },
     });

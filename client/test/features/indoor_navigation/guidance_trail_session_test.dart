@@ -31,6 +31,9 @@ CorridorTrackingResult _result({
   optimisticEdgeId: 'edge',
   optimisticEdgeProgressM: 0,
   previewPeakIdsSynthetic: false,
+  junctionNodeId: null,
+  junctionDistanceM: double.infinity,
+  junctionCandidateEdgeIds: const [],
   leaderRelocated: false,
 );
 

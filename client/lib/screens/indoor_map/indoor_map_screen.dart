@@ -79,6 +79,12 @@ const _placingHintTopPx = 236.0;
 /// 그리는 카테고리 pill 줄과 겹친다(실측에서 배너가 pill 뒤에 깔렸다).
 const _escalatorBannerTopPx = 92.0;
 
+/// 회전 허용 구간에서 이탈 재탐색을 유예하는 최대 시간.
+///
+/// 정상 회전은 2~3걸음(약 2초) 안에 연결 간선으로 수렴한다. 상한을 두지 않으면
+/// 교차점 옆 복도로 실제로 걸어 나간 경우에 재탐색이 영영 걸리지 않는다.
+const _junctionRerouteHoldMs = 4000;
+
 /// 층 교체를 덮는 베일이 들어오는/빠지는 시간.
 const _floorSwapVeilFadeIn = Duration(milliseconds: 140);
 const _floorSwapVeilFadeOut = Duration(milliseconds: 260);
@@ -200,6 +206,13 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   int? _lastRouteEvaluatedSteps;
   int _offRouteEvidenceUpdates = 0;
   int? _offRouteFirstEvidenceAtMs;
+
+  /// 회전 허용 구간에 들어간 시각. 그 구간 동안은 이탈 증거를 새로 쌓지 않는다.
+  ///
+  /// 교차점에서 후보가 갈리는 짧은 구간은 정상 회전이지 이탈이 아니다. 다만
+  /// 보호를 무제한으로 두면 실제로 다른 복도로 걸어간 경우를 영영 못 잡으므로
+  /// [_junctionRerouteHoldMs]로 상한을 둔다.
+  int? _junctionZoneEnteredAtMs;
   bool _rerouteInFlight = false;
   int _lastRerouteAtMs = 0;
 
@@ -2387,6 +2400,13 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     CorridorTrackingResult result,
     int? steps,
   ) {
+    final nowMsForZone = DateTime.now().millisecondsSinceEpoch;
+    if (result.isInJunctionZone) {
+      _junctionZoneEnteredAtMs ??= nowMsForZone;
+    } else {
+      _junctionZoneEnteredAtMs = null;
+    }
+
     final strongDeviation = progress.offsetM >= 4 || progress.reacquired;
     final deviated = !progress.onRouteEdge || strongDeviation;
     if (!deviated ||
@@ -2395,6 +2415,13 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       _offRouteEvidenceUpdates = 0;
       _offRouteFirstEvidenceAtMs = null;
       _lastRouteEvaluatedSteps = steps;
+      return;
+    }
+    // 교차점을 통과하는 동안에는 이탈 증거를 **새로 쌓지 않는다**. 기존 증거는
+    // 지우지 않는다 — 구간을 빠져나온 뒤 실제 이탈이면 그 자리에서 이어 간다.
+    final junctionSinceMs = _junctionZoneEnteredAtMs;
+    if (junctionSinceMs != null &&
+        nowMsForZone - junctionSinceMs < _junctionRerouteHoldMs) {
       return;
     }
     if (steps == null || steps == _lastRouteEvaluatedSteps) return;
