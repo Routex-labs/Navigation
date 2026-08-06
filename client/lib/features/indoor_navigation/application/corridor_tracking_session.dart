@@ -99,6 +99,11 @@ class CorridorTrackingSession {
       hasHeading: snapshot.hasHeading,
       rawConfirmedStepPositions: _newConfirmedFloorPoints(snapshot, transform),
       rawPreviewTailPositions: _previewTailFloorPoints(snapshot, transform),
+      // 좌표만으로는 "이 주황 걸음을 이미 태웠는지"를 알 수 없다. accepted peak
+      // 시각을 같은 인덱스로 함께 넘겨야 optimistic cursor가 배치 구성과
+      // 무관하게 걸음을 한 번만 적용한다.
+      rawPreviewTailPeakTimesMs: previewTailPeakTimesMs(snapshot),
+      confirmedThroughMs: snapshot.lastAppliedBatch?.spanEndMs,
     );
     final output = _tracker!.update(observation);
     _lastObservation = observation;

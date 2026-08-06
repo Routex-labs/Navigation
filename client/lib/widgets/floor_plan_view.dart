@@ -258,6 +258,40 @@ class FloorPlanController {
   /// 지금 내 위치를 따라가는 중인지. 상위가 "내 위치" 버튼의 눌린 상태를
   /// 표시하는 데 쓴다.
   bool get isFollowing => _state?.isFollowing ?? false;
+
+  /// 지금 카메라 상태. 아직 붙지 않았거나 스타일 로드 전이면 null.
+  ///
+  /// 층 전환을 가로질러 화면을 이어 붙이려면 상위가 **전환 직전** 값을 읽어
+  /// 새 층 뷰에 [FloorPlanView.initialCamera]로 넘겨야 한다.
+  FloorCameraSnapshot? get cameraSnapshot {
+    final position = _state?._controller?.cameraPosition;
+    if (position == null) return null;
+    return FloorCameraSnapshot(
+      target: ll.LatLng(position.target.latitude, position.target.longitude),
+      zoom: position.zoom,
+      bearing: position.bearing,
+      tilt: position.tilt,
+    );
+  }
+}
+
+/// 층을 가로질러 물려줄 카메라 상태.
+///
+/// maplibre의 `CameraPosition`을 그대로 쓰지 않는 이유는 이 값을 들고 다니는
+/// 쪽이 지도 화면(`IndoorMapBody`)이기 때문이다. 그 화면은 지금 지도 SDK 타입을
+/// 하나도 모르고, 그 경계를 카메라 인계 하나 때문에 무너뜨릴 이유가 없다.
+class FloorCameraSnapshot {
+  const FloorCameraSnapshot({
+    required this.target,
+    required this.zoom,
+    required this.bearing,
+    required this.tilt,
+  });
+
+  final ll.LatLng target;
+  final double zoom;
+  final double bearing;
+  final double tilt;
 }
 
 /// 매장 폴리곤을 탭할 수 있는 실내 평면도 뷰.
@@ -308,7 +342,23 @@ class FloorPlanView extends StatefulWidget {
     this.onCameraBearingChanged,
     this.onFollowingChanged,
     this.controller,
+    this.initialCamera,
   });
+
+  /// 스타일 로드 직후 건물 fit 대신 그대로 적용할 카메라.
+  ///
+  /// 층이 바뀌면 이 위젯은 ValueKey 차이로 통째로 재생성되고, 새 지도는
+  /// 건물 전체에 맞춰 카메라를 다시 잡는다. 사용자가 층 선택기로 다른 층을
+  /// 훑어볼 때는 그게 맞다 — 낯선 층이니 전체를 보여 줘야 한다.
+  ///
+  /// 반대로 **에스컬레이터 자동 전환**은 사용자가 같은 자리에 서 있는데 층만
+  /// 바뀌는 사건이다. 이때 카메라가 건물 fit으로 튀면 방금 보고 있던 확대
+  /// 수준과 위치를 잃는다. 그 경우에만 상위가 전환 직전 카메라를 여기로
+  /// 넘겨 화면을 이어 붙인다.
+  ///
+  /// 상위가 controller로 직접 밀지 않고 값으로 내려 주는 이유는
+  /// [focusTarget]과 같다 — 준비가 끝난 쪽이 스스로 적용해야 경합이 없다.
+  final FloorCameraSnapshot? initialCamera;
 
   /// 추적이 켜지고 꺼질 때 알린다. 상위가 "내 위치" 버튼 상태를 맞추는 데 쓴다.
   final ValueChanged<bool>? onFollowingChanged;
@@ -1703,7 +1753,23 @@ class FloorPlanViewState extends State<FloorPlanView> {
     await _updatePdrPreviewTrailSource();
     await _updateMarkersSource();
     await _updateHighlightSource();
-    if (widget.routePoints.isNotEmpty) {
+    final handover = widget.initialCamera;
+    if (handover != null) {
+      // 이어받은 카메라가 있으면 fit을 아예 하지 않는다. fit을 한 뒤 되돌리면
+      // 그 사이 한 프레임이 건물 전체로 그려져 화면이 한 번 튄다.
+      // 축소 하한은 build의 `_computeMinZoom`이 층마다 따로 잡으므로 여기서
+      // 건너뛰어도 이어받은 줌이 하한 아래로 내려가 있으면 곧 교정된다.
+      await _controller?.moveCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: _toMapLibreLatLng(handover.target),
+            zoom: handover.zoom,
+            bearing: handover.bearing,
+            tilt: handover.tilt,
+          ),
+        ),
+      );
+    } else if (widget.routePoints.isNotEmpty) {
       await _fitToRouteBounds(widget.routePoints);
     } else {
       await _fitToFootprint();

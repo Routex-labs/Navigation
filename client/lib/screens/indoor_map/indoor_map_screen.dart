@@ -25,6 +25,7 @@ import '../../domain/multi_floor_router.dart';
 import '../../domain/nearby_facilities.dart';
 import '../../domain/route_guidance.dart';
 import '../../domain/route_progress.dart';
+import '../../domain/transfer_route_geometry.dart';
 import '../../models/building.dart';
 import '../../models/building_graph.dart';
 import '../../models/floor_graph.dart';
@@ -34,6 +35,7 @@ import '../../models/poi_search_result.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/category_map_filter.dart';
 import '../../widgets/eta_card.dart';
+import '../../features/indoor_navigation/contract/floor_transition_ui_state.dart';
 import '../../widgets/floor_plan_view.dart';
 import '../../widgets/floor_selector.dart';
 import '../../widgets/map_overlay_tap_guard.dart';
@@ -74,6 +76,18 @@ const _etaCardHeightPx = 130.0;
 // 노출하지 않기로 해서 그쪽 상단 오버레이는 장소 pill 한 줄뿐이다.
 const _placingHintTopPx = 236.0;
 
+/// 회전 허용 구간에서 이탈 재탐색을 유예하는 최대 시간.
+///
+/// 정상 회전은 2~3걸음(약 2초) 안에 연결 간선으로 수렴한다. 상한을 두지 않으면
+/// 교차점 옆 복도로 실제로 걸어 나간 경우에 재탐색이 영영 걸리지 않는다.
+const _junctionRerouteHoldMs = 4000;
+
+/// 층 교체를 덮는 베일이 들어오는/빠지는 시간.
+const _floorSwapVeilFadeIn = Duration(milliseconds: 140);
+
+/// 층 이동 확정 뒤 "아니에요"를 띄워 두는 시간.
+const _escalatorArrivalBannerHold = Duration(seconds: 6);
+
 // 사용자가 매장 내부/건물 밖을 탭했을 때 멀리 떨어진 복도로 강제 스냅하지
 // 않기 위한 상한이다. 입구나 매장 앞을 누르는 정상적인 경우에는 충분히
 // 여유를 두되, 잘못 눌러 건물 반대편에서 PDR이 시작하는 일은 막는다.
@@ -103,6 +117,30 @@ const _pdrControlRightInsetPx = 184.0;
 // 갈라져 있어 같은 줄에 내려도 겹치지 않는다.
 const _floorSelectorBottomOffset = _bottomBarInnerBottomPaddingPx;
 
+/// heading 수렴 polling이 화면 수명보다 오래 남지 않게 하는 취소 가능한 대기.
+///
+/// `Future.delayed`는 위젯이 dispose돼도 타이머를 취소할 수 없다. 자동 입구
+/// 앵커와 수동 위치 지정이 heading을 기다리는 중 화면이 닫히면 테스트에서는
+/// pending timer로 실패하고, 실제 앱에서는 끝난 화면의 비동기 작업이 뒤늦게
+/// 재개된다. dispose에서 [cancel]하면 대기 중 Future도 false로 끝나게 한다.
+class _CancelableHeadingDelay {
+  _CancelableHeadingDelay(Duration duration) {
+    _timer = Timer(duration, () {
+      if (!_completer.isCompleted) _completer.complete(true);
+    });
+  }
+
+  late final Timer _timer;
+  final Completer<bool> _completer = Completer<bool>();
+
+  Future<bool> get completed => _completer.future;
+
+  void cancel() {
+    _timer.cancel();
+    if (!_completer.isCompleted) _completer.complete(false);
+  }
+}
+
 /// 실내 지도 본문(층 평면도 + 경로/매장 오버레이). 검색창·길찾기·건물 전환 같은
 /// 공통 UI는 [MapShellScreen]이 상단/하단 바로 얹으므로 여기서는 다루지 않는다.
 class IndoorMapBody extends StatefulWidget {
@@ -118,6 +156,7 @@ class IndoorMapBody extends StatefulWidget {
     this.outerOverlayKeys = const [],
     this.categorySelection,
     this.onFloorChanged,
+    this.onFloorTransitionChanged,
   });
 
   /// 보고 있는 층이 바뀔 때 호출된다(최초 로드 포함). 상위(MapShellScreen)가
@@ -135,6 +174,14 @@ class IndoorMapBody extends StatefulWidget {
   /// ETA 카드가 화면 최하단에 새로 나타나거나 사라질 때 호출된다.
   /// 상위(MapShellScreen)가 이 값으로 하단 공용 바를 그 위로 띄운다.
   final ValueChanged<bool>? onRouteVisibleChanged;
+
+  /// 층 전환 배너·베일 상태를 상위 셸에 넘긴다.
+  ///
+  /// 이 화면이 직접 그리지 않는 이유: 검색창·카테고리 줄·하단 바는 부모인
+  /// MapShellScreen이 **나중에** 그린다. 자식의 top 상수를 아무리 조정해도
+  /// 부모 sibling 위로 올라갈 수 없어서, 상단 UI가 최악 높이일 때 배너가 뒤에
+  /// 깔렸다. 판정과 상태는 여기가 소유하고 렌더링만 위로 올린다.
+  final FloorTransitionUiChanged? onFloorTransitionChanged;
 
   /// 지도 위 매장 폴리곤을 탭하면 호출된다. 상위(MapShellScreen)가 검색
   /// 결과를 탭했을 때와 똑같이 매장 정보 시트를 띄운다.
@@ -228,6 +275,13 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   int? _lastRouteEvaluatedSteps;
   int _offRouteEvidenceUpdates = 0;
   int? _offRouteFirstEvidenceAtMs;
+
+  /// 회전 허용 구간에 들어간 시각. 그 구간 동안은 이탈 증거를 새로 쌓지 않는다.
+  ///
+  /// 교차점에서 후보가 갈리는 짧은 구간은 정상 회전이지 이탈이 아니다. 다만
+  /// 보호를 무제한으로 두면 실제로 다른 복도로 걸어간 경우를 영영 못 잡으므로
+  /// [_junctionRerouteHoldMs]로 상한을 둔다.
+  int? _junctionZoneEnteredAtMs;
   bool _rerouteInFlight = false;
   int _lastRerouteAtMs = 0;
 
@@ -277,6 +331,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   StreamSubscription<PdrSnapshot>? _pdrSnapshotSub;
   StreamSubscription<CalibrationStatus>? _pdrCalibrationSub;
   StreamSubscription<AltitudeSample>? _pdrAltitudeSub;
+  StreamSubscription<RawMotionActivity>? _pdrRawMotionSub;
   bool _placingPdrAnchor = false;
   PdrDebugSessionRecorder? _pdrDebugRecorder;
 
@@ -298,6 +353,40 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   GraphNode? _pendingArrivalNode;
   bool _pendingArrivalRouteReady = false;
 
+  /// 지금 타고 있다고 보는 에스컬레이터. 배너에 방향과 도착 층을 띄우고,
+  /// 이 값이 있는 동안 걸음 누적을 멈춘다. null이면 평소 상태다.
+  EscalatorTransition? _escalatorRide;
+
+  /// 방금 확정된 층 이동. 배너를 잠깐 "도착" 상태로 유지해 되돌릴 기회를 준다.
+  EscalatorTransition? _escalatorArrival;
+  Timer? _escalatorArrivalTimer;
+
+  /// 아직 층을 바꾸기 전의 탑승 단계(배너만 뜨는 구간).
+  ///
+  /// `boardingDetected`는 접근 근거만으로, `verticalMotionDetected`는 실제
+  /// 수직 이동 근거로 올라온다. 둘 다 목적 층 지도를 열지 않는다.
+  EscalatorPhaseChange? _escalatorStage;
+
+  /// 탑승 때문에 걸음 적용을 멈춘 상태인지. pause/resume 짝을 한 곳에서 센다.
+  bool _stepsPausedForRide = false;
+
+  // 셸에 마지막으로 알린 층 전환 UI 상태. 같은 값이면 다시 알리지 않는다.
+  FloorTransitionUiState? _reportedFloorTransition;
+  double _reportedFloorSwapVeil = 0;
+
+  /// 자동 층 전환에서 새 층 지도에 그대로 물려줄 카메라.
+  ///
+  /// 사용자는 같은 자리에 서 있는데 층만 바뀌는 사건이므로, 보고 있던 확대
+  /// 수준과 중심을 유지해야 한다. 층 선택기로 다른 층을 훑어볼 때는 null로
+  /// 두어 예전처럼 건물 전체 fit이 걸리게 한다.
+  FloorCameraSnapshot? _floorHandoverCamera;
+
+  /// 층 도면이 교체되는 순간을 덮는 페이드 정도(0~1).
+  ///
+  /// 지도 위젯은 층이 바뀌면 통째로 재생성되면서 한 프레임 비어 보인다.
+  /// 그 프레임을 가려 전환이 끊겨 보이지 않게 한다.
+  double _floorSwapVeil = 0;
+
   /// 기압 샘플은 지도/그래프 로딩보다 빠르게 들어올 수 있다. 후보 시작→확정
   /// 또는 취소 순서를 Future 체인으로 직렬화해, 로딩 중 두 번째 상태가 앞질러
   /// 앵커를 엉뚱한 층에 적용하지 못하게 한다.
@@ -307,6 +396,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   /// 층 선택기를 누를 때마다 재시도하면 사용자가 다른 층을 구경한 것만으로 PDR
   /// 기준 층과 위치가 덮이므로, 같은 건물·초기 층 키를 다시 실행하지 않는다.
   String? _autoEstimateAttemptKey;
+
+  /// 자동 앵커와 수동 앵커가 heading을 기다리는 동안 만들어진 짧은 대기들.
+  /// 화면 종료 시 모두 취소해 dispose 뒤 비동기 재개를 막는다.
+  final Set<_CancelableHeadingDelay> _headingSettleDelays = {};
 
   /// 전환 적용 중 재진입 방지. 층 도면을 불러오는 동안 다음 기압 샘플이 또
   /// 확정을 내면 두 번 전환되면서 앵커가 어긋난다.
@@ -435,15 +528,32 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     _pdrAltitudeSub = indoorNavigationDriver.altitudeSamples.listen(
       _onAltitudeSample,
     );
+    // 걸음 적용을 멈춘 동안에도 흐르는 원시 움직임. 하차 첫 걸음을 기압
+    // 샘플 하나로 잡는 유일한 근거라 pause 여부와 무관하게 계속 넣는다.
+    _pdrRawMotionSub = indoorNavigationDriver.rawMotion.listen(
+      _escalatorDetector.onRawMotion,
+    );
     _loadBuilding();
   }
 
   @override
   void dispose() {
     _arrivalAutoClearTimer?.cancel();
+    for (final delay in _headingSettleDelays) {
+      delay.cancel();
+    }
+    _headingSettleDelays.clear();
     _pdrSnapshotSub?.cancel();
     _pdrCalibrationSub?.cancel();
     _pdrAltitudeSub?.cancel();
+    _pdrRawMotionSub?.cancel();
+    _escalatorArrivalTimer?.cancel();
+    // 층 도면을 받아 오는 동안 화면이 닫혀도 전역 PDR 세션을 pause 상태로
+    // 남기지 않는다. dispose 뒤에는 _endEscalatorRide가 setState를 할 수 없어
+    // 걸음 누적만 직접 복구한다.
+    if (_stepsPausedForRide) {
+      unawaited(indoorNavigationDriver.resumeStepTracking());
+    }
     // 앱 전역 인스턴스라 dispose하지 않는다 — 여기서 버리면 야외 지도가
     // 같은 컨트롤러를 계속 구독하고 있다가 notifyListeners에서 죽는다.
     _debugModeController.removeListener(_onDebugModeChanged);
@@ -473,6 +583,15 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     }
     _mapCameraBearingDeg = bearingDeg;
     _mapCameraBearingNotifier.value = bearingDeg;
+  }
+
+  Future<bool> _waitForHeadingPoll() async {
+    if (!mounted) return false;
+    final delay = _CancelableHeadingDelay(const Duration(milliseconds: 100));
+    _headingSettleDelays.add(delay);
+    final completed = await delay.completed;
+    _headingSettleDelays.remove(delay);
+    return completed && mounted;
   }
 
   /// 실내 지도를 보는 동안 PDR 세션을 켜 둔다.
@@ -553,38 +672,63 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     }
   }
 
-  Future<void> _loadFloorPlan(String floor) async {
+  /// 받아 두기만 한 층 도면. 화면에 붙이는 것은 [_applyFloorPlan]이 한다.
+  ///
+  /// 두 단계로 나눈 이유는 자동 층 전환 때문이다. 한 번에 처리하면 `_floorPlan`
+  /// 이 비는 구간이 생기고, build가 그 구간을 스피너로 통째로 갈아치워 지도가
+  /// 사라진다. 미리 받아 두면 `_selectedFloor`와 도면을 **같은 프레임에** 바꿀
+  /// 수 있어 전환이 한 번의 교체로 끝난다.
+  Future<({FloorPlan plan, FloorGraph? graph, String calibrationVersion})?>
+  _fetchFloorPlan(String floor) async {
     try {
       final geojson = await buildingRepository.getFloorGeoJson(
         widget.buildingId,
         floor,
       );
-      if (!mounted || geojson == null) return;
+      if (!mounted || geojson == null) return null;
       final graphJson = geojson['navigation_graph'];
-      final graph = graphJson is Map<String, dynamic>
-          ? FloorGraph.fromJson(graphJson)
-          : null;
-      setState(() {
-        final plan = FloorPlan.fromJson(geojson);
-        _floorPlan = plan;
-        _renderedFloorPlan = plan;
-        _floorGraph = graph;
-        _mapCalibrationVersion =
-            geojson['map_calibration_version'] as String? ?? 'unversioned';
-        _syncCorridorTracking(_pdrTrailState.snapshot);
-      });
-      // 왕복 + 파싱까지 끝난 시점. 지도 위젯은 이 setState 이후에야 트리에
-      // 들어온다(_buildBody의 _floorPlan == null 분기) — 그래서 이 구간이
-      // 지도 초기화와 겹치지 않고 그대로 앞에 붙는다.
-      FloorSwitchTiming.mark('json');
-      // 층 도면이 준비된 시점이 PDR을 켤 수 있는 가장 이른 지점이다. 이미
-      // 돌고 있으면 아무것도 하지 않는다.
-      unawaited(_startPdrIfIdle());
-      unawaited(_initializeEstimatedLocationFromGps(floor, graph));
+      return (
+        plan: FloorPlan.fromJson(geojson),
+        graph: graphJson is Map<String, dynamic>
+            ? FloorGraph.fromJson(graphJson)
+            : null,
+        calibrationVersion:
+            geojson['map_calibration_version'] as String? ?? 'unversioned',
+      );
     } catch (_) {
-      if (!mounted) return;
-      setState(() => _error = '지도를 불러오지 못했습니다. 서버 연결을 확인해주세요.');
+      return null;
     }
+  }
+
+  void _applyFloorPlan(
+    String floor,
+    ({FloorPlan plan, FloorGraph? graph, String calibrationVersion}) loaded,
+  ) {
+    setState(() {
+      _floorPlan = loaded.plan;
+      _renderedFloorPlan = loaded.plan;
+      _floorGraph = loaded.graph;
+      _mapCalibrationVersion = loaded.calibrationVersion;
+      _syncCorridorTracking(_pdrTrailState.snapshot);
+    });
+    // 왕복 + 파싱까지 끝난 시점. 지도 위젯은 이 setState 이후에야 트리에
+    // 들어온다(_buildBody의 _floorPlan == null 분기) — 그래서 이 구간이
+    // 지도 초기화와 겹치지 않고 그대로 앞에 붙는다.
+    FloorSwitchTiming.mark('json');
+    // 층 도면이 준비된 시점이 PDR을 켤 수 있는 가장 이른 지점이다. 이미
+    // 돌고 있으면 아무것도 하지 않는다.
+    unawaited(_startPdrIfIdle());
+    unawaited(_initializeEstimatedLocationFromGps(floor, loaded.graph));
+  }
+
+  Future<void> _loadFloorPlan(String floor) async {
+    final loaded = await _fetchFloorPlan(floor);
+    if (!mounted) return;
+    if (loaded == null) {
+      setState(() => _error = '지도를 불러오지 못했습니다. 서버 연결을 확인해주세요.');
+      return;
+    }
+    _applyFloorPlan(floor, loaded);
   }
 
   Future<void> _initializeEstimatedLocationFromGps(
@@ -602,12 +746,24 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 
     final existing = indoorLocationEstimateController.current;
     IndoorLocationEstimate? estimate;
-    if (existing != null &&
+    final entrance = _building?.entrance;
+    if (entrance != null) {
+      estimate = estimateIndoorLocationFromEntrance(
+        buildingId: buildingId,
+        floorId: floor,
+        graph: graph,
+        latitude: entrance.latitude,
+        longitude: entrance.longitude,
+        observedAt: DateTime.now(),
+      );
+    }
+    if (estimate == null &&
+        existing != null &&
         existing.buildingId == widget.buildingId &&
         existing.floorId == floor &&
         existing.isFresh(DateTime.now())) {
       estimate = existing;
-    } else {
+    } else if (estimate == null) {
       final position = await requestIndoorEstimatePosition();
       if (!mounted ||
           widget.buildingId != buildingId ||
@@ -626,8 +782,8 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         observedAt: position.timestamp,
       );
       if (estimate == null) return;
-      indoorLocationEstimateController.update(estimate);
     }
+    indoorLocationEstimateController.update(estimate);
     final resolvedEstimate = estimate;
 
     // 마커는 estimate를 저장한 순간 바로 보인다. PDR 결합은 센서와 자북
@@ -644,7 +800,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     final deadline = DateTime.now().add(_headingSettleTimeout);
     while (!indoorNavigationDriver.isHeadingConverged &&
         DateTime.now().isBefore(deadline)) {
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      if (!await _waitForHeadingPoll()) return;
       if (!mounted || _selectedFloor != floor) return;
     }
     final snapshot = indoorNavigationDriver.currentSnapshot;
@@ -662,7 +818,28 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     );
   }
 
-  Future<void> _selectFloor(String floor) async {
+  /// 층 선택기에서 사용자가 직접 고른 층.
+  ///
+  /// 자동 전환 경로와 달리 여기서는 카메라를 이어 붙이지 않는다(낯선 층이니
+  /// 건물 전체를 보여 주는 게 맞다). 에스컬레이터 탑승 중에 사용자가 층을
+  /// 직접 고르면 자동 판정보다 사용자의 조작을 믿고 탑승 상태를 끝낸다 —
+  /// 그러지 않으면 판정이 취소될 때까지 걸음 누적이 멈춘 채로 남는다.
+  Future<void> _selectFloorManually(String floor) async {
+    await _endEscalatorRide();
+    if (!mounted) return;
+    await _selectFloor(floor);
+  }
+
+  /// [preloaded]를 주면 도면을 비우는 구간 없이 같은 프레임에 갈아 끼운다.
+  ///
+  /// 안 주면 예전처럼 `_floorPlan`을 비우고 새로 받는다 — 그 사이 build가
+  /// 스피너를 그리므로 지도가 한 번 사라진다. 층 선택기처럼 "다른 층을 보러
+  /// 가는" 동작에서는 그게 정직한 표현이지만, 자동 층 전환에서는 화면이 끊긴
+  /// 것처럼 보인다.
+  Future<void> _selectFloor(
+    String floor, {
+    ({FloorPlan plan, FloorGraph? graph, String calibrationVersion})? preloaded,
+  }) async {
     // 여기가 "층 전환"의 t=0이다. 끝(타일까지 그려짐)은 지도 위젯이 찍는다.
     FloorSwitchTiming.begin(floor);
     // 층 간 경로가 활성이면 그 층의 세그먼트로 갈아타고, 없으면(단일 층 경로
@@ -672,9 +849,13 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     final hadRouteVisible = _hasActiveRoute;
     setState(() {
       _selectedFloor = floor;
-      _floorPlan = null;
-      _floorGraph = null;
-      _mapCalibrationVersion = 'unversioned';
+      _floorPlan = preloaded?.plan;
+      // 도면을 못 받은 동안에도 **직전 층**을 계속 그린다([_renderedFloorPlan]
+      // 주석). 그래서 여기서는 비우지 않고, 새 도면이 실제로 온 경우에만
+      // 갈아 끼운다.
+      if (preloaded != null) _renderedFloorPlan = preloaded.plan;
+      _floorGraph = preloaded?.graph;
+      _mapCalibrationVersion = preloaded?.calibrationVersion ?? 'unversioned';
       if (multiRoute == null) {
         // 단일 층 경로였다면 다른 층 지도 위에 남아 있어도 의미가 없다.
         _route = null;
@@ -708,7 +889,35 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     // 위치 마커가 자동으로 숨겨지고, 사용자가 원래 층으로 돌아오면 다시
     // 표시된다. 실제로 계단·엘리베이터로 이동해 새 층에서 위치를 다시 잡고
     // 싶다면 하단 바 "위치 지정" 버튼으로 직접 앵커 배치를 시작하면 된다.
+    if (preloaded != null) {
+      _applyFloorPlan(floor, preloaded);
+      return;
+    }
     await _loadFloorPlan(floor);
+  }
+
+  /// 자동 층 전환용 층 교체. 도면을 먼저 받아 두고 페이드로 덮은 뒤 한 번에 바꾼다.
+  ///
+  /// 반환값이 false면 도면을 못 받아 층을 바꾸지 않은 것이다.
+  Future<bool> _swapFloorSmoothly(String floor) async {
+    final loaded = await _fetchFloorPlan(floor);
+    if (!mounted) return false;
+    if (loaded == null) return false;
+
+    setState(() {
+      // 아직 살아 있는 지도에서 읽어야 한다. 교체 뒤에는 새 지도의 fit 값이다.
+      _floorHandoverCamera ??= _floorPlanController.cameraSnapshot;
+      _floorSwapVeil = 1;
+    });
+    // 베일이 실제로 덮인 뒤에 갈아 끼운다. 안 기다리면 교체가 먼저 그려져
+    // 페이드가 아무것도 가리지 못한다.
+    await Future<void>.delayed(_floorSwapVeilFadeIn);
+    if (!mounted) return false;
+
+    await _selectFloor(floor, preloaded: loaded);
+    if (!mounted) return false;
+    setState(() => _floorSwapVeil = 0);
+    return true;
   }
 
   /// 하단 바 재보정 버튼(위치 지정 오른쪽). 내 위치를 화면 정중앙에 놓고,
@@ -1240,7 +1449,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   /// 이 층에 그 시설이 없으면 그 줄은 아예 빠진다.
   ///
   /// 실패는 전부 빈 목록이다 — 시설 안내는 부가 정보라 실패가 시트를 막으면 안 된다.
-  Future<List<NearbyFacility>> nearbyFacilitiesFor(PoiSearchResult store) async {
+  Future<List<NearbyFacility>> nearbyFacilitiesFor(
+    PoiSearchResult store,
+  ) async {
     final startNodeId = store.nodeId;
     if (startNodeId == null || store.floor.isEmpty) return const [];
 
@@ -1752,16 +1963,33 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     return estimate.wgs84;
   }
 
+  /// 사용자가 바라보는 방향(지도 기준). 마커 원뿔과 카메라 정렬이 쓴다.
+  ///
+  /// **간선 방위(`previewHeadingDeg`)를 쓰지 않는다.** 그 값은 걸음이 있어야
+  /// 갱신되고 직선 복도에서는 제자리 회전에 반응하지 않아서, 서서 몸을 돌리면
+  /// 화면의 방향이 그대로 얼어 있었다. 복도에서 학습한 bias는 그대로 반영된
+  /// 센서 heading을 쓴다.
   double? get _pdrCurrentHeadingDeg {
     final snapshot = _pdrTrailState.snapshot;
     final anchor = _pdrTrailState.anchor;
     if (snapshot == null || anchor == null || !snapshot.hasHeading) return null;
-    final transform = FloorCoordinateTransform(anchor);
-    final correctedFloorHeading =
-        _corridorTrackingSession.result?.previewHeadingDeg;
-    return correctedFloorHeading == null
+    // 층 전환 중에는 anchor가 아직 출발 층이라 복도 보정 결과가 갱신되지
+    // 않는다. 그 값을 계속 쓰면 원뿔이 탑승 시점 방향에 얼어붙어, 탑승 중
+    // 몸을 돌려도 화면이 반응하지 않는다.
+    //
+    // heading 자체는 끊기지 않았다(`pauseStepTracking`은 센서를 끄지 않는다).
+    // 그래서 센서 heading + anchor rotation으로 직접 만든다 — 축 변환은 지도
+    // bearing으로 되돌릴 때 상쇄되므로 목적 층 도면에서도 방향이 맞다. 복도에서
+    // 학습한 bias만 잠시 빠지는데, 그건 새 층에서 다시 학습하는 값이고 옛 층
+    // 기준 bias를 새 층 frame에 섞는 것보다 안전하다.
+    final deviceFloorHeading = anchor.floorId == _selectedFloor
+        ? _corridorTrackingSession.result?.deviceHeadingDeg
+        : null;
+    return deviceFloorHeading == null
         ? normalizePdrBearing(snapshot.walkingHeadingDeg + anchor.rotationDeg)
-        : transform.floorBearingToMapBearing(correctedFloorHeading);
+        : FloorCoordinateTransform(
+            anchor,
+          ).floorBearingToMapBearing(deviceFloorHeading);
   }
 
   /// 기압 샘플 한 건을 판정기에 넣고, 로그에 남기고, 확정이면 층을 옮긴다.
@@ -1802,6 +2030,8 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         ? _altimeterDebugLine(sample)
         : null;
 
+    _handleEscalatorPhaseChanges();
+
     if (started != null) {
       _enqueueFloorTransition(() => _beginEscalatorTransition(started));
     }
@@ -1813,12 +2043,148 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     }
   }
 
+  /// 판정기의 단계 전이를 화면 동작으로 옮긴다.
+  ///
+  /// 단계마다 **하는 일이 다르다**. 배너는 근거가 약해도 띄우고(되돌리기 비용이
+  /// 없다), 걸음 pause는 실제 수직 이동에서 시작하며, 목적 층 지도는 midpoint
+  /// 근거에서만 연다. 층 전환과 하차 확정은 기존 started/confirmed 경로가
+  /// 그대로 담당한다 — 여기서 두 번 처리하지 않는다.
+  void _handleEscalatorPhaseChanges() {
+    final changes = _escalatorDetector.takePhaseChanges();
+    if (changes.isEmpty) return;
+    for (final change in changes) {
+      switch (change.phase) {
+        case EscalatorPhase.boardingDetected:
+        case EscalatorPhase.verticalMotionDetected:
+          if (!mounted) return;
+          setState(() => _escalatorStage = change);
+          if (change.phase == EscalatorPhase.verticalMotionDetected) {
+            _enqueueFloorTransition(_pauseStepsForRide);
+          }
+        case EscalatorPhase.cancelled:
+        case EscalatorPhase.failed:
+          if (!mounted) return;
+          setState(() => _escalatorStage = null);
+          // 후보가 열린 뒤의 취소는 층·경로 복원까지 해야 하므로 기존
+          // takeCancelledTransition 경로가 처리한다. 여기서는 배너만 띄운
+          // 단계에서 멈춘 걸음을 되살리는 것만 책임진다.
+          if (change.transition == null) {
+            _enqueueFloorTransition(_endEscalatorRide);
+          }
+        case EscalatorPhase.midpointReached:
+        case EscalatorPhase.landed:
+          // 여기서 단계를 비우지 않는다. 층 전환은 큐를 거쳐 다음 프레임 이후에
+          // 적용되므로, 지금 비우면 그 사이 배너가 한 번 깜빡였다가 다시 뜬다.
+          // `_beginEscalatorTransition`과 `_endEscalatorRide`가 각자 정리한다.
+          break;
+        case EscalatorPhase.idle:
+          if (!mounted) return;
+          setState(() => _escalatorStage = null);
+      }
+    }
+  }
+
+  /// 지금 화면이 그려야 하는 층 전환 상태. 없으면 null.
+  ///
+  /// 판정 단계를 UI 개념(문구·되돌리기)으로 한 번만 옮긴다. 화면은 여기서
+  /// 나온 값만 보고 그린다 — 임계값이나 노드 근접을 다시 계산하지 않는다.
+  FloorTransitionUiState? get _floorTransitionUiState {
+    final arrival = _escalatorArrival;
+    if (arrival != null && _escalatorRide == null) {
+      return FloorTransitionUiState(
+        stage: FloorTransitionStage.arrived,
+        fromFloorLabel: arrival.fromFloorLabel,
+        toFloorLabel: arrival.toFloorLabel,
+        goingUp: arrival.direction == EscalatorDirection.up,
+        canUndo: _preTransferFloor != null && _preTransferAnchor != null,
+      );
+    }
+    final ride = _escalatorRide;
+    if (ride != null) {
+      return FloorTransitionUiState(
+        stage: FloorTransitionStage.swapping,
+        fromFloorLabel: ride.fromFloorLabel,
+        toFloorLabel: ride.toFloorLabel,
+        goingUp: ride.direction == EscalatorDirection.up,
+      );
+    }
+    final stage = _escalatorStage;
+    if (stage == null || stage.toFloorLabel == null) return null;
+    return FloorTransitionUiState(
+      stage: stage.phase == EscalatorPhase.verticalMotionDetected
+          ? FloorTransitionStage.moving
+          : FloorTransitionStage.boarding,
+      fromFloorLabel: stage.fromFloorLabel,
+      toFloorLabel: stage.toFloorLabel!,
+      goingUp: stage.direction == EscalatorDirection.up,
+    );
+  }
+
+  /// 배너의 `아니에요`. 셸이 [IndoorMapBodyState]를 통해 호출한다.
+  void undoFloorTransition() {
+    _escalatorArrivalTimer?.cancel();
+    setState(() => _escalatorArrival = null);
+    unawaited(_undoFloorTransition());
+  }
+
+  /// 층 전환 UI 상태가 바뀌었으면 셸에 알린다.
+  ///
+  /// 상태를 바꾸는 지점마다 콜백을 부르지 않고 build에서 비교한다. 취소·오류·
+  /// 되돌리기까지 출구가 여럿이라, 한 곳이라도 빠뜨리면 배너가 남고 사용자가
+  /// 복구할 방법이 없어진다 — 그 실패는 값 비교로 구조적으로 막는다.
+  void _reportFloorTransitionUi() {
+    final banner = _floorTransitionUiState;
+    final veil = _floorSwapVeil;
+    if (banner == _reportedFloorTransition && veil == _reportedFloorSwapVeil) {
+      return;
+    }
+    _reportedFloorTransition = banner;
+    _reportedFloorSwapVeil = veil;
+    final notify = widget.onFloorTransitionChanged;
+    if (notify == null) return;
+    // build 중에는 부모 setState를 호출할 수 없다.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) notify(banner, veil);
+    });
+  }
+
+  /// 위치에 반영하는 걸음만 멈춘다. 센서·기압·방향은 계속 흐른다.
+  Future<void> _pauseStepsForRide() async {
+    if (_stepsPausedForRide) return;
+    _stepsPausedForRide = true;
+    await indoorNavigationDriver.pauseStepTracking();
+    if (mounted) return;
+    // pause Future가 끝나기 직전에 화면이 닫히면 dispose는 pause된 사실을
+    // 볼 수 없다. 여기서 직접 되돌려 전역 PDR 세션을 살려 둔다.
+    _stepsPausedForRide = false;
+    await indoorNavigationDriver.resumeStepTracking();
+  }
+
   void _enqueueFloorTransition(Future<void> Function() action) {
     _floorTransitionQueue = _floorTransitionQueue
         .then((_) => mounted ? action() : Future<void>.value())
-        .onError((Object error, StackTrace stackTrace) {
-          debugPrint('floor transition failed: $error\n$stackTrace');
-        });
+        .onError(_recoverFloorTransitionFailure);
+  }
+
+  /// 층 지도 로드·경로 재계산 중 예외가 나도 탑승 상태를 화면에 남기지 않는다.
+  ///
+  /// 큐가 오류만 출력하고 끝나면 걸음 누적이 멈춘 채 배너와 페이드가 영구히
+  /// 남을 수 있다. 다음 기압 이벤트가 오더라도 이미 판정 상태가 닫혔을 수 있어
+  /// 자동 복구를 기대할 수 없으므로 오류 경계에서 즉시 공통 종료 처리를 거친다.
+  Future<void> _recoverFloorTransitionFailure(
+    Object error,
+    StackTrace stackTrace,
+  ) async {
+    debugPrint('floor transition failed: $error\n$stackTrace');
+    if (!mounted) return;
+    await _endEscalatorRide();
+    if (!mounted) return;
+    setState(() {
+      _pendingTransferMarker = null;
+      _pendingArrivalNode = null;
+      _pendingArrivalRouteReady = false;
+    });
+    _showPdrMessage('층 전환을 완료하지 못했습니다. 현재 층과 위치를 다시 확인해주세요.');
   }
 
   /// 디버그 칩 한 줄. 판정이 안 걸리는 이유를 현장에서 눈으로 가리기 위한 값이다.
@@ -1853,8 +2219,24 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       _preTransferDestination = _routeDestination;
       _pendingArrivalRouteReady = false;
 
-      await _selectFloor(transition.toFloorLabel);
+      // 보통은 `verticalMotionDetected`에서 이미 멈췄다. 수직 속도 근거 없이
+      // 누적 고도만으로 여기 도달한 경우를 위해 한 번 더 보장한다(idempotent).
+      await _pauseStepsForRide();
       if (!mounted) return;
+      setState(() {
+        _escalatorRide = transition;
+        _escalatorStage = null;
+      });
+
+      if (!await _swapFloorSmoothly(transition.toFloorLabel)) {
+        await _endEscalatorRide();
+        if (mounted) {
+          _showPdrMessage(
+            '${transition.toFloorLabel} 지도를 불러오지 못했습니다. 현재 층을 유지합니다.',
+          );
+        }
+        return;
+      }
       // 여기부터가 **길찾기 중에만** 붙는 비용이다. 수동 층 전환에는 없다.
       FloorSwitchTiming.mark('transferFloorReady');
 
@@ -1905,13 +2287,26 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     _applyingFloorTransition = true;
     try {
       if (_selectedFloor != transition.toFloorLabel) {
-        await _selectFloor(transition.toFloorLabel);
-        if (!mounted) return;
+        // 조기 전환 없이 바로 확정된 경우(후보와 확정이 거의 동시). 이때도 층은
+        // 이어 붙여 바꾼다.
+        if (!await _swapFloorSmoothly(transition.toFloorLabel)) {
+          await _endEscalatorRide();
+          if (mounted) {
+            _showPdrMessage(
+              '${transition.toFloorLabel} 지도를 불러오지 못했습니다. 현재 층을 유지합니다.',
+            );
+          }
+          return;
+        }
       }
       final graph = _floorGraph;
       final arrival =
           _pendingArrivalNode ?? _findArrivalNode(graph, transition);
       if (graph == null || arrival == null) {
+        // 도착 지점을 못 찾아도 **탑승 상태는 반드시 끝낸다.** 안 그러면 배너가
+        // 남고 걸음 누적이 영영 멈춘 채로 사용자가 복구할 방법이 없다.
+        await _endEscalatorRide();
+        if (!mounted) return;
         setState(() {
           _pendingTransferMarker = null;
           _pendingArrivalNode = null;
@@ -1934,6 +2329,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         axes: fitPdrToFloorAxes(graph.nodes),
       );
       if (!mounted) return;
+      // 하차했으므로 걸음 누적을 다시 켠다. applyVerticalTransfer가 경로 원점을
+      // 옮긴 **뒤에** 켜야 탑승 중 걸음이 새 층 원점에 붙지 않는다.
+      await _endEscalatorRide();
+      if (!mounted) return;
 
       setState(() {
         _pendingTransferMarker = null;
@@ -1950,24 +2349,40 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       }
       if (!mounted) return;
 
-      final directionLabel = transition.direction == EscalatorDirection.up
-          ? '올라간'
-          : '내려간';
-      showDebugToast(
-        context,
-        message:
-            '에스컬레이터로 ${transition.toFloorLabel}에 $directionLabel 것으로 보여 '
-            '지도를 옮겼습니다.',
-        bottomOffset:
-            _mapShellBottomChromePx +
-            (_hasActiveRoute ? _etaCardHeightPx : 0) +
-            12,
-        actionLabel: '아니에요',
-        onAction: () => unawaited(_undoFloorTransition()),
-      );
+      // 별도 토스트를 띄우지 않는다. 탑승 배너가 이미 같은 자리에 같은 사실을
+      // 말하고 있어서, 확정 순간에 검은 토스트가 겹쳐 뜨면 화면에 같은 내용이
+      // 두 벌이 된다. 배너를 잠깐 "도착" 상태로 두고 되돌리기만 붙인다.
+      _escalatorArrivalTimer?.cancel();
+      setState(() => _escalatorArrival = transition);
+      _escalatorArrivalTimer = Timer(_escalatorArrivalBannerHold, () {
+        if (mounted) setState(() => _escalatorArrival = null);
+      });
     } finally {
       _applyingFloorTransition = false;
     }
+  }
+
+  /// 탑승 상태를 끝낸다. 걸음 누적을 다시 켜고 배너·카메라 인계를 지운다.
+  ///
+  /// 확정·취소·되돌리기 **모든 출구**가 이걸 지나야 한다. 한 경로라도 빠뜨리면
+  /// 배너가 남고 걸음이 영영 멈춘 상태로 사용자가 복구할 방법이 없어진다.
+  Future<void> _endEscalatorRide() async {
+    if (_escalatorRide == null &&
+        _escalatorStage == null &&
+        !_stepsPausedForRide &&
+        _floorHandoverCamera == null &&
+        _floorSwapVeil == 0) {
+      return;
+    }
+    _stepsPausedForRide = false;
+    await indoorNavigationDriver.resumeStepTracking();
+    if (!mounted) return;
+    setState(() {
+      _escalatorRide = null;
+      _escalatorStage = null;
+      _floorHandoverCamera = null;
+      _floorSwapVeil = 0;
+    });
   }
 
   /// 반 층 후보가 되돌아가거나 타임아웃되면 화면·경로를 탑승 전 상태로 복원한다.
@@ -1975,6 +2390,8 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     EscalatorTransition transition,
   ) async {
     final floor = _preTransferFloor;
+    await _endEscalatorRide();
+    if (!mounted) return;
     if (floor == null) return;
     if (_selectedFloor != floor) {
       await _selectFloor(floor);
@@ -2056,6 +2473,8 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     if (_applyingFloorTransition) return;
     _applyingFloorTransition = true;
     try {
+      await _endEscalatorRide();
+      if (!mounted) return;
       await _selectFloor(floor);
       if (!mounted) return;
       setState(() {
@@ -2151,6 +2570,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           timestampMs: nowMs,
         );
       }
+      // 탑승점 접근 배너는 기압이 아니라 **걸음 갱신**에서 올라온다. 여기서
+      // 비우지 않으면 다음 기압 샘플(iOS는 1초)까지 배너가 늦는다.
+      _handleEscalatorPhaseChanges();
     }
     if (result != null) {
       _pdrDebugRecorder?.recordCorridorCorrection(result);
@@ -2199,6 +2621,11 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       return;
     }
 
+    // 에스컬레이터 위에서는 진행 상태를 갱신하지 않는다. 위치는 도착 지점에
+    // 고정돼 있고 방향은 에스컬레이터가 정하므로, 이 구간의 투영은 "반대
+    // 방향입니다" 같은 엉뚱한 안내만 만든다(실측에서 탑승 직후 떴다).
+    if (_escalatorRide != null) return;
+
     final localPosition = LocalPoint(
       result.previewPosition.eastM,
       result.previewPosition.northM,
@@ -2217,7 +2644,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
             routePointsLocalM: route.pointsLocalM,
             routeEdgeIds: route.edgeIds.toSet(),
             currentEdgeId: result.currentEdgeId,
-            headingDeg: result.previewHeadingDeg,
+            headingDeg: result.deviceHeadingDeg,
           )
         : computeRouteProgress(
             routePointsLocalM: route.pointsLocalM,
@@ -2226,7 +2653,11 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
             // 마커와 남은거리가 서로 다른 시점을 가리킨다.
             position: localPosition,
             currentEdgeId: result.currentEdgeId,
-            headingDeg: result.previewHeadingDeg,
+            // 방향은 간선 방위가 아니라 **사용자가 향한 방향**을 쓴다.
+            // "반대 방향입니다"와 후퇴 허용 판단이 둘 다 "지금 어디를 보고
+            // 있나"를 묻기 때문이다. 간선 방위를 쓰면 빔이 고른 진행 부호가
+            // 그대로 답이 되어, 몸을 돌리지 않았는데도 역주행이 뜬다.
+            headingDeg: result.deviceHeadingDeg,
             previousTraveledM: _lastRouteTraveledM,
           );
     if (progress == null) return;
@@ -2244,7 +2675,14 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       acceptedAtSteps: _lastRouteProgressAcceptedSteps,
       currentSteps: responsiveSteps,
     );
-    final holdPrevious = holdForPendingDeviation || holdForImplausibleJump;
+    // 몸을 돌리지 않았는데 생긴 후퇴는 이번 갱신에서 보류한다.
+    final holdForRegression = shouldHoldRouteRegression(
+      previous: previousDisplayProgress,
+      candidate: progress,
+      deviceHeadingErrorDeg: progress.headingErrorDeg,
+    );
+    final holdPrevious =
+        holdForPendingDeviation || holdForImplausibleJump || holdForRegression;
     final displayProgress = holdPrevious ? previousDisplayProgress! : progress;
     setState(() {
       _routeProgress = displayProgress;
@@ -2271,6 +2709,13 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     CorridorTrackingResult result,
     int? steps,
   ) {
+    final nowMsForZone = DateTime.now().millisecondsSinceEpoch;
+    if (result.isInJunctionZone) {
+      _junctionZoneEnteredAtMs ??= nowMsForZone;
+    } else {
+      _junctionZoneEnteredAtMs = null;
+    }
+
     final strongDeviation = progress.offsetM >= 4 || progress.reacquired;
     final deviated = !progress.onRouteEdge || strongDeviation;
     if (!deviated ||
@@ -2279,6 +2724,13 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       _offRouteEvidenceUpdates = 0;
       _offRouteFirstEvidenceAtMs = null;
       _lastRouteEvaluatedSteps = steps;
+      return;
+    }
+    // 교차점을 통과하는 동안에는 이탈 증거를 **새로 쌓지 않는다**. 기존 증거는
+    // 지우지 않는다 — 구간을 빠져나온 뒤 실제 이탈이면 그 자리에서 이어 간다.
+    final junctionSinceMs = _junctionZoneEnteredAtMs;
+    if (junctionSinceMs != null &&
+        nowMsForZone - junctionSinceMs < _junctionRerouteHoldMs) {
       return;
     }
     if (steps == null || steps == _lastRouteEvaluatedSteps) return;
@@ -2654,7 +3106,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     _showPdrMessage('방향을 잡는 중입니다. 폰을 든 채로 잠시만 기다려주세요.');
     final deadline = DateTime.now().add(_headingSettleTimeout);
     while (DateTime.now().isBefore(deadline)) {
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      if (!await _waitForHeadingPoll()) return false;
       if (!mounted) return false;
       if (indoorNavigationDriver.isHeadingConverged) return true;
     }
@@ -2842,6 +3294,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 
   @override
   Widget build(BuildContext context) {
+    // 로딩·오류로 일찍 빠져나가더라도 층 전환 UI 상태는 항상 보고한다 — 여기서
+    // 건너뛰면 도면을 받는 동안 상위가 낡은 전환 상태를 들고 있게 된다.
+    _reportFloorTransitionUi();
     // 예전에는 여기서 지도 위에 디버그 설정 버튼(왼쪽 아래 벌레 아이콘)을 한 겹
     // 더 얹었다. 일반 사용자가 볼 이유가 없는 개발 도구라 앱 메뉴(햄버거)로
     // 옮겼고, 이 화면에는 운영 화면만 남는다.
@@ -2924,10 +3379,12 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         _corridorTrackingSession.result?.state ==
         CorridorTrackingState.uncertain;
     final gpsEstimate = _freshGpsIndoorEstimate;
+    // 방향 원뿔은 "지금 어디를 보고 있나"만 말한다. 층 전환 중 도착 지점에
+    // 고정된 마커에도 그려야 한다 — 탑승 중 몸을 돌리면 내리는 방향을 미리
+    // 확인할 수 있고, 그게 하차 직후 첫 간선 선택과도 맞물린다.
     final currentUsesPdr =
-        _pendingTransferMarker == null &&
-        pdrCurrent != null &&
-        (!trackerUncertain || gpsEstimate == null);
+        _pendingTransferMarker != null ||
+        (pdrCurrent != null && (!trackerUncertain || gpsEstimate == null));
     final current =
         _pendingTransferMarker ??
         (!trackerUncertain ? pdrCurrent : null) ??
@@ -2971,11 +3428,16 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           // 완료된 "기존 계획선"이 아니라 실제로 걸어온 graph-matched 궤적을
           // 회색으로 그린다. 따라서 재탐색은 파란 미래만 교체한다.
           walkedRouteSegments: _walkedGuidanceSegments,
-          transferRoutePoints:
-              _multiFloorRoute
-                  ?.segmentForFloor(_selectedFloor ?? '')
-                  ?.transferPointsToNext ??
-              const [],
+          transferRoutePoints: switch (_multiFloorRoute?.segmentForFloor(
+            _selectedFloor ?? '',
+          )) {
+            final segment? => transferRoutePointsOnFloor(
+              segment,
+              _floorPlan,
+              _floorGraph,
+            ),
+            null => const [],
+          },
           pdrPathPoints:
               debugEnabled && _debugModeController.showMapMatchedPdrPath
               ? _pdrMatchedPathPoints
@@ -3023,8 +3485,15 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           tileRevision: _building?.tileRevision,
           visibleInsets: EdgeInsets.fromLTRB(0, topOverlay, 0, bottomOverlay),
           overlayHitTest: _isTapOnMapOverlay,
+          // 자동 층 전환에서만 값이 있다. 층 선택기로 훑어볼 때는 null이라
+          // 예전처럼 건물 전체 fit이 걸린다.
+          initialCamera: _floorHandoverCamera,
         ),
 
+        // 에스컬레이터 탑승 중 표시. 이 동안 마커는 도착 지점에 고정되고
+        // 걸음 누적이 멈춰 있으므로, 왜 위치가 안 움직이는지 사용자가 알아야
+        // 한다 — 안 그러면 "앱이 멈췄다"로 읽힌다. 확정 뒤에는 같은 자리에서
+        // 잠깐 "도착"으로 바뀌며 되돌리기를 제공한다(예전 검은 토스트 대체).
         if (debugEnabled)
           Positioned(
             left: 12,
@@ -3065,7 +3534,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
                 key: _floorSelectorKey,
                 floors: building.floors,
                 selectedFloor: _selectedFloor!,
-                onSelectFloor: _selectFloor,
+                onSelectFloor: _selectFloorManually,
               ),
             ),
           ),
@@ -3238,6 +3707,11 @@ class _HintCancelButton extends StatelessWidget {
 /// 이탈 여부는 색으로, 진행·남은거리와 이탈거리는 숫자로 보여준다. 이탈 판정은
 /// 간선 동일성으로만 하므로(경로와 나란한 옆 복도도 이탈로 잡힌다), 이탈거리는
 /// 판정 근거가 아니라 참고값으로 함께 적는다.
+/// 에스컬레이터 탑승 중임을 알리는 배너.
+///
+/// 이 동안 위치 마커는 도착 지점에 고정되고 걸음 누적이 멈춰 있다. 아무 설명이
+/// 없으면 "내 위치가 안 따라온다 = 앱이 멈췄다"로 읽히므로, 지금이 의도된
+/// 상태라는 것과 어디로 가고 있는지를 함께 보여 준다.
 class _RouteProgressBadge extends StatelessWidget {
   const _RouteProgressBadge({required this.progress});
 

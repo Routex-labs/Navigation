@@ -3,6 +3,7 @@ import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 import 'altitude_sample.dart';
 import 'calibration_state.dart';
 import 'pdr_runtime_status.dart';
+import 'raw_motion_activity.dart';
 
 /// UI가 **구독**하는 읽기 전용 관찰 계약.
 ///
@@ -45,6 +46,13 @@ abstract interface class IndoorNavigationView {
 
   /// 기압계 가용 상태. native snapshot이 오기 전에는 `unavailable`이다.
   AltimeterStatus get altimeterStatus;
+
+  /// 위치 적용과 **무관한** 원시 움직임 스트림.
+  ///
+  /// [IndoorNavigationIntents.pauseStepTracking]으로 걸음 적용을 멈춘 동안에도
+  /// 계속 흐른다. 층 전이 판정기가 "하차해서 걷기 시작했다"를 위치 갱신보다
+  /// 먼저 알기 위한 유일한 근거다.
+  Stream<RawMotionActivity> get rawMotion;
 
   /// heading이 자리를 잡았는지.
   ///

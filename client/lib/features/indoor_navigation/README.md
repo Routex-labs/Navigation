@@ -48,6 +48,8 @@ flowchart LR
 - 에스컬레이터 층 이동이 확인되면 `applyVerticalTransfer`가 걸음 세션을 새로 열고 도착
   노드를 새 anchor로 놓는다(회전값은 물려받으므로 방향 재보정 없음).
 - 앱 background에서는 pause하고 센서를 멈추며, foreground 복귀 시 resume한다.
+- 에스컬레이터 탑승 중에는 센서를 그대로 둔 채 걸음 누적만 멈춘다
+  (`pauseStepTracking`/`resumeStepTracking`).
 - 층 변경은 pedometer와 보정 anchor를 새 층 기준으로 초기화한다.
 - 안내 종료에서 마지막 pedometer 값을 확정한 뒤 센서를 멈춘다.
 
@@ -85,7 +87,9 @@ flowchart LR
 ## 층 따라가기 (에스컬레이터)
 
 기압계로 층 이동을 감지해 도면·경로를 자동으로 바꾸고, 새 층의 에스컬레이터 **도착
-노드**로 위치를 옮긴다. 판정은 `application/escalator_transition_detector.dart`가 하고,
+노드**로 위치를 옮긴다. 탑승 중에는 상승·하강 배너를 띄우고 걸음 누적을 멈추며, 도면
+전환은 직전 카메라를 물려받아 페이드로 이어 붙인다. 판정은
+`application/escalator_transition_detector.dart`가 하고,
 근거 분담은 "노드 근접 = 허가, 기압 = 판정, 노드 이름 = 도착 층·지점"이다. 자세한 조건과
 범위 한계(±1층 에스컬레이터만, 엘리베이터·계단 제외)는
 [`application/README.md`](application/README.md)에 있다.

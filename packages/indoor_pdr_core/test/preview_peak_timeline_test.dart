@@ -358,9 +358,11 @@ void main() {
       );
     });
 
-    test('새 초록 배치가 오면 총 누적 차이와 무관하게 미확정 12걸음 여유가 다시 열린다', () {
+    test('확정 배치가 늦어도 유예 창 안이면 12걸음 캡을 재지 않는다', () {
       final track = AccelPreviewTrack();
       var peakMs = 1000;
+      // 확정은 1530ms에 멈춰 있고 7.4초 동안 14걸음을 걷는다. 예전 구조는 여기서
+      // 12걸음 캡에 걸려 두 걸음을 버렸다 — 걷는 중에 마커가 서던 동작이다.
       for (var count = 1; count <= 14; count++) {
         peakMs += 530;
         track.applyRealtimePeaks(
@@ -377,16 +379,46 @@ void main() {
           fallbackHeadingDeg: 0,
         );
       }
-      final cappedSteps = track.steps;
-      expect(
-        track.rejectReasons[AccelPreviewTrack.stepLeadCap],
-        greaterThan(0),
-      );
+      expect(peakMs - 1530, lessThan(AccelPreviewTrack.confirmedLagGraceMs));
+      // 첫 호출은 native 누적 peak baseline을 잡는 데 쓰이므로 13걸음이다.
+      expect(track.steps, 13);
+      expect(track.deferredPeaks, 0);
+      expect(track.rejectReasons[AccelPreviewTrack.stepLeadCap], 0);
+    });
 
-      // 다음 confirmed 배치가 기존 accepted peak 대부분의 시간창을 덮었다.
+    test('확정이 유예 창을 넘겨 멈추면 캡이 걸리되 걸음은 버리지 않고 보류한다', () {
+      final track = AccelPreviewTrack();
+      var peakMs = 1000;
+      // 확정이 1530ms에서 멈춘 채 20걸음(10.6초)을 걷는다. 유예를 넘긴 뒤부터
+      // 캡이 걸린다.
+      for (var count = 1; count <= 20; count++) {
+        peakMs += 530;
+        track.applyRealtimePeaks(
+          AccelPeakEvent(count: count, latestPeakMs: peakMs),
+          tracking: true,
+          hasHeading: true,
+          effectiveStrideMeters: 0.75,
+          fallbackStrideMeters: 0.75,
+          confirmedSteps: 1,
+          confirmedDistanceM: 0.75,
+          confirmedThroughMs: 1530,
+          pedometerCadenceHz: 1.9,
+          headingAt: (_) => null,
+          fallbackHeadingDeg: 0,
+        );
+      }
+      expect(peakMs - 1530, greaterThan(AccelPreviewTrack.confirmedLagGraceMs));
+      final cappedSteps = track.steps;
+      expect(cappedSteps, lessThan(19));
+      // 버린 게 아니라 들고 있어야 한다.
+      expect(track.deferredPeaks, 19 - cappedSteps);
+      expect(track.rejectReasons[AccelPreviewTrack.deferOverflow], 0);
+
+      // 다음 confirmed 배치가 기존 accepted peak 대부분의 시간창을 덮으면
+      // 보류분이 한꺼번에 풀린다.
       peakMs += 530;
       final changed = track.applyRealtimePeaks(
-        AccelPeakEvent(count: 15, latestPeakMs: peakMs),
+        AccelPeakEvent(count: 21, latestPeakMs: peakMs),
         tracking: true,
         hasHeading: true,
         effectiveStrideMeters: 0.75,
@@ -400,7 +432,8 @@ void main() {
       );
 
       expect(changed, isTrue);
-      expect(track.steps, cappedSteps + 1);
+      expect(track.deferredPeaks, 0);
+      expect(track.steps, 20);
     });
   });
 }

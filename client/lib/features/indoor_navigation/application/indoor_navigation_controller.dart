@@ -39,6 +39,12 @@ class IndoorNavigationDriver implements IndoorNavigationController {
   final _calibration = StreamController<CalibrationStatus>.broadcast();
   final _runtimeStatuses = StreamController<PdrRuntimeStatus>.broadcast();
   final _altitudes = StreamController<AltitudeSample>.broadcast();
+  final _rawMotion = StreamController<RawMotionActivity>.broadcast();
+
+  // 원시 누적 카운터. native는 pause 여부와 무관하게 계속 보내므로 여기서만
+  // 차분을 낸다(PdrSession은 pause 중 이 값을 경로에 반영하지 않는다).
+  int? _lastRawAccelPeakCount;
+  int? _lastRawPedometerSteps;
 
   AltitudeSample? _currentAltitude;
   AltimeterStatus _altimeterStatus = const AltimeterStatus.unavailable();
@@ -88,6 +94,9 @@ class IndoorNavigationDriver implements IndoorNavigationController {
 
   @override
   AltimeterStatus get altimeterStatus => _altimeterStatus;
+
+  @override
+  Stream<RawMotionActivity> get rawMotion => _rawMotion.stream;
 
   @override
   Map<String, Object?>? get lastPedometerFinalizeInfo =>
@@ -258,6 +267,20 @@ class IndoorNavigationDriver implements IndoorNavigationController {
     );
   }
 
+  @override
+  Future<void> pauseStepTracking() async {
+    // background pause와 달리 native source는 건드리지 않는다. 하차 판정의
+    // 근거인 기압과 방향이 계속 들어와야 한다.
+    if (!_guiding || _backgrounded) return;
+    _session.pause(atMs: _session.lastMotionAtMs ?? _nowMs());
+  }
+
+  @override
+  Future<void> resumeStepTracking() async {
+    if (!_guiding || _backgrounded) return;
+    _session.resume(atMs: _session.lastMotionAtMs ?? _nowMs());
+  }
+
   // ── 앱 lifecycle (앱 셸이 호출) ──
 
   /// 앱이 background로 가면 tracking pause.
@@ -321,6 +344,7 @@ class IndoorNavigationDriver implements IndoorNavigationController {
     await _calibration.close();
     await _runtimeStatuses.close();
     await _altitudes.close();
+    await _rawMotion.close();
   }
 
   // ── 내부 ──
@@ -354,6 +378,44 @@ class IndoorNavigationDriver implements IndoorNavigationController {
     if (pedometer != null) {
       _session.onPedometerBatch(pedometer);
     }
+    _emitRawMotion(accelPeak, pedometer);
+  }
+
+  /// pause 중에도 흐르는 원시 움직임. 위치·경로에는 반영하지 않는다.
+  void _emitRawMotion(AccelPeakEvent? accelPeak, PedometerBatchEvent? pedometer) {
+    if (accelPeak == null && pedometer == null) return;
+    final peakDelta = _delta(accelPeak?.count, () => _lastRawAccelPeakCount, (
+      value,
+    ) {
+      _lastRawAccelPeakCount = value;
+    });
+    final stepDelta = _delta(pedometer?.steps, () => _lastRawPedometerSteps, (
+      value,
+    ) {
+      _lastRawPedometerSteps = value;
+    });
+    if (peakDelta == null && stepDelta == null) return;
+    if (_rawMotion.isClosed) return;
+    _rawMotion.add(
+      RawMotionActivity(
+        timestampMs: _session.lastMotionAtMs ?? _nowMs(),
+        accelPeakDelta: peakDelta ?? 0,
+        nativeStepDelta: stepDelta,
+      ),
+    );
+  }
+
+  /// 누적 카운터의 증가분. 첫 관측과 세션 재시작(감소)은 0으로 본다.
+  static int? _delta(
+    int? current,
+    int? Function() read,
+    void Function(int) write,
+  ) {
+    if (current == null) return null;
+    final previous = read();
+    write(current);
+    if (previous == null || current < previous) return 0;
+    return current - previous;
   }
 
   void _onSourceError(Object error, [StackTrace? stackTrace]) {

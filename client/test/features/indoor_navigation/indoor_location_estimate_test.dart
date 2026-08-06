@@ -90,6 +90,22 @@ void main() {
     expect(estimate.localM.northM, closeTo(0, 0.2));
   });
 
+  test('입구 자동 기준점은 GPS 없이도 가장 가까운 통로에 붙는다', () {
+    final estimate = estimateIndoorLocationFromEntrance(
+      buildingId: 'building',
+      floorId: '1F',
+      graph: _graph,
+      latitude: 37.5,
+      longitude: 127.0000565,
+      observedAt: now,
+    );
+
+    expect(estimate, isNotNull);
+    expect(estimate!.source, 'entrance');
+    expect(estimate.localM.eastM, closeTo(5, 0.2));
+    expect(estimate.localM.northM, closeTo(0, 0.2));
+  });
+
   test('정확도가 15m를 넘는 GPS는 자동 위치로 쓰지 않는다', () {
     final estimate = estimateIndoorLocationFromGps(
       buildingId: 'building',

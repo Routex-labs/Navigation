@@ -87,6 +87,114 @@ void main() {
         isFalse,
       );
     });
+
+    test('앞을 보고 있는데 뒤로 밀린 진행점은 보류한다', () {
+      // 빔 1등 재배치나 보폭 차이로 생기는 후퇴다. 사용자에게는 마커가 뒤로
+      // 튄 것으로 보인다.
+      const pushedBack = RouteProgress(
+        traveledM: 6,
+        remainingM: 34,
+        offsetM: 0.4,
+        onRouteEdge: true,
+        reacquired: false,
+        segmentIndex: 0,
+        headingErrorDeg: 12,
+      );
+
+      expect(
+        shouldHoldRouteRegression(
+          previous: previous,
+          candidate: pushedBack,
+          deviceHeadingErrorDeg: pushedBack.headingErrorDeg,
+        ),
+        isTrue,
+      );
+    });
+
+    test('앞으로 걸은 걸음이 뒤로 갈 여유를 만들지 않는다', () {
+      // pedometer는 방향을 모른다. 걸음 수를 근거로 쓰면 앞으로 걸을수록
+      // 뒤로 튀는 것이 더 허용된다 — 실제로 그렇게 동작했다.
+      const pushedBack = RouteProgress(
+        traveledM: 4,
+        remainingM: 36,
+        offsetM: 0.4,
+        onRouteEdge: true,
+        reacquired: false,
+        segmentIndex: 0,
+        headingErrorDeg: 5,
+      );
+
+      expect(
+        shouldHoldRouteRegression(
+          previous: previous,
+          candidate: pushedBack,
+          deviceHeadingErrorDeg: pushedBack.headingErrorDeg,
+        ),
+        isTrue,
+      );
+    });
+
+    test('작은 후퇴는 그대로 통과시킨다', () {
+      // 투영 오차 수준의 흔들림까지 막으면 마커가 계단식으로 움직인다.
+      const jitter = RouteProgress(
+        traveledM: 8.5,
+        remainingM: 31.5,
+        offsetM: 0.4,
+        onRouteEdge: true,
+        reacquired: false,
+        segmentIndex: 0,
+      );
+
+      expect(
+        shouldHoldRouteRegression(
+          previous: previous,
+          candidate: jitter,
+          deviceHeadingErrorDeg: 5,
+        ),
+        isFalse,
+      );
+    });
+
+    test('몸을 돌린 상태의 후퇴는 그대로 받아들인다', () {
+      const walkedBack = RouteProgress(
+        traveledM: 3,
+        remainingM: 37,
+        offsetM: 0.4,
+        onRouteEdge: true,
+        reacquired: false,
+        segmentIndex: 0,
+        headingErrorDeg: 168,
+      );
+
+      expect(
+        shouldHoldRouteRegression(
+          previous: previous,
+          candidate: walkedBack,
+          deviceHeadingErrorDeg: walkedBack.headingErrorDeg,
+        ),
+        isFalse,
+      );
+    });
+
+    test('방향을 모르면 후퇴를 정당화할 수 없으므로 보류한다', () {
+      const pushedBack = RouteProgress(
+        traveledM: 3,
+        remainingM: 37,
+        offsetM: 0.4,
+        onRouteEdge: true,
+        reacquired: false,
+        segmentIndex: 0,
+      );
+
+      expect(
+        shouldHoldRouteRegression(
+          previous: previous,
+          candidate: pushedBack,
+          deviceHeadingErrorDeg: null,
+        ),
+        isTrue,
+      );
+    });
   });
 
   group('직선 경로 진행', () {
