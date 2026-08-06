@@ -78,11 +78,6 @@ const List<Object> kCategoryHighlightNoneFilter = [
   '__카테고리_선택_없음__',
 ];
 
-/// 강조된 매장 폴리곤의 채움색. 기본 매장 fill(`#F3F1EF`)과 확실히 구분되면서
-/// 그 위에 얹히는 매장명 라벨(`#444846`)의 가독성을 해치지 않는 밝기로 잡는다.
-///
-/// MapLibre가 받는 `#RRGGBB` 문자열로 둔다. `Color`로 두면 화면마다 다른 hex
-/// 변환 확장을 끌어와야 하고, 알파를 실수로 섞으면 네이티브에서 조용히 무시된다.
-/// 값은 `AppColors.blue100`·`blue500`과 같다.
-const String kCategoryHighlightFillColor = '#D6E4FC';
-const String kCategoryHighlightOutlineColor = '#4A87F1';
+/// 강조된 매장 폴리곤의 **색**은 여기 있지 않다. 선택한 대분류마다 달라지므로
+/// [category_map_fill.dart]의 표현식이 정한다 — 이 파일은 "어떤 매장이
+/// 강조되는가"(필터)만 담당한다.

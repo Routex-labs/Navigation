@@ -13,6 +13,7 @@ import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../core/api_config.dart';
+import '../../core/map_picked_point.dart';
 import '../../core/service_locator.dart';
 import '../../core/tile_url.dart';
 import '../../domain/geo_transform.dart';
@@ -40,6 +41,7 @@ import '../../widgets/category_map_filter.dart';
 import '../../widgets/category_map_icon.dart';
 import '../../widgets/floor_facility_style.dart';
 import '../../widgets/floor_selector.dart';
+import '../../widgets/map_icon_cache.dart';
 import '../../widgets/map_overlay_tap_guard.dart';
 import '../../widgets/status_badge.dart';
 import 'floor_outline.dart';
@@ -251,11 +253,13 @@ const _buildingPressedHoldMs = 220;
 // 잘못 탭한 것으로 보고 다시 유도한다.
 const _maxPdrAnchorSnapDistanceM = 40.0;
 
-// 층 선택기와 하단 바 사이 baseline 계산에 쓰이는 MapBottomBar 내부 여백.
-// map_bottom_bar.dart의 outer padding(14) + ModeSegment 실제 높이(≈45) + spacer(10).
-// 실내 화면과 동일한 상수로 계산해 두 화면 사이 pill 위치가 어긋나지 않게 한다.
+// 층 선택기와 하단 바 사이 baseline 계산에 쓰이는 MapBottomBar 내부 여백
+// (map_bottom_bar.dart의 outer padding).
 const _bottomBarInnerBottomPaddingPx = 14.0;
-const _floorSelectorBottomOffset = _bottomBarInnerBottomPaddingPx + 45.0 + 10.0;
+// pill 하단을 하단 바의 맨 아래 줄(홈/실내 세그먼트)과 같은 baseline에 앉힌다.
+// 세그먼트는 우측, pill은 좌측이라 같은 줄에 내려도 겹치지 않는다. 실내 화면과
+// 동일한 계산이어야 두 화면 사이 pill 위치가 어긋나지 않는다.
+const _floorSelectorBottomOffset = _bottomBarInnerBottomPaddingPx;
 // 경로 ETA 카드가 화면에 뜨면 하단 바(=층 선택기 기준선)가 이만큼 위로 올라간다.
 // map_shell_screen.dart의 _etaBarLiftHeight와 동일해야 한다.
 const _bottomBarLiftPx = 92.0;
@@ -454,6 +458,8 @@ class OutdoorMapBody extends StatefulWidget {
     this.onPlacingLocationChanged,
     this.onIndoorEnteredChanged,
     this.onStoreTap,
+    this.onMapPointPicked,
+    this.pickingOnMap = false,
     this.onLocationAnchored,
     this.categorySelection,
     this.onFloorChanged,
@@ -482,6 +488,20 @@ class OutdoorMapBody extends StatefulWidget {
   /// 실내 진입 오버레이에서 매장 폴리곤을 탭했을 때 호출된다. 상위
   /// (MapShellScreen)가 실내 화면과 동일한 매장 정보 시트를 띄운다.
   final ValueChanged<PoiSearchResult>? onStoreTap;
+
+  /// 길찾기의 "지도에서 선택"이 켜져 있는지. 계약과 근거는 실내 화면의 동명
+  /// 필드([IndoorMapBody.pickingOnMap])와 같다 — 두 화면이 같은 조작을 제공해야
+  /// 하므로 규칙도 같은 것을 쓴다.
+  final bool pickingOnMap;
+
+  /// [pickingOnMap]인 동안 실내 오버레이 위에서 **매장이 아닌 곳**을 눌렀을 때,
+  /// 통행 그래프에 스냅해 만든 후보를 상위에 넘긴다.
+  ///
+  /// 이 화면에서 특히 중요한 이유가 하나 더 있다. 실내 오버레이를 보는 중에
+  /// 빈 곳을 누르면 원래 [_exitIndoorByOutsideTap]/[_triggerIndoorEntry]로
+  /// 흘러가 오버레이가 닫히거나 다시 열린다. 고르는 중에 그 경로를 타면 사용자는
+  /// 복도를 눌렀는데 실내 화면이 통째로 닫히는 것을 본다.
+  final ValueChanged<PoiSearchResult>? onMapPointPicked;
 
   /// 사용자의 현재 위치가 새로 잡혔을 때 호출된다 — "위치 지정"으로 지도를
   /// 탭했을 때와 입구 자동 배치가 여기에 해당한다.
@@ -670,13 +690,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 도면 위에서 측정된 것인지 구분하는 데 쓴다.
   String _mapCalibrationVersion = 'unversioned';
 
-  // 지도 위 Flutter 오버레이(PDR 제어·디버그 설정 버튼) 영역. MapLibre는
-  // PlatformView라 이 위젯들 위의 탭도 native 지도까지 흘러들어가 onMapClick이
-  // 함께 발화한다 — 버튼을 눌렀을 뿐인데 뒤의 매장이 열리거나 앵커가 버튼
-  // 아래에 찍히는 것을 막기 위해 좌표로 걸러낸다(실내 화면의 overlayHitTest와
-  // 같은 목적).
+  // 지도 위 Flutter 오버레이(PDR 제어 등) 영역. MapLibre는 PlatformView라 이
+  // 위젯들 위의 탭도 native 지도까지 흘러들어가 onMapClick이 함께 발화한다 —
+  // 버튼을 눌렀을 뿐인데 뒤의 매장이 열리거나 앵커가 버튼 아래에 찍히는 것을
+  // 막기 위해 좌표로 걸러낸다(실내 화면의 overlayHitTest와 같은 목적).
   final GlobalKey _pdrControlKey = GlobalKey();
-  final GlobalKey _debugModeSettingsKey = GlobalKey();
   final GlobalKey _pdrShareButtonKey = GlobalKey();
   final GlobalKey _etaCardKey = GlobalKey();
   final _mapOverlayTapGuard = MapOverlayTapGuard();
@@ -1020,8 +1038,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _syncCorridorTracking(_pdrTrailState.snapshot);
       _syncPdrCurrentLayer();
       unawaited(_syncDebugPdrLayers());
-      // 지하층 외곽선은 방금 받은 도면에서 나온다. 도면이 도착한 이 시점에
-      // 한 번 더 그려야 층을 바꾼 직후의 빈 외곽선이 채워진다.
+      // 층 외곽선은 방금 받은 도면에서 나온다(어느 층이든 — [floorOutlineRing]).
+      // 도면이 도착한 이 시점에 한 번 더 그려야 층을 바꾼 직후의 빈 외곽선이
+      // 채워진다.
       unawaited(_syncFloorOutlineLayer());
       _syncDimScrimLayer();
     } catch (_) {
@@ -2453,17 +2472,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncFloorOutlineLayer();
   }
 
-  /// 지금 "층 경계"로 삼아야 하는 링. 지상층이면 건물 외곽선, 지하층이면 그 층
-  /// 도면의 외곽선이고, 실내에 들어가 있지 않으면 null이다. 규칙과 근거는
-  /// [floorOutlineRing] 참고.
+  /// 지금 "층 경계"로 삼아야 하는 링. 어느 층이든 그 층 도면의 외곽선이고,
+  /// 실내에 들어가 있지 않거나 도면이 아직 없으면 null이다. 규칙과 근거(특히
+  /// 지상층에서도 건물 외곽선을 쓰지 않는 이유)는 [floorOutlineRing] 참고.
   ///
   /// 외곽선·dim scrim hole·건물 안 탭 판정이 **모두 이 하나를 본다.** 셋이 서로
   /// 다른 링을 쓰면 사용자가 보는 선 안쪽이 어두워지거나(scrim), 선 안쪽을
   /// 탭했는데 야외로 튕겨 나가는(탭 판정) 모순이 생긴다.
   List<ll.LatLng>? _activeFloorOutlineRing() => floorOutlineRing(
     indoorEntered: _indoorEntered,
-    floor: _activeFloor,
-    buildingFootprint: _buildingFootprint,
     floorFootprint: _floorPlan?.footprint,
   );
 
@@ -2515,11 +2532,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Future<void> _syncDimScrimLayer() async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
-    // hole은 외곽선과 **같은 링**을 쓴다. 지하층에서 건물 외곽선으로 뚫으면
-    // 건물 밖으로 뻗어 나간 지하 도면이 스크림에 덮여, 사용자가 보는 외곽선
-    // 안쪽이 어두워지는 모순이 생긴다. 링이 아직 없으면(지하 도면 로딩 중)
-    // 건물 외곽선으로 폴백해 스크림 자체는 유지한다 — 스포트라이트가 한 프레임
-    // 통째로 꺼지는 것보다 낫다.
+    // hole은 외곽선과 **같은 링**을 쓴다. 건물 외곽선으로 뚫으면 그 층 도면 중
+    // 건물 외곽선 밖으로 나간 부분이 스크림에 덮여, 사용자가 보는 외곽선 안쪽이
+    // 어두워지는 모순이 생긴다(지하가 특히 심하다). 링이 아직 없으면(층 도면
+    // 로딩 중) 건물 외곽선으로 폴백해 스크림 자체는 유지한다 — 스포트라이트가
+    // 한 프레임 통째로 꺼지는 것보다 낫다. 여기만 폴백을 허용하는 이유는
+    // 스크림이 "경계선"이 아니라 밝기 대비이기 때문이다 — 선은 폴백하지 않는다
+    // ([floorOutlineRing]).
     final footprint = _activeFloorOutlineRing() ?? _buildingFootprint;
     if (footprint == null || footprint.length < 3) {
       await controller.setGeoJsonSource(_dimScrimSourceId, _emptyCollection());
@@ -2643,10 +2662,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// ([isIndoorBuildingNearCamera])과 같은 계산을 써야 "탭은 건물 안인데 근접은
   /// 아니다" 같은 모순이 생기지 않는다.
   ///
-  /// 실내 진입 중인 지하층에서는 그 층 외곽선 안쪽도 "건물 안"으로 본다. 화면에
-  /// 그려진 외곽선 안을 탭했는데 야외로 튕겨 나가면(지하는 건물 외곽선 밖까지
-  /// 뻗어 있다) 사용자 입장에서는 도면 위를 눌렀을 뿐이다. 두 링의 **합집합**을
-  /// 보므로 지상층·야외에서의 판정은 지금까지와 같다.
+  /// 실내 진입 중이면 그 층 외곽선 안쪽도 "건물 안"으로 본다. 화면에 그려진
+  /// 외곽선 안을 탭했는데 야외로 튕겨 나가면(지하처럼 건물 외곽선 밖까지 뻗은
+  /// 층이 있다) 사용자 입장에서는 도면 위를 눌렀을 뿐이다. 두 링의 **합집합**을
+  /// 보므로 야외에서의 판정은 지금까지와 같다.
   bool _isInsideBuilding(ll.LatLng point) {
     final footprint = _buildingFootprint;
     if (footprint != null && isPointInPolygon(point, footprint)) return true;
@@ -2695,6 +2714,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 아닌 곳(복도·footprint)을 탭하면 features가 비어 있어 아래 건물 진입
     // 처리로 자연스럽게 흘러간다.
     if (_indoorEntered && await _tryHandleStoreTap(pointPx)) return;
+
+    // 매장을 맞히지 못했고 길찾기에서 지도로 고르는 중이라면, 이 탭은 복도(또는
+    // 빈 공간)를 고른 것이다. **아래 진입/이탈 처리보다 먼저** 소비해야 한다 —
+    // 그러지 않으면 건물 안을 눌렀을 땐 진입 트리거로, 건물 밖을 눌렀을 땐
+    // 오버레이 닫기로 먹혀서 사용자는 복도를 눌렀는데 화면만 바뀌는 것을 본다.
+    if (_indoorEntered && widget.pickingOnMap && _handleMapPickTap(point)) {
+      return;
+    }
 
     // 폴리곤 히트 검사만 하고, 나머지 탭은 흡수하지 않아 지도 pan/zoom 제스처를
     // 방해하지 않는다(단일 탭이 여기 오면 그건 pan이 아닌 명시적 탭).
@@ -3102,23 +3129,27 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   ) async {
     if (_facilityIconImagesRegistered) return;
     for (final icon in {...kPoiIconByType.values, kDefaultPoiIcon}) {
+      final imageName = poiIconImageName(icon);
       await controller.addImage(
-        poiIconImageName(icon),
-        await renderPoiIconPng(icon),
+        imageName,
+        // 실내 화면과 같은 비트맵 캐시를 공유한다([map_icon_cache.dart]).
+        await cachedIconPng(imageName, () => renderPoiIconPng(icon)),
       );
     }
     for (final entry in kStoreFacilityStyleByName.entries) {
+      final imageName = facilityIconImageName(entry.key);
       await controller.addImage(
-        facilityIconImageName(entry.key),
-        await renderFacilityIconPng(entry.value),
+        imageName,
+        await cachedIconPng(imageName, () => renderFacilityIconPng(entry.value)),
       );
     }
     // 매장명 라벨에 붙는 대분류 아이콘. 실내 화면과 같은 이름·같은 비트맵이라
     // 두 화면 사이를 오가도 같은 매장이 같은 아이콘을 단다.
     for (final category in storeCategoryIconKeys) {
+      final imageName = storeCategoryIconImageName(category);
       await controller.addImage(
-        storeCategoryIconImageName(category),
-        await renderStoreCategoryIconPng(category),
+        imageName,
+        await cachedIconPng(imageName, () => renderStoreCategoryIconPng(category)),
       );
     }
     _facilityIconImagesRegistered = true;
@@ -3780,6 +3811,52 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncHighlightLayer();
   }
 
+  /// 목록에서 고른 매장을 실내 진입 오버레이 위에서 보여 준다.
+  /// [IndoorMapBodyState.focusStore]와 같은 계약이라 상위가 두 화면을 똑같이
+  /// 다룰 수 있다 — 다만 **층은 옮기지 않는다**. 이 화면의 층 전환은 실내 MVT
+  /// 소스를 통째로 갈아 끼우는 작업이라, 목록을 훑는 중에 자동으로 일어나면
+  /// 사용자가 보고 있던 층이 소리 없이 바뀐다. 호출부가 지금 층 매장만 넘긴다.
+  Future<void> focusStore(
+    PoiSearchResult store, {
+    double bottomSheetFraction = 0,
+    double topInsetPx = 0,
+  }) async {
+    if (!_indoorEntered) return;
+    if (store.floor.isNotEmpty && store.floor != _activeFloor) return;
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+
+    setState(() => _highlightedStoreId = store.placeId);
+    await _syncHighlightLayer();
+    if (!mounted) return;
+
+    // 뷰포트는 카메라 이동 전에 읽는다(실내 화면과 같은 이유 — await 뒤에
+    // MediaQuery를 보면 그 사이 위젯이 트리에서 빠졌을 수 있다).
+    final viewport = MediaQuery.sizeOf(context);
+    final camera = controller.cameraPosition;
+    final currentZoom = camera?.zoom ?? 0;
+    await controller.moveCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: _toGl(store.point),
+          // 이미 더 가까이 들어가 있으면 그 배율을 유지한다(실내와 동일).
+          zoom: currentZoom > _storeFocusZoom ? currentZoom : _storeFocusZoom,
+          bearing: camera?.bearing ?? 0,
+          tilt: camera?.tilt ?? 0,
+        ),
+      ),
+    );
+    // 위(검색창·카테고리 줄)와 아래(시트)가 가리고 남는 띠의 한가운데로. 부호와
+    // 단위 근거는 `floor_plan_view.dart`의 같은 계산 주석에 있다.
+    final lift = (viewport.height * bottomSheetFraction - topInsetPx) / 2;
+    if (lift <= 0) return;
+    await controller.moveCamera(CameraUpdate.scrollBy(0, -lift));
+  }
+
+  /// 목록에서 고른 매장을 볼 때의 최소 확대. 실내 화면과 같은 값이라야 두
+  /// 화면을 오가도 같은 크기로 보인다.
+  static const _storeFocusZoom = 19.0;
+
   /// PDR 세션이 [floor]를 가리키게 맞춘다. 이어서 앵커를 찍어도 되면 true.
   ///
   /// **다른 층에서 이미 돌고 있는 세션을 그냥 재사용하면 안 된다.** 앵커에
@@ -3956,8 +4033,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     return null;
   }
 
-  /// [localPoint]가 지도 위 Flutter 오버레이(층 선택기·PDR 제어·디버그 설정과
-  /// 상위가 얹은 검색창·카테고리 열·하단 바) 영역이면 true. 인자는 MapLibre가
+  /// [localPoint]가 지도 위 Flutter 오버레이(층 선택기·PDR 제어와 상위가 얹은
+  /// 검색창·카테고리 열·하단 바) 영역이면 true. 인자는 MapLibre가
   /// 준 지도 위젯 로컬 좌표라 전역 좌표로 바꿔 비교한다.
   bool _isTapOnMapOverlay(Offset localPoint) {
     final mapBox = context.findRenderObject() as RenderBox?;
@@ -3968,7 +4045,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     for (final key in [
       _floorSelectorKey,
       _pdrControlKey,
-      _debugModeSettingsKey,
       _placingHintKey,
       _buildingLoadFailedKey,
       _etaCardKey,
@@ -4014,6 +4090,73 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       return;
     }
     await _confirmPdrAnchor(snapped.point);
+  }
+
+  /// 길찾기 "지도에서 선택" 중에 매장이 아닌 곳을 눌렀을 때. 후보를 만들어
+  /// 넘겼으면 true(=이 탭은 여기서 끝난다).
+  ///
+  /// 스냅 규칙은 [_onMapPressedForPdr]와 **같은 것**을 쓰고, 노드까지 확정해
+  /// 넘기는 이유도 실내 화면의 동명 처리와 같다(다익스트라가 노드에서 시작·종료
+  /// 하므로 노드 id 없는 후보는 경로를 만들지 못한다).
+  ///
+  /// 통로에서 너무 먼 탭은 **false를 돌려 흘려보낸다.** 실내와 다른 점이 여기다 —
+  /// 야외 지도에서 그 탭은 대개 "건물 밖을 눌러 실내에서 나가겠다"는 뜻이므로,
+  /// 여기서 삼키면 고르는 중에는 실내에서 빠져나올 방법이 사라진다.
+  bool _handleMapPickTap(ll.LatLng point) {
+    final floor = _activeFloor;
+    final graph = _floorGraph;
+    if (floor == null || graph == null || graph.nodes.isEmpty) return false;
+    final transform = fitFloorGeoTransform(graph.nodes);
+    final local = transform.invert(point.latitude, point.longitude);
+    if (local == null) return false;
+    final snapped = FloorMapMatcher(
+      graph,
+    ).snapToWalkableNetwork(PdrLocalPoint(local.$1, local.$2));
+    if (snapped == null) return false;
+    if (snapped.distanceToGraphM > _maxPdrAnchorSnapDistanceM) return false;
+
+    final nodeId = _nearestGraphNodeId(
+      graph.nodes,
+      snapped.point.eastM,
+      snapped.point.northM,
+    );
+    final node = graph.nodes.where((n) => n.id == nodeId).firstOrNull;
+    if (node == null) return false;
+    // 노드에 실측 좌표가 있으면 그대로 쓴다. 있는 값을 두고 변환을 태우면
+    // 피팅 오차만큼 어긋난 자리에 핀이 찍힌다(실내 화면과 같은 규칙).
+    final latLng = node.lat != null && node.lng != null
+        ? ll.LatLng(node.lat!, node.lng!)
+        : () {
+            final (lat, lng) = transform.apply(node.xM, node.yM);
+            return ll.LatLng(lat, lng);
+          }();
+    widget.onMapPointPicked?.call(
+      PoiSearchResult(
+        name: kMapPickedPointLabel,
+        floor: floor,
+        point: latLng,
+        nodeId: node.id,
+      ),
+    );
+    return true;
+  }
+
+  /// [xM], [yM]에 가장 가까운 그래프 노드 id. 실내 화면의 동명 헬퍼와 같은
+  /// 계산이다.
+  String? _nearestGraphNodeId(List<GraphNode> nodes, double xM, double yM) {
+    GraphNode? nearest;
+    double? nearestDistanceSquared;
+    for (final node in nodes) {
+      final dx = node.xM - xM;
+      final dy = node.yM - yM;
+      final distanceSquared = dx * dx + dy * dy;
+      if (nearestDistanceSquared == null ||
+          distanceSquared < nearestDistanceSquared) {
+        nearestDistanceSquared = distanceSquared;
+        nearest = node;
+      }
+    }
+    return nearest?.id;
   }
 
   /// [notifyLocationChanged]는 "사용자의 현재 위치가 새로 잡혔다"를 상위에
@@ -4284,29 +4427,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
             ),
           ),
 
-        // 디버그 설정 진입점도 실내 탭과 같은 왼쪽 하단에 둔다. 야외에서
-        // 실내로 진입한 상태에서만 노출해 일반 야외 지도 화면은 그대로 둔다.
-        if (_indoorEntered)
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-            left: 12,
-            bottom: indoorRouteVisible ? _bottomBarLiftPx : 0,
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.only(
-                  bottom: _bottomBarInnerBottomPaddingPx,
-                ),
-                child: DebugModeSettingsButton(
-                  key: _debugModeSettingsKey,
-                  controller: _debugModeController,
-                  onPressed: () =>
-                      showDebugModeSettingsSheet(context, _debugModeController),
-                ),
-              ),
-            ),
-          ),
+        // 디버그 설정 진입점(왼쪽 하단 벌레 아이콘)은 앱 메뉴(햄버거)로 옮겼다.
+        // 실내 진입 오버레이가 켜졌을 때만 뜨는 버튼이라, 그 상태에 있는지에 따라
+        // 개발 도구가 나타났다 사라지는 화면이기도 했다.
 
         if (_indoorEntered && _placingPdrAnchor)
           Positioned(

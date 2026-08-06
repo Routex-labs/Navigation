@@ -132,11 +132,15 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump();
 
-    // 야외(홈) 모드로 바로 시작했는지는 하단 공용 바의 홈/실내 세그먼트로 확인한다 —
-    // 실내 모드였다면 상단 바에 햄버거 버튼이 추가로 보였을 것이다.
+    // 야외(홈) 모드로 바로 시작했는지는 하단 공용 바의 홈/실내 세그먼트와, 실내
+    // 모드였다면 떴을 층 선택기가 없다는 것으로 확인한다.
+    //
+    // 상단 햄버거는 더 이상 모드 신호가 아니다 — 예전엔 실내 모드에서만 뜨는
+    // "건물 선택" 버튼이었지만, 지금은 모드와 무관하게 항상 보이는 앱 메뉴다.
     expect(find.text('홈'), findsOneWidget);
     expect(find.text('실내'), findsOneWidget);
-    expect(find.byIcon(Icons.menu), findsNothing);
+    expect(find.byType(FloorSelector), findsNothing);
+    expect(find.byKey(const Key('map-top-bar-menu')), findsOneWidget);
   });
 
   testWidgets('api health check shows loading then a status message', (
@@ -228,9 +232,9 @@ void main() {
 
       await tester.pumpAndSettle();
       // 실내 진입 오버레이가 켜지면 야외 지도 위에 세로 층 선택기(FloorSelector)
-      // 가 나타난다. 모드는 여전히 야외라 상단 햄버거는 뜨지 않는다.
+      // 가 나타난다. 상단 햄버거(앱 메뉴)는 모드와 무관하게 늘 그 자리에 있다.
       expect(find.byType(FloorSelector), findsOneWidget);
-      expect(find.byIcon(Icons.menu), findsNothing);
+      expect(find.byKey(const Key('map-top-bar-menu')), findsOneWidget);
     },
   );
 
@@ -256,9 +260,10 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      // 오버레이가 켜지지 않았으므로 층 선택기와 햄버거 모두 없어야 한다.
+      // 오버레이가 켜지지 않았으므로 층 선택기는 없어야 한다. 햄버거(앱 메뉴)는
+      // 오버레이 상태와 무관하게 남는다.
       expect(find.byType(FloorSelector), findsNothing);
-      expect(find.byIcon(Icons.menu), findsNothing);
+      expect(find.byKey(const Key('map-top-bar-menu')), findsOneWidget);
     },
   );
 
@@ -339,9 +344,10 @@ void main() {
     );
     expect(floorPlanView.currentLocation, isNull);
 
-    // 기본 지도에는 설정 진입점만 남고 PDR 제어는 디버그 모드를 켠 뒤에만
-    // 나타난다. 일반 사용자의 내비게이션 UI와 센서 테스트 UI를 분리한다.
-    expect(find.byIcon(Icons.bug_report_outlined), findsOneWidget);
+    // 지도 위에는 개발 도구가 남지 않는다. 디버그 설정은 앱 메뉴(햄버거) 안으로
+    // 옮겼고, PDR 제어는 거기서 디버그 모드를 켠 뒤에만 나타난다 — 일반 사용자의
+    // 내비게이션 UI와 센서 테스트 UI를 분리한다.
+    expect(find.byIcon(Icons.bug_report_outlined), findsNothing);
     expect(find.text('PDR 시작'), findsNothing);
   });
 
@@ -364,10 +370,22 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byIcon(Icons.bug_report_outlined), findsOneWidget);
+    // 디버그 모드를 켜 둬도 지도 자체에는 개발 도구가 나타나지 않는다.
+    expect(find.byIcon(Icons.bug_report_outlined), findsNothing);
     expect(find.text('PDR 시작'), findsNothing);
     // 진단 공유 버튼도 실제 길안내 기록이 생긴 뒤에만 나타난다.
     expect(find.byTooltip('PDR 진단 JSON 공유'), findsNothing);
+
+    // 유일한 진입점은 상단 바 햄버거 → 앱 메뉴다. 여기서만 지금 디버그 모드가
+    // 켜져 있다는 사실이 드러나야 한다.
+    await tester.tap(find.byKey(const Key('map-top-bar-menu')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('app-menu-debug')), findsOneWidget);
+    expect(find.byIcon(Icons.bug_report_outlined), findsOneWidget);
+    expect(
+      find.text('사용 중 · PDR 제어와 진단 레이어가 지도에 표시됩니다'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('indoor map switches floor via the floor tabs', (

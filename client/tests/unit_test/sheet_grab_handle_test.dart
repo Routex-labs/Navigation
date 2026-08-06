@@ -8,7 +8,7 @@ import 'package:navigation_client/repositories/building_repository.dart';
 import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/repositories/mock_building_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
-import 'package:navigation_client/widgets/building_switcher_sheet.dart';
+import 'package:navigation_client/widgets/app_menu_sheet.dart';
 import 'package:navigation_client/widgets/category_stores_sheet.dart';
 import 'package:navigation_client/widgets/directions_sheet.dart';
 import 'package:navigation_client/widgets/favorites_sheet.dart';
@@ -119,12 +119,13 @@ void main() {
     );
   });
 
-  testWidgets('건물 선택 시트에 손잡이가 있다', (WidgetTester tester) async {
+  testWidgets('앱 메뉴 시트에 손잡이가 있다', (WidgetTester tester) async {
     await expectGrabHandle(
       tester,
-      (context) => BuildingSwitcherSheet.show(
+      (context) => AppMenuSheet.show(
         context,
-        selectedBuildingId: demoBuildingId,
+        showPlaceLocation: true,
+        debugEnabled: false,
       ),
     );
   });

@@ -67,7 +67,7 @@ void main() {
     // 시트는 닫히고,
     expect(find.text('지도에서 선택'), findsNothing);
     // 지금 무엇을 해야 하는지는 지도 위에 남는다.
-    expect(find.textContaining('도착지로 지정할 매장을 지도에서 눌러주세요'), findsOneWidget);
+    expect(find.textContaining('도착지로 지정할 매장이나 복도를 지도에서 눌러주세요'), findsOneWidget);
     // 출발지가 무엇으로 잡혀 있는지도 함께 보여준다.
     expect(find.textContaining('출발: 현재 위치'), findsOneWidget);
   });
@@ -80,7 +80,7 @@ void main() {
     await tester.tap(find.byTooltip('지도에서 선택 취소'));
     await drain(tester);
 
-    expect(find.textContaining('도착지로 지정할 매장을 지도에서 눌러주세요'), findsNothing);
+    expect(find.textContaining('도착지로 지정할 매장이나 복도를 지도에서 눌러주세요'), findsNothing);
   });
 
   testWidgets('검색을 시작하면 지도에서 고르기가 풀린다', (WidgetTester tester) async {
@@ -93,6 +93,6 @@ void main() {
     await tester.tap(find.byTooltip('검색 닫기'));
     await drain(tester);
 
-    expect(find.textContaining('도착지로 지정할 매장을 지도에서 눌러주세요'), findsNothing);
+    expect(find.textContaining('도착지로 지정할 매장이나 복도를 지도에서 눌러주세요'), findsNothing);
   });
 }

@@ -286,16 +286,16 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: Builder(
-            builder: (context) => DebugModeSettingsButton(
-              controller: controller,
+            builder: (context) => TextButton(
               onPressed: () => showDebugModeSettingsSheet(context, controller),
+              child: const Text('열기'),
             ),
           ),
         ),
       ),
     );
 
-    await tester.tap(find.byIcon(Icons.bug_report_outlined));
+    await tester.tap(find.text('열기'));
     await tester.pumpAndSettle();
     expect(find.text('고급 표시 옵션'), findsNothing);
 
