@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/api_config.dart';
@@ -760,17 +761,53 @@ class _MapShellScreenState extends State<MapShellScreen> {
       _runSheetChain(() => _showStoreInfo(match));
       return;
     }
+    _applyPickedCandidate(
+      target,
+      DirectionsCandidate(
+        title: match.name,
+        subtitle: match.floor,
+        point: match.point,
+        nodeId: match.nodeId,
+        floor: match.floor,
+      ),
+    );
+  }
+
+  /// 야외 지도에서 매장이 아닌 **아무 지점**을 눌렀을 때. 좌표만 있는 후보라
+  /// 노드·층이 없고, 상위 흐름은 이걸 걷기 경로의 끝점으로 쓴다.
+  ///
+  /// 야외에는 이름을 붙일 근거가 없어 좌표를 그대로 부제로 적는다. 사용자가
+  /// 자기가 어디를 찍었는지 확인할 수 있는 유일한 단서다.
+  void _onMapPointPick(LatLng point) {
+    final target = _mapPickTarget;
+    if (target == null) return;
+    _applyPickedCandidate(
+      target,
+      DirectionsCandidate(
+        title: target == DirectionsMapPickTarget.origin
+            ? '지도에서 지정한 출발 위치'
+            : '지도에서 지정한 도착 위치',
+        subtitle:
+            '${point.latitude.toStringAsFixed(5)}, '
+            '${point.longitude.toStringAsFixed(5)}',
+        point: point,
+      ),
+    );
+  }
+
+  /// 지도에서 고른 후보를 해당 칸에 넣고 경로 계산까지 이어 간다.
+  ///
+  /// 매장 탭과 좌표 탭이 **같은 함수를 지나야 한다.** 두 경로가 갈리면 한쪽에만
+  /// "출발지가 바뀌었으니 거리 목록을 다시 계산한다" 같은 뒤처리가 붙어, 어느
+  /// 쪽으로 골랐느냐에 따라 화면이 달라진다.
+  void _applyPickedCandidate(
+    DirectionsMapPickTarget target,
+    DirectionsCandidate picked,
+  ) {
     _stopPickingOnMap();
     // 강조 표시는 남겨두지 않는다 — 곧 경로와 핀이 그 자리를 대신한다.
     _indoorKey.currentState?.clearHighlight();
     _outdoorKey.currentState?.clearHighlight();
-    final picked = DirectionsCandidate(
-      title: match.name,
-      subtitle: match.floor,
-      point: match.point,
-      nodeId: match.nodeId,
-      floor: match.floor,
-    );
 
     if (target == DirectionsMapPickTarget.origin) {
       setState(() => _selectedOrigin = picked);
@@ -846,12 +883,16 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // — 실내 구간까지 미리 풀어 두었다가 건물에 들어가면 이어 붙인다.
     //
     // 출발지가 실내 지점이면 여기로 보내지 않는다. 그건 건물 안 두 지점 사이의
-    // 이동이라 "밖에서 문으로 들어간다"는 전제가 성립하지 않는다.
+    // 이동이라 "밖에서 문으로 들어간다"는 전제가 성립하지 않는다. 반대로 지도에서
+    // 찍은 야외 좌표는 그대로 넘긴다 — GPS가 안 잡히거나 다른 곳에서 출발하는
+    // 경로를 보려는 경우이고, 그때도 들어가는 문은 있어야 한다.
+    final outdoorOrigin =
+        origin != null && origin.floor == null && origin.nodeId == null;
     if (_mode == MapMode.outdoor &&
         !_indoorContextActive &&
         destination.floor != null &&
         destination.nodeId != null &&
-        origin == null) {
+        (origin == null || outdoorOrigin)) {
       await _outdoorKey.currentState?.showOutdoorToIndoorRouteTo(
         PoiSearchResult(
           name: destination.title,
@@ -859,6 +900,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
           point: destination.point,
           nodeId: destination.nodeId,
         ),
+        origin: outdoorOrigin ? origin.point : null,
       );
       return;
     }
@@ -988,9 +1030,20 @@ class _MapShellScreenState extends State<MapShellScreen> {
     _closeSearch();
     if (_mode == MapMode.indoor) {
       _indoorKey.currentState?.startLocationPlacement();
-    } else {
-      _outdoorKey.currentState?.startLocationPlacement();
+      return;
     }
+    if (_outdoorIndoorEntered) {
+      _outdoorKey.currentState?.startLocationPlacement();
+      return;
+    }
+    // 순수 야외에는 층도 PDR 앵커도 없다. 여기서 "위치 지정"이 뜻하는 것은
+    // **출발 위치를 지도에서 직접 찍는 것**이다.
+    //
+    // GPS를 대신 덮어쓰지 않는다는 점이 실내와 다르고, 그게 의도다. 위치 마커와
+    // 정확도 배지, 그리고 실내 진입/이탈 판정은 계속 진짜 GPS를 본다 — 수동
+    // 좌표로 그 입력을 물들이면, 지금 검증하려는 진입 판정이 사람이 찍은 값을
+    // 근거로 돌게 된다.
+    setState(() => _mapPickTarget = DirectionsMapPickTarget.origin);
   }
 
   @override
@@ -1032,6 +1085,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
                 // 넘어갔다는 사실을 야외 지도에 직접 알려야 한다 — 그래야
                 // 실내에 있는 동안 야외 지도가 GPS를 구독하지 않는다.
                 active: _mode == MapMode.outdoor,
+                pickingPointOnMap: _mapPickTarget != null,
+                onMapPointPick: _onMapPointPick,
                 onRouteVisibleChanged: (visible) =>
                     setState(() => _outdoorRouteVisible = visible),
                 onPlacingLocationChanged: (placing) {
@@ -1311,12 +1366,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
               onPlaceLocation: _onPlaceLocation,
               placingLocation: _mode == MapMode.indoor
                   ? _indoorPlacingLocation
-                  : _outdoorPlacingLocation,
-              // 야외에서는 실내 진입 오버레이가 켜져 있을 때만 위치 지정 버튼을
-              // 노출한다. 오버레이가 꺼진 순수 야외 상태에서는 지정할 층 정보가
-              // 없어 눌러도 의미가 없다.
-              showPlaceLocation:
-                  _mode == MapMode.indoor || _outdoorIndoorEntered,
+                  : (_outdoorPlacingLocation ||
+                        _mapPickTarget == DirectionsMapPickTarget.origin),
+              // 순수 야외에서도 노출한다. 예전에는 오버레이가 켜졌을 때만 켰는데,
+              // 그 규칙은 이 버튼이 "층 위에 PDR 앵커를 찍는 것"만 뜻하던 시절의
+              // 것이다. 이제 야외에서는 출발 위치를 지도에서 찍는 흐름을 열어
+              // 주므로, GPS가 안 잡히거나 다른 지점에서 출발하는 경로를 보고 싶은
+              // 사용자에게 눌러야 할 이유가 생겼다.
+              showPlaceLocation: true,
             ),
           ),
         ],

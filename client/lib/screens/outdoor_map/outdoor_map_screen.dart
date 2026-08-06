@@ -458,6 +458,8 @@ class OutdoorMapBody extends StatefulWidget {
     this.onLocationAnchored,
     this.categorySelection,
     this.onFloorChanged,
+    this.pickingPointOnMap = false,
+    this.onMapPointPick,
     this.outerOverlayKeys = const [],
   });
 
@@ -483,6 +485,20 @@ class OutdoorMapBody extends StatefulWidget {
   /// 실내 진입 오버레이에서 매장 폴리곤을 탭했을 때 호출된다. 상위
   /// (MapShellScreen)가 실내 화면과 동일한 매장 정보 시트를 띄운다.
   final ValueChanged<PoiSearchResult>? onStoreTap;
+
+  /// 지금 상위가 "지도에서 출발지/도착지 고르기"를 기다리는 중인지.
+  ///
+  /// 켜져 있으면 지도의 **아무 지점** 탭이 그 선택으로 소비된다. 이 값이 없던
+  /// 동안 야외 지도에서는 고르기를 시작해도 누를 수 있는 것이 매장 폴리곤뿐이라
+  /// (그것도 실내 오버레이가 켜져 있을 때만), 순수 야외 상태에서는 무엇을 눌러도
+  /// 건물 진입으로 흘러가 선택이 영영 끝나지 않았다.
+  final bool pickingPointOnMap;
+
+  /// [pickingPointOnMap]일 때 사용자가 지도에서 누른 지점.
+  ///
+  /// 매장이 아니라 **좌표**다 — 야외에는 노드도 층도 없으므로 상위는 이 후보를
+  /// 실내 라우팅이 아니라 걷기 경로의 끝점으로 쓴다.
+  final ValueChanged<ll.LatLng>? onMapPointPick;
 
   /// 사용자의 현재 위치가 새로 잡혔을 때 호출된다 — "위치 지정"으로 지도를
   /// 탭했을 때와 입구 자동 배치가 여기에 해당한다.
@@ -581,6 +597,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// [_activatePendingIndoorRoute]가 실제 실내 경로 상태로 옮긴다.
   MultiFloorRoute? _pendingIndoorRoute;
   PoiSearchResult? _pendingIndoorDestination;
+
+  /// 사용자가 지도에서 직접 찍은 출발 위치. null이면 출발지는 GPS다.
+  ///
+  /// 이 값이 있는 동안 [_updateRoute]는 **위치가 갱신돼도 경로를 다시 그리지
+  /// 않는다.** 없을 때는 지정한 출발지로 경로를 한 번 그려도 다음 GPS 이벤트가
+  /// 곧바로 현재 위치 기준으로 덮어써, 사용자가 찍은 지점이 1초 만에 사라졌다.
+  ll.LatLng? _fixedRouteOrigin;
 
   /// 문을 바꿔 골랐을 때 2번 구간을 다시 풀기 위해 들고 있는 건물 그래프.
   ///
@@ -1648,6 +1671,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   }
 
   Future<void> _updateRoute(Position position) async {
+    // 출발지를 사용자가 직접 찍었으면 GPS는 경로의 입력이 아니다. 여기서
+    // 막지 않으면 찍은 지점에서 그린 경로가 다음 위치 이벤트에 덮인다.
+    if (_fixedRouteOrigin != null) return;
+
     // 문 경유 안내 중이면 이번 위치로 다시 고른 문이 목적지다. 걸어가는 동안
     // 더 가까운 문이 생기면([_syncSelectedEntrance]가 이미 갱신했다) 야외 구간의
     // 도착점과 실내 구간의 시작점을 함께 갈아 끼운다 — 한쪽만 바꾸면 도보 경로는
@@ -1752,23 +1779,50 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   ///   - 목적지에 실내 노드가 없다 → 실내 구간을 만들 수 없다.
   ///   - 지상 출입구 데이터가 없다 → 경유할 문이 없다.
   ///   - 건물 그래프를 못 받았거나 경로가 안 풀린다 → 야외 구간까지는 안내한다.
-  Future<void> showOutdoorToIndoorRouteTo(PoiSearchResult destination) async {
+  /// [origin]을 주면 GPS 대신 그 지점에서 출발한다 — 사용자가 지도에서 출발
+  /// 위치를 직접 찍은 경우다. 문 선택도 그 지점 기준으로 바뀐다. 현재 위치가
+  /// 아니라 **출발 지점**에서 가까운 문으로 들어가는 것이 맞기 때문이다.
+  Future<void> showOutdoorToIndoorRouteTo(
+    PoiSearchResult destination, {
+    ll.LatLng? origin,
+  }) async {
     final building = _building;
     final endNodeId = destination.nodeId;
     if (building == null || endNodeId == null || destination.floor.isEmpty) {
-      await showRouteTo(destination.point, label: destination.name);
+      await showRouteTo(
+        destination.point,
+        label: destination.name,
+        origin: origin,
+      );
       return;
     }
-    // 문 선택은 현재 위치가 기준이다. 위치가 없으면 걷기 경로 자체를 못 만드는데,
+    // 문은 출발 지점에서 가까운 것을 고른다. 지도에서 찍은 출발지가 있으면 그
+    // 좌표가, 없으면 GPS가 기준이다. 둘 다 없으면 경로 자체를 못 만드는데,
     // showRouteTo가 그 안내를 이미 갖고 있으므로 거기로 흘려보낸다.
-    if (_position == null) {
+    final position = _position;
+    final reference =
+        origin ??
+        (position == null
+            ? null
+            : ll.LatLng(position.latitude, position.longitude));
+    if (reference == null) {
       await showRouteTo(destination.point, label: destination.name);
       return;
     }
-    _syncSelectedEntrance();
-    final entrance = _selectedEntrance;
+    // [_selectedEntrance]가 아니라 [_journeyEntrance]를 이력으로 넘긴다. 앞의
+    // 값은 **GPS 기준**으로 진입 판정이 쓰는 문이라, 멀리 찍은 출발지로 안내할
+    // 때 그 값을 섞으면 두 판단이 서로를 끌어당긴다.
+    final entrance = nearestEntrance(
+      _groundEntrances,
+      reference,
+      current: _journeyEntrance,
+    );
     if (entrance == null) {
-      await showRouteTo(destination.point, label: destination.name);
+      await showRouteTo(
+        destination.point,
+        label: destination.name,
+        origin: origin,
+      );
       return;
     }
 
@@ -1802,6 +1856,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await showRouteTo(
       entrance.point,
       label: _journeyEtaLabel(destination, entrance),
+      origin: origin,
       keepPendingIndoorRoute: true,
     );
   }
@@ -2013,6 +2068,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   }) async {
     if (!keepPendingIndoorRoute) _clearPendingIndoorRoute();
     setState(() {
+      // 이번 안내의 출발지가 무엇인지 여기서 확정한다. origin이 없으면 GPS로
+      // 되돌아가야 하므로 반드시 null로 지워야 한다 — 안 지우면 예전에 찍어 둔
+      // 지점이 계속 출발지로 남아, 현재 위치에서 출발하는 안내가 영영 안 된다.
+      _fixedRouteOrigin = origin;
       _userDestination = destination;
       _userDestinationLabel = label;
       // 새 목적지를 받을 때마다 초기화해서, 이번 경로가 계산되면
@@ -2999,6 +3058,17 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 아닌 곳(복도·footprint)을 탭하면 features가 비어 있어 아래 건물 진입
     // 처리로 자연스럽게 흘러간다.
     if (_indoorEntered && await _tryHandleStoreTap(pointPx)) return;
+
+    // 여기까지 왔다는 것은 "매장을 누른 것은 아니다"라는 뜻이다. 지도에서
+    // 고르는 중이면 이 탭을 좌표 선택으로 소비한다.
+    //
+    // **매장 판정보다 뒤에 둔다.** 실내 오버레이 위에서 매장을 눌렀다면 사용자가
+    // 고르려던 것은 그 매장이지 매장이 깔린 바닥 좌표가 아니다. 순서를 뒤집으면
+    // 실내에서 매장을 골라도 노드 없는 좌표만 잡혀 실내 경로가 끊긴다.
+    if (widget.pickingPointOnMap) {
+      widget.onMapPointPick?.call(point);
+      return;
+    }
 
     // 폴리곤 히트 검사만 하고, 나머지 탭은 흡수하지 않아 지도 pan/zoom 제스처를
     // 방해하지 않는다(단일 탭이 여기 오면 그건 pan이 아닌 명시적 탭).
