@@ -66,31 +66,120 @@ String _firstWord(String value) {
   return space < 0 ? trimmed : trimmed.substring(0, space);
 }
 
-/// 우리 실내 데이터가 이미 아는 가게를 가리키는 POI를 뺀다.
+/// TMAP 지점명 안에 괄호로 들어 있는 **층 힌트**를 뽑는다. 없으면 null.
 ///
-/// 같은 가게가 두 줄로 뜨는 것을 막는 규칙이다. 사용자가 실제로 본 화면이
-/// 그랬다 — "스타벅스 리저브 / B2"(우리)와 "스타벅스 더현대서울(B2)R점"(TMAP)이
-/// 나란히 떴고, 두 줄이 하는 일이 달랐다. **아래쪽을 고르면 실내 경로가 안
-/// 나온다.** 우리 줄에는 층과 노드가 붙어 있어 문을 경유해 매장 앞까지
-/// 안내되지만, TMAP 줄은 좌표 하나뿐이라 건물 입구에서 끝난다.
+/// "스타벅스 더현대서울**(B2)**R점" → `B2`
 ///
-/// 그래서 **우리가 아는 쪽을 남긴다.** 이름은 우리 데이터 이름으로 보이지만
-/// 층이 함께 적혀 있어 같은 곳임을 알아볼 수 있고, 무엇보다 눌렀을 때 실제로
-/// 매장 앞까지 데려다준다.
+/// 이게 왜 필요한가 — **좌표로는 층을 고를 수 없기 때문이다.** 한 건물의 열두
+/// 개 층이 같은 위경도 위에 쌓여 있는데 TMAP은 층 필드를 주지 않는다. 좌표만
+/// 보고 "가장 가까운 매장"을 고르면 B2 스타벅스 대신 벽에 붙은 1층 아무 매장이
+/// 잡히고, 화면은 조용히 엉뚱한 곳으로 안내한다. 층은 이름에만 있다.
 ///
-/// [isInsideBuilding]은 POI 좌표가 우리 도면이 있는 건물 안인지 판정한다.
-/// 건물 밖 POI는 이름이 비슷해도 건드리지 않는다 — 길 건너 스타벅스는 우리
+/// 지하(B)·지상 모두 받는다. 층이 아닌 괄호 내용(예: "(주)")은 숫자가 없어
+/// 걸리지 않는다.
+String? floorHintFrom(String poiName) {
+  final match = RegExp(
+    r'\((B?\d{1,2}F?)\)',
+    caseSensitive: false,
+  ).firstMatch(poiName);
+  return match?.group(1)?.toUpperCase();
+}
+
+/// 층 이름 두 개가 같은 층을 가리키는지. "B2" == "B2F", "1" == "1F".
+///
+/// TMAP 지점명과 우리 층 이름이 F를 붙이는 규칙이 다르다. 글자 그대로 비교하면
+/// 층 힌트가 있어도 매번 어긋나 매칭이 통째로 실패한다.
+bool sameFloor(String a, String b) => _normalizeFloor(a) == _normalizeFloor(b);
+
+String _normalizeFloor(String value) =>
+    value.trim().toUpperCase().replaceAll('F', '');
+
+/// [poi]가 가리키는 **우리 실내 매장**을 찾는다. 못 찾으면 null.
+///
+/// 브랜드 이름으로 후보를 추리고, 이름에 층 힌트가 있으면 그 층으로 좁힌다.
+/// 남은 후보가 **정확히 하나일 때만** 확정한다.
+///
+/// 애매하면 포기하는 쪽이 맞다. 여기서 잘못 고르면 사용자는 "안내가 안 된다"가
+/// 아니라 **엉뚱한 매장 앞에 도착한다.** 앞은 다시 시도하면 되지만 뒤는 걸어간
+/// 시간을 돌려받지 못한다. 포기하면 호출부가 건물 입구까지 안내로 떨어뜨린다.
+///
+/// 노드가 없는 매장은 후보에서 뺀다 — 연결해 봐야 실내 경로를 못 만든다.
+PoiSearchResult? matchIndoorStore(
+  OutdoorPoi poi,
+  List<PoiSearchResult> indoorStores,
+) {
+  final byBrand = indoorStores
+      .where((store) => store.nodeId != null && store.nodeId!.isNotEmpty)
+      .where((store) => looksLikeSameBrand(poi.name, store.name))
+      .toList();
+  if (byBrand.isEmpty) return null;
+  if (byBrand.length == 1) return byBrand.first;
+
+  final hint = floorHintFrom(poi.name);
+  if (hint == null) return null;
+  final byFloor = byBrand.where((s) => sameFloor(s.floor, hint)).toList();
+  return byFloor.length == 1 ? byFloor.first : null;
+}
+
+/// 바깥 목록의 한 줄.
+///
+/// 화면에는 **POI 이름**이 나간다. 사용자가 검색해서 본 이름이 그것이고, 우리
+/// 데이터 이름("스타벅스 리저브")으로 바꿔 버리면 방금 친 검색어와 목록이
+/// 어긋난다. [indoorStore]가 붙어 있으면 그 줄을 눌렀을 때 **건물 안 매장까지**
+/// 안내한다(층·노드가 거기 들어 있다).
+class OutdoorSearchRow {
+  const OutdoorSearchRow(this.poi, {this.indoorStore});
+
+  final OutdoorPoi poi;
+
+  /// 이 POI가 가리키는 우리 실내 매장. null이면 좌표까지만 안내한다.
+  final PoiSearchResult? indoorStore;
+
+  bool get leadsIndoors => indoorStore != null;
+}
+
+/// 바깥 결과와 우리 실내 결과를 **한 목록으로** 합친 뒤 돌려준다.
+///
+/// 같은 가게가 두 줄로 뜨던 화면을 고치는 자리다 — "스타벅스 리저브 / B2"(우리)와
+/// "스타벅스 더현대서울(B2)R점"(TMAP)이 나란히 떴고, 아래쪽을 고르면 실내 경로가
+/// 안 나왔다.
+///
+/// 합치는 방향은 **POI 쪽으로**다. POI 줄을 남기고 거기에 우리 매장의 층·노드를
+/// 붙인다. 사용자가 검색해서 본 이름이 POI 이름이고, 실내 안내라는 능력은 우리
+/// 데이터에서 온다 — 둘 다 살리는 유일한 조합이다.
+class MergedOutdoorResults {
+  const MergedOutdoorResults(this.outdoorRows, this.indoorStores);
+
+  /// "주변 장소" 섹션에 그릴 줄.
+  final List<OutdoorSearchRow> outdoorRows;
+
+  /// 위쪽 실내 섹션에 **남길** 매장. POI 줄로 흡수된 것은 빠져 있다.
+  final List<PoiSearchResult> indoorStores;
+}
+
+/// [isAtBuilding]은 POI 좌표가 우리 도면이 있는 건물에 딸린 자리인지 판정한다.
+/// 건물 밖 POI는 이름이 비슷해도 연결하지 않는다 — 길 건너 스타벅스는 우리
 /// 건물 안 스타벅스와 **다른 가게**다.
-List<OutdoorPoi> dropPoisCoveredByIndoorStores(
-  List<OutdoorPoi> pois,
-  List<PoiSearchResult> indoorStores, {
-  required bool Function(OutdoorPoi poi) isInsideBuilding,
+MergedOutdoorResults mergeOutdoorResults({
+  required List<OutdoorPoi> pois,
+  required List<PoiSearchResult> indoorStores,
+  required bool Function(OutdoorPoi poi) isAtBuilding,
 }) {
-  if (indoorStores.isEmpty) return pois;
-  return pois.where((poi) {
-    if (!isInsideBuilding(poi)) return true;
-    return !indoorStores.any(
-      (store) => looksLikeSameBrand(poi.name, store.name),
-    );
-  }).toList();
+  final rows = <OutdoorSearchRow>[];
+  final absorbed = <PoiSearchResult>{};
+
+  for (final poi in pois) {
+    if (!isAtBuilding(poi)) {
+      rows.add(OutdoorSearchRow(poi));
+      continue;
+    }
+    final store = matchIndoorStore(poi, indoorStores);
+    if (store != null) absorbed.add(store);
+    rows.add(OutdoorSearchRow(poi, indoorStore: store));
+  }
+
+  return MergedOutdoorResults(
+    rows,
+    indoorStores.where((s) => !absorbed.contains(s)).toList(),
+  );
 }

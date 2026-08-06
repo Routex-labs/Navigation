@@ -15,8 +15,12 @@ import 'package:navigation_client/models/poi_search_result.dart';
 OutdoorPoi _poi(String name, {LatLng point = const LatLng(37.5, 126.9)}) =>
     OutdoorPoi(id: name, name: name, point: point);
 
-PoiSearchResult _store(String name, String floor) =>
-    PoiSearchResult(name: name, floor: floor, point: const LatLng(37.5, 126.9));
+PoiSearchResult _store(String name, String floor) => PoiSearchResult(
+  name: name,
+  floor: floor,
+  point: const LatLng(37.5, 126.9),
+  nodeId: 'ND-\$name',
+);
 
 void main() {
   group('filterByNameRelevance', () {
@@ -69,39 +73,106 @@ void main() {
     });
   });
 
-  group('dropPoisCoveredByIndoorStores', () {
-    test('건물 안 POI 중 우리가 아는 가게는 뺀다', () {
-      // 남는 쪽(우리 실내 데이터)에는 층과 노드가 붙어 있어 매장 앞까지
-      // 안내되지만, 빠지는 쪽은 좌표 하나뿐이라 건물 입구에서 끝난다.
-      final pois = [_poi('스타벅스 더현대서울(B2)R점'), _poi('스타벅스 여의도브라이튼점')];
-
-      final result = dropPoisCoveredByIndoorStores(pois, [
-        _store('스타벅스 리저브', 'B2'),
-      ], isInsideBuilding: (poi) => poi.name.contains('더현대'));
-
-      expect(result.map((p) => p.name), ['스타벅스 여의도브라이튼점']);
+  group('floorHintFrom', () {
+    test('지점명 괄호 안의 층을 뽑는다', () {
+      // 좌표로는 층을 고를 수 없다 — 열두 개 층이 같은 위경도 위에 쌓여 있고
+      // TMAP은 층 필드를 안 준다. 층은 이름에만 있다.
+      expect(floorHintFrom('스타벅스 더현대서울(B2)R점'), 'B2');
+      expect(floorHintFrom('스타벅스 여의도IFC몰(L2)STREET점'), isNull);
+      expect(floorHintFrom('스타벅스 여의도점'), isNull);
     });
 
-    test('건물 밖 POI는 이름이 비슷해도 남긴다', () {
+    test('층 이름의 F 표기 차이를 흡수한다', () {
+      expect(sameFloor('B2', 'B2F'), isTrue);
+      expect(sameFloor('1F', '1'), isTrue);
+      expect(sameFloor('B2', 'B3'), isFalse);
+    });
+  });
+
+  group('matchIndoorStore', () {
+    test('브랜드 후보가 하나면 그것으로 확정한다', () {
+      final store = matchIndoorStore(_poi('스타벅스 더현대서울(B2)R점'), [
+        _store('스타벅스 리저브', 'B2'),
+        _store('투썸플레이스', '1F'),
+      ]);
+
+      expect(store?.name, '스타벅스 리저브');
+    });
+
+    test('브랜드 후보가 여럿이면 이름의 층 힌트로 좁힌다', () {
+      final store = matchIndoorStore(_poi('스타벅스 더현대서울(B2)R점'), [
+        _store('스타벅스 리저브', 'B2'),
+        _store('스타벅스', '6F'),
+      ]);
+
+      expect(store?.floor, 'B2');
+    });
+
+    test('층 힌트가 없어 좁히지 못하면 포기한다', () {
+      // 잘못 고르면 사용자는 "안내가 안 된다"가 아니라 엉뚱한 매장 앞에
+      // 도착한다. 포기하면 호출부가 건물 입구까지 안내로 떨어뜨린다.
+      final store = matchIndoorStore(_poi('스타벅스 더현대서울점'), [
+        _store('스타벅스 리저브', 'B2'),
+        _store('스타벅스', '6F'),
+      ]);
+
+      expect(store, isNull);
+    });
+
+    test('노드가 없는 매장은 후보가 아니다', () {
+      // 연결해 봐야 실내 경로를 못 만든다.
+      final store = matchIndoorStore(_poi('스타벅스 더현대서울(B2)R점'), [
+        PoiSearchResult(
+          name: '스타벅스 리저브',
+          floor: 'B2',
+          point: const LatLng(37.5, 126.9),
+        ),
+      ]);
+
+      expect(store, isNull);
+    });
+  });
+
+  group('mergeOutdoorResults', () {
+    test('건물 안 POI에 우리 매장을 실어 준다', () {
+      // 이름은 POI 것이 남고(사용자가 검색해서 본 이름), 층·노드는 우리 것이
+      // 붙는다(실내까지 안내하는 능력). 우리 매장 줄은 목록에서 빠진다.
+      final merged = mergeOutdoorResults(
+        pois: [_poi('스타벅스 더현대서울(B2)R점'), _poi('스타벅스 여의도브라이튼점')],
+        indoorStores: [_store('스타벅스 리저브', 'B2')],
+        isAtBuilding: (poi) => poi.name.contains('더현대'),
+      );
+
+      expect(merged.outdoorRows, hasLength(2));
+      final linked = merged.outdoorRows.first;
+      expect(linked.poi.name, '스타벅스 더현대서울(B2)R점');
+      expect(linked.indoorStore?.name, '스타벅스 리저브');
+      expect(merged.outdoorRows[1].leadsIndoors, isFalse);
+      expect(merged.indoorStores, isEmpty);
+    });
+
+    test('건물 밖 POI는 이름이 비슷해도 연결하지 않는다', () {
       // 길 건너 스타벅스는 우리 건물 안 스타벅스와 다른 가게다.
-      final pois = [_poi('스타벅스 여의도브라이튼점')];
+      final merged = mergeOutdoorResults(
+        pois: [_poi('스타벅스 여의도브라이튼점')],
+        indoorStores: [_store('스타벅스 리저브', 'B2')],
+        isAtBuilding: (_) => false,
+      );
 
-      final result = dropPoisCoveredByIndoorStores(pois, [
-        _store('스타벅스 리저브', 'B2'),
-      ], isInsideBuilding: (_) => false);
-
-      expect(result, hasLength(1));
+      expect(merged.outdoorRows.single.leadsIndoors, isFalse);
+      // 연결되지 않았으니 우리 매장 줄은 그대로 남는다.
+      expect(merged.indoorStores, hasLength(1));
     });
 
-    test('우리가 모르는 건물 안 가게는 남긴다', () {
-      // 실내 데이터에 없는 매장까지 지우면 검색 결과에서 통째로 사라진다.
-      final pois = [_poi('배스킨라빈스 더현대서울점')];
+    test('우리가 모르는 건물 안 가게는 좌표 줄로 남는다', () {
+      final merged = mergeOutdoorResults(
+        pois: [_poi('배스킨라빈스 더현대서울점')],
+        indoorStores: [_store('스타벅스 리저브', 'B2')],
+        isAtBuilding: (_) => true,
+      );
 
-      final result = dropPoisCoveredByIndoorStores(pois, [
-        _store('스타벅스 리저브', 'B2'),
-      ], isInsideBuilding: (_) => true);
-
-      expect(result, hasLength(1));
+      expect(merged.outdoorRows.single.leadsIndoors, isFalse);
+      expect(merged.indoorStores, hasLength(1));
     });
   });
 }

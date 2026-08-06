@@ -816,6 +816,24 @@ class _MapShellScreenState extends State<MapShellScreen> {
   ///
   /// 건물 안을 보고 있으면 1번만 쓴다. 지금 서 있는 층 위에서 길을 찾는 중인데
   /// 길 건너 편의점이 후보에 섞이면, 정작 찾던 매장이 뒤로 밀린다.
+  /// **모든 검색 진입점이 함께 쓰는 후보 목록.**
+  ///
+  /// 상단 검색창과 길찾기 시트가 각자 검색을 구현하면 반드시 갈린다. 실제로
+  /// 갈렸다 — 한쪽에는 건물 밖 장소(TMAP)가 있고 다른 쪽에는 없어서, 같은
+  /// 검색어를 어디에 치느냐에 따라 나오는 곳이 달랐다. "무엇이 후보인가"를
+  /// 정하는 자리는 하나뿐이어야 한다.
+  ///
+  /// 세 가지 출처를 이 순서로 합친다.
+  ///
+  /// 1. **건물 안 매장**(우리 백엔드) — 층·노드가 붙어 있어 문을 경유하는 실내
+  ///    안내까지 이어진다. TMAP POI로 흡수된 것은 여기서 빠진다.
+  /// 2. **건물**(우리 백엔드) — 입구까지 안내한다.
+  /// 3. **건물 밖 장소**(TMAP POI) — 좌표까지 도보·대중교통. 다만 우리 건물
+  ///    안 매장을 가리키는 POI면 그 매장의 층·노드가 실려 실내까지 이어진다
+  ///    ([mergeOutdoorResults]).
+  ///
+  /// 건물 안을 보고 있으면 1번만 쓴다. 지금 서 있는 층 위에서 길을 찾는 중인데
+  /// 길 건너 편의점이 후보에 섞이면, 정작 찾던 매장이 뒤로 밀린다.
   Future<List<DirectionsCandidate>> _searchDirectionsCandidates(
     String query,
   ) async {
@@ -832,18 +850,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
       _buildingId,
       query,
     );
-    final stores = results
-        .map(
-          (r) => DirectionsCandidate(
-            title: r.name,
-            subtitle: r.floor,
-            point: r.point,
-            nodeId: r.nodeId,
-            floor: r.floor,
-          ),
-        )
-        .toList();
-    if (_indoorContextActive) return stores;
+    if (_indoorContextActive) return results.map(_storeCandidate).toList();
 
     // 밖에서는 **아무것도 안 쳤으면 아무것도 보여주지 않는다.**
     //
@@ -877,62 +884,78 @@ class _MapShellScreenState extends State<MapShellScreen> {
       );
     }
 
+    final merged = await _mergeOutdoorResults(query, results);
+    final buildingNames = buildingCandidates
+        .map((c) => collapseName(c.title))
+        .toSet();
     return [
-      ...stores,
+      ...merged.indoorStores.map(_storeCandidate),
       ...buildingCandidates,
-      ...await _outdoorPoiCandidates(query, results, buildingCandidates),
+      for (final row in merged.outdoorRows)
+        if (!buildingNames.contains(collapseName(row.poi.name)))
+          _outdoorRowCandidate(row),
     ];
   }
 
-  /// 건물 밖 장소(TMAP POI) 후보. 기준점을 못 구했거나 TMAP을 쓸 수 없으면
-  /// 빈 목록이다 — 그 경우에도 위의 매장·건물 후보는 그대로 남는다.
+  DirectionsCandidate _storeCandidate(PoiSearchResult store) =>
+      DirectionsCandidate(
+        title: store.name,
+        subtitle: store.floor,
+        point: store.point,
+        nodeId: store.nodeId,
+        floor: store.floor,
+      );
+
+  /// 바깥 줄 하나를 후보로 만든다.
   ///
-  /// 이미 건물 줄로 올라간 곳과 이름이 **완전히 같은**(공백·대소문자 무시) POI는
-  /// 뺀다. TMAP도 같은 건물을 POI로 한 건 돌려주므로 그냥 두면 같은 곳이 목록에
-  /// 두 번 뜨는데, 둘이 하는 일이 다르다 — 건물 줄은 입구까지 안내하고 POI 줄은
-  /// 좌표로 간다. 상단 검색 패널이 쓰는 규칙과 같다.
-  Future<List<DirectionsCandidate>> _outdoorPoiCandidates(
+  /// 우리 실내 매장에 연결된 줄이면 **이름은 POI 것을 쓰고 좌표·층·노드는 우리
+  /// 것을 쓴다.** 사용자가 검색해서 본 이름은 POI 이름이고("스타벅스
+  /// 더현대서울(B2)R점"), 실내까지 안내하는 능력은 우리 데이터에서 온다.
+  DirectionsCandidate _outdoorRowCandidate(OutdoorSearchRow row) {
+    final store = row.indoorStore;
+    if (store == null) {
+      return DirectionsCandidate(
+        title: row.poi.name,
+        subtitle: row.poi.address ?? '건물 밖 장소',
+        point: row.poi.point,
+      );
+    }
+    return DirectionsCandidate(
+      title: row.poi.name,
+      subtitle: '건물 안 · ${store.floor}',
+      point: store.point,
+      nodeId: store.nodeId,
+      floor: store.floor,
+    );
+  }
+
+  /// 바깥 조회를 돌리고 우리 실내 결과와 합친다. 기준점을 못 구했거나 TMAP을
+  /// 쓸 수 없으면 바깥 줄 없이 실내 결과만 돌려준다.
+  Future<MergedOutdoorResults> _mergeOutdoorResults(
     String query,
     List<PoiSearchResult> indoorStores,
-    List<DirectionsCandidate> buildingCandidates,
   ) async {
-    if (!outdoorPoiRepository.isAvailable) return const [];
     final center = _outdoorKey.currentState?.outdoorSearchCenter;
-    if (center == null) return const [];
+    if (!outdoorPoiRepository.isAvailable || center == null) {
+      return MergedOutdoorResults(const [], indoorStores);
+    }
 
     final List<OutdoorPoi> pois;
     try {
       pois = await outdoorPoiRepository.searchNearby(query, center: center);
     } on Object {
-      // 바깥 조회 실패로 길찾기 후보가 통째로 비면 안 된다. 매장·건물은 이미
-      // 손에 있다.
-      return const [];
+      // 바깥 조회 실패로 후보가 통째로 비면 안 된다. 매장·건물은 이미 손에 있다.
+      return MergedOutdoorResults(const [], indoorStores);
     }
 
     // 규칙은 도메인 함수가 갖고 있다(`domain/outdoor_poi_ranking.dart`).
     // 상단 검색 패널도 같은 함수를 부른다 — 여기서 다시 구현하면 또 갈린다.
-    final relevant = filterByNameRelevance(query, pois);
     final outdoor = _outdoorKey.currentState;
-    final deduped = dropPoisCoveredByIndoorStores(
-      relevant,
-      indoorStores,
-      isInsideBuilding: (poi) =>
-          outdoor?.isAtIndoorBuilding(poi.point) ?? false,
+    return mergeOutdoorResults(
+      pois: filterByNameRelevance(query, pois),
+      indoorStores: indoorStores,
+      isAtBuilding: (poi) => outdoor?.isAtIndoorBuilding(poi.point) ?? false,
     );
-
-    // 이미 건물 줄로 올라간 곳과 이름이 완전히 같은 POI도 뺀다.
-    final buildingNames = buildingCandidates
-        .map((c) => collapseName(c.title))
-        .toSet();
-    return [
-      for (final poi in deduped)
-        if (!buildingNames.contains(collapseName(poi.name)))
-          DirectionsCandidate(
-            title: poi.name,
-            subtitle: poi.address ?? '건물 밖 장소',
-            point: poi.point,
-          ),
-    ];
   }
 
   /// 길찾기 시트를 연다. [presetOrigin]/[presetDestination]은 매장 정보

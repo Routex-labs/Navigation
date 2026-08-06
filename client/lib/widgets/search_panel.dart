@@ -782,11 +782,18 @@ class _SearchPanelState extends State<SearchPanel> {
         ),
       );
     }
+    final merged = _mergedResults(building);
+    // 인덱스로 [_discoveryMatches]와 짝을 맞추므로 목록을 미리 걸러 내지 않고
+    // 그리는 자리에서 건너뛴다. 걸러 낸 목록으로 순회하면 추천 이유가 한 칸씩
+    // 밀려 다른 매장에 붙는다.
     for (var index = 0; index < _results.length; index++) {
+      final store = _results[index];
+      // 바깥 줄로 흡수된 매장은 그 줄이 대신 보여준다.
+      if (!merged.indoorStores.contains(store)) continue;
       final match = index < _discoveryMatches.length
           ? _discoveryMatches[index]
           : null;
-      rows.add(_storeTile(_results[index], match));
+      rows.add(_storeTile(store, match));
     }
 
     // 건물 밖 결과는 **항상 실내 아래**에 둔다. 이 앱의 본업은 건물 안 길찾기라,
@@ -794,11 +801,10 @@ class _SearchPanelState extends State<SearchPanel> {
     // 보는 것이 맞다. 대신 어디까지가 우리 건물이고 어디부터 바깥인지 헤더로
     // 명확히 가른다 — 안 가르면 다른 건물 매장을 우리 매장으로 오해한다.
     final onPoiPicked = widget.onOutdoorPoiPicked;
-    final pois = _visiblePois(building);
-    if (pois.isNotEmpty && onPoiPicked != null) {
+    if (merged.outdoorRows.isNotEmpty && onPoiPicked != null) {
       rows.add(_outdoorHeader());
-      for (final poi in pois) {
-        rows.add(_poiTile(poi, onPoiPicked));
+      for (final row in merged.outdoorRows) {
+        rows.add(_poiTile(row, onPoiPicked));
       }
     }
 
@@ -846,22 +852,37 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 1번의 이름 비교는 **완전 일치**다(공백·대소문자 무시). `contains`로
   /// 넓히면 "더현대서울 스타벅스"처럼 건물 이름을 앞에 단 진짜 결과까지
   /// 사라진다 — 중복 한 줄을 지우려다 찾던 가게를 지우는 쪽이 훨씬 나쁘다.
-  List<OutdoorPoi> _visiblePois(Building? building) {
-    if (_pois.isEmpty) return _pois;
+  /// 목록에 실제로 그릴 결과. 같은 곳을 두 번 보여주지 않는다.
+  ///
+  /// **바깥 줄(POI) 쪽으로 합친다.** 사용자가 검색해서 본 이름이 POI 이름이고
+  /// ("스타벅스 더현대서울(B2)R점"), 우리 데이터 이름("스타벅스 리저브")으로
+  /// 바꿔 버리면 방금 친 검색어와 목록이 어긋난다. 대신 그 줄에 우리 매장의
+  /// 층·노드를 실어([mergeOutdoorResults]) 눌렀을 때 실내까지 안내되게 한다 —
+  /// 이름은 POI, 능력은 우리 데이터다.
+  ///
+  /// 건물 줄과 이름이 **완전히 같은**(공백·대소문자 무시) POI도 뺀다. TMAP도
+  /// 같은 건물을 POI 한 건으로 돌려주기 때문이다. `contains`로 넓히지 않는
+  /// 이유는 "더현대서울 스타벅스"처럼 건물 이름을 앞에 단 진짜 결과까지
+  /// 사라지기 때문이다 — 중복 한 줄을 지우려다 찾던 가게를 지우는 쪽이 훨씬
+  /// 나쁘다.
+  MergedOutdoorResults _mergedResults(Building? building) {
+    final isAt = widget.isInsideIndoorBuilding;
+    final merged = mergeOutdoorResults(
+      pois: _pois,
+      indoorStores: _results,
+      // 판정을 못 하면 아무 POI도 건물 것으로 보지 않는다. 그러면 지금까지처럼
+      // 두 줄이 남을 뿐이고, 잘못 합쳐 엉뚱한 매장으로 안내하지는 않는다.
+      isAtBuilding: (poi) => isAt?.call(poi.point) ?? false,
+    );
+    if (building == null) return merged;
 
-    var pois = _pois;
-    final isInside = widget.isInsideIndoorBuilding;
-    if (isInside != null) {
-      pois = dropPoisCoveredByIndoorStores(
-        pois,
-        _results,
-        isInsideBuilding: (poi) => isInside(poi.point),
-      );
-    }
-
-    if (building == null) return pois;
     final key = collapseName(building.name);
-    return pois.where((poi) => collapseName(poi.name) != key).toList();
+    return MergedOutdoorResults(
+      merged.outdoorRows
+          .where((row) => collapseName(row.poi.name) != key)
+          .toList(),
+      merged.indoorStores,
+    );
   }
 
   Widget _discoveryHeader() {
@@ -1065,14 +1086,23 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 건물 밖 장소 한 줄. 실내 줄과 모양을 맞추되, **층 대신 주소와 직선 거리**를
   /// 적는다. 밖에서는 같은 이름의 지점이 여럿이라, 어느 지점인지 가르는 단서가
   /// 층이 아니라 주소다.
-  Widget _poiTile(OutdoorPoi poi, ValueChanged<OutdoorPoi> onPicked) {
+  Widget _poiTile(OutdoorSearchRow row, ValueChanged<OutdoorPoi> onPicked) {
+    final poi = row.poi;
+    final store = row.indoorStore;
     final distance = poi.distanceMeters;
-    final subtitleParts = [
-      if (distance != null) '약 ${formatTransitDistance(distance)}',
-      if (poi.address != null) poi.address!,
-    ];
+    // 우리 실내 매장에 연결된 줄은 **층을 적는다.** 이름은 TMAP 것이라 층이
+    // 안 보이는데, 그 한 줄이 "여기는 건물 안이고 실내까지 안내된다"를 말한다.
+    final subtitleParts = store != null
+        ? ['건물 안', store.floor]
+        : [
+            if (distance != null) '약 ${formatTransitDistance(distance)}',
+            if (poi.address != null) poi.address!,
+          ];
     return ListTile(
-      leading: const Icon(Icons.storefront_outlined, color: AppColors.muted),
+      leading: Icon(
+        store == null ? Icons.storefront_outlined : Icons.place_outlined,
+        color: store == null ? AppColors.muted : AppColors.primary,
+      ),
       title: Row(
         children: [
           Expanded(
@@ -1108,7 +1138,9 @@ class _SearchPanelState extends State<SearchPanel> {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 12, color: AppColors.muted),
             ),
-      onTap: () => onPicked(poi),
+      // 연결된 줄은 **우리 매장으로** 넘긴다. 층·노드가 거기 들어 있어야
+      // 문을 경유하는 실내 안내까지 이어진다([MapShellScreen._startRoute]).
+      onTap: () => store == null ? onPicked(poi) : widget.onStorePicked(store),
     );
   }
 
