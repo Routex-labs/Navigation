@@ -43,7 +43,12 @@ class PdrDebugSessionRecorder {
   // 임계값(변화량·상승속도·허가 반경·유지 시간)은 전부 초안값이라, 실측 기압
   // 원본과 **거부된 판정의 이유**가 파일에 없으면 조정할 근거가 없다. 확정만
   // 남기면 미탐은 파일에서 아예 보이지 않는다.
-  static const schemaVersion = 12;
+  // v13: confirmed cursor와 별개로 사는 optimistic(화면) cursor의 상태를 남긴다.
+  // v12까지는 "preview 선행분"이 scalar 하나였고 그것도 매 프레임 재계산이라,
+  // 화면이 뒤로 간 프레임이 배치 때문인지 후보 교체 때문인지 파일에서 가릴 수
+  // 없었다. optimistic 간선·진행거리·선행분과 preview peak 식별자 합성 여부를
+  // 함께 남겨, 배치 구성과 무관한 위치 시계열인지 사후에 검증한다.
+  static const schemaVersion = 13;
   static const _maxQualitySamples = 900;
   static const _maxTrackerInputEvents = 4000;
   static const _maxRouteProgressSamples = 900;
@@ -312,7 +317,12 @@ class PdrDebugSessionRecorder {
         'preview_is_ambiguous': result.previewIsAmbiguous,
         'heading_bias_deg': result.headingBiasDeg,
         'confirmed_displacement_m': result.confirmedDisplacementM,
-        'confirmed_consumed_preview_m': result.confirmedConsumedPreviewM,
+        // optimistic cursor(화면 위치)의 독립 상태. 확정 cursor와 나란히
+        // 남겨야 "배치가 마커를 뒤로 보냈는가"를 파일만으로 판정할 수 있다.
+        'optimistic_lead_m': result.optimisticLeadM,
+        'optimistic_edge_id': result.optimisticEdgeId,
+        'optimistic_edge_progress_m': result.optimisticEdgeProgressM,
+        'preview_peak_ids_synthetic': result.previewPeakIdsSynthetic,
         'leader_relocated': result.leaderRelocated,
       },
     });

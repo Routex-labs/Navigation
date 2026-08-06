@@ -46,6 +46,8 @@ class CorridorTrackerConfig {
     this.headingBiasMaxErrorDeg = 50,
     this.maxTransitionsPerSegment = 3,
     this.maxPathPoints = 800,
+    this.maxTrackedPreviewPeaks = 512,
+    this.optimisticReconcileMarginM = 2,
   });
 
   /// 동시에 유지하는 가설 수. 교차점이 촘촘한 층에서 정답이 살아남을 여유.
@@ -144,6 +146,28 @@ class CorridorTrackerConfig {
 
   final int maxTransitionsPerSegment;
   final int maxPathPoints;
+
+  /// optimistic beam이 "이미 태운 걸음"으로 기억하는 peak 식별자 수 상한.
+  ///
+  /// 확정 시간창을 지난 식별자는 어차피 다시 들어오지 않으므로 먼저 버린다.
+  /// 이 상한은 시각이 없어 합성 식별자를 쓰는 세션의 안전장치다.
+  final int maxTrackedPreviewPeaks;
+
+  /// 확정 1등에서 optimistic cursor까지 그래프로 도달 가능한지 볼 때 선행분에
+  /// 더해 주는 여유(m). 노드 좌표와 보행 거리의 미세한 차이를 흡수한다.
+  final double optimisticReconcileMarginM;
+}
+
+/// 실시간 preview 걸음 하나.
+///
+/// [peakId]가 **적용 식별자**다. 같은 걸음이 preview로 한 번, confirmed 배치로
+/// 다시 한 번 보고돼도 optimistic cursor는 이 값으로 중복을 걸러 한 번만
+/// 전진한다. 배치 크기를 어떻게 잘라도 표시 위치 시계열이 같아지는 근거다.
+class TimedPreviewStep {
+  const TimedPreviewStep({required this.peakId, required this.rawPoint});
+
+  final int peakId;
+  final PdrLocalPoint rawPoint;
 }
 
 class CorridorObservation {
@@ -158,6 +182,8 @@ class CorridorObservation {
     required this.hasHeading,
     this.rawConfirmedStepPositions = const [],
     this.rawPreviewTailPositions = const [],
+    this.rawPreviewTailPeakTimesMs = const [],
+    this.confirmedThroughMs,
   });
 
   final int timestampMs;
@@ -180,6 +206,54 @@ class CorridorObservation {
   /// 첫 점은 tail 직전 위치이며 이후 점마다 한 걸음의 이동 벡터를 만든다.
   /// 확정 상태에는 반영하지 않고 화면용 preview에만 사용한다.
   final List<PdrLocalPoint> rawPreviewTailPositions;
+
+  /// [rawPreviewTailPositions]와 **같은 인덱스**의 accepted peak 시각.
+  ///
+  /// 비어 있거나 길이가 다르면 세션 안에서만 유효한 합성 식별자로 폴백한다
+  /// ([CorridorTrackingResult.previewPeakIdsSynthetic]가 true가 된다).
+  final List<int?> rawPreviewTailPeakTimesMs;
+
+  /// 확정 배치가 소비한 시간창의 끝. 이 시각 이하의 preview peak는 이미
+  /// 확정으로 넘어갔으므로 optimistic cursor를 다시 전진시키지 않는다.
+  final int? confirmedThroughMs;
+
+  /// tail 직전 위치. 첫 preview 걸음의 이동 벡터 기준점이다.
+  PdrLocalPoint? get previewTailOriginM =>
+      rawPreviewTailPositions.isEmpty ? null : rawPreviewTailPositions.first;
+
+  /// tail을 식별자가 붙은 걸음 목록으로 편다.
+  ///
+  /// 시각이 없으면 누적 preview 걸음 번호로 합성한다. 누적값이라 단조 증가하고
+  /// 배치 구성과 무관하므로, 시각이 없는 Android·옛 fixture에서도 같은 걸음이
+  /// 두 번 적용되지 않는다. 실제 시각과 섞이지 않게 음수로 만든다.
+  List<TimedPreviewStep> get timedPreviewSteps {
+    final points = rawPreviewTailPositions;
+    if (points.length < 2) return const [];
+    final times = rawPreviewTailPeakTimesMs.length == points.length
+        ? rawPreviewTailPeakTimesMs
+        : const <int?>[];
+    final movementCount = points.length - 1;
+    return [
+      for (var index = 1; index < points.length; index += 1)
+        TimedPreviewStep(
+          peakId:
+              (times.isEmpty ? null : times[index]) ??
+              -(previewSteps - (movementCount - index) + 1),
+          rawPoint: points[index],
+        ),
+    ];
+  }
+
+  /// tail 안에 시각이 빠진 걸음이 있는지. 진단 warning의 근거다.
+  bool get hasSyntheticPreviewPeakIds {
+    final points = rawPreviewTailPositions;
+    if (points.length < 2) return false;
+    if (rawPreviewTailPeakTimesMs.length != points.length) return true;
+    for (var index = 1; index < points.length; index += 1) {
+      if (rawPreviewTailPeakTimesMs[index] == null) return true;
+    }
+    return false;
+  }
 }
 
 class CorridorTrackingResult {
@@ -203,7 +277,10 @@ class CorridorTrackingResult {
     required this.rawConfirmedPosition,
     required this.rawPreviewPosition,
     required this.confirmedDisplacementM,
-    required this.confirmedConsumedPreviewM,
+    required this.optimisticLeadM,
+    required this.optimisticEdgeId,
+    required this.optimisticEdgeProgressM,
+    required this.previewPeakIdsSynthetic,
     required this.leaderRelocated,
   });
 
@@ -240,26 +317,21 @@ class CorridorTrackingResult {
   /// 재해석까지 포함할 수 있어 실제 보행 거리와는 구분한다.
   final double confirmedDisplacementM;
 
-  /// 기존 preview 선행분에서 실제로 소비했다고 인정한 확정 거리.
-  final double confirmedConsumedPreviewM;
+  /// 확정 cursor에서 optimistic cursor까지 그래프 경로 길이(m).
+  ///
+  /// 선행분을 따로 "안정화"하지 않는다. optimistic beam이 실제로 태운 거리에서
+  /// 확정 보행 거리를 뺀 값이라, 배치가 도착해도 정의상 뒤로 가지 않는다.
+  final double optimisticLeadM;
+
+  /// optimistic cursor가 올라타 있는 간선과 그 위 진행 거리.
+  final String? optimisticEdgeId;
+  final double optimisticEdgeProgressM;
+
+  /// preview peak 식별자를 accepted peak 시각이 아니라 걸음 번호로 합성했는지.
+  final bool previewPeakIdsSynthetic;
 
   /// 보정 위치 변화가 이번 확정 보행 거리로 설명되지 않는 대표 가설 재배치인지.
   final bool leaderRelocated;
-}
-
-/// 확정 배치 뒤 표시할 preview 선행 거리.
-///
-/// 정상 확정은 이미 주황으로 보였던 이동을 초록이 따라온 것이므로 그 거리만큼
-/// 기존 선행분을 줄인다. 대표 가설이 재배치되더라도 재배치된 직선거리가 아니라
-/// 이번 배치에서 실제 확정된 보행 거리만 소비한다.
-double stabilizePreviewLeadM({
-  required double previousLeadM,
-  required double targetLeadM,
-  required double fullLeadM,
-  required double confirmedConsumedM,
-}) {
-  final retainedLeadM = previousLeadM - confirmedConsumedM;
-  return math.max(targetLeadM, retainedLeadM).clamp(0.0, fullLeadM).toDouble();
 }
 
 /// 초록·주황 원본을 수정하지 않고 실제 위치만 graph 제약으로 보정한다.
@@ -290,6 +362,22 @@ class CorridorPositionTracker {
 
   List<_Hypothesis> _beam = const [];
 
+  /// 화면 위치를 들고 있는 두 번째 빔. 확정 빔과 **따로** 산다.
+  ///
+  /// 매 snapshot마다 확정 1등에서 다시 만들지 않는다. 새 accel peak가 생긴
+  /// 즉시 한 번 전진하고, 그 뒤 확정 배치가 같은 peak를 확인하더라도 다시
+  /// 전진하거나 뒤로 가지 않는다.
+  List<_Hypothesis> _optimisticBeam = const [];
+
+  /// optimistic beam에 이미 태운 preview peak 식별자(오래된 것부터).
+  final List<int> _appliedPreviewPeakIds = [];
+  final Set<int> _appliedPreviewPeakIdSet = {};
+
+  /// optimistic·confirmed가 각각 태운 누적 보행 거리(m).
+  double _optimisticTraveledM = 0;
+  double _confirmedTraveledM = 0;
+  bool _previewPeakIdsSynthetic = false;
+
   CorridorTrackingState _state = CorridorTrackingState.uncertain;
   PdrLocalPoint _correctedPosition = PdrLocalPoint.zero;
   PdrLocalPoint _previewPosition = PdrLocalPoint.zero;
@@ -308,17 +396,19 @@ class CorridorPositionTracker {
   String? _leaderEdgeId;
   int _leaderSign = 1;
 
-  /// 확정 위치에서 preview까지의 경로 길이(m). 뒤로 줄지 않게 지킨다.
-  double _previewLeadM = 0;
-
   /// 이번 갱신에서 확정 위치가 나아간 거리(m).
   double _confirmedAdvanceM = 0;
-  double _confirmedConsumedPreviewM = 0;
   bool _leaderRelocated = false;
 
   bool get isInitialized => _beam.isNotEmpty;
 
   _Hypothesis? get _best => _beam.isEmpty ? null : _beam.first;
+
+  _Hypothesis? get _optimisticBest =>
+      _optimisticBeam.isEmpty ? null : _optimisticBeam.first;
+
+  double get _optimisticLeadM =>
+      math.max(0.0, _optimisticTraveledM - _confirmedTraveledM);
 
   CorridorTrackingResult get result => CorridorTrackingResult(
     state: _state,
@@ -342,7 +432,10 @@ class CorridorPositionTracker {
     rawConfirmedPosition: _rawConfirmedPosition,
     rawPreviewPosition: _rawPreviewPosition,
     confirmedDisplacementM: _confirmedAdvanceM,
-    confirmedConsumedPreviewM: _confirmedConsumedPreviewM,
+    optimisticLeadM: _optimisticLeadM,
+    optimisticEdgeId: _optimisticBest?.edge.id,
+    optimisticEdgeProgressM: _optimisticBest?.progressM ?? 0,
+    previewPeakIdsSynthetic: _previewPeakIdsSynthetic,
     leaderRelocated: _leaderRelocated,
   );
 
@@ -365,10 +458,16 @@ class CorridorPositionTracker {
     _pendingEdgeId = null;
     _leaderEdgeId = null;
     _leaderSign = 1;
-    _previewLeadM = 0;
     _confirmedAdvanceM = 0;
-    _confirmedConsumedPreviewM = 0;
     _leaderRelocated = false;
+    // 두 beam과 식별자 상태를 함께 초기화한다. 하나만 남기면 새 세션의 첫
+    // peak가 "이미 태운 걸음"으로 걸러진다.
+    _appliedPreviewPeakIds.clear();
+    _appliedPreviewPeakIdSet.clear();
+    _optimisticBeam = const [];
+    _confirmedTraveledM = initialConfirmedDistanceM;
+    _optimisticTraveledM = initialConfirmedDistanceM;
+    _previewPeakIdsSynthetic = false;
 
     // 시작 방향을 하나로 못 박지 않는다. 첫 걸음의 방위는 복도에 거의 수직인
     // 경우가 많고(실측에서 176.9°), 그것으로 진행 부호를 잠그면 6° 차이로
@@ -413,7 +512,6 @@ class CorridorPositionTracker {
 
     final previousCorrected = _correctedPosition;
     _confirmedAdvanceM = 0;
-    _confirmedConsumedPreviewM = 0;
     _leaderRelocated = false;
     if (deltaSteps > 0 && deltaDistanceM > 0) {
       final segments = _rawSegments(
@@ -431,12 +529,8 @@ class CorridorPositionTracker {
       _confirmedAdvanceM = (_correctedPosition - previousCorrected).distance;
       // 그래프를 따라 실제로 걸었다면 두 끝점의 직선거리는 보행 경로 길이를
       // 넘을 수 없다. 0.5m 여유를 넘는 차이는 빔 1등 교체로 위치 해석이
-      // 재배치된 것이다. preview에서는 이 변위가 아니라 실제 확정 보행
-      // 거리만 소비한다.
+      // 재배치된 것이다.
       _leaderRelocated = _confirmedAdvanceM > deltaDistanceM + 0.5;
-      _confirmedConsumedPreviewM = _leaderRelocated
-          ? deltaDistanceM
-          : _confirmedAdvanceM;
     }
 
     _lastConfirmedSteps = math.max(
@@ -447,8 +541,16 @@ class CorridorPositionTracker {
       _lastConfirmedDistanceM,
       observation.confirmedDistanceM,
     );
+    _confirmedTraveledM = _lastConfirmedDistanceM;
     _lastPreviewSteps = math.max(_lastPreviewSteps, observation.previewSteps);
-    _rebuildPreview(observation.rawPreviewTailPositions);
+
+    // 확정 → optimistic 순서를 지킨다. 확정이 다른 복도로 옮겨 갔는지 먼저
+    // 판단해야, 이번 프레임의 새 peak를 어느 cursor 위에 태울지가 정해진다.
+    _reconcileOptimistic();
+    _applyPreviewPeaks(observation);
+    _catchUpOptimisticToConfirmed();
+    _forgetAcknowledgedPeakIds(observation.confirmedThroughMs);
+    _publishPreview();
     return result;
   }
 
@@ -723,55 +825,145 @@ class CorridorPositionTracker {
     ];
   }
 
-  // ── preview ──
+  // ── optimistic preview cursor ──
 
-  /// 확정 빔을 그대로 이어 주황 꼬리만 더 태운다.
+  /// 확정 1등이 optimistic cursor와 더 이상 같은 길 위에 있지 않을 때만
+  /// 화면 cursor를 재배치한다.
   ///
-  /// 예전에는 매번 "확정 위치 + 현재 주황 선행분"으로 처음부터 다시 만들었다.
-  /// 확정 배치가 도착하면 선행 걸음 수가 갑자기 줄어(19→8) preview가 8m 뒤로
-  /// 재계산됐고, 그게 화면에서 보이던 역주행이었다. 지금은 확정 빔이 이미
-  /// 그 걸음들을 소비한 상태라 꼬리만 짧아질 뿐 기준점이 뒤로 가지 않는다.
-  void _rebuildPreview(List<PdrLocalPoint> rawPreviewTailPositions) {
+  /// 배치 수신 자체는 marker 이동 이벤트가 아니다. 확정 빔이 optimistic cursor를
+  /// 그래프로 따라잡을 수 있는 한(같은 간선이거나 앞으로 연결된 간선), cursor는
+  /// 그대로 둔다 — 그게 "배치가 와도 뒤로 가지 않는다"의 구현이다.
+  void _reconcileOptimistic() {
     final best = _best;
     if (best == null) {
-      _resetPreviewToConfirmed();
+      _optimisticBeam = const [];
       return;
     }
-    // 씨앗은 **표시 중인 1등 하나뿐**이다. 빔 전체를 씨앗으로 쓰면 확정 쪽
-    // 후보 경쟁이 그대로 preview 위치로 새어 나와, 화면이 복도 사이를 오간다.
-    // 여기서 갈리는 것은 "이 앞 분기에서 어디로 가는가"만이어야 한다.
-    var candidates = [best.forPreview()];
-    for (var index = 1; index < rawPreviewTailPositions.length; index += 1) {
-      final movement =
-          rawPreviewTailPositions[index] - rawPreviewTailPositions[index - 1];
+    final leader = _optimisticBest;
+    if (leader == null) {
+      _rebaseOptimistic(best);
+      return;
+    }
+    if (leader.edge.id == best.edge.id && leader.travelSign == best.travelSign) {
+      return;
+    }
+    if (_network.isForwardReachable(
+      fromEdge: best.edge,
+      travelSign: best.travelSign,
+      progressM: best.progressM,
+      targetEdgeId: leader.edge.id,
+      maxDistanceM: _optimisticLeadM + config.optimisticReconcileMarginM,
+    )) {
+      return;
+    }
+    // 그래프로 설명되지 않는 1등 교체. 화면을 옛 복도에 남겨 두면 그때부터
+    // 모든 갱신이 틀린 자리에서 시작하므로 확정 쪽으로 되돌린다.
+    _leaderRelocated = true;
+    _rebaseOptimistic(best);
+  }
+
+  void _rebaseOptimistic(_Hypothesis confirmedLeader) {
+    _optimisticBeam = [confirmedLeader.forPreview()];
+    _optimisticTraveledM = _confirmedTraveledM;
+  }
+
+  /// 아직 태우지 않은 preview peak만 시간순으로 한 번 적용한다.
+  void _applyPreviewPeaks(CorridorObservation observation) {
+    if (observation.hasSyntheticPreviewPeakIds) {
+      _previewPeakIdsSynthetic = true;
+    }
+    var origin = observation.previewTailOriginM;
+    if (origin == null) return;
+    for (final step in observation.timedPreviewSteps) {
+      final previous = origin!;
+      origin = step.rawPoint;
+      if (!_rememberPreviewPeak(step.peakId)) continue;
+      final movement = step.rawPoint - previous;
       if (movement.distance <= 1e-6) continue;
-      final observed = _normalizeBearing(
-        pdrBearingForDirection(movement) + _headingBiasDeg,
+      _advanceOptimistic(
+        headingDeg: pdrBearingForDirection(movement),
+        distanceM: movement.distance,
+        rawPoint: step.rawPoint,
       );
-      final next = <_Hypothesis>[];
-      for (final hypothesis in candidates) {
+      _optimisticTraveledM += movement.distance;
+    }
+  }
+
+  /// preview로 한 번도 보이지 않고 배치로만 들어온 걸음을 태운다.
+  ///
+  /// 두 beam이 같은 걸음을 두 번 먹지 않으면서도, optimistic cursor가 확정보다
+  /// 뒤에 남는 일은 없어야 한다. 차이는 항상 "preview가 놓친 걸음"이다.
+  void _catchUpOptimisticToConfirmed() {
+    final deficitM = _confirmedTraveledM - _optimisticTraveledM;
+    if (deficitM <= 1e-6) return;
+    final best = _best;
+    if (best == null) return;
+    if (_optimisticBeam.isEmpty) _rebaseOptimistic(best);
+    _advanceOptimistic(
+      headingDeg: best.edge.bearingForTravel(best.progressM, best.travelSign),
+      distanceM: deficitM,
+      rawPoint: _rawConfirmedPosition,
+    );
+    _optimisticTraveledM = _confirmedTraveledM;
+  }
+
+  void _advanceOptimistic({
+    required double headingDeg,
+    required double distanceM,
+    required PdrLocalPoint rawPoint,
+  }) {
+    if (_optimisticBeam.isEmpty) return;
+    final observed = _normalizeBearing(headingDeg + _headingBiasDeg);
+    final next = <_Hypothesis>[];
+    for (final hypothesis in _optimisticBeam) {
+      next.addAll(_advance(hypothesis, observed, distanceM, rawPoint));
+      // 실제 유턴은 반영한다. 반대 부호 가설을 함께 만들어 두면 비용이
+      // 판정하고, 이길 경우 cursor가 뒤로 가는 것도 허용된다.
+      final currentBearing = hypothesis.edge.bearingForTravel(
+        hypothesis.progressM,
+        hypothesis.travelSign,
+      );
+      if (hypothesis.edge.bidirectional &&
+          _headingError(observed, currentBearing) >= config.reverseTriggerDeg) {
         next.addAll(
-          _advance(
-            hypothesis,
-            observed,
-            movement.distance,
-            rawPreviewTailPositions[index],
-          ),
+          _advance(hypothesis.reversed(), observed, distanceM, rawPoint),
         );
       }
-      if (next.isEmpty) break;
-      candidates = _prune(next);
     }
-    if (candidates.isEmpty) {
+    if (next.isEmpty) return;
+    _optimisticBeam = _prune(next);
+  }
+
+  /// 처음 보는 peak면 기억하고 true. 이미 태운 peak면 false.
+  bool _rememberPreviewPeak(int peakId) {
+    if (!_appliedPreviewPeakIdSet.add(peakId)) return false;
+    _appliedPreviewPeakIds.add(peakId);
+    while (_appliedPreviewPeakIds.length > config.maxTrackedPreviewPeaks) {
+      _appliedPreviewPeakIdSet.remove(_appliedPreviewPeakIds.removeAt(0));
+    }
+    return true;
+  }
+
+  /// 확정 시간창을 지난 식별자는 다시 tail에 나타나지 않으므로 잊는다.
+  void _forgetAcknowledgedPeakIds(int? confirmedThroughMs) {
+    if (confirmedThroughMs == null) return;
+    while (_appliedPreviewPeakIds.isNotEmpty) {
+      final oldest = _appliedPreviewPeakIds.first;
+      // 합성 식별자(음수)는 시각 축이 아니므로 개수 상한으로만 관리한다.
+      if (oldest < 0 || oldest > confirmedThroughMs) break;
+      _appliedPreviewPeakIdSet.remove(_appliedPreviewPeakIds.removeAt(0));
+    }
+  }
+
+  void _publishPreview() {
+    final leader = _optimisticBest;
+    if (leader == null) {
       _resetPreviewToConfirmed();
       return;
     }
-
-    final leader = candidates.first;
-    final runnerUp = candidates.length > 1 ? candidates[1] : null;
+    final runnerUp = _optimisticBeam.length > 1 ? _optimisticBeam[1] : null;
     // 모호 판정에 히스테리시스를 준다. 단일 임계값을 쓰면 점수가 그 근처에서
-    // 오갈 때마다 "분기에서 대기 <-> 꼬리 끝까지 전진"이 번갈아 일어나서,
-    // preview가 꼬리 길이만큼(실측 4.6m) 앞뒤로 진동한다.
+    // 오갈 때마다 후보 목록이 프레임마다 뒤집힌다.
     final gapDeg = runnerUp == null || runnerUp.edge.id == leader.edge.id
         ? double.infinity
         : runnerUp.meanErrorDeg - leader.meanErrorDeg;
@@ -780,89 +972,55 @@ class CorridorPositionTracker {
         ? gapDeg < exitThreshold
         : gapDeg < config.ambiguousMarginDeg;
 
-    // 선행분(확정 위치에서 preview까지의 길이)은 **뒤로 줄지 않는다**.
-    //
-    // 갈렸을 때 공통 지점까지만 전진시키면 옳지만, 그 공통 지점은 프레임마다
-    // 조금씩 바뀌어서 preview가 앞뒤로 진동한다(실측 3m 초과 28건). 반대로
-    // 아예 얼려 두면 모호가 안 풀릴 때 옛 자리에 영원히 남는다(실측 214개 중
-    // 189개가 같은 좌표, 실제 위치에서 40m). 선행분을 단조로 두면 둘 다
-    // 피한다 — 확정이 따라온 만큼만 줄어들고, 앞으로는 자유롭게 늘어난다.
-    final leaderPath = leader.path.isEmpty ? [_correctedPosition] : leader.path;
-    final fullLeadM = _pathLength(leaderPath);
-    final targetLeadM = _previewIsAmbiguous && runnerUp != null
-        ? _pathLength(_commonPrefix(leaderPath, runnerUp.path))
-        : fullLeadM;
-    _previewLeadM = stabilizePreviewLeadM(
-      previousLeadM: _previewLeadM,
-      targetLeadM: targetLeadM,
-      fullLeadM: fullLeadM,
-      confirmedConsumedM: _confirmedConsumedPreviewM,
+    _previewPosition = leader.edge.pointAt(leader.progressM);
+    _previewHeadingDeg = leader.edge.bearingForTravel(
+      leader.progressM,
+      leader.travelSign,
     );
+    // 표시 경로는 확정 위치에서 optimistic cursor까지의 **선행분**이다.
+    // 선행분을 별도 scalar로 안정화하지 않고 두 누적 거리의 차이로 정의하므로,
+    // 배치가 확인만 하고 지나가는 프레임에서는 값이 그대로 유지된다.
+    final tail = _takeLastLength(leader.path, _optimisticLeadM);
     _previewPath
       ..clear()
-      ..addAll(_truncateToLength(leaderPath, _previewLeadM));
-    _previewPosition = _previewPath.last;
-    _previewHeadingDeg = _previewIsAmbiguous
-        ? result.correctedHeadingDeg
-        : leader.edge.bearingForTravel(leader.progressM, leader.travelSign);
+      ..addAll(tail.isEmpty ? [_previewPosition] : tail);
     final seen = <String>{};
     _previewCandidateEdgeIds = [
-      for (final candidate in candidates)
+      for (final candidate in _optimisticBeam)
         if (seen.add(candidate.edge.id)) candidate.edge.id,
     ];
   }
 
-  static double _pathLength(List<PdrLocalPoint> path) {
-    var total = 0.0;
-    for (var index = 1; index < path.length; index += 1) {
-      total += (path[index] - path[index - 1]).distance;
-    }
-    return total;
-  }
-
-  /// 경로 앞에서부터 [lengthM]만큼만 남긴다. 마지막 점은 정확히 그 지점이다.
-  static List<PdrLocalPoint> _truncateToLength(
+  /// 경로 **끝에서부터** [lengthM]만큼만 남긴다. 첫 점은 정확히 그 지점이다.
+  static List<PdrLocalPoint> _takeLastLength(
     List<PdrLocalPoint> path,
     double lengthM,
   ) {
-    if (path.isEmpty) return path;
-    final kept = <PdrLocalPoint>[path.first];
+    if (path.isEmpty) return const [];
+    if (lengthM <= 1e-9) return [path.last];
+    final tail = <PdrLocalPoint>[path.last];
     var remaining = lengthM;
-    for (var index = 1; index < path.length; index += 1) {
+    for (var index = path.length - 1; index >= 1; index -= 1) {
       final step = (path[index] - path[index - 1]).distance;
       if (step <= 1e-9) continue;
       if (remaining >= step) {
-        kept.add(path[index]);
+        tail.add(path[index - 1]);
         remaining -= step;
         continue;
       }
       if (remaining > 1e-6) {
         final t = remaining / step;
-        kept.add(
+        tail.add(
           PdrLocalPoint(
-            path[index - 1].eastM +
-                (path[index].eastM - path[index - 1].eastM) * t,
-            path[index - 1].northM +
-                (path[index].northM - path[index - 1].northM) * t,
+            path[index].eastM + (path[index - 1].eastM - path[index].eastM) * t,
+            path[index].northM +
+                (path[index - 1].northM - path[index].northM) * t,
           ),
         );
       }
       break;
     }
-    return kept;
-  }
-
-  static List<PdrLocalPoint> _commonPrefix(
-    List<PdrLocalPoint> left,
-    List<PdrLocalPoint> right,
-  ) {
-    final shared = <PdrLocalPoint>[];
-    final limit = math.min(left.length, right.length);
-    for (var index = 0; index < limit; index += 1) {
-      if ((left[index] - right[index]).distance > 0.05) break;
-      shared.add(left[index]);
-    }
-    return shared;
+    return tail.reversed.toList(growable: false);
   }
 
   void _resetPreviewToConfirmed() {
@@ -873,7 +1031,13 @@ class CorridorPositionTracker {
       ..add(_correctedPosition);
     _previewCandidateEdgeIds = const [];
     _previewIsAmbiguous = false;
-    _previewLeadM = 0;
+    final best = _best;
+    if (best != null) {
+      _rebaseOptimistic(best);
+    } else {
+      _optimisticBeam = const [];
+      _optimisticTraveledM = _confirmedTraveledM;
+    }
   }
 }
 
@@ -1266,6 +1430,44 @@ class _CorridorNetwork {
     headingDeg: incomingBearingDeg,
     toleranceDeg: toleranceDeg,
   );
+
+  /// [fromEdge] 위 [progressM]에서 진행 방향으로 [maxDistanceM] 안에
+  /// [targetEdgeId]에 닿을 수 있는지.
+  ///
+  /// optimistic cursor를 그대로 둘지 확정 쪽으로 되돌릴지 가르는 판정이다.
+  /// "가까운 간선"이 아니라 **연결된 간선**만 본다 — 나란한 평행 복도는 거리가
+  /// 아무리 가까워도 여기서 통과하지 못한다.
+  bool isForwardReachable({
+    required _CorridorEdge fromEdge,
+    required int travelSign,
+    required double progressM,
+    required String targetEdgeId,
+    required double maxDistanceM,
+  }) {
+    if (fromEdge.id == targetEdgeId) return true;
+    final remainingM = travelSign > 0
+        ? fromEdge.lengthM - progressM
+        : progressM;
+    if (remainingM > maxDistanceM) return false;
+    final visited = <String>{fromEdge.id};
+    final queue = <({String nodeId, double distanceM})>[
+      (nodeId: fromEdge.nodeAtTravelEnd(travelSign), distanceM: remainingM),
+    ];
+    while (queue.isNotEmpty) {
+      final head = queue.removeAt(0);
+      for (final option in recoveryOptionsFromNode(head.nodeId)) {
+        if (option.edge.id == targetEdgeId) return true;
+        if (!visited.add(option.edge.id)) continue;
+        final nextM = head.distanceM + option.edge.lengthM;
+        if (nextM > maxDistanceM) continue;
+        queue.add((
+          nodeId: option.edge.nodeAtTravelEnd(option.travelSign),
+          distanceM: nextM,
+        ));
+      }
+    }
+    return false;
+  }
 
   List<_RecoveryOption> recoveryOptionsFromNode(String nodeId) => [
     for (final edge in _incident[nodeId] ?? const [])

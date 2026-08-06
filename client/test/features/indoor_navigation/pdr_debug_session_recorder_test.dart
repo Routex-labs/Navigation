@@ -139,7 +139,7 @@ void main() {
     final matched = paths['map_matched_floor_local_m']! as List<Object?>;
     final finalMatched = matched.last! as Map<String, double>;
 
-    expect(json['schema_version'], 12);
+    expect(json['schema_version'], 13);
     expect(
       (json['map_context']! as Map<String, Object?>)['map_calibration_version'],
       'thehyundai-seoul-1f-svg-v1',
@@ -547,7 +547,10 @@ void main() {
         rawConfirmedPosition: PdrLocalPoint(4, 1),
         rawPreviewPosition: PdrLocalPoint(4.5, 1.2),
         confirmedDisplacementM: 4,
-        confirmedConsumedPreviewM: 3.1,
+        optimisticLeadM: 0.5,
+        optimisticEdgeId: 'ab',
+        optimisticEdgeProgressM: 4.5,
+        previewPeakIdsSynthetic: false,
         leaderRelocated: false,
       ),
       at: DateTime.utc(2026, 7, 18, 9, 0, 3),
@@ -596,7 +599,10 @@ void main() {
       rawConfirmedPosition: PdrLocalPoint(4, 1),
       rawPreviewPosition: PdrLocalPoint(4.5, 1.2),
       confirmedDisplacementM: 4,
-      confirmedConsumedPreviewM: 3.1,
+      optimisticLeadM: 0.5,
+      optimisticEdgeId: 'ab',
+      optimisticEdgeProgressM: 4.5,
+      previewPeakIdsSynthetic: false,
       leaderRelocated: false,
     );
 
