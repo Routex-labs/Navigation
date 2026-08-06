@@ -9,7 +9,10 @@ import 'package:latlong2/latlong.dart';
 /// 지점을 건너뛴다.
 LatLng? wgs84PointToLatLng(Map<String, dynamic>? point) {
   if (point == null) return null;
-  return LatLng((point['lat'] as num).toDouble(), (point['lng'] as num).toDouble());
+  return LatLng(
+    (point['lat'] as num).toDouble(),
+    (point['lng'] as num).toDouble(),
+  );
 }
 
 /// 두 실좌표(WGS84) 사이의 대권 거리(m). 실내 매장은 건물 규모(수백m)라
@@ -34,6 +37,7 @@ class StorePolygon {
     required this.name,
     required this.polygon,
     required this.centroid,
+    this.polygonLocalM = const [],
     this.entranceNodeId,
     this.category,
     this.subcategory,
@@ -44,6 +48,10 @@ class StorePolygon {
   final String name;
   final List<LatLng> polygon;
   final LatLng centroid;
+
+  /// 실제 도면의 로컬(m) 폴리곤. 길찾기 그래프 노드도 같은 좌표계를 쓰므로
+  /// 서로 다른 ID를 가진 에스컬레이터 도형과 탑승 노드를 공간적으로 매칭한다.
+  final List<LocalFloorPoint> polygonLocalM;
 
   /// 경로탐색 시작/도착 노드로 쓸 매장 입구 노드 ID. 없으면 경로탐색 불가.
   final String? entranceNodeId;
@@ -83,9 +91,11 @@ class FloorPlan {
   LatLng? approximateCurrentLocation() {
     if (footprint.isNotEmpty) {
       final avgLat =
-          footprint.map((p) => p.latitude).reduce((a, b) => a + b) / footprint.length;
+          footprint.map((p) => p.latitude).reduce((a, b) => a + b) /
+          footprint.length;
       final avgLng =
-          footprint.map((p) => p.longitude).reduce((a, b) => a + b) / footprint.length;
+          footprint.map((p) => p.longitude).reduce((a, b) => a + b) /
+          footprint.length;
       return LatLng(avgLat, avgLng);
     }
     if (corridors.isNotEmpty && corridors.first.isNotEmpty) {
@@ -96,7 +106,8 @@ class FloorPlan {
   }
 
   factory FloorPlan.fromJson(Map<String, dynamic> json) {
-    if (json.containsKey('footprint_wgs84') || json.containsKey('footprint_local_m')) {
+    if (json.containsKey('footprint_wgs84') ||
+        json.containsKey('footprint_local_m')) {
       return _fromApiResponse(json);
     }
     return _fromGeoJson(json);
@@ -115,22 +126,35 @@ class FloorPlan {
           // entrance_wgs84만 내려오는 경우가 있어, 그때는 entrance를 대체
           // 앵커로 쓴다 — 폴리곤이 없어도 목록/검색에는 등장해야 하기 때문.
           // 둘 다 없는 건물은 실좌표 앵커 자체가 없는 것이므로 건너뛴다.
-          final centroid = wgs84PointToLatLng(
+          final centroid =
+              wgs84PointToLatLng(
                 store['centroid_wgs84'] as Map<String, dynamic>?,
               ) ??
               wgs84PointToLatLng(
                 store['entrance_wgs84'] as Map<String, dynamic>?,
               );
           if (centroid == null) return null;
-          final polygon = ((store['polygon_wgs84'] as List<dynamic>?) ?? const [])
-              .map((point) => wgs84PointToLatLng(point as Map<String, dynamic>))
-              .whereType<LatLng>()
-              .toList();
+          final polygon =
+              ((store['polygon_wgs84'] as List<dynamic>?) ?? const [])
+                  .map(
+                    (point) =>
+                        wgs84PointToLatLng(point as Map<String, dynamic>),
+                  )
+                  .whereType<LatLng>()
+                  .toList();
+          final polygonLocalM =
+              ((store['polygon_local_m'] as List<dynamic>?) ?? const [])
+                  .map(
+                    (point) =>
+                        LocalFloorPoint.fromJson(point as Map<String, dynamic>),
+                  )
+                  .toList();
           return StorePolygon(
             id: store['id'] as String,
             name: store['name'] as String? ?? '',
             polygon: polygon,
             centroid: centroid,
+            polygonLocalM: polygonLocalM,
             entranceNodeId: store['entrance_node_id'] as String?,
             category: store['category'] as String?,
             subcategory: store['subcategory'] as String?,
@@ -142,7 +166,9 @@ class FloorPlan {
     final pois = ((json['pois'] as List<dynamic>?) ?? const [])
         .cast<Map<String, dynamic>>()
         .map((poi) {
-          final point = wgs84PointToLatLng(poi['position_wgs84'] as Map<String, dynamic>?);
+          final point = wgs84PointToLatLng(
+            poi['position_wgs84'] as Map<String, dynamic>?,
+          );
           if (point == null) return null;
           return PoiMarker(
             name: poi['name'] as String? ?? '',
@@ -170,10 +196,10 @@ class FloorPlan {
       if (geometry == null) continue;
 
       if (properties['type'] == 'corridor') {
-        final coordinates = (geometry['coordinates'] as List<dynamic>? ??
-                const [])
-            .map((c) => _toGeoJsonLatLng(c as List<dynamic>))
-            .toList();
+        final coordinates =
+            (geometry['coordinates'] as List<dynamic>? ?? const [])
+                .map((c) => _toGeoJsonLatLng(c as List<dynamic>))
+                .toList();
         corridors.add(coordinates);
       } else if (properties['type'] == 'poi') {
         final coordinate = geometry['coordinates'] as List<dynamic>;
@@ -196,4 +222,17 @@ class FloorPlan {
       (coordinate[0] as num).toDouble(),
     );
   }
+}
+
+class LocalFloorPoint {
+  const LocalFloorPoint(this.x, this.y);
+
+  final double x;
+  final double y;
+
+  factory LocalFloorPoint.fromJson(Map<String, dynamic> json) =>
+      LocalFloorPoint(
+        (json['x'] as num).toDouble(),
+        (json['y'] as num).toDouble(),
+      );
 }

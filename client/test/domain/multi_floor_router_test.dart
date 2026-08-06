@@ -116,6 +116,8 @@ void main() {
     expect(route.segments.first.transferToNodeId, 'arrival');
     expect(route.segments.first.transferPointsToNext, hasLength(2));
     expect(route.segments.last.route.distanceMeters, 7);
+    expect(route.segments.last.route.pointsLocalM.first.x, 2);
+    expect(route.segments.last.route.pointsLocalM.first.y, 2);
     expect(route.segments.last.transferPointsToNext, isEmpty);
   });
 

@@ -141,17 +141,16 @@ MultiFloorRoute? computeMultiFloorRoute(
     ];
     final transferFrom = segment.transferFromNode;
     final transferTo = segment.transferToNode;
-    final transferToTransform = transferTo?.floorId == null
-        ? null
-        : transformFor(transferTo!.floorId!);
-    final transferPoints =
-        transferFrom == null ||
-            transferTo == null ||
-            transferToTransform == null
+    // 두 층의 WGS84 변환 결과를 직접 잇지 않는다. 층별 보정이 조금만 달라도
+    // 실제 에스컬레이터 축이 아닌 대각선이 생긴다. 대신 탑승·하차 노드의 로컬
+    // 좌표를 **현재 층 변환 하나**로 함께 옮긴다. 원본 도면의 로컬 좌표는 층을
+    // 넘어 같은 축을 공유하므로, 현재 에스컬레이터에서 다음 층 방향으로 쭉
+    // 올라가는 약 20m 점선이 된다.
+    final transferPoints = transferFrom == null || transferTo == null
         ? const <LatLng>[]
         : <LatLng>[
             _apply(transform, transferFrom.xM, transferFrom.yM),
-            _apply(transferToTransform, transferTo.xM, transferTo.yM),
+            _apply(transform, transferTo.xM, transferTo.yM),
           ];
     built.add(
       IndoorRouteSegment(

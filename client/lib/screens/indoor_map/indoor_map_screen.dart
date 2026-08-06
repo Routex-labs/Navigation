@@ -23,6 +23,7 @@ import '../../domain/multi_floor_router.dart';
 import '../../domain/nearby_facilities.dart';
 import '../../domain/route_guidance.dart';
 import '../../domain/route_progress.dart';
+import '../../domain/transfer_route_geometry.dart';
 import '../../models/building.dart';
 import '../../models/building_graph.dart';
 import '../../models/floor_graph.dart';
@@ -550,12 +551,24 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 
     final existing = indoorLocationEstimateController.current;
     IndoorLocationEstimate? estimate;
-    if (existing != null &&
+    final entrance = _building?.entrance;
+    if (entrance != null) {
+      estimate = estimateIndoorLocationFromEntrance(
+        buildingId: buildingId,
+        floorId: floor,
+        graph: graph,
+        latitude: entrance.latitude,
+        longitude: entrance.longitude,
+        observedAt: DateTime.now(),
+      );
+    }
+    if (estimate == null &&
+        existing != null &&
         existing.buildingId == widget.buildingId &&
         existing.floorId == floor &&
         existing.isFresh(DateTime.now())) {
       estimate = existing;
-    } else {
+    } else if (estimate == null) {
       final position = await requestIndoorEstimatePosition();
       if (!mounted ||
           widget.buildingId != buildingId ||
@@ -574,8 +587,8 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         observedAt: position.timestamp,
       );
       if (estimate == null) return;
-      indoorLocationEstimateController.update(estimate);
     }
+    indoorLocationEstimateController.update(estimate);
     final resolvedEstimate = estimate;
 
     // 마커는 estimate를 저장한 순간 바로 보인다. PDR 결합은 센서와 자북
@@ -1181,7 +1194,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   /// 이 층에 그 시설이 없으면 그 줄은 아예 빠진다.
   ///
   /// 실패는 전부 빈 목록이다 — 시설 안내는 부가 정보라 실패가 시트를 막으면 안 된다.
-  Future<List<NearbyFacility>> nearbyFacilitiesFor(PoiSearchResult store) async {
+  Future<List<NearbyFacility>> nearbyFacilitiesFor(
+    PoiSearchResult store,
+  ) async {
     final startNodeId = store.nodeId;
     if (startNodeId == null || store.floor.isEmpty) return const [];
 
@@ -2807,11 +2822,16 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           // 완료된 "기존 계획선"이 아니라 실제로 걸어온 graph-matched 궤적을
           // 회색으로 그린다. 따라서 재탐색은 파란 미래만 교체한다.
           walkedRouteSegments: _walkedGuidanceSegments,
-          transferRoutePoints:
-              _multiFloorRoute
-                  ?.segmentForFloor(_selectedFloor ?? '')
-                  ?.transferPointsToNext ??
-              const [],
+          transferRoutePoints: switch (_multiFloorRoute?.segmentForFloor(
+            _selectedFloor ?? '',
+          )) {
+            final segment? => transferRoutePointsOnFloor(
+              segment,
+              _floorPlan,
+              _floorGraph,
+            ),
+            null => const [],
+          },
           pdrPathPoints:
               debugEnabled && _debugModeController.showMapMatchedPdrPath
               ? _pdrMatchedPathPoints
