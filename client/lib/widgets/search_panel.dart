@@ -1,15 +1,18 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../core/service_locator.dart';
 import '../domain/dijkstra.dart';
 import '../models/building.dart';
 import '../models/discovery_result.dart';
+import '../models/outdoor_poi.dart';
 import '../models/poi_search_result.dart';
 import '../theme/app_theme.dart';
 import 'category_icon.dart';
 import 'reach_label.dart';
+import 'transit_style.dart';
 
 /// 상단 검색창 바로 아래에 붙는 결과 패널.
 ///
@@ -70,6 +73,8 @@ class SearchPanel extends StatefulWidget {
     required this.onBuildingPicked,
     this.currentFloorId,
     this.reachByNodeId,
+    this.outdoorSearchCenter,
+    this.onOutdoorPoiPicked,
   });
 
   final String buildingId;
@@ -96,6 +101,17 @@ class SearchPanel extends StatefulWidget {
   /// 그 상태에서 사용자가 할 수 있는 일도 "위치 지정" 하나뿐이라 매 줄에
   /// 알릴 이유가 없다.
   final Map<String, NodeReach>? reachByNodeId;
+
+  /// 건물 **밖** 장소를 함께 찾을 기준점. 야외를 보고 있을 때만 값이 있고,
+  /// 실내 도면을 보고 있으면(또는 위치를 아직 못 잡았으면) null이다.
+  ///
+  /// null이면 바깥 검색을 아예 하지 않는다. 실내에서 "화장실"을 찾는 사람에게
+  /// 길 건너 편의점 화장실을 섞어 주면, 지금 서 있는 층의 결과가 뒤로 밀린다.
+  final LatLng? outdoorSearchCenter;
+
+  /// 야외 장소를 골랐을 때. null이면 바깥 결과 줄을 눌러도 아무 일이 없으므로,
+  /// [outdoorSearchCenter]가 있어도 이 콜백이 없으면 섹션을 그리지 않는다.
+  final ValueChanged<OutdoorPoi>? onOutdoorPoiPicked;
 
   final ValueChanged<PoiSearchResult> onStorePicked;
   final ValueChanged<Building> onBuildingPicked;
@@ -230,6 +246,11 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 검색이 하던 "건물 이름 검색"을 여기로 옮겨 온 것이다.
   Building? _building;
 
+  /// 건물 밖 장소(TMAP POI). 실내 결과와 **따로** 들고 있는 이유는 두 목록의
+  /// 수명이 다르기 때문이다 — 바깥 검색은 실내 검색보다 늦게 끝날 수 있고,
+  /// 실내가 빈손이어도 여기 결과가 있으면 "찾지 못했어요"를 띄우면 안 된다.
+  List<OutdoorPoi> _pois = const [];
+
   _SearchPhase _phase = _SearchPhase.idle;
 
   /// 이번 결과가 의미 검색에서 나왔는지. 목록에 "뜻으로 찾은 결과"라고 표시해
@@ -321,6 +342,7 @@ class _SearchPanelState extends State<SearchPanel> {
         _submittedQuery = '';
         _results = const [];
         _building = null;
+        _pois = const [];
         _fromSemantic = false;
         _discoveryMatches = const [];
         _discoveryMode = null;
@@ -341,8 +363,14 @@ class _SearchPanelState extends State<SearchPanel> {
       _selectedFacets = const {};
       _facetSelectionOrder.clear();
       _showingAll = false;
+      _pois = const [];
       _phase = _SearchPhase.typingLightSearch;
     });
+
+    // 건물 밖 검색은 **기다리지 않는다.** 실내 검색과 나란히 출발시켜 두고,
+    // 먼저 끝나는 쪽부터 화면에 붙인다. 순서대로 하면 실내 결과가 이미 나온
+    // 화면에서 바깥 응답을 기다리느라 목록이 늦게 뜬다.
+    unawaited(_searchOutdoorPois(query, requestId));
 
     List<PoiSearchResult> results;
     Building? building;
@@ -401,6 +429,29 @@ class _SearchPanelState extends State<SearchPanel> {
       _discoveryQuestion = null;
       _discoveryOptions = const [];
       _phase = _SearchPhase.results;
+    });
+  }
+
+  /// 건물 밖 장소 검색(TMAP POI). 실내 검색과 **독립적으로** 돈다.
+  ///
+  /// 실패해도 화면 단계([_phase])를 건드리지 않는다. 이 검색은 곁들이는
+  /// 정보라, 바깥 조회가 실패했다고 실내 결과까지 오류 화면으로 덮으면 원래
+  /// 되던 검색이 같이 죽는다.
+  Future<void> _searchOutdoorPois(String query, int requestId) async {
+    final center = widget.outdoorSearchCenter;
+    if (center == null ||
+        widget.onOutdoorPoiPicked == null ||
+        !outdoorPoiRepository.isAvailable) {
+      return;
+    }
+    final pois = await outdoorPoiRepository.searchNearby(query, center: center);
+    // 늦게 도착한 응답이 다음 검색어의 화면을 덮지 않게 한다(실내와 같은 규칙).
+    if (!mounted || requestId != _requestId || pois.isEmpty) return;
+    setState(() {
+      _pois = pois;
+      // 이름 강조가 쓰는 질의어. 실내 검색이 아직 안 끝났을 수 있어 여기서도
+      // 채운다 — 안 채우면 이전 검색어 기준으로 강조가 걸린다.
+      _submittedQuery = query;
     });
   }
 
@@ -590,6 +641,13 @@ class _SearchPanelState extends State<SearchPanel> {
   }
 
   Widget _body(BuildContext context) {
+    // 건물 밖 결과가 하나라도 있으면 **어떤 단계에서도** 목록을 보여준다.
+    //
+    // 실내 검색이 아직 돌고 있거나(스피너) 빈손으로 끝났거나(결과 없음)
+    // 실패했더라도(오류), 사용자가 찾던 곳이 바깥에 이미 잡혀 있는데 그
+    // 화면들을 띄우면 답을 손에 쥐고도 못 보여 주는 셈이 된다. 실내가 아직
+    // 도는 중이라는 사실은 목록 안의 진행 줄이 대신 알린다.
+    final hasOutdoor = _pois.isNotEmpty;
     switch (_phase) {
       case _SearchPhase.idle:
         return const Padding(
@@ -602,16 +660,16 @@ class _SearchPanelState extends State<SearchPanel> {
         );
       case _SearchPhase.typingLightSearch:
       case _SearchPhase.semanticSearching:
-        return _searchingState();
+        return hasOutdoor ? _resultList() : _searchingState();
       case _SearchPhase.clarify:
       case _SearchPhase.results:
         return _resultList();
       case _SearchPhase.degraded:
-        return _results.isEmpty ? _degradedState() : _resultList();
+        return _results.isEmpty && !hasOutdoor ? _degradedState() : _resultList();
       case _SearchPhase.error:
-        return _errorState();
+        return hasOutdoor ? _resultList() : _errorState();
       case _SearchPhase.noMatch:
-        return _emptyState(context);
+        return hasOutdoor ? _resultList() : _emptyState(context);
     }
   }
 
@@ -644,6 +702,12 @@ class _SearchPanelState extends State<SearchPanel> {
 
   Widget _resultList() {
     final rows = <Widget>[];
+    // 바깥 결과 덕분에 목록이 먼저 떴을 뿐, 건물 안 검색은 아직 돌고 있을 수
+    // 있다. 그 사실을 안 밝히면 사용자는 이게 최종 목록이라고 읽는다.
+    if (_phase == _SearchPhase.typingLightSearch ||
+        _phase == _SearchPhase.semanticSearching) {
+      rows.add(const _IndoorSearchingRow());
+    }
     final isDiscovery = _discoveryMode != null;
     if (isDiscovery) rows.add(_discoveryHeader());
     if (_fromSemantic) {
@@ -698,6 +762,18 @@ class _SearchPanelState extends State<SearchPanel> {
           ? _discoveryMatches[index]
           : null;
       rows.add(_storeTile(_results[index], match));
+    }
+
+    // 건물 밖 결과는 **항상 실내 아래**에 둔다. 이 앱의 본업은 건물 안 길찾기라,
+    // 같은 이름이 안팎에 다 있으면 사용자가 지금 서 있는 건물 안 매장을 먼저
+    // 보는 것이 맞다. 대신 어디까지가 우리 건물이고 어디부터 바깥인지 헤더로
+    // 명확히 가른다 — 안 가르면 다른 건물 매장을 우리 매장으로 오해한다.
+    final onPoiPicked = widget.onOutdoorPoiPicked;
+    if (_pois.isNotEmpty && onPoiPicked != null) {
+      rows.add(_outdoorHeader());
+      for (final poi in _pois) {
+        rows.add(_poiTile(poi, onPoiPicked));
+      }
     }
 
     // 왜 ListView(shrinkWrap)가 아니라 SingleChildScrollView + Column인가.
@@ -898,6 +974,85 @@ class _SearchPanelState extends State<SearchPanel> {
     );
   }
 
+  /// "건물 밖" 구분선. 여기부터는 우리 백엔드가 아니라 외부 지도(TMAP)에서 온
+  /// 결과라는 것도 함께 밝힌다 — 정보의 깊이가 다른 이유이고, 실제와 다를 때
+  /// 사용자가 어디를 의심할지 알려 준다.
+  Widget _outdoorHeader() {
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(16, 14, 16, 8),
+      child: Row(
+        children: [
+          Icon(Icons.explore_outlined, size: 14, color: AppColors.muted),
+          SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              '건물 밖 주변 장소',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.muted,
+              ),
+            ),
+          ),
+          Text(
+            'TMAP',
+            style: TextStyle(fontSize: 10.5, color: AppColors.muted),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 건물 밖 장소 한 줄. 실내 줄과 모양을 맞추되, **층 대신 주소와 직선 거리**를
+  /// 적는다. 밖에서는 같은 이름의 지점이 여럿이라, 어느 지점인지 가르는 단서가
+  /// 층이 아니라 주소다.
+  Widget _poiTile(OutdoorPoi poi, ValueChanged<OutdoorPoi> onPicked) {
+    final distance = poi.distanceMeters;
+    final subtitleParts = [
+      if (distance != null) '약 ${formatTransitDistance(distance)}',
+      if (poi.address != null) poi.address!,
+    ];
+    return ListTile(
+      leading: const Icon(Icons.storefront_outlined, color: AppColors.muted),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                children: highlightedNameSpans(poi.name, _submittedQuery),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+          ),
+          if (poi.category != null) ...[
+            const SizedBox(width: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 84),
+              child: Text(
+                poi.category!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: const TextStyle(fontSize: 12, color: AppColors.muted),
+              ),
+            ),
+          ],
+        ],
+      ),
+      subtitle: subtitleParts.isEmpty
+          ? null
+          : Text(
+              subtitleParts.join(' · '),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12, color: AppColors.muted),
+            ),
+      onTap: () => onPicked(poi),
+    );
+  }
+
   Widget _emptyState(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 22),
@@ -960,6 +1115,36 @@ class _SearchPanelState extends State<SearchPanel> {
           Text(
             '연결 상태를 확인하고 잠시 후 다시 시도해 주세요.',
             style: TextStyle(fontSize: 12.5, color: AppColors.muted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 목록 맨 위에 붙는 "건물 안은 아직 찾는 중" 줄.
+///
+/// 바깥 결과가 먼저 도착해 목록이 뜬 상태를 위한 것이다. 이 줄이 없으면
+/// 사용자는 지금 보이는 것이 전부라고 읽고, 잠시 뒤 실내 결과가 위에 끼어들며
+/// 목록이 통째로 밀린다.
+class _IndoorSearchingRow extends StatelessWidget {
+  const _IndoorSearchingRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(16, 12, 16, 10),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 13,
+            height: 13,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(width: 8),
+          Text(
+            '건물 안에서도 찾는 중…',
+            style: TextStyle(fontSize: 12, color: AppColors.muted),
           ),
         ],
       ),

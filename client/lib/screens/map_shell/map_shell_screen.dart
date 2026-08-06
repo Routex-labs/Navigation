@@ -12,7 +12,9 @@ import '../../models/building.dart';
 import '../../models/category_count.dart';
 import '../../models/favorite_place.dart';
 import '../../models/floor_plan.dart';
+import '../../models/outdoor_poi.dart';
 import '../../models/poi_search_result.dart';
+import '../../models/transit_route.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/building_switcher_sheet.dart';
 import '../../widgets/category_icon.dart';
@@ -24,8 +26,10 @@ import '../../widgets/directions_sheet.dart';
 import '../../widgets/favorites_sheet.dart';
 import '../../widgets/map_bottom_bar.dart';
 import '../../widgets/map_top_bar.dart';
+import '../../widgets/outdoor_poi_sheet.dart';
 import '../../widgets/place_detail_sheet.dart';
 import '../../widgets/search_panel.dart';
+import '../../widgets/transit_routes_sheet.dart';
 import '../indoor_map/indoor_map_screen.dart';
 import '../outdoor_map/outdoor_map_screen.dart';
 
@@ -191,6 +195,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 다익스트라를 타이핑 속도로 태우게 된다. 검색을 시작할 때와 위치를 새로
   /// 잡았을 때만 갱신한다.
   Map<String, NodeReach>? _reachByNodeId;
+
+  /// 건물 밖 장소를 함께 찾을 기준점. 검색을 시작할 때 야외 지도에서 한 번
+  /// 받아 둔다([_activateSearch]).
+  ///
+  /// **매 build마다 지도에서 읽지 않는다.** 지도 상태를 GlobalKey로 읽는 건
+  /// build 중에 하기 나쁜 일이고(레이아웃 전에는 카메라가 없다), 검색 한 번
+  /// 도중에 기준점이 흔들리면 같은 검색어의 결과가 타이핑 중에 바뀐다.
+  LatLng? _outdoorSearchCenter;
 
   /// 검색 결과 거리 표시용 도달 정보를 다시 계산한다.
   ///
@@ -395,7 +407,15 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 검색을 시작했다는 것은 지도에서 고르는 걸 그만뒀다는 뜻이다. 안내만 남으면
     // 검색 결과를 고른 뒤에도 다음 매장 탭이 출발지/도착지로 먹혀 버린다.
     _stopPickingOnMap();
-    setState(() => _searchActive = true);
+    setState(() {
+      _searchActive = true;
+      // 건물 안 도면을 보고 있으면 바깥 검색을 붙이지 않는다. 실내에서
+      // "화장실"을 찾는 사람에게 길 건너 편의점을 섞으면, 지금 서 있는 층의
+      // 결과가 뒤로 밀린다.
+      _outdoorSearchCenter = _indoorContextActive
+          ? null
+          : _outdoorKey.currentState?.outdoorSearchCenter;
+    });
     // 결과에 붙일 거리는 여기서 한 번만 준비한다. 결과가 나오기 전에 시작하므로
     // 그래프 요청이 늦어도 목록은 먼저 뜨고, 거리 줄만 뒤늦게 채워진다.
     unawaited(_refreshReach());
@@ -451,6 +471,127 @@ class _MapShellScreenState extends State<MapShellScreen> {
   Future<void> _onSearchStorePicked(PoiSearchResult store) async {
     _closeSearch();
     await _runSheetChain(() => _showStoreInfo(store, focusOnMap: true));
+  }
+
+  /// 검색 결과의 **건물 밖** 장소를 골랐을 때. 매장과 시트가 다르므로
+  /// ([OutdoorPoiSheet]) 별도 흐름을 탄다.
+  Future<void> _onSearchPoiPicked(OutdoorPoi poi) async {
+    _closeSearch();
+    await _runSheetChain(() => _showOutdoorPoiInfo(poi));
+  }
+
+  /// 야외 장소 시트. 매장 시트와 같은 규칙으로 "출발/도착을 실제로 골랐는가"를
+  /// 돌려준다 — 부모 loop가 그 값으로 이전 시트로 되돌릴지 정한다.
+  Future<bool> _showOutdoorPoiInfo(OutdoorPoi poi) async {
+    // 목록에서 고른 장소는 지금 화면 어디에 있는지 알 수 없다. 시트가 덮기
+    // 전에 지도를 그쪽으로 옮겨, 시트를 닫으면 바로 그 자리가 보이게 한다.
+    await _outdoorKey.currentState?.focusPoint(poi.point);
+    if (!mounted) return false;
+
+    final action = await _withMapsLocked(
+      () => OutdoorPoiSheet.show(
+        context,
+        poi: poi,
+        onCloseAll: _requestCloseSheetChain,
+        transitEnabled: transitRepository.isAvailable,
+      ),
+    );
+    if (!mounted) return false;
+    if (_closeSheetChainRequested) return true;
+    if (action == null) return false;
+
+    // 야외 좌표뿐인 후보다. 노드·층이 없으므로 [_startRoute]는 이 값을 실내
+    // 라우팅으로 보내지 않고 도보 경로로 흘려보낸다.
+    final candidate = DirectionsCandidate(
+      title: poi.name,
+      subtitle: poi.address ?? '건물 밖 장소',
+      point: poi.point,
+    );
+    switch (action) {
+      case OutdoorPoiAction.setOrigin:
+        setState(() => _selectedOrigin = candidate);
+        final destination = _routeDraftDestination;
+        if (destination != null) {
+          await _startRoute(origin: candidate, destination: destination);
+        } else {
+          await _openDirections(presetOrigin: candidate);
+        }
+      case OutdoorPoiAction.setDestination:
+        setState(() => _routeDraftDestination = candidate);
+        final origin = _selectedOrigin;
+        if (origin != null || _canRouteFromCurrentLocation) {
+          await _startRoute(origin: origin, destination: candidate);
+        }
+      case OutdoorPoiAction.transit:
+        setState(() => _routeDraftDestination = candidate);
+        await _startTransitRoute(candidate);
+    }
+    return true;
+  }
+
+  /// 대중교통 경로를 물어보고, 후보 중 하나를 고르면 야외 지도에 그린다.
+  ///
+  /// 출발지는 야외 지도가 정한다([OutdoorMapBodyState.routeOriginPoint]) —
+  /// 지도에서 찍은 출발 지점이 있으면 그것을, 없으면 GPS를 쓴다. 실내 앵커는
+  /// 쓰지 않는다(건물 안 좌표를 보내면 정류장이 건물 반대편에서 잡힌다).
+  Future<void> _startTransitRoute(DirectionsCandidate destination) async {
+    final outdoor = _outdoorKey.currentState;
+    final origin = _selectedOrigin?.point ?? outdoor?.routeOriginPoint;
+    if (outdoor == null || origin == null) {
+      _showSnack('현재 위치를 아직 못 잡았습니다. GPS 신호를 확인하거나 출발지를 직접 지정해주세요.');
+      return;
+    }
+
+    final routes = await transitRepository.getTransitRoutes(
+      origin: origin,
+      destination: destination.point,
+    );
+    if (!mounted) return;
+
+    // 결말마다 사용자가 할 행동이 다르다. 한 문구로 묶으면 700m 앞 목적지를
+    // 두고 계속 재시도하게 된다([TransitRoutesStatus] 주석).
+    switch (routes.status) {
+      case TransitRoutesStatus.unavailable:
+        _showSnack('대중교통 안내를 쓸 수 없습니다. TMAP 키 설정을 확인해주세요.');
+        return;
+      case TransitRoutesStatus.failed:
+        _showSnack('대중교통 경로를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
+        return;
+      case TransitRoutesStatus.tooClose:
+        // 걸어갈 수 있는 거리다. 안내 없이 끝내지 않고 도보 경로로 이어 준다 —
+        // 사용자가 원한 것은 "저기까지 가는 방법"이지 "대중교통 그 자체"가 아니다.
+        _showSnack('가까운 거리라 대중교통 경로가 없습니다. 도보로 안내합니다.');
+        await _startRoute(origin: _selectedOrigin, destination: destination);
+        return;
+      case TransitRoutesStatus.noRoute:
+        _showSnack('이 구간의 대중교통 경로를 찾지 못했습니다.');
+        return;
+      case TransitRoutesStatus.ok:
+        break;
+    }
+
+    final picked = await _withMapsLocked(
+      () => TransitRoutesSheet.show(
+        context,
+        routes: routes,
+        destinationLabel: destination.title,
+        onCloseAll: _requestCloseSheetChain,
+      ),
+    );
+    if (!mounted || picked == null) return;
+    await _outdoorKey.currentState?.showTransitRoute(
+      picked,
+      destination: destination.point,
+      label: '${destination.title}까지',
+      origin: origin,
+    );
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _onSearchBuildingPicked(Building building) {
@@ -1242,6 +1383,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
                         onBuildingPicked: _onSearchBuildingPicked,
                         currentFloorId: _activeIndoorFloor,
                         reachByNodeId: _reachByNodeId,
+                        // 야외를 보고 있을 때만 값이 있다. 건물 안 도면을 보는
+                        // 중이면 null이라 바깥 검색 자체가 돌지 않는다.
+                        outdoorSearchCenter: _outdoorSearchCenter,
+                        onOutdoorPoiPicked: (poi) =>
+                            unawaited(_onSearchPoiPicked(poi)),
                       ),
                     ),
                   )
