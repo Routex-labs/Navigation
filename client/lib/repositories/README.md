@@ -10,8 +10,26 @@
 | [`building_repository.dart`](building_repository.dart) | [`http_building_repository.dart`](http_building_repository.dart) | [`mock_building_repository.dart`](mock_building_repository.dart) | 건물·층 지도·층 그래프·건물 전체 그래프, 단일 층 최단 경로 |
 | [`destination_repository.dart`](destination_repository.dart) | [`http_destination_repository.dart`](http_destination_repository.dart) | [`mock_destination_repository.dart`](mock_destination_repository.dart) | 목적지·시설 검색과 현재 층 필터 |
 | [`directions_repository.dart`](directions_repository.dart) | [`tmap_directions_repository.dart`](tmap_directions_repository.dart) | [`mock_directions_repository.dart`](mock_directions_repository.dart) | 실외 도보 경로 |
+| [`outdoor_poi_repository.dart`](outdoor_poi_repository.dart) | [`tmap_poi_repository.dart`](tmap_poi_repository.dart) | 같은 파일의 `UnavailableOutdoorPoiRepository` | 건물 밖 장소 검색(TMAP POI 통합검색) |
+| [`transit_repository.dart`](transit_repository.dart) | [`tmap_transit_repository.dart`](tmap_transit_repository.dart) | 같은 파일의 `UnavailableTransitRepository` | 대중교통 경로 후보(TMAP transit) |
 
 구현 선택은 [`../core/service_locator.dart`](../core/service_locator.dart)에서 한다.
+
+## 외부 지도(TMAP) 계약에서 조심할 것
+
+세 리포지토리가 같은 `TMAP_APP_KEY`를 쓰지만 응답의 함정은 각각 다르다.
+
+- **POI 검색은 좌표·거리를 문자열로 준다.** `"frontLat": "37.5665"`, `"radius": "0.25"`(km).
+  숫자로 읽으면 첫 검색에서 바로 던진다. `radius` 요청 파라미터도 km 정수라 1000을 넘기면 전국을 뒤진다.
+- **대중교통은 경로가 없을 때도 HTTP 200이다.** `metaData` 대신 `result.status`가 오고,
+  `11`은 "출발지와 도착지가 700m 이내"라 걸어가면 되는 상황이다. 이 구분을 잃으면 화면이
+  네트워크 오류와 같은 문구를 띄우고, 사용자는 눈앞의 목적지를 두고 재시도만 반복한다.
+- **선 좌표는 `"경도,위도"` 순서다.** 도보 구간은 `steps[].linestring`, 탈것 구간은
+  `passShape.linestring`에 들어 있어 한쪽만 읽으면 지도에서 경로가 끊긴다.
+- **한글이 charset 헤더 없이 온다.** 두 리포지토리 모두 `bodyBytes`를 직접 UTF-8로 디코딩한다.
+
+키가 없으면 두 기능은 **꺼진다**(가짜 데이터를 만들지 않는다). 도보 경로 Mock은 방향이라도
+맞지만, 없는 가게·없는 버스는 사용자를 실제로 그 좌표까지 걸어가게 만든다.
 
 ## 건물·경로 흐름
 

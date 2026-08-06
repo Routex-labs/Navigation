@@ -9,7 +9,7 @@
 | 디렉터리 | 화면 | 책임 |
 |---|---|---|
 | [`map_shell/`](map_shell/map_shell_screen.dart) | `MapShellScreen` | 실외/실내 모드, 상단·하단 바, 시트와 현재 건물·층 상태 조립 |
-| [`outdoor_map/`](outdoor_map/outdoor_map_screen.dart) | `OutdoorMapScreen` | GPS, 실외 지도, 건물 진입과 실외 경로 표시 |
+| [`outdoor_map/`](outdoor_map/outdoor_map_screen.dart) | `OutdoorMapScreen` | GPS, 실외 지도, 건물 진입과 실외 경로(도보·대중교통) 표시 |
 | [`indoor_map/`](indoor_map/indoor_map_screen.dart) | `IndoorMapScreen` | 층 지도, 실내 위치·경로, PDR 보정 및 층 선택 |
 | [`destination/`](destination/destination_screen.dart) | `DestinationScreen` | 목적지 검색과 선택 |
 | [`route_guide/`](route_guide/route_guide_screen.dart) | `RouteGuideScreen` | 선택한 목적지의 안내 진행·도착 전환 |

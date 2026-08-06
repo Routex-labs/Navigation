@@ -14,6 +14,8 @@
 | 지도 셸 | [`floor_selector.dart`](floor_selector.dart) | 좌하단 세로 층 선택기(최대 5개 노출·현재 층 강조), 실내·야외 진입 오버레이 공유 |
 | 탐색 | [`search_panel.dart`](search_panel.dart), [`directions_sheet.dart`](directions_sheet.dart), [`building_switcher_sheet.dart`](building_switcher_sheet.dart) | 매장 검색(경량)·AI 검색(의미), 출발/도착 검색, 건물 전환 |
 | 장소 시트 | [`category_stores_sheet.dart`](category_stores_sheet.dart), [`place_detail_sheet.dart`](place_detail_sheet.dart), [`favorites_sheet.dart`](favorites_sheet.dart) | 카테고리 매장·매장 상세·즐겨찾기 |
+| 장소 시트 | [`outdoor_poi_sheet.dart`](outdoor_poi_sheet.dart) | 건물 **밖** 장소 상세(주소·전화·거리) + 출발/도착/대중교통 |
+| 대중교통 | [`transit_routes_sheet.dart`](transit_routes_sheet.dart), [`transit_summary_card.dart`](transit_summary_card.dart), [`transit_style.dart`](transit_style.dart) | 경로 후보 목록, 안내 중 하단 요약 카드, 셋이 공유하는 색·아이콘·시간/요금 표기 |
 | 장소 상세 | [`place_detail/`](place_detail/) | 상세 시트 본문의 섹션별 렌더러(summary·hero·menu·매장정보 등) |
 | 카테고리 | [`category_icon.dart`](category_icon.dart), [`category_label_order.dart`](category_label_order.dart) | 카테고리 대분류 아이콘·색상(chip·시트·리스트 공유), label 중복 제거·가나다 정렬 |
 | 카테고리 | [`category_map_filter.dart`](category_map_filter.dart), [`category_map_icon.dart`](category_map_icon.dart) | 지도 카테고리 강조 필터, 매장명 라벨 옆 대분류 아이콘·이름 좌우 배치 규칙 |
@@ -36,6 +38,17 @@
 - **경량이 빈손이면**: 400ms를 더 기다렸다가 의미 검색(`/query/ai`)까지 자동으로 이어
   붙인다.
 - **엔터로 확정**(`submitTick` 증가): 위 두 대기를 건너뛰고 같은 경로를 즉시 탄다.
+- **동시에, 건물 밖도 찾는다**(`outdoorSearchCenter`가 있을 때): TMAP POI 통합검색을
+  위 두 단계와 **나란히** 출발시켜 결과를 "건물 밖 주변 장소" 섹션으로 실내 결과 아래에
+  붙인다. 순서대로 하면 실내 결과가 이미 나온 화면에서 바깥 응답을 기다리느라 목록이
+  늦게 뜬다.
+
+바깥 검색이 붙으면서 화면 단계의 규칙이 하나 늘었다 — **바깥 결과가 하나라도 있으면
+어떤 단계에서도 목록을 보여준다.** 실내가 아직 돌고 있든(스피너), 빈손으로 끝났든
+("찾지 못했어요"), 실패했든(오류), 사용자가 찾던 곳이 이미 손에 있는데 그 화면들을
+띄우면 답을 쥐고도 못 보여 주는 셈이다. 실내가 아직 도는 중이라는 사실은 목록 맨 위의
+진행 줄이 대신 알린다. 기준점(`outdoorSearchCenter`)은 야외를 보고 있을 때만 내려오고,
+실내 도면을 보는 중이면 null이라 바깥 검색 자체가 돌지 않는다.
 
 의미 검색을 엔터에만 걸어 두지 않는 이유는 두 가지다. 한글 IME에서 첫 엔터가 조합
 확정에 쓰이면 `onSubmitted`가 오지 않아 의미 검색이 아예 시작되지 않고, 그때까지 화면에는

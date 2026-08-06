@@ -20,7 +20,11 @@
 3. 웹·데스크톱·iOS 시뮬레이터: `http://localhost:8001`
 
 TMAP·VWorld 키도 소스에 넣지 않고 `TMAP_APP_KEY`, `VWORLD_API_KEY`로 주입한다.
-TMAP 키가 없으면 `directionsRepository`는 직선 경로를 만드는 Mock을 사용한다.
+TMAP 키 하나로 보행자 경로·POI 통합검색·대중교통 경로를 모두 호출한다(대중교통만
+base path가 `tmapTransitBaseUrl`로 다르다). 키가 없으면 `directionsRepository`는 직선
+경로를 만드는 Mock을, `outdoorPoiRepository`·`transitRepository`는 **기능이 꺼진 구현**을
+사용한다 — 뒤 둘은 Mock을 두지 않는다. 없는 가게·없는 버스를 지어내면 사용자를 실제로
+그 좌표까지 걸어가게 만들기 때문이다.
 
 값을 매번 명령줄에 적는 대신 `client/config.local.json`(gitignore 대상, 템플릿은 `config.example.json`)에 모아 두고
 `flutter run --dart-define-from-file=config.local.json`으로 넘긴다. JSON의 키 이름은 위 `String.fromEnvironment` 이름과 같아야 한다.

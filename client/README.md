@@ -215,6 +215,7 @@ sequenceDiagram
 - `buildingRepository = HttpBuildingRepository()` — 오프라인 확인 시 `MockBuildingRepository()`로.
 - `destinationRepository = HttpDestinationRepository()` — 오프라인 확인 시 `MockDestinationRepository(...)`로.
 - `directionsRepository` — `--dart-define=TMAP_APP_KEY=…`가 있으면 실제 TMAP, 없으면 직선 Mock.
+- `outdoorPoiRepository` / `transitRepository` — 같은 TMAP 키를 쓰며, 키가 없으면 기능이 꺼진 구현이 들어가 검색 패널의 "건물 밖 주변 장소"와 대중교통 버튼이 사라진다.
 - `pdrMotionSource` / `indoorNavigationDriver` — 화면이 바뀌어도 센서 세션을 유지하는 싱글턴.
 
 API 주소는 `core/api_config.dart`가 플랫폼별 기본값을 고르고(`--dart-define=API_BASE_URL=…`로 덮어씀).

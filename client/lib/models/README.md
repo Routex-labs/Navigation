@@ -15,6 +15,8 @@
 | [`poi_search_result.dart`](poi_search_result.dart) | `PoiSearchResult` | 목적지 검색 결과 |
 | [`discovery_result.dart`](discovery_result.dart) | `DiscoveryResult`, `DiscoveryMode`, `DiscoveryMatch`, `DiscoveryOption` | 탐색(`/query/ai`) 응답: mode·질문·선택지·후보 |
 | [`directions_route.dart`](directions_route.dart) | `DirectionsRoute` | 실외 보행 경로점·거리·시간 |
+| [`outdoor_poi.dart`](outdoor_poi.dart) | `OutdoorPoi` | 건물 밖 장소(TMAP POI 통합검색). 노드가 없어 좌표로만 안내한다 |
+| [`transit_route.dart`](transit_route.dart) | `TransitRoutes`, `TransitItinerary`, `TransitLeg`, `TransitMode` | 대중교통 경로 후보와 구간, 조회 결말(`TransitRoutesStatus`) |
 | [`favorite_place.dart`](favorite_place.dart) | `FavoritePlace` | 저장 가능한 즐겨찾기 장소 |
 
 ## 좌표 모델
