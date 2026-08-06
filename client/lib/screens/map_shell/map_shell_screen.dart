@@ -409,12 +409,20 @@ class _MapShellScreenState extends State<MapShellScreen> {
     _stopPickingOnMap();
     setState(() {
       _searchActive = true;
-      // 건물 안 도면을 보고 있으면 바깥 검색을 붙이지 않는다. 실내에서
-      // "화장실"을 찾는 사람에게 길 건너 편의점을 섞으면, 지금 서 있는 층의
-      // 결과가 뒤로 밀린다.
-      _outdoorSearchCenter = _indoorContextActive
-          ? null
-          : _outdoorKey.currentState?.outdoorSearchCenter;
+      // **실내 도면을 보는 중에도 바깥을 함께 찾는다.**
+      //
+      // 처음에는 [_indoorContextActive]일 때 껐다. "실내에서 화장실을 찾는
+      // 사람에게 길 건너 편의점을 섞지 말자"는 뜻이었는데, 이 게이트가 기능을
+      // 통째로 죽였다 — 폰에서는 실내 진입 임계 zoom이 화면 폭에 맞춰 16.8까지
+      // 내려가는데(indoor_entry_zoom.dart) 야외 지도 초기 zoom이 17이라,
+      // 건물 근처에서 앱을 켜면 **첫 프레임부터** 오버레이가 켜져 있다. 즉
+      // 실기기에서는 이 조건이 거의 항상 참이라 바깥 검색이 한 번도 안 돌았다.
+      //
+      // 원래 걱정은 게이트가 아니라 **순서**로 이미 해결돼 있다. 바깥 결과는
+      // 항상 실내 결과 **아래**에 별도 헤더를 달고 붙으므로, 실내에 답이 있으면
+      // 사용자는 위부터 읽고 바깥은 눈에 들어오지도 않는다. 실내가 빈손일 때만
+      // 바깥이 첫 줄이 되는데, 그건 정확히 바깥이 답인 경우다.
+      _outdoorSearchCenter = _outdoorKey.currentState?.outdoorSearchCenter;
     });
     // 결과에 붙일 거리는 여기서 한 번만 준비한다. 결과가 나오기 전에 시작하므로
     // 그래프 요청이 늦어도 목록은 먼저 뜨고, 거리 줄만 뒤늦게 채워진다.
@@ -595,6 +603,19 @@ class _MapShellScreenState extends State<MapShellScreen> {
       label: '${destination.title}까지',
       origin: origin,
     );
+  }
+
+  /// ETA 카드 라벨에서 목적지 이름만 뽑는다.
+  ///
+  /// 그 라벨은 화면용이라 꼬리가 붙어 있다 — 문 경유 안내에서는
+  /// `이솝까지 · 남측 문 경유`다. 그대로 시트 제목에 넣으면
+  /// "이솝까지 · 남측 문 경유까지 대중교통"이 된다.
+  String _destinationNameFromEtaLabel(String label) {
+    var name = label.split('·').first.trim();
+    if (name.endsWith('까지')) {
+      name = name.substring(0, name.length - '까지'.length).trim();
+    }
+    return name.isEmpty ? '목적지' : name;
   }
 
   void _showSnack(String message) {
@@ -1238,6 +1259,18 @@ class _MapShellScreenState extends State<MapShellScreen> {
                 active: _mode == MapMode.outdoor,
                 pickingPointOnMap: _mapPickTarget != null,
                 onMapPointPick: _onMapPointPick,
+                // 도보 안내 카드의 "대중교통". 야외 목적지는 무엇이든(매장·
+                // 지도에서 찍은 지점·건물 입구) 이 카드를 지나므로, 진입점을
+                // 여기 하나로 모은다.
+                onTransitRequested: (destination, label) => unawaited(
+                  _startTransitRoute(
+                    DirectionsCandidate(
+                      title: _destinationNameFromEtaLabel(label),
+                      subtitle: '',
+                      point: destination,
+                    ),
+                  ),
+                ),
                 onRouteVisibleChanged: (visible) =>
                     setState(() => _outdoorRouteVisible = visible),
                 onPlacingLocationChanged: (placing) {

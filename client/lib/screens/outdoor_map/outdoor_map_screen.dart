@@ -476,6 +476,7 @@ class OutdoorMapBody extends StatefulWidget {
     this.onFloorChanged,
     this.pickingPointOnMap = false,
     this.onMapPointPick,
+    this.onTransitRequested,
     this.outerOverlayKeys = const [],
   });
 
@@ -515,6 +516,14 @@ class OutdoorMapBody extends StatefulWidget {
   /// 매장이 아니라 **좌표**다 — 야외에는 노드도 층도 없으므로 상위는 이 후보를
   /// 실내 라우팅이 아니라 걷기 경로의 끝점으로 쓴다.
   final ValueChanged<ll.LatLng>? onMapPointPick;
+
+  /// 도보 안내 카드의 "대중교통"을 눌렀을 때. 상위(MapShellScreen)가 경로를
+  /// 조회하고 후보 시트를 띄운다.
+  ///
+  /// 조회·시트를 여기서 직접 하지 않는 이유는 역할 분담이다 — 시트를 띄우는
+  /// 동안 지도 제스처를 잠그는 것([MapShellScreen._withMapsLocked])이 상위의
+  /// 일이라, 이 화면이 스스로 시트를 열면 그 잠금을 우회하게 된다.
+  final void Function(ll.LatLng destination, String label)? onTransitRequested;
 
   /// 사용자의 현재 위치가 새로 잡혔을 때 호출된다 — "위치 지정"으로 지도를
   /// 탭했을 때와 입구 자동 배치가 여기에 해당한다.
@@ -5000,6 +5009,17 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
                   distanceMeters: outdoorEta.distanceM,
                   minutes: outdoorEta.minutes,
                   label: _userDestinationLabel ?? '목적지까지',
+                  // TMAP 키가 없으면 버튼 자체를 감춘다 — 눌러서 "쓸 수 없습니다"를
+                  // 보는 것보다 없는 편이 낫다.
+                  onTransit:
+                      (widget.onTransitRequested == null ||
+                          !transitRepository.isAvailable ||
+                          _userDestination == null)
+                      ? null
+                      : () => widget.onTransitRequested!(
+                          _userDestination!,
+                          _userDestinationLabel ?? '목적지',
+                        ),
                   onClose: _dismissUserDestinationFromEtaCard,
                   onClosePointerDown: (position) =>
                       _etaClosePointerDown = position,
