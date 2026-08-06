@@ -1928,6 +1928,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           }
         case EscalatorPhase.midpointReached:
         case EscalatorPhase.landed:
+          // 여기서 단계를 비우지 않는다. 층 전환은 큐를 거쳐 다음 프레임 이후에
+          // 적용되므로, 지금 비우면 그 사이 배너가 한 번 깜빡였다가 다시 뜬다.
+          // `_beginEscalatorTransition`과 `_endEscalatorRide`가 각자 정리한다.
+          break;
         case EscalatorPhase.idle:
           if (!mounted) return;
           setState(() => _escalatorStage = null);
