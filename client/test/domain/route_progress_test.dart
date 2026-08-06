@@ -87,6 +87,72 @@ void main() {
         isFalse,
       );
     });
+
+    test('걸음 없이 뒤로 밀린 진행점은 보류한다', () {
+      // 빔 1등 재배치나 보폭 차이로 생기는 후퇴다. 사용자에게는 마커가 뒤로
+      // 튄 것으로 보인다.
+      const pushedBack = RouteProgress(
+        traveledM: 6,
+        remainingM: 34,
+        offsetM: 0.4,
+        onRouteEdge: true,
+        reacquired: false,
+        segmentIndex: 0,
+      );
+
+      expect(
+        shouldHoldRouteRegression(
+          previous: previous,
+          candidate: pushedBack,
+          acceptedAtSteps: 100,
+          currentSteps: 100,
+        ),
+        isTrue,
+      );
+    });
+
+    test('작은 후퇴는 그대로 통과시킨다', () {
+      // 투영 오차 수준의 흔들림까지 막으면 마커가 계단식으로 움직인다.
+      const jitter = RouteProgress(
+        traveledM: 8.5,
+        remainingM: 31.5,
+        offsetM: 0.4,
+        onRouteEdge: true,
+        reacquired: false,
+        segmentIndex: 0,
+      );
+
+      expect(
+        shouldHoldRouteRegression(
+          previous: previous,
+          candidate: jitter,
+          acceptedAtSteps: 100,
+          currentSteps: 100,
+        ),
+        isFalse,
+      );
+    });
+
+    test('실제로 되돌아 걸으면 걸음이 쌓이는 만큼 후퇴를 받아들인다', () {
+      const walkedBack = RouteProgress(
+        traveledM: 3,
+        remainingM: 37,
+        offsetM: 0.4,
+        onRouteEdge: true,
+        reacquired: false,
+        segmentIndex: 0,
+      );
+
+      expect(
+        shouldHoldRouteRegression(
+          previous: previous,
+          candidate: walkedBack,
+          acceptedAtSteps: 100,
+          currentSteps: 105,
+        ),
+        isFalse,
+      );
+    });
   });
 
   group('직선 경로 진행', () {

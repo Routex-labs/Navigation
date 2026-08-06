@@ -258,6 +258,20 @@ class IndoorNavigationDriver implements IndoorNavigationController {
     );
   }
 
+  @override
+  Future<void> pauseStepTracking() async {
+    // background pause와 달리 native source는 건드리지 않는다. 하차 판정의
+    // 근거인 기압과 방향이 계속 들어와야 한다.
+    if (!_guiding || _backgrounded) return;
+    _session.pause(atMs: _session.lastMotionAtMs ?? _nowMs());
+  }
+
+  @override
+  Future<void> resumeStepTracking() async {
+    if (!_guiding || _backgrounded) return;
+    _session.resume(atMs: _session.lastMotionAtMs ?? _nowMs());
+  }
+
   // ── 앱 lifecycle (앱 셸이 호출) ──
 
   /// 앱이 background로 가면 tracking pause.

@@ -147,6 +147,33 @@ bool shouldHoldImplausibleRouteJump({
   return (candidate.traveledM - previous.traveledM).abs() > plausibleDistanceM;
 }
 
+/// 걸음으로 설명되지 않는 **경로상 후퇴**인지 판단한다.
+///
+/// [shouldHoldImplausibleRouteJump]는 앞·뒤를 가리지 않고 큰 점프만 막는다.
+/// 그런데 실제로 눈에 거슬리는 것은 크기가 작은 후퇴다 — 빔 1등이 옆 간선으로
+/// 재배치되거나 초록 보폭이 주황보다 커서 선행분이 깎일 때, 마커가 걸은 적
+/// 없는 방향으로 몇 미터 밀린다. 사용자에게는 "뒤로 튀었다"로 보인다.
+///
+/// 되돌아 걷는 것은 정상이므로 후퇴 자체를 막으면 안 된다. 그래서 두 가지로
+/// 가른다: 늘어난 걸음으로 설명되는 후퇴는 그대로 통과시키고, 걸음이 없는데
+/// 생긴 후퇴만 [freeRegressionM]까지 참는다. 그 이상은 이번 갱신에서 보류하되,
+/// 실제로 되돌아 걷는 중이라면 걸음이 쌓이면서 곧 통과한다.
+bool shouldHoldRouteRegression({
+  required RouteProgress? previous,
+  required RouteProgress candidate,
+  required int? acceptedAtSteps,
+  required int? currentSteps,
+  double freeRegressionM = 2.0,
+  double maxStepLengthM = 1.2,
+}) {
+  if (previous == null) return false;
+  final regressionM = previous.traveledM - candidate.traveledM;
+  if (regressionM <= freeRegressionM) return false;
+  if (acceptedAtSteps == null || currentSteps == null) return true;
+  final stepDelta = math.max(0, currentSteps - acceptedAtSteps);
+  return regressionM > freeRegressionM + stepDelta * maxStepLengthM;
+}
+
 /// [previousTraveledM] 주변에서 후보를 찾는 기본 탐색 창(±m).
 ///
 /// 임의값이다. 실측 진행거리 분포를 보고 조정해야 하며, 현재는 한 걸음

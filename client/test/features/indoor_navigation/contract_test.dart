@@ -94,6 +94,12 @@ class FakeIndoorNavigation implements IndoorNavigationController {
     log.add('transfer:$floorId@${anchorLocalM.eastM},${anchorLocalM.northM}');
   }
 
+  @override
+  Future<void> pauseStepTracking() async => log.add('pauseSteps');
+
+  @override
+  Future<void> resumeStepTracking() async => log.add('resumeSteps');
+
   // 테스트 구동용.
   void pushCalibration(CalibrationStatus s) {
     _calib = s;

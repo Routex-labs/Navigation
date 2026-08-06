@@ -187,6 +187,7 @@ class CorridorTrackingResult {
     required this.state,
     required this.correctedPosition,
     required this.correctedHeadingDeg,
+    required this.deviceHeadingDeg,
     required this.headingBiasDeg,
     required this.currentEdgeId,
     required this.currentEdgeProgressM,
@@ -208,7 +209,18 @@ class CorridorTrackingResult {
 
   final CorridorTrackingState state;
   final PdrLocalPoint correctedPosition;
+
+  /// 지금 걷고 있다고 보는 **간선의 방위**. 경로 진행·역주행 판정의 기준이다.
   final double correctedHeadingDeg;
+
+  /// 사용자가 실제로 **바라보는 방향**(센서 heading + 복도에서 학습한 bias).
+  ///
+  /// [correctedHeadingDeg]와 분리해야 하는 이유: 간선 방위는 걸음이 있어야
+  /// 갱신되고, 직선 복도에서는 제자리 회전에 아예 반응하지 않는다. 마커의 방향
+  /// 원뿔과 카메라 정렬은 "지금 어디를 보고 있나"를 물으므로 이 값을 쓰고,
+  /// "경로를 따라 어디까지 갔나"는 간선 방위를 쓴다.
+  final double deviceHeadingDeg;
+
   final double headingBiasDeg;
   final String? currentEdgeId;
   final double currentEdgeProgressM;
@@ -314,6 +326,7 @@ class CorridorPositionTracker {
     correctedHeadingDeg:
         _best?.edge.bearingForTravel(_best!.progressM, _best!.travelSign) ??
         _normalizeBearing(_sensorHeadingDeg + _headingBiasDeg),
+    deviceHeadingDeg: _normalizeBearing(_sensorHeadingDeg + _headingBiasDeg),
     headingBiasDeg: _headingBiasDeg,
     currentEdgeId: _best?.edge.id,
     currentEdgeProgressM: _best?.progressM ?? 0,

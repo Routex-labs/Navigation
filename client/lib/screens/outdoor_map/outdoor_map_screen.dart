@@ -3702,13 +3702,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final snapshot = _pdrTrailState.snapshot;
     final anchor = _pdrTrailState.anchor;
     if (snapshot == null || anchor == null || !snapshot.hasHeading) return null;
-    final correctedFloorHeading =
-        _corridorTrackingSession.result?.previewHeadingDeg;
-    return correctedFloorHeading == null
+    // 간선 방위가 아니라 센서 heading(+복도 bias)을 쓴다. 간선 방위는 걸음이
+    // 있어야 갱신돼서, 서서 몸만 돌리면 방향이 얼어붙는다.
+    final deviceFloorHeading =
+        _corridorTrackingSession.result?.deviceHeadingDeg;
+    return deviceFloorHeading == null
         ? normalizePdrBearing(snapshot.walkingHeadingDeg + anchor.rotationDeg)
         : FloorCoordinateTransform(
             anchor,
-          ).floorBearingToMapBearing(correctedFloorHeading);
+          ).floorBearingToMapBearing(deviceFloorHeading);
   }
 
   void _syncCorridorTracking(PdrSnapshot? snapshot) {
