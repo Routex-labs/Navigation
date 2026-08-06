@@ -1,7 +1,7 @@
 # PDR 경로 추종·층 전환 개선 계획
 
 - 작성일: 2026-08-06
-- 상태: Phase 1~5 구현 완료 (Phase 0·6의 실기기 검증은 남음)
+- 상태: Phase 1~5 구현 및 iOS 실기기 검증 완료 (Phase 0 fixture 분리·Android·A/B replay는 남음)
 - 범위: Flutter 클라이언트 PDR·경로 진행·에스컬레이터 상태기·전환 UI
 
 이 문서는 실측에서 확인된 다음 문제를 해결하기 위한 클라이언트 중심 구현 계획이다.
@@ -687,7 +687,8 @@ class RawMotionActivity {
 
 ### Phase 6 — 통합 검증
 
-> **상태**: 자동 검증은 통과한다. 실기기 시나리오와 A/B replay는 남아 있다.
+> **상태**: 자동 검증과 iOS 상·하행 실기기 확인은 통과했다. Android 센서 주기 차이와
+> A/B replay 검증은 남아 있다.
 
 #### 자동 검증
 
@@ -864,6 +865,6 @@ PDR 한 세션의 heading과 drift를 graph 형상으로 자동 저장하지 않
 - [x] replay 테스트 통과
 - [x] widget 테스트 통과
 - [x] `flutter analyze` 통과
-- [ ] iOS 상행·하행 실기기 검증 (남음)
+- [x] iOS 상행·하행 실기기 검증
 - [ ] Android 센서 주기 차이 검증 (남음)
 - [x] 진단 JSON에 phase·cursor·junction·raw activity 근거가 남는다.
