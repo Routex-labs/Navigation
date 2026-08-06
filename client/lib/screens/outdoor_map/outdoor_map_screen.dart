@@ -3802,7 +3802,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 있는 화면 중심은 "여기 근처"라는 의도로 읽어도 무리가 없다.
   ll.LatLng? get outdoorSearchCenter {
     final position = _position;
-    if (position != null) return ll.LatLng(position.latitude, position.longitude);
+    if (position != null) {
+      return ll.LatLng(position.latitude, position.longitude);
+    }
     final target = _mapController?.cameraPosition?.target;
     if (target == null) return null;
     return ll.LatLng(target.latitude, target.longitude);
@@ -3827,9 +3829,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 사용자를 내려놓는다. 좌표만으로 판정되므로 이름 맞추기와 달리 실패하지
   /// 않는다 — 안이면 문으로, 밖이면 그대로다.
   ll.LatLng? entranceIfInsideBuilding(ll.LatLng point) {
-    if (!_isInsideBuilding(point)) return null;
+    if (!isInsideIndoorBuilding(point)) return null;
     return _building == null ? null : entrancePointFor(_building!.id);
   }
+
+  /// [point]가 우리 실내 도면이 있는 건물 외곽선 안인지.
+  ///
+  /// 검색 결과를 합칠 때 "이 POI가 우리가 아는 건물 안인가"를 묻는 자리가
+  /// 있어서 밖으로 연다([dropPoisCoveredByIndoorStores]). 외곽선을 아직 못
+  /// 받았으면 false다 — 모르면 건드리지 않는 쪽이 안전하다.
+  bool isInsideIndoorBuilding(ll.LatLng point) => _isInsideBuilding(point);
 
   /// "이 건물까지" 안내할 때 쓸 도착 좌표.
   ///

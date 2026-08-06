@@ -26,7 +26,12 @@ class TmapPoiRepository implements OutdoorPoiRepository {
     String keyword, {
     required LatLng center,
     int radiusMeters = 0,
-    int limit = 10,
+    // 10건이면 **이름이 맞는 결과가 잘려 나간다.** TMAP은 이름을 조각내 훑기
+    // 때문에 "더현대"에도 "…더원아파트", "…현대썬앤빌…"이 함께 오고, 거리순
+    // 정렬이라 그것들이 앞을 채우면 정작 "더현대 대구"가 10건 밖으로 밀린다.
+    // 넉넉히 받아 두고 이름 관련성으로 거르는 쪽이(`filterByNameRelevance`)
+    // 응답 한 번으로 끝난다.
+    int limit = 30,
   }) async {
     final query = keyword.trim();
     if (query.isEmpty) return const [];

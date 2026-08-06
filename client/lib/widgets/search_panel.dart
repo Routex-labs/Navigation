@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../core/service_locator.dart';
 import '../domain/dijkstra.dart';
+import '../domain/outdoor_poi_ranking.dart';
 import '../models/building.dart';
 import '../models/discovery_result.dart';
 import '../models/outdoor_poi.dart';
@@ -75,6 +76,7 @@ class SearchPanel extends StatefulWidget {
     this.reachByNodeId,
     this.outdoorSearchCenter,
     this.onOutdoorPoiPicked,
+    this.isInsideIndoorBuilding,
   });
 
   final String buildingId;
@@ -112,6 +114,13 @@ class SearchPanel extends StatefulWidget {
   /// 야외 장소를 골랐을 때. null이면 바깥 결과 줄을 눌러도 아무 일이 없으므로,
   /// [outdoorSearchCenter]가 있어도 이 콜백이 없으면 섹션을 그리지 않는다.
   final ValueChanged<OutdoorPoi>? onOutdoorPoiPicked;
+
+  /// 좌표가 우리 실내 도면이 있는 건물 안인지 묻는다. 야외 지도가 답한다.
+  ///
+  /// 같은 가게가 두 줄로 뜨는 것을 막는 데 쓴다 — 건물 **안** POI 중 우리
+  /// 실내 데이터가 이미 아는 것은 목록에서 뺀다
+  /// ([dropPoisCoveredByIndoorStores]). null이면 그 정리를 하지 않는다.
+  final bool Function(LatLng point)? isInsideIndoorBuilding;
 
   final ValueChanged<PoiSearchResult> onStorePicked;
   final ValueChanged<Building> onBuildingPicked;
@@ -457,8 +466,12 @@ class _SearchPanelState extends State<SearchPanel> {
     final pois = await outdoorPoiRepository.searchNearby(query, center: center);
     // 늦게 도착한 응답이 다음 검색어의 화면을 덮지 않게 한다(실내와 같은 규칙).
     if (!mounted || requestId != _requestId || pois.isEmpty) return;
+    // 규칙은 도메인 함수가 갖고 있다(`domain/outdoor_poi_ranking.dart`).
+    // 길찾기 시트도 같은 함수를 부른다 — 여기서 다시 구현하면 또 갈린다.
+    final relevant = filterByNameRelevance(query, pois);
+    if (relevant.isEmpty) return;
     setState(() {
-      _pois = pois;
+      _pois = relevant;
       // 이름 강조가 쓰는 질의어. 실내 검색이 아직 안 끝났을 수 있어 여기서도
       // 채운다 — 안 채우면 이전 검색어 기준으로 강조가 걸린다.
       _submittedQuery = query;
@@ -675,7 +688,9 @@ class _SearchPanelState extends State<SearchPanel> {
       case _SearchPhase.results:
         return _resultList();
       case _SearchPhase.degraded:
-        return _results.isEmpty && !hasOutdoor ? _degradedState() : _resultList();
+        return _results.isEmpty && !hasOutdoor
+            ? _degradedState()
+            : _resultList();
       case _SearchPhase.error:
         return hasOutdoor ? _resultList() : _errorState();
       case _SearchPhase.noMatch:
@@ -779,7 +794,7 @@ class _SearchPanelState extends State<SearchPanel> {
     // 보는 것이 맞다. 대신 어디까지가 우리 건물이고 어디부터 바깥인지 헤더로
     // 명확히 가른다 — 안 가르면 다른 건물 매장을 우리 매장으로 오해한다.
     final onPoiPicked = widget.onOutdoorPoiPicked;
-    final pois = _poisExcludingBuilding(building);
+    final pois = _visiblePois(building);
     if (pois.isNotEmpty && onPoiPicked != null) {
       rows.add(_outdoorHeader());
       for (final poi in pois) {
@@ -816,26 +831,38 @@ class _SearchPanelState extends State<SearchPanel> {
     );
   }
 
-  /// 이미 위에 "건물" 줄로 올라간 곳과 같은 장소를 가리키는 바깥 결과를 뺀다.
+  /// 목록에 실제로 그릴 바깥 결과. 같은 곳을 두 번 보여주지 않는다.
   ///
-  /// TMAP도 "더현대서울"을 POI 한 건으로 돌려주므로, 그냥 두면 같은 건물이
-  /// 목록에 두 번 뜬다. 헷갈리는 것으로 끝나지 않고 **둘이 하는 일이 다르다** —
-  /// 위쪽 건물 줄은 시트를 열어 건물 안 매장까지 이어 주지만, 아래쪽은 좌표
-  /// 하나짜리 야외 장소라 건물 앞에서 안내가 끝난다. 아래를 누른 사용자는
-  /// 기능이 반쯤 죽은 쪽으로 새는 셈이라 아예 지운다.
+  /// 두 종류의 중복을 뺀다.
   ///
-  /// 공백을 지우고 대소문자를 맞춘 뒤 **완전 일치**로만 판정한다("더현대 서울"
-  /// = "더현대서울"). contains로 넓히면 "더현대서울 스타벅스"처럼 건물 이름을
-  /// 앞에 달고 있는 진짜 결과까지 함께 사라진다 — 중복 한 줄을 지우려다 찾던
-  /// 매장을 지우는 쪽이 훨씬 나쁘다.
-  List<OutdoorPoi> _poisExcludingBuilding(Building? building) {
-    if (building == null || _pois.isEmpty) return _pois;
-    final key = _collapse(building.name);
-    return _pois.where((poi) => _collapse(poi.name) != key).toList();
-  }
+  /// 1. **건물 줄과 같은 곳.** TMAP도 "더현대서울"을 POI 한 건으로 돌려주므로
+  ///    그냥 두면 같은 건물이 두 번 뜨고, 둘이 하는 일이 다르다 — 위쪽 건물
+  ///    줄은 입구까지 안내하지만 아래쪽은 좌표 하나짜리다.
+  /// 2. **우리 실내 데이터가 이미 아는 가게.** 사용자가 본 화면이 그랬다 —
+  ///    "스타벅스 리저브 / B2"(우리)와 "스타벅스 더현대서울(B2)R점"(TMAP)이
+  ///    나란히 떴고, 아래쪽을 고르면 실내 경로가 안 나왔다. 층·노드가 붙어
+  ///    매장 앞까지 데려다주는 쪽을 남긴다([dropPoisCoveredByIndoorStores]).
+  ///
+  /// 1번의 이름 비교는 **완전 일치**다(공백·대소문자 무시). `contains`로
+  /// 넓히면 "더현대서울 스타벅스"처럼 건물 이름을 앞에 단 진짜 결과까지
+  /// 사라진다 — 중복 한 줄을 지우려다 찾던 가게를 지우는 쪽이 훨씬 나쁘다.
+  List<OutdoorPoi> _visiblePois(Building? building) {
+    if (_pois.isEmpty) return _pois;
 
-  static String _collapse(String value) =>
-      value.replaceAll(RegExp(r'\s+'), '').toLowerCase();
+    var pois = _pois;
+    final isInside = widget.isInsideIndoorBuilding;
+    if (isInside != null) {
+      pois = dropPoisCoveredByIndoorStores(
+        pois,
+        _results,
+        isInsideBuilding: (poi) => isInside(poi.point),
+      );
+    }
+
+    if (building == null) return pois;
+    final key = collapseName(building.name);
+    return pois.where((poi) => collapseName(poi.name) != key).toList();
+  }
 
   Widget _discoveryHeader() {
     final isClarify = _discoveryMode == DiscoveryMode.clarify;

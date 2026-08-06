@@ -8,6 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../core/api_config.dart';
 import '../../core/service_locator.dart';
 import '../../domain/dijkstra.dart';
+import '../../domain/outdoor_poi_ranking.dart';
 import '../../models/building.dart';
 import '../../models/category_count.dart';
 import '../../models/favorite_place.dart';
@@ -879,7 +880,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
     return [
       ...stores,
       ...buildingCandidates,
-      ...await _outdoorPoiCandidates(query, buildingCandidates),
+      ...await _outdoorPoiCandidates(query, results, buildingCandidates),
     ];
   }
 
@@ -892,6 +893,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 좌표로 간다. 상단 검색 패널이 쓰는 규칙과 같다.
   Future<List<DirectionsCandidate>> _outdoorPoiCandidates(
     String query,
+    List<PoiSearchResult> indoorStores,
     List<DirectionsCandidate> buildingCandidates,
   ) async {
     if (!outdoorPoiRepository.isAvailable) return const [];
@@ -906,12 +908,25 @@ class _MapShellScreenState extends State<MapShellScreen> {
       // 손에 있다.
       return const [];
     }
+
+    // 규칙은 도메인 함수가 갖고 있다(`domain/outdoor_poi_ranking.dart`).
+    // 상단 검색 패널도 같은 함수를 부른다 — 여기서 다시 구현하면 또 갈린다.
+    final relevant = filterByNameRelevance(query, pois);
+    final outdoor = _outdoorKey.currentState;
+    final deduped = dropPoisCoveredByIndoorStores(
+      relevant,
+      indoorStores,
+      isInsideBuilding: (poi) =>
+          outdoor?.isInsideIndoorBuilding(poi.point) ?? false,
+    );
+
+    // 이미 건물 줄로 올라간 곳과 이름이 완전히 같은 POI도 뺀다.
     final buildingNames = buildingCandidates
-        .map((c) => _collapseName(c.title))
+        .map((c) => collapseName(c.title))
         .toSet();
     return [
-      for (final poi in pois)
-        if (!buildingNames.contains(_collapseName(poi.name)))
+      for (final poi in deduped)
+        if (!buildingNames.contains(collapseName(poi.name)))
           DirectionsCandidate(
             title: poi.name,
             subtitle: poi.address ?? '건물 밖 장소',
@@ -919,9 +934,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
           ),
     ];
   }
-
-  static String _collapseName(String value) =>
-      value.replaceAll(RegExp(r'\s+'), '').toLowerCase();
 
   /// 길찾기 시트를 연다. [presetOrigin]/[presetDestination]은 매장 정보
   /// 시트의 "출발지로 설정"/"도착지로 설정"에서 넘어올 때 그 매장으로 채워
@@ -1573,6 +1585,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
                         outdoorSearchCenter: _outdoorSearchCenter,
                         onOutdoorPoiPicked: (poi) =>
                             unawaited(_onSearchPoiPicked(poi)),
+                        // 같은 가게가 두 줄로 뜨지 않게 하는 판정. 길찾기
+                        // 후보 목록도 같은 규칙을 쓴다.
+                        isInsideIndoorBuilding: (point) =>
+                            _outdoorKey.currentState?.isInsideIndoorBuilding(
+                              point,
+                            ) ??
+                            false,
                       ),
                     ),
                   )
