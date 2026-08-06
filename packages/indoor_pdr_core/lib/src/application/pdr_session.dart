@@ -48,6 +48,13 @@ class AppliedBatchInfo {
 /// 이 결과는 초록 센서 원본이다. 제품 현재 위치의 복도 제약은 floor graph를
 /// 소유한 Flutter 클라이언트가 별도 상태로 적용한다.
 class PdrSession {
+  /// heading 전용 스냅샷의 최소 간격(ms)과 최소 변화량(도).
+  ///
+  /// 간격만 두면 센서 흔들림(정지 중에도 ±몇 도)이 계속 스냅샷을 만들고,
+  /// 각도만 두면 빠른 회전에서 30ms마다 나간다. 둘 다 넘어야 내보낸다.
+  static const int _headingEmitMinIntervalMs = 150;
+  static const double _headingEmitMinDeltaDeg = 1.5;
+
   PdrSession({PdrSessionConfig? config})
     : config = config ?? const PdrSessionConfig() {
     _paths = PathAccumulator(maxPoints: this.config.maxPathPoints);
@@ -91,6 +98,10 @@ class PdrSession {
   double walkDirDeg = 0;
   double walkDirConfidence = 0;
   int? lastMotionAtMs;
+
+  // 걸음 없이 방향만 바뀔 때 스냅샷을 흘려보내는 스로틀 상태.
+  int? _lastHeadingEmitAtMs;
+  double? _lastEmittedHeadingDeg;
 
   int iosTrackedSteps = 0;
 
@@ -181,6 +192,33 @@ class PdrSession {
         deviceHeadingDeg: deviceHeadingDeg,
       ),
     );
+    _maybeEmitHeading(motionMs);
+  }
+
+  /// 걸음이 없어도 방향은 계속 흘려보낸다.
+  ///
+  /// 스냅샷은 원래 걸음에서만 나갔다(accel peak 채택 · pedometer 배치). 그래서
+  /// 제자리에 서서 몸만 돌리면 소비자가 받는 heading이 **마지막 걸음 시점에
+  /// 얼어붙었다** — 코너에서 방향을 트는 순간이 정작 방향이 가장 필요한 때다.
+  ///
+  /// 다만 native motion 이벤트는 30ms마다 온다. 그대로 흘리면 지도 소스가 초당
+  /// 33번 다시 그려진다. 시간·각도 두 문턱을 함께 둬서, 실제로 몸을 돌리는
+  /// 동안에만 6~7Hz로 나가고 가만히 있으면 센서 흔들림에는 반응하지 않는다.
+  void _maybeEmitHeading(int motionMs) {
+    final previous = _lastEmittedHeadingDeg;
+    final current = walkingHeadingDeg;
+    if (previous != null &&
+        shortestDeltaDegrees(current - previous).abs() <
+            _headingEmitMinDeltaDeg) {
+      return;
+    }
+    final lastAt = _lastHeadingEmitAtMs;
+    if (lastAt != null && motionMs - lastAt < _headingEmitMinIntervalMs) {
+      return;
+    }
+    _lastHeadingEmitAtMs = motionMs;
+    _lastEmittedHeadingDeg = current;
+    _emit();
   }
 
   /// native accel step-peak 신호. 주황 preview 경로에만 반영.
