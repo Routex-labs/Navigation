@@ -456,18 +456,36 @@ void main() {
   });
 
   group('getAllBuildings', () {
-    test('caches the list and populates the per-id cache', () async {
-      var requestCount = 0;
+    test('does not let the slim list response satisfy getBuilding', () async {
+      // 목록에는 tile_revision이 없다(단건 응답에만 있다). 목록으로 개별 캐시를
+      // 채우면 그 뒤 실내 타일 URL에 `?v=`가 안 붙어 서버 캐시가 1년 immutable
+      // 대신 60초로 떨어지고, 층을 바꿀 때마다 타일을 다시 받게 된다.
+      var listCount = 0;
+      var singleCount = 0;
       final client = MockClient((request) async {
-        requestCount++;
+        final isList = request.url.path.endsWith('/buildings');
+        if (isList) {
+          listCount++;
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 'bldg-001',
+                'name': '데모 건물',
+                'floors': ['1F', '2F'],
+              },
+            ]),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }
+        singleCount++;
         return http.Response(
-          jsonEncode([
-            {
-              'id': 'bldg-001',
-              'name': '데모 건물',
-              'floors': ['1F', '2F'],
-            },
-          ]),
+          jsonEncode({
+            'id': 'bldg-001',
+            'name': '데모 건물',
+            'floors': ['1F', '2F'],
+            'tile_revision': 'rev-1',
+          }),
           200,
           headers: {'content-type': 'application/json; charset=utf-8'},
         );
@@ -478,8 +496,12 @@ void main() {
       await repository.getAllBuildings();
       final building = await repository.getBuilding('bldg-001');
 
-      expect(requestCount, 1);
+      // 목록 자체는 여전히 한 번만 받는다.
+      expect(listCount, 1);
+      // 개별 조회는 단건 엔드포인트를 타야 tile_revision이 채워진다.
+      expect(singleCount, 1);
       expect(building?.name, '데모 건물');
+      expect(building?.tileRevision, 'rev-1');
     });
   });
 }

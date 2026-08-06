@@ -36,7 +36,8 @@ flowchart LR
     GUIDE --> ARRIVAL
 ```
 
-`MapShellScreen`이 공통 지도 셸과 검색/즐겨찾기/카테고리 시트를 조립한다.
+`MapShellScreen`이 공통 지도 셸과 검색/즐겨찾기/카테고리 시트, 그리고 상단 바 햄버거가
+여는 앱 메뉴(`widgets/app_menu_sheet.dart` — 디버그 설정의 유일한 진입점)를 조립한다.
 독립 진단이 필요한 기능은 운영 화면에 임시 코드를 넣지 않고 `debug/` 화면으로 분리한다.
 
 ## 의존 경계

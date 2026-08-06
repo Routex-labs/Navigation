@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 
-/// 지도 화면(야외/실내) 공통 상단 바. 실내 모드에서만 햄버거 버튼이 보인다.
+/// 지도 화면(야외/실내) 공통 상단 바. 왼쪽 햄버거 버튼은 앱 메뉴를 연다.
+///
+/// 햄버거는 **모드와 무관하게 항상 보인다.** 한동안 실내 모드에서만 띄웠는데,
+/// 그때는 버튼이 곧 "건물 선택"이라 야외에서는 누를 이유가 없었기 때문이다.
+/// 지금은 저장한 장소·길찾기·위치 보정·디버그 설정을 모은 앱 메뉴라, 야외에서
+/// 숨기면 야외 화면에서만 닿지 않는 항목이 생긴다.
 ///
 /// 검색창은 장소의 "일반 정보"만 보여주는 용도이고, 실제 경로 안내는
 /// 오른쪽 길찾기 아이콘이 여는 별도 입력 시트를 통해서만 시작된다 —
@@ -17,8 +22,7 @@ import '../theme/app_theme.dart';
 class MapTopBar extends StatelessWidget {
   const MapTopBar({
     super.key,
-    required this.showHamburger,
-    required this.onHamburgerTap,
+    required this.onMenuTap,
     required this.controller,
     required this.focusNode,
     required this.onChanged,
@@ -35,8 +39,8 @@ class MapTopBar extends StatelessWidget {
     this.hintText = '건물, 장소를 검색하세요',
   });
 
-  final bool showHamburger;
-  final VoidCallback onHamburgerTap;
+  /// 왼쪽 햄버거 버튼. 앱 메뉴 시트를 여는 것이 유일한 역할이다.
+  final VoidCallback onMenuTap;
 
   final TextEditingController controller;
   final FocusNode focusNode;
@@ -47,7 +51,7 @@ class MapTopBar extends StatelessWidget {
   /// 쓰여 여기까지 오지 않아도 검색은 끝까지 간다.
   final ValueChanged<String> onSubmitted;
 
-  /// 검색이 활성(포커스 또는 입력 중)인지. true면 왼쪽 버튼이 햄버거 대신
+  /// 검색이 활성(포커스 또는 입력 중)인지. true면 왼쪽 버튼이 메뉴 대신
   /// "검색 종료"로 바뀐다.
   final bool searchActive;
   final VoidCallback onCancelSearch;
@@ -97,16 +101,12 @@ class MapTopBar extends StatelessWidget {
                   icon: const Icon(Icons.arrow_back, color: AppColors.muted),
                   tooltip: '검색 닫기',
                 )
-              else if (showHamburger)
-                IconButton(
-                  onPressed: onHamburgerTap,
-                  icon: const Icon(Icons.menu, color: AppColors.muted),
-                  tooltip: '건물 선택',
-                )
               else
-                const Padding(
-                  padding: EdgeInsets.only(left: 16),
-                  child: Icon(Icons.search, size: 18, color: AppColors.muted),
+                IconButton(
+                  key: const Key('map-top-bar-menu'),
+                  onPressed: onMenuTap,
+                  icon: const Icon(Icons.menu, color: AppColors.muted),
+                  tooltip: '메뉴',
                 ),
               Expanded(
                 child: Padding(
@@ -142,11 +142,17 @@ class MapTopBar extends StatelessWidget {
               ),
               // 글자가 있으면 지우기, 없으면 길찾기. 둘을 나란히 두면 좁은
               // 화면에서 입력 폭이 더 줄어든다.
+              //
+              // 이 자리가 앱 안 모든 검색창 지우기 X의 기준 패턴이다 — 글자가
+              // 있을 때만 나타나고, 글자만 지우는 게 아니라 `onChanged('')`로
+              // 그 입력이 걸어 둔 결과 상태까지 함께 되돌린다. 길찾기 시트와
+              // 카테고리 매장 목록 시트도 같은 규칙을 따른다.
               ValueListenableBuilder<TextEditingValue>(
                 valueListenable: controller,
                 builder: (context, value, _) {
                   if (value.text.isEmpty) {
                     return IconButton(
+                      key: const Key('map-top-bar-directions'),
                       onPressed: onDirectionsTap,
                       icon: const Icon(
                         Icons.directions,
@@ -156,6 +162,7 @@ class MapTopBar extends StatelessWidget {
                     );
                   }
                   return IconButton(
+                    key: const Key('map-top-bar-clear'),
                     onPressed: () {
                       controller.clear();
                       onChanged('');

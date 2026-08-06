@@ -5,6 +5,17 @@ import 'package:flutter/material.dart';
 
 import 'debug_mode_controller.dart';
 
+/// 디버그 설정 시트. **유일한 진입점은 앱 메뉴(상단 바 햄버거 → 개발자 → 디버그
+/// 설정)** 다.
+///
+/// 한동안은 지도 왼쪽 아래에 떠 있는 원형 벌레 아이콘 버튼(`DebugModeSettingsButton`)
+/// 이 이 시트를 열었다. 일반 사용자에게 보일 이유가 없는 개발 도구가 메인 지도의
+/// 자리를 차지했고, 야외에서는 실내 진입 오버레이 상태에 따라 나타났다 사라져
+/// "어디서 켜는 건지" 자체가 상태에 얽혀 있었다. 메뉴 항목 하나로 옮기면 지도는
+/// 운영 화면만 남고 진입 경로는 모드와 무관하게 고정된다.
+///
+/// 실제 PDR 버튼과 진단 레이어는 여기서 [DebugModeController.enabled]를 켰을
+/// 때만 지도에 나타난다.
 Future<void> showDebugModeSettingsSheet(
   BuildContext context,
   DebugModeController controller,
@@ -15,40 +26,6 @@ Future<void> showDebugModeSettingsSheet(
     showDragHandle: true,
     builder: (context) => _DebugModeSettingsSheet(controller: controller),
   );
-}
-
-/// 메인 지도에 남는 유일한 디버그 진입점. 실제 PDR 버튼과 진단 레이어는
-/// [DebugModeController.enabled]가 켜졌을 때만 나타난다.
-class DebugModeSettingsButton extends StatelessWidget {
-  const DebugModeSettingsButton({
-    super.key,
-    required this.controller,
-    required this.onPressed,
-  });
-
-  final DebugModeController controller;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = controller.enabled;
-    return Tooltip(
-      message: enabled ? '디버그 설정 (사용 중)' : '디버그 설정',
-      child: Material(
-        color: Colors.white.withValues(alpha: 0.96),
-        elevation: 3,
-        shadowColor: Colors.black.withValues(alpha: 0.16),
-        shape: const CircleBorder(),
-        child: IconButton(
-          onPressed: controller.isLoaded ? onPressed : null,
-          icon: Icon(
-            Icons.bug_report_outlined,
-            color: enabled ? const Color(0xFF7E57C2) : const Color(0xFF5F6368),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _DebugModeSettingsSheet extends StatelessWidget {

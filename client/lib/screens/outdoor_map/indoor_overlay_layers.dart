@@ -32,7 +32,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import '../../core/map_fonts.dart';
 import '../../core/map_palette.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/category_map_filter.dart';
+import '../../widgets/category_map_fill.dart';
 import '../../widgets/category_map_icon.dart';
 import '../../widgets/floor_facility_style.dart';
 import 'indoor_entry_zoom.dart';
@@ -80,7 +80,11 @@ FillLayerProperties buildingFillProps(double opacity) => FillLayerProperties(
 ///
 /// 실내 도면 **위에** 얹히는 선이라 얇게(1px) 긋는다. 굵게 그으면 도면 가장자리
 /// 매장을 덮고, 지하처럼 외곽이 들쭉날쭉한 층에서는 선 자체가 도면처럼 읽힌다.
-/// 어느 링을 따라갈지는 [floor_outline.dart]가 정한다.
+///
+/// 어느 링을 따라갈지는 [floor_outline.dart]가 정한다. 그 링은 바로 아래
+/// [indoorFootprintProps]가 칠하는 타일 `footprint`와 **같은 층 footprint**에서
+/// 나온다 — 선과 바닥이 다른 데이터에서 나오면 층마다 경계가 미세하게 어긋난다
+/// (그렇게 어긋났던 경위는 [floor_outline.dart] 상단 주석 참고).
 LineLayerProperties floorOutlineProps(List<Object> fadeExpr) =>
     LineLayerProperties(
       lineColor: AppColors.primary.toHexString(),
@@ -100,6 +104,9 @@ FillLayerProperties indoorFootprintProps(List<Object> fadeExpr) =>
       fillOpacity: fadeExpr,
     );
 
+/// 실내 오버레이의 매장 fill. 실내 화면(`FloorPlanView`)과 **같은 기본 색**이다.
+/// 두 화면이 같은 MVT `stores` 레이어를 보는데 색이 다르면 같은 매장이 야외
+/// 오버레이와 실내 화면에서 다르게 읽힌다.
 FillLayerProperties indoorStoresFillProps(List<Object> fadeExpr) =>
     FillLayerProperties(
       fillColor: mapStoreFill,
@@ -109,17 +116,17 @@ FillLayerProperties indoorStoresFillProps(List<Object> fadeExpr) =>
 
 /// 카테고리 필터로 강조된 매장 fill.
 ///
-/// 색은 실내 화면과 같은 상수([kCategoryHighlightFillColor])를 쓴다. 두 화면이
-/// 같은 MVT `stores` 레이어를 보는데 강조색이 다르면, 같은 매장이 야외 오버레이
-/// 에서와 실내 화면에서 다른 색으로 보인다.
+/// 색은 실내 화면과 **같은 표현식**([category_map_fill.dart])을 써서 선택한
+/// 대분류의 색으로 칠한다. 두 화면이 같은 MVT `stores` 레이어를 보는데 강조색이
+/// 다르면, 같은 매장이 야외 오버레이에서와 실내 화면에서 다른 색으로 보인다.
 ///
 /// 다른 점은 **opacity를 fadeExpr로 묶는다**는 것뿐이다. 야외 오버레이는 줌에
 /// 따라 통째로 페이드인/아웃되므로, 강조만 불투명하게 두면 도면이 아직 안 보이는
-/// 줌에서 파란 폴리곤만 공중에 뜬다.
+/// 줌에서 강조 폴리곤만 공중에 뜬다.
 FillLayerProperties indoorCategoryHighlightProps(List<Object> fadeExpr) =>
     FillLayerProperties(
-      fillColor: kCategoryHighlightFillColor,
-      fillOutlineColor: kCategoryHighlightOutlineColor,
+      fillColor: storeCategoryHighlightFillColorExpression(),
+      fillOutlineColor: storeCategoryHighlightOutlineExpression(),
       fillOpacity: fadeExpr,
     );
 

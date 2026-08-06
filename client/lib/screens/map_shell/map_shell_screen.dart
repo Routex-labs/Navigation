@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../core/api_config.dart';
 import '../../core/service_locator.dart';
 import '../../domain/dijkstra.dart';
+import '../../features/debug_mode/debug_mode.dart';
 import '../../features/indoor_navigation/contract/floor_transition_ui_state.dart';
 import '../../models/building.dart';
 import '../../models/category_count.dart';
@@ -14,12 +15,11 @@ import '../../models/favorite_place.dart';
 import '../../models/floor_plan.dart';
 import '../../models/poi_search_result.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/building_switcher_sheet.dart';
+import '../../widgets/app_menu_sheet.dart';
 import '../../widgets/category_icon.dart';
 import '../../widgets/category_label_order.dart';
 import '../../widgets/category_map_filter.dart';
 import '../../widgets/category_stores_sheet.dart';
-import '../../widgets/category_taxonomy.dart';
 import '../../widgets/directions_sheet.dart';
 import '../../widgets/favorites_sheet.dart';
 import '../../widgets/floor_transition_overlay.dart';
@@ -31,8 +31,8 @@ import '../indoor_map/indoor_map_screen.dart';
 import '../outdoor_map/outdoor_map_screen.dart';
 
 /// 야외/실내 지도의 공통 뼈대. 홈(야외) ↔ 실내 전환은 Navigator push 없이
-/// 이 화면 안에서 모드만 바꿔 탭처럼 즉시 반응하게 한다. 검색·길찾기·건물
-/// 전환·위치 보정은 전부 이 화면이 상단/하단 공용 바를 통해 중계한다.
+/// 이 화면 안에서 모드만 바꿔 탭처럼 즉시 반응하게 한다. 검색·길찾기·앱
+/// 메뉴·위치 보정은 전부 이 화면이 상단/하단 공용 바를 통해 중계한다.
 class MapShellScreen extends StatefulWidget {
   const MapShellScreen({super.key, this.initialMode = MapMode.outdoor});
 
@@ -48,9 +48,10 @@ const _etaBarLiftHeight = 92.0;
 
 /// 카테고리 필터 pill이 쓰는 (층·대분류·소분류)별 매장 수.
 ///
-/// 층까지 들고 있는 이유는 "이 층 N곳" 안내 때문이다 — 선택한 카테고리가 지금
-/// 보고 있는 층에 하나도 없으면 지도에 파란 강조가 아예 안 뜨는데, 그 상태와
-/// "필터가 안 먹었다"를 사용자가 구분할 방법이 달리 없다.
+/// pill은 대분류·소분류만 읽는다. 층·개수는 지도 위 "이 층 N곳" 안내가 쓰던
+/// 값인데, 그 안내를 걷어내고 목록 시트가 층별 묶음으로 대신 답하도록 바꿨다
+/// (`category_stores_sheet.dart`). 응답 스키마라 필드는 그대로 두되, 이 화면은
+/// 더 이상 읽지 않는다.
 typedef _CategoryEntry = CategoryCount;
 
 class _MapShellScreenState extends State<MapShellScreen> {
@@ -64,7 +65,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
   static const _floorSwapVeilFadeOut = Duration(milliseconds: 260);
 
   late MapMode _mode = widget.initialMode;
-  String _buildingId = demoBuildingId;
+
+  /// 이 앱이 다루는 건물. 한동안 햄버거 버튼이 "건물 선택 (테스트)" 시트를 열어
+  /// 백엔드에 적재된 건물 목록에서 바꿀 수 있었지만, 데모용 전환 수단이었고
+  /// 실제 사용 흐름에는 없는 조작이라 걷어냈다. 여러 건물을 실제로 다루게 되면
+  /// 그때는 시트가 아니라 지도에서 건물을 골라 들어오는 흐름이어야 한다.
+  static const _buildingId = demoBuildingId;
 
   /// 지도 위 카테고리 필터에서 지금 고른 것. null이면 강조 없음(기본 상태).
   /// 실내·야외 지도에 같은 값을 내려 두 화면의 강조가 어긋나지 않게 한다.
@@ -132,6 +138,23 @@ class _MapShellScreenState extends State<MapShellScreen> {
   void _onCategorySelectionChanged(CategorySelection? selection) {
     if (_categorySelection == selection) return;
     setState(() => _categorySelection = selection);
+  }
+
+  /// 지도 위 대분류 chip을 눌렀을 때. 강조를 걸고 **곧바로** 매장 목록 시트를
+  /// 연다.
+  ///
+  /// 예전에는 chip → 소분류 pill 줄 → "목록" 버튼까지 세 번을 눌러야 이름을
+  /// 볼 수 있었다. 강조만으로는 "저 파란 칸이 뭔지"에 답하지 못하는데, 정작
+  /// 답이 있는 목록이 가장 멀리 있었다. 지금은 chip 한 번이면 목록이고,
+  /// 소분류는 그 시트 안에서 고른다.
+  ///
+  /// 이미 고른 chip을 다시 누르면(=[selection]이 null) 해제만 하고 시트는 열지
+  /// 않는다. 해제 수단이 사라지면 필터를 걸어 놓고 되돌릴 방법이 없어진다.
+  void _onCategoryChipTapped(CategorySelection? selection) {
+    _onCategorySelectionChanged(selection);
+    final category = selection?.category;
+    if (category == null) return;
+    _runSheetChain(() => _openCategoryStores(category));
   }
 
   ({String title, String subtitle})? _placeInfo;
@@ -615,6 +638,16 @@ class _MapShellScreenState extends State<MapShellScreen> {
           category: category,
           onCloseAll: _requestCloseSheetChain,
           currentFloor: currentFloor,
+          // 지도 강조와 시트 목록이 같은 소분류를 가리키게 한다. 다른 대분류가
+          // 걸려 있었다면(매장 정보 시트에서 카테고리를 타고 들어온 경우) 그
+          // 소분류는 이 대분류에 없는 값이므로 넘기지 않는다.
+          subcategory: _categorySelection?.category == category
+              ? _categorySelection?.subcategory
+              : null,
+          onSubcategoryChanged: (value) => _onCategorySelectionChanged(
+            CategorySelection(category: category, subcategory: value),
+          ),
+          onFirstStoreChanged: _focusCategoryFirstStore,
         ),
       );
       if (_closeSheetChainRequested || picked == null || !mounted) return false;
@@ -623,6 +656,43 @@ class _MapShellScreenState extends State<MapShellScreen> {
       if (tookAction) return true;
     }
     return false;
+  }
+
+  /// 카테고리 목록 맨 위 매장을 지도에서 보여 준다.
+  ///
+  /// 시트가 화면 아래를, 카테고리 chip 줄이 위를 가리므로 **그 사이에 남는 띠
+  /// 한가운데**가 목표 지점이다. 정중앙에 놓으면 시트 뒤에 숨고, 시트 높이만
+  /// 감안하면 이번엔 chip 줄 뒤로 올라간다.
+  ///
+  /// 시트는 현재 층 매장만 올려 준다(`onFirstStoreChanged` 주석). 다른 층으로
+  /// 카메라를 보내면 지도가 층을 갈아타야 하는데, 그러면 시트 머리글이 말하는
+  /// 층과 지도가 어긋난다.
+  void _focusCategoryFirstStore(PoiSearchResult? store) {
+    if (store == null || !mounted) return;
+    final topInsetPx = _categoryRowBottomPx();
+    if (_mode == MapMode.indoor) {
+      _indoorKey.currentState?.focusStore(
+        store,
+        bottomSheetFraction: kCategoryStoresSheetInitialSize,
+        topInsetPx: topInsetPx,
+      );
+    } else if (_outdoorIndoorEntered) {
+      _outdoorKey.currentState?.focusStore(
+        store,
+        bottomSheetFraction: kCategoryStoresSheetInitialSize,
+        topInsetPx: topInsetPx,
+      );
+    }
+  }
+
+  /// 지도 위 카테고리 chip 줄의 아래 끝(화면 좌표·논리 픽셀). 상수로 박지 않고
+  /// 실제로 재는 이유는, 이 줄이 길찾기 초안 바 때문에 아래로 밀리거나 검색 중
+  /// 접히기 때문이다. 트리에 없으면 0 — 가릴 것이 없다는 뜻이다.
+  double _categoryRowBottomPx() {
+    final box =
+        _categoryRowKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return 0;
+    return box.localToGlobal(Offset.zero).dy + box.size.height;
   }
 
   Future<List<DirectionsCandidate>> _searchDirectionsCandidates(
@@ -673,6 +743,43 @@ class _MapShellScreenState extends State<MapShellScreen> {
         .toList();
   }
 
+  /// 길찾기 시트의 2단계(의미 검색). 경량이 빈손일 때만 시트가 부른다.
+  ///
+  /// 상단 검색과 같은 `/query/ai` 계약을 그대로 태운다 — "밥 먹을 곳"처럼 이름이
+  /// 아닌 말이 상단에서는 되고 길찾기에서는 안 되는 상태를 없애기 위해서다.
+  /// 경량과 마찬가지로 층은 넘기지 않는다: 길찾기는 원래 다른 층으로 가려고 여는
+  /// 기능이고, 백엔드의 의미 단계는 current_floor_id를 받아도 건물 전체를 본다
+  /// (query_search.match_ai_destination).
+  Future<DirectionsDiscovery> _semanticDirectionsCandidates(
+    String query, {
+    Map<String, List<String>>? selectedFacets,
+    required bool showAll,
+  }) async {
+    final discovery = await destinationRepository.searchDestinationsAi(
+      _buildingId,
+      query,
+      selectedFacets: selectedFacets,
+      showAll: showAll,
+    );
+    return DirectionsDiscovery(
+      mode: discovery.mode,
+      question: discovery.question,
+      options: discovery.options,
+      candidates: discovery.matches
+          .map(
+            (m) => DirectionsCandidate(
+              title: m.name,
+              subtitle: m.floorName,
+              point: m.point,
+              nodeId: m.entranceNodeId,
+              floor: m.floorName,
+              reason: m.reason,
+            ),
+          )
+          .toList(),
+    );
+  }
+
   /// 길찾기 시트를 연다. [presetOrigin]/[presetDestination]은 매장 정보
   /// 시트의 "출발지로 설정"/"도착지로 설정"에서 넘어올 때 그 매장으로 채워
   /// 둘 값이다. 저장된 도착 초안이 있으면 [presetDestination]이 없어도 그
@@ -700,6 +807,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
         initialOrigin: initialOrigin,
         initialDestination: initialDestination,
         search: _searchDirectionsCandidates,
+        // 야외(건물 입구를 고르는) 모드에서는 넘기지 않는다. `/query/ai`는 건물
+        // 안의 매장을 찾는 계약이라, 건물을 고르는 자리에서 매장을 추천하면
+        // 후보를 눌러도 갈 수 없는 목록이 된다. 시트가 떠 있는 동안에는 지도가
+        // 잠겨(_withMapsLocked) 실내/야외가 바뀌지 않으므로 여는 시점의 판정을
+        // 그대로 써도 된다.
+        semanticSearch: _indoorContextActive
+            ? _semanticDirectionsCandidates
+            : null,
         focusOrigin: focusOrigin,
       ),
     );
@@ -783,6 +898,28 @@ class _MapShellScreenState extends State<MapShellScreen> {
       _runSheetChain(() => _showStoreInfo(match));
       return;
     }
+    _applyMapPick(match, target);
+  }
+
+  /// 지도에서 고르는 중에 **매장이 아닌 곳(복도·빈 공간)** 을 눌렀을 때.
+  ///
+  /// 지도 화면이 그 탭을 통행 그래프에 스냅해 노드까지 확정한 뒤 넘겨주므로,
+  /// 여기서는 매장을 눌렀을 때와 **완전히 같은 처리**를 태운다. 두 경로가 갈리면
+  /// "복도로 지정한 출발지만 위치 아이콘이 안 따라온다" 같은 절반짜리 동작이
+  /// 생긴다.
+  ///
+  /// 고르는 중이 아닐 때는 아무 일도 하지 않는다. 지도 화면도 같은 조건으로
+  /// 막지만([IndoorMapBody.pickingOnMap]), 상태를 소유한 쪽에서 한 번 더 막아
+  /// 두 값이 한 프레임 어긋나는 순간에 빈 곳 탭이 목적지가 되는 일을 없앤다.
+  void _onMapPointPicked(PoiSearchResult picked) {
+    final target = _mapPickTarget;
+    if (target == null) return;
+    _applyMapPick(picked, target);
+  }
+
+  /// 지도 탭으로 확정된 지점을 출발지/도착지에 반영한다. 매장 탭과 복도 탭이
+  /// 공유하는 유일한 경로다.
+  void _applyMapPick(PoiSearchResult match, DirectionsMapPickTarget target) {
     _stopPickingOnMap();
     // 강조 표시는 남겨두지 않는다 — 곧 경로와 핀이 그 자리를 대신한다.
     _indoorKey.currentState?.clearHighlight();
@@ -954,21 +1091,39 @@ class _MapShellScreenState extends State<MapShellScreen> {
     }
   }
 
-  Future<void> _onHamburgerTap() async {
-    final selected = await _withMapsLocked(
-      () =>
-          BuildingSwitcherSheet.show(context, selectedBuildingId: _buildingId),
+  /// 상단 바 햄버거 → 앱 메뉴. 시트는 **고른 항목만 돌려주고**, 실제 동작은
+  /// 시트가 닫힌 뒤 여기서 실행한다. 시트가 콜백을 직접 들고 실행하면 이미
+  /// 닫힌 시트의 `context`로 다음 시트를 띄우게 되고, 그 사이 모드가 바뀌면
+  /// 옛 상태에 대고 동작한다.
+  Future<void> _onMenuTap() async {
+    final action = await _withMapsLocked(
+      () => AppMenuSheet.show(
+        context,
+        // 하단 바의 "위치 지정" 버튼과 같은 조건이다. 건물 밖에서는 지정할
+        // 층이 없어 눌러도 아무 일도 일어나지 않는다.
+        showPlaceLocation: _mode == MapMode.indoor || _outdoorIndoorEntered,
+        debugEnabled: debugModeController.enabled,
+      ),
     );
-    if (selected == null || selected == _buildingId || !mounted) return;
-    setState(() {
-      _buildingId = selected;
-      _placeInfo = null;
-      // 건물이 바뀌면 카테고리 목록도 그 건물 것으로 다시 읽고, 이전 건물에서
-      // 고른 선택은 버린다 — 새 건물에 없는 카테고리가 걸린 채로 남으면 지도에
-      // 아무것도 강조되지 않는데 pill만 눌린 상태로 보인다.
-      _categoryEntriesFuture = _loadCategoryEntries();
-      _categorySelection = null;
-    });
+    if (action == null || !mounted) return;
+    switch (action) {
+      case AppMenuAction.favorites:
+        await _openFavorites();
+      case AppMenuAction.directions:
+        await _openDirections();
+      case AppMenuAction.placeLocation:
+        _onPlaceLocation();
+      case AppMenuAction.calibrate:
+        _onCalibrate();
+      case AppMenuAction.debugSettings:
+        // 디버그 설정은 메인 지도에서 걷어냈으므로 이 메뉴가 유일한 진입점이다.
+        // 시트 안에서 토글하면 지도 두 화면이 전역 컨트롤러의 알림을 받아
+        // 알아서 다시 그린다.
+        await _withMapsLocked<bool>(() async {
+          await showDebugModeSettingsSheet(context, debugModeController);
+          return true;
+        });
+    }
   }
 
   void _onCalibrate() {
@@ -1053,6 +1208,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
                   unawaited(_refreshReach());
                 },
                 onStoreTap: _onMapStoreTap,
+                // 실내 오버레이 위에서도 복도를 골라 출발/도착을 정할 수 있다.
+                // 실내 탭과 같은 조작이어야 하므로 같은 값을 내려 준다.
+                pickingOnMap: _mapPickTarget != null,
+                onMapPointPicked: _onMapPointPicked,
                 onLocationAnchored: _onLocationAnchored,
                 // 실내 화면과 같은 선택을 넘긴다. 야외 지도도 실내 진입
                 // 오버레이가 켜지면 같은 도면을 그리므로, 안 넘기면 칩을
@@ -1078,6 +1237,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
                 onRouteVisibleChanged: (visible) =>
                     setState(() => _indoorRouteVisible = visible),
                 onStoreTap: _onMapStoreTap,
+                // 지도에서 고르는 중에는 매장뿐 아니라 복도도 고를 수 있다.
+                // 지도 화면이 복도 탭을 그래프 노드로 스냅해 돌려준다.
+                pickingOnMap: _mapPickTarget != null,
+                onMapPointPicked: _onMapPointPicked,
                 onLocationAnchored: _onLocationAnchored,
                 onPlacingLocationChanged: (placing) {
                   if (_indoorPlacingLocation == placing) return;
@@ -1138,8 +1301,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
               children: [
                 MapTopBar(
                   key: _topBarKey,
-                  showHamburger: _mode == MapMode.indoor,
-                  onHamburgerTap: _onHamburgerTap,
+                  onMenuTap: _onMenuTap,
                   controller: _searchController,
                   focusNode: _searchFocus,
                   onChanged: _onSearchChanged,
@@ -1218,69 +1380,42 @@ class _MapShellScreenState extends State<MapShellScreen> {
                 else
                   Padding(
                     padding: const EdgeInsets.only(top: _overlayGap),
-                    // 대분류 줄과 소분류 줄을 세로로 쌓는다. 두 줄을 하나의 가로
-                    // 스크롤에 넣으면 소분류가 대분류 오른쪽 끝에 붙어, 어느
-                    // 대분류에 딸린 것인지 읽히지 않는다.
-                    child: Column(
+                    // 지도 위에는 **대분류 한 줄만** 둔다. 소분류는 chip을 누르면
+                    // 바로 올라오는 매장 목록 시트 안으로 옮겼다 — 시트가 곧장
+                    // 뜨는 마당에 같은 pill 줄을 지도에도 그리면 화면에 같은
+                    // 조작이 두 벌 남는다.
+                    child: _MapOverlayScrollRow(
                       key: _categoryRowKey,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
+                      onPointerOverChanged: (over) => over
+                          ? _lockMaps(_mapLockOverlayHover)
+                          : _unlockMaps(_mapLockOverlayHover),
+                      onPointerDownChanged: (down) => down
+                          ? _lockMaps(_mapLockOverlayTouch)
+                          : _unlockMaps(_mapLockOverlayTouch),
                       children: [
-                        _MapOverlayScrollRow(
-                          onPointerOverChanged: (over) => over
-                              ? _lockMaps(_mapLockOverlayHover)
-                              : _unlockMaps(_mapLockOverlayHover),
-                          onPointerDownChanged: (down) => down
-                              ? _lockMaps(_mapLockOverlayTouch)
-                              : _unlockMaps(_mapLockOverlayTouch),
-                          children: [
-                            _FavoritesPill(
-                              key: _favoritesPillKey,
-                              onTap: _openFavorites,
-                            ),
-                            // 카테고리 필터는 **건물 안을 보고 있을 때만**
-                            // 노출한다. 기준은 모드(_mode)가 아니라
-                            // [_indoorContextActive]다 — 야외 탭이어도 건물을
-                            // 탭하거나 줌으로 실내 오버레이가 켜지면 사용자에게는
-                            // 실내 화면과 똑같은 도면이 떠 있고, 그 위에 강조가
-                            // 그려진다. 모드로 분기하면 그 상태에서 칩만 사라져,
-                            // 웹(마우스로 실내 탭을 눌러 들어감)에서는 보이고
-                            // 모바일(도면을 탭해 바로 진입)에서는 안 보인다.
-                            //
-                            // 반대로 오버레이가 꺼진 순수 야외에서는 계속 감춘다.
-                            // 아직 들어가지도 않은 건물의 카테고리를 누르게 되고,
-                            // 강조는 도면 위에 그려지므로 결과가 보이지 않는다.
-                            if (_indoorContextActive) ...[
-                              const SizedBox(width: 8),
-                              _CategoryChipsRow(
-                                entriesFuture: _categoryEntriesFuture,
-                                selection: _categorySelection,
-                                onSelectionChanged: _onCategorySelectionChanged,
-                                onRetry: _reloadCategoryEntries,
-                              ),
-                            ],
-                          ],
+                        _FavoritesPill(
+                          key: _favoritesPillKey,
+                          onTap: _openFavorites,
                         ),
-                        // 소분류 줄과 개수 안내는 대분류를 고른 뒤에만 뜬다.
-                        if (_indoorContextActive &&
-                            _categorySelection != null) ...[
-                          const SizedBox(height: _overlayGap),
-                          _SubcategoryPillsRow(
+                        // 카테고리 필터는 **건물 안을 보고 있을 때만**
+                        // 노출한다. 기준은 모드(_mode)가 아니라
+                        // [_indoorContextActive]다 — 야외 탭이어도 건물을
+                        // 탭하거나 줌으로 실내 오버레이가 켜지면 사용자에게는
+                        // 실내 화면과 똑같은 도면이 떠 있고, 그 위에 강조가
+                        // 그려진다. 모드로 분기하면 그 상태에서 칩만 사라져,
+                        // 웹(마우스로 실내 탭을 눌러 들어감)에서는 보이고
+                        // 모바일(도면을 탭해 바로 진입)에서는 안 보인다.
+                        //
+                        // 반대로 오버레이가 꺼진 순수 야외에서는 계속 감춘다.
+                        // 아직 들어가지도 않은 건물의 카테고리를 누르게 되고,
+                        // 강조는 도면 위에 그려지므로 결과가 보이지 않는다.
+                        if (_indoorContextActive) ...[
+                          const SizedBox(width: 8),
+                          _CategoryChipsRow(
                             entriesFuture: _categoryEntriesFuture,
-                            selection: _categorySelection!,
-                            activeFloor: _activeFloorLabel,
-                            onSelectionChanged: _onCategorySelectionChanged,
-                            onPointerOverChanged: (over) => over
-                                ? _lockMaps(_mapLockOverlayHover)
-                                : _unlockMaps(_mapLockOverlayHover),
-                            onPointerDownChanged: (down) => down
-                                ? _lockMaps(_mapLockOverlayTouch)
-                                : _unlockMaps(_mapLockOverlayTouch),
-                            onOpenList: (category) {
-                              _runSheetChain(
-                                () => _openCategoryStores(category),
-                              );
-                            },
+                            selection: _categorySelection,
+                            onSelectionChanged: _onCategoryChipTapped,
+                            onRetry: _reloadCategoryEntries,
                           ),
                         ],
                       ],
@@ -1373,6 +1508,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
 ///    움직였다. 세로 delta를 가로 오프셋으로 직접 옮겨 준다.
 class _MapOverlayScrollRow extends StatefulWidget {
   const _MapOverlayScrollRow({
+    super.key,
     required this.onPointerOverChanged,
     required this.onPointerDownChanged,
     required this.children,
@@ -1576,230 +1712,6 @@ class _CategoryChipsRow extends StatelessWidget {
   }
 }
 
-/// 대분류를 고른 뒤 그 아래에 뜨는 소분류 pill 줄과 개수 안내.
-///
-/// 소분류가 2개 미만인 대분류(뷰티 — 화장품·향수 하나뿐)에서는 pill 줄을 아예
-/// 만들지 않는다. 고를 것이 하나뿐인 줄은 탭을 한 번 더 요구할 뿐이다.
-class _SubcategoryPillsRow extends StatelessWidget {
-  const _SubcategoryPillsRow({
-    required this.entriesFuture,
-    required this.selection,
-    required this.activeFloor,
-    required this.onSelectionChanged,
-    required this.onPointerOverChanged,
-    required this.onPointerDownChanged,
-    required this.onOpenList,
-  });
-
-  final Future<List<_CategoryEntry>> entriesFuture;
-  final CategorySelection selection;
-
-  /// 지금 보고 있는 층 라벨. null이면(순수 야외) 층 개념이 없으므로 건물 전체
-  /// 기준으로 안내한다.
-  final String? activeFloor;
-
-  final ValueChanged<CategorySelection?> onSelectionChanged;
-  final ValueChanged<bool> onPointerOverChanged;
-  final ValueChanged<bool> onPointerDownChanged;
-
-  /// "목록" 버튼. 지도 강조만으로는 매장 이름을 훑기 어려워, 기존 카테고리
-  /// 매장 목록 시트로 넘어가는 길을 남겨 둔다.
-  final ValueChanged<String> onOpenList;
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<List<_CategoryEntry>>(
-      future: entriesFuture,
-      builder: (context, snapshot) {
-        final entries = snapshot.data ?? const <_CategoryEntry>[];
-        if (entries.isEmpty) return const SizedBox.shrink();
-
-        final options = subcategoryOptionsFor(
-          selection.category,
-          entries.map((entry) => (entry.category, entry.subcategory)),
-        );
-        final showPills = hasMeaningfulSubcategories(options);
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (showPills)
-              _MapOverlayScrollRow(
-                onPointerOverChanged: onPointerOverChanged,
-                onPointerDownChanged: onPointerDownChanged,
-                children: [
-                  _SubcategoryPill(
-                    label: '전체',
-                    selected: selection.subcategory == null,
-                    onTap: () => onSelectionChanged(
-                      CategorySelection(category: selection.category),
-                    ),
-                  ),
-                  for (final option in options) ...[
-                    const SizedBox(width: 6),
-                    _SubcategoryPill(
-                      label: option.label,
-                      selected: selection.subcategory == option.value,
-                      // 이미 고른 소분류를 다시 누르면 대분류 전체로 되돌린다.
-                      onTap: () => onSelectionChanged(
-                        CategorySelection(
-                          category: selection.category,
-                          subcategory: selection.subcategory == option.value
-                              ? null
-                              : option.value,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            const SizedBox(height: 6),
-            _CategoryFilterHint(
-              entries: entries,
-              selection: selection,
-              activeFloor: activeFloor,
-              onOpenList: () => onOpenList(selection.category),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-/// 지금 필터에 몇 곳이 걸렸는지 알려주는 줄.
-///
-/// **이게 없으면 "이 층에 없음"과 "필터가 고장남"을 구분할 수 없다.** 강조
-/// 방식이라 지도는 정상으로 보이는데 파란 칠만 안 뜨기 때문이다. 이 층에 없으면
-/// 다른 층에 몇 곳이 있는지까지 알려줘, 사용자가 층을 옮길 근거를 준다.
-class _CategoryFilterHint extends StatelessWidget {
-  const _CategoryFilterHint({
-    required this.entries,
-    required this.selection,
-    required this.activeFloor,
-    required this.onOpenList,
-  });
-
-  final List<_CategoryEntry> entries;
-  final CategorySelection selection;
-  final String? activeFloor;
-  final VoidCallback onOpenList;
-
-  bool _matches(_CategoryEntry entry) {
-    if (entry.category != selection.category) return false;
-    final subcategory = selection.subcategory;
-    return subcategory == null || entry.subcategory == subcategory;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // 한 줄이 매장 하나가 아니라 (층·대분류·소분류) 묶음이라 **개수를 더해야**
-    // 한다. 줄 수를 세면 "카페 53곳"이 "카페 8곳"(층 수)으로 나온다.
-    final matched = entries.where(_matches);
-    final total = matched.fold<int>(0, (sum, entry) => sum + entry.count);
-    final floor = activeFloor;
-    final onThisFloor = floor == null
-        ? total
-        : matched
-              .where((entry) => entry.floor == floor)
-              .fold<int>(0, (sum, entry) => sum + entry.count);
-
-    final String text;
-    if (total == 0) {
-      // 데이터에 그 조합이 아예 없다. pill이 데이터에서 나오므로 정상 흐름에서는
-      // 도달하지 않지만, 층 응답이 부분적으로 실패한 경우를 위해 남겨 둔다.
-      text = '해당 매장을 찾지 못했습니다';
-    } else if (floor == null) {
-      text = '건물 전체 $total곳';
-    } else if (onThisFloor > 0) {
-      text = '$floor $onThisFloor곳 · 전체 $total곳';
-    } else {
-      text = '$floor에는 없습니다 · 다른 층 $total곳';
-    }
-
-    return Material(
-      color: Colors.white,
-      elevation: 3,
-      shadowColor: Colors.black.withValues(alpha: 0.15),
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        onTap: onOpenList,
-        borderRadius: BorderRadius.circular(20),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                text,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.muted,
-                ),
-              ),
-              const SizedBox(width: 6),
-              const Text(
-                '목록',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
-                ),
-              ),
-              const Icon(
-                Icons.chevron_right,
-                size: 14,
-                color: AppColors.primary,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 소분류 pill. 대분류 chip보다 한 단계 작고 아이콘이 없다 — 두 줄이 같은
-/// 무게로 보이면 어느 쪽이 상위인지 읽히지 않는다.
-class _SubcategoryPill extends StatelessWidget {
-  const _SubcategoryPill({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: selected ? AppColors.primary : Colors.white,
-      elevation: 3,
-      shadowColor: Colors.black.withValues(alpha: 0.15),
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: selected ? Colors.white : AppColors.text,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _CategoryChip extends StatelessWidget {
   const _CategoryChip({
     required this.name,
@@ -1935,10 +1847,14 @@ class _MapPickHintCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // 복도도 고를 수 있게 된 뒤로 "매장을 눌러주세요"는 틀린
+                  // 안내가 됐다. 안내가 매장만 말하면 복도를 눌러도 된다는 걸
+                  // 아무도 모르고, 매장이 없는 자리를 눌러 본 사용자는 앱이
+                  // 반응하지 않는다고 읽는다.
                   Text(
                     isOrigin
-                        ? '출발지로 지정할 매장을 지도에서 눌러주세요'
-                        : '도착지로 지정할 매장을 지도에서 눌러주세요',
+                        ? '출발지로 지정할 매장이나 복도를 지도에서 눌러주세요'
+                        : '도착지로 지정할 매장이나 복도를 지도에서 눌러주세요',
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,

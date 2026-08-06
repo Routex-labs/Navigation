@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart' as ll;
 
+import '../../core/floor_switch_timing.dart';
+import '../../core/map_picked_point.dart';
 import '../../core/service_locator.dart';
 import '../../domain/geo_transform.dart';
 import '../../features/debug_mode/debug_mode.dart';
@@ -108,10 +110,12 @@ const _bottomBarInnerBottomPaddingPx = 14.0;
 // iPhone 13 Pro 기준 세그먼트 폭(160px) + 화면 우측 여백(16px) + 간격(8px)이다.
 const _pdrControlRightInsetPx = 184.0;
 
-// 하단 바의 "위치 지정 / 위치 보정" 버튼 열 하단 offset(SafeArea 안쪽 기준).
-// MapBottomBar Column 구조: [버튼 열] + spacer(10) + [ModeSegment(~45)] + padding(14).
-// pill 하단을 이 값과 맞추면 층 선택기와 위 버튼들이 같은 층에 놓인 것처럼 보인다.
-const _floorSelectorBottomOffset = _bottomBarInnerBottomPaddingPx + 45.0 + 10.0;
+// 층 선택기 pill의 하단 offset(SafeArea 안쪽 기준). 하단 바의 맨 아래 줄인
+// 홈/실내 세그먼트와 **같은 baseline**에 앉힌다. 예전에는 그보다 한 줄 위인
+// "위치 지정 / 위치 보정" 버튼 열에 맞췄는데, 세그먼트는 우측에만 있어 좌측
+// 아래가 비어 있는데도 pill만 공중에 떠 보였다. 세그먼트와 pill은 좌우로
+// 갈라져 있어 같은 줄에 내려도 겹치지 않는다.
+const _floorSelectorBottomOffset = _bottomBarInnerBottomPaddingPx;
 
 /// heading 수렴 polling이 화면 수명보다 오래 남지 않게 하는 취소 가능한 대기.
 ///
@@ -145,6 +149,8 @@ class IndoorMapBody extends StatefulWidget {
     required this.buildingId,
     this.onRouteVisibleChanged,
     this.onStoreTap,
+    this.onMapPointPicked,
+    this.pickingOnMap = false,
     this.onPlacingLocationChanged,
     this.onLocationAnchored,
     this.outerOverlayKeys = const [],
@@ -181,6 +187,23 @@ class IndoorMapBody extends StatefulWidget {
   /// 결과를 탭했을 때와 똑같이 매장 정보 시트를 띄운다.
   final ValueChanged<PoiSearchResult>? onStoreTap;
 
+  /// 길찾기의 "지도에서 선택"이 켜져 있는지. 상위(MapShellScreen)가 소유한
+  /// `_mapPickTarget`이 그대로 내려온다.
+  ///
+  /// 이 값이 true인 동안에만 **매장이 아닌 곳(복도·빈 공간) 탭**이 의미를 갖는다.
+  /// 평소에는 복도를 눌러도 아무 일이 없어야 한다 — 지도를 훑다 빈 곳을 누른 것을
+  /// 목적지 지정으로 읽으면 사용자가 시키지 않은 경로가 그려진다.
+  final bool pickingOnMap;
+
+  /// [pickingOnMap]인 동안 복도·빈 공간을 눌렀을 때, 그 지점을 통행 그래프에
+  /// 스냅해 만든 후보를 상위에 넘긴다.
+  ///
+  /// [onStoreTap]과 **따로 두는 이유**는 상위의 분기가 다르기 때문이다. 매장 탭은
+  /// 고르는 중이 아닐 때 매장 정보 시트를 여는 경로가 붙어 있는데, 복도 지점에는
+  /// 열어 줄 상세가 없다. 한 콜백으로 합치면 상위가 "이건 매장인가 지점인가"를
+  /// 다시 판별해야 하고, 실수하면 복도를 눌렀을 때 빈 정보 시트가 뜬다.
+  final ValueChanged<PoiSearchResult>? onMapPointPicked;
+
   /// "위치 지정" 흐름이 시작되어 지도 탭을 대기 중인지가 바뀔 때 호출된다.
   /// 상위(MapShellScreen)가 이 값으로 하단 바의 "위치 지정" 버튼을 눌린
   /// 상태로 표시해서, 사용자가 다음 동작(지도 탭)을 알 수 있게 한다.
@@ -208,6 +231,17 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   Building? _building;
   String? _selectedFloor;
   FloorPlan? _floorPlan;
+
+  /// **지도에 그려 둔** 도면. [_floorPlan]과 달리 층을 바꾸는 동안에도 비우지
+  /// 않는다 — 비우면 지도 위젯이 트리에서 빠지고, 다시 들어올 때 네이티브 지도를
+  /// 처음부터 만들게 된다(실기기 계측에서 층 전환 시간의 대부분이 그 재생성이었다).
+  ///
+  /// 새 층 JSON이 오기 전 짧은 동안(실측 150~220ms)에는 이 값이 **직전 층**을
+  /// 가리킨다. 그 사이 지도는 이미 새 층 타일을 그리고 있고, 이 값은 카메라
+  /// 범위·강조 폴리곤 조회에만 쓰여 화면에 어긋남이 드러나지 않는다. 화면 로직
+  /// (PDR·복도 추적·경로 계산)은 예전 그대로 [_floorPlan]만 보므로, 로딩 중에는
+  /// 여전히 "도면 없음"으로 동작한다.
+  FloorPlan? _renderedFloorPlan;
   FloorGraph? _floorGraph;
   String _mapCalibrationVersion = 'unversioned';
   IndoorRoute? _route;
@@ -229,6 +263,14 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   /// 반드시 null로 되돌려야 한다 — 이전 세그먼트 기준 진행거리를 그대로 두면
   /// 새 세그먼트에서는 창 밖 값이 되어 매 걸음 재획득이 켜진다.
   double? _lastRouteTraveledM;
+
+  /// 도착 안내를 띄운 뒤 경로를 자동으로 지우기까지 도는 타이머.
+  ///
+  /// null이 아니라는 것은 "지금 도착 상태로 카운트다운 중"이라는 뜻이다.
+  /// 도착 상태에서 벗어나면 취소하고, 화면이 사라지거나 경로가 다른 이유로
+  /// 지워질 때도 반드시 취소한다 — 남겨두면 이미 없는 경로를 지우려는 콜백이
+  /// 나중에 깨어난다.
+  Timer? _arrivalAutoClearTimer;
   int? _lastRouteProgressAcceptedSteps;
   int? _lastRouteEvaluatedSteps;
   int _offRouteEvidenceUpdates = 0;
@@ -249,7 +291,6 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   // 문제를 여기서 명시적으로 걸러낸다.
   final _floorSelectorKey = GlobalKey();
   final _pdrControlKey = GlobalKey();
-  final _debugModeSettingsKey = GlobalKey();
   final _etaCardKey = GlobalKey();
   final _mapOverlayTapGuard = MapOverlayTapGuard();
   Offset? _etaClosePointerDown;
@@ -268,7 +309,6 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     for (final key in [
       _floorSelectorKey,
       _pdrControlKey,
-      _debugModeSettingsKey,
       _placingHintKey,
       _etaCardKey,
       ...widget.outerOverlayKeys,
@@ -421,10 +461,13 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   /// 카메라를 여기서 직접 밀지 않고 [FloorPlanView]에 값으로 내려 주는 이유는
   /// 층 전환 타이밍이다 — 근거는 `FloorPlanView.focusTarget` 주석 참고.
   /// [bottomSheetFraction]은 곧 화면 아래를 덮을 시트의 높이 비율이다. 그만큼
-  /// 매장을 위로 올려 시트 뒤에 숨지 않게 한다.
+  /// 매장을 위로 올려 시트 뒤에 숨지 않게 한다. [topInsetPx]는 화면 위쪽을
+  /// 덮고 있는 오버레이(검색창·카테고리 chip 줄) 두께로, 이만큼은 다시 내려
+  /// 매장이 그 줄 뒤로 올라가지 않게 한다.
   Future<void> focusStore(
     PoiSearchResult store, {
     double bottomSheetFraction = 0,
+    double topInsetPx = 0,
   }) async {
     final floor = store.floor;
     if (floor.isNotEmpty && floor != _selectedFloor) {
@@ -435,6 +478,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       _highlightedStoreId = store.placeId;
       _focusTarget = store.point;
       _focusBottomSheetFraction = bottomSheetFraction;
+      _focusTopInsetPx = topInsetPx;
       _focusTick++;
     });
   }
@@ -444,6 +488,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   ll.LatLng? _focusTarget;
   int _focusTick = 0;
   double _focusBottomSheetFraction = 0;
+  double _focusTopInsetPx = 0;
 
   /// 백엔드 연결 실패 시 사용자에게 보여줄 메시지. null이면 정상 상태.
   /// 이게 없으면 fetch 예외가 조용히 삼켜져 로딩 스피너가 영원히 멈추지 않는다.
@@ -493,6 +538,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 
   @override
   void dispose() {
+    _arrivalAutoClearTimer?.cancel();
     for (final delay in _headingSettleDelays) {
       delay.cancel();
     }
@@ -660,10 +706,15 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   ) {
     setState(() {
       _floorPlan = loaded.plan;
+      _renderedFloorPlan = loaded.plan;
       _floorGraph = loaded.graph;
       _mapCalibrationVersion = loaded.calibrationVersion;
       _syncCorridorTracking(_pdrTrailState.snapshot);
     });
+    // 왕복 + 파싱까지 끝난 시점. 지도 위젯은 이 setState 이후에야 트리에
+    // 들어온다(_buildBody의 _floorPlan == null 분기) — 그래서 이 구간이
+    // 지도 초기화와 겹치지 않고 그대로 앞에 붙는다.
+    FloorSwitchTiming.mark('json');
     // 층 도면이 준비된 시점이 PDR을 켤 수 있는 가장 이른 지점이다. 이미
     // 돌고 있으면 아무것도 하지 않는다.
     unawaited(_startPdrIfIdle());
@@ -789,6 +840,8 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     String floor, {
     ({FloorPlan plan, FloorGraph? graph, String calibrationVersion})? preloaded,
   }) async {
+    // 여기가 "층 전환"의 t=0이다. 끝(타일까지 그려짐)은 지도 위젯이 찍는다.
+    FloorSwitchTiming.begin(floor);
     // 층 간 경로가 활성이면 그 층의 세그먼트로 갈아타고, 없으면(단일 층 경로
     // 또는 경로 없음) 이전 경로/도착지 강조를 지운다.
     final multiRoute = _multiFloorRoute;
@@ -797,6 +850,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     setState(() {
       _selectedFloor = floor;
       _floorPlan = preloaded?.plan;
+      // 도면을 못 받은 동안에도 **직전 층**을 계속 그린다([_renderedFloorPlan]
+      // 주석). 그래서 여기서는 비우지 않고, 새 도면이 실제로 온 경우에만
+      // 갈아 끼운다.
+      if (preloaded != null) _renderedFloorPlan = preloaded.plan;
       _floorGraph = preloaded?.graph;
       _mapCalibrationVersion = preloaded?.calibrationVersion ?? 'unversioned';
       if (multiRoute == null) {
@@ -1200,10 +1257,14 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     required String endNodeId,
     String? explicitOriginNodeId,
   }) async {
+    // 건물 전체 그래프는 1.3MB(gzip 195KB)다. 리포지토리가 세션당 한 번만
+    // 받지만, **그 한 번이 어느 순간에 걸리는지**가 체감을 가른다 — 층 전환
+    // 도중에 걸리면 전환이 통째로 그만큼 늦는다.
     final buildingGraph = await buildingRepository.getBuildingGraph(
       widget.buildingId,
     );
     if (!mounted) return;
+    FloorSwitchTiming.mark('buildingGraph');
     if (buildingGraph == null || buildingGraph.nodes.isEmpty) {
       _showPdrMessage('층 간 경로 계산에 필요한 그래프를 불러오지 못했습니다.');
       widget.onRouteVisibleChanged?.call(false);
@@ -1229,6 +1290,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       endNodeId,
     );
     if (!mounted) return;
+    FloorSwitchTiming.mark('multiFloorDijkstra');
     if (computedRoute == null || computedRoute.isEmpty) {
       setState(() {
         _route = null;
@@ -1569,6 +1631,8 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     if (pointerDown != null) {
       _mapOverlayTapGuard.retainPointerDown(pointerDown);
     }
+    _arrivalAutoClearTimer?.cancel();
+    _arrivalAutoClearTimer = null;
     setState(() {
       _route = null;
       _multiFloorRoute = null;
@@ -1584,6 +1648,46 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     widget.onRouteVisibleChanged?.call(false);
     // 한 번의 길안내가 여기서 끝난다. 세션을 닫고 내보내기 기회를 준다.
     _endRouteRecordingSession();
+  }
+
+  /// 도착 여부에 맞춰 자동 종료 타이머를 걸거나 취소한다.
+  ///
+  /// 진행률이 갱신될 때마다 호출된다. 도착 판정 자체는
+  /// [_currentRouteGuidance]에 맡긴다 — 그래야 화면에 "목적지에 도착했습니다"가
+  /// 떠 있는 동안에만 종료가 예약되고, 다층 경로 중간 층의 환승 지점처럼
+  /// 도착이 아닌 끝점에서는 예약되지 않는다.
+  ///
+  /// **가만히 서 있어도 끝나야 한다.** PDR은 걸음이 있을 때만 갱신되므로 도착
+  /// 직후 멈춰 서면 이 함수는 더 이상 불리지 않는다. 그래서 종료는 다음 갱신이
+  /// 아니라 타이머가 책임진다. 반대로 도착 지점을 지나쳐 다시 걷기 시작하면
+  /// 그 갱신이 [ArrivalAutoClearDecision.cancel]로 타이머를 걷어낸다.
+  void _syncArrivalAutoClear() {
+    final decision = decideArrivalAutoClear(
+      action: _currentRouteGuidance(_route)?.action,
+      hasMeasuredProgress: _routeProgress != null,
+      alreadyScheduled: _arrivalAutoClearTimer != null,
+    );
+    switch (decision) {
+      case ArrivalAutoClearDecision.keep:
+        return;
+      case ArrivalAutoClearDecision.cancel:
+        _arrivalAutoClearTimer?.cancel();
+        _arrivalAutoClearTimer = null;
+        return;
+      case ArrivalAutoClearDecision.schedule:
+        _arrivalAutoClearTimer = Timer(arrivalAutoClearDelay, () {
+          _arrivalAutoClearTimer = null;
+          if (!mounted || !_hasActiveRoute) return;
+          // 세는 동안 위치가 바뀌었을 수 있다. 취소 신호(갱신)가 오지 않는
+          // 경우까지 감안해 지우기 직전에 한 번 더 확인한다.
+          if (_currentRouteGuidance(_route)?.action !=
+                  RouteGuidanceAction.arrived ||
+              _routeProgress == null) {
+            return;
+          }
+          _clearRoute();
+        });
+    }
   }
 
   /// ETA 카드가 지금 화면에 노출돼야 하는지. 단일 층 경로는 이 층에 실제
@@ -2133,6 +2237,8 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         }
         return;
       }
+      // 여기부터가 **길찾기 중에만** 붙는 비용이다. 수동 층 전환에는 없다.
+      FloorSwitchTiming.mark('transferFloorReady');
 
       final graph = _floorGraph;
       final arrival = _findArrivalNode(graph, transition);
@@ -2163,6 +2269,8 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         clearBackups: false,
       );
       if (!mounted) return;
+      // 새 층 경로선까지 다시 그린 시점 — 사용자가 "안내가 이어졌다"고 보는 순간.
+      FloorSwitchTiming.mark('transferRouteDrawn');
       _pendingArrivalRouteReady = _route != null || _multiFloorRoute != null;
     } finally {
       _applyingFloorTransition = false;
@@ -2508,6 +2616,8 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           _offRouteFirstEvidenceAtMs = null;
         });
       }
+      // 경로도 위치도 없는 상태다. 예약해 둔 자동 종료가 있으면 여기서 걷힌다.
+      _syncArrivalAutoClear();
       return;
     }
 
@@ -2582,6 +2692,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       }
     });
     _pdrDebugRecorder?.recordRouteProgress(progress);
+    _syncArrivalAutoClear();
   }
 
   /// 현재 간선이 안내 경로에 속하지 않거나 경로에서 확연히 떨어진 상태가
@@ -2883,6 +2994,12 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   @visibleForTesting
   bool handleMapPressForTest(ll.LatLng point) => _onMapPressedForPdr(point);
 
+  /// 매장을 맞히지 못한 탭(=복도 탭)의 테스트 진입점. 위와 같은 이유로 실기기가
+  /// 타는 함수를 그대로 부른다.
+  @visibleForTesting
+  bool handleEmptyMapPressForTest(ll.LatLng point) =>
+      _onEmptyMapPressedForPick(point);
+
   bool _onMapPressedForPdr(ll.LatLng point) {
     if (!_placingPdrAnchor) return false;
     final graph = _floorGraph;
@@ -2905,6 +3022,76 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       return true;
     }
     unawaited(_confirmPdrAnchor(snapped.point));
+    return true;
+  }
+
+  /// 길찾기 "지도에서 선택" 중에 **매장이 아닌 곳**을 눌렀을 때의 처리.
+  ///
+  /// 사용자에게 이 동작은 하단 바의 "위치 지정"과 같은 조작이다 — 복도를 눌러
+  /// 한 지점을 정한다. 그래서 스냅 규칙도 [_onMapPressedForPdr]와 **같은 것**을
+  /// 쓴다(`snapToWalkableNetwork` + [_maxPdrAnchorSnapDistanceM]). 두 곳이 다른
+  /// 규칙을 쓰면 같은 자리를 눌러도 한쪽은 되고 한쪽은 "복도에 더 가깝게
+  /// 눌러주세요"가 나온다.
+  ///
+  /// **스냅한 간선 위 점이 아니라 가장 가까운 노드를 돌려준다.** 다익스트라는
+  /// 노드에서 시작·종료하므로([_pickStartNodeIdOnFloor] 주석), 노드 id가 없는
+  /// 후보는 출발지로도 도착지로도 쓸 수 없다 — 넘겨봐야 "노드 정보가 없어 경로를
+  /// 계산할 수 없습니다"로 끝난다. 그래서 여기서 노드까지 확정해 넘긴다.
+  ///
+  /// 눌린 지점과 반환되는 노드가 몇 m 어긋날 수 있는데, 그건 경로 시작/도착점이
+  /// 원래 노드 단위라 매장을 골랐을 때(입구 노드)와 같은 성질의 오차다.
+  bool _onEmptyMapPressedForPick(ll.LatLng point) {
+    if (!widget.pickingOnMap) return false;
+    final floor = _selectedFloor;
+    final graph = _floorGraph;
+    if (floor == null || graph == null || graph.nodes.isEmpty) {
+      _showPdrMessage('이 층은 지도에서 선택하는 데 필요한 지도 정보가 아직 없습니다.');
+      return true;
+    }
+    final transform = fitFloorGeoTransform(graph.nodes);
+    final local = transform.invert(point.latitude, point.longitude);
+    if (local == null) {
+      _showPdrMessage('이 층 좌표를 계산하지 못했습니다.');
+      return true;
+    }
+    final snapped = FloorMapMatcher(
+      graph,
+    ).snapToWalkableNetwork(PdrLocalPoint(local.$1, local.$2));
+    if (snapped == null) {
+      _showPdrMessage('이 층의 통로 위치를 찾지 못했습니다. 다시 시도해주세요.');
+      return true;
+    }
+    if (snapped.distanceToGraphM > _maxPdrAnchorSnapDistanceM) {
+      _showPdrMessage('매장이나 복도를 눌러주세요.');
+      return true;
+    }
+    final nodeId = _nearestNodeId(
+      graph.nodes,
+      snapped.point.eastM,
+      snapped.point.northM,
+    );
+    final node = graph.nodes.where((n) => n.id == nodeId).firstOrNull;
+    if (node == null) {
+      _showPdrMessage('이 층의 통로 위치를 찾지 못했습니다. 다시 시도해주세요.');
+      return true;
+    }
+    // 노드에 실측 좌표가 있으면 그대로 쓰고, 없는 층(합성 대응점으로 피팅된
+    // 경우)만 변환으로 만든다. 있는 값을 두고 변환을 태우면 피팅 오차만큼
+    // 어긋난 자리에 핀이 찍힌다.
+    final latLng = node.lat != null && node.lng != null
+        ? ll.LatLng(node.lat!, node.lng!)
+        : () {
+            final (lat, lng) = transform.apply(node.xM, node.yM);
+            return ll.LatLng(lat, lng);
+          }();
+    widget.onMapPointPicked?.call(
+      PoiSearchResult(
+        name: kMapPickedPointLabel,
+        floor: floor,
+        point: latLng,
+        nodeId: node.id,
+      ),
+    );
     return true;
   }
 
@@ -3107,38 +3294,15 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 
   @override
   Widget build(BuildContext context) {
+    // 로딩·오류로 일찍 빠져나가더라도 층 전환 UI 상태는 항상 보고한다 — 여기서
+    // 건너뛰면 도면을 받는 동안 상위가 낡은 전환 상태를 들고 있게 된다.
     _reportFloorTransitionUi();
+    // 예전에는 여기서 지도 위에 디버그 설정 버튼(왼쪽 아래 벌레 아이콘)을 한 겹
+    // 더 얹었다. 일반 사용자가 볼 이유가 없는 개발 도구라 앱 메뉴(햄버거)로
+    // 옮겼고, 이 화면에는 운영 화면만 남는다.
+    if (_loading) return const Center(child: CircularProgressIndicator());
     final error = _error;
-    final body = _loading
-        ? const Center(child: CircularProgressIndicator())
-        : error != null
-        ? _buildError(error)
-        : _buildBody();
-    return Stack(
-      children: [
-        Positioned.fill(child: body),
-        AnimatedPositioned(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-          left: 12,
-          bottom: _hasActiveRoute ? _bottomBarLiftPx : 0,
-          child: SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.only(
-                bottom: _bottomBarInnerBottomPaddingPx,
-              ),
-              child: DebugModeSettingsButton(
-                key: _debugModeSettingsKey,
-                controller: _debugModeController,
-                onPressed: () =>
-                    showDebugModeSettingsSheet(context, _debugModeController),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
+    return error != null ? _buildError(error) : _buildBody();
   }
 
   Widget _buildError(String message) {
@@ -3167,7 +3331,11 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     if (building == null) {
       return const Center(child: Text('건물 정보를 찾을 수 없습니다'));
     }
-    final floorPlan = _floorPlan;
+    // 지도에는 **직전 층 도면이라도** 넘긴다. 여기서 null을 만들어 스피너로
+    // 갈아치우면 지도 위젯이 트리에서 빠져 다음 층에서 네이티브 지도를 다시
+    // 만들게 된다 — 그게 층 전환 지연의 대부분이었다. 진짜 스피너가 필요한 건
+    // 앱을 켜고 첫 층을 아직 못 받은 때뿐이다.
+    final floorPlan = _renderedFloorPlan;
     if (floorPlan == null) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -3239,10 +3407,11 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     return Stack(
       children: [
         FloorPlanView(
-          // 건물/층이 바뀔 때 위젯 자체를 다시 만들어야 초기화 상태를 재사용
-          // 하지 않으므로 ValueKey를 유지한다. 카메라 조작(회전/중심 이동)은
-          // controller가 매번 새로운 state에 자동 attach/detach 하도록 처리한다.
-          key: ValueKey('${widget.buildingId}-$_selectedFloor'),
+          // **건물이 바뀔 때만** 위젯을 다시 만든다. 층은 key에서 뺐다 —
+          // 층까지 넣으면 층을 바꿀 때마다 네이티브 지도를 새로 만들게 되고,
+          // 실기기 계측에서 그 재생성이 전환 시간의 대부분이었다. 층 변경은
+          // FloorPlanView가 타일 소스만 갈아 끼워 처리한다(_swapFloorTiles).
+          key: ValueKey(widget.buildingId),
           controller: _floorPlanController,
           buildingId: widget.buildingId,
           floorName: _selectedFloor!,
@@ -3291,6 +3460,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           debugMapOverlay: debugOverlay,
           onCameraBearingChanged: _onMapCameraBearingChanged,
           onMapPressed: _onMapPressedForPdr,
+          onEmptyMapPressed: _onEmptyMapPressedForPick,
           onStoreSelected: (selected) {
             setState(() => _highlightedStoreId = selected.id);
             widget.onStoreTap?.call(
@@ -3311,6 +3481,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           focusTarget: _focusTarget,
           focusTick: _focusTick,
           focusBottomSheetFraction: _focusBottomSheetFraction,
+          focusTopInsetPx: _focusTopInsetPx,
           tileRevision: _building?.tileRevision,
           visibleInsets: EdgeInsets.fromLTRB(0, topOverlay, 0, bottomOverlay),
           overlayHitTest: _isTapOnMapOverlay,
