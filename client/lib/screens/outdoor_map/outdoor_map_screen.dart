@@ -1710,6 +1710,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 막지 않으면 찍은 지점에서 그린 경로가 다음 위치 이벤트에 덮인다.
     if (_fixedRouteOrigin != null) return;
 
+    // 대중교통 안내 중이면 도보 경로를 만들지 않는다.
+    //
+    // [showTransitRoute]가 목적지([_userDestination])는 그대로 남기므로, 이걸
+    // 막지 않으면 **다음 GPS 틱 한 번**에 같은 목적지로 향하는 도보 선이 지도에
+    // 함께 그려진다. 화면에는 버스 노선과 파란 도보선이 겹치는데 하단 카드는
+    // 대중교통 시간만 말하는, 서로 어긋난 상태가 된다.
+    if (_transitItinerary != null) return;
+
     // 문 경유 안내 중이면 이번 위치로 다시 고른 문이 목적지다. 걸어가는 동안
     // 더 가까운 문이 생기면([_syncSelectedEntrance]가 이미 갱신했다) 야외 구간의
     // 도착점과 실내 구간의 시작점을 함께 갈아 끼운다 — 한쪽만 바꾸면 도보 경로는

@@ -536,7 +536,17 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 쓰지 않는다(건물 안 좌표를 보내면 정류장이 건물 반대편에서 잡힌다).
   Future<void> _startTransitRoute(DirectionsCandidate destination) async {
     final outdoor = _outdoorKey.currentState;
-    final origin = _selectedOrigin?.point ?? outdoor?.routeOriginPoint;
+    // 명시적으로 고른 출발지라도 **실내 지점이면 쓰지 않는다.** 건물 안 좌표를
+    // 보내면 TMAP이 그 좌표에서 가장 가까운 정류장을 찾는데, 건물이 크면 실제로
+    // 나가야 하는 문의 반대편이 잡힌다. 그때는 GPS로 떨어뜨린다.
+    final selectedOrigin = _selectedOrigin;
+    final outdoorOrigin =
+        (selectedOrigin != null &&
+            selectedOrigin.floor == null &&
+            selectedOrigin.nodeId == null)
+        ? selectedOrigin.point
+        : null;
+    final origin = outdoorOrigin ?? outdoor?.routeOriginPoint;
     if (outdoor == null || origin == null) {
       _showSnack('현재 위치를 아직 못 잡았습니다. GPS 신호를 확인하거나 출발지를 직접 지정해주세요.');
       return;
