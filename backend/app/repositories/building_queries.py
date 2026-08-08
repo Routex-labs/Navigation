@@ -105,6 +105,63 @@ def search_stores(
     return [_to_store_dict(store, transform) for store in stores]
 
 
+# 자동완성 인덱스용 경량 매장 목록. 없는 건물이면 None, 매장이 없으면 빈 리스트.
+#
+# 클라이언트가 앱 시작 시 1회 받아 온디바이스 자동완성·초성 검색·오타 교정의 원본으로
+# 쓴다(설계: docs/client/search-input-assist.md K절). 타이핑마다 서버를 왕복하지 않는
+# 이유는 실내 매장 집합이 1640건으로 고정이라서다.
+#
+# search_stores()를 재사용하지 않는 이유: 그쪽은 폴리곤을 local_m·wgs84 두 벌로 실어
+# 응답의 절반 이상이 자동완성에 안 쓰이는 좌표다. 여기서는 필요한 컬럼만 고른다.
+#
+# select(Store)가 아니라 컬럼을 나열하는 것도 같은 이유다. ORM 엔티티를 읽으면
+# polygon(JSON 텍스트)까지 SQLite에서 꺼내 파싱한 뒤 버리게 된다 — 응답에는 안 나가도
+# 조회 비용은 그대로 든다.
+def list_store_index(session: Session, building_id: str) -> list[dict[str, Any]] | None:
+    if session.get(Building, building_id) is None:
+        return None
+
+    rows = session.execute(
+        select(
+            Store.id,
+            Store.name,
+            Floor.id,
+            Floor.name,
+            Store.category,
+            Store.subcategory,
+            Store.entrance_node_id,
+        )
+        .join(Floor, Store.floor_id == Floor.id)
+        .where(Floor.building_id == building_id)
+        # 결정적 순서. 정렬을 명시하지 않으면 SQLite의 반환 순서에 의존하게 되고,
+        # 같은 데이터에 대해 호출마다 순서가 달라지면 클라이언트가 인덱스를 캐시할 때
+        # "내용은 같은데 다른 응답"으로 보인다. Floor.level 내림차순은 건물 요약
+        # (_to_building_summary)의 층 순서(엘리베이터 버튼판, 위층이 앞)와 같고,
+        # Store.id는 PK라 층 안에서 동점이 없다 — 두 키로 전순서가 정해진다.
+        .order_by(Floor.level.desc(), Store.id)
+    ).all()
+
+    return [
+        {
+            "id": store_id,
+            "name": name,
+            # floor_id와 floor_name을 함께 준다. 라벨(B2)이 없으면 클라이언트가
+            # 후보 한 줄을 그리려고 건물 응답의 층 목록과 다시 조인해야 하고, 반대로
+            # id가 없으면 층 지도 응답(StoreResponse.floor_id)·현재 층 필터와 대조할
+            # 키가 사라진다. 층은 12개뿐이라 두 벌을 실어도 반복 문자열 몇 KB다.
+            # 자연어 질의 응답(dto/query.py QueryMatch)도 같은 이유로 둘 다 싣는다.
+            "floor_id": floor_id,
+            "floor_name": floor_name,
+            "category": category,
+            "subcategory": subcategory,
+            # 후보를 고른 직후 길찾기로 넘어가는 도착 노드. 이게 없으면 이름을 다시
+            # 질의해 매장을 찾아야 한다.
+            "entrance_node_id": entrance_node_id,
+        }
+        for store_id, name, floor_id, floor_name, category, subcategory, entrance_node_id in rows
+    ]
+
+
 # 층 지도 데이터(footprint + 벡터 지도 + 매장 폴리곤 + POI). 없으면 None.
 def get_floor_map(
     session: Session,
