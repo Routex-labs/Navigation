@@ -287,6 +287,17 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 계산하면 한 프레임에 여러 번 1640건을 훑는다.
   List<StoreSuggestion> _suggestions = const [];
 
+  /// 다음 검색 한 번만 층 스코프를 빼고 건물 전체에서 찾는다.
+  ///
+  /// 후보나 최근 검색어를 **탭한 경우**에 선다. 층 스코프는 "화장실"처럼 사용자가
+  /// 직접 친 시설 질의를 지금 보는 층으로 확정하려고 있는 것인데, 목록에서 특정
+  /// 대상을 고른 행동에까지 적용하면 엉뚱하게 막힌다.
+  ///
+  /// 실기기에서 잡았다. 1F에서 `apc` 후보로 뜬 **3F의 A.P.C.** 를 탭하면 그 이름으로
+  /// 다시 검색하는데, 층 스코프 때문에 1차가 또 빈손이 되고 후보 화면으로 되돌아와
+  /// 몇 번을 눌러도 매장에 닿지 못했다. 서버는 층만 안 좁히면 `ok · 3F`를 준다.
+  bool _ignoreFloorScopeOnce = false;
+
   @override
   void initState() {
     super.initState();
@@ -403,10 +414,13 @@ class _SearchPanelState extends State<SearchPanel> {
       // 우연히 걸리는 층이 나온다). 매장을 이름으로 아는 검색이 다른 층에
       // 있어 여기서 빈손이 되더라도, 빈손이면 아래에서 층 제한이 없는 의미
       // 검색으로 자동으로 넘어가 그 매장을 여전히 찾아낸다.
+      // 목록에서 고른 검색이면 층을 좁히지 않는다(위 _ignoreFloorScopeOnce).
+      final floorScope = _ignoreFloorScopeOnce ? null : widget.currentFloorId;
+      _ignoreFloorScopeOnce = false;
       results = await destinationRepository.searchDestinations(
         widget.buildingId,
         query,
-        currentFloorId: widget.currentFloorId,
+        currentFloorId: floorScope,
       );
       final buildings = await buildingRepository.getAllBuildings();
       building = buildings
@@ -808,7 +822,10 @@ class _SearchPanelState extends State<SearchPanel> {
         floorLine,
         style: const TextStyle(fontSize: 12, color: AppColors.muted),
       ),
-      onTap: () => widget.onQueryPicked(store.name),
+      onTap: () {
+        _ignoreFloorScopeOnce = true;
+        widget.onQueryPicked(store.name);
+      },
     );
   }
 
@@ -896,7 +913,10 @@ class _SearchPanelState extends State<SearchPanel> {
                           onPressed: () =>
                               recentSearchesController.remove(query),
                         ),
-                        onTap: () => widget.onQueryPicked(query),
+                        onTap: () {
+                          _ignoreFloorScopeOnce = true;
+                          widget.onQueryPicked(query);
+                        },
                       ),
                   ],
                 ),

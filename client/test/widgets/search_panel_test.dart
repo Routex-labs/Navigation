@@ -591,6 +591,63 @@ void main() {
       expect(find.text('이걸 찾으셨나요?'), findsOneWidget);
     });
 
+    // **실기기에서 잡은 회귀다.** 1F에서 3F 매장 후보를 탭하면 그 이름으로 다시
+    // 검색하는데, 층 스코프 때문에 1차가 또 빈손이 되어 후보 화면으로 되돌아왔다.
+    // 몇 번을 눌러도 매장에 닿지 못한다.
+    testWidgets('후보를 탭한 검색은 층으로 좁히지 않는다', (tester) async {
+      buildingRepository = _FakeBuildingRepository(
+        storeIndex: [_entry('A.P.C.', '3F')],
+      );
+      final repository = _FakeDestinationRepository(const []);
+      destinationRepository = repository;
+
+      // 상위(MapShellScreen)와 같게 배선한다 — 후보를 고르면 검색창 글자를 바꾸고
+      // 확정 카운터를 올려 검색을 한 바퀴 더 돌린다. 이 되먹임이 없으면 탭이
+      // 만드는 두 번째 검색 자체가 일어나지 않아 검증이 성립하지 않는다.
+      final query = ValueNotifier<String>('apc');
+      final submitTick = ValueNotifier<int>(0);
+      addTearDown(query.dispose);
+      addTearDown(submitTick.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              height: 500,
+              child: ListenableBuilder(
+                listenable: Listenable.merge([query, submitTick]),
+                builder: (_, _) => SearchPanel(
+                  buildingId: 'building-1',
+                  query: query.value,
+                  submitTick: submitTick.value,
+                  // 지금 1F를 보고 있다.
+                  currentFloorId: 'FL-1F',
+                  onStorePicked: (_) {},
+                  onBuildingPicked: (_) {},
+                  onQueryPicked: (value) {
+                    query.value = value;
+                    submitTick.value++;
+                  },
+                  indoorContextActive: true,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      // 디바운스를 지나 1차 검색이 실제로 나가게 둔다. 그래야 "탭 전에는 층을
+      // 실어 보냈다"를 비교할 수 있다.
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('suggestion-PO-A.P.C.')));
+      await tester.pumpAndSettle();
+
+      expect(query.value, 'A.P.C.');
+      expect(repository.floorScopes.length, 2);
+      expect(repository.floorScopes.first, 'FL-1F');
+      expect(repository.floorScopes.last, isNull);
+    });
+
     // 후보의 원본이 건물 하나의 매장 목록이라, 야외에서 쓰면 지금 서 있는 곳과
     // 무관한 매장을 제안한다. 실기기에서 시청 앞 야외 지도에 더현대서울 3층
     // 매장이 후보로 떠서 잡았다. 야외 장소 검색은 외부 API로 따로 채운다.
@@ -722,12 +779,18 @@ class _FakeDestinationRepository implements DestinationRepository {
   /// 호출 자체를 세야 한다.
   int aiCallCount = 0;
 
+  /// 경량 검색이 받은 층 스코프를 순서대로 기록한다.
+  final List<String?> floorScopes = [];
+
   @override
   Future<List<PoiSearchResult>> searchDestinations(
     String buildingId,
     String query, {
     String? currentFloorId,
-  }) async => results;
+  }) async {
+    floorScopes.add(currentFloorId);
+    return results;
+  }
 
   @override
   Future<DiscoveryResult> searchDestinationsAi(
