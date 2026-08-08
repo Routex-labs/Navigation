@@ -31,6 +31,7 @@ flowchart LR
         e1["GET /buildings"]
         e2["GET /buildings/{id}"]
         e3["GET /buildings/{id}/stores?q="]
+        e3b["GET /buildings/{id}/store-index"]
         e4["GET /…/floors/{floor}"]
         e5["GET /…/floors/{floor}/graph"]
         e5b["GET /…/{id}/graph?vertical="]
@@ -47,6 +48,7 @@ flowchart LR
         f1["list_buildings()"]
         f2["get_building()"]
         f3["search_stores()"]
+        f3b["list_store_index()"]
         f4["get_floor_map()"]
         f5["get_floor_graph()"]
         f5b["get_building_graph()"]
@@ -60,6 +62,7 @@ flowchart LR
         d1["BuildingSummaryResponse"]
         d2["BuildingDetailResponse"]
         d3["StoreResponse"]
+        d3b["StoreIndexResponse"]
         d4["FloorMapResponse"]
         d5["FloorGraphResponse"]
         d5b["BuildingGraphResponse"]
@@ -73,6 +76,7 @@ flowchart LR
     e1 --> f1 --> d1
     e2 --> f2 --> d2
     e3 --> f3 --> d3
+    e3b --> f3b --> d3b
     e4 --> f4 --> d4
     e5 --> f5 --> d5
     e5b --> f5b --> d5b
