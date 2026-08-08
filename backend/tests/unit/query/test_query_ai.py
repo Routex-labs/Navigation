@@ -460,6 +460,59 @@ def test_discover_구분력_있는_축이_없으면_clarify_대신_results다(db
     assert len(result["matches"]) <= MAX_SHOW_ALL
 
 
+# **실기기에서 잡았다.** `샤낼 뷰티`를 치니 `향수 (10)` `화장품 (10)` 두 chip이 떴는데
+# 어느 쪽을 눌러도 같은 10건이었다. `_intents.json`의 두 intent가 같은 규칙
+# (`subcategory: ["화장품·향수"]`)이라 가리키는 매장 집합이 동일했기 때문이다.
+# 고르는 행동이 아무것도 바꾸지 못하는 질문은 질문이 아니다.
+def test_discover_같은_후보를_가리키는_값들은_질문이_되지_않는다(db_session, monkeypatch):
+    _no_semantic(monkeypatch)
+    # 6건 모두 두 값을 함께 갖는다 — 값은 2개지만 나누는 힘은 0이다.
+    for index in range(6):
+        _add_store(
+            db_session,
+            f"beauty-{index}",
+            f"뷰티샵{index}",
+            subcategory="화장품·향수",
+            facets={"intents": ["화장품", "향수"]},
+        )
+    db_session.flush()
+
+    result = query_search.discover(db_session, BUILDING_ID, "화장품·향수")
+
+    assert result["mode"] == "results"
+    assert result["question"] is None
+    assert result["options"] == []
+
+
+# 겹치되 **완전히 같지는 않은** 값은 여전히 질문이 된다. 위 수정이 정상적인 되물음까지
+# 잡아먹으면 clarify가 통째로 죽으므로 경계를 함께 고정한다.
+def test_discover_일부만_겹치는_값은_질문으로_남는다(db_session, monkeypatch):
+    _no_semantic(monkeypatch)
+    # 4건은 두 값을 함께 갖고, 2건은 한쪽만 갖는다 → 고르면 후보가 실제로 줄어든다.
+    for index in range(4):
+        _add_store(
+            db_session,
+            f"both-{index}",
+            f"둘다샵{index}",
+            subcategory="화장품·향수",
+            facets={"intents": ["화장품", "향수"]},
+        )
+    for index in range(2):
+        _add_store(
+            db_session,
+            f"only-{index}",
+            f"화장품만샵{index}",
+            subcategory="화장품·향수",
+            facets={"intents": ["화장품"]},
+        )
+    db_session.flush()
+
+    result = query_search.discover(db_session, BUILDING_ID, "화장품·향수")
+
+    assert result["mode"] == "clarify"
+    assert {option["value"] for option in result["options"]} == {"화장품", "향수"}
+
+
 def test_discover_태그가_얇은_축은_질문으로_쓰지_않는다(db_session, monkeypatch):
     _no_semantic(monkeypatch)
     # 값은 2개지만(스포츠·캐주얼) 태그가 있는 후보는 8건 중 2건뿐이다. 이 질문에

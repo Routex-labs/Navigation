@@ -547,18 +547,55 @@ def _facet_options(
     ]
 
 
+def _drop_indistinguishable(
+    candidates: list[tuple[Store, Floor]],
+    axis: str,
+    options: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """가리키는 후보가 똑같은 선택지를 하나로 접는다.
+
+    같은 매장 집합을 가리키는 값이 둘이면 화면에는 chip이 둘 뜨지만 어느 쪽을 눌러도
+    결과가 같다. 고르는 행동이 아무것도 바꾸지 못하므로 선택지가 아니다. 근거와 실제
+    사례는 [_pick_question] docstring 2번에 있다.
+
+    남길 값은 [_facet_options]가 정한 순서(후보 수 내림차순 → 값 오름차순)의 첫 번째다.
+    같은 입력에 항상 같은 chip이 나와야 하므로 순서에 기대는 선택이며, 그 순서 자체가
+    이미 결정적이다.
+    """
+    kept: dict[frozenset[str], dict[str, Any]] = {}
+    for option in options:
+        members = frozenset(store.id for store, _floor in candidates if option["value"] in _facets(store).get(axis, ()))
+        # 후보가 하나도 없는 값은 애초에 _facet_options가 만들지 않는다. 방어적으로만 둔다.
+        if not members:
+            continue
+        kept.setdefault(members, option)
+    return list(kept.values())
+
+
 def _pick_question(
     candidates: list[tuple[Store, Floor]],
     asked_intents: list[str] | None = None,
 ) -> tuple[str | None, list[dict[str, Any]]]:
     """현재 후보를 실제로 둘 이상으로 나누는 축을 고른다. 없으면 (None, []).
 
-    두 가지를 모두 만족해야 질문이 된다(7-3절 "현재 후보를 실제로 나누지 못하는
+    세 가지를 모두 만족해야 질문이 된다(7-3절 "현재 후보를 실제로 나누지 못하는
     facet은 질문으로 선택하지 않는다").
 
     1. 서로 다른 값이 둘 이상 — "명품" 질의의 후보 43건은 전부 styles=["명품"]이라
        스타일을 다시 물어도 후보가 그대로다.
-    2. 그 축을 가진 후보가 절반 이상 — 태깅이 아직 얇은 지금 데이터에서는, 상위 10건 중
+    2. **그 값들이 서로 다른 후보를 가리킨다** — 값 개수만 세면 라벨만 다르고 가리키는
+       매장이 똑같은 쌍을 걸러내지 못한다. `_intents.json`의 `화장품`과 `향수`가 바로
+       그런 쌍이다(둘 다 `subcategory: ["화장품·향수"]`). 실기기에서 `샤낼 뷰티`를
+       치면 `향수 (10)` `화장품 (10)` 두 chip이 떴는데 **어느 쪽을 눌러도 같은 10건**
+       이었다. 고르는 행동이 아무것도 바꾸지 못하는 질문이라 사용자는 "둘 중 뭘 고르라는
+       거지"만 남는다.
+
+       이 쌍은 **임베딩 쪽에서는 의도된 것**이다 — 소분류가 복합 라벨(`화장품·향수`)
+       이라 `화장품`만 선언하면 문서 텍스트의 단어 빈도가 한쪽으로 쏠려 `향수` 질의가
+       회귀했다(FAISS.md 11-4). 그래서 데이터를 고치지 않고 **질문 축으로 쓸 때만**
+       걸러낸다. 한 데이터가 임베딩 가중치와 질문 선택지라는 두 용도를 겸하고 있고,
+       두 번째 용도에서만 무효인 경우다.
+    3. 그 축을 가진 후보가 절반 이상 — 태깅이 아직 얇은 지금 데이터에서는, 상위 10건 중
        2건만 태그가 있어도 "값이 2개"라는 조건은 통과해 버린다. 그 질문에 답하면
        태그 없는 8건이 통째로 사라진다(2절 "미표기 매장이 통째로 사라진다").
 
@@ -573,6 +610,7 @@ def _pick_question(
         options = _facet_options(candidates, axis)
         if axis == "intents" and excluded:
             options = [option for option in options if option["value"] not in excluded]
+        options = _drop_indistinguishable(candidates, axis, options)
         if len(options) < 2:
             continue
         covered = sum(1 for store, _floor in candidates if _facets(store).get(axis))
