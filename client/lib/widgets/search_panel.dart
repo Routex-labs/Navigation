@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../core/service_locator.dart';
 import '../domain/dijkstra.dart';
+import '../domain/name_siblings.dart';
 import '../domain/nearest_store.dart';
 import '../domain/reason_text.dart';
 import '../domain/search_result_order.dart';
@@ -1264,6 +1265,7 @@ class _SearchPanelState extends State<SearchPanel> {
         ),
       );
     }
+    rows.addAll(_siblingRows(ordered));
 
     // 왜 ListView(shrinkWrap)가 아니라 SingleChildScrollView + Column인가.
     //
@@ -1292,6 +1294,49 @@ class _SearchPanelState extends State<SearchPanel> {
         child: Column(mainAxisSize: MainAxisSize.min, children: children),
       ),
     );
+  }
+
+  /// 서버가 확정한 1건 **아래에** 같은 계열 매장을 잇는 행들.
+  ///
+  /// `구찌`를 치면 서버는 `구찌` 한 곳을 자신 있게 확정하고, `구찌 뷰티`·
+  /// `구찌 선글라스`는 화면에서 사라진다. 규칙과 실패 조건은
+  /// [nameSiblings](../domain/name_siblings.dart)가 단일 출처다.
+  ///
+  /// **정확 일치 행은 맨 위에 고정한다.** 사용자가 친 그 이름이라 거리로 밀어
+  /// 내리면 "이름 맞춤"이라는 말 자체가 무너진다. 그래서 이 화면에는 정렬
+  /// 컨트롤을 두지 않는다 — 머리 행이 고정된 목록은 정렬 기준 하나로 설명되지
+  /// 않는다. 형제는 실데이터 기준 최대 3건이라 고를 것도 많지 않다.
+  List<Widget> _siblingRows(List<PoiSearchResult> ordered) {
+    // 경량 경로가 확정한 1건일 때만이다. 의미 검색·discovery 결과는 이름으로
+    // 걸린 게 아니라 형제라는 개념 자체가 없다.
+    if (_discoveryMode != null || _fromSemantic) return const [];
+    if (ordered.length != 1) return const [];
+
+    final siblings = nameSiblings(
+      suggestions: _suggestions,
+      confirmedName: ordered.single.name,
+    );
+    if (siblings.isEmpty) return const [];
+
+    final sorted = sortedSuggestions(
+      suggestions: siblings,
+      reachByNodeId: widget.reachByNodeId,
+      order: _sortOrder,
+    );
+    return [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 2),
+        child: Text(
+          '이름이 비슷한 매장 ${sorted.length}곳',
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: AppColors.muted,
+          ),
+        ),
+      ),
+      for (final suggestion in sorted) _suggestionTile(suggestion),
+    ];
   }
 
   Widget _discoveryHeader() {

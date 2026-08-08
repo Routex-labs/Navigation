@@ -1094,6 +1094,202 @@ void main() {
     });
   });
 
+  // S. 서버가 자신 있게 1건을 확정하면 같은 계열 매장이 화면에서 사라졌다.
+  // 설계: docs/client/search-result-list-ux.md S절.
+  group('확정된 1건 아래의 같은 계열 매장', () {
+    late DestinationRepository originalDestination;
+    late BuildingRepository originalBuilding;
+    String? picked;
+
+    setUp(() {
+      originalDestination = destinationRepository;
+      originalBuilding = buildingRepository;
+      picked = null;
+    });
+
+    tearDown(() {
+      destinationRepository = originalDestination;
+      buildingRepository = originalBuilding;
+    });
+
+    Widget buildSubject(
+      String query, {
+      Map<String, NodeReach>? reachByNodeId,
+    }) => MaterialApp(
+      home: Scaffold(
+        body: SizedBox(
+          height: 700,
+          child: SearchPanel(
+            buildingId: 'building-1',
+            query: query,
+            submitTick: 0,
+            onStorePicked: (_) {},
+            onBuildingPicked: (_) {},
+            onQueryPicked: (value) => picked = value,
+            indoorContextActive: true,
+            reachByNodeId: reachByNodeId,
+          ),
+        ),
+      ),
+    );
+
+    Future<void> settle(WidgetTester tester) async {
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+    }
+
+    /// 서버가 `구찌` 1건을 확정한 상태. 온디바이스 인덱스에는 형제 둘이 더 있다.
+    void useGucci({List<PoiSearchResult>? serverResults}) {
+      buildingRepository = _FakeBuildingRepository(
+        storeIndex: [
+          _entry('구찌', '1F', nodeId: 'N1'),
+          _entry('구찌 뷰티', '1F', nodeId: 'N1b'),
+          _entry('구찌 선글라스', '2F', nodeId: 'N2'),
+        ],
+      );
+      destinationRepository = _FakeDestinationRepository(
+        serverResults ??
+            [
+              PoiSearchResult(
+                name: '구찌',
+                floor: '1F',
+                point: const LatLng(37.5, 127.0),
+                placeId: 'place-gucci',
+                nodeId: 'N1',
+                category: '패션',
+                subcategory: '명품',
+              ),
+            ],
+      );
+    }
+
+    testWidgets('확정된 1건 아래에 형제가 붙는다', (tester) async {
+      useGucci();
+
+      await tester.pumpWidget(buildSubject('구찌'));
+      await settle(tester);
+
+      expect(find.text('이름이 비슷한 매장 2곳'), findsOneWidget);
+      expect(find.byKey(const Key('suggestion-PO-구찌 뷰티-1F')), findsOneWidget);
+      expect(find.byKey(const Key('suggestion-PO-구찌 선글라스-2F')), findsOneWidget);
+      // 확정된 매장 자신은 형제로 중복되지 않는다.
+      expect(find.byKey(const Key('suggestion-PO-구찌-1F')), findsNothing);
+    });
+
+    // 사용자가 친 그 이름이라, 거리로 밀어 내리면 "이름 맞춤"이라는 말이 무너진다.
+    testWidgets('정확 일치 행이 맨 위에 고정된다', (tester) async {
+      useGucci();
+
+      await tester.pumpWidget(
+        buildSubject(
+          '구찌',
+          // 형제가 확정된 매장보다 훨씬 가깝다.
+          reachByNodeId: const {
+            'N1': NodeReach(distanceM: 300, costM: 300),
+            'N1b': NodeReach(distanceM: 10, costM: 10),
+            'N2': NodeReach(distanceM: 40, costM: 40),
+          },
+        ),
+      );
+      await settle(tester);
+
+      final tiles = tester.widgetList<ListTile>(find.byType(ListTile)).toList();
+      // 첫 행은 서버 결과라 Key가 없는 _storeTile이다.
+      expect((tiles.first.key as ValueKey<String>?)?.value, isNull);
+      expect(
+        [for (final t in tiles.skip(1)) (t.key as ValueKey<String>?)?.value],
+        ['suggestion-PO-구찌 뷰티-1F', 'suggestion-PO-구찌 선글라스-2F'],
+      );
+    });
+
+    // 머리 행이 고정된 목록은 정렬 기준 하나로 설명되지 않는다.
+    testWidgets('이 화면에는 정렬 컨트롤을 두지 않는다', (tester) async {
+      useGucci();
+
+      await tester.pumpWidget(
+        buildSubject(
+          '구찌',
+          reachByNodeId: const {'N1': NodeReach(distanceM: 30, costM: 30)},
+        ),
+      );
+      await settle(tester);
+
+      expect(find.byKey(const Key('sort-order')), findsNothing);
+    });
+
+    testWidgets('형제를 탭하면 그 이름으로 다시 검색한다', (tester) async {
+      useGucci();
+
+      await tester.pumpWidget(buildSubject('구찌'));
+      await settle(tester);
+      await tester.tap(find.byKey(const Key('suggestion-PO-구찌 뷰티-1F')));
+
+      expect(picked, '구찌 뷰티');
+    });
+
+    // 서버는 카테고리로도 확정한다(tier 1). 그때 후보는 형제가 아니라 남남이다.
+    testWidgets('확정된 매장이 후보에 없으면 형제를 붙이지 않는다', (tester) async {
+      buildingRepository = _FakeBuildingRepository(
+        storeIndex: [
+          _entry('커피 리브레', '1F', nodeId: 'N1'),
+          _entry('커피빈', '2F', nodeId: 'N2'),
+        ],
+      );
+      destinationRepository = _FakeDestinationRepository([
+        PoiSearchResult(
+          name: '블루보틀',
+          floor: '3F',
+          point: const LatLng(37.5, 127.0),
+          placeId: 'place-bb',
+          nodeId: 'N3',
+        ),
+      ]);
+
+      await tester.pumpWidget(buildSubject('커피'));
+      await settle(tester);
+
+      expect(find.textContaining('이름이 비슷한 매장'), findsNothing);
+    });
+
+    // 이름으로 걸린 게 아니라 형제라는 개념 자체가 없다.
+    testWidgets('의미 검색 결과에는 붙이지 않는다', (tester) async {
+      buildingRepository = _FakeBuildingRepository(
+        storeIndex: [
+          _entry('구찌', '1F', nodeId: 'N1'),
+          _entry('구찌 뷰티', '1F', nodeId: 'N1b'),
+        ],
+      );
+      destinationRepository = _FakeDestinationRepository(
+        const [],
+        discovery: const DiscoveryResult(
+          mode: DiscoveryMode.results,
+          query: '구찌',
+          matches: [
+            DiscoveryMatch(
+              storeId: 'place-x',
+              name: '구찌',
+              category: '패션',
+              subcategory: '명품',
+              floorId: 'FL-1F',
+              floorName: '1F',
+              entranceNodeId: 'N1',
+              point: LatLng(37.5, 127.0),
+              matchedFacets: {},
+              reason: '뜻이 비슷해요',
+            ),
+          ],
+        ),
+      );
+
+      await tester.pumpWidget(buildSubject('구찌'));
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump(const Duration(milliseconds: 450));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('이름이 비슷한 매장'), findsNothing);
+    });
+  });
+
   // R. 못 찾았을 때의 탈출구.
   group('결과 없음 — 카테고리로 둘러보기', () {
     late DestinationRepository originalDestination;

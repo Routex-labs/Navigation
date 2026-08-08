@@ -147,7 +147,7 @@ List<StoreSuggestion> suggestStores({
   int limit = maxStoreSuggestions,
 }) {
   if (limit <= 0) return const [];
-  final normalizedQuery = _matchKey(query);
+  final normalizedQuery = storeMatchKey(query);
   if (normalizedQuery.length < minSuggestionQueryLength) return const [];
 
   final entries = _indexByName(stores);
@@ -214,7 +214,12 @@ int _compare(_Ranked a, _Ranked b) {
 /// 버리는 대상에 **공백이 포함된다.** `나이키 라이즈`를 `나이키라`로도 찾을 수
 /// 있어야 해서다. 띄어쓰기는 사용자가 가장 자주 틀리는 지점인데, 그걸 오타
 /// 교정에 떠넘기면 3글자 하한에 걸려 아예 못 잡는다.
-String _matchKey(String text) {
+///
+/// **공개해 둔 이유**는 서버가 확정한 매장과 후보 목록을 같은 잣대로 맞춰야 하는
+/// 곳이 있기 때문이다([nameSiblings](name_siblings.dart)). 표기가 다른 같은 이름
+/// (`물품 보관함`·`물품보관함`)을 서로 다른 매장으로 세면 같은 줄이 두 번 그려진다.
+/// 정규화 규칙이 두 벌이 되지 않도록 여기 하나만 둔다.
+String storeMatchKey(String text) {
   final buffer = StringBuffer();
   for (final unit in text.toLowerCase().codeUnits) {
     final isDigit = unit >= 0x30 && unit <= 0x39;
@@ -237,7 +242,7 @@ String _matchKey(String text) {
 List<_NameEntry> _indexByName(Iterable<StoreIndexEntry> stores) {
   final byKey = <String, _NameEntry>{};
   for (final store in stores) {
-    final key = _matchKey(store.name);
+    final key = storeMatchKey(store.name);
     // 정규화하면 아무것도 안 남는 이름(구두점뿐)은 어떤 질의로도 못 찾는다.
     // 남겨 두면 빈 키 하나로 서로 다른 매장이 뭉친다.
     if (key.isEmpty) continue;
