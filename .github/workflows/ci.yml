@@ -28,7 +28,12 @@ jobs:
       - run: flutter config --enable-linux-desktop
       - run: flutter pub get
       - run: flutter analyze
+      # 테스트 디렉터리가 둘이다. `tests/`는 이 저장소가 따로 만든 것이고,
+      # `test/`는 flutter의 표준 위치다. 지금까지 `tests/`만 돌려서 `test/` 아래
+      # 337개(도메인·위젯)가 작성돼 있는데도 CI에서 한 번도 실행되지 않았다 —
+      # 회귀를 못 막는 테스트였다. 둘 다 돌린다.
       - run: flutter test tests/unit_test/
+      - run: flutter test test/
       - run: xvfb-run -a flutter test tests/integration_test/ -d linux
 
   backend:
