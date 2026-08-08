@@ -157,6 +157,18 @@ class _MapShellScreenState extends State<MapShellScreen> {
     _runSheetChain(() => _openCategoryStores(category));
   }
 
+  /// 검색이 빈손일 때 패널이 제안한 카테고리를 골랐다(설계:
+  /// `docs/client/search-result-list-ux.md` R절).
+  ///
+  /// **검색을 먼저 닫는다.** 검색 패널은 상단 Column 전체를 차지하므로, 열어 둔
+  /// 채 시트를 띄우면 목록이 패널 뒤로 들어간다. 닫은 뒤에는 지도 위 chip을 누른
+  /// 것과 완전히 같은 경로를 탄다 — 같은 결과에 이르는 길이 둘로 갈리면 한쪽만
+  /// 고쳐지는 날이 온다.
+  void _onSearchCategoryPicked(String category) {
+    _closeSearch();
+    _onCategoryChipTapped(CategorySelection(category: category));
+  }
+
   ({String title, String subtitle})? _placeInfo;
   bool _outdoorRouteVisible = false;
   bool _indoorRouteVisible = false;
@@ -1383,6 +1395,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
                         indoorContextActive: _indoorContextActive,
                         currentFloorId: _activeIndoorFloor,
                         reachByNodeId: _reachByNodeId,
+                        // "찾지 못했어요" 화면의 탈출구. 지도 위 chip 줄과 **같은
+                        // Future**를 넘긴다 — 다시 요청하면 같은 정보를 두 번
+                        // 받게 되고, 두 화면의 카테고리 목록이 어긋날 수 있다.
+                        categoryEntries: _categoryEntriesFuture,
+                        onCategoryPicked: _onSearchCategoryPicked,
                       ),
                     ),
                   )

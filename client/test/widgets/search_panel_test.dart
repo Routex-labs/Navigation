@@ -3,7 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/core/service_locator.dart';
 import 'package:navigation_client/domain/dijkstra.dart';
+import 'package:navigation_client/domain/search_result_order.dart';
 import 'package:navigation_client/models/building.dart';
+import 'package:navigation_client/models/category_count.dart';
 import 'package:navigation_client/models/discovery_result.dart';
 import 'package:navigation_client/models/poi_search_result.dart';
 import 'package:navigation_client/models/store_index_entry.dart';
@@ -876,6 +878,318 @@ void main() {
         (tiles.first.key as ValueKey<String>?)?.value,
         'suggestion-PO-타임-3F',
       );
+    });
+  });
+
+  // 개수·층 머리말(Q)과 정렬 컨트롤(P)은 한 줄을 함께 쓴다.
+  // 설계: docs/client/search-result-list-ux.md P·Q절.
+  group('목록 머리말과 정렬 컨트롤', () {
+    late DestinationRepository originalDestination;
+    late BuildingRepository originalBuilding;
+
+    setUp(() {
+      originalDestination = destinationRepository;
+      originalBuilding = buildingRepository;
+    });
+
+    tearDown(() {
+      destinationRepository = originalDestination;
+      buildingRepository = originalBuilding;
+    });
+
+    Widget buildSubject(
+      String query, {
+      Map<String, NodeReach>? reachByNodeId,
+    }) => MaterialApp(
+      home: Scaffold(
+        body: SizedBox(
+          height: 600,
+          child: SearchPanel(
+            buildingId: 'building-1',
+            query: query,
+            submitTick: 0,
+            onStorePicked: (_) {},
+            onBuildingPicked: (_) {},
+            onQueryPicked: (_) {},
+            indoorContextActive: true,
+            reachByNodeId: reachByNodeId,
+          ),
+        ),
+      ),
+    );
+
+    Future<void> pumpWhileTyping(WidgetTester tester) async {
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    /// 서버가 `ambiguous`(match=null)를 준 뒤 — 후보 목록이 최종 화면이다.
+    Future<void> settleAmbiguous(WidgetTester tester) async {
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+    }
+
+    void useIndoorBrand() {
+      buildingRepository = _FakeBuildingRepository(
+        storeIndex: [
+          _entry('구찌', '1F', nodeId: 'N1'),
+          _entry('구찌 뷰티', '1F', nodeId: 'N1b'),
+          _entry('구찌 선글라스', '2F', nodeId: 'N2'),
+        ],
+      );
+      destinationRepository = _FakeDestinationRepository(const []);
+    }
+
+    const brandReach = {
+      'N1': NodeReach(distanceM: 300, costM: 300),
+      'N1b': NodeReach(distanceM: 40, costM: 40),
+      'N2': NodeReach(distanceM: 120, costM: 120),
+    };
+
+    testWidgets('확정된 후보 목록에 개수와 층 수가 뜬다', (tester) async {
+      useIndoorBrand();
+
+      await tester.pumpWidget(buildSubject('구찌', reachByNodeId: brandReach));
+      await settleAmbiguous(tester);
+
+      expect(find.text('검색 결과 3 · 2개 층'), findsOneWidget);
+      expect(find.text('검색어 제안'), findsNothing);
+    });
+
+    // 타이핑 중에는 아직 결론이 아니다. 매 글자 컨트롤이 깜빡이면 결론처럼
+    // 보이고, 거리로 다시 세우면 줄이 위아래로 튄다.
+    testWidgets('타이핑 중에는 머리말도 컨트롤도 없다', (tester) async {
+      useIndoorBrand();
+
+      await tester.pumpWidget(buildSubject('구찌', reachByNodeId: brandReach));
+      await pumpWhileTyping(tester);
+
+      expect(find.text('검색어 제안'), findsOneWidget);
+      expect(find.byKey(const Key('sort-order')), findsNothing);
+    });
+
+    testWidgets('위치가 있으면 가까운 순이 기본이고 그렇게 세운다', (tester) async {
+      useIndoorBrand();
+
+      await tester.pumpWidget(buildSubject('구찌', reachByNodeId: brandReach));
+      await settleAmbiguous(tester);
+
+      expect(find.text('가까운 순'), findsOneWidget);
+      final tiles = tester.widgetList<ListTile>(find.byType(ListTile)).toList();
+      expect(
+        [for (final t in tiles) (t.key as ValueKey<String>?)?.value],
+        [
+          'suggestion-PO-구찌 뷰티-1F', // 40m
+          'suggestion-PO-구찌 선글라스-2F', // 120m
+          'suggestion-PO-구찌-1F', // 300m
+        ],
+      );
+    });
+
+    // 매칭 품질순으로 되돌리면 K절의 순서(짧은 이름이 위)로 돌아와야 한다.
+    testWidgets('이름 맞춤 순을 고르면 매칭 품질순으로 되돌아간다', (tester) async {
+      useIndoorBrand();
+
+      await tester.pumpWidget(buildSubject('구찌', reachByNodeId: brandReach));
+      await settleAmbiguous(tester);
+
+      await tester.tap(find.byKey(const Key('sort-order')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('이름 맞춤 순').last);
+      await tester.pumpAndSettle();
+
+      final tiles = tester.widgetList<ListTile>(find.byType(ListTile)).toList();
+      expect(
+        [for (final t in tiles) (t.key as ValueKey<String>?)?.value],
+        [
+          'suggestion-PO-구찌-1F',
+          'suggestion-PO-구찌 뷰티-1F',
+          'suggestion-PO-구찌 선글라스-2F',
+        ],
+      );
+    });
+
+    // 거리를 아무도 모르면 눌러도 순서가 안 바뀐다. 고를 수 있게 두면 사용자는
+    // 정렬이 고장 났다고 읽는다.
+    testWidgets('위치가 없으면 기본이 이름 맞춤 순이고 가까운 순은 비활성이다', (tester) async {
+      useIndoorBrand();
+
+      await tester.pumpWidget(buildSubject('구찌'));
+      await settleAmbiguous(tester);
+
+      expect(find.text('이름 맞춤 순'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('sort-order')));
+      await tester.pumpAndSettle();
+
+      final item = tester.widget<PopupMenuItem<SearchSortOrder>>(
+        find.widgetWithText(PopupMenuItem<SearchSortOrder>, '가까운 순 (현재 위치 필요)'),
+      );
+      expect(item.enabled, isFalse);
+    });
+
+    testWidgets('후보가 1건이면 머리말도 컨트롤도 없다', (tester) async {
+      buildingRepository = _FakeBuildingRepository(
+        storeIndex: [_entry('크록스', '4F', nodeId: 'N4')],
+      );
+      destinationRepository = _FakeDestinationRepository(const []);
+
+      await tester.pumpWidget(
+        buildSubject(
+          '크록스',
+          reachByNodeId: const {'N4': NodeReach(distanceM: 30, costM: 30)},
+        ),
+      );
+      await settleAmbiguous(tester);
+
+      expect(find.byKey(const Key('sort-order')), findsNothing);
+      expect(find.textContaining('검색 결과'), findsNothing);
+    });
+
+    // 교정 후보는 추측이다. 개수를 세고 거리로 세워 주는 건 "이게 답이다"라는
+    // 말인데, 여기서 아는 건 "표기가 비슷한 이름이 있다"뿐이다.
+    testWidgets('오타 교정 화면에는 머리말도 컨트롤도 없다', (tester) async {
+      buildingRepository = _FakeBuildingRepository(
+        storeIndex: [
+          _entry('샤넬 뷰티', '1F', nodeId: 'N1'),
+          _entry('샤넬', '1F', nodeId: 'N1b'),
+        ],
+      );
+      destinationRepository = _FakeDestinationRepository(const []);
+
+      await tester.pumpWidget(
+        buildSubject(
+          '샤낼 뷰티',
+          reachByNodeId: const {
+            'N1': NodeReach(distanceM: 300, costM: 300),
+            'N1b': NodeReach(distanceM: 10, costM: 10),
+          },
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump(const Duration(milliseconds: 450));
+      await tester.pumpAndSettle();
+
+      expect(find.text('이걸 찾으셨나요?'), findsOneWidget);
+      expect(find.byKey(const Key('sort-order')), findsNothing);
+    });
+
+    // 검색어가 바뀌면 초기화한다 — 저장하면 다음 검색이 사용자가 기억 못 하는
+    // 순서로 시작한다.
+    testWidgets('검색어를 바꾸면 정렬 선택이 기본으로 돌아간다', (tester) async {
+      useIndoorBrand();
+
+      await tester.pumpWidget(buildSubject('구찌', reachByNodeId: brandReach));
+      await settleAmbiguous(tester);
+      await tester.tap(find.byKey(const Key('sort-order')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('이름 맞춤 순').last);
+      await tester.pumpAndSettle();
+      expect(find.text('이름 맞춤 순'), findsOneWidget);
+
+      await tester.pumpWidget(buildSubject('구찌 ', reachByNodeId: brandReach));
+      await settleAmbiguous(tester);
+
+      expect(find.text('가까운 순'), findsOneWidget);
+    });
+  });
+
+  // R. 못 찾았을 때의 탈출구.
+  group('결과 없음 — 카테고리로 둘러보기', () {
+    late DestinationRepository originalDestination;
+    late BuildingRepository originalBuilding;
+    String? pickedCategory;
+
+    setUp(() {
+      originalDestination = destinationRepository;
+      originalBuilding = buildingRepository;
+      buildingRepository = _FakeBuildingRepository();
+      destinationRepository = _FakeDestinationRepository(const []);
+      pickedCategory = null;
+    });
+
+    tearDown(() {
+      destinationRepository = originalDestination;
+      buildingRepository = originalBuilding;
+    });
+
+    Widget buildSubject({
+      bool indoor = true,
+      Future<List<CategoryCount>>? categoryEntries,
+    }) => MaterialApp(
+      home: Scaffold(
+        body: SizedBox(
+          height: 600,
+          child: SearchPanel(
+            buildingId: 'building-1',
+            query: '읿ㄹ힣ㅎ',
+            submitTick: 0,
+            onStorePicked: (_) {},
+            onBuildingPicked: (_) {},
+            onQueryPicked: (_) {},
+            indoorContextActive: indoor,
+            categoryEntries: categoryEntries,
+            onCategoryPicked: (value) => pickedCategory = value,
+          ),
+        ),
+      ),
+    );
+
+    /// 경량(300ms) + 의미(400ms)를 모두 지나 noMatch가 확정된 뒤.
+    Future<void> settleNoMatch(WidgetTester tester) async {
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump(const Duration(milliseconds: 450));
+      await tester.pumpAndSettle();
+    }
+
+    Future<List<CategoryCount>> categories() async => const [
+      CategoryCount(floor: '1F', category: '패션', subcategory: null, count: 3),
+      CategoryCount(floor: '2F', category: '뷰티', subcategory: null, count: 2),
+      CategoryCount(floor: '1F', category: '패션', subcategory: null, count: 1),
+    ];
+
+    testWidgets('실내에서는 대분류 chip 줄이 뜬다', (tester) async {
+      await tester.pumpWidget(buildSubject(categoryEntries: categories()));
+      await settleNoMatch(tester);
+
+      expect(find.text('카테고리로 둘러보기'), findsOneWidget);
+      // 중복 대분류는 한 번만.
+      expect(find.byKey(const Key('browse-category-패션')), findsOneWidget);
+      expect(find.byKey(const Key('browse-category-뷰티')), findsOneWidget);
+    });
+
+    testWidgets('chip을 누르면 그 대분류를 상위에 알린다', (tester) async {
+      await tester.pumpWidget(buildSubject(categoryEntries: categories()));
+      await settleNoMatch(tester);
+      await tester.tap(find.byKey(const Key('browse-category-뷰티')));
+
+      expect(pickedCategory, '뷰티');
+    });
+
+    // 아직 들어가지도 않은 건물의 카테고리를 누르게 되고, 지도 강조는 도면 위에
+    // 그려지므로 결과가 보이지 않는다.
+    testWidgets('야외에서는 그리지 않는다', (tester) async {
+      await tester.pumpWidget(
+        buildSubject(indoor: false, categoryEntries: categories()),
+      );
+      await settleNoMatch(tester);
+
+      expect(find.text('카테고리로 둘러보기'), findsNothing);
+      expect(find.textContaining('찾지 못했어요'), findsOneWidget);
+    });
+
+    testWidgets('카테고리를 못 받으면 줄만 조용히 사라진다', (tester) async {
+      // FutureBuilder는 "찾지 못했어요" 화면에서야 트리에 붙는다. 그 전에
+      // 실패한 Future는 듣는 사람이 없어 테스트 프레임워크가 미처리 오류로
+      // 잡으므로, 여기서 한 번 흘려 준다. 실패 자체는 그대로 남는다.
+      final failing = Future<List<CategoryCount>>.error(Exception('boom'));
+      failing.ignore();
+
+      await tester.pumpWidget(buildSubject(categoryEntries: failing));
+      await settleNoMatch(tester);
+
+      expect(find.text('카테고리로 둘러보기'), findsNothing);
+      expect(find.textContaining('찾지 못했어요'), findsOneWidget);
     });
   });
 
