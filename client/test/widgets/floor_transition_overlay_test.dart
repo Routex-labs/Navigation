@@ -160,11 +160,7 @@ void main() {
 
       await tester.tap(find.byType(Scaffold), warnIfMissed: false);
       await tester.pump();
-      expect(
-        tapped,
-        isTrue,
-        reason: '투명한 베일이 화면 전체 입력을 계속 먹으면 전환 뒤 앱이 먹통이 된다',
-      );
+      expect(tapped, isTrue, reason: '투명한 베일이 화면 전체 입력을 계속 먹으면 전환 뒤 앱이 먹통이 된다');
     });
   });
 }

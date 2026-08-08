@@ -14,12 +14,21 @@ void main() {
   group('clampToFootprint', () {
     // 가만히 둔 지도가 매 idle마다 animateCamera로 미세하게 떨리면 안 된다.
     test('이미 도면 안이면 아무것도 하지 않는다', () {
-      expect(clampToFootprint(const ll.LatLng(37.1, 127.2), _footprint), isNull);
+      expect(
+        clampToFootprint(const ll.LatLng(37.1, 127.2), _footprint),
+        isNull,
+      );
     });
 
     test('경계 위도 정확히 위에 있으면 그대로 둔다', () {
-      expect(clampToFootprint(const ll.LatLng(37.0, 127.0), _footprint), isNull);
-      expect(clampToFootprint(const ll.LatLng(37.2, 127.4), _footprint), isNull);
+      expect(
+        clampToFootprint(const ll.LatLng(37.0, 127.0), _footprint),
+        isNull,
+      );
+      expect(
+        clampToFootprint(const ll.LatLng(37.2, 127.4), _footprint),
+        isNull,
+      );
     });
 
     test('밖으로 나간 축만 가장자리로 당긴다', () {

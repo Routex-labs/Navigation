@@ -723,8 +723,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
   }
 
   Future<List<DirectionsCandidate>> _searchDirectionsCandidates(
-    String query,
-  ) async {
+    String query, {
+    String? floorId,
+  }) async {
     final normalized = query.trim().toLowerCase();
     // 건물 밖을 보고 있을 때만 건물 입구가 후보다. 실내 진입 오버레이가 켜져
     // 있으면 야외 탭이어도 아래 매장 검색으로 흘려보낸다 — 그러지 않으면 실내
@@ -753,9 +754,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 사용자 의도의 반대였다 — 찾는 매장이 결과에 아예 없어서 매번 토글을 켜야
     // 했다. 다른 층 결과에는 층 라벨이 부제로 붙으므로(아래 subtitle), 어느 층
     // 매장인지는 목록에서 그대로 읽힌다.
+    // [floorId]는 **목록에서 고른 후보의 층**일 때만 값이 있다. 사용자가 직접 친
+    // 질의에는 null이라 위 「항상 건물 전체」 규칙이 그대로 유지된다. 후보를 콕
+    // 집은 행동에만 그 층으로 좁혀, 같은 이름이 층마다 있는 시설에서 화면에 적힌
+    // 층과 실제로 가는 층이 어긋나지 않게 한다(search-result-list-ux.md T절).
     final results = await destinationRepository.searchDestinations(
       _buildingId,
       query,
+      currentFloorId: floorId,
     );
     return results
         .map(
@@ -845,6 +851,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
         // 상단 검색 결과와 같은 판단 재료를 준다. 이미 계산해 둔 맵을 넘길 뿐이라
         // 추가 계산이 없다(설계: map-ui-redesign-plan.md 「7+E 합동 설계」 2단계).
         reachByNodeId: _reachByNodeId,
+        // 상단 검색과 같은 온디바이스 후보(초성·구두점·오타)를 길찾기에도 준다.
+        // 리포지토리가 같은 Future를 공유하므로 두 번 받지 않는다.
+        storeIndex: _indoorContextActive
+            ? buildingRepository.getStoreIndex(_buildingId)
+            : null,
         focusOrigin: focusOrigin,
       ),
     );

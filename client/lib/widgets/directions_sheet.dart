@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../domain/dijkstra.dart';
+import '../domain/nearest_store.dart';
+import '../domain/store_suggestions.dart';
 import '../models/discovery_result.dart';
+import '../models/store_index_entry.dart';
 import '../theme/app_theme.dart';
 import 'reach_label.dart';
 import 'sheet_grab_handle.dart';
@@ -49,8 +52,10 @@ enum DirectionsMapPickTarget { origin, destination }
 /// 출발지로 쓴다는 뜻이다.
 class DirectionsResult {
   /// 도착지까지 정해져서 바로 경로를 그릴 수 있는 경우.
-  const DirectionsResult({this.origin, required DirectionsCandidate this.destination})
-    : pickOnMap = null;
+  const DirectionsResult({
+    this.origin,
+    required DirectionsCandidate this.destination,
+  }) : pickOnMap = null;
 
   /// 도착지 칸에서 "지도에서 선택"을 누른 경우. 도착지는 아직 없고, 호출자가
   /// 지도에서 매장을 고르는 모드로 넘어가야 한다. 출발지는 시트에서 정한 값을
@@ -84,8 +89,13 @@ enum _ActiveField { origin, destination }
 /// "전체 층에서 찾기" 토글로 넓히게 했는데, 길찾기는 원래 다른 층으로 가려고
 /// 여는 기능이라 기본값이 반대였다 — 찾는 매장이 대부분 다른 층에 있어서
 /// 사용자가 매번 토글을 켜야 결과가 나왔다.
+/// [floorId]는 **목록에서 고른 후보의 층**이다. 사용자가 직접 친 질의에는 절대
+/// 넘기지 않는다 — 위 「항상 건물 전체」 규칙 그대로다. 후보를 콕 집은 행동에만
+/// 그 후보의 층을 실어 보내, 같은 이름이 층마다 있는 시설(화장실 19곳)에서
+/// 화면에 적힌 층과 실제로 가는 층이 어긋나지 않게 한다(설계:
+/// `docs/client/search-result-list-ux.md` T절).
 typedef DirectionsSearchCallback =
-    Future<List<DirectionsCandidate>> Function(String query);
+    Future<List<DirectionsCandidate>> Function(String query, {String? floorId});
 
 /// 의미 검색(`/query/ai`) 응답을 시트가 쓰는 형태로 옮긴 것. 후보를
 /// [DirectionsCandidate]로만 받으면 mode·질문·선택지를 잃어 상단 검색 패널과
@@ -156,6 +166,7 @@ class DirectionsSheet extends StatefulWidget {
     this.semanticSearch,
     this.initialOrigin,
     this.initialDestination,
+    this.storeIndex,
     this.reachByNodeId,
     this.focusOrigin = false,
   });
@@ -175,6 +186,13 @@ class DirectionsSheet extends StatefulWidget {
   /// 정해진 채로 시트를 열 때 채워둔다. 검색창에 그 이름을 미리 채우고
   /// 검색 결과 목록에서 그대로 골라도 되고, 다른 검색어로 바꿔도 된다.
   final DirectionsCandidate? initialDestination;
+
+  /// 온디바이스 자동완성의 원본. 상위가 이미 받아 둔 Future를 그대로 받는다
+  /// (리포지토리가 같은 Future를 공유하므로 두 번 받지 않는다).
+  ///
+  /// **없어도 검색은 그대로 돈다.** 후보만 조용히 사라진다 — 상단 검색 패널과
+  /// 같은 계약이다(`docs/client/search-input-assist.md` K절 실패 조건).
+  final Future<List<StoreIndexEntry>?>? storeIndex;
 
   /// 현재 위치에서 각 그래프 노드까지의 거리·비용. 상위(MapShellScreen)가 이미
   /// 한 번 계산해 들고 있는 맵을 그대로 받는다 — **여기서 경로를 새로 계산하지
@@ -198,6 +216,7 @@ class DirectionsSheet extends StatefulWidget {
     DirectionsSemanticSearchCallback? semanticSearch,
     DirectionsCandidate? initialOrigin,
     DirectionsCandidate? initialDestination,
+    Future<List<StoreIndexEntry>?>? storeIndex,
     Map<String, NodeReach>? reachByNodeId,
     bool focusOrigin = false,
   }) {
@@ -214,6 +233,7 @@ class DirectionsSheet extends StatefulWidget {
           semanticSearch: semanticSearch,
           initialOrigin: initialOrigin,
           initialDestination: initialDestination,
+          storeIndex: storeIndex,
           reachByNodeId: reachByNodeId,
           focusOrigin: focusOrigin,
         ),
@@ -308,6 +328,11 @@ enum _SearchPhase {
   /// 보여줄 후보가 있다.
   results,
 
+  /// **온디바이스 후보로 답했다.** 서버 경량 매칭은 빈손이었지만 기기 안 인덱스가
+  /// 이름으로 매장을 찾은 상태다. 이때는 의미 검색으로 넘어가지 않는다 — 근거는
+  /// 상단 검색 패널과 같다(search-input-assist.md K절 실기기 검증 2번).
+  suggestions,
+
   /// 쓸 수 있는 검색을 **모두** 끝냈는데 없다.
   noMatch,
 
@@ -374,11 +399,50 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
   String get _activeQuery =>
       _isOriginActive ? _originController.text : _destinationController.text;
 
+  TextEditingController get _activeController =>
+      _isOriginActive ? _originController : _destinationController;
+
+  /// 온디바이스 자동완성의 원본. null은 "아직 못 받았거나 받기에 실패했다"는
+  /// 뜻이고, **그 상태가 정상 경로에 포함된다.**
+  List<StoreIndexEntry>? _storeIndex;
+
+  /// 지금 질의에 대한 후보. 질의가 바뀔 때만 다시 계산한다 — build에서 매번
+  /// 계산하면 한 프레임에 여러 번 1640건을 훑는다.
+  List<StoreSuggestion> _suggestions = const [];
+
+  /// 다음 검색 한 번만 이 층으로 좁힌다. 후보를 **탭한 경우**에 선다.
+  /// null이면 평소대로 건물 전체를 본다(위 [DirectionsSearchCallback] 주석).
+  String? _floorScopeOnce;
+
+  /// 후보 원본을 받아 둔다. 실패는 삼킨다 — 자동완성만 포기하고 검색은 막지 않는다.
+  Future<void> _loadStoreIndex() async {
+    final source = widget.storeIndex;
+    if (source == null) return;
+    try {
+      final index = await source;
+      if (!mounted || index == null) return;
+      setState(() {
+        _storeIndex = index;
+        // 목록이 늦게 도착하는 동안 사용자가 이미 치고 있었을 수 있다.
+        _suggestions = _computeSuggestions(_activeQuery);
+      });
+    } on Object {
+      // 자동완성만 포기한다.
+    }
+  }
+
+  List<StoreSuggestion> _computeSuggestions(String query) {
+    final index = _storeIndex;
+    if (index == null) return const [];
+    return suggestStores(stores: index, query: query);
+  }
+
   @override
   void initState() {
     super.initState();
     _selectedOrigin = widget.initialOrigin;
     _selectedDestination = widget.initialDestination;
+    unawaited(_loadStoreIndex());
     if (widget.focusOrigin) {
       // 출발 행을 눌러 열렸다. 후보 목록도 출발지 기준(맨 위 "현재 위치" 고정 행)
       // 이어야 한다. 명시적 출발지가 없으면 칸에 적힌 "현재 위치"는 값이 아니라
@@ -429,9 +493,15 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
       _phase = _SearchPhase.lightSearching;
     });
 
+    // 서버 응답을 기다리지 않는다. 이게 후보가 즉시 뜨는 이유다.
+    _suggestions = _computeSuggestions(query);
+
     List<DirectionsCandidate> results;
     try {
-      results = await widget.search(query);
+      // 목록에서 고른 검색이면 그 후보의 층으로 좁힌다. 한 번 쓰고 지운다.
+      final floorId = _floorScopeOnce;
+      _floorScopeOnce = null;
+      results = await widget.search(query, floorId: floorId);
     } on Object {
       _finishFailed(query, seq);
       return;
@@ -458,6 +528,26 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
         _fromSemantic = false;
         _clearDiscovery();
         _phase = _SearchPhase.idle;
+      });
+      return;
+    }
+
+    // **이름이 실제로 걸렸으면 의미 검색으로 넘어가지 않는다.**
+    //
+    // 서버 경량 매칭은 `name LIKE`라 구두점이 든 `A.P.C.`를 못 잡고, 초성
+    // (`ㄴㅇㅋ`)은 아예 못 잡는다. 그런데 온디바이스 인덱스는 이미 그 매장을
+    // 찾아 둔 상태다. 여기서 2차로 넘기면 그 정답이 스피너에 덮이고, 임계값을
+    // 겨우 넘긴 의미 검색이 엉뚱한 곳을 확정한다 — 상단 검색 패널이 실기기에서
+    // 겪은 것과 같은 사고다(search-input-assist.md K절 실기기 검증 2번).
+    //
+    // 교정 후보만 있을 때는 추측이라 2차에 기회를 준다.
+    if (_suggestions.any((s) => !s.kind.isCorrection)) {
+      setState(() {
+        _submittedQuery = query;
+        _results = const [];
+        _fromSemantic = false;
+        _clearDiscovery();
+        _phase = _SearchPhase.suggestions;
       });
       return;
     }
@@ -521,7 +611,8 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
             ? null
             : Map<String, List<String>>.fromEntries(
                 _selectedFacets.entries.map(
-                  (entry) => MapEntry(entry.key, List<String>.from(entry.value)),
+                  (entry) =>
+                      MapEntry(entry.key, List<String>.from(entry.value)),
                 ),
               ),
         showAll: showAll,
@@ -819,9 +910,9 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
   void _afterOriginPicked() {
     final destination = _selectedDestination;
     if (destination != null) {
-      Navigator.of(
-        context,
-      ).pop(DirectionsResult(origin: _selectedOrigin, destination: destination));
+      Navigator.of(context).pop(
+        DirectionsResult(origin: _selectedOrigin, destination: destination),
+      );
       return;
     }
     _destinationFocusNode.requestFocus();
@@ -906,7 +997,11 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
                   children: [
                     const Text(
                       '길찾기',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.text),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.text,
+                      ),
                     ),
                     const SizedBox(height: 14),
                     // 교체 버튼은 두 입력창 **오른쪽 세로 가운데**에 둔다. 지도
@@ -1015,6 +1110,7 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
         rows.add(_candidateTile(candidate));
       }
     }
+    rows.addAll(_suggestionRows());
 
     final status = _statusRow(showResults);
     if (status != null) rows.add(status);
@@ -1036,6 +1132,83 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
     ),
     onTap: _selectCurrentLocationAsOrigin,
   );
+
+  /// 온디바이스 후보 줄. 서버가 못 잡는 초성(`ㄴㅇㅋ`)·구두점(`A.P.C.`)·오타
+  /// (`샤낼 뷰티`)가 여기서 걸린다.
+  ///
+  /// **탭하면 그 이름으로 검색을 다시 돌린다.** 후보에는 좌표가 없어서 곧바로
+  /// 목적지로 확정할 수 없기 때문이다([StoreIndexEntry] 주석). 대신 **그 후보의
+  /// 층**을 함께 실어 보내 화면에 적힌 층과 실제로 가는 층이 어긋나지 않게 한다.
+  List<Widget> _suggestionRows() {
+    final showAsAnswer =
+        _phase == _SearchPhase.suggestions || _phase == _SearchPhase.noMatch;
+    if (!showAsAnswer || _suggestions.isEmpty) return const [];
+    final allCorrections = _suggestions.every((s) => s.kind.isCorrection);
+    return [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 2),
+        child: Text(
+          allCorrections ? '이걸 찾으셨나요?' : '검색어 제안',
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: AppColors.muted,
+          ),
+        ),
+      ),
+      for (final suggestion in _suggestions) _suggestionTile(suggestion),
+    ];
+  }
+
+  ListTile _suggestionTile(StoreSuggestion suggestion) {
+    // 묶인 시설(화장실 19곳)에서 어느 매장의 층을 적을지는 거리를 아는 쪽만
+    // 정할 수 있다. 상단 검색 패널과 같은 함수를 쓴다.
+    final nearest = nearestByWalkingDistance(
+      stores: suggestion.stores,
+      reachByNodeId: widget.reachByNodeId,
+    );
+    final store = nearest.store;
+    final reach = nearest.reach;
+    final count = suggestion.stores.length;
+    final floorLine = count > 1
+        ? '${store.floorName} 등 $count곳'
+        : store.floorName;
+    return ListTile(
+      key: Key('directions-suggestion-${store.id}'),
+      leading: Icon(
+        suggestion.kind.isCorrection ? Icons.auto_fix_high : Icons.search,
+        color: AppColors.muted,
+      ),
+      title: Text(
+        store.name,
+        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(floorLine, maxLines: 1, overflow: TextOverflow.ellipsis),
+          if (reach != null)
+            Text(
+              reachLabel(reach),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.text,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+        ],
+      ),
+      isThreeLine: reach != null,
+      onTap: () {
+        _floorScopeOnce = store.floorId;
+        _activeController.text = store.name;
+        _search(store.name, immediate: true);
+      },
+    );
+  }
 
   ListTile _candidateTile(DirectionsCandidate candidate) {
     // 실내 후보(floor가 있는 것)인데 입구 노드가 없으면 경로를 계산할 수 없다.
@@ -1189,8 +1362,8 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
             ? '이름을 입력하면 바로 찾아드려요.\n"밥 먹을 곳"처럼 뜻으로 물어도 됩니다.'
             : '이름을 입력해 목적지를 찾아보세요.',
       ),
-      _SearchPhase.lightSearching || _SearchPhase.semanticSearching =>
-        _searchingRow(),
+      _SearchPhase.lightSearching ||
+      _SearchPhase.semanticSearching => _searchingRow(),
       // 의미 검색까지 끝난 뒤에만 도달한다(야외 모드는 경량이 마지막 단계다).
       _SearchPhase.noMatch => _message(
         _submittedQuery.isEmpty
@@ -1205,7 +1378,10 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
         '지금은 검색할 수 없어요.\n연결 상태를 확인하고 잠시 후 다시 시도해 주세요.',
       ),
       // clarify·results인데 후보가 비었다면 질문 chip만 남은 상태다.
-      _SearchPhase.clarify || _SearchPhase.results => null,
+      // suggestions는 온디바이스 후보 줄이 이미 답을 그리고 있으므로 안내가 없다.
+      _SearchPhase.clarify ||
+      _SearchPhase.results ||
+      _SearchPhase.suggestions => null,
     };
   }
 

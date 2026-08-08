@@ -39,7 +39,7 @@ void main() {
     List<DirectionsCandidate> results, {
     Object? throws,
   }) {
-    return (query) async {
+    return (query, {String? floorId}) async {
       lightCalls.add(query);
       if (throws != null) throw throws;
       return results;

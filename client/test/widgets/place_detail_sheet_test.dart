@@ -57,9 +57,7 @@ void main() {
     );
   }
 
-  testWidgets('상세를 불러오는 동안에도 코어와 길찾기 버튼을 즉시 그린다', (
-    tester,
-  ) async {
+  testWidgets('상세를 불러오는 동안에도 코어와 길찾기 버튼을 즉시 그린다', (tester) async {
     final completer = Completer<PlaceDetail?>();
     await tester.pumpWidget(
       buildSubject(repository: _FakeRepository(completer.future)),
@@ -187,7 +185,9 @@ void main() {
 
   testWidgets('매장 정보가 없어도 소개는 제목을 갖는다', (tester) async {
     await tester.pumpWidget(
-      buildSubject(repository: _FakeRepository(Future.value(_detailWithSummary()))),
+      buildSubject(
+        repository: _FakeRepository(Future.value(_detailWithSummary())),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -519,7 +519,10 @@ void main() {
 
   testWidgets('층도 업종도 없으면 이름만 남는다', (tester) async {
     await tester.pumpWidget(
-      buildSubject(subtitle: '', repository: _FakeRepository(Future.value(null))),
+      buildSubject(
+        subtitle: '',
+        repository: _FakeRepository(Future.value(null)),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -586,7 +589,8 @@ class _FakeRepository implements PlaceDetailRepository {
   final Future<PlaceDetail?> response;
 
   @override
-  Future<PlaceDetail?> getPlaceDetail(String buildingId, String placeId) => response;
+  Future<PlaceDetail?> getPlaceDetail(String buildingId, String placeId) =>
+      response;
 }
 
 PlaceDetail _detail({
@@ -594,35 +598,33 @@ PlaceDetail _detail({
   String kind = 'store',
   String source = 'manual',
   String? updatedAt,
-}) =>
-    PlaceDetail.fromJson({
-      'kind': kind,
-      'id': 'place-1',
-      'name': '테스트 매장',
-      'subtitle': '1F',
-      'category': null,
-      'subcategory': null,
-      'location': {
-        'building_id': 'building-1',
-        'floor_label': '1F',
-        'position_local_m': {'x': 0, 'y': 0},
-        'entrance_node_id': null,
-      },
-      'actions': [],
-      'sections': sections,
-      'provenance': {'source': source, 'updated_at': updatedAt},
-    });
+}) => PlaceDetail.fromJson({
+  'kind': kind,
+  'id': 'place-1',
+  'name': '테스트 매장',
+  'subtitle': '1F',
+  'category': null,
+  'subcategory': null,
+  'location': {
+    'building_id': 'building-1',
+    'floor_label': '1F',
+    'position_local_m': {'x': 0, 'y': 0},
+    'entrance_node_id': null,
+  },
+  'actions': [],
+  'sections': sections,
+  'provenance': {'source': source, 'updated_at': updatedAt},
+});
 
 PlaceDetail _detailWithSummary({
   String kind = 'store',
   String source = 'manual',
   String? updatedAt,
-}) =>
-    _detail(
-      kind: kind,
-      source: source,
-      updatedAt: updatedAt,
-      sections: const [
-        {'type': 'summary', 'text': '상세 섹션'},
-      ],
-    );
+}) => _detail(
+  kind: kind,
+  source: source,
+  updatedAt: updatedAt,
+  sections: const [
+    {'type': 'summary', 'text': '상세 섹션'},
+  ],
+);
