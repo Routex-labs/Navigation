@@ -12,6 +12,7 @@ import '../models/poi_search_result.dart';
 import '../models/store_index_entry.dart';
 import '../theme/app_theme.dart';
 import 'category_icon.dart';
+import 'filter_pill.dart';
 import 'reach_label.dart';
 
 /// 상단 검색창 바로 아래에 붙는 결과 패널.
@@ -1077,74 +1078,130 @@ class _SearchPanelState extends State<SearchPanel> {
     // 상태도 포함한다 — 그 화면에서는 이 버튼이 질문으로 돌아가는 유일한 길이다.
     final canChooseAgain = hasSelection || _showingAll;
 
-    final selectedChips = <Widget>[];
+    // 선택·되돌리기 줄. 답을 한 번이라도 골랐을 때만 선다.
+    final selectedRow = <Widget>[];
     for (final entry in _selectedFacets.entries) {
       for (final value in entry.value) {
-        selectedChips.add(
-          InputChip(
+        if (selectedRow.isNotEmpty) selectedRow.add(const SizedBox(width: 6));
+        selectedRow.add(
+          FilterPill(
             key: Key('selected-facet-${entry.key}-$value'),
-            label: Text('$value 선택됨'),
-            onDeleted: () => _removeFacet(entry.key, value),
+            label: value,
+            selected: true,
+            // 고른 값을 다시 누르면 풀린다. 카테고리 시트의 소분류 pill과 같은
+            // 규칙이라 같은 모양이 같게 동작한다. `×`는 그 사실을 눈에 보이게 한다.
+            trailing: Icons.close,
+            onTap: () => _removeFacet(entry.key, value),
           ),
         );
       }
     }
+    // 조작 pill(전체 보기·다시 선택)은 **선택 줄 끝에 구분선 뒤로** 붙인다. 예전에는
+    // "전체 보기"가 혼자 윗줄에 떠서, 방금 고른 선택보다 위에 있는 탈출구가 됐다.
+    // clarify 화면에서는 이미 선택지 줄 끝에 있으므로 여기서는 빼고 중복시키지 않는다.
+    final trailingActions = <Widget>[
+      if (canShowAll && !isClarify)
+        FilterPill(
+          key: const Key('show-all'),
+          label: '전체 보기',
+          selected: false,
+          onTap: () => _requestDiscovery(showAll: true),
+        ),
+      if (canChooseAgain)
+        FilterPill(
+          key: const Key('choose-again'),
+          label: '다시 선택',
+          selected: false,
+          onTap: _chooseAgain,
+        ),
+    ];
+    if (trailingActions.isNotEmpty) {
+      if (selectedRow.isNotEmpty) {
+        selectedRow.add(
+          const VerticalDivider(width: 10, indent: 6, endIndent: 6),
+        );
+      }
+      for (var index = 0; index < trailingActions.length; index++) {
+        if (index > 0) selectedRow.add(const SizedBox(width: 6));
+        selectedRow.add(trailingActions[index]);
+      }
+    }
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+      padding: const EdgeInsets.fromLTRB(0, 10, 0, 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (_discoveryMode == DiscoveryMode.degraded)
-            const Text(
-              '일부 추천 기능이 준비되지 않아 제한된 결과만 보여드려요.',
-              style: TextStyle(fontSize: 12, color: AppColors.muted),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 6),
+              child: Text(
+                '일부 추천 기능이 준비되지 않아 제한된 결과만 보여드려요.',
+                style: TextStyle(fontSize: 12, color: AppColors.muted),
+              ),
             ),
           if (isClarify) ...[
-            Text(
-              _discoveryQuestion ?? '어떤 조건을 더 중요하게 보시나요?',
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            // 질문은 이 패널의 다른 머리말(`검색어 제안`·`최근 검색어`)과 같은
+            // 크기·색으로 둔다. 예전에는 14/굵게라 질문이 결과보다 커 보였는데,
+            // 여기서 물어보는 건 답을 좁히는 보조 수단이지 화면의 주인공이 아니다.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+              child: Text(
+                _discoveryQuestion ?? '어떤 조건을 더 중요하게 보시나요?',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.muted,
+                ),
+              ),
             ),
-            if (_discoveryOptions.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: _discoveryOptions
-                    .map(
-                      (option) => ActionChip(
+            // **선택지는 한 줄에서 가로로 스크롤한다.** Wrap으로 접으면 다섯 개짜리
+            // 축(styles)에서 두 줄이 되고, 질문·전체 보기까지 합쳐 세로 150px가
+            // 넘어가 정작 결과 목록이 화면 밖으로 밀린다. 줄을 고정하면 선택지가
+            // 몇 개든 패널 높이가 그대로다.
+            if (_discoveryOptions.isNotEmpty)
+              SizedBox(
+                height: 30,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: [
+                    for (final option in _discoveryOptions) ...[
+                      FilterPill(
                         key: Key(
                           'facet-option-${option.facet}-${option.value}',
                         ),
-                        label: Text('${option.label} (${option.count})'),
-                        onPressed: () => _selectFacet(option),
+                        label: '${option.label} (${option.count})',
+                        selected: false,
+                        onTap: () => _selectFacet(option),
                       ),
-                    )
-                    .toList(),
+                      const SizedBox(width: 6),
+                    ],
+                    // 성격이 다른 것은 같은 줄에 두되 섞이지 않게 구분선으로
+                    // 나눈다(naver-map-ui-ux-analysis.md 5·6절의 필터 줄과 같다).
+                    // 위 pill들은 "이 값으로 좁혀라"이고, 이건 "좁히지 말고 다 봐라"다.
+                    if (canShowAll) ...[
+                      const VerticalDivider(width: 10, indent: 6, endIndent: 6),
+                      FilterPill(
+                        key: const Key('show-all'),
+                        label: '전체 보기',
+                        selected: false,
+                        onTap: () => _requestDiscovery(showAll: true),
+                      ),
+                    ],
+                  ],
+                ),
               ),
-            ],
           ],
-          if (selectedChips.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Wrap(spacing: 8, runSpacing: 6, children: selectedChips),
-          ],
-          if (canShowAll || canChooseAgain) ...[
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 4,
-              children: [
-                if (canShowAll)
-                  TextButton(
-                    key: const Key('show-all'),
-                    onPressed: () => _requestDiscovery(showAll: true),
-                    child: const Text('전체 보기'),
-                  ),
-                if (canChooseAgain)
-                  TextButton(
-                    key: const Key('choose-again'),
-                    onPressed: _chooseAgain,
-                    child: const Text('다시 선택'),
-                  ),
-              ],
+          if (selectedRow.isNotEmpty) ...[
+            if (isClarify) const SizedBox(height: 6),
+            SizedBox(
+              height: 30,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                children: selectedRow,
+              ),
             ),
           ],
         ],

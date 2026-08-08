@@ -4,6 +4,7 @@ import '../core/service_locator.dart';
 import '../models/floor_plan.dart';
 import '../models/poi_search_result.dart';
 import '../theme/app_theme.dart';
+import 'filter_pill.dart';
 import 'category_icon.dart';
 import 'category_taxonomy.dart';
 import 'sheet_grab_handle.dart';
@@ -210,66 +211,67 @@ class _CategoryStoresSheetState extends State<CategoryStoresSheet> {
         if (didPop && !_intentionalPop) widget.onCloseAll();
       },
       child: GestureDetector(
-      onTap: () => Navigator.of(context).maybePop(),
-      behavior: HitTestBehavior.opaque,
-      child: DraggableScrollableSheet(
-        initialChildSize: kCategoryStoresSheetInitialSize,
-        minChildSize: 0.35,
-        maxChildSize: 0.9,
-        expand: false,
-        builder: (context, scrollController) {
-          return GestureDetector(
-            onTap: () {},
-            behavior: HitTestBehavior.opaque,
-            child: Material(
-              color: Colors.white,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: FutureBuilder<List<_CategoryStoreEntry>>(
-                future: _entriesFuture,
-                builder: (context, snapshot) {
-                  return CustomScrollView(
-                    controller: scrollController,
-                    slivers: [
-                      const SliverToBoxAdapter(child: SheetGrabHandle()),
-                      SliverToBoxAdapter(
-                        child: SheetHeader(
-                          title: widget.category,
-                          leading: Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: categoryColorFor(widget.category)
-                                  .withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(9),
+        onTap: () => Navigator.of(context).maybePop(),
+        behavior: HitTestBehavior.opaque,
+        child: DraggableScrollableSheet(
+          initialChildSize: kCategoryStoresSheetInitialSize,
+          minChildSize: 0.35,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (context, scrollController) {
+            return GestureDetector(
+              onTap: () {},
+              behavior: HitTestBehavior.opaque,
+              child: Material(
+                color: Colors.white,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: FutureBuilder<List<_CategoryStoreEntry>>(
+                  future: _entriesFuture,
+                  builder: (context, snapshot) {
+                    return CustomScrollView(
+                      controller: scrollController,
+                      slivers: [
+                        const SliverToBoxAdapter(child: SheetGrabHandle()),
+                        SliverToBoxAdapter(
+                          child: SheetHeader(
+                            title: widget.category,
+                            leading: Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: categoryColorFor(
+                                  widget.category,
+                                ).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(9),
+                              ),
+                              alignment: Alignment.center,
+                              child: Icon(
+                                categoryIconFor(widget.category),
+                                size: 16,
+                                color: categoryColorFor(widget.category),
+                              ),
                             ),
-                            alignment: Alignment.center,
-                            child: Icon(
-                              categoryIconFor(widget.category),
-                              size: 16,
-                              color: categoryColorFor(widget.category),
-                            ),
+                            onCloseAll: widget.onCloseAll,
+                            onIntentionalPop: _markIntentional,
                           ),
-                          onCloseAll: widget.onCloseAll,
-                          onIntentionalPop: _markIntentional,
                         ),
-                      ),
-                      SliverToBoxAdapter(
-                        child: _buildFilterBar(
-                          snapshot.data ?? const <_CategoryStoreEntry>[],
+                        SliverToBoxAdapter(
+                          child: _buildFilterBar(
+                            snapshot.data ?? const <_CategoryStoreEntry>[],
+                          ),
                         ),
-                      ),
-                      ..._buildBody(snapshot),
-                    ],
-                  );
-                },
+                        ..._buildBody(snapshot),
+                      ],
+                    );
+                  },
+                ),
               ),
-            ),
-          );
-        },
-      ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -368,7 +370,8 @@ class _CategoryStoresSheetState extends State<CategoryStoresSheet> {
     return [
       SliverList.separated(
         itemCount: entries.length,
-        separatorBuilder: (_, _) => const Divider(height: 1, indent: 20, endIndent: 20),
+        separatorBuilder: (_, _) =>
+            const Divider(height: 1, indent: 20, endIndent: 20),
         itemBuilder: (context, index) => _StoreTile(
           entry: entries[index],
           onTap: () {
@@ -424,14 +427,14 @@ class _CategoryStoresSheetState extends State<CategoryStoresSheet> {
         child: ListView(
           scrollDirection: Axis.horizontal,
           children: [
-            _SubcategoryPill(
+            FilterPill(
               label: '전체',
               selected: _subcategory == null,
               onTap: () => _selectSubcategory(null),
             ),
             for (final option in options) ...[
               const SizedBox(width: 6),
-              _SubcategoryPill(
+              FilterPill(
                 label: option.label,
                 selected: _subcategory == option.value,
                 // 이미 고른 소분류를 다시 누르면 대분류 전체로 되돌린다.
@@ -452,43 +455,6 @@ class _CategoryStoresSheetState extends State<CategoryStoresSheet> {
     if (_subcategory == value) return;
     setState(() => _subcategory = value);
     widget.onSubcategoryChanged?.call(value);
-  }
-}
-
-/// 시트 안 소분류 pill. 지도 위 pill과 달리 그림자를 쓰지 않는다 — 흰 시트
-/// 위에 뜬 카드처럼 보이면 목록과 같은 평면이라는 게 읽히지 않는다.
-class _SubcategoryPill extends StatelessWidget {
-  const _SubcategoryPill({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: selected ? AppColors.primary : const Color(0xFFF3F4F6),
-      borderRadius: BorderRadius.circular(15),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(15),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-              color: selected ? Colors.white : AppColors.text,
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }
 
@@ -524,7 +490,11 @@ class _StoreTile extends StatelessWidget {
         subtitle,
         style: const TextStyle(fontSize: 12, color: AppColors.muted),
       ),
-      trailing: const Icon(Icons.chevron_right, size: 18, color: AppColors.muted),
+      trailing: const Icon(
+        Icons.chevron_right,
+        size: 18,
+        color: AppColors.muted,
+      ),
     );
   }
 }
@@ -536,12 +506,12 @@ class _CategoryStoreEntry {
   final String floor;
 
   PoiSearchResult toPoiSearchResult() => PoiSearchResult(
-        name: store.name,
-        floor: floor,
-        point: store.centroid,
-        placeId: store.id,
-        nodeId: store.entranceNodeId,
-        category: store.category,
-        subcategory: store.subcategory,
-      );
+    name: store.name,
+    floor: floor,
+    point: store.centroid,
+    placeId: store.id,
+    nodeId: store.entranceNodeId,
+    category: store.category,
+    subcategory: store.subcategory,
+  );
 }
