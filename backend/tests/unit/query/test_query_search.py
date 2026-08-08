@@ -241,12 +241,18 @@ def test_동의어_표준형으로도_intent를_되짚는다():
 # "신발/의류 중 무엇을 찾으세요?"라는 메아리 질문이 선다.
 def test_질의가_가리킨_intent는_선택지에서_빠진다():
     floor = _floor()
+    # **두 값이 서로 다른 후보를 가리키게 둔다.** 예전 fixture는 6건 전부가
+    # ["신발", "의류"]를 함께 가져서 두 값이 완전히 같은 집합이었는데, 그건
+    # _pick_question이 이제 걸러내는 "나누지 못하는 축"이라 이 테스트의 주제(질의
+    # intent 제외)에 닿기 전에 축이 먼저 탈락한다. 신발만 파는 매장을 2건 섞어
+    # 축이 실제로 구분력을 갖게 한 뒤 제외 규칙을 본다.
     rows = [
-        (_store(f"s{i}", f"매장{i}", subcategory="캐주얼·스트리트", facets={"intents": ["신발", "의류"]}), floor)
-        for i in range(6)
-    ]
+        (_store(f"b{i}", f"둘다매장{i}", subcategory="캐주얼·스트리트", facets={"intents": ["신발", "의류"]}), floor)
+        for i in range(4)
+    ] + [(_store(f"s{i}", f"신발매장{i}", subcategory="슈즈", facets={"intents": ["신발"]}), floor) for i in range(2)]
     axis, options = query_search._pick_question(rows)
     assert axis == "intents"  # 아무것도 안 뺐을 때는 두 값이 선택지가 된다
+    assert {option["value"] for option in options} == {"신발", "의류"}
 
     # "신발"을 뺀 뒤에는 남는 값이 하나뿐이라 이 축은 구분력이 없다.
     axis, options = query_search._pick_question(rows, ["신발"])

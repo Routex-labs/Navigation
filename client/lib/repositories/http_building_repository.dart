@@ -10,6 +10,7 @@ import '../models/building_graph.dart';
 import '../models/category_count.dart';
 import '../models/floor_graph.dart';
 import '../models/indoor_route.dart';
+import '../models/store_index_entry.dart';
 import 'building_repository.dart';
 
 /// api/app/routers/buildings.py의 /buildings 엔드포인트를 그대로 호출한다.
@@ -38,6 +39,7 @@ class HttpBuildingRepository implements BuildingRepository {
   final Map<String, Future<Map<String, dynamic>?>> _floorGeoJsonFutures = {};
   final Map<String, Future<BuildingGraph?>> _buildingGraphFutures = {};
   final Map<String, Future<List<CategoryCount>?>> _categoryCountFutures = {};
+  final Map<String, Future<List<StoreIndexEntry>?>> _storeIndexFutures = {};
 
   // 아래 둘은 네트워크가 아니라 계산 결과라 값 캐시로 충분하다.
   final Map<String, FloorGraph> _floorGraphCache = {};
@@ -146,6 +148,20 @@ class HttpBuildingRepository implements BuildingRepository {
       final list = jsonDecode(response.body) as List<dynamic>;
       return list
           .map((item) => CategoryCount.fromJson(item as Map<String, dynamic>))
+          .toList();
+    });
+  }
+
+  @override
+  Future<List<StoreIndexEntry>?> getStoreIndex(String buildingId) {
+    return _shared(_storeIndexFutures, buildingId, () async {
+      final response = await _client.get(
+        Uri.parse('$apiBaseUrl/buildings/$buildingId/store-index'),
+      );
+      if (response.statusCode == 404) return null;
+      final list = jsonDecode(response.body) as List<dynamic>;
+      return list
+          .map((item) => StoreIndexEntry.fromJson(item as Map<String, dynamic>))
           .toList();
     });
   }

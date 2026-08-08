@@ -188,7 +188,8 @@ void main() {
 }
 
 void _resizeTo(Size size) {
-  final view = TestWidgetsFlutterBinding.instance.platformDispatcher.views.first;
+  final view =
+      TestWidgetsFlutterBinding.instance.platformDispatcher.views.first;
   view.physicalSize = size;
   view.devicePixelRatio = 1.0;
   addTearDown(() {
@@ -240,10 +241,10 @@ class _FloorStoresRepository extends MockBuildingRepository {
 
   @override
   Future<Building?> getBuilding(String buildingId) async => Building(
-        id: buildingId,
-        name: '테스트 건물',
-        floors: storesByFloor.keys.toList(),
-      );
+    id: buildingId,
+    name: '테스트 건물',
+    floors: storesByFloor.keys.toList(),
+  );
 
   @override
   Future<Map<String, dynamic>?> getFloorGeoJson(

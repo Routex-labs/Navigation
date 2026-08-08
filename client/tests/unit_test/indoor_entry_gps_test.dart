@@ -20,12 +20,11 @@ void main() {
     required int atSeconds,
     required double accuracy,
     required double metersFromEntrance,
-  }) =>
-      GpsFix(
-        at: base.add(Duration(seconds: atSeconds)),
-        point: east(metersFromEntrance),
-        accuracyMeters: accuracy,
-      );
+  }) => GpsFix(
+    at: base.add(Duration(seconds: atSeconds)),
+    point: east(metersFromEntrance),
+    accuracyMeters: accuracy,
+  );
 
   IndoorEntryGpsDecision feed(List<GpsFix> fixes, {bool armed = true}) {
     final tracker = IndoorEntryGpsTracker();
@@ -135,50 +134,48 @@ void main() {
 
   group('재활성화', () {
     test('신뢰 좌표가 입구에서 충분히 멀면 다시 켠다', () {
-      final decision = feed(
-        [fix(atSeconds: 0, accuracy: 8, metersFromEntrance: 60)],
-        armed: false,
-      );
+      final decision = feed([
+        fix(atSeconds: 0, accuracy: 8, metersFromEntrance: 60),
+      ], armed: false);
       expect(decision, IndoorEntryGpsDecision.rearm);
     });
 
     test('신뢰 좌표여도 입구에 가까우면 다시 켜지 않는다', () {
       // 입구 30 m는 진입 반경(20 m) 밖이지만 재활성화 거리(40 m) 안이다. 이
       // 완충 구간이 없으면 경계에서 진입과 재활성화가 번갈아 일어난다.
-      final decision = feed(
-        [fix(atSeconds: 0, accuracy: 8, metersFromEntrance: 30)],
-        armed: false,
-      );
+      final decision = feed([
+        fix(atSeconds: 0, accuracy: 8, metersFromEntrance: 30),
+      ], armed: false);
       expect(decision, IndoorEntryGpsDecision.none);
     });
 
     test('신호가 나쁘면 멀리 있어도 다시 켜지 않는다', () {
       // 실내에서 밖을 탭해 GPS가 되살아난 상황. 좌표를 믿을 수 없으니 "나왔다"고
       // 볼 근거가 없다.
-      final decision = feed(
-        [fix(atSeconds: 0, accuracy: 45, metersFromEntrance: 70)],
-        armed: false,
-      );
+      final decision = feed([
+        fix(atSeconds: 0, accuracy: 45, metersFromEntrance: 70),
+      ], armed: false);
       expect(decision, IndoorEntryGpsDecision.none);
     });
 
     test('무장 상태에서는 재활성화를 판정하지 않는다', () {
-      final decision = feed(
-        [fix(atSeconds: 0, accuracy: 8, metersFromEntrance: 60)],
-        armed: true,
-      );
+      final decision = feed([
+        fix(atSeconds: 0, accuracy: 8, metersFromEntrance: 60),
+      ], armed: true);
       expect(decision, IndoorEntryGpsDecision.none);
     });
   });
 
   group('이탈 감시 (실내에서 GPS를 켜 둘지)', () {
-    bool watch({required double pdrMetersFromEntrance, required bool watching}) =>
-        shouldWatchGpsNearEntrance(
-          pdrPoint: east(pdrMetersFromEntrance),
-          entrance: entrance,
-          watching: watching,
-          graceExpired: false,
-        );
+    bool watch({
+      required double pdrMetersFromEntrance,
+      required bool watching,
+    }) => shouldWatchGpsNearEntrance(
+      pdrPoint: east(pdrMetersFromEntrance),
+      entrance: entrance,
+      watching: watching,
+      graceExpired: false,
+    );
 
     test('PDR이 입구 앞으로 들어오면 켠다', () {
       expect(watch(pdrMetersFromEntrance: 10, watching: false), isTrue);
@@ -261,15 +258,17 @@ void main() {
   });
 
   group('야외 판정', () {
-    bool outdoors({required double accuracy, required double metersFromEntrance}) =>
-        isOutdoorsFix(
-          fix: fix(
-            atSeconds: 0,
-            accuracy: accuracy,
-            metersFromEntrance: metersFromEntrance,
-          ),
-          entrance: entrance,
-        );
+    bool outdoors({
+      required double accuracy,
+      required double metersFromEntrance,
+    }) => isOutdoorsFix(
+      fix: fix(
+        atSeconds: 0,
+        accuracy: accuracy,
+        metersFromEntrance: metersFromEntrance,
+      ),
+      entrance: entrance,
+    );
 
     test('입구 앞에서 신뢰 좌표가 잡히면 밖으로 나온 것이다', () {
       expect(outdoors(accuracy: 8, metersFromEntrance: 10), isTrue);

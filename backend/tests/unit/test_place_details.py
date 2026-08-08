@@ -14,6 +14,7 @@ from app.repositories.place_details import load_overlays, validate_overlay
 SCHEMA = {
     "fields": {
         "summary": {"max_length": 60},
+        "source": {"max_length": 300},
         "tags": {"max_items": 6},
         "hero": {"max_items": 6},
         "menu": {"max_items": 12},
@@ -133,6 +134,34 @@ def test_summary_길이_초과를_잡는다():
     errors = _validate({"PO-a": {"summary": "가" * 61}})
 
     assert any("60자" in error for error in errors)
+
+
+# 공식 사이트에서 옮겨 온 문구는 **그 문구가 있던 페이지**가 근거다. 다시 열어 볼 수
+# 없는 값이면 확인일(updated_at)이 뜻을 잃는다.
+def test_출처는_http_주소여야_한다():
+    errors = _validate({"PO-a": {"summary": "한 줄 소개", "source": "브랜드 공식 사이트"}})
+
+    assert any("http(s) 주소" in error for error in errors)
+
+
+def test_http_출처는_통과한다():
+    assert (
+        _validate(
+            {
+                "PO-a": {
+                    "summary": "한 줄 소개",
+                    "source": "https://example.com/about-us.html",
+                }
+            }
+        )
+        == []
+    )
+
+
+def test_빈_출처를_잡는다():
+    errors = _validate({"PO-a": {"summary": "한 줄 소개", "source": "   "}})
+
+    assert any("source가 비어" in error for error in errors)
 
 
 def test_리치_상세_오버레이는_검증을_통과한다():

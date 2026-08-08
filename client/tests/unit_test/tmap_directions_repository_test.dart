@@ -102,29 +102,38 @@ const _sampleResponseBody = '''
 ''';
 
 void main() {
-  test('parses distance/time from the first feature and flattens the path', () async {
-    final client = MockClient((request) async {
-      return http.Response(
-        _sampleResponseBody,
-        200,
-        headers: {'content-type': 'application/json; charset=utf-8'},
+  test(
+    'parses distance/time from the first feature and flattens the path',
+    () async {
+      final client = MockClient((request) async {
+        return http.Response(
+          _sampleResponseBody,
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+      final repository = TmapDirectionsRepository(client: client);
+
+      final route = await repository.getWalkingRoute(
+        origin: const LatLng(37.56814892738826, 126.97784881268932),
+        destination: const LatLng(37.5665435593568, 126.97789607606079),
       );
-    });
-    final repository = TmapDirectionsRepository(client: client);
 
-    final route = await repository.getWalkingRoute(
-      origin: const LatLng(37.56814892738826, 126.97784881268932),
-      destination: const LatLng(37.5665435593568, 126.97789607606079),
-    );
-
-    expect(route, isNotNull);
-    expect(route!.distanceMeters, 265);
-    expect(route.durationSeconds, 228);
-    // 시작점과 끝점이 실제 경로 좌표와 일치하는지 확인
-    expect(route.points.first, const LatLng(37.56814892738826, 126.97784881268932));
-    expect(route.points.last, const LatLng(37.5665435593568, 126.97789607606079));
-    expect(route.points, isNotEmpty);
-  });
+      expect(route, isNotNull);
+      expect(route!.distanceMeters, 265);
+      expect(route.durationSeconds, 228);
+      // 시작점과 끝점이 실제 경로 좌표와 일치하는지 확인
+      expect(
+        route.points.first,
+        const LatLng(37.56814892738826, 126.97784881268932),
+      );
+      expect(
+        route.points.last,
+        const LatLng(37.5665435593568, 126.97789607606079),
+      );
+      expect(route.points, isNotEmpty);
+    },
+  );
 
   test('returns null on a non-200 response', () async {
     final client = MockClient((request) async {

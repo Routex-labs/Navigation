@@ -76,14 +76,14 @@ class _CategorizedBuildingRepository extends MockBuildingRepository {
 
   @override
   Future<List<CategoryCount>?> getCategoryCounts(String buildingId) async => [
-        for (final entry in _storesByFloor.entries)
-          CategoryCount(
-            floor: entry.key,
-            category: '서비스',
-            subcategory: 'ATM',
-            count: entry.value.length,
-          ),
-      ];
+    for (final entry in _storesByFloor.entries)
+      CategoryCount(
+        floor: entry.key,
+        category: '서비스',
+        subcategory: 'ATM',
+        count: entry.value.length,
+      ),
+  ];
 
   @override
   Future<Map<String, dynamic>?> getFloorGeoJson(

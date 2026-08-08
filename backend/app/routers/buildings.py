@@ -9,6 +9,7 @@ sqlite3/SQLAlchemy 동기 IO이므로 모든 핸들러는 def(동기)로 선언�
   GET /buildings                                → 건물 목록
   GET /buildings/{id}                           → 건물 상세 (footprint 포함)
   GET /buildings/{id}/stores?q=검색어           → 매장 검색
+  GET /buildings/{id}/store-index               → 자동완성용 경량 매장 목록(좌표 없음)
   GET /buildings/{id}/places/{place_id}         → 매장/시설 상세
   GET /buildings/{id}/floors/{floor}            → 층 지도 데이터 (매장+POI+그래프)
   GET /buildings/{id}/floors/{floor}/graph      → 층 길찾기 그래프 (nodes+edges)
@@ -28,6 +29,7 @@ from app.dto.building import (
     BuildingDetailResponse,
     BuildingSummaryResponse,
     CategoryCountResponse,
+    StoreIndexResponse,
 )
 from app.dto.floor_map import FloorMapResponse, StoreResponse
 from app.dto.place_detail import PlaceDetailResponse
@@ -95,6 +97,22 @@ def search_stores(
     session: Session = Depends(get_db),
 ):
     result = building_queries.search_stores(session, building_id, q)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Building not found")
+    return result
+
+
+# 온디바이스 자동완성의 원본이 되는 경량 매장 목록. 좌표·폴리곤은 싣지 않는다.
+#
+# 경로 이름: `/stores`의 쿼리 파라미터(`?light=1` 등)로 얹지 않고 별도 경로로 둔다.
+# 같은 경로가 요청에 따라 다른 스키마를 돌려주면 response_model을 하나로 고정할 수
+# 없고, 층 지도를 그리는 기존 소비자와 검색 인덱스 소비자가 같은 계약을 공유하게 된다.
+# 건물 스코프의 파생 목록을 별도 경로로 두는 것은 `/categories`와 같은 방식이다.
+# `store-index`라는 이름은 필터된 매장 목록이 아니라 **검색 인덱스 원본**이라는
+# 용도를 드러낸다 — `?q=` 검색은 계속 `/stores`가 담당한다.
+@router.get("/{building_id}/store-index", response_model=list[StoreIndexResponse])
+def list_store_index(building_id: str, session: Session = Depends(get_db)):
+    result = building_queries.list_store_index(session, building_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Building not found")
     return result

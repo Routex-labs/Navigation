@@ -160,9 +160,7 @@ void main() {
     expect(find.widgetWithText(ListTile, '현재 위치'), findsOneWidget);
   });
 
-  testWidgets('도착지 X는 확정된 도착지까지 비워 출발지 선택만으로 닫히지 않게 한다', (
-    tester,
-  ) async {
+  testWidgets('도착지 X는 확정된 도착지까지 비워 출발지 선택만으로 닫히지 않게 한다', (tester) async {
     await openSheet(tester, initialDestination: store('다이슨'));
 
     await tester.tap(find.byKey(const Key('directions-clear-destination')));
@@ -214,9 +212,7 @@ void main() {
     expect(result!.destination!.title, '나이키');
   });
 
-  testWidgets('도착지가 비어 있어도 교체할 수 있다 — 현재 위치에서 출발하는 경로가 된다', (
-    tester,
-  ) async {
+  testWidgets('도착지가 비어 있어도 교체할 수 있다 — 현재 위치에서 출발하는 경로가 된다', (tester) async {
     await openSheet(tester, initialOrigin: store('나이키'));
 
     await tester.tap(find.byKey(const Key('directions-swap')));

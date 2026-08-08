@@ -11,7 +11,7 @@ Session으로 DB를 읽어 **기존 API 응답과 같은 모양의 순수 dict**
 
 | 파일 | 역할 | 핵심 함수 |
 |---|---|---|
-| `building_queries.py` | 건물/층/매장/지도/그래프 조회 + dict 조립 | `list_buildings`, `get_building`, `search_stores`, `get_floor_map`, `get_floor_graph`, `get_building_graph` |
+| `building_queries.py` | 건물/층/매장/지도/그래프 조회 + dict 조립 | `list_buildings`, `get_building`, `search_stores`, `list_store_index`, `get_floor_map`, `get_floor_graph`, `get_building_graph` |
 | `query_search.py` | 자연어 질의 경량 매칭(이름·카테고리·동의어) + 탐색 조립 | `match_destination`, `match_info`, `discover`, `match_ai_destination` |
 | `store_facets.py` | 매장 카테고리→facet 파생·오버레이 병합·intent 해석 | `derive_facets`, `load_overlay`, `resolve_facets`, `resolve_intent_store_ids` |
 | `query_morph.py` | 질의 형태소 정규화(Kiwi). 조사·어미 제거 | `normalize` |
@@ -91,6 +91,7 @@ flowchart LR
     DEFAULT["_default_floor()"]
 
     SEARCH["search_stores()"]
+    INDEX["list_store_index()"]
     TRANSFORM["fit_building_geo_transform()"]
     STORE["_to_store_dict()"]
 
@@ -100,6 +101,10 @@ flowchart LR
     SEARCH --> STORE
     TRANSFORM --> STORE
 ```
+
+`list_store_index()`만 좌표 변환과 `_to_store_dict()`를 거치지 않는다 — 자동완성
+인덱스는 좌표를 쓰지 않으므로 컬럼만 골라 바로 dict로 만든다. 이 화살표가 없는 것이
+그 함수가 가벼운 이유다(설계: [search-input-assist.md](../../../docs/client/search-input-assist.md) K절).
 
 ### 층 지도 응답 조립
 

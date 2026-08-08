@@ -58,8 +58,12 @@ def get_place_detail(
         "actions": _actions(store, kind),
         "sections": _sections(store, kind, overlay),
         "provenance": {
+            # source는 출처의 **종류**다(studio/manual/derived). 오버레이가 있으면
+            # 사람이 적은 것이므로 manual이고, 그 문구를 어디서 옮겨 왔는지는 url이
+            # 따로 들고 간다.
             "source": "manual" if overlay else "studio",
             "updated_at": overlay.get("updated_at"),
+            "url": overlay.get("source"),
         },
     }
 

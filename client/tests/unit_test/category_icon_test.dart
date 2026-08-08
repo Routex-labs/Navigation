@@ -19,7 +19,11 @@ void main() {
       };
 
       expect(icons.length, 3, reason: '셋이 같은 글리프면 나눈 의미가 없다');
-      expect(icons, isNot(contains(Icons.storefront)), reason: '폴백으로 떨어지면 안 된다');
+      expect(
+        icons,
+        isNot(contains(Icons.storefront)),
+        reason: '폴백으로 떨어지면 안 된다',
+      );
     });
 
     test('나뉜 세 대분류가 각각 다른 색을 갖는다', () {
@@ -44,8 +48,14 @@ void main() {
 
   group('시설 소분류', () {
     test('한글 소분류가 영어 원본값과 같은 아이콘을 준다', () {
-      expect(storeIconFor(subcategory: '화장실'), storeIconFor(subcategory: 'restroom'));
-      expect(storeIconFor(subcategory: '엘리베이터'), storeIconFor(subcategory: 'elevator'));
+      expect(
+        storeIconFor(subcategory: '화장실'),
+        storeIconFor(subcategory: 'restroom'),
+      );
+      expect(
+        storeIconFor(subcategory: '엘리베이터'),
+        storeIconFor(subcategory: 'elevator'),
+      );
       expect(
         storeIconFor(subcategory: '에스컬레이터'),
         storeIconFor(subcategory: 'escalator'),

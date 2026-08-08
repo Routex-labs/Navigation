@@ -28,6 +28,31 @@ class CategoryCountResponse(BaseModel):
     count: int  # 그 조합의 매장 수
 
 
+# 온디바이스 자동완성 인덱스 한 줄.
+#
+# 앱이 시작할 때 건물당 1회 받아 초성·부분 일치·오타 교정의 원본으로 쓴다
+# (설계: docs/client/search-input-assist.md K절). 매장 목록을 주는 응답이
+# `/stores`(StoreResponse)와 둘이 된 이유는 목적이 다르기 때문이다 — 그쪽은 층 지도를
+# 그리는 응답이라 폴리곤을 local_m·wgs84 두 벌로 싣고, 자동완성은 그 좌표를 한 번도
+# 쓰지 않는다. 기존 계약은 그대로 두고 검색 전용 목록을 따로 둔다.
+#
+# **좌표를 넣지 않는 것이 이 모델의 존재 이유다.** 후보 목록은 이름과 층 라벨만
+# 그리므로 중심점이 필요 없고, 후보를 탭한 뒤 필요해지는 좌표는 이미 두 경로로
+# 얻는다 — 지도를 열면 어차피 받는 층 지도 응답의 `centroid_local_m`,
+# 또는 상세 `/places/{id}`의 `position_local_m`(ETag로 캐시됨). 1건이 필요할 때
+# 1건만 가져오는 쪽이 1640건 전부에 좌표를 붙여 매번 내려보내는 것보다 싸다.
+# 실측(매장 1640건): 이 응답 341KB에 중심점을 얹으면 +82KB(local_m만)·
+# +194KB(wgs84까지)로 최대 1.6배가 된다. 같은 데이터의 `/stores`는 1,229KB다.
+class StoreIndexResponse(BaseModel):
+    id: str  # 매장 고유 id. 상세(`/places/{id}`) 조회 키
+    name: str  # 매장명. 원문 그대로 — 구두점(A.P.C.)을 서버에서 지우지 않는다
+    floor_id: str  # 소속 층 id. 층 지도 응답의 StoreResponse.floor_id와 대조하는 키
+    floor_name: str  # 사람이 보는 층 라벨(예: B2). 후보 한 줄에 바로 표시한다
+    category: str | None  # 대분류(예: 패션), 없는 매장이 있어 선택
+    subcategory: str | None  # 소분류(예: 여성패션), 선택
+    entrance_node_id: str | None  # 도착 노드. null이면 그 후보는 길찾기로 이어지지 않는다
+
+
 # 건물 상세. 목록 응답에 도면을 그리는 데 필요한 값을 더한다.
 class BuildingDetailResponse(BuildingSummaryResponse):
     area_m2: float | None  # 건물 바닥 면적 (제곱미터), 선택

@@ -41,6 +41,15 @@ classDiagram
         +float perimeter_m ?
         +list~PointResponse~ footprint_local_m
     }
+    class StoreIndexResponse {
+        +str id
+        +str name
+        +str floor_id
+        +str floor_name
+        +str category ?
+        +str subcategory ?
+        +str entrance_node_id ?
+    }
     class FloorMapResponse {
         +Literal navigation_coordinate_system
         +str map_calibration_version
@@ -73,6 +82,7 @@ classDiagram
     BuildingSummaryResponse <|-- BuildingDetailResponse : 상세 필드 추가
     FloorMapResponse *-- FloorResponse : floor
     FloorMapResponse *-- StoreResponse : stores
+    StoreResponse .. StoreIndexResponse : 같은 Store, 좌표 없는 경량판
     FloorMapResponse *-- PoiResponse : pois
     FloorMapResponse *-- FloorGraphResponse : navigation_graph
 ```

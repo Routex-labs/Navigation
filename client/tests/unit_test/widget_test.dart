@@ -162,9 +162,7 @@ void main() {
   testWidgets('outdoor map body renders map after position arrives', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      MaterialApp(home: const OutdoorMapBody()),
-    );
+    await tester.pumpWidget(MaterialApp(home: const OutdoorMapBody()));
 
     // OutdoorMapBody는 위치 신호를 기다리는 동안에도 지도를 그리며,
     // 로딩 스피너로 화면을 가리지 않는다. 첫 pump가 끝나면 fake 스트림이
@@ -185,9 +183,7 @@ void main() {
   ) async {
     watchPosition = () => Stream.value(_fakeLowAccuracyPosition);
 
-    await tester.pumpWidget(
-      MaterialApp(home: const OutdoorMapBody()),
-    );
+    await tester.pumpWidget(MaterialApp(home: const OutdoorMapBody()));
     await tester.pump();
 
     expect(find.text('GPS 신호 약함'), findsOneWidget);
@@ -196,9 +192,7 @@ void main() {
   testWidgets('outdoor map shows a route and ETA card to the entrance', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      MaterialApp(home: const OutdoorMapBody()),
-    );
+    await tester.pumpWidget(MaterialApp(home: const OutdoorMapBody()));
     await tester.pump();
     await tester.pump();
 
@@ -212,9 +206,9 @@ void main() {
     'map shell shows the indoor entry overlay when entrance is detected nearby',
     (WidgetTester tester) async {
       watchPosition = () => Stream.fromIterable([
-            _fakePositionApproachingEntrance,
-            _fakePositionAtEntrance,
-          ]);
+        _fakePositionApproachingEntrance,
+        _fakePositionAtEntrance,
+      ]);
 
       await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
 
@@ -273,9 +267,7 @@ void main() {
     final controller = StreamController<Position>();
     watchPosition = () => controller.stream;
 
-    await tester.pumpWidget(
-      MaterialApp(home: const OutdoorMapBody()),
-    );
+    await tester.pumpWidget(MaterialApp(home: const OutdoorMapBody()));
 
     controller.add(_fakePosition);
     // MapLibre 이관 후 _handlePosition이 비동기 _syncCurrentLayer / _updateRoute
@@ -298,9 +290,7 @@ void main() {
   ) async {
     watchPosition = () => Stream.error(Exception('위치를 가져올 수 없음'));
 
-    await tester.pumpWidget(
-      MaterialApp(home: const OutdoorMapBody()),
-    );
+    await tester.pumpWidget(MaterialApp(home: const OutdoorMapBody()));
     await tester.pump();
 
     // 위치 실패 시에도 지도 body는 폴백 좌표로 렌더되고 GPS 신호 약함 배지가
@@ -382,10 +372,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('app-menu-debug')), findsOneWidget);
     expect(find.byIcon(Icons.bug_report_outlined), findsOneWidget);
-    expect(
-      find.text('사용 중 · PDR 제어와 진단 레이어가 지도에 표시됩니다'),
-      findsOneWidget,
-    );
+    expect(find.text('사용 중 · PDR 제어와 진단 레이어가 지도에 표시됩니다'), findsOneWidget);
   });
 
   testWidgets('indoor map switches floor via the floor tabs', (
@@ -498,9 +485,7 @@ void main() {
     expect(find.text('뜻이 비슷한 매장을 찾았어요'), findsNothing);
   });
 
-  testWidgets('엔터를 누르지 않아도 타이핑이 멎으면 의미 검색까지 간다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('엔터를 누르지 않아도 타이핑이 멎으면 의미 검색까지 간다', (WidgetTester tester) async {
     // 회귀: 예전에는 의미 검색이 onSubmitted(엔터)에만 붙어 있었다. 한글 IME에서
     // 첫 엔터가 조합 확정에 쓰이면 onSubmitted가 오지 않아 의미 검색이 아예
     // 시작되지 않았고, 화면에는 경량이 빈손이라는 이유만으로 "찾지 못했어요"가
@@ -569,7 +554,6 @@ void main() {
     expect(find.text('AI 검색'), findsNothing);
   });
 
-
   testWidgets('건물 이름으로 검색하면 건물 줄이 뜬다', (WidgetTester tester) async {
     // 매장과 건물을 같은 결과 패널에 함께 얹는다.
     destinationRepository = _FallbackDestinationRepository();
@@ -607,7 +591,6 @@ void main() {
     expect(repository.lightFloorScopes, isNot(contains(null)));
     expect(find.text('B2'), findsOneWidget);
   });
-
 
   testWidgets('destination screen filters as the user types', (
     WidgetTester tester,

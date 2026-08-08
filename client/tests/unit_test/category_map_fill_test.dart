@@ -25,10 +25,7 @@ void main() {
   test('아이콘 표와 색 표의 대분류가 일치한다', () {
     // 한쪽에만 있으면 지도에서 아이콘은 붙는데 면은 회색인(또는 그 반대)
     // 대분류가 생긴다.
-    expect(
-      categoryPaletteCategories.toSet(),
-      categoryIconCategories.toSet(),
-    );
+    expect(categoryPaletteCategories.toSet(), categoryIconCategories.toSet());
   });
 
   test('면 색은 매장명이 읽힐 만큼 밝다', () {

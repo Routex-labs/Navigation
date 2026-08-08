@@ -33,17 +33,17 @@ void main() {
   const farFromEntrance = ll.LatLng(37.5665, 126.9800);
 
   Position fix(ll.LatLng point, double accuracy) => Position(
-        latitude: point.latitude,
-        longitude: point.longitude,
-        timestamp: DateTime(2024, 1, 1),
-        accuracy: accuracy,
-        altitude: 0,
-        altitudeAccuracy: 0,
-        heading: 0,
-        headingAccuracy: 0,
-        speed: 0,
-        speedAccuracy: 0,
-      );
+    latitude: point.latitude,
+    longitude: point.longitude,
+    timestamp: DateTime(2024, 1, 1),
+    accuracy: accuracy,
+    altitude: 0,
+    altitudeAccuracy: 0,
+    heading: 0,
+    headingAccuracy: 0,
+    speed: 0,
+    speedAccuracy: 0,
+  );
 
   Future<void> drain(WidgetTester tester) async {
     for (var i = 0; i < 8; i++) {
@@ -72,9 +72,7 @@ void main() {
     watchPosition = defaultWatchPosition;
   });
 
-  testWidgets('밖으로 나온 것이 확인되면 자동 진입이 다시 동작한다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('밖으로 나온 것이 확인되면 자동 진입이 다시 동작한다', (WidgetTester tester) async {
     // 실내로 들어가면 구독이 끊기고 나오면 다시 붙으므로 broadcast여야 한다.
     final positions = StreamController<Position>.broadcast();
     watchPosition = () => positions.stream;
@@ -82,7 +80,9 @@ void main() {
 
     // 자동 진입 안내가 스낵바라 ScaffoldMessenger의 Scaffold 조상이 필요하다.
     await tester.pumpWidget(
-      MaterialApp(home: Scaffold(body: OutdoorMapBody(key: key))),
+      MaterialApp(
+        home: Scaffold(body: OutdoorMapBody(key: key)),
+      ),
     );
     await drain(tester);
 
@@ -127,16 +127,16 @@ void main() {
     expect(find.byType(FloorSelector), findsOneWidget);
   });
 
-  testWidgets('입구 근처에서 잡힌 신뢰 좌표로는 재활성화하지 않는다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('입구 근처에서 잡힌 신뢰 좌표로는 재활성화하지 않는다', (WidgetTester tester) async {
     final positions = StreamController<Position>.broadcast();
     watchPosition = () => positions.stream;
     final key = GlobalKey<OutdoorMapBodyState>();
 
     // 자동 진입 안내가 스낵바라 ScaffoldMessenger의 Scaffold 조상이 필요하다.
     await tester.pumpWidget(
-      MaterialApp(home: Scaffold(body: OutdoorMapBody(key: key))),
+      MaterialApp(
+        home: Scaffold(body: OutdoorMapBody(key: key)),
+      ),
     );
     await drain(tester);
 

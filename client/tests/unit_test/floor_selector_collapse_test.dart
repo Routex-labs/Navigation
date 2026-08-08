@@ -9,7 +9,11 @@ import 'package:navigation_client/widgets/floor_selector.dart';
 /// 이 위젯의 존재 이유다 — 기본값이 펼침으로 돌아가면 그 이득이 사라진다.
 void main() {
   testWidgets('처음에는 접혀서 현재 층만 보인다', (tester) async {
-    await _pumpSelector(tester, floors: const ['B1', '1F', '2F'], selected: '1F');
+    await _pumpSelector(
+      tester,
+      floors: const ['B1', '1F', '2F'],
+      selected: '1F',
+    );
 
     expect(find.text('1F'), findsOneWidget);
     expect(find.text('B1'), findsNothing);
@@ -17,7 +21,11 @@ void main() {
   });
 
   testWidgets('토글을 누르면 전 층이 펼쳐진다', (tester) async {
-    await _pumpSelector(tester, floors: const ['B1', '1F', '2F'], selected: '1F');
+    await _pumpSelector(
+      tester,
+      floors: const ['B1', '1F', '2F'],
+      selected: '1F',
+    );
 
     await tester.tap(find.byKey(const Key('floor-selector-toggle')));
     await tester.pumpAndSettle();
@@ -29,7 +37,11 @@ void main() {
 
   testWidgets('접힌 캡슐을 눌러도 펼쳐진다', (tester) async {
     // 화살표(20px)만 노리게 하면 지도 위에서 누르기 너무 작다.
-    await _pumpSelector(tester, floors: const ['B1', '1F', '2F'], selected: '1F');
+    await _pumpSelector(
+      tester,
+      floors: const ['B1', '1F', '2F'],
+      selected: '1F',
+    );
 
     await tester.tap(find.text('1F'));
     await tester.pumpAndSettle();

@@ -19,7 +19,10 @@ void main() {
   });
 
   test('filters POIs by name, case-insensitively', () async {
-    final results = await repository.searchDestinations('thehyundai-seoul', '201');
+    final results = await repository.searchDestinations(
+      'thehyundai-seoul',
+      '201',
+    );
 
     expect(results, hasLength(1));
     expect(results.single.name, '강의실 201');
@@ -33,7 +36,10 @@ void main() {
   });
 
   test('returns an empty list when nothing matches the query', () async {
-    final results = await repository.searchDestinations('thehyundai-seoul', '화장실');
+    final results = await repository.searchDestinations(
+      'thehyundai-seoul',
+      '화장실',
+    );
 
     expect(results, isEmpty);
   });

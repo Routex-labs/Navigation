@@ -127,8 +127,16 @@ void main() {
     test('같은 이름이면 작은 매장이 더 작은 글자를 받는다', () {
       // 매장 크기가 1.9m~14m로 벌어져 있어서, 모든 매장에 같은 px을 주는 한
       // 어떤 값을 골라도 한쪽은 넘치고 한쪽은 작다 — 이 차이가 그 해결책이다.
-      final small = fitStoreLabel(name: '올리브영', boxWidthM: 2.0, boxHeightM: 2.0);
-      final large = fitStoreLabel(name: '올리브영', boxWidthM: 12.0, boxHeightM: 9.0);
+      final small = fitStoreLabel(
+        name: '올리브영',
+        boxWidthM: 2.0,
+        boxHeightM: 2.0,
+      );
+      final large = fitStoreLabel(
+        name: '올리브영',
+        boxWidthM: 12.0,
+        boxHeightM: 9.0,
+      );
       expect(large.emMeters, greaterThan(small.emMeters * 3));
     });
 
@@ -216,7 +224,10 @@ void main() {
       // 작은 매장이 읽을 수 없게 줄어드는 쪽과, 큰 매장이 도면을 삼키는 쪽을
       // 각각 참값으로 확인한다.
       final tooSmall = (kStoreLabelMinPx - 1) / _pixelsPerMeter(18);
-      expect(_evalStop(stops[18.0]!, tooSmall), closeTo(kStoreLabelMinPx, 1e-6));
+      expect(
+        _evalStop(stops[18.0]!, tooSmall),
+        closeTo(kStoreLabelMinPx, 1e-6),
+      );
 
       final tooBig = (kStoreLabelMaxPx + 1) / _pixelsPerMeter(18);
       expect(_evalStop(stops[18.0]!, tooBig), closeTo(kStoreLabelMaxPx, 1e-6));
@@ -243,7 +254,11 @@ void main() {
       // 5m 매장 + 4글자 이름. 예전 표현식은 z19에서 12.75px 한 줄 = 약 51px인데
       // 박스는 42px이라 넘쳤다. 지금은 접힌 두 줄이 박스 안에 들어가야 한다.
       const boxM = 5.0;
-      final fit = fitStoreLabel(name: '루이비통', boxWidthM: boxM, boxHeightM: boxM);
+      final fit = fitStoreLabel(
+        name: '루이비통',
+        boxWidthM: boxM,
+        boxHeightM: boxM,
+      );
       final stops = _stops(storeLabelTextSizeExpression(latitude: _lat));
 
       final pixelsPerMeter = _pixelsPerMeter(19);
