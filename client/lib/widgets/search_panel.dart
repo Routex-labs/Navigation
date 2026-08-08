@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../core/service_locator.dart';
 import '../domain/dijkstra.dart';
+import '../domain/nearest_store.dart';
 import '../domain/reason_text.dart';
 import '../domain/search_result_order.dart';
 import '../domain/store_suggestions.dart';
@@ -772,13 +773,25 @@ class _SearchPanelState extends State<SearchPanel> {
   }
 
   Widget _suggestionTile(StoreSuggestion suggestion) {
-    final store = suggestion.store;
+    // 묶인 시설(화장실 19곳)에서 **어느 매장의 층을 적을지**를 여기서 정한다.
+    // 예전에는 인덱스 첫 번째였고, 인덱스가 `Floor.level DESC`라 늘 꼭대기 층이
+    // 대표였다 — B2에 서 있어도 `화장실 · 6F 등 19곳`. 규칙과 실패 조건은
+    // [nearestByWalkingDistance](../domain/nearest_store.dart)가 단일 출처다.
+    final nearest = nearestByWalkingDistance(
+      stores: suggestion.stores,
+      reachByNodeId: widget.reachByNodeId,
+    );
+    final store = nearest.store;
+    final reach = nearest.reach;
     final categoryLabel =
         subcategoryLabelFor(store.subcategory) ?? store.category;
     // 층마다 있는 시설(화장실 19건)은 한 줄로 묶여 온다. 몇 곳인지 적어 주지
-    // 않으면 사용자는 "왜 한 층만 나오지"로 읽는다.
-    final floorLine = suggestion.duplicateCount > 1
-        ? '${store.floorName} 등 ${suggestion.duplicateCount}곳'
+    // 않으면 사용자는 "왜 한 층만 나오지"로 읽는다. **개수는 거리를 아는 곳이
+    // 몇인지와 무관하게 묶인 전체다** — 19곳 중 3곳만 도달 가능하다고 `등 3곳`
+    // 으로 적으면 없는 사실을 만들어 낸다.
+    final count = suggestion.stores.length;
+    final floorLine = count > 1
+        ? '${store.floorName} 등 $count곳'
         : store.floorName;
     return ListTile(
       key: Key('suggestion-${store.id}'),
@@ -820,10 +833,36 @@ class _SearchPanelState extends State<SearchPanel> {
           ],
         ],
       ),
-      subtitle: Text(
-        floorLine,
-        style: const TextStyle(fontSize: 12, color: AppColors.muted),
+      // 결과 목록(_storeTile)과 같은 두 줄 구조다. 후보 목록이 사실상 결과
+      // 화면으로도 쓰이는데(서버가 한 곳을 지목 못 한 브랜드 질의) 거리만 없어서,
+      // 가장 흔한 검색이 가장 빈약한 화면으로 가고 있었다.
+      // 설계: docs/client/search-result-list-ux.md O절.
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            floorLine,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12, color: AppColors.muted),
+          ),
+          if (reach != null)
+            Text(
+              reachLabel(reach),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              // 결과 행과 같은 무게. 두 목록이 같은 값을 다르게 그리면 사용자는
+              // 둘이 다른 것을 뜻한다고 읽는다.
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.text,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+        ],
       ),
+      isThreeLine: reach != null,
       onTap: () {
         _ignoreFloorScopeOnce = true;
         widget.onQueryPicked(store.name);

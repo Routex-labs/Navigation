@@ -75,19 +75,22 @@ enum SuggestionKind {
 
 /// 후보 한 건.
 ///
-/// [store]는 입력으로 받은 원본 객체 그대로다 — 이름을 정규화한 사본이 아니다.
-/// 화면은 여기서 `name`·`floorName`·업종만 읽는다. 후보를 골랐을 때 좌표를 들고
-/// 바로 이동하지 않고 그 이름으로 검색을 다시 돌리는 이유는
-/// [StoreIndexEntry] 주석에 있다.
+/// [stores]는 **같은 이름으로 묶인 매장 전부**다(화장실 19건 → 19개). 입력으로 받은
+/// 원본 객체 그대로이고 인덱스 순서를 유지하며, 비어 있지 않다. 화면은 여기서
+/// `name`·`floorName`·업종만 읽는다. 후보를 골랐을 때 좌표를 들고 바로 이동하지 않고
+/// 그 이름으로 검색을 다시 돌리는 이유는 [StoreIndexEntry] 주석에 있다.
 ///
-/// [duplicateCount]는 **같은 이름으로 묶인 매장 수**다(화장실 19건 → 19).
-/// 1보다 크면 층마다 있는 시설이라는 뜻이라, 화면이 `화장실 · 19곳`처럼 적어
-/// 줄 수 있다. 이 값이 없으면 호출부는 "왜 한 줄만 나오지"를 알 방법이 없다.
-typedef StoreSuggestion = ({
-  StoreIndexEntry store,
-  SuggestionKind kind,
-  int duplicateCount,
-});
+/// **대표 하나가 아니라 목록 전체를 넘긴다.** 예전에는 처음 나온 매장 하나와 개수
+/// (`duplicateCount`)만 줬는데, 그러면 화면이 `화장실 · 6F 등 19곳`처럼 **인덱스
+/// 순서상 첫 번째**의 층을 적게 된다. 인덱스는 `Floor.level DESC`라 그게 늘 꼭대기
+/// 층이었다 — 사용자가 B2에 있어도 6F라고 적혔다. 어느 매장을 대표로 세울지는 거리를
+/// 아는 쪽(화면)만 정할 수 있으므로, 여기서는 고르지 않고 그대로 넘긴다
+/// ([nearestByWalkingDistance](nearest_store.dart), 설계:
+/// `docs/client/search-result-list-ux.md` O절).
+///
+/// 묶인 개수는 `stores.length`다. 별도 필드로 두지 않는 이유는 두 값이 같은 사실을
+/// 가리키기 때문이다 — 한쪽만 걸러지면 조용히 어긋난다.
+typedef StoreSuggestion = ({List<StoreIndexEntry> stores, SuggestionKind kind});
 
 /// [stores]에서 [query]에 맞는 후보를 우선순위 순으로 최대 [limit]건 고른다.
 ///
@@ -114,8 +117,11 @@ typedef StoreSuggestion = ({
 /// ## 중복 이름
 ///
 /// 화장실·엘리베이터는 층마다 있어 같은 이름이 12건씩 나온다. 정규화한 이름을
-/// 키로 묶어 **처음 나온 매장 하나만** 남기고, 묶인 개수를 `duplicateCount`에
+/// 키로 묶어 **한 줄로** 내보내되, 묶인 매장은 하나도 버리지 않고 `stores`에 전부
 /// 담는다. 표기만 다른 같은 이름(`물품 보관함`·`물품보관함`)도 같이 묶인다.
+///
+/// **여기서 대표를 고르지 않는다.** 어느 매장의 층을 화면에 적을지는 거리를 아는
+/// 쪽만 정할 수 있다([StoreSuggestion] 주석).
 ///
 /// ## IME 조합 중
 ///
@@ -189,11 +195,7 @@ List<StoreSuggestion> suggestStores({
   ranked.sort(_compare);
   return [
     for (final item in ranked.take(limit))
-      (
-        store: item.entry.store,
-        kind: item.kind,
-        duplicateCount: item.entry.duplicateCount,
-      ),
+      (stores: item.entry.stores, kind: item.kind),
   ];
 }
 
@@ -241,7 +243,9 @@ List<_NameEntry> _indexByName(Iterable<StoreIndexEntry> stores) {
     if (key.isEmpty) continue;
     final existing = byKey[key];
     if (existing != null) {
-      existing.duplicateCount++;
+      // 개수만 세지 않고 매장 자체를 모아 둔다. 화면이 그중 가장 가까운 곳을
+      // 대표로 세워야 하기 때문이다([StoreSuggestion] 주석).
+      existing.stores.add(store);
       continue;
     }
     byKey[key] = _NameEntry(store, key, byKey.length);
@@ -252,13 +256,14 @@ List<_NameEntry> _indexByName(Iterable<StoreIndexEntry> stores) {
 
 /// 이름 하나에 대한 매칭용 파생값 묶음.
 class _NameEntry {
-  _NameEntry(this.store, this.key, this.order)
-    : jamo = decomposeJamo(key),
+  _NameEntry(StoreIndexEntry first, this.key, this.order)
+    : stores = [first],
+      jamo = decomposeJamo(key),
       initials = initialConsonants(key),
       _jamoStarts = _jamoStartsOf(key);
 
-  /// 이 이름을 대표하는 매장(처음 나온 것).
-  final StoreIndexEntry store;
+  /// 이 이름으로 묶인 매장 전부. 인덱스 순서이고 비어 있지 않다.
+  final List<StoreIndexEntry> stores;
 
   /// 정규화한 이름. 표시에는 쓰지 않는다.
   final String key;
@@ -271,9 +276,6 @@ class _NameEntry {
 
   /// `key`의 각 글자가 `jamo`의 몇 번째에서 시작하는지.
   final List<int> _jamoStarts;
-
-  /// 같은 이름으로 묶인 매장 수.
-  int duplicateCount = 1;
 
   /// [queryJamo]가 이름의 몇 번째 **글자**에서부터 일치하는지. 없으면 -1.
   ///

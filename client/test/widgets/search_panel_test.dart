@@ -464,7 +464,11 @@ void main() {
       buildingRepository = originalBuilding;
     });
 
-    Widget buildSubject(String query, {bool indoor = true}) => MaterialApp(
+    Widget buildSubject(
+      String query, {
+      bool indoor = true,
+      Map<String, NodeReach>? reachByNodeId,
+    }) => MaterialApp(
       home: Scaffold(
         body: SizedBox(
           height: 500,
@@ -476,6 +480,7 @@ void main() {
             onBuildingPicked: (_) {},
             onQueryPicked: (value) => picked = value,
             indoorContextActive: indoor,
+            reachByNodeId: reachByNodeId,
           ),
         ),
       ),
@@ -702,6 +707,178 @@ void main() {
     });
   });
 
+  // 후보 목록은 브랜드 질의(구찌·프라다 — 서버가 한 곳을 지목 못 한다)에서
+  // 사실상 결과 화면이 된다. 그런데 거리가 없었고, 묶인 시설의 대표 층은
+  // 인덱스 첫 번째(= 늘 꼭대기 층)로 고정돼 **틀린 층**을 적고 있었다.
+  // 설계: docs/client/search-result-list-ux.md O절.
+  group('후보 목록의 거리와 대표 층', () {
+    late DestinationRepository originalDestination;
+    late BuildingRepository originalBuilding;
+
+    setUp(() {
+      originalDestination = destinationRepository;
+      originalBuilding = buildingRepository;
+    });
+
+    tearDown(() {
+      destinationRepository = originalDestination;
+      buildingRepository = originalBuilding;
+    });
+
+    Widget buildSubject(
+      String query, {
+      Map<String, NodeReach>? reachByNodeId,
+    }) => MaterialApp(
+      home: Scaffold(
+        body: SizedBox(
+          height: 500,
+          child: SearchPanel(
+            buildingId: 'building-1',
+            query: query,
+            submitTick: 0,
+            onStorePicked: (_) {},
+            onBuildingPicked: (_) {},
+            onQueryPicked: (_) {},
+            indoorContextActive: true,
+            reachByNodeId: reachByNodeId,
+          ),
+        ),
+      ),
+    );
+
+    Future<void> pumpWhileTyping(WidgetTester tester) async {
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    // 인덱스 순서는 서버가 `Floor.level DESC`로 못박아 둔다(building_queries.py).
+    // 그래서 예전에는 사용자가 B2에 서 있어도 `화장실 · 6F 등 3곳`이었다.
+    testWidgets('묶인 시설의 대표 층이 인덱스 첫 번째가 아니라 최근접이다', (tester) async {
+      buildingRepository = _FakeBuildingRepository(
+        storeIndex: [
+          _entry('화장실', '6F', nodeId: 'N6'),
+          _entry('화장실', 'B2', nodeId: 'NB2'),
+          _entry('화장실', '1F', nodeId: 'N1'),
+        ],
+      );
+      destinationRepository = _FakeDestinationRepository(const []);
+
+      await tester.pumpWidget(
+        buildSubject(
+          '화장실',
+          reachByNodeId: const {
+            'N6': NodeReach(distanceM: 310, costM: 310),
+            'NB2': NodeReach(distanceM: 48, costM: 48),
+            'N1': NodeReach(distanceM: 120, costM: 120),
+          },
+        ),
+      );
+      await pumpWhileTyping(tester);
+
+      expect(find.text('B2 등 3곳'), findsOneWidget);
+      expect(find.text('48m · 도보 1분'), findsOneWidget);
+      // 개수는 도달 가능한 수가 아니라 묶인 전체다.
+      expect(find.textContaining('6F'), findsNothing);
+    });
+
+    // 19곳 중 3곳만 거리를 안다고 `등 3곳`으로 적으면 없는 사실을 만들어 낸다.
+    testWidgets('일부만 도달 가능해도 묶인 개수는 그대로다', (tester) async {
+      buildingRepository = _FakeBuildingRepository(
+        storeIndex: [
+          _entry('화장실', '6F', nodeId: 'N6'),
+          _entry('화장실', 'B2', nodeId: 'NB2'),
+          _entry('화장실', '1F', nodeId: 'N1'),
+        ],
+      );
+      destinationRepository = _FakeDestinationRepository(const []);
+
+      await tester.pumpWidget(
+        buildSubject(
+          '화장실',
+          // 그래프가 끊겨 1F만 도달 가능한 상태.
+          reachByNodeId: const {'N1': NodeReach(distanceM: 120, costM: 120)},
+        ),
+      );
+      await pumpWhileTyping(tester);
+
+      expect(find.text('1F 등 3곳'), findsOneWidget);
+    });
+
+    // 서버가 한 곳을 지목하지 못하는 브랜드 질의(query_search.py의 ambiguous).
+    // 이 화면이 최종 결과인데 거리가 없으면 어느 층으로 갈지 고를 수 없다.
+    testWidgets('묶이지 않은 후보에도 거리가 붙는다', (tester) async {
+      buildingRepository = _FakeBuildingRepository(
+        storeIndex: [
+          _entry('구찌', '1F', nodeId: 'N1'),
+          _entry('구찌 선글라스', '2F', nodeId: 'N2'),
+        ],
+      );
+      destinationRepository = _FakeDestinationRepository(const []);
+
+      await tester.pumpWidget(
+        buildSubject(
+          '구찌',
+          reachByNodeId: const {
+            'N1': NodeReach(distanceM: 40, costM: 40),
+            'N2': NodeReach(distanceM: 180, costM: 180),
+          },
+        ),
+      );
+      await pumpWhileTyping(tester);
+
+      expect(find.text('40m · 도보 1분'), findsOneWidget);
+      expect(find.text('180m · 도보 3분'), findsOneWidget);
+    });
+
+    // 위치가 없을 때는 결과 목록과 같은 규칙이다 — 거리 줄을 아예 그리지 않는다
+    // (A절 실패 조건). 줄마다 "거리 알 수 없음"이 반복되면 목록이 안 읽힌다.
+    testWidgets('위치가 없으면 거리 줄이 없고 대표도 예전 그대로다', (tester) async {
+      buildingRepository = _FakeBuildingRepository(
+        storeIndex: [
+          _entry('화장실', '6F', nodeId: 'N6'),
+          _entry('화장실', 'B2', nodeId: 'NB2'),
+        ],
+      );
+      destinationRepository = _FakeDestinationRepository(const []);
+
+      await tester.pumpWidget(buildSubject('화장실'));
+      await pumpWhileTyping(tester);
+
+      expect(find.text('6F 등 2곳'), findsOneWidget);
+      expect(find.textContaining('도보'), findsNothing);
+    });
+
+    // O는 거리 라벨만 더한다. 후보 **순서**는 매칭 품질순 그대로다 — 타이핑 중에
+    // 거리로 다시 세우면 글자를 칠 때마다 목록이 튄다(O절 「순서는 건드리지 않는다」).
+    testWidgets('거리가 붙어도 후보 순서는 매칭 품질순 그대로다', (tester) async {
+      buildingRepository = _FakeBuildingRepository(
+        storeIndex: [
+          // `타임`은 짧은 이름이 위다(K절). 거리로 세우면 타임옴므가 1위가 된다.
+          _entry('타임옴므', '3F', nodeId: 'N옴므'),
+          _entry('타임', '3F', nodeId: 'N타임'),
+        ],
+      );
+      destinationRepository = _FakeDestinationRepository(const []);
+
+      await tester.pumpWidget(
+        buildSubject(
+          '타임',
+          reachByNodeId: const {
+            'N옴므': NodeReach(distanceM: 10, costM: 10),
+            'N타임': NodeReach(distanceM: 300, costM: 300),
+          },
+        ),
+      );
+      await pumpWhileTyping(tester);
+
+      final tiles = tester.widgetList<ListTile>(find.byType(ListTile)).toList();
+      expect(
+        (tiles.first.key as ValueKey<String>?)?.value,
+        'suggestion-PO-타임-3F',
+      );
+    });
+  });
+
   group('reachLabel', () {
     // 거리는 실제 이동 거리, 시간은 비용 기준이다. 엘리베이터 대기·탑승이
     // 비용에만 들어 있어서, 시간까지 거리로 계산하면 다른 층 매장이 실제보다
@@ -807,12 +984,18 @@ class _FakeDestinationRepository implements DestinationRepository {
   }
 }
 
-StoreIndexEntry _entry(String name, String floor) => StoreIndexEntry(
-  id: 'PO-$name',
-  name: name,
-  floorId: 'FL-$floor',
-  floorName: floor,
-);
+/// [nodeId]를 주면 그 매장까지의 거리를 잴 수 있다(O절). 안 주면 예전과 같이
+/// 거리를 모르는 매장이라, 후보 줄에 거리가 붙지 않는다.
+StoreIndexEntry _entry(String name, String floor, {String? nodeId}) =>
+    StoreIndexEntry(
+      // 같은 이름이 층마다 있는 시설은 id도 층으로 갈라야 한다. 이름만으로 id를
+      // 만들면 대표가 바뀌어도 Key가 그대로라 테스트가 통과해 버린다.
+      id: nodeId == null ? 'PO-$name' : 'PO-$name-$floor',
+      name: name,
+      floorId: 'FL-$floor',
+      floorName: floor,
+      entranceNodeId: nodeId,
+    );
 
 /// 이 화면이 실제로 부르는 것은 `getAllBuildings`·`getStoreIndex` 둘뿐이다.
 /// 나머지는 [noSuchMethod]로 열어 둬 인터페이스가 늘어도 이 테스트가 깨지지

@@ -1,0 +1,164 @@
+import 'package:navigation_client/domain/dijkstra.dart';
+import 'package:navigation_client/domain/nearest_store.dart';
+import 'package:navigation_client/models/store_index_entry.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+/// 설계와 검증 기준은 `docs/client/search-result-list-ux.md` O절이 단일 출처다.
+
+StoreIndexEntry _store(String floor, {String? nodeId, String name = '화장실'}) =>
+    StoreIndexEntry(
+      id: 'PO-$name-$floor',
+      name: name,
+      floorId: 'FL-$floor',
+      floorName: floor,
+      entranceNodeId: nodeId,
+    );
+
+NodeReach _reach(double distanceM) =>
+    NodeReach(distanceM: distanceM, costM: distanceM);
+
+void main() {
+  group('O. 묶인 시설의 대표는 가장 가까운 곳이다', () {
+    // 인덱스 순서는 서버가 `Floor.level DESC`로 못박아 둔다. 그래서 예전 구현
+    // ("처음 나온 것")은 사용자가 어디 있든 늘 꼭대기 층을 대표로 세웠다.
+    test('인덱스 첫 번째가 아니라 최근접을 고른다', () {
+      final stores = [
+        _store('6F', nodeId: 'N6'),
+        _store('B2', nodeId: 'NB2'),
+        _store('1F', nodeId: 'N1'),
+      ];
+
+      final result = nearestByWalkingDistance(
+        stores: stores,
+        reachByNodeId: {
+          'N6': _reach(310),
+          'NB2': _reach(48),
+          'N1': _reach(120),
+        },
+      );
+
+      expect(result.store.floorName, 'B2');
+      expect(result.reach?.distanceM, 48);
+    });
+
+    test('묶이지 않은 단일 매장도 거리를 얻는다', () {
+      final result = nearestByWalkingDistance(
+        stores: [_store('1F', nodeId: 'N1', name: '구찌 뷰티')],
+        reachByNodeId: {'N1': _reach(120)},
+      );
+
+      expect(result.store.floorName, '1F');
+      expect(result.reach?.distanceM, 120);
+    });
+  });
+
+  group('O. 거리를 모를 때는 지금 동작 그대로', () {
+    test('reach가 null이면 첫 번째를 그대로 쓰고 거리는 없다', () {
+      final stores = [_store('6F', nodeId: 'N6'), _store('B2', nodeId: 'NB2')];
+
+      final result = nearestByWalkingDistance(
+        stores: stores,
+        reachByNodeId: null,
+      );
+
+      expect(result.store.floorName, '6F');
+      expect(result.reach, isNull);
+    });
+
+    test('reach가 비어 있어도 마찬가지다', () {
+      final result = nearestByWalkingDistance(
+        stores: [_store('6F', nodeId: 'N6')],
+        reachByNodeId: const {},
+      );
+
+      expect(result.store.floorName, '6F');
+      expect(result.reach, isNull);
+    });
+
+    // 그래프가 끊겨 아무도 reach에 없는 경우. 도달 못 하는 곳을 "가장 가깝다"고
+    // 적지 않는다.
+    test('전원 도달 불가면 첫 번째 + 거리 없음', () {
+      final result = nearestByWalkingDistance(
+        stores: [
+          _store('6F', nodeId: 'N6'),
+          _store('B2', nodeId: 'NB2'),
+        ],
+        reachByNodeId: {'N-다른층': _reach(10)},
+      );
+
+      expect(result.store.floorName, '6F');
+      expect(result.reach, isNull);
+    });
+  });
+
+  group('O. 일부만 도달 가능할 때', () {
+    test('entranceNodeId가 없는 매장은 후보에서 빠진다', () {
+      // 가장 가까울 수도 있지만 경로를 못 그리므로 대표가 될 수 없다.
+      final result = nearestByWalkingDistance(
+        stores: [
+          _store('6F', nodeId: null),
+          _store('3F', nodeId: 'N3'),
+          _store('B2', nodeId: 'NB2'),
+        ],
+        reachByNodeId: {'N3': _reach(90), 'NB2': _reach(200)},
+      );
+
+      expect(result.store.floorName, '3F');
+      expect(result.reach?.distanceM, 90);
+    });
+
+    test('도달 가능한 것이 하나뿐이면 그것이 대표다', () {
+      final result = nearestByWalkingDistance(
+        stores: [
+          _store('6F', nodeId: 'N6'),
+          _store('B2', nodeId: 'NB2'),
+          _store('1F', nodeId: 'N1'),
+        ],
+        reachByNodeId: {'NB2': _reach(500)},
+      );
+
+      expect(result.store.floorName, 'B2');
+      expect(result.reach?.distanceM, 500);
+    });
+  });
+
+  group('O. 결정성', () {
+    // 같은 입구 노드를 공유하는 인접 매장은 거리가 정확히 같다. 동점에서 대표가
+    // 흔들리면 위치를 갱신할 때마다 후보 줄의 층 라벨이 바뀐다.
+    //
+    // 40건인 이유는 `search_result_order_test.dart`와 같다 — 2~3건은 어떤
+    // 구현으로도 우연히 통과한다.
+    test('동점 40건에서 매 호출 같은 대표가 나온다', () {
+      final stores = [
+        for (var i = 0; i < 40; i++) _store('F$i', nodeId: 'N$i'),
+      ];
+      final reach = {for (var i = 0; i < 40; i++) 'N$i': _reach(100)};
+
+      final first = nearestByWalkingDistance(
+        stores: stores,
+        reachByNodeId: reach,
+      );
+      for (var attempt = 0; attempt < 20; attempt++) {
+        final again = nearestByWalkingDistance(
+          stores: stores,
+          reachByNodeId: reach,
+        );
+        expect(again.store.id, first.store.id);
+      }
+      // 동점은 입력 순서로 깬다.
+      expect(first.store.floorName, 'F0');
+    });
+
+    test('입력 목록을 건드리지 않는다', () {
+      final stores = [_store('6F', nodeId: 'N6'), _store('B2', nodeId: 'NB2')];
+      final before = [for (final s in stores) s.id];
+
+      nearestByWalkingDistance(
+        stores: stores,
+        reachByNodeId: {'NB2': _reach(10)},
+      );
+
+      expect([for (final s in stores) s.id], before);
+    });
+  });
+}
