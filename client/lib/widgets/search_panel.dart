@@ -69,6 +69,7 @@ class SearchPanel extends StatefulWidget {
     required this.submitTick,
     required this.onStorePicked,
     required this.onBuildingPicked,
+    required this.onQueryPicked,
     this.currentFloorId,
     this.reachByNodeId,
   });
@@ -100,6 +101,11 @@ class SearchPanel extends StatefulWidget {
 
   final ValueChanged<PoiSearchResult> onStorePicked;
   final ValueChanged<Building> onBuildingPicked;
+
+  /// 최근 검색어를 골랐을 때. 패널이 입력창을 갖고 있지 않으므로(클래스 주석
+  /// 참고) 검색을 스스로 다시 돌릴 수 없다 — 상위가 검색창 글자를 그 값으로
+  /// 바꾸고 [query]·[submitTick]을 새로 내려줘야 한 바퀴가 돈다.
+  final ValueChanged<String> onQueryPicked;
 
   @override
   State<SearchPanel> createState() => _SearchPanelState();
@@ -574,14 +580,7 @@ class _SearchPanelState extends State<SearchPanel> {
   Widget _body(BuildContext context) {
     switch (_phase) {
       case _SearchPhase.idle:
-        return const Padding(
-          padding: EdgeInsets.fromLTRB(16, 20, 16, 22),
-          child: Text(
-            '매장 이름을 입력하면 바로 찾아드려요.\n'
-            '"밥 먹을 곳"처럼 뜻으로 물어도 됩니다.',
-            style: TextStyle(fontSize: 13, color: AppColors.muted, height: 1.5),
-          ),
-        );
+        return _idleState();
       case _SearchPhase.typingLightSearch:
       case _SearchPhase.semanticSearching:
         return _searchingState();
@@ -595,6 +594,102 @@ class _SearchPanelState extends State<SearchPanel> {
       case _SearchPhase.noMatch:
         return _emptyState(context);
     }
+  }
+
+  /// 아직 아무것도 치지 않은 화면. 최근 검색어가 있으면 그걸 보여주고, 없으면
+  /// 예전처럼 안내 문구만 남긴다.
+  ///
+  /// **"인기 매장"은 만들지 않는다.** 방문·클릭 로그가 없어 순위를 만들 근거가
+  /// 없다(설계: naver-map-ui-ux-analysis.md J절). 클라이언트가 실제로 아는 것만
+  /// 쓴다.
+  ///
+  /// 첫 실행의 빈 목록은 오류가 아니라 정상 상태다. 그때는 목록 자리에
+  /// 빈 박스를 남기지 않고 안내 문구가 그 자리를 그대로 쓴다.
+  Widget _idleState() {
+    return ListenableBuilder(
+      listenable: recentSearchesController,
+      builder: (context, _) {
+        final queries = recentSearchesController.queries;
+        if (queries.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.fromLTRB(16, 20, 16, 22),
+            child: Text(
+              '매장 이름을 입력하면 바로 찾아드려요.\n'
+              '"밥 먹을 곳"처럼 뜻으로 물어도 됩니다.',
+              style: TextStyle(
+                fontSize: 13,
+                color: AppColors.muted,
+                height: 1.5,
+              ),
+            ),
+          );
+        }
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 8, 2),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      '최근 검색어',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.muted,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: recentSearchesController.clear,
+                    child: const Text('전체 삭제', style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+            ),
+            // 목록이 상한(컨트롤러의 maxEntries)까지 차도 패널이 화면을 다 먹지
+            // 않도록 상위가 준 높이 안에서 스크롤시킨다. 결과 목록과 같은 이유로
+            // ListView가 아니라 Column + SingleChildScrollView다(아래 _resultList
+            // 주석 참고).
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final query in queries)
+                      ListTile(
+                        key: Key('recent-$query'),
+                        dense: true,
+                        leading: const Icon(
+                          Icons.history,
+                          size: 20,
+                          color: AppColors.muted,
+                        ),
+                        title: Text(
+                          query,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          color: AppColors.muted,
+                          tooltip: '$query 삭제',
+                          onPressed: () =>
+                              recentSearchesController.remove(query),
+                        ),
+                        onTap: () => widget.onQueryPicked(query),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   /// 아직 결론이 아니라는 화면. 경량 단계에서는 스피너만 돌리고, 의미 검색으로

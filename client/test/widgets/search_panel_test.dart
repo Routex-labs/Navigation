@@ -8,20 +8,18 @@ import 'package:navigation_client/models/discovery_result.dart';
 import 'package:navigation_client/models/poi_search_result.dart';
 import 'package:navigation_client/repositories/building_repository.dart';
 import 'package:navigation_client/repositories/destination_repository.dart';
+import 'package:navigation_client/state/recent_searches_controller.dart';
 import 'package:navigation_client/theme/app_theme.dart';
 import 'package:navigation_client/widgets/reach_label.dart';
 import 'package:navigation_client/widgets/search_panel.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   group('highlightedNameSpans', () {
     test('검색어와 일치하는 구간만 강조하고 나머지는 원문 그대로 둔다', () {
       final spans = highlightedNameSpans('죠죠 더현대서울점', '더현대서울');
 
-      expect(spans.map((span) => span.text).toList(), [
-        '죠죠 ',
-        '더현대서울',
-        '점',
-      ]);
+      expect(spans.map((span) => span.text).toList(), ['죠죠 ', '더현대서울', '점']);
       expect(spans[0].style?.color, isNull);
       expect(spans[1].style?.color, AppColors.primary);
       expect(spans[2].style?.color, isNull);
@@ -88,6 +86,7 @@ void main() {
             submitTick: 0,
             onStorePicked: (_) {},
             onBuildingPicked: (_) {},
+            onQueryPicked: (_) {},
             reachByNodeId: reachByNodeId,
           ),
         ),
@@ -190,9 +189,7 @@ void main() {
 
       await tester.pumpWidget(
         buildSubject(
-          reachByNodeId: const {
-            '다른-노드': NodeReach(distanceM: 10, costM: 10),
-          },
+          reachByNodeId: const {'다른-노드': NodeReach(distanceM: 10, costM: 10)},
         ),
       );
       await settleSearch(tester);
@@ -229,6 +226,7 @@ void main() {
             submitTick: 0,
             onStorePicked: (_) {},
             onBuildingPicked: (_) {},
+            onQueryPicked: (_) {},
             reachByNodeId: reachByNodeId,
           ),
         ),
@@ -292,7 +290,13 @@ void main() {
           mode: DiscoveryMode.results,
           query: '나이키',
           matches: [
-            _match(name: '나이키 라이즈', floor: '5F', node: '노드-먼곳', id: '먼곳', reason: '이유-먼곳'),
+            _match(
+              name: '나이키 라이즈',
+              floor: '5F',
+              node: '노드-먼곳',
+              id: '먼곳',
+              reason: '이유-먼곳',
+            ),
             _match(
               name: '나이키 키즈',
               floor: '3F',
@@ -325,6 +329,117 @@ void main() {
     });
   });
 
+  // 스펙은 naver-map-ui-ux-analysis.md의 「J. 검색 빈 상태(idle) 채우기」다.
+  // 저장소 규칙 자체는 state/recent_searches_controller_test.dart가 덮고,
+  // 여기서는 **패널이 그 값을 실제로 그리고 다시 검색으로 이어 주는지**를 본다.
+  group('빈 화면의 최근 검색어', () {
+    late RecentSearchesController original;
+
+    /// 최근 검색어를 탭했을 때 상위로 올라온 값. 콜백이 실제로 불렸는지 본다.
+    String? picked;
+
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      original = recentSearchesController;
+      picked = null;
+    });
+
+    tearDown(() => recentSearchesController = original);
+
+    Future<void> useQueries(List<String> queries) async {
+      final controller = RecentSearchesController(
+        prefs: await SharedPreferences.getInstance(),
+      );
+      await controller.ready;
+      for (final query in queries) {
+        await controller.add(query);
+      }
+      recentSearchesController = controller;
+    }
+
+    Widget buildSubject() => MaterialApp(
+      home: Scaffold(
+        body: SizedBox(
+          height: 400,
+          child: SearchPanel(
+            buildingId: 'building-1',
+            // 빈 질의라 검색이 돌지 않고 idle에 머문다.
+            query: '',
+            submitTick: 0,
+            onStorePicked: (_) {},
+            onBuildingPicked: (_) {},
+            onQueryPicked: (value) => picked = value,
+          ),
+        ),
+      ),
+    );
+
+    testWidgets('저장된 검색어가 없으면 예전 안내 문구가 그대로 남는다', (tester) async {
+      await useQueries(const []);
+
+      await tester.pumpWidget(buildSubject());
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('매장 이름을 입력하면'), findsOneWidget);
+      expect(find.text('최근 검색어'), findsNothing);
+    });
+
+    testWidgets('최근 검색어가 있으면 최신순으로 보여준다', (tester) async {
+      await useQueries(const ['화장실', '나이키']);
+
+      await tester.pumpWidget(buildSubject());
+      await tester.pumpAndSettle();
+
+      expect(find.text('최근 검색어'), findsOneWidget);
+      // 나중에 넣은 '나이키'가 위로 온다.
+      expect(
+        tester.getTopLeft(find.text('나이키')).dy,
+        lessThan(tester.getTopLeft(find.text('화장실')).dy),
+      );
+      // 안내 문구는 자리를 내준다.
+      expect(find.textContaining('매장 이름을 입력하면'), findsNothing);
+    });
+
+    testWidgets('탭하면 그 검색어로 다시 검색한다', (tester) async {
+      await useQueries(const ['나이키']);
+
+      await tester.pumpWidget(buildSubject());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('나이키'));
+
+      expect(picked, '나이키');
+    });
+
+    testWidgets('개별 삭제하면 그 줄만 사라진다', (tester) async {
+      await useQueries(const ['화장실', '나이키']);
+
+      await tester.pumpWidget(buildSubject());
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const Key('recent-나이키')),
+          matching: find.byIcon(Icons.close),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('나이키'), findsNothing);
+      expect(find.text('화장실'), findsOneWidget);
+    });
+
+    testWidgets('전체 삭제하면 안내 문구로 돌아간다', (tester) async {
+      await useQueries(const ['화장실', '나이키']);
+
+      await tester.pumpWidget(buildSubject());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('전체 삭제'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('최근 검색어'), findsNothing);
+      expect(find.textContaining('매장 이름을 입력하면'), findsOneWidget);
+    });
+  });
+
   group('reachLabel', () {
     // 거리는 실제 이동 거리, 시간은 비용 기준이다. 엘리베이터 대기·탑승이
     // 비용에만 들어 있어서, 시간까지 거리로 계산하면 다른 층 매장이 실제보다
@@ -344,16 +459,18 @@ void main() {
   });
 }
 
-PoiSearchResult _result({required String? subcategory, required String? category}) =>
-    PoiSearchResult(
-      name: '나이키 강남',
-      floor: '3F',
-      point: const LatLng(37.5, 127.0),
-      placeId: 'place-1',
-      nodeId: 'node-1',
-      category: category,
-      subcategory: subcategory,
-    );
+PoiSearchResult _result({
+  required String? subcategory,
+  required String? category,
+}) => PoiSearchResult(
+  name: '나이키 강남',
+  floor: '3F',
+  point: const LatLng(37.5, 127.0),
+  placeId: 'place-1',
+  nodeId: 'node-1',
+  category: category,
+  subcategory: subcategory,
+);
 
 /// 정렬 테스트용. 층 이름이 그대로 화면에 나오는 유일한 평문이라, 목록 순서는
 /// 이 값의 세로 위치로 잰다(이름은 `Text.rich`라 `find.text`로 못 집는다).
@@ -422,6 +539,5 @@ class _FakeBuildingRepository implements BuildingRepository {
   Future<List<Building>> getAllBuildings() async => const [];
 
   @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      super.noSuchMethod(invocation);
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

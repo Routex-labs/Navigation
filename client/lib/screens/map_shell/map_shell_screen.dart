@@ -497,13 +497,28 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 엔터로 확정. 패널이 이 시점에만 의미 검색(`/query/ai`)까지 이어 붙인다.
   void _onSearchSubmitted(String value) {
     _activateSearch();
+    // 엔터는 "이 말로 찾겠다"는 분명한 신호라 여기서 최근 검색어에 남긴다.
+    // 결과가 있었는지는 보지 않는다 — 못 찾은 말도 다시 시도하거나 고쳐 치는
+    // 대상이라, 목록에 남는 편이 사용자에게 쓸모 있다.
+    recentSearchesController.add(value);
     setState(() {
       _searchQuery = value;
       _searchSubmitTick++;
     });
   }
 
+  /// 검색 패널의 최근 검색어를 골랐을 때. 패널은 입력창을 갖고 있지 않으므로
+  /// 검색창 글자까지 여기서 맞춰 줘야 화면과 질의가 갈라지지 않는다.
+  void _onSearchQueryPicked(String query) {
+    _searchController.text = query;
+    _onSearchSubmitted(query);
+  }
+
   Future<void> _onSearchStorePicked(PoiSearchResult store) async {
+    // 엔터 없이 디바운스 검색 결과를 바로 고르는 흐름이 더 흔하다. 그 경우도
+    // "이 검색은 쓸모가 있었다"는 신호라 함께 남긴다. 같은 말이면 컨트롤러가
+    // 중복 없이 맨 앞으로 올린다.
+    recentSearchesController.add(_searchQuery);
     _closeSearch();
     await _runSheetChain(() => _showStoreInfo(store, focusOnMap: true));
   }
@@ -1364,6 +1379,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                         submitTick: _searchSubmitTick,
                         onStorePicked: _onSearchStorePicked,
                         onBuildingPicked: _onSearchBuildingPicked,
+                        onQueryPicked: _onSearchQueryPicked,
                         currentFloorId: _activeIndoorFloor,
                         reachByNodeId: _reachByNodeId,
                       ),
