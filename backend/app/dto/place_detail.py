@@ -58,8 +58,15 @@ class PlaceActionResponse(BaseModel):
 # 장치이기도 하다 — 오버레이가 붙으면 source가 manual로 바뀌므로, 사람이 쓴
 # 내용인지 파생인지를 응답만 보고 구분할 수 있다.
 class ProvenanceResponse(BaseModel):
+    # 출처의 **종류**다. 어디서 왔는지(주소)는 아래 url이 따로 들고 있다 — 둘을 한
+    # 필드에 담으면 "manual인지 URL인지"를 소비자가 매번 분기해야 한다.
     source: Literal["studio", "manual", "derived"]
     updated_at: str | None = None  # ISO 날짜. 오버레이가 적어 준 최종 확인일
+
+    # 공식 사이트에서 옮겨 온 문구라면 그 문구가 실제로 있던 페이지 주소. 직접 적은
+    # 내용이면 null이다. updated_at(확인일)은 이 주소를 다시 열어 봤다는 뜻이므로
+    # 둘은 짝으로 읽는다.
+    url: str | None = None
 
 
 # --- 섹션 -------------------------------------------------------------

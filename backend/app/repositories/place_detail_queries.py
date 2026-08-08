@@ -58,11 +58,12 @@ def get_place_detail(
         "actions": _actions(store, kind),
         "sections": _sections(store, kind, overlay),
         "provenance": {
-            # 오버레이가 출처를 적어 뒀으면 그걸 그대로 내보낸다. 공식 사이트에서
-            # 옮겨 온 문구는 "누가 썼는지"보다 **어디서 왔는지**가 근거이기 때문이다.
-            # 안 적혀 있으면 예전처럼 "manual"(사람이 직접 적음)로 남는다.
-            "source": (overlay.get("source") or "manual") if overlay else "studio",
+            # source는 출처의 **종류**다(studio/manual/derived). 오버레이가 있으면
+            # 사람이 적은 것이므로 manual이고, 그 문구를 어디서 옮겨 왔는지는 url이
+            # 따로 들고 간다.
+            "source": "manual" if overlay else "studio",
             "updated_at": overlay.get("updated_at"),
+            "url": overlay.get("source"),
         },
     }
 
