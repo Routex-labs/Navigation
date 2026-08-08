@@ -1651,9 +1651,14 @@ class _FavoritesPill extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-      elevation: 3,
-      shadowColor: Colors.black.withValues(alpha: 0.15),
-      borderRadius: BorderRadius.circular(20),
+      // 지도에 붙은 조작 줄이다. 그림자를 줄이고 경계는 hairline이 맡는다
+      // (AppElevation.onMap).
+      elevation: AppElevation.onMap,
+      shadowColor: Colors.black.withValues(alpha: 0.12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: AppColors.hairline),
+      ),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
@@ -1767,9 +1772,15 @@ class _CategoryChip extends StatelessWidget {
     final color = categoryColorFor(name);
     return Material(
       color: selected ? color : Colors.white,
-      elevation: 3,
-      shadowColor: Colors.black.withValues(alpha: 0.15),
-      borderRadius: BorderRadius.circular(20),
+      elevation: AppElevation.onMap,
+      shadowColor: Colors.black.withValues(alpha: 0.12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        // 선택된 chip은 카테고리 고유색으로 채워지므로 경계선이 필요 없다.
+        side: BorderSide(
+          color: selected ? Colors.transparent : AppColors.hairline,
+        ),
+      ),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
@@ -1809,9 +1820,14 @@ class _CategoryRetryChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-      elevation: 3,
-      shadowColor: Colors.black.withValues(alpha: 0.15),
-      borderRadius: BorderRadius.circular(20),
+      // 지도에 붙은 조작 줄이다. 그림자를 줄이고 경계는 hairline이 맡는다
+      // (AppElevation.onMap).
+      elevation: AppElevation.onMap,
+      shadowColor: Colors.black.withValues(alpha: 0.12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: AppColors.hairline),
+      ),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),

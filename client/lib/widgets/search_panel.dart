@@ -739,8 +739,10 @@ class _SearchPanelState extends State<SearchPanel> {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-      elevation: 6,
-      shadowColor: Colors.black.withValues(alpha: 0.15),
+      // 지도를 덮는 임시 레이어다. 상단 바(chrome)보다 한 단계 앞에 둬야
+      // "지금 이게 화면의 주인공"이 읽힌다(AppElevation).
+      elevation: AppElevation.overlay,
+      shadowColor: Colors.black.withValues(alpha: 0.16),
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
       child: _body(context),
