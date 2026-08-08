@@ -6,6 +6,9 @@
 - [네이버지도 UI/UX 분석](naver-map-ui-ux-analysis.md)이 **정보 구조와 목록·시트 UX**
   (항목 A~J)를 다룬다면, 이 문서는 **매칭 품질과 입력 보조**를 다룬다. 항목 번호는
   겹치지 않게 **K부터** 이어 붙인다.
+- **입력이 끝난 뒤 사용자가 고르는 목록**(후보 행의 거리·정렬·개수 표기)은
+  [검색 결과 목록 UX](search-result-list-ux.md)가 **O~R**로 이어받는다. 이 문서가 만든
+  후보 목록이 사실상 결과 화면으로도 쓰인다는 사실이 그 문서의 출발점이다.
 - 매칭 파이프라인의 설계 근거는 [query.md](../backend/native/query.md) ·
   [FAISS.md](../backend/native/FAISS.md) · [KIWI.md](../backend/native/KIWI.md)가 단일
   출처다. 이 문서는 그 위에 무엇을 얹을지만 적는다.
