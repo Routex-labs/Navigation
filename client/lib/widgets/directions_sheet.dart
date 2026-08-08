@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../domain/dijkstra.dart';
 import '../models/discovery_result.dart';
 import '../theme/app_theme.dart';
+import 'reach_label.dart';
 import 'sheet_grab_handle.dart';
 
 import 'map_overlay_guard.dart';
@@ -154,6 +156,7 @@ class DirectionsSheet extends StatefulWidget {
     this.semanticSearch,
     this.initialOrigin,
     this.initialDestination,
+    this.reachByNodeId,
     this.focusOrigin = false,
   });
 
@@ -173,6 +176,16 @@ class DirectionsSheet extends StatefulWidget {
   /// 검색 결과 목록에서 그대로 골라도 되고, 다른 검색어로 바꿔도 된다.
   final DirectionsCandidate? initialDestination;
 
+  /// 현재 위치에서 각 그래프 노드까지의 거리·비용. 상위(MapShellScreen)가 이미
+  /// 한 번 계산해 들고 있는 맵을 그대로 받는다 — **여기서 경로를 새로 계산하지
+  /// 않는다.**
+  ///
+  /// 길찾기 후보 목록이 상단 검색 결과와 같은 판단 재료를 갖게 하려고 넣었다.
+  /// 같은 앱에서 같은 매장을 고르는데 한쪽에만 거리가 있으면, 사용자는 두 화면이
+  /// 다른 것을 뜻한다고 읽는다(설계: `docs/client/map-ui-redesign-plan.md`
+  /// 「7+E 합동 설계」의 2단계).
+  final Map<String, NodeReach>? reachByNodeId;
+
   /// 출발지 칸을 활성으로 열지. 상단 초안 바의 **출발 행**을 눌러 들어올 때 켠다 —
   /// 출발지를 바꾸려고 누른 것이므로 커서와 후보 목록이 그 칸에 맞아야 한다.
   /// 기본은 false로, 도착지를 고르는 기존 흐름이 그대로 유지된다.
@@ -185,6 +198,7 @@ class DirectionsSheet extends StatefulWidget {
     DirectionsSemanticSearchCallback? semanticSearch,
     DirectionsCandidate? initialOrigin,
     DirectionsCandidate? initialDestination,
+    Map<String, NodeReach>? reachByNodeId,
     bool focusOrigin = false,
   }) {
     return showModalBottomSheet<DirectionsResult>(
@@ -200,6 +214,7 @@ class DirectionsSheet extends StatefulWidget {
           semanticSearch: semanticSearch,
           initialOrigin: initialOrigin,
           initialDestination: initialDestination,
+          reachByNodeId: reachByNodeId,
           focusOrigin: focusOrigin,
         ),
       ),
@@ -1029,13 +1044,37 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
     final subtitle =
         candidate.reason ??
         (unroutable ? '${candidate.subtitle} · 경로 안내 불가' : candidate.subtitle);
+    // 상단 검색 결과와 **같은 규칙**이다 — 거리를 모르면 줄을 아예 그리지 않는다.
+    // 줄마다 "거리 알 수 없음"을 반복하면 목록이 읽히지 않는다.
+    final nodeId = candidate.nodeId;
+    final reach = nodeId == null ? null : widget.reachByNodeId?[nodeId];
     return ListTile(
       leading: const Icon(Icons.place, color: AppColors.primary),
       title: Text(
         candidate.title,
         style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
       ),
-      subtitle: Text(subtitle),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+          if (reach != null)
+            Text(
+              reachLabel(reach),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              // 검색 결과 행과 같은 무게. 두 화면이 같은 값을 다르게 그리면
+              // 사용자는 둘이 다른 것을 뜻한다고 읽는다.
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.text,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+        ],
+      ),
+      isThreeLine: reach != null,
       onTap: () => _selectCandidate(candidate),
     );
   }
