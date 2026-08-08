@@ -75,6 +75,7 @@ SCHEMA_FILENAME = "_schema.json"
 _DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _ALLOWED_FIELDS = {
     "summary",
+    "source",
     "tags",
     "keyValue",
     "notice",
@@ -144,6 +145,20 @@ def _validate_values(
             errors.append(f"{place_id}: summary가 비어 있습니다")
         elif len(summary) > max_length:
             errors.append(f"{place_id}: summary가 {max_length}자를 넘습니다")
+
+    # 출처. 공식 사이트에서 옮겨 온 문구는 **그 문구가 실제로 있던 페이지**를 남긴다.
+    # 홈 주소만 적으면 나중에 다시 찾을 수 없어 확인이 불가능해진다.
+    source = overlay.get("source")
+    if source is not None:
+        max_length = fields.get("source", {}).get("max_length", 300)
+        if not isinstance(source, str) or not source.strip():
+            errors.append(f"{place_id}: source가 비어 있습니다")
+        elif len(source) > max_length:
+            errors.append(f"{place_id}: source가 {max_length}자를 넘습니다")
+        elif not source.startswith(("http://", "https://")):
+            # 브랜드명·"공식 사이트" 같은 말은 근거가 되지 못한다. 다시 열어 볼 수
+            # 있는 주소여야 확인일(updated_at)이 뜻을 갖는다.
+            errors.append(f"{place_id}: source는 http(s) 주소여야 합니다")
 
     tags = overlay.get("tags")
     if tags is not None:

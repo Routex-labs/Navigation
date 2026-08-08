@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "매장 상세 오버레이 스키마. 이 파일 자체는 오버레이가 아니다(_ 접두). 값은 backend/scripts/validate_store_details.py가 강제한다.",
+  "description": "매장 상세 오버레이 스키마. 이 파일 자체는 오버레이가 아니다(_ 접두). 검증은 시드가 적재 전에 app/repositories/place_details.validate_overlay로 수행한다.",
   "join_key": "id",
   "reserved_keys": {
     "name": "사람이 diff를 읽기 위한 중복 정보. 병합 키가 아니며, Studio 원본과 다르면 검증 실패한다.",
@@ -12,6 +12,11 @@
       "max_length": 60,
       "note": "한 줄 소개. 사실 주장이 아니라 매장이 스스로 내세우는 성격을 적는다."
     },
+    "source": {
+      "type": "string",
+      "max_length": 300,
+      "note": "summary를 옮겨 온 공식 페이지 주소. http(s)여야 한다. 홈 주소가 아니라 그 문구가 실제로 적혀 있던 페이지를 적는다 — 다시 열어 확인할 수 있어야 updated_at(최종 확인일)이 뜻을 갖는다. 없으면 provenance.source는 manual이다."
+    },
     "tags": {
       "type": "string_array",
       "max_items": 6,
@@ -20,31 +25,47 @@
     },
     "keyValue": {
       "type": "object_array",
-      "item_keys": ["label", "value"],
+      "item_keys": [
+        "label",
+        "value"
+      ],
       "max_items": 6,
       "note": "라벨:값 목록."
     },
     "hero": {
       "type": "object_array",
-      "item_keys": ["local_asset"],
+      "item_keys": [
+        "local_asset"
+      ],
       "max_items": 6,
       "note": "앱 번들에 포함된 대표·갤러리 사진 경로."
     },
     "menu": {
       "type": "object_array",
-      "item_keys": ["name", "price", "description", "image_asset"],
+      "item_keys": [
+        "name",
+        "price",
+        "description",
+        "image_asset"
+      ],
       "max_items": 12,
       "note": "매장 상세에 표시할 메뉴. 가격과 설명은 updated_at 기준 확인 값이다."
     },
     "businessInfo": {
       "type": "object_array",
-      "item_keys": ["label", "value"],
+      "item_keys": [
+        "label",
+        "value"
+      ],
       "max_items": 8,
       "note": "매장을 설명하는 운영 정보. forbidden_labels가 keyValue와 똑같이 적용된다 — 영업시간·연락처류는 넣을 수 없다."
     },
     "notice": {
       "type": "object",
-      "item_keys": ["text", "until"],
+      "item_keys": [
+        "text",
+        "until"
+      ],
       "note": "기간이 명시된 고지만 허용. until은 YYYY-MM-DD이며 지나면 검증이 실패한다."
     }
   },
