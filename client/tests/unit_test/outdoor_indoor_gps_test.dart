@@ -41,49 +41,49 @@ void main() {
   // 멀쩡했을 때 입구 앞에 있었다"는 근거를 요구하므로, 저하 표본만 흘리면 판정이
   // 서지 않는다. 이 표본이 그 근거다.
   Position approachingEntrance() => Position(
-        latitude: 37.5665,
-        longitude: 126.9779,
-        timestamp: DateTime(2024, 1, 1),
-        accuracy: 10,
-        altitude: 0,
-        altitudeAccuracy: 0,
-        heading: 0,
-        headingAccuracy: 0,
-        speed: 0,
-        speedAccuracy: 0,
-      );
+    latitude: 37.5665,
+    longitude: 126.9779,
+    timestamp: DateTime(2024, 1, 1),
+    accuracy: 10,
+    altitude: 0,
+    altitudeAccuracy: 0,
+    heading: 0,
+    headingAccuracy: 0,
+    speed: 0,
+    speedAccuracy: 0,
+  );
 
   // 같은 자리에서 신호가 무너진 상태. 위 접근 표본과 짝을 이뤄 자동 실내 진입
   // 조건(창 안에 입구 20m 이내의 신뢰 좌표 + 지금 accuracy 30m 초과)을 만족한다.
   // accuracy 60m는 '약함' 임계값(30m)도 넘으므로, 이 위치에서도 배지가 안 뜬다면
   // 그건 GPS 표시를 실제로 껐다는 뜻이다.
   Position atEntrance() => Position(
-        latitude: 37.5665,
-        longitude: 126.9779,
-        timestamp: DateTime(2024, 1, 1),
-        accuracy: 60,
-        altitude: 0,
-        altitudeAccuracy: 0,
-        heading: 0,
-        headingAccuracy: 0,
-        speed: 0,
-        speedAccuracy: 0,
-      );
+    latitude: 37.5665,
+    longitude: 126.9779,
+    timestamp: DateTime(2024, 1, 1),
+    accuracy: 60,
+    altitude: 0,
+    altitudeAccuracy: 0,
+    heading: 0,
+    headingAccuracy: 0,
+    speed: 0,
+    speedAccuracy: 0,
+  );
 
   // 입구에서 약 185m 떨어진 좌표 + 약한 신호. 자동 진입 반경 밖이라 야외
   // 상태를 유지하면서 'GPS 신호 약함' 배지만 띄운다.
   Position farAway() => Position(
-        latitude: 37.5665,
-        longitude: 126.9800,
-        timestamp: DateTime(2024, 1, 1),
-        accuracy: 40,
-        altitude: 0,
-        altitudeAccuracy: 0,
-        heading: 0,
-        headingAccuracy: 0,
-        speed: 0,
-        speedAccuracy: 0,
-      );
+    latitude: 37.5665,
+    longitude: 126.9800,
+    timestamp: DateTime(2024, 1, 1),
+    accuracy: 40,
+    altitude: 0,
+    altitudeAccuracy: 0,
+    heading: 0,
+    headingAccuracy: 0,
+    speed: 0,
+    speedAccuracy: 0,
+  );
 
   // 실내 진입 오버레이는 건물 로드(asset)와 여러 비동기 sync를 거쳐 뜬다.
   // pumpAndSettle은 지도 오버레이의 반복 애니메이션·타이머 때문에 정착하지

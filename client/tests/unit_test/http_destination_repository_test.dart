@@ -169,22 +169,25 @@ void main() {
       await repository.searchDestinationsAi(
         'thehyundai-seoul',
         '신발',
-        selectedFacets: const {'styles': ['스포츠']},
+        selectedFacets: const {
+          'styles': ['스포츠'],
+        },
         showAll: true,
       );
 
       final body =
           jsonDecode(utf8.decode(captured.bodyBytes)) as Map<String, dynamic>;
       expect(body['show_all'], isTrue);
-      expect(body['selected_facets'], {'styles': ['스포츠']});
+      expect(body['selected_facets'], {
+        'styles': ['스포츠'],
+      });
     });
 
     test('direct: matches 1건과 mode를 파싱한다', () async {
       final repository = HttpDestinationRepository(
         client: MockClient(
-          (request) async => _json(
-            _discoveryBody(matches: [_discoveryMatchJson()]),
-          ),
+          (request) async =>
+              _json(_discoveryBody(matches: [_discoveryMatchJson()])),
         ),
       );
 
@@ -296,10 +299,7 @@ void main() {
       final repository = HttpDestinationRepository(
         client: MockClient(
           (request) async => _json(
-            _discoveryBody(
-              mode: 'degraded',
-              matches: [_discoveryMatchJson()],
-            ),
+            _discoveryBody(mode: 'degraded', matches: [_discoveryMatchJson()]),
           ),
         ),
       );
@@ -318,9 +318,7 @@ void main() {
         client: MockClient(
           (request) async => _json(
             _discoveryBody(
-              matches: [
-                _discoveryMatchJson(matchedFacets: null, reason: null),
-              ],
+              matches: [_discoveryMatchJson(matchedFacets: null, reason: null)],
             ),
           ),
         ),

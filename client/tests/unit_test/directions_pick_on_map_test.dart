@@ -81,9 +81,7 @@ void main() {
     );
   });
 
-  testWidgets('"지도에서 선택"을 누르면 출발지를 지닌 채 시트가 닫힌다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('"지도에서 선택"을 누르면 출발지를 지닌 채 시트가 닫힌다', (WidgetTester tester) async {
     await openSheet(tester, initialOrigin: store);
 
     await tester.tap(find.text('지도에서 선택'));
@@ -96,9 +94,7 @@ void main() {
     expect(result.origin?.title, 'MLB');
   });
 
-  testWidgets('출발지가 없어도(현재 위치 출발) 지도에서 고를 수 있다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('출발지가 없어도(현재 위치 출발) 지도에서 고를 수 있다', (WidgetTester tester) async {
     // 상단 바 길찾기 아이콘으로 바로 연 경우. origin이 null이면 호출자가
     // "현재 위치" 출발로 해석한다.
     await openSheet(tester);
@@ -110,9 +106,7 @@ void main() {
     expect(result.origin, isNull);
   });
 
-  testWidgets('출발지 입력이 활성일 때도 "지도에서 선택"이 보인다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('출발지 입력이 활성일 때도 "지도에서 선택"이 보인다', (WidgetTester tester) async {
     // 예전에는 출발지 칸에서 이 줄을 감췄다. 도착지만 지도에서 고를 수 있으니
     // 맞는 처리였지만, 출발지도 지도에서 고를 수 있게 된 지금은 감추면 기능이
     // 없는 것으로 보인다. 두 칸의 조작 방법은 같아야 한다.
@@ -157,9 +151,7 @@ void main() {
     expect(result.destination?.title, '올리브영');
   });
 
-  testWidgets('검색 결과를 고르면 지도 선택이 아니라 도착지로 확정된다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('검색 결과를 고르면 지도 선택이 아니라 도착지로 확정된다', (WidgetTester tester) async {
     // "지도에서 선택"을 넣으면서 기존 경로가 깨지지 않았는지 함께 고정한다.
     await openSheet(
       tester,

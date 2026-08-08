@@ -8,9 +8,30 @@ void main() {
   test('경로가 있으면 노드 lat/lng을 정확히 지나는 폴리라인을 만든다', () {
     final graph = FloorGraph(
       nodes: [
-        GraphNode(id: 'A', type: 'corridor', xM: 0, yM: 0, lat: 37.500, lng: 127.000),
-        GraphNode(id: 'B', type: 'corridor', xM: 10, yM: 0, lat: 37.5001, lng: 127.0012),
-        GraphNode(id: 'C', type: 'corridor', xM: 0, yM: 10, lat: 37.5011, lng: 127.0002),
+        GraphNode(
+          id: 'A',
+          type: 'corridor',
+          xM: 0,
+          yM: 0,
+          lat: 37.500,
+          lng: 127.000,
+        ),
+        GraphNode(
+          id: 'B',
+          type: 'corridor',
+          xM: 10,
+          yM: 0,
+          lat: 37.5001,
+          lng: 127.0012,
+        ),
+        GraphNode(
+          id: 'C',
+          type: 'corridor',
+          xM: 0,
+          yM: 10,
+          lat: 37.5011,
+          lng: 127.0002,
+        ),
       ],
       edges: [
         GraphEdge(

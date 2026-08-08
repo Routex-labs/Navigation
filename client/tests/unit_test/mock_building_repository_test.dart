@@ -48,11 +48,19 @@ void main() {
     expect(geojson, isNull);
   });
 
-  test('returns null route when the mock floor has no matching store entrance', () async {
-    // sample_building.json은 GeoJSON POI만 있고 매장/entranceNodeId가 없어서
-    // 항상 null이다 - 실제 그래프 기반 경로는 HttpBuildingRepository에서만 나온다.
-    final route = await repository.getShortestRoute('thehyundai-seoul', '1F', 'N1', 'N2');
+  test(
+    'returns null route when the mock floor has no matching store entrance',
+    () async {
+      // sample_building.json은 GeoJSON POI만 있고 매장/entranceNodeId가 없어서
+      // 항상 null이다 - 실제 그래프 기반 경로는 HttpBuildingRepository에서만 나온다.
+      final route = await repository.getShortestRoute(
+        'thehyundai-seoul',
+        '1F',
+        'N1',
+        'N2',
+      );
 
-    expect(route, isNull);
-  });
+      expect(route, isNull);
+    },
+  );
 }

@@ -94,9 +94,7 @@ void main() {
     );
   });
 
-  testWidgets('상단 출발 행은 매장을 안 골랐어도 "현재 위치"로 적는다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('상단 출발 행은 매장을 안 골랐어도 "현재 위치"로 적는다', (WidgetTester tester) async {
     // 같은 null 겹침이 라벨에서도 드러난다. 상위가 출발지를 null로 넘기면 상단
     // 바는 "출발지를 선택하세요" placeholder를 띄우는데, 그건 위치를 방금 찍어둔
     // 사용자에게 출발지가 비어 있다고 잘못 알리는 것이다. 그 상태에서는 출발 행을

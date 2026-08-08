@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import '../core/service_locator.dart';
 import '../domain/dijkstra.dart';
 import '../domain/search_result_order.dart';
+import '../domain/store_suggestions.dart';
 import '../models/building.dart';
 import '../models/discovery_result.dart';
 import '../models/poi_search_result.dart';
+import '../models/store_index_entry.dart';
 import '../theme/app_theme.dart';
 import 'category_icon.dart';
 import 'reach_label.dart';
@@ -190,6 +192,11 @@ List<TextSpan> highlightedNameSpans(String name, String query) {
   return spans;
 }
 
+/// 후보 목록 위에 붙는 문구. 같은 목록이 두 자리에서 쓰이는데 뜻이 달라서
+/// 나눈다 — 치는 중에는 "이런 게 있다"는 제안이고, 못 찾은 뒤에는 "네가 치려던
+/// 게 이거냐"는 되물음이다.
+enum _SuggestionHeader { typing, didYouMean }
+
 class _SearchPanelState extends State<SearchPanel> {
   /// 경량 검색용 디바운스. 글자마다 서버를 때리지 않게 잠깐 모았다 보낸다.
   static const _lightDebounce = Duration(milliseconds: 300);
@@ -256,16 +263,53 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 실제 위치를 따라간다.
   final _resultScrollController = ScrollController();
 
+  /// 온디바이스 자동완성의 원본. 건물당 1회 받아 둔다.
+  ///
+  /// null은 "아직 못 받았거나 받기에 실패했다"는 뜻이고, **그 상태가 정상 경로에
+  /// 포함된다.** 자동완성은 부가 기능이라 목록이 없으면 후보만 조용히 사라지고
+  /// 서버 검색은 그대로 돈다(설계: search-input-assist.md K절 실패 조건).
+  List<StoreIndexEntry>? _storeIndex;
+
+  /// 지금 질의에 대한 후보. **질의가 바뀔 때만** 다시 계산한다 — build에서 매번
+  /// 계산하면 한 프레임에 여러 번 1640건을 훑는다.
+  List<StoreSuggestion> _suggestions = const [];
+
   @override
   void initState() {
     super.initState();
+    _loadStoreIndex();
     // 검색창에 글자가 남아 있는 채로 패널이 다시 열릴 수 있다.
     if (widget.query.trim().isNotEmpty) _scheduleSearch(widget.query);
+  }
+
+  /// 후보 원본을 받아 둔다. 실패는 삼킨다 — 위 [_storeIndex] 주석 참고.
+  Future<void> _loadStoreIndex() async {
+    try {
+      final index = await buildingRepository.getStoreIndex(widget.buildingId);
+      if (!mounted || index == null) return;
+      setState(() {
+        _storeIndex = index;
+        // 목록이 늦게 도착하는 동안 사용자가 이미 치고 있었을 수 있다.
+        _suggestions = _computeSuggestions(widget.query);
+      });
+    } on Object {
+      // 자동완성만 포기한다. 검색을 막지 않는다.
+    }
+  }
+
+  List<StoreSuggestion> _computeSuggestions(String query) {
+    final index = _storeIndex;
+    if (index == null) return const [];
+    return suggestStores(stores: index, query: query);
   }
 
   @override
   void didUpdateWidget(covariant SearchPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.query != oldWidget.query) {
+      // 서버 응답을 기다리지 않는다. 이게 자동완성이 즉시 뜨는 이유다.
+      _suggestions = _computeSuggestions(widget.query);
+    }
     if (widget.submitTick != oldWidget.submitTick) {
       // 엔터로 확정. 사용자가 이미 "다 쳤다"고 말한 셈이라 두 대기를 모두
       // 건너뛴다. 엔터가 의미 검색의 **유일한** 트리거는 아니지만, 가장 빠른
@@ -578,6 +622,25 @@ class _SearchPanelState extends State<SearchPanel> {
   }
 
   Widget _body(BuildContext context) {
+    // **후보를 띄울지는 단계가 아니라 "이번 글자의 답이 있는가"로 정한다.**
+    //
+    // [_phase]로 판단하면 안 되는 이유가 있다. 디바운스(300ms) 동안에는 아직
+    // 요청이 시작조차 안 해서 단계가 그대로 남아 있다 — 첫 글자에는 [idle],
+    // 두 번째 검색부터는 **직전 질의의 [results]** 다. 즉 단계만 보면 사용자가
+    // 이미 다른 말을 치고 있는데 화면은 이전 결과를 계속 보여준다.
+    //
+    // [_submittedQuery]는 지금 화면에 그려진 결과가 어느 질의의 것인지를 담고
+    // 있으므로, 검색창 글자와 다르면 "아직 이번 글자의 답이 아니다"가 된다.
+    // 온디바이스 후보는 0ms에 나오니 그 사이를 후보로 채운다.
+    final awaitingAnswer = widget.query.trim() != _submittedQuery;
+    if (_suggestions.isNotEmpty &&
+        awaitingAnswer &&
+        // 의미 검색만 예외다. 여기서만 몇 초가 걸릴 수 있어 "AI가 찾는 중"이라는
+        // 사실 자체가 화면에 있어야 한다(_searchingState 주석).
+        _phase != _SearchPhase.semanticSearching) {
+      return _suggestionList(_SuggestionHeader.typing);
+    }
+
     switch (_phase) {
       case _SearchPhase.idle:
         return _idleState();
@@ -591,9 +654,113 @@ class _SearchPanelState extends State<SearchPanel> {
         return _results.isEmpty ? _degradedState() : _resultList();
       case _SearchPhase.error:
         return _errorState();
+      // **오타 교정이 실제로 값을 내는 자리다.** 서버가 못 찾은 뒤에도 "샤낼 뷰티"
+      // 같은 표기 실수나 초성 질의(`ㄴㅇㅋ`)는 온디바이스 후보가 잡는다. 여기서
+      // 후보를 안 보여주면 사용자가 볼 수 있는 건 "찾지 못했어요" 하나뿐이다.
       case _SearchPhase.noMatch:
-        return _emptyState(context);
+        return _suggestions.isEmpty
+            ? _emptyState(context)
+            : _suggestionList(_SuggestionHeader.didYouMean);
     }
+  }
+
+  /// 후보 목록. 상위가 [_storeIndex]를 못 받았으면 애초에 여기 오지 않는다.
+  ///
+  /// 후보를 탭하면 **좌표를 들고 바로 이동하지 않는다.** 그 이름으로 검색을 다시
+  /// 돌려(`onQueryPicked`) 기존 경량 매칭이 좌표까지 갖춘 결과를 만들게 한다 —
+  /// 이유는 [StoreIndexEntry] 주석에 있다.
+  Widget _suggestionList(_SuggestionHeader header) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
+          child: Text(
+            switch (header) {
+              _SuggestionHeader.typing => '검색어 제안',
+              // 교정 후보가 섞여 있을 때만 의미가 있는 문구다. 초성·부분 일치만
+              // 남은 경우에도 "이걸 찾으셨나요"는 여전히 맞는 말이라 나눠 쓰지
+              // 않는다.
+              _SuggestionHeader.didYouMean => '이걸 찾으셨나요?',
+            },
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: AppColors.muted,
+            ),
+          ),
+        ),
+        Flexible(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final suggestion in _suggestions)
+                  _suggestionTile(suggestion),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _suggestionTile(StoreSuggestion suggestion) {
+    final store = suggestion.store;
+    final categoryLabel =
+        subcategoryLabelFor(store.subcategory) ?? store.category;
+    // 층마다 있는 시설(화장실 19건)은 한 줄로 묶여 온다. 몇 곳인지 적어 주지
+    // 않으면 사용자는 "왜 한 층만 나오지"로 읽는다.
+    final floorLine = suggestion.duplicateCount > 1
+        ? '${store.floorName} 등 ${suggestion.duplicateCount}곳'
+        : store.floorName;
+    return ListTile(
+      key: Key('suggestion-${store.id}'),
+      dense: true,
+      // 돋보기와 핀 2종만 쓰는 네이버 관례를 따른다. 교정 후보만 다른 아이콘으로
+      // "이건 네가 친 말이 아니다"를 알린다 — 검증 기준(L)의 "교정 후보임이
+      // 화면에 드러남"이 이 아이콘과 아래 하이라이트 없음으로 충족된다.
+      leading: Icon(
+        suggestion.kind.isCorrection ? Icons.auto_fix_high : Icons.search,
+        size: 20,
+        color: AppColors.muted,
+      ),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text.rich(
+              // 교정 후보는 사용자가 친 글자와 이름이 어긋나 있어 하이라이트가
+              // 안 걸린다. 그게 정상이다(highlightedNameSpans 주석).
+              TextSpan(
+                children: highlightedNameSpans(store.name, widget.query),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 14),
+            ),
+          ),
+          if (categoryLabel != null) ...[
+            const SizedBox(width: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 84),
+              child: Text(
+                categoryLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: const TextStyle(fontSize: 12, color: AppColors.muted),
+              ),
+            ),
+          ],
+        ],
+      ),
+      subtitle: Text(
+        floorLine,
+        style: const TextStyle(fontSize: 12, color: AppColors.muted),
+      ),
+      onTap: () => widget.onQueryPicked(store.name),
+    );
   }
 
   /// 아직 아무것도 치지 않은 화면. 최근 검색어가 있으면 그걸 보여주고, 없으면

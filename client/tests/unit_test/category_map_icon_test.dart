@@ -162,9 +162,7 @@ void main() {
     // `Picture.toImage`/`Image.toByteData`의 Future는 엔진이 실제 시간에
     // 완료시킨다. 가짜 시간에서 기다리면 절대 풀리지 않아 테스트가 통째로
     // 10분 타임아웃까지 매달린다(실패로 한 번 확인했다).
-    final bytes = await tester.runAsync(
-      () => renderStoreCategoryIconPng('패션'),
-    );
+    final bytes = await tester.runAsync(() => renderStoreCategoryIconPng('패션'));
     expect(bytes, isNotNull);
     expect(bytes!, isNotEmpty);
     // PNG 시그니처. addImage가 받는 형식이 아니면 지도에서 조용히 무시된다.

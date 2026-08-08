@@ -4,9 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/widgets/map_top_bar.dart';
 
 void main() {
-  testWidgets('도착지 초안은 출발지 선택과 검색 재개를 위한 두 행을 보여준다', (
-    tester,
-  ) async {
+  testWidgets('도착지 초안은 출발지 선택과 검색 재개를 위한 두 행을 보여준다', (tester) async {
     final events = <String>[];
     final controller = TextEditingController();
     final focusNode = FocusNode();
@@ -47,9 +45,7 @@ void main() {
     expect(events, ['origin', 'destination', 'search', 'clear']);
   });
 
-  testWidgets('검색을 다시 열면 초안이 있어도 기존 검색 입력창을 쓴다', (
-    tester,
-  ) async {
+  testWidgets('검색을 다시 열면 초안이 있어도 기존 검색 입력창을 쓴다', (tester) async {
     final controller = TextEditingController();
     final focusNode = FocusNode();
     addTearDown(controller.dispose);

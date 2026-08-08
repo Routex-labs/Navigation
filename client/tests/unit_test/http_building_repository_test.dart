@@ -215,61 +215,69 @@ void main() {
       ]);
     });
 
-    test('reuses the floor response graph for the following route request', () async {
-      final requestPaths = <String>[];
-      final client = MockClient((request) async {
-        requestPaths.add(request.url.path);
-        return http.Response(
-          jsonEncode({
-            'floor': {'id': 'floor-1f', 'name': '1F'},
-            'footprint_local_m': [],
-            'stores': [],
-            'pois': [],
-            'navigation_graph': {
+    test(
+      'reuses the floor response graph for the following route request',
+      () async {
+        final requestPaths = <String>[];
+        final client = MockClient((request) async {
+          requestPaths.add(request.url.path);
+          return http.Response(
+            jsonEncode({
               'floor': {'id': 'floor-1f', 'name': '1F'},
-              'nodes': [
-                {
-                  'id': 'A',
-                  'type': 'corridor',
-                  'name': null,
-                  'x_m': 0.0,
-                  'y_m': 0.0,
-                  'lat': 37.0,
-                  'lng': 127.0,
-                },
-                {
-                  'id': 'B',
-                  'type': 'corridor',
-                  'name': null,
-                  'x_m': 2.0,
-                  'y_m': 0.0,
-                  'lat': 37.0,
-                  'lng': 127.0,
-                },
-              ],
-              'edges': [
-                {
-                  'id': 'AB',
-                  'from': 'A',
-                  'to': 'B',
-                  'length_m': 2.0,
-                  'bidirectional': true,
-                  'geometry_local_m': [],
-                },
-              ],
-            },
-          }),
-          200,
+              'footprint_local_m': [],
+              'stores': [],
+              'pois': [],
+              'navigation_graph': {
+                'floor': {'id': 'floor-1f', 'name': '1F'},
+                'nodes': [
+                  {
+                    'id': 'A',
+                    'type': 'corridor',
+                    'name': null,
+                    'x_m': 0.0,
+                    'y_m': 0.0,
+                    'lat': 37.0,
+                    'lng': 127.0,
+                  },
+                  {
+                    'id': 'B',
+                    'type': 'corridor',
+                    'name': null,
+                    'x_m': 2.0,
+                    'y_m': 0.0,
+                    'lat': 37.0,
+                    'lng': 127.0,
+                  },
+                ],
+                'edges': [
+                  {
+                    'id': 'AB',
+                    'from': 'A',
+                    'to': 'B',
+                    'length_m': 2.0,
+                    'bidirectional': true,
+                    'geometry_local_m': [],
+                  },
+                ],
+              },
+            }),
+            200,
+          );
+        });
+        final repository = HttpBuildingRepository(client: client);
+
+        await repository.getFloorGeoJson('bldg-001', '1F');
+        final route = await repository.getShortestRoute(
+          'bldg-001',
+          '1F',
+          'A',
+          'B',
         );
-      });
-      final repository = HttpBuildingRepository(client: client);
 
-      await repository.getFloorGeoJson('bldg-001', '1F');
-      final route = await repository.getShortestRoute('bldg-001', '1F', 'A', 'B');
-
-      expect(route?.distanceMeters, 2.0);
-      expect(requestPaths, ['/buildings/bldg-001/floors/1F']);
-    });
+        expect(route?.distanceMeters, 2.0);
+        expect(requestPaths, ['/buildings/bldg-001/floors/1F']);
+      },
+    );
   });
 
   group('getShortestRoute', () {
@@ -348,49 +356,10 @@ void main() {
       'pois': <Map<String, dynamic>>[],
     };
 
-    test(
-      'GET /floors/{floor} 응답 하나로 최단 경로를 계산한다(별도 /graph 요청 없음)',
-      () async {
-        final requestPaths = <String>[];
-        final client = MockClient((request) async {
-          requestPaths.add(request.url.path);
-          return http.Response(
-            jsonEncode(floorResponse()),
-            200,
-            headers: {'content-type': 'application/json; charset=utf-8'},
-          );
-        });
-        final repository = HttpBuildingRepository(client: client);
-
-        final route = await repository.getShortestRoute(
-          'thehyundai-seoul',
-          '1F',
-          'N1',
-          'N3',
-        );
-
-        // 요청 경로가 /buildings/thehyundai-seoul/floors/1F 하나뿐이어야 한다.
-        expect(requestPaths, ['/buildings/thehyundai-seoul/floors/1F']);
-
-        // 거리: 직행(10.0)이 아니라 N1->N2->N3 우회(2.0+3.0=5.0)를 골라야 한다.
-        expect(route?.distanceMeters, 5.0);
-
-        // 노드 순서: 세 노드의 lat/lng을 N1, N2, N3 순서로 그대로 지난다
-        // (간선 geometry가 비어 있어 노드 좌표 사이를 직선으로 잇기 때문).
-        expect(route?.points.length, 3);
-        expect(route!.points[0].latitude, closeTo(37.5260, 1e-9));
-        expect(route.points[0].longitude, closeTo(126.9280, 1e-9));
-        expect(route.points[1].latitude, closeTo(37.5261, 1e-9));
-        expect(route.points[1].longitude, closeTo(126.9281, 1e-9));
-        expect(route.points[2].latitude, closeTo(37.5262, 1e-9));
-        expect(route.points[2].longitude, closeTo(126.9282, 1e-9));
-      },
-    );
-
-    test('reuses the cached floor response for a second node pair on the same floor', () async {
-      var requestCount = 0;
+    test('GET /floors/{floor} 응답 하나로 최단 경로를 계산한다(별도 /graph 요청 없음)', () async {
+      final requestPaths = <String>[];
       final client = MockClient((request) async {
-        requestCount++;
+        requestPaths.add(request.url.path);
         return http.Response(
           jsonEncode(floorResponse()),
           200,
@@ -399,24 +368,63 @@ void main() {
       });
       final repository = HttpBuildingRepository(client: client);
 
-      final first = await repository.getShortestRoute(
-        'thehyundai-seoul',
-        '1F',
-        'N1',
-        'N2',
-      );
-      final second = await repository.getShortestRoute(
+      final route = await repository.getShortestRoute(
         'thehyundai-seoul',
         '1F',
         'N1',
         'N3',
       );
 
-      expect(first?.distanceMeters, 2.0);
-      expect(second?.distanceMeters, 5.0);
-      // 층 응답은 한 번만 요청하고(캐시), 두 경로 계산 모두 로컬에서 수행한다.
-      expect(requestCount, 1);
+      // 요청 경로가 /buildings/thehyundai-seoul/floors/1F 하나뿐이어야 한다.
+      expect(requestPaths, ['/buildings/thehyundai-seoul/floors/1F']);
+
+      // 거리: 직행(10.0)이 아니라 N1->N2->N3 우회(2.0+3.0=5.0)를 골라야 한다.
+      expect(route?.distanceMeters, 5.0);
+
+      // 노드 순서: 세 노드의 lat/lng을 N1, N2, N3 순서로 그대로 지난다
+      // (간선 geometry가 비어 있어 노드 좌표 사이를 직선으로 잇기 때문).
+      expect(route?.points.length, 3);
+      expect(route!.points[0].latitude, closeTo(37.5260, 1e-9));
+      expect(route.points[0].longitude, closeTo(126.9280, 1e-9));
+      expect(route.points[1].latitude, closeTo(37.5261, 1e-9));
+      expect(route.points[1].longitude, closeTo(126.9281, 1e-9));
+      expect(route.points[2].latitude, closeTo(37.5262, 1e-9));
+      expect(route.points[2].longitude, closeTo(126.9282, 1e-9));
     });
+
+    test(
+      'reuses the cached floor response for a second node pair on the same floor',
+      () async {
+        var requestCount = 0;
+        final client = MockClient((request) async {
+          requestCount++;
+          return http.Response(
+            jsonEncode(floorResponse()),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        });
+        final repository = HttpBuildingRepository(client: client);
+
+        final first = await repository.getShortestRoute(
+          'thehyundai-seoul',
+          '1F',
+          'N1',
+          'N2',
+        );
+        final second = await repository.getShortestRoute(
+          'thehyundai-seoul',
+          '1F',
+          'N1',
+          'N3',
+        );
+
+        expect(first?.distanceMeters, 2.0);
+        expect(second?.distanceMeters, 5.0);
+        // 층 응답은 한 번만 요청하고(캐시), 두 경로 계산 모두 로컬에서 수행한다.
+        expect(requestCount, 1);
+      },
+    );
 
     test('returns null when the floor is not found (404)', () async {
       final client = MockClient((request) async {

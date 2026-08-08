@@ -6,6 +6,7 @@ import 'package:navigation_client/domain/dijkstra.dart';
 import 'package:navigation_client/models/building.dart';
 import 'package:navigation_client/models/discovery_result.dart';
 import 'package:navigation_client/models/poi_search_result.dart';
+import 'package:navigation_client/models/store_index_entry.dart';
 import 'package:navigation_client/repositories/building_repository.dart';
 import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/state/recent_searches_controller.dart';
@@ -440,6 +441,139 @@ void main() {
     });
   });
 
+  // 후보 산출 규칙 자체는 domain/store_suggestions_test.dart가 덮는다. 여기서는
+  // **패널이 그 후보를 어느 화면에 띄우는지**와, 목록을 못 받았을 때 검색이
+  // 그대로 도는지를 본다(설계: search-input-assist.md K·L절).
+  group('자동완성 후보', () {
+    late DestinationRepository originalDestination;
+    late BuildingRepository originalBuilding;
+    String? picked;
+
+    setUp(() {
+      originalDestination = destinationRepository;
+      originalBuilding = buildingRepository;
+      picked = null;
+    });
+
+    tearDown(() {
+      destinationRepository = originalDestination;
+      buildingRepository = originalBuilding;
+    });
+
+    Widget buildSubject(String query) => MaterialApp(
+      home: Scaffold(
+        body: SizedBox(
+          height: 500,
+          child: SearchPanel(
+            buildingId: 'building-1',
+            query: query,
+            submitTick: 0,
+            onStorePicked: (_) {},
+            onBuildingPicked: (_) {},
+            onQueryPicked: (value) => picked = value,
+          ),
+        ),
+      ),
+    );
+
+    // 디바운스가 끝나기 **전**. 서버는 아직 아무 말도 안 했다.
+    Future<void> pumpWhileTyping(WidgetTester tester) async {
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    testWidgets('서버를 기다리는 동안 후보가 먼저 뜬다', (tester) async {
+      buildingRepository = _FakeBuildingRepository(
+        storeIndex: [_entry('나이키 라이즈', '3F')],
+      );
+      destinationRepository = _FakeDestinationRepository(const []);
+
+      await tester.pumpWidget(buildSubject('나이'));
+      await pumpWhileTyping(tester);
+
+      expect(find.text('검색어 제안'), findsOneWidget);
+      expect(find.text('3F'), findsOneWidget);
+    });
+
+    // 초성은 서버 경량 매칭이 전혀 못 잡는다. 온디바이스 후보만이 답을 낸다.
+    testWidgets('초성으로도 후보가 나온다', (tester) async {
+      buildingRepository = _FakeBuildingRepository(
+        storeIndex: [_entry('나이키 라이즈', '3F')],
+      );
+      destinationRepository = _FakeDestinationRepository(const []);
+
+      await tester.pumpWidget(buildSubject('ㄴㅇㅋ'));
+      await pumpWhileTyping(tester);
+
+      expect(find.text('검색어 제안'), findsOneWidget);
+    });
+
+    // L이 실제로 값을 내는 자리. 서버가 못 찾은 뒤에도 표기 실수를 잡아 준다.
+    testWidgets('서버가 못 찾아도 오타 교정 후보를 되묻는다', (tester) async {
+      buildingRepository = _FakeBuildingRepository(
+        storeIndex: [_entry('샤넬 뷰티', '1F')],
+      );
+      destinationRepository = _FakeDestinationRepository(const []);
+
+      await tester.pumpWidget(buildSubject('샤낼 뷰티'));
+      // 경량(300ms) + 의미(400ms)까지 모두 지나 noMatch가 확정된 뒤.
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump(const Duration(milliseconds: 450));
+      await tester.pumpAndSettle();
+
+      expect(find.text('이걸 찾으셨나요?'), findsOneWidget);
+      expect(find.text('1F'), findsOneWidget);
+    });
+
+    testWidgets('후보를 탭하면 그 이름으로 다시 검색한다', (tester) async {
+      buildingRepository = _FakeBuildingRepository(
+        storeIndex: [_entry('나이키 라이즈', '3F')],
+      );
+      destinationRepository = _FakeDestinationRepository(const []);
+
+      await tester.pumpWidget(buildSubject('나이'));
+      await pumpWhileTyping(tester);
+      await tester.tap(find.byKey(const Key('suggestion-PO-나이키 라이즈')));
+
+      // 좌표를 들고 바로 이동하지 않고 이름으로 재검색한다(StoreIndexEntry 주석).
+      expect(picked, '나이키 라이즈');
+    });
+
+    // 자동완성은 부가 기능이다. 원본을 못 받아도 검색을 막아서는 안 된다.
+    testWidgets('목록을 못 받으면 후보만 사라지고 검색은 그대로 돈다', (tester) async {
+      buildingRepository = _FakeBuildingRepository(storeIndexFails: true);
+      destinationRepository = _FakeDestinationRepository([
+        _result(subcategory: '여성패션', category: '패션'),
+      ]);
+
+      await tester.pumpWidget(buildSubject('나이키'));
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+
+      expect(find.text('검색어 제안'), findsNothing);
+      // 서버 결과는 정상적으로 나온다.
+      expect(find.text('여성패션'), findsOneWidget);
+    });
+
+    // 층마다 있는 시설은 한 줄로 묶여 온다. 몇 곳인지 안 적으면 사용자는
+    // "왜 한 층만 나오지"로 읽는다.
+    testWidgets('같은 이름 시설은 한 줄로 묶고 몇 곳인지 적는다', (tester) async {
+      buildingRepository = _FakeBuildingRepository(
+        storeIndex: [
+          _entry('화장실', 'B2'),
+          _entry('화장실', 'B1'),
+          _entry('화장실', '1F'),
+        ],
+      );
+      destinationRepository = _FakeDestinationRepository(const []);
+
+      await tester.pumpWidget(buildSubject('화장실'));
+      await pumpWhileTyping(tester);
+
+      expect(find.textContaining('3곳'), findsOneWidget);
+    });
+  });
+
   group('reachLabel', () {
     // 거리는 실제 이동 거리, 시간은 비용 기준이다. 엘리베이터 대기·탑승이
     // 비용에만 들어 있어서, 시간까지 거리로 계산하면 다른 층 매장이 실제보다
@@ -532,11 +666,32 @@ class _FakeDestinationRepository implements DestinationRepository {
       discovery ?? DiscoveryResult(mode: DiscoveryMode.noMatch, query: query);
 }
 
-/// 이 화면이 실제로 부르는 것은 `getAllBuildings` 하나뿐이다. 나머지는
-/// [noSuchMethod]로 열어 둬 인터페이스가 늘어도 이 테스트가 깨지지 않게 한다.
+StoreIndexEntry _entry(String name, String floor) => StoreIndexEntry(
+  id: 'PO-$name',
+  name: name,
+  floorId: 'FL-$floor',
+  floorName: floor,
+);
+
+/// 이 화면이 실제로 부르는 것은 `getAllBuildings`·`getStoreIndex` 둘뿐이다.
+/// 나머지는 [noSuchMethod]로 열어 둬 인터페이스가 늘어도 이 테스트가 깨지지
+/// 않게 한다.
 class _FakeBuildingRepository implements BuildingRepository {
+  _FakeBuildingRepository({this.storeIndex, this.storeIndexFails = false});
+
+  final List<StoreIndexEntry>? storeIndex;
+
+  /// 자동완성 원본을 못 받는 상태. 앱이 죽지 않고 후보만 사라져야 한다.
+  final bool storeIndexFails;
+
   @override
   Future<List<Building>> getAllBuildings() async => const [];
+
+  @override
+  Future<List<StoreIndexEntry>?> getStoreIndex(String buildingId) async {
+    if (storeIndexFails) throw Exception('store-index 실패');
+    return storeIndex;
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
