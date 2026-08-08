@@ -1380,6 +1380,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                         onStorePicked: _onSearchStorePicked,
                         onBuildingPicked: _onSearchBuildingPicked,
                         onQueryPicked: _onSearchQueryPicked,
+                        indoorContextActive: _indoorContextActive,
                         currentFloorId: _activeIndoorFloor,
                         reachByNodeId: _reachByNodeId,
                       ),

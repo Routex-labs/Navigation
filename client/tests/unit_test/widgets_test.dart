@@ -129,6 +129,7 @@ void main() {
                   query.value = value;
                   submitTick.value++;
                 },
+                indoorContextActive: true,
                 currentFloorId: currentFloorId,
               ),
             ),
@@ -715,6 +716,7 @@ void main() {
                     query.value = value;
                     submitTick.value++;
                   },
+                  indoorContextActive: true,
                 ),
               ),
             ),

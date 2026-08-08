@@ -72,6 +72,7 @@ class SearchPanel extends StatefulWidget {
     required this.onStorePicked,
     required this.onBuildingPicked,
     required this.onQueryPicked,
+    required this.indoorContextActive,
     this.currentFloorId,
     this.reachByNodeId,
   });
@@ -109,6 +110,18 @@ class SearchPanel extends StatefulWidget {
   /// 바꾸고 [query]·[submitTick]을 새로 내려줘야 한 바퀴가 돈다.
   final ValueChanged<String> onQueryPicked;
 
+  /// 지금 건물 안을 보고 있는가(실내 모드이거나, 야외 지도 위에서 실내 도면을
+  /// 훑는 중). 상위의 `_indoorContextActive`를 그대로 받는다.
+  ///
+  /// **자동완성은 이 값이 참일 때만 동작한다.** 후보의 원본이 건물 하나의 매장
+  /// 목록이라, 야외에서 쓰면 지금 서 있는 곳과 무관한 매장을 제안하게 된다.
+  /// 실제로 시청 앞 야외 지도에서 `apc`를 치니 더현대서울 3층 매장이 후보로
+  /// 떴다 — 사용자가 야외에서 찾는 것은 그게 아니다.
+  ///
+  /// 야외 장소 검색은 외부 검색 API(Tmap 등)로 별도로 채울 예정이며, 그때
+  /// 이 패널이 어느 원본을 쓸지는 이 값으로 갈린다.
+  final bool indoorContextActive;
+
   @override
   State<SearchPanel> createState() => _SearchPanelState();
 }
@@ -136,6 +149,11 @@ enum _SearchPhase {
 
   /// 보여줄 매장·건물이 있다.
   results,
+
+  /// **온디바이스 후보로 답했다.** 서버 경량 매칭은 빈손이었지만 기기 안 인덱스가
+  /// 이름으로 매장을 찾은 상태다. 이때는 의미 검색으로 넘어가지 않는다 — 근거는
+  /// [_SearchPanelState._search]의 분기 주석에 있다.
+  suggestions,
 
   /// 경량과 의미 검색을 **둘 다** 끝냈는데 없다. 최종 "결과 없음" 문구는 오직
   /// 이 단계에서만 나온다.
@@ -191,11 +209,6 @@ List<TextSpan> highlightedNameSpans(String name, String query) {
   if (cursor < name.length) spans.add(TextSpan(text: name.substring(cursor)));
   return spans;
 }
-
-/// 후보 목록 위에 붙는 문구. 같은 목록이 두 자리에서 쓰이는데 뜻이 달라서
-/// 나눈다 — 치는 중에는 "이런 게 있다"는 제안이고, 못 찾은 뒤에는 "네가 치려던
-/// 게 이거냐"는 되물음이다.
-enum _SuggestionHeader { typing, didYouMean }
 
 class _SearchPanelState extends State<SearchPanel> {
   /// 경량 검색용 디바운스. 글자마다 서버를 때리지 않게 잠깐 모았다 보낸다.
@@ -277,7 +290,7 @@ class _SearchPanelState extends State<SearchPanel> {
   @override
   void initState() {
     super.initState();
-    _loadStoreIndex();
+    if (widget.indoorContextActive) _loadStoreIndex();
     // 검색창에 글자가 남아 있는 채로 패널이 다시 열릴 수 있다.
     if (widget.query.trim().isNotEmpty) _scheduleSearch(widget.query);
   }
@@ -298,6 +311,8 @@ class _SearchPanelState extends State<SearchPanel> {
   }
 
   List<StoreSuggestion> _computeSuggestions(String query) {
+    // 야외에서는 후보를 만들지 않는다 — 이유는 [SearchPanel.indoorContextActive].
+    if (!widget.indoorContextActive) return const [];
     final index = _storeIndex;
     if (index == null) return const [];
     return suggestStores(stores: index, query: query);
@@ -306,7 +321,13 @@ class _SearchPanelState extends State<SearchPanel> {
   @override
   void didUpdateWidget(covariant SearchPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.query != oldWidget.query) {
+    // 야외 → 실내로 들어오면 그때 원본을 받는다. 야외에서 미리 받아 두면 쓰지도
+    // 않을 목록을 내려받는 것이고, 실내로 들어온 뒤에는 후보가 있어야 한다.
+    if (widget.indoorContextActive && !oldWidget.indoorContextActive) {
+      _loadStoreIndex();
+    }
+    if (widget.query != oldWidget.query ||
+        widget.indoorContextActive != oldWidget.indoorContextActive) {
       // 서버 응답을 기다리지 않는다. 이게 자동완성이 즉시 뜨는 이유다.
       _suggestions = _computeSuggestions(widget.query);
     }
@@ -403,6 +424,35 @@ class _SearchPanelState extends State<SearchPanel> {
     // 지난 뒤에만 나올 수 있게 된다. 경량이 한 건이라도 잡으면 그대로 보여준다
     // — 잘 되던 검색은 여전히 빠르다.
     if (results.isEmpty && building == null) {
+      // **이름이 실제로 걸렸으면 의미 검색으로 넘어가지 않는다.**
+      //
+      // 실기기에서 `apc`로 확인한 문제다. 서버 경량 매칭은 `name LIKE %apc%`라
+      // 구두점이 든 `A.P.C.`를 못 잡고 `no_match`를 준다. 그런데 온디바이스
+      // 인덱스는 정규화 키로 이미 그 매장을 찾아 화면에 띄워 둔 상태다. 여기서
+      // 2차로 넘어가면 그 정답이 스피너에 덮이고, 임계값 0.50을 겨우 넘은
+      // 의미 검색이 **주차구역(6A·6E)** 을 "뜻이 비슷한 매장"이라며 확정했다.
+      // 맞는 답을 보여주다가 틀린 답으로 갈아치운 셈이다.
+      //
+      // FAISS.md 11절이 정한 역할 분리("정확한 이름은 1차가 확정하고 임베딩은
+      // 말로 푸는 질의만 담당")를 그대로 따르는 것이며, 달라진 건 그 1차가
+      // 서버뿐 아니라 온디바이스 인덱스이기도 하다는 점이다.
+      //
+      // 교정 후보만 있을 때는 넘긴다 — 그건 추측이라 의미 검색이 더 나을 수
+      // 있고, 2차도 실패하면 noMatch 화면이 그 교정 후보를 되묻는다.
+      if (_suggestions.any((s) => !s.kind.isCorrection)) {
+        setState(() {
+          _submittedQuery = query;
+          _results = const [];
+          _building = null;
+          _fromSemantic = false;
+          _discoveryMatches = const [];
+          _discoveryMode = null;
+          _discoveryQuestion = null;
+          _discoveryOptions = const [];
+          _phase = _SearchPhase.suggestions;
+        });
+        return;
+      }
       if (immediate) {
         await _semanticSearch(query, requestId);
       } else {
@@ -635,10 +685,11 @@ class _SearchPanelState extends State<SearchPanel> {
     final awaitingAnswer = widget.query.trim() != _submittedQuery;
     if (_suggestions.isNotEmpty &&
         awaitingAnswer &&
-        // 의미 검색만 예외다. 여기서만 몇 초가 걸릴 수 있어 "AI가 찾는 중"이라는
-        // 사실 자체가 화면에 있어야 한다(_searchingState 주석).
+        // 의미 검색만 예외다. 여기까지 왔다는 건 이름으로 걸린 후보가 없었다는
+        // 뜻이라(위 _search 분기) 후보로 덮을 것도 없고, 여기서만 몇 초가 걸릴 수
+        // 있어 "AI가 찾는 중"이라는 사실 자체가 화면에 있어야 한다.
         _phase != _SearchPhase.semanticSearching) {
-      return _suggestionList(_SuggestionHeader.typing);
+      return _suggestionList();
     }
 
     switch (_phase) {
@@ -647,6 +698,8 @@ class _SearchPanelState extends State<SearchPanel> {
       case _SearchPhase.typingLightSearch:
       case _SearchPhase.semanticSearching:
         return _searchingState();
+      case _SearchPhase.suggestions:
+        return _suggestionList();
       case _SearchPhase.clarify:
       case _SearchPhase.results:
         return _resultList();
@@ -658,9 +711,7 @@ class _SearchPanelState extends State<SearchPanel> {
       // 같은 표기 실수나 초성 질의(`ㄴㅇㅋ`)는 온디바이스 후보가 잡는다. 여기서
       // 후보를 안 보여주면 사용자가 볼 수 있는 건 "찾지 못했어요" 하나뿐이다.
       case _SearchPhase.noMatch:
-        return _suggestions.isEmpty
-            ? _emptyState(context)
-            : _suggestionList(_SuggestionHeader.didYouMean);
+        return _suggestions.isEmpty ? _emptyState(context) : _suggestionList();
     }
   }
 
@@ -669,7 +720,11 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 후보를 탭하면 **좌표를 들고 바로 이동하지 않는다.** 그 이름으로 검색을 다시
   /// 돌려(`onQueryPicked`) 기존 경량 매칭이 좌표까지 갖춘 결과를 만들게 한다 —
   /// 이유는 [StoreIndexEntry] 주석에 있다.
-  Widget _suggestionList(_SuggestionHeader header) {
+  Widget _suggestionList() {
+    // 머리말은 호출 자리가 아니라 **후보의 성격**으로 정한다. 전부 교정 후보면
+    // "네가 치려던 게 이거냐"는 되물음이고, 하나라도 이름이 실제로 걸렸으면
+    // "이런 게 있다"는 제안이다. 자리로 나누면 같은 목록에 다른 말이 붙는다.
+    final allCorrections = _suggestions.every((s) => s.kind.isCorrection);
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -677,13 +732,7 @@ class _SearchPanelState extends State<SearchPanel> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
           child: Text(
-            switch (header) {
-              _SuggestionHeader.typing => '검색어 제안',
-              // 교정 후보가 섞여 있을 때만 의미가 있는 문구다. 초성·부분 일치만
-              // 남은 경우에도 "이걸 찾으셨나요"는 여전히 맞는 말이라 나눠 쓰지
-              // 않는다.
-              _SuggestionHeader.didYouMean => '이걸 찾으셨나요?',
-            },
+            allCorrections ? '이걸 찾으셨나요?' : '검색어 제안',
             style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,

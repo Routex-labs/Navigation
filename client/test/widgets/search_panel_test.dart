@@ -88,6 +88,7 @@ void main() {
             onStorePicked: (_) {},
             onBuildingPicked: (_) {},
             onQueryPicked: (_) {},
+            indoorContextActive: true,
             reachByNodeId: reachByNodeId,
           ),
         ),
@@ -228,6 +229,7 @@ void main() {
             onStorePicked: (_) {},
             onBuildingPicked: (_) {},
             onQueryPicked: (_) {},
+            indoorContextActive: true,
             reachByNodeId: reachByNodeId,
           ),
         ),
@@ -370,6 +372,7 @@ void main() {
             onStorePicked: (_) {},
             onBuildingPicked: (_) {},
             onQueryPicked: (value) => picked = value,
+            indoorContextActive: true,
           ),
         ),
       ),
@@ -460,7 +463,7 @@ void main() {
       buildingRepository = originalBuilding;
     });
 
-    Widget buildSubject(String query) => MaterialApp(
+    Widget buildSubject(String query, {bool indoor = true}) => MaterialApp(
       home: Scaffold(
         body: SizedBox(
           height: 500,
@@ -471,6 +474,7 @@ void main() {
             onStorePicked: (_) {},
             onBuildingPicked: (_) {},
             onQueryPicked: (value) => picked = value,
+            indoorContextActive: indoor,
           ),
         ),
       ),
@@ -537,6 +541,72 @@ void main() {
 
       // 좌표를 들고 바로 이동하지 않고 이름으로 재검색한다(StoreIndexEntry 주석).
       expect(picked, '나이키 라이즈');
+    });
+
+    // **실기기에서 잡은 회귀다.** `apc`는 서버 경량 매칭이 `name LIKE %apc%`라
+    // 구두점이 든 `A.P.C.`를 못 잡고 no_match를 준다. 예전에는 그 뒤 의미 검색이
+    // 돌아 임계값을 겨우 넘긴 **주차구역**을 "뜻이 비슷한 매장"이라며 확정했다 —
+    // 정답이 이미 화면에 떠 있는데 오답으로 갈아치웠다.
+    testWidgets('이름이 걸린 후보가 있으면 의미 검색으로 넘어가지 않는다', (tester) async {
+      buildingRepository = _FakeBuildingRepository(
+        storeIndex: [_entry('A.P.C.', '3F')],
+      );
+      final repository = _FakeDestinationRepository(
+        const [],
+        discovery: const DiscoveryResult(
+          mode: DiscoveryMode.results,
+          query: 'apc',
+          matches: [],
+        ),
+      );
+      destinationRepository = repository;
+
+      await tester.pumpWidget(buildSubject('apc'));
+      // 경량(300ms) + 의미 유예(400ms)를 모두 지나도
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump(const Duration(milliseconds: 450));
+      await tester.pumpAndSettle();
+
+      // 의미 검색을 아예 부르지 않는다.
+      expect(repository.aiCallCount, 0);
+      // 후보가 그대로 남아 있다.
+      expect(find.text('검색어 제안'), findsOneWidget);
+      expect(find.text('3F'), findsOneWidget);
+    });
+
+    // 교정 후보만 있을 때는 추측이라 의미 검색에 기회를 준다.
+    testWidgets('교정 후보뿐이면 의미 검색으로 넘어간다', (tester) async {
+      buildingRepository = _FakeBuildingRepository(
+        storeIndex: [_entry('샤넬 뷰티', '1F')],
+      );
+      final repository = _FakeDestinationRepository(const []);
+      destinationRepository = repository;
+
+      await tester.pumpWidget(buildSubject('샤낼 뷰티'));
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump(const Duration(milliseconds: 450));
+      await tester.pumpAndSettle();
+
+      expect(repository.aiCallCount, 1);
+      expect(find.text('이걸 찾으셨나요?'), findsOneWidget);
+    });
+
+    // 후보의 원본이 건물 하나의 매장 목록이라, 야외에서 쓰면 지금 서 있는 곳과
+    // 무관한 매장을 제안한다. 실기기에서 시청 앞 야외 지도에 더현대서울 3층
+    // 매장이 후보로 떠서 잡았다. 야외 장소 검색은 외부 API로 따로 채운다.
+    testWidgets('야외에서는 후보를 만들지 않고 원본도 받지 않는다', (tester) async {
+      final repository = _FakeBuildingRepository(
+        storeIndex: [_entry('A.P.C.', '3F')],
+      );
+      buildingRepository = repository;
+      destinationRepository = _FakeDestinationRepository(const []);
+
+      await tester.pumpWidget(buildSubject('apc', indoor: false));
+      await pumpWhileTyping(tester);
+
+      expect(find.text('검색어 제안'), findsNothing);
+      // 쓰지도 않을 목록을 내려받지 않는다.
+      expect(repository.storeIndexCallCount, 0);
     });
 
     // 자동완성은 부가 기능이다. 원본을 못 받아도 검색을 막아서는 안 된다.
@@ -648,6 +718,10 @@ class _FakeDestinationRepository implements DestinationRepository {
   /// 2차 의미 검색 응답. 주지 않으면 `no_match`라 1차에서 끝나는 경로만 탄다.
   final DiscoveryResult? discovery;
 
+  /// 의미 검색을 몇 번 불렀는지. "아예 안 불렀다"를 검증하려면 결과가 아니라
+  /// 호출 자체를 세야 한다.
+  int aiCallCount = 0;
+
   @override
   Future<List<PoiSearchResult>> searchDestinations(
     String buildingId,
@@ -662,8 +736,11 @@ class _FakeDestinationRepository implements DestinationRepository {
     String? currentFloorId,
     Map<String, List<String>>? selectedFacets,
     bool showAll = false,
-  }) async =>
-      discovery ?? DiscoveryResult(mode: DiscoveryMode.noMatch, query: query);
+  }) async {
+    aiCallCount++;
+    return discovery ??
+        DiscoveryResult(mode: DiscoveryMode.noMatch, query: query);
+  }
 }
 
 StoreIndexEntry _entry(String name, String floor) => StoreIndexEntry(
@@ -687,8 +764,13 @@ class _FakeBuildingRepository implements BuildingRepository {
   @override
   Future<List<Building>> getAllBuildings() async => const [];
 
+  /// 원본을 몇 번 받아갔는지. 야외에서 "받지 않는다"를 검증하려면 결과가 아니라
+  /// 호출 자체를 세야 한다.
+  int storeIndexCallCount = 0;
+
   @override
   Future<List<StoreIndexEntry>?> getStoreIndex(String buildingId) async {
+    storeIndexCallCount++;
     if (storeIndexFails) throw Exception('store-index 실패');
     return storeIndex;
   }
