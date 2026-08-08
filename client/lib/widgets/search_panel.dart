@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../core/service_locator.dart';
 import '../domain/dijkstra.dart';
+import '../domain/search_result_order.dart';
 import '../models/building.dart';
 import '../models/discovery_result.dart';
 import '../models/poi_search_result.dart';
@@ -674,11 +675,30 @@ class _SearchPanelState extends State<SearchPanel> {
         ),
       );
     }
-    for (var index = 0; index < _results.length; index++) {
-      final match = index < _discoveryMatches.length
-          ? _discoveryMatches[index]
-          : null;
-      rows.add(_storeTile(_results[index], match));
+    // 가까운 것부터 보여준다. 규칙과 실패 조건은
+    // [sortedByWalkingDistance](../domain/search_result_order.dart)가 단일 출처다.
+    // 여기(build)에서 세우는 이유는 거리의 출처인 `widget.reachByNodeId`가 위치를
+    // 새로 잡을 때마다 바뀌기 때문이다 — 결과를 받는 시점에 한 번만 세우면
+    // 화면에 적힌 거리와 순서가 어긋난 목록이 남는다. 상한이 30건이라 매 빌드
+    // 정렬 비용은 무시할 수 있다.
+    final ordered = sortedByWalkingDistance(
+      results: _results,
+      reachByNodeId: widget.reachByNodeId,
+      fromSemantic: _fromSemantic,
+    );
+    // 추천 이유는 **storeId로** 짝짓는다. 예전에는 `_discoveryMatches[index]`로
+    // 인덱스를 맞췄는데, 정렬이 들어오면 이유가 엉뚱한 매장에 붙는다. 그리고
+    // 이건 가정이 아니다 — `_fromSemantic`은 결과가 정확한 이름 일치로 판정되면
+    // false가 되는데(_semanticSearch), 그때도 `_discoveryMatches`는 차 있다.
+    // 즉 "정렬은 도는데 인덱스 짝짓기는 깨지는" 조합이 실제 경로로 존재한다.
+    final matchByStoreId = {
+      for (final match in _discoveryMatches) match.storeId: match,
+    };
+    for (final store in ordered) {
+      final placeId = store.placeId;
+      rows.add(
+        _storeTile(store, placeId == null ? null : matchByStoreId[placeId]),
+      );
     }
 
     // 왜 ListView(shrinkWrap)가 아니라 SingleChildScrollView + Column인가.
