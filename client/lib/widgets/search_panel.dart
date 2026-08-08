@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../core/service_locator.dart';
 import '../domain/dijkstra.dart';
+import '../domain/reason_text.dart';
 import '../domain/search_result_order.dart';
 import '../domain/store_suggestions.dart';
 import '../models/building.dart';
@@ -1026,10 +1027,19 @@ class _SearchPanelState extends State<SearchPanel> {
     final matchByStoreId = {
       for (final match in _discoveryMatches) match.storeId: match,
     };
+    // 모든 행에 똑같이 들어 있는 근거 문장은 행에서 빼고 층에 자리를 돌려준다.
+    // 규칙과 이유는 [distinctiveReason](../domain/reason_text.dart)이 단일 출처다.
+    final sharedReasons = sharedReasonSentences(
+      _discoveryMatches.map((match) => match.reason),
+    );
     for (final store in ordered) {
       final placeId = store.placeId;
       rows.add(
-        _storeTile(store, placeId == null ? null : matchByStoreId[placeId]),
+        _storeTile(
+          store,
+          placeId == null ? null : matchByStoreId[placeId],
+          sharedReasons,
+        ),
       );
     }
 
@@ -1214,7 +1224,11 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 업종을 왼쪽 아이콘이 아니라 **이름 오른쪽 회색 글자**로 두는 이유는, 매장마다
   /// 다른 글리프를 만들지 않고도 소분류까지 그대로 읽히기 때문이다. 왼쪽 아이콘은
   /// "이건 장소다"만 말하면 되므로 한 종류로 충분하다.
-  Widget _storeTile(PoiSearchResult store, DiscoveryMatch? match) {
+  Widget _storeTile(
+    PoiSearchResult store,
+    DiscoveryMatch? match,
+    Set<String> sharedReasons,
+  ) {
     // 소분류가 없는 장소에서 업종이 통째로 사라지지 않도록 대분류로 떨어뜨린다 —
     // 상세 시트를 여는 호출부(MapShellScreen._showStoreInfo)와 같은 규칙이다.
     final categoryLabel =
@@ -1223,9 +1237,13 @@ class _SearchPanelState extends State<SearchPanel> {
     // 아래 첫 줄의 "경로 안내 불가"가 이미 말한다.
     final nodeId = store.nodeId;
     final reach = nodeId == null ? null : widget.reachByNodeId?[nodeId];
-    final firstLine =
-        match?.reason ??
-        (nodeId == null ? '${store.floor} · 경로 안내 불가' : store.floor);
+    // 층은 **항상** 남긴다. 예전에는 reason이 층을 통째로 대체해서, 다섯 행이 같은
+    // 문장을 되풀이하는 동안 정작 몇 층인지가 화면에서 사라졌다.
+    final reason = distinctiveReason(match?.reason, sharedReasons);
+    final floorLine = nodeId == null
+        ? '${store.floor} · 경로 안내 불가'
+        : store.floor;
+    final firstLine = reason == null ? floorLine : '$floorLine · $reason';
     return ListTile(
       leading: const Icon(Icons.place_outlined, color: AppColors.primary),
       title: Row(

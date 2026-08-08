@@ -445,7 +445,8 @@ void main() {
 
       expect(find.text('어떤 스타일의 신발을 찾으세요?'), findsOneWidget);
       expect(find.text('스포츠 (3)'), findsOneWidget);
-      expect(find.text('스포츠 신발을 찾을 때 볼 만해요.'), findsOneWidget);
+      // 층이 앞에 붙는다. 결과가 한 건이라 되풀이가 없어 근거는 그대로 남는다.
+      expect(find.text('3F · 스포츠 신발을 찾을 때 볼 만해요.'), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('facet-option-styles-스포츠')));
       await flush(tester);

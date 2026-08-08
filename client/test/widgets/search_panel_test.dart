@@ -315,14 +315,15 @@ void main() {
       await settleSearch(tester);
 
       // 가까운 매장이 위로 올라왔고,
+      // 층이 앞에 붙는다 — 근거가 층을 밀어내지 않는다(domain/reason_text.dart).
       expect(
-        tester.getTopLeft(find.text('이유-가까운곳')).dy,
-        lessThan(tester.getTopLeft(find.text('이유-먼곳')).dy),
+        tester.getTopLeft(find.text('3F · 이유-가까운곳')).dy,
+        lessThan(tester.getTopLeft(find.text('5F · 이유-먼곳')).dy),
       );
       // 그 줄의 거리도 가까운 매장의 것이다. 인덱스로 짝지었다면 이유와 거리가
       // 서로 다른 매장의 값이 되어 여기서 걸린다.
       final nearTile = find.ancestor(
-        of: find.text('이유-가까운곳'),
+        of: find.text('3F · 이유-가까운곳'),
         matching: find.byType(ListTile),
       );
       expect(
