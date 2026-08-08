@@ -231,6 +231,33 @@ List<TextSpan> highlightedNameSpans(String name, String query) {
   return spans;
 }
 
+/// 다음 검색 한 번에만 적용할 층 스코프.
+///
+/// **예전에는 "층으로 좁히지 마라"는 bool 하나였다.** 1F에서 `apc` 후보로 뜬 3F의
+/// `A.P.C.`를 탭하면 층 스코프 때문에 1차가 빈손이 되어 후보 화면으로 되돌아오던
+/// 문제를 그렇게 막았다. 그런데 스코프를 아예 빼면 **어느 매장을 고를지는 서버가
+/// 자기 순서로 정한다.**
+///
+/// 실기기에서 그 대가가 드러났다. 1F에서 후보 `화장실 · 1F 등 19곳 · 57m`를 탭했더니
+/// **`화장실 · B6 · 219m`** 로 갔다. 화면이 1F라고 적어 놓고 네 배 먼 지하 6층으로
+/// 보낸 것이다. 같은 이름이 19곳이니 서버는 그중 하나를 고를 수밖에 없는데, 그
+/// 기준에 사용자 위치가 들어갈 자리가 없다.
+///
+/// **고른 후보의 층을 실어 보내면 둘 다 풀린다.** `A.P.C.`는 3F로 좁혀 확정되고,
+/// `화장실`은 화면에 적힌 그 1F로 확정된다. 추가 요청도, 계약 변경도 없다.
+///
+/// [floorId]가 null인 경우는 **층을 모르는 선택**이다 — 최근 검색어는 문자열
+/// 하나뿐이라 어느 층 매장이었는지 알 방법이 없다. 그때만 예전처럼 스코프를 뺀다.
+///
+/// 설계 근거와 검증 기준은 `docs/client/search-result-list-ux.md` T절이 단일
+/// 출처다.
+class _FloorScopeOverride {
+  const _FloorScopeOverride(this.floorId);
+
+  /// 이 층으로 좁힌다. null이면 좁히지 않는다.
+  final String? floorId;
+}
+
 class _SearchPanelState extends State<SearchPanel> {
   /// 경량 검색용 디바운스. 글자마다 서버를 때리지 않게 잠깐 모았다 보낸다.
   static const _lightDebounce = Duration(milliseconds: 300);
@@ -316,16 +343,15 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 누르는 경우에는 유지한다 — 방금 한 조작이 사라지면 안 된다.
   SearchSortOrder? _sortOverride;
 
-  /// 다음 검색 한 번만 층 스코프를 빼고 건물 전체에서 찾는다.
+  /// 다음 검색 **한 번만** 층 스코프를 이 값으로 바꾼다. null이면 재정의 없이
+  /// [SearchPanel.currentFloorId]를 그대로 쓴다.
   ///
-  /// 후보나 최근 검색어를 **탭한 경우**에 선다. 층 스코프는 "화장실"처럼 사용자가
-  /// 직접 친 시설 질의를 지금 보는 층으로 확정하려고 있는 것인데, 목록에서 특정
-  /// 대상을 고른 행동에까지 적용하면 엉뚱하게 막힌다.
+  /// 목록에서 무언가를 **탭한 경우**에 선다. 층 스코프는 "화장실"처럼 사용자가
+  /// 직접 친 시설 질의를 지금 보는 층으로 확정하려고 있는 것이지, 목록에서 특정
+  /// 대상을 콕 집은 행동에 그대로 적용할 것이 아니다.
   ///
-  /// 실기기에서 잡았다. 1F에서 `apc` 후보로 뜬 **3F의 A.P.C.** 를 탭하면 그 이름으로
-  /// 다시 검색하는데, 층 스코프 때문에 1차가 또 빈손이 되고 후보 화면으로 되돌아와
-  /// 몇 번을 눌러도 매장에 닿지 못했다. 서버는 층만 안 좁히면 `ok · 3F`를 준다.
-  bool _ignoreFloorScopeOnce = false;
+  /// 왜 bool이 아니라 층 값인지는 [_FloorScopeOverride] 주석에 있다.
+  _FloorScopeOverride? _floorScopeOnce;
 
   @override
   void initState() {
@@ -446,9 +472,13 @@ class _SearchPanelState extends State<SearchPanel> {
       // 우연히 걸리는 층이 나온다). 매장을 이름으로 아는 검색이 다른 층에
       // 있어 여기서 빈손이 되더라도, 빈손이면 아래에서 층 제한이 없는 의미
       // 검색으로 자동으로 넘어가 그 매장을 여전히 찾아낸다.
-      // 목록에서 고른 검색이면 층을 좁히지 않는다(위 _ignoreFloorScopeOnce).
-      final floorScope = _ignoreFloorScopeOnce ? null : widget.currentFloorId;
-      _ignoreFloorScopeOnce = false;
+      // 목록에서 고른 검색이면 **고른 그 매장의 층**으로 좁힌다(위
+      // [_FloorScopeOverride]). 층을 모르는 선택(최근 검색어)만 스코프를 뺀다.
+      final override = _floorScopeOnce;
+      final floorScope = override != null
+          ? override.floorId
+          : widget.currentFloorId;
+      _floorScopeOnce = null;
       results = await destinationRepository.searchDestinations(
         widget.buildingId,
         query,
@@ -1026,7 +1056,9 @@ class _SearchPanelState extends State<SearchPanel> {
       ),
       isThreeLine: reach != null,
       onTap: () {
-        _ignoreFloorScopeOnce = true;
+        // 화면에 적힌 그 층으로 확정되게 한다. 이름만 넘기면 같은 이름이 19곳인
+        // 시설에서 서버가 자기 순서로 아무 층이나 고른다([_FloorScopeOverride]).
+        _floorScopeOnce = _FloorScopeOverride(store.floorId);
         widget.onQueryPicked(store.name);
       },
     );
@@ -1117,7 +1149,9 @@ class _SearchPanelState extends State<SearchPanel> {
                               recentSearchesController.remove(query),
                         ),
                         onTap: () {
-                          _ignoreFloorScopeOnce = true;
+                          // 최근 검색어는 문자열 하나뿐이라 어느 층 매장이었는지
+                          // 알 방법이 없다. 층을 모르는 선택이므로 스코프를 뺀다.
+                          _floorScopeOnce = const _FloorScopeOverride(null);
                           widget.onQueryPicked(query);
                         },
                       ),

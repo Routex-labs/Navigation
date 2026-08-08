@@ -599,10 +599,14 @@ void main() {
       expect(find.text('이걸 찾으셨나요?'), findsOneWidget);
     });
 
-    // **실기기에서 잡은 회귀다.** 1F에서 3F 매장 후보를 탭하면 그 이름으로 다시
-    // 검색하는데, 층 스코프 때문에 1차가 또 빈손이 되어 후보 화면으로 되돌아왔다.
-    // 몇 번을 눌러도 매장에 닿지 못한다.
-    testWidgets('후보를 탭한 검색은 층으로 좁히지 않는다', (tester) async {
+    // **실기기에서 두 번 잡은 자리다.**
+    //
+    // 처음에는 1F에서 3F 매장 후보를 탭하면 층 스코프 때문에 1차가 또 빈손이
+    // 되어 후보 화면으로 되돌아왔다. 그래서 "탭한 검색은 층을 안 좁힌다"로
+    // 막았는데, 그러면 **어느 매장을 고를지를 서버가 자기 순서로 정한다** —
+    // `화장실 · 1F 등 19곳 · 57m`을 탭했더니 `화장실 · B6 · 219m`로 갔다.
+    // 지금은 **고른 후보의 층**을 실어 보내 둘 다 막는다.
+    testWidgets('후보를 탭하면 그 후보의 층으로 좁혀 검색한다', (tester) async {
       buildingRepository = _FakeBuildingRepository(
         storeIndex: [_entry('A.P.C.', '3F')],
       );
@@ -652,8 +656,123 @@ void main() {
 
       expect(query.value, 'A.P.C.');
       expect(repository.floorScopes.length, 2);
+      // 탭 전에는 지금 보고 있는 층, 탭 뒤에는 **고른 후보의 층**이다.
       expect(repository.floorScopes.first, 'FL-1F');
-      expect(repository.floorScopes.last, isNull);
+      expect(repository.floorScopes.last, 'FL-3F');
+    });
+
+    // 같은 이름이 층마다 있는 시설은 대표(최근접)의 층으로 좁혀야 화면에 적힌
+    // 층과 실제로 가는 층이 같아진다.
+    testWidgets('묶인 시설은 화면에 적힌 대표의 층으로 좁힌다', (tester) async {
+      buildingRepository = _FakeBuildingRepository(
+        storeIndex: [
+          _entry('화장실', '6F', nodeId: 'N6'),
+          _entry('화장실', 'B2', nodeId: 'NB2'),
+          _entry('화장실', '1F', nodeId: 'N1'),
+        ],
+      );
+      final repository = _FakeDestinationRepository(const []);
+      destinationRepository = repository;
+
+      final query = ValueNotifier<String>('화장');
+      final submitTick = ValueNotifier<int>(0);
+      addTearDown(query.dispose);
+      addTearDown(submitTick.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              height: 500,
+              child: ListenableBuilder(
+                listenable: Listenable.merge([query, submitTick]),
+                builder: (_, _) => SearchPanel(
+                  buildingId: 'building-1',
+                  query: query.value,
+                  submitTick: submitTick.value,
+                  currentFloorId: 'FL-1F',
+                  onStorePicked: (_) {},
+                  onBuildingPicked: (_) {},
+                  onQueryPicked: (value) {
+                    query.value = value;
+                    submitTick.value++;
+                  },
+                  indoorContextActive: true,
+                  // B2가 가장 가깝다 → 대표도 B2다.
+                  reachByNodeId: const {
+                    'N6': NodeReach(distanceM: 310, costM: 310),
+                    'NB2': NodeReach(distanceM: 48, costM: 48),
+                    'N1': NodeReach(distanceM: 120, costM: 120),
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('suggestion-PO-화장실-B2')));
+      await tester.pumpAndSettle();
+
+      // 인덱스 첫 번째(6F)도, 지금 보고 있는 층(1F)도 아닌 대표의 층이다.
+      expect(repository.floorScopes.last, 'FL-B2');
+    });
+
+    // 최근 검색어는 문자열 하나뿐이라 어느 층 매장이었는지 알 방법이 없다.
+    // 그때만 예전처럼 스코프를 뺀다 — 안 그러면 다른 층 매장에 영영 못 닿는다.
+    testWidgets('최근 검색어 탭은 층으로 좁히지 않는다', (tester) async {
+      final originalRecent = recentSearchesController;
+      addTearDown(() => recentSearchesController = originalRecent);
+      SharedPreferences.setMockInitialValues({});
+      final recent = RecentSearchesController(
+        prefs: await SharedPreferences.getInstance(),
+      );
+      await recent.ready;
+      await recent.add('A.P.C.');
+      recentSearchesController = recent;
+
+      buildingRepository = _FakeBuildingRepository(
+        storeIndex: [_entry('A.P.C.', '3F')],
+      );
+      final repository = _FakeDestinationRepository(const []);
+      destinationRepository = repository;
+
+      final query = ValueNotifier<String>('');
+      final submitTick = ValueNotifier<int>(0);
+      addTearDown(query.dispose);
+      addTearDown(submitTick.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              height: 500,
+              child: ListenableBuilder(
+                listenable: Listenable.merge([query, submitTick]),
+                builder: (_, _) => SearchPanel(
+                  buildingId: 'building-1',
+                  query: query.value,
+                  submitTick: submitTick.value,
+                  currentFloorId: 'FL-1F',
+                  onStorePicked: (_) {},
+                  onBuildingPicked: (_) {},
+                  onQueryPicked: (value) {
+                    query.value = value;
+                    submitTick.value++;
+                  },
+                  indoorContextActive: true,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('recent-A.P.C.')));
+      await tester.pumpAndSettle();
+
+      expect(repository.floorScopes.single, isNull);
     });
 
     // 후보의 원본이 건물 하나의 매장 목록이라, 야외에서 쓰면 지금 서 있는 곳과
