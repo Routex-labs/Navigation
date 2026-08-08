@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 import '../models/building.dart';
 import '../models/building_graph.dart';
 import '../models/category_count.dart';
+import '../models/store_index_entry.dart';
 import '../models/floor_plan.dart';
 import '../models/indoor_route.dart';
 import 'building_repository.dart';
@@ -92,6 +93,35 @@ class MockBuildingRepository implements BuildingRepository {
           ),
         )
         .toList();
+  }
+
+  @override
+  Future<List<StoreIndexEntry>?> getStoreIndex(String buildingId) async {
+    final data = await _load();
+    if (data['id'] != buildingId) return null;
+
+    // 목업 자산은 층 도면만 갖고 있어 매장 id를 따로 주지 않는다. 자동완성은
+    // 이름으로 다시 검색하는 흐름이라(StoreIndexEntry 주석) id를 키로 쓰지
+    // 않으므로, 층·이름을 합친 값으로 채워 유일성만 맞춘다.
+    final entries = <StoreIndexEntry>[];
+    final floorData = data['floor_data'] as Map<String, dynamic>;
+    for (final entry in floorData.entries) {
+      final plan = FloorPlan.fromJson(entry.value as Map<String, dynamic>);
+      for (final store in plan.stores) {
+        entries.add(
+          StoreIndexEntry(
+            id: '${entry.key}/${store.name}',
+            name: store.name,
+            floorId: entry.key,
+            floorName: entry.key,
+            category: store.category,
+            subcategory: store.subcategory,
+            entranceNodeId: store.entranceNodeId,
+          ),
+        );
+      }
+    }
+    return entries;
   }
 
   @override
