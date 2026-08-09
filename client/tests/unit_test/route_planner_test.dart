@@ -68,6 +68,7 @@ void main() {
     RoutePlanField? field,
     List<DirectionsCandidate> results = const [],
     bool transitEnabled = true,
+    bool indoorOnly = false,
   }) async {
     final recorder = _Recorder();
     await tester.pumpWidget(
@@ -84,6 +85,7 @@ void main() {
             initialMode: mode,
             initialField: field,
             transitEnabled: transitEnabled,
+            indoorOnly: indoorOnly,
             onClose: () => recorder.closed = true,
             onEndpointsChanged: (o, d) {
               recorder.origin = o;
@@ -183,6 +185,23 @@ void main() {
     );
 
     expect(recorder.indoorWalkDestination?.title, 'MLB');
+    expect(map.road, isNull);
+  });
+
+  testWidgets('실내 지도 탭에서는 도보만 남기고 실내 안내로 넘긴다', (WidgetTester tester) async {
+    // 건물 안 두 지점 사이의 안내는 층 그래프로 풀어 실내 지도에 그려야 한다.
+    // 이 화면이 쓰는 도로 경로는 야외 지도에만 그려지므로, 실내 탭에서 그리면
+    // 보이지도 않는 지도에 선을 긋고 카드에는 건물을 관통하는 직선이 적힌다.
+    final recorder = await pumpPlanner(
+      tester,
+      destination: outdoorPlace,
+      indoorOnly: true,
+    );
+
+    expect(find.byKey(const ValueKey('route-plan-mode-car')), findsNothing);
+    expect(find.byKey(const ValueKey('route-plan-mode-transit')), findsNothing);
+    expect(find.byKey(const ValueKey('route-plan-mode-walk')), findsOneWidget);
+    expect(recorder.indoorWalkDestination?.title, '한성대학교');
     expect(map.road, isNull);
   });
 

@@ -1052,6 +1052,13 @@ class _MapShellScreenState extends State<MapShellScreen>
     });
   }
 
+  /// 길찾기 화면에서 골라 둔 수단을 잊는다. 그 화면을 다시 열면 거리를 보고
+  /// 처음부터 정한다.
+  void _forgetPlannerMode() {
+    if (_plannerMode == null) return;
+    setState(() => _plannerMode = null);
+  }
+
   /// 길찾기 화면을 닫는다. 경로를 지울지는 그 화면이 이미 정했다 — X로
   /// 취소했으면 지운 뒤에, "안내시작"이면 남긴 채로 여기까지 온다.
   void _closePlanner() {
@@ -1356,6 +1363,11 @@ class _MapShellScreenState extends State<MapShellScreen>
     required DirectionsCandidate destination,
     bool autoSelectMode = true,
   }) async {
+    // 여기로 오는 안내는 전부 길찾기 화면 **밖에서** 시작된 것이다(매장 시트,
+    // 검색 결과, 지도 탭). 그러니 그 화면에서 골라 뒀던 수단은 이제 옛 이야기다 —
+    // 안 지우면 예전에 자동차를 한 번 고른 것 때문에 한참 뒤의 도보 안내에서
+    // 이동 수단 줄이 계속 감춰진다.
+    _forgetPlannerMode();
     // 건물 안 매장이 목적지면 수단을 고르지 않는다. 그 안내는 "문을 경유해
     // 매장까지"라 도보 구간과 실내 구간이 한 몸이고([showOutdoorToIndoorRouteTo]),
     // 대중교통으로 바꾸면 그 실내 구간이 통째로 사라진다.
@@ -1819,9 +1831,15 @@ class _MapShellScreenState extends State<MapShellScreen>
                   //
                   // 검색 중에는 감춘다 — 그 자리는 결과 패널이 쓰고, 검색을 하는
                   // 동안에는 아직 어디로 갈지도 안 정해졌다.
+                  // 자동차 경로를 보고 있을 때는 감춘다. 이 줄에는 도보와
+                  // 대중교통뿐이라, 지도에 자동차 경로가 그려진 채로 "도보"가
+                  // 눌린 것처럼 보이는 거짓말이 된다. 수단을 바꾸려면 초안 바의
+                  // 행을 눌러 길찾기 화면으로 돌아가면 된다 — 수단을 고르는
+                  // 자리는 이제 그 화면 하나다.
                   if (_mode == MapMode.outdoor &&
                       _routeDraftDestination != null &&
-                      !_searchActive)
+                      !_searchActive &&
+                      _plannerMode != RoutePlanMode.car)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(
                         12,
@@ -2032,6 +2050,9 @@ class _MapShellScreenState extends State<MapShellScreen>
                 initialMode: _plannerMode,
                 initialField: _plannerField,
                 transitEnabled: transitRepository.isAvailable,
+                // 실내 지도 탭에서는 이 화면이 그릴 수 있는 경로가 없다. 도보
+                // 하나만 남기고, 목적지가 정해지면 곧바로 실내 안내로 넘긴다.
+                indoorOnly: _mode == MapMode.indoor,
                 onModeChanged: (mode) => _plannerMode = mode,
                 onEndpointsChanged: (origin, destination) => setState(() {
                   _selectedOrigin = origin;

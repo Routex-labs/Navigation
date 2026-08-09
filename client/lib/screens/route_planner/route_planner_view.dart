@@ -82,6 +82,7 @@ class RoutePlannerView extends StatefulWidget {
     this.initialMode,
     this.initialField,
     this.transitEnabled = true,
+    this.indoorOnly = false,
   });
 
   final RoutePlannerMap map;
@@ -134,6 +135,18 @@ class RoutePlannerView extends StatefulWidget {
 
   final bool transitEnabled;
 
+  /// 지금 화면이 **실내 지도 탭**인지.
+  ///
+  /// 그렇다면 이 화면이 그릴 수 있는 경로가 없다. 건물 안 두 지점 사이의 안내는
+  /// 층 그래프로 풀어 실내 지도에 그려야 하는데, 이 화면이 쓰는 도로 경로는
+  /// 야외 지도에만 그려진다 — 실내 탭에서는 보이지도 않는 지도에 선을 긋고,
+  /// 요약 카드에는 건물을 관통하는 직선 거리가 적힌다.
+  ///
+  /// 그래서 수단을 도보 하나로 줄이고, 목적지가 정해지는 즉시
+  /// [onIndoorWalkRoute]로 넘긴다. 자동차·대중교통은 건물 안에서 고를 이유가
+  /// 없으므로 탭 자체를 감춘다.
+  final bool indoorOnly;
+
   @override
   State<RoutePlannerView> createState() => _RoutePlannerViewState();
 }
@@ -180,10 +193,13 @@ class _RoutePlannerViewState extends State<RoutePlannerView> {
   /// 계산된다 — 매 프레임 now()를 읽으면 시트를 열어 둔 채 숫자가 저 혼자 바뀐다.
   DateTime? _transitQueriedAt;
 
-  List<RoutePlanMode> get _modes => [
-    for (final mode in RoutePlanMode.values)
-      if (mode != RoutePlanMode.transit || widget.transitEnabled) mode,
-  ];
+  List<RoutePlanMode> get _modes {
+    if (widget.indoorOnly) return const [RoutePlanMode.walk];
+    return [
+      for (final mode in RoutePlanMode.values)
+        if (mode != RoutePlanMode.transit || widget.transitEnabled) mode,
+    ];
+  }
 
   @override
   void initState() {
@@ -242,7 +258,10 @@ class _RoutePlannerViewState extends State<RoutePlannerView> {
   RoutePlanMode _pickInitialMode() {
     final destination = _destination;
     final from = _origin?.point ?? widget.map.currentOriginPoint;
-    if (destination == null || from == null || !widget.transitEnabled) {
+    if (widget.indoorOnly ||
+        destination == null ||
+        from == null ||
+        !widget.transitEnabled) {
       return RoutePlanMode.walk;
     }
     final meters = const Distance().as(
@@ -383,9 +402,14 @@ class _RoutePlannerViewState extends State<RoutePlannerView> {
     final destination = _destination;
     if (destination == null) return;
 
-    // 도보 + 건물 안 매장은 이 화면이 그릴 수 없는 유일한 조합이다. 상위의
-    // "문을 경유해 매장까지" 흐름으로 넘긴다([RoutePlannerView.onIndoorWalkRoute]).
-    if (_mode == RoutePlanMode.walk && destination.isIndoorPoint) {
+    // 이 화면이 그릴 수 없는 두 경우를 상위로 넘긴다
+    // ([RoutePlannerView.onIndoorWalkRoute]).
+    //
+    // - 도보 + 건물 안 매장: "문을 경유해 매장까지"라 야외 구간과 실내 구간이
+    //   한 몸이다.
+    // - 실내 지도 탭: 애초에 야외 지도에 그릴 수 없다([indoorOnly]).
+    if (_mode == RoutePlanMode.walk &&
+        (widget.indoorOnly || destination.isIndoorPoint)) {
       widget.onIndoorWalkRoute(_origin, destination);
       return;
     }
@@ -608,7 +632,14 @@ class _RoutePlannerViewState extends State<RoutePlannerView> {
             child: _searching && _results.isEmpty
                 ? const Center(child: CircularProgressIndicator())
                 : ListView.separated(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    // 셸이 키보드로 화면을 리사이즈하지 않으므로
+                    // (`resizeToAvoidBottomInset: false`) 여기서 바닥을 직접
+                    // 띄운다 — 안 그러면 목록의 아래쪽이 키보드에 덮여, 스크롤을
+                    // 끝까지 내려도 마지막 줄을 누를 수 없다.
+                    padding: EdgeInsets.only(
+                      top: 4,
+                      bottom: MediaQuery.viewInsetsOf(context).bottom + 4,
+                    ),
                     // 출발지 칸에서는 맨 위에 "현재 위치"를 고정으로 둔다.
                     // 따로 고르지 않으면 그게 기본값이므로, 되돌아올 길이
                     // 목록 안에 있어야 한다.
