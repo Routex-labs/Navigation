@@ -1084,7 +1084,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
         // 크기는 화면 배율을 곱해 정한다 — `icon-size`는 물리 픽셀이고
         // `text-size`는 논리 픽셀이라, 안 곱하면 고밀도 화면에서 아이콘만
         // 배율만큼 작아진다([storeCategoryIconSizeIndoor] 실측표).
-        iconSize: storeCategoryIconSizeIndoor(_devicePixelRatio),
+        iconSize: storeCategoryIconSize(_devicePixelRatio),
         textVariableAnchor: kStoreLabelVariableAnchor,
         textRadialOffset: kStoreLabelRadialOffset,
         // variable-anchor가 고른 방향에 맞춰 좌/우 정렬을 따라가게 한다.
@@ -1172,7 +1172,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
           ],
           poiIconImageName(kDefaultPoiIcon),
         ],
-        iconSize: kIndoorPoiIconSize,
+        iconSize: indoorMarkerIconSize(_devicePixelRatio),
         iconOpacity: 0.92,
         iconAllowOverlap: true,
       ),
@@ -1221,7 +1221,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
           ],
           poiIconImageName(kDefaultPoiIcon),
         ],
-        iconSize: kIndoorPoiIconSize,
+        iconSize: indoorMarkerIconSize(_devicePixelRatio),
         iconOpacity: 0.92,
         iconAllowOverlap: true,
         // iconOffset을 주지 않아 아이콘이 폴리곤 중심(centroid)에 그려진다.

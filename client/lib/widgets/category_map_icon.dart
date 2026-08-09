@@ -116,58 +116,34 @@ const kStoreLabelVariableAnchor = <String>['left', 'right'];
 /// 여유가 조금 더 있다.
 const kStoreLabelRadialOffset = 0.55;
 
-/// 아이콘 비트맵 캔버스 한 변(px). [renderStoreCategoryIconPng]가 굽는 크기이자
-/// `icon-size` 1.0일 때 화면에 그려지는 크기다.
-const kIconCanvasPx = 96.0;
-
-/// 대분류 배지를 **논리 픽셀**로 얼마나 크게 그릴지 (z16 축소 ~ z20 확대).
+/// 실내 화면의 대분류 배지 `icon-size`.
 ///
-/// 매장명 글자가 12~17 논리 px이므로([kStoreLabelMinPx]~[kStoreLabelMaxPx])
-/// 배지는 글자의 1.17~1.18배다.
+/// ## 화장실 아이콘과 **같은 값 하나**를 쓴다
 ///
-/// **비율로 붙잡아 둔다.** 배율 버그를 고친 직후 12~18로 잡았다가 도면이 배지에
-/// 눌려 보여 11~16으로 내렸고, 그 뒤 글자 밴드가 접근성 피드백으로 올라가면서
-/// 같은 비율을 유지하려고 14~20이 됐다. 글자보다 조금 크기만 하면 "여기 무슨
-/// 업종인지"는 전달되므로 **1.2배 언저리**가 기준이고, 절대값은 글자를 따라간다.
-const kStoreCategoryIconMinLogicalPx = 14.0;
-const kStoreCategoryIconMaxLogicalPx = 20.0;
-
-/// 실내 화면의 대분류 아이콘 `icon-size` 표현식.
+/// "대분류 아이콘을 화장실만큼 해 달라"는 피드백으로 배지 전용 크기를 없애고
+/// [kIndoorMarkerLogicalPx]로 합쳤다. 값을 두 벌로 두면 한쪽만 조정할 때마다
+/// 다시 갈라지고, 실제로 그렇게 갈라져 있었다.
 ///
-/// ## 왜 상수가 아니라 함수가 됐나 — 아이콘만 화면 배율을 안 먹고 있었다
+/// **zoom 보간도 함께 없앴다.** 배지만 줌에 따라 커지면 같은 화면에서 화장실
+/// 아이콘과 크기가 어긋난다 — 시설 아이콘은 원래 고정이었다. 도면을 훑는 축소
+/// 화면에서 마커가 전부 같은 크기로 남는 편이 밀도도 예측 가능하다.
 ///
-/// **이 파일의 모든 크기 주석이 3.5배 틀려 있었다.** `icon-size`는 비트맵의
-/// **화면(물리) 픽셀** 수에 곱해지는데, `text-size`는 논리 픽셀이라 MapLibre가
-/// 화면 배율을 곱해 그린다. 즉 같은 숫자를 둘에 줘도 고밀도 화면에서는 아이콘만
-/// 배율만큼 작아진다.
+/// 이 결정으로 사라진 것과 그 이유는 아래에 남긴다.
 ///
-/// Galaxy S23(1440×3088, 배율 약 3.5)에서 실측했다.
+///  - `kStoreCategoryIconMinLogicalPx`/`MaxLogicalPx`(14~20) — 배지 전용 크기.
+///    글자 밴드(12~17)의 1.2배로 잡았던 값인데, 화장실(약 11.5 논리 px)보다
+///    확실히 커서 같은 도면 위에서 두 종류의 마커가 다른 무게로 읽혔다.
+///  - z16~z20 보간 — 위와 같은 이유.
 ///
-/// | | 설정 | 화면 px | 논리 px |
-/// |---|---|---|---|
-/// | 매장명 글자 | `text-size: 14` | 약 49 | 14 |
-/// | 대분류 배지 (예전 0.20) | `icon-size: 0.20` | 19 | **5.5** |
+/// ## 배율 환산은 그대로 필요하다
 ///
-/// 배지가 글자의 1.4배여야 한다고 주석에 적혀 있었지만 실제로는 **0.4배**였다.
-/// "동그란 게 너무 작다"는 피드백이 정확했고, 0.20 → 0.24처럼 숫자를 조금
-/// 올리는 것으로는 닿을 수 없는 격차였다. 그래서 크기를 **논리 픽셀로 적고**
-/// 화면 배율을 여기서 곱한다 — 기기가 바뀌어도 눈에 보이는 크기가 같다.
-///
-/// 예전 값(0.14~0.20)과 그 주변의 "0.17~0.25로 키웠더니 B1 라벨이 49→38개로
-/// 줄었다"는 실측은 **전부 이 버그 위에서 잰 값**이라 더 이상 기준이 아니다.
-/// 지금 기준은 아래 [storeCategoryIconLayout]이 만드는 배치 규칙이다.
-List<Object> storeCategoryIconSizeIndoor(double devicePixelRatio) {
-  double scale(double logicalPx) => logicalPx * devicePixelRatio / kIconCanvasPx;
-  return [
-    'interpolate',
-    ['linear'],
-    ['zoom'],
-    16,
-    scale(kStoreCategoryIconMinLogicalPx),
-    20,
-    scale(kStoreCategoryIconMaxLogicalPx),
-  ];
-}
+/// `icon-size`는 비트맵의 **물리** 픽셀에 곱해지고 `text-size`는 논리 픽셀이라,
+/// 배율을 안 곱하면 고밀도 화면에서 아이콘만 배율만큼 작아진다. Galaxy S23
+/// (배율 3.5)에서 글자 14 논리px(=49 물리px) 옆에 배지가 19 물리px(=5.5 논리px)
+/// 으로 떠 "동그란 게 너무 작다"가 됐던 것이 그 버그다. 환산은
+/// [indoorMarkerIconSize]가 맡는다.
+double storeCategoryIconSize(double devicePixelRatio) =>
+    indoorMarkerIconSize(devicePixelRatio);
 
 /// 대분류 아이콘 비트맵. 흰 테두리 + 카테고리 색 원 + 흰 글리프.
 ///

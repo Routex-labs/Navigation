@@ -16,12 +16,14 @@ const _epsilonDeg = 1e-7;
 /// 사라진 뒤에도 얼마든지 더 나갈 수 있다. 그 상태에서는 자기가 어디로 얼마나
 /// 움직였는지 알 방법이 없어 "지도가 없어졌다"가 된다.
 ///
-/// **허용 영역은 bbox가 아니라 bbox를 화면 크기만큼 깎은 것이다.**
+/// **허용 영역은 bbox가 아니라 bbox를 화면 크기의 일부만큼 깎은 것이다.**
 /// [halfSpanLat]·[halfSpanLng]는 지금 화면이 덮는 위경도 범위의 **절반**이다.
 /// 중심만 bbox 안에 가두면 중심이 모서리에 있는 상태가 합법이라, 그 순간 화면의
 /// 절반 이상이 건물 밖 빈 공간이 된다. 범위가 넓었던 게 아니라 화면 크기를
-/// 계산에 안 넣었던 것이다. 절반만큼 안쪽으로 깎으면 뷰포트 자체가 bbox 안에
-/// 머물러 빈 공간이 아예 생기지 않는다.
+/// 계산에 안 넣었던 것이다. 안쪽으로 깎으면 뷰포트가 bbox 근처에 머문다.
+///
+/// 얼마나 깎을지는 [kFootprintDeflateRatio]가 정한다 — 화면 절반을 통째로 깎으면
+/// 빈 공간이 한 픽셀도 안 생기지만 미는 느낌이 지나치게 빡빡해진다.
 ///
 /// **이건 여유(margin)를 두는 것의 반대다.** 예전에 "가장자리를 화면 중앙에 못
 /// 놓을까 봐" bbox를 절반만큼 **넓혀** 봤다가 그 여유만큼 건물이 화면 밖으로
@@ -72,8 +74,8 @@ ll.LatLng? clampToFootprint(
   }
   if (maxLat <= minLat || maxLng <= minLng) return null;
 
-  var latRange = _deflate(minLat, maxLat, halfSpanLat);
-  var lngRange = _deflate(minLng, maxLng, halfSpanLng);
+  var latRange = _deflate(minLat, maxLat, halfSpanLat * kFootprintDeflateRatio);
+  var lngRange = _deflate(minLng, maxLng, halfSpanLng * kFootprintDeflateRatio);
   if (userLocation != null) {
     latRange = _intersectAround(latRange, userLocation.latitude, halfSpanLat);
     lngRange = _intersectAround(lngRange, userLocation.longitude, halfSpanLng);
@@ -89,6 +91,32 @@ ll.LatLng? clampToFootprint(
   }
   return ll.LatLng(lat, lng);
 }
+
+/// 허용 영역을 깎는 정도. 화면 절반([halfSpanLat]·[halfSpanLng])에 대한 비율이다.
+///
+/// **1.0이면 도면 밖 빈 공간이 한 픽셀도 안 생긴다** — 뷰포트가 통째로 bbox 안에
+/// 갇힌다. 처음엔 그게 맞다고 봤는데, 실기기에서 "화면 중앙으로 당겨오는 게 너무
+/// 빡세다"는 피드백이 나왔다. 이유가 둘이다.
+///
+///  - **bbox는 건물보다 넓다.** 도면은 L자·계단형인데 제한은 사각형이라, 실제
+///    도면 가장자리는 이미 화면 안쪽 깊숙이 들어와 있다. 거기서 한 번 더 화면
+///    절반을 깎으면 가장자리 매장을 보려고 밀 때마다 손을 떼는 순간 끌려온다.
+///  - **빈 공간이 조금 보이는 건 손해가 아니다.** 원래 막으려던 것은 "도면이
+///    화면에서 사라져 자기가 어디로 얼마나 움직였는지 모르는" 상태이고, 화면의
+///    3/4에 도면이 남아 있으면 그 일은 일어나지 않는다.
+///
+/// 0.75는 **화면의 1/8까지 도면 밖 여백을 허용한다**는 뜻이다(깎지 않은 0.25가
+/// 곧 여백 한도라 `halfSpan × 0.25` = 화면의 12.5%).
+///
+/// ⚠️ **0.5로 잡았다가 되돌렸다.** 화면 1/4까지 허용하니 실기기에서 도면이
+/// **통째로 사라지는 자리**까지 밀렸다. bbox가 도면보다 훨씬 넓은 게 이유다 —
+/// 1F 도면은 세로로 긴 비정형인데 제한은 사각형이라, bbox 모서리 근처는 애초에
+/// 건물이 없는 빈 공간이다. 거기에 화면 1/4을 더 얹으면 남는 게 없다.
+///
+/// 즉 이 값은 "얼마나 넉넉한가"만이 아니라 **bbox와 실제 도면의 차이를 흡수할
+/// 여유**까지 함께 쓴다. 더 풀고 싶으면 비율을 올리는 대신 제한을 bbox가 아니라
+/// 도면 폴리곤 자체로 바꾸는 편이 맞다.
+const kFootprintDeflateRatio = 0.75;
 
 /// 추적 중 카메라를 내 위치로 다시 옮기기 전에 허용하는 **어긋남**. 화면 절반
 /// ([halfSpanLat]·[halfSpanLng])에 대한 비율이다.

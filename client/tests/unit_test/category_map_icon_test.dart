@@ -81,59 +81,48 @@ void main() {
       // 아니다. 중심 거리로 오해해 아이콘 반지름/글자크기(≈0.85)를 넣었더니
       // 실기기에서 간격이 27px까지 벌어져 아이콘과 이름이 따로 놀았다.
       //
-      // ⚠️ **고정 상한(0.35)에서 비율로 바꿨다.** 그 값은 아이콘이 15 물리px
-      // 이던 시절에 잡은 것이라, 배지가 3배 커진 지금은 같은 여백이 "글자가
-      // 아이콘에 파묻힌다"가 된다. 여백은 배지 크기에 따라 달라져야 하므로
-      // **배지 지름에 대한 비율**로 잠근다.
+      // ⚠️ **기준을 두 번 바꿨다.** 처음엔 고정 상한(0.35), 다음엔 배지 지름에
+      // 대한 비율이었다. 배지가 화장실 아이콘과 같은 고정 크기가 되면서
+      // ([kIndoorMarkerLogicalPx]) 비율 기준도 의미를 잃었다 — 여백은
+      // `offset × 글자 크기`라 글자만 따라 변하는데 배지는 이제 고정이다.
       //
-      // 여백(논리 px) = offset(em) × 글자 크기(논리 px).
+      // 그래서 **여백 자체를 논리 px으로** 잠근다. 붙는 쪽(3px 미만)은 글자가
+      // 배지에 파묻히고, 벌어지는 쪽(10px 초과)은 둘이 따로 논다.
       expect(kStoreLabelRadialOffset, greaterThan(0));
 
-      for (final (textPx, iconPx) in [
-        (kStoreLabelMinPx, kStoreCategoryIconMinLogicalPx),
-        (kStoreLabelMaxPx, kStoreCategoryIconMaxLogicalPx),
-      ]) {
-        final ratio = kStoreLabelRadialOffset * textPx / iconPx;
-        expect(ratio, greaterThanOrEqualTo(0.25), reason: '배지에 글자가 파묻힌다');
-        expect(ratio, lessThanOrEqualTo(0.7), reason: '아이콘과 이름이 따로 논다');
+      for (final textPx in [kStoreLabelMinPx, kStoreLabelMaxPx]) {
+        final gapPx = kStoreLabelRadialOffset * textPx;
+        expect(gapPx, greaterThanOrEqualTo(3.0), reason: '배지에 글자가 파묻힌다');
+        expect(gapPx, lessThanOrEqualTo(10.0), reason: '아이콘과 이름이 따로 논다');
       }
     });
 
-    test('아이콘 크기가 화면 배율을 따라간다', () {
+    test('배지가 화장실 아이콘과 같은 크기다', () {
+      // 피드백 그대로다 — 두 값이 갈라지면 같은 도면 위에서 마커가 다른 무게로
+      // 읽힌다. 같은 함수를 쓰는지까지 잠가 둔다.
+      for (final dpr in [1.0, 2.0, 2.625, 3.5]) {
+        expect(storeCategoryIconSize(dpr), indoorMarkerIconSize(dpr));
+      }
+    });
+
+    test('마커 크기가 화면 배율을 따라간다', () {
       // 회귀 대상이 이 저장소에서 실제로 났던 버그다. `icon-size`는 비트맵의
       // **물리 픽셀**에 곱해지고 `text-size`는 논리 픽셀이라, 배율을 안 곱하면
-      // 고밀도 화면에서 아이콘만 배율만큼 작아진다. Galaxy S23(배율 3.5)에서
-      // 글자 14 논리px(=49 물리px) 옆에 배지가 19 물리px(=5.5 논리px)으로 떠
-      // "동그란 게 너무 작다"가 됐다.
-      final at1x = storeCategoryIconSizeIndoor(1.0);
-      final at3x = storeCategoryIconSizeIndoor(3.0);
-
-      expect((at3x[4] as double), closeTo((at1x[4] as double) * 3, 1e-9));
-      expect((at3x[6] as double), closeTo((at1x[6] as double) * 3, 1e-9));
+      // 고밀도 화면에서 아이콘만 배율만큼 작아진다.
+      expect(indoorMarkerIconSize(3.0), closeTo(indoorMarkerIconSize(1.0) * 3, 1e-9));
     });
 
     test('논리 px로 환산하면 배율과 무관하게 같은 크기다', () {
       for (final dpr in [1.0, 2.0, 2.625, 3.5]) {
-        final expr = storeCategoryIconSizeIndoor(dpr);
-        final minLogical = (expr[4] as double) * kIconCanvasPx / dpr;
-        final maxLogical = (expr[6] as double) * kIconCanvasPx / dpr;
-
-        expect(minLogical, closeTo(kStoreCategoryIconMinLogicalPx, 1e-9));
-        expect(maxLogical, closeTo(kStoreCategoryIconMaxLogicalPx, 1e-9));
+        final logical = indoorMarkerIconSize(dpr) * kIconCanvasPx / dpr;
+        expect(logical, closeTo(kIndoorMarkerLogicalPx, 1e-9));
       }
     });
 
-    test('배지는 이름보다 크되 도면을 삼킬 만큼은 아니다', () {
-      // 이 파일이 원래 의도한 비율("글자 크기의 1.4배 남짓")을 **논리 px 기준**
-      // 으로 잠근다. 예전 기준(물리 px 상수 비교)은 위 배율 버그 위에서 잰
-      // 값이라 기준이 될 수 없었다.
-      final atZoomOut = kStoreCategoryIconMinLogicalPx / kStoreLabelMinPx;
-      final atZoomIn = kStoreCategoryIconMaxLogicalPx / kStoreLabelMaxPx;
-
-      for (final ratio in [atZoomOut, atZoomIn]) {
-        expect(ratio, greaterThan(1.0), reason: '배지가 글자보다 작으면 색점으로만 읽힌다');
-        expect(ratio, lessThanOrEqualTo(1.5), reason: '1.5배를 넘으면 도면이 아이콘 밭이 된다');
-      }
+    test('배지가 색점으로만 읽힐 만큼 작지는 않다', () {
+      // 예전 배지는 5.5 논리 px이라 글리프가 안 보이고 색점으로만 읽혔다.
+      // 화장실 아이콘이 통과한 크기(약 11.5)가 하한의 근거다.
+      expect(kIndoorMarkerLogicalPx, greaterThanOrEqualTo(10.0));
     });
   });
 

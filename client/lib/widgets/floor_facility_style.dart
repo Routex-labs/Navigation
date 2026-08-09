@@ -137,13 +137,42 @@ const kPoiIconByType = <String, IconData>{
 const kDefaultPoiIcon = Icons.place;
 const kPoiIconBackgroundColor = Color(0xFF76AE6D);
 
-/// 실내 지도에서 POI·편의시설 아이콘을 그릴 배율. 아이콘 비트맵이 96px 캔버스라
-/// 화면 지름은 `96 * 이 값`(=약 42px)이다. 처음 0.28(약 27px)로 뒀더니 화장실·
-/// 장애인화장실·정수기 같은 시설이 매장 라벨에 묻혀 안 보인다는 피드백을 받아
-/// 1.5배로 올렸다. 원본이 96px이므로 이 값까지는 확대가 아니라 축소 렌더링이라
-/// 아이콘이 흐려지지 않는다. 더 키우려면 [renderPoiIconPng]·
-/// [renderFacilityIconPng]의 캔버스 크기도 같이 올려야 한다.
-const kIndoorPoiIconSize = 0.42;
+/// 실내 지도 위 **모든 마커의 지름(논리 px)**. 화장실·정수기 같은 편의시설,
+/// POI, 그리고 매장 라벨 옆 대분류 배지가 전부 이 하나를 쓴다.
+///
+/// ## 왜 하나로 묶었나
+///
+/// "대분류 아이콘을 화장실만큼 해 달라"는 피드백이다. 값을 두 벌로 두면 한쪽만
+/// 조정할 때마다 다시 갈라진다 — 실제로 그렇게 갈라져 있었다. 배지는 화면 배율을
+/// 곱해 논리 px으로 잡혀 있었고([storeCategoryIconSize]) 시설 아이콘은 배율 없는
+/// 스칼라(0.42)라, 같은 숫자를 써도 기기마다 다른 비율로 벌어졌다.
+///
+/// ## 값의 근거
+///
+/// 12는 **시설 아이콘이 지금 보이는 크기 그대로**다. 예전 값 0.42는 비트맵
+/// 96px에 곱하는 배율이라 화면에서 40 물리 px이었고, 이 기기(배율 3.5)에서
+/// 약 11.5 논리 px이다. 그 크기는 두 번의 피드백을 통과한 값이라(0.28은 "안
+/// 보인다", 0.6은 "너무 크다") 기준으로 삼을 만하다.
+///
+/// **바뀐 것은 기기 간 일관성이다.** 예전엔 어느 기기에서나 40 **물리** px이라
+/// 고밀도 화면일수록 작아 보였는데, 이제 어느 기기에서나 12 **논리** px으로
+/// 같은 크기로 보인다.
+///
+/// 더 키우려면 [renderPoiIconPng]·[renderFacilityIconPng]의 캔버스(96px)도 같이
+/// 올려야 한다 — 그보다 크게 그리면 확대 렌더링이라 아이콘이 흐려진다.
+const kIndoorMarkerLogicalPx = 12.0;
+
+/// 아이콘 비트맵 캔버스 한 변(px). [renderPoiIconPng] 등이 굽는 크기이자
+/// `icon-size` 1.0일 때 화면에 그려지는 **물리** 픽셀 수다.
+const kIconCanvasPx = 96.0;
+
+/// [kIndoorMarkerLogicalPx]를 `icon-size` 값으로 환산한다.
+///
+/// `icon-size`는 비트맵의 **물리** 픽셀에 곱해지는데 `text-size`는 논리 픽셀이라,
+/// 배율을 곱하지 않으면 고밀도 화면에서 아이콘만 배율만큼 작아진다. 이 저장소가
+/// 실제로 그 버그를 겪었다(`category_map_icon.dart`의 실측표).
+double indoorMarkerIconSize(double devicePixelRatio) =>
+    kIndoorMarkerLogicalPx * devicePixelRatio / kIconCanvasPx;
 
 /// 매장 폴리곤이지만 이름이 이 표에 있는 시설(화장실·정수기 등)은 라벨 옆에
 /// 종류별 아이콘을 함께 얹는다. POI(엘리베이터·에스컬레이터 등)와 달리 이
