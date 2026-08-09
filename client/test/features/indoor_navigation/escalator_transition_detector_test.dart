@@ -255,6 +255,38 @@ void main() {
       expect(fixture.confirmed.last.fromFloorLabel, '3F');
       expect(fixture.confirmed.last.toFloorLabel, '4F');
     });
+
+    test('하차 직후에도 상대 고도는 0에서 다시 시작한다', () {
+      // 연속 환승(내리자마자 다음 에스컬레이터)에서 중요한 두 가지를 함께 본다.
+      // (1) 새 0점은 **하차 시점**에 잡힌다 — 이미 올라와 있는 것으로 읽지 않는다.
+      // (2) 층이 바뀌었다고 기압 창까지 버리지 않는다 — 버리면 최소 샘플을 다시
+      //     채울 때까지(iOS 약 3초) 판정이 아예 죽어 두 번째 층이 늦는다.
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standNearBoarding();
+      fixture.ramp(fromM: 0, toM: 4.5, seconds: 20);
+      fixture.hold(atM: 4.5, seconds: 4);
+      expect(fixture.confirmed, hasLength(1));
+
+      fixture.detector.updateContext(
+        floorLabel: '3F',
+        graph: _graphFor3F(),
+        floorLabels: _floors,
+      );
+
+      expect(
+        fixture.detector.smoothedAltitudeM,
+        isNotNull,
+        reason: '평활값이 null이면 다시 채울 때까지 판정이 죽는다',
+      );
+      final delta = fixture.detector.deltaM;
+      expect(delta, isNotNull);
+      expect(
+        delta!.abs(),
+        lessThan(0.6),
+        reason: '4.5m를 올라왔어도 새 층에서의 상대 고도는 0 근처여야 한다',
+      );
+    });
   });
 
   group('센서 주기 (실측 회귀)', () {
@@ -403,6 +435,24 @@ void main() {
       expect(fixture.confirmed.single.boardingEvidence, 'routeExpected');
       expect(fixture.confirmed.single.expectedArrivalNodeId, 'n1-dn-fr2f');
     });
+
+    test('허가가 늦게 걸려도 그 전 하강분을 baseline이 먹지 않는다', () {
+      // 보정 위치가 탑승 노드에 늦게 수렴하는 경우(하행 랜딩 실측). 허가 전에
+      // 이미 내려간 만큼이 baseline에 흡수되면, 허가 시점의 Δ가 0에 가까워져
+      // 사용자는 이미 반쯤 내려왔는데 판정은 처음부터 다시 시작한다.
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standFarAway();
+      fixture.ramp(fromM: 0, toM: -2.0, seconds: 8);
+
+      final deltaBeforeArming = fixture.detector.deltaM;
+      expect(deltaBeforeArming, isNotNull);
+      expect(
+        deltaBeforeArming!.abs(),
+        greaterThan(1.5),
+        reason: '움직이는 중에는 baseline이 하강분을 따라가지 않아야 한다',
+      );
+    });
   });
 
   group('단계 분리', () {
@@ -440,12 +490,12 @@ void main() {
       expect(fixture.phasesOf(), contains(EscalatorPhase.cancelled));
     });
 
-    test('걸음 pause는 누적 1.8m 이전 수직 속도에서 시작한다', () {
+    test('걸음 pause는 지도 전환 문턱 이전 수직 속도에서 시작한다', () {
       final fixture = _Fixture();
       fixture.hold(atM: 0, seconds: 5);
       fixture.approachBoarding(remainingM: const [12, 8, 4, 2]);
-      // 반 층(1.8m)에 못 미치는 1.2m만 오른다.
-      fixture.ramp(fromM: 0, toM: 1.2, seconds: 5);
+      // 지도 전환 문턱(minDeltaM)에 한참 못 미치는 0.8m만 오른다.
+      fixture.ramp(fromM: 0, toM: 0.8, seconds: 5);
 
       expect(
         fixture.phasesOf(),
@@ -455,6 +505,26 @@ void main() {
         fixture.phasesOf(),
         isNot(contains(EscalatorPhase.midpointReached)),
         reason: '목적 층 지도는 midpoint 근거 전에는 열지 않는다',
+      );
+    });
+
+    test('지도 전환은 반 층(2m)에 닿기 전에 열린다', () {
+      // 실측 층고 4.5m를 20초에 오르는 에스컬레이터(0.22 m/s). 예전 문턱
+      // (1.8m)에서는 지도가 8초쯤 뒤에 바뀌어, 사용자는 이미 탑승한 뒤로도
+      // 한참 이전 층 도면을 봤다. 이 테스트는 "얼마나 일찍 열리는가"를 고정한다.
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standNearBoarding();
+      fixture.ramp(fromM: 0, toM: 4.5, seconds: 20);
+
+      final midpoint = fixture.phases
+          .where((change) => change.phase == EscalatorPhase.midpointReached)
+          .firstOrNull;
+      expect(midpoint, isNotNull, reason: '탑승 중에 지도가 넘어가야 한다');
+      expect(
+        midpoint!.deltaM.abs(),
+        lessThan(2.0),
+        reason: '반 층을 다 오르기 전에 지도가 넘어가야 "탔는데 아직 이전 층"이 사라진다',
       );
     });
 
