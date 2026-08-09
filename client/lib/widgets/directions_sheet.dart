@@ -173,6 +173,7 @@ class DirectionsSheet extends StatefulWidget {
     this.initialDestination,
     this.storeIndex,
     this.reachByNodeId,
+    this.currentFloorId,
     this.focusOrigin = false,
   });
 
@@ -209,6 +210,12 @@ class DirectionsSheet extends StatefulWidget {
   /// 「7+E 합동 설계」의 2단계).
   final Map<String, NodeReach>? reachByNodeId;
 
+  /// 지금 보고 있는 층. **검색 범위를 좁히는 데 쓰지 않는다** — 길찾기는 항상
+  /// 건물 전체를 본다(`_semanticDirectionsCandidates` 주석). 묶인 시설에서 거리를
+  /// 모를 때 **어느 층을 대표로 적을지**에만 쓴다. 상단 검색 패널과 같은 규칙이라야
+  /// 같은 매장이 두 화면에서 다른 층으로 보이지 않는다.
+  final String? currentFloorId;
+
   /// 출발지 칸을 활성으로 열지. 상단 초안 바의 **출발 행**을 눌러 들어올 때 켠다 —
   /// 출발지를 바꾸려고 누른 것이므로 커서와 후보 목록이 그 칸에 맞아야 한다.
   /// 기본은 false로, 도착지를 고르는 기존 흐름이 그대로 유지된다.
@@ -223,6 +230,7 @@ class DirectionsSheet extends StatefulWidget {
     DirectionsCandidate? initialDestination,
     Future<List<StoreIndexEntry>?>? storeIndex,
     Map<String, NodeReach>? reachByNodeId,
+    String? currentFloorId,
     bool focusOrigin = false,
   }) {
     return showModalBottomSheet<DirectionsResult>(
@@ -240,6 +248,7 @@ class DirectionsSheet extends StatefulWidget {
           initialDestination: initialDestination,
           storeIndex: storeIndex,
           reachByNodeId: reachByNodeId,
+          currentFloorId: currentFloorId,
           focusOrigin: focusOrigin,
         ),
       ),
@@ -1215,6 +1224,7 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
     final nearest = nearestByWalkingDistance(
       stores: suggestion.stores,
       reachByNodeId: widget.reachByNodeId,
+      currentFloorId: widget.currentFloorId,
     );
     final store = nearest.store;
     final reach = nearest.reach;

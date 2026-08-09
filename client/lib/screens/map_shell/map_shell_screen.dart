@@ -841,6 +841,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
         // 상단 검색 결과와 같은 판단 재료를 준다. 이미 계산해 둔 맵을 넘길 뿐이라
         // 추가 계산이 없다(설계: map-ui-redesign-plan.md 「7+E 합동 설계」 2단계).
         reachByNodeId: _reachByNodeId,
+        // 묶인 시설의 대표 층을 상단 검색과 같게 고르게 한다. 검색 범위는
+        // 여전히 건물 전체다(위 「항상 건물 전체」).
+        currentFloorId: _activeIndoorFloor,
         // 상단 검색과 같은 온디바이스 후보(초성·구두점·오타)를 길찾기에도 준다.
         // 리포지토리가 같은 Future를 공유하므로 두 번 받지 않는다.
         storeIndex: _indoorContextActive

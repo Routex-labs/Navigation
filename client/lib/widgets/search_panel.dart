@@ -1001,6 +1001,7 @@ class _SearchPanelState extends State<SearchPanel> {
                 nearestByWalkingDistance(
                   stores: suggestion.stores,
                   reachByNodeId: widget.reachByNodeId,
+                  currentFloorId: widget.currentFloorId,
                 ).store.floorName,
             ],
             canChoose: true,
@@ -1040,6 +1041,7 @@ class _SearchPanelState extends State<SearchPanel> {
     final nearest = nearestByWalkingDistance(
       stores: suggestion.stores,
       reachByNodeId: widget.reachByNodeId,
+      currentFloorId: widget.currentFloorId,
     );
     final store = nearest.store;
     final reach = nearest.reach;
