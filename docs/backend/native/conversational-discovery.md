@@ -491,7 +491,8 @@ python -m scripts.seed.reset_and_seed
 python -m scripts.evaluate_query_hybrid
 ```
 
-- 현재 기준선은 **긍정 25 + 부정 4 = 29개 질의에서 기대 패턴 23/29**다([FAISS.md](FAISS.md) 10·11절).
+- 현재 기준선은 **긍정 114 + 부정 20 = 134개 질의**다. 총점과 클래스별 수치는
+  [search-eval-set.md](search-eval-set.md) 5절이 단일 출처다(여기에 복제하지 않는다).
   facet을 넣은 뒤 이 값이 떨어지면 재현율이 아니라 회귀로 본다.
 - 이 점수는 이름·카테고리·소분류 패턴 일치라는 최소 지표라, `운동화 사고 싶다 → 나이키 라이즈`처럼
   사람이 보기에 맞는 결과도 실패로 센다. facet 태그가 붙으면 기대 패턴 자체를 손봐야 하므로,

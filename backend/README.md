@@ -51,7 +51,9 @@ backend/
 │   ├── graph/           # 길찾기 그래프 도메인 (무결성 검증, 리비전 체크섬)
 │   └── routers/         # HTTP 엔드포인트 (buildings, query, fonts)
 ├── scripts/             # 오프라인 실행용 스크립트
-│   ├── evaluate_query_hybrid.py  # 최종 AI 경로 29개 실데이터 평가
+│   ├── eval/query_eval_set.json  # 평가 질의 세트(설계: docs/backend/native/search-eval-set.md)
+│   ├── evaluate_query_hybrid.py  # 최종 AI 경로 실데이터 평가
+│   ├── analyze_similarity_margin.py  # 의미 검색 채택 규칙 후보 비교
 │   ├── warm_embedding_model.py   # 임베딩 모델을 로컬 HF 캐시에 선다운로드
 │   ├── seed/            # DB 초기화·시드 (reset_and_seed 등)
 │   ├── transform/       # 데이터 가공 (글리프 생성, 층 정렬 등)
