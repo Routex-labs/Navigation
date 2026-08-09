@@ -186,6 +186,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 새 결과를 덮으면 목록이 방금 친 글자와 무관한 것을 보여 준다.
   int _routeSearchSeq = 0;
 
+  /// 지금 치고 있는 칸에 들어 있는 글자.
+  String get _routeQuery => _routeEditingField == RoutePlanField.origin
+      ? _routeOriginController.text
+      : _routeDestinationController.text;
+
   final _outdoorKey = GlobalKey<OutdoorMapBodyState>();
   final _indoorKey = GlobalKey<IndoorMapBodyState>();
 
@@ -1893,220 +1898,239 @@ class _MapShellScreenState extends State<MapShellScreen> {
             // 패널이 키보드 밑으로 들어가지 않게 한다. 예전에는 상단 바 높이를
             // 상수로 가정해 별도 계산했지만, 이제는 Column의 실제 높이를 쓴다.
             bottom: MediaQuery.viewInsetsOf(context).bottom,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              // 예전 Positioned가 left·right로 강제하던 폭을 대신한다. 기본값
-              // (center)이면 자식이 제 내용 너비로 줄어들어, 검색 패널이 결과
-              // 개수에 따라 폭이 들쭉날쭉해진다.
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                MapTopBar(
-                  key: _topBarKey,
-                  showHamburger: _mode == MapMode.indoor,
-                  onHamburgerTap: _onHamburgerTap,
-                  controller: _searchController,
-                  focusNode: _searchFocus,
-                  onChanged: _onSearchChanged,
-                  onSubmitted: _onSearchSubmitted,
-                  searchActive: _searchActive,
-                  onCancelSearch: _closeSearch,
-                  onDirectionsTap: _openRouteMode,
-                  routeMode: _routeMode,
-                  originController: _routeOriginController,
-                  destinationController: _routeDestinationController,
-                  originFocus: _routeOriginFocus,
-                  destinationFocus: _routeDestinationFocus,
-                  onOriginChanged: (value) =>
-                      _onRouteFieldChanged(RoutePlanField.origin, value),
-                  onDestinationChanged: (value) =>
-                      _onRouteFieldChanged(RoutePlanField.destination, value),
-                  onClearRouteDraft: _clearRouteDraft,
-                ),
-
-                // 이동 수단 줄. 길찾기 중에만, 상단 두 칸 **바로 아래**에 뜬다.
-                //
-                // 도착지가 아직 없어도 보여 준다. 수단을 먼저 고르고 목적지를
-                // 넣는 순서도 자연스럽고, 무엇보다 이 줄이 도착지를 정하는
-                // 순간 갑자기 나타나면 방금 누르려던 자리가 아래로 밀린다.
-                if (_routeMode)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, _overlayGap, 12, 0),
-                    child: TravelModeBar(
-                      key: _travelModeBarKey,
-                      selected: _travelMode,
-                      modes: _availableTravelModes,
-                      onSelected: (mode) =>
-                          unawaited(_onTravelModePicked(mode)),
+            // 상태 표시줄 여백은 이 Column 전체가 한 번만 먹는다. 예전에는
+            // MapTopBar가 자기 안에서 SafeArea를 썼는데, 그 위에 다른 줄(이동
+            // 수단)이 오는 순간 둘이 각자 여백을 먹어 간격이 두 배가 된다.
+            child: SafeArea(
+              bottom: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                // 예전 Positioned가 left·right로 강제하던 폭을 대신한다. 기본값
+                // (center)이면 자식이 제 내용 너비로 줄어들어, 검색 패널이 결과
+                // 개수에 따라 폭이 들쭉날쭉해진다.
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // 이동 수단 줄은 **두 칸보다 위**다. "어떻게 갈지"를 먼저 정하고
+                  // 목적지를 넣는 순서이며, 아래에 두면 두 칸과 후보 목록 사이에
+                  // 끼어 입력하는 동안 시선을 가로막는다.
+                  if (_routeMode)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                      child: TravelModeBar(
+                        key: _travelModeBarKey,
+                        selected: _travelMode,
+                        modes: _availableTravelModes,
+                        onSelected: (mode) =>
+                            unawaited(_onTravelModePicked(mode)),
+                      ),
                     ),
+
+                  MapTopBar(
+                    key: _topBarKey,
+                    showHamburger: _mode == MapMode.indoor,
+                    onHamburgerTap: _onHamburgerTap,
+                    controller: _searchController,
+                    focusNode: _searchFocus,
+                    onChanged: _onSearchChanged,
+                    onSubmitted: _onSearchSubmitted,
+                    searchActive: _searchActive,
+                    onCancelSearch: _closeSearch,
+                    onDirectionsTap: _openRouteMode,
+                    routeMode: _routeMode,
+                    originController: _routeOriginController,
+                    destinationController: _routeDestinationController,
+                    originFocus: _routeOriginFocus,
+                    destinationFocus: _routeDestinationFocus,
+                    onOriginChanged: (value) =>
+                        _onRouteFieldChanged(RoutePlanField.origin, value),
+                    onDestinationChanged: (value) =>
+                        _onRouteFieldChanged(RoutePlanField.destination, value),
+                    onClearRouteDraft: _clearRouteDraft,
                   ),
 
-                // 길찾기 두 칸 중 하나를 치는 중이면 그 후보 목록이 이 자리를
-                // 쓴다. 일반 검색 패널·카테고리 열과 자리를 다투므로 셋 중
-                // 하나만 뜬다.
-                if (_routeEditingField != null)
-                  Flexible(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        12,
-                        _overlayGap,
-                        12,
-                        12,
-                      ),
-                      child: RouteFieldResults(
-                        key: _routeResultsKey,
-                        field: _routeEditingField!,
-                        results: _routeResults,
-                        searching: _routeSearching,
-                        onPicked: _pickRouteCandidate,
-                        onPickOnMap: () =>
-                            _pickRouteEndpointOnMap(_routeEditingField!),
-                        // 도면을 보고 있을 때만 준다. 야외에서 지도를 누르면
-                        // 이름 없는 좌표가 잡히는데, 매장 이름으로 고르는 줄과
-                        // 나란히 두면 같은 무게로 읽힌다([RouteFieldResults]).
-                        showPickOnMap: _indoorContextActive,
-                        onCurrentLocation: _pickCurrentLocationAsOrigin,
-                      ),
-                    ),
-                  )
-                // 결과 패널과 카테고리 열은 같은 자리를 쓴다. 검색 중에는
-                // 카테고리 열을 접어 두 오버레이가 겹치지 않게 한다.
-                else if (_searchActive)
-                  Flexible(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        12,
-                        _overlayGap,
-                        12,
-                        12,
-                      ),
-                      child: SearchPanel(
-                        key: _searchPanelKey,
-                        buildingId: _buildingId,
-                        query: _searchQuery,
-                        submitTick: _searchSubmitTick,
-                        onStorePicked: _onSearchStorePicked,
-                        onBuildingPicked: _onSearchBuildingPicked,
-                        currentFloorId: _activeIndoorFloor,
-                        reachByNodeId: _reachByNodeId,
-                        // 야외를 보고 있을 때만 값이 있다. 건물 안 도면을 보는
-                        // 중이면 null이라 바깥 검색 자체가 돌지 않는다.
-                        outdoorSearchCenter: _outdoorSearchCenter,
-                        onOutdoorPoiPicked: (poi) =>
-                            unawaited(_onSearchPoiPicked(poi)),
-                        // 같은 가게가 두 줄로 뜨지 않게 하는 판정. 길찾기
-                        // 후보 목록도 같은 규칙을 쓴다.
-                        isInsideIndoorBuilding: (point) =>
-                            _outdoorKey.currentState?.isAtIndoorBuilding(
-                              point,
-                            ) ??
-                            false,
-                      ),
-                    ),
-                  )
-                // 길찾기 draft에서는 **접지 않고 내려온다.** 상단 바가 출발/도착
-                // 두 줄로 커지면 이 Column이 그만큼 아래로 밀어 주므로 겹치지
-                // 않는다. 한때 접어 뒀지만, 도착지를 정한 뒤에도 "그럼 저긴
-                // 뭐였지" 하고 카테고리를 다시 훑는 흐름이 끊겼다.
-                else
-                  Padding(
-                    padding: const EdgeInsets.only(top: _overlayGap),
-                    // 대분류 줄과 소분류 줄을 세로로 쌓는다. 두 줄을 하나의 가로
-                    // 스크롤에 넣으면 소분류가 대분류 오른쪽 끝에 붙어, 어느
-                    // 대분류에 딸린 것인지 읽히지 않는다.
-                    child: Column(
-                      key: _categoryRowKey,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _MapOverlayScrollRow(
-                          onPointerOverChanged: (over) => over
-                              ? _lockMaps(_mapLockOverlayHover)
-                              : _unlockMaps(_mapLockOverlayHover),
-                          onPointerDownChanged: (down) => down
-                              ? _lockMaps(_mapLockOverlayTouch)
-                              : _unlockMaps(_mapLockOverlayTouch),
-                          children: [
-                            _FavoritesPill(
-                              key: _favoritesPillKey,
-                              onTap: _openFavorites,
-                            ),
-                            // 카테고리 필터는 **건물 안을 보고 있을 때만**
-                            // 노출한다. 기준은 모드(_mode)가 아니라
-                            // [_indoorContextActive]다 — 야외 탭이어도 건물을
-                            // 탭하거나 줌으로 실내 오버레이가 켜지면 사용자에게는
-                            // 실내 화면과 똑같은 도면이 떠 있고, 그 위에 강조가
-                            // 그려진다. 모드로 분기하면 그 상태에서 칩만 사라져,
-                            // 웹(마우스로 실내 탭을 눌러 들어감)에서는 보이고
-                            // 모바일(도면을 탭해 바로 진입)에서는 안 보인다.
-                            //
-                            // 반대로 오버레이가 꺼진 순수 야외에서는 계속 감춘다.
-                            // 아직 들어가지도 않은 건물의 카테고리를 누르게 되고,
-                            // 강조는 도면 위에 그려지므로 결과가 보이지 않는다.
-                            if (_indoorContextActive) ...[
-                              const SizedBox(width: 8),
-                              _CategoryChipsRow(
-                                entriesFuture: _categoryEntriesFuture,
-                                selection: _categorySelection,
-                                onSelectionChanged: _onCategorySelectionChanged,
-                                onRetry: _reloadCategoryEntries,
-                              ),
-                            ],
-                          ],
+                  // 길찾기 두 칸 중 하나를 치는 중이면 그 후보 목록이 이 자리를
+                  // 쓴다. 일반 검색 패널·카테고리 열과 자리를 다투므로 셋 중
+                  // 하나만 뜬다.
+                  if (_routeEditingField != null)
+                    Flexible(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          12,
+                          _overlayGap,
+                          12,
+                          12,
                         ),
-                        // 소분류 줄과 개수 안내는 대분류를 고른 뒤에만 뜬다.
-                        if (_indoorContextActive &&
-                            _categorySelection != null) ...[
-                          const SizedBox(height: _overlayGap),
-                          _SubcategoryPillsRow(
-                            entriesFuture: _categoryEntriesFuture,
-                            selection: _categorySelection!,
-                            activeFloor: _activeFloorLabel,
-                            onSelectionChanged: _onCategorySelectionChanged,
+                        child: RouteFieldResults(
+                          key: _routeResultsKey,
+                          field: _routeEditingField!,
+                          results: _routeResults,
+                          // 아직 아무것도 안 친 상태에서는 진행 표시를 하지 않는다.
+                          // 밖에서 빈 검색어는 결과가 없는 것이 정상이라
+                          // ([_searchDirectionsCandidates]) 스피너가 떴다가 곧바로
+                          // 빈 화면으로 바뀌는 깜빡임만 남는다.
+                          searching: _routeSearching && _routeQuery.isNotEmpty,
+                          onPicked: _pickRouteCandidate,
+                          onPickOnMap: () =>
+                              _pickRouteEndpointOnMap(_routeEditingField!),
+                          // 도면을 보고 있을 때만 준다. 야외에서 지도를 누르면
+                          // 이름 없는 좌표가 잡히는데, 매장 이름으로 고르는 줄과
+                          // 나란히 두면 같은 무게로 읽힌다([RouteFieldResults]).
+                          showPickOnMap: _indoorContextActive,
+                          onCurrentLocation: _pickCurrentLocationAsOrigin,
+                        ),
+                      ),
+                    )
+                  // 결과 패널과 카테고리 열은 같은 자리를 쓴다. 검색 중에는
+                  // 카테고리 열을 접어 두 오버레이가 겹치지 않게 한다.
+                  else if (_searchActive)
+                    Flexible(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          12,
+                          _overlayGap,
+                          12,
+                          12,
+                        ),
+                        child: SearchPanel(
+                          key: _searchPanelKey,
+                          buildingId: _buildingId,
+                          query: _searchQuery,
+                          submitTick: _searchSubmitTick,
+                          onStorePicked: _onSearchStorePicked,
+                          onBuildingPicked: _onSearchBuildingPicked,
+                          currentFloorId: _activeIndoorFloor,
+                          reachByNodeId: _reachByNodeId,
+                          // 야외를 보고 있을 때만 값이 있다. 건물 안 도면을 보는
+                          // 중이면 null이라 바깥 검색 자체가 돌지 않는다.
+                          outdoorSearchCenter: _outdoorSearchCenter,
+                          onOutdoorPoiPicked: (poi) =>
+                              unawaited(_onSearchPoiPicked(poi)),
+                          // 같은 가게가 두 줄로 뜨지 않게 하는 판정. 길찾기
+                          // 후보 목록도 같은 규칙을 쓴다.
+                          isInsideIndoorBuilding: (point) =>
+                              _outdoorKey.currentState?.isAtIndoorBuilding(
+                                point,
+                              ) ??
+                              false,
+                        ),
+                      ),
+                    )
+                  // 길찾기 draft에서는 **접지 않고 내려온다.** 상단 바가 출발/도착
+                  // 두 줄로 커지면 이 Column이 그만큼 아래로 밀어 주므로 겹치지
+                  // 않는다. 한때 접어 뒀지만, 도착지를 정한 뒤에도 "그럼 저긴
+                  // 뭐였지" 하고 카테고리를 다시 훑는 흐름이 끊겼다.
+                  else
+                    Padding(
+                      padding: const EdgeInsets.only(top: _overlayGap),
+                      // 대분류 줄과 소분류 줄을 세로로 쌓는다. 두 줄을 하나의 가로
+                      // 스크롤에 넣으면 소분류가 대분류 오른쪽 끝에 붙어, 어느
+                      // 대분류에 딸린 것인지 읽히지 않는다.
+                      child: Column(
+                        key: _categoryRowKey,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _MapOverlayScrollRow(
                             onPointerOverChanged: (over) => over
                                 ? _lockMaps(_mapLockOverlayHover)
                                 : _unlockMaps(_mapLockOverlayHover),
                             onPointerDownChanged: (down) => down
                                 ? _lockMaps(_mapLockOverlayTouch)
                                 : _unlockMaps(_mapLockOverlayTouch),
-                            onOpenList: (category) {
-                              _runSheetChain(
-                                () => _openCategoryStores(category),
-                              );
-                            },
+                            children: [
+                              _FavoritesPill(
+                                key: _favoritesPillKey,
+                                onTap: _openFavorites,
+                              ),
+                              // 카테고리 필터는 **건물 안을 보고 있을 때만**
+                              // 노출한다. 기준은 모드(_mode)가 아니라
+                              // [_indoorContextActive]다 — 야외 탭이어도 건물을
+                              // 탭하거나 줌으로 실내 오버레이가 켜지면 사용자에게는
+                              // 실내 화면과 똑같은 도면이 떠 있고, 그 위에 강조가
+                              // 그려진다. 모드로 분기하면 그 상태에서 칩만 사라져,
+                              // 웹(마우스로 실내 탭을 눌러 들어감)에서는 보이고
+                              // 모바일(도면을 탭해 바로 진입)에서는 안 보인다.
+                              //
+                              // 반대로 오버레이가 꺼진 순수 야외에서는 계속 감춘다.
+                              // 아직 들어가지도 않은 건물의 카테고리를 누르게 되고,
+                              // 강조는 도면 위에 그려지므로 결과가 보이지 않는다.
+                              if (_indoorContextActive) ...[
+                                const SizedBox(width: 8),
+                                _CategoryChipsRow(
+                                  entriesFuture: _categoryEntriesFuture,
+                                  selection: _categorySelection,
+                                  onSelectionChanged:
+                                      _onCategorySelectionChanged,
+                                  onRetry: _reloadCategoryEntries,
+                                ),
+                              ],
+                            ],
                           ),
+                          // 소분류 줄과 개수 안내는 대분류를 고른 뒤에만 뜬다.
+                          if (_indoorContextActive &&
+                              _categorySelection != null) ...[
+                            const SizedBox(height: _overlayGap),
+                            _SubcategoryPillsRow(
+                              entriesFuture: _categoryEntriesFuture,
+                              selection: _categorySelection!,
+                              activeFloor: _activeFloorLabel,
+                              onSelectionChanged: _onCategorySelectionChanged,
+                              onPointerOverChanged: (over) => over
+                                  ? _lockMaps(_mapLockOverlayHover)
+                                  : _unlockMaps(_mapLockOverlayHover),
+                              onPointerDownChanged: (down) => down
+                                  ? _lockMaps(_mapLockOverlayTouch)
+                                  : _unlockMaps(_mapLockOverlayTouch),
+                              onOpenList: (category) {
+                                _runSheetChain(
+                                  () => _openCategoryStores(category),
+                                );
+                              },
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
-                  ),
 
-                // 지도에서 고르는 중이라는 안내. 이게 없으면 "지도에서 선택"을
-                // 눌렀을 때 시트만 닫히고 아무 일도 안 일어난 것처럼 보인다.
-                if (_mapPickTarget != null && !_searchActive)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, _overlayGap, 12, 0),
-                    child: _MapPickHintCard(
-                      key: _mapPickHintKey,
-                      target: _mapPickTarget!,
-                      // 지금 고르는 칸의 **반대쪽**을 보여준다. 출발지를 고르는
-                      // 중이면 도착지가, 도착지를 고르는 중이면 출발지가 무엇으로
-                      // 잡혀 있는지 알아야 지금 무엇을 누를지 판단할 수 있다.
-                      counterpartLabel:
-                          _mapPickTarget == DirectionsMapPickTarget.origin
-                          ? _routeDraftDestination?.title
-                          : (_selectedOrigin?.title ?? '현재 위치'),
-                      onCancel: _cancelMapPick,
+                  // 지도에서 고르는 중이라는 안내. 이게 없으면 "지도에서 선택"을
+                  // 눌렀을 때 시트만 닫히고 아무 일도 안 일어난 것처럼 보인다.
+                  if (_mapPickTarget != null && !_searchActive)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        12,
+                        _overlayGap,
+                        12,
+                        0,
+                      ),
+                      child: _MapPickHintCard(
+                        key: _mapPickHintKey,
+                        target: _mapPickTarget!,
+                        // 지금 고르는 칸의 **반대쪽**을 보여준다. 출발지를 고르는
+                        // 중이면 도착지가, 도착지를 고르는 중이면 출발지가 무엇으로
+                        // 잡혀 있는지 알아야 지금 무엇을 누를지 판단할 수 있다.
+                        counterpartLabel:
+                            _mapPickTarget == DirectionsMapPickTarget.origin
+                            ? _routeDraftDestination?.title
+                            : (_selectedOrigin?.title ?? '현재 위치'),
+                        onCancel: _cancelMapPick,
+                      ),
+                    )
+                  else if (placeInfo != null && !_searchActive)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        12,
+                        _overlayGap,
+                        12,
+                        0,
+                      ),
+                      child: _PlaceInfoCard(
+                        title: placeInfo.title,
+                        subtitle: placeInfo.subtitle,
+                        onClose: () => setState(() => _placeInfo = null),
+                      ),
                     ),
-                  )
-                else if (placeInfo != null && !_searchActive)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, _overlayGap, 12, 0),
-                    child: _PlaceInfoCard(
-                      title: placeInfo.title,
-                      subtitle: placeInfo.subtitle,
-                      onClose: () => setState(() => _placeInfo = null),
-                    ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
 

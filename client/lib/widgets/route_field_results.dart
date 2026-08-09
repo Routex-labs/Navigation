@@ -54,6 +54,15 @@ class RouteFieldResults extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isOrigin = field == RoutePlanField.origin;
+    // 보여 줄 것이 하나도 없으면 **아무것도 그리지 않는다.**
+    //
+    // 예전에는 이 조건에서도 카드가 남아, 야외에서 길찾기를 열면 이동 수단 줄
+    // 아래에 아무 내용 없는 흰 막대가 하나 떠 있었다. 지름길 두 줄이 다 빠지고
+    // (야외 + 도착 칸) 아직 아무것도 안 친 상태가 정확히 그 경우다.
+    final hasShortcut = showPickOnMap || isOrigin;
+    if (!hasShortcut && results.isEmpty && !searching) {
+      return const SizedBox.shrink();
+    }
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(16),
@@ -100,51 +109,55 @@ class RouteFieldResults extends StatelessWidget {
                 style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
               ),
             ),
-          const Divider(height: 1),
-          Flexible(
-            child: searching && results.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 24),
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                : ListView.separated(
-                    shrinkWrap: true,
-                    // 셸이 키보드로 화면을 리사이즈하지 않으므로
-                    // (`resizeToAvoidBottomInset: false`) 여기서 바닥을 직접
-                    // 띄운다 — 안 그러면 목록의 아래쪽이 키보드에 덮여, 스크롤을
-                    // 끝까지 내려도 마지막 줄을 누를 수 없다.
-                    padding: EdgeInsets.only(
-                      bottom: MediaQuery.viewInsetsOf(context).bottom > 0
-                          ? 8
-                          : 0,
-                    ),
-                    itemCount: results.length,
-                    separatorBuilder: (_, _) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final candidate = results[index];
-                      return ListTile(
-                        dense: true,
-                        // 건물과 건물 안 매장을 아이콘으로 가른다. 같은 핀으로
-                        // 두면 목록에서 무엇이 건물인지 읽을 방법이 없다.
-                        leading: Icon(
-                          candidate.buildingId == null
-                              ? Icons.place
-                              : Icons.apartment_outlined,
-                          color: AppColors.primary,
-                        ),
-                        title: Text(
-                          candidate.title,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
+          // 지름길 줄과 목록 사이의 구분선. 한쪽이 비어 있으면 선만 남아 카드
+          // 아래에 얇은 회색 줄이 떠다닌다.
+          if (hasShortcut && (results.isNotEmpty || searching))
+            const Divider(height: 1),
+          if (results.isNotEmpty || searching)
+            Flexible(
+              child: searching && results.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      // 셸이 키보드로 화면을 리사이즈하지 않으므로
+                      // (`resizeToAvoidBottomInset: false`) 여기서 바닥을 직접
+                      // 띄운다 — 안 그러면 목록의 아래쪽이 키보드에 덮여, 스크롤을
+                      // 끝까지 내려도 마지막 줄을 누를 수 없다.
+                      padding: EdgeInsets.only(
+                        bottom: MediaQuery.viewInsetsOf(context).bottom > 0
+                            ? 8
+                            : 0,
+                      ),
+                      itemCount: results.length,
+                      separatorBuilder: (_, _) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final candidate = results[index];
+                        return ListTile(
+                          dense: true,
+                          // 건물과 건물 안 매장을 아이콘으로 가른다. 같은 핀으로
+                          // 두면 목록에서 무엇이 건물인지 읽을 방법이 없다.
+                          leading: Icon(
+                            candidate.buildingId == null
+                                ? Icons.place
+                                : Icons.apartment_outlined,
+                            color: AppColors.primary,
                           ),
-                        ),
-                        subtitle: Text(candidate.subtitle),
-                        onTap: () => onPicked(candidate),
-                      );
-                    },
-                  ),
-          ),
+                          title: Text(
+                            candidate.title,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
+                          subtitle: Text(candidate.subtitle),
+                          onTap: () => onPicked(candidate),
+                        );
+                      },
+                    ),
+            ),
         ],
       ),
     );

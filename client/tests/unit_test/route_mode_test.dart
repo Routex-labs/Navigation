@@ -10,6 +10,7 @@ import 'package:navigation_client/repositories/mock_building_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:navigation_client/widgets/eta_card.dart';
+import 'package:navigation_client/widgets/route_field_results.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 길찾기가 **상단 바 안에서** 끝나는지에 대한 회귀 테스트.
@@ -98,6 +99,30 @@ void main() {
     // (그 규칙은 travel_mode_bar_test가 따로 지킨다) 나머지 둘로 확인한다.
     expect(find.text('자동차'), findsOneWidget);
     expect(find.text('도보'), findsOneWidget);
+
+    // 수단 줄은 두 칸보다 **위**다. "어떻게 갈지"를 먼저 정하고 목적지를 넣는
+    // 순서이며, 아래에 두면 두 칸과 후보 목록 사이에 끼어 시선을 가로막는다.
+    expect(
+      tester.getRect(find.byKey(const ValueKey('travel-mode-bar'))).bottom,
+      lessThanOrEqualTo(
+        tester.getRect(find.byKey(const Key('route-draft-origin'))).top,
+      ),
+    );
+  });
+
+  testWidgets('야외에서 아직 아무것도 안 쳤으면 빈 후보 카드를 남기지 않는다', (
+    WidgetTester tester,
+  ) async {
+    // 야외 + 도착 칸이면 지름길 두 줄("지도에서 선택"·"현재 위치")이 모두 빠지고
+    // 빈 검색어의 후보도 없다. 그런데도 카드를 그리면 이동 수단 줄 아래에 아무
+    // 내용 없는 흰 막대가 떠 있게 된다.
+    await pumpShell(tester);
+    await tester.tap(find.byTooltip('길찾기'));
+    await drain(tester);
+
+    // 위젯은 트리에 있어도 그리는 높이가 0이어야 한다 — 흰 막대의 정체가
+    // "내용 없는 카드"였으므로 높이로 확인한다.
+    expect(tester.getSize(find.byType(RouteFieldResults)).height, 0);
   });
 
   testWidgets('도착지를 그 자리에서 쳐서 고르면 경로가 그려진다', (

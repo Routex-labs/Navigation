@@ -83,114 +83,114 @@ class MapTopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final showRouteDraft = routeMode && originController != null;
-    return SafeArea(
-      bottom: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-        child: Material(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(showRouteDraft ? 18 : 28),
-          elevation: 6,
-          shadowColor: Colors.black.withValues(alpha: 0.15),
-          child: showRouteDraft
-              ? _RouteDraftBar(
-                  originController: originController!,
-                  destinationController: destinationController!,
-                  originFocus: originFocus,
-                  destinationFocus: destinationFocus,
-                  onOriginChanged: onOriginChanged,
-                  onDestinationChanged: onDestinationChanged,
-                  onClear: onClearRouteDraft,
-                )
-              : Row(
-                  children: [
-                    if (searchActive)
-                      IconButton(
-                        onPressed: onCancelSearch,
-                        icon: const Icon(
-                          Icons.arrow_back,
-                          color: AppColors.muted,
-                        ),
-                        tooltip: '검색 닫기',
-                      )
-                    else if (showHamburger)
-                      IconButton(
-                        onPressed: onHamburgerTap,
-                        icon: const Icon(Icons.menu, color: AppColors.muted),
-                        tooltip: '건물 선택',
-                      )
-                    else
-                      const Padding(
-                        padding: EdgeInsets.only(left: 16),
-                        child: Icon(
-                          Icons.search,
-                          size: 18,
-                          color: AppColors.muted,
-                        ),
+    // 상태 표시줄 여백은 여기서 먹지 않는다. 길찾기 중에는 이 바 **위에** 이동
+    // 수단 줄이 오는데, 둘이 각자 SafeArea를 두면 여백이 두 번 들어가 상단이
+    // 뚝 떨어진다. 그 여백은 상위가 Column 전체에 한 번만 준다.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(showRouteDraft ? 18 : 28),
+        elevation: 6,
+        shadowColor: Colors.black.withValues(alpha: 0.15),
+        child: showRouteDraft
+            ? _RouteDraftBar(
+                originController: originController!,
+                destinationController: destinationController!,
+                originFocus: originFocus,
+                destinationFocus: destinationFocus,
+                onOriginChanged: onOriginChanged,
+                onDestinationChanged: onDestinationChanged,
+                onClear: onClearRouteDraft,
+              )
+            : Row(
+                children: [
+                  if (searchActive)
+                    IconButton(
+                      onPressed: onCancelSearch,
+                      icon: const Icon(
+                        Icons.arrow_back,
+                        color: AppColors.muted,
                       ),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: TextField(
-                          controller: controller,
-                          focusNode: focusNode,
-                          textInputAction: TextInputAction.search,
-                          onChanged: onChanged,
-                          onSubmitted: onSubmitted,
-                          style: const TextStyle(
+                      tooltip: '검색 닫기',
+                    )
+                  else if (showHamburger)
+                    IconButton(
+                      onPressed: onHamburgerTap,
+                      icon: const Icon(Icons.menu, color: AppColors.muted),
+                      tooltip: '건물 선택',
+                    )
+                  else
+                    const Padding(
+                      padding: EdgeInsets.only(left: 16),
+                      child: Icon(
+                        Icons.search,
+                        size: 18,
+                        color: AppColors.muted,
+                      ),
+                    ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: TextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        textInputAction: TextInputAction.search,
+                        onChanged: onChanged,
+                        onSubmitted: onSubmitted,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: AppColors.text,
+                        ),
+                        // 상단 바 자체가 이미 흰 카드다. 전역 inputDecorationTheme의
+                        // 채움색(blue50)과 포커스 테두리(파란 1.5px)를 그대로 두면
+                        // 카드 안에 파란 알약이 하나 더 생긴다 — 셋 다 여기서 끈다.
+                        decoration: InputDecoration(
+                          isDense: true,
+                          filled: false,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          hintText: hintText,
+                          hintStyle: const TextStyle(
                             fontSize: 14,
-                            color: AppColors.text,
+                            color: AppColors.muted,
                           ),
-                          // 상단 바 자체가 이미 흰 카드다. 전역 inputDecorationTheme의
-                          // 채움색(blue50)과 포커스 테두리(파란 1.5px)를 그대로 두면
-                          // 카드 안에 파란 알약이 하나 더 생긴다 — 셋 다 여기서 끈다.
-                          decoration: InputDecoration(
-                            isDense: true,
-                            filled: false,
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            hintText: hintText,
-                            hintStyle: const TextStyle(
-                              fontSize: 14,
-                              color: AppColors.muted,
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              vertical: 14,
-                            ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 14,
                           ),
                         ),
                       ),
                     ),
-                    // 글자가 있으면 지우기, 없으면 길찾기. 둘을 나란히 두면 좁은
-                    // 화면에서 입력 폭이 더 줄어든다.
-                    ValueListenableBuilder<TextEditingValue>(
-                      valueListenable: controller,
-                      builder: (context, value, _) {
-                        if (value.text.isEmpty) {
-                          return IconButton(
-                            onPressed: onDirectionsTap,
-                            icon: const Icon(
-                              Icons.directions,
-                              color: AppColors.primary,
-                            ),
-                            tooltip: '길찾기',
-                          );
-                        }
+                  ),
+                  // 글자가 있으면 지우기, 없으면 길찾기. 둘을 나란히 두면 좁은
+                  // 화면에서 입력 폭이 더 줄어든다.
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: controller,
+                    builder: (context, value, _) {
+                      if (value.text.isEmpty) {
                         return IconButton(
-                          onPressed: () {
-                            controller.clear();
-                            onChanged('');
-                          },
-                          icon: const Icon(Icons.close, color: AppColors.muted),
-                          tooltip: '입력 지우기',
+                          onPressed: onDirectionsTap,
+                          icon: const Icon(
+                            Icons.directions,
+                            color: AppColors.primary,
+                          ),
+                          tooltip: '길찾기',
                         );
-                      },
-                    ),
-                    const SizedBox(width: 4),
-                  ],
-                ),
-        ),
+                      }
+                      return IconButton(
+                        onPressed: () {
+                          controller.clear();
+                          onChanged('');
+                        },
+                        icon: const Icon(Icons.close, color: AppColors.muted),
+                        tooltip: '입력 지우기',
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 4),
+                ],
+              ),
       ),
     );
   }
