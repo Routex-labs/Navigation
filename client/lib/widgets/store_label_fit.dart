@@ -416,7 +416,7 @@ List<Object> storeLabelTextSizeExpression({
       metersPerPixelAtZoom0Equator * cos(latitude * pi / 180);
 
   final stops = <Object>[];
-  for (var zoom = _textSizeStopMinZoom; zoom <= _textSizeStopMaxZoom; zoom++) {
+  for (var zoom = _textSizeStopMinZoom; zoom <= kStoreLabelStopMaxZoom; zoom++) {
     final pixelsPerMeter = pow(2, zoom) / metersPerPixelZ0;
     stops.add(zoom.toDouble());
     stops.add(<Object>[
@@ -446,4 +446,25 @@ List<Object> storeLabelTextSizeExpression({
 /// stop을 찍는 zoom 범위. 실내 타일이 사는 구간을 덮는다. 밖에서는 보간이 양
 /// 끝값을 유지하는데, 그 값은 이미 하한/상한에 걸려 있어 문제가 없다.
 const _textSizeStopMinZoom = 16;
-const _textSizeStopMaxZoom = 22;
+
+/// 글자 크기 stop을 찍는 가장 높은 zoom. 이 위에서는 보간이 끝값을 유지하는데,
+/// 그 값은 이미 상한에 걸려 있어 문제가 없다.
+const kStoreLabelStopMaxZoom = 22;
+
+/// 라벨 GeoJSON 소스에 걸 `maxzoom`. **스타일 스펙이 허용하는 최대값이다.**
+///
+/// 소스 기본값은 18이다. 그 위에서 MapLibre는 z18 타일을 확대해 재활용하는데,
+/// 그 상태에서 심볼의 **아이콘만** 통째로 빠진다 — 글자와, 타일 소스를 쓰는 POI
+/// 아이콘은 멀쩡하다. 실기기(Galaxy S23) 실측이다. 같은 화면에서 zoom을 한
+/// 단계씩 올리며 배지 픽셀을 셌다.
+///
+/// | 소스 maxzoom | z0 | z+1 | z+2 | z+3 |
+/// |---|---|---|---|---|
+/// | 18 (기본) | 0 | 5,956 | 0 | — |
+/// | 22 | 50,000 | 10,850 | 3,780 | **0** |
+/// | 24 (지금) | 아래 「검증」 참고 | | | |
+///
+/// 값을 올릴 때마다 **소실 지점이 정확히 한 단계씩 위로 밀렸다.** 그래서 카메라가
+/// 닿을 수 있는 어떤 zoom도 오버줌이 되지 않도록 스펙 상한(24)에 둔다. 타일이
+/// 그만큼 잘게 쪼개지지만 feature가 층당 수백 개라 비용은 무시할 수준이다.
+const kStoreLabelSourceMaxZoom = 24;

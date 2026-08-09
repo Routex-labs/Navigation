@@ -90,38 +90,41 @@ void main() {
       );
     });
 
-    test('아이콘을 키운 만큼 이름이 밀려나지 않는다', () {
-      // 붐비는 층의 라벨 개수를 지키는 진짜 기준은 아이콘 크기 자체가 아니라
-      // **심볼 하나가 차지하는 폭**이다 — MapLibre의 충돌 판정이 보는 값이 그것
-      // 이고, 그 폭이 넓어진 만큼 이름이 밀려난다.
-      //
-      //   심볼 폭 = 아이콘 + (간격 × 글자크기) + (글자크기 × 글자수)
-      //
-      // ⚠️ **기준을 바꿨다.** 예전에는 "아이콘 ≤ 글자의 1.5배"였는데, 그 1.5는
-      // 글자 상한이 18px이던 시절에 쓰던 대용값이다. 상한을 14px로 내리자
-      // (`kStoreLabelMaxPx`) 같은 비율이 **아이콘을 예전보다 작게** 강요했다 —
-      // "동그라미가 너무 작다"는 피드백과 정반대 방향이다. 비율 대신 실제
-      // 예산으로 바꾼다. 대용값이 사라져서 오히려 조건이 정확해진다.
-      const canvasSize = 96.0;
-      const nameLength = 4; // 매장명 중앙값 근처
+    test('아이콘 크기가 화면 배율을 따라간다', () {
+      // 회귀 대상이 이 저장소에서 실제로 났던 버그다. `icon-size`는 비트맵의
+      // **물리 픽셀**에 곱해지고 `text-size`는 논리 픽셀이라, 배율을 안 곱하면
+      // 고밀도 화면에서 아이콘만 배율만큼 작아진다. Galaxy S23(배율 3.5)에서
+      // 글자 14 논리px(=49 물리px) 옆에 배지가 19 물리px(=5.5 논리px)으로 떠
+      // "동그란 게 너무 작다"가 됐다.
+      final at1x = storeCategoryIconSizeIndoor(1.0);
+      final at3x = storeCategoryIconSizeIndoor(3.0);
 
-      double symbolWidth(double iconScale, double textPx) =>
-          iconScale * canvasSize +
-          kStoreLabelRadialOffset * textPx +
-          nameLength * textPx;
+      expect((at3x[4] as double), closeTo((at1x[4] as double) * 3, 1e-9));
+      expect((at3x[6] as double), closeTo((at1x[6] as double) * 3, 1e-9));
+    });
 
-      // 밀도가 실제로 확인된 마지막 조합: 아이콘 0.14~0.20 · 글자 9~18px.
-      // 그때보다 넓어지면 안 된다.
-      expect(
-        symbolWidth(kStoreCategoryIconSizeIndoor[4] as double, kStoreLabelMinPx),
-        lessThanOrEqualTo(symbolWidth(0.14, 9.0) + 1e-9),
-        reason: '축소(z16)는 글자가 이미 하한이라 아이콘을 키울 예산이 없다',
-      );
-      expect(
-        symbolWidth(kStoreCategoryIconSizeIndoor[6] as double, kStoreLabelMaxPx),
-        lessThanOrEqualTo(symbolWidth(0.20, 18.0)),
-        reason: '확대(z20)는 글자 상한을 내린 만큼만 키울 수 있다',
-      );
+    test('논리 px로 환산하면 배율과 무관하게 같은 크기다', () {
+      for (final dpr in [1.0, 2.0, 2.625, 3.5]) {
+        final expr = storeCategoryIconSizeIndoor(dpr);
+        final minLogical = (expr[4] as double) * kIconCanvasPx / dpr;
+        final maxLogical = (expr[6] as double) * kIconCanvasPx / dpr;
+
+        expect(minLogical, closeTo(kStoreCategoryIconMinLogicalPx, 1e-9));
+        expect(maxLogical, closeTo(kStoreCategoryIconMaxLogicalPx, 1e-9));
+      }
+    });
+
+    test('배지는 이름보다 크되 도면을 삼킬 만큼은 아니다', () {
+      // 이 파일이 원래 의도한 비율("글자 크기의 1.4배 남짓")을 **논리 px 기준**
+      // 으로 잠근다. 예전 기준(물리 px 상수 비교)은 위 배율 버그 위에서 잰
+      // 값이라 기준이 될 수 없었다.
+      final atZoomOut = kStoreCategoryIconMinLogicalPx / kStoreLabelMinPx;
+      final atZoomIn = kStoreCategoryIconMaxLogicalPx / kStoreLabelMaxPx;
+
+      for (final ratio in [atZoomOut, atZoomIn]) {
+        expect(ratio, greaterThan(1.0), reason: '배지가 글자보다 작으면 색점으로만 읽힌다');
+        expect(ratio, lessThanOrEqualTo(1.5), reason: '1.5배를 넘으면 도면이 아이콘 밭이 된다');
+      }
     });
   });
 

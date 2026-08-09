@@ -90,6 +90,47 @@ ll.LatLng? clampToFootprint(
   return ll.LatLng(lat, lng);
 }
 
+/// 추적 중 카메라를 내 위치로 다시 옮기기 전에 허용하는 **어긋남**. 화면 절반
+/// ([halfSpanLat]·[halfSpanLng])에 대한 비율이다.
+///
+/// **왜 데드밴드가 필요한가** — 위치가 갱신될 때마다 카메라를 옮기면 사용자가
+/// 화면 정중앙에 못으로 박힌 것처럼 된다. PDR은 한 걸음마다 값을 내놓으므로
+/// 걷는 내내 지도가 끌려다니고, 정작 사용자는 그 사이에 도면을 읽을 수 없다.
+/// 마커가 이 범위 안에 있는 동안에는 카메라를 가만히 둔다.
+///
+/// 0.35는 화면 절반의 35%, 즉 **화면 폭의 약 17.5%**까지 벗어나도 두겠다는
+/// 뜻이다. 마커는 여전히 화면 가운데 언저리에 있고, 걸음마다 오던 미세한
+/// 끌림은 사라진다. 키우면 더 조용해지지만 마커가 구석으로 밀리고, 0으로 두면
+/// 예전처럼 매 걸음 따라간다.
+const kFollowDeadbandRatio = 0.35;
+
+/// 추적 중인 카메라를 [user] 자리로 다시 옮겨야 하는지.
+///
+/// 화면 크기를 모르면([halfSpanLat]·[halfSpanLng]가 0) **항상 옮긴다.** 데드밴드는
+/// 화면 크기에 대한 비율이라 기준이 없으면 정의되지 않는데, 그때 안 옮기는 쪽을
+/// 고르면 마커가 화면 밖으로 나가도 카메라가 영영 따라가지 않는다.
+///
+/// [halfSpan]은 회전된 뷰포트의 축정렬 bbox라 실제보다 넉넉하다
+/// (`FloorPlanViewState._visibleHalfSpan`). 그만큼 데드밴드도 조금 넓어지는데,
+/// 방향이 어느 쪽이든 "덜 따라간다" 쪽이라 안전한 오차다.
+bool shouldRecenterFollow({
+  required ll.LatLng camera,
+  required ll.LatLng user,
+  double halfSpanLat = 0,
+  double halfSpanLng = 0,
+}) {
+  if (halfSpanLat <= 0 ||
+      halfSpanLng <= 0 ||
+      !halfSpanLat.isFinite ||
+      !halfSpanLng.isFinite) {
+    return true;
+  }
+  return (user.latitude - camera.latitude).abs() >
+          halfSpanLat * kFollowDeadbandRatio ||
+      (user.longitude - camera.longitude).abs() >
+          halfSpanLng * kFollowDeadbandRatio;
+}
+
 /// [lo]~[hi] 구간을 양쪽에서 [halfSpan]만큼 깎는다. 다 깎여 뒤집히면 중점
 /// 하나로 붕괴시킨다.
 ({double lo, double hi}) _deflate(double lo, double hi, double halfSpan) {

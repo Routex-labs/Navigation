@@ -510,6 +510,20 @@ class FloorPlanViewState extends State<FloorPlanView> {
   MapLibreMapController? _controller;
   bool _styleReady = false;
 
+  /// 화면 배율. `icon-size`가 **물리 픽셀**에 곱해지는 값이라 논리 px로 잡은
+  /// 아이콘 크기를 여기로 환산한다([storeCategoryIconSizeIndoor]).
+  ///
+  /// `MediaQuery.devicePixelRatioOf(context)`를 레이어 등록 시점에 바로 읽지
+  /// 않는 이유는 그 코드가 여러 번의 `await` 뒤라서다 — 그 사이 위젯이
+  /// 사라지면 context 접근이 터진다. 의존성이 잡히는 시점에 한 번 받아 둔다.
+  double _devicePixelRatio = 1;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
+  }
+
   /// 지금 지도에 설치돼 있는 층의 타일. 층이 바뀌면 이 값이 가리키는 레이어를
   /// 새 층 것으로 갈아 끼운다(위젯을 다시 만들지 않는다).
   String? _activeTileFloor;
@@ -940,11 +954,27 @@ class FloorPlanViewState extends State<FloorPlanView> {
 
     // 매장명 라벨 앵커. 타일이 아니라 클라이언트가 만든다(이유는
     // [_storeLabelSourceIdFor] 주석).
+    //
+    // **`addGeoJsonSource`가 아니라 `addSource`인 이유는 `maxzoom` 때문이다.**
+    // GeoJSON 소스의 기본 maxzoom은 18인데 실내 지도는 z22까지 쓴다
+    // ([kStoreLabelSourceMaxZoom]). 그 위에서는 z18 타일을 확대해 재활용하는데,
+    // 그 상태에서 심볼의 **아이콘만** 통째로 빠지는 것을 실기기에서 확인했다 —
+    // 같은 화면에서 zoom을 한 단계씩 올리며 배지 픽셀을 세면 있음 → 없음 →
+    // 없음이었고, 글자와 (타일 소스를 쓰는) POI 아이콘은 멀쩡했다. 소스가 실제
+    // 줌까지 타일을 만들게 하면 그 경계가 사라진다.
+    //
+    // buffer도 함께 올린다. 라벨 앵커는 점이지만 그려지는 심볼(배지 + 이름)은
+    // 폭이 있어서, 기본 buffer(128/512)로는 타일 경계 근처 매장의 심볼이
+    // 잘려 나갈 수 있다.
     final labelSourceId = _storeLabelSourceIdFor(floor);
     final labelLatitude = _storeLabelLatitude();
-    await controller.addGeoJsonSource(
+    await controller.addSource(
       labelSourceId,
-      _storeLabelFeatureCollection(),
+      GeojsonSourceProperties(
+        data: _storeLabelFeatureCollection(),
+        maxzoom: kStoreLabelSourceMaxZoom.toDouble(),
+        buffer: 256,
+      ),
     );
 
     // 도면 폴리곤 색은 [map_palette.dart]가 갖는다 — 야외 오버레이가 같은 도면을
@@ -1051,7 +1081,10 @@ class FloorPlanViewState extends State<FloorPlanView> {
         // ([kStoreLabelMaxWidthProperty] 주석).
         textMaxWidth: ['get', kStoreLabelMaxWidthProperty],
         iconImage: storeCategoryIconExpression(),
-        iconSize: kStoreCategoryIconSizeIndoor,
+        // 크기는 화면 배율을 곱해 정한다 — `icon-size`는 물리 픽셀이고
+        // `text-size`는 논리 픽셀이라, 안 곱하면 고밀도 화면에서 아이콘만
+        // 배율만큼 작아진다([storeCategoryIconSizeIndoor] 실측표).
+        iconSize: storeCategoryIconSizeIndoor(_devicePixelRatio),
         textVariableAnchor: kStoreLabelVariableAnchor,
         textRadialOffset: kStoreLabelRadialOffset,
         // variable-anchor가 고른 방향에 맞춰 좌/우 정렬을 따라가게 한다.
@@ -1061,19 +1094,26 @@ class FloorPlanViewState extends State<FloorPlanView> {
         textColor: mapLabelStoreColor,
         textHaloColor: mapLabelHaloColor,
         textHaloWidth: mapLabelHaloWidth,
-        symbolAvoidEdges: true,
         // variable-anchor는 충돌 판정 위에서만 동작한다. true로 바꾸면 앵커가
         // 항상 첫 번째 값으로 굳어 뒤집기가 조용히 죽는다.
         textAllowOverlap: false,
-        // 둘 다 들어갈 자리가 없으면 하나만이라도 남긴다. 아이콘만 남으면 "여기
-        // 이런 종류의 매장이 있다"가, 이름만 남으면 "여기가 어디다"가 전달된다 —
-        // 둘 다 버려 폴리곤이 빈 회색 상자로 남는 것이 가장 나쁘다.
+        // 자리가 없으면 **이름만** 포기한다. 아이콘은 항상 그린다.
         //
-        // **iconOptional이 없으면 라벨이 줄어든다.** 심볼 폭이 아이콘만큼 넓어져
-        // 붐비는 층에서 이름이 통째로 밀려난다(B1 한 화면에서 49개 → 38개로
-        // 줄던 것을 실측했다). 아이콘을 포기할 수 있게 해 두면 그 이름들이 돌아온다.
+        // ⚠️ **예전 규칙을 뒤집었다.** 원래는 `iconOptional: true`로 두고
+        // "붐빌 때는 아이콘을 포기해 이름을 살린다"였는데, 실기기에서 재 보니
+        // 그 대가가 예상보다 훨씬 컸다 — 같은 1F에서 zoom을 한 단계씩 올리며
+        // 배지 픽셀을 세면 **0 → 5,956 → 0**이었다. 확대해서 자리가 남아도는
+        // 화면에서도 배지가 통째로 사라졌다. 사용자에게는 "아이콘이 커지거나
+        // 줄어드는 게 아니라 없어진다"로 보인다.
+        //
+        // 아이콘은 이름보다 훨씬 작고(12~18 논리 px) 색만으로도 업종을 말하므로,
+        // 밀릴 때 버릴 것은 이쪽이 아니다. `iconIgnorePlacement`까지 켜서 배지가
+        // **다른 라벨을 밀어내지도 않게** 한다 — 이름을 지키려던 원래 의도는
+        // 아이콘을 버리는 대신 이 플래그가 대신 맡는다.
         textOptional: true,
-        iconOptional: true,
+        iconOptional: false,
+        iconAllowOverlap: true,
+        iconIgnorePlacement: true,
       ),
       belowLayerId: belowLayerId,
       // 라벨 소스는 타일이 아니라 클라이언트 GeoJSON이라 타일 소스의 zoom 범위를
@@ -1841,10 +1881,19 @@ class FloorPlanViewState extends State<FloorPlanView> {
     );
     if (clamped == null) return;
 
+    // 되돌림도 미끄러지게 한다. 기본 애니메이션은 짧아서 경계에서 지도가
+    // 튕겨 나오는 것처럼 보였다 — 같은 거리를 같은 방향으로 옮기더라도
+    // "벽에 부딪혔다"와 "벽에 닿아 멈췄다"는 다르게 읽힌다.
     await controller.animateCamera(
       CameraUpdate.newLatLng(_toMapLibreLatLng(clamped)),
+      duration: _pullBackAnimationDuration,
     );
   }
+
+  /// 도면 밖으로 나간 카메라를 되돌리는 데 쓰는 시간. [_followAnimationDuration]
+  /// 보다 조금 길게 둔다 — 이쪽은 사용자가 방금 민 것을 되돌리는 동작이라,
+  /// 빠를수록 "튕겼다"로 읽힌다.
+  static const _pullBackAnimationDuration = Duration(milliseconds: 450);
 
   /// 지금 화면이 덮는 위경도 범위의 **절반**. 못 구하면 null이다.
   ///
@@ -1980,17 +2029,51 @@ class FloorPlanViewState extends State<FloorPlanView> {
       cameraBearing: current?.bearing,
       force: force,
     );
-    await controller.moveCamera(
+
+    // 위치에도 데드밴드를 둔다. 예전에는 위치가 갱신될 때마다 무조건 중앙에
+    // 맞췄는데, PDR이 한 걸음마다 값을 내놓으므로 걷는 내내 지도가 끌려다녔다
+    // ([kFollowDeadbandRatio]).
+    final cameraCenter = current?.target;
+    var recenter = force || cameraCenter == null;
+    if (!recenter) {
+      final halfSpan = await _visibleHalfSpan(controller);
+      if (!mounted) return;
+      recenter = shouldRecenterFollow(
+        camera: ll.LatLng(cameraCenter.latitude, cameraCenter.longitude),
+        user: target,
+        halfSpanLat: halfSpan?.lat ?? 0,
+        halfSpanLng: halfSpan?.lng ?? 0,
+      );
+    }
+    // 위치도 방향도 손댈 게 없으면 카메라를 아예 건드리지 않는다. 같은 자리로
+    // animateCamera를 부르면 그 자체가 onCameraIdle을 다시 불러 되돌림 판정이
+    // 헛돈다([floor_camera_bounds.dart]의 `_epsilonDeg` 주석과 같은 함정).
+    if (!recenter && bearing == null) return;
+
+    // **중심 이동과 회전을 한 번의 호출로 묶는다.** 나눠 부르면 걸음마다 화면이
+    // 두 번 튄다(먼저 밀리고 그 다음 돈다).
+    //
+    // `moveCamera`가 아니라 `animateCamera`인 이유는 데드밴드와 짝이다 — 데드밴드
+    // 를 두면 한 번에 옮기는 거리가 그만큼 커지는데, 순간이동으로 처리하면
+    // 조용해진 대신 가끔 크게 튀는 화면이 되어 오히려 더 거슬린다.
+    await controller.animateCamera(
       CameraUpdate.newCameraPosition(
         CameraPosition(
-          target: _toMapLibreLatLng(target),
+          target: recenter
+              ? _toMapLibreLatLng(target)
+              : LatLng(cameraCenter!.latitude, cameraCenter.longitude),
           zoom: current?.zoom ?? 18,
           bearing: bearing ?? current?.bearing ?? 0,
           tilt: current?.tilt ?? 0,
         ),
       ),
+      duration: _followAnimationDuration,
     );
   }
+
+  /// 추적 카메라가 새 위치로 미끄러지는 시간. 걸음 간격(약 0.5~0.8초)보다 짧게
+  /// 둬야 다음 갱신이 오기 전에 끝난다 — 길게 잡으면 애니메이션이 밀려 쌓인다.
+  static const _followAnimationDuration = Duration(milliseconds: 350);
 
   /// 카메라 중심만 [target]으로 옮긴다. 현재 bearing/줌은 유지 — 사용자 위치를
   /// 화면 정중앙에 오게 하는 데 쓴다.
@@ -2035,6 +2118,17 @@ class FloorPlanViewState extends State<FloorPlanView> {
     _gesturePanPx += event.delta.distance;
     if (_gesturePanPx < _followBreakSlopPx) return;
     setState(() => _following = false);
+    // **내 위치 근방 제한도 함께 푼다.** 이게 없으면 추적만 꺼지고 카메라는
+    // 여전히 "내 위치에서 화면 절반 이내"에 묶여 있어서, 옆 구역을 보려고 밀어
+    // 둔 지도가 손을 떼는 순간 [_pullBackIntoFootprint]에 도로 끌려온다 —
+    // 사용자 입장에서는 추적을 끈 것이 아무 소용이 없다.
+    //
+    // 도면 제한은 그대로 남는다. 밀어서 볼 수 있는 범위가 **이 건물 이 층**으로
+    // 제한되는 것은 맞고, 그게 없으면 도면이 화면에서 사라진다
+    // ([clampToFootprint] 주석).
+    //
+    // 다시 켜는 곳은 [resumeFollow] 하나다("위치 보정").
+    _userBoundsSuspended = true;
     widget.onFollowingChanged?.call(false);
   }
 

@@ -231,4 +231,63 @@ void main() {
       expect(clamped.latitude, closeTo(36.51, 1e-9));
     });
   });
+
+  group('shouldRecenterFollow', () {
+    // 데드밴드가 없으면 PDR이 한 걸음 낼 때마다 카메라가 끌려간다 — 걷는 내내
+    // 지도가 흔들려 도면을 읽을 수 없다.
+    test('화면 절반의 데드밴드 안이면 카메라를 두고 본다', () {
+      expect(
+        shouldRecenterFollow(
+          camera: const ll.LatLng(37.1, 127.2),
+          user: ll.LatLng(37.1 + 0.05 * kFollowDeadbandRatio * 0.9, 127.2),
+          halfSpanLat: 0.05,
+          halfSpanLng: 0.05,
+        ),
+        isFalse,
+      );
+    });
+
+    test('데드밴드를 벗어나면 따라간다', () {
+      expect(
+        shouldRecenterFollow(
+          camera: const ll.LatLng(37.1, 127.2),
+          user: ll.LatLng(37.1 + 0.05 * kFollowDeadbandRatio * 1.1, 127.2),
+          halfSpanLat: 0.05,
+          halfSpanLng: 0.05,
+        ),
+        isTrue,
+      );
+    });
+
+    test('한 축만 벗어나도 따라간다', () {
+      expect(
+        shouldRecenterFollow(
+          camera: const ll.LatLng(37.1, 127.2),
+          user: ll.LatLng(37.1, 127.2 + 0.05 * kFollowDeadbandRatio * 1.1),
+          halfSpanLat: 0.05,
+          halfSpanLng: 0.05,
+        ),
+        isTrue,
+      );
+    });
+
+    // 기준이 없으면 데드밴드가 정의되지 않는다. 그때 안 따라가는 쪽을 고르면
+    // 마커가 화면 밖으로 나가도 카메라가 영영 오지 않는다.
+    test('화면 크기를 모르면 항상 따라간다', () {
+      expect(
+        shouldRecenterFollow(
+          camera: const ll.LatLng(37.1, 127.2),
+          user: const ll.LatLng(37.1, 127.2),
+        ),
+        isTrue,
+      );
+    });
+
+    test('데드밴드는 화면을 벗어날 만큼 넓지 않다', () {
+      // 마커가 화면 밖으로 나가기 전에 반드시 따라잡아야 한다. 비율이 1을
+      // 넘으면 그 보장이 깨진다.
+      expect(kFollowDeadbandRatio, greaterThan(0));
+      expect(kFollowDeadbandRatio, lessThan(1));
+    });
+  });
 }
