@@ -31,6 +31,7 @@ import '../../widgets/outdoor_poi_sheet.dart';
 import '../../widgets/place_detail_sheet.dart';
 import '../../widgets/search_panel.dart';
 import '../../widgets/transit_routes_sheet.dart';
+import '../../widgets/travel_mode_bar.dart';
 import '../indoor_map/indoor_map_screen.dart';
 import '../outdoor_map/outdoor_map_screen.dart';
 
@@ -447,11 +448,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
       _searchActive = false;
       _searchQuery = '';
     });
-  }
-
-  void _resumeSearchFromRouteDraft() {
-    _activateSearch();
-    _searchFocus.requestFocus();
   }
 
   void _clearRouteDraft() {
@@ -1085,6 +1081,48 @@ class _MapShellScreenState extends State<MapShellScreen> {
     unawaited(_refreshReach());
   }
 
+  /// 지금 고른 이동 수단. 도착지를 새로 정하면 거리를 보고 다시 정해진다.
+  TravelMode _travelMode = TravelMode.walk;
+
+  /// 걸어갈 만한 거리의 상한(m).
+  ///
+  /// 1.5 km는 보통 걸음으로 20분쯤이다. 그보다 멀면 대중교통을 먼저 보여 주는
+  /// 편이 맞다 — 도보 안내를 지나쳐 다시 누르게 하는 것보다 낫고, 반대로 이
+  /// 값을 더 낮추면 두 정거장 거리를 굳이 버스로 안내하게 된다.
+  static const _walkableMeters = 1500.0;
+
+  /// 거리를 보고 처음 보여 줄 이동 수단을 정한다.
+  ///
+  /// 출발점을 모르면(GPS 미확보) 도보로 둔다. 모르는 채로 대중교통을 부르면
+  /// "현재 위치를 아직 못 잡았습니다"만 뜨고 끝나, 사용자는 수단을 고른 적도
+  /// 없는데 실패 안내를 본다.
+  TravelMode _defaultTravelMode(
+    DirectionsCandidate? origin,
+    DirectionsCandidate destination,
+  ) {
+    if (!transitRepository.isAvailable) return TravelMode.walk;
+    final from = origin?.point ?? _outdoorKey.currentState?.routeOriginPoint;
+    if (from == null) return TravelMode.walk;
+    final meters = wgs84DistanceMeters(from, destination.point);
+    return meters > _walkableMeters ? TravelMode.transit : TravelMode.walk;
+  }
+
+  /// 이동 수단 줄에서 직접 골랐을 때. 자동 선택을 덮어쓴다.
+  Future<void> _onTravelModePicked(TravelMode mode) async {
+    final destination = _routeDraftDestination;
+    if (destination == null || _travelMode == mode) return;
+    setState(() => _travelMode = mode);
+    if (mode == TravelMode.transit) {
+      await _startTransitRoute(destination);
+      return;
+    }
+    await _startRoute(
+      origin: _selectedOrigin,
+      destination: destination,
+      autoSelectMode: false,
+    );
+  }
+
   /// 지도에서 고르기를 끝낸다(선택 완료·취소 공통, 출발지·도착지 공통).
   void _stopPickingOnMap() {
     if (_mapPickTarget == null) return;
@@ -1175,10 +1213,34 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 실제 경로 표시. 길찾기 시트를 거치는 경로와, 이미 기억해둔 출발지로 바로
   /// 라우팅하는 경로가 함께 쓸 수 있게 뽑아뒀다. [origin]이 null이면 "현재
   /// 위치"(=PDR)로 라우팅한다.
+  /// 도착지가 정해졌을 때 **어떻게 갈지를 먼저 고른다.**
+  ///
+  /// [autoSelectMode]가 참이면 거리를 보고 수단을 정한다 — 걸어갈 만하면 도보,
+  /// 아니면 대중교통. 사용자가 이동 수단 줄에서 직접 고른 경우에는 거짓으로
+  /// 불러 그 선택을 덮지 않는다.
+  ///
+  /// 예전에는 이 판단이 없어서 10 km 떨어진 목적지에 "약 147분 / 10649m" 도보
+  /// 안내가 먼저 떴다. 걸어서 두 시간 반 걸리는 길을 기본 답으로 내미는 셈이라,
+  /// 사용자는 매번 그 화면을 지나 대중교통 버튼을 다시 눌러야 했다.
   Future<void> _startRoute({
     DirectionsCandidate? origin,
     required DirectionsCandidate destination,
+    bool autoSelectMode = true,
   }) async {
+    // 건물 안 매장이 목적지면 수단을 고르지 않는다. 그 안내는 "문을 경유해
+    // 매장까지"라 도보 구간과 실내 구간이 한 몸이고([showOutdoorToIndoorRouteTo]),
+    // 대중교통으로 바꾸면 그 실내 구간이 통째로 사라진다.
+    if (autoSelectMode &&
+        _mode == MapMode.outdoor &&
+        destination.nodeId == null) {
+      final mode = _defaultTravelMode(origin, destination);
+      if (_travelMode != mode) setState(() => _travelMode = mode);
+      if (mode == TravelMode.transit) {
+        await _startTransitRoute(destination);
+        return;
+      }
+    }
+
     // 야외 지도에서 실내 진입 오버레이를 보는 중 실내 매장(nodeId+floor)까지
     // 길찾기를 시작하면, 화면(탭)을 바꾸지 않고 야외 화면 그대로에 실내 경로를
     // 그린다 — 방금 지정한 위치·매장·경로를 한 시야에서 확인하도록.
@@ -1590,7 +1652,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
                   searchActive: _searchActive,
                   onCancelSearch: _closeSearch,
                   onDirectionsTap: _openDirections,
-                  onSearchRequested: _resumeSearchFromRouteDraft,
                   // 명시적으로 고른 매장이 없어도 현재 위치를 출발지로 쓸 수 있으면
                   // 그렇게 적는다. null을 그대로 넘기면 상단 바가 "출발지를
                   // 선택하세요" placeholder를 띄워, 위치를 방금 찍어둔 사용자에게
@@ -1610,6 +1671,23 @@ class _MapShellScreenState extends State<MapShellScreen> {
                       ? null
                       : _clearRouteDraft,
                 ),
+
+                // 이동 수단 줄. 도착지가 정해진 야외 안내에서만 뜬다.
+                //
+                // 검색 중에는 감춘다 — 그 자리는 결과 패널이 쓰고, 검색을 하는
+                // 동안에는 아직 어디로 갈지도 안 정해졌다.
+                if (_mode == MapMode.outdoor &&
+                    _routeDraftDestination != null &&
+                    !_searchActive)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, _overlayGap, 12, 0),
+                    child: TravelModeBar(
+                      selected: _travelMode,
+                      transitEnabled: transitRepository.isAvailable,
+                      onSelected: (mode) =>
+                          unawaited(_onTravelModePicked(mode)),
+                    ),
+                  ),
 
                 // 결과 패널과 카테고리 열은 같은 자리를 쓴다. 검색 중에는
                 // 카테고리 열을 접어 두 오버레이가 겹치지 않게 한다.

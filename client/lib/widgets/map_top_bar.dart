@@ -26,7 +26,6 @@ class MapTopBar extends StatelessWidget {
     required this.searchActive,
     required this.onCancelSearch,
     required this.onDirectionsTap,
-    required this.onSearchRequested,
     this.routeOriginLabel,
     this.routeDestinationLabel,
     this.onRouteOriginTap,
@@ -65,7 +64,6 @@ class MapTopBar extends StatelessWidget {
 
   /// 길찾기 초안을 보고 있는 중에도 일반 장소 검색으로 돌아갈 수 있는
   /// 진입점이다. 검색을 닫으면 상위가 같은 초안을 다시 넘겨준다.
-  final VoidCallback onSearchRequested;
   final String hintText;
 
   @override
@@ -86,88 +84,96 @@ class MapTopBar extends StatelessWidget {
                   destinationLabel: routeDestinationLabel!,
                   onOriginTap: onRouteOriginTap ?? onDirectionsTap,
                   onDestinationTap: onRouteDestinationTap ?? onDirectionsTap,
-                  onSearchRequested: onSearchRequested,
                   onClear: onClearRouteDraft,
                 )
               : Row(
-            children: [
-              if (searchActive)
-                IconButton(
-                  onPressed: onCancelSearch,
-                  icon: const Icon(Icons.arrow_back, color: AppColors.muted),
-                  tooltip: '검색 닫기',
-                )
-              else if (showHamburger)
-                IconButton(
-                  onPressed: onHamburgerTap,
-                  icon: const Icon(Icons.menu, color: AppColors.muted),
-                  tooltip: '건물 선택',
-                )
-              else
-                const Padding(
-                  padding: EdgeInsets.only(left: 16),
-                  child: Icon(Icons.search, size: 18, color: AppColors.muted),
-                ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: TextField(
-                    controller: controller,
-                    focusNode: focusNode,
-                    textInputAction: TextInputAction.search,
-                    onChanged: onChanged,
-                    onSubmitted: onSubmitted,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: AppColors.text,
-                    ),
-                    // 상단 바 자체가 이미 흰 카드다. 전역 inputDecorationTheme의
-                    // 채움색(blue50)과 포커스 테두리(파란 1.5px)를 그대로 두면
-                    // 카드 안에 파란 알약이 하나 더 생긴다 — 셋 다 여기서 끈다.
-                    decoration: InputDecoration(
-                      isDense: true,
-                      filled: false,
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      hintText: hintText,
-                      hintStyle: const TextStyle(
-                        fontSize: 14,
-                        color: AppColors.muted,
+                  children: [
+                    if (searchActive)
+                      IconButton(
+                        onPressed: onCancelSearch,
+                        icon: const Icon(
+                          Icons.arrow_back,
+                          color: AppColors.muted,
+                        ),
+                        tooltip: '검색 닫기',
+                      )
+                    else if (showHamburger)
+                      IconButton(
+                        onPressed: onHamburgerTap,
+                        icon: const Icon(Icons.menu, color: AppColors.muted),
+                        tooltip: '건물 선택',
+                      )
+                    else
+                      const Padding(
+                        padding: EdgeInsets.only(left: 16),
+                        child: Icon(
+                          Icons.search,
+                          size: 18,
+                          color: AppColors.muted,
+                        ),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ),
-                ),
-              ),
-              // 글자가 있으면 지우기, 없으면 길찾기. 둘을 나란히 두면 좁은
-              // 화면에서 입력 폭이 더 줄어든다.
-              ValueListenableBuilder<TextEditingValue>(
-                valueListenable: controller,
-                builder: (context, value, _) {
-                  if (value.text.isEmpty) {
-                    return IconButton(
-                      onPressed: onDirectionsTap,
-                      icon: const Icon(
-                        Icons.directions,
-                        color: AppColors.primary,
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: TextField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          textInputAction: TextInputAction.search,
+                          onChanged: onChanged,
+                          onSubmitted: onSubmitted,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppColors.text,
+                          ),
+                          // 상단 바 자체가 이미 흰 카드다. 전역 inputDecorationTheme의
+                          // 채움색(blue50)과 포커스 테두리(파란 1.5px)를 그대로 두면
+                          // 카드 안에 파란 알약이 하나 더 생긴다 — 셋 다 여기서 끈다.
+                          decoration: InputDecoration(
+                            isDense: true,
+                            filled: false,
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            hintText: hintText,
+                            hintStyle: const TextStyle(
+                              fontSize: 14,
+                              color: AppColors.muted,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 14,
+                            ),
+                          ),
+                        ),
                       ),
-                      tooltip: '길찾기',
-                    );
-                  }
-                  return IconButton(
-                    onPressed: () {
-                      controller.clear();
-                      onChanged('');
-                    },
-                    icon: const Icon(Icons.close, color: AppColors.muted),
-                    tooltip: '입력 지우기',
-                  );
-                },
-              ),
-              const SizedBox(width: 4),
-            ],
-          ),
+                    ),
+                    // 글자가 있으면 지우기, 없으면 길찾기. 둘을 나란히 두면 좁은
+                    // 화면에서 입력 폭이 더 줄어든다.
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: controller,
+                      builder: (context, value, _) {
+                        if (value.text.isEmpty) {
+                          return IconButton(
+                            onPressed: onDirectionsTap,
+                            icon: const Icon(
+                              Icons.directions,
+                              color: AppColors.primary,
+                            ),
+                            tooltip: '길찾기',
+                          );
+                        }
+                        return IconButton(
+                          onPressed: () {
+                            controller.clear();
+                            onChanged('');
+                          },
+                          icon: const Icon(Icons.close, color: AppColors.muted),
+                          tooltip: '입력 지우기',
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                ),
         ),
       ),
     );
@@ -183,7 +189,6 @@ class _RouteDraftBar extends StatelessWidget {
     required this.destinationLabel,
     required this.onOriginTap,
     required this.onDestinationTap,
-    required this.onSearchRequested,
     required this.onClear,
   });
 
@@ -191,7 +196,6 @@ class _RouteDraftBar extends StatelessWidget {
   final String destinationLabel;
   final VoidCallback onOriginTap;
   final VoidCallback onDestinationTap;
-  final VoidCallback onSearchRequested;
   final VoidCallback? onClear;
 
   @override
@@ -220,12 +224,6 @@ class _RouteDraftBar extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-          IconButton(
-            key: const Key('route-draft-search'),
-            onPressed: onSearchRequested,
-            icon: const Icon(Icons.search, color: AppColors.muted),
-            tooltip: '장소 검색',
           ),
           if (onClear != null)
             IconButton(
