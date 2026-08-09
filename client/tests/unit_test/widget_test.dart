@@ -55,11 +55,9 @@ final _fakeLowAccuracyPosition = Position(
   speedAccuracy: 0,
 );
 
-// 자동 진입 감지 테스트용 두 건. 판정은 **한 건으로 성립하지 않는다** —
-// "신호가 멀쩡했을 때 입구 앞에 있었다"는 근거가 창 안에 있어야 하므로, 접근
-// 표본(양호)과 진입 표본(저하)을 순서대로 흘려야 한다. 근거 없이 저하 한 건만
-// 오는 경우는 판정하지 않는 것이 이 정책의 규칙이다.
-final _fakePositionApproachingEntrance = Position(
+// 자동 진입 감지 테스트용. 데모 건물 외곽선 **안쪽** 좌표 + 믿을 수 있는 오차라,
+// 이 한 건으로 진입이 성립한다([indoor_entry_gps.dart]).
+final _fakePositionInsideBuilding = Position(
   latitude: 37.5665,
   longitude: 126.9779,
   timestamp: DateTime(2024, 1, 1),
@@ -72,13 +70,13 @@ final _fakePositionApproachingEntrance = Position(
   speedAccuracy: 0,
 );
 
-// 데모 건물 입구와 정확히 같은 좌표 + 신호 저하. accuracy가 '무너졌다' 기준
-// (30m)을 넘어야 진입으로 읽힌다.
-final _fakePositionAtEntrance = Position(
-  latitude: 37.5665,
-  longitude: 126.9779,
+// 건물 벽 바로 밖(북쪽 변에서 약 11 m) + 신호 양호. 완충 구간이라 진입도 이탈도
+// 판정하지 않는다 — 건물 앞을 지나가는 사람이 실내로 끌려 들어가면 안 된다.
+final _fakePositionPassingBy = Position(
+  latitude: 37.5668,
+  longitude: 126.9780,
   timestamp: DateTime(2024, 1, 1),
-  accuracy: 45,
+  accuracy: 5,
   altitude: 0,
   altitudeAccuracy: 0,
   heading: 0,
@@ -185,31 +183,28 @@ void main() {
     expect(find.text('GPS 신호 약함'), findsOneWidget);
   });
 
-  testWidgets('outdoor map shows a route and ETA card to the entrance', (
+  testWidgets('outdoor map draws no route until a destination is chosen', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(MaterialApp(home: const OutdoorMapBody()));
     await tester.pump();
     await tester.pump();
 
-    // 목적지 핀은 MapLibre 심볼 레이어로 옮겨져 Flutter 트리에는 없다.
-    // 실제 경로가 계산돼 ETA 카드가 뜬 것으로 "경로 표시 흐름이 살아있다"를 검증.
-    expect(find.byType(EtaCard), findsOneWidget);
-    expect(find.textContaining('건물 입구까지'), findsOneWidget);
+    // 예전에는 목적지가 없으면 "가장 가까운 건물 입구까지" 경로를 그렸다. 앱을
+    // 켜고 GPS가 잡히는 것만으로 아무도 요청하지 않은 안내가 시작되고, 위치가
+    // 갱신될 때마다 TMAP 요청이 나가던 흐름이라 지웠다([_updateRoute] 주석).
+    expect(find.byType(EtaCard), findsNothing);
+    expect(find.textContaining('건물 입구까지'), findsNothing);
   });
 
   testWidgets(
-    'map shell shows the indoor entry overlay when entrance is detected nearby',
+    'map shell shows the indoor entry overlay when GPS lands inside the building',
     (WidgetTester tester) async {
-      watchPosition = () => Stream.fromIterable([
-        _fakePositionApproachingEntrance,
-        _fakePositionAtEntrance,
-      ]);
+      watchPosition = () => Stream.value(_fakePositionInsideBuilding);
 
       await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
 
-      // 접근 표본 → 진입 표본 순으로 흘러야 판정이 서므로, 두 건이 모두 도착할
-      // 때까지 프레임을 진행한다.
+      // 건물 로드(asset)와 첫 위치가 모두 도착할 때까지 프레임을 진행한다.
       for (var i = 0; i < 5; i++) {
         await tester.pump(const Duration(milliseconds: 50));
       }
@@ -229,26 +224,16 @@ void main() {
   );
 
   testWidgets(
-    'map shell keeps the outdoor view when GPS signal stays strong near the entrance',
+    'map shell keeps the outdoor view when GPS stays just outside the building',
     (WidgetTester tester) async {
-      // 입구와 같은 좌표지만 신호는 계속 양호함 (건물 앞을 지나가는 상황).
-      final passingByPosition = Position(
-        latitude: 37.5665,
-        longitude: 126.9779,
-        timestamp: DateTime(2024, 1, 1),
-        accuracy: 5,
-        altitude: 0,
-        altitudeAccuracy: 0,
-        heading: 0,
-        headingAccuracy: 0,
-        speed: 0,
-        speedAccuracy: 0,
-      );
-      watchPosition = () => Stream.value(passingByPosition);
+      // 건물 벽 바로 밖. 신호가 아무리 좋아도 완충 구간이라 진입하지 않는다 —
+      // 여기서 들어가면 건물 앞 인도를 걷는 사람의 화면이 제멋대로 실내가 된다.
+      watchPosition = () => Stream.value(_fakePositionPassingBy);
 
       await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
-      await tester.pump();
-      await tester.pump();
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
 
       // 오버레이가 켜지지 않았으므로 층 선택기와 햄버거 모두 없어야 한다.
       expect(find.byType(FloorSelector), findsNothing);

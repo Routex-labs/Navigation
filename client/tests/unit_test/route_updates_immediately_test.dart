@@ -28,9 +28,12 @@ void main() {
 
   final repository = MockBuildingRepository();
 
+  // 건물 밖 좌표(외곽선에서 약 185 m 동쪽). 건물 안이면 GPS가 실내 진입을
+  // 발동시켜 야외 도보 안내 대신 실내 안내로 갈라진다 — 여기서 보려는 것은
+  // 야외 흐름이다.
   Position fix() => Position(
     latitude: 37.5665,
-    longitude: 126.9779,
+    longitude: 126.9800,
     timestamp: DateTime(2024, 1, 1),
     accuracy: 10,
     altitude: 0,

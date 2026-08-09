@@ -2,11 +2,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:navigation_client/screens/outdoor_map/indoor_entry_proximity.dart';
 
-/// 실내 진입 근접 판정 테스트.
+/// 건물 외곽선 기하 계산 테스트.
 ///
-/// 지키려는 증상: 실내 도면이 있는 건물이 주변에 없는데도 지도를 확대하면 실내
-/// 모드로 전환돼, 보여줄 도면 없이 층 선택기·위치 지정 버튼만 뜨던 문제.
-/// 판정을 지도 컨트롤러에서 떼어낸 순수 함수로 두고 여기서 고정한다.
+/// 이 값들이 실내 진입/이탈 판정의 입력이다([indoor_entry_gps.dart]). 특히
+/// [metersInsidePolygon]과 [metersToPolygon]이 어긋나면 벽 근처에서 진입과 이탈이
+/// 동시에 성립해 화면이 실내와 야외를 오간다. 판정을 지도 컨트롤러에서 떼어낸
+/// 순수 함수로 두고 여기서 고정한다.
 void main() {
   /// 데모 건물(assets/mock/sample_building.json)의 footprint. 위도 폭
   /// 0.0004도(약 44 m), 경도 폭 0.0006도(이 위도에서 약 53 m)인 사각형이다.
@@ -101,81 +102,49 @@ void main() {
 
     test('꼭짓점이 아니라 변까지의 거리를 잰다', () {
       // 위쪽 변(길이 약 53 m) 중점에서 10 m 위. 가장 가까운 꼭짓점까지는 약
-      // 28 m지만 변까지는 10 m다. 꼭짓점만 비교하면 긴 벽면 가운데를 확대한
-      // 사용자가 "건물이 멀다"고 잘못 판정된다.
-      final aboveEdgeMidpoint = northOf(10);
-      expect(metersToPolygon(aboveEdgeMidpoint, footprint), closeTo(10, 1.0));
-      expect(
-        isIndoorBuildingNearCamera(
-          camera: aboveEdgeMidpoint,
-          footprint: footprint,
-          radiusMeters: 15,
-        ),
-        isTrue,
-        reason: '변까지 10 m인데 꼭짓점 거리(28 m)로 판정하면 false가 된다',
-      );
+      // 28 m지만 변까지는 10 m다. 꼭짓점만 비교하면 벽면 한가운데로 나온
+      // 사용자가 "아직 건물에서 멀다"고 잘못 판정된다.
+      expect(metersToPolygon(northOf(10), footprint), closeTo(10, 1.0));
+    });
+
+    test('점이 3개 미만이면 무한대다', () {
+      // 호출부는 이 값을 "판정 근거 없음"으로 읽는다.
+      expect(metersToPolygon(center, const []), double.infinity);
     });
   });
 
-  group('실내 진입 근접 판정', () {
-    test('건물 안에서는 가깝다', () {
-      expect(
-        isIndoorBuildingNearCamera(camera: center, footprint: footprint),
-        isTrue,
-      );
+  group('폴리곤 안쪽으로 들어온 거리', () {
+    test('밖이면 0이다', () {
+      expect(metersInsidePolygon(northOf(10), footprint), 0);
     });
 
-    test('벽 바로 밖(톨러런스 안)도 가깝다', () {
-      expect(
-        isIndoorBuildingNearCamera(camera: northOf(50), footprint: footprint),
-        isTrue,
-      );
-      expect(
-        isIndoorBuildingNearCamera(camera: eastOf(70), footprint: footprint),
-        isTrue,
-      );
+    test('안쪽에서는 가장 가까운 변까지의 거리다', () {
+      // 중심은 남북 폭 44 m의 한가운데라 가장 가까운 변(위/아래)까지 22 m다.
+      expect(metersInsidePolygon(center, footprint), closeTo(22, 1.0));
     });
 
-    test('톨러런스를 넘으면 멀다', () {
-      expect(
-        isIndoorBuildingNearCamera(camera: northOf(200), footprint: footprint),
-        isFalse,
+    test('벽 바로 안쪽은 작은 값이다', () {
+      // 진입 판정이 이 값을 임계값과 비교한다. 여기가 부풀면 문 앞에 선 사람이
+      // 이미 들어온 것으로 읽힌다.
+      final justInside = ll.LatLng(
+        37.5667 - 3 / metersPerDegreeLat,
+        126.9780,
       );
-      // 완전히 다른 지역(강남역). 여기를 확대해도 실내 모드가 되면 안 된다.
-      expect(
-        isIndoorBuildingNearCamera(
-          camera: const ll.LatLng(37.4979, 127.0276),
-          footprint: footprint,
-        ),
-        isFalse,
-      );
+      expect(metersInsidePolygon(justInside, footprint), closeTo(3, 0.5));
     });
 
-    test('건물을 아직 로드하지 못했으면 항상 멀다', () {
-      // 이게 false여야 앱 시작 직후 확대해도 빈 실내 모드로 들어가지 않는다.
-      expect(
-        isIndoorBuildingNearCamera(camera: center, footprint: null),
-        isFalse,
-      );
-      expect(
-        isIndoorBuildingNearCamera(camera: center, footprint: const []),
-        isFalse,
-      );
+    test('두 거리 중 하나는 항상 0이다', () {
+      // 같은 좌표가 "안으로 5 m"이면서 "밖으로 20 m"일 수는 없다. 이 불변이
+      // 깨지면 진입과 이탈이 동시에 성립한다.
+      for (final point in [center, northOf(10), northOf(100), eastOf(5)]) {
+        final inside = metersInsidePolygon(point, footprint);
+        final outside = metersToPolygon(point, footprint);
+        expect(inside == 0 || outside == 0, isTrue);
+      }
     });
 
-    test('카메라 위치를 모르면 진입하지 않는 쪽으로 판정한다', () {
-      expect(
-        isIndoorBuildingNearCamera(camera: null, footprint: footprint),
-        isFalse,
-      );
-    });
-
-    test('톨러런스는 진입 임계값 화면 반폭보다 크고, 한 블록보다는 작다', () {
-      // 값을 옮길 때 근거를 잃지 않도록 범위로 고정한다. 60 m는 zoom 17.5에서
-      // 폭 360 px 화면의 반폭이고, 150 m를 넘어가면 건물이 화면에 없는데도
-      // 실내로 들어가기 시작한다.
-      expect(indoorEntryProximityMeters, greaterThan(60));
-      expect(indoorEntryProximityMeters, lessThan(150));
+    test('점이 3개 미만이면 0이다', () {
+      expect(metersInsidePolygon(center, const []), 0);
     });
   });
 }
