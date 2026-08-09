@@ -92,9 +92,25 @@ SUPPORTED_VERSION = 1
 # intents 정의 파일명. `_` 접두라 `_iter_overlay_files`가 오버레이로 읽지 않는다.
 INTENTS_FILENAME = "_intents.json"
 
-# `rules`에서 조건으로 쓸 수 있는 매장 필드. 임의 키를 허용하지 않는 이유는 오타가
-# "아무 매장도 안 잡히는 규칙"으로 조용히 통과하는 것을 막기 위해서다.
-_ALLOWED_RULE_FIELDS = {"category", "subcategory"}
+# `rules`에서 조건으로 쓸 수 있는 **스칼라** 매장 필드. 값이 하나뿐이라 `in`으로 본다.
+_SCALAR_RULE_FIELDS = {"category", "subcategory"}
+
+# `rules`에서 조건으로 쓸 수 있는 **facet 축**. 매장 쪽 값이 배열이라 교집합으로 본다.
+#
+# ## 왜 facet 축까지 규칙으로 쓰는가
+#
+# 「양식」 같은 질의는 소분류로는 못 잡는다. 음식점 소분류는 `레스토랑` 하나뿐이라
+# 한식·일식·중식·양식이 전부 같은 칸에 있고, 그 구분은 `cuisines` 오버레이에만 있다.
+# 축을 규칙에서 못 쓰면 남는 방법은 intent마다 `extra_store_ids`로 매장 id를 손으로
+# 나열하는 것인데, 그건 이 모듈이 애초에 막으려던 드리프트다 — 요리 분류가 바뀌면
+# 오버레이와 intent 목록이 따로 놀게 된다.
+#
+# 축 이름을 여기 적어 두는 이유는 스칼라 필드와 같다. 임의 키를 허용하면 오타가
+# "아무 매장도 안 잡히는 규칙"으로 조용히 통과한다. 값 자체는 `_vocabulary.json`이
+# 선언하고, `validate_intents`가 실데이터와 대조한다.
+_FACET_RULE_FIELDS = {"styles", "cuisines"}
+
+_ALLOWED_RULE_FIELDS = _SCALAR_RULE_FIELDS | _FACET_RULE_FIELDS
 
 
 def derive_facets(category: str | None, subcategory: str | None) -> dict[str, list[str]]:
@@ -342,7 +358,13 @@ def _matches_rules(store: dict, rules: dict[str, list[str]]) -> bool:
     for field, values in rules.items():
         if field not in _ALLOWED_RULE_FIELDS:
             raise ValueError(f"규칙에 쓸 수 없는 필드입니다: {field!r} (허용: {sorted(_ALLOWED_RULE_FIELDS)})")
-        if store.get(field) not in values:
+        if field in _FACET_RULE_FIELDS:
+            # facet 축은 매장 쪽도 배열이다. 교집합이 있으면 만족 — 같은 필드 안이
+            # OR이라는 규칙을 배열 대 배열로 자연스럽게 확장한 것이다.
+            # 축이 없는 매장(`cuisines`가 안 붙은 비음식점)은 빈 집합이라 안 걸린다.
+            if not set(store.get(field) or ()) & set(values):
+                return False
+        elif store.get(field) not in values:
             return False
     return True
 
@@ -457,7 +479,10 @@ def validate_intents(payload: dict, stores: list[dict]) -> list[str]:
 
     known_ids = {store["store_id"] for store in stores}
     names = {store["store_id"]: store.get("name") for store in stores}
-    field_values: dict[str, set] = {field: {store.get(field) for store in stores} for field in _ALLOWED_RULE_FIELDS}
+    # 4번 검사(실데이터에 없는 값)용 값 집합. facet 축은 매장마다 배열이라 펼쳐 모은다.
+    field_values: dict[str, set] = {field: {store.get(field) for store in stores} for field in _SCALAR_RULE_FIELDS}
+    for field in _FACET_RULE_FIELDS:
+        field_values[field] = {value for store in stores for value in (store.get(field) or ())}
 
     intents = payload.get("intents", {})
     for intent, definition in intents.items():
