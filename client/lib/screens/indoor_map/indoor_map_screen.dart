@@ -315,6 +315,14 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     widget.onPlacingLocationChanged?.call(value);
   }
 
+  /// 상위(MapShellScreen)가 길찾기 자체를 끝낼 때 호출한다 — 상단 초안 바의 X가
+  /// 그 자리다. ETA 카드의 "안내 종료"와 **같은 경로**를 지나야 어느 쪽으로
+  /// 끝내든 남는 상태가 같다(경로선·도착 핀·진행률·기록 세션).
+  void clearRoute() {
+    if (!_hasActiveRoute) return;
+    _clearRoute();
+  }
+
   /// 매장 정보 시트가 닫히면 상위(MapShellScreen)가 호출해서 지도 위
   /// 강조 표시도 같이 지운다.
   void clearHighlight() {

@@ -487,11 +487,24 @@ class _MapShellScreenState extends State<MapShellScreen>
     });
   }
 
+  /// 상단 초안 바의 X. **길찾기를 통째로 끝낸다.**
+  ///
+  /// 예전에는 출발/도착 값만 비웠다. 그래서 X를 눌러도 지도에는 경로선과 도착
+  /// 핀이 그대로 남았고, 그걸 지우려면 하단 안내 카드의 "안내 종료"를 한 번 더
+  /// 눌러야 했다 — 사용자에게는 초기화 버튼이 먹지 않은 것으로 보인다. 초안 바가
+  /// 사라지는 것과 경로가 사라지는 것은 같은 사건이므로 한 번에 처리한다.
+  ///
+  /// 이동 수단 선택도 함께 잊는다. 안 지우면 다음 길찾기가 지난번에 고른
+  /// 자동차·대중교통으로 시작해, 초기화했는데 옛 선택이 따라온다.
   void _clearRouteDraft() {
     _closeSearch();
+    _forgetPlannerMode();
+    _outdoorKey.currentState?.clearAllRoutes();
+    _indoorKey.currentState?.clearRoute();
     setState(() {
       _selectedOrigin = null;
       _routeDraftDestination = null;
+      _travelMode = TravelMode.walk;
     });
   }
 

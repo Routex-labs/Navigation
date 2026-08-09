@@ -2235,6 +2235,19 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 직전에 부른다.
   void clearPlannedRoute() => _clearUserDestination();
 
+  /// 이 화면에 그려진 안내를 **전부** 지운다 — 야외 도보·대중교통 구간과 실내
+  /// 구간까지.
+  ///
+  /// [clearPlannedRoute]와 나눈 이유는 부르는 쪽의 뜻이 다르기 때문이다. 그쪽은
+  /// "다시 계산하기 전에 옛 선을 치운다"라 실내 구간은 건드리지 않아야 하지만,
+  /// 여기는 상단 초안 바의 X처럼 **길찾기 자체를 끝낸다**는 뜻이라 문 경유 안내의
+  /// 실내 뒷부분까지 남으면 안 된다. 하나로 합치면 재계산 때마다 실내 구간이
+  /// 함께 날아가 문 앞에서 안내가 끊긴다.
+  void clearAllRoutes() {
+    _clearUserDestination();
+    _clearIndoorRoute();
+  }
+
   void _clearUserDestination() {
     _clearPendingIndoorRoute();
     clearTransitRoute();
