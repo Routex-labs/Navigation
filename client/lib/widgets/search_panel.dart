@@ -77,7 +77,6 @@ class SearchPanel extends StatefulWidget {
     this.outdoorSearchCenter,
     this.onOutdoorPoiPicked,
     this.isInsideIndoorBuilding,
-    this.indoorContextActive = true,
   });
 
   final String buildingId;
@@ -122,22 +121,6 @@ class SearchPanel extends StatefulWidget {
   /// 실내 데이터가 이미 아는 것은 목록에서 뺀다
   /// ([dropPoisCoveredByIndoorStores]). null이면 그 정리를 하지 않는다.
   final bool Function(LatLng point)? isInsideIndoorBuilding;
-
-  /// 지금 화면이 **건물 안**을 보고 있는지.
-  ///
-  /// 밖에서는 **우리 실내 데이터를 목록에 그리지 않는다.** 사용자가 밖에서 보는
-  /// 이름은 POI 이름이어야 하고, 우리 데이터는 그 줄을 눌렀을 때 실내까지
-  /// 안내하는 데만 쓴다([mergeOutdoorResults]).
-  ///
-  /// **왜 흡수가 아니라 아예 안 그리나** — 흡수는 이름 매칭이 성공해야 일어난다.
-  /// 매칭이 한 번이라도 빗나가면 같은 가게가 두 줄로 남고, 화면에서는 "매칭이
-  /// 실패했다"와 "원래 두 곳이다"가 구분되지 않는다. 실제로 이 자리에서 세 번
-  /// 연속으로 빗나갔다. 그리는 규칙을 매칭 결과에서 떼어 내면 **매칭이 실패해도
-  /// 화면은 틀리지 않는다** — 실패는 "실내 경로 대신 건물 입구까지"로만 드러난다.
-  ///
-  /// 대가는 분명하다. TMAP에 없는 매장은 밖에서 못 찾는다. 그 매장은 건물에
-  /// 들어간 뒤(실내 컨텍스트) 검색해야 한다.
-  final bool indoorContextActive;
 
   final ValueChanged<PoiSearchResult> onStorePicked;
   final ValueChanged<Building> onBuildingPicked;
@@ -1051,18 +1034,18 @@ class _SearchPanelState extends State<SearchPanel> {
     // 아래 첫 줄의 "경로 안내 불가"가 이미 말한다.
     final nodeId = store.nodeId;
     final reach = nodeId == null ? null : widget.reachByNodeId?[nodeId];
-    // 층 앞에 **건물 이름**을 적는다.
+    // 층 앞에 **건물 이름**을 적는다. 조건 없이 항상.
     //
     // "스타벅스 리저브 / B2"만으로는 이게 어느 건물의 스타벅스인지 알 수 없다.
     // 밖에서 검색하면 목록에 길 건너 스타벅스도 함께 뜨는데, 그 줄들은 주소가
     // 적혀 있어 구분이 되고 우리 줄만 층 하나로 남는다 — 정보가 가장 많은 줄이
     // 가장 안 읽히는 상태였다.
     //
-    // 건물 안을 보고 있을 때는 붙이지 않는다. 지금 그 건물 안에 서 있는
-    // 사람에게 매 줄마다 건물 이름을 반복하면 정작 다른 층·업종 정보가 밀린다.
-    final buildingName = widget.indoorContextActive
-        ? null
-        : _currentBuildingName;
+    // 한때 "건물 안을 보고 있으면 생략"을 붙였다가 **화면에서 통째로 사라졌다.**
+    // 실내 오버레이는 건물로 확대하기만 해도 켜지므로(indoor_entry_zoom.dart),
+    // 건물 근처에서 검색하는 흔한 경우가 전부 "건물 안"으로 판정됐다. 줄마다
+    // 반복되는 게 눈에 거슬릴 수는 있어도, 안 보이는 것보다는 낫다.
+    final buildingName = _currentBuildingName;
     final placeLine = buildingName == null
         ? store.floor
         : '$buildingName · ${store.floor}';

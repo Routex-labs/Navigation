@@ -850,7 +850,16 @@ class _MapShellScreenState extends State<MapShellScreen> {
       _buildingId,
       query,
     );
-    if (_indoorContextActive) return results.map(_storeCandidate).toList();
+    final buildings = await buildingRepository.getAllBuildings();
+    // 매장 줄에 함께 적을 건물 이름. 조건 없이 항상 붙인다 — 상단 검색 패널과
+    // 같은 규칙이고, 이유는 그쪽 주석(`_storeTile`)에 적었다.
+    final buildingName = buildings
+        .where((b) => b.id == _buildingId)
+        .map((b) => b.name)
+        .firstOrNull;
+    List<DirectionsCandidate> storeCandidates() =>
+        results.map((s) => _storeCandidate(s, buildingName)).toList();
+    if (_indoorContextActive) return storeCandidates();
 
     // 밖에서는 **아무것도 안 쳤으면 아무것도 보여주지 않는다.**
     //
@@ -867,7 +876,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 층 목록만 주고 출입구·외곽선은 상세(`/buildings/{id}`)에만 있다. 그래서
     // 야외 지도가 이미 상세로 받아 둔 값을 먼저 쓰고([_buildingDestinationPoint]),
     // 그마저 없으면 후보에서 뺀다 — 좌표 없는 후보는 눌러도 경로가 안 나온다.
-    final buildings = await buildingRepository.getAllBuildings();
     final buildingCandidates = <DirectionsCandidate>[];
     for (final building in buildings) {
       if (!building.name.toLowerCase().contains(normalized)) continue;
@@ -895,10 +903,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 우리 매장 줄은 **전부** 남긴다. 겹치는 POI 줄은 이미 빠져 있다
     // ([mergeOutdoorResults]) — 우리 줄에는 층·노드가 붙어 있어 실내까지
     // 안내되고, POI 줄은 건물 입구에서 끝나기 때문이다.
-    final buildingName = buildings
-        .where((b) => b.id == _buildingId)
-        .map((b) => b.name)
-        .firstOrNull;
     return [
       ...merged.indoorStores.map((s) => _storeCandidate(s, buildingName)),
       ...buildingCandidates,
@@ -914,8 +918,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 검색하면 길 건너 스타벅스도 함께 뜨고 그쪽에는 주소가 적혀 있어, 정작
   /// 실내까지 안내되는 우리 줄만 층 하나로 남아 가장 안 읽혔다.
   ///
-  /// 건물 안을 보고 있으면 null을 준다 — 그 건물에 서 있는 사람에게 매 줄마다
-  /// 건물 이름을 반복하면 정작 층 정보가 밀린다.
+  /// 조건 없이 항상 붙인다. 한때 "건물 안을 보고 있으면 생략"을 뒀다가 화면에서
+  /// 통째로 사라졌다 — 실내 오버레이는 건물로 확대하기만 해도 켜지므로, 건물
+  /// 근처에서 검색하는 흔한 경우가 전부 "건물 안"으로 판정됐다.
   DirectionsCandidate _storeCandidate(
     PoiSearchResult store, [
     String? buildingName,
@@ -1633,10 +1638,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
                             unawaited(_onSearchPoiPicked(poi)),
                         // 같은 가게가 두 줄로 뜨지 않게 하는 판정. 길찾기
                         // 후보 목록도 같은 규칙을 쓴다.
-                        // 밖에서는 우리 실내 데이터를 목록에 그리지 않는다.
-                        // 이름은 POI 것을 쓰고, 우리 데이터는 그 줄을 눌렀을
-                        // 때 실내까지 안내하는 데만 쓴다.
-                        indoorContextActive: _indoorContextActive,
                         isInsideIndoorBuilding: (point) =>
                             _outdoorKey.currentState?.isAtIndoorBuilding(
                               point,

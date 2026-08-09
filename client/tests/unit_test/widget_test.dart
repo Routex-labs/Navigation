@@ -576,7 +576,8 @@ void main() {
     await searchFromTopBar(tester, 'MLB');
 
     expect(repository.lightFloorScopes, isNot(contains(null)));
-    expect(find.text('B2'), findsOneWidget);
+    // 층 앞에 건물 이름이 함께 붙는다("데모 건물 · B2").
+    expect(find.textContaining('B2'), findsOneWidget);
   });
 
   testWidgets('destination screen filters as the user types', (
