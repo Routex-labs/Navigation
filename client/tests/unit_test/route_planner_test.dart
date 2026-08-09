@@ -136,12 +136,12 @@ void main() {
     expect(find.byKey(const ValueKey('route-plan-mode-car')), findsOneWidget);
   });
 
-  testWidgets('도착지를 고르면 그 자리에서 경로가 그려지고 요약 카드가 뜬다', (
+  testWidgets('자동차로 도착지를 고르면 화면이 남고 "안내시작"이 뜬다', (
     WidgetTester tester,
   ) async {
     final recorder = await pumpPlanner(
       tester,
-      mode: RoutePlanMode.walk,
+      mode: RoutePlanMode.car,
       results: const [outdoorPlace],
     );
 
@@ -154,6 +154,26 @@ void main() {
     expect(map.road, isNotNull, reason: '지도에 경로를 그리지 않았다');
     expect(find.byKey(const Key('route-planner-start')), findsOneWidget);
     expect(recorder.destination?.title, '한성대학교');
+  });
+
+  testWidgets('도보로 도착지를 고르면 안내를 시작하지 않고 경로만 그린 뒤 닫는다', (
+    WidgetTester tester,
+  ) async {
+    // 도보에는 시작할 안내가 없다. 지도에 그려진 선과 남은 거리·시간이 전부고
+    // 그건 지도 위 ETA 카드가 이어받으므로, "안내시작"을 한 번 더 누르게 하면
+    // 누르기 전과 후의 화면이 사실상 같아진다.
+    final recorder = await pumpPlanner(
+      tester,
+      mode: RoutePlanMode.walk,
+      results: const [outdoorPlace],
+    );
+
+    await tester.tap(find.text('한성대학교'));
+    await drain(tester);
+
+    expect(map.road, isNotNull, reason: '경로는 그려 두고 닫아야 한다');
+    expect(recorder.closed, isTrue);
+    expect(find.byKey(const Key('route-planner-start')), findsNothing);
   });
 
   testWidgets('수단을 바꾸면 그리던 경로를 걷고 다시 계산한다', (WidgetTester tester) async {

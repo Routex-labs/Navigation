@@ -123,22 +123,12 @@ void main() {
     );
     await drain(tester);
 
-    // 새 도착지로 다시 계산된 경로가 **기다리지 않고** 바로 요약으로 나와야
-    // 한다. 여기서 "안내시작"이 없으면 계산이 끊긴 것이다.
-    expect(
-      find.byKey(const Key('route-planner-start')),
-      findsOneWidget,
-      reason: '끝점을 바꿨으면 경로를 끊지 말고 곧바로 다시 그려야 한다',
-    );
-    await tester.tap(find.byKey(const Key('route-planner-start')));
-    await drain(tester);
-
-    // 안내로 넘어가면 지도 위 카드가 그 경로를 이어받는다. 카드가 아직 이전
-    // 도착지를 가리키면 끝점만 바뀌고 경로는 그대로인 것이다.
+    // 도보는 안내를 시작하지 않고 경로만 그린 뒤 화면을 닫는다. 즉 버튼을 한 번
+    // 더 누를 필요 없이 지도 위 카드가 곧바로 새 경로를 이어받아야 한다.
     expect(
       find.byType(EtaCard),
       findsOneWidget,
-      reason: '안내시작 뒤에는 지도 위 카드가 그 경로를 이어받아야 한다',
+      reason: '끝점을 바꿨으면 경로를 끊지 말고 곧바로 다시 그려야 한다',
     );
     // 상단 초안 바에도 같은 이름이 적히므로 카드 안으로 좁힌다.
     expect(

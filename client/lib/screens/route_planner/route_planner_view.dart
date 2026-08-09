@@ -481,6 +481,21 @@ class _RoutePlannerViewState extends State<RoutePlannerView> {
       // "OO까지"를 받는다.
       label: _destination?.title ?? '목적지',
     );
+    if (!mounted || seq != _computeSeq) return;
+    // **도보는 여기서 끝난다.** 안내를 시작하지 않고 경로만 그린 뒤 화면을 닫는다.
+    //
+    // 도보에는 시작할 "안내"가 없다. 지도에 그려진 선과 남은 거리·시간이 전부고,
+    // 그건 화면을 닫는 순간 지도 위 ETA 카드가 그대로 이어받는다. 그런데도
+    // "안내시작"을 한 번 더 누르게 하면 누르기 전과 후의 화면이 사실상 같아서,
+    // 그 버튼이 무엇을 켰는지 알 수 없다.
+    //
+    // 같은 규칙이 이미 도보 + 건물 안 매장에 적용돼 있다([_compute]가
+    // [RoutePlannerView.onIndoorWalkRoute]로 넘기면 상위가 화면을 닫고 지도에
+    // 그린다). 목적지가 건물 밖이라고 다르게 굴 이유가 없다.
+    //
+    // 자동차는 반대다. 그쪽의 "안내시작"은 카메라를 현재 위치로 확대해 따라가기
+    // 시작하는 실제 상태 전환이라 누를 이유가 있다.
+    if (_mode == RoutePlanMode.walk) widget.onClose();
   }
 
   Future<void> _computeTransit(
@@ -698,9 +713,9 @@ class _RoutePlannerViewState extends State<RoutePlannerView> {
       RoadRouteSummaryCard(
         mode: _mode,
         route: route,
-        // "안내시작"은 경로를 **남긴 채** 화면만 닫는다. 그래야 지도 위 ETA
-        // 카드가 그 경로를 이어받아 걷는 동안 안내를 계속한다.
-        onStart: widget.onClose,
+        // 도보에는 버튼이 없다. 경로를 그린 [_computeRoad]가 이미 화면을 닫는
+        // 중이라, 여기 버튼을 두면 닫히기 직전 한 프레임만 깜빡인다.
+        onStart: _mode == RoutePlanMode.walk ? null : widget.onClose,
       ),
     );
   }

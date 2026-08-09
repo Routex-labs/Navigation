@@ -22,7 +22,11 @@ class RoadRouteSummaryCard extends StatelessWidget {
   final DirectionsRoute route;
 
   /// "안내시작" — 길찾기 화면을 닫고 지도 위 안내로 넘어간다.
-  final VoidCallback onStart;
+  ///
+  /// null이면 버튼 자체를 그리지 않는다. 도보가 그렇다 — 도보는 안내를 시작하지
+  /// 않고 경로만 그린 뒤 화면을 닫으므로([_RoutePlannerViewState._computeRoad]),
+  /// 누를 것이 없는 버튼을 한 프레임이라도 보여 주면 "눌러야 하나" 싶어진다.
+  final VoidCallback? onStart;
 
   @override
   Widget build(BuildContext context) {
@@ -67,16 +71,18 @@ class RoadRouteSummaryCard extends StatelessWidget {
               facts.join(' · '),
               style: const TextStyle(fontSize: 13, color: AppColors.muted),
             ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                key: const Key('route-planner-start'),
-                onPressed: onStart,
-                icon: const Icon(Icons.navigation_rounded, size: 18),
-                label: const Text('안내시작'),
+            if (onStart != null) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  key: const Key('route-planner-start'),
+                  onPressed: onStart,
+                  icon: const Icon(Icons.navigation_rounded, size: 18),
+                  label: const Text('안내시작'),
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),
