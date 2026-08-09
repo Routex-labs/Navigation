@@ -13,10 +13,10 @@
 | 지도 셸 | [`map_top_bar.dart`](map_top_bar.dart), [`map_bottom_bar.dart`](map_bottom_bar.dart), [`eta_card.dart`](eta_card.dart), [`status_badge.dart`](status_badge.dart) | 지도 화면 공통 조작·상태 |
 | 지도 셸 | [`floor_selector.dart`](floor_selector.dart) | 좌하단 세로 층 선택기(최대 5개 노출·현재 층 강조), 실내·야외 진입 오버레이 공유 |
 | 탐색 | [`search_panel.dart`](search_panel.dart), [`directions_candidate.dart`](directions_candidate.dart), [`building_switcher_sheet.dart`](building_switcher_sheet.dart) | 매장 검색(경량)·AI 검색(의미), 출발/도착 후보 모델, 건물 전환 |
-| 길찾기 | [`route_planner/`](route_planner/) | 길찾기 화면의 파란 머리(수단 탭 + 출발/도착 입력), 자동차·도보 요약 카드, 대중교통 상세 시트 |
+| 길찾기 | [`travel_mode_bar.dart`](travel_mode_bar.dart), [`route_plan_mode.dart`](route_plan_mode.dart), [`route_field_results.dart`](route_field_results.dart) | 상단 두 칸 아래 이동 수단 줄, 수단 열거형, 출발/도착 칸을 치는 동안 뜨는 후보 목록 |
 | 장소 시트 | [`category_stores_sheet.dart`](category_stores_sheet.dart), [`place_detail_sheet.dart`](place_detail_sheet.dart), [`favorites_sheet.dart`](favorites_sheet.dart) | 카테고리 매장·매장 상세·즐겨찾기 |
 | 장소 시트 | [`outdoor_poi_sheet.dart`](outdoor_poi_sheet.dart) | 건물 **밖** 장소 상세(주소·전화·거리) + 출발/도착/대중교통 |
-| 대중교통 | [`transit_routes_sheet.dart`](transit_routes_sheet.dart), [`transit_itinerary_tile.dart`](transit_itinerary_tile.dart), [`transit_summary_card.dart`](transit_summary_card.dart), [`transit_style.dart`](transit_style.dart) | 경로 후보 목록, 후보 한 줄(목록·길찾기 화면 공유), 안내 중 하단 요약 카드, 넷이 공유하는 색·아이콘·시간/요금 표기 |
+| 대중교통 | [`transit_routes_sheet.dart`](transit_routes_sheet.dart), [`transit_itinerary_tile.dart`](transit_itinerary_tile.dart), [`transit_summary_card.dart`](transit_summary_card.dart), [`transit_style.dart`](transit_style.dart) | 경로 후보 목록, 후보 한 줄, 안내 중 하단 요약 카드, 넷이 공유하는 색·아이콘·시간/요금 표기 |
 | 장소 상세 | [`place_detail/`](place_detail/) | 상세 시트 본문의 섹션별 렌더러(summary·hero·menu·매장정보 등) |
 | 카테고리 | [`category_icon.dart`](category_icon.dart), [`category_label_order.dart`](category_label_order.dart) | 카테고리 대분류 아이콘·색상(chip·시트·리스트 공유), label 중복 제거·가나다 정렬 |
 | 카테고리 | [`category_map_filter.dart`](category_map_filter.dart), [`category_map_icon.dart`](category_map_icon.dart) | 지도 카테고리 강조 필터, 매장명 라벨 옆 대분류 아이콘·이름 좌우 배치 규칙 |
@@ -53,7 +53,7 @@
 
 ### 후보를 정하는 자리는 하나다
 
-상단 검색창과 길찾기 화면은 **같은 함수**에서 후보를 받는다
+상단 검색창과 길찾기 두 칸은 **같은 함수**에서 후보를 받는다
 (`MapShellScreen._searchDirectionsCandidates`). 두 진입점이 각자 검색을 구현하면 반드시
 갈리고, 실제로 반복해서 갈렸다 — 한쪽에만 건물 밖 장소(TMAP)가 있어서 상단 검색에서는
 찾아지던 곳이 길찾기에서는 없는 곳이 됐다. 사용자에게는 "될 때도 있고 안 될 때도 있는
@@ -134,7 +134,7 @@ TMAP도 같은 건물을 POI로 한 건 돌려주므로, 건물 줄과 이름이
 (`query_search.match_ai_destination`) 그 매장을 그대로 찾아낸다 — 사용자에게는 "뜻으로
 찾았다" 배너가 붙어 나오는 차이만 있다.
 층 스코프(`currentFloorId`)를 쓰는 건 이제 `search_panel.dart` 외에 카테고리 매장
-시트가 있다. 길찾기 화면은 층으로 좁히지 않는다 — 여는 이유 자체가 대개 "지금 층에
+시트가 있다. 길찾기 후보는 층으로 좁히지 않는다 — 여는 이유 자체가 대개 "지금 층에
 없는 곳으로 가려고"라서다.
 
 의미 검색을 타이핑 중이 아니라 확정 시점에만 붙이는 이유는 비용이다. 백엔드가 임베딩
@@ -192,7 +192,7 @@ flowchart LR
 |---|---|
 | 지도 레이어·마커 변경 | `floor_plan_view.dart` |
 | 경로 모양 변경 | `domain/route_guidance.dart`(`RoutePolylineSplit`)와 `models/indoor_route.dart` |
-| 길찾기 출발/도착 검색 입력 변경 | `route_planner/route_planner_header.dart`와 `../screens/route_planner/route_planner_view.dart` |
+| 길찾기 출발/도착 검색 입력 변경 | `map_top_bar.dart`(두 칸)와 `route_field_results.dart`(후보 목록), 상태는 `../screens/map_shell/map_shell_screen.dart` |
 | 공통 색·간격 변경 | [`../theme/README.md`](../theme/README.md) |
 
 ---
