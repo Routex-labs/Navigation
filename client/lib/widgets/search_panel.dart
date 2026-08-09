@@ -78,6 +78,7 @@ class SearchPanel extends StatefulWidget {
     required this.onStorePicked,
     required this.onBuildingPicked,
     required this.onQueryPicked,
+    required this.onSuggestionPicked,
     required this.indoorContextActive,
     this.currentFloorId,
     this.reachByNodeId,
@@ -112,6 +113,14 @@ class SearchPanel extends StatefulWidget {
 
   final ValueChanged<PoiSearchResult> onStorePicked;
   final ValueChanged<Building> onBuildingPicked;
+
+  /// 자동완성 후보 한 곳을 골랐을 때. 상위가 좌표를 붙여 상세 시트까지 연다.
+  ///
+  /// [onStorePicked]와 따로 두는 이유는 **패널이 좌표를 모르기 때문**이다.
+  /// 후보의 원본인 `/store-index`는 1,640건을 한 번에 내려보내는 응답이라
+  /// 좌표를 싣지 않는다(근거는 `StoreIndexResponse` 주석). 좌표는 층 지도를
+  /// 가진 상위가 id로 찾아 붙인다(`IndoorMapScreen.resolveIndexEntry`).
+  final ValueChanged<StoreIndexEntry> onSuggestionPicked;
 
   /// 최근 검색어를 골랐을 때. 패널이 입력창을 갖고 있지 않으므로(클래스 주석
   /// 참고) 검색을 스스로 다시 돌릴 수 없다 — 상위가 검색창 글자를 그 값으로
@@ -1115,6 +1124,18 @@ class _SearchPanelState extends State<SearchPanel> {
       ),
       isThreeLine: reach != null,
       onTap: () {
+        // 한 곳짜리 후보는 그 매장을 열면 그만이다. 예전에는 여기서도 이름으로
+        // 검색을 다시 돌렸는데(아래 분기), 그러면 사용자가 방금 고른 것과 사실상
+        // 같은 줄을 결과 목록에서 한 번 더 눌러야 했다. 좌표가 없어서 생긴
+        // 우회였고, 좌표는 상위가 층 지도에서 찾아 붙인다.
+        if (count == 1) {
+          widget.onSuggestionPicked(store);
+          return;
+        }
+        // 층마다 있는 시설(화장실 19곳)은 한 줄에 묶여 있다. 여기서 한 곳을
+        // 바로 열면 나머지 18곳을 고를 방법이 사라지므로, 목록을 펼치는 기존
+        // 동작을 유지한다.
+        //
         // 화면에 적힌 그 층으로 확정되게 한다. 이름만 넘기면 같은 이름이 19곳인
         // 시설에서 서버가 자기 순서로 아무 층이나 고른다([_FloorScopeOverride]).
         _floorScopeOnce = _FloorScopeOverride(store.floorId);

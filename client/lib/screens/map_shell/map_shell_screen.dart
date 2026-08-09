@@ -15,6 +15,7 @@ import '../../models/category_count.dart';
 import '../../models/favorite_place.dart';
 import '../../models/floor_plan.dart';
 import '../../models/poi_search_result.dart';
+import '../../models/store_index_entry.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_menu_sheet.dart';
 import '../../widgets/category_icon.dart';
@@ -513,6 +514,28 @@ class _MapShellScreenState extends State<MapShellScreen> {
     recentSearchesController.add(_searchQuery);
     _closeSearch();
     await _runSheetChain(() => _showStoreInfo(store, focusOnMap: true));
+  }
+
+  /// 자동완성 후보 한 곳을 골랐을 때. 좌표를 붙여 검색 결과를 고른 것과 **같은
+  /// 자리로 합류시킨다** — 후보에서 왔든 결과 목록에서 왔든 사용자에게는 같은
+  /// 동작이어야 한다.
+  ///
+  /// 좌표는 층 도면에서 찾는다(`OutdoorMapBodyState.resolveIndexEntry`). 추가
+  /// 요청은 없다 — 그 층은 어차피 열어야 하고, 도면이 매장마다 중심점을 들고 있다.
+  ///
+  /// 못 찾으면 예전처럼 그 이름으로 검색을 다시 돌린다. 후보와 층 도면이
+  /// 어긋나는 경우(시드 갱신 직후, 아직 야외라 층을 옮길 수 없는 경우 등)에
+  /// 아무 일도 일어나지 않는 것보다, 한 번 더 누르더라도 도달하는 편이 낫다.
+  Future<void> _onSearchSuggestionPicked(StoreIndexEntry entry) async {
+    recentSearchesController.add(_searchQuery);
+    final resolved = await _outdoorKey.currentState?.resolveIndexEntry(entry);
+    if (!mounted) return;
+    if (resolved == null) {
+      _onSearchQueryPicked(entry.name);
+      return;
+    }
+    _closeSearch();
+    await _runSheetChain(() => _showStoreInfo(resolved, focusOnMap: true));
   }
 
   void _onSearchBuildingPicked(Building building) {
@@ -1334,6 +1357,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                         onStorePicked: _onSearchStorePicked,
                         onBuildingPicked: _onSearchBuildingPicked,
                         onQueryPicked: _onSearchQueryPicked,
+                        onSuggestionPicked: _onSearchSuggestionPicked,
                         indoorContextActive: _indoorContextActive,
                         currentFloorId: _activeIndoorFloor,
                         reachByNodeId: _reachByNodeId,

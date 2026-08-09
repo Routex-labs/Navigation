@@ -41,6 +41,7 @@ import '../../models/floor_graph.dart';
 import '../../models/floor_plan.dart';
 import '../../models/indoor_route.dart';
 import '../../models/poi_search_result.dart';
+import '../../models/store_index_entry.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/eta_card.dart';
 import '../../core/map_route_style.dart';
@@ -4596,6 +4597,51 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (_highlightedStoreId == null) return;
     setState(() => _highlightedStoreId = null);
     _syncHighlightLayer();
+  }
+
+  /// 검색 후보(`StoreIndexEntry`)를 좌표까지 갖춘 [PoiSearchResult]로 바꾼다.
+  /// 찾지 못하면 null — 상위가 이름으로 검색을 다시 돌린다.
+  ///
+  /// **후보 목록이 좌표를 들고 오지 않기 때문에 이 변환이 필요하다.**
+  /// `/store-index`는 1,640건을 한 번에 내려보내는 응답이라 좌표를 싣지 않는다
+  /// (근거와 실측치는 `StoreIndexResponse` 주석). 그렇다고 후보를 탭했을 때
+  /// 그 이름으로 검색을 다시 돌리면 사용자는 같은 줄을 두 번 누르게 된다.
+  ///
+  /// 그래서 이미 가진 것에서 좌표를 찾는다 — 층 도면([_floorPlan])이 매장마다
+  /// `centroid`를 들고 있고, 그 층은 어차피 열어야 한다. 추가 요청이 없다.
+  ///
+  /// 이름이 아니라 **id로 찾는다.** 이름은 유일 키가 아니라서(동명 시설 다수)
+  /// 이름으로 맞추면 같은 층의 다른 매장을 열 수 있다.
+  ///
+  /// **실내에 들어와 있지 않으면 층을 옮기지 않고 포기한다.** 층 전환은 실내
+  /// MVT 소스를 통째로 갈아 끼우고 끝에서 카메라를 건물로 당겨오는 작업이라,
+  /// 야외에서 부르면 매장 강조는 [focusStore]가 `_indoorEntered` 검사로 막는데
+  /// 카메라만 건물로 튀는 반쪽 이동이 남는다. 그 경우 null을 돌려주면 상위가
+  /// 이름 재검색으로 떨어지고, 사용자는 한 번 더 누르지만 화면은 어긋나지 않는다.
+  Future<PoiSearchResult?> resolveIndexEntry(StoreIndexEntry entry) async {
+    if (entry.floorName.isNotEmpty && entry.floorName != _activeFloor) {
+      if (!_indoorEntered) return null;
+      await _switchOverlayFloor(entry.floorName);
+      if (!mounted) return null;
+    }
+    final stores = _floorPlan?.stores;
+    if (stores == null) return null;
+
+    for (final store in stores) {
+      if (store.id != entry.id) continue;
+      return PoiSearchResult(
+        name: entry.name,
+        floor: entry.floorName,
+        point: store.centroid,
+        placeId: entry.id,
+        // 도착 노드는 색인 쪽을 쓴다. 층 도면에도 같은 값이 있지만, 후보 줄에
+        // "길찾기 가능"을 판단한 근거가 색인이라 화면과 행동이 갈리지 않는다.
+        nodeId: entry.entranceNodeId,
+        category: entry.category,
+        subcategory: entry.subcategory,
+      );
+    }
+    return null;
   }
 
   /// 목록에서 고른 매장을 실내 진입 오버레이 위에서 보여 준다.

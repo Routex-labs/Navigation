@@ -63,6 +63,7 @@ void main() {
                     submitTick: 0,
                     onStorePicked: _noop,
                     onBuildingPicked: _noop,
+                    onSuggestionPicked: _noop,
                     onQueryPicked: _noop,
                     // 야외로 두면 인덱스를 받지 않아 리포지토리가 필요 없다.
                     indoorContextActive: false,
