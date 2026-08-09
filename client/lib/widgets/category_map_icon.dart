@@ -114,9 +114,13 @@ const kIconCanvasPx = 96.0;
 /// 대분류 배지를 **논리 픽셀**로 얼마나 크게 그릴지 (z16 축소 ~ z20 확대).
 ///
 /// 매장명 글자가 9~14 논리 px이므로([kStoreLabelMinPx]~[kStoreLabelMaxPx])
-/// 배지는 글자의 1.3배 남짓이다. 이 파일이 원래 의도했던 비율 그대로다.
-const kStoreCategoryIconMinLogicalPx = 12.0;
-const kStoreCategoryIconMaxLogicalPx = 18.0;
+/// 배지는 글자의 1.15~1.2배다.
+///
+/// **12~18에서 한 단계 내렸다.** 배율 버그를 고친 직후 값이 12~18이었는데
+/// 실기기에서 도면이 배지에 눌려 보였다. 글자보다 조금 크기만 하면 "여기 무슨
+/// 업종인지"는 전달되므로, 비율을 1.4배 근처가 아니라 **1.2배 아래**로 잡는다.
+const kStoreCategoryIconMinLogicalPx = 11.0;
+const kStoreCategoryIconMaxLogicalPx = 16.0;
 
 /// 실내 화면의 대분류 아이콘 `icon-size` 표현식.
 ///

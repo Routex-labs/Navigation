@@ -110,6 +110,26 @@ const kStoreLabelLineHeightEm = 1.2;
 /// (위 증상에는 [storeLabelWrapWidth]가 고친 두 번째 원인도 함께 얽혀 있었다.)
 const kStoreLabelMaxLines = 2;
 
+/// 접었을 때 한 줄이 가져야 하는 **최소 폭(em)**. 전각 두 글자에 해당한다.
+///
+/// 줄 수만 제한하면([kStoreLabelMaxLines]) 「르 라보」가 이렇게 나온다.
+///
+/// ```
+/// 르
+/// 라보
+/// ```
+///
+/// 2줄이라 규칙은 지켰지만 첫 줄에 한 글자만 남아, 그 글자가 이웃 매장 이름의
+/// 조각처럼 읽힌다. **줄 수가 아니라 줄의 내용이 문제다.**
+///
+/// 2.0em(두 글자)을 하한으로 두면 「르 라보」는 어떤 폭으로도 2줄을 만들 수 없어
+/// 한 줄로 떨어지고, 「조 말론 런던」(`조 말론` / `런던`)이나 「디올 뷰티」
+/// (`디올` / `뷰티`)처럼 양쪽이 말이 되는 2줄은 그대로 남는다.
+///
+/// 이름 전체가 이보다 짧으면(「르」 같은 한 글자 매장) 이 규칙은 적용되지 않는다 —
+/// 어차피 접을 일이 없다.
+const kStoreLabelMinLineEm = 2.0;
+
 /// 박스에서 실제로 글자에 내주는 비율. 테두리·헤일로와 이웃 폴리곤 사이 여백이다.
 const kStoreLabelBoxPadding = 0.88;
 
@@ -262,6 +282,10 @@ List<double> _lineWidths(List<_Chunk> chunks, double maxWidthEm) {
 /// 폭도 반드시 「연속한 덩어리들의 합」**이므로, 답이 될 수 있는 폭은 그 합들뿐
 /// 이다. 좁은 것부터 훑어 처음으로 [targetLines]줄 이하가 되는 폭이 답이다.
 ///
+/// 후보 중에는 [kStoreLabelMinLineEm]보다 얇은 줄을 만드는 것도 있다. 그런 폭은
+/// 건너뛴다 — 「르」 한 글자만 남는 줄이 그렇게 나왔다. 끝까지 못 찾으면 접지 않고
+/// 한 줄로 돌려준다.
+///
 /// 이름이 아주 길면(덩어리 [_wrapScanChunkLimit]개 초과) 후보가 제곱으로 늘어
 /// 나므로 옛 근사식으로 물러난다. 실데이터 매장명은 전부 그 한참 아래다.
 double storeLabelWrapWidth(String text, int targetLines) {
@@ -280,8 +304,15 @@ double storeLabelWrapWidth(String text, int targetLines) {
   }
   final sorted = candidates.toList()..sort();
   for (final width in sorted) {
-    if (_lineWidths(chunks, width).length <= targetLines) return width;
+    final lines = _lineWidths(chunks, width);
+    if (lines.length > targetLines) continue;
+    if (lines.length > 1 &&
+        lines.reduce(min) < kStoreLabelMinLineEm - 1e-9) {
+      continue;
+    }
+    return width;
   }
+  // 조건을 만족하는 접기가 없다. 억지로 접지 않고 한 줄로 둔다.
   return totalEm;
 }
 

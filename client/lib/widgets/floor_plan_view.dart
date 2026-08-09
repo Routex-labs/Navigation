@@ -1106,14 +1106,18 @@ class FloorPlanViewState extends State<FloorPlanView> {
         // 화면에서도 배지가 통째로 사라졌다. 사용자에게는 "아이콘이 커지거나
         // 줄어드는 게 아니라 없어진다"로 보인다.
         //
-        // 아이콘은 이름보다 훨씬 작고(12~18 논리 px) 색만으로도 업종을 말하므로,
-        // 밀릴 때 버릴 것은 이쪽이 아니다. `iconIgnorePlacement`까지 켜서 배지가
-        // **다른 라벨을 밀어내지도 않게** 한다 — 이름을 지키려던 원래 의도는
-        // 아이콘을 버리는 대신 이 플래그가 대신 맡는다.
+        // 아이콘은 이름보다 조금 크기만 하고(11~16 논리 px) 색만으로도 업종을
+        // 말하므로, 밀릴 때 버릴 것은 이쪽이 아니다.
+        //
+        // **`iconIgnorePlacement`는 켰다가 껐다.** 켜 두면 배지가 충돌 판정에서
+        // 아예 빠져 "다른 라벨을 밀어내지 않는" 대신 **다른 매장 이름 위에 그대로
+        // 올라앉는다** — 실기기에서 「탬버린즈」·「오휘/후」가 옆 매장 배지에
+        // 덮였다. 배지를 장애물로 되돌려 이름들이 그 자리를 피해 가게 한다.
+        // 배지 자체는 `iconAllowOverlap`·`iconOptional: false` 덕에 그래도
+        // 사라지지 않는다.
         textOptional: true,
         iconOptional: false,
         iconAllowOverlap: true,
-        iconIgnorePlacement: true,
       ),
       belowLayerId: belowLayerId,
       // 라벨 소스는 타일이 아니라 클라이언트 GeoJSON이라 타일 소스의 zoom 범위를

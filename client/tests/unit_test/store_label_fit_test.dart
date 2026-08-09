@@ -127,6 +127,29 @@ void main() {
   });
 
   group('fitStoreLabel', () {
+    test('한 글자만 남는 줄은 만들지 않는다', () {
+      // 실기기 증상: 「르 라보」가 「르」 / 「라보」로 접혀, 첫 줄의 한 글자가
+      // 이웃 매장 이름의 조각처럼 읽혔다. 2줄 규칙은 지켰지만 줄의 내용이 문제다.
+      final fit = fitStoreLabel(name: '르 라보', boxWidthM: 4.0, boxHeightM: 2.5);
+      final lines = storeLabelLineWidths('르 라보', fit.maxWidthEm);
+
+      expect(lines, hasLength(1), reason: '2줄로 쪼갤 수 없는 이름이다');
+      expect(lines.first, closeTo(storeLabelEmWidth('르 라보'), 1e-9));
+    });
+
+    test('양쪽이 두 글자 이상이면 그대로 2줄로 접는다', () {
+      for (final name in ['디올 뷰티', '조 말론 런던', '에스티 로더']) {
+        final fit = fitStoreLabel(name: name, boxWidthM: 4.0, boxHeightM: 4.0);
+        final lines = storeLabelLineWidths(name, fit.maxWidthEm);
+        if (lines.length == 1) continue; // 박스가 넓어 1줄이 이긴 경우
+        expect(
+          lines.reduce(min),
+          greaterThanOrEqualTo(kStoreLabelMinLineEm - 1e-9),
+          reason: '$name의 짧은 줄이 두 글자보다 얇다',
+        );
+      }
+    });
+
     test('짧은 브랜드명이 글자 단위로 흩어지지 않는다', () {
       // 실기기에서 나온 증상 그대로다 — `조 말론 런던`이 세 조각으로 흩어져
       // 각각 다른 매장 이름처럼 읽혔다.
