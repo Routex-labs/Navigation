@@ -498,9 +498,18 @@ class _MapShellScreenState extends State<MapShellScreen>
   /// 자동차·대중교통으로 시작해, 초기화했는데 옛 선택이 따라온다.
   void _clearRouteDraft() {
     _closeSearch();
-    _forgetPlannerMode();
     _outdoorKey.currentState?.clearAllRoutes();
     _indoorKey.currentState?.clearRoute();
+    _forgetRouteDraft();
+  }
+
+  /// 지도에 그려진 것은 그대로 두고 **상단 길찾기 상태만** 비운다.
+  ///
+  /// 지도가 "안내 종료를 눌렀다"고 알려올 때([OutdoorMapBody.onGuidanceDismissed])
+  /// 쓰는 경로다. 그쪽은 이미 자기 경로를 지운 뒤라, 여기서 다시 지우라고
+  /// 되돌려 보내면 같은 일을 두 번 한다.
+  void _forgetRouteDraft() {
+    _forgetPlannerMode();
     setState(() {
       _selectedOrigin = null;
       _routeDraftDestination = null;
@@ -1678,6 +1687,7 @@ class _MapShellScreenState extends State<MapShellScreen>
                 onMapPointPick: _onMapPointPick,
                 onRouteVisibleChanged: (visible) =>
                     setState(() => _outdoorRouteVisible = visible),
+                onGuidanceDismissed: _forgetRouteDraft,
                 onPlacingLocationChanged: (placing) {
                   if (_outdoorPlacingLocation == placing) return;
                   setState(() => _outdoorPlacingLocation = placing);
@@ -1725,6 +1735,7 @@ class _MapShellScreenState extends State<MapShellScreen>
                 buildingId: _buildingId,
                 onRouteVisibleChanged: (visible) =>
                     setState(() => _indoorRouteVisible = visible),
+                onGuidanceDismissed: _forgetRouteDraft,
                 onStoreTap: _onMapStoreTap,
                 onLocationAnchored: _onLocationAnchored,
                 onPlacingLocationChanged: (placing) {

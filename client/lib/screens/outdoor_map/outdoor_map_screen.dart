@@ -489,6 +489,7 @@ class OutdoorMapBody extends StatefulWidget {
     super.key,
     this.active = true,
     this.onRouteVisibleChanged,
+    this.onGuidanceDismissed,
     this.onPlacingLocationChanged,
     this.onIndoorEnteredChanged,
     this.onStoreTap,
@@ -510,6 +511,15 @@ class OutdoorMapBody extends StatefulWidget {
   /// ETA 카드가 화면 최하단에 새로 나타나거나 사라질 때 호출된다.
   /// 상위(MapShellScreen)가 이 값으로 하단 공용 바를 그 위로 띄운다.
   final ValueChanged<bool>? onRouteVisibleChanged;
+
+  /// 사용자가 **"안내 종료"를 눌러** 길안내를 끝냈을 때 호출된다.
+  ///
+  /// [onRouteVisibleChanged]와 반드시 구분해야 한다. 그쪽은 경로선이 있는지
+  /// 없는지라 재계산·수단 변경처럼 안내가 계속되는 중에도 오르내리지만, 이쪽은
+  /// "사용자가 그만두겠다고 눌렀다" 하나뿐이다. 상위는 이 신호로 상단 길찾기
+  /// 바까지 함께 닫는다 — 안 그러면 경로만 사라지고 출발/도착 칸이 남아,
+  /// 안내를 껐는데 화면은 아직 길찾기 중인 상태가 된다.
+  final VoidCallback? onGuidanceDismissed;
 
   /// PDR 앵커 배치 대기 상태가 바뀔 때 호출된다. 상위(MapShellScreen)가 이
   /// 값으로 하단 바의 "위치 지정" 버튼을 눌린(활성) 톤으로 표시한다.
@@ -2649,6 +2659,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   void _dismissUserDestinationFromEtaCard() {
     _retainEtaClosePointer();
     _clearUserDestination();
+    widget.onGuidanceDismissed?.call();
   }
 
   void _dismissIndoorRouteFromEtaCard() {
@@ -2657,6 +2668,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 지우면 밖으로 나갔을 때 방금 끝낸 안내의 앞부분이 혼자 되살아난다.
     _clearUserDestination();
     _clearIndoorRoute();
+    widget.onGuidanceDismissed?.call();
   }
 
   void _retainEtaClosePointer() {

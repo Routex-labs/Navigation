@@ -106,6 +106,7 @@ class IndoorMapBody extends StatefulWidget {
     super.key,
     required this.buildingId,
     this.onRouteVisibleChanged,
+    this.onGuidanceDismissed,
     this.onStoreTap,
     this.onPlacingLocationChanged,
     this.onLocationAnchored,
@@ -129,6 +130,15 @@ class IndoorMapBody extends StatefulWidget {
   /// ETA 카드가 화면 최하단에 새로 나타나거나 사라질 때 호출된다.
   /// 상위(MapShellScreen)가 이 값으로 하단 공용 바를 그 위로 띄운다.
   final ValueChanged<bool>? onRouteVisibleChanged;
+
+  /// 사용자가 **"안내 종료"를 눌러** 길안내를 끝냈을 때 호출된다.
+  ///
+  /// [onRouteVisibleChanged]와 반드시 구분해야 한다. 그쪽은 경로선이 있는지
+  /// 없는지라 재계산·층 전환처럼 안내가 계속되는 중에도 오르내리지만, 이쪽은
+  /// "사용자가 그만두겠다고 눌렀다" 하나뿐이다. 상위는 이 신호로 상단 길찾기
+  /// 바까지 함께 닫는다 — 안 그러면 경로만 사라지고 출발/도착 칸이 남아,
+  /// 안내를 껐는데 화면은 아직 길찾기 중인 상태가 된다.
+  final VoidCallback? onGuidanceDismissed;
 
   /// 지도 위 매장 폴리곤을 탭하면 호출된다. 상위(MapShellScreen)가 검색
   /// 결과를 탭했을 때와 똑같이 매장 정보 시트를 띄운다.
@@ -321,6 +331,14 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   void clearRoute() {
     if (!_hasActiveRoute) return;
     _clearRoute();
+  }
+
+  /// ETA 카드의 "안내 종료". 경로를 지우고 **상위에도 알린다** — 상단 길찾기
+  /// 바는 상위가 들고 있어서, 알리지 않으면 경로만 사라지고 출발/도착 칸이
+  /// 남는다.
+  void _dismissGuidance() {
+    _clearRoute();
+    widget.onGuidanceDismissed?.call();
   }
 
   /// 매장 정보 시트가 닫히면 상위(MapShellScreen)가 호출해서 지도 위
@@ -2986,7 +3004,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
                       .clamp(1, 999),
                   label: _etaLabel(routeDestination),
                   instruction: routeGuidance,
-                  onClose: _clearRoute,
+                  onClose: _dismissGuidance,
                   onClosePointerDown: (position) =>
                       _etaClosePointerDown = position,
                 ),
