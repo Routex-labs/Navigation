@@ -16,6 +16,7 @@ library;
 
 import '../models/store_index_entry.dart';
 import 'dijkstra.dart';
+import 'store_suggestions.dart';
 
 /// 고른 대표와 그 매장까지의 도달 정보.
 ///
@@ -74,4 +75,58 @@ NearestStore nearestByWalkingDistance({
 
   if (best == null) return (store: first, reach: null);
   return (store: best, reach: bestReach);
+}
+
+
+/// 이 질의가 **같은 이름이 층마다 있는 시설**을 가리키면, 가장 가까운 곳의 층을
+/// 돌려준다. 아니면 null.
+///
+/// ## 왜 필요한가
+///
+/// 길찾기 검색은 **항상 건물 전체**를 본다. 층으로 좁히면 "다른 층으로 가려고
+/// 여는 기능"인데 매번 토글을 켜야 했기 때문이다(`directions_sheet.dart`의
+/// [DirectionsSearchCallback] 주석). 그 결정은 **매장**에는 맞다.
+///
+/// **시설에는 정반대다.** 1F에 서서 `화장`을 치면 상단 검색은 `1F · 57m`를 주는데
+/// 길찾기는 `B6 · 219m`를 줬다 — 층을 안 주니 서버가 자기 정렬 순서로 아무 층이나
+/// 고른 것이다. 사용자가 화장실을 찾을 때 원하는 건 언제나 **가장 가까운 하나**다.
+///
+/// ## 시설인지 어떻게 아는가 — 사전을 만들지 않는다
+///
+/// 카테고리 단어 사전을 두면 `제일`은 되는데 `가장`은 안 되는 식으로 예외가 계속
+/// 는다(서버 `query_search.py`가 같은 이유로 사전을 거부한다). 대신 **데이터에서
+/// 유도한다** — 온디바이스 후보의 최상위 그룹에 같은 이름 매장이 둘 이상이면
+/// 그게 곧 "층마다 있는 시설"이다. 화장실 19곳·정수기 14곳·엘리베이터 60곳이
+/// 전부 이 한 조건으로 걸리고, `나이키`(서로 다른 이름 3건)는 안 걸린다.
+///
+/// **추가 요청이 없다.** 후보도 거리 맵도 화면이 이미 들고 있다.
+///
+/// ## null을 돌려주는 경우 (실패 조건을 먼저 정한 것)
+///
+/// - **후보가 없을 때.** 인덱스를 못 받았거나 야외다 → 지금까지의 동작 그대로.
+/// - **최상위 후보가 교정일 때.** 오타 교정은 추측이라, 그걸 근거로 층까지 좁히면
+///   틀린 추측이 목적지를 확정한다.
+/// - **그룹이 아닐 때**(같은 이름이 하나뿐). 매장이므로 건물 전체를 본다.
+/// - **거리를 모를 때.** 어느 층이 가까운지 모르는데 아무 층이나 고르면 지금 문제를
+///   다른 층으로 옮기는 것일 뿐이다.
+///
+/// 마지막 조건은 안전판도 겸한다 — 거리를 안다는 건 그 매장에 `entranceNodeId`가
+/// 있고 그래프에도 있다는 뜻이라, 그 층으로 좁힌 검색이 빈손이 될 가능성이 낮다.
+///
+/// 설계 근거와 검증 기준은 `docs/client/search-result-list-ux.md` U절이 단일 출처다.
+String? nearestFloorForGroupedFacility({
+  required List<StoreSuggestion> suggestions,
+  required Map<String, NodeReach>? reachByNodeId,
+}) {
+  if (suggestions.isEmpty) return null;
+  final top = suggestions.first;
+  if (top.kind.isCorrection) return null;
+  if (top.stores.length <= 1) return null;
+
+  final nearest = nearestByWalkingDistance(
+    stores: top.stores,
+    reachByNodeId: reachByNodeId,
+  );
+  if (nearest.reach == null) return null;
+  return nearest.store.floorId;
 }

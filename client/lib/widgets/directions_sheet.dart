@@ -498,8 +498,16 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
 
     List<DirectionsCandidate> results;
     try {
-      // 목록에서 고른 검색이면 그 후보의 층으로 좁힌다. 한 번 쓰고 지운다.
-      final floorId = _floorScopeOnce;
+      // 층을 좁히는 경우는 둘뿐이다.
+      //  1. 목록에서 후보를 **탭한** 경우 — 그 후보의 층(한 번 쓰고 지운다).
+      //  2. 질의가 **층마다 있는 시설**을 가리키는 경우 — 가장 가까운 층.
+      // 그 밖에는 null이라 「길찾기는 항상 건물 전체」 규칙이 그대로 유지된다.
+      final floorId =
+          _floorScopeOnce ??
+          nearestFloorForGroupedFacility(
+            suggestions: _suggestions,
+            reachByNodeId: widget.reachByNodeId,
+          );
       _floorScopeOnce = null;
       results = await widget.search(query, floorId: floorId);
     } on Object {

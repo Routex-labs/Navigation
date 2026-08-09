@@ -219,4 +219,67 @@ void main() {
     expect(find.text('검색어 제안'), findsNothing);
     expect(find.text('MLB'), findsOneWidget);
   });
+
+  // U. 길찾기는 원래 층을 안 보낸다(「항상 건물 전체」). 그런데 층마다 있는
+  // 시설에서는 그게 정반대라, 1F에 서서 `화장`을 치면 B6가 답이었다.
+  group('U. 시설 질의만 가장 가까운 층으로 좁힌다', () {
+    testWidgets('층마다 있는 시설이면 최근접 층을 실어 보낸다', (tester) async {
+      await tester.pumpWidget(
+        subject(
+          index: [
+            _entry('화장실', '6F', nodeId: 'N6'),
+            _entry('화장실', 'B2', nodeId: 'NB2'),
+            _entry('화장실', '1F', nodeId: 'N1'),
+          ],
+          reachByNodeId: const {
+            'N6': NodeReach(distanceM: 310, costM: 310),
+            'NB2': NodeReach(distanceM: 48, costM: 48),
+            'N1': NodeReach(distanceM: 120, costM: 120),
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await settle(tester, '화장');
+
+      expect(floorScopes.last, 'FL-B2');
+    });
+
+    // 매장은 다른 층에 있는 게 정상이라 규칙이 그대로여야 한다.
+    testWidgets('매장 질의는 여전히 건물 전체를 본다', (tester) async {
+      await tester.pumpWidget(
+        subject(
+          index: [
+            _entry('나이키스윔', '4F', nodeId: 'N4'),
+            _entry('나이키 라이즈', 'B2', nodeId: 'NB2'),
+          ],
+          reachByNodeId: const {
+            'N4': NodeReach(distanceM: 118, costM: 118),
+            'NB2': NodeReach(distanceM: 168, costM: 168),
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await settle(tester, '나이키');
+
+      expect(floorScopes.last, isNull);
+    });
+
+    testWidgets('위치를 모르면 좁히지 않는다', (tester) async {
+      await tester.pumpWidget(
+        subject(
+          index: [
+            _entry('화장실', '6F', nodeId: 'N6'),
+            _entry('화장실', 'B2', nodeId: 'NB2'),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await settle(tester, '화장');
+
+      expect(floorScopes.last, isNull);
+    });
+  });
 }

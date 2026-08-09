@@ -1,5 +1,6 @@
 import 'package:navigation_client/domain/dijkstra.dart';
 import 'package:navigation_client/domain/nearest_store.dart';
+import 'package:navigation_client/domain/store_suggestions.dart';
 import 'package:navigation_client/models/store_index_entry.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -159,6 +160,93 @@ void main() {
       );
 
       expect([for (final s in stores) s.id], before);
+    });
+  });
+
+  // U. 길찾기가 「항상 건물 전체」를 유지하면서도 시설만 가까운 층으로 좁히는 판정.
+  // 설계와 검증 기준은 `docs/client/search-result-list-ux.md` U절이 단일 출처다.
+  group('U. 층마다 있는 시설이면 가장 가까운 층', () {
+    StoreSuggestion group(
+      List<StoreIndexEntry> stores, {
+      SuggestionKind kind = SuggestionKind.prefix,
+    }) => (stores: stores, kind: kind);
+
+    test('같은 이름이 여러 층이면 최근접의 층을 돌려준다', () {
+      final floor = nearestFloorForGroupedFacility(
+        suggestions: [
+          group([
+            _store('6F', nodeId: 'N6'),
+            _store('B2', nodeId: 'NB2'),
+            _store('1F', nodeId: 'N1'),
+          ]),
+        ],
+        reachByNodeId: {
+          'N6': _reach(310),
+          'NB2': _reach(48),
+          'N1': _reach(120),
+        },
+      );
+
+      expect(floor, 'FL-B2');
+    });
+
+    // `나이키`는 서로 다른 이름 3건이라 시설이 아니다. 길찾기의 「항상 건물
+    // 전체」 규칙이 그대로 유지돼야 한다.
+    test('같은 이름이 하나뿐이면 좁히지 않는다', () {
+      final floor = nearestFloorForGroupedFacility(
+        suggestions: [
+          group([_store('4F', nodeId: 'N4', name: '나이키스윔')]),
+          group([_store('B2', nodeId: 'NB2', name: '나이키 라이즈')]),
+        ],
+        reachByNodeId: {'N4': _reach(118), 'NB2': _reach(168)},
+      );
+
+      expect(floor, isNull);
+    });
+
+    // 어느 층이 가까운지 모르는데 아무 층이나 고르면 문제를 옮기는 것뿐이다.
+    test('거리를 모르면 좁히지 않는다', () {
+      final stores = [_store('6F', nodeId: 'N6'), _store('B2', nodeId: 'NB2')];
+
+      expect(
+        nearestFloorForGroupedFacility(
+          suggestions: [group(stores)],
+          reachByNodeId: null,
+        ),
+        isNull,
+      );
+      expect(
+        nearestFloorForGroupedFacility(
+          suggestions: [group(stores)],
+          reachByNodeId: {'다른-노드': _reach(10)},
+        ),
+        isNull,
+      );
+    });
+
+    // 오타 교정은 추측이다. 그걸 근거로 층까지 확정하면 틀린 추측이 목적지가 된다.
+    test('최상위가 교정 후보면 좁히지 않는다', () {
+      final floor = nearestFloorForGroupedFacility(
+        suggestions: [
+          group([
+            _store('6F', nodeId: 'N6'),
+            _store('B2', nodeId: 'NB2'),
+          ], kind: SuggestionKind.correction),
+        ],
+        reachByNodeId: {'N6': _reach(310), 'NB2': _reach(48)},
+      );
+
+      expect(floor, isNull);
+    });
+
+    test('후보가 없으면 좁히지 않는다', () {
+      expect(
+        nearestFloorForGroupedFacility(
+          suggestions: const [],
+          reachByNodeId: {'N1': _reach(10)},
+        ),
+        isNull,
+      );
     });
   });
 }
