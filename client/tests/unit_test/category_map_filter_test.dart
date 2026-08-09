@@ -74,6 +74,55 @@ void main() {
     });
   });
 
+  group('categoryLabelTextField', () {
+    test('선택이 없으면 모든 매장이 이름을 단다', () {
+      // 카테고리를 고르기 전 화면은 예전과 한 글자도 달라지면 안 된다.
+      expect(categoryLabelTextField(null), ['get', 'name']);
+    });
+
+    test('선택이 있으면 그 매장만 이름을 달고 나머지는 빈 문자열이다', () {
+      final field = categoryLabelTextField(
+        const CategorySelection(category: '식음료'),
+      );
+
+      expect(field.first, 'case');
+      // 조건은 강조 fill과 **같은 함수**에서 나온다. 갈라지면 파랗게 칠해진
+      // 매장과 이름이 남는 매장이 어긋난다.
+      expect(
+        field[1],
+        categoryHighlightFilter(const CategorySelection(category: '식음료')),
+      );
+      expect(field[2], ['get', 'name']);
+      // 이름을 지우는 값은 빈 문자열이다. null이면 text-field가 통째로 빠져
+      // 스펙 기본값으로 돌아간다.
+      expect(field[3], '');
+      expect(field, hasLength(4));
+    });
+
+    test('소분류까지 고른 선택도 조건에 그대로 실린다', () {
+      const selection = CategorySelection(
+        category: '식음료',
+        subcategory: '카페·베이커리',
+      );
+
+      expect(
+        categoryLabelTextField(selection)[1],
+        categoryHighlightFilter(selection),
+      );
+    });
+
+    test('match·in 같은 배열 인자 형태를 쓰지 않는다', () {
+      // 이 파일의 필터와 같은 이유다. `case`의 인자는 데이터 배열이 아니라
+      // 불리언 표현식이라 그 함정에 걸리지 않는다.
+      final flattened = categoryLabelTextField(
+        const CategorySelection(category: '패션', subcategory: '명품'),
+      ).toString();
+
+      expect(flattened.contains('match'), isFalse);
+      expect(flattened.contains('literal'), isFalse);
+    });
+  });
+
   group('kCategoryHighlightNoneFilter', () {
     test('선택이 없을 때 쓰는 필터는 실제 데이터와 맞지 않는다', () {
       // 'kind'는 타일의 모든 매장 feature가 'store'로 갖고 있는 값이라,

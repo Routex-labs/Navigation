@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import 'package:navigation_client/screens/outdoor_map/indoor_overlay_layers.dart';
+import 'package:navigation_client/widgets/category_map_filter.dart';
 
 /// 실기기에서 건물이 **불투명한 검정 덩어리**로 덮이던 회귀를 막는 테스트.
 ///
@@ -65,7 +66,7 @@ void main() {
 
   group('symbol 레이어는 layout 속성을 항상 함께 보낸다', () {
     test('매장 라벨 — text-field/text-font/text-color가 살아 있다', () {
-      final json = wireJson(indoorStoresLabelProps(fadeExpr));
+      final json = wireJson(indoorStoresLabelProps(fadeExpr, null));
       // text-field가 null로 가면 라벨이 통째로 사라진다.
       expect(json['text-field'], isNotNull);
       expect(json['text-font'], isNotNull);
@@ -74,7 +75,7 @@ void main() {
     });
 
     test('매장 라벨 — 대분류 아이콘 속성이 함께 살아 있다', () {
-      final json = wireJson(indoorStoresLabelProps(fadeExpr));
+      final json = wireJson(indoorStoresLabelProps(fadeExpr, null));
       // 라벨과 아이콘이 같은 심볼이라, 이 중 하나라도 null로 가면 아이콘이
       // 사라지거나(icon-image) 글자가 아이콘 위에 겹쳐 찍힌다(radial-offset).
       expect(json['icon-image'], isNotNull);
@@ -85,24 +86,40 @@ void main() {
     });
 
     test('매장 라벨 — 아이콘·이름 중 하나만이라도 남긴다', () {
-      final json = wireJson(indoorStoresLabelProps(fadeExpr));
+      final json = wireJson(indoorStoresLabelProps(fadeExpr, null));
       // 둘 다 필수로 두면 심볼이 넓어진 만큼 붐비는 층에서 라벨이 통째로
       // 밀려난다(B1 한 화면 49개 → 38개를 실측했다).
       expect(json['text-optional'], isTrue);
       expect(json['icon-optional'], isTrue);
     });
 
+    test('카테고리를 골라도 text-field는 살아 있다', () {
+      // 선택이 걸리면 이름이 조건부가 되는데, 그 조건 표현식이 통째로 빠지거나
+      // null이 되면 라벨이 전부 사라진다.
+      final json = wireJson(
+        indoorStoresLabelProps(
+          fadeExpr,
+          const CategorySelection(category: '식음료'),
+        ),
+      );
+
+      expect(json['text-field'], isNotNull);
+      expect((json['text-field'] as List).first, 'case');
+      // 이름이 사라져도 아이콘은 남아야 "여기는 다른 업종의 매장"이 읽힌다.
+      expect(json['icon-image'], isNotNull);
+    });
+
     test('매장 라벨 — text-allow-overlap은 false다', () {
       // variable-anchor는 충돌 판정 위에서만 동작한다. true가 되면 앵커가 항상
       // 첫 번째 값으로 굳어 이름 뒤집기가 조용히 죽는다.
       expect(
-        wireJson(indoorStoresLabelProps(fadeExpr))['text-allow-overlap'],
+        wireJson(indoorStoresLabelProps(fadeExpr, null))['text-allow-overlap'],
         isFalse,
       );
     });
 
     test('편의시설 라벨 — 텍스트 속성이 살아 있다', () {
-      final json = wireJson(indoorFacilityLabelProps(fadeExpr));
+      final json = wireJson(indoorFacilityLabelProps(fadeExpr, null));
       expect(json['text-field'], isNotNull);
       expect(json['text-font'], isNotNull);
       expect(json['text-color'], isNotNull);

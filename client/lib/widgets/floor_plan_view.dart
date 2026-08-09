@@ -1088,66 +1088,12 @@ class FloorPlanViewState extends State<FloorPlanView> {
       ],
       enableInteraction: false,
     );
-    // 매장명 라벨: 크기와 줄바꿈 폭을 **매장 폴리곤에 맞춰** 미리 계산해
-    // feature에 실어 둔다([store_label_fit.dart]). 예전에는 zoom 보간만으로
-    // 9~14px을 줬는데, 도면은 zoom 1레벨마다 2배가 되는 월드 좌표라 확대할수록
-    // 글자가 상대적으로 작아지고 축소할수록 매장 밖으로 넘쳤다.
-    //
-    // 이름 옆에 대분류 아이콘을 **같은 심볼로** 얹는다. 아이콘을 별도 레이어로
-    // 두면 충돌 판정이 따로 돌아 아이콘만 남거나 이름만 남는 짝이 안 맞는 라벨이
-    // 생긴다. 한 심볼이면 둘이 함께 놓이고 함께 밀린다.
-    //
-    // 이름이 아이콘 앞/뒤 중 어디에 붙을지는 `text-variable-anchor`가 정한다
-    // (규칙과 한계는 [category_map_icon.dart] 주석).
+    // 매장명 라벨. 속성 묶음은 [_storeLabelSymbolProps]가 만든다 — 카테고리를
+    // 고르면 이름을 다는 매장이 바뀌므로, 등록과 갱신이 같은 함수를 봐야 한다.
     await controller.addSymbolLayer(
       labelSourceId,
       _tileLayerId('floor-stores-label', floor),
-      SymbolLayerProperties(
-        textField: ['get', 'name'],
-        textFont: _mapFontStack,
-        textSize: storeLabelTextSizeExpression(latitude: labelLatitude),
-        // 크기를 잴 때 가정한 줄바꿈 폭 그대로 걸어야 계산이 맞는다
-        // ([kStoreLabelMaxWidthProperty] 주석).
-        textMaxWidth: ['get', kStoreLabelMaxWidthProperty],
-        iconImage: storeCategoryIconExpression(),
-        // 크기는 화면 배율을 곱해 정한다 — `icon-size`는 물리 픽셀이고
-        // `text-size`는 논리 픽셀이라, 안 곱하면 고밀도 화면에서 아이콘만
-        // 배율만큼 작아진다([storeCategoryIconSizeIndoor] 실측표).
-        iconSize: storeCategoryIconSize(_devicePixelRatio),
-        textVariableAnchor: kStoreLabelVariableAnchor,
-        textRadialOffset: kStoreLabelRadialOffset,
-        // variable-anchor가 고른 방향에 맞춰 좌/우 정렬을 따라가게 한다.
-        // 기본값(center)으로 두면 두 줄로 접힌 이름이 아이콘 쪽으로 쏠린다.
-        textJustify: 'auto',
-        // 색·헤일로는 [map_label_style.dart]가 단일 출처다(야외 오버레이와 같은 값).
-        textColor: mapLabelStoreColor,
-        textHaloColor: mapLabelHaloColor,
-        textHaloWidth: mapLabelHaloWidth,
-        // variable-anchor는 충돌 판정 위에서만 동작한다. true로 바꾸면 앵커가
-        // 항상 첫 번째 값으로 굳어 뒤집기가 조용히 죽는다.
-        textAllowOverlap: false,
-        // 자리가 없으면 **이름만** 포기한다. 아이콘은 항상 그린다.
-        //
-        // ⚠️ **예전 규칙을 뒤집었다.** 원래는 `iconOptional: true`로 두고
-        // "붐빌 때는 아이콘을 포기해 이름을 살린다"였는데, 실기기에서 재 보니
-        // 그 대가가 예상보다 훨씬 컸다 — 같은 1F에서 zoom을 한 단계씩 올리며
-        // 배지 픽셀을 세면 **0 → 5,956 → 0**이었다. 확대해서 자리가 남아도는
-        // 화면에서도 배지가 통째로 사라졌다. 사용자에게는 "아이콘이 커지거나
-        // 줄어드는 게 아니라 없어진다"로 보인다.
-        //
-        // 아이콘은 이름보다 조금 크기만 하고(11~16 논리 px) 색만으로도 업종을
-        // 말하므로, 밀릴 때 버릴 것은 이쪽이 아니다.
-        //
-        // **`iconIgnorePlacement`는 켰다가 껐다.** 켜 두면 배지가 충돌 판정에서
-        // 아예 빠져 "다른 라벨을 밀어내지 않는" 대신 **다른 매장 이름 위에 그대로
-        // 올라앉는다** — 실기기에서 「탬버린즈」·「오휘/후」가 옆 매장 배지에
-        // 덮였다. 배지를 장애물로 되돌려 이름들이 그 자리를 피해 가게 한다.
-        // 배지 자체는 `iconAllowOverlap`·`iconOptional: false` 덕에 그래도
-        // 사라지지 않는다.
-        textOptional: true,
-        iconOptional: false,
-        iconAllowOverlap: true,
-      ),
+      _storeLabelSymbolProps(labelLatitude),
       belowLayerId: belowLayerId,
       // 라벨 소스는 타일이 아니라 클라이언트 GeoJSON이라 타일 소스의 zoom 범위를
       // 물려받지 않는다. 그대로 두면 도면 타일이 아직 안 나오는 축소 구간에서
@@ -1157,30 +1103,12 @@ class FloorPlanViewState extends State<FloorPlanView> {
       enableInteraction: false,
     );
 
-    // 편의시설(화장실·정수기 등) 이름 — 아이콘은 아래 전용 레이어가 그리므로
-    // 여기서는 텍스트만 얹는다. 위 레이어에 섞으면 같은 폴리곤에 시설 아이콘과
-    // 대분류 아이콘이 둘 다 떠서 무엇을 봐야 할지 알 수 없게 된다.
-    //
-    // **매장명과 달리 크기가 고정이다.** 폴리곤 맞춤 계산은 글자가 폴리곤 안에
-    // 들어가는 경우의 계산인데 이 이름은 아이콘을 피해 폴리곤 밖으로 내려 그린다
-    // ([mapLabelFacilityTextSize] 주석에 근거를 적었다).
+    // 편의시설(화장실·정수기 등) 이름. 속성 묶음은 [_facilityLabelSymbolProps]가
+    // 만든다 — 매장명 라벨과 같은 이유로 등록과 갱신이 같은 함수를 봐야 한다.
     await controller.addSymbolLayer(
       labelSourceId,
       _tileLayerId(_facilityLabelLayerId, floor),
-      const SymbolLayerProperties(
-        textField: ['get', 'name'],
-        textFont: _mapFontStack,
-        textSize: mapLabelFacilityTextSize,
-        textMaxWidth: mapLabelFacilityMaxWidth,
-        // 아이콘이 centroid를 차지하므로 이름은 그 아래로 내린다. POI 라벨
-        // (`floor-pois-label`)·야외 오버레이와 같은 오프셋이라 세 곳의 라벨
-        // 높이가 맞는다.
-        textOffset: mapLabelBelowIconOffset,
-        textColor: mapLabelFacilityColor,
-        textHaloColor: mapLabelHaloColor,
-        textHaloWidth: mapLabelHaloWidth,
-        textAllowOverlap: false,
-      ),
+      _facilityLabelSymbolProps(),
       belowLayerId: belowLayerId,
       // 위 매장명 라벨과 같은 이유.
       minzoom: indoorTilesMinZoom,
@@ -1642,11 +1570,116 @@ class FloorPlanViewState extends State<FloorPlanView> {
     return categoryHighlightFilter(selection);
   }
 
-  /// 강조 레이어의 필터만 갈아 끼운다.
+  /// 매장명 라벨 심볼의 속성 묶음.
   ///
-  /// `setLayerProperties`가 아니라 `setFilter`를 쓴다 — 전자는 넘기지 않은
-  /// 속성까지 null로 함께 보내 스펙 기본값(fill-color는 검정)으로 되돌리므로,
-  /// 실기기에서 지도가 검게 덮인다(indoor_overlay_layers.dart 상단 주석).
+  /// 크기와 줄바꿈 폭을 **매장 폴리곤에 맞춰** 미리 계산해 feature에 실어 둔다
+  /// ([store_label_fit.dart]). 예전에는 zoom 보간만으로 9~14px을 줬는데, 도면은
+  /// zoom 1레벨마다 2배가 되는 월드 좌표라 확대할수록 글자가 상대적으로 작아지고
+  /// 축소할수록 매장 밖으로 넘쳤다.
+  ///
+  /// 이름 옆에 대분류 아이콘을 **같은 심볼로** 얹는다. 아이콘을 별도 레이어로
+  /// 두면 충돌 판정이 따로 돌아 아이콘만 남거나 이름만 남는 짝이 안 맞는 라벨이
+  /// 생긴다. 한 심볼이면 둘이 함께 놓이고 함께 밀린다.
+  ///
+  /// 이름이 아이콘 앞/뒤 중 어디에 붙을지는 `text-variable-anchor`가 정한다
+  /// (규칙과 한계는 [category_map_icon.dart] 주석).
+  ///
+  /// **등록([_installFloorTileLayers])과 갱신([_applyCategoryFilter])이 같은
+  /// 함수를 쓴다.** `setLayerProperties`는 patch가 아니라 전체 교체라, 갱신
+  /// 쪽에서 속성 하나라도 빠지면 그 속성이 스펙 기본값으로 돌아간다 — 심볼
+  /// 레이어에서는 `text-field`·`icon-image`가 null이 되어 라벨과 아이콘이 통째로
+  /// 사라진다(indoor_overlay_layers.dart 상단 주석).
+  SymbolLayerProperties _storeLabelSymbolProps(double labelLatitude) =>
+      SymbolLayerProperties(
+        // 카테고리를 고르면 그 매장만 이름을 단다. 나머지는 빈 문자열이 되어
+        // 아이콘만 남는다(판단 근거는 [categoryLabelTextField] 주석).
+        textField: categoryLabelTextField(widget.categorySelection),
+        textFont: _mapFontStack,
+        textSize: storeLabelTextSizeExpression(latitude: labelLatitude),
+        // 크기를 잴 때 가정한 줄바꿈 폭 그대로 걸어야 계산이 맞는다
+        // ([kStoreLabelMaxWidthProperty] 주석).
+        textMaxWidth: ['get', kStoreLabelMaxWidthProperty],
+        iconImage: storeCategoryIconExpression(),
+        // 크기는 화면 배율을 곱해 정한다 — `icon-size`는 물리 픽셀이고
+        // `text-size`는 논리 픽셀이라, 안 곱하면 고밀도 화면에서 아이콘만
+        // 배율만큼 작아진다([storeCategoryIconSizeIndoor] 실측표).
+        iconSize: storeCategoryIconSize(_devicePixelRatio),
+        textVariableAnchor: kStoreLabelVariableAnchor,
+        textRadialOffset: kStoreLabelRadialOffset,
+        // variable-anchor가 고른 방향에 맞춰 좌/우 정렬을 따라가게 한다.
+        // 기본값(center)으로 두면 두 줄로 접힌 이름이 아이콘 쪽으로 쏠린다.
+        textJustify: 'auto',
+        // 색·헤일로는 [map_label_style.dart]가 단일 출처다(야외 오버레이와 같은 값).
+        textColor: mapLabelStoreColor,
+        textHaloColor: mapLabelHaloColor,
+        textHaloWidth: mapLabelHaloWidth,
+        // variable-anchor는 충돌 판정 위에서만 동작한다. true로 바꾸면 앵커가
+        // 항상 첫 번째 값으로 굳어 뒤집기가 조용히 죽는다.
+        textAllowOverlap: false,
+        // 자리가 없으면 **이름만** 포기한다. 아이콘은 항상 그린다.
+        //
+        // ⚠️ **예전 규칙을 뒤집었다.** 원래는 `iconOptional: true`로 두고
+        // "붐빌 때는 아이콘을 포기해 이름을 살린다"였는데, 실기기에서 재 보니
+        // 그 대가가 예상보다 훨씬 컸다 — 같은 1F에서 zoom을 한 단계씩 올리며
+        // 배지 픽셀을 세면 **0 → 5,956 → 0**이었다. 확대해서 자리가 남아도는
+        // 화면에서도 배지가 통째로 사라졌다. 사용자에게는 "아이콘이 커지거나
+        // 줄어드는 게 아니라 없어진다"로 보인다.
+        //
+        // 아이콘은 이름보다 조금 크기만 하고(11~16 논리 px) 색만으로도 업종을
+        // 말하므로, 밀릴 때 버릴 것은 이쪽이 아니다.
+        //
+        // **`iconIgnorePlacement`는 켰다가 껐다.** 켜 두면 배지가 충돌 판정에서
+        // 아예 빠져 "다른 라벨을 밀어내지 않는" 대신 **다른 매장 이름 위에 그대로
+        // 올라앉는다** — 실기기에서 「탬버린즈」·「오휘/후」가 옆 매장 배지에
+        // 덮였다. 배지를 장애물로 되돌려 이름들이 그 자리를 피해 가게 한다.
+        // 배지 자체는 `iconAllowOverlap`·`iconOptional: false` 덕에 그래도
+        // 사라지지 않는다.
+        textOptional: true,
+        iconOptional: false,
+        iconAllowOverlap: true,
+      );
+
+  /// 편의시설(화장실·정수기 등) 이름 심볼의 속성 묶음.
+  ///
+  /// 아이콘은 전용 레이어(`floor-store-facility-icons`)가 그리므로 여기서는
+  /// 텍스트만 얹는다. 매장명 라벨에 섞으면 같은 폴리곤에 시설 아이콘과 대분류
+  /// 아이콘이 둘 다 떠서 무엇을 봐야 할지 알 수 없게 된다.
+  ///
+  /// **매장명과 달리 크기가 고정이다.** 폴리곤 맞춤 계산은 글자가 폴리곤 안에
+  /// 들어가는 경우의 계산인데 이 이름은 아이콘을 피해 폴리곤 밖으로 내려 그린다
+  /// ([mapLabelFacilityTextSize] 주석에 근거를 적었다).
+  ///
+  /// **카테고리 선택은 매장명과 똑같이 적용한다.** 아이콘이 다른 레이어에 있을
+  /// 뿐 화면에서는 「ATM (하나은행)」도 이름 달린 폴리곤 하나다. 여기만 예외로
+  /// 두면 「패션」을 고른 화면에 시설 이름들이 그대로 남아, 남은 글자가 곧 답이
+  /// 라는 규칙이 깨진다.
+  SymbolLayerProperties _facilityLabelSymbolProps() => SymbolLayerProperties(
+    textField: categoryLabelTextField(widget.categorySelection),
+    textFont: _mapFontStack,
+    textSize: mapLabelFacilityTextSize,
+    textMaxWidth: mapLabelFacilityMaxWidth,
+    // 아이콘이 centroid를 차지하므로 이름은 그 아래로 내린다. POI 라벨
+    // (`floor-pois-label`)·야외 오버레이와 같은 오프셋이라 세 곳의 라벨
+    // 높이가 맞는다.
+    textOffset: mapLabelBelowIconOffset,
+    textColor: mapLabelFacilityColor,
+    textHaloColor: mapLabelHaloColor,
+    textHaloWidth: mapLabelHaloWidth,
+    textAllowOverlap: false,
+  );
+
+  /// 선택이 바뀌었을 때 지도에 그 선택을 반영한다.
+  ///
+  /// 두 가지가 함께 바뀐다 — **어느 매장이 색으로 강조되는가**(강조 fill의 필터)
+  /// 와 **어느 매장이 이름을 다는가**(라벨의 `text-field`). 둘은 같은 선택에서
+  /// 나오므로 한 함수 안에서 같이 갱신해야 어긋나지 않는다.
+  ///
+  /// 강조 fill은 `setLayerProperties`가 아니라 `setFilter`를 쓴다 — 전자는 넘기지
+  /// 않은 속성까지 null로 함께 보내 스펙 기본값(fill-color는 검정)으로
+  /// 되돌리므로, 실기기에서 지도가 검게 덮인다(indoor_overlay_layers.dart 상단
+  /// 주석). 라벨은 바뀌는 것이 필터가 아니라 layout 속성이라 그 경로를 쓸 수
+  /// 없고, 대신 [_storeLabelSymbolProps]·[_facilityLabelSymbolProps]가 **전체
+  /// 속성**을 다시 만들어 넘긴다.
   Future<void> _applyCategoryFilter() async {
     final controller = _controller;
     final floor = _activeTileFloor;
@@ -1657,6 +1690,14 @@ class FloorPlanViewState extends State<FloorPlanView> {
     await controller.setFilter(
       _tileLayerId(_categoryHighlightFillLayerId, floor),
       _categoryFilterExpression(),
+    );
+    await controller.setLayerProperties(
+      _tileLayerId('floor-stores-label', floor),
+      _storeLabelSymbolProps(_storeLabelLatitude()),
+    );
+    await controller.setLayerProperties(
+      _tileLayerId(_facilityLabelLayerId, floor),
+      _facilityLabelSymbolProps(),
     );
   }
 

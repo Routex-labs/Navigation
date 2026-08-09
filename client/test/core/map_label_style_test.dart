@@ -9,7 +9,7 @@ import 'package:navigation_client/widgets/store_label_fit.dart';
 void main() {
   group('라벨 타이포그래피 단일 출처', () {
     test('야외 매장명 라벨이 공용 색·헤일로를 쓴다', () {
-      final props = indoorStoresLabelProps(const [1.0]);
+      final props = indoorStoresLabelProps(const [1.0], null);
 
       expect(props.textColor, mapLabelStoreColor);
       expect(props.textHaloColor, mapLabelHaloColor);
@@ -17,7 +17,7 @@ void main() {
     });
 
     test('야외 편의시설 라벨이 공용 보조 스타일을 쓴다', () {
-      final props = indoorFacilityLabelProps(const [1.0]);
+      final props = indoorFacilityLabelProps(const [1.0], null);
 
       expect(props.textColor, mapLabelFacilityColor);
       expect(props.textHaloColor, mapLabelHaloColor);
