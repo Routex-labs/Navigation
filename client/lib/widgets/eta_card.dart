@@ -12,7 +12,6 @@ class EtaCard extends StatelessWidget {
     this.label = '목적지까지',
     this.instruction,
     this.onClose,
-    this.onTransit,
     this.onClosePointerDown,
   });
 
@@ -25,14 +24,6 @@ class EtaCard extends StatelessWidget {
   /// 직접 고른 경로를 취소할 때만 쓰고, 자동 안내(예: 건물 입구까지)에는
   /// null이라 버튼이 사라진다.
   final VoidCallback? onClose;
-
-  /// 있으면 "대중교통" 버튼을 보여준다. 야외 도보 경로에만 넘긴다.
-  ///
-  /// **이 버튼이 대중교통의 주 진입점이다.** 처음에는 야외 장소 시트 안에만
-  /// 뒀는데, 그러면 지도에서 찍은 지점·매장·건물 입구처럼 시트를 거치지 않는
-  /// 목적지에서는 대중교통에 닿을 방법이 없었다. 안내가 이미 그려진 이 카드는
-  /// 모든 야외 목적지가 반드시 지나는 자리라, 여기 두면 진입점이 하나로 모인다.
-  final VoidCallback? onTransit;
 
   final ValueChanged<Offset>? onClosePointerDown;
 
@@ -48,7 +39,6 @@ class EtaCard extends StatelessWidget {
                 minutes: minutes,
                 distanceMeters: distanceMeters,
                 onClose: onClose,
-                onTransit: onTransit,
                 onClosePointerDown: onClosePointerDown,
               )
             : Row(
@@ -158,7 +148,6 @@ class _LegacyEtaContent extends StatelessWidget {
     required this.minutes,
     required this.distanceMeters,
     required this.onClose,
-    required this.onTransit,
     required this.onClosePointerDown,
   });
 
@@ -166,7 +155,6 @@ class _LegacyEtaContent extends StatelessWidget {
   final int minutes;
   final double distanceMeters;
   final VoidCallback? onClose;
-  final VoidCallback? onTransit;
   final ValueChanged<Offset>? onClosePointerDown;
 
   @override
@@ -207,29 +195,10 @@ class _LegacyEtaContent extends StatelessWidget {
             ],
           ),
         ),
-        if (onTransit != null) ...[
-          const SizedBox(width: 6),
-          // 도보 시간 바로 옆에 둔다. "걸어서 38분"을 읽은 그 자리가 다른
-          // 수단을 찾게 되는 지점이라, 여기서 한 번에 넘어갈 수 있어야 한다.
-          TextButton.icon(
-            key: const ValueKey('eta-transit'),
-            onPressed: onTransit,
-            icon: const Icon(Icons.directions_transit_rounded, size: 17),
-            label: const Text('대중교통'),
-            style: TextButton.styleFrom(
-              foregroundColor: AppColors.primary,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              shape: RoundedRectangleBorder(
-                side: const BorderSide(color: AppColors.blue200),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              textStyle: const TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
+        // 이동 수단을 고르는 자리는 길찾기 화면 하나다. 예전에는 이 카드에도
+        // "대중교통" 버튼이 있었는데, 안내가 이미 그려진 자리에서 수단이 또
+        // 갈리면 같은 선택이 두 화면에 흩어진다 — 상단 초안 바의 행을 눌러
+        // 길찾기 화면으로 돌아가면 거기서 세 수단을 한 줄로 고를 수 있다.
         if (onClose != null) ...[
           const SizedBox(width: 8),
           // "안내 종료"는 되돌리기 어려운 조작(경로/도착지 리셋)이므로

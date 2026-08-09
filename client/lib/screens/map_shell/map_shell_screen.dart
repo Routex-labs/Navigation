@@ -640,19 +640,6 @@ class _MapShellScreenState extends State<MapShellScreen>
     );
   }
 
-  /// ETA 카드 라벨에서 목적지 이름만 뽑는다.
-  ///
-  /// 그 라벨은 화면용이라 꼬리가 붙어 있다 — 문 경유 안내에서는
-  /// `이솝까지 · 남측 문 경유`다. 그대로 시트 제목에 넣으면
-  /// "이솝까지 · 남측 문 경유까지 대중교통"이 된다.
-  String _destinationNameFromEtaLabel(String label) {
-    var name = label.split('·').first.trim();
-    if (name.endsWith('까지')) {
-      name = name.substring(0, name.length - '까지'.length).trim();
-    }
-    return name.isEmpty ? '목적지' : name;
-  }
-
   void _showSnack(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -1671,18 +1658,6 @@ class _MapShellScreenState extends State<MapShellScreen>
                 active: _mode == MapMode.outdoor,
                 pickingPointOnMap: _mapPickTarget != null,
                 onMapPointPick: _onMapPointPick,
-                // 도보 안내 카드의 "대중교통". 야외 목적지는 무엇이든(매장·
-                // 지도에서 찍은 지점·건물 입구) 이 카드를 지나므로, 진입점을
-                // 여기 하나로 모은다.
-                onTransitRequested: (destination, label) => unawaited(
-                  _startTransitRoute(
-                    DirectionsCandidate(
-                      title: _destinationNameFromEtaLabel(label),
-                      subtitle: '',
-                      point: destination,
-                    ),
-                  ),
-                ),
                 onRouteVisibleChanged: (visible) =>
                     setState(() => _outdoorRouteVisible = visible),
                 onPlacingLocationChanged: (placing) {
