@@ -790,6 +790,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
     );
     return DirectionsDiscovery(
       mode: discovery.mode,
+      source: discovery.source,
       question: discovery.question,
       options: discovery.options,
       candidates: discovery.matches

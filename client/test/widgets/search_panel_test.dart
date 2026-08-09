@@ -555,31 +555,109 @@ void main() {
     // 구두점이 든 `A.P.C.`를 못 잡고 no_match를 준다. 예전에는 그 뒤 의미 검색이
     // 돌아 임계값을 겨우 넘긴 **주차구역**을 "뜻이 비슷한 매장"이라며 확정했다 —
     // 정답이 이미 화면에 떠 있는데 오답으로 갈아치웠다.
-    testWidgets('이름이 걸린 후보가 있으면 의미 검색으로 넘어가지 않는다', (tester) async {
+    testWidgets('이름이 걸린 후보는 임베딩 결과에 덮이지 않는다', (tester) async {
       buildingRepository = _FakeBuildingRepository(
         storeIndex: [_entry('A.P.C.', '3F')],
       );
       final repository = _FakeDestinationRepository(
         const [],
-        discovery: const DiscoveryResult(
+        // 실기기에서 실제로 온 모양 — 임계값을 겨우 넘긴 주차구역이 "뜻이
+        // 비슷한 매장"이라며 올라왔다.
+        discovery: DiscoveryResult(
           mode: DiscoveryMode.results,
           query: 'apc',
-          matches: [],
+          source: DiscoverySource.semantic,
+          matches: [_gateMatch('6A', 'B5')],
         ),
       );
       destinationRepository = repository;
 
       await tester.pumpWidget(buildSubject('apc'));
-      // 경량(300ms) + 의미 유예(400ms)를 모두 지나도
       await tester.pump(const Duration(milliseconds: 350));
       await tester.pump(const Duration(milliseconds: 450));
       await tester.pumpAndSettle();
 
-      // 의미 검색을 아예 부르지 않는다.
-      expect(repository.aiCallCount, 0);
-      // 후보가 그대로 남아 있다.
+      // 호출은 한다 — 막아야 하는 건 임베딩 결과지 호출이 아니다.
+      expect(repository.aiCallCount, 1);
+      // 그리고 그 결과는 버려진다. 화면에는 이름 후보가 그대로 남는다.
       expect(find.text('검색어 제안'), findsOneWidget);
       expect(find.text('3F'), findsOneWidget);
+      expect(find.text('6A'), findsNothing);
+    });
+
+    // `커피`가 상호에 그 글자가 든 4곳으로 끝나고 카페 53곳이 통째로 가려지던
+    // 문제. 서버 어휘(동의어·intent·카테고리)는 이름 후보와 같은 등급이라 이긴다.
+    testWidgets('어휘로 잡은 결과는 이름 후보를 대체한다', (tester) async {
+      buildingRepository = _FakeBuildingRepository(
+        storeIndex: [_entry('더커피', 'B1')],
+      );
+      final repository = _FakeDestinationRepository(
+        const [],
+        discovery: DiscoveryResult(
+          mode: DiscoveryMode.results,
+          query: '커피',
+          source: DiscoverySource.light,
+          matches: [_gateMatch('블루보틀', '5F'), _gateMatch('스타벅스 리저브', 'B2')],
+        ),
+      );
+      destinationRepository = repository;
+
+      await tester.pumpWidget(buildSubject('커피'));
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump(const Duration(milliseconds: 450));
+      await tester.pumpAndSettle();
+
+      expect(repository.aiCallCount, 1);
+      expect(find.text('검색어 제안'), findsNothing);
+      expect(find.text('블루보틀'), findsOneWidget);
+      expect(find.text('스타벅스 리저브'), findsOneWidget);
+      // 어휘로 정확히 찾아 준 것을 "뜻이 비슷한"이라고 말하지 않는다.
+      expect(find.textContaining('뜻이 비슷한'), findsNothing);
+    });
+
+    testWidgets('임베딩으로 찾았을 때만 뜻이 비슷하다고 말한다', (tester) async {
+      buildingRepository = _FakeBuildingRepository(storeIndex: const []);
+      destinationRepository = _FakeDestinationRepository(
+        const [],
+        discovery: DiscoveryResult(
+          mode: DiscoveryMode.results,
+          query: '밥 먹을 곳',
+          source: DiscoverySource.semantic,
+          matches: [_gateMatch('요즘김밥', 'B1')],
+        ),
+      );
+
+      await tester.pumpWidget(buildSubject('밥 먹을 곳'));
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump(const Duration(milliseconds: 450));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('뜻이 비슷한'), findsOneWidget);
+    });
+
+    // 배포 순서가 어긋나 구버전 서버에 붙었을 때. source를 모르면 이름 후보를
+    // 지키는 쪽이 안전하다 — 반대로 기울면 A.P.C. 회귀가 되살아난다.
+    testWidgets('source를 모르는 응답은 이름 후보를 대체하지 않는다', (tester) async {
+      buildingRepository = _FakeBuildingRepository(
+        storeIndex: [_entry('A.P.C.', '3F')],
+      );
+      final repository = _FakeDestinationRepository(
+        const [],
+        discovery: DiscoveryResult(
+          mode: DiscoveryMode.results,
+          query: 'apc',
+          matches: [_gateMatch('6A', 'B5')],
+        ),
+      );
+      destinationRepository = repository;
+
+      await tester.pumpWidget(buildSubject('apc'));
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump(const Duration(milliseconds: 450));
+      await tester.pumpAndSettle();
+
+      expect(find.text('검색어 제안'), findsOneWidget);
+      expect(find.text('6A'), findsNothing);
     });
 
     // 교정 후보만 있을 때는 추측이라 의미 검색에 기회를 준다.
@@ -1553,6 +1631,16 @@ PoiSearchResult _store({
   point: const LatLng(37.5, 127.0),
   placeId: placeId,
   nodeId: nodeId,
+);
+
+/// 이름·층만 다르면 되는 게이트 테스트용 축약. 근거 문구·노드까지 지정하는
+/// [_match]와 달리 "무엇이 화면에 남는가"만 본다.
+DiscoveryMatch _gateMatch(String name, String floor) => _match(
+  name: name,
+  floor: floor,
+  node: 'node-$name',
+  id: 'id-$name',
+  reason: '',
 );
 
 DiscoveryMatch _match({

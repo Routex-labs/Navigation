@@ -515,7 +515,22 @@ class _SearchPanelState extends State<SearchPanel> {
       //
       // 교정 후보만 있을 때는 넘긴다 — 그건 추측이라 의미 검색이 더 나을 수
       // 있고, 2차도 실패하면 noMatch 화면이 그 교정 후보를 되묻는다.
-      if (_suggestions.any((s) => !s.kind.isCorrection)) {
+      final hasNameSuggestions = _suggestions.any((s) => !s.kind.isCorrection);
+      if (hasNameSuggestions) {
+        // 후보를 **먼저 확정해 보여주고**, 서버 탐색은 그대로 이어서 던진다.
+        //
+        // 예전에는 여기서 return하며 2차를 아예 부르지 않았는데, 그건 필요보다
+        // 넓은 차단이었다. 막아야 했던 건 임베딩 추측이지 `/query/ai` 호출이
+        // 아니다 — 그 엔드포인트의 1차는 임베딩이 아니라 서버 어휘(동의어·
+        // intent·카테고리) 매칭이고, 이름 매칭과 같은 등급의 결정적 매칭이다.
+        //
+        // 실제로 `커피`를 치면 온디바이스가 상호에 "커피"가 든 4곳을 잡고 끝나
+        // 카페 53곳이 통째로 가려졌다(실기기 확인). 서버는 그 53곳을
+        // `source: light`로 이미 돌려줄 수 있었는데 묻지를 않았다.
+        //
+        // 응답이 오면 [DiscoverySource]로 판정한다 — light면 교체하고,
+        // semantic이면 버린다. A.P.C. 불변("임베딩은 이름 후보를 덮지 못한다")은
+        // 그대로이고, 차단 지점만 호출 전에서 응답 후로 옮긴 것이다.
         setState(() {
           _submittedQuery = query;
           _results = const [];
@@ -527,10 +542,13 @@ class _SearchPanelState extends State<SearchPanel> {
           _discoveryOptions = const [];
           _phase = _SearchPhase.suggestions;
         });
-        return;
       }
       if (immediate) {
-        await _semanticSearch(query, requestId);
+        await _semanticSearch(
+          query,
+          requestId,
+          keepSuggestionsUnlessLight: hasNameSuggestions,
+        );
       } else {
         // 대기를 `Future.delayed`가 아니라 Timer로 두는 이유는 취소 때문이다.
         // 패널이 닫히면 dispose가 이 타이머를 끄고, 사용자가 글자를 더 치면
@@ -538,7 +556,11 @@ class _SearchPanelState extends State<SearchPanel> {
         // 취소할 방법이 없어 패널이 사라진 뒤에도 살아 있다.
         _debounce = Timer(
           _semanticGrace,
-          () => _semanticSearch(query, requestId),
+          () => _semanticSearch(
+            query,
+            requestId,
+            keepSuggestionsUnlessLight: hasNameSuggestions,
+          ),
         );
       }
       return;
@@ -562,12 +584,25 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 2단계. 여기까지 왔다는 건 경량이 확실히 빈손이라는 뜻이고, 이 함수가 끝나야
   /// 비로소 [_SearchPhase.noMatch]를 최종 결론으로 쓸 수 있다.
   ///
-  /// 백엔드 응답은 DiscoveryResponse(mode + question/options + matches)다.
+  /// 백엔드 응답은 DiscoveryResponse(mode + source + question/options + matches)다.
   /// mode마다 명시적인 화면 상태로 옮긴다. 추천 후보는 [DiscoveryMatch] 원본을
   /// 별도 보관해 reason/storeId를 잃지 않고 기존 길찾기 콜백에는 변환값만 준다.
-  Future<void> _semanticSearch(String query, int requestId) async {
+  ///
+  /// [keepSuggestionsUnlessLight]가 참이면 화면에 이미 온디바이스 이름 후보가
+  /// 떠 있다는 뜻이다. 그때는 스피너로 덮지 않고, 응답이 어휘(`light`)로 잡은
+  /// 것일 때만 후보를 교체한다. 임베딩 결과는 조용히 버린다 — A.P.C.가
+  /// 주차구역으로 갈아치워지던 회귀를 막는 불변이다(`search-input-assist.md`).
+  Future<void> _semanticSearch(
+    String query,
+    int requestId, {
+    bool keepSuggestionsUnlessLight = false,
+  }) async {
     if (!mounted || requestId != _requestId) return;
-    setState(() => _phase = _SearchPhase.semanticSearching);
+    // 후보가 떠 있으면 스피너를 띄우지 않는다. 맞는 답을 보여주다가 "찾는 중"
+    // 으로 덮는 것이 A.P.C. 사례에서 사용자가 겪은 문제의 절반이었다.
+    if (!keepSuggestionsUnlessLight) {
+      setState(() => _phase = _SearchPhase.semanticSearching);
+    }
 
     DiscoveryResult discovery;
     try {
@@ -581,10 +616,23 @@ class _SearchPanelState extends State<SearchPanel> {
         currentFloorId: widget.currentFloorId,
       );
     } on Object {
+      if (keepSuggestionsUnlessLight) return; // 후보 화면을 오류로 덮지 않는다
       _finishFailed(query, requestId);
       return;
     }
     if (!mounted || requestId != _requestId) return;
+
+    // 이름 후보가 떠 있는데 서버가 임베딩으로 잡은 결과를 줬다면 버린다.
+    // 화면은 이미 `suggestions`로 확정돼 있으므로 아무것도 하지 않으면 된다.
+    //
+    // 어휘로 잡았더라도 보여줄 게 없으면(빈 matches) 마찬가지로 버린다. 지금
+    // 서버 구현에서는 light + 빈 결과가 나올 수 없지만, 그 전제가 깨지는 날
+    // 화면에 떠 있던 맞는 후보가 "결과 없음"으로 지워지는 쪽이 최악이다.
+    if (keepSuggestionsUnlessLight &&
+        (!discovery.source.canReplaceNameSuggestions ||
+            discovery.matches.isEmpty)) {
+      return;
+    }
 
     final results = discovery.matches
         .map((match) => match.toPoiSearchResult())
@@ -596,8 +644,17 @@ class _SearchPanelState extends State<SearchPanel> {
       _submittedQuery = query;
       _results = results;
       _building = null;
+      // "뜻이 비슷한 매장"은 임베딩으로 찾았을 때만 맞는 말이다. 서버 어휘
+      // (동의어·intent·카테고리)로 잡은 `커피` → 카페 목록에 이 배너가 붙으면
+      // 정확히 찾아 준 것을 추측이라고 말하는 셈이다.
+      //
+      // source가 오기 전에는 이걸 알 수 없어서 이름 비교 휴리스틱으로 추정했다
+      // ([isExactNameMatch]). 이제 서버가 알려주므로 그 값을 먼저 본다.
+      // 휴리스틱은 여전히 필요하다 — 타 층 매장을 정확한 이름으로 쳐서 2차로
+      // 넘어온 경우는 source가 semantic이어도 "뜻으로 찾은" 게 아니다.
       _fromSemantic =
           results.isNotEmpty &&
+          !discovery.source.canReplaceNameSuggestions &&
           !isExactNameMatch(query, results.map((r) => r.name));
       _discoveryMatches = discovery.matches;
       _discoveryMode = discovery.mode;

@@ -95,7 +95,8 @@ void main() {
 
   // 상단 검색 패널이 실기기에서 겪은 사고와 같은 것을 막는다 — 정답이 이미
   // 화면에 있는데 임계값을 겨우 넘긴 의미 검색이 엉뚱한 곳으로 갈아치우는 것.
-  testWidgets('이름이 걸린 후보가 있으면 의미 검색으로 넘어가지 않는다', (tester) async {
+  // 막는 대상은 임베딩 **결과**지 호출이 아니다.
+  testWidgets('이름이 걸린 후보는 임베딩 결과에 덮이지 않는다', (tester) async {
     var aiCalls = 0;
     await tester.pumpWidget(
       MaterialApp(
@@ -105,7 +106,11 @@ void main() {
             search: (query, {String? floorId}) async => const [],
             semanticSearch: (query, {selectedFacets, required showAll}) async {
               aiCalls++;
-              return const DirectionsDiscovery(mode: DiscoveryMode.noMatch);
+              return DirectionsDiscovery(
+                mode: DiscoveryMode.results,
+                source: DiscoverySource.semantic,
+                candidates: [_candidate('6A', 'B5')],
+              );
             },
             storeIndex: Future.value([_entry('A.P.C.', '3F')]),
           ),
@@ -116,8 +121,36 @@ void main() {
 
     await settle(tester, 'apc');
 
-    expect(aiCalls, 0);
+    expect(aiCalls, 1);
     expect(find.text('A.P.C.'), findsOneWidget);
+    expect(find.text('6A'), findsNothing);
+  });
+
+  // `커피`가 상호에 그 글자가 든 몇 곳으로 끝나던 문제. 서버 어휘는 이름
+  // 후보와 같은 등급이라 이긴다.
+  testWidgets('어휘로 잡은 결과는 이름 후보를 대체한다', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: DirectionsSheet(
+            originLabel: '현재 위치',
+            search: (query, {String? floorId}) async => const [],
+            semanticSearch: (query, {selectedFacets, required showAll}) async =>
+                DirectionsDiscovery(
+                  mode: DiscoveryMode.results,
+                  source: DiscoverySource.light,
+                  candidates: [_candidate('블루보틀', '5F')],
+                ),
+            storeIndex: Future.value([_entry('더커피', 'B1')]),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await settle(tester, '커피');
+
+    expect(find.text('블루보틀'), findsOneWidget);
   });
 
   // 교정은 추측이라 2차에 기회를 준다. 그러고도 못 찾으면 되묻는다.

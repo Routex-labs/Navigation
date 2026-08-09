@@ -103,6 +103,7 @@ typedef DirectionsSearchCallback =
 class DirectionsDiscovery {
   const DirectionsDiscovery({
     required this.mode,
+    this.source = DiscoverySource.unknown,
     this.question,
     this.options = const [],
     this.candidates = const [],
@@ -112,6 +113,10 @@ class DirectionsDiscovery {
   /// [DiscoveryMode.unknown]으로 내려오고, 시트는 그걸 "결과 없음"과 같이
   /// 안전하게 처리한다 — 임의의 후보를 목적지로 밀지 않는다.
   final DiscoveryMode mode;
+
+  /// 후보를 어휘로 잡았는지 임베딩으로 잡았는지. 온디바이스 이름 후보를 이
+  /// 응답으로 대체할지 판단하는 데 쓴다([DiscoverySource]).
+  final DiscoverySource source;
   final String? question;
   final List<DiscoveryOption> options;
   final List<DirectionsCandidate> candidates;
@@ -540,16 +545,22 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
       return;
     }
 
-    // **이름이 실제로 걸렸으면 의미 검색으로 넘어가지 않는다.**
+    // **이름 후보는 임베딩에는 이기고 어휘에는 진다.**
     //
     // 서버 경량 매칭은 `name LIKE`라 구두점이 든 `A.P.C.`를 못 잡고, 초성
     // (`ㄴㅇㅋ`)은 아예 못 잡는다. 그런데 온디바이스 인덱스는 이미 그 매장을
-    // 찾아 둔 상태다. 여기서 2차로 넘기면 그 정답이 스피너에 덮이고, 임계값을
-    // 겨우 넘긴 의미 검색이 엉뚱한 곳을 확정한다 — 상단 검색 패널이 실기기에서
-    // 겪은 것과 같은 사고다(search-input-assist.md K절 실기기 검증 2번).
+    // 찾아 둔 상태다. 그 정답이 임계값을 겨우 넘긴 의미 검색에 덮이면 안 된다
+    // (search-input-assist.md K절 실기기 검증 2번).
     //
-    // 교정 후보만 있을 때는 추측이라 2차에 기회를 준다.
-    if (_suggestions.any((s) => !s.kind.isCorrection)) {
+    // 그렇다고 `/query/ai` 호출 자체를 막지는 않는다 — 그 엔드포인트의 1차는
+    // 임베딩이 아니라 서버 어휘(동의어·intent·카테고리)라, 이름 후보와 같은
+    // 등급의 결정적 매칭이다. 막으면 `커피`가 상호에 그 글자가 든 몇 곳으로
+    // 끝나고 카페 카테고리 전체가 가려진다. 그래서 후보를 먼저 확정해 보여준
+    // 뒤, 응답의 `source`로 교체 여부를 정한다.
+    //
+    // 교정 후보만 있을 때는 추측이라 2차에 온전히 기회를 준다.
+    final hasNameSuggestions = _suggestions.any((s) => !s.kind.isCorrection);
+    if (hasNameSuggestions) {
       setState(() {
         _submittedQuery = query;
         _results = const [];
@@ -557,7 +568,6 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
         _clearDiscovery();
         _phase = _SearchPhase.suggestions;
       });
-      return;
     }
 
     final semantic = widget.semanticSearch;
@@ -574,30 +584,57 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
     }
 
     if (immediate) {
-      await _semanticSearch(query, seq);
+      await _semanticSearch(
+        query,
+        seq,
+        keepSuggestionsUnlessLight: hasNameSuggestions,
+      );
       return;
     }
     // 대기를 `Future.delayed`가 아니라 Timer로 두는 이유는 취소 때문이다.
     // 시트가 닫히면 dispose가, 사용자가 더 치면 _scheduleSearch가 이 타이머를
     // 끈다. `await Future.delayed`는 취소할 방법이 없다.
-    _debounce = Timer(_semanticGrace, () => _semanticSearch(query, seq));
+    _debounce = Timer(
+      _semanticGrace,
+      () => _semanticSearch(
+        query,
+        seq,
+        keepSuggestionsUnlessLight: hasNameSuggestions,
+      ),
+    );
   }
 
   /// 2단계. 여기까지 왔다는 건 경량이 확실히 빈손이라는 뜻이고, 이 함수가
   /// 끝나야 비로소 [_SearchPhase.noMatch]를 최종 결론으로 쓸 수 있다.
-  Future<void> _semanticSearch(String query, int seq) async {
+  ///
+  /// [keepSuggestionsUnlessLight]가 참이면 화면에 온디바이스 이름 후보가 이미
+  /// 떠 있다. 그때는 스피너로 덮지 않고, 어휘(`light`)로 잡은 응답일 때만
+  /// 교체한다. 상단 검색 패널의 같은 이름 인자와 규칙이 동일하다.
+  Future<void> _semanticSearch(
+    String query,
+    int seq, {
+    bool keepSuggestionsUnlessLight = false,
+  }) async {
     final semantic = widget.semanticSearch;
     if (semantic == null || !mounted || seq != _searchSeq) return;
-    setState(() => _phase = _SearchPhase.semanticSearching);
+    if (!keepSuggestionsUnlessLight) {
+      setState(() => _phase = _SearchPhase.semanticSearching);
+    }
 
     DirectionsDiscovery discovery;
     try {
       discovery = await semantic(query, showAll: false);
     } on Object {
+      if (keepSuggestionsUnlessLight) return; // 후보 화면을 오류로 덮지 않는다
       _finishFailed(query, seq);
       return;
     }
     if (!mounted || seq != _searchSeq) return;
+    if (keepSuggestionsUnlessLight &&
+        (!discovery.source.canReplaceNameSuggestions ||
+            discovery.candidates.isEmpty)) {
+      return;
+    }
     setState(() => _applyDiscovery(query, discovery));
   }
 
@@ -638,8 +675,12 @@ class _DirectionsSheetState extends State<DirectionsSheet> {
   void _applyDiscovery(String query, DirectionsDiscovery discovery) {
     _submittedQuery = query;
     _results = discovery.candidates;
+    // "뜻이 비슷한 곳"은 임베딩으로 찾았을 때만 맞는 말이다. 서버 어휘로 잡은
+    // 결과에까지 붙이면 정확히 찾아 준 것을 추측이라고 말하는 셈이다. 상단
+    // 검색 패널과 같은 규칙이다(search_panel.dart의 같은 자리).
     _fromSemantic =
         discovery.candidates.isNotEmpty &&
+        !discovery.source.canReplaceNameSuggestions &&
         !isExactNameMatch(query, discovery.candidates.map((c) => c.title));
     _discoveryMode = discovery.mode;
     _discoveryQuestion = discovery.question;
