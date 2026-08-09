@@ -21,6 +21,7 @@ class RouteFieldResults extends StatelessWidget {
     required this.searching,
     required this.onPicked,
     required this.onPickOnMap,
+    required this.showPickOnMap,
     required this.onCurrentLocation,
   });
 
@@ -34,6 +35,17 @@ class RouteFieldResults extends StatelessWidget {
 
   /// "지도에서 선택". 목록을 접고 지도 탭을 기다린다.
   final VoidCallback onPickOnMap;
+
+  /// 그 줄을 보여 줄지. **야외 지도에서는 감춘다.**
+  ///
+  /// 야외에서 지도를 누르면 이름도 없는 좌표 하나가 잡힌다("지도에서 지정한 도착
+  /// 위치, 37.5665, 126.9779"). 매장 이름으로 고르는 흐름과 나란히 두면 같은
+  /// 무게로 읽히는데, 실제로 쓸 일은 GPS가 안 잡히는 예외뿐이다 — 그 경우는
+  /// 하단 바의 "위치 지정"이 따로 맡는다.
+  ///
+  /// 도면을 보고 있을 때는 다르다. 거기서 누르는 것은 좌표가 아니라 **매장**이라
+  /// 층·노드가 붙어 실내 안내까지 이어진다.
+  final bool showPickOnMap;
 
   /// "현재 위치"로 되돌린다. 출발지를 따로 고르지 않은 상태가 곧 이 값이라,
   /// 다른 곳을 골랐다가 되돌아올 길이 목록 안에 있어야 한다.
@@ -51,31 +63,32 @@ class RouteFieldResults extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ListTile(
-            key: const Key('route-field-pick-on-map'),
-            onTap: onPickOnMap,
-            dense: true,
-            leading: const Icon(
-              Icons.touch_app_outlined,
-              size: 20,
-              color: AppColors.primary,
+          if (showPickOnMap)
+            ListTile(
+              key: const Key('route-field-pick-on-map'),
+              onTap: onPickOnMap,
+              dense: true,
+              leading: const Icon(
+                Icons.touch_app_outlined,
+                size: 20,
+                color: AppColors.primary,
+              ),
+              title: const Text(
+                '지도에서 선택',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+              ),
+              // 제목은 같아도 부제는 갈라야 한다. 출발지 칸에서 눌렀는데 "도착지로
+              // 지정합니다"라고 적혀 있으면 사용자는 잘못 눌렀다고 판단해 되돌린다.
+              subtitle: Text(
+                isOrigin ? '지도에서 매장을 눌러 출발지로 지정합니다' : '지도에서 매장을 눌러 도착지로 지정합니다',
+                style: const TextStyle(fontSize: 12, color: AppColors.muted),
+              ),
+              trailing: const Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: AppColors.muted,
+              ),
             ),
-            title: const Text(
-              '지도에서 선택',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-            ),
-            // 제목은 같아도 부제는 갈라야 한다. 출발지 칸에서 눌렀는데 "도착지로
-            // 지정합니다"라고 적혀 있으면 사용자는 잘못 눌렀다고 판단해 되돌린다.
-            subtitle: Text(
-              isOrigin ? '지도에서 눌러 출발지로 지정합니다' : '지도에서 눌러 도착지로 지정합니다',
-              style: const TextStyle(fontSize: 12, color: AppColors.muted),
-            ),
-            trailing: const Icon(
-              Icons.chevron_right,
-              size: 18,
-              color: AppColors.muted,
-            ),
-          ),
           if (isOrigin)
             ListTile(
               key: const Key('route-field-current-location'),

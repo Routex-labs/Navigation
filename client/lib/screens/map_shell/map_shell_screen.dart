@@ -679,35 +679,33 @@ class _MapShellScreenState extends State<MapShellScreen> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  /// 검색 결과의 **건물**을 골랐을 때. 그 건물 입구까지 안내한다.
+  /// 검색 결과의 **건물**을 골랐을 때. 그 건물로 지도를 옮기고 이름을 띄운다.
   ///
-  /// 되묻지 않는다. 예전에는 "건물까지 갈지, 안의 매장까지 갈지"를 시트로
-  /// 물었는데, 그 질문 자체가 필요 없어졌다 — 밖에서도 건물 안 매장이 그대로
-  /// 검색되므로([SearchPanel]), 매장이 목적지인 사용자는 애초에 매장 줄을
-  /// 고른다. 건물 줄을 고른 사람은 건물이 목적지인 사람이다.
-  ///
-  /// 매장 줄을 고르면 [_showStoreInfo]를 거쳐 문을 경유하는 실내 안내로
-  /// 이어진다([_startRoute]). 즉 어느 줄을 골랐느냐가 곧 의도이고, 화면은 그
-  /// 의도를 다시 확인하지 않는다.
+  /// **길을 찾지 않는다.** 예전에는 건물 줄을 누르는 순간 그 입구까지 경로를
+  /// 그렸다. 그런데 검색은 "저기가 어디지"를 묻는 조작이지 "저기로 데려다 줘"가
+  /// 아니다 — 위치만 확인하려던 사용자에게 안내가 시작되고, 그만두려면 안내
+  /// 종료를 눌러야 했다. 길찾기는 상단 길찾기 버튼에서 시작한다.
   void _onSearchBuildingPicked(Building building) {
     _closeSearch();
-    final point = _buildingDestinationPoint(building);
+    // 지도를 옮길 때는 건물 **중심**이 낫다. 입구 좌표는 "여기까지 걸어가라"의
+    // 끝점이라 건물 한쪽 벽에 붙어 있어서, 그 자리로 옮기면 건물이 화면 가장자리에
+    // 걸린다([Building.outdoorAnchor] 주석).
+    final point = building.outdoorAnchor ?? _buildingDestinationPoint(building);
     if (point == null) {
-      // 좌표를 하나도 못 구한 건물이다. 안내를 못 하는 이유를 밝히지 않으면
-      // 사용자는 결과를 눌렀는데 아무 일도 안 일어난 화면을 본다.
+      // 좌표를 하나도 못 구한 건물이다. 이유를 밝히지 않으면 사용자는 결과를
+      // 눌렀는데 아무 일도 안 일어난 화면을 본다.
       _showSnack('이 건물의 위치를 아직 받아오지 못했습니다. 잠시 후 다시 시도해주세요.');
       return;
     }
-    final candidate = DirectionsCandidate(
-      title: building.name,
-      subtitle: '건물 입구',
-      point: point,
-    );
-    setState(() => _routeDraftDestination = candidate);
-    final origin = _selectedOrigin;
-    if (origin != null || _canRouteFromCurrentLocation) {
-      unawaited(_startRoute(origin: origin, destination: candidate));
-    }
+    unawaited(_outdoorKey.currentState?.focusPoint(point));
+    // 건물에는 매장 상세 같은 본문이 없다. 그래도 무엇으로 옮겨 왔는지는 화면에
+    // 남아야 한다 — 지도만 움직이면 사용자는 자기가 누른 것이 반영됐는지 모른다.
+    setState(() {
+      _placeInfo = (
+        title: building.name,
+        subtitle: '${building.floors.length}개 층',
+      );
+    });
   }
 
   /// "이 건물까지" 안내할 때의 도착 좌표.
@@ -740,10 +738,22 @@ class _MapShellScreenState extends State<MapShellScreen> {
     if (focusOnMap) {
       // 곧 올라올 시트 높이를 함께 넘겨, 매장이 시트 뒤가 아니라 그 위 영역
       // 한가운데에 놓이게 한다. 시트 높이를 바꾸면 카메라도 자동으로 따라온다.
-      await _indoorKey.currentState?.focusStore(
-        match,
-        bottomSheetFraction: kPlaceDetailSheetInitialSize,
-      );
+      //
+      // **지금 보고 있는 지도로 보낸다.** 한동안 실내 지도에만 보냈는데, 야외
+      // 탭에서 매장을 검색하면 시트만 올라오고 지도는 그대로였다 — 사용자는
+      // 어디 있는 매장인지 모른 채 이름만 읽게 된다. 야외 지도도 같은 도면을
+      // 그릴 수 있으므로([OutdoorMapBodyState.focusStore]) 보낼 곳만 갈린다.
+      if (_mode == MapMode.indoor) {
+        await _indoorKey.currentState?.focusStore(
+          match,
+          bottomSheetFraction: kPlaceDetailSheetInitialSize,
+        );
+      } else {
+        await _outdoorKey.currentState?.focusStore(
+          match,
+          bottomSheetFraction: kPlaceDetailSheetInitialSize,
+        );
+      }
       if (!mounted) return false;
     }
     final favorite = FavoritePlace.fromPoiSearchResult(
@@ -1950,6 +1960,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
                         onPicked: _pickRouteCandidate,
                         onPickOnMap: () =>
                             _pickRouteEndpointOnMap(_routeEditingField!),
+                        // 도면을 보고 있을 때만 준다. 야외에서 지도를 누르면
+                        // 이름 없는 좌표가 잡히는데, 매장 이름으로 고르는 줄과
+                        // 나란히 두면 같은 무게로 읽힌다([RouteFieldResults]).
+                        showPickOnMap: _indoorContextActive,
                         onCurrentLocation: _pickCurrentLocationAsOrigin,
                       ),
                     ),

@@ -161,6 +161,8 @@ void main() {
       find.byKey(const Key('route-field-current-location')),
       findsOneWidget,
     );
-    expect(find.byKey(const Key('route-field-pick-on-map')), findsOneWidget);
+    // 야외에서는 "지도에서 선택"을 주지 않는다 — 이름 없는 좌표가 잡히는 줄이라
+    // 매장 이름으로 고르는 줄과 나란히 두면 같은 무게로 읽힌다.
+    expect(find.byKey(const Key('route-field-pick-on-map')), findsNothing);
   });
 }

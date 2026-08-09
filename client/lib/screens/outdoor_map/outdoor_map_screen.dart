@@ -70,6 +70,12 @@ const _indoorWalkingSpeedMetersPerSecond = 1.2;
 // 검색에서 고른 야외 장소로 카메라를 옮길 때의 줌.
 const _poiFocusZoom = 17.0;
 
+// 검색에서 고른 **건물 안 매장**으로 카메라를 옮길 때 최소한 이만큼은 확대한다.
+// 매장 이름 라벨이 읽히는 배율이며, 실내 탭의 같은 상수와 맞춘다
+// (`FloorPlanView._storeFocusZoom`) — 두 화면에서 같은 매장을 골랐는데 확대가
+// 다르면 어느 쪽이 맞는 크기인지 알 수 없다.
+const _storeFocusZoom = 19.0;
+
 // 자동차 안내를 시작할 때 현재 위치로 확대할 줌.
 //
 // 야외 지도의 초기 zoom(17)보다 한 단계 더 들어간다. 안내가 시작되면 사용자가
@@ -3840,6 +3846,55 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (controller == null || !_styleReady) return;
     await controller.animateCamera(
       CameraUpdate.newLatLngZoom(_toGl(point), _poiFocusZoom),
+    );
+  }
+
+  /// 검색 결과에서 고른 **건물 안 매장**을 화면에 보여 준다.
+  ///
+  /// 좌표만 옮기면 안 된다. 그 좌표는 건물 지붕 위 한 점이라, **그 매장이 있는
+  /// 층**으로 갈아타야 도면 위에서 실제 자리가 보인다. 도면 자체는 확대하면
+  /// 함께 진해지므로([indoorOverlayFadeExpr]) 여기서 따로 켜지 않는다.
+  ///
+  /// **실내 진입 상태는 건드리지 않는다.** 검색 결과를 눌러 위치를 확인하는 것과
+  /// "이 건물 안에 들어와 있다"는 것은 다른 이야기다. 진입으로 처리하면 그 순간부터
+  /// 현재 위치가 GPS가 아니라 PDR 앵커 기준이 되어, 위치를 잡지 않은 사용자는
+  /// 바로 이어서 "도착"을 눌러도 경로가 그려지지 않는다.
+  ///
+  /// [bottomSheetFraction]은 곧 화면 아래를 덮을 시트의 높이 비율이다. 그만큼
+  /// 카메라를 밀어 올려 매장이 시트 뒤에 숨지 않게 한다.
+  Future<void> focusStore(
+    PoiSearchResult store, {
+    double bottomSheetFraction = 0,
+  }) async {
+    if (store.floor.isNotEmpty && store.floor != _activeFloor) {
+      await _switchOverlayFloor(store.floor);
+      if (!mounted) return;
+    }
+    setState(() => _highlightedStoreId = store.placeId);
+    unawaited(_syncHighlightLayer());
+
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    // 뷰포트는 카메라 이동을 기다리기 **전에** 읽는다. 기다린 뒤 MediaQuery를
+    // 보면 그 사이 위젯이 트리에서 빠졌을 수 있다.
+    final viewportHeight = MediaQuery.sizeOf(context).height;
+    final currentZoom = controller.cameraPosition?.zoom ?? 0;
+    await controller.animateCamera(
+      CameraUpdate.newLatLngZoom(
+        _toGl(store.point),
+        // 이미 더 가까이 들어가 있으면 그 배율을 유지한다. 목록에서 골랐다고
+        // 사용자가 맞춰 둔 확대를 되돌리면 방금 보던 맥락을 잃는다.
+        currentZoom > _storeFocusZoom ? currentZoom : _storeFocusZoom,
+      ),
+    );
+    // 정중앙에 놓으면 방금 고른 매장이 시트 뒤에 숨는다. 시트 위에 남는 영역의
+    // 한가운데로 오도록 밀어 올린다. 부호·단위의 근거는 실내 지도의 같은 계산
+    // 주석에 있다(`FloorPlanView._applyFocusTarget`) — **음수가 위로**이고
+    // 단위는 논리 픽셀이다.
+    final lift = bottomSheetFraction / 2;
+    if (lift <= 0) return;
+    await controller.animateCamera(
+      CameraUpdate.scrollBy(0, -viewportHeight * lift),
     );
   }
 
