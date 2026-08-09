@@ -383,6 +383,15 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   /// 탑승 때문에 걸음 적용을 멈춘 상태인지. pause/resume 짝을 한 곳에서 센다.
   bool _stepsPausedForRide = false;
 
+  /// 탑승 판정 구간에 현재 위치를 고정할 지점(이 층 local m). null이면 평소처럼
+  /// tracker 위치를 그대로 그린다.
+  ///
+  /// **안내가 "여기서 타라"고 지목한 그 탑승점일 때만** 채워진다. 경로와 무관한
+  /// 에스컬레이터 옆을 지나가는 것으로는 고정하지 않는다 — 그건 그냥 걷는
+  /// 중이고, 고정하면 멀쩡한 보행자의 마커를 세워 버린다. [_boardingHoldNodeId]
+  /// 참고.
+  PdrLocalPoint? _boardingHoldPointM;
+
   // 셸에 마지막으로 알린 층 전환 UI 상태. 같은 값이면 다시 알리지 않는다.
   FloorTransitionUiState? _reportedFloorTransition;
   double _reportedFloorScrimOpacity = 0;
@@ -893,6 +902,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       _offRouteEvidenceUpdates = 0;
       _offRouteFirstEvidenceAtMs = null;
       _highlightedStoreId = null;
+      // 고정점은 이 층 local m 좌표다. 층이 바뀌면 같은 숫자가 다른 자리를
+      // 가리키므로 반드시 버린다(전환 뒤에는 도착 노드 마커가 이어받는다).
+      _boardingHoldPointM = null;
     });
     if (hadRouteVisible != _hasActiveRoute) {
       widget.onRouteVisibleChanged?.call(_hasActiveRoute);
@@ -1695,6 +1707,8 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       _offRouteEvidenceUpdates = 0;
       _offRouteFirstEvidenceAtMs = null;
       _guidanceTrailSession.clear();
+      // 안내가 끝나면 "안내가 지목한 탑승점"도 없다.
+      _boardingHoldPointM = null;
     });
     widget.onRouteVisibleChanged?.call(false);
     // 한 번의 길안내가 여기서 끝난다. 세션을 닫고 내보내기 기회를 준다.
@@ -1836,11 +1850,25 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         (segment != null &&
             identical(segment, multi.destinationSegment) &&
             _selectedFloor == _routeDestination?.floor);
+    // 층 이동 중에는 역주행 안내를 내지 않는다.
+    //
+    // 판정이 틀려서가 아니다. 탑승 직전에 실제로 되돌아 걸었다면 그 판정은
+    // 맞다. 문제는 **그 뒤로 갱신이 멈춘다는 것**이다 — 탑승이 시작되면 경로
+    // 진행 상태를 갱신하지 않으므로 방향 상태는 탑승 직전 값에 그대로 얼어붙고,
+    // 맞았든 틀렸든 에스컬레이터를 타고 가는 내내 "뒤로 돌아가세요"가 남는다.
+    // 이 구간에 사용자가 그 안내로 할 수 있는 일은 없고(에스컬레이터 위다),
+    // 내리면 새 층에서 경로가 다시 잡힌다. 그러니 말하지 않는 편이 정확하다.
+    final inFloorTransfer =
+        _escalatorRide != null ||
+        _boardingHoldPointM != null ||
+        _escalatorStage != null;
     return buildRouteGuidance(
       localPoints: route.pointsLocalM,
       wgs84Points: route.points,
       progress: _routeProgress,
-      travelDirectionState: _travelDirectionTracker.state,
+      travelDirectionState: inFloorTransfer
+          ? TravelDirectionState.forward
+          : _travelDirectionTracker.state,
       transferMode: segment?.transferModeToNext,
       allowArrival: allowArrival,
     );
@@ -1990,7 +2018,13 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     if (graph == null || result == null) return null;
     // 안내 진행률은 파란선·ETA만 안정화한다. 실제 마커는 첫 preview peak부터
     // tracker의 optimistic 위치를 그대로 따라야 역방향·이탈을 숨기지 않는다.
-    final current = result.previewPosition;
+    //
+    // 단 하나의 예외가 탑승점 고정이다. 안내가 지목한 에스컬레이터 앞에 선
+    // 뒤에는 걸음이 더 세어져도 **그 방향으로 걸어갈 복도가 없다** — 그 걸음은
+    // 에스컬레이터 발판 위 진동이거나 탑승 대기 중의 제자리 움직임이다.
+    // 그대로 두면 마커가 탑승점을 지나 앞 매장으로 계속 흘러가고, 사용자는
+    // "이미 탔는데 아직 걸어가는 중"인 화면을 본다.
+    final current = _boardingHoldPointM ?? result.previewPosition;
     final wgs84 = fitFloorGeoTransform(
       graph.nodes,
     ).apply(current.eastM, current.northM);
@@ -2098,14 +2132,20 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         case EscalatorPhase.boardingDetected:
         case EscalatorPhase.verticalMotionDetected:
           if (!mounted) return;
-          setState(() => _escalatorStage = change);
+          setState(() {
+            _escalatorStage = change;
+            _boardingHoldPointM = _routeBoardingHoldPoint(change);
+          });
           if (change.phase == EscalatorPhase.verticalMotionDetected) {
             _enqueueFloorTransition(_pauseStepsForRide);
           }
         case EscalatorPhase.cancelled:
         case EscalatorPhase.failed:
           if (!mounted) return;
-          setState(() => _escalatorStage = null);
+          setState(() {
+            _escalatorStage = null;
+            _boardingHoldPointM = null;
+          });
           // 후보가 열린 뒤의 취소는 층·경로 복원까지 해야 하므로 기존
           // takeCancelledTransition 경로가 처리한다. 여기서는 배너만 띄운
           // 단계에서 멈춘 걸음을 되살리는 것만 책임진다.
@@ -2120,9 +2160,38 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           break;
         case EscalatorPhase.idle:
           if (!mounted) return;
-          setState(() => _escalatorStage = null);
+          setState(() {
+            _escalatorStage = null;
+            _boardingHoldPointM = null;
+          });
       }
     }
+  }
+
+  /// 이번 단계 전이가 **안내가 지목한 탑승점**을 가리키면 그 지점을, 아니면 null.
+  ///
+  /// 판정기는 경로와 무관한 근접(`observed`)으로도 단계를 올린다. 그 근거로
+  /// 마커를 고정하면, 에스컬레이터 옆을 스쳐 지나가는 사용자의 위치가 그 자리에
+  /// 붙어 버린다. 그래서 지금 층 세그먼트가 실제로 **에스컬레이터로 갈아타는**
+  /// 구간이고, 판정기가 고른 탑승 노드가 그 세그먼트의 전이 노드와 **같을 때만**
+  /// 고정한다.
+  ///
+  /// 고정을 푸는 조건은 여기서 따로 세지 않는다. 판정기가 멀어짐
+  /// (`movedAwayFromBoarding`)·타임아웃(`boardingPhaseTimeoutMs`)으로 단계를
+  /// 취소하면 그 전이가 위에서 hold를 지운다 — 조건을 두 곳에서 세면 반드시
+  /// 한쪽이 남는다.
+  PdrLocalPoint? _routeBoardingHoldPoint(EscalatorPhaseChange change) {
+    final nodeId = change.boardingNodeId;
+    final floor = _pdrTrailState.anchor?.floorId;
+    if (nodeId == null || floor == null || floor != _selectedFloor) return null;
+    final segment = _multiFloorRoute?.segmentForFloor(floor);
+    if (segment == null ||
+        segment.transferModeToNext != 'escalator' ||
+        segment.transferFromNodeId != nodeId) {
+      return null;
+    }
+    final node = _floorGraph?.nodes.where((n) => n.id == nodeId).firstOrNull;
+    return node == null ? null : PdrLocalPoint(node.xM, node.yM);
   }
 
   /// 지금 화면이 그려야 하는 층 전환 상태. 없으면 null.
@@ -2435,6 +2504,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       _escalatorStage = null;
       _floorHandoverCamera = null;
       _floorSwapVeil = 0;
+      _boardingHoldPointM = null;
     });
   }
 
@@ -2736,7 +2806,12 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     // 에스컬레이터 위에서는 진행 상태를 갱신하지 않는다. 위치는 도착 지점에
     // 고정돼 있고 방향은 에스컬레이터가 정하므로, 이 구간의 투영은 "반대
     // 방향입니다" 같은 엉뚱한 안내만 만든다(실측에서 탑승 직후 떴다).
-    if (_escalatorRide != null) return;
+    //
+    // 탑승점에 고정한 구간도 같다. 마커만 세우고 진행률은 raw 위치로 계속
+    // 계산하면, 화면은 탑승점에 서 있는데 안내는 "경로를 벗어났다"고 판단해
+    // **재탐색이 돌아 버린다** — 곧 층이 바뀔 위치에서 이 층 경로를 새로 그리는
+    // 최악의 타이밍이다. 남은거리·안내 문구도 마지막 값에 그대로 멈춘다.
+    if (_escalatorRide != null || _boardingHoldPointM != null) return;
 
     final localPosition = LocalPoint(
       result.previewPosition.eastM,
