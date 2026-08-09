@@ -82,6 +82,12 @@ class DiscoveryResponse(BaseModel):
     # degraded : 의미 검색 기능 자체를 못 쓰는 상태(모델·인덱스 미가용). 경량 결과가 있으면 함께 담는다
     mode: str
     query: str  # 사용자가 보낸 원문. 화면에 되비추는 용도
+    # 후보를 무엇으로 잡았는가 — "light"(이름·카테고리·동의어·intent) | "semantic"(임베딩).
+    # mode와 축이 다르다: mode는 "얼마나 좁혀졌나", source는 "무엇을 근거로 잡았나"다.
+    # 클라이언트가 온디바이스 이름 후보를 이 응답으로 대체할지 판단하는 데 쓴다
+    # (docs/client/search-input-assist.md 「실기기 검증」 2번). 값의 정의는
+    # query_search.SOURCE_LIGHT / SOURCE_SEMANTIC.
+    source: str
     question: str | None = None  # clarify일 때만. 7-3절 템플릿에서 고른다
     options: list[DiscoveryOption] = Field(default_factory=list)  # clarify일 때만 채워진다
     matches: list[DiscoveryMatch] = Field(default_factory=list)
