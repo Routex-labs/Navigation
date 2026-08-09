@@ -884,7 +884,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
       );
     }
 
-    final merged = await _mergeOutdoorResults(query, results);
+    final merged = await _mergeOutdoorResults(
+      query,
+      results,
+      buildings.map((b) => b.name).toList(),
+    );
     final buildingNames = buildingCandidates
         .map((c) => collapseName(c.title))
         .toSet();
@@ -934,6 +938,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
   Future<MergedOutdoorResults> _mergeOutdoorResults(
     String query,
     List<PoiSearchResult> indoorStores,
+    List<String> buildingNames,
   ) async {
     final center = _outdoorKey.currentState?.outdoorSearchCenter;
     if (!outdoorPoiRepository.isAvailable || center == null) {
@@ -951,11 +956,22 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 규칙은 도메인 함수가 갖고 있다(`domain/outdoor_poi_ranking.dart`).
     // 상단 검색 패널도 같은 함수를 부른다 — 여기서 다시 구현하면 또 갈린다.
     final outdoor = _outdoorKey.currentState;
-    return mergeOutdoorResults(
+    final merged = mergeOutdoorResults(
       pois: filterByNameRelevance(query, pois),
       indoorStores: indoorStores,
       isAtBuilding: (poi) => outdoor?.isAtIndoorBuilding(poi.point) ?? false,
+      buildingNames: buildingNames,
     );
+    // **연결 결과를 로그로 남긴다.** 화면에서는 "합쳐졌다"와 "합칠 대상이
+    // 없었다"가 똑같이 보여서, 규칙이 통째로 안 도는 것을 눈으로 구분할 수
+    // 없다. 실제로 이 자리를 두 번 잘못 짚었다.
+    final linked = merged.outdoorRows.where((r) => r.leadsIndoors).length;
+    debugPrint(
+      '[poi-merge] "$query" 바깥 ${merged.outdoorRows.length}건 중 '
+      '$linked건을 실내 매장에 연결, 실내 목록 ${indoorStores.length} → '
+      '${merged.indoorStores.length}건',
+    );
+    return merged;
   }
 
   /// 길찾기 시트를 연다. [presetOrigin]/[presetDestination]은 매장 정보

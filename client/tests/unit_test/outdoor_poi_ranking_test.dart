@@ -19,7 +19,7 @@ PoiSearchResult _store(String name, String floor) => PoiSearchResult(
   name: name,
   floor: floor,
   point: const LatLng(37.5, 126.9),
-  nodeId: 'ND-\$name',
+  nodeId: 'ND-$name',
 );
 
 void main() {
@@ -148,6 +148,21 @@ void main() {
       expect(linked.poi.name, '스타벅스 더현대서울(B2)R점');
       expect(linked.indoorStore?.name, '스타벅스 리저브');
       expect(merged.outdoorRows[1].leadsIndoors, isFalse);
+      expect(merged.indoorStores, isEmpty);
+    });
+
+    test('좌표가 안 걸려도 이름이 건물을 부르면 연결한다', () {
+      // 실제로 여기서 두 번 틀렸다. TMAP POI 좌표는 도로 접근점이라 큰 건물에서
+      // 외곽선 밖에 찍히고, 얼마나 떨어질지는 건물마다 다르다 — 허용 거리 하나로는
+      // 어느 쪽으로도 안전한 값이 없다. 이름은 그 애매함이 없다.
+      final merged = mergeOutdoorResults(
+        pois: [_poi('스타벅스 더현대서울(B2)R점')],
+        indoorStores: [_store('스타벅스 리저브', 'B2')],
+        isAtBuilding: (_) => false,
+        buildingNames: const ['더현대 서울'],
+      );
+
+      expect(merged.outdoorRows.single.indoorStore?.name, '스타벅스 리저브');
       expect(merged.indoorStores, isEmpty);
     });
 

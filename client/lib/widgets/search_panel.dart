@@ -255,6 +255,13 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 검색이 하던 "건물 이름 검색"을 여기로 옮겨 온 것이다.
   Building? _building;
 
+  /// 우리가 도면을 가진 건물 이름 전부.
+  ///
+  /// [_building]과 다르다. 그쪽은 **검색어에 걸린** 건물이라 "스타벅스"를 치면
+  /// null인데, 바로 그때 "스타벅스 더현대서울(B2)R점"이 우리 건물 것인지
+  /// 판정해야 한다([mentionsBuilding]). 검색어와 무관하게 들고 있어야 한다.
+  List<String> _buildingNames = const [];
+
   /// 건물 밖 장소(TMAP POI). 실내 결과와 **따로** 들고 있는 이유는 두 목록의
   /// 수명이 다르기 때문이다 — 바깥 검색은 실내 검색보다 늦게 끝날 수 있고,
   /// 실내가 빈손이어도 여기 결과가 있으면 "찾지 못했어요"를 띄우면 안 된다.
@@ -399,6 +406,7 @@ class _SearchPanelState extends State<SearchPanel> {
       building = buildings
           .where((b) => b.name.toLowerCase().contains(query.toLowerCase()))
           .firstOrNull;
+      _buildingNames = buildings.map((b) => b.name).toList();
     } on Object {
       _finishFailed(query, requestId);
       return;
@@ -873,6 +881,7 @@ class _SearchPanelState extends State<SearchPanel> {
       // 판정을 못 하면 아무 POI도 건물 것으로 보지 않는다. 그러면 지금까지처럼
       // 두 줄이 남을 뿐이고, 잘못 합쳐 엉뚱한 매장으로 안내하지는 않는다.
       isAtBuilding: (poi) => isAt?.call(poi.point) ?? false,
+      buildingNames: _buildingNames,
     );
     if (building == null) return merged;
 

@@ -157,19 +157,47 @@ class MergedOutdoorResults {
   final List<PoiSearchResult> indoorStores;
 }
 
+/// POI 이름이 우리 건물을 **직접 부르고 있는지**. "스타벅스 **더현대서울**(B2)R점"
+///
+/// 좌표 판정의 짝이다. TMAP POI 좌표는 도로 접근점이라 큰 건물에서는 외곽선에서
+/// 꽤 떨어져 찍히는데, 어느 정도 떨어지는지는 건물마다 다르다. 허용 거리를
+/// 넓히면 길 건너 가게를 삼키고, 좁히면 정작 입점 매장을 놓친다 — 거리 하나로는
+/// 어느 쪽으로도 안전한 값이 없다.
+///
+/// 이름은 그 애매함이 없다. TMAP 지점명은 대개 건물 이름을 그대로 달고 있고,
+/// 달고 있다면 그건 우연이 아니다.
+bool mentionsBuilding(String poiName, List<String> buildingNames) {
+  final name = collapseName(poiName);
+  return buildingNames.any((building) {
+    final needle = collapseName(building);
+    return needle.length >= 2 && name.contains(needle);
+  });
+}
+
 /// [isAtBuilding]은 POI 좌표가 우리 도면이 있는 건물에 딸린 자리인지 판정한다.
-/// 건물 밖 POI는 이름이 비슷해도 연결하지 않는다 — 길 건너 스타벅스는 우리
-/// 건물 안 스타벅스와 **다른 가게**다.
+/// [buildingNames]는 우리가 도면을 가진 건물 이름이며, POI 이름이 그중 하나를
+/// 달고 있으면 좌표와 무관하게 그 건물 것으로 본다.
+///
+/// **두 신호를 OR로 묶는 것이 핵심이다.** 좌표만 보면 도로 접근점 때문에 입점
+/// 매장을 놓치고, 이름만 보면 건물 이름을 안 단 입점 매장을 놓친다. 둘 중
+/// 하나라도 걸리면 "이 건물 것"으로 보고, 실제로 합칠지는 그다음 브랜드·층
+/// 판정([matchIndoorStore])이 정한다 — 넓게 후보로 올리고 좁게 확정한다.
+///
+/// 어느 신호에도 안 걸린 POI는 이름이 비슷해도 연결하지 않는다 — 길 건너
+/// 스타벅스는 우리 건물 안 스타벅스와 **다른 가게**다.
 MergedOutdoorResults mergeOutdoorResults({
   required List<OutdoorPoi> pois,
   required List<PoiSearchResult> indoorStores,
   required bool Function(OutdoorPoi poi) isAtBuilding,
+  List<String> buildingNames = const [],
 }) {
   final rows = <OutdoorSearchRow>[];
   final absorbed = <PoiSearchResult>{};
 
   for (final poi in pois) {
-    if (!isAtBuilding(poi)) {
+    final atBuilding =
+        isAtBuilding(poi) || mentionsBuilding(poi.name, buildingNames);
+    if (!atBuilding) {
       rows.add(OutdoorSearchRow(poi));
       continue;
     }
