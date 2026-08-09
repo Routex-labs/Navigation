@@ -11,6 +11,7 @@
 | [`map_shell/`](map_shell/map_shell_screen.dart) | `MapShellScreen` | 실외/실내 모드, 상단·하단 바, 시트와 현재 건물·층 상태 조립 |
 | [`outdoor_map/`](outdoor_map/outdoor_map_screen.dart) | `OutdoorMapScreen` | GPS, 실외 지도, 건물 진입과 실외 경로(도보·대중교통) 표시 |
 | [`indoor_map/`](indoor_map/indoor_map_screen.dart) | `IndoorMapScreen` | 층 지도, 실내 위치·경로, PDR 보정 및 층 선택 |
+| [`route_planner/`](route_planner/route_planner_view.dart) | `RoutePlannerView` | 길찾기 화면 — 이동 수단(자동차·대중교통·도보), 출발/도착 입력, 수단별 결과 |
 | [`destination/`](destination/destination_screen.dart) | `DestinationScreen` | 목적지 검색과 선택 |
 | [`route_guide/`](route_guide/route_guide_screen.dart) | `RouteGuideScreen` | 선택한 목적지의 안내 진행·도착 전환 |
 | [`arrival/`](arrival/arrival_screen.dart) | `ArrivalScreen` | 도착 결과와 다음 이동 |
@@ -38,6 +39,17 @@ flowchart LR
 
 `MapShellScreen`이 공통 지도 셸과 검색/즐겨찾기/카테고리 시트를 조립한다.
 독립 진단이 필요한 기능은 운영 화면에 임시 코드를 넣지 않고 `debug/` 화면으로 분리한다.
+
+### 길찾기 화면은 지도를 새로 만들지 않는다
+
+`RoutePlannerView`는 Navigator로 push하는 화면이 아니라 `MapShellScreen`이 지도 위에
+얹는 전체 화면 오버레이다. MapLibre 지도는 플랫폼 뷰라 하나 더 띄우면 타일·GPS·실내
+도면을 통째로 다시 로드하고, 방금 보던 카메라와 위치 앵커가 날아간다.
+
+그래서 **그리는 일은 이미 떠 있는 야외 지도가** 맡고, 길찾기 화면은 `RoutePlannerMap`
+창구를 통해 무엇을 그릴지만 정한다. 그 창구를 구현하는 곳은 `MapShellScreen` 하나다 —
+지도 상태(GlobalKey)를 들고 있는 자리가 거기뿐이라, 길찾기 화면에 직접 넘기면 실내 탭
+전환 같은 처리가 두 곳으로 갈린다.
 
 ## 의존 경계
 

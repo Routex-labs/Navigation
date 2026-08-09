@@ -9,7 +9,7 @@
 |---|---|---|---|
 | [`building_repository.dart`](building_repository.dart) | [`http_building_repository.dart`](http_building_repository.dart) | [`mock_building_repository.dart`](mock_building_repository.dart) | 건물·층 지도·층 그래프·건물 전체 그래프, 단일 층 최단 경로 |
 | [`destination_repository.dart`](destination_repository.dart) | [`http_destination_repository.dart`](http_destination_repository.dart) | [`mock_destination_repository.dart`](mock_destination_repository.dart) | 목적지·시설 검색과 현재 층 필터 |
-| [`directions_repository.dart`](directions_repository.dart) | [`tmap_directions_repository.dart`](tmap_directions_repository.dart) | [`mock_directions_repository.dart`](mock_directions_repository.dart) | 실외 도보 경로 |
+| [`directions_repository.dart`](directions_repository.dart) | [`tmap_directions_repository.dart`](tmap_directions_repository.dart) | [`mock_directions_repository.dart`](mock_directions_repository.dart) | 실외 도로 경로 — 도보(`/routes/pedestrian`)와 자동차(`/routes`) |
 | [`outdoor_poi_repository.dart`](outdoor_poi_repository.dart) | [`tmap_poi_repository.dart`](tmap_poi_repository.dart) | 같은 파일의 `UnavailableOutdoorPoiRepository` | 건물 밖 장소 검색(TMAP POI 통합검색) |
 | [`transit_repository.dart`](transit_repository.dart) | [`tmap_transit_repository.dart`](tmap_transit_repository.dart) | 같은 파일의 `UnavailableTransitRepository` | 대중교통 경로 후보(TMAP transit) |
 
