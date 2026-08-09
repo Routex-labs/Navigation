@@ -867,8 +867,14 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       _mapCalibrationVersion = preloaded?.calibrationVersion ?? 'unversioned';
       if (multiRoute == null) {
         // 단일 층 경로였다면 다른 층 지도 위에 남아 있어도 의미가 없다.
+        //
+        // **목적지 계약(`_routeDestination`)은 여기서 지우지 않는다.** 경로 계산이
+        // 이 함수를 거쳐 화면을 출발 층으로 옮기기 때문에(`_computeAndShow*`),
+        // 여기서 지우면 방금 정한 목적지가 경로가 그려지기 직전에 사라진다.
+        // 그러면 지도에는 파란 경로가 그려지는데 ETA·턴바이턴 카드는 뜨지 않고
+        // (카드는 목적지가 있어야 뜬다), 이탈 재탐색도 목적지가 없어 조용히
+        // 멈춘다. 안내를 실제로 끝내는 곳(`_clearRoute`)에서만 지운다.
         _route = null;
-        _routeDestination = null;
       } else {
         // 다층 경로: 이 층 세그먼트가 있으면 그것으로 갈아타고, 이 층에
         // 세그먼트가 없으면 지도 위에는 그리지 않되 다층 경로 자체는 유지.
@@ -1875,7 +1881,13 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     if (currentFloorRoute != null && currentFloorRoute.points.isNotEmpty) {
       return currentFloorRoute.points.last;
     }
-    return destination?.point;
+    // 경로가 아직(또는 이미) 없을 때의 폴백은 **같은 층일 때만** 쓴다. 목적지
+    // 계약은 층을 훑어보는 동안에도 유지되므로, 층을 확인하지 않으면 다른 층
+    // 도면 위에 도착 핀이 찍혀 "이 층에 목적지가 있다"고 잘못 말한다.
+    if (destination != null && destination.floor == _selectedFloor) {
+      return destination.point;
+    }
+    return null;
   }
 
   List<PdrLocalPoint> get _pdrConfirmedFloorPath {
