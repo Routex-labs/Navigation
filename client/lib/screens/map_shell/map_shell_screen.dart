@@ -892,8 +892,15 @@ class _MapShellScreenState extends State<MapShellScreen> {
     final buildingNames = buildingCandidates
         .map((c) => collapseName(c.title))
         .toSet();
+    // 밖에서 바깥 후보가 하나라도 있으면 우리 실내 매장 줄은 넣지 않는다.
+    // 상단 검색 패널과 **같은 규칙**이다([SearchPanel.indoorContextActive]) —
+    // 한쪽만 숨기면 같은 검색어를 어디에 치느냐에 따라 목록이 달라진다.
+    //
+    // 바깥 후보가 없으면 넣는다. 겹칠 상대가 없어 중복이 생기지 않고, 빼면
+    // 답을 손에 쥐고도 빈 목록을 보여주게 된다.
+    final showIndoorCandidates = merged.outdoorRows.isEmpty;
     return [
-      ...merged.indoorStores.map(_storeCandidate),
+      if (showIndoorCandidates) ...merged.indoorStores.map(_storeCandidate),
       ...buildingCandidates,
       for (final row in merged.outdoorRows)
         if (!buildingNames.contains(collapseName(row.poi.name)))
@@ -1626,6 +1633,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
                             unawaited(_onSearchPoiPicked(poi)),
                         // 같은 가게가 두 줄로 뜨지 않게 하는 판정. 길찾기
                         // 후보 목록도 같은 규칙을 쓴다.
+                        // 밖에서는 우리 실내 데이터를 목록에 그리지 않는다.
+                        // 이름은 POI 것을 쓰고, 우리 데이터는 그 줄을 눌렀을
+                        // 때 실내까지 안내하는 데만 쓴다.
+                        indoorContextActive: _indoorContextActive,
                         isInsideIndoorBuilding: (point) =>
                             _outdoorKey.currentState?.isAtIndoorBuilding(
                               point,

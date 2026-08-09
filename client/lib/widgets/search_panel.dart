@@ -77,6 +77,7 @@ class SearchPanel extends StatefulWidget {
     this.outdoorSearchCenter,
     this.onOutdoorPoiPicked,
     this.isInsideIndoorBuilding,
+    this.indoorContextActive = true,
   });
 
   final String buildingId;
@@ -121,6 +122,22 @@ class SearchPanel extends StatefulWidget {
   /// 실내 데이터가 이미 아는 것은 목록에서 뺀다
   /// ([dropPoisCoveredByIndoorStores]). null이면 그 정리를 하지 않는다.
   final bool Function(LatLng point)? isInsideIndoorBuilding;
+
+  /// 지금 화면이 **건물 안**을 보고 있는지.
+  ///
+  /// 밖에서는 **우리 실내 데이터를 목록에 그리지 않는다.** 사용자가 밖에서 보는
+  /// 이름은 POI 이름이어야 하고, 우리 데이터는 그 줄을 눌렀을 때 실내까지
+  /// 안내하는 데만 쓴다([mergeOutdoorResults]).
+  ///
+  /// **왜 흡수가 아니라 아예 안 그리나** — 흡수는 이름 매칭이 성공해야 일어난다.
+  /// 매칭이 한 번이라도 빗나가면 같은 가게가 두 줄로 남고, 화면에서는 "매칭이
+  /// 실패했다"와 "원래 두 곳이다"가 구분되지 않는다. 실제로 이 자리에서 세 번
+  /// 연속으로 빗나갔다. 그리는 규칙을 매칭 결과에서 떼어 내면 **매칭이 실패해도
+  /// 화면은 틀리지 않는다** — 실패는 "실내 경로 대신 건물 입구까지"로만 드러난다.
+  ///
+  /// 대가는 분명하다. TMAP에 없는 매장은 밖에서 못 찾는다. 그 매장은 건물에
+  /// 들어간 뒤(실내 컨텍스트) 검색해야 한다.
+  final bool indoorContextActive;
 
   final ValueChanged<PoiSearchResult> onStorePicked;
   final ValueChanged<Building> onBuildingPicked;
@@ -794,10 +811,17 @@ class _SearchPanelState extends State<SearchPanel> {
     // 인덱스로 [_discoveryMatches]와 짝을 맞추므로 목록을 미리 걸러 내지 않고
     // 그리는 자리에서 건너뛴다. 걸러 낸 목록으로 순회하면 추천 이유가 한 칸씩
     // 밀려 다른 매장에 붙는다.
-    for (var index = 0; index < _results.length; index++) {
+    //
+    // 밖에서 바깥 줄이 하나라도 있으면 실내 줄은 **한 줄도** 그리지 않는다.
+    //
+    // 조건에 "바깥 줄이 있으면"이 붙는 이유는 빈 화면을 막기 위해서다. TMAP이
+    // 그 검색어로 아무것도 못 찾았는데 우리 줄까지 숨기면, 답을 손에 쥐고도
+    // 아무것도 안 보여 주는 화면이 된다. 그때는 중복이 생길 여지도 없다 —
+    // 겹칠 상대가 없기 때문이다.
+    final showIndoorRows =
+        widget.indoorContextActive || merged.outdoorRows.isEmpty;
+    for (var index = 0; showIndoorRows && index < _results.length; index++) {
       final store = _results[index];
-      // 바깥 줄로 흡수된 매장은 그 줄이 대신 보여준다.
-      if (!merged.indoorStores.contains(store)) continue;
       final match = index < _discoveryMatches.length
           ? _discoveryMatches[index]
           : null;
@@ -815,6 +839,11 @@ class _SearchPanelState extends State<SearchPanel> {
         rows.add(_poiTile(row, onPoiPicked));
       }
     }
+
+    // 밖에서는 실내 줄을 안 그리므로 "검색은 성공했는데 그릴 줄이 하나도 없는"
+    // 상태가 생길 수 있다(우리 DB에만 있고 TMAP에 없는 매장). 빈 패널을 띄우면
+    // 사용자는 앱이 멈춘 것으로 읽으므로, 없다고 말해 준다.
+    if (rows.isEmpty) return _emptyState(context);
 
     // 왜 ListView(shrinkWrap)가 아니라 SingleChildScrollView + Column인가.
     //
@@ -883,6 +912,7 @@ class _SearchPanelState extends State<SearchPanel> {
       isAtBuilding: (poi) => isAt?.call(poi.point) ?? false,
       buildingNames: _buildingNames,
     );
+    _logMerge(merged);
     if (building == null) return merged;
 
     final key = collapseName(building.name);
@@ -892,6 +922,29 @@ class _SearchPanelState extends State<SearchPanel> {
           .toList(),
       merged.indoorStores,
     );
+  }
+
+  /// 직전에 남긴 로그 한 줄. build마다 같은 말을 반복하지 않으려고 들고 있는다.
+  String _lastMergeLog = '';
+
+  /// **연결 결과를 로그로 남긴다.**
+  ///
+  /// 화면에서는 "실내 매장에 연결됐다"와 "연결할 게 없었다"가 똑같이 보인다 —
+  /// 둘 다 POI 줄 하나로 끝난다. 그래서 규칙이 통째로 안 도는 것을 눈으로
+  /// 구분할 수 없고, 실제로 이 자리를 세 번 잘못 짚었다. 다음에는 추측하지
+  /// 않도록 근거를 남긴다.
+  void _logMerge(MergedOutdoorResults merged) {
+    if (merged.outdoorRows.isEmpty) return;
+    final linked = merged.outdoorRows.where((r) => r.leadsIndoors).length;
+    final line =
+        '[poi-merge] 바깥 ${merged.outdoorRows.length}건 중 $linked건 연결 '
+        '(실내 후보 ${_results.length}건, 건물 이름 $_buildingNames)';
+    if (line == _lastMergeLog) return;
+    _lastMergeLog = line;
+    debugPrint(line);
+    for (final row in merged.outdoorRows.where((r) => !r.leadsIndoors)) {
+      debugPrint('[poi-merge]   연결 안 됨: "${row.poi.name}"');
+    }
   }
 
   Widget _discoveryHeader() {

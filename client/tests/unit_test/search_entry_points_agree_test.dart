@@ -122,16 +122,21 @@ void main() {
         .isNotEmpty;
   }
 
-  testWidgets('건물 안 매장은 두 진입점 모두에서 찾아진다', (WidgetTester tester) async {
+  testWidgets('밖에서 바깥 결과가 있으면 두 진입점 모두 우리 매장 줄을 숨긴다', (
+    WidgetTester tester,
+  ) async {
+    // 밖에서 보는 이름은 POI 이름이어야 하고, 우리 데이터는 그 줄을 눌렀을 때
+    // 실내까지 안내하는 데만 쓴다. 한쪽만 숨기면 같은 검색어를 어디에 치느냐에
+    // 따라 목록이 달라진다 — 이 파일이 막으려는 증상이 정확히 그것이다.
     expect(
       await foundInTopSearch(tester, query: '강의실', name: '강의실 101'),
-      isTrue,
-      reason: '상단 검색에서 매장이 안 나왔다',
+      isFalse,
+      reason: '상단 검색에 우리 데이터 줄이 그대로 남았다',
     );
     expect(
       await foundInDirections(tester, query: '강의실', name: '강의실 101'),
-      isTrue,
-      reason: '길찾기에서만 매장이 빠졌다 — 두 진입점이 갈렸다',
+      isFalse,
+      reason: '길찾기에만 우리 데이터 줄이 남았다 — 두 진입점이 갈렸다',
     );
   });
 
@@ -148,6 +153,23 @@ void main() {
     );
   });
 
+  testWidgets('바깥 결과가 없으면 두 진입점 모두 우리 매장 줄을 보여준다', (WidgetTester tester) async {
+    // 겹칠 상대가 없으면 중복도 없다. 그때까지 숨기면 답을 손에 쥐고도 빈
+    // 목록을 보여주게 된다.
+    outdoorPoiRepository = _EmptyPoiRepository();
+
+    expect(
+      await foundInTopSearch(tester, query: '강의실', name: '강의실 101'),
+      isTrue,
+      reason: '바깥이 빈손인데 상단 검색이 우리 매장까지 숨겼다',
+    );
+    expect(
+      await foundInDirections(tester, query: '강의실', name: '강의실 101'),
+      isTrue,
+      reason: '바깥이 빈손인데 길찾기가 우리 매장까지 숨겼다',
+    );
+  });
+
   testWidgets('건물은 두 진입점 모두에서 찾아진다', (WidgetTester tester) async {
     expect(
       await foundInTopSearch(tester, query: '데모', name: '데모 건물'),
@@ -160,6 +182,20 @@ void main() {
       reason: '길찾기에서만 건물이 빠졌다 — 두 진입점이 갈렸다',
     );
   });
+}
+
+/// TMAP은 살아 있는데 이 검색어로는 아무것도 못 찾은 상황.
+class _EmptyPoiRepository implements OutdoorPoiRepository {
+  @override
+  bool get isAvailable => true;
+
+  @override
+  Future<List<OutdoorPoi>> searchNearby(
+    String keyword, {
+    required LatLng center,
+    int radiusMeters = 0,
+    int limit = 10,
+  }) async => const [];
 }
 
 /// 검색어와 무관하게 건물 밖 장소 한 건을 돌려준다. TMAP 없이 "바깥에도 답이
