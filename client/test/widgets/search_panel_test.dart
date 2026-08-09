@@ -1288,7 +1288,7 @@ void main() {
       await tester.pumpWidget(buildSubject('구찌'));
       await settle(tester);
 
-      expect(find.text('이름이 비슷한 매장 2곳'), findsOneWidget);
+      expect(find.text('관련 매장 2곳'), findsOneWidget);
       expect(find.byKey(const Key('suggestion-PO-구찌 뷰티-1F')), findsOneWidget);
       expect(find.byKey(const Key('suggestion-PO-구찌 선글라스-2F')), findsOneWidget);
       // 확정된 매장 자신은 형제로 중복되지 않는다.
@@ -1367,7 +1367,7 @@ void main() {
       await tester.pumpWidget(buildSubject('커피'));
       await settle(tester);
 
-      expect(find.textContaining('이름이 비슷한 매장'), findsNothing);
+      expect(find.textContaining('관련 매장'), findsNothing);
     });
 
     // 이름으로 걸린 게 아니라 형제라는 개념 자체가 없다.
@@ -1405,7 +1405,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 450));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('이름이 비슷한 매장'), findsNothing);
+      expect(find.textContaining('관련 매장'), findsNothing);
     });
   });
 

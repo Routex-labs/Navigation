@@ -1363,7 +1363,7 @@ class _SearchPanelState extends State<SearchPanel> {
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 2),
         child: Text(
-          '이름이 비슷한 매장 ${sorted.length}곳',
+          '관련 매장 ${sorted.length}곳',
           style: const TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
