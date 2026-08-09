@@ -8,7 +8,7 @@ import 'package:navigation_client/repositories/mock_destination_repository.dart'
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 상단 초안 바에서 어느 행을 눌렀는지에 따라 길찾기 화면이 그 칸을 활성으로
+/// 상단 초안 바에서 어느 행을 눌렀는지에 따라 상단 길찾기 바가 그 칸을 활성으로
 /// 열어야 한다는 테스트.
 ///
 /// 지키려는 증상: **출발 행을 눌렀는데 도착지 칸이 활성인 채로 열리는 것.** 그러면
@@ -76,7 +76,7 @@ void main() {
     matching: find.text('현재 위치'),
   );
 
-  testWidgets('출발 행을 누르면 출발지 칸이 활성인 채로 길찾기 화면이 열린다', (
+  testWidgets('출발 행을 누르면 출발지 칸이 활성인 채로 출발지 칸이 열린다', (
     WidgetTester tester,
   ) async {
     await openRouteDraft(tester);
@@ -94,7 +94,7 @@ void main() {
     // 검색어로도 쓰여 결과가 비어 버린다.
     final originField = tester.widget<TextField>(
       find.descendant(
-        of: find.byKey(const Key('route-planner-origin-field')),
+        of: find.byKey(const Key('route-draft-origin')),
         matching: find.byType(TextField),
       ),
     );

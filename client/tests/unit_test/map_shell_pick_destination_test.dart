@@ -83,14 +83,19 @@ void main() {
     expect(find.textContaining('도착지로 지정할 매장을 지도에서 눌러주세요'), findsNothing);
   });
 
-  testWidgets('검색을 시작하면 지도에서 고르기가 풀린다', (WidgetTester tester) async {
-    // 안내만 남으면, 검색 결과로 목적지를 정한 뒤에도 다음 매장 탭이 도착지로
+  testWidgets('다시 칸을 눌러 치기 시작하면 지도에서 고르기가 풀린다', (
+    WidgetTester tester,
+  ) async {
+    // 안내만 남으면, 이름으로 목적지를 정한 뒤에도 다음 매장 탭이 도착지로
     // 먹혀 엉뚱한 경로가 그려진다.
     await pickOnMap(tester);
 
-    await tester.tap(find.byType(TextField).first);
-    await drain(tester);
-    await tester.tap(find.byTooltip('검색 닫기'));
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('route-draft-destination')),
+        matching: find.byType(TextField),
+      ),
+    );
     await drain(tester);
 
     expect(find.textContaining('도착지로 지정할 매장을 지도에서 눌러주세요'), findsNothing);

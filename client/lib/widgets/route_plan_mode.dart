@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// 길찾기 화면 맨 위에서 고르는 이동 수단.
+/// 목적지까지 **어떻게 갈지**.
 ///
 /// 순서가 화면 순서다 — 자동차 · 대중교통 · 도보. 국내 지도 앱들이 쓰는 순서와
 /// 같게 두어야 사용자가 아이콘 위치를 기억한 대로 누를 수 있다.
@@ -24,8 +24,7 @@ enum RoutePlanMode {
     RoutePlanMode.transit => Icons.directions_bus_rounded,
     RoutePlanMode.walk => Icons.directions_walk_rounded,
   };
-
-  /// 도로 위에 선 하나로 그려지는 수단인지. 자동차·도보가 여기 해당하고,
-  /// 대중교통만 "여러 후보 중 하나를 고르는" 다른 흐름을 탄다.
-  bool get isRoad => this != RoutePlanMode.transit;
 }
+
+/// 상단 길찾기 바에서 지금 글자를 치고 있는 칸.
+enum RoutePlanField { origin, destination }

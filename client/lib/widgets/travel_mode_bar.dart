@@ -1,51 +1,38 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'route_plan_mode.dart';
 
-/// 목적지까지 **어떻게 갈지**.
+/// 상단 길찾기 바(출발/도착 두 칸) **바로 아래**에 붙는 이동 수단 선택 줄.
 ///
-/// 자동차·자전거는 넣지 않는다. 우리가 부르는 TMAP API에 그 경로가 없어서,
-/// 탭만 만들어 두면 눌러도 아무 일이 없는 죽은 버튼이 된다 — 사용자는 그것을
-/// "고장"으로 읽지 "지원 안 함"으로 읽지 않는다.
-enum TravelMode {
-  walk,
-  transit;
-
-  String get label => this == TravelMode.walk ? '도보' : '대중교통';
-
-  IconData get icon => this == TravelMode.walk
-      ? Icons.directions_walk_rounded
-      : Icons.directions_transit_rounded;
-}
-
-/// 상단 경로 초안 바 아래에 붙는 이동 수단 선택 줄.
+/// **왜 입력 아래에 있는가** — 한동안 이 줄은 전용 길찾기 화면 맨 위, 입력보다
+/// 위에 있었다. "어떻게 갈지를 먼저 정한다"는 순서였는데, 그 화면을 없애고
+/// 길찾기를 상단 바로 되돌리면서 자리도 바뀌었다. 지금 순서는 **어디로 갈지 →
+/// 어떻게 갈지**다. 도착지를 정하면 거리를 보고 수단이 자동으로 정해지므로
+/// (가까우면 도보, 멀면 대중교통) 이 줄은 대개 "고르는 곳"이 아니라 "지금 무엇으로
+/// 안내 중인지 보여주고 바꿀 수 있는 곳"이다.
 ///
-/// **왜 필요한가** — 예전에는 목적지를 정하면 무조건 도보 경로부터 그렸고,
-/// 대중교통은 하단 카드의 버튼을 눌러야 나왔다. 그래서 10 km 떨어진 목적지에
-/// "약 147분 / 10649m" 도보 안내가 먼저 떴다. 걸어서 두 시간 반 걸리는 길을
-/// 기본 답으로 내미는 셈이라, 사용자는 매번 그 화면을 지나쳐 다시 눌러야 했다.
-///
-/// 수단을 **먼저 고르게** 하면 그 왕복이 사라진다. 처음 뜨는 수단도 거리에
-/// 따라 정하므로(가까우면 도보, 멀면 대중교통) 대개는 고를 필요조차 없다.
+/// 수단이 하나뿐이면(실내 탭·TMAP 키 없음) 줄 자체를 감춘다. 선택지가 없는 선택
+/// 줄은 자리만 먹는다.
 class TravelModeBar extends StatelessWidget {
   const TravelModeBar({
     super.key,
     required this.selected,
+    required this.modes,
     required this.onSelected,
-    this.transitEnabled = true,
   });
 
-  final TravelMode selected;
-  final ValueChanged<TravelMode> onSelected;
+  final RoutePlanMode selected;
 
-  /// TMAP 키가 없어 대중교통을 쓸 수 없으면 false. 그 탭을 **감춘다** —
-  /// 눌러서 "쓸 수 없습니다"를 보는 것보다 없는 편이 낫다.
-  final bool transitEnabled;
+  /// 실제로 고를 수 있는 수단만 담는다. TMAP 키가 없으면 대중교통이, 실내
+  /// 탭에서는 자동차·대중교통이 빠진다 — 눌러서 "쓸 수 없습니다"를 보는 것보다
+  /// 없는 편이 낫다.
+  final List<RoutePlanMode> modes;
+
+  final ValueChanged<RoutePlanMode> onSelected;
 
   @override
   Widget build(BuildContext context) {
-    final modes = transitEnabled ? TravelMode.values : [TravelMode.walk];
-    // 수단이 하나뿐이면 고를 것이 없다. 선택지가 없는 선택 줄은 자리만 먹는다.
     if (modes.length < 2) return const SizedBox.shrink();
 
     return Material(
@@ -81,7 +68,7 @@ class _ModeTab extends StatelessWidget {
     required this.onTap,
   });
 
-  final TravelMode mode;
+  final RoutePlanMode mode;
   final bool selected;
   final VoidCallback onTap;
 
@@ -102,13 +89,19 @@ class _ModeTab extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(mode.icon, size: 18, color: color),
-            const SizedBox(width: 6),
-            Text(
-              mode.label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: color,
+            const SizedBox(width: 5),
+            // 세 칸이 되면서 한 칸이 좁아졌다. 이름이 잘리면 아이콘만 남아
+            // "자동차"와 "대중교통"을 구분할 수 없으므로 줄이지 않고 흘려보낸다.
+            Flexible(
+              child: Text(
+                mode.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
               ),
             ),
           ],

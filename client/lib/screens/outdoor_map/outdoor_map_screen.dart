@@ -498,7 +498,6 @@ class OutdoorMapBody extends StatefulWidget {
     this.onFloorChanged,
     this.pickingPointOnMap = false,
     this.onMapPointPick,
-    this.suppressRouteCards = false,
     this.outerOverlayKeys = const [],
   });
 
@@ -547,13 +546,6 @@ class OutdoorMapBody extends StatefulWidget {
   /// 매장이 아니라 **좌표**다 — 야외에는 노드도 층도 없으므로 상위는 이 후보를
   /// 실내 라우팅이 아니라 걷기 경로의 끝점으로 쓴다.
   final ValueChanged<ll.LatLng>? onMapPointPick;
-
-  /// 화면 아래 안내 카드(ETA·대중교통 요약)를 그리지 말라는 표시.
-  ///
-  /// 길찾기 화면이 열려 있는 동안 켠다. 그 화면이 같은 자리에 자기 요약 카드를
-  /// 놓기 때문인데, 둘을 함께 띄우면 한 화면에서 소요 시간이 두 번 적히고
-  /// 그중 하나에는 이 화면에서 누를 수 없는 "안내 종료" 버튼이 달린다.
-  final bool suppressRouteCards;
 
   /// 사용자의 현재 위치가 새로 잡혔을 때 호출된다 — "위치 지정"으로 지도를
   /// 탭했을 때와 입구 자동 배치가 여기에 해당한다.
@@ -4862,15 +4854,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final lowAccuracy =
         _outdoorGpsVisible &&
         (position == null || accuracy > _lowAccuracyThresholdMeters);
-    // 길찾기 화면이 열려 있으면 아래 카드는 전부 접는다. 선은 그대로 그리되
-    // 요약은 그 화면이 자기 자리에서 말한다([OutdoorMapBody.suppressRouteCards]).
-    final cards = !widget.suppressRouteCards;
-    final route = cards ? _route : null;
-    final transitItinerary = cards ? _transitItinerary : null;
+    final route = _route;
+    final transitItinerary = _transitItinerary;
     // 카드도 지도와 같은 규칙으로 고른다 — 건물 안에서는 실내, 밖에서는 야외.
     // 두 값이 함께 살아 있을 수 있으므로([_activatePendingIndoorRoute]) 여기서
     // 갈라 주지 않으면 지도에는 야외 선이 그려지는데 카드는 실내 거리를 말한다.
-    final indoorRouteDestination = (cards && _indoorEntered)
+    final indoorRouteDestination = _indoorEntered
         ? _indoorRouteDestination
         : null;
     // 거리·시간을 한 번에 계산한다(예전엔 같은 계산을 두 번 돌았다).
@@ -4878,7 +4867,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final outdoorEta = route == null ? null : _outdoorEta(route);
     // 카드를 접으면 그 위로 밀어 올릴 것도 없다. 이 값을 그대로 두면 층 선택기
     // 같은 지도 위 버튼들이 있지도 않은 카드 높이만큼 떠 있게 된다.
-    final indoorRouteVisible = cards && _hasAnyRouteVisible;
+    final indoorRouteVisible = _hasAnyRouteVisible;
     final debugEnabled = _debugModeController.enabled;
     final pdrActive =
         indoorNavigationDriver.currentRuntimeStatus.state !=
