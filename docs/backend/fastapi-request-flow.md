@@ -239,6 +239,10 @@ flowchart TD
 후보를 담은 `DiscoveryResponse`이고, `mode`가 화면 분기의 유일한 근거다. 진입점은
 `query_search.discover()`다.
 
+응답에는 `source`(`light`·`semantic`)도 실린다 — 후보를 **어휘로 잡았는지 임베딩으로
+잡았는지**다. 클라이언트가 온디바이스 이름 후보를 이 응답으로 대체할지 판단하는 데
+쓴다(근거: [`docs/client/search-input-assist.md`](../client/search-input-assist.md) V절).
+
 ```mermaid
 flowchart TD
     req["POST /query/ai<br/>{text, building_id, current_floor_id?,<br/>selected_facets?, show_all?}"]
