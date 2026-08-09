@@ -134,27 +134,23 @@ void main() {
   });
 
   group('mergeOutdoorResults', () {
-    test('건물 안 POI에 우리 매장을 실어 준다', () {
-      // 이름은 POI 것이 남고(사용자가 검색해서 본 이름), 층·노드는 우리 것이
-      // 붙는다(실내까지 안내하는 능력). 우리 매장 줄은 목록에서 빠진다.
+    test('우리 매장과 겹치는 POI 줄은 뺀다', () {
+      // 남는 쪽은 우리 줄이다. 층·노드가 붙어 있어 매장 앞까지 데려다주는 반면
+      // POI 줄은 건물 입구에서 끝난다.
       final merged = mergeOutdoorResults(
         pois: [_poi('스타벅스 더현대서울(B2)R점'), _poi('스타벅스 여의도브라이튼점')],
         indoorStores: [_store('스타벅스 리저브', 'B2')],
         isAtBuilding: (poi) => poi.name.contains('더현대'),
       );
 
-      expect(merged.outdoorRows, hasLength(2));
-      final linked = merged.outdoorRows.first;
-      expect(linked.poi.name, '스타벅스 더현대서울(B2)R점');
-      expect(linked.indoorStore?.name, '스타벅스 리저브');
-      expect(merged.outdoorRows[1].leadsIndoors, isFalse);
-      expect(merged.indoorStores, isEmpty);
+      expect(merged.outdoorRows.map((r) => r.poi.name), ['스타벅스 여의도브라이튼점']);
+      // 우리 줄은 전부 남는다 — 실내 안내는 매칭 성공 여부와 무관해야 한다.
+      expect(merged.indoorStores, hasLength(1));
     });
 
-    test('좌표가 안 걸려도 이름이 건물을 부르면 연결한다', () {
-      // 실제로 여기서 두 번 틀렸다. TMAP POI 좌표는 도로 접근점이라 큰 건물에서
-      // 외곽선 밖에 찍히고, 얼마나 떨어질지는 건물마다 다르다 — 허용 거리 하나로는
-      // 어느 쪽으로도 안전한 값이 없다. 이름은 그 애매함이 없다.
+    test('좌표가 안 걸려도 이름이 건물을 부르면 뺀다', () {
+      // TMAP POI 좌표는 도로 접근점이라 큰 건물에서 외곽선 밖에 찍힌다. 허용
+      // 거리 하나로는 어느 쪽으로도 안전한 값이 없어서, 이름을 함께 본다.
       final merged = mergeOutdoorResults(
         pois: [_poi('스타벅스 더현대서울(B2)R점')],
         indoorStores: [_store('스타벅스 리저브', 'B2')],
@@ -162,11 +158,10 @@ void main() {
         buildingNames: const ['더현대 서울'],
       );
 
-      expect(merged.outdoorRows.single.indoorStore?.name, '스타벅스 리저브');
-      expect(merged.indoorStores, isEmpty);
+      expect(merged.outdoorRows, isEmpty);
     });
 
-    test('건물 밖 POI는 이름이 비슷해도 연결하지 않는다', () {
+    test('건물 밖 POI는 이름이 비슷해도 남긴다', () {
       // 길 건너 스타벅스는 우리 건물 안 스타벅스와 다른 가게다.
       final merged = mergeOutdoorResults(
         pois: [_poi('스타벅스 여의도브라이튼점')],
@@ -174,20 +169,18 @@ void main() {
         isAtBuilding: (_) => false,
       );
 
-      expect(merged.outdoorRows.single.leadsIndoors, isFalse);
-      // 연결되지 않았으니 우리 매장 줄은 그대로 남는다.
-      expect(merged.indoorStores, hasLength(1));
+      expect(merged.outdoorRows, hasLength(1));
     });
 
-    test('우리가 모르는 건물 안 가게는 좌표 줄로 남는다', () {
+    test('우리가 모르는 건물 안 가게는 남긴다', () {
+      // 지우면 검색 결과에서 통째로 사라진다. 좌표까지라도 안내하는 편이 낫다.
       final merged = mergeOutdoorResults(
         pois: [_poi('배스킨라빈스 더현대서울점')],
         indoorStores: [_store('스타벅스 리저브', 'B2')],
         isAtBuilding: (_) => true,
       );
 
-      expect(merged.outdoorRows.single.leadsIndoors, isFalse);
-      expect(merged.indoorStores, hasLength(1));
+      expect(merged.outdoorRows, hasLength(1));
     });
   });
 }

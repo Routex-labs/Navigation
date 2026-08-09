@@ -279,6 +279,10 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 판정해야 한다([mentionsBuilding]). 검색어와 무관하게 들고 있어야 한다.
   List<String> _buildingNames = const [];
 
+  /// 지금 검색 중인 건물([SearchPanel.buildingId])의 이름. 매장 줄 부제에
+  /// "더현대 서울 · B2"처럼 적어, 어느 건물의 매장인지 한 줄로 읽히게 한다.
+  String? _currentBuildingName;
+
   /// 건물 밖 장소(TMAP POI). 실내 결과와 **따로** 들고 있는 이유는 두 목록의
   /// 수명이 다르기 때문이다 — 바깥 검색은 실내 검색보다 늦게 끝날 수 있고,
   /// 실내가 빈손이어도 여기 결과가 있으면 "찾지 못했어요"를 띄우면 안 된다.
@@ -424,6 +428,10 @@ class _SearchPanelState extends State<SearchPanel> {
           .where((b) => b.name.toLowerCase().contains(query.toLowerCase()))
           .firstOrNull;
       _buildingNames = buildings.map((b) => b.name).toList();
+      _currentBuildingName = buildings
+          .where((b) => b.id == widget.buildingId)
+          .map((b) => b.name)
+          .firstOrNull;
     } on Object {
       _finishFailed(query, requestId);
       return;
@@ -812,15 +820,7 @@ class _SearchPanelState extends State<SearchPanel> {
     // 그리는 자리에서 건너뛴다. 걸러 낸 목록으로 순회하면 추천 이유가 한 칸씩
     // 밀려 다른 매장에 붙는다.
     //
-    // 밖에서 바깥 줄이 하나라도 있으면 실내 줄은 **한 줄도** 그리지 않는다.
-    //
-    // 조건에 "바깥 줄이 있으면"이 붙는 이유는 빈 화면을 막기 위해서다. TMAP이
-    // 그 검색어로 아무것도 못 찾았는데 우리 줄까지 숨기면, 답을 손에 쥐고도
-    // 아무것도 안 보여 주는 화면이 된다. 그때는 중복이 생길 여지도 없다 —
-    // 겹칠 상대가 없기 때문이다.
-    final showIndoorRows =
-        widget.indoorContextActive || merged.outdoorRows.isEmpty;
-    for (var index = 0; showIndoorRows && index < _results.length; index++) {
+    for (var index = 0; index < _results.length; index++) {
       final store = _results[index];
       final match = index < _discoveryMatches.length
           ? _discoveryMatches[index]
@@ -840,9 +840,8 @@ class _SearchPanelState extends State<SearchPanel> {
       }
     }
 
-    // 밖에서는 실내 줄을 안 그리므로 "검색은 성공했는데 그릴 줄이 하나도 없는"
-    // 상태가 생길 수 있다(우리 DB에만 있고 TMAP에 없는 매장). 빈 패널을 띄우면
-    // 사용자는 앱이 멈춘 것으로 읽으므로, 없다고 말해 준다.
+    // 그릴 줄이 하나도 없으면 빈 패널 대신 없다고 말한다. 사용자는 빈 패널을
+    // "앱이 멈췄다"로 읽는다.
     if (rows.isEmpty) return _emptyState(context);
 
     // 왜 ListView(shrinkWrap)가 아니라 SingleChildScrollView + Column인가.
@@ -934,16 +933,16 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 구분할 수 없고, 실제로 이 자리를 세 번 잘못 짚었다. 다음에는 추측하지
   /// 않도록 근거를 남긴다.
   void _logMerge(MergedOutdoorResults merged) {
-    if (merged.outdoorRows.isEmpty) return;
-    final linked = merged.outdoorRows.where((r) => r.leadsIndoors).length;
+    if (_pois.isEmpty) return;
+    final dropped = _pois.length - merged.outdoorRows.length;
     final line =
-        '[poi-merge] 바깥 ${merged.outdoorRows.length}건 중 $linked건 연결 '
+        '[poi-merge] 바깥 ${_pois.length}건 중 $dropped건이 우리 매장과 겹쳐 빠짐 '
         '(실내 후보 ${_results.length}건, 건물 이름 $_buildingNames)';
     if (line == _lastMergeLog) return;
     _lastMergeLog = line;
     debugPrint(line);
-    for (final row in merged.outdoorRows.where((r) => !r.leadsIndoors)) {
-      debugPrint('[poi-merge]   연결 안 됨: "${row.poi.name}"');
+    for (final row in merged.outdoorRows) {
+      debugPrint('[poi-merge]   남김: "${row.poi.name}"');
     }
   }
 
@@ -1052,9 +1051,23 @@ class _SearchPanelState extends State<SearchPanel> {
     // 아래 첫 줄의 "경로 안내 불가"가 이미 말한다.
     final nodeId = store.nodeId;
     final reach = nodeId == null ? null : widget.reachByNodeId?[nodeId];
+    // 층 앞에 **건물 이름**을 적는다.
+    //
+    // "스타벅스 리저브 / B2"만으로는 이게 어느 건물의 스타벅스인지 알 수 없다.
+    // 밖에서 검색하면 목록에 길 건너 스타벅스도 함께 뜨는데, 그 줄들은 주소가
+    // 적혀 있어 구분이 되고 우리 줄만 층 하나로 남는다 — 정보가 가장 많은 줄이
+    // 가장 안 읽히는 상태였다.
+    //
+    // 건물 안을 보고 있을 때는 붙이지 않는다. 지금 그 건물 안에 서 있는
+    // 사람에게 매 줄마다 건물 이름을 반복하면 정작 다른 층·업종 정보가 밀린다.
+    final buildingName = widget.indoorContextActive
+        ? null
+        : _currentBuildingName;
+    final placeLine = buildingName == null
+        ? store.floor
+        : '$buildingName · ${store.floor}';
     final firstLine =
-        match?.reason ??
-        (nodeId == null ? '${store.floor} · 경로 안내 불가' : store.floor);
+        match?.reason ?? (nodeId == null ? '$placeLine · 경로 안내 불가' : placeLine);
     return ListTile(
       leading: const Icon(Icons.place_outlined, color: AppColors.primary),
       title: Row(
@@ -1150,21 +1163,13 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 층이 아니라 주소다.
   Widget _poiTile(OutdoorSearchRow row, ValueChanged<OutdoorPoi> onPicked) {
     final poi = row.poi;
-    final store = row.indoorStore;
     final distance = poi.distanceMeters;
-    // 우리 실내 매장에 연결된 줄은 **층을 적는다.** 이름은 TMAP 것이라 층이
-    // 안 보이는데, 그 한 줄이 "여기는 건물 안이고 실내까지 안내된다"를 말한다.
-    final subtitleParts = store != null
-        ? ['건물 안', store.floor]
-        : [
-            if (distance != null) '약 ${formatTransitDistance(distance)}',
-            if (poi.address != null) poi.address!,
-          ];
+    final subtitleParts = [
+      if (distance != null) '약 ${formatTransitDistance(distance)}',
+      if (poi.address != null) poi.address!,
+    ];
     return ListTile(
-      leading: Icon(
-        store == null ? Icons.storefront_outlined : Icons.place_outlined,
-        color: store == null ? AppColors.muted : AppColors.primary,
-      ),
+      leading: const Icon(Icons.storefront_outlined, color: AppColors.muted),
       title: Row(
         children: [
           Expanded(
@@ -1202,7 +1207,7 @@ class _SearchPanelState extends State<SearchPanel> {
             ),
       // 연결된 줄은 **우리 매장으로** 넘긴다. 층·노드가 거기 들어 있어야
       // 문을 경유하는 실내 안내까지 이어진다([MapShellScreen._startRoute]).
-      onTap: () => store == null ? onPicked(poi) : widget.onStorePicked(store),
+      onTap: () => onPicked(poi),
     );
   }
 

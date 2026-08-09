@@ -892,15 +892,15 @@ class _MapShellScreenState extends State<MapShellScreen> {
     final buildingNames = buildingCandidates
         .map((c) => collapseName(c.title))
         .toSet();
-    // 밖에서 바깥 후보가 하나라도 있으면 우리 실내 매장 줄은 넣지 않는다.
-    // 상단 검색 패널과 **같은 규칙**이다([SearchPanel.indoorContextActive]) —
-    // 한쪽만 숨기면 같은 검색어를 어디에 치느냐에 따라 목록이 달라진다.
-    //
-    // 바깥 후보가 없으면 넣는다. 겹칠 상대가 없어 중복이 생기지 않고, 빼면
-    // 답을 손에 쥐고도 빈 목록을 보여주게 된다.
-    final showIndoorCandidates = merged.outdoorRows.isEmpty;
+    // 우리 매장 줄은 **전부** 남긴다. 겹치는 POI 줄은 이미 빠져 있다
+    // ([mergeOutdoorResults]) — 우리 줄에는 층·노드가 붙어 있어 실내까지
+    // 안내되고, POI 줄은 건물 입구에서 끝나기 때문이다.
+    final buildingName = buildings
+        .where((b) => b.id == _buildingId)
+        .map((b) => b.name)
+        .firstOrNull;
     return [
-      if (showIndoorCandidates) ...merged.indoorStores.map(_storeCandidate),
+      ...merged.indoorStores.map((s) => _storeCandidate(s, buildingName)),
       ...buildingCandidates,
       for (final row in merged.outdoorRows)
         if (!buildingNames.contains(collapseName(row.poi.name)))
@@ -908,37 +908,37 @@ class _MapShellScreenState extends State<MapShellScreen> {
     ];
   }
 
-  DirectionsCandidate _storeCandidate(PoiSearchResult store) =>
-      DirectionsCandidate(
-        title: store.name,
-        subtitle: store.floor,
-        point: store.point,
-        nodeId: store.nodeId,
-        floor: store.floor,
-      );
+  /// 매장 하나를 후보로 만든다. [buildingName]을 주면 부제에 함께 적는다.
+  ///
+  /// "스타벅스 리저브 / B2"만으로는 어느 건물의 스타벅스인지 알 수 없다. 밖에서
+  /// 검색하면 길 건너 스타벅스도 함께 뜨고 그쪽에는 주소가 적혀 있어, 정작
+  /// 실내까지 안내되는 우리 줄만 층 하나로 남아 가장 안 읽혔다.
+  ///
+  /// 건물 안을 보고 있으면 null을 준다 — 그 건물에 서 있는 사람에게 매 줄마다
+  /// 건물 이름을 반복하면 정작 층 정보가 밀린다.
+  DirectionsCandidate _storeCandidate(
+    PoiSearchResult store, [
+    String? buildingName,
+  ]) => DirectionsCandidate(
+    title: store.name,
+    subtitle: buildingName == null
+        ? store.floor
+        : '$buildingName · ${store.floor}',
+    point: store.point,
+    nodeId: store.nodeId,
+    floor: store.floor,
+  );
 
   /// 바깥 줄 하나를 후보로 만든다.
   ///
-  /// 우리 실내 매장에 연결된 줄이면 **이름은 POI 것을 쓰고 좌표·층·노드는 우리
-  /// 것을 쓴다.** 사용자가 검색해서 본 이름은 POI 이름이고("스타벅스
-  /// 더현대서울(B2)R점"), 실내까지 안내하는 능력은 우리 데이터에서 온다.
-  DirectionsCandidate _outdoorRowCandidate(OutdoorSearchRow row) {
-    final store = row.indoorStore;
-    if (store == null) {
-      return DirectionsCandidate(
+  /// 여기까지 온 POI는 우리가 모르는 곳이다 — 우리 실내 데이터가 아는 가게를
+  /// 가리키는 POI는 목록을 만들 때 이미 빠진다([mergeOutdoorResults]).
+  DirectionsCandidate _outdoorRowCandidate(OutdoorSearchRow row) =>
+      DirectionsCandidate(
         title: row.poi.name,
         subtitle: row.poi.address ?? '건물 밖 장소',
         point: row.poi.point,
       );
-    }
-    return DirectionsCandidate(
-      title: row.poi.name,
-      subtitle: '건물 안 · ${store.floor}',
-      point: store.point,
-      nodeId: store.nodeId,
-      floor: store.floor,
-    );
-  }
 
   /// 바깥 조회를 돌리고 우리 실내 결과와 합친다. 기준점을 못 구했거나 TMAP을
   /// 쓸 수 없으면 바깥 줄 없이 실내 결과만 돌려준다.
@@ -969,14 +969,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
       isAtBuilding: (poi) => outdoor?.isAtIndoorBuilding(poi.point) ?? false,
       buildingNames: buildingNames,
     );
-    // **연결 결과를 로그로 남긴다.** 화면에서는 "합쳐졌다"와 "합칠 대상이
-    // 없었다"가 똑같이 보여서, 규칙이 통째로 안 도는 것을 눈으로 구분할 수
-    // 없다. 실제로 이 자리를 두 번 잘못 짚었다.
-    final linked = merged.outdoorRows.where((r) => r.leadsIndoors).length;
+    // **중복 제거 결과를 로그로 남긴다.** 화면에서는 "겹쳐서 뺐다"와 "원래
+    // 한 줄이었다"가 똑같이 보여서, 규칙이 통째로 안 도는 것을 눈으로 구분할
+    // 수 없다. 실제로 이 자리를 세 번 잘못 짚었다.
+    final dropped = pois.length - merged.outdoorRows.length;
     debugPrint(
-      '[poi-merge] "$query" 바깥 ${merged.outdoorRows.length}건 중 '
-      '$linked건을 실내 매장에 연결, 실내 목록 ${indoorStores.length} → '
-      '${merged.indoorStores.length}건',
+      '[poi-merge] "$query" 바깥 ${pois.length}건 중 $dropped건이 '
+      '우리 매장과 겹쳐 빠짐 (실내 후보 ${indoorStores.length}건, '
+      '건물 이름 $buildingNames)',
     );
     return merged;
   }

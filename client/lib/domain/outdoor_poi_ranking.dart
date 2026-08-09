@@ -60,11 +60,18 @@ bool looksLikeSameBrand(String poiName, String storeName) {
   return store.startsWith(brand) || brand.startsWith(store);
 }
 
-String _firstWord(String value) {
-  final trimmed = value.trim();
+/// 이름의 **브랜드 부분**(첫 어절). "스타벅스 더현대서울(B2)R점" → `스타벅스`
+///
+/// 우리 백엔드에 다시 물어볼 때 쓰는 검색어다. 사용자가 친 말("더현대 스타벅스")
+/// 로는 우리 DB가 아무것도 못 찾는다 — 우리는 그 가게를 "스타벅스 리저브"라고
+/// 부르기 때문이다. 브랜드만 떼어 물어야 후보가 나온다.
+String brandOf(String name) {
+  final trimmed = name.trim();
   final space = trimmed.indexOf(RegExp(r'\s'));
   return space < 0 ? trimmed : trimmed.substring(0, space);
 }
+
+String _firstWord(String value) => brandOf(value);
 
 /// TMAP 지점명 안에 괄호로 들어 있는 **층 힌트**를 뽑는다. 없으면 null.
 ///
@@ -123,19 +130,13 @@ PoiSearchResult? matchIndoorStore(
 
 /// 바깥 목록의 한 줄.
 ///
-/// 화면에는 **POI 이름**이 나간다. 사용자가 검색해서 본 이름이 그것이고, 우리
-/// 데이터 이름("스타벅스 리저브")으로 바꿔 버리면 방금 친 검색어와 목록이
-/// 어긋난다. [indoorStore]가 붙어 있으면 그 줄을 눌렀을 때 **건물 안 매장까지**
-/// 안내한다(층·노드가 거기 들어 있다).
+/// 여기까지 온 POI는 **우리가 모르는 곳**이다. 우리 실내 데이터가 아는 가게를
+/// 가리키는 POI는 목록을 만들 때 이미 빠진다([mergeOutdoorResults]) — 그 가게는
+/// 우리 줄이 층·노드를 달고 대신 보여준다.
 class OutdoorSearchRow {
-  const OutdoorSearchRow(this.poi, {this.indoorStore});
+  const OutdoorSearchRow(this.poi);
 
   final OutdoorPoi poi;
-
-  /// 이 POI가 가리키는 우리 실내 매장. null이면 좌표까지만 안내한다.
-  final PoiSearchResult? indoorStore;
-
-  bool get leadsIndoors => indoorStore != null;
 }
 
 /// 바깥 결과와 우리 실내 결과를 **한 목록으로** 합친 뒤 돌려준다.
@@ -144,16 +145,24 @@ class OutdoorSearchRow {
 /// "스타벅스 더현대서울(B2)R점"(TMAP)이 나란히 떴고, 아래쪽을 고르면 실내 경로가
 /// 안 나왔다.
 ///
-/// 합치는 방향은 **POI 쪽으로**다. POI 줄을 남기고 거기에 우리 매장의 층·노드를
-/// 붙인다. 사용자가 검색해서 본 이름이 POI 이름이고, 실내 안내라는 능력은 우리
-/// 데이터에서 온다 — 둘 다 살리는 유일한 조합이다.
+/// 합치는 방향은 **우리 쪽으로**다. 우리 줄을 남기고 겹치는 POI 줄을 뺀다.
+///
+/// 한때 반대로 했다 — POI 줄을 남기고 거기에 우리 층·노드를 실었다. 사용자가
+/// 검색해서 본 이름이 POI 이름이라는 이유였는데, 그 방향은 **매칭이 성공해야만
+/// 실내 안내가 된다**는 약점이 있다. 매칭은 이름 휴리스틱이라 언제든 빗나가고,
+/// 빗나가면 사용자는 건물 입구에서 안내가 끊긴 화면을 본다.
+///
+/// 우리 쪽을 남기면 실내 안내는 **매칭과 무관하게** 확실하다(층·노드가 원래
+/// 거기 있다). 매칭은 "POI 줄 하나를 뺄지"만 정하므로, 빗나가도 손해가 중복 한
+/// 줄로 끝난다. 대신 이름이 우리 것("스타벅스 리저브")이라 어느 건물인지 안
+/// 보이는데, 그건 부제에 건물 이름을 함께 적어 푼다.
 class MergedOutdoorResults {
   const MergedOutdoorResults(this.outdoorRows, this.indoorStores);
 
-  /// "주변 장소" 섹션에 그릴 줄.
+  /// "주변 장소" 섹션에 그릴 줄. 우리가 아는 가게를 가리키는 POI는 빠져 있다.
   final List<OutdoorSearchRow> outdoorRows;
 
-  /// 위쪽 실내 섹션에 **남길** 매장. POI 줄로 흡수된 것은 빠져 있다.
+  /// 위쪽 실내 섹션에 그릴 매장. **전부 그대로 남는다.**
   final List<PoiSearchResult> indoorStores;
 }
 
@@ -192,22 +201,15 @@ MergedOutdoorResults mergeOutdoorResults({
   List<String> buildingNames = const [],
 }) {
   final rows = <OutdoorSearchRow>[];
-  final absorbed = <PoiSearchResult>{};
 
   for (final poi in pois) {
     final atBuilding =
         isAtBuilding(poi) || mentionsBuilding(poi.name, buildingNames);
-    if (!atBuilding) {
-      rows.add(OutdoorSearchRow(poi));
-      continue;
-    }
-    final store = matchIndoorStore(poi, indoorStores);
-    if (store != null) absorbed.add(store);
-    rows.add(OutdoorSearchRow(poi, indoorStore: store));
+    // 우리 줄이 대신 보여줄 가게면 POI 줄은 뺀다. 못 찾으면 남긴다 — 우리가
+    // 모르는 가게이므로 좌표까지라도 안내하는 편이 낫다.
+    if (atBuilding && matchIndoorStore(poi, indoorStores) != null) continue;
+    rows.add(OutdoorSearchRow(poi));
   }
 
-  return MergedOutdoorResults(
-    rows,
-    indoorStores.where((s) => !absorbed.contains(s)).toList(),
-  );
+  return MergedOutdoorResults(rows, indoorStores);
 }
