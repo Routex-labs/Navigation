@@ -545,6 +545,11 @@ class FloorPlanViewState extends State<FloorPlanView> {
   /// 교체가 겹쳐 같은 층을 두 번 설치하거나, 아직 안 얹힌 층을 지우려 든다.
   bool _swappingFloorTiles = false;
 
+  /// 교체가 도는 동안 새로 요청된 층. 지금 교체가 끝나면 [_swapFloorTiles]가
+  /// 이어서 처리한다 — 버리면 타일과 라벨이 서로 다른 층을 가리켜 두 층이
+  /// 겹쳐 보인다(자세한 근거는 [_swapFloorTiles] 주석).
+  String? _pendingTileFloor;
+
   /// 프리페치 소스가 깔려 있는 층들. 불변식은 "활성 층을 뺀
   /// [FloorPlanView.prefetchFloorNames] 전부" — 설치는 첫 idle에서
   /// ([_installPrefetchTileSources]), 이후 층 전환마다 [_swapFloorTiles]가
@@ -1483,35 +1488,68 @@ class FloorPlanViewState extends State<FloorPlanView> {
   /// 반대로 하면 그 사이 도면이 통째로 사라져 흰 화면이 보이고, 위에서 말한
   /// 네이티브 함정도 그대로 밟는다.
   ///
+  /// **전환 중에 들어온 요청은 버리지 않고 이어서 처리한다.** 예전에는 그냥
+  /// return했는데, 그러면 타일만 중간 층에 멈춘 채 선택기·라벨·마커는 마지막
+  /// 층으로 넘어가 **두 층이 겹쳐 보였다** — 실기기에서 B1 도면 위에 2F 매장명이
+  /// 얹혀 에스컬레이터 띠에 매장 이름이 찍혔다. [_activeTileFloor]가
+  /// `widget.floorName`과 어긋난 채 [_updateStoreLabelSource]가 새 층 라벨을
+  /// 옛 층 소스에 써넣는 것이 그 경로다.
+  ///
+  /// 밀린 요청은 **마지막 것 하나만** 남긴다. 중간 층들은 사용자가 지나치는
+  /// 층이라 굳이 그려 줄 이유가 없고, 건너뛰는 편이 최종 화면에 더 빨리 닿는다.
   Future<void> _swapFloorTiles(String fromFloor, String toFloor) async {
     final controller = _controller;
     if (controller == null || !_styleReady) return;
-    if (_swappingFloorTiles) return;
+    if (_swappingFloorTiles) {
+      _pendingTileFloor = toFloor;
+      return;
+    }
     _swappingFloorTiles = true;
     try {
-      await _installFloorTileLayers(
-        controller,
-        toFloor,
-        // 경로선·마커는 이미 이 위에 있다. 앵커를 안 주면 새 도면이 그것들을
-        // 덮어 경로가 도면 밑으로 사라진다.
-        belowLayerId: _firstOverlayLayerId,
-      );
-      if (!mounted) return;
-      _activeTileFloor = toFloor;
-      FloorSwitchTiming.mark('tilesSwapped');
-      await _removeFloorTileLayers(controller, fromFloor);
-      // 프리페치 불변식(활성 층 제외 전부, [_prefetchedFloors]) 유지: 방금
-      // 활성이 된 층의 프리페치는 실제 소스와 타일이 겹치므로 거두고, 떠난
-      // 층은 프리페치로 되돌려 언제든 왕복 없이 돌아올 수 있게 한다.
-      if (_prefetchedFloors.remove(toFloor)) {
-        await _removePrefetchTileSource(controller, toFloor);
-      }
-      if (widget.prefetchFloorNames.contains(fromFloor)) {
-        await _installPrefetchTileSource(controller, fromFloor);
+      var from = fromFloor;
+      var to = toFloor;
+      while (true) {
+        await _installFloorTileLayers(
+          controller,
+          to,
+          // 경로선·마커는 이미 이 위에 있다. 앵커를 안 주면 새 도면이 그것들을
+          // 덮어 경로가 도면 밑으로 사라진다.
+          belowLayerId: _firstOverlayLayerId,
+        );
+        if (!mounted) return;
+        _activeTileFloor = to;
+        FloorSwitchTiming.mark('tilesSwapped');
+        await _removeFloorTileLayers(controller, from);
+        // 프리페치 불변식(활성 층 제외 전부, [_prefetchedFloors]) 유지 — 첫째,
+        // 방금 활성이 된 층의 프리페치는 실제 소스와 타일이 겹치므로 거둔다.
+        if (_prefetchedFloors.remove(to)) {
+          await _removePrefetchTileSource(controller, to);
+        }
+
+        // 여기서부터는 동기 구간이라 `didUpdateWidget`이 끼어들 수 없다 —
+        // 밀린 요청을 읽고 비우는 사이에 새 요청이 유실될 틈이 없다.
+        final next = _pendingTileFloor;
+        _pendingTileFloor = null;
+        if (next != null && next != to) {
+          // 둘째 절반(떠난 층을 프리페치로 되돌리기)은 건너뛴다. 사용자가
+          // 기다리는 것은 화면에 보일 층이고, 빠진 층은 아래 마무리 호출과
+          // [_onMapIdle]이 어차피 다시 채운다.
+          from = to;
+          to = next;
+          continue;
+        }
+        if (widget.prefetchFloorNames.contains(from)) {
+          await _installPrefetchTileSource(controller, from);
+        }
+        break;
       }
     } finally {
       _swappingFloorTiles = false;
+      _pendingTileFloor = null;
     }
+    // 연쇄 전환에서 건너뛴 중간 층들을 여기서 마저 프리페치한다. 이미 깔린
+    // 층은 건너뛰므로 [_onMapIdle]의 같은 호출과 겹쳐도 무해하다.
+    await _installPrefetchTileSources();
   }
 
   /// 목록에서 고른 매장이 화면에 크게 보이도록 카메라를 옮긴다.
