@@ -84,8 +84,12 @@ const _placingHintTopPx = 236.0;
 /// 교차점 옆 복도로 실제로 걸어 나간 경우에 재탐색이 영영 걸리지 않는다.
 const _junctionRerouteHoldMs = 4000;
 
-/// 층 교체를 덮는 베일이 들어오는/빠지는 시간.
-const _floorSwapVeilFadeIn = Duration(milliseconds: 140);
+/// 도면을 갈아 끼운 뒤 **완전 불투명**을 유지하는 시간.
+///
+/// 교체 프레임만 가리고 곧바로 걷으면, 지도가 언제 바뀌었는지 모르게 슬쩍
+/// 바뀌어 사용자가 "지금 다른 층을 보고 있다"는 사실을 놓친다. 새 도면이 첫
+/// 프레임을 그릴 시간을 주고, 전환을 **일부러 한 박자 보이게** 만든다.
+const _floorSwapVeilHold = Duration(milliseconds: 400);
 
 /// 층 이동 확정 뒤 "아니에요"를 띄워 두는 시간.
 const _escalatorArrivalBannerHold = Duration(seconds: 6);
@@ -381,7 +385,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 
   // 셸에 마지막으로 알린 층 전환 UI 상태. 같은 값이면 다시 알리지 않는다.
   FloorTransitionUiState? _reportedFloorTransition;
-  double _reportedFloorSwapVeil = 0;
+  double _reportedFloorScrimOpacity = 0;
 
   /// 자동 층 전환에서 새 층 지도에 그대로 물려줄 카메라.
   ///
@@ -926,11 +930,17 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     });
     // 베일이 실제로 덮인 뒤에 갈아 끼운다. 안 기다리면 교체가 먼저 그려져
     // 페이드가 아무것도 가리지 못한다.
-    await Future<void>.delayed(_floorSwapVeilFadeIn);
+    await Future<void>.delayed(floorTransitionScrimFadeIn);
     if (!mounted) return false;
 
     await _selectFloor(floor, preloaded: loaded);
     if (!mounted) return false;
+    // 새 도면이 첫 프레임을 그릴 시간을 준 뒤에 걷는다. 곧바로 걷으면 지도가
+    // 바뀌는 순간이 그대로 노출되고, 전환이 있었다는 사실도 눈에 남지 않는다.
+    await Future<void>.delayed(_floorSwapVeilHold);
+    if (!mounted) return false;
+    // 0으로 되돌려도 화면이 곧장 밝아지지는 않는다. 아직 탑승 중이면 단계
+    // 기반 스크림([_floorTransitionScrimOpacity])이 반투명으로 이어받는다.
     setState(() => _floorSwapVeil = 0);
     return true;
   }
@@ -2151,6 +2161,18 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     );
   }
 
+  /// 지금 화면을 덮어야 하는 정도.
+  ///
+  /// **도면을 실제로 갈아 끼우는 구간에만 0이 아니다.** 한때 탑승~하차 구간
+  /// 전체를 반투명으로 덮어 뒀는데, 그 구간은 길게는 수십 초라 "전환이
+  /// 일어나는 중"이 아니라 "화면이 계속 덮여 있다"로 읽혔다. 덮개는 사건을
+  /// 알리는 것이지 상태를 표시하는 것이 아니다 — 탑승 중이라는 사실은 배너가
+  /// 계속 말한다.
+  ///
+  /// 페이드가 느려서(진입 [floorTransitionScrimFadeIn], 해제
+  /// [floorTransitionScrimFadeOut]) 실제 노출은 1.5초 남짓이다.
+  double get _floorTransitionScrimOpacity => _floorSwapVeil;
+
   /// 배너의 `아니에요`. 셸이 [IndoorMapBodyState]를 통해 호출한다.
   void undoFloorTransition() {
     _escalatorArrivalTimer?.cancel();
@@ -2165,12 +2187,12 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   /// 복구할 방법이 없어진다 — 그 실패는 값 비교로 구조적으로 막는다.
   void _reportFloorTransitionUi() {
     final banner = _floorTransitionUiState;
-    final veil = _floorSwapVeil;
-    if (banner == _reportedFloorTransition && veil == _reportedFloorSwapVeil) {
+    final veil = _floorTransitionScrimOpacity;
+    if (banner == _reportedFloorTransition && veil == _reportedFloorScrimOpacity) {
       return;
     }
     _reportedFloorTransition = banner;
-    _reportedFloorSwapVeil = veil;
+    _reportedFloorScrimOpacity = veil;
     final notify = widget.onFloorTransitionChanged;
     if (notify == null) return;
     // build 중에는 부모 setState를 호출할 수 없다.
