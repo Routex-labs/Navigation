@@ -1159,6 +1159,11 @@ class _MapShellScreenState extends State<MapShellScreen>
   @override
   void clearPlannedRoute() => _outdoorKey.currentState?.clearPlannedRoute();
 
+  @override
+  Future<void> startFollowingCurrentLocation() async {
+    await _outdoorKey.currentState?.startFollowingCurrentLocation();
+  }
+
   /// 지도 화면이 "사용자 위치를 새로 잡았다"고 알려올 때. 기억해둔 출발지
   /// 매장을 버려서, 다음 길찾기가 **방금 잡은 위치**에서 출발하게 한다.
   ///

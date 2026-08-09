@@ -52,6 +52,14 @@ abstract interface class RoutePlannerMap {
   /// 계산하기 직전에 부른다 — 안 지우면 새 경로가 나올 때까지 옛 선이 남아
   /// 화면과 카드가 서로 다른 경로를 말한다.
   void clearPlannedRoute();
+
+  /// 카메라를 현재 위치로 확대하고, 이후 위치가 갱신될 때마다 따라가게 한다.
+  ///
+  /// 자동차 "안내시작"이 여기로 온다. 도로 경로는 전체를 한눈에 보여 주는 계획
+  /// 화면으로 시작하지만, 안내가 시작되면 사용자가 보고 싶은 것은 **지금 내가
+  /// 어디쯤인가**다 — 운전 중에는 화면을 손으로 옮길 수 없으므로 지도가 따라와야
+  /// 한다. 따라가기는 안내가 끝나면(경로를 지우면) 함께 멈춘다.
+  Future<void> startFollowingCurrentLocation();
 }
 
 /// 아래에서 시트가 올라오는 대신 **화면이 통째로 바뀌는** 길찾기.
@@ -582,6 +590,17 @@ class _RoutePlannerViewState extends State<RoutePlannerView> {
     widget.onClose();
   }
 
+  /// 자동차 "안내시작". 경로는 남긴 채 화면만 닫고, 지도를 현재 위치로 확대해
+  /// 따라가기 시작한다.
+  ///
+  /// 도보와 갈리는 지점이다. 도보에는 시작할 것이 없어 경로만 그리고 끝내지만
+  /// ([_computeRoad]), 자동차의 이 버튼은 카메라를 넘겨받는 실제 상태 전환이라
+  /// 누를 이유가 있다.
+  void _startCarGuidance() {
+    unawaited(widget.map.startFollowingCurrentLocation());
+    widget.onClose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -715,7 +734,7 @@ class _RoutePlannerViewState extends State<RoutePlannerView> {
         route: route,
         // 도보에는 버튼이 없다. 경로를 그린 [_computeRoad]가 이미 화면을 닫는
         // 중이라, 여기 버튼을 두면 닫히기 직전 한 프레임만 깜빡인다.
-        onStart: _mode == RoutePlanMode.walk ? null : widget.onClose,
+        onStart: _mode == RoutePlanMode.walk ? null : _startCarGuidance,
       ),
     );
   }

@@ -156,6 +156,27 @@ void main() {
     expect(recorder.destination?.title, '한성대학교');
   });
 
+  testWidgets('자동차 "안내시작"은 지도를 현재 위치로 옮겨 따라가게 한다', (
+    WidgetTester tester,
+  ) async {
+    // 운전 중에는 화면을 손으로 옮길 수 없다. 안내를 시작했는데 카메라가 경로
+    // 전체를 보여 주는 자리에 그대로 있으면, 사용자는 자기가 어디쯤인지 알 수 없다.
+    final recorder = await pumpPlanner(
+      tester,
+      destination: outdoorPlace,
+      mode: RoutePlanMode.car,
+    );
+    expect(map.follows, 0, reason: '누르기 전에는 따라가지 않는다');
+
+    await tester.tap(find.byKey(const Key('route-planner-start')));
+    await drain(tester);
+
+    expect(map.follows, 1);
+    // 경로는 남긴 채 화면만 닫는다 — 지도 위 ETA 카드가 그 경로를 이어받는다.
+    expect(recorder.closed, isTrue);
+    expect(map.road, isNotNull);
+  });
+
   testWidgets('도보로 도착지를 고르면 안내를 시작하지 않고 경로만 그린 뒤 닫는다', (
     WidgetTester tester,
   ) async {
@@ -406,6 +427,12 @@ class _FakeMap implements RoutePlannerMap {
   DirectionsRoute? road;
   TransitItinerary? transit;
   int clears = 0;
+  int follows = 0;
+
+  @override
+  Future<void> startFollowingCurrentLocation() async {
+    follows++;
+  }
 
   @override
   LatLng? get currentOriginPoint => origin;

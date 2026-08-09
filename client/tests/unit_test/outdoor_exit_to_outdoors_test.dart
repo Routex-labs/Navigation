@@ -234,6 +234,7 @@ void main() {
     final state = tester.state<OutdoorMapBodyState>(
       find.byType(OutdoorMapBody),
     );
+    // ignore: invalid_use_of_visible_for_testing_member
     await state.handleMapClickForTest(const LatLng(37.5680, 126.9800));
     await drain(tester);
     expect(find.byType(FloorSelector), findsNothing);

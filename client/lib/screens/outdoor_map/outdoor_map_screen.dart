@@ -70,6 +70,14 @@ const _indoorWalkingSpeedMetersPerSecond = 1.2;
 // 검색에서 고른 야외 장소로 카메라를 옮길 때의 줌.
 const _poiFocusZoom = 17.0;
 
+// 자동차 안내를 시작할 때 현재 위치로 확대할 줌.
+//
+// 야외 지도의 초기 zoom(17)보다 한 단계 더 들어간다. 안내가 시작되면 사용자가
+// 보는 것은 "전체 경로"가 아니라 "다음 갈림길"이라, 주변 도로 이름이 읽힐 만큼은
+// 확대돼 있어야 한다. 확대는 더 이상 실내 진입을 발동시키지 않으므로
+// ([indoor_entry_zoom.dart]) 건물 옆을 지나도 도면이 끼어들지 않는다.
+const _carGuidanceZoom = 17.5;
+
 // TMAP POI가 "이 건물의 가게"인지 볼 때 외곽선에서 허용하는 거리(m).
 //
 // TMAP POI 좌표는 건물 대표점이 아니라 도로에서 들어오는 접근점이라, 건물 안
@@ -655,6 +663,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// [_activatePendingIndoorRoute]가 실제 실내 경로 상태로 옮긴다.
   MultiFloorRoute? _pendingIndoorRoute;
   PoiSearchResult? _pendingIndoorDestination;
+
+  /// 자동차 안내가 시작돼 카메라가 사용자 위치를 따라가는 중인지.
+  ///
+  /// setState를 쓰지 않는다 — 이 값으로 갈리는 위젯이 없고, 위치가 올 때마다
+  /// 카메라만 움직인다. rebuild를 걸면 GPS 틱마다 지도 위 오버레이가 통째로 다시
+  /// 그려진다.
+  bool _followingUser = false;
 
   /// 사용자가 지도에서 직접 찍은 출발 위치. null이면 출발지는 GPS다.
   ///
@@ -1405,6 +1420,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 화면에 그릴지는 [_outdoorGpsVisible]이 따로 가른다([_syncCurrentLayer]).
     setState(() => _position = position);
     _syncCurrentLayer();
+    // 안내 중이면 카메라가 사용자를 따라간다. 판정보다 먼저 두는 이유는, 이번
+    // 위치로 실내에 들어가면 따라가기가 꺼지기 때문이다 — 그때는 카메라의 주인이
+    // 실내 위치(PDR)로 바뀐다.
+    if (_followingUser) unawaited(_moveCameraToUser(position));
     // 문 선택은 진입 판정보다 **먼저** 갱신한다. 진입 직후 실내 위치를 잡을 때
     // 폴백으로 쓰는 문이 이 선택의 결과라, 순서를 뒤집으면 사용자가 이미 다른
     // 문으로 들어왔는데 폴백은 한 박자 전 문을 가리킨다.
@@ -1414,6 +1433,40 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 실내 도면 위에 건물을 관통하는 선이 얹힌다.
     if (_indoorEntered) return;
     _updateRoute(position);
+  }
+
+  /// 자동차 안내를 시작한다 — 카메라를 현재 위치로 확대하고, 이후 위치가 갱신될
+  /// 때마다 그 자리를 따라간다.
+  ///
+  /// 위치를 아직 못 잡았어도 **켜 둔다.** 신호가 잡히는 순간 첫 위치가 카메라를
+  /// 데려가므로, 여기서 포기하면 터널을 나오며 안내를 시작한 사용자가 영영
+  /// 따라가지 못한다. 대신 지금 아무 일도 안 일어나는 이유는 알린다.
+  Future<void> startFollowingCurrentLocation() async {
+    _followingUser = true;
+    final position = _position;
+    if (position == null) {
+      _showSnack('현재 위치를 아직 못 잡았습니다. 신호가 잡히면 그 자리로 지도를 옮깁니다.');
+      return;
+    }
+    await _moveCameraToUser(position, zoom: _carGuidanceZoom);
+  }
+
+  /// 따라가기를 멈춘다. 안내가 끝나거나(경로 삭제) 카메라의 주인이 바뀌는
+  /// 지점(실내 진입·새 경로 계산)에서 부른다 — 안 멈추면 사용자가 지도를 옮겨도
+  /// 다음 위치 한 건이 곧바로 되돌려 놓아 지도를 조작할 수 없다.
+  void _stopFollowingUser() => _followingUser = false;
+
+  /// 카메라를 [position]으로 옮긴다. [zoom]을 주면 그 값으로 확대하고, 없으면
+  /// 지금 배율을 유지한다 — 따라가는 동안 사용자가 맞춘 배율을 빼앗지 않는다.
+  Future<void> _moveCameraToUser(Position position, {double? zoom}) async {
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    final target = LatLng(position.latitude, position.longitude);
+    await controller.animateCamera(
+      zoom == null
+          ? CameraUpdate.newLatLng(target)
+          : CameraUpdate.newLatLngZoom(target, zoom),
+    );
   }
 
   /// 위치 한 건이 말하는 건물 안팎을 상태에 반영한다.
@@ -1938,7 +1991,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncRouteLayer();
     _notifyRouteVisibilityIfChanged();
     final isVisible = route != null;
-    if (!wasVisible && isVisible) {
+    // 안내를 따라가는 중이면 경로 전체에 맞추지 않는다. 두 카메라가 번갈아
+    // 움직이면 지도가 사용자 위치와 경로 전체 사이를 오간다.
+    if (!wasVisible && isVisible && !_followingUser) {
       _fitCameraToRoute(route);
     }
   }
@@ -2091,6 +2146,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     bool keepPendingIndoorRoute = false,
   }) async {
     if (!keepPendingIndoorRoute) _clearPendingIndoorRoute();
+    // 새 안내는 새 계획이다. 이전 자동차 안내의 따라가기를 남기면 경로 전체를
+    // 보여 줘야 할 화면이 사용자 위치에 붙들린다.
+    _stopFollowingUser();
     // 새 도보 목적지를 받으면 이전 대중교통 안내는 끝난 것이다. 남겨 두면
     // 다른 곳으로 걸어가는 화면 위에 예전 버스 노선이 계속 그려진다.
     clearTransitRoute();
@@ -2147,6 +2205,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     required String label,
   }) async {
     _clearPendingIndoorRoute();
+    // 길찾기 화면이 경로를 **다시 그리는** 중이다(수단 변경·끝점 변경). 아직
+    // "안내시작" 전이므로 카메라는 경로 전체를 보여 줘야 한다.
+    _stopFollowingUser();
     clearTransitRoute();
     setState(() {
       _fixedRouteOrigin = origin;
@@ -2179,6 +2240,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   }
 
   void _clearUserDestination() {
+    // 안내가 여기서 끝난다. 따라가기를 남기면 카메라가 계속 사용자를 쫓아다녀
+    // 지도를 훑어볼 수 없다.
+    _stopFollowingUser();
     _clearPendingIndoorRoute();
     clearTransitRoute();
     setState(() {
@@ -3284,6 +3348,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 효과가 즉시 반영되게 한다.
   void _setIndoorEntered(bool value) {
     if (_indoorEntered == value) return;
+    // 건물 안에서는 카메라의 주인이 실내 위치(PDR)다. GPS 따라가기를 남기면
+    // 도면 위에서 카메라가 건물 밖으로 튄 GPS 좌표를 쫓아다닌다.
+    if (value) _stopFollowingUser();
     // 야외로 나가면 "이번 실내 상태가 어떻게 켜졌는가"는 끝난 이야기다. 안 지우면
     // 다음에 사용자가 직접 탭해 연 도면까지 자동 이탈 대상이 된다.
     if (!value) _indoorEnteredByGps = false;
