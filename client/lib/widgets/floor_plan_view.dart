@@ -48,6 +48,12 @@ const _tileSourceId = 'floor-tiles';
 /// 주석에 있다 — 같은 id를 지웠다 다시 만드는 경로를 피하려는 것이다.
 String _tileSourceIdFor(String floor) => '$_tileSourceId-$floor';
 
+/// 비활성 층 타일을 미리 받아 두는 프리페치 소스/레이어 id
+/// ([_installPrefetchTileSources]). 실제 층 소스([_tileSourceIdFor])와 id를
+/// 나눠, 층 전환의 addSource가 이미 있는 id에 부딪히는 경로를 만들지 않는다.
+String _prefetchSourceIdFor(String floor) => '$_tileSourceId-prefetch-$floor';
+String _prefetchLayerIdFor(String floor) => '$_tileSourceId-prefetch-fill-$floor';
+
 /// 매장명 라벨 전용 GeoJSON 소스 id.
 ///
 /// **왜 라벨만 타일이 아니라 GeoJSON인가.** 글자 크기를 매장 크기에 맞추려면
@@ -338,6 +344,7 @@ class FloorPlanView extends StatefulWidget {
     this.focusBottomSheetFraction = 0,
     this.focusTopInsetPx = 0,
     this.tileRevision,
+    this.prefetchFloorNames = const [],
     this.visibleInsets = EdgeInsets.zero,
     this.overlayHitTest,
     this.onCameraBearingChanged,
@@ -416,6 +423,12 @@ class FloorPlanView extends StatefulWidget {
   /// 벡터 타일 URL에 붙일 버전 토큰(`Building.tileRevision`). 근거는
   /// `core/tile_url.dart` 주석.
   final String? tileRevision;
+
+  /// 이 건물의 전체 층 이름 목록. 현재 층이 다 그려진 뒤(첫 idle) 나머지 층의
+  /// 타일을 투명 레이어로 미리 받아 둔다([_installPrefetchTileSources]) —
+  /// 층 전환 시 새 층 타일이 그제서야 네트워크로 내려오는 지연을 없애기 위한
+  /// 것이다. 비어 있으면 프리페치를 하지 않는다(길 안내처럼 층이 고정된 화면).
+  final List<String> prefetchFloorNames;
 
   /// [focusTarget]으로 이동한 뒤 화면 아래쪽을 덮을 시트의 높이(화면 비율).
   /// 이만큼을 감안해 매장을 위로 밀어 올린다 — 0이면 정중앙에 놓는다.
@@ -531,6 +544,17 @@ class FloorPlanViewState extends State<FloorPlanView> {
   /// 타일 교체가 도는 중인지. 사용자가 층 선택기를 빠르게 여러 번 누르면
   /// 교체가 겹쳐 같은 층을 두 번 설치하거나, 아직 안 얹힌 층을 지우려 든다.
   bool _swappingFloorTiles = false;
+
+  /// 프리페치 소스가 깔려 있는 층들. 불변식은 "활성 층을 뺀
+  /// [FloorPlanView.prefetchFloorNames] 전부" — 설치는 첫 idle에서
+  /// ([_installPrefetchTileSources]), 이후 층 전환마다 [_swapFloorTiles]가
+  /// 활성 층 것만 빼고 떠난 층 것을 다시 채워 유지한다.
+  final Set<String> _prefetchedFloors = {};
+
+  /// 프리페치 설치가 도는 중인지. idle은 타일 로드가 끝날 때마다 다시 오므로,
+  /// 설치가 끝나기 전에 다음 idle이 같은 설치를 겹쳐 돌리는 것을 막는다.
+  bool _installingPrefetch = false;
+
   Size? _lastViewport;
   double? _minZoom;
 
@@ -741,7 +765,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
       onStyleLoadedCallback: _onStyleLoaded,
       // 타일까지 다 그려 지도가 멈춘 시점 — 사용자가 "떴다"고 느끼는 순간이다.
       // 계측이 꺼져 있으면 [FloorSwitchTiming.mark]가 즉시 반환한다.
-      onMapIdle: () => FloorSwitchTiming.mark('idle'),
+      onMapIdle: _onMapIdle,
       onMapClick: _handleMapClick,
       onCameraMove: (position) =>
           widget.onCameraBearingChanged?.call(position.bearing),
@@ -1273,6 +1297,113 @@ class FloorPlanViewState extends State<FloorPlanView> {
     }
   }
 
+  /// 타일까지 다 그려 지도가 멈춘 시점 — 사용자가 "떴다"고 느끼는 순간이다.
+  /// 계측이 꺼져 있으면 [FloorSwitchTiming.mark]가 즉시 반환한다.
+  ///
+  /// 프리페치를 스타일 로드 직후가 아니라 여기서 거는 이유: 첫 층 타일과
+  /// 대역폭을 다투면 정작 보이는 층이 늦게 뜬다. idle은 "보이는 층이 다
+  /// 그려졌다"는 신호라, 그 뒤의 여유 시간에 나머지 층을 받는다.
+  void _onMapIdle() {
+    FloorSwitchTiming.mark('idle');
+    unawaited(_installPrefetchTileSources());
+  }
+
+  /// 비활성 층들의 타일 소스를 투명 fill 레이어와 함께 미리 깔아 둔다.
+  ///
+  /// 층 전환([_swapFloorTiles])은 새 층 소스를 그 순간에야 만들기 때문에, 각
+  /// 층의 첫 방문은 타일 fetch를 그대로 기다린다 — 그 왕복을 없애는 장치다.
+  /// MapLibre는 레이어가 참조하는 소스의 타일만 받으므로(visibility: none인
+  /// 레이어는 안 받는다) 불투명도 0짜리 fill을 하나 얹어 로드를 강제한다.
+  /// 받은 타일은 `?v=` immutable 캐시(core/tile_url.dart)에 남아, 층 전환 때
+  /// [_installFloorTileLayers]가 같은 URL로 소스를 만들면 네트워크 왕복 없이
+  /// 그려진다.
+  ///
+  /// **Dart 쪽 http로 미리 받아 두는 방법은 소용이 없다** — MapLibre 네이티브
+  /// 타일 로더의 캐시와 Dart HttpClient는 완전히 분리돼 있다. 반드시 지도
+  /// 소스를 통해 받아야 캐시가 워밍된다.
+  ///
+  /// 한 번 받고 지우지 않고 계속 두는 이유: 이후 사용자가 확대/이동한 만큼
+  /// 모든 층이 따라 받아지므로, 어떤 카메라 상태에서 층을 바꿔도 캐시에 있다.
+  /// 카메라가 건물 footprint에 묶여 있어([floor_camera_bounds.dart]) 층당 타일
+  /// 수는 유한하고 작다(z15~18 × 건물 폭 ~300m ≈ 층당 수십 장, 장당 수 KB).
+  Future<void> _installPrefetchTileSources() async {
+    final controller = _controller;
+    if (controller == null || !_styleReady) return;
+    // 층 전환 중에는 활성 층이 바뀌는 중이라 건너뛴다. idle은 전환의 타일
+    // 로드가 끝난 뒤 다시 오므로 그때 마저 채운다.
+    if (_installingPrefetch || _swappingFloorTiles) return;
+    _installingPrefetch = true;
+    try {
+      for (final floor in widget.prefetchFloorNames) {
+        if (floor == _activeTileFloor) continue;
+        if (_prefetchedFloors.contains(floor)) continue;
+        await _installPrefetchTileSource(controller, floor);
+      }
+    } finally {
+      _installingPrefetch = false;
+    }
+  }
+
+  Future<void> _installPrefetchTileSource(
+    MapLibreMapController controller,
+    String floor,
+  ) async {
+    try {
+      await controller.addSource(
+        _prefetchSourceIdFor(floor),
+        VectorSourceProperties(
+          tiles: [
+            indoorTileUrl(
+              buildingId: widget.buildingId,
+              floorName: floor,
+              tileRevision: widget.tileRevision,
+            ),
+          ],
+          // 실제 층 소스([_installFloorTileLayers])와 같은 범위여야 같은
+          // 타일 주소가 나와 캐시가 맞물린다.
+          minzoom: indoorTilesMinZoom,
+          maxzoom: indoorTilesMaxZoom,
+        ),
+      );
+      await controller.addFillLayer(
+        _prefetchSourceIdFor(floor),
+        _prefetchLayerIdFor(floor),
+        // 투명해도 타일은 받는다 — 로드 여부를 가르는 것은 visibility뿐이고
+        // fill-opacity는 paint 속성이라 로드 판정에 끼지 않는다.
+        const FillLayerProperties(fillOpacity: 0),
+        sourceLayer: 'footprint',
+        // 탭 판정(_storeAtScreenPoint)은 활성 층 레이어 id만 조회하므로 원래
+        // 겹칠 일이 없지만, 웹의 feature-tap 경로까지 확실히 닫는다.
+        enableInteraction: false,
+      );
+      _prefetchedFloors.add(floor);
+      FloorSwitchTiming.note('prefetch=$floor');
+    } on Object catch (error) {
+      // 프리페치는 편의 기능이다 — 실패해도 층 전환이 조금 느려질 뿐이므로
+      // 지도를 깨뜨리지 않는다. 흔한 원인이 "이미 있는 id"(hot restart 잔재,
+      // 전환과의 경합)라, 재시도로 idle마다 같은 실패를 반복하지 않도록
+      // 설치된 것으로 친다.
+      _prefetchedFloors.add(floor);
+      debugPrint('prefetch install failed ($floor): $error');
+    }
+  }
+
+  Future<void> _removePrefetchTileSource(
+    MapLibreMapController controller,
+    String floor,
+  ) async {
+    try {
+      await controller.removeLayer(_prefetchLayerIdFor(floor));
+    } on Object {
+      // 이미 없으면 무시 — [_removeFloorTileLayers]와 같은 이유.
+    }
+    try {
+      await controller.removeSource(_prefetchSourceIdFor(floor));
+    } on Object {
+      // 위와 같은 이유.
+    }
+  }
+
   /// 라벨 크기 계산에 쓰는 기준 위도. 픽셀당 미터가 위도에 따라 달라져서
   /// 필요하다 — 건물 하나 안에서는 상수로 봐도 되므로 도면 중심 하나를 쓴다.
   double _storeLabelLatitude() {
@@ -1351,6 +1482,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
   /// 순서가 핵심이다: **새 층을 먼저 얹고**, 다 얹힌 뒤에 옛 층을 지운다.
   /// 반대로 하면 그 사이 도면이 통째로 사라져 흰 화면이 보이고, 위에서 말한
   /// 네이티브 함정도 그대로 밟는다.
+  ///
   Future<void> _swapFloorTiles(String fromFloor, String toFloor) async {
     final controller = _controller;
     if (controller == null || !_styleReady) return;
@@ -1368,6 +1500,15 @@ class FloorPlanViewState extends State<FloorPlanView> {
       _activeTileFloor = toFloor;
       FloorSwitchTiming.mark('tilesSwapped');
       await _removeFloorTileLayers(controller, fromFloor);
+      // 프리페치 불변식(활성 층 제외 전부, [_prefetchedFloors]) 유지: 방금
+      // 활성이 된 층의 프리페치는 실제 소스와 타일이 겹치므로 거두고, 떠난
+      // 층은 프리페치로 되돌려 언제든 왕복 없이 돌아올 수 있게 한다.
+      if (_prefetchedFloors.remove(toFloor)) {
+        await _removePrefetchTileSource(controller, toFloor);
+      }
+      if (widget.prefetchFloorNames.contains(fromFloor)) {
+        await _installPrefetchTileSource(controller, fromFloor);
+      }
     } finally {
       _swappingFloorTiles = false;
     }

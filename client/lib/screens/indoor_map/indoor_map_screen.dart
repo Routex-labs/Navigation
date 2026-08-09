@@ -3430,6 +3430,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           focusBottomSheetFraction: _focusBottomSheetFraction,
           focusTopInsetPx: _focusTopInsetPx,
           tileRevision: _building?.tileRevision,
+          // 현재 층이 다 그려진 뒤 나머지 층 타일을 미리 받아 둔다 — 층
+          // 전환 때 새 층 타일을 그제서야 네트워크로 받는 지연을 없앤다.
+          prefetchFloorNames: building.floors,
           visibleInsets: EdgeInsets.fromLTRB(0, topOverlay, 0, bottomOverlay),
           overlayHitTest: _isTapOnMapOverlay,
           // 자동 층 전환에서만 값이 있다. 층 선택기로 훑어볼 때는 null이라
