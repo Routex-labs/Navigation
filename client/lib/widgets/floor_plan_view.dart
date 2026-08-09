@@ -1393,6 +1393,20 @@ class FloorPlanViewState extends State<FloorPlanView> {
     // 정하면 null로 되돌리지 않아서, 매장을 한 번이라도 누르면 위치 제한이
     // 영원히 꺼진다.
     _userBoundsSuspended = true;
+    // **도면 제한도 함께 끈다.** 이게 없으면 건물 가장자리 매장을 고를 때
+    // 포커스가 통째로 무효가 된다 — [clampToFootprint]는 뷰포트가 bbox 안에
+    // 머물도록 허용 영역을 화면 절반만큼 깎으므로, 가장자리 매장은 애초에
+    // 중앙에 놓을 수 없고 아래 lift까지 되돌려진다.
+    //
+    // 그 규칙의 근거는 "가장자리는 화면 **끝**에 보이면 된다"였는데, 시트가
+    // 화면의 60%를 덮는 순간 그 '끝'이 곧 시트 뒤다. 실기기에서 6F
+    // 「이탈리 마켓」(건물 동쪽 끝)을 고르면 매장이 우하단으로 밀려 시트에
+    // 완전히 가렸다.
+    //
+    // 꺼도 카메라가 멀리 도망가지는 않는다 — 목표가 건물 안 매장이라 최대
+    // 화면 절반만큼 바깥이고, 그동안 도면은 화면에 남는다. 다시 켜지는 곳은
+    // 위치 제한과 같다(사용자가 지도를 끌거나 [resumeFollow]).
+    _footprintBoundsSuspended = true;
 
     // 뷰포트는 await 전에 읽는다. 카메라 이동을 기다린 뒤 MediaQuery를 보면
     // 그 사이 위젯이 트리에서 빠졌을 수 있다.
@@ -1873,6 +1887,9 @@ class FloorPlanViewState extends State<FloorPlanView> {
     final center = controller?.cameraPosition?.target;
     if (controller == null || center == null) return;
 
+    // 매장 포커스 중에는 되돌리지 않는다(위 [_applyFocusTarget] 주석).
+    if (_footprintBoundsSuspended) return;
+
     final halfSpan = await _visibleHalfSpan(controller);
     if (!mounted) return;
 
@@ -2107,6 +2124,13 @@ class FloorPlanViewState extends State<FloorPlanView> {
   /// 자세한 이유는 [_applyFocusTarget] 주석에 있다.
   bool _userBoundsSuspended = false;
 
+  /// 도면 밖 되돌림([_pullBackIntoFootprint])을 꺼 둔 상태인지.
+  ///
+  /// 매장 포커스 중에만 켠다. 건물 가장자리 매장은 되돌림 때문에 화면 중앙에
+  /// 놓을 수 없고, 시트를 피해 올려 둔 것까지 되돌려지기 때문이다
+  /// ([_applyFocusTarget] 주석에 실기기 사례를 적어 두었다).
+  bool _footprintBoundsSuspended = false;
+
   /// 이번 제스처에서 손가락이 움직인 누적 거리(논리 픽셀). 이 값이 임계를
   /// 넘어야 "끌었다"로 본다.
   double _gesturePanPx = 0;
@@ -2133,6 +2157,10 @@ class FloorPlanViewState extends State<FloorPlanView> {
     //
     // 다시 켜는 곳은 [resumeFollow] 하나다("위치 보정").
     _userBoundsSuspended = true;
+    // 반대로 도면 제한은 **여기서 되살린다.** 포커스 때문에 꺼 뒀던 것인데,
+    // 사용자가 직접 밀기 시작하면 "도면 밖으로 무한히 밀리지 않는다"가 다시
+    // 필요하다([clampToFootprint] 주석).
+    _footprintBoundsSuspended = false;
     widget.onFollowingChanged?.call(false);
   }
 
@@ -2141,8 +2169,9 @@ class FloorPlanViewState extends State<FloorPlanView> {
       setState(() => _following = true);
       widget.onFollowingChanged?.call(true);
     }
-    // 내 위치로 돌아왔으니 매장 포커스 때문에 꺼 뒀던 위치 제한을 다시 켠다.
+    // 내 위치로 돌아왔으니 매장 포커스 때문에 꺼 뒀던 제한들을 다시 켠다.
     _userBoundsSuspended = false;
+    _footprintBoundsSuspended = false;
     // 중심만 맞추고 끝내지 않는다. 추적이 풀린 사이 사용자가 지도를 돌려 놨을
     // 수 있고, 그러면 "내 위치로 돌아왔는데 방향은 딴 데를 보는" 화면이 된다.
     // 명시적 요청이므로 데드밴드를 건너뛴다.

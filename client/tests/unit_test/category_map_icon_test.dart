@@ -81,13 +81,22 @@ void main() {
       // 아니다. 중심 거리로 오해해 아이콘 반지름/글자크기(≈0.85)를 넣었더니
       // 실기기에서 간격이 27px까지 벌어져 아이콘과 이름이 따로 놀았다.
       //
-      // 실측으로 약 31.7px/em이라, 0.35를 넘으면 11px 이상 벌어진다.
+      // ⚠️ **고정 상한(0.35)에서 비율로 바꿨다.** 그 값은 아이콘이 15 물리px
+      // 이던 시절에 잡은 것이라, 배지가 3배 커진 지금은 같은 여백이 "글자가
+      // 아이콘에 파묻힌다"가 된다. 여백은 배지 크기에 따라 달라져야 하므로
+      // **배지 지름에 대한 비율**로 잠근다.
+      //
+      // 여백(논리 px) = offset(em) × 글자 크기(논리 px).
       expect(kStoreLabelRadialOffset, greaterThan(0));
-      expect(
-        kStoreLabelRadialOffset,
-        lessThanOrEqualTo(0.35),
-        reason: '아이콘 반지름 기준으로 계산한 값을 다시 넣지 말 것 — 그 가정은 틀렸다.',
-      );
+
+      for (final (textPx, iconPx) in [
+        (kStoreLabelMinPx, kStoreCategoryIconMinLogicalPx),
+        (kStoreLabelMaxPx, kStoreCategoryIconMaxLogicalPx),
+      ]) {
+        final ratio = kStoreLabelRadialOffset * textPx / iconPx;
+        expect(ratio, greaterThanOrEqualTo(0.25), reason: '배지에 글자가 파묻힌다');
+        expect(ratio, lessThanOrEqualTo(0.7), reason: '아이콘과 이름이 따로 논다');
+      }
     });
 
     test('아이콘 크기가 화면 배율을 따라간다', () {

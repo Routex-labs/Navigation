@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../core/service_locator.dart';
 import '../domain/dijkstra.dart';
-import '../domain/nearby_facilities.dart';
 import '../models/favorite_place.dart';
 import '../models/place_detail.dart';
 import '../repositories/place_detail_repository.dart';
@@ -48,7 +47,6 @@ class PlaceDetailSheet extends StatefulWidget {
     this.category,
     this.subcategory,
     this.reach,
-    this.facilities = const [],
     this.repository,
     required this.onCloseAll,
   });
@@ -72,7 +70,6 @@ class PlaceDetailSheet extends StatefulWidget {
   ///
   /// [reach]와 **기준이 다르다** — 이쪽은 사용자가 아니라 이 매장에서 잰 거리다.
   /// 같은 기준으로 두 번 적으면 두 번째 줄이 알려 주는 게 없다.
-  final List<NearbyFacility> facilities;
 
   /// 헤더 아이콘의 대분류 폴백·강조색. 세부 규칙(`카페·베이커리` 등)이 먼저고,
   /// 거기 걸리지 않는 일반 매장이 이 값으로 떨어진다.
@@ -93,7 +90,6 @@ class PlaceDetailSheet extends StatefulWidget {
     String? category,
     String? subcategory,
     NodeReach? reach,
-    List<NearbyFacility> facilities = const [],
     PlaceDetailRepository? repository,
     required VoidCallback onCloseAll,
   }) {
@@ -120,7 +116,6 @@ class PlaceDetailSheet extends StatefulWidget {
           category: category,
           subcategory: subcategory,
           reach: reach,
-          facilities: facilities,
           repository: repository,
           onCloseAll: onCloseAll,
         ),
@@ -277,7 +272,6 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                           category: widget.category,
                           subcategory: subcategory,
                           reach: widget.reach,
-                          facilities: widget.facilities,
                         ),
                       ),
                       // 이름을 읽은 직후가 길찾기를 누르는 자리다. 사진·메뉴를
@@ -333,7 +327,6 @@ class _PlaceCore extends StatelessWidget {
     required this.category,
     required this.subcategory,
     required this.reach,
-    required this.facilities,
   });
 
   final String title;
@@ -341,7 +334,6 @@ class _PlaceCore extends StatelessWidget {
   final String? category;
   final String? subcategory;
   final NodeReach? reach;
-  final List<NearbyFacility> facilities;
 
   @override
   Widget build(BuildContext context) {
@@ -449,36 +441,6 @@ class _PlaceCore extends StatelessWidget {
                           height: 1.3,
                           fontWeight: FontWeight.w600,
                           color: AppColors.text,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-              // 이 매장에서 가장 가까운 시설. 위 거리 줄과 **기준이 다르므로**
-              // ("나 → 매장"과 "매장 → 시설") 아이콘과 문구로 구분한다.
-              for (final facility in facilities) ...[
-                const SizedBox(height: 3),
-                Row(
-                  children: [
-                    Icon(
-                      switch (facility.kind) {
-                        FacilityKind.restroom => Icons.wc,
-                        FacilityKind.elevator => Icons.elevator,
-                      },
-                      size: 14,
-                      color: AppColors.muted,
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        '${facility.kind.label} ${facility.reach.distanceM.round()}m',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          height: 1.3,
-                          color: AppColors.muted,
                         ),
                       ),
                     ),
