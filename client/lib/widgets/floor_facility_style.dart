@@ -63,6 +63,64 @@ List<Object> facilityStoreLabelFilter() => [
     ],
 ];
 
+/// 이름을 **그리면 안 되는** POI `type`.
+///
+/// ## 왜 필요한가 — 이 이름들은 사람에게 보여 줄 이름이 아니다
+///
+/// POI는 Studio 원본의 `elevator`/`escalator` 노드를 마커로 승격한 것이라
+/// (`backend/scripts/seed/studio_adapter.py`의 `_generate_pois`), `name`이 노드
+/// 식별자 그대로다. 더현대 서울 실데이터를 세어 보면:
+///
+/// | type | 개수 | 이름 예시 |
+/// |---|---|---|
+/// | `escalator` | 152 | `ES1-DN(FR3F)` · `ES3-UP(TO2F)` · `ES2-UP(FRB1)` |
+/// | `elevator` | 59 | `EV1` · `EV2` · `EV3` |
+///
+/// 즉 실내 도면 한 층에 **매장명과 같은 무게의 영문 내부 코드가 수십 개** 떠
+/// 있었다. 이름 자체가 뜻을 전하지 못할 뿐 아니라, 한글 매장명 사이에 섞인
+/// 영문 대문자 코드라 시선을 먼저 끌어 정작 읽어야 할 매장명이 묻혔다.
+///
+/// ## 왜 층 매장 라벨에서는 안 보였나
+///
+/// `stores` 레이어 쪽 에스컬레이터·엘리베이터는 이미 걸러지고 있다
+/// ([storeLabelWithCategoryIconFilter] — 이름이 정확히 `에스컬레이터`·
+/// `엘리베이터`인 폴리곤). 같은 시설이 **폴리곤(stores)과 마커(pois) 두 소스로**
+/// 들어오는데 한쪽만 막혀 있었던 것이다. 야외 오버레이는 POI를 아이콘으로만
+/// 그리고 이름 레이어가 아예 없어서(`outdoor_map_screen.dart`) 실내 화면에서만
+/// 증상이 보였다.
+///
+/// ## 아이콘은 남긴다
+///
+/// 위치 자체는 필요한 정보다. `floor-pois-icon`이 계속 그리고, 무슨 시설인지는
+/// 아이콘([kPoiIconByType])이 말한다 — [storeLabelWithCategoryIconFilter]가
+/// 폴리곤 쪽에서 내린 것과 같은 판단이다.
+///
+/// `vertical-connection`은 더현대 데이터에는 없지만 [kPoiIconByType]이 다른
+/// 데이터셋을 위해 이미 받고 있는 값이라 같이 막는다. 새 건물이 들어올 때
+/// 아이콘은 붙는데 이름만 새는 상태가 되지 않게 한다.
+const kVerticalTransportPoiTypes = <String>[
+  'elevator',
+  'escalator',
+  'vertical-connection',
+];
+
+/// POI 이름 라벨 필터. [kVerticalTransportPoiTypes]를 뺀 나머지(화장실·출구 등)만
+/// 이름을 그린다.
+///
+/// `!=`의 `all`이다 — [storeLabelWithCategoryIconFilter]와 같은 형태를 쓴다.
+/// `['match', ...]`나 `['!', ['in', ...]]`가 MapLibre GL Native에서 조용히
+/// 어긋나던 전례가 있어([floor_plan_view.dart]의 fill 필터 주석) 검증된 쪽으로
+/// 통일한다.
+List<Object> poiLabelFilter() => [
+  'all',
+  for (final type in kVerticalTransportPoiTypes)
+    [
+      '!=',
+      ['get', 'type'],
+      type,
+    ],
+];
+
 /// POI `type` 속성(백엔드 실데이터 값)을 지도 위 아이콘에 매핑한다. 건물마다
 /// 명명이 조금씩 달라(더현대는 elevator/escalator/toilet/exit, 다른 데이터셋은
 /// vertical-connection/core-entrance 등) 여러 값을 같은 아이콘으로 묶는다.

@@ -13,6 +13,7 @@ import '../core/api_config.dart';
 import '../core/floor_switch_timing.dart';
 import '../core/tile_url.dart';
 import '../core/map_fonts.dart';
+import '../core/map_label_style.dart';
 import '../core/map_palette.dart';
 import '../core/map_route_style.dart';
 import 'destination_pin.dart';
@@ -1056,9 +1057,10 @@ class FloorPlanViewState extends State<FloorPlanView> {
         // variable-anchor가 고른 방향에 맞춰 좌/우 정렬을 따라가게 한다.
         // 기본값(center)으로 두면 두 줄로 접힌 이름이 아이콘 쪽으로 쏠린다.
         textJustify: 'auto',
-        textColor: '#444846',
-        textHaloColor: '#FFFFFF',
-        textHaloWidth: 1.2,
+        // 색·헤일로는 [map_label_style.dart]가 단일 출처다(야외 오버레이와 같은 값).
+        textColor: mapLabelStoreColor,
+        textHaloColor: mapLabelHaloColor,
+        textHaloWidth: mapLabelHaloWidth,
         symbolAvoidEdges: true,
         // variable-anchor는 충돌 판정 위에서만 동작한다. true로 바꾸면 앵커가
         // 항상 첫 번째 값으로 굳어 뒤집기가 조용히 죽는다.
@@ -1085,20 +1087,25 @@ class FloorPlanViewState extends State<FloorPlanView> {
     // 편의시설(화장실·정수기 등) 이름 — 아이콘은 아래 전용 레이어가 그리므로
     // 여기서는 텍스트만 얹는다. 위 레이어에 섞으면 같은 폴리곤에 시설 아이콘과
     // 대분류 아이콘이 둘 다 떠서 무엇을 봐야 할지 알 수 없게 된다.
+    //
+    // **매장명과 달리 크기가 고정이다.** 폴리곤 맞춤 계산은 글자가 폴리곤 안에
+    // 들어가는 경우의 계산인데 이 이름은 아이콘을 피해 폴리곤 밖으로 내려 그린다
+    // ([mapLabelFacilityTextSize] 주석에 근거를 적었다).
     await controller.addSymbolLayer(
       labelSourceId,
       _tileLayerId(_facilityLabelLayerId, floor),
-      SymbolLayerProperties(
+      const SymbolLayerProperties(
         textField: ['get', 'name'],
         textFont: _mapFontStack,
-        textSize: storeLabelTextSizeExpression(latitude: labelLatitude),
-        textMaxWidth: ['get', kStoreLabelMaxWidthProperty],
+        textSize: mapLabelFacilityTextSize,
+        textMaxWidth: mapLabelFacilityMaxWidth,
         // 아이콘이 centroid를 차지하므로 이름은 그 아래로 내린다. POI 라벨
-        // (`floor-pois-label`)이 쓰는 오프셋과 같은 값이라 두 라벨의 높이가 맞는다.
-        textOffset: const [0, 1.6],
-        textColor: '#444846',
-        textHaloColor: '#FFFFFF',
-        textHaloWidth: 1.2,
+        // (`floor-pois-label`)·야외 오버레이와 같은 오프셋이라 세 곳의 라벨
+        // 높이가 맞는다.
+        textOffset: mapLabelBelowIconOffset,
+        textColor: mapLabelFacilityColor,
+        textHaloColor: mapLabelHaloColor,
+        textHaloWidth: mapLabelHaloWidth,
         textAllowOverlap: false,
       ),
       belowLayerId: belowLayerId,
@@ -1129,20 +1136,26 @@ class FloorPlanViewState extends State<FloorPlanView> {
       belowLayerId: belowLayerId,
       enableInteraction: false,
     );
+    // POI 이름. **수직이동(에스컬레이터·엘리베이터)은 이름을 그리지 않는다** —
+    // 그 이름이 `ES3-UP(TO2F)` 같은 Studio 내부 코드라서다([poiLabelFilter]에
+    // 실데이터 개수와 예시를 적어 두었다). 아이콘은 위 레이어가 계속 그린다.
     await controller.addSymbolLayer(
       sourceId,
       _tileLayerId('floor-pois-label', floor),
       const SymbolLayerProperties(
         textField: ['get', 'name'],
         textFont: _mapFontStack,
-        textSize: 10,
-        textOffset: [0, 1.6],
-        textColor: '#4F5451',
-        textHaloColor: '#FFFFFF',
-        textHaloWidth: 1,
+        // 같은 "아이콘 + 아래 이름" 꼴인 편의시설 라벨과 같은 값을 쓴다.
+        textSize: mapLabelFacilityTextSize,
+        textMaxWidth: mapLabelFacilityMaxWidth,
+        textOffset: mapLabelBelowIconOffset,
+        textColor: mapLabelFacilityColor,
+        textHaloColor: mapLabelHaloColor,
+        textHaloWidth: mapLabelHaloWidth,
       ),
       sourceLayer: 'pois',
       belowLayerId: belowLayerId,
+      filter: poiLabelFilter(),
       enableInteraction: false,
     );
 

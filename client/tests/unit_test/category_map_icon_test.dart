@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/widgets/category_icon.dart';
 import 'package:navigation_client/widgets/category_map_icon.dart';
 import 'package:navigation_client/widgets/floor_facility_style.dart';
+import 'package:navigation_client/widgets/store_label_fit.dart';
 
 /// 지도 라벨에 붙는 대분류 아이콘의 규칙을 못 박는다.
 ///
@@ -89,19 +90,37 @@ void main() {
       );
     });
 
-    test('아이콘이 이름보다 커지지 않는다', () {
-      // 아이콘 폭이 심볼 폭에 그대로 더해져 붐비는 층의 라벨 개수를 깎는다.
-      // 글자 크기의 1.5배를 넘기면 도면이 아이콘 밭이 되고 이름이 밀려난다.
-      const textSizeAtZ16 = 9.0;
-      const textSizeAtZ20 = 14.0;
+    test('아이콘을 키운 만큼 이름이 밀려나지 않는다', () {
+      // 붐비는 층의 라벨 개수를 지키는 진짜 기준은 아이콘 크기 자체가 아니라
+      // **심볼 하나가 차지하는 폭**이다 — MapLibre의 충돌 판정이 보는 값이 그것
+      // 이고, 그 폭이 넓어진 만큼 이름이 밀려난다.
+      //
+      //   심볼 폭 = 아이콘 + (간격 × 글자크기) + (글자크기 × 글자수)
+      //
+      // ⚠️ **기준을 바꿨다.** 예전에는 "아이콘 ≤ 글자의 1.5배"였는데, 그 1.5는
+      // 글자 상한이 18px이던 시절에 쓰던 대용값이다. 상한을 14px로 내리자
+      // (`kStoreLabelMaxPx`) 같은 비율이 **아이콘을 예전보다 작게** 강요했다 —
+      // "동그라미가 너무 작다"는 피드백과 정반대 방향이다. 비율 대신 실제
+      // 예산으로 바꾼다. 대용값이 사라져서 오히려 조건이 정확해진다.
       const canvasSize = 96.0;
+      const nameLength = 4; // 매장명 중앙값 근처
+
+      double symbolWidth(double iconScale, double textPx) =>
+          iconScale * canvasSize +
+          kStoreLabelRadialOffset * textPx +
+          nameLength * textPx;
+
+      // 밀도가 실제로 확인된 마지막 조합: 아이콘 0.14~0.20 · 글자 9~18px.
+      // 그때보다 넓어지면 안 된다.
       expect(
-        (kStoreCategoryIconSizeIndoor[4] as double) * canvasSize,
-        lessThan(textSizeAtZ16 * 1.5),
+        symbolWidth(kStoreCategoryIconSizeIndoor[4] as double, kStoreLabelMinPx),
+        lessThanOrEqualTo(symbolWidth(0.14, 9.0) + 1e-9),
+        reason: '축소(z16)는 글자가 이미 하한이라 아이콘을 키울 예산이 없다',
       );
       expect(
-        (kStoreCategoryIconSizeIndoor[6] as double) * canvasSize,
-        lessThan(textSizeAtZ20 * 1.5),
+        symbolWidth(kStoreCategoryIconSizeIndoor[6] as double, kStoreLabelMaxPx),
+        lessThanOrEqualTo(symbolWidth(0.20, 18.0)),
+        reason: '확대(z20)는 글자 상한을 내린 만큼만 키울 수 있다',
       );
     });
   });
