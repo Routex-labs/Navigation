@@ -1,9 +1,14 @@
 {
   "PO-A9Dje-_R07837": {
     "name": "블루보틀",
-    "updated_at": "2026-08-08",
-    "summary": "우리는 훌륭한 커피를 원하는 모든 사람에게 제공하자는 단순한 목적으로 연결되어 있습니다.",
-    "source": "https://kr.bluebottlecoffee.com/pages/about-us",
+    "updated_at": "2026-08-10",
+    "summary": "부드러운 곡선의 벽체와 벽면을 따라 이어지는 은은한 라이팅으로 아늑함 속 잠시의 휴식에 취해 보세요.",
+    "source": "https://kr.bluebottlecoffee.com/blogs/locator/bluebottle-yeouido-cafe",
+    "tags": ["유리 천장", "실내 정원"],
+    "hero": [
+      { "local_asset": "assets/place_details/bluebottle_yeouido_store_01.jpg" },
+      { "local_asset": "assets/place_details/bluebottle_yeouido_store_02.jpg" }
+    ],
     "businessInfo": [
       {
         "label": "주소",
