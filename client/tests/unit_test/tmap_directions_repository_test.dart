@@ -160,7 +160,7 @@ void main() {
     Map<String, String>? sentFields;
     final client = MockClient((request) async {
       calledUri = request.url;
-      sentFields = (request as http.Request).bodyFields;
+      sentFields = request.bodyFields;
       return http.Response(
         _drivingResponseBody,
         200,

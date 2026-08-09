@@ -15,6 +15,7 @@ import '../../models/favorite_place.dart';
 import '../../models/floor_plan.dart';
 import '../../models/outdoor_poi.dart';
 import '../../models/poi_search_result.dart';
+import '../../models/directions_route.dart';
 import '../../models/transit_route.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/building_switcher_sheet.dart';
@@ -23,17 +24,20 @@ import '../../widgets/category_label_order.dart';
 import '../../widgets/category_map_filter.dart';
 import '../../widgets/category_stores_sheet.dart';
 import '../../widgets/category_taxonomy.dart';
-import '../../widgets/directions_sheet.dart';
+import '../../widgets/directions_candidate.dart';
 import '../../widgets/favorites_sheet.dart';
 import '../../widgets/map_bottom_bar.dart';
 import '../../widgets/map_top_bar.dart';
 import '../../widgets/outdoor_poi_sheet.dart';
 import '../../widgets/place_detail_sheet.dart';
+import '../../widgets/route_planner/route_plan_mode.dart';
+import '../../widgets/route_planner/route_planner_header.dart';
 import '../../widgets/search_panel.dart';
 import '../../widgets/transit_routes_sheet.dart';
 import '../../widgets/travel_mode_bar.dart';
 import '../indoor_map/indoor_map_screen.dart';
 import '../outdoor_map/outdoor_map_screen.dart';
+import '../route_planner/route_planner_view.dart';
 
 /// 야외/실내 지도의 공통 뼈대. 홈(야외) ↔ 실내 전환은 Navigator push 없이
 /// 이 화면 안에서 모드만 바꿔 탭처럼 즉시 반응하게 한다. 검색·길찾기·건물
@@ -58,7 +62,8 @@ const _etaBarLiftHeight = 92.0;
 /// "필터가 안 먹었다"를 사용자가 구분할 방법이 달리 없다.
 typedef _CategoryEntry = CategoryCount;
 
-class _MapShellScreenState extends State<MapShellScreen> {
+class _MapShellScreenState extends State<MapShellScreen>
+    implements RoutePlannerMap {
   /// 상단 오버레이 사이 간격. 예전 top: 78 / top: 128 같은 고정 offset을
   /// 대신하는 유일한 값이다. 상단 바 높이가 상태에 따라 달라져도 이 간격은
   /// 그대로라 어느 모드에서든 같은 여백으로 보인다.
@@ -158,6 +163,33 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 명시적 초기화 또는 다른 도착지 선택 때만 바꾼다.
   DirectionsCandidate? _routeDraftDestination;
 
+  /// 길찾기 화면이 지금 열려 있는지.
+  ///
+  /// **다른 화면을 push하지 않는다.** 지도를 새로 만들면 타일·GPS·실내 도면을
+  /// 통째로 다시 로드하고 방금 보던 카메라와 위치 앵커가 날아간다. 대신 지금
+  /// 지도 위에 전체 화면 오버레이로 얹고, 지도 위 다른 요소(상단 검색창·카테고리
+  /// 칩·하단 바)를 접는다 — 사용자에게는 화면이 통째로 바뀐 것으로 보이고,
+  /// 그리는 쪽은 이미 떠 있는 지도 그대로다.
+  bool _plannerOpen = false;
+
+  /// 길찾기 화면을 열 때마다 1씩 오른다. [RoutePlannerView]의 key로 써서 새로
+  /// 열 때는 반드시 새 State가 만들어지게 한다 — 안 그러면 initState가 다시
+  /// 돌지 않아 이번에 넘긴 출발/도착 초기값이 무시된다.
+  int _plannerSession = 0;
+
+  /// 길찾기 화면에서 사용자가 **직접 고른** 이동 수단. 지도에서 출발지를 고르러
+  /// 잠깐 화면을 접었다 다시 열 때 그 선택을 되살리는 데 쓴다. null이면 거리를
+  /// 보고 자동으로 정한다.
+  RoutePlanMode? _plannerMode;
+
+  /// 길찾기 화면을 열 때 커서를 둘 칸.
+  RoutePlanField? _plannerField;
+
+  /// "지도에서 선택"으로 화면을 접은 것인지. 참이면 지도에서 한 지점을 고르는
+  /// 즉시 길찾기 화면을 다시 연다 — 안 그러면 사용자가 고른 값이 어디로 갔는지
+  /// 모른 채 지도만 남는다.
+  bool _reopenPlannerAfterPick = false;
+
   final _outdoorKey = GlobalKey<OutdoorMapBodyState>();
   final _indoorKey = GlobalKey<IndoorMapBodyState>();
 
@@ -174,6 +206,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// "지도에서 도착지를 골라주세요" 안내. 이 카드의 X를 누른 탭이 지도까지
   /// 새어들어가면, 취소를 누른 손가락이 그 아래 매장을 도착지로 지정해 버린다.
   final _mapPickHintKey = GlobalKey();
+
+  /// 길찾기 화면 전체. 이 화면이 떠 있는 동안에는 지도 탭이 통째로 막혀야 한다 —
+  /// 화면 뒤에서 건물 진입이나 매장 선택이 일어나면, 사용자가 보고 있는 화면과
+  /// 그 아래 상태가 어긋난다.
+  final _plannerKey = GlobalKey();
 
   // 상단 검색창은 이제 여기(상위)가 소유한다. 결과 패널이 검색창 바로 아래에
   // 붙어야 하므로, 입력 상태를 검색창과 패널이 함께 볼 수 있는 이 자리에 둔다.
@@ -520,7 +557,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
         if (destination != null) {
           await _startRoute(origin: candidate, destination: destination);
         } else {
-          await _openDirections(presetOrigin: candidate);
+          _openPlanner(presetOrigin: candidate);
         }
       case OutdoorPoiAction.setDestination:
         setState(() => _routeDraftDestination = candidate);
@@ -751,7 +788,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
       if (destination != null) {
         await _startRoute(origin: candidate, destination: destination);
       } else {
-        await _openDirections(presetOrigin: candidate);
+        _openPlanner(presetOrigin: candidate);
       }
     } else if (action == StoreInfoAction.setDestination) {
       // 출발지가 준비돼 있으면 바로 경로를 그린다. 명시적으로 고른 매장이거나,
@@ -982,82 +1019,138 @@ class _MapShellScreenState extends State<MapShellScreen> {
     return merged;
   }
 
-  /// 길찾기 시트를 연다. [presetOrigin]/[presetDestination]은 매장 정보
-  /// 시트의 "출발지로 설정"/"도착지로 설정"에서 넘어올 때 그 매장으로 채워
-  /// 둘 값이다. 저장된 도착 초안이 있으면 [presetDestination]이 없어도 그
-  /// 값을 채워, 상단 출발 행에서 끊긴 흐름을 그대로 이어 간다. 시트 안에서
-  /// 출발지를 직접 고르면(맨 위 "현재 위치" 포함) 그 선택이 [presetOrigin]보다
-  /// 우선한다.
-  /// [focusOrigin]은 출발지 칸을 활성으로 열지다. 상단 초안 바의 **출발 행**을
-  /// 눌러 들어올 때만 켠다 — 출발지를 바꾸려고 누른 것이므로 커서가 그 칸에 있어야
-  /// 한다. 매장 정보 시트에서 출발지를 이미 정하고 넘어오는 경우는 다음에 고를 것이
-  /// 도착지라 기본값(도착지 활성)이 맞다.
-  Future<void> _openDirections({
+  /// 길찾기 화면을 연다.
+  ///
+  /// 예전에는 아래에서 시트가 올라왔다. 시트가 지도를 덮으니 경로를 보려면
+  /// 시트를 닫아야 했고, 닫으면 방금 넣은 출발/도착이 어디로 갔는지 알 수
+  /// 없었다. 게다가 이동 수단은 시트를 닫은 **뒤에** 지도 위 작은 줄에서 고르게
+  /// 되어, 입력과 선택이 서로 다른 화면에 흩어져 있었다. 이제는 수단·입력·결과가
+  /// 한 화면에 함께 있다([RoutePlannerView]).
+  ///
+  /// [presetOrigin]/[presetDestination]은 매장 정보 시트의 "출발지로 설정"/
+  /// "도착지로 설정"에서 넘어올 때 채워 둘 값이다. 넘기지 않으면 상위가 기억해 둔
+  /// 초안([_selectedOrigin]·[_routeDraftDestination])을 그대로 이어 간다.
+  ///
+  /// [focusField]는 커서를 둘 칸이다. 상단 초안 바의 출발 행을 눌러 들어올 때만
+  /// 출발지를 준다 — 출발지를 바꾸려고 누른 것이므로 커서가 그 칸에 있어야 한다.
+  void _openPlanner({
     DirectionsCandidate? presetOrigin,
     DirectionsCandidate? presetDestination,
-    bool focusOrigin = false,
-  }) async {
-    // 상위가 기억해둔 출발지가 있으면 시트에도 미리 채워, 사용자가 매번 다시
-    // 입력하지 않아도 되게 한다. presetOrigin(이번 진입점에서 명시적으로 넘긴
-    // 값)이 있으면 그 값이 우선한다.
-    final initialOrigin = presetOrigin ?? _selectedOrigin;
-    final initialDestination = presetDestination ?? _routeDraftDestination;
-    final result = await _withMapsLocked(
-      () => DirectionsSheet.show(
-        context,
-        originLabel: '현재 위치',
-        initialOrigin: initialOrigin,
-        initialDestination: initialDestination,
-        search: _searchDirectionsCandidates,
-        focusOrigin: focusOrigin,
+    RoutePlanField? focusField,
+  }) {
+    _closeSearch();
+    // 지도에서 고르는 중이었다면 그 상태는 끝난다. 안 끄면 길찾기 화면을 닫은
+    // 뒤의 첫 지도 탭이 엉뚱하게 출발지/도착지로 먹힌다.
+    _stopPickingOnMap();
+    setState(() {
+      if (presetOrigin != null) _selectedOrigin = presetOrigin;
+      if (presetDestination != null) _routeDraftDestination = presetDestination;
+      _plannerField = focusField;
+      _plannerOpen = true;
+      _plannerSession++;
+      _placeInfo = null;
+    });
+  }
+
+  /// 길찾기 화면을 닫는다. 경로를 지울지는 그 화면이 이미 정했다 — X로
+  /// 취소했으면 지운 뒤에, "안내시작"이면 남긴 채로 여기까지 온다.
+  void _closePlanner() {
+    if (!_plannerOpen) return;
+    setState(() {
+      _plannerOpen = false;
+      _reopenPlannerAfterPick = false;
+    });
+  }
+
+  /// 도보 + **건물 안 매장**. 길찾기 화면이 그릴 수 없는 유일한 조합이라 여기로
+  /// 넘어온다.
+  ///
+  /// 그 안내는 "가장 가까운 문을 경유해 매장까지"라 야외 도보 구간과 실내 구간이
+  /// 한 몸이고, 층 이동까지 포함한다([_startRoute]). 길찾기 화면에서 도로 경로
+  /// 하나로 그리면 건물 외벽에서 안내가 끝나 정작 목적지인 매장에 닿지 못한다.
+  ///
+  /// 그래서 화면을 닫고 지도 위 안내로 넘긴다 — 그 안내의 ETA 카드가 실내
+  /// 구간까지 합친 거리·시간을 말한다.
+  void _startIndoorWalkRoute(
+    DirectionsCandidate? origin,
+    DirectionsCandidate destination,
+  ) {
+    setState(() {
+      _selectedOrigin = origin;
+      _routeDraftDestination = destination;
+      _travelMode = TravelMode.walk;
+    });
+    _closePlanner();
+    unawaited(
+      _startRoute(
+        origin: origin,
+        destination: destination,
+        // 수단은 사용자가 방금 길찾기 화면에서 도보로 골랐다. 여기서 거리를
+        // 보고 다시 정하면 그 선택이 대중교통으로 덮인다.
+        autoSelectMode: false,
       ),
     );
-    if (result == null || !mounted) return;
-
-    if (result.pickOnMap == DirectionsMapPickTarget.origin) {
-      // 출발지를 지도에서 고르겠다는 뜻. **기존 출발지는 지우지 않는다** —
-      // 지우면 사용자가 마음을 바꿔 취소했을 때 방금까지 잡혀 있던 출발지가
-      // 함께 날아간다. 지도 탭이 확정하는 순간 [_onMapStoreTap]이 덮어쓴다.
-      //
-      // 시트에서 이미 고른 도착지는 초안으로 받아 둔다. 안 받으면 출발지를
-      // 찍고 나서 도착지를 처음부터 다시 입력하게 된다.
-      setState(() {
-        _routeDraftDestination = result.destination ?? _routeDraftDestination;
-        _mapPickTarget = DirectionsMapPickTarget.origin;
-        // 안내 카드와 자리가 겹치므로 장소 카드는 접는다.
-        _placeInfo = null;
-      });
-      return;
-    }
-
-    // 시트 안에서 고른 출발지는 다음 "도착" 탭이 그대로 재사용할 수 있도록
-    // 상위 상태에도 반영한다. "현재 위치"(=null)를 골랐다면 명시적 출발지가
-    // 없다는 뜻이므로 저장된 값도 지워, 다음번엔 시트가 다시 열리게 한다.
-    setState(() => _selectedOrigin = result.origin);
-
-    if (result.pickOnMap == DirectionsMapPickTarget.destination) {
-      // 시트는 닫혔고, 이제 지도에서 매장을 누르는 것이 도착지 선택이다.
-      // 도착 초안은 지우지 않는다 — 아직 새 도착지가 정해지지 않았고, 지도 탭이
-      // 확정하는 순간 [_onMapStoreTap]이 덮어쓴다.
-      setState(() {
-        _mapPickTarget = DirectionsMapPickTarget.destination;
-        _placeInfo = null;
-      });
-      return;
-    }
-
-    // 시트 안에서 확정한 도착지는 상단 초안에도 반영한다. 출발 위치가 아직
-    // 준비되지 않아 경로가 끊겨도 이 후보가 화면과 함께 사라지지 않게 한다.
-    //
-    // 건물을 골랐든 매장을 골랐든 여기서 갈리지 않는다. 후보에 이미 답이
-    // 들어 있기 때문이다 — 매장 후보에는 층·노드가 붙어 있어 [_startRoute]가
-    // 문을 경유하는 실내 안내로 보내고, 건물 후보에는 없어서 입구까지의 도보
-    // 안내로 간다. 상단 검색에서 같은 것을 골랐을 때와 결과가 같아야 하므로,
-    // 두 진입점이 **같은 함수에서 갈라져야** 한다.
-    final destination = result.destination!;
-    setState(() => _routeDraftDestination = destination);
-    await _startRoute(origin: result.origin, destination: destination);
   }
+
+  /// 길찾기 화면의 "지도에서 선택". 화면이 지도를 덮고 있으므로 접어 두고,
+  /// 고르는 즉시 [_applyPickedCandidate]가 다시 연다.
+  void _pickPlannerEndpointOnMap(DirectionsMapPickTarget target) {
+    setState(() {
+      _plannerOpen = false;
+      _reopenPlannerAfterPick = true;
+      _mapPickTarget = target;
+      // 안내 카드와 자리가 겹치므로 장소 카드는 접는다.
+      _placeInfo = null;
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // RoutePlannerMap — 길찾기 화면이 지도에게 시키는 일들.
+  //
+  // 이 화면이 창구를 맡는 이유는 지도 상태를 GlobalKey로 들고 있는 곳이 여기
+  // 하나이기 때문이다. 길찾기 화면에 GlobalKey를 넘기면 그 화면도 야외 지도의
+  // 내부 사정을 알게 되고, 실내 탭으로 바뀌었을 때의 처리까지 두 곳에 생긴다.
+  // ---------------------------------------------------------------------
+
+  @override
+  LatLng? get currentOriginPoint => _outdoorKey.currentState?.routeOriginPoint;
+
+  @override
+  LatLng resolveRoadEndpoint(LatLng point) =>
+      _outdoorKey.currentState?.entranceIfInsideBuilding(point) ?? point;
+
+  @override
+  Future<void> showRoadRoute(
+    DirectionsRoute route, {
+    required LatLng origin,
+    required LatLng destination,
+    required String label,
+  }) async {
+    await _outdoorKey.currentState?.showPlannedRoadRoute(
+      route,
+      origin: origin,
+      destination: destination,
+      label: label,
+    );
+  }
+
+  @override
+  Future<void> showTransitItinerary(
+    TransitItinerary itinerary, {
+    required LatLng origin,
+    required LatLng destination,
+    required String label,
+  }) async {
+    await _outdoorKey.currentState?.showTransitRoute(
+      itinerary,
+      origin: origin,
+      destination: destination,
+      label: label,
+    );
+  }
+
+  @override
+  void clearPlannedRoute() => _outdoorKey.currentState?.clearPlannedRoute();
 
   /// 지도 화면이 "사용자 위치를 새로 잡았다"고 알려올 때. 기억해둔 출발지
   /// 매장을 버려서, 다음 길찾기가 **방금 잡은 위치**에서 출발하게 한다.
@@ -1067,7 +1160,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 경로가 여전히 A에서 출발한다. 화면에는 새로 찍은 위치 아이콘이 있는데
   /// 경로만 엉뚱한 데서 시작하니, 사용자는 위치 지정이 무시됐다고 본다.
   ///
-  /// 출발지를 "매장 선택"으로 갱신하는 경로는 [_showStoreInfo]·[_openDirections]가
+  /// 출발지를 "매장 선택"으로 갱신하는 경로는 [_showStoreInfo]·[_openPlanner]가
   /// 이미 [_selectedOrigin]을 새 값으로 덮어쓴다. 그래서 두 경로 모두 "마지막에
   /// 갱신한 위치"가 출발지가 된다.
   ///
@@ -1124,9 +1217,27 @@ class _MapShellScreenState extends State<MapShellScreen> {
   }
 
   /// 지도에서 고르기를 끝낸다(선택 완료·취소 공통, 출발지·도착지 공통).
+  ///
+  /// 길찾기 화면으로 되돌아갈 예약도 여기서 함께 지운다. 고르기를 그만둔 뒤에도
+  /// 예약이 남아 있으면, 한참 뒤 다른 이유로 지도를 누른 탭이 갑자기 길찾기
+  /// 화면을 띄운다.
   void _stopPickingOnMap() {
-    if (_mapPickTarget == null) return;
-    setState(() => _mapPickTarget = null);
+    if (_mapPickTarget == null && !_reopenPlannerAfterPick) return;
+    setState(() {
+      _mapPickTarget = null;
+      _reopenPlannerAfterPick = false;
+    });
+  }
+
+  /// 안내 카드의 X로 지도 고르기를 취소했을 때.
+  ///
+  /// 길찾기 화면에서 넘어온 것이면 그 화면으로 되돌린다. 그냥 지도만 남기면
+  /// 사용자는 "지도에서 선택"을 눌렀다가 마음을 바꿨을 뿐인데 입력하던 길찾기
+  /// 화면이 통째로 사라진 것을 본다.
+  void _cancelMapPick() {
+    final reopenPlanner = _reopenPlannerAfterPick;
+    _stopPickingOnMap();
+    if (reopenPlanner) _openPlanner();
   }
 
   /// 지도에서 매장을 눌렀을 때의 분기점. 지도에서 고르는 중이면 매장 정보
@@ -1183,10 +1294,28 @@ class _MapShellScreenState extends State<MapShellScreen> {
     DirectionsMapPickTarget target,
     DirectionsCandidate picked,
   ) {
+    // 플래그는 [_stopPickingOnMap]이 지우므로 **먼저** 읽는다.
+    final reopenPlanner = _reopenPlannerAfterPick;
     _stopPickingOnMap();
     // 강조 표시는 남겨두지 않는다 — 곧 경로와 핀이 그 자리를 대신한다.
     _indoorKey.currentState?.clearHighlight();
     _outdoorKey.currentState?.clearHighlight();
+
+    // 길찾기 화면에서 "지도에서 선택"으로 접어 둔 경우다. 고른 값을 두 칸에
+    // 반영한 채로 그 화면을 다시 연다 — 경로 계산은 그 화면이 이어서 한다.
+    if (reopenPlanner) {
+      final isOrigin = target == DirectionsMapPickTarget.origin;
+      if (isOrigin) unawaited(_refreshReach());
+      setState(() {
+        if (isOrigin) {
+          _selectedOrigin = picked;
+        } else {
+          _routeDraftDestination = picked;
+        }
+      });
+      _openPlanner();
+      return;
+    }
 
     if (target == DirectionsMapPickTarget.origin) {
       setState(() => _selectedOrigin = picked);
@@ -1197,7 +1326,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
         // 아직 도착지가 없다. 여기서 멈추면 사용자는 매장을 눌렀는데 아무 일도
         // 안 일어난 화면을 본다 — 시트의 [_afterOriginPicked]와 같은 규칙으로
         // 길찾기 시트를 다시 열어 도착지 입력을 이어 준다.
-        unawaited(_openDirections(presetOrigin: picked));
+        _openPlanner(presetOrigin: picked);
         return;
       }
       unawaited(_startRoute(origin: picked, destination: destination));
@@ -1493,10 +1622,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
         : _indoorRouteVisible;
     // 시트였을 때는 뒤로가기가 시트만 닫았다. 패널로 바뀌었다고 뒤로가기가
     // 앱을 종료해 버리면 안 되므로, 검색 중에는 pop을 가로채 검색만 닫는다.
+    //
+    // 길찾기 화면이 열려 있을 때는 여기서 아무것도 하지 않는다. 그 화면이 자기
+    // PopScope로 "상세 → 목록 → 닫기" 단계를 직접 되짚기 때문이다 — 여기서도
+    // 가로채면 뒤로가기 한 번에 두 단계가 함께 되돌아간다.
     return PopScope(
-      canPop: !_searchActive,
+      canPop: !_searchActive && !_plannerOpen,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _closeSearch();
+        if (!didPop && !_plannerOpen) _closeSearch();
       },
       child: _buildShell(context, placeInfo, routeVisible),
     );
@@ -1560,6 +1693,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
                 },
                 onStoreTap: _onMapStoreTap,
                 onLocationAnchored: _onLocationAnchored,
+                // 길찾기 화면이 열려 있는 동안에는 지도가 자기 요약 카드를
+                // 그리지 않는다 — 그 자리를 길찾기 화면이 쓴다.
+                suppressRouteCards: _plannerOpen,
                 // 실내 화면과 같은 선택을 넘긴다. 야외 지도도 실내 진입
                 // 오버레이가 켜지면 같은 도면을 그리므로, 안 넘기면 칩을
                 // 눌러도 강조가 안 뜬다.
@@ -1576,6 +1712,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                   _searchPanelKey,
                   _bottomBarKey,
                   _mapPickHintKey,
+                  _plannerKey,
                 ],
               ),
               IndoorMapBody(
@@ -1598,6 +1735,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                   _searchPanelKey,
                   _bottomBarKey,
                   _mapPickHintKey,
+                  _plannerKey,
                 ],
               ),
             ],
@@ -1625,236 +1763,285 @@ class _MapShellScreenState extends State<MapShellScreen> {
           // 히트 테스트용 GlobalKey는 그대로 각 자식에 붙어 있다. 지도 제스처 잠금은
           // 키의 RenderBox를 localToGlobal로 읽으므로 부모가 Stack이든 Column이든
           // 같은 값이 나온다.
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            // 키보드가 올라와도 Scaffold를 리사이즈하지 않으므로
-            // (resizeToAvoidBottomInset: false), 여기서 바닥을 직접 올려 검색
-            // 패널이 키보드 밑으로 들어가지 않게 한다. 예전에는 상단 바 높이를
-            // 상수로 가정해 별도 계산했지만, 이제는 Column의 실제 높이를 쓴다.
-            bottom: MediaQuery.viewInsetsOf(context).bottom,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              // 예전 Positioned가 left·right로 강제하던 폭을 대신한다. 기본값
-              // (center)이면 자식이 제 내용 너비로 줄어들어, 검색 패널이 결과
-              // 개수에 따라 폭이 들쭉날쭉해진다.
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                MapTopBar(
-                  key: _topBarKey,
-                  showHamburger: _mode == MapMode.indoor,
-                  onHamburgerTap: _onHamburgerTap,
-                  controller: _searchController,
-                  focusNode: _searchFocus,
-                  onChanged: _onSearchChanged,
-                  onSubmitted: _onSearchSubmitted,
-                  searchActive: _searchActive,
-                  onCancelSearch: _closeSearch,
-                  onDirectionsTap: _openDirections,
-                  // 명시적으로 고른 매장이 없어도 현재 위치를 출발지로 쓸 수 있으면
-                  // 그렇게 적는다. null을 그대로 넘기면 상단 바가 "출발지를
-                  // 선택하세요" placeholder를 띄워, 위치를 방금 찍어둔 사용자에게
-                  // 출발지가 비어 있다고 잘못 알린다.
-                  routeOriginLabel:
-                      _selectedOrigin?.title ??
-                      (_canRouteFromCurrentLocation ? '현재 위치' : null),
-                  routeDestinationLabel: _routeDraftDestination?.title,
-                  onRouteOriginTap: () => _openDirections(
-                    presetDestination: _routeDraftDestination,
-                    focusOrigin: true,
-                  ),
-                  onRouteDestinationTap: () => _openDirections(
-                    presetDestination: _routeDraftDestination,
-                  ),
-                  onClearRouteDraft: _routeDraftDestination == null
-                      ? null
-                      : _clearRouteDraft,
-                ),
-
-                // 이동 수단 줄. 도착지가 정해진 야외 안내에서만 뜬다.
-                //
-                // 검색 중에는 감춘다 — 그 자리는 결과 패널이 쓰고, 검색을 하는
-                // 동안에는 아직 어디로 갈지도 안 정해졌다.
-                if (_mode == MapMode.outdoor &&
-                    _routeDraftDestination != null &&
-                    !_searchActive)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, _overlayGap, 12, 0),
-                    child: TravelModeBar(
-                      selected: _travelMode,
-                      transitEnabled: transitRepository.isAvailable,
-                      onSelected: (mode) =>
-                          unawaited(_onTravelModePicked(mode)),
+          // 길찾기 화면이 열리면 지도 위 오버레이는 통째로 접는다. 검색창·
+          // 카테고리 칩·안내 카드가 그 아래 남아 있으면, 화면이 바뀐 게 아니라
+          // 창이 하나 더 뜬 것처럼 보이고 두 상단 바가 겹친다.
+          if (!_plannerOpen)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              // 키보드가 올라와도 Scaffold를 리사이즈하지 않으므로
+              // (resizeToAvoidBottomInset: false), 여기서 바닥을 직접 올려 검색
+              // 패널이 키보드 밑으로 들어가지 않게 한다. 예전에는 상단 바 높이를
+              // 상수로 가정해 별도 계산했지만, 이제는 Column의 실제 높이를 쓴다.
+              bottom: MediaQuery.viewInsetsOf(context).bottom,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                // 예전 Positioned가 left·right로 강제하던 폭을 대신한다. 기본값
+                // (center)이면 자식이 제 내용 너비로 줄어들어, 검색 패널이 결과
+                // 개수에 따라 폭이 들쭉날쭉해진다.
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  MapTopBar(
+                    key: _topBarKey,
+                    showHamburger: _mode == MapMode.indoor,
+                    onHamburgerTap: _onHamburgerTap,
+                    controller: _searchController,
+                    focusNode: _searchFocus,
+                    onChanged: _onSearchChanged,
+                    onSubmitted: _onSearchSubmitted,
+                    searchActive: _searchActive,
+                    onCancelSearch: _closeSearch,
+                    onDirectionsTap: _openPlanner,
+                    // 명시적으로 고른 매장이 없어도 현재 위치를 출발지로 쓸 수 있으면
+                    // 그렇게 적는다. null을 그대로 넘기면 상단 바가 "출발지를
+                    // 선택하세요" placeholder를 띄워, 위치를 방금 찍어둔 사용자에게
+                    // 출발지가 비어 있다고 잘못 알린다.
+                    routeOriginLabel:
+                        _selectedOrigin?.title ??
+                        (_canRouteFromCurrentLocation ? '현재 위치' : null),
+                    routeDestinationLabel: _routeDraftDestination?.title,
+                    onRouteOriginTap: () => _openPlanner(
+                      presetDestination: _routeDraftDestination,
+                      focusField: RoutePlanField.origin,
                     ),
+                    onRouteDestinationTap: () => _openPlanner(
+                      presetDestination: _routeDraftDestination,
+                      focusField: RoutePlanField.destination,
+                    ),
+                    onClearRouteDraft: _routeDraftDestination == null
+                        ? null
+                        : _clearRouteDraft,
                   ),
 
-                // 결과 패널과 카테고리 열은 같은 자리를 쓴다. 검색 중에는
-                // 카테고리 열을 접어 두 오버레이가 겹치지 않게 한다.
-                if (_searchActive)
-                  Flexible(
-                    child: Padding(
+                  // 이동 수단 줄. 도착지가 정해진 야외 안내에서만 뜬다.
+                  //
+                  // 검색 중에는 감춘다 — 그 자리는 결과 패널이 쓰고, 검색을 하는
+                  // 동안에는 아직 어디로 갈지도 안 정해졌다.
+                  if (_mode == MapMode.outdoor &&
+                      _routeDraftDestination != null &&
+                      !_searchActive)
+                    Padding(
                       padding: const EdgeInsets.fromLTRB(
                         12,
                         _overlayGap,
                         12,
-                        12,
+                        0,
                       ),
-                      child: SearchPanel(
-                        key: _searchPanelKey,
-                        buildingId: _buildingId,
-                        query: _searchQuery,
-                        submitTick: _searchSubmitTick,
-                        onStorePicked: _onSearchStorePicked,
-                        onBuildingPicked: _onSearchBuildingPicked,
-                        currentFloorId: _activeIndoorFloor,
-                        reachByNodeId: _reachByNodeId,
-                        // 야외를 보고 있을 때만 값이 있다. 건물 안 도면을 보는
-                        // 중이면 null이라 바깥 검색 자체가 돌지 않는다.
-                        outdoorSearchCenter: _outdoorSearchCenter,
-                        onOutdoorPoiPicked: (poi) =>
-                            unawaited(_onSearchPoiPicked(poi)),
-                        // 같은 가게가 두 줄로 뜨지 않게 하는 판정. 길찾기
-                        // 후보 목록도 같은 규칙을 쓴다.
-                        isInsideIndoorBuilding: (point) =>
-                            _outdoorKey.currentState?.isAtIndoorBuilding(
-                              point,
-                            ) ??
-                            false,
+                      child: TravelModeBar(
+                        selected: _travelMode,
+                        transitEnabled: transitRepository.isAvailable,
+                        onSelected: (mode) =>
+                            unawaited(_onTravelModePicked(mode)),
                       ),
                     ),
-                  )
-                // 길찾기 draft에서는 **접지 않고 내려온다.** 상단 바가 출발/도착
-                // 두 줄로 커지면 이 Column이 그만큼 아래로 밀어 주므로 겹치지
-                // 않는다. 한때 접어 뒀지만, 도착지를 정한 뒤에도 "그럼 저긴
-                // 뭐였지" 하고 카테고리를 다시 훑는 흐름이 끊겼다.
-                else
-                  Padding(
-                    padding: const EdgeInsets.only(top: _overlayGap),
-                    // 대분류 줄과 소분류 줄을 세로로 쌓는다. 두 줄을 하나의 가로
-                    // 스크롤에 넣으면 소분류가 대분류 오른쪽 끝에 붙어, 어느
-                    // 대분류에 딸린 것인지 읽히지 않는다.
-                    child: Column(
-                      key: _categoryRowKey,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _MapOverlayScrollRow(
-                          onPointerOverChanged: (over) => over
-                              ? _lockMaps(_mapLockOverlayHover)
-                              : _unlockMaps(_mapLockOverlayHover),
-                          onPointerDownChanged: (down) => down
-                              ? _lockMaps(_mapLockOverlayTouch)
-                              : _unlockMaps(_mapLockOverlayTouch),
-                          children: [
-                            _FavoritesPill(
-                              key: _favoritesPillKey,
-                              onTap: _openFavorites,
-                            ),
-                            // 카테고리 필터는 **건물 안을 보고 있을 때만**
-                            // 노출한다. 기준은 모드(_mode)가 아니라
-                            // [_indoorContextActive]다 — 야외 탭이어도 건물을
-                            // 탭하거나 줌으로 실내 오버레이가 켜지면 사용자에게는
-                            // 실내 화면과 똑같은 도면이 떠 있고, 그 위에 강조가
-                            // 그려진다. 모드로 분기하면 그 상태에서 칩만 사라져,
-                            // 웹(마우스로 실내 탭을 눌러 들어감)에서는 보이고
-                            // 모바일(도면을 탭해 바로 진입)에서는 안 보인다.
-                            //
-                            // 반대로 오버레이가 꺼진 순수 야외에서는 계속 감춘다.
-                            // 아직 들어가지도 않은 건물의 카테고리를 누르게 되고,
-                            // 강조는 도면 위에 그려지므로 결과가 보이지 않는다.
-                            if (_indoorContextActive) ...[
-                              const SizedBox(width: 8),
-                              _CategoryChipsRow(
-                                entriesFuture: _categoryEntriesFuture,
-                                selection: _categorySelection,
-                                onSelectionChanged: _onCategorySelectionChanged,
-                                onRetry: _reloadCategoryEntries,
-                              ),
-                            ],
-                          ],
+
+                  // 결과 패널과 카테고리 열은 같은 자리를 쓴다. 검색 중에는
+                  // 카테고리 열을 접어 두 오버레이가 겹치지 않게 한다.
+                  if (_searchActive)
+                    Flexible(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          12,
+                          _overlayGap,
+                          12,
+                          12,
                         ),
-                        // 소분류 줄과 개수 안내는 대분류를 고른 뒤에만 뜬다.
-                        if (_indoorContextActive &&
-                            _categorySelection != null) ...[
-                          const SizedBox(height: _overlayGap),
-                          _SubcategoryPillsRow(
-                            entriesFuture: _categoryEntriesFuture,
-                            selection: _categorySelection!,
-                            activeFloor: _activeFloorLabel,
-                            onSelectionChanged: _onCategorySelectionChanged,
+                        child: SearchPanel(
+                          key: _searchPanelKey,
+                          buildingId: _buildingId,
+                          query: _searchQuery,
+                          submitTick: _searchSubmitTick,
+                          onStorePicked: _onSearchStorePicked,
+                          onBuildingPicked: _onSearchBuildingPicked,
+                          currentFloorId: _activeIndoorFloor,
+                          reachByNodeId: _reachByNodeId,
+                          // 야외를 보고 있을 때만 값이 있다. 건물 안 도면을 보는
+                          // 중이면 null이라 바깥 검색 자체가 돌지 않는다.
+                          outdoorSearchCenter: _outdoorSearchCenter,
+                          onOutdoorPoiPicked: (poi) =>
+                              unawaited(_onSearchPoiPicked(poi)),
+                          // 같은 가게가 두 줄로 뜨지 않게 하는 판정. 길찾기
+                          // 후보 목록도 같은 규칙을 쓴다.
+                          isInsideIndoorBuilding: (point) =>
+                              _outdoorKey.currentState?.isAtIndoorBuilding(
+                                point,
+                              ) ??
+                              false,
+                        ),
+                      ),
+                    )
+                  // 길찾기 draft에서는 **접지 않고 내려온다.** 상단 바가 출발/도착
+                  // 두 줄로 커지면 이 Column이 그만큼 아래로 밀어 주므로 겹치지
+                  // 않는다. 한때 접어 뒀지만, 도착지를 정한 뒤에도 "그럼 저긴
+                  // 뭐였지" 하고 카테고리를 다시 훑는 흐름이 끊겼다.
+                  else
+                    Padding(
+                      padding: const EdgeInsets.only(top: _overlayGap),
+                      // 대분류 줄과 소분류 줄을 세로로 쌓는다. 두 줄을 하나의 가로
+                      // 스크롤에 넣으면 소분류가 대분류 오른쪽 끝에 붙어, 어느
+                      // 대분류에 딸린 것인지 읽히지 않는다.
+                      child: Column(
+                        key: _categoryRowKey,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _MapOverlayScrollRow(
                             onPointerOverChanged: (over) => over
                                 ? _lockMaps(_mapLockOverlayHover)
                                 : _unlockMaps(_mapLockOverlayHover),
                             onPointerDownChanged: (down) => down
                                 ? _lockMaps(_mapLockOverlayTouch)
                                 : _unlockMaps(_mapLockOverlayTouch),
-                            onOpenList: (category) {
-                              _runSheetChain(
-                                () => _openCategoryStores(category),
-                              );
-                            },
+                            children: [
+                              _FavoritesPill(
+                                key: _favoritesPillKey,
+                                onTap: _openFavorites,
+                              ),
+                              // 카테고리 필터는 **건물 안을 보고 있을 때만**
+                              // 노출한다. 기준은 모드(_mode)가 아니라
+                              // [_indoorContextActive]다 — 야외 탭이어도 건물을
+                              // 탭하거나 줌으로 실내 오버레이가 켜지면 사용자에게는
+                              // 실내 화면과 똑같은 도면이 떠 있고, 그 위에 강조가
+                              // 그려진다. 모드로 분기하면 그 상태에서 칩만 사라져,
+                              // 웹(마우스로 실내 탭을 눌러 들어감)에서는 보이고
+                              // 모바일(도면을 탭해 바로 진입)에서는 안 보인다.
+                              //
+                              // 반대로 오버레이가 꺼진 순수 야외에서는 계속 감춘다.
+                              // 아직 들어가지도 않은 건물의 카테고리를 누르게 되고,
+                              // 강조는 도면 위에 그려지므로 결과가 보이지 않는다.
+                              if (_indoorContextActive) ...[
+                                const SizedBox(width: 8),
+                                _CategoryChipsRow(
+                                  entriesFuture: _categoryEntriesFuture,
+                                  selection: _categorySelection,
+                                  onSelectionChanged:
+                                      _onCategorySelectionChanged,
+                                  onRetry: _reloadCategoryEntries,
+                                ),
+                              ],
+                            ],
                           ),
+                          // 소분류 줄과 개수 안내는 대분류를 고른 뒤에만 뜬다.
+                          if (_indoorContextActive &&
+                              _categorySelection != null) ...[
+                            const SizedBox(height: _overlayGap),
+                            _SubcategoryPillsRow(
+                              entriesFuture: _categoryEntriesFuture,
+                              selection: _categorySelection!,
+                              activeFloor: _activeFloorLabel,
+                              onSelectionChanged: _onCategorySelectionChanged,
+                              onPointerOverChanged: (over) => over
+                                  ? _lockMaps(_mapLockOverlayHover)
+                                  : _unlockMaps(_mapLockOverlayHover),
+                              onPointerDownChanged: (down) => down
+                                  ? _lockMaps(_mapLockOverlayTouch)
+                                  : _unlockMaps(_mapLockOverlayTouch),
+                              onOpenList: (category) {
+                                _runSheetChain(
+                                  () => _openCategoryStores(category),
+                                );
+                              },
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
-                  ),
 
-                // 지도에서 고르는 중이라는 안내. 이게 없으면 "지도에서 선택"을
-                // 눌렀을 때 시트만 닫히고 아무 일도 안 일어난 것처럼 보인다.
-                if (_mapPickTarget != null && !_searchActive)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, _overlayGap, 12, 0),
-                    child: _MapPickHintCard(
-                      key: _mapPickHintKey,
-                      target: _mapPickTarget!,
-                      // 지금 고르는 칸의 **반대쪽**을 보여준다. 출발지를 고르는
-                      // 중이면 도착지가, 도착지를 고르는 중이면 출발지가 무엇으로
-                      // 잡혀 있는지 알아야 지금 무엇을 누를지 판단할 수 있다.
-                      counterpartLabel:
-                          _mapPickTarget == DirectionsMapPickTarget.origin
-                          ? _routeDraftDestination?.title
-                          : (_selectedOrigin?.title ?? '현재 위치'),
-                      onCancel: _stopPickingOnMap,
+                  // 지도에서 고르는 중이라는 안내. 이게 없으면 "지도에서 선택"을
+                  // 눌렀을 때 시트만 닫히고 아무 일도 안 일어난 것처럼 보인다.
+                  if (_mapPickTarget != null && !_searchActive)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        12,
+                        _overlayGap,
+                        12,
+                        0,
+                      ),
+                      child: _MapPickHintCard(
+                        key: _mapPickHintKey,
+                        target: _mapPickTarget!,
+                        // 지금 고르는 칸의 **반대쪽**을 보여준다. 출발지를 고르는
+                        // 중이면 도착지가, 도착지를 고르는 중이면 출발지가 무엇으로
+                        // 잡혀 있는지 알아야 지금 무엇을 누를지 판단할 수 있다.
+                        counterpartLabel:
+                            _mapPickTarget == DirectionsMapPickTarget.origin
+                            ? _routeDraftDestination?.title
+                            : (_selectedOrigin?.title ?? '현재 위치'),
+                        onCancel: _cancelMapPick,
+                      ),
+                    )
+                  else if (placeInfo != null && !_searchActive)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        12,
+                        _overlayGap,
+                        12,
+                        0,
+                      ),
+                      child: _PlaceInfoCard(
+                        title: placeInfo.title,
+                        subtitle: placeInfo.subtitle,
+                        onClose: () => setState(() => _placeInfo = null),
+                      ),
                     ),
-                  )
-                else if (placeInfo != null && !_searchActive)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, _overlayGap, 12, 0),
-                    child: _PlaceInfoCard(
-                      title: placeInfo.title,
-                      subtitle: placeInfo.subtitle,
-                      onClose: () => setState(() => _placeInfo = null),
-                    ),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
 
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-            left: 0,
-            right: 0,
-            bottom: routeVisible ? _etaBarLiftHeight : 0,
-            child: MapBottomBar(
-              key: _bottomBarKey,
-              mode: _mode,
-              onModeChanged: _setMode,
-              onCalibrate: _onCalibrate,
-              onPlaceLocation: _onPlaceLocation,
-              placingLocation: _mode == MapMode.indoor
-                  ? _indoorPlacingLocation
-                  : (_outdoorPlacingLocation ||
-                        _mapPickTarget == DirectionsMapPickTarget.origin),
-              // 순수 야외에서도 노출한다. 예전에는 오버레이가 켜졌을 때만 켰는데,
-              // 그 규칙은 이 버튼이 "층 위에 PDR 앵커를 찍는 것"만 뜻하던 시절의
-              // 것이다. 이제 야외에서는 출발 위치를 지도에서 찍는 흐름을 열어
-              // 주므로, GPS가 안 잡히거나 다른 지점에서 출발하는 경로를 보고 싶은
-              // 사용자에게 눌러야 할 이유가 생겼다.
-              showPlaceLocation: true,
+          if (!_plannerOpen)
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+              left: 0,
+              right: 0,
+              bottom: routeVisible ? _etaBarLiftHeight : 0,
+              child: MapBottomBar(
+                key: _bottomBarKey,
+                mode: _mode,
+                onModeChanged: _setMode,
+                onCalibrate: _onCalibrate,
+                onPlaceLocation: _onPlaceLocation,
+                placingLocation: _mode == MapMode.indoor
+                    ? _indoorPlacingLocation
+                    : (_outdoorPlacingLocation ||
+                          _mapPickTarget == DirectionsMapPickTarget.origin),
+                // 순수 야외에서도 노출한다. 예전에는 오버레이가 켜졌을 때만 켰는데,
+                // 그 규칙은 이 버튼이 "층 위에 PDR 앵커를 찍는 것"만 뜻하던 시절의
+                // 것이다. 이제 야외에서는 출발 위치를 지도에서 찍는 흐름을 열어
+                // 주므로, GPS가 안 잡히거나 다른 지점에서 출발하는 경로를 보고 싶은
+                // 사용자에게 눌러야 할 이유가 생겼다.
+                showPlaceLocation: true,
+              ),
             ),
-          ),
+
+          // 길찾기 화면. 지도 위에 통째로 얹지만 **막을 깔지는 않는다** —
+          // 자동차·도보 경로나 고른 대중교통 경로를 보는 동안에는 머리와 아래
+          // 카드만 그려지고, 그 사이 빈 자리는 그대로 지도다.
+          if (_plannerOpen)
+            Positioned.fill(
+              key: _plannerKey,
+              child: RoutePlannerView(
+                // 열 때마다 새 State여야 이번에 넘긴 출발/도착이 반영된다.
+                key: ValueKey('route-planner-$_plannerSession'),
+                map: this,
+                search: _searchDirectionsCandidates,
+                initialOrigin: _selectedOrigin,
+                initialDestination: _routeDraftDestination,
+                initialMode: _plannerMode,
+                initialField: _plannerField,
+                transitEnabled: transitRepository.isAvailable,
+                onModeChanged: (mode) => _plannerMode = mode,
+                onEndpointsChanged: (origin, destination) => setState(() {
+                  _selectedOrigin = origin;
+                  _routeDraftDestination = destination;
+                }),
+                onPickOnMap: _pickPlannerEndpointOnMap,
+                onIndoorWalkRoute: _startIndoorWalkRoute,
+                onClose: _closePlanner,
+              ),
+            ),
         ],
       ),
     );

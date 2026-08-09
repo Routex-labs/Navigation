@@ -383,7 +383,6 @@ Future<Uint8List> _renderPdrLocationIcon({required bool showHeading}) async {
   return byteData!.buffer.asUint8List();
 }
 
-
 // 기본 지도 스타일. vworldApiKey가 있으면 VWorld Base 타일, 없으면 OSM으로 폴백해
 // 로컬 개발·테스트 환경에서도 지도가 항상 뜨도록 한다.
 String _baseMapStyle() {
@@ -489,6 +488,7 @@ class OutdoorMapBody extends StatefulWidget {
     this.pickingPointOnMap = false,
     this.onMapPointPick,
     this.onTransitRequested,
+    this.suppressRouteCards = false,
     this.outerOverlayKeys = const [],
   });
 
@@ -536,6 +536,13 @@ class OutdoorMapBody extends StatefulWidget {
   /// 동안 지도 제스처를 잠그는 것([MapShellScreen._withMapsLocked])이 상위의
   /// 일이라, 이 화면이 스스로 시트를 열면 그 잠금을 우회하게 된다.
   final void Function(ll.LatLng destination, String label)? onTransitRequested;
+
+  /// 화면 아래 안내 카드(ETA·대중교통 요약)를 그리지 말라는 표시.
+  ///
+  /// 길찾기 화면이 열려 있는 동안 켠다. 그 화면이 같은 자리에 자기 요약 카드를
+  /// 놓기 때문인데, 둘을 함께 띄우면 한 화면에서 소요 시간이 두 번 적히고
+  /// 그중 하나에는 이 화면에서 누를 수 없는 "안내 종료" 버튼이 달린다.
+  final bool suppressRouteCards;
 
   /// 사용자의 현재 위치가 새로 잡혔을 때 호출된다 — "위치 지정"으로 지도를
   /// 탭했을 때와 입구 자동 배치가 여기에 해당한다.
@@ -2201,6 +2208,42 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await _updateRoute(position);
   }
 
+  /// 길찾기 화면이 **미리 계산해 온** 도로 경로(자동차·도보)를 그대로 그린다.
+  ///
+  /// [showRouteTo]와 나눈 이유는 경로를 누가 계산하느냐가 다르기 때문이다.
+  /// showRouteTo는 목적지만 받아 이 화면이 직접 TMAP을 부르지만, 길찾기 화면은
+  /// 요약 카드에 적을 거리·시간·요금이 필요해 이미 응답을 손에 쥐고 있다. 여기서
+  /// 다시 부르면 같은 구간을 두 번 조회하고, 두 응답이 미묘하게 달라지면 카드와
+  /// 지도가 다른 경로를 말하게 된다.
+  ///
+  /// 출발점을 [_fixedRouteOrigin]으로 박는 것이 중요하다. 길찾기 화면은 걷는
+  /// 동안 따라가는 안내가 아니라 **한 번 그려 놓고 비교하는 계획 화면**이라,
+  /// GPS가 갱신될 때마다 경로가 다시 계산되면 사용자가 보던 선이 흔들린다.
+  Future<void> showPlannedRoadRoute(
+    DirectionsRoute route, {
+    required ll.LatLng origin,
+    required ll.LatLng destination,
+    required String label,
+  }) async {
+    _clearPendingIndoorRoute();
+    clearTransitRoute();
+    setState(() {
+      _fixedRouteOrigin = origin;
+      _userDestination = destination;
+      _userDestinationLabel = label;
+      // 먼저 비워야 [_applyRoute]가 "새로 생김"으로 보고 카메라를 경로 전체에
+      // 맞춘다. 안 비우면 수단을 바꿔도 카메라가 옛 경로 자리에 머문다.
+      _route = null;
+    });
+    _syncDestinationLayer();
+    _syncRouteLayer();
+    _applyRoute(route);
+  }
+
+  /// 길찾기 화면이 그리던 경로를 걷는다. 취소했거나 조건이 바뀌어 다시 계산하기
+  /// 직전에 부른다.
+  void clearPlannedRoute() => _clearUserDestination();
+
   void _clearUserDestination() {
     _clearPendingIndoorRoute();
     clearTransitRoute();
@@ -2723,7 +2766,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         lineJoin: 'round',
       ),
       // 탈것 구간만. 도보는 아래 점선 레이어가 따로 그린다.
-      filter: ['==', ['get', 'walk'], false],
+      filter: [
+        '==',
+        ['get', 'walk'],
+        false,
+      ],
       enableInteraction: false,
     );
     await controller.addLineLayer(
@@ -2736,7 +2783,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         lineCap: 'round',
         lineJoin: 'round',
       ),
-      filter: ['==', ['get', 'walk'], true],
+      filter: [
+        '==',
+        ['get', 'walk'],
+        true,
+      ],
       enableInteraction: false,
     );
 
@@ -4858,18 +4909,23 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final lowAccuracy =
         _outdoorGpsVisible &&
         (position == null || accuracy > _lowAccuracyThresholdMeters);
-    final route = _route;
-    final transitItinerary = _transitItinerary;
+    // 길찾기 화면이 열려 있으면 아래 카드는 전부 접는다. 선은 그대로 그리되
+    // 요약은 그 화면이 자기 자리에서 말한다([OutdoorMapBody.suppressRouteCards]).
+    final cards = !widget.suppressRouteCards;
+    final route = cards ? _route : null;
+    final transitItinerary = cards ? _transitItinerary : null;
     // 카드도 지도와 같은 규칙으로 고른다 — 건물 안에서는 실내, 밖에서는 야외.
     // 두 값이 함께 살아 있을 수 있으므로([_activatePendingIndoorRoute]) 여기서
     // 갈라 주지 않으면 지도에는 야외 선이 그려지는데 카드는 실내 거리를 말한다.
-    final indoorRouteDestination = _indoorEntered
+    final indoorRouteDestination = (cards && _indoorEntered)
         ? _indoorRouteDestination
         : null;
     // 거리·시간을 한 번에 계산한다(예전엔 같은 계산을 두 번 돌았다).
     final indoorEta = _indoorEta();
     final outdoorEta = route == null ? null : _outdoorEta(route);
-    final indoorRouteVisible = _hasAnyRouteVisible;
+    // 카드를 접으면 그 위로 밀어 올릴 것도 없다. 이 값을 그대로 두면 층 선택기
+    // 같은 지도 위 버튼들이 있지도 않은 카드 높이만큼 떠 있게 된다.
+    final indoorRouteVisible = cards && _hasAnyRouteVisible;
     final debugEnabled = _debugModeController.enabled;
     final pdrActive =
         indoorNavigationDriver.currentRuntimeStatus.state !=

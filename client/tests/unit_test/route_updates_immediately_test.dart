@@ -109,9 +109,9 @@ void main() {
   ) async {
     await startGuidance(tester);
 
-    // 상단 도착 행 → 시트. 도착지 칸이 활성인 채로 열리므로 검색어만 새로 넣고
-    // 후보를 고르면 시트가 닫히며 경로 계산으로 이어진다. 시트의 입력창은
-    // [출발지, 도착지] 순서다(초안 바가 떠 있는 동안 상단 바에는 입력창이 없다).
+    // 상단 도착 행 → 길찾기 화면. 도착지 칸이 활성인 채로 열리므로 검색어만
+    // 새로 넣고 후보를 고르면 그 자리에서 경로 계산으로 이어진다. 그 화면의
+    // 입력창은 [출발지, 도착지] 순서다(길찾기 화면이 상단 바를 대신한다).
     await tester.tap(find.byKey(const Key('route-draft-destination')));
     await drain(tester);
     await tester.enterText(find.byType(TextField).at(1), '데모');
@@ -123,13 +123,22 @@ void main() {
     );
     await drain(tester);
 
-    // 경로가 새 도착지로 다시 계산됐다. 카드가 아직 이전 도착지를 가리키면
-    // 끝점만 바뀌고 경로는 그대로인 것이고, 카드가 없으면 "버튼을 한 번 더
-    // 눌러야 하는" 대기 상태가 다시 들어온 것이다.
+    // 새 도착지로 다시 계산된 경로가 **기다리지 않고** 바로 요약으로 나와야
+    // 한다. 여기서 "안내시작"이 없으면 계산이 끊긴 것이다.
+    expect(
+      find.byKey(const Key('route-planner-start')),
+      findsOneWidget,
+      reason: '끝점을 바꿨으면 경로를 끊지 말고 곧바로 다시 그려야 한다',
+    );
+    await tester.tap(find.byKey(const Key('route-planner-start')));
+    await drain(tester);
+
+    // 안내로 넘어가면 지도 위 카드가 그 경로를 이어받는다. 카드가 아직 이전
+    // 도착지를 가리키면 끝점만 바뀌고 경로는 그대로인 것이다.
     expect(
       find.byType(EtaCard),
       findsOneWidget,
-      reason: '끝점을 바꿨으면 경로를 끊지 말고 곧바로 다시 그려야 한다',
+      reason: '안내시작 뒤에는 지도 위 카드가 그 경로를 이어받아야 한다',
     );
     // 상단 초안 바에도 같은 이름이 적히므로 카드 안으로 좁힌다.
     expect(
