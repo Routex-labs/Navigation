@@ -101,6 +101,35 @@ const _sampleResponseBody = '''
 }
 ''';
 
+// 자동차 경로(POST /routes) 응답. 보행자와 같은 FeatureCollection이고,
+// 첫 Feature의 properties에 요금 두 줄(totalFare·taxiFare)이 더 붙는다.
+const _drivingResponseBody = '''
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [126.7, 37.63] },
+      "properties": {
+        "totalDistance": 30400,
+        "totalTime": 2100,
+        "totalFare": 0,
+        "taxiFare": 30000,
+        "pointType": "S"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[126.7, 37.63], [126.85, 37.56], [126.92, 37.53]]
+      },
+      "properties": { "distance": 30400, "time": 2100 }
+    }
+  ]
+}
+''';
+
 void main() {
   test('parses distance/time from the first feature and flattens the path', () async {
     final client = MockClient((request) async {
@@ -124,6 +153,58 @@ void main() {
     expect(route.points.first, const LatLng(37.56814892738826, 126.97784881268932));
     expect(route.points.last, const LatLng(37.5665435593568, 126.97789607606079));
     expect(route.points, isNotEmpty);
+  });
+
+  test('자동차 경로는 /routes를 부르고 요금까지 읽는다', () async {
+    Uri? calledUri;
+    Map<String, String>? sentFields;
+    final client = MockClient((request) async {
+      calledUri = request.url;
+      sentFields = (request as http.Request).bodyFields;
+      return http.Response(
+        _drivingResponseBody,
+        200,
+        headers: {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final repository = TmapDirectionsRepository(client: client);
+
+    final route = await repository.getDrivingRoute(
+      origin: const LatLng(37.63, 126.7),
+      destination: const LatLng(37.53, 126.92),
+    );
+
+    // 보행자 경로와 **다른 엔드포인트**를 불러야 한다. 같은 주소로 보내면
+    // 자동차 탭에 사람이 걸어가는 길이 그려지고, 35분짜리 거리가 8시간으로 뜬다.
+    expect(calledUri?.path, endsWith('/tmap/routes'));
+    expect(sentFields?['startY'], '37.63');
+    expect(route, isNotNull);
+    expect(route!.distanceMeters, 30400);
+    expect(route.durationSeconds, 2100);
+    // 통행료 0은 "무료"이지 "정보 없음"이 아니다. null로 뭉개면 화면이
+    // "통행료 없음"을 말하지 못한다.
+    expect(route.tollFareWon, 0);
+    expect(route.taxiFareWon, 30000);
+    expect(route.points.length, 3);
+  });
+
+  test('보행자 경로에는 요금 필드가 없어 null로 남는다', () async {
+    final client = MockClient((request) async {
+      return http.Response(
+        _sampleResponseBody,
+        200,
+        headers: {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final repository = TmapDirectionsRepository(client: client);
+
+    final route = await repository.getWalkingRoute(
+      origin: const LatLng(37.56814892738826, 126.97784881268932),
+      destination: const LatLng(37.5665435593568, 126.97789607606079),
+    );
+
+    expect(route!.tollFareWon, isNull);
+    expect(route.taxiFareWon, isNull);
   });
 
   test('returns null on a non-200 response', () async {
