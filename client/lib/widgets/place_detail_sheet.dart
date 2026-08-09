@@ -27,6 +27,48 @@ import 'map_overlay_guard.dart';
 /// 여기만 바꾸면 카메라도 따라온다.
 const double kPlaceDetailSheetInitialSize = 0.5;
 
+/// 시트 **위쪽 빈 자리로 들어온 포인터를 지도에 그대로 넘기는** 바텀시트 라우트.
+///
+/// ## 왜 필요한가 — 지도가 보이는데 만질 수 없었다
+///
+/// 매장 상세 시트는 화면 아래 절반만 덮는다. 위쪽에는 방금 고른 매장이 지도에
+/// 그대로 보이는데, 그 위에서 **끌기·확대·회전이 전부 먹지 않았다.** 사용자에게는
+/// "터치가 안 먹는" 화면이다.
+///
+/// 세 겹이 겹쳐 있었고, 하나라도 남으면 증상은 그대로다.
+///
+///  1. `showModalBottomSheet`의 **`ModalBarrier`** — `barrierColor`를 투명으로
+///     주면 색만 사라진다. barrier는 `HitTestBehavior.opaque`라 **투명해도
+///     포인터는 전부 흡수한다.** 이 라우트가 [buildModalBarrier]를 비워 없앤다.
+///  2. 시트 본문을 감싸던 **전체 화면 `GestureDetector(opaque)`** — 아래
+///     [_PlaceDetailSheetState.build] 주석 참고.
+///  3. `MapShellScreen._withMapsLocked`의 **지도 제스처 잠금** — 그쪽 주석 참고.
+///
+/// ## 잃는 것 — 바깥을 눌러 닫기
+///
+/// barrier가 사라지면 "시트 밖을 눌러 닫기"도 함께 사라진다. 그 자리를 지도가
+/// 가져간다 — 다른 매장을 누르면 시트가 그 매장으로 바뀌고, 닫기는 X 버튼과
+/// 뒤로 가기가 맡는다. **이건 의도된 교환이다.** 사용자가 원한 것은 "매장 정보와
+/// 강조를 놔둔 채로 지도를 움직이는 것"이라, 지도 위 포인터를 닫기 신호로 쓰는
+/// 동작 자체가 그 요구와 충돌한다.
+///
+/// [ModalBottomSheetRoute]를 그대로 상속하는 이유는 애니메이션·드래그·safe area
+/// 같은 나머지 동작을 한 줄도 다시 구현하지 않기 위해서다. 바꾸는 것은 barrier
+/// 하나뿐이다.
+class _MapPassThroughSheetRoute<T> extends ModalBottomSheetRoute<T> {
+  _MapPassThroughSheetRoute({
+    required super.builder,
+    required super.isScrollControlled,
+    super.capturedThemes,
+    super.backgroundColor,
+    super.shape,
+    super.isDismissible,
+  });
+
+  @override
+  Widget buildModalBarrier() => const SizedBox.shrink();
+}
+
 /// 장소 상세 시트에서 호출자에게 돌려주는 다음 동작.
 ///
 /// 호출부의 출발·도착·카테고리 시트 chain 계약은 기존과 동일하게 유지한다.
@@ -93,31 +135,32 @@ class PlaceDetailSheet extends StatefulWidget {
     PlaceDetailRepository? repository,
     required VoidCallback onCloseAll,
   }) {
-    return showModalBottomSheet<StoreInfoAction>(
-      context: context,
-      isScrollControlled: true,
-      isDismissible: true,
-      backgroundColor: Colors.transparent,
-      // 시트 뒤 지도를 어둡게 덮지 않는다. 목록에서 매장을 고르면 지도가 그
-      // 매장으로 이동하는데, 기본 barrier(검정 54%)가 깔리면 정작 확인하러 온
-      // 그 매장이 어둠 속에 있다. 바깥을 눌러 닫는 동작은 시트 본문의
-      // GestureDetector가 그대로 처리하므로 잃는 기능은 없다.
-      barrierColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) => MapOverlayGuard(
-        child: PlaceDetailSheet(
-          title: title,
-          subtitle: subtitle,
-          buildingId: buildingId,
-          placeId: placeId,
-          favorite: favorite,
-          category: category,
-          subcategory: subcategory,
-          reach: reach,
-          repository: repository,
-          onCloseAll: onCloseAll,
+    final navigator = Navigator.of(context);
+    return navigator.push<StoreInfoAction>(
+      _MapPassThroughSheetRoute<StoreInfoAction>(
+        capturedThemes: InheritedTheme.capture(
+          from: context,
+          to: navigator.context,
+        ),
+        isScrollControlled: true,
+        isDismissible: true,
+        backgroundColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        builder: (context) => MapOverlayGuard(
+          child: PlaceDetailSheet(
+            title: title,
+            subtitle: subtitle,
+            buildingId: buildingId,
+            placeId: placeId,
+            favorite: favorite,
+            category: category,
+            subcategory: subcategory,
+            reach: reach,
+            repository: repository,
+            onCloseAll: onCloseAll,
+          ),
         ),
       ),
     );
@@ -223,84 +266,95 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
       onPopInvokedWithResult: (didPop, _) {
         if (didPop && !_intentionalPop) widget.onCloseAll();
       },
-      child: GestureDetector(
-        onTap: () => Navigator.of(context).maybePop(),
-        behavior: HitTestBehavior.opaque,
-        child: DraggableScrollableSheet(
-          initialChildSize: kPlaceDetailSheetInitialSize,
-          minChildSize: 0.3,
-          maxChildSize: 0.92,
-          expand: false,
-          builder: (context, scrollController) => GestureDetector(
-            onTap: () {},
-            behavior: HitTestBehavior.opaque,
-            child: Material(
-              color: Colors.white,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: ScrollConfiguration(
-                behavior: const _NoOverscrollIndicator(),
-                child: SingleChildScrollView(
-                  controller: scrollController,
-                  padding: EdgeInsets.only(
-                    bottom: 20 + MediaQuery.paddingOf(context).bottom,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const SheetGrabHandle(),
-                      SheetHeader(
-                        onCloseAll: widget.onCloseAll,
-                        onIntentionalPop: _markIntentional,
-                        // 저장은 눌러도 시트가 그대로 남는 유일한 버튼이라 길찾기와
-                        // 같은 줄에 두지 않는다([SheetHeader.trailing] 주석).
-                        trailing: favorite == null
-                            ? null
-                            : _SaveToggle(
-                                isSaved: saved,
-                                onPressed: _onToggleFavorite,
-                              ),
+      // **여기에 전체 화면 `GestureDetector(opaque)`를 두면 안 된다.**
+      //
+      // 예전에는 `DraggableScrollableSheet`를 `GestureDetector(onTap: maybePop,
+      // behavior: opaque)`로 감싸 "바깥을 눌러 닫기"를 처리했다. 그런데 이 시트는
+      // `isScrollControlled: true`라 라우트의 child가 **화면 전체 높이**를 차지한다.
+      // 시트는 아래 절반만 그려지지만 위쪽 투명한 영역도 `opaque` 탓에 히트
+      // 테스트에 걸려서, 지도가 보이는 자리의 탭·드래그가 전부 그 GestureDetector로
+      // 빨려 들어갔다 — 지도는 보이는데 만질 수 없었다([_MapPassThroughSheetRoute]
+      // 주석의 세 겹 중 두 번째).
+      //
+      // 지금은 감싸지 않는다. `DraggableScrollableSheet`는 `expand: false`라
+      // 시트가 실제로 그려지는 영역만 히트 테스트에 잡히고, 그 위 빈 자리는
+      // 포인터를 지도로 그대로 흘린다. 시트 본문 자체는 아래 builder 안쪽의
+      // `GestureDetector(onTap: () {})`가 계속 막고 있어 시트를 눌렀을 때 지도가
+      // 함께 반응하는 일은 없다.
+      child: DraggableScrollableSheet(
+        initialChildSize: kPlaceDetailSheetInitialSize,
+        minChildSize: 0.3,
+        maxChildSize: 0.92,
+        expand: false,
+        builder: (context, scrollController) => GestureDetector(
+          onTap: () {},
+          behavior: HitTestBehavior.opaque,
+          child: Material(
+            color: Colors.white,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: ScrollConfiguration(
+              behavior: const _NoOverscrollIndicator(),
+              child: SingleChildScrollView(
+                controller: scrollController,
+                padding: EdgeInsets.only(
+                  bottom: 20 + MediaQuery.paddingOf(context).bottom,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SheetGrabHandle(),
+                    SheetHeader(
+                      onCloseAll: widget.onCloseAll,
+                      onIntentionalPop: _markIntentional,
+                      // 저장은 눌러도 시트가 그대로 남는 유일한 버튼이라 길찾기와
+                      // 같은 줄에 두지 않는다([SheetHeader.trailing] 주석).
+                      trailing: favorite == null
+                          ? null
+                          : _SaveToggle(
+                              isSaved: saved,
+                              onPressed: _onToggleFavorite,
+                            ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                      child: _PlaceCore(
+                        title: widget.title,
+                        subtitle: widget.subtitle,
+                        category: widget.category,
+                        subcategory: subcategory,
+                        reach: widget.reach,
                       ),
+                    ),
+                    // 이름을 읽은 직후가 길찾기를 누르는 자리다. 사진·메뉴를
+                    // 지나 하단까지 내려가야 한다면 흐름이 한 번 끊긴다.
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                      child: _PlaceActions(
+                        onOrigin: () => _pop(StoreInfoAction.setOrigin),
+                        onDestination: () =>
+                            _pop(StoreInfoAction.setDestination),
+                      ),
+                    ),
+                    if (_isLoading)
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(20, 24, 20, 8),
+                        child: _DetailLoadingPlaceholder(),
+                      )
+                    else if (sections.isNotEmpty)
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-                        child: _PlaceCore(
-                          title: widget.title,
-                          subtitle: widget.subtitle,
-                          category: widget.category,
-                          subcategory: subcategory,
-                          reach: widget.reach,
+                        // 좌우 여백은 섹션이 스스로 갖는다. 사진·메뉴는
+                        // 시트 끝까지 써야 해서 여기서 일괄로 줄 수 없다.
+                        padding: const EdgeInsets.only(top: 20),
+                        child: PlaceDetailSections(
+                          sections: sections,
+                          floorLabel: _detail?.location.floorLabel,
                         ),
                       ),
-                      // 이름을 읽은 직후가 길찾기를 누르는 자리다. 사진·메뉴를
-                      // 지나 하단까지 내려가야 한다면 흐름이 한 번 끊긴다.
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-                        child: _PlaceActions(
-                          onOrigin: () => _pop(StoreInfoAction.setOrigin),
-                          onDestination: () =>
-                              _pop(StoreInfoAction.setDestination),
-                        ),
-                      ),
-                      if (_isLoading)
-                        const Padding(
-                          padding: EdgeInsets.fromLTRB(20, 24, 20, 8),
-                          child: _DetailLoadingPlaceholder(),
-                        )
-                      else if (sections.isNotEmpty)
-                        Padding(
-                          // 좌우 여백은 섹션이 스스로 갖는다. 사진·메뉴는
-                          // 시트 끝까지 써야 해서 여기서 일괄로 줄 수 없다.
-                          padding: const EdgeInsets.only(top: 20),
-                          child: PlaceDetailSections(
-                            sections: sections,
-                            floorLabel: _detail?.location.floorLabel,
-                          ),
-                        ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
             ),

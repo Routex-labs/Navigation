@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -438,10 +439,25 @@ class _MapShellScreenState extends State<MapShellScreen> {
   }
 
   /// 바텀시트가 떠 있는 동안 지도 제스처를 꺼서, 시트를 마우스 휠로
-  /// 스크롤할 때 그 아래 지도까지 같이 스크롤/줌되지 않게 한다. 실내 지도는
-  /// 웹에서 실제 DOM 캔버스(MapLibre)라 시트 위에서도 휠 이벤트가 새어나갈
-  /// 수 있어서 필요하다.
+  /// 스크롤할 때 그 아래 지도까지 같이 스크롤/줌되지 않게 한다.
+  ///
+  /// **웹에서만 잠근다.** 이 잠금이 막으려는 것은 웹 전용 증상이다 — 웹의
+  /// MapLibre는 Flutter가 그리는 캔버스가 아니라 DOM에 실제로 존재하는
+  /// `canvas.maplibregl-canvas`라, 그 위에 시트를 그려도 브라우저는 시트가 없는
+  /// 것처럼 휠 이벤트를 지도에 그대로 전달한다([map_overlay_guard.dart] 상단에
+  /// 같은 내용이 적혀 있다). iOS·Android는 지도가 네이티브 뷰이고 제스처가
+  /// Flutter 아레나를 거치므로 애초에 새지 않는다.
+  ///
+  /// 그런데 잠금은 플랫폼을 가리지 않고 걸려 있었다. 그래서 실기기에서는 얻는
+  /// 것 없이 **시트가 떠 있는 동안 지도가 통째로 얼었다** — 매장 상세 시트를 열면
+  /// 위쪽에 그 매장이 보이는데 끌 수도 확대할 수도 없었다. 매장 상세 시트는
+  /// barrier까지 없애 포인터를 지도로 흘리므로([_MapPassThroughSheetRoute]),
+  /// 이 잠금이 남아 있으면 그 작업이 통째로 무효가 된다.
+  ///
+  /// 다른 시트(메뉴·길찾기)는 여전히 자기 `ModalBarrier`가 포인터를 막으므로,
+  /// 네이티브에서 잠금을 풀어도 그쪽 동작은 달라지지 않는다.
   Future<T?> _withMapsLocked<T>(Future<T?> Function() showSheet) async {
+    if (!kIsWeb) return showSheet();
     _lockMaps(_mapLockSheet);
     try {
       return await showSheet();
