@@ -118,8 +118,9 @@ python -m scripts.seed.reset_and_seed
 python -m scripts.evaluate_query_hybrid --baseline <이전 결과.json>
 ```
 
-- 29셋 총점·질의 단위 회귀 확인
-- 유효/부정 최상단 마진 재측정 → 임계값 0.50 유지 여부 판단
+- 세트 총점·클래스별·질의 단위 회귀 확인
+- 유효/부정 최상단 마진 재측정 → 임계값 유지 여부 판단
+  (W11에서 0.50 → 0.52로 올렸다. 절차와 수치는 [search-eval-set.md](search-eval-set.md))
 - 평가셋에 새 intent 질의(`커피`, `출구` 등) 추가
 
 > 2026-08-01 규칙분 확장에서 이 절차가 실제로 회귀를 하나 잡았다 — `화장품` intent만

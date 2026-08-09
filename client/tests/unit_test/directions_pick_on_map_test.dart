@@ -41,7 +41,7 @@ void main() {
                   originLabel: '현재 위치',
                   initialOrigin: initialOrigin,
                   initialDestination: initialDestination,
-                  search: (query) async => results,
+                  search: (query, {String? floorId}) async => results,
                 );
                 holder.settled = true;
               },

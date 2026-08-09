@@ -157,6 +157,18 @@ class _MapShellScreenState extends State<MapShellScreen> {
     _runSheetChain(() => _openCategoryStores(category));
   }
 
+  /// 검색이 빈손일 때 패널이 제안한 카테고리를 골랐다(설계:
+  /// `docs/client/search-result-list-ux.md` R절).
+  ///
+  /// **검색을 먼저 닫는다.** 검색 패널은 상단 Column 전체를 차지하므로, 열어 둔
+  /// 채 시트를 띄우면 목록이 패널 뒤로 들어간다. 닫은 뒤에는 지도 위 chip을 누른
+  /// 것과 완전히 같은 경로를 탄다 — 같은 결과에 이르는 길이 둘로 갈리면 한쪽만
+  /// 고쳐지는 날이 온다.
+  void _onSearchCategoryPicked(String category) {
+    _closeSearch();
+    _onCategoryChipTapped(CategorySelection(category: category));
+  }
+
   ({String title, String subtitle})? _placeInfo;
   bool _outdoorRouteVisible = false;
   bool _indoorRouteVisible = false;
@@ -561,11 +573,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
       match,
       buildingId: _buildingId,
     );
-    // 시트를 띄우기 전에 구한다. 그래프·층 도면은 이미 받아 둔 것을 재사용하고
-    // 다익스트라만 한 번 더 도는 정도라, 시트가 눈에 띄게 늦어지지 않는다.
-    // 실패는 빈 목록이므로 시설 줄만 빠지고 시트는 그대로 열린다.
-    final facilities =
-        await _indoorKey.currentState?.nearbyFacilitiesFor(match) ?? const [];
     if (!mounted) return false;
     final action = await _withMapsLocked(
       () => PlaceDetailSheet.show(
@@ -584,7 +591,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
         // 같은 매장에 다른 거리를 적으면 어느 쪽도 못 믿게 된다.
         reach: match.nodeId == null ? null : _reachByNodeId?[match.nodeId],
         // "이 매장에서" 가장 가까운 시설. 위 reach와 기준이 다르다.
-        facilities: facilities,
         onCloseAll: _requestCloseSheetChain,
       ),
     );
@@ -711,8 +717,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
   }
 
   Future<List<DirectionsCandidate>> _searchDirectionsCandidates(
-    String query,
-  ) async {
+    String query, {
+    String? floorId,
+  }) async {
     final normalized = query.trim().toLowerCase();
     // 건물 밖을 보고 있을 때만 건물 입구가 후보다. 실내 진입 오버레이가 켜져
     // 있으면 야외 탭이어도 아래 매장 검색으로 흘려보낸다 — 그러지 않으면 실내
@@ -741,9 +748,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 사용자 의도의 반대였다 — 찾는 매장이 결과에 아예 없어서 매번 토글을 켜야
     // 했다. 다른 층 결과에는 층 라벨이 부제로 붙으므로(아래 subtitle), 어느 층
     // 매장인지는 목록에서 그대로 읽힌다.
+    // [floorId]는 **목록에서 고른 후보의 층**일 때만 값이 있다. 사용자가 직접 친
+    // 질의에는 null이라 위 「항상 건물 전체」 규칙이 그대로 유지된다. 후보를 콕
+    // 집은 행동에만 그 층으로 좁혀, 같은 이름이 층마다 있는 시설에서 화면에 적힌
+    // 층과 실제로 가는 층이 어긋나지 않게 한다(search-result-list-ux.md T절).
     final results = await destinationRepository.searchDestinations(
       _buildingId,
       query,
+      currentFloorId: floorId,
     );
     return results
         .map(
@@ -778,6 +790,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
     );
     return DirectionsDiscovery(
       mode: discovery.mode,
+      source: discovery.source,
       question: discovery.question,
       options: discovery.options,
       candidates: discovery.matches
@@ -829,6 +842,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
         // 그대로 써도 된다.
         semanticSearch: _indoorContextActive
             ? _semanticDirectionsCandidates
+            : null,
+        // 상단 검색 결과와 같은 판단 재료를 준다. 이미 계산해 둔 맵을 넘길 뿐이라
+        // 추가 계산이 없다(설계: map-ui-redesign-plan.md 「7+E 합동 설계」 2단계).
+        reachByNodeId: _reachByNodeId,
+        // 상단 검색과 같은 온디바이스 후보(초성·구두점·오타)를 길찾기에도 준다.
+        // 리포지토리가 같은 Future를 공유하므로 두 번 받지 않는다.
+        storeIndex: _indoorContextActive
+            ? buildingRepository.getStoreIndex(_buildingId)
             : null,
         focusOrigin: focusOrigin,
       ),
@@ -1383,6 +1404,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
                         indoorContextActive: _indoorContextActive,
                         currentFloorId: _activeIndoorFloor,
                         reachByNodeId: _reachByNodeId,
+                        // "찾지 못했어요" 화면의 탈출구. 지도 위 chip 줄과 **같은
+                        // Future**를 넘긴다 — 다시 요청하면 같은 정보를 두 번
+                        // 받게 되고, 두 화면의 카테고리 목록이 어긋날 수 있다.
+                        categoryEntries: _categoryEntriesFuture,
+                        onCategoryPicked: _onSearchCategoryPicked,
                       ),
                     ),
                   )
@@ -1634,9 +1660,14 @@ class _FavoritesPill extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-      elevation: 3,
-      shadowColor: Colors.black.withValues(alpha: 0.15),
-      borderRadius: BorderRadius.circular(20),
+      // 지도에 붙은 조작 줄이다. 그림자를 줄이고 경계는 hairline이 맡는다
+      // (AppElevation.onMap).
+      elevation: AppElevation.onMap,
+      shadowColor: Colors.black.withValues(alpha: 0.12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: AppColors.hairline),
+      ),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
@@ -1750,9 +1781,15 @@ class _CategoryChip extends StatelessWidget {
     final color = categoryColorFor(name);
     return Material(
       color: selected ? color : Colors.white,
-      elevation: 3,
-      shadowColor: Colors.black.withValues(alpha: 0.15),
-      borderRadius: BorderRadius.circular(20),
+      elevation: AppElevation.onMap,
+      shadowColor: Colors.black.withValues(alpha: 0.12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        // 선택된 chip은 카테고리 고유색으로 채워지므로 경계선이 필요 없다.
+        side: BorderSide(
+          color: selected ? Colors.transparent : AppColors.hairline,
+        ),
+      ),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
@@ -1792,9 +1829,14 @@ class _CategoryRetryChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-      elevation: 3,
-      shadowColor: Colors.black.withValues(alpha: 0.15),
-      borderRadius: BorderRadius.circular(20),
+      // 지도에 붙은 조작 줄이다. 그림자를 줄이고 경계는 hairline이 맡는다
+      // (AppElevation.onMap).
+      elevation: AppElevation.onMap,
+      shadowColor: Colors.black.withValues(alpha: 0.12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: AppColors.hairline),
+      ),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),

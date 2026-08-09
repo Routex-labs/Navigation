@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../features/indoor_navigation/contract/floor_transition_ui_state.dart';
+import '../theme/app_theme.dart';
 
 /// 층 도면이 실제로 교체되는 짧은 구간을 덮는 베일.
 ///
@@ -84,11 +85,7 @@ class FloorSwapVeil extends StatelessWidget {
 /// 문구는 [FloorTransitionUiState.message]가 정한다. 이 위젯은 임계값도
 /// 단계 판정도 모른다 — 상태를 받아 그리기만 한다.
 class FloorTransitionBanner extends StatelessWidget {
-  const FloorTransitionBanner({
-    super.key,
-    required this.state,
-    this.onUndo,
-  });
+  const FloorTransitionBanner({super.key, required this.state, this.onUndo});
 
   final FloorTransitionUiState state;
 
@@ -100,7 +97,9 @@ class FloorTransitionBanner extends StatelessWidget {
     final undo = state.canUndo ? onUndo : null;
     return Material(
       color: const Color(0xFF1A73E8),
-      elevation: 3,
+      // 몇 초짜리 임시 레이어다 — 지금 층이 바뀌고 있다는 사실이 화면에서 가장
+      // 앞에 있어야 한다(AppElevation.overlay). 색이 진해 경계선은 필요 없다.
+      elevation: AppElevation.overlay,
       shadowColor: Colors.black.withValues(alpha: 0.2),
       borderRadius: BorderRadius.circular(999),
       child: Padding(

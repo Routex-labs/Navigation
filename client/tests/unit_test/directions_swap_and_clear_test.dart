@@ -27,7 +27,10 @@ void main() {
     lightCalls = [];
   });
 
-  Future<List<DirectionsCandidate>> light(String query) async {
+  Future<List<DirectionsCandidate>> light(
+    String query, {
+    String? floorId,
+  }) async {
     lightCalls.add(query);
     // 아무 글자에나 후보 하나를 돌려줘 경량 단계에서 결론이 나게 한다. 이
     // 테스트가 보려는 것은 검색 단계가 아니라 칸과 후보의 일관성이다.

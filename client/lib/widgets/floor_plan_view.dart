@@ -13,6 +13,7 @@ import '../core/api_config.dart';
 import '../core/floor_switch_timing.dart';
 import '../core/tile_url.dart';
 import '../core/map_fonts.dart';
+import '../core/map_label_style.dart';
 import '../core/map_palette.dart';
 import '../core/map_route_style.dart';
 import 'destination_pin.dart';
@@ -46,6 +47,12 @@ const _tileSourceId = 'floor-tiles';
 /// 층마다 다른 타일 소스 id. 층 이름을 붙이는 이유는 [_installFloorTileLayers]
 /// 주석에 있다 — 같은 id를 지웠다 다시 만드는 경로를 피하려는 것이다.
 String _tileSourceIdFor(String floor) => '$_tileSourceId-$floor';
+
+/// 비활성 층 타일을 미리 받아 두는 프리페치 소스/레이어 id
+/// ([_installPrefetchTileSources]). 실제 층 소스([_tileSourceIdFor])와 id를
+/// 나눠, 층 전환의 addSource가 이미 있는 id에 부딪히는 경로를 만들지 않는다.
+String _prefetchSourceIdFor(String floor) => '$_tileSourceId-prefetch-$floor';
+String _prefetchLayerIdFor(String floor) => '$_tileSourceId-prefetch-fill-$floor';
 
 /// 매장명 라벨 전용 GeoJSON 소스 id.
 ///
@@ -337,6 +344,7 @@ class FloorPlanView extends StatefulWidget {
     this.focusBottomSheetFraction = 0,
     this.focusTopInsetPx = 0,
     this.tileRevision,
+    this.prefetchFloorNames = const [],
     this.visibleInsets = EdgeInsets.zero,
     this.overlayHitTest,
     this.onCameraBearingChanged,
@@ -415,6 +423,12 @@ class FloorPlanView extends StatefulWidget {
   /// 벡터 타일 URL에 붙일 버전 토큰(`Building.tileRevision`). 근거는
   /// `core/tile_url.dart` 주석.
   final String? tileRevision;
+
+  /// 이 건물의 전체 층 이름 목록. 현재 층이 다 그려진 뒤(첫 idle) 나머지 층의
+  /// 타일을 투명 레이어로 미리 받아 둔다([_installPrefetchTileSources]) —
+  /// 층 전환 시 새 층 타일이 그제서야 네트워크로 내려오는 지연을 없애기 위한
+  /// 것이다. 비어 있으면 프리페치를 하지 않는다(길 안내처럼 층이 고정된 화면).
+  final List<String> prefetchFloorNames;
 
   /// [focusTarget]으로 이동한 뒤 화면 아래쪽을 덮을 시트의 높이(화면 비율).
   /// 이만큼을 감안해 매장을 위로 밀어 올린다 — 0이면 정중앙에 놓는다.
@@ -509,6 +523,20 @@ class FloorPlanViewState extends State<FloorPlanView> {
   MapLibreMapController? _controller;
   bool _styleReady = false;
 
+  /// 화면 배율. `icon-size`가 **물리 픽셀**에 곱해지는 값이라 논리 px로 잡은
+  /// 아이콘 크기를 여기로 환산한다([storeCategoryIconSizeIndoor]).
+  ///
+  /// `MediaQuery.devicePixelRatioOf(context)`를 레이어 등록 시점에 바로 읽지
+  /// 않는 이유는 그 코드가 여러 번의 `await` 뒤라서다 — 그 사이 위젯이
+  /// 사라지면 context 접근이 터진다. 의존성이 잡히는 시점에 한 번 받아 둔다.
+  double _devicePixelRatio = 1;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
+  }
+
   /// 지금 지도에 설치돼 있는 층의 타일. 층이 바뀌면 이 값이 가리키는 레이어를
   /// 새 층 것으로 갈아 끼운다(위젯을 다시 만들지 않는다).
   String? _activeTileFloor;
@@ -516,6 +544,22 @@ class FloorPlanViewState extends State<FloorPlanView> {
   /// 타일 교체가 도는 중인지. 사용자가 층 선택기를 빠르게 여러 번 누르면
   /// 교체가 겹쳐 같은 층을 두 번 설치하거나, 아직 안 얹힌 층을 지우려 든다.
   bool _swappingFloorTiles = false;
+
+  /// 교체가 도는 동안 새로 요청된 층. 지금 교체가 끝나면 [_swapFloorTiles]가
+  /// 이어서 처리한다 — 버리면 타일과 라벨이 서로 다른 층을 가리켜 두 층이
+  /// 겹쳐 보인다(자세한 근거는 [_swapFloorTiles] 주석).
+  String? _pendingTileFloor;
+
+  /// 프리페치 소스가 깔려 있는 층들. 불변식은 "활성 층을 뺀
+  /// [FloorPlanView.prefetchFloorNames] 전부" — 설치는 첫 idle에서
+  /// ([_installPrefetchTileSources]), 이후 층 전환마다 [_swapFloorTiles]가
+  /// 활성 층 것만 빼고 떠난 층 것을 다시 채워 유지한다.
+  final Set<String> _prefetchedFloors = {};
+
+  /// 프리페치 설치가 도는 중인지. idle은 타일 로드가 끝날 때마다 다시 오므로,
+  /// 설치가 끝나기 전에 다음 idle이 같은 설치를 겹쳐 돌리는 것을 막는다.
+  bool _installingPrefetch = false;
+
   Size? _lastViewport;
   double? _minZoom;
 
@@ -726,7 +770,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
       onStyleLoadedCallback: _onStyleLoaded,
       // 타일까지 다 그려 지도가 멈춘 시점 — 사용자가 "떴다"고 느끼는 순간이다.
       // 계측이 꺼져 있으면 [FloorSwitchTiming.mark]가 즉시 반환한다.
-      onMapIdle: () => FloorSwitchTiming.mark('idle'),
+      onMapIdle: _onMapIdle,
       onMapClick: _handleMapClick,
       onCameraMove: (position) =>
           widget.onCameraBearingChanged?.call(position.bearing),
@@ -939,11 +983,27 @@ class FloorPlanViewState extends State<FloorPlanView> {
 
     // 매장명 라벨 앵커. 타일이 아니라 클라이언트가 만든다(이유는
     // [_storeLabelSourceIdFor] 주석).
+    //
+    // **`addGeoJsonSource`가 아니라 `addSource`인 이유는 `maxzoom` 때문이다.**
+    // GeoJSON 소스의 기본 maxzoom은 18인데 실내 지도는 z22까지 쓴다
+    // ([kStoreLabelSourceMaxZoom]). 그 위에서는 z18 타일을 확대해 재활용하는데,
+    // 그 상태에서 심볼의 **아이콘만** 통째로 빠지는 것을 실기기에서 확인했다 —
+    // 같은 화면에서 zoom을 한 단계씩 올리며 배지 픽셀을 세면 있음 → 없음 →
+    // 없음이었고, 글자와 (타일 소스를 쓰는) POI 아이콘은 멀쩡했다. 소스가 실제
+    // 줌까지 타일을 만들게 하면 그 경계가 사라진다.
+    //
+    // buffer도 함께 올린다. 라벨 앵커는 점이지만 그려지는 심볼(배지 + 이름)은
+    // 폭이 있어서, 기본 buffer(128/512)로는 타일 경계 근처 매장의 심볼이
+    // 잘려 나갈 수 있다.
     final labelSourceId = _storeLabelSourceIdFor(floor);
     final labelLatitude = _storeLabelLatitude();
-    await controller.addGeoJsonSource(
+    await controller.addSource(
       labelSourceId,
-      _storeLabelFeatureCollection(),
+      GeojsonSourceProperties(
+        data: _storeLabelFeatureCollection(),
+        maxzoom: kStoreLabelSourceMaxZoom.toDouble(),
+        buffer: 256,
+      ),
     );
 
     // 도면 폴리곤 색은 [map_palette.dart]가 갖는다 — 야외 오버레이가 같은 도면을
@@ -1050,28 +1110,43 @@ class FloorPlanViewState extends State<FloorPlanView> {
         // ([kStoreLabelMaxWidthProperty] 주석).
         textMaxWidth: ['get', kStoreLabelMaxWidthProperty],
         iconImage: storeCategoryIconExpression(),
-        iconSize: kStoreCategoryIconSizeIndoor,
+        // 크기는 화면 배율을 곱해 정한다 — `icon-size`는 물리 픽셀이고
+        // `text-size`는 논리 픽셀이라, 안 곱하면 고밀도 화면에서 아이콘만
+        // 배율만큼 작아진다([storeCategoryIconSizeIndoor] 실측표).
+        iconSize: storeCategoryIconSize(_devicePixelRatio),
         textVariableAnchor: kStoreLabelVariableAnchor,
         textRadialOffset: kStoreLabelRadialOffset,
         // variable-anchor가 고른 방향에 맞춰 좌/우 정렬을 따라가게 한다.
         // 기본값(center)으로 두면 두 줄로 접힌 이름이 아이콘 쪽으로 쏠린다.
         textJustify: 'auto',
-        textColor: '#444846',
-        textHaloColor: '#FFFFFF',
-        textHaloWidth: 1.2,
-        symbolAvoidEdges: true,
+        // 색·헤일로는 [map_label_style.dart]가 단일 출처다(야외 오버레이와 같은 값).
+        textColor: mapLabelStoreColor,
+        textHaloColor: mapLabelHaloColor,
+        textHaloWidth: mapLabelHaloWidth,
         // variable-anchor는 충돌 판정 위에서만 동작한다. true로 바꾸면 앵커가
         // 항상 첫 번째 값으로 굳어 뒤집기가 조용히 죽는다.
         textAllowOverlap: false,
-        // 둘 다 들어갈 자리가 없으면 하나만이라도 남긴다. 아이콘만 남으면 "여기
-        // 이런 종류의 매장이 있다"가, 이름만 남으면 "여기가 어디다"가 전달된다 —
-        // 둘 다 버려 폴리곤이 빈 회색 상자로 남는 것이 가장 나쁘다.
+        // 자리가 없으면 **이름만** 포기한다. 아이콘은 항상 그린다.
         //
-        // **iconOptional이 없으면 라벨이 줄어든다.** 심볼 폭이 아이콘만큼 넓어져
-        // 붐비는 층에서 이름이 통째로 밀려난다(B1 한 화면에서 49개 → 38개로
-        // 줄던 것을 실측했다). 아이콘을 포기할 수 있게 해 두면 그 이름들이 돌아온다.
+        // ⚠️ **예전 규칙을 뒤집었다.** 원래는 `iconOptional: true`로 두고
+        // "붐빌 때는 아이콘을 포기해 이름을 살린다"였는데, 실기기에서 재 보니
+        // 그 대가가 예상보다 훨씬 컸다 — 같은 1F에서 zoom을 한 단계씩 올리며
+        // 배지 픽셀을 세면 **0 → 5,956 → 0**이었다. 확대해서 자리가 남아도는
+        // 화면에서도 배지가 통째로 사라졌다. 사용자에게는 "아이콘이 커지거나
+        // 줄어드는 게 아니라 없어진다"로 보인다.
+        //
+        // 아이콘은 이름보다 조금 크기만 하고(11~16 논리 px) 색만으로도 업종을
+        // 말하므로, 밀릴 때 버릴 것은 이쪽이 아니다.
+        //
+        // **`iconIgnorePlacement`는 켰다가 껐다.** 켜 두면 배지가 충돌 판정에서
+        // 아예 빠져 "다른 라벨을 밀어내지 않는" 대신 **다른 매장 이름 위에 그대로
+        // 올라앉는다** — 실기기에서 「탬버린즈」·「오휘/후」가 옆 매장 배지에
+        // 덮였다. 배지를 장애물로 되돌려 이름들이 그 자리를 피해 가게 한다.
+        // 배지 자체는 `iconAllowOverlap`·`iconOptional: false` 덕에 그래도
+        // 사라지지 않는다.
         textOptional: true,
-        iconOptional: true,
+        iconOptional: false,
+        iconAllowOverlap: true,
       ),
       belowLayerId: belowLayerId,
       // 라벨 소스는 타일이 아니라 클라이언트 GeoJSON이라 타일 소스의 zoom 범위를
@@ -1085,20 +1160,25 @@ class FloorPlanViewState extends State<FloorPlanView> {
     // 편의시설(화장실·정수기 등) 이름 — 아이콘은 아래 전용 레이어가 그리므로
     // 여기서는 텍스트만 얹는다. 위 레이어에 섞으면 같은 폴리곤에 시설 아이콘과
     // 대분류 아이콘이 둘 다 떠서 무엇을 봐야 할지 알 수 없게 된다.
+    //
+    // **매장명과 달리 크기가 고정이다.** 폴리곤 맞춤 계산은 글자가 폴리곤 안에
+    // 들어가는 경우의 계산인데 이 이름은 아이콘을 피해 폴리곤 밖으로 내려 그린다
+    // ([mapLabelFacilityTextSize] 주석에 근거를 적었다).
     await controller.addSymbolLayer(
       labelSourceId,
       _tileLayerId(_facilityLabelLayerId, floor),
-      SymbolLayerProperties(
+      const SymbolLayerProperties(
         textField: ['get', 'name'],
         textFont: _mapFontStack,
-        textSize: storeLabelTextSizeExpression(latitude: labelLatitude),
-        textMaxWidth: ['get', kStoreLabelMaxWidthProperty],
+        textSize: mapLabelFacilityTextSize,
+        textMaxWidth: mapLabelFacilityMaxWidth,
         // 아이콘이 centroid를 차지하므로 이름은 그 아래로 내린다. POI 라벨
-        // (`floor-pois-label`)이 쓰는 오프셋과 같은 값이라 두 라벨의 높이가 맞는다.
-        textOffset: const [0, 1.6],
-        textColor: '#444846',
-        textHaloColor: '#FFFFFF',
-        textHaloWidth: 1.2,
+        // (`floor-pois-label`)·야외 오버레이와 같은 오프셋이라 세 곳의 라벨
+        // 높이가 맞는다.
+        textOffset: mapLabelBelowIconOffset,
+        textColor: mapLabelFacilityColor,
+        textHaloColor: mapLabelHaloColor,
+        textHaloWidth: mapLabelHaloWidth,
         textAllowOverlap: false,
       ),
       belowLayerId: belowLayerId,
@@ -1121,7 +1201,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
           ],
           poiIconImageName(kDefaultPoiIcon),
         ],
-        iconSize: kIndoorPoiIconSize,
+        iconSize: indoorMarkerIconSize(_devicePixelRatio),
         iconOpacity: 0.92,
         iconAllowOverlap: true,
       ),
@@ -1129,20 +1209,26 @@ class FloorPlanViewState extends State<FloorPlanView> {
       belowLayerId: belowLayerId,
       enableInteraction: false,
     );
+    // POI 이름. **수직이동(에스컬레이터·엘리베이터)은 이름을 그리지 않는다** —
+    // 그 이름이 `ES3-UP(TO2F)` 같은 Studio 내부 코드라서다([poiLabelFilter]에
+    // 실데이터 개수와 예시를 적어 두었다). 아이콘은 위 레이어가 계속 그린다.
     await controller.addSymbolLayer(
       sourceId,
       _tileLayerId('floor-pois-label', floor),
       const SymbolLayerProperties(
         textField: ['get', 'name'],
         textFont: _mapFontStack,
-        textSize: 10,
-        textOffset: [0, 1.6],
-        textColor: '#4F5451',
-        textHaloColor: '#FFFFFF',
-        textHaloWidth: 1,
+        // 같은 "아이콘 + 아래 이름" 꼴인 편의시설 라벨과 같은 값을 쓴다.
+        textSize: mapLabelFacilityTextSize,
+        textMaxWidth: mapLabelFacilityMaxWidth,
+        textOffset: mapLabelBelowIconOffset,
+        textColor: mapLabelFacilityColor,
+        textHaloColor: mapLabelHaloColor,
+        textHaloWidth: mapLabelHaloWidth,
       ),
       sourceLayer: 'pois',
       belowLayerId: belowLayerId,
+      filter: poiLabelFilter(),
       enableInteraction: false,
     );
 
@@ -1164,7 +1250,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
           ],
           poiIconImageName(kDefaultPoiIcon),
         ],
-        iconSize: kIndoorPoiIconSize,
+        iconSize: indoorMarkerIconSize(_devicePixelRatio),
         iconOpacity: 0.92,
         iconAllowOverlap: true,
         // iconOffset을 주지 않아 아이콘이 폴리곤 중심(centroid)에 그려진다.
@@ -1213,6 +1299,113 @@ class FloorPlanViewState extends State<FloorPlanView> {
     } on Object {
       // 위와 같은 이유. 이 소스가 남으면 다음 번 같은 층 설치에서 addSource가
       // 중복 id로 실패해 라벨만 통째로 빠진다.
+    }
+  }
+
+  /// 타일까지 다 그려 지도가 멈춘 시점 — 사용자가 "떴다"고 느끼는 순간이다.
+  /// 계측이 꺼져 있으면 [FloorSwitchTiming.mark]가 즉시 반환한다.
+  ///
+  /// 프리페치를 스타일 로드 직후가 아니라 여기서 거는 이유: 첫 층 타일과
+  /// 대역폭을 다투면 정작 보이는 층이 늦게 뜬다. idle은 "보이는 층이 다
+  /// 그려졌다"는 신호라, 그 뒤의 여유 시간에 나머지 층을 받는다.
+  void _onMapIdle() {
+    FloorSwitchTiming.mark('idle');
+    unawaited(_installPrefetchTileSources());
+  }
+
+  /// 비활성 층들의 타일 소스를 투명 fill 레이어와 함께 미리 깔아 둔다.
+  ///
+  /// 층 전환([_swapFloorTiles])은 새 층 소스를 그 순간에야 만들기 때문에, 각
+  /// 층의 첫 방문은 타일 fetch를 그대로 기다린다 — 그 왕복을 없애는 장치다.
+  /// MapLibre는 레이어가 참조하는 소스의 타일만 받으므로(visibility: none인
+  /// 레이어는 안 받는다) 불투명도 0짜리 fill을 하나 얹어 로드를 강제한다.
+  /// 받은 타일은 `?v=` immutable 캐시(core/tile_url.dart)에 남아, 층 전환 때
+  /// [_installFloorTileLayers]가 같은 URL로 소스를 만들면 네트워크 왕복 없이
+  /// 그려진다.
+  ///
+  /// **Dart 쪽 http로 미리 받아 두는 방법은 소용이 없다** — MapLibre 네이티브
+  /// 타일 로더의 캐시와 Dart HttpClient는 완전히 분리돼 있다. 반드시 지도
+  /// 소스를 통해 받아야 캐시가 워밍된다.
+  ///
+  /// 한 번 받고 지우지 않고 계속 두는 이유: 이후 사용자가 확대/이동한 만큼
+  /// 모든 층이 따라 받아지므로, 어떤 카메라 상태에서 층을 바꿔도 캐시에 있다.
+  /// 카메라가 건물 footprint에 묶여 있어([floor_camera_bounds.dart]) 층당 타일
+  /// 수는 유한하고 작다(z15~18 × 건물 폭 ~300m ≈ 층당 수십 장, 장당 수 KB).
+  Future<void> _installPrefetchTileSources() async {
+    final controller = _controller;
+    if (controller == null || !_styleReady) return;
+    // 층 전환 중에는 활성 층이 바뀌는 중이라 건너뛴다. idle은 전환의 타일
+    // 로드가 끝난 뒤 다시 오므로 그때 마저 채운다.
+    if (_installingPrefetch || _swappingFloorTiles) return;
+    _installingPrefetch = true;
+    try {
+      for (final floor in widget.prefetchFloorNames) {
+        if (floor == _activeTileFloor) continue;
+        if (_prefetchedFloors.contains(floor)) continue;
+        await _installPrefetchTileSource(controller, floor);
+      }
+    } finally {
+      _installingPrefetch = false;
+    }
+  }
+
+  Future<void> _installPrefetchTileSource(
+    MapLibreMapController controller,
+    String floor,
+  ) async {
+    try {
+      await controller.addSource(
+        _prefetchSourceIdFor(floor),
+        VectorSourceProperties(
+          tiles: [
+            indoorTileUrl(
+              buildingId: widget.buildingId,
+              floorName: floor,
+              tileRevision: widget.tileRevision,
+            ),
+          ],
+          // 실제 층 소스([_installFloorTileLayers])와 같은 범위여야 같은
+          // 타일 주소가 나와 캐시가 맞물린다.
+          minzoom: indoorTilesMinZoom,
+          maxzoom: indoorTilesMaxZoom,
+        ),
+      );
+      await controller.addFillLayer(
+        _prefetchSourceIdFor(floor),
+        _prefetchLayerIdFor(floor),
+        // 투명해도 타일은 받는다 — 로드 여부를 가르는 것은 visibility뿐이고
+        // fill-opacity는 paint 속성이라 로드 판정에 끼지 않는다.
+        const FillLayerProperties(fillOpacity: 0),
+        sourceLayer: 'footprint',
+        // 탭 판정(_storeAtScreenPoint)은 활성 층 레이어 id만 조회하므로 원래
+        // 겹칠 일이 없지만, 웹의 feature-tap 경로까지 확실히 닫는다.
+        enableInteraction: false,
+      );
+      _prefetchedFloors.add(floor);
+      FloorSwitchTiming.note('prefetch=$floor');
+    } on Object catch (error) {
+      // 프리페치는 편의 기능이다 — 실패해도 층 전환이 조금 느려질 뿐이므로
+      // 지도를 깨뜨리지 않는다. 흔한 원인이 "이미 있는 id"(hot restart 잔재,
+      // 전환과의 경합)라, 재시도로 idle마다 같은 실패를 반복하지 않도록
+      // 설치된 것으로 친다.
+      _prefetchedFloors.add(floor);
+      debugPrint('prefetch install failed ($floor): $error');
+    }
+  }
+
+  Future<void> _removePrefetchTileSource(
+    MapLibreMapController controller,
+    String floor,
+  ) async {
+    try {
+      await controller.removeLayer(_prefetchLayerIdFor(floor));
+    } on Object {
+      // 이미 없으면 무시 — [_removeFloorTileLayers]와 같은 이유.
+    }
+    try {
+      await controller.removeSource(_prefetchSourceIdFor(floor));
+    } on Object {
+      // 위와 같은 이유.
     }
   }
 
@@ -1294,26 +1487,69 @@ class FloorPlanViewState extends State<FloorPlanView> {
   /// 순서가 핵심이다: **새 층을 먼저 얹고**, 다 얹힌 뒤에 옛 층을 지운다.
   /// 반대로 하면 그 사이 도면이 통째로 사라져 흰 화면이 보이고, 위에서 말한
   /// 네이티브 함정도 그대로 밟는다.
+  ///
+  /// **전환 중에 들어온 요청은 버리지 않고 이어서 처리한다.** 예전에는 그냥
+  /// return했는데, 그러면 타일만 중간 층에 멈춘 채 선택기·라벨·마커는 마지막
+  /// 층으로 넘어가 **두 층이 겹쳐 보였다** — 실기기에서 B1 도면 위에 2F 매장명이
+  /// 얹혀 에스컬레이터 띠에 매장 이름이 찍혔다. [_activeTileFloor]가
+  /// `widget.floorName`과 어긋난 채 [_updateStoreLabelSource]가 새 층 라벨을
+  /// 옛 층 소스에 써넣는 것이 그 경로다.
+  ///
+  /// 밀린 요청은 **마지막 것 하나만** 남긴다. 중간 층들은 사용자가 지나치는
+  /// 층이라 굳이 그려 줄 이유가 없고, 건너뛰는 편이 최종 화면에 더 빨리 닿는다.
   Future<void> _swapFloorTiles(String fromFloor, String toFloor) async {
     final controller = _controller;
     if (controller == null || !_styleReady) return;
-    if (_swappingFloorTiles) return;
+    if (_swappingFloorTiles) {
+      _pendingTileFloor = toFloor;
+      return;
+    }
     _swappingFloorTiles = true;
     try {
-      await _installFloorTileLayers(
-        controller,
-        toFloor,
-        // 경로선·마커는 이미 이 위에 있다. 앵커를 안 주면 새 도면이 그것들을
-        // 덮어 경로가 도면 밑으로 사라진다.
-        belowLayerId: _firstOverlayLayerId,
-      );
-      if (!mounted) return;
-      _activeTileFloor = toFloor;
-      FloorSwitchTiming.mark('tilesSwapped');
-      await _removeFloorTileLayers(controller, fromFloor);
+      var from = fromFloor;
+      var to = toFloor;
+      while (true) {
+        await _installFloorTileLayers(
+          controller,
+          to,
+          // 경로선·마커는 이미 이 위에 있다. 앵커를 안 주면 새 도면이 그것들을
+          // 덮어 경로가 도면 밑으로 사라진다.
+          belowLayerId: _firstOverlayLayerId,
+        );
+        if (!mounted) return;
+        _activeTileFloor = to;
+        FloorSwitchTiming.mark('tilesSwapped');
+        await _removeFloorTileLayers(controller, from);
+        // 프리페치 불변식(활성 층 제외 전부, [_prefetchedFloors]) 유지 — 첫째,
+        // 방금 활성이 된 층의 프리페치는 실제 소스와 타일이 겹치므로 거둔다.
+        if (_prefetchedFloors.remove(to)) {
+          await _removePrefetchTileSource(controller, to);
+        }
+
+        // 여기서부터는 동기 구간이라 `didUpdateWidget`이 끼어들 수 없다 —
+        // 밀린 요청을 읽고 비우는 사이에 새 요청이 유실될 틈이 없다.
+        final next = _pendingTileFloor;
+        _pendingTileFloor = null;
+        if (next != null && next != to) {
+          // 둘째 절반(떠난 층을 프리페치로 되돌리기)은 건너뛴다. 사용자가
+          // 기다리는 것은 화면에 보일 층이고, 빠진 층은 아래 마무리 호출과
+          // [_onMapIdle]이 어차피 다시 채운다.
+          from = to;
+          to = next;
+          continue;
+        }
+        if (widget.prefetchFloorNames.contains(from)) {
+          await _installPrefetchTileSource(controller, from);
+        }
+        break;
+      }
     } finally {
       _swappingFloorTiles = false;
+      _pendingTileFloor = null;
     }
+    // 연쇄 전환에서 건너뛴 중간 층들을 여기서 마저 프리페치한다. 이미 깔린
+    // 층은 건너뛰므로 [_onMapIdle]의 같은 호출과 겹쳐도 무해하다.
+    await _installPrefetchTileSources();
   }
 
   /// 목록에서 고른 매장이 화면에 크게 보이도록 카메라를 옮긴다.
@@ -1336,6 +1572,20 @@ class FloorPlanViewState extends State<FloorPlanView> {
     // 정하면 null로 되돌리지 않아서, 매장을 한 번이라도 누르면 위치 제한이
     // 영원히 꺼진다.
     _userBoundsSuspended = true;
+    // **도면 제한도 함께 끈다.** 이게 없으면 건물 가장자리 매장을 고를 때
+    // 포커스가 통째로 무효가 된다 — [clampToFootprint]는 뷰포트가 bbox 안에
+    // 머물도록 허용 영역을 화면 절반만큼 깎으므로, 가장자리 매장은 애초에
+    // 중앙에 놓을 수 없고 아래 lift까지 되돌려진다.
+    //
+    // 그 규칙의 근거는 "가장자리는 화면 **끝**에 보이면 된다"였는데, 시트가
+    // 화면의 60%를 덮는 순간 그 '끝'이 곧 시트 뒤다. 실기기에서 6F
+    // 「이탈리 마켓」(건물 동쪽 끝)을 고르면 매장이 우하단으로 밀려 시트에
+    // 완전히 가렸다.
+    //
+    // 꺼도 카메라가 멀리 도망가지는 않는다 — 목표가 건물 안 매장이라 최대
+    // 화면 절반만큼 바깥이고, 그동안 도면은 화면에 남는다. 다시 켜지는 곳은
+    // 위치 제한과 같다(사용자가 지도를 끌거나 [resumeFollow]).
+    _footprintBoundsSuspended = true;
 
     // 뷰포트는 await 전에 읽는다. 카메라 이동을 기다린 뒤 MediaQuery를 보면
     // 그 사이 위젯이 트리에서 빠졌을 수 있다.
@@ -1816,6 +2066,9 @@ class FloorPlanViewState extends State<FloorPlanView> {
     final center = controller?.cameraPosition?.target;
     if (controller == null || center == null) return;
 
+    // 매장 포커스 중에는 되돌리지 않는다(위 [_applyFocusTarget] 주석).
+    if (_footprintBoundsSuspended) return;
+
     final halfSpan = await _visibleHalfSpan(controller);
     if (!mounted) return;
 
@@ -1828,10 +2081,19 @@ class FloorPlanViewState extends State<FloorPlanView> {
     );
     if (clamped == null) return;
 
+    // 되돌림도 미끄러지게 한다. 기본 애니메이션은 짧아서 경계에서 지도가
+    // 튕겨 나오는 것처럼 보였다 — 같은 거리를 같은 방향으로 옮기더라도
+    // "벽에 부딪혔다"와 "벽에 닿아 멈췄다"는 다르게 읽힌다.
     await controller.animateCamera(
       CameraUpdate.newLatLng(_toMapLibreLatLng(clamped)),
+      duration: _pullBackAnimationDuration,
     );
   }
+
+  /// 도면 밖으로 나간 카메라를 되돌리는 데 쓰는 시간. [_followAnimationDuration]
+  /// 보다 조금 길게 둔다 — 이쪽은 사용자가 방금 민 것을 되돌리는 동작이라,
+  /// 빠를수록 "튕겼다"로 읽힌다.
+  static const _pullBackAnimationDuration = Duration(milliseconds: 450);
 
   /// 지금 화면이 덮는 위경도 범위의 **절반**. 못 구하면 null이다.
   ///
@@ -1967,17 +2229,51 @@ class FloorPlanViewState extends State<FloorPlanView> {
       cameraBearing: current?.bearing,
       force: force,
     );
-    await controller.moveCamera(
+
+    // 위치에도 데드밴드를 둔다. 예전에는 위치가 갱신될 때마다 무조건 중앙에
+    // 맞췄는데, PDR이 한 걸음마다 값을 내놓으므로 걷는 내내 지도가 끌려다녔다
+    // ([kFollowDeadbandRatio]).
+    final cameraCenter = current?.target;
+    var recenter = force || cameraCenter == null;
+    if (!recenter) {
+      final halfSpan = await _visibleHalfSpan(controller);
+      if (!mounted) return;
+      recenter = shouldRecenterFollow(
+        camera: ll.LatLng(cameraCenter.latitude, cameraCenter.longitude),
+        user: target,
+        halfSpanLat: halfSpan?.lat ?? 0,
+        halfSpanLng: halfSpan?.lng ?? 0,
+      );
+    }
+    // 위치도 방향도 손댈 게 없으면 카메라를 아예 건드리지 않는다. 같은 자리로
+    // animateCamera를 부르면 그 자체가 onCameraIdle을 다시 불러 되돌림 판정이
+    // 헛돈다([floor_camera_bounds.dart]의 `_epsilonDeg` 주석과 같은 함정).
+    if (!recenter && bearing == null) return;
+
+    // **중심 이동과 회전을 한 번의 호출로 묶는다.** 나눠 부르면 걸음마다 화면이
+    // 두 번 튄다(먼저 밀리고 그 다음 돈다).
+    //
+    // `moveCamera`가 아니라 `animateCamera`인 이유는 데드밴드와 짝이다 — 데드밴드
+    // 를 두면 한 번에 옮기는 거리가 그만큼 커지는데, 순간이동으로 처리하면
+    // 조용해진 대신 가끔 크게 튀는 화면이 되어 오히려 더 거슬린다.
+    await controller.animateCamera(
       CameraUpdate.newCameraPosition(
         CameraPosition(
-          target: _toMapLibreLatLng(target),
+          target: recenter
+              ? _toMapLibreLatLng(target)
+              : LatLng(cameraCenter!.latitude, cameraCenter.longitude),
           zoom: current?.zoom ?? 18,
           bearing: bearing ?? current?.bearing ?? 0,
           tilt: current?.tilt ?? 0,
         ),
       ),
+      duration: _followAnimationDuration,
     );
   }
+
+  /// 추적 카메라가 새 위치로 미끄러지는 시간. 걸음 간격(약 0.5~0.8초)보다 짧게
+  /// 둬야 다음 갱신이 오기 전에 끝난다 — 길게 잡으면 애니메이션이 밀려 쌓인다.
+  static const _followAnimationDuration = Duration(milliseconds: 350);
 
   /// 카메라 중심만 [target]으로 옮긴다. 현재 bearing/줌은 유지 — 사용자 위치를
   /// 화면 정중앙에 오게 하는 데 쓴다.
@@ -2007,6 +2303,13 @@ class FloorPlanViewState extends State<FloorPlanView> {
   /// 자세한 이유는 [_applyFocusTarget] 주석에 있다.
   bool _userBoundsSuspended = false;
 
+  /// 도면 밖 되돌림([_pullBackIntoFootprint])을 꺼 둔 상태인지.
+  ///
+  /// 매장 포커스 중에만 켠다. 건물 가장자리 매장은 되돌림 때문에 화면 중앙에
+  /// 놓을 수 없고, 시트를 피해 올려 둔 것까지 되돌려지기 때문이다
+  /// ([_applyFocusTarget] 주석에 실기기 사례를 적어 두었다).
+  bool _footprintBoundsSuspended = false;
+
   /// 이번 제스처에서 손가락이 움직인 누적 거리(논리 픽셀). 이 값이 임계를
   /// 넘어야 "끌었다"로 본다.
   double _gesturePanPx = 0;
@@ -2022,6 +2325,21 @@ class FloorPlanViewState extends State<FloorPlanView> {
     _gesturePanPx += event.delta.distance;
     if (_gesturePanPx < _followBreakSlopPx) return;
     setState(() => _following = false);
+    // **내 위치 근방 제한도 함께 푼다.** 이게 없으면 추적만 꺼지고 카메라는
+    // 여전히 "내 위치에서 화면 절반 이내"에 묶여 있어서, 옆 구역을 보려고 밀어
+    // 둔 지도가 손을 떼는 순간 [_pullBackIntoFootprint]에 도로 끌려온다 —
+    // 사용자 입장에서는 추적을 끈 것이 아무 소용이 없다.
+    //
+    // 도면 제한은 그대로 남는다. 밀어서 볼 수 있는 범위가 **이 건물 이 층**으로
+    // 제한되는 것은 맞고, 그게 없으면 도면이 화면에서 사라진다
+    // ([clampToFootprint] 주석).
+    //
+    // 다시 켜는 곳은 [resumeFollow] 하나다("위치 보정").
+    _userBoundsSuspended = true;
+    // 반대로 도면 제한은 **여기서 되살린다.** 포커스 때문에 꺼 뒀던 것인데,
+    // 사용자가 직접 밀기 시작하면 "도면 밖으로 무한히 밀리지 않는다"가 다시
+    // 필요하다([clampToFootprint] 주석).
+    _footprintBoundsSuspended = false;
     widget.onFollowingChanged?.call(false);
   }
 
@@ -2030,8 +2348,9 @@ class FloorPlanViewState extends State<FloorPlanView> {
       setState(() => _following = true);
       widget.onFollowingChanged?.call(true);
     }
-    // 내 위치로 돌아왔으니 매장 포커스 때문에 꺼 뒀던 위치 제한을 다시 켠다.
+    // 내 위치로 돌아왔으니 매장 포커스 때문에 꺼 뒀던 제한들을 다시 켠다.
     _userBoundsSuspended = false;
+    _footprintBoundsSuspended = false;
     // 중심만 맞추고 끝내지 않는다. 추적이 풀린 사이 사용자가 지도를 돌려 놨을
     // 수 있고, 그러면 "내 위치로 돌아왔는데 방향은 딴 데를 보는" 화면이 된다.
     // 명시적 요청이므로 데드밴드를 건너뛴다.

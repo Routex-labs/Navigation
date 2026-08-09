@@ -37,6 +37,39 @@ enum DiscoveryMode {
   };
 }
 
+/// 서버가 후보를 **무엇으로** 잡았는지. 백엔드 DiscoveryResponse.source와 1:1.
+///
+/// [DiscoveryMode]와 축이 다르다 — mode는 "얼마나 좁혀졌나"이고, 이건 "무엇을
+/// 근거로 잡았나"다. `results`·`clarify`는 어느 쪽 경로에서도 나오므로 mode만
+/// 봐서는 구분할 수 없다.
+///
+/// 화면이 이 값을 읽는 이유는 온디바이스 이름 후보와의 우선순위 때문이다 —
+/// 이름 후보는 추측인 [semantic]에는 이기고, 결정적 어휘인 [light]에는 진다.
+/// 근거는 `docs/client/search-input-assist.md` 「실기기 검증」 2번.
+enum DiscoverySource {
+  /// 이름·카테고리·동의어·intent로 잡았다. 이름 후보만큼 결정적이다.
+  light,
+
+  /// FAISS 임베딩 유사도로 잡았다. 추측이라 이름 후보를 덮으면 안 된다.
+  semantic,
+
+  /// 서버가 이 필드를 안 보냈거나 모르는 값을 보냈다.
+  ///
+  /// **[semantic]과 같이 취급한다.** `source`를 모르는 구버전 서버에서도 오늘
+  /// 동작(이름 후보가 이긴다)이 그대로 유지되어야 하기 때문이다. 이 폴백이
+  /// [light]로 기울면 구버전 서버에 붙은 순간 A.P.C. 회귀가 되살아난다.
+  unknown;
+
+  static DiscoverySource fromWire(String? value) => switch (value) {
+    'light' => DiscoverySource.light,
+    'semantic' => DiscoverySource.semantic,
+    _ => DiscoverySource.unknown,
+  };
+
+  /// 온디바이스 이름 후보를 이 응답으로 대체해도 되는가.
+  bool get canReplaceNameSuggestions => this == DiscoverySource.light;
+}
+
 /// clarify 질문의 선택지 하나. 백엔드 DiscoveryOption(dto/query.py)과 1:1.
 /// 실제 후보가 있는 값만 오므로(빈 chip 금지, 설계 문서 4-3절) 클라이언트는
 /// count==0을 별도로 걸러낼 필요가 없다.
@@ -158,6 +191,7 @@ class DiscoveryResult {
   const DiscoveryResult({
     required this.mode,
     required this.query,
+    this.source = DiscoverySource.unknown,
     this.question,
     this.options = const [],
     this.matches = const [],
@@ -167,6 +201,10 @@ class DiscoveryResult {
 
   /// 사용자가 보낸 원문. 화면에 되비추는 용도.
   final String query;
+
+  /// 후보를 무엇으로 잡았는가. 기본값이 [DiscoverySource.unknown]인 이유는
+  /// 그 enum 주석에 있다 — 모르면 이름 후보를 덮지 않는 쪽이 안전하다.
+  final DiscoverySource source;
 
   /// clarify일 때만 값이 있다. 7-3절 템플릿에서 고른 질문 문장.
   final String? question;

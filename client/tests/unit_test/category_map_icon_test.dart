@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/widgets/category_icon.dart';
 import 'package:navigation_client/widgets/category_map_icon.dart';
 import 'package:navigation_client/widgets/floor_facility_style.dart';
+import 'package:navigation_client/widgets/store_label_fit.dart';
 
 /// 지도 라벨에 붙는 대분류 아이콘의 규칙을 못 박는다.
 ///
@@ -80,29 +81,48 @@ void main() {
       // 아니다. 중심 거리로 오해해 아이콘 반지름/글자크기(≈0.85)를 넣었더니
       // 실기기에서 간격이 27px까지 벌어져 아이콘과 이름이 따로 놀았다.
       //
-      // 실측으로 약 31.7px/em이라, 0.35를 넘으면 11px 이상 벌어진다.
+      // ⚠️ **기준을 두 번 바꿨다.** 처음엔 고정 상한(0.35), 다음엔 배지 지름에
+      // 대한 비율이었다. 배지가 화장실 아이콘과 같은 고정 크기가 되면서
+      // ([kIndoorMarkerLogicalPx]) 비율 기준도 의미를 잃었다 — 여백은
+      // `offset × 글자 크기`라 글자만 따라 변하는데 배지는 이제 고정이다.
+      //
+      // 그래서 **여백 자체를 논리 px으로** 잠근다. 붙는 쪽(3px 미만)은 글자가
+      // 배지에 파묻히고, 벌어지는 쪽(10px 초과)은 둘이 따로 논다.
       expect(kStoreLabelRadialOffset, greaterThan(0));
-      expect(
-        kStoreLabelRadialOffset,
-        lessThanOrEqualTo(0.35),
-        reason: '아이콘 반지름 기준으로 계산한 값을 다시 넣지 말 것 — 그 가정은 틀렸다.',
-      );
+
+      for (final textPx in [kStoreLabelMinPx, kStoreLabelMaxPx]) {
+        final gapPx = kStoreLabelRadialOffset * textPx;
+        expect(gapPx, greaterThanOrEqualTo(3.0), reason: '배지에 글자가 파묻힌다');
+        expect(gapPx, lessThanOrEqualTo(10.0), reason: '아이콘과 이름이 따로 논다');
+      }
     });
 
-    test('아이콘이 이름보다 커지지 않는다', () {
-      // 아이콘 폭이 심볼 폭에 그대로 더해져 붐비는 층의 라벨 개수를 깎는다.
-      // 글자 크기의 1.5배를 넘기면 도면이 아이콘 밭이 되고 이름이 밀려난다.
-      const textSizeAtZ16 = 9.0;
-      const textSizeAtZ20 = 14.0;
-      const canvasSize = 96.0;
-      expect(
-        (kStoreCategoryIconSizeIndoor[4] as double) * canvasSize,
-        lessThan(textSizeAtZ16 * 1.5),
-      );
-      expect(
-        (kStoreCategoryIconSizeIndoor[6] as double) * canvasSize,
-        lessThan(textSizeAtZ20 * 1.5),
-      );
+    test('배지가 화장실 아이콘과 같은 크기다', () {
+      // 피드백 그대로다 — 두 값이 갈라지면 같은 도면 위에서 마커가 다른 무게로
+      // 읽힌다. 같은 함수를 쓰는지까지 잠가 둔다.
+      for (final dpr in [1.0, 2.0, 2.625, 3.5]) {
+        expect(storeCategoryIconSize(dpr), indoorMarkerIconSize(dpr));
+      }
+    });
+
+    test('마커 크기가 화면 배율을 따라간다', () {
+      // 회귀 대상이 이 저장소에서 실제로 났던 버그다. `icon-size`는 비트맵의
+      // **물리 픽셀**에 곱해지고 `text-size`는 논리 픽셀이라, 배율을 안 곱하면
+      // 고밀도 화면에서 아이콘만 배율만큼 작아진다.
+      expect(indoorMarkerIconSize(3.0), closeTo(indoorMarkerIconSize(1.0) * 3, 1e-9));
+    });
+
+    test('논리 px로 환산하면 배율과 무관하게 같은 크기다', () {
+      for (final dpr in [1.0, 2.0, 2.625, 3.5]) {
+        final logical = indoorMarkerIconSize(dpr) * kIconCanvasPx / dpr;
+        expect(logical, closeTo(kIndoorMarkerLogicalPx, 1e-9));
+      }
+    });
+
+    test('배지가 색점으로만 읽힐 만큼 작지는 않다', () {
+      // 예전 배지는 5.5 논리 px이라 글리프가 안 보이고 색점으로만 읽혔다.
+      // 화장실 아이콘이 통과한 크기(약 11.5)가 하한의 근거다.
+      expect(kIndoorMarkerLogicalPx, greaterThanOrEqualTo(10.0));
     });
   });
 

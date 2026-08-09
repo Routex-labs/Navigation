@@ -30,6 +30,7 @@ import 'package:flutter/painting.dart' show Color;
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../core/map_fonts.dart';
+import '../../core/map_label_style.dart';
 import '../../core/map_palette.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/category_map_fill.dart';
@@ -146,6 +147,13 @@ FillLayerProperties indoorVerticalTransportProps(List<Object> fadeExpr) =>
 ///
 /// **z16 축소와 z20 확대를 반드시 함께 확인한다**([indoorIconSizeExpr] 주석의
 /// 함정이 여기에도 그대로 적용된다).
+///
+/// ## 여기는 키우지 않았다 (2026-08-09)
+///
+/// "동그란 아이콘이 너무 작다"는 피드백으로 실내는 확대 쪽을 0.20 → 0.24로
+/// 키웠지만([kStoreCategoryIconSizeIndoor]) 야외는 그대로 둔다. **실내는 글자
+/// 상한을 18 → 14px로 내려 심볼 예산이 남았는데, 야외는 글자가 11px 고정이라
+/// 내려간 것이 없다.** 여기서 아이콘만 키우면 늘어난 폭이 그대로 이름을 밀어낸다.
 const indoorCategoryIconSizeExpr = [
   'interpolate',
   ['linear'],
@@ -167,9 +175,12 @@ SymbolLayerProperties indoorStoresLabelProps(List<Object> fadeExpr) =>
       textField: ['get', 'name'],
       textFont: const [mapFontStackRegular],
       textSize: 11,
-      textColor: '#333333',
-      textHaloColor: '#FFFFFF',
-      textHaloWidth: 1,
+      // 색·헤일로는 [map_label_style.dart]가 단일 출처다(실내 화면과 같은 값).
+      // 크기만 여기서 고정인데, 야외는 도면 전체를 훑는 축소 화면이라 폴리곤
+      // 맞춤 크기를 쓰면 작은 매장 이름이 읽을 수 없게 작아진다.
+      textColor: mapLabelStoreColor,
+      textHaloColor: mapLabelHaloColor,
+      textHaloWidth: mapLabelHaloWidth,
       textMaxWidth: 6,
       textOpacity: fadeExpr,
       iconImage: storeCategoryIconExpression(),
@@ -193,14 +204,14 @@ SymbolLayerProperties indoorFacilityLabelProps(List<Object> fadeExpr) =>
     SymbolLayerProperties(
       textField: ['get', 'name'],
       textFont: const [mapFontStackRegular],
-      textSize: 11,
-      textColor: '#333333',
-      textHaloColor: '#FFFFFF',
-      textHaloWidth: 1,
-      textMaxWidth: 6,
+      textSize: mapLabelFacilityTextSize,
+      textColor: mapLabelFacilityColor,
+      textHaloColor: mapLabelHaloColor,
+      textHaloWidth: mapLabelHaloWidth,
+      textMaxWidth: mapLabelFacilityMaxWidth,
       textOpacity: fadeExpr,
       // 아이콘이 centroid를 차지하므로 이름은 아래로 내린다.
-      textOffset: const [0, 1.6],
+      textOffset: mapLabelBelowIconOffset,
       textAllowOverlap: false,
     );
 

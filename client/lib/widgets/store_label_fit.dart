@@ -62,24 +62,83 @@ const kStoreLabelMaxWidthProperty = 'label_max_w';
 
 /// 읽을 수 있는 하한(px). 박스에 맞추려면 이보다 작아야 하는 매장은 넘침을
 /// 감수하고 이 크기로 그린다 — 라벨을 숨기는 대신 유지하기로 한 결정이다.
-const kStoreLabelMinPx = 9.0;
+///
+/// ## 9 → 12 (2026-08-09, 접근성)
+///
+/// **"모든 사람이 시력이 이렇게 좋지 않다"는 피드백이다.** 9 논리 px은 본문
+/// 글씨의 절반을 겨우 넘는 크기라, 이 값에 눌린 매장(z18 기준 수백 개)의 이름은
+/// 사실상 못 읽는다. 하한은 "읽을 수 있는 최소"라는 뜻인데 그 이름값을 못 하고
+/// 있었다.
+///
+/// **대가를 알고 올린다.** 하한에 걸린 매장은 이 크기로 넘치게 그려지므로, 올린
+/// 만큼 이웃과 더 부딪히고 충돌로 밀려나는 이름이 늘어난다(`textOptional`).
+/// 읽히지 않는 이름을 많이 그리는 것보다 읽히는 이름을 덜 그리는 쪽을 택한다.
+const kStoreLabelMinPx = 12.0;
 
 /// 상한(px). 큰 매장에서 글자가 도면을 삼키지 않게 막는다.
 ///
-/// 실데이터(더현대 1626개 매장)로 값을 재 봤다. 상한을 올릴수록 "글자가 매장에
-/// 비해 작다"가 줄지만 z19 이상에서는 대부분이 어차피 상한에 붙어 있어 효과가
-/// 금방 꺾인다 — 평균 글자폭/매장폭은 z19에서 16px 0.59 → 18px 0.63 →
-/// 20px 0.66 → 24px 0.73이다. 반면 기본 화면인 z18에서는 상한을 16→18로만
-/// 올려도 상한에 눌리는 매장이 191개 → 97개로 줄어 매장 크기 차이가 그대로
-/// 드러난다. 그 지점이 18px이라 여기서 멈춘다(예전 고정 상한은 14px이었다).
-const kStoreLabelMaxPx = 18.0;
+/// ## 18 → 14 → 17 (들쭉날쭉 피드백 뒤 접근성 피드백)
+///
+/// **이 값은 한 번 반대 방향으로 튜닝했던 값이라 근거를 남긴다.** 원래 근거는
+/// 이랬다 — 실데이터(더현대 1626개 매장)에서 상한을 16→18로 올리면 기본 화면인
+/// z18에서 상한에 눌리는 매장이 191개 → 97개로 줄어, 매장 크기 차이가 글자
+/// 크기에 그대로 드러난다. 즉 **매장별 비례**를 최대화하는 값이 18이었다.
+///
+/// 그런데 그 비례가 곧 불균일이다. 하한 9와 상한 18은 **한 화면 안에서 글자
+/// 크기가 2배까지 벌어진다**는 뜻이고, 실기기에서 그게 "글자가 제멋대로다"로
+/// 읽혔다. 상용 지도는 이 폭을 훨씬 좁게 잡는다 — Mapbox Streets의 `poi-label`은
+/// 같은 랭크 안에서 zoom 전 구간을 11~14px로만 움직이고(비 1.27), 밀도는 글자
+/// 크기가 아니라 **랭크 필터**로 조절한다.
+///
+/// 우리에겐 랭크 데이터가 없어 폴리곤 맞춤을 유지하되 **폭만 좁혔다**(9~14).
+///
+/// 그 뒤 "글자가 너무 작다"는 접근성 피드백으로 **밴드를 통째로 올렸다** —
+/// 하한 9→12, 상한 14→17. 비는 1.42로 좁은 폭을 유지하고, 편의시설·POI 이름의
+/// 고정 크기 13([mapLabelFacilityTextSize])이 그 안에 들어와 도면 전체가 한
+/// 덩어리로 읽히는 성질도 그대로다. 좁힌 이유(균일함)와 올린 이유(가독성)는
+/// 서로 다른 축이라 둘을 함께 만족시킬 수 있다.
+const kStoreLabelMaxPx = 17.0;
 
 /// MapLibre가 쓰는 줄 높이(em). shaping에서 `lineHeight = 1.2 * fontSize`다.
 const kStoreLabelLineHeightEm = 1.2;
 
-/// 몇 줄까지 접어 볼지. 3줄을 넘으면 이름 덩어리가 매장보다 세로로 길어져
-/// 어느 폴리곤 것인지 알아보기 어려워진다.
-const kStoreLabelMaxLines = 3;
+/// 몇 줄까지 접어 볼지.
+///
+/// **3에서 2로 내렸다.** 3줄을 허용하면 짧은 브랜드명이 글자 단위로 흩어진다 —
+/// 실기기에서 `조 말론 런던`이 이렇게 나왔다.
+///
+/// ```
+/// 조
+/// 말론
+/// 런던
+/// ```
+///
+/// 이렇게 되면 이름 덩어리가 매장보다 세로로 길어져 어느 폴리곤의 이름인지
+/// 알아보기 어렵고, 세 조각이 각각 다른 매장 이름처럼 읽힌다. 상용 지도가 매장
+/// 라벨을 2줄까지만 접는 것도 같은 이유다.
+///
+/// (위 증상에는 [storeLabelWrapWidth]가 고친 두 번째 원인도 함께 얽혀 있었다.)
+const kStoreLabelMaxLines = 2;
+
+/// 접었을 때 한 줄이 가져야 하는 **최소 폭(em)**. 전각 두 글자에 해당한다.
+///
+/// 줄 수만 제한하면([kStoreLabelMaxLines]) 「르 라보」가 이렇게 나온다.
+///
+/// ```
+/// 르
+/// 라보
+/// ```
+///
+/// 2줄이라 규칙은 지켰지만 첫 줄에 한 글자만 남아, 그 글자가 이웃 매장 이름의
+/// 조각처럼 읽힌다. **줄 수가 아니라 줄의 내용이 문제다.**
+///
+/// 2.0em(두 글자)을 하한으로 두면 「르 라보」는 어떤 폭으로도 2줄을 만들 수 없어
+/// 한 줄로 떨어지고, 「조 말론 런던」(`조 말론` / `런던`)이나 「디올 뷰티」
+/// (`디올` / `뷰티`)처럼 양쪽이 말이 되는 2줄은 그대로 남는다.
+///
+/// 이름 전체가 이보다 짧으면(「르」 같은 한 글자 매장) 이 규칙은 적용되지 않는다 —
+/// 어차피 접을 일이 없다.
+const kStoreLabelMinLineEm = 2.0;
 
 /// 박스에서 실제로 글자에 내주는 비율. 테두리·헤일로와 이웃 폴리곤 사이 여백이다.
 const kStoreLabelBoxPadding = 0.88;
@@ -177,8 +236,12 @@ List<_Chunk> _chunks(String text) {
 ///
 /// 한 덩어리가 [maxWidthEm]보다 넓으면(긴 라틴 단어) 그 줄만 넘친다 — 쪼갤 수
 /// 있는 지점이 없으므로 접는 대신 넘치는 것이 MapLibre의 동작이기도 하다.
-List<double> storeLabelLineWidths(String text, double maxWidthEm) {
-  final chunks = _chunks(text);
+List<double> storeLabelLineWidths(String text, double maxWidthEm) =>
+    _lineWidths(_chunks(text), maxWidthEm);
+
+/// [storeLabelLineWidths]의 알맹이. [storeLabelWrapWidth]가 같은 이름을 수십 번
+/// 재므로 덩어리 쪼개기를 한 번만 하려고 나눠 두었다.
+List<double> _lineWidths(List<_Chunk> chunks, double maxWidthEm) {
   final lines = <double>[];
   var current = 0.0;
   var pendingSpace = 0.0;
@@ -203,6 +266,69 @@ List<double> storeLabelLineWidths(String text, double maxWidthEm) {
   if (lines.isEmpty) lines.add(0);
   return lines;
 }
+
+/// [text]가 [targetLines]줄 **이하로** 접히는 가장 좁은 줄바꿈 폭(em).
+///
+/// ## 왜 `전체 폭 / 줄 수`로는 안 되는가
+///
+/// 예전에는 목표 폭을 `totalEm / target`으로 잡았다. 그건 줄 폭의 **평균**이지
+/// 탐욕 배치가 실제로 달성하는 폭이 아니다. 한글처럼 모든 글자가 같은 폭인 이름
+/// 에서는 평균에 도달할 수 없다 — `조 말론 런던`(5.56em)을 2줄로 접으려고
+/// 2.78em을 주면 실제로는 **3줄**(`조 말론` / `론…` 식)이 나온다. 5글자를 3줄로
+/// 접으려고 1.85em을 주면 한 줄에 한 글자씩 들어가 **5줄**이 된다.
+///
+/// 그렇게 나온 폭을 `text-max-width`로 그대로 내보내니 MapLibre도 같은 폭으로
+/// 접었고, 화면에는 글자가 흩어진 라벨이 떴다.
+///
+/// ```
+/// 조
+/// 말론
+/// 런던
+/// ```
+///
+/// ## 어떻게 찾는가
+///
+/// 폭을 넓힐수록 줄 수는 단조적으로 줄어든다. 그리고 탐욕 배치에서 **어떤 줄의
+/// 폭도 반드시 「연속한 덩어리들의 합」**이므로, 답이 될 수 있는 폭은 그 합들뿐
+/// 이다. 좁은 것부터 훑어 처음으로 [targetLines]줄 이하가 되는 폭이 답이다.
+///
+/// 후보 중에는 [kStoreLabelMinLineEm]보다 얇은 줄을 만드는 것도 있다. 그런 폭은
+/// 건너뛴다 — 「르」 한 글자만 남는 줄이 그렇게 나왔다. 끝까지 못 찾으면 접지 않고
+/// 한 줄로 돌려준다.
+///
+/// 이름이 아주 길면(덩어리 [_wrapScanChunkLimit]개 초과) 후보가 제곱으로 늘어
+/// 나므로 옛 근사식으로 물러난다. 실데이터 매장명은 전부 그 한참 아래다.
+double storeLabelWrapWidth(String text, int targetLines) {
+  final chunks = _chunks(text);
+  final totalEm = storeLabelEmWidth(text);
+  if (targetLines <= 1 || chunks.length <= 1) return totalEm;
+  if (chunks.length > _wrapScanChunkLimit) return totalEm / targetLines;
+
+  final candidates = <double>{};
+  for (var i = 0; i < chunks.length; i++) {
+    var sum = 0.0;
+    for (var j = i; j < chunks.length; j++) {
+      sum += chunks[j].widthEm;
+      candidates.add(sum);
+    }
+  }
+  final sorted = candidates.toList()..sort();
+  for (final width in sorted) {
+    final lines = _lineWidths(chunks, width);
+    if (lines.length > targetLines) continue;
+    if (lines.length > 1 &&
+        lines.reduce(min) < kStoreLabelMinLineEm - 1e-9) {
+      continue;
+    }
+    return width;
+  }
+  // 조건을 만족하는 접기가 없다. 억지로 접지 않고 한 줄로 둔다.
+  return totalEm;
+}
+
+/// [storeLabelWrapWidth]가 후보를 전부 훑어도 되는 덩어리 수 상한. 후보가
+/// `n²`개라 여기서 끊는다.
+const _wrapScanChunkLimit = 40;
 
 /// [name]이 `boxWidthM x boxHeightM` 박스 안에 들어가는 최대 글자 크기를 찾는다.
 ///
@@ -235,9 +361,9 @@ StoreLabelFit fitStoreLabel({
 
   var best = const StoreLabelFit(emMeters: 0, maxWidthEm: 1, lines: 1);
   for (var target = 1; target <= kStoreLabelMaxLines; target++) {
-    // 균등하게 나눈 폭을 목표로 접는다. MapLibre도 "전체 폭 / 줄 수"를 목표로
-    // 잡으므로 같은 기준이다.
-    final widths = storeLabelLineWidths(name, totalEm / target);
+    // 그 줄 수가 **실제로 나오는** 가장 좁은 폭으로 접는다. 평균 폭을 쓰면
+    // 목표보다 많은 줄이 나와 계산과 화면이 어긋난다([storeLabelWrapWidth]).
+    final widths = storeLabelLineWidths(name, storeLabelWrapWidth(name, target));
     final widest = widths.reduce(max);
     if (widest <= 0) continue;
     final emMeters = min(
@@ -331,7 +457,7 @@ List<Object> storeLabelTextSizeExpression({
       metersPerPixelAtZoom0Equator * cos(latitude * pi / 180);
 
   final stops = <Object>[];
-  for (var zoom = _textSizeStopMinZoom; zoom <= _textSizeStopMaxZoom; zoom++) {
+  for (var zoom = _textSizeStopMinZoom; zoom <= kStoreLabelStopMaxZoom; zoom++) {
     final pixelsPerMeter = pow(2, zoom) / metersPerPixelZ0;
     stops.add(zoom.toDouble());
     stops.add(<Object>[
@@ -361,4 +487,25 @@ List<Object> storeLabelTextSizeExpression({
 /// stop을 찍는 zoom 범위. 실내 타일이 사는 구간을 덮는다. 밖에서는 보간이 양
 /// 끝값을 유지하는데, 그 값은 이미 하한/상한에 걸려 있어 문제가 없다.
 const _textSizeStopMinZoom = 16;
-const _textSizeStopMaxZoom = 22;
+
+/// 글자 크기 stop을 찍는 가장 높은 zoom. 이 위에서는 보간이 끝값을 유지하는데,
+/// 그 값은 이미 상한에 걸려 있어 문제가 없다.
+const kStoreLabelStopMaxZoom = 22;
+
+/// 라벨 GeoJSON 소스에 걸 `maxzoom`. **스타일 스펙이 허용하는 최대값이다.**
+///
+/// 소스 기본값은 18이다. 그 위에서 MapLibre는 z18 타일을 확대해 재활용하는데,
+/// 그 상태에서 심볼의 **아이콘만** 통째로 빠진다 — 글자와, 타일 소스를 쓰는 POI
+/// 아이콘은 멀쩡하다. 실기기(Galaxy S23) 실측이다. 같은 화면에서 zoom을 한
+/// 단계씩 올리며 배지 픽셀을 셌다.
+///
+/// | 소스 maxzoom | z0 | z+1 | z+2 | z+3 |
+/// |---|---|---|---|---|
+/// | 18 (기본) | 0 | 5,956 | 0 | — |
+/// | 22 | 50,000 | 10,850 | 3,780 | **0** |
+/// | 24 (지금) | 아래 「검증」 참고 | | | |
+///
+/// 값을 올릴 때마다 **소실 지점이 정확히 한 단계씩 위로 밀렸다.** 그래서 카메라가
+/// 닿을 수 있는 어떤 zoom도 오버줌이 되지 않도록 스펙 상한(24)에 둔다. 타일이
+/// 그만큼 잘게 쪼개지지만 feature가 층당 수백 개라 비용은 무시할 수준이다.
+const kStoreLabelSourceMaxZoom = 24;

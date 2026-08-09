@@ -10,7 +10,11 @@ void main() {
     final result = keepWordsWhole('한 줄 소개');
 
     expect(result.replaceAll(joiner, ''), '한 줄 소개');
-    expect(result.split(' ').last, '소$joiner' '개');
+    expect(
+      result.split(' ').last,
+      '소$joiner'
+      '개',
+    );
   });
 
   test('한 줄보다 길 수 있는 어절은 묶지 않는다', () {

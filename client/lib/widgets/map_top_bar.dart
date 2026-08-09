@@ -81,9 +81,14 @@ class MapTopBar extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
         child: Material(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(showRouteDraft ? 18 : 28),
-          elevation: 6,
-          shadowColor: Colors.black.withValues(alpha: 0.15),
+          // 늘 있는 chrome이다. 예전에는 결과 패널과 같은 6이라 둘이 한 덩어리로
+          // 보였다 — 지금은 패널이 이 위로 한 단계 더 나온다(AppElevation).
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(showRouteDraft ? 18 : 28),
+            side: const BorderSide(color: AppColors.hairline),
+          ),
+          elevation: AppElevation.chrome,
+          shadowColor: Colors.black.withValues(alpha: 0.10),
           child: showRouteDraft
               ? _RouteDraftBar(
                   originLabel: routeOriginLabel ?? '출발지를 선택하세요',
@@ -94,87 +99,92 @@ class MapTopBar extends StatelessWidget {
                   onClear: onClearRouteDraft,
                 )
               : Row(
-            children: [
-              if (searchActive)
-                IconButton(
-                  onPressed: onCancelSearch,
-                  icon: const Icon(Icons.arrow_back, color: AppColors.muted),
-                  tooltip: '검색 닫기',
-                )
-              else
-                IconButton(
-                  key: const Key('map-top-bar-menu'),
-                  onPressed: onMenuTap,
-                  icon: const Icon(Icons.menu, color: AppColors.muted),
-                  tooltip: '메뉴',
-                ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: TextField(
-                    controller: controller,
-                    focusNode: focusNode,
-                    textInputAction: TextInputAction.search,
-                    onChanged: onChanged,
-                    onSubmitted: onSubmitted,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: AppColors.text,
-                    ),
-                    // 상단 바 자체가 이미 흰 카드다. 전역 inputDecorationTheme의
-                    // 채움색(blue50)과 포커스 테두리(파란 1.5px)를 그대로 두면
-                    // 카드 안에 파란 알약이 하나 더 생긴다 — 셋 다 여기서 끈다.
-                    decoration: InputDecoration(
-                      isDense: true,
-                      filled: false,
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      hintText: hintText,
-                      hintStyle: const TextStyle(
-                        fontSize: 14,
-                        color: AppColors.muted,
+                  children: [
+                    if (searchActive)
+                      IconButton(
+                        onPressed: onCancelSearch,
+                        icon: const Icon(
+                          Icons.arrow_back,
+                          color: AppColors.muted,
+                        ),
+                        tooltip: '검색 닫기',
+                      )
+                    else
+                      IconButton(
+                        key: const Key('map-top-bar-menu'),
+                        onPressed: onMenuTap,
+                        icon: const Icon(Icons.menu, color: AppColors.muted),
+                        tooltip: '메뉴',
                       ),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ),
-                ),
-              ),
-              // 글자가 있으면 지우기, 없으면 길찾기. 둘을 나란히 두면 좁은
-              // 화면에서 입력 폭이 더 줄어든다.
-              //
-              // 이 자리가 앱 안 모든 검색창 지우기 X의 기준 패턴이다 — 글자가
-              // 있을 때만 나타나고, 글자만 지우는 게 아니라 `onChanged('')`로
-              // 그 입력이 걸어 둔 결과 상태까지 함께 되돌린다. 길찾기 시트와
-              // 카테고리 매장 목록 시트도 같은 규칙을 따른다.
-              ValueListenableBuilder<TextEditingValue>(
-                valueListenable: controller,
-                builder: (context, value, _) {
-                  if (value.text.isEmpty) {
-                    return IconButton(
-                      key: const Key('map-top-bar-directions'),
-                      onPressed: onDirectionsTap,
-                      icon: const Icon(
-                        Icons.directions,
-                        color: AppColors.primary,
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: TextField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          textInputAction: TextInputAction.search,
+                          onChanged: onChanged,
+                          onSubmitted: onSubmitted,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppColors.text,
+                          ),
+                          // 상단 바 자체가 이미 흰 카드다. 전역 inputDecorationTheme의
+                          // 채움색(blue50)과 포커스 테두리(파란 1.5px)를 그대로 두면
+                          // 카드 안에 파란 알약이 하나 더 생긴다 — 셋 다 여기서 끈다.
+                          decoration: InputDecoration(
+                            isDense: true,
+                            filled: false,
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            hintText: hintText,
+                            hintStyle: const TextStyle(
+                              fontSize: 14,
+                              color: AppColors.muted,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 14,
+                            ),
+                          ),
+                        ),
                       ),
-                      tooltip: '길찾기',
-                    );
-                  }
-                  return IconButton(
-                    key: const Key('map-top-bar-clear'),
-                    onPressed: () {
-                      controller.clear();
-                      onChanged('');
-                    },
-                    icon: const Icon(Icons.close, color: AppColors.muted),
-                    tooltip: '입력 지우기',
-                  );
-                },
-              ),
-              const SizedBox(width: 4),
-            ],
-          ),
+                    ),
+                    // 글자가 있으면 지우기, 없으면 길찾기. 둘을 나란히 두면 좁은
+                    // 화면에서 입력 폭이 더 줄어든다.
+                    //
+                    // 이 자리가 앱 안 모든 검색창 지우기 X의 기준 패턴이다 — 글자가
+                    // 있을 때만 나타나고, 글자만 지우는 게 아니라 `onChanged('')`로
+                    // 그 입력이 걸어 둔 결과 상태까지 함께 되돌린다. 길찾기 시트와
+                    // 카테고리 매장 목록 시트도 같은 규칙을 따른다.
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: controller,
+                      builder: (context, value, _) {
+                        if (value.text.isEmpty) {
+                          return IconButton(
+                            key: const Key('map-top-bar-directions'),
+                            onPressed: onDirectionsTap,
+                            icon: const Icon(
+                              Icons.directions,
+                              color: AppColors.primary,
+                            ),
+                            tooltip: '길찾기',
+                          );
+                        }
+                        return IconButton(
+                          key: const Key('map-top-bar-clear'),
+                          onPressed: () {
+                            controller.clear();
+                            onChanged('');
+                          },
+                          icon: const Icon(Icons.close, color: AppColors.muted),
+                          tooltip: '입력 지우기',
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                ),
         ),
       ),
     );

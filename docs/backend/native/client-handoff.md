@@ -127,7 +127,7 @@
 - 로컬 백엔드 기동 후 Swagger(`http://127.0.0.1:8001/docs`)에서 `POST /query/ai`로
   `{"text":"밥 먹을 곳","building_id":"thehyundai-seoul"}` 응답 확인.
 - 정확 이름(예: "MLB")은 즉시(경량 1차), 자연어("애들 신발")는 2차(모델 로드 후) 응답 확인.
-- 무의미 문자열("asdfqwerzxcv")이 `no_match`로 걸러지는지 확인(임계값 0.50).
+- 무의미 문자열("asdfqwerzxcv")이 `no_match`로 걸러지는지 확인(유사도 임계값 미달 컷).
 
 ## 참고
 
