@@ -392,9 +392,10 @@ Phase 1의 vocabulary는 `styles` 하나뿐이다.
 태그가 아니므로 vocabulary와 오버레이 어느 쪽에도 넣지 않고 `_intents.json` 한 파일에
 둔다. 매장별 배열(`"intents": ["신발"]`)로 손으로 적으면 `styles`에서 이미 겪은 드리프트가
 그대로 재현되기 때문이다(근거는 `app/repositories/store_facets.py` 모듈 docstring
-"왜 intents는 매장 태그가 아니라 '규칙 + 예외' 파일인가"). 현재 값은 `신발`(규칙
-`subcategory=슈즈` + 예외 매장 145건)과 `식사`(규칙 `subcategory=레스토랑`)이고, 시드가
-전개 결과를 `Store.search_facets["intents"]`에 적재해 경량 매칭이 소비한다.
+"왜 intents는 매장 태그가 아니라 '규칙 + 예외' 파일인가"). 시드가 규칙 전개 결과를
+`Store.search_facets["intents"]`에 적재하고 경량 매칭과 임베딩 문서가 그것을 소비한다.
+**선언 목록과 건수는 `_intents.json`이 단일 출처다** — 여기 옮겨 적으면 태깅 라운드마다
+낡는다. 확장 이력은 [facet-llm-tagging.md](facet-llm-tagging.md)를 본다.
 
 ### 5-2. 시드 검증
 
@@ -971,7 +972,13 @@ facet도 새 응답 모델도 필요 없고, 넣어 두면 이후 단계의 검�
 - `intents` 스키마는 **소분류 규칙 객체 + 예외 매장 id**로 확정한다(매장별 배열은 기각).
   선언 위치는 vocabulary가 아니라 `resources/store_search_facets/_intents.json`이고,
   시드가 규칙을 전개해 `Store.search_facets["intents"]`에 적재한 값을 검색이 사용한다.
-  현재 `신발`은 실데이터 153건, `식사`는 57건이다(5-1-1, `store_facets.py` docstring).
+  선언 목록·건수는 그 파일이 단일 출처다(5-1-1).
+- **소분류에 없는 말만 intent로 넣는다.** 소분류가 이미 사용자 어휘와 같으면
+  (`아이웨어`·`호텔`) `query_synonyms.json` 별칭으로 잇는다 — intent는 임베딩 문서
+  텍스트를 바꾸므로 이름 신호를 밀어내 오타 질의가 회귀한다([FAISS.md](FAISS.md) 11-6).
+- **언어 축도 같은 파일이 맡는다.** 영문 일반명사(`toilet`·`shoes`)는 별칭으로 넣고
+  모델을 바꾸지 않는다 — 한국 매장명은 영어의 음차라 임베딩이 넘을 수 없고, 다국어
+  모델은 어느 임계값에서도 오탐이 0이 되지 않았다([FAISS.md](FAISS.md) 11-7).
 - 원본 JSON 전체를 Flutter에 보내지 않는다.
 - `/query/destination`의 단일 목적지 계약은 유지한다.
 - 대화형 탐색은 여러 후보·질문·선택지를 표현하는 별도 응답 모델을 사용한다.
