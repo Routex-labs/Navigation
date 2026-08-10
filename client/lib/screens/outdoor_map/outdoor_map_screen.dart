@@ -26,6 +26,7 @@ import '../../features/indoor_navigation/debug/pdr_debug_device_info.dart';
 import '../../features/indoor_navigation/debug/pdr_debug_session_recorder.dart';
 import '../../features/indoor_navigation/debug/pdr_debug_session_share.dart';
 import '../../domain/multi_floor_router.dart';
+import '../../domain/route_endpoint_fill.dart';
 import '../../models/building.dart';
 import '../../models/building_graph.dart';
 import '../../models/directions_route.dart';
@@ -1999,7 +2000,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// (걷는 동안 계속 일어남) 다시 맞추지 않는다 — 사용자가 지도를 보는 중에
   /// 카메라가 계속 튀면 방해가 된다. 새 목적지를 고르면(showRouteTo) 그때는
   /// 다시 한번 전체 경로가 보이도록 맞춘다.
-  void _applyRoute(DirectionsRoute? route) {
+  void _applyRoute(DirectionsRoute? incoming) {
+    // TMAP 보행자 경로는 가장 가까운 보행 가능 도로에서 끝난다. 도착점이 건물
+    // 출입구처럼 도로에서 떨어진 자리면 선이 도로에서 뚝 끊겨, "북동쪽 출구
+    // 경유"라고 적힌 안내에 정작 그 출구 앞 구간이 비어 있다.
+    final route = extendRouteToDestination(incoming, _userDestination);
     final wasVisible = _route != null;
     setState(() => _route = route);
     _syncRouteLayer();
@@ -3811,9 +3816,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 지금 펼쳐 둔 층의 구간만 그린다. 여러 층을 한꺼번에 겹쳐 그리면 같은
     // 좌표 위에 선이 여러 겹 쌓여, 어느 것이 이 층의 길인지 알 수 없다 —
     // 층 chip을 넘기면 그 층의 구간이 이어서 보인다.
-    final pending = _pendingIndoorRoute?.segmentForFloor(_activeFloor ?? '');
-    if (pending != null && pending.route.points.length >= 2) {
-      features.add(_lineFeature(pending.route.points));
+    //
+    // **승격된 뒤에도 계속 보여야 한다.** 확대해서 실내에 한 번 들어가면
+    // [_activatePendingIndoorRoute]가 pending을 비우고 [_indoorMultiFloorRoute]로
+    // 옮긴다. pending만 보면 그 뒤로 축소했을 때 실내 선이 사라지는데, 사용자가
+    // 한 일은 확대했다 축소한 것뿐이라 안내가 깨진 것처럼 보인다.
+    final preview = _pendingIndoorRoute ?? _indoorMultiFloorRoute;
+    final segment = preview?.segmentForFloor(_activeFloor ?? '');
+    if (segment != null && segment.route.points.length >= 2) {
+      features.add(_lineFeature(segment.route.points));
     }
     await controller.setGeoJsonSource(
       _routeSourceId,
