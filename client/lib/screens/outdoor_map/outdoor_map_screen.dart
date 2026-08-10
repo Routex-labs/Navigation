@@ -3735,7 +3735,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           widget.categorySelection,
           _devicePixelRatio,
         ),
-        sourceLayer: 'stores',
+        // **폴리곤이 아니라 라벨 전용 점 레이어를 본다.** MapLibre는 폴리곤
+        // 심볼을 면적 무게중심에 찍는데, ㄱ자·길쭉한 매장에서 그 점이 눈에
+        // 보이는 가운데가 아니다(백엔드 `label_point.py` 주석에 실측을 적었다).
+        // 백엔드가 폴리곤마다 "라벨 놓을 자리"를 계산해 이 레이어로 내려준다.
+        sourceLayer: 'store_labels',
         filter: storeLabelWithCategoryIconFilter(),
         belowLayerId: _routeCasingLayerId,
         enableInteraction: false,
@@ -3746,7 +3750,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _indoorTilesSourceId,
         _indoorFacilityLabelLayerId,
         indoorFacilityLabelProps(fadeExpr, widget.categorySelection),
-        sourceLayer: 'stores',
+        // 매장명 라벨과 같은 이유로 라벨 점 레이어를 본다.
+        sourceLayer: 'store_labels',
         filter: facilityStoreLabelFilter(),
         belowLayerId: _routeCasingLayerId,
         enableInteraction: false,
@@ -3762,15 +3767,17 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         belowLayerId: _routeCasingLayerId,
         enableInteraction: false,
       );
-      // 편의시설 아이콘: `stores` 소스에 있는 화장실·정수기 같은 시설물은 POI
-      // 레이어를 타지 않으므로 아이콘이 안 붙는다. 매장 이름을 기준으로 심볼을
-      // 하나 더 얹어 라벨 바로 위에 아이콘이 뜨게 한다. iconOffset을 y=-18로
-      // 줘 라벨(centroid)과 위/아래로 겹치지 않는다.
+      // 편의시설 아이콘: 화장실·정수기 같은 시설물은 백엔드에서 `pois`가 아니라
+      // 매장으로 들어오므로 POI 아이콘 레이어를 타지 않는다. 이름을 기준으로
+      // 심볼을 하나 더 얹어 아이콘이 붙게 한다. 이름은 위 편의시설 라벨
+      // 레이어가 같은 점에 아래로 그린다.
       await controller.addSymbolLayer(
         _indoorTilesSourceId,
         _indoorStoreFacilityIconLayerId,
         indoorFacilityIconProps(fadeExpr, _devicePixelRatio),
-        sourceLayer: 'stores',
+        // 이름과 아이콘이 **같은 점**에 놓여야 한다. 하나만 라벨 점 레이어로
+        // 옮기면 아이콘과 이름이 매장 안 서로 다른 자리에 뜬다.
+        sourceLayer: 'store_labels',
         belowLayerId: _routeCasingLayerId,
         filter: [
           'any',
