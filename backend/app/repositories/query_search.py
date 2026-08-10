@@ -148,8 +148,32 @@ def _name_match_rank(name: str, q: str) -> int | None:
     return _CONTAINS
 
 
+# 질의를 **접두로 갖는** 별칭들의 표준형.
+#
+# 별칭 사전은 완전 일치 조회(`synonyms.get(q)`)라 `starbucks`를 끝까지 쳐야 걸렸다.
+# 한글은 매장명 자체가 `스타벅스 리저브`라 `스타`만 쳐도 부분 일치로 잡히는데,
+# 영어로 치는 사용자만 전부 입력해야 했다 — 같은 매장을 찾는 두 언어의 경험이
+# 달랐다.
+#
+# 그래서 `starb`처럼 별칭의 앞부분만 쳐도 그 별칭의 표준형(`스타벅스`)을 함께
+# 후보로 본다. 반대 방향(표준형이 질의의 접두)은 넣지 않는다 — `스`가 `스타벅스`
+# 별칭 전부를 끌어와 무관한 매장이 쏟아진다.
+#
+# 질의당 한 번만 계산해 매장 루프 밖에서 넘긴다. 사전이 190개 남짓이라 순회가
+# 싸고, 매장마다 다시 돌면 600곳 × 190개가 된다.
+def _prefix_expansions(synonyms: dict[str, str], q: str) -> tuple[str, ...]:
+    if len(q) < _MIN_NAME_PARTIAL_MATCH_LEN:
+        return ()
+    found: list[str] = []
+    for alias, canon in synonyms.items():
+        # 완전 일치는 호출부가 이미 canon으로 처리한다.
+        if alias != q and alias.startswith(q) and canon not in found:
+            found.append(canon)
+    return tuple(found)
+
+
 # 매칭 우선순위 (tier, tier 2 정밀도). 낮을수록 우선. 안 걸리면 None.
-def _tier(store: Store, q: str, canon: str) -> tuple[int, int] | None:
+def _tier(store: Store, q: str, canon: str, expansions: tuple[str, ...] = ()) -> tuple[int, int] | None:
     name = _norm(store.name or "")
     cat = _norm(store.category or "")
     sub = _norm(store.subcategory or "")
@@ -169,6 +193,10 @@ def _tier(store: Store, q: str, canon: str) -> tuple[int, int] | None:
         return 1, 0
     # 질의 원문과 동의어 표준형 중 더 정밀하게 걸린 쪽을 쓴다.
     ranks = [rank for rank in (_name_match_rank(name, q), _name_match_rank(name, canon)) if rank is not None]
+    for expanded in expansions:
+        rank = _name_match_rank(name, expanded)
+        if rank is not None:
+            ranks.append(rank)
     if ranks:
         return 2, min(ranks)  # 이름 부분 일치
     return None
@@ -189,14 +217,17 @@ def _rank_with_candidate(
     candidates = _query_candidates(text)
     synonyms = _synonyms()
 
+    # 후보마다 표준형과 접두 확장을 **매장 루프 밖에서** 한 번만 만든다.
+    expanded_candidates = [(synonyms.get(q, q), _prefix_expansions(synonyms, q)) for q in candidates]
+
     # 걸리는 매장마다 최선의 (tier, 후보 순서, 정밀도)를 고른다. tier가 같으면 원문에
     # 가까운 후보가 먼저라 "A.P.C."가 "A.P.C 골프"의 부분 일치보다 우선한다.
     scored_with_candidate = []
     for store, floor in rows:
         best: tuple[int, int, int] | None = None
         for candidate_order, q in enumerate(candidates):
-            canon = synonyms.get(q, q)
-            matched = _tier(store, q, canon)
+            canon, expansions = expanded_candidates[candidate_order]
+            matched = _tier(store, q, canon, expansions)
             if matched is None:
                 continue
             tier, precision = matched

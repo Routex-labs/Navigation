@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/core/service_locator.dart';
 import 'package:navigation_client/models/building.dart';
+import 'package:navigation_client/models/poi_search_result.dart';
 import 'package:navigation_client/repositories/building_repository.dart';
 import 'package:navigation_client/repositories/mock_building_repository.dart';
-import 'package:navigation_client/models/poi_search_result.dart';
 import 'package:navigation_client/widgets/category_stores_sheet.dart';
 
 /// 카테고리 매장 목록 시트가 **현재 층을 먼저** 보여주는지 고정한다.

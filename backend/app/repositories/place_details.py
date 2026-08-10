@@ -138,13 +138,14 @@ def _validate_values(
     errors: list[str] = []
     fields = schema.get("fields", {})
 
+    # 길이는 검사하지 않는다. 한때 60자 상한을 걸었는데, 그 값이 뜻한 것은
+    # "짧게 쓰라"였지 60이라는 숫자가 아니었다. 숫자로 굳혀 두니 브랜드가 쓴 공식
+    # 문구를 5자 차이로 버리고 뜻이 옅은 다른 문장을 싣는 일이 생겼다 — 검증기가
+    # 막아야 할 것은 틀린 값이지 긴 값이 아니다. 짧게 유지하는 것은 쓰는 사람의
+    # 판단으로 남긴다.
     summary = overlay.get("summary")
-    if summary is not None:
-        max_length = fields.get("summary", {}).get("max_length", 60)
-        if not isinstance(summary, str) or not summary.strip():
-            errors.append(f"{place_id}: summary가 비어 있습니다")
-        elif len(summary) > max_length:
-            errors.append(f"{place_id}: summary가 {max_length}자를 넘습니다")
+    if summary is not None and (not isinstance(summary, str) or not summary.strip()):
+        errors.append(f"{place_id}: summary가 비어 있습니다")
 
     # 출처. 공식 사이트에서 옮겨 온 문구는 **그 문구가 실제로 있던 페이지**를 남긴다.
     # 홈 주소만 적으면 나중에 다시 찾을 수 없어 확인이 불가능해진다.

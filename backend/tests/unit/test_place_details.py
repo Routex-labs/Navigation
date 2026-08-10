@@ -130,10 +130,18 @@ def test_스키마에_없는_키를_잡는다():
     assert any("스키마에 없는 키" in error for error in errors)
 
 
-def test_summary_길이_초과를_잡는다():
-    errors = _validate({"PO-a": {"summary": "가" * 61}})
+# 길이는 막지 않는다. 60자 상한을 걸었을 때 브랜드 공식 문구를 몇 글자 차이로 버리고
+# 뜻이 옅은 문장을 싣는 일이 생겼다 — 짧게 쓰는 것은 쓰는 사람의 판단이고, 검증기가
+# 막을 것은 틀린 값이지 긴 값이 아니다.
+def test_긴_summary도_통과한다():
+    assert _validate({"PO-a": {"summary": "가" * 200}}) == []
 
-    assert any("60자" in error for error in errors)
+
+# 빈 문자열은 여전히 막는다. 화면에 빈 소개 섹션이 생긴다.
+def test_빈_summary를_잡는다():
+    errors = _validate({"PO-a": {"summary": "   "}})
+
+    assert any("summary가 비어" in error for error in errors)
 
 
 # 공식 사이트에서 옮겨 온 문구는 **그 문구가 있던 페이지**가 근거다. 다시 열어 볼 수
