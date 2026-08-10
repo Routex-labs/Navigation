@@ -233,6 +233,270 @@
           "중식"
         ]
       }
+    },
+    "시계": {
+      "rules": {
+        "subcategory": [
+          "시계·주얼리"
+        ]
+      }
+    },
+    "주얼리": {
+      "rules": {
+        "subcategory": [
+          "시계·주얼리"
+        ]
+      }
+    },
+    "잡화": {
+      "rules": {
+        "subcategory": [
+          "잡화·액세서리"
+        ]
+      }
+    },
+    "액세서리": {
+      "rules": {
+        "subcategory": [
+          "잡화·액세서리"
+        ]
+      }
+    },
+    "가방": {
+      "rules": {
+        "subcategory": [
+          "잡화·액세서리"
+        ]
+      },
+      "excluded_store_ids": {
+        "PO-9-5QMZZfR3912": "파소티",
+        "PO-5-GRLCYeN5103": "케이스티파이",
+        "PO-lAUuXFnvf6045": "헬렌카민스키"
+      }
+    },
+    "가구": {
+      "rules": {
+        "subcategory": [
+          "가구·인테리어"
+        ]
+      }
+    },
+    "인테리어": {
+      "rules": {
+        "subcategory": [
+          "가구·인테리어"
+        ]
+      }
+    },
+    "가전": {
+      "rules": {
+        "subcategory": [
+          "가전·디지털"
+        ]
+      }
+    },
+    "디지털": {
+      "rules": {
+        "subcategory": [
+          "가전·디지털"
+        ]
+      }
+    },
+    "리빙": {
+      "rules": {
+        "subcategory": [
+          "리빙·주방"
+        ]
+      }
+    },
+    "주방": {
+      "rules": {
+        "subcategory": [
+          "리빙·주방"
+        ]
+      }
+    },
+    "그릇": {
+      "rules": {
+        "subcategory": [
+          "리빙·주방"
+        ]
+      }
+    },
+    "침구": {
+      "rules": {
+        "subcategory": [
+          "침구·매트리스"
+        ]
+      }
+    },
+    "매트리스": {
+      "rules": {
+        "subcategory": [
+          "침구·매트리스"
+        ]
+      }
+    },
+    "침대": {
+      "rules": {
+        "subcategory": [
+          "침구·매트리스"
+        ]
+      }
+    },
+    "문구": {
+      "rules": {
+        "subcategory": [
+          "문구·팬시"
+        ]
+      }
+    },
+    "팬시": {
+      "rules": {
+        "subcategory": [
+          "문구·팬시"
+        ]
+      }
+    },
+    "꽃": {
+      "rules": {
+        "subcategory": [
+          "플라워"
+        ]
+      }
+    },
+    "토이": {
+      "rules": {
+        "subcategory": [
+          "토이·완구"
+        ]
+      }
+    },
+    "완구": {
+      "rules": {
+        "subcategory": [
+          "토이·완구"
+        ]
+      }
+    },
+    "장난감": {
+      "rules": {
+        "subcategory": [
+          "토이·완구"
+        ]
+      }
+    },
+    "유아": {
+      "rules": {
+        "subcategory": [
+          "유아·아동"
+        ]
+      }
+    },
+    "아동": {
+      "rules": {
+        "subcategory": [
+          "유아·아동"
+        ]
+      }
+    },
+    "아동복": {
+      "rules": {
+        "subcategory": [
+          "유아·아동"
+        ]
+      }
+    },
+    "식품": {
+      "rules": {
+        "subcategory": [
+          "식품·그로서리"
+        ]
+      }
+    },
+    "그로서리": {
+      "rules": {
+        "subcategory": [
+          "식품·그로서리"
+        ]
+      }
+    },
+    "장보기": {
+      "rules": {
+        "subcategory": [
+          "식품·그로서리"
+        ]
+      }
+    },
+    "와인": {
+      "rules": {
+        "subcategory": [
+          "와인·주류"
+        ]
+      }
+    },
+    "주류": {
+      "rules": {
+        "subcategory": [
+          "와인·주류"
+        ]
+      }
+    },
+    "문화": {
+      "rules": {
+        "subcategory": [
+          "문화·예술"
+        ]
+      }
+    },
+    "예술": {
+      "rules": {
+        "subcategory": [
+          "문화·예술"
+        ]
+      }
+    },
+    "전시": {
+      "rules": {
+        "subcategory": [
+          "문화·예술"
+        ]
+      }
+    },
+    "의료": {
+      "rules": {
+        "subcategory": [
+          "의료·약국"
+        ]
+      }
+    },
+    "약국": {
+      "rules": {
+        "subcategory": [
+          "의료·약국"
+        ]
+      }
+    },
+    "병원": {
+      "rules": {
+        "subcategory": [
+          "의료·약국"
+        ]
+      }
+    },
+    "고객센터": {
+      "rules": {
+        "subcategory": [
+          "고객서비스"
+        ]
+      }
+    },
+    "미용실": {
+      "rules": {
+        "subcategory": [
+          "뷰티살롱"
+        ]
+      }
     }
   }
 }
