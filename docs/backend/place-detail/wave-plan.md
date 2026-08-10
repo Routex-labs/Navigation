@@ -2,7 +2,7 @@
 
 작성일: 2026-07-30
 
-상태: Wave 1~3.5 완료 · Wave 5 데이터 작업 진행 중 · Wave 4 미착수
+상태: Wave 1~3.6 완료 · Wave 5 데이터 작업 진행 중 · Wave 4 미착수
 
 | 단계 | 상태 |
 |---|---|
@@ -12,6 +12,7 @@
 | Wave 2 C3 (오버레이 내용 작성) | 진행 중 — Wave 5 F1/F3과 같은 작업이라 아래로 합침 |
 | Wave 3 D1~D7 (클라이언트 렌더러) | 완료 |
 | Wave 3.5 (가드레일 복구 — D2) | 완료 (아래 절) |
+| **Wave 3.6 (소개 영상용 파일럿 확장 — D2″)** | **완료** (아래 절) |
 | Wave 4 (건물 스케일) | 미착수 |
 | Wave 5 F1·F3 (커버리지) | 진행 중 — 스타벅스 리저브·블루보틀 여의도·시그니처 공간 5곳 |
 | Wave 5 F2·F4·F5 | 미착수 |
@@ -204,6 +205,37 @@ Wave 1과 2는 완전 병렬(파일 교집합 0). Wave 3은 A·B가 끝나야 �
 
 **남은 결정**: `businessInfo`에 유일하게 남은 `주소`가 건물 주소라 전 매장이 동일하다.
 뺄지 여부는 설계 문서 10절 "남겨 둔 과제"에 있다.
+
+---
+
+## Wave 3.6 — 소개 영상용 파일럿 확장 (완료)
+
+**발단**: 소개 영상에 스타벅스 리저브 상세가 나오는데, 메뉴 4종에 영업시간도 없는 화면은
+보여 줄 것이 없었다. **한 매장의 데이터를 두껍게 채우는 것이 목적이고, 그 과정에서 스키마가
+견디지 못한 곳만 고쳤다.**
+
+| # | 결과 |
+|---|---|
+| H1 | `_schema.json` v2 — `item_keys` → `required_keys`/`optional_keys`. `menu`의 필수는 `name`·`image_asset`뿐이고 `category`·`price`·`volume` 등 7개는 선택 |
+| H2 | `_schema.json` — `demoInfo` 필드와 `demo_allowlist` 신설 (D2″) |
+| H3 | `place_details.py` — 키 목록을 **스키마에서 읽는다**. 선언하지 않은 키는 오타로 보고 실패시킨다. `_validate_demo_info` 신설 |
+| H4 | `place_detail_queries.py` — 선택 키는 값이 있을 때만 싣는다(빈 문자열로 채우지 않는다). `demoInfo` 섹션을 `businessInfo` 위에 놓는다 |
+| H5 | 오버레이 — 메뉴 30종·6카테고리, hero 5장, `demoInfo` 5항목 |
+| H6 | `place_detail.dart` — `MenuItem.price`를 선택으로. `DemoInfoSection` 추가 |
+| H7 | `place_detail_rich_sections.dart` — 메뉴 카테고리 탭, 가격 없을 때 용량·칼로리·카페인 대체, `PlaceDemoInfoSection` |
+| H8 | `pubspec.yaml` — 매장 상세 이미지를 파일 목록이 아니라 디렉터리 단위로 등록 |
+
+**완료 기준**
+- [x] 가격 없는 메뉴가 크래시 없이 파싱되고, 카드가 용량·칼로리·카페인을 대신 보여 준다
+- [x] 셋 다 없는 항목(푸드)은 그 줄을 아예 그리지 않는다
+- [x] 카테고리 탭이 서버 등장 순서대로 뜨고, 한 항목이라도 카테고리가 없으면 탭을 안 만든다
+- [x] `demo_allowlist`에 없는 매장이 `demoInfo`를 쓰면 검증이 실패한다
+- [x] `demoInfo` 항목의 `source`가 http(s)가 아니거나 `confirmed_at`이 `YYYY-MM-DD`가 아니면 실패한다
+- [x] 선언하지 않은 키(`calorie` 같은 오타)가 있으면 실패한다
+- [x] 백엔드 541건 · 클라이언트 618건 · ruff format/check · mypy · `flutter analyze` 무경고
+
+**남은 결정**: 확인일 만료 기준이 없다. `demo_allowlist`에 매장을 더할 때의 절차와 함께
+설계 문서 10절 "남겨 둔 과제"에 있다.
 
 ---
 
