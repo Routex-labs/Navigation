@@ -164,9 +164,23 @@ const kRouteWalkDashArray = [1.4, 1.1];
 ///
 /// 이름에 버전을 달아 둔다. 웹 addImage는 같은 이름이 이미 있으면 새 비트맵을
 /// 버리므로, 모양을 바꿀 때 이름도 함께 올려야 살아 있는 지도에 반영된다.
-const kRouteWalkBadgeImageName = 'route-badge-walk-v1';
-const kRouteBusBadgeImageName = 'route-badge-bus-v1';
-const kRouteSubwayBadgeImageName = 'route-badge-subway-v1';
+/// (v2에서 [kRouteModeBadgeCanvasSize]를 두 배로 키웠다.)
+const kRouteWalkBadgeImageName = 'route-badge-walk-v2';
+const kRouteBusBadgeImageName = 'route-badge-bus-v2';
+const kRouteSubwayBadgeImageName = 'route-badge-subway-v2';
+
+/// 수단 배지 비트맵 한 변의 길이(px).
+///
+/// **화면에 찍히는 크기는 이 값 × [routeModeBadgeProps]의 `iconSize`다.** 처음엔
+/// 56px로 구웠는데, iconSize가 0.34~0.52라 실제로는 19~29px밖에 안 됐다 — 옆에
+/// 적히는 매장 이름 글자보다 작아서 "여기서 내려 걷는다"는 경계가 눈에 안 들어
+/// 왔다. iconSize는 그대로 두고 비트맵만 두 배로 키워 화면 크기를 두 배로 만든다.
+///
+/// iconSize를 올리지 않고 비트맵을 키우는 이유: iconSize > 1이면 MapLibre가 원본
+/// 보다 큰 크기로 늘려 그려서 원 테두리와 아이콘 획이 뭉개진다. 아래 모든 반지름·
+/// 글자 크기가 이 값에서 비례로 파생되므로, 크기를 다시 조정할 때는 여기만 바꾸고
+/// 위 이름의 버전을 올린다.
+const kRouteModeBadgeCanvasSize = 112.0;
 
 /// 수단 배지 한 장을 굽는다 — 색 원판 위에 흰 아이콘.
 ///
@@ -177,19 +191,23 @@ const kRouteSubwayBadgeImageName = 'route-badge-subway-v1';
 /// 아이콘은 Material 글리프를 그대로 굽는다. 한글 글리프 문제는 텍스트에만
 /// 해당하고([renderRouteArrowIcon] 주석), 아이콘 폰트는 앱에 함께 실린다.
 Future<Uint8List> renderModeBadgeIcon(IconData icon, Color background) async {
-  const size = 56.0;
+  const size = kRouteModeBadgeCanvasSize;
+  // 흰 테두리 두께와 글자 크기는 한 변 길이에서 비례로 뽑는다. 상수로 박아 두면
+  // [kRouteModeBadgeCanvasSize]를 바꿀 때 테두리만 얇아지거나 아이콘만 작아진다.
+  const rimWidth = size * 3 / 56;
+  const glyphSize = size * 30 / 56;
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, size, size));
 
   // 흰 테두리를 두른 원판. 지도 배경이 밝든 어둡든 배지가 떠 보이게 한다.
   canvas.drawCircle(
     const Offset(size / 2, size / 2),
-    size / 2 - 1,
+    size / 2 - size / 56,
     Paint()..color = Colors.white,
   );
   canvas.drawCircle(
     const Offset(size / 2, size / 2),
-    size / 2 - 4,
+    size / 2 - size / 56 - rimWidth,
     Paint()..color = background,
   );
 
@@ -197,7 +215,7 @@ Future<Uint8List> renderModeBadgeIcon(IconData icon, Color background) async {
     text: TextSpan(
       text: String.fromCharCode(icon.codePoint),
       style: TextStyle(
-        fontSize: 30,
+        fontSize: glyphSize,
         fontFamily: icon.fontFamily,
         package: icon.fontPackage,
         color: Colors.white,
@@ -221,6 +239,10 @@ Future<Uint8List> renderModeBadgeIcon(IconData icon, Color background) async {
 /// 구간 시작 배지 레이어. [imageName] 하나만 그리고, 어떤 feature를 그릴지는
 /// 호출부가 필터로 정한다 — `iconImage`에 표현식을 넣는 방식은 이 바인딩에서
 /// 조용히 실패할 수 있어(아이콘이 안 뜨는데 오류도 없다) 이름을 상수로 박는다.
+///
+/// `iconSize`는 **비트맵 대비 배율**이라 이 값만으로는 화면 크기를 알 수 없다.
+/// 실제 크기는 [kRouteModeBadgeCanvasSize] × 아래 배율이다 — 배지를 키우려면
+/// 그 상수를 올린다(1을 넘는 배율은 비트맵을 늘려 그려서 뭉개진다).
 SymbolLayerProperties routeModeBadgeProps(String imageName) =>
     SymbolLayerProperties(
       iconImage: imageName,
