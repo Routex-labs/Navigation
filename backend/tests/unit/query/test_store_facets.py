@@ -508,6 +508,29 @@ def test_후보가_아닌_매장을_excluded에_적으면_잡는다():
 # ── 실제 배포 파일 회귀 검사 ──────────────────────────────────────────────
 
 
+# W12에서 소분류 규칙으로 메운 intent들. 소분류 하나 → 그 소분류로 결정적으로 유도되는
+# intent 이름이며, 사람이 매장별로 판단해야 하는 값(`선물` 등)은 여기 없다.
+_W12_BY_SUBCATEGORY = {
+    "시계·주얼리": ("시계", "주얼리"),
+    "잡화·액세서리": ("잡화", "액세서리", "가방"),
+    "가구·인테리어": ("가구", "인테리어"),
+    "가전·디지털": ("가전", "디지털"),
+    "리빙·주방": ("리빙", "주방", "그릇"),
+    "침구·매트리스": ("침구", "매트리스", "침대"),
+    "문구·팬시": ("문구", "팬시"),
+    "플라워": ("꽃",),
+    "토이·완구": ("토이", "완구", "장난감"),
+    "유아·아동": ("유아", "아동", "아동복"),
+    "식품·그로서리": ("식품", "그로서리", "장보기"),
+    "와인·주류": ("와인", "주류"),
+    "문화·예술": ("문화", "예술", "전시"),
+    "의료·약국": ("의료", "약국", "병원"),
+    "고객서비스": ("고객센터",),
+    "뷰티살롱": ("미용실",),
+}
+_W12_INTENTS = tuple(name for names in _W12_BY_SUBCATEGORY.values() for name in names)
+
+
 # 실데이터 대조(고아 id·소분류 일치)는 시드 경로에서 validate_intents가 하고, 여기서는
 # 파일이 파싱되고 사람이 검수한 범위(P3 판정 예 145건)가 그대로인지만 지킨다.
 def test_배포된_intents_파일이_검수_범위를_유지한다():
@@ -533,6 +556,10 @@ def test_배포된_intents_파일이_검수_범위를_유지한다():
         "한식",
         "일식",
         "중식",
+        # W12. intent가 0건이던 대분류(리빙·서비스·식품관·키즈)를 소분류 규칙으로 메웠다.
+        # 복합 라벨(`A·B`)은 양쪽 단어를 모두 선언한다 — 한쪽만 넣으면 그 단어가 문서
+        # 텍스트에 두 번 들어가 나머지를 밀어낸다(FAISS.md 11-4의 화장품/향수 회귀).
+        *_W12_INTENTS,
     }
     assert intents["신발"]["rules"] == {"subcategory": ["슈즈"]}
     # 먹거리 intent는 소분류가 아니라 **대분류**를 본다. 대분류 재편으로
@@ -558,3 +585,14 @@ def test_배포된_intents_파일이_검수_범위를_유지한다():
     for intent in ("양식", "한식", "일식", "중식"):
         assert intents[intent]["rules"] == {"cuisines": [intent]}, intent
         assert "extra_store_ids" not in intents[intent], intent
+
+    # W12도 같은 원칙이다 — 소분류 규칙만 쓰고 extra로 매장을 손으로 굽지 않는다.
+    # 규칙이 **잘못 끌어오는** 것을 빼는 excluded만 예외이고, 지금은 `가방` 하나뿐이다
+    # (`잡화·액세서리` 18건 중 우산·폰케이스·모자 3건).
+    for subcategory, names in _W12_BY_SUBCATEGORY.items():
+        for intent in names:
+            assert intents[intent]["rules"] == {"subcategory": [subcategory]}, intent
+            assert "extra_store_ids" not in intents[intent], intent
+            if intent != "가방":
+                assert "excluded_store_ids" not in intents[intent], intent
+    assert len(intents["가방"]["excluded_store_ids"]) == 3

@@ -289,6 +289,39 @@ def test_출구_질의가_지하철_출입구까지_포함한다(real_db_session
     assert any("지하철" in name for name in names), names
 
 
+# W12 전에는 리빙·서비스·식품관·키즈 네 대분류의 intent 커버리지가 **0%**였다. 아래
+# 질의는 전부 소분류 라벨에 없는 말이라, intent가 없으면 어휘로 닿을 방법이 없다
+# (닿더라도 임베딩이 0.52를 넘겨야 하는 운에 기댄다). 규칙이 지워지면 여기서 깨진다.
+@pytest.mark.parametrize(
+    ("query", "subcategory"),
+    [
+        ("장난감", "토이·완구"),
+        ("장보기", "식품·그로서리"),
+        ("전시", "문화·예술"),
+        ("침대", "침구·매트리스"),
+        ("꽃", "플라워"),
+        ("고객센터", "고객서비스"),
+    ],
+)
+def test_소분류에_없는_말도_intent로_후보에_닿는다(real_db_session, query, subcategory):
+    discovery = query_search.discover(real_db_session, REAL_BUILDING_ID, query)
+
+    assert discovery["mode"] != "no_match", query
+    assert discovery["matches"], query
+    assert all(match["subcategory"] == subcategory for match in discovery["matches"]), discovery["matches"]
+
+
+# 소분류가 이미 한 단어면 intent가 아니라 **별칭**으로 잇는다. `안경`을 intent로 넣었더니
+# 문서 텍스트가 `젠틀몬스터 패션 아이웨어 안경`이 되면서 이름 신호가 희석돼 오타 질의
+# `젠틀 몬스터`가 회귀했다(FAISS.md 11-6). 별칭은 경량 tier 1만 건드리고 문서를 안 바꾼다.
+@pytest.mark.parametrize("query", ["안경", "선글라스"])
+def test_아이웨어는_intent가_아니라_별칭으로_닿는다(real_db_session, query):
+    discovery = query_search.discover(real_db_session, REAL_BUILDING_ID, query)
+
+    assert discovery["source"] == "light", discovery["source"]
+    assert all(match["subcategory"] == "아이웨어" for match in discovery["matches"]), discovery["matches"]
+
+
 # 추천 이유가 사용자가 친 말과 이어지는지. 질문 축(styles)만 basis에 담기던 시절에는
 # "신발"을 물어도 "명품 스타일 매장이에요"만 나와 신발 근거가 사라졌다.
 def test_신발_질의의_추천_이유가_신발을_말한다(real_db_session):
