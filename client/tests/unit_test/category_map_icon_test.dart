@@ -77,16 +77,30 @@ void main() {
       }
     });
 
-    test('마커 크기가 화면 배율을 따라간다', () {
+    test('네이티브에서는 마커 크기가 화면 배율을 따라간다', () {
       // 회귀 대상이 이 저장소에서 실제로 났던 버그다. `icon-size`는 비트맵의
       // **물리 픽셀**에 곱해지고 `text-size`는 논리 픽셀이라, 배율을 안 곱하면
       // 고밀도 화면에서 아이콘만 배율만큼 작아진다.
-      expect(indoorMarkerIconSize(3.0), closeTo(indoorMarkerIconSize(1.0) * 3, 1e-9));
+      expect(
+        indoorMarkerIconSize(3.0, isWeb: false),
+        closeTo(indoorMarkerIconSize(1.0, isWeb: false) * 3, 1e-9),
+      );
     });
 
-    test('논리 px로 환산하면 배율과 무관하게 같은 크기다', () {
+    test('네이티브에서 논리 px로 환산하면 배율과 무관하게 같은 크기다', () {
       for (final dpr in [1.0, 2.0, 2.625, 3.5]) {
-        final logical = indoorMarkerIconSize(dpr) * kIconCanvasPx / dpr;
+        final logical =
+            indoorMarkerIconSize(dpr, isWeb: false) * kIconCanvasPx / dpr;
+        expect(logical, closeTo(kIndoorMarkerLogicalPx, 1e-9));
+      }
+    });
+
+    test('웹에서는 배율을 곱하지 않는다', () {
+      // 웹 구현은 비트맵을 pixelRatio 1로 등록해서 `icon-size`가 곱해지는 대상이
+      // 이미 논리(CSS) 픽셀이다. 네이티브와 같은 식을 쓰면 아이콘만 배율배로
+      // 커진다 — Chrome 기기 에뮬레이션(배율 3)에서 12px 배지가 36px으로 떴다.
+      for (final dpr in [1.0, 2.0, 3.0, 3.5]) {
+        final logical = indoorMarkerIconSize(dpr, isWeb: true) * kIconCanvasPx;
         expect(logical, closeTo(kIndoorMarkerLogicalPx, 1e-9));
       }
     });
