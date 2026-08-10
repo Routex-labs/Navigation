@@ -186,3 +186,23 @@ bool shouldRecenterFollow({
   if (lo > hi) return (lo: nearLo, hi: nearHi);
   return (lo: lo, hi: hi);
 }
+
+/// 매장으로 카메라를 옮길 때 쓸 배율.
+///
+/// 실내 도면과 야외의 실내 진입 오버레이가 **같은 규칙을 써야** 같은 매장을
+/// 같은 조작으로 골랐을 때 화면이 달라지지 않는다. 예전에는 두 화면에 같은
+/// 삼항식이 각각 박혀 있었다.
+///
+/// - [keepZoom]이면 배율을 **그대로 둔다.** 카테고리를 고르는 것은 "저 업종이
+///   어디 있나"를 훑는 행동이라, 화면이 확 당겨지면 방금 보던 층 전체의 배치를
+///   잃는다. 이동만 하고 배율은 사용자가 맞춰 둔 값을 존중한다.
+/// - 아니면 [storeFocusZoom]까지 당기되, **이미 더 가까이 들어가 있으면 그대로
+///   둔다.** 목록에서 골랐다고 사용자가 확대해 둔 것을 되돌리면 맥락을 잃는다.
+double focusZoomFor({
+  required double currentZoom,
+  required bool keepZoom,
+  double storeFocusZoom = 19.0,
+}) {
+  if (keepZoom) return currentZoom;
+  return currentZoom > storeFocusZoom ? currentZoom : storeFocusZoom;
+}

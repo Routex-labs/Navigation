@@ -99,6 +99,13 @@ flutter:
     - assets/place_details/starbucks_reserve_store_02.png
     - assets/place_details/starbucks_reserve_store_03.png
     - assets/place_details/starbucks_reserve_store_04.png
+    - assets/place_details/bluebottle_yeouido_store_01.jpg
+    - assets/place_details/bluebottle_yeouido_store_02.jpg
+    - assets/place_details/sounds_forest_01.png
+    - assets/place_details/sounds_forest_02.png
+    - assets/place_details/sounds_forest_03.png
+    - assets/place_details/waterfall_garden_01.jpg
+    - assets/place_details/alt1_01.jpg
     - assets/mock/sample_building.json
     - assets/mock/hyundai_floor_1f.json
     - assets/mock/hyundai_floor_map.svg

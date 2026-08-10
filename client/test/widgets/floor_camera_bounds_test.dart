@@ -11,6 +11,7 @@ const _footprint = [
 ];
 
 void main() {
+  _focusZoomTests();
   group('clampToFootprint', () {
     // 가만히 둔 지도가 매 idle마다 animateCamera로 미세하게 떨리면 안 된다.
     test('이미 도면 안이면 아무것도 하지 않는다', () {
@@ -333,6 +334,32 @@ void main() {
       // 넘으면 그 보장이 깨진다.
       expect(kFollowDeadbandRatio, greaterThan(0));
       expect(kFollowDeadbandRatio, lessThan(1));
+    });
+  });
+}
+
+/// 카테고리를 훑는 조작과 매장을 콕 집는 조작은 **같은 카메라 이동이라도 배율
+/// 규칙이 다르다.** 실내 도면과 야외의 실내 오버레이가 이 함수를 공유하므로,
+/// 여기가 두 화면의 단일 출처다.
+void _focusZoomTests() {
+  group('focusZoomFor', () {
+    test('keepZoom이면 지금 배율을 그대로 둔다', () {
+      // 카테고리를 고르는 것은 층 전체를 훑는 행동이라 당기면 맥락을 잃는다.
+      expect(focusZoomFor(currentZoom: 16.0, keepZoom: true), 16.0);
+      expect(focusZoomFor(currentZoom: 20.5, keepZoom: true), 20.5);
+    });
+
+    test('매장을 집으면 기준 배율까지 당긴다', () {
+      expect(focusZoomFor(currentZoom: 16.0, keepZoom: false), 19.0);
+    });
+
+    // 목록에서 골랐다고 사용자가 맞춰 둔 확대를 되돌리면 방금 보던 맥락을 잃는다.
+    test('이미 더 가까우면 그 배율을 유지한다', () {
+      expect(focusZoomFor(currentZoom: 20.5, keepZoom: false), 20.5);
+    });
+
+    test('기준과 같으면 그대로다', () {
+      expect(focusZoomFor(currentZoom: 19.0, keepZoom: false), 19.0);
     });
   });
 }

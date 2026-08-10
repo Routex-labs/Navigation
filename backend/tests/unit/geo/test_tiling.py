@@ -230,3 +230,87 @@ def test_poi도_wgs84로_변환된다():
     coordinates = poi_layer["features"][0]["geometry"]["coordinates"]
 
     assert coordinates == [131.0, 42.0]
+
+
+# 라벨(아이콘+이름)은 매장 폴리곤이 아니라 전용 점 레이어에 실린다. MapLibre가
+# 폴리곤 심볼을 면적 무게중심에 찍는데, ㄱ자 매장에서는 그 점이 매장 밖이다
+# ([label_point.py] 주석). 클라이언트 라벨 레이어가 이 레이어를 본다.
+def test_매장_라벨은_전용_점_레이어로_나간다():
+    layers = build_floor_tile_layers(
+        _building(),
+        stores=[_store_with_category("s1", "패션", "여성복")],
+        pois=[],
+        transform=IDENTITY_TRANSFORM,
+        bounds=tile_bounds(0, 0, 0),
+    )
+
+    label_layer = next(layer for layer in layers if layer["name"] == "store_labels")
+    feature = label_layer["features"][0]
+
+    assert feature["geometry"]["type"] == "Point"
+    # 필터 표현식이 폴리곤 레이어와 같은 키를 보므로 properties도 같아야 한다.
+    assert feature["properties"]["id"] == "s1"
+    assert feature["properties"]["category"] == "패션"
+    assert feature["properties"]["subcategory"] == "여성복"
+
+
+# ㄱ자 매장에서 라벨 점이 폴리곤 안에 들어와야 한다. 무게중심을 그대로 쓰면
+# 두 팔 사이 빈 곳(=복도)에 아이콘이 뜬다.
+def test_ㄱ자_매장_라벨_점이_폴리곤_안에_있다():
+    l_shaped = Store(
+        id="l1",
+        floor_id="f1",
+        name="ㄱ자 매장",
+        centroid_x_m=0.0,
+        centroid_y_m=0.0,
+        polygon=[
+            {"x": 0.0, "y": 0.0},
+            {"x": 0.30, "y": 0.0},
+            {"x": 0.30, "y": 0.06},
+            {"x": 0.06, "y": 0.06},
+            {"x": 0.06, "y": 0.30},
+            {"x": 0.0, "y": 0.30},
+        ],
+    )
+
+    layers = build_floor_tile_layers(
+        _building(),
+        stores=[l_shaped],
+        pois=[],
+        transform=IDENTITY_TRANSFORM,
+        bounds=tile_bounds(0, 0, 0),
+    )
+
+    ring = next(layer for layer in layers if layer["name"] == "stores")["features"][0]
+    polygon = [(point[0], point[1]) for point in ring["geometry"]["coordinates"][0]]
+    label = next(layer for layer in layers if layer["name"] == "store_labels")["features"][0]
+    x, y = label["geometry"]["coordinates"]
+
+    inside = False
+    for index in range(len(polygon)):
+        x0, y0 = polygon[index]
+        x1, y1 = polygon[(index + 1) % len(polygon)]
+        if (y0 > y) != (y1 > y) and x < (x1 - x0) * (y - y0) / (y1 - y0) + x0:
+            inside = not inside
+
+    assert inside
+
+
+# 타일 경계에 걸친 매장은 폴리곤이 양쪽 타일에 실리지만 **라벨은 한 번만**
+# 실려야 한다. 둘 다 실으면 두 타일이 함께 떠 있을 때 같은 이름이 두 번 찍힌다.
+def test_라벨_점이_없는_타일에는_라벨을_싣지_않는다():
+    store = _store_with_category("s1", "패션", "여성복")
+    # 매장 폴리곤(lng 126.1~126.2)과 겹치지만 라벨 점(lng≈126.171)은 담지 못하는
+    # 좁은 띠. 화면 가장자리에서 매장의 오른쪽 끝만 걸친 타일이 이 모양이다.
+    sliver = TileBounds(west=126.18, south=37.0, east=126.5, north=37.5)
+
+    layers = build_floor_tile_layers(
+        _building(),
+        stores=[store],
+        pois=[],
+        transform=IDENTITY_TRANSFORM,
+        bounds=sliver,
+    )
+
+    assert next(layer for layer in layers if layer["name"] == "stores")["features"]
+    assert next(layer for layer in layers if layer["name"] == "store_labels")["features"] == []

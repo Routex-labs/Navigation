@@ -15,6 +15,7 @@ import '../../models/category_count.dart';
 import '../../models/favorite_place.dart';
 import '../../models/floor_plan.dart';
 import '../../models/poi_search_result.dart';
+import '../../models/store_index_entry.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_menu_sheet.dart';
 import '../../widgets/category_icon.dart';
@@ -325,7 +326,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
     }
   }
 
-
   /// 야외 컨텍스트로 나왔을 때, 실내 지점(층+노드)으로 잡아둔 출발지를 버린다.
   ///
   /// 실내에서 "출발지로 설정"한 매장은 야외 지도에서 쓸 수 없다. 그대로 두면
@@ -515,6 +515,28 @@ class _MapShellScreenState extends State<MapShellScreen> {
     await _runSheetChain(() => _showStoreInfo(store, focusOnMap: true));
   }
 
+  /// 자동완성 후보 한 곳을 골랐을 때. 좌표를 붙여 검색 결과를 고른 것과 **같은
+  /// 자리로 합류시킨다** — 후보에서 왔든 결과 목록에서 왔든 사용자에게는 같은
+  /// 동작이어야 한다.
+  ///
+  /// 좌표는 층 도면에서 찾는다(`OutdoorMapBodyState.resolveIndexEntry`). 추가
+  /// 요청은 없다 — 그 층은 어차피 열어야 하고, 도면이 매장마다 중심점을 들고 있다.
+  ///
+  /// 못 찾으면 예전처럼 그 이름으로 검색을 다시 돌린다. 후보와 층 도면이
+  /// 어긋나는 경우(시드 갱신 직후, 아직 야외라 층을 옮길 수 없는 경우 등)에
+  /// 아무 일도 일어나지 않는 것보다, 한 번 더 누르더라도 도달하는 편이 낫다.
+  Future<void> _onSearchSuggestionPicked(StoreIndexEntry entry) async {
+    recentSearchesController.add(_searchQuery);
+    final resolved = await _outdoorKey.currentState?.resolveIndexEntry(entry);
+    if (!mounted) return;
+    if (resolved == null) {
+      _onSearchQueryPicked(entry.name);
+      return;
+    }
+    _closeSearch();
+    await _runSheetChain(() => _showStoreInfo(resolved, focusOnMap: true));
+  }
+
   void _onSearchBuildingPicked(Building building) {
     _closeSearch();
     setState(() {
@@ -532,20 +554,25 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 반환값은 사용자가 출발/도착 액션을 실제로 골랐는지를 뜻한다. 저장된
   /// 장소 시트에서 넘어온 경우 호출자가 이 값을 보고 "그냥 닫힘"이면 다시
   /// 저장된 장소 시트로 돌려보내는 데 쓴다.
+  ///
+  /// [keepZoom]이면 카메라를 옮기되 **배율은 그대로 둔다.** 지도에서 매장을
+  /// 직접 눌렀을 때 쓴다 — 그 매장은 이미 화면에 있으므로 확대까지 하면 방금
+  /// 보던 층 배치가 사라진다. 목록·검색 결과에서 온 매장은 지금 화면 어디에
+  /// 있는지 알 수 없으니 확대해서 보여 주는 편이 맞다.
   Future<bool> _showStoreInfo(
     PoiSearchResult match, {
     bool focusOnMap = false,
+    bool keepZoom = false,
   }) async {
-    // 목록에서 고른 매장은 지금 화면 어디에 있는지 알 수 없다. 시트를 띄우기
-    // 전에 지도를 그 매장으로 옮겨, 시트를 닫으면 바로 그 자리가 보이게 한다.
-    // 지도 폴리곤을 직접 탭한 경우에는 옮기지 않는다 — 이미 보고 있는 매장을
-    // 다시 중앙으로 끌어오면 방금 보던 주변 맥락이 사라진다.
+    // 시트를 띄우기 전에 지도를 그 매장으로 옮겨, 시트를 닫으면 바로 그 자리가
+    // 보이게 한다.
     if (focusOnMap) {
       // 곧 올라올 시트 높이를 함께 넘겨, 매장이 시트 뒤가 아니라 그 위 영역
       // 한가운데에 놓이게 한다. 시트 높이를 바꾸면 카메라도 자동으로 따라온다.
       await _outdoorKey.currentState?.focusStore(
         match,
         bottomSheetFraction: kPlaceDetailSheetInitialSize,
+        keepZoom: keepZoom,
       );
       if (!mounted) return false;
     }
@@ -554,7 +581,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
       buildingId: _buildingId,
     );
     if (!mounted) return false;
-    final action = await _withMapsLocked(
+    final showing = _withMapsLocked(
       () => PlaceDetailSheet.show(
         context,
         title: match.name,
@@ -574,6 +601,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
         onCloseAll: _requestCloseSheetChain,
       ),
     );
+    // 떠 있는 동안만 값이 있다. 지도에서 다른 매장을 눌렀을 때 이 시트를 먼저
+    // 닫고 기다리는 데 쓴다([_openStoreFromMap]).
+    _placeDetailClosing = showing;
+    final action = await showing;
+    if (identical(_placeDetailClosing, showing)) _placeDetailClosing = null;
     if (!mounted) return false;
     // 시트가 어떻게 닫혔든(선택 없이 닫힘 포함) 지도 위 강조 표시도 같이 지운다.
     _outdoorKey.currentState?.clearHighlight();
@@ -623,41 +655,43 @@ class _MapShellScreenState extends State<MapShellScreen> {
   }
 
   /// 카테고리 chip을 눌렀을 때 같은 카테고리의 매장 목록 시트를 연다. 항목을
-  /// 탭하면 그 매장의 매장 정보 시트로 넘어가고, 정보 시트에서 뒤로 돌아
-  /// 오면(=출발/도착 액션 없이 닫힘) 다시 카테고리 목록으로 돌아온다 —
-  /// 사용자가 여러 매장을 훑어보는 흐름을 위해 저장한 장소와 동일한 loop
-  /// 패턴을 쓴다.
+  /// 탭하면 목록이 닫히고 그 매장의 상세 시트가 뜬다.
+  ///
+  /// **상세를 닫아도 목록으로 돌아가지 않는다.** 예전에는 여기가 loop여서 상세를
+  /// 닫으면 카테고리 목록이 다시 올라왔다 — 여러 매장을 훑는 흐름을 노린 것이었다.
+  /// 그런데 사용자에게는 매장을 하나 눌렀을 뿐인데 시트가 겹겹이 쌓인 것으로
+  /// 읽혔다. 상세는 **그 매장 하나를 보는 자리**이고, 닫으면 지도로 끝나는 편이
+  /// 예측 가능하다. 목록을 다시 보고 싶으면 chip을 다시 누르면 된다.
   Future<bool> _openCategoryStores(String category) async {
-    while (mounted) {
-      final currentFloor = _activeIndoorFloor;
-      final picked = await _withMapsLocked(
-        () => CategoryStoresSheet.show(
-          context,
-          buildingId: _buildingId,
-          category: category,
-          onCloseAll: _requestCloseSheetChain,
-          currentFloor: currentFloor,
-          // 지도 강조와 시트 목록이 같은 소분류를 가리키게 한다. 다른 대분류가
-          // 걸려 있었다면(매장 정보 시트에서 카테고리를 타고 들어온 경우) 그
-          // 소분류는 이 대분류에 없는 값이므로 넘기지 않는다.
-          subcategory: _categorySelection?.category == category
-              ? _categorySelection?.subcategory
-              : null,
-          onSubcategoryChanged: (value) => _onCategorySelectionChanged(
-            CategorySelection(category: category, subcategory: value),
-          ),
-          onFirstStoreChanged: _focusCategoryFirstStore,
+    final currentFloor = _activeIndoorFloor;
+    final picked = await _withMapsLocked(
+      () => CategoryStoresSheet.show(
+        context,
+        buildingId: _buildingId,
+        category: category,
+        onCloseAll: _requestCloseSheetChain,
+        currentFloor: currentFloor,
+        // 지도 강조와 시트 목록이 같은 소분류를 가리키게 한다. 다른 대분류가
+        // 걸려 있었다면(매장 정보 시트에서 카테고리를 타고 들어온 경우) 그
+        // 소분류는 이 대분류에 없는 값이므로 넘기지 않는다.
+        subcategory: _categorySelection?.category == category
+            ? _categorySelection?.subcategory
+            : null,
+        onFirstStoreChanged: _focusCategoryFirstStore,
+        onSubcategoryChanged: (value) => _onCategorySelectionChanged(
+          CategorySelection(category: category, subcategory: value),
         ),
-      );
-      if (_closeSheetChainRequested || picked == null || !mounted) return false;
-      final tookAction = await _showStoreInfo(picked, focusOnMap: true);
-      if (_closeSheetChainRequested || !mounted) return false;
-      if (tookAction) return true;
-    }
-    return false;
+      ),
+    );
+    if (_closeSheetChainRequested || picked == null || !mounted) return false;
+    return _showStoreInfo(picked, focusOnMap: true);
   }
 
-  /// 카테고리 목록 맨 위 매장을 지도에서 보여 준다.
+  /// 카테고리 목록 맨 위 매장으로 지도를 옮긴다. **배율은 건드리지 않는다.**
+  ///
+  /// 카테고리를 고르는 것은 "저 업종이 어디 있나"를 훑는 행동이라, 화면이 확
+  /// 당겨지면 방금 보던 층 전체의 배치를 잃는다. 매장을 콕 집었을 때(검색 결과·
+  /// 목록 항목)만 확대하고, 여기서는 중앙만 맞춘다(`focusKeepZoom`).
   ///
   /// 시트가 화면 아래를, 카테고리 chip 줄이 위를 가리므로 **그 사이에 남는 띠
   /// 한가운데**가 목표 지점이다. 정중앙에 놓으면 시트 뒤에 숨고, 시트 높이만
@@ -674,6 +708,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
         store,
         bottomSheetFraction: kCategoryStoresSheetInitialSize,
         topInsetPx: topInsetPx,
+        keepZoom: true,
       );
     }
   }
@@ -818,6 +853,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
         // 상단 검색 결과와 같은 판단 재료를 준다. 이미 계산해 둔 맵을 넘길 뿐이라
         // 추가 계산이 없다(설계: map-ui-redesign-plan.md 「7+E 합동 설계」 2단계).
         reachByNodeId: _reachByNodeId,
+        // 묶인 시설의 대표 층을 상단 검색과 같게 고르게 한다. 검색 범위는
+        // 여전히 건물 전체다(위 「항상 건물 전체」).
+        currentFloorId: _activeIndoorFloor,
         // 상단 검색과 같은 온디바이스 후보(초성·구두점·오타)를 길찾기에도 준다.
         // 리포지토리가 같은 Future를 공유하므로 두 번 받지 않는다.
         storeIndex: _indoorContextActive
@@ -903,10 +941,43 @@ class _MapShellScreenState extends State<MapShellScreen> {
   void _onMapStoreTap(PoiSearchResult match) {
     final target = _mapPickTarget;
     if (target == null) {
-      _runSheetChain(() => _showStoreInfo(match));
+      unawaited(_openStoreFromMap(match));
       return;
     }
     _applyMapPick(match, target);
+  }
+
+  /// 지금 떠 있는 상세 시트가 닫히면 완료되는 Future. 안 떠 있으면 null.
+  Future<StoreInfoAction?>? _placeDetailClosing;
+
+  /// 지도에서 매장을 눌러 상세를 연다. **떠 있는 상세가 있으면 먼저 닫는다.**
+  ///
+  /// 고른 매장은 폴리곤이 파랗게 채워지고([_highlightedStoreId]) 카메라가 그
+  /// 매장을 시트 위 영역 한가운데로 끌어온다. 화면 구석을 눌렀을 때 강조된
+  /// 매장이 곧바로 시트 뒤로 숨어 "무엇을 골랐는지" 확인할 수 없던 것을 없앤다.
+  /// 배율은 건드리지 않는다(`keepZoom` — [_showStoreInfo] 주석).
+  ///
+  /// 이 시트는 barrier가 없어 포인터를 지도로 흘린다([_withMapsLocked] 주석) —
+  /// 시트를 열어 둔 채 지도를 만질 수 있게 한 의도된 설계다. 그 대가로 다른
+  /// 매장을 누르면 시트가 그 위에 하나 더 쌓였고, 사용자는 매장 하나를 봤을
+  /// 뿐인데 닫기를 두 번 눌러야 했다.
+  ///
+  /// 닫기를 기다린 뒤에 여는 이유는 두 라우트가 겹치는 순간을 없애기 위해서다.
+  /// 기다리지 않고 바로 열면 이전 시트의 pop 애니메이션과 새 시트의 push가
+  /// 겹쳐 화면이 한 번 깜빡인다.
+  Future<void> _openStoreFromMap(PoiSearchResult match) async {
+    final closing = _placeDetailClosing;
+    if (closing != null) {
+      // pop은 chain 전체를 닫으라는 신호를 만들지만(PopScope), 아래
+      // `_runSheetChain`이 시작할 때 그 플래그를 초기화하므로 새 시트에는
+      // 영향이 없다.
+      Navigator.of(context).pop();
+      await closing;
+      if (!mounted) return;
+    }
+    await _runSheetChain(
+      () => _showStoreInfo(match, focusOnMap: true, keepZoom: true),
+    );
   }
 
   /// 지도에서 고르는 중에 **매장이 아닌 곳(복도·빈 공간)** 을 눌렀을 때.
@@ -1051,23 +1122,18 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 매장 정보 시트에서 출발/도착을 고르지 않고 뒤로 닫으면 다시 저장된 장소
   /// 시트로 돌아온다 — 사용자가 여러 저장 항목을 훑어보다 잘못 눌렀거나
   /// 다른 항목을 다시 고르려는 경우를 위한 흐름이다.
+  /// 저장한 장소 목록을 연다. 항목을 탭하면 목록이 닫히고 상세 시트가 뜬다.
+  ///
+  /// 상세를 닫아도 목록으로 돌아가지 않는다 — 이유는 [_openCategoryStores]와 같다.
   Future<void> _openFavorites() async {
     await _runSheetChain(() async {
-      while (mounted) {
-        final picked = await _withMapsLocked(
-          () =>
-              FavoritesSheet.show(context, onCloseAll: _requestCloseSheetChain),
-        );
-        if (_closeSheetChainRequested || picked == null || !mounted) return;
-        final enriched = await _favoriteWithCategory(picked);
-        if (_closeSheetChainRequested || !mounted) return;
-        final tookAction = await _showStoreInfo(
-          enriched.toPoiSearchResult(),
-          focusOnMap: true,
-        );
-        if (_closeSheetChainRequested || !mounted) return;
-        if (tookAction) return;
-      }
+      final picked = await _withMapsLocked(
+        () => FavoritesSheet.show(context, onCloseAll: _requestCloseSheetChain),
+      );
+      if (_closeSheetChainRequested || picked == null || !mounted) return;
+      final enriched = await _favoriteWithCategory(picked);
+      if (_closeSheetChainRequested || !mounted) return;
+      await _showStoreInfo(enriched.toPoiSearchResult(), focusOnMap: true);
     });
   }
 
@@ -1334,6 +1400,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                         onStorePicked: _onSearchStorePicked,
                         onBuildingPicked: _onSearchBuildingPicked,
                         onQueryPicked: _onSearchQueryPicked,
+                        onSuggestionPicked: _onSearchSuggestionPicked,
                         indoorContextActive: _indoorContextActive,
                         currentFloorId: _activeIndoorFloor,
                         reachByNodeId: _reachByNodeId,
@@ -1443,8 +1510,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
               // 야외에서는 실내 진입 오버레이가 켜져 있을 때만 위치 지정 버튼을
               // 노출한다. 오버레이가 꺼진 순수 야외 상태에서는 지정할 층 정보가
               // 없어 눌러도 의미가 없다.
-              showPlaceLocation:
-                  _outdoorIndoorEntered,
+              showPlaceLocation: _outdoorIndoorEntered,
             ),
           ),
 

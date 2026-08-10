@@ -2,17 +2,25 @@
 
 작성일: 2026-07-30
 
-상태: Wave 1·2 완료 · Wave 3 구현 완료(검증 중) · Wave 3.5 착수
+상태: Wave 1~3.5 완료 · Wave 5 데이터 작업 진행 중 · Wave 4 미착수
 
 | 단계 | 상태 |
 |---|---|
 | Wave 1 갈래 A (클라이언트 id 관통) | 완료 — `afd3768` |
 | Wave 1 갈래 B (백엔드 계약) | 완료 — `60440be` |
 | Wave 2 C1·C2·C4 (스키마·검증기·테스트) | 완료 — `bb4c463` |
-| Wave 2 C3 (오버레이 내용 작성) | 파일럿 1건 완료 — 스타벅스 리저브(사용자 작성) |
-| Wave 3 D1~D7 (클라이언트 렌더러) | 구현 완료 · **미커밋** — 검증 중 |
-| **Wave 3.5 (출처 필수화 — D2′)** | **착수** |
-| Wave 4~5 | 미착수 |
+| Wave 2 C3 (오버레이 내용 작성) | 진행 중 — Wave 5 F1/F3과 같은 작업이라 아래로 합침 |
+| Wave 3 D1~D7 (클라이언트 렌더러) | 완료 |
+| Wave 3.5 (가드레일 복구 — D2) | 완료 (아래 절) |
+| Wave 4 (건물 스케일) | 미착수 |
+| Wave 5 F1·F3 (커버리지) | 진행 중 — 스타벅스 리저브·블루보틀 여의도·시그니처 공간 5곳 |
+| Wave 5 F2·F4·F5 | 미착수 |
+
+**커버리지 작업은 브랜드가 아니라 공간 쪽으로 방향을 틀었다.** 브랜드 공식
+사이트에서 지점 소개문을 구할 수 있는 곳이 15곳 중 1곳뿐이었고, 대신 더현대 서울
+자체의 시그니처 공간은 현대백화점이 직접 설명한다. 근거와 실패 목록은
+[bluebottle-yeouido-detail.md](bluebottle-yeouido-detail.md)·
+[thehyundai-landmarks-detail.md](thehyundai-landmarks-detail.md)에 있다.
 
 **C3에 대한 아래 원칙은 유지된다.** 파일럿 1건은 사용자가 직접 확인해 작성했고, 그 출처를
 [starbucks-detail-pilot.md](starbucks-detail-pilot.md)에 표로 남겼다. 에이전트는 내용을
@@ -24,7 +32,7 @@
 거짓"은 잡지 못한다. 내용은 매장을 확인할 수 있는 사람이 쓰고, 검증기가 형식과
 드리프트를 본다.
 
-브랜치: `feature/store-detail`
+브랜치: `feature/store-detail-tier-a`
 
 상위 문서: [place-detail-interface.md](place-detail-interface.md)(계약·실패 조건),
 [wave0-coverage.md](wave0-coverage.md)(사전 조사·결정)

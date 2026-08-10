@@ -12,7 +12,7 @@ def test_유효한_타일을_MVT로_디코딩할_수_있다(api_client):
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/vnd.mapbox-vector-tile"
     decoded = mapbox_vector_tile.decode(response.content)
-    assert set(decoded) <= {"footprint", "stores", "pois"}
+    assert set(decoded) <= {"footprint", "stores", "store_labels", "pois"}
 
 
 def test_존재하지_않는_건물의_타일은_찾을수없음_응답을_반환한다(api_client):

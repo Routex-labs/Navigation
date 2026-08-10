@@ -41,8 +41,10 @@ import '../../models/floor_graph.dart';
 import '../../models/floor_plan.dart';
 import '../../models/indoor_route.dart';
 import '../../models/poi_search_result.dart';
+import '../../models/store_index_entry.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/eta_card.dart';
+import '../../widgets/floor_camera_bounds.dart';
 import '../../core/map_route_style.dart';
 import '../../widgets/destination_pin.dart';
 import '../../widgets/category_map_filter.dart';
@@ -200,9 +202,15 @@ const _pdrLocationDotImageName =
 const _pdrLocationIconPixelRatio = 2.0;
 const _pdrLocationCoreRadius = 16.0;
 const _pdrLocationRimRadius = _pdrLocationCoreRadius + 5;
-// 실내 오버레이에서 매장 폴리곤을 탭했을 때 그 매장 하나만 옅은 파란색 + 진한
-// 테두리로 강조 표시하는 전용 소스·레이어. 실내 지도의 highlight와 같은 톤
-// (#1A73E8, 옅은 fill + 얇은 line)으로 맞춰 두 화면 사이 UX가 흔들리지 않게 한다.
+// 실내 오버레이에서 매장 폴리곤을 탭했을 때 그 매장 하나만 파란색으로 채우고
+// 테두리를 두르는 전용 소스·레이어. 색은 앱의 선택 색(#1A73E8) 하나를 쓴다.
+//
+// **fill 0.16은 사실상 안 보였다.** 매장 바닥(#F1EEEA)이 밝은 회색이라 16%
+// 파랑을 얹어도 "눌렀는데 아무 일도 안 일어난 것 같다"는 인상이었다. 0.35면
+// 어느 매장을 골랐는지 한눈에 들어오고, 매장 이름은 흰 헤일로를 두르고 그 위
+// 심볼 레이어에 찍히므로 여전히 읽힌다. 더 올리면 이름이 배경에 먹히기
+// 시작하므로 여기가 상한에 가깝다.
+const _highlightFillOpacity = 0.35;
 const _highlightSourceId = 'outdoor-highlight';
 const _highlightFillLayerId = 'outdoor-highlight-fill';
 const _highlightLineLayerId = 'outdoor-highlight-line';
@@ -805,6 +813,21 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     widget.onFloorChanged?.call(floor);
   }
 
+  /// 화면 배율. `icon-size`가 **물리 픽셀**에 곱해지는 값이라 논리 px으로 잡은
+  /// 마커 크기를 여기로 환산한다([indoorMarkerIconSize]).
+  ///
+  /// 레이어를 등록하는 코드가 여러 번의 `await` 뒤라 그 자리에서
+  /// `MediaQuery.devicePixelRatioOf(context)`를 읽으면 위젯이 그 사이 사라졌을 때
+  /// 터진다. 실내 화면([FloorPlanViewState])과 같은 이유로 의존성이 잡히는
+  /// 시점에 한 번 받아 둔다.
+  double _devicePixelRatio = 1;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1162,7 +1185,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final destination = _preTransferDestination ?? _indoorRouteDestination;
     final destinationNodeId = destination?.nodeId;
     final buildingId = _building?.id;
-    if (destination == null || destinationNodeId == null || buildingId == null) {
+    if (destination == null ||
+        destinationNodeId == null ||
+        buildingId == null) {
       _clearTransferRouteBackups(keepUndoAnchor: true);
       return;
     }
@@ -2929,7 +2954,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await controller.addFillLayer(
       _highlightSourceId,
       _highlightFillLayerId,
-      const FillLayerProperties(fillColor: '#1A73E8', fillOpacity: 0.16),
+      const FillLayerProperties(
+        fillColor: '#1A73E8',
+        fillOpacity: _highlightFillOpacity,
+      ),
       enableInteraction: false,
     );
     await controller.addLineLayer(
@@ -2937,7 +2965,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _highlightLineLayerId,
       const LineLayerProperties(
         lineColor: '#1A73E8',
-        lineWidth: 1.2,
+        // fill이 진해진 만큼 테두리도 같이 올린다. 1.2px는 옅은 fill의 경계를
+        // 겨우 알려 주던 굵기라, 채운 뒤에는 fill에 묻혀 보이지 않는다.
+        lineWidth: 2,
         lineJoin: 'round',
       ),
       enableInteraction: false,
@@ -3211,7 +3241,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     for (final (id, props) in [
       (
         _indoorStoresLabelLayerId,
-        indoorStoresLabelProps(fadeExpr, widget.categorySelection),
+        indoorStoresLabelProps(
+          fadeExpr,
+          widget.categorySelection,
+          _devicePixelRatio,
+        ),
       ),
       (
         _indoorFacilityLabelLayerId,
@@ -3257,14 +3291,21 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       // 이름이 되살아난다([indoorStoresLabelProps] 주석).
       (
         _indoorStoresLabelLayerId,
-        indoorStoresLabelProps(fadeExpr, widget.categorySelection),
+        indoorStoresLabelProps(
+          fadeExpr,
+          widget.categorySelection,
+          _devicePixelRatio,
+        ),
       ),
       (
         _indoorFacilityLabelLayerId,
         indoorFacilityLabelProps(fadeExpr, widget.categorySelection),
       ),
-      (_indoorPoiIconLayerId, indoorPoiIconProps(fadeExpr)),
-      (_indoorStoreFacilityIconLayerId, indoorFacilityIconProps(fadeExpr)),
+      (_indoorPoiIconLayerId, indoorPoiIconProps(fadeExpr, _devicePixelRatio)),
+      (
+        _indoorStoreFacilityIconLayerId,
+        indoorFacilityIconProps(fadeExpr, _devicePixelRatio),
+      ),
     ]) {
       try {
         await controller.setLayerProperties(id, props);
@@ -3689,8 +3730,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       await controller.addSymbolLayer(
         _indoorTilesSourceId,
         _indoorStoresLabelLayerId,
-        indoorStoresLabelProps(fadeExpr, widget.categorySelection),
-        sourceLayer: 'stores',
+        indoorStoresLabelProps(
+          fadeExpr,
+          widget.categorySelection,
+          _devicePixelRatio,
+        ),
+        // **폴리곤이 아니라 라벨 전용 점 레이어를 본다.** MapLibre는 폴리곤
+        // 심볼을 면적 무게중심에 찍는데, ㄱ자·길쭉한 매장에서 그 점이 눈에
+        // 보이는 가운데가 아니다(백엔드 `label_point.py` 주석에 실측을 적었다).
+        // 백엔드가 폴리곤마다 "라벨 놓을 자리"를 계산해 이 레이어로 내려준다.
+        sourceLayer: 'store_labels',
         filter: storeLabelWithCategoryIconFilter(),
         belowLayerId: _routeCasingLayerId,
         enableInteraction: false,
@@ -3701,7 +3750,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _indoorTilesSourceId,
         _indoorFacilityLabelLayerId,
         indoorFacilityLabelProps(fadeExpr, widget.categorySelection),
-        sourceLayer: 'stores',
+        // 매장명 라벨과 같은 이유로 라벨 점 레이어를 본다.
+        sourceLayer: 'store_labels',
         filter: facilityStoreLabelFilter(),
         belowLayerId: _routeCasingLayerId,
         enableInteraction: false,
@@ -3712,20 +3762,22 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       await controller.addSymbolLayer(
         _indoorTilesSourceId,
         _indoorPoiIconLayerId,
-        indoorPoiIconProps(fadeExpr),
+        indoorPoiIconProps(fadeExpr, _devicePixelRatio),
         sourceLayer: 'pois',
         belowLayerId: _routeCasingLayerId,
         enableInteraction: false,
       );
-      // 편의시설 아이콘: `stores` 소스에 있는 화장실·정수기 같은 시설물은 POI
-      // 레이어를 타지 않으므로 아이콘이 안 붙는다. 매장 이름을 기준으로 심볼을
-      // 하나 더 얹어 라벨 바로 위에 아이콘이 뜨게 한다. iconOffset을 y=-18로
-      // 줘 라벨(centroid)과 위/아래로 겹치지 않는다.
+      // 편의시설 아이콘: 화장실·정수기 같은 시설물은 백엔드에서 `pois`가 아니라
+      // 매장으로 들어오므로 POI 아이콘 레이어를 타지 않는다. 이름을 기준으로
+      // 심볼을 하나 더 얹어 아이콘이 붙게 한다. 이름은 위 편의시설 라벨
+      // 레이어가 같은 점에 아래로 그린다.
       await controller.addSymbolLayer(
         _indoorTilesSourceId,
         _indoorStoreFacilityIconLayerId,
-        indoorFacilityIconProps(fadeExpr),
-        sourceLayer: 'stores',
+        indoorFacilityIconProps(fadeExpr, _devicePixelRatio),
+        // 이름과 아이콘이 **같은 점**에 놓여야 한다. 하나만 라벨 점 레이어로
+        // 옮기면 아이콘과 이름이 매장 안 서로 다른 자리에 뜬다.
+        sourceLayer: 'store_labels',
         belowLayerId: _routeCasingLayerId,
         filter: [
           'any',
@@ -3777,7 +3829,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       final imageName = facilityIconImageName(entry.key);
       await controller.addImage(
         imageName,
-        await cachedIconPng(imageName, () => renderFacilityIconPng(entry.value)),
+        await cachedIconPng(
+          imageName,
+          () => renderFacilityIconPng(entry.value),
+        ),
       );
     }
     // 매장명 라벨에 붙는 대분류 아이콘. 실내 화면과 같은 이름·같은 비트맵이라
@@ -3786,7 +3841,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       final imageName = storeCategoryIconImageName(category);
       await controller.addImage(
         imageName,
-        await cachedIconPng(imageName, () => renderStoreCategoryIconPng(category)),
+        await cachedIconPng(
+          imageName,
+          () => renderStoreCategoryIconPng(category),
+        ),
       );
     }
     _facilityIconImagesRegistered = true;
@@ -4470,7 +4528,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       );
     }
     if (update.shouldReroute &&
-        DateTime.now().millisecondsSinceEpoch - _lastIndoorRerouteAtMs >= 2000) {
+        DateTime.now().millisecondsSinceEpoch - _lastIndoorRerouteAtMs >=
+            2000) {
       unawaited(_rerouteIndoorFromCurrentPosition());
     }
     if (mounted) setState(() {});
@@ -4598,6 +4657,51 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncHighlightLayer();
   }
 
+  /// 검색 후보(`StoreIndexEntry`)를 좌표까지 갖춘 [PoiSearchResult]로 바꾼다.
+  /// 찾지 못하면 null — 상위가 이름으로 검색을 다시 돌린다.
+  ///
+  /// **후보 목록이 좌표를 들고 오지 않기 때문에 이 변환이 필요하다.**
+  /// `/store-index`는 1,640건을 한 번에 내려보내는 응답이라 좌표를 싣지 않는다
+  /// (근거와 실측치는 `StoreIndexResponse` 주석). 그렇다고 후보를 탭했을 때
+  /// 그 이름으로 검색을 다시 돌리면 사용자는 같은 줄을 두 번 누르게 된다.
+  ///
+  /// 그래서 이미 가진 것에서 좌표를 찾는다 — 층 도면([_floorPlan])이 매장마다
+  /// `centroid`를 들고 있고, 그 층은 어차피 열어야 한다. 추가 요청이 없다.
+  ///
+  /// 이름이 아니라 **id로 찾는다.** 이름은 유일 키가 아니라서(동명 시설 다수)
+  /// 이름으로 맞추면 같은 층의 다른 매장을 열 수 있다.
+  ///
+  /// **실내에 들어와 있지 않으면 층을 옮기지 않고 포기한다.** 층 전환은 실내
+  /// MVT 소스를 통째로 갈아 끼우고 끝에서 카메라를 건물로 당겨오는 작업이라,
+  /// 야외에서 부르면 매장 강조는 [focusStore]가 `_indoorEntered` 검사로 막는데
+  /// 카메라만 건물로 튀는 반쪽 이동이 남는다. 그 경우 null을 돌려주면 상위가
+  /// 이름 재검색으로 떨어지고, 사용자는 한 번 더 누르지만 화면은 어긋나지 않는다.
+  Future<PoiSearchResult?> resolveIndexEntry(StoreIndexEntry entry) async {
+    if (entry.floorName.isNotEmpty && entry.floorName != _activeFloor) {
+      if (!_indoorEntered) return null;
+      await _switchOverlayFloor(entry.floorName);
+      if (!mounted) return null;
+    }
+    final stores = _floorPlan?.stores;
+    if (stores == null) return null;
+
+    for (final store in stores) {
+      if (store.id != entry.id) continue;
+      return PoiSearchResult(
+        name: entry.name,
+        floor: entry.floorName,
+        point: store.centroid,
+        placeId: entry.id,
+        // 도착 노드는 색인 쪽을 쓴다. 층 도면에도 같은 값이 있지만, 후보 줄에
+        // "길찾기 가능"을 판단한 근거가 색인이라 화면과 행동이 갈리지 않는다.
+        nodeId: entry.entranceNodeId,
+        category: entry.category,
+        subcategory: entry.subcategory,
+      );
+    }
+    return null;
+  }
+
   /// 목록에서 고른 매장을 실내 진입 오버레이 위에서 보여 준다.
   /// [IndoorMapBodyState.focusStore]와 같은 계약이라 상위가 두 화면을 똑같이
   /// 다룰 수 있다 — 다만 **층은 옮기지 않는다**. 이 화면의 층 전환은 실내 MVT
@@ -4607,6 +4711,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     PoiSearchResult store, {
     double bottomSheetFraction = 0,
     double topInsetPx = 0,
+    bool keepZoom = false,
   }) async {
     if (!_indoorEntered) return;
     if (store.floor.isNotEmpty && store.floor != _activeFloor) return;
@@ -4626,8 +4731,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       CameraUpdate.newCameraPosition(
         CameraPosition(
           target: _toGl(store.point),
-          // 이미 더 가까이 들어가 있으면 그 배율을 유지한다(실내와 동일).
-          zoom: currentZoom > _storeFocusZoom ? currentZoom : _storeFocusZoom,
+          // 배율 규칙은 실내 도면과 한 함수를 공유한다(focusZoomFor).
+          zoom: focusZoomFor(
+            currentZoom: currentZoom,
+            keepZoom: keepZoom,
+            storeFocusZoom: _storeFocusZoom,
+          ),
           bearing: camera?.bearing ?? 0,
           tilt: camera?.tilt ?? 0,
         ),
@@ -5237,7 +5346,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         // 디버그 설정 진입점(왼쪽 하단 벌레 아이콘)은 앱 메뉴(햄버거)로 옮겼다.
         // 실내 진입 오버레이가 켜졌을 때만 뜨는 버튼이라, 그 상태에 있는지에 따라
         // 개발 도구가 나타났다 사라지는 화면이기도 했다.
-
         if (_indoorEntered && _placingPdrAnchor)
           Positioned(
             top: _placingHintTopPx,
