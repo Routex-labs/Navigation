@@ -131,3 +131,34 @@ def test_실데이터_화장실은_facility로_내려간다(real_api_client, rea
 
     assert response.status_code == 200
     assert response.json()["kind"] == "facility"
+
+
+# 값이 없는 선택 키는 `null`로도 나가지 않는다.
+#
+# 조립 단계(`_rich_items`)는 키를 빼는데 DTO가 직렬화하면서 `"price": null`로 도로
+# 채워 넣던 적이 있다. 단위 테스트는 조립 결과만 보므로 이 구멍을 못 잡는다 —
+# 응답 본문에서 확인해야 한다. 클라이언트가 "없다"와 "있는데 비었다"를 구분하는
+# 분기를 갖게 되면 그 분기가 카드마다 다른 높이로 새어 나온다(계약 4-2 규칙 1).
+def test_선택_키는_null로도_나가지_않는다(real_api_client):
+    from app.repositories import place_details
+
+    # 오버레이가 붙은 매장을 데이터에서 고른다. 특정 id를 박아 두면 데모 데이터가
+    # 바뀔 때마다 테스트가 같이 깨진다.
+    overlays = place_details.load_overlays()
+    with_menu = [place_id for place_id, overlay in overlays.items() if overlay.get("menu")]
+    assert with_menu, "메뉴가 있는 오버레이가 하나는 있어야 한다"
+
+    response = real_api_client.get(f"/buildings/{REAL_BUILDING_ID}/places/{with_menu[0]}")
+
+    assert response.status_code == 200
+    assert _null_paths(response.json()) == []
+
+
+def _null_paths(value, path="") -> list[str]:
+    if value is None:
+        return [path or "<root>"]
+    if isinstance(value, dict):
+        return [p for key, item in value.items() for p in _null_paths(item, f"{path}.{key}")]
+    if isinstance(value, list):
+        return [p for index, item in enumerate(value) for p in _null_paths(item, f"{path}[{index}]")]
+    return []
