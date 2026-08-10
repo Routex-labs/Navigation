@@ -382,7 +382,10 @@ class IndoorNavigationDriver implements IndoorNavigationController {
   }
 
   /// pause 중에도 흐르는 원시 움직임. 위치·경로에는 반영하지 않는다.
-  void _emitRawMotion(AccelPeakEvent? accelPeak, PedometerBatchEvent? pedometer) {
+  void _emitRawMotion(
+    AccelPeakEvent? accelPeak,
+    PedometerBatchEvent? pedometer,
+  ) {
     if (accelPeak == null && pedometer == null) return;
     final peakDelta = _delta(accelPeak?.count, () => _lastRawAccelPeakCount, (
       value,
@@ -446,6 +449,7 @@ class IndoorNavigationDriver implements IndoorNavigationController {
       path: snapshot.path,
       steps: snapshot.steps,
       distanceM: snapshot.distanceM,
+      orientationHeadingDeg: snapshot.orientationHeadingDeg,
       walkingHeadingDeg: snapshot.walkingHeadingDeg,
       hasHeading: snapshot.hasHeading,
       preview: snapshot.preview,

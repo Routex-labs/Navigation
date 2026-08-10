@@ -9,12 +9,26 @@
 /// (자식의 top 상수를 아무리 조정해도 부모 sibling 위로 올라갈 수 없다).
 library;
 
+/// 스크림이 짙어지는/걷히는 시간.
+///
+/// **일부러 느리다.** 층 전환은 사용자가 알아채야 하는 사건이다. 빠른 페이드는
+/// 지도가 "깜빡"한 것처럼 보여서, 화면이 바뀐 줄도 모르고 다른 층 도면을 읽는
+/// 일이 생긴다. 천천히 덮였다가 천천히 걷히면 그 사이에 뭔가 일어났다는 것이
+/// 눈에 남는다. 걷히는 쪽을 더 길게 둔 이유는, 그때 사용자가 이미 새 도면을
+/// 보고 있어서 서두를 이유가 없기 때문이다.
+///
+/// 도면을 갈아 끼우는 화면(`IndoorMapBody`)과 스크림을 그리는 셸이 **같은 값**을
+/// 써야 한다. 화면은 이 시간만큼 기다린 뒤에 도면을 교체하는데, 셸의 페이드가
+/// 그보다 길면 아직 덜 덮인 채로 지도가 바뀌어 교체 장면이 그대로 보인다.
+const floorTransitionScrimFadeIn = Duration(milliseconds: 520);
+const floorTransitionScrimFadeOut = Duration(milliseconds: 700);
+
 /// 층 전환 UI 상태가 바뀔 때 상위 셸에 알리는 계약.
 ///
-/// [banner]가 null이면 배너를 감춘다. [veilOpacity]는 실제 도면 swap 구간에만
-/// 0이 아니며, 그때는 뒤쪽 입력도 함께 막아야 한다.
+/// [banner]가 null이면 배너를 감춘다. [scrimOpacity]는 탑승 구간에서 반투명,
+/// 도면 교체 프레임에서 1이 되며, 1일 때만 뒤쪽 입력을 막는다.
 typedef FloorTransitionUiChanged =
-    void Function(FloorTransitionUiState? banner, double veilOpacity);
+    void Function(FloorTransitionUiState? banner, double scrimOpacity);
 
 /// 사용자에게 보이는 층 전환 진행 단계.
 enum FloorTransitionStage {
@@ -55,6 +69,22 @@ class FloorTransitionUiState {
       '에스컬레이터로 이동 중 · $fromFloorLabel → $toFloorLabel',
     FloorTransitionStage.swapping => '$toFloorLabel 지도로 전환하는 중',
     FloorTransitionStage.arrived => '$toFloorLabel에 도착한 것으로 보여 위치를 옮겼습니다',
+  };
+
+  /// 화면을 덮는 스크림 안에 쓰는 한 줄.
+  ///
+  /// 층 라벨은 스크림이 큰 글씨로 따로 그리므로 여기서는 **지금 무슨 일이
+  /// 일어나는지**만 말한다. 라벨을 문구에 또 넣으면 같은 글자가 카드 안에 두
+  /// 번 나온다.
+  ///
+  /// 스크림은 실제로 도면을 갈아 끼우는 `swapping` 구간에만 뜨지만, 나머지
+  /// 단계도 문구를 갖는다 — 단계가 늘어날 때 문구가 비는 쪽으로 조용히
+  /// 떨어지지 않게 하기 위해서다.
+  String get scrimCaption => switch (stage) {
+    FloorTransitionStage.boarding => '에스컬레이터 탑승을 기다리는 중',
+    FloorTransitionStage.moving => '에스컬레이터로 이동 중',
+    FloorTransitionStage.swapping => '지도를 전환하는 중',
+    FloorTransitionStage.arrived => '도착했습니다',
   };
 
   @override

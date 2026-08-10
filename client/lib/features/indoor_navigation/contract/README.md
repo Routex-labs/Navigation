@@ -15,7 +15,7 @@ UI가 호출할 명령, UI가 구독할 상태, PDR 좌표를 층 좌표에 고�
 | [`pdr_runtime_status.dart`](pdr_runtime_status.dart) | 센서 파이프라인 실행 상태 | `PdrRuntimeState`, `PdrRuntimeStatus` |
 | [`altitude_sample.dart`](altitude_sample.dart) | 기압 샘플과 기압계 가용 상태 | `AltitudeSample`, `AltimeterStatus`, `pressureAltitudeM` |
 | [`raw_motion_activity.dart`](raw_motion_activity.dart) | 걸음 pause와 무관하게 흐르는 원시 움직임 | `RawMotionActivity` |
-| [`floor_transition_ui_state.dart`](floor_transition_ui_state.dart) | 층 전환 배너·베일이 그릴 상태 | `FloorTransitionUiState`, `FloorTransitionStage` |
+| [`floor_transition_ui_state.dart`](floor_transition_ui_state.dart) | 층 전환 배너·스크림이 그릴 상태 | `FloorTransitionUiState`, `FloorTransitionStage` |
 
 ## 계약 관계
 

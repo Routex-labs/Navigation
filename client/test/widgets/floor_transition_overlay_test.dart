@@ -97,7 +97,7 @@ void main() {
     });
   });
 
-  group('FloorSwapVeil', () {
+  group('FloorTransitionScrim', () {
     testWidgets('전환 중에는 뒤쪽 입력을 막는다', (tester) async {
       var tapped = false;
       await tester.pumpWidget(
@@ -112,7 +112,7 @@ void main() {
                   ),
                 ),
                 Positioned.fill(
-                  child: FloorSwapVeil(
+                  child: FloorTransitionScrim(
                     opacity: 1,
                     fadeIn: Duration.zero,
                     fadeOut: Duration.zero,
@@ -132,7 +132,48 @@ void main() {
       expect(find.text('1F'), findsOneWidget);
     });
 
-    testWidgets('베일이 걷히면 뒤쪽 입력이 다시 통과한다', (tester) async {
+    testWidgets('덮개가 옅어지는 동안에는 입력이 통과한다', (tester) async {
+      var tapped = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Stack(
+              children: [
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => tapped = true,
+                  ),
+                ),
+                Positioned.fill(
+                  child: FloorTransitionScrim(
+                    opacity: 0.5,
+                    fadeIn: Duration.zero,
+                    fadeOut: Duration.zero,
+                    state: _state(FloorTransitionStage.swapping),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byType(Scaffold), warnIfMissed: false);
+      await tester.pump();
+      expect(
+        tapped,
+        isTrue,
+        reason: '절반쯤 걷힌 화면을 계속 막아 두면 전환이 끝나도 먹통으로 느껴진다',
+      );
+      expect(
+        find.text('지도를 전환하는 중'),
+        findsOneWidget,
+        reason: '층 라벨 옆에 지금 무슨 일이 일어나는지 한 줄이 있어야 한다',
+      );
+    });
+
+    testWidgets('스크림이 걷히면 뒤쪽 입력이 다시 통과한다', (tester) async {
       var tapped = false;
       await tester.pumpWidget(
         MaterialApp(
@@ -146,7 +187,7 @@ void main() {
                   ),
                 ),
                 const Positioned.fill(
-                  child: FloorSwapVeil(
+                  child: FloorTransitionScrim(
                     opacity: 0,
                     fadeIn: Duration.zero,
                     fadeOut: Duration.zero,
@@ -160,7 +201,11 @@ void main() {
 
       await tester.tap(find.byType(Scaffold), warnIfMissed: false);
       await tester.pump();
-      expect(tapped, isTrue, reason: '투명한 베일이 화면 전체 입력을 계속 먹으면 전환 뒤 앱이 먹통이 된다');
+      expect(
+        tapped,
+        isTrue,
+        reason: '투명한 스크림이 화면 전체 입력을 계속 먹으면 전환 뒤 앱이 먹통이 된다',
+      );
     });
   });
 }

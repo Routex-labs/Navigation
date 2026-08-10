@@ -61,9 +61,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 그대로라 어느 모드에서든 같은 여백으로 보인다.
   static const _overlayGap = 8.0;
 
-  /// 층 교체 베일의 페이드 시간. [IndoorMapBody]가 도면을 바꾸는 구간과 같다.
-  static const _floorSwapVeilFadeIn = Duration(milliseconds: 140);
-  static const _floorSwapVeilFadeOut = Duration(milliseconds: 260);
+  // 스크림 페이드 시간은 계약(floorTransitionScrimFadeIn/Out)이 정한다.
+  // [IndoorMapBody]가 "덮인 뒤에 도면을 교체"하려고 같은 값을 기다리므로,
+  // 여기서 따로 잡으면 두 값이 어긋나 교체 장면이 그대로 보인다.
 
   late MapMode _mode = widget.initialMode;
 
@@ -121,16 +121,16 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 배너가 들어갈 자리가 없고, 그 순간 사용자에게 더 급한 정보는 길안내다.
   void _onFloorTransitionChanged(
     FloorTransitionUiState? banner,
-    double veilOpacity,
+    double scrimOpacity,
   ) {
     if (!mounted) return;
-    if (_floorTransition == banner && _floorSwapVeil == veilOpacity) return;
+    if (_floorTransition == banner && _floorScrimOpacity == scrimOpacity) return;
     if (banner != null && _searchActive) {
       _closeSearch();
     }
     setState(() {
       _floorTransition = banner;
-      _floorSwapVeil = veilOpacity;
+      _floorScrimOpacity = scrimOpacity;
     });
   }
 
@@ -215,13 +215,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
   final _outdoorKey = GlobalKey<OutdoorMapBodyState>();
   final _indoorKey = GlobalKey<IndoorMapBodyState>();
 
-  /// 층 전환 배너·베일 상태. 판정과 상태 전이는 [IndoorMapBody]가 소유하고
+  /// 층 전환 배너·스크림 상태. 판정과 상태 전이는 [IndoorMapBody]가 소유하고
   /// 여기서는 그리기만 한다.
   ///
   /// 셸이 그려야 하는 이유: 검색창·카테고리 줄·하단 바가 이 Stack의 형제라,
   /// 지도 안에서 그린 배너는 그 뒤에 깔린다.
   FloorTransitionUiState? _floorTransition;
-  double _floorSwapVeil = 0;
+  double _floorScrimOpacity = 0;
 
   // 지도 위에 얹은 공용 오버레이(검색창·저장한 장소 pill·하단 홈/실내 바)의
   // 영역을 IndoorMapBody가 map click 처리에서 제외할 수 있게 넘겨줄 key들.
@@ -1386,7 +1386,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
                 // 놓는다. 상단 바 높이는 상태마다 달라지므로(검색 한 줄 ↔
                 // 출발/도착 두 줄), 상수로 잡으면 어느 한쪽에서 반드시 겹친다.
                 // 전환 중에는 아래 카테고리 줄을 접어 자리를 보장한다.
-                if (_floorTransition case final transition?)
+                //
+                // 스크림이 올라온 구간에서는 배너를 접는다. 스크림 카드가 같은
+                // 문장을 화면 한가운데에서 더 크게 말하고 있어서, 둘을 같이
+                // 띄우면 같은 내용이 두 벌로 보인다(배너는 스크림 **아래** 층에
+                // 깔리므로 흐려지기까지 한다).
+                if (_floorTransition case final transition?
+                    when _floorScrimOpacity <= 0)
                   Padding(
                     padding: const EdgeInsets.only(top: _overlayGap),
                     child: Center(
@@ -1535,14 +1541,15 @@ class _MapShellScreenState extends State<MapShellScreen> {
             ),
           ),
 
-          // 실제 도면 swap 구간을 덮는 베일. root Stack의 **마지막** 레이어라
-          // 지도뿐 아니라 검색창·카테고리·하단 바까지 함께 덮고, 페이드 중
-          // 뒤쪽 입력을 막는다.
+          // 층 전환 스크림. root Stack의 **마지막** 레이어라 지도뿐 아니라
+          // 검색창·카테고리·하단 바까지 함께 덮는다. 도면 교체 프레임에서만
+          // 완전히 덮고 뒤쪽 입력을 막으며, 탑승 구간은 반투명이라 사용자가
+          // 지도를 계속 만질 수 있다.
           Positioned.fill(
-            child: FloorSwapVeil(
-              opacity: _floorSwapVeil,
-              fadeIn: _floorSwapVeilFadeIn,
-              fadeOut: _floorSwapVeilFadeOut,
+            child: FloorTransitionScrim(
+              opacity: _floorScrimOpacity,
+              fadeIn: floorTransitionScrimFadeIn,
+              fadeOut: floorTransitionScrimFadeOut,
               state: _floorTransition,
             ),
           ),

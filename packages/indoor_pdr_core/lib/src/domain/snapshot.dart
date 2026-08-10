@@ -114,6 +114,7 @@ class PdrSnapshot {
     required this.path,
     required this.steps,
     required this.distanceM,
+    required this.orientationHeadingDeg,
     required this.walkingHeadingDeg,
     required this.hasHeading,
     required this.preview,
@@ -130,6 +131,13 @@ class PdrSnapshot {
   final List<PdrLocalPoint> path;
   final int steps;
   final double distanceM;
+
+  /// walkOffset을 적용하기 전 기기 전방축의 안정화된 방향.
+  ///
+  /// 마커 화살표와 카메라 bearing은 이 값을 쓴다. 보행 벡터 적분에 쓰는
+  /// [walkingHeadingDeg]와 분리해야, 휴대폰을 들고 걷는 자세 보정이 사용자가
+  /// 실제로 바라보는 방향까지 강제로 돌리지 않는다.
+  final double orientationHeadingDeg;
 
   /// fused heading + walkOffset 보정이 들어간 실제 보행 방향(자북 기준일 때).
   final double walkingHeadingDeg;

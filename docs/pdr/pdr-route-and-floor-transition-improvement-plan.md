@@ -128,7 +128,7 @@
 | 배치 독립성 | 같은 peak 입력은 batch 구성과 무관하게 같은 optimistic 위치 시계열을 만든다. |
 | junction 안전 | 임시 자유 위치는 node 주변 제한 반경에만 존재하며 연결 edge만 후보로 사용한다. |
 | 재탐색 | junction 보호는 짧은 상태로 끝나며 실제 이탈은 기존 evidence 뒤 재탐색한다. |
-| 탑승 UI | 활성 경로의 탑승점 도달을 감지하면 고도 1.8m 이전에 배너가 보인다. |
+| 탑승 UI | 활성 경로의 탑승점 도달을 감지하면 지도 전환 문턱(`minDeltaM`)에 닿기 전에 배너가 보인다. |
 | 층 전환 | 기존 고도·ramp 조건을 통과한 `midpointReached`에서만 목적 층 지도를 연다. |
 | 하차 재개 | 정상 하차는 첫 유효 저속 고도 샘플 또는 약 1초 안에 PDR 적용을 재개한다. |
 | heading | 탑승 중 의미 있는 2° 이상 변화가 500ms 안에 고정 마커 원뿔에 반영된다. |
@@ -180,7 +180,7 @@ clamp만 제거해서는 해결되지 않는다. `_previewPath` 자체가 `fullL
 ### 4.5 에스컬레이터 첫 UI 이벤트가 이미 중간 고도다
 
 `EscalatorTransitionDetector`는 경로와 node 근접을 내부 `armed`로 보관하지만, UI에 전달하는
-`startedTransition`은 `|delta| >= minDeltaM(1.8m)`와 ramp 조건 뒤에 생성한다. 화면은 이 이벤트로
+`startedTransition`은 `|delta| >= minDeltaM`(당시 1.8m)와 ramp 조건 뒤에 생성한다. 화면은 이 이벤트로
 배너, PDR pause, 목적 층 지도 교체를 연달아 수행한다.
 
 ### 4.6 heading은 살아 있지만 화면에서 가려진다
@@ -520,7 +520,7 @@ enum EscalatorPhase {
 #### B. `verticalMotionDetected` — PDR 걸음 적용 차단
 
 - expected direction의 fast altitude slope가 연속 관측된다.
-- 누적 고도 1.8m 이전이어도 된다.
+- 누적 고도가 지도 전환 문턱에 닿기 전이어도 된다.
 - 단일 기압 튐은 허용하지 않는다.
 
 동작:
@@ -534,7 +534,7 @@ enum EscalatorPhase {
 
 기존의 보수적인 조건을 유지한다.
 
-- `|delta| >= minDeltaM` 초기값 1.8m
+- `|delta| >= minDeltaM` (현재 값은 `EscalatorDetectorConfig`가 단일 출처)
 - expected direction과 같은 부호
 - 최소 ramp rise와 방향 일관성
 - 유효한 boarding/arrival node
@@ -581,7 +581,7 @@ enum EscalatorPhase {
 #### 테스트
 
 - 접근만 하고 지나가면 배너 취소, 층 유지
-- 배너는 1.8m 이전, 층 전환은 midpoint 이후
+- 배너는 지도 전환 문턱 이전, 층 전환은 midpoint 이후
 - 상승·하강 방향과 node 이름 불일치 거부
 - 고도 상승 후 복귀 취소
 - 여러 층 변화 거부
@@ -644,8 +644,9 @@ class RawMotionActivity {
 
 ### Phase 5 — 전환 UI와 z-order
 
-> **상태**: 완료. 배너는 `MapShellScreen`의 상단 Column 흐름에, 베일은 root Stack
-> 마지막 레이어에 있다.
+> **상태**: 완료. 배너는 `MapShellScreen`의 상단 Column 흐름에, 층 전환 스크림은 root Stack
+> 마지막 레이어에 있다. 스크림은 도면을 갈아 끼우는 구간에만 뜨고 느린 페이드로 여닫는다
+> (임계값·문구는 `client/lib/features/indoor_navigation/application/README.md`가 단일 출처).
 
 #### 상태 소유
 
@@ -834,7 +835,7 @@ PDR 한 세션의 heading과 drift를 graph 형상으로 자동 저장하지 않
 
 ### 에스컬레이터
 
-- [x] 탑승 배너가 1.8m 이전에 뜬다.
+- [x] 탑승 배너가 지도 전환 문턱 이전에 뜬다.
 - [x] PDR 걸음 pause와 층 지도 전환 시점이 분리됐다.
 - [x] 목적 층 지도는 midpoint 근거 전에는 바뀌지 않는다.
 - [x] raw activity와 위치 적용 걸음이 분리됐다.

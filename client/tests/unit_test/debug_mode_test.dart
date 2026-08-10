@@ -14,6 +14,7 @@ PdrSnapshot _snapshot() => const PdrSnapshot(
   path: [PdrLocalPoint.zero, PdrLocalPoint(1, 0), PdrLocalPoint(2, 0)],
   steps: 2,
   distanceM: 2,
+  orientationHeadingDeg: 90,
   walkingHeadingDeg: 90,
   hasHeading: true,
   preview: PdrPreview(

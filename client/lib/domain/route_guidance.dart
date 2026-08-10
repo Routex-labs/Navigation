@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:latlong2/latlong.dart';
 
 import '../models/floor_graph.dart';
+import 'route_movement.dart';
 import 'route_progress.dart';
 
 enum RouteGuidanceAction {
@@ -95,11 +96,12 @@ RouteGuidanceInstruction buildRouteGuidance({
   required List<LocalPoint> localPoints,
   required List<LatLng> wgs84Points,
   required RouteProgress? progress,
+  TravelDirectionState travelDirectionState = TravelDirectionState.forward,
   String? transferMode,
   bool allowArrival = true,
   double arrivalThresholdM = 5,
 }) {
-  if (progress?.wrongWay ?? false) {
+  if (travelDirectionState == TravelDirectionState.reverseConfirmed) {
     return const RouteGuidanceInstruction(
       action: RouteGuidanceAction.wrongWay,
       primaryText: '반대 방향입니다 · 뒤로 돌아가세요',

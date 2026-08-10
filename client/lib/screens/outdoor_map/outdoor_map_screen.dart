@@ -3758,31 +3758,40 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 사용자가 바라보는 방향(true north 기준, 시계방향 도). PDR 세션이 heading을
   /// 아직 못 얻은 상태(예: 자북 못 잡음 + 수동 방향 보정 아직 안 함, 첫 걸음
   /// 전)에는 null을 돌려주고, 이 경우 마커도 heading 원뿔 없이 도트만 뜬다.
-  /// 계산식은 실내와 동일하며 도면 축 변환과 복도 heading bias까지 반영한다.
+  /// 계산식은 실내와 동일하며 walkOffset·복도 bias를 섞지 않는다.
   double? get _pdrCurrentHeadingDeg {
     final snapshot = _pdrTrailState.snapshot;
     final anchor = _pdrTrailState.anchor;
     if (snapshot == null || anchor == null || !snapshot.hasHeading) return null;
-    // 간선 방위가 아니라 센서 heading(+복도 bias)을 쓴다. 간선 방위는 걸음이
-    // 있어야 갱신돼서, 서서 몸만 돌리면 방향이 얼어붙는다.
-    final deviceFloorHeading =
-        _corridorTrackingSession.result?.deviceHeadingDeg;
-    return deviceFloorHeading == null
-        ? normalizePdrBearing(snapshot.walkingHeadingDeg + anchor.rotationDeg)
-        : FloorCoordinateTransform(
-            anchor,
-          ).floorBearingToMapBearing(deviceFloorHeading);
+    final transform = FloorCoordinateTransform(anchor);
+    final orientationFloorHeading = transform.toFloorBearing(
+      snapshot.orientationHeadingDeg,
+    );
+    return transform.floorBearingToMapBearing(orientationFloorHeading);
   }
 
   void _syncCorridorTracking(PdrSnapshot? snapshot) {
     final anchor = _pdrTrailState.anchor;
     if (anchor == null || anchor.floorId != _activeFloor) return;
-    _corridorTrackingSession.update(
+    final result = _corridorTrackingSession.update(
       graph: _floorGraph,
       anchor: anchor,
       snapshot: snapshot,
       timestampMs: DateTime.now().millisecondsSinceEpoch,
     );
+    if (result == null) return;
+    _pdrDebugRecorder?.recordCorridorCorrection(result);
+    if (snapshot != null) {
+      _pdrDebugRecorder?.recordTrackerInput(
+        observation: _corridorTrackingSession.lastObservation,
+        wasReset: _corridorTrackingSession.lastWasReset,
+        result: result,
+        snapshot: snapshot,
+        previewTailPeakTimesMs: _corridorTrackingSession.previewTailPeakTimesMs(
+          snapshot,
+        ),
+      );
+    }
   }
 
   /// 강조 매장 폴리곤을 highlight 소스에 채운다. null 또는 미매치면 비운다.
@@ -3988,6 +3997,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final snapshot = indoorNavigationDriver.currentSnapshot;
     if (snapshot != null) recorder.recordSnapshot(snapshot);
     recorder.recordRuntime(indoorNavigationDriver.currentRuntimeStatus);
+    recorder.recordSessionBoundary(
+      announceExport ? 'routeEnded' : 'routeReplaced',
+    );
     if (!mounted) return;
     if (announceExport &&
         recorder.hasSnapshot &&
@@ -4225,6 +4237,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Future<void> _cancelPdrAnchor() async {
     if (!_placingPdrAnchor) return;
     await indoorNavigationDriver.stopGuidance();
+    _pdrDebugRecorder?.recordPedometerFinalize(
+      indoorNavigationDriver.lastPedometerFinalizeInfo,
+    );
+    _pdrDebugRecorder?.recordSessionBoundary('sensorStopped');
     _pdrDebugRecorder?.recordRuntime(
       indoorNavigationDriver.currentRuntimeStatus,
     );

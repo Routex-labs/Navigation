@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/domain/route_progress.dart';
+import 'package:navigation_client/domain/route_movement.dart';
 import 'package:navigation_client/models/floor_graph.dart';
 
 /// (0,0) → (20,0) 직선 복도.
@@ -102,10 +103,10 @@ void main() {
       );
 
       expect(
-        shouldHoldRouteRegression(
+        shouldHoldDisplayRouteRegression(
           previous: previous,
           candidate: pushedBack,
-          deviceHeadingErrorDeg: pushedBack.headingErrorDeg,
+          travelDirectionState: TravelDirectionState.forward,
         ),
         isTrue,
       );
@@ -125,10 +126,10 @@ void main() {
       );
 
       expect(
-        shouldHoldRouteRegression(
+        shouldHoldDisplayRouteRegression(
           previous: previous,
           candidate: pushedBack,
-          deviceHeadingErrorDeg: pushedBack.headingErrorDeg,
+          travelDirectionState: TravelDirectionState.forward,
         ),
         isTrue,
       );
@@ -146,16 +147,16 @@ void main() {
       );
 
       expect(
-        shouldHoldRouteRegression(
+        shouldHoldDisplayRouteRegression(
           previous: previous,
           candidate: jitter,
-          deviceHeadingErrorDeg: 5,
+          travelDirectionState: TravelDirectionState.forward,
         ),
         isFalse,
       );
     });
 
-    test('몸을 돌린 상태의 후퇴는 그대로 받아들인다', () {
+    test('실제 역방향 걸음이 확정된 후퇴는 그대로 받아들인다', () {
       const walkedBack = RouteProgress(
         traveledM: 3,
         remainingM: 37,
@@ -167,16 +168,16 @@ void main() {
       );
 
       expect(
-        shouldHoldRouteRegression(
+        shouldHoldDisplayRouteRegression(
           previous: previous,
           candidate: walkedBack,
-          deviceHeadingErrorDeg: walkedBack.headingErrorDeg,
+          travelDirectionState: TravelDirectionState.reverseConfirmed,
         ),
         isFalse,
       );
     });
 
-    test('방향을 모르면 후퇴를 정당화할 수 없으므로 보류한다', () {
+    test('heading이 없어도 실제 방향 상태가 forward면 후퇴를 보류한다', () {
       const pushedBack = RouteProgress(
         traveledM: 3,
         remainingM: 37,
@@ -187,10 +188,10 @@ void main() {
       );
 
       expect(
-        shouldHoldRouteRegression(
+        shouldHoldDisplayRouteRegression(
           previous: previous,
           candidate: pushedBack,
-          deviceHeadingErrorDeg: null,
+          travelDirectionState: TravelDirectionState.forward,
         ),
         isTrue,
       );
@@ -226,7 +227,7 @@ void main() {
       expect(remaining, orderedEquals(<double>[20, 16, 12, 8, 4, 0]));
     });
 
-    test('경로와 같은 간선에서 120도 이상 반대로 향하면 역주행이다', () {
+    test('120도 이상 heading 차이는 진단값일 뿐 제품 역주행을 만들지 않는다', () {
       final progress = computeRouteProgress(
         routePointsLocalM: _straightRoute,
         routeEdgeIds: const {'ab'},
@@ -237,10 +238,10 @@ void main() {
       )!;
 
       expect(progress.headingErrorDeg, closeTo(180, 1e-9));
-      expect(progress.wrongWay, isTrue);
+      expect(progress.routeHeadingDeg, closeTo(90, 1e-9));
     });
 
-    test('코너 수준의 heading 차이와 경로 밖 간선은 역주행으로 단정하지 않는다', () {
+    test('코너와 경로 밖에서도 heading 오차는 진단값으로만 남는다', () {
       final corner = computeRouteProgress(
         routePointsLocalM: _straightRoute,
         routeEdgeIds: const {'ab'},
@@ -257,8 +258,8 @@ void main() {
       )!;
 
       expect(corner.headingErrorDeg, closeTo(100, 1e-9));
-      expect(corner.wrongWay, isFalse);
-      expect(offRoute.wrongWay, isFalse);
+      expect(offRoute.headingErrorDeg, closeTo(180, 1e-9));
+      expect(offRoute.onRouteEdge, isFalse);
     });
 
     test('경로 시작 이전·끝 이후로 나가도 진행거리가 경로 범위를 벗어나지 않는다', () {
