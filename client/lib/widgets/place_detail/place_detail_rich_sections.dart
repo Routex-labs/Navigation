@@ -176,6 +176,11 @@ class _PlaceMenuSectionState extends State<PlaceMenuSection> {
         ? widget.items
         : widget.items.where((item) => item.category == active).toList(growable: false);
 
+    // 상한을 넘으면 넘는 만큼을 더보기 카드 하나로 대신한다. 더보기 카드는 카드
+    // 자리를 하나 쓰므로 `_menuVisibleCap`장 + 더보기 = 상한 + 1칸이 된다.
+    final capped = visible.length > _menuVisibleCap;
+    final shown = capped ? visible.take(_menuVisibleCap).toList(growable: false) : visible;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -202,9 +207,11 @@ class _PlaceMenuSectionState extends State<PlaceMenuSection> {
             // 가로 리스트는 본문 거터를 스스로 갖는다. 그래야 첫 카드가 시트
             // 가장자리에서 시작하면서도 끝까지 스크롤된다.
             padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
-            itemCount: visible.length,
+            itemCount: shown.length + (capped ? 1 : 0),
             separatorBuilder: (_, _) => const SizedBox(width: 12),
-            itemBuilder: (context, index) => _PlaceMenuCard(item: visible[index]),
+            itemBuilder: (context, index) => index < shown.length
+                ? _PlaceMenuCard(item: shown[index])
+                : _MenuMoreCard(title: active ?? '전체 메뉴', items: visible),
           ),
         ),
       ],
@@ -280,6 +287,13 @@ const _menuImageAspect = 402 / 420;
 
 /// 사진 영역 높이. 카드 폭에서 위 비율로 떨어진다.
 final _menuImageHeight = (_menuCardWidth / _menuImageAspect).ceilToDouble();
+
+/// 한 카테고리에서 가로 줄에 세우는 카드 수. 넘는 만큼은 "더보기" 뒤로 보낸다.
+///
+/// 카드가 172×237이라 화면에 두 장 남짓 들어간다. 카테고리에 메뉴가 늘어날수록 가로 줄만
+/// 길어지는데, 옆으로 미는 목록은 끝이 어디인지 안 보여서 몇 개가 더 있는지 알 수 없다.
+/// 상한을 두면 줄 길이가 고정되고, 남은 개수가 더보기 카드에 숫자로 드러난다.
+const _menuVisibleCap = 4;
 const _menuNameSize = 14.0;
 const _menuNameEnSize = 11.0;
 const _menuNameGap = 2.0;
@@ -405,6 +419,177 @@ class _PlaceMenuCard extends StatelessWidget {
               child: card,
             )
           : card,
+    );
+  }
+}
+
+/// 가로 줄 끝에 서는 "더보기" 카드. 그 카테고리 전체를 목록으로 연다.
+///
+/// **숨긴 것만이 아니라 전체를 보여 준다.** 앞에서 본 카드가 목록에 없으면 "아까 그건
+/// 어디 갔지"가 되고, 사용자가 목록과 카드 줄을 머릿속에서 이어 붙여야 한다.
+class _MenuMoreCard extends StatelessWidget {
+  const _MenuMoreCard({required this.title, required this.items});
+
+  final String title;
+  final List<PlaceMenuItem> items;
+
+  Future<void> _open(BuildContext context) async {
+    final selected = await showDialog<PlaceMenuItem>(
+      context: context,
+      builder: (_) => _MenuListDialog(title: title, items: items),
+    );
+    // 목록에서 하나를 고르면 그 메뉴의 상세를 잇는다. 목록 위에 팝업을 겹쳐 쌓지
+    // 않고 닫은 뒤 여는 이유는, 뒤로가기 한 번에 어디까지 닫히는지를 분명히 두기
+    // 위해서다(설계 F5와 같은 이유).
+    if (selected != null && context.mounted) {
+      await showDialog<void>(
+        context: context,
+        builder: (_) => _MenuDetailDialog(item: selected),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: _menuCardWidth,
+    child: GestureDetector(
+      onTap: () => _open(context),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.blue50,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.blue100),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.more_horiz, size: 26, color: AppColors.primary),
+              const SizedBox(height: 8),
+              const Text(
+                '더보기',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                '${items.length}종',
+                style: const TextStyle(fontSize: 12, color: AppColors.muted),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// 한 카테고리의 메뉴를 전부 세로 목록으로 보여 준다.
+///
+/// 사진 없이 이름만 세우는 이유는 개수 때문이다. 카드는 한 장이 237px이라 열 개만 돼도
+/// 훑기 어려운데, 이 목록은 한 줄이 40px 남짓이라 스무 개도 한눈에 지나간다. 고른 항목의
+/// 사진·설명은 상세 팝업이 맡는다.
+class _MenuListDialog extends StatelessWidget {
+  const _MenuListDialog({required this.title, required this.items});
+
+  final String title;
+  final List<PlaceMenuItem> items;
+
+  @override
+  Widget build(BuildContext context) => Dialog(
+    backgroundColor: AppColors.surface,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 340, maxHeight: 460),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 10),
+            child: Text(
+              '$title ${items.length}종',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: AppColors.text,
+              ),
+            ),
+          ),
+          Flexible(
+            child: ListView.separated(
+              shrinkWrap: true,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              itemCount: items.length,
+              separatorBuilder: (_, _) => const Divider(height: 17),
+              itemBuilder: (context, index) => _MenuListRow(item: items[index]),
+            ),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 4, 12, 8),
+              child: TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('닫기'),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _MenuListRow extends StatelessWidget {
+  const _MenuListRow({required this.item});
+
+  final PlaceMenuItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final row = Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item.name,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.text,
+                ),
+              ),
+              if (item.nameEn != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  item.nameEn!,
+                  style: const TextStyle(fontSize: 12, color: AppColors.muted),
+                ),
+              ],
+            ],
+          ),
+        ),
+        // 더 볼 것이 있는 항목만 화살표를 단다. 없는데 달면 눌러 보고 아무 일도
+        // 일어나지 않는다.
+        if (item.hasDetail)
+          const Icon(Icons.chevron_right, size: 20, color: AppColors.muted),
+      ],
+    );
+
+    if (!item.hasDetail) return row;
+
+    return GestureDetector(
+      // 고른 항목을 호출부로 돌려준다. 여기서 바로 상세를 열면 목록 위에 팝업이
+      // 쌓인다.
+      onTap: () => Navigator.of(context).pop(item),
+      behavior: HitTestBehavior.opaque,
+      child: row,
     );
   }
 }

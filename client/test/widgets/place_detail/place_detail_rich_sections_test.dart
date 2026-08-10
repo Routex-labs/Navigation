@@ -201,6 +201,107 @@ void main() {
       expect(box.width / box.height, closeTo(402 / 420, 0.01));
     });
 
+    // 카드가 커서 가로 줄이 길어지면 몇 개가 더 있는지 안 보인다. 상한을 넘는 만큼은
+    // 더보기 카드 하나로 대신하고, 남은 개수를 숫자로 드러낸다.
+    testWidgets('a category over the cap gets a 더보기 card', (tester) async {
+      await tester.pumpWidget(
+        subject(
+          PlaceMenuSection(
+            items: [
+              for (var index = 0; index < 6; index++)
+                PlaceMenuItem(name: '메뉴 $index', description: '설명 $index'),
+            ],
+          ),
+        ),
+      );
+
+      expect(find.text('더보기'), findsOneWidget);
+      expect(find.text('6종'), findsOneWidget);
+      // 상한만큼만 카드로 선다.
+      expect(find.text('메뉴 0'), findsOneWidget);
+      expect(find.text('메뉴 4'), findsNothing);
+    });
+
+    testWidgets('a category within the cap has no 더보기 card', (tester) async {
+      await tester.pumpWidget(
+        subject(
+          PlaceMenuSection(
+            items: [
+              for (var index = 0; index < 4; index++)
+                PlaceMenuItem(name: '메뉴 $index'),
+            ],
+          ),
+        ),
+      );
+
+      expect(find.text('더보기'), findsNothing);
+    });
+
+    // 목록에는 숨긴 것만이 아니라 **전체**가 나와야 한다. 앞에서 본 카드가 목록에
+    // 없으면 "아까 그건 어디 갔지"가 되고, 사용자가 목록과 카드 줄을 머릿속에서
+    // 이어 붙여야 한다.
+    testWidgets('더보기 lists the whole category, not just the hidden part', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        subject(
+          PlaceMenuSection(
+            items: [
+              for (var index = 0; index < 6; index++)
+                PlaceMenuItem(name: '메뉴 $index', description: '설명 $index'),
+            ],
+          ),
+        ),
+      );
+
+      // 더보기 카드는 가로 줄 끝이라 화면 밖에 있다. 먼저 스크롤해 온다.
+      await tester.ensureVisible(find.text('더보기'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('더보기'));
+      await tester.pumpAndSettle();
+
+      // 팝업 뒤에 카드가 그대로 남아 있으므로 팝업 안에서만 센다.
+      for (var index = 0; index < 6; index++) {
+        expect(
+          find.descendant(
+            of: find.byType(Dialog),
+            matching: find.text('메뉴 $index'),
+          ),
+          findsOneWidget,
+        );
+      }
+    });
+
+    testWidgets('picking a row in the 더보기 list opens its detail', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        subject(
+          PlaceMenuSection(
+            items: [
+              for (var index = 0; index < 6; index++)
+                PlaceMenuItem(
+                  name: '메뉴 $index',
+                  description: '설명 $index',
+                  volume: '355ml',
+                ),
+            ],
+          ),
+        ),
+      );
+
+      await tester.ensureVisible(find.text('더보기'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('더보기'));
+      await tester.pumpAndSettle();
+      // 카드로는 안 보이던 항목을 고른다.
+      await tester.tap(find.text('메뉴 5'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(keepWordsWhole('설명 5')), findsOneWidget);
+      expect(find.text('355ml'), findsOneWidget);
+    });
+
     testWidgets('menu tabs filter items by category in server order', (
       tester,
     ) async {
