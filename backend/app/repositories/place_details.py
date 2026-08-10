@@ -82,6 +82,7 @@ _ALLOWED_FIELDS = {
     "hero",
     "menu",
     "businessInfo",
+    "demoInfo",
 }
 
 
@@ -101,6 +102,7 @@ def validate_overlay(
 ) -> list[str]:
     errors: list[str] = []
     forbidden = {label.strip() for label in schema.get("forbidden_labels", [])}
+    demo_allowlist = {str(place_id).strip() for place_id in schema.get("demo_allowlist", [])}
 
     for place_id, overlay in payload.items():
         if not isinstance(overlay, dict):
@@ -123,7 +125,7 @@ def validate_overlay(
         if unknown:
             errors.append(f"{place_id}: 스키마에 없는 키 {sorted(unknown)}")
 
-        errors += _validate_values(place_id, overlay, schema, forbidden, today)
+        errors += _validate_values(place_id, overlay, schema, forbidden, demo_allowlist, today)
 
     return errors
 
@@ -133,6 +135,7 @@ def _validate_values(
     overlay: dict[str, Any],
     schema: dict[str, Any],
     forbidden: set[str],
+    demo_allowlist: set[str],
     today: str,
 ) -> list[str]:
     errors: list[str] = []
@@ -169,21 +172,10 @@ def _validate_values(
         elif len(tags) > max_items:
             errors.append(f"{place_id}: tags가 {max_items}개를 넘습니다")
 
-    errors += _validate_asset_items(
-        place_id,
-        overlay.get("hero"),
-        "hero",
-        ("local_asset",),
-        fields,
-    )
-    errors += _validate_asset_items(
-        place_id,
-        overlay.get("menu"),
-        "menu",
-        ("name", "price", "description", "image_asset"),
-        fields,
-    )
+    errors += _validate_asset_items(place_id, overlay.get("hero"), "hero", fields)
+    errors += _validate_asset_items(place_id, overlay.get("menu"), "menu", fields)
     errors += _validate_business_info(place_id, overlay.get("businessInfo"), fields, forbidden)
+    errors += _validate_demo_info(place_id, overlay.get("demoInfo"), fields, demo_allowlist)
 
     for item in overlay.get("keyValue") or []:
         if not isinstance(item, dict) or "label" not in item or "value" not in item:
@@ -215,11 +207,15 @@ def _validate_values(
     return errors
 
 
+# 필수 키와 선택 키를 스키마에서 읽는다.
+#
+# 키 목록을 호출부에 하드코딩해 두면 스키마 파일과 코드가 서로 다른 진실을 갖게 되고,
+# 스키마만 고친 사람은 검증이 따라온 줄 안다. 선택 키를 **선언한 것만** 허용하는 이유도
+# 같다 — `image_assset` 같은 오타는 값이 조용히 사라질 뿐 아무 데서도 실패하지 않는다.
 def _validate_asset_items(
     place_id: str,
     value: Any,
     field_name: str,
-    required_keys: tuple[str, ...],
     fields: dict[str, Any],
 ) -> list[str]:
     if value is None:
@@ -229,7 +225,11 @@ def _validate_asset_items(
     if not isinstance(value, list):
         return [f"{place_id}: {field_name}는 객체 배열이어야 합니다"]
 
-    max_items = fields.get(field_name, {}).get("max_items")
+    spec = fields.get(field_name, {})
+    required_keys = tuple(spec.get("required_keys", ()))
+    allowed_keys = set(required_keys) | set(spec.get("optional_keys", ()))
+
+    max_items = spec.get("max_items")
     if isinstance(max_items, int) and len(value) > max_items:
         errors.append(f"{place_id}: {field_name}가 {max_items}개를 넘습니다")
 
@@ -239,6 +239,61 @@ def _validate_asset_items(
             not isinstance(item.get(key), str) or not item[key].strip() for key in required_keys
         ):
             errors.append(f"{place_id}: {field_name} 항목에 {required_label}가 필요합니다")
+            continue
+
+        unknown = set(item) - allowed_keys
+        if unknown:
+            errors.append(f"{place_id}: {field_name} 항목에 스키마에 없는 키 {sorted(unknown)}")
+    return errors
+
+
+# demoInfo가 별도 함수인 이유
+#
+# 이 필드는 **forbidden_labels를 적용하지 않는 유일한 자리**다. 영업시간·대표번호처럼
+# 시간이 지나면 낡는 값을 소개 영상용 매장에 올리려고 열어 뒀다. 예외를 두는 순간
+# 문제는 "누가 이걸 쓸 수 있나"로 옮겨 가므로, 두 가지로 가둔다.
+#
+# 1. `demo_allowlist`에 id를 명시한 매장만 쓸 수 있다. 목록에 없으면 필드가 있다는
+#    것만으로 검증이 실패한다 — 이것이 없으면 "데모 전용"은 주석에만 있는 말이 되고,
+#    검증기를 통과한다는 이유로 다른 매장에 번져 나간다.
+# 2. 항목마다 source(그 값이 실제로 적혀 있던 페이지)와 confirmed_at이 필수다.
+#    낡는 것을 막지는 못하지만, 언제 확인한 값인지 모르는 상태는 막는다.
+def _validate_demo_info(
+    place_id: str,
+    value: Any,
+    fields: dict[str, Any],
+    demo_allowlist: set[str],
+) -> list[str]:
+    if value is None:
+        return []
+    if place_id not in demo_allowlist:
+        return [f"{place_id}: demoInfo는 demo_allowlist에 있는 매장만 쓸 수 있습니다"]
+    if not isinstance(value, list):
+        return [f"{place_id}: demoInfo는 객체 배열이어야 합니다"]
+
+    errors: list[str] = []
+    max_items = fields.get("demoInfo", {}).get("max_items")
+    if isinstance(max_items, int) and len(value) > max_items:
+        errors.append(f"{place_id}: demoInfo가 {max_items}개를 넘습니다")
+
+    for item in value:
+        if not isinstance(item, dict):
+            errors.append(f"{place_id}: demoInfo 항목은 객체여야 합니다")
+            continue
+
+        if any(not isinstance(item.get(key), str) or not item[key].strip() for key in ("label", "value")):
+            errors.append(f"{place_id}: demoInfo 항목에 label/value가 필요합니다")
+            continue
+
+        label = str(item["label"]).strip()
+        source = item.get("source")
+        if not isinstance(source, str) or not source.startswith(("http://", "https://")):
+            errors.append(f"{place_id}: demoInfo '{label}'의 source는 http(s) 주소여야 합니다")
+
+        confirmed_at = item.get("confirmed_at")
+        if not isinstance(confirmed_at, str) or not _DATE_PATTERN.match(confirmed_at):
+            errors.append(f"{place_id}: demoInfo '{label}'의 confirmed_at 형식은 YYYY-MM-DD입니다")
+
     return errors
 
 

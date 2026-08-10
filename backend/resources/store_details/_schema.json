@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "description": "매장 상세 오버레이 스키마. 이 파일 자체는 오버레이가 아니다(_ 접두). 검증은 시드가 적재 전에 app/repositories/place_details.validate_overlay로 수행한다.",
   "join_key": "id",
   "reserved_keys": {
@@ -24,7 +24,7 @@
     },
     "keyValue": {
       "type": "object_array",
-      "item_keys": [
+      "required_keys": [
         "label",
         "value"
       ],
@@ -33,35 +33,53 @@
     },
     "hero": {
       "type": "object_array",
-      "item_keys": [
+      "required_keys": [
         "local_asset"
       ],
-      "max_items": 6,
+      "max_items": 8,
       "note": "앱 번들에 포함된 대표·갤러리 사진 경로."
     },
     "menu": {
       "type": "object_array",
-      "item_keys": [
+      "required_keys": [
         "name",
-        "price",
-        "description",
         "image_asset"
       ],
-      "max_items": 12,
-      "note": "매장 상세에 표시할 메뉴. 가격과 설명은 updated_at 기준 확인 값이다."
+      "optional_keys": [
+        "category",
+        "name_en",
+        "description",
+        "price",
+        "volume",
+        "calories",
+        "caffeine"
+      ],
+      "max_items": 40,
+      "note": "매장 상세에 표시할 메뉴. category는 화면의 메뉴 탭이 되며, 탭 순서는 항목이 처음 등장하는 순서다(순서는 서버가 정한다는 계약 4-2 규칙 3). price는 선택 항목이다 — 스타벅스 코리아 공식 사이트처럼 가격을 공개하지 않는 출처가 있어서, 없으면 화면이 용량·칼로리·카페인을 대신 보여 준다. 지어낸 가격을 채우지 않는다."
     },
     "businessInfo": {
       "type": "object_array",
-      "item_keys": [
+      "required_keys": [
         "label",
         "value"
       ],
       "max_items": 8,
-      "note": "매장을 설명하는 운영 정보. forbidden_labels가 keyValue와 똑같이 적용된다 — 영업시간·연락처류는 넣을 수 없다."
+      "note": "매장을 설명하는 운영 정보. forbidden_labels가 keyValue와 똑같이 적용된다 — 영업시간·연락처류는 넣을 수 없다. 넣어야 한다면 demoInfo를 쓴다."
+    },
+    "demoInfo": {
+      "type": "object_array",
+      "required_keys": [
+        "label",
+        "value",
+        "source",
+        "confirmed_at"
+      ],
+      "max_items": 8,
+      "note": "소개 영상 촬영용 매장에만 붙이는 운영 정보. forbidden_labels를 적용하지 않는 유일한 필드라, demo_allowlist에 id를 명시한 매장에서만 쓸 수 있다. 항목마다 source(그 값이 실제로 적혀 있던 http(s) 페이지)와 confirmed_at(YYYY-MM-DD)이 필수다."
     },
     "notice": {
       "type": "object",
-      "item_keys": [
+      "required_keys": [
         "text",
         "until"
       ],
@@ -82,5 +100,9 @@
     "평점",
     "리뷰"
   ],
-  "forbidden_labels_note": "출처가 없어 검증할 수 없고, 영업시간류는 시간이 지나면 자동으로 거짓이 된다. keyValue와 businessInfo 양쪽에 적용된다 — 한때 businessInfo가 이 검사를 건너뛰어 출처 없는 영업시간·대표번호가 응답에 실려 나간 적이 있다. 값을 채우고 싶으면 먼저 출처를 정하고 이 목록에서 빼야 한다."
+  "forbidden_labels_note": "출처가 없어 검증할 수 없고, 영업시간류는 시간이 지나면 자동으로 거짓이 된다. keyValue와 businessInfo 양쪽에 적용된다 — 한때 businessInfo가 이 검사를 건너뛰어 출처 없는 영업시간·대표번호가 응답에 실려 나간 적이 있다. 값을 채우고 싶으면 demoInfo와 demo_allowlist를 쓴다.",
+  "demo_allowlist": [
+    "PO-HU40njvml1512"
+  ],
+  "demo_allowlist_note": "demoInfo를 쓸 수 있는 매장 id. 소개 영상에 나오는 매장만 넣는다. 이 목록이 없으면 '데모 전용'이라는 말이 지켜지지 않고, 검증기를 통과한다는 이유로 1,640개 매장에 낡은 영업시간이 번져 나간다. 목록에 id를 더할 때는 그 매장을 실제로 확인할 사람이 누구인지도 같이 정한다."
 }

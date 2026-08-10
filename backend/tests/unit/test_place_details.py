@@ -11,19 +11,32 @@ from app.repositories.place_details import load_overlays, validate_overlay
 
 # 실제 스키마 선언과 같은 모양의 최소 스키마. 값 자체를 여기 박아 두는 이유는
 # 리소스 파일이 바뀌어도 이 테스트가 "검사 로직"만 보게 하기 위해서다.
+#
+# 다만 **모양**은 리소스 파일과 같아야 한다. 검증기가 필수·선택 키를 스키마에서 읽기
+# 때문에, 여기에 `required_keys`를 빼 두면 검증기는 "필수 키가 없는 필드"로 읽고
+# 아무것도 잡지 않는다 — 테스트는 전부 통과하면서 검사는 사라진다.
 SCHEMA = {
     "fields": {
         "summary": {"max_length": 60},
         "source": {"max_length": 300},
         "tags": {"max_items": 6},
-        "hero": {"max_items": 6},
-        "menu": {"max_items": 12},
-        "businessInfo": {"max_items": 8},
+        "hero": {"required_keys": ["local_asset"], "max_items": 6},
+        "menu": {
+            "required_keys": ["name", "image_asset"],
+            "optional_keys": ["category", "price", "description", "volume"],
+            "max_items": 12,
+        },
+        "businessInfo": {"required_keys": ["label", "value"], "max_items": 8},
+        "demoInfo": {
+            "required_keys": ["label", "value", "source", "confirmed_at"],
+            "max_items": 8,
+        },
     },
     "forbidden_labels": ["영업시간", "전화번호"],
+    "demo_allowlist": ["PO-a"],
 }
-KNOWN_IDS = {"PO-a"}
-NAMES = {"PO-a": "가게A"}
+KNOWN_IDS = {"PO-a", "PO-b"}
+NAMES = {"PO-a": "가게A", "PO-b": "가게B"}
 TODAY = "2026-07-30"
 
 
@@ -197,21 +210,136 @@ def test_리치_상세_오버레이는_검증을_통과한다():
 
 
 def test_리치_상세_필수_필드가_없는_메뉴를_잡는다():
+    errors = _validate({"PO-a": {"menu": [{"name": "카페 아메리카노"}]}})
+
+    assert any("menu 항목에 name/image_asset가 필요" in error for error in errors)
+
+
+# 가격은 선택 항목이다. 스타벅스 코리아 공식 사이트처럼 가격을 공개하지 않는 출처가
+# 있어서, 필수로 두면 지어낸 값을 채우는 것 말고는 통과할 방법이 없어진다.
+def test_가격_없는_메뉴도_통과한다():
+    assert (
+        _validate(
+            {
+                "PO-a": {
+                    "menu": [
+                        {
+                            "name": "리저브 콜드 브루",
+                            "image_asset": "assets/place_details/menu.jpg",
+                            "category": "리저브",
+                            "volume": "355ml",
+                        }
+                    ]
+                }
+            }
+        )
+        == []
+    )
+
+
+# 선택 키를 **선언한 것만** 허용하는 이유. `image_assset` 같은 오타는 필수 키 검사에
+# 걸리지만, 선택 키 쪽 오타(`calorie`)는 값이 조용히 사라질 뿐 아무 데서도 실패하지
+# 않는다. 화면에는 칼로리 없는 카드가 뜨고 데이터는 멀쩡해 보인다.
+def test_선택_키_오타를_잡는다():
     errors = _validate(
         {
             "PO-a": {
                 "menu": [
                     {
-                        "name": "카페 아메리카노",
-                        "price": "4,700원",
+                        "name": "리저브 콜드 브루",
                         "image_asset": "assets/place_details/menu.jpg",
+                        "calorie": "5kcal",
                     }
                 ]
             }
         }
     )
 
-    assert any("menu 항목에 name/price/description/image_asset가 필요" in error for error in errors)
+    assert any("스키마에 없는 키" in error and "calorie" in error for error in errors)
+
+
+# --- demoInfo (소개 영상용 예외) ---
+#
+# forbidden_labels를 적용하지 않는 유일한 자리다. 예외를 열었으므로 "누가 쓸 수
+# 있나"와 "언제 확인한 값인가"를 대신 검사하고, 아래 네 건이 그 두 가지를 본다.
+
+
+def test_demoInfo는_허용_목록에_있는_매장만_쓴다():
+    errors = _validate(
+        {
+            "PO-b": {
+                "name": "가게B",
+                "demoInfo": [
+                    {
+                        "label": "영업시간",
+                        "value": "10:30~20:00",
+                        "source": "https://example.com/store",
+                        "confirmed_at": "2026-07-30",
+                    }
+                ],
+            }
+        }
+    )
+
+    assert any("demo_allowlist" in error for error in errors)
+
+
+def test_demoInfo는_금지_라벨을_쓸_수_있다():
+    assert (
+        _validate(
+            {
+                "PO-a": {
+                    "demoInfo": [
+                        {
+                            "label": "영업시간",
+                            "value": "월~목 10:30~20:00",
+                            "source": "https://example.com/store",
+                            "confirmed_at": "2026-07-30",
+                        }
+                    ]
+                }
+            }
+        )
+        == []
+    )
+
+
+def test_demoInfo의_출처는_http_주소여야_한다():
+    errors = _validate(
+        {
+            "PO-a": {
+                "demoInfo": [
+                    {
+                        "label": "영업시간",
+                        "value": "월~목 10:30~20:00",
+                        "source": "매장 방문 확인",
+                        "confirmed_at": "2026-07-30",
+                    }
+                ]
+            }
+        }
+    )
+
+    assert any("http(s) 주소" in error for error in errors)
+
+
+def test_demoInfo의_확인일_형식을_잡는다():
+    errors = _validate(
+        {
+            "PO-a": {
+                "demoInfo": [
+                    {
+                        "label": "영업시간",
+                        "value": "월~목 10:30~20:00",
+                        "source": "https://example.com/store",
+                        "confirmed_at": "2026년 7월",
+                    }
+                ]
+            }
+        }
+    )
+
+    assert any("confirmed_at" in error for error in errors)
 
 
 # --- businessInfo 금지 라벨 (회귀 방지) ---
@@ -248,6 +376,14 @@ def test_섹션_순서를_서버가_고정한다():
                 "source": "매장",
             }
         ],
+        "demoInfo": [
+            {
+                "label": "영업시간",
+                "value": "월~목 10:30~20:00",
+                "source": "https://example.com/store",
+                "confirmed_at": "2026-07-30",
+            }
+        ],
         "businessInfo": [{"label": "주소", "value": "여의대로 108", "source": "매장"}],
         "tags": ["포장"],
         "notice": {"text": "팝업", "until": "2099-01-01"},
@@ -255,7 +391,37 @@ def test_섹션_순서를_서버가_고정한다():
 
     types = [section["type"] for section in _sections(_StubStore(), "store", overlay)]
 
-    assert types == ["hero", "notice", "tags", "summary", "menu", "businessInfo"]
+    # demoInfo가 businessInfo보다 위인 이유: 영업시간은 매장을 고르는 데 실제로
+    # 쓰이고, 아래 주소는 건물 주소라 이미 아는 정보다.
+    assert types == ["hero", "notice", "tags", "summary", "menu", "demoInfo", "businessInfo"]
+
+
+# 값이 없는 선택 키를 빈 문자열로 채워 내려보내지 않는다. 빈 값이 실려 나가면
+# 클라이언트가 "있는데 비었다"와 "없다"를 구분하는 분기를 갖게 되고, 그 분기가
+# 카드마다 다른 높이로 새어 나온다(계약 4-2 규칙 1과 같은 이유).
+def test_비어_있는_선택_키는_아예_내려보내지_않는다():
+    from app.repositories.place_detail_queries import _sections
+
+    overlay = {
+        "menu": [
+            {
+                "name": "리저브 콜드 브루",
+                "image_asset": "assets/reserve.jpg",
+                "category": "리저브",
+                "price": "   ",
+            }
+        ]
+    }
+
+    menu = next(s for s in _sections(_StubStore(), "store", overlay) if s["type"] == "menu")
+
+    assert menu["items"] == [
+        {
+            "name": "리저브 콜드 브루",
+            "image_asset": "assets/reserve.jpg",
+            "category": "리저브",
+        }
+    ]
 
 
 class _StubStore:

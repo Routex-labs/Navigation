@@ -107,9 +107,20 @@ class HeroSection(BaseModel):
 
 class MenuItem(BaseModel):
     name: str
-    price: str
-    description: str
     image_asset: str
+
+    # 아래는 전부 선택 항목이다. 출처마다 갖고 있는 것이 다르기 때문이다 —
+    # 스타벅스 코리아 공식 사이트는 가격을 공개하지 않는 대신 용량·칼로리·카페인을
+    # 주고, 푸드에는 영양정보가 없다. 없는 값을 채우려면 지어내는 수밖에 없으므로
+    # 필수로 만들지 않는다. 무엇이 비었는지에 따라 카드가 무엇을 보여줄지는
+    # 클라이언트가 정한다(계약 4-2 규칙 3).
+    category: str | None = None  # 화면의 메뉴 탭. 탭 순서는 items에 처음 등장하는 순서다
+    name_en: str | None = None
+    description: str | None = None
+    price: str | None = None
+    volume: str | None = None
+    calories: str | None = None
+    caffeine: str | None = None
 
 
 class MenuSection(BaseModel):
@@ -125,6 +136,26 @@ class BusinessInfoItem(BaseModel):
 class BusinessInfoSection(BaseModel):
     type: Literal["businessInfo"] = "businessInfo"
     items: list[BusinessInfoItem]
+
+
+class DemoInfoItem(BaseModel):
+    label: str
+    value: str
+    # businessInfo와 달리 출처를 항목마다 들고 간다. 이 섹션에는 영업시간·대표번호처럼
+    # 시간이 지나면 낡는 값이 들어오기 때문에, 화면이 확인일을 함께 보여 줄 수 있어야 한다.
+    source: str
+    confirmed_at: str
+
+
+# 소개 영상 촬영용 매장에만 붙는 운영 정보.
+#
+# `businessInfo`와 모양이 거의 같은데 굳이 섹션을 나눈 이유는, 두 섹션이 **다른 규칙을
+# 따르기** 때문이다. businessInfo는 forbidden_labels가 조건 없이 막고, 이쪽은 막지 않는
+# 대신 오버레이 검증기의 demo_allowlist에 id가 있어야 한다. 같은 섹션 안에서 항목별로
+# 규칙이 갈리면 그 분기가 곧 Wave 3.5에서 겪은 우회 경로가 된다.
+class DemoInfoSection(BaseModel):
+    type: Literal["demoInfo"] = "demoInfo"
+    items: list[DemoInfoItem]
 
 
 class NoticeSection(BaseModel):
@@ -163,6 +194,7 @@ DetailSection = (
     | HeroSection
     | MenuSection
     | BusinessInfoSection
+    | DemoInfoSection
     | NoticeSection
     | MapSection
     | ChildListSection

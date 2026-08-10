@@ -136,13 +136,24 @@ def _sections(
     if isinstance(summary, str) and summary.strip():
         sections.append({"type": "summary", "text": summary.strip()})
 
-    menu_items = _rich_items(overlay.get("menu"), ("name", "price", "description", "image_asset"))
+    menu_items = _rich_items(
+        overlay.get("menu"),
+        ("name", "image_asset"),
+        ("category", "name_en", "description", "price", "volume", "calories", "caffeine"),
+    )
     if menu_items:
         sections.append({"type": "menu", "items": menu_items})
 
     items = _key_value_items(overlay)
     if items:
         sections.append({"type": "keyValue", "items": items})
+
+    # 영업시간·대표번호처럼 낡는 값이 들어 있는 섹션이다. businessInfo보다 위에 두는
+    # 이유는 매장을 고르는 데 실제로 쓰이기 때문이고, 아래 주소는 건물 주소라 이미
+    # 아는 정보다.
+    demo_info_items = _rich_items(overlay.get("demoInfo"), ("label", "value", "source", "confirmed_at"))
+    if demo_info_items:
+        sections.append({"type": "demoInfo", "items": demo_info_items})
 
     business_info_items = _rich_items(overlay.get("businessInfo"), ("label", "value"))
     if business_info_items:
@@ -171,7 +182,16 @@ def _key_value_items(overlay: dict[str, Any]) -> list[dict[str, str]]:
     return items
 
 
-def _rich_items(raw: Any, keys: tuple[str, ...]) -> list[dict[str, str]]:
+# 필수 키가 하나라도 비면 항목을 버리고, 선택 키는 값이 있을 때만 싣는다.
+#
+# 선택 키를 빈 문자열로 채워 내려보내지 않는 이유는 섹션을 아예 만들지 않는 규칙(계약
+# 4-2 규칙 1)과 같다 — 빈 값이 실려 나가면 클라이언트가 "있는데 비었다"와 "없다"를
+# 구분하는 분기를 갖게 되고, 그 분기가 카드마다 다른 높이로 새어 나온다.
+def _rich_items(
+    raw: Any,
+    keys: tuple[str, ...],
+    optional_keys: tuple[str, ...] = (),
+) -> list[dict[str, str]]:
     if not isinstance(raw, list):
         return []
 
@@ -180,8 +200,13 @@ def _rich_items(raw: Any, keys: tuple[str, ...]) -> list[dict[str, str]]:
         if not isinstance(entry, dict):
             continue
         item = {key: str(entry.get(key, "")).strip() for key in keys}
-        if all(item.values()):
-            items.append(item)
+        if not all(item.values()):
+            continue
+        for key in optional_keys:
+            value = str(entry.get(key, "")).strip()
+            if value:
+                item[key] = value
+        items.append(item)
     return items
 
 
