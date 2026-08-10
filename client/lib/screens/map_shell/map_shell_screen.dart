@@ -9,8 +9,10 @@ import '../../core/api_config.dart';
 import '../../core/service_locator.dart';
 import '../../domain/dijkstra.dart';
 import '../../domain/outdoor_poi_ranking.dart';
+import '../../domain/transit_walk_fill.dart';
 import '../../models/building.dart';
 import '../../models/category_count.dart';
+import '../../models/directions_route.dart';
 import '../../models/favorite_place.dart';
 import '../../models/floor_plan.dart';
 import '../../models/outdoor_poi.dart';
@@ -617,7 +619,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
   Future<void> _startTransitRoute(DirectionsCandidate destination) async {
     final outdoor = _outdoorKey.currentState;
     // 명시적으로 고른 출발지라도 **실내 지점이면 쓰지 않는다.** 건물 안 좌표를
-    // 보내면 TMAP이 그 좌표에서 가장 가까운 정류장을 찾는데, 건물이 크면 실제로
+    // 보내면 카카오가 그 좌표에서 가장 가까운 정류장을 찾는데, 건물이 크면 실제로
     // 나가야 하는 문의 반대편이 잡힌다. 그때는 GPS로 떨어뜨린다.
     final selectedOrigin = _selectedOrigin;
     final outdoorOrigin =
@@ -642,7 +644,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 두고 계속 재시도하게 된다([TransitRoutesStatus] 주석).
     switch (routes.status) {
       case TransitRoutesStatus.unavailable:
-        _showSnack('대중교통 안내를 쓸 수 없습니다. TMAP 키 설정을 확인해주세요.');
+        _showSnack('대중교통 안내를 쓸 수 없습니다. 카카오 REST 키 설정을 확인해주세요.');
         return;
       case TransitRoutesStatus.failed:
         _showSnack('대중교통 경로를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
@@ -669,11 +671,63 @@ class _MapShellScreenState extends State<MapShellScreen> {
       ),
     );
     if (!mounted || picked == null) return;
-    await _outdoorKey.currentState?.showTransitRoute(
+
+    // 고른 **뒤에** 앞뒤 도보를 채운다. 후보는 최대 15개까지 오는데, 목록을
+    // 만들자고 후보마다 두 번씩 보행자 API를 부르면 30번이 나가고 사용자는
+    // 그중 하나만 본다. 목록 단계에서 도보가 없어도 총 소요시간은 정확하다 —
+    // 카카오 totalTime에 이미 포함돼 있다([fillTransitWalkLegs] 주석).
+    final completed = await _withTransitWalkLegs(
       picked,
+      origin: origin,
+      destination: destination.point,
+    );
+    if (!mounted) return;
+
+    await _outdoorKey.currentState?.showTransitRoute(
+      completed,
       destination: destination.point,
       label: '${destination.title}까지',
       origin: origin,
+    );
+  }
+
+  /// 카카오가 주지 않는 출발·도착 도보를 TMAP 보행자 경로로 채운다.
+  ///
+  /// 두 요청을 동시에 보낸다. 순서대로 기다리면 지도가 뜨기까지 왕복 시간이
+  /// 두 배가 되는데, 두 구간은 서로를 필요로 하지 않는다.
+  ///
+  /// 실패해도 안내를 막지 않는다. 도보선이 직선으로 떨어질 뿐이고, 사용자가
+  /// 기다린 것은 "저기까지 가는 방법"이지 도보 구간의 정확한 모양이 아니다.
+  Future<TransitItinerary> _withTransitWalkLegs(
+    TransitItinerary itinerary, {
+    required LatLng origin,
+    required LatLng destination,
+  }) async {
+    if (itinerary.legs.isEmpty) return itinerary;
+    final first = itinerary.legs.first;
+    final last = itinerary.legs.last;
+
+    final routes = await Future.wait([
+      (first.mode.isWalk || first.points.isEmpty)
+          ? Future<DirectionsRoute?>.value()
+          : directionsRepository.getWalkingRoute(
+              origin: origin,
+              destination: first.points.first,
+            ),
+      (last.mode.isWalk || last.points.isEmpty)
+          ? Future<DirectionsRoute?>.value()
+          : directionsRepository.getWalkingRoute(
+              origin: last.points.last,
+              destination: destination,
+            ),
+    ]);
+
+    return fillTransitWalkLegs(
+      itinerary,
+      origin: origin,
+      destination: destination,
+      head: routes[0],
+      tail: routes[1],
     );
   }
 
