@@ -1066,12 +1066,25 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 오버레이를 닫고 야외 지도를 보는 중이라면 사용자의 위치는 GPS이지 실내
     // 앵커가 아니다. 그때도 실내 라우팅으로 보내면, 화면에는 GPS 위치 아이콘이
     // 있는데 경로만 예전에 찍어둔 건물 안 앵커에서 뻗어 나간다.
+    //
+    // 오버레이만으로는 부족하다 — **출발점이 실제로 건물 안에 있어야 한다.**
+    // 오버레이는 건물을 확대하거나 탭하기만 해도 켜지므로, 밖에 서 있는
+    // 사용자에게도 켜져 있다. 밖에서 건물 안 매장을 검색해 고른 뒤 건물로
+    // 확대해 둔 상태가 정확히 그렇다.
+    // 그때 실내 라우팅으로 보내면 시작 노드를 정할 실내 위치가 없어
+    // "출발 위치를 먼저 지정해주세요"만 나오고 안내가 끝난다. 정작 그 사용자에게
+    // 필요한 것은 아래의 "문을 경유해 매장까지"다. 그래서 출발지를 명시하지
+    // 않았다면 실내 위치(PDR 앵커)가 잡혀 있을 때만 이 분기를 탄다.
+    final indoorStartReady =
+        indoorNavigationDriver.currentCalibration.canRenderPosition;
     if (_indoorContextActive &&
         destination.floor != null &&
         destination.nodeId != null &&
         // origin이 있다면 그것도 실내 노드여야 실내 그래프로 이을 수 있다.
         // 건물 입구 같은 야외 후보라면 아래 걷기 경로로 흘려보낸다.
-        (origin == null || (origin.floor != null && origin.nodeId != null))) {
+        (origin == null
+            ? indoorStartReady
+            : (origin.floor != null && origin.nodeId != null))) {
       await _outdoorKey.currentState?.showIndoorRouteTo(
         PoiSearchResult(
           name: destination.title,
@@ -1087,6 +1100,37 @@ class _MapShellScreenState extends State<MapShellScreen> {
                 point: origin.point,
                 nodeId: origin.nodeId,
               ),
+      );
+      return;
+    }
+
+    // 건물 **밖에서** 건물 안 매장을 고른 경우다. 목적지 좌표로 곧장 걷기 경로를
+    // 그리면 도착점이 건물 내부 좌표라 TMAP이 외벽 아무 곳으로나 안내하고, 거기서
+    // 안내가 끝난다. 대신 가장 가까운 지상 출입구를 경유하도록 야외 화면에 맡긴다
+    // — 실내 구간까지 미리 풀어 두었다가 건물에 들어가면 이어 붙인다.
+    //
+    // 출발지가 실내 지점이면 여기로 보내지 않는다. 그건 건물 안 두 지점 사이의
+    // 이동이라 "밖에서 문으로 들어간다"는 전제가 성립하지 않는다. 반대로 지도에서
+    // 찍은 야외 좌표는 그대로 넘긴다 — GPS가 안 잡히거나 다른 곳에서 출발하는
+    // 경로를 보려는 경우이고, 그때도 들어가는 문은 있어야 한다.
+    //
+    // 조건에서 `!_indoorContextActive`를 뺀 것이 중요하다. 오버레이가 켜져 있어도
+    // 실내 위치가 없으면 사용자는 아직 밖에 있고, 그 경우 위 분기가 이미 통과시켜
+    // 여기까지 흘려보낸다. 오버레이 유무로 다시 막으면 "건물 안에서 매장 고르기"로
+    // 들어온 사용자가 매장을 눌러도 안내가 시작되지 않는다.
+    final outdoorOrigin =
+        origin != null && origin.floor == null && origin.nodeId == null;
+    if (destination.floor != null &&
+        destination.nodeId != null &&
+        (origin == null || outdoorOrigin)) {
+      await _outdoorKey.currentState?.showOutdoorToIndoorRouteTo(
+        PoiSearchResult(
+          name: destination.title,
+          floor: destination.floor!,
+          point: destination.point,
+          nodeId: destination.nodeId,
+        ),
+        origin: outdoorOrigin ? origin.point : null,
       );
       return;
     }
