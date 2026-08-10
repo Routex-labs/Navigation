@@ -10,7 +10,9 @@ import '../../core/api_config.dart';
 import '../../core/service_locator.dart';
 import '../../domain/dijkstra.dart';
 import '../../domain/indoor_store_lookup.dart';
+import '../../domain/nearest_store.dart';
 import '../../domain/outdoor_poi_ranking.dart';
+import '../../domain/store_suggestions.dart';
 import '../../features/debug_mode/debug_mode.dart';
 import '../../features/indoor_navigation/contract/floor_transition_ui_state.dart';
 import '../../models/building.dart';
@@ -18,6 +20,7 @@ import '../../models/category_count.dart';
 import '../../models/favorite_place.dart';
 import '../../models/floor_plan.dart';
 import '../../models/outdoor_poi.dart';
+import '../../models/store_index_entry.dart';
 import '../../models/poi_search_result.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_menu_sheet.dart';
@@ -289,6 +292,19 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   /// 지금 고른 이동 수단.
   RoutePlanMode _travelMode = RoutePlanMode.walk;
+
+  /// 온디바이스 자동완성의 원본. null은 "아직 못 받았거나 받기에 실패했다"는
+  /// 뜻이고, **그 상태가 정상 경로에 포함된다** — 자동완성만 빠지고 서버 검색은
+  /// 그대로 돈다.
+  List<StoreIndexEntry>? _routeStoreIndex;
+
+  /// 지금 질의에 대한 온디바이스 후보. 질의가 바뀔 때만 다시 계산한다 —
+  /// build에서 매번 계산하면 한 프레임에 여러 번 전체 목록을 훑는다.
+  List<StoreSuggestion> _routeSuggestions = const [];
+
+  /// 다음 후보 조회 한 번만 이 층으로 좁힌다. 후보를 **탭한 경우**에 선다.
+  /// null이면 평소대로 건물 전체를 본다.
+  String? _routeFloorScopeOnce;
 
   /// 지금 치고 있는 칸에 들어 있는 글자.
   String get _routeQuery => _routeEditingField == RoutePlanField.origin
@@ -577,6 +593,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
       _routeMode = false;
       _routeEditingField = null;
       _routeResults = const [];
+      _routeSuggestions = const [];
       _selectedOrigin = null;
       _routeDraftDestination = null;
       _travelMode = RoutePlanMode.walk;
@@ -854,8 +871,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 상단 검색과 **같은 재료**를 쓴다. 진입점마다 규칙이 갈리면 같은 검색어가
   /// 어디에 치느냐에 따라 다른 곳을 찾아 주고, 실제로 그런 시기가 있었다.
   Future<List<DirectionsCandidate>> _searchDirectionsCandidates(
-    String query,
-  ) async {
+    String query, {
+    String? floorId,
+  }) async {
     final normalized = query.trim().toLowerCase();
 
     // 매장 검색은 **항상 건물 전체**를 뒤진다(currentFloorId를 넘기지 않는다).
@@ -865,9 +883,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 사용자 의도의 반대였다 — 찾는 매장이 결과에 아예 없어서 매번 토글을 켜야
     // 했다. 다른 층 결과에는 층 라벨이 부제로 붙으므로, 어느 층 매장인지는
     // 목록에서 그대로 읽힌다.
+    // [floorId]는 후보를 콕 집은 행동에만 값이 있다. 사용자가 직접 친 질의에는
+    // null이라 위 「항상 건물 전체」 규칙이 그대로 유지된다.
     final results = await destinationRepository.searchDestinations(
       _buildingId,
       query,
+      currentFloorId: floorId,
     );
     final buildings = await buildingRepository.getAllBuildings();
     // 매장 줄에 함께 적을 건물 이름. 상단 검색 패널과 같은 규칙이다.
@@ -1051,6 +1072,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 지도에서 고르는 중이었다면 그 상태는 끝난다. 안 끄면 다음 지도 탭이
     // 엉뚱하게 출발지/도착지로 먹힌다.
     _stopPickingOnMap();
+    // 자동완성 원본은 여기서 한 번만 받아 둔다. 결과를 기다리지 않으므로
+    // 목록은 먼저 뜨고, 도착하면 후보 줄만 뒤늦게 채워진다.
+    unawaited(_loadRouteStoreIndex());
     if (presetOrigin != null) _selectedOrigin = presetOrigin;
     if (presetDestination != null) _routeDraftDestination = presetDestination;
     _routeOriginController.text = _selectedOrigin?.title ?? '';
@@ -1074,6 +1098,50 @@ class _MapShellScreenState extends State<MapShellScreen> {
             : _routeDestinationFocus)
         .requestFocus();
     await _searchRouteCandidates('');
+  }
+
+  /// 자동완성 원본을 받아 둔다. 실패는 삼킨다 — 자동완성만 포기하고 검색은
+  /// 막지 않는다. 리포지토리가 상단 검색과 같은 Future를 공유하므로 두 번
+  /// 받지 않는다.
+  Future<void> _loadRouteStoreIndex() async {
+    if (_routeStoreIndex != null) return;
+    try {
+      final index = await buildingRepository.getStoreIndex(_buildingId);
+      if (!mounted || index == null) return;
+      setState(() {
+        _routeStoreIndex = index;
+        // 목록이 늦게 도착하는 동안 사용자가 이미 치고 있었을 수 있다.
+        _routeSuggestions = _computeRouteSuggestions(_routeQuery);
+      });
+    } on Object {
+      // 자동완성만 포기한다.
+    }
+  }
+
+  /// 후보 계산. **건물 안을 보고 있을 때만** 만든다 — 원본이 건물 하나의 매장
+  /// 목록이라, 야외에서 쓰면 지금 서 있는 곳과 무관한 매장을 제안하게 된다
+  /// (상단 검색 패널의 `indoorContextActive`와 같은 이유).
+  List<StoreSuggestion> _computeRouteSuggestions(String query) {
+    final index = _routeStoreIndex;
+    if (index == null || !_indoorContextActive) return const [];
+    return suggestStores(stores: index, query: query);
+  }
+
+  /// 온디바이스 후보를 눌렀을 때. 그 이름으로 검색을 다시 돌리되, **고른 그
+  /// 매장의 층**으로 한 번만 좁힌다 — 같은 이름이 층마다 있는 시설에서 화면에
+  /// 적힌 층과 실제로 가는 층이 어긋나지 않게 한다.
+  void _onRouteSuggestionPicked(StoreSuggestion suggestion) {
+    final nearest = nearestByWalkingDistance(
+      stores: suggestion.stores,
+      reachByNodeId: _reachByNodeId,
+    );
+    final store = nearest.store;
+    _routeFloorScopeOnce = store.floorId;
+    final controller = _routeEditingField == RoutePlanField.origin
+        ? _routeOriginController
+        : _routeDestinationController;
+    controller.text = store.name;
+    unawaited(_searchRouteCandidates(store.name));
   }
 
   void _onRouteOriginFocusChanged() {
@@ -1121,15 +1189,112 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   Future<void> _searchRouteCandidates(String query) async {
     final seq = ++_routeSearchSeq;
-    setState(() => _routeSearching = true);
-    final results = await _searchDirectionsCandidates(query);
+    // 서버 응답을 기다리지 않는다. 이게 후보가 즉시 뜨는 이유다.
+    setState(() {
+      _routeSearching = true;
+      _routeSuggestions = _computeRouteSuggestions(query.trim());
+    });
+    // 층을 좁히는 경우는 둘뿐이다.
+    //  1. 온디바이스 후보를 **탭한** 경우 — 그 후보의 층(한 번 쓰고 지운다).
+    //  2. 질의가 **층마다 있는 시설**을 가리키는 경우 — 가장 가까운 층.
+    // 그 밖에는 null이라 「길찾기는 항상 건물 전체」 규칙이 그대로 유지된다.
+    final floorId =
+        _routeFloorScopeOnce ??
+        nearestFloorForGroupedFacility(
+          suggestions: _routeSuggestions,
+          reachByNodeId: _reachByNodeId,
+        );
+    _routeFloorScopeOnce = null;
+    var results = await _searchDirectionsCandidates(query, floorId: floorId);
     // 여러 조회가 겹쳐 뜰 수 있어(빠른 타이핑) 마지막 요청 결과만 반영한다.
     if (!mounted || seq != _routeSearchSeq) return;
+
+    // 경량이 빈손이면 **의미 검색까지 이어 간다.** 상단 검색과 같은 계약을 태워,
+    // "밥 먹을 곳"처럼 이름이 아닌 말이 검색창에서는 되고 길찾기에서는 안 되는
+    // 상태를 없앤다. 건물 안을 보고 있을 때만 부른다 — `/query/ai`는 건물 안의
+    // 매장을 찾는 계약이라, 밖에서 건물을 고르는 자리에서 승격시키면 눌러도 갈 수
+    // 없는 목록이 된다.
+    if (results.isEmpty && query.trim().isNotEmpty && _indoorContextActive) {
+      results = await _semanticDirectionsCandidates(query);
+      if (!mounted || seq != _routeSearchSeq) return;
+    }
     setState(() {
       _routeResults = results;
       _routeSearching = false;
     });
   }
+
+  /// 2단계(의미 검색). 경량이 빈손일 때만 부른다.
+  ///
+  /// 경량과 마찬가지로 층은 넘기지 않는다: 길찾기는 원래 다른 층으로 가려고 여는
+  /// 기능이고, 백엔드의 의미 단계는 current_floor_id를 받아도 건물 전체를 본다
+  /// (query_search.match_ai_destination).
+  ///
+  /// 실패는 빈 목록으로 삼킨다. 여기까지 왔다는 것은 경량이 이미 빈손이라는
+  /// 뜻이라, 오류 화면으로 덮어도 사용자가 할 수 있는 일이 늘지 않는다.
+  Future<List<DirectionsCandidate>> _semanticDirectionsCandidates(
+    String query,
+  ) async {
+    try {
+      final discovery = await destinationRepository.searchDestinationsAi(
+        _buildingId,
+        query,
+      );
+      return discovery.matches
+          .map(
+            (m) => DirectionsCandidate(
+              title: m.name,
+              subtitle: m.floorName,
+              point: m.point,
+              nodeId: m.entranceNodeId,
+              floor: m.floorName,
+              reason: m.reason,
+            ),
+          )
+          .toList();
+    } on Object {
+      return const [];
+    }
+  }
+
+  /// 출발지 ↔ 도착지 교체.
+  ///
+  /// **확정된 후보만 뒤집는다.** 아직 고르지 않고 타이핑 중인 글자는 후보가
+  /// 아니라 검색어라 뒤집을 대상이 없다. 검색어를 반대 칸으로 옮기면 그 칸의
+  /// 검색이 처음부터 다시 돌기만 하고, 사용자가 고른 적 없는 값이 확정된 것처럼
+  /// 칸에 앉는다.
+  ///
+  /// **출발지가 실제 후보일 때만** 누를 수 있다([_canSwapRoute]). 교체하면 지금
+  /// 출발지가 도착지가 되는데, "현재 위치"는 그런 후보 객체가 아예 없다 —
+  /// 출발지 칸에서만 null이라는 뜻으로 표현되는 특수값이라 도착지 자리로 옮길 수
+  /// 없다. 반대로 도착지가 비어 있어도 교체는 성립한다: "A에서 출발"을 뒤집으면
+  /// "현재 위치에서 출발해 A로 도착"이고 양쪽 모두 유효한 값이다.
+  void _swapRouteEndpoints() {
+    final origin = _selectedOrigin;
+    if (origin == null) return;
+    final destination = _routeDraftDestination;
+    setState(() {
+      _selectedOrigin = destination;
+      _routeDraftDestination = origin;
+      // 도착지가 비어 있었다면 출발지는 "현재 위치"로 돌아간다. 값이 아니라
+      // 안내문이므로 컨트롤러는 비우고 [_selectedOrigin]도 null로 둔다.
+      _routeOriginController.text = destination?.title ?? '';
+      _routeDestinationController.text = origin.title;
+      _routeEditingField = null;
+    });
+    // 교체 직전에 걸려 있던 조회를 무효화한다. 늦게 도착한 응답이 반대 칸의
+    // 목록을 덮으면, 방금 만든 조합과 무관한 후보가 뜬다.
+    _routeSearchSeq++;
+    _unfocusRouteFields();
+    unawaited(_refreshReach());
+    unawaited(
+      _startRoute(origin: _selectedOrigin, destination: origin),
+    );
+  }
+
+  /// 교체 버튼을 누를 수 있는지. 못 누르는 상태에서도 **숨기지 않는다** —
+  /// 버튼이 사라지면 사용자는 기능이 없다고 결론짓고 다시 찾지 않는다.
+  bool get _canSwapRoute => _selectedOrigin != null;
 
   /// 후보 목록에서 하나를 골랐을 때. 아직 도착지가 없으면 도착지 칸으로 넘겨
   /// 주고, 둘 다 준비됐으면 입력을 닫고 경로를 계산한다.
@@ -1781,6 +1946,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
                     onDestinationChanged: (value) =>
                         _onRouteFieldChanged(RoutePlanField.destination, value),
                     onClearRouteDraft: _clearRouteDraft,
+                    onSwapRouteEndpoints: _swapRouteEndpoints,
+                    canSwapRouteEndpoints: _canSwapRoute,
                   ),
 
                   // 길찾기 두 칸 중 하나를 치는 중이면 그 후보 목록이 이 자리를
@@ -1805,6 +1972,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
                           // 빈 화면으로 바뀌는 깜빡임만 남는다.
                           searching: _routeSearching && _routeQuery.isNotEmpty,
                           onPicked: _pickRouteCandidate,
+                          // 상단 검색 결과와 **같은 계산 결과**를 넘긴다. 두
+                          // 화면이 같은 매장에 다른 거리를 적으면 어느 쪽도 못
+                          // 믿게 된다.
+                          reachByNodeId: _reachByNodeId,
+                          suggestions: _routeSuggestions,
+                          onSuggestionPicked: _onRouteSuggestionPicked,
                           onPickOnMap: () => _pickRouteEndpointOnMap(field),
                           // 야외 지도에서 누르면 이름 없는 좌표가 잡힌다. 도면을
                           // 보고 있을 때만 매장(층·노드)이 잡히므로 그때만 준다.

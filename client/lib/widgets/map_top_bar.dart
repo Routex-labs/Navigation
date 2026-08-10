@@ -39,6 +39,8 @@ class MapTopBar extends StatelessWidget {
     this.onOriginChanged,
     this.onDestinationChanged,
     this.onClearRouteDraft,
+    this.onSwapRouteEndpoints,
+    this.canSwapRouteEndpoints = false,
     this.hintText = '건물, 장소를 검색하세요',
   });
 
@@ -82,6 +84,14 @@ class MapTopBar extends StatelessWidget {
   /// X — 길찾기를 통째로 끝낸다(그려진 경로까지).
   final VoidCallback? onClearRouteDraft;
 
+  /// 출발지 ↔ 도착지 교체. 규칙은 상위에 있다(`_swapRouteEndpoints`).
+  final VoidCallback? onSwapRouteEndpoints;
+
+  /// 지금 교체를 누를 수 있는지. 못 누르는 상태에서도 **버튼을 숨기지 않는다** —
+  /// 사라지면 사용자는 기능이 없다고 결론짓고 다시 찾지 않는다. 대신 왜 못
+  /// 누르는지를 툴팁으로 말한다.
+  final bool canSwapRouteEndpoints;
+
   final String hintText;
 
   @override
@@ -111,6 +121,8 @@ class MapTopBar extends StatelessWidget {
                 onOriginChanged: onOriginChanged,
                 onDestinationChanged: onDestinationChanged,
                 onClear: onClearRouteDraft,
+                onSwap: onSwapRouteEndpoints,
+                canSwap: canSwapRouteEndpoints,
               )
             : Row(
                 children: [
@@ -215,6 +227,8 @@ class _RouteDraftBar extends StatelessWidget {
     required this.onOriginChanged,
     required this.onDestinationChanged,
     required this.onClear,
+    required this.onSwap,
+    required this.canSwap,
   });
 
   final TextEditingController originController;
@@ -224,6 +238,8 @@ class _RouteDraftBar extends StatelessWidget {
   final ValueChanged<String>? onOriginChanged;
   final ValueChanged<String>? onDestinationChanged;
   final VoidCallback? onClear;
+  final VoidCallback? onSwap;
+  final bool canSwap;
 
   @override
   Widget build(BuildContext context) {
@@ -259,6 +275,16 @@ class _RouteDraftBar extends StatelessWidget {
               ],
             ),
           ),
+          if (onSwap != null)
+            IconButton(
+              key: const Key('route-draft-swap'),
+              onPressed: canSwap ? onSwap : null,
+              icon: const Icon(Icons.swap_vert),
+              color: AppColors.primary,
+              tooltip: canSwap
+                  ? '출발지와 도착지 교체'
+                  : '현재 위치는 도착지로 지정할 수 없어 교체할 수 없어요',
+            ),
           if (onClear != null)
             IconButton(
               key: const Key('route-draft-clear'),

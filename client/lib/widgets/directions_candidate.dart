@@ -11,6 +11,7 @@ class DirectionsCandidate {
     this.nodeId,
     this.floor,
     this.buildingId,
+    this.reason,
   });
 
   final String title;
@@ -34,6 +35,11 @@ class DirectionsCandidate {
   /// 층과 노드가 **둘 다** 있어야 한다. 하나만 있으면 실내 라우팅이 시작 노드나
   /// 층을 정하지 못해 "출발 위치를 먼저 지정해주세요"에서 조용히 끝난다.
   bool get isIndoorPoint => nodeId != null && floor != null;
+
+  /// 의미 검색(`/query/ai`)이 준 추천 이유. 값이 있으면 [subtitle] 대신
+  /// 보여준다 — "왜 이 매장이 나왔는지"가 층 라벨보다 중요한 정보다.
+  /// 경량 검색 후보에는 없다.
+  final String? reason;
 }
 
 /// "지도에서 선택"으로 정할 대상. 출발지·도착지 양쪽 모두 지도에서 고를 수

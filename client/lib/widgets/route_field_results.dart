@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../domain/dijkstra.dart';
+import '../domain/nearest_store.dart';
+import '../domain/store_suggestions.dart';
 import '../theme/app_theme.dart';
 import 'directions_candidate.dart';
+import 'reach_label.dart';
 import 'route_plan_mode.dart';
 
 /// 상단 길찾기 바에서 한 칸을 치는 동안 **그 바로 아래**에 붙는 후보 목록.
@@ -23,6 +27,9 @@ class RouteFieldResults extends StatelessWidget {
     required this.onPickOnMap,
     required this.showPickOnMap,
     required this.onCurrentLocation,
+    this.suggestions = const [],
+    this.onSuggestionPicked,
+    this.reachByNodeId,
   });
 
   /// 지금 고치고 있는 칸. 출발지일 때만 맨 위에 "현재 위치"가 붙는다.
@@ -51,6 +58,18 @@ class RouteFieldResults extends StatelessWidget {
   /// 다른 곳을 골랐다가 되돌아올 길이 목록 안에 있어야 한다.
   final VoidCallback onCurrentLocation;
 
+  /// 온디바이스 이름 후보(초성·구두점·오타 교정). 서버를 기다리지 않고 0ms에
+  /// 나오므로 **목록의 맨 위**에 붙는다 — 상단 검색과 같은 재료를 쓴다.
+  final List<StoreSuggestion> suggestions;
+
+  /// 그 후보를 눌렀을 때. 상위가 그 이름으로 검색을 다시 돌린다.
+  final ValueChanged<StoreSuggestion>? onSuggestionPicked;
+
+  /// 현재 위치에서 각 그래프 노드까지의 거리·비용. 후보마다 "몇 m · 도보 몇 분"을
+  /// 붙이는 데 쓴다. **모르면 줄을 아예 그리지 않는다** — 줄마다 "거리 알 수
+  /// 없음"을 반복하면 목록이 읽히지 않는다(상단 검색 결과와 같은 규칙).
+  final Map<String, NodeReach>? reachByNodeId;
+
   @override
   Widget build(BuildContext context) {
     final isOrigin = field == RoutePlanField.origin;
@@ -60,7 +79,8 @@ class RouteFieldResults extends StatelessWidget {
     // 아래에 아무 내용 없는 흰 막대가 하나 떠 있었다. 지름길 두 줄이 다 빠지고
     // (야외 + 도착 칸) 아직 아무것도 안 친 상태가 정확히 그 경우다.
     final hasShortcut = showPickOnMap || isOrigin;
-    if (!hasShortcut && results.isEmpty && !searching) {
+    final showSuggestions = suggestions.isNotEmpty && onSuggestionPicked != null;
+    if (!hasShortcut && results.isEmpty && !searching && !showSuggestions) {
       return const SizedBox.shrink();
     }
     return Material(
@@ -111,7 +131,14 @@ class RouteFieldResults extends StatelessWidget {
             ),
           // 지름길 줄과 목록 사이의 구분선. 한쪽이 비어 있으면 선만 남아 카드
           // 아래에 얇은 회색 줄이 떠다닌다.
-          if (hasShortcut && (results.isNotEmpty || searching))
+          if (hasShortcut && (results.isNotEmpty || searching || showSuggestions))
+            const Divider(height: 1),
+          // 온디바이스 후보는 서버 결과 **위**다. 0ms에 나오는 값이라 사용자가
+          // 치는 동안 이 자리가 먼저 차고, 서버가 답하면 아래가 채워진다.
+          if (showSuggestions)
+            for (final suggestion in suggestions)
+              _suggestionTile(suggestion),
+          if (showSuggestions && (results.isNotEmpty || searching))
             const Divider(height: 1),
           if (results.isNotEmpty || searching)
             Flexible(
@@ -135,31 +162,105 @@ class RouteFieldResults extends StatelessWidget {
                       separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final candidate = results[index];
-                        return ListTile(
-                          dense: true,
-                          // 건물과 건물 안 매장을 아이콘으로 가른다. 같은 핀으로
-                          // 두면 목록에서 무엇이 건물인지 읽을 방법이 없다.
-                          leading: Icon(
-                            candidate.buildingId == null
-                                ? Icons.place
-                                : Icons.apartment_outlined,
-                            color: AppColors.primary,
-                          ),
-                          title: Text(
-                            candidate.title,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                            ),
-                          ),
-                          subtitle: Text(candidate.subtitle),
-                          onTap: () => onPicked(candidate),
-                        );
+                        return _candidateTile(candidate);
                       },
                     ),
             ),
         ],
       ),
+    );
+  }
+
+  /// 후보 한 줄. 실내 후보인데 입구 노드가 없으면 경로를 계산할 수 없으므로
+  /// 미리 알린다 — 고를 수는 있게 둔다(위치는 지도에 보여줄 수 있다).
+  Widget _candidateTile(DirectionsCandidate candidate) {
+    final unroutable = candidate.floor != null && candidate.nodeId == null;
+    final subtitle =
+        candidate.reason ??
+        (unroutable ? '${candidate.subtitle} · 경로 안내 불가' : candidate.subtitle);
+    final nodeId = candidate.nodeId;
+    final reach = nodeId == null ? null : reachByNodeId?[nodeId];
+    return ListTile(
+      dense: true,
+      // 건물과 건물 안 매장을 아이콘으로 가른다. 같은 핀으로 두면 목록에서
+      // 무엇이 건물인지 읽을 방법이 없다.
+      leading: Icon(
+        candidate.buildingId == null ? Icons.place : Icons.apartment_outlined,
+        color: AppColors.primary,
+      ),
+      title: Text(
+        candidate.title,
+        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+          if (reach != null)
+            Text(
+              reachLabel(reach),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              // 상단 검색 결과 행과 같은 무게. 두 화면이 같은 값을 다르게 그리면
+              // 사용자는 둘이 다른 것을 뜻한다고 읽는다.
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.text,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+        ],
+      ),
+      isThreeLine: reach != null,
+      onTap: () => onPicked(candidate),
+    );
+  }
+
+  /// 온디바이스 후보 한 줄. 같은 이름이 여러 층에 있으면 **가장 가까운 층**을
+  /// 대표로 세우고 나머지는 개수로 접는다.
+  Widget _suggestionTile(StoreSuggestion suggestion) {
+    final nearest = nearestByWalkingDistance(
+      stores: suggestion.stores,
+      reachByNodeId: reachByNodeId,
+    );
+    final store = nearest.store;
+    final reach = nearest.reach;
+    final count = suggestion.stores.length;
+    final floorLine = count > 1
+        ? '${store.floorName} 등 $count곳'
+        : store.floorName;
+    return ListTile(
+      key: Key('route-field-suggestion-${store.id}'),
+      dense: true,
+      leading: Icon(
+        suggestion.kind.isCorrection ? Icons.auto_fix_high : Icons.search,
+        color: AppColors.muted,
+      ),
+      title: Text(
+        store.name,
+        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(floorLine, maxLines: 1, overflow: TextOverflow.ellipsis),
+          if (reach != null)
+            Text(
+              reachLabel(reach),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.text,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+        ],
+      ),
+      isThreeLine: reach != null,
+      onTap: () => onSuggestionPicked?.call(suggestion),
     );
   }
 }
