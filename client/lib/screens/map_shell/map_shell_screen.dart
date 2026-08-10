@@ -10,6 +10,7 @@ import '../../core/service_locator.dart';
 import '../../domain/dijkstra.dart';
 import '../../domain/indoor_store_lookup.dart';
 import '../../domain/outdoor_poi_ranking.dart';
+import '../../domain/route_endpoint_fill.dart';
 import '../../domain/single_flight.dart';
 import '../../domain/transit_walk_fill.dart';
 import '../../models/building.dart';
@@ -786,7 +787,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
       origin: origin,
       destination: destination,
       head: routes[0],
-      tail: routes[1],
+      // 마지막 도보는 **도착점까지 이어 붙인다.** TMAP 보행자 경로는 가장 가까운
+      // 보행 가능 도로에서 끝나는데, 여기 도착점은 건물 출입구라 도로에서 몇십
+      // 미터 떨어져 있다. 그대로 두면 선이 건물 앞 도로에서 뚝 끊기고, 정작 문
+      // 앞 구간과 그 문에서 이어지는 실내 구간 사이가 비어 두 선이 남남으로
+      // 보인다. 도보 안내는 이미 [_applyRoute]에서 같은 처리를 하고 있었다.
+      tail: extendRouteToDestination(routes[1], destination),
     );
   }
 
