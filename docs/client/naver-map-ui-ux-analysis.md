@@ -321,8 +321,9 @@ tooltip + 스낵바 **셋으로** 그 자리를 메운다 — 셋 중 하나라�
 🛗 엘리베이터 55m
 ```
 
-선택 로직은 [`nearby_facilities.dart`](../../client/lib/domain/nearby_facilities.dart)에
-순수 함수로 두고 테스트로 덮었다.
+선택 로직은 `nearby_facilities.dart`에 순수 함수로 두고 테스트로 덮었다.
+**그 뒤 실내 안내 리팩터에서 파일이 삭제됐고 대체 구현을 확인하지 못했다** — 이 항목의
+"완료"는 당시 기준이다.
 
 **정한 실패 조건**
 
