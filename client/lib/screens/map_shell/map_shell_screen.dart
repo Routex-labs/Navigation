@@ -11,6 +11,9 @@ import '../../core/service_locator.dart';
 import '../../domain/dijkstra.dart';
 import '../../domain/indoor_store_lookup.dart';
 import '../../domain/nearest_store.dart';
+import '../../domain/route_endpoint_fill.dart';
+import '../../domain/single_flight.dart';
+import '../../domain/transit_walk_fill.dart';
 import '../../domain/outdoor_poi_ranking.dart';
 import '../../domain/store_suggestions.dart';
 import '../../features/debug_mode/debug_mode.dart';
@@ -21,6 +24,8 @@ import '../../models/favorite_place.dart';
 import '../../models/floor_plan.dart';
 import '../../models/outdoor_poi.dart';
 import '../../models/store_index_entry.dart';
+import '../../models/directions_route.dart';
+import '../../models/transit_route.dart';
 import '../../models/poi_search_result.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_menu_sheet.dart';
@@ -37,6 +42,7 @@ import '../../widgets/outdoor_poi_sheet.dart';
 import '../../widgets/place_detail_sheet.dart';
 import '../../widgets/route_field_results.dart';
 import '../../widgets/route_plan_mode.dart';
+import '../../widgets/transit_routes_sheet.dart';
 import '../../widgets/travel_mode_bar.dart';
 import '../../widgets/search_panel.dart';
 import '../outdoor_map/outdoor_map_screen.dart';
@@ -310,6 +316,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
   String get _routeQuery => _routeEditingField == RoutePlanField.origin
       ? _routeOriginController.text
       : _routeDestinationController.text;
+
+  /// 대중교통 조회가 겹쳐 나가는 것을 막는다.
+  ///
+  /// 실기기 로그에서 **같은 조회가 2~3번 연달아 나갔다** — 응답 세 줄이 사이에
+  /// 아무 로그도 없이 붙어 있었으니 동시에 날아간 것이다. 어느 조작이 그러는지는
+  /// 아직 못 짚었지만, 조회가 나가 있는 동안 같은 조회를 또 보내는 것이 맞는
+  /// 상황은 없다.
+  final _transitRequest = SingleFlight();
 
   final _travelModeBarKey = GlobalKey();
   final _routeResultsKey = GlobalKey();
@@ -762,9 +776,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
         context,
         poi: poi,
         onCloseAll: _requestCloseSheetChain,
-        // 대중교통은 뒤 커밋에서 붙인다. 지금은 시트가 그 버튼을 아예 그리지
-        // 않으므로 아래 switch의 transit 갈래로는 들어올 수 없다.
-        transitEnabled: false,
+        transitEnabled: transitRepository.isAvailable,
       ),
     );
     if (!mounted) return false;
@@ -795,7 +807,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
           await _startRoute(origin: origin, destination: candidate);
         }
       case OutdoorPoiAction.transit:
-        break;
+        setState(() {
+          _routeDraftDestination = candidate;
+          _travelMode = RoutePlanMode.transit;
+        });
+        await _startTransitRoute(candidate);
     }
     return true;
   }
@@ -1393,6 +1409,214 @@ class _MapShellScreenState extends State<MapShellScreen> {
     });
   }
 
+  /// 걸어갈 만한 거리의 상한(m).
+  ///
+  /// 1.5 km는 보통 걸음으로 20분쯤이다. 그보다 멀면 대중교통을 먼저 보여 주는
+  /// 편이 맞다 — 도보 안내를 지나쳐 다시 누르게 하는 것보다 낫고, 반대로 이
+  /// 값을 더 낮추면 두 정거장 거리를 굳이 버스로 안내하게 된다.
+  static const _walkableMeters = 1500.0;
+
+  /// 거리를 보고 처음 보여 줄 이동 수단을 정한다.
+  ///
+  /// 출발점을 모르면(GPS 미확보) 도보로 둔다. 모르는 채로 대중교통을 부르면
+  /// "현재 위치를 아직 못 잡았습니다"만 뜨고 끝나, 사용자는 수단을 고른 적도
+  /// 없는데 실패 안내를 본다.
+  ///
+  /// 자동차는 **자동으로 고르지 않는다.** 사용자가 차를 갖고 있는지 우리는
+  /// 모르고, 걸어서 갈 거리에 운전 경로를 내밀면 무엇을 안내받는지부터 다시
+  /// 읽어야 한다.
+  RoutePlanMode _defaultTravelMode(
+    DirectionsCandidate? origin,
+    DirectionsCandidate destination,
+  ) {
+    if (!transitRepository.isAvailable) return RoutePlanMode.walk;
+    final from = origin?.point ?? _outdoorKey.currentState?.routeOriginPoint;
+    if (from == null) return RoutePlanMode.walk;
+    final meters = const Distance().as(
+      LengthUnit.Meter,
+      from,
+      destination.point,
+    );
+    return meters > _walkableMeters
+        ? RoutePlanMode.transit
+        : RoutePlanMode.walk;
+  }
+
+  /// 대중교통 경로를 물어보고, 후보 중 하나를 고르면 야외 지도에 그린다.
+  ///
+  /// 출발지는 야외 지도가 정한다([OutdoorMapBodyState.routeOriginPoint]) —
+  /// 지도에서 찍은 출발 지점이 있으면 그것을, 없으면 GPS를 쓴다. 실내 앵커는
+  /// 쓰지 않는다(건물 안 좌표를 보내면 정류장이 건물 반대편에서 잡힌다).
+  ///
+  /// **무시한 사실을 로그로 남긴다.** 조용히 삼키면 중복을 만드는 조작이
+  /// 무엇인지 영영 안 보이고, 가드가 원인을 덮은 채로 남는다.
+  Future<void> _startTransitRoute(DirectionsCandidate destination) {
+    return _transitRequest.run(
+      () => _requestTransitRoute(destination),
+      onDuplicate: () =>
+          debugPrint('[transit] 조회 중이라 중복 요청 무시: ${destination.title}'),
+    );
+  }
+
+  Future<void> _requestTransitRoute(DirectionsCandidate destination) async {
+    debugPrint('[transit] 조회 시작: ${destination.title}');
+    final outdoor = _outdoorKey.currentState;
+    // 명시적으로 고른 출발지라도 **실내 지점이면 쓰지 않는다.** 건물 안 좌표를
+    // 보내면 카카오가 그 좌표에서 가장 가까운 정류장을 찾는데, 건물이 크면
+    // 실제로 나가야 하는 문의 반대편이 잡힌다. 그때는 GPS로 떨어뜨린다.
+    final selectedOrigin = _selectedOrigin;
+    final outdoorOrigin =
+        (selectedOrigin != null &&
+            selectedOrigin.floor == null &&
+            selectedOrigin.nodeId == null)
+        ? selectedOrigin.point
+        : null;
+    final origin = outdoorOrigin ?? outdoor?.routeOriginPoint;
+    if (outdoor == null || origin == null) {
+      _showSnack('현재 위치를 아직 못 잡았습니다. GPS 신호를 확인하거나 출발지를 직접 지정해주세요.');
+      return;
+    }
+
+    final routes = await transitRepository.getTransitRoutes(
+      origin: origin,
+      destination: destination.point,
+    );
+    if (!mounted) return;
+
+    // 결말마다 사용자가 할 행동이 다르다. 한 문구로 묶으면 700m 앞 목적지를
+    // 두고 계속 재시도하게 된다([TransitRoutesStatus] 주석).
+    switch (routes.status) {
+      case TransitRoutesStatus.unavailable:
+        _showSnack('대중교통 안내를 쓸 수 없습니다. 카카오 REST 키 설정을 확인해주세요.');
+        return;
+      case TransitRoutesStatus.failed:
+        _showSnack('대중교통 경로를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
+        return;
+      case TransitRoutesStatus.tooClose:
+        // 걸어갈 수 있는 거리다. 안내 없이 끝내지 않고 도보 경로로 이어 준다 —
+        // 사용자가 원한 것은 "저기까지 가는 방법"이지 "대중교통 그 자체"가 아니다.
+        _showSnack('가까운 거리라 대중교통 경로가 없습니다. 도보로 안내합니다.');
+        setState(() => _travelMode = RoutePlanMode.walk);
+        await _startRoute(
+          origin: _selectedOrigin,
+          destination: destination,
+          autoSelectMode: false,
+        );
+        return;
+      case TransitRoutesStatus.noRoute:
+        _showSnack('이 구간의 대중교통 경로를 찾지 못했습니다.');
+        return;
+      case TransitRoutesStatus.ok:
+        break;
+    }
+
+    final picked = await _withMapsLocked(
+      () => TransitRoutesSheet.show(
+        context,
+        routes: routes,
+        destinationLabel: destination.title,
+        onCloseAll: _requestCloseSheetChain,
+      ),
+    );
+    if (!mounted || picked == null) return;
+
+    // **건물 안 매장이면 마지막 도보는 매장이 아니라 문으로 간다.**
+    //
+    // 매장 좌표를 그대로 끝점으로 주면 TMAP이 그 좌표에서 가장 가까운 도로로
+    // 스냅하는데, 그 도로가 내린 곳 반대편일 수 있다 — 실제로 하차 지점 바로
+    // 옆에 문이 있는데 건물을 빙 돌아 반대편 문으로 안내한 화면을 봤다.
+    // 내린 자리에서 가장 가까운 문을 우리가 직접 고른다.
+    final dropPoint = picked.legs.last.points.isEmpty
+        ? destination.point
+        : picked.legs.last.points.last;
+    final indoorStore = _indoorStoreOf(destination);
+    final walkTarget =
+        (indoorStore == null ? null : outdoor.entranceNearestTo(dropPoint)) ??
+        destination.point;
+
+    // 고른 **뒤에** 앞뒤 도보를 채운다. 후보는 최대 15개까지 오는데, 목록을
+    // 만들자고 후보마다 두 번씩 보행자 API를 부르면 30번이 나가고 사용자는
+    // 그중 하나만 본다. 목록 단계에서 도보가 없어도 총 소요시간은 정확하다 —
+    // 카카오 totalTime에 이미 포함돼 있다([fillTransitWalkLegs] 주석).
+    final completed = await _withTransitWalkLegs(
+      picked,
+      origin: origin,
+      destination: walkTarget,
+    );
+    if (!mounted) return;
+
+    await outdoor.showTransitRoute(
+      completed,
+      destination: walkTarget,
+      label: '${destination.title}까지',
+      origin: origin,
+    );
+    if (!mounted || indoorStore == null) return;
+
+    // 실내 구간은 **showTransitRoute 뒤에** 푼다. 그 함수가 시작할 때 pending을
+    // 비우므로, 앞에서 풀면 쌓아 둔 실내 구간이 곧바로 지워진다.
+    await outdoor.prepareIndoorLegFromDrop(indoorStore, dropPoint: dropPoint);
+  }
+
+  /// 이 후보가 **우리 건물 안 매장**이면 실내 라우팅용 값으로 바꾼다. 층이나
+  /// 노드가 없으면 null — 좌표까지만 안내할 수 있는 바깥 장소다.
+  PoiSearchResult? _indoorStoreOf(DirectionsCandidate candidate) {
+    final floor = candidate.floor;
+    final nodeId = candidate.nodeId;
+    if (floor == null || nodeId == null) return null;
+    return PoiSearchResult(
+      name: candidate.title,
+      floor: floor,
+      point: candidate.point,
+      nodeId: nodeId,
+    );
+  }
+
+  /// 카카오가 주지 않는 출발·도착 도보를 TMAP 보행자 경로로 채운다.
+  ///
+  /// 두 요청을 동시에 보낸다. 순서대로 기다리면 지도가 뜨기까지 왕복 시간이
+  /// 두 배가 되는데, 두 구간은 서로를 필요로 하지 않는다.
+  ///
+  /// 실패해도 안내를 막지 않는다. 도보선이 직선으로 떨어질 뿐이고, 사용자가
+  /// 기다린 것은 "저기까지 가는 방법"이지 도보 구간의 정확한 모양이 아니다.
+  Future<TransitItinerary> _withTransitWalkLegs(
+    TransitItinerary itinerary, {
+    required LatLng origin,
+    required LatLng destination,
+  }) async {
+    if (itinerary.legs.isEmpty) return itinerary;
+    final first = itinerary.legs.first;
+    final last = itinerary.legs.last;
+
+    final routes = await Future.wait([
+      (first.mode.isWalk || first.points.isEmpty)
+          ? Future<DirectionsRoute?>.value()
+          : directionsRepository.getWalkingRoute(
+              origin: origin,
+              destination: first.points.first,
+            ),
+      (last.mode.isWalk || last.points.isEmpty)
+          ? Future<DirectionsRoute?>.value()
+          : directionsRepository.getWalkingRoute(
+              origin: last.points.last,
+              destination: destination,
+            ),
+    ]);
+
+    return fillTransitWalkLegs(
+      itinerary,
+      origin: origin,
+      destination: destination,
+      head: routes[0],
+      // 마지막 도보는 **도착점까지 이어 붙인다.** TMAP 보행자 경로는 가장 가까운
+      // 보행 가능 도로에서 끝나는데, 여기 도착점은 건물 출입구라 도로에서 몇십
+      // 미터 떨어져 있다. 그대로 두면 선이 건물 앞 도로에서 뚝 끊기고, 정작 문
+      // 앞 구간과 그 문에서 이어지는 실내 구간 사이가 비어 두 선이 남남으로
+      // 보인다.
+      tail: extendRouteToDestination(routes[1], destination),
+    );
+  }
+
   /// 자동차 경로. **경로 전체를 먼저 보여주고, 따라가기는 버튼으로 시작한다.**
   ///
   /// 한동안은 경로를 그리자마자 카메라를 현재 위치로 확대했다. "자동차를 고른
@@ -1554,14 +1778,21 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 자동차로 길을 찾아 본 사용자에게는 그 값이 그대로 남아 있고, 그 상태로
     // 건물 안 매장을 고르면 아래 분기가 자동차로 흘려보내 실내 구간이 시작조차
     // 못 한다.
-    if (autoSelectMode && destination.nodeId != null) {
-      if (_travelMode != RoutePlanMode.walk) {
-        setState(() => _travelMode = RoutePlanMode.walk);
-      }
+    if (autoSelectMode) {
+      final mode = destination.nodeId == null
+          ? _defaultTravelMode(origin, destination)
+          : RoutePlanMode.walk;
+      if (_travelMode != mode) setState(() => _travelMode = mode);
     }
-    if (_travelMode == RoutePlanMode.car) {
-      await _startCarRoute(origin, destination);
-      return;
+    switch (_travelMode) {
+      case RoutePlanMode.transit:
+        await _startTransitRoute(destination);
+        return;
+      case RoutePlanMode.car:
+        await _startCarRoute(origin, destination);
+        return;
+      case RoutePlanMode.walk:
+        break;
     }
     // 야외 지도에서 실내 진입 오버레이를 보는 중 실내 매장(nodeId+floor)까지
     // 길찾기를 시작하면, 화면(탭)을 바꾸지 않고 야외 화면 그대로에 실내 경로를
