@@ -48,4 +48,26 @@ void main() {
       expect(kStoreLabelMaxPx / kStoreLabelMinPx, lessThanOrEqualTo(1.6));
     });
   });
+
+  // 한 화면에서 이름이 붙는 자리가 하나여야 눈이 규칙을 세운다. 예전에는
+  // 매장명만 아이콘 좌/우로 뒤집히고(variable-anchor) 시설명은 아래로 고정이라,
+  // 같은 도면에 두 규칙이 섞여 있었다.
+  group('이름은 항상 아이콘 아래', () {
+    test('야외 매장명이 아이콘 아래에 고정된다', () {
+      final props = indoorStoresLabelProps(const [1.0], null);
+
+      expect(props.textAnchor, 'top');
+      expect(props.textOffset, mapLabelBelowIconOffset);
+      // 뒤집기가 남아 있으면 앵커 고정이 무효가 된다.
+      expect(props.textVariableAnchor, isNull);
+    });
+
+    test('야외 편의시설명과 같은 오프셋을 쓴다', () {
+      final store = indoorStoresLabelProps(const [1.0], null);
+      final facility = indoorFacilityLabelProps(const [1.0], null);
+
+      expect(store.textOffset, facility.textOffset);
+    });
+  });
+
 }

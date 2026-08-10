@@ -196,12 +196,10 @@ SymbolLayerProperties indoorStoresLabelProps(
   iconImage: storeCategoryIconExpression(),
   iconSize: indoorCategoryIconSizeExpr,
   iconOpacity: fadeExpr,
-  textVariableAnchor: kStoreLabelVariableAnchor,
-  // 아이콘 가장자리부터의 여백이다(중심 거리가 아니다 —
-  // [kStoreLabelRadialOffset]의 실측표 참고). 실내(0.18em)보다 조금 큰 것은
-  // 글자가 11로 고정이라 같은 em이 더 작은 픽셀이 되기 때문이다.
-  textRadialOffset: 0.20,
-  textJustify: 'auto',
+  // 이름은 항상 아이콘 아래다 — 실내 도면·편의시설 라벨과 같은 규칙.
+  textAnchor: 'top',
+  textOffset: mapLabelBelowIconOffset,
+  textJustify: 'center',
   textAllowOverlap: false,
   // 자리가 없으면 아이콘·이름 중 하나만이라도 남긴다. iconOptional이 없으면
   // 심볼이 넓어진 만큼 이름이 밀려난다(실내 화면 주석의 실측 참고).

@@ -1617,11 +1617,17 @@ class FloorPlanViewState extends State<FloorPlanView> {
         // `text-size`는 논리 픽셀이라, 안 곱하면 고밀도 화면에서 아이콘만
         // 배율만큼 작아진다([storeCategoryIconSizeIndoor] 실측표).
         iconSize: storeCategoryIconSize(_devicePixelRatio),
-        textVariableAnchor: kStoreLabelVariableAnchor,
-        textRadialOffset: kStoreLabelRadialOffset,
-        // variable-anchor가 고른 방향에 맞춰 좌/우 정렬을 따라가게 한다.
-        // 기본값(center)으로 두면 두 줄로 접힌 이름이 아이콘 쪽으로 쏠린다.
-        textJustify: 'auto',
+        // 이름은 **항상 아이콘 아래**다. 편의시설·POI 라벨과 같은 규칙이라
+        // 한 화면에서 이름이 붙는 자리가 하나로 읽힌다.
+        //
+        // 예전에는 `textVariableAnchor: ['left','right']`로 아이콘 오른쪽을
+        // 먼저 시도하고 자리가 없으면 왼쪽으로 넘겼다. 자리를 잘 찾는 대신
+        // **같은 화면에서 매장마다 이름이 다른 쪽에 붙어** 눈이 이름을 찾는
+        // 규칙을 못 세웠다. 시설은 이미 아래로 고정이라 두 규칙이 섞이기도 했다.
+        textAnchor: 'top',
+        textOffset: mapLabelBelowIconOffset,
+        // 앵커가 고정이므로 두 줄로 접힌 이름은 가운데 정렬이 맞는다.
+        textJustify: 'center',
         // 색·헤일로는 [map_label_style.dart]가 단일 출처다(야외 오버레이와 같은 값).
         textColor: mapLabelStoreColor,
         textHaloColor: mapLabelHaloColor,

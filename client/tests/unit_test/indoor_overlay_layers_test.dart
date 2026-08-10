@@ -77,12 +77,15 @@ void main() {
     test('매장 라벨 — 대분류 아이콘 속성이 함께 살아 있다', () {
       final json = wireJson(indoorStoresLabelProps(fadeExpr, null));
       // 라벨과 아이콘이 같은 심볼이라, 이 중 하나라도 null로 가면 아이콘이
-      // 사라지거나(icon-image) 글자가 아이콘 위에 겹쳐 찍힌다(radial-offset).
+      // 사라지거나(icon-image) 글자가 아이콘 위에 겹쳐 찍힌다(anchor·offset).
       expect(json['icon-image'], isNotNull);
       expect(json['icon-size'], isNotNull);
       expect(json['icon-opacity'], isNotNull);
-      expect(json['text-variable-anchor'], isNotNull);
-      expect(json['text-radial-offset'], isNotNull);
+      // 이름을 아이콘 아래로 내리는 두 속성. 예전에는 좌/우로 뒤집는
+      // `text-variable-anchor`·`text-radial-offset`이 그 자리였는데, 같은 화면에
+      // 매장마다 이름이 다른 쪽에 붙어 규칙이 읽히지 않아 아래 고정으로 바꿨다.
+      expect(json['text-anchor'], isNotNull);
+      expect(json['text-offset'], isNotNull);
     });
 
     test('매장 라벨 — 아이콘·이름 중 하나만이라도 남긴다', () {
