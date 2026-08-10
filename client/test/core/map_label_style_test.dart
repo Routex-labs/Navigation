@@ -111,5 +111,19 @@ void main() {
       expect(gap, greaterThan(0), reason: '0 이하면 이름이 아이콘 위에 겹쳐 찍힌다');
       expect(gap, lessThan(6), reason: '6px를 넘으면 이름이 아이콘에서 떨어져 나온 것으로 읽힌다');
     });
+
+    test('가장 작은 글자에서도 헤일로가 아이콘을 파고들지 않는다', () {
+      // 오프셋은 em인데 아이콘은 고정 px이라 **글자가 작을수록 간격이 좁아진다**.
+      // 실내 매장명은 폴리곤에 맞춰 줄어들므로 가장 빡빡한 쪽이 하한을 정한다.
+      // 헤일로 두께보다 좁아지면 글자 외곽선이 아이콘 흰 테두리를 파고든다.
+      final gap =
+          mapLabelBelowIconOffset[1] * kStoreLabelMinPx -
+          kIndoorMarkerLogicalPx / 2;
+
+      // 지금 값은 이 하한과 **정확히 같다**(0.6 × 12 − 6 = 1.2). 여유가 0이므로
+      // 오프셋을 더 줄이거나 아이콘을 키우면 이 테스트가 바로 깨진다 — 그게
+      // 이 테스트를 둔 이유다. 1e-9는 double 곱셈 오차만 흡수한다.
+      expect(gap, greaterThanOrEqualTo(mapLabelHaloWidth - 1e-9));
+    });
   });
 }
