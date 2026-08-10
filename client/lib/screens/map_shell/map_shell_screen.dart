@@ -1657,6 +1657,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
       destination: to,
       label: destination.title,
       offerStartGuidance: true,
+      driving: true,
     );
   }
 
