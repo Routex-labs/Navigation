@@ -85,6 +85,11 @@ const _indoorWalkingSpeedMetersPerSecond = 1.2;
 // 둘이 크게 벌어졌다면 그건 손 떨림이 아니라 **데이터 정합이 깨진 상태**다.
 // 그런 상태에서 억지로 스냅하면 건물 반대편 복도에 위치를 찍어 놓고 거기서부터
 // 걸음을 쌓는다 — 위치가 없는 것보다 나쁘다.
+// 자동차 안내를 시작할 때 현재 위치로 내려가며 맞추는 zoom. 다음 교차로가
+// 화면에 들어오는 정도이고, 실내 진입 임계값 위라 건물 근처에서 눌러도 도면이
+// 끼어들지 않는다.
+const _carGuidanceZoom = 17.5;
+
 const _maxEntranceAnchorSnapDistanceM = 25.0;
 
 // 자동 진입 때 GPS 좌표를 통로에 붙일 수 있는 최대 거리(m).
@@ -481,6 +486,7 @@ class OutdoorMapBody extends StatefulWidget {
     super.key,
     this.active = true,
     this.onRouteVisibleChanged,
+    this.onGuidanceDismissed,
     this.onPlacingLocationChanged,
     this.onIndoorEnteredChanged,
     this.onStoreTap,
@@ -502,6 +508,15 @@ class OutdoorMapBody extends StatefulWidget {
   /// ETA 카드가 화면 최하단에 새로 나타나거나 사라질 때 호출된다.
   /// 상위(MapShellScreen)가 이 값으로 하단 공용 바를 그 위로 띄운다.
   final ValueChanged<bool>? onRouteVisibleChanged;
+
+  /// 사용자가 **"안내 종료"를 눌러** 길안내를 끝냈을 때 호출된다.
+  ///
+  /// [onRouteVisibleChanged]와 반드시 구분해야 한다. 그쪽은 경로선이 있는지
+  /// 없는지라 재계산·수단 변경처럼 안내가 계속되는 중에도 오르내리지만, 이쪽은
+  /// "사용자가 그만두겠다고 눌렀다" 하나뿐이다. 상위는 이 신호로 상단 길찾기
+  /// 바까지 함께 닫는다 — 안 그러면 경로만 사라지고 출발/도착 칸이 남아,
+  /// 안내를 껐는데 화면은 아직 길찾기 중인 상태가 된다.
+  final VoidCallback? onGuidanceDismissed;
 
   /// 층 전환 배너·스크림 상태를 셸에 넘긴다.
   ///
@@ -631,6 +646,25 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// [_activatePendingIndoorRoute]가 실제 실내 경로 상태로 옮긴다.
   MultiFloorRoute? _pendingIndoorRoute;
   PoiSearchResult? _pendingIndoorDestination;
+
+  /// 이번 안내의 출발점을 GPS가 아니라 이 좌표로 못박는다. 길찾기가 그린
+  /// **계획 경로**는 걷는 동안 다시 계산되면 안 된다 — 사용자가 비교하려고
+  /// 보고 있는 선이 GPS 틱마다 흔들린다.
+  ll.LatLng? _fixedRouteOrigin;
+
+  /// 자동차 안내가 시작돼 카메라가 사용자 위치를 따라가는 중인지.
+  ///
+  /// setState를 쓰지 않는다 — 이 값으로 갈리는 위젯이 없고, 위치가 올 때마다
+  /// 카메라만 움직인다. rebuild를 걸면 GPS 틱마다 지도 위 오버레이가 통째로
+  /// 다시 그려진다.
+  bool _followingUser = false;
+
+  /// 계획 상태로 그려 둔 자동차 경로가 있어서 "안내 시작"을 권해야 하는지.
+  ///
+  /// 자동차 경로를 그린 직후에는 카메라가 **경로 전체**에 맞춰져 있다. 사용자가
+  /// 어디로 어떻게 가는지 한 번 보고 나서 출발하도록, 위치로 내려가는 조작은
+  /// 버튼 하나로 분리했다([EtaCard.onStartGuidance]).
+  bool _offerStartGuidance = false;
 
   StreamSubscription<Position>? _positionSubscription;
   bool _interactive = true;
@@ -1867,6 +1901,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 화면에 그릴지는 [_outdoorGpsVisible]이 따로 가른다([_syncCurrentLayer]).
     setState(() => _position = position);
     _syncCurrentLayer();
+    // 안내 중이면 카메라가 사용자를 따라간다. 판정보다 먼저 두는 이유는, 이번
+    // 위치로 실내에 들어가면 따라가기가 꺼지기 때문이다 — 그때는 카메라의
+    // 주인이 실내 위치(PDR)로 바뀐다.
+    if (_followingUser) unawaited(_moveCameraToUser(position));
     // 문 선택은 진입 판정보다 **먼저** 갱신한다. 진입 직후 실내 위치를 잡을 때
     // 폴백으로 쓰는 문이 이 선택의 결과라, 순서를 뒤집으면 사용자가 이미 다른
     // 문으로 들어왔는데 폴백은 한 박자 전 문을 가리킨다.
@@ -2124,7 +2162,19 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 새 문으로 가는데 실내 경로는 옛 문에서 시작하는 화면이 된다.
     if (_pendingIndoorDestination != null) _retargetJourneyEntrance();
 
-    final target = _userDestination ?? _entrance;
+    // 길찾기가 그린 **계획 경로**는 출발점이 못박혀 있다. GPS가 갱신될 때마다
+    // 다시 계산하면 사용자가 비교하려고 보고 있는 선이 걸음마다 흔들린다.
+    if (_fixedRouteOrigin != null) return;
+
+    // 야외 걷기 경로는 **사용자가 목적지를 고른 경우에만** 그린다.
+    //
+    // 예전에는 목적지가 없으면 [_entrance]로 폴백했지만, 백엔드가 건물 출입구
+    // 좌표를 내려주지 않아 그 값이 늘 null이었고 폴백은 한 번도 실행되지 않았다.
+    // 이제 [_syncSelectedEntrance]가 실제 문 좌표로 그 값을 채우므로, 폴백을
+    // 그대로 두면 앱을 켜고 GPS가 잡히는 것만으로 아무도 요청하지 않은
+    // "가장 가까운 문까지" 경로가 그려지고, 위치가 갱신될 때마다 TMAP 요청이
+    // 나간다. [_entrance]는 진입/이탈 판정의 기준점이지 목적지가 아니다.
+    final target = _userDestination;
     if (target == null) return;
 
     final route = await directionsRepository.getWalkingRoute(
@@ -2287,7 +2337,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 이전 여정을 걷어낸다. 남겨 두면 사용자가 다른 곳으로 안내를 바꾼 뒤에
     // 건물에 들어갔을 때 지웠어야 할 실내 경로가 혼자 되살아난다.
     if (!keepPendingIndoorRoute) _clearPendingIndoorRoute();
+    // 새 안내는 새 계획이다. 이전 자동차 안내의 따라가기를 남기면 경로 전체를
+    // 보여 줘야 할 화면이 사용자 위치에 붙들린다.
+    _stopFollowingUser();
     setState(() {
+      // 이번 안내의 출발지가 무엇인지 여기서 확정한다. origin이 없으면 GPS로
+      // 되돌아가야 하므로 반드시 null로 지워야 한다 — 안 지우면 예전에 찍어 둔
+      // 지점이 계속 출발지로 남아, 현재 위치에서 출발하는 안내가 영영 안 된다.
+      _fixedRouteOrigin = origin;
+      _offerStartGuidance = false;
       _userDestination = destination;
       _userDestinationLabel = label;
       // 새 목적지를 받을 때마다 초기화해서, 이번 경로가 계산되면
@@ -2316,6 +2374,112 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       return;
     }
     await _updateRoute(position);
+  }
+
+  /// 길찾기가 **미리 계산해 온** 도로 경로(자동차·도보)를 그대로 그린다.
+  ///
+  /// [showRouteTo]와 나눈 이유는 경로를 누가 계산하느냐가 다르기 때문이다.
+  /// showRouteTo는 목적지만 받아 이 화면이 직접 TMAP을 부르지만, 길찾기는 요약
+  /// 카드에 적을 거리·시간이 필요해 이미 응답을 손에 쥐고 있다. 여기서 다시
+  /// 부르면 같은 구간을 두 번 조회하고, 두 응답이 미묘하게 달라지면 카드와
+  /// 지도가 다른 경로를 말하게 된다.
+  ///
+  /// 출발점을 [_fixedRouteOrigin]으로 박는 것이 중요하다. 이건 걷는 동안 따라가는
+  /// 안내가 아니라 **한 번 그려 놓고 비교하는 계획 화면**이라, GPS가 갱신될
+  /// 때마다 경로가 다시 계산되면 사용자가 보던 선이 흔들린다.
+  ///
+  /// [offerStartGuidance]가 참이면 하단 카드에 "안내 시작"을 붙인다.
+  Future<void> showPlannedRoadRoute(
+    DirectionsRoute route, {
+    required ll.LatLng origin,
+    required ll.LatLng destination,
+    required String label,
+    bool offerStartGuidance = false,
+  }) async {
+    _clearPendingIndoorRoute();
+    // 경로를 **다시 그리는** 중이다(수단 변경·끝점 변경). 아직 "안내 시작" 전
+    // 이므로 카메라는 경로 전체를 보여 줘야 한다.
+    _stopFollowingUser();
+    setState(() {
+      _offerStartGuidance = offerStartGuidance;
+      _fixedRouteOrigin = origin;
+      _userDestination = destination;
+      _userDestinationLabel = label;
+      // 먼저 비워야 [_applyRoute]가 "새로 생김"으로 보고 카메라를 경로 전체에
+      // 맞춘다. 안 비우면 수단을 바꿔도 카메라가 옛 경로 자리에 머문다.
+      _route = null;
+    });
+    _syncDestinationLayer();
+    _syncRouteLayer();
+    _applyRoute(route);
+  }
+
+  /// 자동차 안내를 시작한다 — 카메라를 현재 위치로 확대하고, 이후 위치가 갱신될
+  /// 때마다 그 자리를 따라간다.
+  ///
+  /// 위치를 아직 못 잡았어도 **켜 둔다.** 신호가 잡히는 순간 첫 위치가 카메라를
+  /// 데려가므로, 여기서 포기하면 터널을 나오며 안내를 시작한 사용자가 영영
+  /// 따라가지 못한다. 대신 지금 아무 일도 안 일어나는 이유는 알린다.
+  Future<void> startFollowingCurrentLocation() async {
+    _followingUser = true;
+    // 버튼을 눌렀으면 이제 안내 중이다. 계획 상태로 되돌리는 길은 안내 종료뿐.
+    if (_offerStartGuidance) setState(() => _offerStartGuidance = false);
+    final position = _position;
+    if (position == null) {
+      _showSnack('현재 위치를 아직 못 잡았습니다. 신호가 잡히면 그 자리로 지도를 옮깁니다.');
+      return;
+    }
+    await _moveCameraToUser(position, zoom: _carGuidanceZoom);
+  }
+
+  /// 따라가기를 멈춘다. 안내가 끝나거나(경로 삭제) 카메라의 주인이 바뀌는
+  /// 지점(새 경로 계산)에서 부른다 — 안 멈추면 사용자가 지도를 옮겨도 다음 위치
+  /// 한 건이 곧바로 되돌려 놓아 지도를 조작할 수 없다.
+  void _stopFollowingUser() => _followingUser = false;
+
+  /// 카메라를 [position]으로 옮긴다. [zoom]을 주면 그 값으로 확대하고, 없으면
+  /// 지금 배율을 유지한다 — 따라가는 동안 사용자가 맞춘 배율을 빼앗지 않는다.
+  Future<void> _moveCameraToUser(Position position, {double? zoom}) async {
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    final target = LatLng(position.latitude, position.longitude);
+    await controller.animateCamera(
+      zoom == null
+          ? CameraUpdate.newLatLng(target)
+          : CameraUpdate.newLatLngZoom(target, zoom),
+    );
+  }
+
+  /// 이 화면이 아는 "지금 출발할 자리". 지도에서 찍어 둔 출발 지점이 있으면 그
+  /// 값을, 없으면 GPS를 쓴다.
+  ///
+  /// **실내 PDR 앵커는 쓰지 않는다.** 건물 안 좌표를 도로 경로의 출발지로 보내면
+  /// TMAP이 건물 반대편 도로로 스냅한다.
+  ll.LatLng? get routeOriginPoint {
+    final fixed = _fixedRouteOrigin;
+    if (fixed != null) return fixed;
+    final position = _position;
+    if (position == null) return null;
+    return ll.LatLng(position.latitude, position.longitude);
+  }
+
+  /// [point]가 우리 실내 도면이 있는 건물 **안**이면, 그 건물의 지상 출입구
+  /// 좌표를 돌려준다. 밖이거나 건물을 아직 못 받았으면 null.
+  ///
+  /// TMAP POI 중에는 건물 **안** 매장이 섞여 있다(예: 백화점 입점 브랜드).
+  /// 그 좌표를 도로 안내의 끝점으로 그대로 쓰면 도착점이 건물 내부라, TMAP이
+  /// 가장 가까운 도로로 스냅하면서 실제로 들어갈 수 있는 문과 다른 면에
+  /// 사용자를 내려놓는다.
+  ///
+  /// 여기는 **엄격한** 판정을 쓴다. 묻는 것이 "이 좌표를 안내의 끝점으로 써도
+  /// 되는가"이고, 그게 못 쓰는 좌표가 되는 건 정말로 건물 안일 때뿐이다.
+  /// [isAtIndoorBuilding]처럼 여유를 주면 건물 옆 노점까지 건물 문으로 안내한다.
+  ll.LatLng? entranceIfInsideBuilding(ll.LatLng point) {
+    final footprint = _buildingFootprint;
+    final inside = footprint != null && isPointInPolygon(point, footprint);
+    if (!inside) return null;
+    final building = _building;
+    return building == null ? null : entrancePointFor(building.id);
   }
 
   /// 야외(GPS)에서 건물 안 매장까지 한 번에 안내한다.
@@ -2559,12 +2723,29 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     return _buildingCenter(footprint);
   }
 
+  /// 이 화면에 그려진 안내를 **전부** 지운다 — 야외 도보 구간과 실내 구간까지.
+  ///
+  /// 상단 길찾기 바의 X처럼 "길찾기 자체를 끝낸다"는 뜻일 때 쓴다. 재계산 직전에
+  /// 옛 선만 치우는 경로와 나누지 않으면, 수단을 바꿀 때마다 문 경유 안내의
+  /// 실내 뒷부분이 함께 날아가 문 앞에서 안내가 끊긴다.
+  void clearAllRoutes() {
+    _clearUserDestination();
+    _clearIndoorRoute();
+  }
+
   void _clearUserDestination() {
+    // 안내가 여기서 끝난다. 따라가기를 남기면 카메라가 계속 사용자를 쫓아다녀
+    // 지도를 훑어볼 수 없다.
+    _stopFollowingUser();
     _clearPendingIndoorRoute();
     setState(() {
       _userDestination = null;
       _userDestinationLabel = null;
       _route = null;
+      _fixedRouteOrigin = null;
+      // 그릴 경로가 없으면 시작할 안내도 없다. 안 지우면 다음에 뜨는 도보 카드에
+      // 자동차용 "안내 시작"이 얹힌다.
+      _offerStartGuidance = false;
     });
     _syncDestinationLayer();
     _syncRouteLayer();
@@ -3080,11 +3261,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   void _dismissUserDestinationFromEtaCard() {
     _retainEtaClosePointer();
     _clearUserDestination();
+    widget.onGuidanceDismissed?.call();
   }
 
   void _dismissIndoorRouteFromEtaCard() {
     _retainEtaClosePointer();
+    // 야외 구간도 함께 지운다. 실내 구간은 그 야외 구간의 뒷부분이라, 실내만
+    // 지우면 밖으로 나갔을 때 방금 끝낸 안내의 앞부분이 혼자 되살아난다.
+    _clearUserDestination();
     _clearIndoorRoute();
+    widget.onGuidanceDismissed?.call();
   }
 
   void _retainEtaClosePointer() {
@@ -5677,6 +5863,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
                       : '건물 입구까지',
                   onClose: userDestination != null
                       ? _dismissUserDestinationFromEtaCard
+                      : null,
+                  // 자동차 계획 상태에서만 붙는다. 누르면 카메라가 현재 위치로
+                  // 내려가고 버튼은 사라진다([startFollowingCurrentLocation]).
+                  onStartGuidance: _offerStartGuidance
+                      ? () => unawaited(startFollowingCurrentLocation())
                       : null,
                   onClosePointerDown: userDestination != null
                       ? (position) => _etaClosePointerDown = position

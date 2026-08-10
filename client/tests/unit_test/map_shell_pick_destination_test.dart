@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:navigation_client/core/service_locator.dart';
 import 'package:navigation_client/repositories/building_repository.dart';
 import 'package:navigation_client/repositories/destination_repository.dart';
@@ -17,7 +20,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 ///
 /// 이 줄은 **도면을 보고 있을 때만** 뜬다. 야외 지도에서 누르면 이름 없는 좌표
 /// 하나가 잡히는데, 매장 이름으로 고르는 줄과 나란히 두면 같은 무게로 읽힌다.
-/// 그래서 아래 흐름은 전부 실내 탭에서 확인한다.
+/// 그래서 아래 흐름은 전부 도면을 펴 놓은 상태에서 확인한다 — 예전에는 하단
+/// 세그먼트의 '실내' 탭으로 그 상태를 만들었지만, 지도가 하나로 합쳐지면서
+/// 지금은 건물 안에서 GPS가 잡히는 것이 그 상태로 들어가는 길이다.
 void main() {
   late BuildingRepository originalBuildingRepository;
   late DestinationRepository originalDestinationRepository;
@@ -46,15 +51,35 @@ void main() {
     buildingRepository = originalBuildingRepository;
     destinationRepository = originalDestinationRepository;
     requestStartupPermissions = defaultRequestStartupPermissions;
+    watchPosition = defaultWatchPosition;
   });
 
-  /// 실내 탭에서 길찾기를 연 뒤 "지도에서 선택"을 누른다.
+  /// 데모 건물 외곽선(위도 37.5663~37.5667) 한가운데 + 신뢰할 수 있는 신호.
+  /// 이 좌표 한 건이면 자동 실내 진입이 발동한다(judgeBuildingFromGps).
+  Position insideBuilding() => Position(
+    latitude: 37.5665,
+    longitude: 126.9780,
+    timestamp: DateTime(2024, 1, 1),
+    accuracy: 10,
+    altitude: 0,
+    altitudeAccuracy: 0,
+    heading: 0,
+    headingAccuracy: 0,
+    speed: 0,
+    speedAccuracy: 0,
+  );
+
+  /// 도면을 펴 놓은 상태에서 길찾기를 연 뒤 "지도에서 선택"을 누른다.
   Future<void> pickOnMap(WidgetTester tester) async {
+    final positions = StreamController<Position>.broadcast();
+    addTearDown(positions.close);
+    watchPosition = () => positions.stream;
+
     await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
     await drain(tester);
-
-    await tester.tap(find.text('실내'));
+    positions.add(insideBuilding());
     await drain(tester);
+
     await tester.tap(find.byTooltip('길찾기'));
     await drain(tester);
     expect(
