@@ -9,6 +9,7 @@ import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/repositories/mock_building_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
+import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
 import 'package:navigation_client/widgets/floor_selector.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -166,26 +167,27 @@ void main() {
     expect(find.text('GPS 신호 약함'), findsNothing);
   });
 
-  testWidgets('실내 탭으로 전환하면 뒤에 남은 야외 지도도 GPS를 구독하지 않는다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('실내 오버레이가 켜지면 GPS 구독을 끊는다', (WidgetTester tester) async {
     var cancelled = false;
     final positions = StreamController<Position>(
       onCancel: () => cancelled = true,
     );
     watchPosition = () => positions.stream;
 
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    final mapKey = GlobalKey<OutdoorMapBodyState>();
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: OutdoorMapBody(key: mapKey))),
+    );
     // 위치를 흘리기 전에 건물(입구 좌표) 로드가 끝날 때까지 프레임을 진행한다.
-    // 자동 실내 진입 판정은 입구 좌표가 있어야 성립하므로, 이걸 기다리지 않으면
-    // asset 로드 속도에 따라 진입이 됐다 안 됐다 하는 플래키 테스트가 된다.
     await drain(tester);
     positions.add(farAway());
     await tester.pump(const Duration(milliseconds: 50));
     expect(cancelled, isFalse);
 
-    // 하단 세그먼트로 실내 탭 전환. IndexedStack이라 야외 화면은 트리에 남는다.
-    await tester.tap(find.text('실내'));
+    // 실내로 들어가면 위치의 주인은 PDR이다. GPS를 계속 물고 있으면 배터리를
+    // 쓰면서 실내에서 쓰지도 않는 값을 받는다.
+    // ignore: invalid_use_of_visible_for_testing_member
+    mapKey.currentState!.enterIndoorForTest();
     await tester.pump();
 
     expect(cancelled, isTrue);

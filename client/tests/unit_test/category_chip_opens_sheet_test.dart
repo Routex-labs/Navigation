@@ -7,6 +7,7 @@ import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/repositories/mock_building_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
+import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
 import 'package:navigation_client/widgets/category_stores_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -40,8 +41,13 @@ void main() {
   testWidgets('카테고리 chip을 누르면 매장 목록 시트가 바로 뜬다', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
     await tester.pumpAndSettle();
-    // 카테고리 칩은 건물 안을 보고 있을 때만 뜬다.
-    await tester.tap(find.text('실내'));
+    // 카테고리 칩 줄은 셸이 그리고, 건물 안을 보고 있을 때만 뜬다. 예전에는
+    // 하단 '실내' 세그먼트를 눌렀는데, 실내가 별도 탭이 아니게 되면서 진입
+    // 자체가 오버레이를 켜는 일이 됐다.
+    tester
+        .state<OutdoorMapBodyState>(find.byType(OutdoorMapBody))
+        // ignore: invalid_use_of_visible_for_testing_member
+        .enterIndoorForTest();
     await tester.pumpAndSettle();
 
     expect(find.text('서비스'), findsOneWidget);

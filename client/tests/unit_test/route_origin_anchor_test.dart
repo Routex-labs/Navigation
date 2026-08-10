@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,7 +15,7 @@ import 'package:navigation_client/models/poi_search_result.dart';
 import 'package:navigation_client/repositories/building_repository.dart';
 import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
-import 'package:navigation_client/screens/indoor_map/indoor_map_screen.dart';
+import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 매장을 출발지로 골라 길 안내를 시작하면 현재 위치 아이콘도 그 매장으로
@@ -135,17 +137,20 @@ void main() {
     isPedometerPermissionGranted = defaultIsPedometerPermissionGranted;
   });
 
-  Future<GlobalKey<IndoorMapBodyState>> openIndoorMap(
+  Future<GlobalKey<OutdoorMapBodyState>> openIndoorMap(
     WidgetTester tester,
   ) async {
-    final key = GlobalKey<IndoorMapBodyState>();
+    final key = GlobalKey<OutdoorMapBodyState>();
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: IndoorMapBody(key: key, buildingId: demoBuildingId),
+          body: OutdoorMapBody(key: key),
         ),
       ),
     );
+    await drain(tester);
+    // ignore: invalid_use_of_visible_for_testing_member
+    key.currentState!.enterIndoorForTest();
     await drain(tester);
     expect(key.currentState!.currentFloor, '1F');
     return key;
@@ -160,13 +165,13 @@ void main() {
   /// 붙잡고 있으면 둘 다 못 해 그대로 멈춘다.
   Future<void> startRoute(
     WidgetTester tester,
-    IndoorMapBodyState state,
+    OutdoorMapBodyState state,
     PoiSearchResult destination, {
     PoiSearchResult? origin,
   }) async {
     var done = false;
     final tracked = state
-        .showRouteTo(destination, origin: origin)
+        .showIndoorRouteTo(destination, origin: origin)
         .whenComplete(() => done = true);
     await pumpUntil(tester, () => done);
     await tracked;
@@ -280,13 +285,12 @@ void main() {
     // 출발해야 한다. 상위(MapShellScreen)는 이 신호로 기억해둔 매장 A를 버린다.
     // 신호가 안 오면 새 위치 아이콘과 경로 시작점이 따로 논다.
     var anchored = 0;
-    final key = GlobalKey<IndoorMapBodyState>();
+    final key = GlobalKey<OutdoorMapBodyState>();
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: IndoorMapBody(
+          body: OutdoorMapBody(
             key: key,
-            buildingId: demoBuildingId,
             onLocationAnchored: () => anchored++,
           ),
         ),
@@ -297,7 +301,7 @@ void main() {
     await key.currentState!.startLocationPlacement();
     await drain(tester);
     // ignore: invalid_use_of_visible_for_testing_member
-    final handled = key.currentState!.handleMapPressForTest(wgs84(18, 52));
+    unawaited(key.currentState!.handleMapClickForTest(wgs84(18, 52)));
     // 앵커 확정은 지도 탭 처리와 분리돼 돌아간다(unawaited). 확정될 때까지
     // 프레임을 진행시켜야 heading 대기와 진행 방향 모달이 흐른다.
     await pumpUntil(
@@ -305,7 +309,6 @@ void main() {
       () => indoorNavigationDriver.currentCalibration.anchor != null,
     );
 
-    expect(handled, isTrue);
     expect(anchored, 1);
     // 새로 찍은 자리(n-c: 18, 52)가 반영돼야 한다.
     final anchor = indoorNavigationDriver.currentCalibration.anchor!;
@@ -318,13 +321,12 @@ void main() {
     // 신호를 보내면 상위가 그 출발지를 스스로 버려, 매장을 골라도 다음 길찾기가
     // "현재 위치"에서 출발하게 된다.
     var anchored = 0;
-    final key = GlobalKey<IndoorMapBodyState>();
+    final key = GlobalKey<OutdoorMapBodyState>();
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: IndoorMapBody(
+          body: OutdoorMapBody(
             key: key,
-            buildingId: demoBuildingId,
             onLocationAnchored: () => anchored++,
           ),
         ),

@@ -18,6 +18,7 @@ import '../../core/service_locator.dart';
 import '../../core/tile_url.dart';
 import '../../domain/geo_transform.dart';
 import '../../features/debug_mode/debug_mode.dart';
+import '../../domain/dijkstra.dart';
 import '../../domain/route_guidance.dart';
 import '../../features/indoor_navigation/application/corridor_position_tracker.dart';
 import '../../features/indoor_navigation/application/escalator_arrival.dart';
@@ -1556,7 +1557,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (floor == _activeFloor) return;
     final controller = _mapController;
     final building = _building;
-    if (controller == null || building == null || !_styleReady) return;
+    if (building == null) return;
+    // **컨트롤러가 없어도 층 상태와 그래프는 바꾼다.** 예전에는 여기서 통째로
+    // 빠져나갔는데, 그러면 스타일이 아직 안 올라온 사이에 온 층 전환(자동 층
+    // 이동이 대표적이다)이 조용히 사라진다. 지도 레이어를 만지는 부분만
+    // 컨트롤러가 있을 때 한다.
+    final canDrawLayers = controller != null && _styleReady;
 
     // 다층 경로가 있으면 새 층의 세그먼트로 갈아 끼운다(없으면 이 층에는
     // 안 그린다). 단일층 경로였다면 다른 층으로 옮기는 순간 경로가 무의미해지므로
@@ -1580,7 +1586,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 층이 바뀐 순간 이전 층의 외곽선은 더 이상 맞지 않는다. 새 도면이 도착할
     // 때까지(지하 → 다른 층) 선을 지워 둔다 — 틀린 경계를 보여주지 않는다.
     unawaited(_syncFloorOutlineLayer());
-    if (_indoorTilesRegistered) {
+    if (canDrawLayers && _indoorTilesRegistered) {
       // 순서 중요: 레이어부터 지워야 소스를 지울 수 있다(레이어가 붙어있으면 오류).
       // 이미 없는 레이어에 대해 removeLayer가 예외를 던지는 native 구현도 있어
       // 각 항목을 try/catch로 감싼다.
@@ -2513,6 +2519,44 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _beginRouteRecordingSession();
   }
 
+  /// 현재 위치에서 건물 안 **모든 그래프 노드**까지의 거리·비용.
+  ///
+  /// 검색 결과 목록이 매장마다 "몇 m · 도보 몇 분"을 붙이는 데 쓴다. 목적지를
+  /// 아직 고르지 않은 시점에 부르는 값이라 [showRouteTo]와 달리 도착 노드가
+  /// 없고, 그래서 [reachableFrom]으로 한 번만 탐색해 전 노드 결과를 받는다.
+  ///
+  /// **null을 돌려주는 경우가 여러 가지다** — 위치(앵커)가 아직 없거나, 그래프를
+  /// 못 받았거나, 앵커 층에 그래프 노드가 없을 때다. 호출부는 어느 쪽이든 거리
+  /// 줄을 아예 그리지 않는다. 줄마다 "거리 알 수 없음"을 반복하면 목록이 읽히지
+  /// 않고, 사용자가 할 수 있는 일도 어차피 "위치 지정" 하나뿐이다.
+  Future<Map<String, NodeReach>?> reachFromCurrentPosition() async {
+    final anchor = _pdrTrailState.anchor;
+    final buildingId = _building?.id;
+    if (anchor == null || buildingId == null) return null;
+
+    final graph = await buildingRepository.getBuildingGraph(buildingId);
+    if (!mounted || graph == null || graph.nodes.isEmpty) return null;
+
+    // 경로 계산과 **같은 시작 노드**를 쓴다. 여기서 다른 규칙으로 고르면 목록에
+    // 적힌 거리와 실제로 길찾기를 눌렀을 때 나오는 거리가 서로 달라진다.
+    final startNodeId = _pickStartNodeIdInBuildingGraph(
+      graph: graph,
+      startFloorName: anchor.floorId,
+    );
+    if (startNodeId == null) return null;
+
+    try {
+      return reachableFrom(
+        nodes: graph.nodes,
+        edges: graph.edges,
+        startNodeId: startNodeId,
+      );
+    } on ArgumentError {
+      // 그래프가 깨져 있어도 목록 자체는 계속 떠야 한다 — 거리만 빠진다.
+      return null;
+    }
+  }
+
   String? _pickStartNodeIdInBuildingGraph({
     required BuildingGraph graph,
     required String startFloorName,
@@ -3209,6 +3253,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final ring = _activeFloorOutlineRing();
     return ring != null && isPointInPolygon(point, ring);
   }
+
+  /// 실내 진입 오버레이를 켜는 테스트 진입점.
+  ///
+  /// 실기기에서는 GPS·줌·건물 탭이 [_setIndoorEntered]를 부르는데, 그 셋 다
+  /// 건물 폴리곤과 입구 좌표가 있어야 한다. 그래프만 있는 fixture로 실내 동작을
+  /// 검증하려는 테스트는 그 준비를 할 수 없으므로, 실기기가 지나는 것과 **같은
+  /// 함수**를 직접 부른다.
+  @visibleForTesting
+  void enterIndoorForTest() => _setIndoorEntered(true);
 
   /// 지도 탭 처리의 테스트 진입점.
   ///

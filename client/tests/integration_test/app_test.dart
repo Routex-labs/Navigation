@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'package:navigation_client/core/service_locator.dart';
@@ -54,9 +55,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pump();
 
-      // 앱은 이제 스플래시 화면 없이 바로 야외(홈) 지도로 시작한다.
-      expect(find.text('홈'), findsOneWidget);
-      expect(find.text('실내'), findsOneWidget);
+      // 앱은 스플래시 화면 없이 바로 지도로 시작한다. 예전에는 하단 홈/실내
+      // 세그먼트로 확인했는데, 실내가 별도 탭이 아니게 되면서 그 문구가 사라졌다.
+      // 지도 셸이 떴다는 것 자체를 본다.
+      expect(find.byType(MapShellScreen), findsOneWidget);
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }
