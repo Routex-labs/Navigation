@@ -2801,9 +2801,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _routeSourceId,
       GeojsonSourceProperties(data: _emptyCollection()),
     );
-    // 테두리는 **실내 구간에 깔지 않는다.** 테두리는 본선보다 어두운 남색인데,
-    // 연한 실내 선 밑에 깔리면 그 어두운 색이 비어져 나와 오히려 야외 선보다
-    // 진해 보인다 — 연하게 만든 이유가 통째로 뒤집힌다.
+    // 테두리는 **자동차 구간에만 깔린다.** 걷는 구간은 점선이라 테두리를 두르면
+    // 점 사이 빈칸까지 남색이 채워져 점선이 실선으로 뭉개지고, 실내 구간은 도면
+    // 위에 그려져 배경 대비가 이미 충분하다.
     await controller.addLineLayer(
       _routeSourceId,
       _routeCasingLayerId,
@@ -2856,7 +2856,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _routeSourceId,
       // 실내 구간은 **실선**이다. 건물 안에서는 복도가 정해져 있어 "대략 이쪽"이
       // 아니라 실제로 그 길로 걷는다 — 점선으로 그리면 밖의 도보 구간과 같은
-      // 성격으로 읽힌다. 대신 색을 연하게 해 야외 구간과 구분한다.
+      // 성격으로 읽힌다. 색은 야외 본선과 같다([kRouteIndoorLineColor] 주석).
       _routeIndoorLayerId,
       const LineLayerProperties(
         lineColor: kRouteIndoorLineColor,
