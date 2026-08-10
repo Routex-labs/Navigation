@@ -4,6 +4,9 @@ import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/features/indoor_navigation/application/indoor_guidance_position.dart';
 import 'package:navigation_client/features/indoor_navigation/application/indoor_guidance_session.dart';
 import 'package:navigation_client/features/indoor_navigation/application/indoor_location_estimate.dart';
+import 'package:navigation_client/features/indoor_navigation/contract/altitude_sample.dart';
+import 'package:navigation_client/models/building_graph.dart';
+import 'package:navigation_client/models/indoor_route.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/pdr_anchor.dart';
 import 'package:navigation_client/models/floor_graph.dart';
 
@@ -244,6 +247,168 @@ void main() {
 
       session.setEstimate(_estimate(floorId: '2F', observedAt: now));
       expect(session.position, isNull, reason: '다른 층 추정점');
+    });
+  });
+
+  group('탑승점 고정 판정', () {
+    // 에스컬레이터 노드 하나가 붙은 층. 고정은 이 노드 좌표로 걸린다.
+    const escalatorGraph = FloorGraph(
+      nodes: [
+        GraphNode(id: 'w', type: 'corridor', xM: 0, yM: 0),
+        GraphNode(
+          id: 'es-up',
+          type: 'escalator',
+          name: 'ES1-UP(TO2F)',
+          xM: 30,
+          yM: 0,
+        ),
+      ],
+      edges: [
+        GraphEdge(
+          id: 'we',
+          fromNodeId: 'w',
+          toNodeId: 'es-up',
+          lengthM: 30,
+          bidirectional: true,
+          geometryLocalM: [LocalPoint(0, 0), LocalPoint(30, 0)],
+        ),
+      ],
+    );
+
+    MultiFloorRoute routeVia({
+      required String? transferMode,
+      required String? transferFromNodeId,
+      String floorName = '1F',
+    }) => MultiFloorRoute(
+      segments: [
+        IndoorRouteSegment(
+          floorId: floorName,
+          floorName: floorName,
+          route: const IndoorRoute(
+            points: [],
+            pointsLocalM: [LocalPoint(0, 0), LocalPoint(30, 0)],
+            nodeIds: ['w', 'es-up'],
+            edgeIds: ['we'],
+            distanceMeters: 30,
+          ),
+          transferModeToNext: transferMode,
+          transferFromNodeId: transferFromNodeId,
+        ),
+      ],
+      totalDistanceMeters: 30,
+      totalCostMeters: 30,
+    );
+
+    test('안내가 지목한 탑승점이면 그 노드 좌표로 고정한다', () {
+      final held = routeBoardingHoldPoint(
+        boardingNodeId: 'es-up',
+        anchorFloorId: '1F',
+        displayedFloorId: '1F',
+        multiFloorRoute: routeVia(
+          transferMode: 'escalator',
+          transferFromNodeId: 'es-up',
+        ),
+        graph: escalatorGraph,
+      );
+
+      expect(held, isNotNull);
+      expect(held!.eastM, 30);
+      expect(held.northM, 0);
+    });
+
+    test('경로가 지목하지 않은 에스컬레이터 옆을 지나가는 것으로는 고정하지 않는다', () {
+      // 그냥 걷고 있는 사용자의 마커를 세우면 안 된다.
+      final held = routeBoardingHoldPoint(
+        boardingNodeId: 'es-up',
+        anchorFloorId: '1F',
+        displayedFloorId: '1F',
+        multiFloorRoute: routeVia(
+          transferMode: 'escalator',
+          transferFromNodeId: 'es-other',
+        ),
+        graph: escalatorGraph,
+      );
+
+      expect(held, isNull);
+    });
+
+    test('엘리베이터로 갈아타는 구간에서는 고정하지 않는다', () {
+      final held = routeBoardingHoldPoint(
+        boardingNodeId: 'es-up',
+        anchorFloorId: '1F',
+        displayedFloorId: '1F',
+        multiFloorRoute: routeVia(
+          transferMode: 'elevator',
+          transferFromNodeId: 'es-up',
+        ),
+        graph: escalatorGraph,
+      );
+
+      expect(held, isNull);
+    });
+
+    test('안내 중이 아니면 고정하지 않는다', () {
+      final held = routeBoardingHoldPoint(
+        boardingNodeId: 'es-up',
+        anchorFloorId: '1F',
+        displayedFloorId: '1F',
+        multiFloorRoute: null,
+        graph: escalatorGraph,
+      );
+
+      expect(held, isNull);
+    });
+
+    test('앵커가 보고 있는 층과 다르면 고정하지 않는다', () {
+      // 다른 층 노드 좌표에 고정하면 남의 층 자리를 가리킨다.
+      final held = routeBoardingHoldPoint(
+        boardingNodeId: 'es-up',
+        anchorFloorId: '2F',
+        displayedFloorId: '1F',
+        multiFloorRoute: routeVia(
+          transferMode: 'escalator',
+          transferFromNodeId: 'es-up',
+        ),
+        graph: escalatorGraph,
+      );
+
+      expect(held, isNull);
+    });
+  });
+
+  group('부착 게이트 — 층 판정기', () {
+    final sample = AltitudeSample(
+      timestampMs: 1000,
+      pressureHpa: 1013.25,
+      source: 'test',
+    );
+
+    test('붙이기 전 기압 샘플은 판정기에 들어가지 않는다', () {
+      // 야외에서 오르내린 고도가 실내 판정의 0점을 흔들면, 건물에 들어서자마자
+      // 있지도 않은 층 이동이 잡힌다.
+      final session = newSession();
+
+      final outcome = session.onAltitude(sample);
+
+      expect(outcome.isEmpty, isTrue);
+      expect(outcome.events, isEmpty);
+      expect(session.escalator.smoothedAltitudeM, isNull);
+    });
+
+    test('떼어낸 뒤 기압 샘플도 무시한다', () {
+      final session = attachedSession()..detach();
+
+      final outcome = session.onAltitude(sample);
+
+      expect(outcome.isEmpty, isTrue);
+      expect(session.escalator.smoothedAltitudeM, isNull);
+    });
+
+    test('떼어낸 상태에서는 단계 전이를 내지 않는다', () {
+      final session = attachedSession()..detach();
+
+      expect(session.takePhaseChanges(), isEmpty);
+      expect(session.boardingHoldPointM, isNull);
     });
   });
 
