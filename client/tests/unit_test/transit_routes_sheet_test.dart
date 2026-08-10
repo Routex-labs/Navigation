@@ -111,16 +111,15 @@ void main() {
     expect(picked?.totalTimeSeconds, 2400);
   });
 
-  testWidgets('요약 카드는 총 시간과 구간을 보여주고 도보 전환을 남긴다', (tester) async {
-    var walkTapped = false;
+  testWidgets('요약 카드는 총 시간과 구간을 보여주고 안내 종료만 남긴다', (tester) async {
+    var closed = false;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: TransitSummaryCard(
             itinerary: _withTransfer,
             label: '여의도공원까지',
-            onClose: () {},
-            onWalk: () => walkTapped = true,
+            onClose: () => closed = true,
           ),
         ),
       ),
@@ -131,8 +130,12 @@ void main() {
     expect(find.text('약 40분'), findsOneWidget);
     expect(find.textContaining('1,500원'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('transit-switch-to-walk')));
+    // 이동 수단을 고르는 자리는 상단 이동 수단 줄 하나다. 카드에 "도보"를 다시
+    // 두면 같은 선택이 두 군데로 흩어진다.
+    expect(find.text('도보'), findsNothing);
+
+    await tester.tap(find.text('안내 종료'));
     await tester.pump();
-    expect(walkTapped, isTrue);
+    expect(closed, isTrue);
   });
 }

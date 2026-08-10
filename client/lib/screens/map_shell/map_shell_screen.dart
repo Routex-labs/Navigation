@@ -1484,12 +1484,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
     });
   }
 
-  /// 자동차 경로. 그리고 **곧바로 따라가기를 시작한다.**
+  /// 자동차 경로. **경로 전체를 먼저 보여주고, 따라가기는 버튼으로 시작한다.**
   ///
-  /// 자동차를 고른 것 자체가 "지금 출발한다"는 뜻이라, 여기서 버튼을 한 번 더
-  /// 두면 누르기 전과 후의 화면이 사실상 같아진다. 운전 중에는 화면을 손으로
-  /// 옮길 수 없으므로 카메라가 현재 위치를 따라가야 하고, 그만두는 조작은 하단
-  /// 카드의 "안내 종료" 하나로 모은다.
+  /// 한동안은 경로를 그리자마자 카메라를 현재 위치로 확대했다. "자동차를 고른
+  /// 것 자체가 지금 출발한다는 뜻"이라는 판단이었는데, 그 화면에서는 사용자가
+  /// 전체 경로를 **한 번도 못 본다** — 어디를 지나 어느 방향으로 가는지 확인할
+  /// 기회 없이 곧바로 자기 위치에 확대된 화면을 마주한다. 지금은 경로 전체에
+  /// 카메라를 맞춰 두고, 하단 카드의 "안내 시작"을 누르면 그때 위치로 내려간다.
   Future<void> _startCarRoute(
     DirectionsCandidate? origin,
     DirectionsCandidate destination,
@@ -1522,9 +1523,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
       origin: from,
       destination: to,
       label: destination.title,
+      offerStartGuidance: true,
     );
-    if (!mounted) return;
-    await outdoor.startFollowingCurrentLocation();
   }
 
   /// 실제 경로 표시. 길찾기 바를 거치는 경로와, 이미 기억해둔 출발지로 바로
@@ -1548,13 +1548,19 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 지도 탭처럼 길찾기 바를 거치지 않고 들어오는 경로가 있어서, 여기서 한 번
     // 맞춰 준다 — 안 맞추면 경로는 그려졌는데 상단은 검색창인 화면이 된다.
     _enterRouteModeForGuidance(origin, destination);
-    // 건물 안 매장이 목적지면 수단을 고르지 않는다. 그 안내는 "문을 경유해
+    // 건물 안 매장이 목적지면 **도보로 못박는다.** 그 안내는 "문을 경유해
     // 매장까지"라 도보 구간과 실내 구간이 한 몸이고([showOutdoorToIndoorRouteTo]),
-    // 대중교통·자동차로 바꾸면 그 실내 구간이 통째로 사라진다.
-    if (autoSelectMode &&
-        _mode == MapMode.outdoor &&
-        destination.nodeId == null) {
-      final mode = _defaultTravelMode(origin, destination);
+    // 대중교통·자동차로 가면 그 실내 구간이 통째로 사라진다.
+    //
+    // 예전에는 여기서 **자동 선택만 건너뛰었다.** 그런데 [_travelMode]는 화면에
+    // 남는 값이라, 직전에 대중교통으로 길을 찾아 본 사용자에게는 그 값이 그대로
+    // 남아 있었다. 그 상태로 건물 안 매장을 고르면 아래 switch가 대중교통으로
+    // 흘려보내 return하고, 실내 구간은 시작조차 못 했다 — 화면에는 건물 앞까지
+    // 가는 버스 노선만 뜨고 "매장까지" 안내는 없었다.
+    if (autoSelectMode && _mode == MapMode.outdoor) {
+      final mode = destination.nodeId == null
+          ? _defaultTravelMode(origin, destination)
+          : RoutePlanMode.walk;
       if (_travelMode != mode) setState(() => _travelMode = mode);
     }
     if (_mode == MapMode.outdoor) {

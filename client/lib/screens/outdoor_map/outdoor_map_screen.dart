@@ -634,14 +634,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 지금 지도에 그려진 대중교통 경로. null이면 대중교통 안내 중이 아니다.
   TransitItinerary? _transitItinerary;
 
-  /// 대중교통 요약 카드에 적을 도착지 문구와 좌표. 좌표는 "도보로 보기"로
-  /// 되돌아갈 때 같은 목적지로 도보 경로를 다시 그리는 데 쓴다.
+  /// 대중교통 요약 카드에 적을 도착지 문구.
+  ///
+  /// 목적지·출발지 좌표도 함께 들고 있었는데, 요약 카드의 "도보로 보기"가
+  /// 사라지면서 쓸 곳이 없어졌다. 수단을 바꾸는 자리는 상단 이동 수단 줄 하나다.
   String? _transitLabel;
-  ll.LatLng? _transitDestination;
-
-  /// 대중교통 경로를 요청할 때 쓴 출발점. 도보로 되돌릴 때 같은 지점에서
-  /// 시작해야 두 안내가 같은 여정을 말한다.
-  ll.LatLng? _transitOrigin;
 
   // --- 야외 → 실내 연결(문 경유 길안내) ---
   //
@@ -678,6 +675,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 카메라만 움직인다. rebuild를 걸면 GPS 틱마다 지도 위 오버레이가 통째로 다시
   /// 그려진다.
   bool _followingUser = false;
+
+  /// 계획 상태로 그려 둔 자동차 경로가 있어서 "안내 시작"을 권해야 하는지.
+  ///
+  /// 자동차 경로를 그린 직후에는 카메라가 **경로 전체**에 맞춰져 있다. 사용자가
+  /// 어디로 어떻게 가는지 한 번 보고 나서 출발하도록, 위치로 내려가는 조작은
+  /// 버튼 하나로 분리했다([EtaCard.onStartGuidance]).
+  bool _offerStartGuidance = false;
 
   /// 사용자가 지도에서 직접 찍은 출발 위치. null이면 출발지는 GPS다.
   ///
@@ -1451,6 +1455,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 따라가지 못한다. 대신 지금 아무 일도 안 일어나는 이유는 알린다.
   Future<void> startFollowingCurrentLocation() async {
     _followingUser = true;
+    // 버튼을 눌렀으면 이제 안내 중이다. 계획 상태로 되돌리는 길은 안내 종료뿐.
+    if (_offerStartGuidance) setState(() => _offerStartGuidance = false);
     final position = _position;
     if (position == null) {
       _showSnack('현재 위치를 아직 못 잡았습니다. 신호가 잡히면 그 자리로 지도를 옮깁니다.');
@@ -2206,11 +2212,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 출발점을 [_fixedRouteOrigin]으로 박는 것이 중요하다. 길찾기 화면은 걷는
   /// 동안 따라가는 안내가 아니라 **한 번 그려 놓고 비교하는 계획 화면**이라,
   /// GPS가 갱신될 때마다 경로가 다시 계산되면 사용자가 보던 선이 흔들린다.
+  /// [offerStartGuidance]가 참이면 하단 카드에 "안내 시작"을 붙인다. 자동차
+  /// 안내가 그렇다 — 경로 전체를 한 번 보여 준 뒤, 사용자가 누르면 그때 카메라가
+  /// 현재 위치로 내려간다. 도보는 따라가기 개념이 없어 거짓이다.
   Future<void> showPlannedRoadRoute(
     DirectionsRoute route, {
     required ll.LatLng origin,
     required ll.LatLng destination,
     required String label,
+    bool offerStartGuidance = false,
   }) async {
     _clearPendingIndoorRoute();
     // 길찾기 화면이 경로를 **다시 그리는** 중이다(수단 변경·끝점 변경). 아직
@@ -2218,6 +2228,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _stopFollowingUser();
     clearTransitRoute();
     setState(() {
+      _offerStartGuidance = offerStartGuidance;
       _fixedRouteOrigin = origin;
       _userDestination = destination;
       _userDestinationLabel = label;
@@ -2257,6 +2268,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _userDestination = null;
       _userDestinationLabel = null;
       _route = null;
+      // 그릴 경로가 없으면 시작할 안내도 없다. 안 지우면 다음에 뜨는 도보 카드에
+      // 자동차용 "안내 시작"이 얹힌다.
+      _offerStartGuidance = false;
     });
     _syncDestinationLayer();
     _syncRouteLayer();
@@ -3978,9 +3992,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _clearPendingIndoorRoute();
     setState(() {
       _transitItinerary = itinerary;
-      _transitDestination = destination;
       _transitLabel = label;
-      _transitOrigin = origin ?? routeOriginPoint;
       // 도보 경로와 그 목적지 핀은 접는다. 목적지 자체는 대중교통 경로의 끝점
       // 으로 그대로 남아 있다.
       _route = null;
@@ -4000,24 +4012,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     setState(() {
       _transitItinerary = null;
       _transitLabel = null;
-      _transitDestination = null;
-      _transitOrigin = null;
     });
     _syncTransitLayer();
     _notifyRouteVisibilityIfChanged();
-  }
-
-  /// 요약 카드의 "도보" — 같은 출발·도착으로 도보 경로를 다시 그린다.
-  ///
-  /// 대중교통이 더 오래 걸리는 짧은 거리에서 되돌아갈 길이다. 이게 없으면
-  /// 안내를 끄고 목적지부터 다시 골라야 한다.
-  Future<void> _switchTransitToWalking() async {
-    final destination = _transitDestination;
-    final label = _transitLabel;
-    final origin = _transitOrigin;
-    if (destination == null || label == null) return;
-    clearTransitRoute();
-    await showRouteTo(destination, label: label, origin: origin);
   }
 
   /// 실내/야외/대중교통 경로 중 하나라도 활성이면 true. ETA 카드 노출과 하단 바
@@ -5155,7 +5152,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
                   itinerary: transitItinerary,
                   label: _transitLabel ?? '목적지까지',
                   onClose: _dismissUserDestinationFromEtaCard,
-                  onWalk: () => unawaited(_switchTransitToWalking()),
                   onClosePointerDown: (position) =>
                       _etaClosePointerDown = position,
                 ),
@@ -5181,6 +5177,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
                   minutes: outdoorEta.minutes,
                   label: _userDestinationLabel ?? '목적지까지',
                   onClose: _dismissUserDestinationFromEtaCard,
+                  // 자동차 계획 상태에서만 붙는다. 누르면 카메라가 현재 위치로
+                  // 내려가고 버튼은 사라진다([startFollowingCurrentLocation]).
+                  onStartGuidance: _offerStartGuidance
+                      ? () => unawaited(startFollowingCurrentLocation())
+                      : null,
                   onClosePointerDown: (position) =>
                       _etaClosePointerDown = position,
                 ),

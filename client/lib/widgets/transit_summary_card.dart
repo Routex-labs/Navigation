@@ -10,16 +10,21 @@ import 'transit_style.dart';
 /// 두 카드가 서로 다른 소요 시간을 말하기 때문이다 — 한 화면에 "약 42분"과
 /// "약 12분"이 동시에 있으면 어느 쪽이 지금 그려진 선인지 알 수 없다.
 ///
-/// [onWalk]는 "도보로 보기"다. 대중교통이 더 오래 걸리는 짧은 거리에서
-/// 사용자가 되돌아갈 길을 남겨 둔다 — 이게 없으면 안내를 끄고 목적지부터
-/// 다시 골라야 한다.
+/// **"도보로 보기" 버튼은 없다.** 한동안 이 카드에 뒀는데, 이동 수단을 고르는
+/// 자리는 상단 이동 수단 줄 하나여야 한다([TravelModeBar]). 같은 선택이 두
+/// 군데에 흩어지면 사용자는 어느 쪽이 지금 선택인지 카드와 줄을 번갈아 봐야
+/// 한다. [EtaCard]가 같은 이유로 수단 버튼을 이미 걷어냈고, 이 카드만 남겨
+/// 두면 대중교통일 때만 규칙이 다른 화면이 된다.
+///
+/// **"안내 종료"는 오른쪽 아래다.** [EtaCard]와 같은 자리에 둔다 — 수단이
+/// 바뀌었다고 종료 버튼이 카드 위아래로 옮겨 다니면, 안내를 그만두려는
+/// 사용자가 매번 버튼을 다시 찾아야 한다.
 class TransitSummaryCard extends StatelessWidget {
   const TransitSummaryCard({
     super.key,
     required this.itinerary,
     required this.label,
     required this.onClose,
-    this.onWalk,
     this.onClosePointerDown,
   });
 
@@ -29,7 +34,6 @@ class TransitSummaryCard extends StatelessWidget {
   final String label;
 
   final VoidCallback onClose;
-  final VoidCallback? onWalk;
 
   /// 지도 오버레이 탭 가드가 쓰는 콜백([EtaCard]와 같은 규칙).
   final ValueChanged<Offset>? onClosePointerDown;
@@ -51,49 +55,64 @@ class TransitSummaryCard extends StatelessWidget {
           children: [
             Row(
               children: [
+                const Icon(
+                  Icons.directions_transit_rounded,
+                  size: 14,
+                  color: AppColors.primary,
+                ),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.muted,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 3),
+            Text(
+              '약 ${formatTransitDuration(itinerary.totalTimeSeconds)}',
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: AppColors.text,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              facts.join(' · '),
+              style: const TextStyle(fontSize: 12, color: AppColors.muted),
+            ),
+            const SizedBox(height: 10),
+            // 구간 칩과 "안내 종료"가 같은 줄이다. 칩이 길면 가로로 스크롤되는데,
+            // 종료 버튼은 스크롤 밖에 두어 언제나 같은 자리에 남는다 — 스크롤
+            // 안에 넣으면 환승이 많은 경로에서 버튼이 화면 밖으로 밀려난다.
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.directions_transit_rounded,
-                            size: 14,
-                            color: AppColors.primary,
-                          ),
-                          const SizedBox(width: 4),
-                          Flexible(
-                            child: Text(
-                              label,
-                              style: const TextStyle(
-                                fontSize: 11,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (var i = 0; i < itinerary.legs.length; i++) ...[
+                          if (i > 0)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 3),
+                              child: Icon(
+                                Icons.chevron_right,
+                                size: 13,
                                 color: AppColors.muted,
                               ),
-                              overflow: TextOverflow.ellipsis,
                             ),
-                          ),
+                          TransitLegChip(leg: itinerary.legs[i], compact: true),
                         ],
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        '약 ${formatTransitDuration(itinerary.totalTimeSeconds)}',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.text,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        facts.join(' · '),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.muted,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -120,49 +139,6 @@ class TransitSummaryCard extends StatelessWidget {
                     child: const Text('안내 종료'),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        for (var i = 0; i < itinerary.legs.length; i++) ...[
-                          if (i > 0)
-                            const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 3),
-                              child: Icon(
-                                Icons.chevron_right,
-                                size: 13,
-                                color: AppColors.muted,
-                              ),
-                            ),
-                          TransitLegChip(leg: itinerary.legs[i], compact: true),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-                if (onWalk != null)
-                  TextButton.icon(
-                    key: const ValueKey('transit-switch-to-walk'),
-                    onPressed: onWalk,
-                    icon: const Icon(Icons.directions_walk_rounded, size: 16),
-                    label: const Text('도보'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.primary,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      textStyle: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
               ],
             ),
           ],
