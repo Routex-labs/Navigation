@@ -232,7 +232,9 @@ Wave 1과 2는 완전 병렬(파일 교집합 0). Wave 3은 A·B가 끝나야 �
 - [x] `demo_allowlist`에 없는 매장이 `demoInfo`를 쓰면 검증이 실패한다
 - [x] `demoInfo` 항목의 `source`가 http(s)가 아니거나 `confirmed_at`이 `YYYY-MM-DD`가 아니면 실패한다
 - [x] 선언하지 않은 키(`calorie` 같은 오타)가 있으면 실패한다
-- [x] 백엔드 541건 · 클라이언트 618건 · ruff format/check · mypy · `flutter analyze` 무경고
+- [x] 백엔드 590건 · 클라이언트 631건 · ruff format/check · mypy · `flutter analyze` 무경고
+- [x] 스키마 v2가 기존 오버레이 11건을 그대로 통과시킨다 (필수 키를 줄인 변경이라
+      기존 데이터가 깨지지 않는다)
 
 **남은 결정**: 확인일 만료 기준이 없다. `demo_allowlist`에 매장을 더할 때의 절차와 함께
 설계 문서 10절 "남겨 둔 과제"에 있다.
