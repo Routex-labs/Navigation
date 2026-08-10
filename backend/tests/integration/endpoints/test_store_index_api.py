@@ -23,6 +23,10 @@ EXPECTED_FIELDS = {
     "floor_name",
     "category",
     "subcategory",
+    # 상세와 같은 분류. 이 목록에는 상세를 열지 않는 주차·에스컬레이터·엘리베이터가
+    # 61% 섞여 있어서, 매장만 골라야 하는 화면(근처 매장)이 규칙을 다시 만들지 않도록
+    # 서버가 함께 준다.
+    "kind",
     "entrance_node_id",
 }
 
@@ -69,6 +73,24 @@ def test_자동완성에_필요한_필드를_모두_담는다(api_client):
     shop_b = next(store for store in stores if store["id"] == "shop-b-1f")
     assert shop_b["category"] is None
     assert shop_b["subcategory"] is None
+
+
+# kind는 상세(`/places/{id}`)와 **같은 값**이어야 한다. 두 곳이 갈리면 "목록에는
+# 있는데 눌러도 상세가 안 열리는" 매장이 조용히 생기고, 그 반대(근처 매장 목록에
+# 주차구역이 섞임)도 마찬가지다. 규칙의 단일 출처는 classify_place_kind다.
+def test_kind가_상세와_같은_값이다(real_api_client):
+    stores = real_api_client.get(f"/buildings/{REAL_BUILDING_ID}/store-index").json()
+
+    assert {store["kind"] for store in stores} <= {"store", "facility", "excluded"}
+
+    # 실데이터에는 세 종류가 모두 있다. 하나라도 비면 이 검증이 아무것도 보지 않는다.
+    excluded = [store for store in stores if store["kind"] == "excluded"]
+    facilities = [store for store in stores if store["kind"] == "facility"]
+    assert excluded and facilities
+
+    for sample in (excluded[0], facilities[0]):
+        detail = real_api_client.get(f"/buildings/{REAL_BUILDING_ID}/places/{sample['id']}").json()
+        assert detail["kind"] == sample["kind"]
 
 
 # 폴리곤·좌표가 빠졌는지 검증한다. 이 엔드포인트를 신설한 이유 그 자체다.

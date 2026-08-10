@@ -137,7 +137,12 @@ def get_place_detail(
 
     # 상세는 시트를 열 때마다 요청되고 내용은 재시드 전까지 바뀌지 않는다.
     # 직렬화된 본문에서 ETag를 뽑으므로 추가 쿼리가 없다.
-    body = PlaceDetailResponse.model_validate(result).model_dump_json()
+    #
+    # `exclude_none`이 있어야 계약 4-2 규칙 1이 HTTP 경계까지 지켜진다. 조립 단계는
+    # 값이 없는 선택 키를 이미 빼고 있는데, DTO가 직렬화하면서 `"price": null`로
+    # 도로 채워 넣는다. 그러면 클라이언트가 "없다"와 "있는데 비었다"를 구분하는
+    # 분기를 갖게 되고, 그 분기가 카드마다 다른 높이로 새어 나온다.
+    body = PlaceDetailResponse.model_validate(result).model_dump_json(exclude_none=True)
     etag = f'"{hashlib.blake2b(body.encode("utf-8"), digest_size=16).hexdigest()}"'
     headers = cache_headers(etag, settings.tile_cache_max_age)
 
