@@ -3432,9 +3432,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 있었다. 진입은 도면 탭과 GPS만 맡는다.
   void _handleCameraIdle() {
     // 카메라 콜백은 위젯이 사라진 뒤에도 한 박자 늦게 도착할 수 있다.
-    if (!mounted || !_indoorEntered) return;
+    if (!mounted) return;
     final camera = _mapController?.cameraPosition;
     if (camera == null) return;
+
+    if (!_indoorEntered) {
+      _maybeEnterIndoorForZoom(camera);
+      return;
+    }
     if (!shouldExitIndoorForZoom(camera.zoom)) return;
     // 사용자가 건물을 벗어날 만큼 축소했다. 배치 대기 중이면 함께 종료해 하단 바
     // 표시도 초기화한다.
@@ -3443,6 +3448,24 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 가리키므로, 무장을 풀어 두지 않으면 다음 위치 한 건에 도로 끌려 들어간다.
     _gpsEntryArmed = false;
     _setIndoorEntered(false);
+  }
+
+  /// 건물 위로 충분히 확대했으면 실내 오버레이를 켠다.
+  ///
+  /// **zoom과 위치를 함께 본다.** zoom만 보고 들여보내던 시절에는 건너편에서
+  /// 건물을 훑던 사용자가 영문 모르고 실내 화면에 들어와 있어서 기능을 한 번
+  /// 걷어냈다([indoor_entry_zoom.dart] 상단 주석). 화면 중심이 그 건물 위에
+  /// 있다면 이야기가 다르다 — 그건 "저 건물을 보고 있다"가 아니라 "저 건물을
+  /// 열어 보고 있다"에 가깝다.
+  ///
+  /// 판정에 [_isInsideBuilding]을 그대로 쓴다. 도면을 탭해 들어가는 것과 같은
+  /// 기준이라, "탭으로는 들어가지는데 확대로는 안 되는" 어긋남이 없다.
+  void _maybeEnterIndoorForZoom(CameraPosition camera) {
+    if (_building == null) return;
+    if (!shouldEnterIndoorForZoom(camera.zoom)) return;
+    final center = ll.LatLng(camera.target.latitude, camera.target.longitude);
+    if (!_isInsideBuilding(center)) return;
+    _setIndoorEntered(true);
   }
 
   // 실내 MVT 소스·레이어는 스타일 로드와 활성 건물 로드 둘 다 되면 한 번만 등록.
@@ -3763,12 +3786,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           ? _emptyCollection()
           : _collection([_lineFeature(transferPoints)]),
     );
-    // **건물 안에 있을 때만** 실내 경로를 그린다. 두 구간을 동시에 그리면
-    // 어느 쪽이 지금 안내인지 알 수 없고, 반대로 밖에 나왔는데 실내 경로만
-    // 남으면 걸어갈 길이 화면에서 사라진다.
-    //
-    // 야외 구간은 승격 뒤에도 상태로 남아 있으므로([_activatePendingIndoorRoute]),
-    // 이 조건 하나로 "안에서는 실내, 밖에서는 야외"가 자동으로 갈린다.
+    // **건물 안에 있으면 실내 구간만** 그린다. 승격된 뒤에는 야외 구간도 상태로
+    // 남아 있는데([_activatePendingIndoorRoute]) 둘을 함께 그리면 이미 걸어온
+    // 길이 화면에 계속 남는다.
     final indoor = _indoorEntered ? _indoorRouteSegment : null;
     if (indoor != null && indoor.points.length >= 2) {
       await controller.setGeoJsonSource(
@@ -3777,14 +3797,27 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       );
       return;
     }
+
+    final features = <Map<String, dynamic>>[];
     final route = _route;
-    if (route == null || route.points.length < 2) {
-      await controller.setGeoJsonSource(_routeSourceId, _emptyCollection());
-      return;
+    if (route != null && route.points.length >= 2) {
+      features.add(_lineFeature(route.points));
+    }
+    // **밖에서도 실내 구간을 미리 보여준다.** 아직 승격 전이라 상태는
+    // [_pendingIndoorRoute]에 있다. 예전에는 건물에 들어가야 그려져서, 안내를
+    // 받아 든 사용자가 "매장까지"라는 라벨만 보고 정작 건물 안 어디로 가는지는
+    // 도착할 때까지 알 수 없었다.
+    //
+    // 지금 펼쳐 둔 층의 구간만 그린다. 여러 층을 한꺼번에 겹쳐 그리면 같은
+    // 좌표 위에 선이 여러 겹 쌓여, 어느 것이 이 층의 길인지 알 수 없다 —
+    // 층 chip을 넘기면 그 층의 구간이 이어서 보인다.
+    final pending = _pendingIndoorRoute?.segmentForFloor(_activeFloor ?? '');
+    if (pending != null && pending.route.points.length >= 2) {
+      features.add(_lineFeature(pending.route.points));
     }
     await controller.setGeoJsonSource(
       _routeSourceId,
-      _collection([_lineFeature(route.points)]),
+      features.isEmpty ? _emptyCollection() : _collection(features),
     );
   }
 
