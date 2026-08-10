@@ -180,7 +180,12 @@ const _routeSourceId = 'outdoor-route';
 const _transferRouteSourceId = 'outdoor-transfer-route';
 const _transferRouteLayerId = 'outdoor-transfer-route-line';
 const _routeCasingLayerId = 'outdoor-route-casing';
+// 자동차 구간(실선)과 걷는 구간(점선)을 레이어로 나눈다. `lineDasharray`는
+// feature 속성에서 못 읽어(색과 달리 `['get', ...]`이 안 통한다) 패턴마다
+// 레이어가 하나씩 필요하다. 필터는 feature의 `style` 속성을 본다.
 const _routeLineLayerId = 'outdoor-route-line';
+const _routeWalkLayerId = 'outdoor-route-walk';
+const _routeIndoorLayerId = 'outdoor-route-indoor';
 // 진행 방향 화살표. 본선 위에 얹혀 선을 따라 흐른다.
 const _routeArrowLayerId = 'outdoor-route-arrow';
 // 대중교통 경로. 도보 경로와 소스를 나누는 이유는 **선의 성격이 다르기**
@@ -194,11 +199,13 @@ const _transitWalkLayerId = 'outdoor-transit-walk';
 const _currentSourceId = 'outdoor-current';
 const _accuracyLayerId = 'outdoor-accuracy';
 const _currentDotLayerId = 'outdoor-current-dot';
+// 야외 목적지 좌표를 담는 소스. **지금은 그리는 레이어가 없다** — 도착 지점의
+// 빨간 원을 걷어냈다(등록 자리의 주석 참고). 소스와 [_syncDestinationLayer]는
+// 남겨 둔다. 호출 지점이 열한 곳이라 함께 걷어내면 이번 변경의 성격이 흐려지고,
+// 도착 표시를 다시 그려야 할 때 붙일 자리이기도 하다.
 const _destSourceId = 'outdoor-destination';
-const _destLayerId = 'outdoor-destination-pin';
-// 실내 경로의 도착 노드에 찍는 물방울 핀. 야외 GPS 목적지 원(_destLayerId)과
-// **소스를 나눈다** — 같은 소스에 넣으면 원 레이어 필터가 없어 실내 도착
-// 노드에도 빨간 원이 함께 그려져 핀 밑에 원이 비어져 나온다.
+// 실내 경로의 도착 노드에 찍는 물방울 핀. 야외 목적지 소스와 **소스를 나눈다** —
+// 같은 소스에 넣으면 레이어 필터가 없어 실내 도착 노드에도 함께 그려진다.
 const _indoorDestSourceId = 'outdoor-indoor-destination';
 const _indoorDestLayerId = 'outdoor-indoor-destination-pin';
 // 도착 핀 비트맵의 addImage 등록 키. 실내 지도와 같은 도형을
@@ -461,10 +468,17 @@ Map<String, dynamic> _pointFeature(ll.LatLng point) {
   };
 }
 
-Map<String, dynamic> _lineFeature(List<ll.LatLng> points) {
+/// [style]은 레이어 필터가 읽는 값이다 — `drive`(실선), `walk`(점선),
+/// `indoor`(연한 점선). 레이어를 나누는 이유는 **점선 패턴이 데이터로 안
+/// 갈리기 때문이다.** MapLibre의 `lineDasharray`는 feature 속성에서 못 읽어서,
+/// 색처럼 `['get', ...]`로 처리할 수 없다.
+Map<String, dynamic> _lineFeature(
+  List<ll.LatLng> points, {
+  String style = 'walk',
+}) {
   return {
     'type': 'Feature',
-    'properties': const <String, dynamic>{},
+    'properties': {'style': style},
     'geometry': {
       'type': 'LineString',
       'coordinates': [
@@ -683,6 +697,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 어디로 어떻게 가는지 한 번 보고 나서 출발하도록, 위치로 내려가는 조작은
   /// 버튼 하나로 분리했다([EtaCard.onStartGuidance]).
   bool _offerStartGuidance = false;
+
+  /// 지금 그려진 야외 경로가 자동차 경로인지. 선 모양이 갈린다 — 자동차는
+  /// 실선, 걷는 구간은 점선이다([_lineFeature]의 `style`).
+  bool _routeIsDriving = false;
 
   /// 사용자가 지도에서 직접 찍은 출발 위치. null이면 출발지는 GPS다.
   ///
@@ -2178,6 +2196,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _fixedRouteOrigin = origin;
       _userDestination = destination;
       _userDestinationLabel = label;
+      // 이 경로는 걷는 안내다. 자동차에서 넘어왔으면 실선으로 남지 않게 되돌린다.
+      _routeIsDriving = false;
       // 새 목적지를 받을 때마다 초기화해서, 이번 경로가 계산되면
       // _applyRoute가 "새로 생김"으로 보고 카메라를 다시 맞추게 한다.
       _route = null;
@@ -2226,6 +2246,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     required ll.LatLng destination,
     required String label,
     bool offerStartGuidance = false,
+    bool driving = false,
   }) async {
     _clearPendingIndoorRoute();
     // 길찾기 화면이 경로를 **다시 그리는** 중이다(수단 변경·끝점 변경). 아직
@@ -2234,6 +2255,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     clearTransitRoute();
     setState(() {
       _offerStartGuidance = offerStartGuidance;
+      _routeIsDriving = driving;
       _fixedRouteOrigin = origin;
       _userDestination = destination;
       _userDestinationLabel = label;
@@ -2742,6 +2764,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _routeSourceId,
       GeojsonSourceProperties(data: _emptyCollection()),
     );
+    // 테두리는 **실내 구간에 깔지 않는다.** 테두리는 본선보다 어두운 남색인데,
+    // 연한 실내 선 밑에 깔리면 그 어두운 색이 비어져 나와 오히려 야외 선보다
+    // 진해 보인다 — 연하게 만든 이유가 통째로 뒤집힌다.
     await controller.addLineLayer(
       _routeSourceId,
       _routeCasingLayerId,
@@ -2751,7 +2776,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         lineCap: 'round',
         lineJoin: 'round',
       ),
+      filter: [
+        '!=',
+        ['get', 'style'],
+        'indoor',
+      ],
     );
+    // 자동차만 실선이다. 운전 경로는 도로를 그대로 따라가므로 선이 곧 길이지만,
+    // 걷는 구간은 횡단보도·건물 안처럼 "이 근처로 가라"에 가까워 점선이 맞다.
     await controller.addLineLayer(
       _routeSourceId,
       _routeLineLayerId,
@@ -2761,6 +2793,43 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         lineCap: 'round',
         lineJoin: 'round',
       ),
+      filter: [
+        '==',
+        ['get', 'style'],
+        'drive',
+      ],
+    );
+    await controller.addLineLayer(
+      _routeSourceId,
+      _routeWalkLayerId,
+      const LineLayerProperties(
+        lineColor: kRouteLineColor,
+        lineWidth: kRouteLineWidthExpr,
+        lineDasharray: [1.4, 1.1],
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      filter: [
+        '==',
+        ['get', 'style'],
+        'walk',
+      ],
+    );
+    await controller.addLineLayer(
+      _routeSourceId,
+      _routeIndoorLayerId,
+      const LineLayerProperties(
+        lineColor: kRouteIndoorLineColor,
+        lineWidth: kRouteLineWidthExpr,
+        lineDasharray: [1.4, 1.1],
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
+      filter: [
+        '==',
+        ['get', 'style'],
+        'indoor',
+      ],
     );
     await controller.addImage(
       kRouteArrowImageName,
@@ -2888,16 +2957,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _destSourceId,
       GeojsonSourceProperties(data: _emptyCollection()),
     );
-    await controller.addCircleLayer(
-      _destSourceId,
-      _destLayerId,
-      CircleLayerProperties(
-        circleRadius: 9,
-        circleColor: AppColors.dest.toHexString(),
-        circleStrokeColor: '#FFFFFF',
-        circleStrokeWidth: 2,
-      ),
-    );
+    // **도착 지점에 빨간 원을 찍지 않는다.** 경로선이 이제 도착점까지 실제로
+    // 이어지므로([extendRouteToDestination]) 선 끝이 곧 도착 지점이고, 그 위에
+    // 원을 하나 더 얹으면 출입구 라벨·매장 아이콘을 가린다. 건물 안 목적지는
+    // 물방울 핀(_indoorDestLayerId)이 따로 가리킨다.
 
     // 매장 강조 표시 소스·레이어. PDR 마커보다 아래·경로선보다 위에 두고,
     // 실내 오버레이 fill(_indoorStoresFillLayerId)이 나중에 belowLayerId로
@@ -3798,7 +3861,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (indoor != null && indoor.points.length >= 2) {
       await controller.setGeoJsonSource(
         _routeSourceId,
-        _collection([_lineFeature(indoor.points)]),
+        _collection([_lineFeature(indoor.points, style: 'indoor')]),
       );
       return;
     }
@@ -3806,7 +3869,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final features = <Map<String, dynamic>>[];
     final route = _route;
     if (route != null && route.points.length >= 2) {
-      features.add(_lineFeature(route.points));
+      features.add(
+        _lineFeature(route.points, style: _routeIsDriving ? 'drive' : 'walk'),
+      );
     }
     // **밖에서도 실내 구간을 미리 보여준다.** 아직 승격 전이라 상태는
     // [_pendingIndoorRoute]에 있다. 예전에는 건물에 들어가야 그려져서, 안내를
@@ -3824,7 +3889,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final preview = _pendingIndoorRoute ?? _indoorMultiFloorRoute;
     final segment = preview?.segmentForFloor(_activeFloor ?? '');
     if (segment != null && segment.route.points.length >= 2) {
-      features.add(_lineFeature(segment.route.points));
+      features.add(_lineFeature(segment.route.points, style: 'indoor'));
     }
     await controller.setGeoJsonSource(
       _routeSourceId,

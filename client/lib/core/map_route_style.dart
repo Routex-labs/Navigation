@@ -148,3 +148,11 @@ Future<Uint8List> renderRouteArrowIcon() async {
 /// (`indoor_overlay_layers.dart`)에 있어, core에서 쓰면 의존 방향이 뒤집힌다.
 /// 그래서 값을 고정한다 — [AppColors.primary]를 바꾸면 여기도 같이 바꾼다.
 const kRouteLineColor = '#4A87F1';
+
+/// 건물 **안** 구간의 선 색. 야외 본선([kRouteLineColor])보다 연하다.
+///
+/// 밖에서 안내를 받을 때 두 구간이 한 화면에 함께 그려지는데, 같은 색이면
+/// 어디부터 건물 안인지 선만 보고는 알 수 없다. 지금 걸어야 할 길(야외)이
+/// 진하고, 들어간 뒤에 걸을 길(실내)이 연한 순서다 — 색의 진하기가 곧
+/// "지금인가 나중인가"로 읽힌다.
+const kRouteIndoorLineColor = '#A8C6F6';
