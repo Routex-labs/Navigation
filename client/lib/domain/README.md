@@ -14,6 +14,7 @@ Flutter 화면이나 HTTP를 모르는 계산 계층이다. 백엔드가 제공�
 | [`route_guidance.dart`](route_guidance.dart) | 다음 행동 한 줄 안내와 진행 지점 기준 경로선 분할(지나온/남은) | `RouteGuidanceAction`, `RouteGuidanceInstruction`, `RoutePolylineSplit`, `splitRouteAtProgress` |
 | [`geo_transform.dart`](geo_transform.dart) | 2D affine 피팅·적용, PDR/층 좌표 연결 | `AffineTransform` |
 | [`transit_walk_fill.dart`](transit_walk_fill.dart) | 카카오가 주지 않는 앞뒤 도보를 대중교통 경로에 붙임 | `fillTransitWalkLegs` |
+| [`single_flight.dart`](single_flight.dart) | 같은 작업이 겹쳐 도는 것을 막음(겹치면 버린다) | `SingleFlight` |
 
 ## 단일 층 경로 계산
 

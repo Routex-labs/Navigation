@@ -9,6 +9,7 @@ import '../../core/api_config.dart';
 import '../../core/service_locator.dart';
 import '../../domain/dijkstra.dart';
 import '../../domain/outdoor_poi_ranking.dart';
+import '../../domain/single_flight.dart';
 import '../../domain/transit_walk_fill.dart';
 import '../../models/building.dart';
 import '../../models/category_count.dart';
@@ -174,6 +175,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   /// 길찾기 두 칸 중 지금 글자를 치고 있는 칸. null이면 결과(지도)를 보는 중이다.
   RoutePlanField? _routeEditingField;
+
+  /// 대중교통 조회가 겹쳐 나가는 것을 막는다.
+  ///
+  /// 실기기 로그에서 **같은 조회가 2~3번 연달아 나갔다** — 응답 세 줄이 사이에
+  /// 아무 로그도 없이 붙어 있었으니 동시에 날아간 것이다. 어느 조작이 그러는지는
+  /// 아직 못 짚었지만, 조회가 나가 있는 동안 같은 조회를 또 보내는 것이 맞는
+  /// 상황은 없다.
+  final _transitRequest = SingleFlight();
 
   final _routeOriginController = TextEditingController();
   final _routeDestinationController = TextEditingController();
@@ -616,7 +625,20 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 출발지는 야외 지도가 정한다([OutdoorMapBodyState.routeOriginPoint]) —
   /// 지도에서 찍은 출발 지점이 있으면 그것을, 없으면 GPS를 쓴다. 실내 앵커는
   /// 쓰지 않는다(건물 안 좌표를 보내면 정류장이 건물 반대편에서 잡힌다).
-  Future<void> _startTransitRoute(DirectionsCandidate destination) async {
+  /// 조회가 나가 있는 동안 들어온 요청은 버린다([_transitRequest]).
+  ///
+  /// **무시한 사실을 로그로 남긴다.** 조용히 삼키면 중복을 만드는 조작이 무엇인지
+  /// 영영 안 보이고, 가드가 원인을 덮은 채로 남는다.
+  Future<void> _startTransitRoute(DirectionsCandidate destination) {
+    return _transitRequest.run(
+      () => _requestTransitRoute(destination),
+      onDuplicate: () =>
+          debugPrint('[transit] 조회 중이라 중복 요청 무시: ${destination.title}'),
+    );
+  }
+
+  Future<void> _requestTransitRoute(DirectionsCandidate destination) async {
+    debugPrint('[transit] 조회 시작: ${destination.title}');
     final outdoor = _outdoorKey.currentState;
     // 명시적으로 고른 출발지라도 **실내 지점이면 쓰지 않는다.** 건물 안 좌표를
     // 보내면 카카오가 그 좌표에서 가장 가까운 정류장을 찾는데, 건물이 크면 실제로
