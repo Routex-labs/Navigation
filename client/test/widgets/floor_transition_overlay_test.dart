@@ -173,7 +173,7 @@ void main() {
       );
     });
 
-    testWidgets('베일이 걷히면 뒤쪽 입력이 다시 통과한다', (tester) async {
+    testWidgets('스크림이 걷히면 뒤쪽 입력이 다시 통과한다', (tester) async {
       var tapped = false;
       await tester.pumpWidget(
         MaterialApp(
@@ -204,7 +204,7 @@ void main() {
       expect(
         tapped,
         isTrue,
-        reason: '투명한 베일이 화면 전체 입력을 계속 먹으면 전환 뒤 앱이 먹통이 된다',
+        reason: '투명한 스크림이 화면 전체 입력을 계속 먹으면 전환 뒤 앱이 먹통이 된다',
       );
     });
   });

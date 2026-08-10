@@ -202,7 +202,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
   final _outdoorKey = GlobalKey<OutdoorMapBodyState>();
   final _indoorKey = GlobalKey<IndoorMapBodyState>();
 
-  /// 층 전환 배너·베일 상태. 판정과 상태 전이는 [IndoorMapBody]가 소유하고
+  /// 층 전환 배너·스크림 상태. 판정과 상태 전이는 [IndoorMapBody]가 소유하고
   /// 여기서는 그리기만 한다.
   ///
   /// 셸이 그려야 하는 이유: 검색창·카테고리 줄·하단 바가 이 Stack의 형제라,

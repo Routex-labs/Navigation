@@ -181,7 +181,7 @@ class IndoorMapBody extends StatefulWidget {
   /// 상위(MapShellScreen)가 이 값으로 하단 공용 바를 그 위로 띄운다.
   final ValueChanged<bool>? onRouteVisibleChanged;
 
-  /// 층 전환 배너·베일 상태를 상위 셸에 넘긴다.
+  /// 층 전환 배너·스크림 상태를 상위 셸에 넘긴다.
   ///
   /// 이 화면이 직접 그리지 않는 이유: 검색창·카테고리 줄·하단 바는 부모인
   /// MapShellScreen이 **나중에** 그린다. 자식의 top 상수를 아무리 조정해도
@@ -940,7 +940,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       _floorHandoverCamera ??= _floorPlanController.cameraSnapshot;
       _floorSwapVeil = 1;
     });
-    // 베일이 실제로 덮인 뒤에 갈아 끼운다. 안 기다리면 교체가 먼저 그려져
+    // 스크림이 실제로 덮인 뒤에 갈아 끼운다. 안 기다리면 교체가 먼저 그려져
     // 페이드가 아무것도 가리지 못한다.
     await Future<void>.delayed(floorTransitionScrimFadeIn);
     if (!mounted) return false;
