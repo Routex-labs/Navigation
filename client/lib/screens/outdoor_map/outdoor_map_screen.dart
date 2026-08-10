@@ -196,6 +196,9 @@ const _routeArrowLayerId = 'outdoor-route-arrow';
 const _transitSourceId = 'outdoor-transit';
 const _transitRideLayerId = 'outdoor-transit-ride';
 const _transitWalkLayerId = 'outdoor-transit-walk';
+// 구간 시작점에 얹는 수단 배지(도보·버스·지하철).
+const _transitBadgeSourceId = 'outdoor-transit-badge';
+const _transitBadgeLayerId = 'outdoor-transit-badge-icon';
 const _currentSourceId = 'outdoor-current';
 const _accuracyLayerId = 'outdoor-accuracy';
 const _currentDotLayerId = 'outdoor-current-dot';
@@ -2777,9 +2780,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         lineJoin: 'round',
       ),
       filter: [
-        '!=',
+        '==',
         ['get', 'style'],
-        'indoor',
+        'drive',
       ],
     );
     // 자동차만 실선이다. 운전 경로는 도로를 그대로 따라가므로 선이 곧 길이지만,
@@ -2803,9 +2806,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _routeSourceId,
       _routeWalkLayerId,
       const LineLayerProperties(
-        lineColor: kRouteLineColor,
+        lineColor: kRouteWalkColor,
         lineWidth: kRouteLineWidthExpr,
-        lineDasharray: [1.4, 1.1],
+        lineDasharray: kRouteWalkDashArray,
         lineCap: 'round',
         lineJoin: 'round',
       ),
@@ -2817,11 +2820,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     );
     await controller.addLineLayer(
       _routeSourceId,
+      // 실내 구간은 **실선**이다. 건물 안에서는 복도가 정해져 있어 "대략 이쪽"이
+      // 아니라 실제로 그 길로 걷는다 — 점선으로 그리면 밖의 도보 구간과 같은
+      // 성격으로 읽힌다. 대신 색을 연하게 해 야외 구간과 구분한다.
       _routeIndoorLayerId,
       const LineLayerProperties(
         lineColor: kRouteIndoorLineColor,
         lineWidth: kRouteLineWidthExpr,
-        lineDasharray: [1.4, 1.1],
         lineCap: 'round',
         lineJoin: 'round',
       ),
@@ -2872,10 +2877,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await controller.addLineLayer(
       _transitSourceId,
       _transitWalkLayerId,
+      // 걷는 구간은 **노선색을 따르지 않는다.** 정류장까지 걸어가는 길이 버스
+      // 노선과 같은 색이면, 어디서 내려 걸어야 하는지를 점선 여부만으로 읽어야
+      // 한다. 회색으로 빼 두면 "여기는 타는 구간이 아니다"가 색에서 먼저 온다.
       const LineLayerProperties(
-        lineColor: ['get', 'color'],
+        lineColor: kRouteWalkColor,
         lineWidth: 3.5,
-        lineDasharray: [1.4, 1.2],
+        lineDasharray: kRouteWalkDashArray,
         lineCap: 'round',
         lineJoin: 'round',
       ),
@@ -2884,6 +2892,38 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         ['get', 'walk'],
         true,
       ],
+      enableInteraction: false,
+    );
+
+    // 구간 시작 배지. 선과 **소스를 나눈다** — 점 feature를 선 소스에 섞으면
+    // 선 레이어 필터가 그 점까지 훑고, 반대로 배지 필터가 선을 훑는다. 둘의
+    // 수명도 다르다(선은 층을 바꿔도 그대로, 배지는 구간이 바뀌면 새로 찍는다).
+    await controller.addSource(
+      _transitBadgeSourceId,
+      GeojsonSourceProperties(data: _emptyCollection()),
+    );
+    await controller.addImage(
+      kRouteWalkBadgeImageName,
+      await renderModeBadgeIcon(
+        Icons.directions_walk_rounded,
+        const Color(0xFF8A9199),
+      ),
+    );
+    await controller.addImage(
+      kRouteBusBadgeImageName,
+      await renderModeBadgeIcon(
+        Icons.directions_bus_rounded,
+        const Color(0xFF0068B7),
+      ),
+    );
+    await controller.addImage(
+      kRouteSubwayBadgeImageName,
+      await renderModeBadgeIcon(Icons.subway_rounded, const Color(0xFF3A5DAE)),
+    );
+    await controller.addSymbolLayer(
+      _transitBadgeSourceId,
+      _transitBadgeLayerId,
+      routeModeBadgeProps(),
       enableInteraction: false,
     );
 
@@ -3907,9 +3947,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final itinerary = _transitItinerary;
     if (itinerary == null) {
       await controller.setGeoJsonSource(_transitSourceId, _emptyCollection());
+      await controller.setGeoJsonSource(
+        _transitBadgeSourceId,
+        _emptyCollection(),
+      );
       return;
     }
     final features = <Map<String, dynamic>>[];
+    final badges = <Map<String, dynamic>>[];
     for (final leg in itinerary.legs) {
       if (leg.points.length < 2) continue;
       features.add({
@@ -3925,12 +3970,44 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           ],
         },
       });
+      // 배지는 **구간이 시작하는 자리**에 찍는다. 끝점에 찍으면 다음 구간의
+      // 시작점과 같은 자리라 두 아이콘이 겹치고, 사용자는 어느 쪽이 지금부터
+      // 시작하는 수단인지 알 수 없다.
+      final icon = _badgeImageFor(leg.mode);
+      if (icon == null) continue;
+      badges.add({
+        'type': 'Feature',
+        'properties': {'icon': icon},
+        'geometry': {
+          'type': 'Point',
+          'coordinates': [
+            leg.points.first.longitude,
+            leg.points.first.latitude,
+          ],
+        },
+      });
     }
     await controller.setGeoJsonSource(
       _transitSourceId,
       features.isEmpty ? _emptyCollection() : _collection(features),
     );
+    await controller.setGeoJsonSource(
+      _transitBadgeSourceId,
+      badges.isEmpty ? _emptyCollection() : _collection(badges),
+    );
   }
+
+  /// 이 수단의 배지 이미지 이름. 배지를 안 그리는 수단이면 null이다.
+  ///
+  /// 기차·고속버스·항공은 아이콘을 따로 굽지 않았다. 이 데모의 안내 범위(도심
+  /// 대중교통)에서는 나오지 않고, 굳이 버스 아이콘을 돌려 쓰면 사용자가 버스로
+  /// 읽는다 — 없는 것보다 나쁘다.
+  static String? _badgeImageFor(TransitMode mode) => switch (mode) {
+    TransitMode.walk => kRouteWalkBadgeImageName,
+    TransitMode.bus => kRouteBusBadgeImageName,
+    TransitMode.subway => kRouteSubwayBadgeImageName,
+    _ => null,
+  };
 
   /// 대중교통 경로를 요청할 때 쓸 출발점. 지도에서 찍은 출발지가 있으면 그
   /// 지점을, 없으면 GPS 현재 위치를 쓴다. 둘 다 없으면 null이고, 그때는
