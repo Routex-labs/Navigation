@@ -17,6 +17,7 @@ import '../../features/indoor_navigation/debug/pdr_debug_session_share.dart';
 import '../../features/indoor_navigation/application/corridor_position_tracker.dart';
 import '../../features/indoor_navigation/application/guidance_trail_session.dart';
 import '../../features/indoor_navigation/application/escalator_node_naming.dart';
+import '../../features/indoor_navigation/application/escalator_arrival.dart';
 import '../../features/indoor_navigation/application/escalator_transition_detector.dart';
 import '../../features/indoor_navigation/application/indoor_guidance_session.dart';
 import '../../features/indoor_navigation/application/indoor_location_estimate.dart';
@@ -2039,37 +2040,12 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   ///
   /// 판정 단계를 UI 개념(문구·되돌리기)으로 한 번만 옮긴다. 화면은 여기서
   /// 나온 값만 보고 그린다 — 임계값이나 노드 근접을 다시 계산하지 않는다.
-  FloorTransitionUiState? get _floorTransitionUiState {
-    final arrival = _escalatorArrival;
-    if (arrival != null && _escalatorRide == null) {
-      return FloorTransitionUiState(
-        stage: FloorTransitionStage.arrived,
-        fromFloorLabel: arrival.fromFloorLabel,
-        toFloorLabel: arrival.toFloorLabel,
-        goingUp: arrival.direction == EscalatorDirection.up,
-        canUndo: _preTransferFloor != null && _preTransferAnchor != null,
-      );
-    }
-    final ride = _escalatorRide;
-    if (ride != null) {
-      return FloorTransitionUiState(
-        stage: FloorTransitionStage.swapping,
-        fromFloorLabel: ride.fromFloorLabel,
-        toFloorLabel: ride.toFloorLabel,
-        goingUp: ride.direction == EscalatorDirection.up,
-      );
-    }
-    final stage = _escalatorStage;
-    if (stage == null || stage.toFloorLabel == null) return null;
-    return FloorTransitionUiState(
-      stage: stage.phase == EscalatorPhase.verticalMotionDetected
-          ? FloorTransitionStage.moving
-          : FloorTransitionStage.boarding,
-      fromFloorLabel: stage.fromFloorLabel,
-      toFloorLabel: stage.toFloorLabel!,
-      goingUp: stage.direction == EscalatorDirection.up,
-    );
-  }
+  FloorTransitionUiState? get _floorTransitionUiState => floorTransitionUiState(
+    arrival: _escalatorArrival,
+    ride: _escalatorRide,
+    stage: _escalatorStage,
+    canUndo: _preTransferFloor != null && _preTransferAnchor != null,
+  );
 
   /// 지금 화면을 덮어야 하는 정도.
   ///
@@ -2204,7 +2180,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       FloorSwitchTiming.mark('transferFloorReady');
 
       final graph = _floorGraph;
-      final arrival = _findArrivalNode(graph, transition);
+      final arrival = findEscalatorArrivalNode(graph, transition);
       if (graph == null || arrival == null) {
         _showPdrMessage(
           '${transition.toFloorLabel} 도착 지점을 찾는 중입니다. 하차 후에도 위치가 '
@@ -2264,7 +2240,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       }
       final graph = _floorGraph;
       final arrival =
-          _pendingArrivalNode ?? _findArrivalNode(graph, transition);
+          _pendingArrivalNode ?? findEscalatorArrivalNode(graph, transition);
       if (graph == null || arrival == null) {
         // 도착 지점을 못 찾아도 **탑승 상태는 반드시 끝낸다.** 안 그러면 배너가
         // 남고 걸음 누적이 영영 멈춘 채로 사용자가 복구할 방법이 없다.
@@ -2462,40 +2438,6 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   /// 위치 근접으로 짝지어져 탑승/도착이 뒤바뀔 수 있어 근거로 쓰지 않는다
   /// ([EscalatorNodeName] 문서 참고). 이름으로 못 찾으면 같은 그룹·같은 방향의
   /// 에스컬레이터 노드로 폴백하고, 그것도 없으면 null을 돌려준다.
-  GraphNode? _findArrivalNode(
-    FloorGraph? graph,
-    EscalatorTransition transition,
-  ) {
-    if (graph == null) return null;
-    final expectedArrivalNodeId = transition.expectedArrivalNodeId;
-    if (expectedArrivalNodeId != null) {
-      for (final node in graph.nodes) {
-        if (node.id == expectedArrivalNodeId && node.type == 'escalator') {
-          return node;
-        }
-      }
-    }
-    GraphNode? sameGroupFallback;
-    for (final node in graph.nodes) {
-      if (node.type != 'escalator') continue;
-      final parsed = EscalatorNodeName.tryParse(node.name);
-      if (parsed == null) continue;
-      if (parsed.isArrivalOf(
-        group: transition.group,
-        direction: transition.direction,
-        fromFloorLabel: transition.fromFloorLabel,
-      )) {
-        return node;
-      }
-      if (sameGroupFallback == null &&
-          parsed.group == transition.group &&
-          parsed.direction == transition.direction) {
-        sameGroupFallback = node;
-      }
-    }
-    return sameGroupFallback;
-  }
-
   /// 세션에 스냅샷을 넘기고, 나온 보정 결과로 화면 상태를 갱신한다.
   ///
   /// 복도 보정·층 판정 급여·탑승점 고정은 세션이 한다. 여기 남은 것은 이
