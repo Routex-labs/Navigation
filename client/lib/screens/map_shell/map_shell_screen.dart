@@ -577,7 +577,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
       buildingId: _buildingId,
     );
     if (!mounted) return false;
-    final action = await _withMapsLocked(
+    final showing = _withMapsLocked(
       () => PlaceDetailSheet.show(
         context,
         title: match.name,
@@ -597,6 +597,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
         onCloseAll: _requestCloseSheetChain,
       ),
     );
+    // 떠 있는 동안만 값이 있다. 지도에서 다른 매장을 눌렀을 때 이 시트를 먼저
+    // 닫고 기다리는 데 쓴다([_openStoreFromMap]).
+    _placeDetailClosing = showing;
+    final action = await showing;
+    if (identical(_placeDetailClosing, showing)) _placeDetailClosing = null;
     if (!mounted) return false;
     // 시트가 어떻게 닫혔든(선택 없이 닫힘 포함) 지도 위 강조 표시도 같이 지운다.
     _outdoorKey.currentState?.clearHighlight();
@@ -668,6 +673,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
         subcategory: _categorySelection?.category == category
             ? _categorySelection?.subcategory
             : null,
+        onFirstStoreChanged: _focusCategoryFirstStore,
         onSubcategoryChanged: (value) => _onCategorySelectionChanged(
           CategorySelection(category: category, subcategory: value),
         ),
@@ -675,6 +681,42 @@ class _MapShellScreenState extends State<MapShellScreen> {
     );
     if (_closeSheetChainRequested || picked == null || !mounted) return false;
     return _showStoreInfo(picked, focusOnMap: true);
+  }
+
+  /// 카테고리 목록 맨 위 매장으로 지도를 옮긴다. **배율은 건드리지 않는다.**
+  ///
+  /// 카테고리를 고르는 것은 "저 업종이 어디 있나"를 훑는 행동이라, 화면이 확
+  /// 당겨지면 방금 보던 층 전체의 배치를 잃는다. 매장을 콕 집었을 때(검색 결과·
+  /// 목록 항목)만 확대하고, 여기서는 중앙만 맞춘다(`focusKeepZoom`).
+  ///
+  /// 시트가 화면 아래를, 카테고리 chip 줄이 위를 가리므로 **그 사이에 남는 띠
+  /// 한가운데**가 목표 지점이다. 정중앙에 놓으면 시트 뒤에 숨고, 시트 높이만
+  /// 감안하면 이번엔 chip 줄 뒤로 올라간다.
+  ///
+  /// 시트는 현재 층 매장만 올려 준다(`onFirstStoreChanged` 주석). 다른 층으로
+  /// 카메라를 보내면 지도가 층을 갈아타야 하는데, 그러면 시트 머리글이 말하는
+  /// 층과 지도가 어긋난다.
+  void _focusCategoryFirstStore(PoiSearchResult? store) {
+    if (store == null || !mounted) return;
+    final topInsetPx = _categoryRowBottomPx();
+    if (_outdoorIndoorEntered) {
+      _outdoorKey.currentState?.focusStore(
+        store,
+        bottomSheetFraction: kCategoryStoresSheetInitialSize,
+        topInsetPx: topInsetPx,
+        keepZoom: true,
+      );
+    }
+  }
+
+  /// 지도 위 카테고리 chip 줄의 아래 끝(화면 좌표·논리 픽셀). 상수로 박지 않고
+  /// 실제로 재는 이유는, 이 줄이 길찾기 초안 바 때문에 아래로 밀리거나 검색 중
+  /// 접히기 때문이다. 트리에 없으면 0 — 가릴 것이 없다는 뜻이다.
+  double _categoryRowBottomPx() {
+    final box =
+        _categoryRowKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return 0;
+    return box.localToGlobal(Offset.zero).dy + box.size.height;
   }
 
   Future<List<DirectionsCandidate>> _searchDirectionsCandidates(
@@ -895,10 +937,36 @@ class _MapShellScreenState extends State<MapShellScreen> {
   void _onMapStoreTap(PoiSearchResult match) {
     final target = _mapPickTarget;
     if (target == null) {
-      _runSheetChain(() => _showStoreInfo(match));
+      unawaited(_openStoreFromMap(match));
       return;
     }
     _applyMapPick(match, target);
+  }
+
+  /// 지금 떠 있는 상세 시트가 닫히면 완료되는 Future. 안 떠 있으면 null.
+  Future<StoreInfoAction?>? _placeDetailClosing;
+
+  /// 지도에서 매장을 눌러 상세를 연다. **떠 있는 상세가 있으면 먼저 닫는다.**
+  ///
+  /// 이 시트는 barrier가 없어 포인터를 지도로 흘린다([_withMapsLocked] 주석) —
+  /// 시트를 열어 둔 채 지도를 만질 수 있게 한 의도된 설계다. 그 대가로 다른
+  /// 매장을 누르면 시트가 그 위에 하나 더 쌓였고, 사용자는 매장 하나를 봤을
+  /// 뿐인데 닫기를 두 번 눌러야 했다.
+  ///
+  /// 닫기를 기다린 뒤에 여는 이유는 두 라우트가 겹치는 순간을 없애기 위해서다.
+  /// 기다리지 않고 바로 열면 이전 시트의 pop 애니메이션과 새 시트의 push가
+  /// 겹쳐 화면이 한 번 깜빡인다.
+  Future<void> _openStoreFromMap(PoiSearchResult match) async {
+    final closing = _placeDetailClosing;
+    if (closing != null) {
+      // pop은 chain 전체를 닫으라는 신호를 만들지만(PopScope), 아래
+      // `_runSheetChain`이 시작할 때 그 플래그를 초기화하므로 새 시트에는
+      // 영향이 없다.
+      Navigator.of(context).pop();
+      await closing;
+      if (!mounted) return;
+    }
+    await _runSheetChain(() => _showStoreInfo(match));
   }
 
   /// 지도에서 고르는 중에 **매장이 아닌 곳(복도·빈 공간)** 을 눌렀을 때.

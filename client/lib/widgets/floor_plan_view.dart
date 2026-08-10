@@ -343,6 +343,7 @@ class FloorPlanView extends StatefulWidget {
     this.focusTick = 0,
     this.focusBottomSheetFraction = 0,
     this.focusTopInsetPx = 0,
+    this.focusKeepZoom = false,
     this.tileRevision,
     this.prefetchFloorNames = const [],
     this.visibleInsets = EdgeInsets.zero,
@@ -443,6 +444,14 @@ class FloorPlanView extends StatefulWidget {
   /// [focusBottomSheetFraction]과 달리 비율이 아니라 픽셀인 이유는, 이 줄이
   /// 화면 높이에 비례하지 않기 때문이다 — 상위가 실제로 재서 넘긴다.
   final double focusTopInsetPx;
+
+  /// 참이면 [focusTarget]으로 옮기되 **배율은 지금 그대로 둔다.**
+  ///
+  /// 매장을 콕 집었을 때(검색 결과·목록 항목)는 그 매장이 보이도록 확대하는 게
+  /// 맞다. 그런데 카테고리를 고르는 것은 "저 업종이 어디 있나"를 훑는 행동이라,
+  /// 화면이 확 당겨지면 방금 보던 층 전체의 배치를 잃는다. 같은 카메라 이동이라도
+  /// 두 조작의 의도가 달라서 배율만 갈라 둔다.
+  final bool focusKeepZoom;
 
   /// 지도 위에 얹은 Flutter 오버레이(층 selector 같은)가 자기 영역을 알려주는
   /// 콜백. 인자는 화면 전역 좌표. true 반환 시 그 좌표의 탭은 매장 선택으로
@@ -1527,7 +1536,11 @@ class FloorPlanViewState extends State<FloorPlanView> {
           target: _toMapLibreLatLng(target),
           // 이미 더 가까이 들어가 있으면 그 배율을 유지한다. 목록에서 골랐다고
           // 사용자가 맞춰 둔 확대를 되돌리면 방금 보던 맥락을 잃는다.
-          zoom: currentZoom > _storeFocusZoom ? currentZoom : _storeFocusZoom,
+          zoom: focusZoomFor(
+            currentZoom: currentZoom,
+            keepZoom: widget.focusKeepZoom,
+            storeFocusZoom: _storeFocusZoom,
+          ),
           bearing: current?.bearing ?? 0,
           tilt: current?.tilt ?? 0,
         ),

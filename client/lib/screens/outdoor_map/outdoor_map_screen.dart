@@ -44,6 +44,7 @@ import '../../models/poi_search_result.dart';
 import '../../models/store_index_entry.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/eta_card.dart';
+import '../../widgets/floor_camera_bounds.dart';
 import '../../core/map_route_style.dart';
 import '../../widgets/destination_pin.dart';
 import '../../widgets/category_map_filter.dart';
@@ -4653,6 +4654,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     PoiSearchResult store, {
     double bottomSheetFraction = 0,
     double topInsetPx = 0,
+    bool keepZoom = false,
   }) async {
     if (!_indoorEntered) return;
     if (store.floor.isNotEmpty && store.floor != _activeFloor) return;
@@ -4672,8 +4674,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       CameraUpdate.newCameraPosition(
         CameraPosition(
           target: _toGl(store.point),
-          // 이미 더 가까이 들어가 있으면 그 배율을 유지한다(실내와 동일).
-          zoom: currentZoom > _storeFocusZoom ? currentZoom : _storeFocusZoom,
+          // 배율 규칙은 실내 도면과 한 함수를 공유한다(focusZoomFor).
+          zoom: focusZoomFor(
+            currentZoom: currentZoom,
+            keepZoom: keepZoom,
+            storeFocusZoom: _storeFocusZoom,
+          ),
           bearing: camera?.bearing ?? 0,
           tilt: camera?.tilt ?? 0,
         ),
