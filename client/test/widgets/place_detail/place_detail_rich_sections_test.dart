@@ -176,6 +176,31 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    // 메뉴 사진은 402x420이라 폭에 맞춰 채우면 세로가 42% 잘린다. 잘린 사진은
+    // 아무도 못 알아채므로(컵 윗부분이 원래 그런 줄 안다) 계약으로 고정한다.
+    testWidgets('menu photo is not cropped', (tester) async {
+      await tester.pumpWidget(
+        subject(
+          const PlaceMenuSection(
+            items: [
+              PlaceMenuItem(
+                name: '카페 아메리카노',
+                imageAssetPath:
+                    'assets/place_details/starbucks_menu_americano.jpg',
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final image = tester.widget<Image>(find.byType(Image));
+      expect(image.fit, BoxFit.contain);
+
+      // 사진 영역이 원본 비율(402/420)을 따라야 여백도 잘림도 없다.
+      final box = tester.getSize(find.byType(Image));
+      expect(box.width / box.height, closeTo(402 / 420, 0.01));
+    });
+
     testWidgets('menu tabs filter items by category in server order', (
       tester,
     ) async {

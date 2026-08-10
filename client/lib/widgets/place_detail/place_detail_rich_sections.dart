@@ -265,8 +265,21 @@ class _MenuCategoryTabs extends StatelessWidget {
 }
 
 const _menuCardWidth = 172.0;
-const _menuImageHeight = 104.0;
 const _menuCardPadding = 12.0;
+
+/// 메뉴 사진의 가로÷세로. 번들에 든 30장이 전부 402×420이라 그 값을 그대로 쓴다.
+///
+/// **사진 영역을 이 비율로 잡는 이유는 자르지 않기 위해서다.** 예전에는 172×104
+/// (비율 1.65)에 `BoxFit.cover`로 넣었는데, 비율이 0.96인 사진을 폭에 맞춰 늘린 뒤
+/// 세로를 42% 잘라냈다 — 컵이 긴 음료는 위아래가 날아갔다.
+///
+/// 여백을 두는 방식(`contain` + 배경색)으로는 못 푼다. 사진 배경이 다크그린 18장,
+/// 크림색 12장으로 갈리고 그중 4장은 단색도 아니라, 어떤 색을 깔아도 절반은 색 띠가
+/// 보인다. 비율을 맞추면 여백 자체가 생기지 않는다.
+const _menuImageAspect = 402 / 420;
+
+/// 사진 영역 높이. 카드 폭에서 위 비율로 떨어진다.
+final _menuImageHeight = (_menuCardWidth / _menuImageAspect).ceilToDouble();
 const _menuNameSize = 14.0;
 const _menuNameEnSize = 11.0;
 const _menuNameGap = 2.0;
@@ -327,7 +340,11 @@ class _PlaceMenuCard extends StatelessWidget {
                     item.imageAssetPath!,
                     height: _menuImageHeight,
                     width: double.infinity,
-                    fit: BoxFit.cover,
+                    // 비율이 맞는 지금 사진들에는 contain과 cover가 같은 결과다.
+                    // contain을 쓰는 이유는 나중에 비율이 다른 사진이 들어왔을 때
+                    // 조용히 잘리는 대신 여백이 보이게 하기 위해서다 — 잘린 것은
+                    // 아무도 못 알아채지만 여백은 눈에 띈다.
+                    fit: BoxFit.contain,
                   ),
                 ),
                 // 누를 수 있다는 표시. 줄을 하나 더 쓰지 않으려고 사진 위에 얹는다 —
@@ -436,11 +453,12 @@ class _MenuDetailDialog extends StatelessWidget {
               if (item.imageAssetPath != null)
                 ClipRRect(
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
-                  child: Image.asset(
-                    item.imageAssetPath!,
-                    height: 200,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
+                  // 카드와 같은 이유로 비율을 사진에 맞춘다. 높이를 200으로 박아
+                  // 두면 폭이 340이라 세로를 60% 넘게 잘라냈다 — 메뉴를 자세히
+                  // 보려고 연 팝업에서 정작 사진이 제일 많이 잘렸다.
+                  child: AspectRatio(
+                    aspectRatio: _menuImageAspect,
+                    child: Image.asset(item.imageAssetPath!, fit: BoxFit.contain),
                   ),
                 ),
               Padding(
