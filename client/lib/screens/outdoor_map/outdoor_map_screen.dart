@@ -853,6 +853,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 기압 샘플 한 건을 세션에 넣고, 확정이 나오면 층을 옮긴다.
   void _onAltitudeSample(AltitudeSample sample) {
     if (!mounted) return;
+    // 스냅샷이 아직 없거나(PDR 시작 직후) 서 있어서 멈춘 동안에도 판정기는
+    // 층 그래프를 알아야 에스컬레이터 노드에 허가가 걸린다. 기압은 걸음과
+    // 무관하게 흐르므로 여기서도 컨텍스트를 준다.
+    _guidance.setContext(
+      floorId: _activeFloor,
+      graph: _floorGraph,
+      floorLabels: _building?.floors ?? const [],
+    );
     final outcome = _guidance.onAltitude(sample);
     final recorder = _pdrDebugRecorder;
     if (recorder != null) {
@@ -927,7 +935,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           setState(() => _escalatorStage = null);
       }
     }
-    _reportFloorTransitionUi();
   }
 
   /// 층 전환 작업을 직렬화한다.
@@ -985,7 +992,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _floorSwapVeil = 0;
     });
     _guidance.clearBoardingHold();
-    _reportFloorTransitionUi();
   }
 
   /// 스크림으로 덮은 뒤 오버레이 층을 갈아 끼운다.
@@ -996,7 +1002,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Future<bool> _swapIndoorFloorSmoothly(String floor) async {
     if (!(_building?.floors.contains(floor) ?? false)) return false;
     setState(() => _floorSwapVeil = 1);
-    _reportFloorTransitionUi();
     await Future<void>.delayed(floorTransitionScrimFadeIn);
     if (!mounted) return false;
     await _switchOverlayFloor(floor);
@@ -1005,7 +1010,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await Future<void>.delayed(_indoorFloorSwapVeilHold);
     if (!mounted) return false;
     setState(() => _floorSwapVeil = 0);
-    _reportFloorTransitionUi();
     return _activeFloor == floor;
   }
 
@@ -1037,7 +1041,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _escalatorRide = transition;
         _escalatorStage = null;
       });
-      _reportFloorTransitionUi();
 
       if (!await _swapIndoorFloorSmoothly(transition.toFloorLabel)) {
         await _endEscalatorRide();
@@ -1115,11 +1118,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       // 말하고 있어서, 확정 순간에 토스트가 겹치면 같은 내용이 두 벌이 된다.
       _escalatorArrivalTimer?.cancel();
       setState(() => _escalatorArrival = transition);
-      _reportFloorTransitionUi();
       _escalatorArrivalTimer = Timer(_indoorArrivalBannerHold, () {
         if (!mounted) return;
         setState(() => _escalatorArrival = null);
-        _reportFloorTransitionUi();
       });
     } finally {
       _applyingFloorTransition = false;
@@ -1228,7 +1229,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   void undoFloorTransition() {
     _escalatorArrivalTimer?.cancel();
     setState(() => _escalatorArrival = null);
-    _reportFloorTransitionUi();
     _enqueueFloorTransition(_undoFloorTransition);
   }
 
@@ -3389,7 +3389,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 야외를 걸어 다닌 거리가 실내 좌표계에 누적되다가, 다시 들어오는 순간
     // 걸어 본 적 없는 자리에서 시작했다.
     if (value) {
-      _guidance.attach(buildingId: _building?.id ?? '');
+      _ensureGuidanceAttached();
     } else {
       _guidance.detach();
       // 야외로 나가면 진행 중이던 층 전환도 끝난다. 남겨 두면 배너가 야외
@@ -4300,7 +4300,19 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   ///
   /// 층·그래프·앵커·경로는 세션이 들고 있으므로 여기서 다시 확인하지 않는다.
   /// 두 곳에서 같은 조건을 세면 반드시 한쪽이 먼저 낡는다.
+  /// 실내 안내를 지금 건물에 붙인다.
+  ///
+  /// 진입 시점에 건물이 아직 로드되지 않았을 수 있다. 그때 빈 id로 붙여 두면
+  /// GPS 추정점의 건물이 영원히 안 맞아 폴백 표시가 조용히 죽는다. 로드된 뒤
+  /// 처음 오는 스냅샷에서 제대로 붙인다.
+  void _ensureGuidanceAttached() {
+    final buildingId = _building?.id;
+    if (buildingId == null || _guidance.buildingId == buildingId) return;
+    _guidance.attach(buildingId: buildingId);
+  }
+
   void _syncCorridorTracking(PdrSnapshot? snapshot) {
+    if (_indoorEntered) _ensureGuidanceAttached();
     _guidance
       ..setContext(
         floorId: _activeFloor,
@@ -4311,6 +4323,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       ..setEstimate(indoorLocationEstimateController.current)
       ..setRoute(_indoorMultiFloorRoute);
     final result = _guidance.onSnapshot(snapshot);
+    // 탑승점 접근 배너와 마커 고정은 기압이 아니라 **걸음 갱신**에서 올라온다.
+    // 여기서 비우지 않으면 다음 기압 샘플(iOS는 약 1초)까지 늦는다.
+    if (result != null) _handleEscalatorPhaseChanges();
     _syncIndoorRouteProgress(result, snapshot);
     if (result == null) return;
     _pdrDebugRecorder?.recordCorridorCorrection(result);
@@ -4954,7 +4969,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   }
 
   @override
-  Widget build(BuildContext context) => _buildBody();
+  Widget build(BuildContext context) {
+    // 어느 경로로 상태가 바뀌든 여기서 한 번 보고한다. 상태를 바꾸는 자리마다
+    // 호출을 흩뿌리면 반드시 한 곳을 빠뜨리고, 그러면 배너가 남거나 안 뜬다.
+    // 같은 값이면 알리지 않으므로 매 프레임 불러도 부모가 다시 그리지 않는다.
+    _reportFloorTransitionUi();
+    return _buildBody();
+  }
 
   Widget _buildBody() {
     final position = _position;

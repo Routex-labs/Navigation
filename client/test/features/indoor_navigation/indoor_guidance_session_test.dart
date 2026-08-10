@@ -6,6 +6,7 @@ import 'package:navigation_client/features/indoor_navigation/application/indoor_
 import 'package:navigation_client/features/indoor_navigation/application/indoor_location_estimate.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/altitude_sample.dart';
 import 'package:navigation_client/models/building_graph.dart';
+import 'package:navigation_client/domain/route_movement.dart';
 import 'package:navigation_client/models/indoor_route.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/pdr_anchor.dart';
 import 'package:navigation_client/models/floor_graph.dart';
@@ -409,6 +410,116 @@ void main() {
 
       expect(session.takePhaseChanges(), isEmpty);
       expect(session.boardingHoldPointM, isNull);
+    });
+  });
+
+  group('경로 진행률', () {
+    /// 복도(0,0)~(50,0)을 그대로 따라가는 경로.
+    const route = IndoorRoute(
+      points: [],
+      pointsLocalM: [LocalPoint(0, 0), LocalPoint(50, 0)],
+      nodeIds: ['w', 'e'],
+      edgeIds: ['we'],
+      distanceMeters: 50,
+    );
+
+    IndoorGuidanceSession routedSession() =>
+        attachedSession()..setRouteSegment(route);
+
+    test('걸을수록 남은거리가 줄어든다', () {
+      final session = routedSession();
+
+      session.updateProgress(
+        session.onSnapshot(_walkedEast(5), timestampMs: 1000),
+        previewSteps: 5,
+      );
+      final after5 = session.displayProgress!.remainingM;
+
+      session.updateProgress(
+        session.onSnapshot(_walkedEast(20), timestampMs: 2000),
+        previewSteps: 20,
+      );
+      final after20 = session.displayProgress!.remainingM;
+
+      expect(after5, lessThan(50));
+      expect(after20, lessThan(after5));
+    });
+
+    test('경로가 없으면 진행률을 내지 않는다', () {
+      final session = attachedSession();
+
+      final update = session.updateProgress(
+        session.onSnapshot(_walkedEast(5), timestampMs: 1000),
+        previewSteps: 5,
+      );
+
+      expect(update.hasProgress, isFalse);
+      expect(session.displayProgress, isNull);
+    });
+
+    test('세그먼트를 갈아타면 진행거리 기준점을 새로 잡는다', () {
+      // 남겨 두면 새 세그먼트에서는 창 밖 값이 되어 매 걸음 재획득이 켜진다.
+      final session = routedSession();
+      session.updateProgress(
+        session.onSnapshot(_walkedEast(20), timestampMs: 1000),
+        previewSteps: 20,
+      );
+      expect(session.displayProgress, isNotNull);
+
+      session
+        ..setRouteSegment(route)
+        ..seedProgress(null);
+
+      expect(session.displayProgress, isNull);
+      expect(session.measuredProgress, isNull);
+    });
+
+    test('안내를 끝내면 진행률과 방향 상태를 모두 버린다', () {
+      final session = routedSession();
+      session.updateProgress(
+        session.onSnapshot(_walkedEast(20), timestampMs: 1000),
+        previewSteps: 20,
+      );
+      expect(session.displayProgress, isNotNull);
+
+      session.clearProgress();
+
+      expect(session.displayProgress, isNull);
+      expect(session.travelDirectionState, TravelDirectionState.forward);
+    });
+
+    test('에스컬레이터 위에서는 진행률을 갱신하지 않는다', () {
+      // 위치가 한 지점에 묶여 있어 그 투영은 "경로를 벗어났다"는 오판만 만들고,
+      // 곧 층이 바뀔 자리에서 재탐색을 돌린다.
+      final session = routedSession();
+      session.updateProgress(
+        session.onSnapshot(_walkedEast(5), timestampMs: 1000),
+        previewSteps: 5,
+      );
+      final frozen = session.displayProgress!.remainingM;
+
+      session.updateProgress(
+        session.onSnapshot(_walkedEast(30), timestampMs: 2000),
+        previewSteps: 30,
+        onEscalator: true,
+      );
+
+      expect(session.displayProgress!.remainingM, frozen);
+    });
+
+    test('경로 위를 정상적으로 걸으면 재탐색을 걸지 않는다', () {
+      final session = routedSession();
+
+      var asked = false;
+      for (var steps = 1; steps <= 20; steps += 1) {
+        final update = session.updateProgress(
+          session.onSnapshot(_walkedEast(steps), timestampMs: 1000 + steps * 500),
+          previewSteps: steps,
+        );
+        asked = asked || update.shouldReroute;
+      }
+
+      expect(asked, isFalse);
     });
   });
 
