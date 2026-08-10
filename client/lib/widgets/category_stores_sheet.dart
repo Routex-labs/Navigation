@@ -33,7 +33,6 @@ class CategoryStoresSheet extends StatefulWidget {
     this.currentFloor,
     this.subcategory,
     this.onSubcategoryChanged,
-    this.onFirstStoreChanged,
   });
 
   final String buildingId;
@@ -57,10 +56,6 @@ class CategoryStoresSheet extends StatefulWidget {
   /// 상위가 받아 [CategorySelection]을 갱신하지 않으면 목록과 지도가 어긋난다.
   final ValueChanged<String?>? onSubcategoryChanged;
 
-  /// 지금 목록 맨 위에 있는(=현재 층의 첫) 매장. 상위가 지도 카메라를 그리로
-  /// 옮긴다. 층을 옮기게 하지 않으려고 **현재 층 매장만** 올린다 — 현재 층에
-  /// 하나도 없으면 null이고, 그때 카메라는 그대로 둔다.
-  final ValueChanged<PoiSearchResult?>? onFirstStoreChanged;
 
   static Future<PoiSearchResult?> show(
     BuildContext context, {
@@ -70,7 +65,6 @@ class CategoryStoresSheet extends StatefulWidget {
     String? currentFloor,
     String? subcategory,
     ValueChanged<String?>? onSubcategoryChanged,
-    ValueChanged<PoiSearchResult?>? onFirstStoreChanged,
   }) {
     return showModalBottomSheet<PoiSearchResult>(
       context: context,
@@ -92,7 +86,6 @@ class CategoryStoresSheet extends StatefulWidget {
           currentFloor: currentFloor,
           subcategory: subcategory,
           onSubcategoryChanged: onSubcategoryChanged,
-          onFirstStoreChanged: onFirstStoreChanged,
         ),
       ),
     );
@@ -111,10 +104,6 @@ class _CategoryStoresSheetState extends State<CategoryStoresSheet> {
   late final Future<List<_CategoryStoreEntry>> _entriesFuture = _load();
   late String? _subcategory = widget.subcategory;
 
-  /// 마지막으로 상위에 알린 첫 매장의 id. 같은 매장을 반복해서 올리면 소분류를
-  /// 만질 때마다 카메라가 제자리에서 다시 움직인다.
-  String? _notifiedFirstStoreId;
-  bool _firstStoreNotified = false;
 
   /// back/X/항목 선택처럼 명시적 조작으로 pop될 때 true. PopScope가 pop을
   /// 받았을 때 이 값이 false면 barrier·drag-down으로 dismiss된 것으로 보고
@@ -130,31 +119,6 @@ class _CategoryStoresSheetState extends State<CategoryStoresSheet> {
         .toList();
   }
 
-  /// 목록 맨 위 매장을 상위에 알린다.
-  ///
-  /// build 중에 콜백을 부르면 상위가 그 자리에서 setState를 돌게 되므로 프레임
-  /// 뒤로 미룬다. 층이 다른 매장은 올리지 않는다 — 카메라를 옮기려면 지도가
-  /// 층을 갈아타야 하는데, 그러면 시트 머리글("현재 층 · 1F")이 가리키는 층과
-  /// 지도가 보여주는 층이 어긋난다.
-  void _notifyFirstStore(List<_CategoryStoreEntry> entries) {
-    final callback = widget.onFirstStoreChanged;
-    if (callback == null) return;
-    final current = widget.currentFloor;
-    _CategoryStoreEntry? first;
-    for (final entry in entries) {
-      if (current == null || entry.floor == current) {
-        first = entry;
-        break;
-      }
-    }
-    if (_firstStoreNotified && _notifiedFirstStoreId == first?.store.id) return;
-    _firstStoreNotified = true;
-    _notifiedFirstStoreId = first?.store.id;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      callback(first?.toPoiSearchResult());
-    });
-  }
 
   Future<List<_CategoryStoreEntry>> _load() async {
     final building = await buildingRepository.getBuilding(widget.buildingId);
@@ -300,7 +264,6 @@ class _CategoryStoresSheetState extends State<CategoryStoresSheet> {
     }
     final all = snapshot.data ?? const <_CategoryStoreEntry>[];
     if (all.isEmpty) {
-      _notifyFirstStore(const []);
       return const [
         SliverToBoxAdapter(
           child: Padding(
@@ -311,7 +274,6 @@ class _CategoryStoresSheetState extends State<CategoryStoresSheet> {
       ];
     }
     final entries = _applyFilters(all);
-    _notifyFirstStore(entries);
     if (entries.isEmpty) {
       return const [
         SliverToBoxAdapter(

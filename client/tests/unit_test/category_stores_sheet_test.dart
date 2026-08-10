@@ -4,7 +4,6 @@ import 'package:navigation_client/core/service_locator.dart';
 import 'package:navigation_client/models/building.dart';
 import 'package:navigation_client/repositories/building_repository.dart';
 import 'package:navigation_client/repositories/mock_building_repository.dart';
-import 'package:navigation_client/models/poi_search_result.dart';
 import 'package:navigation_client/widgets/category_stores_sheet.dart';
 
 /// 카테고리 매장 목록 시트가 **현재 층을 먼저** 보여주는지 고정한다.
@@ -147,44 +146,6 @@ void main() {
     expect(reported, ['와인·주류', null]);
   });
 
-  testWidgets('맨 위 매장을 상위에 알린다 — 현재 층 것만', (tester) async {
-    // 상위는 이 값으로 지도 카메라를 옮긴다. 다른 층 매장을 올리면 카메라가
-    // 층을 갈아타야 하고, 그러면 시트 머리글이 말하는 층과 지도가 어긋난다.
-    buildingRepository = _FloorStoresRepository(const {
-      'B1': [('와인웍스', '와인·주류')],
-      '1F': [('현대베이커리', '식품·그로서리')],
-    });
-    final focused = <String?>[];
-
-    await _openSheet(
-      tester,
-      currentFloor: '1F',
-      onFirstStoreChanged: (store) => focused.add(store?.name),
-    );
-
-    expect(focused, ['현대베이커리']);
-
-    // 소분류로 좁혀 현재 층 결과가 사라지면 카메라를 붙들 대상도 사라진다.
-    await tester.tap(find.text('와인·주류'));
-    await tester.pumpAndSettle();
-    expect(focused, ['현대베이커리', null]);
-  });
-
-  testWidgets('현재 층에 없으면 첫 매장으로 null을 올린다', (tester) async {
-    buildingRepository = _FloorStoresRepository(const {
-      'B1': [('와인웍스', null)],
-      '1F': <(String, String?)>[],
-    });
-    final focused = <String?>[];
-
-    await _openSheet(
-      tester,
-      currentFloor: '1F',
-      onFirstStoreChanged: (store) => focused.add(store?.name),
-    );
-
-    expect(focused, [null]);
-  });
 }
 
 void _resizeTo(Size size) {
@@ -202,7 +163,6 @@ Future<void> _openSheet(
   WidgetTester tester, {
   required String? currentFloor,
   ValueChanged<String?>? onSubcategoryChanged,
-  ValueChanged<PoiSearchResult?>? onFirstStoreChanged,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -216,7 +176,6 @@ Future<void> _openSheet(
               onCloseAll: () {},
               currentFloor: currentFloor,
               onSubcategoryChanged: onSubcategoryChanged,
-              onFirstStoreChanged: onFirstStoreChanged,
             ),
             child: const Text('열기'),
           ),

@@ -671,42 +671,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
         onSubcategoryChanged: (value) => _onCategorySelectionChanged(
           CategorySelection(category: category, subcategory: value),
         ),
-        onFirstStoreChanged: _focusCategoryFirstStore,
       ),
     );
     if (_closeSheetChainRequested || picked == null || !mounted) return false;
     return _showStoreInfo(picked, focusOnMap: true);
-  }
-
-  /// 카테고리 목록 맨 위 매장을 지도에서 보여 준다.
-  ///
-  /// 시트가 화면 아래를, 카테고리 chip 줄이 위를 가리므로 **그 사이에 남는 띠
-  /// 한가운데**가 목표 지점이다. 정중앙에 놓으면 시트 뒤에 숨고, 시트 높이만
-  /// 감안하면 이번엔 chip 줄 뒤로 올라간다.
-  ///
-  /// 시트는 현재 층 매장만 올려 준다(`onFirstStoreChanged` 주석). 다른 층으로
-  /// 카메라를 보내면 지도가 층을 갈아타야 하는데, 그러면 시트 머리글이 말하는
-  /// 층과 지도가 어긋난다.
-  void _focusCategoryFirstStore(PoiSearchResult? store) {
-    if (store == null || !mounted) return;
-    final topInsetPx = _categoryRowBottomPx();
-    if (_outdoorIndoorEntered) {
-      _outdoorKey.currentState?.focusStore(
-        store,
-        bottomSheetFraction: kCategoryStoresSheetInitialSize,
-        topInsetPx: topInsetPx,
-      );
-    }
-  }
-
-  /// 지도 위 카테고리 chip 줄의 아래 끝(화면 좌표·논리 픽셀). 상수로 박지 않고
-  /// 실제로 재는 이유는, 이 줄이 길찾기 초안 바 때문에 아래로 밀리거나 검색 중
-  /// 접히기 때문이다. 트리에 없으면 0 — 가릴 것이 없다는 뜻이다.
-  double _categoryRowBottomPx() {
-    final box =
-        _categoryRowKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize) return 0;
-    return box.localToGlobal(Offset.zero).dy + box.size.height;
   }
 
   Future<List<DirectionsCandidate>> _searchDirectionsCandidates(
