@@ -114,19 +114,23 @@ class PlaceMenuItem {
   final String? caffeine;
   final String? imageAssetPath;
 
-  /// 가격 자리를 대신 채울 한 줄(`355ml · 5kcal · 190mg`).
+  /// 팝업에 보여 줄 영양정보 목록. 없는 값은 빠진다.
   ///
-  /// 셋 다 없으면 `null`이라 카드가 줄 자체를 그리지 않는다. 빈 문자열을 반환하면
-  /// 보이지 않는 한 줄만큼 카드 높이가 달라져서, 푸드 카드와 음료 카드가 같은 줄에서
-  /// 어긋난다.
-  String? get specLine {
-    final parts = [
-      volume,
-      calories,
-      caffeine,
-    ].where((part) => part != null && part.isNotEmpty).cast<String>();
-    return parts.isEmpty ? null : parts.join(' · ');
-  }
+  /// 푸드에는 이 정보가 아예 없어서 빈 목록이 된다. 그때 팝업은 이 블록을 통째로
+  /// 생략한다 — 라벨만 있고 값이 빈 표를 그리면 "정보가 없다"가 아니라 "불러오지
+  /// 못했다"로 읽힌다.
+  List<(String, String)> get nutritionFacts => [
+    if (price != null && price!.isNotEmpty) ('가격', price!),
+    if (volume != null && volume!.isNotEmpty) ('용량', volume!),
+    if (calories != null && calories!.isNotEmpty) ('칼로리', calories!),
+    if (caffeine != null && caffeine!.isNotEmpty) ('카페인', caffeine!),
+  ];
+
+  /// 팝업을 열 만한 내용이 있는가.
+  ///
+  /// 없으면 카드를 누를 수 없게 만든다. 눌렀는데 카드에 이미 있는 이름만 다시
+  /// 나오는 팝업은 막다른 길이고, 한 번 겪으면 다음 카드도 안 누르게 된다.
+  bool get hasDetail => nutritionFacts.isNotEmpty || (description?.isNotEmpty ?? false);
 }
 
 /// 메뉴를 좁은 가로 카드 목록으로 보여 준다. 카테고리가 있으면 위에 탭을 붙인다.
@@ -189,7 +193,7 @@ class _PlaceMenuSectionState extends State<PlaceMenuSection> {
         ],
         const SizedBox(height: 10),
         SizedBox(
-          height: 230,
+          height: _menuListHeight(context),
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             // 탭을 바꾸면 가로 스크롤을 처음으로 되돌린다. key가 없으면 같은
@@ -260,18 +264,52 @@ class _MenuCategoryTabs extends StatelessWidget {
   );
 }
 
-/// 가격 자리에 넣을 문구. 가격이 우선이고, 없으면 용량·칼로리·카페인이 대신 온다.
-String? _metaLine(PlaceMenuItem item) => item.price ?? item.specLine;
+const _menuCardWidth = 172.0;
+const _menuImageHeight = 104.0;
+const _menuCardPadding = 12.0;
+const _menuNameSize = 14.0;
+const _menuNameEnSize = 11.0;
+const _menuNameGap = 2.0;
 
+/// 카드 글자의 줄 높이. **두 곳에서 같은 값을 써야 해서 상수로 뽑는다** — 아래
+/// [_menuListHeight]가 이 값으로 카드 높이를 계산하고, 카드가 이 값으로 글자를
+/// 그린다. 둘이 어긋나면 그 차이가 그대로 넘침이 된다.
+///
+/// `TextStyle.height`를 비워 두면 줄 높이가 글꼴 메트릭에서 나와 기기·글꼴마다
+/// 달라진다. 계산과 실제가 어긋나는 원인이 여기였다.
+const _menuTextLineHeight = 1.25;
+
+/// 카드 목록의 높이. **상수로 박지 않고 글자 배율에서 계산한다.**
+///
+/// 예전에는 230으로 박아 뒀는데, 기기의 글자 크기 설정이 커지면 안쪽 텍스트가 그
+/// 높이를 넘어 `BOTTOM OVERFLOWED BY N PIXELS`가 떴다. 여백을 넉넉히 주는 것으로
+/// 넘어가면 배율을 더 키운 기기에서 같은 일이 다시 생긴다 — 배율을 실제로 읽어서
+/// 필요한 만큼 잡는 쪽이 이 실패를 없앤다.
+double _menuListHeight(BuildContext context) {
+  final scaler = MediaQuery.textScalerOf(context);
+  // 글자는 이름·영문명 두 줄뿐이다. 줄 높이를 위에서 못 박아 뒀으므로 이 계산은
+  // 추정이 아니라 실제 값이다. 소수점은 올려서 반올림 차이로 1px 넘치는 것을 막는다.
+  final textBlock =
+      scaler.scale(_menuNameSize) * _menuTextLineHeight +
+      _menuNameGap +
+      scaler.scale(_menuNameEnSize) * _menuTextLineHeight;
+  return (_menuImageHeight + _menuCardPadding * 2 + textBlock).ceilToDouble();
+}
+
+/// 메뉴 카드 한 장. 사진 + 이름 + 영문명까지만 싣는다.
+///
+/// 용량·칼로리·카페인을 카드에서 뺀 이유는 **카드가 고르는 자리이기 때문**이다.
+/// 30장을 옆으로 넘기면서 읽는 화면에서 숫자 세 개는 이름을 가리는 노이즈였고,
+/// 정작 그 숫자가 궁금해지는 건 하나를 고른 다음이다. 그래서 나머지는 팝업으로
+/// 옮겼다([_MenuDetailDialog]).
 class _PlaceMenuCard extends StatelessWidget {
   const _PlaceMenuCard({required this.item});
 
   final PlaceMenuItem item;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 172,
-    child: DecoratedBox(
+  Widget build(BuildContext context) {
+    final card = DecoratedBox(
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(14),
@@ -281,18 +319,30 @@ class _PlaceMenuCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (item.imageAssetPath != null)
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
-              child: Image.asset(
-                item.imageAssetPath!,
-                height: 104,
-                width: double.infinity,
-                fit: BoxFit.cover,
-              ),
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                  child: Image.asset(
+                    item.imageAssetPath!,
+                    height: _menuImageHeight,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                // 누를 수 있다는 표시. 줄을 하나 더 쓰지 않으려고 사진 위에 얹는다 —
+                // 표시가 없으면 팝업이 있다는 걸 아무도 모른다.
+                if (item.hasDetail)
+                  const Positioned(
+                    right: 6,
+                    top: 6,
+                    child: _MenuDetailBadge(),
+                  ),
+              ],
             ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(_menuCardPadding),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -300,39 +350,23 @@ class _PlaceMenuCard extends StatelessWidget {
                     item.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                      fontSize: _menuNameSize,
+                      height: _menuTextLineHeight,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   if (item.nameEn != null) ...[
-                    const SizedBox(height: 2),
+                    const SizedBox(height: _menuNameGap),
                     Text(
                       item.nameEn!,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 11, color: AppColors.muted),
-                    ),
-                  ],
-                  // 가격이 있으면 가격, 없으면 용량·칼로리·카페인. 둘 다 없는 카드도
-                  // 있고(가격을 공개하지 않는 푸드), 그때는 이 줄을 통째로 생략한다.
-                  if (_metaLine(item) != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      _metaLine(item)!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: item.price != null ? 14 : 12,
-                        fontWeight: item.price != null ? FontWeight.w700 : FontWeight.w600,
-                        color: item.price != null ? AppColors.text : AppColors.blue500,
+                      style: const TextStyle(
+                        fontSize: _menuNameEnSize,
+                        height: _menuTextLineHeight,
+                        color: AppColors.muted,
                       ),
-                    ),
-                  ],
-                  if (item.description != null) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      item.description!,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12, color: AppColors.muted, height: 1.3),
                     ),
                   ],
                 ],
@@ -341,7 +375,155 @@ class _PlaceMenuCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+
+    return SizedBox(
+      width: _menuCardWidth,
+      child: item.hasDetail
+          ? GestureDetector(
+              onTap: () => showDialog<void>(
+                context: context,
+                builder: (_) => _MenuDetailDialog(item: item),
+              ),
+              child: card,
+            )
+          : card,
+    );
+  }
+}
+
+class _MenuDetailBadge extends StatelessWidget {
+  const _MenuDetailBadge();
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: Colors.black.withValues(alpha: 0.5),
+      shape: BoxShape.circle,
     ),
+    child: const Padding(
+      padding: EdgeInsets.all(3),
+      child: Icon(Icons.info_outline, size: 14, color: Colors.white),
+    ),
+  );
+}
+
+/// 메뉴 하나의 상세. 카드에서 뺀 설명과 영양정보가 여기 모인다.
+///
+/// 시트가 아니라 다이얼로그인 이유는 **뒤로가기 규약**(설계 F5) 때문이다. 상세 시트는
+/// 자기 라우트가 pop되면 `onCloseAll`로 시트 묶음 전체를 닫는데, 그 위에 시트를 하나
+/// 더 쌓으면 뒤로가기 한 번이 어디까지 닫는지가 흐려진다. 다이얼로그는 별도 라우트라
+/// 뒤로가기가 팝업만 닫고 상세 시트는 그대로 남는다.
+class _MenuDetailDialog extends StatelessWidget {
+  const _MenuDetailDialog({required this.item});
+
+  final PlaceMenuItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final facts = item.nutritionFacts;
+
+    return Dialog(
+      backgroundColor: AppColors.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 340),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (item.imageAssetPath != null)
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+                  child: Image.asset(
+                    item.imageAssetPath!,
+                    height: 200,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.name,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.text,
+                      ),
+                    ),
+                    if (item.nameEn != null) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        item.nameEn!,
+                        style: const TextStyle(fontSize: 13, color: AppColors.muted),
+                      ),
+                    ],
+                    if (item.description != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        keepWordsWhole(item.description!),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          height: 1.45,
+                          color: AppColors.text,
+                        ),
+                      ),
+                    ],
+                    // 푸드에는 영양정보가 없다. 라벨만 남은 빈 표를 그리면 "정보가
+                    // 없다"가 아니라 "못 불러왔다"로 읽히므로 블록째 생략한다.
+                    if (facts.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      for (var index = 0; index < facts.length; index++) ...[
+                        if (index > 0) const Divider(height: 17),
+                        _NutritionRow(label: facts[index].$1, value: facts[index].$2),
+                      ],
+                    ],
+                  ],
+                ),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 0, 12, 8),
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('닫기'),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NutritionRow extends StatelessWidget {
+  const _NutritionRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      Text(label, style: const TextStyle(fontSize: 13, color: AppColors.muted)),
+      Text(
+        value,
+        style: const TextStyle(
+          fontSize: 13.5,
+          fontWeight: FontWeight.w700,
+          color: AppColors.text,
+        ),
+      ),
+    ],
   );
 }
 

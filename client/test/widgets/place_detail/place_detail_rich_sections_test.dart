@@ -42,51 +42,9 @@ void main() {
       expect(find.byType(PageView), findsNothing);
     });
 
-    testWidgets('menu cards render name price description and image asset', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        subject(
-          const PlaceMenuSection(
-            items: [
-              PlaceMenuItem(
-                name: '카페 아메리카노',
-                price: '4,700원',
-                description: '진한 에스프레소와 물',
-                imageAssetPath:
-                    'assets/place_details/starbucks_reserve_menu.jpg',
-              ),
-            ],
-          ),
-        ),
-      );
-
-      expect(find.text('메뉴'), findsOneWidget);
-      expect(find.text('카페 아메리카노'), findsOneWidget);
-      expect(find.text('4,700원'), findsOneWidget);
-      expect(find.text('진한 에스프레소와 물'), findsOneWidget);
-      expect(find.byType(Image), findsOneWidget);
-    });
-
-    testWidgets('menu card supports a menu without optional fields', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        subject(
-          const PlaceMenuSection(
-            items: [PlaceMenuItem(name: '오늘의 커피', price: '5,000원')],
-          ),
-        ),
-      );
-
-      expect(find.text('오늘의 커피'), findsOneWidget);
-      expect(find.text('5,000원'), findsOneWidget);
-      expect(find.byType(Image), findsNothing);
-    });
-
-    // 가격을 공개하지 않는 출처(스타벅스 코리아 공식 사이트)가 있어서, 가격 자리를
-    // 용량·칼로리·카페인이 대신 채운다. 지어낸 가격을 넣지 않기 위한 자리다.
-    testWidgets('menu card falls back to volume, calories and caffeine', (
+    // 카드는 고르는 자리다. 이름과 영문명까지만 싣고 설명·용량·칼로리는 팝업으로
+    // 옮겼다 — 30장을 옆으로 넘기는 화면에서 숫자 세 개는 이름을 가리는 노이즈였다.
+    testWidgets('menu card shows only the name and the english name', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -96,6 +54,37 @@ void main() {
               PlaceMenuItem(
                 name: '리저브 콜드 브루',
                 nameEn: 'Reserve Cold Brew',
+                description: '깊고 부드러운 풍미의 커피',
+                volume: '355ml',
+                calories: '5kcal',
+                caffeine: '190mg',
+                imageAssetPath:
+                    'assets/place_details/starbucks_reserve_menu.jpg',
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(find.text('메뉴'), findsOneWidget);
+      expect(find.text('리저브 콜드 브루'), findsOneWidget);
+      expect(find.text('Reserve Cold Brew'), findsOneWidget);
+      expect(find.byType(Image), findsOneWidget);
+      // 카드에는 없다. 여기가 새면 예전 레이아웃으로 되돌아간 것이다.
+      expect(find.textContaining('355ml'), findsNothing);
+      expect(find.textContaining('5kcal'), findsNothing);
+      expect(find.text('깊고 부드러운 풍미의 커피'), findsNothing);
+    });
+
+    testWidgets('tapping a card opens the detail popup', (tester) async {
+      await tester.pumpWidget(
+        subject(
+          const PlaceMenuSection(
+            items: [
+              PlaceMenuItem(
+                name: '리저브 콜드 브루',
+                nameEn: 'Reserve Cold Brew',
+                description: '깊고 부드러운 풍미의 커피',
                 volume: '355ml',
                 calories: '5kcal',
                 caffeine: '190mg',
@@ -105,26 +94,86 @@ void main() {
         ),
       );
 
-      expect(find.text('Reserve Cold Brew'), findsOneWidget);
-      expect(find.text('355ml · 5kcal · 190mg'), findsOneWidget);
+      await tester.tap(find.text('리저브 콜드 브루'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(keepWordsWhole('깊고 부드러운 풍미의 커피')), findsOneWidget);
+      expect(find.text('355ml'), findsOneWidget);
+      expect(find.text('5kcal'), findsOneWidget);
+      expect(find.text('190mg'), findsOneWidget);
+      expect(find.text('용량'), findsOneWidget);
     });
 
-    // 푸드에는 영양정보가 없다. 빈 줄을 그리면 그만큼 카드 높이가 달라져 같은 줄의
-    // 음료 카드와 어긋난다.
-    testWidgets('menu card omits the meta line when nothing fills it', (
+    // 푸드에는 영양정보가 없다. 라벨만 남은 빈 표를 그리면 "정보가 없다"가 아니라
+    // "못 불러왔다"로 읽힌다.
+    testWidgets('popup omits the nutrition block when there is none', (
       tester,
     ) async {
       await tester.pumpWidget(
         subject(
           const PlaceMenuSection(
-            items: [PlaceMenuItem(name: '플레인 베이글', description: '담백한 베이글')],
+            items: [
+              PlaceMenuItem(name: '플레인 베이글', description: '담백한 베이글'),
+            ],
           ),
         ),
       );
 
-      expect(find.text('플레인 베이글'), findsOneWidget);
-      expect(find.text('담백한 베이글'), findsOneWidget);
-      expect(find.byType(Text), findsNWidgets(3)); // 제목 + 이름 + 설명
+      await tester.tap(find.text('플레인 베이글'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(keepWordsWhole('담백한 베이글')), findsOneWidget);
+      expect(find.text('용량'), findsNothing);
+      expect(find.text('칼로리'), findsNothing);
+      expect(find.text('카페인'), findsNothing);
+    });
+
+    // 눌렀는데 카드에 이미 있는 이름만 다시 나오는 팝업은 막다른 길이다. 한 번
+    // 겪으면 다음 카드도 안 누르게 되므로 아예 안 눌리게 한다.
+    testWidgets('a card with nothing more to show is not tappable', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        subject(
+          const PlaceMenuSection(
+            items: [PlaceMenuItem(name: '오늘의 커피', nameEn: 'Coffee of the Day')],
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('오늘의 커피'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Dialog), findsNothing);
+    });
+
+    // 카드 높이를 상수로 박아 두면 기기 글자 크기 설정이 커졌을 때 넘친다. 실제로
+    // `BOTTOM OVERFLOWED BY 2.0 PIXELS`가 떴다.
+    testWidgets('menu card does not overflow at a large text scale', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(textScaler: TextScaler.linear(2.0)),
+            child: const Scaffold(
+              body: SingleChildScrollView(
+                child: PlaceMenuSection(
+                  items: [
+                    PlaceMenuItem(
+                      name: '초콜릿 크림 칩 프라푸치노',
+                      nameEn: 'Chocolate Cream Chip Frappuccino',
+                      volume: '355ml',
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('menu tabs filter items by category in server order', (
