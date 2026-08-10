@@ -253,11 +253,14 @@ class _PlaceMenuSectionState extends State<PlaceMenuSection> {
   }
 }
 
-/// 메뉴 한 줄. 왼쪽에 사진, 오른쪽에 이름·영문명·설명.
+/// 메뉴 한 줄. 왼쪽에 이름·설명·가격, 오른쪽에 사진.
 ///
-/// 가로 카드에서 세로 줄로 바꾼 이유는 **끝이 보이기 때문**이다. 옆으로 미는 목록은
-/// 몇 개가 더 있는지 알 수 없어서 끝까지 밀어 본 사람만 전부 봤다. 세로로 세우면
-/// 한 화면에 네댓 줄이 들어오고 남은 분량이 스크롤바로 드러난다.
+/// 글을 왼쪽에 둔 이유는 **읽는 순서** 때문이다. 사람은 왼쪽부터 읽는데 사진이 앞에
+/// 있으면 이름을 보려고 눈이 한 번 건너뛴다. 사진은 이름을 확인한 뒤 "그래서 뭐가
+/// 나오는데"에 답하는 자리라 오른쪽이 맞다.
+///
+/// **영문명은 줄에서 뺐다.** 한 줄에 이름·영문명·설명·가격이 다 오면 무엇이 제목인지
+/// 흐려진다. 영문명은 골라서 팝업을 연 사람에게만 필요하다.
 class _MenuRow extends StatelessWidget {
   const _MenuRow({required this.item});
 
@@ -268,47 +271,26 @@ class _MenuRow extends StatelessWidget {
     final row = Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: placeSectionGutter,
-        vertical: 10,
+        vertical: 12,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (item.imageAssetPath != null) ...[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: Image.asset(
-                item.imageAssetPath!,
-                width: _menuThumbWidth,
-                height: _menuThumbHeight,
-                // 카드와 같은 이유로 원본 비율을 지킨다(설계 7-A-2).
-                fit: BoxFit.contain,
-              ),
-            ),
-            const SizedBox(width: 12),
-          ],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   item.name,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 14.5,
+                    fontSize: 16,
                     fontWeight: FontWeight.w700,
+                    height: 1.3,
                     color: AppColors.text,
                   ),
                 ),
-                if (item.nameEn != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    item.nameEn!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12, color: AppColors.muted),
-                  ),
-                ],
                 if (item.description != null) ...[
                   const SizedBox(height: 5),
                   Text(
@@ -322,16 +304,33 @@ class _MenuRow extends StatelessWidget {
                     ),
                   ),
                 ],
+                // 가격이 있으면 설명 아래. 지금 데이터에는 없어서 그려지지 않는다 —
+                // 공식 사이트가 가격을 공개하지 않아 지어내는 대신 비워 뒀다.
+                if (item.price != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    item.price!,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.text,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
-          // 더 볼 것이 있는 줄만 화살표를 단다. 없는데 달면 눌러 보고 아무 일도
-          // 일어나지 않는다.
-          if (item.hasDetail) ...[
-            const SizedBox(width: 8),
-            const Padding(
-              padding: EdgeInsets.only(top: 2),
-              child: Icon(Icons.chevron_right, size: 20, color: AppColors.muted),
+          if (item.imageAssetPath != null) ...[
+            const SizedBox(width: 14),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.asset(
+                item.imageAssetPath!,
+                width: _menuThumbWidth,
+                height: _menuThumbHeight,
+                // 카드와 같은 이유로 원본 비율을 지킨다(설계 7-A-2).
+                fit: BoxFit.contain,
+              ),
             ),
           ],
         ],

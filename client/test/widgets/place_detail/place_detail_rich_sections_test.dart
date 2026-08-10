@@ -42,9 +42,9 @@ void main() {
       expect(find.byType(PageView), findsNothing);
     });
 
-    // 줄에는 이름·영문명·설명까지만 싣고 용량·칼로리·카페인은 팝업으로 옮겼다 —
-    // 목록을 훑는 동안 숫자 세 개는 이름을 가리는 노이즈였다.
-    testWidgets('menu row shows the name, english name and description', (
+    // 한 줄에 이름·영문명·설명·가격이 다 오면 무엇이 제목인지 흐려진다. 영문명은
+    // 골라서 팝업을 연 사람에게만 필요하다.
+    testWidgets('menu row drops the english name and keeps the description', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -68,12 +68,34 @@ void main() {
 
       expect(find.text('메뉴'), findsOneWidget);
       expect(find.text('리저브 콜드 브루'), findsOneWidget);
-      expect(find.text('Reserve Cold Brew'), findsOneWidget);
       expect(find.text('깊고 부드러운 풍미의 커피'), findsOneWidget);
       expect(find.byType(Image), findsOneWidget);
-      // 줄에는 없다. 여기가 새면 숫자가 다시 목록으로 올라온 것이다.
+      // 줄에는 없다. 여기가 새면 제목이 다시 흐려진 것이다.
+      expect(find.text('Reserve Cold Brew'), findsNothing);
       expect(find.textContaining('355ml'), findsNothing);
       expect(find.textContaining('5kcal'), findsNothing);
+    });
+
+    // 가격은 설명 아래에 온다. 지금 데이터에는 없지만 자리는 계약으로 고정한다 —
+    // 공식 가격 출처가 생기면 데이터만 채우면 되게.
+    testWidgets('menu row shows the price under the description', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        subject(
+          const PlaceMenuSection(
+            items: [
+              PlaceMenuItem(
+                name: '카페 아메리카노',
+                description: '진한 에스프레소와 물',
+                price: '4,700원',
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(find.text('4,700원'), findsOneWidget);
     });
 
     testWidgets('tapping a card opens the detail popup', (tester) async {
