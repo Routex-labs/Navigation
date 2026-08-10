@@ -157,6 +157,25 @@ class IndoorGuidanceSession {
     _resetTracking();
   }
 
+  /// 탑승점 고정만 푼다.
+  ///
+  /// 단계 전이가 아니라 화면 쪽 출구(되돌리기·취소 정리)에서 탑승이 끝나는
+  /// 경로가 있다. 그 경로가 고정을 안 풀면 마커가 탑승점에 붙은 채 남는다.
+  void clearBoardingHold() {
+    _boardingHoldPointM = null;
+  }
+
+  /// 부착·층·경로는 그대로 두고 **보정만** 처음부터 다시 본다.
+  ///
+  /// 새 PDR 세션을 시작했거나 앵커를 다시 찍은 경우다. [detach]와 달리 층·
+  /// 그래프·경로를 버리지 않는다 — 그것까지 버리면 다음 스냅샷이 올 때까지
+  /// 화면이 컨텍스트 없는 상태로 남는다.
+  void resetTracking() {
+    _corridor.reset();
+    _snapshot = null;
+    _boardingHoldPointM = null;
+  }
+
   void _resetTracking() {
     _corridor.reset();
     _snapshot = null;

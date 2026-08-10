@@ -4001,11 +4001,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
     setState(() {
       _pdrTrailState.beginNewSession();
-      // 새 PDR 세션이다. 이전 세션의 보정·판정을 들고 가면 첫 프레임이 지난
-      // 세션 좌표에서 시작한다. 붙어 있는 상태를 유지한 채 내용만 비운다.
-      _guidance
-        ..detach()
-        ..attach(buildingId: _building?.id ?? '');
+      // 새 PDR 세션이다. 이전 세션의 보정을 들고 가면 첫 프레임이 지난 세션
+      // 좌표에서 시작한다. 층·경로 컨텍스트는 그대로 두고 보정만 비운다.
+      _guidance.resetTracking();
     });
     return true;
   }

@@ -15,10 +15,10 @@ import '../../features/indoor_navigation/debug/pdr_debug_device_info.dart';
 import '../../features/indoor_navigation/debug/pdr_debug_session_recorder.dart';
 import '../../features/indoor_navigation/debug/pdr_debug_session_share.dart';
 import '../../features/indoor_navigation/application/corridor_position_tracker.dart';
-import '../../features/indoor_navigation/application/corridor_tracking_session.dart';
 import '../../features/indoor_navigation/application/guidance_trail_session.dart';
 import '../../features/indoor_navigation/application/escalator_node_naming.dart';
 import '../../features/indoor_navigation/application/escalator_transition_detector.dart';
+import '../../features/indoor_navigation/application/indoor_guidance_session.dart';
 import '../../features/indoor_navigation/application/indoor_location_estimate.dart';
 import '../../domain/dijkstra.dart';
 import '../../domain/multi_floor_router.dart';
@@ -337,8 +337,8 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 
   String? _highlightedStoreId;
   late final DebugPdrTrailState _pdrTrailState;
-  final CorridorTrackingSession _corridorTrackingSession =
-      CorridorTrackingSession();
+  /// 실내 안내의 위치·층 판정. 홈 지도와 **같은 구현**을 쓴다.
+  final IndoorGuidanceSession _guidance = IndoorGuidanceSession();
   final GuidanceTrailSession _guidanceTrailSession = GuidanceTrailSession();
   StreamSubscription<PdrSnapshot>? _pdrSnapshotSub;
   StreamSubscription<CalibrationStatus>? _pdrCalibrationSub;
@@ -346,11 +346,6 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   StreamSubscription<RawMotionActivity>? _pdrRawMotionSub;
   bool _placingPdrAnchor = false;
   PdrDebugSessionRecorder? _pdrDebugRecorder;
-
-  /// 기압으로 에스컬레이터 층 이동을 판정한다. 화면이 층·그래프·보정 위치를
-  /// 먹여 주고, 확정이 나오면 [_applyEscalatorTransition]이 층을 바꾼다.
-  final EscalatorTransitionDetector _escalatorDetector =
-      EscalatorTransitionDetector();
 
   /// 자동 층 전환 직전의 층·앵커. 되돌리기가 이 값으로 복원한다.
   String? _preTransferFloor;
@@ -381,15 +376,6 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 
   /// 탑승 때문에 걸음 적용을 멈춘 상태인지. pause/resume 짝을 한 곳에서 센다.
   bool _stepsPausedForRide = false;
-
-  /// 탑승 판정 구간에 현재 위치를 고정할 지점(이 층 local m). null이면 평소처럼
-  /// tracker 위치를 그대로 그린다.
-  ///
-  /// **안내가 "여기서 타라"고 지목한 그 탑승점일 때만** 채워진다. 경로와 무관한
-  /// 에스컬레이터 옆을 지나가는 것으로는 고정하지 않는다 — 그건 그냥 걷는
-  /// 중이고, 고정하면 멀쩡한 보행자의 마커를 세워 버린다. [_boardingHoldNodeId]
-  /// 참고.
-  PdrLocalPoint? _boardingHoldPointM;
 
   // 셸에 마지막으로 알린 층 전환 UI 상태. 같은 값이면 다시 알리지 않는다.
   FloorTransitionUiState? _reportedFloorTransition;
@@ -552,7 +538,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     // 걸음 적용을 멈춘 동안에도 흐르는 원시 움직임. 하차 첫 걸음을 기압
     // 샘플 하나로 잡는 유일한 근거라 pause 여부와 무관하게 계속 넣는다.
     _pdrRawMotionSub = indoorNavigationDriver.rawMotion.listen(
-      _escalatorDetector.onRawMotion,
+      _guidance.onRawMotion,
     );
     _loadBuilding();
   }
@@ -901,10 +887,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       _offRouteEvidenceUpdates = 0;
       _offRouteFirstEvidenceAtMs = null;
       _highlightedStoreId = null;
-      // 고정점은 이 층 local m 좌표다. 층이 바뀌면 같은 숫자가 다른 자리를
-      // 가리키므로 반드시 버린다(전환 뒤에는 도착 노드 마커가 이어받는다).
-      _boardingHoldPointM = null;
     });
+    // 고정점은 이 층 local m 좌표다. 층이 바뀌면 같은 숫자가 다른 자리를
+    // 가리키므로 세션이 버린다(전환 뒤에는 도착 노드 마커가 이어받는다).
+    _guidance.setContext(floorId: floor, graph: _floorGraph);
     if (hadRouteVisible != _hasActiveRoute) {
       widget.onRouteVisibleChanged?.call(_hasActiveRoute);
     }
@@ -1131,7 +1117,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 
     setState(() {
       _pdrTrailState.beginNewSession();
-      _corridorTrackingSession.reset();
+      _guidance.resetTracking();
       _routeProgress = null;
       _lastRouteTraveledM = null;
       _lastRouteProgressAcceptedSteps = null;
@@ -1263,7 +1249,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     if (floor != null) {
       _guidanceTrailSession.start(
         floorId: floor,
-        result: _corridorTrackingSession.result,
+        result: _guidance.trackingResult,
       );
     }
     _beginRouteRecordingSession();
@@ -1503,7 +1489,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   /// 위에서 재탐색을 반복하지 않게 한다.
   IndoorRoute _routeStartingAtCurrent(IndoorRoute route, String floor) {
     final anchor = _pdrTrailState.anchor;
-    final result = _corridorTrackingSession.result;
+    final result = _guidance.trackingResult;
     final graph = _floorGraph;
     if (anchor == null ||
         anchor.floorId != floor ||
@@ -1572,7 +1558,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   }
 
   RouteProgress? _seedProgressAtCurrentRouteStart(IndoorRoute route) {
-    final result = _corridorTrackingSession.result;
+    final result = _guidance.trackingResult;
     if (result == null || route.pointsLocalM.isEmpty) return null;
     final first = route.pointsLocalM.first;
     final distanceToStartM = math.sqrt(
@@ -1654,9 +1640,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       _offRouteEvidenceUpdates = 0;
       _offRouteFirstEvidenceAtMs = null;
       _guidanceTrailSession.clear();
-      // 안내가 끝나면 "안내가 지목한 탑승점"도 없다.
-      _boardingHoldPointM = null;
     });
+    // 안내가 끝나면 "안내가 지목한 탑승점"도 없다.
+    _guidance.setRoute(null);
     widget.onRouteVisibleChanged?.call(false);
     // 한 번의 길안내가 여기서 끝난다. 세션을 닫고 내보내기 기회를 준다.
     _endRouteRecordingSession();
@@ -1807,7 +1793,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     // 내리면 새 층에서 경로가 다시 잡힌다. 그러니 말하지 않는 편이 정확하다.
     final inFloorTransfer =
         _escalatorRide != null ||
-        _boardingHoldPointM != null ||
+        _guidance.boardingHoldPointM != null ||
         _escalatorStage != null;
     return buildRouteGuidance(
       localPoints: route.pointsLocalM,
@@ -1928,19 +1914,19 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   List<PdrLocalPoint> get _pdrMatchedFloorPath {
     final anchor = _pdrTrailState.anchor;
     if (anchor == null || anchor.floorId != _selectedFloor) return const [];
-    return _corridorTrackingSession.result?.correctedPath ?? const [];
+    return _guidance.trackingResult?.correctedPath ?? const [];
   }
 
   List<PdrLocalPoint> get _pdrMatchedPreviewFloorPath {
     final anchor = _pdrTrailState.anchor;
     if (anchor == null || anchor.floorId != _selectedFloor) return const [];
-    final preview = _corridorTrackingSession.result?.previewPath ?? const [];
+    final preview = _guidance.trackingResult?.previewPath ?? const [];
     return preview.length >= 2 ? preview : const [];
   }
 
   Set<String> get _pdrMatchedEdgeIds {
     if (!_hasMeaningfulPdrMovement(_pdrConfirmedFloorPath)) return const {};
-    final edgeId = _corridorTrackingSession.result?.currentEdgeId;
+    final edgeId = _guidance.trackingResult?.currentEdgeId;
     return edgeId == null ? const {} : {edgeId};
   }
 
@@ -1961,7 +1947,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 
   ll.LatLng? get _pdrCurrentLocation {
     final graph = _floorGraph;
-    final result = _corridorTrackingSession.result;
+    final result = _guidance.trackingResult;
     if (graph == null || result == null) return null;
     // 안내 진행률은 파란선·ETA만 안정화한다. 실제 마커는 첫 preview peak부터
     // tracker의 optimistic 위치를 그대로 따라야 역방향·이탈을 숨기지 않는다.
@@ -1971,7 +1957,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     // 에스컬레이터 발판 위 진동이거나 탑승 대기 중의 제자리 움직임이다.
     // 그대로 두면 마커가 탑승점을 지나 앞 매장으로 계속 흘러가고, 사용자는
     // "이미 탔는데 아직 걸어가는 중"인 화면을 본다.
-    final current = _boardingHoldPointM ?? result.previewPosition;
+    final current = _guidance.boardingHoldPointM ?? result.previewPosition;
     final wgs84 = fitFloorGeoTransform(
       graph.nodes,
     ).apply(current.eastM, current.northM);
@@ -2014,39 +2000,39 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     ).floorBearingToMapBearing(orientationFloorHeading);
   }
 
-  /// 기압 샘플 한 건을 판정기에 넣고, 로그에 남기고, 확정이면 층을 옮긴다.
+  /// 기압 샘플 한 건을 세션에 넣고, 로그에 남기고, 확정이면 층을 옮긴다.
+  ///
+  /// 화면 컨텍스트(층·그래프)를 판정기에 다시 주입하는 시점은 세션이 정한다 —
+  /// 탑승 중에는 주입하지 않아야 baseline이 탑승 층 기준으로 유지된다.
   void _onAltitudeSample(AltitudeSample sample) {
     if (!mounted) return;
-    // 조기 전환 뒤 화면은 목적 층을 먼저 보여주지만 판정기는 탑승 층의
-    // baseline·노드 허가를 끝까지 유지해야 한다. 후보가 닫힌 뒤에만 화면
-    // 컨텍스트를 다시 주입한다.
-    if (_escalatorDetector.pendingTransition == null) {
-      _escalatorDetector.updateContext(
-        floorLabel: _selectedFloor,
-        graph: _floorGraph,
-        floorLabels: _building?.floors ?? const [],
-      );
-    }
-    final transition = _escalatorDetector.onAltitude(sample);
-    final started = _escalatorDetector.takeStartedTransition();
-    final cancelled = _escalatorDetector.takeCancelledTransition();
+    _guidance.setContext(
+      floorId: _selectedFloor,
+      graph: _floorGraph,
+      floorLabels: _building?.floors ?? const [],
+    );
+    final outcome = _guidance.onAltitude(sample);
+    final transition = outcome.confirmed;
+    final started = outcome.started;
+    final cancelled = outcome.cancelled;
 
     final recorder = _pdrDebugRecorder;
     if (recorder != null) {
       recorder.recordAltimeterStatus(indoorNavigationDriver.altimeterStatus);
       recorder.recordAltitudeSample(
         sample,
-        smoothedM: _escalatorDetector.smoothedAltitudeM,
-        baselineM: _escalatorDetector.baselineM,
-        deltaM: _escalatorDetector.deltaM,
-        armed: _escalatorDetector.isArmed,
-        candidate: _escalatorDetector.hasCandidate,
+        smoothedM: _guidance.escalator.smoothedAltitudeM,
+        baselineM: _guidance.escalator.baselineM,
+        deltaM: _guidance.escalator.deltaM,
+        armed: _guidance.escalator.isArmed,
+        candidate: _guidance.escalator.hasCandidate,
       );
     }
-    // 레코더가 없어도 이벤트는 비운다. 안 그러면 다음 길안내 세션의 로그에
-    // 지난 세션 판정이 섞여 들어간다.
-    final events = _escalatorDetector.takeEvents();
-    if (events.isNotEmpty) recorder?.recordFloorTransitionEvents(events);
+    // 레코더가 없어도 세션이 이벤트를 비워서 넘긴다. 안 그러면 다음 길안내
+    // 세션의 로그에 지난 세션 판정이 섞여 들어간다.
+    if (outcome.events.isNotEmpty) {
+      recorder?.recordFloorTransitionEvents(outcome.events);
+    }
 
     _altimeterDebugText.value = _debugModeController.enabled
         ? _altimeterDebugLine(sample)
@@ -2072,27 +2058,21 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   /// 근거에서만 연다. 층 전환과 하차 확정은 기존 started/confirmed 경로가
   /// 그대로 담당한다 — 여기서 두 번 처리하지 않는다.
   void _handleEscalatorPhaseChanges() {
-    final changes = _escalatorDetector.takePhaseChanges();
+    final changes = _guidance.takePhaseChanges();
     if (changes.isEmpty) return;
     for (final change in changes) {
       switch (change.phase) {
         case EscalatorPhase.boardingDetected:
         case EscalatorPhase.verticalMotionDetected:
           if (!mounted) return;
-          setState(() {
-            _escalatorStage = change;
-            _boardingHoldPointM = _routeBoardingHoldPoint(change);
-          });
+          setState(() => _escalatorStage = change);
           if (change.phase == EscalatorPhase.verticalMotionDetected) {
             _enqueueFloorTransition(_pauseStepsForRide);
           }
         case EscalatorPhase.cancelled:
         case EscalatorPhase.failed:
           if (!mounted) return;
-          setState(() {
-            _escalatorStage = null;
-            _boardingHoldPointM = null;
-          });
+          setState(() => _escalatorStage = null);
           // 후보가 열린 뒤의 취소는 층·경로 복원까지 해야 하므로 기존
           // takeCancelledTransition 경로가 처리한다. 여기서는 배너만 띄운
           // 단계에서 멈춘 걸음을 되살리는 것만 책임진다.
@@ -2107,38 +2087,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           break;
         case EscalatorPhase.idle:
           if (!mounted) return;
-          setState(() {
-            _escalatorStage = null;
-            _boardingHoldPointM = null;
-          });
+          setState(() => _escalatorStage = null);
       }
     }
-  }
-
-  /// 이번 단계 전이가 **안내가 지목한 탑승점**을 가리키면 그 지점을, 아니면 null.
-  ///
-  /// 판정기는 경로와 무관한 근접(`observed`)으로도 단계를 올린다. 그 근거로
-  /// 마커를 고정하면, 에스컬레이터 옆을 스쳐 지나가는 사용자의 위치가 그 자리에
-  /// 붙어 버린다. 그래서 지금 층 세그먼트가 실제로 **에스컬레이터로 갈아타는**
-  /// 구간이고, 판정기가 고른 탑승 노드가 그 세그먼트의 전이 노드와 **같을 때만**
-  /// 고정한다.
-  ///
-  /// 고정을 푸는 조건은 여기서 따로 세지 않는다. 판정기가 멀어짐
-  /// (`movedAwayFromBoarding`)·타임아웃(`boardingPhaseTimeoutMs`)으로 단계를
-  /// 취소하면 그 전이가 위에서 hold를 지운다 — 조건을 두 곳에서 세면 반드시
-  /// 한쪽이 남는다.
-  PdrLocalPoint? _routeBoardingHoldPoint(EscalatorPhaseChange change) {
-    final nodeId = change.boardingNodeId;
-    final floor = _pdrTrailState.anchor?.floorId;
-    if (nodeId == null || floor == null || floor != _selectedFloor) return null;
-    final segment = _multiFloorRoute?.segmentForFloor(floor);
-    if (segment == null ||
-        segment.transferModeToNext != 'escalator' ||
-        segment.transferFromNodeId != nodeId) {
-      return null;
-    }
-    final node = _floorGraph?.nodes.where((n) => n.id == nodeId).firstOrNull;
-    return node == null ? null : PdrLocalPoint(node.xM, node.yM);
   }
 
   /// 지금 화면이 그려야 하는 층 전환 상태. 없으면 null.
@@ -2258,11 +2209,11 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
 
   /// 디버그 칩 한 줄. 판정이 안 걸리는 이유를 현장에서 눈으로 가리기 위한 값이다.
   String _altimeterDebugLine(AltitudeSample sample) {
-    final delta = _escalatorDetector.deltaM;
+    final delta = _guidance.escalator.deltaM;
     final deltaText = delta == null ? '—' : '${delta.toStringAsFixed(2)}m';
-    final state = _escalatorDetector.hasCandidate
+    final state = _guidance.escalator.hasCandidate
         ? '후보'
-        : (_escalatorDetector.isArmed ? '허가' : '대기');
+        : (_guidance.escalator.isArmed ? '허가' : '대기');
     return '기압 ${sample.pressureHpa.toStringAsFixed(2)}hPa · Δ$deltaText · $state';
   }
 
@@ -2390,7 +2341,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       setState(() {
         // 이전 층 궤적과 복도 보정 상태는 새 층에서 이어지지 않는다.
         _pdrTrailState.beginNewSession();
-        _corridorTrackingSession.reset();
+        _guidance.resetTracking();
       });
       await indoorNavigationDriver.applyVerticalTransfer(
         floorId: transition.toFloorLabel,
@@ -2451,8 +2402,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       _escalatorStage = null;
       _floorHandoverCamera = null;
       _floorSwapVeil = 0;
-      _boardingHoldPointM = null;
     });
+    // 탑승이 끝났으므로 탑승점 고정도 푼다. 단계 전이가 아닌 출구(되돌리기·
+    // 취소 정리)로도 여기 오므로, 세션에 직접 알려야 마커가 붙은 채 남지 않는다.
+    _guidance.clearBoardingHold();
   }
 
   /// 반 층 후보가 되돌아가거나 타임아웃되면 화면·경로를 탑승 전 상태로 복원한다.
@@ -2549,7 +2502,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       if (!mounted) return;
       setState(() {
         _pdrTrailState.beginNewSession();
-        _corridorTrackingSession.reset();
+        _guidance.resetTracking();
       });
       await indoorNavigationDriver.applyVerticalTransfer(
         floorId: floor,
@@ -2605,41 +2558,23 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     return sameGroupFallback;
   }
 
+  /// 세션에 스냅샷을 넘기고, 나온 보정 결과로 화면 상태를 갱신한다.
+  ///
+  /// 복도 보정·층 판정 급여·탑승점 고정은 세션이 한다. 여기 남은 것은 이
+  /// 화면만 쓰는 것들이다 — 디버그 궤적, 레코더, 경로 진행률.
   void _syncCorridorTracking(PdrSnapshot? snapshot) {
+    _guidance
+      ..setContext(
+        floorId: _selectedFloor,
+        graph: _floorGraph,
+        floorLabels: _building?.floors ?? const [],
+      )
+      ..setAnchor(_pdrTrailState.anchor)
+      ..setRoute(_multiFloorRoute);
     final anchor = _pdrTrailState.anchor;
-    if (anchor == null || anchor.floorId != _selectedFloor) return;
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
-    final result = _corridorTrackingSession.update(
-      graph: _floorGraph,
-      anchor: anchor,
-      snapshot: snapshot,
-      timestampMs: nowMs,
-    );
-    if (result != null) {
+    final result = _guidance.onSnapshot(snapshot);
+    if (result != null && anchor != null) {
       _guidanceTrailSession.update(floorId: anchor.floorId, result: result);
-      // 층 전이 판정에는 **보정된** 위치를 준다. 원시 PDR 좌표를 주면 앵커
-      // 오차만큼 에스컬레이터 노드 근접 판정이 어긋난다.
-      _escalatorDetector.onPosition(
-        positionM: result.correctedPosition,
-        steps: snapshot?.steps ?? 0,
-        timestampMs: nowMs,
-      );
-      final currentSegment = _multiFloorRoute?.segmentForFloor(anchor.floorId);
-      final currentRoute = currentSegment?.route;
-      if (currentSegment?.transferModeToNext == 'escalator' &&
-          currentSegment?.transferFromNodeId != null &&
-          currentRoute != null &&
-          currentRoute.pointsLocalM.isNotEmpty) {
-        final routeEnd = currentRoute.pointsLocalM.last;
-        _escalatorDetector.onEscalatorRouteApproach(
-          positionM: result.previewPosition,
-          routeEndM: PdrLocalPoint(routeEnd.x, routeEnd.y),
-          expectedBoardingNodeId: currentSegment!.transferFromNodeId!,
-          expectedArrivalNodeId: currentSegment.transferToNodeId,
-          steps: snapshot?.steps ?? 0,
-          timestampMs: nowMs,
-        );
-      }
       // 탑승점 접근 배너는 기압이 아니라 **걸음 갱신**에서 올라온다. 여기서
       // 비우지 않으면 다음 기압 샘플(iOS는 1초)까지 배너가 늦는다.
       _handleEscalatorPhaseChanges();
@@ -2648,29 +2583,28 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       _pdrDebugRecorder?.recordCorridorCorrection(result);
       if (snapshot != null) {
         _pdrDebugRecorder?.recordTrackerInput(
-          observation: _corridorTrackingSession.lastObservation,
-          wasReset: _corridorTrackingSession.lastWasReset,
+          observation: _guidance.lastObservation,
+          wasReset: _guidance.lastWasReset,
           result: result,
           snapshot: snapshot,
-          previewTailPeakTimesMs: _corridorTrackingSession
+          previewTailPeakTimesMs: _guidance.corridor
               .previewTailPeakTimesMs(snapshot),
         );
       }
     }
+    // heading은 앵커가 있어야 층 기준으로 바꿀 수 있다. 앵커가 없으면 진행률
+    // 계산에도 방향을 주지 않는다 — 없는 근거로 역주행을 판단하지 않는다.
+    final toFloor = anchor == null ? null : FloorCoordinateTransform(anchor);
     _syncRouteProgress(
       result,
       confirmedSteps: snapshot?.steps,
       previewSteps: snapshot?.preview.steps,
-      orientationHeadingDeg: snapshot == null
+      orientationHeadingDeg: snapshot == null || toFloor == null
           ? null
-          : FloorCoordinateTransform(
-              anchor,
-            ).toFloorBearing(snapshot.orientationHeadingDeg),
-      walkingHeadingDeg: snapshot == null
+          : toFloor.toFloorBearing(snapshot.orientationHeadingDeg),
+      walkingHeadingDeg: snapshot == null || toFloor == null
           ? null
-          : FloorCoordinateTransform(
-              anchor,
-            ).toFloorBearing(snapshot.walkingHeadingDeg),
+          : toFloor.toFloorBearing(snapshot.walkingHeadingDeg),
     );
   }
 
@@ -2758,7 +2692,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     // 계산하면, 화면은 탑승점에 서 있는데 안내는 "경로를 벗어났다"고 판단해
     // **재탐색이 돌아 버린다** — 곧 층이 바뀔 위치에서 이 층 경로를 새로 그리는
     // 최악의 타이밍이다. 남은거리·안내 문구도 마지막 값에 그대로 멈춘다.
-    if (_escalatorRide != null || _boardingHoldPointM != null) return;
+    if (_escalatorRide != null || _guidance.boardingHoldPointM != null) return;
 
     final localPosition = LocalPoint(
       result.previewPosition.eastM,
@@ -2901,7 +2835,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     // 단층 경로로 바뀌어 최종 도착처럼 보일 수 있다.
     final floor = _pdrTrailState.anchor?.floorId;
     final graph = _floorGraph;
-    final current = _corridorTrackingSession.result?.previewPosition;
+    final current = _guidance.trackingResult?.previewPosition;
     if (destination == null ||
         destinationNodeId == null ||
         floor == null ||
@@ -3082,7 +3016,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     );
     setState(() {
       _pdrTrailState.beginNewSession();
-      _corridorTrackingSession.reset();
+      _guidance.resetTracking();
       _routeProgress = null;
       _lastRouteTraveledM = null;
       _lastRouteProgressAcceptedSteps = null;
@@ -3526,7 +3460,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     // 만든다. 층이 다르면 뷰는 그저 다른 층의 지도만 보여주고, 자기 위치가
     // 궁금하면 "위치 지정" 또는 재보정으로 원래 층으로 돌아가면 된다.
     final trackerUncertain =
-        _corridorTrackingSession.result?.state ==
+        _guidance.trackingResult?.state ==
         CorridorTrackingState.uncertain;
     final gpsEstimate = _freshGpsIndoorEstimate;
     // 방향 원뿔은 "지금 어디를 보고 있나"만 말한다. 층 전환 중 도착 지점에
