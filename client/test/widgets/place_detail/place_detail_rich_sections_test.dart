@@ -265,8 +265,11 @@ void main() {
       );
 
       expect(find.text('영업 정보'), findsOneWidget);
-      expect(find.text('영업시간'), findsOneWidget);
+      expect(find.byIcon(Icons.schedule_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.local_parking_outlined), findsOneWidget);
       expect(find.text('2026-08-10 확인'), findsOneWidget);
+      // 라벨은 아이콘이 대신하므로 글자로 남지 않는다.
+      expect(find.text('영업시간'), findsNothing);
     });
 
     // 확인일이 다르면 하나로 묶을 수 없다. 묶는 순간 오래된 항목이 최근에 확인된
@@ -293,12 +296,11 @@ void main() {
         ),
       );
 
-      expect(find.text('영업시간 · 2026-08-10 확인'), findsOneWidget);
-      expect(find.text('주차 · 2026-07-30 확인'), findsOneWidget);
-      expect(find.text('2026-08-10 확인'), findsNothing);
+      expect(find.text('2026-08-10 확인'), findsOneWidget);
+      expect(find.text('2026-07-30 확인'), findsOneWidget);
     });
 
-    testWidgets('business information displays each key-value row', (
+    testWidgets('business information replaces the label with an icon', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -306,16 +308,32 @@ void main() {
           const PlaceBusinessInfoSection(
             items: [
               PlaceBusinessInfo(label: '주소', value: '서울 영등포구 여의대로 108'),
-              PlaceBusinessInfo(label: '주차', value: '주차 지원 불가'),
             ],
           ),
         ),
       );
 
       expect(find.text('매장 정보'), findsOneWidget);
-      expect(find.text('주소'), findsOneWidget);
+      expect(find.byIcon(Icons.place_outlined), findsOneWidget);
+      expect(find.text('주소'), findsNothing);
       expect(find.text(keepWordsWhole('서울 영등포구 여의대로 108')), findsOneWidget);
-      expect(find.text(keepWordsWhole('주차 지원 불가')), findsOneWidget);
+    });
+
+    // 데이터는 사람이 쓰는 자유 문자열이라 언제든 새 라벨이 들어온다. 아무 아이콘이나
+    // 물리면 그 값이 무슨 뜻인지가 화면에서 사라지므로, 모르는 라벨은 글자로 남긴다.
+    testWidgets('an unmapped label keeps its text', (tester) async {
+      await tester.pumpWidget(
+        subject(
+          const PlaceBusinessInfoSection(
+            items: [
+              PlaceBusinessInfo(label: '반려동물 동반', value: '가능'),
+            ],
+          ),
+        ),
+      );
+
+      expect(find.text('반려동물 동반'), findsOneWidget);
+      expect(find.text(keepWordsWhole('가능')), findsOneWidget);
     });
   });
 }

@@ -539,9 +539,9 @@ class PlaceBusinessInfo {
   final String value;
 }
 
-/// 매장 운영 정보를 라벨-값 행으로 보여 준다.
+/// 매장 운영 정보를 아이콘-값 행으로 보여 준다.
 ///
-/// 카드 테두리 없이 구분선만 쓴다. 위쪽 summary·hero가 이미 시각적으로 묶여 있어서
+/// 카드 테두리 없이 여백만 쓴다. 위쪽 summary·hero가 이미 시각적으로 묶여 있어서
 /// 여기에 상자를 하나 더 두면 시트가 카드의 나열처럼 보인다.
 class PlaceBusinessInfoSection extends StatelessWidget {
   const PlaceBusinessInfoSection({super.key, required this.items});
@@ -556,44 +556,108 @@ class PlaceBusinessInfoSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const PlaceSectionTitle('매장 정보'),
-        const SizedBox(height: 10),
-        // 여백은 항목 사이에만 둔다. 첫·마지막 행에 붙이면 섹션 아래위가 다른
-        // 섹션보다 더 벌어져서 구분선 간격이 제각각으로 보인다.
+        const SizedBox(height: 12),
         for (var index = 0; index < items.length; index++) ...[
-          if (index > 0) ...[
-            const SizedBox(height: 10),
-            const Divider(height: 1),
-            const SizedBox(height: 10),
-          ],
-          _BusinessInfoRow(item: items[index]),
+          if (index > 0) const SizedBox(height: infoRowGap),
+          PlaceInfoRow(label: items[index].label, value: items[index].value),
         ],
       ],
     );
   }
 }
 
-class _BusinessInfoRow extends StatelessWidget {
-  const _BusinessInfoRow({required this.item});
+/// 정보 행 사이 간격. 행마다 구분선을 긋지 않는 이유는 6줄짜리 목록이 표처럼
+/// 보이면서 시트 전체가 글 덩어리로 읽히기 때문이다. 섹션 경계는 이미
+/// `_SectionBreak`가 긋고 있어서 행 사이까지 그을 필요가 없다.
+const infoRowGap = 14.0;
 
-  final PlaceBusinessInfo item;
+/// 라벨을 대신하는 아이콘. 없으면 `null`이고, 그때는 라벨을 글자로 남긴다.
+///
+/// **모르는 라벨에 기본 아이콘을 물리지 않는다.** 아이콘이 라벨을 대신할 수 있는
+/// 것은 그 아이콘이 라벨을 정확히 가리킬 때뿐이고, 아무 아이콘이나 붙이면 값이
+/// 무슨 뜻인지가 화면에서 사라진다. 데이터는 사람이 쓰는 자유 문자열이라
+/// 언제든 새 라벨이 들어온다.
+IconData? infoIconFor(String label) => switch (label.replaceAll(' ', '')) {
+  '영업시간' || '운영시간' => Icons.schedule_outlined,
+  '대표번호' || '전화번호' || '연락처' || '문의' => Icons.call_outlined,
+  '매장타입' || '매장유형' => Icons.storefront_outlined,
+  '주차' => Icons.local_parking_outlined,
+  '위생등급' => Icons.verified_outlined,
+  '주소' || '위치' => Icons.place_outlined,
+  '홈페이지' || '웹사이트' => Icons.language_outlined,
+  _ => null,
+};
 
-  // 라벨을 왼쪽 열로 두면 값이 쓸 수 있는 폭이 72px 줄어, 주소처럼 긴 값이 두
-  // 줄로 갈라진다. 라벨을 값 위 캡션으로 올려 값이 본문 폭을 그대로 쓰게 한다.
+/// 아이콘 + 값 한 줄. 아이콘이 라벨을 대신하므로 라벨 글자가 사라진다.
+///
+/// 라벨을 값 위 캡션으로 올렸던 이전 배치는 한 항목이 두 줄을 썼다. 항목이 여섯
+/// 개면 열두 줄이라 시트가 글 덩어리로 읽혔다. 아이콘은 가로 24px만 쓰고 값이
+/// 본문 폭을 그대로 받으므로, 같은 내용이 절반 높이에 들어간다.
+class PlaceInfoRow extends StatelessWidget {
+  const PlaceInfoRow({
+    super.key,
+    required this.label,
+    required this.value,
+    this.caption,
+  });
+
+  final String label;
+  final String value;
+
+  /// 값 아래 작은 글씨(확인일 등). 없으면 그리지 않는다.
+  final String? caption;
+
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        item.label,
-        style: const TextStyle(fontSize: 12, color: AppColors.muted),
-      ),
-      const SizedBox(height: 3),
-      Text(
-        keepWordsWhole(item.value),
-        style: const TextStyle(fontSize: 13.5, height: 1.4, color: AppColors.text),
-      ),
-    ],
-  );
+  Widget build(BuildContext context) {
+    final icon = infoIconFor(label);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 아이콘은 첫 줄 글자의 중앙에 맞춘다. 위쪽 정렬만 하면 값이 두 줄일 때
+        // 아이콘이 글자보다 살짝 떠 보인다.
+        Padding(
+          padding: const EdgeInsets.only(top: 1),
+          child: Icon(
+            icon ?? Icons.circle,
+            size: icon == null ? 5 : 19,
+            color: AppColors.muted,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 아이콘이 라벨을 대신하지 못할 때만 라벨을 글자로 남긴다.
+              if (icon == null) ...[
+                Text(
+                  label,
+                  style: const TextStyle(fontSize: 12, color: AppColors.muted),
+                ),
+                const SizedBox(height: 3),
+              ],
+              Text(
+                keepWordsWhole(value),
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  height: 1.4,
+                  color: AppColors.text,
+                ),
+              ),
+              if (caption != null) ...[
+                const SizedBox(height: 3),
+                Text(
+                  caption!,
+                  style: const TextStyle(fontSize: 11, color: AppColors.muted),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 /// 영업시간·대표번호처럼 **시간이 지나면 저절로 거짓이 되는** 운영 정보다.
@@ -633,20 +697,18 @@ class PlaceDemoInfoSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const PlaceSectionTitle('영업 정보'),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         for (var index = 0; index < items.length; index++) ...[
-          if (index > 0) ...[
-            const SizedBox(height: 10),
-            const Divider(height: 1),
-            const SizedBox(height: 10),
-          ],
-          _DemoInfoRow(
-            item: items[index],
-            showConfirmedAt: sharedDate == null,
+          if (index > 0) const SizedBox(height: infoRowGap),
+          PlaceInfoRow(
+            label: items[index].label,
+            value: items[index].value,
+            // 확인일이 제각각일 때만 항목마다 붙인다. 묶을 수 없기 때문이다.
+            caption: sharedDate == null ? '${items[index].confirmedAt} 확인' : null,
           ),
         ],
         if (sharedDate != null) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Text(
             '$sharedDate 확인',
             style: const TextStyle(fontSize: 11, color: AppColors.muted),
@@ -655,29 +717,6 @@ class PlaceDemoInfoSection extends StatelessWidget {
       ],
     );
   }
-}
-
-class _DemoInfoRow extends StatelessWidget {
-  const _DemoInfoRow({required this.item, required this.showConfirmedAt});
-
-  final PlaceDemoInfo item;
-  final bool showConfirmedAt;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        showConfirmedAt ? '${item.label} · ${item.confirmedAt} 확인' : item.label,
-        style: const TextStyle(fontSize: 12, color: AppColors.muted),
-      ),
-      const SizedBox(height: 3),
-      Text(
-        keepWordsWhole(item.value),
-        style: const TextStyle(fontSize: 13.5, height: 1.4, color: AppColors.text),
-      ),
-    ],
-  );
 }
 
 /// 상세 본문의 좌우 여백. 사진처럼 끝까지 채우는 섹션만 이 값을 쓰지 않는다.

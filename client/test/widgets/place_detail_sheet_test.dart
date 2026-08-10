@@ -102,7 +102,9 @@ void main() {
     expect(find.text('도착'), findsOneWidget);
   });
 
-  testWidgets('businessInfo는 라벨과 값을 그린다', (tester) async {
+  // 라벨은 아이콘이 대신한다(설계 7-A-2). '주소'라는 글자가 아니라 장소 아이콘이
+  // 떠야 하고, 값은 그대로 남는다.
+  testWidgets('businessInfo는 라벨을 아이콘으로 바꿔 그린다', (tester) async {
     await tester.pumpWidget(
       buildSubject(
         repository: _FakeRepository(
@@ -124,7 +126,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('매장 정보'), findsOneWidget);
-    expect(find.text('주소'), findsOneWidget);
+    expect(find.text('주소'), findsNothing);
+    expect(find.byIcon(Icons.place_outlined), findsOneWidget);
     expect(find.text(keepWordsWhole('서울특별시 영등포구 여의대로 108')), findsOneWidget);
   });
 
