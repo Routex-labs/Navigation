@@ -54,6 +54,7 @@
 | [스타벅스 리저브 파일럿](backend/place-detail/starbucks-detail-pilot.md) | 파일럿 데이터·출처 |
 | [블루보틀 여의도](backend/place-detail/bluebottle-yeouido-detail.md) | 두 번째 매장 조사 |
 | [더현대 시그니처 공간](backend/place-detail/thehyundai-landmarks-detail.md) | 공간 단위 커버리지 |
+| [다음 작업 순서](backend/place-detail/next-steps.md) | 후속 항목과 참고 화면 |
 
 ## 클라이언트 UI
 
