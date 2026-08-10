@@ -624,7 +624,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   ll.LatLng? _userDestination;
   String? _userDestinationLabel;
 
-  // --- 대중교통 경로(TMAP transit) ---
+  // --- 대중교통 경로(카카오맵) ---
   //
   // 도보 경로([_route])와 **동시에 그리지 않는다.** 두 선이 겹치면 지금 안내
   // 중인 것이 어느 쪽인지 알 수 없고, 하단 카드도 서로 다른 소요 시간을 말하게

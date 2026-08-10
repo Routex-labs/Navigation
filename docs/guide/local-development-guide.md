@@ -124,19 +124,27 @@ flutter run --dart-define=API_BASE_URL=http://192.168.0.10:8001
 Set-Location client
 # 최초 1회: 템플릿 복사 후 값 채우기 (config.local.json은 .gitignore로 커밋되지 않는다)
 Copy-Item config.example.json config.local.json
-# config.local.json의 API_BASE_URL·TMAP_APP_KEY·VWORLD_API_KEY를 채운 뒤:
+# config.local.json의 항목을 채운 뒤(항목 목록은 아래 표):
 flutter run --dart-define-from-file=config.local.json
 ```
 
-`config.local.json` 예시(키를 비우면 각각 목업 경로 / OSM 배경지도로 자동 대체):
+**항목 목록의 단일 출처는 [`client/config.example.json`](../../client/config.example.json)이다.** 여기서는
+각 항목을 어디서 발급받고 비우면 어떻게 되는지만 적는다.
 
-```json
-{
-  "API_BASE_URL": "http://localhost:8001",
-  "TMAP_APP_KEY": "",
-  "VWORLD_API_KEY": ""
-}
-```
+| 항목 | 발급처 | 쓰는 곳 | 비워 두면 |
+|---|---|---|---|
+| `API_BASE_URL` | 배포 서비스 URL([GCP 배포](gcp-instance.md)) | 백엔드 전체 | 플랫폼별 로컬 기본값(`localhost:8001`, 안드로이드 에뮬레이터는 `10.0.2.2:8001`) |
+| `TMAP_APP_KEY` | [openapi.sk.com](https://openapi.sk.com) 앱 등록 | 보행자 경로, POI 통합검색 | 경로는 직선 목업, 건물 밖 장소 검색은 꺼짐 |
+| `KAKAO_REST_KEY` | [developers.kakao.com](https://developers.kakao.com) → [앱 키]의 **REST API 키** | 대중교통 경로 | 대중교통 버튼이 사라짐 |
+| `VWORLD_API_KEY` | [vworld.kr/dev](https://www.vworld.kr/dev) 도메인 등록 | 배경지도 타일 | OSM 타일로 대체 |
+
+카카오 키는 발급 후 **[제품 설정] > [카카오맵]에서 사용 설정을 켜야** 한다. 안 켜면 키가 맞아도
+401이다. 그리고 앱을 "테스트앱"으로 만들면 월 쿼터와 별개로 소량의 일 쿼터가 걸려 금방
+`code -10`(API limit has been exceeded)이 난다.
+
+대중교통은 **카카오 키만으로는 완전하지 않다.** 카카오가 첫 승차지점 앞·마지막 하차지점 뒤
+도보를 주지 않아 그 두 구간은 TMAP 보행자 경로로 채우기 때문에, 대중교통 안내를 제대로 보려면
+`TMAP_APP_KEY`도 함께 있어야 한다.
 
 키를 하나만 즉석에서 넘길 땐 단건 방식도 그대로 동작한다.
 

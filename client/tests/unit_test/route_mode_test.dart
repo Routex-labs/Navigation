@@ -95,7 +95,7 @@ void main() {
     expect(find.byKey(const Key('route-draft-origin')), findsOneWidget);
     expect(find.byKey(const Key('route-draft-destination')), findsOneWidget);
     expect(find.byKey(const ValueKey('travel-mode-bar')), findsOneWidget);
-    // 수단이 나란히 있다. 테스트 환경에는 TMAP 키가 없어 대중교통은 빠지므로
+    // 수단이 나란히 있다. 테스트 환경에는 카카오 키가 없어 대중교통은 빠지므로
     // (그 규칙은 travel_mode_bar_test가 따로 지킨다) 나머지 둘로 확인한다.
     expect(find.text('자동차'), findsOneWidget);
     expect(find.text('도보'), findsOneWidget);

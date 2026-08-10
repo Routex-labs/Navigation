@@ -24,7 +24,7 @@ class TravelModeBar extends StatelessWidget {
 
   final RoutePlanMode selected;
 
-  /// 실제로 고를 수 있는 수단만 담는다. TMAP 키가 없으면 대중교통이, 실내
+  /// 실제로 고를 수 있는 수단만 담는다. 카카오 키가 없으면 대중교통이, 실내
   /// 탭에서는 자동차·대중교통이 빠진다 — 눌러서 "쓸 수 없습니다"를 보는 것보다
   /// 없는 편이 낫다.
   final List<RoutePlanMode> modes;

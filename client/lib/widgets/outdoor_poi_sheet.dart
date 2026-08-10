@@ -35,7 +35,7 @@ class OutdoorPoiSheet extends StatefulWidget {
   final OutdoorPoi poi;
   final VoidCallback onCloseAll;
 
-  /// TMAP 키가 없어 대중교통을 쓸 수 없으면 false. 버튼을 아예 감춘다 —
+  /// 카카오 키가 없어 대중교통을 쓸 수 없으면 false. 버튼을 아예 감춘다 —
   /// 눌러서 "쓸 수 없습니다"를 보는 것보다 없는 편이 낫다.
   final bool transitEnabled;
 

@@ -206,6 +206,7 @@ sequenceDiagram
 | `HttpBuildingRepository` | 백엔드 | `GET /buildings`, `/floors/{floor}`(지도+`navigation_graph`), `/floors/{floor}/graph` |
 | `HttpDestinationRepository` | 백엔드 | `POST /query/destination` (경량 검색), `POST /query/ai` (탐색·의미 검색) |
 | `TmapDirectionsRepository` | TMAP | 실외 보행자 경로 |
+| `KakaoTransitRepository` | 카카오맵 | 대중교통 경로 후보 |
 | `Mock*Repository` | 없음 | 오프라인·위젯 테스트용 대체 구현 |
 
 ## DI · 교체 패턴 (`core/service_locator.dart`)
@@ -215,7 +216,8 @@ sequenceDiagram
 - `buildingRepository = HttpBuildingRepository()` — 오프라인 확인 시 `MockBuildingRepository()`로.
 - `destinationRepository = HttpDestinationRepository()` — 오프라인 확인 시 `MockDestinationRepository(...)`로.
 - `directionsRepository` — `--dart-define=TMAP_APP_KEY=…`가 있으면 실제 TMAP, 없으면 직선 Mock.
-- `outdoorPoiRepository` / `transitRepository` — 같은 TMAP 키를 쓰며, 키가 없으면 기능이 꺼진 구현이 들어가 검색 패널의 "건물 밖 주변 장소"와 대중교통 버튼이 사라진다.
+- `outdoorPoiRepository` — TMAP 키를 쓰며, 없으면 기능이 꺼진 구현이 들어가 검색 패널의 "건물 밖 주변 장소"가 사라진다.
+- `transitRepository` — **여기만 `KAKAO_REST_KEY`를 본다**(TMAP 대중교통은 하루 10건이라 옮겼다). 없으면 대중교통 버튼이 사라진다. 카카오가 주지 않는 앞뒤 도보는 `directionsRepository`가 채우므로 TMAP 키도 함께 있어야 경로가 완전하다.
 - `pdrMotionSource` / `indoorNavigationDriver` — 화면이 바뀌어도 센서 세션을 유지하는 싱글턴.
 
 API 주소는 `core/api_config.dart`가 플랫폼별 기본값을 고르고(`--dart-define=API_BASE_URL=…`로 덮어씀).

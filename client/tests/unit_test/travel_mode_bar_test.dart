@@ -52,7 +52,7 @@ void main() {
   });
 
   testWidgets('쓸 수 있는 수단만 그린다', (WidgetTester tester) async {
-    // TMAP 키가 없으면 대중교통이 빠진다 — 눌러서 "쓸 수 없습니다"를 보는 것보다
+    // 카카오 키가 없으면 대중교통이 빠진다 — 눌러서 "쓸 수 없습니다"를 보는 것보다
     // 없는 편이 낫다.
     await pumpBar(
       tester,
