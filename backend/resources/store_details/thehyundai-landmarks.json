@@ -1,0 +1,55 @@
+{
+  "PO-0T2klz2IW6996": {
+    "name": "사운즈포레스트 (정원)",
+    "updated_at": "2026-08-10",
+    "summary": "약 1,000평에 달하는 대규모 실내 정원입니다. 400여 평에 넓게 깔린 천연 잔디와 50여 그루의 나무가 빛나는 풍경",
+    "source": "https://thehyundaiblog.com/entry/thehyundaiseoul-spot",
+    "hero": [
+      { "local_asset": "assets/place_details/sounds_forest_01.png" },
+      { "local_asset": "assets/place_details/sounds_forest_02.png" },
+      { "local_asset": "assets/place_details/sounds_forest_03.png" }
+    ],
+    "businessInfo": [
+      {
+        "label": "주소",
+        "value": "서울특별시 영등포구 여의대로 108, 더현대서울 5F"
+      }
+    ]
+  },
+  "PO-_az6DiEe43889": {
+    "name": "WATERFALL GARDEN",
+    "updated_at": "2026-08-10",
+    "summary": "3층에서부터 1층까지 수직으로 12m 내려오는 키 큰 워터폴 가든이 우리를 바로 계곡 안으로 들여놓죠.",
+    "source": "https://thehyundaiblog.com/entry/thehyundaiseoul-spot",
+    "businessInfo": [
+      {
+        "label": "주소",
+        "value": "서울특별시 영등포구 여의대로 108, 더현대서울 1F"
+      }
+    ]
+  },
+  "PO-irMt24efY8957": {
+    "name": "CH 1985",
+    "updated_at": "2026-08-10",
+    "summary": "MZ세대의 뉴 프리미엄 기준에 맞춰 새롭게 리뉴얼한 커뮤니티 플랫폼입니다.",
+    "source": "https://thehyundaiblog.com/entry/thehyundaiseoul-spot",
+    "businessInfo": [
+      {
+        "label": "주소",
+        "value": "서울특별시 영등포구 여의대로 108, 더현대서울 6F"
+      }
+    ]
+  },
+  "PO-zbWA20Ae85369": {
+    "name": "ALT. 1",
+    "updated_at": "2026-08-10",
+    "summary": "예술과 대중이 하나처럼 공존하길 바라는 철학",
+    "source": "https://thehyundaiblog.com/entry/thehyundaiseoul-spot",
+    "businessInfo": [
+      {
+        "label": "주소",
+        "value": "서울특별시 영등포구 여의대로 108, 더현대서울 6F"
+      }
+    ]
+  }
+}
