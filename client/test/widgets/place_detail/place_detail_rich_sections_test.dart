@@ -42,9 +42,9 @@ void main() {
       expect(find.byType(PageView), findsNothing);
     });
 
-    // 카드는 고르는 자리다. 이름과 영문명까지만 싣고 설명·용량·칼로리는 팝업으로
-    // 옮겼다 — 30장을 옆으로 넘기는 화면에서 숫자 세 개는 이름을 가리는 노이즈였다.
-    testWidgets('menu card shows only the name and the english name', (
+    // 줄에는 이름·영문명·설명까지만 싣고 용량·칼로리·카페인은 팝업으로 옮겼다 —
+    // 목록을 훑는 동안 숫자 세 개는 이름을 가리는 노이즈였다.
+    testWidgets('menu row shows the name, english name and description', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -69,11 +69,11 @@ void main() {
       expect(find.text('메뉴'), findsOneWidget);
       expect(find.text('리저브 콜드 브루'), findsOneWidget);
       expect(find.text('Reserve Cold Brew'), findsOneWidget);
+      expect(find.text('깊고 부드러운 풍미의 커피'), findsOneWidget);
       expect(find.byType(Image), findsOneWidget);
-      // 카드에는 없다. 여기가 새면 예전 레이아웃으로 되돌아간 것이다.
+      // 줄에는 없다. 여기가 새면 숫자가 다시 목록으로 올라온 것이다.
       expect(find.textContaining('355ml'), findsNothing);
       expect(find.textContaining('5kcal'), findsNothing);
-      expect(find.text('깊고 부드러운 풍미의 커피'), findsNothing);
     });
 
     testWidgets('tapping a card opens the detail popup', (tester) async {
@@ -201,9 +201,9 @@ void main() {
       expect(box.width / box.height, closeTo(402 / 420, 0.01));
     });
 
-    // 카드가 커서 가로 줄이 길어지면 몇 개가 더 있는지 안 보인다. 상한을 넘는 만큼은
-    // 더보기 카드 하나로 대신하고, 남은 개수를 숫자로 드러낸다.
-    testWidgets('a category over the cap gets a 더보기 card', (tester) async {
+    // 세로 목록이라 줄이 늘어날수록 다른 섹션이 화면 밖으로 밀린다. 상한을 넘는
+    // 만큼은 더보기 뒤로 보낸다.
+    testWidgets('a category over the cap gets a 더보기 row', (tester) async {
       await tester.pumpWidget(
         subject(
           PlaceMenuSection(
@@ -216,13 +216,13 @@ void main() {
       );
 
       expect(find.text('더보기'), findsOneWidget);
-      expect(find.text('6종'), findsOneWidget);
-      // 상한만큼만 카드로 선다.
       expect(find.text('메뉴 0'), findsOneWidget);
       expect(find.text('메뉴 4'), findsNothing);
+      // 개수는 적지 않는다. 눌러서 나온 목록에 이미 전부 있다.
+      expect(find.text('6종'), findsNothing);
     });
 
-    testWidgets('a category within the cap has no 더보기 card', (tester) async {
+    testWidgets('a category within the cap has no 더보기 row', (tester) async {
       await tester.pumpWidget(
         subject(
           PlaceMenuSection(
@@ -237,12 +237,9 @@ void main() {
       expect(find.text('더보기'), findsNothing);
     });
 
-    // 목록에는 숨긴 것만이 아니라 **전체**가 나와야 한다. 앞에서 본 카드가 목록에
-    // 없으면 "아까 그건 어디 갔지"가 되고, 사용자가 목록과 카드 줄을 머릿속에서
-    // 이어 붙여야 한다.
-    testWidgets('더보기 lists the whole category, not just the hidden part', (
-      tester,
-    ) async {
+    // 팝업으로 띄우지 않고 그 자리에서 펼친다. 목록을 보러 팝업을 여는 것은
+    // 목록을 두 번 만드는 일이다.
+    testWidgets('더보기 expands the rest in place', (tester) async {
       await tester.pumpWidget(
         subject(
           PlaceMenuSection(
@@ -254,25 +251,20 @@ void main() {
         ),
       );
 
-      // 더보기 카드는 가로 줄 끝이라 화면 밖에 있다. 먼저 스크롤해 온다.
-      await tester.ensureVisible(find.text('더보기'));
-      await tester.pumpAndSettle();
       await tester.tap(find.text('더보기'));
       await tester.pumpAndSettle();
 
-      // 팝업 뒤에 카드가 그대로 남아 있으므로 팝업 안에서만 센다.
+      expect(find.byType(Dialog), findsNothing);
       for (var index = 0; index < 6; index++) {
-        expect(
-          find.descendant(
-            of: find.byType(Dialog),
-            matching: find.text('메뉴 $index'),
-          ),
-          findsOneWidget,
-        );
+        expect(find.text('메뉴 $index'), findsOneWidget);
       }
+      // 다 펼쳤으면 더보기는 사라진다.
+      expect(find.text('더보기'), findsNothing);
     });
 
-    testWidgets('picking a row in the 더보기 list opens its detail', (
+    // 탭을 옮기면 다시 접는다. 카테고리마다 펼침 상태를 들고 있으면, 돌아왔을 때
+    // 어디까지 펼쳤는지 기억나지 않는 목록이 열려 있다.
+    testWidgets('changing the category collapses the list again', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -280,26 +272,24 @@ void main() {
           PlaceMenuSection(
             items: [
               for (var index = 0; index < 6; index++)
-                PlaceMenuItem(
-                  name: '메뉴 $index',
-                  description: '설명 $index',
-                  volume: '355ml',
-                ),
+                PlaceMenuItem(name: '리저브 $index', category: '리저브'),
+              PlaceMenuItem(name: '아메리카노', category: '에스프레소'),
             ],
           ),
         ),
       );
 
-      await tester.ensureVisible(find.text('더보기'));
-      await tester.pumpAndSettle();
       await tester.tap(find.text('더보기'));
       await tester.pumpAndSettle();
-      // 카드로는 안 보이던 항목을 고른다.
-      await tester.tap(find.text('메뉴 5'));
+      expect(find.text('리저브 5'), findsOneWidget);
+
+      await tester.tap(find.text('에스프레소'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('리저브').last);
       await tester.pumpAndSettle();
 
-      expect(find.text(keepWordsWhole('설명 5')), findsOneWidget);
-      expect(find.text('355ml'), findsOneWidget);
+      expect(find.text('더보기'), findsOneWidget);
+      expect(find.text('리저브 5'), findsNothing);
     });
 
     testWidgets('menu tabs filter items by category in server order', (
@@ -424,6 +414,35 @@ void main() {
 
       expect(find.text('2026-08-10 확인'), findsOneWidget);
       expect(find.text('2026-07-30 확인'), findsOneWidget);
+    });
+
+    // 링크는 앱 밖으로 나간다. 그 사실이 줄에서 보여야 해서 화살표(>)가 아니라
+    // 바깥으로 나가는 아이콘을 쓴다.
+    testWidgets('links show a label and an external-link affordance', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        subject(
+          const PlaceLinksSection(
+            items: [
+              PlaceLinkItem(
+                label: '공식 사이트',
+                url: 'https://www.starbucks.co.kr/index.do',
+              ),
+              PlaceLinkItem(
+                label: '인스타그램',
+                url: 'https://www.instagram.com/starbuckskorea',
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(find.text('링크'), findsOneWidget);
+      expect(find.text('공식 사이트'), findsOneWidget);
+      expect(find.text('인스타그램'), findsOneWidget);
+      expect(find.byIcon(Icons.open_in_new), findsNWidgets(2));
+      expect(find.byIcon(Icons.language_outlined), findsOneWidget);
     });
 
     testWidgets('business information replaces the label with an icon', (

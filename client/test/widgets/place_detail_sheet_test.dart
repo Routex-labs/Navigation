@@ -160,6 +160,64 @@ void main() {
     expect(find.text(keepWordsWhole('여의대로 108')), findsOneWidget);
   });
 
+  // 메뉴가 30종까지 늘면서 한 줄로 이어 붙인 본문이 너무 길어졌다. 영업시간을 보려면
+  // 메뉴를 한참 지나쳐야 했고, 반대도 마찬가지였다. 둘을 탭으로 나눈다.
+  testWidgets('메뉴가 있으면 홈·메뉴 탭으로 나눈다', (tester) async {
+    await tester.pumpWidget(
+      buildSubject(
+        repository: _FakeRepository(
+          Future.value(
+            _detail(
+              sections: const [
+                {'type': 'summary', 'text': '한 줄 소개'},
+                {
+                  'type': 'menu',
+                  'items': [
+                    {'name': '카페 아메리카노'},
+                  ],
+                },
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('홈'), findsOneWidget);
+    expect(find.text('메뉴'), findsOneWidget);
+    // 처음엔 홈 탭. 메뉴 항목은 아직 그리지 않는다.
+    expect(find.text(keepWordsWhole('한 줄 소개')), findsOneWidget);
+    expect(find.text('카페 아메리카노'), findsNothing);
+
+    await tester.tap(find.text('메뉴'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('카페 아메리카노'), findsOneWidget);
+    expect(find.text(keepWordsWhole('한 줄 소개')), findsNothing);
+  });
+
+  // 탭 하나짜리 탭 바는 아무것도 나누지 않으면서 자리만 차지한다.
+  testWidgets('메뉴가 없으면 탭을 만들지 않는다', (tester) async {
+    await tester.pumpWidget(
+      buildSubject(
+        repository: _FakeRepository(
+          Future.value(
+            _detail(
+              sections: const [
+                {'type': 'summary', 'text': '한 줄 소개'},
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('홈'), findsNothing);
+    expect(find.text(keepWordsWhole('한 줄 소개')), findsOneWidget);
+  });
+
   // 지도 미리보기가 붙기 전까지 map 섹션은 층 이름만 적힌 중복 블록이다.
   // 그 층은 헤더 배지에 이미 있으므로 본문에 그리지 않는다.
   testWidgets('map 섹션은 본문에 그리지 않는다', (tester) async {

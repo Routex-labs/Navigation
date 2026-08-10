@@ -339,6 +339,24 @@
         "label": "주소",
         "value": "서울특별시 영등포구 여의대로 108, 더현대서울 B2"
       }
+    ],
+    "links": [
+      {
+        "label": "공식 사이트",
+        "url": "https://www.starbucks.co.kr/index.do"
+      },
+      {
+        "label": "페이스북",
+        "url": "https://www.facebook.com/starbuckskorea"
+      },
+      {
+        "label": "인스타그램",
+        "url": "https://www.instagram.com/starbuckskorea"
+      },
+      {
+        "label": "스마트스토어",
+        "url": "https://brand.naver.com/starbucks"
+      }
     ]
   }
 }

@@ -83,6 +83,7 @@ _ALLOWED_FIELDS = {
     "menu",
     "businessInfo",
     "demoInfo",
+    "links",
 }
 
 
@@ -176,6 +177,7 @@ def _validate_values(
     errors += _validate_asset_items(place_id, overlay.get("menu"), "menu", fields)
     errors += _validate_business_info(place_id, overlay.get("businessInfo"), fields, forbidden)
     errors += _validate_demo_info(place_id, overlay.get("demoInfo"), fields, demo_allowlist)
+    errors += _validate_links(place_id, overlay.get("links"), fields)
 
     for item in overlay.get("keyValue") or []:
         if not isinstance(item, dict) or "label" not in item or "value" not in item:
@@ -244,6 +246,37 @@ def _validate_asset_items(
         unknown = set(item) - allowed_keys
         if unknown:
             errors.append(f"{place_id}: {field_name} 항목에 스키마에 없는 키 {sorted(unknown)}")
+    return errors
+
+
+# 링크는 값이 문장이 아니라 주소다. 열리지 않는 주소는 화면에서 아무 일도 일어나지
+# 않는 버튼이 되므로, 최소한 형식이 주소인지는 여기서 막는다. 살아 있는지는 사람이
+# 확인할 일이다 — 검증기가 네트워크를 타면 시드가 외부 사이트 사정에 묶인다.
+def _validate_links(place_id: str, value: Any, fields: dict[str, Any]) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        return [f"{place_id}: links는 객체 배열이어야 합니다"]
+
+    errors: list[str] = []
+    max_items = fields.get("links", {}).get("max_items")
+    if isinstance(max_items, int) and len(value) > max_items:
+        errors.append(f"{place_id}: links가 {max_items}개를 넘습니다")
+
+    for item in value:
+        if not isinstance(item, dict):
+            errors.append(f"{place_id}: links 항목은 객체여야 합니다")
+            continue
+
+        label = item.get("label")
+        if not isinstance(label, str) or not label.strip():
+            errors.append(f"{place_id}: links 항목에 label이 필요합니다")
+            continue
+
+        url = item.get("url")
+        if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+            errors.append(f"{place_id}: links '{label.strip()}'의 url은 http(s) 주소여야 합니다")
+
     return errors
 
 

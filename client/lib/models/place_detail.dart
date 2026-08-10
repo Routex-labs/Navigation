@@ -136,6 +136,7 @@ sealed class PlaceDetailSection {
       'menu' => MenuSection.fromJson(json),
       'businessInfo' => BusinessInfoSection.fromJson(json),
       'demoInfo' => DemoInfoSection.fromJson(json),
+      'links' => LinksSection.fromJson(json),
       _ => null,
     };
   }
@@ -336,6 +337,40 @@ class BusinessInfoItem {
       BusinessInfoItem(
         label: json['label'] as String,
         value: json['value'] as String,
+      );
+}
+
+/// 공식 채널 링크. 누르면 외부 브라우저로 열린다.
+///
+/// 값이 사람이 읽는 문장이 아니라 **주소**라 다른 섹션과 성격이 다르다. 낡으면 거짓이
+/// 되는 것이 아니라 아예 열리지 않는다.
+class LinksSection extends PlaceDetailSection {
+  const LinksSection({required this.items});
+
+  final List<PlaceLink> items;
+
+  factory LinksSection.fromJson(Map<String, dynamic> json) {
+    final rawItems = json['items'];
+    return LinksSection(
+      items: rawItems is List
+          ? rawItems
+              .whereType<Map<String, dynamic>>()
+              .map(PlaceLink.fromJson)
+              .toList(growable: false)
+          : const <PlaceLink>[],
+    );
+  }
+}
+
+class PlaceLink {
+  const PlaceLink({required this.label, required this.url});
+
+  final String label;
+  final String url;
+
+  factory PlaceLink.fromJson(Map<String, dynamic> json) => PlaceLink(
+        label: json['label'] as String,
+        url: json['url'] as String,
       );
 }
 

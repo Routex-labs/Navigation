@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../theme/app_theme.dart';
 import 'korean_line_break.dart';
@@ -85,6 +86,45 @@ class _PlaceHeroCarouselState extends State<PlaceHeroCarousel> {
   }
 }
 
+/// 사진 탭. 대표 사진들을 두 칸 격자로 늘어놓는다.
+///
+/// 위 캐러셀과 **같은 사진들**이다. 캐러셀은 한 장씩 넘겨야 해서 몇 장이 있는지·어떤
+/// 것이 있는지가 한눈에 안 들어오고, 격자는 그 반대다. 둘 중 하나만 두지 않는 이유는
+/// 역할이 달라서다 — 캐러셀은 "무슨 매장인지"를 알려 주고, 격자는 "사진을 보러 온"
+/// 사람을 위한 자리다.
+class PlacePhotoGrid extends StatelessWidget {
+  const PlacePhotoGrid({super.key, required this.assetPaths});
+
+  final List<String> assetPaths;
+
+  @override
+  Widget build(BuildContext context) {
+    if (assetPaths.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
+      child: GridView.builder(
+        // 시트 본문이 이미 스크롤이라 격자는 스스로 스크롤하지 않는다.
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+        ),
+        itemCount: assetPaths.length,
+        itemBuilder: (context, index) => ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          // 매장 사진은 크기가 제각각이라 비율을 맞출 수 없다. 격자는 칸이 정사각으로
+          // 고정되므로 여기서는 `cover`로 채운다 — 메뉴 사진과 달리 잘려도 무엇을
+          // 찍은 사진인지 알아볼 수 있다.
+          child: Image.asset(assetPaths[index], fit: BoxFit.cover),
+        ),
+      ),
+    );
+  }
+}
+
 /// 메뉴 카드에 필요한 로컬 표시 데이터다. 메뉴의 판매 여부나 가격 갱신은
 /// 상위 데이터 공급자가 책임지고 이 위젯은 값을 그대로 렌더링한다.
 ///
@@ -164,6 +204,11 @@ List<String> menuCategoryTabs(List<PlaceMenuItem> items) {
 class _PlaceMenuSectionState extends State<PlaceMenuSection> {
   String? _activeTab;
 
+  /// 더보기를 눌러 전부 펼친 카테고리. 탭을 옮기면 다시 접는다 — 카테고리마다
+  /// 펼침 상태를 따로 들고 있으면, 돌아왔을 때 어디까지 펼쳤는지 기억나지 않는
+  /// 목록이 열려 있다.
+  bool _expanded = false;
+
   @override
   Widget build(BuildContext context) {
     if (widget.items.isEmpty) return const SizedBox.shrink();
@@ -176,9 +221,7 @@ class _PlaceMenuSectionState extends State<PlaceMenuSection> {
         ? widget.items
         : widget.items.where((item) => item.category == active).toList(growable: false);
 
-    // 상한을 넘으면 넘는 만큼을 더보기 카드 하나로 대신한다. 더보기 카드는 카드
-    // 자리를 하나 쓰므로 `_menuVisibleCap`장 + 더보기 = 상한 + 1칸이 된다.
-    final capped = visible.length > _menuVisibleCap;
+    final capped = !_expanded && visible.length > _menuVisibleCap;
     final shown = capped ? visible.take(_menuVisibleCap).toList(growable: false) : visible;
 
     return Column(
@@ -193,30 +236,156 @@ class _PlaceMenuSectionState extends State<PlaceMenuSection> {
           _MenuCategoryTabs(
             tabs: tabs,
             active: active!,
-            onSelect: (tab) => setState(() => _activeTab = tab),
+            onSelect: (tab) => setState(() {
+              _activeTab = tab;
+              _expanded = false;
+            }),
           ),
         ],
-        const SizedBox(height: 10),
-        SizedBox(
-          height: _menuListHeight(context),
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            // 탭을 바꾸면 가로 스크롤을 처음으로 되돌린다. key가 없으면 같은
-            // ListView가 재사용돼, 5개짜리 탭으로 옮겼는데 오른쪽 끝에 가 있다.
-            key: ValueKey(active),
-            // 가로 리스트는 본문 거터를 스스로 갖는다. 그래야 첫 카드가 시트
-            // 가장자리에서 시작하면서도 끝까지 스크롤된다.
-            padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
-            itemCount: shown.length + (capped ? 1 : 0),
-            separatorBuilder: (_, _) => const SizedBox(width: 12),
-            itemBuilder: (context, index) => index < shown.length
-                ? _PlaceMenuCard(item: shown[index])
-                : _MenuMoreCard(title: active ?? '전체 메뉴', items: visible),
-          ),
-        ),
+        const SizedBox(height: 6),
+        // 세로 목록이라 스크롤을 따로 갖지 않는다. 시트 본문이 이미 스크롤이고,
+        // 그 안에 또 스크롤을 넣으면 어느 쪽이 움직일지가 손끝에서 갈린다.
+        for (final item in shown) _MenuRow(item: item),
+        if (capped)
+          _MenuMoreRow(onTap: () => setState(() => _expanded = true)),
       ],
     );
   }
+}
+
+/// 메뉴 한 줄. 왼쪽에 사진, 오른쪽에 이름·영문명·설명.
+///
+/// 가로 카드에서 세로 줄로 바꾼 이유는 **끝이 보이기 때문**이다. 옆으로 미는 목록은
+/// 몇 개가 더 있는지 알 수 없어서 끝까지 밀어 본 사람만 전부 봤다. 세로로 세우면
+/// 한 화면에 네댓 줄이 들어오고 남은 분량이 스크롤바로 드러난다.
+class _MenuRow extends StatelessWidget {
+  const _MenuRow({required this.item});
+
+  final PlaceMenuItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final row = Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: placeSectionGutter,
+        vertical: 10,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (item.imageAssetPath != null) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.asset(
+                item.imageAssetPath!,
+                width: _menuThumbWidth,
+                height: _menuThumbHeight,
+                // 카드와 같은 이유로 원본 비율을 지킨다(설계 7-A-2).
+                fit: BoxFit.contain,
+              ),
+            ),
+            const SizedBox(width: 12),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.text,
+                  ),
+                ),
+                if (item.nameEn != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    item.nameEn!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, color: AppColors.muted),
+                  ),
+                ],
+                if (item.description != null) ...[
+                  const SizedBox(height: 5),
+                  Text(
+                    item.description!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      height: 1.35,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          // 더 볼 것이 있는 줄만 화살표를 단다. 없는데 달면 눌러 보고 아무 일도
+          // 일어나지 않는다.
+          if (item.hasDetail) ...[
+            const SizedBox(width: 8),
+            const Padding(
+              padding: EdgeInsets.only(top: 2),
+              child: Icon(Icons.chevron_right, size: 20, color: AppColors.muted),
+            ),
+          ],
+        ],
+      ),
+    );
+
+    if (!item.hasDetail) return row;
+
+    return GestureDetector(
+      onTap: () => showDialog<void>(
+        context: context,
+        builder: (_) => _MenuDetailDialog(item: item),
+      ),
+      behavior: HitTestBehavior.opaque,
+      child: row,
+    );
+  }
+}
+
+/// 목록 끝의 "더보기". 누르면 그 자리에서 나머지가 펼쳐진다.
+///
+/// 개수를 적지 않는 이유는 그 숫자가 판단에 쓰이지 않기 때문이다. "6종"을 보고 누를지
+/// 말지를 정하는 사람은 없고, 눌러서 나온 목록에 이미 전부 있다.
+class _MenuMoreRow extends StatelessWidget {
+  const _MenuMoreRow({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    behavior: HitTestBehavior.opaque,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: placeSectionGutter,
+        vertical: 12,
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Text(
+            '더보기',
+            style: TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(width: 2),
+          const Icon(Icons.expand_more, size: 20, color: AppColors.primary),
+        ],
+      ),
+    ),
+  );
 }
 
 class _MenuCategoryTabs extends StatelessWidget {
@@ -271,344 +440,23 @@ class _MenuCategoryTabs extends StatelessWidget {
   );
 }
 
-const _menuCardWidth = 172.0;
-const _menuCardPadding = 12.0;
-
-/// 메뉴 사진의 가로÷세로. 번들에 든 30장이 전부 402×420이라 그 값을 그대로 쓴다.
+/// 메뉴 사진의 가로÷세로. 번들에 든 30장이 전부 402×420이라 그 값을 그대로 씁니다.
 ///
-/// **사진 영역을 이 비율로 잡는 이유는 자르지 않기 위해서다.** 예전에는 172×104
-/// (비율 1.65)에 `BoxFit.cover`로 넣었는데, 비율이 0.96인 사진을 폭에 맞춰 늘린 뒤
-/// 세로를 42% 잘라냈다 — 컵이 긴 음료는 위아래가 날아갔다.
-///
-/// 여백을 두는 방식(`contain` + 배경색)으로는 못 푼다. 사진 배경이 다크그린 18장,
-/// 크림색 12장으로 갈리고 그중 4장은 단색도 아니라, 어떤 색을 깔아도 절반은 색 띠가
-/// 보인다. 비율을 맞추면 여백 자체가 생기지 않는다.
+/// **썸네일을 이 비율로 잡는 이유는 자르지 않기 위해서다.** 정사각으로 넣으면 비율이
+/// 0.96인 사진의 위아래가 잘려 컵이 뭉툭해진다. 배경색으로 여백을 채우는 방식은 못 쓴다 —
+/// 사진 배경이 다크그린 18장, 크림색 12장으로 갈리고 그중 4장은 단색도 아니다.
 const _menuImageAspect = 402 / 420;
 
-/// 사진 영역 높이. 카드 폭에서 위 비율로 떨어진다.
-final _menuImageHeight = (_menuCardWidth / _menuImageAspect).ceilToDouble();
+/// 목록 썸네일 크기. 한 줄에 사진·이름·설명이 같이 들어가야 해서 작게 잡는다.
+const _menuThumbWidth = 76.0;
+final _menuThumbHeight = (_menuThumbWidth / _menuImageAspect).ceilToDouble();
 
-/// 한 카테고리에서 가로 줄에 세우는 카드 수. 넘는 만큼은 "더보기" 뒤로 보낸다.
+/// 한 카테고리에서 접힌 상태로 보여 주는 줄 수. 넘는 만큼은 "더보기" 뒤로 보낸다.
 ///
-/// 카드가 172×237이라 화면에 두 장 남짓 들어간다. 카테고리에 메뉴가 늘어날수록 가로 줄만
-/// 길어지는데, 옆으로 미는 목록은 끝이 어디인지 안 보여서 몇 개가 더 있는지 알 수 없다.
-/// 상한을 두면 줄 길이가 고정되고, 남은 개수가 더보기 카드에 숫자로 드러난다.
+/// 세로 목록이라 줄이 늘어날수록 다른 섹션(영업 정보·매장 정보)이 화면 밖으로 밀린다.
+/// 상한을 두면 상세를 처음 열었을 때 어떤 섹션들이 있는지가 한눈에 들어오고, 메뉴를
+/// 더 볼 사람만 펼치면 된다.
 const _menuVisibleCap = 4;
-const _menuNameSize = 14.0;
-const _menuNameEnSize = 11.0;
-const _menuNameGap = 2.0;
-
-/// 카드 글자의 줄 높이. **두 곳에서 같은 값을 써야 해서 상수로 뽑는다** — 아래
-/// [_menuListHeight]가 이 값으로 카드 높이를 계산하고, 카드가 이 값으로 글자를
-/// 그린다. 둘이 어긋나면 그 차이가 그대로 넘침이 된다.
-///
-/// `TextStyle.height`를 비워 두면 줄 높이가 글꼴 메트릭에서 나와 기기·글꼴마다
-/// 달라진다. 계산과 실제가 어긋나는 원인이 여기였다.
-const _menuTextLineHeight = 1.25;
-
-/// 카드 목록의 높이. **상수로 박지 않고 글자 배율에서 계산한다.**
-///
-/// 예전에는 230으로 박아 뒀는데, 기기의 글자 크기 설정이 커지면 안쪽 텍스트가 그
-/// 높이를 넘어 `BOTTOM OVERFLOWED BY N PIXELS`가 떴다. 여백을 넉넉히 주는 것으로
-/// 넘어가면 배율을 더 키운 기기에서 같은 일이 다시 생긴다 — 배율을 실제로 읽어서
-/// 필요한 만큼 잡는 쪽이 이 실패를 없앤다.
-double _menuListHeight(BuildContext context) {
-  final scaler = MediaQuery.textScalerOf(context);
-  // 글자는 이름·영문명 두 줄뿐이다. 줄 높이를 위에서 못 박아 뒀으므로 이 계산은
-  // 추정이 아니라 실제 값이다. 소수점은 올려서 반올림 차이로 1px 넘치는 것을 막는다.
-  final textBlock =
-      scaler.scale(_menuNameSize) * _menuTextLineHeight +
-      _menuNameGap +
-      scaler.scale(_menuNameEnSize) * _menuTextLineHeight;
-  return (_menuImageHeight + _menuCardPadding * 2 + textBlock).ceilToDouble();
-}
-
-/// 메뉴 카드 한 장. 사진 + 이름 + 영문명까지만 싣는다.
-///
-/// 용량·칼로리·카페인을 카드에서 뺀 이유는 **카드가 고르는 자리이기 때문**이다.
-/// 30장을 옆으로 넘기면서 읽는 화면에서 숫자 세 개는 이름을 가리는 노이즈였고,
-/// 정작 그 숫자가 궁금해지는 건 하나를 고른 다음이다. 그래서 나머지는 팝업으로
-/// 옮겼다([_MenuDetailDialog]).
-class _PlaceMenuCard extends StatelessWidget {
-  const _PlaceMenuCard({required this.item});
-
-  final PlaceMenuItem item;
-
-  @override
-  Widget build(BuildContext context) {
-    final card = DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.blue100),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (item.imageAssetPath != null)
-            Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
-                  child: Image.asset(
-                    item.imageAssetPath!,
-                    height: _menuImageHeight,
-                    width: double.infinity,
-                    // 비율이 맞는 지금 사진들에는 contain과 cover가 같은 결과다.
-                    // contain을 쓰는 이유는 나중에 비율이 다른 사진이 들어왔을 때
-                    // 조용히 잘리는 대신 여백이 보이게 하기 위해서다 — 잘린 것은
-                    // 아무도 못 알아채지만 여백은 눈에 띈다.
-                    fit: BoxFit.contain,
-                  ),
-                ),
-                // 누를 수 있다는 표시. 줄을 하나 더 쓰지 않으려고 사진 위에 얹는다 —
-                // 표시가 없으면 팝업이 있다는 걸 아무도 모른다.
-                if (item.hasDetail)
-                  const Positioned(
-                    right: 6,
-                    top: 6,
-                    child: _MenuDetailBadge(),
-                  ),
-              ],
-            ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(_menuCardPadding),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: _menuNameSize,
-                      height: _menuTextLineHeight,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  if (item.nameEn != null) ...[
-                    const SizedBox(height: _menuNameGap),
-                    Text(
-                      item.nameEn!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: _menuNameEnSize,
-                        height: _menuTextLineHeight,
-                        color: AppColors.muted,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    return SizedBox(
-      width: _menuCardWidth,
-      child: item.hasDetail
-          ? GestureDetector(
-              onTap: () => showDialog<void>(
-                context: context,
-                builder: (_) => _MenuDetailDialog(item: item),
-              ),
-              child: card,
-            )
-          : card,
-    );
-  }
-}
-
-/// 가로 줄 끝에 서는 "더보기" 카드. 그 카테고리 전체를 목록으로 연다.
-///
-/// **숨긴 것만이 아니라 전체를 보여 준다.** 앞에서 본 카드가 목록에 없으면 "아까 그건
-/// 어디 갔지"가 되고, 사용자가 목록과 카드 줄을 머릿속에서 이어 붙여야 한다.
-class _MenuMoreCard extends StatelessWidget {
-  const _MenuMoreCard({required this.title, required this.items});
-
-  final String title;
-  final List<PlaceMenuItem> items;
-
-  Future<void> _open(BuildContext context) async {
-    final selected = await showDialog<PlaceMenuItem>(
-      context: context,
-      builder: (_) => _MenuListDialog(title: title, items: items),
-    );
-    // 목록에서 하나를 고르면 그 메뉴의 상세를 잇는다. 목록 위에 팝업을 겹쳐 쌓지
-    // 않고 닫은 뒤 여는 이유는, 뒤로가기 한 번에 어디까지 닫히는지를 분명히 두기
-    // 위해서다(설계 F5와 같은 이유).
-    if (selected != null && context.mounted) {
-      await showDialog<void>(
-        context: context,
-        builder: (_) => _MenuDetailDialog(item: selected),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    width: _menuCardWidth,
-    child: GestureDetector(
-      onTap: () => _open(context),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: AppColors.blue50,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.blue100),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.more_horiz, size: 26, color: AppColors.primary),
-              const SizedBox(height: 8),
-              const Text(
-                '더보기',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                '${items.length}종',
-                style: const TextStyle(fontSize: 12, color: AppColors.muted),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-/// 한 카테고리의 메뉴를 전부 세로 목록으로 보여 준다.
-///
-/// 사진 없이 이름만 세우는 이유는 개수 때문이다. 카드는 한 장이 237px이라 열 개만 돼도
-/// 훑기 어려운데, 이 목록은 한 줄이 40px 남짓이라 스무 개도 한눈에 지나간다. 고른 항목의
-/// 사진·설명은 상세 팝업이 맡는다.
-class _MenuListDialog extends StatelessWidget {
-  const _MenuListDialog({required this.title, required this.items});
-
-  final String title;
-  final List<PlaceMenuItem> items;
-
-  @override
-  Widget build(BuildContext context) => Dialog(
-    backgroundColor: AppColors.surface,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-    child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 340, maxHeight: 460),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 10),
-            child: Text(
-              '$title ${items.length}종',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: AppColors.text,
-              ),
-            ),
-          ),
-          Flexible(
-            child: ListView.separated(
-              shrinkWrap: true,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              itemCount: items.length,
-              separatorBuilder: (_, _) => const Divider(height: 17),
-              itemBuilder: (context, index) => _MenuListRow(item: items[index]),
-            ),
-          ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(8, 4, 12, 8),
-              child: TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('닫기'),
-              ),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-class _MenuListRow extends StatelessWidget {
-  const _MenuListRow({required this.item});
-
-  final PlaceMenuItem item;
-
-  @override
-  Widget build(BuildContext context) {
-    final row = Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                item.name,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.text,
-                ),
-              ),
-              if (item.nameEn != null) ...[
-                const SizedBox(height: 2),
-                Text(
-                  item.nameEn!,
-                  style: const TextStyle(fontSize: 12, color: AppColors.muted),
-                ),
-              ],
-            ],
-          ),
-        ),
-        // 더 볼 것이 있는 항목만 화살표를 단다. 없는데 달면 눌러 보고 아무 일도
-        // 일어나지 않는다.
-        if (item.hasDetail)
-          const Icon(Icons.chevron_right, size: 20, color: AppColors.muted),
-      ],
-    );
-
-    if (!item.hasDetail) return row;
-
-    return GestureDetector(
-      // 고른 항목을 호출부로 돌려준다. 여기서 바로 상세를 열면 목록 위에 팝업이
-      // 쌓인다.
-      onTap: () => Navigator.of(context).pop(item),
-      behavior: HitTestBehavior.opaque,
-      child: row,
-    );
-  }
-}
-
-class _MenuDetailBadge extends StatelessWidget {
-  const _MenuDetailBadge();
-
-  @override
-  Widget build(BuildContext context) => DecoratedBox(
-    decoration: BoxDecoration(
-      color: Colors.black.withValues(alpha: 0.5),
-      shape: BoxShape.circle,
-    ),
-    child: const Padding(
-      padding: EdgeInsets.all(3),
-      child: Icon(Icons.info_outline, size: 14, color: Colors.white),
-    ),
-  );
-}
 
 /// 메뉴 하나의 상세. 카드에서 뺀 설명과 영양정보가 여기 모인다.
 ///
@@ -763,6 +611,101 @@ class PlaceBusinessInfoSection extends StatelessWidget {
         for (var index = 0; index < items.length; index++) ...[
           if (index > 0) const SizedBox(height: infoRowGap),
           PlaceInfoRow(label: items[index].label, value: items[index].value),
+        ],
+      ],
+    );
+  }
+}
+
+/// 공식 채널 링크 하나.
+class PlaceLinkItem {
+  const PlaceLinkItem({required this.label, required this.url});
+
+  final String label;
+  final String url;
+}
+
+/// 라벨을 대신하는 링크 아이콘. 매핑에 없으면 `null`이고, 그때는 일반 링크 아이콘을 쓴다.
+///
+/// 정보 행([infoIconFor])과 달리 여기서는 모르는 라벨에도 아이콘을 준다. 라벨 글자가
+/// 항상 함께 보이기 때문에 아이콘이 뜻을 혼자 짊어지지 않는다.
+IconData linkIconFor(String label) => switch (label.replaceAll(' ', '')) {
+  '공식사이트' || '홈페이지' || '웹사이트' => Icons.language_outlined,
+  '페이스북' => Icons.facebook_outlined,
+  '인스타그램' => Icons.camera_alt_outlined,
+  '스마트스토어' || '네이버' || '스토어' => Icons.storefront_outlined,
+  _ => Icons.link_outlined,
+};
+
+/// 공식 채널 링크 목록. 누르면 외부 브라우저로 연다.
+class PlaceLinksSection extends StatelessWidget {
+  const PlaceLinksSection({super.key, required this.items});
+
+  final List<PlaceLinkItem> items;
+
+  // 열기에 실패하면 조용히 넘기지 않는다. 눌렀는데 아무 일도 일어나지 않으면
+  // 사용자는 앱이 멈춘 줄 안다 — 실패했다는 사실만이라도 알려 준다.
+  Future<void> _open(BuildContext context, PlaceLinkItem item) async {
+    var opened = false;
+    try {
+      opened = await launchUrl(
+        Uri.parse(item.url),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {
+      opened = false;
+    }
+    if (!opened && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${item.label}을(를) 열지 못했습니다'),
+          duration: const Duration(milliseconds: 1600),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const PlaceSectionTitle('링크'),
+        const SizedBox(height: 12),
+        for (var index = 0; index < items.length; index++) ...[
+          if (index > 0) const SizedBox(height: infoRowGap),
+          GestureDetector(
+            onTap: () => _open(context, items[index]),
+            behavior: HitTestBehavior.opaque,
+            child: Row(
+              children: [
+                Icon(
+                  linkIconFor(items[index].label),
+                  size: 19,
+                  color: AppColors.muted,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    items[index].label,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      color: AppColors.text,
+                    ),
+                  ),
+                ),
+                // 이 줄이 앱 밖으로 나간다는 표시. 화살표(>)를 쓰면 앱 안의 다음
+                // 화면으로 읽힌다.
+                const Icon(
+                  Icons.open_in_new,
+                  size: 16,
+                  color: AppColors.muted,
+                ),
+              ],
+            ),
+          ),
         ],
       ],
     );

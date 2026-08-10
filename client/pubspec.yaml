@@ -49,6 +49,7 @@ dependencies:
   indoor_pdr_core:
     path: ../packages/indoor_pdr_core
   pointer_interceptor: ^0.10.1+2
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:

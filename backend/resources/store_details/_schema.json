@@ -66,6 +66,15 @@
       "max_items": 8,
       "note": "매장을 설명하는 운영 정보. forbidden_labels가 keyValue와 똑같이 적용된다 — 영업시간·연락처류는 넣을 수 없다. 넣어야 한다면 demoInfo를 쓴다."
     },
+    "links": {
+      "type": "object_array",
+      "required_keys": [
+        "label",
+        "url"
+      ],
+      "max_items": 6,
+      "note": "매장·브랜드의 공식 링크. url은 http(s)여야 한다. 화면에서 누르면 외부 브라우저로 열리므로, 브랜드 공식 채널처럼 **주소가 바뀌지 않는 것**만 넣는다. 지점 전용 링크가 없으면 브랜드 링크임을 label에 드러낸다."
+    },
     "demoInfo": {
       "type": "object_array",
       "required_keys": [

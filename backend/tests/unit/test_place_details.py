@@ -27,6 +27,7 @@ SCHEMA = {
             "max_items": 12,
         },
         "businessInfo": {"required_keys": ["label", "value"], "max_items": 8},
+        "links": {"required_keys": ["label", "url"], "max_items": 6},
         "demoInfo": {
             "required_keys": ["label", "value", "source", "confirmed_at"],
             "max_items": 8,
@@ -256,6 +257,22 @@ def test_선택_키_오타를_잡는다():
     )
 
     assert any("스키마에 없는 키" in error and "calorie" in error for error in errors)
+
+
+# 링크는 값이 문장이 아니라 주소다. 열리지 않는 주소는 화면에서 아무 일도 일어나지
+# 않는 버튼이 되므로, 최소한 형식이 주소인지는 시드가 막는다.
+
+
+def test_링크의_url은_http_주소여야_한다():
+    errors = _validate({"PO-a": {"links": [{"label": "공식 사이트", "url": "starbucks.co.kr"}]}})
+
+    assert any("http(s) 주소" in error for error in errors)
+
+
+def test_정상_링크는_통과한다():
+    assert (
+        _validate({"PO-a": {"links": [{"label": "공식 사이트", "url": "https://www.starbucks.co.kr/index.do"}]}}) == []
+    )
 
 
 # --- demoInfo (소개 영상용 예외) ---

@@ -158,6 +158,21 @@ class DemoInfoSection(BaseModel):
     items: list[DemoInfoItem]
 
 
+class LinkItem(BaseModel):
+    label: str
+    url: str
+
+
+# 공식 채널 링크. 화면에서 누르면 외부 브라우저로 열린다.
+#
+# `businessInfo`·`demoInfo`와 달리 값이 사람이 읽는 문장이 아니라 **주소**다. 낡으면
+# 거짓이 되는 것이 아니라 아예 열리지 않으므로, 검증기는 형식(http(s))만 보고 살아
+# 있는지는 보지 않는다 — 그건 사람이 확인할 일이다.
+class LinksSection(BaseModel):
+    type: Literal["links"] = "links"
+    items: list[LinkItem]
+
+
 class NoticeSection(BaseModel):
     type: Literal["notice"] = "notice"
     text: str
@@ -195,6 +210,7 @@ DetailSection = (
     | MenuSection
     | BusinessInfoSection
     | DemoInfoSection
+    | LinksSection
     | NoticeSection
     | MapSection
     | ChildListSection

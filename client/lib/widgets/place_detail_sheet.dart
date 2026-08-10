@@ -572,7 +572,7 @@ class _DetailLoadingPlaceholder extends StatelessWidget {
 
 /// 닫힌 섹션 집합을 화면 위젯으로 바꾼다. 모델 파싱 단계에서 모르는 type은 이미
 /// 버려졌지만, 여기서도 타입별로만 분기해 새 서버 섹션이 길찾기 UI를 깨지 않게 한다.
-class PlaceDetailSections extends StatelessWidget {
+class PlaceDetailSections extends StatefulWidget {
   const PlaceDetailSections({
     super.key,
     required this.sections,
@@ -583,10 +583,74 @@ class PlaceDetailSections extends StatelessWidget {
   final String? floorLabel;
 
   @override
+  State<PlaceDetailSections> createState() => _PlaceDetailSectionsState();
+}
+
+/// 상단 탭 이름.
+const _homeTab = '홈';
+const _menuTab = '메뉴';
+const _photoTab = '사진';
+
+class _PlaceDetailSectionsState extends State<PlaceDetailSections> {
+  String _activeTab = _homeTab;
+
+  @override
   Widget build(BuildContext context) {
+    final hero = widget.sections.whereType<HeroSection>().toList(growable: false);
+    final menu = widget.sections.whereType<MenuSection>().toList(growable: false);
+    final home = widget.sections
+        .where((section) => section is! HeroSection && section is! MenuSection)
+        .toList(growable: false);
+
+    // 대표 사진은 탭 위에 남긴다. 어느 탭을 보고 있든 "무슨 매장인지"는 계속
+    // 보여야 하고, 사진 탭은 그 사진들을 한눈에 늘어놓는 자리다.
+    final photos = [
+      for (final section in hero)
+        for (final item in section.items) item.localAsset,
+    ];
+
+    // 있는 탭만 만든다. 탭 하나짜리 탭 바는 아무것도 나누지 않으면서 자리만
+    // 차지한다(메뉴 카테고리 탭과 같은 규칙).
+    final tabs = [
+      if (home.isNotEmpty) _homeTab,
+      if (menu.isNotEmpty) _menuTab,
+      // 사진이 한 장뿐이면 위 캐러셀이 이미 다 보여 준 것이다.
+      if (photos.length > 1) _photoTab,
+    ];
+    final tabbed = tabs.length > 1;
+    final active = tabs.contains(_activeTab) ? _activeTab : tabs.firstOrNull;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (hero.isNotEmpty) ...[
+          _render(hero),
+          const SizedBox(height: 16),
+        ],
+        if (tabbed) ...[
+          _SectionTabs(
+            tabs: tabs,
+            active: active!,
+            onSelect: (tab) => setState(() => _activeTab = tab),
+          ),
+          const SizedBox(height: 18),
+        ],
+        if (!tabbed)
+          _render([...home, ...menu])
+        else if (active == _menuTab)
+          _render(menu)
+        else if (active == _photoTab)
+          PlacePhotoGrid(assetPaths: photos)
+        else
+          _render(home),
+      ],
+    );
+  }
+
+  Widget _render(List<PlaceDetailSection> sections) {
     final widgets = <Widget>[];
     for (final section in sections) {
-      final widget = switch (section) {
+      final rendered = switch (section) {
         SummarySection(:final text) => _TitledSection(
           title: '소개',
           child: PlaceSummarySection(text: text),
@@ -608,7 +672,7 @@ class PlaceDetailSections extends StatelessWidget {
           text: text,
           until: until,
         ),
-        MapSection() => PlaceMapSection(floorLabel: floorLabel),
+        MapSection() => PlaceMapSection(floorLabel: widget.floorLabel),
         MenuSection(:final items) => PlaceMenuSection(
           items: [
             for (final item in items)
@@ -635,6 +699,12 @@ class PlaceDetailSections extends StatelessWidget {
               ),
           ],
         ),
+        LinksSection(:final items) => PlaceLinksSection(
+          items: [
+            for (final item in items)
+              PlaceLinkItem(label: item.label, url: item.url),
+          ],
+        ),
         BusinessInfoSection(:final items) => PlaceBusinessInfoSection(
           items: [
             for (final item in items)
@@ -642,16 +712,16 @@ class PlaceDetailSections extends StatelessWidget {
           ],
         ),
       };
-      // 사진은 시트 끝까지, 메뉴는 가로 스크롤이 끝까지 흐르도록 스스로 여백을
-      // 갖는다. 나머지 섹션만 여기서 본문 거터를 씌운다.
+      // 사진은 시트 끝까지, 메뉴는 줄 전체가 눌리도록 스스로 여백을 갖는다.
+      // 나머지 섹션만 여기서 본문 거터를 씌운다.
       final fullBleed = section is HeroSection || section is MenuSection;
       final padded = fullBleed
-          ? widget
+          ? rendered
           : Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: placeSectionGutter,
               ),
-              child: widget,
+              child: rendered,
             );
       // 여백만으로는 섹션이 어디서 끝났는지 읽히지 않는다. 카드로 감싸는 대신
       // 시트 폭을 가로지르는 얇은 선 하나로만 끊는다.
@@ -663,6 +733,62 @@ class PlaceDetailSections extends StatelessWidget {
       children: widgets,
     );
   }
+}
+
+/// 시트 본문을 가르는 상단 탭.
+///
+/// 메뉴가 30종까지 늘면서 한 줄로 이어 붙인 본문이 너무 길어졌다. 상세를 열었을 때
+/// 영업시간이 보이려면 메뉴를 한참 지나쳐야 했고, 반대로 메뉴를 보려면 소개를 지나야
+/// 했다. **어느 쪽을 보러 왔는지는 사람마다 다르므로** 둘을 나란히 두고 고르게 한다.
+///
+/// 섹션 순서는 그대로 서버가 정한다(계약 4-2 규칙 3). 클라이언트가 하는 것은 **묶는
+/// 일**뿐이고, 한 탭 안에서는 서버가 보낸 순서대로 쌓는다.
+class _SectionTabs extends StatelessWidget {
+  const _SectionTabs({
+    required this.tabs,
+    required this.active,
+    required this.onSelect,
+  });
+
+  final List<String> tabs;
+  final String active;
+  final ValueChanged<String> onSelect;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
+    child: Row(
+      children: [
+        for (final tab in tabs)
+          Expanded(
+            child: GestureDetector(
+              onTap: () => onSelect(tab),
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                padding: const EdgeInsets.only(bottom: 10),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: tab == active ? AppColors.primary : AppColors.blue100,
+                      width: tab == active ? 2.5 : 1,
+                    ),
+                  ),
+                ),
+                child: Text(
+                  tab,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: tab == active ? AppColors.primary : AppColors.muted,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
 }
 
 /// 섹션과 섹션 사이의 경계. 여백 + 시트 폭을 가로지르는 선 한 줄이다.
