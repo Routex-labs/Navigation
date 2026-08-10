@@ -9,7 +9,6 @@ import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/repositories/mock_building_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
-import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
 import 'package:navigation_client/widgets/floor_selector.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -164,32 +163,6 @@ void main() {
     await drain(tester);
     expect(cancelled, isFalse);
     expect(find.text('GPS 신호 약함'), findsNothing);
-  });
-
-  testWidgets('실내 오버레이가 켜지면 GPS 구독을 끊는다', (WidgetTester tester) async {
-    var cancelled = false;
-    final positions = StreamController<Position>(
-      onCancel: () => cancelled = true,
-    );
-    watchPosition = () => positions.stream;
-
-    final mapKey = GlobalKey<OutdoorMapBodyState>();
-    await tester.pumpWidget(
-      MaterialApp(home: Scaffold(body: OutdoorMapBody(key: mapKey))),
-    );
-    // 위치를 흘리기 전에 건물(입구 좌표) 로드가 끝날 때까지 프레임을 진행한다.
-    await drain(tester);
-    positions.add(farAway());
-    await tester.pump(const Duration(milliseconds: 50));
-    expect(cancelled, isFalse);
-
-    // 실내로 들어가면 위치의 주인은 PDR이다. GPS를 계속 물고 있으면 배터리를
-    // 쓰면서 실내에서 쓰지도 않는 값을 받는다.
-    // ignore: invalid_use_of_visible_for_testing_member
-    mapKey.currentState!.enterIndoorForTest();
-    await tester.pump();
-
-    expect(cancelled, isTrue);
   });
 
   testWidgets('실내 상태의 위치 보정은 GPS를 조회하지 않고 실내 위치를 안내한다', (

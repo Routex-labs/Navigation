@@ -85,16 +85,31 @@ double polygonWidthMeters(List<ll.LatLng> polygon) {
 ///
 /// 외곽선의 **변**까지의 거리를 재므로, 꼭짓점만 비교할 때와 달리 긴 벽면
 /// 가운데를 확대한 경우도 올바르게 가깝다고 판정한다.
+double metersToPolygon(ll.LatLng point, List<ll.LatLng> polygon) {
+  if (polygon.length < 3) return double.infinity;
+  if (isPointInPolygon(point, polygon)) return 0;
+  return _metersToBoundary(point, polygon);
+}
+
+/// [point]가 [polygon] **안쪽으로** 얼마나 들어와 있는지(m). 밖이면 0이다.
+///
+/// [metersToPolygon]의 짝이다. 두 값 중 하나는 항상 0이고, 둘을 함께 쓰면
+/// "벽에서 안으로 5 m 이상 / 밖으로 20 m 이상"처럼 안팎을 비대칭 임계값으로
+/// 가를 수 있다([indoor_entry_gps.dart]의 진입/이탈 판정).
+double metersInsidePolygon(ll.LatLng point, List<ll.LatLng> polygon) {
+  if (polygon.length < 3) return 0;
+  if (!isPointInPolygon(point, polygon)) return 0;
+  return _metersToBoundary(point, polygon);
+}
+
+/// [point]에서 외곽선까지의 거리(m). 안팎을 가리지 않고 **경계선까지**만 잰다.
 ///
 /// 계산은 [point] 주변을 평면으로 근사(equirectangular)해서 한다. 건물 크기
 /// (수백 m) 규모에서 오차는 무시할 수 있고, 대신 위경도 차이를 미터로 바꿀 때
 /// 경도 축을 `cos(위도)`로 줄여야 한다 — 안 그러면 서울 위도에서 동서 거리가
 /// 실제보다 약 26% 크게 나온다. 자오선/극점을 넘는 폴리곤은 다루지 않는다
 /// (실내 도면이 있는 건물에서는 생기지 않는다).
-double metersToPolygon(ll.LatLng point, List<ll.LatLng> polygon) {
-  if (polygon.length < 3) return double.infinity;
-  if (isPointInPolygon(point, polygon)) return 0;
-
+double _metersToBoundary(ll.LatLng point, List<ll.LatLng> polygon) {
   final mPerDegLng =
       _metersPerDegreeLat * math.cos(point.latitude * math.pi / 180);
   double toLocalX(ll.LatLng p) => (p.longitude - point.longitude) * mPerDegLng;

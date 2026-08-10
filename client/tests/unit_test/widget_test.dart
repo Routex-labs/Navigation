@@ -229,10 +229,14 @@ void main() {
   testWidgets(
     'map shell keeps the outdoor view when GPS signal stays strong near the entrance',
     (WidgetTester tester) async {
-      // 입구와 같은 좌표지만 신호는 계속 양호함 (건물 앞을 지나가는 상황).
+      // 건물 북쪽 벽에서 약 33 m 떨어진 인도 + 신호 양호(건물 앞을 지나가는
+      // 상황). 좌표를 외곽선 **밖**으로 잡는 것이 이 테스트의 전제다 — 진입
+      // 판정이 "믿을 수 있는 좌표가 건물 안"이라(judgeBuildingFromGps), 입구와
+      // 같은 좌표(외곽선 안쪽 약 22 m)를 흘리면 지나가는 상황이 아니라 실제로
+      // 들어온 상황이 된다.
       final passingByPosition = Position(
-        latitude: 37.5665,
-        longitude: 126.9779,
+        latitude: 37.5670,
+        longitude: 126.9780,
         timestamp: DateTime(2024, 1, 1),
         accuracy: 5,
         altitude: 0,
