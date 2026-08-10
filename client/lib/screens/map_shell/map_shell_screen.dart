@@ -646,38 +646,36 @@ class _MapShellScreenState extends State<MapShellScreen> {
   }
 
   /// 카테고리 chip을 눌렀을 때 같은 카테고리의 매장 목록 시트를 연다. 항목을
-  /// 탭하면 그 매장의 매장 정보 시트로 넘어가고, 정보 시트에서 뒤로 돌아
-  /// 오면(=출발/도착 액션 없이 닫힘) 다시 카테고리 목록으로 돌아온다 —
-  /// 사용자가 여러 매장을 훑어보는 흐름을 위해 저장한 장소와 동일한 loop
-  /// 패턴을 쓴다.
+  /// 탭하면 목록이 닫히고 그 매장의 상세 시트가 뜬다.
+  ///
+  /// **상세를 닫아도 목록으로 돌아가지 않는다.** 예전에는 여기가 loop여서 상세를
+  /// 닫으면 카테고리 목록이 다시 올라왔다 — 여러 매장을 훑는 흐름을 노린 것이었다.
+  /// 그런데 사용자에게는 매장을 하나 눌렀을 뿐인데 시트가 겹겹이 쌓인 것으로
+  /// 읽혔다. 상세는 **그 매장 하나를 보는 자리**이고, 닫으면 지도로 끝나는 편이
+  /// 예측 가능하다. 목록을 다시 보고 싶으면 chip을 다시 누르면 된다.
   Future<bool> _openCategoryStores(String category) async {
-    while (mounted) {
-      final currentFloor = _activeIndoorFloor;
-      final picked = await _withMapsLocked(
-        () => CategoryStoresSheet.show(
-          context,
-          buildingId: _buildingId,
-          category: category,
-          onCloseAll: _requestCloseSheetChain,
-          currentFloor: currentFloor,
-          // 지도 강조와 시트 목록이 같은 소분류를 가리키게 한다. 다른 대분류가
-          // 걸려 있었다면(매장 정보 시트에서 카테고리를 타고 들어온 경우) 그
-          // 소분류는 이 대분류에 없는 값이므로 넘기지 않는다.
-          subcategory: _categorySelection?.category == category
-              ? _categorySelection?.subcategory
-              : null,
-          onSubcategoryChanged: (value) => _onCategorySelectionChanged(
-            CategorySelection(category: category, subcategory: value),
-          ),
-          onFirstStoreChanged: _focusCategoryFirstStore,
+    final currentFloor = _activeIndoorFloor;
+    final picked = await _withMapsLocked(
+      () => CategoryStoresSheet.show(
+        context,
+        buildingId: _buildingId,
+        category: category,
+        onCloseAll: _requestCloseSheetChain,
+        currentFloor: currentFloor,
+        // 지도 강조와 시트 목록이 같은 소분류를 가리키게 한다. 다른 대분류가
+        // 걸려 있었다면(매장 정보 시트에서 카테고리를 타고 들어온 경우) 그
+        // 소분류는 이 대분류에 없는 값이므로 넘기지 않는다.
+        subcategory: _categorySelection?.category == category
+            ? _categorySelection?.subcategory
+            : null,
+        onSubcategoryChanged: (value) => _onCategorySelectionChanged(
+          CategorySelection(category: category, subcategory: value),
         ),
-      );
-      if (_closeSheetChainRequested || picked == null || !mounted) return false;
-      final tookAction = await _showStoreInfo(picked, focusOnMap: true);
-      if (_closeSheetChainRequested || !mounted) return false;
-      if (tookAction) return true;
-    }
-    return false;
+        onFirstStoreChanged: _focusCategoryFirstStore,
+      ),
+    );
+    if (_closeSheetChainRequested || picked == null || !mounted) return false;
+    return _showStoreInfo(picked, focusOnMap: true);
   }
 
   /// 카테고리 목록 맨 위 매장을 지도에서 보여 준다.
@@ -1077,23 +1075,18 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 매장 정보 시트에서 출발/도착을 고르지 않고 뒤로 닫으면 다시 저장된 장소
   /// 시트로 돌아온다 — 사용자가 여러 저장 항목을 훑어보다 잘못 눌렀거나
   /// 다른 항목을 다시 고르려는 경우를 위한 흐름이다.
+  /// 저장한 장소 목록을 연다. 항목을 탭하면 목록이 닫히고 상세 시트가 뜬다.
+  ///
+  /// 상세를 닫아도 목록으로 돌아가지 않는다 — 이유는 [_openCategoryStores]와 같다.
   Future<void> _openFavorites() async {
     await _runSheetChain(() async {
-      while (mounted) {
-        final picked = await _withMapsLocked(
-          () =>
-              FavoritesSheet.show(context, onCloseAll: _requestCloseSheetChain),
-        );
-        if (_closeSheetChainRequested || picked == null || !mounted) return;
-        final enriched = await _favoriteWithCategory(picked);
-        if (_closeSheetChainRequested || !mounted) return;
-        final tookAction = await _showStoreInfo(
-          enriched.toPoiSearchResult(),
-          focusOnMap: true,
-        );
-        if (_closeSheetChainRequested || !mounted) return;
-        if (tookAction) return;
-      }
+      final picked = await _withMapsLocked(
+        () => FavoritesSheet.show(context, onCloseAll: _requestCloseSheetChain),
+      );
+      if (_closeSheetChainRequested || picked == null || !mounted) return;
+      final enriched = await _favoriteWithCategory(picked);
+      if (_closeSheetChainRequested || !mounted) return;
+      await _showStoreInfo(enriched.toPoiSearchResult(), focusOnMap: true);
     });
   }
 

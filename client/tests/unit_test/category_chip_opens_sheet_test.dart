@@ -9,6 +9,7 @@ import 'package:navigation_client/repositories/mock_destination_repository.dart'
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
 import 'package:navigation_client/widgets/category_stores_sheet.dart';
+import 'package:navigation_client/widgets/place_detail_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 지도 위 대분류 chip을 누르면 **그 자리에서** 매장 목록 시트가 뜨는지 고정한다.
@@ -68,6 +69,34 @@ void main() {
     // 지도 위 「목록」 버튼은 사라졌다. 시트가 바로 뜨는데 한 단계를 더 두면
     // 같은 목적지로 가는 길이 두 개가 된다.
     expect(find.text('목록'), findsNothing);
+  });
+
+  // 예전에는 여기가 loop여서 상세를 닫으면 카테고리 목록이 다시 올라왔다.
+  // 여러 매장을 훑는 흐름을 노린 것이었지만, 사용자에게는 매장 하나를 눌렀을
+  // 뿐인데 시트가 겹겹이 쌓인 것으로 읽혔다. 상세는 그 매장 하나를 보는 자리이고,
+  // 닫으면 지도로 끝난다.
+  testWidgets('상세를 닫으면 카테고리 목록으로 돌아가지 않는다', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('실내'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('서비스'));
+    await tester.pumpAndSettle();
+
+    // 목록에서 매장을 고르면 목록이 닫히고 상세가 뜬다.
+    await tester.tap(find.text('우리은행 ATM'));
+    await tester.pumpAndSettle();
+    expect(find.byType(CategoryStoresSheet), findsNothing);
+    expect(find.byType(PlaceDetailSheet), findsOneWidget);
+
+    // **헤더의 뒤로 화살표로 닫는다.** 바깥을 눌러 닫는 경로는 chain 전체를
+    // 접으라는 신호(onCloseAll)라 어느 구현에서도 목록이 안 뜬다 — 그 경로로
+    // 검사하면 이 테스트는 아무것도 지키지 못한다.
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PlaceDetailSheet), findsNothing);
+    expect(find.byType(CategoryStoresSheet), findsNothing);
   });
 }
 
