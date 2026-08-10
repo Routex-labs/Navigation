@@ -326,7 +326,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
     }
   }
 
-
   /// 야외 컨텍스트로 나왔을 때, 실내 지점(층+노드)으로 잡아둔 출발지를 버린다.
   ///
   /// 실내에서 "출발지로 설정"한 매장은 야외 지도에서 쓸 수 없다. 그대로 두면
@@ -555,20 +554,25 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 반환값은 사용자가 출발/도착 액션을 실제로 골랐는지를 뜻한다. 저장된
   /// 장소 시트에서 넘어온 경우 호출자가 이 값을 보고 "그냥 닫힘"이면 다시
   /// 저장된 장소 시트로 돌려보내는 데 쓴다.
+  ///
+  /// [keepZoom]이면 카메라를 옮기되 **배율은 그대로 둔다.** 지도에서 매장을
+  /// 직접 눌렀을 때 쓴다 — 그 매장은 이미 화면에 있으므로 확대까지 하면 방금
+  /// 보던 층 배치가 사라진다. 목록·검색 결과에서 온 매장은 지금 화면 어디에
+  /// 있는지 알 수 없으니 확대해서 보여 주는 편이 맞다.
   Future<bool> _showStoreInfo(
     PoiSearchResult match, {
     bool focusOnMap = false,
+    bool keepZoom = false,
   }) async {
-    // 목록에서 고른 매장은 지금 화면 어디에 있는지 알 수 없다. 시트를 띄우기
-    // 전에 지도를 그 매장으로 옮겨, 시트를 닫으면 바로 그 자리가 보이게 한다.
-    // 지도 폴리곤을 직접 탭한 경우에는 옮기지 않는다 — 이미 보고 있는 매장을
-    // 다시 중앙으로 끌어오면 방금 보던 주변 맥락이 사라진다.
+    // 시트를 띄우기 전에 지도를 그 매장으로 옮겨, 시트를 닫으면 바로 그 자리가
+    // 보이게 한다.
     if (focusOnMap) {
       // 곧 올라올 시트 높이를 함께 넘겨, 매장이 시트 뒤가 아니라 그 위 영역
       // 한가운데에 놓이게 한다. 시트 높이를 바꾸면 카메라도 자동으로 따라온다.
       await _outdoorKey.currentState?.focusStore(
         match,
         bottomSheetFraction: kPlaceDetailSheetInitialSize,
+        keepZoom: keepZoom,
       );
       if (!mounted) return false;
     }
@@ -948,6 +952,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   /// 지도에서 매장을 눌러 상세를 연다. **떠 있는 상세가 있으면 먼저 닫는다.**
   ///
+  /// 고른 매장은 폴리곤이 파랗게 채워지고([_highlightedStoreId]) 카메라가 그
+  /// 매장을 시트 위 영역 한가운데로 끌어온다. 화면 구석을 눌렀을 때 강조된
+  /// 매장이 곧바로 시트 뒤로 숨어 "무엇을 골랐는지" 확인할 수 없던 것을 없앤다.
+  /// 배율은 건드리지 않는다(`keepZoom` — [_showStoreInfo] 주석).
+  ///
   /// 이 시트는 barrier가 없어 포인터를 지도로 흘린다([_withMapsLocked] 주석) —
   /// 시트를 열어 둔 채 지도를 만질 수 있게 한 의도된 설계다. 그 대가로 다른
   /// 매장을 누르면 시트가 그 위에 하나 더 쌓였고, 사용자는 매장 하나를 봤을
@@ -966,7 +975,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
       await closing;
       if (!mounted) return;
     }
-    await _runSheetChain(() => _showStoreInfo(match));
+    await _runSheetChain(
+      () => _showStoreInfo(match, focusOnMap: true, keepZoom: true),
+    );
   }
 
   /// 지도에서 고르는 중에 **매장이 아닌 곳(복도·빈 공간)** 을 눌렀을 때.
@@ -1499,8 +1510,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
               // 야외에서는 실내 진입 오버레이가 켜져 있을 때만 위치 지정 버튼을
               // 노출한다. 오버레이가 꺼진 순수 야외 상태에서는 지정할 층 정보가
               // 없어 눌러도 의미가 없다.
-              showPlaceLocation:
-                  _outdoorIndoorEntered,
+              showPlaceLocation: _outdoorIndoorEntered,
             ),
           ),
 

@@ -202,9 +202,15 @@ const _pdrLocationDotImageName =
 const _pdrLocationIconPixelRatio = 2.0;
 const _pdrLocationCoreRadius = 16.0;
 const _pdrLocationRimRadius = _pdrLocationCoreRadius + 5;
-// 실내 오버레이에서 매장 폴리곤을 탭했을 때 그 매장 하나만 옅은 파란색 + 진한
-// 테두리로 강조 표시하는 전용 소스·레이어. 실내 지도의 highlight와 같은 톤
-// (#1A73E8, 옅은 fill + 얇은 line)으로 맞춰 두 화면 사이 UX가 흔들리지 않게 한다.
+// 실내 오버레이에서 매장 폴리곤을 탭했을 때 그 매장 하나만 파란색으로 채우고
+// 테두리를 두르는 전용 소스·레이어. 색은 앱의 선택 색(#1A73E8) 하나를 쓴다.
+//
+// **fill 0.16은 사실상 안 보였다.** 매장 바닥(#F1EEEA)이 밝은 회색이라 16%
+// 파랑을 얹어도 "눌렀는데 아무 일도 안 일어난 것 같다"는 인상이었다. 0.35면
+// 어느 매장을 골랐는지 한눈에 들어오고, 매장 이름은 흰 헤일로를 두르고 그 위
+// 심볼 레이어에 찍히므로 여전히 읽힌다. 더 올리면 이름이 배경에 먹히기
+// 시작하므로 여기가 상한에 가깝다.
+const _highlightFillOpacity = 0.35;
 const _highlightSourceId = 'outdoor-highlight';
 const _highlightFillLayerId = 'outdoor-highlight-fill';
 const _highlightLineLayerId = 'outdoor-highlight-line';
@@ -2948,7 +2954,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await controller.addFillLayer(
       _highlightSourceId,
       _highlightFillLayerId,
-      const FillLayerProperties(fillColor: '#1A73E8', fillOpacity: 0.16),
+      const FillLayerProperties(
+        fillColor: '#1A73E8',
+        fillOpacity: _highlightFillOpacity,
+      ),
       enableInteraction: false,
     );
     await controller.addLineLayer(
@@ -2956,7 +2965,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _highlightLineLayerId,
       const LineLayerProperties(
         lineColor: '#1A73E8',
-        lineWidth: 1.2,
+        // fill이 진해진 만큼 테두리도 같이 올린다. 1.2px는 옅은 fill의 경계를
+        // 겨우 알려 주던 굵기라, 채운 뒤에는 fill에 묻혀 보이지 않는다.
+        lineWidth: 2,
         lineJoin: 'round',
       ),
       enableInteraction: false,
