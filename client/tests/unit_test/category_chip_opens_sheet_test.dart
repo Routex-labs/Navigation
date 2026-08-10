@@ -71,6 +71,29 @@ void main() {
     expect(find.text('목록'), findsNothing);
   });
 
+  // 목록이 떠 있는 동안 위쪽 지도를 만질 수 있어야 한다. barrier는 투명해도
+  // opaque라 포인터를 전부 흡수하므로, 남아 있으면 "지도는 보이는데 끌리지도
+  // 확대되지도 않는" 화면이 된다 — 상세 시트가 이미 겪고 고친 증상이다.
+  // ([MapPassThroughSheetRoute])
+  testWidgets('목록이 떠 있어도 위쪽 지도로 포인터가 지나간다', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpAndSettle();
+    tester
+        .state<OutdoorMapBodyState>(find.byType(OutdoorMapBody))
+        // ignore: invalid_use_of_visible_for_testing_member
+        .enterIndoorForTest();
+    await tester.pumpAndSettle();
+    // 홈 페이지 라우트도 자기 barrier를 하나 갖는다(포인터를 막지 않는다).
+    // 그래서 "0개"가 아니라 **시트를 열어도 늘지 않는 것**을 잰다.
+    final before = find.byType(ModalBarrier).evaluate().length;
+
+    await tester.tap(find.text('서비스'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CategoryStoresSheet), findsOneWidget);
+    expect(find.byType(ModalBarrier).evaluate().length, before);
+  });
+
   // 예전에는 여기가 loop여서 상세를 닫으면 카테고리 목록이 다시 올라왔다.
   // 여러 매장을 훑는 흐름을 노린 것이었지만, 사용자에게는 매장 하나를 눌렀을
   // 뿐인데 시트가 겹겹이 쌓인 것으로 읽혔다. 상세는 그 매장 하나를 보는 자리이고,
