@@ -275,6 +275,7 @@ class MenuItem {
   const MenuItem({
     required this.name,
     required this.imageAsset,
+    this.group,
     this.category,
     this.nameEn,
     this.description,
@@ -287,7 +288,9 @@ class MenuItem {
   final String name;
   final String? imageAsset;
 
-  /// 화면의 메뉴 탭. 탭 순서는 서버가 보낸 등장 순서다(계약 4-2 규칙 3).
+  /// 화면 위쪽 갈래(음료·푸드). 그 안의 탭이 [category]다. 둘 다 순서는 서버가
+  /// 보낸 등장 순서다(계약 4-2 규칙 3).
+  final String? group;
   final String? category;
   final String? nameEn;
   final String? description;
@@ -299,6 +302,7 @@ class MenuItem {
   factory MenuItem.fromJson(Map<String, dynamic> json) => MenuItem(
         name: json['name'] as String,
         imageAsset: json['image_asset'] as String?,
+        group: json['group'] as String?,
         category: json['category'] as String?,
         nameEn: json['name_en'] as String?,
         description: json['description'] as String?,

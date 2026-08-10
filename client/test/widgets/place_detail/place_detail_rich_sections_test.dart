@@ -314,6 +314,98 @@ void main() {
       expect(find.text('리저브 5'), findsNothing);
     });
 
+    // 갈래(음료·푸드)는 카테고리 위 단계다. 공식 사이트가 둘을 다른 페이지로
+    // 나누는 것과 같은 구조다.
+    testWidgets('groups split the menu above the category tabs', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        subject(
+          const PlaceMenuSection(
+            items: [
+              PlaceMenuItem(name: '카페 라떼', group: '음료', category: '에스프레소'),
+              PlaceMenuItem(name: '콜드 브루', group: '음료', category: '콜드 브루'),
+              PlaceMenuItem(name: '플레인 베이글', group: '푸드', category: '브레드'),
+            ],
+          ),
+        ),
+      );
+
+      expect(find.text('음료'), findsOneWidget);
+      expect(find.text('푸드'), findsOneWidget);
+      // 첫 갈래가 기본. 푸드 항목은 아직 안 보인다.
+      expect(find.text('카페 라떼'), findsOneWidget);
+      expect(find.text('플레인 베이글'), findsNothing);
+
+      await tester.tap(find.text('푸드'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('플레인 베이글'), findsOneWidget);
+      expect(find.text('카페 라떼'), findsNothing);
+      // 갈래 안에 카테고리가 하나뿐이면 카테고리 탭은 만들지 않는다.
+      expect(find.text('브레드'), findsNothing);
+    });
+
+    // 검색창은 메뉴가 한 화면에 안 들어올 때만 의미가 있다.
+    testWidgets('search field appears only when the menu is long', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        subject(
+          PlaceMenuSection(
+            items: [
+              for (var index = 0; index < 5; index++)
+                PlaceMenuItem(name: '메뉴 $index'),
+            ],
+          ),
+        ),
+      );
+
+      expect(find.byType(TextField), findsNothing);
+    });
+
+    testWidgets('search narrows by name and english name', (tester) async {
+      await tester.pumpWidget(
+        subject(
+          PlaceMenuSection(
+            items: [
+              for (var index = 0; index < 24; index++)
+                PlaceMenuItem(name: '메뉴 $index'),
+              const PlaceMenuItem(name: '카페 라떼', nameEn: 'Caffe Latte'),
+            ],
+          ),
+        ),
+      );
+
+      expect(find.byType(TextField), findsOneWidget);
+
+      // 영문명으로도 찾힌다. 띄어쓰기·대소문자는 무시한다.
+      await tester.enterText(find.byType(TextField), 'caffelatte');
+      await tester.pumpAndSettle();
+
+      expect(find.text('카페 라떼'), findsOneWidget);
+      expect(find.text('메뉴 0'), findsNothing);
+    });
+
+    // 찾는 것이 없을 때 빈 화면을 두면 앱이 멈춘 줄 안다.
+    testWidgets('search tells the user when nothing matches', (tester) async {
+      await tester.pumpWidget(
+        subject(
+          PlaceMenuSection(
+            items: [
+              for (var index = 0; index < 24; index++)
+                PlaceMenuItem(name: '메뉴 $index'),
+            ],
+          ),
+        ),
+      );
+
+      await tester.enterText(find.byType(TextField), '없는메뉴');
+      await tester.pumpAndSettle();
+
+      expect(find.text('찾는 메뉴가 없습니다'), findsOneWidget);
+    });
+
     testWidgets('menu tabs filter items by category in server order', (
       tester,
     ) async {

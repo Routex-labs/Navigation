@@ -114,7 +114,10 @@ class MenuItem(BaseModel):
     # 주고, 푸드에는 영양정보가 없다. 없는 값을 채우려면 지어내는 수밖에 없으므로
     # 필수로 만들지 않는다. 무엇이 비었는지에 따라 카드가 무엇을 보여줄지는
     # 클라이언트가 정한다(계약 4-2 규칙 3).
-    category: str | None = None  # 화면의 메뉴 탭. 탭 순서는 items에 처음 등장하는 순서다
+    # group은 화면 위쪽 갈래(음료·푸드), category는 그 안의 탭이다. 둘 다 순서는
+    # items에 처음 등장하는 순서다.
+    group: str | None = None
+    category: str | None = None
     name_en: str | None = None
     description: str | None = None
     price: str | None = None

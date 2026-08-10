@@ -134,6 +134,7 @@ class PlacePhotoGrid extends StatelessWidget {
 class PlaceMenuItem {
   const PlaceMenuItem({
     required this.name,
+    this.group,
     this.category,
     this.nameEn,
     this.price,
@@ -145,6 +146,7 @@ class PlaceMenuItem {
   });
 
   final String name;
+  final String? group;
   final String? category;
   final String? nameEn;
   final String? price;
@@ -183,43 +185,69 @@ class PlaceMenuSection extends StatefulWidget {
   State<PlaceMenuSection> createState() => _PlaceMenuSectionState();
 }
 
-/// 탭으로 쓸 카테고리를 등장 순서대로 뽑는다. 탭을 만들지 않을 때는 빈 목록.
+/// 등장 순서대로 값을 뽑는다. 나눌 것이 없으면 빈 목록.
 ///
-/// **한 항목이라도 카테고리가 없으면 탭을 만들지 않는다.** 가진 것만 탭에 넣으면 나머지
-/// 항목은 어느 탭에서도 보이지 않는데, 화면에는 아무 이상이 없어 보인다. 메뉴가 조용히
-/// 사라지는 쪽이 30개를 한 줄로 미는 것보다 나쁘다.
+/// **한 항목이라도 값이 없으면 나누지 않는다.** 가진 것만 탭에 넣으면 나머지 항목은
+/// 어느 탭에서도 보이지 않는데, 화면에는 아무 이상이 없어 보인다. 메뉴가 조용히
+/// 사라지는 쪽이 한 줄로 길게 늘어놓는 것보다 나쁘다.
 ///
-/// 카테고리가 한 종류뿐일 때도 만들지 않는다. 누를 곳이 하나뿐인 탭은 아무것도 나누지
+/// 값이 한 종류뿐일 때도 만들지 않는다. 누를 곳이 하나뿐인 탭은 아무것도 나누지
 /// 않으면서 자리만 차지한다.
-List<String> menuCategoryTabs(List<PlaceMenuItem> items) {
-  final tabs = <String>[];
+List<String> _distinctInOrder(
+  List<PlaceMenuItem> items,
+  String? Function(PlaceMenuItem) pick,
+) {
+  final values = <String>[];
   for (final item in items) {
-    final category = item.category;
-    if (category == null || category.isEmpty) return const <String>[];
-    if (!tabs.contains(category)) tabs.add(category);
+    final value = pick(item);
+    if (value == null || value.isEmpty) return const <String>[];
+    if (!values.contains(value)) values.add(value);
   }
-  return tabs.length > 1 ? tabs : const <String>[];
+  return values.length > 1 ? values : const <String>[];
 }
 
-class _PlaceMenuSectionState extends State<PlaceMenuSection> {
-  String? _activeTab;
+/// 탭으로 쓸 카테고리. 화면·테스트가 함께 쓴다.
+List<String> menuCategoryTabs(List<PlaceMenuItem> items) =>
+    _distinctInOrder(items, (item) => item.category);
 
-  /// 더보기를 눌러 전부 펼친 카테고리. 탭을 옮기면 다시 접는다 — 카테고리마다
-  /// 펼침 상태를 따로 들고 있으면, 돌아왔을 때 어디까지 펼쳤는지 기억나지 않는
-  /// 목록이 열려 있다.
+/// 위쪽 갈래(음료·푸드).
+List<String> menuGroupTabs(List<PlaceMenuItem> items) =>
+    _distinctInOrder(items, (item) => item.group);
+
+class _PlaceMenuSectionState extends State<PlaceMenuSection> {
+  String? _activeGroup;
+  String? _activeTab;
+  String _query = '';
+
+  /// 더보기를 눌러 전부 펼친 상태. 갈래·탭을 옮기거나 검색어를 바꾸면 다시 접는다 —
+  /// 자리마다 펼침 상태를 따로 들고 있으면, 돌아왔을 때 어디까지 펼쳤는지 기억나지
+  /// 않는 목록이 열려 있다.
   bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
     if (widget.items.isEmpty) return const SizedBox.shrink();
 
-    final tabs = menuCategoryTabs(widget.items);
-    // 선택한 탭이 사라졌으면(데이터가 바뀌었으면) 첫 탭으로 되돌린다. 없어진
-    // 카테고리를 붙들고 있으면 빈 목록이 뜬다.
+    final groups = menuGroupTabs(widget.items);
+    final activeGroup = groups.contains(_activeGroup)
+        ? _activeGroup
+        : groups.firstOrNull;
+    final inGroup = activeGroup == null
+        ? widget.items
+        : widget.items.where((item) => item.group == activeGroup).toList(growable: false);
+
+    // 검색은 갈래 안에서만 한다. 음료를 보다가 친 검색어에 푸드가 섞여 나오면
+    // 갈래를 고른 일이 무효가 된다.
+    final searching = _query.trim().isNotEmpty;
+    final matched = searching ? _search(inGroup, _query) : inGroup;
+
+    // 검색 중에는 카테고리 탭을 숨긴다. 검색 결과가 여러 카테고리에 걸치는데 탭이
+    // 남아 있으면 "지금 뭘 보고 있는지"가 두 곳에서 다르게 말해진다.
+    final tabs = searching ? const <String>[] : menuCategoryTabs(matched);
     final active = tabs.contains(_activeTab) ? _activeTab : tabs.firstOrNull;
     final visible = active == null
-        ? widget.items
-        : widget.items.where((item) => item.category == active).toList(growable: false);
+        ? matched
+        : matched.where((item) => item.category == active).toList(growable: false);
 
     final capped = !_expanded && visible.length > _menuVisibleCap;
     final shown = capped ? visible.take(_menuVisibleCap).toList(growable: false) : visible;
@@ -231,6 +259,30 @@ class _PlaceMenuSectionState extends State<PlaceMenuSection> {
           padding: EdgeInsets.symmetric(horizontal: placeSectionGutter),
           child: PlaceSectionTitle('메뉴'),
         ),
+        if (groups.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _MenuGroupTabs(
+            tabs: groups,
+            active: activeGroup!,
+            onSelect: (group) => setState(() {
+              _activeGroup = group;
+              _activeTab = null;
+              _expanded = false;
+            }),
+          ),
+        ],
+        // 검색창은 메뉴가 한 화면에 안 들어올 때만 의미가 있다. 열 줄도 안 되는
+        // 목록에서는 눈으로 훑는 편이 빠르고, 입력창만 자리를 차지한다.
+        if (widget.items.length >= _menuSearchThreshold) ...[
+          const SizedBox(height: 12),
+          _MenuSearchField(
+            value: _query,
+            onChanged: (value) => setState(() {
+              _query = value;
+              _expanded = false;
+            }),
+          ),
+        ],
         if (tabs.isNotEmpty) ...[
           const SizedBox(height: 10),
           _MenuCategoryTabs(
@@ -243,6 +295,14 @@ class _PlaceMenuSectionState extends State<PlaceMenuSection> {
           ),
         ],
         const SizedBox(height: 6),
+        if (visible.isEmpty)
+          const Padding(
+            padding: EdgeInsets.fromLTRB(placeSectionGutter, 14, placeSectionGutter, 6),
+            child: Text(
+              '찾는 메뉴가 없습니다',
+              style: TextStyle(fontSize: 13.5, color: AppColors.muted),
+            ),
+          ),
         // 세로 목록이라 스크롤을 따로 갖지 않는다. 시트 본문이 이미 스크롤이고,
         // 그 안에 또 스크롤을 넣으면 어느 쪽이 움직일지가 손끝에서 갈린다.
         for (final item in shown) _MenuRow(item: item),
@@ -251,6 +311,25 @@ class _PlaceMenuSectionState extends State<PlaceMenuSection> {
       ],
     );
   }
+}
+
+/// 검색창을 붙이는 최소 메뉴 수.
+const _menuSearchThreshold = 20;
+
+/// 이름·영문명으로 찾는다. 공백을 지우고 대소문자를 무시한다.
+///
+/// 설명까지 뒤지지 않는 이유는 결과가 설명 안의 흔한 낱말에 끌려다니기 때문이다 —
+/// "커피"를 치면 설명에 커피가 들어간 거의 모든 음료가 나와서 걸러 주는 게 없다.
+List<PlaceMenuItem> _search(List<PlaceMenuItem> items, String query) {
+  String norm(String value) => value.replaceAll(' ', '').toLowerCase();
+  final needle = norm(query);
+  return items
+      .where(
+        (item) =>
+            norm(item.name).contains(needle) ||
+            norm(item.nameEn ?? '').contains(needle),
+      )
+      .toList(growable: false);
 }
 
 /// 메뉴 한 줄. 왼쪽에 이름·설명·가격, 오른쪽에 사진.
@@ -382,6 +461,112 @@ class _MenuMoreRow extends StatelessWidget {
           const SizedBox(width: 2),
           const Icon(Icons.expand_more, size: 20, color: AppColors.primary),
         ],
+      ),
+    ),
+  );
+}
+
+/// 위쪽 갈래(음료·푸드) 선택. 카테고리 탭보다 굵게 두어 위계를 드러낸다.
+class _MenuGroupTabs extends StatelessWidget {
+  const _MenuGroupTabs({
+    required this.tabs,
+    required this.active,
+    required this.onSelect,
+  });
+
+  final List<String> tabs;
+  final String active;
+  final ValueChanged<String> onSelect;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
+    child: Row(
+      children: [
+        for (final tab in tabs)
+          Padding(
+            padding: const EdgeInsets.only(right: 18),
+            child: GestureDetector(
+              onTap: () => onSelect(tab),
+              behavior: HitTestBehavior.opaque,
+              child: Text(
+                tab,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: tab == active ? FontWeight.w800 : FontWeight.w500,
+                  color: tab == active ? AppColors.text : AppColors.muted,
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+/// 메뉴 이름으로 좁히는 검색창.
+class _MenuSearchField extends StatefulWidget {
+  const _MenuSearchField({required this.value, required this.onChanged});
+
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_MenuSearchField> createState() => _MenuSearchFieldState();
+}
+
+class _MenuSearchFieldState extends State<_MenuSearchField> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.value);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.blue50,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Row(
+          children: [
+            const Icon(Icons.search, size: 19, color: AppColors.muted),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: _controller,
+                onChanged: widget.onChanged,
+                style: const TextStyle(fontSize: 14, color: AppColors.text),
+                decoration: const InputDecoration(
+                  isDense: true,
+                  border: InputBorder.none,
+                  hintText: '메뉴 검색',
+                  hintStyle: TextStyle(fontSize: 14, color: AppColors.muted),
+                  contentPadding: EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+            if (widget.value.isNotEmpty)
+              GestureDetector(
+                onTap: () {
+                  _controller.clear();
+                  widget.onChanged('');
+                },
+                behavior: HitTestBehavior.opaque,
+                child: const Padding(
+                  padding: EdgeInsets.only(left: 4),
+                  child: Icon(Icons.close, size: 18, color: AppColors.muted),
+                ),
+              ),
+          ],
+        ),
       ),
     ),
   );

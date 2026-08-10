@@ -23,6 +23,7 @@
     ],
     "menu": [
       {
+        "group": "음료",
         "category": "리저브",
         "name": "리저브 콜드 브루",
         "name_en": "Reserve Cold Brew",
@@ -33,6 +34,7 @@
         "caffeine": "190mg"
       },
       {
+        "group": "음료",
         "category": "리저브",
         "name": "리저브 나이트로",
         "name_en": "Reserve Nitro",
@@ -43,6 +45,7 @@
         "caffeine": "190mg"
       },
       {
+        "group": "음료",
         "category": "리저브",
         "name": "클래식 아포가토",
         "name_en": "Classic Affogato",
@@ -53,6 +56,7 @@
         "caffeine": "210mg"
       },
       {
+        "group": "음료",
         "category": "리저브",
         "name": "콜드 브루 몰트",
         "name_en": "Cold Brew Malt",
@@ -63,6 +67,7 @@
         "caffeine": "190mg"
       },
       {
+        "group": "음료",
         "category": "리저브",
         "name": "에스프레소 플라이트",
         "name_en": "Espresso Flight",
@@ -70,6 +75,7 @@
         "description": "스타벅스 리저브 에스프레소를 새롭고 다양하게 즐길 수 있는 에스프레소 플라이트"
       },
       {
+        "group": "음료",
         "category": "리저브",
         "name": "스모크드 콜드 패션드",
         "name_en": "Smoked Cold Fashioned",
@@ -80,6 +86,7 @@
         "caffeine": "135mg"
       },
       {
+        "group": "음료",
         "category": "에스프레소",
         "name": "카페 아메리카노",
         "name_en": "Caffe Americano",
@@ -90,6 +97,7 @@
         "caffeine": "150mg"
       },
       {
+        "group": "음료",
         "category": "에스프레소",
         "name": "카페 라떼",
         "name_en": "Caffe Latte",
@@ -100,6 +108,7 @@
         "caffeine": "75mg"
       },
       {
+        "group": "음료",
         "category": "에스프레소",
         "name": "카푸치노",
         "name_en": "Cappuccino",
@@ -110,6 +119,7 @@
         "caffeine": "75mg"
       },
       {
+        "group": "음료",
         "category": "에스프레소",
         "name": "카라멜 마키아또",
         "name_en": "Caramel Macchiato",
@@ -120,6 +130,7 @@
         "caffeine": "75mg"
       },
       {
+        "group": "음료",
         "category": "에스프레소",
         "name": "스타벅스 돌체 라떼",
         "name_en": "Starbucks Dolce Latte",
@@ -130,6 +141,7 @@
         "caffeine": "150mg"
       },
       {
+        "group": "음료",
         "category": "에스프레소",
         "name": "카페 모카",
         "name_en": "Caffe Mocha",
@@ -140,6 +152,7 @@
         "caffeine": "95mg"
       },
       {
+        "group": "음료",
         "category": "콜드 브루",
         "name": "콜드 브루",
         "name_en": "Cold Brew",
@@ -150,6 +163,7 @@
         "caffeine": "155mg"
       },
       {
+        "group": "음료",
         "category": "콜드 브루",
         "name": "나이트로 콜드 브루",
         "name_en": "Nitro Cold Brew",
@@ -160,6 +174,7 @@
         "caffeine": "245mg"
       },
       {
+        "group": "음료",
         "category": "콜드 브루",
         "name": "바닐라 크림 콜드 브루",
         "name_en": "Vanilla Cream Cold Brew",
@@ -170,6 +185,7 @@
         "caffeine": "135mg"
       },
       {
+        "group": "음료",
         "category": "콜드 브루",
         "name": "돌체 콜드 브루",
         "name_en": "Dolce Cold Brew",
@@ -180,6 +196,7 @@
         "caffeine": "130mg"
       },
       {
+        "group": "음료",
         "category": "프라푸치노",
         "name": "자바 칩 프라푸치노",
         "name_en": "Java Chip Frappuccino",
@@ -190,6 +207,7 @@
         "caffeine": "100mg"
       },
       {
+        "group": "음료",
         "category": "프라푸치노",
         "name": "카라멜 프라푸치노",
         "name_en": "Caramel Frappuccino",
@@ -200,6 +218,7 @@
         "caffeine": "85mg"
       },
       {
+        "group": "음료",
         "category": "프라푸치노",
         "name": "제주 말차 크림 프라푸치노",
         "name_en": "Jeju Malcha Cream Frappuccino",
@@ -210,6 +229,7 @@
         "caffeine": "80mg"
       },
       {
+        "group": "음료",
         "category": "프라푸치노",
         "name": "초콜릿 크림 칩 프라푸치노",
         "name_en": "Chocolate Cream Chip Frappuccino",
@@ -220,6 +240,7 @@
         "caffeine": "10mg"
       },
       {
+        "group": "음료",
         "category": "티·기타",
         "name": "제주 말차 라떼",
         "name_en": "Jeju Malcha Latte",
@@ -230,6 +251,7 @@
         "caffeine": "80mg"
       },
       {
+        "group": "음료",
         "category": "티·기타",
         "name": "얼 그레이 티",
         "name_en": "Earl Grey Brewed Tea",
@@ -240,6 +262,7 @@
         "caffeine": "70mg"
       },
       {
+        "group": "음료",
         "category": "티·기타",
         "name": "자몽 허니 블랙 티",
         "name_en": "Grapefruit Honey Black Tea",
@@ -250,6 +273,7 @@
         "caffeine": "70mg"
       },
       {
+        "group": "음료",
         "category": "티·기타",
         "name": "시그니처 핫 초콜릿",
         "name_en": "Signature Hot Chocolate",
@@ -260,6 +284,7 @@
         "caffeine": "40mg"
       },
       {
+        "group": "푸드",
         "category": "푸드",
         "name": "잉글리쉬 스콘",
         "name_en": "English Scone",
@@ -267,6 +292,7 @@
         "description": "고메 버터의 풍미가 은은하게 맴도는 담백한 스콘입니다."
       },
       {
+        "group": "푸드",
         "category": "푸드",
         "name": "탕종 플레인 베이글",
         "name_en": "Plain Bagel",
@@ -274,6 +300,7 @@
         "description": "탕종법으로 반죽한 후 고온에서 데치고, 짧게 구워 내 쫄깃하고 촉촉한 식감이 특징인 플레인 베이글입니다."
       },
       {
+        "group": "푸드",
         "category": "푸드",
         "name": "부드러운 생크림 카스텔라",
         "name_en": "Fresh Cream Castella",
@@ -281,6 +308,7 @@
         "description": "부드러운 생크림이 듬뿍 들어있는 촉촉한 카스텔라입니다."
       },
       {
+        "group": "푸드",
         "category": "푸드",
         "name": "레이디핑거 티라미수 케이크",
         "name_en": "Ladyfinger Tiramisu Cake",
@@ -288,6 +316,7 @@
         "description": "진한 풍미의 마스카포네 치즈 크림 사이에 커피 시럽으로 촉촉하게 적신 레이디핑거 쿠키가 샌드되어 부드럽게 어우러지는 케이크입니다."
       },
       {
+        "group": "푸드",
         "category": "푸드",
         "name": "B.L.T. 샌드위치",
         "name_en": "B.L.T. Sandwich",
@@ -295,6 +324,7 @@
         "description": "멀티 그레인이 들어간 통밀 식빵에 참나무로 훈연한 베이컨, 로메인, 두툼하게 썬 토마토의 클래식한 조합으로 만든 샌드위치입니다."
       },
       {
+        "group": "푸드",
         "category": "푸드",
         "name": "쫄깃 소시지 브레드",
         "name_en": "Sausage Bread",

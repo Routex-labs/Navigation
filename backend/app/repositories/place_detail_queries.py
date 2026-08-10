@@ -139,7 +139,7 @@ def _sections(
     menu_items = _rich_items(
         overlay.get("menu"),
         ("name", "image_asset"),
-        ("category", "name_en", "description", "price", "volume", "calories", "caffeine"),
+        ("group", "category", "name_en", "description", "price", "volume", "calories", "caffeine"),
     )
     if menu_items:
         sections.append({"type": "menu", "items": menu_items})
