@@ -33,20 +33,14 @@
 
 | 파일 | 용도 | 출처 | 라이선스 |
 |---|---|---|---|
-| `starbucks_store_0{1,4,6,7,8}.jpg` | hero 5장 | 스타벅스 코리아 더현대서울(B2)R점 공식 매장 화면, 사용자 제공 | 데모용 |
-| `starbucks_store_0{2,3,5}.jpg` | (미사용) | 위와 같음 | 데모용 |
+| `starbucks_store_0{1,4,6,7,8}.jpg` | hero 5장 (매장 사진은 이 5장만 남겼다) | 스타벅스 코리아 더현대서울(B2)R점 공식 매장 화면, 사용자 제공 | 데모용 |
 | `starbucks_menu_*.jpg` 30장 | 메뉴 카드 | 스타벅스 코리아 공식 메뉴 페이지 (`image.istarbucks.co.kr`) | 상표·이미지: Starbucks Corporation, 데모 식별용 |
 
-**아래 7장은 초기 파일럿 때 넣었고 지금은 어느 오버레이도 참조하지 않는다.** 디렉터리째
-등록하므로 번들에는 계속 들어가며, 클라이언트 테스트가 경로 문자열로 쓰고 있어 지우려면
-테스트도 같이 손봐야 한다.
-
-| 파일 | 원래 용도 | 출처 | 라이선스 |
-|---|---|---|---|
-| `starbucks_logo.svg` | 매장 식별 로고 | [Wikimedia Commons](https://upload.wikimedia.org/wikipedia/en/d/d3/Starbucks_Corporation_Logo_2011.svg) | 상표: Starbucks Corporation, 데모 식별용 |
-| `starbucks_reserve_store_0{1..4}.png` | 대표·갤러리 사진 | 스타벅스 코리아 공식 매장 화면, 사용자 제공 | 데모용 |
-| `starbucks_reserve_hero.jpg` | 대표 이미지 | [Pexels, Mariya Yordanova](https://www.pexels.com/photo/coffee-and-roll-served-in-a-coffee-shop-19455695/) | Pexels 무료 사용 |
-| `starbucks_reserve_menu.jpg` | 메뉴 카드 데모 | [Pexels, Arda Kaykısız](https://www.pexels.com/photo/coffee-with-pastries-20002825/) | Pexels 무료 사용 |
+> **초기 파일럿 이미지 7장은 삭제했다.** `starbucks_logo.svg`,
+> `starbucks_reserve_store_0{1..4}.png`, `starbucks_reserve_hero.jpg`,
+> `starbucks_reserve_menu.jpg`는 위 사진들로 대체되어 어느 오버레이도 참조하지 않게 됐고,
+> 경로 문자열만 쓰던 클라이언트 테스트를 현재 asset으로 옮긴 뒤 함께 지웠다. 매장 사진도
+> 실제로 쓰는 5장만 남겼다.
 
 > **메뉴 사진 원본 경로가 4장분만 남아 있다.** 초기 4종은 아래 [메뉴 사진 출처](#메뉴-사진-출처)에
 > `skuimg` 경로가 적혀 있지만, 이번에 늘린 26장은 파일별 원본 URL을 받아 적지 않았다.

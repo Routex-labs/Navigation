@@ -53,7 +53,7 @@ void main() {
         {
           'type': 'hero',
           'items': [
-            {'local_asset': 'assets/place_details/starbucks_reserve_store_01.png'},
+            {'local_asset': 'assets/place_details/starbucks_store_01.jpg'},
           ],
         },
         {
@@ -63,7 +63,7 @@ void main() {
               'name': '카페 아메리카노',
               'price': '4,700원',
               'description': '진하고 풍부한 에스프레소 샷에 물을 더한 커피',
-              'image_asset': 'assets/place_details/starbucks_reserve_menu.jpg',
+              'image_asset': 'assets/place_details/starbucks_menu_americano.jpg',
             },
           ],
         },
@@ -95,11 +95,11 @@ void main() {
     final businessInfo = detail.sections[3] as BusinessInfoSection;
 
     expect(detail.sections, hasLength(4));
-    expect(hero.items.single.localAsset, 'assets/place_details/starbucks_reserve_store_01.png');
+    expect(hero.items.single.localAsset, 'assets/place_details/starbucks_store_01.jpg');
     expect(menu.items.single.name, '카페 아메리카노');
     expect(menu.items.single.price, '4,700원');
     expect(menu.items.single.description, '진하고 풍부한 에스프레소 샷에 물을 더한 커피');
-    expect(menu.items.single.imageAsset, 'assets/place_details/starbucks_reserve_menu.jpg');
+    expect(menu.items.single.imageAsset, 'assets/place_details/starbucks_menu_americano.jpg');
     expect(demoInfo.items.single.label, '영업시간');
     expect(demoInfo.items.single.confirmedAt, '2026-08-10');
     expect(businessInfo.items.single.label, '대표번호');

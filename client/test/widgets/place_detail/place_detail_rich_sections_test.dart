@@ -18,11 +18,11 @@ void main() {
             images: [
               PlaceHeroImage(
                 assetPath:
-                    'assets/place_details/starbucks_reserve_store_01.png',
+                    'assets/place_details/starbucks_store_01.jpg',
               ),
               PlaceHeroImage(
                 assetPath:
-                    'assets/place_details/starbucks_reserve_store_02.png',
+                    'assets/place_details/starbucks_store_04.jpg',
               ),
             ],
           ),
@@ -59,7 +59,7 @@ void main() {
                 calories: '5kcal',
                 caffeine: '190mg',
                 imageAssetPath:
-                    'assets/place_details/starbucks_reserve_menu.jpg',
+                    'assets/place_details/starbucks_menu_americano.jpg',
               ),
             ],
           ),
