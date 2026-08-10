@@ -16,11 +16,11 @@ import '../repositories/http_building_repository.dart';
 import '../repositories/http_destination_repository.dart';
 import '../repositories/mock_directions_repository.dart';
 import '../repositories/http_place_detail_repository.dart';
+import '../repositories/kakao_transit_repository.dart';
 import '../repositories/outdoor_poi_repository.dart';
 import '../repositories/place_detail_repository.dart';
 import '../repositories/tmap_directions_repository.dart';
 import '../repositories/tmap_poi_repository.dart';
-import '../repositories/tmap_transit_repository.dart';
 import '../repositories/transit_repository.dart';
 import '../state/favorites_controller.dart';
 
@@ -94,10 +94,18 @@ OutdoorPoiRepository outdoorPoiRepository = tmapAppKey.isEmpty
     ? const UnavailableOutdoorPoiRepository()
     : TmapPoiRepository();
 
-/// 대중교통 경로(TMAP transit). 위와 같은 이유로 키가 없으면 꺼진 구현이다.
-TransitRepository transitRepository = tmapAppKey.isEmpty
+/// 대중교통 경로(카카오맵). 위와 같은 이유로 키가 없으면 꺼진 구현이다.
+///
+/// **여기만 TMAP 키가 아니라 카카오 키를 본다.** TMAP 대중교통 무료 제공량이
+/// 하루 10건이라 데모 한 번에 소진돼 옮겼다. 되돌리려면 `TmapTransitRepository()`
+/// 로 바꾸면 되지만, 그때는 판단 기준도 `tmapAppKey`로 함께 되돌려야 한다.
+///
+/// 카카오 응답에는 첫 승차지점 앞·마지막 하차지점 뒤 도보가 없다. 그 두 구간은
+/// 화면이 [directionsRepository]로 채우므로, 대중교통을 쓰는 흐름은 TMAP 키도
+/// 함께 있어야 완전한 경로가 그려진다.
+TransitRepository transitRepository = kakaoRestApiKey.isEmpty
     ? const UnavailableTransitRepository()
-    : TmapTransitRepository();
+    : KakaoTransitRepository();
 
 /// 사용자가 "장소" 탭에 저장해둔 매장 목록. SharedPreferences로 앱 재실행
 /// 뒤에도 유지된다. 테스트에서는 이 변수를 in-memory 컨트롤러로 교체한다.

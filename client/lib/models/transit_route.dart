@@ -29,6 +29,18 @@ enum TransitMode {
     };
   }
 
+  /// 카카오는 `BUS`·`SUBWAY`·`WALKING` 셋만 준다(도보가 `WALK`가 아니다).
+  /// 기차·고속버스·항공·해운은 아예 나오지 않으므로 [unknown]으로 모인다 —
+  /// 문서에 없는 값이 나중에 추가돼도 화면은 일반 아이콘으로 버틴다.
+  static TransitMode fromKakao(Object? raw) {
+    return switch (raw is String ? raw.trim().toUpperCase() : '') {
+      'WALKING' => TransitMode.walk,
+      'BUS' => TransitMode.bus,
+      'SUBWAY' => TransitMode.subway,
+      _ => TransitMode.unknown,
+    };
+  }
+
   /// 걷는 구간인지. 지도에서 실선(탈것) 대신 점선으로 그리고, 요약 줄에서도
   /// "도보 n분"으로 따로 세는 기준이다.
   bool get isWalk => this == TransitMode.walk;
@@ -77,6 +89,42 @@ class TransitLeg {
       startName: start?.name,
       endName: end?.name,
       stationCount: _stationCount(json),
+    );
+  }
+
+  /// 카카오 `routes[].steps[]` 한 건.
+  ///
+  /// TMAP과 달리 값이 `properties`와 `path` 두 덩어리로 나뉘어 있고, 선 좌표는
+  /// 문자열이 아니라 `[[경도, 위도], …]` 숫자 배열이다. 수단에 상관없이
+  /// `path.points` 한 곳만 보면 되므로 TMAP처럼 도보·탈것을 나눠 읽지 않는다.
+  factory TransitLeg.fromKakaoJson(Map<String, dynamic> json) {
+    final properties = json['properties'];
+    final props = properties is Map<String, dynamic>
+        ? properties
+        : const <String, dynamic>{};
+    final mode = TransitMode.fromKakao(props['type']);
+    final stops = _kakaoStopNames(props['stops']);
+
+    var points = const <LatLng>[];
+    final path = json['path'];
+    if (path is Map<String, dynamic>) {
+      points = parseKakaoPoints(path['points']);
+    }
+
+    return TransitLeg(
+      mode: mode,
+      sectionTimeSeconds: _int(props['time']) ?? 0,
+      distanceMeters: _number(props['distance']) ?? 0,
+      points: points,
+      routeName: _kakaoRouteName(props['vehicles']),
+      // 카카오는 노선 고유색을 주지 않는다. null이면 화면이 수단별 기본색으로
+      // 떨어지므로(widgets/transit_style.dart) 지하철 호선 색 구분만 사라진다.
+      routeColorHex: null,
+      startName: stops.isEmpty ? null : stops.first,
+      endName: stops.length < 2 ? null : stops.last,
+      // 도보 구간에도 stops가 둘 붙어 온다(예: "신논현" → "신논현역"). 그대로
+      // 세면 걸어가는 구간에 "1정거장"이 찍히므로 도보는 0으로 못박는다.
+      stationCount: mode.isWalk || stops.length <= 1 ? 0 : stops.length - 1,
     );
   }
 
@@ -159,6 +207,41 @@ class TransitLeg {
     return stations.length <= 1 ? 0 : stations.length - 1;
   }
 
+  static List<String> _kakaoStopNames(Object? raw) {
+    if (raw is! List) return const [];
+    final names = <String>[];
+    for (final stop in raw) {
+      if (stop is! Map<String, dynamic>) continue;
+      final name = _text(stop['name']);
+      if (name != null) names.add(name);
+    }
+    return names;
+  }
+
+  /// 카카오 `vehicles[]`를 TMAP과 같은 `종류:번호` 한 줄로 만든다.
+  ///
+  /// **같은 구간을 지나는 노선을 전부 묶어 준다** — 여의도 앞 한 정거장에
+  /// `지선 5623`, `간선 461` … 7개가 함께 왔다. 목록 칩에 7개를 늘어놓을 수는
+  /// 없으니 첫 노선만 쓰고 나머지는 "외 N대"로 접는다. 접두사를 `:`로 붙이는
+  /// 것은 TMAP이 `간선:472`로 주던 규칙과 맞춘 것이다 — [shortLabel]이 이
+  /// 접두사를 떼어내므로 좁은 칩에서는 번호가 먼저 읽힌다.
+  static String? _kakaoRouteName(Object? raw) {
+    if (raw is! List || raw.isEmpty) return null;
+    String? kind;
+    String? number;
+    var counted = 0;
+    for (final vehicle in raw) {
+      if (vehicle is! Map<String, dynamic>) continue;
+      counted++;
+      if (number != null) continue;
+      kind = _text(vehicle['type']);
+      number = _text(vehicle['name']);
+    }
+    if (number == null) return null;
+    final label = counted > 1 ? '$number외 ${counted - 1}대' : number;
+    return kind == null ? label : '$kind:$label';
+  }
+
   static String? _colorHex(Object? raw) {
     final value = _text(raw);
     if (value == null) return null;
@@ -200,6 +283,52 @@ class TransitItinerary {
     );
   }
 
+  /// 카카오 `routes[]` 한 건.
+  ///
+  /// **응답에는 첫 승차지점 앞과 마지막 하차지점 뒤의 도보가 빠져 있다.**
+  /// 카카오가 "대중교통 이용 경로"만 답하기 때문이고, 그 두 구간은 화면이
+  /// `DirectionsRepository.getWalkingRoute()`로 따로 채운다.
+  ///
+  /// 다만 **`totalTime`·`totalDistance`에는 그 도보가 이미 들어 있다.** 실호출로
+  /// 확인한 값이다 — 9호선+신분당선 경로에서 steps 시간 합 1236초, `totalTime`
+  /// 2022초로 786초가 더 컸고 거리 차이는 807m였다(약 1m/1초, 보행 속도와 맞다).
+  /// 그래서 목록에 찍는 총 소요시간은 도보를 못 받아도 정확하고, 우리가 따로
+  /// 추정해 더하면 오히려 이중 계산이 된다.
+  static TransitItinerary? fromKakaoJson(Map<String, dynamic> json) {
+    final rawSteps = json['steps'];
+    if (rawSteps is! List) return null;
+    final legs = <TransitLeg>[];
+    for (final step in rawSteps) {
+      if (step is Map<String, dynamic>) legs.add(TransitLeg.fromKakaoJson(step));
+    }
+    if (legs.isEmpty) return null;
+
+    final properties = json['properties'];
+    final props = properties is Map<String, dynamic>
+        ? properties
+        : const <String, dynamic>{};
+    final totalTime = _int(props['totalTime']) ?? 0;
+
+    // 카카오는 totalWalkTime을 따로 주지 않는다. 받은 도보 구간(환승 도보)에,
+    // "총계에는 있는데 steps에는 없는" 시간 = 빠진 앞뒤 도보를 더해 복원한다.
+    var stepSeconds = 0;
+    var walkSeconds = 0;
+    for (final leg in legs) {
+      stepSeconds += leg.sectionTimeSeconds;
+      if (leg.mode.isWalk) walkSeconds += leg.sectionTimeSeconds;
+    }
+    final missingWalk = totalTime - stepSeconds;
+
+    return TransitItinerary(
+      totalTimeSeconds: totalTime,
+      totalWalkTimeSeconds: walkSeconds + (missingWalk > 0 ? missingWalk : 0),
+      totalDistanceMeters: _number(props['totalDistance']) ?? 0,
+      transferCount: _int(props['transfers']) ?? 0,
+      legs: legs,
+      fare: _kakaoFare(props['fare']),
+    );
+  }
+
   final int totalTimeSeconds;
   final int totalWalkTimeSeconds;
   final double totalDistanceMeters;
@@ -217,6 +346,14 @@ class TransitItinerary {
   /// 탈것 구간만. 요약 줄에 "지하철 → 버스"처럼 적을 때 도보를 빼고 쓴다.
   List<TransitLeg> get rideLegs =>
       legs.where((leg) => !leg.mode.isWalk).toList(growable: false);
+
+  /// 카카오 `properties.fare.value`. **요금이 통째로 안 올 수 있다** — 실호출에서
+  /// 짧은 버스 경로 하나가 fare 없이 왔다. 화면은 이미 null을 요금 미표시로
+  /// 처리하므로 0으로 채우지 않는다(0원은 "공짜"라는 다른 뜻이 된다).
+  static int? _kakaoFare(Object? raw) {
+    if (raw is! Map<String, dynamic>) return null;
+    return _int(raw['value']);
+  }
 
   static int? _fare(Map<String, dynamic> json) {
     final fare = json['fare'];
@@ -279,6 +416,23 @@ List<LatLng> parseTransitLinestring(Object? raw) {
     if (parts.length != 2) continue;
     final lon = double.tryParse(parts[0]);
     final lat = double.tryParse(parts[1]);
+    if (lon == null || lat == null) continue;
+    points.add(LatLng(lat, lon));
+  }
+  return points;
+}
+
+/// 카카오가 경로선을 담는 `[[경도, 위도], …]` 배열을 좌표열로 바꾼다.
+///
+/// TMAP과 담는 그릇만 다를 뿐(문자열 vs 숫자 배열) **경도가 먼저 오는 것은
+/// 같다.** 이 순서를 뒤집으면 경로가 서해 한가운데로 날아간다.
+List<LatLng> parseKakaoPoints(Object? raw) {
+  if (raw is! List) return const [];
+  final points = <LatLng>[];
+  for (final pair in raw) {
+    if (pair is! List || pair.length < 2) continue;
+    final lon = _number(pair[0]);
+    final lat = _number(pair[1]);
     if (lon == null || lat == null) continue;
     points.add(LatLng(lat, lon));
   }
