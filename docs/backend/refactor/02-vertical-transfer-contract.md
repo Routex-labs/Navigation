@@ -58,7 +58,7 @@ main보다 6커밋 앞선 브랜치 기준). 실제로는 `length_m` 하나가 �
   실측 재시드 결과 에스컬레이터 한 칸의 실제 거리는 약 5.8m인데 20m로 계산되고 있었다.
 
 또한 클라이언트에 이름 기반 재해석 로직이 실제로 존재한다
-([`indoor_map_screen.dart`의 `_findArrivalNode()`](../../../client/lib/screens/indoor_map/indoor_map_screen.dart)) —
+(~~`indoor_map_screen.dart`의 `_findArrivalNode()`~~ — **그 파일과 함수는 이후 실내 안내 리팩터에서 삭제됐다.** 아래는 당시 상태다) —
 에스컬레이터 이름을 파싱해 도착 노드를 다시 고르고 `sameGroupFallback`으로 넘어간다.
 **이 제거는 이 PR 범위 밖이며 후속 작업으로 남는다.**
 

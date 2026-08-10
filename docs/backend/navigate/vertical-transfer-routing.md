@@ -152,9 +152,9 @@ flowchart LR
 
 검증 테스트:
 
-- [`tests/unit/test_vertical_transfers.py`](../../../backend/tests/unit/test_vertical_transfers.py) — V1·V2 (방향·비용 모델)
-- [`tests/integration/test_building_graph.py`](../../../backend/tests/integration/test_building_graph.py) — V4·V5 (서빙·정책·무결성, 실데이터 방향)
-- [`tests/integration/test_real_data_smoke.py`](../../../backend/tests/integration/test_real_data_smoke.py) — 전이 간선 불변식
+- [`tests/unit/test_vertical_transfers.py`](../../../backend/tests/unit/graph/test_vertical_transfers.py) — V1·V2 (방향·비용 모델)
+- [`tests/integration/test_building_graph.py`](../../../backend/tests/integration/graph/test_building_graph.py) — V4·V5 (서빙·정책·무결성, 실데이터 방향)
+- [`tests/integration/test_real_data_smoke.py`](../../../backend/tests/integration/seed/test_real_data_smoke.py) — 전이 간선 불변식
 
 ## 10. 남은 작업 / 위험
 
