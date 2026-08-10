@@ -119,6 +119,24 @@ _NAME_PREFIX = 0  # 이름이 질의로 시작 — "이솝화" → "이솝 화�
 _WORD_PREFIX = 1  # 이름 속 단어가 질의로 시작 — "레이어드" → "카페 레이어드"
 _CONTAINS = 2  # 그 밖의 중간 포함 — "이솝" → "엘리베이터솝"(가상의 예)
 
+# 띄어쓰기를 양쪽에서 뗀 뒤의 일치. 위 세 단계보다 **항상 뒤에** 온다.
+#
+# 사람은 브랜드명을 띄어 치고("노스 페이스"), 데이터도 같은 시설을 제각각 띄어 적는다
+# (`물품보관함`·`물품 보관함`·`물 품 보 관 함` 세 이름이 실제로 있다). 어느 쪽이든
+# 공백은 뜻을 나르지 않는데 문자열 비교는 그걸 다른 이름으로 본다.
+#
+# 공백을 뗀 비교를 별도 단계로 두는 이유는 순위 때문이다. 원문 띄어쓰기 그대로 걸린
+# 매장이 있으면 그쪽이 무조건 먼저여야 한다 — 공백을 떼면 후보가 늘기만 하므로,
+# 같은 단계에 섞으면 정확히 친 사용자가 손해를 본다.
+#
+# 공백을 뗀 이름에는 단어 경계가 없어 _WORD_PREFIX에 해당하는 단계가 없다. 대신
+# "이름 전체가 같음"을 맨 앞에 둔다 — "노스 페이스"가 `노스페이스`(전체 일치)와
+# `노스페이스 화이트 라벨`(접두)을 같은 정밀도로 묶으면 둘 중 하나로 확정하지 못하고
+# 되물음으로 새 버린다.
+_SPACELESS_EXACT = 3  # 공백을 떼면 이름 전체와 같음 — "노스 페이스" → "노스페이스"
+_SPACELESS_PREFIX = 4  # 공백을 떼면 이름이 질의로 시작 — "노스 페이스" → "노스페이스 화이트 라벨"
+_SPACELESS_CONTAINS = 5  # 그 밖의 중간 포함
+
 # tier 2(이름 부분 일치)에 들어가려면 질의가 최소 2글자여야 한다. query_morph.normalize가
 # 형태소 분해로 오타·조사를 지우면서 질의가 1글자로 축소되는 경우가 있다("샤낼"→"샤",
 # "물 사고싶어"→"물"). 그 1글자가 무관한 매장 이름 접두와 우연히 맞아 오탐이 난다.
@@ -138,14 +156,36 @@ def _intent_names(store: Store) -> tuple[str, ...]:
     return tuple(_norm(value) for value in _facets(store).get("intents", ()))
 
 
-def _name_match_rank(name: str, q: str) -> int | None:
-    if not q or len(q) < _MIN_NAME_PARTIAL_MATCH_LEN or q not in name:
+def _squash_spaces(text: str) -> str:
+    return "".join(text.split())
+
+
+def _spaceless_match_rank(name: str, q: str) -> int | None:
+    """공백을 뗀 뒤의 부분 일치 정밀도. 뗄 공백이 아예 없으면 검사하지 않는다."""
+    squashed_name = _squash_spaces(name)
+    squashed_q = _squash_spaces(q)
+    # 양쪽 다 공백이 없으면 바로 위 검사와 완전히 같은 비교다 — 두 번 하지 않는다.
+    if squashed_name == name and squashed_q == q:
         return None
-    if name.startswith(q):
-        return _NAME_PREFIX
-    if any(token.startswith(q) for token in name.split()):
-        return _WORD_PREFIX
-    return _CONTAINS
+    if len(squashed_q) < _MIN_NAME_PARTIAL_MATCH_LEN or squashed_q not in squashed_name:
+        return None
+    if squashed_name == squashed_q:
+        return _SPACELESS_EXACT
+    if squashed_name.startswith(squashed_q):
+        return _SPACELESS_PREFIX
+    return _SPACELESS_CONTAINS
+
+
+def _name_match_rank(name: str, q: str) -> int | None:
+    if not q:
+        return None
+    if len(q) >= _MIN_NAME_PARTIAL_MATCH_LEN and q in name:
+        if name.startswith(q):
+            return _NAME_PREFIX
+        if any(token.startswith(q) for token in name.split()):
+            return _WORD_PREFIX
+        return _CONTAINS
+    return _spaceless_match_rank(name, q)
 
 
 # 질의를 **접두로 갖는** 별칭들의 표준형.
