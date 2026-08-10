@@ -184,6 +184,9 @@ class HttpDestinationRepository implements DestinationRepository {
     return DiscoveryResult(
       mode: DiscoveryMode.fromWire(body['mode'] as String),
       query: body['query'] as String,
+      // 구버전 서버에는 이 키가 없다. nullable로 읽어 unknown으로 떨어뜨린다 —
+      // 캐스팅을 non-null로 두면 배포 순서가 어긋난 순간 검색이 통째로 죽는다.
+      source: DiscoverySource.fromWire(body['source'] as String?),
       question: body['question'] as String?,
       options: options,
       matches: matches,

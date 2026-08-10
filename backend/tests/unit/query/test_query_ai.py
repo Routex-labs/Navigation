@@ -634,6 +634,55 @@ def test_discover_없는_건물은_None을_반환한다(db_session):
     assert query_search.discover(db_session, "no-such", "가게A") is None
 
 
+# --- source: 후보를 무엇으로 잡았는가 -------------------------------------
+#
+# 클라이언트는 온디바이스 이름 후보를 들고 있다가 이 응답으로 대체할지 말지를
+# 이 값 하나로 정한다(docs/client/search-input-assist.md 「실기기 검증」 2번).
+# 뒤집히면 화면에서 조용히 틀린다 — 맞는 이름 후보가 임베딩 추측에 덮이거나,
+# 반대로 어휘로 잡은 카테고리 목록이 이름 몇 건에 가려진다.
+
+
+def test_discover_어휘로_잡은_후보는_source가_light다(db_session, monkeypatch):
+    def 임베딩을_부르면_실패시킨다(*a, **k):
+        raise AssertionError("경량이 잡았는데 2차를 불렀다")
+
+    monkeypatch.setattr(query_semantic, "search_many", 임베딩을_부르면_실패시킨다)
+
+    for query in ("가게A 어디야?", "패션"):
+        result = query_search.discover(db_session, BUILDING_ID, query)
+        assert result["source"] == query_search.SOURCE_LIGHT, query
+
+
+def test_discover_임베딩으로_잡은_후보는_source가_semantic이다(db_session, monkeypatch):
+    rows = _load_stores(db_session, BUILDING_ID)
+    hits = tuple((0.7 - index * 0.01, store, floor) for index, (store, floor) in enumerate(rows))
+    monkeypatch.setattr(
+        query_semantic,
+        "search_many",
+        lambda *a, **k: query_semantic.SemanticResults(query_semantic.SemanticReason.OK, hits),
+    )
+
+    result = query_search.discover(db_session, BUILDING_ID, "밥 먹을 데")
+
+    assert result["mode"] == "results"
+    assert result["source"] == query_search.SOURCE_SEMANTIC
+
+
+def test_discover_결과가_없어도_source는_실제로_거친_경로다(db_session, monkeypatch):
+    monkeypatch.setattr(
+        query_semantic,
+        "search_many",
+        lambda *a, **k: query_semantic.SemanticResults(query_semantic.SemanticReason.BELOW_THRESHOLD),
+    )
+
+    result = query_search.discover(db_session, BUILDING_ID, "존재하지않는것")
+
+    # no_match여도 2차까지 갔다는 사실은 남는다. 이 값이 light로 새면 클라이언트가
+    # "어휘가 확정한 빈 결과"로 읽어 이름 후보를 지운다.
+    assert result["mode"] == "no_match"
+    assert result["source"] == query_search.SOURCE_SEMANTIC
+
+
 def _stub_index(db_session, monkeypatch, *, top_score):
     """실제 임베딩·faiss 없이 '최상위 1건이 top_score'인 인덱스를 흉내 낸다.
 

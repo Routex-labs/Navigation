@@ -350,6 +350,60 @@ def test_모르는_intent는_빈_집합이다():
 
 
 # 규칙 필드 오타를 조용히 무시하면 조건이 사라져 후보가 넓어지는 방향으로 틀린다.
+# ── facet 축 규칙(cuisines 등) ────────────────────────────────────────────
+
+# 소분류가 같아도 요리가 갈리는 경우. 실데이터의 음식점 소분류는 `레스토랑`
+# 하나뿐이라 이 모양이 곧 현실이다.
+CUISINE_STORES = [
+    {
+        "store_id": "PO-양식1",
+        "name": "이탈리 마켓",
+        "category": "음식점",
+        "subcategory": "레스토랑",
+        "cuisines": ["양식"],
+    },
+    {
+        "store_id": "PO-일식1",
+        "name": "본가 스시",
+        "category": "음식점",
+        "subcategory": "레스토랑",
+        "cuisines": ["일식"],
+    },
+    # 요리 축이 아예 없는 매장. 규칙에 걸리면 안 된다.
+    {"store_id": "PO-옷1", "name": "펜디", "category": "패션", "subcategory": "명품"},
+]
+
+CUISINE_INTENTS = {"양식": {"rules": {"cuisines": ["양식"]}}}
+
+
+def test_facet_축_규칙이_배열_교집합으로_매칭된다():
+    # 소분류로는 PO-양식1과 PO-일식1이 구분되지 않는다. 축이 그걸 가른다.
+    assert store_facets.resolve_intent_store_ids("양식", CUISINE_STORES, CUISINE_INTENTS) == {"PO-양식1"}
+
+
+def test_facet_축이_없는_매장은_규칙에_걸리지_않는다():
+    assert store_facets.resolve_intents(CUISINE_STORES[2], CUISINE_INTENTS) == []
+
+
+def test_facet_축_규칙은_값이_하나라도_겹치면_잡는다():
+    store = {
+        "store_id": "PO-복합",
+        "name": "퓨전",
+        "category": "음식점",
+        "subcategory": "레스토랑",
+        "cuisines": ["한식", "양식"],
+    }
+    assert store_facets.resolve_intents(store, CUISINE_INTENTS) == ["양식"]
+
+
+def test_facet_축도_실데이터에_없는_값을_검증에서_잡는다():
+    # 스칼라 필드와 같은 방어다 — 오버레이에서 요리 값이 빠지면 규칙이 조용히
+    # 0건이 되는 것을 시드 전에 잡아야 한다.
+    payload = {"version": 1, "intents": {"태국": {"rules": {"cuisines": ["태국"]}}}}
+    errors = store_facets.validate_intents(payload, CUISINE_STORES)
+    assert any("실데이터에 없는 값" in e and "태국" in e for e in errors)
+
+
 def test_규칙에_쓸_수_없는_필드는_예외다():
     intents = {"신발": {"rules": {"subcategory_kr": ["슈즈"]}}}
     # 지원하지 않는 규칙 필드는 예외를 던져야 한다.
@@ -463,7 +517,23 @@ def test_배포된_intents_파일이_검수_범위를_유지한다():
     path = Path(__file__).resolve().parents[3] / "resources" / "store_search_facets"
     intents = store_facets.load_intents(path)
 
-    assert set(intents) == {"신발", "식사", "카페", "화장품", "향수", "의류", "출구"}
+    assert set(intents) == {
+        "신발",
+        "식사",
+        "카페",
+        "화장품",
+        "향수",
+        "의류",
+        "출구",
+        # 요리 분류. 「양식」이 intent에 없어서 의미검색으로 떨어졌고, 임베딩이
+        # 洋食이 아니라 養殖으로 읽어 「수산」을 물어 왔다. 소분류로는 못 잡는다 —
+        # 음식점 소분류는 `레스토랑` 하나뿐이라 한식·일식·중식·양식이 전부 같은
+        # 칸에 있고, 그 구분은 `cuisines` 오버레이에만 있다.
+        "양식",
+        "한식",
+        "일식",
+        "중식",
+    }
     assert intents["신발"]["rules"] == {"subcategory": ["슈즈"]}
     # 먹거리 intent는 소분류가 아니라 **대분류**를 본다. 대분류 재편으로
     # category=음식점이 subcategory=레스토랑과 같은 집합이 됐고, 지도 필터 pill과
@@ -481,3 +551,10 @@ def test_배포된_intents_파일이_검수_범위를_유지한다():
     for intent in ("카페", "화장품", "향수", "의류"):
         assert "extra_store_ids" not in intents[intent], intent
     assert len(intents["출구"]["extra_store_ids"]) == 2
+
+    # 요리 intent도 같은 원칙이다 — 매장 id를 손으로 나열하지 않고 facet 축
+    # 규칙만 쓴다. extra로 굽기 시작하면 요리 분류가 바뀔 때 오버레이와 intent
+    # 목록이 따로 논다(store_facets._FACET_RULE_FIELDS 주석).
+    for intent in ("양식", "한식", "일식", "중식"):
+        assert intents[intent]["rules"] == {"cuisines": [intent]}, intent
+        assert "extra_store_ids" not in intents[intent], intent

@@ -9,7 +9,9 @@ Studio 형식으로 바꾸는 작업, 검색 품질 평가, 임베딩 모델 사
 |---|---|
 | [`seed/`](seed/README.md) | SQLite 초기화와 Studio 데이터 적재 |
 | [`transform/`](transform/README.md) | 원본 데이터·층 정렬·수직 전이·글리프 변환 |
-| [`evaluate_query_hybrid.py`](evaluate_query_hybrid.py) | 29개 질의로 경량+FAISS 최종 경로와 FAISS 단독 비교 |
+| [`eval/query_eval_set.json`](eval/query_eval_set.json) | 평가 질의 세트(134건). 설계는 [search-eval-set.md](../../docs/backend/native/search-eval-set.md) |
+| [`evaluate_query_hybrid.py`](evaluate_query_hybrid.py) | 세트로 경량+FAISS 최종 경로와 FAISS 단독 비교 |
+| [`analyze_similarity_margin.py`](analyze_similarity_margin.py) | 의미 검색 채택 규칙 후보(절대·상대 마진) 비교 |
 | [`warm_embedding_model.py`](warm_embedding_model.py) | 문장 임베딩 모델을 캐시에 받고 실제 encode까지 확인 |
 
 ## 데이터 흐름
@@ -39,6 +41,8 @@ flowchart LR
 ```text
 python -m scripts.seed.reset_and_seed
 python -m scripts.evaluate_query_hybrid
+python -m scripts.evaluate_query_hybrid --validate-only   # 세트만 점검(모델 불필요)
+python -m scripts.analyze_similarity_margin
 python -m scripts.warm_embedding_model
 ```
 

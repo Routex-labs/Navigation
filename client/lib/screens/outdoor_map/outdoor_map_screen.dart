@@ -2583,11 +2583,18 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     return categoryHighlightFilter(selection);
   }
 
-  /// 강조 레이어의 필터만 갈아 끼운다.
+  /// 선택이 바뀌었을 때 오버레이에 그 선택을 반영한다.
   ///
-  /// `setLayerProperties`가 아니라 `setFilter`를 쓴다 — 전자는 넘기지 않은
-  /// 속성까지 null로 함께 보내 스펙 기본값(fill-color는 검정)으로 되돌리므로
-  /// 실기기에서 지도가 검게 덮인다(indoor_overlay_layers.dart 상단 주석).
+  /// 실내 화면(`FloorPlanView._applyCategoryFilter`)과 같은 두 가지가 바뀐다 —
+  /// **어느 매장이 색으로 강조되는가**(강조 fill의 필터)와 **어느 매장이 이름을
+  /// 다는가**(라벨의 `text-field`).
+  ///
+  /// 강조 fill은 `setLayerProperties`가 아니라 `setFilter`를 쓴다 — 전자는 넘기지
+  /// 않은 속성까지 null로 함께 보내 스펙 기본값(fill-color는 검정)으로 되돌리므로
+  /// 실기기에서 지도가 검게 덮인다(indoor_overlay_layers.dart 상단 주석). 라벨은
+  /// 바뀌는 것이 필터가 아니라 layout 속성이라 그 경로를 쓸 수 없고, 대신
+  /// [indoorStoresLabelProps]·[indoorFacilityLabelProps]가 **전체 속성**을 다시
+  /// 만들어 넘긴다.
   Future<void> _applyCategoryFilter() async {
     final controller = _mapController;
     if (controller == null || !_styleReady || !_indoorTilesRegistered) return;
@@ -2599,6 +2606,21 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _categoryFilterExpression(),
       );
     } catch (_) {}
+    final fadeExpr = _fadeExpr();
+    for (final (id, props) in [
+      (
+        _indoorStoresLabelLayerId,
+        indoorStoresLabelProps(fadeExpr, widget.categorySelection),
+      ),
+      (
+        _indoorFacilityLabelLayerId,
+        indoorFacilityLabelProps(fadeExpr, widget.categorySelection),
+      ),
+    ]) {
+      try {
+        await controller.setLayerProperties(id, props);
+      } catch (_) {}
+    }
   }
 
   /// 현재 진입 상태에 맞는 오버레이 페이드 표현식.
@@ -2630,8 +2652,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _indoorVerticalTransportFillLayerId,
         indoorVerticalTransportProps(fadeExpr),
       ),
-      (_indoorStoresLabelLayerId, indoorStoresLabelProps(fadeExpr)),
-      (_indoorFacilityLabelLayerId, indoorFacilityLabelProps(fadeExpr)),
+      // 선택을 반드시 함께 넘긴다. 빼면 줌을 움직일 때마다 가려 뒀던 매장
+      // 이름이 되살아난다([indoorStoresLabelProps] 주석).
+      (
+        _indoorStoresLabelLayerId,
+        indoorStoresLabelProps(fadeExpr, widget.categorySelection),
+      ),
+      (
+        _indoorFacilityLabelLayerId,
+        indoorFacilityLabelProps(fadeExpr, widget.categorySelection),
+      ),
       (_indoorPoiIconLayerId, indoorPoiIconProps(fadeExpr)),
       (_indoorStoreFacilityIconLayerId, indoorFacilityIconProps(fadeExpr)),
     ]) {
@@ -3036,7 +3066,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       await controller.addSymbolLayer(
         _indoorTilesSourceId,
         _indoorStoresLabelLayerId,
-        indoorStoresLabelProps(fadeExpr),
+        indoorStoresLabelProps(fadeExpr, widget.categorySelection),
         sourceLayer: 'stores',
         filter: storeLabelWithCategoryIconFilter(),
         belowLayerId: _routeCasingLayerId,
@@ -3047,7 +3077,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       await controller.addSymbolLayer(
         _indoorTilesSourceId,
         _indoorFacilityLabelLayerId,
-        indoorFacilityLabelProps(fadeExpr),
+        indoorFacilityLabelProps(fadeExpr, widget.categorySelection),
         sourceLayer: 'stores',
         filter: facilityStoreLabelFilter(),
         belowLayerId: _routeCasingLayerId,

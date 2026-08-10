@@ -118,7 +118,7 @@ List<StoreSuggestion> _suggest(String query, {int limit = 8}) =>
     suggestStores(stores: _stores, query: query, limit: limit);
 
 List<String> _names(String query, {int limit = 8}) => [
-  for (final s in _suggest(query, limit: limit)) s.store.name,
+  for (final s in _suggest(query, limit: limit)) s.stores.first.name,
 ];
 
 void main() {
@@ -126,7 +126,7 @@ void main() {
     test('이름 prefix 일치가 가장 위다', () {
       final result = _suggest('나이');
 
-      expect(result.first.store.name, '나이키 골프');
+      expect(result.first.stores.first.name, '나이키 골프');
       expect(result.every((s) => s.kind == SuggestionKind.prefix), isTrue);
       expect(_names('나이'), containsAll(['나이키 라이즈', '나이스웨더']));
     });
@@ -149,7 +149,7 @@ void main() {
     test('이름 가운데 일치는 부분 일치로 분류된다', () {
       final result = _suggest('라이즈');
 
-      expect(result.single.store.name, '나이키 라이즈');
+      expect(result.single.stores.first.name, '나이키 라이즈');
       expect(result.single.kind, SuggestionKind.partial);
     });
 
@@ -157,9 +157,9 @@ void main() {
     test('접두 일치가 부분 일치보다 위다', () {
       final result = _suggest('화장실');
 
-      expect(result[0].store.name, '화장실');
+      expect(result[0].stores.first.name, '화장실');
       expect(result[0].kind, SuggestionKind.prefix);
-      expect(result[1].store.name, '장애인화장실');
+      expect(result[1].stores.first.name, '장애인화장실');
       expect(result[1].kind, SuggestionKind.partial);
     });
 
@@ -188,21 +188,21 @@ void main() {
     test('같은 이름 시설은 한 줄로 묶고 개수를 남긴다', () {
       final result = _suggest('화장실');
 
-      expect(result.where((s) => s.store.name == '화장실').length, 1);
-      expect(result.first.duplicateCount, 3);
+      expect(result.where((s) => s.stores.first.name == '화장실').length, 1);
+      expect(result.first.stores.length, 3);
       // 대표는 처음 나온 것 — 층 정보가 살아 있어야 화면이 뭔가 적을 수 있다.
-      expect(result.first.store.floorName, '1F');
+      expect(result.first.stores.first.floorName, '1F');
     });
 
     test('표기만 다른 같은 이름도 묶인다', () {
       final result = _suggest('물품보관함');
 
-      expect(result.single.store.name, '물품 보관함');
-      expect(result.single.duplicateCount, 2);
+      expect(result.single.stores.first.name, '물품 보관함');
+      expect(result.single.stores.length, 2);
     });
 
     test('중복이 없으면 개수는 1이다', () {
-      expect(_suggest('크록스').single.duplicateCount, 1);
+      expect(_suggest('크록스').single.stores.length, 1);
     });
 
     // 질의 쪽만 정규화한다는 원칙은 표시용 원본에 대한 것이다. 매칭 키에서는
@@ -210,8 +210,8 @@ void main() {
     test('구두점 상호는 어떻게 쳐도 찾히고 원본 이름은 그대로다', () {
       for (final query in ['apc', 'a.p.c', 'A.P.C.', 'APC']) {
         final result = _suggest(query);
-        expect(result.first.store.name, 'A.P.C.', reason: query);
-        expect(result.map((s) => s.store.name), contains('A.P.C 골프'));
+        expect(result.first.stores.first.name, 'A.P.C.', reason: query);
+        expect(result.map((s) => s.stores.first.name), contains('A.P.C 골프'));
       }
       // `/`도 마찬가지다.
       expect(_names('마리떼프랑소와저버lmc'), ['마리떼프랑소와저버/ LMC']);
@@ -261,7 +261,7 @@ void main() {
         final result = _suggest(typo);
 
         expect(result, isNotEmpty, reason: '$typo가 아무것도 못 찾았다');
-        expect(result.first.store.name, expected);
+        expect(result.first.stores.first.name, expected);
         expect(result.first.kind, SuggestionKind.correction);
       });
     }
@@ -270,7 +270,7 @@ void main() {
       final corrected = _typoCases.where((c) {
         final result = _suggest(c.$1);
         return result.isNotEmpty &&
-            result.first.store.name == c.$2 &&
+            result.first.stores.first.name == c.$2 &&
             result.first.kind == SuggestionKind.correction;
       });
 
@@ -308,7 +308,7 @@ void main() {
     test('`이` 는 이솝을 1위로 그대로 돌려준다', () {
       final result = _suggest('이');
 
-      expect(result.first.store.name, '이솝');
+      expect(result.first.stores.first.name, '이솝');
       expect(result.first.kind, SuggestionKind.prefix);
       expect(result.any((s) => s.kind.isCorrection), isFalse);
     });

@@ -84,6 +84,10 @@ def _all_store_rows(directory: Path = STUDIO_DIR) -> list[dict]:
     """
     overrides = _load_store_categories()
     by_name = _load_store_categories(STORE_CATEGORIES_BY_NAME_PATH)
+    # facet도 함께 실어 `_reshape_stores`가 규칙에 넘기는 것과 **같은 모양**으로
+    # 만든다. intent 규칙이 `cuisines` 같은 축을 볼 수 있게 되면서, 검증이 보는
+    # 행에 그 축이 없으면 "실데이터에 없는 값"으로 잘못 걸린다.
+    facet_overlay = store_facets.load_overlay(STORE_SEARCH_FACETS_DIR)
     rows: list[dict] = []
     for path in sorted(directory.glob("stores_*.json")):
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -97,6 +101,7 @@ def _all_store_rows(directory: Path = STUDIO_DIR) -> list[dict]:
                     "name": store.get("name") or store["id"],
                     "category": category,
                     "subcategory": subcategory,
+                    **store_facets.resolve_facets(store["id"], category, subcategory, facet_overlay),
                 }
             )
     return rows
@@ -364,8 +369,16 @@ def _reshape_stores(
         # 하면 소분류가 Studio에서 바뀔 때 JSON이 조용히 낡은 후보를 들고 있게 된다
         # (store_facets 모듈 docstring "왜 intents는 규칙 + 예외 파일인가").
         # `_all_store_rows`와 같은 순수 dict 모양으로 넘긴다.
+        # facets를 함께 넘긴다 — 규칙이 `cuisines` 같은 축도 볼 수 있어서다
+        # (store_facets._FACET_RULE_FIELDS). 바로 위에서 이미 푼 값이라 추가
+        # 비용이 없고, `_all_store_rows`가 검증에 쓰는 모양과도 같다.
         intents = store_facets.resolve_intents(
-            {"store_id": store["id"], "category": category, "subcategory": subcategory},
+            {
+                "store_id": store["id"],
+                "category": category,
+                "subcategory": subcategory,
+                **facets,
+            },
             intent_definitions,
         )
         if intents:

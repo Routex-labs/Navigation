@@ -22,7 +22,6 @@ import '../../features/indoor_navigation/application/escalator_transition_detect
 import '../../features/indoor_navigation/application/indoor_location_estimate.dart';
 import '../../domain/dijkstra.dart';
 import '../../domain/multi_floor_router.dart';
-import '../../domain/nearby_facilities.dart';
 import '../../domain/route_guidance.dart';
 import '../../domain/route_checkpoint.dart';
 import '../../domain/route_movement.dart';
@@ -1473,58 +1472,6 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     } on ArgumentError {
       // 그래프가 깨져 있어도 목록 자체는 계속 떠야 한다 — 거리만 빠진다.
       return null;
-    }
-  }
-
-  /// [store]에서 가장 가까운 화장실·엘리베이터.
-  ///
-  /// **기준이 사용자 위치가 아니라 그 매장이다.** 상세 시트에는 내 위치에서
-  /// 매장까지의 거리가 이미 윗줄에 있어서, 같은 기준을 한 번 더 적으면 알려
-  /// 주는 게 없다. 그래서 매장 입구 노드에서 [reachableFrom]을 한 번 더 돌린다
-  /// (그래프는 이미 받아 둔 것을 재사용하므로 계산만 몇 ms 든다).
-  ///
-  /// **같은 층만 본다.** 층 도면 하나로 후보를 뽑기 때문이기도 하고, 다른 층
-  /// 화장실을 "가장 가깝다"고 적으면 층 이동까지 함께 알려야 말이 되기 때문이다.
-  /// 이 층에 그 시설이 없으면 그 줄은 아예 빠진다.
-  ///
-  /// 실패는 전부 빈 목록이다 — 시설 안내는 부가 정보라 실패가 시트를 막으면 안 된다.
-  Future<List<NearbyFacility>> nearbyFacilitiesFor(
-    PoiSearchResult store,
-  ) async {
-    final startNodeId = store.nodeId;
-    if (startNodeId == null || store.floor.isEmpty) return const [];
-
-    final graph = await buildingRepository.getBuildingGraph(widget.buildingId);
-    if (!mounted || graph == null || graph.nodes.isEmpty) return const [];
-
-    final json = await buildingRepository.getFloorGeoJson(
-      widget.buildingId,
-      store.floor,
-    );
-    if (!mounted || json == null) return const [];
-
-    final candidates = <FacilityCandidate>[];
-    for (final floorStore in FloorPlan.fromJson(json).stores) {
-      final kind = facilityKindForSubcategory(floorStore.subcategory);
-      final nodeId = floorStore.entranceNodeId;
-      // 시설로 들어가는 노드를 모르면 거리도 잴 수 없다.
-      if (kind == null || nodeId == null || nodeId == startNodeId) continue;
-      candidates.add((kind: kind, nodeId: nodeId));
-    }
-    if (candidates.isEmpty) return const [];
-
-    try {
-      return nearestFacilities(
-        reach: reachableFrom(
-          nodes: graph.nodes,
-          edges: graph.edges,
-          startNodeId: startNodeId,
-        ),
-        candidates: candidates,
-      );
-    } on ArgumentError {
-      // 매장 입구 노드가 그래프에 없는 경우. 시트는 그대로 열린다.
-      return const [];
     }
   }
 
@@ -3686,6 +3633,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
           focusBottomSheetFraction: _focusBottomSheetFraction,
           focusTopInsetPx: _focusTopInsetPx,
           tileRevision: _building?.tileRevision,
+          // 현재 층이 다 그려진 뒤 나머지 층 타일을 미리 받아 둔다 — 층
+          // 전환 때 새 층 타일을 그제서야 네트워크로 받는 지연을 없앤다.
+          prefetchFloorNames: building.floors,
           visibleInsets: EdgeInsets.fromLTRB(0, topOverlay, 0, bottomOverlay),
           overlayHitTest: _isTapOnMapOverlay,
           // 자동 층 전환에서만 값이 있다. 층 선택기로 훑어볼 때는 null이라

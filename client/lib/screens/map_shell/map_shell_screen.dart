@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -155,6 +156,18 @@ class _MapShellScreenState extends State<MapShellScreen> {
     final category = selection?.category;
     if (category == null) return;
     _runSheetChain(() => _openCategoryStores(category));
+  }
+
+  /// 검색이 빈손일 때 패널이 제안한 카테고리를 골랐다(설계:
+  /// `docs/client/search-result-list-ux.md` R절).
+  ///
+  /// **검색을 먼저 닫는다.** 검색 패널은 상단 Column 전체를 차지하므로, 열어 둔
+  /// 채 시트를 띄우면 목록이 패널 뒤로 들어간다. 닫은 뒤에는 지도 위 chip을 누른
+  /// 것과 완전히 같은 경로를 탄다 — 같은 결과에 이르는 길이 둘로 갈리면 한쪽만
+  /// 고쳐지는 날이 온다.
+  void _onSearchCategoryPicked(String category) {
+    _closeSearch();
+    _onCategoryChipTapped(CategorySelection(category: category));
   }
 
   ({String title, String subtitle})? _placeInfo;
@@ -426,10 +439,25 @@ class _MapShellScreenState extends State<MapShellScreen> {
   }
 
   /// 바텀시트가 떠 있는 동안 지도 제스처를 꺼서, 시트를 마우스 휠로
-  /// 스크롤할 때 그 아래 지도까지 같이 스크롤/줌되지 않게 한다. 실내 지도는
-  /// 웹에서 실제 DOM 캔버스(MapLibre)라 시트 위에서도 휠 이벤트가 새어나갈
-  /// 수 있어서 필요하다.
+  /// 스크롤할 때 그 아래 지도까지 같이 스크롤/줌되지 않게 한다.
+  ///
+  /// **웹에서만 잠근다.** 이 잠금이 막으려는 것은 웹 전용 증상이다 — 웹의
+  /// MapLibre는 Flutter가 그리는 캔버스가 아니라 DOM에 실제로 존재하는
+  /// `canvas.maplibregl-canvas`라, 그 위에 시트를 그려도 브라우저는 시트가 없는
+  /// 것처럼 휠 이벤트를 지도에 그대로 전달한다([map_overlay_guard.dart] 상단에
+  /// 같은 내용이 적혀 있다). iOS·Android는 지도가 네이티브 뷰이고 제스처가
+  /// Flutter 아레나를 거치므로 애초에 새지 않는다.
+  ///
+  /// 그런데 잠금은 플랫폼을 가리지 않고 걸려 있었다. 그래서 실기기에서는 얻는
+  /// 것 없이 **시트가 떠 있는 동안 지도가 통째로 얼었다** — 매장 상세 시트를 열면
+  /// 위쪽에 그 매장이 보이는데 끌 수도 확대할 수도 없었다. 매장 상세 시트는
+  /// barrier까지 없애 포인터를 지도로 흘리므로([_MapPassThroughSheetRoute]),
+  /// 이 잠금이 남아 있으면 그 작업이 통째로 무효가 된다.
+  ///
+  /// 다른 시트(메뉴·길찾기)는 여전히 자기 `ModalBarrier`가 포인터를 막으므로,
+  /// 네이티브에서 잠금을 풀어도 그쪽 동작은 달라지지 않는다.
   Future<T?> _withMapsLocked<T>(Future<T?> Function() showSheet) async {
+    if (!kIsWeb) return showSheet();
     _lockMaps(_mapLockSheet);
     try {
       return await showSheet();
@@ -561,11 +589,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
       match,
       buildingId: _buildingId,
     );
-    // 시트를 띄우기 전에 구한다. 그래프·층 도면은 이미 받아 둔 것을 재사용하고
-    // 다익스트라만 한 번 더 도는 정도라, 시트가 눈에 띄게 늦어지지 않는다.
-    // 실패는 빈 목록이므로 시설 줄만 빠지고 시트는 그대로 열린다.
-    final facilities =
-        await _indoorKey.currentState?.nearbyFacilitiesFor(match) ?? const [];
     if (!mounted) return false;
     final action = await _withMapsLocked(
       () => PlaceDetailSheet.show(
@@ -584,7 +607,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
         // 같은 매장에 다른 거리를 적으면 어느 쪽도 못 믿게 된다.
         reach: match.nodeId == null ? null : _reachByNodeId?[match.nodeId],
         // "이 매장에서" 가장 가까운 시설. 위 reach와 기준이 다르다.
-        facilities: facilities,
         onCloseAll: _requestCloseSheetChain,
       ),
     );
@@ -711,8 +733,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
   }
 
   Future<List<DirectionsCandidate>> _searchDirectionsCandidates(
-    String query,
-  ) async {
+    String query, {
+    String? floorId,
+  }) async {
     final normalized = query.trim().toLowerCase();
     // 건물 밖을 보고 있을 때만 건물 입구가 후보다. 실내 진입 오버레이가 켜져
     // 있으면 야외 탭이어도 아래 매장 검색으로 흘려보낸다 — 그러지 않으면 실내
@@ -741,9 +764,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 사용자 의도의 반대였다 — 찾는 매장이 결과에 아예 없어서 매번 토글을 켜야
     // 했다. 다른 층 결과에는 층 라벨이 부제로 붙으므로(아래 subtitle), 어느 층
     // 매장인지는 목록에서 그대로 읽힌다.
+    // [floorId]는 **목록에서 고른 후보의 층**일 때만 값이 있다. 사용자가 직접 친
+    // 질의에는 null이라 위 「항상 건물 전체」 규칙이 그대로 유지된다. 후보를 콕
+    // 집은 행동에만 그 층으로 좁혀, 같은 이름이 층마다 있는 시설에서 화면에 적힌
+    // 층과 실제로 가는 층이 어긋나지 않게 한다(search-result-list-ux.md T절).
     final results = await destinationRepository.searchDestinations(
       _buildingId,
       query,
+      currentFloorId: floorId,
     );
     return results
         .map(
@@ -778,6 +806,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
     );
     return DirectionsDiscovery(
       mode: discovery.mode,
+      source: discovery.source,
       question: discovery.question,
       options: discovery.options,
       candidates: discovery.matches
@@ -829,6 +858,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
         // 그대로 써도 된다.
         semanticSearch: _indoorContextActive
             ? _semanticDirectionsCandidates
+            : null,
+        // 상단 검색 결과와 같은 판단 재료를 준다. 이미 계산해 둔 맵을 넘길 뿐이라
+        // 추가 계산이 없다(설계: map-ui-redesign-plan.md 「7+E 합동 설계」 2단계).
+        reachByNodeId: _reachByNodeId,
+        // 상단 검색과 같은 온디바이스 후보(초성·구두점·오타)를 길찾기에도 준다.
+        // 리포지토리가 같은 Future를 공유하므로 두 번 받지 않는다.
+        storeIndex: _indoorContextActive
+            ? buildingRepository.getStoreIndex(_buildingId)
             : null,
         focusOrigin: focusOrigin,
       ),
@@ -1389,6 +1426,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
                         indoorContextActive: _indoorContextActive,
                         currentFloorId: _activeIndoorFloor,
                         reachByNodeId: _reachByNodeId,
+                        // "찾지 못했어요" 화면의 탈출구. 지도 위 chip 줄과 **같은
+                        // Future**를 넘긴다 — 다시 요청하면 같은 정보를 두 번
+                        // 받게 되고, 두 화면의 카테고리 목록이 어긋날 수 있다.
+                        categoryEntries: _categoryEntriesFuture,
+                        onCategoryPicked: _onSearchCategoryPicked,
                       ),
                     ),
                   )
@@ -1641,9 +1683,14 @@ class _FavoritesPill extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-      elevation: 3,
-      shadowColor: Colors.black.withValues(alpha: 0.15),
-      borderRadius: BorderRadius.circular(20),
+      // 지도에 붙은 조작 줄이다. 그림자를 줄이고 경계는 hairline이 맡는다
+      // (AppElevation.onMap).
+      elevation: AppElevation.onMap,
+      shadowColor: Colors.black.withValues(alpha: 0.12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: AppColors.hairline),
+      ),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
@@ -1757,9 +1804,15 @@ class _CategoryChip extends StatelessWidget {
     final color = categoryColorFor(name);
     return Material(
       color: selected ? color : Colors.white,
-      elevation: 3,
-      shadowColor: Colors.black.withValues(alpha: 0.15),
-      borderRadius: BorderRadius.circular(20),
+      elevation: AppElevation.onMap,
+      shadowColor: Colors.black.withValues(alpha: 0.12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        // 선택된 chip은 카테고리 고유색으로 채워지므로 경계선이 필요 없다.
+        side: BorderSide(
+          color: selected ? Colors.transparent : AppColors.hairline,
+        ),
+      ),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
@@ -1799,9 +1852,14 @@ class _CategoryRetryChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-      elevation: 3,
-      shadowColor: Colors.black.withValues(alpha: 0.15),
-      borderRadius: BorderRadius.circular(20),
+      // 지도에 붙은 조작 줄이다. 그림자를 줄이고 경계는 hairline이 맡는다
+      // (AppElevation.onMap).
+      elevation: AppElevation.onMap,
+      shadowColor: Colors.black.withValues(alpha: 0.12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: AppColors.hairline),
+      ),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),

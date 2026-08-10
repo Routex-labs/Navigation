@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/core/service_locator.dart';
 import 'package:navigation_client/domain/dijkstra.dart';
-import 'package:navigation_client/domain/nearby_facilities.dart';
 import 'package:navigation_client/models/favorite_place.dart';
 import 'package:navigation_client/models/place_detail.dart';
 import 'package:navigation_client/models/poi_search_result.dart';
@@ -36,7 +35,6 @@ void main() {
     String? subcategory,
     FavoritePlace? favorite,
     NodeReach? reach,
-    List<NearbyFacility> facilities = const [],
   }) {
     return MaterialApp(
       home: Scaffold(
@@ -49,7 +47,6 @@ void main() {
           subcategory: subcategory,
           favorite: favorite,
           reach: reach,
-          facilities: facilities,
           onCloseAll: onCloseAll ?? () {},
           repository: repository,
         ),
@@ -57,9 +54,7 @@ void main() {
     );
   }
 
-  testWidgets('상세를 불러오는 동안에도 코어와 길찾기 버튼을 즉시 그린다', (
-    tester,
-  ) async {
+  testWidgets('상세를 불러오는 동안에도 코어와 길찾기 버튼을 즉시 그린다', (tester) async {
     final completer = Completer<PlaceDetail?>();
     await tester.pumpWidget(
       buildSubject(repository: _FakeRepository(completer.future)),
@@ -187,7 +182,9 @@ void main() {
 
   testWidgets('매장 정보가 없어도 소개는 제목을 갖는다', (tester) async {
     await tester.pumpWidget(
-      buildSubject(repository: _FakeRepository(Future.value(_detailWithSummary()))),
+      buildSubject(
+        repository: _FakeRepository(Future.value(_detailWithSummary())),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -281,61 +278,6 @@ void main() {
       expect(find.textContaining('도보'), findsNothing);
       // 층·업종 줄은 그대로다.
       expect(find.textContaining('1F'), findsOneWidget);
-    });
-  });
-
-  group('가까운 시설', () {
-    testWidgets('매장 기준 화장실·엘리베이터 거리를 보여준다', (tester) async {
-      await tester.pumpWidget(
-        buildSubject(
-          repository: _FakeRepository(Future.value(null)),
-          facilities: const [
-            (
-              kind: FacilityKind.restroom,
-              reach: NodeReach(distanceM: 18.2, costM: 18.2),
-            ),
-            (
-              kind: FacilityKind.elevator,
-              reach: NodeReach(distanceM: 41.7, costM: 41.7),
-            ),
-          ],
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('화장실 18m'), findsOneWidget);
-      expect(find.text('엘리베이터 42m'), findsOneWidget);
-    });
-
-    // 시설 거리는 "매장 → 시설"이고 위 거리 줄은 "나 → 매장"이다. 기준이 다른
-    // 두 값이 같은 자리에 겹치지 않는지 함께 확인한다.
-    testWidgets('내 위치 거리와 시설 거리를 함께 보여줄 수 있다', (tester) async {
-      await tester.pumpWidget(
-        buildSubject(
-          repository: _FakeRepository(Future.value(null)),
-          reach: const NodeReach(distanceM: 124.4, costM: 124.4),
-          facilities: const [
-            (
-              kind: FacilityKind.restroom,
-              reach: NodeReach(distanceM: 18, costM: 18),
-            ),
-          ],
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('124m · 도보 2분'), findsOneWidget);
-      expect(find.text('화장실 18m'), findsOneWidget);
-    });
-
-    testWidgets('시설이 없으면 줄을 그리지 않는다', (tester) async {
-      await tester.pumpWidget(
-        buildSubject(repository: _FakeRepository(Future.value(null))),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.textContaining('화장실'), findsNothing);
-      expect(find.textContaining('엘리베이터'), findsNothing);
     });
   });
 
@@ -519,7 +461,10 @@ void main() {
 
   testWidgets('층도 업종도 없으면 이름만 남는다', (tester) async {
     await tester.pumpWidget(
-      buildSubject(subtitle: '', repository: _FakeRepository(Future.value(null))),
+      buildSubject(
+        subtitle: '',
+        repository: _FakeRepository(Future.value(null)),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -586,7 +531,8 @@ class _FakeRepository implements PlaceDetailRepository {
   final Future<PlaceDetail?> response;
 
   @override
-  Future<PlaceDetail?> getPlaceDetail(String buildingId, String placeId) => response;
+  Future<PlaceDetail?> getPlaceDetail(String buildingId, String placeId) =>
+      response;
 }
 
 PlaceDetail _detail({
@@ -594,35 +540,33 @@ PlaceDetail _detail({
   String kind = 'store',
   String source = 'manual',
   String? updatedAt,
-}) =>
-    PlaceDetail.fromJson({
-      'kind': kind,
-      'id': 'place-1',
-      'name': '테스트 매장',
-      'subtitle': '1F',
-      'category': null,
-      'subcategory': null,
-      'location': {
-        'building_id': 'building-1',
-        'floor_label': '1F',
-        'position_local_m': {'x': 0, 'y': 0},
-        'entrance_node_id': null,
-      },
-      'actions': [],
-      'sections': sections,
-      'provenance': {'source': source, 'updated_at': updatedAt},
-    });
+}) => PlaceDetail.fromJson({
+  'kind': kind,
+  'id': 'place-1',
+  'name': '테스트 매장',
+  'subtitle': '1F',
+  'category': null,
+  'subcategory': null,
+  'location': {
+    'building_id': 'building-1',
+    'floor_label': '1F',
+    'position_local_m': {'x': 0, 'y': 0},
+    'entrance_node_id': null,
+  },
+  'actions': [],
+  'sections': sections,
+  'provenance': {'source': source, 'updated_at': updatedAt},
+});
 
 PlaceDetail _detailWithSummary({
   String kind = 'store',
   String source = 'manual',
   String? updatedAt,
-}) =>
-    _detail(
-      kind: kind,
-      source: source,
-      updatedAt: updatedAt,
-      sections: const [
-        {'type': 'summary', 'text': '상세 섹션'},
-      ],
-    );
+}) => _detail(
+  kind: kind,
+  source: source,
+  updatedAt: updatedAt,
+  sections: const [
+    {'type': 'summary', 'text': '상세 섹션'},
+  ],
+);

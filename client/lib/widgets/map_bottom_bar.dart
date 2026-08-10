@@ -91,8 +91,9 @@ class _CalibrateButton extends StatelessWidget {
       child: Material(
         color: Colors.white,
         shape: const CircleBorder(),
-        elevation: 4,
-        shadowColor: Colors.black.withValues(alpha: 0.18),
+        // 지도에 붙은 조작이다(AppElevation.onMap).
+        elevation: AppElevation.onMap,
+        shadowColor: Colors.black.withValues(alpha: 0.14),
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: onPressed,
@@ -135,9 +136,10 @@ class _PlaceLocationButton extends StatelessWidget {
       child: Material(
         color: backgroundColor,
         shape: const CircleBorder(),
-        elevation: active ? 6 : 4,
+        // 눌린 상태만 한 단계 앞으로 나온다 — 지도 탭을 기다리는 중이라는 신호다.
+        elevation: active ? AppElevation.chrome : AppElevation.onMap,
         shadowColor: (active ? AppColors.primary : Colors.black).withValues(
-          alpha: active ? 0.35 : 0.18,
+          alpha: active ? 0.30 : 0.14,
         ),
         child: InkWell(
           customBorder: const CircleBorder(),
@@ -170,9 +172,13 @@ class _ModeSegment extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(24),
-      elevation: 6,
-      shadowColor: Colors.black.withValues(alpha: 0.15),
+      // 늘 있는 chrome이다(AppElevation.chrome).
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: const BorderSide(color: AppColors.hairline),
+      ),
+      elevation: AppElevation.chrome,
+      shadowColor: Colors.black.withValues(alpha: 0.10),
       child: Padding(
         padding: const EdgeInsets.all(4),
         child: Row(
@@ -224,7 +230,11 @@ class _ModeButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 17, color: active ? Colors.white : AppColors.muted),
+            Icon(
+              icon,
+              size: 17,
+              color: active ? Colors.white : AppColors.muted,
+            ),
             const SizedBox(width: 6),
             Text(
               label,

@@ -9,13 +9,21 @@ void main() {
   );
 
   group('Place rich detail renderers', () {
-    testWidgets('hero carousel exposes every supplied local asset', (tester) async {
+    testWidgets('hero carousel exposes every supplied local asset', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         subject(
           const PlaceHeroCarousel(
             images: [
-              PlaceHeroImage(assetPath: 'assets/place_details/starbucks_reserve_store_01.png'),
-              PlaceHeroImage(assetPath: 'assets/place_details/starbucks_reserve_store_02.png'),
+              PlaceHeroImage(
+                assetPath:
+                    'assets/place_details/starbucks_reserve_store_01.png',
+              ),
+              PlaceHeroImage(
+                assetPath:
+                    'assets/place_details/starbucks_reserve_store_02.png',
+              ),
             ],
           ),
         ),
@@ -26,13 +34,17 @@ void main() {
       expect(find.text('1 / 2'), findsOneWidget);
     });
 
-    testWidgets('hero carousel is omitted when no local image is available', (tester) async {
+    testWidgets('hero carousel is omitted when no local image is available', (
+      tester,
+    ) async {
       await tester.pumpWidget(subject(const PlaceHeroCarousel(images: [])));
 
       expect(find.byType(PageView), findsNothing);
     });
 
-    testWidgets('menu cards render name price description and image asset', (tester) async {
+    testWidgets('menu cards render name price description and image asset', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         subject(
           const PlaceMenuSection(
@@ -41,7 +53,8 @@ void main() {
                 name: '카페 아메리카노',
                 price: '4,700원',
                 description: '진한 에스프레소와 물',
-                imageAssetPath: 'assets/place_details/starbucks_reserve_menu.jpg',
+                imageAssetPath:
+                    'assets/place_details/starbucks_reserve_menu.jpg',
               ),
             ],
           ),
@@ -55,7 +68,9 @@ void main() {
       expect(find.byType(Image), findsOneWidget);
     });
 
-    testWidgets('menu card supports a menu without optional fields', (tester) async {
+    testWidgets('menu card supports a menu without optional fields', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         subject(
           const PlaceMenuSection(
@@ -69,7 +84,9 @@ void main() {
       expect(find.byType(Image), findsNothing);
     });
 
-    testWidgets('business information displays each key-value row', (tester) async {
+    testWidgets('business information displays each key-value row', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         subject(
           const PlaceBusinessInfoSection(

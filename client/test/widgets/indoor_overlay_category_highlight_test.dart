@@ -13,10 +13,7 @@ import 'package:navigation_client/widgets/category_map_filter.dart';
 void main() {
   group('indoorCategoryHighlightProps', () {
     test('opacity만이 아니라 색까지 항상 함께 넘긴다', () {
-      final json = indoorCategoryHighlightProps(const [
-        'literal',
-        1,
-      ]).toJson();
+      final json = indoorCategoryHighlightProps(const ['literal', 1]).toJson();
 
       expect(json['fill-color'], storeCategoryHighlightFillColorExpression());
       expect(

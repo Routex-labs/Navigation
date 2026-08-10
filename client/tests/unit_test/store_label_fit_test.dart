@@ -89,7 +89,85 @@ void main() {
     });
   });
 
+  group('storeLabelWrapWidth', () {
+    test('목표 줄 수가 실제로 나오는 폭을 돌려준다', () {
+      // 회귀 대상: 예전 근사식 `totalEm / target`은 평균 폭이라 한글 이름에서
+      // 목표보다 많은 줄을 만들었다. `조 말론 런던`을 2줄로 접으려다 3줄이 되어
+      // 화면에 「조 / 말론 / 런던」이 떴다.
+      for (final name in ['조 말론 런던', '루이비통', '리치몬드 과자점', '올리브영']) {
+        for (final target in [1, 2, 3]) {
+          final lines = storeLabelLineWidths(
+            name,
+            storeLabelWrapWidth(name, target),
+          );
+          expect(
+            lines.length,
+            lessThanOrEqualTo(target),
+            reason: '$name을 $target줄로 접으려는데 ${lines.length}줄이 나온다',
+          );
+        }
+      }
+    });
+
+    test('목표를 만족하는 폭 중 가장 좁은 것을 고른다', () {
+      // 더 좁게 잡을 수 있는데 넓게 주면 라벨이 옆으로 퍼져 매장을 벗어난다.
+      const name = '조 말론 런던';
+      final width = storeLabelWrapWidth(name, 2);
+      expect(storeLabelLineWidths(name, width), hasLength(2));
+      // 한 덩어리(전각 1글자 = 1.0em)만큼 좁히면 2줄이 깨져야 최소값이다.
+      expect(
+        storeLabelLineWidths(name, width - 1.0).length,
+        greaterThan(2),
+      );
+    });
+
+    test('1줄 목표는 이름 전체 폭이다', () {
+      expect(storeLabelWrapWidth('루이비통', 1), closeTo(4.0, 1e-9));
+    });
+  });
+
   group('fitStoreLabel', () {
+    test('한 글자만 남는 줄은 만들지 않는다', () {
+      // 실기기 증상: 「르 라보」가 「르」 / 「라보」로 접혀, 첫 줄의 한 글자가
+      // 이웃 매장 이름의 조각처럼 읽혔다. 2줄 규칙은 지켰지만 줄의 내용이 문제다.
+      final fit = fitStoreLabel(name: '르 라보', boxWidthM: 4.0, boxHeightM: 2.5);
+      final lines = storeLabelLineWidths('르 라보', fit.maxWidthEm);
+
+      expect(lines, hasLength(1), reason: '2줄로 쪼갤 수 없는 이름이다');
+      expect(lines.first, closeTo(storeLabelEmWidth('르 라보'), 1e-9));
+    });
+
+    test('양쪽이 두 글자 이상이면 그대로 2줄로 접는다', () {
+      for (final name in ['디올 뷰티', '조 말론 런던', '에스티 로더']) {
+        final fit = fitStoreLabel(name: name, boxWidthM: 4.0, boxHeightM: 4.0);
+        final lines = storeLabelLineWidths(name, fit.maxWidthEm);
+        if (lines.length == 1) continue; // 박스가 넓어 1줄이 이긴 경우
+        expect(
+          lines.reduce(min),
+          greaterThanOrEqualTo(kStoreLabelMinLineEm - 1e-9),
+          reason: '$name의 짧은 줄이 두 글자보다 얇다',
+        );
+      }
+    });
+
+    test('짧은 브랜드명이 글자 단위로 흩어지지 않는다', () {
+      // 실기기에서 나온 증상 그대로다 — `조 말론 런던`이 세 조각으로 흩어져
+      // 각각 다른 매장 이름처럼 읽혔다.
+      final fit = fitStoreLabel(
+        name: '조 말론 런던',
+        boxWidthM: 4.0,
+        boxHeightM: 3.0,
+      );
+
+      expect(fit.lines, lessThanOrEqualTo(kStoreLabelMaxLines));
+      // text-max-width로 그대로 나가는 값이라, 이 폭으로 접었을 때도 같은 줄
+      // 수여야 MapLibre가 화면에 같은 모양을 그린다.
+      final lines = storeLabelLineWidths('조 말론 런던', fit.maxWidthEm);
+      expect(lines, hasLength(fit.lines));
+      // 한 줄에 한 글자만 남는 배치가 다시 나오면 여기서 걸린다.
+      expect(lines.reduce(max), greaterThan(1.0));
+    });
+
     test('고른 크기로 접으면 실제로 박스 안에 들어간다', () {
       // 이 테스트가 곧 "글자가 매장 밖으로 빠져나가지 않는다"의 정의다.
       const boxWidthM = 5.0;
