@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/api_config.dart';
@@ -14,6 +15,7 @@ import '../../models/building.dart';
 import '../../models/category_count.dart';
 import '../../models/favorite_place.dart';
 import '../../models/floor_plan.dart';
+import '../../models/outdoor_poi.dart';
 import '../../models/poi_search_result.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_menu_sheet.dart';
@@ -26,6 +28,7 @@ import '../../widgets/favorites_sheet.dart';
 import '../../widgets/floor_transition_overlay.dart';
 import '../../widgets/map_bottom_bar.dart';
 import '../../widgets/map_top_bar.dart';
+import '../../widgets/outdoor_poi_sheet.dart';
 import '../../widgets/place_detail_sheet.dart';
 import '../../widgets/search_panel.dart';
 import '../outdoor_map/outdoor_map_screen.dart';
@@ -253,6 +256,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 잡았을 때만 갱신한다.
   Map<String, NodeReach>? _reachByNodeId;
 
+  /// 건물 밖 장소를 함께 찾을 기준점. 검색을 시작할 때 야외 지도에서 한 번
+  /// 받아 둔다([_activateSearch]).
+  ///
+  /// **매 build마다 지도에서 읽지 않는다.** 지도 상태를 GlobalKey로 읽는 건
+  /// build 중에 하기 나쁜 일이고(레이아웃 전에는 카메라가 없다), 검색 한 번
+  /// 도중에 기준점이 흔들리면 같은 검색어의 결과가 타이핑 중에 바뀐다.
+  LatLng? _outdoorSearchCenter;
+
   /// 검색 결과 거리 표시용 도달 정보를 다시 계산한다.
   ///
   /// 건물 밖(순수 야외)에서는 실내 그래프 거리가 의미가 없으므로 비운다 —
@@ -442,7 +453,23 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 검색을 시작했다는 것은 지도에서 고르는 걸 그만뒀다는 뜻이다. 안내만 남으면
     // 검색 결과를 고른 뒤에도 다음 매장 탭이 출발지/도착지로 먹혀 버린다.
     _stopPickingOnMap();
-    setState(() => _searchActive = true);
+    setState(() {
+      _searchActive = true;
+      // **실내 도면을 보는 중에도 바깥을 함께 찾는다.**
+      //
+      // 처음에는 [_indoorContextActive]일 때 껐다. "실내에서 화장실을 찾는
+      // 사람에게 길 건너 편의점을 섞지 말자"는 뜻이었는데, 이 게이트가 기능을
+      // 통째로 죽였다 — 폰에서는 실내 진입 임계 zoom이 화면 폭에 맞춰 16.8까지
+      // 내려가는데(indoor_entry_zoom.dart) 야외 지도 초기 zoom이 17이라,
+      // 건물 근처에서 앱을 켜면 **첫 프레임부터** 오버레이가 켜져 있다. 즉
+      // 실기기에서는 이 조건이 거의 항상 참이라 바깥 검색이 한 번도 안 돌았다.
+      //
+      // 원래 걱정은 게이트가 아니라 **순서**로 이미 해결돼 있다. 바깥 결과는
+      // 항상 실내 결과 **아래**에 별도 헤더를 달고 붙으므로, 실내에 답이 있으면
+      // 사용자는 위부터 읽고 바깥은 눈에 들어오지도 않는다. 실내가 빈손일 때만
+      // 바깥이 첫 줄이 되는데, 그건 정확히 바깥이 답인 경우다.
+      _outdoorSearchCenter = _outdoorKey.currentState?.outdoorSearchCenter;
+    });
     // 결과에 붙일 거리는 여기서 한 번만 준비한다. 결과가 나오기 전에 시작하므로
     // 그래프 요청이 늦어도 목록은 먼저 뜨고, 거리 줄만 뒤늦게 채워진다.
     unawaited(_refreshReach());
@@ -618,6 +645,64 @@ class _MapShellScreenState extends State<MapShellScreen> {
       if (origin != null || _canRouteFromCurrentLocation) {
         await _startRoute(origin: origin, destination: candidate);
       }
+    }
+    return true;
+  }
+
+  /// 검색 결과에서 **건물 밖 장소**를 골랐을 때. 매장을 고른 경로와 같은 모양이다
+  /// — 검색을 닫고 시트 chain 안에서 그 장소의 시트를 연다.
+  Future<void> _onSearchPoiPicked(OutdoorPoi poi) async {
+    _closeSearch();
+    await _runSheetChain(() => _showOutdoorPoiInfo(poi));
+  }
+
+  /// 야외 장소 시트. 매장 시트와 같은 규칙으로 "출발/도착을 실제로 골랐는가"를
+  /// 돌려준다 — 부모 loop가 그 값으로 이전 시트로 되돌릴지 정한다.
+  Future<bool> _showOutdoorPoiInfo(OutdoorPoi poi) async {
+    // 목록에서 고른 장소는 지금 화면 어디에 있는지 알 수 없다. 시트가 덮기
+    // 전에 지도를 그쪽으로 옮겨, 시트를 닫으면 바로 그 자리가 보이게 한다.
+    await _outdoorKey.currentState?.focusPoint(poi.point);
+    if (!mounted) return false;
+
+    final action = await _withMapsLocked(
+      () => OutdoorPoiSheet.show(
+        context,
+        poi: poi,
+        onCloseAll: _requestCloseSheetChain,
+        // 대중교통은 뒤 커밋에서 붙인다. 지금은 시트가 그 버튼을 아예 그리지
+        // 않으므로 아래 switch의 transit 갈래로는 들어올 수 없다.
+        transitEnabled: false,
+      ),
+    );
+    if (!mounted) return false;
+    if (_closeSheetChainRequested) return true;
+    if (action == null) return false;
+
+    // 야외 좌표뿐인 후보다. 노드·층이 없으므로 [_startRoute]는 이 값을 실내
+    // 라우팅으로 보내지 않고 도보 경로로 흘려보낸다. 좌표가 우리 건물 안일
+    // 때의 보정도 [_startRoute]가 한다 — 진입점마다 하면 또 갈린다.
+    final candidate = DirectionsCandidate(
+      title: poi.name,
+      subtitle: poi.address ?? '건물 밖 장소',
+      point: poi.point,
+    );
+    switch (action) {
+      case OutdoorPoiAction.setOrigin:
+        setState(() => _selectedOrigin = candidate);
+        final destination = _routeDraftDestination;
+        if (destination != null) {
+          await _startRoute(origin: candidate, destination: destination);
+        } else {
+          await _openDirections(presetOrigin: candidate);
+        }
+      case OutdoorPoiAction.setDestination:
+        setState(() => _routeDraftDestination = candidate);
+        final origin = _selectedOrigin;
+        if (origin != null || _canRouteFromCurrentLocation) {
+          await _startRoute(origin: origin, destination: candidate);
+        }
+      case OutdoorPoiAction.transit:
+        break;
     }
     return true;
   }
@@ -1337,6 +1422,18 @@ class _MapShellScreenState extends State<MapShellScreen> {
                         indoorContextActive: _indoorContextActive,
                         currentFloorId: _activeIndoorFloor,
                         reachByNodeId: _reachByNodeId,
+                        // 검색을 시작한 순간 지도에서 받아 둔 기준점. 위치도
+                        // 카메라도 못 잡았으면 null이라 바깥 검색이 돌지 않는다.
+                        outdoorSearchCenter: _outdoorSearchCenter,
+                        onOutdoorPoiPicked: (poi) =>
+                            unawaited(_onSearchPoiPicked(poi)),
+                        // 같은 가게가 두 줄로 뜨지 않게 하는 판정. 야외 지도가
+                        // 외곽선을 들고 있으므로 그쪽에 묻는다.
+                        isInsideIndoorBuilding: (point) =>
+                            _outdoorKey.currentState?.isAtIndoorBuilding(
+                              point,
+                            ) ??
+                            false,
                         // "찾지 못했어요" 화면의 탈출구. 지도 위 chip 줄과 **같은
                         // Future**를 넘긴다 — 다시 요청하면 같은 정보를 두 번
                         // 받게 되고, 두 화면의 카테고리 목록이 어긋날 수 있다.

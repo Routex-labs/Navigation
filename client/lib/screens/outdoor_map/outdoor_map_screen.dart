@@ -92,6 +92,19 @@ const _sensorWarmupTimeout = Duration(seconds: 2);
 // 플랫폼이 채워 넣는 0°를 "정북으로 걸어 들어왔다"로 오독하게 된다.
 const _entryCourseMinSpeedMps = 0.5;
 
+// 검색 결과에서 고른 야외 장소로 옮길 때의 zoom. 건물 하나가 화면에 들어오는
+// 정도이고, 실내 진입 임계보다 낮게 둬 위치만 확인하는 이동이 실내 진입으로
+// 읽히지 않게 한다.
+const _poiFocusZoom = 17.0;
+
+// TMAP POI 좌표가 이만큼 안에 있으면 그 건물의 가게로 본다.
+//
+// 엄격한 폴리곤 판정으로는 안 된다 — TMAP이 주는 좌표는 대표점이 아니라
+// **도로에서 들어오는 접근점**(frontLat/frontLon)이라 백화점 입점 매장도
+// 건물 벽 바깥 인도에 찍힌다. 여유가 남의 가게를 삼킬 여지는 좁다. 이 판정만으로
+// 두 줄을 합치는 것이 아니라 브랜드 이름까지 맞아야 하기 때문이다.
+const _poiBuildingProximityMeters = 40.0;
+
 // 실내 지도와 같은 이유. maplibre_gl은 web/android/iOS만 지원하므로
 // 데스크톱에서는 사전에 안내를 보여주고 지도 자체는 그리지 않는다.
 const _mapSupportedNativePlatforms = {
@@ -4588,6 +4601,47 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           },
         },
       ]),
+    );
+  }
+
+  /// 야외 POI 검색의 기준점.
+  ///
+  /// GPS를 먼저 쓰고, 아직 신호가 없으면 **지금 보고 있는 지도 중심**으로
+  /// 떨어진다. 후자를 폴백으로 두는 이유는, 기준점이 없으면 TMAP POI 검색이
+  /// 전국을 뒤져 걸어갈 수 없는 후보를 첫 줄에 올리기 때문이다. 사용자가 보고
+  /// 있는 화면 중심은 "여기 근처"라는 의도로 읽어도 무리가 없다.
+  ll.LatLng? get outdoorSearchCenter {
+    final position = _position;
+    if (position != null) {
+      return ll.LatLng(position.latitude, position.longitude);
+    }
+    final target = _mapController?.cameraPosition?.target;
+    if (target == null) return null;
+    return ll.LatLng(target.latitude, target.longitude);
+  }
+
+  /// 이 좌표가 우리 실내 도면이 있는 건물의 것인가.
+  ///
+  /// 검색 결과를 합칠 때 "이 POI가 우리가 아는 건물의 가게인가"를 묻는 자리가
+  /// 있어서 밖으로 연다([SearchPanel.isInsideIndoorBuilding]).
+  ///
+  /// **외곽선 안인지만 보면 안 된다.** 이유와 여유 폭의 근거는
+  /// [_poiBuildingProximityMeters]에 적어 뒀다 — 실제로 "스타벅스
+  /// 더현대서울(B2)R점"이 엄격 판정에서 "건물 밖"이 되어 우리 "스타벅스
+  /// 리저브"와 나란히 남아 있었다.
+  bool isAtIndoorBuilding(ll.LatLng point) {
+    final footprint = _buildingFootprint;
+    if (footprint == null || footprint.length < 3) return false;
+    return metersToPolygon(point, footprint) <= _poiBuildingProximityMeters;
+  }
+
+  /// 지도를 한 지점으로 옮긴다. 검색 결과에서 고른 야외 장소를 시트가 덮기 전에
+  /// 화면에 먼저 보여 주는 용도다.
+  Future<void> focusPoint(ll.LatLng point) async {
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    await controller.animateCamera(
+      CameraUpdate.newLatLngZoom(_toGl(point), _poiFocusZoom),
     );
   }
 
