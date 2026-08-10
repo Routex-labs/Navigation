@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 /// 에스컬레이터/엘리베이터/유아차 전용 E/V — 수직이동 구조물 폴리곤을 초록톤으로
@@ -171,8 +172,22 @@ const kIconCanvasPx = 96.0;
 /// `icon-size`는 비트맵의 **물리** 픽셀에 곱해지는데 `text-size`는 논리 픽셀이라,
 /// 배율을 곱하지 않으면 고밀도 화면에서 아이콘만 배율만큼 작아진다. 이 저장소가
 /// 실제로 그 버그를 겪었다(`category_map_icon.dart`의 실측표).
-double indoorMarkerIconSize(double devicePixelRatio) =>
-    kIndoorMarkerLogicalPx * devicePixelRatio / kIconCanvasPx;
+///
+/// ## 웹에서는 배율을 곱하면 안 된다
+///
+/// 위 "물리 픽셀" 전제는 **네이티브(Android·iOS)에만** 해당한다. 웹 구현은
+/// 비트맵을 `pixelRatio: 1`로 등록하기 때문에(`maplibre_gl_web` 0.26.2의
+/// `MapLibreWebGlPlatform.addImage`) `icon-size`가 곱해지는 대상이 CSS 픽셀,
+/// 즉 논리 픽셀이다. 여기서 배율까지 곱하면 아이콘만 배율배로 커진다 —
+/// Chrome 기기 에뮬레이션(iPhone 12, 배율 3)에서 12 논리 px짜리 배지가 36 px으로
+/// 떴고, 폰에서는 멀쩡한데 웹에서만 크다는 제보가 이것이다.
+///
+/// [isWeb]은 테스트가 두 갈래를 모두 고정할 수 있게 뚫어 둔 구멍이다. 실행
+/// 경로에서는 넘기지 않는다(`service_locator.dart`가 쓰는 방식과 같다).
+double indoorMarkerIconSize(double devicePixelRatio, {bool? isWeb}) =>
+    kIndoorMarkerLogicalPx *
+    ((isWeb ?? kIsWeb) ? 1.0 : devicePixelRatio) /
+    kIconCanvasPx;
 
 /// 매장 폴리곤이지만 이름이 이 표에 있는 시설(화장실·정수기 등)은 라벨 옆에
 /// 종류별 아이콘을 함께 얹는다. POI(엘리베이터·에스컬레이터 등)와 달리 이
