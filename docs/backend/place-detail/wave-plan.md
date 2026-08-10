@@ -33,8 +33,6 @@
 거짓"은 잡지 못한다. 내용은 매장을 확인할 수 있는 사람이 쓰고, 검증기가 형식과
 드리프트를 본다.
 
-브랜치: `feature/store-detail-tier-a`
-
 상위 문서: [place-detail-interface.md](place-detail-interface.md)(계약·실패 조건),
 [wave0-coverage.md](wave0-coverage.md)(사전 조사·결정)
 
