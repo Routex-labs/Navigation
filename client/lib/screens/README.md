@@ -8,9 +8,8 @@
 
 | 디렉터리 | 화면 | 책임 |
 |---|---|---|
-| [`map_shell/`](map_shell/map_shell_screen.dart) | `MapShellScreen` | 실외/실내 모드, 상단·하단 바, 시트와 현재 건물·층 상태 조립 |
-| [`outdoor_map/`](outdoor_map/outdoor_map_screen.dart) | `OutdoorMapScreen` | GPS, 실외 지도, 건물 진입과 실외 경로 표시 |
-| [`indoor_map/`](indoor_map/indoor_map_screen.dart) | `IndoorMapScreen` | 층 지도, 실내 위치·경로, PDR 보정 및 층 선택 |
+| [`map_shell/`](map_shell/map_shell_screen.dart) | `MapShellScreen` | 상단·하단 바, 시트와 현재 건물·층 상태 조립 |
+| [`outdoor_map/`](outdoor_map/outdoor_map_screen.dart) | `OutdoorMapBody` | 지도 전부 — GPS·실외 경로, 건물 진입 뒤 실내 도면 오버레이, 실내 위치·경로·층 전환 |
 | [`destination/`](destination/destination_screen.dart) | `DestinationScreen` | 목적지 검색과 선택 |
 | [`route_guide/`](route_guide/route_guide_screen.dart) | `RouteGuideScreen` | 선택한 목적지의 안내 진행·도착 전환 |
 | [`arrival/`](arrival/arrival_screen.dart) | `ArrivalScreen` | 도착 결과와 다음 이동 |
@@ -79,7 +78,7 @@ flowchart TD
 |---|---|
 | 새 화면/전환 추가 | [`../routing/README.md`](../routing/README.md), `app.dart` |
 | 검색 동작 변경 | `destination/`, [`../repositories/README.md`](../repositories/README.md) |
-| 지도 표시 변경 | `indoor_map/` 또는 `outdoor_map/`, [`../widgets/README.md`](../widgets/README.md) |
+| 지도 표시 변경 | `outdoor_map/`, [`../widgets/README.md`](../widgets/README.md) |
 | PDR 화면 연동 | [`../features/indoor_navigation/README.md`](../features/indoor_navigation/README.md) |
 
 ---
