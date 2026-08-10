@@ -13,7 +13,7 @@ import 'package:navigation_client/models/poi_search_result.dart';
 import 'package:navigation_client/repositories/building_repository.dart';
 import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
-import 'package:navigation_client/screens/indoor_map/indoor_map_screen.dart';
+import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 길찾기 "지도에서 선택"에서 **복도를 눌러** 출발지/도착지를 정할 수 있는지.
@@ -104,25 +104,28 @@ void main() {
     destinationRepository = originalDestinationRepository;
   });
 
-  /// [picking]이 켜진 실내 지도를 띄우고, 고른 후보를 담을 리스트를 함께 준다.
-  Future<(GlobalKey<IndoorMapBodyState>, List<PoiSearchResult>)> openIndoorMap(
+  /// [picking]이 켜진 지도를 실내 진입 상태로 띄우고, 고른 후보를 담을 리스트를
+  /// 함께 준다.
+  Future<(GlobalKey<OutdoorMapBodyState>, List<PoiSearchResult>)> openIndoorMap(
     WidgetTester tester, {
     required bool picking,
   }) async {
-    final key = GlobalKey<IndoorMapBodyState>();
+    final key = GlobalKey<OutdoorMapBodyState>();
     final picked = <PoiSearchResult>[];
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: IndoorMapBody(
+          body: OutdoorMapBody(
             key: key,
-            buildingId: demoBuildingId,
             pickingOnMap: picking,
             onMapPointPicked: picked.add,
           ),
         ),
       ),
     );
+    await drain(tester);
+    // ignore: invalid_use_of_visible_for_testing_member
+    key.currentState!.enterIndoorForTest();
     await drain(tester);
     expect(
       key.currentState!.currentFloor,
@@ -140,12 +143,10 @@ void main() {
     // n-a(18, 22)에서 3m 떨어진 복도 위. 스냅 상한(12m) 안이고, 가장 가까운
     // 노드가 n-a임이 명확한 자리다.
     // ignore: invalid_use_of_visible_for_testing_member
-    final consumed = key.currentState!.handleEmptyMapPressForTest(
-      latLngAt(21, 22),
-    );
+    await key.currentState!.handleMapClickForTest(latLngAt(21, 22));
+    await drain(tester);
 
-    expect(consumed, isTrue, reason: '고르는 중인 탭은 이 경로가 소비해야 한다');
-    expect(picked, hasLength(1));
+    expect(picked, hasLength(1), reason: '고르는 중인 탭은 이 경로가 소비해야 한다');
     expect(picked.single.nodeId, 'n-a');
     expect(picked.single.floor, '1F');
     // 매장 이름 자리에 들어가는 값이다. 장소 이름처럼 보이면 사용자가 실제로
@@ -157,12 +158,10 @@ void main() {
     final (key, picked) = await openIndoorMap(tester, picking: false);
 
     // ignore: invalid_use_of_visible_for_testing_member
-    final consumed = key.currentState!.handleEmptyMapPressForTest(
-      latLngAt(21, 22),
-    );
+    await key.currentState!.handleMapClickForTest(latLngAt(21, 22));
+    await drain(tester);
 
     // 소비하지 않아야 뒤따르는 다른 지도 처리(있다면)가 그대로 흘러간다.
-    expect(consumed, isFalse);
     expect(picked, isEmpty);
   });
 
@@ -172,12 +171,9 @@ void main() {
     // 그래프에서 100m 넘게 떨어진 자리 — 사실상 건물 밖을 누른 경우다. 여기서
     // 후보를 만들어 주면 사용자가 누르지도 않은 복도가 출발지가 된다.
     // ignore: invalid_use_of_visible_for_testing_member
-    final consumed = key.currentState!.handleEmptyMapPressForTest(
-      latLngAt(180, 22),
-    );
+    await key.currentState!.handleMapClickForTest(latLngAt(180, 22));
+    await drain(tester);
 
-    // 탭 자체는 소비한다 — 안내를 띄웠으므로 다른 처리로 흘러가면 안 된다.
-    expect(consumed, isTrue);
     expect(picked, isEmpty);
   });
 }

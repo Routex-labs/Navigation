@@ -25,20 +25,22 @@ PDR UI와 지도 렌더링은 아래 파일에 모여 있다.
 
 | 구분 | 위치 | 역할 |
 |---|---|---|
-| 지도 셸 | `client/lib/screens/map_shell/map_shell_screen.dart` | 홈/실내 모드를 전환하고 권한을 요청한다. 실내 모드일 때 `IndoorMapBody`를 표시한다. |
-| 실내 지도 + PDR UI | `client/lib/screens/indoor_map/indoor_map_screen.dart` | 시작·종료 버튼, 시작점 지정, 방향 보정 대화상자, 위치·경로 렌더링, JSON 공유를 담당한다. |
+| 지도 셸 | `client/lib/screens/map_shell/map_shell_screen.dart` | 상단·하단 바와 시트를 조립하고 권한을 요청한다. 층 전환 배너·스크림도 여기서 그린다. |
+| 지도 + PDR UI | `client/lib/screens/outdoor_map/outdoor_map_screen.dart` | 지도 하나가 실외와 실내를 모두 그린다. 시작점 지정, 방향 보정 대화상자, 위치·경로 렌더링, JSON 공유를 담당한다. |
+| 실내 안내 세션 | `client/lib/features/indoor_navigation/application/indoor_guidance_session.dart` | 위치·층 전환 판정·경로 진행률·이탈 증거를 소유한다. 위젯을 모르는 headless 클래스다. |
 | 전역 세션 생성 | `client/lib/core/service_locator.dart` | 플랫폼별 센서 소스와 `IndoorNavigationDriver`를 앱 범위 singleton으로 생성한다. |
 | 앱 lifecycle 연결 | `client/lib/app.dart` | `NavigationApp`이 background/foreground 변화를 driver에 전달한다. |
 
-`IndoorMapBody`는 driver의 snapshot과 calibration stream을 구독한다. PDR 좌표가
-유효해지면 이를 지도 위 현재 위치와 `pdrPathPoints`로 `FloorPlanView`에 전달한다.
-실내 길찾기의 출발 노드도 PDR 현재 위치가 있으면 그 위치를 우선 사용한다.
+`OutdoorMapBody`는 driver의 snapshot·calibration·기압·원시 움직임 stream을
+구독해 `IndoorGuidanceSession`에 넣고, 세션이 내주는 위치 한 건과 그 출처
+(`tracked`/`anchorOnly`/`estimate`)를 지도 레이어에 그린다. 실내 길찾기의 출발
+노드도 PDR 현재 위치가 있으면 그 위치를 우선 사용한다.
 
 ```mermaid
 flowchart LR
-  Shell["MapShellScreen\n실내 모드"] --> Map["IndoorMapBody\nPDR UI와 지도"]
-  Map --> View["FloorPlanView\n현재 위치 · 이동 경로"]
-  Map --> Driver["IndoorNavigationDriver\n앱 범위 singleton"]
+  Shell["MapShellScreen\n바 · 시트 · 층 전환 배너"] --> Map["OutdoorMapBody\n지도와 PDR UI"]
+  Map --> Session["IndoorGuidanceSession\n위치 · 층 전환 · 진행률"]
+  Session --> Driver["IndoorNavigationDriver\n앱 범위 singleton"]
   App["NavigationApp lifecycle"] --> Driver
 ```
 
@@ -101,7 +103,7 @@ flowchart LR
   Source["AndroidPdrMotionSource\n또는 IosPdrMotionSource"]
   Driver["IndoorNavigationDriver\n세션 · anchor · lifecycle"]
   Core["indoor_pdr_core\nPdrSession"]
-  Map["IndoorMapBody\n좌표 변환 · 맵매칭 · 렌더링"]
+  Map["OutdoorMapBody\n좌표 변환 · 맵매칭 · 렌더링"]
 
   Native --> Bridge --> Source --> Driver --> Core
   Core --> Driver --> Map

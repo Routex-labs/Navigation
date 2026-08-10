@@ -28,16 +28,13 @@ import '../../widgets/map_bottom_bar.dart';
 import '../../widgets/map_top_bar.dart';
 import '../../widgets/place_detail_sheet.dart';
 import '../../widgets/search_panel.dart';
-import '../indoor_map/indoor_map_screen.dart';
 import '../outdoor_map/outdoor_map_screen.dart';
 
 /// 야외/실내 지도의 공통 뼈대. 홈(야외) ↔ 실내 전환은 Navigator push 없이
 /// 이 화면 안에서 모드만 바꿔 탭처럼 즉시 반응하게 한다. 검색·길찾기·앱
 /// 메뉴·위치 보정은 전부 이 화면이 상단/하단 공용 바를 통해 중계한다.
 class MapShellScreen extends StatefulWidget {
-  const MapShellScreen({super.key, this.initialMode = MapMode.outdoor});
-
-  final MapMode initialMode;
+  const MapShellScreen({super.key});
 
   @override
   State<MapShellScreen> createState() => _MapShellScreenState();
@@ -65,7 +62,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
   // [IndoorMapBody]가 "덮인 뒤에 도면을 교체"하려고 같은 값을 기다리므로,
   // 여기서 따로 잡으면 두 값이 어긋나 교체 장면이 그대로 보인다.
 
-  late MapMode _mode = widget.initialMode;
 
   /// 이 앱이 다루는 건물. 한동안 햄버거 버튼이 "건물 선택 (테스트)" 시트를 열어
   /// 백엔드에 적재된 건물 목록에서 바꿀 수 있었지만, 데모용 전환 수단이었고
@@ -172,11 +168,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   ({String title, String subtitle})? _placeInfo;
   bool _outdoorRouteVisible = false;
-  bool _indoorRouteVisible = false;
 
   /// 실내 지도에서 "위치 지정" 흐름이 켜져 있는지. IndoorMapBody가 콜백으로
   /// 알려주며, 하단 바 "위치 지정" 버튼을 눌린 상태로 표시하는 데 쓴다.
-  bool _indoorPlacingLocation = false;
 
   /// 야외 지도의 실내 진입 오버레이에서 "위치 지정" 흐름이 켜져 있는지.
   /// OutdoorMapBody가 콜백으로 알려주며, 실내와 동일하게 하단 바 버튼을 눌린
@@ -213,7 +207,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
   DirectionsCandidate? _routeDraftDestination;
 
   final _outdoorKey = GlobalKey<OutdoorMapBodyState>();
-  final _indoorKey = GlobalKey<IndoorMapBodyState>();
 
   /// 층 전환 배너·스크림 상태. 판정과 상태 전이는 [IndoorMapBody]가 소유하고
   /// 여기서는 그리기만 한다.
@@ -271,7 +264,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
       }
       return;
     }
-    final reach = await _indoorKey.currentState?.reachFromCurrentPosition();
+    final reach = await _outdoorKey.currentState?.reachFromCurrentPosition();
     if (!mounted) return;
     setState(() => _reachByNodeId = reach);
   }
@@ -332,33 +325,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
     }
   }
 
-  void _setMode(MapMode mode) {
-    if (mode == _mode) return;
-    // 하단 바는 검색 막(barrier) 위에 있어 검색 중에도 눌린다. 화면이 바뀌는데
-    // 결과 패널만 남아 있으면 안 되므로 여기서 함께 닫는다.
-    _closeSearch();
-    setState(() {
-      _mode = mode;
-      _placeInfo = null;
-      // 홈으로 나가면 카테고리 필터도 푼다. 야외에서는 칩을 감추므로, 선택만
-      // 남겨두면 사용자가 해제할 수단이 없는 채로 실내 오버레이에만 강조가
-      // 남는다 — 왜 파랗게 칠해졌는지 알 방법이 없는 상태가 된다.
-      if (mode == MapMode.outdoor) _categorySelection = null;
-    });
-    // '홈'을 누른 것은 "야외 지도를 보겠다"는 뜻이다. 야외 지도가 실내 진입
-    // 오버레이를 켠 상태로 남아 있으면, 홈으로 왔는데 도면·실내 위치 아이콘이
-    // 그대로 보이고 길찾기도 실내 앵커에서 출발한다. 오버레이를 닫고 카메라도
-    // 야외 시야로 되돌린다.
-    if (mode == MapMode.outdoor) {
-      final outdoor = _outdoorKey.currentState;
-      if (outdoor != null) unawaited(outdoor.returnToOutdoorView());
-    }
-    _dropIndoorOriginIfOutdoors();
-    // 건물 안으로 들어온 시점에 미리 계산해 둔다. 매장을 지도에서 바로 눌러
-    // 상세를 여는 흐름은 검색을 거치지 않으므로, 여기서 준비하지 않으면 상세에
-    // 거리 줄이 비어 있다가 나중에야 채워진다.
-    unawaited(_refreshReach());
-  }
 
   /// 야외 컨텍스트로 나왔을 때, 실내 지점(층+노드)으로 잡아둔 출발지를 버린다.
   ///
@@ -376,11 +342,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   /// 지금 화면이 "건물 안"을 보고 있는지. 실내 탭이거나, 야외 탭이어도 실내
   /// 진입 오버레이가 켜져 있으면 사용자에게는 똑같이 건물 내부를 보고 있는
-  /// 상태다. 길찾기·카테고리 시트는 이 값으로 분기해야 한다 — 모드(_mode)만
+  /// 상태다. 길찾기·카테고리 시트는 이 값으로 분기해야 한다 — 진입 여부만
   /// 보고 분기하면, 야외 지도 위에서 실내 도면을 훑는 동안 길찾기 후보가
   /// 매장이 아닌 건물 이름만 뒤져 "아무것도 안 나오는" 상태가 된다.
   bool get _indoorContextActive =>
-      _mode == MapMode.indoor || _outdoorIndoorEntered;
+      _outdoorIndoorEntered;
 
   /// 지금 "현재 위치에서 출발"로 경로를 그릴 수 있는지.
   ///
@@ -403,7 +369,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 오버레이를 보고 있으면 그 오버레이의 층. 어느 쪽도 아니면 null이라
   /// 호출부가 "층 개념 없음"으로 처리한다.
   String? get _activeIndoorFloor {
-    if (_mode == MapMode.indoor) return _indoorKey.currentState?.currentFloor;
     if (_outdoorIndoorEntered) return _outdoorKey.currentState?.currentFloor;
     return null;
   }
@@ -435,7 +400,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
   void _applyMapInteractive() {
     final interactive = _mapLockReasons.isEmpty;
     _outdoorKey.currentState?.setInteractive(interactive);
-    _indoorKey.currentState?.setInteractive(interactive);
   }
 
   /// 바텀시트가 떠 있는 동안 지도 제스처를 꺼서, 시트를 마우스 휠로
@@ -579,7 +543,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
     if (focusOnMap) {
       // 곧 올라올 시트 높이를 함께 넘겨, 매장이 시트 뒤가 아니라 그 위 영역
       // 한가운데에 놓이게 한다. 시트 높이를 바꾸면 카메라도 자동으로 따라온다.
-      await _indoorKey.currentState?.focusStore(
+      await _outdoorKey.currentState?.focusStore(
         match,
         bottomSheetFraction: kPlaceDetailSheetInitialSize,
       );
@@ -612,8 +576,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
     );
     if (!mounted) return false;
     // 시트가 어떻게 닫혔든(선택 없이 닫힘 포함) 지도 위 강조 표시도 같이 지운다.
-    // 야외의 실내 진입 오버레이에서 열린 시트도 있으므로 두 지도 모두에 알린다.
-    _indoorKey.currentState?.clearHighlight();
     _outdoorKey.currentState?.clearHighlight();
     // X로 chain 전체를 닫으라는 신호가 왔다면, 여기서 곧장 종료해 부모 loop가
     // 다음 시트를 다시 열지 못하게 한다.
@@ -707,13 +669,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
   void _focusCategoryFirstStore(PoiSearchResult? store) {
     if (store == null || !mounted) return;
     final topInsetPx = _categoryRowBottomPx();
-    if (_mode == MapMode.indoor) {
-      _indoorKey.currentState?.focusStore(
-        store,
-        bottomSheetFraction: kCategoryStoresSheetInitialSize,
-        topInsetPx: topInsetPx,
-      );
-    } else if (_outdoorIndoorEntered) {
+    if (_outdoorIndoorEntered) {
       _outdoorKey.currentState?.focusStore(
         store,
         bottomSheetFraction: kCategoryStoresSheetInitialSize,
@@ -974,7 +930,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
   void _applyMapPick(PoiSearchResult match, DirectionsMapPickTarget target) {
     _stopPickingOnMap();
     // 강조 표시는 남겨두지 않는다 — 곧 경로와 핀이 그 자리를 대신한다.
-    _indoorKey.currentState?.clearHighlight();
     _outdoorKey.currentState?.clearHighlight();
     final picked = DirectionsCandidate(
       title: match.name,
@@ -1026,8 +981,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 오버레이를 닫고 야외 지도를 보는 중이라면 사용자의 위치는 GPS이지 실내
     // 앵커가 아니다. 그때도 실내 라우팅으로 보내면, 화면에는 GPS 위치 아이콘이
     // 있는데 경로만 예전에 찍어둔 건물 안 앵커에서 뻗어 나간다.
-    if (_mode == MapMode.outdoor &&
-        _indoorContextActive &&
+    if (_indoorContextActive &&
         destination.floor != null &&
         destination.nodeId != null &&
         // origin이 있다면 그것도 실내 노드여야 실내 그래프로 이을 수 있다.
@@ -1052,7 +1006,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
       return;
     }
 
-    if (_mode == MapMode.outdoor) {
+    if (!_indoorContextActive) {
       // 야외 걷기 경로(TMAP)는 출발지도 야외 좌표여야 한다. 실내 지점이 출발지로
       // 남아 있으면(실내에서 "출발지로 설정"한 매장을 그대로 들고 나온 경우)
       // 버리고 GPS 현재 위치에서 시작한다 — 건물 안 좌표를 그대로 보내면 실내
@@ -1067,11 +1021,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
       );
       return;
     }
-    // 실내는 IndoorMapBody.showRouteTo가 층이 다르면 건물 전체 그래프로
-    // 층 간 경로(엘리베이터·에스컬레이터 포함)를 계산한다. 여기서는 origin/
-    // destination을 다듬지 않고 그대로 넘긴다 — 층이 다르면 다층 경로,
-    // 같으면 단일 층 경로로 자동 분기된다.
-    await _indoorKey.currentState?.showRouteTo(
+    // 실내는 showIndoorRouteTo가 층이 다르면 건물 전체 그래프로 층 간 경로
+    // (엘리베이터·에스컬레이터 포함)를 계산한다. 여기서는 origin/destination을
+    // 다듬지 않고 그대로 넘긴다 — 층이 다르면 다층, 같으면 단일 층으로 분기된다.
+    //
+    // 야외 경로(showRouteTo)와 **다른 메서드**다. 이름이 비슷하지만 하나는
+    // Tmap 보행 경로, 하나는 건물 그래프 탐색이라 인자 타입부터 다르다.
+    await _outdoorKey.currentState?.showIndoorRouteTo(
       PoiSearchResult(
         name: destination.title,
         floor: destination.floor ?? '',
@@ -1153,7 +1109,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
         context,
         // 하단 바의 "위치 지정" 버튼과 같은 조건이다. 건물 밖에서는 지정할
         // 층이 없어 눌러도 아무 일도 일어나지 않는다.
-        showPlaceLocation: _mode == MapMode.indoor || _outdoorIndoorEntered,
+        showPlaceLocation: _outdoorIndoorEntered,
         debugEnabled: debugModeController.enabled,
       ),
     );
@@ -1179,11 +1135,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
   }
 
   void _onCalibrate() {
-    if (_mode == MapMode.outdoor) {
-      _outdoorKey.currentState?.recalibrate();
-    } else {
-      _indoorKey.currentState?.recalibrate();
-    }
+    _outdoorKey.currentState?.recalibrate();
   }
 
   /// "위치 지정" 버튼(하단 바). 야외 지도에서 실내 진입 오버레이가 켜져 있으면
@@ -1193,19 +1145,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
   void _onPlaceLocation() {
     // 이제부터 지도를 탭해야 하므로 검색 막을 먼저 걷는다.
     _closeSearch();
-    if (_mode == MapMode.indoor) {
-      _indoorKey.currentState?.startLocationPlacement();
-    } else {
-      _outdoorKey.currentState?.startLocationPlacement();
-    }
+    _outdoorKey.currentState?.startLocationPlacement();
   }
 
   @override
   Widget build(BuildContext context) {
     final placeInfo = _placeInfo;
-    final routeVisible = _mode == MapMode.outdoor
-        ? _outdoorRouteVisible
-        : _indoorRouteVisible;
+    final routeVisible = _outdoorRouteVisible;
     // 시트였을 때는 뒤로가기가 시트만 닫았다. 패널로 바뀌었다고 뒤로가기가
     // 앱을 종료해 버리면 안 되므로, 검색 중에는 pop을 가로채 검색만 닫는다.
     return PopScope(
@@ -1230,86 +1176,51 @@ class _MapShellScreenState extends State<MapShellScreen> {
       resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
-          IndexedStack(
-            index: _mode == MapMode.outdoor ? 0 : 1,
-            children: [
-              OutdoorMapBody(
-                key: _outdoorKey,
-                // IndexedStack은 안 보이는 쪽도 살려 두므로, 실내 탭으로
-                // 넘어갔다는 사실을 야외 지도에 직접 알려야 한다 — 그래야
-                // 실내에 있는 동안 야외 지도가 GPS를 구독하지 않는다.
-                active: _mode == MapMode.outdoor,
-                onRouteVisibleChanged: (visible) =>
-                    setState(() => _outdoorRouteVisible = visible),
-                onPlacingLocationChanged: (placing) {
-                  if (_outdoorPlacingLocation == placing) return;
-                  setState(() => _outdoorPlacingLocation = placing);
-                },
-                onIndoorEnteredChanged: (entered) {
-                  if (_outdoorIndoorEntered == entered) return;
-                  setState(() {
-                    _outdoorIndoorEntered = entered;
-                    // 오버레이가 닫히면 카테고리 칩 줄도 함께 사라진다. 선택만
-                    // 남겨 두면 사용자가 해제할 수단이 없는 채로, 다시 들어갔을
-                    // 때 영문 모를 강조가 걸려 있다(홈 탭으로 나갈 때와 같은 이유).
-                    if (!entered) _categorySelection = null;
-                  });
-                  // 오버레이를 닫고 야외로 나온 순간부터는 위치·출발지가 GPS다.
-                  if (!entered) _dropIndoorOriginIfOutdoors();
-                  // 실내 컨텍스트가 켜지고 꺼질 때마다 거리 기준이 통째로 바뀐다.
-                  unawaited(_refreshReach());
-                },
-                onStoreTap: _onMapStoreTap,
-                // 실내 오버레이 위에서도 복도를 골라 출발/도착을 정할 수 있다.
-                // 실내 탭과 같은 조작이어야 하므로 같은 값을 내려 준다.
-                pickingOnMap: _mapPickTarget != null,
-                onMapPointPicked: _onMapPointPicked,
-                onLocationAnchored: _onLocationAnchored,
-                // 실내 화면과 같은 선택을 넘긴다. 야외 지도도 실내 진입
-                // 오버레이가 켜지면 같은 도면을 그리므로, 안 넘기면 칩을
-                // 눌러도 강조가 안 뜬다.
-                categorySelection: _categorySelection,
-                onFloorChanged: _onActiveFloorChanged,
-                // 실내 화면과 같은 목록을 넘긴다. 야외 지도도 실내 진입
-                // 오버레이가 켜지면 층 선택기·위치 지정을 함께 쓰므로, 상단
-                // 검색창이나 하단 바를 누른 탭이 지도 탭으로 새어들어가면
-                // 실내 오버레이가 닫히거나 그 자리에 PDR 앵커가 찍힌다.
-                outerOverlayKeys: [
-                  _topBarKey,
-                  _favoritesPillKey,
-                  _categoryRowKey,
-                  _searchPanelKey,
-                  _bottomBarKey,
-                  _mapPickHintKey,
-                ],
-              ),
-              IndoorMapBody(
-                key: _indoorKey,
-                buildingId: _buildingId,
-                onRouteVisibleChanged: (visible) =>
-                    setState(() => _indoorRouteVisible = visible),
-                onStoreTap: _onMapStoreTap,
-                // 지도에서 고르는 중에는 매장뿐 아니라 복도도 고를 수 있다.
-                // 지도 화면이 복도 탭을 그래프 노드로 스냅해 돌려준다.
-                pickingOnMap: _mapPickTarget != null,
-                onMapPointPicked: _onMapPointPicked,
-                onLocationAnchored: _onLocationAnchored,
-                onPlacingLocationChanged: (placing) {
-                  if (_indoorPlacingLocation == placing) return;
-                  setState(() => _indoorPlacingLocation = placing);
-                },
-                categorySelection: _categorySelection,
-                onFloorChanged: _onActiveFloorChanged,
-                onFloorTransitionChanged: _onFloorTransitionChanged,
-                outerOverlayKeys: [
-                  _topBarKey,
-                  _favoritesPillKey,
-                  _categoryRowKey,
-                  _searchPanelKey,
-                  _bottomBarKey,
-                  _mapPickHintKey,
-                ],
-              ),
+          OutdoorMapBody(
+            key: _outdoorKey,
+            onRouteVisibleChanged: (visible) =>
+                setState(() => _outdoorRouteVisible = visible),
+            onPlacingLocationChanged: (placing) {
+              if (_outdoorPlacingLocation == placing) return;
+              setState(() => _outdoorPlacingLocation = placing);
+            },
+            onIndoorEnteredChanged: (entered) {
+              if (_outdoorIndoorEntered == entered) return;
+              setState(() {
+                _outdoorIndoorEntered = entered;
+                // 오버레이가 닫히면 카테고리 칩 줄도 함께 사라진다. 선택만
+                // 남겨 두면 사용자가 해제할 수단이 없는 채로, 다시 들어갔을
+                // 때 영문 모를 강조가 걸려 있다(홈 탭으로 나갈 때와 같은 이유).
+                if (!entered) _categorySelection = null;
+              });
+              // 오버레이를 닫고 야외로 나온 순간부터는 위치·출발지가 GPS다.
+              if (!entered) _dropIndoorOriginIfOutdoors();
+              // 실내 컨텍스트가 켜지고 꺼질 때마다 거리 기준이 통째로 바뀐다.
+              unawaited(_refreshReach());
+            },
+            onStoreTap: _onMapStoreTap,
+            // 실내 오버레이 위에서도 복도를 골라 출발/도착을 정할 수 있다.
+            // 실내 탭과 같은 조작이어야 하므로 같은 값을 내려 준다.
+            pickingOnMap: _mapPickTarget != null,
+            onMapPointPicked: _onMapPointPicked,
+            onLocationAnchored: _onLocationAnchored,
+            // 실내 화면과 같은 선택을 넘긴다. 야외 지도도 실내 진입
+            // 오버레이가 켜지면 같은 도면을 그리므로, 안 넘기면 칩을
+            // 눌러도 강조가 안 뜬다.
+            categorySelection: _categorySelection,
+            onFloorChanged: _onActiveFloorChanged,
+            onFloorTransitionChanged: _onFloorTransitionChanged,
+            // 실내 화면과 같은 목록을 넘긴다. 야외 지도도 실내 진입
+            // 오버레이가 켜지면 층 선택기·위치 지정을 함께 쓰므로, 상단
+            // 검색창이나 하단 바를 누른 탭이 지도 탭으로 새어들어가면
+            // 실내 오버레이가 닫히거나 그 자리에 PDR 앵커가 찍힌다.
+            outerOverlayKeys: [
+              _topBarKey,
+              _favoritesPillKey,
+              _categoryRowKey,
+              _searchPanelKey,
+              _bottomBarKey,
+              _mapPickHintKey,
             ],
           ),
 
@@ -1399,7 +1310,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                       child: FloorTransitionBanner(
                         state: transition,
                         onUndo: () =>
-                            _indoorKey.currentState?.undoFloorTransition(),
+                            _outdoorKey.currentState?.undoFloorTransition(),
                       ),
                     ),
                   ),
@@ -1463,7 +1374,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                           onTap: _openFavorites,
                         ),
                         // 카테고리 필터는 **건물 안을 보고 있을 때만**
-                        // 노출한다. 기준은 모드(_mode)가 아니라
+                        // 노출한다. 기준은
                         // [_indoorContextActive]다 — 야외 탭이어도 건물을
                         // 탭하거나 줌으로 실내 오버레이가 켜지면 사용자에게는
                         // 실내 화면과 똑같은 도면이 떠 있고, 그 위에 강조가
@@ -1526,18 +1437,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
             bottom: routeVisible ? _etaBarLiftHeight : 0,
             child: MapBottomBar(
               key: _bottomBarKey,
-              mode: _mode,
-              onModeChanged: _setMode,
               onCalibrate: _onCalibrate,
               onPlaceLocation: _onPlaceLocation,
-              placingLocation: _mode == MapMode.indoor
-                  ? _indoorPlacingLocation
-                  : _outdoorPlacingLocation,
+              placingLocation: _outdoorPlacingLocation,
               // 야외에서는 실내 진입 오버레이가 켜져 있을 때만 위치 지정 버튼을
               // 노출한다. 오버레이가 꺼진 순수 야외 상태에서는 지정할 층 정보가
               // 없어 눌러도 의미가 없다.
               showPlaceLocation:
-                  _mode == MapMode.indoor || _outdoorIndoorEntered,
+                  _outdoorIndoorEntered,
             ),
           ),
 

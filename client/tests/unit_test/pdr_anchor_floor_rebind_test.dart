@@ -13,7 +13,7 @@ import 'package:navigation_client/models/indoor_route.dart';
 import 'package:navigation_client/repositories/building_repository.dart';
 import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
-import 'package:navigation_client/screens/indoor_map/indoor_map_screen.dart';
+import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
 import 'package:navigation_client/widgets/floor_selector.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -114,17 +114,20 @@ void main() {
     isPedometerPermissionGranted = defaultIsPedometerPermissionGranted;
   });
 
-  Future<GlobalKey<IndoorMapBodyState>> openIndoorMap(
+  Future<GlobalKey<OutdoorMapBodyState>> openIndoorMap(
     WidgetTester tester,
   ) async {
-    final key = GlobalKey<IndoorMapBodyState>();
+    final key = GlobalKey<OutdoorMapBodyState>();
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: IndoorMapBody(key: key, buildingId: demoBuildingId),
+          body: OutdoorMapBody(key: key),
         ),
       ),
     );
+    await drain(tester);
+    // ignore: invalid_use_of_visible_for_testing_member
+    key.currentState!.enterIndoorForTest();
     await drain(tester);
     expect(
       key.currentState!.currentFloor,
@@ -143,7 +146,7 @@ void main() {
   /// 테스트하게 된다.
   Future<void> openFloor(
     WidgetTester tester,
-    GlobalKey<IndoorMapBodyState> key,
+    GlobalKey<OutdoorMapBodyState> key,
     String floor,
   ) async {
     tester
