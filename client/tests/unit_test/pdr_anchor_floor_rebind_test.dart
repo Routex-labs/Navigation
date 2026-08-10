@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/models/category_count.dart';
+import 'package:navigation_client/models/store_index_entry.dart';
 import 'package:navigation_client/core/api_config.dart';
 import 'package:navigation_client/core/service_locator.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/indoor_navigation_contract.dart';
@@ -12,7 +13,7 @@ import 'package:navigation_client/models/indoor_route.dart';
 import 'package:navigation_client/repositories/building_repository.dart';
 import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
-import 'package:navigation_client/screens/indoor_map/indoor_map_screen.dart';
+import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
 import 'package:navigation_client/widgets/floor_selector.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -113,17 +114,20 @@ void main() {
     isPedometerPermissionGranted = defaultIsPedometerPermissionGranted;
   });
 
-  Future<GlobalKey<IndoorMapBodyState>> openIndoorMap(
+  Future<GlobalKey<OutdoorMapBodyState>> openIndoorMap(
     WidgetTester tester,
   ) async {
-    final key = GlobalKey<IndoorMapBodyState>();
+    final key = GlobalKey<OutdoorMapBodyState>();
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: IndoorMapBody(key: key, buildingId: demoBuildingId),
+          body: OutdoorMapBody(key: key),
         ),
       ),
     );
+    await drain(tester);
+    // ignore: invalid_use_of_visible_for_testing_member
+    key.currentState!.enterIndoorForTest();
     await drain(tester);
     expect(
       key.currentState!.currentFloor,
@@ -142,7 +146,7 @@ void main() {
   /// 테스트하게 된다.
   Future<void> openFloor(
     WidgetTester tester,
-    GlobalKey<IndoorMapBodyState> key,
+    GlobalKey<OutdoorMapBodyState> key,
     String floor,
   ) async {
     tester
@@ -216,6 +220,12 @@ class _TwoFloorGraphRepository implements BuildingRepository {
   // 뜨지 않아 검증 대상 화면이 그대로 유지된다.
   @override
   Future<List<CategoryCount>?> getCategoryCounts(String buildingId) async =>
+      const [];
+
+  // 자동완성 원본. 이 테스트들은 후보를 보지 않으므로 빈 목록으로 둔다 —
+  // 패널은 목록이 비면 후보를 그리지 않고 서버 검색만 돈다.
+  @override
+  Future<List<StoreIndexEntry>?> getStoreIndex(String buildingId) async =>
       const [];
   _TwoFloorGraphRepository(this.graphJson);
 

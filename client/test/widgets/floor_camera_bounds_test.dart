@@ -14,12 +14,21 @@ void main() {
   group('clampToFootprint', () {
     // 가만히 둔 지도가 매 idle마다 animateCamera로 미세하게 떨리면 안 된다.
     test('이미 도면 안이면 아무것도 하지 않는다', () {
-      expect(clampToFootprint(const ll.LatLng(37.1, 127.2), _footprint), isNull);
+      expect(
+        clampToFootprint(const ll.LatLng(37.1, 127.2), _footprint),
+        isNull,
+      );
     });
 
     test('경계 위도 정확히 위에 있으면 그대로 둔다', () {
-      expect(clampToFootprint(const ll.LatLng(37.0, 127.0), _footprint), isNull);
-      expect(clampToFootprint(const ll.LatLng(37.2, 127.4), _footprint), isNull);
+      expect(
+        clampToFootprint(const ll.LatLng(37.0, 127.0), _footprint),
+        isNull,
+      );
+      expect(
+        clampToFootprint(const ll.LatLng(37.2, 127.4), _footprint),
+        isNull,
+      );
     });
 
     test('밖으로 나간 축만 가장자리로 당긴다', () {
@@ -65,8 +74,9 @@ void main() {
 
   group('clampToFootprint — 화면 크기만큼 깎기', () {
     // 중심만 bbox 안에 가두면 중심이 모서리에 있는 상태가 합법이라, 그 순간
-    // 화면의 절반 이상이 건물 밖 빈 공간이 된다.
-    test('모서리는 화면 절반만큼 안쪽으로 밀린다', () {
+    // 화면의 절반 이상이 건물 밖 빈 공간이 된다. 다만 화면 절반을 통째로 깎으면
+    // 미는 느낌이 지나치게 빡빡해서, [kFootprintDeflateRatio]만큼만 깎는다.
+    test('모서리는 화면 절반의 일부만큼 안쪽으로 밀린다', () {
       final clamped = clampToFootprint(
         const ll.LatLng(37.2, 127.4),
         _footprint,
@@ -74,8 +84,14 @@ void main() {
         halfSpanLng: 0.1,
       )!;
 
-      expect(clamped.latitude, closeTo(37.15, 1e-9));
-      expect(clamped.longitude, closeTo(127.3, 1e-9));
+      expect(
+        clamped.latitude,
+        closeTo(37.2 - 0.05 * kFootprintDeflateRatio, 1e-9),
+      );
+      expect(
+        clamped.longitude,
+        closeTo(127.4 - 0.1 * kFootprintDeflateRatio, 1e-9),
+      );
     });
 
     test('깎고 남은 영역 안이면 그대로 둔다', () {
@@ -105,7 +121,9 @@ void main() {
 
     test('한 축만 화면이 더 크면 그 축만 붕괴한다', () {
       final clamped = clampToFootprint(
-        const ll.LatLng(37.0, 127.35),
+        // bbox 동쪽 끝. 깎기가 느슨해져서 127.35는 이제 허용 범위 안이라,
+        // 경도 축이 실제로 당겨지는지 보려면 가장자리에서 시작해야 한다.
+        const ll.LatLng(37.0, 127.4),
         _footprint,
         halfSpanLat: 5,
         halfSpanLng: 0.05,
@@ -113,7 +131,10 @@ void main() {
 
       expect(clamped.latitude, closeTo(37.1, 1e-9));
       // 경도는 아직 깎을 여유가 있어 가장자리로만 당긴다.
-      expect(clamped.longitude, closeTo(127.35, 1e-9));
+      expect(
+        clamped.longitude,
+        closeTo(127.4 - 0.05 * kFootprintDeflateRatio, 1e-9),
+      );
     });
 
     // 되돌림은 animateCamera이고 그게 다시 onCameraIdle을 부른다.
@@ -203,8 +224,11 @@ void main() {
         userLocation: const ll.LatLng(37.19, 127.2),
       )!;
 
-      // 위치 기준으로는 37.24까지 허용되지만 도면 깎기가 37.15에서 막는다.
-      expect(clamped.latitude, closeTo(37.15, 1e-9));
+      // 위치 기준으로는 37.24까지 허용되지만 도면 깎기가 먼저 막는다.
+      expect(
+        clamped.latitude,
+        closeTo(37.2 - 0.05 * kFootprintDeflateRatio, 1e-9),
+      );
     });
 
     // PDR이 도면 밖으로 흘렀을 때. 빈 공간을 피하자고 사용자를 화면 밖에 두면
@@ -220,6 +244,95 @@ void main() {
 
       // 도면(37.01~37.19)과 위치 근방(36.49~36.51)이 안 겹친다 → 위치 근방.
       expect(clamped.latitude, closeTo(36.51, 1e-9));
+    });
+  });
+
+  group('clampToFootprint — 얼마나 넉넉한가', () {
+    test('화면의 1/4까지는 도면 밖 여백을 허용한다', () {
+      // "중앙으로 당겨오는 게 너무 빡세다"는 피드백으로 넓힌 값이다. 1.0으로
+      // 되돌리면(=빈 공간 0) 여기서 걸린다.
+      expect(kFootprintDeflateRatio, lessThan(1.0));
+      expect(
+        kFootprintDeflateRatio,
+        greaterThan(0.0),
+        reason: '0이면 건물 가장자리가 화면 정중앙까지 와서 화면 절반이 빈다',
+      );
+    });
+
+    test('깎기가 느슨해진 만큼 더 멀리 밀 수 있다', () {
+      // 예전(비율 1.0)이면 되돌려졌을 자리가 이제는 허용돼야 한다.
+      const halfSpan = 0.05;
+      final justOutsideOldLimit = ll.LatLng(37.2 - halfSpan + 1e-4, 127.2);
+
+      expect(
+        clampToFootprint(
+          justOutsideOldLimit,
+          _footprint,
+          halfSpanLat: halfSpan,
+          halfSpanLng: 0.02,
+        ),
+        isNull,
+        reason: '예전 제한(화면 절반 전체 깎기) 바깥이지만 지금은 그대로 둬야 한다',
+      );
+    });
+  });
+
+  group('shouldRecenterFollow', () {
+    // 데드밴드가 없으면 PDR이 한 걸음 낼 때마다 카메라가 끌려간다 — 걷는 내내
+    // 지도가 흔들려 도면을 읽을 수 없다.
+    test('화면 절반의 데드밴드 안이면 카메라를 두고 본다', () {
+      expect(
+        shouldRecenterFollow(
+          camera: const ll.LatLng(37.1, 127.2),
+          user: ll.LatLng(37.1 + 0.05 * kFollowDeadbandRatio * 0.9, 127.2),
+          halfSpanLat: 0.05,
+          halfSpanLng: 0.05,
+        ),
+        isFalse,
+      );
+    });
+
+    test('데드밴드를 벗어나면 따라간다', () {
+      expect(
+        shouldRecenterFollow(
+          camera: const ll.LatLng(37.1, 127.2),
+          user: ll.LatLng(37.1 + 0.05 * kFollowDeadbandRatio * 1.1, 127.2),
+          halfSpanLat: 0.05,
+          halfSpanLng: 0.05,
+        ),
+        isTrue,
+      );
+    });
+
+    test('한 축만 벗어나도 따라간다', () {
+      expect(
+        shouldRecenterFollow(
+          camera: const ll.LatLng(37.1, 127.2),
+          user: ll.LatLng(37.1, 127.2 + 0.05 * kFollowDeadbandRatio * 1.1),
+          halfSpanLat: 0.05,
+          halfSpanLng: 0.05,
+        ),
+        isTrue,
+      );
+    });
+
+    // 기준이 없으면 데드밴드가 정의되지 않는다. 그때 안 따라가는 쪽을 고르면
+    // 마커가 화면 밖으로 나가도 카메라가 영영 오지 않는다.
+    test('화면 크기를 모르면 항상 따라간다', () {
+      expect(
+        shouldRecenterFollow(
+          camera: const ll.LatLng(37.1, 127.2),
+          user: const ll.LatLng(37.1, 127.2),
+        ),
+        isTrue,
+      );
+    });
+
+    test('데드밴드는 화면을 벗어날 만큼 넓지 않다', () {
+      // 마커가 화면 밖으로 나가기 전에 반드시 따라잡아야 한다. 비율이 1을
+      // 넘으면 그 보장이 깨진다.
+      expect(kFollowDeadbandRatio, greaterThan(0));
+      expect(kFollowDeadbandRatio, lessThan(1));
     });
   });
 }

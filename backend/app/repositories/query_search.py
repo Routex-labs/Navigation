@@ -435,6 +435,16 @@ def match_ai_destination(
 MAX_DISCOVERY_MATCHES = 5  # 되물을 수 없는 제한 상태(degraded)의 추천 상한
 CLARIFY_PREVIEW_MATCHES = 3  # 질문과 함께 보여줄 초기 후보 수(12절 확정)
 
+# 후보를 무엇으로 잡았는지. 응답의 `source`로 나가며, 클라이언트가 온디바이스 이름
+# 후보와 이 응답 중 무엇을 화면에 둘지 판단하는 근거다.
+#
+# 왜 mode만으로는 부족한가: `results`·`clarify`는 어휘로 잡았을 때도 임베딩으로
+# 잡았을 때도 나온다. 클라이언트가 구분해야 하는 축은 "얼마나 좁혀졌나"(mode)가
+# 아니라 **"무엇을 근거로 잡았나"** 다. 이름을 정확히 아는 온디바이스 후보는 추측인
+# 임베딩에는 이겨야 하고, 동의어·intent 같은 결정적 어휘에는 져야 한다.
+SOURCE_LIGHT = "light"  # 이름·카테고리·동의어·intent — 결정적 어휘 매칭
+SOURCE_SEMANTIC = "semantic"  # FAISS 임베딩 — 유사도 추측
+
 # 목록(results) 상한.
 #
 # 12절이 정한 "추천 최대 5건"은 **질문이 아직 서 있는 화면**의 규칙이다. 되물을 축이
@@ -547,18 +557,55 @@ def _facet_options(
     ]
 
 
+def _drop_indistinguishable(
+    candidates: list[tuple[Store, Floor]],
+    axis: str,
+    options: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """가리키는 후보가 똑같은 선택지를 하나로 접는다.
+
+    같은 매장 집합을 가리키는 값이 둘이면 화면에는 chip이 둘 뜨지만 어느 쪽을 눌러도
+    결과가 같다. 고르는 행동이 아무것도 바꾸지 못하므로 선택지가 아니다. 근거와 실제
+    사례는 [_pick_question] docstring 2번에 있다.
+
+    남길 값은 [_facet_options]가 정한 순서(후보 수 내림차순 → 값 오름차순)의 첫 번째다.
+    같은 입력에 항상 같은 chip이 나와야 하므로 순서에 기대는 선택이며, 그 순서 자체가
+    이미 결정적이다.
+    """
+    kept: dict[frozenset[str], dict[str, Any]] = {}
+    for option in options:
+        members = frozenset(store.id for store, _floor in candidates if option["value"] in _facets(store).get(axis, ()))
+        # 후보가 하나도 없는 값은 애초에 _facet_options가 만들지 않는다. 방어적으로만 둔다.
+        if not members:
+            continue
+        kept.setdefault(members, option)
+    return list(kept.values())
+
+
 def _pick_question(
     candidates: list[tuple[Store, Floor]],
     asked_intents: list[str] | None = None,
 ) -> tuple[str | None, list[dict[str, Any]]]:
     """현재 후보를 실제로 둘 이상으로 나누는 축을 고른다. 없으면 (None, []).
 
-    두 가지를 모두 만족해야 질문이 된다(7-3절 "현재 후보를 실제로 나누지 못하는
+    세 가지를 모두 만족해야 질문이 된다(7-3절 "현재 후보를 실제로 나누지 못하는
     facet은 질문으로 선택하지 않는다").
 
     1. 서로 다른 값이 둘 이상 — "명품" 질의의 후보 43건은 전부 styles=["명품"]이라
        스타일을 다시 물어도 후보가 그대로다.
-    2. 그 축을 가진 후보가 절반 이상 — 태깅이 아직 얇은 지금 데이터에서는, 상위 10건 중
+    2. **그 값들이 서로 다른 후보를 가리킨다** — 값 개수만 세면 라벨만 다르고 가리키는
+       매장이 똑같은 쌍을 걸러내지 못한다. `_intents.json`의 `화장품`과 `향수`가 바로
+       그런 쌍이다(둘 다 `subcategory: ["화장품·향수"]`). 실기기에서 `샤낼 뷰티`를
+       치면 `향수 (10)` `화장품 (10)` 두 chip이 떴는데 **어느 쪽을 눌러도 같은 10건**
+       이었다. 고르는 행동이 아무것도 바꾸지 못하는 질문이라 사용자는 "둘 중 뭘 고르라는
+       거지"만 남는다.
+
+       이 쌍은 **임베딩 쪽에서는 의도된 것**이다 — 소분류가 복합 라벨(`화장품·향수`)
+       이라 `화장품`만 선언하면 문서 텍스트의 단어 빈도가 한쪽으로 쏠려 `향수` 질의가
+       회귀했다(FAISS.md 11-4). 그래서 데이터를 고치지 않고 **질문 축으로 쓸 때만**
+       걸러낸다. 한 데이터가 임베딩 가중치와 질문 선택지라는 두 용도를 겸하고 있고,
+       두 번째 용도에서만 무효인 경우다.
+    3. 그 축을 가진 후보가 절반 이상 — 태깅이 아직 얇은 지금 데이터에서는, 상위 10건 중
        2건만 태그가 있어도 "값이 2개"라는 조건은 통과해 버린다. 그 질문에 답하면
        태그 없는 8건이 통째로 사라진다(2절 "미표기 매장이 통째로 사라진다").
 
@@ -573,6 +620,7 @@ def _pick_question(
         options = _facet_options(candidates, axis)
         if axis == "intents" and excluded:
             options = [option for option in options if option["value"] not in excluded]
+        options = _drop_indistinguishable(candidates, axis, options)
         if len(options) < 2:
             continue
         covered = sum(1 for store, _floor in candidates if _facets(store).get(axis))
@@ -701,6 +749,7 @@ def _discovery(
     text: str,
     mode: str,
     *,
+    source: str,
     question: str | None = None,
     options: list[dict[str, Any]] | None = None,
     matches: list[dict[str, Any]] | None = None,
@@ -708,6 +757,7 @@ def _discovery(
     return {
         "mode": mode,
         "query": text,
+        "source": source,
         "question": question,
         "options": options or [],
         "matches": matches or [],
@@ -740,6 +790,11 @@ def discover(
     `current_floor_id`는 8-2절 A안이다. 1차 경량(tier 0·1 시설 질의)은 층 스코프를 유지해
     "화장실"이 현재 층에서 확정되게 하고, 탐색 후보 집합은 건물 전체를 보되 같은 이름이
     현재 층에도 있으면 그 층을 대표로 고르는 정렬 보조로만 쓴다.
+
+    응답의 `source`는 **이 후보가 어휘로 잡힌 것인지 임베딩으로 잡힌 것인지**를 알린다.
+    클라이언트가 온디바이스 이름 후보와 이 응답 중 무엇을 보여줄지 판단하는 근거다 —
+    이름 후보는 임베딩(`semantic`)에는 이기지만 어휘(`light`)에는 진다. 근거는
+    docs/client/search-input-assist.md 「실기기 검증」 2번.
     """
     if session.get(Building, building_id) is None:
         return None
@@ -769,6 +824,7 @@ def discover(
                 return _discovery(
                     text,
                     "direct",
+                    source=SOURCE_LIGHT,
                     matches=[_to_discovery_match(store, floor, transform, basis)],
                 )
 
@@ -785,10 +841,14 @@ def discover(
         pool = [(store, floor) for *_rank, store, floor in building_scored]
 
     degraded = False
+    # 후보가 어디서 왔는지. 아래 모든 반환이 이 값을 그대로 싣는다 — 경로마다 따로
+    # 판단하면 한 갈래만 고쳐도 계약이 갈라진다.
+    source = SOURCE_LIGHT
     if not pool:
         # import는 여기서 지연 — 2차를 실제로 쓸 때만 torch를 로드한다.
         from app.repositories import query_semantic
 
+        source = SOURCE_SEMANTIC
         results = query_semantic.search_many(session, building_id, text)
         degraded = results.is_degraded
         pool = [(store, floor) for _score, store, floor in results.hits]
@@ -803,7 +863,7 @@ def discover(
     candidates = _dedupe_by_name(pool, current_floor_id)
 
     if not candidates:
-        return _discovery(text, "degraded" if degraded else "no_match")
+        return _discovery(text, "degraded" if degraded else "no_match", source=source)
 
     if degraded:
         # 의미 검색 기능 자체를 못 쓰는 상태. 경량·태그로 얻은 결과라도 담아 준다(8-3절).
@@ -814,6 +874,7 @@ def discover(
         return _discovery(
             text,
             "degraded",
+            source=source,
             matches=_discovery_matches(candidates, MAX_DISCOVERY_MATCHES, {}, transform),
         )
 
@@ -827,6 +888,7 @@ def discover(
         return _discovery(
             text,
             "results",
+            source=source,
             matches=_discovery_matches(candidates, MAX_RESULT_MATCHES, {**intent_basis, **selection}, transform),
         )
 
@@ -842,6 +904,7 @@ def discover(
             return _discovery(
                 text,
                 "clarify",
+                source=source,
                 question=_QUESTION_TEMPLATES[axis],
                 options=options,
                 matches=_discovery_matches(
@@ -861,6 +924,7 @@ def discover(
     return _discovery(
         text,
         "results",
+        source=source,
         matches=_discovery_matches(candidates, MAX_RESULT_MATCHES, intent_basis, transform),
     )
 

@@ -1,0 +1,560 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:indoor_pdr_core/indoor_pdr_core.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:navigation_client/features/indoor_navigation/application/indoor_guidance_position.dart';
+import 'package:navigation_client/features/indoor_navigation/application/indoor_guidance_session.dart';
+import 'package:navigation_client/features/indoor_navigation/application/indoor_location_estimate.dart';
+import 'package:navigation_client/features/indoor_navigation/contract/altitude_sample.dart';
+import 'package:navigation_client/models/building_graph.dart';
+import 'package:navigation_client/domain/route_movement.dart';
+import 'package:navigation_client/models/indoor_route.dart';
+import 'package:navigation_client/features/indoor_navigation/contract/pdr_anchor.dart';
+import 'package:navigation_client/models/floor_graph.dart';
+
+/// 동서로 뻗은 복도 하나. 걸음이 이 선 위로 보정된다.
+const _corridorGraph = FloorGraph(
+  nodes: [
+    GraphNode(id: 'w', type: 'corridor', xM: 0, yM: 0),
+    GraphNode(id: 'e', type: 'corridor', xM: 50, yM: 0),
+  ],
+  edges: [
+    GraphEdge(
+      id: 'we',
+      fromNodeId: 'w',
+      toNodeId: 'e',
+      lengthM: 50,
+      bidirectional: true,
+      geometryLocalM: [LocalPoint(0, 0), LocalPoint(50, 0)],
+    ),
+  ],
+);
+
+PdrAnchor _anchor({String floorId = '1F', double eastM = 1, double northM = 0}) =>
+    PdrAnchor(
+      floorId: floorId,
+      anchorLocalM: PdrLocalPoint(eastM, northM),
+      rotationDeg: 0,
+      headingReference: HeadingReference.magneticNorth,
+      requiresManualRotationCalibration: false,
+      source: AnchorSource.userPin,
+      confidence: 1,
+    );
+
+/// 품질은 이 세션의 판단에 쓰이지 않는다. 스냅샷을 만들려면 필요할 뿐이라
+/// 최소값 한 벌을 재사용한다.
+const _quality = PdrQuality(
+  state: PdrQualityState.healthy,
+  warnings: [],
+  features: PdrQualityFeatures(
+    greenOrangeDistanceDivergencePct: 0,
+    orangeStepRatio: 1,
+    orangeOvercountLikely: false,
+    pedometerUndercountSuspected: false,
+    pedometerFlaggedSpanS: 0,
+    headingStable: true,
+    headingSource: 'test',
+    magneticAccuracy: 'high',
+    rotationHeadingAccuracyDeg: 5,
+    cadenceHz: 1.6,
+    pitchDeg: 0,
+    rollDeg: 0,
+    headingReferenceIsMagneticNorth: true,
+    peakRejectHistogram: {},
+    fusedHeadingDeg: 90,
+    walkOffsetDeg: 0,
+    walkOffsetActive: false,
+    deviceHeadingDeg: 90,
+    gyroHeadingDeg: 90,
+    walkDirDeg: 90,
+    walkDirConfidence: 1,
+    headingConverged: true,
+    headingSpreadDeg: 1,
+  ),
+);
+
+/// 동쪽으로 [steps]걸음(0.7m) 걸은 스냅샷.
+PdrSnapshot _walkedEast(int steps) {
+  final path = [
+    for (var i = 0; i <= steps; i += 1) PdrLocalPoint(i * 0.7, 0),
+  ];
+  return PdrSnapshot(
+    position: path.last,
+    path: path,
+    steps: steps,
+    distanceM: steps * 0.7,
+    orientationHeadingDeg: 90,
+    walkingHeadingDeg: 90,
+    hasHeading: true,
+    preview: PdrPreview(
+      position: path.last,
+      path: path,
+      steps: steps,
+      distanceM: steps * 0.7,
+      acceptedPeakTimesMs: List<int?>.filled(path.length, null),
+    ),
+    quality: _quality,
+  );
+}
+
+IndoorLocationEstimate _estimate({
+  String buildingId = 'b1',
+  String floorId = '1F',
+  double eastM = 40,
+  required DateTime observedAt,
+}) => IndoorLocationEstimate(
+  buildingId: buildingId,
+  floorId: floorId,
+  localM: PdrLocalPoint(eastM, 0),
+  wgs84: const LatLng(37, 127),
+  accuracyMeters: 8,
+  observedAt: observedAt,
+  source: 'gps',
+);
+
+void main() {
+  // 시간을 고정한다. 추정점 신선도(30초)가 판단에 들어가므로 벽시계를 쓰면
+  // 느린 CI에서 간헐적으로 갈린다.
+  final now = DateTime(2026, 8, 10, 12);
+  IndoorGuidanceSession newSession() => IndoorGuidanceSession(now: () => now);
+
+  /// 붙이고 층·그래프·앵커까지 세워 둔 세션. 대부분의 테스트가 여기서 시작한다.
+  IndoorGuidanceSession attachedSession() => newSession()
+    ..attach(buildingId: 'b1')
+    ..setContext(floorId: '1F', graph: _corridorGraph)
+    ..setAnchor(_anchor());
+
+  group('부착 상태', () {
+    test('붙이지 않으면 스냅샷을 버리고 위치도 내지 않는다', () {
+      final session = newSession()
+        ..setContext(floorId: '1F', graph: _corridorGraph)
+        ..setAnchor(_anchor());
+
+      expect(session.onSnapshot(_walkedEast(10), timestampMs: 1000), isNull);
+      expect(session.position, isNull);
+      expect(session.trackingResult, isNull);
+    });
+
+    test('떼어내면 그때까지의 보정을 버린다', () {
+      // 야외로 나간 동안 걸은 거리가 실내 좌표계에 남아 있으면, 다시 들어올 때
+      // 사용자는 걸어 본 적 없는 자리에서 시작한다.
+      final session = attachedSession()
+        ..onSnapshot(_walkedEast(10), timestampMs: 1000);
+      expect(session.position?.source, GuidancePositionSource.tracked);
+
+      session.detach();
+
+      expect(session.isAttached, isFalse);
+      expect(session.position, isNull);
+      expect(session.trackingResult, isNull);
+    });
+
+    test('떼었다 다시 붙이면 이전 세션의 걸음이 이월되지 않는다', () {
+      final session = attachedSession()
+        ..onSnapshot(_walkedEast(20), timestampMs: 1000);
+      final walkedEastM = session.position!.localM.eastM;
+      expect(walkedEastM, greaterThan(10));
+
+      session
+        ..detach()
+        ..attach(buildingId: 'b1')
+        ..setContext(floorId: '1F', graph: _corridorGraph)
+        ..setAnchor(_anchor());
+
+      // 걸음 없이 앵커만 있는 상태로 돌아와야 한다.
+      expect(session.position?.source, GuidancePositionSource.anchorOnly);
+      expect(session.position?.localM.eastM, 1);
+    });
+
+    test('같은 건물에 다시 붙이는 것은 보정을 리셋하지 않는다', () {
+      // 층 오버레이를 다시 그릴 때마다 attach가 불릴 수 있다. 그때마다 리셋하면
+      // 사용자는 걷는 도중 위치가 앵커로 되돌아가는 것을 본다.
+      final session = attachedSession()
+        ..onSnapshot(_walkedEast(20), timestampMs: 1000);
+      final before = session.position!.localM.eastM;
+
+      session.attach(buildingId: 'b1');
+
+      expect(session.position?.localM.eastM, before);
+      expect(session.position?.source, GuidancePositionSource.tracked);
+    });
+  });
+
+  group('위치 출처 우선순위', () {
+    test('앵커 + 걸음이면 보정된 위치를 tracked로 낸다', () {
+      final session = attachedSession()
+        ..onSnapshot(_walkedEast(10), timestampMs: 1000);
+
+      final position = session.position!;
+      expect(position.source, GuidancePositionSource.tracked);
+      // 복도 위로 보정되므로 north는 0에 붙어 있고, 동쪽으로 이동해 있다.
+      expect(position.localM.northM, closeTo(0, 0.5));
+      expect(position.localM.eastM, greaterThan(1));
+      expect(position.headingDeg, isNotNull);
+    });
+
+    test('앵커만 있고 걸음이 없으면 anchorOnly이고 방향은 비운다', () {
+      // 서 있는 사람에게 방향 원뿔을 그리면 아무 근거 없는 방향을 가리킨다.
+      final session = attachedSession();
+
+      final position = session.position!;
+      expect(position.source, GuidancePositionSource.anchorOnly);
+      expect(position.localM.eastM, 1);
+      expect(position.headingDeg, isNull);
+    });
+
+    test('앵커가 없으면 신선한 추정점을 estimate로 낸다', () {
+      final session = newSession()
+        ..attach(buildingId: 'b1')
+        ..setContext(floorId: '1F', graph: _corridorGraph)
+        ..setEstimate(_estimate(observedAt: now.subtract(const Duration(seconds: 5))));
+
+      final position = session.position!;
+      expect(position.source, GuidancePositionSource.estimate);
+      expect(position.isConfirmed, isFalse);
+      expect(position.accuracyM, 8);
+      expect(position.headingDeg, isNull);
+    });
+
+    test('추정점은 걸어서 이동한 위치를 되돌리지 않는다', () {
+      // 추정점은 30초까지 살아 있다. 우선순위가 뒤집히면 이미 20m 걸어간
+      // 사용자를 30초 전 GPS 자리로 끌어다 놓는다.
+      final session = attachedSession()
+        ..setEstimate(_estimate(eastM: 40, observedAt: now))
+        ..onSnapshot(_walkedEast(10), timestampMs: 1000);
+
+      final position = session.position!;
+      expect(position.source, GuidancePositionSource.tracked);
+      expect(position.localM.eastM, lessThan(40));
+    });
+
+    test('오래된 추정점은 쓰지 않는다', () {
+      final session = newSession()
+        ..attach(buildingId: 'b1')
+        ..setContext(floorId: '1F', graph: _corridorGraph)
+        ..setEstimate(
+          _estimate(observedAt: now.subtract(const Duration(seconds: 31))),
+        );
+
+      expect(session.position, isNull);
+    });
+
+    test('다른 건물·다른 층의 추정점은 쓰지 않는다', () {
+      final session = newSession()
+        ..attach(buildingId: 'b1')
+        ..setContext(floorId: '1F', graph: _corridorGraph);
+
+      session.setEstimate(_estimate(buildingId: 'b2', observedAt: now));
+      expect(session.position, isNull, reason: '다른 건물 추정점');
+
+      session.setEstimate(_estimate(floorId: '2F', observedAt: now));
+      expect(session.position, isNull, reason: '다른 층 추정점');
+    });
+  });
+
+  group('탑승점 고정 판정', () {
+    // 에스컬레이터 노드 하나가 붙은 층. 고정은 이 노드 좌표로 걸린다.
+    const escalatorGraph = FloorGraph(
+      nodes: [
+        GraphNode(id: 'w', type: 'corridor', xM: 0, yM: 0),
+        GraphNode(
+          id: 'es-up',
+          type: 'escalator',
+          name: 'ES1-UP(TO2F)',
+          xM: 30,
+          yM: 0,
+        ),
+      ],
+      edges: [
+        GraphEdge(
+          id: 'we',
+          fromNodeId: 'w',
+          toNodeId: 'es-up',
+          lengthM: 30,
+          bidirectional: true,
+          geometryLocalM: [LocalPoint(0, 0), LocalPoint(30, 0)],
+        ),
+      ],
+    );
+
+    MultiFloorRoute routeVia({
+      required String? transferMode,
+      required String? transferFromNodeId,
+      String floorName = '1F',
+    }) => MultiFloorRoute(
+      segments: [
+        IndoorRouteSegment(
+          floorId: floorName,
+          floorName: floorName,
+          route: const IndoorRoute(
+            points: [],
+            pointsLocalM: [LocalPoint(0, 0), LocalPoint(30, 0)],
+            nodeIds: ['w', 'es-up'],
+            edgeIds: ['we'],
+            distanceMeters: 30,
+          ),
+          transferModeToNext: transferMode,
+          transferFromNodeId: transferFromNodeId,
+        ),
+      ],
+      totalDistanceMeters: 30,
+      totalCostMeters: 30,
+    );
+
+    test('안내가 지목한 탑승점이면 그 노드 좌표로 고정한다', () {
+      final held = routeBoardingHoldPoint(
+        boardingNodeId: 'es-up',
+        anchorFloorId: '1F',
+        displayedFloorId: '1F',
+        multiFloorRoute: routeVia(
+          transferMode: 'escalator',
+          transferFromNodeId: 'es-up',
+        ),
+        graph: escalatorGraph,
+      );
+
+      expect(held, isNotNull);
+      expect(held!.eastM, 30);
+      expect(held.northM, 0);
+    });
+
+    test('경로가 지목하지 않은 에스컬레이터 옆을 지나가는 것으로는 고정하지 않는다', () {
+      // 그냥 걷고 있는 사용자의 마커를 세우면 안 된다.
+      final held = routeBoardingHoldPoint(
+        boardingNodeId: 'es-up',
+        anchorFloorId: '1F',
+        displayedFloorId: '1F',
+        multiFloorRoute: routeVia(
+          transferMode: 'escalator',
+          transferFromNodeId: 'es-other',
+        ),
+        graph: escalatorGraph,
+      );
+
+      expect(held, isNull);
+    });
+
+    test('엘리베이터로 갈아타는 구간에서는 고정하지 않는다', () {
+      final held = routeBoardingHoldPoint(
+        boardingNodeId: 'es-up',
+        anchorFloorId: '1F',
+        displayedFloorId: '1F',
+        multiFloorRoute: routeVia(
+          transferMode: 'elevator',
+          transferFromNodeId: 'es-up',
+        ),
+        graph: escalatorGraph,
+      );
+
+      expect(held, isNull);
+    });
+
+    test('안내 중이 아니면 고정하지 않는다', () {
+      final held = routeBoardingHoldPoint(
+        boardingNodeId: 'es-up',
+        anchorFloorId: '1F',
+        displayedFloorId: '1F',
+        multiFloorRoute: null,
+        graph: escalatorGraph,
+      );
+
+      expect(held, isNull);
+    });
+
+    test('앵커가 보고 있는 층과 다르면 고정하지 않는다', () {
+      // 다른 층 노드 좌표에 고정하면 남의 층 자리를 가리킨다.
+      final held = routeBoardingHoldPoint(
+        boardingNodeId: 'es-up',
+        anchorFloorId: '2F',
+        displayedFloorId: '1F',
+        multiFloorRoute: routeVia(
+          transferMode: 'escalator',
+          transferFromNodeId: 'es-up',
+        ),
+        graph: escalatorGraph,
+      );
+
+      expect(held, isNull);
+    });
+  });
+
+  group('부착 게이트 — 층 판정기', () {
+    final sample = AltitudeSample(
+      timestampMs: 1000,
+      pressureHpa: 1013.25,
+      source: 'test',
+    );
+
+    test('붙이기 전 기압 샘플은 판정기에 들어가지 않는다', () {
+      // 야외에서 오르내린 고도가 실내 판정의 0점을 흔들면, 건물에 들어서자마자
+      // 있지도 않은 층 이동이 잡힌다.
+      final session = newSession();
+
+      final outcome = session.onAltitude(sample);
+
+      expect(outcome.isEmpty, isTrue);
+      expect(outcome.events, isEmpty);
+      expect(session.escalator.smoothedAltitudeM, isNull);
+    });
+
+    test('떼어낸 뒤 기압 샘플도 무시한다', () {
+      final session = attachedSession()..detach();
+
+      final outcome = session.onAltitude(sample);
+
+      expect(outcome.isEmpty, isTrue);
+      expect(session.escalator.smoothedAltitudeM, isNull);
+    });
+
+    test('떼어낸 상태에서는 단계 전이를 내지 않는다', () {
+      final session = attachedSession()..detach();
+
+      expect(session.takePhaseChanges(), isEmpty);
+      expect(session.boardingHoldPointM, isNull);
+    });
+  });
+
+  group('경로 진행률', () {
+    /// 복도(0,0)~(50,0)을 그대로 따라가는 경로.
+    const route = IndoorRoute(
+      points: [],
+      pointsLocalM: [LocalPoint(0, 0), LocalPoint(50, 0)],
+      nodeIds: ['w', 'e'],
+      edgeIds: ['we'],
+      distanceMeters: 50,
+    );
+
+    IndoorGuidanceSession routedSession() =>
+        attachedSession()..setRouteSegment(route);
+
+    test('걸을수록 남은거리가 줄어든다', () {
+      final session = routedSession();
+
+      session.updateProgress(
+        session.onSnapshot(_walkedEast(5), timestampMs: 1000),
+        previewSteps: 5,
+      );
+      final after5 = session.displayProgress!.remainingM;
+
+      session.updateProgress(
+        session.onSnapshot(_walkedEast(20), timestampMs: 2000),
+        previewSteps: 20,
+      );
+      final after20 = session.displayProgress!.remainingM;
+
+      expect(after5, lessThan(50));
+      expect(after20, lessThan(after5));
+    });
+
+    test('경로가 없으면 진행률을 내지 않는다', () {
+      final session = attachedSession();
+
+      final update = session.updateProgress(
+        session.onSnapshot(_walkedEast(5), timestampMs: 1000),
+        previewSteps: 5,
+      );
+
+      expect(update.hasProgress, isFalse);
+      expect(session.displayProgress, isNull);
+    });
+
+    test('세그먼트를 갈아타면 진행거리 기준점을 새로 잡는다', () {
+      // 남겨 두면 새 세그먼트에서는 창 밖 값이 되어 매 걸음 재획득이 켜진다.
+      final session = routedSession();
+      session.updateProgress(
+        session.onSnapshot(_walkedEast(20), timestampMs: 1000),
+        previewSteps: 20,
+      );
+      expect(session.displayProgress, isNotNull);
+
+      session
+        ..setRouteSegment(route)
+        ..seedProgress(null);
+
+      expect(session.displayProgress, isNull);
+      expect(session.measuredProgress, isNull);
+    });
+
+    test('안내를 끝내면 진행률과 방향 상태를 모두 버린다', () {
+      final session = routedSession();
+      session.updateProgress(
+        session.onSnapshot(_walkedEast(20), timestampMs: 1000),
+        previewSteps: 20,
+      );
+      expect(session.displayProgress, isNotNull);
+
+      session.clearProgress();
+
+      expect(session.displayProgress, isNull);
+      expect(session.travelDirectionState, TravelDirectionState.forward);
+    });
+
+    test('에스컬레이터 위에서는 진행률을 갱신하지 않는다', () {
+      // 위치가 한 지점에 묶여 있어 그 투영은 "경로를 벗어났다"는 오판만 만들고,
+      // 곧 층이 바뀔 자리에서 재탐색을 돌린다.
+      final session = routedSession();
+      session.updateProgress(
+        session.onSnapshot(_walkedEast(5), timestampMs: 1000),
+        previewSteps: 5,
+      );
+      final frozen = session.displayProgress!.remainingM;
+
+      session.updateProgress(
+        session.onSnapshot(_walkedEast(30), timestampMs: 2000),
+        previewSteps: 30,
+        onEscalator: true,
+      );
+
+      expect(session.displayProgress!.remainingM, frozen);
+    });
+
+    test('경로 위를 정상적으로 걸으면 재탐색을 걸지 않는다', () {
+      final session = routedSession();
+
+      var asked = false;
+      for (var steps = 1; steps <= 20; steps += 1) {
+        final update = session.updateProgress(
+          session.onSnapshot(_walkedEast(steps), timestampMs: 1000 + steps * 500),
+          previewSteps: steps,
+        );
+        asked = asked || update.shouldReroute;
+      }
+
+      expect(asked, isFalse);
+    });
+  });
+
+  group('층 경계', () {
+    test('앵커가 다른 층에 있으면 보정을 돌리지 않는다', () {
+      // 다른 층 기준점으로 이 층 복도에 스냅하면 마커가 남의 층을 걸어간다.
+      final session = newSession()
+        ..attach(buildingId: 'b1')
+        ..setContext(floorId: '1F', graph: _corridorGraph)
+        ..setAnchor(_anchor(floorId: '2F'));
+
+      expect(session.onSnapshot(_walkedEast(10), timestampMs: 1000), isNull);
+      expect(session.trackingResult, isNull);
+    });
+
+    test('층이 바뀌면 보정을 버린다', () {
+      // 같은 local m 숫자가 층마다 다른 자리를 가리킨다.
+      final session = attachedSession()
+        ..onSnapshot(_walkedEast(20), timestampMs: 1000);
+      expect(session.trackingResult, isNotNull);
+
+      session.setContext(floorId: '2F', graph: _corridorGraph);
+
+      expect(session.trackingResult, isNull);
+      expect(session.position, isNull, reason: '앵커는 아직 1F에 있다');
+    });
+
+    test('같은 층을 다시 알려주는 것은 보정을 버리지 않는다', () {
+      final session = attachedSession()
+        ..onSnapshot(_walkedEast(20), timestampMs: 1000);
+      final before = session.position!.localM.eastM;
+
+      session.setContext(floorId: '1F', graph: _corridorGraph);
+
+      expect(session.position?.localM.eastM, before);
+    });
+  });
+}

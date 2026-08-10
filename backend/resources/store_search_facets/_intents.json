@@ -2,7 +2,11 @@
   "version": 1,
   "intents": {
     "신발": {
-      "rules": { "subcategory": ["슈즈"] },
+      "rules": {
+        "subcategory": [
+          "슈즈"
+        ]
+      },
       "extra_store_ids": {
         "PO-gfyEtBflu5678": "A.P.C 골프",
         "PO-APkl7L6cM9301": "PXG",
@@ -152,16 +156,32 @@
       }
     },
     "식사": {
-      "rules": { "category": ["음식점"] }
+      "rules": {
+        "category": [
+          "음식점"
+        ]
+      }
     },
     "카페": {
-      "rules": { "category": ["카페"] }
+      "rules": {
+        "category": [
+          "카페"
+        ]
+      }
     },
     "화장품": {
-      "rules": { "subcategory": ["화장품·향수"] }
+      "rules": {
+        "subcategory": [
+          "화장품·향수"
+        ]
+      }
     },
     "향수": {
-      "rules": { "subcategory": ["화장품·향수"] }
+      "rules": {
+        "subcategory": [
+          "화장품·향수"
+        ]
+      }
     },
     "의류": {
       "rules": {
@@ -176,10 +196,42 @@
       }
     },
     "출구": {
-      "rules": { "subcategory": ["교통"] },
+      "rules": {
+        "subcategory": [
+          "교통"
+        ]
+      },
       "extra_store_ids": {
         "PO-IwrFRbR4j4030": "지하철 5/9호선 여의도역",
         "PO-QH5bALbbs2639": "지하철 5/9호선 여의도역"
+      }
+    },
+    "양식": {
+      "rules": {
+        "cuisines": [
+          "양식"
+        ]
+      }
+    },
+    "한식": {
+      "rules": {
+        "cuisines": [
+          "한식"
+        ]
+      }
+    },
+    "일식": {
+      "rules": {
+        "cuisines": [
+          "일식"
+        ]
+      }
+    },
+    "중식": {
+      "rules": {
+        "cuisines": [
+          "중식"
+        ]
       }
     }
   }

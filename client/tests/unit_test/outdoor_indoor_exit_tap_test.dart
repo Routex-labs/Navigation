@@ -183,9 +183,7 @@ void main() {
     expect(find.byType(FloorSelector), findsOneWidget);
   });
 
-  testWidgets('건물 밖 탭으로 나온 뒤 건물을 다시 탭하면 실내로 돌아온다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('건물 밖 탭으로 나온 뒤 건물을 다시 탭하면 실내로 돌아온다', (WidgetTester tester) async {
     // 가장 깨지기 쉬운 지점. 진입 히스테리시스 플래그(_autoIndoorEntryArmed)는
     // 진입할 때 false가 되고 이탈 임계값 아래로 축소할 때만 다시 true가 된다.
     // 명시적 건물 탭까지 그 플래그로 막으면, 탭으로 나온 사용자는 zoom을 크게
@@ -225,9 +223,7 @@ void main() {
     expect(find.byType(FloorSelector), findsOneWidget);
   });
 
-  testWidgets('상위 화면 오버레이를 누른 탭도 야외 이탈로 해석하지 않는다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('상위 화면 오버레이를 누른 탭도 야외 이탈로 해석하지 않는다', (WidgetTester tester) async {
     // 하단 공용 바("위치 지정" 등)는 상위 MapShellScreen이 지도 위에 얹으므로
     // 야외 지도가 스스로 알 수 없다. 좌표를 넘겨받지 못하면 하단 바를 누른
     // 탭이 그대로 지도 탭이 되어 실내 오버레이가 닫힌다.
@@ -259,7 +255,9 @@ void main() {
     // 띄우는데, 하위에 Scaffold가 없으면 ScaffoldMessenger가 예외를 던져 진입
     // 코드가 그 자리에서 끊긴다(오버레이가 안 켜진 것처럼 보인다).
     await tester.pumpWidget(
-      MaterialApp(home: Scaffold(body: OutdoorMapBody(key: key))),
+      MaterialApp(
+        home: Scaffold(body: OutdoorMapBody(key: key)),
+      ),
     );
     await drain(tester);
     expect(find.byType(FloorSelector), findsNothing);

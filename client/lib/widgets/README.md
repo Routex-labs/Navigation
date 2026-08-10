@@ -10,16 +10,16 @@
 | 지도 | [`floor_plan_view.dart`](floor_plan_view.dart) | MapLibre 층 지도, 매장·POI·현재 위치·경로 표시 |
 | 지도 | [`location_marker.dart`](location_marker.dart), [`uncertainty_circle.dart`](uncertainty_circle.dart) | 현재 위치와 불확실성 표현 |
 | 지도 | [`floor_facility_style.dart`](floor_facility_style.dart), [`map_overlay_tap_guard.dart`](map_overlay_tap_guard.dart) | 수직이동 구조물·POI 아이콘/색 매핑, 오버레이 닫힘 직후 같은 포인터의 지도 오탭 차단 |
+| 지도 | [`store_label_fit.dart`](store_label_fit.dart) | 매장명 라벨 크기를 폴리곤 크기에 맞춰 계산(미터 단위 → zoom에서 px 환산), 줄바꿈 폭 추정 |
 | 지도 셸 | [`map_top_bar.dart`](map_top_bar.dart), [`map_bottom_bar.dart`](map_bottom_bar.dart), [`eta_card.dart`](eta_card.dart), [`status_badge.dart`](status_badge.dart) | 지도 화면 공통 조작·상태 |
-| 지도 셸 | [`floor_selector.dart`](floor_selector.dart) | 좌하단 세로 층 선택기(최대 5개 노출·현재 층 강조), 실내·야외 진입 오버레이 공유 |
-| 탐색 | [`search_panel.dart`](search_panel.dart), [`directions_candidate.dart`](directions_candidate.dart), [`building_switcher_sheet.dart`](building_switcher_sheet.dart) | 매장 검색(경량)·AI 검색(의미), 출발/도착 후보 모델, 건물 전환 |
-| 길찾기 | [`travel_mode_bar.dart`](travel_mode_bar.dart), [`route_plan_mode.dart`](route_plan_mode.dart), [`route_field_results.dart`](route_field_results.dart) | 상단 두 칸 아래 이동 수단 줄, 수단 열거형, 출발/도착 칸을 치는 동안 뜨는 후보 목록 |
+| 지도 셸 | [`floor_selector.dart`](floor_selector.dart) | 좌하단 세로 층 선택기(기본 접힘·펼치면 최대 5개 노출·현재 층 강조), 실내·야외 진입 오버레이 공유 |
+| 탐색 | [`search_panel.dart`](search_panel.dart), [`directions_sheet.dart`](directions_sheet.dart) | 매장 검색(경량)·AI 검색(의미), 출발/도착 검색 |
+| 지도 셸 | [`app_menu_sheet.dart`](app_menu_sheet.dart) | 상단 바 햄버거가 여는 앱 메뉴(저장한 장소·길찾기·위치 지정/보정·디버그 설정) |
 | 장소 시트 | [`category_stores_sheet.dart`](category_stores_sheet.dart), [`place_detail_sheet.dart`](place_detail_sheet.dart), [`favorites_sheet.dart`](favorites_sheet.dart) | 카테고리 매장·매장 상세·즐겨찾기 |
-| 장소 시트 | [`outdoor_poi_sheet.dart`](outdoor_poi_sheet.dart) | 건물 **밖** 장소 상세(주소·전화·거리) + 출발/도착/대중교통 |
-| 대중교통 | [`transit_routes_sheet.dart`](transit_routes_sheet.dart), [`transit_itinerary_tile.dart`](transit_itinerary_tile.dart), [`transit_summary_card.dart`](transit_summary_card.dart), [`transit_style.dart`](transit_style.dart) | 경로 후보 목록, 후보 한 줄, 안내 중 하단 요약 카드, 넷이 공유하는 색·아이콘·시간/요금 표기 |
 | 장소 상세 | [`place_detail/`](place_detail/) | 상세 시트 본문의 섹션별 렌더러(summary·hero·menu·매장정보 등) |
 | 카테고리 | [`category_icon.dart`](category_icon.dart), [`category_label_order.dart`](category_label_order.dart) | 카테고리 대분류 아이콘·색상(chip·시트·리스트 공유), label 중복 제거·가나다 정렬 |
 | 카테고리 | [`category_map_filter.dart`](category_map_filter.dart), [`category_map_icon.dart`](category_map_icon.dart) | 지도 카테고리 강조 필터, 매장명 라벨 옆 대분류 아이콘·이름 좌우 배치 규칙 |
+| 카테고리 | [`category_map_fill.dart`](category_map_fill.dart) | 강조된 매장 폴리곤을 선택한 대분류 색으로 칠하는 표현식(옅은 면 + 진한 테두리) |
 | 공통 | [`sheet_header.dart`](sheet_header.dart), [`sheet_grab_handle.dart`](sheet_grab_handle.dart) | 시트 헤더, 시트 상단 크기 조절 손잡이 |
 
 ## 검색은 한 곳, 두 단계
@@ -39,95 +39,6 @@
 - **경량이 빈손이면**: 400ms를 더 기다렸다가 의미 검색(`/query/ai`)까지 자동으로 이어
   붙인다.
 - **엔터로 확정**(`submitTick` 증가): 위 두 대기를 건너뛰고 같은 경로를 즉시 탄다.
-- **동시에, 건물 밖도 찾는다**(`outdoorSearchCenter`가 있을 때): TMAP POI 통합검색을
-  위 두 단계와 **나란히** 출발시켜 결과를 "건물 밖 주변 장소" 섹션으로 실내 결과 아래에
-  붙인다. 순서대로 하면 실내 결과가 이미 나온 화면에서 바깥 응답을 기다리느라 목록이
-  늦게 뜬다.
-
-바깥 검색이 붙으면서 화면 단계의 규칙이 하나 늘었다 — **바깥 결과가 하나라도 있으면
-어떤 단계에서도 목록을 보여준다.** 실내가 아직 돌고 있든(스피너), 빈손으로 끝났든
-("찾지 못했어요"), 실패했든(오류), 사용자가 찾던 곳이 이미 손에 있는데 그 화면들을
-띄우면 답을 쥐고도 못 보여 주는 셈이다. 실내가 아직 도는 중이라는 사실은 목록 맨 위의
-진행 줄이 대신 알린다. 기준점(`outdoorSearchCenter`)은 야외를 보고 있을 때만 내려오고,
-실내 도면을 보는 중이면 null이라 바깥 검색 자체가 돌지 않는다.
-
-### 후보를 정하는 자리는 하나다
-
-상단 검색창과 길찾기 두 칸은 **같은 함수**에서 후보를 받는다
-(`MapShellScreen._searchDirectionsCandidates`). 두 진입점이 각자 검색을 구현하면 반드시
-갈리고, 실제로 반복해서 갈렸다 — 한쪽에만 건물 밖 장소(TMAP)가 있어서 상단 검색에서는
-찾아지던 곳이 길찾기에서는 없는 곳이 됐다. 사용자에게는 "될 때도 있고 안 될 때도 있는
-검색"으로 보인다.
-
-같은 이유로 **도착 좌표 보정도 한 곳에서만 한다**(`_startRoute`). 후보를 만드는 자리마다
-보정하면 한 곳을 빠뜨리는 순간 그 진입점만 조용히 달라진다.
-
-`search_entry_points_agree_test.dart`가 이 규칙을 지킨다 — 새 출처를 한쪽에만 붙이면
-거기서 걸린다.
-
-### 바깥 결과는 올리기 전에 손본다
-
-TMAP POI를 받은 그대로 그리면 두 가지가 무너진다. 규칙은
-[`../domain/outdoor_poi_ranking.dart`](../domain/outdoor_poi_ranking.dart)가 갖고 있고,
-상단 검색과 길찾기 후보가 **같은 함수**를 부른다.
-
-- **이름이 겹치는 결과가 있으면 그것만 남긴다**(`filterByNameRelevance`). TMAP은 이름을
-  조각내 훑기 때문에 "더현대"에 "장기동이지더원아파트 전기차충전소",
-  "김포한강신도시현대썬앤빌더킹오피스텔" 같은 것이 함께 온다. 반경 제한이 없으니 이런
-  것들이 목록을 채우고 정작 "더현대 대구"는 뒤로 밀려 잘린다. 다만 **하나도 안 겹치면
-  원본을 그대로** 둔다 — "카페"·"약국"처럼 업종으로 찾는 검색은 이름에 그 글자가 없는
-  결과가 정상이라, 여기서 걸러 버리면 업종 검색이 통째로 죽는다.
-- **같은 가게면 POI 줄로 합친다**(`mergeOutdoorResults`). "스타벅스 리저브 / B2"(우리)와
-  "스타벅스 더현대서울(B2)R점"(TMAP)이 나란히 뜨고, 두 줄이 하는 일이 달랐다 — 아래쪽을
-  고르면 실내 경로가 안 나온다. 합치는 방향은 **POI 쪽**이다. 사용자가 검색해서 본 이름이
-  POI 이름이라 우리 이름으로 바꾸면 검색어와 목록이 어긋나고, 실내까지 안내하는 능력은
-  우리 데이터에만 있다. 그래서 **이름은 POI, 층·노드는 우리 것**을 실어 한 줄로 만들고
-  우리 매장 줄은 숨긴다.
-
-**우리 검색이 빈손이면 브랜드로 한 번 더 묻는다**
-([`../domain/indoor_store_lookup.dart`](../domain/indoor_store_lookup.dart)). 합치기는 우리 매장이
-목록에 있어야 성립하는데, 사용자가 "더현대 스타벅스"라고 치면 우리 DB는 그 가게를 "스타벅스
-리저브"로 갖고 있어 `no_match`가 난다. 실내 후보가 0건이면 겹침을 판정할 대상 자체가 없어
-TMAP 줄이 그대로 남고, 그 줄에는 층·노드가 없어 **실내 경로가 시작되지 않는다.** 되묻는 말은
-검색어가 아니라 **POI 이름의 첫 어절**이다 — 검색어의 첫 어절은 "더현대"(건물 이름)라 소용이 없다.
-
-**좌표로 매칭하지 않는다.** 한 건물의 열두 개 층이 같은 위경도 위에 쌓여 있고 TMAP은 층
-필드를 주지 않으므로, 좌표만으로는 어느 층 매장인지 정할 근거가 없다. 게다가 TMAP 좌표는
-매장 위치가 아니라 도로 접근점이라 "가장 가까운 매장"을 고르면 B2 스타벅스 대신 벽에 붙은
-1층 아무 매장이 잡힌다 — "안내가 안 된다"보다 "엉뚱한 매장 앞에 도착한다"가 훨씬 나쁘다.
-
-그래서 좌표는 **"이 건물 것인가"** 판정에만 쓰고(외곽선에서 40 m), 실제 매칭은 이름으로
-한다 — 브랜드(첫 어절)로 후보를 추리고, 지점명 괄호의 층 힌트("…(B2)R점")로 좁힌다.
-남은 후보가 **정확히 하나일 때만** 확정하고, 애매하면 포기해 좌표 줄로 남긴다.
-
-### 검색은 **길을 찾지 않는다**
-
-밖에서 검색해도 **건물 안 매장을 그대로 찾는다.** 밖에서 "루이비통"을 치는 사람은 그
-매장이 목적지이고, 정작 그 매장의 층과 노드는 우리가 이미 갖고 있다. 목록에는 세 종류가
-올라온다 — 건물 안 매장(층 표시), 건물 한 줄, 그리고 "건물 밖 주변 장소"(TMAP).
-
-고른 줄로 **지도를 옮기고, 보여 줄 정보가 있으면 띄운다.** 거기까지다.
-
-| 고른 줄 | 결과 |
-|---|---|
-| 건물 안 매장 | 그 층으로 갈아탄 뒤 매장을 화면에 놓고 상세 시트를 올린다 (`focusStore`) |
-| 건물 | 그 건물로 카메라를 옮기고 이름·층 수를 카드로 띄운다 |
-| 건물 밖 장소 | 그 좌표로 카메라를 옮기고 장소 시트를 올린다 |
-
-한동안 건물 줄은 누르는 즉시 입구까지 경로를 그렸다. 검색은 "저기가 어디지"를 묻는
-조작이지 "저기로 데려다 줘"가 아닌데, 위치만 확인하려던 사용자에게 안내가 시작되고
-그만두려면 안내 종료를 눌러야 했다. **길찾기는 상단 길찾기 버튼에서 시작한다** — 시트의
-"출발"·"도착"을 누르면 거기서 이어진다.
-
-TMAP POI 중에는 건물 **안** 매장이 섞여 있다(백화점 입점 브랜드 등). 그 좌표를 도보
-안내의 끝점으로 그대로 쓰면 TMAP이 가장 가까운 도로로 스냅해 실제로 들어갈 수 있는 문과
-다른 면에 내려놓으므로, 좌표가 우리 건물 안이면 문 좌표로 바꾼다
-(`OutdoorMapBodyState.entranceIfInsideBuilding`). 이름을 맞추지 않고 좌표만 보므로 실패할
-여지가 없다 — 우리가 그 매장을 안다면 사용자는 애초에 위쪽 매장 줄을 골랐을 것이다.
-
-TMAP도 같은 건물을 POI로 한 건 돌려주므로, 건물 줄과 이름이 **완전히 같은**(공백·대소문자
-무시) 바깥 결과는 목록에서 뺀다. `contains`로 넓히지 않는 이유는 "더현대서울 스타벅스"처럼
-건물 이름을 앞에 단 진짜 결과까지 사라지기 때문이다.
 
 의미 검색을 엔터에만 걸어 두지 않는 이유는 두 가지다. 한글 IME에서 첫 엔터가 조합
 확정에 쓰이면 `onSubmitted`가 오지 않아 의미 검색이 아예 시작되지 않고, 그때까지 화면에는
@@ -141,18 +52,76 @@ TMAP도 같은 건물을 POI로 한 건 돌려주므로, 건물 줄과 이름이
 이 때문에 빈손이 되더라도, 2차 의미 검색(`/query/ai`)은 층을 무시하고 건물 전체를 보므로
 (`query_search.match_ai_destination`) 그 매장을 그대로 찾아낸다 — 사용자에게는 "뜻으로
 찾았다" 배너가 붙어 나오는 차이만 있다.
-층 스코프(`currentFloorId`)를 쓰는 건 이제 `search_panel.dart` 외에 카테고리 매장
-시트가 있다. 길찾기 후보는 층으로 좁히지 않는다 — 여는 이유 자체가 대개 "지금 층에
-없는 곳으로 가려고"라서다.
+층 스코프(`currentFloorId`)를 쓰는 건 이제 `search_panel.dart` 외에도
+[`directions_sheet.dart`](directions_sheet.dart)와 카테고리 매장 시트가 있다.
 
-의미 검색을 타이핑 중이 아니라 확정 시점에만 붙이는 이유는 비용이다. 백엔드가 임베딩
-모델을 로드하면 첫 호출이 20초대까지 가므로, 글자마다 던지면 "밥"·"밥 먹"이 전부 모델을
-태운다. **이 조건을 지우면 검색이 느려지는 게 아니라 멈춘 것처럼 보인다.**
+비싼 쪽만 늦추는 이 두 단 디바운스는 지워선 안 된다. 백엔드가 임베딩 모델을 로드하면
+첫 호출이 20초대까지 가므로, 글자마다 던지면 "밥"·"밥 먹"이 전부 모델을 태운다.
+**이 조건을 지우면 검색이 느려지는 게 아니라 멈춘 것처럼 보인다.**
+
+### 길찾기 시트도 같은 두 단계다
+
+[`directions_sheet.dart`](directions_sheet.dart)의 출발/도착 검색도 같은 흐름을 쓴다.
+예전에는 이 시트만 경량 한 번으로 끝나서 "밥 먹을 곳"처럼 이름이 아닌 말은 **항상**
+"검색 결과가 없습니다"였다 — 사용자에게는 상단에서는 찾아 주는 말이 길찾기에서는 안
+되는, 자리에 따라 다른 검색이었다. 시트는 의미 검색을 직접 호출하지 않고
+`semanticSearch` 콜백으로 상위(`map_shell_screen.dart`)에 위임한다.
+
+- 콜백이 **null이면 승격하지 않는다.** 야외(건물 입구를 고르는) 모드가 그렇다 —
+  `/query/ai`는 건물 안의 매장을 찾는 계약이라, 건물을 고르는 자리에서 매장을 추천하면
+  눌러도 갈 수 없는 목록이 된다.
+- 빈 입력은 어느 단계도 태우지 않고 안내 문구를 띄운다(`_SearchPhase.idle`). 예전에는
+  이 자리에도 "검색 결과가 없습니다"가 떠서, 아무것도 치지 않았는데 못 찾았다고 말했다.
+- 경량과 마찬가지로 층은 넘기지 않는다 — 길찾기는 항상 건물 전체를 뒤진다(위 `ce6fa1f`
+  결정과 같은 이유).
+
+동작은 [`../../tests/unit_test/directions_semantic_search_test.dart`](../../tests/unit_test/directions_semantic_search_test.dart)가
+고정한다 — 승격이 빠지는 회귀와 항상 승격하는 회귀 둘 다 잡는다.
 
 예전에는 경로 안내 화면(`route_guide_screen.dart`)의 FAB가 `ai_search_sheet.dart`라는
 별도 대화형 검색 시트를 열었다. 검색 진입점을 상단 검색 하나로 일원화하기로 하면서
 그 시트와 FAB를 제거했다(W12) — 경로 안내 화면은 상단 검색 인프라(포커스 상태·지도
 잠금 배선)를 갖고 있지 않아, 그 화면에 검색을 다시 붙이는 대신 진입점 자체를 없앴다.
+
+## 햄버거는 앱 메뉴다 — 개발 도구가 들어가는 유일한 문
+
+[`app_menu_sheet.dart`](app_menu_sheet.dart)는 상단 바 왼쪽 햄버거가 여는 목록이다.
+한동안 이 버튼은 실내 모드에서만 뜨는 "건물 선택 (테스트)" 시트였다. 건물을 바꿀 일이
+없어져 그 시트는 지웠고, 자리는 화면 구석에 흩어져 있던 진입점을 모으는 데 쓴다 —
+저장한 장소·길찾기·위치 지정/보정·**디버그 설정**.
+
+디버그 설정이 여기 있는 것이 핵심이다. 예전에는 지도 왼쪽 아래에 원형 벌레 아이콘
+버튼이 떠 있었다. 일반 사용자가 볼 이유가 없는 개발 도구가 메인 지도를 차지했고,
+야외에서는 실내 진입 오버레이 상태에 따라 나타났다 사라져 "어디서 켜는지"조차 상태에
+얽혀 있었다. 메뉴 항목으로 내리면 지도에는 운영 화면만 남고, 진입 경로는 모드와
+무관하게 고정된다. 그래서 햄버거는 이제 **모드와 상관없이 항상 보인다** — 야외에서
+숨기면 야외 화면에서만 닿지 않는 항목이 생긴다.
+
+시트는 스스로 아무것도 실행하지 않고 고른 [`AppMenuAction`](app_menu_sheet.dart)만
+돌려준다. 실제 동작은 지도 상태를 쥔 `map_shell_screen.dart`가 시트가 닫힌 뒤 수행한다
+— 시트가 콜백을 직접 들고 있으면 이미 닫힌 시트의 `context`로 다음 시트를 띄우게 되고,
+그 사이 모드가 바뀌면 옛 상태에 대고 동작한다.
+
+**실패 지점.** 목록이 길어지면 기본 시트 높이 상한(화면의 9/16)에 아래쪽 항목부터
+조용히 잘린다. 스크롤 되는 줄 모르는 사용자에게는 "메뉴에 디버그 설정이 없다"가 되므로
+`isScrollControlled: true`로 띄운다. 항목 구성과 반환값은
+[`../../tests/unit_test/app_menu_sheet_test.dart`](../../tests/unit_test/app_menu_sheet_test.dart)가
+고정한다.
+
+## 카테고리는 chip 한 번이면 목록이다
+
+지도 위 대분류 chip을 누르면 강조가 걸리는 **동시에**
+[`category_stores_sheet.dart`](category_stores_sheet.dart)가 열린다. 소분류 pill도 그 시트
+안에 있고, 목록만이 아니라 지도 강조까지 함께 바꾼다(`onSubcategoryChanged`).
+
+- **지도 위에는 대분류 줄만 둔다.** 시트가 곧바로 뜨는데 같은 pill 줄을 지도에도 그리면
+  화면에 같은 조작이 두 벌 남는다. 예전의 「목록」 버튼과 "1F에는 없습니다 · 다른 층 28곳"
+  안내도 같은 이유로 없앴다 — 층·개수는 시트의 묶음 머리글이 답한다.
+- **목록은 현재 층 묶음이 먼저**, 굵은 구분선 뒤에 다른 층이 온다. 현재 층에 없으면 그
+  사실을 적고 넘어간다(강조 방식이라 "이 층에 없음"과 "필터 고장"이 지도에서 똑같이 보인다).
+- **첫 매장은 지도에서 보여준다.** 시트가 맨 위 매장을 상위로 올리면
+  (`onFirstStoreChanged`) 지도가 카테고리 줄과 시트 사이에 남는 띠 한가운데로 카메라를
+  옮긴다. 층은 옮기지 않으므로 현재 층 매장만 올라온다.
 
 ## `FloorPlanView` 경계
 
@@ -200,7 +169,7 @@ flowchart LR
 |---|---|
 | 지도 레이어·마커 변경 | `floor_plan_view.dart` |
 | 경로 모양 변경 | `domain/route_guidance.dart`(`RoutePolylineSplit`)와 `models/indoor_route.dart` |
-| 길찾기 출발/도착 검색 입력 변경 | `map_top_bar.dart`(두 칸)와 `route_field_results.dart`(후보 목록), 상태는 `../screens/map_shell/map_shell_screen.dart` |
+| 길찾기 출발/도착 검색 입력 변경 | `directions_sheet.dart` |
 | 공통 색·간격 변경 | [`../theme/README.md`](../theme/README.md) |
 
 ---

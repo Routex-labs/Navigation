@@ -48,6 +48,8 @@ flowchart LR
 - 에스컬레이터 층 이동이 확인되면 `applyVerticalTransfer`가 걸음 세션을 새로 열고 도착
   노드를 새 anchor로 놓는다(회전값은 물려받으므로 방향 재보정 없음).
 - 앱 background에서는 pause하고 센서를 멈추며, foreground 복귀 시 resume한다.
+- 에스컬레이터 탑승 중에는 센서를 그대로 둔 채 걸음 누적만 멈춘다
+  (`pauseStepTracking`/`resumeStepTracking`).
 - 층 변경은 pedometer와 보정 anchor를 새 층 기준으로 초기화한다.
 - 안내 종료에서 마지막 pedometer 값을 확정한 뒤 센서를 멈춘다.
 
@@ -71,8 +73,9 @@ flowchart LR
 
 제품 위치는 자유 XY 적분값을 조금씩 당기는 방식이 아니라 현재 edge의 누적 진행거리로
 계산한다. 따라서 보라색 경로는 항상 그래프 간선 위에 있다. 초록 배치가 늦는 동안에는
-주황 tail을 연결 가능한 간선열에 임시 적분해 보라 점선과 현재 마커를 먼저 움직이되,
-길안내 기준 위치와 보라 실선은 초록 거리로 후보가 검증될 때까지 바꾸지 않는다.
+주황 tail을 연결 가능한 간선열에 optimistic 적분해 보라 점선과 현재 마커를 즉시 움직인다.
+길안내의 measured 진행률은 이 실제 위치를 파란 경로에 투영해 만들고, display 진행률의
+점프·후퇴 보류는 파란선·ETA에만 적용한다. 경로 투영점이 마커 위치를 덮어쓰지 않는다.
 
 초록 배치가 간선 끝을 통과하면 해당 배치의 남은 걸음을 버리지 않고 `uncertain` 복구
 증거로 이어서 사용한다. 복구 시에는 최근 걸음의 평균 heading 하나가 아니라 직진·회전
@@ -85,7 +88,9 @@ flowchart LR
 ## 층 따라가기 (에스컬레이터)
 
 기압계로 층 이동을 감지해 도면·경로를 자동으로 바꾸고, 새 층의 에스컬레이터 **도착
-노드**로 위치를 옮긴다. 판정은 `application/escalator_transition_detector.dart`가 하고,
+노드**로 위치를 옮긴다. 탑승 중에는 상승·하강 배너를 띄우고 걸음 누적을 멈추며, 도면
+전환은 직전 카메라를 물려받아 페이드로 이어 붙인다. 판정은
+`application/escalator_transition_detector.dart`가 하고,
 근거 분담은 "노드 근접 = 허가, 기압 = 판정, 노드 이름 = 도착 층·지점"이다. 자세한 조건과
 범위 한계(±1층 에스컬레이터만, 엘리베이터·계단 제외)는
 [`application/README.md`](application/README.md)에 있다.

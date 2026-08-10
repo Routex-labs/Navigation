@@ -1,17 +1,23 @@
 # `lib/state` — 지속되는 사용자 상태
 
 화면 하나보다 오래 유지되고 앱 재실행 뒤에도 복원해야 하는 사용자 상태를 둔다.
-현재는 즐겨찾기만 관리한다.
+현재는 즐겨찾기와 최근 검색어를 관리한다.
 
 ## 구성 파일
 
 | 파일 | 역할 |
 |---|---|
 | [`favorites_controller.dart`](favorites_controller.dart) | 즐겨찾기 로드·추가·삭제·토글·순서 변경과 저장 |
+| [`recent_searches_controller.dart`](recent_searches_controller.dart) | 최근 검색어 로드·추가(최신순)·개별/전체 삭제와 저장 |
 
-`FavoritesController`는 `ChangeNotifier`이며 `SharedPreferences`의 JSON 문자열에
-`FavoritePlace` 목록을 저장한다. 앱 전역 인스턴스는
-[`../core/service_locator.dart`](../core/service_locator.dart)에 있다.
+둘 다 `ChangeNotifier`이며 `SharedPreferences`의 JSON 문자열에 목록을 저장한다
+(즐겨찾기는 `FavoritePlace` 배열, 최근 검색어는 문자열 배열). 즐겨찾기의 앱 전역
+인스턴스는 [`../core/service_locator.dart`](../core/service_locator.dart)에 있다.
+
+`RecentSearchesController`가 채우는 화면과 그 근거는
+[`docs/client/naver-map-ui-ux-analysis.md`](../../../docs/client/naver-map-ui-ux-analysis.md)의
+「J. 검색 빈 상태(idle) 채우기」가 단일 출처다. 검색어는 **기기에만 저장하고 서버로
+보내지 않는다.**
 
 ## 상태 흐름
 
@@ -29,12 +35,18 @@ flowchart LR
     CONTROLLER -->|"persist"| STORAGE
 ```
 
+최근 검색어도 같은 모양이다 — 저장소에서 문자열 목록을 읽고, 검색 실행 시 `add`,
+목록에서 `remove`·`clear`, 변경 후 `notifyListeners`와 `persist`. 차이는 (1) 모델
+없이 문자열만 다루고, (2) 상한(`maxEntries`)을 넘으면 오래된 것부터 버린다는 점이다.
+
 ## 실패 지점
 
 - 초기 비동기 load가 끝나기 전에 빈 목록을 최종 상태로 오해하지 않도록 `isLoaded`를 확인한다.
 - `FavoritePlace` JSON 형식을 바꾸면 기존 사용자의 저장값과 호환되는지 확인한다.
 - 같은 장소를 판별하는 `key` 규칙을 바꾸면 중복 또는 삭제 실패가 생긴다.
 - 테스트에서는 실제 기기 저장소 대신 컨트롤러를 교체하거나 mock preferences를 사용한다.
+- 최근 검색어는 부가 기능이라 저장소 읽기·쓰기 실패를 예외로 올리지 않고 빈 목록으로
+  degrade한다. 첫 실행의 빈 목록은 오류가 아니라 정상 상태이므로 화면도 그렇게 다룬다.
 
 ## 새 전역 상태를 추가할 때
 

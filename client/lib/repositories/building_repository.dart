@@ -2,6 +2,7 @@ import '../models/building.dart';
 import '../models/building_graph.dart';
 import '../models/category_count.dart';
 import '../models/indoor_route.dart';
+import '../models/store_index_entry.dart';
 
 abstract class BuildingRepository {
   Future<List<Building>> getAllBuildings();
@@ -18,6 +19,12 @@ abstract class BuildingRepository {
   /// 층 지도를 층마다 받아 세지 않기 위한 전용 조회다 — 근거는
   /// [CategoryCount] 주석.
   Future<List<CategoryCount>?> getCategoryCounts(String buildingId);
+
+  /// 자동완성이 쓰는 경량 매장 목록. 건물이 없으면 null.
+  ///
+  /// 앱에서 건물당 1회만 받아 온디바이스 후보 산출의 원본으로 쓴다. 좌표가
+  /// 빠져 있는 이유는 [StoreIndexEntry] 주석에 있다.
+  Future<List<StoreIndexEntry>?> getStoreIndex(String buildingId);
 
   /// 두 노드 사이 최단 경로. 경로가 없거나 층/노드를 찾을 수 없으면 null.
   Future<IndoorRoute?> getShortestRoute(

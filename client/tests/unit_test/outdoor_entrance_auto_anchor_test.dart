@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/models/category_count.dart';
+import 'package:navigation_client/models/store_index_entry.dart';
 import 'package:navigation_client/core/service_locator.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/indoor_navigation_contract.dart';
 import 'package:navigation_client/models/building.dart';
@@ -278,6 +279,12 @@ class _GraphBuildingRepository implements BuildingRepository {
   // 뜨지 않아 검증 대상 화면이 그대로 유지된다.
   @override
   Future<List<CategoryCount>?> getCategoryCounts(String buildingId) async =>
+      const [];
+
+  // 자동완성 원본. 이 테스트들은 후보를 보지 않으므로 빈 목록으로 둔다 —
+  // 패널은 목록이 비면 후보를 그리지 않고 서버 검색만 돈다.
+  @override
+  Future<List<StoreIndexEntry>?> getStoreIndex(String buildingId) async =>
       const [];
   _GraphBuildingRepository(this.graphJson);
 

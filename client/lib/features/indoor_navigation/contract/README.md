@@ -14,6 +14,8 @@ UI가 호출할 명령, UI가 구독할 상태, PDR 좌표를 층 좌표에 고�
 | [`pdr_anchor.dart`](pdr_anchor.dart) | PDR east/north → 층 `local_m` 변환 | `PdrAnchor`, `PdrToFloorAxes`, `FloorCoordinateTransform` |
 | [`pdr_runtime_status.dart`](pdr_runtime_status.dart) | 센서 파이프라인 실행 상태 | `PdrRuntimeState`, `PdrRuntimeStatus` |
 | [`altitude_sample.dart`](altitude_sample.dart) | 기압 샘플과 기압계 가용 상태 | `AltitudeSample`, `AltimeterStatus`, `pressureAltitudeM` |
+| [`raw_motion_activity.dart`](raw_motion_activity.dart) | 걸음 pause와 무관하게 흐르는 원시 움직임 | `RawMotionActivity` |
+| [`floor_transition_ui_state.dart`](floor_transition_ui_state.dart) | 층 전환 배너·스크림이 그릴 상태 | `FloorTransitionUiState`, `FloorTransitionStage` |
 
 ## 계약 관계
 
@@ -76,6 +78,16 @@ floor = anchorLocalM + PdrToFloorAxes × Rotation(rotationDeg) × pdr
 - 기압을 위치 추정에 섞으면 HVAC 교란이 걸음 배치까지 흔든다. 층 전이 판정만 이 값을 본다.
 
 ## 수직 이동
+
+`rawMotion`은 `pauseStepTracking`으로 걸음 적용을 멈춘 동안에도 흐른다. 판정기가 보던
+`steps`는 **위치에 반영된** 걸음 수라 탑승 중 증가하지 않아, 하차 첫 걸음이라는 가장 빠른
+근거를 볼 수 없었다. 이 스트림은 위치·경로에 반영되지 않으며 판정기는 수직 속도가 충분히
+낮을 때만 하차 보조 근거로 쓴다.
+
+`FloorTransitionUiState`는 판정 단계를 UI 개념으로 한 번만 옮긴다. 화면은 문구와 애니메이션
+으로만 바꾸고 고도 임계값이나 노드 근접을 다시 계산하지 않는다. 이 상태를 그리는 주체는
+지도 본문이 아니라 앱 셸의 최상위 Stack이다 — 검색창·카테고리 줄이 셸의 형제라, 지도 안에서
+그린 배너는 어떤 offset을 줘도 그 뒤에 깔린다.
 
 `applyVerticalTransfer`는 `changeFloor`와 다르다. 층만 바꾸고 사용자 pin을 다시 받는 게 아니라,
 확인된 도착 지점을 새 anchor로 놓고 **회전값을 직전 anchor에서 물려받는다**(같은 센서 세션이라

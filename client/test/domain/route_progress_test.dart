@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/domain/route_progress.dart';
+import 'package:navigation_client/domain/route_movement.dart';
 import 'package:navigation_client/models/floor_graph.dart';
 
 /// (0,0) → (20,0) 직선 복도.
@@ -87,6 +88,114 @@ void main() {
         isFalse,
       );
     });
+
+    test('앞을 보고 있는데 뒤로 밀린 진행점은 보류한다', () {
+      // 빔 1등 재배치나 보폭 차이로 생기는 후퇴다. 사용자에게는 마커가 뒤로
+      // 튄 것으로 보인다.
+      const pushedBack = RouteProgress(
+        traveledM: 6,
+        remainingM: 34,
+        offsetM: 0.4,
+        onRouteEdge: true,
+        reacquired: false,
+        segmentIndex: 0,
+        headingErrorDeg: 12,
+      );
+
+      expect(
+        shouldHoldDisplayRouteRegression(
+          previous: previous,
+          candidate: pushedBack,
+          travelDirectionState: TravelDirectionState.forward,
+        ),
+        isTrue,
+      );
+    });
+
+    test('앞으로 걸은 걸음이 뒤로 갈 여유를 만들지 않는다', () {
+      // pedometer는 방향을 모른다. 걸음 수를 근거로 쓰면 앞으로 걸을수록
+      // 뒤로 튀는 것이 더 허용된다 — 실제로 그렇게 동작했다.
+      const pushedBack = RouteProgress(
+        traveledM: 4,
+        remainingM: 36,
+        offsetM: 0.4,
+        onRouteEdge: true,
+        reacquired: false,
+        segmentIndex: 0,
+        headingErrorDeg: 5,
+      );
+
+      expect(
+        shouldHoldDisplayRouteRegression(
+          previous: previous,
+          candidate: pushedBack,
+          travelDirectionState: TravelDirectionState.forward,
+        ),
+        isTrue,
+      );
+    });
+
+    test('작은 후퇴는 그대로 통과시킨다', () {
+      // 투영 오차 수준의 흔들림까지 막으면 마커가 계단식으로 움직인다.
+      const jitter = RouteProgress(
+        traveledM: 8.5,
+        remainingM: 31.5,
+        offsetM: 0.4,
+        onRouteEdge: true,
+        reacquired: false,
+        segmentIndex: 0,
+      );
+
+      expect(
+        shouldHoldDisplayRouteRegression(
+          previous: previous,
+          candidate: jitter,
+          travelDirectionState: TravelDirectionState.forward,
+        ),
+        isFalse,
+      );
+    });
+
+    test('실제 역방향 걸음이 확정된 후퇴는 그대로 받아들인다', () {
+      const walkedBack = RouteProgress(
+        traveledM: 3,
+        remainingM: 37,
+        offsetM: 0.4,
+        onRouteEdge: true,
+        reacquired: false,
+        segmentIndex: 0,
+        headingErrorDeg: 168,
+      );
+
+      expect(
+        shouldHoldDisplayRouteRegression(
+          previous: previous,
+          candidate: walkedBack,
+          travelDirectionState: TravelDirectionState.reverseConfirmed,
+        ),
+        isFalse,
+      );
+    });
+
+    test('heading이 없어도 실제 방향 상태가 forward면 후퇴를 보류한다', () {
+      const pushedBack = RouteProgress(
+        traveledM: 3,
+        remainingM: 37,
+        offsetM: 0.4,
+        onRouteEdge: true,
+        reacquired: false,
+        segmentIndex: 0,
+      );
+
+      expect(
+        shouldHoldDisplayRouteRegression(
+          previous: previous,
+          candidate: pushedBack,
+          travelDirectionState: TravelDirectionState.forward,
+        ),
+        isTrue,
+      );
+    });
   });
 
   group('직선 경로 진행', () {
@@ -118,7 +227,7 @@ void main() {
       expect(remaining, orderedEquals(<double>[20, 16, 12, 8, 4, 0]));
     });
 
-    test('경로와 같은 간선에서 120도 이상 반대로 향하면 역주행이다', () {
+    test('120도 이상 heading 차이는 진단값일 뿐 제품 역주행을 만들지 않는다', () {
       final progress = computeRouteProgress(
         routePointsLocalM: _straightRoute,
         routeEdgeIds: const {'ab'},
@@ -129,10 +238,10 @@ void main() {
       )!;
 
       expect(progress.headingErrorDeg, closeTo(180, 1e-9));
-      expect(progress.wrongWay, isTrue);
+      expect(progress.routeHeadingDeg, closeTo(90, 1e-9));
     });
 
-    test('코너 수준의 heading 차이와 경로 밖 간선은 역주행으로 단정하지 않는다', () {
+    test('코너와 경로 밖에서도 heading 오차는 진단값으로만 남는다', () {
       final corner = computeRouteProgress(
         routePointsLocalM: _straightRoute,
         routeEdgeIds: const {'ab'},
@@ -149,8 +258,8 @@ void main() {
       )!;
 
       expect(corner.headingErrorDeg, closeTo(100, 1e-9));
-      expect(corner.wrongWay, isFalse);
-      expect(offRoute.wrongWay, isFalse);
+      expect(offRoute.headingErrorDeg, closeTo(180, 1e-9));
+      expect(offRoute.onRouteEdge, isFalse);
     });
 
     test('경로 시작 이전·끝 이후로 나가도 진행거리가 경로 범위를 벗어나지 않는다', () {

@@ -99,11 +99,7 @@ void main() {
         _edge('e4', 'c', 'd', 8, cost: 12),
       ];
 
-      final reach = reachableFrom(
-        nodes: nodes,
-        edges: edges,
-        startNodeId: 'a',
-      );
+      final reach = reachableFrom(nodes: nodes, edges: edges, startNodeId: 'a');
       final path = findShortestPath(
         nodes: nodes,
         edges: edges,

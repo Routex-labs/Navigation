@@ -9,6 +9,7 @@ import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/repositories/mock_building_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
+import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
 import 'package:navigation_client/widgets/floor_selector.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -40,49 +41,49 @@ void main() {
   // 멀쩡했을 때 입구 앞에 있었다"는 근거를 요구하므로, 저하 표본만 흘리면 판정이
   // 서지 않는다. 이 표본이 그 근거다.
   Position approachingEntrance() => Position(
-        latitude: 37.5665,
-        longitude: 126.9779,
-        timestamp: DateTime(2024, 1, 1),
-        accuracy: 10,
-        altitude: 0,
-        altitudeAccuracy: 0,
-        heading: 0,
-        headingAccuracy: 0,
-        speed: 0,
-        speedAccuracy: 0,
-      );
+    latitude: 37.5665,
+    longitude: 126.9779,
+    timestamp: DateTime(2024, 1, 1),
+    accuracy: 10,
+    altitude: 0,
+    altitudeAccuracy: 0,
+    heading: 0,
+    headingAccuracy: 0,
+    speed: 0,
+    speedAccuracy: 0,
+  );
 
   // 같은 자리에서 신호가 무너진 상태. 위 접근 표본과 짝을 이뤄 자동 실내 진입
   // 조건(창 안에 입구 20m 이내의 신뢰 좌표 + 지금 accuracy 30m 초과)을 만족한다.
   // accuracy 60m는 '약함' 임계값(30m)도 넘으므로, 이 위치에서도 배지가 안 뜬다면
   // 그건 GPS 표시를 실제로 껐다는 뜻이다.
   Position atEntrance() => Position(
-        latitude: 37.5665,
-        longitude: 126.9779,
-        timestamp: DateTime(2024, 1, 1),
-        accuracy: 60,
-        altitude: 0,
-        altitudeAccuracy: 0,
-        heading: 0,
-        headingAccuracy: 0,
-        speed: 0,
-        speedAccuracy: 0,
-      );
+    latitude: 37.5665,
+    longitude: 126.9779,
+    timestamp: DateTime(2024, 1, 1),
+    accuracy: 60,
+    altitude: 0,
+    altitudeAccuracy: 0,
+    heading: 0,
+    headingAccuracy: 0,
+    speed: 0,
+    speedAccuracy: 0,
+  );
 
   // 입구에서 약 185m 떨어진 좌표 + 약한 신호. 자동 진입 반경 밖이라 야외
   // 상태를 유지하면서 'GPS 신호 약함' 배지만 띄운다.
   Position farAway() => Position(
-        latitude: 37.5665,
-        longitude: 126.9800,
-        timestamp: DateTime(2024, 1, 1),
-        accuracy: 40,
-        altitude: 0,
-        altitudeAccuracy: 0,
-        heading: 0,
-        headingAccuracy: 0,
-        speed: 0,
-        speedAccuracy: 0,
-      );
+    latitude: 37.5665,
+    longitude: 126.9800,
+    timestamp: DateTime(2024, 1, 1),
+    accuracy: 40,
+    altitude: 0,
+    altitudeAccuracy: 0,
+    heading: 0,
+    headingAccuracy: 0,
+    speed: 0,
+    speedAccuracy: 0,
+  );
 
   // 실내 진입 오버레이는 건물 로드(asset)와 여러 비동기 sync를 거쳐 뜬다.
   // pumpAndSettle은 지도 오버레이의 반복 애니메이션·타이머 때문에 정착하지
@@ -165,26 +166,27 @@ void main() {
     expect(find.text('GPS 신호 약함'), findsNothing);
   });
 
-  testWidgets('실내 탭으로 전환하면 뒤에 남은 야외 지도도 GPS를 구독하지 않는다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('실내 오버레이가 켜지면 GPS 구독을 끊는다', (WidgetTester tester) async {
     var cancelled = false;
     final positions = StreamController<Position>(
       onCancel: () => cancelled = true,
     );
     watchPosition = () => positions.stream;
 
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    final mapKey = GlobalKey<OutdoorMapBodyState>();
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: OutdoorMapBody(key: mapKey))),
+    );
     // 위치를 흘리기 전에 건물(입구 좌표) 로드가 끝날 때까지 프레임을 진행한다.
-    // 자동 실내 진입 판정은 입구 좌표가 있어야 성립하므로, 이걸 기다리지 않으면
-    // asset 로드 속도에 따라 진입이 됐다 안 됐다 하는 플래키 테스트가 된다.
     await drain(tester);
     positions.add(farAway());
     await tester.pump(const Duration(milliseconds: 50));
     expect(cancelled, isFalse);
 
-    // 하단 세그먼트로 실내 탭 전환. IndexedStack이라 야외 화면은 트리에 남는다.
-    await tester.tap(find.text('실내'));
+    // 실내로 들어가면 위치의 주인은 PDR이다. GPS를 계속 물고 있으면 배터리를
+    // 쓰면서 실내에서 쓰지도 않는 값을 받는다.
+    // ignore: invalid_use_of_visible_for_testing_member
+    mapKey.currentState!.enterIndoorForTest();
     await tester.pump();
 
     expect(cancelled, isTrue);

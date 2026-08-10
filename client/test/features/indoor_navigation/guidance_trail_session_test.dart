@@ -26,7 +26,13 @@ CorridorTrackingResult _result({
   rawConfirmedPosition: corrected,
   rawPreviewPosition: preview.isEmpty ? corrected : preview.last,
   confirmedDisplacementM: 0,
-  confirmedConsumedPreviewM: 0,
+  optimisticLeadM: 0,
+  optimisticEdgeId: 'edge',
+  optimisticEdgeProgressM: 0,
+  previewPeakIdsSynthetic: false,
+  junctionNodeId: null,
+  junctionDistanceM: double.infinity,
+  junctionCandidateEdgeIds: const [],
   leaderRelocated: false,
 );
 

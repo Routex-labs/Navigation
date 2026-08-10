@@ -4,6 +4,7 @@ import '../core/service_locator.dart';
 import '../models/floor_plan.dart';
 import '../models/poi_search_result.dart';
 import '../theme/app_theme.dart';
+import 'filter_pill.dart';
 import 'category_icon.dart';
 import 'category_taxonomy.dart';
 import 'sheet_grab_handle.dart';
@@ -15,6 +16,11 @@ import 'map_overlay_guard.dart';
 /// 매장을 층별로 훑어볼 수 있는 목록 시트. 사용자가 항목을 탭하면 그 매장의
 /// [PoiSearchResult]로 pop해서 호출자가 다시 매장 정보 시트를 띄우게 한다.
 ///
+/// 목록은 **현재 층 묶음이 먼저**, 굵은 구분선 뒤에 다른 층 묶음이 온다.
+/// 예전에는 "현재 층만 보기" 토글로 층을 걸렀는데, 켜면 다른 층이 통째로
+/// 사라지고 끄면 현재 층이 목록 한가운데 파묻혀 어느 쪽이든 한 번에 답을
+/// 못 줬다. 나눠서 둘 다 보여주면 토글을 만질 일이 없다.
+///
 /// 건물 전체 층을 순회하며 stores를 모아야 해서 첫 로드는 층 수만큼의 API
 /// 호출이 필요하다 — HttpBuildingRepository가 이 응답을 이미 캐시하므로
 /// 같은 건물 안에서는 두 번째부터 즉시 뜬다.
@@ -25,19 +31,36 @@ class CategoryStoresSheet extends StatefulWidget {
     required this.category,
     required this.onCloseAll,
     this.currentFloor,
+    this.subcategory,
+    this.onSubcategoryChanged,
+    this.onFirstStoreChanged,
   });
 
   final String buildingId;
   final String category;
 
-  /// 실내 모드에서 지도가 지금 보여주고 있는 층 라벨. 시트 상단의
-  /// "현재 층만 보기" 토글에 노출된다. null(야외 모드 등)이면 토글 자체를
-  /// 숨기고 전 층 목록만 보여준다.
+  /// 실내 모드에서 지도가 지금 보여주고 있는 층 라벨. 목록을 "현재 층 → 다른
+  /// 층" 두 묶음으로 나누는 기준이다. null(야외 모드 등)이면 층 개념이 없으므로
+  /// 나누지 않고 전 층 목록을 한 줄기로 보여준다.
   final String? currentFloor;
 
   /// X 버튼이 눌리면 호출. 부모(MapShellScreen)가 chain-close 플래그를 세팅해
   /// 위쪽 시트들(예: 매장 정보 시트, 저장한 장소)이 다시 열리지 않게 한다.
   final VoidCallback onCloseAll;
+
+  /// 시트를 열 때 이미 걸려 있던 소분류. 지도 강조와 시트 pill이 같은 값을
+  /// 가리켜야 해서 상위가 소유하고 여기로 내려 준다.
+  final String? subcategory;
+
+  /// 시트 안 소분류 pill을 눌렀을 때. 이 pill은 목록만 좁히는 게 아니라 **지도
+  /// 강조도 함께** 바꾼다 — 예전에 지도 위에 있던 pill 줄이 하던 일 그대로다.
+  /// 상위가 받아 [CategorySelection]을 갱신하지 않으면 목록과 지도가 어긋난다.
+  final ValueChanged<String?>? onSubcategoryChanged;
+
+  /// 지금 목록 맨 위에 있는(=현재 층의 첫) 매장. 상위가 지도 카메라를 그리로
+  /// 옮긴다. 층을 옮기게 하지 않으려고 **현재 층 매장만** 올린다 — 현재 층에
+  /// 하나도 없으면 null이고, 그때 카메라는 그대로 둔다.
+  final ValueChanged<PoiSearchResult?>? onFirstStoreChanged;
 
   static Future<PoiSearchResult?> show(
     BuildContext context, {
@@ -45,6 +68,9 @@ class CategoryStoresSheet extends StatefulWidget {
     required String category,
     required VoidCallback onCloseAll,
     String? currentFloor,
+    String? subcategory,
+    ValueChanged<String?>? onSubcategoryChanged,
+    ValueChanged<PoiSearchResult?>? onFirstStoreChanged,
   }) {
     return showModalBottomSheet<PoiSearchResult>(
       context: context,
@@ -64,6 +90,9 @@ class CategoryStoresSheet extends StatefulWidget {
           category: category,
           onCloseAll: onCloseAll,
           currentFloor: currentFloor,
+          subcategory: subcategory,
+          onSubcategoryChanged: onSubcategoryChanged,
+          onFirstStoreChanged: onFirstStoreChanged,
         ),
       ),
     );
@@ -73,11 +102,19 @@ class CategoryStoresSheet extends StatefulWidget {
   State<CategoryStoresSheet> createState() => _CategoryStoresSheetState();
 }
 
+/// 시트가 열릴 때 화면 아래를 덮는 비율. 지도 카메라가 "시트 위에 남는 띠"의
+/// 한가운데를 잡을 때 이 값을 그대로 쓴다 — 근거는 `place_detail_sheet.dart`의
+/// `kPlaceDetailSheetInitialSize` 주석과 같다.
+const double kCategoryStoresSheetInitialSize = 0.55;
+
 class _CategoryStoresSheetState extends State<CategoryStoresSheet> {
   late final Future<List<_CategoryStoreEntry>> _entriesFuture = _load();
-  late final TextEditingController _searchController = TextEditingController();
-  String _searchQuery = '';
-  bool _showCurrentFloorOnly = false;
+  late String? _subcategory = widget.subcategory;
+
+  /// 마지막으로 상위에 알린 첫 매장의 id. 같은 매장을 반복해서 올리면 소분류를
+  /// 만질 때마다 카메라가 제자리에서 다시 움직인다.
+  String? _notifiedFirstStoreId;
+  bool _firstStoreNotified = false;
 
   /// back/X/항목 선택처럼 명시적 조작으로 pop될 때 true. PopScope가 pop을
   /// 받았을 때 이 값이 false면 barrier·drag-down으로 dismiss된 것으로 보고
@@ -85,24 +122,38 @@ class _CategoryStoresSheetState extends State<CategoryStoresSheet> {
   bool _intentionalPop = false;
   void _markIntentional() => _intentionalPop = true;
 
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
+  List<_CategoryStoreEntry> _applyFilters(List<_CategoryStoreEntry> all) {
+    final subcategory = _subcategory;
+    if (subcategory == null) return all;
+    return all
+        .where((entry) => entry.store.subcategory == subcategory)
+        .toList();
   }
 
-  List<_CategoryStoreEntry> _applyFilters(List<_CategoryStoreEntry> all) {
-    final query = _searchQuery.trim().toLowerCase();
+  /// 목록 맨 위 매장을 상위에 알린다.
+  ///
+  /// build 중에 콜백을 부르면 상위가 그 자리에서 setState를 돌게 되므로 프레임
+  /// 뒤로 미룬다. 층이 다른 매장은 올리지 않는다 — 카메라를 옮기려면 지도가
+  /// 층을 갈아타야 하는데, 그러면 시트 머리글("현재 층 · 1F")이 가리키는 층과
+  /// 지도가 보여주는 층이 어긋난다.
+  void _notifyFirstStore(List<_CategoryStoreEntry> entries) {
+    final callback = widget.onFirstStoreChanged;
+    if (callback == null) return;
     final current = widget.currentFloor;
-    return all.where((entry) {
-      if (_showCurrentFloorOnly && current != null && entry.floor != current) {
-        return false;
+    _CategoryStoreEntry? first;
+    for (final entry in entries) {
+      if (current == null || entry.floor == current) {
+        first = entry;
+        break;
       }
-      if (query.isNotEmpty && !entry.store.name.toLowerCase().contains(query)) {
-        return false;
-      }
-      return true;
-    }).toList();
+    }
+    if (_firstStoreNotified && _notifiedFirstStoreId == first?.store.id) return;
+    _firstStoreNotified = true;
+    _notifiedFirstStoreId = first?.store.id;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      callback(first?.toPoiSearchResult());
+    });
   }
 
   Future<List<_CategoryStoreEntry>> _load() async {
@@ -160,62 +211,67 @@ class _CategoryStoresSheetState extends State<CategoryStoresSheet> {
         if (didPop && !_intentionalPop) widget.onCloseAll();
       },
       child: GestureDetector(
-      onTap: () => Navigator.of(context).maybePop(),
-      behavior: HitTestBehavior.opaque,
-      child: DraggableScrollableSheet(
-        initialChildSize: 0.55,
-        minChildSize: 0.35,
-        maxChildSize: 0.9,
-        expand: false,
-        builder: (context, scrollController) {
-          return GestureDetector(
-            onTap: () {},
-            behavior: HitTestBehavior.opaque,
-            child: Material(
-              color: Colors.white,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: FutureBuilder<List<_CategoryStoreEntry>>(
-                future: _entriesFuture,
-                builder: (context, snapshot) {
-                  return CustomScrollView(
-                    controller: scrollController,
-                    slivers: [
-                      const SliverToBoxAdapter(child: SheetGrabHandle()),
-                      SliverToBoxAdapter(
-                        child: SheetHeader(
-                          title: widget.category,
-                          leading: Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: categoryColorFor(widget.category)
-                                  .withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(9),
+        onTap: () => Navigator.of(context).maybePop(),
+        behavior: HitTestBehavior.opaque,
+        child: DraggableScrollableSheet(
+          initialChildSize: kCategoryStoresSheetInitialSize,
+          minChildSize: 0.35,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (context, scrollController) {
+            return GestureDetector(
+              onTap: () {},
+              behavior: HitTestBehavior.opaque,
+              child: Material(
+                color: Colors.white,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: FutureBuilder<List<_CategoryStoreEntry>>(
+                  future: _entriesFuture,
+                  builder: (context, snapshot) {
+                    return CustomScrollView(
+                      controller: scrollController,
+                      slivers: [
+                        const SliverToBoxAdapter(child: SheetGrabHandle()),
+                        SliverToBoxAdapter(
+                          child: SheetHeader(
+                            title: widget.category,
+                            leading: Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: categoryColorFor(
+                                  widget.category,
+                                ).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(9),
+                              ),
+                              alignment: Alignment.center,
+                              child: Icon(
+                                categoryIconFor(widget.category),
+                                size: 16,
+                                color: categoryColorFor(widget.category),
+                              ),
                             ),
-                            alignment: Alignment.center,
-                            child: Icon(
-                              categoryIconFor(widget.category),
-                              size: 16,
-                              color: categoryColorFor(widget.category),
-                            ),
+                            onCloseAll: widget.onCloseAll,
+                            onIntentionalPop: _markIntentional,
                           ),
-                          onCloseAll: widget.onCloseAll,
-                          onIntentionalPop: _markIntentional,
                         ),
-                      ),
-                      SliverToBoxAdapter(child: _buildFilterBar()),
-                      ..._buildBody(snapshot),
-                    ],
-                  );
-                },
+                        SliverToBoxAdapter(
+                          child: _buildFilterBar(
+                            snapshot.data ?? const <_CategoryStoreEntry>[],
+                          ),
+                        ),
+                        ..._buildBody(snapshot),
+                      ],
+                    );
+                  },
+                ),
               ),
-            ),
-          );
-        },
-      ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -244,6 +300,7 @@ class _CategoryStoresSheetState extends State<CategoryStoresSheet> {
     }
     final all = snapshot.data ?? const <_CategoryStoreEntry>[];
     if (all.isEmpty) {
+      _notifyFirstStore(const []);
       return const [
         SliverToBoxAdapter(
           child: Padding(
@@ -254,6 +311,7 @@ class _CategoryStoresSheetState extends State<CategoryStoresSheet> {
       ];
     }
     final entries = _applyFilters(all);
+    _notifyFirstStore(entries);
     if (entries.isEmpty) {
       return const [
         SliverToBoxAdapter(
@@ -264,10 +322,56 @@ class _CategoryStoresSheetState extends State<CategoryStoresSheet> {
         ),
       ];
     }
+
+    final current = widget.currentFloor;
+    // 층 개념이 없거나(야외) 결과가 한 층에만 몰려 있으면 나눌 것이 없다.
+    // 묶음이 하나뿐인데 머리글을 붙이면 읽을 정보 없이 줄만 늘어난다.
+    final onCurrent = current == null
+        ? const <_CategoryStoreEntry>[]
+        : entries.where((e) => e.floor == current).toList();
+    final others = current == null
+        ? entries
+        : entries.where((e) => e.floor != current).toList();
+    if (current == null || others.isEmpty) {
+      return [
+        ..._storeSlivers(entries),
+        const SliverToBoxAdapter(child: SizedBox(height: 12)),
+      ];
+    }
+
+    return [
+      _sectionHeader('현재 층 · $current', count: onCurrent.length),
+      // 현재 층에 없을 때도 머리글은 남기고 그 사실을 적는다. 묶음을 통째로
+      // 빼 버리면 "이 층에 없다"와 "필터가 고장났다"가 화면에서 같아 보인다.
+      if (onCurrent.isEmpty)
+        const SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(20, 2, 20, 12),
+            child: Text(
+              '이 층에는 없습니다.',
+              style: TextStyle(fontSize: 13, color: AppColors.muted),
+            ),
+          ),
+        )
+      else
+        ..._storeSlivers(onCurrent),
+      const SliverToBoxAdapter(
+        child: Divider(height: 9, thickness: 9, color: Color(0xFFF3F4F6)),
+      ),
+      _sectionHeader('다른 층', count: others.length),
+      ..._storeSlivers(others),
+      const SliverToBoxAdapter(child: SizedBox(height: 12)),
+    ];
+  }
+
+  /// 묶음 하나를 그리는 목록 sliver. 탭 처리(=pop으로 결과 반환)가 묶음마다
+  /// 같아야 해서 한 곳에서 만든다.
+  List<Widget> _storeSlivers(List<_CategoryStoreEntry> entries) {
     return [
       SliverList.separated(
         itemCount: entries.length,
-        separatorBuilder: (_, _) => const Divider(height: 1, indent: 20, endIndent: 20),
+        separatorBuilder: (_, _) =>
+            const Divider(height: 1, indent: 20, endIndent: 20),
         itemBuilder: (context, index) => _StoreTile(
           entry: entries[index],
           onTap: () {
@@ -276,81 +380,81 @@ class _CategoryStoresSheetState extends State<CategoryStoresSheet> {
           },
         ),
       ),
-      const SliverToBoxAdapter(child: SizedBox(height: 12)),
     ];
   }
 
-  Widget _buildFilterBar() {
-    final currentFloor = widget.currentFloor;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _SearchField(
-            controller: _searchController,
-            onChanged: (value) => setState(() => _searchQuery = value),
-          ),
-          if (currentFloor != null) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Text(
-                  '현재 층만 보기 ($currentFloor)',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.text,
-                  ),
-                ),
-                const Spacer(),
-                Switch(
-                  value: _showCurrentFloorOnly,
-                  onChanged: (v) => setState(() => _showCurrentFloorOnly = v),
-                ),
-              ],
+  Widget _sectionHeader(String label, {required int count}) {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
+        child: Row(
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w800,
+                color: AppColors.text,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              '$count곳',
+              style: const TextStyle(fontSize: 12, color: AppColors.muted),
             ),
           ],
-        ],
+        ),
       ),
     );
   }
-}
 
-class _SearchField extends StatelessWidget {
-  const _SearchField({required this.controller, required this.onChanged});
-
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      onChanged: onChanged,
-      textInputAction: TextInputAction.search,
-      decoration: InputDecoration(
-        isDense: true,
-        prefixIcon: const Icon(Icons.search, size: 18, color: AppColors.muted),
-        hintText: '매장 이름 검색',
-        hintStyle: const TextStyle(fontSize: 13.5, color: AppColors.muted),
-        filled: true,
-        fillColor: const Color(0xFFF3F4F6),
-        contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.2),
+  Widget _buildFilterBar(List<_CategoryStoreEntry> all) {
+    // pill 목록은 **불러온 매장에서** 뽑는다. 지도 위 pill 줄이 쓰던
+    // `/category-counts` 응답과 같은 규칙(`subcategoryOptionsFor`)이라 같은
+    // 항목이 나오고, 데이터에 없는 소분류가 pill로 뜨는 일도 없다.
+    final options = subcategoryOptionsFor(
+      widget.category,
+      all.map((entry) => (entry.store.category, entry.store.subcategory)),
+    );
+    // 고를 것이 하나뿐인 줄은 탭만 한 번 더 요구한다(지도 pill 줄과 같은 규칙).
+    // 걸 것이 없으면 줄 자체를 지운다 — 예전에는 이 자리에 검색창이 늘 있어
+    // 빈 줄이 생기지 않았지만, 지금은 pill이 없으면 남길 것이 없다.
+    if (!hasMeaningfulSubcategories(options)) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: SizedBox(
+        height: 30,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          children: [
+            FilterPill(
+              label: '전체',
+              selected: _subcategory == null,
+              onTap: () => _selectSubcategory(null),
+            ),
+            for (final option in options) ...[
+              const SizedBox(width: 6),
+              FilterPill(
+                label: option.label,
+                selected: _subcategory == option.value,
+                // 이미 고른 소분류를 다시 누르면 대분류 전체로 되돌린다.
+                onTap: () => _selectSubcategory(
+                  _subcategory == option.value ? null : option.value,
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
+  }
+
+  /// 소분류를 바꾼다. 목록만 좁히는 게 아니라 지도 강조도 같이 바뀌어야 해서
+  /// 상위에 올린다 — 한쪽만 바뀌면 시트엔 세 곳, 지도엔 스무 곳이 칠해진다.
+  void _selectSubcategory(String? value) {
+    if (_subcategory == value) return;
+    setState(() => _subcategory = value);
+    widget.onSubcategoryChanged?.call(value);
   }
 }
 
@@ -386,7 +490,11 @@ class _StoreTile extends StatelessWidget {
         subtitle,
         style: const TextStyle(fontSize: 12, color: AppColors.muted),
       ),
-      trailing: const Icon(Icons.chevron_right, size: 18, color: AppColors.muted),
+      trailing: const Icon(
+        Icons.chevron_right,
+        size: 18,
+        color: AppColors.muted,
+      ),
     );
   }
 }
@@ -398,12 +506,12 @@ class _CategoryStoreEntry {
   final String floor;
 
   PoiSearchResult toPoiSearchResult() => PoiSearchResult(
-        name: store.name,
-        floor: floor,
-        point: store.centroid,
-        placeId: store.id,
-        nodeId: store.entranceNodeId,
-        category: store.category,
-        subcategory: store.subcategory,
-      );
+    name: store.name,
+    floor: floor,
+    point: store.centroid,
+    placeId: store.id,
+    nodeId: store.entranceNodeId,
+    category: store.category,
+    subcategory: store.subcategory,
+  );
 }

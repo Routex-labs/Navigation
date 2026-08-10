@@ -114,7 +114,13 @@ MultiFloorRoute? computeMultiFloorRoute(
     } else if (edge.fromNodeId == toNodeId && edge.toNodeId == fromNodeId) {
       geometry = geometry.reversed.toList();
     }
-    current.addGeometry(geometry, edge.lengthM, edge.id);
+    current.addGeometry(
+      geometry,
+      edge.lengthM,
+      edge.id,
+      fromNodeId: fromNodeId,
+      toNodeId: toNodeId,
+    );
   }
 
   if (current != null) {
@@ -141,17 +147,16 @@ MultiFloorRoute? computeMultiFloorRoute(
     ];
     final transferFrom = segment.transferFromNode;
     final transferTo = segment.transferToNode;
-    final transferToTransform = transferTo?.floorId == null
-        ? null
-        : transformFor(transferTo!.floorId!);
-    final transferPoints =
-        transferFrom == null ||
-            transferTo == null ||
-            transferToTransform == null
+    // 두 층의 WGS84 변환 결과를 직접 잇지 않는다. 층별 보정이 조금만 달라도
+    // 실제 에스컬레이터 축이 아닌 대각선이 생긴다. 대신 탑승·하차 노드의 로컬
+    // 좌표를 **현재 층 변환 하나**로 함께 옮긴다. 원본 도면의 로컬 좌표는 층을
+    // 넘어 같은 축을 공유하므로, 현재 에스컬레이터에서 다음 층 방향으로 쭉
+    // 올라가는 약 20m 점선이 된다.
+    final transferPoints = transferFrom == null || transferTo == null
         ? const <LatLng>[]
         : <LatLng>[
             _apply(transform, transferFrom.xM, transferFrom.yM),
-            _apply(transferToTransform, transferTo.xM, transferTo.yM),
+            _apply(transform, transferTo.xM, transferTo.yM),
           ];
     built.add(
       IndoorRouteSegment(
@@ -165,6 +170,7 @@ MultiFloorRoute? computeMultiFloorRoute(
           // 더해 합산한다.
           pointsLocalM: segment.points,
           edgeIds: segment.edgeIds,
+          nodeIds: segment.nodeIds,
         ),
         transferModeToNext: segment.transferModeToNext,
         transferPointsToNext: transferPoints,
@@ -272,6 +278,7 @@ class _PendingSegment {
   /// 이 세그먼트가 지나는 층 내부 간선 id. 수직 전이 간선은 세그먼트 경계일
   /// 뿐 이동 폴리라인에 포함되지 않으므로 여기에도 넣지 않는다.
   final List<String> edgeIds = <String>[];
+  final List<String> nodeIds = <String>[];
   double distanceM = 0.0;
   String? transferModeToNext;
   double transferDistanceM = 0.0;
@@ -281,6 +288,7 @@ class _PendingSegment {
   String? transferEdgeId;
 
   void addNode(GraphNode node) {
+    if (nodeIds.isEmpty || nodeIds.last != node.id) nodeIds.add(node.id);
     if (points.isNotEmpty &&
         points.last.x == node.xM &&
         points.last.y == node.yM) {
@@ -292,10 +300,17 @@ class _PendingSegment {
   void addGeometry(
     List<LocalPoint> geometry,
     double edgeLengthM,
-    String edgeId,
-  ) {
+    String edgeId, {
+    required String fromNodeId,
+    required String toNodeId,
+  }) {
     if (geometry.isEmpty) return;
     edgeIds.add(edgeId);
+    if (nodeIds.isEmpty) nodeIds.add(fromNodeId);
+    if (nodeIds.last != fromNodeId) {
+      throw ArgumentError('세그먼트 node 순서가 간선 $edgeId와 연결되지 않습니다.');
+    }
+    nodeIds.add(toNodeId);
     if (points.isNotEmpty &&
         points.last.x == geometry.first.x &&
         points.last.y == geometry.first.y) {

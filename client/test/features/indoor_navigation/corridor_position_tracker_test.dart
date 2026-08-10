@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 import 'package:navigation_client/features/indoor_navigation/application/corridor_position_tracker.dart';
@@ -83,6 +85,8 @@ CorridorObservation _observation({
   PdrLocalPoint raw = PdrLocalPoint.zero,
   List<PdrLocalPoint> rawConfirmedStepPositions = const [],
   List<PdrLocalPoint> rawPreviewTailPositions = const [],
+  List<int?> rawPreviewTailPeakTimesMs = const [],
+  int? confirmedThroughMs,
 }) => CorridorObservation(
   timestampMs: atMs,
   rawConfirmedPosition: raw,
@@ -94,45 +98,266 @@ CorridorObservation _observation({
   hasHeading: true,
   rawConfirmedStepPositions: rawConfirmedStepPositions,
   rawPreviewTailPositions: rawPreviewTailPositions,
+  rawPreviewTailPeakTimesMs: rawPreviewTailPeakTimesMs,
+  confirmedThroughMs: confirmedThroughMs,
 );
 
+/// 동쪽으로 [count]걸음(0.7m) 걷는 preview/confirmed 시계열을 만든다.
+///
+/// 같은 peak 시계열을 서로 다른 배치 크기로 확정시켜도 optimistic 위치가
+/// 같아야 한다는 것을 확인하기 위한 생성기다.
+List<PdrLocalPoint> _eastPoints(double startEastM, int count) => [
+  for (var index = 0; index <= count; index += 1)
+    PdrLocalPoint(startEastM + index * 0.7, 0),
+];
+
 void main() {
-  group('preview 선행 거리 안정화', () {
-    test('정상 확정 배치는 이미 보인 선행분을 확정 거리만큼 소비한다', () {
-      expect(
-        stabilizePreviewLeadM(
-          previousLeadM: 5,
-          targetLeadM: 0,
-          fullLeadM: 5,
-          confirmedConsumedM: 1.4,
+  group('배치 독립 optimistic preview cursor', () {
+    CorridorPositionTracker straightTracker() =>
+        CorridorPositionTracker(_longStraightGraph)..reset(
+          initialPosition: const PdrLocalPoint(1, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+
+    test('배치가 이미 본 preview peak를 확인만 하면 표시 위치가 그대로다', () {
+      final tracker = straightTracker();
+      final afterPreview = tracker.update(
+        _observation(
+          atMs: 1600,
+          confirmedSteps: 0,
+          confirmedDistanceM: 0,
+          previewSteps: 2,
+          headingDeg: 90,
+          rawPreviewTailPositions: _eastPoints(1, 2),
+          rawPreviewTailPeakTimesMs: const [null, 1000, 1500],
         ),
-        closeTo(3.6, 1e-9),
       );
+      expect(afterPreview.previewPosition.eastM, closeTo(2.4, 1e-9));
+      expect(afterPreview.optimisticStepAdvances, hasLength(2));
+      expect(
+        afterPreview.optimisticStepAdvances
+            .map((event) => event.distanceM)
+            .toList(),
+        everyElement(closeTo(0.7, 1e-9)),
+      );
+      expect(
+        afterPreview.optimisticStepAdvances
+            .expand((event) => event.traversals)
+            .map((traversal) => traversal.edgeId)
+            .toSet(),
+        {'straight'},
+      );
+
+      final afterFirstBatch = tracker.update(
+        _observation(
+          atMs: 2000,
+          confirmedSteps: 1,
+          confirmedDistanceM: 0.7,
+          previewSteps: 2,
+          headingDeg: 90,
+          raw: const PdrLocalPoint(1.7, 0),
+          rawConfirmedStepPositions: const [PdrLocalPoint(1.7, 0)],
+          rawPreviewTailPositions: const [
+            PdrLocalPoint(1.7, 0),
+            PdrLocalPoint(2.4, 0),
+          ],
+          rawPreviewTailPeakTimesMs: const [null, 1500],
+          confirmedThroughMs: 1200,
+        ),
+      );
+      expect(afterFirstBatch.correctedPosition.eastM, closeTo(1.7, 1e-9));
+      expect(
+        afterFirstBatch.previewPosition.eastM,
+        closeTo(2.4, 1e-9),
+        reason: '배치는 이미 보인 걸음을 확인했을 뿐이므로 marker가 움직이면 안 된다',
+      );
+      expect(afterFirstBatch.optimisticLeadM, closeTo(0.7, 1e-9));
+
+      final afterSecondBatch = tracker.update(
+        _observation(
+          atMs: 2400,
+          confirmedSteps: 2,
+          confirmedDistanceM: 1.4,
+          previewSteps: 2,
+          headingDeg: 90,
+          raw: const PdrLocalPoint(2.4, 0),
+          rawConfirmedStepPositions: const [PdrLocalPoint(2.4, 0)],
+          confirmedThroughMs: 1700,
+        ),
+      );
+      expect(afterSecondBatch.previewPosition.eastM, closeTo(2.4, 1e-9));
+      expect(afterSecondBatch.optimisticLeadM, closeTo(0, 1e-9));
+      expect(afterSecondBatch.optimisticStepAdvances, isEmpty);
     });
 
-    test('대표 가설 재배치 때도 실제 확정 보행 거리만 소비한다', () {
-      expect(
-        stabilizePreviewLeadM(
-          previousLeadM: 5,
-          targetLeadM: 0,
-          fullLeadM: 5,
-          confirmedConsumedM: 1.4,
+    test('preview에 없이 배치로만 들어온 걸음도 한 번은 태운다', () {
+      final tracker = straightTracker();
+      final result = tracker.update(
+        _observation(
+          atMs: 2000,
+          confirmedSteps: 2,
+          confirmedDistanceM: 1.4,
+          previewSteps: 0,
+          headingDeg: 90,
+          raw: const PdrLocalPoint(2.4, 0),
+          rawConfirmedStepPositions: const [
+            PdrLocalPoint(1.7, 0),
+            PdrLocalPoint(2.4, 0),
+          ],
+          confirmedThroughMs: 1700,
         ),
-        closeTo(3.6, 1e-9),
-        reason: '재배치된 4m를 빼지 않고 이번 배치의 확정 1.4m만 빼야 한다',
       );
+
+      expect(result.correctedPosition.eastM, closeTo(2.4, 1e-9));
+      expect(result.previewPosition.eastM, closeTo(2.4, 1e-9));
+      expect(result.optimisticLeadM, closeTo(0, 1e-9));
     });
 
-    test('재배치 중에도 현재 후보 경로 길이를 넘겨 표시하지 않는다', () {
-      expect(
-        stabilizePreviewLeadM(
-          previousLeadM: 5,
-          targetLeadM: 1,
-          fullLeadM: 2,
-          confirmedConsumedM: 0,
+    test('같은 tail이 다시 들어와도 같은 peak를 두 번 태우지 않는다', () {
+      final tracker = straightTracker();
+      const tail = [PdrLocalPoint(1, 0), PdrLocalPoint(1.7, 0)];
+      const times = <int?>[null, 1000];
+      tracker.update(
+        _observation(
+          atMs: 1100,
+          confirmedSteps: 0,
+          confirmedDistanceM: 0,
+          previewSteps: 1,
+          headingDeg: 90,
+          rawPreviewTailPositions: tail,
+          rawPreviewTailPeakTimesMs: times,
         ),
-        closeTo(2, 1e-9),
       );
+      final result = tracker.update(
+        _observation(
+          atMs: 1200,
+          confirmedSteps: 0,
+          confirmedDistanceM: 0,
+          previewSteps: 1,
+          headingDeg: 90,
+          rawPreviewTailPositions: tail,
+          rawPreviewTailPeakTimesMs: times,
+        ),
+      );
+
+      expect(result.previewPosition.eastM, closeTo(1.7, 1e-9));
+      expect(result.previewPeakIdsSynthetic, isFalse);
+    });
+
+    test('peak 시각이 없어도 걸음 번호로 중복을 거른다', () {
+      final tracker = straightTracker();
+      tracker.update(
+        _observation(
+          atMs: 1100,
+          confirmedSteps: 0,
+          confirmedDistanceM: 0,
+          previewSteps: 2,
+          headingDeg: 90,
+          rawPreviewTailPositions: _eastPoints(1, 2),
+        ),
+      );
+      final result = tracker.update(
+        _observation(
+          atMs: 1600,
+          confirmedSteps: 0,
+          confirmedDistanceM: 0,
+          previewSteps: 3,
+          headingDeg: 90,
+          // 겹치는 두 걸음(1.7·2.4)이 다시 들어오고 3.1만 새 걸음이다.
+          rawPreviewTailPositions: const [
+            PdrLocalPoint(1.7, 0),
+            PdrLocalPoint(2.4, 0),
+            PdrLocalPoint(3.1, 0),
+          ],
+        ),
+      );
+
+      expect(result.previewPosition.eastM, closeTo(3.1, 1e-9));
+      expect(result.previewPeakIdsSynthetic, isTrue);
+    });
+
+    test('같은 peak 시계열은 배치 구성이 달라도 같은 optimistic 위치를 만든다', () {
+      double runWithBatchSize(int batchSize) {
+        final tracker = straightTracker();
+        final points = _eastPoints(1, 10);
+        var confirmedSteps = 0;
+        for (var step = 1; step <= 10; step += 1) {
+          final tail = points.sublist(confirmedSteps, step + 1);
+          final times = <int?>[
+            null,
+            for (var index = confirmedSteps + 1; index <= step; index += 1)
+              index * 500,
+          ];
+          final confirmNow = step % batchSize == 0;
+          tracker.update(
+            _observation(
+              atMs: step * 500 + 100,
+              confirmedSteps: confirmNow ? step : confirmedSteps,
+              confirmedDistanceM: (confirmNow ? step : confirmedSteps) * 0.7,
+              previewSteps: step,
+              headingDeg: 90,
+              raw: points[confirmNow ? step : confirmedSteps],
+              rawConfirmedStepPositions: confirmNow
+                  ? points.sublist(confirmedSteps + 1, step + 1)
+                  : const [],
+              rawPreviewTailPositions: tail,
+              rawPreviewTailPeakTimesMs: times,
+              confirmedThroughMs: confirmNow ? step * 500 : null,
+            ),
+          );
+          if (confirmNow) confirmedSteps = step;
+        }
+        return tracker.result.previewPosition.eastM;
+      }
+
+      final single = runWithBatchSize(1);
+      expect(runWithBatchSize(2), closeTo(single, 1e-9));
+      expect(runWithBatchSize(5), closeTo(single, 1e-9));
+      expect(runWithBatchSize(10), closeTo(single, 1e-9));
+      expect(single, closeTo(8, 1e-9));
+    });
+
+    test('실제 유턴은 optimistic cursor의 후퇴로 반영한다', () {
+      final tracker = CorridorPositionTracker(_longStraightGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(25, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+
+      tracker.update(
+        _observation(
+          atMs: 1000,
+          confirmedSteps: 0,
+          confirmedDistanceM: 0,
+          previewSteps: 2,
+          headingDeg: 90,
+          rawPreviewTailPositions: _eastPoints(25, 2),
+          rawPreviewTailPeakTimesMs: const [null, 500, 1000],
+        ),
+      );
+      final forward = tracker.result.previewPosition.eastM;
+      expect(forward, closeTo(26.4, 1e-9));
+
+      for (var step = 1; step <= 4; step += 1) {
+        tracker.update(
+          _observation(
+            atMs: 1000 + step * 500,
+            confirmedSteps: 0,
+            confirmedDistanceM: 0,
+            previewSteps: 2 + step,
+            headingDeg: 270,
+            rawPreviewTailPositions: [
+              PdrLocalPoint(26.4 - (step - 1) * 0.7, 0),
+              PdrLocalPoint(26.4 - step * 0.7, 0),
+            ],
+            rawPreviewTailPeakTimesMs: [null, 1000 + step * 500],
+          ),
+        );
+      }
+
+      expect(tracker.result.previewPosition.eastM, lessThan(forward - 2));
     });
   });
 
@@ -152,6 +377,239 @@ void main() {
     expect(transform.toFloorBearing(0), closeTo(180, 1e-9));
     expect(transform.toFloorBearing(90), closeTo(90, 1e-9));
     expect(transform.floorBearingToMapBearing(180), closeTo(0, 1e-9));
+  });
+
+  group('교차점 전후 회전 허용 구간', () {
+    /// [turnOffsetM]만큼 어긋난 지점에서 북쪽으로 꺾는 보행을 재생한다.
+    ///
+    /// 음수면 노드(10,0)보다 일찍, 양수면 늦게 꺾는다. 두 경우 모두 실제
+    /// 사람이 코너를 도는 방식이고, graph node 좌표를 정확히 밟지 않는다.
+    CorridorPositionTracker walkAndTurnNorth({
+      required double turnOffsetM,
+      int northSteps = 3,
+    }) {
+      final tracker = CorridorPositionTracker(_crossGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(4, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+      final turnEastM = 10 + turnOffsetM;
+      var atMs = 0;
+      var steps = 0;
+      var raw = const PdrLocalPoint(4, 0);
+
+      void walk(PdrLocalPoint next, double headingDeg) {
+        atMs += 500;
+        steps += 1;
+        tracker.update(
+          _observation(
+            atMs: atMs,
+            confirmedSteps: steps,
+            confirmedDistanceM: steps * 0.7,
+            previewSteps: steps,
+            headingDeg: headingDeg,
+            raw: next,
+            rawConfirmedStepPositions: [next],
+          ),
+        );
+        raw = next;
+      }
+
+      while (raw.eastM < turnEastM - 1e-9) {
+        walk(PdrLocalPoint(math.min(raw.eastM + 0.7, turnEastM), 0), 90);
+      }
+      for (var index = 1; index <= northSteps; index += 1) {
+        walk(PdrLocalPoint(turnEastM, index * 0.7), 0);
+      }
+      return tracker;
+    }
+
+    test('노드보다 3m 일찍 꺾어도 연결된 간선으로 수렴한다', () {
+      final tracker = walkAndTurnNorth(turnOffsetM: -3);
+      expect(tracker.result.currentEdgeId, 'bc');
+    });
+
+    test('노드 근처에서 꺾으면 연결된 간선으로 수렴한다', () {
+      final tracker = walkAndTurnNorth(turnOffsetM: 0);
+      expect(tracker.result.currentEdgeId, 'bc');
+    });
+
+    test('노드보다 3m 늦게 꺾어도 지나온 노드의 연결 간선으로 되돌아간다', () {
+      final tracker = walkAndTurnNorth(turnOffsetM: 3);
+      expect(tracker.result.currentEdgeId, 'bc');
+    });
+
+    test('교차점을 직진으로 통과하면 회전 후보로 넘어가지 않는다', () {
+      final tracker = CorridorPositionTracker(_crossGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(4, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+      for (var step = 1; step <= 14; step += 1) {
+        final raw = PdrLocalPoint(4 + step * 0.7, 0);
+        tracker.update(
+          _observation(
+            atMs: step * 500,
+            confirmedSteps: step,
+            confirmedDistanceM: step * 0.7,
+            previewSteps: step,
+            headingDeg: 90,
+            raw: raw,
+            rawConfirmedStepPositions: [raw],
+          ),
+        );
+      }
+
+      expect(tracker.result.currentEdgeId, 'bd');
+      expect(tracker.result.correctedPosition.northM.abs(), lessThan(1e-6));
+    });
+
+    test('전환 구간 안에서는 연결된 간선만 후보로 알린다', () {
+      final tracker = walkAndTurnNorth(turnOffsetM: -1, northSteps: 1);
+      final result = tracker.result;
+
+      expect(result.junctionNodeId, 'b');
+      expect(result.junctionDistanceM, lessThanOrEqualTo(3));
+      expect(result.junctionCandidateEdgeIds, containsAll(['ab', 'bd', 'bc']));
+      expect(
+        result.junctionCandidateEdgeIds,
+        isNot(contains('ef')),
+        reason: '노드 b에 연결되지 않은 평행 간선은 후보가 될 수 없다',
+      );
+    });
+
+    test('전환 구간 밖 직선 구간에서는 회전 구간 상태가 아니다', () {
+      final tracker = CorridorPositionTracker(_crossGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(4, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+      tracker.update(
+        _observation(
+          atMs: 500,
+          confirmedSteps: 1,
+          confirmedDistanceM: 0.7,
+          previewSteps: 1,
+          headingDeg: 90,
+          raw: const PdrLocalPoint(4.7, 0),
+          rawConfirmedStepPositions: const [PdrLocalPoint(4.7, 0)],
+        ),
+      );
+
+      expect(tracker.result.isInJunctionZone, isFalse);
+    });
+
+    test('걸음 없이 휴대폰만 돌려서는 간선이 바뀌지 않는다', () {
+      final tracker = CorridorPositionTracker(_crossGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(8.5, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+      for (var step = 1; step <= 5; step += 1) {
+        tracker.update(
+          _observation(
+            atMs: step * 400,
+            confirmedSteps: 0,
+            confirmedDistanceM: 0,
+            previewSteps: 0,
+            headingDeg: 0,
+            raw: const PdrLocalPoint(8.5, 0),
+          ),
+        );
+      }
+
+      expect(tracker.result.currentEdgeId, 'ab');
+      expect(tracker.result.correctedPosition.eastM, closeTo(8.5, 0.5));
+    });
+  });
+
+  group('하차 직후 다음 간선 선택', () {
+    /// 에스컬레이터 도착 노드(10,0)에서 새 앵커를 잡은 직후를 재현한다.
+    ///
+    /// 사용자는 아직 동쪽을 보고 서 있고([initialHeadingDeg]), 그 상태에서
+    /// 실제로 [stepHeadingDeg] 방향으로 걷기 시작한다. 바라보는 방향은 약한
+    /// 근거일 뿐이고 실제 걸음이 간선을 정해야 한다.
+    CorridorPositionTracker landAndWalk({
+      required double stepHeadingDeg,
+      required PdrLocalPoint stepDelta,
+      int steps = 2,
+    }) {
+      final tracker = CorridorPositionTracker(_crossGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(10, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+      var raw = const PdrLocalPoint(10, 0);
+      for (var step = 1; step <= steps; step += 1) {
+        raw = PdrLocalPoint(
+          raw.eastM + stepDelta.eastM,
+          raw.northM + stepDelta.northM,
+        );
+        tracker.update(
+          _observation(
+            atMs: step * 500,
+            confirmedSteps: step,
+            confirmedDistanceM: step * 0.7,
+            previewSteps: step,
+            headingDeg: stepHeadingDeg,
+            raw: raw,
+            rawConfirmedStepPositions: [raw],
+          ),
+        );
+      }
+      return tracker;
+    }
+
+    test('직진 하차는 두 걸음 안에 정면 간선으로 수렴한다', () {
+      final tracker = landAndWalk(
+        stepHeadingDeg: 90,
+        stepDelta: const PdrLocalPoint(0.7, 0),
+      );
+      expect(tracker.result.currentEdgeId, 'bd');
+    });
+
+    test('좌회전 하차는 바라보던 방향이 아니라 걸음 방향을 따른다', () {
+      final tracker = landAndWalk(
+        stepHeadingDeg: 0,
+        stepDelta: const PdrLocalPoint(0, 0.7),
+      );
+      expect(tracker.result.currentEdgeId, 'bc');
+    });
+
+    test('우회전 하차도 두 걸음 안에 연결 간선으로 수렴한다', () {
+      final tracker = landAndWalk(
+        stepHeadingDeg: 270,
+        stepDelta: const PdrLocalPoint(-0.7, 0),
+      );
+      expect(tracker.result.currentEdgeId, 'ab');
+    });
+
+    test('걸음 전에는 도착 노드에 연결된 간선을 모두 후보로 둔다', () {
+      final tracker = CorridorPositionTracker(_crossGraph)
+        ..reset(
+          initialPosition: const PdrLocalPoint(10, 0),
+          initialHeadingDeg: 90,
+          timestampMs: 0,
+        );
+      final result = tracker.update(
+        _observation(
+          atMs: 300,
+          confirmedSteps: 0,
+          confirmedDistanceM: 0,
+          previewSteps: 0,
+          headingDeg: 90,
+          raw: const PdrLocalPoint(10, 0),
+        ),
+      );
+
+      expect(result.junctionNodeId, 'b');
+      expect(result.junctionCandidateEdgeIds, containsAll(['ab', 'bd', 'bc']));
+    });
   });
 
   group('CorridorPositionTracker', () {

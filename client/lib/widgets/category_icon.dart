@@ -49,6 +49,14 @@ const _colorByCategory = <String, Color>{
 /// 배포 시차 동안 그 매장들이 폴백 아이콘으로 떨어지는 쪽이 손해다.
 Iterable<String> get categoryIconCategories => _iconByCategory.keys;
 
+/// 색이 정의된 대분류 목록. 매장 폴리곤을 대분류 색으로 칠하는 표현식이
+/// 쓴다([category_map_fill.dart]).
+///
+/// [categoryIconCategories]와 **같은 키 집합이어야 한다** — 한쪽에만 있는
+/// 대분류가 생기면 지도에서 아이콘은 붙는데 면은 회색이거나(또는 그 반대)
+/// 그 카테고리만 반쯤 칠해진 것처럼 보인다. 테스트가 이 일치를 지킨다.
+Iterable<String> get categoryPaletteCategories => _colorByCategory.keys;
+
 IconData categoryIconFor(String category) =>
     _iconByCategory[category] ?? Icons.storefront;
 

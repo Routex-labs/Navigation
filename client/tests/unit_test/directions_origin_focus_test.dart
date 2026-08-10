@@ -8,11 +8,11 @@ import 'package:navigation_client/repositories/mock_destination_repository.dart'
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 상단 초안 바에서 어느 행을 눌렀는지에 따라 상단 길찾기 바가 그 칸을 활성으로
+/// 상단 초안 바에서 어느 행을 눌렀는지에 따라 길찾기 시트가 그 칸을 활성으로
 /// 열어야 한다는 테스트.
 ///
 /// 지키려는 증상: **출발 행을 눌렀는데 도착지 칸이 활성인 채로 열리는 것.** 그러면
-/// 후보 목록도 도착지 기준이라, 출발지를 바꾸려던 사용자는 그 화면에서 출발지 칸을
+/// 후보 목록도 도착지 기준이라, 출발지를 바꾸려던 사용자는 시트 안에서 출발지 칸을
 /// 한 번 더 눌러야 한다. 방금 누른 곳과 커서가 있는 곳이 다르다.
 ///
 /// 활성 칸은 후보 목록으로 구분한다 — 출발지가 활성일 때만 맨 위에 "현재 위치"
@@ -71,14 +71,10 @@ void main() {
 
   /// 후보 목록의 "현재 위치" 고정 행. 출발지 칸이 활성일 때만 붙는다. 상단 초안
   /// 바에도 같은 문구가 있으므로 목록 항목(ListTile)으로 좁힌다.
-  Finder currentLocationRow() => find.descendant(
-    of: find.byType(ListTile),
-    matching: find.text('현재 위치'),
-  );
+  Finder currentLocationRow() =>
+      find.descendant(of: find.byType(ListTile), matching: find.text('현재 위치'));
 
-  testWidgets('출발 행을 누르면 출발지 칸이 활성인 채로 출발지 칸이 열린다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('출발 행을 누르면 출발지 칸이 활성인 채로 시트가 열린다', (WidgetTester tester) async {
     await openRouteDraft(tester);
 
     await tester.tap(find.byKey(const Key('route-draft-origin')));
@@ -89,21 +85,12 @@ void main() {
       findsOneWidget,
       reason: '출발 행을 눌렀으면 후보 목록이 출발지 기준이어야 한다',
     );
-    // 출발지 칸은 비어 있어야 한다. "현재 위치"는 값이 아니라 기본값 안내라
-    // 글자로 채우지 않는다 — 채우면 사용자가 먼저 지워야 하고, 그 글자가
-    // 검색어로도 쓰여 결과가 비어 버린다.
-    final originField = tester.widget<TextField>(
-      find.descendant(
-        of: find.byKey(const Key('route-draft-origin')),
-        matching: find.byType(TextField),
-      ),
-    );
-    expect(originField.controller?.text, isEmpty);
+    // 출발지 칸에 적혀 있던 "현재 위치"는 값이 아니라 안내문이므로 비워, 사용자가
+    // 먼저 지우지 않고 바로 칠 수 있어야 한다.
+    expect(find.text('출발지를 입력하세요'), findsOneWidget);
   });
 
-  testWidgets('도착 행을 누르면 도착지 칸이 활성인 채로 열린다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('도착 행을 누르면 도착지 칸이 활성인 채로 열린다', (WidgetTester tester) async {
     // 기본 흐름이 뒤집히지 않는지 함께 고정한다.
     await openRouteDraft(tester);
 

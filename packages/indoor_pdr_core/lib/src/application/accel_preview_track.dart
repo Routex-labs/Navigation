@@ -22,6 +22,25 @@ class AccelPreviewTrack {
   static const int minPeakIntervalMs = 300;
   static const int maxPeakIntervalMs = 1100;
 
+  /// 확정이 이만큼 늦어질 때까지는 lead cap을 적용하지 않는다.
+  ///
+  /// 캡의 목적은 "센서가 폭주해도 주황이 무한히 달아나지 않게" 하는 것이지
+  /// **확정 배치가 늦다는 이유로 마커를 세우는 것**이 아니다. 예전에는 둘을
+  /// 구분하지 못해서, 첫 배치가 도착한 뒤로는 pedometer 지연이 곧바로 12걸음
+  /// 캡에 닿아 걸음이 버려졌다 — 걷는데 화면이 멈췄다가 배치가 오면 한꺼번에
+  /// 밀려가는 동작의 원인이다. 확정 시각과 지금 peak의 간격으로 둘을 가른다:
+  /// 이 창 안이면 "정상적인 배치 지연"이라 캡을 재지 않고, 이보다 오래 확정이
+  /// 없으면(heading 소실·pedometer 정지) 그때부터 캡이 걸린다.
+  static const int confirmedLagGraceMs = 8000;
+
+  /// 캡에 걸린 걸음을 보류해 두는 최대 개수.
+  ///
+  /// 버리지 않고 들고 있다가 확정이 따라오면 소비한다. 무한히 쌓으면 센서가
+  /// 정말 폭주했을 때 나중에 그 걸음이 통째로 풀려 위치가 순간이동하므로
+  /// 상한을 둔다. 넘치면 **가장 오래된 쪽**을 버린다 — 최근 걸음이 지금
+  /// 위치에 더 가깝다.
+  static const int maxDeferredPeaks = 40;
+
   static const String baseline = 'baseline';
   static const String tooDense = 'tooDense';
   static const String tooSparse = 'tooSparse';
@@ -32,6 +51,12 @@ class AccelPreviewTrack {
   static const String noHeading = 'noHeading';
   static const String missingTimestamp = 'missingTimestamp';
   static const String batchedPeaksCapped = 'batchedPeaksCapped';
+
+  /// 캡에 걸렸지만 버리지 않고 보류 중인 걸음. 확정이 따라오면 반영된다.
+  static const String leadDeferred = 'leadDeferred';
+
+  /// 보류 큐가 넘쳐 실제로 버린 걸음.
+  static const String deferOverflow = 'deferOverflow';
 
   final int maxPoints;
   final List<PdrLocalPoint> path = [PdrLocalPoint.zero];
@@ -61,11 +86,19 @@ class AccelPreviewTrack {
     noHeading: 0,
     missingTimestamp: 0,
     batchedPeaksCapped: 0,
+    leadDeferred: 0,
+    deferOverflow: 0,
   };
 
   int? _lastPeakCount;
   int? _lastAcceptedPeakMs;
   int? _lastGatePeakMs;
+
+  /// 캡 때문에 아직 경로에 반영하지 못한 걸음의 peak 시각(오래된 것부터).
+  final List<int> _deferredPeakTimesMs = [];
+
+  /// 보류 중인 걸음 수(진단용).
+  int get deferredPeaks => _deferredPeakTimesMs.length;
 
   bool applyRealtimePeaks(
     AccelPeakEvent? signal, {
@@ -107,6 +140,9 @@ class AccelPreviewTrack {
     if (!tracking || !hasHeading) {
       final reason = tracking ? noHeading : notTracking;
       _resyncGate(peakMs);
+      // 추적이 꺼졌거나 방향을 모르는 구간의 걸음은 어느 방향으로 놓을지
+      // 알 수 없다. 보류해 뒀다가 나중에 푸는 것이 더 나쁘므로 버린다.
+      _deferredPeakTimesMs.clear();
       _recordReject(reason: reason, deltaPeaks: delta);
       return false;
     }
@@ -130,49 +166,69 @@ class AccelPreviewTrack {
       }
     }
 
-    final sample = headingAt(peakMs);
-    final headingDeg = sample?.walkDeg ?? fallbackHeadingDeg;
     final stride = _resolveStepDistance(
       effectiveStrideMeters: effectiveStrideMeters,
       fallbackStrideMeters: fallbackStrideMeters,
     );
-    final leadReason = _leadCapReason(
-      stride.meters,
-      confirmedSteps: confirmedSteps,
-      confirmedDistanceM: confirmedDistanceM,
-      confirmedThroughMs: confirmedThroughMs,
-    );
-    if (leadReason != null) {
-      // 실제로 걸음을 버려야 lead cap이 의미가 있다. 예전에는 여기서 reject만
-      // 기록하고 아래로 그대로 흘러가, position·path·steps·distanceM에 전부
-      // 반영된 뒤 lastRejectReason까지 'none'으로 덮였다. 그래서 캡이 사실상
-      // no-op이었고 preview가 confirmed보다 무한히 앞서 나갔다(실측 세션에서
-      // stepLeadCap 133건이 기록됐는데도 preview가 confirmed+12를 훌쩍 넘긴
-      // 163걸음까지 갔다). 위쪽 다른 reject 경로들과 동일하게 여기서 끊는다.
-      _resyncGate(peakMs);
-      _recordReject(reason: leadReason, deltaPeaks: delta);
+
+    // 새 peak를 보류 큐 뒤에 붙이고, 캡이 허용하는 만큼 앞에서부터 소비한다.
+    // 캡에 걸린 걸음을 그 자리에서 버리던 예전 구조는 "확정이 늦어서 못 넣은
+    // 걸음"과 "센서 과검출이라 넣으면 안 되는 걸음"을 구분하지 못했다.
+    _deferredPeakTimesMs.addAll(List<int>.filled(delta, peakMs));
+    if (_deferredPeakTimesMs.length > maxDeferredPeaks) {
+      final drop = _deferredPeakTimesMs.length - maxDeferredPeaks;
+      _deferredPeakTimesMs.removeRange(0, drop);
+      _recordReject(reason: deferOverflow, deltaPeaks: drop);
+    }
+
+    var applied = 0;
+    String? blockedBy;
+    while (_deferredPeakTimesMs.isNotEmpty) {
+      blockedBy = _leadCapReason(
+        stride.meters,
+        confirmedSteps: confirmedSteps,
+        confirmedDistanceM: confirmedDistanceM,
+        confirmedThroughMs: confirmedThroughMs,
+        nowMs: peakMs,
+      );
+      if (blockedBy != null) break;
+      final stepMs = _deferredPeakTimesMs.removeAt(0);
+      // 보류됐던 걸음은 자기 시각의 heading으로 놓는다. 배치로 몰려 들어온
+      // 걸음을 수신 시점 heading 하나로 그리면 회전 구간이 통째로 눕는다.
+      final headingDeg = headingAt(stepMs)?.walkDeg ?? fallbackHeadingDeg;
+      final headingRad = headingDeg * math.pi / 180;
+      position += PdrLocalPoint(
+        math.sin(headingRad) * stride.meters,
+        math.cos(headingRad) * stride.meters,
+      );
+      path.add(position);
+      acceptedPeakTimesMs.add(stepMs);
+      steps += 1;
+      acceptedPeaks += 1;
+      distanceM += stride.meters;
+      applied += 1;
+    }
+    _trim();
+
+    if (_deferredPeakTimesMs.isNotEmpty) {
+      // 버린 게 아니라 들고 있는 것이므로 rejectedPeaks에는 세지 않는다.
+      _recordReject(
+        reason: leadDeferred,
+        deltaPeaks: _deferredPeakTimesMs.length,
+        counted: false,
+      );
+      // 어느 캡에 걸렸는지는 튜닝에 필요하다.
+      if (blockedBy != null) {
+        rejectReasons[blockedBy] = (rejectReasons[blockedBy] ?? 0) + 1;
+      }
+    }
+    _resyncGate(peakMs);
+    if (applied == 0) {
       return false;
     }
-
-    final headingRad = headingDeg * math.pi / 180;
-    final stepOffset = PdrLocalPoint(
-      math.sin(headingRad) * stride.meters,
-      math.cos(headingRad) * stride.meters,
-    );
-
-    for (var i = 0; i < delta; i += 1) {
-      position += stepOffset;
-      path.add(position);
-      acceptedPeakTimesMs.add(peakMs);
-    }
-    steps += delta;
-    acceptedPeaks += delta;
-    distanceM += stride.meters * delta;
-    _trim();
     lastStepAtMs = peakMs;
     _lastAcceptedPeakMs = peakMs;
-    _resyncGate(peakMs);
-    lastRejectReason = 'none';
+    lastRejectReason = _deferredPeakTimesMs.isEmpty ? 'none' : _label(leadDeferred);
     return true;
   }
 
@@ -199,6 +255,7 @@ class AccelPreviewTrack {
     _lastPeakCount = preserveNativePeakBaseline ? nativePeakBaseline : null;
     _lastAcceptedPeakMs = null;
     _lastGatePeakMs = null;
+    _deferredPeakTimesMs.clear();
   }
 
   void _trim() {
@@ -268,8 +325,14 @@ class AccelPreviewTrack {
     required int confirmedSteps,
     required double confirmedDistanceM,
     int? confirmedThroughMs,
+    int? nowMs,
   }) {
     if (confirmedThroughMs != null) {
+      // 확정이 아직 "정상적인 지연" 범위면 캡을 재지 않는다. 배치가 늦다고
+      // 마커를 세우는 것이 이 캡의 목적이 아니다.
+      if (nowMs != null && nowMs - confirmedThroughMs <= confirmedLagGraceMs) {
+        return null;
+      }
       var pendingSteps = 0;
       var pendingDistanceM = 0.0;
       for (var index = 1; index < acceptedPeakTimesMs.length; index++) {
@@ -355,6 +418,10 @@ class AccelPreviewTrack {
         return 'missing timestamp';
       case batchedPeaksCapped:
         return 'batched peaks capped';
+      case leadDeferred:
+        return 'lead deferred';
+      case deferOverflow:
+        return 'defer overflow';
       case baseline:
         return 'baseline';
       default:

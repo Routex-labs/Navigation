@@ -4,23 +4,6 @@
 /// 임계값 하나만 옮겨도 "도면이 다 보이기 전에 실내에서 튕겨 나가는" 증상이나
 /// "이탈 순간 도면이 툭 끊기는" 증상이 조용히 되살아난다. 관계를 함수로
 /// 고정하고 테스트로 지킨다.
-///
-/// ## zoom 진입은 **위치 조건과 함께** 돌아왔다
-///
-/// 예전에는 임계값 이상으로 확대하면 그것만으로 실내 오버레이가 켜졌다. 확대는
-/// "저 건물을 자세히 보고 싶다"는 뜻이지 "저 안에 들어왔다"는 뜻이 아니라,
-/// 건너편에서 건물을 훑어보던 사용자가 영문 모르고 실내 화면에 들어와 있었다.
-/// 그래서 한동안 걷어냈다.
-///
-/// 지금은 **화면 중심이 그 건물 위일 때만** 들여보낸다
-/// ([shouldEnterIndoorForZoom]과 호출부의 위치 판정). 건물을 화면 한가운데
-/// 놓고 그만큼 확대했다면 그건 "저 건물을 열어 보고 있다"에 가깝고, 걷어냈던
-/// 이유였던 "건너편에서 훑어보는" 경우는 중심이 건물 밖이라 걸리지 않는다.
-/// 도면 탭과 GPS 진입([indoor_entry_gps.dart])은 그대로다.
-///
-/// 이탈은 zoom이 계속 맡는다. 실내에서 충분히 축소하는 것은 "이제 밖을 보겠다"는
-/// 명확한 조작이고, GPS가 건물 안을 계속 가리키는 동안 사용자가 화면을 빠져나올
-/// 수단이 하나는 있어야 한다.
 library;
 
 import 'dart:math' as math;
@@ -87,27 +70,26 @@ const indoorOverlayFadeInEndZoom = 17.5;
 const indoorOverlayFadeOutStartZoom = indoorExitZoomThreshold;
 const indoorOverlayFadeOutEndZoom = 16.0;
 
-/// 도면이 완전히 보이는(페이드가 끝나는) zoom.
-///
-/// 한때는 이 값이 곧 **진입 임계값**이었다. 지금은 진입 트리거가 아니라 카메라를
-/// 맞출 때의 목표 zoom이다 — 층 chip을 눌렀거나 실내로 들어왔는데 도면이 화면에
-/// 안 보이면 여기까지 확대해 준다([indoorFocusZoomFor]).
-const indoorFocusZoom = indoorOverlayFadeInEndZoom;
+/// 이 zoom 이상으로 확대하면 "실내 진입" 의도로 보고 실내 UI 오버레이를 얹는다.
+/// 진입 램프의 페이드가 끝나는 순간(=도면이 완전히 보이는 순간)과 맞춘다.
+const indoorEntryZoomThreshold = indoorOverlayFadeInEndZoom;
 
 /// 이 zoom 미만으로 축소하면 실내 오버레이를 접고 야외로 되돌아간다.
 ///
-/// **도면이 다 보이는 zoom보다 확실히 낮아야 한다.** 두 값이 붙어 있으면
-/// 사용자가 층 전체를 보려고 조금만 축소해도 즉시 야외로 튕겨 나간다. 더현대
-/// 서울의 지하는 지상보다 훨씬 넓다 — 층 도면은 정북 기준 53도 돌아가 있어서,
-/// 로컬 좌표로는 295 x 148 m인 B3·B4가 화면(정북 정렬) 기준으로는
-/// **286 x 305 m**를 차지한다. 지상층(약 180 x 190 m)의 1.6배다.
+/// **진입 임계값과 같은 값을 쓰면 안 된다.** 두 값이 같으면 사용자가 층 전체를
+/// 보려고 조금만 축소해도 즉시 야외로 튕겨 나간다. 더현대 서울의 지하는 지상
+/// 보다 훨씬 넓다 — 층 도면은 정북 기준 53도 돌아가 있어서, 로컬 좌표로는
+/// 295 x 148 m인 B3·B4가 화면(정북 정렬) 기준으로는 **286 x 305 m**를 차지한다.
+/// 지상층(약 180 x 190 m)의 1.6배다.
 ///
-/// 폭 360 px 화면에 이 286 m를 담으려면 z≈16.05까지 축소해야 하는데, 예전처럼
-/// 17.5에서 바로 이탈 판정이 나면 "다 담기지도 않았는데 벗어나는" 증상이
-/// 생긴다(17.5에서 보이는 폭은 121 m뿐이다).
+/// 폭 360 px 화면에 이 286 m를 담으려면 z≈16.05까지 축소해야 하는데, 진입
+/// 임계값 17.5에서 바로 이탈 판정이 나 "다 담기지도 않았는데 벗어나는" 증상이
+/// 생겼다(17.5에서 보이는 폭은 121 m뿐이다).
 ///
 /// 그래서 이탈은 fit zoom 16.05보다 확실히 아래인 15.6으로 내린다. 여기서
-/// 보이는 폭이 450 m라 가장 넓은 지하층도 57% 여유를 두고 들어간다.
+/// 보이는 폭이 450 m라 가장 넓은 지하층도 57% 여유를 두고 들어간다. 진입 17.5
+/// 와의 사이 1.9 zoom이 히스테리시스 밴드이며, 그 안에서는 진입도 이탈도
+/// 판정하지 않는다.
 const indoorExitZoomThreshold = 15.6;
 
 /// 하단 바에서 '홈'(야외)을 눌러 야외 지도로 돌아올 때 카메라를 맞출 zoom.
@@ -119,34 +101,46 @@ const indoorExitZoomThreshold = 15.6;
 /// 들어갈 수 있다. 이탈 임계값 아래로 내리면 zoom 판정도 "야외"로 일치한다.
 const outdoorReturnZoom = indoorExitZoomThreshold - 0.1;
 
-/// 화면 폭 [viewportWidthPx]에서 카메라를 맞출 zoom.
+/// 화면 폭 [viewportWidthPx]에서 실제로 쓸 진입 임계값.
 ///
-/// [indoorFocusZoom]은 **절대 zoom**이라, 같은 값이라도 화면이 넓으면 더 넓은
-/// 땅이 보인다. 더현대 서울(정북 정렬 폭 약 179 m, 위도 37.526) 기준으로:
+/// [indoorEntryZoomThreshold]는 **절대 zoom**이라, 같은 값이라도 화면이 넓으면
+/// 더 넓은 땅이 보인다. 이게 좁은 화면에서 확대 진입을 통째로 죽이고 있었다.
+/// 더현대 서울(정북 정렬 폭 약 179 m, 위도 37.526) 기준으로:
 ///
 /// | 화면 폭 | 건물이 화면에 담기는 zoom | z=17.5에서 보이는 폭 |
 /// |---|---|---|
 /// | 1400 px (데스크톱 Chrome) | 18.8 | 470 m — 건물이 여유롭게 담긴다 |
 /// | 360 px (폰 세로) | 16.8 | 121 m — 건물의 68%만 보인다 |
 ///
-/// 즉 폰에서 고정 17.5로 맞추면 건물이 화면 밖으로 넘치게 확대돼, 포커스를
-/// 맞췄는데 오히려 건물이 안 보인다. 그래서 "건물이 화면 폭에 담기는 zoom"을
-/// 상한으로 함께 쓴다 — 두 값 중 낮은 쪽(min)이 답이다.
+/// 즉 데스크톱에서는 건물을 화면에 맞추기만 해도 17.5를 한참 넘겨 진입이
+/// 저절로 발화하지만, 폰에서는 건물이 **화면 밖으로 넘칠 때까지** 확대해야
+/// 닿는다. 사용자는 건물이 꽉 차는 z≈16.8에서 확대를 멈추므로 임계값에 영영
+/// 닿지 않고, 건물을 직접 탭하는 경로만 남는다 — "실기기에서만 층 선택기와
+/// 위치 지정 버튼이 안 뜬다"의 정체가 이것이었다.
 ///
-/// 하한은 [indoorOverlayFadeOutEndZoom](16.0)이다. 진입 **후** 페이드 램프가 이
-/// zoom에서 이미 100%라, 여기까지만 확대해도 도면이 흐린 채로 남는 일이 없다.
-/// [indoorExitZoomThreshold](15.6)보다도 위라, 포커스를 맞춘 그 자리에서 곧바로
-/// 이탈 판정이 나는 일도 없다.
+/// 그래서 "건물이 화면 폭에 담기는 zoom"을 임계값의 상한으로 함께 쓴다.
+///
+/// **min을 쓰는 것이 핵심이다.** 두 값 중 낮은 쪽을 택하므로 이 보정으로
+/// 진입이 지금보다 **어려워지는 화면은 없다.** 넓은 화면에서는 fit zoom이
+/// 17.5보다 높게 나와 기존 17.5가 그대로 쓰인다(데스크톱 동작 불변).
+///
+/// 하한은 [indoorOverlayFadeOutEndZoom](16.0)이다. 두 가지를 동시에 지킨다.
+///   - 진입 **후** 페이드 램프가 이 zoom에서 이미 100%라, 낮아진 임계값으로
+///     들어가도 도면이 흐린 채로 진입하는 일이 없다.
+///   - [indoorExitZoomThreshold](15.6)와의 히스테리시스 밴드가 남는다. 이
+///     하한이 없으면 아주 넓은 건물 + 좁은 화면에서 진입 임계값이 이탈 임계값
+///     아래로 내려가, 같은 zoom에서 진입과 이탈이 동시에 성립해 오버레이가
+///     켜졌다 꺼졌다 진동한다.
 ///
 /// [buildingWidthMeters]나 [viewportWidthPx]가 0 이하면(건물 미로드 등) 판정
-/// 근거가 없으므로 보정 없이 기본값을 그대로 돌려준다.
-double indoorFocusZoomFor({
+/// 근거가 없으므로 보정 없이 기본 임계값을 그대로 돌려준다.
+double indoorEntryZoomThresholdFor({
   required double buildingWidthMeters,
   required double viewportWidthPx,
   required double latitude,
 }) {
   if (buildingWidthMeters <= 0 || viewportWidthPx <= 0) {
-    return indoorFocusZoom;
+    return indoorEntryZoomThreshold;
   }
   final fitZoom = zoomToFitWidth(
     widthMeters: buildingWidthMeters,
@@ -154,7 +148,7 @@ double indoorFocusZoomFor({
     latitude: latitude,
   );
   return math.max(
-    math.min(indoorFocusZoom, fitZoom),
+    math.min(indoorEntryZoomThreshold, fitZoom),
     indoorOverlayFadeOutEndZoom,
   );
 }
@@ -182,34 +176,52 @@ const indoorTilesMinZoom = 15.0;
 /// 그 이상에서는 z=18 타일을 over-scale한다(z=18은 ~150 m 폭, 0.04 m/유닛).
 const indoorTilesMaxZoom = 18.0;
 
-/// [zoom]에서 실내 오버레이를 접어야 하는지.
-///
-/// **판정은 이탈 하나뿐이다.** 확대는 아무리 깊어도 실내로 들여보내지 않는다 —
-/// 진입은 도면 탭과 GPS만 담당한다(파일 상단 주석). 그래서 이 함수는 "얼마나
-/// 축소했는가"만 본다.
-///
-/// [indoorExitZoomThreshold] 이상에서는 false다. 실내에 들어와 층 전체를 보려고
-/// 축소하는 구간이 여기이며, 도면은 그동안 계속 진하게 남아 있다
-/// ([indoorOverlayFadeOutEndZoom]).
-bool shouldExitIndoorForZoom(double zoom) => zoom < indoorExitZoomThreshold;
+/// 카메라가 멈춘 시점의 zoom이 실내 진입 상태에 요구하는 변화.
+enum IndoorEntryTransition {
+  /// 실내 오버레이를 켠다(이미 켜져 있으면 유지).
+  enter,
 
-/// 확대만으로 실내 오버레이를 켤 zoom.
-///
-/// 도면이 완전히 진해지는 지점([indoorFocusZoom])과 같다. 그보다 낮으면 반쯤
-/// 흐린 도면 위에서 실내로 들어가 있게 되고, 화면은 "들어온 것도 아니고 밖도
-/// 아닌" 상태로 보인다.
-///
-/// **이탈 임계값(15.6)과 크게 벌려 둔 것이 핵심이다.** 두 값이 붙어 있으면 손가락
-/// 한 번 움찔하는 것만으로 진입과 이탈이 번갈아 발화한다.
-const indoorEntryZoomThreshold = indoorFocusZoom;
+  /// 실내 오버레이를 접고 야외로 되돌아간다.
+  exit,
 
-/// 확대만으로 실내에 들어갈 zoom인지.
+  /// 히스테리시스 밴드 — 현재 상태를 그대로 둔다.
+  keep,
+}
+
+/// [zoom]에서 실내 진입 상태를 어떻게 바꿔야 하는지 판정한다.
 ///
-/// **이 판정 하나로 들어가지 않는다.** 호출부가 "카메라 중심이 실제로 그 건물
-/// 위인지"를 함께 본다. zoom만 보고 들여보내던 시절에 건너편에서 건물을 훑던
-/// 사용자가 영문 모르고 실내 화면에 들어와 있었고(파일 상단 주석), 그래서 한 번
-/// 걷어냈던 기능이다. 위치 조건을 붙여 되살린 것이라 zoom 단독으로는 부족하다.
-bool shouldEnterIndoorForZoom(double zoom) => zoom >= indoorEntryZoomThreshold;
+/// 두 임계값 사이는 [IndoorEntryTransition.keep]이다. 실내에 들어와 층 전체를
+/// 보려고 축소하는 구간이 여기이며, 반대로 아직 진입하지 않았다면 이 구간에서
+/// 도면만 옅게 보일 뿐 실내 UI는 뜨지 않는다.
+///
+/// [buildingNearby]는 카메라가 실내 도면이 있는 건물 근처인지
+/// (`isIndoorBuildingNearCamera`, `indoor_entry_proximity.dart`)다. false면
+/// 아무리 확대해도 [IndoorEntryTransition.enter]를 내지 않는다 — 건물이 없는
+/// 지역을 확대했을 때 도면 한 장 없이 층 선택기·위치 지정 버튼만 뜨는 것을
+/// 막는다. 대신 [IndoorEntryTransition.exit]도 내지 않는다: 이탈은 축소와
+/// 건물 밖 탭으로만 판정해, 실내에서 도면 끝을 보려고 살짝 패닝했을 때 화면이
+/// 야외로 튀지 않게 한다.
+///
+/// 이 파라미터는 기본값을 두지 않는다. 기본값 true를 두면 새 호출부가 값을
+/// 빼먹는 순간 "확대만으로 실내 진입" 버그가 조용히 되살아난다.
+///
+/// [entryZoom]은 이 화면 폭에서 쓸 진입 임계값이며 [indoorEntryZoomThresholdFor]
+/// 가 계산한다. 이것도 같은 이유로 기본값을 두지 않는다 — 기본값
+/// [indoorEntryZoomThreshold]를 두면 호출부가 값을 빼먹는 순간 좁은 화면에서
+/// 확대 진입이 발화하지 않는 버그가 조용히 되살아난다.
+IndoorEntryTransition indoorEntryTransitionForZoom(
+  double zoom, {
+  required bool buildingNearby,
+  required double entryZoom,
+}) {
+  if (zoom >= entryZoom) {
+    return buildingNearby
+        ? IndoorEntryTransition.enter
+        : IndoorEntryTransition.keep;
+  }
+  if (zoom < indoorExitZoomThreshold) return IndoorEntryTransition.exit;
+  return IndoorEntryTransition.keep;
+}
 
 /// 실내 오버레이(및 dim scrim)의 zoom-interpolate 페이드 표현식.
 /// `[interpolate, [linear], [zoom], stop0_zoom, stop0_val, ...]` 형태의

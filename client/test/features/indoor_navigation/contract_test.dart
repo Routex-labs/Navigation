@@ -10,6 +10,7 @@ class FakeIndoorNavigation implements IndoorNavigationController {
   final _calibration = StreamController<CalibrationStatus>.broadcast();
   final _runtimeStatuses = StreamController<PdrRuntimeStatus>.broadcast();
   final _altitudes = StreamController<AltitudeSample>.broadcast();
+  final _rawMotion = StreamController<RawMotionActivity>.broadcast();
 
   PdrSnapshot? _current;
   CalibrationStatus _calib = const CalibrationStatus.uncalibrated();
@@ -30,6 +31,9 @@ class FakeIndoorNavigation implements IndoorNavigationController {
 
   @override
   Stream<PdrRuntimeStatus> get runtimeStatuses => _runtimeStatuses.stream;
+
+  @override
+  Stream<RawMotionActivity> get rawMotion => _rawMotion.stream;
 
   @override
   PdrRuntimeStatus get currentRuntimeStatus => _runtimeStatus;
@@ -93,6 +97,12 @@ class FakeIndoorNavigation implements IndoorNavigationController {
   }) async {
     log.add('transfer:$floorId@${anchorLocalM.eastM},${anchorLocalM.northM}');
   }
+
+  @override
+  Future<void> pauseStepTracking() async => log.add('pauseSteps');
+
+  @override
+  Future<void> resumeStepTracking() async => log.add('resumeSteps');
 
   // 테스트 구동용.
   void pushCalibration(CalibrationStatus s) {

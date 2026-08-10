@@ -5,30 +5,25 @@ import '../theme/app_theme.dart';
 
 /// 하단 바에서 전환 가능한 지도 모드. [outdoor]는 야외(GPS) 지도,
 /// [indoor]는 실내 지도 화면에 대응한다.
-enum MapMode { outdoor, indoor }
-
 /// "위치 지정" 버튼 아이콘. Material 아이콘 대신 전용 에셋을 쓰는 이유는
 /// 에셋 파일 상단 주석에 있다 — 색을 알파로만 표현해 활성/비활성 두 상태에서
 /// 같은 농담 차이를 유지해야 한다.
 const _placeLocationIconAsset = 'assets/icons/place_location_pin.svg';
 
-/// 지도 화면(야외/실내) 공통 하단 바. 위치 보정 버튼(우상단) + 홈/실내
-/// 전환 세그먼트로 구성된다. 화면 전환은 Navigator push 없이 [onModeChanged]
-/// 콜백으로 상위(MapShellScreen)의 상태만 바꾼다 — 탭 전환처럼 즉시 반응해야
-/// 하고, 이전 화면 스택이 쌓이면 안 되기 때문이다.
+/// 지도 화면 하단 바. 위치 보정 버튼과 "위치 지정" 버튼으로 구성된다.
+///
+/// 예전에는 여기에 홈/실내 전환 세그먼트가 있었다. 실내가 별도 탭이던 시절의
+/// 잔재인데, 실내 도면을 야외 지도 위 오버레이로 그리게 되면서 전환할 대상이
+/// 없어졌다 — 건물에 들어가면 오버레이가 열리고 나오면 닫힌다.
 class MapBottomBar extends StatelessWidget {
   const MapBottomBar({
     super.key,
-    required this.mode,
-    required this.onModeChanged,
     required this.onCalibrate,
     required this.onPlaceLocation,
     this.placingLocation = false,
     this.showPlaceLocation = true,
   });
 
-  final MapMode mode;
-  final ValueChanged<MapMode> onModeChanged;
   final VoidCallback onCalibrate;
 
   /// 위치 보정 버튼 옆에 놓인 "위치 지정" 버튼을 눌렀을 때 호출된다. 지도를
@@ -70,8 +65,6 @@ class MapBottomBar extends StatelessWidget {
                 _CalibrateButton(onPressed: onCalibrate),
               ],
             ),
-            const SizedBox(height: 10),
-            _ModeSegment(mode: mode, onModeChanged: onModeChanged),
           ],
         ),
       ),
@@ -91,8 +84,9 @@ class _CalibrateButton extends StatelessWidget {
       child: Material(
         color: Colors.white,
         shape: const CircleBorder(),
-        elevation: 4,
-        shadowColor: Colors.black.withValues(alpha: 0.18),
+        // 지도에 붙은 조작이다(AppElevation.onMap).
+        elevation: AppElevation.onMap,
+        shadowColor: Colors.black.withValues(alpha: 0.14),
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: onPressed,
@@ -135,9 +129,10 @@ class _PlaceLocationButton extends StatelessWidget {
       child: Material(
         color: backgroundColor,
         shape: const CircleBorder(),
-        elevation: active ? 6 : 4,
+        // 눌린 상태만 한 단계 앞으로 나온다 — 지도 탭을 기다리는 중이라는 신호다.
+        elevation: active ? AppElevation.chrome : AppElevation.onMap,
         shadowColor: (active ? AppColors.primary : Colors.black).withValues(
-          alpha: active ? 0.35 : 0.18,
+          alpha: active ? 0.30 : 0.14,
         ),
         child: InkWell(
           customBorder: const CircleBorder(),
@@ -154,87 +149,6 @@ class _PlaceLocationButton extends StatelessWidget {
               colorFilter: ColorFilter.mode(iconColor, BlendMode.srcIn),
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ModeSegment extends StatelessWidget {
-  const _ModeSegment({required this.mode, required this.onModeChanged});
-
-  final MapMode mode;
-  final ValueChanged<MapMode> onModeChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(24),
-      elevation: 6,
-      shadowColor: Colors.black.withValues(alpha: 0.15),
-      child: Padding(
-        padding: const EdgeInsets.all(4),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _ModeButton(
-              label: '홈',
-              icon: Icons.home_rounded,
-              active: mode == MapMode.outdoor,
-              onTap: () => onModeChanged(MapMode.outdoor),
-            ),
-            _ModeButton(
-              label: '실내',
-              icon: Icons.apartment_rounded,
-              active: mode == MapMode.indoor,
-              onTap: () => onModeChanged(MapMode.indoor),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ModeButton extends StatelessWidget {
-  const _ModeButton({
-    required this.label,
-    required this.icon,
-    required this.active,
-    required this.onTap,
-  });
-
-  final String label;
-  final IconData icon;
-  final bool active;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-        decoration: BoxDecoration(
-          color: active ? AppColors.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 17, color: active ? Colors.white : AppColors.muted),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w700,
-                color: active ? Colors.white : AppColors.muted,
-              ),
-            ),
-          ],
         ),
       ),
     );

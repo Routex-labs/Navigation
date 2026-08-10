@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/domain/route_guidance.dart';
+import 'package:navigation_client/domain/route_movement.dart';
 import 'package:navigation_client/domain/route_progress.dart';
 import 'package:navigation_client/models/floor_graph.dart';
 
@@ -14,13 +15,13 @@ void main() {
       reacquired: false,
       segmentIndex: 0,
       headingErrorDeg: 180,
-      wrongWay: true,
     );
 
     final instruction = buildRouteGuidance(
       localPoints: const [LocalPoint(0, 0), LocalPoint(20, 0)],
       wgs84Points: const [LatLng(37, 127), LatLng(37, 127.001)],
       progress: progress,
+      travelDirectionState: TravelDirectionState.reverseConfirmed,
     );
 
     expect(instruction.action, RouteGuidanceAction.wrongWay);

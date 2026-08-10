@@ -23,6 +23,7 @@ import '../repositories/tmap_directions_repository.dart';
 import '../repositories/tmap_poi_repository.dart';
 import '../repositories/transit_repository.dart';
 import '../state/favorites_controller.dart';
+import '../state/recent_searches_controller.dart';
 
 /// 앱 전체에서 공유하는 PDR 센서 소스와 세션 드라이버다. 화면이 바뀌어도
 /// 센서 세션을 다시 만들지 않도록 singleton으로 유지한다.
@@ -110,6 +111,10 @@ TransitRepository transitRepository = kakaoRestApiKey.isEmpty
 /// 사용자가 "장소" 탭에 저장해둔 매장 목록. SharedPreferences로 앱 재실행
 /// 뒤에도 유지된다. 테스트에서는 이 변수를 in-memory 컨트롤러로 교체한다.
 FavoritesController favoritesController = FavoritesController();
+
+/// 사용자가 최근에 검색한 말. 검색 패널의 빈 화면(idle)을 채운다. 즐겨찾기와
+/// 같은 저장소를 쓰지만 **기기 밖으로 나가지 않는다** — 서버로 보내지 않는다.
+RecentSearchesController recentSearchesController = RecentSearchesController();
 
 /// 걸음 센서(PDR)에 필요한 권한. iOS는 Motion & Fitness, Android는
 /// ActivityRecognition이며 가속도·자력계 원시값은 권한이 필요 없다.

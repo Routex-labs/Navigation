@@ -49,6 +49,7 @@ IndoorRoute? computeShortestRoute(
     // 그리기용 WGS84로 변환하면서 버리지 않고 그대로 실어 보낸다.
     pointsLocalM: localPoints,
     edgeIds: path.edgeIds,
+    nodeIds: path.nodeIds,
   );
 }
 

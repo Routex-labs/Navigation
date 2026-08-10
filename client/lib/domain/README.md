@@ -11,7 +11,7 @@ Flutter 화면이나 HTTP를 모르는 계산 계층이다. 백엔드가 제공�
 | [`floor_router.dart`](floor_router.dart) | node/edge 경로를 지도용 경로점으로 변환 | `computeShortestRoute` |
 | [`multi_floor_router.dart`](multi_floor_router.dart) | 건물 전체 그래프 경로를 층별 세그먼트로 분할 | `computeMultiFloorRoute` |
 | [`route_progress.dart`](route_progress.dart) | 현재 위치를 경로에 투영해 진행·남은거리·이탈 판정 | `RouteProgress`, `computeRouteProgress` |
-| [`route_guidance.dart`](route_guidance.dart) | 다음 행동 한 줄 안내와 진행 지점 기준 경로선 분할(지나온/남은) | `RouteGuidanceAction`, `RouteGuidanceInstruction`, `RoutePolylineSplit`, `splitRouteAtProgress` |
+| [`route_guidance.dart`](route_guidance.dart) | 다음 행동 한 줄 안내, 진행 지점 기준 경로선 분할(지나온/남은), 도착 시 안내 자동 종료 판단 | `RouteGuidanceAction`, `RouteGuidanceInstruction`, `RoutePolylineSplit`, `splitRouteAtProgress`, `decideArrivalAutoClear` |
 | [`geo_transform.dart`](geo_transform.dart) | 2D affine 피팅·적용, PDR/층 좌표 연결 | `AffineTransform` |
 | [`transit_walk_fill.dart`](transit_walk_fill.dart) | 카카오가 주지 않는 앞뒤 도보를 대중교통 경로에 붙임 | `fillTransitWalkLegs` |
 | [`single_flight.dart`](single_flight.dart) | 같은 작업이 겹쳐 도는 것을 막음(겹치면 버린다) | `SingleFlight` |
@@ -74,6 +74,7 @@ flowchart LR
 - 진행률을 매번 전역 최소 투영으로 구하면 ㄷ자 경로에서 마주보는 구간이 가까워 진행거리가 순간이동한다. 이전 진행거리 기준 지역 탐색이 필요하다.
 - 이전 진행거리 근처 후보라도 실제 걸음으로 설명할 수 없는 폭으로 튀면 다음 행동과 파란선이 건너뛴다. 마지막 채택 이후 걸음 수로 허용 이동량을 제한해야 한다.
 - 경로·층 세그먼트가 바뀔 때 이전 진행거리를 기준으로 남겨두면 매 걸음 재획득이 켜진다. 호출자가 기준점을 초기화해야 한다.
+- 진행률이 없을 때의 안내는 남은거리를 폴리라인 전체 길이로 대신 계산한다. 이 상태의 "도착"은 걸어서 도착한 것이 아니라 경로가 짧다는 뜻이므로, 자동 종료 판단에 그대로 쓰면 바로 옆 매장 경로가 그려지자마자 사라진다.
 
 ## 검증 기준
 
@@ -85,6 +86,8 @@ flowchart LR
 - 이탈거리가 작아도 현재 간선이 경로에 없으면 경로 위로 판정하지 않는다.
 - 걸음 없는 큰 진행거리 점프는 표시에서 보류하고, 누적 걸음으로 설명되는 이동은 반영한다.
   ([`../../test/domain/route_progress_test.dart`](../../test/domain/route_progress_test.dart))
+- 측정된 진행률로 목적지에 도착했을 때만 안내 자동 종료를 예약하고, 도착 상태에서 벗어나면 취소한다. 환승 지점·역주행·진행률 없는 짧은 경로는 종료하지 않는다.
+  ([`../../test/domain/route_arrival_auto_clear_test.dart`](../../test/domain/route_arrival_auto_clear_test.dart))
 
 ---
 

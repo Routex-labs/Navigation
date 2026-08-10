@@ -58,9 +58,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('디버그 모드를 끄면 개별 토글이 켜져 있어도 그리지 않는다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('디버그 모드를 끄면 개별 토글이 켜져 있어도 그리지 않는다', (WidgetTester tester) async {
     await tester.pumpWidget(const MaterialApp(home: OutdoorMapBody()));
     await tester.pump();
 

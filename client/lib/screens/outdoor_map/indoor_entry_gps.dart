@@ -1,114 +1,249 @@
 /// 야외 지도의 "GPS 기반 실내 진입/이탈" 판정 정책.
 ///
-/// zoom 정책([indoor_entry_zoom.dart])과 짝을 이룬다. 화면 코드에서 분리한 이유도
-/// 같다 — 이 판정은 위치 스트림에 얽혀 있어서, 화면 안에 묻어 두면 실기기를 들고
-/// 건물을 드나들어야만 검증할 수 있다.
+/// zoom 정책([indoor_entry_zoom.dart])·카메라 근접 정책
+/// ([indoor_entry_proximity.dart])과 짝을 이룬다. 화면 코드에서 분리한 이유도
+/// 같다 — 이 판정은 위치 스트림과 시간에 얽혀 있어서, 화면 안에 묻어 두면
+/// 실기기를 들고 입구를 드나들어야만 검증할 수 있다.
 ///
 /// ## 무엇을 판정하는가
 ///
-/// **"지금 이 좌표가 건물 외곽선 안인가"** 하나다. 판정 결과는 셋이다 —
-/// 안([GpsBuildingVerdict.inside])·밖([GpsBuildingVerdict.outside])·모름
-/// ([GpsBuildingVerdict.unclear]).
+/// 실내에 들어갔는지를 직접 알 방법은 없다. 앱이 볼 수 있는 건 플랫폼이 주는
+/// `accuracy`(내 위치가 이 반경 안에 있을 것이라는 추정, m) 하나뿐이고, 위성
+/// 개수나 신호 세기는 얻을 수 없다. 그래서 **"신호가 멀쩡했을 때 입구 근처에
+/// 있었는데, 지금 신호가 무너졌다"** 는 정황으로 판정한다.
 ///
-/// ## 왜 "입구 근처에서 신호가 무너짐"을 버렸는가
+/// ## 왜 "직전 값 대비 몇 배"가 아닌가
 ///
-/// 예전 판정은 **"신호가 멀쩡했을 때 입구 20 m 안에 있었는데, 지금 오차가 30 m를
-/// 넘었다"** 였다. 실내에서는 GPS가 반드시 무너진다는 전제였는데, 실기기에서
-/// 그 전제가 성립하지 않았다.
+/// 예전 판정은 `현재 > 직전 × 1.3`이었다. 이 형태는 **샘플 간격에 결합된다.**
+/// 위치는 5 m 움직일 때마다 오므로 간격이 걷는 속도에 따라 달라지는데, 촘촘히
+/// 들어올수록 한 스텝의 변화가 작아져 같은 저하도 못 잡는다.
 ///
-///   - 건물 안으로 들어가도 **입구 부근에서는 오차가 한동안 작게 유지된다.**
-///     그래서 "무너짐" 조건이 서지 않아 진입이 발화하지 않았고, 정작 사용자는
-///     이미 건물 안이었다.
-///   - 무너짐이 뒤늦게(건물 중심 쪽으로 한참 들어간 뒤) 오면, 그때는 창
-///     (10초)이 이미 지나 "입구 앞이었다"는 근거가 사라져 있었다.
+///   10 → 60                  : 6.0배 → 잡힘
+///   10 → 15 → 22 → 33 → 50   : 각 1.5배 → 잡힘
+///   10 → 12 → 14 → … → 50    : 각 1.2배 → **끝까지 못 잡음** (실제로는 5배)
 ///
-/// 즉 저 판정은 **신호 품질**이라는 간접 증거로 위치를 추론했다. 지금은 좌표를
-/// 직접 본다 — 오차가 작다는 것은 그 좌표를 믿어도 된다는 뜻이므로, 믿을 수 있는
-/// 좌표가 건물 안을 가리키면 그것이 곧 진입이다. 신호가 좋을수록 판정이 잘 되는
-/// 방향이라, 예전과 달리 GPS가 예상보다 잘 잡히는 것이 문제가 되지 않는다.
+/// 게다가 직전 값을 판정 성공 여부와 무관하게 덮어써서, 저하 순간에 좌표가 튀어
+/// 거리 조건이 깨지면 그 한 번으로 기회가 사라졌다(다음 비교 기준이 이미 나쁜
+/// 값이 되어 버린다). 이것이 실제 미탐의 주된 원인이었다.
 ///
-/// ## 히스테리시스는 거리로 만든다
-///
-/// "안"은 외곽선에서 [indoorEnterInsetMeters]만큼 **안쪽**, "밖"은
-/// [outdoorExitMarginMeters]만큼 **바깥**을 요구한다. 그 사이(벽 주변 완충 구간)는
-/// 모름이라 상태를 바꾸지 않는다. 벽에 붙어 선 사람의 좌표가 안팎으로 흔들려도
-/// 화면이 실내/야외를 오가지 않게 하는 유일한 장치다.
-///
-/// 두 값이 비대칭인 것은 의도다. 잘못 들어가는 비용(밖에 있는데 실내 도면이 뜸)
-/// 보다 잘못 나오는 비용(안에 있는데 PDR 추적이 끊김)이 크므로, 나가는 쪽을 더
-/// 엄격하게 잡는다.
+/// 그래서 비율을 버리고 **절대값 두 개 + 되짚는 창**으로 바꿨다. 창 안에서
+/// 조건을 다시 읽으므로 한 번 놓쳐도 다음 위치에서 다시 판정되고, 몇 번에 나눠
+/// 나빠지든 결과가 같다. 요구하는 대비는 오히려 1.3배에서 2배
+/// ([trustedAccuracyMeters] → [degradedAccuracyMeters])로 **엄격해진다.**
 library;
 
 import 'package:latlong2/latlong.dart' as ll;
 
-import 'indoor_entry_proximity.dart';
-
-/// 진입/이탈 판정에 쓸 수 있는 좌표의 최대 오차(m).
+/// 이 오차 이하면 좌표를 믿는다(m).
 ///
-/// 이 값을 넘는 좌표는 안팎 어느 쪽 근거로도 쓰지 않는다. 더 조이면(예: 10 m)
-/// 도심에서 건물 벽에 가려 오차가 커진 순간에 진입이 통째로 죽고, 풀면 오차
-/// 반경이 건물 폭에 육박해 "안"이라는 판정 자체가 의미를 잃는다. 20 m는 데모
-/// 건물(폭 약 180 m)의 1/9이라, 이 오차로 안쪽 5 m 지점이 잡혔다면 실제 위치가
-/// 건물 밖일 여지는 좁다.
-const decisiveAccuracyMeters = 20.0;
+/// 두 가지 일을 한다 — (1) "신호가 멀쩡했다"의 증거, (2) 입구까지 거리를 잴 때
+/// 쓸 좌표의 자격. 더 조이면(예: 10 m) 큰 건물 벽 옆에서는 거의 성립하지 않아
+/// 진입이 통째로 죽고, 풀면 거리 판정이 헐거워진다.
+const trustedAccuracyMeters = 15.0;
 
-/// 외곽선에서 이만큼 안쪽에 찍혀야 "들어왔다"고 본다(m).
+/// 이 오차를 넘으면 신호가 무너졌다고 본다(m).
 ///
-/// 0으로 두면 문 앞에 서 있는 사람의 좌표가 벽을 넘나들 때마다 진입이 발화한다.
-/// 5 m는 회전문·자동문을 통과하면 곧바로 넘는 거리라 진입이 늦어지지 않는다.
-const indoorEnterInsetMeters = 5.0;
+/// 화면의 'GPS 신호 약함' 배지와 **같은 값을 쓴다.** 배지가 뜬 상태에서 진입이
+/// 판정되므로 사용자가 보는 것과 코드의 판단이 어긋나지 않는다.
+const degradedAccuracyMeters = 30.0;
 
-/// 외곽선에서 이만큼 바깥에 찍혀야 "나왔다"고 본다(m).
+/// 입구에서 이 거리 안이면 "입구에 있었다"고 본다(m).
 ///
-/// [indoorEnterInsetMeters]보다 훨씬 크다. 실내에서 켜 둔 GPS는 좌표가 건물 밖
-/// 으로 튀는 일이 흔한데, 그 한 건으로 실내 상태를 접으면 사용자는 건물 안에서
-/// 도면과 위치 아이콘을 잃는다. 20 m면 문을 나와 몇 걸음 걸은 뒤라 확실하다.
-const outdoorExitMarginMeters = 20.0;
+/// [indoor_entry_proximity.dart]의 `indoorEntryProximityMeters`(80 m)와 다른
+/// 값이다. 그쪽은 **카메라**가 건물 근처인지, 이쪽은 **사용자**가 입구 앞인지다.
+const entranceNearMeters = 20.0;
+
+/// 자동 진입을 다시 켜려면 입구에서 이만큼 떨어진 곳에서 신뢰 좌표가 잡혀야
+/// 한다(m).
+///
+/// [entranceNearMeters]와 같은 값을 쓰면 경계에서 켜졌다 꺼졌다 한다. 신뢰
+/// 좌표라도 오차가 [trustedAccuracyMeters]까지 있으므로, 40 m면 오차를 빼도
+/// 진입 반경 밖이 보장된다. zoom 정책이 진입 17.5 / 이탈 15.6으로 벌려 둔 것과
+/// 같은 이유다.
+const entranceFarMeters = 40.0;
+
+/// 진입 판정이 과거를 되짚는 창.
+///
+/// 이 길이가 곧 **"급격함"의 정의**다. 짧으면 확 나빠진 경우만, 길면 완만한
+/// 저하까지 잡는다. 10초를 고른 근거는 양쪽 압력이다.
+///   - 더 짧으면: 위치는 5 m 이동마다 오므로 보통 걸음에서 4초에 한 건꼴이다.
+///     10초에 2~3건이 들어가는데 이보다 짧으면 창이 비거나 한 건뿐이라 판정이
+///     불안정해진다. 정확도 수치 자체도 문을 통과한 뒤 몇 초에 걸쳐 올라간다.
+///   - 더 길면: 걸어서 10초는 약 13 m다. 30초로 잡으면 "40 m 전에 입구 근처였다"
+///     가 되어, 입구를 지나쳐 간 사람까지 진입으로 읽는다.
+///
+/// 실기기 로그로 가장 먼저 조정할 값이다.
+const entryLookbackWindow = Duration(seconds: 10);
+
+/// 실내에서 PDR 위치가 입구에서 이만큼 안으로 들어오면 "밖으로 나가려는 것일 수
+/// 있다"고 보고 GPS를 다시 켠다(m).
+///
+/// 실내에서는 GPS를 끄는 것이 원칙이지만, 그러면 사용자가 아무 조작 없이 걸어
+/// 나갔을 때 알 방법이 없다. 그렇다고 실내 내내 켜 두면 위성을 못 잡고 탐색만
+/// 반복해 배터리를 계속 쓴다. 그래서 **PDR이 계기를 만들고 판단은 GPS가 한다** —
+/// 입구 앞에 왔을 때만 잠깐 켠다.
+const entranceNodeWatchMeters = 15.0;
+
+/// 켜 둔 GPS를 다시 끄는 거리(m).
+///
+/// [entranceNodeWatchMeters]와 같은 값을 쓰면 PDR이 경계에서 조금만 흔들려도
+/// 구독이 붙었다 끊겼다 한다. 10 m 여유를 둬 그 떨림을 흡수한다.
+const entranceNodeReleaseMeters = 25.0;
+
+/// PDR이 아직 아무 말도 못 하는 동안 감시를 켜 두는 유예.
+///
+/// 진입 직후에는 앵커가 아직 없어 PDR 위치를 모른다. 그 구간에서 감시를 꺼 버리면
+/// **들어오자마자 돌아 나가는 사용자를 놓친다** — 정작 가장 확인이 필요한 순간이다.
+/// 자동 앵커가 실패한 층(통로 지도 없음 등)에서는 PDR 위치를 끝내 알 수 없어서
+/// 감시가 영영 안 켜지기도 한다.
+///
+/// 그래서 "모르면 켜 둔다"로 두되, 무한정 켜 두지 않도록 상한을 건다. 들어왔다
+/// 바로 나가는 행동은 1분 안에 끝나므로, 그 뒤에도 PDR이 말을 못 하면 안에 머무는
+/// 것으로 보고 끈다. PDR이 위치를 말할 수 있게 되면 이 유예와 무관하게 거리 규칙이
+/// 우선한다.
+const entranceWatchGraceWindow = Duration(seconds: 60);
+
+/// 창에 쌓아 두는 위치 표본 수의 상한.
+///
+/// 창은 표본의 **자체 timestamp**로 자르는데, 기기 시계가 멈추거나 플랫폼이 같은
+/// 시각을 반복해 주면 아무것도 잘려 나가지 않는다. 그 경우에도 메모리가 무한정
+/// 늘지 않도록 개수로도 막는다.
+const _maxWindowSamples = 64;
 
 /// 판정에 쓰는 위치 한 건.
 class GpsFix {
-  const GpsFix({required this.point, required this.accuracyMeters});
+  const GpsFix({
+    required this.at,
+    required this.point,
+    required this.accuracyMeters,
+  });
 
+  /// 플랫폼이 준 관측 시각. 창을 자르는 기준이며, `DateTime.now()`가 아니라
+  /// 표본 자신의 시각을 쓴다 — 테스트에서 시계를 흉내 낼 필요가 없고, 위치가
+  /// 늦게 배달돼도 창 길이가 왜곡되지 않는다.
+  final DateTime at;
   final ll.LatLng point;
 
   /// 오차 반경(m). **작을수록 정확하다.**
   final double accuracyMeters;
 }
 
-/// 좌표 한 건이 말하는 "건물 안팎".
-enum GpsBuildingVerdict {
-  /// 건물 안. 야외 상태였다면 실내로 들어갈 근거다.
-  inside,
+/// 위치 한 건이 요구하는 상태 변화.
+enum IndoorEntryGpsDecision {
+  /// 실내 진입 — 창 안에 입구 근처의 신뢰 좌표가 있었고 지금은 신호가 무너졌다.
+  enter,
 
-  /// 건물 밖. 실내 상태였다면 나갈 근거이고, 야외 상태라면 자동 진입을 다시
-  /// 무장할 근거다.
-  outside,
+  /// 자동 진입 재활성화 — 신뢰 좌표가 입구에서 충분히 떨어진 곳에서 잡혔다.
+  /// 오차 [trustedAccuracyMeters] 이하는 실내에서 거의 나오지 않으므로, 이
+  /// 조건 자체가 사실상 "밖에 있다"의 증거다.
+  rearm,
 
-  /// 판단하지 않는다 — 오차가 크거나, 외곽선을 모르거나, 벽 주변 완충 구간.
-  unclear,
+  /// 근거 없음 — 상태를 그대로 둔다.
+  none,
 }
 
-/// [fix]가 [footprint] 안팎 중 어디를 가리키는지 판정한다.
+/// 최근 위치를 창으로 들고 있으면서 [IndoorEntryGpsDecision]을 판정한다.
 ///
-/// 지금 실내 상태인지는 **묻지 않는다.** 이 함수는 좌표 하나를 읽을 뿐이고,
-/// 그 결과로 무엇을 할지(진입·이탈·무장)는 화면이 정한다. 상태를 넣기 시작하면
-/// 같은 좌표가 상태에 따라 다르게 읽혀, 실기기 로그만 보고는 왜 그 판정이
-/// 나왔는지 되짚을 수 없다.
-GpsBuildingVerdict judgeBuildingFromGps({
-  required GpsFix fix,
-  required List<ll.LatLng>? footprint,
-}) {
-  if (footprint == null || footprint.length < 3) {
-    return GpsBuildingVerdict.unclear;
+/// 순수 로직이다(Flutter·플랫폼 의존 없음). 화면은 위치가 올 때마다 [record]
+/// 하고 [decide]가 시키는 대로만 하면 된다.
+class IndoorEntryGpsTracker {
+  final List<GpsFix> _window = <GpsFix>[];
+
+  /// 테스트·진단용. 지금 창에 남아 있는 표본 수.
+  int get sampleCount => _window.length;
+
+  void record(GpsFix fix) {
+    _window.add(fix);
+    final cutoff = fix.at.subtract(entryLookbackWindow);
+    // 방금 넣은 표본은 자기 자신보다 이르지 않으므로 항상 살아남는다.
+    _window.removeWhere((sample) => sample.at.isBefore(cutoff));
+    if (_window.length > _maxWindowSamples) {
+      _window.removeRange(0, _window.length - _maxWindowSamples);
+    }
   }
-  if (fix.accuracyMeters > decisiveAccuracyMeters) {
-    return GpsBuildingVerdict.unclear;
+
+  /// 창을 비운다. 실내에 들어가 GPS 구독을 끊을 때처럼, 이전 표본이 더 이상
+  /// 지금 상황을 대표하지 않을 때 호출한다.
+  void clear() => _window.clear();
+
+  /// [entrance]는 건물 입구 좌표, [armed]는 자동 진입이 지금 켜져 있는지다.
+  ///
+  /// 두 판정은 배타적이다 — 켜져 있으면 진입만, 꺼져 있으면 재활성화만 본다.
+  /// 입구를 아직 모르거나([entrance]가 null) 표본이 하나도 없으면 판정하지
+  /// 않는다. **근거가 없으면 판단하지 않는다**는 것이 이 파일 전체의 규칙이다.
+  IndoorEntryGpsDecision decide({
+    required ll.LatLng? entrance,
+    required bool armed,
+  }) {
+    if (entrance == null || _window.isEmpty) {
+      return IndoorEntryGpsDecision.none;
+    }
+    final latest = _window.last;
+
+    if (!armed) {
+      final trusted = latest.accuracyMeters <= trustedAccuracyMeters;
+      final away = _metersBetween(latest.point, entrance) > entranceFarMeters;
+      return trusted && away
+          ? IndoorEntryGpsDecision.rearm
+          : IndoorEntryGpsDecision.none;
+    }
+
+    // 지금 신호가 무너졌는가.
+    if (latest.accuracyMeters <= degradedAccuracyMeters) {
+      return IndoorEntryGpsDecision.none;
+    }
+    // 창 안 어딘가에 "믿을 수 있으면서 입구 앞이었던" 순간이 있었는가.
+    //
+    // any로 창 전체를 다시 읽는 것이 핵심이다. 이 덕분에 저하 순간에 좌표가 튀어
+    // 놓치더라도, 창이 살아 있는 동안 들어오는 다음 위치에서 그대로 다시 성립한다.
+    final approached = _window.any(
+      (sample) =>
+          sample.accuracyMeters <= trustedAccuracyMeters &&
+          _metersBetween(sample.point, entrance) <= entranceNearMeters,
+    );
+    return approached
+        ? IndoorEntryGpsDecision.enter
+        : IndoorEntryGpsDecision.none;
   }
-  if (metersInsidePolygon(fix.point, footprint) >= indoorEnterInsetMeters) {
-    return GpsBuildingVerdict.inside;
-  }
-  if (metersToPolygon(fix.point, footprint) >= outdoorExitMarginMeters) {
-    return GpsBuildingVerdict.outside;
-  }
-  return GpsBuildingVerdict.unclear;
 }
+
+/// 실내 상태에서 "밖으로 나가는지 확인하려고" GPS를 켜 둬야 하는지.
+///
+/// [pdrPoint]는 PDR이 말하는 지금 위치, [watching]은 지금 켜 둔 상태인지,
+/// [graceExpired]는 [entranceWatchGraceWindow]가 지났는지다.
+///
+/// 판단 순서가 중요하다.
+///   1. 입구를 모르면 켜지 않는다 — 비교할 기준이 없다.
+///   2. **PDR이 위치를 말할 수 있으면 그것만 본다.** 켜는 반경
+///      ([entranceNodeWatchMeters])과 끄는 반경([entranceNodeReleaseMeters])이
+///      달라서, 그 사이에서는 현재 상태를 유지한다.
+///   3. PDR이 말을 못 하면(앵커 없음·다른 층) 유예 동안만 켜 둔다. 진입 직후가
+///      바로 이 구간이고, 여기서 꺼 버리면 들어오자마자 돌아 나가는 사용자를
+///      놓친다.
+bool shouldWatchGpsNearEntrance({
+  required ll.LatLng? pdrPoint,
+  required ll.LatLng? entrance,
+  required bool watching,
+  required bool graceExpired,
+}) {
+  if (entrance == null) return false;
+  if (pdrPoint == null) return !graceExpired;
+  final distance = _metersBetween(pdrPoint, entrance);
+  if (watching) return distance <= entranceNodeReleaseMeters;
+  return distance <= entranceNodeWatchMeters;
+}
+
+/// 실내에서 켠 GPS가 잡은 [fix]가 "밖으로 나왔다"를 뜻하는지.
+///
+/// 근거는 **오차 자체**다. 오차 [trustedAccuracyMeters] 이하는 건물 안에서 거의
+/// 나오지 않으므로, 그 값이 잡혔다는 것만으로 실외의 강한 증거다.
+///
+/// 거리 조건([entranceNearMeters] 이내)은 확인 사살이다. PDR은 "입구 앞"이라고
+/// 했는데 GPS가 한참 떨어진 곳을 가리키면 둘 중 하나가 틀린 것이므로, 그때는
+/// 판정하지 않는다 — 사용자는 예전처럼 탭이나 축소로 나가면 된다.
+bool isOutdoorsFix({required GpsFix fix, required ll.LatLng entrance}) =>
+    fix.accuracyMeters <= trustedAccuracyMeters &&
+    _metersBetween(fix.point, entrance) <= entranceNearMeters;
+
+double _metersBetween(ll.LatLng a, ll.LatLng b) =>
+    const ll.Distance().as(ll.LengthUnit.Meter, a, b);

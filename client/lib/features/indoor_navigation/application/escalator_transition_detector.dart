@@ -26,6 +26,7 @@ import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
 import '../../../models/floor_graph.dart';
 import '../contract/altitude_sample.dart';
+import '../contract/raw_motion_activity.dart';
 import 'escalator_node_naming.dart';
 
 /// 판정 임계값. 전부 **초안값**이며 실측 로그(schema v12의
@@ -35,17 +36,17 @@ class EscalatorDetectorConfig {
     this.armRadiusM = 6.0,
     this.routeApproachArmRadiusM = 16.0,
     this.armHoldMs = 60000,
-    this.smoothingWindowMs = 4000,
+    this.smoothingWindowMs = 3000,
     this.minSmoothingSamples = 3,
     this.maxSampleAgeMs = 15000,
-    this.minDeltaM = 1.8,
+    this.minDeltaM = 1.2,
     this.minConfirmDeltaM = 2.2,
     this.rampConsistencyWindowMs = 5000,
     this.minDirectionalRampSamples = 3,
     this.minDirectionalSampleDeltaM = 0.04,
     this.minRampMs = 2500,
     this.settleWindowMs = 2500,
-    this.minRampRiseM = 0.35,
+    this.minRampRiseM = 0.45,
     this.settleSlopeM = 0.25,
     this.fastAltitudeAlpha = 0.65,
     this.fastExitSlopeMps = 0.12,
@@ -54,6 +55,11 @@ class EscalatorDetectorConfig {
     this.candidateTimeoutMs = 90000,
     this.multiFloorRejectM = 10.0,
     this.baselineTrackAlpha = 0.02,
+    this.boardingApproachRadiusM = 3.0,
+    this.boardingApproachUpdates = 2,
+    this.boardingPhaseTimeoutMs = 40000,
+    this.minVerticalSpeedMps = 0.12,
+    this.verticalMotionConsecutiveSamples = 2,
   });
 
   /// 에스컬레이터 노드에 이만큼 다가오면 판정을 "허가"한다. 랜딩 폭과 보정
@@ -76,10 +82,18 @@ class EscalatorDetectorConfig {
   /// 중앙값 평활 창. 기압 단기 노이즈(±0.1~0.3 hPa ≈ ±1~2.5 m)를 눌러야
   /// 층 간격(4~6 m)과 구분된다.
   ///
-  /// 2000ms였을 때 iOS에서 판정이 **한 번도 돌지 않았다**. `CMAltimeter` 실측
-  /// 간격이 1069ms여서 2초 창에는 항상 2개만 들어오고, [minSmoothingSamples]를
-  /// 영원히 못 채웠다(실측 로그의 `smoothed_m`이 전 구간 null). 창을 넓히는
-  /// 동시에 아래 [minSmoothingSamples] 개수는 창과 무관하게 항상 보장한다.
+  /// **이 창이 곧 판정 지연이다.** 중앙값은 창 길이의 절반쯤 뒤처지므로, 창이
+  /// 4초면 실제로 오르기 시작한 시각보다 약 2초 늦게 delta가 따라온다. 층 전환
+  /// 전체 지연(=여기 + [minDeltaM]에 도달할 때까지)에서 무시할 수 없는 몫이라
+  /// 3초로 줄였다. iOS `CMAltimeter` 실측 간격 1069ms 기준 3개가 들어와 중앙값
+  /// 3개짜리는 그대로 유지되고(단발 튐은 여전히 걸러진다), 지연은 약 1초로
+  /// 줄어든다.
+  ///
+  /// 2000ms였을 때 iOS에서 판정이 **한 번도 돌지 않았다**. 2초 창에는 항상 2개만
+  /// 들어와 [minSmoothingSamples]를 영원히 못 채웠기 때문이다(실측 로그의
+  /// `smoothed_m`이 전 구간 null). 그 실패는 창 길이가 아니라 개수 보장이
+  /// 없었던 탓이고, 지금은 아래 [minSmoothingSamples]가 창과 무관하게 최근 3개를
+  /// 항상 남긴다 — 센서 간격이 더 벌어져도 판정은 계속 돈다.
   final int smoothingWindowMs;
 
   /// 평활에 쓸 최소 샘플 수. iOS ~0.93Hz, Android 5Hz로 간격이 5배 다르므로
@@ -97,6 +111,20 @@ class EscalatorDetectorConfig {
   /// 후보를 열기 위한 최소 고도 변화(m). 건물마다 층고가 다르고 세션 시작
   /// 기압도 달라 절대 층고 대신, 사람이 한 번에 점프하기 어려운 변화량과
   /// 아래의 지속 방향 조건을 함께 쓴다.
+  ///
+  /// 이 값이 **지도가 바뀌는 시점**을 정한다. 1.8m였을 때 에스컬레이터 수직
+  /// 속도(0.25~0.5 m/s) 기준 탑승 후 4~7초가 지나야 지도가 넘어갔고, 그 사이
+  /// 사용자는 "이미 탔는데 아직 이전 층"인 화면을 봤다. 1.2m면 2~5초로 당겨진다.
+  ///
+  /// 더 낮출 수도 있지만 다음을 감수해야 한다. 후보가 열린 뒤 delta가
+  /// `minDeltaM * 0.5` 아래로 돌아오면 취소로 보고 층·경로를 되돌리므로, 문턱이
+  /// 낮을수록 그 되돌림 폭도 좁아져 평활 노이즈에 층이 깜빡일 수 있다. 1.2m는
+  /// 중앙값 평활 뒤 잔여 노이즈(±0.3m 수준)의 4배이면서 반 층보다 낮은 값이다.
+  ///
+  /// **이 문턱 하나로 층이 바뀌지는 않는다.** 탑승 노드 근접 허가, 같은 방향으로
+  /// 이어지는 램프([minDirectionalRampSamples]), 지금도 그 속도로 움직이는 중
+  /// ([minRampRiseM])이 모두 함께 성립해야 한다. 기상 드리프트는 세 번째 조건에서
+  /// 걸린다.
   final double minDeltaM;
 
   /// PDR 고정을 풀고 층 이동을 최종 확정할 최소 변화량. 고정된 한 층 높이를
@@ -130,6 +158,11 @@ class EscalatorDetectorConfig {
   /// 층이 바뀐다(실제로 이 테스트에서 오탐이 났다). 에스컬레이터의 수직 속도는
   /// 0.2~0.3 m/s(≈0.5~0.75 m / 2.5초)이고 기상 드리프트는 0.01 m/s 수준이라,
   /// 속도 조건 하나로 두 경우가 10배 이상 벌어진다.
+  ///
+  /// [minDeltaM]을 1.8→1.2로 낮추면서 0.35→0.45로 올렸다. 누적 변화량 문턱이
+  /// 내려간 만큼 "지금 실제로 그 속도로 움직이는 중"이라는 근거를 더 받는
+  /// 것이다. 0.45m/2.5초 = 0.18 m/s로 에스컬레이터(0.2~0.3 m/s)보다 낮아 실제
+  /// 탑승은 그대로 통과하고, 드리프트(0.01 m/s)보다는 18배 높다.
   final double minRampRiseM;
 
   /// 이 창 동안 고도 변화가 이 값 이하면 "멈췄다"로 본다. 확정 시점을 하차
@@ -168,6 +201,99 @@ class EscalatorDetectorConfig {
   /// 허가/후보가 없는 동안 baseline을 천천히 따라가는 비율. 기상 드리프트를
   /// 흡수한다. 허가 중에는 추적하지 않는다 — 상승분을 같이 먹어버린다.
   final double baselineTrackAlpha;
+
+  /// 활성 경로의 탑승점에 이만큼 다가오면 **배너만** 띄운다.
+  ///
+  /// 배너는 되돌리기 비용이 거의 없다(문구가 사라질 뿐이다). 그래서 층 지도를
+  /// 바꾸는 [minDeltaM]보다 훨씬 이른 근거로 띄워도 된다. 반대로 기압이
+  /// [minDeltaM]만큼 움직일 때까지 기다리면 이미 반 층을 올라간 뒤에 배너가 뜬다.
+  final double boardingApproachRadiusM;
+
+  /// 탑승점까지 남은 거리가 줄어드는 것을 확인할 **서로 다른 걸음 갱신** 횟수.
+  ///
+  /// 한 프레임의 근접만으로 띄우면 탑승점 옆을 스쳐 지나가는 사람에게도 뜬다.
+  final int boardingApproachUpdates;
+
+  /// 배너를 띄운 뒤 수직 이동 근거 없이 기다리는 최대 시간. 넘으면 취소한다.
+  final int boardingPhaseTimeoutMs;
+
+  /// "지금 실제로 오르내리는 중"으로 보는 최소 수직 속도(m/s).
+  ///
+  /// 에스컬레이터는 0.2~0.3 m/s, 기상 드리프트는 0.01 m/s 수준이다. 이 값은
+  /// 누적 고도 [minDeltaM]에 닿기 **전에** 걸음 누적을 멈추기 위한 근거이며,
+  /// 층 지도를 바꾸는 근거로는 쓰지 않는다.
+  final double minVerticalSpeedMps;
+
+  /// 단일 기압 튐을 배제하기 위해 요구하는 연속 관측 수.
+  final int verticalMotionConsecutiveSamples;
+}
+
+/// 층 이동의 공개 진행 단계.
+///
+/// 배너·걸음 pause·층 지도 전환·하차 재개가 **서로 다른 근거와 시점**을 쓰도록
+/// 나눈 것이다. 예전에는 넷이 모두 `|delta| >= 1.8m` 한 지점에서 동시에
+/// 일어나서, 배너는 반 층 뒤에 뜨고 지도는 아직 타는 중에 바뀌었다.
+enum EscalatorPhase {
+  idle,
+
+  /// 활성 경로의 탑승점에 접근했다. 배너만 띄운다.
+  boardingDetected,
+
+  /// 실제로 오르내리는 중이다. 위치에 반영하는 걸음만 멈춘다.
+  verticalMotionDetected,
+
+  /// 반 층을 지났다. 이 단계에서만 목적 층 지도를 연다.
+  midpointReached,
+
+  /// 하차했다. 새 anchor를 잡고 걸음 적용을 재개한다.
+  landed,
+
+  cancelled,
+  failed,
+}
+
+/// 단계 전이 한 건. UI는 이 값만 보고 문구·pause·층 전환을 결정한다.
+class EscalatorPhaseChange {
+  const EscalatorPhaseChange({
+    required this.phase,
+    required this.atMs,
+    required this.fromFloorLabel,
+    required this.reason,
+    this.toFloorLabel,
+    this.group,
+    this.direction,
+    this.boardingNodeId,
+    this.expectedArrivalNodeId,
+    this.deltaM = 0,
+    this.transition,
+  });
+
+  final EscalatorPhase phase;
+  final int atMs;
+  final String fromFloorLabel;
+  final String reason;
+  final String? toFloorLabel;
+  final String? group;
+  final EscalatorDirection? direction;
+  final String? boardingNodeId;
+  final String? expectedArrivalNodeId;
+  final double deltaM;
+
+  /// `midpointReached`·`landed`·`cancelled`에서만 채워진다.
+  final EscalatorTransition? transition;
+
+  Map<String, Object?> toJson() => {
+    'phase': phase.name,
+    'at_ms': atMs,
+    'reason': reason,
+    'from_floor': fromFloorLabel,
+    'to_floor': toFloorLabel,
+    'group': group,
+    'direction': direction?.name,
+    'boarding_node_id': boardingNodeId,
+    'expected_arrival_node_id': expectedArrivalNodeId,
+    'delta_m': deltaM,
+  };
 }
 
 /// 확정된 층 이동.
@@ -303,6 +429,10 @@ class EscalatorTransitionDetector {
   int? _armedUntilMs;
   int _lastSteps = 0;
 
+  /// 방금 확정한 이동의 목적 층. 화면이 그 층을 알려 올 때 "설명되는 층 변경"
+  /// 임을 알아보고 baseline·기압 창을 지키기 위한 표식이다. 한 번 쓰면 비운다.
+  String? _confirmedToFloorLabel;
+
   // 후보 상태.
   int? _candidateStartMs;
   int _candidateSign = 0;
@@ -316,11 +446,30 @@ class EscalatorTransitionDetector {
   int _fastExitLowSlopeSamples = 0;
   int _lastAltitudeSteps = 0;
 
+  /// 위치 적용과 무관한 원시 움직임 누적. 걸음 pause 중에도 늘어난다.
+  int _rawMotionCount = 0;
+  int _lastAltitudeRawMotionCount = 0;
+
   // UI가 "층은 먼저 바꾸고 마커는 고정"하는 두 단계 전환을 적용할 수 있도록
   // 후보 시작/취소 신호를 한 번씩 보관한다. 최종 확정은 onAltitude 반환값이다.
   EscalatorTransition? _startedTransition;
   EscalatorTransition? _cancelledTransition;
   EscalatorTransition? _pendingTransition;
+
+  // 공개 단계 상태.
+  EscalatorPhase _phase = EscalatorPhase.idle;
+  int? _phaseEnteredAtMs;
+  final List<EscalatorPhaseChange> _phaseChanges = [];
+
+  // 탑승점 접근 상태(배너 근거). 위치 갱신에서만 갱신한다.
+  double? _lastApproachDistanceM;
+  int _approachDecreaseUpdates = 0;
+  int? _lastApproachSteps;
+  _EscalatorNode? _approachBoarding;
+
+  // 수직 이동 상태(걸음 pause 근거).
+  int _verticalMotionSamples = 0;
+  int _verticalMotionSign = 0;
 
   final List<EscalatorDetectionEvent> _events = [];
 
@@ -346,6 +495,16 @@ class EscalatorTransitionDetector {
     return transition;
   }
 
+  /// 지금 공개 단계.
+  EscalatorPhase get phase => _phase;
+
+  /// 기록된 단계 전이를 비우며 가져간다. UI는 이 순서대로 적용한다.
+  List<EscalatorPhaseChange> takePhaseChanges() {
+    final drained = List<EscalatorPhaseChange>.unmodifiable(_phaseChanges);
+    _phaseChanges.clear();
+    return drained;
+  }
+
   /// 기록된 진단 이벤트를 비우며 가져간다.
   List<EscalatorDetectionEvent> takeEvents() {
     final drained = List<EscalatorDetectionEvent>.unmodifiable(_events);
@@ -355,9 +514,22 @@ class EscalatorTransitionDetector {
 
   /// 층·그래프·층 목록을 갱신한다.
   ///
-  /// 층 라벨이 바뀌면(수동 선택이든 확정된 이동이든) baseline과 허가·후보를
-  /// 전부 버린다. 이전 층 기준 baseline을 그대로 들고 가면 다음 판정이 이미
-  /// 기울어진 값에서 시작한다.
+  /// **설명되지 않는** 층 변경이면 baseline과 허가·후보를 전부 버린다. 사용자가
+  /// 층 선택기로 다른 층을 고르거나 계단·엘리베이터로 옮긴 경우가 그렇다. 그런
+  /// 이동은 고도 관계를 알 수 없으므로 이전 층 baseline을 들고 가면 다음 판정이
+  /// 이미 기울어진 값에서 시작한다.
+  ///
+  /// 반대로 **이 판정기가 방금 확정한 이동**이면 아무것도 버리지 않는다.
+  /// [_confirm]이 하차 시점 고도로 baseline을 이미 새로 잡았고, 기압 창은 층
+  /// 라벨과 무관한 실제 관측 이력이라 버릴 이유가 없다. 예전에는 여기서
+  /// 창까지 비워서 하차 직후 최소 [minSmoothingSamples]개를 다시 채울 때까지
+  /// (iOS 약 3초) 판정이 아예 돌지 않았다 — 내리자마자 다음 에스컬레이터를 타는
+  /// 연속 환승에서 두 번째 층이 그만큼 늦게 잡혔다.
+  ///
+  /// 탑승 중(`pendingTransition != null`)에는 호출자가 아예 이 함수를 부르지
+  /// 않는다. 화면은 반 층에서 목적 층으로 먼저 넘어가지만 판정기는 탑승 층
+  /// 기준을 하차까지 유지해야 하기 때문이다. 그 규칙이 깨지면 긴 에스컬레이터
+  /// 중간에 baseline이 다시 잡혀 남은 반 층이 **또 하나의 층 이동**으로 보인다.
   void updateContext({
     required String? floorLabel,
     required FloorGraph? graph,
@@ -371,9 +543,12 @@ class EscalatorTransitionDetector {
       _graph = graph;
       _escalatorNodes = _parseEscalatorNodes(graph);
     }
-    if (floorChanged) {
-      _resetForNewFloor();
+    if (!floorChanged) return;
+    if (floorLabel != null && floorLabel == _confirmedToFloorLabel) {
+      _confirmedToFloorLabel = null;
+      return;
     }
+    _resetForNewFloor();
   }
 
   /// 보정된 현재 위치를 넣어 허가 상태를 갱신한다.
@@ -437,7 +612,10 @@ class EscalatorTransitionDetector {
     required int timestampMs,
   }) {
     final approachDistance = (positionM - routeEndM).distance;
-    if (approachDistance > config.routeApproachArmRadiusM) return;
+    if (approachDistance > config.routeApproachArmRadiusM) {
+      _resetApproach();
+      return;
+    }
     _lastSteps = steps;
     final expected = _escalatorNodes
         .where(
@@ -449,20 +627,143 @@ class EscalatorTransitionDetector {
     if (expected == null) return;
     _expectedBoardingNodeId = expectedBoardingNodeId;
     _expectedArrivalNodeId = expectedArrivalNodeId;
+    _approachBoarding = expected;
     _armedNodes[expected.id] = _ArmedNode(
       nodeId: expected.id,
       distanceM: approachDistance,
       atMs: timestampMs,
     );
     _armedUntilMs = timestampMs + config.armHoldMs;
+    _updateBoardingApproach(
+      approachDistanceM: approachDistance,
+      steps: steps,
+      timestampMs: timestampMs,
+      expectedArrivalNodeId: expectedArrivalNodeId,
+      boarding: expected,
+    );
+  }
+
+  /// 탑승점까지 남은 거리가 실제로 줄고 있을 때만 배너 단계로 올린다.
+  ///
+  /// 거리 하나로 판정하면 탑승점 옆을 지나가는 사람에게도 뜬다. 서로 다른
+  /// 걸음 갱신에서 연속으로 줄어드는지를 함께 본다 — 그게 "탑승점 방향으로
+  /// 가고 있다"는 근거다.
+  void _updateBoardingApproach({
+    required double approachDistanceM,
+    required int steps,
+    required int timestampMs,
+    required String? expectedArrivalNodeId,
+    required _EscalatorNode boarding,
+  }) {
+    if (_phase != EscalatorPhase.idle &&
+        _phase != EscalatorPhase.boardingDetected) {
+      return;
+    }
+    if (_lastApproachSteps != steps) {
+      final previous = _lastApproachDistanceM;
+      if (previous != null && approachDistanceM < previous - 0.2) {
+        _approachDecreaseUpdates++;
+      } else if (previous != null && approachDistanceM > previous + 0.5) {
+        // 다시 멀어졌다. 근거를 처음부터 다시 모은다.
+        _approachDecreaseUpdates = 0;
+        if (_phase == EscalatorPhase.boardingDetected) {
+          _setPhase(
+            EscalatorPhase.cancelled,
+            atMs: timestampMs,
+            reason: 'movedAwayFromBoarding',
+          );
+        }
+      }
+      _lastApproachDistanceM = approachDistanceM;
+      _lastApproachSteps = steps;
+    }
+    if (_phase == EscalatorPhase.boardingDetected) return;
+    if (approachDistanceM > config.boardingApproachRadiusM) return;
+    if (_approachDecreaseUpdates < config.boardingApproachUpdates) return;
+    final toFloor = boarding.name.otherFloorLabel;
+    if (_floorLabels.isNotEmpty && !_floorLabels.contains(toFloor)) return;
+    _setPhase(
+      EscalatorPhase.boardingDetected,
+      atMs: timestampMs,
+      reason: 'routeApproach',
+      toFloorLabel: toFloor,
+      group: boarding.name.group,
+      direction: boarding.name.direction,
+      boardingNodeId: boarding.id,
+      expectedArrivalNodeId: expectedArrivalNodeId,
+    );
+  }
+
+  void _resetApproach() {
+    _lastApproachDistanceM = null;
+    _lastApproachSteps = null;
+    _approachDecreaseUpdates = 0;
+    _approachBoarding = null;
+  }
+
+  void _setPhase(
+    EscalatorPhase phase, {
+    required int atMs,
+    required String reason,
+    String? toFloorLabel,
+    String? group,
+    EscalatorDirection? direction,
+    String? boardingNodeId,
+    String? expectedArrivalNodeId,
+    double deltaM = 0,
+    EscalatorTransition? transition,
+  }) {
+    if (_phase == phase) return;
+    _phase = phase;
+    _phaseEnteredAtMs = atMs;
+    if (phase == EscalatorPhase.cancelled ||
+        phase == EscalatorPhase.failed ||
+        phase == EscalatorPhase.landed) {
+      _resetApproach();
+      _verticalMotionSamples = 0;
+      _verticalMotionSign = 0;
+      _phase = EscalatorPhase.idle;
+    }
+    _phaseChanges.add(
+      EscalatorPhaseChange(
+        phase: phase,
+        atMs: atMs,
+        fromFloorLabel: _floorLabel ?? '',
+        reason: reason,
+        toFloorLabel: toFloorLabel,
+        group: group,
+        direction: direction,
+        boardingNodeId: boardingNodeId,
+        expectedArrivalNodeId: expectedArrivalNodeId,
+        deltaM: deltaM,
+        transition: transition,
+      ),
+    );
+  }
+
+  /// 위치에 반영되지 않은 원시 움직임을 넣는다.
+  ///
+  /// 탑승 중 걸음 적용을 멈추면 [onPosition]의 `steps`가 늘지 않아 하차 빠른
+  /// 확정 경로가 동작하지 않는다. 이 신호는 pause와 무관하게 흐르므로 "하차
+  /// 뒤 첫 걸음"을 한 샘플 만에 잡을 수 있다. **수직 속도가 충분히 낮을 때만**
+  /// 보조 근거로 쓰이므로 에스컬레이터 진동 peak로는 재개되지 않는다.
+  void onRawMotion(RawMotionActivity activity) {
+    if (!activity.hasMotion) return;
+    _rawMotionCount +=
+        activity.accelPeakDelta + (activity.nativeStepDelta ?? 0);
   }
 
   /// 기압 샘플을 넣고 판정한다. 층 이동이 확정된 순간에만 non-null.
   EscalatorTransition? onAltitude(AltitudeSample sample) {
     final previousFastAltitude = _fastAltitudeM;
     final previousFastAtMs = _lastFastAltitudeAtMs;
-    final hadNewSteps = _lastSteps > _lastAltitudeSteps;
+    // 위치에 적용된 걸음 **또는** 원시 움직임 중 하나라도 늘었으면 근거로 본다.
+    // 탑승 중에는 앞의 값이 멈춰 있으므로 뒤의 값만 살아남는다.
+    final hadNewSteps =
+        _lastSteps > _lastAltitudeSteps ||
+        _rawMotionCount > _lastAltitudeRawMotionCount;
     _lastAltitudeSteps = _lastSteps;
+    _lastAltitudeRawMotionCount = _rawMotionCount;
 
     // 1) 시계열이 끊겼으면(background 복귀 등) 이전 관측을 통째로 버린다.
     //    공백 동안 층이 바뀌었을 수 있어 baseline과 후보도 함께 무효다.
@@ -537,9 +838,27 @@ class EscalatorTransitionDetector {
     if (_candidateStartMs == null) {
       // 허가도 후보도 없는 구간에서만 baseline이 기상 드리프트를 따라간다.
       if (!armed) {
-        _baselineM = _baselineM! + config.baselineTrackAlpha * delta;
+        // **지금 실제로 오르내리는 중이면 따라가지 않는다.** 허가는 보정 위치가
+        // 탑승 노드에 닿아야 걸리는데, 그 위치가 늦게 수렴하면(하행 랜딩에서
+        // 실측 12m 오차가 있었다) 허가 전 구간의 고도 변화가 baseline에 그대로
+        // 흡수된다. 그러면 허가가 걸린 순간 Δ가 0으로 초기화된 것과 같아, 이미
+        // 반쯤 내려온 사용자가 처음부터 다시 [minDeltaM]을 채워야 한다.
+        // 정지 상태의 기상 드리프트는 이 조건에 걸리지 않으므로(0.01 m/s)
+        // 흡수는 그대로 유지된다.
+        final movingVertically =
+            fastSpeedMps != null &&
+            fastSpeedMps.abs() >= config.minVerticalSpeedMps;
+        if (!movingVertically) {
+          _baselineM = _baselineM! + config.baselineTrackAlpha * delta;
+        }
+        _expireStalledPhase(sample.timestampMs, reason: 'armExpired');
         return null;
       }
+      // 누적 고도가 아직 문턱에 못 미쳐도, **지금 오르내리는 중**이라는 근거는
+      // 이미 있다. 걸음 pause는 여기서 시작한다 — 에스컬레이터 진동이 위치에
+      // 쌓이는 것을 막는 데 반 층을 기다릴 이유가 없다.
+      _updateVerticalMotion(sample.timestampMs, fastSpeedMps);
+      _expireStalledPhase(sample.timestampMs, reason: 'noVerticalMotion');
       if (delta.abs() < config.minDeltaM) return null;
       // 누적 변화량 + 지금도 그 방향으로 움직이는 중일 때만 후보를 연다.
       final rise = _riseOver(sample.timestampMs, smoothed);
@@ -596,6 +915,18 @@ class EscalatorTransitionDetector {
       );
       _pendingTransition = started;
       _startedTransition = started;
+      _setPhase(
+        EscalatorPhase.midpointReached,
+        atMs: sample.timestampMs,
+        reason: sign > 0 ? 'rising' : 'falling',
+        toFloorLabel: toFloor,
+        group: boarding.name.group,
+        direction: direction,
+        boardingNodeId: boarding.id,
+        expectedArrivalNodeId: started.expectedArrivalNodeId,
+        deltaM: delta,
+        transition: started,
+      );
       return null;
     }
 
@@ -745,9 +1076,11 @@ class EscalatorTransitionDetector {
       stepsDuring: stepsDuring,
     );
 
-    // 확정했으면 새 층 기준으로 처음부터 다시 본다. 호출자가 updateContext로
-    // 새 층을 알려주면 한 번 더 초기화되지만, 그 사이 도착하는 샘플이 방금 끝난
-    // 상승을 다시 후보로 열지 않도록 여기서 먼저 끊는다.
+    // 확정했으면 새 층 기준으로 처음부터 다시 본다. **상대 고도 0점을 다시
+    // 잡는 곳은 여기 하나뿐이다** — 하차가 확정된 순간이고, 그 값은 지금
+    // 서 있는 층의 고도다. 이후 호출자가 updateContext로 이 층을 알려 와도
+    // 초기화가 한 번 더 돌지 않도록 목적 층을 표식으로 남긴다.
+    _confirmedToFloorLabel = toFloor;
     _candidateStartMs = null;
     _candidateSign = 0;
     _candidateBoarding = null;
@@ -758,7 +1091,68 @@ class EscalatorTransitionDetector {
     _armedNodes.clear();
     _observedBoardingDistances.clear();
     _armedUntilMs = null;
+    _setPhase(
+      EscalatorPhase.landed,
+      atMs: atMs,
+      reason: direction == EscalatorDirection.up ? 'up' : 'down',
+      toFloorLabel: toFloor,
+      group: boarding.name.group,
+      direction: direction,
+      boardingNodeId: boarding.id,
+      expectedArrivalNodeId: transition.expectedArrivalNodeId,
+      deltaM: deltaM,
+      transition: transition,
+    );
     return transition;
+  }
+
+  /// 지금 실제로 오르내리는 중인지 갱신한다.
+  ///
+  /// 단일 기압 튐은 배제하려고 연속 관측을 요구하고, 같은 부호로 이어질 때만
+  /// 센다. 여기서는 층을 바꾸지 않고 **걸음 적용만** 멈춘다.
+  void _updateVerticalMotion(int atMs, double? fastSpeedMps) {
+    if (fastSpeedMps == null || fastSpeedMps.abs() < config.minVerticalSpeedMps) {
+      _verticalMotionSamples = 0;
+      _verticalMotionSign = 0;
+      return;
+    }
+    final sign = fastSpeedMps > 0 ? 1 : -1;
+    if (sign != _verticalMotionSign) {
+      _verticalMotionSign = sign;
+      _verticalMotionSamples = 1;
+    } else {
+      _verticalMotionSamples++;
+    }
+    if (_verticalMotionSamples < config.verticalMotionConsecutiveSamples) return;
+    final direction = sign > 0 ? EscalatorDirection.up : EscalatorDirection.down;
+    final boarding = _approachBoarding ?? _pickBoardingNode(direction);
+    if (boarding == null || boarding.name.direction != direction) return;
+    _setPhase(
+      EscalatorPhase.verticalMotionDetected,
+      atMs: atMs,
+      reason: sign > 0 ? 'rising' : 'falling',
+      toFloorLabel: boarding.name.otherFloorLabel,
+      group: boarding.name.group,
+      direction: direction,
+      boardingNodeId: boarding.id,
+      expectedArrivalNodeId: boarding.id == _expectedBoardingNodeId
+          ? _expectedArrivalNodeId
+          : null,
+    );
+  }
+
+  /// 배너·pause 단계가 근거 없이 오래 머물면 되돌린다.
+  ///
+  /// 이 경로가 없으면 탑승점에 다가갔다가 그냥 지나친 사용자에게 배너가 영영
+  /// 남고, `verticalMotionDetected`로 멈춘 걸음이 다시 켜지지 않는다.
+  void _expireStalledPhase(int atMs, {required String reason}) {
+    if (_phase != EscalatorPhase.boardingDetected &&
+        _phase != EscalatorPhase.verticalMotionDetected) {
+      return;
+    }
+    final since = _phaseEnteredAtMs;
+    if (since == null || atMs - since < config.boardingPhaseTimeoutMs) return;
+    _setPhase(EscalatorPhase.cancelled, atMs: atMs, reason: reason);
   }
 
   EscalatorTransition _buildTransition({
@@ -890,6 +1284,15 @@ class EscalatorTransitionDetector {
     if (_pendingTransition != null) {
       _cancelledTransition = _pendingTransition;
     }
+    _setPhase(
+      EscalatorPhase.cancelled,
+      atMs: atMs,
+      reason: reason,
+      toFloorLabel: toFloorLabel,
+      group: group,
+      deltaM: deltaM,
+      transition: _pendingTransition,
+    );
     _candidateStartMs = null;
     _candidateSign = 0;
     _candidateBoarding = null;
@@ -912,6 +1315,7 @@ class EscalatorTransitionDetector {
   }
 
   void _resetForNewFloor() {
+    _confirmedToFloorLabel = null;
     _window.clear();
     _smoothedHistory.clear();
     _baselineM = null;
@@ -932,6 +1336,23 @@ class EscalatorTransitionDetector {
     _lastFastAltitudeAtMs = null;
     _fastExitLowSlopeSamples = 0;
     _lastAltitudeSteps = _lastSteps;
+    _lastAltitudeRawMotionCount = _rawMotionCount;
+    // 층이 바뀌었으면 진행 중인 단계도 끝난 것이다. 남겨 두면 새 층에서 옛
+    // 배너와 pause가 그대로 이어진다.
+    if (_phase == EscalatorPhase.boardingDetected ||
+        _phase == EscalatorPhase.verticalMotionDetected ||
+        _phase == EscalatorPhase.midpointReached) {
+      _setPhase(
+        EscalatorPhase.cancelled,
+        atMs: _phaseEnteredAtMs ?? 0,
+        reason: 'floorChanged',
+      );
+    }
+    _phase = EscalatorPhase.idle;
+    _phaseEnteredAtMs = null;
+    _resetApproach();
+    _verticalMotionSamples = 0;
+    _verticalMotionSign = 0;
   }
 
   void _pushEvent({

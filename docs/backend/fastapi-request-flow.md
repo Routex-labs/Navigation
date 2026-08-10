@@ -239,6 +239,10 @@ flowchart TD
 후보를 담은 `DiscoveryResponse`이고, `mode`가 화면 분기의 유일한 근거다. 진입점은
 `query_search.discover()`다.
 
+응답에는 `source`(`light`·`semantic`)도 실린다 — 후보를 **어휘로 잡았는지 임베딩으로
+잡았는지**다. 클라이언트가 온디바이스 이름 후보를 이 응답으로 대체할지 판단하는 데
+쓴다(근거: [`docs/client/search-input-assist.md`](../client/search-input-assist.md) V절).
+
 ```mermaid
 flowchart TD
     req["POST /query/ai<br/>{text, building_id, current_floor_id?,<br/>selected_facets?, show_all?}"]
@@ -247,7 +251,7 @@ flowchart TD
     direct["mode=direct — 1건 바로 안내"]
     pool["후보 집합<br/>경량 후보 우선, 없으면 2차"]
     imp["지연 import: query_semantic<br/>(탐색 후보 0건일 때만 torch 로드)"]
-    sem["2차: search_many()<br/>FAISS 코사인, 임계값 0.50"]
+    sem["2차: search_many()<br/>FAISS 코사인, 임계값 0.52"]
     narrow["selected_facets로 좁힘<br/>0건이면 선택 해제(막다른 흐름 방지)"]
     dedupe["_dedupe_by_name → candidates"]
     empty{"candidates 0건?"}
@@ -277,8 +281,9 @@ flowchart TD
   보낸다. 그래서 `/query/ai` 요청 모델(`AiRequest`)만 destination·info와 달리 이 두 필드를 더 받는다.
 - **브랜드명은 문자열 일치가 임베딩보다 정확하고 안전하다.** 그래서 경량 1차가 먼저다.
   2차 의미 검색(`search_many`)은 경량 후보가 **0건일 때만** torch를 지연 import해 돈다.
-- **임계값 0.50은 정밀도 우선 선택이다.** 길찾기에서는 틀린 매장을 안내하는 것이
-  "다시 말해 주세요"보다 나쁘다. 근거는 [`docs/backend/native/FAISS.md`](native/FAISS.md) 11-1절.
+- **임계값은 정밀도 우선으로 정한다.** 길찾기에서는 틀린 매장을 안내하는 것이
+  "다시 말해 주세요"보다 나쁘다. 현재 값과 튜닝 근거는
+  [`docs/backend/native/search-eval-set.md`](native/search-eval-set.md) 6절.
   의미 검색 기능 자체를 못 쓰면 `mode=degraded`로 상태를 명시한다.
 - **정규화는 1차에만 적용된다.** 2차에는 질의 **원문**이 그대로 전달된다 — 문장 임베딩은 조사·어미가
   붙은 문장을 그대로 처리하는 게 낫고, 인덱스 텍스트를 바꾸면 임계값 튜닝 근거가 무효가 된다.

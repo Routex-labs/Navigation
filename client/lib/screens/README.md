@@ -8,9 +8,8 @@
 
 | 디렉터리 | 화면 | 책임 |
 |---|---|---|
-| [`map_shell/`](map_shell/map_shell_screen.dart) | `MapShellScreen` | 실외/실내 모드, 상단·하단 바, 시트와 현재 건물·층 상태 조립 |
-| [`outdoor_map/`](outdoor_map/outdoor_map_screen.dart) | `OutdoorMapScreen` | GPS, 실외 지도, 건물 진입과 실외 경로(도보·대중교통) 표시 |
-| [`indoor_map/`](indoor_map/indoor_map_screen.dart) | `IndoorMapScreen` | 층 지도, 실내 위치·경로, PDR 보정 및 층 선택 |
+| [`map_shell/`](map_shell/map_shell_screen.dart) | `MapShellScreen` | 상단·하단 바, 시트와 현재 건물·층 상태 조립 |
+| [`outdoor_map/`](outdoor_map/outdoor_map_screen.dart) | `OutdoorMapBody` | 지도 전부 — GPS·실외 경로, 건물 진입 뒤 실내 도면 오버레이, 실내 위치·경로·층 전환 |
 | [`destination/`](destination/destination_screen.dart) | `DestinationScreen` | 목적지 검색과 선택 |
 | [`route_guide/`](route_guide/route_guide_screen.dart) | `RouteGuideScreen` | 선택한 목적지의 안내 진행·도착 전환 |
 | [`arrival/`](arrival/arrival_screen.dart) | `ArrivalScreen` | 도착 결과와 다음 이동 |
@@ -36,22 +35,9 @@ flowchart LR
     GUIDE --> ARRIVAL
 ```
 
-`MapShellScreen`이 공통 지도 셸과 검색/즐겨찾기/카테고리 시트를 조립한다.
+`MapShellScreen`이 공통 지도 셸과 검색/즐겨찾기/카테고리 시트, 그리고 상단 바 햄버거가
+여는 앱 메뉴(`widgets/app_menu_sheet.dart` — 디버그 설정의 유일한 진입점)를 조립한다.
 독립 진단이 필요한 기능은 운영 화면에 임시 코드를 넣지 않고 `debug/` 화면으로 분리한다.
-
-### 길찾기는 화면이 아니라 상단 바다
-
-길찾기를 시작하면 상단 바가 **출발/도착 두 칸**으로 바뀌고 그 아래에 이동 수단 줄이
-붙는다(`widgets/map_top_bar.dart`, `widgets/travel_mode_bar.dart`). 후보 목록만 그 아래로
-펼쳐지고 지도는 계속 보인다.
-
-한동안은 전용 화면(`screens/route_planner/`)이었다. 지도를 새로 만들지 않으려고 전체
-화면 오버레이로 얹었지만, 화면이 통째로 바뀌는 것은 마찬가지라 두 가지가 걸렸다 —
-목적지를 고치려면 보던 지도를 잃고 그 화면을 다시 열어야 했고, **방금 누른 칸과 실제로
-치는 칸이 서로 다른 화면에 있었다**(상단 요약 행 → 화면 안 입력창).
-
-경로를 그리는 일은 지금도 이미 떠 있는 야외 지도가 맡는다. `MapShellScreen`이 지도
-상태(GlobalKey)를 들고 있는 유일한 자리라, 무엇을 그릴지 정하는 것도 거기 하나로 모은다.
 
 ## 의존 경계
 
@@ -92,7 +78,7 @@ flowchart TD
 |---|---|
 | 새 화면/전환 추가 | [`../routing/README.md`](../routing/README.md), `app.dart` |
 | 검색 동작 변경 | `destination/`, [`../repositories/README.md`](../repositories/README.md) |
-| 지도 표시 변경 | `indoor_map/` 또는 `outdoor_map/`, [`../widgets/README.md`](../widgets/README.md) |
+| 지도 표시 변경 | `outdoor_map/`, [`../widgets/README.md`](../widgets/README.md) |
 | PDR 화면 연동 | [`../features/indoor_navigation/README.md`](../features/indoor_navigation/README.md) |
 
 ---

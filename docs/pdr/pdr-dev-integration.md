@@ -25,20 +25,22 @@ PDR UI와 지도 렌더링은 아래 파일에 모여 있다.
 
 | 구분 | 위치 | 역할 |
 |---|---|---|
-| 지도 셸 | `client/lib/screens/map_shell/map_shell_screen.dart` | 홈/실내 모드를 전환하고 권한을 요청한다. 실내 모드일 때 `IndoorMapBody`를 표시한다. |
-| 실내 지도 + PDR UI | `client/lib/screens/indoor_map/indoor_map_screen.dart` | 시작·종료 버튼, 시작점 지정, 방향 보정 대화상자, 위치·경로 렌더링, JSON 공유를 담당한다. |
+| 지도 셸 | `client/lib/screens/map_shell/map_shell_screen.dart` | 상단·하단 바와 시트를 조립하고 권한을 요청한다. 층 전환 배너·스크림도 여기서 그린다. |
+| 지도 + PDR UI | `client/lib/screens/outdoor_map/outdoor_map_screen.dart` | 지도 하나가 실외와 실내를 모두 그린다. 시작점 지정, 방향 보정 대화상자, 위치·경로 렌더링, JSON 공유를 담당한다. |
+| 실내 안내 세션 | `client/lib/features/indoor_navigation/application/indoor_guidance_session.dart` | 위치·층 전환 판정·경로 진행률·이탈 증거를 소유한다. 위젯을 모르는 headless 클래스다. |
 | 전역 세션 생성 | `client/lib/core/service_locator.dart` | 플랫폼별 센서 소스와 `IndoorNavigationDriver`를 앱 범위 singleton으로 생성한다. |
 | 앱 lifecycle 연결 | `client/lib/app.dart` | `NavigationApp`이 background/foreground 변화를 driver에 전달한다. |
 
-`IndoorMapBody`는 driver의 snapshot과 calibration stream을 구독한다. PDR 좌표가
-유효해지면 이를 지도 위 현재 위치와 `pdrPathPoints`로 `FloorPlanView`에 전달한다.
-실내 길찾기의 출발 노드도 PDR 현재 위치가 있으면 그 위치를 우선 사용한다.
+`OutdoorMapBody`는 driver의 snapshot·calibration·기압·원시 움직임 stream을
+구독해 `IndoorGuidanceSession`에 넣고, 세션이 내주는 위치 한 건과 그 출처
+(`tracked`/`anchorOnly`/`estimate`)를 지도 레이어에 그린다. 실내 길찾기의 출발
+노드도 PDR 현재 위치가 있으면 그 위치를 우선 사용한다.
 
 ```mermaid
 flowchart LR
-  Shell["MapShellScreen\n실내 모드"] --> Map["IndoorMapBody\nPDR UI와 지도"]
-  Map --> View["FloorPlanView\n현재 위치 · 이동 경로"]
-  Map --> Driver["IndoorNavigationDriver\n앱 범위 singleton"]
+  Shell["MapShellScreen\n바 · 시트 · 층 전환 배너"] --> Map["OutdoorMapBody\n지도와 PDR UI"]
+  Map --> Session["IndoorGuidanceSession\n위치 · 층 전환 · 진행률"]
+  Session --> Driver["IndoorNavigationDriver\n앱 범위 singleton"]
   App["NavigationApp lifecycle"] --> Driver
 ```
 
@@ -101,7 +103,7 @@ flowchart LR
   Source["AndroidPdrMotionSource\n또는 IosPdrMotionSource"]
   Driver["IndoorNavigationDriver\n세션 · anchor · lifecycle"]
   Core["indoor_pdr_core\nPdrSession"]
-  Map["IndoorMapBody\n좌표 변환 · 맵매칭 · 렌더링"]
+  Map["OutdoorMapBody\n좌표 변환 · 맵매칭 · 렌더링"]
 
   Native --> Bridge --> Source --> Driver --> Core
   Core --> Driver --> Map
@@ -353,10 +355,18 @@ corrected heading, heading bias를 기록한다.
 - 층 따라가기는 **±1층 에스컬레이터만** 판정한다. 엘리베이터·연속 다층 이동은 거부하고
   로그(`floor_transition_events`)만 남기며, 계단은 노드 타입이 데이터에 없어 대상이 아니다.
 - 기압계가 없는 기기에서는 층 따라가기가 비활성이며 기존처럼 층을 수동으로 고른다.
-- 층 전이 판정 임계값(후보 Δ 1.8m·확정 Δ 2.2m·상승 0.35m/2.5s·같은 방향 변화
-  최근 5초 3회·허가 반경 6m·유지 60초·다층 거부 10m)은 초안값이다. 고정 층고나
-  세션 시작 절대 고도를 쓰지 않으며 실측 로그(schema v12의 `altimeter_samples`)로
-  계속 조정한다.
+- 층 전이 판정 임계값(후보 Δ 1.2m·확정 Δ 2.2m·상승 0.45m/2.5s·같은 방향 변화
+  최근 5초 3회·평활 창 3초·허가 반경 6m·유지 60초·다층 거부 10m)은 초안값이다.
+  고정 층고나 세션 시작 절대 고도를 쓰지 않으며 실측 로그(schema v13의
+  `altimeter_samples`)로 계속 조정한다.
+- 탑승 배너·걸음 pause·층 지도 전환·하차 재개는 **서로 다른 근거와 시점**을 쓴다.
+  배너는 활성 경로의 탑승점 접근만으로 뜨고, 걸음 pause는 누적 Δ가 후보 문턱에
+  닿기 전 수직 속도에서 시작하며, 목적 층 지도는 위 임계값을 통과해야 열린다.
+- 안내가 **지목한** 탑승점(현재 층 세그먼트의 `transferFromNodeId`)에서 탑승 단계가
+  열리면, 하차까지 현재 위치 마커와 경로 진행률을 그 노드에 고정한다. 경로와
+  무관한 에스컬레이터 근접으로는 고정하지 않는다.
+  단계 정의는 [`application/README.md`](../../client/lib/features/indoor_navigation/application/README.md)
+  의 `EscalatorPhase` 표가 단일 출처다.
 - **현재 위치 마커·PDR 궤적·복도 보정·경로 진행률·층 전이 판정은 모두 "앵커 층 == 표시 층"일
   때만 동작한다.** 앵커가 다른 층에 있으면 전부 조용히 꺼지므로, 경로를 그린 뒤 이 상태면
   화면이 그 사실을 안내하고 재지정 손잡이를 준다.

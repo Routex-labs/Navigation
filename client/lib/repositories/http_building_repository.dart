@@ -10,6 +10,7 @@ import '../models/building_graph.dart';
 import '../models/category_count.dart';
 import '../models/floor_graph.dart';
 import '../models/indoor_route.dart';
+import '../models/store_index_entry.dart';
 import 'building_repository.dart';
 
 /// api/app/routers/buildings.py의 /buildings 엔드포인트를 그대로 호출한다.
@@ -38,6 +39,7 @@ class HttpBuildingRepository implements BuildingRepository {
   final Map<String, Future<Map<String, dynamic>?>> _floorGeoJsonFutures = {};
   final Map<String, Future<BuildingGraph?>> _buildingGraphFutures = {};
   final Map<String, Future<List<CategoryCount>?>> _categoryCountFutures = {};
+  final Map<String, Future<List<StoreIndexEntry>?>> _storeIndexFutures = {};
 
   // 아래 둘은 네트워크가 아니라 계산 결과라 값 캐시로 충분하다.
   final Map<String, FloorGraph> _floorGraphCache = {};
@@ -101,10 +103,21 @@ class HttpBuildingRepository implements BuildingRepository {
           .map((item) => Building.fromJson(item as Map<String, dynamic>))
           .toList();
 
-      // 목록으로 이미 받은 건물은 개별 조회도 네트워크를 타지 않게 채워 둔다.
-      for (final building in buildings) {
-        _buildingFutures[building.id] = Future.value(building);
-      }
+      // **목록 응답으로 개별 조회 캐시를 채우지 않는다.**
+      //
+      // 예전에는 "이미 받았으니 개별 조회는 네트워크를 타지 말자"고 채워 뒀는데,
+      // 목록(`/buildings`)과 단건(`/buildings/{id}`)의 응답이 같지 않다. 목록에는
+      // `tile_revision`이 없어서, 채워 두면 그 뒤 [getBuilding]이 **버전 없는**
+      // Building을 돌려준다.
+      //
+      // 그러면 실내 타일 URL에 `?v=`가 안 붙고(`core/tile_url.dart`), 서버는
+      // `immutable`(1년) 대신 `max-age=60`을 준다 — 실측으로 두 값을 모두 확인했다.
+      // 그 결과 60초만 지나면 층을 바꿀 때마다 타일을 다시 받는다. 게다가 목록은
+      // 검색할 때마다 불리므로(`search_panel.dart`), 검색 한 번이 그 뒤의 모든
+      // 층 전환을 느리게 만들었다.
+      //
+      // 아낀 요청 한 번보다 타일 캐시가 훨씬 크다. 개별 조회는 `_shared`가 세션
+      // 동안 한 번만 태우므로 실제 비용도 건물당 요청 1회다.
       return buildings;
     } catch (_) {
       _allBuildingsFuture = null; // 재시도 가능하게 (위 _shared와 같은 이유)
@@ -135,6 +148,20 @@ class HttpBuildingRepository implements BuildingRepository {
       final list = jsonDecode(response.body) as List<dynamic>;
       return list
           .map((item) => CategoryCount.fromJson(item as Map<String, dynamic>))
+          .toList();
+    });
+  }
+
+  @override
+  Future<List<StoreIndexEntry>?> getStoreIndex(String buildingId) {
+    return _shared(_storeIndexFutures, buildingId, () async {
+      final response = await _client.get(
+        Uri.parse('$apiBaseUrl/buildings/$buildingId/store-index'),
+      );
+      if (response.statusCode == 404) return null;
+      final list = jsonDecode(response.body) as List<dynamic>;
+      return list
+          .map((item) => StoreIndexEntry.fromJson(item as Map<String, dynamic>))
           .toList();
     });
   }

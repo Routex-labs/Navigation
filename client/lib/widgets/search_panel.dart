@@ -1,20 +1,24 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:latlong2/latlong.dart';
 
 import '../core/service_locator.dart';
 import '../domain/dijkstra.dart';
-import '../domain/indoor_store_lookup.dart';
-import '../domain/outdoor_poi_ranking.dart';
+import '../domain/name_siblings.dart';
+import '../domain/nearest_store.dart';
+import '../domain/reason_text.dart';
+import '../domain/search_result_order.dart';
+import '../domain/store_suggestions.dart';
 import '../models/building.dart';
+import '../models/category_count.dart';
 import '../models/discovery_result.dart';
-import '../models/outdoor_poi.dart';
 import '../models/poi_search_result.dart';
+import '../models/store_index_entry.dart';
 import '../theme/app_theme.dart';
 import 'category_icon.dart';
+import 'category_label_order.dart';
+import 'filter_pill.dart';
 import 'reach_label.dart';
-import 'transit_style.dart';
 
 /// 상단 검색창 바로 아래에 붙는 결과 패널.
 ///
@@ -73,11 +77,12 @@ class SearchPanel extends StatefulWidget {
     required this.submitTick,
     required this.onStorePicked,
     required this.onBuildingPicked,
+    required this.onQueryPicked,
+    required this.indoorContextActive,
     this.currentFloorId,
     this.reachByNodeId,
-    this.outdoorSearchCenter,
-    this.onOutdoorPoiPicked,
-    this.isInsideIndoorBuilding,
+    this.categoryEntries,
+    this.onCategoryPicked,
   });
 
   final String buildingId;
@@ -105,26 +110,38 @@ class SearchPanel extends StatefulWidget {
   /// 알릴 이유가 없다.
   final Map<String, NodeReach>? reachByNodeId;
 
-  /// 건물 **밖** 장소를 함께 찾을 기준점. 야외를 보고 있을 때만 값이 있고,
-  /// 실내 도면을 보고 있으면(또는 위치를 아직 못 잡았으면) null이다.
-  ///
-  /// null이면 바깥 검색을 아예 하지 않는다. 실내에서 "화장실"을 찾는 사람에게
-  /// 길 건너 편의점 화장실을 섞어 주면, 지금 서 있는 층의 결과가 뒤로 밀린다.
-  final LatLng? outdoorSearchCenter;
-
-  /// 야외 장소를 골랐을 때. null이면 바깥 결과 줄을 눌러도 아무 일이 없으므로,
-  /// [outdoorSearchCenter]가 있어도 이 콜백이 없으면 섹션을 그리지 않는다.
-  final ValueChanged<OutdoorPoi>? onOutdoorPoiPicked;
-
-  /// 좌표가 우리 실내 도면이 있는 건물 안인지 묻는다. 야외 지도가 답한다.
-  ///
-  /// 같은 가게가 두 줄로 뜨는 것을 막는 데 쓴다 — 건물 **안** POI 중 우리
-  /// 실내 데이터가 이미 아는 것은 목록에서 뺀다
-  /// ([dropPoisCoveredByIndoorStores]). null이면 그 정리를 하지 않는다.
-  final bool Function(LatLng point)? isInsideIndoorBuilding;
-
   final ValueChanged<PoiSearchResult> onStorePicked;
   final ValueChanged<Building> onBuildingPicked;
+
+  /// 최근 검색어를 골랐을 때. 패널이 입력창을 갖고 있지 않으므로(클래스 주석
+  /// 참고) 검색을 스스로 다시 돌릴 수 없다 — 상위가 검색창 글자를 그 값으로
+  /// 바꾸고 [query]·[submitTick]을 새로 내려줘야 한 바퀴가 돈다.
+  final ValueChanged<String> onQueryPicked;
+
+  /// 지금 건물 안을 보고 있는가(실내 모드이거나, 야외 지도 위에서 실내 도면을
+  /// 훑는 중). 상위의 `_indoorContextActive`를 그대로 받는다.
+  ///
+  /// **자동완성은 이 값이 참일 때만 동작한다.** 후보의 원본이 건물 하나의 매장
+  /// 목록이라, 야외에서 쓰면 지금 서 있는 곳과 무관한 매장을 제안하게 된다.
+  /// 실제로 시청 앞 야외 지도에서 `apc`를 치니 더현대서울 3층 매장이 후보로
+  /// 떴다 — 사용자가 야외에서 찾는 것은 그게 아니다.
+  ///
+  /// 야외 장소 검색은 외부 검색 API(Tmap 등)로 별도로 채울 예정이며, 그때
+  /// 이 패널이 어느 원본을 쓸지는 이 값으로 갈린다.
+  final bool indoorContextActive;
+
+  /// 건물의 (층·대분류·소분류)별 매장 수. **상위가 이미 들고 있는 Future를 그대로
+  /// 받는다** — 여기서 다시 요청하면 같은 정보를 두 번 받게 되고, 두 화면의
+  /// 카테고리 목록이 어긋날 수 있다.
+  ///
+  /// "찾지 못했어요" 화면에서 **둘러볼 곳**을 제안하는 데만 쓴다(설계:
+  /// `docs/client/search-result-list-ux.md` R절). null이거나 로드가 실패하면
+  /// 그 줄만 조용히 사라진다.
+  final Future<List<CategoryCount>>? categoryEntries;
+
+  /// 위 대분류를 골랐을 때. 상위가 검색을 닫고 그 카테고리의 매장 목록 시트를
+  /// 연다. null이면 제안 줄을 그리지 않는다.
+  final ValueChanged<String>? onCategoryPicked;
 
   @override
   State<SearchPanel> createState() => _SearchPanelState();
@@ -154,6 +171,11 @@ enum _SearchPhase {
   /// 보여줄 매장·건물이 있다.
   results,
 
+  /// **온디바이스 후보로 답했다.** 서버 경량 매칭은 빈손이었지만 기기 안 인덱스가
+  /// 이름으로 매장을 찾은 상태다. 이때는 의미 검색으로 넘어가지 않는다 — 근거는
+  /// [_SearchPanelState._search]의 분기 주석에 있다.
+  suggestions,
+
   /// 경량과 의미 검색을 **둘 다** 끝냈는데 없다. 최종 "결과 없음" 문구는 오직
   /// 이 단계에서만 나온다.
   noMatch,
@@ -164,28 +186,6 @@ enum _SearchPhase {
   /// 서버·네트워크가 끊겨 검색을 끝내지 못했다. 없는 것과 못 찾은 것은 사용자가
   /// 할 행동이 다르다 — 전자는 다른 말로 바꿔야 하고, 후자는 기다려야 한다.
   error,
-}
-
-/// 의미 검색 결과가 사실상 정확한 이름 일치인지 휴리스틱으로 판정한다. 서버가
-/// 어느 tier(정확 일치·동의어·의미)로 매칭했는지는 클라이언트로 내려오지
-/// 않으므로, 질의와 결과 이름을 직접 비교해 추정한다.
-///
-/// 최근 층 스코프 적용(ea315b8)으로 상단 검색이 현재 층을 함께 보내면서,
-/// 사용자가 타 층 매장을 정확한 이름으로 검색해도 1차 경량 검색(현재 층
-/// 한정)이 빈손이 되어 2차 의미 검색으로 넘어오는 경우가 생겼다. 이때도
-/// [SearchPanel._fromSemantic] 배너("뜻이 비슷한 매장을 찾았어요")가 그대로
-/// 붙으면, 정확한 이름을 쳤는데 "뜻으로 찾았다"고 말하는 셈이라 부정확하다.
-///
-/// 대소문자·앞뒤 공백만 정규화하고 그 밖의 정규화(형태소 분석 등)는 하지
-/// 않는다. 서버의 Kiwi 정규화까지 흉내내려 하면 휴리스틱이 오히려 서버 판정과
-/// 어긋나는 경우가 늘어난다 — 여기서는 "누가 봐도 같은 이름"만 걸러낸다.
-bool _isExactNameMatch(String query, List<PoiSearchResult> results) {
-  final normalizedQuery = query.trim().toLowerCase();
-  if (normalizedQuery.isEmpty) return false;
-  return results.any((result) {
-    final name = result.name.trim().toLowerCase();
-    return name == normalizedQuery || name.startsWith(normalizedQuery);
-  });
 }
 
 /// 이름에서 검색어와 일치하는 구간만 강조한 span 목록을 만든다.
@@ -201,7 +201,7 @@ bool _isExactNameMatch(String query, List<PoiSearchResult> results) {
 ///
 /// 대소문자·앞뒤 공백만 정규화하고 그 밖의 정규화(형태소 분석 등)는 하지 않는다.
 /// 서버의 Kiwi 정규화까지 흉내내면 강조 구간이 오히려 서버 판정과 어긋난다 —
-/// [_isExactNameMatch]와 같은 이유다. 그 결과 "더현대 서울"로 검색하면 띄어쓰기가
+/// [isExactNameMatch]와 같은 이유다. 그 결과 "더현대 서울"로 검색하면 띄어쓰기가
 /// 다른 "더현대서울점"에는 강조가 걸리지 않는데, 이건 강조가 빠질 뿐 결과 자체는
 /// 그대로 나오므로 손실이 없는 쪽으로 둔 선택이다.
 List<TextSpan> highlightedNameSpans(String name, String query) {
@@ -231,6 +231,33 @@ List<TextSpan> highlightedNameSpans(String name, String query) {
   return spans;
 }
 
+/// 다음 검색 한 번에만 적용할 층 스코프.
+///
+/// **예전에는 "층으로 좁히지 마라"는 bool 하나였다.** 1F에서 `apc` 후보로 뜬 3F의
+/// `A.P.C.`를 탭하면 층 스코프 때문에 1차가 빈손이 되어 후보 화면으로 되돌아오던
+/// 문제를 그렇게 막았다. 그런데 스코프를 아예 빼면 **어느 매장을 고를지는 서버가
+/// 자기 순서로 정한다.**
+///
+/// 실기기에서 그 대가가 드러났다. 1F에서 후보 `화장실 · 1F 등 19곳 · 57m`를 탭했더니
+/// **`화장실 · B6 · 219m`** 로 갔다. 화면이 1F라고 적어 놓고 네 배 먼 지하 6층으로
+/// 보낸 것이다. 같은 이름이 19곳이니 서버는 그중 하나를 고를 수밖에 없는데, 그
+/// 기준에 사용자 위치가 들어갈 자리가 없다.
+///
+/// **고른 후보의 층을 실어 보내면 둘 다 풀린다.** `A.P.C.`는 3F로 좁혀 확정되고,
+/// `화장실`은 화면에 적힌 그 1F로 확정된다. 추가 요청도, 계약 변경도 없다.
+///
+/// [floorId]가 null인 경우는 **층을 모르는 선택**이다 — 최근 검색어는 문자열
+/// 하나뿐이라 어느 층 매장이었는지 알 방법이 없다. 그때만 예전처럼 스코프를 뺀다.
+///
+/// 설계 근거와 검증 기준은 `docs/client/search-result-list-ux.md` T절이 단일
+/// 출처다.
+class _FloorScopeOverride {
+  const _FloorScopeOverride(this.floorId);
+
+  /// 이 층으로 좁힌다. null이면 좁히지 않는다.
+  final String? floorId;
+}
+
 class _SearchPanelState extends State<SearchPanel> {
   /// 경량 검색용 디바운스. 글자마다 서버를 때리지 않게 잠깐 모았다 보낸다.
   static const _lightDebounce = Duration(milliseconds: 300);
@@ -255,22 +282,6 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 이름이 걸린 건물. 매장과 함께 목록 맨 위에 한 줄로 얹는다 — 예전 상단
   /// 검색이 하던 "건물 이름 검색"을 여기로 옮겨 온 것이다.
   Building? _building;
-
-  /// 우리가 도면을 가진 건물 이름 전부.
-  ///
-  /// [_building]과 다르다. 그쪽은 **검색어에 걸린** 건물이라 "스타벅스"를 치면
-  /// null인데, 바로 그때 "스타벅스 더현대서울(B2)R점"이 우리 건물 것인지
-  /// 판정해야 한다([mentionsBuilding]). 검색어와 무관하게 들고 있어야 한다.
-  List<String> _buildingNames = const [];
-
-  /// 지금 검색 중인 건물([SearchPanel.buildingId])의 이름. 매장 줄 부제에
-  /// "더현대 서울 · B2"처럼 적어, 어느 건물의 매장인지 한 줄로 읽히게 한다.
-  String? _currentBuildingName;
-
-  /// 건물 밖 장소(TMAP POI). 실내 결과와 **따로** 들고 있는 이유는 두 목록의
-  /// 수명이 다르기 때문이다 — 바깥 검색은 실내 검색보다 늦게 끝날 수 있고,
-  /// 실내가 빈손이어도 여기 결과가 있으면 "찾지 못했어요"를 띄우면 안 된다.
-  List<OutdoorPoi> _pois = const [];
 
   _SearchPhase _phase = _SearchPhase.idle;
 
@@ -313,16 +324,82 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 실제 위치를 따라간다.
   final _resultScrollController = ScrollController();
 
+  /// 온디바이스 자동완성의 원본. 건물당 1회 받아 둔다.
+  ///
+  /// null은 "아직 못 받았거나 받기에 실패했다"는 뜻이고, **그 상태가 정상 경로에
+  /// 포함된다.** 자동완성은 부가 기능이라 목록이 없으면 후보만 조용히 사라지고
+  /// 서버 검색은 그대로 돈다(설계: search-input-assist.md K절 실패 조건).
+  List<StoreIndexEntry>? _storeIndex;
+
+  /// 지금 질의에 대한 후보. **질의가 바뀔 때만** 다시 계산한다 — build에서 매번
+  /// 계산하면 한 프레임에 여러 번 1640건을 훑는다.
+  List<StoreSuggestion> _suggestions = const [];
+
+  /// 사용자가 직접 고른 정렬. null이면 아직 안 골랐다는 뜻이고, 그때는
+  /// [defaultSortOrder]가 위치 유무를 보고 정한다.
+  ///
+  /// **검색어가 바뀌면 지운다**(didUpdateWidget). 세션에 저장하면 다음 검색이
+  /// 사용자가 기억하지 못하는 순서로 시작한다. 반대로 같은 검색어로 다시 엔터를
+  /// 누르는 경우에는 유지한다 — 방금 한 조작이 사라지면 안 된다.
+  SearchSortOrder? _sortOverride;
+
+  /// 다음 검색 **한 번만** 층 스코프를 이 값으로 바꾼다. null이면 재정의 없이
+  /// [SearchPanel.currentFloorId]를 그대로 쓴다.
+  ///
+  /// 목록에서 무언가를 **탭한 경우**에 선다. 층 스코프는 "화장실"처럼 사용자가
+  /// 직접 친 시설 질의를 지금 보는 층으로 확정하려고 있는 것이지, 목록에서 특정
+  /// 대상을 콕 집은 행동에 그대로 적용할 것이 아니다.
+  ///
+  /// 왜 bool이 아니라 층 값인지는 [_FloorScopeOverride] 주석에 있다.
+  _FloorScopeOverride? _floorScopeOnce;
+
   @override
   void initState() {
     super.initState();
+    if (widget.indoorContextActive) _loadStoreIndex();
     // 검색창에 글자가 남아 있는 채로 패널이 다시 열릴 수 있다.
     if (widget.query.trim().isNotEmpty) _scheduleSearch(widget.query);
+  }
+
+  /// 후보 원본을 받아 둔다. 실패는 삼킨다 — 위 [_storeIndex] 주석 참고.
+  Future<void> _loadStoreIndex() async {
+    try {
+      final index = await buildingRepository.getStoreIndex(widget.buildingId);
+      if (!mounted || index == null) return;
+      setState(() {
+        _storeIndex = index;
+        // 목록이 늦게 도착하는 동안 사용자가 이미 치고 있었을 수 있다.
+        _suggestions = _computeSuggestions(widget.query);
+      });
+    } on Object {
+      // 자동완성만 포기한다. 검색을 막지 않는다.
+    }
+  }
+
+  List<StoreSuggestion> _computeSuggestions(String query) {
+    // 야외에서는 후보를 만들지 않는다 — 이유는 [SearchPanel.indoorContextActive].
+    if (!widget.indoorContextActive) return const [];
+    final index = _storeIndex;
+    if (index == null) return const [];
+    return suggestStores(stores: index, query: query);
   }
 
   @override
   void didUpdateWidget(covariant SearchPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // 야외 → 실내로 들어오면 그때 원본을 받는다. 야외에서 미리 받아 두면 쓰지도
+    // 않을 목록을 내려받는 것이고, 실내로 들어온 뒤에는 후보가 있어야 한다.
+    if (widget.indoorContextActive && !oldWidget.indoorContextActive) {
+      _loadStoreIndex();
+    }
+    if (widget.query != oldWidget.query ||
+        widget.indoorContextActive != oldWidget.indoorContextActive) {
+      // 서버 응답을 기다리지 않는다. 이게 자동완성이 즉시 뜨는 이유다.
+      _suggestions = _computeSuggestions(widget.query);
+    }
+    // 새 검색어면 정렬 선택을 지운다. 엔터 재확정(submitTick만 오름)은 같은
+    // 검색어라 유지한다.
+    if (widget.query != oldWidget.query) _sortOverride = null;
     if (widget.submitTick != oldWidget.submitTick) {
       // 엔터로 확정. 사용자가 이미 "다 쳤다"고 말한 셈이라 두 대기를 모두
       // 건너뛴다. 엔터가 의미 검색의 **유일한** 트리거는 아니지만, 가장 빠른
@@ -363,7 +440,6 @@ class _SearchPanelState extends State<SearchPanel> {
         _submittedQuery = '';
         _results = const [];
         _building = null;
-        _pois = const [];
         _fromSemantic = false;
         _discoveryMatches = const [];
         _discoveryMode = null;
@@ -384,14 +460,8 @@ class _SearchPanelState extends State<SearchPanel> {
       _selectedFacets = const {};
       _facetSelectionOrder.clear();
       _showingAll = false;
-      _pois = const [];
       _phase = _SearchPhase.typingLightSearch;
     });
-
-    // 건물 밖 검색은 **기다리지 않는다.** 실내 검색과 나란히 출발시켜 두고,
-    // 먼저 끝나는 쪽부터 화면에 붙인다. 순서대로 하면 실내 결과가 이미 나온
-    // 화면에서 바깥 응답을 기다리느라 목록이 늦게 뜬다.
-    unawaited(_searchOutdoorPois(query, requestId));
 
     List<PoiSearchResult> results;
     Building? building;
@@ -402,19 +472,21 @@ class _SearchPanelState extends State<SearchPanel> {
       // 우연히 걸리는 층이 나온다). 매장을 이름으로 아는 검색이 다른 층에
       // 있어 여기서 빈손이 되더라도, 빈손이면 아래에서 층 제한이 없는 의미
       // 검색으로 자동으로 넘어가 그 매장을 여전히 찾아낸다.
+      // 목록에서 고른 검색이면 **고른 그 매장의 층**으로 좁힌다(위
+      // [_FloorScopeOverride]). 층을 모르는 선택(최근 검색어)만 스코프를 뺀다.
+      final override = _floorScopeOnce;
+      final floorScope = override != null
+          ? override.floorId
+          : widget.currentFloorId;
+      _floorScopeOnce = null;
       results = await destinationRepository.searchDestinations(
         widget.buildingId,
         query,
-        currentFloorId: widget.currentFloorId,
+        currentFloorId: floorScope,
       );
       final buildings = await buildingRepository.getAllBuildings();
       building = buildings
           .where((b) => b.name.toLowerCase().contains(query.toLowerCase()))
-          .firstOrNull;
-      _buildingNames = buildings.map((b) => b.name).toList();
-      _currentBuildingName = buildings
-          .where((b) => b.id == widget.buildingId)
-          .map((b) => b.name)
           .firstOrNull;
     } on Object {
       _finishFailed(query, requestId);
@@ -428,8 +500,55 @@ class _SearchPanelState extends State<SearchPanel> {
     // 지난 뒤에만 나올 수 있게 된다. 경량이 한 건이라도 잡으면 그대로 보여준다
     // — 잘 되던 검색은 여전히 빠르다.
     if (results.isEmpty && building == null) {
+      // **이름이 실제로 걸렸으면 의미 검색으로 넘어가지 않는다.**
+      //
+      // 실기기에서 `apc`로 확인한 문제다. 서버 경량 매칭은 `name LIKE %apc%`라
+      // 구두점이 든 `A.P.C.`를 못 잡고 `no_match`를 준다. 그런데 온디바이스
+      // 인덱스는 정규화 키로 이미 그 매장을 찾아 화면에 띄워 둔 상태다. 여기서
+      // 2차로 넘어가면 그 정답이 스피너에 덮이고, 임계값 0.50을 겨우 넘은
+      // 의미 검색이 **주차구역(6A·6E)** 을 "뜻이 비슷한 매장"이라며 확정했다.
+      // 맞는 답을 보여주다가 틀린 답으로 갈아치운 셈이다.
+      //
+      // FAISS.md 11절이 정한 역할 분리("정확한 이름은 1차가 확정하고 임베딩은
+      // 말로 푸는 질의만 담당")를 그대로 따르는 것이며, 달라진 건 그 1차가
+      // 서버뿐 아니라 온디바이스 인덱스이기도 하다는 점이다.
+      //
+      // 교정 후보만 있을 때는 넘긴다 — 그건 추측이라 의미 검색이 더 나을 수
+      // 있고, 2차도 실패하면 noMatch 화면이 그 교정 후보를 되묻는다.
+      final hasNameSuggestions = _suggestions.any((s) => !s.kind.isCorrection);
+      if (hasNameSuggestions) {
+        // 후보를 **먼저 확정해 보여주고**, 서버 탐색은 그대로 이어서 던진다.
+        //
+        // 예전에는 여기서 return하며 2차를 아예 부르지 않았는데, 그건 필요보다
+        // 넓은 차단이었다. 막아야 했던 건 임베딩 추측이지 `/query/ai` 호출이
+        // 아니다 — 그 엔드포인트의 1차는 임베딩이 아니라 서버 어휘(동의어·
+        // intent·카테고리) 매칭이고, 이름 매칭과 같은 등급의 결정적 매칭이다.
+        //
+        // 실제로 `커피`를 치면 온디바이스가 상호에 "커피"가 든 4곳을 잡고 끝나
+        // 카페 53곳이 통째로 가려졌다(실기기 확인). 서버는 그 53곳을
+        // `source: light`로 이미 돌려줄 수 있었는데 묻지를 않았다.
+        //
+        // 응답이 오면 [DiscoverySource]로 판정한다 — light면 교체하고,
+        // semantic이면 버린다. A.P.C. 불변("임베딩은 이름 후보를 덮지 못한다")은
+        // 그대로이고, 차단 지점만 호출 전에서 응답 후로 옮긴 것이다.
+        setState(() {
+          _submittedQuery = query;
+          _results = const [];
+          _building = null;
+          _fromSemantic = false;
+          _discoveryMatches = const [];
+          _discoveryMode = null;
+          _discoveryQuestion = null;
+          _discoveryOptions = const [];
+          _phase = _SearchPhase.suggestions;
+        });
+      }
       if (immediate) {
-        await _semanticSearch(query, requestId);
+        await _semanticSearch(
+          query,
+          requestId,
+          keepSuggestionsUnlessLight: hasNameSuggestions,
+        );
       } else {
         // 대기를 `Future.delayed`가 아니라 Timer로 두는 이유는 취소 때문이다.
         // 패널이 닫히면 dispose가 이 타이머를 끄고, 사용자가 글자를 더 치면
@@ -437,7 +556,11 @@ class _SearchPanelState extends State<SearchPanel> {
         // 취소할 방법이 없어 패널이 사라진 뒤에도 살아 있다.
         _debounce = Timer(
           _semanticGrace,
-          () => _semanticSearch(query, requestId),
+          () => _semanticSearch(
+            query,
+            requestId,
+            keepSuggestionsUnlessLight: hasNameSuggestions,
+          ),
         );
       }
       return;
@@ -458,69 +581,28 @@ class _SearchPanelState extends State<SearchPanel> {
     });
   }
 
-  /// 건물 밖 장소 검색(TMAP POI). 실내 검색과 **독립적으로** 돈다.
-  ///
-  /// 실패해도 화면 단계([_phase])를 건드리지 않는다. 이 검색은 곁들이는
-  /// 정보라, 바깥 조회가 실패했다고 실내 결과까지 오류 화면으로 덮으면 원래
-  /// 되던 검색이 같이 죽는다.
-  Future<void> _searchOutdoorPois(String query, int requestId) async {
-    final center = widget.outdoorSearchCenter;
-    // **건너뛰는 이유를 반드시 남긴다.** 이 세 조건 중 하나만 걸려도 화면에는
-    // "바깥 결과가 없다"와 똑같이 보인다. 실제로 기준점이 null이라 한 번도 안
-    // 돌던 시기를 로그 없이 지나쳤다.
-    if (center == null) {
-      debugPrint('[tmap-poi] 건너뜀: 검색 기준점 없음(위치·카메라 모두 미확보)');
-      return;
-    }
-    if (widget.onOutdoorPoiPicked == null) {
-      debugPrint('[tmap-poi] 건너뜀: 선택 콜백 없음');
-      return;
-    }
-    if (!outdoorPoiRepository.isAvailable) {
-      debugPrint('[tmap-poi] 건너뜀: TMAP_APP_KEY 미주입');
-      return;
-    }
-    final pois = await outdoorPoiRepository.searchNearby(query, center: center);
-    // 늦게 도착한 응답이 다음 검색어의 화면을 덮지 않게 한다(실내와 같은 규칙).
-    if (!mounted || requestId != _requestId || pois.isEmpty) return;
-    // 규칙은 도메인 함수가 갖고 있다(`domain/outdoor_poi_ranking.dart`).
-    // 길찾기 시트도 같은 함수를 부른다 — 여기서 다시 구현하면 또 갈린다.
-    final relevant = filterByNameRelevance(query, pois);
-    if (relevant.isEmpty) return;
-
-    // 사용자가 친 말로 우리 매장을 못 찾았을 수 있다("더현대 스타벅스" →
-    // no_match). 그 경우 POI 이름의 브랜드로 한 번 더 묻는다 — 안 하면 겹침을
-    // 판정할 대상이 없어 TMAP 줄이 그대로 남고, 그 줄을 고르면 층·노드가 없어
-    // 실내 경로가 시작되지 않는다. 길찾기 후보도 같은 함수를 부른다.
-    final isAt = widget.isInsideIndoorBuilding;
-    final enriched = await lookUpIndoorStoresByBrand(
-      pois: relevant,
-      indoorStores: _results,
-      isAtBuilding: (poi) => isAt?.call(poi.point) ?? false,
-      buildingNames: _buildingNames,
-      search: (brand) =>
-          destinationRepository.searchDestinations(widget.buildingId, brand),
-    );
-    if (!mounted || requestId != _requestId) return;
-
-    setState(() {
-      _pois = relevant;
-      _results = enriched;
-      // 이름 강조가 쓰는 질의어. 실내 검색이 아직 안 끝났을 수 있어 여기서도
-      // 채운다 — 안 채우면 이전 검색어 기준으로 강조가 걸린다.
-      _submittedQuery = query;
-    });
-  }
-
   /// 2단계. 여기까지 왔다는 건 경량이 확실히 빈손이라는 뜻이고, 이 함수가 끝나야
   /// 비로소 [_SearchPhase.noMatch]를 최종 결론으로 쓸 수 있다.
   ///
-  /// 백엔드 응답은 DiscoveryResponse(mode + question/options + matches)다.
+  /// 백엔드 응답은 DiscoveryResponse(mode + source + question/options + matches)다.
   /// mode마다 명시적인 화면 상태로 옮긴다. 추천 후보는 [DiscoveryMatch] 원본을
   /// 별도 보관해 reason/storeId를 잃지 않고 기존 길찾기 콜백에는 변환값만 준다.
-  Future<void> _semanticSearch(String query, int requestId) async {
+  ///
+  /// [keepSuggestionsUnlessLight]가 참이면 화면에 이미 온디바이스 이름 후보가
+  /// 떠 있다는 뜻이다. 그때는 스피너로 덮지 않고, 응답이 어휘(`light`)로 잡은
+  /// 것일 때만 후보를 교체한다. 임베딩 결과는 조용히 버린다 — A.P.C.가
+  /// 주차구역으로 갈아치워지던 회귀를 막는 불변이다(`search-input-assist.md`).
+  Future<void> _semanticSearch(
+    String query,
+    int requestId, {
+    bool keepSuggestionsUnlessLight = false,
+  }) async {
     if (!mounted || requestId != _requestId) return;
-    setState(() => _phase = _SearchPhase.semanticSearching);
+    // 후보가 떠 있으면 스피너를 띄우지 않는다. 맞는 답을 보여주다가 "찾는 중"
+    // 으로 덮는 것이 A.P.C. 사례에서 사용자가 겪은 문제의 절반이었다.
+    if (!keepSuggestionsUnlessLight) {
+      setState(() => _phase = _SearchPhase.semanticSearching);
+    }
 
     DiscoveryResult discovery;
     try {
@@ -534,10 +616,23 @@ class _SearchPanelState extends State<SearchPanel> {
         currentFloorId: widget.currentFloorId,
       );
     } on Object {
+      if (keepSuggestionsUnlessLight) return; // 후보 화면을 오류로 덮지 않는다
       _finishFailed(query, requestId);
       return;
     }
     if (!mounted || requestId != _requestId) return;
+
+    // 이름 후보가 떠 있는데 서버가 임베딩으로 잡은 결과를 줬다면 버린다.
+    // 화면은 이미 `suggestions`로 확정돼 있으므로 아무것도 하지 않으면 된다.
+    //
+    // 어휘로 잡았더라도 보여줄 게 없으면(빈 matches) 마찬가지로 버린다. 지금
+    // 서버 구현에서는 light + 빈 결과가 나올 수 없지만, 그 전제가 깨지는 날
+    // 화면에 떠 있던 맞는 후보가 "결과 없음"으로 지워지는 쪽이 최악이다.
+    if (keepSuggestionsUnlessLight &&
+        (!discovery.source.canReplaceNameSuggestions ||
+            discovery.matches.isEmpty)) {
+      return;
+    }
 
     final results = discovery.matches
         .map((match) => match.toPoiSearchResult())
@@ -549,7 +644,18 @@ class _SearchPanelState extends State<SearchPanel> {
       _submittedQuery = query;
       _results = results;
       _building = null;
-      _fromSemantic = results.isNotEmpty && !_isExactNameMatch(query, results);
+      // "뜻이 비슷한 매장"은 임베딩으로 찾았을 때만 맞는 말이다. 서버 어휘
+      // (동의어·intent·카테고리)로 잡은 `커피` → 카페 목록에 이 배너가 붙으면
+      // 정확히 찾아 준 것을 추측이라고 말하는 셈이다.
+      //
+      // source가 오기 전에는 이걸 알 수 없어서 이름 비교 휴리스틱으로 추정했다
+      // ([isExactNameMatch]). 이제 서버가 알려주므로 그 값을 먼저 본다.
+      // 휴리스틱은 여전히 필요하다 — 타 층 매장을 정확한 이름으로 쳐서 2차로
+      // 넘어온 경우는 source가 semantic이어도 "뜻으로 찾은" 게 아니다.
+      _fromSemantic =
+          results.isNotEmpty &&
+          !discovery.source.canReplaceNameSuggestions &&
+          !isExactNameMatch(query, results.map((r) => r.name));
       _discoveryMatches = discovery.matches;
       _discoveryMode = discovery.mode;
       _discoveryQuestion = discovery.question;
@@ -606,7 +712,8 @@ class _SearchPanelState extends State<SearchPanel> {
         _results = results;
         _building = null;
         _fromSemantic =
-            results.isNotEmpty && !_isExactNameMatch(query, results);
+            results.isNotEmpty &&
+            !isExactNameMatch(query, results.map((r) => r.name));
         _discoveryMatches = discovery.matches;
         _discoveryMode = discovery.mode;
         _discoveryQuestion = discovery.question;
@@ -689,8 +796,10 @@ class _SearchPanelState extends State<SearchPanel> {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-      elevation: 6,
-      shadowColor: Colors.black.withValues(alpha: 0.15),
+      // 지도를 덮는 임시 레이어다. 상단 바(chrome)보다 한 단계 앞에 둬야
+      // "지금 이게 화면의 주인공"이 읽힌다(AppElevation).
+      elevation: AppElevation.overlay,
+      shadowColor: Colors.black.withValues(alpha: 0.16),
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
       child: _body(context),
@@ -698,38 +807,421 @@ class _SearchPanelState extends State<SearchPanel> {
   }
 
   Widget _body(BuildContext context) {
-    // 건물 밖 결과가 하나라도 있으면 **어떤 단계에서도** 목록을 보여준다.
+    // **후보를 띄울지는 단계가 아니라 "이번 글자의 답이 있는가"로 정한다.**
     //
-    // 실내 검색이 아직 돌고 있거나(스피너) 빈손으로 끝났거나(결과 없음)
-    // 실패했더라도(오류), 사용자가 찾던 곳이 바깥에 이미 잡혀 있는데 그
-    // 화면들을 띄우면 답을 손에 쥐고도 못 보여 주는 셈이 된다. 실내가 아직
-    // 도는 중이라는 사실은 목록 안의 진행 줄이 대신 알린다.
-    final hasOutdoor = _pois.isNotEmpty;
+    // [_phase]로 판단하면 안 되는 이유가 있다. 디바운스(300ms) 동안에는 아직
+    // 요청이 시작조차 안 해서 단계가 그대로 남아 있다 — 첫 글자에는 [idle],
+    // 두 번째 검색부터는 **직전 질의의 [results]** 다. 즉 단계만 보면 사용자가
+    // 이미 다른 말을 치고 있는데 화면은 이전 결과를 계속 보여준다.
+    //
+    // [_submittedQuery]는 지금 화면에 그려진 결과가 어느 질의의 것인지를 담고
+    // 있으므로, 검색창 글자와 다르면 "아직 이번 글자의 답이 아니다"가 된다.
+    // 온디바이스 후보는 0ms에 나오니 그 사이를 후보로 채운다.
+    final awaitingAnswer = widget.query.trim() != _submittedQuery;
+    if (_suggestions.isNotEmpty &&
+        awaitingAnswer &&
+        // 의미 검색만 예외다. 여기까지 왔다는 건 이름으로 걸린 후보가 없었다는
+        // 뜻이라(위 _search 분기) 후보로 덮을 것도 없고, 여기서만 몇 초가 걸릴 수
+        // 있어 "AI가 찾는 중"이라는 사실 자체가 화면에 있어야 한다.
+        _phase != _SearchPhase.semanticSearching) {
+      return _suggestionList(settled: false);
+    }
+
     switch (_phase) {
       case _SearchPhase.idle:
-        return const Padding(
-          padding: EdgeInsets.fromLTRB(16, 20, 16, 22),
-          child: Text(
-            '매장 이름을 입력하면 바로 찾아드려요.\n'
-            '"밥 먹을 곳"처럼 뜻으로 물어도 됩니다.',
-            style: TextStyle(fontSize: 13, color: AppColors.muted, height: 1.5),
-          ),
-        );
+        return _idleState();
       case _SearchPhase.typingLightSearch:
       case _SearchPhase.semanticSearching:
-        return hasOutdoor ? _resultList() : _searchingState();
+        return _searchingState();
+      case _SearchPhase.suggestions:
+        return _suggestionList(settled: true);
       case _SearchPhase.clarify:
       case _SearchPhase.results:
         return _resultList();
       case _SearchPhase.degraded:
-        return _results.isEmpty && !hasOutdoor
-            ? _degradedState()
-            : _resultList();
+        return _results.isEmpty ? _degradedState() : _resultList();
       case _SearchPhase.error:
-        return hasOutdoor ? _resultList() : _errorState();
+        return _errorState();
+      // **오타 교정이 실제로 값을 내는 자리다.** 서버가 못 찾은 뒤에도 "샤낼 뷰티"
+      // 같은 표기 실수나 초성 질의(`ㄴㅇㅋ`)는 온디바이스 후보가 잡는다. 여기서
+      // 후보를 안 보여주면 사용자가 볼 수 있는 건 "찾지 못했어요" 하나뿐이다.
       case _SearchPhase.noMatch:
-        return hasOutdoor ? _resultList() : _emptyState(context);
+        return _suggestions.isEmpty
+            ? _emptyState(context)
+            : _suggestionList(settled: true);
     }
+  }
+
+  /// 지금 적용 중인 정렬. 사용자가 고른 값이 우선이고, 안 골랐으면 위치 유무로
+  /// 정한다.
+  SearchSortOrder get _sortOrder =>
+      _sortOverride ?? defaultSortOrder(widget.reachByNodeId);
+
+  /// 목록 머리말 — 개수·층 분포(Q)와 정렬 컨트롤(P)이 **한 줄**을 쓴다.
+  ///
+  /// 줄을 두 개 만들면 그만큼 결과가 아래로 밀린다. 이 패널은 상단 오버레이라
+  /// 세로가 가장 귀한 자원이다.
+  ///
+  /// [floorNames]는 **화면에 그린 줄들의 층**이다. 묶인 시설(화장실 19곳)의
+  /// 나머지 층까지 세면 한 줄짜리 목록에 `10개 층`이라고 적히는데, 사용자가 보는
+  /// 것과 다른 수를 적는 셈이다. 서버 상한(30)이나 후보 상한(8)에 잘린 목록에서
+  /// 전체 개수를 적지 않는 것과 같은 규칙이다.
+  ///
+  /// 층을 `B2 ~ 3F` 같은 **범위**로 적지 않는다. `StoreIndexEntry`·
+  /// `PoiSearchResult` 어느 쪽에도 `Floor.level`이 없어서, 문자열을 사전순으로
+  /// 세우면 `1F`가 `B1`보다 앞에 온다. 순서 값이 생기기 전에는 `N개 층`이
+  /// 사실만 말하는 유일한 표기다.
+  Widget _listHeader({
+    required int count,
+    required Iterable<String> floorNames,
+    required bool canChoose,
+  }) {
+    final floors = floorNames.toSet();
+    final floorText = floors.length == 1 ? floors.first : '${floors.length}개 층';
+    final canNearest = canSortByNearest(widget.reachByNodeId);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 4, 2),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              '검색 결과 $count · $floorText',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.muted,
+              ),
+            ),
+          ),
+          if (canChoose)
+            // 네이버가 필터를 칩으로 늘어놓지 않고 헤더 우측에 `추천순 ⌄`로
+            // 접는 것과 같은 자리다(naver-map-ui-ux-analysis.md 1절).
+            PopupMenuButton<SearchSortOrder>(
+              key: const Key('sort-order'),
+              initialValue: _sortOrder,
+              tooltip: '정렬 기준',
+              onSelected: (value) => setState(() => _sortOverride = value),
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: SearchSortOrder.nearest,
+                  // 거리를 아무도 모르면 눌러도 순서가 안 바뀐다. 고를 수 있게
+                  // 두면 사용자는 정렬이 고장 났다고 읽는다.
+                  enabled: canNearest,
+                  child: Text(canNearest ? '가까운 순' : '가까운 순 (현재 위치 필요)'),
+                ),
+                const PopupMenuItem(
+                  value: SearchSortOrder.bestMatch,
+                  child: Text('이름 맞춤 순'),
+                ),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _sortOrder == SearchSortOrder.nearest
+                          ? '가까운 순'
+                          : '이름 맞춤 순',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.text,
+                      ),
+                    ),
+                    const Icon(
+                      Icons.expand_more,
+                      size: 16,
+                      color: AppColors.muted,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 후보 목록. 상위가 [_storeIndex]를 못 받았으면 애초에 여기 오지 않는다.
+  ///
+  /// 후보를 탭하면 **좌표를 들고 바로 이동하지 않는다.** 그 이름으로 검색을 다시
+  /// 돌려(`onQueryPicked`) 기존 경량 매칭이 좌표까지 갖춘 결과를 만들게 한다 —
+  /// 이유는 [StoreIndexEntry] 주석에 있다.
+  /// [settled]는 **이 화면이 이번 글자의 결론인가**다. 타이핑 중(서버를 기다리는
+  /// 중)이면 false다.
+  ///
+  /// 이 값으로 갈리는 게 둘이다. **타이핑 중에는 정렬을 고르게 하지 않고, 순서도
+  /// 매칭 품질순 그대로 둔다.** 글자마다 목록이 거리로 다시 세워지면 아직 무엇을
+  /// 찾는지 정하지도 않은 사용자의 눈앞에서 줄이 위아래로 튄다. 그리고 매 글자
+  /// 컨트롤이 깜빡이면 아직 결론이 아닌 화면이 결론처럼 보인다.
+  Widget _suggestionList({required bool settled}) {
+    // 머리말은 호출 자리가 아니라 **후보의 성격**으로 정한다. 전부 교정 후보면
+    // "네가 치려던 게 이거냐"는 되물음이고, 하나라도 이름이 실제로 걸렸으면
+    // "이런 게 있다"는 제안이다. 자리로 나누면 같은 목록에 다른 말이 붙는다.
+    final allCorrections = _suggestions.every((s) => s.kind.isCorrection);
+    // 교정 후보는 추측이다. 개수를 세고 거리로 정렬해 주는 건 "이게 답이다"라는
+    // 말인데, 여기서 우리가 아는 건 "표기가 비슷한 이름이 있다"뿐이다.
+    //
+    // **1건짜리 목록에는 머리말을 얹지 않는다.** `검색 결과 1 · 4F`는 바로 아래
+    // 한 줄이 이미 말한 것을 되풀이할 뿐이고, 정렬 컨트롤도 누를 대상이 없다.
+    // 개수 머리말과 컨트롤이 같은 조건으로 갈리므로 조건도 하나로 둔다.
+    final showCount =
+        settled &&
+        !allCorrections &&
+        canChooseSortOrder(itemCount: _suggestions.length, fromSemantic: false);
+    final suggestions = showCount
+        ? sortedSuggestions(
+            suggestions: _suggestions,
+            reachByNodeId: widget.reachByNodeId,
+            order: _sortOrder,
+          )
+        : _suggestions;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (showCount)
+          _listHeader(
+            count: suggestions.length,
+            // 묶인 시설은 화면에 그린 대표의 층만 센다(_listHeader 주석).
+            floorNames: [
+              for (final suggestion in suggestions)
+                nearestByWalkingDistance(
+                  stores: suggestion.stores,
+                  reachByNodeId: widget.reachByNodeId,
+                ).store.floorName,
+            ],
+            canChoose: true,
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
+            child: Text(
+              allCorrections ? '이걸 찾으셨나요?' : '검색어 제안',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.muted,
+              ),
+            ),
+          ),
+        Flexible(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final suggestion in suggestions)
+                  _suggestionTile(suggestion),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _suggestionTile(StoreSuggestion suggestion) {
+    // 묶인 시설(화장실 19곳)에서 **어느 매장의 층을 적을지**를 여기서 정한다.
+    // 예전에는 인덱스 첫 번째였고, 인덱스가 `Floor.level DESC`라 늘 꼭대기 층이
+    // 대표였다 — B2에 서 있어도 `화장실 · 6F 등 19곳`. 규칙과 실패 조건은
+    // [nearestByWalkingDistance](../domain/nearest_store.dart)가 단일 출처다.
+    final nearest = nearestByWalkingDistance(
+      stores: suggestion.stores,
+      reachByNodeId: widget.reachByNodeId,
+    );
+    final store = nearest.store;
+    final reach = nearest.reach;
+    final categoryLabel =
+        subcategoryLabelFor(store.subcategory) ?? store.category;
+    // 층마다 있는 시설(화장실 19건)은 한 줄로 묶여 온다. 몇 곳인지 적어 주지
+    // 않으면 사용자는 "왜 한 층만 나오지"로 읽는다. **개수는 거리를 아는 곳이
+    // 몇인지와 무관하게 묶인 전체다** — 19곳 중 3곳만 도달 가능하다고 `등 3곳`
+    // 으로 적으면 없는 사실을 만들어 낸다.
+    final count = suggestion.stores.length;
+    final floorLine = count > 1
+        ? '${store.floorName} 등 $count곳'
+        : store.floorName;
+    return ListTile(
+      key: Key('suggestion-${store.id}'),
+      dense: true,
+      // 돋보기와 핀 2종만 쓰는 네이버 관례를 따른다. 교정 후보만 다른 아이콘으로
+      // "이건 네가 친 말이 아니다"를 알린다 — 검증 기준(L)의 "교정 후보임이
+      // 화면에 드러남"이 이 아이콘과 아래 하이라이트 없음으로 충족된다.
+      leading: Icon(
+        suggestion.kind.isCorrection ? Icons.auto_fix_high : Icons.search,
+        size: 20,
+        color: AppColors.muted,
+      ),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text.rich(
+              // 교정 후보는 사용자가 친 글자와 이름이 어긋나 있어 하이라이트가
+              // 안 걸린다. 그게 정상이다(highlightedNameSpans 주석).
+              TextSpan(
+                children: highlightedNameSpans(store.name, widget.query),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 14),
+            ),
+          ),
+          if (categoryLabel != null) ...[
+            const SizedBox(width: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 84),
+              child: Text(
+                categoryLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: const TextStyle(fontSize: 12, color: AppColors.muted),
+              ),
+            ),
+          ],
+        ],
+      ),
+      // 결과 목록(_storeTile)과 같은 두 줄 구조다. 후보 목록이 사실상 결과
+      // 화면으로도 쓰이는데(서버가 한 곳을 지목 못 한 브랜드 질의) 거리만 없어서,
+      // 가장 흔한 검색이 가장 빈약한 화면으로 가고 있었다.
+      // 설계: docs/client/search-result-list-ux.md O절.
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            floorLine,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12, color: AppColors.muted),
+          ),
+          if (reach != null)
+            Text(
+              reachLabel(reach),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              // 결과 행과 같은 무게. 두 목록이 같은 값을 다르게 그리면 사용자는
+              // 둘이 다른 것을 뜻한다고 읽는다.
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.text,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+        ],
+      ),
+      isThreeLine: reach != null,
+      onTap: () {
+        // 화면에 적힌 그 층으로 확정되게 한다. 이름만 넘기면 같은 이름이 19곳인
+        // 시설에서 서버가 자기 순서로 아무 층이나 고른다([_FloorScopeOverride]).
+        _floorScopeOnce = _FloorScopeOverride(store.floorId);
+        widget.onQueryPicked(store.name);
+      },
+    );
+  }
+
+  /// 아직 아무것도 치지 않은 화면. 최근 검색어가 있으면 그걸 보여주고, 없으면
+  /// 예전처럼 안내 문구만 남긴다.
+  ///
+  /// **"인기 매장"은 만들지 않는다.** 방문·클릭 로그가 없어 순위를 만들 근거가
+  /// 없다(설계: naver-map-ui-ux-analysis.md J절). 클라이언트가 실제로 아는 것만
+  /// 쓴다.
+  ///
+  /// 첫 실행의 빈 목록은 오류가 아니라 정상 상태다. 그때는 목록 자리에
+  /// 빈 박스를 남기지 않고 안내 문구가 그 자리를 그대로 쓴다.
+  Widget _idleState() {
+    return ListenableBuilder(
+      listenable: recentSearchesController,
+      builder: (context, _) {
+        final queries = recentSearchesController.queries;
+        if (queries.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.fromLTRB(16, 20, 16, 22),
+            child: Text(
+              '매장 이름을 입력하면 바로 찾아드려요.\n'
+              '"밥 먹을 곳"처럼 뜻으로 물어도 됩니다.',
+              style: TextStyle(
+                fontSize: 13,
+                color: AppColors.muted,
+                height: 1.5,
+              ),
+            ),
+          );
+        }
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 8, 2),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      '최근 검색어',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.muted,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: recentSearchesController.clear,
+                    child: const Text('전체 삭제', style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+            ),
+            // 목록이 상한(컨트롤러의 maxEntries)까지 차도 패널이 화면을 다 먹지
+            // 않도록 상위가 준 높이 안에서 스크롤시킨다. 결과 목록과 같은 이유로
+            // ListView가 아니라 Column + SingleChildScrollView다(아래 _resultList
+            // 주석 참고).
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final query in queries)
+                      ListTile(
+                        key: Key('recent-$query'),
+                        dense: true,
+                        leading: const Icon(
+                          Icons.history,
+                          size: 20,
+                          color: AppColors.muted,
+                        ),
+                        title: Text(
+                          query,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          color: AppColors.muted,
+                          tooltip: '$query 삭제',
+                          onPressed: () =>
+                              recentSearchesController.remove(query),
+                        ),
+                        onTap: () {
+                          // 최근 검색어는 문자열 하나뿐이라 어느 층 매장이었는지
+                          // 알 방법이 없다. 층을 모르는 선택이므로 스코프를 뺀다.
+                          _floorScopeOnce = const _FloorScopeOverride(null);
+                          widget.onQueryPicked(query);
+                        },
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   /// 아직 결론이 아니라는 화면. 경량 단계에서는 스피너만 돌리고, 의미 검색으로
@@ -761,12 +1253,6 @@ class _SearchPanelState extends State<SearchPanel> {
 
   Widget _resultList() {
     final rows = <Widget>[];
-    // 바깥 결과 덕분에 목록이 먼저 떴을 뿐, 건물 안 검색은 아직 돌고 있을 수
-    // 있다. 그 사실을 안 밝히면 사용자는 이게 최종 목록이라고 읽는다.
-    if (_phase == _SearchPhase.typingLightSearch ||
-        _phase == _SearchPhase.semanticSearching) {
-      rows.add(const _IndoorSearchingRow());
-    }
     final isDiscovery = _discoveryMode != null;
     if (isDiscovery) rows.add(_discoveryHeader());
     if (_fromSemantic) {
@@ -816,34 +1302,63 @@ class _SearchPanelState extends State<SearchPanel> {
         ),
       );
     }
-    final merged = _mergedResults(building);
-    // 인덱스로 [_discoveryMatches]와 짝을 맞추므로 목록을 미리 걸러 내지 않고
-    // 그리는 자리에서 건너뛴다. 걸러 낸 목록으로 순회하면 추천 이유가 한 칸씩
-    // 밀려 다른 매장에 붙는다.
-    //
-    for (var index = 0; index < _results.length; index++) {
-      final store = _results[index];
-      final match = index < _discoveryMatches.length
-          ? _discoveryMatches[index]
-          : null;
-      rows.add(_storeTile(store, match));
+    // 가까운 것부터 보여준다. 규칙과 실패 조건은
+    // [sortedSearchResults](../domain/search_result_order.dart)가 단일 출처다.
+    // 여기(build)에서 세우는 이유는 거리의 출처인 `widget.reachByNodeId`가 위치를
+    // 새로 잡을 때마다 바뀌기 때문이다 — 결과를 받는 시점에 한 번만 세우면
+    // 화면에 적힌 거리와 순서가 어긋난 목록이 남는다. 상한이 30건이라 매 빌드
+    // 정렬 비용은 무시할 수 있다.
+    final ordered = sortedSearchResults(
+      results: _results,
+      reachByNodeId: widget.reachByNodeId,
+      fromSemantic: _fromSemantic,
+      order: _sortOrder,
+    );
+    // 개수·층 머리말과 정렬 컨트롤은 **결론인 목록에만** 얹는다. clarify는 아직
+    // 질문이 서 있는 화면이라 질문·선택지 줄 위에 개수를 또 적으면 무엇을 먼저
+    // 읽어야 할지 흐려지고, 의미 검색 결과는 유사도순이라 고를 수 있는 축이
+    // 아니다(`canChooseSortOrder`).
+    final canChoose =
+        _discoveryMode != DiscoveryMode.clarify &&
+        canChooseSortOrder(
+          itemCount: ordered.length,
+          fromSemantic: _fromSemantic,
+        );
+    // 건물 행 **아래**에 둔다. "검색 결과 N"의 N은 매장 수이고 건물은 세지
+    // 않으므로, 건물 위에 얹으면 그 줄까지 세는 것처럼 읽힌다.
+    if (canChoose) {
+      rows.add(
+        _listHeader(
+          count: ordered.length,
+          floorNames: [for (final store in ordered) store.floor],
+          canChoose: true,
+        ),
+      );
     }
-
-    // 건물 밖 결과는 **항상 실내 아래**에 둔다. 이 앱의 본업은 건물 안 길찾기라,
-    // 같은 이름이 안팎에 다 있으면 사용자가 지금 서 있는 건물 안 매장을 먼저
-    // 보는 것이 맞다. 대신 어디까지가 우리 건물이고 어디부터 바깥인지 헤더로
-    // 명확히 가른다 — 안 가르면 다른 건물 매장을 우리 매장으로 오해한다.
-    final onPoiPicked = widget.onOutdoorPoiPicked;
-    if (merged.outdoorRows.isNotEmpty && onPoiPicked != null) {
-      rows.add(_outdoorHeader());
-      for (final row in merged.outdoorRows) {
-        rows.add(_poiTile(row, onPoiPicked));
-      }
+    // 추천 이유는 **storeId로** 짝짓는다. 예전에는 `_discoveryMatches[index]`로
+    // 인덱스를 맞췄는데, 정렬이 들어오면 이유가 엉뚱한 매장에 붙는다. 그리고
+    // 이건 가정이 아니다 — `_fromSemantic`은 결과가 정확한 이름 일치로 판정되면
+    // false가 되는데(_semanticSearch), 그때도 `_discoveryMatches`는 차 있다.
+    // 즉 "정렬은 도는데 인덱스 짝짓기는 깨지는" 조합이 실제 경로로 존재한다.
+    final matchByStoreId = {
+      for (final match in _discoveryMatches) match.storeId: match,
+    };
+    // 모든 행에 똑같이 들어 있는 근거 문장은 행에서 빼고 층에 자리를 돌려준다.
+    // 규칙과 이유는 [distinctiveReason](../domain/reason_text.dart)이 단일 출처다.
+    final sharedReasons = sharedReasonSentences(
+      _discoveryMatches.map((match) => match.reason),
+    );
+    for (final store in ordered) {
+      final placeId = store.placeId;
+      rows.add(
+        _storeTile(
+          store,
+          placeId == null ? null : matchByStoreId[placeId],
+          sharedReasons,
+        ),
+      );
     }
-
-    // 그릴 줄이 하나도 없으면 빈 패널 대신 없다고 말한다. 사용자는 빈 패널을
-    // "앱이 멈췄다"로 읽는다.
-    if (rows.isEmpty) return _emptyState(context);
+    rows.addAll(_siblingRows(ordered));
 
     // 왜 ListView(shrinkWrap)가 아니라 SingleChildScrollView + Column인가.
     //
@@ -874,77 +1389,47 @@ class _SearchPanelState extends State<SearchPanel> {
     );
   }
 
-  /// 목록에 실제로 그릴 바깥 결과. 같은 곳을 두 번 보여주지 않는다.
+  /// 서버가 확정한 1건 **아래에** 같은 계열 매장을 잇는 행들.
   ///
-  /// 두 종류의 중복을 뺀다.
+  /// `구찌`를 치면 서버는 `구찌` 한 곳을 자신 있게 확정하고, `구찌 뷰티`·
+  /// `구찌 선글라스`는 화면에서 사라진다. 규칙과 실패 조건은
+  /// [nameSiblings](../domain/name_siblings.dart)가 단일 출처다.
   ///
-  /// 1. **건물 줄과 같은 곳.** TMAP도 "더현대서울"을 POI 한 건으로 돌려주므로
-  ///    그냥 두면 같은 건물이 두 번 뜨고, 둘이 하는 일이 다르다 — 위쪽 건물
-  ///    줄은 입구까지 안내하지만 아래쪽은 좌표 하나짜리다.
-  /// 2. **우리 실내 데이터가 이미 아는 가게.** 사용자가 본 화면이 그랬다 —
-  ///    "스타벅스 리저브 / B2"(우리)와 "스타벅스 더현대서울(B2)R점"(TMAP)이
-  ///    나란히 떴고, 아래쪽을 고르면 실내 경로가 안 나왔다. 층·노드가 붙어
-  ///    매장 앞까지 데려다주는 쪽을 남긴다([dropPoisCoveredByIndoorStores]).
-  ///
-  /// 1번의 이름 비교는 **완전 일치**다(공백·대소문자 무시). `contains`로
-  /// 넓히면 "더현대서울 스타벅스"처럼 건물 이름을 앞에 단 진짜 결과까지
-  /// 사라진다 — 중복 한 줄을 지우려다 찾던 가게를 지우는 쪽이 훨씬 나쁘다.
-  /// 목록에 실제로 그릴 결과. 같은 곳을 두 번 보여주지 않는다.
-  ///
-  /// **바깥 줄(POI) 쪽으로 합친다.** 사용자가 검색해서 본 이름이 POI 이름이고
-  /// ("스타벅스 더현대서울(B2)R점"), 우리 데이터 이름("스타벅스 리저브")으로
-  /// 바꿔 버리면 방금 친 검색어와 목록이 어긋난다. 대신 그 줄에 우리 매장의
-  /// 층·노드를 실어([mergeOutdoorResults]) 눌렀을 때 실내까지 안내되게 한다 —
-  /// 이름은 POI, 능력은 우리 데이터다.
-  ///
-  /// 건물 줄과 이름이 **완전히 같은**(공백·대소문자 무시) POI도 뺀다. TMAP도
-  /// 같은 건물을 POI 한 건으로 돌려주기 때문이다. `contains`로 넓히지 않는
-  /// 이유는 "더현대서울 스타벅스"처럼 건물 이름을 앞에 단 진짜 결과까지
-  /// 사라지기 때문이다 — 중복 한 줄을 지우려다 찾던 가게를 지우는 쪽이 훨씬
-  /// 나쁘다.
-  MergedOutdoorResults _mergedResults(Building? building) {
-    final isAt = widget.isInsideIndoorBuilding;
-    final merged = mergeOutdoorResults(
-      pois: _pois,
-      indoorStores: _results,
-      // 판정을 못 하면 아무 POI도 건물 것으로 보지 않는다. 그러면 지금까지처럼
-      // 두 줄이 남을 뿐이고, 잘못 합쳐 엉뚱한 매장으로 안내하지는 않는다.
-      isAtBuilding: (poi) => isAt?.call(poi.point) ?? false,
-      buildingNames: _buildingNames,
+  /// **정확 일치 행은 맨 위에 고정한다.** 사용자가 친 그 이름이라 거리로 밀어
+  /// 내리면 "이름 맞춤"이라는 말 자체가 무너진다. 그래서 이 화면에는 정렬
+  /// 컨트롤을 두지 않는다 — 머리 행이 고정된 목록은 정렬 기준 하나로 설명되지
+  /// 않는다. 형제는 실데이터 기준 최대 3건이라 고를 것도 많지 않다.
+  List<Widget> _siblingRows(List<PoiSearchResult> ordered) {
+    // 경량 경로가 확정한 1건일 때만이다. 의미 검색·discovery 결과는 이름으로
+    // 걸린 게 아니라 형제라는 개념 자체가 없다.
+    if (_discoveryMode != null || _fromSemantic) return const [];
+    if (ordered.length != 1) return const [];
+
+    final siblings = nameSiblings(
+      suggestions: _suggestions,
+      confirmedName: ordered.single.name,
     );
-    _logMerge(merged);
-    if (building == null) return merged;
+    if (siblings.isEmpty) return const [];
 
-    final key = collapseName(building.name);
-    return MergedOutdoorResults(
-      merged.outdoorRows
-          .where((row) => collapseName(row.poi.name) != key)
-          .toList(),
-      merged.indoorStores,
+    final sorted = sortedSuggestions(
+      suggestions: siblings,
+      reachByNodeId: widget.reachByNodeId,
+      order: _sortOrder,
     );
-  }
-
-  /// 직전에 남긴 로그 한 줄. build마다 같은 말을 반복하지 않으려고 들고 있는다.
-  String _lastMergeLog = '';
-
-  /// **연결 결과를 로그로 남긴다.**
-  ///
-  /// 화면에서는 "실내 매장에 연결됐다"와 "연결할 게 없었다"가 똑같이 보인다 —
-  /// 둘 다 POI 줄 하나로 끝난다. 그래서 규칙이 통째로 안 도는 것을 눈으로
-  /// 구분할 수 없고, 실제로 이 자리를 세 번 잘못 짚었다. 다음에는 추측하지
-  /// 않도록 근거를 남긴다.
-  void _logMerge(MergedOutdoorResults merged) {
-    if (_pois.isEmpty) return;
-    final dropped = _pois.length - merged.outdoorRows.length;
-    final line =
-        '[poi-merge] 바깥 ${_pois.length}건 중 $dropped건이 우리 매장과 겹쳐 빠짐 '
-        '(실내 후보 ${_results.length}건, 건물 이름 $_buildingNames)';
-    if (line == _lastMergeLog) return;
-    _lastMergeLog = line;
-    debugPrint(line);
-    for (final row in merged.outdoorRows) {
-      debugPrint('[poi-merge]   남김: "${row.poi.name}"');
-    }
+    return [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 2),
+        child: Text(
+          '관련 매장 ${sorted.length}곳',
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: AppColors.muted,
+          ),
+        ),
+      ),
+      for (final suggestion in sorted) _suggestionTile(suggestion),
+    ];
   }
 
   Widget _discoveryHeader() {
@@ -963,74 +1448,130 @@ class _SearchPanelState extends State<SearchPanel> {
     // 상태도 포함한다 — 그 화면에서는 이 버튼이 질문으로 돌아가는 유일한 길이다.
     final canChooseAgain = hasSelection || _showingAll;
 
-    final selectedChips = <Widget>[];
+    // 선택·되돌리기 줄. 답을 한 번이라도 골랐을 때만 선다.
+    final selectedRow = <Widget>[];
     for (final entry in _selectedFacets.entries) {
       for (final value in entry.value) {
-        selectedChips.add(
-          InputChip(
+        if (selectedRow.isNotEmpty) selectedRow.add(const SizedBox(width: 6));
+        selectedRow.add(
+          FilterPill(
             key: Key('selected-facet-${entry.key}-$value'),
-            label: Text('$value 선택됨'),
-            onDeleted: () => _removeFacet(entry.key, value),
+            label: value,
+            selected: true,
+            // 고른 값을 다시 누르면 풀린다. 카테고리 시트의 소분류 pill과 같은
+            // 규칙이라 같은 모양이 같게 동작한다. `×`는 그 사실을 눈에 보이게 한다.
+            trailing: Icons.close,
+            onTap: () => _removeFacet(entry.key, value),
           ),
         );
       }
     }
+    // 조작 pill(전체 보기·다시 선택)은 **선택 줄 끝에 구분선 뒤로** 붙인다. 예전에는
+    // "전체 보기"가 혼자 윗줄에 떠서, 방금 고른 선택보다 위에 있는 탈출구가 됐다.
+    // clarify 화면에서는 이미 선택지 줄 끝에 있으므로 여기서는 빼고 중복시키지 않는다.
+    final trailingActions = <Widget>[
+      if (canShowAll && !isClarify)
+        FilterPill(
+          key: const Key('show-all'),
+          label: '전체 보기',
+          selected: false,
+          onTap: () => _requestDiscovery(showAll: true),
+        ),
+      if (canChooseAgain)
+        FilterPill(
+          key: const Key('choose-again'),
+          label: '다시 선택',
+          selected: false,
+          onTap: _chooseAgain,
+        ),
+    ];
+    if (trailingActions.isNotEmpty) {
+      if (selectedRow.isNotEmpty) {
+        selectedRow.add(
+          const VerticalDivider(width: 10, indent: 6, endIndent: 6),
+        );
+      }
+      for (var index = 0; index < trailingActions.length; index++) {
+        if (index > 0) selectedRow.add(const SizedBox(width: 6));
+        selectedRow.add(trailingActions[index]);
+      }
+    }
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+      padding: const EdgeInsets.fromLTRB(0, 10, 0, 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (_discoveryMode == DiscoveryMode.degraded)
-            const Text(
-              '일부 추천 기능이 준비되지 않아 제한된 결과만 보여드려요.',
-              style: TextStyle(fontSize: 12, color: AppColors.muted),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 6),
+              child: Text(
+                '일부 추천 기능이 준비되지 않아 제한된 결과만 보여드려요.',
+                style: TextStyle(fontSize: 12, color: AppColors.muted),
+              ),
             ),
           if (isClarify) ...[
-            Text(
-              _discoveryQuestion ?? '어떤 조건을 더 중요하게 보시나요?',
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            // 질문은 이 패널의 다른 머리말(`검색어 제안`·`최근 검색어`)과 같은
+            // 크기·색으로 둔다. 예전에는 14/굵게라 질문이 결과보다 커 보였는데,
+            // 여기서 물어보는 건 답을 좁히는 보조 수단이지 화면의 주인공이 아니다.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+              child: Text(
+                _discoveryQuestion ?? '어떤 조건을 더 중요하게 보시나요?',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.muted,
+                ),
+              ),
             ),
-            if (_discoveryOptions.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: _discoveryOptions
-                    .map(
-                      (option) => ActionChip(
+            // **선택지는 한 줄에서 가로로 스크롤한다.** Wrap으로 접으면 다섯 개짜리
+            // 축(styles)에서 두 줄이 되고, 질문·전체 보기까지 합쳐 세로 150px가
+            // 넘어가 정작 결과 목록이 화면 밖으로 밀린다. 줄을 고정하면 선택지가
+            // 몇 개든 패널 높이가 그대로다.
+            if (_discoveryOptions.isNotEmpty)
+              SizedBox(
+                height: 30,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: [
+                    for (final option in _discoveryOptions) ...[
+                      FilterPill(
                         key: Key(
                           'facet-option-${option.facet}-${option.value}',
                         ),
-                        label: Text('${option.label} (${option.count})'),
-                        onPressed: () => _selectFacet(option),
+                        label: '${option.label} (${option.count})',
+                        selected: false,
+                        onTap: () => _selectFacet(option),
                       ),
-                    )
-                    .toList(),
+                      const SizedBox(width: 6),
+                    ],
+                    // 성격이 다른 것은 같은 줄에 두되 섞이지 않게 구분선으로
+                    // 나눈다(naver-map-ui-ux-analysis.md 5·6절의 필터 줄과 같다).
+                    // 위 pill들은 "이 값으로 좁혀라"이고, 이건 "좁히지 말고 다 봐라"다.
+                    if (canShowAll) ...[
+                      const VerticalDivider(width: 10, indent: 6, endIndent: 6),
+                      FilterPill(
+                        key: const Key('show-all'),
+                        label: '전체 보기',
+                        selected: false,
+                        onTap: () => _requestDiscovery(showAll: true),
+                      ),
+                    ],
+                  ],
+                ),
               ),
-            ],
           ],
-          if (selectedChips.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Wrap(spacing: 8, runSpacing: 6, children: selectedChips),
-          ],
-          if (canShowAll || canChooseAgain) ...[
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 4,
-              children: [
-                if (canShowAll)
-                  TextButton(
-                    key: const Key('show-all'),
-                    onPressed: () => _requestDiscovery(showAll: true),
-                    child: const Text('전체 보기'),
-                  ),
-                if (canChooseAgain)
-                  TextButton(
-                    key: const Key('choose-again'),
-                    onPressed: _chooseAgain,
-                    child: const Text('다시 선택'),
-                  ),
-              ],
+          if (selectedRow.isNotEmpty) ...[
+            if (isClarify) const SizedBox(height: 6),
+            SizedBox(
+              height: 30,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                children: selectedRow,
+              ),
             ),
           ],
         ],
@@ -1043,7 +1584,11 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 업종을 왼쪽 아이콘이 아니라 **이름 오른쪽 회색 글자**로 두는 이유는, 매장마다
   /// 다른 글리프를 만들지 않고도 소분류까지 그대로 읽히기 때문이다. 왼쪽 아이콘은
   /// "이건 장소다"만 말하면 되므로 한 종류로 충분하다.
-  Widget _storeTile(PoiSearchResult store, DiscoveryMatch? match) {
+  Widget _storeTile(
+    PoiSearchResult store,
+    DiscoveryMatch? match,
+    Set<String> sharedReasons,
+  ) {
     // 소분류가 없는 장소에서 업종이 통째로 사라지지 않도록 대분류로 떨어뜨린다 —
     // 상세 시트를 여는 호출부(MapShellScreen._showStoreInfo)와 같은 규칙이다.
     final categoryLabel =
@@ -1052,23 +1597,13 @@ class _SearchPanelState extends State<SearchPanel> {
     // 아래 첫 줄의 "경로 안내 불가"가 이미 말한다.
     final nodeId = store.nodeId;
     final reach = nodeId == null ? null : widget.reachByNodeId?[nodeId];
-    // 층 앞에 **건물 이름**을 적는다. 조건 없이 항상.
-    //
-    // "스타벅스 리저브 / B2"만으로는 이게 어느 건물의 스타벅스인지 알 수 없다.
-    // 밖에서 검색하면 목록에 길 건너 스타벅스도 함께 뜨는데, 그 줄들은 주소가
-    // 적혀 있어 구분이 되고 우리 줄만 층 하나로 남는다 — 정보가 가장 많은 줄이
-    // 가장 안 읽히는 상태였다.
-    //
-    // 한때 "건물 안을 보고 있으면 생략"을 붙였다가 **화면에서 통째로 사라졌다.**
-    // 실내 오버레이는 건물로 확대하기만 해도 켜지므로(indoor_entry_zoom.dart),
-    // 건물 근처에서 검색하는 흔한 경우가 전부 "건물 안"으로 판정됐다. 줄마다
-    // 반복되는 게 눈에 거슬릴 수는 있어도, 안 보이는 것보다는 낫다.
-    final buildingName = _currentBuildingName;
-    final placeLine = buildingName == null
-        ? store.floor
-        : '$buildingName · ${store.floor}';
-    final firstLine =
-        match?.reason ?? (nodeId == null ? '$placeLine · 경로 안내 불가' : placeLine);
+    // 층은 **항상** 남긴다. 예전에는 reason이 층을 통째로 대체해서, 다섯 행이 같은
+    // 문장을 되풀이하는 동안 정작 몇 층인지가 화면에서 사라졌다.
+    final reason = distinctiveReason(match?.reason, sharedReasons);
+    final floorLine = nodeId == null
+        ? '${store.floor} · 경로 안내 불가'
+        : store.floor;
+    final firstLine = reason == null ? floorLine : '$floorLine · $reason';
     return ListTile(
       leading: const Icon(Icons.place_outlined, color: AppColors.primary),
       title: Row(
@@ -1130,88 +1665,6 @@ class _SearchPanelState extends State<SearchPanel> {
     );
   }
 
-  /// "건물 밖" 구분선. 여기부터는 우리 백엔드가 아니라 외부 지도(TMAP)에서 온
-  /// 결과라는 것도 함께 밝힌다 — 정보의 깊이가 다른 이유이고, 실제와 다를 때
-  /// 사용자가 어디를 의심할지 알려 준다.
-  Widget _outdoorHeader() {
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(16, 14, 16, 8),
-      child: Row(
-        children: [
-          Icon(Icons.explore_outlined, size: 14, color: AppColors.muted),
-          SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              '건물 밖 주변 장소',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: AppColors.muted,
-              ),
-            ),
-          ),
-          Text(
-            'TMAP',
-            style: TextStyle(fontSize: 10.5, color: AppColors.muted),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 건물 밖 장소 한 줄. 실내 줄과 모양을 맞추되, **층 대신 주소와 직선 거리**를
-  /// 적는다. 밖에서는 같은 이름의 지점이 여럿이라, 어느 지점인지 가르는 단서가
-  /// 층이 아니라 주소다.
-  Widget _poiTile(OutdoorSearchRow row, ValueChanged<OutdoorPoi> onPicked) {
-    final poi = row.poi;
-    final distance = poi.distanceMeters;
-    final subtitleParts = [
-      if (distance != null) '약 ${formatTransitDistance(distance)}',
-      if (poi.address != null) poi.address!,
-    ];
-    return ListTile(
-      leading: const Icon(Icons.storefront_outlined, color: AppColors.muted),
-      title: Row(
-        children: [
-          Expanded(
-            child: Text.rich(
-              TextSpan(
-                children: highlightedNameSpans(poi.name, _submittedQuery),
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-            ),
-          ),
-          if (poi.category != null) ...[
-            const SizedBox(width: 8),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 84),
-              child: Text(
-                poi.category!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end,
-                style: const TextStyle(fontSize: 12, color: AppColors.muted),
-              ),
-            ),
-          ],
-        ],
-      ),
-      subtitle: subtitleParts.isEmpty
-          ? null
-          : Text(
-              subtitleParts.join(' · '),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12, color: AppColors.muted),
-            ),
-      // 연결된 줄은 **우리 매장으로** 넘긴다. 층·노드가 거기 들어 있어야
-      // 문을 경유하는 실내 안내까지 이어진다([MapShellScreen._startRoute]).
-      onTap: () => onPicked(poi),
-    );
-  }
-
   Widget _emptyState(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 22),
@@ -1225,14 +1678,77 @@ class _SearchPanelState extends State<SearchPanel> {
           ),
           const SizedBox(height: 6),
           // 이 문구가 나오는 시점에는 경량과 의미 검색을 모두 돌린 뒤다
-          // (_SearchPhase.noMatch에서만 그린다). 사용자가 더 눌러 볼 수단이
-          // 남아 있는 것처럼 보이면 안 되므로, 다른 말로 바꿔 보라고만 한다.
+          // (_SearchPhase.noMatch에서만 그린다). 말을 바꿔 보라는 것 말고
+          // 사용자가 더 눌러 볼 수단이 있는 것처럼 보이면 안 된다.
           const Text(
             '다른 말로 바꿔서 다시 찾아보세요.',
             style: TextStyle(fontSize: 12.5, color: AppColors.muted),
           ),
+          _browseCategories(),
         ],
       ),
+    );
+  }
+
+  /// 못 찾았을 때의 탈출구 — 카테고리로 둘러보기(R절).
+  ///
+  /// **"인기 검색어"는 만들지 않는다.** 방문·클릭 로그가 없어 순위를 만들 근거가
+  /// 없다(J절과 같은 이유). 여기 놓는 것은 우리가 실제로 아는 것 — 이 건물에
+  /// 어떤 대분류가 있는가 — 뿐이다.
+  ///
+  /// **야외에서는 그리지 않는다.** 아직 들어가지도 않은 건물의 카테고리를 누르게
+  /// 되고, 지도 강조는 도면 위에 그려지므로 결과가 보이지 않는다(지도 위 chip 줄이
+  /// `_indoorContextActive`로 갈리는 것과 같은 이유).
+  Widget _browseCategories() {
+    final entries = widget.categoryEntries;
+    final onPicked = widget.onCategoryPicked;
+    if (entries == null || onPicked == null || !widget.indoorContextActive) {
+      return const SizedBox.shrink();
+    }
+    return FutureBuilder<List<CategoryCount>>(
+      future: entries,
+      builder: (context, snapshot) {
+        // 로드 실패·미완료는 **줄만 조용히 사라진다.** 상위 지도 오버레이는 실패를
+        // 재시도 칩으로 드러내지만, 여기서는 부가 제안이라 "찾지 못했어요" 화면에
+        // 오류를 하나 더 얹을 이유가 없다.
+        final categories = sortedCategoryLabels(
+          (snapshot.data ?? const <CategoryCount>[]).map((e) => e.category),
+        );
+        if (categories.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(top: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                '카테고리로 둘러보기',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.muted,
+                ),
+              ),
+              const SizedBox(height: 8),
+              // 대분류가 6~7개라 접으면 두 줄이 된다. 이 화면은 결과가 없어
+              // 세로가 남으므로 Wrap으로 두어 한눈에 다 보이게 한다.
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final category in categories)
+                    FilterPill(
+                      key: Key('browse-category-$category'),
+                      label: category,
+                      selected: false,
+                      onTap: () => onPicked(category),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1274,36 +1790,6 @@ class _SearchPanelState extends State<SearchPanel> {
           Text(
             '연결 상태를 확인하고 잠시 후 다시 시도해 주세요.',
             style: TextStyle(fontSize: 12.5, color: AppColors.muted),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 목록 맨 위에 붙는 "건물 안은 아직 찾는 중" 줄.
-///
-/// 바깥 결과가 먼저 도착해 목록이 뜬 상태를 위한 것이다. 이 줄이 없으면
-/// 사용자는 지금 보이는 것이 전부라고 읽고, 잠시 뒤 실내 결과가 위에 끼어들며
-/// 목록이 통째로 밀린다.
-class _IndoorSearchingRow extends StatelessWidget {
-  const _IndoorSearchingRow();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(16, 12, 16, 10),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 13,
-            height: 13,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-          SizedBox(width: 8),
-          Text(
-            '건물 안에서도 찾는 중…',
-            style: TextStyle(fontSize: 12, color: AppColors.muted),
           ),
         ],
       ),

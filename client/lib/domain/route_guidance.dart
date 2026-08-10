@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:latlong2/latlong.dart';
 
 import '../models/floor_graph.dart';
+import 'route_movement.dart';
 import 'route_progress.dart';
 
 enum RouteGuidanceAction {
@@ -25,6 +26,48 @@ class RouteGuidanceInstruction {
   final RouteGuidanceAction action;
   final String primaryText;
   final double distanceToActionM;
+}
+
+/// 도착 안내가 뜬 뒤 경로를 스스로 지울지에 대한 결정.
+enum ArrivalAutoClearDecision {
+  /// 지금부터 [arrivalAutoClearDelay]를 세고 그 뒤에 경로를 지운다.
+  schedule,
+
+  /// 이미 세고 있다. 다시 걸지 않는다 — 매 걸음마다 다시 걸면 사용자가
+  /// 도착 지점에서 제자리걸음만 해도 카운트다운이 영원히 처음으로 돌아간다.
+  keep,
+
+  /// 도착 상태가 아니다. 세고 있던 것이 있으면 취소한다.
+  cancel,
+}
+
+/// 도착 안내를 읽을 시간을 준 뒤 경로를 지우기까지의 대기 시간.
+///
+/// 0으로 두면 "목적지에 도착했습니다"가 뜨는 프레임과 카드가 사라지는 프레임이
+/// 같아져, 사용자는 안내를 못 본 채 경로만 사라진 것으로 읽는다. 반대로 너무
+/// 길면 도착 뒤에도 남은 카드가 지도를 가린다. 한 줄 안내를 읽기에 충분한
+/// 정도로 잡은 임의값이다.
+const Duration arrivalAutoClearDelay = Duration(seconds: 5);
+
+/// 지금 안내 상태에서 "안내를 자동으로 끝낼지"를 판단한다.
+///
+/// [hasMeasuredProgress]는 **실제로 측정된 진행률이 있는지**다. 이 값이 없으면
+/// [buildRouteGuidance]는 남은거리를 폴리라인 전체 길이로 대신 계산하므로, 총
+/// 길이가 도착 임계값보다 짧은 경로(바로 옆 매장)는 그리는 순간 `arrived`가
+/// 된다. 그대로 자동 삭제를 걸면 사용자는 도착지를 고르자마자 경로가 사라지는
+/// 것을 본다. 걸어서 도착한 것과 애초에 가까운 것은 다르므로, 자동 종료는
+/// 측정된 진행률이 있을 때만 한다.
+ArrivalAutoClearDecision decideArrivalAutoClear({
+  required RouteGuidanceAction? action,
+  required bool hasMeasuredProgress,
+  required bool alreadyScheduled,
+}) {
+  if (action != RouteGuidanceAction.arrived || !hasMeasuredProgress) {
+    return ArrivalAutoClearDecision.cancel;
+  }
+  return alreadyScheduled
+      ? ArrivalAutoClearDecision.keep
+      : ArrivalAutoClearDecision.schedule;
 }
 
 class RoutePolylineSplit {
@@ -53,11 +96,12 @@ RouteGuidanceInstruction buildRouteGuidance({
   required List<LocalPoint> localPoints,
   required List<LatLng> wgs84Points,
   required RouteProgress? progress,
+  TravelDirectionState travelDirectionState = TravelDirectionState.forward,
   String? transferMode,
   bool allowArrival = true,
   double arrivalThresholdM = 5,
 }) {
-  if (progress?.wrongWay ?? false) {
+  if (travelDirectionState == TravelDirectionState.reverseConfirmed) {
     return const RouteGuidanceInstruction(
       action: RouteGuidanceAction.wrongWay,
       primaryText: '반대 방향입니다 · 뒤로 돌아가세요',

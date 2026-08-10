@@ -14,6 +14,7 @@ PdrSnapshot _snapshot() => const PdrSnapshot(
   path: [PdrLocalPoint.zero, PdrLocalPoint(1, 0), PdrLocalPoint(2, 0)],
   steps: 2,
   distanceM: 2,
+  orientationHeadingDeg: 90,
   walkingHeadingDeg: 90,
   hasHeading: true,
   preview: PdrPreview(
@@ -286,16 +287,16 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: Builder(
-            builder: (context) => DebugModeSettingsButton(
-              controller: controller,
+            builder: (context) => TextButton(
               onPressed: () => showDebugModeSettingsSheet(context, controller),
+              child: const Text('열기'),
             ),
           ),
         ),
       ),
     );
 
-    await tester.tap(find.byIcon(Icons.bug_report_outlined));
+    await tester.tap(find.text('열기'));
     await tester.pumpAndSettle();
     expect(find.text('고급 표시 옵션'), findsNothing);
 

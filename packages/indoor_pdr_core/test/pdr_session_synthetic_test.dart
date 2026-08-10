@@ -137,7 +137,9 @@ void main() {
 
   test('snapshots 스트림은 배치 반영 시 이벤트를 낸다', () async {
     final s = newSession();
-    final future = s.snapshots.first;
+    // 첫 heading에서도 스냅샷이 한 번 나가므로(정지 중 방향 추적) 배치가
+    // 반영된 스냅샷을 골라 기다린다.
+    final future = s.snapshots.firstWhere((snapshot) => snapshot.steps == 4);
     s.onHeading(const HeadingEvent(
       motionTimestampMs: 1000,
       fusedHeadingDeg: 0,

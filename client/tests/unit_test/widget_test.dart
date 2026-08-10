@@ -7,7 +7,6 @@ import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:navigation_client/app.dart';
-import 'package:navigation_client/core/api_config.dart';
 import 'package:navigation_client/core/service_locator.dart';
 import 'package:navigation_client/models/discovery_result.dart';
 import 'package:navigation_client/models/poi_search_result.dart';
@@ -18,14 +17,11 @@ import 'package:navigation_client/routing/app_routes.dart';
 import 'package:navigation_client/screens/arrival/arrival_screen.dart';
 import 'package:navigation_client/screens/debug/api_health_check_screen.dart';
 import 'package:navigation_client/screens/destination/destination_screen.dart';
-import 'package:navigation_client/screens/indoor_map/indoor_map_screen.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
 import 'package:navigation_client/screens/route_guide/route_guide_screen.dart';
 import 'package:navigation_client/widgets/eta_card.dart';
-import 'package:navigation_client/widgets/floor_plan_view.dart';
 import 'package:navigation_client/widgets/floor_selector.dart';
-import 'package:navigation_client/widgets/map_bottom_bar.dart';
 
 // 데모 건물 입구(37.5665, 126.9779)에서 약 185m 떨어진 좌표.
 // 자동 건물 진입 감지(반경 50m)에 걸리지 않도록 충분히 멀리 둔다.
@@ -55,9 +51,11 @@ final _fakeLowAccuracyPosition = Position(
   speedAccuracy: 0,
 );
 
-// 자동 진입 감지 테스트용. 데모 건물 외곽선 **안쪽** 좌표 + 믿을 수 있는 오차라,
-// 이 한 건으로 진입이 성립한다([indoor_entry_gps.dart]).
-final _fakePositionInsideBuilding = Position(
+// 자동 진입 감지 테스트용 두 건. 판정은 **한 건으로 성립하지 않는다** —
+// "신호가 멀쩡했을 때 입구 앞에 있었다"는 근거가 창 안에 있어야 하므로, 접근
+// 표본(양호)과 진입 표본(저하)을 순서대로 흘려야 한다. 근거 없이 저하 한 건만
+// 오는 경우는 판정하지 않는 것이 이 정책의 규칙이다.
+final _fakePositionApproachingEntrance = Position(
   latitude: 37.5665,
   longitude: 126.9779,
   timestamp: DateTime(2024, 1, 1),
@@ -70,13 +68,13 @@ final _fakePositionInsideBuilding = Position(
   speedAccuracy: 0,
 );
 
-// 건물 벽 바로 밖(북쪽 변에서 약 11 m) + 신호 양호. 완충 구간이라 진입도 이탈도
-// 판정하지 않는다 — 건물 앞을 지나가는 사람이 실내로 끌려 들어가면 안 된다.
-final _fakePositionPassingBy = Position(
-  latitude: 37.5668,
-  longitude: 126.9780,
+// 데모 건물 입구와 정확히 같은 좌표 + 신호 저하. accuracy가 '무너졌다' 기준
+// (30m)을 넘어야 진입으로 읽힌다.
+final _fakePositionAtEntrance = Position(
+  latitude: 37.5665,
+  longitude: 126.9779,
   timestamp: DateTime(2024, 1, 1),
-  accuracy: 5,
+  accuracy: 45,
   altitude: 0,
   altitudeAccuracy: 0,
   heading: 0,
@@ -130,11 +128,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump();
 
-    // 야외(홈) 모드로 바로 시작했는지는 하단 공용 바의 홈/실내 세그먼트로 확인한다 —
-    // 실내 모드였다면 상단 바에 햄버거 버튼이 추가로 보였을 것이다.
-    expect(find.text('홈'), findsOneWidget);
-    expect(find.text('실내'), findsOneWidget);
-    expect(find.byIcon(Icons.menu), findsNothing);
+    // 야외 시야로 시작했는지는 **층 선택기가 없다는 것**으로 확인한다. 예전에는
+    // 하단 홈/실내 세그먼트로 봤는데, 실내가 별도 탭이 아니게 되면서 그 세그먼트
+    // 자체가 사라졌다 — 건물에 들어가면 오버레이가 열리고 나오면 닫힌다.
+    //
+    // 상단 햄버거는 모드 신호가 아니다. 항상 보이는 앱 메뉴다.
+    expect(find.byType(FloorSelector), findsNothing);
+    expect(find.byKey(const Key('map-top-bar-menu')), findsOneWidget);
   });
 
   testWidgets('api health check shows loading then a status message', (
@@ -183,28 +183,31 @@ void main() {
     expect(find.text('GPS 신호 약함'), findsOneWidget);
   });
 
-  testWidgets('outdoor map draws no route until a destination is chosen', (
+  testWidgets('outdoor map shows a route and ETA card to the entrance', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(MaterialApp(home: const OutdoorMapBody()));
     await tester.pump();
     await tester.pump();
 
-    // 예전에는 목적지가 없으면 "가장 가까운 건물 입구까지" 경로를 그렸다. 앱을
-    // 켜고 GPS가 잡히는 것만으로 아무도 요청하지 않은 안내가 시작되고, 위치가
-    // 갱신될 때마다 TMAP 요청이 나가던 흐름이라 지웠다([_updateRoute] 주석).
-    expect(find.byType(EtaCard), findsNothing);
-    expect(find.textContaining('건물 입구까지'), findsNothing);
+    // 목적지 핀은 MapLibre 심볼 레이어로 옮겨져 Flutter 트리에는 없다.
+    // 실제 경로가 계산돼 ETA 카드가 뜬 것으로 "경로 표시 흐름이 살아있다"를 검증.
+    expect(find.byType(EtaCard), findsOneWidget);
+    expect(find.textContaining('건물 입구까지'), findsOneWidget);
   });
 
   testWidgets(
-    'map shell shows the indoor entry overlay when GPS lands inside the building',
+    'map shell shows the indoor entry overlay when entrance is detected nearby',
     (WidgetTester tester) async {
-      watchPosition = () => Stream.value(_fakePositionInsideBuilding);
+      watchPosition = () => Stream.fromIterable([
+        _fakePositionApproachingEntrance,
+        _fakePositionAtEntrance,
+      ]);
 
       await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
 
-      // 건물 로드(asset)와 첫 위치가 모두 도착할 때까지 프레임을 진행한다.
+      // 접근 표본 → 진입 표본 순으로 흘러야 판정이 서므로, 두 건이 모두 도착할
+      // 때까지 프레임을 진행한다.
       for (var i = 0; i < 5; i++) {
         await tester.pump(const Duration(milliseconds: 50));
       }
@@ -217,27 +220,38 @@ void main() {
 
       await tester.pumpAndSettle();
       // 실내 진입 오버레이가 켜지면 야외 지도 위에 세로 층 선택기(FloorSelector)
-      // 가 나타난다. 모드는 여전히 야외라 상단 햄버거는 뜨지 않는다.
+      // 가 나타난다. 상단 햄버거(앱 메뉴)는 모드와 무관하게 늘 그 자리에 있다.
       expect(find.byType(FloorSelector), findsOneWidget);
-      expect(find.byIcon(Icons.menu), findsNothing);
+      expect(find.byKey(const Key('map-top-bar-menu')), findsOneWidget);
     },
   );
 
   testWidgets(
-    'map shell keeps the outdoor view when GPS stays just outside the building',
+    'map shell keeps the outdoor view when GPS signal stays strong near the entrance',
     (WidgetTester tester) async {
-      // 건물 벽 바로 밖. 신호가 아무리 좋아도 완충 구간이라 진입하지 않는다 —
-      // 여기서 들어가면 건물 앞 인도를 걷는 사람의 화면이 제멋대로 실내가 된다.
-      watchPosition = () => Stream.value(_fakePositionPassingBy);
+      // 입구와 같은 좌표지만 신호는 계속 양호함 (건물 앞을 지나가는 상황).
+      final passingByPosition = Position(
+        latitude: 37.5665,
+        longitude: 126.9779,
+        timestamp: DateTime(2024, 1, 1),
+        accuracy: 5,
+        altitude: 0,
+        altitudeAccuracy: 0,
+        heading: 0,
+        headingAccuracy: 0,
+        speed: 0,
+        speedAccuracy: 0,
+      );
+      watchPosition = () => Stream.value(passingByPosition);
 
       await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
-      for (var i = 0; i < 5; i++) {
-        await tester.pump(const Duration(milliseconds: 50));
-      }
+      await tester.pump();
+      await tester.pump();
 
-      // 오버레이가 켜지지 않았으므로 층 선택기와 햄버거 모두 없어야 한다.
+      // 오버레이가 켜지지 않았으므로 층 선택기는 없어야 한다. 햄버거(앱 메뉴)는
+      // 오버레이 상태와 무관하게 남는다.
       expect(find.byType(FloorSelector), findsNothing);
-      expect(find.byIcon(Icons.menu), findsNothing);
+      expect(find.byKey(const Key('map-top-bar-menu')), findsOneWidget);
     },
   );
 
@@ -280,45 +294,24 @@ void main() {
     expect(find.text('GPS 신호 약함'), findsOneWidget);
   });
 
-  testWidgets('indoor map shows building info loaded from the repository', (
+  testWidgets('실내 진입 오버레이는 저장소에서 받은 층을 chip으로 보여준다', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      const MaterialApp(home: IndoorMapBody(buildingId: demoBuildingId)),
-    );
-
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
-
+    final key = GlobalKey<OutdoorMapBodyState>();
+    await tester.pumpWidget(MaterialApp(home: OutdoorMapBody(key: key)));
+    await tester.pumpAndSettle();
+    // ignore: invalid_use_of_visible_for_testing_member
+    key.currentState!.enterIndoorForTest();
     await tester.pumpAndSettle();
 
-    // 최신 실내 chrome은 건물명을 중복 표시하지 않고 현재 층 chip만 남긴다.
+    // 건물명을 중복 표시하지 않고 현재 층 chip만 남긴다.
     expect(find.text('1F'), findsOneWidget);
   });
 
-  testWidgets('indoor map renders the floor plan view', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      const MaterialApp(home: IndoorMapBody(buildingId: demoBuildingId)),
-    );
-    await tester.pumpAndSettle();
-
-    // 검색창 아래 보조 바에는 현재 층 chip만 표시한다.
-    expect(find.text('1F'), findsOneWidget);
-    expect(find.byType(FloorPlanView), findsOneWidget);
-
-    // PDR anchor 또는 실제 경로가 아직 없으면, 도면 중앙을 현재 위치로
-    // 가장하지 않는다. 사용자가 PDR 시작점을 지정한 뒤에만 위치를 표시한다.
-    final floorPlanView = tester.widget<FloorPlanView>(
-      find.byType(FloorPlanView),
-    );
-    expect(floorPlanView.currentLocation, isNull);
-
-    // 기본 지도에는 설정 진입점만 남고 PDR 제어는 디버그 모드를 켠 뒤에만
-    // 나타난다. 일반 사용자의 내비게이션 UI와 센서 테스트 UI를 분리한다.
-    expect(find.byIcon(Icons.bug_report_outlined), findsOneWidget);
-    expect(find.text('PDR 시작'), findsNothing);
-  });
+  // 예전에는 여기서 실내 탭의 FloorPlanView 렌더링을 확인했다. 실내 탭이 사라진
+  // 뒤 도면은 MapLibre 레이어로 그려지고, 그 레이어는 위젯 트리에 없어 위젯
+  // 테스트로 볼 수 없다. FloorPlanView 위젯 자체는 floor_plan_view_test.dart가,
+  // 지도 위 개발 도구가 없다는 것은 아래 디버그 모드 테스트가 계속 지킨다.
 
   testWidgets('debug mode keeps always-on PDR free of a manual start control', (
     WidgetTester tester,
@@ -335,22 +328,33 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(
-      const MaterialApp(home: MapShellScreen(initialMode: MapMode.indoor)),
+      const MaterialApp(home: MapShellScreen()),
     );
     await tester.pumpAndSettle();
 
-    expect(find.byIcon(Icons.bug_report_outlined), findsOneWidget);
+    // 디버그 모드를 켜 둬도 지도 자체에는 개발 도구가 나타나지 않는다.
+    expect(find.byIcon(Icons.bug_report_outlined), findsNothing);
     expect(find.text('PDR 시작'), findsNothing);
     // 진단 공유 버튼도 실제 길안내 기록이 생긴 뒤에만 나타난다.
     expect(find.byTooltip('PDR 진단 JSON 공유'), findsNothing);
+
+    // 유일한 진입점은 상단 바 햄버거 → 앱 메뉴다. 여기서만 지금 디버그 모드가
+    // 켜져 있다는 사실이 드러나야 한다.
+    await tester.tap(find.byKey(const Key('map-top-bar-menu')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('app-menu-debug')), findsOneWidget);
+    expect(find.byIcon(Icons.bug_report_outlined), findsOneWidget);
+    expect(find.text('사용 중 · PDR 제어와 진단 레이어가 지도에 표시됩니다'), findsOneWidget);
   });
 
-  testWidgets('indoor map switches floor via the floor tabs', (
+  testWidgets('실내 진입 오버레이에서 층 chip으로 층을 바꾼다', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      const MaterialApp(home: IndoorMapBody(buildingId: demoBuildingId)),
-    );
+    final mapKey = GlobalKey<OutdoorMapBodyState>();
+    await tester.pumpWidget(MaterialApp(home: OutdoorMapBody(key: mapKey)));
+    await tester.pumpAndSettle();
+    // ignore: invalid_use_of_visible_for_testing_member
+    mapKey.currentState!.enterIndoorForTest();
     await tester.pumpAndSettle();
 
     // 접힌 층 chip을 먼저 연 뒤 다른 층을 선택한다.
@@ -359,12 +363,9 @@ void main() {
     await tester.tap(find.text('2F'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(FloorPlanView), findsOneWidget);
-    expect(find.text('2F'), findsOneWidget);
-    expect(
-      tester.widget<FloorPlanView>(find.byType(FloorPlanView)).floorName,
-      '2F',
-    );
+    // 도면 자체는 MapLibre 레이어라 위젯 트리에 없다. 층이 바뀐 사실은 선택기가
+    // 말하고, 화면 상태는 currentFloor가 말한다.
+    expect(mapKey.currentState!.currentFloor, '2F');
   });
 
   testWidgets('destination screen shows every POI by default', (
@@ -406,9 +407,7 @@ void main() {
 
     expect(repository.lightQueries, ['MLB']);
     expect(find.text('MLB'), findsWidgets);
-    // 밖에서는 층 앞에 건물 이름이 함께 붙는다("데모 건물 · B2") — 어느 건물의
-    // 매장인지 목록에서 바로 읽히게 하려는 것이다.
-    expect(find.textContaining('B2'), findsOneWidget);
+    expect(find.text('B2'), findsOneWidget);
   });
 
   testWidgets('엔터로 확정하면 경량이 빈손일 때 의미 검색까지 자동으로 간다', (
@@ -555,14 +554,16 @@ void main() {
 
     await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
     await tester.pumpAndSettle();
-    // 실내 탭으로 전환하면 현재 층(_activeIndoorFloor)이 잡힌다.
-    await tester.tap(find.text('실내'));
+    // 실내 오버레이가 켜져야 현재 층(_activeIndoorFloor)이 잡힌다.
+    tester
+        .state<OutdoorMapBodyState>(find.byType(OutdoorMapBody))
+        // ignore: invalid_use_of_visible_for_testing_member
+        .enterIndoorForTest();
     await tester.pumpAndSettle();
     await searchFromTopBar(tester, 'MLB');
 
     expect(repository.lightFloorScopes, isNot(contains(null)));
-    // 층 앞에 건물 이름이 함께 붙는다("데모 건물 · B2").
-    expect(find.textContaining('B2'), findsOneWidget);
+    expect(find.text('B2'), findsOneWidget);
   });
 
   testWidgets('destination screen filters as the user types', (

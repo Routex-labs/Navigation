@@ -12,7 +12,6 @@ import 'screens/debug/pdr_svg_test_screen.dart';
 import 'screens/destination/destination_screen.dart';
 import 'screens/map_shell/map_shell_screen.dart';
 import 'screens/route_guide/route_guide_screen.dart';
-import 'widgets/map_bottom_bar.dart';
 
 void defaultPdrBackgrounded() {
   unawaited(indoorNavigationDriver.onAppBackgrounded());
@@ -75,8 +74,10 @@ class _NavigationAppState extends State<NavigationApp>
   Widget build(BuildContext context) {
     final routes = <String, WidgetBuilder>{
       AppRoutes.outdoorMap: (context) => const MapShellScreen(),
-      AppRoutes.indoorMap: (context) =>
-          const MapShellScreen(initialMode: MapMode.indoor),
+      // 실내 전용 화면이 없어진 뒤에도 이 라우트는 남긴다. 도착 화면이
+      // pushNamedAndRemoveUntil로 여기를 부르고, 지도는 하나뿐이라 같은
+      // 셸로 보내면 된다.
+      AppRoutes.indoorMap: (context) => const MapShellScreen(),
       AppRoutes.destination: (context) => const DestinationScreen(),
       AppRoutes.routeGuide: (context) => const RouteGuideScreen(),
       AppRoutes.arrival: (context) => const ArrivalScreen(),

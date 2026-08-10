@@ -48,6 +48,20 @@ class AppliedBatchInfo {
 /// 이 결과는 초록 센서 원본이다. 제품 현재 위치의 복도 제약은 floor graph를
 /// 소유한 Flutter 클라이언트가 별도 상태로 적용한다.
 class PdrSession {
+  /// heading 전용 스냅샷을 내보내기 전에 **다른 스냅샷이 없었어야 하는** 시간.
+  ///
+  /// 소비자는 스냅샷 하나마다 화면 전체를 다시 그리고 지도 소스를 다시 올린다.
+  /// 그래서 이 신호는 "걸음이 없어 스냅샷이 끊긴 구간을 메우는" 용도로만 써야
+  /// 한다. 걷는 동안에는 accel peak가 이미 초당 두어 번 스냅샷을 만들고 그
+  /// 스냅샷에 최신 heading이 실려 있으므로, 여기서 더 보탤 이유가 없다.
+  ///
+  /// 처음에 이 조건 없이 150ms마다 내보냈더니 갱신 빈도가 3배가 되면서 지도
+  /// 채널이 밀렸고, 도면 로딩과 위치 반영이 눈에 띄게 느려졌다.
+  static const int _headingEmitQuietMs = 400;
+
+  /// 이만큼도 안 움직였으면 방향이 바뀐 게 아니라 센서가 떠는 것이다.
+  static const double _headingEmitMinDeltaDeg = 2.0;
+
   PdrSession({PdrSessionConfig? config})
     : config = config ?? const PdrSessionConfig() {
     _paths = PathAccumulator(maxPoints: this.config.maxPathPoints);
@@ -91,6 +105,13 @@ class PdrSession {
   double walkDirDeg = 0;
   double walkDirConfidence = 0;
   int? lastMotionAtMs;
+
+  // 걸음 없이 방향만 바뀔 때 스냅샷을 흘려보내는 스로틀 상태.
+  //
+  // [_lastEmitAtMs]는 heading 전용이 아니라 **모든** 스냅샷의 시각이다. 걸음이
+  // 만든 스냅샷도 같이 세야 "조용한 구간"을 판단할 수 있다.
+  int? _lastEmitAtMs;
+  double? _lastEmittedHeadingDeg;
 
   int iosTrackedSteps = 0;
 
@@ -181,6 +202,33 @@ class PdrSession {
         deviceHeadingDeg: deviceHeadingDeg,
       ),
     );
+    _maybeEmitHeading(motionMs);
+  }
+
+  /// 걸음이 끊긴 구간에서만 방향 갱신을 흘려보낸다.
+  ///
+  /// 스냅샷은 원래 걸음에서만 나갔다(accel peak 채택 · pedometer 배치). 그래서
+  /// 제자리에 서서 몸만 돌리면 소비자가 받는 heading이 **마지막 걸음 시점에
+  /// 얼어붙었다** — 코너에서 방향을 트는 순간이 정작 방향이 가장 필요한 때다.
+  ///
+  /// 그렇다고 native motion 주기(30ms)로 흘리면 안 된다. 소비자는 스냅샷마다
+  /// 화면을 다시 그리므로 갱신 빈도가 그대로 비용이다. 걷는 동안에는 이미
+  /// 스냅샷이 충분히 나가고 거기에 최신 heading이 실려 있으니, 여기서는
+  /// **[_headingEmitQuietMs] 동안 아무 스냅샷도 없었을 때만** 보탠다.
+  void _maybeEmitHeading(int motionMs) {
+    final lastEmit = _lastEmitAtMs;
+    if (lastEmit != null && motionMs - lastEmit < _headingEmitQuietMs) {
+      return;
+    }
+    final previous = _lastEmittedHeadingDeg;
+    final current = walkingHeadingDeg;
+    if (previous != null &&
+        shortestDeltaDegrees(current - previous).abs() <
+            _headingEmitMinDeltaDeg) {
+      return;
+    }
+    _lastEmittedHeadingDeg = current;
+    _emitAt(motionMs);
   }
 
   /// native accel step-peak 신호. 주황 preview 경로에만 반영.
@@ -343,10 +391,14 @@ class PdrSession {
     fusedHeadingDeg = normalizeDegrees(fusedHeadingDeg + delta * alpha);
   }
 
-  void _emit() {
-    if (!_snapshots.isClosed) {
-      _snapshots.add(_buildSnapshot());
-    }
+  void _emit() => _emitAt(lastMotionAtMs);
+
+  void _emitAt(int? atMs) {
+    if (_snapshots.isClosed) return;
+    // motion 시간축이 아직 없으면(센서 시작 전 reset 등) 조용한 구간 판정만
+    // 건너뛰고 스냅샷은 그대로 내보낸다.
+    if (atMs != null) _lastEmitAtMs = atMs;
+    _snapshots.add(_buildSnapshot());
   }
 
   PdrSnapshot _buildSnapshot() {
@@ -356,6 +408,7 @@ class PdrSession {
       path: List.unmodifiable(_paths.corrected),
       steps: iosTrackedSteps,
       distanceM: _stride.trackedDistanceM,
+      orientationHeadingDeg: fusedHeadingDeg,
       walkingHeadingDeg: walkingHeadingDeg,
       hasHeading: hasFusedHeading,
       preview: PdrPreview(

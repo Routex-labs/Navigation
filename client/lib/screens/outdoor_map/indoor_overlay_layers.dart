@@ -30,8 +30,10 @@ import 'package:flutter/painting.dart' show Color;
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../core/map_fonts.dart';
+import '../../core/map_label_style.dart';
 import '../../core/map_palette.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/category_map_fill.dart';
 import '../../widgets/category_map_filter.dart';
 import '../../widgets/category_map_icon.dart';
 import '../../widgets/floor_facility_style.dart';
@@ -80,7 +82,11 @@ FillLayerProperties buildingFillProps(double opacity) => FillLayerProperties(
 ///
 /// 실내 도면 **위에** 얹히는 선이라 얇게(1px) 긋는다. 굵게 그으면 도면 가장자리
 /// 매장을 덮고, 지하처럼 외곽이 들쭉날쭉한 층에서는 선 자체가 도면처럼 읽힌다.
-/// 어느 링을 따라갈지는 [floor_outline.dart]가 정한다.
+///
+/// 어느 링을 따라갈지는 [floor_outline.dart]가 정한다. 그 링은 바로 아래
+/// [indoorFootprintProps]가 칠하는 타일 `footprint`와 **같은 층 footprint**에서
+/// 나온다 — 선과 바닥이 다른 데이터에서 나오면 층마다 경계가 미세하게 어긋난다
+/// (그렇게 어긋났던 경위는 [floor_outline.dart] 상단 주석 참고).
 LineLayerProperties floorOutlineProps(List<Object> fadeExpr) =>
     LineLayerProperties(
       lineColor: AppColors.primary.toHexString(),
@@ -100,6 +106,9 @@ FillLayerProperties indoorFootprintProps(List<Object> fadeExpr) =>
       fillOpacity: fadeExpr,
     );
 
+/// 실내 오버레이의 매장 fill. 실내 화면(`FloorPlanView`)과 **같은 기본 색**이다.
+/// 두 화면이 같은 MVT `stores` 레이어를 보는데 색이 다르면 같은 매장이 야외
+/// 오버레이와 실내 화면에서 다르게 읽힌다.
 FillLayerProperties indoorStoresFillProps(List<Object> fadeExpr) =>
     FillLayerProperties(
       fillColor: mapStoreFill,
@@ -109,17 +118,17 @@ FillLayerProperties indoorStoresFillProps(List<Object> fadeExpr) =>
 
 /// 카테고리 필터로 강조된 매장 fill.
 ///
-/// 색은 실내 화면과 같은 상수([kCategoryHighlightFillColor])를 쓴다. 두 화면이
-/// 같은 MVT `stores` 레이어를 보는데 강조색이 다르면, 같은 매장이 야외 오버레이
-/// 에서와 실내 화면에서 다른 색으로 보인다.
+/// 색은 실내 화면과 **같은 표현식**([category_map_fill.dart])을 써서 선택한
+/// 대분류의 색으로 칠한다. 두 화면이 같은 MVT `stores` 레이어를 보는데 강조색이
+/// 다르면, 같은 매장이 야외 오버레이에서와 실내 화면에서 다른 색으로 보인다.
 ///
 /// 다른 점은 **opacity를 fadeExpr로 묶는다**는 것뿐이다. 야외 오버레이는 줌에
 /// 따라 통째로 페이드인/아웃되므로, 강조만 불투명하게 두면 도면이 아직 안 보이는
-/// 줌에서 파란 폴리곤만 공중에 뜬다.
+/// 줌에서 강조 폴리곤만 공중에 뜬다.
 FillLayerProperties indoorCategoryHighlightProps(List<Object> fadeExpr) =>
     FillLayerProperties(
-      fillColor: kCategoryHighlightFillColor,
-      fillOutlineColor: kCategoryHighlightOutlineColor,
+      fillColor: storeCategoryHighlightFillColorExpression(),
+      fillOutlineColor: storeCategoryHighlightOutlineExpression(),
       fillOpacity: fadeExpr,
     );
 
@@ -139,6 +148,13 @@ FillLayerProperties indoorVerticalTransportProps(List<Object> fadeExpr) =>
 ///
 /// **z16 축소와 z20 확대를 반드시 함께 확인한다**([indoorIconSizeExpr] 주석의
 /// 함정이 여기에도 그대로 적용된다).
+///
+/// ## 여기는 키우지 않았다 (2026-08-09)
+///
+/// "동그란 아이콘이 너무 작다"는 피드백으로 실내는 확대 쪽을 0.20 → 0.24로
+/// 키웠지만([kStoreCategoryIconSizeIndoor]) 야외는 그대로 둔다. **실내는 글자
+/// 상한을 18 → 14px로 내려 심볼 예산이 남았는데, 야외는 글자가 11px 고정이라
+/// 내려간 것이 없다.** 여기서 아이콘만 키우면 늘어난 폭이 그대로 이름을 밀어낸다.
 const indoorCategoryIconSizeExpr = [
   'interpolate',
   ['linear'],
@@ -155,47 +171,66 @@ const indoorCategoryIconSizeExpr = [
 /// 뒤집히는 방식과 그 한계는 [category_map_icon.dart]에 적어 두었다. 실내 화면
 /// (`FloorPlanView`)과 **같은 표현식·같은 앵커 규칙**을 써야 두 화면 사이에서
 /// 같은 매장이 다른 아이콘을 달지 않는다.
-SymbolLayerProperties indoorStoresLabelProps(List<Object> fadeExpr) =>
-    SymbolLayerProperties(
-      textField: ['get', 'name'],
-      textFont: const [mapFontStackRegular],
-      textSize: 11,
-      textColor: '#333333',
-      textHaloColor: '#FFFFFF',
-      textHaloWidth: 1,
-      textMaxWidth: 6,
-      textOpacity: fadeExpr,
-      iconImage: storeCategoryIconExpression(),
-      iconSize: indoorCategoryIconSizeExpr,
-      iconOpacity: fadeExpr,
-      textVariableAnchor: kStoreLabelVariableAnchor,
-      // 아이콘 가장자리부터의 여백이다(중심 거리가 아니다 —
-      // [kStoreLabelRadialOffset]의 실측표 참고). 실내(0.18em)보다 조금 큰 것은
-      // 글자가 11로 고정이라 같은 em이 더 작은 픽셀이 되기 때문이다.
-      textRadialOffset: 0.20,
-      textJustify: 'auto',
-      textAllowOverlap: false,
-      // 자리가 없으면 아이콘·이름 중 하나만이라도 남긴다. iconOptional이 없으면
-      // 심볼이 넓어진 만큼 이름이 밀려난다(실내 화면 주석의 실측 참고).
-      textOptional: true,
-      iconOptional: true,
-    );
+///
+/// [selection]은 지금 고른 카테고리다. 실내 화면과 마찬가지로 선택이 있으면 그
+/// 매장만 이름을 달고 나머지는 아이콘만 남는다([categoryLabelTextField]).
+/// **호출하는 쪽이 모두 지금 선택을 넘겨야 한다** — 이 함수는 페이드 갱신
+/// (`_syncIndoorOverlayFade`)에서도 불리는데, 거기서 선택을 빼먹으면 줌만
+/// 움직여도 가려 뒀던 이름이 되살아난다(파일 상단의 "전체 교체" 규칙이 layout
+/// 속성에도 그대로 적용되는 경우다).
+SymbolLayerProperties indoorStoresLabelProps(
+  List<Object> fadeExpr,
+  CategorySelection? selection,
+) => SymbolLayerProperties(
+  textField: categoryLabelTextField(selection),
+  textFont: const [mapFontStackRegular],
+  textSize: 11,
+  // 색·헤일로는 [map_label_style.dart]가 단일 출처다(실내 화면과 같은 값).
+  // 크기만 여기서 고정인데, 야외는 도면 전체를 훑는 축소 화면이라 폴리곤
+  // 맞춤 크기를 쓰면 작은 매장 이름이 읽을 수 없게 작아진다.
+  textColor: mapLabelStoreColor,
+  textHaloColor: mapLabelHaloColor,
+  textHaloWidth: mapLabelHaloWidth,
+  textMaxWidth: 6,
+  textOpacity: fadeExpr,
+  iconImage: storeCategoryIconExpression(),
+  iconSize: indoorCategoryIconSizeExpr,
+  iconOpacity: fadeExpr,
+  textVariableAnchor: kStoreLabelVariableAnchor,
+  // 아이콘 가장자리부터의 여백이다(중심 거리가 아니다 —
+  // [kStoreLabelRadialOffset]의 실측표 참고). 실내(0.18em)보다 조금 큰 것은
+  // 글자가 11로 고정이라 같은 em이 더 작은 픽셀이 되기 때문이다.
+  textRadialOffset: 0.20,
+  textJustify: 'auto',
+  textAllowOverlap: false,
+  // 자리가 없으면 아이콘·이름 중 하나만이라도 남긴다. iconOptional이 없으면
+  // 심볼이 넓어진 만큼 이름이 밀려난다(실내 화면 주석의 실측 참고).
+  textOptional: true,
+  iconOptional: true,
+);
 
 /// 편의시설의 텍스트 전용 라벨. 아이콘은 [indoorFacilityIconProps]가 그린다.
-SymbolLayerProperties indoorFacilityLabelProps(List<Object> fadeExpr) =>
-    SymbolLayerProperties(
-      textField: ['get', 'name'],
-      textFont: const [mapFontStackRegular],
-      textSize: 11,
-      textColor: '#333333',
-      textHaloColor: '#FFFFFF',
-      textHaloWidth: 1,
-      textMaxWidth: 6,
-      textOpacity: fadeExpr,
-      // 아이콘이 centroid를 차지하므로 이름은 아래로 내린다.
-      textOffset: const [0, 1.6],
-      textAllowOverlap: false,
-    );
+///
+/// [selection]은 매장명 라벨과 같은 규칙으로 쓴다 — 아이콘이 다른 레이어에 있을
+/// 뿐 화면에서는 이름 달린 폴리곤 하나라, 여기만 예외로 두면 고른 카테고리
+/// 이외의 시설 이름이 그대로 남는다. 호출하는 쪽이 모두 지금 선택을 넘겨야
+/// 하는 이유도 [indoorStoresLabelProps]와 같다.
+SymbolLayerProperties indoorFacilityLabelProps(
+  List<Object> fadeExpr,
+  CategorySelection? selection,
+) => SymbolLayerProperties(
+  textField: categoryLabelTextField(selection),
+  textFont: const [mapFontStackRegular],
+  textSize: mapLabelFacilityTextSize,
+  textColor: mapLabelFacilityColor,
+  textHaloColor: mapLabelHaloColor,
+  textHaloWidth: mapLabelHaloWidth,
+  textMaxWidth: mapLabelFacilityMaxWidth,
+  textOpacity: fadeExpr,
+  // 아이콘이 centroid를 차지하므로 이름은 아래로 내린다.
+  textOffset: mapLabelBelowIconOffset,
+  textAllowOverlap: false,
+);
 
 SymbolLayerProperties indoorPoiIconProps(List<Object> fadeExpr) =>
     SymbolLayerProperties(

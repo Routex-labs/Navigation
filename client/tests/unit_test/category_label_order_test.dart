@@ -24,11 +24,7 @@ void main() {
   });
 
   test('영문 보조 정렬은 앞뒤 공백과 대소문자를 무시한다', () {
-    final labels = sortedCategoryLabels([
-      'fashion',
-      ' Bakery ',
-      'apparel',
-    ]);
+    final labels = sortedCategoryLabels(['fashion', ' Bakery ', 'apparel']);
 
     expect(labels, ['apparel', ' Bakery ', 'fashion']);
   });

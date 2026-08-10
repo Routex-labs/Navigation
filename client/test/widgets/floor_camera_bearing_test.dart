@@ -6,10 +6,7 @@ void main() {
     // 실내 heading은 가만히 서 있어도 몇 도씩 흔들린다. 그대로 따라 돌리면
     // 화면이 쉬지 않고 떨린다.
     test('데드밴드 안의 흔들림은 무시한다', () {
-      expect(
-        bearingToFollow(heading: 95, cameraBearing: 90),
-        isNull,
-      );
+      expect(bearingToFollow(heading: 95, cameraBearing: 90), isNull);
     });
 
     test('데드밴드를 넘게 돌면 그 방향으로 맞춘다', () {

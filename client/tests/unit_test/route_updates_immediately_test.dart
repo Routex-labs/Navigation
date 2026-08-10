@@ -98,10 +98,7 @@ void main() {
       reason: '테스트 전제(도착을 누르면 경로가 그려짐)가 성립하지 않았다',
     );
     expect(
-      find.descendant(
-        of: find.byType(EtaCard),
-        matching: find.text('강의실 101'),
-      ),
+      find.descendant(of: find.byType(EtaCard), matching: find.text('강의실 101')),
       findsOneWidget,
       reason: '테스트 전제(ETA 카드가 지금 도착지를 가리킴)가 성립하지 않았다',
     );
@@ -135,10 +132,7 @@ void main() {
     );
     // 상단 초안 바에도 같은 이름이 적히므로 카드 안으로 좁힌다.
     expect(
-      find.descendant(
-        of: find.byType(EtaCard),
-        matching: find.text('데모 건물'),
-      ),
+      find.descendant(of: find.byType(EtaCard), matching: find.text('데모 건물')),
       findsOneWidget,
       reason: '바꾼 도착지가 경로에 반영되지 않았다',
     );

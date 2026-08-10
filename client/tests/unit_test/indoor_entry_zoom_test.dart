@@ -93,11 +93,11 @@ void main() {
       );
     });
 
-    test('이탈을 도면이 다 보이는 zoom으로 되돌리면 이 기준이 깨진다', () {
-      // 회귀 방향을 못박아 둔다 — 예전처럼 이탈을 17.5로 올리면 가장 넓은
+    test('예전 동작(진입=이탈)에서는 이 기준이 실제로 깨진다', () {
+      // 회귀 방향을 못박아 둔다 — 이탈을 진입 임계값으로 되돌리면 가장 넓은
       // 지하층은 화면에 다 들어오지 못한다.
       final visibleAtEntry = visibleWidthMeters(
-        zoom: indoorFocusZoom,
+        zoom: indoorEntryZoomThreshold,
         availablePx: referenceViewportWidthPx,
         latitude: referenceLatitude,
       );
@@ -105,37 +105,93 @@ void main() {
     });
   });
 
-  group('zoom은 이탈만 판정한다', () {
-    // 이 그룹이 지키는 규칙: 확대는 "저 건물을 자세히 보고 싶다"는 뜻이지
-    // "저 안에 들어왔다"가 아니다. 진입은 도면 탭과 GPS만 맡는다.
-    test('아무리 확대해도 이탈이 아니다(=진입도 아니다)', () {
-      for (final z in [17.5, 18.0, 19.0, 21.0]) {
-        expect(
-          shouldExitIndoorForZoom(z),
-          isFalse,
-          reason: 'zoom $z에서 상태가 바뀌면 안 된다',
-        );
-      }
+  group('히스테리시스', () {
+    test('진입 임계값이 이탈 임계값보다 확실히 높다', () {
+      expect(
+        indoorEntryZoomThreshold - indoorExitZoomThreshold,
+        greaterThan(1.0),
+      );
     });
 
-    test('층 전체를 보려고 축소하는 구간에서는 남아 있는다', () {
+    test('밴드 안에서는 상태를 유지한다', () {
       for (final z in [15.6, 16.0, 16.5, 17.0, 17.49]) {
         expect(
-          shouldExitIndoorForZoom(z),
-          isFalse,
-          reason: 'zoom $z는 층 전체를 보는 구간이라 실내를 유지해야 한다',
+          indoorEntryTransitionForZoom(
+            z,
+            buildingNearby: true,
+            entryZoom: indoorEntryZoomThreshold,
+          ),
+          IndoorEntryTransition.keep,
+          reason: 'zoom $z는 히스테리시스 밴드 안이어야 한다',
         );
       }
     });
 
-    test('이탈 임계값 경계에서 갈린다', () {
-      expect(shouldExitIndoorForZoom(indoorExitZoomThreshold - 0.01), isTrue);
-      expect(shouldExitIndoorForZoom(indoorExitZoomThreshold), isFalse);
+    test('임계값 경계에서 진입·이탈이 갈린다', () {
+      expect(
+        indoorEntryTransitionForZoom(
+          indoorEntryZoomThreshold,
+          buildingNearby: true,
+          entryZoom: indoorEntryZoomThreshold,
+        ),
+        IndoorEntryTransition.enter,
+      );
+      expect(
+        indoorEntryTransitionForZoom(
+          indoorExitZoomThreshold - 0.01,
+          buildingNearby: true,
+          entryZoom: indoorEntryZoomThreshold,
+        ),
+        IndoorEntryTransition.exit,
+      );
+      expect(
+        indoorEntryTransitionForZoom(
+          indoorExitZoomThreshold,
+          buildingNearby: true,
+          entryZoom: indoorEntryZoomThreshold,
+        ),
+        IndoorEntryTransition.keep,
+      );
+    });
+  });
+
+  group('건물 근접 게이트', () {
+    // 이 그룹이 지키는 증상: 실내 도면이 있는 건물이 주변에 없는데도 확대만
+    // 하면 실내 모드로 전환돼, 도면 한 장 없이 층 선택기와 위치 지정 버튼만
+    // 뜨던 문제.
+    test('건물이 주변에 없으면 아무리 확대해도 진입하지 않는다', () {
+      for (final z in [17.5, 18.0, 19.0, 21.0]) {
+        expect(
+          indoorEntryTransitionForZoom(
+            z,
+            buildingNearby: false,
+            entryZoom: indoorEntryZoomThreshold,
+          ),
+          IndoorEntryTransition.keep,
+          reason: 'zoom $z에서 건물 없이 실내로 들어가면 안 된다',
+        );
+      }
     });
 
-    test('도면이 다 보이는 zoom과 이탈 임계값 사이가 넉넉하다', () {
-      // 두 값이 붙어 있으면 층 전체를 보려고 조금만 축소해도 야외로 튕긴다.
-      expect(indoorFocusZoom - indoorExitZoomThreshold, greaterThan(1.0));
+    test('건물이 없어도 이탈 판정은 zoom만으로 유지된다', () {
+      // 근접 게이트가 이탈까지 건드리면, 실내에서 도면 끝을 보려고 살짝 패닝한
+      // 순간 야외로 튕겨 나간다. 이탈은 축소와 건물 밖 탭만 담당한다.
+      expect(
+        indoorEntryTransitionForZoom(
+          indoorExitZoomThreshold - 0.01,
+          buildingNearby: false,
+          entryZoom: indoorEntryZoomThreshold,
+        ),
+        IndoorEntryTransition.exit,
+      );
+      expect(
+        indoorEntryTransitionForZoom(
+          17.0,
+          buildingNearby: false,
+          entryZoom: indoorEntryZoomThreshold,
+        ),
+        IndoorEntryTransition.keep,
+      );
     });
   });
 
@@ -162,7 +218,7 @@ void main() {
     test('진입 전에는 야외 지도를 훑는 동안 도면이 끼어들지 않는다', () {
       expect(indoorOverlayOpacityAt(zoom: 16.4, entered: false), 0.0);
       expect(
-        indoorOverlayOpacityAt(zoom: indoorFocusZoom, entered: false),
+        indoorOverlayOpacityAt(zoom: indoorEntryZoomThreshold, entered: false),
         1.0,
       );
     });
@@ -226,27 +282,28 @@ void main() {
       expect(indoorTilesMinZoom, indoorExitZoomThreshold.floorToDouble());
     });
 
-    test('maxzoom이 포커스 zoom보다 높다', () {
-      expect(indoorTilesMaxZoom, greaterThan(indoorFocusZoom));
+    test('maxzoom이 진입 임계값보다 높다', () {
+      expect(indoorTilesMaxZoom, greaterThan(indoorEntryZoomThreshold));
     });
   });
 
-  group('포커스 zoom의 화면 폭 보정', () {
-    // 이 그룹이 지키는 증상: 고정 17.5로 카메라를 맞추면 폰에서는 건물이 화면
-    // 밖으로 넘치게 확대돼, 포커스를 맞췄는데 오히려 건물이 안 보인다. 같은 값이
-    // 화면 폭에 따라 "얼마나 넓은 땅이 보이는지"를 다르게 의미하기 때문이다.
+  group('진입 임계값의 화면 폭 보정', () {
+    // 이 그룹이 지키는 증상: 데스크톱 Chrome에서는 확대만으로 실내에 들어가는데
+    // 폰 실기기에서는 아무리 확대해도 층 선택기·위치 지정 버튼이 뜨지 않던 문제.
+    // 고정 임계값 17.5가 화면 폭에 따라 "얼마나 확대한 상태인지"를 다르게
+    // 의미해서 생긴 일이다.
     const buildingWidthM = 179.3; // 1F 정북 정렬 폭
 
-    double thresholdAt(double viewportPx) => indoorFocusZoomFor(
+    double thresholdAt(double viewportPx) => indoorEntryZoomThresholdFor(
       buildingWidthMeters: buildingWidthM,
       viewportWidthPx: viewportPx,
       latitude: referenceLatitude,
     );
 
-    test('폰 폭에서는 건물이 화면에 딱 담기는 zoom을 쓴다', () {
+    test('폰 폭에서는 건물이 화면에 담기는 순간 진입한다', () {
       final threshold = thresholdAt(referenceViewportWidthPx);
-      // 보정 전에는 17.5라 건물이 화면 밖으로 넘쳤다.
-      expect(threshold, lessThan(indoorFocusZoom));
+      // 보정 전에는 17.5여서, 건물이 화면 밖으로 넘칠 때까지 확대해야 닿았다.
+      expect(threshold, lessThan(indoorEntryZoomThreshold));
       final visible = visibleWidthMeters(
         zoom: threshold,
         availablePx: referenceViewportWidthPx,
@@ -258,30 +315,30 @@ void main() {
         visible,
         greaterThan(buildingWidthM - 0.001),
         reason:
-            '포커스 zoom에서 보이는 폭 ${visible.toStringAsFixed(0)} m가 건물 폭 '
-            '$buildingWidthM m보다 좁다 — 건물이 화면 밖으로 넘친다',
+            '진입하는 순간 보이는 폭 ${visible.toStringAsFixed(0)} m가 건물 폭 '
+            '$buildingWidthM m보다 좁다 — 건물이 화면 밖으로 넘쳐야만 진입한다',
       );
     });
 
-    test('넓은 화면에서는 기본값이 그대로 쓰인다(데스크톱 회귀 방지)', () {
-      expect(thresholdAt(1400), indoorFocusZoom);
+    test('넓은 화면에서는 기존 임계값이 그대로 쓰인다(데스크톱 회귀 방지)', () {
+      expect(thresholdAt(1400), indoorEntryZoomThreshold);
     });
 
-    test('어떤 화면 폭에서도 기본값보다 깊게 확대하지 않는다', () {
+    test('어떤 화면 폭에서도 지금보다 진입이 어려워지지 않는다', () {
       for (var px = 280.0; px <= 2400.0; px += 20) {
         expect(
           thresholdAt(px),
-          lessThanOrEqualTo(indoorFocusZoom),
-          reason: '화면 폭 $px px에서 포커스 zoom이 기본값보다 높아졌다',
+          lessThanOrEqualTo(indoorEntryZoomThreshold),
+          reason: '화면 폭 $px px에서 임계값이 기존보다 높아졌다',
         );
       }
     });
 
     test('아주 넓은 건물 + 좁은 화면에서도 이탈 임계값 위에 남는다', () {
-      // 하한이 없으면 포커스 zoom이 이탈 임계값 아래로 내려가, 카메라를 맞춘
-      // 그 자리에서 곧바로 이탈 판정이 난다.
+      // 하한이 없으면 진입 임계값이 이탈 임계값 아래로 내려가 같은 zoom에서
+      // 진입과 이탈이 동시에 성립하고, 오버레이가 켜졌다 꺼졌다 진동한다.
       for (final width in [286.1, 500.0, 1200.0, 5000.0]) {
-        final threshold = indoorFocusZoomFor(
+        final threshold = indoorEntryZoomThresholdFor(
           buildingWidthMeters: width,
           viewportWidthPx: 280,
           latitude: referenceLatitude,
@@ -289,49 +346,64 @@ void main() {
         expect(
           threshold,
           greaterThan(indoorExitZoomThreshold),
-          reason: '건물 폭 $width m에서 포커스 zoom이 이탈 임계값 이하로 내려갔다',
+          reason: '건물 폭 $width m에서 진입 임계값이 이탈 임계값 이하로 내려갔다',
         );
       }
     });
 
-    test('낮아진 포커스 zoom에서도 도면은 흐리지 않다', () {
-      // 하한을 페이드 아웃 램프 끝(16.0)에 맞춘 이유. 실내 상태의 램프가 이미
-      // 100%인 zoom에서만 카메라를 멈춰야 한다.
+    test('낮아진 임계값으로 진입해도 도면은 흐리지 않다', () {
+      // 하한을 페이드 아웃 램프 끝(16.0)에 맞춘 이유. 진입 순간 램프가 "진입 후"
+      // 램프로 갈아끼워지므로, 그 램프가 이미 100%인 zoom에서만 진입해야 한다.
       for (final px in [280.0, 320.0, referenceViewportWidthPx, 430.0, 768.0]) {
         final threshold = thresholdAt(px);
         expect(
           indoorOverlayOpacityAt(zoom: threshold, entered: true),
           1.0,
-          reason: '화면 폭 $px px의 포커스 zoom에서 도면이 100% 불투명하지 않다',
+          reason: '화면 폭 $px px의 진입 zoom에서 도면이 100% 불투명하지 않다',
         );
       }
     });
 
     test('건물 폭이나 화면 폭이 없으면 보정하지 않는다', () {
       expect(
-        indoorFocusZoomFor(
+        indoorEntryZoomThresholdFor(
           buildingWidthMeters: 0,
           viewportWidthPx: referenceViewportWidthPx,
           latitude: referenceLatitude,
         ),
-        indoorFocusZoom,
+        indoorEntryZoomThreshold,
       );
       expect(
-        indoorFocusZoomFor(
+        indoorEntryZoomThresholdFor(
           buildingWidthMeters: buildingWidthM,
           viewportWidthPx: 0,
           latitude: referenceLatitude,
         ),
-        indoorFocusZoom,
+        indoorEntryZoomThreshold,
       );
     });
 
-    test('보정된 포커스 zoom에서 이탈 판정이 나지 않는다', () {
-      // 카메라를 맞춘 자리가 곧 이탈 구간이면, 층 chip을 누를 때마다 화면이
-      // 실내로 갔다가 야외로 되돌아온다.
-      for (final px in [280.0, referenceViewportWidthPx, 768.0, 1400.0]) {
-        expect(shouldExitIndoorForZoom(thresholdAt(px)), isFalse);
-      }
+    test('보정된 임계값이 실제 진입 판정에 반영된다', () {
+      final threshold = thresholdAt(referenceViewportWidthPx);
+      // 보정 전이라면 keep이었을 zoom에서 enter가 나와야 한다.
+      expect(threshold, lessThan(indoorEntryZoomThreshold));
+      expect(
+        indoorEntryTransitionForZoom(
+          threshold,
+          buildingNearby: true,
+          entryZoom: threshold,
+        ),
+        IndoorEntryTransition.enter,
+      );
+      // 근접 게이트는 그대로 살아 있다 — 건물이 없으면 여전히 안 들어간다.
+      expect(
+        indoorEntryTransitionForZoom(
+          threshold,
+          buildingNearby: false,
+          entryZoom: threshold,
+        ),
+        IndoorEntryTransition.keep,
+      );
     });
   });
 }
