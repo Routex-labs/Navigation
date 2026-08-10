@@ -135,6 +135,7 @@ sealed class PlaceDetailSection {
       'map' => MapSection.fromJson(json),
       'menu' => MenuSection.fromJson(json),
       'businessInfo' => BusinessInfoSection.fromJson(json),
+      'demoInfo' => DemoInfoSection.fromJson(json),
       _ => null,
     };
   }
@@ -262,24 +263,48 @@ class MenuSection extends PlaceDetailSection {
   }
 }
 
+/// 메뉴 한 건. 이름과 사진만 반드시 있고 나머지는 전부 없을 수 있다.
+///
+/// 가격이 선택인 이유는 출처마다 가진 것이 다르기 때문이다 — 스타벅스 코리아 공식
+/// 사이트는 가격을 공개하지 않는 대신 용량·칼로리·카페인을 주고, 푸드에는 영양정보가
+/// 아예 없다. 서버는 없는 값을 빈 문자열로 채워 보내지 않고 키 자체를 뺀다(계약 4-2
+/// 규칙 1). 그래서 여기서도 `''`가 아니라 `null`이며, 무엇이 비었는지에 따라 카드가
+/// 무엇을 보여줄지는 위젯이 정한다.
 class MenuItem {
   const MenuItem({
     required this.name,
-    required this.price,
-    required this.description,
     required this.imageAsset,
+    this.category,
+    this.nameEn,
+    this.description,
+    this.price,
+    this.volume,
+    this.calories,
+    this.caffeine,
   });
 
   final String name;
-  final String price;
-  final String? description;
   final String? imageAsset;
+
+  /// 화면의 메뉴 탭. 탭 순서는 서버가 보낸 등장 순서다(계약 4-2 규칙 3).
+  final String? category;
+  final String? nameEn;
+  final String? description;
+  final String? price;
+  final String? volume;
+  final String? calories;
+  final String? caffeine;
 
   factory MenuItem.fromJson(Map<String, dynamic> json) => MenuItem(
         name: json['name'] as String,
-        price: json['price'] as String,
-        description: json['description'] as String?,
         imageAsset: json['image_asset'] as String?,
+        category: json['category'] as String?,
+        nameEn: json['name_en'] as String?,
+        description: json['description'] as String?,
+        price: json['price'] as String?,
+        volume: json['volume'] as String?,
+        calories: json['calories'] as String?,
+        caffeine: json['caffeine'] as String?,
       );
 }
 
@@ -311,5 +336,50 @@ class BusinessInfoItem {
       BusinessInfoItem(
         label: json['label'] as String,
         value: json['value'] as String,
+      );
+}
+
+/// 소개 영상 촬영용 매장에만 붙는 운영 정보다.
+///
+/// [BusinessInfoSection]과 모양이 거의 같은데 섹션을 나눈 이유는 **다루는 값의 수명이
+/// 다르기** 때문이다. 이쪽에는 영업시간·대표번호처럼 시간이 지나면 저절로 거짓이 되는
+/// 값이 들어오고, 서버가 항목마다 확인일을 필수로 받아 함께 내려보낸다. 화면이 그
+/// 확인일을 보여 줄 수 있어야 해서 별도 타입으로 둔다.
+class DemoInfoSection extends PlaceDetailSection {
+  const DemoInfoSection({required this.items});
+
+  final List<DemoInfoItem> items;
+
+  factory DemoInfoSection.fromJson(Map<String, dynamic> json) {
+    final rawItems = json['items'];
+    return DemoInfoSection(
+      items: rawItems is List
+          ? rawItems
+              .whereType<Map<String, dynamic>>()
+              .map(DemoInfoItem.fromJson)
+              .toList(growable: false)
+          : const <DemoInfoItem>[],
+    );
+  }
+}
+
+class DemoInfoItem {
+  const DemoInfoItem({
+    required this.label,
+    required this.value,
+    required this.confirmedAt,
+  });
+
+  final String label;
+  final String value;
+  final String confirmedAt;
+
+  // `source`는 받아 두고 화면에 그리지 않는다. 다시 열어 볼 수 있는 주소는 데이터를
+  // 고치는 사람에게 필요한 것이고, 사용자에게 필요한 것은 "언제 확인한 값인가"다
+  // (설계 7-A-3).
+  factory DemoInfoItem.fromJson(Map<String, dynamic> json) => DemoInfoItem(
+        label: json['label'] as String,
+        value: json['value'] as String,
+        confirmedAt: json['confirmed_at'] as String,
       );
 }

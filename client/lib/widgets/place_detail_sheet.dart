@@ -614,9 +614,24 @@ class PlaceDetailSections extends StatelessWidget {
             for (final item in items)
               PlaceMenuItem(
                 name: item.name,
+                category: item.category,
+                nameEn: item.nameEn,
                 price: item.price,
                 description: item.description,
+                volume: item.volume,
+                calories: item.calories,
+                caffeine: item.caffeine,
                 imageAssetPath: item.imageAsset,
+              ),
+          ],
+        ),
+        DemoInfoSection(:final items) => PlaceDemoInfoSection(
+          items: [
+            for (final item in items)
+              PlaceDemoInfo(
+                label: item.label,
+                value: item.value,
+                confirmedAt: item.confirmedAt,
               ),
           ],
         ),
