@@ -807,6 +807,21 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     widget.onFloorChanged?.call(floor);
   }
 
+  /// 화면 배율. `icon-size`가 **물리 픽셀**에 곱해지는 값이라 논리 px으로 잡은
+  /// 마커 크기를 여기로 환산한다([indoorMarkerIconSize]).
+  ///
+  /// 레이어를 등록하는 코드가 여러 번의 `await` 뒤라 그 자리에서
+  /// `MediaQuery.devicePixelRatioOf(context)`를 읽으면 위젯이 그 사이 사라졌을 때
+  /// 터진다. 실내 화면([FloorPlanViewState])과 같은 이유로 의존성이 잡히는
+  /// 시점에 한 번 받아 둔다.
+  double _devicePixelRatio = 1;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1164,7 +1179,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final destination = _preTransferDestination ?? _indoorRouteDestination;
     final destinationNodeId = destination?.nodeId;
     final buildingId = _building?.id;
-    if (destination == null || destinationNodeId == null || buildingId == null) {
+    if (destination == null ||
+        destinationNodeId == null ||
+        buildingId == null) {
       _clearTransferRouteBackups(keepUndoAnchor: true);
       return;
     }
@@ -3213,7 +3230,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     for (final (id, props) in [
       (
         _indoorStoresLabelLayerId,
-        indoorStoresLabelProps(fadeExpr, widget.categorySelection),
+        indoorStoresLabelProps(
+          fadeExpr,
+          widget.categorySelection,
+          _devicePixelRatio,
+        ),
       ),
       (
         _indoorFacilityLabelLayerId,
@@ -3259,14 +3280,21 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       // 이름이 되살아난다([indoorStoresLabelProps] 주석).
       (
         _indoorStoresLabelLayerId,
-        indoorStoresLabelProps(fadeExpr, widget.categorySelection),
+        indoorStoresLabelProps(
+          fadeExpr,
+          widget.categorySelection,
+          _devicePixelRatio,
+        ),
       ),
       (
         _indoorFacilityLabelLayerId,
         indoorFacilityLabelProps(fadeExpr, widget.categorySelection),
       ),
-      (_indoorPoiIconLayerId, indoorPoiIconProps(fadeExpr)),
-      (_indoorStoreFacilityIconLayerId, indoorFacilityIconProps(fadeExpr)),
+      (_indoorPoiIconLayerId, indoorPoiIconProps(fadeExpr, _devicePixelRatio)),
+      (
+        _indoorStoreFacilityIconLayerId,
+        indoorFacilityIconProps(fadeExpr, _devicePixelRatio),
+      ),
     ]) {
       try {
         await controller.setLayerProperties(id, props);
@@ -3691,7 +3719,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       await controller.addSymbolLayer(
         _indoorTilesSourceId,
         _indoorStoresLabelLayerId,
-        indoorStoresLabelProps(fadeExpr, widget.categorySelection),
+        indoorStoresLabelProps(
+          fadeExpr,
+          widget.categorySelection,
+          _devicePixelRatio,
+        ),
         sourceLayer: 'stores',
         filter: storeLabelWithCategoryIconFilter(),
         belowLayerId: _routeCasingLayerId,
@@ -3714,7 +3746,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       await controller.addSymbolLayer(
         _indoorTilesSourceId,
         _indoorPoiIconLayerId,
-        indoorPoiIconProps(fadeExpr),
+        indoorPoiIconProps(fadeExpr, _devicePixelRatio),
         sourceLayer: 'pois',
         belowLayerId: _routeCasingLayerId,
         enableInteraction: false,
@@ -3726,7 +3758,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       await controller.addSymbolLayer(
         _indoorTilesSourceId,
         _indoorStoreFacilityIconLayerId,
-        indoorFacilityIconProps(fadeExpr),
+        indoorFacilityIconProps(fadeExpr, _devicePixelRatio),
         sourceLayer: 'stores',
         belowLayerId: _routeCasingLayerId,
         filter: [
@@ -3779,7 +3811,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       final imageName = facilityIconImageName(entry.key);
       await controller.addImage(
         imageName,
-        await cachedIconPng(imageName, () => renderFacilityIconPng(entry.value)),
+        await cachedIconPng(
+          imageName,
+          () => renderFacilityIconPng(entry.value),
+        ),
       );
     }
     // 매장명 라벨에 붙는 대분류 아이콘. 실내 화면과 같은 이름·같은 비트맵이라
@@ -3788,7 +3823,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       final imageName = storeCategoryIconImageName(category);
       await controller.addImage(
         imageName,
-        await cachedIconPng(imageName, () => renderStoreCategoryIconPng(category)),
+        await cachedIconPng(
+          imageName,
+          () => renderStoreCategoryIconPng(category),
+        ),
       );
     }
     _facilityIconImagesRegistered = true;
@@ -4472,7 +4510,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       );
     }
     if (update.shouldReroute &&
-        DateTime.now().millisecondsSinceEpoch - _lastIndoorRerouteAtMs >= 2000) {
+        DateTime.now().millisecondsSinceEpoch - _lastIndoorRerouteAtMs >=
+            2000) {
       unawaited(_rerouteIndoorFromCurrentPosition());
     }
     if (mounted) setState(() {});
@@ -5289,7 +5328,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         // 디버그 설정 진입점(왼쪽 하단 벌레 아이콘)은 앱 메뉴(햄버거)로 옮겼다.
         // 실내 진입 오버레이가 켜졌을 때만 뜨는 버튼이라, 그 상태에 있는지에 따라
         // 개발 도구가 나타났다 사라지는 화면이기도 했다.
-
         if (_indoorEntered && _placingPdrAnchor)
           Positioned(
             top: _placingHintTopPx,

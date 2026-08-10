@@ -1156,8 +1156,8 @@ class FloorPlanViewState extends State<FloorPlanView> {
         textField: ['get', 'name'],
         textFont: _mapFontStack,
         // 같은 "아이콘 + 아래 이름" 꼴인 편의시설 라벨과 같은 값을 쓴다.
-        textSize: mapLabelFacilityTextSize,
-        textMaxWidth: mapLabelFacilityMaxWidth,
+        textSize: mapLabelFixedTextSize,
+        textMaxWidth: mapLabelFixedMaxWidth,
         textOffset: mapLabelBelowIconOffset,
         textColor: mapLabelFacilityColor,
         textHaloColor: mapLabelHaloColor,
@@ -1666,7 +1666,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
   ///
   /// **매장명과 달리 크기가 고정이다.** 폴리곤 맞춤 계산은 글자가 폴리곤 안에
   /// 들어가는 경우의 계산인데 이 이름은 아이콘을 피해 폴리곤 밖으로 내려 그린다
-  /// ([mapLabelFacilityTextSize] 주석에 근거를 적었다).
+  /// ([mapLabelFixedTextSize] 주석에 근거를 적었다).
   ///
   /// **카테고리 선택은 매장명과 똑같이 적용한다.** 아이콘이 다른 레이어에 있을
   /// 뿐 화면에서는 「ATM (하나은행)」도 이름 달린 폴리곤 하나다. 여기만 예외로
@@ -1675,8 +1675,8 @@ class FloorPlanViewState extends State<FloorPlanView> {
   SymbolLayerProperties _facilityLabelSymbolProps() => SymbolLayerProperties(
     textField: categoryLabelTextField(widget.categorySelection),
     textFont: _mapFontStack,
-    textSize: mapLabelFacilityTextSize,
-    textMaxWidth: mapLabelFacilityMaxWidth,
+    textSize: mapLabelFixedTextSize,
+    textMaxWidth: mapLabelFixedMaxWidth,
     // 아이콘이 centroid를 차지하므로 이름은 그 아래로 내린다. POI 라벨
     // (`floor-pois-label`)·야외 오버레이와 같은 오프셋이라 세 곳의 라벨
     // 높이가 맞는다.
