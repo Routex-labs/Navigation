@@ -202,13 +202,11 @@ const _transitBadgeLayerId = 'outdoor-transit-badge-icon';
 const _currentSourceId = 'outdoor-current';
 const _accuracyLayerId = 'outdoor-accuracy';
 const _currentDotLayerId = 'outdoor-current-dot';
-// 야외 목적지 좌표를 담는 소스. **지금은 그리는 레이어가 없다** — 도착 지점의
-// 빨간 원을 걷어냈다(등록 자리의 주석 참고). 소스와 [_syncDestinationLayer]는
-// 남겨 둔다. 호출 지점이 열한 곳이라 함께 걷어내면 이번 변경의 성격이 흐려지고,
-// 도착 표시를 다시 그려야 할 때 붙일 자리이기도 하다.
-const _destSourceId = 'outdoor-destination';
-// 실내 경로의 도착 노드에 찍는 물방울 핀. 야외 목적지 소스와 **소스를 나눈다** —
-// 같은 소스에 넣으면 레이어 필터가 없어 실내 도착 노드에도 함께 그려진다.
+// 실내 경로의 도착 노드에 찍는 물방울 핀.
+//
+// 야외 목적지에는 대응하는 소스가 없다. 한동안 빨간 원을 찍는 소스를 따로
+// 뒀는데, 경로선이 도착점까지 이어지면서([extendRouteToDestination]) 선 끝이
+// 곧 도착 지점이 되어 원이 라벨만 가렸다.
 const _indoorDestSourceId = 'outdoor-indoor-destination';
 const _indoorDestLayerId = 'outdoor-indoor-destination-pin';
 // 도착 핀 비트맵의 addImage 등록 키. 실내 지도와 같은 도형을
@@ -1134,7 +1132,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _activeFloor = building?.initialFloor;
     });
     _notifyActiveFloor();
-    _syncDestinationLayer();
     _syncBuildingLayer();
     // 스타일이 이미 로드된 뒤 건물이 늦게 도착한 케이스(테스트/느린 네트워크)를
     // 위해 실내 MVT 소스도 여기서 한 번 더 등록 시도.
@@ -1199,7 +1196,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _selectedEntrance = picked;
       _entrance = picked.point;
     });
-    _syncDestinationLayer();
   }
 
   /// 진행 중인 층 그래프 로드. 자동 실내 진입은 GPS 이벤트를 따라 발화하므로
@@ -1806,7 +1802,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       // 남쪽 문으로 걸어가는데 실내 안내만 서쪽 문에서 시작하는 상태가 된다.
       _pendingIndoorRoute = (leg == null || leg.isEmpty) ? null : leg;
     });
-    _syncDestinationLayer();
   }
 
   /// 야외 구간 ETA. 문 경유 안내 중이면 미리 풀어 둔 실내 구간까지 더한다.
@@ -1991,7 +1986,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _indoorMultiFloorRoute = route;
       _indoorRouteSegment = segment?.route;
     });
-    _syncDestinationLayer();
     _syncRouteLayer();
     _syncIndoorDestinationLayer();
     _notifyRouteVisibilityIfChanged();
@@ -2205,7 +2199,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       // _applyRoute가 "새로 생김"으로 보고 카메라를 다시 맞추게 한다.
       _route = null;
     });
-    _syncDestinationLayer();
     _syncRouteLayer();
 
     if (origin != null) {
@@ -2266,7 +2259,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       // 맞춘다. 안 비우면 수단을 바꿔도 카메라가 옛 경로 자리에 머문다.
       _route = null;
     });
-    _syncDestinationLayer();
     _syncRouteLayer();
     _applyRoute(route);
   }
@@ -2302,7 +2294,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       // 자동차용 "안내 시작"이 얹힌다.
       _offerStartGuidance = false;
     });
-    _syncDestinationLayer();
     _syncRouteLayer();
     _notifyRouteVisibilityIfChanged();
   }
@@ -2365,7 +2356,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _indoorRouteSegment = null;
       _indoorMultiFloorRoute = null;
     });
-    _syncDestinationLayer();
     _syncRouteLayer();
     // 경로 계산 전에도 도착지 centroid에 핀을 먼저 띄운다 — 사용자가 고른
     // 매장이 어디인지 즉시 보이고, 계산이 끝나면 도착 노드로 옮겨 붙는다.
@@ -2992,12 +2982,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       ),
     );
 
-    // 목적지 핀.
-    await controller.addSource(
-      _destSourceId,
-      GeojsonSourceProperties(data: _emptyCollection()),
-    );
-    // **도착 지점에 빨간 원을 찍지 않는다.** 경로선이 이제 도착점까지 실제로
+    // **야외 목적지에는 아무것도 찍지 않는다.** 경로선이 도착점까지 실제로
     // 이어지므로([extendRouteToDestination]) 선 끝이 곧 도착 지점이고, 그 위에
     // 원을 하나 더 얹으면 출입구 라벨·매장 아이콘을 가린다. 건물 안 목적지는
     // 물방울 핀(_indoorDestLayerId)이 따로 가리킨다.
@@ -3092,7 +3077,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     setState(() => _styleReady = true);
     _syncBuildingLayer();
     _syncCurrentLayer();
-    _syncDestinationLayer();
     _syncRouteLayer();
     _syncTransitLayer();
     _syncIndoorDestinationLayer();
@@ -3818,23 +3802,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     );
   }
 
-  Future<void> _syncDestinationLayer() async {
-    final controller = _mapController;
-    if (controller == null || !_styleReady) return;
-    // 도착 핀은 사용자가 고른 목적지에만 찍는다. [_entrance]로 폴백하면 이제
-    // 그 값이 항상 채워져 있어(가장 가까운 문) 아무 안내도 시작하지 않은
-    // 지도에 문 위 핀이 상시로 떠 있게 된다 — 근거는 [_updateRoute] 주석.
-    final target = _userDestination;
-    if (target == null) {
-      await controller.setGeoJsonSource(_destSourceId, _emptyCollection());
-      return;
-    }
-    await controller.setGeoJsonSource(
-      _destSourceId,
-      _collection([_pointFeature(target)]),
-    );
-  }
-
   /// 실내 경로의 도착 노드에 물방울 핀을 찍는다.
   ///
   /// 핀을 찍는 좌표는 매장 중심(centroid)이 아니라 **경로의 마지막 점**이다 —
@@ -4186,7 +4153,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _userDestinationLabel = label;
     });
     _syncRouteLayer();
-    _syncDestinationLayer();
     await _syncTransitLayer();
     _notifyRouteVisibilityIfChanged();
     _fitCameraToPoints(itinerary.points);
