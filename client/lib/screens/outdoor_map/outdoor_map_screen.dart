@@ -18,8 +18,9 @@ import '../../core/service_locator.dart';
 import '../../core/tile_url.dart';
 import '../../domain/geo_transform.dart';
 import '../../features/debug_mode/debug_mode.dart';
-import '../../features/indoor_navigation/application/corridor_tracking_session.dart';
 import '../../features/indoor_navigation/application/floor_map_matcher.dart';
+import '../../features/indoor_navigation/application/indoor_guidance_position.dart';
+import '../../features/indoor_navigation/application/indoor_guidance_session.dart';
 import '../../features/indoor_navigation/application/indoor_location_estimate.dart';
 import '../../features/indoor_navigation/contract/indoor_navigation_contract.dart';
 import '../../features/indoor_navigation/debug/pdr_debug_device_info.dart';
@@ -668,10 +669,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 회전을 수행한다. 순수 야외(GPS) 보정은 이 카운터를 쓰지 않는다.
   int _recalibrateTapCount = 0;
   late final DebugPdrTrailState _pdrTrailState;
-  final CorridorTrackingSession _corridorTrackingSession =
-      CorridorTrackingSession();
+
+  /// 실내 안내의 위치·층 판정. 실내 탭과 **같은 구현**을 쓴다.
+  ///
+  /// 예전에는 이 화면이 복도 보정을 따로 돌려 놓고 결과를 읽지 않은 채 앵커를
+  /// 고정 표시했다 — 홈에서 실내 길안내를 하면 마커가 움직이지 않았던 이유다.
+  final IndoorGuidanceSession _guidance = IndoorGuidanceSession();
   StreamSubscription<PdrSnapshot>? _pdrSnapshotSub;
   StreamSubscription<CalibrationStatus>? _pdrCalibrationSub;
+  StreamSubscription<AltitudeSample>? _pdrAltitudeSub;
+  StreamSubscription<RawMotionActivity>? _pdrRawMotionSub;
 
   /// 디버그 설정은 실내 지도와 공유한다 — 어느 화면에서 켜든 같은 상태를 본다.
   final DebugModeController _debugModeController = debugModeController;
@@ -773,8 +780,61 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _syncEntranceExitWatch();
       unawaited(_syncDebugPdrLayers());
     });
+    // 층 전환 판정. 실내 탭에만 있던 구독을 여기에도 둔다 — 이게 없으면 홈에서
+    // 에스컬레이터를 타도 층이 그대로라, 마커가 이전 층 도면 위를 걸어간다.
+    _pdrAltitudeSub = indoorNavigationDriver.altitudeSamples.listen(
+      _onAltitudeSample,
+    );
+    _pdrRawMotionSub = indoorNavigationDriver.rawMotion.listen(
+      _guidance.onRawMotion,
+    );
     unawaited(_loadBuildingEntrance());
     _syncGpsSubscription();
+  }
+
+  /// 기압 샘플 한 건을 세션에 넣고, 확정이 나오면 층을 옮긴다.
+  void _onAltitudeSample(AltitudeSample sample) {
+    if (!mounted) return;
+    final outcome = _guidance.onAltitude(sample);
+    final recorder = _pdrDebugRecorder;
+    if (recorder != null) {
+      recorder.recordAltimeterStatus(indoorNavigationDriver.altimeterStatus);
+      recorder.recordAltitudeSample(
+        sample,
+        smoothedM: _guidance.escalator.smoothedAltitudeM,
+        baselineM: _guidance.escalator.baselineM,
+        deltaM: _guidance.escalator.deltaM,
+        armed: _guidance.escalator.isArmed,
+        candidate: _guidance.escalator.hasCandidate,
+      );
+    }
+    if (outcome.events.isNotEmpty) {
+      recorder?.recordFloorTransitionEvents(outcome.events);
+    }
+    // 단계 전이는 탑승점 고정을 갱신한다. 홈은 아직 배너를 그리지 않으므로
+    // 여기서는 꺼내 버리는 것만으로 충분하다 — 쌓아 두면 다음 세션 로그에
+    // 지난 판정이 섞인다.
+    _guidance.takePhaseChanges();
+
+    final confirmed = outcome.confirmed ?? outcome.started;
+    if (confirmed != null) {
+      unawaited(_applyEscalatorFloorChange(confirmed.toFloorLabel));
+    }
+    if (outcome.cancelled != null) {
+      unawaited(
+        _applyEscalatorFloorChange(outcome.cancelled!.fromFloorLabel),
+      );
+    }
+  }
+
+  /// 층 판정이 만든 층 변경을 화면에 적용한다.
+  ///
+  /// 사용자가 층 선택기를 누른 것과 **같은 경로**를 쓴다. 다층 경로 세그먼트
+  /// 교체와 도면 로딩이 이미 거기 있고, 두 벌로 만들면 한쪽이 먼저 낡는다.
+  Future<void> _applyEscalatorFloorChange(String floorLabel) async {
+    if (!mounted || !_indoorEntered || floorLabel == _activeFloor) return;
+    if (!(_building?.floors.contains(floorLabel) ?? false)) return;
+    await _switchOverlayFloor(floorLabel);
   }
 
   /// 건물 로드가 실패한 상태인지. 배지를 띄우는 유일한 근거이며, 재시도가
@@ -906,6 +966,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _positionSubscription?.cancel();
     _pdrSnapshotSub?.cancel();
     _pdrCalibrationSub?.cancel();
+    _pdrAltitudeSub?.cancel();
+    _pdrRawMotionSub?.cancel();
     // 앱 전역 인스턴스라 dispose하지 않는다 — 실내 화면이 같은 컨트롤러를
     // 계속 구독한다.
     _debugModeController.removeListener(_onDebugModeChanged);
@@ -2860,6 +2922,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _entranceWatchGraceTimer = null;
       _indoorEnteredByGps = false;
     }
+    // 실내 안내를 켜고 끄는 유일한 지점이다.
+    //
+    // 예전에는 오버레이가 꺼져도 복도 보정이 계속 돌았다 — 화면에 안 보일 뿐
+    // 야외를 걸어 다닌 거리가 실내 좌표계에 누적되다가, 다시 들어오는 순간
+    // 걸어 본 적 없는 자리에서 시작했다.
+    if (value) {
+      _guidance.attach(buildingId: _building?.id ?? '');
+    } else {
+      _guidance.detach();
+    }
     setState(() => _indoorEntered = value);
     widget.onIndoorEnteredChanged?.call(value);
     // 진입/이탈로 "지금 보고 있는 층"의 유무 자체가 바뀐다.
@@ -3554,31 +3626,21 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     );
   }
 
-  /// 홈 실내 오버레이에서는 사용자가 확정한 앵커만 고정 표시한다.
+  /// 지금 그려야 하는 실내 위치. 출처 판단은 [IndoorGuidanceSession]이 한다.
   ///
-  /// 홈은 실제 층을 확정할 수 없으므로 걸음 누적 위치를 계속 그리면 잘못된 층의
-  /// 지도 위에서 점이 튄다. 연속 PDR 안내는 실내 탭이 담당하고, 홈에서는 다음
-  /// 위치 지정 전까지 이 기준점만 유지한다.
+  /// 예전에는 여기서 **앵커만** 그렸다. 홈은 층 전환을 감지하지 못하니 걸음
+  /// 누적 위치를 그리면 엉뚱한 층 도면 위에서 점이 걸어간다는 이유였는데,
+  /// 이제 세션이 에스컬레이터 층 전환까지 판정하므로 그 전제가 사라졌다.
+  GuidancePosition? get _indoorPosition => _guidance.position;
+
   ll.LatLng? _pdrCurrentWgs84() {
     final graph = _floorGraph;
     if (graph == null || graph.nodes.isEmpty) return null;
-    final transform = fitFloorGeoTransform(graph.nodes);
-    final anchor = _pdrTrailState.anchor;
-    if (anchor == null || anchor.floorId != _activeFloor) {
-      final estimate = indoorLocationEstimateController.current;
-      if (estimate != null &&
-          estimate.buildingId == _building?.id &&
-          estimate.floorId == _activeFloor &&
-          estimate.isFresh(DateTime.now())) {
-        return estimate.wgs84;
-      }
-      return null;
-    }
-
-    final wgs84 = transform.apply(
-      anchor.anchorLocalM.eastM,
-      anchor.anchorLocalM.northM,
-    );
+    final position = _indoorPosition;
+    if (position == null) return null;
+    final wgs84 = fitFloorGeoTransform(
+      graph.nodes,
+    ).apply(position.localM.eastM, position.localM.northM);
     return ll.LatLng(wgs84.$1, wgs84.$2);
   }
 
@@ -3770,24 +3832,30 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     return transform.floorBearingToMapBearing(orientationFloorHeading);
   }
 
+  /// 세션에 스냅샷을 넘기고, 나온 보정 결과를 로그에 남긴다.
+  ///
+  /// 층·그래프·앵커·경로는 세션이 들고 있으므로 여기서 다시 확인하지 않는다.
+  /// 두 곳에서 같은 조건을 세면 반드시 한쪽이 먼저 낡는다.
   void _syncCorridorTracking(PdrSnapshot? snapshot) {
-    final anchor = _pdrTrailState.anchor;
-    if (anchor == null || anchor.floorId != _activeFloor) return;
-    final result = _corridorTrackingSession.update(
-      graph: _floorGraph,
-      anchor: anchor,
-      snapshot: snapshot,
-      timestampMs: DateTime.now().millisecondsSinceEpoch,
-    );
+    _guidance
+      ..setContext(
+        floorId: _activeFloor,
+        graph: _floorGraph,
+        floorLabels: _building?.floors ?? const [],
+      )
+      ..setAnchor(_pdrTrailState.anchor)
+      ..setEstimate(indoorLocationEstimateController.current)
+      ..setRoute(_indoorMultiFloorRoute);
+    final result = _guidance.onSnapshot(snapshot);
     if (result == null) return;
     _pdrDebugRecorder?.recordCorridorCorrection(result);
     if (snapshot != null) {
       _pdrDebugRecorder?.recordTrackerInput(
-        observation: _corridorTrackingSession.lastObservation,
-        wasReset: _corridorTrackingSession.lastWasReset,
+        observation: _guidance.lastObservation,
+        wasReset: _guidance.lastWasReset,
         result: result,
         snapshot: snapshot,
-        previewTailPeakTimesMs: _corridorTrackingSession.previewTailPeakTimesMs(
+        previewTailPeakTimesMs: _guidance.corridor.previewTailPeakTimesMs(
           snapshot,
         ),
       );
@@ -3933,7 +4001,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
     setState(() {
       _pdrTrailState.beginNewSession();
-      _corridorTrackingSession.reset();
+      // 새 PDR 세션이다. 이전 세션의 보정·판정을 들고 가면 첫 프레임이 지난
+      // 세션 좌표에서 시작한다. 붙어 있는 상태를 유지한 채 내용만 비운다.
+      _guidance
+        ..detach()
+        ..attach(buildingId: _building?.id ?? '');
     });
     return true;
   }
