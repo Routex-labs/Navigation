@@ -78,7 +78,11 @@ void main() {
   testWidgets('상세를 닫으면 카테고리 목록으로 돌아가지 않는다', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('실내'));
+    // 위 테스트와 같은 이유로 세그먼트가 아니라 오버레이를 직접 켠다.
+    tester
+        .state<OutdoorMapBodyState>(find.byType(OutdoorMapBody))
+        // ignore: invalid_use_of_visible_for_testing_member
+        .enterIndoorForTest();
     await tester.pumpAndSettle();
     await tester.tap(find.text('서비스'));
     await tester.pumpAndSettle();
