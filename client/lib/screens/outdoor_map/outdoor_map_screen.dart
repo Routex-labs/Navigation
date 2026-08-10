@@ -1582,6 +1582,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       // 층이 바뀌면 그 층에 강조하던 매장은 지도에 없다. 강조도 초기화.
       _highlightedStoreId = null;
     });
+    // **세션에도 지금 알린다.** 다음 스냅샷까지 미루면 그 사이 세션은 이전 층
+    // 기준 보정 위치를 들고 있고, 화면은 새 층 그래프로 좌표를 되돌린다 —
+    // 마커가 새 층 도면 위 엉뚱한 자리에 찍힌다. 서 있으면 스냅샷이 몇 초씩
+    // 안 오므로 한 프레임이 아니라 눈에 보이는 시간 동안 어긋난다.
+    _guidance.setContext(
+      floorId: floor,
+      graph: _floorGraph,
+      floorLabels: building.floors,
+    );
     _notifyActiveFloor();
     // 층이 바뀐 순간 이전 층의 외곽선은 더 이상 맞지 않는다. 새 도면이 도착할
     // 때까지(지하 → 다른 층) 선을 지워 둔다 — 틀린 경계를 보여주지 않는다.
@@ -2299,6 +2308,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         floor: originFloor,
         nodeId: originNodeId,
         storePoint: origin!.point,
+        storeName: origin.name,
       );
       if (!mounted) return;
     }
@@ -2353,6 +2363,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     required String floor,
     required String nodeId,
     required ll.LatLng storePoint,
+    required String storeName,
   }) async {
     // [_confirmPdrAnchor]가 축 변환(axes)을 [_floorGraph]에서 가져오므로,
     // 앵커를 찍기 전에 그 층 그래프가 화면에 올라와 있어야 한다.
@@ -2385,6 +2396,29 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
     if (!await _bindPdrSessionToFloor(floor)) return;
     await _confirmPdrAnchor(floorPoint, notifyLocationChanged: false);
+    if (!mounted) return;
+    if (!indoorNavigationDriver.currentCalibration.canRenderPosition) return;
+    // 되돌릴 손잡이를 함께 띄운다. 출발지가 실제 위치와 다르면 조용히 틀린
+    // 지점에서 안내가 시작되는데, 그건 사용자가 알아챌 수 있어야 한다.
+    showDebugToast(
+      context,
+      message: '$storeName에서 출발하는 것으로 보고 현재 위치를 잡았습니다.',
+      bottomOffset:
+          _mapShellBottomChromePx +
+          (_hasAnyRouteVisible ? _etaCardHeightPx : 0) +
+          12,
+      actionLabel: '위치 다시 지정',
+      onAction: () => unawaited(_resetAnchorForManualPlacement(floor)),
+    );
+  }
+
+  /// 자동으로 잡은 앵커를 버리고 사용자 지정 흐름으로 되돌린다.
+  Future<void> _resetAnchorForManualPlacement(String floor) async {
+    // changeFloor는 같은 층으로 불러도 걸음 세션과 앵커를 초기화하고
+    // awaitingPin으로 되돌린다 — 앵커만 버리는 전용 명령이 따로 없다.
+    await indoorNavigationDriver.changeFloor(floorId: floor);
+    if (!mounted) return;
+    await startLocationPlacement();
   }
 
   /// 같은 층 안에서 계산한 실내 경로를 지도에 얹는다. 활성 층이 목적지 층과
@@ -4664,7 +4698,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _pdrTrailState.beginNewSession();
       // 새 PDR 세션이다. 이전 세션의 보정을 들고 가면 첫 프레임이 지난 세션
       // 좌표에서 시작한다. 층·경로 컨텍스트는 그대로 두고 보정만 비운다.
-      _guidance.resetTracking();
+      //
+      // 진행률 기준점도 함께 버린다. 앵커가 옮겨졌는데 진행거리만 이전 세션
+      // 값으로 남으면, 다음 걸음에서 남은거리가 튀거나 재획득이 매 걸음 켜진다.
+      _guidance
+        ..resetTracking()
+        ..clearProgress();
     });
     return true;
   }
