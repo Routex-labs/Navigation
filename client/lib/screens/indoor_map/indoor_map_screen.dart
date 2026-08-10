@@ -23,7 +23,6 @@ import '../../features/indoor_navigation/application/indoor_location_estimate.da
 import '../../domain/dijkstra.dart';
 import '../../domain/multi_floor_router.dart';
 import '../../domain/route_guidance.dart';
-import '../../domain/route_checkpoint.dart';
 import '../../domain/route_movement.dart';
 import '../../domain/route_progress.dart';
 import '../../domain/transfer_route_geometry.dart';
@@ -80,9 +79,6 @@ const _placingHintTopPx = 236.0;
 /// 회전 허용 구간에서 이탈 재탐색을 유예하는 최대 시간.
 ///
 /// 정상 회전은 2~3걸음(약 2초) 안에 연결 간선으로 수렴한다. 상한을 두지 않으면
-/// 교차점 옆 복도로 실제로 걸어 나간 경우에 재탐색이 영영 걸리지 않는다.
-const _junctionRerouteHoldMs = 4000;
-
 /// 도면을 갈아 끼운 뒤 **완전 불투명**을 유지하는 시간.
 ///
 /// 교체 프레임만 가리고 곧바로 걷으면, 지도가 언제 바뀌었는지 모르게 슬쩍
@@ -249,7 +245,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   FloorPlan? _renderedFloorPlan;
   FloorGraph? _floorGraph;
   String _mapCalibrationVersion = 'unversioned';
-  IndoorRoute? _route;
+  IndoorRoute? get _route => _guidance.routeSegment;
 
   /// 층 간 경로일 때만 채워진다. [_route]는 이 다층 경로 중 지금 [_selectedFloor]
   /// 에 해당하는 세그먼트를 얹은 것이며, 층 selector로 다른 층 지도를 열면
@@ -262,19 +258,8 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   ///
   /// 경로가 없거나 PDR 위치가 없으면 null이다. 위치 추정에는 영향을 주지
   /// 않으며(단방향), 남은거리 표시와 진단에만 쓴다.
-  RouteProgress? _routeProgress;
-  RouteProgress? _measuredRouteProgress;
-  final TravelDirectionTracker _travelDirectionTracker =
-      TravelDirectionTracker();
-  final RouteCheckpointShadowTracker _checkpointShadowTracker =
-      RouteCheckpointShadowTracker();
-  IndoorRoute? _travelDirectionRoute;
-  int _routeGeneration = 0;
-
-  /// 다음 진행률 계산의 지역 탐색 기준. 경로·층 세그먼트가 바뀔 때마다
-  /// 반드시 null로 되돌려야 한다 — 이전 세그먼트 기준 진행거리를 그대로 두면
-  /// 새 세그먼트에서는 창 밖 값이 되어 매 걸음 재획득이 켜진다.
-  double? _lastRouteTraveledM;
+  RouteProgress? get _routeProgress => _guidance.displayProgress;
+  RouteProgress? get _measuredRouteProgress => _guidance.measuredProgress;
 
   /// 도착 안내를 띄운 뒤 경로를 자동으로 지우기까지 도는 타이머.
   ///
@@ -283,17 +268,6 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   /// 지워질 때도 반드시 취소한다 — 남겨두면 이미 없는 경로를 지우려는 콜백이
   /// 나중에 깨어난다.
   Timer? _arrivalAutoClearTimer;
-  int? _lastRouteProgressAcceptedSteps;
-  int? _lastRouteEvaluatedSteps;
-  int _offRouteEvidenceUpdates = 0;
-  int? _offRouteFirstEvidenceAtMs;
-
-  /// 회전 허용 구간에 들어간 시각. 그 구간 동안은 이탈 증거를 새로 쌓지 않는다.
-  ///
-  /// 교차점에서 후보가 갈리는 짧은 구간은 정상 회전이지 이탈이 아니다. 다만
-  /// 보호를 무제한으로 두면 실제로 다른 복도로 걸어간 경우를 영영 못 잡으므로
-  /// [_junctionRerouteHoldMs]로 상한을 둔다.
-  int? _junctionZoneEnteredAtMs;
   bool _rerouteInFlight = false;
   int _lastRerouteAtMs = 0;
 
@@ -633,7 +607,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.buildingId != widget.buildingId) {
       _autoEstimateAttemptKey = null;
-      _route = null;
+      _guidance.setRouteSegment(null);
       _multiFloorRoute = null;
       _routeDestination = null;
       _highlightedStoreId = null;
@@ -872,20 +846,15 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         // 그러면 지도에는 파란 경로가 그려지는데 ETA·턴바이턴 카드는 뜨지 않고
         // (카드는 목적지가 있어야 뜬다), 이탈 재탐색도 목적지가 없어 조용히
         // 멈춘다. 안내를 실제로 끝내는 곳(`_clearRoute`)에서만 지운다.
-        _route = null;
+        _guidance.setRouteSegment(null);
       } else {
         // 다층 경로: 이 층 세그먼트가 있으면 그것으로 갈아타고, 이 층에
         // 세그먼트가 없으면 지도 위에는 그리지 않되 다층 경로 자체는 유지.
-        _route = nextSegmentRoute;
+        _guidance.setRouteSegment(nextSegmentRoute);
       }
       // 세그먼트가 갈아타면 진행거리 기준점도 새 세그먼트 기준으로 다시
       // 잡아야 한다. 남겨두면 층을 바꾼 순간 남은거리가 튄다.
-      _routeProgress = null;
-      _lastRouteTraveledM = null;
-      _lastRouteProgressAcceptedSteps = null;
-      _lastRouteEvaluatedSteps = null;
-      _offRouteEvidenceUpdates = 0;
-      _offRouteFirstEvidenceAtMs = null;
+      _guidance.clearProgress();
       _highlightedStoreId = null;
     });
     // 고정점은 이 층 local m 좌표다. 층이 바뀌면 같은 숫자가 다른 자리를
@@ -1118,12 +1087,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     setState(() {
       _pdrTrailState.beginNewSession();
       _guidance.resetTracking();
-      _routeProgress = null;
-      _lastRouteTraveledM = null;
-      _lastRouteProgressAcceptedSteps = null;
-      _lastRouteEvaluatedSteps = null;
-      _offRouteEvidenceUpdates = 0;
-      _offRouteFirstEvidenceAtMs = null;
+      _guidance.clearProgress();
     });
     await _confirmPdrAnchor(
       PdrLocalPoint(node.xM, node.yM),
@@ -1170,15 +1134,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       setState(() {
         // 새 목적지를 받을 때마다 초기화해서, 이번 경로가 계산되면 지도가
         // 전체 경로에 맞춰 다시 줌아웃되게 한다(FloorPlanView의 null→값 전환).
-        _route = null;
+        _guidance.setRouteSegment(null);
         _multiFloorRoute = null;
         // 새 경로의 진행거리는 이전 경로와 아무 관계가 없다.
-        _routeProgress = null;
-        _lastRouteTraveledM = null;
-        _lastRouteProgressAcceptedSteps = null;
-        _lastRouteEvaluatedSteps = null;
-        _offRouteEvidenceUpdates = 0;
-        _offRouteFirstEvidenceAtMs = null;
+        _guidance.clearProgress();
       });
     }
 
@@ -1198,7 +1157,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     );
     if (!mounted) return;
     if (computedRoute == null) {
-      setState(() => _route = null);
+      setState(() => _guidance.setRouteSegment(null));
       widget.onRouteVisibleChanged?.call(false);
       _showPdrMessage('경로를 찾지 못했습니다. 다른 매장을 골라보거나 출발지를 다시 지정해주세요.');
       return;
@@ -1209,16 +1168,9 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     final seededProgress = _seedProgressAtCurrentRouteStart(route);
     final seededSteps = _pdrTrailState.snapshot?.preview.steps;
     setState(() {
-      _route = route;
+      _guidance.setRouteSegment(route);
       _multiFloorRoute = null;
-      _routeProgress = seededProgress;
-      _lastRouteTraveledM = seededProgress?.traveledM;
-      _lastRouteProgressAcceptedSteps = seededProgress == null
-          ? null
-          : seededSteps;
-      _lastRouteEvaluatedSteps = null;
-      _offRouteEvidenceUpdates = 0;
-      _offRouteFirstEvidenceAtMs = null;
+      _guidance.seedProgress(seededProgress, atSteps: seededSteps);
     });
     widget.onRouteVisibleChanged?.call(true);
     _startRouteRecording(route, isMultiFloor: false);
@@ -1265,7 +1217,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       floorId: _selectedFloor,
       edgeIds: route.edgeIds,
       nodeIds: route.nodeIds,
-      routeGeneration: _routeGeneration,
+      routeGeneration: _guidance.routeGeneration,
       routeDistanceM: route.distanceMeters,
       isMultiFloor: isMultiFloor,
     );
@@ -1317,7 +1269,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     FloorSwitchTiming.mark('multiFloorDijkstra');
     if (computedRoute == null || computedRoute.isEmpty) {
       setState(() {
-        _route = null;
+        _guidance.setRouteSegment(null);
         _multiFloorRoute = null;
       });
       widget.onRouteVisibleChanged?.call(false);
@@ -1336,15 +1288,11 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     // _selectFloor가 그 층 세그먼트를 자동으로 얹는다.
     setState(() {
       _multiFloorRoute = route;
-      _route = route.segmentForFloor(_selectedFloor ?? '')?.route;
-      _routeProgress = _selectedFloor == startFloor ? seededProgress : null;
-      _lastRouteTraveledM = _routeProgress?.traveledM;
-      _lastRouteProgressAcceptedSteps = _routeProgress == null
-          ? null
-          : seededSteps;
-      _lastRouteEvaluatedSteps = null;
-      _offRouteEvidenceUpdates = 0;
-      _offRouteFirstEvidenceAtMs = null;
+      _guidance.setRouteSegment(route.segmentForFloor(_selectedFloor ?? '')?.route);
+      _guidance.seedProgress(
+        _selectedFloor == startFloor ? seededProgress : null,
+        atSteps: seededSteps,
+      );
     });
     widget.onRouteVisibleChanged?.call(true);
     final currentSegmentRoute = _route;
@@ -1630,15 +1578,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     _arrivalAutoClearTimer?.cancel();
     _arrivalAutoClearTimer = null;
     setState(() {
-      _route = null;
+      _guidance.setRouteSegment(null);
       _multiFloorRoute = null;
       _routeDestination = null;
-      _routeProgress = null;
-      _lastRouteTraveledM = null;
-      _lastRouteProgressAcceptedSteps = null;
-      _lastRouteEvaluatedSteps = null;
-      _offRouteEvidenceUpdates = 0;
-      _offRouteFirstEvidenceAtMs = null;
+      _guidance.clearProgress();
       _guidanceTrailSession.clear();
     });
     // 안내가 끝나면 "안내가 지목한 탑승점"도 없다.
@@ -1801,7 +1744,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       progress: _routeProgress,
       travelDirectionState: inFloorTransfer
           ? TravelDirectionState.forward
-          : _travelDirectionTracker.state,
+          : _guidance.travelDirectionState,
       transferMode: segment?.transferModeToNext,
       allowArrival: allowArrival,
     );
@@ -2421,17 +2364,12 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
       if (!mounted) return;
     }
     setState(() {
-      _route = _preTransferRoute;
+      _guidance.setRouteSegment(_preTransferRoute);
       _multiFloorRoute = _preTransferMultiRoute;
       _routeDestination = _preTransferDestination;
       _pendingTransferMarker = null;
       _pendingArrivalNode = null;
-      _routeProgress = null;
-      _lastRouteTraveledM = null;
-      _lastRouteProgressAcceptedSteps = null;
-      _lastRouteEvaluatedSteps = null;
-      _offRouteEvidenceUpdates = 0;
-      _offRouteFirstEvidenceAtMs = null;
+      _guidance.clearProgress();
       _pendingArrivalRouteReady = false;
     });
     _clearTransferRouteBackups(keepUndoAnchor: false);
@@ -2613,6 +2551,10 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
   /// 경로는 이 계산의 **입력이 아니라 출력 쪽**에만 있다 — tracker에는 아무것도
   /// 되돌려주지 않으므로, 경로가 위치 추정을 끌어당기는 일이 구조적으로
   /// 불가능하다.
+  /// 세션에 진행률을 갱신시키고, 그 결과를 화면과 로그에 반영한다.
+  ///
+  /// 투영·hold·이탈 증거는 세션이 판단한다. 여기 남은 것은 화면 몫이다 —
+  /// 다시 그리기, 레코더, 그리고 실제 재탐색 실행.
   void _syncRouteProgress(
     CorridorTrackingResult? result, {
     int? confirmedSteps,
@@ -2620,211 +2562,58 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     double? orientationHeadingDeg,
     double? walkingHeadingDeg,
   }) {
-    final route = _route;
-    if (route == null || result == null) {
-      if (route == null) {
-        _travelDirectionRoute = null;
-        _travelDirectionTracker.reset();
+    final update = _guidance.updateProgress(
+      result,
+      confirmedSteps: confirmedSteps,
+      previewSteps: previewSteps,
+      orientationHeadingDeg: orientationHeadingDeg,
+      walkingHeadingDeg: walkingHeadingDeg,
+      rerouteInFlight: _rerouteInFlight,
+      onEscalator: _escalatorRide != null,
+    );
+
+    for (final advance in update.stepAdvances) {
+      _pdrDebugRecorder?.recordRouteStepAdvance(
+        advance.step,
+        transition: advance.transition,
+      );
+    }
+    for (final event in update.checkpointEvents) {
+      _pdrDebugRecorder?.recordCheckpointEvent(event);
+    }
+    if (update.routeChanged) {
+      final route = _route;
+      if (route != null) {
+        _recordRouteContext(route, isMultiFloor: _multiFloorRoute != null);
       }
-      if (_routeProgress != null || _lastRouteTraveledM != null) {
-        setState(() {
-          _routeProgress = null;
-          _measuredRouteProgress = null;
-          _lastRouteTraveledM = null;
-          _lastRouteProgressAcceptedSteps = null;
-          _lastRouteEvaluatedSteps = null;
-          _offRouteEvidenceUpdates = 0;
-          _offRouteFirstEvidenceAtMs = null;
-        });
-      }
+    }
+
+    if (update.cleared) {
+      setState(() {});
+    }
+    if (!update.hasProgress) {
       // 경로도 위치도 없는 상태다. 예약해 둔 자동 종료가 있으면 여기서 걷힌다.
       _syncArrivalAutoClear();
       return;
     }
 
-    if (!identical(_travelDirectionRoute, route)) {
-      _travelDirectionRoute = route;
-      _routeGeneration += 1;
-      _travelDirectionTracker.reset();
-      final checkpointGraph = _floorGraph;
-      if (checkpointGraph != null) {
-        _checkpointShadowTracker.configure(
-          routeGeneration: _routeGeneration,
-          route: route,
-          graph: checkpointGraph,
-        );
-      }
-      _recordRouteContext(route, isMultiFloor: _multiFloorRoute != null);
-    }
-    final graph = _floorGraph;
-    if (graph != null) {
-      for (final optimisticStep in result.optimisticStepAdvances) {
-        final routeStep = adaptOptimisticStepToRoute(
-          step: optimisticStep,
-          graph: graph,
-          routeEdgeIds: route.edgeIds,
-          routeNodeIds: route.nodeIds,
-          orientationHeadingDeg: orientationHeadingDeg,
-          walkingHeadingDeg: walkingHeadingDeg,
-        );
-        final transition = _travelDirectionTracker.apply(routeStep);
-        _pdrDebugRecorder?.recordRouteStepAdvance(
-          routeStep,
-          transition: transition,
-        );
-        for (final checkpointEvent in _checkpointShadowTracker.apply(
-          step: routeStep,
-          travelDirectionState: _travelDirectionTracker.state,
-          tracker: result,
-          graph: graph,
-          rerouteInFlight: _rerouteInFlight,
-        )) {
-          _pdrDebugRecorder?.recordCheckpointEvent(checkpointEvent);
-        }
-      }
+    // 재탐색은 세션이 "걸어도 된다"고 한 뒤에 화면이 실행한다. 목적지·그래프·
+    // 비동기 계산이 화면 몫이라 세션에 두면 위젯을 알게 된다.
+    if (update.shouldReroute &&
+        DateTime.now().millisecondsSinceEpoch - _lastRerouteAtMs >= 2000) {
+      unawaited(_rerouteFromCurrentPosition());
     }
 
-    // 에스컬레이터 위에서는 진행 상태를 갱신하지 않는다. 위치는 도착 지점에
-    // 고정돼 있고 방향은 에스컬레이터가 정하므로, 이 구간의 투영은 "반대
-    // 방향입니다" 같은 엉뚱한 안내만 만든다(실측에서 탑승 직후 떴다).
-    //
-    // 탑승점에 고정한 구간도 같다. 마커만 세우고 진행률은 raw 위치로 계속
-    // 계산하면, 화면은 탑승점에 서 있는데 안내는 "경로를 벗어났다"고 판단해
-    // **재탐색이 돌아 버린다** — 곧 층이 바뀔 위치에서 이 층 경로를 새로 그리는
-    // 최악의 타이밍이다. 남은거리·안내 문구도 마지막 값에 그대로 멈춘다.
-    if (_escalatorRide != null || _guidance.boardingHoldPointM != null) return;
-
-    final localPosition = LocalPoint(
-      result.previewPosition.eastM,
-      result.previewPosition.northM,
-    );
-    final first = route.pointsLocalM.isEmpty ? null : route.pointsLocalM.first;
-    final atNewRouteStart =
-        _routeProgress == null &&
-        first != null &&
-        math.sqrt(
-              math.pow(localPosition.x - first.x, 2) +
-                  math.pow(localPosition.y - first.y, 2),
-            ) <=
-            0.5;
-    final progress = atNewRouteStart
-        ? seedRouteProgressAtRouteStart(
-            routePointsLocalM: route.pointsLocalM,
-            routeEdgeIds: route.edgeIds.toSet(),
-            currentEdgeId: result.optimisticEdgeId,
-            headingDeg: orientationHeadingDeg,
-          )
-        : computeRouteProgress(
-            routePointsLocalM: route.pointsLocalM,
-            routeEdgeIds: route.edgeIds.toSet(),
-            // 표시 위치와 같은 값을 쓴다. 확정(초록) 위치로 계산하면 화면의
-            // 마커와 남은거리가 서로 다른 시점을 가리킨다.
-            position: localPosition,
-            currentEdgeId: result.optimisticEdgeId,
-            // orientation은 경로 접선과의 오차를 진단하는 데만 쓴다. 역방향
-            // 안내와 display 후퇴 허용은 peak traversal 상태기가 결정한다.
-            headingDeg: orientationHeadingDeg,
-            previousTraveledM: _lastRouteTraveledM,
-          );
-    if (progress == null) return;
-
-    final previousDisplayProgress = _routeProgress;
-    final responsiveSteps = previewSteps ?? confirmedSteps;
-    _maybeRerouteAfterDeviation(progress, result, responsiveSteps);
-    final holdForPendingDeviation =
-        !progress.onRouteEdge &&
-        _offRouteEvidenceUpdates > 0 &&
-        previousDisplayProgress != null;
-    final holdForImplausibleJump = shouldHoldImplausibleRouteJump(
-      previous: previousDisplayProgress,
-      candidate: progress,
-      acceptedAtSteps: _lastRouteProgressAcceptedSteps,
-      currentSteps: responsiveSteps,
-    );
-    // 실제 역방향 peak가 확정되기 전에 생긴 display 후퇴만 보류한다.
-    final holdForRegression = shouldHoldDisplayRouteRegression(
-      previous: previousDisplayProgress,
-      candidate: progress,
-      travelDirectionState: _travelDirectionTracker.state,
-    );
-    final holdPrevious =
-        holdForPendingDeviation || holdForImplausibleJump || holdForRegression;
-    final displayProgress = holdPrevious ? previousDisplayProgress! : progress;
-    setState(() {
-      _routeProgress = displayProgress;
-      _measuredRouteProgress = progress;
-      _lastRouteTraveledM = progress.traveledM;
-      if (!holdPrevious) {
-        _lastRouteProgressAcceptedSteps = responsiveSteps;
-      }
-    });
-    _pdrDebugRecorder?.recordRouteProgress(
-      progress,
-      displayProgress: displayProgress,
-      holdReason: holdForPendingDeviation
-          ? 'pendingDeviation'
-          : holdForImplausibleJump
-          ? 'implausibleJump'
-          : holdForRegression
-          ? 'regression'
-          : null,
-    );
+    final measured = update.measuredProgress;
+    setState(() {});
+    if (measured != null) {
+      _pdrDebugRecorder?.recordRouteProgress(
+        measured,
+        displayProgress: update.displayProgress,
+        holdReason: update.holdReason,
+      );
+    }
     _syncArrivalAutoClear();
-  }
-
-  /// 현재 간선이 안내 경로에 속하지 않거나 경로에서 확연히 떨어진 상태가
-  /// preview 기준 여러 위치 갱신 동안 이어지면 목적지는 유지하고 현 위치에서
-  /// 경로만 다시 계산한다.
-  ///
-  /// 걸음 개수를 임계값으로 쓰면 네이티브 이벤트 한 번에 여러 걸음이 묶여
-  /// 들어올 때 한 프레임만으로 이탈이 확정될 수 있다. 시간과 독립 갱신 횟수를
-  /// 함께 요구해 교차점 흔들림은 흡수하되 실제 이탈은 보행 중 약 1~2초 안에
-  /// 재탐색한다. confirmed 배치가 아니라 주황 preview 걸음을 써서 iOS의
-  /// 2.5초 pedometer batch를 세 번 기다리지 않는다.
-  void _maybeRerouteAfterDeviation(
-    RouteProgress progress,
-    CorridorTrackingResult result,
-    int? steps,
-  ) {
-    final nowMsForZone = DateTime.now().millisecondsSinceEpoch;
-    if (result.isInJunctionZone) {
-      _junctionZoneEnteredAtMs ??= nowMsForZone;
-    } else {
-      _junctionZoneEnteredAtMs = null;
-    }
-
-    final strongDeviation = progress.offsetM >= 4 || progress.reacquired;
-    final deviated = !progress.onRouteEdge || strongDeviation;
-    if (!deviated ||
-        result.optimisticEdgeId == null ||
-        result.state == CorridorTrackingState.uncertain) {
-      _offRouteEvidenceUpdates = 0;
-      _offRouteFirstEvidenceAtMs = null;
-      _lastRouteEvaluatedSteps = steps;
-      return;
-    }
-    // 교차점을 통과하는 동안에는 이탈 증거를 **새로 쌓지 않는다**. 기존 증거는
-    // 지우지 않는다 — 구간을 빠져나온 뒤 실제 이탈이면 그 자리에서 이어 간다.
-    final junctionSinceMs = _junctionZoneEnteredAtMs;
-    if (junctionSinceMs != null &&
-        nowMsForZone - junctionSinceMs < _junctionRerouteHoldMs) {
-      return;
-    }
-    if (steps == null || steps == _lastRouteEvaluatedSteps) return;
-    _lastRouteEvaluatedSteps = steps;
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
-    _offRouteFirstEvidenceAtMs ??= nowMs;
-    _offRouteEvidenceUpdates++;
-    final evidenceDurationMs = nowMs - _offRouteFirstEvidenceAtMs!;
-    final requiredUpdates = strongDeviation ? 2 : 3;
-    final requiredDurationMs = strongDeviation ? 700 : 1200;
-    if (_offRouteEvidenceUpdates < requiredUpdates ||
-        evidenceDurationMs < requiredDurationMs ||
-        _rerouteInFlight) {
-      return;
-    }
-    if (nowMs - _lastRerouteAtMs < 2000) return;
-    unawaited(_rerouteFromCurrentPosition());
   }
 
   Future<void> _rerouteFromCurrentPosition() async {
@@ -2869,9 +2658,6 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
         );
       }
       _lastRerouteAtMs = DateTime.now().millisecondsSinceEpoch;
-      _offRouteEvidenceUpdates = 0;
-      _offRouteFirstEvidenceAtMs = null;
-      _lastRouteEvaluatedSteps = null;
     } finally {
       _rerouteInFlight = false;
     }
@@ -3017,12 +2803,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
     setState(() {
       _pdrTrailState.beginNewSession();
       _guidance.resetTracking();
-      _routeProgress = null;
-      _lastRouteTraveledM = null;
-      _lastRouteProgressAcceptedSteps = null;
-      _lastRouteEvaluatedSteps = null;
-      _offRouteEvidenceUpdates = 0;
-      _offRouteFirstEvidenceAtMs = null;
+      _guidance.clearProgress();
     });
     return true;
   }
@@ -3636,7 +3417,7 @@ class IndoorMapBodyState extends State<IndoorMapBody> {
             child: _RouteProgressBadge(
               progress: _routeProgress!,
               measuredProgress: _measuredRouteProgress,
-              travelDirectionState: _travelDirectionTracker.state,
+              travelDirectionState: _guidance.travelDirectionState,
             ),
           ),
 

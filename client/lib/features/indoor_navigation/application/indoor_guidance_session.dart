@@ -1,5 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
+import '../../../domain/route_checkpoint.dart';
+import '../../../domain/route_movement.dart';
+import '../../../domain/route_progress.dart';
 import '../../../models/building_graph.dart';
 import '../../../models/floor_graph.dart';
 import '../contract/altitude_sample.dart';
@@ -8,7 +13,9 @@ import '../contract/raw_motion_activity.dart';
 import 'corridor_position_tracker.dart';
 import 'corridor_tracking_session.dart';
 import 'escalator_transition_detector.dart';
+import '../../../models/indoor_route.dart';
 import 'indoor_guidance_position.dart';
+import 'indoor_guidance_progress.dart';
 import 'indoor_location_estimate.dart';
 
 /// 기압 샘플 한 건이 만들어 낸 층 이동 신호들.
@@ -72,6 +79,13 @@ PdrLocalPoint? routeBoardingHoldPoint({
   final node = graph?.nodes.where((n) => n.id == boardingNodeId).firstOrNull;
   return node == null ? null : PdrLocalPoint(node.xM, node.yM);
 }
+
+/// 교차점을 지나는 동안 이탈 증거를 새로 쌓지 않는 시간.
+///
+/// 교차점에서는 어느 간선에 있는지가 잠깐 흔들린다. 이 보호가 없으면 통과하는
+/// 것만으로 재탐색이 돈다. 반대로 무한정 보호하면 교차점 옆 복도로 실제로 걸어
+/// 나간 경우에 재탐색이 영영 걸리지 않는다.
+const junctionRerouteHoldMs = 4000;
 
 /// 실내 안내에서 **"지금 어디에 있는가"** 하나를 소유하는 headless 세션.
 ///
@@ -404,6 +418,307 @@ class IndoorGuidanceSession {
       source: GuidancePositionSource.estimate,
       accuracyM: estimate.accuracyMeters,
     );
+  }
+
+  // --- 경로 진행률 ---
+  //
+  // 진행률에 얽힌 상태를 **여기 한 곳에** 모은다. 예전에는 화면이
+  // `_routeProgress`·`_lastRouteTraveledM`·`_lastRouteProgressAcceptedSteps`·
+  // `_lastRouteEvaluatedSteps`와 이탈 증거 카운터를 직접 들고, 경로를 새로 뽑을
+  // 때마다 열 군데 가까이에서 같은 묶음을 손으로 맞췄다. 한 곳만 빠뜨려도 새
+  // 경로의 남은거리가 이전 경로 기준으로 계산된다.
+
+  final TravelDirectionTracker _travelDirection = TravelDirectionTracker();
+  final RouteCheckpointShadowTracker _checkpoints =
+      RouteCheckpointShadowTracker();
+
+  IndoorRoute? _routeSegment;
+  IndoorRoute? _progressRoute;
+  int _routeGeneration = 0;
+  RouteProgress? _displayProgress;
+  RouteProgress? _measuredProgress;
+  double? _lastTraveledM;
+  int? _lastAcceptedSteps;
+  int? _lastEvaluatedSteps;
+
+  int _offRouteEvidenceUpdates = 0;
+  int? _offRouteFirstEvidenceAtMs;
+  int? _junctionZoneEnteredAtMs;
+
+  /// 지금 이 층에 그려진 경로 세그먼트. 화면도 이 값을 읽어 폴리라인을 그린다.
+  IndoorRoute? get routeSegment => _routeSegment;
+
+  /// 화면이 그리는 진행률. 튐·후퇴를 보류한 결과다.
+  RouteProgress? get displayProgress => _displayProgress;
+
+  /// 보류 전 원본. 진단 로그와 도착 판정이 쓴다.
+  RouteProgress? get measuredProgress => _measuredProgress;
+
+  TravelDirectionState get travelDirectionState => _travelDirection.state;
+  int get routeGeneration => _routeGeneration;
+
+  /// 이 층에 그릴 세그먼트를 바꾼다. 진행률 기준점은 [seedProgress]가 정한다.
+  void setRouteSegment(IndoorRoute? route) {
+    _routeSegment = route;
+  }
+
+  /// 진행률 기준점을 통째로 다시 잡는다.
+  ///
+  /// 경로를 새로 뽑았거나 층 세그먼트를 갈아탄 직후다. [progress]가 null이면
+  /// "아직 아무것도 모른다"는 상태이고, 다음 걸음이 시작점 근처면
+  /// [updateProgress]가 알아서 seed한다.
+  void seedProgress(RouteProgress? progress, {int? atSteps}) {
+    _displayProgress = progress;
+    _measuredProgress = progress;
+    _lastTraveledM = progress?.traveledM;
+    _lastAcceptedSteps = progress == null ? null : atSteps;
+    _lastEvaluatedSteps = null;
+    _offRouteEvidenceUpdates = 0;
+    _offRouteFirstEvidenceAtMs = null;
+  }
+
+  /// 안내가 끝났다. 진행률과 이탈 증거를 모두 버린다.
+  void clearProgress() {
+    _progressRoute = null;
+    _travelDirection.reset();
+    seedProgress(null);
+  }
+
+  /// 보정 위치를 이 층 경로에 투영해 진행 상태를 낸다.
+  ///
+  /// 경로는 이 계산의 **입력이 아니라 출력 쪽**에만 있다 — tracker에는 아무것도
+  /// 되돌려주지 않으므로, 경로가 위치 추정을 끌어당기는 일이 구조적으로
+  /// 불가능하다.
+  GuidanceProgressUpdate updateProgress(
+    CorridorTrackingResult? result, {
+    int? previewSteps,
+    int? confirmedSteps,
+    double? orientationHeadingDeg,
+    double? walkingHeadingDeg,
+    bool rerouteInFlight = false,
+    bool onEscalator = false,
+    int? nowMs,
+  }) {
+    final route = _routeSegment;
+    if (route == null || result == null) {
+      if (route == null) {
+        _progressRoute = null;
+        _travelDirection.reset();
+      }
+      final hadProgress = _displayProgress != null || _lastTraveledM != null;
+      if (hadProgress) seedProgress(null);
+      return GuidanceProgressUpdate(cleared: hadProgress);
+    }
+
+    final routeChanged = !identical(_progressRoute, route);
+    if (routeChanged) {
+      _progressRoute = route;
+      _routeGeneration += 1;
+      _travelDirection.reset();
+      final graph = _graph;
+      if (graph != null) {
+        _checkpoints.configure(
+          routeGeneration: _routeGeneration,
+          route: route,
+          graph: graph,
+        );
+      }
+    }
+
+    final advances = <GuidanceStepAdvance>[];
+    final events = <RouteCheckpointEvent>[];
+    final graph = _graph;
+    if (graph != null) {
+      for (final optimisticStep in result.optimisticStepAdvances) {
+        final routeStep = adaptOptimisticStepToRoute(
+          step: optimisticStep,
+          graph: graph,
+          routeEdgeIds: route.edgeIds,
+          routeNodeIds: route.nodeIds,
+          orientationHeadingDeg: orientationHeadingDeg,
+          walkingHeadingDeg: walkingHeadingDeg,
+        );
+        final transition = _travelDirection.apply(routeStep);
+        advances.add(
+          GuidanceStepAdvance(step: routeStep, transition: transition),
+        );
+        events.addAll(
+          _checkpoints.apply(
+            step: routeStep,
+            travelDirectionState: _travelDirection.state,
+            tracker: result,
+            graph: graph,
+            rerouteInFlight: rerouteInFlight,
+          ),
+        );
+      }
+    }
+
+    // 에스컬레이터 위나 탑승점 고정 구간에서는 진행 상태를 갱신하지 않는다.
+    // 위치가 한 지점에 묶여 있어 그 투영은 "경로를 벗어났다"는 오판만 만들고,
+    // 곧 층이 바뀔 자리에서 재탐색을 돌린다.
+    if (onEscalator || _boardingHoldPointM != null) {
+      return GuidanceProgressUpdate(
+        displayProgress: _displayProgress,
+        measuredProgress: _measuredProgress,
+        stepAdvances: advances,
+        checkpointEvents: events,
+        travelDirectionState: _travelDirection.state,
+        routeChanged: routeChanged,
+      );
+    }
+
+    final localPosition = LocalPoint(
+      result.previewPosition.eastM,
+      result.previewPosition.northM,
+    );
+    final first = route.pointsLocalM.isEmpty ? null : route.pointsLocalM.first;
+    final atNewRouteStart =
+        _displayProgress == null &&
+        first != null &&
+        math.sqrt(
+              math.pow(localPosition.x - first.x, 2) +
+                  math.pow(localPosition.y - first.y, 2),
+            ) <=
+            0.5;
+    final progress = atNewRouteStart
+        ? seedRouteProgressAtRouteStart(
+            routePointsLocalM: route.pointsLocalM,
+            routeEdgeIds: route.edgeIds.toSet(),
+            currentEdgeId: result.optimisticEdgeId,
+            headingDeg: orientationHeadingDeg,
+          )
+        : computeRouteProgress(
+            routePointsLocalM: route.pointsLocalM,
+            routeEdgeIds: route.edgeIds.toSet(),
+            // 표시 위치와 같은 값을 쓴다. 확정 위치로 계산하면 화면의 마커와
+            // 남은거리가 서로 다른 시점을 가리킨다.
+            position: localPosition,
+            currentEdgeId: result.optimisticEdgeId,
+            // orientation은 경로 접선과의 오차를 진단하는 데만 쓴다. 역방향
+            // 안내와 display 후퇴 허용은 peak traversal 상태기가 결정한다.
+            headingDeg: orientationHeadingDeg,
+            previousTraveledM: _lastTraveledM,
+          );
+    if (progress == null) {
+      return GuidanceProgressUpdate(
+        displayProgress: _displayProgress,
+        measuredProgress: _measuredProgress,
+        stepAdvances: advances,
+        checkpointEvents: events,
+        travelDirectionState: _travelDirection.state,
+        routeChanged: routeChanged,
+      );
+    }
+
+    final previous = _displayProgress;
+    final responsiveSteps = previewSteps ?? confirmedSteps;
+    // **순서가 중요하다.** 이탈 증거를 이번 프레임 값으로 올린 **뒤에** hold를
+    // 판단해야 한다. 뒤집으면 이탈 첫 프레임의 표시값이 한 박자 늦게 붙들려,
+    // 재탐색 직전에 마커가 경로 밖으로 한 번 튀었다 돌아온다.
+    final shouldReroute = _updateDeviationEvidence(
+      progress: progress,
+      result: result,
+      steps: responsiveSteps,
+      rerouteInFlight: rerouteInFlight,
+      nowMs: nowMs ?? _nowMs(),
+    );
+    final holdReason = _holdReason(previous, progress, responsiveSteps);
+    final display = holdReason == null ? progress : previous!;
+
+    _displayProgress = display;
+    _measuredProgress = progress;
+    _lastTraveledM = progress.traveledM;
+    if (holdReason == null) _lastAcceptedSteps = responsiveSteps;
+
+    return GuidanceProgressUpdate(
+      displayProgress: display,
+      measuredProgress: progress,
+      holdReason: holdReason,
+      stepAdvances: advances,
+      checkpointEvents: events,
+      travelDirectionState: _travelDirection.state,
+      routeChanged: routeChanged,
+      shouldReroute: shouldReroute,
+    );
+  }
+
+  /// 이탈 증거를 갱신하고, 재탐색을 걸 때가 됐으면 true.
+  ///
+  /// 걸음 개수를 임계값으로 쓰면 네이티브 이벤트 한 번에 여러 걸음이 묶여 들어올
+  /// 때 한 프레임만으로 이탈이 확정될 수 있다. 시간과 독립 갱신 횟수를 함께
+  /// 요구해 교차점 흔들림은 흡수하되 실제 이탈은 1~2초 안에 잡는다.
+  bool _updateDeviationEvidence({
+    required RouteProgress progress,
+    required CorridorTrackingResult result,
+    required int? steps,
+    required bool rerouteInFlight,
+    required int nowMs,
+  }) {
+    if (result.isInJunctionZone) {
+      _junctionZoneEnteredAtMs ??= nowMs;
+    } else {
+      _junctionZoneEnteredAtMs = null;
+    }
+
+    final strongDeviation = progress.offsetM >= 4 || progress.reacquired;
+    final deviated = !progress.onRouteEdge || strongDeviation;
+    if (!deviated ||
+        result.optimisticEdgeId == null ||
+        result.state == CorridorTrackingState.uncertain) {
+      _offRouteEvidenceUpdates = 0;
+      _offRouteFirstEvidenceAtMs = null;
+      _lastEvaluatedSteps = steps;
+      return false;
+    }
+    // 교차점을 통과하는 동안에는 증거를 **새로 쌓지 않는다**. 기존 증거는
+    // 지우지 않는다 — 구간을 빠져나온 뒤 실제 이탈이면 그 자리에서 이어 간다.
+    final junctionSinceMs = _junctionZoneEnteredAtMs;
+    if (junctionSinceMs != null &&
+        nowMs - junctionSinceMs < junctionRerouteHoldMs) {
+      return false;
+    }
+    if (steps == null || steps == _lastEvaluatedSteps) return false;
+    _lastEvaluatedSteps = steps;
+    _offRouteFirstEvidenceAtMs ??= nowMs;
+    _offRouteEvidenceUpdates++;
+    final evidenceDurationMs = nowMs - _offRouteFirstEvidenceAtMs!;
+    final requiredUpdates = strongDeviation ? 2 : 3;
+    final requiredDurationMs = strongDeviation ? 700 : 1200;
+    return _offRouteEvidenceUpdates >= requiredUpdates &&
+        evidenceDurationMs >= requiredDurationMs &&
+        !rerouteInFlight;
+  }
+
+  /// 표시값을 이전 것으로 붙들 이유가 있으면 그 이름, 없으면 null.
+  ///
+  /// 이름을 돌려주는 이유는 로그 때문이다. "붙들었다"만 알면 실측에서 어느
+  /// 조건이 걸렸는지 되짚을 수 없다.
+  String? _holdReason(
+    RouteProgress? previous,
+    RouteProgress candidate,
+    int? responsiveSteps,
+  ) {
+    if (previous == null) return null;
+    if (!candidate.onRouteEdge && _offRouteEvidenceUpdates > 0) {
+      return 'pendingDeviation';
+    }
+    if (shouldHoldImplausibleRouteJump(
+      previous: previous,
+      candidate: candidate,
+      acceptedAtSteps: _lastAcceptedSteps,
+      currentSteps: responsiveSteps,
+    )) {
+      return 'implausibleJump';
+    }
+    if (shouldHoldDisplayRouteRegression(
+      previous: previous,
+      candidate: candidate,
+      travelDirectionState: _travelDirection.state,
+    )) {
+      return 'regression';
+    }
+    return null;
   }
 
   /// 마커 원뿔이 쓰는 층 기준 방향.
