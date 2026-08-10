@@ -695,6 +695,20 @@ class _MapShellScreenState extends State<MapShellScreen> {
     );
     if (!mounted || picked == null) return;
 
+    // **건물 안 매장이면 마지막 도보는 매장이 아니라 문으로 간다.**
+    //
+    // 매장 좌표를 그대로 끝점으로 주면 TMAP이 그 좌표에서 가장 가까운 도로로
+    // 스냅하는데, 그 도로가 내린 곳 반대편일 수 있다 — 실제로 하차 지점 바로
+    // 옆에 문이 있는데 건물을 빙 돌아 반대편 문으로 안내한 화면을 봤다.
+    // 내린 자리에서 가장 가까운 문을 우리가 직접 고른다.
+    final dropPoint = picked.legs.last.points.isEmpty
+        ? destination.point
+        : picked.legs.last.points.last;
+    final indoorStore = _indoorStoreOf(destination);
+    final walkTarget =
+        (indoorStore == null ? null : outdoor.entranceNearestTo(dropPoint)) ??
+        destination.point;
+
     // 고른 **뒤에** 앞뒤 도보를 채운다. 후보는 최대 15개까지 오는데, 목록을
     // 만들자고 후보마다 두 번씩 보행자 API를 부르면 30번이 나가고 사용자는
     // 그중 하나만 본다. 목록 단계에서 도보가 없어도 총 소요시간은 정확하다 —
@@ -702,15 +716,37 @@ class _MapShellScreenState extends State<MapShellScreen> {
     final completed = await _withTransitWalkLegs(
       picked,
       origin: origin,
-      destination: destination.point,
+      destination: walkTarget,
     );
     if (!mounted) return;
 
     await _outdoorKey.currentState?.showTransitRoute(
       completed,
-      destination: destination.point,
+      destination: walkTarget,
       label: '${destination.title}까지',
       origin: origin,
+    );
+    if (!mounted || indoorStore == null) return;
+
+    // 실내 구간은 **showTransitRoute 뒤에** 푼다. 그 함수가 시작할 때 pending을
+    // 비우므로, 앞에서 풀면 쌓아 둔 실내 구간이 곧바로 지워진다.
+    await _outdoorKey.currentState?.prepareIndoorLegFromDrop(
+      indoorStore,
+      dropPoint: dropPoint,
+    );
+  }
+
+  /// 이 후보가 **우리 건물 안 매장**이면 실내 라우팅용 값으로 바꾼다. 층이나
+  /// 노드가 없으면 null — 좌표까지만 안내할 수 있는 바깥 장소다.
+  PoiSearchResult? _indoorStoreOf(DirectionsCandidate candidate) {
+    final floor = candidate.floor;
+    final nodeId = candidate.nodeId;
+    if (floor == null || nodeId == null) return null;
+    return PoiSearchResult(
+      name: candidate.title,
+      floor: floor,
+      point: candidate.point,
+      nodeId: nodeId,
     );
   }
 

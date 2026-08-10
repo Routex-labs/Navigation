@@ -1955,6 +1955,50 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     );
   }
 
+  /// [point]에서 가장 가까운 지상 출입구 좌표. 문 데이터가 없으면 null이다.
+  ///
+  /// 대중교통 안내가 **내린 자리 기준으로** 문을 고를 때 쓴다. 예전에는 이
+  /// 판단이 없어 하차 지점과 무관하게 매장 좌표로 도보 경로를 그렸고, 그러면
+  /// TMAP이 매장에서 가장 가까운 도로로 스냅해 **내린 곳 반대편 문**으로
+  /// 데려가는 일이 실제로 있었다.
+  ll.LatLng? entranceNearestTo(ll.LatLng point) =>
+      nearestEntrance(_groundEntrances, point)?.point;
+
+  /// 대중교통에서 내린 뒤 들어갈 문을 정하고, 그 문에서 매장까지의 실내 구간을
+  /// 미리 풀어 둔다. 실제로 그리는 것은 [_syncRouteLayer]다(밖에서는 미리보기,
+  /// 건물에 들어가면 [_activatePendingIndoorRoute]가 승격한다).
+  ///
+  /// [showTransitRoute]가 시작할 때 pending을 비우므로 **그 뒤에** 불러야 한다.
+  /// 순서를 뒤집으면 여기서 쌓은 실내 구간이 곧바로 지워진다.
+  Future<void> prepareIndoorLegFromDrop(
+    PoiSearchResult destination, {
+    required ll.LatLng dropPoint,
+  }) async {
+    final building = _building;
+    final endNodeId = destination.nodeId;
+    if (building == null || endNodeId == null || destination.floor.isEmpty) {
+      return;
+    }
+    final entrance = nearestEntrance(_groundEntrances, dropPoint);
+    if (entrance == null) return;
+
+    final graph =
+        _journeyBuildingGraph ??
+        await buildingRepository.getBuildingGraph(building.id);
+    if (!mounted) return;
+    final leg = graph == null
+        ? null
+        : computeMultiFloorRoute(graph, entrance.nodeId, endNodeId);
+    setState(() {
+      _journeyBuildingGraph = graph;
+      _journeyEntrance = entrance;
+      _pendingIndoorDestination = destination;
+      _pendingIndoorRoute = (leg == null || leg.isEmpty) ? null : leg;
+    });
+    _syncRouteLayer();
+    _syncIndoorDestinationLayer();
+  }
+
   /// 건물에 들어간 순간, 미리 풀어 둔 실내 구간을 실제 안내로 승격한다.
   ///
   /// **야외 구간은 지우지 않고 들고 있는다.** 예전에는 지웠는데, 그러면 건물에
@@ -2910,12 +2954,27 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       kRouteSubwayBadgeImageName,
       await renderModeBadgeIcon(Icons.subway_rounded, const Color(0xFF3A5DAE)),
     );
-    await controller.addSymbolLayer(
-      _transitBadgeSourceId,
-      _transitBadgeLayerId,
-      routeModeBadgeProps(),
-      enableInteraction: false,
-    );
+    // **아이콘 이름마다 레이어를 하나씩 둔다.** `iconImage`에 `['get', ...]`
+    // 표현식을 넣는 방식은 이 바인딩에서 조용히 실패할 수 있어(아이콘이 아예 안
+    // 뜨고 오류도 없다), 이름을 상수로 박고 필터로 가른다. 종류가 셋뿐이라
+    // 레이어 셋이 표현식 하나보다 싸다.
+    for (final entry in const {
+      kRouteWalkBadgeImageName: _transitBadgeLayerId,
+      kRouteBusBadgeImageName: '$_transitBadgeLayerId-bus',
+      kRouteSubwayBadgeImageName: '$_transitBadgeLayerId-subway',
+    }.entries) {
+      await controller.addSymbolLayer(
+        _transitBadgeSourceId,
+        entry.value,
+        routeModeBadgeProps(entry.key),
+        filter: [
+          '==',
+          ['get', 'icon'],
+          entry.key,
+        ],
+        enableInteraction: false,
+      );
+    }
 
     await controller.addSource(
       _transferRouteSourceId,

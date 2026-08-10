@@ -218,24 +218,27 @@ Future<Uint8List> renderModeBadgeIcon(IconData icon, Color background) async {
   return byteData!.buffer.asUint8List();
 }
 
-/// 구간 시작 배지 레이어. 아이콘 이름은 feature 속성에서 읽는다.
-SymbolLayerProperties routeModeBadgeProps() => const SymbolLayerProperties(
-  iconImage: ['get', 'icon'],
-  iconSize: [
-    'interpolate',
-    ['linear'],
-    ['zoom'],
-    13,
-    0.34,
-    18,
-    0.52,
-  ],
-  // 화살표와 달리 **화면 기준**이다. 배지는 선을 따라 눕는 것이 아니라 늘 똑바로
-  // 서 있어야 아이콘이 읽힌다.
-  iconRotationAlignment: 'viewport',
-  iconAllowOverlap: true,
-  iconIgnorePlacement: true,
-);
+/// 구간 시작 배지 레이어. [imageName] 하나만 그리고, 어떤 feature를 그릴지는
+/// 호출부가 필터로 정한다 — `iconImage`에 표현식을 넣는 방식은 이 바인딩에서
+/// 조용히 실패할 수 있어(아이콘이 안 뜨는데 오류도 없다) 이름을 상수로 박는다.
+SymbolLayerProperties routeModeBadgeProps(String imageName) =>
+    SymbolLayerProperties(
+      iconImage: imageName,
+      iconSize: const [
+        'interpolate',
+        ['linear'],
+        ['zoom'],
+        13,
+        0.34,
+        18,
+        0.52,
+      ],
+      // 화살표와 달리 **화면 기준**이다. 배지는 선을 따라 눕는 것이 아니라 늘
+      // 똑바로 서 있어야 아이콘이 읽힌다.
+      iconRotationAlignment: 'viewport',
+      iconAllowOverlap: true,
+      iconIgnorePlacement: true,
+    );
 
 /// 건물 **안** 구간의 선 색. 야외 본선([kRouteLineColor])보다 연하다.
 ///
