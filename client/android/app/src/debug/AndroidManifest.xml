@@ -4,4 +4,12 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- 로컬 백엔드를 평문 http로 붙여 볼 때 필요하다. Android 9부터 평문 HTTP가 기본
+         차단이라, 이것이 없으면 요청이 앱 안에서 조용히 실패한다 — 화면에는 그냥
+         "정보 없음"으로 보여서 원인을 찾기 어렵다.
+
+         디버그 소스 세트에만 둔다. 릴리스 빌드는 이 파일을 병합하지 않으므로 배포된
+         앱은 여전히 HTTPS만 쓴다(배포 백엔드는 Cloud Run HTTPS다). -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>

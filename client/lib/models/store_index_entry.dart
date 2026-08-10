@@ -19,6 +19,7 @@ class StoreIndexEntry {
     required this.floorName,
     this.category,
     this.subcategory,
+    this.kind = 'store',
     this.entranceNodeId,
   });
 
@@ -42,6 +43,16 @@ class StoreIndexEntry {
   /// 소분류(예: 여성패션). 선택.
   final String? subcategory;
 
+  /// 상세와 같은 분류(`store`·`facility`·`excluded`). 서버가 준다.
+  ///
+  /// 이 색인에는 주차 787·에스컬레이터 152·엘리베이터 68이 섞여 있다(전체의 61%).
+  /// 매장만 골라야 하는 화면(근처 매장)이 소분류 목록을 여기에 베껴 판정하면, 서버가
+  /// 규칙을 고친 날 두 화면이 서로 다른 말을 한다.
+  ///
+  /// 기본값이 `store`인 이유는 이 필드가 없던 서버 응답과 섞여도 **후보 목록이
+  /// 사라지지 않게** 하기 위해서다 — 자동완성은 kind를 보지 않는다.
+  final String kind;
+
   /// 도착 노드. null이면 그 매장은 경로 안내가 불가능하다.
   final String? entranceNodeId;
 
@@ -53,6 +64,7 @@ class StoreIndexEntry {
       floorName: json['floor_name'] as String,
       category: json['category'] as String?,
       subcategory: json['subcategory'] as String?,
+      kind: json['kind'] as String? ?? 'store',
       entranceNodeId: json['entrance_node_id'] as String?,
     );
   }

@@ -49,6 +49,7 @@ dependencies:
   indoor_pdr_core:
     path: ../packages/indoor_pdr_core
   pointer_interceptor: ^0.10.1+2
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:
@@ -88,24 +89,12 @@ flutter:
   #   - images/a_dot_ham.jpeg
 
   assets:
-    - assets/place_details/starbucks_logo.svg
-    - assets/place_details/starbucks_reserve_hero.jpg
-    - assets/place_details/starbucks_reserve_menu.jpg
-    - assets/place_details/starbucks_menu_americano.jpg
-    - assets/place_details/starbucks_menu_latte.jpg
-    - assets/place_details/starbucks_menu_dolce_latte.jpg
-    - assets/place_details/starbucks_menu_caramel_macchiato.jpg
-    - assets/place_details/starbucks_reserve_store_01.png
-    - assets/place_details/starbucks_reserve_store_02.png
-    - assets/place_details/starbucks_reserve_store_03.png
-    - assets/place_details/starbucks_reserve_store_04.png
-    - assets/place_details/bluebottle_yeouido_store_01.jpg
-    - assets/place_details/bluebottle_yeouido_store_02.jpg
-    - assets/place_details/sounds_forest_01.png
-    - assets/place_details/sounds_forest_02.png
-    - assets/place_details/sounds_forest_03.png
-    - assets/place_details/waterfall_garden_01.jpg
-    - assets/place_details/alt1_01.jpg
+    # 매장 상세 이미지는 파일을 하나씩 적지 않고 디렉터리째 등록한다. 어떤 파일을
+    # 쓸지는 서버 오버레이(`backend/resources/store_details/*.json`)가 정하는데,
+    # 등록을 빠뜨려도 빌드는 성공하고 실행 중에 카드만 빈 채로 뜬다 — 메뉴를 30종으로
+    # 늘렸을 때 실제로 31개가 미등록으로 남아 있었다. 한쪽 목록을 지우는 편이 두 목록을
+    # 맞춰 두는 것보다 낫다.
+    - assets/place_details/
     - assets/mock/sample_building.json
     - assets/mock/hyundai_floor_1f.json
     - assets/mock/hyundai_floor_map.svg

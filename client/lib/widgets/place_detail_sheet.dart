@@ -1,11 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../core/service_locator.dart';
 import '../domain/dijkstra.dart';
+import '../domain/nearby_stores.dart';
 import '../models/favorite_place.dart';
 import '../models/place_detail.dart';
+import '../models/store_index_entry.dart';
 import '../repositories/place_detail_repository.dart';
 import '../theme/app_theme.dart';
+import 'place_detail/place_detail_hours_section.dart';
+import 'place_detail/place_detail_nearby_section.dart';
 import 'place_detail/place_detail_rich_sections.dart';
 import 'place_detail/place_detail_sections.dart';
 import 'category_icon.dart';
@@ -48,6 +54,8 @@ class PlaceDetailSheet extends StatefulWidget {
     this.category,
     this.subcategory,
     this.reach,
+    this.nearbyStoresLoader,
+    this.onSelectNearbyStore,
     this.repository,
     required this.onCloseAll,
   });
@@ -67,10 +75,19 @@ class PlaceDetailSheet extends StatefulWidget {
   /// 일은 "위치 지정" 하나뿐이라 이 자리에서 알릴 이유가 없다.
   final NodeReach? reach;
 
-  /// 이 매장에서 가장 가까운 화장실·엘리베이터. 비어 있으면 줄을 그리지 않는다.
+  /// 이 매장에서 가까운 다른 매장을 찾아 온다. 인자는 **이 매장의 입구 노드**다.
   ///
   /// [reach]와 **기준이 다르다** — 이쪽은 사용자가 아니라 이 매장에서 잰 거리다.
   /// 같은 기준으로 두 번 적으면 두 번째 줄이 알려 주는 게 없다.
+  ///
+  /// 시트가 그래프·매장 색인을 직접 들고 오지 않는 이유는, 둘 다 상위(지도 화면)가
+  /// 이미 캐시해 두고 검색·경로에 쓰는 것이기 때문이다. 여기서 다시 받아 오면 같은
+  /// 데이터가 두 벌이 되고, 무엇보다 시트를 테스트하려면 그래프를 만들어야 한다.
+  final Future<List<NearbyStore>> Function(String entranceNodeId)?
+  nearbyStoresLoader;
+
+  /// 근처 매장 줄을 눌렀을 때. null이면 누를 수 없는 목록으로 그린다.
+  final void Function(StoreIndexEntry store)? onSelectNearbyStore;
 
   /// 헤더 아이콘의 대분류 폴백·강조색. 세부 규칙(`카페·베이커리` 등)이 먼저고,
   /// 거기 걸리지 않는 일반 매장이 이 값으로 떨어진다.
@@ -91,6 +108,9 @@ class PlaceDetailSheet extends StatefulWidget {
     String? category,
     String? subcategory,
     NodeReach? reach,
+    Future<List<NearbyStore>> Function(String entranceNodeId)?
+    nearbyStoresLoader,
+    void Function(StoreIndexEntry store)? onSelectNearbyStore,
     PlaceDetailRepository? repository,
     required VoidCallback onCloseAll,
   }) {
@@ -117,6 +137,8 @@ class PlaceDetailSheet extends StatefulWidget {
             category: category,
             subcategory: subcategory,
             reach: reach,
+            nearbyStoresLoader: nearbyStoresLoader,
+            onSelectNearbyStore: onSelectNearbyStore,
             repository: repository,
             onCloseAll: onCloseAll,
           ),
@@ -136,6 +158,9 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
   /// 위젯이 아니라 응답 모델을 들고 있는다. `kind`(excluded 판정)와 `provenance`
   /// (출처 노출)를 build 시점에 봐야 하기 때문이다 — 설계 7-A-3·7-A-4.
   PlaceDetail? _detail;
+
+  /// 근처 매장. 비어 있으면 섹션을 통째로 그리지 않는다.
+  List<NearbyStore> _nearbyStores = const [];
 
   /// 주차·에스컬레이터·엘리베이터 1,007건. 서버가 404 대신 `excluded`로 200을
   /// 주고, "시트를 열지 말지"는 클라이언트가 이 값만 보고 정한다(설계 4-1).
@@ -190,11 +215,31 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
           .getPlaceDetail(widget.buildingId, placeId);
       if (mounted && detail != null) {
         setState(() => _detail = detail);
+        // 상세가 온 **뒤에** 시작한다. 근처 매장은 이 매장의 입구 노드에서 재는데,
+        // 그 값이 상세 응답에 들어 있기 때문이다.
+        unawaited(_loadNearbyStores(detail));
       }
     } catch (_) {
       // 상세 조회는 부가 정보다. 실패를 다이얼로그로 승격하면 길찾기를 막는다.
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// 근처 매장. **본문 로딩을 붙잡지 않는다** — 그래프를 받아 다익스트라를 한 번
+  /// 도는 일이라, 이걸 기다리면 이미 받아 둔 소개·메뉴까지 늦게 뜬다. 목록이
+  /// 준비되면 아래에 조용히 붙는다.
+  Future<void> _loadNearbyStores(PlaceDetail detail) async {
+    final loader = widget.nearbyStoresLoader;
+    final entranceNodeId = detail.location.entranceNodeId;
+    // 입구 노드가 없으면 잴 출발점이 없다. 이 매장은 길찾기 버튼도 안 나온다.
+    if (loader == null || entranceNodeId == null) return;
+
+    try {
+      final nearby = await loader(entranceNodeId);
+      if (mounted) setState(() => _nearbyStores = nearby);
+    } catch (_) {
+      // 그래프를 못 받았거나 끊겼다. 목록만 빠지고 상세는 그대로 뜬다.
     }
   }
 
@@ -258,8 +303,17 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
               behavior: const _NoOverscrollIndicator(),
               child: SingleChildScrollView(
                 controller: scrollController,
+                // 키보드(`viewInsets`)만큼 아래를 더 비운다. 이 시트는 화면 높이의
+                // 비율로 크기가 정해져서 키보드가 올라와도 **줄어들지 않는다** —
+                // 아래쪽이 키보드에 덮인 채로 남는다. 그 자리에 있는 입력칸은
+                // 가려지고, 스크롤로 끌어올리려 해도 스크롤할 길이가 없어서 꺼낼
+                // 수가 없다. 여기서 길이를 만들어 줘야 [_MenuSearchField]가
+                // 자기를 보이는 자리로 올릴 수 있다.
                 padding: EdgeInsets.only(
-                  bottom: 20 + MediaQuery.paddingOf(context).bottom,
+                  bottom:
+                      20 +
+                      MediaQuery.paddingOf(context).bottom +
+                      MediaQuery.viewInsetsOf(context).bottom,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -311,6 +365,12 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                         child: PlaceDetailSections(
                           sections: sections,
                           floorLabel: _detail?.location.floorLabel,
+                          homeFooter: _nearbyStores.isEmpty
+                              ? null
+                              : PlaceNearbySection(
+                                  stores: _nearbyStores,
+                                  onSelect: widget.onSelectNearbyStore,
+                                ),
                         ),
                       ),
                   ],
@@ -572,21 +632,107 @@ class _DetailLoadingPlaceholder extends StatelessWidget {
 
 /// 닫힌 섹션 집합을 화면 위젯으로 바꾼다. 모델 파싱 단계에서 모르는 type은 이미
 /// 버려졌지만, 여기서도 타입별로만 분기해 새 서버 섹션이 길찾기 UI를 깨지 않게 한다.
-class PlaceDetailSections extends StatelessWidget {
+class PlaceDetailSections extends StatefulWidget {
   const PlaceDetailSections({
     super.key,
     required this.sections,
     required this.floorLabel,
+    this.now,
+    this.homeFooter,
   });
 
   final List<PlaceDetailSection> sections;
   final String? floorLabel;
 
+  /// 영업시간 판정의 기준 시각. 테스트가 넘기고 앱에서는 null이라
+  /// [DateTime.now]가 쓰인다 — 시각에 의존하는 화면을 고정할 수 있어야 한다.
+  final DateTime? now;
+
+  /// 홈 탭 **맨 아래**에 붙는 블록. 근처 매장이 여기 온다.
+  ///
+  /// 서버 섹션 배열이 아니라 별도 인자인 이유는, 이 내용이 서버가 내려보내는 값이
+  /// 아니라 **클라이언트가 그래프로 계산한 것**이기 때문이다. 섹션 배열에 섞으면
+  /// "순서는 서버가 정한다"는 계약(4-2 규칙 3)이 반만 참이 된다.
+  ///
+  /// 메뉴·사진 탭에는 붙이지 않는다. 그쪽은 이 매장 안의 것을 보러 들어간 자리라,
+  /// 옆 매장 목록이 끼면 탭을 나눈 이유가 흐려진다.
+  final Widget? homeFooter;
+
+  @override
+  State<PlaceDetailSections> createState() => _PlaceDetailSectionsState();
+}
+
+/// 상단 탭 이름.
+const _homeTab = '홈';
+const _menuTab = '메뉴';
+const _photoTab = '사진';
+
+class _PlaceDetailSectionsState extends State<PlaceDetailSections> {
+  String _activeTab = _homeTab;
+
   @override
   Widget build(BuildContext context) {
+    final hero = widget.sections.whereType<HeroSection>().toList(
+      growable: false,
+    );
+    final menu = widget.sections.whereType<MenuSection>().toList(
+      growable: false,
+    );
+    final home = widget.sections
+        .where((section) => section is! HeroSection && section is! MenuSection)
+        .toList(growable: false);
+
+    // 대표 사진은 탭 위에 남긴다. 어느 탭을 보고 있든 "무슨 매장인지"는 계속
+    // 보여야 하고, 사진 탭은 그 사진들을 한눈에 늘어놓는 자리다.
+    final photos = [
+      for (final section in hero)
+        for (final item in section.items) item.localAsset,
+    ];
+
+    // 있는 탭만 만든다. 탭 하나짜리 탭 바는 아무것도 나누지 않으면서 자리만
+    // 차지한다(메뉴 카테고리 탭과 같은 규칙).
+    final tabs = [
+      if (home.isNotEmpty) _homeTab,
+      if (menu.isNotEmpty) _menuTab,
+      // 사진이 한 장뿐이면 위 캐러셀이 이미 다 보여 준 것이다.
+      if (photos.length > 1) _photoTab,
+    ];
+    final tabbed = tabs.length > 1;
+    final active = tabs.contains(_activeTab) ? _activeTab : tabs.firstOrNull;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (hero.isNotEmpty) ...[_render(hero), const SizedBox(height: 16)],
+        if (tabbed) ...[
+          _SectionTabs(
+            tabs: tabs,
+            active: active!,
+            onSelect: (tab) => setState(() => _activeTab = tab),
+          ),
+          const SizedBox(height: 18),
+        ],
+        if (!tabbed)
+          _render([...home, ...menu])
+        else if (active == _menuTab)
+          _render(menu)
+        else if (active == _photoTab)
+          PlacePhotoGrid(assetPaths: photos)
+        else
+          _render(home),
+        // 탭이 없으면 본문이 곧 홈이므로 그때도 붙인다.
+        if (widget.homeFooter != null && (!tabbed || active == _homeTab)) ...[
+          const _SectionBreak(),
+          widget.homeFooter!,
+        ],
+      ],
+    );
+  }
+
+  Widget _render(List<PlaceDetailSection> sections) {
     final widgets = <Widget>[];
     for (final section in sections) {
-      final widget = switch (section) {
+      final rendered = switch (section) {
         SummarySection(:final text) => _TitledSection(
           title: '소개',
           child: PlaceSummarySection(text: text),
@@ -608,16 +754,50 @@ class PlaceDetailSections extends StatelessWidget {
           text: text,
           until: until,
         ),
-        MapSection() => PlaceMapSection(floorLabel: floorLabel),
+        MapSection() => PlaceMapSection(floorLabel: widget.floorLabel),
         MenuSection(:final items) => PlaceMenuSection(
           items: [
             for (final item in items)
               PlaceMenuItem(
                 name: item.name,
+                // group을 빠뜨리면 음료·푸드 갈래 탭이 통째로 사라진다. 화면에는
+                // 아무 이상이 없어 보이고 316종이 한 목록에 이어 붙을 뿐이라,
+                // 빠진 것을 알아채기 어려운 자리다.
+                group: item.group,
+                category: item.category,
+                nameEn: item.nameEn,
                 price: item.price,
                 description: item.description,
+                volume: item.volume,
+                calories: item.calories,
+                caffeine: item.caffeine,
+                allergens: item.allergens,
+                badges: item.badges,
                 imageAssetPath: item.imageAsset,
               ),
+          ],
+        ),
+        // 영업시간만 렌더러가 시각을 넘긴다. "지금 영업 중"은 저장된 값이 아니라
+        // 그릴 때마다 계산되는 값이라, 계산의 기준 시각이 화면 밖에서 들어와야
+        // 테스트가 시각에 매이지 않는다.
+        HoursSection() => PlaceHoursSection(
+          hours: section,
+          now: widget.now ?? DateTime.now(),
+        ),
+        DemoInfoSection(:final items) => PlaceDemoInfoSection(
+          items: [
+            for (final item in items)
+              PlaceDemoInfo(
+                label: item.label,
+                value: item.value,
+                confirmedAt: item.confirmedAt,
+              ),
+          ],
+        ),
+        LinksSection(:final items) => PlaceLinksSection(
+          items: [
+            for (final item in items)
+              PlaceLinkItem(label: item.label, url: item.url),
           ],
         ),
         BusinessInfoSection(:final items) => PlaceBusinessInfoSection(
@@ -627,16 +807,16 @@ class PlaceDetailSections extends StatelessWidget {
           ],
         ),
       };
-      // 사진은 시트 끝까지, 메뉴는 가로 스크롤이 끝까지 흐르도록 스스로 여백을
-      // 갖는다. 나머지 섹션만 여기서 본문 거터를 씌운다.
+      // 사진은 시트 끝까지, 메뉴는 줄 전체가 눌리도록 스스로 여백을 갖는다.
+      // 나머지 섹션만 여기서 본문 거터를 씌운다.
       final fullBleed = section is HeroSection || section is MenuSection;
       final padded = fullBleed
-          ? widget
+          ? rendered
           : Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: placeSectionGutter,
               ),
-              child: widget,
+              child: rendered,
             );
       // 여백만으로는 섹션이 어디서 끝났는지 읽히지 않는다. 카드로 감싸는 대신
       // 시트 폭을 가로지르는 얇은 선 하나로만 끊는다.
@@ -648,6 +828,64 @@ class PlaceDetailSections extends StatelessWidget {
       children: widgets,
     );
   }
+}
+
+/// 시트 본문을 가르는 상단 탭.
+///
+/// 메뉴가 30종까지 늘면서 한 줄로 이어 붙인 본문이 너무 길어졌다. 상세를 열었을 때
+/// 영업시간이 보이려면 메뉴를 한참 지나쳐야 했고, 반대로 메뉴를 보려면 소개를 지나야
+/// 했다. **어느 쪽을 보러 왔는지는 사람마다 다르므로** 둘을 나란히 두고 고르게 한다.
+///
+/// 섹션 순서는 그대로 서버가 정한다(계약 4-2 규칙 3). 클라이언트가 하는 것은 **묶는
+/// 일**뿐이고, 한 탭 안에서는 서버가 보낸 순서대로 쌓는다.
+class _SectionTabs extends StatelessWidget {
+  const _SectionTabs({
+    required this.tabs,
+    required this.active,
+    required this.onSelect,
+  });
+
+  final List<String> tabs;
+  final String active;
+  final ValueChanged<String> onSelect;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
+    child: Row(
+      children: [
+        for (final tab in tabs)
+          Expanded(
+            child: GestureDetector(
+              onTap: () => onSelect(tab),
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                padding: const EdgeInsets.only(bottom: 10),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: tab == active
+                          ? AppColors.primary
+                          : AppColors.blue100,
+                      width: tab == active ? 2.5 : 1,
+                    ),
+                  ),
+                ),
+                child: Text(
+                  tab,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: tab == active ? AppColors.primary : AppColors.muted,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
 }
 
 /// 섹션과 섹션 사이의 경계. 여백 + 시트 폭을 가로지르는 선 한 줄이다.
