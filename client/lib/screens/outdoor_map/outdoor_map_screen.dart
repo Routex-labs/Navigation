@@ -18,6 +18,8 @@ import '../../core/service_locator.dart';
 import '../../core/tile_url.dart';
 import '../../domain/geo_transform.dart';
 import '../../features/debug_mode/debug_mode.dart';
+import '../../domain/route_guidance.dart';
+import '../../features/indoor_navigation/application/corridor_position_tracker.dart';
 import '../../features/indoor_navigation/application/floor_map_matcher.dart';
 import '../../features/indoor_navigation/application/indoor_guidance_position.dart';
 import '../../features/indoor_navigation/application/indoor_guidance_session.dart';
@@ -560,7 +562,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   // 세그먼트만 지도에 그려지고, 층 chip으로 다른 층을 훑으면 해당 층 세그먼트로
   // 갈아탄다. 다층 경로일 때는 [_indoorMultiFloorRoute]에 전체가 남아 있어
   // ETA 총 거리도 유지된다.
-  IndoorRoute? _indoorRouteSegment;
+  /// 지금 이 층에 그려진 실내 경로 세그먼트. 실내 탭과 같은 세션이 소유한다 —
+  /// 진행률이 이 값에 투영되므로 두 곳에 두면 남은거리가 갈라진다.
+  IndoorRoute? get _indoorRouteSegment => _guidance.routeSegment;
   MultiFloorRoute? _indoorMultiFloorRoute;
   PoiSearchResult? _indoorRouteDestination;
 
@@ -1134,11 +1138,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _floorGraph = null;
       _floorPlan = null;
       _mapCalibrationVersion = 'unversioned';
-      if (multiRoute == null) {
-        _indoorRouteSegment = null;
-      } else {
-        _indoorRouteSegment = nextSegmentRoute;
-      }
+      // 세그먼트가 갈아타면 진행거리 기준점도 새 세그먼트 기준으로 다시 잡아야
+      // 한다. 남겨두면 층을 바꾼 순간 남은거리가 튄다.
+      _guidance
+        ..setRouteSegment(multiRoute == null ? null : nextSegmentRoute)
+        ..seedProgress(null);
       // 층이 바뀌면 그 층에 강조하던 매장은 지도에 없다. 강조도 초기화.
       _highlightedStoreId = null;
     });
@@ -1869,7 +1873,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _userDestinationLabel = null;
       _indoorRouteDestination = destination;
       // 새 경로를 그리기 전에 초기화 — 아래 compute가 성공하면 다시 채운다.
-      _indoorRouteSegment = null;
+      _guidance.setRouteSegment(null);
       _indoorMultiFloorRoute = null;
     });
     _syncDestinationLayer();
@@ -1996,7 +2000,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       return;
     }
     setState(() {
-      _indoorRouteSegment = route;
+      _guidance
+        ..setRouteSegment(route)
+        ..seedProgress(null)
+        ..setRoute(null);
       _indoorMultiFloorRoute = null;
     });
     _syncRouteLayer();
@@ -2059,7 +2066,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final segment = route.segmentForFloor(startFloor);
     setState(() {
       _indoorMultiFloorRoute = route;
-      _indoorRouteSegment = segment?.route;
+      _guidance
+        ..setRouteSegment(segment?.route)
+        ..seedProgress(null)
+        ..setRoute(route);
     });
     _syncRouteLayer();
     _syncIndoorDestinationLayer();
@@ -2158,15 +2168,33 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// `distanceM`은 실제 수평 거리만("m 남음"), `costM`은 탑승·대기 시간까지 담은 보행
   /// 등가값(소요 시간)이다. 한 값으로 겸하면 남은거리가 비용만큼 부풀어 보인다.
   ({double distanceM, double costM}) _indoorEta() {
+    // 걸은 만큼 줄어든 값이 있으면 그것을 쓴다. 예전에는 항상 경로 전체 길이를
+    // 돌려줘서, 목적지 앞에 서 있어도 "출발할 때와 같은 거리"가 떠 있었다.
+    final remaining = _guidance.displayProgress?.remainingM;
     final multi = _indoorMultiFloorRoute;
     if (multi != null) {
+      if (remaining == null) {
+        return (
+          distanceM: multi.totalDistanceMeters,
+          costM: multi.totalCostMeters,
+        );
+      }
+      // 이 층 세그먼트만 진행률을 갖는다. 남은 층들의 거리·비용은 그대로 더한다.
+      final segmentM = _indoorRouteSegment?.distanceMeters ?? 0;
+      final walkedM = (segmentM - remaining).clamp(0.0, segmentM);
       return (
-        distanceM: multi.totalDistanceMeters,
-        costM: multi.totalCostMeters,
+        distanceM: (multi.totalDistanceMeters - walkedM).clamp(
+          0.0,
+          multi.totalDistanceMeters,
+        ),
+        costM: (multi.totalCostMeters - walkedM).clamp(
+          0.0,
+          multi.totalCostMeters,
+        ),
       );
     }
     // 단층 경로에는 수직 이동이 없어 거리와 비용이 같다.
-    final remainingM = _indoorRouteSegment?.distanceMeters ?? 0;
+    final remainingM = remaining ?? _indoorRouteSegment?.distanceMeters ?? 0;
     return (distanceM: remainingM, costM: remainingM);
   }
 
@@ -2194,7 +2222,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 시 호출된다.
   void _clearIndoorRoute() {
     setState(() {
-      _indoorRouteSegment = null;
+      _guidance
+        ..setRouteSegment(null)
+        ..clearProgress()
+        ..setRoute(null);
       _indoorMultiFloorRoute = null;
       _indoorRouteDestination = null;
     });
@@ -3847,6 +3878,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       ..setEstimate(indoorLocationEstimateController.current)
       ..setRoute(_indoorMultiFloorRoute);
     final result = _guidance.onSnapshot(snapshot);
+    _syncIndoorRouteProgress(result, snapshot);
     if (result == null) return;
     _pdrDebugRecorder?.recordCorridorCorrection(result);
     if (snapshot != null) {
@@ -3860,6 +3892,75 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         ),
       );
     }
+  }
+
+  /// 실내 경로 진행률을 갱신한다. 계산은 세션이, 다시 그리기는 여기가 한다.
+  ///
+  /// 홈에도 이게 필요한 이유는 ETA 카드 때문이다. 예전에는 경로 전체 길이를
+  /// 고정으로 보여줘서, 목적지 앞에 서 있어도 출발할 때와 같은 거리가 떠 있었다.
+  void _syncIndoorRouteProgress(
+    CorridorTrackingResult? result,
+    PdrSnapshot? snapshot,
+  ) {
+    if (!_indoorEntered) return;
+    final anchor = _pdrTrailState.anchor;
+    final toFloor = anchor == null ? null : FloorCoordinateTransform(anchor);
+    final update = _guidance.updateProgress(
+      result,
+      confirmedSteps: snapshot?.steps,
+      previewSteps: snapshot?.preview.steps,
+      orientationHeadingDeg: snapshot == null || toFloor == null
+          ? null
+          : toFloor.toFloorBearing(snapshot.orientationHeadingDeg),
+      walkingHeadingDeg: snapshot == null || toFloor == null
+          ? null
+          : toFloor.toFloorBearing(snapshot.walkingHeadingDeg),
+    );
+    for (final advance in update.stepAdvances) {
+      _pdrDebugRecorder?.recordRouteStepAdvance(
+        advance.step,
+        transition: advance.transition,
+      );
+    }
+    for (final event in update.checkpointEvents) {
+      _pdrDebugRecorder?.recordCheckpointEvent(event);
+    }
+    final measured = update.measuredProgress;
+    if (measured != null) {
+      _pdrDebugRecorder?.recordRouteProgress(
+        measured,
+        displayProgress: update.displayProgress,
+        holdReason: update.holdReason,
+      );
+    }
+    // 재탐색은 아직 붙이지 않는다. 홈에는 목적지 노드를 들고 경로를 다시 뽑는
+    // 경로가 실내 탭과 다르게 배선돼 있어, 같이 옮겨야 안전하다.
+    if (mounted) setState(() {});
+  }
+
+  /// 지금 이 층 실내 경로의 턴바이턴 안내. 없으면 null.
+  ///
+  /// 실내 탭과 같은 규칙을 쓴다 — 도착 안내는 **목적지 세그먼트에서만** 낸다.
+  /// 중간 층 세그먼트의 끝은 도착이 아니라 환승이라, 거기서 "도착했습니다"를
+  /// 띄우면 사용자가 남은 층을 안 가고 멈춘다.
+  RouteGuidanceInstruction? get _indoorRouteGuidance {
+    final route = _indoorRouteSegment;
+    if (route == null || route.pointsLocalM.isEmpty) return null;
+    final multi = _indoorMultiFloorRoute;
+    final segment = multi?.segmentForFloor(_activeFloor ?? '');
+    final allowArrival =
+        multi == null ||
+        (segment != null &&
+            identical(segment, multi.destinationSegment) &&
+            _activeFloor == _indoorRouteDestination?.floor);
+    return buildRouteGuidance(
+      localPoints: route.pointsLocalM,
+      wgs84Points: route.points,
+      progress: _guidance.displayProgress,
+      travelDirectionState: _guidance.travelDirectionState,
+      transferMode: segment?.transferModeToNext,
+      allowArrival: allowArrival,
+    );
   }
 
   /// 강조 매장 폴리곤을 highlight 소스에 채운다. null 또는 미매치면 비운다.
@@ -4566,6 +4667,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
                           .ceil()
                           .clamp(1, 999),
                   label: _indoorEtaLabel(indoorRouteDestination),
+                  instruction: _indoorRouteGuidance,
                   onClose: _dismissIndoorRouteFromEtaCard,
                   onClosePointerDown: (position) =>
                       _etaClosePointerDown = position,
