@@ -397,3 +397,73 @@ def test_운동화는_꼬리가_붙어도_신발로_이어진다(real_db_session
 
     assert discovery["matches"], text
     assert all("신발" in (match["reason"] or "") for match in discovery["matches"]), text
+
+
+# 영문으로 치는 사용자가 한글로 치는 사용자와 **같은 곳**에 닿아야 한다.
+#
+# W12까지 사전에 있던 영문은 브랜드명뿐이었다(`gucci`→구찌). 일반명사·시설어는 통째로
+# 비어 있어서 `toilet`·`shoes`는 no_match였고, 한국 매장명은 영어의 음차라 임베딩도
+# 못 넘는다(스타벅스 ≠ seutabeokseu). 그래서 모델이 아니라 사전으로 푼다 —
+# 근거는 query_semantic.py 모듈 주석의 다국어 모델 비교표.
+#
+# 같은 결과인지를 보는 이유: 별칭이 살아 있는지만 보면(죽은 항목 검사) 엉뚱한 표준형을
+# 가리켜도 통과한다. 실제로 `information`을 `고객센터`로 보냈다가 안내데스크가 아니라
+# 수리 접수 창구로 새는 것을 이 대조로 잡았다.
+@pytest.mark.parametrize(
+    ("english", "korean"),
+    [
+        ("toilet", "화장실"),
+        ("elevator", "엘리베이터"),
+        ("escalator", "에스컬레이터"),
+        ("shoes", "신발"),
+        ("clothes", "의류"),
+        ("perfume", "향수"),
+        ("watches", "시계"),
+        ("grocery", "장보기"),
+        ("toys", "장난감"),
+        ("pharmacy", "약국"),
+        ("sunglasses", "아이웨어"),
+        ("coffee", "커피"),
+        ("luxury", "명품"),
+    ],
+)
+def test_영문_일반명사는_한글_질의와_같은_곳에_닿는다(real_db_session, english, korean):
+    en = query_search.discover(real_db_session, REAL_BUILDING_ID, english)
+    ko = query_search.discover(real_db_session, REAL_BUILDING_ID, korean)
+
+    assert en["matches"], english
+    assert en["mode"] == ko["mode"], english
+    assert [m["store_id"] for m in en["matches"]] == [m["store_id"] for m in ko["matches"]], english
+
+
+# 안내를 묻는 말은 안내데스크로 간다.
+#
+# `고객서비스` 소분류(교환·환불 데스크, 수리 접수 8곳)와 실제 안내데스크
+# (`컨시어지 (안내데스크)`, 편의시설)는 다른 곳이다. W12가 `안내데스크`를 `고객센터`
+# intent로 보내면서, 더 구체적으로 친 질의가 덜 구체적인 `안내`보다 나쁜 결과를 받았다
+# — tier 1(intent)이 tier 2(이름 부분 일치)를 이겨서 진짜 안내데스크가 8건 뒤로 밀렸다.
+@pytest.mark.parametrize("query", ["안내", "안내데스크", "컨시어지", "information", "info", "concierge"])
+def test_안내_질의는_안내데스크로_간다(real_db_session, query):
+    discovery = query_search.discover(real_db_session, REAL_BUILDING_ID, query)
+
+    assert [m["name"] for m in discovery["matches"]] == ["컨시어지 (안내데스크)"], query
+
+
+# 사후 서비스를 묻는 말은 그대로 고객서비스 창구로 남는다(위 분리가 한쪽으로 쏠리지 않았다).
+def test_사후_서비스_질의는_고객서비스_창구로_간다(real_db_session):
+    discovery = query_search.discover(real_db_session, REAL_BUILDING_ID, "customer service")
+
+    names = [m["name"] for m in discovery["matches"]]
+    assert "교환 / 환불 데스크" in names
+    assert "컨시어지 (안내데스크)" not in names
+
+
+# 띄어쓰기는 뜻을 나르지 않는다 — 사람은 브랜드명을 띄어 치고("노스 페이스"), 데이터도
+# 같은 시설을 제각각 띄어 적어 뒀다. 공백을 뗀 일치는 원문 그대로의 일치보다 항상 뒤라
+# 정확히 친 사용자가 손해 보지 않는다.
+def test_띄어_친_브랜드명도_같은_매장으로_간다(real_db_session):
+    spaced = query_search.discover(real_db_session, REAL_BUILDING_ID, "노스 페이스")
+    exact = query_search.discover(real_db_session, REAL_BUILDING_ID, "노스페이스")
+
+    assert spaced["mode"] == exact["mode"] == "direct"
+    assert [m["store_id"] for m in spaced["matches"]] == [m["store_id"] for m in exact["matches"]]
