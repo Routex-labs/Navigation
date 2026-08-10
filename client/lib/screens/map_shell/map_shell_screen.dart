@@ -8,6 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../core/api_config.dart';
 import '../../core/service_locator.dart';
 import '../../domain/dijkstra.dart';
+import '../../domain/nearby_stores.dart';
 import '../../features/debug_mode/debug_mode.dart';
 import '../../features/indoor_navigation/contract/floor_transition_ui_state.dart';
 import '../../models/building.dart';
@@ -345,8 +346,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 상태다. 길찾기·카테고리 시트는 이 값으로 분기해야 한다 — 진입 여부만
   /// 보고 분기하면, 야외 지도 위에서 실내 도면을 훑는 동안 길찾기 후보가
   /// 매장이 아닌 건물 이름만 뒤져 "아무것도 안 나오는" 상태가 된다.
-  bool get _indoorContextActive =>
-      _outdoorIndoorEntered;
+  bool get _indoorContextActive => _outdoorIndoorEntered;
 
   /// 지금 "현재 위치에서 출발"로 경로를 그릴 수 있는지.
   ///
@@ -537,6 +537,59 @@ class _MapShellScreenState extends State<MapShellScreen> {
     await _runSheetChain(() => _showStoreInfo(resolved, focusOnMap: true));
   }
 
+  /// 상세 시트가 부르는 "근처 매장" 계산.
+  ///
+  /// **여기서 하는 이유**: 그래프와 매장 색인은 이 화면이 이미 받아 두고 검색·경로에
+  /// 쓰는 것이다(둘 다 저장소가 future를 공유해 캐시한다). 시트가 직접 받아 오면 같은
+  /// 데이터가 두 벌이 되고, 시트를 테스트하려면 그래프부터 만들어야 한다.
+  ///
+  /// 서버에 새 엔드포인트를 만들지 않는 이유도 같다 — 필요한 것이 전부 이미 기기에
+  /// 있고, 거리는 어차피 온디바이스 다익스트라가 정답이다(AGENTS.md의 경로 계산 규칙).
+  Future<List<NearbyStore>> _loadNearbyStores(String entranceNodeId) async {
+    final graph = await buildingRepository.getBuildingGraph(_buildingId);
+    final index = await buildingRepository.getStoreIndex(_buildingId);
+    if (graph == null || index == null || graph.nodes.isEmpty) return const [];
+
+    final Map<String, NodeReach> reach;
+    try {
+      reach = reachableFrom(
+        nodes: graph.nodes,
+        edges: graph.edges,
+        startNodeId: entranceNodeId,
+      );
+    } on ArgumentError {
+      // 이 매장의 입구 노드가 그래프에 없다. 시드와 그래프가 어긋난 경우라
+      // 목록만 빠지고 상세는 그대로 뜬다.
+      return const [];
+    }
+
+    return nearbyStores(
+      stores: index,
+      reachByNodeId: reach,
+      excludePlaceId: _nearbyOriginPlaceId ?? '',
+    );
+  }
+
+  /// 근처 매장 목록에서 자기 자신을 빼려면 지금 열려 있는 매장 id가 필요하다.
+  /// 시트가 인자로 넘기지 않는 이유는, 이 화면이 어차피 시트를 띄우면서 그 id를
+  /// 이미 알고 있기 때문이다.
+  String? _nearbyOriginPlaceId;
+
+  /// 근처 매장 줄을 눌렀다. **검색 후보를 고른 것과 같은 경로**를 탄다 —
+  /// 같은 결과에 이르는 길이 둘로 갈리면 한쪽만 고쳐지는 날이 온다.
+  Future<void> _onNearbyStorePicked(StoreIndexEntry entry) async {
+    // 지금 시트를 먼저 닫는다. 닫지 않고 새 시트를 올리면 상세가 상세 위에 쌓여
+    // 뒤로 가기가 몇 번인지 사용자가 알 수 없게 된다.
+    Navigator.of(context).pop();
+
+    // `_onSearchSuggestionPicked`를 그대로 부르지 않는 이유는 그쪽이 **최근 검색어를
+    // 남기기** 때문이다. 근처 매장을 누른 것은 검색이 아니라서, 부르면 방금 친 적도
+    // 없는 말이 최근 목록에 쌓인다. 좌표를 찾고 시트를 여는 부분은 같은 함수를 쓴다.
+    final resolved = await _outdoorKey.currentState?.resolveIndexEntry(entry);
+    if (!mounted || resolved == null) return;
+    await _runSheetChain(() => _showStoreInfo(resolved, focusOnMap: true));
+  }
+
   void _onSearchBuildingPicked(Building building) {
     _closeSearch();
     setState(() {
@@ -581,6 +634,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
       buildingId: _buildingId,
     );
     if (!mounted) return false;
+    // 근처 매장 목록에서 자기 자신을 빼는 데 쓴다.
+    _nearbyOriginPlaceId = match.placeId;
     final showing = _withMapsLocked(
       () => PlaceDetailSheet.show(
         context,
@@ -597,7 +652,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
         // 검색 결과 목록이 쓰는 것과 **같은 계산 결과**를 넘긴다. 두 화면이
         // 같은 매장에 다른 거리를 적으면 어느 쪽도 못 믿게 된다.
         reach: match.nodeId == null ? null : _reachByNodeId?[match.nodeId],
-        // "이 매장에서" 가장 가까운 시설. 위 reach와 기준이 다르다.
+        // "이 매장에서" 잰 근처 매장. 위 reach와 기준이 다르다 — 사용자 기준
+        // 거리는 이미 헤더에 있고, 같은 기준으로 두 번 적으면 두 번째 줄이
+        // 알려 주는 게 없다.
+        nearbyStoresLoader: _loadNearbyStores,
+        onSelectNearbyStore: _onNearbyStorePicked,
         onCloseAll: _requestCloseSheetChain,
       ),
     );

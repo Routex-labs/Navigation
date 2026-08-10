@@ -59,12 +59,18 @@
 | 호출부 | 진입 | `current_floor_id` | 비고 |
 |---|---|---|---|
 | [`search_panel.dart`](../../../client/lib/widgets/search_panel.dart) | 상단 검색창 엔터 | 보내지 않음(건물 전체) | 경량 빈손일 때만 |
-| [`ai_search_sheet.dart`](../../../client/lib/widgets/ai_search_sheet.dart) | 경로 안내 화면 FAB | 현재 층을 보냄 | 질의–응답 로그를 쌓는 시트 |
+| ~~`ai_search_sheet.dart`~~ **(삭제됨)** | 경로 안내 화면 FAB | 현재 층을 보냄 | 질의–응답 로그를 쌓는 시트 |
 
 둘 다 [`http_destination_repository.dart`](../../../client/lib/repositories/http_destination_repository.dart)의
 `searchDestinationsAi` 하나를 공유하고, 이 메서드는 `/query/destination`과 파싱까지
 공유한다(`_query`). 따라서 `/query/ai` 응답 모양을 바꾸면 파서 한 곳이 아니라
 **추상 인터페이스(`destination_repository.dart`)·mock·두 화면·관련 테스트**가 함께 움직인다.
+> **`ai_search_sheet.dart`는 그 뒤 삭제됐다**(실내 안내를 공용 세션으로 모으고 실내 탭을
+> 없앤 리팩터). 이 문서에서 그 파일을 가리키는 서술은 **당시 상태**이며, 지금 `/query/ai`를
+> 쓰는 곳은 [`map_shell_screen.dart`](../../../client/lib/screens/map_shell/map_shell_screen.dart)와
+> [`directions_sheet.dart`](../../../client/lib/widgets/directions_sheet.dart)다. 아래
+> "두 화면"이라는 표현도 그 전제에서 읽어야 한다.
+
 9절의 화면 상태는 상단 검색 패널 기준이며, `ai_search_sheet`를 같은 계약으로 옮길지
 탐색 진입점을 상단 검색 한 곳으로 합칠지는 12절 미결로 둔다.
 
@@ -816,7 +822,7 @@ Material의 `ActionChip`·`FilterChip`을 쓰지 않는 이유는 크기다. 기
 함께 고쳐야 하는 파일:
 
 - [`search_panel.dart`](../../../client/lib/widgets/search_panel.dart) — 상태 열거·facet chip
-- [`ai_search_sheet.dart`](../../../client/lib/widgets/ai_search_sheet.dart) — 같은 `/query/ai`를 쓰는 두 번째 화면(1-3)
+- ~~`ai_search_sheet.dart`~~ — 같은 `/query/ai`를 쓰던 두 번째 화면(1-3). **삭제됐다**(아래 주석)
 - [`http_destination_repository.dart`](../../../client/lib/repositories/http_destination_repository.dart) —
   현재 `/destination`과 `_query` 하나를 공유하므로 분리가 필요하다
 - [`destination_repository.dart`](../../../client/lib/repositories/destination_repository.dart)·
