@@ -20,6 +20,9 @@ import '../../domain/geo_transform.dart';
 import '../../features/debug_mode/debug_mode.dart';
 import '../../domain/route_guidance.dart';
 import '../../features/indoor_navigation/application/corridor_position_tracker.dart';
+import '../../features/indoor_navigation/application/escalator_arrival.dart';
+import '../../features/indoor_navigation/application/escalator_transition_detector.dart';
+import '../../features/indoor_navigation/contract/floor_transition_ui_state.dart';
 import '../../features/indoor_navigation/application/floor_map_matcher.dart';
 import '../../features/indoor_navigation/application/indoor_guidance_position.dart';
 import '../../features/indoor_navigation/application/indoor_guidance_session.dart';
@@ -461,6 +464,7 @@ class OutdoorMapBody extends StatefulWidget {
     this.onLocationAnchored,
     this.categorySelection,
     this.onFloorChanged,
+    this.onFloorTransitionChanged,
     this.outerOverlayKeys = const [],
   });
 
@@ -473,6 +477,12 @@ class OutdoorMapBody extends StatefulWidget {
   /// ETA 카드가 화면 최하단에 새로 나타나거나 사라질 때 호출된다.
   /// 상위(MapShellScreen)가 이 값으로 하단 공용 바를 그 위로 띄운다.
   final ValueChanged<bool>? onRouteVisibleChanged;
+
+  /// 층 전환 배너·스크림 상태를 셸에 넘긴다.
+  ///
+  /// 이 화면이 직접 그리지 않는 이유: 검색창·카테고리 줄·하단 바가 셸 Stack의
+  /// 형제라, 지도 안에서 그린 배너는 그 뒤에 깔린다.
+  final FloorTransitionUiChanged? onFloorTransitionChanged;
 
   /// PDR 앵커 배치 대기 상태가 바뀔 때 호출된다. 상위(MapShellScreen)가 이
   /// 값으로 하단 바의 "위치 지정" 버튼을 눌린(활성) 톤으로 표시한다.
@@ -684,6 +694,50 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   StreamSubscription<AltitudeSample>? _pdrAltitudeSub;
   StreamSubscription<RawMotionActivity>? _pdrRawMotionSub;
 
+  // --- 자동 층 전환 ---
+  //
+  // 실내 탭과 같은 상태 기계를 쓴다. 다른 것은 도면을 갈아 끼우는 방법뿐이다 —
+  // 실내 탭은 자체 렌더러의 카메라를 인계하고, 홈은 MapLibre 오버레이 소스를
+  // 통째로 바꾼다([_switchOverlayFloor]).
+
+  /// 조기 전환으로 목적 층을 이미 열어 둔 이동. 하차 확정 전까지 유지된다.
+  EscalatorTransition? _escalatorRide;
+
+  /// 확정 직후 잠깐 "도착" 배너를 띄우는 이동. 되돌리기를 여기에 붙인다.
+  EscalatorTransition? _escalatorArrival;
+  Timer? _escalatorArrivalTimer;
+
+  /// 배너만 띄우는 접근·수직이동 단계. 층 지도는 아직 안 바꾼다.
+  EscalatorPhaseChange? _escalatorStage;
+
+  /// 탑승 때문에 걸음 적용을 멈춘 상태인지. pause/resume 짝을 한 곳에서 센다.
+  bool _stepsPausedForRide = false;
+
+  /// 전환 직전 상태. 되돌리기와 취소 복원이 이 값을 쓴다.
+  String? _preTransferFloor;
+  PdrAnchor? _preTransferAnchor;
+  IndoorRoute? _preTransferRoute;
+  MultiFloorRoute? _preTransferMultiRoute;
+  PoiSearchResult? _preTransferDestination;
+  GraphNode? _pendingArrivalNode;
+
+  /// 도면 교체 구간을 덮는 정도. 0이 아니면 셸이 스크림을 그린다.
+  double _floorSwapVeil = 0;
+
+  /// 도면을 갈아 끼운 뒤 완전 불투명을 유지하는 시간. 실내 탭과 같은 값이다.
+  static const _indoorFloorSwapVeilHold = Duration(milliseconds: 400);
+
+  /// 층 이동 확정 뒤 "아니에요"를 띄워 두는 시간.
+  static const _indoorArrivalBannerHold = Duration(seconds: 6);
+
+  /// 층 전환 작업을 직렬화한다. 겹쳐 돌면 층과 경로가 서로 다른 시점을 가리킨다.
+  Future<void> _floorTransitionQueue = Future<void>.value();
+  bool _applyingFloorTransition = false;
+
+  // 셸에 마지막으로 알린 층 전환 UI 상태. 같은 값이면 다시 알리지 않는다.
+  FloorTransitionUiState? _reportedFloorTransition;
+  double _reportedFloorScrimOpacity = 0;
+
   /// 디버그 설정은 실내 지도와 공유한다 — 어느 화면에서 켜든 같은 상태를 본다.
   final DebugModeController _debugModeController = debugModeController;
 
@@ -815,30 +869,399 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (outcome.events.isNotEmpty) {
       recorder?.recordFloorTransitionEvents(outcome.events);
     }
-    // 단계 전이는 탑승점 고정을 갱신한다. 홈은 아직 배너를 그리지 않으므로
-    // 여기서는 꺼내 버리는 것만으로 충분하다 — 쌓아 두면 다음 세션 로그에
-    // 지난 판정이 섞인다.
-    _guidance.takePhaseChanges();
+    _handleEscalatorPhaseChanges();
 
-    final confirmed = outcome.confirmed ?? outcome.started;
-    if (confirmed != null) {
-      unawaited(_applyEscalatorFloorChange(confirmed.toFloorLabel));
+    // 순서가 중요하다. 시작 → 취소 → 확정 순으로 큐에 넣어야 층·경로 복원이
+    // 어긋나지 않는다.
+    if (outcome.started != null) {
+      _enqueueFloorTransition(
+        () => _beginEscalatorTransition(outcome.started!),
+      );
     }
     if (outcome.cancelled != null) {
-      unawaited(
-        _applyEscalatorFloorChange(outcome.cancelled!.fromFloorLabel),
+      _enqueueFloorTransition(
+        () => _cancelEscalatorTransition(outcome.cancelled!),
+      );
+    }
+    if (outcome.confirmed != null) {
+      _enqueueFloorTransition(
+        () => _completeEscalatorTransition(outcome.confirmed!),
       );
     }
   }
 
-  /// 층 판정이 만든 층 변경을 화면에 적용한다.
+  /// 판정기의 단계 전이를 화면 동작으로 옮긴다.
   ///
-  /// 사용자가 층 선택기를 누른 것과 **같은 경로**를 쓴다. 다층 경로 세그먼트
-  /// 교체와 도면 로딩이 이미 거기 있고, 두 벌로 만들면 한쪽이 먼저 낡는다.
-  Future<void> _applyEscalatorFloorChange(String floorLabel) async {
-    if (!mounted || !_indoorEntered || floorLabel == _activeFloor) return;
-    if (!(_building?.floors.contains(floorLabel) ?? false)) return;
-    await _switchOverlayFloor(floorLabel);
+  /// 단계마다 하는 일이 다르다. 배너는 근거가 약해도 띄우고(되돌리기 비용이
+  /// 없다), 걸음 pause는 실제 수직 이동에서 시작하며, 목적 층 지도는 midpoint
+  /// 근거에서만 연다. 층 전환과 하차 확정은 started/confirmed 경로가 담당한다.
+  void _handleEscalatorPhaseChanges() {
+    final changes = _guidance.takePhaseChanges();
+    if (changes.isEmpty) return;
+    for (final change in changes) {
+      switch (change.phase) {
+        case EscalatorPhase.boardingDetected:
+        case EscalatorPhase.verticalMotionDetected:
+          if (!mounted) return;
+          setState(() => _escalatorStage = change);
+          if (change.phase == EscalatorPhase.verticalMotionDetected) {
+            _enqueueFloorTransition(_pauseStepsForRide);
+          }
+        case EscalatorPhase.cancelled:
+        case EscalatorPhase.failed:
+          if (!mounted) return;
+          setState(() => _escalatorStage = null);
+          // 후보가 열린 뒤의 취소는 층·경로 복원까지 해야 하므로 cancelled
+          // 경로가 처리한다. 여기서는 배너만 띄운 단계에서 멈춘 걸음을
+          // 되살리는 것만 책임진다.
+          if (change.transition == null) {
+            _enqueueFloorTransition(_endEscalatorRide);
+          }
+        case EscalatorPhase.midpointReached:
+        case EscalatorPhase.landed:
+          // 여기서 단계를 비우지 않는다. 층 전환은 큐를 거쳐 다음 프레임 이후에
+          // 적용되므로, 지금 비우면 그 사이 배너가 한 번 깜빡였다가 다시 뜬다.
+          break;
+        case EscalatorPhase.idle:
+          if (!mounted) return;
+          setState(() => _escalatorStage = null);
+      }
+    }
+    _reportFloorTransitionUi();
+  }
+
+  /// 층 전환 작업을 직렬화한다.
+  ///
+  /// 겹쳐 돌면 층과 경로가 서로 다른 시점을 가리킨다. 오류가 나도 탑승 상태를
+  /// 화면에 남기지 않는다 — 큐가 오류만 찍고 끝나면 걸음이 멈춘 채 배너가
+  /// 영구히 남고 사용자가 복구할 방법이 없다.
+  void _enqueueFloorTransition(Future<void> Function() action) {
+    _floorTransitionQueue = _floorTransitionQueue
+        .then((_) => mounted ? action() : Future<void>.value())
+        .onError(_recoverFloorTransitionFailure);
+  }
+
+  Future<void> _recoverFloorTransitionFailure(
+    Object error,
+    StackTrace stackTrace,
+  ) async {
+    debugPrint('floor transition failed: $error\n$stackTrace');
+    if (!mounted) return;
+    await _endEscalatorRide();
+    if (!mounted) return;
+    setState(() => _pendingArrivalNode = null);
+    _showSnack('층 전환을 완료하지 못했습니다. 현재 층과 위치를 다시 확인해주세요.');
+  }
+
+  /// 위치에 반영하는 걸음만 멈춘다. 센서·기압·방향은 계속 흐른다.
+  Future<void> _pauseStepsForRide() async {
+    if (_stepsPausedForRide) return;
+    _stepsPausedForRide = true;
+    await indoorNavigationDriver.pauseStepTracking();
+    if (mounted) return;
+    // pause Future가 끝나기 직전에 화면이 닫히면 dispose는 pause된 사실을 볼 수
+    // 없다. 여기서 직접 되돌려 전역 PDR 세션을 살려 둔다.
+    _stepsPausedForRide = false;
+    await indoorNavigationDriver.resumeStepTracking();
+  }
+
+  /// 탑승 상태를 끝낸다. 걸음 누적을 다시 켜고 배너·스크림을 지운다.
+  ///
+  /// 확정·취소·되돌리기 **모든 출구**가 이걸 지나야 한다. 한 경로라도 빠뜨리면
+  /// 배너가 남고 걸음이 영영 멈춘 상태로 사용자가 복구할 방법이 없어진다.
+  Future<void> _endEscalatorRide() async {
+    if (_escalatorRide == null &&
+        _escalatorStage == null &&
+        !_stepsPausedForRide &&
+        _floorSwapVeil == 0) {
+      return;
+    }
+    _stepsPausedForRide = false;
+    await indoorNavigationDriver.resumeStepTracking();
+    if (!mounted) return;
+    setState(() {
+      _escalatorRide = null;
+      _escalatorStage = null;
+      _floorSwapVeil = 0;
+    });
+    _guidance.clearBoardingHold();
+    _reportFloorTransitionUi();
+  }
+
+  /// 스크림으로 덮은 뒤 오버레이 층을 갈아 끼운다.
+  ///
+  /// 실내 탭은 자체 렌더러의 카메라를 인계하지만, 홈은 MapLibre 소스를 통째로
+  /// 바꾸므로 카메라가 그대로 유지된다. 덮개만 같은 타이밍으로 맞춘다 — 셸의
+  /// 페이드와 여기 대기 시간이 어긋나면 교체 장면이 그대로 보인다.
+  Future<bool> _swapIndoorFloorSmoothly(String floor) async {
+    if (!(_building?.floors.contains(floor) ?? false)) return false;
+    setState(() => _floorSwapVeil = 1);
+    _reportFloorTransitionUi();
+    await Future<void>.delayed(floorTransitionScrimFadeIn);
+    if (!mounted) return false;
+    await _switchOverlayFloor(floor);
+    if (!mounted) return false;
+    // 새 도면이 첫 프레임을 그릴 시간을 준 뒤에 걷는다.
+    await Future<void>.delayed(_indoorFloorSwapVeilHold);
+    if (!mounted) return false;
+    setState(() => _floorSwapVeil = 0);
+    _reportFloorTransitionUi();
+    return _activeFloor == floor;
+  }
+
+  /// 반 층을 지났다. 목적 층 지도를 먼저 연다(하차는 아직).
+  Future<void> _beginEscalatorTransition(EscalatorTransition transition) async {
+    if (_applyingFloorTransition) return;
+    final building = _building;
+    if (building == null) return;
+    if (!building.floors.contains(transition.toFloorLabel)) return;
+    if (_activeFloor != transition.fromFloorLabel) {
+      // 판정 중에 사용자가 층 선택기로 다른 층을 열었다. 어느 층 기준인지
+      // 모호해졌으므로 적용하지 않는다.
+      return;
+    }
+
+    _applyingFloorTransition = true;
+    try {
+      _preTransferFloor = _activeFloor;
+      _preTransferAnchor = _pdrTrailState.anchor;
+      _preTransferRoute = _indoorRouteSegment;
+      _preTransferMultiRoute = _indoorMultiFloorRoute;
+      _preTransferDestination = _indoorRouteDestination;
+
+      // 보통은 verticalMotionDetected에서 이미 멈췄다. 수직 속도 근거 없이
+      // 누적 고도만으로 여기 도달한 경우를 위해 한 번 더 보장한다(idempotent).
+      await _pauseStepsForRide();
+      if (!mounted) return;
+      setState(() {
+        _escalatorRide = transition;
+        _escalatorStage = null;
+      });
+      _reportFloorTransitionUi();
+
+      if (!await _swapIndoorFloorSmoothly(transition.toFloorLabel)) {
+        await _endEscalatorRide();
+        if (mounted) {
+          _showSnack('${transition.toFloorLabel} 지도를 불러오지 못했습니다. 현재 층을 유지합니다.');
+        }
+        return;
+      }
+      final arrival = findEscalatorArrivalNode(_floorGraph, transition);
+      if (arrival != null) setState(() => _pendingArrivalNode = arrival);
+    } finally {
+      _applyingFloorTransition = false;
+    }
+  }
+
+  /// 하차가 확정됐다. 새 층 도착 노드로 앵커를 옮기고 경로를 다시 잡는다.
+  Future<void> _completeEscalatorTransition(
+    EscalatorTransition transition,
+  ) async {
+    if (_applyingFloorTransition) return;
+    _applyingFloorTransition = true;
+    try {
+      if (_activeFloor != transition.toFloorLabel) {
+        // 조기 전환 없이 바로 확정된 경우(후보와 확정이 거의 동시).
+        if (!await _swapIndoorFloorSmoothly(transition.toFloorLabel)) {
+          await _endEscalatorRide();
+          if (mounted) {
+            _showSnack(
+              '${transition.toFloorLabel} 지도를 불러오지 못했습니다. 현재 층을 유지합니다.',
+            );
+          }
+          return;
+        }
+      }
+      final graph = _floorGraph;
+      final arrival =
+          _pendingArrivalNode ?? findEscalatorArrivalNode(graph, transition);
+      if (graph == null || arrival == null) {
+        // 도착 지점을 못 찾아도 **탑승 상태는 반드시 끝낸다.** 안 그러면 배너가
+        // 남고 걸음 누적이 영영 멈춘 채로 사용자가 복구할 방법이 없다.
+        await _endEscalatorRide();
+        if (!mounted) return;
+        setState(() => _pendingArrivalNode = null);
+        _showSnack(
+          '${transition.toFloorLabel} 도착 지점을 찾지 못했습니다. '
+          '하단 "위치 지정"으로 현재 위치를 찍어주세요.',
+        );
+        return;
+      }
+
+      setState(() {
+        // 이전 층 궤적과 복도 보정 상태는 새 층에서 이어지지 않는다.
+        _pdrTrailState.beginNewSession();
+        _guidance.resetTracking();
+      });
+      await indoorNavigationDriver.applyVerticalTransfer(
+        floorId: transition.toFloorLabel,
+        anchorLocalM: PdrLocalPoint(arrival.xM, arrival.yM),
+        axes: fitPdrToFloorAxes(graph.nodes),
+      );
+      if (!mounted) return;
+      // 하차했으므로 걸음 누적을 다시 켠다. applyVerticalTransfer가 경로 원점을
+      // 옮긴 **뒤에** 켜야 탑승 중 걸음이 새 층 원점에 붙지 않는다.
+      await _endEscalatorRide();
+      if (!mounted) return;
+      setState(() => _pendingArrivalNode = null);
+
+      await _rerouteAfterVerticalTransfer(
+        arrivalNodeId: arrival.id,
+        floor: transition.toFloorLabel,
+      );
+      if (!mounted) return;
+
+      // 별도 토스트를 띄우지 않는다. 배너가 이미 같은 자리에서 같은 사실을
+      // 말하고 있어서, 확정 순간에 토스트가 겹치면 같은 내용이 두 벌이 된다.
+      _escalatorArrivalTimer?.cancel();
+      setState(() => _escalatorArrival = transition);
+      _reportFloorTransitionUi();
+      _escalatorArrivalTimer = Timer(_indoorArrivalBannerHold, () {
+        if (!mounted) return;
+        setState(() => _escalatorArrival = null);
+        _reportFloorTransitionUi();
+      });
+    } finally {
+      _applyingFloorTransition = false;
+    }
+  }
+
+  /// 반 층 후보가 되돌아가거나 타임아웃되면 화면·경로를 탑승 전으로 복원한다.
+  Future<void> _cancelEscalatorTransition(
+    EscalatorTransition transition,
+  ) async {
+    final floor = _preTransferFloor;
+    await _endEscalatorRide();
+    if (!mounted) return;
+    if (floor == null) return;
+    if (_activeFloor != floor) {
+      await _switchOverlayFloor(floor);
+      if (!mounted) return;
+    }
+    setState(() {
+      _guidance
+        ..setRouteSegment(_preTransferRoute)
+        ..clearProgress()
+        ..setRoute(_preTransferMultiRoute);
+      _indoorMultiFloorRoute = _preTransferMultiRoute;
+      _indoorRouteDestination = _preTransferDestination;
+      _pendingArrivalNode = null;
+    });
+    _syncRouteLayer();
+    _syncIndoorDestinationLayer();
+    _clearTransferRouteBackups(keepUndoAnchor: false);
+  }
+
+  /// 새 층에서 목적지까지 경로를 다시 뽑는다.
+  Future<void> _rerouteAfterVerticalTransfer({
+    required String arrivalNodeId,
+    required String floor,
+  }) async {
+    final destination = _preTransferDestination ?? _indoorRouteDestination;
+    final destinationNodeId = destination?.nodeId;
+    final buildingId = _building?.id;
+    if (destination == null || destinationNodeId == null || buildingId == null) {
+      _clearTransferRouteBackups(keepUndoAnchor: true);
+      return;
+    }
+    setState(() => _indoorRouteDestination = destination);
+    if (destination.floor == floor) {
+      await _computeAndShowSingleFloorIndoorRoute(
+        buildingId: buildingId,
+        floor: floor,
+        endNodeId: destinationNodeId,
+        startNodeId: arrivalNodeId,
+      );
+    } else {
+      await _computeAndShowMultiFloorIndoorRoute(
+        buildingId: buildingId,
+        startFloor: floor,
+        endFloor: destination.floor,
+        endNodeId: destinationNodeId,
+        startNodeId: arrivalNodeId,
+      );
+    }
+    if (!mounted) return;
+    _clearTransferRouteBackups(keepUndoAnchor: true);
+  }
+
+  void _clearTransferRouteBackups({required bool keepUndoAnchor}) {
+    _preTransferRoute = null;
+    _preTransferMultiRoute = null;
+    _preTransferDestination = null;
+    if (!keepUndoAnchor) {
+      _preTransferFloor = null;
+      _preTransferAnchor = null;
+    }
+  }
+
+  /// 지금 화면이 그려야 하는 층 전환 배너 상태.
+  FloorTransitionUiState? get _floorTransitionUiState => floorTransitionUiState(
+    arrival: _escalatorArrival,
+    ride: _escalatorRide,
+    stage: _escalatorStage,
+    canUndo: _preTransferFloor != null && _preTransferAnchor != null,
+  );
+
+  /// 배너·스크림 상태가 바뀌면 셸에 알린다. 같은 값이면 알리지 않는다.
+  ///
+  /// 값 비교로 막지 않으면 매 스냅샷마다 부모 setState가 돌아, 지도 전체가
+  /// 초당 수 회 다시 그려진다.
+  void _reportFloorTransitionUi() {
+    final banner = _floorTransitionUiState;
+    final scrim = _floorSwapVeil;
+    if (banner == _reportedFloorTransition &&
+        scrim == _reportedFloorScrimOpacity) {
+      return;
+    }
+    _reportedFloorTransition = banner;
+    _reportedFloorScrimOpacity = scrim;
+    final notify = widget.onFloorTransitionChanged;
+    if (notify == null) return;
+    // build 중에는 부모 setState를 호출할 수 없다.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) notify(banner, scrim);
+    });
+  }
+
+  /// 배너의 `아니에요`. 셸이 호출한다.
+  void undoFloorTransition() {
+    _escalatorArrivalTimer?.cancel();
+    setState(() => _escalatorArrival = null);
+    _reportFloorTransitionUi();
+    _enqueueFloorTransition(_undoFloorTransition);
+  }
+
+  /// 자동 전환을 되돌린다. 층과 앵커를 전환 직전 값으로 복원한다.
+  ///
+  /// 되돌린 뒤 위치는 "에스컬레이터를 타기 직전 지점"이다. 그 사이 걸은 거리는
+  /// 복원하지 않는다 — 잘못된 전환이었다면 그 구간의 걸음은 어차피 어느 층
+  /// 기준인지 알 수 없다.
+  Future<void> _undoFloorTransition() async {
+    final floor = _preTransferFloor;
+    final anchor = _preTransferAnchor;
+    if (floor == null || anchor == null) return;
+    _preTransferFloor = null;
+    _preTransferAnchor = null;
+    if (_applyingFloorTransition) return;
+    _applyingFloorTransition = true;
+    try {
+      await _endEscalatorRide();
+      if (!mounted) return;
+      await _switchOverlayFloor(floor);
+      if (!mounted) return;
+      setState(() {
+        _pdrTrailState.beginNewSession();
+        _guidance.resetTracking();
+      });
+      await indoorNavigationDriver.applyVerticalTransfer(
+        floorId: floor,
+        anchorLocalM: anchor.anchorLocalM,
+        axes: anchor.axes,
+      );
+    } finally {
+      _applyingFloorTransition = false;
+    }
   }
 
   /// 건물 로드가 실패한 상태인지. 배지를 띄우는 유일한 근거이며, 재시도가
@@ -972,6 +1395,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _pdrCalibrationSub?.cancel();
     _pdrAltitudeSub?.cancel();
     _pdrRawMotionSub?.cancel();
+    _escalatorArrivalTimer?.cancel();
+    // 탑승 중 화면이 닫히면 걸음이 멈춘 채로 전역 PDR 세션이 남는다. 다음
+    // 화면에서 아무리 걸어도 위치가 갱신되지 않는다.
+    if (_stepsPausedForRide) {
+      _stepsPausedForRide = false;
+      unawaited(indoorNavigationDriver.resumeStepTracking());
+    }
     // 앱 전역 인스턴스라 dispose하지 않는다 — 실내 화면이 같은 컨트롤러를
     // 계속 구독한다.
     _debugModeController.removeListener(_onDebugModeChanged);
@@ -2962,6 +3392,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _guidance.attach(buildingId: _building?.id ?? '');
     } else {
       _guidance.detach();
+      // 야외로 나가면 진행 중이던 층 전환도 끝난다. 남겨 두면 배너가 야외
+      // 화면에 떠 있고 걸음이 멈춘 채로 유지된다.
+      _enqueueFloorTransition(_endEscalatorRide);
     }
     setState(() => _indoorEntered = value);
     widget.onIndoorEnteredChanged?.call(value);
@@ -3907,6 +4340,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final toFloor = anchor == null ? null : FloorCoordinateTransform(anchor);
     final update = _guidance.updateProgress(
       result,
+      rerouteInFlight: _indoorRerouteInFlight,
       confirmedSteps: snapshot?.steps,
       previewSteps: snapshot?.preview.steps,
       orientationHeadingDeg: snapshot == null || toFloor == null
@@ -3933,9 +4367,67 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         holdReason: update.holdReason,
       );
     }
-    // 재탐색은 아직 붙이지 않는다. 홈에는 목적지 노드를 들고 경로를 다시 뽑는
-    // 경로가 실내 탭과 다르게 배선돼 있어, 같이 옮겨야 안전하다.
+    if (update.shouldReroute &&
+        DateTime.now().millisecondsSinceEpoch - _lastIndoorRerouteAtMs >= 2000) {
+      unawaited(_rerouteIndoorFromCurrentPosition());
+    }
     if (mounted) setState(() {});
+  }
+
+  bool _indoorRerouteInFlight = false;
+  int _lastIndoorRerouteAtMs = 0;
+
+  /// 경로를 벗어난 것이 확인되면 목적지는 유지한 채 현 위치에서 다시 뽑는다.
+  ///
+  /// **층 선택기 층이 아니라 앵커 층을 기준으로 한다.** 선택기는 사용자가 다른
+  /// 층을 둘러보는 UI 상태일 뿐이다. 그 층으로 재탐색하면 다층 안내 중간
+  /// 세그먼트가 단층 경로로 바뀌어 최종 도착처럼 보인다.
+  Future<void> _rerouteIndoorFromCurrentPosition() async {
+    if (_indoorRerouteInFlight) return;
+    final destination = _indoorRouteDestination;
+    final destinationNodeId = destination?.nodeId;
+    final floor = _pdrTrailState.anchor?.floorId;
+    final graph = _floorGraph;
+    final buildingId = _building?.id;
+    final current = _guidance.trackingResult?.previewPosition;
+    if (destination == null ||
+        destinationNodeId == null ||
+        floor == null ||
+        graph == null ||
+        buildingId == null ||
+        current == null) {
+      return;
+    }
+    final startNodeId = _nearestNodeId(
+      graph.nodes,
+      current.eastM,
+      current.northM,
+      excludingNodeId: destinationNodeId,
+    );
+    if (startNodeId == null) return;
+
+    _indoorRerouteInFlight = true;
+    try {
+      if (destination.floor == floor) {
+        await _computeAndShowSingleFloorIndoorRoute(
+          buildingId: buildingId,
+          floor: floor,
+          endNodeId: destinationNodeId,
+          startNodeId: startNodeId,
+        );
+      } else {
+        await _computeAndShowMultiFloorIndoorRoute(
+          buildingId: buildingId,
+          startFloor: floor,
+          endFloor: destination.floor,
+          endNodeId: destinationNodeId,
+          startNodeId: startNodeId,
+        );
+      }
+      _lastIndoorRerouteAtMs = DateTime.now().millisecondsSinceEpoch;
+    } finally {
+      _indoorRerouteInFlight = false;
+    }
   }
 
   /// 지금 이 층 실내 경로의 턴바이턴 안내. 없으면 null.

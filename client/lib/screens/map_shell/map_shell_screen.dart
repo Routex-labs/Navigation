@@ -1270,6 +1270,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                 // 눌러도 강조가 안 뜬다.
                 categorySelection: _categorySelection,
                 onFloorChanged: _onActiveFloorChanged,
+                onFloorTransitionChanged: _onFloorTransitionChanged,
                 // 실내 화면과 같은 목록을 넘긴다. 야외 지도도 실내 진입
                 // 오버레이가 켜지면 층 선택기·위치 지정을 함께 쓰므로, 상단
                 // 검색창이나 하단 바를 누른 탭이 지도 탭으로 새어들어가면
@@ -1398,8 +1399,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
                     child: Center(
                       child: FloorTransitionBanner(
                         state: transition,
-                        onUndo: () =>
-                            _indoorKey.currentState?.undoFloorTransition(),
+                        // 되돌리기는 지금 그 전환을 소유한 화면이 처리한다.
+                        // 홈과 실내 탭이 각자 층 전환을 돌리므로, 한쪽으로만
+                        // 보내면 다른 쪽 배너의 "아니에요"가 먹통이 된다.
+                        onUndo: _mode == MapMode.outdoor
+                            ? () => _outdoorKey.currentState
+                                  ?.undoFloorTransition()
+                            : () => _indoorKey.currentState
+                                  ?.undoFloorTransition(),
                       ),
                     ),
                   ),
