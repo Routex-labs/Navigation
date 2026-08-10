@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../core/service_locator.dart';
 import '../domain/dijkstra.dart';
+import '../domain/indoor_store_lookup.dart';
 import '../domain/outdoor_poi_ranking.dart';
 import '../models/building.dart';
 import '../models/discovery_result.dart';
@@ -486,8 +487,25 @@ class _SearchPanelState extends State<SearchPanel> {
     // 길찾기 시트도 같은 함수를 부른다 — 여기서 다시 구현하면 또 갈린다.
     final relevant = filterByNameRelevance(query, pois);
     if (relevant.isEmpty) return;
+
+    // 사용자가 친 말로 우리 매장을 못 찾았을 수 있다("더현대 스타벅스" →
+    // no_match). 그 경우 POI 이름의 브랜드로 한 번 더 묻는다 — 안 하면 겹침을
+    // 판정할 대상이 없어 TMAP 줄이 그대로 남고, 그 줄을 고르면 층·노드가 없어
+    // 실내 경로가 시작되지 않는다. 길찾기 후보도 같은 함수를 부른다.
+    final isAt = widget.isInsideIndoorBuilding;
+    final enriched = await lookUpIndoorStoresByBrand(
+      pois: relevant,
+      indoorStores: _results,
+      isAtBuilding: (poi) => isAt?.call(poi.point) ?? false,
+      buildingNames: _buildingNames,
+      search: (brand) =>
+          destinationRepository.searchDestinations(widget.buildingId, brand),
+    );
+    if (!mounted || requestId != _requestId) return;
+
     setState(() {
       _pois = relevant;
+      _results = enriched;
       // 이름 강조가 쓰는 질의어. 실내 검색이 아직 안 끝났을 수 있어 여기서도
       // 채운다 — 안 채우면 이전 검색어 기준으로 강조가 걸린다.
       _submittedQuery = query;

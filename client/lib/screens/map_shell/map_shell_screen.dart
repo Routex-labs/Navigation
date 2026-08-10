@@ -8,6 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../core/api_config.dart';
 import '../../core/service_locator.dart';
 import '../../domain/dijkstra.dart';
+import '../../domain/indoor_store_lookup.dart';
 import '../../domain/outdoor_poi_ranking.dart';
 import '../../domain/single_flight.dart';
 import '../../domain/transit_walk_fill.dart';
@@ -1111,10 +1112,26 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 규칙은 도메인 함수가 갖고 있다(`domain/outdoor_poi_ranking.dart`).
     // 상단 검색 패널도 같은 함수를 부른다 — 여기서 다시 구현하면 또 갈린다.
     final outdoor = _outdoorKey.currentState;
-    final merged = mergeOutdoorResults(
-      pois: filterByNameRelevance(query, pois),
+    final relevant = filterByNameRelevance(query, pois);
+    bool isAtBuilding(OutdoorPoi poi) =>
+        outdoor?.isAtIndoorBuilding(poi.point) ?? false;
+
+    // 사용자가 친 말로 우리 매장을 못 찾았을 수 있다("더현대 스타벅스" →
+    // no_match). 그 경우 POI 이름의 브랜드로 한 번 더 묻는다 — 안 하면 겹침을
+    // 판정할 대상이 없어 TMAP 줄이 그대로 남고, 그 줄에는 층·노드가 없다.
+    final enrichedStores = await lookUpIndoorStoresByBrand(
+      pois: relevant,
       indoorStores: indoorStores,
-      isAtBuilding: (poi) => outdoor?.isAtIndoorBuilding(poi.point) ?? false,
+      isAtBuilding: isAtBuilding,
+      buildingNames: buildingNames,
+      search: (brand) =>
+          destinationRepository.searchDestinations(_buildingId, brand),
+    );
+
+    final merged = mergeOutdoorResults(
+      pois: relevant,
+      indoorStores: enrichedStores,
+      isAtBuilding: isAtBuilding,
       buildingNames: buildingNames,
     );
     // **중복 제거 결과를 로그로 남긴다.** 화면에서는 "겹쳐서 뺐다"와 "원래
@@ -1123,7 +1140,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
     final dropped = pois.length - merged.outdoorRows.length;
     debugPrint(
       '[poi-merge] "$query" 바깥 ${pois.length}건 중 $dropped건이 '
-      '우리 매장과 겹쳐 빠짐 (실내 후보 ${indoorStores.length}건, '
+      '우리 매장과 겹쳐 빠짐 (실내 후보 ${enrichedStores.length}건, '
       '건물 이름 $buildingNames)',
     );
     return merged;

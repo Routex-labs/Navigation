@@ -235,7 +235,11 @@ class _LegacyEtaContent extends StatelessWidget {
             child: const Text('안내 시작'),
           ),
         ],
-        if (onClose != null) ...[
+        // **시작과 종료는 함께 뜨지 않는다.** 계획 상태에서 할 일은 출발뿐이고,
+        // 안내 중에 할 일은 그만두는 것뿐이다. 둘을 나란히 두면 아직 출발도 안
+        // 한 화면에 "종료"가 있어, 사용자는 무엇이 이미 시작됐는지부터 헷갈린다.
+        // 계획을 접는 길은 상단 길찾기 바에 그대로 있다.
+        if (onClose != null && onStartGuidance == null) ...[
           const SizedBox(width: 8),
           // "안내 종료"는 되돌리기 어려운 조작(경로/도착지 리셋)이므로
           // 색상은 부드럽되, 다른 카드 요소보다 명확히 눌러야 할 지점으로

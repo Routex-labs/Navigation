@@ -22,12 +22,17 @@ void main() {
     );
   }
 
-  testWidgets('콜백을 주면 안내 시작 버튼이 뜬다', (tester) async {
+  testWidgets('계획 상태에서는 안내 시작만 뜬다', (tester) async {
     var started = false;
-    await tester.pumpWidget(host(onStartGuidance: () => started = true));
+    await tester.pumpWidget(
+      host(onStartGuidance: () => started = true, onClose: () {}),
+    );
     await tester.pump();
 
     expect(find.text('안내 시작'), findsOneWidget);
+    // 아직 출발도 안 했는데 "종료"가 함께 있으면, 무엇이 이미 시작됐는지부터
+    // 헷갈린다. 계획을 접는 길은 상단 길찾기 바에 있다.
+    expect(find.text('안내 종료'), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('eta-start-guidance')));
     await tester.pump();
@@ -44,13 +49,13 @@ void main() {
     expect(find.text('안내 종료'), findsOneWidget);
   });
 
-  testWidgets('시작과 종료가 함께 뜰 때 순서는 시작 → 종료', (tester) async {
-    await tester.pumpWidget(host(onStartGuidance: () {}, onClose: () {}));
+  testWidgets('안내를 시작하면 종료만 남는다', (tester) async {
+    // 안내가 시작되면 호출부가 onStartGuidance를 null로 내린다
+    // (OutdoorMapBodyState._offerStartGuidance). 그 상태를 그대로 그린다.
+    await tester.pumpWidget(host(onClose: () {}));
     await tester.pump();
 
-    final start = tester.getTopLeft(find.text('안내 시작')).dx;
-    final close = tester.getTopLeft(find.text('안내 종료')).dx;
-    // 권하는 행동이 먼저 읽히고, 되돌리기 어려운 조작이 바깥쪽에 온다.
-    expect(start, lessThan(close));
+    expect(find.text('안내 시작'), findsNothing);
+    expect(find.text('안내 종료'), findsOneWidget);
   });
 }
