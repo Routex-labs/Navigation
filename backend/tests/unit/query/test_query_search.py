@@ -272,3 +272,30 @@ def test_근거가_없으면_추천_이유는_없다():
     assert query_search._reason({}) is None
     assert query_search._intent_basis([]) == {}
     assert query_search._intent_basis(["신발"]) == {"intents": ["신발"]}
+
+
+# 별칭의 **앞부분만** 쳐도 걸린다. 한글은 매장명이 `스타벅스 리저브`라 `스타`만
+# 쳐도 부분 일치로 잡히는데, 영어로 치는 사용자만 `starbucks`를 끝까지 입력해야
+# 했다 — 같은 매장을 찾는 두 언어의 경험이 달랐다.
+def test_영문_별칭은_앞부분만_쳐도_걸린다():
+    rows = [(_store("s1", "스타벅스 리저브"), _floor())]
+
+    for typed in ("sta", "starb", "starbucks"):
+        scored = query_search._rank(rows, typed)
+        assert scored and scored[0][3].id == "s1", typed
+
+
+# 반대 방향(표준형이 질의의 접두)은 넣지 않는다. `스`로 `스타벅스` 별칭 전부를
+# 끌어오면 무관한 매장이 쏟아진다.
+def test_한_글자는_확장하지_않는다():
+    synonyms = query_search._synonyms()
+
+    assert query_search._prefix_expansions(synonyms, "s") == ()
+
+
+# 접두 확장이 없는 말은 예전처럼 이름 부분 일치만 본다 — 확장이 매칭을
+# 넓히기만 하고 기존 판정을 바꾸지 않는다.
+def test_별칭에_없는_말은_그대로다():
+    rows = [(_store("s1", "테디뵈르하우스"), _floor())]
+
+    assert query_search._rank(rows, "테디") and query_search._rank(rows, "zzzz") == []
