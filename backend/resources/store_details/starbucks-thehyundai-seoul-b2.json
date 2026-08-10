@@ -1,42 +1,344 @@
 {
   "PO-HU40njvml1512": {
     "name": "스타벅스 리저브",
-    "updated_at": "2026-07-30",
+    "updated_at": "2026-08-10",
+    "source": "https://www.starbucks.co.kr/store/store_map.do?store_cd=1762",
     "summary": "프리미엄 커피와 스페셜한 공간이 있는 더현대서울(B2)R점입니다.",
     "hero": [
-      { "local_asset": "assets/place_details/starbucks_reserve_store_01.png" },
-      { "local_asset": "assets/place_details/starbucks_reserve_store_02.png" },
-      { "local_asset": "assets/place_details/starbucks_reserve_store_03.png" },
-      { "local_asset": "assets/place_details/starbucks_reserve_store_04.png" }
+      {
+        "local_asset": "assets/place_details/starbucks_store_01.jpg"
+      },
+      {
+        "local_asset": "assets/place_details/starbucks_store_04.jpg"
+      },
+      {
+        "local_asset": "assets/place_details/starbucks_store_06.jpg"
+      },
+      {
+        "local_asset": "assets/place_details/starbucks_store_07.jpg"
+      },
+      {
+        "local_asset": "assets/place_details/starbucks_store_08.jpg"
+      }
     ],
     "menu": [
       {
+        "category": "리저브",
+        "name": "리저브 콜드 브루",
+        "name_en": "Reserve Cold Brew",
+        "image_asset": "assets/place_details/starbucks_menu_reserve_cold_brew.jpg",
+        "description": "리저브 커피 마스터의 정성으로 차갑게 추출한 깊고 부드러운 풍미의 커피",
+        "volume": "355ml",
+        "calories": "5kcal",
+        "caffeine": "190mg"
+      },
+      {
+        "category": "리저브",
+        "name": "리저브 나이트로",
+        "name_en": "Reserve Nitro",
+        "image_asset": "assets/place_details/starbucks_menu_reserve_nitro.jpg",
+        "description": "나이트로 커피 정통의 캐스케이딩과 부드러운 콜드 크레마. 부드러운 목 넘김과 완벽한 밸런스에 커피 본연의 단맛을 경험할 수 있습니다.",
+        "volume": "355ml",
+        "calories": "5kcal",
+        "caffeine": "190mg"
+      },
+      {
+        "category": "리저브",
+        "name": "클래식 아포가토",
+        "name_en": "Classic Affogato",
+        "image_asset": "assets/place_details/starbucks_menu_classic_affogato.jpg",
+        "description": "[리저브R 매장 전용음료] 리저브 에스프레소 투 샷이 바닐라 아이스크림과 진하게 어우러진 정통 아포가토",
+        "volume": "355ml",
+        "calories": "240kcal",
+        "caffeine": "210mg"
+      },
+      {
+        "category": "리저브",
+        "name": "콜드 브루 몰트",
+        "name_en": "Cold Brew Malt",
+        "image_asset": "assets/place_details/starbucks_menu_cold_brew_malt.jpg",
+        "description": "[리저브 전용음료] 리저브 콜드 브루, 바닐라 아이스크림, 몰트가 블렌딩된 리저브만의 쉐이크",
+        "volume": "355ml",
+        "calories": "505kcal",
+        "caffeine": "190mg"
+      },
+      {
+        "category": "리저브",
+        "name": "에스프레소 플라이트",
+        "name_en": "Espresso Flight",
+        "image_asset": "assets/place_details/starbucks_menu_espresso_flight.jpg",
+        "description": "스타벅스 리저브 에스프레소를 새롭고 다양하게 즐길 수 있는 에스프레소 플라이트"
+      },
+      {
+        "category": "리저브",
+        "name": "스모크드 콜드 패션드",
+        "name_en": "Smoked Cold Fashioned",
+        "image_asset": "assets/place_details/starbucks_menu_smoked_cold_fashioned.jpg",
+        "description": "스모키한 위스키의 풍미와 초콜릿 풍미의 리저브 커피가 어우러진 칵테일처럼 즐기는 콜드 브루 음료",
+        "volume": "355ml",
+        "calories": "30kcal",
+        "caffeine": "135mg"
+      },
+      {
+        "category": "에스프레소",
         "name": "카페 아메리카노",
-        "price": "4,700원",
-        "description": "에스프레소에 물을 더한 커피입니다.",
-        "image_asset": "assets/place_details/starbucks_menu_americano.jpg"
+        "name_en": "Caffe Americano",
+        "image_asset": "assets/place_details/starbucks_menu_americano.jpg",
+        "description": "진한 에스프레소에 뜨거운 물을 더한 깊이와 풍미가 살아있는 커피",
+        "volume": "355ml",
+        "calories": "10kcal",
+        "caffeine": "150mg"
       },
       {
+        "category": "에스프레소",
         "name": "카페 라떼",
-        "price": "5,200원",
-        "description": "에스프레소와 우유가 어우러진 라떼입니다.",
-        "image_asset": "assets/place_details/starbucks_menu_latte.jpg"
+        "name_en": "Caffe Latte",
+        "image_asset": "assets/place_details/starbucks_menu_latte.jpg",
+        "description": "풍부하고 진한 에스프레소가 신선한 스팀 밀크를 만나 부드러워진 커피 위에 우유 거품을 살짝 얹은 커피",
+        "volume": "355ml",
+        "calories": "180kcal",
+        "caffeine": "75mg"
       },
       {
-        "name": "스타벅스 돌체 라떼",
-        "price": "6,100원",
-        "description": "연유 풍미를 더한 스타벅스 라떼입니다.",
-        "image_asset": "assets/place_details/starbucks_menu_dolce_latte.jpg"
+        "category": "에스프레소",
+        "name": "카푸치노",
+        "name_en": "Cappuccino",
+        "image_asset": "assets/place_details/starbucks_menu_cappuccino.jpg",
+        "description": "풍부하고 진한 에스프레소에 따뜻한 우유와 벨벳 같은 우유 거품이 1:1 비율로 어우러져 마무리된 커피 음료",
+        "volume": "355ml",
+        "calories": "110kcal",
+        "caffeine": "75mg"
       },
       {
+        "category": "에스프레소",
         "name": "카라멜 마키아또",
-        "price": "6,100원",
-        "description": "바닐라와 카라멜 풍미를 더한 에스프레소 음료입니다.",
-        "image_asset": "assets/place_details/starbucks_menu_caramel_macchiato.jpg"
+        "name_en": "Caramel Macchiato",
+        "image_asset": "assets/place_details/starbucks_menu_caramel_macchiato.jpg",
+        "description": "향긋한 바닐라 시럽과 따뜻한 스팀 밀크 위에 풍성한 우유 거품을 얹고 점을 찍듯이 에스프레소를 부은 후 벌집 모양으로 카라멜 드리즐을 올린 달콤한 커피 음료",
+        "volume": "355ml",
+        "calories": "200kcal",
+        "caffeine": "75mg"
+      },
+      {
+        "category": "에스프레소",
+        "name": "스타벅스 돌체 라떼",
+        "name_en": "Starbucks Dolce Latte",
+        "image_asset": "assets/place_details/starbucks_menu_dolce_latte.jpg",
+        "description": "스타벅스의 다른 커피 음료보다 더욱 깊은 커피의 맛과 향에 깔끔한 무지방 우유와 부드러운 돌체 시럽이 들어간 음료로 달콤하고 진한 커피 라떼",
+        "volume": "355ml",
+        "calories": "215kcal",
+        "caffeine": "150mg"
+      },
+      {
+        "category": "에스프레소",
+        "name": "카페 모카",
+        "name_en": "Caffe Mocha",
+        "image_asset": "assets/place_details/starbucks_menu_cafe_mocha.jpg",
+        "description": "진한 초콜릿 모카 시럽과 풍부한 에스프레소를 스팀 밀크와 섞어 휘핑크림으로 마무리한 음료로 진한 에스프레소와 초콜릿 맛이 어우러진 커피",
+        "volume": "355ml",
+        "calories": "290kcal",
+        "caffeine": "95mg"
+      },
+      {
+        "category": "콜드 브루",
+        "name": "콜드 브루",
+        "name_en": "Cold Brew",
+        "image_asset": "assets/place_details/starbucks_menu_cold_brew.jpg",
+        "description": "스타벅스 바리스타의 정성으로 만들어진 콜드브루. 콜드브루 전용 원료로 정교하게 완성된 부드러운 산미와 깊은 바디감의 초콜릿 풍미 커피",
+        "volume": "355ml",
+        "calories": "5kcal",
+        "caffeine": "155mg"
+      },
+      {
+        "category": "콜드 브루",
+        "name": "나이트로 콜드 브루",
+        "name_en": "Nitro Cold Brew",
+        "image_asset": "assets/place_details/starbucks_menu_nitro_cold_brew.jpg",
+        "description": "나이트로 커피 정통의 캐스케이딩과 부드러운 콜드 크레마. 부드러운 목 넘김과 완벽한 밸런스에 커피 본연의 단맛을 경험할 수 있습니다.",
+        "volume": "355ml",
+        "calories": "5kcal",
+        "caffeine": "245mg"
+      },
+      {
+        "category": "콜드 브루",
+        "name": "바닐라 크림 콜드 브루",
+        "name_en": "Vanilla Cream Cold Brew",
+        "image_asset": "assets/place_details/starbucks_menu_vanilla_cream_cold_brew.jpg",
+        "description": "콜드 브루에 더해진 바닐라 크림으로 깔끔하면서 달콤한 콜드 브루를 새롭게 즐길 수 있는 음료입니다.",
+        "volume": "355ml",
+        "calories": "120kcal",
+        "caffeine": "135mg"
+      },
+      {
+        "category": "콜드 브루",
+        "name": "돌체 콜드 브루",
+        "name_en": "Dolce Cold Brew",
+        "image_asset": "assets/place_details/starbucks_menu_dolce_cold_brew.jpg",
+        "description": "무더운 여름철, 동남아 휴가지에서 즐기는 커피를 떠오르게 하는 스타벅스 음료의 베스트 조합인 돌체 콜드 브루를 만나보세요.",
+        "volume": "355ml",
+        "calories": "170kcal",
+        "caffeine": "130mg"
+      },
+      {
+        "category": "프라푸치노",
+        "name": "자바 칩 프라푸치노",
+        "name_en": "Java Chip Frappuccino",
+        "image_asset": "assets/place_details/starbucks_menu_java_chip_frappuccino.jpg",
+        "description": "커피, 모카 소스, 진한 초콜릿 칩이 입안 가득 느껴지는 스타벅스에서만 맛볼 수 있는 프라푸치노",
+        "volume": "355ml",
+        "calories": "285kcal",
+        "caffeine": "100mg"
+      },
+      {
+        "category": "프라푸치노",
+        "name": "카라멜 프라푸치노",
+        "name_en": "Caramel Frappuccino",
+        "image_asset": "assets/place_details/starbucks_menu_caramel_frappuccino.jpg",
+        "description": "카라멜과 커피가 어우러진 프라푸치노",
+        "volume": "355ml",
+        "calories": "225kcal",
+        "caffeine": "85mg"
+      },
+      {
+        "category": "프라푸치노",
+        "name": "제주 말차 크림 프라푸치노",
+        "name_en": "Jeju Malcha Cream Frappuccino",
+        "image_asset": "assets/place_details/starbucks_menu_jeju_malcha_cream_frappuccino.jpg",
+        "description": "깊고 진한 말차 본연의 맛과 향을 시원하고 부드럽게 즐길 수 있는 프라푸치노",
+        "volume": "355ml",
+        "calories": "235kcal",
+        "caffeine": "80mg"
+      },
+      {
+        "category": "프라푸치노",
+        "name": "초콜릿 크림 칩 프라푸치노",
+        "name_en": "Chocolate Cream Chip Frappuccino",
+        "image_asset": "assets/place_details/starbucks_menu_chocolate_cream_chip_frappuccino.jpg",
+        "description": "모카 소스와 진한 초콜릿 칩, 초콜릿 드리즐이 올라간 달콤한 크림 프라푸치노",
+        "volume": "355ml",
+        "calories": "275kcal",
+        "caffeine": "10mg"
+      },
+      {
+        "category": "티·기타",
+        "name": "제주 말차 라떼",
+        "name_en": "Jeju Malcha Latte",
+        "image_asset": "assets/place_details/starbucks_menu_jeju_malcha_latte.jpg",
+        "description": "차광재배한 어린 녹찻잎을 곱게 갈아 깊고 진한 말차 본연의 맛과 향을 부드럽게 즐길 수 있는 제주 말차 라떼",
+        "volume": "355ml",
+        "calories": "205kcal",
+        "caffeine": "80mg"
+      },
+      {
+        "category": "티·기타",
+        "name": "얼 그레이 티",
+        "name_en": "Earl Grey Brewed Tea",
+        "image_asset": "assets/place_details/starbucks_menu_earl_grey_tea.jpg",
+        "description": "꽃향 가득한 라벤더와 베르가못 향이 진한 홍차와 블렌딩된 향긋한 블랙 티",
+        "volume": "355ml",
+        "calories": "0kcal",
+        "caffeine": "70mg"
+      },
+      {
+        "category": "티·기타",
+        "name": "자몽 허니 블랙 티",
+        "name_en": "Grapefruit Honey Black Tea",
+        "image_asset": "assets/place_details/starbucks_menu_grapefruit_honey_black_tea.jpg",
+        "description": "새콤한 자몽과 달콤한 꿀이 깊고 그윽한 풍미의 스타벅스 티바나 블랙 티의 조화",
+        "volume": "355ml",
+        "calories": "125kcal",
+        "caffeine": "70mg"
+      },
+      {
+        "category": "티·기타",
+        "name": "시그니처 핫 초콜릿",
+        "name_en": "Signature Hot Chocolate",
+        "image_asset": "assets/place_details/starbucks_menu_signature_hot_chocolate.jpg",
+        "description": "깊고 진한 초콜릿과 부드러운 휘핑크림이 입안에서 사르르 녹는 초콜릿 음료",
+        "volume": "355ml",
+        "calories": "405kcal",
+        "caffeine": "40mg"
+      },
+      {
+        "category": "푸드",
+        "name": "잉글리쉬 스콘",
+        "name_en": "English Scone",
+        "image_asset": "assets/place_details/starbucks_menu_english_scone.jpg",
+        "description": "고메 버터의 풍미가 은은하게 맴도는 담백한 스콘입니다."
+      },
+      {
+        "category": "푸드",
+        "name": "탕종 플레인 베이글",
+        "name_en": "Plain Bagel",
+        "image_asset": "assets/place_details/starbucks_menu_plain_bagel.jpg",
+        "description": "탕종법으로 반죽한 후 고온에서 데치고, 짧게 구워 내 쫄깃하고 촉촉한 식감이 특징인 플레인 베이글입니다."
+      },
+      {
+        "category": "푸드",
+        "name": "부드러운 생크림 카스텔라",
+        "name_en": "Fresh Cream Castella",
+        "image_asset": "assets/place_details/starbucks_menu_fresh_cream_castella.jpg",
+        "description": "부드러운 생크림이 듬뿍 들어있는 촉촉한 카스텔라입니다."
+      },
+      {
+        "category": "푸드",
+        "name": "레이디핑거 티라미수 케이크",
+        "name_en": "Ladyfinger Tiramisu Cake",
+        "image_asset": "assets/place_details/starbucks_menu_ladyfinger_tiramisu_cake.jpg",
+        "description": "진한 풍미의 마스카포네 치즈 크림 사이에 커피 시럽으로 촉촉하게 적신 레이디핑거 쿠키가 샌드되어 부드럽게 어우러지는 케이크입니다."
+      },
+      {
+        "category": "푸드",
+        "name": "B.L.T. 샌드위치",
+        "name_en": "B.L.T. Sandwich",
+        "image_asset": "assets/place_details/starbucks_menu_blt_sandwich.jpg",
+        "description": "멀티 그레인이 들어간 통밀 식빵에 참나무로 훈연한 베이컨, 로메인, 두툼하게 썬 토마토의 클래식한 조합으로 만든 샌드위치입니다."
+      },
+      {
+        "category": "푸드",
+        "name": "쫄깃 소시지 브레드",
+        "name_en": "Sausage Bread",
+        "image_asset": "assets/place_details/starbucks_menu_sausage_bread.jpg",
+        "description": "돌돌 말린 쫄깃한 도우와 육즙 가득 두툼한 소시지, 어니언 소스가 잘 어우러지는 세이보리 브레드입니다."
+      }
+    ],
+    "demoInfo": [
+      {
+        "label": "영업시간",
+        "value": "화~목 10:30–20:00 · 금~일 10:30–20:30 (2026-08-10 월요일 휴점)",
+        "source": "https://www.starbucks.co.kr/store/store_map.do?store_cd=1762",
+        "confirmed_at": "2026-08-10"
+      },
+      {
+        "label": "대표번호",
+        "value": "1522-3232 (평일 09:00–18:00) · 전국 공통 고객센터",
+        "source": "https://www.starbucks.co.kr/store/store_map.do?store_cd=1762",
+        "confirmed_at": "2026-08-10"
+      },
+      {
+        "label": "매장 타입",
+        "value": "스타벅스 리저브 · 2021년 2월 24일 오픈",
+        "source": "https://www.starbucks.co.kr/store/store_map.do?store_cd=1762",
+        "confirmed_at": "2026-08-10"
+      },
+      {
+        "label": "주차",
+        "value": "주차 지원 불가",
+        "source": "https://www.starbucks.co.kr/store/store_map.do?store_cd=1762",
+        "confirmed_at": "2026-08-10"
+      },
+      {
+        "label": "위생등급",
+        "value": "식약처 음식점 위생등급제 매우우수",
+        "source": "https://www.starbucks.co.kr/store/store_map.do?store_cd=1762",
+        "confirmed_at": "2026-08-10"
       }
     ],
     "businessInfo": [
-      { "label": "주소", "value": "서울특별시 영등포구 여의대로 108, 더현대서울 B2" }
+      {
+        "label": "주소",
+        "value": "서울특별시 영등포구 여의대로 108, 더현대서울 B2"
+      }
     ]
   }
 }
