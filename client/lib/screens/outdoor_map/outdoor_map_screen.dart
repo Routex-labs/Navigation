@@ -52,6 +52,7 @@ import '../../widgets/category_map_filter.dart';
 import '../../widgets/category_map_icon.dart';
 import '../../widgets/floor_facility_style.dart';
 import '../../widgets/floor_selector.dart';
+import '../../widgets/guidance_recenter_button.dart';
 import '../../widgets/map_icon_cache.dart';
 import '../../widgets/map_overlay_tap_guard.dart';
 import '../../widgets/status_badge.dart';
@@ -272,6 +273,50 @@ const _indoorZoomInDuration = Duration(milliseconds: 900);
 /// 따라와 답답하다.
 const _floorSwitchZoomDuration = Duration(milliseconds: 500);
 
+/// 안내를 시작할 때 경로 전체를 담으러 물러서는 시간.
+///
+/// 진입(900ms)보다 짧고 층 전환(500ms)보다 길다. 진입만큼 큰 장면 전환은
+/// 아니지만 "지금부터 이 길로 간다"를 읽을 시간은 줘야 한다.
+const _routeOverviewDuration = Duration(milliseconds: 700);
+
+/// 개요 연출을 하지 않는 경로 길이(m).
+///
+/// 바로 옆 매장이면 담을 것이 없다. 물러섰다 돌아오는 동작만 남아 화면이
+/// 까닭 없이 출렁인다. 걷기 경로 쪽 [_fitCameraToRoute]의 5m 가드와 같은 취지다.
+const _routeOverviewMinDistanceM = 5.0;
+
+/// 경로 상자의 변 길이 하한(m).
+///
+/// **없으면 zoom이 발산한다.** 곧게 뻗은 복도 경로는 최소 넓이 상자의 짧은 변이
+/// 0에 수렴하는데, [zoomToFitWidth]는 `log(가용폭 / 폭)`이라 폭이 0이면 무한대를
+/// 돌려준다. 12m는 복도 폭 남짓이라, 곧은 경로도 양옆이 조금 보이는 배율에서
+/// 멈춘다.
+const _routeFitMinSideM = 12.0;
+
+/// 경로 개요가 확대해 들어가는 상한.
+///
+/// 하한([_routeFitMinSideM])만으로는 짧은 세그먼트에서 배율이 지나치게
+/// 올라간다 — 층 전환 직후 15m짜리 B1 세그먼트가 복도 하나만 꽉 채운 화면이
+/// 됐다. 경로가 화면에 다 들어와도 **주변 매장 몇 개는 함께 보여야** 여기가
+/// 어디인지 읽힌다. 타일이 더 세밀해지지 않는 상한(18)보다 반 단계 아래로
+/// 잡아 짧은 경로에서도 맥락이 남게 한다.
+const _routeFitMaxZoom = 17.5;
+
+/// "내 위치로" 버튼이 되돌아가는 배율의 하한.
+///
+/// 개요 연출이 물러선 자리에서 누르면 이만큼 다시 당겨 온다. 실내 타일이 더
+/// 세밀해지지 않는 상한([indoorTilesMaxZoom])을 그대로 쓴다 — 그 위로 확대해도
+/// 도면은 같은 그림을 늘린 것뿐이다.
+///
+/// 이미 이보다 확대해 둔 사용자에게는 **적용하지 않는다.** 무언가를 들여다보려
+/// 당겨 둔 배율을 버튼 한 번에 되돌리면, 위치로 돌아가는 대신 방금 보던 것을
+/// 잃는다.
+const _walkingViewZoom = indoorTilesMaxZoom;
+
+/// "내 위치로" 카메라 이동 시간. 층 전환 재정렬(500ms)보다 짧다 — 사용자가 직접
+/// 누른 조작이라 과정을 보여 줄 이유가 없고, 즉시 반응하는 편이 낫다.
+const _recenterDuration = Duration(milliseconds: 300);
+
 /// 도면을 화면에 맞출 때 실제로 채우는 비율.
 ///
 /// 1.0이면 외곽선이 화면 가장자리에 딱 붙는다 — 도면이 답답해 보이고 가장자리
@@ -286,6 +331,19 @@ const _floorFitFillRatio = 0.86;
 /// 위보다 얇으므로, 가려지지 않는 띠의 한가운데로 도면을 내려 놓아야 한다.
 const _floorFitTopChromePx = _placingHintTopPx;
 const _floorFitBottomChromePx = _mapShellBottomChromePx;
+
+/// 안내 중에 화면 위·아래에서 비워 두는 chrome 높이(논리 px).
+///
+/// **층 도면용 값([_floorFitTopChromePx])을 그대로 쓰면 안 된다.** 그 132는
+/// 검색창 + 카테고리 칩 줄 기준인데, 안내가 시작되면 칩 줄은 통째로 접히고
+/// (map_shell_screen의 `_guidanceActive` 분기) 상단 바도 도착지 한 줄로 줄어든다.
+/// 없는 줄만큼 위를 비우면 경로가 필요 이상으로 화면 아래에 눌려 놓인다.
+/// 132에서 칩 줄(높이 ≈32 + 간격 8)을 뺀 값이다.
+///
+/// 아래도 마찬가지다. 하단 바는 안내 중 아예 그려지지 않고([_guidanceActive])
+/// ETA 카드만 화면 맨 아래에 도킹하므로, 카드 높이만 비우면 된다.
+const _guidanceFitTopChromePx = 92.0;
+const _guidanceFitBottomChromePx = _bottomBarLiftPx;
 
 // 실내 진입/이탈 임계값·오버레이 페이드 구간은 서로 얽혀 있어 한 곳에서만
 // 정의한다 — indoor_entry_zoom.dart 참고. 값 하나만 옮겨도 "도면이 다 보이기
@@ -1065,6 +1123,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 실내 탭은 자체 렌더러의 카메라를 인계하지만, 홈은 MapLibre 소스를 통째로
   /// 바꾸므로 카메라가 그대로 유지된다. 덮개만 같은 타이밍으로 맞춘다 — 셸의
   /// 페이드와 여기 대기 시간이 어긋나면 교체 장면이 그대로 보인다.
+  ///
+  /// **새 층 경로에 카메라를 다시 맞추는 것도 여기서, 스크림이 덮인 동안 한다.**
+  /// 층마다 경로가 놓인 자리와 방향이 달라서 이전 층 배율·bearing 그대로 두면
+  /// 걷힌 화면에 경로가 비스듬히 눕거나 아예 밖으로 나가 있다. 그렇다고 걷힌
+  /// **뒤에** 움직이면 층이 바뀔 때마다 지도가 크게 도는 연출이 반복돼 피로하다.
+  /// 덮여 있는 동안 옮겨 두면 사용자는 새 층을 이미 맞춰진 상태로 만난다 —
+  /// 움직임을 못 봤으니 "순간이동"으로도 읽히지 않는다.
   Future<bool> _swapIndoorFloorSmoothly(String floor) async {
     if (!(_building?.floors.contains(floor) ?? false)) return false;
     setState(() => _floorSwapVeil = 1);
@@ -1072,6 +1137,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (!mounted) return false;
     await _switchOverlayFloor(floor);
     if (!mounted) return false;
+    // 덮인 동안이라 애니메이션 시간을 줄 이유가 없다. 사용자는 과정을 볼 수
+    // 없고, 기다리는 만큼 스크림만 길어진다.
+    final segment = _indoorRouteSegment;
+    if (segment != null) {
+      await _fitCameraToRouteSegment(segment, duration: Duration.zero);
+      if (!mounted) return false;
+    }
     // 새 도면이 첫 프레임을 그릴 시간을 준 뒤에 걷는다.
     await Future<void>.delayed(_indoorFloorSwapVeilHold);
     if (!mounted) return false;
@@ -1234,11 +1306,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       return;
     }
     setState(() => _indoorRouteDestination = destination);
+    // 여기도 연출을 붙이지 않는다. 카메라는 이미 [_swapIndoorFloorSmoothly]가
+    // 스크림 뒤에서 새 층 경로에 맞춰 뒀고, 이 재계산은 그 자리를 실제 하차
+    // 노드 기준으로 다듬는 것뿐이다. 스크림이 걷힌 뒤에 또 움직이면 사용자는
+    // 방금 자리 잡은 화면이 한 번 더 흔들리는 것을 본다.
     if (destination.floor == floor) {
       await _computeAndShowSingleFloorIndoorRoute(
         buildingId: buildingId,
         floor: floor,
         endNodeId: destinationNodeId,
+        playOverview: false,
         startNodeId: arrivalNodeId,
       );
     } else {
@@ -1247,6 +1324,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         startFloor: floor,
         endFloor: destination.floor,
         endNodeId: destinationNodeId,
+        playOverview: false,
         startNodeId: arrivalNodeId,
       );
     }
@@ -2442,11 +2520,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncIndoorDestinationLayer();
     _notifyRouteStateIfChanged();
 
+    // 사용자가 목적지를 고른 **이 순간**이 개요 연출을 하는 유일한 자리다.
+    // 여기서만 켜 두면 "안내당 한 번"이 별도 플래그 없이 지켜진다 — 재탐색은
+    // 아래 [_rerouteIndoorFromCurrentPosition]에서 끄고, 층 전환은 스크림 뒤에서
+    // 조용히 처리한다([_swapIndoorFloorSmoothly]).
     if (startFloor == endFloor) {
       await _computeAndShowSingleFloorIndoorRoute(
         buildingId: building.id,
         floor: endFloor,
         endNodeId: endNodeId,
+        playOverview: true,
         startNodeId: explicitStartNodeId,
       );
     } else {
@@ -2455,6 +2538,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         startFloor: startFloor,
         endFloor: endFloor,
         endNodeId: endNodeId,
+        playOverview: true,
         startNodeId: explicitStartNodeId,
       );
     }
@@ -2545,10 +2629,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 다르면 먼저 그 층으로 오버레이를 전환해 필요한 그래프를 다시 로드한다.
   /// [startNodeId]가 주어지면(길찾기 시트에서 매장을 출발지로 고른 경우) 그
   /// 노드에서 바로 출발하고, null이면 PDR 앵커 주변 최근접 통로 노드를 찾는다.
+  ///
+  /// [playOverview]는 경로를 그린 뒤 개요 연출([_fitCameraToRouteSegment])을 할지다.
+  /// **기본값을 두지 않는다** — 안내 시작이냐 재탐색이냐에 따라 답이 정반대라,
+  /// 빠뜨리면 조용히 틀린 쪽으로 굴러간다.
   Future<void> _computeAndShowSingleFloorIndoorRoute({
     required String buildingId,
     required String floor,
     required String endNodeId,
+    required bool playOverview,
     String? startNodeId,
   }) async {
     if (floor != _activeFloor) {
@@ -2599,7 +2688,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncRouteLayer();
     _syncIndoorDestinationLayer();
     _notifyRouteStateIfChanged();
-    _fitCameraToIndoorRoute(route);
+    if (playOverview) unawaited(_fitCameraToRouteSegment(route));
     // 이 경로 한 건이 진단 세션 하나가 된다. 이전 세션 데이터는 여기서
     // 버려지므로 내보내기 안내는 띄우지 않는다 — 길안내가 끝난 게 아니라
     // 목적지가 바뀐 것이고, 안내를 눌러도 꺼낼 게 없다.
@@ -2615,11 +2704,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 시작 층부터 훑도록 활성 층을 자동으로 시작 층으로 전환한다.
   /// [startNodeId]가 주어지면(길찾기 시트에서 매장을 출발지로 고른 경우) 그
   /// 노드에서 바로 출발하고, null이면 PDR 앵커 기준으로 시작 노드를 고른다.
+  /// [playOverview]의 뜻은 [_computeAndShowSingleFloorIndoorRoute]와 같다.
   Future<void> _computeAndShowMultiFloorIndoorRoute({
     required String buildingId,
     required String startFloor,
     required String endFloor,
     required String endNodeId,
+    required bool playOverview,
     String? startNodeId,
   }) async {
     final buildingGraph = await buildingRepository.getBuildingGraph(buildingId);
@@ -2664,8 +2755,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncRouteLayer();
     _syncIndoorDestinationLayer();
     _notifyRouteStateIfChanged();
-    if (segment != null && segment.route.points.length >= 2) {
-      _fitCameraToIndoorRoute(segment.route);
+    if (playOverview && segment != null) {
+      unawaited(_fitCameraToRouteSegment(segment.route));
     }
     if (_pdrDebugRecorder != null) {
       _endRouteRecordingSession(announceExport: false);
@@ -2759,35 +2850,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       }
     }
     return nearest?.id;
-  }
-
-  void _fitCameraToIndoorRoute(IndoorRoute route) {
-    if (route.points.length < 2 || route.distanceMeters < 1) return;
-    final controller = _mapController;
-    if (controller == null || !_styleReady) return;
-
-    var minLat = double.infinity;
-    var maxLat = double.negativeInfinity;
-    var minLng = double.infinity;
-    var maxLng = double.negativeInfinity;
-    for (final p in route.points) {
-      minLat = p.latitude < minLat ? p.latitude : minLat;
-      maxLat = p.latitude > maxLat ? p.latitude : maxLat;
-      minLng = p.longitude < minLng ? p.longitude : minLng;
-      maxLng = p.longitude > maxLng ? p.longitude : maxLng;
-    }
-    controller.animateCamera(
-      CameraUpdate.newLatLngBounds(
-        LatLngBounds(
-          southwest: LatLng(minLat, minLng),
-          northeast: LatLng(maxLat, maxLng),
-        ),
-        left: 40,
-        top: 110,
-        right: 40,
-        bottom: 180,
-      ),
-    );
   }
 
   /// ETA 카드에 쓸 거리와 비용. 다층 경로면 전 세그먼트 합, 단일 층이면 그 세그먼트
@@ -3548,23 +3610,129 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Future<void> _fitCameraToActiveFloor({
     Duration duration = _indoorZoomInDuration,
   }) async {
-    final controller = _mapController;
     final footprint = _activeFloorOutlineRing() ?? _buildingFootprint;
-    if (controller == null || !_styleReady) return;
     if (footprint == null || footprint.length < 3) return;
     final center = _buildingCenter(footprint);
     if (center == null) return;
-
     final box = minAreaBoxFor(footprint);
-    final viewport = MediaQuery.sizeOf(context);
-    // 상자를 못 구하면(퇴화한 외곽선) 돌리지 않고 임계값까지만 간다.
-    if (box == null) {
-      await controller.animateCamera(
-        CameraUpdate.newLatLngZoom(_toGl(center), _entryZoomThreshold()),
+    if (box != null) {
+      await _animateCameraToFitBox(
+        box,
+        center: center,
+        topChromePx: _floorFitTopChromePx,
+        bottomChromePx: _floorFitBottomChromePx,
         duration: duration,
       );
       return;
     }
+    // 상자를 못 구하면(퇴화한 외곽선) 돌리지 않고 임계값까지만 간다.
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    await controller.animateCamera(
+      CameraUpdate.newLatLngZoom(_toGl(center), _entryZoomThreshold()),
+      duration: duration,
+    );
+  }
+
+  /// 안내가 시작된 순간, **지금 층 경로 전체**가 한눈에 들어오도록 카메라를 한 번
+  /// 크게 움직인다.
+  ///
+  /// ## 왜 층 도면이 아니라 경로에 맞추나
+  ///
+  /// 안내를 시작한 사용자가 알고 싶은 것은 "이 층이 어떻게 생겼나"가 아니라
+  /// "어디로 얼마나 가나"다. 층 전체를 담으면 경로는 그 안 한 귀퉁이의 짧은
+  /// 선이 되어 진행 방향이 읽히지 않는다.
+  ///
+  /// ## 왜 지금 층 세그먼트만인가
+  ///
+  /// 다층 경로 전체를 담으려 하면 **화면에 없는 층의 좌표까지** 상자에 들어간다.
+  /// 층마다 도면 위치가 어긋나 있으면 상자가 엉뚱하게 커지고, 그만큼 축소돼
+  /// 지금 걸을 구간이 도리어 안 보인다. 층은 [_swapIndoorFloorSmoothly]가 바뀔
+  /// 때마다 다시 맞춘다.
+  ///
+  /// ## 왜 newLatLngBounds를 안 쓰나
+  ///
+  /// 예전 `_fitCameraToIndoorRoute`가 그걸 썼는데, 그 API는 **항상 정북 정렬
+  /// 기준으로 계산해 bearing을 0으로 되돌린다.** 진입·층 전환에서 애써 세로로
+  /// 세워 둔 도면이 안내를 시작하는 순간 도로 비스듬히 누웠다
+  /// (`widgets/floor_plan_view.dart`의 같은 주석 참고). 회전을 유지하려면
+  /// [_animateCameraToFitPoints]처럼 `newCameraPosition`으로 직접 계산해야 한다.
+  Future<void> _fitCameraToRouteSegment(
+    IndoorRoute route, {
+    Duration duration = _routeOverviewDuration,
+  }) async {
+    // 바로 옆 매장이면 담을 것이 없다 — 물러섰다 돌아오는 동작만 남는다.
+    if (route.distanceMeters < _routeOverviewMinDistanceM) return;
+    // 퇴화한 경로(점 2개, 일직선)를 견디는 몫은 [routeBoxFor]가 진다.
+    final box = routeBoxFor(route.points, minSideM: _routeFitMinSideM);
+    final center = _buildingCenter(route.points);
+    if (box == null || center == null) return;
+    await _animateCameraToFitBox(
+      box,
+      center: center,
+      topChromePx: _guidanceFitTopChromePx,
+      bottomChromePx: _guidanceFitBottomChromePx,
+      duration: duration,
+      maxZoom: _routeFitMaxZoom,
+    );
+  }
+
+  /// 안내 중 "내 위치로" 버튼([GuidanceRecenterButton]). 카메라를 지금 위치로
+  /// 옮긴다.
+  ///
+  /// **bearing과 tilt는 건드리지 않는다.** 개요 연출이 경로 축에 맞춰 세워 둔
+  /// 방향이 여기서 정북으로 돌아가면, 돌아온 화면의 위쪽이 갈 방향과 어긋난다.
+  /// 배율도 [_walkingViewZoom]까지만 당기고 그보다 확대돼 있으면 그대로 둔다 —
+  /// 자세한 설명은 그 상수에 있다.
+  Future<void> _recenterOnCurrentPosition() async {
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    final here = _pdrCurrentWgs84();
+    // 위치를 아직 못 그리는 상태면 되돌릴 자리도 없다. 버튼 노출 조건이 같은
+    // 값을 보므로([_canRecenterOnCurrentPosition]) 보통은 여기 안 걸린다.
+    if (here == null) return;
+    final camera = controller.cameraPosition;
+    await controller.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: _toGl(here),
+          zoom: math.max(camera?.zoom ?? _walkingViewZoom, _walkingViewZoom),
+          bearing: camera?.bearing ?? 0,
+          tilt: camera?.tilt ?? 0,
+        ),
+      ),
+      duration: _recenterDuration,
+    );
+  }
+
+  /// "내 위치로" 버튼을 띄울지. 누를 자리가 없는 버튼을 띄우지 않기 위해
+  /// [_recenterOnCurrentPosition]이 실제로 쓰는 값과 **같은 값**을 본다.
+  bool get _canRecenterOnCurrentPosition =>
+      _indoorLocationVisible && _pdrCurrentWgs84() != null;
+
+  /// [box]를 **가려지지 않는 띠**에 맞춰 카메라를 움직인다. 컨트롤러가 아직
+  /// 없으면 아무것도 하지 않고 false.
+  ///
+  /// 층 도면 fit([_fitCameraToActiveFloor])과 경로 개요([_fitCameraToRouteSegment])의
+  /// **공통 몸통**이다. 둘을 한 함수로 묶는 이유는 chrome 보정과 줌 하한이 한
+  /// 곳에만 있어야 하기 때문이다 — 각자 갖게 두면 한쪽만 고쳐져 도면을 맞춘
+  /// 화면과 경로를 맞춘 화면에서 같은 지점이 다른 높이에 온다.
+  ///
+  /// 상자를 **어떻게 구하느냐**는 호출부가 정한다([minAreaBoxFor] / [routeBoxFor]).
+  /// 퇴화 입력 방어처럼 입력 종류마다 다른 규칙이 여기 섞이면, 이 함수가 층
+  /// 외곽선용인지 경로용인지 알 수 없게 된다.
+  /// [maxZoom]은 확대해 들어가는 상한이다. 경로 개요만 준다([_routeFitMaxZoom])
+  /// — 층 외곽선은 커서 그 배율까지 올라갈 일이 없다.
+  Future<bool> _animateCameraToFitBox(
+    BuildingBox box, {
+    required ll.LatLng center,
+    required double topChromePx,
+    required double bottomChromePx,
+    required Duration duration,
+    double maxZoom = double.infinity,
+  }) async {
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return false;
 
     final bearing = portraitBearingFor(
       longAxisAzimuthDeg: box.longAxisAzimuthDeg,
@@ -3572,9 +3740,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     );
     // 위아래 chrome이 덮는 만큼을 뺀 **실제로 보이는 띠**에 맞춘다. 전체 높이로
     // 맞추면 도면 윗부분이 카테고리 줄 뒤로 들어간다.
+    final viewport = MediaQuery.sizeOf(context);
     final bandHeightPx = math.max(
       1.0,
-      viewport.height - _floorFitTopChromePx - _floorFitBottomChromePx,
+      viewport.height - topChromePx - bottomChromePx,
     );
     final fitZoom = zoomToFitRotatedBox(
       // 상자를 비율만큼 부풀려 맞추면 그만큼 사방에 여백이 남는다.
@@ -3587,12 +3756,19 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 하한은 **이탈 임계값** 기준이다. 예전에는 진입 임계값까지 끌어올렸는데,
     // 그러면 위에서 준 여백이 도로 먹혔다. 실내 상태는 이탈 임계값 위이기만
     // 하면 유지된다([indoorEntryTransitionForZoom]은 그 아래에서만 exit를 낸다).
-    final zoom = math.max(fitZoom, indoorExitZoomThreshold + 0.3);
+    //
+    // 경로가 길어 이 배율에 다 담기지 않는 경우가 있는데, **그걸 받아들인다.**
+    // 억지로 담으려 더 물러서면 [_handleCameraIdle]이 이탈로 판정해 도면이 닫히고
+    // 야외로 튕긴다 — 경로 끝이 조금 잘리는 쪽이 낫다.
+    final zoom = math.min(
+      math.max(fitZoom, indoorExitZoomThreshold + 0.3),
+      maxZoom,
+    );
 
-    // 도면 한가운데를 화면 한가운데가 아니라 **가려지지 않는 띠의 한가운데**에
+    // 상자 한가운데를 화면 한가운데가 아니라 **가려지지 않는 띠의 한가운데**에
     // 놓는다. 카메라 목표점은 늘 화면 중앙에 그려지므로, 목표점을 화면 위쪽
-    // (=지금 bearing 방향)으로 그만큼 밀면 도면이 그만큼 내려온다.
-    final shiftPx = (_floorFitTopChromePx - _floorFitBottomChromePx) / 2;
+    // (=지금 bearing 방향)으로 그만큼 밀면 상자가 그만큼 내려온다.
+    final shiftPx = (topChromePx - bottomChromePx) / 2;
     final metersPerPx = visibleWidthMeters(
       zoom: zoom,
       availablePx: 1,
@@ -3604,17 +3780,23 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       meters: shiftPx * metersPerPx,
     );
 
-    await controller.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(
-          target: _toGl(target),
-          zoom: zoom,
-          bearing: bearing,
-          tilt: controller.cameraPosition?.tilt ?? 0,
-        ),
+    final update = CameraUpdate.newCameraPosition(
+      CameraPosition(
+        target: _toGl(target),
+        zoom: zoom,
+        bearing: bearing,
+        tilt: controller.cameraPosition?.tilt ?? 0,
       ),
-      duration: duration,
     );
+    // 즉시 이동은 moveCamera로 간다. animateCamera에 Duration.zero를 주면
+    // Android MapLibre가 "Null duration"으로 예외를 던진다 — 층 전환 큐 안에서
+    // 터지면 전환 전체가 실패 복구로 빠진다([_recoverFloorTransitionFailure]).
+    if (duration <= Duration.zero) {
+      await controller.moveCamera(update);
+    } else {
+      await controller.animateCamera(update, duration: duration);
+    }
+    return true;
   }
 
   /// 건물 폴리곤을 잠깐 진하게 칠했다 되돌린다 — "이 건물을 말하는 것"이라는
@@ -4835,11 +5017,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
     _indoorRerouteInFlight = true;
     try {
+      // **재탐색에는 개요 연출을 붙이지 않는다.** 재탐색은 사용자가 걷고 있는
+      // 도중에 일어난다. 그때 카메라가 경로 전체를 담으러 크게 물러섰다 돌아오면
+      // 연출이 아니라 방해다 — 다음 걸음을 보려던 화면이 통째로 바뀐다.
       if (destination.floor == floor) {
         await _computeAndShowSingleFloorIndoorRoute(
           buildingId: buildingId,
           floor: floor,
           endNodeId: destinationNodeId,
+          playOverview: false,
           startNodeId: startNodeId,
         );
       } else {
@@ -4848,6 +5034,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           startFloor: floor,
           endFloor: destination.floor,
           endNodeId: destinationNodeId,
+          playOverview: false,
           startNodeId: startNodeId,
         );
       }
@@ -5686,6 +5873,30 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
                 floors: _building!.floors,
                 selectedFloor: _activeFloor!,
                 onSelectFloor: _onFloorChipSelected,
+              ),
+            ),
+          ),
+
+        // 안내 중 "내 위치로" — 방금 접힌 층 선택기와 **같은 자리**에 놓는다.
+        // 안내가 시작되면 그 자리가 비고, 사용자는 이미 거기에 조작이 있다는
+        // 것을 알고 있다.
+        //
+        // 안내 중에만 띄우는 이유는 [GuidanceRecenterButton] 주석에 있다 —
+        // 평상시에는 하단 바의 "위치 보정"이 그 자리를 대신하므로, 둘을 같이
+        // 띄우면 비슷하게 생긴 두 조작이 화면에 남는다.
+        if (_guidanceActive && _canRecenterOnCurrentPosition)
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            left: 16,
+            bottom:
+                _floorSelectorBottomOffset +
+                (indoorRouteVisible ? _bottomBarLiftPx : 0),
+            child: SafeArea(
+              top: false,
+              child: GuidanceRecenterButton(
+                key: const Key('guidance-recenter'),
+                onPressed: () => unawaited(_recenterOnCurrentPosition()),
               ),
             ),
           ),

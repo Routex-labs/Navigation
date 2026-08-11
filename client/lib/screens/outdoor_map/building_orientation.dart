@@ -142,6 +142,47 @@ double portraitBearingFor({
   return _turnMagnitude(from, a) <= _turnMagnitude(from, b) ? a : b;
 }
 
+/// 경로 폴리라인을 감싸는 최소 넓이 상자. [minAreaBoxFor]와 같은 상자를 구하되
+/// **퇴화한 입력을 견딘다.**
+///
+/// 경로는 건물 외곽선과 달리 넓이가 없을 수 있다. 그대로 [minAreaBoxFor]에
+/// 넣으면 두 곳에서 깨진다.
+///
+/// 1. **점이 둘뿐인 곧은 경로**(복도 한 구간)는 3점 미만이라 null이 나온다.
+///    중점을 끼워 3점으로 만든다 — 어차피 일직선이라 상자 모양은 그대로다.
+/// 2. **일직선 경로**는 짧은 변이 0으로 수렴한다. `zoomToFitWidth`가
+///    `log(가용폭 / 폭)`이라, 그 상자를 카메라에 넘기면 zoom이 무한대로
+///    발산해 지도가 사라진다. 그래서 두 변 모두 [minSideM]으로 받친다.
+///
+/// 점이 2개 미만이면 담을 것이 없으므로 null.
+///
+/// **긴 축 방위각은 손대지 않는다.** 변 길이만 받치므로, 곧은 경로에서도 갈
+/// 방향은 그대로 나온다 — 그 값이 곧 카메라를 세우는 기준이다
+/// ([portraitBearingFor]).
+BuildingBox? routeBoxFor(
+  List<ll.LatLng> points, {
+  required double minSideM,
+}) {
+  if (points.length < 2) return null;
+  final dense = points.length >= 3
+      ? points
+      : <ll.LatLng>[
+          points.first,
+          ll.LatLng(
+            (points.first.latitude + points.last.latitude) / 2,
+            (points.first.longitude + points.last.longitude) / 2,
+          ),
+          points.last,
+        ];
+  final box = minAreaBoxFor(dense);
+  if (box == null) return null;
+  return (
+    longSideM: math.max(box.longSideM, minSideM),
+    shortSideM: math.max(box.shortSideM, minSideM),
+    longAxisAzimuthDeg: box.longAxisAzimuthDeg,
+  );
+}
+
 /// [origin]에서 방위각 [azimuthDeg](북 기준 시계방향) 쪽으로 [meters]만큼
 /// 떨어진 지점.
 ///

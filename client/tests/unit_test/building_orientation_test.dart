@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:navigation_client/screens/outdoor_map/building_orientation.dart';
+import 'package:navigation_client/screens/outdoor_map/indoor_entry_zoom.dart';
 
 /// 건물을 세로로 세우는 계산의 검증.
 ///
@@ -221,6 +222,114 @@ void main() {
       final forward = offsetByMeters(origin, azimuthDeg: 233, meters: 80);
       expect(back.latitude, closeTo(forward.latitude, 1e-9));
       expect(back.longitude, closeTo(forward.longitude, 1e-9));
+    });
+  });
+
+  group('경로 상자', () {
+    const minSideM = 12.0;
+
+    /// [lat0], [lng0]에서 방위각 [azimuthDeg] 쪽으로 [lengthM]만큼 뻗은 직선
+    /// 경로. 점 개수는 [pointCount].
+    List<ll.LatLng> straightRoute({
+      required double lengthM,
+      required double azimuthDeg,
+      int pointCount = 2,
+    }) {
+      final rad = azimuthDeg * math.pi / 180;
+      return [
+        for (var i = 0; i < pointCount; i++)
+          () {
+            final d = lengthM * i / (pointCount - 1);
+            return ll.LatLng(
+              lat0 + d * math.cos(rad) / metersPerDegLat,
+              lng0 + d * math.sin(rad) / metersPerDegLng,
+            );
+          }(),
+      ];
+    }
+
+    test('점이 2개 미만이면 상자가 없다', () {
+      expect(routeBoxFor(const [], minSideM: minSideM), isNull);
+      expect(
+        routeBoxFor([ll.LatLng(lat0, lng0)], minSideM: minSideM),
+        isNull,
+      );
+    });
+
+    test('점이 둘뿐인 곧은 경로도 상자를 만든다', () {
+      // [minAreaBoxFor]는 3점을 요구해 여기서 null을 낸다. 복도 한 구간짜리
+      // 경로가 딱 이 모양이라, 안내 시작 연출이 통째로 사라지는 자리였다.
+      final points = straightRoute(lengthM: 200, azimuthDeg: 53);
+      expect(minAreaBoxFor(points), isNull);
+      expect(routeBoxFor(points, minSideM: minSideM), isNotNull);
+    });
+
+    test('곧은 경로의 긴 축은 경로가 뻗은 방향이다', () {
+      for (final az in [0.0, 31.0, 53.0, 90.0, 147.0]) {
+        final box = routeBoxFor(
+          straightRoute(lengthM: 180, azimuthDeg: az),
+          minSideM: minSideM,
+        )!;
+        expect(
+          box.longSideM,
+          closeTo(180, 2.0),
+          reason: '$az도에서 경로 길이가 긴 변으로 안 나왔다',
+        );
+        expect(
+          box.longAxisAzimuthDeg,
+          closeTo(az % 180, 0.6),
+          reason: '$az도에서 방위가 어긋났다 — 카메라가 그만큼 잘못 돈다',
+        );
+      }
+    });
+
+    test('일직선 경로의 짧은 변을 하한이 받친다', () {
+      // **이게 없으면 zoom이 발산한다.** 짧은 변 0은 zoomToFitWidth의
+      // log(가용폭 / 0) = 무한대로 이어져 지도가 사라진다.
+      final box = routeBoxFor(
+        straightRoute(lengthM: 240, azimuthDeg: 53, pointCount: 9),
+        minSideM: minSideM,
+      )!;
+      expect(box.shortSideM, closeTo(minSideM, 1e-6));
+    });
+
+    test('받친 상자는 유한한 zoom을 만든다', () {
+      final box = routeBoxFor(
+        straightRoute(lengthM: 240, azimuthDeg: 53, pointCount: 9),
+        minSideM: minSideM,
+      )!;
+      final zoom = zoomToFitRotatedBox(
+        widthMeters: box.shortSideM,
+        heightMeters: box.longSideM,
+        viewportWidthPx: 360,
+        viewportHeightPx: 500,
+        latitude: lat0,
+      );
+      expect(zoom.isFinite, isTrue, reason: '하한을 뚫고 zoom이 발산했다');
+    });
+
+    test('아주 짧은 경로는 두 변 모두 하한으로 받친다', () {
+      final box = routeBoxFor(
+        straightRoute(lengthM: 3, azimuthDeg: 53),
+        minSideM: minSideM,
+      )!;
+      expect(box.longSideM, closeTo(minSideM, 1e-6));
+      expect(box.shortSideM, closeTo(minSideM, 1e-6));
+    });
+
+    test('넓이가 있는 경로는 하한이 건드리지 않는다', () {
+      // ㄱ자로 꺾인 경로. 두 변 모두 하한보다 크므로 [minAreaBoxFor]와 같아야
+      // 한다 — 하한이 정상 입력까지 부풀리면 경로가 필요 이상으로 작게 보인다.
+      final corner = [
+        ll.LatLng(lat0, lng0),
+        ll.LatLng(lat0 + 120 / metersPerDegLat, lng0),
+        ll.LatLng(lat0 + 120 / metersPerDegLat, lng0 + 80 / metersPerDegLng),
+      ];
+      final raw = minAreaBoxFor(corner)!;
+      final box = routeBoxFor(corner, minSideM: minSideM)!;
+      expect(box.longSideM, closeTo(raw.longSideM, 1e-9));
+      expect(box.shortSideM, closeTo(raw.shortSideM, 1e-9));
+      expect(box.longAxisAzimuthDeg, closeTo(raw.longAxisAzimuthDeg, 1e-9));
     });
   });
 }
