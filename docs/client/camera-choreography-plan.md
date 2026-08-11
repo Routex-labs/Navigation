@@ -210,17 +210,16 @@ B3~B6은 사방이 잘려 층 전체가 화면에 안 들어온다.
 화면에는 "지하층이 잘려 보이고 매장을 눌러도 뒤 건물만 반응한다"로만 드러나
 원인을 짚을 단서가 없다.
 
-실제 사례: `GET /buildings/{id}/floors/{floor}`가 ETag를 뽑으려고
-`model_dump_json()`을 직접 부르면서 `by_alias`를 빠뜨려, 간선 키가 계약대로인
-`from`/`to`가 아니라 필드명 `from_node_id`/`to_node_id`로 나갔다. 같은 DTO를 쓰는
-`/floors/{floor}/graph`·`/graph`는 FastAPI 경로라 정상이었다 — **한 배포 안에서
-두 엔드포인트의 계약이 갈렸다.** 클라이언트에서는 `json['from'] as String`이
-조용한 타입 예외로 끝났다.
+실제 사례는 간선 키 하나였다 — `GET /buildings/{id}/floors/{floor}`만 계약대로인
+`from`/`to`가 아니라 `from_node_id`/`to_node_id`로 나갔고, 클라이언트의
+`json['from'] as String`이 조용한 타입 예외로 끝났다. 왜 그 엔드포인트만 갈렸는지는
+[dto README의 alias 규칙](../../backend/app/dto/README.md#api-전용-표현들)에 있다.
 
-지금은 세 겹으로 막는다. 백엔드는 `by_alias=True`를 명시하고 두 엔드포인트의 키가
-같은지 테스트가 지킨다. 클라이언트는 두 철자를 모두 받고
-(`floor_graph.dart`·`tests/unit_test/floor_graph_parse_test.dart`), 삼키는 catch는
-이유를 로그에 남긴다.
+**여기서 지킬 것은 클라이언트 쪽 세 겹이다.** 파싱은 두 철자를 모두 받고
+(`models/floor_graph.dart`), 그 계약은
+`tests/unit_test/floor_graph_parse_test.dart`가 지키며, 삼키는 catch는 반드시 이유를
+로그에 남긴다. 서버를 고치더라도 구 버전 배포에 붙은 앱이 이것 하나로 통째로
+망가지면 안 된다.
 
 ---
 
