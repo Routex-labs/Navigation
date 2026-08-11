@@ -103,12 +103,28 @@ class GraphEdge {
   final String? fromFloorId;
   final String? toFloorId;
 
+  /// 간선 양 끝 노드 id의 키. 백엔드는 짧은 `from`/`to`로 내보내는 것이 계약이지만
+  /// **필드명 그대로인 `from_node_id`/`to_node_id`로 나가는 경로가 실제로 있었다** —
+  /// ETag를 뽑으려고 `model_dump_json()`을 직접 부르는 엔드포인트가 by_alias를
+  /// 빠뜨리면 alias가 적용되지 않는다(`routers/buildings.py`의 get_floor_map).
+  ///
+  /// 그 한 글자 차이가 여기서 조용한 타입 예외(`null is not a String`)가 되고,
+  /// 호출부가 예외를 삼키면 **층 도면과 그래프가 통째로 null**이 되어 층 외곽선·
+  /// 카메라 fit·매장 탭·검색 포커스가 한꺼번에 죽는다. 화면에는 원인을 짚을 단서가
+  /// 하나도 남지 않는다. 그래서 두 철자를 모두 받는다 — 서버를 고치더라도
+  /// 배포되지 않은 구 버전에 붙는 앱이 이 하나로 전부 망가지면 안 된다.
+  static String _nodeId(Map<String, dynamic> json, String short, String long) {
+    final value = json[short] ?? json[long];
+    if (value is String) return value;
+    throw FormatException('간선에 $short/$long 키가 없다: ${json.keys.toList()}');
+  }
+
   factory GraphEdge.fromJson(Map<String, dynamic> json) {
     final lengthM = (json['length_m'] as num).toDouble();
     return GraphEdge(
       id: json['id'] as String,
-      fromNodeId: json['from'] as String,
-      toNodeId: json['to'] as String,
+      fromNodeId: _nodeId(json, 'from', 'from_node_id'),
+      toNodeId: _nodeId(json, 'to', 'to_node_id'),
       lengthM: lengthM,
       // cost_m을 아직 안 내려주는 서버면 null로 두고, routingCostM이 lengthM으로
       // 폴백한다(층 내부 간선은 두 값이 같으므로 폴백이 곧 정답이다).
