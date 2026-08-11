@@ -41,6 +41,19 @@ _REFINE_STEPS = 5
 # 좁은 통로형 매장에서 내부 점을 하나도 못 찍고 시작한다.
 _INITIAL_DIVISIONS = 16
 
+# 격자 후보가 현 최선을 대체하려면 넘어야 하는 **상대 여유**. 길쭉한 직사각형류
+# 에서는 경계 최원점이 한 점이 아니라 긴 축 위 선분(능선) 전체로 동률인데, 순수
+# `>` 비교는 부동소수점 반올림(상대 ~1e-16) 차이만으로도 능선을 타고 시드
+# (무게중심)에서 멀어진다 — 실제로 시드가 무력화됐던 배포에서 이 동률 표류가
+# 최대 25m 라벨 이탈로 나타났다(아래 polygon_centroid 주석 참고).
+#
+# 절대값이 아니라 상대 여유인 이유: 입력이 WGS84 경위도라 거리 규모가 ~1e-5 deg
+# 수준까지 내려가므로, 규모에 비례해야 한계가 일관된다. 1e-9는 반올림 노이즈
+# (상대 ~1e-16)보다 7자리 크고, 도형 차이에서 오는 진짜 개선(격자 셀 폭 이상)
+# 보다는 한참 작다 — 10m 매장 기준 5nm라 라벨 위치로는 0이다. 결과적으로
+# "유의미한 이득이 없으면 무게중심에 머문다"가 보장된다.
+_IMPROVEMENT_MARGIN = 1e-9
+
 
 # 폴리곤 링(닫히지 않아도 됨)의 면적 무게중심. 면적이 0에 가까우면(선분처럼
 # 납작한 폴리곤) 꼭짓점 평균으로 떨어진다 — 0으로 나누지 않기 위해서다.
@@ -50,8 +63,11 @@ _INITIAL_DIVISIONS = 16
 # WGS84 경위도(~127, ~37)에서 몇 미터짜리 매장의 외적 항은 ~10³인데 진짜
 # 면적은 ~10⁻⁹ deg²라, 큰 항들의 상쇄(catastrophic cancellation)에서 살아남는
 # 유효자리가 모자라 무게중심이 폴리곤에서 수 km 벗어난 값으로 나온다(실데이터
-# 실측 — 예전 코드는 그 오답이 _contains에 걸러져 격자 탐색이 덮어 주고
-# 있었을 뿐이다). 상대 좌표에서는 외적 항 자체가 면적 크기라 상쇄가 없다.
+# 실측). 예전 코드는 그 오답이 _contains에 걸러져 **시드가 무력화**됐고, 시드를
+# 잃은 격자 탐색이 동률 능선 위 임의 점을 고르면서 최대 25m 라벨 이탈이 실제
+# 배포에 있었다(전수 조사 1,626개 매장 중 207개 — 루이비통(남) 8.55m 등).
+# 즉 시드 무력화가 곧 라벨 이탈의 원인이었다. 상대 좌표에서는 외적 항 자체가
+# 면적 크기라 상쇄가 없다.
 def polygon_centroid(ring: list[Point]) -> Point:
     count = len(ring)
     origin_x, origin_y = ring[0]
@@ -194,7 +210,11 @@ def label_point(ring: list[Point]) -> Point:
                 candidate = (x, y)
                 if _contains(candidate, ring):
                     distance = _distance_to_boundary(candidate, ring)
-                    if distance > best_distance:
+                    # 유의미하게 나을 때만 옮긴다 — 순수 `>`는 동률 능선에서
+                    # 반올림 노이즈로도 시드를 밀어낸다(_IMPROVEMENT_MARGIN 참고).
+                    # 시드가 밖이라 best_distance가 -1.0이면 임계도 음수라
+                    # 내부 후보가 항상 통과한다.
+                    if distance > best_distance * (1.0 + _IMPROVEMENT_MARGIN):
                         best_distance = distance
                         best = candidate
                 x += step
