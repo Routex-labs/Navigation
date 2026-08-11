@@ -153,12 +153,33 @@ class _MapShellScreenState extends State<MapShellScreen> {
   ///
   /// 이미 고른 chip을 다시 누르면(=[selection]이 null) 해제만 하고 시트는 열지
   /// 않는다. 해제 수단이 사라지면 필터를 걸어 놓고 되돌릴 방법이 없어진다.
-  void _onCategoryChipTapped(CategorySelection? selection) {
+  ///
+  /// **떠 있는 목록 시트가 있으면 먼저 닫는다.** 이 시트는 barrier가 없어
+  /// 포인터를 지도로 흘리므로([_withMapsLocked] 주석) chip 줄이 시트 위에 계속
+  /// 떠 있고 그대로 눌린다. 닫지 않고 열면 chip을 누른 횟수만큼 시트가 그대로
+  /// 쌓여서, 카테고리 몇 개를 훑어본 사용자는 지도로 돌아가려고 닫기를 그만큼
+  /// 눌러야 한다. 매장 상세 시트가 같은 이유로 이미 하는 일이다
+  /// ([_openStoreFromMap]) — 두 시트가 같은 라우트를 쓰는 이상 규칙도 같아야 한다.
+  Future<void> _onCategoryChipTapped(CategorySelection? selection) async {
     _onCategorySelectionChanged(selection);
+    final closing = _categorySheetClosing;
+    if (closing != null) {
+      // pop은 chain 전체를 닫으라는 신호를 만들지만(PopScope), 아래
+      // `_runSheetChain`이 시작할 때 그 플래그를 초기화하므로 새 시트에는
+      // 영향이 없다([_openStoreFromMap]과 같은 규칙).
+      Navigator.of(context).pop();
+      await closing;
+      if (!mounted) return;
+    }
+    // 해제(다시 누르기)는 여기까지다 — 떠 있던 목록은 닫고 새로 열지는 않는다.
     final category = selection?.category;
     if (category == null) return;
-    _runSheetChain(() => _openCategoryStores(category));
+    await _runSheetChain(() => _openCategoryStores(category));
   }
+
+  /// 지금 떠 있는 카테고리 목록 시트가 닫히면 완료되는 Future. 안 떠 있으면 null.
+  /// 상세 시트의 [_placeDetailClosing]과 같은 역할이다.
+  Future<PoiSearchResult?>? _categorySheetClosing;
 
   /// 검색이 빈손일 때 패널이 제안한 카테고리를 골랐다(설계:
   /// `docs/client/search-result-list-ux.md` R절).
@@ -678,14 +699,22 @@ class _MapShellScreenState extends State<MapShellScreen> {
     if (!mounted) return false;
     // 시트가 어떻게 닫혔든(선택 없이 닫힘 포함) 지도 위 강조 표시도 같이 지운다.
     _outdoorKey.currentState?.clearHighlight();
+    // **아무것도 고르지 않고 닫았으면 층 화면으로 되돌린다.** 매장을 고르면
+    // 카메라가 그 매장으로 당겨지고 시트를 피해 위로 밀려 있는데, 그 치우친
+    // 화면이 그대로 남으면 사용자는 방금 보던 층 배치를 다시 찾아야 한다.
+    //
+    // 무언가를 골랐을 때(카테고리 보기·출발/도착)는 되돌리지 않는다 — 뒤이어
+    // 다른 시트나 경로 개요가 카메라를 자기 자리로 가져가므로, 여기서 한 번 더
+    // 움직이면 화면이 두 번 튄다.
+    if (action == null || _closeSheetChainRequested) {
+      unawaited(
+        _outdoorKey.currentState?.realignToActiveFloor() ?? Future.value(),
+      );
+    }
     // X로 chain 전체를 닫으라는 신호가 왔다면, 여기서 곧장 종료해 부모 loop가
     // 다음 시트를 다시 열지 못하게 한다.
     if (_closeSheetChainRequested) return true;
     if (action == null) return false;
-
-    if (action == StoreInfoAction.viewCategory && match.category != null) {
-      return _openCategoryStores(match.category!);
-    }
 
     final candidate = DirectionsCandidate(
       title: match.name,
@@ -733,7 +762,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 예측 가능하다. 목록을 다시 보고 싶으면 chip을 다시 누르면 된다.
   Future<bool> _openCategoryStores(String category) async {
     final currentFloor = _activeIndoorFloor;
-    final picked = await _withMapsLocked(
+    final showing = _withMapsLocked(
       () => CategoryStoresSheet.show(
         context,
         buildingId: _buildingId,
@@ -752,6 +781,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
         ),
       ),
     );
+    // 떠 있는 동안만 값이 있다. 다른 chip을 눌렀을 때 이 시트를 먼저 닫고
+    // 기다리는 데 쓴다([_onCategoryChipTapped]).
+    _categorySheetClosing = showing;
+    final picked = await showing;
+    if (identical(_categorySheetClosing, showing)) _categorySheetClosing = null;
     if (_closeSheetChainRequested || picked == null || !mounted) return false;
     return _showStoreInfo(picked, focusOnMap: true);
   }

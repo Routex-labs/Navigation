@@ -56,17 +56,19 @@
 ### 3.2 지금 구조
 
 ```
-_animateCameraToFitBox(box, center, topChromePx, bottomChromePx, duration)
+_animateCameraToFitBox(box, topChromePx, bottomChromePx, duration)
   ├─ portraitBearingFor(box.longAxis, 현재 bearing)   긴 축을 화면 세로로
   ├─ zoomToFitRotatedBox(..., 가용 높이 = 화면 − 위아래 chrome)
   ├─ max(fitZoom, indoorExitZoomThreshold + 0.3)      실내 유지 하한
-  ├─ offsetByMeters(center, bearing, chrome 보정)     가려지지 않는 띠 한가운데로
+  ├─ offsetByMeters(box.center, bearing, chrome 보정) 가려지지 않는 띠 한가운데로
   └─ animateCamera(newCameraPosition(...))
 
     ↑ 공통 몸통. 상자를 어떻게 구하느냐만 호출부가 정한다.
+      **중심도 상자가 준다** — 근거는 [4.8](#48-배율과-위치는-같은-상자에서-나와야-한다).
 
-_fitCameraToActiveFloor    minAreaBoxFor(층 외곽선)        chrome 132 / 112
-_fitCameraToRouteSegment   routeBoxFor(경로 점, minSide)   chrome  92 /  92
+_fitCameraToActiveFloor    minAreaBoxFor(층 외곽선,       chrome 132 / 112
+                             covering: 그려지는 것 전부)
+_fitCameraToRouteSegment   routeBoxFor(경로 점, minSide)  chrome  92 /  92
 ```
 
 chrome 보정과 줌 하한을 한 함수에만 둔 이유는, 각자 갖게 두면 한쪽만 고쳐져
@@ -154,6 +156,71 @@ GPS가 잡힐 때마다 자동 계산되는 "건물 입구까지" 경로가 화�
 받친다. 긴 축 방위각은 손대지 않는다 — 곧은 경로에서도 갈 방향은 그대로 나와야
 카메라를 세울 수 있다.
 
+### 4.8 배율과 위치는 같은 상자에서 나와야 한다
+
+한동안 배율은 **돌아간** 최소 넓이 상자로 재고, 카메라 목표점은 폴리곤의 **정북
+정렬 bbox 중심**으로 잡았다. 대칭 도형에서는 두 중심이 같아 티가 안 나는데,
+비대칭이면 그 차이만큼 도면이 프레임에서 밀린다. 채움 비율이 0.86이라 사방
+여백이 7%뿐이므로 그 밀림은 곧 **잘림**이다 — 더현대 서울 B1은 31 px 밀려 한쪽이
+화면 끝에 붙고 여백이 반대쪽에만 몰렸다.
+
+그래서 `minAreaBoxFor`가 `center`를 함께 돌려주고 `_animateCameraToFitBox`는 그
+값만 쓴다. 호출부가 중심을 따로 구해 넘길 수 없으니 어긋날 자리가 없다.
+
+### 4.9 층 외곽선은 그려지는 것의 전부가 아니다
+
+두 방향으로 어긋난다.
+
+- **외곽선이 좁다.** 1F는 매장 폴리곤이 층 외곽선 위아래로 12 m·19 m 튀어나와
+  있어, 외곽선에만 맞추면 그만큼이 화면 밖에 남는다(실측 21 px 잘림).
+- **외곽선이 넓다.** B2의 footprint는 매장보다 9 m 넓은 맨 사각형이라, 그 상자에
+  맞추면 도면이 프레임 안에서 한쪽으로 치우친다.
+
+그래서 `minAreaBoxFor(층 외곽선, covering: 외곽선 + 매장 폴리곤·중심 + POI)`로
+**그려지는 것 전부**를 덮는다. 각도는 여전히 외곽선이 정한다 — 축은 카메라를
+세우는 기준이라, 매장 배치 차이로 층마다 몇 도씩 돌면 층을 바꿀 때마다 지도가
+미세하게 회전한다.
+
+### 4.10 층 도면이 없을 때의 폴백 — 없애면 안 되고, 거기서 끝내도 안 된다
+
+`Building.footprint_local_m`은 시드 구조상 **1F의 외곽선**이다
+(`floor_outline.dart` 주석). 지상층끼리는 거의 같아 폴백해도 티가 안 나지만,
+지하는 1.8배 크고 위치도 달라서 그 배율로 굳으면 B1·B2는 한쪽이 잘리고
+B3~B6은 사방이 잘려 층 전체가 화면에 안 들어온다.
+
+그렇다고 **폴백을 없애면 더 나쁘다.** 실기기에서 확인했다 — 배율을 아예 안 잡아서
+건물에 들어가도 도면이 야외 지도 위 작은 사각형으로 남고 진입 줌인 연출이 통째로
+사라졌다. "틀린 배율"보다 "배율 없음"이 나쁘다.
+
+그래서 `_fitCameraToActiveFloor`는 셋을 함께 한다.
+
+1. `_floorGraphLoad`를 **기다린다** — 대부분은 여기서 바로 그 층 외곽선을 얻는다.
+2. 그래도 없으면 건물 외곽선으로 **일단 맞춘다**(연출을 잃지 않는다).
+3. 동시에 다시 맞추기를 **예약한다**(`_pendingFloorFit`). 도면이 도착하는 순간
+   `_fetchFloorGraph`가 그 층 크기로 한 번 더 맞춘다.
+
+폴백이 실제로 타면 로그가 남는다(`fit 폴백(건물 외곽선)`). 그 줄이 보인다면 층
+도면 로드가 실패하고 있다는 뜻이고, 그건 카메라가 아니라 **로드 쪽 문제**다 —
+실제로 그랬다([4.11](#411-층-도면이-없어지는-진짜-이유는-보통-파싱이다)).
+
+### 4.11 층 도면이 없어지는 진짜 이유는 보통 파싱이다
+
+`_fetchFloorGraph`가 예외를 삼키면 `_floorPlan`과 `_floorGraph`가 **통째로 null**이
+되고, 그 하나로 층 외곽선·카메라 fit·매장 탭·검색 포커스가 한꺼번에 죽는다.
+화면에는 "지하층이 잘려 보이고 매장을 눌러도 뒤 건물만 반응한다"로만 드러나
+원인을 짚을 단서가 없다.
+
+실제 사례는 간선 키 하나였다 — `GET /buildings/{id}/floors/{floor}`만 계약대로인
+`from`/`to`가 아니라 `from_node_id`/`to_node_id`로 나갔고, 클라이언트의
+`json['from'] as String`이 조용한 타입 예외로 끝났다. 왜 그 엔드포인트만 갈렸는지는
+[dto README의 alias 규칙](../../backend/app/dto/README.md#api-전용-표현들)에 있다.
+
+**여기서 지킬 것은 클라이언트 쪽 세 겹이다.** 파싱은 두 철자를 모두 받고
+(`models/floor_graph.dart`), 그 계약은
+`tests/unit_test/floor_graph_parse_test.dart`가 지키며, 삼키는 catch는 반드시 이유를
+로그에 남긴다. 서버를 고치더라도 구 버전 배포에 붙은 앱이 이것 하나로 통째로
+망가지면 안 된다.
+
 ---
 
 ## 5. 검증 기준
@@ -183,6 +250,10 @@ GPS가 잡힐 때마다 자동 계산되는 "건물 입구까지" 경로가 화�
 
 - [x] 건물 탭 → 진입 연출(900ms, 세로 정렬)이 그대로다.
 - [x] 층 선택기 층 전환(500ms 재정렬)이 그대로다.
+- [x] 어느 층으로 가도 그 층에 그려지는 것이 전부 화면에 들어오고, 여백이 좌우
+      균등하다([4.8](#48-배율과-위치는-같은-상자에서-나와야-한다),
+      [4.9](#49-층-외곽선은-그려지는-것의-전부가-아니다)). 배포 백엔드의 실제 12개
+      층 좌표로 12개 층 × 두 기기 폭을 계산해 확인했다 — 잘림 0, 좌우 여백 차 0 px.
 - [x] 야외 "건물 입구까지" 자동 경로가 카메라를 가져가지 않는다([4.2](#42-자동-경로는-카메라를-가져가지-않기로-했다)).
 
 ---

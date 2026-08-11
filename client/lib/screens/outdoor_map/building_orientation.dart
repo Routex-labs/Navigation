@@ -40,6 +40,16 @@ typedef BuildingBox = ({
   /// 축은 선이라 방향이 둘이다(θ와 θ+180). 여기서는 0~180으로 정규화해 두고,
   /// 어느 쪽을 위로 둘지는 [portraitBearingFor]가 정한다.
   double longAxisAzimuthDeg,
+
+  /// **이 상자의 한가운데.** 카메라 목표점은 반드시 이 값이어야 한다.
+  ///
+  /// 예전에는 호출부가 폴리곤의 정북 정렬 bbox 중심을 따로 구해 넘겼다. 그런데
+  /// 배율은 여기서 나온 **돌아간** 상자로 계산하므로, 두 중심이 다른 만큼 도면이
+  /// 화면 한가운데에서 밀린다. 채움 비율이 0.86이라 사방 여백이 7%뿐인데
+  /// (`_floorFitFillRatio`), 실측에서 B1은 그 여백을 통째로 넘는 31 px이 밀려
+  /// 한쪽은 화면 끝에 붙고 반대쪽에만 여백이 몰렸다. 상자를 준 쪽이 중심도
+  /// 함께 주면 그 어긋남이 구조적으로 생길 수 없다.
+  ll.LatLng center,
 });
 
 /// 각도 탐색 간격(도). 0.5도면 방위가 최대 0.25도 어긋나는데, 그 정도는 화면에서
@@ -54,7 +64,22 @@ const _sweepStepDeg = 0.5;
 /// 정석보다 코드가 짧고, 이 규모(수십 점)에서는 비용도 문제가 되지 않는다.
 /// 무엇보다 **틀리기 어렵다** — 최소 넓이라는 정의를 그대로 옮긴 것이라, 부호나
 /// 순회 방향 실수로 조용히 90도 어긋날 여지가 없다.
-BuildingBox? minAreaBoxFor(List<ll.LatLng> footprint) {
+///
+/// [covering]을 주면 **각도는 [footprint]로 정하고 크기·중심만 [covering]을 다
+/// 덮도록 넓힌다.** 화면에 그려지는 것이 외곽선만이 아니기 때문이다 — 매장
+/// 폴리곤과 POI는 층 외곽선 밖으로 나갈 수 있고(더현대 서울 1F는 외곽선 위아래로
+/// 12 m·19 m 튀어나온다), 외곽선에만 맞추면 그만큼이 화면 밖에 남는다.
+///
+/// 각도까지 [covering]으로 정하지 않는 이유는 **축이 층마다 흔들리면 안 되기**
+/// 때문이다. 긴 축은 카메라를 세우는 기준이라(=[portraitBearingFor]), 매장 배치가
+/// 조금 다른 옆 층으로 옮길 때마다 몇 도씩 돌면 층을 바꿀 때마다 지도가 미세하게
+/// 회전한다. 건물 윤곽은 층이 바뀌어도 같은 방향으로 앉아 있다.
+///
+/// [covering]이 비어 있으면 [footprint] 자신을 덮는다(예전 동작 그대로).
+BuildingBox? minAreaBoxFor(
+  List<ll.LatLng> footprint, {
+  List<ll.LatLng> covering = const [],
+}) {
   if (footprint.length < 3) return null;
 
   // 위경도를 미터 평면으로 편다. 경도 축은 cos(위도)로 줄여야 서울 위도에서
@@ -77,8 +102,6 @@ BuildingBox? minAreaBoxFor(List<ll.LatLng> footprint) {
   }
 
   var bestArea = double.infinity;
-  var bestU = 0.0;
-  var bestV = 0.0;
   var bestDeg = 0.0;
   for (var deg = 0.0; deg < 180.0; deg += _sweepStepDeg) {
     final rad = deg * math.pi / 180;
@@ -96,18 +119,44 @@ BuildingBox? minAreaBoxFor(List<ll.LatLng> footprint) {
       if (v < minV) minV = v;
       if (v > maxV) maxV = v;
     }
-    final w = maxU - minU;
-    final h = maxV - minV;
-    final area = w * h;
+    final area = (maxU - minU) * (maxV - minV);
     // 엄격한 `<`라서 동점이면 먼저 훑은 각이 남는다 — 같은 건물에서 매번 같은
     // 결과가 나와야 한다(정사각형에 가까운 건물이 두 축 사이를 오가면 안 된다).
     if (area < bestArea) {
       bestArea = area;
-      bestU = w;
-      bestV = h;
       bestDeg = deg;
     }
   }
+
+  // 고른 각도에서 상자의 크기와 중심을 다시 잰다. 이때만 [covering]을 본다 —
+  // 각도는 외곽선이 정하고, 덮는 범위는 실제로 그려지는 것 전부가 정한다.
+  final rad = bestDeg * math.pi / 180;
+  final c = math.cos(rad);
+  final s = math.sin(rad);
+  var minU = double.infinity;
+  var maxU = double.negativeInfinity;
+  var minV = double.infinity;
+  var maxV = double.negativeInfinity;
+  for (final p in covering.isEmpty ? footprint : covering) {
+    final x = (p.longitude - lng0) * mPerDegLng;
+    final y = (p.latitude - lat0) * _metersPerDegreeLat;
+    final u = x * c + y * s;
+    final v = -x * s + y * c;
+    if (u < minU) minU = u;
+    if (u > maxU) maxU = u;
+    if (v < minV) minV = v;
+    if (v > maxV) maxV = v;
+  }
+  final bestU = maxU - minU;
+  final bestV = maxV - minV;
+
+  // 상자 중심(u,v)을 (동,북)으로 되돌린 뒤 위경도로 환산한다.
+  final cu = (minU + maxU) / 2;
+  final cv = (minV + maxV) / 2;
+  final center = ll.LatLng(
+    lat0 + (cu * s + cv * c) / _metersPerDegreeLat,
+    lng0 + (cu * c - cv * s) / mPerDegLng,
+  );
 
   // u축은 (동, 북) 평면에서 방향 (cos deg, sin deg)이다. 방위각은 북쪽 기준
   // 시계방향이므로 atan2(동, 북) = atan2(cos deg, sin deg) = 90 - deg.
@@ -116,8 +165,18 @@ BuildingBox? minAreaBoxFor(List<ll.LatLng> footprint) {
   final vAzimuth = _normalize180(-bestDeg);
 
   return bestU >= bestV
-      ? (longSideM: bestU, shortSideM: bestV, longAxisAzimuthDeg: uAzimuth)
-      : (longSideM: bestV, shortSideM: bestU, longAxisAzimuthDeg: vAzimuth);
+      ? (
+          longSideM: bestU,
+          shortSideM: bestV,
+          longAxisAzimuthDeg: uAzimuth,
+          center: center,
+        )
+      : (
+          longSideM: bestV,
+          shortSideM: bestU,
+          longAxisAzimuthDeg: vAzimuth,
+          center: center,
+        );
 }
 
 /// 긴 축이 화면 **세로**로 서도록 하는 카메라 bearing(0~360 미만).
@@ -180,6 +239,8 @@ BuildingBox? routeBoxFor(
     longSideM: math.max(box.longSideM, minSideM),
     shortSideM: math.max(box.shortSideM, minSideM),
     longAxisAzimuthDeg: box.longAxisAzimuthDeg,
+    // 변만 받치므로 중심은 그대로다 — 양쪽으로 같은 만큼 넓히는 것과 같다.
+    center: box.center,
   );
 }
 

@@ -1788,7 +1788,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       // 어긋난다. 그 상태로는 카메라 fit이 엉뚱한 외곽선에 맞고(지하층 정렬
       // 이상), 매장 탭이 feature id를 다른 층 목록에서 찾다 실패하며(탭 불능
       // + 건물 파란 반짝임만 남음), 검색 포커스도 매장을 못 찾는다.
-      if (!mounted || _activeFloor != floor) return;
+      if (!mounted || _activeFloor != floor) {
+        debugPrint(
+          '[outdoor overlay] 층 도면 버림: 요청=$floor 지금=$_activeFloor '
+          'mounted=$mounted',
+        );
+        return;
+      }
       final graphJson = geojson?['navigation_graph'];
       final graph = graphJson is Map<String, dynamic>
           ? FloorGraph.fromJson(graphJson)
@@ -1808,10 +1814,25 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       // 채워진다.
       unawaited(_syncFloorOutlineLayer());
       _syncDimScrimLayer();
-    } catch (_) {
+      // 도면이 없어서 미뤄 둔 카메라 fit이 이 층 것이면 지금 실행한다
+      // ([_pendingFloorFit]). 이 자리가 "그 층 외곽선이 처음으로 존재하는"
+      // 시점이라, 여기서 맞춰야 배율이 정확히 한 번에 잡힌다.
+      final pending = _pendingFloorFit;
+      if (pending != null && pending.floor == floor) {
+        _pendingFloorFit = null;
+        // 이 함수 자체가 `_floorGraphLoad`라서, 기다리는 껍데기를 부르면
+        // 자기 자신을 기다린다 — 몸통을 직접 부른다.
+        unawaited(_fitCameraToLoadedFloor(pending.duration));
+      }
+    } catch (error, stackTrace) {
       // 로드 실패 시 앵커 배치·매장 탭은 안내로 막고 나머지 야외 지도 동작은
       // 그대로 유지한다. 성공 경로와 같은 이유로, 추월당한 요청의 실패가
       // 지금 층의 도면을 지우면 안 된다.
+      //
+      // **삼키되 조용하지는 않게 한다.** 여기서 터지면 층 외곽선·매장 탭·카메라
+      // fit이 한꺼번에 죽는데, 화면에는 "실내 기능만 없는" 상태로만 보여서
+      // 원인을 화면 밖에서 찾을 단서가 하나도 없다.
+      debugPrint('[outdoor overlay] 층 도면 로드 실패($floor): $error\n$stackTrace');
       if (mounted && _activeFloor == floor) {
         setState(() {
           _floorGraph = null;
@@ -4006,20 +4027,63 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 286 x 305 m다. 건물 외곽선 하나로 맞춰 두면 지상층에서는 여백이 남고
   /// 지하로 내려가면 도면이 화면 밖으로 잘린다.
   ///
-  /// 층 도면이 아직 안 왔으면 건물 외곽선으로 폴백한다 — 한 프레임 어긋난
-  /// 배율이 아무 데도 못 맞추는 것보다 낫다.
+  /// **건물 외곽선으로 폴백하지 않는다.** 예전에는 층 도면이 아직 없으면 건물
+  /// 외곽선에 맞췄는데("한 프레임 어긋난 배율이 낫다"), 그 값은 시드 구조상
+  /// **1F의 외곽선**이다([floorOutlineRing] 주석). 지상층끼리는 거의 같아서
+  /// 티가 안 나지만 지하는 1.8배 크고 위치도 달라서, 그 배율로 굳으면 B1·B2는
+  /// 한쪽이 잘리고 B3~B6은 사방이 잘려 층 전체가 화면에 안 들어온다. 그리고
+  /// 이건 "한 프레임"이 아니다 — 뒤이어 다시 맞춰 주는 곳이 없어 그대로 남는다.
+  ///
+  /// 그래서 도면 로드를 **기다렸다가** 맞춘다.
+  ///
+  /// 기다려도 없으면 건물 외곽선으로 일단 맞추되(연출을 잃지 않는다) **다시
+  /// 맞추기를 예약해 둔다**([_pendingFloorFit]). 폴백을 아예 없애 봤더니 "틀린
+  /// 배율"이 "배율을 아예 안 잡음"이 됐고, 그건 더 나쁘다 — 실기기에서 건물에
+  /// 들어가도 도면이 야외 지도 위 작은 사각형으로 남고 진입 줌인이 통째로
+  /// 사라졌다. 예약해 두면 도면이 도착하는 순간 그 층 크기로 한 번 더 맞는다.
   Future<void> _fitCameraToActiveFloor({
     Duration duration = _indoorZoomInDuration,
   }) async {
-    final footprint = _activeFloorOutlineRing() ?? _buildingFootprint;
+    // 층을 막 바꾼 직후면 도면이 아직 오는 중이다. 여기서 기다려야 대부분의
+    // 경우 예약까지 가지 않고 바로 맞는다.
+    await _floorGraphLoad;
+    if (!mounted) return;
+    await _fitCameraToLoadedFloor(duration);
+  }
+
+  /// [_fitCameraToActiveFloor]의 몸통 — **도면 로드를 기다리지 않는다.**
+  ///
+  /// 예약분을 실행하는 쪽([_fetchFloorGraph])은 이미 그 로드 **안에** 있어서,
+  /// 거기서 `_floorGraphLoad`를 기다리면 자기 자신을 기다리다 멈춘다. 그래서
+  /// 기다리는 껍데기와 실제로 맞추는 몸통을 나눠 둔다.
+  Future<void> _fitCameraToLoadedFloor(Duration duration) async {
+    final ring = _activeFloorOutlineRing();
+    // 층 도면이 없으면 건물 외곽선으로 **일단 맞춘다.** 그 값은 1F 외곽선이라
+    // 지하에서는 크기가 안 맞지만, 안 맞추면 진입 줌인 연출이 통째로 사라진다 —
+    // 실기기에서 확인했다. 대신 도면이 도착하면 그 층 크기로 다시 맞추도록
+    // 예약해 둔다([_pendingFloorFit]).
+    final footprint = ring ?? _buildingFootprint;
     if (footprint == null || footprint.length < 3) return;
-    final center = _buildingCenter(footprint);
-    if (center == null) return;
-    final box = minAreaBoxFor(footprint);
+    final floor = _activeFloor;
+    if (ring == null) {
+      if (floor != null) _pendingFloorFit = (floor: floor, duration: duration);
+      debugPrint(
+        '[outdoor overlay] fit 폴백(건물 외곽선): $floor 도면 없음 '
+        '(entered=$_indoorEntered)',
+      );
+    } else {
+      _pendingFloorFit = null;
+    }
+    // 화면에 그려지는 것은 외곽선만이 아니다 — 매장·POI까지 덮어야 "층 전체가
+    // 보인다"가 된다([_activeFloorDrawnPoints]). 폴백 중이면 그 층 도면이 없으니
+    // 덮을 점도 없다.
+    final box = minAreaBoxFor(
+      footprint,
+      covering: ring == null ? const [] : _activeFloorDrawnPoints(),
+    );
     if (box != null) {
       await _animateCameraToFitBox(
         box,
-        center: center,
         topChromePx: _floorFitTopChromePx,
         bottomChromePx: _floorFitBottomChromePx,
         duration: duration,
@@ -4027,12 +4091,38 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       return;
     }
     // 상자를 못 구하면(퇴화한 외곽선) 돌리지 않고 임계값까지만 간다.
+    final center = _buildingCenter(footprint);
     final controller = _mapController;
-    if (controller == null || !_styleReady) return;
+    if (center == null || controller == null || !_styleReady) return;
     await controller.animateCamera(
       CameraUpdate.newLatLngZoom(_toGl(center), _entryZoomThreshold()),
       duration: duration,
     );
+  }
+
+  /// 지금 층에서 **실제로 그려지는** 좌표 전부 — 외곽선 + 매장 폴리곤·중심 +
+  /// POI. 카메라를 맞출 때 덮어야 할 범위다.
+  ///
+  /// 외곽선만으로는 모자란다. 백엔드 층 footprint는 도면을 감싸라고 만든 값이지
+  /// 매장을 다 덮는다는 보장이 없고, 실제로 더현대 서울 1F는 매장이 외곽선
+  /// 위아래로 12 m·19 m 튀어나와 있어 외곽선에 맞추면 그만큼이 화면 밖에 남는다.
+  /// 반대로 B2의 footprint는 매장보다 9 m 넓은 맨 사각형이라, 그 상자에 맞추면
+  /// 도면이 프레임 안에서 한쪽으로 치우친다. 둘 다 "그려지는 것"을 기준으로
+  /// 잡으면 사라진다.
+  /// 층 도면이 아직 없어 미뤄 둔 카메라 fit. 도면이 도착하면
+  /// [_fetchFloorGraph]가 이어서 실행한다. 층 이름을 함께 들고 있는 이유는,
+  /// 기다리는 사이 사용자가 다른 층으로 가 버리면 이 예약은 남의 층 것이라
+  /// 버려야 하기 때문이다.
+  ({String floor, Duration duration})? _pendingFloorFit;
+
+  List<ll.LatLng> _activeFloorDrawnPoints() {
+    final plan = _floorPlan;
+    if (plan == null) return const [];
+    return <ll.LatLng>[
+      ...plan.footprint,
+      for (final store in plan.stores) ...[store.centroid, ...store.polygon],
+      for (final poi in plan.pois) poi.point,
+    ];
   }
 
   /// 안내가 시작된 순간, **지금 층 경로 전체**가 한눈에 들어오도록 카메라를 한 번
@@ -4066,11 +4156,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (route.distanceMeters < _routeOverviewMinDistanceM) return;
     // 퇴화한 경로(점 2개, 일직선)를 견디는 몫은 [routeBoxFor]가 진다.
     final box = routeBoxFor(route.points, minSideM: _routeFitMinSideM);
-    final center = _buildingCenter(route.points);
-    if (box == null || center == null) return;
+    if (box == null) return;
     await _animateCameraToFitBox(
       box,
-      center: center,
       topChromePx: _guidanceFitTopChromePx,
       bottomChromePx: _guidanceFitBottomChromePx,
       duration: duration,
@@ -4126,7 +4214,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// — 층 외곽선은 커서 그 배율까지 올라갈 일이 없다.
   Future<bool> _animateCameraToFitBox(
     BuildingBox box, {
-    required ll.LatLng center,
     required double topChromePx,
     required double bottomChromePx,
     required Duration duration,
@@ -4135,6 +4222,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final controller = _mapController;
     if (controller == null || !_styleReady) return false;
 
+    // 중심은 **상자가 준다.** 호출부가 따로 구한 중심을 받던 시절에는 배율은
+    // 돌아간 상자로, 위치는 정북 정렬 bbox로 재서 둘이 어긋났다(근거는
+    // [BuildingBox.center]).
+    final center = box.center;
     final bearing = portraitBearingFor(
       longAxisAzimuthDeg: box.longAxisAzimuthDeg,
       currentBearing: controller.cameraPosition?.bearing,
@@ -5516,6 +5607,20 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (_highlightedStoreId == null) return;
     setState(() => _highlightedStoreId = null);
     _syncHighlightLayer();
+  }
+
+  /// 지금 층을 **다시 고른 것과 같은 화면**으로 되돌린다.
+  ///
+  /// 매장을 고르면 카메라가 그 매장으로 당겨지고 시트에 가리지 않도록 위로
+  /// 밀린다. 아무것도 고르지 않고 시트를 닫으면 사용자가 보려던 것은 다시 층
+  /// 전체인데, 그 치우친 화면이 그대로 남아 있으면 방금 어디를 보고 있었는지
+  /// 다시 찾아야 한다. 층 전환과 **같은 함수·같은 시간**으로 되돌려, 층 선택기를
+  /// 누른 것과 구분되지 않는 화면을 만든다.
+  ///
+  /// 실내에 들어와 있지 않으면 되돌릴 기준이 없으므로 아무것도 하지 않는다.
+  Future<void> realignToActiveFloor() async {
+    if (!_indoorEntered) return;
+    await _fitCameraToActiveFloor(duration: _floorSwitchZoomDuration);
   }
 
   /// 검색 후보(`StoreIndexEntry`)를 좌표까지 갖춘 [PoiSearchResult]로 바꾼다.

@@ -53,6 +53,26 @@ def test_층_지도에_Studio_그래프와_매장_폴리곤을_응답한다(api_
     assert all(store["polygon_local_m"] is not None for store in body["stores"])
 
 
+# 층 지도 응답의 간선 키가 alias(from/to)인지 검증한다.
+#
+# **이 엔드포인트만 따로 지켜야 한다.** ETag를 뽑으려고 model_dump_json()을 직접
+# 부르는데, 그 기본값은 by_alias=False라 alias가 적용되지 않는다. 그러면 같은
+# DTO를 쓰는 /floors/{floor}/graph는 from/to인데 여기만 from_node_id/to_node_id로
+# 나가 한 배포 안에서 계약이 갈린다. 클라이언트에서는 조용한 파싱 예외가 되어
+# 층 도면·그래프가 통째로 null이 되고, 층 외곽선·카메라 fit·매장 탭·검색 포커스가
+# 한꺼번에 죽는다(화면에는 원인 단서가 남지 않는다).
+def test_층_지도_그래프_간선은_from_to_alias로_나간다(api_client):
+    body = api_client.get(f"/buildings/{BUILDING_ID}/floors/{FLOOR_NAME}").json()
+    edge = body["navigation_graph"]["edges"][0]
+
+    assert "from" in edge and "to" in edge
+    assert "from_node_id" not in edge and "to_node_id" not in edge
+
+    # 같은 DTO를 쓰는 전용 그래프 엔드포인트와 키가 정확히 같아야 한다.
+    graph_edge = api_client.get(f"/buildings/{BUILDING_ID}/floors/{FLOOR_NAME}/graph").json()["edges"][0]
+    assert set(edge) == set(graph_edge)
+
+
 # 건물 외곽이 Studio '테두리' 입력 그대로 응답에 실리는지 검증한다.
 def test_층_지도에_건물_외곽이_실린다(api_client):
     response = api_client.get(f"/buildings/{BUILDING_ID}/floors/{FLOOR_NAME}")
