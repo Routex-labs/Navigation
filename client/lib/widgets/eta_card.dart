@@ -100,7 +100,7 @@ class _GuidanceRow extends StatelessWidget {
     final accent = wrongWay ? const Color(0xFFD93025) : AppColors.primary;
     return Row(
       children: [
-        Icon(_iconFor(guidance.action), size: 24, color: accent),
+        Icon(routeGuidanceIcon(guidance.action), size: 24, color: accent),
         const SizedBox(width: 12),
         Expanded(
           child: Text(
@@ -230,7 +230,10 @@ String _distanceLabel(double meters) {
   return '${meters.round()} m';
 }
 
-IconData _iconFor(RouteGuidanceAction action) => switch (action) {
+/// 안내 지시별 아이콘. 걷는 중 배너와 경로 단계 목록([RouteStepsSheet])이
+/// **같은 매핑**을 봐야 한다 — 목록에서 본 그림이 걷는 중 배너에 그대로 다시
+/// 나와야 같은 지시로 읽힌다. 그래서 배너 전용 private이 아니라 public이다.
+IconData routeGuidanceIcon(RouteGuidanceAction action) => switch (action) {
   RouteGuidanceAction.wrongWay => Icons.u_turn_right_rounded,
   RouteGuidanceAction.turnLeft => Icons.turn_left_rounded,
   RouteGuidanceAction.turnRight => Icons.turn_right_rounded,

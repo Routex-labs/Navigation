@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../domain/route_guidance.dart';
 import '../theme/app_theme.dart';
+import 'eta_card.dart';
 
 /// 안내 배너를 탭했을 때 올라오는 **경로 전체 단계 목록** 시트.
 ///
@@ -69,7 +70,8 @@ class _RouteStepsSheet extends StatelessWidget {
                   dense: true,
                   visualDensity: VisualDensity.compact,
                   leading: Icon(
-                    _stepIcon(step.action),
+                    // 걷는 중 배너와 같은 매핑 — 이유는 [routeGuidanceIcon]에.
+                    routeGuidanceIcon(step.action),
                     size: 22,
                     color: arrived
                         ? const Color(0xFFD93025)
@@ -94,15 +96,3 @@ class _RouteStepsSheet extends StatelessWidget {
     );
   }
 }
-
-/// 걷는 중 배너([EtaCard])와 같은 아이콘을 쓴다 — 목록에서 본 그림이 걷는 중
-/// 배너에 그대로 다시 나와야 "같은 지시"로 읽힌다.
-IconData _stepIcon(RouteGuidanceAction action) => switch (action) {
-  RouteGuidanceAction.wrongWay => Icons.u_turn_right_rounded,
-  RouteGuidanceAction.turnLeft => Icons.turn_left_rounded,
-  RouteGuidanceAction.turnRight => Icons.turn_right_rounded,
-  RouteGuidanceAction.escalator => Icons.escalator_rounded,
-  RouteGuidanceAction.elevator => Icons.elevator_rounded,
-  RouteGuidanceAction.straight => Icons.straight_rounded,
-  RouteGuidanceAction.arrived => Icons.flag_rounded,
-};

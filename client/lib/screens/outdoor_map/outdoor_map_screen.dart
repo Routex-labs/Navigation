@@ -1173,12 +1173,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     return _activeFloor == floor;
   }
 
-  /// 디버그 모드에서 강제로 태울 수 있는 다음 환승. 없으면 null.
+  /// 디버그 모드에서 강제로 태울 수 있는 다음 환승(지금 층 세그먼트 + 도착 층).
+  /// 없으면 null.
   ///
   /// 지금 층 세그먼트에 **에스컬레이터** 환승이 붙어 있을 때만이다. 판정기
   /// ([EscalatorTransitionDetector])가 에스컬레이터 전용이라, 엘리베이터 환승을
   /// 강제로 태우면 실제로는 나올 수 없는 화면을 검증하게 된다.
-  IndoorRouteSegment? get _debugForceableTransferSegment {
+  ({IndoorRouteSegment segment, String nextFloorLabel})?
+  get _debugForceableTransfer {
     final multi = _indoorMultiFloorRoute;
     final floor = _activeFloor;
     if (multi == null || floor == null) return null;
@@ -1187,7 +1189,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final seg = multi.segments[i];
     if (seg.transferModeToNext != 'escalator') return null;
     if (seg.transferFromNodeId == null) return null;
-    return seg;
+    return (segment: seg, nextFloorLabel: multi.segments[i + 1].floorName);
   }
 
   /// 층 라벨을 비교 가능한 순위로 바꾼다. "1F" → 1, "B1" → -1.
@@ -1218,28 +1220,26 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 알고리즘은 재작성이 예정돼 있어, 거기 디버그 주입구를 뚫으면 재작성 때
   /// 같이 갈아엎어야 할 표면만 는다.
   void _debugForceFloorTransition() {
-    final seg = _debugForceableTransferSegment;
-    final multi = _indoorMultiFloorRoute;
+    final transfer = _debugForceableTransfer;
     final floor = _activeFloor;
-    if (seg == null || multi == null || floor == null) return;
-    final i = multi.segments.indexWhere((s) => s.floorName == floor);
-    final next = multi.segments[i + 1];
-    final goingUp = _floorRank(next.floorName) > _floorRank(floor);
+    if (transfer == null || floor == null) return;
+    final (:segment, :nextFloorLabel) = transfer;
+    final goingUp = _floorRank(nextFloorLabel) > _floorRank(floor);
     final transition = EscalatorTransition(
       // 도착 노드를 경로 지목으로 찾으므로 그룹 매칭까지 갈 일이 없지만,
       // 진단 JSON에 남는 값이라 강제 전환임을 알아볼 수 있게 적는다.
       group: 'DEBUG',
       direction: goingUp ? EscalatorDirection.up : EscalatorDirection.down,
       fromFloorLabel: floor,
-      toFloorLabel: next.floorName,
+      toFloorLabel: nextFloorLabel,
       deltaM: goingUp ? 5.0 : -5.0,
       durationMs: 0,
       stepsDuring: 0,
-      boardingNodeId: seg.transferFromNodeId!,
+      boardingNodeId: segment.transferFromNodeId!,
       boardingNodeName: null,
       boardingDistanceM: 0,
       boardingEvidence: 'debug-forced',
-      expectedArrivalNodeId: seg.transferToNodeId,
+      expectedArrivalNodeId: segment.transferToNodeId,
     );
     _enqueueFloorTransition(() => _beginEscalatorTransition(transition));
     // 시작과 확정 사이를 벌린다. 실제 에스컬레이터는 탑승부터 하차 감지까지
@@ -6060,7 +6060,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         // 무엇을 태우는지는 [_debugForceFloorTransition]에 있다.
         if (debugEnabled &&
             _guidanceActive &&
-            _debugForceableTransferSegment != null)
+            _debugForceableTransfer != null)
           AnimatedPositioned(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOut,
