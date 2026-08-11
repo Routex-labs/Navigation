@@ -574,4 +574,74 @@ void main() {
       );
     });
   });
+
+  group('층 전환 크로스페이드 opacity 표현식', () {
+    // 실기기 회귀: ['*', factor, interpolate]로 감싸면 MapLibre native가
+    // "zoom expression may only be used as input to a top-level step or
+    // interpolate"로 속성을 거부하고, opacity가 스펙 기본값 1로 굳어 새 도면이
+    // 투명하게 얹히지도, 페이드인되지도 않았다. 표현식은 어떤 계수에서도
+    // zoom을 입력으로 갖는 **최상위 interpolate**여야 한다.
+    test('어떤 계수에서도 최상위 interpolate를 유지한다(곱셈 래핑 금지)', () {
+      for (final factor in [0.0, 0.25, 0.62, 1.0]) {
+        final expr = indoorOverlayCrossfadeExpr(
+          entered: true,
+          crossfadeFactor: factor,
+        );
+        expect(
+          expr.first,
+          'interpolate',
+          reason: '계수 $factor에서 표현식이 최상위 interpolate가 아니면 '
+              'native가 opacity 설정을 거부한다',
+        );
+        expect(
+          expr[2],
+          ['zoom'],
+          reason: 'zoom은 최상위 interpolate의 입력 자리에 있어야 한다',
+        );
+      }
+    });
+
+    test('계수는 램프 끝 스톱에 곱해져 곱셈과 같은 값을 낸다', () {
+      const factor = 0.4;
+      final expr = indoorOverlayCrossfadeExpr(
+        entered: true,
+        crossfadeFactor: factor,
+      );
+      // 시작 스톱 값은 0(곱해도 0), 끝 스톱 값은 factor여야 모든 zoom에서
+      // "원래 램프 × factor"와 일치한다.
+      expect(expr[4], 0);
+      expect(expr[6], factor);
+      // 미러 함수로도 확인: 램프 끝(z=17)에서 0.4, 램프 시작 아래에서 0.
+      expect(
+        indoorOverlayOpacityAt(zoom: 17, entered: true, maxOpacity: factor),
+        factor,
+      );
+      expect(
+        indoorOverlayOpacityAt(zoom: 15, entered: true, maxOpacity: factor),
+        0,
+      );
+    });
+
+    test('계수 1이면 원래 페이드 램프와 같다', () {
+      expect(
+        indoorOverlayCrossfadeExpr(entered: true, crossfadeFactor: 1),
+        indoorOverlayFadeExpr(entered: true),
+      );
+      expect(
+        indoorOverlayCrossfadeExpr(entered: false, crossfadeFactor: 1),
+        indoorOverlayFadeExpr(entered: false),
+      );
+    });
+
+    test('범위를 벗어난 계수는 0~1로 잘린다', () {
+      expect(
+        indoorOverlayCrossfadeExpr(entered: true, crossfadeFactor: -0.2),
+        indoorOverlayFadeExpr(entered: true, maxOpacity: 0),
+      );
+      expect(
+        indoorOverlayCrossfadeExpr(entered: true, crossfadeFactor: 1.7),
+        indoorOverlayFadeExpr(entered: true, maxOpacity: 1),
+      );
+    });
+  });
 }

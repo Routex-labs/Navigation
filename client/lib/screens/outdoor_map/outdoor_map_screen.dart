@@ -1781,7 +1781,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         buildingId,
         floor,
       );
-      if (!mounted) return;
+      // **추월당한 응답은 버린다.** 층을 연달아 바꾸면 요청이 겹치는데,
+      // 저장소가 층별 future를 캐시하므로 이미 가 본 층은 즉시, 처음 가는
+      // 층은 네트워크 시간 뒤에 도착한다 — 나중에 도착한 이전 층 응답이
+      // 지금 층의 도면·그래프를 덮어쓰면, 화면에 그려진 층과 [_floorPlan]이
+      // 어긋난다. 그 상태로는 카메라 fit이 엉뚱한 외곽선에 맞고(지하층 정렬
+      // 이상), 매장 탭이 feature id를 다른 층 목록에서 찾다 실패하며(탭 불능
+      // + 건물 파란 반짝임만 남음), 검색 포커스도 매장을 못 찾는다.
+      if (!mounted || _activeFloor != floor) return;
       final graphJson = geojson?['navigation_graph'];
       final graph = graphJson is Map<String, dynamic>
           ? FloorGraph.fromJson(graphJson)
@@ -1803,8 +1810,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _syncDimScrimLayer();
     } catch (_) {
       // 로드 실패 시 앵커 배치·매장 탭은 안내로 막고 나머지 야외 지도 동작은
-      // 그대로 유지한다.
-      if (mounted) {
+      // 그대로 유지한다. 성공 경로와 같은 이유로, 추월당한 요청의 실패가
+      // 지금 층의 도면을 지우면 안 된다.
+      if (mounted && _activeFloor == floor) {
         setState(() {
           _floorGraph = null;
           _floorPlan = null;
@@ -1836,7 +1844,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 읽힌다. 재정렬을 페이드 뒤로 미루면 전환이 두 박자("바뀌고, 그 다음
     // 움직이고")로 쪼개진다.
     await _switchOverlayFloorCrossfaded(floor, recenterIfNeeded: false);
-    if (!mounted) return;
+    // 연타로 이 탭이 추월당했으면 카메라를 만지지 않는다 — 여기서 fit하면
+    // 사용자가 마지막으로 고른 층 화면을 이전 탭의 층 외곽선에 맞춰 버린다
+    // (지하층처럼 층마다 크기가 크게 다르면 정렬이 눈에 띄게 어긋난다).
+    // 카메라는 마지막 탭의 이 함수 호출이 맞춘다.
+    if (!mounted || _activeFloor != floor) return;
     // 층 그래프가 도착한 뒤라 [_activeFloorOutlineRing]이 새 층 외곽선을 준다
     // (`_switchOverlayFloor`가 `_loadFloorGraph`까지 기다린다).
     await _fitCameraToActiveFloor(duration: _floorSwitchZoomDuration);
@@ -3797,11 +3809,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 속성을 쓰는 모든 경로(등록·페이드 갱신·카테고리 필터·크로스페이드 단계)가
   /// 이걸 써야 페이드 도중 끼어든 갱신이 계수를 되돌리지 않는다. 건물 단위
   /// dim scrim은 층 전환과 무관하므로 [_fadeExpr]를 그대로 쓴다.
+  ///
+  /// 곱셈을 `['*', ...]`로 감싸지 않고 램프 끝 스톱에 곱해 넣는 이유
+  /// (native의 top-level zoom 제약)는 [indoorOverlayCrossfadeExpr]에 있다.
   List<Object> _overlayFadeExpr() {
-    final expr = _fadeExpr();
     final factor = _indoorOverlayFadeFactor;
-    if (factor >= 1) return expr;
-    return ['*', factor, expr];
+    if (factor >= 1) return _fadeExpr();
+    return indoorOverlayCrossfadeExpr(
+      entered: _indoorEntered,
+      crossfadeFactor: factor,
+    );
   }
 
   /// 실내 진입/이탈로 페이드 구간이 바뀌었을 때 이미 등록된 오버레이 레이어의
@@ -4464,10 +4481,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       // 실내 오버레이 레이어를 route casing 바로 아래에 삽입한다. 안 그러면
       // _onStyleLoaded가 먼저 그린 경로선/GPS 마커/PDR dot이 나중에 얹힌 stores
       // fill(줌 17.5+에서 fillOpacity=1) 밑으로 깔려 화면에서 완전히 사라진다.
-      // stores 레이어는 매장 탭 검출용으로 상호작용을 유지한다(중복 발화는
-      // MapLibreMap.featureTapsTriggersMapClick=true로 onMapClick에 흡수됨).
-      // footprint/label은 탭 반응이 없어도 되므로 명시적으로 꺼서 시각 부작용을
-      // (footprint 폴리곤 반짝임 등) 없앤다.
+      // **전 레이어 인터랙션을 끈다** — 매장 탭 검출은 feature 탭 콜백이 아니라
+      // [_handleMapClick]의 queryRenderedFeatures(현재 세대 stores 레이어 id로
+      // 직접 질의)가 하고, onMapClick은 featureTapsTriggersMapClick=true라 어차피
+      // 항상 온다. stores를 인터랙션으로 남기면 층 전환 크로스페이드 동안 은퇴
+      // 목록([_retiringIndoorBlocks])에 남는 이전 층 stores 레이어까지 탭 대상이
+      // 되어, native feature 탭 판정이 화면과 무관한 이전 층 폴리곤에 걸린다.
       await controller.addFillLayer(
         _indoorTilesSourceId,
         _indoorFootprintLayerId,
@@ -4482,6 +4501,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         indoorStoresFillProps(fadeExpr),
         sourceLayer: 'stores',
         belowLayerId: _routeCasingLayerId,
+        enableInteraction: false,
       );
       // 카테고리 강조. 일반 매장 fill 바로 위에 얹어 선택한 매장만 파랗게
       // 덮는다. 선택이 없을 때도 레이어는 남겨 두고 아무것도 맞지 않는 필터를
@@ -5524,7 +5544,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       // 자리다. 새 도면 페이드인은 이어지는 매장 포커스 카메라 이동과 겹친다.
       await _switchOverlayFloorCrossfaded(entry.floorName);
       if (!mounted) return null;
+      // 기다리는 사이 다른 전환이 추월했으면 다른 층 도면에서 좌표를 찾게
+      // 되므로 여기서 멈춘다([focusStore]와 같은 규칙).
+      if (_activeFloor != entry.floorName) return null;
     }
+    // 층은 맞지만 그 층 도면 로드가 아직 도는 중일 수 있다 — 층을 막 바꾼
+    // 직후의 검색 탭이 대표적이다. 기다리지 않으면 [_floorPlan]이 비어 있어
+    // 첫 탭이 조용히 null로 떨어지고, 상위가 이름 재검색으로 돌려 사용자는
+    // 같은 매장을 **두 번** 눌러야 한다.
+    await _floorGraphLoad;
+    if (!mounted) return null;
     final stores = _floorPlan?.stores;
     if (stores == null) return null;
 
@@ -5592,6 +5621,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       // 엉뚱한 자리를 강조하게 되므로 여기서 멈춘다.
       if (store.floor != _activeFloor) return;
     }
+    // 도면 로드가 아직 도는 중이면 기다린다 — 아래 강조([_syncHighlightLayer])가
+    // [_floorPlan]에서 매장 폴리곤을 찾으므로, 로드 전에 그리면 강조 없이
+    // 카메라만 움직이는 반쪽 포커스가 된다([resolveIndexEntry]와 같은 이유).
+    await _floorGraphLoad;
+    if (!mounted) return;
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
 
@@ -6172,12 +6206,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
             // FloorPlanView도 같은 이유로 이 값을 명시적으로 켜고 있다.
             trackCameraPosition: true,
             // 웹의 maplibre_gl은 기본값(false)이면 상호작용 가능한 벡터 레이어
-            // (실내 오버레이의 stores/footprint fill 등)을 탭한 순간 별도 feature
-            // -tap만 발화하고 onMapClick은 삼켜버린다. 그러면 사용자가 실내
-            // 진입 오버레이 위에서 "위치 지정" → 건물 안 매장 폴리곤을 탭했을
+            // (건물 fill처럼 enableInteraction이 켜진 레이어)를 탭한 순간 별도
+            // feature-tap만 발화하고 onMapClick은 삼켜버린다. 그러면 사용자가
+            // 실내 진입 오버레이 위에서 "위치 지정" → 건물 폴리곤을 탭했을
             // 때 _handleMapClick이 아예 호출되지 않아 PDR 앵커 배치가 조용히
             // 실패한다. 이 값을 켜서 feature-tap이 있어도 onMapClick도 함께
             // 오게 만든다(실내 지도의 FloorPlanView가 같은 이유로 이미 켜둠).
+            // 실내 오버레이 레이어는 전부 인터랙션을 꺼 두었다 — 이유는
+            // _ensureIndoorTilesRegistered의 레이어 등록 주석 참고.
             featureTapsTriggersMapClick: true,
             compassEnabled: false,
             myLocationEnabled: false,

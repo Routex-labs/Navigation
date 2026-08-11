@@ -303,6 +303,28 @@ List<Object> indoorOverlayFadeExpr({
   ];
 }
 
+/// 층 전환 크로스페이드 계수([crossfadeFactor], 0=투명 ~ 1=원래 불투명도)까지
+/// 반영한 오버레이 opacity 표현식.
+///
+/// **`['*', factor, <interpolate>]`처럼 곱셈으로 감싸면 안 된다.** MapLibre
+/// native는 `["zoom"]`을 **최상위** `interpolate`/`step`의 입력으로만 허용해
+/// (`Error setting property: fill-opacity "zoom" expression may only be used
+/// as input to a top-level "step" or "interpolate" expression`) 속성 설정
+/// 자체를 거부하고, 거부된 opacity는 스펙 기본값 **1**로 굳는다. 실기기에서
+/// 층 전환 때 "새 도면을 투명하게 얹었다 페이드인"이 전부 무시되고 즉시
+/// 불투명하게 떴던 원인이다(frontend.log에 층 전환마다 위 오류 9건).
+///
+/// 페이드 램프의 시작 스톱 값이 0이므로, 끝 스톱(maxOpacity)에 계수를 곱한
+/// **최상위 interpolate**가 모든 zoom에서 곱셈과 같은 값을 낸다. zoom이
+/// 최상위 interpolate의 입력으로 남으므로 native가 받아들인다.
+List<Object> indoorOverlayCrossfadeExpr({
+  required bool entered,
+  required double crossfadeFactor,
+}) => indoorOverlayFadeExpr(
+  entered: entered,
+  maxOpacity: crossfadeFactor.clamp(0.0, 1.0).toDouble(),
+);
+
 /// [indoorOverlayFadeExpr]가 [zoom]에서 만들어 내는 실제 opacity. 표현식을
 /// 직접 평가할 수 없는 테스트·검증용 미러다.
 double indoorOverlayOpacityAt({
