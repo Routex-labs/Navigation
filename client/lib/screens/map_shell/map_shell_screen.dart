@@ -64,7 +64,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
   // [IndoorMapBody]가 "덮인 뒤에 도면을 교체"하려고 같은 값을 기다리므로,
   // 여기서 따로 잡으면 두 값이 어긋나 교체 장면이 그대로 보인다.
 
-
   /// 이 앱이 다루는 건물. 한동안 햄버거 버튼이 "건물 선택 (테스트)" 시트를 열어
   /// 백엔드에 적재된 건물 목록에서 바꿀 수 있었지만, 데모용 전환 수단이었고
   /// 실제 사용 흐름에는 없는 조작이라 걷어냈다. 여러 건물을 실제로 다루게 되면
@@ -170,6 +169,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   ({String title, String subtitle})? _placeInfo;
   bool _outdoorRouteVisible = false;
+
+  /// 사용자가 고른 목적지로 안내 중인지. true면 지도 위 chrome(검색창·카테고리
+  /// 줄·하단 바)을 접어 지도와 안내 카드만 남긴다. 판정 기준과 그렇게 나눈
+  /// 이유는 `OutdoorMapBody`의 `_guidanceActive`에 있다.
+  bool _guidanceActive = false;
 
   /// 실내 지도에서 "위치 지정" 흐름이 켜져 있는지. IndoorMapBody가 콜백으로
   /// 알려주며, 하단 바 "위치 지정" 버튼을 눌린 상태로 표시하는 데 쓴다.
@@ -1305,6 +1309,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
             key: _outdoorKey,
             onRouteVisibleChanged: (visible) =>
                 setState(() => _outdoorRouteVisible = visible),
+            onGuidanceActiveChanged: (active) {
+              if (_guidanceActive == active) return;
+              setState(() => _guidanceActive = active);
+              // 안내가 시작되면 검색창이 사라진다. 검색이 열린 채였다면 입력
+              // 대상이 없는 결과 패널과 지도를 덮은 막만 남으므로 함께 닫는다.
+              if (active) _closeSearch();
+            },
             onPlacingLocationChanged: (placing) {
               if (_outdoorPlacingLocation == placing) return;
               setState(() => _outdoorPlacingLocation = placing);
@@ -1387,6 +1398,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
               // 개수에 따라 폭이 들쭉날쭉해진다.
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // **안내 중에도 접지 않는다.** 이 자리는 안내가 시작되면
+                // 검색창이 아니라 출발/도착 초안 바로 바뀐다(`MapTopBar`의
+                // `showRouteDraft`). 즉 지금 어디로 가는 중인지를 적어 주는
+                // 안내 UI이지, 접어야 할 사전 조작 chrome이 아니다. 게다가
+                // 길안내 중 도착지를 바꾸는 유일한 경로가 이 초안 바의 도착 행이라
+                // (`tests/unit_test/route_updates_immediately_test.dart`),
+                // 접으면 끝점을 바꾸려면 안내를 먼저 끝내야 하는 화면이 된다.
                 MapTopBar(
                   key: _topBarKey,
                   onMenuTap: _onMenuTap,
@@ -1473,7 +1491,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
                   )
                 // 층 전환 중에는 카테고리 줄을 접는다. 배너가 상단 바 바로
                 // 아래에 오도록 자리를 비우는 것이고, 전환은 몇 초짜리 상태다.
-                else if (_floorTransition != null)
+                //
+                // 안내 중에도 접는다. 칩을 누르면 매장 목록 시트가 올라오는데,
+                // 그건 "어디 갈지 고르는" 조작이라 목적지가 이미 정해진 화면에
+                // 있을 이유가 없다.
+                else if (_floorTransition != null || _guidanceActive)
                   const SizedBox.shrink()
                 // 길찾기 draft에서는 **접지 않고 내려온다.** 상단 바가 출발/도착
                 // 두 줄로 커지면 이 Column이 그만큼 아래로 밀어 주므로 겹치지
@@ -1555,23 +1577,28 @@ class _MapShellScreenState extends State<MapShellScreen> {
             ),
           ),
 
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-            left: 0,
-            right: 0,
-            bottom: routeVisible ? _etaBarLiftHeight : 0,
-            child: MapBottomBar(
-              key: _bottomBarKey,
-              onCalibrate: _onCalibrate,
-              onPlaceLocation: _onPlaceLocation,
-              placingLocation: _outdoorPlacingLocation,
-              // 야외에서는 실내 진입 오버레이가 켜져 있을 때만 위치 지정 버튼을
-              // 노출한다. 오버레이가 꺼진 순수 야외 상태에서는 지정할 층 정보가
-              // 없어 눌러도 의미가 없다.
-              showPlaceLocation: _outdoorIndoorEntered,
+          // 안내 중에는 접는다. 두 버튼("위치 지정"·"위치 보정") 모두 안내를
+          // 시작하기 **전에** 출발점을 잡는 조작이라, 이미 경로를 따라가는
+          // 중에는 쓸 일이 없다. 접히면 리프트도 의미가 없으므로
+          // [routeVisible] 분기는 접히지 않은 자동 안내에서만 남는다.
+          if (!_guidanceActive)
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+              left: 0,
+              right: 0,
+              bottom: routeVisible ? _etaBarLiftHeight : 0,
+              child: MapBottomBar(
+                key: _bottomBarKey,
+                onCalibrate: _onCalibrate,
+                onPlaceLocation: _onPlaceLocation,
+                placingLocation: _outdoorPlacingLocation,
+                // 야외에서는 실내 진입 오버레이가 켜져 있을 때만 위치 지정
+                // 버튼을 노출한다. 오버레이가 꺼진 순수 야외 상태에서는 지정할
+                // 층 정보가 없어 눌러도 의미가 없다.
+                showPlaceLocation: _outdoorIndoorEntered,
+              ),
             ),
-          ),
 
           // 층 전환 스크림. root Stack의 **마지막** 레이어라 지도뿐 아니라
           // 검색창·카테고리·하단 바까지 함께 덮는다. 도면 교체 프레임에서만

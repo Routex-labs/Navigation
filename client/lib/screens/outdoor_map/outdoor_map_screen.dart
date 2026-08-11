@@ -17,6 +17,7 @@ import '../../core/map_picked_point.dart';
 import '../../core/service_locator.dart';
 import '../../core/tile_url.dart';
 import '../../domain/geo_transform.dart';
+import '../../domain/guidance_chrome.dart';
 import '../../features/debug_mode/debug_mode.dart';
 import '../../domain/dijkstra.dart';
 import '../../domain/route_guidance.dart';
@@ -465,6 +466,7 @@ class OutdoorMapBody extends StatefulWidget {
     super.key,
     this.active = true,
     this.onRouteVisibleChanged,
+    this.onGuidanceActiveChanged,
     this.onPlacingLocationChanged,
     this.onIndoorEnteredChanged,
     this.onStoreTap,
@@ -486,6 +488,12 @@ class OutdoorMapBody extends StatefulWidget {
   /// ETA 카드가 화면 최하단에 새로 나타나거나 사라질 때 호출된다.
   /// 상위(MapShellScreen)가 이 값으로 하단 공용 바를 그 위로 띄운다.
   final ValueChanged<bool>? onRouteVisibleChanged;
+
+  /// 사용자가 **직접 고른** 목적지로 안내가 시작/종료될 때 호출된다.
+  /// 상위(MapShellScreen)가 이 값으로 검색창·카테고리 줄·하단 바를 접는다.
+  ///
+  /// [onRouteVisibleChanged]와 반드시 구분해서 쓴다 — 이유는 [_guidanceActive].
+  final ValueChanged<bool>? onGuidanceActiveChanged;
 
   /// 층 전환 배너·스크림 상태를 셸에 넘긴다.
   ///
@@ -1647,7 +1655,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 핀이 사라지고, 다시 그 층으로 돌아오면 살아난다.
     _syncIndoorDestinationLayer();
     _syncHighlightLayer();
-    _notifyRouteVisibilityIfChanged();
+    _notifyRouteStateIfChanged();
     // 층 chip을 눌렀는데 카메라가 건물 밖을 보거나 실내 오버레이가 페이드인되기
     // 전 zoom(<17.5)에 있으면 사용자는 새 층 도면을 볼 수 없다 — "5F/6F를 골랐는데
     // 아무것도 안 나온다"는 인상을 준다. 층 chip 탭은 명시적으로 "그 층을 보고
@@ -2111,7 +2119,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final wasVisible = _route != null;
     setState(() => _route = route);
     _syncRouteLayer();
-    _notifyRouteVisibilityIfChanged();
+    _notifyRouteStateIfChanged();
     final isVisible = route != null;
     if (!wasVisible && isVisible) {
       _fitCameraToRoute(route);
@@ -2257,6 +2265,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     });
     _syncDestinationLayer();
     _syncRouteLayer();
+    // 여기서는 아직 chrome이 접히지 않는다 — `_route`를 방금 null로 되돌렸고,
+    // 안내 chrome은 경로가 실제로 그려진 뒤에야 접힌다([shouldFoldGuidanceChrome]).
+    // 그래도 통보한다: 앞선 안내가 돌고 있었다면 그게 여기서 끝나므로 접혀 있던
+    // chrome을 되돌려야 하고, 아래 경로 계산이 실패해 그대로 return하는 경로에서도
+    // 화면이 접힌 채 남지 않는다.
+    _notifyRouteStateIfChanged();
 
     if (origin != null) {
       final route = await directionsRepository.getWalkingRoute(
@@ -2287,7 +2301,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     });
     _syncDestinationLayer();
     _syncRouteLayer();
-    _notifyRouteVisibilityIfChanged();
+    _notifyRouteStateIfChanged();
   }
 
   /// 실내 진입 오버레이에서 매장까지의 실내 경로를 계산·표시한다. 사용자가
@@ -2352,7 +2366,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 경로 계산 전에도 도착지 centroid에 핀을 먼저 띄운다 — 사용자가 고른
     // 매장이 어디인지 즉시 보이고, 계산이 끝나면 도착 노드로 옮겨 붙는다.
     _syncIndoorDestinationLayer();
-    _notifyRouteVisibilityIfChanged();
+    _notifyRouteStateIfChanged();
 
     if (startFloor == endFloor) {
       await _computeAndShowSingleFloorIndoorRoute(
@@ -2503,7 +2517,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     });
     _syncRouteLayer();
     _syncIndoorDestinationLayer();
-    _notifyRouteVisibilityIfChanged();
+    _notifyRouteStateIfChanged();
     _fitCameraToIndoorRoute(route);
     // 이 경로 한 건이 진단 세션 하나가 된다. 이전 세션 데이터는 여기서
     // 버려지므로 내보내기 안내는 띄우지 않는다 — 길안내가 끝난 게 아니라
@@ -2568,7 +2582,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     });
     _syncRouteLayer();
     _syncIndoorDestinationLayer();
-    _notifyRouteVisibilityIfChanged();
+    _notifyRouteStateIfChanged();
     if (segment != null && segment.route.points.length >= 2) {
       _fitCameraToIndoorRoute(segment.route);
     }
@@ -2764,7 +2778,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     });
     _syncRouteLayer();
     _syncIndoorDestinationLayer();
-    _notifyRouteVisibilityIfChanged();
+    _notifyRouteStateIfChanged();
     // 한 번의 길안내가 여기서 끝난다.
     _endRouteRecordingSession();
   }
@@ -3975,15 +3989,38 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _indoorRouteSegment != null ||
       _indoorMultiFloorRoute != null;
 
-  /// 상위(MapShellScreen)의 하단 바 리프트/ETA 카드 표시가 어긋나지 않도록
-  /// 실내 경로 변경 후 이 헬퍼로 방문 상태 변화만 통보한다. 걷기 경로 쪽
-  /// [_applyRoute]와 같은 규칙(변화가 있을 때만 콜백)을 쓴다.
+  /// 사용자가 **직접 고른** 목적지로 안내 중인지. 안내 chrome(검색창·카테고리
+  /// 줄·층 선택기·하단 바)을 접을지의 유일한 판정 기준이다.
+  ///
+  /// 판정 규칙과 그렇게 나눈 이유는 [shouldFoldGuidanceChrome]에 있다. 요약하면
+  /// **접는 조건은 종료 버튼이 있는 조건과 같아야 한다** — 아래 ETA 카드 두
+  /// 분기가 `onClose`를 다는 조건과 이 getter가 정확히 맞물려야 하고, 어느
+  /// 한쪽을 고치면 그 함수를 통해 다른 쪽도 같이 바뀐다.
+  bool get _guidanceActive => shouldFoldGuidanceChrome(
+    hasUserDestination: _userDestination != null,
+    hasIndoorRouteDestination: _indoorRouteDestination != null,
+    hasComputedRoute: _route != null,
+  );
+
+  /// 상위(MapShellScreen)의 하단 바 리프트/ETA 카드 표시와 안내 chrome 접기가
+  /// 어긋나지 않도록, 경로·목적지를 건드린 뒤 이 헬퍼로 상태 변화만 통보한다.
+  /// 걷기 경로 쪽 [_applyRoute]와 같은 규칙(변화가 있을 때만 콜백)을 쓴다.
+  ///
+  /// 두 신호를 한 함수에서 같이 본다. 호출 지점을 나누면 목적지만 바뀌고 경로는
+  /// 그대로인 순간(예: [showRouteTo] 진입 직후)에 한쪽만 통보되기 쉽다.
   bool _lastRouteVisibleNotified = false;
-  void _notifyRouteVisibilityIfChanged() {
+  bool _lastGuidanceActiveNotified = false;
+  void _notifyRouteStateIfChanged() {
     final visible = _hasAnyRouteVisible;
-    if (visible == _lastRouteVisibleNotified) return;
-    _lastRouteVisibleNotified = visible;
-    widget.onRouteVisibleChanged?.call(visible);
+    if (visible != _lastRouteVisibleNotified) {
+      _lastRouteVisibleNotified = visible;
+      widget.onRouteVisibleChanged?.call(visible);
+    }
+    final guiding = _guidanceActive;
+    if (guiding != _lastGuidanceActiveNotified) {
+      _lastGuidanceActiveNotified = guiding;
+      widget.onGuidanceActiveChanged?.call(guiding);
+    }
   }
 
   /// 실내 오버레이 stores 폴리곤을 탭했는지 확인하고, 맞으면 상위에 매장 정보
@@ -5289,9 +5326,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           ),
 
         // 실내 진입 오버레이 — 야외 지도 위 좌측 하단에 세로 층 선택기를 얹어
-        // 실내 화면과 동일한 위치·디자인으로 층을 훑을 수 있게 한다. 하단 바가
-        // 경로 ETA로 위로 리프트되면 pill도 같이 올라가 시각 정렬을 유지한다.
+        // 실내 화면과 동일한 위치·디자인으로 층을 훑을 수 있게 한다.
+        //
+        // **안내 중에는 접는다.** 안내가 도는 동안 층은 사용자가 고르는 것이
+        // 아니라 경로가 정한다 — 층이 바뀌는 순간 [_enqueueFloorTransition]이
+        // 도면을 갈아 끼우고, 그 판정이 틀렸을 때 되돌리는 수단은 층 선택기가
+        // 아니라 전환 배너의 "아니에요"다. 안내 중에 남겨 두면 사용자가 고른 층과
+        // 경로가 가리키는 층이 어긋난 화면이 생기고, 그 상태를 정리할 규칙이 없다.
         if (_indoorEntered &&
+            !_guidanceActive &&
             _building != null &&
             _activeFloor != null &&
             _building!.floors.isNotEmpty)
