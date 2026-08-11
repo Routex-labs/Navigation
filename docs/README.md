@@ -64,6 +64,7 @@
 | [네이버지도 UI/UX 분석 (v2)](client/naver-map-ui-ux-analysis.md) | 정보 구조와 목록·시트 UX |
 | [검색 입력 보조](client/search-input-assist.md) | 자동완성·오타 교정 |
 | [검색 결과 목록 UX](client/search-result-list-ux.md) | 결과 행 구조와 정렬 |
+| [카메라 연출 계획](client/camera-choreography-plan.md) | 안내 시작·층 전환 카메라 (핸드오프, 미착수) |
 
 ## 리팩터 과제
 
