@@ -31,7 +31,11 @@ class EtaCard extends StatelessWidget {
     final guidance = instruction;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+        // 안내 한 줄은 위아래를 조인다 — 배너가 얇을수록 도면이 넓어진다.
+        // 두 줄인 legacy 쪽은 예전 여백을 유지해야 글자가 답답하지 않다.
+        padding: guidance == null
+            ? const EdgeInsets.fromLTRB(16, 14, 12, 14)
+            : const EdgeInsets.fromLTRB(16, 8, 8, 8),
         child: guidance == null
             ? _LegacyEtaContent(
                 label: label,
@@ -40,106 +44,106 @@ class EtaCard extends StatelessWidget {
                 onClose: onClose,
                 onClosePointerDown: onClosePointerDown,
               )
-            : Row(
-                children: [
-                  _GuidanceIcon(action: guidance.action),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          guidance.primaryText,
-                          style: const TextStyle(
-                            fontSize: 20,
-                            height: 1.15,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.text,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 7),
-                        Text(
-                          '$label · 약 $minutes분 · ${distanceMeters.round()}m 남음',
-                          style: const TextStyle(
-                            fontSize: 11.5,
-                            color: AppColors.muted,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (onClose != null) ...[
-                    const SizedBox(width: 6),
-                    Listener(
-                      onPointerDown: (event) =>
-                          onClosePointerDown?.call(event.position),
-                      child: TextButton(
-                        onPressed: onClose,
-                        style: TextButton.styleFrom(
-                          foregroundColor: const Color(0xFFD93025),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 9,
-                            vertical: 8,
-                          ),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          textStyle: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        child: const Text('종료'),
-                      ),
-                    ),
-                  ],
-                ],
+            : _GuidanceRow(
+                guidance: guidance,
+                onClose: onClose,
+                onClosePointerDown: onClosePointerDown,
               ),
       ),
     );
   }
 }
 
-class _GuidanceIcon extends StatelessWidget {
-  const _GuidanceIcon({required this.action});
+/// 안내 중 배너 본문. **한 줄이다** — 아이콘 · 지시 문구 · 다음 조작까지 거리.
+///
+/// 예전에는 두 줄이었다(큰 문구 + `목적지까지 · 약 N분 · Nm 남음`). 걸으면서
+/// 보는 화면에서 실제로 쓰는 정보는 **다음에 무엇을 할지와 몇 미터 남았는지**
+/// 둘뿐인데, 나머지가 그만큼 지도를 덮고 있었다. 총 소요·총 남은거리는 걷는
+/// 동안 계속 바뀌면서도 당장의 행동을 바꾸지 않는다.
+///
+/// 거리는 총 남은거리가 아니라 [RouteGuidanceInstruction.distanceToActionM],
+/// 즉 **다음 조작까지**의 거리다. "오른쪽 통로로 이동 92 m"에서 92 m는 그
+/// 모퉁이까지이지 목적지까지가 아니다 — 두 값을 섞으면 사용자는 92 m를 걷고도
+/// 모퉁이가 안 나오는 화면을 본다.
+class _GuidanceRow extends StatelessWidget {
+  const _GuidanceRow({
+    required this.guidance,
+    required this.onClose,
+    required this.onClosePointerDown,
+  });
 
-  final RouteGuidanceAction action;
+  final RouteGuidanceInstruction guidance;
+  final VoidCallback? onClose;
+  final ValueChanged<Offset>? onClosePointerDown;
 
   @override
   Widget build(BuildContext context) {
-    final icon = switch (action) {
-      RouteGuidanceAction.wrongWay => Icons.u_turn_right_rounded,
-      RouteGuidanceAction.turnLeft => Icons.turn_left_rounded,
-      RouteGuidanceAction.turnRight => Icons.turn_right_rounded,
-      RouteGuidanceAction.escalator => Icons.escalator_rounded,
-      RouteGuidanceAction.elevator => Icons.elevator_rounded,
-      RouteGuidanceAction.arrived => Icons.flag_rounded,
-      RouteGuidanceAction.straight => Icons.straight_rounded,
-    };
-    return Container(
-      width: 46,
-      height: 46,
-      decoration: BoxDecoration(
-        color: action == RouteGuidanceAction.wrongWay
-            ? const Color(0xFFFCE8E6)
-            : const Color(0xFFE8F0FE),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Icon(
-        icon,
-        size: 30,
-        color: action == RouteGuidanceAction.wrongWay
-            ? const Color(0xFFD93025)
-            : const Color(0xFF1A73E8),
-      ),
+    final wrongWay = guidance.action == RouteGuidanceAction.wrongWay;
+    final accent = wrongWay ? const Color(0xFFD93025) : AppColors.primary;
+    return Row(
+      children: [
+        Icon(_iconFor(guidance.action), size: 24, color: accent),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            guidance.primaryText,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: AppColors.text,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          _distanceLabel(guidance.distanceToActionM),
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: accent,
+          ),
+        ),
+        if (onClose != null) ...[
+          const SizedBox(width: 4),
+          // 한 줄에는 "종료" 글자를 놓을 자리가 없다. 다만 **없앨 수는 없다** —
+          // 안내 중에는 지도 위 chrome이 접혀 있어(`shouldFoldGuidanceChrome`)
+          // 이 버튼이 화면에서 빠져나가는 유일한 수단이다.
+          Listener(
+            onPointerDown: (event) => onClosePointerDown?.call(event.position),
+            child: IconButton(
+              key: const Key('eta-card-close'),
+              onPressed: onClose,
+              icon: const Icon(Icons.close, size: 20),
+              color: AppColors.muted,
+              tooltip: '안내 종료',
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
+
+/// 남은 거리 표기. 10 m 미만은 한 자리까지 보여 준다 — 도착 직전에 "0 m"가
+/// 몇 걸음 동안 붙어 있으면 안내가 멈춘 것처럼 보인다.
+String _distanceLabel(double meters) {
+  if (!meters.isFinite || meters < 0) return '';
+  if (meters < 10) return '${meters.toStringAsFixed(1)} m';
+  return '${meters.round()} m';
+}
+
+IconData _iconFor(RouteGuidanceAction action) => switch (action) {
+  RouteGuidanceAction.wrongWay => Icons.u_turn_right_rounded,
+  RouteGuidanceAction.turnLeft => Icons.turn_left_rounded,
+  RouteGuidanceAction.turnRight => Icons.turn_right_rounded,
+  RouteGuidanceAction.escalator => Icons.escalator_rounded,
+  RouteGuidanceAction.elevator => Icons.elevator_rounded,
+  RouteGuidanceAction.arrived => Icons.flag_rounded,
+  RouteGuidanceAction.straight => Icons.straight_rounded,
+};
 
 class _LegacyEtaContent extends StatelessWidget {
   const _LegacyEtaContent({
