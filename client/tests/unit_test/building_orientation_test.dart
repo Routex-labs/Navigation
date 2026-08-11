@@ -115,6 +115,121 @@ void main() {
         reason: '돌려 잰 짧은 변이 정북 정렬 폭보다 작아야 화면을 더 채울 수 있다',
       );
     });
+
+    test('중심은 상자의 한가운데다', () {
+      // 대칭 사각형이면 상자 중심 = 도형 중심이다. 여기서 어긋나면 아래의
+      // 비대칭 검증이 무슨 값을 재는지 알 수 없게 된다.
+      for (final deg in [0.0, 53.0, 128.0]) {
+        final box = minAreaBoxFor(
+          rect(widthM: 148, heightM: 295, rotationDeg: deg),
+        )!;
+        expect(box.center.latitude, closeTo(lat0, 1e-6), reason: '$deg도');
+        expect(box.center.longitude, closeTo(lng0, 1e-6), reason: '$deg도');
+      }
+    });
+
+    test('비대칭 도형에서 상자 중심은 정북 bbox 중심과 다르다', () {
+      // **이게 도면이 한쪽으로 밀리던 자리다.** 배율은 돌아간 상자로 재고 위치는
+      // 정북 bbox 중심으로 잡으면, 두 중심의 차이만큼 도면이 프레임에서 밀린다.
+      // 사방 여백이 7%뿐이라(_floorFitFillRatio 0.86) 그 차이가 곧 잘림이 된다.
+      // 53도 돌아간 사각형에 한쪽 모서리만 튀어나온 꼬리를 붙여 비대칭을 만든다.
+      final footprint = [
+        ...rect(widthM: 148, heightM: 295, rotationDeg: 53),
+        ll.LatLng(lat0, lng0 + 200 / metersPerDegLng),
+      ];
+      final box = minAreaBoxFor(footprint)!;
+
+      var minLat = double.infinity, maxLat = double.negativeInfinity;
+      var minLng = double.infinity, maxLng = double.negativeInfinity;
+      for (final p in footprint) {
+        minLat = math.min(minLat, p.latitude);
+        maxLat = math.max(maxLat, p.latitude);
+        minLng = math.min(minLng, p.longitude);
+        maxLng = math.max(maxLng, p.longitude);
+      }
+      final bboxCenterLat = (minLat + maxLat) / 2;
+      final bboxCenterLng = (minLng + maxLng) / 2;
+      final gapM = math.sqrt(
+        math.pow((box.center.latitude - bboxCenterLat) * metersPerDegLat, 2) +
+            math.pow(
+              (box.center.longitude - bboxCenterLng) * metersPerDegLng,
+              2,
+            ),
+      );
+      expect(
+        gapM,
+        greaterThan(5),
+        reason: '두 중심이 사실상 같으면 이 테스트가 회귀를 못 잡는다',
+      );
+
+      // 상자 중심에서 재면 도형이 상자 안에 대칭으로 들어온다 — 즉 어느 쪽으로도
+      // 상자 절반보다 멀리 있는 점이 없다.
+      final rad = box.longAxisAzimuthDeg * math.pi / 180;
+      for (final p in footprint) {
+        final east =
+            (p.longitude - box.center.longitude) * metersPerDegLng;
+        final north = (p.latitude - box.center.latitude) * metersPerDegLat;
+        // 긴 축 방향 성분과 그 직교 성분.
+        final along = east * math.sin(rad) + north * math.cos(rad);
+        final across = east * math.cos(rad) - north * math.sin(rad);
+        expect(along.abs(), lessThanOrEqualTo(box.longSideM / 2 + 1e-6));
+        expect(across.abs(), lessThanOrEqualTo(box.shortSideM / 2 + 1e-6));
+      }
+    });
+  });
+
+  group('그려지는 것까지 덮는 상자(covering)', () {
+    test('외곽선 밖의 점까지 덮도록 넓어진다', () {
+      // 더현대 서울 1F가 이 모양이다 — 매장 폴리곤이 층 외곽선 위아래로
+      // 12 m·19 m 튀어나와 있어, 외곽선에만 맞추면 그만큼이 화면 밖에 남는다.
+      final footprint = rect(widthM: 148, heightM: 295, rotationDeg: 0);
+      final bare = minAreaBoxFor(footprint)!;
+      // 긴 축(남북)으로 한쪽에만 20 m 더 나간 점.
+      final outside = ll.LatLng(
+        lat0 + (295 / 2 + 20) / metersPerDegLat,
+        lng0,
+      );
+      final box = minAreaBoxFor(
+        footprint,
+        covering: [...footprint, outside],
+      )!;
+      expect(box.longSideM, closeTo(bare.longSideM + 20, 1.0));
+      expect(box.shortSideM, closeTo(bare.shortSideM, 1.0));
+      // 한쪽으로만 넓어졌으므로 중심도 그 절반만큼 그쪽으로 움직인다.
+      expect(
+        (box.center.latitude - lat0) * metersPerDegLat,
+        closeTo(10, 1.0),
+      );
+    });
+
+    test('각도는 외곽선이 정한다 — covering이 축을 흔들지 않는다', () {
+      // 축은 카메라를 세우는 기준이라(portraitBearingFor), 층마다 매장 배치가
+      // 조금씩 다른 것 때문에 몇 도씩 돌면 층을 바꿀 때마다 지도가 미세하게
+      // 회전한다. covering은 크기만 넓힌다.
+      final footprint = rect(widthM: 148, heightM: 295, rotationDeg: 53);
+      final bare = minAreaBoxFor(footprint)!;
+      // 축을 90도쯤 뒤집고 싶어할 만큼 옆으로 길게 퍼진 점들을 covering에 넣는다.
+      final wide = [
+        for (final d in [-200.0, -100.0, 100.0, 200.0])
+          ll.LatLng(lat0, lng0 + d / metersPerDegLng),
+      ];
+      final box = minAreaBoxFor(footprint, covering: [...footprint, ...wide])!;
+      expect(
+        box.longAxisAzimuthDeg,
+        closeTo(bare.longAxisAzimuthDeg, 1e-9),
+        reason: 'covering이 축을 바꾸면 층을 오갈 때 지도가 돈다',
+      );
+    });
+
+    test('covering이 비어 있으면 외곽선 자신을 덮는다(예전 동작)', () {
+      final footprint = rect(widthM: 148, heightM: 295, rotationDeg: 53);
+      final bare = minAreaBoxFor(footprint)!;
+      final same = minAreaBoxFor(footprint, covering: const [])!;
+      expect(same.longSideM, closeTo(bare.longSideM, 1e-9));
+      expect(same.shortSideM, closeTo(bare.shortSideM, 1e-9));
+      expect(same.center.latitude, closeTo(bare.center.latitude, 1e-12));
+      expect(same.center.longitude, closeTo(bare.center.longitude, 1e-12));
+    });
   });
 
   group('세로로 세우는 bearing', () {
@@ -330,6 +445,16 @@ void main() {
       expect(box.longSideM, closeTo(raw.longSideM, 1e-9));
       expect(box.shortSideM, closeTo(raw.shortSideM, 1e-9));
       expect(box.longAxisAzimuthDeg, closeTo(raw.longAxisAzimuthDeg, 1e-9));
+    });
+
+    test('하한이 변을 받쳐도 중심은 그대로다', () {
+      // 변만 양쪽으로 넓히는 것이므로 경로가 화면 한가운데에 남아야 한다.
+      final points = straightRoute(lengthM: 3, azimuthDeg: 53);
+      final box = routeBoxFor(points, minSideM: minSideM)!;
+      final midLat = (points.first.latitude + points.last.latitude) / 2;
+      final midLng = (points.first.longitude + points.last.longitude) / 2;
+      expect(box.center.latitude, closeTo(midLat, 1e-9));
+      expect(box.center.longitude, closeTo(midLng, 1e-9));
     });
   });
 }
