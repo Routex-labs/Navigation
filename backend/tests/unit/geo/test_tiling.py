@@ -296,6 +296,44 @@ def test_ㄱ자_매장_라벨_점이_폴리곤_안에_있다():
     assert inside
 
 
+# 라벨 좌표는 타일(z/x/y)과 무관하게 매장 폴리곤 + 건물 변환만으로 정해지므로,
+# 호출자가 memo를 넘기면 계산 결과가 채워져 다음 타일에서 재사용할 수 있어야 한다.
+def test_라벨_memo에_계산된_좌표가_채워진다():
+    memo: dict[str, tuple[float, float]] = {}
+
+    layers = build_floor_tile_layers(
+        _building(),
+        stores=[_store_with_category("s1", "패션", "여성복")],
+        pois=[],
+        transform=IDENTITY_TRANSFORM,
+        bounds=tile_bounds(0, 0, 0),
+        store_label_memo=memo,
+    )
+
+    label = next(layer for layer in layers if layer["name"] == "store_labels")["features"][0]
+    assert memo["s1"] == tuple(label["geometry"]["coordinates"])
+
+
+# memo에 이미 있는 매장은 다시 계산하지 않고 그 좌표를 그대로 쓴다. 재계산이
+# 일어나면 memo 값과 다른(진짜 계산된) 좌표가 실리므로, 일부러 다른 좌표를
+# 심어 재사용 여부를 판별한다.
+def test_라벨_memo의_좌표를_재계산_없이_그대로_쓴다():
+    planted = (126.15, 37.15)
+    memo = {"s1": planted}
+
+    layers = build_floor_tile_layers(
+        _building(),
+        stores=[_store_with_category("s1", "패션", "여성복")],
+        pois=[],
+        transform=IDENTITY_TRANSFORM,
+        bounds=tile_bounds(0, 0, 0),
+        store_label_memo=memo,
+    )
+
+    label = next(layer for layer in layers if layer["name"] == "store_labels")["features"][0]
+    assert tuple(label["geometry"]["coordinates"]) == planted
+
+
 # 타일 경계에 걸친 매장은 폴리곤이 양쪽 타일에 실리지만 **라벨은 한 번만**
 # 실려야 한다. 둘 다 실으면 두 타일이 함께 떠 있을 때 같은 이름이 두 번 찍힌다.
 def test_라벨_점이_없는_타일에는_라벨을_싣지_않는다():

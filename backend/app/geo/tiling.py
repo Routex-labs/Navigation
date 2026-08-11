@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import MutableMapping, Sequence
 from dataclasses import dataclass
 from math import atan, degrees, pi, sinh
 from typing import TYPE_CHECKING
@@ -138,6 +138,16 @@ def build_floor_tile_layers(
     transform: GeoTransform | None,
     bounds: TileBounds,
     footprint_local_m: list[dict] | None = None,
+    # 매장 id → 라벨 좌표(lng, lat) memo. 호출자가 소유·무효화하는 저장소를
+    # 넘기면 이미 계산된 매장의 label_point를 건너뛰고, 새로 계산한 값을 채운다.
+    #
+    # 타일 간 재사용이 안전한 근거: 라벨 좌표의 입력은 매장 폴리곤(local_m)과
+    # 건물 단위 affine 변환(GeoTransform) 둘뿐이다. 변환은 건물 전체에 하나로
+    # 피팅되고(z/x/y와 무관), bounds는 라벨을 실을지 말지만 거르지 좌표 계산에는
+    # 끼지 않는다. 타일 격자 양자화는 이후 MVT 인코딩 단계에서 일어난다. 따라서
+    # 같은 DB 상태(=같은 revision)에서는 어느 타일에서 계산하든 같은 좌표가
+    # 나온다. 무효화(재시드 시점) 책임은 호출자(tile_queries)에 있다.
+    store_label_memo: MutableMapping[str, tuple[float, float]] | None = None,
 ) -> list[dict]:
     if transform is None:
         return []
@@ -186,7 +196,12 @@ def build_floor_tile_layers(
         # 하나씩 갖게 되고, 두 타일이 함께 떠 있는 순간 같은 이름이 두 번
         # 찍힌다. 대신 화면 가장자리에서 폴리곤 타일만 로드된 상태면 그 매장
         # 라벨이 잠깐 안 보이는데, POI 레이어가 이미 같은 규칙으로 동작한다.
-        label_x, label_y = label_point(_closed_ring_to_points(ring))
+        label_xy = store_label_memo.get(store.id) if store_label_memo is not None else None
+        if label_xy is None:
+            label_xy = label_point(_closed_ring_to_points(ring))
+            if store_label_memo is not None:
+                store_label_memo[store.id] = label_xy
+        label_x, label_y = label_xy
         if bounds.intersects(label_x, label_y, label_x, label_y):
             label_features.append(
                 {

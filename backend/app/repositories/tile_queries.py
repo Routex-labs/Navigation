@@ -67,6 +67,36 @@ _CACHE_GENERATION: tuple[str, int] | None = None
 # 워밍업 데몬 스레드와 요청 처리 스레드가 세대 전역을 함께 만지므로 교체는 락으로 묶는다.
 _CACHE_LOCK = threading.Lock()
 
+# 매장 라벨 좌표 memo — revision 하나에 대한 {store_id: (lng, lat)}.
+#
+# 왜 필요한가 — label_point(격자 탐색)가 타일 생성 비용의 대부분인데, 결과는
+# 매장 폴리곤 + 건물 단위 affine 변환에만 의존해 z/x/y와 무관하다(근거는
+# build_floor_tile_layers의 store_label_memo 파라미터 주석). 즉 같은 매장을
+# 타일마다·줌마다 다시 계산할 이유가 없어, (store_id, revision) 단위로 프로세스
+# 메모리에 한 번만 계산한다.
+#
+# 무효화는 타일 LRU 캐시(_TILE_CACHE)와 같은 축이다 — revision(=DB 파일 세대)이
+# 바뀌면 타일 캐시 키가 갈리듯 이 memo도 통째로 버린다. revision을 항목 키가
+# 아니라 memo 전체의 소유 키로 두는 이유는, 낡은 세대의 좌표가 새 세대 dict에
+# 섞여 남는 일 자체를 없애기 위해서다(항목 수백 개 × 좌표 2개라 재계산도 싸다).
+#
+# 동시성 — 교체(revision 전환)만 락으로 묶는다. 항목 get/set은 여러 렌더 스레드가
+# 락 없이 하지만, 값이 결정적이라(같은 입력 → 같은 좌표) 경쟁해 봐야 같은 값을
+# 두 번 계산해 넣는 것이 최악이다. 메모리는 실데이터 기준 매장 781개 × float 2개로
+# 수십 KB 수준이라 상한을 따로 두지 않는다.
+_LABEL_MEMO_LOCK = threading.Lock()
+_LABEL_MEMO_REVISION: str | None = None
+_LABEL_MEMO: dict[str, tuple[float, float]] = {}
+
+
+def _label_memo_for(revision: str) -> dict[str, tuple[float, float]]:
+    global _LABEL_MEMO_REVISION, _LABEL_MEMO
+    with _LABEL_MEMO_LOCK:
+        if revision != _LABEL_MEMO_REVISION:
+            _LABEL_MEMO_REVISION = revision
+            _LABEL_MEMO = {}
+        return _LABEL_MEMO
+
 
 # 캐시 세대를 구한다. settings.database_url이 아니라 세션이 실제로 물고 있는
 # 엔진에서 경로를 얻는다 — 테스트는 임시 DB 엔진을 get_db 오버라이드로 주입할 뿐
@@ -136,6 +166,9 @@ def _render_tile_bytes(
     z: int,
     x: int,
     y: int,
+    # 매장 라벨 좌표 memo(없으면 매번 계산). render_floor_tile이 revision에 묶인
+    # dict를 넘긴다 — 그래야 재시드 후 낡은 좌표가 재사용되지 않는다.
+    store_label_memo: dict[str, tuple[float, float]] | None = None,
 ) -> bytes | None:
     floor = _find_floor(session, building_id, floor_name)
     if floor is None:
@@ -159,6 +192,7 @@ def _render_tile_bytes(
         transform=transform,
         bounds=bounds,
         footprint_local_m=floor.footprint_local_m,
+        store_label_memo=store_label_memo,
     )
 
     return mapbox_vector_tile.encode(
@@ -182,9 +216,10 @@ def render_floor_tile(
 
     revision = _cache_revision(session)
     cache_key = (building_id, floor_name, z, x, y, revision)
+    label_memo = _label_memo_for(revision)
     return _TILE_CACHE.get_or_render(
         cache_key,
-        lambda: _render_tile_bytes(session, building_id, floor_name, z, x, y),
+        lambda: _render_tile_bytes(session, building_id, floor_name, z, x, y, store_label_memo=label_memo),
     )
 
 
@@ -244,14 +279,14 @@ def _lnglat_to_tile(lng: float, lat: float, z: int) -> tuple[int, int]:
     return x, y
 
 
-# 이 건물에서 워밍업할 층을 고른다. 기본은 앱이 처음 여는 층(지상 1층) 하나만.
+# 이 건물에서 워밍업할 층을 고른다. 기본은 전 층이다.
 #
-# 기동 워밍업의 목적은 "사용자가 처음 보는 화면"의 소켓 폭주 제거다. 앱은
-# default_floor(지상 1층)로 열리므로 그 층만 미리 채우면 첫인상 구간은 덮인다.
-# 나머지 층은 첫 방문 때 lazy로 채워지고, single-flight가 그 순간의 동시 요청도
-# 한 번 인코딩으로 합친다. 전 층을 미리 인코딩하는 것 대비 워밍 작업량과 상주
-# 메모리를 층 수만큼 줄인다(데모: 층 여러 개 → 1개). 전 층 워밍이 필요하면
-# NAV_TILE_WARM_DEFAULT_FLOOR_ONLY=0으로 되돌린다.
+# 예전 기본은 앱이 처음 여는 층(지상 1층) 하나였다 — 층 하나 워밍에 1초대가
+# 걸리던 시절의 절충이다. 라벨 계산 병목 제거(볼록 4각형 조기 탈출 + 라벨
+# memo) 후에는 전 층 워밍이 수 초·1MB 미만이라 절충할 이유가 없어졌다
+# (수치 근거는 config.tile_warm_default_floor_only 주석). 층 전환 첫 방문의
+# 타일 격자 병렬 요청도 전부 캐시 히트가 된다. 기본 층만 워밍하려면
+# NAV_TILE_WARM_DEFAULT_FLOOR_ONLY=1로 조인다.
 def _floors_to_warm(floors: list[Floor]) -> list[Floor]:
     if not settings.tile_warm_default_floor_only:
         return floors
