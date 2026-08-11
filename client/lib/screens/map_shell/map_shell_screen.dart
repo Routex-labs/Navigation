@@ -2032,8 +2032,10 @@ class _MapPickHintCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isOrigin = target == DirectionsMapPickTarget.origin;
     final counterpart = counterpartLabel;
+    // 색을 지정하지 않는다 — 테마 카드(surface + hairline)가 앱의 카드 문법이고,
+    // 파란 면(blue50)을 깔면 이 카드만 EtaCard·검색 패널과 다른 톤이 된다.
+    // 포인트는 아이콘의 primary 하나로 충분하다.
     return Card(
-      color: AppColors.blue50,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
         child: Row(

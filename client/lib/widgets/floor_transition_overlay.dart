@@ -108,7 +108,9 @@ class _FloorTransitionCard extends StatefulWidget {
 
 class _FloorTransitionCardState extends State<_FloorTransitionCard>
     with SingleTickerProviderStateMixin {
-  static const _accent = Color(0xFF1A73E8);
+  // 강조는 앱 포인트 색 하나로 통일한다. 예전의 구글 파랑(#1A73E8)은 앱의
+  // 절제된 화이트/뮤트 톤에서 혼자 다른 팔레트로 떠 보였다.
+  static const _accent = AppColors.primary;
 
   /// 점이 한쪽 끝에서 반대쪽 끝까지 가는 데 걸리는 시간.
   static const _travel = Duration(milliseconds: 1600);
@@ -223,7 +225,7 @@ class _FloorTransitionCardState extends State<_FloorTransitionCard>
   }
 }
 
-/// 층 라벨 한 개. [emphasis] 1이면 도착 층(진한 파랑·큼), 0이면 지나온 층
+/// 층 라벨 한 개. [emphasis] 1이면 도착 층(포인트 파랑·큼), 0이면 지나온 층
 /// (옅은 회색·작음)이다. 그 사이를 연속으로 오간다.
 class _FloorLabel extends StatelessWidget {
   const _FloorLabel({
@@ -246,7 +248,7 @@ class _FloorLabel extends StatelessWidget {
         fontWeight: FontWeight.w800,
         color: Color.lerp(
           scheme.onSurface.withValues(alpha: 0.35),
-          const Color(0xFF1A73E8),
+          AppColors.primary,
           t,
         ),
       ),
@@ -269,13 +271,16 @@ class FloorTransitionBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final undo = state.canUndo ? onUndo : null;
+    // 앱의 카드 문법(surface + hairline + 포인트만 primary)을 그대로 쓴다.
+    // 예전에는 구글 파랑(#1A73E8) 원색 알약이었는데, 절제된 화이트/뮤트 톤의
+    // 화면에서 이 배너만 다른 앱처럼 보였다. "임시 레이어라 가장 앞"이라는
+    // 위계는 색이 아니라 그림자(AppElevation.overlay)가 말한다. 흰 배경이라
+    // 경계선(hairline)이 윤곽을 맡는다.
     return Material(
-      color: const Color(0xFF1A73E8),
-      // 몇 초짜리 임시 레이어다 — 지금 층이 바뀌고 있다는 사실이 화면에서 가장
-      // 앞에 있어야 한다(AppElevation.overlay). 색이 진해 경계선은 필요 없다.
+      color: AppColors.surface,
       elevation: AppElevation.overlay,
       shadowColor: Colors.black.withValues(alpha: 0.2),
-      borderRadius: BorderRadius.circular(999),
+      shape: const StadiumBorder(side: BorderSide(color: AppColors.hairline)),
       child: Padding(
         padding: EdgeInsets.fromLTRB(14, 9, undo == null ? 14 : 6, 9),
         child: Row(
@@ -284,7 +289,7 @@ class FloorTransitionBanner extends StatelessWidget {
             Icon(
               state.goingUp ? Icons.arrow_upward : Icons.arrow_downward,
               size: 16,
-              color: Colors.white,
+              color: AppColors.primary,
             ),
             const SizedBox(width: 8),
             Flexible(
@@ -294,7 +299,7 @@ class FloorTransitionBanner extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: Colors.white,
+                  color: AppColors.text,
                 ),
               ),
             ),
@@ -305,7 +310,8 @@ class FloorTransitionBanner extends StatelessWidget {
                   minimumSize: const Size(0, 32),
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  foregroundColor: Colors.white,
+                  // 배너의 유일한 조작이므로 여기만 포인트 색이다.
+                  foregroundColor: AppColors.primary,
                 ),
                 child: const Text(
                   '아니에요',

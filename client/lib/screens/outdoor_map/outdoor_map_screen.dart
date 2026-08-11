@@ -14,6 +14,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../core/api_config.dart';
 import '../../core/floor_switch_veil.dart';
+import '../../core/map_palette.dart';
 import '../../core/map_picked_point.dart';
 import '../../core/service_locator.dart';
 import '../../core/tile_url.dart';
@@ -210,7 +211,8 @@ const _pdrLocationIconPixelRatio = 2.0;
 const _pdrLocationCoreRadius = 16.0;
 const _pdrLocationRimRadius = _pdrLocationCoreRadius + 5;
 // 실내 오버레이에서 매장 폴리곤을 탭했을 때 그 매장 하나만 파란색으로 채우고
-// 테두리를 두르는 전용 소스·레이어. 색은 앱의 선택 색(#1A73E8) 하나를 쓴다.
+// 테두리를 두르는 전용 소스·레이어. 색은 앱의 선택 색(mapSelectionColor =
+// AppColors.primary) 하나를 쓴다.
 //
 // **fill 0.16은 사실상 안 보였다.** 매장 바닥(#F1EEEA)이 밝은 회색이라 16%
 // 파랑을 얹어도 "눌렀는데 아무 일도 안 일어난 것 같다"는 인상이었다. 0.35면
@@ -3286,7 +3288,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _highlightSourceId,
       _highlightFillLayerId,
       const FillLayerProperties(
-        fillColor: '#1A73E8',
+        fillColor: mapSelectionColor,
         fillOpacity: _highlightFillOpacity,
       ),
       enableInteraction: false,
@@ -3295,7 +3297,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _highlightSourceId,
       _highlightLineLayerId,
       const LineLayerProperties(
-        lineColor: '#1A73E8',
+        lineColor: mapSelectionColor,
         // fill이 진해진 만큼 테두리도 같이 올린다. 1.2px는 옅은 fill의 경계를
         // 겨우 알려 주던 굵기라, 채운 뒤에는 fill에 묻혀 보이지 않는다.
         lineWidth: 2,
@@ -5881,10 +5883,28 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 그냥 showSnackBar를 부르면 두 번째 안내가 큐에 쌓여 첫 안내가 4초를 다
   /// 채운 뒤에야 뜬다 — 이미 끝난 작업의 진행 중 문구를 계속 보여주고, 하단
   /// 바를 그만큼 오래 가린다.
-  void _replaceSnack(String message) {
+  void _replaceSnack(String message) =>
+      _showSnackGuarded(message, replace: true);
+
+  /// 같은 문구가 이미 떠 있으면(또는 큐에 남아 있으면) 다시 띄우지 않는다.
+  ///
+  /// GPS 틱·건물 감지처럼 **반복 호출되는 경로**가 같은 안내를 매번 다시 띄우면,
+  /// 표시 시간이 그때마다 처음부터 다시 시작돼 "영원히 안 사라지는" 스낵바가
+  /// 된다(replace 계열은 이전 것을 걷어내고 새로 띄우므로 특히 그렇다). 시각
+  /// 기억 대신 "지금 그 문구가 떠 있는가"를 기준으로 거른다 — 닫힌 뒤의 정당한
+  /// 재표시는 막지 않고, 테스트의 가짜 시계와도 어긋나지 않는다.
+  void _showSnackGuarded(String message, {required bool replace}) {
     if (!mounted) return;
-    final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
-    messenger.showSnackBar(SnackBar(content: Text(message)));
+    if (_visibleSnackMessage == message) return;
+    final messenger = ScaffoldMessenger.of(context);
+    if (replace) messenger.hideCurrentSnackBar();
+    _visibleSnackMessage = message;
+    messenger
+        .showSnackBar(SnackBar(content: Text(message)))
+        .closed
+        .whenComplete(() {
+          if (_visibleSnackMessage == message) _visibleSnackMessage = null;
+        });
   }
 
   @override
@@ -6268,10 +6288,18 @@ class _PlacingAnchorHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 앱의 카드 문법(surface + hairline + 아이콘만 primary)을 따른다. 예전의
+    // 파란 원색(AppColors.indoor) 배경은 절제된 화이트/뮤트 톤에서 이 배지만
+    // 튀어 보였다. "지도 탭을 가져가는 상태"라는 긴장은 하단 바 버튼의 활성
+    // 톤이 이미 말하고 있으므로, 여기는 안내문답게 조용히 있는다.
     return Material(
-      color: AppColors.indoor,
-      elevation: 3,
-      borderRadius: BorderRadius.circular(20),
+      color: AppColors.surface,
+      elevation: AppElevation.chrome,
+      shadowColor: Colors.black.withValues(alpha: 0.10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: AppColors.hairline),
+      ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
         child: Row(
@@ -6282,7 +6310,7 @@ class _PlacingAnchorHint extends StatelessWidget {
           children: [
             const Padding(
               padding: EdgeInsets.only(top: 5),
-              child: Icon(Icons.touch_app, size: 16, color: Colors.white),
+              child: Icon(Icons.touch_app, size: 16, color: AppColors.primary),
             ),
             const SizedBox(width: 8),
             const Expanded(
@@ -6292,7 +6320,7 @@ class _PlacingAnchorHint extends StatelessWidget {
                   '지도를 탭해 현재 서 있는 위치를 지정해주세요',
                   maxLines: 2,
                   style: TextStyle(
-                    color: Colors.white,
+                    color: AppColors.text,
                     fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                   ),
@@ -6300,7 +6328,7 @@ class _PlacingAnchorHint extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 6),
-            _HintCancelButton(onPressed: onCancel, color: Colors.white),
+            _HintCancelButton(onPressed: onCancel, color: AppColors.muted),
           ],
         ),
       ),

@@ -2032,14 +2032,17 @@ class FloorPlanViewState extends State<FloorPlanView> {
     await controller.addFillLayer(
       _highlightSourceId,
       'floor-highlight-fill',
-      const FillLayerProperties(fillColor: '#1A73E8', fillOpacity: 0.16),
+      const FillLayerProperties(
+        fillColor: mapSelectionColor,
+        fillOpacity: 0.16,
+      ),
       enableInteraction: false,
     );
     await controller.addLineLayer(
       _highlightSourceId,
       'floor-highlight-line',
       const LineLayerProperties(
-        lineColor: '#1A73E8',
+        lineColor: mapSelectionColor,
         // 두꺼운 파란 테두리는 옆 매장까지 덮어 지도 가독성을 해쳤다. 채움
         // 색으로도 포커스를 충분히 표현하므로, 테두리는 매장 경계선을 아주
         // 살짝 진하게 하는 정도로만 남긴다.
