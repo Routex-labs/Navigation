@@ -13,7 +13,7 @@ import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../core/api_config.dart';
-import '../../core/floor_switch_veil.dart';
+import '../../core/floor_switch_progress.dart';
 import '../../core/map_palette.dart';
 import '../../core/map_picked_point.dart';
 import '../../core/service_locator.dart';
@@ -323,8 +323,9 @@ const _walkingViewZoom = indoorTilesMaxZoom;
 /// 누른 조작이라 과정을 보여 줄 이유가 없고, 즉시 반응하는 편이 낫다.
 const _recenterDuration = Duration(milliseconds: 300);
 
-// 사람 조작 층 전환에 덮는 베일의 근거·타이밍 정책(표시 지연, 최소 표시,
-// 에스컬레이터 모티프 임계)은 core/floor_switch_veil.dart가 단일 출처다.
+// 사람 조작 층 전환 크로스페이드의 근거·타이밍 정책(즉시 교체 임계, 페이드
+// 길이, 에스컬레이터 모티프 임계)은 core/floor_switch_progress.dart가 단일
+// 출처다.
 
 /// 도면을 화면에 맞출 때 실제로 채우는 비율.
 ///
@@ -842,10 +843,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 도면 교체 구간을 덮는 정도. 0이 아니면 셸이 스크림을 그린다.
   double _floorSwapVeil = 0;
 
-  // 사람 조작 층 전환용 베일. 안내용 [_floorSwapVeil]과 분리한다 — 그쪽은 셸이
-  // chrome까지 덮는 불투명 스크림이고, 이쪽은 지도만 살짝 덮는 반투명이다.
-  // 언제 덮고 걷을지(표시 지연·최소 표시·모티프 임계)는 컨트롤러가 정한다.
-  bool _floorSwitchVeilVisible = false;
+  // 사람 조작 층 전환이 오래 걸릴 때 뜨는 에스컬레이터 모티프. 안내용
+  // [_floorSwapVeil](셸이 chrome까지 덮는 불투명 스크림)과 달리 이쪽은 아무것도
+  // 덮지 않는다 — 이전 층 도면이 그대로 보이는 위에 카드 하나만 뜬다. 언제
+  // 띄우고 걷을지(모티프 임계·최소 표시)는 컨트롤러가 정한다.
   bool _floorSwitchMotifVisible = false;
 
   /// 모티프가 마지막으로 흘렀던 방향. 숨김 전환(AnimatedSwitcher 페이드아웃)
@@ -853,19 +854,30 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 값을 들고 있는다.
   FloorSwitchDirection _floorSwitchMotifDirection = FloorSwitchDirection.up;
 
-  late final FloorSwitchVeilController _floorSwitchVeil =
-      FloorSwitchVeilController(onChanged: _onFloorSwitchVeilChanged);
+  late final FloorSwitchProgressController _floorSwitchProgress =
+      FloorSwitchProgressController(onChanged: _onFloorSwitchMotifChanged);
 
-  void _onFloorSwitchVeilChanged(FloorSwitchVeilState state) {
+  void _onFloorSwitchMotifChanged(FloorSwitchDirection? direction) {
     if (!mounted) return;
     setState(() {
-      _floorSwitchVeilVisible = state.veilVisible;
-      _floorSwitchMotifVisible = state.motifDirection != null;
-      if (state.motifDirection != null) {
-        _floorSwitchMotifDirection = state.motifDirection!;
-      }
+      _floorSwitchMotifVisible = direction != null;
+      if (direction != null) _floorSwitchMotifDirection = direction;
     });
   }
+
+  /// 실내 오버레이 레이어 전체에 곱해지는 크로스페이드 계수(0=투명, 1=원래
+  /// 불투명도). 크로스페이드 중이 아니면 항상 1이다. 페이드 갱신·카테고리
+  /// 필터 등 오버레이 속성을 다시 쓰는 **모든** 경로가 이 계수를 거친
+  /// [_overlayFadeExpr]를 써야, 페이드 도중 끼어든 갱신이 반쯤 페이드된 새
+  /// 도면을 갑자기 불투명하게 되돌리지 않는다.
+  double _indoorOverlayFadeFactor = 1;
+
+  /// 크로스페이드가 끝나기를 기다리며 화면에 남아 있는 이전 층 소스·레이어
+  /// 묶음(은퇴 블록). 새 도면 페이드인이 끝나면 [_removeRetiringIndoorBlocks]가
+  /// 지운다. 연타로 크로스페이드가 겹치면 블록이 잠시 여러 개 쌓일 수 있고,
+  /// 마지막 전환의 마무리가 한꺼번에 정리한다.
+  final List<({List<String> layerIds, String sourceId})>
+  _retiringIndoorBlocks = [];
 
   /// 도면을 갈아 끼운 뒤 완전 불투명을 유지하는 시간. 실내 탭과 같은 값이다.
   static const _indoorFloorSwapVeilHold = Duration(milliseconds: 400);
@@ -1225,7 +1237,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final floor = _activeFloor;
     if (transfer == null || floor == null) return;
     final (:segment, :nextFloorLabel) = transfer;
-    // 층 라벨 → 순위 비교는 베일 정책과 같은 함수를 쓴다(floor_switch_veil).
+    // 층 라벨 → 순위 비교는 층 전환 연출 정책과 같은 함수를 쓴다
+    // (floor_switch_progress).
     final goingUp = floorSwitchRank(nextFloorLabel) > floorSwitchRank(floor);
     final transition = EscalatorTransition(
       // 도착 노드를 경로 지목으로 찾으므로 그룹 매칭까지 갈 일이 없지만,
@@ -1380,7 +1393,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (_activeFloor != floor) {
       // 사용자가 "아니에요"로 되돌린 직후다. [_endEscalatorRide]가 불투명
       // 스크림을 이미 걷었으므로, 여기 층 복귀는 베일이 덮는다.
-      await _switchOverlayFloorVeiled(floor);
+      await _switchOverlayFloorCrossfaded(floor);
       if (!mounted) return;
     }
     setState(() {
@@ -1500,7 +1513,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     try {
       await _endEscalatorRide();
       if (!mounted) return;
-      await _switchOverlayFloorVeiled(floor);
+      await _switchOverlayFloorCrossfaded(floor);
       if (!mounted) return;
       setState(() {
         _pdrTrailState.beginNewSession();
@@ -1648,7 +1661,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _pdrAltitudeSub?.cancel();
     _pdrRawMotionSub?.cancel();
     _escalatorArrivalTimer?.cancel();
-    _floorSwitchVeil.dispose();
+    _floorSwitchProgress.dispose();
     // 탑승 중 화면이 닫히면 걸음이 멈춘 채로 전역 PDR 세션이 남는다. 다음
     // 화면에서 아무리 걸어도 위치가 갱신되지 않는다.
     if (_stepsPausedForRide) {
@@ -1817,55 +1830,78 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 이 경로로 들어올 수도 없다.)
   Future<void> _onFloorChipSelected(String floor) async {
     if (floor == _activeFloor) return;
-    // 베일 걷힘(300ms)은 컨트롤러가 최소 표시를 채우는 대로 시작돼 카메라
-    // 재정렬(500ms)과 **겹친다.** 재정렬이 끝난 뒤 걷으면 전환이 두 박자
-    // ("움직이고, 그 다음 밝아지고")로 쪼개진다.
-    await _switchOverlayFloorVeiled(floor, recenterIfNeeded: false);
+    // 크로스페이드 마무리(타일 대기 → 페이드인)는 떼어 둔 채 곧바로 돌아오므로
+    // 카메라 재정렬(500ms)이 이전 층 도면이 아직 보이는 동안 시작된다 — 새
+    // 도면은 카메라가 움직이는 위로 준비되는 대로 페이드인돼 하나의 전환으로
+    // 읽힌다. 재정렬을 페이드 뒤로 미루면 전환이 두 박자("바뀌고, 그 다음
+    // 움직이고")로 쪼개진다.
+    await _switchOverlayFloorCrossfaded(floor, recenterIfNeeded: false);
     if (!mounted) return;
-    // 도면이 도착한 뒤라 [_activeFloorOutlineRing]이 새 층 외곽선을 준다
+    // 층 그래프가 도착한 뒤라 [_activeFloorOutlineRing]이 새 층 외곽선을 준다
     // (`_switchOverlayFloor`가 `_loadFloorGraph`까지 기다린다).
     await _fitCameraToActiveFloor(duration: _floorSwitchZoomDuration);
   }
 
-  /// [_switchOverlayFloor]를 베일로 덮어서 돈다. **사람 조작으로 층이 바뀌는
+  /// [_switchOverlayFloor]를 크로스페이드로 돈다. **사람 조작으로 층이 바뀌는
   /// 모든 경로**(층 선택기, 검색·카테고리에서 타 층 매장, 경로 계산의 층 이동,
-  /// 자동 전환 취소·되돌리기)가 이걸 쓴다 — 베일 없이 직접
+  /// 자동 전환 취소·되돌리기)가 이걸 쓴다 — 크로스페이드 없이 직접
   /// [_switchOverlayFloor]를 부르면 타일 교체가 "지워졌다 다시 그려지는"
   /// 장면으로 드러난다. 예외는 안내 중 자동 전환([_swapIndoorFloorSmoothly])
   /// 하나 — 거긴 셸의 불투명 스크림이 이미 같은 일을 한다.
   ///
-  /// 전환이 빨리 끝나면(표시 지연 안) 베일은 아예 안 뜨고, 오래 걸리면 베일
-  /// 위에 에스컬레이터 모티프까지 뜬다. 판단은 전부
-  /// [FloorSwitchVeilController]가 한다 — 여기서는 시작·완료만 알린다.
-  /// 연타 시 베일의 주인은 마지막 호출이다(토큰).
-  Future<void> _switchOverlayFloorVeiled(
+  /// 이전 층 도면은 새 층 타일이 실제로 도착할 때까지 그대로 남고, 도착하면
+  /// 새 도면이 그 위로 페이드인된다(오래 걸리면 그동안 에스컬레이터 모티프가
+  /// 뜬다 — 판단은 [FloorSwitchProgressController]). 마무리(타일 대기 →
+  /// 페이드인 → 이전 블록 제거)는 [_finalizeIndoorFloorCrossfade]가 떼어져
+  /// 돌므로 이 함수는 층 그래프 로드까지만 기다린다. 연타 시 모티프의 주인은
+  /// 마지막 호출이다(토큰).
+  Future<void> _switchOverlayFloorCrossfaded(
     String floor, {
     bool recenterIfNeeded = true,
   }) async {
-    final token = _floorSwitchVeil.begin(
+    final token = _floorSwitchProgress.begin(
       floorSwitchDirectionBetween(_activeFloor, floor),
     );
+    var handedOff = false;
     try {
-      await _switchOverlayFloor(floor, recenterIfNeeded: recenterIfNeeded);
+      handedOff = await _switchOverlayFloor(
+        floor,
+        recenterIfNeeded: recenterIfNeeded,
+        crossfade: true,
+        progressToken: token,
+      );
     } finally {
-      // 실패해도 반드시 알린다 — 안 그러면 베일이 영영 안 걷힌다.
-      _floorSwitchVeil.finish(token);
+      // 크로스페이드 마무리가 예약됐으면 완료 통지도 거기서 한다(타일이 아직
+      // 오는 중인데 여기서 finish하면 모티프가 "로딩 중"에 걷힌다). 예약까지
+      // 못 갔으면(같은 층, 지도 미준비, 예외) 여기서 반드시 알린다 — 안
+      // 그러면 모티프가 영영 안 걷힌다.
+      if (!handedOff) _floorSwitchProgress.finish(token);
     }
   }
 
-  /// 층 chip으로 다른 층을 골랐을 때. 실내 MVT 오버레이 소스를 통째로 갈아
-  /// 끼워 새 층 타일을 받아오게 하고, PDR 스냅용 층 그래프도 함께 갱신한다.
+  /// 층 도면을 갈아 끼운다. 실내 MVT 오버레이 소스를 새 층 타일로 바꾸고,
+  /// PDR 스냅용 층 그래프도 함께 갱신한다.
   /// [recenterIfNeeded]가 false면 마지막의 [_recenterOnBuildingIfNeeded]를
   /// 건너뛴다. 호출자가 곧바로 카메라를 다시 맞출 때 쓴다 — 두 애니메이션이
   /// 겹치면 지도가 한 번 움찔했다가 다시 움직인다.
-  Future<void> _switchOverlayFloor(
+  ///
+  /// [crossfade]가 false(안내 중 자동 전환 — 셸의 불투명 스크림이 교체를
+  /// 가린다)면 이전 층 소스·레이어를 지우고 새 층을 등록하는 즉시 교체다.
+  /// true(사람 조작, [_switchOverlayFloorCrossfaded])면 이전 층 블록을 화면에
+  /// 남긴 채 새 층 블록을 **투명하게** 위에 등록하고, 타일 도착을 기다렸다가
+  /// 페이드인하는 마무리([_finalizeIndoorFloorCrossfade])를 떼어서 예약한다.
+  /// 반환값은 그 마무리가 예약됐는지 — 예약됐다면 [progressToken]의 finish도
+  /// 마무리가 맡는다.
+  Future<bool> _switchOverlayFloor(
     String floor, {
     bool recenterIfNeeded = true,
+    bool crossfade = false,
+    int? progressToken,
   }) async {
-    if (floor == _activeFloor) return;
+    if (floor == _activeFloor) return false;
     final controller = _mapController;
     final building = _building;
-    if (building == null) return;
+    if (building == null) return false;
     // **컨트롤러가 없어도 층 상태와 그래프는 바꾼다.** 예전에는 여기서 통째로
     // 빠져나갔는데, 그러면 스타일이 아직 안 올라온 사이에 온 층 전환(자동 층
     // 이동이 대표적이다)이 조용히 사라진다. 지도 레이어를 만지는 부분만
@@ -1903,25 +1939,58 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 층이 바뀐 순간 이전 층의 외곽선은 더 이상 맞지 않는다. 새 도면이 도착할
     // 때까지(지하 → 다른 층) 선을 지워 둔다 — 틀린 경계를 보여주지 않는다.
     unawaited(_syncFloorOutlineLayer());
+    // 크로스페이드면 이전 층 블록을 지우지 않고 은퇴 목록으로 넘긴다 — 새 층
+    // 타일이 도착할 때까지 이전 도면이 그대로 보이는 것이 연출의 핵심이다.
+    // 제거는 페이드인이 끝난 뒤 [_finalizeIndoorFloorCrossfade]가 한다.
+    var retiredForCrossfade = false;
     if (canDrawLayers && _indoorTilesRegistered) {
-      // 순서 중요: 레이어부터 지워야 소스를 지울 수 있다(레이어가 붙어있으면 오류).
-      // 이미 없는 레이어에 대해 removeLayer가 예외를 던지는 native 구현도 있어
-      // 각 항목을 try/catch로 감싼다.
-      for (final id in _indoorOverlayLayerIds) {
+      if (crossfade) {
+        _retiringIndoorBlocks.add((
+          layerIds: _indoorOverlayLayerIds,
+          sourceId: _indoorTilesSourceId,
+        ));
+        retiredForCrossfade = true;
+        _indoorTilesRegistered = false;
+        _bumpIndoorIds();
+      } else {
+        // 앞선 크로스페이드가 마무리 전에 이 경로(안내 중 자동 전환)로
+        // 끊겼으면 은퇴 블록이 남아 있을 수 있다 — 여기서 함께 지운다.
+        await _removeRetiringIndoorBlocks(controller);
+        // 순서 중요: 레이어부터 지워야 소스를 지울 수 있다(레이어가 붙어있으면
+        // 오류). 이미 없는 레이어에 대해 removeLayer가 예외를 던지는 native
+        // 구현도 있어 각 항목을 try/catch로 감싼다.
+        for (final id in _indoorOverlayLayerIds) {
+          try {
+            await controller.removeLayer(id);
+          } catch (_) {}
+        }
         try {
-          await controller.removeLayer(id);
+          await controller.removeSource(_indoorTilesSourceId);
         } catch (_) {}
+        _indoorTilesRegistered = false;
+        // 다음 등록은 새 세대 ID로. 같은 ID로 즉시 addSource를 다시 부르면
+        // native(Android/iOS)가 이전 remove의 정리를 아직 못 끝내 조용히
+        // 실패하는 경우가 있다(특정 층으로 전환 시 아무것도 안 그려지는
+        // 원인이었음).
+        _bumpIndoorIds();
       }
-      try {
-        await controller.removeSource(_indoorTilesSourceId);
-      } catch (_) {}
-      _indoorTilesRegistered = false;
-      // 다음 등록은 새 세대 ID로. 같은 ID로 즉시 addSource를 다시 부르면
-      // native(Android/iOS)가 이전 remove의 정리를 아직 못 끝내 조용히 실패하는
-      // 경우가 있다(특정 층으로 전환 시 아무것도 안 그려지는 원인이었음).
-      _bumpIndoorIds();
     }
-    await _ensureIndoorTilesRegistered();
+    // 은퇴 블록이 있으면 새 블록은 투명(계수 0)하게 얹는다 — 타일이 도착해도
+    // 페이드인 전까지는 이전 도면이 보인다. 은퇴 블록이 없으면(첫 등록) 가릴
+    // 이전 도면 자체가 없으므로 원래 불투명도로 바로 얹는다.
+    await _ensureIndoorTilesRegistered(
+      fadeFactor: retiredForCrossfade ? 0 : 1,
+    );
+    var crossfadeScheduled = false;
+    if (crossfade && canDrawLayers && _indoorTilesRegistered) {
+      crossfadeScheduled = true;
+      unawaited(
+        _finalizeIndoorFloorCrossfade(
+          generation: _indoorIdGeneration,
+          progressToken: progressToken,
+        ),
+      );
+    }
     await _loadFloorGraph(building.id, floor);
     _syncPdrCurrentLayer();
     unawaited(_syncDebugPdrLayers());
@@ -1939,6 +2008,133 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 건드리지 않는다 — 그 상황에서 강제로 재정렬하면 사용자의 view가 불필요하게
     // 튀어 조작감이 나빠진다.
     if (recenterIfNeeded) await _recenterOnBuildingIfNeeded();
+    return crossfadeScheduled;
+  }
+
+  /// 크로스페이드 마무리 — 새 층 타일 도착을 기다렸다가 새 도면을 페이드인하고
+  /// 이전 층 블록을 지운다. [_switchOverlayFloor]가 새 블록을 등록한 직후
+  /// 떼어서(unawaited) 부른다 — 호출자는 타일을 기다릴 필요가 없고, 카메라
+  /// 재정렬이 로드와 겹쳐서 돈다.
+  ///
+  /// "타일 도착"은 고정 딜레이가 아니라 **실제 로드 신호**다: 새 소스의
+  /// `footprint`를 [MapLibreMapController.querySourceFeatures]로 폴링해, 로드된
+  /// 타일에 feature가 잡히는 순간을 준비 완료로 본다. 주차구역 폴리곤이 수백
+  /// 개라 로드에 수 초 걸리는 층(B3·5F·6F)에서도 이전 도면이 끝까지 유지되는
+  /// 근거다. 화면 밖·minzoom 미만이라 타일 요청 자체가 없으면 feature가 영영
+  /// 안 잡히므로 [floorSwitchTilesReadyTimeout]에서 끊고 그냥 교체한다(그
+  /// 줌에서는 오버레이가 어차피 안 보여 교체 장면도 없다).
+  ///
+  /// [generation]은 이 마무리가 맡은 소스 세대다. 기다리는 사이 새 전환이
+  /// 시작되면(세대 불일치) 즉시 물러난다 — 은퇴 블록 정리까지 포함해 마지막
+  /// 전환의 마무리가 이어받는다. [progressToken]이 있으면 어떤 경로로 끝나든
+  /// 에스컬레이터 모티프 컨트롤러에 완료를 알린다(추월당한 토큰의 finish는
+  /// 컨트롤러가 무시한다).
+  Future<void> _finalizeIndoorFloorCrossfade({
+    required int generation,
+    int? progressToken,
+  }) async {
+    try {
+      final elapsed = Stopwatch()..start();
+      while (true) {
+        if (!mounted || _indoorIdGeneration != generation) return;
+        final controller = _mapController;
+        if (controller == null) return;
+        List<dynamic> features = const [];
+        try {
+          features = await controller.querySourceFeatures(
+            _indoorTilesSourceId,
+            'footprint',
+            null,
+          );
+        } catch (_) {}
+        if (features.isNotEmpty ||
+            elapsed.elapsed >= floorSwitchTilesReadyTimeout) {
+          break;
+        }
+        await Future<void>.delayed(floorSwitchTilesPollInterval);
+      }
+      if (!mounted || _indoorIdGeneration != generation) return;
+      final controller = _mapController;
+      if (controller == null) return;
+
+      // 즉시 교체 임계 안에 준비된 전환(캐시된 층)은 페이드 없이 바로 보여
+      // 준다 — 빠른 층 훑기에 페이드 잔상이 끌리지 않게. 계수가 이미 1이면
+      // (첫 등록이라 은퇴 블록이 없던 경우) 페이드할 것도 없다.
+      final animate =
+          _indoorOverlayFadeFactor < 1 &&
+          elapsed.elapsed >= floorSwitchInstantSwapThreshold;
+      if (animate) {
+        final stepInterval =
+            floorSwitchCrossfadeDuration ~/ floorSwitchCrossfadeSteps;
+        for (var step = 1; step <= floorSwitchCrossfadeSteps; step++) {
+          _indoorOverlayFadeFactor = Curves.easeOut.transform(
+            step / floorSwitchCrossfadeSteps,
+          );
+          await _applyOverlayFillFadeFactor(controller);
+          if (step < floorSwitchCrossfadeSteps) {
+            await Future<void>.delayed(stepInterval);
+          }
+          if (!mounted || _indoorIdGeneration != generation) return;
+        }
+      }
+      // 최종 상태: 계수 1로 전체 레이어(심볼 포함)를 원래 불투명도로 되돌린다.
+      // 심볼(라벨·아이콘)은 단계 페이드에서 뺐다 — 성긴 점 요소라 fill이 다
+      // 올라온 끝에 한 번에 켜져도 팝이 안 읽히고, 단계마다 보내는 전체 속성
+      // 교체(플랫폼 채널 호출)를 절반으로 줄인다.
+      _indoorOverlayFadeFactor = 1;
+      await _syncIndoorOverlayFade();
+      if (!mounted || _indoorIdGeneration != generation) return;
+      // 새 도면이 완전히 올라왔으니 이전 층 블록(연타로 쌓인 것 포함)을 지운다.
+      await _removeRetiringIndoorBlocks(controller);
+    } finally {
+      if (progressToken != null) {
+        _floorSwitchProgress.finish(progressToken);
+      }
+    }
+  }
+
+  /// 크로스페이드 뒤에 남은 이전 층 소스·레이어 묶음을 전부 지운다. 이미 없는
+  /// 레이어에 removeLayer가 예외를 던지는 native 구현이 있어 각각 삼킨다.
+  Future<void> _removeRetiringIndoorBlocks(
+    MapLibreMapController controller,
+  ) async {
+    while (_retiringIndoorBlocks.isNotEmpty) {
+      final block = _retiringIndoorBlocks.removeLast();
+      for (final id in block.layerIds) {
+        try {
+          await controller.removeLayer(id);
+        } catch (_) {}
+      }
+      try {
+        await controller.removeSource(block.sourceId);
+      } catch (_) {}
+    }
+  }
+
+  /// 크로스페이드 단계마다 현재 계수([_indoorOverlayFadeFactor])를 fill 레이어
+  /// 4종에 적용한다. **opacity만 보내면 안 되고 전체 속성을 다시 보낸다** —
+  /// setLayerProperties는 patch가 아니라 전체 교체다(indoor_overlay_layers.dart
+  /// 상단 규칙).
+  Future<void> _applyOverlayFillFadeFactor(
+    MapLibreMapController controller,
+  ) async {
+    final fadeExpr = _overlayFadeExpr();
+    for (final (id, props) in [
+      (_indoorFootprintLayerId, indoorFootprintProps(fadeExpr)),
+      (_indoorStoresFillLayerId, indoorStoresFillProps(fadeExpr)),
+      (
+        _indoorCategoryHighlightFillLayerId,
+        indoorCategoryHighlightProps(fadeExpr),
+      ),
+      (
+        _indoorVerticalTransportFillLayerId,
+        indoorVerticalTransportProps(fadeExpr),
+      ),
+    ]) {
+      try {
+        await controller.setLayerProperties(id, props);
+      } catch (_) {}
+    }
   }
 
   /// 층 chip 탭·자동 실내 진입 뒤에 실내 오버레이를 보장 노출하기 위한 헬퍼.
@@ -2705,7 +2901,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // [_confirmPdrAnchor]가 축 변환(axes)을 [_floorGraph]에서 가져오므로,
     // 앵커를 찍기 전에 그 층 그래프가 화면에 올라와 있어야 한다.
     if (floor != _activeFloor) {
-      await _switchOverlayFloorVeiled(floor);
+      await _switchOverlayFloorCrossfaded(floor);
       if (!mounted) return;
     }
     final graph = _floorGraph;
@@ -2775,9 +2971,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     String? startNodeId,
   }) async {
     if (floor != _activeFloor) {
-      // 목적지 층으로 화면을 옮기는 사람 조작 흐름이다. 베일 걷힘은 이어지는
-      // 경로 개요 연출(playOverview)과 겹쳐 하나의 전환으로 읽힌다.
-      await _switchOverlayFloorVeiled(floor);
+      // 목적지 층으로 화면을 옮기는 사람 조작 흐름이다. 새 도면 페이드인은
+      // 이어지는 경로 개요 연출(playOverview)과 겹쳐 하나의 전환으로 읽힌다.
+      await _switchOverlayFloorCrossfaded(floor);
       if (!mounted) return;
     }
     final graph = _floorGraph;
@@ -2877,7 +3073,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 훑던 층과 다르더라도 시작 층부터 보는 게 "지금 어디서 어느 방향으로
     // 첫 걸음"을 파악하는 데 자연스럽다(실내 화면과 동일 규칙).
     if (_activeFloor != startFloor) {
-      await _switchOverlayFloorVeiled(startFloor);
+      await _switchOverlayFloorCrossfaded(startFloor);
       if (!mounted) return;
     }
     final segment = route.segmentForFloor(startFloor);
@@ -3570,7 +3766,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _categoryFilterExpression(),
       );
     } catch (_) {}
-    final fadeExpr = _fadeExpr();
+    final fadeExpr = _overlayFadeExpr();
     for (final (id, props) in [
       (
         _indoorStoresLabelLayerId,
@@ -3596,6 +3792,18 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   List<Object> _fadeExpr({double maxOpacity = 1}) =>
       indoorOverlayFadeExpr(entered: _indoorEntered, maxOpacity: maxOpacity);
 
+  /// 실내 오버레이 **레이어**용 페이드 표현식 — [_fadeExpr]에 층 전환
+  /// 크로스페이드 계수([_indoorOverlayFadeFactor])를 곱한 것. 오버레이 레이어
+  /// 속성을 쓰는 모든 경로(등록·페이드 갱신·카테고리 필터·크로스페이드 단계)가
+  /// 이걸 써야 페이드 도중 끼어든 갱신이 계수를 되돌리지 않는다. 건물 단위
+  /// dim scrim은 층 전환과 무관하므로 [_fadeExpr]를 그대로 쓴다.
+  List<Object> _overlayFadeExpr() {
+    final expr = _fadeExpr();
+    final factor = _indoorOverlayFadeFactor;
+    if (factor >= 1) return expr;
+    return ['*', factor, expr];
+  }
+
   /// 실내 진입/이탈로 페이드 구간이 바뀌었을 때 이미 등록된 오버레이 레이어의
   /// opacity 표현식을 갈아 끼운다. 레이어가 아직 등록되지 않았으면
   /// [_ensureIndoorTilesRegistered]가 등록 시점의 상태로 넣어주므로 아무것도
@@ -3606,7 +3814,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Future<void> _syncIndoorOverlayFade() async {
     final controller = _mapController;
     if (controller == null || !_styleReady || !_indoorTilesRegistered) return;
-    final fadeExpr = _fadeExpr();
+    final fadeExpr = _overlayFadeExpr();
     // 이미 제거된 레이어에 대한 setLayerProperties가 native에서 예외를 던지는
     // 구현이 있어(층 전환과 겹치는 순간) 각각 감싼다.
     for (final (id, props) in [
@@ -4190,7 +4398,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   // 실내 MVT 소스·레이어는 스타일 로드와 활성 건물 로드 둘 다 되면 한 번만 등록.
   bool _indoorTilesRegistered = false;
-  Future<void> _ensureIndoorTilesRegistered() async {
+  /// [fadeFactor]는 등록되는 레이어에 곱할 층 전환 크로스페이드 계수다. 기본
+  /// 1(원래 불투명도). 크로스페이드가 이전 층 위에 새 블록을 투명하게 얹을
+  /// 때만 0을 넘긴다 — 이후 [_finalizeIndoorFloorCrossfade]가 1까지 올린다.
+  Future<void> _ensureIndoorTilesRegistered({double fadeFactor = 1}) async {
     final controller = _mapController;
     final building = _building;
     if (controller == null || !_styleReady || building == null) {
@@ -4248,7 +4459,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       // [indoorOverlayFadeExpr]가 만들어 준다. zoom-interpolate 표현식이라
       // 카메라 이동 중에는 setLayerProperties 없이도 실시간으로 반영되고,
       // 진입/이탈로 구간 자체가 바뀔 때만 [_syncIndoorOverlayFade]가 갱신한다.
-      final fadeExpr = _fadeExpr();
+      _indoorOverlayFadeFactor = fadeFactor;
+      final fadeExpr = _overlayFadeExpr();
       // 실내 오버레이 레이어를 route casing 바로 아래에 삽입한다. 안 그러면
       // _onStyleLoaded가 먼저 그린 경로선/GPS 마커/PDR dot이 나중에 얹힌 stores
       // fill(줌 17.5+에서 fillOpacity=1) 밑으로 깔려 화면에서 완전히 사라진다.
@@ -5309,8 +5521,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (entry.floorName.isNotEmpty && entry.floorName != _activeFloor) {
       if (!_indoorEntered) return null;
       // 검색에서 타 층 매장을 고른 경로 — 사용자가 층 전환을 가장 자주 체감하는
-      // 자리다. 베일 걷힘은 이어지는 매장 포커스 카메라 이동과 겹친다.
-      await _switchOverlayFloorVeiled(entry.floorName);
+      // 자리다. 새 도면 페이드인은 이어지는 매장 포커스 카메라 이동과 겹친다.
+      await _switchOverlayFloorCrossfaded(entry.floorName);
       if (!mounted) return null;
     }
     final stores = _floorPlan?.stores;
@@ -5374,7 +5586,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       if (!enterBuildingIfNeeded) return;
       // 층 교체는 실내 모드와 무관하다 — 도면 소스만 갈아 끼우므로, 카메라가
       // 도착했을 때 그 매장이 있는 층이 그려져 있게 된다.
-      await _switchOverlayFloorVeiled(store.floor);
+      await _switchOverlayFloorCrossfaded(store.floor);
       if (!mounted) return;
       // 층 전환이 실패했으면(그 층 그래프·도면을 못 받음) 다른 층 도면 위에
       // 엉뚱한 자리를 강조하게 되므로 여기서 멈춘다.
@@ -5980,26 +6192,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         else
           const ColoredBox(color: AppColors.surface),
 
-        // 사람 조작으로 층이 바뀌는 동안 지도만 살짝 덮는 베일. 왜 있는지와
-        // 타이밍 정책은 core/floor_switch_veil.dart에 있다. 층 선택기·버튼들보다
-        // **아래**라 훑는 조작 자체는 또렷하게 남고, IgnorePointer라 지도 조작도
-        // 안 막는다.
-        Positioned.fill(
-          child: IgnorePointer(
-            child: AnimatedOpacity(
-              opacity: _floorSwitchVeilVisible ? floorSwitchVeilOpacity : 0,
-              duration: _floorSwitchVeilVisible
-                  ? floorSwitchVeilFadeIn
-                  : floorSwitchVeilFadeOut,
-              curve: Curves.easeOut,
-              child: const ColoredBox(color: AppColors.surface),
-            ),
-          ),
-        ),
-
-        // 전환이 오래 걸릴 때만 베일 위 중앙에 뜨는 에스컬레이터 모티프.
-        // AnimatedSwitcher가 등장·퇴장을 페이드로 처리하고, 숨김이 끝나면
-        // 위젯을 트리에서 내려 벨트 애니메이션 ticker도 함께 멈춘다.
+        // 층 전환이 오래 걸릴 때만 지도 위 중앙에 뜨는 에스컬레이터 모티프.
+        // 이전 층 도면이 그대로 보이는 위에 뜬다 — 덮개(베일)는 없다. 실기기
+        // 에서 흰 베일이 캡처 플래시처럼 번쩍여 걷어냈고, 모티프는 자체 카드
+        // 배경이 있어 도면 위에서도 읽힌다. 타이밍 정책은
+        // core/floor_switch_progress.dart. AnimatedSwitcher가 등장·퇴장을
+        // 페이드로 처리하고, 숨김이 끝나면 위젯을 트리에서 내려 벨트 애니메이션
+        // ticker도 함께 멈춘다. IgnorePointer라 지도 조작을 안 막는다.
         Positioned.fill(
           child: IgnorePointer(
             child: AnimatedSwitcher(

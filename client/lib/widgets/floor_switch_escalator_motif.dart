@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../core/floor_switch_veil.dart';
+import '../core/floor_switch_progress.dart';
 import '../theme/app_theme.dart';
 
-/// 층 전환이 오래 걸릴 때([floorSwitchMotifDelay] 초과) 베일 중앙에 띄우는
+/// 층 전환이 오래 걸릴 때([floorSwitchMotifDelay] 초과) 지도 위 중앙에 띄우는
 /// 에스컬레이터 모티프 — 정면에서 본 계단이 벨트처럼 위/아래로 계속 흐른다.
 ///
 /// 스피너를 쓰지 않는 이유: 원형 스피너는 "무언가 기다린다"만 말하고 **무엇을**
@@ -13,8 +13,9 @@ import '../theme/app_theme.dart';
 /// ([floorSwitchDirectionBetween])로 정해 넘긴다.
 ///
 /// 외부 패키지·에셋 없이 [CustomPainter]로만 그린다. 색은 전부 [AppColors]
-/// 토큰 — 베일(흰 0.6) 위에 뜨므로 흰 카드 + 파스텔 파랑 계단이면 앱의 다른
-/// 오버레이(카드류)와 같은 톤으로 읽힌다.
+/// 토큰 — 이전 층 도면이 그대로 보이는 지도 위에 바로 뜨므로, 흰 카드 배경이
+/// 있어야 도면 무늬 위에서도 읽힌다(베일 없이 뜨는 근거). 흰 카드 + 파스텔
+/// 파랑 계단이면 앱의 다른 오버레이(카드류)와 같은 톤으로 읽힌다.
 class FloorSwitchEscalatorMotif extends StatefulWidget {
   const FloorSwitchEscalatorMotif({super.key, required this.direction});
 
