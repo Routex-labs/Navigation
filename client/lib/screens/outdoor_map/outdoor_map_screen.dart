@@ -13,6 +13,7 @@ import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../core/api_config.dart';
+import '../../core/floor_switch_veil.dart';
 import '../../core/map_picked_point.dart';
 import '../../core/service_locator.dart';
 import '../../core/tile_url.dart';
@@ -53,6 +54,7 @@ import '../../widgets/category_map_filter.dart';
 import '../../widgets/category_map_icon.dart';
 import '../../widgets/floor_facility_style.dart';
 import '../../widgets/floor_selector.dart';
+import '../../widgets/floor_switch_escalator_motif.dart';
 import '../../widgets/guidance_recenter_button.dart';
 import '../../widgets/route_steps_sheet.dart';
 import '../../widgets/map_icon_cache.dart';
@@ -319,20 +321,8 @@ const _walkingViewZoom = indoorTilesMaxZoom;
 /// 누른 조작이라 과정을 보여 줄 이유가 없고, 즉시 반응하는 편이 낫다.
 const _recenterDuration = Duration(milliseconds: 300);
 
-/// 층 선택기로 층을 바꿀 때 지도 위에 잠깐 덮는 베일.
-///
-/// 층을 바꾸면 MVT 소스를 통째로 갈아 끼우고 새 층 타일을 네트워크에서 받아
-/// 온다. 그 사이 이전 층 도면이 그대로 남아 있다가 새 도면이 **툭** 바뀌는데,
-/// 이 잔상이 로딩 지연으로 읽힌다. 베일을 얹으면 같은 지연이 "전환 중"으로
-/// 읽힌다 — 지연을 없애는 게 아니라 의도된 것으로 보이게 하는 장치다.
-///
-/// 안내 중 층 전환 스크림(불투명, 입력 차단)과 달리 **반투명이고 입력을 막지
-/// 않는다.** 층 훑기는 연속 조작이라, 매 탭마다 화면이 완전히 덮이고 잠기면
-/// 훑는 리듬이 끊긴다. 걷힘은 카메라 재정렬(500ms)과 겹쳐 하나의 전환으로
-/// 읽히게 한다.
-const _floorBrowseVeilOpacity = 0.6;
-const _floorBrowseVeilFadeIn = Duration(milliseconds: 120);
-const _floorBrowseVeilFadeOut = Duration(milliseconds: 300);
+// 사람 조작 층 전환에 덮는 베일의 근거·타이밍 정책(표시 지연, 최소 표시,
+// 에스컬레이터 모티프 임계)은 core/floor_switch_veil.dart가 단일 출처다.
 
 /// 도면을 화면에 맞출 때 실제로 채우는 비율.
 ///
@@ -850,10 +840,30 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 도면 교체 구간을 덮는 정도. 0이 아니면 셸이 스크림을 그린다.
   double _floorSwapVeil = 0;
 
-  // 층 선택기 훑기용 베일. 안내용 [_floorSwapVeil]과 분리한다 — 그쪽은 셸이
+  // 사람 조작 층 전환용 베일. 안내용 [_floorSwapVeil]과 분리한다 — 그쪽은 셸이
   // chrome까지 덮는 불투명 스크림이고, 이쪽은 지도만 살짝 덮는 반투명이다.
-  bool _floorBrowseVeil = false;
-  int _floorBrowseVeilToken = 0;
+  // 언제 덮고 걷을지(표시 지연·최소 표시·모티프 임계)는 컨트롤러가 정한다.
+  bool _floorSwitchVeilVisible = false;
+  bool _floorSwitchMotifVisible = false;
+
+  /// 모티프가 마지막으로 흘렀던 방향. 숨김 전환(AnimatedSwitcher 페이드아웃)
+  /// 중에도 위젯이 잠깐 더 그려지므로, 방향 없는 프레임이 생기지 않게 마지막
+  /// 값을 들고 있는다.
+  FloorSwitchDirection _floorSwitchMotifDirection = FloorSwitchDirection.up;
+
+  late final FloorSwitchVeilController _floorSwitchVeil =
+      FloorSwitchVeilController(onChanged: _onFloorSwitchVeilChanged);
+
+  void _onFloorSwitchVeilChanged(FloorSwitchVeilState state) {
+    if (!mounted) return;
+    setState(() {
+      _floorSwitchVeilVisible = state.veilVisible;
+      _floorSwitchMotifVisible = state.motifDirection != null;
+      if (state.motifDirection != null) {
+        _floorSwitchMotifDirection = state.motifDirection!;
+      }
+    });
+  }
 
   /// 도면을 갈아 끼운 뒤 완전 불투명을 유지하는 시간. 실내 탭과 같은 값이다.
   static const _indoorFloorSwapVeilHold = Duration(milliseconds: 400);
@@ -1192,17 +1202,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     return (segment: seg, nextFloorLabel: multi.segments[i + 1].floorName);
   }
 
-  /// 층 라벨을 비교 가능한 순위로 바꾼다. "1F" → 1, "B1" → -1.
-  ///
-  /// [Building.floors]의 나열 순서에 기대지 않는 이유: 그 순서는 서버 응답
-  /// 순서일 뿐 위아래를 약속하지 않는다. 라벨 자체가 위아래를 말한다.
-  static int _floorRank(String label) {
-    final m = RegExp(r'^(B?)(\d+)').firstMatch(label.toUpperCase());
-    if (m == null) return 0;
-    final n = int.parse(m.group(2)!);
-    return m.group(1)!.isEmpty ? n : -n;
-  }
-
   /// 디버그 전용 — 실제 탑승 없이 층 전환 시퀀스를 태운다.
   ///
   /// **판정기를 흉내 내는 것이지 우회하는 것이 아니다.** 판정기가 확정을 냈을 때
@@ -1224,7 +1223,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final floor = _activeFloor;
     if (transfer == null || floor == null) return;
     final (:segment, :nextFloorLabel) = transfer;
-    final goingUp = _floorRank(nextFloorLabel) > _floorRank(floor);
+    // 층 라벨 → 순위 비교는 베일 정책과 같은 함수를 쓴다(floor_switch_veil).
+    final goingUp = floorSwitchRank(nextFloorLabel) > floorSwitchRank(floor);
     final transition = EscalatorTransition(
       // 도착 노드를 경로 지목으로 찾으므로 그룹 매칭까지 갈 일이 없지만,
       // 진단 JSON에 남는 값이라 강제 전환임을 알아볼 수 있게 적는다.
@@ -1376,7 +1376,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (!mounted) return;
     if (floor == null) return;
     if (_activeFloor != floor) {
-      await _switchOverlayFloor(floor);
+      // 사용자가 "아니에요"로 되돌린 직후다. [_endEscalatorRide]가 불투명
+      // 스크림을 이미 걷었으므로, 여기 층 복귀는 베일이 덮는다.
+      await _switchOverlayFloorVeiled(floor);
       if (!mounted) return;
     }
     setState(() {
@@ -1496,7 +1498,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     try {
       await _endEscalatorRide();
       if (!mounted) return;
-      await _switchOverlayFloor(floor);
+      await _switchOverlayFloorVeiled(floor);
       if (!mounted) return;
       setState(() {
         _pdrTrailState.beginNewSession();
@@ -1644,6 +1646,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _pdrAltitudeSub?.cancel();
     _pdrRawMotionSub?.cancel();
     _escalatorArrivalTimer?.cancel();
+    _floorSwitchVeil.dispose();
     // 탑승 중 화면이 닫히면 걸음이 멈춘 채로 전역 PDR 세션이 남는다. 다음
     // 화면에서 아무리 걸어도 위치가 갱신되지 않는다.
     if (_stepsPausedForRide) {
@@ -1812,21 +1815,40 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 이 경로로 들어올 수도 없다.)
   Future<void> _onFloorChipSelected(String floor) async {
     if (floor == _activeFloor) return;
-    // 훑는 중 연타를 견딘다 — 베일을 내리는 것은 **마지막 탭의 완료**뿐이다.
-    // 토큰 없이 각자 내리면, 먼저 끝난 이전 탭이 다음 탭이 덮어 둔 베일을
-    // 걷어 버려 타일 교체 장면이 그대로 드러난다.
-    final token = ++_floorBrowseVeilToken;
-    setState(() => _floorBrowseVeil = true);
-    await _switchOverlayFloor(floor, recenterIfNeeded: false);
+    // 베일 걷힘(300ms)은 컨트롤러가 최소 표시를 채우는 대로 시작돼 카메라
+    // 재정렬(500ms)과 **겹친다.** 재정렬이 끝난 뒤 걷으면 전환이 두 박자
+    // ("움직이고, 그 다음 밝아지고")로 쪼개진다.
+    await _switchOverlayFloorVeiled(floor, recenterIfNeeded: false);
     if (!mounted) return;
-    // 베일 걷힘(300ms)을 카메라 재정렬(500ms)과 **겹쳐서** 시작한다. 재정렬이
-    // 끝난 뒤 걷으면 전환이 두 박자("움직이고, 그 다음 밝아지고")로 쪼개진다.
-    if (token == _floorBrowseVeilToken) {
-      setState(() => _floorBrowseVeil = false);
-    }
     // 도면이 도착한 뒤라 [_activeFloorOutlineRing]이 새 층 외곽선을 준다
     // (`_switchOverlayFloor`가 `_loadFloorGraph`까지 기다린다).
     await _fitCameraToActiveFloor(duration: _floorSwitchZoomDuration);
+  }
+
+  /// [_switchOverlayFloor]를 베일로 덮어서 돈다. **사람 조작으로 층이 바뀌는
+  /// 모든 경로**(층 선택기, 검색·카테고리에서 타 층 매장, 경로 계산의 층 이동,
+  /// 자동 전환 취소·되돌리기)가 이걸 쓴다 — 베일 없이 직접
+  /// [_switchOverlayFloor]를 부르면 타일 교체가 "지워졌다 다시 그려지는"
+  /// 장면으로 드러난다. 예외는 안내 중 자동 전환([_swapIndoorFloorSmoothly])
+  /// 하나 — 거긴 셸의 불투명 스크림이 이미 같은 일을 한다.
+  ///
+  /// 전환이 빨리 끝나면(표시 지연 안) 베일은 아예 안 뜨고, 오래 걸리면 베일
+  /// 위에 에스컬레이터 모티프까지 뜬다. 판단은 전부
+  /// [FloorSwitchVeilController]가 한다 — 여기서는 시작·완료만 알린다.
+  /// 연타 시 베일의 주인은 마지막 호출이다(토큰).
+  Future<void> _switchOverlayFloorVeiled(
+    String floor, {
+    bool recenterIfNeeded = true,
+  }) async {
+    final token = _floorSwitchVeil.begin(
+      floorSwitchDirectionBetween(_activeFloor, floor),
+    );
+    try {
+      await _switchOverlayFloor(floor, recenterIfNeeded: recenterIfNeeded);
+    } finally {
+      // 실패해도 반드시 알린다 — 안 그러면 베일이 영영 안 걷힌다.
+      _floorSwitchVeil.finish(token);
+    }
   }
 
   /// 층 chip으로 다른 층을 골랐을 때. 실내 MVT 오버레이 소스를 통째로 갈아
@@ -2684,7 +2706,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // [_confirmPdrAnchor]가 축 변환(axes)을 [_floorGraph]에서 가져오므로,
     // 앵커를 찍기 전에 그 층 그래프가 화면에 올라와 있어야 한다.
     if (floor != _activeFloor) {
-      await _switchOverlayFloor(floor);
+      await _switchOverlayFloorVeiled(floor);
       if (!mounted) return;
     }
     final graph = _floorGraph;
@@ -2754,7 +2776,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     String? startNodeId,
   }) async {
     if (floor != _activeFloor) {
-      await _switchOverlayFloor(floor);
+      // 목적지 층으로 화면을 옮기는 사람 조작 흐름이다. 베일 걷힘은 이어지는
+      // 경로 개요 연출(playOverview)과 겹쳐 하나의 전환으로 읽힌다.
+      await _switchOverlayFloorVeiled(floor);
       if (!mounted) return;
     }
     final graph = _floorGraph;
@@ -2854,7 +2878,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 훑던 층과 다르더라도 시작 층부터 보는 게 "지금 어디서 어느 방향으로
     // 첫 걸음"을 파악하는 데 자연스럽다(실내 화면과 동일 규칙).
     if (_activeFloor != startFloor) {
-      await _switchOverlayFloor(startFloor);
+      await _switchOverlayFloorVeiled(startFloor);
       if (!mounted) return;
     }
     final segment = route.segmentForFloor(startFloor);
@@ -5285,7 +5309,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Future<PoiSearchResult?> resolveIndexEntry(StoreIndexEntry entry) async {
     if (entry.floorName.isNotEmpty && entry.floorName != _activeFloor) {
       if (!_indoorEntered) return null;
-      await _switchOverlayFloor(entry.floorName);
+      // 검색에서 타 층 매장을 고른 경로 — 사용자가 층 전환을 가장 자주 체감하는
+      // 자리다. 베일 걷힘은 이어지는 매장 포커스 카메라 이동과 겹친다.
+      await _switchOverlayFloorVeiled(entry.floorName);
       if (!mounted) return null;
     }
     final stores = _floorPlan?.stores;
@@ -5349,7 +5375,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       if (!enterBuildingIfNeeded) return;
       // 층 교체는 실내 모드와 무관하다 — 도면 소스만 갈아 끼우므로, 카메라가
       // 도착했을 때 그 매장이 있는 층이 그려져 있게 된다.
-      await _switchOverlayFloor(store.floor);
+      await _switchOverlayFloorVeiled(store.floor);
       if (!mounted) return;
       // 층 전환이 실패했으면(그 층 그래프·도면을 못 받음) 다른 층 도면 위에
       // 엉뚱한 자리를 강조하게 되므로 여기서 멈춘다.
@@ -5938,18 +5964,37 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         else
           const ColoredBox(color: AppColors.surface),
 
-        // 층 선택기로 층을 훑는 동안 지도만 살짝 덮는 베일. 왜 있는지는
-        // [_floorBrowseVeilOpacity]에 있다. 층 선택기·버튼들보다 **아래**라
-        // 훑는 조작 자체는 또렷하게 남고, IgnorePointer라 지도 조작도 안 막는다.
+        // 사람 조작으로 층이 바뀌는 동안 지도만 살짝 덮는 베일. 왜 있는지와
+        // 타이밍 정책은 core/floor_switch_veil.dart에 있다. 층 선택기·버튼들보다
+        // **아래**라 훑는 조작 자체는 또렷하게 남고, IgnorePointer라 지도 조작도
+        // 안 막는다.
         Positioned.fill(
           child: IgnorePointer(
             child: AnimatedOpacity(
-              opacity: _floorBrowseVeil ? _floorBrowseVeilOpacity : 0,
-              duration: _floorBrowseVeil
-                  ? _floorBrowseVeilFadeIn
-                  : _floorBrowseVeilFadeOut,
+              opacity: _floorSwitchVeilVisible ? floorSwitchVeilOpacity : 0,
+              duration: _floorSwitchVeilVisible
+                  ? floorSwitchVeilFadeIn
+                  : floorSwitchVeilFadeOut,
               curve: Curves.easeOut,
               child: const ColoredBox(color: AppColors.surface),
+            ),
+          ),
+        ),
+
+        // 전환이 오래 걸릴 때만 베일 위 중앙에 뜨는 에스컬레이터 모티프.
+        // AnimatedSwitcher가 등장·퇴장을 페이드로 처리하고, 숨김이 끝나면
+        // 위젯을 트리에서 내려 벨트 애니메이션 ticker도 함께 멈춘다.
+        Positioned.fill(
+          child: IgnorePointer(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 160),
+              child: _floorSwitchMotifVisible
+                  ? Center(
+                      child: FloorSwitchEscalatorMotif(
+                        direction: _floorSwitchMotifDirection,
+                      ),
+                    )
+                  : const SizedBox.shrink(),
             ),
           ),
         ),
