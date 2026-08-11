@@ -94,11 +94,15 @@ void main() {
     );
   });
 
-  testWidgets('상단 출발 행은 매장을 안 골랐어도 "현재 위치"로 적는다', (WidgetTester tester) async {
+  testWidgets('출발지가 현재 위치면 상단 바는 도착지 한 줄로 접힌다', (WidgetTester tester) async {
     // 같은 null 겹침이 라벨에서도 드러난다. 상위가 출발지를 null로 넘기면 상단
     // 바는 "출발지를 선택하세요" placeholder를 띄우는데, 그건 위치를 방금 찍어둔
-    // 사용자에게 출발지가 비어 있다고 잘못 알리는 것이다. 그 상태에서는 출발 행을
-    // 눌러 매장을 고르지 않는 한 문구가 바뀌지 않아, 위치 지정이 무시된 것처럼 보인다.
+    // 사용자에게 출발지가 비어 있다고 잘못 알리는 것이다.
+    //
+    // 예전에는 그 자리에 "현재 위치"라고 적어 두는 것으로 해결했다. 지금은 아예
+    // 접는다 — 출발지는 대부분 현재 위치라 매번 읽을 것이 없고, 그 두 줄이
+    // 지도에서 가장 비싼 자리를 계속 먹었다. 잘못 알리지 않는다는 원래 요구는
+    // 그대로다(placeholder가 안 뜬다).
     await openStoreInfoBySearch(tester);
 
     await tester.tap(find.text('도착'));
@@ -109,6 +113,13 @@ void main() {
       findsNothing,
       reason: '현재 위치를 출발지로 쓸 수 있는데도 출발지가 비어 있다고 표시했다',
     );
-    expect(find.text('현재 위치'), findsOneWidget);
+    // 접혔어도 출발지를 바꾸는 길은 남아 있어야 한다. 이게 없으면 도착 행을 눌러
+    // 도착지 칸이 활성인 시트를 받고 그 안에서 한 번 더 눌러야 한다
+    // (`directions_origin_focus_test.dart`가 막는 증상).
+    expect(
+      find.byKey(const Key('route-draft-origin')),
+      findsOneWidget,
+      reason: '출발지 진입점까지 사라지면 출발지를 바꿀 길이 없다',
+    );
   });
 }

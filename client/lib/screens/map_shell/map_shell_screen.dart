@@ -8,7 +8,10 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../core/api_config.dart';
 import '../../core/service_locator.dart';
 import '../../domain/dijkstra.dart';
+import 'package:latlong2/latlong.dart';
+
 import '../../domain/nearby_stores.dart';
+import '../../domain/route_endpoint_swap.dart';
 import '../../features/debug_mode/debug_mode.dart';
 import '../../features/indoor_navigation/contract/floor_transition_ui_state.dart';
 import '../../models/building.dart';
@@ -1095,12 +1098,121 @@ class _MapShellScreenState extends State<MapShellScreen> {
     unawaited(_startRoute(origin: _selectedOrigin, destination: picked));
   }
 
+  /// 지금 출발↔도착을 맞바꿀 수 있는지. 상단 초안 바의 ⇅ 버튼 활성 조건이다.
+  ///
+  /// 출발지가 실제 지점이면 언제나 바꿀 수 있다(두 값을 그냥 맞바꾸면 된다).
+  /// 출발지가 "현재 위치"(=`_selectedOrigin`이 null)일 때만 조건이 붙는다 —
+  /// 도착지 자리에는 "현재 위치"라는 표현이 없어서 가장 가까운 매장으로 굳혀야
+  /// 하고, 그러려면 현재 위치에서 잰 거리([_reachByNodeId])가 있어야 한다.
+  ///
+  /// 여기서 후보를 실제로 고르지는 않는다. 매 프레임 색인을 뒤질 수는 없으므로
+  /// **고를 수 있는 상태인지**만 보고, 실제 선택은 누른 뒤 [_swapRouteEndpoints]가
+  /// 한다. 그래서 눌렀는데 못 고르는 경우가 남고(모든 최근접 후보가 지금
+  /// 도착지뿐일 때), 그건 그쪽에서 안내로 처리한다.
+  bool get _canSwapRouteEndpoints {
+    if (_routeDraftDestination == null) return false;
+    if (_selectedOrigin != null) return true;
+    return (_reachByNodeId?.isNotEmpty ?? false);
+  }
+
+  /// 출발지와 도착지를 맞바꾸고 반대 방향 경로를 곧바로 다시 그린다.
+  ///
+  /// 출발지가 "현재 위치"면 **가장 가까운 매장**으로 굳혀 도착지에 놓는다. 규칙과
+  /// 실패 조건은 [nearestStoreForCurrentLocation]에 있다. 못 고르면 상태를 건드리지
+  /// 않고 이유만 알린다 — 절반만 바뀐 초안(출발지는 새 값, 도착지는 옛 값)을
+  /// 남기면 사용자가 무엇을 누른 것인지 알 수 없게 된다.
+  Future<void> _swapRouteEndpoints() async {
+    final destination = _routeDraftDestination;
+    if (destination == null) return;
+    final origin = _selectedOrigin;
+
+    // 출발지가 실제 지점이면 그냥 맞바꾼다. 색인도 그래프도 필요 없다.
+    if (origin != null) {
+      setState(() {
+        _selectedOrigin = destination;
+        _routeDraftDestination = origin;
+      });
+      // 출발점이 바뀌었으니 목록 거리도 전부 옛 값이다([_applyMapPick]과 같은 규칙).
+      unawaited(_refreshReach());
+      await _startRoute(
+        origin: destination,
+        destination: origin,
+        // 사용자가 방금 직접 뒤집었다 — 위치가 옮겨간 것을 새삼 알릴 이유가 없다.
+        announceOriginAnchor: false,
+      );
+      return;
+    }
+
+    final replacement = await _nearestStoreAsCandidate(
+      excludeNodeId: destination.nodeId,
+    );
+    if (!mounted) return;
+    if (replacement == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('현재 위치를 대신할 가까운 매장을 찾지 못했어요.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _selectedOrigin = destination;
+      _routeDraftDestination = replacement;
+    });
+    unawaited(_refreshReach());
+    await _startRoute(
+      origin: destination,
+      destination: replacement,
+      announceOriginAnchor: false,
+    );
+  }
+
+  /// 현재 위치에서 가장 가까운 매장을 경로 후보로 만든다. 못 만들면 null.
+  ///
+  /// 좌표는 매장 색인이 아니라 **그래프 노드**에서 가져온다. [StoreIndexEntry]에는
+  /// 좌표가 없고(온디바이스 검색용이라 이름·층·입구 노드만 든다), 어차피 경로가
+  /// 이어지는 지점은 매장 중심이 아니라 입구 노드다 — 노드 좌표를 쓰면 계산 전에
+  /// 잠깐 뜨는 핀도 실제로 경로가 닿을 자리에 선다.
+  Future<DirectionsCandidate?> _nearestStoreAsCandidate({
+    String? excludeNodeId,
+  }) async {
+    final stores = await buildingRepository.getStoreIndex(_buildingId);
+    if (!mounted || stores == null || stores.isEmpty) return null;
+    final nearest = nearestStoreForCurrentLocation(
+      stores: stores,
+      reachByNodeId: _reachByNodeId,
+      excludeNodeId: excludeNodeId,
+    );
+    if (nearest == null) return null;
+
+    final graph = await buildingRepository.getBuildingGraph(_buildingId);
+    if (!mounted || graph == null) return null;
+    final nodeId = nearest.entranceNodeId;
+    final node = graph.nodes.where((n) => n.id == nodeId).firstOrNull;
+    final lat = node?.lat;
+    final lng = node?.lng;
+    // 건물에 실측 wgs84 앵커가 없으면 노드에 좌표가 없다(GraphNode.lat 주석).
+    // 좌표 없이는 핀도 야외 폴백 경로도 자리를 못 잡으므로 여기서 멈춘다.
+    if (lat == null || lng == null) return null;
+
+    return DirectionsCandidate(
+      title: nearest.name,
+      subtitle: nearest.floorName,
+      point: LatLng(lat, lng),
+      nodeId: nodeId,
+      floor: nearest.floorName,
+    );
+  }
+
   /// 실제 경로 표시. 길찾기 시트를 거치는 경로와, 이미 기억해둔 출발지로 바로
   /// 라우팅하는 경로가 함께 쓸 수 있게 뽑아뒀다. [origin]이 null이면 "현재
   /// 위치"(=PDR)로 라우팅한다.
+  /// [announceOriginAnchor]가 false면 매장을 출발지로 쓸 때 뜨는 "여기서
+  /// 출발하는 것으로 봤다" 안내를 띄우지 않는다. 사용자가 방금 그 이동을 직접
+  /// 시킨 경우(출발↔도착 맞바꾸기)에 쓴다.
   Future<void> _startRoute({
     DirectionsCandidate? origin,
     required DirectionsCandidate destination,
+    bool announceOriginAnchor = true,
   }) async {
     // 야외 지도에서 실내 진입 오버레이를 보는 중 실내 매장(nodeId+floor)까지
     // 길찾기를 시작하면, 화면(탭)을 바꾸지 않고 야외 화면 그대로에 실내 경로를
@@ -1136,6 +1248,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                 point: origin.point,
                 nodeId: origin.nodeId,
               ),
+        announceOriginAnchor: announceOriginAnchor,
       );
       return;
     }
@@ -1434,6 +1547,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
                   onClearRouteDraft: _routeDraftDestination == null
                       ? null
                       : _clearRouteDraft,
+                  onSwapRouteEndpoints: _canSwapRouteEndpoints
+                      ? () => unawaited(_swapRouteEndpoints())
+                      : null,
+                  // 출발지를 따로 고르지 않았고 현재 위치로 출발할 수 있으면
+                  // 기본값이다 — 그때만 접는다. 둘 중 하나라도 아니면 사용자가
+                  // 확인하거나 채워야 할 정보가 그 줄에 있다.
+                  routeOriginIsDefault:
+                      _selectedOrigin == null && _canRouteFromCurrentLocation,
                 ),
 
                 // 층 전환 배너는 고정 top 숫자가 아니라 **이 Column 흐름**에

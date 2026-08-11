@@ -2317,6 +2317,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Future<void> showIndoorRouteTo(
     PoiSearchResult destination, {
     PoiSearchResult? origin,
+    bool announceOriginAnchor = true,
   }) async {
     final anchor = _pdrTrailState.anchor;
     // 명시적 출발지는 노드 id와 층이 둘 다 있어야 그래프 탐색을 시작할 수 있다.
@@ -2348,6 +2349,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         nodeId: originNodeId,
         storePoint: origin!.point,
         storeName: origin.name,
+        announce: announceOriginAnchor,
       );
       if (!mounted) return;
     }
@@ -2398,11 +2400,17 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   ///
   /// 실패는 조용히 넘긴다. 위치 아이콘을 못 옮기더라도 경로 자체는 그려져야
   /// 한다 — 여기서 return해 버리면 길찾기가 통째로 죽는다.
+  /// [announce]가 false면 "여기서 출발하는 것으로 봤다"는 안내를 띄우지 않는다.
+  ///
+  /// 그 안내는 앱이 사용자의 현재 위치를 **말없이** 옮겼을 때 알리려는 것이다.
+  /// 출발↔도착 맞바꾸기처럼 사용자가 방금 그 이동을 직접 시킨 경우에는 알릴
+  /// 것이 없다 — 누를 때마다 되돌리기 손잡이가 뜨면 조작을 방해하기만 한다.
   Future<void> _anchorAtStoreOrigin({
     required String floor,
     required String nodeId,
     required ll.LatLng storePoint,
     required String storeName,
+    bool announce = true,
   }) async {
     // [_confirmPdrAnchor]가 축 변환(axes)을 [_floorGraph]에서 가져오므로,
     // 앵커를 찍기 전에 그 층 그래프가 화면에 올라와 있어야 한다.
@@ -2437,6 +2445,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await _confirmPdrAnchor(floorPoint, notifyLocationChanged: false);
     if (!mounted) return;
     if (!indoorNavigationDriver.currentCalibration.canRenderPosition) return;
+    if (!announce) return;
     // 되돌릴 손잡이를 함께 띄운다. 출발지가 실제 위치와 다르면 조용히 틀린
     // 지점에서 안내가 시작되는데, 그건 사용자가 알아챌 수 있어야 한다.
     showDebugToast(
