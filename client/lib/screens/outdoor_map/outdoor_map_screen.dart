@@ -4778,6 +4778,27 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       unawaited(_rerouteIndoorFromCurrentPosition());
     }
     if (mounted) setState(() {});
+    _syncArrivalHighlight();
+  }
+
+  /// 도착한 순간 목적지 매장 폴리곤을 강조하고, 벗어나면 되돌린다.
+  ///
+  /// 카드가 "여기에 도착했다"고 말할 때 지도에서 **그 여기가 어디인지**를 함께
+  /// 보여 준다. 이름만 적힌 카드로는 눈앞의 여러 매장 중 어느 쪽인지 알 수 없다.
+  ///
+  /// 도착이 아닐 때 강조를 지우는 쪽도 함께 둔다 — 도착 판정은 걸음에 따라
+  /// 들락날락할 수 있어서, 켜기만 하면 지나쳐 걸어간 뒤에도 강조가 남는다.
+  /// 사용자가 매장을 눌러 직접 켜 둔 강조는 건드리지 않는다.
+  void _syncArrivalHighlight() {
+    if (!mounted) return;
+    final destinationId = _indoorRouteDestination?.placeId;
+    if (destinationId == null) return;
+    final arrived = _indoorRouteGuidance?.action == RouteGuidanceAction.arrived;
+    final shouldHighlight = arrived ? destinationId : null;
+    if (shouldHighlight == null && _highlightedStoreId != destinationId) return;
+    if (_highlightedStoreId == shouldHighlight) return;
+    setState(() => _highlightedStoreId = shouldHighlight);
+    unawaited(_syncHighlightLayer());
   }
 
   bool _indoorRerouteInFlight = false;
@@ -5737,6 +5758,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
                           .clamp(1, 999),
                   label: _indoorEtaLabel(indoorRouteDestination),
                   instruction: _indoorRouteGuidance,
+                  // 도착 순간 배너가 "어디에 도착했는지"를 말하도록 목적지를
+                  // 함께 넘긴다. [_indoorEtaLabel]은 경유 층까지 붙인 긴 줄이라
+                  // 카드 제목으로는 쓸 수 없다.
+                  destinationName: indoorRouteDestination.name,
+                  destinationFloor: indoorRouteDestination.floor,
                   onClose: _dismissIndoorRouteFromEtaCard,
                   onClosePointerDown: (position) =>
                       _etaClosePointerDown = position,

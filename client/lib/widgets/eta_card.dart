@@ -11,6 +11,8 @@ class EtaCard extends StatelessWidget {
     required this.minutes,
     this.label = '목적지까지',
     this.instruction,
+    this.destinationName,
+    this.destinationFloor,
     this.onClose,
     this.onClosePointerDown,
   });
@@ -19,6 +21,11 @@ class EtaCard extends StatelessWidget {
   final int minutes;
   final String label;
   final RouteGuidanceInstruction? instruction;
+
+  /// 도착 안내에 적을 목적지 이름·층. 둘 다 있으면 도착 순간 배너가 매장을
+  /// 가리키는 카드로 바뀐다 — 없으면 지시 문구 한 줄 그대로다.
+  final String? destinationName;
+  final String? destinationFloor;
 
   /// 있으면 카드 오른쪽에 "안내 종료" 버튼을 보여준다. 사용자가 길찾기로
   /// 직접 고른 경로를 취소할 때만 쓰고, 자동 안내(예: 건물 입구까지)에는
@@ -41,6 +48,17 @@ class EtaCard extends StatelessWidget {
                 label: label,
                 minutes: minutes,
                 distanceMeters: distanceMeters,
+                onClose: onClose,
+                onClosePointerDown: onClosePointerDown,
+              )
+            : (guidance.action == RouteGuidanceAction.arrived &&
+                  destinationName != null)
+            // 도착은 "다음에 무엇을 할지"가 없는 유일한 상태다. 남은
+            // 거리도 0이라, 같은 한 줄 배너로 그리면 `0 m`만 붙은 이상한
+            // 줄이 된다. 대신 **어디에 도착했는지**를 말한다.
+            ? _ArrivalRow(
+                name: destinationName!,
+                floor: destinationFloor,
                 onClose: onClose,
                 onClosePointerDown: onClosePointerDown,
               )
@@ -117,6 +135,83 @@ class _GuidanceRow extends StatelessWidget {
               onPressed: onClose,
               icon: const Icon(Icons.close, size: 20),
               color: AppColors.muted,
+              tooltip: '안내 종료',
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// 도착 안내. 지시 배너가 아니라 **목적지를 가리키는 카드**다.
+///
+/// 안내가 끝났음을 알리는 동시에 "여기가 그 매장"임을 확인시켜 준다 — 지도에는
+/// 같은 순간 그 매장 폴리곤이 강조된다.
+class _ArrivalRow extends StatelessWidget {
+  const _ArrivalRow({
+    required this.name,
+    required this.floor,
+    required this.onClose,
+    required this.onClosePointerDown,
+  });
+
+  final String name;
+  final String? floor;
+  final VoidCallback? onClose;
+  final ValueChanged<Offset>? onClosePointerDown;
+
+  @override
+  Widget build(BuildContext context) {
+    final where = (floor == null || floor!.isEmpty)
+        ? '목적지에 도착했습니다'
+        : '$floor · 목적지에 도착했습니다';
+    return Row(
+      children: [
+        const Icon(Icons.place, size: 24, color: Color(0xFFD93025)),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                name,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.text,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                where,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.muted,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+        if (onClose != null) ...[
+          const SizedBox(width: 8),
+          // 도착에서는 X가 아니라 체크다. 같은 동작(안내를 끝낸다)이지만 여기서는
+          // 취소가 아니라 확인이라, 아이콘이 다르면 사용자가 "실패했나" 하고
+          // 망설이지 않는다.
+          Listener(
+            onPointerDown: (event) => onClosePointerDown?.call(event.position),
+            child: IconButton(
+              key: const Key('eta-card-close'),
+              onPressed: onClose,
+              icon: const Icon(Icons.check_circle, size: 24),
+              color: AppColors.primary,
               tooltip: '안내 종료',
               visualDensity: VisualDensity.compact,
             ),
