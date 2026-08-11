@@ -23,6 +23,7 @@ import '../../domain/dijkstra.dart';
 import '../../domain/route_guidance.dart';
 import '../../features/indoor_navigation/application/corridor_position_tracker.dart';
 import '../../features/indoor_navigation/application/escalator_arrival.dart';
+import '../../features/indoor_navigation/application/escalator_node_naming.dart';
 import '../../features/indoor_navigation/application/escalator_transition_detector.dart';
 import '../../features/indoor_navigation/contract/floor_transition_ui_state.dart';
 import '../../features/indoor_navigation/application/floor_map_matcher.dart';
@@ -1149,6 +1150,86 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (!mounted) return false;
     setState(() => _floorSwapVeil = 0);
     return _activeFloor == floor;
+  }
+
+  /// 디버그 모드에서 강제로 태울 수 있는 다음 환승. 없으면 null.
+  ///
+  /// 지금 층 세그먼트에 **에스컬레이터** 환승이 붙어 있을 때만이다. 판정기
+  /// ([EscalatorTransitionDetector])가 에스컬레이터 전용이라, 엘리베이터 환승을
+  /// 강제로 태우면 실제로는 나올 수 없는 화면을 검증하게 된다.
+  IndoorRouteSegment? get _debugForceableTransferSegment {
+    final multi = _indoorMultiFloorRoute;
+    final floor = _activeFloor;
+    if (multi == null || floor == null) return null;
+    final i = multi.segments.indexWhere((s) => s.floorName == floor);
+    if (i < 0 || i + 1 >= multi.segments.length) return null;
+    final seg = multi.segments[i];
+    if (seg.transferModeToNext != 'escalator') return null;
+    if (seg.transferFromNodeId == null) return null;
+    return seg;
+  }
+
+  /// 층 라벨을 비교 가능한 순위로 바꾼다. "1F" → 1, "B1" → -1.
+  ///
+  /// [Building.floors]의 나열 순서에 기대지 않는 이유: 그 순서는 서버 응답
+  /// 순서일 뿐 위아래를 약속하지 않는다. 라벨 자체가 위아래를 말한다.
+  static int _floorRank(String label) {
+    final m = RegExp(r'^(B?)(\d+)').firstMatch(label.toUpperCase());
+    if (m == null) return 0;
+    final n = int.parse(m.group(2)!);
+    return m.group(1)!.isEmpty ? n : -n;
+  }
+
+  /// 디버그 전용 — 실제 탑승 없이 층 전환 시퀀스를 태운다.
+  ///
+  /// **판정기를 흉내 내는 것이지 우회하는 것이 아니다.** 판정기가 확정을 냈을 때
+  /// 타는 경로(시작 → 확정, [_beginEscalatorTransition] →
+  /// [_completeEscalatorTransition])에 합성 transition을 그대로 넣는다. 스크림,
+  /// 스크림 뒤 카메라 재배치([_swapIndoorFloorSmoothly]), 새 층 앵커 복원,
+  /// 재탐색까지 전부 프로덕션 코드가 돈다 — 여기서 따로 그리는 화면이 없으므로
+  /// 이 버튼으로 본 연출이 곧 실기기에서 에스컬레이터를 탔을 때의 연출이다.
+  ///
+  /// 도착 노드는 경로가 지목한 노드([IndoorRouteSegment.transferToNodeId])를
+  /// 그대로 쓴다. 실제 판정도 활성 경로가 있으면 같은 값을 우선한다
+  /// ([findEscalatorArrivalNode]의 1단계).
+  ///
+  /// 판정기 자체([EscalatorTransitionDetector])는 건드리지 않는다 — 수직 전이
+  /// 알고리즘은 재작성이 예정돼 있어, 거기 디버그 주입구를 뚫으면 재작성 때
+  /// 같이 갈아엎어야 할 표면만 는다.
+  void _debugForceFloorTransition() {
+    final seg = _debugForceableTransferSegment;
+    final multi = _indoorMultiFloorRoute;
+    final floor = _activeFloor;
+    if (seg == null || multi == null || floor == null) return;
+    final i = multi.segments.indexWhere((s) => s.floorName == floor);
+    final next = multi.segments[i + 1];
+    final goingUp = _floorRank(next.floorName) > _floorRank(floor);
+    final transition = EscalatorTransition(
+      // 도착 노드를 경로 지목으로 찾으므로 그룹 매칭까지 갈 일이 없지만,
+      // 진단 JSON에 남는 값이라 강제 전환임을 알아볼 수 있게 적는다.
+      group: 'DEBUG',
+      direction: goingUp ? EscalatorDirection.up : EscalatorDirection.down,
+      fromFloorLabel: floor,
+      toFloorLabel: next.floorName,
+      deltaM: goingUp ? 5.0 : -5.0,
+      durationMs: 0,
+      stepsDuring: 0,
+      boardingNodeId: seg.transferFromNodeId!,
+      boardingNodeName: null,
+      boardingDistanceM: 0,
+      boardingEvidence: 'debug-forced',
+      expectedArrivalNodeId: seg.transferToNodeId,
+    );
+    _enqueueFloorTransition(() => _beginEscalatorTransition(transition));
+    // 시작과 확정 사이를 벌린다. 실제 에스컬레이터는 탑승부터 하차 감지까지
+    // 10초를 넘게 타는데, 처음 1.2초로 뒀더니 "이동 중" 상태가 실제보다 훨씬
+    // 짧아 보였다 — 이 버튼으로 본 리듬이 곧 실기기 리듬이어야 하므로 실제
+    // 탑승 시간에 가깝게 둔다. (실기기에서는 이 대기가 없다 — 판정기가 실제
+    // 하차를 기다리므로 몸이 시간을 정한다.)
+    _enqueueFloorTransition(
+      () => Future<void>.delayed(const Duration(seconds: 5)),
+    );
+    _enqueueFloorTransition(() => _completeEscalatorTransition(transition));
   }
 
   /// 반 층을 지났다. 목적 층 지도를 먼저 연다(하차는 아직).
@@ -5897,6 +5978,46 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
               child: GuidanceRecenterButton(
                 key: const Key('guidance-recenter'),
                 onPressed: () => unawaited(_recenterOnCurrentPosition()),
+              ),
+            ),
+          ),
+
+        // 디버그 전용 — 강제 층 전환. "내 위치로" 버튼 바로 위, 안내 중 +
+        // 디버그 모드 + 에스컬레이터 환승이 남아 있을 때만 뜬다.
+        // 무엇을 태우는지는 [_debugForceFloorTransition]에 있다.
+        if (debugEnabled &&
+            _guidanceActive &&
+            _debugForceableTransferSegment != null)
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            left: 16,
+            bottom:
+                _floorSelectorBottomOffset +
+                (indoorRouteVisible ? _bottomBarLiftPx : 0) +
+                52,
+            child: SafeArea(
+              top: false,
+              child: Material(
+                color: Colors.white.withValues(alpha: 0.96),
+                elevation: 3,
+                shadowColor: Colors.black.withValues(alpha: 0.16),
+                shape: StadiumBorder(
+                  side: BorderSide(
+                    color: AppColors.indoor.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: IconButton(
+                  key: const Key('debug-force-floor-transition'),
+                  tooltip: '층 전환 시뮬레이션',
+                  onPressed: _debugForceFloorTransition,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 44,
+                    height: 44,
+                  ),
+                  icon: const Icon(Icons.escalator, size: 20),
+                ),
               ),
             ),
           ),
