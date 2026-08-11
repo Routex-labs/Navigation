@@ -319,6 +319,21 @@ const _walkingViewZoom = indoorTilesMaxZoom;
 /// 누른 조작이라 과정을 보여 줄 이유가 없고, 즉시 반응하는 편이 낫다.
 const _recenterDuration = Duration(milliseconds: 300);
 
+/// 층 선택기로 층을 바꿀 때 지도 위에 잠깐 덮는 베일.
+///
+/// 층을 바꾸면 MVT 소스를 통째로 갈아 끼우고 새 층 타일을 네트워크에서 받아
+/// 온다. 그 사이 이전 층 도면이 그대로 남아 있다가 새 도면이 **툭** 바뀌는데,
+/// 이 잔상이 로딩 지연으로 읽힌다. 베일을 얹으면 같은 지연이 "전환 중"으로
+/// 읽힌다 — 지연을 없애는 게 아니라 의도된 것으로 보이게 하는 장치다.
+///
+/// 안내 중 층 전환 스크림(불투명, 입력 차단)과 달리 **반투명이고 입력을 막지
+/// 않는다.** 층 훑기는 연속 조작이라, 매 탭마다 화면이 완전히 덮이고 잠기면
+/// 훑는 리듬이 끊긴다. 걷힘은 카메라 재정렬(500ms)과 겹쳐 하나의 전환으로
+/// 읽히게 한다.
+const _floorBrowseVeilOpacity = 0.6;
+const _floorBrowseVeilFadeIn = Duration(milliseconds: 120);
+const _floorBrowseVeilFadeOut = Duration(milliseconds: 300);
+
 /// 도면을 화면에 맞출 때 실제로 채우는 비율.
 ///
 /// 1.0이면 외곽선이 화면 가장자리에 딱 붙는다 — 도면이 답답해 보이고 가장자리
@@ -834,6 +849,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   /// 도면 교체 구간을 덮는 정도. 0이 아니면 셸이 스크림을 그린다.
   double _floorSwapVeil = 0;
+
+  // 층 선택기 훑기용 베일. 안내용 [_floorSwapVeil]과 분리한다 — 그쪽은 셸이
+  // chrome까지 덮는 불투명 스크림이고, 이쪽은 지도만 살짝 덮는 반투명이다.
+  bool _floorBrowseVeil = false;
+  int _floorBrowseVeilToken = 0;
 
   /// 도면을 갈아 끼운 뒤 완전 불투명을 유지하는 시간. 실내 탭과 같은 값이다.
   static const _indoorFloorSwapVeilHold = Duration(milliseconds: 400);
@@ -1791,8 +1811,19 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 이 사용자 조작 경로에만 둔다. (안내 중에는 층 선택기 자체가 접혀 있어
   /// 이 경로로 들어올 수도 없다.)
   Future<void> _onFloorChipSelected(String floor) async {
+    if (floor == _activeFloor) return;
+    // 훑는 중 연타를 견딘다 — 베일을 내리는 것은 **마지막 탭의 완료**뿐이다.
+    // 토큰 없이 각자 내리면, 먼저 끝난 이전 탭이 다음 탭이 덮어 둔 베일을
+    // 걷어 버려 타일 교체 장면이 그대로 드러난다.
+    final token = ++_floorBrowseVeilToken;
+    setState(() => _floorBrowseVeil = true);
     await _switchOverlayFloor(floor, recenterIfNeeded: false);
     if (!mounted) return;
+    // 베일 걷힘(300ms)을 카메라 재정렬(500ms)과 **겹쳐서** 시작한다. 재정렬이
+    // 끝난 뒤 걷으면 전환이 두 박자("움직이고, 그 다음 밝아지고")로 쪼개진다.
+    if (token == _floorBrowseVeilToken) {
+      setState(() => _floorBrowseVeil = false);
+    }
     // 도면이 도착한 뒤라 [_activeFloorOutlineRing]이 새 층 외곽선을 준다
     // (`_switchOverlayFloor`가 `_loadFloorGraph`까지 기다린다).
     await _fitCameraToActiveFloor(duration: _floorSwitchZoomDuration);
@@ -5906,6 +5937,22 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           )
         else
           const ColoredBox(color: AppColors.surface),
+
+        // 층 선택기로 층을 훑는 동안 지도만 살짝 덮는 베일. 왜 있는지는
+        // [_floorBrowseVeilOpacity]에 있다. 층 선택기·버튼들보다 **아래**라
+        // 훑는 조작 자체는 또렷하게 남고, IgnorePointer라 지도 조작도 안 막는다.
+        Positioned.fill(
+          child: IgnorePointer(
+            child: AnimatedOpacity(
+              opacity: _floorBrowseVeil ? _floorBrowseVeilOpacity : 0,
+              duration: _floorBrowseVeil
+                  ? _floorBrowseVeilFadeIn
+                  : _floorBrowseVeilFadeOut,
+              curve: Curves.easeOut,
+              child: const ColoredBox(color: AppColors.surface),
+            ),
+          ),
+        ),
 
         // 실내 진입 시 야외만 어둡게 덮는 dim scrim은 위젯 트리가 아니라
         // MapLibre fill 레이어(_dimScrimFillLayerId)로 처리한다. 위젯 스크림은
