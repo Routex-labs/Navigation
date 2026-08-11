@@ -5547,9 +5547,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     );
   }
 
-  /// 경로가 해제되면 세션을 닫는다. [announceExport]가 true일 때만 내보내기
-  /// 안내를 띄운다 — "PDR 종료" 버튼이 사라진 지금 길안내가 실제로 끝나는
-  /// 지점(_clearIndoorRoute)의 이 안내가 실측 데이터를 꺼낼 유일한 트리거다.
+  /// 경로가 해제되면 세션을 닫는다. [announceExport]는 세션 경계 기록에만 쓴다
+  /// — 사용자가 끝낸 것(routeEnded)과 새 경로로 갈아탄 것(routeReplaced)을
+  /// 사후 분석에서 구분하기 위해서다.
+  ///
+  /// 예전에는 여기서 "진단 JSON을 내보낼 수 있다"는 토스트를 띄웠다. 안내가
+  /// 끝나는 순간은 도착 카드가 뜨는 순간이라 토스트가 그 위를 덮었고, 내보내기
+  /// 진입점은 디버그 모드의 공유 버튼([PdrMapControl])이 이미 지도에 상시로
+  /// 있다 — 같은 일을 하는 두 번째 입구가 화면을 가리기만 했다.
   void _endRouteRecordingSession({bool announceExport = true}) {
     final recorder = _pdrDebugRecorder;
     if (recorder == null) return;
@@ -5558,26 +5563,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     recorder.recordRuntime(indoorNavigationDriver.currentRuntimeStatus);
     recorder.recordSessionBoundary(
       announceExport ? 'routeEnded' : 'routeReplaced',
-    );
-    if (!mounted) return;
-    if (announceExport &&
-        recorder.hasSnapshot &&
-        _debugModeController.enabled) {
-      _showPdrMessageWithExport('길안내가 끝났습니다. 진단 JSON을 내보내 분석할 수 있습니다.');
-    }
-  }
-
-  void _showPdrMessageWithExport(String message) {
-    if (!mounted) return;
-    showDebugToast(
-      context,
-      message: message,
-      bottomOffset:
-          _mapShellBottomChromePx +
-          (_hasAnyRouteVisible ? _etaCardHeightPx : 0) +
-          12,
-      actionLabel: 'JSON 공유',
-      onAction: () => unawaited(_exportPdrDebugJson()),
     );
   }
 
