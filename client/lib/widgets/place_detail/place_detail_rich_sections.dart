@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -1408,9 +1410,20 @@ class _CopyButton extends StatelessWidget {
 ///
 /// 포인터는 [IgnorePointer]로 통과시킨다. 1.6초짜리 알림이 그동안 시트의 탭을
 /// 가로채면 안 된다.
+///
+/// **토스트는 화면에 한 개만 둔다.** 엔트리와 타이머를 모듈 수준에서 들고
+/// 있다가, 새 토스트가 뜨는 순간 이전 것을 즉시 걷어낸다. 예전에는 취소
+/// 불가능한 `Future.delayed`가 해제를 맡았는데, 그 시점에 `entry.mounted`가
+/// false면 remove를 다시 시도하지 않아 토스트가 오버레이에 영원히 남았고,
+/// 연속 호출은 엔트리를 겹겹이 쌓기만 했다.
+OverlayEntry? _placeToastEntry;
+Timer? _placeToastTimer;
+
 void showPlaceToast(BuildContext context, String message) {
   final overlay = Overlay.maybeOf(context, rootOverlay: true);
   if (overlay == null) return;
+
+  _dismissPlaceToast();
 
   final entry = OverlayEntry(
     builder: (context) => Positioned(
@@ -1435,11 +1448,24 @@ void showPlaceToast(BuildContext context, String message) {
     ),
   );
 
+  _placeToastEntry = entry;
   overlay.insert(entry);
-  // 시트가 먼저 닫히면 Overlay와 함께 정리되므로 mounted를 확인하고 지운다.
-  Future<void>.delayed(const Duration(milliseconds: 1600), () {
-    if (entry.mounted) entry.remove();
-  });
+  _placeToastTimer = Timer(
+    const Duration(milliseconds: 1600),
+    _dismissPlaceToast,
+  );
+}
+
+/// 떠 있는 토스트를 확실히 걷어낸다. 실패 경로가 없다 — 여기 들어오는 엔트리는
+/// 전부 [showPlaceToast]가 insert한 것이고, [OverlayEntry.remove]는 Overlay가
+/// 이미 dispose된 뒤에도 안전하게 no-op으로 끝난다. 제거 후 참조를 비우므로
+/// 같은 엔트리를 두 번 remove할 일도 없다.
+void _dismissPlaceToast() {
+  _placeToastTimer?.cancel();
+  _placeToastTimer = null;
+  final entry = _placeToastEntry;
+  _placeToastEntry = null;
+  entry?.remove();
 }
 
 /// 영업시간·대표번호처럼 **시간이 지나면 저절로 거짓이 되는** 운영 정보다.

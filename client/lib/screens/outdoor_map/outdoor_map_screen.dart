@@ -2173,9 +2173,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (decision != IndoorEntryGpsDecision.enter || entrance == null) return;
 
     _gpsEntryArmed = false;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('건물 감지 중...')));
+    // 진행 안내는 큐에 쌓지 않고 지금 자리를 차지한다. 가드 덕분에 감지가
+    // 연달아 발화해도 같은 문구가 다시 뜨며 시간을 처음부터 다시 세지 않는다.
+    _replaceSnack('건물 감지 중...');
     // GPS 경로는 [_gpsEntryArmed]라는 자기 게이트를 이미 통과했다. zoom 무장까지
     // 보면, 밖으로 나온 게 확인돼 다시 무장해도 여기서 막혀 아무 일도 안 일어난다.
     //
@@ -2473,10 +2473,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         );
       }
     } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('위치를 다시 확인하지 못했습니다')));
+      _showSnack('위치를 다시 확인하지 못했습니다');
     }
   }
 
@@ -5872,12 +5869,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     );
   }
 
-  void _showSnack(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
-  }
+  /// 마지막으로 띄운(아직 닫히지 않은) 스낵바 문구. 같은 문구의 연속 재표시를
+  /// 막는 근거다.
+  String? _visibleSnackMessage;
+
+  void _showSnack(String message) => _showSnackGuarded(message, replace: false);
 
   /// 지금 떠 있는 안내를 걷어내고 새 안내를 띄운다.
   ///
