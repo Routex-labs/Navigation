@@ -36,8 +36,11 @@ const double kPlaceDetailSheetInitialSize = 0.5;
 
 /// 장소 상세 시트에서 호출자에게 돌려주는 다음 동작.
 ///
-/// 호출부의 출발·도착·카테고리 시트 chain 계약은 기존과 동일하게 유지한다.
-enum StoreInfoAction { setOrigin, setDestination, viewCategory }
+/// 예전에는 `viewCategory`가 하나 더 있었는데, 대분류 칩을 시트에서 걷어낸 뒤로
+/// **아무도 그 값을 만들지 않았다.** 호출부에는 그 값을 받는 분기만 남아 있어,
+/// 카테고리 시트가 매장 시트를 거쳐 자기 자신을 다시 여는 것처럼 읽혔다. 실제로
+/// 도달할 수 없는 경로라 지운다.
+enum StoreInfoAction { setOrigin, setDestination }
 
 /// 매장 상세 시트.
 ///
