@@ -54,6 +54,7 @@ import '../../widgets/category_map_icon.dart';
 import '../../widgets/floor_facility_style.dart';
 import '../../widgets/floor_selector.dart';
 import '../../widgets/guidance_recenter_button.dart';
+import '../../widgets/route_steps_sheet.dart';
 import '../../widgets/map_icon_cache.dart';
 import '../../widgets/map_overlay_tap_guard.dart';
 import '../../widgets/status_badge.dart';
@@ -3005,6 +3006,46 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _notifyRouteStateIfChanged();
     // 한 번의 길안내가 여기서 끝난다.
     _endRouteRecordingSession();
+  }
+
+  /// 안내 배너를 탭했을 때 — 경로 전체를 단계 목록으로 펴서 시트로 보여준다.
+  ///
+  /// 다층 경로면 **모든 층의 세그먼트**를 순서대로 편다. 화면에 그려지는 것은
+  /// 지금 층 세그먼트뿐이지만, 목록의 존재 이유가 "이 다음에 뭐가 오는지"라
+  /// 아직 안 간 층의 단계까지 있어야 한다.
+  void _showIndoorRouteSteps(PoiSearchResult destination) {
+    final multi = _indoorMultiFloorRoute;
+    final List<RouteStepLeg> legs;
+    if (multi != null && multi.isNotEmpty) {
+      legs = [
+        for (var i = 0; i < multi.segments.length; i++)
+          (
+            wgs84Points: multi.segments[i].route.points,
+            localPoints: multi.segments[i].route.pointsLocalM,
+            floorLabel: multi.segments[i].floorName,
+            transferModeToNext: multi.segments[i].transferModeToNext,
+            nextFloorLabel: i + 1 < multi.segments.length
+                ? multi.segments[i + 1].floorName
+                : null,
+          ),
+      ];
+    } else {
+      final segment = _indoorRouteSegment;
+      final floor = _activeFloor;
+      if (segment == null || floor == null) return;
+      legs = [
+        (
+          wgs84Points: segment.points,
+          localPoints: segment.pointsLocalM,
+          floorLabel: floor,
+          transferModeToNext: null,
+          nextFloorLabel: null,
+        ),
+      ];
+    }
+    final steps = buildRouteStepList(legs);
+    if (steps.isEmpty) return;
+    showRouteStepsSheet(context, steps: steps, destinationName: destination.name);
   }
 
   void _dismissUserDestinationFromEtaCard() {
@@ -6078,26 +6119,34 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
               top: false,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                child: EtaCard(
-                  key: _etaCardKey,
-                  distanceMeters: indoorEta.distanceM,
-                  // 시간은 비용 기준 — 엘리베이터 대기·탑승 시간이 여기 들어 있다.
-                  minutes:
-                      (indoorEta.costM /
-                              _indoorWalkingSpeedMetersPerSecond /
-                              60)
-                          .ceil()
-                          .clamp(1, 999),
-                  label: _indoorEtaLabel(indoorRouteDestination),
-                  instruction: _indoorRouteGuidance,
-                  // 도착 순간 배너가 "어디에 도착했는지"를 말하도록 목적지를
-                  // 함께 넘긴다. [_indoorEtaLabel]은 경유 층까지 붙인 긴 줄이라
-                  // 카드 제목으로는 쓸 수 없다.
-                  destinationName: indoorRouteDestination.name,
-                  destinationFloor: indoorRouteDestination.floor,
-                  onClose: _dismissIndoorRouteFromEtaCard,
-                  onClosePointerDown: (position) =>
-                      _etaClosePointerDown = position,
+                // 배너를 탭하면 경로 전체 단계 목록이 올라온다. 배너 자체는
+                // "다음 한 수"만 말하므로, 전체를 보고 싶은 사용자가 갈 곳이
+                // 여기뿐이다. 종료 버튼은 Listener가 먼저 받아 탭과 겹치지
+                // 않는다.
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _showIndoorRouteSteps(indoorRouteDestination),
+                  child: EtaCard(
+                    key: _etaCardKey,
+                    distanceMeters: indoorEta.distanceM,
+                    // 시간은 비용 기준 — 엘리베이터 대기·탑승 시간이 여기 들어 있다.
+                    minutes:
+                        (indoorEta.costM /
+                                _indoorWalkingSpeedMetersPerSecond /
+                                60)
+                            .ceil()
+                            .clamp(1, 999),
+                    label: _indoorEtaLabel(indoorRouteDestination),
+                    instruction: _indoorRouteGuidance,
+                    // 도착 순간 배너가 "어디에 도착했는지"를 말하도록 목적지를
+                    // 함께 넘긴다. [_indoorEtaLabel]은 경유 층까지 붙인 긴 줄이라
+                    // 카드 제목으로는 쓸 수 없다.
+                    destinationName: indoorRouteDestination.name,
+                    destinationFloor: indoorRouteDestination.floor,
+                    onClose: _dismissIndoorRouteFromEtaCard,
+                    onClosePointerDown: (position) =>
+                        _etaClosePointerDown = position,
+                  ),
                 ),
               ),
             ),
