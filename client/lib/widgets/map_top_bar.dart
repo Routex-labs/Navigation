@@ -36,6 +36,8 @@ class MapTopBar extends StatelessWidget {
     this.onRouteOriginTap,
     this.onRouteDestinationTap,
     this.onClearRouteDraft,
+    this.onSwapRouteEndpoints,
+    this.routeOriginIsDefault = false,
     this.hintText = '건물, 장소를 검색하세요',
   });
 
@@ -67,6 +69,16 @@ class MapTopBar extends StatelessWidget {
   final VoidCallback? onRouteDestinationTap;
   final VoidCallback? onClearRouteDraft;
 
+  /// 출발↔도착을 맞바꿔 반대 방향 경로를 다시 그린다. **null이면 버튼이
+  /// 비활성**이다 — 지금 상태에서 뒤집을 수 없다는 뜻이고(예: 출발지가 "현재
+  /// 위치"인데 측위가 안 돼 대신 놓을 매장을 못 고름), 그때는 눌러도 아무 일도
+  /// 일어나지 않는 버튼을 활성처럼 보여 주지 않는다.
+  final VoidCallback? onSwapRouteEndpoints;
+
+  /// 출발지가 기본값("현재 위치")인지. 참이면 초안 바가 도착지 한 줄로 접힌다
+  /// — 이유는 [_RouteDraftBar.collapseOrigin].
+  final bool routeOriginIsDefault;
+
   /// 길찾기 초안을 보고 있는 중에도 일반 장소 검색으로 돌아갈 수 있는
   /// 진입점이다. 검색을 닫으면 상위가 같은 초안을 다시 넘겨준다.
   final VoidCallback onSearchRequested;
@@ -97,6 +109,8 @@ class MapTopBar extends StatelessWidget {
                   onDestinationTap: onRouteDestinationTap ?? onDirectionsTap,
                   onSearchRequested: onSearchRequested,
                   onClear: onClearRouteDraft,
+                  onSwap: onSwapRouteEndpoints,
+                  collapseOrigin: routeOriginIsDefault,
                 )
               : Row(
                   children: [
@@ -202,6 +216,8 @@ class _RouteDraftBar extends StatelessWidget {
     required this.onDestinationTap,
     required this.onSearchRequested,
     required this.onClear,
+    required this.onSwap,
+    required this.collapseOrigin,
   });
 
   final String originLabel;
@@ -210,6 +226,20 @@ class _RouteDraftBar extends StatelessWidget {
   final VoidCallback onDestinationTap;
   final VoidCallback onSearchRequested;
   final VoidCallback? onClear;
+  final VoidCallback? onSwap;
+
+  /// 출발지 줄을 접을지. 출발지가 기본값("현재 위치")일 때만 참이다.
+  ///
+  /// 두 줄 + 구분선은 지도에서 가장 비싼 자리(검색창 바로 아래)를 계속 먹는데,
+  /// 출발지는 대부분 현재 위치라 매번 읽을 것이 없다. 그래서 평소에는 도착지
+  /// 한 줄만 두고, 누르면 기존 길찾기 시트가 열려 출발지를 바꿀 수 있다.
+  ///
+  /// **기본값이 아닐 때는 접지 않는다.** 사용자가 매장을 출발지로 골라 둔
+  /// 상태는 경로가 통째로 달라지는 정보다. 접어서 안 보이면 "왜 엉뚱한 데서
+  /// 출발하지"를 화면에서 확인할 수 없고, 시트를 열어 보기 전까지 틀린 경로를
+  /// 맞다고 믿게 된다. 출발지를 아직 못 정한 상태(placeholder)도 같은 이유로
+  /// 펼쳐 둔다 — 그건 사용자가 채워야 할 빈칸이다.
+  final bool collapseOrigin;
 
   @override
   Widget build(BuildContext context) {
@@ -217,26 +247,62 @@ class _RouteDraftBar extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(8, 6, 4, 6),
       child: Row(
         children: [
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _RouteDraftField(
-                  key: const Key('route-draft-origin'),
-                  icon: Icons.my_location,
-                  label: originLabel,
-                  isPlaceholder: originLabel == '출발지를 선택하세요',
-                  onTap: onOriginTap,
-                ),
-                const Divider(height: 1, indent: 34),
-                _RouteDraftField(
-                  key: const Key('route-draft-destination'),
-                  icon: Icons.place_outlined,
-                  label: destinationLabel,
-                  onTap: onDestinationTap,
-                ),
-              ],
+          // 접어도 **출발지로 가는 길은 남긴다.** 행을 통째로 없애면 출발지를
+          // 바꾸려는 사용자가 도착 행을 눌러 도착지 칸이 활성인 시트를 받고,
+          // 그 안에서 출발지 칸을 한 번 더 눌러야 한다 — 방금 누른 곳과 커서가
+          // 있는 곳이 다른, 이미 한 번 고쳤던 증상이다
+          // (`tests/unit_test/directions_origin_focus_test.dart`).
+          // 그래서 같은 key·같은 콜백을 아이콘 하나로 옮겨 둔다. 줄이 하나로
+          // 줄어드는 것이 목적이지 출발지를 감추는 것이 목적이 아니다.
+          if (collapseOrigin)
+            IconButton(
+              key: const Key('route-draft-origin'),
+              onPressed: onOriginTap,
+              icon: const Icon(Icons.my_location, size: 20),
+              color: AppColors.primary,
+              tooltip: '출발지 바꾸기 (지금은 현재 위치)',
+              visualDensity: VisualDensity.compact,
             ),
+          Expanded(
+            child: collapseOrigin
+                ? _RouteDraftField(
+                    key: const Key('route-draft-destination'),
+                    icon: Icons.place_outlined,
+                    label: destinationLabel,
+                    onTap: onDestinationTap,
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _RouteDraftField(
+                        key: const Key('route-draft-origin'),
+                        icon: Icons.my_location,
+                        label: originLabel,
+                        isPlaceholder: originLabel == '출발지를 선택하세요',
+                        onTap: onOriginTap,
+                      ),
+                      const Divider(height: 1, indent: 34),
+                      _RouteDraftField(
+                        key: const Key('route-draft-destination'),
+                        icon: Icons.place_outlined,
+                        label: destinationLabel,
+                        onTap: onDestinationTap,
+                      ),
+                    ],
+                  ),
+          ),
+          // 두 줄의 **가운데 높이**에 놓는다. 뒤집기는 위/아래 두 칸 모두에
+          // 걸리는 조작이라, 어느 한 줄에 붙여 두면 그 줄만의 버튼처럼 읽힌다.
+          // 지도 앱들이 같은 자리에 ⇅를 두는 이유이기도 하다.
+          IconButton(
+            key: const Key('route-draft-swap'),
+            onPressed: onSwap,
+            icon: const Icon(Icons.swap_vert),
+            color: AppColors.primary,
+            // 비활성일 때 아예 사라지면 줄 폭이 흔들려 옆 버튼들이 움직인다.
+            // 자리는 지키되 눌리지 않는다는 걸 색으로 알린다.
+            disabledColor: AppColors.muted.withValues(alpha: 0.35),
+            tooltip: onSwap == null ? '지금은 출발지와 도착지를 바꿀 수 없어요' : '출발지와 도착지 바꾸기',
           ),
           IconButton(
             key: const Key('route-draft-search'),

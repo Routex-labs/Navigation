@@ -153,6 +153,64 @@ double indoorEntryZoomThresholdFor({
   );
 }
 
+/// 돌려 세운 건물이 화면에 담기는 zoom.
+///
+/// 건물을 세로로 세운 뒤([building_orientation.dart]) 그 직사각형을 화면에
+/// 맞출 때 쓴다. 가로·세로 **둘 다** 담겨야 하므로 두 제약 중 더 축소해야 하는
+/// 쪽을 고른다 — 한쪽만 보면 나머지 축이 화면 밖으로 잘린다.
+///
+/// [widthMeters]는 화면 가로에 놓이는 변(짧은 축), [heightMeters]는 세로에
+/// 놓이는 변(긴 축)이다. 세로로 세운다는 것이 곧 이 대응을 뜻한다.
+double zoomToFitRotatedBox({
+  required double widthMeters,
+  required double heightMeters,
+  required double viewportWidthPx,
+  required double viewportHeightPx,
+  required double latitude,
+}) {
+  final byWidth = zoomToFitWidth(
+    widthMeters: widthMeters,
+    availablePx: viewportWidthPx,
+    latitude: latitude,
+  );
+  final byHeight = zoomToFitWidth(
+    widthMeters: heightMeters,
+    availablePx: viewportHeightPx,
+    latitude: latitude,
+  );
+  return math.min(byWidth, byHeight);
+}
+
+/// 건물을 **바깥에서 보여 줄 때** 진입 임계값에서 물러서는 폭(zoom 레벨).
+///
+/// zoom은 log2 스케일이라 0.7을 빼면 건물이 화면 폭의 약 62%를 차지한다 —
+/// 건물 윤곽과 주변 길이 함께 보이는 "여기 있다"의 그림이다.
+const exteriorViewZoomMargin = 0.7;
+
+/// 검색에서 고른 건물의 **바깥 모습**을 보여 줄 zoom.
+///
+/// 진입 임계값과 한 파일에 두는 이유가 이 함수의 전부다 — **이 값은 반드시
+/// 임계값보다 아래여야 한다.** 검색 결과를 누르는 것은 "저 건물이 어디 있는지"를
+/// 묻는 조작이고, 들어가는 것은 건물을 탭하는 별도 조작이다. 두 값을 각자
+/// 계산하면 화면 폭이 좁은 기기에서 물러선 배율이 도로 임계값을 넘어, 검색만
+/// 했는데 도면이 열린다(실제로 그랬다 — 한때 외곽선을 화면에 꼭 맞췄는데
+/// 그 배율이 곧 [indoorEntryZoomThresholdFor]가 정의하는 진입 조건이었다).
+///
+/// 임계값에는 하한이 있으므로([indoorOverlayFadeOutEndZoom]) 여기서 뺀 결과는
+/// 그 아래로 내려갈 수 있다. 야외에서만 쓰는 값이라 문제가 되지 않는다 —
+/// 이탈 판정은 이미 실내일 때만 의미가 있다.
+double exteriorViewZoomFor({
+  required double buildingWidthMeters,
+  required double viewportWidthPx,
+  required double latitude,
+}) =>
+    indoorEntryZoomThresholdFor(
+      buildingWidthMeters: buildingWidthMeters,
+      viewportWidthPx: viewportWidthPx,
+      latitude: latitude,
+    ) -
+    exteriorViewZoomMargin;
+
 /// 실내 MVT 소스 minzoom. 이 미만에서는 타일 요청 자체가 나가지 않는다.
 ///
 /// 백엔드 MVT는 요청 타일 경계로 지오메트리를 4096 유닛에 양자화하는데, 낮은
