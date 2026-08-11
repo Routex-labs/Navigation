@@ -1633,6 +1633,102 @@ void main() {
       expect(label, '3m · 도보 1분');
     });
   });
+
+  group('검색 결과의 건물 한 줄', () {
+    // 이 그룹이 지키는 증상: 야외에서 "더현대"를 쳐도 건물 위치로 지도가
+    // 움직이지 않던 문제. 지도를 옮기는 것은 상위 화면이지만, 그 콜백이
+    // 불리려면 **건물 한 줄이 실제로 그려지고 눌려야** 한다. 여기서 그 앞단을
+    // 못 박아, 다음에 같은 증상이 나면 원인이 이쪽인지 지도 쪽인지 바로 갈린다.
+    late DestinationRepository originalDestination;
+    late BuildingRepository originalBuilding;
+
+    const building = Building(
+      id: 'thehyundai-seoul',
+      name: '더현대 서울',
+      floors: ['6F', '1F', 'B1', 'B2'],
+    );
+
+    setUp(() {
+      originalDestination = destinationRepository;
+      originalBuilding = buildingRepository;
+      buildingRepository = _FakeBuildingRepository(buildings: const [building]);
+      destinationRepository = _FakeDestinationRepository(const []);
+    });
+
+    tearDown(() {
+      destinationRepository = originalDestination;
+      buildingRepository = originalBuilding;
+    });
+
+    Widget buildSubject({
+      required ValueChanged<Building> onBuildingPicked,
+      bool indoorContextActive = false,
+    }) => MaterialApp(
+      home: Scaffold(
+        body: SizedBox(
+          height: 400,
+          child: SearchPanel(
+            buildingId: 'thehyundai-seoul',
+            query: '더현대',
+            submitTick: 0,
+            onStorePicked: (_) {},
+            onBuildingPicked: onBuildingPicked,
+            onSuggestionPicked: (_) {},
+            onQueryPicked: (_) {},
+            indoorContextActive: indoorContextActive,
+          ),
+        ),
+      ),
+    );
+
+    Future<void> settleSearch(WidgetTester tester) async {
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('이름이 겹치는 건물이 있으면 한 줄로 뜬다', (WidgetTester tester) async {
+      await tester.pumpWidget(buildSubject(onBuildingPicked: (_) {}));
+      await settleSearch(tester);
+
+      expect(find.text('더현대 서울'), findsOneWidget);
+      expect(find.text('건물 · 4개 층'), findsOneWidget);
+    });
+
+    testWidgets('그 줄을 누르면 건물이 상위로 전달된다', (WidgetTester tester) async {
+      Building? picked;
+      await tester.pumpWidget(
+        buildSubject(onBuildingPicked: (b) => picked = b),
+      );
+      await settleSearch(tester);
+
+      await tester.tap(find.text('더현대 서울'));
+      await tester.pumpAndSettle();
+
+      expect(
+        picked?.id,
+        'thehyundai-seoul',
+        reason: '이 콜백이 안 불리면 지도를 옮길 기회 자체가 없다',
+      );
+    });
+
+    testWidgets('건물 안을 보고 있어도 그 줄은 그대로 뜬다', (WidgetTester tester) async {
+      // 실내에서 건물 이름을 다시 검색하는 경우다. 여기서 줄이 사라지면
+      // "실내에서는 건물로 못 돌아간다"가 된다.
+      Building? picked;
+      await tester.pumpWidget(
+        buildSubject(
+          onBuildingPicked: (b) => picked = b,
+          indoorContextActive: true,
+        ),
+      );
+      await settleSearch(tester);
+
+      expect(find.text('더현대 서울'), findsOneWidget);
+      await tester.tap(find.text('더현대 서울'));
+      await tester.pumpAndSettle();
+      expect(picked?.id, 'thehyundai-seoul');
+    });
+  });
 }
 
 PoiSearchResult _result({
@@ -1748,7 +1844,15 @@ StoreIndexEntry _entry(String name, String floor, {String? nodeId}) =>
 /// 나머지는 [noSuchMethod]로 열어 둬 인터페이스가 늘어도 이 테스트가 깨지지
 /// 않게 한다.
 class _FakeBuildingRepository implements BuildingRepository {
-  _FakeBuildingRepository({this.storeIndex, this.storeIndexFails = false});
+  _FakeBuildingRepository({
+    this.storeIndex,
+    this.storeIndexFails = false,
+    this.buildings = const [],
+  });
+
+  /// `getAllBuildings()`가 돌려줄 목록. 검색 패널은 여기서 질의와 이름이
+  /// 겹치는 건물을 찾아 결과 맨 위에 건물 한 줄을 세운다.
+  final List<Building> buildings;
 
   final List<StoreIndexEntry>? storeIndex;
 
@@ -1756,7 +1860,7 @@ class _FakeBuildingRepository implements BuildingRepository {
   final bool storeIndexFails;
 
   @override
-  Future<List<Building>> getAllBuildings() async => const [];
+  Future<List<Building>> getAllBuildings() async => buildings;
 
   /// 원본을 몇 번 받아갔는지. 야외에서 "받지 않는다"를 검증하려면 결과가 아니라
   /// 호출 자체를 세야 한다.

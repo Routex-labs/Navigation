@@ -124,7 +124,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
     double scrimOpacity,
   ) {
     if (!mounted) return;
-    if (_floorTransition == banner && _floorScrimOpacity == scrimOpacity) return;
+    if (_floorTransition == banner && _floorScrimOpacity == scrimOpacity) {
+      return;
+    }
     if (banner != null && _searchActive) {
       _closeSearch();
     }
@@ -170,7 +172,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
     _onCategoryChipTapped(CategorySelection(category: category));
   }
 
-  ({String title, String subtitle})? _placeInfo;
   bool _outdoorRouteVisible = false;
 
   /// 사용자가 고른 목적지로 안내 중인지. true면 지도 위 chrome(검색창·카테고리
@@ -225,12 +226,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
   FloorTransitionUiState? _floorTransition;
   double _floorScrimOpacity = 0;
 
-  // 지도 위에 얹은 공용 오버레이(검색창·저장한 장소 pill·하단 홈/실내 바)의
-  // 영역을 IndoorMapBody가 map click 처리에서 제외할 수 있게 넘겨줄 key들.
+  // 지도 위에 얹은 공용 오버레이(검색창·카테고리 줄·하단 바)의 영역을
+  // IndoorMapBody가 map click 처리에서 제외할 수 있게 넘겨줄 key들.
   // MapLibre PlatformView가 gesture arena를 우회해서 오버레이 탭이 뒤의 매장
   // 까지 새어들어가는 문제를 여기서 함께 막는다.
   final _topBarKey = GlobalKey();
-  final _favoritesPillKey = GlobalKey();
   final _categoryRowKey = GlobalKey();
   final _bottomBarKey = GlobalKey();
   final _searchPanelKey = GlobalKey();
@@ -599,12 +599,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   void _onSearchBuildingPicked(Building building) {
     _closeSearch();
-    setState(() {
-      _placeInfo = (
-        title: building.name,
-        subtitle: '${building.floors.length}개 층',
-      );
-    });
+    // 카드만 띄우고 지도를 그대로 두면 사용자는 자기가 고른 건물이 화면 어디에
+    // 있는지 알 수 없다 — 이름만 적힌 카드가 뜰 뿐 지도는 방금 보던 자리 그대로다.
+    // 매장을 골랐을 때 [_showStoreInfo]가 카메라를 옮기는 것과 같은 규칙이다.
+    unawaited(
+      _outdoorKey.currentState?.focusBuilding(building) ?? Future.value(),
+    );
   }
 
   /// 매장 정보 시트를 띄운다. 검색 결과를 탭했을 때와 지도 위 매장 폴리곤을
@@ -633,6 +633,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
         match,
         bottomSheetFraction: kPlaceDetailSheetInitialSize,
         keepZoom: keepZoom,
+        // 검색·목록에서 고른 매장은 건물 밖에서 골랐어도 보여 준다. 지도에서
+        // 직접 누른 매장은 이미 건물 안이라 이 값과 무관하다.
+        enterBuildingIfNeeded: true,
       );
       if (!mounted) return false;
     }
@@ -942,8 +945,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
       setState(() {
         _routeDraftDestination = result.destination ?? _routeDraftDestination;
         _mapPickTarget = DirectionsMapPickTarget.origin;
-        // 안내 카드와 자리가 겹치므로 장소 카드는 접는다.
-        _placeInfo = null;
       });
       return;
     }
@@ -959,7 +960,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
       // 확정하는 순간 [_onMapStoreTap]이 덮어쓴다.
       setState(() {
         _mapPickTarget = DirectionsMapPickTarget.destination;
-        _placeInfo = null;
       });
       return;
     }
@@ -1392,7 +1392,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final placeInfo = _placeInfo;
     final routeVisible = _outdoorRouteVisible;
     // 시트였을 때는 뒤로가기가 시트만 닫았다. 패널로 바뀌었다고 뒤로가기가
     // 앱을 종료해 버리면 안 되므로, 검색 중에는 pop을 가로채 검색만 닫는다.
@@ -1401,15 +1400,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _closeSearch();
       },
-      child: _buildShell(context, placeInfo, routeVisible),
+      child: _buildShell(context, routeVisible),
     );
   }
 
-  Widget _buildShell(
-    BuildContext context,
-    ({String title, String subtitle})? placeInfo,
-    bool routeVisible,
-  ) {
+  Widget _buildShell(BuildContext context, bool routeVisible) {
     return Scaffold(
       // 상단 검색창(MapTopBar)에 포커스가 들어가 소프트키보드가 올라올 때
       // Scaffold body가 리사이즈되면 그 안의 MapLibre PlatformView(지도)도
@@ -1465,7 +1460,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
             // 실내 오버레이가 닫히거나 그 자리에 PDR 앵커가 찍힌다.
             outerOverlayKeys: [
               _topBarKey,
-              _favoritesPillKey,
               _categoryRowKey,
               _searchPanelKey,
               _bottomBarKey,
@@ -1638,10 +1632,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
                           ? _lockMaps(_mapLockOverlayTouch)
                           : _unlockMaps(_mapLockOverlayTouch),
                       children: [
-                        _FavoritesPill(
-                          key: _favoritesPillKey,
-                          onTap: _openFavorites,
-                        ),
+                        // "장소"(저장한 장소) pill은 여기서 뺐다. 지도 위가 아니라
+                        // 화면 맨 아래 홈/장소 내비게이션으로 갈 자리다. 진입점이
+                        // 사라지는 것은 아니다 — 햄버거 메뉴의 "저장한 장소"가
+                        // 같은 시트를 연다([_openFavorites]).
+                        //
                         // 카테고리 필터는 **건물 안을 보고 있을 때만**
                         // 노출한다. 기준은
                         // [_indoorContextActive]다 — 야외 탭이어도 건물을
@@ -1655,7 +1650,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
                         // 아직 들어가지도 않은 건물의 카테고리를 누르게 되고,
                         // 강조는 도면 위에 그려지므로 결과가 보이지 않는다.
                         if (_indoorContextActive) ...[
-                          const SizedBox(width: 8),
                           _CategoryChipsRow(
                             entriesFuture: _categoryEntriesFuture,
                             selection: _categorySelection,
@@ -1683,15 +1677,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
                           ? _routeDraftDestination?.title
                           : (_selectedOrigin?.title ?? '현재 위치'),
                       onCancel: _stopPickingOnMap,
-                    ),
-                  )
-                else if (placeInfo != null && !_searchActive)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, _overlayGap, 12, 0),
-                    child: _PlaceInfoCard(
-                      title: placeInfo.title,
-                      subtitle: placeInfo.subtitle,
-                      onClose: () => setState(() => _placeInfo = null),
                     ),
                   ),
               ],
@@ -1852,52 +1837,7 @@ class _MapOverlayScrollRowState extends State<_MapOverlayScrollRow> {
   }
 }
 
-/// 검색창 바로 아래에 뜨는 작은 "장소" 칩. 저장해둔 매장 리스트로 가는
-/// 지름길이다. 검색과 시각적으로 분리되도록 흰 카드 톤을 유지한다.
-class _FavoritesPill extends StatelessWidget {
-  const _FavoritesPill({super.key, required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      // 지도에 붙은 조작 줄이다. 그림자를 줄이고 경계는 hairline이 맡는다
-      // (AppElevation.onMap).
-      elevation: AppElevation.onMap,
-      shadowColor: Colors.black.withValues(alpha: 0.12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: const BorderSide(color: AppColors.hairline),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.bookmark_outline, size: 16, color: AppColors.primary),
-              SizedBox(width: 6),
-              Text(
-                '장소',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.text,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 검색창 바로 아래 저장한 장소 pill 옆에 붙는 카테고리 chip 열.
+/// 검색창 바로 아래에 붙는 카테고리 chip 열.
 /// 건물에 실제 존재하는 대분류만 골라 각각 하나의 chip으로 노출한다.
 /// chip 탭 → 해당 카테고리 매장 목록 시트가 바로 열린다 (예전에는 카테고리
 /// pill → 카테고리 목록 시트 → 매장 목록 시트로 두 단계였음).
@@ -2138,61 +2078,6 @@ class _MapPickHintCard extends StatelessWidget {
             IconButton(
               tooltip: '지도에서 선택 취소',
               onPressed: onCancel,
-              icon: const Icon(Icons.close, size: 18, color: AppColors.muted),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PlaceInfoCard extends StatelessWidget {
-  const _PlaceInfoCard({
-    required this.title,
-    required this.subtitle,
-    required this.onClose,
-  });
-
-  final String title;
-  final String subtitle;
-  final VoidCallback onClose;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-        child: Row(
-          children: [
-            const Icon(Icons.info_outline, color: AppColors.primary, size: 20),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.muted,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            IconButton(
-              onPressed: onClose,
               icon: const Icon(Icons.close, size: 18, color: AppColors.muted),
             ),
           ],

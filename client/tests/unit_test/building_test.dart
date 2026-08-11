@@ -75,4 +75,47 @@ void main() {
 
     expect(building.footprintWgs84, isNull);
   });
+  group('목록 응답과 단건 응답은 같지 않다', () {
+    // 이 그룹이 지키는 증상: 검색에서 "더현대 서울"을 골라도 지도가 꿈쩍 않던
+    // 문제. 검색 결과의 건물 한 줄은 **목록**(`/buildings`)에서 나오는데 거기엔
+    // 외곽선도 입구도 없어서, 그 Building을 그대로 들고 카메라를 옮기려 하면
+    // 옮길 좌표가 하나도 없다. 화면에서는 그냥 "안 움직인다"로만 보여 원인을
+    // 찾는 데 오래 걸렸다.
+    //
+    // 그래서 목록에서 온 건물을 쓰는 쪽은 반드시 단건으로 한 번 더 받아야 한다
+    // (`OutdoorMapBodyState.focusBuilding`). 이 테스트는 그 전제 — 두 응답의
+    // 모양이 실제로 다르다는 것 — 을 못 박는다.
+
+    test('목록 응답에는 외곽선과 입구가 없다', () {
+      // 실제 `/buildings` 응답 키를 그대로 옮긴 것이다.
+      final fromList = Building.fromJson({
+        'id': 'thehyundai-seoul',
+        'name': '더현대 서울',
+        'floors': ['6F', '1F', 'B1', 'B2'],
+        'default_floor': '1F',
+      });
+
+      expect(fromList.footprintWgs84, isNull);
+      expect(fromList.entrance, isNull);
+    });
+
+    test('단건 응답에는 외곽선이 있다', () {
+      final fromDetail = Building.fromJson({
+        'id': 'thehyundai-seoul',
+        'name': '더현대 서울',
+        'floors': ['6F', '1F', 'B1', 'B2'],
+        'default_floor': '1F',
+        'footprint_wgs84': [
+          {'lat': 37.5259, 'lng': 126.9284},
+          {'lat': 37.5263, 'lng': 126.9284},
+          {'lat': 37.5263, 'lng': 126.9291},
+          {'lat': 37.5259, 'lng': 126.9291},
+        ],
+        'tile_revision': '42bb37f872d3eaf4',
+      });
+
+      expect(fromDetail.footprintWgs84, hasLength(4));
+      expect(fromDetail.tileRevision, isNotNull);
+    });
+  });
 }

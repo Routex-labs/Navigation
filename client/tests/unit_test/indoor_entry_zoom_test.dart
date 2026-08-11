@@ -406,4 +406,65 @@ void main() {
       );
     });
   });
+  group('건물 바깥 보기 — 검색만 했는데 실내가 열리면 안 된다', () {
+    // 이 그룹이 지키는 증상: 검색에서 "더현대 서울"을 고르자마자 도면이 열리던
+    // 문제. 카메라를 건물 외곽선에 꼭 맞췄는데, 그 배율이 곧 진입 조건이었다
+    // (진입 임계값의 정의가 "건물이 화면에 담기는 zoom"이다). 검색은 저 건물이
+    // 어디 있는지를 묻는 조작이고, 들어가는 것은 건물을 탭하는 별도 조작이다.
+
+    test('바깥 보기 배율에서는 진입이 발화하지 않는다 — 모든 층·화면 폭에서', () {
+      for (final entry in _floorScreenExtentsM.entries) {
+        final width = entry.value.width;
+        for (var px = 280.0; px <= 2400.0; px += 20) {
+          final entryZoom = indoorEntryZoomThresholdFor(
+            buildingWidthMeters: width,
+            viewportWidthPx: px,
+            latitude: referenceLatitude,
+          );
+          final exterior = exteriorViewZoomFor(
+            buildingWidthMeters: width,
+            viewportWidthPx: px,
+            latitude: referenceLatitude,
+          );
+          expect(
+            indoorEntryTransitionForZoom(
+              exterior,
+              // 건물을 화면에 놓고 보는 중이니 근접 게이트는 당연히 통과한다.
+              // 그 게이트에 기대면 안 된다는 것이 이 테스트의 요점이다.
+              buildingNearby: true,
+              entryZoom: entryZoom,
+            ),
+            isNot(IndoorEntryTransition.enter),
+            reason:
+                '${entry.key}(폭 ${width.toStringAsFixed(0)} m)를 ${px.toStringAsFixed(0)} px '
+                '화면에서 바깥 보기로 잡으면 zoom ${exterior.toStringAsFixed(2)}인데 '
+                '진입 임계값이 ${entryZoom.toStringAsFixed(2)}라 그대로 실내로 들어간다',
+          );
+        }
+      }
+    });
+
+    test('그렇다고 건물이 안 보일 만큼 물러서지는 않는다', () {
+      // 너무 많이 빼면 "여기 있다"가 아니라 "어딘가에 있다"가 된다. 건물이
+      // 화면 폭의 절반 이상은 차지해야 한다.
+      const width = 179.3; // 1F 정북 정렬 폭
+      final exterior = exteriorViewZoomFor(
+        buildingWidthMeters: width,
+        viewportWidthPx: referenceViewportWidthPx,
+        latitude: referenceLatitude,
+      );
+      final visible = visibleWidthMeters(
+        zoom: exterior,
+        availablePx: referenceViewportWidthPx,
+        latitude: referenceLatitude,
+      );
+      expect(
+        width / visible,
+        greaterThan(0.5),
+        reason:
+            '건물이 화면 폭의 ${(width / visible * 100).toStringAsFixed(0)}%밖에 '
+            '차지하지 않는다 — 무엇을 고른 것인지 알아보기 어렵다',
+      );
+    });
+  });
 }

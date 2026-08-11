@@ -2122,7 +2122,19 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _notifyRouteStateIfChanged();
     final isVisible = route != null;
     if (!wasVisible && isVisible) {
-      _fitCameraToRoute(route);
+      // **자동으로 생긴 경로는 카메라를 가져가지 않는다.**
+      //
+      // 야외에서 GPS가 잡히면 사용자가 부탁한 적 없어도 건물 입구까지의 걷기
+      // 경로를 계산한다([_updateRoute]의 `_userDestination ?? _entrance`).
+      // 그 경로가 처음 생기는 순간 여기서 전체를 화면에 맞추면, 사용자가 지금
+      // 무엇을 보고 있든 **내 위치부터 건물까지**가 다 들어오는 배율로 튕겨
+      // 나간다. 멀리 있을수록 심해서, 검색으로 건물을 찾아 막 확대한 화면이
+      // 도시 전체 축척으로 바뀌고 정작 건물은 점이 된다 — "건물 위치가 안
+      // 나온다"의 정체가 이것이다.
+      //
+      // 사용자가 직접 고른 목적지([_userDestination])면 그대로 맞춘다. 그건
+      // "이 경로를 보여 달라"는 요청이라 화면을 가져가는 것이 맞다.
+      if (_userDestination != null) _fitCameraToRoute(route);
     }
   }
 
@@ -3416,7 +3428,19 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (!_isInsideBuilding(point)) {
       // 실내 모드에서 건물 밖을 탭한 것 — 사용자가 야외로 나가겠다는 뜻이다.
       // 축소해서 나가는 것보다 훨씬 직관적인 탈출 경로다.
-      if (_indoorEntered) _exitIndoorByOutsideTap();
+      //
+      // 단, **외곽선 바로 바깥은 이탈로 치지 않는다**
+      // ([isTapOutsideBuildingForExit]). 벽에 붙은 매장을 누르다 손가락이 선을
+      // 몇 미터 넘기는 일은 흔한데, 그때마다 실내가 닫히면 매장을 누르려던
+      // 사용자가 건물에서 쫓겨난다. 여기서 그냥 흡수해 아무 일도 일어나지 않게
+      // 두는 편이, 되돌리는 데 건물을 다시 찾아 탭해야 하는 것보다 낫다.
+      if (_indoorEntered &&
+          isTapOutsideBuildingForExit(
+            point: point,
+            footprint: _buildingFootprint,
+          )) {
+        _exitIndoorByOutsideTap();
+      }
       return;
     }
 
@@ -3427,24 +3451,38 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 반짝임은 장식이라 컨트롤러가 아직 없으면 건너뛴다. 진입을 컨트롤러 유무에
     // 걸어 두면(예전 `if (controller == null) return;`) 스타일 로드 전에 건물을
     // 탭한 사용자에게 아무 반응도 없다.
-    final controller = _mapController;
-    if (controller != null) {
-      // fillColor를 매번 함께 넘긴다 — 빼면 검정으로 되돌아간다
-      // (indoor_overlay_layers.dart 상단 주석 참고).
-      await controller.setLayerProperties(
-        _buildingFillLayerId,
-        buildingFillProps(_buildingFillOpacityPressed),
-      );
-      await Future<void>.delayed(
-        const Duration(milliseconds: _buildingPressedHoldMs),
-      );
-      if (!mounted) return;
-      await controller.setLayerProperties(
-        _buildingFillLayerId,
-        buildingFillProps(_buildingFillOpacityDefault),
-      );
-    }
+    await _flashBuildingFill();
+    if (!mounted) return;
     _triggerIndoorEntry(ignoreZoomArming: true);
+  }
+
+  /// 건물 폴리곤을 잠깐 진하게 칠했다 되돌린다 — "이 건물을 말하는 것"이라는
+  /// 시각 피드백.
+  ///
+  /// 건물을 탭했을 때와 검색에서 골랐을 때가 **같은 신호**를 써야 한다. 탭에만
+  /// 있으면, 검색으로 고른 사용자는 카메라만 슥 움직이고 아무것도 강조되지 않는
+  /// 화면을 본다 — 옅은 파랑(0.15) 폴리곤은 배경 지도 위에서 눈에 잘 띄지 않아
+  /// "골랐다"는 사실이 화면에 드러나지 않는다.
+  ///
+  /// 장식이라 컨트롤러가 아직 없으면 조용히 건너뛴다. 이 반짝임에 진입이나
+  /// 카메라 이동을 걸어 두면 안 된다.
+  Future<void> _flashBuildingFill() async {
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    // fillColor를 매번 함께 넘긴다 — 빼면 검정으로 되돌아간다
+    // (indoor_overlay_layers.dart 상단 주석 참고).
+    await controller.setLayerProperties(
+      _buildingFillLayerId,
+      buildingFillProps(_buildingFillOpacityPressed),
+    );
+    await Future<void>.delayed(
+      const Duration(milliseconds: _buildingPressedHoldMs),
+    );
+    if (!mounted) return;
+    await controller.setLayerProperties(
+      _buildingFillLayerId,
+      buildingFillProps(_buildingFillOpacityDefault),
+    );
   }
 
   /// 실내 진입 트리거 — 건물 탭·줌 임계값 초과·GPS 근접 감지 중 하나로 호출.
@@ -4753,14 +4791,48 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 다룰 수 있다 — 다만 **층은 옮기지 않는다**. 이 화면의 층 전환은 실내 MVT
   /// 소스를 통째로 갈아 끼우는 작업이라, 목록을 훑는 중에 자동으로 일어나면
   /// 사용자가 보고 있던 층이 소리 없이 바뀐다. 호출부가 지금 층 매장만 넘긴다.
+  /// [enterBuildingIfNeeded]면 건물 밖에서 골랐어도 **건물에 들어가고 층까지
+  /// 맞춘 뒤** 그 매장을 보여 준다.
+  ///
+  /// 검색 결과에서 매장을 고르는 것은 "이 매장을 보여 달라"는 명시적 조작인데,
+  /// 예전에는 실내가 아니거나 다른 층이면 여기서 조용히 빠져나갔다. 그래서 멀리
+  /// 있는 사용자가 매장을 눌러도 아무 일도 일어나지 않았다 — 시트만 올라오고
+  /// 지도는 도시 축척 그대로였다.
+  ///
+  /// 지도 위 카테고리 목록에서 오는 호출은 이 값을 주지 않는다. 그쪽 시트는
+  /// **지금 층 매장만** 올려 주므로, 층을 갈아타면 시트 머리글이 말하는 층과
+  /// 지도가 어긋난다.
   Future<void> focusStore(
     PoiSearchResult store, {
     double bottomSheetFraction = 0,
     double topInsetPx = 0,
     bool keepZoom = false,
+    bool enterBuildingIfNeeded = false,
   }) async {
-    if (!_indoorEntered) return;
-    if (store.floor.isNotEmpty && store.floor != _activeFloor) return;
+    // 밖에서 들어온 경우 배율을 유지하면 도시 축척 그대로 매장 위에 서게 된다.
+    // 그때는 keepZoom 요청을 무시하고 매장이 보이는 배율까지 확대한다.
+    final fromOutside = !_indoorEntered;
+    if (fromOutside && !enterBuildingIfNeeded) return;
+
+    // **여기서 실내 모드를 직접 켜지 않는다.** 켜면 [_indoorContextActive]가
+    // 함께 참이 되고, 그 값이 길찾기의 출발지 규칙을 통째로 바꾼다 — 야외
+    // GPS 대신 PDR 앵커를 요구하게 되어, 멀리서 매장을 고른 사용자가 "도착"을
+    // 눌렀을 때 "출발 위치를 먼저 지정해주세요"로 막힌다. 검색에서 매장을 고른
+    // 것은 위치를 지정한 것이 아니다.
+    //
+    // 대신 카메라만 그 매장으로 확대한다. 진입 판정은 사용자가 직접 확대했을
+    // 때와 **같은 경로**([_handleCameraIdle])가 맡는다 — 그 배율에 도달하면
+    // 알아서 켜지고, 판정 근거(건물 근접·줌 임계값)도 한 곳에만 남는다.
+    if (store.floor.isNotEmpty && store.floor != _activeFloor) {
+      if (!enterBuildingIfNeeded) return;
+      // 층 교체는 실내 모드와 무관하다 — 도면 소스만 갈아 끼우므로, 카메라가
+      // 도착했을 때 그 매장이 있는 층이 그려져 있게 된다.
+      await _switchOverlayFloor(store.floor);
+      if (!mounted) return;
+      // 층 전환이 실패했으면(그 층 그래프·도면을 못 받음) 다른 층 도면 위에
+      // 엉뚱한 자리를 강조하게 되므로 여기서 멈춘다.
+      if (store.floor != _activeFloor) return;
+    }
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
 
@@ -4780,7 +4852,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           // 배율 규칙은 실내 도면과 한 함수를 공유한다(focusZoomFor).
           zoom: focusZoomFor(
             currentZoom: currentZoom,
-            keepZoom: keepZoom,
+            keepZoom: keepZoom && !fromOutside,
             storeFocusZoom: _storeFocusZoom,
           ),
           bearing: camera?.bearing ?? 0,
@@ -4798,6 +4870,90 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 목록에서 고른 매장을 볼 때의 최소 확대. 실내 화면과 같은 값이라야 두
   /// 화면을 오가도 같은 크기로 보인다.
   static const _storeFocusZoom = 19.0;
+
+  /// 검색 결과에서 고른 **건물**의 바깥 모습이 보이도록 카메라를 옮긴다.
+  ///
+  /// 매장은 [focusStore]가 한 점으로 끌어오지만 건물은 **면**이다. 입구 좌표
+  /// 하나로만 옮기면 더현대 서울처럼 큰 건물은 중심만 맞은 채 화면 밖으로
+  /// 삐져나가, 정작 "무엇을 고른 것인지"가 안 보인다.
+  ///
+  /// **여기서 실내로 들어가지는 않는다.** 이게 이 함수의 핵심 제약이다. 한때
+  /// 외곽선을 화면에 꼭 맞췄는데(`newLatLngBounds`), 그 배율이 곧 실내 진입
+  /// 임계값이라([_entryZoomThreshold]는 "건물이 화면을 채우는 zoom"이다) 검색 결과를
+  /// 누르자마자 도면이 열렸다. 검색은 "저 건물이 어디 있는지"를 묻는 조작이지
+  /// "들어가겠다"가 아니다. 들어가는 것은 건물을 **탭**하는 별도 조작이 맡는다
+  /// ([_handleMapClick] 끝의 [_triggerIndoorEntry]).
+  ///
+  /// 그래서 배율은 [exteriorViewZoomFor]가 정한다 — 진입 판정과 **같은 파일**에
+  /// 두어 두 값이 어긋날 수 없게 묶어 둔 함수다.
+  ///
+  /// 옮길 자리가 없으면(외곽선도 입구도 없는 건물) 아무 일도 하지 않는다.
+  Future<void> focusBuilding(Building building) async {
+    final controller = _mapController;
+    if (controller == null || !_styleReady) {
+      // 조용히 실패하면 "검색에서 골랐는데 지도가 안 움직인다"의 원인을 화면
+      // 밖에서 찾을 수 없다. 이 경로는 스타일 로드 전에 검색을 마친 경우에만
+      // 지나므로 로그가 쌓이지도 않는다.
+      debugPrint(
+        '[outdoor overlay] focusBuilding skipped: '
+        'controller=${controller != null} styleReady=$_styleReady',
+      );
+      return;
+    }
+
+    // **목록 응답으로 온 건물은 외곽선이 없다.** `/buildings`는 id·이름·층만
+    // 내려주고 `footprint_wgs84`·`entrance`는 단건(`/buildings/{id}`)에만 있다
+    // (같은 이유로 [_fetchAllBuildings]가 목록으로 단건 캐시를 채우지 않는다).
+    // 검색 결과의 건물 한 줄은 그 목록에서 나오므로, 여기 그대로 쓰면 옮길
+    // 좌표가 하나도 없어 아무 일도 일어나지 않는다 — 화면에서는 "눌렀는데
+    // 지도가 안 움직인다"로만 보인다.
+    final resolved = building.id == _building?.id
+        // 지금 지도에 올라온 건물이면 이미 단건으로 받아 둔 것을 쓴다.
+        ? _building!
+        : (await buildingRepository.getBuilding(building.id) ?? building);
+    if (!mounted) return;
+
+    final footprint = resolved.footprintWgs84;
+    final center = footprint == null || footprint.length < 3
+        ? null
+        : _buildingCenter(footprint);
+    if (footprint != null && center != null) {
+      final width = polygonWidthMeters(footprint);
+      // 폭이 0이면 zoom 계산이 발산한다. 그런 외곽선은 점이나 마찬가지라
+      // 아래 입구 폴백으로 흘려보낸다.
+      if (width > 0) {
+        final zoom = exteriorViewZoomFor(
+          buildingWidthMeters: width,
+          viewportWidthPx: MediaQuery.sizeOf(context).width,
+          latitude: center.latitude,
+        );
+        debugPrint(
+          '[outdoor overlay] focusBuilding ${building.id} '
+          'zoom=${zoom.toStringAsFixed(2)} width=${width.toStringAsFixed(0)}m',
+        );
+        await controller.animateCamera(
+          CameraUpdate.newLatLngZoom(_toGl(center), zoom),
+        );
+        // 카메라만 움직이면 "뭔가 지나갔다"로 끝난다. 건물을 탭했을 때와 같은
+        // 반짝임을 줘서 어느 건물을 말하는 것인지 화면에 못 박는다.
+        await _flashBuildingFill();
+        return;
+      }
+    }
+
+    final entrance = resolved.entrance;
+    if (entrance == null) {
+      // 옮길 좌표가 하나도 없다. 조용히 끝내면 "눌렀는데 아무 일도 안 일어난다"의
+      // 원인을 화면 밖에서 찾을 수 없다 — 실제로 이 침묵 때문에 목록 응답에
+      // 외곽선이 없다는 사실을 한참 뒤에야 찾았다.
+      debugPrint(
+        '[outdoor overlay] focusBuilding ${building.id}: 좌표 없음 '
+        '(footprint=${footprint?.length ?? 0}pts, entrance=null)',
+      );
+      return;
+    }
+    await controller.animateCamera(CameraUpdate.newLatLng(_toGl(entrance)));
+  }
 
   /// PDR 세션이 [floor]를 가리키게 맞춘다. 이어서 앵커를 찍어도 되면 true.
   ///
