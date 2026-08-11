@@ -467,4 +467,111 @@ void main() {
       );
     });
   });
+  group('돌려 세운 상자 맞추기', () {
+    // 세로로 세운 건물을 화면에 담을 때는 가로·세로 두 제약을 **동시에** 지켜야
+    // 한다. 한쪽만 보면 나머지 축이 잘린 채로 확대된다.
+    const shortM = 148.0; // 짧은 축(화면 가로)
+    const longM = 295.0; // 긴 축(화면 세로)
+
+    test('두 축 모두 화면 안에 들어온다', () {
+      // 세로로 긴 폰부터 가로로 넓은 태블릿까지 훑는다.
+      for (final (wPx, hPx) in [
+        (360.0, 640.0),
+        (480.0, 1029.0),
+        (412.0, 915.0),
+        (834.0, 1112.0),
+        (1280.0, 800.0),
+      ]) {
+        final zoom = zoomToFitRotatedBox(
+          widthMeters: shortM,
+          heightMeters: longM,
+          viewportWidthPx: wPx,
+          viewportHeightPx: hPx,
+          latitude: referenceLatitude,
+        );
+        final visibleW = visibleWidthMeters(
+          zoom: zoom,
+          availablePx: wPx,
+          latitude: referenceLatitude,
+        );
+        final visibleH = visibleWidthMeters(
+          zoom: zoom,
+          availablePx: hPx,
+          latitude: referenceLatitude,
+        );
+        expect(
+          visibleW,
+          greaterThan(shortM - 0.001),
+          reason:
+              '${wPx.toStringAsFixed(0)}x${hPx.toStringAsFixed(0)}에서 가로가 잘린다',
+        );
+        expect(
+          visibleH,
+          greaterThan(longM - 0.001),
+          reason:
+              '${wPx.toStringAsFixed(0)}x${hPx.toStringAsFixed(0)}에서 세로가 잘린다',
+        );
+      }
+    });
+
+    test('가로로 넓은 화면에서는 세로가 제약이 된다', () {
+      // 태블릿 가로 모드처럼 폭이 넉넉하면 긴 축이 먼저 화면을 채운다.
+      final zoom = zoomToFitRotatedBox(
+        widthMeters: shortM,
+        heightMeters: longM,
+        viewportWidthPx: 1280,
+        viewportHeightPx: 800,
+        latitude: referenceLatitude,
+      );
+      final byHeightOnly = zoomToFitWidth(
+        widthMeters: longM,
+        availablePx: 800,
+        latitude: referenceLatitude,
+      );
+      expect(zoom, closeTo(byHeightOnly, 1e-9));
+    });
+
+    test('세로로 긴 폰에서는 가로가 제약이 된다', () {
+      final zoom = zoomToFitRotatedBox(
+        widthMeters: shortM,
+        heightMeters: longM,
+        viewportWidthPx: 480,
+        viewportHeightPx: 1029,
+        latitude: referenceLatitude,
+      );
+      final byWidthOnly = zoomToFitWidth(
+        widthMeters: shortM,
+        availablePx: 480,
+        latitude: referenceLatitude,
+      );
+      expect(zoom, closeTo(byWidthOnly, 1e-9));
+    });
+
+    test('세로로 세우면 정북 정렬보다 더 확대할 수 있다', () {
+      // 이 기능의 목적 자체다 — 같은 화면에서 도면이 더 크게 들어온다.
+      // 정북 정렬 폭은 53도 돌아앉은 148x295 건물의 축 정렬 상자 폭이다.
+      final northAlignedWidth =
+          shortM * math.cos(53 * math.pi / 180).abs() +
+          longM * math.sin(53 * math.pi / 180).abs();
+      final upright = zoomToFitRotatedBox(
+        widthMeters: shortM,
+        heightMeters: longM,
+        viewportWidthPx: 480,
+        viewportHeightPx: 1029,
+        latitude: referenceLatitude,
+      );
+      final northUp = zoomToFitWidth(
+        widthMeters: northAlignedWidth,
+        availablePx: 480,
+        latitude: referenceLatitude,
+      );
+      expect(
+        upright,
+        greaterThan(northUp),
+        reason:
+            '세로로 세웠는데도 정북 정렬($northUp)보다 확대가 안 된다면 '
+            '돌릴 이유가 없다',
+      );
+    });
+  });
 }

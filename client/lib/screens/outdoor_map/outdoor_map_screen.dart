@@ -57,6 +57,7 @@ import '../../widgets/map_overlay_tap_guard.dart';
 import '../../widgets/status_badge.dart';
 import 'floor_outline.dart';
 import 'indoor_entry_gps.dart';
+import 'building_orientation.dart';
 import 'indoor_entry_proximity.dart';
 import 'indoor_entry_zoom.dart';
 import 'indoor_overlay_layers.dart';
@@ -252,6 +253,39 @@ const _buildingFillOpacityPressed = 0.45;
 // 탭 후 오버레이 페이드인이 완료되는 시간 감각. 시각 피드백이 잠깐 이어져야
 // "인식됐다" 느낌을 준다.
 const _buildingPressedHoldMs = 220;
+
+/// 건물을 탭해 실내로 들어갈 때 카메라가 확대되는 시간.
+///
+/// 너무 빠르면(≤400ms) 한 번에 갈아 낀 것과 구분이 안 되고, 너무 느리면
+/// (≥1.5s) 탭에 대한 반응이 굼떠 두 번 누르게 된다. 900ms면 확대되는 과정이
+/// 눈에 남으면서도 기다린다는 느낌은 들지 않는다.
+///
+/// 반짝임([_buildingPressedHoldMs] 220ms)이 끝난 **뒤에** 시작하므로, 탭부터
+/// 도면이 자리 잡기까지는 약 1.1초다.
+const _indoorZoomInDuration = Duration(milliseconds: 900);
+
+/// 층을 갈아탈 때 카메라가 새 층 외곽선에 다시 맞춰지는 시간.
+///
+/// 진입([_indoorZoomInDuration])보다 짧다. 진입은 "밖에서 안으로 들어간다"는
+/// 큰 장면 전환이라 과정을 보여 줘야 하지만, 층 전환은 이미 같은 건물 안에서
+/// 도면만 갈아 끼우는 것이라 같은 900ms를 쓰면 층을 훑을 때마다 지도가 느릿하게
+/// 따라와 답답하다.
+const _floorSwitchZoomDuration = Duration(milliseconds: 500);
+
+/// 도면을 화면에 맞출 때 실제로 채우는 비율.
+///
+/// 1.0이면 외곽선이 화면 가장자리에 딱 붙는다 — 도면이 답답해 보이고 가장자리
+/// 매장 라벨이 잘린다. 0.86이면 사방에 7%씩 남아, 건물이 어디서 끝나는지가
+/// 보이면서도 도면은 충분히 크다.
+const _floorFitFillRatio = 0.86;
+
+/// 도면을 맞출 때 화면 위·아래에서 비워 두는 chrome 높이(논리 px).
+///
+/// 이걸 빼지 않으면 도면 한가운데가 화면 한가운데에 오는데, 위쪽은 검색창과
+/// 카테고리 줄이 덮고 있어서 **도면 윗부분 매장이 칩에 가린다.** 아래 chrome이
+/// 위보다 얇으므로, 가려지지 않는 띠의 한가운데로 도면을 내려 놓아야 한다.
+const _floorFitTopChromePx = _placingHintTopPx;
+const _floorFitBottomChromePx = _mapShellBottomChromePx;
 
 // 실내 진입/이탈 임계값·오버레이 페이드 구간은 서로 얽혀 있어 한 곳에서만
 // 정의한다 — indoor_entry_zoom.dart 참고. 값 하나만 옮겨도 "도면이 다 보이기
@@ -1584,9 +1618,35 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
   }
 
+  /// 층 선택기에서 사용자가 직접 층을 골랐을 때.
+  ///
+  /// 층을 갈아 끼운 뒤 **그 층 외곽선에 카메라를 다시 맞춘다.** 층마다 크기가
+  /// 달라서(지상 약 180 x 190 m ↔ B3·B4 286 x 305 m) 이전 층에 맞춰 둔 배율이
+  /// 새 층에는 안 맞는다 — 지하로 내려가면 도면이 화면 밖으로 잘리고, 올라오면
+  /// 여백만 남는다.
+  ///
+  /// **자동 층 전환에는 붙이지 않는다.** 안내 중 층이 바뀌는 순간
+  /// ([_enqueueFloorTransition])에는 카메라가 사용자를 따라가야지 층 전체를
+  /// 담으려 물러서면 안 된다. 그래서 재정렬을 [_switchOverlayFloor] 안이 아니라
+  /// 이 사용자 조작 경로에만 둔다. (안내 중에는 층 선택기 자체가 접혀 있어
+  /// 이 경로로 들어올 수도 없다.)
+  Future<void> _onFloorChipSelected(String floor) async {
+    await _switchOverlayFloor(floor, recenterIfNeeded: false);
+    if (!mounted) return;
+    // 도면이 도착한 뒤라 [_activeFloorOutlineRing]이 새 층 외곽선을 준다
+    // (`_switchOverlayFloor`가 `_loadFloorGraph`까지 기다린다).
+    await _fitCameraToActiveFloor(duration: _floorSwitchZoomDuration);
+  }
+
   /// 층 chip으로 다른 층을 골랐을 때. 실내 MVT 오버레이 소스를 통째로 갈아
   /// 끼워 새 층 타일을 받아오게 하고, PDR 스냅용 층 그래프도 함께 갱신한다.
-  Future<void> _switchOverlayFloor(String floor) async {
+  /// [recenterIfNeeded]가 false면 마지막의 [_recenterOnBuildingIfNeeded]를
+  /// 건너뛴다. 호출자가 곧바로 카메라를 다시 맞출 때 쓴다 — 두 애니메이션이
+  /// 겹치면 지도가 한 번 움찔했다가 다시 움직인다.
+  Future<void> _switchOverlayFloor(
+    String floor, {
+    bool recenterIfNeeded = true,
+  }) async {
     if (floor == _activeFloor) return;
     final controller = _mapController;
     final building = _building;
@@ -1663,7 +1723,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 화면에 뜨게 한다. 이미 건물이 잘 보이는 상태에서 층만 바꾼 경우에는 카메라를
     // 건드리지 않는다 — 그 상황에서 강제로 재정렬하면 사용자의 view가 불필요하게
     // 튀어 조작감이 나빠진다.
-    await _recenterOnBuildingIfNeeded();
+    if (recenterIfNeeded) await _recenterOnBuildingIfNeeded();
   }
 
   /// 층 chip 탭·자동 실내 진입 뒤에 실내 오버레이를 보장 노출하기 위한 헬퍼.
@@ -3454,6 +3514,107 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await _flashBuildingFill();
     if (!mounted) return;
     _triggerIndoorEntry(ignoreZoomArming: true);
+    // 오버레이만 켜면 도면이 지금 배율 그대로 뜬다 — 바깥에서 건물을 눌러
+    // 들어온 경우 건물이 화면의 60% 남짓이라 "들어왔다"는 느낌이 안 난다.
+    // 카메라도 함께 도면이 화면을 채우는 자리까지 끌어온다.
+    if (_indoorEntered) unawaited(_fitCameraToActiveFloor());
+  }
+
+  /// 건물을 탭해 들어온 직후, 도면이 화면을 채우도록 카메라를 끌어온다.
+  ///
+  /// **한 번에 갈아 끼우지 않고 애니메이션으로 간다.** 배율이 즉시 튀면 지도가
+  /// 다른 장소로 순간이동한 것처럼 보여서, 사용자가 방금 누른 건물과 지금 보는
+  /// 도면이 같은 곳이라는 연결이 끊긴다. 확대되는 과정을 보여 주면 그 연결이
+  /// 눈으로 이어진다.
+  ///
+  /// **지도도 함께 돌린다.** 건물은 정북 기준 아무 방향으로나 앉아 있어서(더현대
+  /// 서울은 약 53도), 북쪽을 위로 둔 채 확대하면 도면이 화면에 비스듬히 누워
+  /// 들어온다. 세로로 긴 폰 화면에 누운 사각형을 담는 꼴이라 좌우가 남고 도면은
+  /// 그만큼 작아진다. 건물의 긴 축을 화면 세로에 맞추면 같은 배율에서 도면이
+  /// 훨씬 크게 들어오고, 폰을 든 방향과 건물 축도 나란해진다.
+  ///
+  /// 배율은 **돌려 세운 상자**를 화면에 맞춘 값이다([zoomToFitRotatedBox]).
+  /// 다만 진입 임계값보다 아래로는 내려가지 않게 잡는다 — 그 아래로 가면 도착한
+  /// 뒤 [_handleCameraIdle]이 이탈로 판정해 방금 연 도면이 도로 닫힌다.
+  /// 지금 보고 있는 **층 도면**이 화면을 채우도록 카메라를 맞춘다.
+  ///
+  /// 기준은 건물 외곽선이 아니라 **그 층의 외곽선**이다. 층마다 크기가 크게
+  /// 다르기 때문이다 — 더현대 서울은 지상층이 약 180 x 190 m인데 B3·B4는
+  /// 286 x 305 m다. 건물 외곽선 하나로 맞춰 두면 지상층에서는 여백이 남고
+  /// 지하로 내려가면 도면이 화면 밖으로 잘린다.
+  ///
+  /// 층 도면이 아직 안 왔으면 건물 외곽선으로 폴백한다 — 한 프레임 어긋난
+  /// 배율이 아무 데도 못 맞추는 것보다 낫다.
+  Future<void> _fitCameraToActiveFloor({
+    Duration duration = _indoorZoomInDuration,
+  }) async {
+    final controller = _mapController;
+    final footprint = _activeFloorOutlineRing() ?? _buildingFootprint;
+    if (controller == null || !_styleReady) return;
+    if (footprint == null || footprint.length < 3) return;
+    final center = _buildingCenter(footprint);
+    if (center == null) return;
+
+    final box = minAreaBoxFor(footprint);
+    final viewport = MediaQuery.sizeOf(context);
+    // 상자를 못 구하면(퇴화한 외곽선) 돌리지 않고 임계값까지만 간다.
+    if (box == null) {
+      await controller.animateCamera(
+        CameraUpdate.newLatLngZoom(_toGl(center), _entryZoomThreshold()),
+        duration: duration,
+      );
+      return;
+    }
+
+    final bearing = portraitBearingFor(
+      longAxisAzimuthDeg: box.longAxisAzimuthDeg,
+      currentBearing: controller.cameraPosition?.bearing,
+    );
+    // 위아래 chrome이 덮는 만큼을 뺀 **실제로 보이는 띠**에 맞춘다. 전체 높이로
+    // 맞추면 도면 윗부분이 카테고리 줄 뒤로 들어간다.
+    final bandHeightPx = math.max(
+      1.0,
+      viewport.height - _floorFitTopChromePx - _floorFitBottomChromePx,
+    );
+    final fitZoom = zoomToFitRotatedBox(
+      // 상자를 비율만큼 부풀려 맞추면 그만큼 사방에 여백이 남는다.
+      widthMeters: box.shortSideM / _floorFitFillRatio,
+      heightMeters: box.longSideM / _floorFitFillRatio,
+      viewportWidthPx: viewport.width,
+      viewportHeightPx: bandHeightPx,
+      latitude: center.latitude,
+    );
+    // 하한은 **이탈 임계값** 기준이다. 예전에는 진입 임계값까지 끌어올렸는데,
+    // 그러면 위에서 준 여백이 도로 먹혔다. 실내 상태는 이탈 임계값 위이기만
+    // 하면 유지된다([indoorEntryTransitionForZoom]은 그 아래에서만 exit를 낸다).
+    final zoom = math.max(fitZoom, indoorExitZoomThreshold + 0.3);
+
+    // 도면 한가운데를 화면 한가운데가 아니라 **가려지지 않는 띠의 한가운데**에
+    // 놓는다. 카메라 목표점은 늘 화면 중앙에 그려지므로, 목표점을 화면 위쪽
+    // (=지금 bearing 방향)으로 그만큼 밀면 도면이 그만큼 내려온다.
+    final shiftPx = (_floorFitTopChromePx - _floorFitBottomChromePx) / 2;
+    final metersPerPx = visibleWidthMeters(
+      zoom: zoom,
+      availablePx: 1,
+      latitude: center.latitude,
+    );
+    final target = offsetByMeters(
+      center,
+      azimuthDeg: bearing,
+      meters: shiftPx * metersPerPx,
+    );
+
+    await controller.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: _toGl(target),
+          zoom: zoom,
+          bearing: bearing,
+          tilt: controller.cameraPosition?.tilt ?? 0,
+        ),
+      ),
+      duration: duration,
+    );
   }
 
   /// 건물 폴리곤을 잠깐 진하게 칠했다 되돌린다 — "이 건물을 말하는 것"이라는
@@ -4890,16 +5051,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 옮길 자리가 없으면(외곽선도 입구도 없는 건물) 아무 일도 하지 않는다.
   Future<void> focusBuilding(Building building) async {
     final controller = _mapController;
-    if (controller == null || !_styleReady) {
-      // 조용히 실패하면 "검색에서 골랐는데 지도가 안 움직인다"의 원인을 화면
-      // 밖에서 찾을 수 없다. 이 경로는 스타일 로드 전에 검색을 마친 경우에만
-      // 지나므로 로그가 쌓이지도 않는다.
-      debugPrint(
-        '[outdoor overlay] focusBuilding skipped: '
-        'controller=${controller != null} styleReady=$_styleReady',
-      );
-      return;
-    }
+    if (controller == null || !_styleReady) return;
 
     // **목록 응답으로 온 건물은 외곽선이 없다.** `/buildings`는 id·이름·층만
     // 내려주고 `footprint_wgs84`·`entrance`는 단건(`/buildings/{id}`)에만 있다
@@ -4926,10 +5078,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           buildingWidthMeters: width,
           viewportWidthPx: MediaQuery.sizeOf(context).width,
           latitude: center.latitude,
-        );
-        debugPrint(
-          '[outdoor overlay] focusBuilding ${building.id} '
-          'zoom=${zoom.toStringAsFixed(2)} width=${width.toStringAsFixed(0)}m',
         );
         await controller.animateCamera(
           CameraUpdate.newLatLngZoom(_toGl(center), zoom),
@@ -5516,7 +5664,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
                 key: _floorSelectorKey,
                 floors: _building!.floors,
                 selectedFloor: _activeFloor!,
-                onSelectFloor: _switchOverlayFloor,
+                onSelectFloor: _onFloorChipSelected,
               ),
             ),
           ),

@@ -153,6 +153,34 @@ double indoorEntryZoomThresholdFor({
   );
 }
 
+/// 돌려 세운 건물이 화면에 담기는 zoom.
+///
+/// 건물을 세로로 세운 뒤([building_orientation.dart]) 그 직사각형을 화면에
+/// 맞출 때 쓴다. 가로·세로 **둘 다** 담겨야 하므로 두 제약 중 더 축소해야 하는
+/// 쪽을 고른다 — 한쪽만 보면 나머지 축이 화면 밖으로 잘린다.
+///
+/// [widthMeters]는 화면 가로에 놓이는 변(짧은 축), [heightMeters]는 세로에
+/// 놓이는 변(긴 축)이다. 세로로 세운다는 것이 곧 이 대응을 뜻한다.
+double zoomToFitRotatedBox({
+  required double widthMeters,
+  required double heightMeters,
+  required double viewportWidthPx,
+  required double viewportHeightPx,
+  required double latitude,
+}) {
+  final byWidth = zoomToFitWidth(
+    widthMeters: widthMeters,
+    availablePx: viewportWidthPx,
+    latitude: latitude,
+  );
+  final byHeight = zoomToFitWidth(
+    widthMeters: heightMeters,
+    availablePx: viewportHeightPx,
+    latitude: latitude,
+  );
+  return math.min(byWidth, byHeight);
+}
+
 /// 건물을 **바깥에서 보여 줄 때** 진입 임계값에서 물러서는 폭(zoom 레벨).
 ///
 /// zoom은 log2 스케일이라 0.7을 빼면 건물이 화면 폭의 약 62%를 차지한다 —
