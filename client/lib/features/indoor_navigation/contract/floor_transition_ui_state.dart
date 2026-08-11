@@ -63,12 +63,17 @@ class FloorTransitionUiState {
   final bool canUndo;
 
   /// 이 단계의 배너 문구.
+  ///
+  /// arrived는 짧다. 층이 바뀌었다는 사실은 직전 스크림 연출이 이미 층 라벨을
+  /// 큰 글씨로 말했으므로, 배너는 스크림이 말하지 않은 것 — 위치를 **추정으로**
+  /// 옮겼다는 사실 — 만 말한다. "~에 도착한 것으로 보여"까지 다시 적으면 같은
+  /// 안내가 두 벌이 된다.
   String get message => switch (stage) {
     FloorTransitionStage.boarding => '에스컬레이터 탑승을 감지했습니다',
     FloorTransitionStage.moving =>
       '에스컬레이터로 이동 중 · $fromFloorLabel → $toFloorLabel',
     FloorTransitionStage.swapping => '$toFloorLabel 지도로 전환하는 중',
-    FloorTransitionStage.arrived => '$toFloorLabel에 도착한 것으로 보여 위치를 옮겼습니다',
+    FloorTransitionStage.arrived => '$toFloorLabel 도착으로 보고 위치를 옮겼습니다',
   };
 
   /// 화면을 덮는 스크림 안에 쓰는 한 줄.

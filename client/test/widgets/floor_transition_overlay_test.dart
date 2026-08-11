@@ -34,7 +34,7 @@ void main() {
         (FloorTransitionStage.boarding, '에스컬레이터 탑승을 감지했습니다'),
         (FloorTransitionStage.moving, '에스컬레이터로 이동 중 · B1 → 1F'),
         (FloorTransitionStage.swapping, '1F 지도로 전환하는 중'),
-        (FloorTransitionStage.arrived, '1F에 도착한 것으로 보여 위치를 옮겼습니다'),
+        (FloorTransitionStage.arrived, '1F 도착으로 보고 위치를 옮겼습니다'),
       ]) {
         await tester.pumpWidget(
           _host(FloorTransitionBanner(state: _state(stage))),

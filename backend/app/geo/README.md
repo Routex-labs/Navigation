@@ -13,6 +13,7 @@ FastAPI·SQLAlchemy를 몰라도 되는 계층이라, ORM 모델의 값 필드�
 |---|---|---|
 | `georeference.py` | 2D affine 변환 피팅·적용·합성 | `GeoTransform`, `PointPair`, `fit_wgs84_transform`, `fit_affine_transform`, `compose_transforms` |
 | `tiling.py` | 슬리피맵 타일 계산 + MVT GeoJSON 레이어 | `TileBounds`, `tile_bounds`, `local_points_to_lnglat`, `build_floor_tile_layers` |
+| `label_point.py` | 폴리곤 라벨 위치(pole of inaccessibility) | `label_point`, `polygon_centroid` |
 | `__init__.py` | 패키지 표식 | — |
 
 ---
@@ -42,10 +43,12 @@ class GeoTransform:
 ```python
 def tile_bounds(z, x, y) -> TileBounds          # 슬리피맵 z/x/y → WGS84 경계 상자
 def local_points_to_lnglat(points, transform)   # local_m 점 목록 → [lng, lat] 목록
-def build_floor_tile_layers(building, stores, pois, transform, bounds) -> list[dict]
+def build_floor_tile_layers(building, stores, pois, transform, bounds,
+                            footprint_local_m=None, store_label_memo=None) -> list[dict]
 ```
 
 - `build_floor_tile_layers`는 footprint/stores/pois를 wgs84 GeoJSON feature로 만들되, **타일 bbox와 겹치는 것만** 담는다(정밀 클리핑 없이 bbox 교차만 — 실내 지도는 feature가 적어 충분).
+- 매장 라벨 좌표(`label_point`)는 타일과 무관하게 폴리곤+변환만으로 정해지므로, 호출자가 `store_label_memo`(매장 id → 좌표)를 넘기면 타일마다 재계산하지 않는다. memo 소유·무효화(재시드 시점)는 `repositories/tile_queries.py` 책임이다.
 - `transform`이 `None`이면 빈 레이어를 돌려준다 → 404 대신 "그릴 게 없음"으로 처리해 MapLibre가 조용히 넘어가게 한다.
 - **MVT 바이트 인코딩은 여기서 하지 않는다.** 외부 라이브러리(`mapbox_vector_tile`) 의존이라 `repositories/tile_queries.py`가 담당한다. 이 모듈은 순수 계산까지만.
 

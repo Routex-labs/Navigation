@@ -161,11 +161,26 @@ def get_floor_map(
     building_id: str,
     floor_name: str,
     session: Session = Depends(get_db),
+    if_none_match: str | None = Header(default=None),
 ):
     result = building_queries.get_floor_map(session, building_id, floor_name)
     if result is None:
         raise HTTPException(status_code=404, detail="Floor not found")
-    return result
+
+    # 층 응답은 층을 전환할 때마다 요청되는데 내용은 재시드 전까지 바뀌지 않는다.
+    # 같은 파일의 타일·상세 엔드포인트처럼 짧은 max-age + ETag 재검증을 붙여
+    # 재방문을 304(본문 없음)로 끝낸다. ETag는 직렬화된 본문에서 뽑으므로 추가
+    # 쿼리가 없다. 상세(get_place_detail)와 달리 exclude_none을 주지 않는 이유:
+    # 이 응답은 지금까지 FastAPI 기본 직렬화(None 키 포함)로 나갔고, 클라이언트
+    # 모델이 그 형태를 소비 중이라 본문 계약을 그대로 유지한다.
+    body = FloorMapResponse.model_validate(result).model_dump_json()
+    etag = f'"{hashlib.blake2b(body.encode("utf-8"), digest_size=16).hexdigest()}"'
+    headers = cache_headers(etag, settings.tile_cache_max_age)
+
+    if etag_matches(if_none_match, etag):
+        return Response(status_code=304, headers=headers)
+
+    return Response(content=body, media_type="application/json", headers=headers)
 
 
 # 층 지도 벡터 타일(MVT). MapLibre GL의 벡터 타일 소스가 z/x/y로 호출한다.

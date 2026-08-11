@@ -39,3 +39,12 @@ const mapStoreFill = '#F1EEEA';
 /// MapLibre의 `fillOutlineColor`는 **두께가 1px 고정**이다. 더 굵게 하려면 같은
 /// 소스에 line 레이어를 따로 얹어야 하므로, 색으로 모자랄 때만 그 비용을 낸다.
 const mapStoreOutline = '#A69C90';
+
+/// 선택(포커스)된 매장 강조 fill·테두리. 실내 화면과 야외 실내 오버레이가 같은
+/// 강조를 그리므로 여기서 한 값을 공유한다.
+///
+/// **`AppColors.primary`(#4A87F1)와 같은 값이어야 한다.** UI 위젯의 포인트 색과
+/// 지도 위 선택 강조가 다른 파랑이면(예전에는 구글 파랑 #1A73E8이었다) 같은
+/// "선택됨"이 화면 요소마다 다른 색으로 말해진다. MapLibre 레이어는 hex 문자열만
+/// 받아 const 속성에 `Color`를 쓸 수 없어서 문자열로 다시 적는다.
+const mapSelectionColor = '#4A87F1';

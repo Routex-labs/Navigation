@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     glyph_cache_max_age: int = 86400  # NAV_GLYPH_CACHE_MAX_AGE — 글리프(.pbf) Cache-Control(초)
     tile_cache_max_entries: int = 2048  # NAV_TILE_CACHE_MAX_ENTRIES — 타일 메모리 캐시 항목 상한
     tile_cache_max_bytes: int = 64 * 1024 * 1024  # NAV_TILE_CACHE_MAX_BYTES — 타일 캐시 바이트 상한
-    tile_warm_default_floor_only: bool = True  # NAV_TILE_WARM_DEFAULT_FLOOR_ONLY — 기동 워밍을 기본 층만
+    tile_warm_default_floor_only: bool = False  # NAV_TILE_WARM_DEFAULT_FLOOR_ONLY — 1이면 기동 워밍을 기본 층만(기본은 전 층)
     warm_embedding: bool = False  # NAV_WARM_EMBEDDING — 기동 시 임베딩 모델 백그라운드 선로드
     log_level: str = "INFO"  # NAV_LOG_LEVEL — 로그 레벨(DEBUG로 상세 로그)
     store_entrance_snap_max_m: float = 25.0  # NAV_STORE_ENTRANCE_SNAP_MAX_M — 입구 스냅 허용 거리(m)
