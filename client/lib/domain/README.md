@@ -16,7 +16,7 @@ Flutter 화면이나 HTTP를 모르는 계산 계층이다. 백엔드가 제공�
 | [`transit_walk_fill.dart`](transit_walk_fill.dart) | 카카오가 주지 않는 앞뒤 도보를 대중교통 경로에 붙임 | `fillTransitWalkLegs` |
 | [`single_flight.dart`](single_flight.dart) | 같은 작업이 겹쳐 도는 것을 막음(겹치면 버린다) | `SingleFlight` |
 | [`indoor_store_lookup.dart`](indoor_store_lookup.dart) | 사용자 검색어로 못 찾은 매장을 POI 브랜드로 다시 물음 | `lookUpIndoorStoresByBrand` |
-| [`route_endpoint_fill.dart`](route_endpoint_fill.dart) | 도로에서 끝난 보행 경로를 실제 도착점(출입구)까지 이음 | `extendRouteToDestination` |
+| [`route_endpoint_fill.dart`](route_endpoint_fill.dart) | 보행 경로의 끝을 실제 도착점(출입구)에 맞춤 — 끊긴 몇십 미터를 잇고, TMAP이 문에 닿지 못해 돌아간 뒷부분은 직선으로 바꿈 | `extendRouteToDestination` |
 
 ## 단일 층 경로 계산
 
