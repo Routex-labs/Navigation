@@ -49,6 +49,73 @@ void main() {
     expect(filled!.points, hasLength(2));
   });
 
+  group('TMAP이 도착점에 닿지 못한 경우', () {
+    // 실측 재현(더현대 서울 남서쪽 출구). 정류장에서 문까지 직선 52m인데,
+    // TMAP은 서쪽으로 돌아 69m를 안내하고 그 끝점은 문에서 35m 떨어진 지하철
+    // 출입구 광장이다. 화면에는 "서쪽으로 돌았다가 벽을 따라 되돌아오는" 선이
+    // 남는다.
+    const door = LatLng(37.52520479, 126.92870807);
+    const detour = [
+      LatLng(37.524723, 126.928752), // 정류장(출발)
+      LatLng(37.524720, 126.928591),
+      LatLng(37.524809, 126.928402), // 서쪽으로 벗어남
+      LatLng(37.524989, 126.928363),
+      LatLng(37.525064, 126.928349), // 문에서 35m 떨어진 곳에서 끝남
+    ];
+
+    test('우회를 걷어내고 도착점까지 직선으로 잇는다', () {
+      final fixed = extendRouteToDestination(
+        DirectionsRoute(
+          points: detour,
+          distanceMeters: 69,
+          durationSeconds: 50,
+        ),
+        door,
+      );
+
+      // 서쪽으로 벗어나기 **전**에서 끊는다 — 출발점 하나만 남고 도착점이 붙는다.
+      expect(fixed!.points, hasLength(2));
+      expect(fixed.points.first, detour.first);
+      expect(fixed.points.last, door);
+      // 기하가 달라졌으므로 거리·시간도 새 기하를 따른다(같은 보행 속도).
+      expect(fixed.distanceMeters, closeTo(54, 4));
+      expect(fixed.durationSeconds, lessThan(50));
+    });
+
+    test('직선이 길면 우회로를 그대로 둔다 — 관통선이 돌아가는 길보다 나쁘다', () {
+      // 같은 모양이지만 출발점이 문에서 200m 남쪽이다. 이때 그어질 직선은
+      // 건물·도로를 관통한다.
+      final far = [const LatLng(37.52340, 126.928752), ...detour.skip(1)];
+      final fixed = extendRouteToDestination(
+        DirectionsRoute(points: far, distanceMeters: 250, durationSeconds: 190),
+        door,
+      );
+
+      expect(fixed!.points, hasLength(far.length + 1));
+      expect(fixed.distanceMeters, 250);
+    });
+
+    test('곧장 다가오다 끝났으면 이어 붙이기만 한다 — 이득이 없다', () {
+      // 문 남쪽 도로를 따라 문 쪽으로 곧게 다가오다 35m 앞에서 끝난 경로.
+      final straight = [
+        const LatLng(37.524600, 126.928708),
+        const LatLng(37.524750, 126.928708),
+        const LatLng(37.524890, 126.928708),
+      ];
+      final fixed = extendRouteToDestination(
+        DirectionsRoute(
+          points: straight,
+          distanceMeters: 32,
+          durationSeconds: 25,
+        ),
+        door,
+      );
+
+      expect(fixed!.points, hasLength(straight.length + 1));
+      expect(fixed.distanceMeters, 32);
+    });
+  });
+
   test('경로나 도착점이 없으면 그대로 돌려준다', () {
     expect(extendRouteToDestination(null, _roadEnd), isNull);
     final route = _route(const [LatLng(37.5280, 126.9290), _roadEnd]);

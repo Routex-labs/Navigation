@@ -23,6 +23,7 @@ import '../../domain/geo_transform.dart';
 import '../../domain/guidance_chrome.dart';
 import '../../features/debug_mode/debug_mode.dart';
 import '../../domain/dijkstra.dart';
+import '../../domain/route_endpoint_fill.dart';
 import '../../domain/route_guidance.dart';
 import '../../features/indoor_navigation/application/corridor_position_tracker.dart';
 import '../../features/indoor_navigation/application/escalator_arrival.dart';
@@ -2748,7 +2749,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       destination: target,
     );
     if (!mounted) return;
-    _applyRoute(route);
+    // 도착점이 문이면 TMAP 선이 문 앞에서 끊기거나, 아예 문에 닿지 못한 채
+    // 엉뚱한 곳으로 돌아간다([extendRouteToDestination]).
+    _applyRoute(extendRouteToDestination(route, target));
   }
 
   /// 경로가 새로 생기면(이전엔 없다가 이번에 생김) 상위에 ETA 바가 보인다고
@@ -2957,7 +2960,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         destination: destination,
       );
       if (!mounted) return;
-      _applyRoute(route);
+      _applyRoute(extendRouteToDestination(route, destination));
       return;
     }
 
