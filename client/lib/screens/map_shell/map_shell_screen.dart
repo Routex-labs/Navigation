@@ -1526,20 +1526,73 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 스냅하는데, 그 도로가 내린 곳 반대편일 수 있다 — 실제로 하차 지점 바로
     // 옆에 문이 있는데 건물을 빙 돌아 반대편 문으로 안내한 화면을 봤다.
     // 내린 자리에서 가장 가까운 문을 우리가 직접 고른다.
-    final dropPoint = picked.legs.last.points.isEmpty
+    // **내린 자리는 마지막 "타는" 구간이 끝나는 곳이다.**
+    //
+    // `legs.last`를 그대로 쓰면 안 된다. 카카오가 마지막에 도보 구간을 함께 주는
+    // 경우가 있는데, 그 구간의 끝점은 내린 자리가 아니라 **우리가 보낸 목적지
+    // 좌표**다. 그걸 기준으로 문을 고르면 "목적지에서 가까운 문"이 되어, 정작
+    // 사용자가 내리는 자리와는 무관해진다 — 이번에 반대편 문으로 안내한 화면이
+    // 정확히 그 경로였다.
+    final lastRide = picked.legs.lastWhere(
+      (leg) => !leg.mode.isWalk && leg.points.isNotEmpty,
+      orElse: () => picked.legs.last,
+    );
+    final dropPoint = lastRide.points.isEmpty
         ? destination.point
-        : picked.legs.last.points.last;
+        : lastRide.points.last;
     final indoorStore = _indoorStoreOf(destination);
+    // **목적지가 우리 건물이면 문을 다시 고른다 — 기준은 내린 자리다.**
+    //
+    // 건물 후보의 좌표는 후보를 만들 때 이미 문 하나로 정해져 있는데, 그 문은
+    // **검색하던 시점의 현재 위치**에서 가까운 문이다([_buildingDestinationPoint]).
+    // 한 시간 버스를 타고 반대편에서 내리면 그 문은 더 이상 가깝지 않다 — 실기기
+    // 에서 정확히 그 화면을 봤다. 내린 자리 바로 옆에 문이 있는데 건물을 빙 돌아
+    // 반대편 문으로 안내했다.
+    //
+    // 매장이 목적지인 경우도 같다(매장 좌표를 그대로 끝점으로 주면 TMAP이 가장
+    // 가까운 도로로 스냅해 내린 곳 반대편으로 데려간다). 그래서 두 경우를 하나로
+    // 묶어, **우리 건물을 향하는 안내면** 하차 지점 기준으로 문을 다시 고른다.
+    final targetsOurBuilding =
+        indoorStore != null || destination.buildingId == _buildingId;
     final walkTarget =
-        (indoorStore == null ? null : outdoor.entranceNearestTo(dropPoint)) ??
+        (targetsOurBuilding ? outdoor.entranceNearestTo(dropPoint) : null) ??
         destination.point;
+    debugPrint(
+      '[transit] 하차 지점 기준 문 선택: 우리 건물=$targetsOurBuilding '
+      '하차=(${dropPoint.latitude.toStringAsFixed(5)}, '
+      '${dropPoint.longitude.toStringAsFixed(5)}) '
+      '도보 도착=(${walkTarget.latitude.toStringAsFixed(5)}, '
+      '${walkTarget.longitude.toStringAsFixed(5)})',
+    );
+
+    // **카카오가 마지막 도보를 줬어도 우리가 다시 그린다.**
+    //
+    // 그 구간은 카카오가 정한 끝점(우리가 보낸 목적지 좌표)으로 가는데, 우리는
+    // 방금 하차 지점 기준으로 문을 다시 골랐다. 그대로 두면 지도에 그려진 도보는
+    // 옛 끝점으로 가고 실내 구간만 새 문에서 시작해, 두 선이 서로 다른 곳을
+    // 가리킨다. 모양도 다르다 — 카카오 도보는 정류장 사이를 잇는 개략선이라
+    // 실제 보도를 따르지 않고 구불구불하게 떨어진다.
+    //
+    // 잘라 내면 마지막 구간이 "타는" 구간이 되므로 [fillTransitWalkLegs]가 우리
+    // 도보를 대신 붙인다(TMAP 보행자 경로). 구간이 하나뿐이면 자르지 않는다 —
+    // 그건 처음부터 끝까지 걷는 안내라 잘라 낼 것이 남지 않는다.
+    final trimmed = (picked.legs.length > 1 && picked.legs.last.mode.isWalk)
+        ? TransitItinerary(
+            totalTimeSeconds: picked.totalTimeSeconds,
+            totalWalkTimeSeconds: picked.totalWalkTimeSeconds,
+            totalDistanceMeters: picked.totalDistanceMeters,
+            transferCount: picked.transferCount,
+            legs: picked.legs.sublist(0, picked.legs.length - 1),
+            fare: picked.fare,
+          )
+        : picked;
 
     // 고른 **뒤에** 앞뒤 도보를 채운다. 후보는 최대 15개까지 오는데, 목록을
     // 만들자고 후보마다 두 번씩 보행자 API를 부르면 30번이 나가고 사용자는
     // 그중 하나만 본다. 목록 단계에서 도보가 없어도 총 소요시간은 정확하다 —
     // 카카오 totalTime에 이미 포함돼 있다([fillTransitWalkLegs] 주석).
     final completed = await _withTransitWalkLegs(
-      picked,
+      trimmed,
       origin: origin,
       destination: walkTarget,
     );

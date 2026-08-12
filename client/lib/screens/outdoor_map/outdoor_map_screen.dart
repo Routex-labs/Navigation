@@ -2631,6 +2631,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _indoorMultiFloorRoute = null;
       _indoorRouteDestination = null;
     });
+    _syncDestinationLayer();
     _syncIndoorDestinationLayer();
 
     if (leg == null || leg.isEmpty) {
@@ -2739,6 +2740,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _pendingIndoorDestination = null;
       _journeyEntrance = null;
     });
+    // 문 경유가 끝나면 목적지 핀의 조건도 바뀐다([_syncDestinationLayer]).
+    unawaited(_syncDestinationLayer());
   }
 
   /// "이 건물까지" 안내할 때 쓸 도착 좌표.
@@ -4515,10 +4518,23 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     );
   }
 
+  /// 야외 목적지 핀.
+  ///
+  /// **[_entrance]로 폴백하지 않는다.** 그 값은 진입/이탈 판정의 기준점이지
+  /// 목적지가 아니다. 문 좌표가 채워지면서([_syncSelectedEntrance]) 폴백이
+  /// 되살아났고, 앱을 켜고 GPS가 잡히기만 하면 아무도 고르지 않은 문에 빨간
+  /// 핀이 찍혔다 — 경로 쪽에서 같은 폴백을 걷어낸 것과 같은 이유다.
+  ///
+  /// **문을 경유하는 안내 중에도 찍지 않는다.** 그때 [_userDestination]은
+  /// 목적지가 아니라 지나갈 문이고, 진짜 목적지는 건물 안이라 실내 도착 핀이
+  /// 따로 찍힌다([_syncIndoorDestinationLayer]). 둘 다 찍으면 야외 선이 끝나는
+  /// 자리에 "여기가 목적지"로 읽히는 핀이 하나 더 생긴다.
   Future<void> _syncDestinationLayer() async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
-    final target = _userDestination ?? _entrance;
+    final passingThroughDoor =
+        _pendingIndoorRoute != null || _pendingIndoorDestination != null;
+    final target = passingThroughDoor ? null : _userDestination;
     if (target == null) {
       await controller.setGeoJsonSource(_destSourceId, _emptyCollection());
       return;
@@ -4658,6 +4674,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _pendingIndoorRoute = (leg == null || leg.isEmpty) ? null : leg;
     });
     _syncRouteLayer();
+    _syncDestinationLayer();
     _syncIndoorDestinationLayer();
   }
 
@@ -5412,6 +5429,17 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   RouteGuidanceInstruction? get _indoorRouteGuidance {
     final route = _indoorRouteSegment;
     if (route == null || route.pointsLocalM.isEmpty) return null;
+    // **실내 위치가 없으면 한 줄 안내를 내지 않는다.**
+    //
+    // [buildRouteGuidance]는 진행률이 null이면 경로 **전체**를 기준으로 다음
+    // 회전을 찾는다. 그래서 건물 밖에 서 있어도 "110미터 후 에스컬레이터 탑승"
+    // 같은 문장이 떴다 — 사용자는 아직 버스에서 내려 걷는 중인데 화면은 건물 안
+    // 몇 미터 앞을 말한다. 실내 오버레이만으로 가르면 안 되는 이유는, 그 오버레이가
+    // 건물로 확대하기만 해도 켜지기 때문이다(indoor_entry_zoom.dart).
+    //
+    // 기준은 "우리가 이 사람이 실내 어디에 있는지 아는가"다. 그게 곧 진행률의
+    // 출처이고, 진입을 실제로 감지해 앵커를 잡았을 때만 참이 된다.
+    if (_guidance.displayProgress == null) return null;
     final multi = _indoorMultiFloorRoute;
     final segment = multi?.segmentForFloor(_activeFloor ?? '');
     final allowArrival =
