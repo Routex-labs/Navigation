@@ -65,11 +65,12 @@
 `searchDestinationsAi` 하나를 공유하고, 이 메서드는 `/query/destination`과 파싱까지
 공유한다(`_query`). 따라서 `/query/ai` 응답 모양을 바꾸면 파서 한 곳이 아니라
 **추상 인터페이스(`destination_repository.dart`)·mock·두 화면·관련 테스트**가 함께 움직인다.
-> **`ai_search_sheet.dart`는 그 뒤 삭제됐다**(실내 안내를 공용 세션으로 모으고 실내 탭을
-> 없앤 리팩터). 이 문서에서 그 파일을 가리키는 서술은 **당시 상태**이며, 지금 `/query/ai`를
-> 쓰는 곳은 [`map_shell_screen.dart`](../../../client/lib/screens/map_shell/map_shell_screen.dart)와
-> [`directions_sheet.dart`](../../../client/lib/widgets/directions_sheet.dart)다. 아래
-> "두 화면"이라는 표현도 그 전제에서 읽어야 한다.
+> **`ai_search_sheet.dart`와 `directions_sheet.dart`는 그 뒤 삭제됐다**(실내 안내를 공용
+> 세션으로 모으고 실내 탭을 없앤 리팩터, 그리고 길찾기 입력을 상단 바 두 칸으로 되돌린
+> 변경). 이 문서에서 그 파일들을 가리키는 서술은 **당시 상태**이며, 지금 `/query/ai`를
+> 쓰는 곳은 [`search_panel.dart`](../../../client/lib/widgets/search_panel.dart)(상단 검색)와
+> [`map_shell_screen.dart`](../../../client/lib/screens/map_shell/map_shell_screen.dart)의
+> 길찾기 후보 조회 두 곳이다. 아래 "두 화면"이라는 표현도 그 전제에서 읽어야 한다.
 
 9절의 화면 상태는 상단 검색 패널 기준이며, `ai_search_sheet`를 같은 계약으로 옮길지
 탐색 진입점을 상단 검색 한 곳으로 합칠지는 12절 미결로 둔다.

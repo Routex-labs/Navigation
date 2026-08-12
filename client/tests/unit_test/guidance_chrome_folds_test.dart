@@ -28,9 +28,15 @@ void main() {
 
   final repository = MockBuildingRepository();
 
+  /// 건물 **밖** 좌표(외곽선에서 약 185 m 동쪽).
+  ///
+  /// 입구와 같은 좌표를 쓰면 지금 진입 판정에서는 곧바로 실내로 들어간다
+  /// (judgeBuildingFromGps — 믿을 수 있는 좌표가 외곽선 안). 그러면 출발지
+  /// 기준이 PDR 앵커로 바뀌어 "도착"이 경로를 그리지 못하고, 이 테스트가
+  /// 보려는 chrome 접기까지 가지 못한다.
   Position fix() => Position(
     latitude: 37.5665,
-    longitude: 126.9779,
+    longitude: 126.9800,
     timestamp: DateTime(2024, 1, 1),
     accuracy: 10,
     altitude: 0,

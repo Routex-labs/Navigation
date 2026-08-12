@@ -13,6 +13,10 @@ Flutter 화면이나 HTTP를 모르는 계산 계층이다. 백엔드가 제공�
 | [`route_progress.dart`](route_progress.dart) | 현재 위치를 경로에 투영해 진행·남은거리·이탈 판정 | `RouteProgress`, `computeRouteProgress` |
 | [`route_guidance.dart`](route_guidance.dart) | 다음 행동 한 줄 안내, 진행 지점 기준 경로선 분할(지나온/남은), 도착 시 안내 자동 종료 판단 | `RouteGuidanceAction`, `RouteGuidanceInstruction`, `RoutePolylineSplit`, `splitRouteAtProgress`, `decideArrivalAutoClear` |
 | [`geo_transform.dart`](geo_transform.dart) | 2D affine 피팅·적용, PDR/층 좌표 연결 | `AffineTransform` |
+| [`transit_walk_fill.dart`](transit_walk_fill.dart) | 카카오가 주지 않는 앞뒤 도보를 대중교통 경로에 붙임 | `fillTransitWalkLegs` |
+| [`single_flight.dart`](single_flight.dart) | 같은 작업이 겹쳐 도는 것을 막음(겹치면 버린다) | `SingleFlight` |
+| [`indoor_store_lookup.dart`](indoor_store_lookup.dart) | 사용자 검색어로 못 찾은 매장을 POI 브랜드로 다시 물음 | `lookUpIndoorStoresByBrand` |
+| [`route_endpoint_fill.dart`](route_endpoint_fill.dart) | 보행 경로의 끝을 실제 도착점(출입구)에 맞춤 — 끊긴 몇십 미터를 잇고, TMAP이 문에 닿지 못해 돌아간 뒷부분은 직선으로 바꿈 | `extendRouteToDestination` |
 
 ## 단일 층 경로 계산
 

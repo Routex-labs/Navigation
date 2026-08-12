@@ -54,7 +54,6 @@ void main() {
                   searchActive: false,
                   onCancelSearch: () {},
                   onDirectionsTap: () {},
-                  onSearchRequested: () {},
                 ),
                 const Expanded(
                   child: SearchPanel(
@@ -101,7 +100,6 @@ void main() {
               searchActive: false,
               onCancelSearch: () {},
               onDirectionsTap: () {},
-              onSearchRequested: () {},
             ),
           ),
         ),

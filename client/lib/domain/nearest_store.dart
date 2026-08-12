@@ -106,8 +106,8 @@ StoreIndexEntry? _onCurrentFloor(
 /// ## 왜 필요한가
 ///
 /// 길찾기 검색은 **항상 건물 전체**를 본다. 층으로 좁히면 "다른 층으로 가려고
-/// 여는 기능"인데 매번 토글을 켜야 했기 때문이다(`directions_sheet.dart`의
-/// [DirectionsSearchCallback] 주석). 그 결정은 **매장**에는 맞다.
+/// 여는 기능"인데 매번 토글을 켜야 했기 때문이다(`map_shell_screen.dart`의
+/// `_searchDirectionsCandidates` 주석). 그 결정은 **매장**에는 맞다.
 ///
 /// **시설에는 정반대다.** 1F에 서서 `화장`을 치면 상단 검색은 `1F · 57m`를 주는데
 /// 길찾기는 `B6 · 219m`를 줬다 — 층을 안 주니 서버가 자기 정렬 순서로 아무 층이나

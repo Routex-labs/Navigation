@@ -51,11 +51,11 @@ graph LR
   클라이언트도 대분류 아이콘 레이어와 타이포그래피 통일(6c)까지 왔다. 남은 것은
   **라벨 `textColor`를 카테고리 색으로** 바꾸는 것과 **zoom별 밀도 필터**다.
   `feature/store-icons` 브랜치 이력은 아직 확인이 필요하다(아래 참조).
-- **7번(길찾기 입력)** — `directions_sheet.dart` 제거 + 시트 chain 계약 재배선이라
-  상세 시트·카테고리 시트까지 영향이 간다. 범위가 커서 뒤로 뒀다.
-  **[네이버지도 분석 문서](naver-map-ui-ux-analysis.md)의 E 항목(SearchPanel →
-  바텀시트)과 같은 코드를 건드리므로 함께 설계한다.** 따로 하면 시트 chain을
-  두 번 뜯는다.
+- **7번(길찾기 입력) — 끝났다.** 입력이 상단 바로 올라왔다. 검색창 자리가
+  길찾기 중에는 출발/도착 **두 칸**이 되고, 후보 목록이 그 바로 아래에 붙는다.
+  이동 수단(도보·자동차·대중교통)은 두 칸 위 한 줄에서 고른다.
+  `directions_sheet.dart`는 지웠고, 그 시트가 갖고 있던 규칙(거리·도보시간,
+  온디바이스 후보, 의미 검색, 출발↔도착 교체)은 상단 바 흐름이 이어받았다.
 
 두 항목의 설계는 아래 본문에 그대로 남겨 둔다 — 착수할 때 이 문서에서 이어받는다.
 
@@ -73,7 +73,7 @@ graph LR
 | 4 | 도착 핀 두 화면 통일 · 시설물 텍스트 라벨 제거 | `outdoor_map_screen.dart`, `floor_plan_view.dart` |
 | 5 | 진한 테두리 + 진행 방향 화살표, 두 화면 동일 | `core/map_route_style.dart` |
 | 6 | 타일에 `category`·`subcategory`는 실림 — **라벨은 아직 `textColor: '#444846'` 고정, 카테고리 아이콘 레이어 없음** | `backend/app/geo/tiling.py`, `floor_plan_view.dart` |
-| 7 | `directions_sheet.dart` 존재 · `resizeToAvoidBottomInset: false` 그대로 | `map_shell_screen.dart` |
+| 7 | **완료** — 상단 바 두 칸 + `route_field_results.dart` 후보 목록, `directions_sheet.dart` 제거 | `map_shell_screen.dart`, `map_top_bar.dart` |
 
 ⚠️ **`feature/store-icons` 원격 브랜치가 삭제된 이력이 있다.** 이름이 6번과 겹치는데
 PR 목록에도, main에도 흔적이 없다. 누가 착수했다 접었거나 로컬에만 남겨뒀을 수 있으니
@@ -678,10 +678,13 @@ Galaxy S23(배율 3.5) 실측:
 
 ## 7. 길찾기 입력 구조 <sub>다음 차수</sub>
 
+> **끝난 항목이다.** 아래는 그때의 문제 인식과 설계를 남겨 둔 기록이다. 지금은
+> 상단 바 두 칸에서 바로 치고, 후보 목록이 그 아래에 붙는다.
+
 ### 문제
 
-길찾기 동작이 **두 군데**에 있다. 상단 바에 출발/도착 draft가 보이고, 실제 입력은
-하단 시트(`client/lib/widgets/directions_sheet.dart`)다.
+길찾기 동작이 **두 군데**에 있었다. 상단 바에 출발/도착 draft가 보이고, 실제
+입력은 하단 시트(`directions_sheet.dart`)였다.
 
 ### 상용 지도의 공통점
 
@@ -743,11 +746,14 @@ _searchPanelMaxHeight(context)    // 키보드 높이를 직접 빼서 계산
 
 ![길찾기 입력 구조 변경 전후](images/07-directions.svg)
 
-### 위험
+### 위험 (착수 전 판단)
 
-범위가 가장 크다. `directions_sheet.dart` 제거 + 시트 chain 계약
+범위가 가장 크다고 봤다. `directions_sheet.dart` 제거 + 시트 chain 계약
 (`StoreInfoAction`, `_runSheetChain`) 재배선이라 **상세 시트·카테고리 시트까지
-영향이 간다.** 그래서 마지막에 둔다.
+영향이 간다.** 그래서 마지막에 뒀다.
+
+실제로는 시트 chain 계약을 건드리지 않고 끝났다 — 두 칸은 시트가 아니라 상단 바
+안에 있어서, `_runSheetChain`을 쓰는 매장·카테고리 시트는 그대로 남았다.
 
 ---
 

@@ -140,8 +140,8 @@ gcloud run services describe navigation-api --region asia-northeast3
 
 ## Flutter 클라이언트 연결
 
-배포 URL과 TMAP/VWorld 키를 매번 치지 않도록, git에 올리지 않는 `client/config.local.json`에 모아
-한 번에 주입한다(형식은 `client/config.example.json` 참고, 자세한 내용은
+배포 URL과 외부 API 키를 매번 치지 않도록, git에 올리지 않는 `client/config.local.json`에 모아
+한 번에 주입한다(항목 목록은 `client/config.example.json`, 항목별 발급처는
 [로컬 개발 가이드](local-development-guide.md#api-키-주입)).
 
 ```powershell
@@ -149,7 +149,7 @@ Set-Location client
 [Console]::OutputEncoding = [Text.Encoding]::UTF8   # 한글 로그가 CP949로 깨지지 않게 UTF-8 고정
 $OutputEncoding = [Text.Encoding]::UTF8
 # config.example.json을 config.local.json으로 복사한 뒤 API_BASE_URL에 위 서비스 URL,
-# TMAP_APP_KEY·VWORLD_API_KEY에 발급받은 키를 채운다.
+# 나머지 항목에 외부 API 키를 채운다.
 flutter run --dart-define-from-file=config.local.json
 ```
 

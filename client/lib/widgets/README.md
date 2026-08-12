@@ -13,7 +13,8 @@
 | 지도 | [`store_label_fit.dart`](store_label_fit.dart) | 매장명 라벨 크기를 폴리곤 크기에 맞춰 계산(미터 단위 → zoom에서 px 환산), 줄바꿈 폭 추정 |
 | 지도 셸 | [`map_top_bar.dart`](map_top_bar.dart), [`map_bottom_bar.dart`](map_bottom_bar.dart), [`eta_card.dart`](eta_card.dart), [`status_badge.dart`](status_badge.dart) | 지도 화면 공통 조작·상태 |
 | 지도 셸 | [`floor_selector.dart`](floor_selector.dart) | 좌하단 세로 층 선택기(기본 접힘·펼치면 최대 5개 노출·현재 층 강조), 실내·야외 진입 오버레이 공유 |
-| 탐색 | [`search_panel.dart`](search_panel.dart), [`directions_sheet.dart`](directions_sheet.dart) | 매장 검색(경량)·AI 검색(의미), 출발/도착 검색 |
+| 탐색 | [`search_panel.dart`](search_panel.dart), [`route_field_results.dart`](route_field_results.dart) | 매장 검색(경량)·AI 검색(의미), 상단 길찾기 두 칸의 출발/도착 후보 |
+| 길찾기 | [`travel_mode_bar.dart`](travel_mode_bar.dart), [`transit_routes_sheet.dart`](transit_routes_sheet.dart), [`transit_summary_card.dart`](transit_summary_card.dart) | 이동 수단(도보·자동차·대중교통) 선택, 대중교통 후보 목록·요약 |
 | 지도 셸 | [`app_menu_sheet.dart`](app_menu_sheet.dart) | 상단 바 햄버거가 여는 앱 메뉴(저장한 장소·길찾기·위치 지정/보정·디버그 설정) |
 | 장소 시트 | [`category_stores_sheet.dart`](category_stores_sheet.dart), [`place_detail_sheet.dart`](place_detail_sheet.dart), [`favorites_sheet.dart`](favorites_sheet.dart) | 카테고리 매장·매장 상세·즐겨찾기 |
 | 장소 상세 | [`place_detail/`](place_detail/) | 상세 시트 본문의 섹션별 렌더러(summary·hero·menu·매장정보 등) |
@@ -53,19 +54,22 @@
 (`query_search.match_ai_destination`) 그 매장을 그대로 찾아낸다 — 사용자에게는 "뜻으로
 찾았다" 배너가 붙어 나오는 차이만 있다.
 층 스코프(`currentFloorId`)를 쓰는 건 이제 `search_panel.dart` 외에도
-[`directions_sheet.dart`](directions_sheet.dart)와 카테고리 매장 시트가 있다.
+상단 길찾기 후보(`map_shell_screen.dart`의 `_searchDirectionsCandidates`)와
+카테고리 매장 시트가 있다.
 
 비싼 쪽만 늦추는 이 두 단 디바운스는 지워선 안 된다. 백엔드가 임베딩 모델을 로드하면
 첫 호출이 20초대까지 가므로, 글자마다 던지면 "밥"·"밥 먹"이 전부 모델을 태운다.
 **이 조건을 지우면 검색이 느려지는 게 아니라 멈춘 것처럼 보인다.**
 
-### 길찾기 시트도 같은 두 단계다
+### 길찾기 후보도 같은 두 단계다
 
-[`directions_sheet.dart`](directions_sheet.dart)의 출발/도착 검색도 같은 흐름을 쓴다.
-예전에는 이 시트만 경량 한 번으로 끝나서 "밥 먹을 곳"처럼 이름이 아닌 말은 **항상**
-"검색 결과가 없습니다"였다 — 사용자에게는 상단에서는 찾아 주는 말이 길찾기에서는 안
-되는, 자리에 따라 다른 검색이었다. 시트는 의미 검색을 직접 호출하지 않고
-`semanticSearch` 콜백으로 상위(`map_shell_screen.dart`)에 위임한다.
+상단 길찾기 두 칸의 출발/도착 후보도 같은 흐름을 쓴다. 예전에는 이쪽만 경량 한 번으로
+끝나서 "밥 먹을 곳"처럼 이름이 아닌 말은 **항상** "검색 결과가 없습니다"였다 —
+사용자에게는 상단에서는 찾아 주는 말이 길찾기에서는 안 되는, 자리에 따라 다른
+검색이었다. 두 단계는 모두 `map_shell_screen.dart`가 돌리고
+([`route_field_results.dart`](route_field_results.dart)는 결과만 그린다), 의미 검색은
+건물 안을 보고 있을 때만 이어 붙인다 — `/query/ai`는 건물 안의 매장을 찾는 계약이라
+밖에서 건물을 고르는 자리에서 승격시키면 눌러도 갈 수 없는 목록이 된다.
 
 - 콜백이 **null이면 승격하지 않는다.** 야외(건물 입구를 고르는) 모드가 그렇다 —
   `/query/ai`는 건물 안의 매장을 찾는 계약이라, 건물을 고르는 자리에서 매장을 추천하면
@@ -172,7 +176,7 @@ flowchart LR
 |---|---|
 | 지도 레이어·마커 변경 | `floor_plan_view.dart` |
 | 경로 모양 변경 | `domain/route_guidance.dart`(`RoutePolylineSplit`)와 `models/indoor_route.dart` |
-| 길찾기 출발/도착 검색 입력 변경 | `directions_sheet.dart` |
+| 길찾기 출발/도착 입력 변경 | `map_top_bar.dart`(두 칸)와 `route_field_results.dart`(후보 목록) |
 | 공통 색·간격 변경 | [`../theme/README.md`](../theme/README.md) |
 
 ---

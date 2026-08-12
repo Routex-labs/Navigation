@@ -14,6 +14,7 @@ class EtaCard extends StatelessWidget {
     this.destinationName,
     this.destinationFloor,
     this.onClose,
+    this.onStartGuidance,
     this.onClosePointerDown,
   });
 
@@ -31,6 +32,16 @@ class EtaCard extends StatelessWidget {
   /// 직접 고른 경로를 취소할 때만 쓰고, 자동 안내(예: 건물 입구까지)에는
   /// null이라 버튼이 사라진다.
   final VoidCallback? onClose;
+
+  /// 있으면 "안내 시작" 버튼을 보여준다. 자동차 경로를 **계획 상태**로 그려 둔
+  /// 동안만 준다 — 누르면 카메라가 현재 위치로 내려가 따라가기가 시작된다.
+  ///
+  /// 계획과 안내를 나누는 이유는 **두 화면이 답하는 질문이 다르기 때문**이다.
+  /// 계획 화면은 "어디로 어떻게 가는가"라 경로 전체가 보여야 하고, 안내 화면은
+  /// "지금 어디서 뭘 하는가"라 내 위치가 커야 한다. 경로를 그리자마자 위치로
+  /// 확대해 버리면 사용자는 전체 경로를 한 번도 못 보고 안내에 들어간다.
+  final VoidCallback? onStartGuidance;
+
   final ValueChanged<Offset>? onClosePointerDown;
 
   @override
@@ -49,6 +60,7 @@ class EtaCard extends StatelessWidget {
                 minutes: minutes,
                 distanceMeters: distanceMeters,
                 onClose: onClose,
+                onStartGuidance: onStartGuidance,
                 onClosePointerDown: onClosePointerDown,
               )
             : (guidance.action == RouteGuidanceAction.arrived &&
@@ -249,6 +261,7 @@ class _LegacyEtaContent extends StatelessWidget {
     required this.minutes,
     required this.distanceMeters,
     required this.onClose,
+    required this.onStartGuidance,
     required this.onClosePointerDown,
   });
 
@@ -256,6 +269,7 @@ class _LegacyEtaContent extends StatelessWidget {
   final int minutes;
   final double distanceMeters;
   final VoidCallback? onClose;
+  final VoidCallback? onStartGuidance;
   final ValueChanged<Offset>? onClosePointerDown;
 
   @override
@@ -296,7 +310,38 @@ class _LegacyEtaContent extends StatelessWidget {
             ],
           ),
         ),
-        if (onClose != null) ...[
+        // 이동 수단을 고르는 자리는 길찾기 화면 하나다. 예전에는 이 카드에도
+        // "대중교통" 버튼이 있었는데, 안내가 이미 그려진 자리에서 수단이 또
+        // 갈리면 같은 선택이 두 화면에 흩어진다 — 상단 초안 바의 행을 눌러
+        // 길찾기 화면으로 돌아가면 거기서 세 수단을 한 줄로 고를 수 있다.
+        if (onStartGuidance != null) ...[
+          const SizedBox(width: 8),
+          // "안내 시작"은 이 카드에서 **권하는** 다음 행동이라 채운 버튼이다.
+          // 종료(외곽선)와 톤을 나눠, 운전 전에 눌러야 할 것이 무엇인지 색으로
+          // 먼저 읽히게 한다.
+          FilledButton(
+            key: const ValueKey('eta-start-guidance'),
+            onPressed: onStartGuidance,
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              textStyle: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            child: const Text('안내 시작'),
+          ),
+        ],
+        // **시작과 종료는 함께 뜨지 않는다.** 계획 상태에서 할 일은 출발뿐이고,
+        // 안내 중에 할 일은 그만두는 것뿐이다. 둘을 나란히 두면 아직 출발도 안
+        // 한 화면에 "종료"가 있어, 사용자는 무엇이 이미 시작됐는지부터 헷갈린다.
+        // 계획을 접는 길은 상단 길찾기 바에 그대로 있다.
+        if (onClose != null && onStartGuidance == null) ...[
           const SizedBox(width: 8),
           // "안내 종료"는 되돌리기 어려운 조작(경로/도착지 리셋)이므로
           // 색상은 부드럽되, 다른 카드 요소보다 명확히 눌러야 할 지점으로

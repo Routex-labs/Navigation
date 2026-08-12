@@ -8,7 +8,7 @@
 
 | 파일 | 역할 | 주요 항목 |
 |---|---|---|
-| [`api_config.dart`](api_config.dart) | 실행 환경 설정 | `apiBaseUrl`, `demoBuildingId`, `tmapAppKey`, `vworldApiKey` |
+| [`api_config.dart`](api_config.dart) | 실행 환경 설정 | `apiBaseUrl`, `demoBuildingId`, `tmapAppKey`, `kakaoRestApiKey`, `vworldApiKey` |
 | [`service_locator.dart`](service_locator.dart) | 앱 전역 의존성 조립 | 리포지토리, PDR 드라이버, 위치 스트림, 권한 요청, 즐겨찾기 |
 
 ## 설정 우선순위
@@ -19,8 +19,18 @@
 2. Android 에뮬레이터: `http://10.0.2.2:8001`
 3. 웹·데스크톱·iOS 시뮬레이터: `http://localhost:8001`
 
-TMAP·VWorld 키도 소스에 넣지 않고 `TMAP_APP_KEY`, `VWORLD_API_KEY`로 주입한다.
-TMAP 키가 없으면 `directionsRepository`는 직선 경로를 만드는 Mock을 사용한다.
+외부 API 키도 소스에 넣지 않고 `TMAP_APP_KEY`, `KAKAO_REST_KEY`, `VWORLD_API_KEY`로
+주입한다. TMAP 키로 보행자 경로와 POI 통합검색을, **대중교통만 카카오 키로** 호출한다
+(TMAP 대중교통 무료 제공량이 하루 10건이라 옮겼다).
+
+**대중교통은 두 키를 함께 쓴다.** 카카오는 첫 승차지점 앞·마지막 하차지점 뒤 도보를 주지
+않아 그 두 구간을 `directionsRepository`(TMAP 보행자)로 채운다. 카카오 키만 있으면 경로가
+정류장에서 시작해 정류장에서 끝난다.
+
+키가 없으면 `directionsRepository`는 직선 경로를 만드는 Mock을,
+`outdoorPoiRepository`·`transitRepository`는 **기능이 꺼진 구현**을 사용한다 — 뒤 둘은 Mock을
+두지 않는다. 없는 가게·없는 버스를 지어내면 사용자를 실제로 그 좌표까지 걸어가게 만들기
+때문이다.
 
 값을 매번 명령줄에 적는 대신 `client/config.local.json`(gitignore 대상, 템플릿은 `config.example.json`)에 모아 두고
 `flutter run --dart-define-from-file=config.local.json`으로 넘긴다. JSON의 키 이름은 위 `String.fromEnvironment` 이름과 같아야 한다.
@@ -34,10 +44,12 @@ flowchart LR
 
     CONFIG -->|"API 주소"| HTTP["HttpBuildingRepository"]
     CONFIG -->|"TMAP 키 유무"| DIRECTIONS["Tmap 또는 Mock<br/>DirectionsRepository"]
+    CONFIG -->|"카카오 키 유무"| TRANSIT["Kakao 또는 Unavailable<br/>TransitRepository"]
     CONFIG -->|"VWorld 키"| MAP["실외 지도 타일"]
 
     LOCATOR --> HTTP
     LOCATOR --> DIRECTIONS
+    LOCATOR --> TRANSIT
     LOCATOR --> DEST["DestinationRepository"]
     LOCATOR --> PDR["IndoorNavigationDriver"]
     LOCATOR --> STATE["FavoritesController"]
@@ -67,7 +79,7 @@ flowchart LR
 | 하고 싶은 것 | 위치 |
 |---|---|
 | 백엔드 주소 변경 | `--dart-define=API_BASE_URL=...` |
-| 외부 API 키 주입 | `--dart-define=TMAP_APP_KEY=...`, `VWORLD_API_KEY=...` |
+| 외부 API 키 주입 | `--dart-define=TMAP_APP_KEY=...`, `KAKAO_REST_KEY=...`, `VWORLD_API_KEY=...` |
 | 실제/Mock 리포지토리 전환 | `service_locator.dart` |
 | 테스트에서 GPS·권한 대체 | `watchPosition`, `requestStartupPermissions`, `isPedometerPermissionGranted` 교체 |
 

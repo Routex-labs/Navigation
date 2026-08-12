@@ -32,7 +32,8 @@ Set-Location client
 $OutputEncoding = [Text.Encoding]::UTF8
 Copy-Item config.example.json config.local.json   # 최초 1회
 # config.local.json의 API_BASE_URL에 배포 서비스 주소(→ docs/guide/gcp-instance.md),
-# TMAP_APP_KEY·VWORLD_API_KEY에 발급받은 키를 채운다. 키는 비워도 앱은 뜬다.
+# 나머지 항목에 외부 API 키를 채운다. 항목별 발급처는
+# docs/guide/local-development-guide.md#api-키-주입 참고. 키는 비워도 앱은 뜬다.
 flutter pub get
 flutter run --dart-define-from-file=config.local.json
 ```

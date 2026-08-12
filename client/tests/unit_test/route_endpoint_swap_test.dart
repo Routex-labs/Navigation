@@ -12,7 +12,7 @@ import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:navigation_client/widgets/eta_card.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 상단 초안 바의 ⇅(출발↔도착 바꾸기)가 **실제로 반대 방향 경로를 다시 그리는지**
+/// 상단 길찾기 바의 ⇅(출발↔도착 바꾸기)가 **실제로 반대 방향 경로를 다시 그리는지**
 /// 에 대한 회귀 테스트.
 ///
 /// 라벨만 뒤바뀌고 경로는 그대로면 사용자는 뒤집혔다고 믿은 채 원래 방향으로
@@ -26,9 +26,16 @@ void main() {
 
   final repository = MockBuildingRepository();
 
+  /// 건물 **밖** 좌표(외곽선에서 약 185 m 동쪽).
+  ///
+  /// 예전에는 입구와 같은 좌표(37.5665, 126.9779)를 썼다. 그때는 진입 판정이
+  /// "입구 앞 + 신호 저하"라 오차 10 m면 야외로 남았지만, 지금 판정은 "믿을 수
+  /// 있는 좌표가 외곽선 안"이라(judgeBuildingFromGps) 그 좌표가 곧 실내 진입이
+  /// 된다. 실내로 들어가면 출발지 기준이 PDR 앵커로 바뀌어 "도착"이 경로를
+  /// 그리지 못하고, 이 테스트가 보려는 뒤집기까지 가지 못한다.
   Position fix() => Position(
     latitude: 37.5665,
-    longitude: 126.9779,
+    longitude: 126.9800,
     timestamp: DateTime(2024, 1, 1),
     accuracy: 10,
     altitude: 0,
@@ -64,6 +71,20 @@ void main() {
     watchPosition = defaultWatchPosition;
   });
 
+  /// 두 칸은 각각 입력창이라, 값은 Text가 아니라 컨트롤러에 있다.
+  Finder originField() => find.descendant(
+    of: find.byKey(const Key('route-draft-origin')),
+    matching: find.byType(TextField),
+  );
+
+  Finder destinationField() => find.descendant(
+    of: find.byKey(const Key('route-draft-destination')),
+    matching: find.byType(TextField),
+  );
+
+  String textOf(WidgetTester tester, Finder field) =>
+      tester.widget<TextField>(field).controller?.text ?? '';
+
   /// 출발지·도착지가 **둘 다 실제 지점**인 경로를 만든다. 뒤집기의 기본 경우다
   /// (현재 위치를 매장으로 굳히는 분기를 타지 않는다).
   Future<void> startRouteBetweenTwoPlaces(WidgetTester tester) async {
@@ -86,11 +107,11 @@ void main() {
     await tester.tap(find.text('도착'));
     await drain(tester);
 
-    // 출발 행 → 시트에서 출발지를 실제 지점으로 채운다. 시트의 입력창은
-    // [출발지, 도착지] 순서다.
-    await tester.tap(find.byKey(const Key('route-draft-origin')));
+    // 출발 칸에 그 자리에서 친다. 상단 바가 두 칸(진짜 입력창)이라 누르면
+    // 커서가 그 칸에 잡히고 후보 목록이 그 칸 기준으로 열린다.
+    await tester.tap(originField());
     await drain(tester);
-    await tester.enterText(find.byType(TextField).at(0), '데모');
+    await tester.enterText(originField(), '데모');
     await drain(tester);
     await tester.tap(
       find
@@ -114,22 +135,17 @@ void main() {
     await tester.tap(find.byKey(const Key('route-draft-swap')));
     await drain(tester);
 
-    // 초안 바의 두 줄이 서로 자리를 바꿨다.
+    // 두 칸이 서로 자리를 바꿨다. 칸이 입력창이므로 **글자까지** 함께 바뀌어야
+    // 한다 — 상태만 뒤집고 글자를 두면 화면과 실제 경로가 어긋난다.
     expect(
-      find.descendant(
-        of: find.byKey(const Key('route-draft-origin')),
-        matching: find.text('강의실 101'),
-      ),
-      findsOneWidget,
-      reason: '뒤집었으면 이전 도착지가 출발지 줄로 올라와야 한다',
+      textOf(tester, originField()),
+      '강의실 101',
+      reason: '뒤집었으면 이전 도착지가 출발 칸으로 올라와야 한다',
     );
     expect(
-      find.descendant(
-        of: find.byKey(const Key('route-draft-destination')),
-        matching: find.text('데모 건물'),
-      ),
-      findsOneWidget,
-      reason: '뒤집었으면 이전 출발지가 도착지 줄로 내려와야 한다',
+      textOf(tester, destinationField()),
+      '데모 건물',
+      reason: '뒤집었으면 이전 출발지가 도착 칸으로 내려와야 한다',
     );
 
     // 그리고 **경로가 실제로 다시 계산됐다.** 라벨만 바뀌고 카드가 이전

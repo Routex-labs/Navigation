@@ -40,6 +40,35 @@ class Building {
   /// 같은 짧은 캐시 + 재검증으로 동작한다.
   final String? tileRevision;
 
+  /// 야외에서 이 건물을 가리킬 때 쓸 좌표. 출입구가 있으면 그것을, 없으면
+  /// 외곽선의 중심을 쓴다. 둘 다 없으면 null.
+  ///
+  /// **폴백이 없으면 건물이 화면에서 통째로 사라진다.** 길찾기 후보 목록은
+  /// `entrance != null`로 건물을 걸러 왔는데, 백엔드 건물 응답에 출입구 좌표가
+  /// 없어서 그 조건을 통과하는 건물이 하나도 없었다 — 밖에서 길찾기를 열고
+  /// "더현대"를 쳐도 후보가 비었다. 외곽선은 벡터 타일과 함께 항상 내려오므로
+  /// 그 중심이 실질적인 대체 좌표다.
+  ///
+  /// 중심은 "여기까지 걸어가라"의 끝점으로는 거칠다(건물 한가운데라 TMAP이
+  /// 외벽 아무 곳으로나 스냅한다). 실제 안내에 쓸 때는 지상 출입구를 먼저
+  /// 고르고([OutdoorMapBodyState.nearestBuildingEntrancePoint]) 이 값은 그것도
+  /// 없을 때의 마지막 폴백으로만 쓴다.
+  LatLng? get outdoorAnchor {
+    final door = entrance;
+    if (door != null) return door;
+    final ring = footprintWgs84;
+    if (ring == null || ring.isEmpty) return null;
+    var minLat = double.infinity, maxLat = double.negativeInfinity;
+    var minLng = double.infinity, maxLng = double.negativeInfinity;
+    for (final p in ring) {
+      if (p.latitude < minLat) minLat = p.latitude;
+      if (p.latitude > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLng) minLng = p.longitude;
+      if (p.longitude > maxLng) maxLng = p.longitude;
+    }
+    return LatLng((minLat + maxLat) / 2, (minLng + maxLng) / 2);
+  }
+
   /// 지도를 열 때 선택할 층. default_floor가 오면 그것을, 아니면 목록의 첫
   /// 항목을 쓴다. 층이 하나도 없으면 null.
   String? get initialFloor {

@@ -20,7 +20,6 @@ import 'package:navigation_client/screens/destination/destination_screen.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
 import 'package:navigation_client/screens/route_guide/route_guide_screen.dart';
-import 'package:navigation_client/widgets/eta_card.dart';
 import 'package:navigation_client/widgets/floor_selector.dart';
 
 // 데모 건물 입구(37.5665, 126.9779)에서 약 185m 떨어진 좌표.
@@ -183,19 +182,6 @@ void main() {
     expect(find.text('GPS 신호 약함'), findsOneWidget);
   });
 
-  testWidgets('outdoor map shows a route and ETA card to the entrance', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(MaterialApp(home: const OutdoorMapBody()));
-    await tester.pump();
-    await tester.pump();
-
-    // 목적지 핀은 MapLibre 심볼 레이어로 옮겨져 Flutter 트리에는 없다.
-    // 실제 경로가 계산돼 ETA 카드가 뜬 것으로 "경로 표시 흐름이 살아있다"를 검증.
-    expect(find.byType(EtaCard), findsOneWidget);
-    expect(find.textContaining('건물 입구까지'), findsOneWidget);
-  });
-
   testWidgets(
     'map shell shows the indoor entry overlay when entrance is detected nearby',
     (WidgetTester tester) async {
@@ -229,10 +215,14 @@ void main() {
   testWidgets(
     'map shell keeps the outdoor view when GPS signal stays strong near the entrance',
     (WidgetTester tester) async {
-      // 입구와 같은 좌표지만 신호는 계속 양호함 (건물 앞을 지나가는 상황).
+      // 건물 북쪽 벽에서 약 33 m 떨어진 인도 + 신호 양호(건물 앞을 지나가는
+      // 상황). 좌표를 외곽선 **밖**으로 잡는 것이 이 테스트의 전제다 — 진입
+      // 판정이 "믿을 수 있는 좌표가 건물 안"이라(judgeBuildingFromGps), 입구와
+      // 같은 좌표(외곽선 안쪽 약 22 m)를 흘리면 지나가는 상황이 아니라 실제로
+      // 들어온 상황이 된다.
       final passingByPosition = Position(
-        latitude: 37.5665,
-        longitude: 126.9779,
+        latitude: 37.5670,
+        longitude: 126.9780,
         timestamp: DateTime(2024, 1, 1),
         accuracy: 5,
         altitude: 0,

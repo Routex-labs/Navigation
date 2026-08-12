@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/core/api_config.dart';
 import 'package:navigation_client/core/service_locator.dart';
 import 'package:navigation_client/models/favorite_place.dart';
@@ -10,7 +9,6 @@ import 'package:navigation_client/repositories/mock_building_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
 import 'package:navigation_client/widgets/app_menu_sheet.dart';
 import 'package:navigation_client/widgets/category_stores_sheet.dart';
-import 'package:navigation_client/widgets/directions_sheet.dart';
 import 'package:navigation_client/widgets/favorites_sheet.dart';
 import 'package:navigation_client/widgets/place_detail_sheet.dart';
 import 'package:navigation_client/widgets/sheet_grab_handle.dart';
@@ -99,23 +97,6 @@ void main() {
     await expectGrabHandle(
       tester,
       (context) => FavoritesSheet.show(context, onCloseAll: () {}),
-    );
-  });
-
-  testWidgets('길찾기 시트에 손잡이가 있다', (WidgetTester tester) async {
-    await expectGrabHandle(
-      tester,
-      (context) => DirectionsSheet.show(
-        context,
-        originLabel: '현재 위치',
-        search: (query, {String? floorId}) async => const [
-          DirectionsCandidate(
-            title: 'MLB',
-            subtitle: 'B2',
-            point: LatLng(37.52, 126.92),
-          ),
-        ],
-      ),
     );
   });
 
