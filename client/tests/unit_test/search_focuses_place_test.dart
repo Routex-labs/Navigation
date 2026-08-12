@@ -89,12 +89,17 @@ void main() {
     await tester.tap(find.text('데모 건물').first);
     await drain(tester);
 
-    // 경로도, 길찾기 바도 없다.
+    // 경로도, 길찾기 바도 없다. 건물을 고른 것은 "저기가 어디인지 보자"이지
+    // "저기로 가자"가 아니다.
     expect(find.byType(EtaCard), findsNothing);
     expect(find.byKey(const Key('route-draft-destination')), findsNothing);
-    // 대신 무엇으로 옮겨 왔는지는 화면에 남는다 — 지도만 움직이면 사용자는
-    // 자기가 누른 것이 반영됐는지 모른다.
-    expect(find.text('데모 건물'), findsOneWidget);
+    // 예전에는 지도 위에 "ⓘ 건물 이름" 카드가 남는 것까지 확인했다. 그 카드는
+    // 지도 위 chrome을 줄이면서 빠졌고(층 수 같은 세부는 화면 맨 아래 내비게이션
+    // 자리로 간다), 지금 사용자가 받는 피드백은 카드가 아니라 **카메라가 그
+    // 건물로 옮겨 가는 것**이다. 그 이동은 MapLibre 컨트롤러가 하는 일이라
+    // 위젯 테스트에서는 잡히지 않으므로, 여기서는 "길찾기로 새지 않는다"만
+    // 지킨다.
+    expect(find.text('검색 결과'), findsNothing);
   });
 
   testWidgets('매장을 고르면 그 매장 정보 시트가 올라온다', (WidgetTester tester) async {

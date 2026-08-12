@@ -343,6 +343,7 @@ class FloorPlanView extends StatefulWidget {
     this.focusTick = 0,
     this.focusBottomSheetFraction = 0,
     this.focusTopInsetPx = 0,
+    this.focusKeepZoom = false,
     this.tileRevision,
     this.prefetchFloorNames = const [],
     this.visibleInsets = EdgeInsets.zero,
@@ -443,6 +444,14 @@ class FloorPlanView extends StatefulWidget {
   /// [focusBottomSheetFraction]과 달리 비율이 아니라 픽셀인 이유는, 이 줄이
   /// 화면 높이에 비례하지 않기 때문이다 — 상위가 실제로 재서 넘긴다.
   final double focusTopInsetPx;
+
+  /// 참이면 [focusTarget]으로 옮기되 **배율은 지금 그대로 둔다.**
+  ///
+  /// 매장을 콕 집었을 때(검색 결과·목록 항목)는 그 매장이 보이도록 확대하는 게
+  /// 맞다. 그런데 카테고리를 고르는 것은 "저 업종이 어디 있나"를 훑는 행동이라,
+  /// 화면이 확 당겨지면 방금 보던 층 전체의 배치를 잃는다. 같은 카메라 이동이라도
+  /// 두 조작의 의도가 달라서 배율만 갈라 둔다.
+  final bool focusKeepZoom;
 
   /// 지도 위에 얹은 Flutter 오버레이(층 selector 같은)가 자기 영역을 알려주는
   /// 콜백. 인자는 화면 전역 좌표. true 반환 시 그 좌표의 탭은 매장 선택으로
@@ -1147,8 +1156,8 @@ class FloorPlanViewState extends State<FloorPlanView> {
         textField: ['get', 'name'],
         textFont: _mapFontStack,
         // 같은 "아이콘 + 아래 이름" 꼴인 편의시설 라벨과 같은 값을 쓴다.
-        textSize: mapLabelFacilityTextSize,
-        textMaxWidth: mapLabelFacilityMaxWidth,
+        textSize: mapLabelFixedTextSize,
+        textMaxWidth: mapLabelFixedMaxWidth,
         textOffset: mapLabelBelowIconOffset,
         textColor: mapLabelFacilityColor,
         textHaloColor: mapLabelHaloColor,
@@ -1527,7 +1536,11 @@ class FloorPlanViewState extends State<FloorPlanView> {
           target: _toMapLibreLatLng(target),
           // 이미 더 가까이 들어가 있으면 그 배율을 유지한다. 목록에서 골랐다고
           // 사용자가 맞춰 둔 확대를 되돌리면 방금 보던 맥락을 잃는다.
-          zoom: currentZoom > _storeFocusZoom ? currentZoom : _storeFocusZoom,
+          zoom: focusZoomFor(
+            currentZoom: currentZoom,
+            keepZoom: widget.focusKeepZoom,
+            storeFocusZoom: _storeFocusZoom,
+          ),
           bearing: current?.bearing ?? 0,
           tilt: current?.tilt ?? 0,
         ),
@@ -1604,11 +1617,17 @@ class FloorPlanViewState extends State<FloorPlanView> {
         // `text-size`는 논리 픽셀이라, 안 곱하면 고밀도 화면에서 아이콘만
         // 배율만큼 작아진다([storeCategoryIconSizeIndoor] 실측표).
         iconSize: storeCategoryIconSize(_devicePixelRatio),
-        textVariableAnchor: kStoreLabelVariableAnchor,
-        textRadialOffset: kStoreLabelRadialOffset,
-        // variable-anchor가 고른 방향에 맞춰 좌/우 정렬을 따라가게 한다.
-        // 기본값(center)으로 두면 두 줄로 접힌 이름이 아이콘 쪽으로 쏠린다.
-        textJustify: 'auto',
+        // 이름은 **항상 아이콘 아래**다. 편의시설·POI 라벨과 같은 규칙이라
+        // 한 화면에서 이름이 붙는 자리가 하나로 읽힌다.
+        //
+        // 예전에는 `textVariableAnchor: ['left','right']`로 아이콘 오른쪽을
+        // 먼저 시도하고 자리가 없으면 왼쪽으로 넘겼다. 자리를 잘 찾는 대신
+        // **같은 화면에서 매장마다 이름이 다른 쪽에 붙어** 눈이 이름을 찾는
+        // 규칙을 못 세웠다. 시설은 이미 아래로 고정이라 두 규칙이 섞이기도 했다.
+        textAnchor: 'top',
+        textOffset: mapLabelBelowIconOffset,
+        // 앵커가 고정이므로 두 줄로 접힌 이름은 가운데 정렬이 맞는다.
+        textJustify: 'center',
         // 색·헤일로는 [map_label_style.dart]가 단일 출처다(야외 오버레이와 같은 값).
         textColor: mapLabelStoreColor,
         textHaloColor: mapLabelHaloColor,
@@ -1647,7 +1666,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
   ///
   /// **매장명과 달리 크기가 고정이다.** 폴리곤 맞춤 계산은 글자가 폴리곤 안에
   /// 들어가는 경우의 계산인데 이 이름은 아이콘을 피해 폴리곤 밖으로 내려 그린다
-  /// ([mapLabelFacilityTextSize] 주석에 근거를 적었다).
+  /// ([mapLabelFixedTextSize] 주석에 근거를 적었다).
   ///
   /// **카테고리 선택은 매장명과 똑같이 적용한다.** 아이콘이 다른 레이어에 있을
   /// 뿐 화면에서는 「ATM (하나은행)」도 이름 달린 폴리곤 하나다. 여기만 예외로
@@ -1656,8 +1675,8 @@ class FloorPlanViewState extends State<FloorPlanView> {
   SymbolLayerProperties _facilityLabelSymbolProps() => SymbolLayerProperties(
     textField: categoryLabelTextField(widget.categorySelection),
     textFont: _mapFontStack,
-    textSize: mapLabelFacilityTextSize,
-    textMaxWidth: mapLabelFacilityMaxWidth,
+    textSize: mapLabelFixedTextSize,
+    textMaxWidth: mapLabelFixedMaxWidth,
     // 아이콘이 centroid를 차지하므로 이름은 그 아래로 내린다. POI 라벨
     // (`floor-pois-label`)·야외 오버레이와 같은 오프셋이라 세 곳의 라벨
     // 높이가 맞는다.
@@ -2013,14 +2032,17 @@ class FloorPlanViewState extends State<FloorPlanView> {
     await controller.addFillLayer(
       _highlightSourceId,
       'floor-highlight-fill',
-      const FillLayerProperties(fillColor: '#1A73E8', fillOpacity: 0.16),
+      const FillLayerProperties(
+        fillColor: mapSelectionColor,
+        fillOpacity: 0.16,
+      ),
       enableInteraction: false,
     );
     await controller.addLineLayer(
       _highlightSourceId,
       'floor-highlight-line',
       const LineLayerProperties(
-        lineColor: '#1A73E8',
+        lineColor: mapSelectionColor,
         // 두꺼운 파란 테두리는 옆 매장까지 덮어 지도 가독성을 해쳤다. 채움
         // 색으로도 포커스를 충분히 표현하므로, 테두리는 매장 경계선을 아주
         // 살짝 진하게 하는 정도로만 남긴다.

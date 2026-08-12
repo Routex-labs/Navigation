@@ -11,10 +11,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import MutableMapping, Sequence
 from dataclasses import dataclass
 from math import atan, degrees, pi, sinh
 from typing import TYPE_CHECKING
+
+from app.geo.label_point import label_point
 
 if TYPE_CHECKING:
     from app.geo.georeference import GeoTransform
@@ -84,6 +86,16 @@ def _local_polygon_ring(points: list[dict], transform: GeoTransform) -> list[lis
     return _close_ring(local_points_to_lnglat(points, transform))
 
 
+# `_close_ring`이 붙인 마지막 중복점을 떼고 (lng, lat) 튜플 목록으로 바꾼다.
+# [label_point]는 링이 닫혀 있지 않다고 보고 마지막-첫 변을 스스로 잇기 때문에,
+# 닫힌 링을 그대로 넘기면 길이 0짜리 변이 하나 끼어든다.
+def _closed_ring_to_points(ring: list[list[float]]) -> list[tuple[float, float]]:
+    points = [(point[0], point[1]) for point in ring]
+    if len(points) > 1 and points[0] == points[-1]:
+        points.pop()
+    return points
+
+
 # 매장 feature의 properties. category/subcategory는 클라이언트가 MapLibre
 # setFilter로 카테고리 필터를 걸 때 쓴다.
 #
@@ -126,6 +138,16 @@ def build_floor_tile_layers(
     transform: GeoTransform | None,
     bounds: TileBounds,
     footprint_local_m: list[dict] | None = None,
+    # 매장 id → 라벨 좌표(lng, lat) memo. 호출자가 소유·무효화하는 저장소를
+    # 넘기면 이미 계산된 매장의 label_point를 건너뛰고, 새로 계산한 값을 채운다.
+    #
+    # 타일 간 재사용이 안전한 근거: 라벨 좌표의 입력은 매장 폴리곤(local_m)과
+    # 건물 단위 affine 변환(GeoTransform) 둘뿐이다. 변환은 건물 전체에 하나로
+    # 피팅되고(z/x/y와 무관), bounds는 라벨을 실을지 말지만 거르지 좌표 계산에는
+    # 끼지 않는다. 타일 격자 양자화는 이후 MVT 인코딩 단계에서 일어난다. 따라서
+    # 같은 DB 상태(=같은 revision)에서는 어느 타일에서 계산하든 같은 좌표가
+    # 나온다. 무효화(재시드 시점) 책임은 호출자(tile_queries)에 있다.
+    store_label_memo: MutableMapping[str, tuple[float, float]] | None = None,
 ) -> list[dict]:
     if transform is None:
         return []
@@ -150,7 +172,13 @@ def build_floor_tile_layers(
         )
 
     # 매장 폴리곤 — 타일에 걸치지 않는 것은 버린다.
+    #
+    # 라벨(아이콘+이름)은 같은 폴리곤에 얹지 않고 아래 store_labels 점 레이어로
+    # 따로 내려보낸다. 이유는 [label_point.py] 상단에 적었다 — MapLibre가 폴리곤
+    # 심볼을 면적 무게중심에 찍는데, ㄱ자·길쭉한 매장에서 그 점이 눈에 보이는
+    # 가운데가 아니다.
     store_features = []
+    label_features = []
     for store in stores:
         if not store.polygon:
             continue
@@ -163,7 +191,26 @@ def build_floor_tile_layers(
                 "properties": _store_properties(store),
             }
         )
+        # **라벨 점은 그 점이 들어 있는 타일에만 싣는다.** 폴리곤과 같은 기준
+        # (bbox 교차)으로 실으면 타일 경계에 걸친 매장이 양쪽 타일에 라벨을
+        # 하나씩 갖게 되고, 두 타일이 함께 떠 있는 순간 같은 이름이 두 번
+        # 찍힌다. 대신 화면 가장자리에서 폴리곤 타일만 로드된 상태면 그 매장
+        # 라벨이 잠깐 안 보이는데, POI 레이어가 이미 같은 규칙으로 동작한다.
+        label_xy = store_label_memo.get(store.id) if store_label_memo is not None else None
+        if label_xy is None:
+            label_xy = label_point(_closed_ring_to_points(ring))
+            if store_label_memo is not None:
+                store_label_memo[store.id] = label_xy
+        label_x, label_y = label_xy
+        if bounds.intersects(label_x, label_y, label_x, label_y):
+            label_features.append(
+                {
+                    "geometry": {"type": "Point", "coordinates": [label_x, label_y]},
+                    "properties": _store_properties(store),
+                }
+            )
     layers.append({"name": "stores", "features": store_features})
+    layers.append({"name": "store_labels", "features": label_features})
 
     # POI는 점이라 bbox 교차가 곧 포함 여부다.
     poi_features = []

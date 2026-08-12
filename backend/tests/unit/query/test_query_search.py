@@ -272,3 +272,73 @@ def test_근거가_없으면_추천_이유는_없다():
     assert query_search._reason({}) is None
     assert query_search._intent_basis([]) == {}
     assert query_search._intent_basis(["신발"]) == {"intents": ["신발"]}
+
+
+# 별칭의 **앞부분만** 쳐도 걸린다. 한글은 매장명이 `스타벅스 리저브`라 `스타`만
+# 쳐도 부분 일치로 잡히는데, 영어로 치는 사용자만 `starbucks`를 끝까지 입력해야
+# 했다 — 같은 매장을 찾는 두 언어의 경험이 달랐다.
+def test_영문_별칭은_앞부분만_쳐도_걸린다():
+    rows = [(_store("s1", "스타벅스 리저브"), _floor())]
+
+    for typed in ("sta", "starb", "starbucks"):
+        scored = query_search._rank(rows, typed)
+        assert scored and scored[0][3].id == "s1", typed
+
+
+# 반대 방향(표준형이 질의의 접두)은 넣지 않는다. `스`로 `스타벅스` 별칭 전부를
+# 끌어오면 무관한 매장이 쏟아진다.
+def test_한_글자는_확장하지_않는다():
+    synonyms = query_search._synonyms()
+
+    assert query_search._prefix_expansions(synonyms, "s") == ()
+
+
+# 접두 확장이 없는 말은 예전처럼 이름 부분 일치만 본다 — 확장이 매칭을
+# 넓히기만 하고 기존 판정을 바꾸지 않는다.
+def test_별칭에_없는_말은_그대로다():
+    rows = [(_store("s1", "테디뵈르하우스"), _floor())]
+
+    assert query_search._rank(rows, "테디") and query_search._rank(rows, "zzzz") == []
+
+
+# 공백은 뜻을 나르지 않는다 — 사람은 "노스 페이스"라 띄어 치고, 데이터는 같은 시설을
+# `물품보관함`·`물품 보관함`·`물 품 보 관 함` 세 이름으로 적어 뒀다. 양쪽에서 공백을
+# 떼고 한 번 더 본다.
+def test_띄어쓰기가_달라도_이름으로_찾는다():
+    rows = [(_store("s1", "노스페이스"), _floor())]
+
+    scored = query_search._rank(rows, "노스 페이스")
+
+    assert scored and scored[0][3].id == "s1"
+
+
+# 공백을 뗀 일치는 **항상 뒤로** 온다. 원문 띄어쓰기 그대로 걸린 매장이 있으면 정확히
+# 친 사용자가 손해를 보면 안 된다.
+def test_띄어쓰기_그대로_걸린_쪽이_먼저다():
+    floor = _floor()
+    rows = [(_store("s1", "노스페이스"), floor), (_store("s2", "노스 페이스 아울렛"), floor)]
+
+    scored = query_search._rank(rows, "노스 페이스")
+
+    assert scored[0][3].id == "s2"
+
+
+# 공백을 뗀 뒤 이름 전체와 같은 쪽이 접두보다 먼저다. 둘을 같은 정밀도로 묶으면 이름이
+# 둘이라 확정하지 못하고 되물음으로 새 버린다 — "노스 페이스"가 그랬다.
+def test_공백을_뗀_전체_일치가_접두보다_먼저다():
+    floor = _floor()
+    rows = [
+        (_store("s1", "노스페이스 화이트 라벨"), floor),
+        (_store("s2", "노스페이스"), floor),
+    ]
+
+    scored = query_search._rank_with_candidate(rows, "노스 페이스")
+
+    assert scored[0][5].id == "s2"
+    assert query_search._is_confident_light_match(scored)
+
+
+# 뗄 공백이 양쪽 다 없으면 같은 비교를 두 번 하지 않는다(넓어지는 건 공백이 있을 때뿐).
+def test_공백이_없으면_기존_판정_그대로다():
+    assert query_search._spaceless_match_rank("노스페이스", "노스") is None
+    assert query_search._rank([(_store("s1", "테디뵈르하우스"), _floor())], "zzzz") == []

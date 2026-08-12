@@ -59,12 +59,19 @@
 | 호출부 | 진입 | `current_floor_id` | 비고 |
 |---|---|---|---|
 | [`search_panel.dart`](../../../client/lib/widgets/search_panel.dart) | 상단 검색창 엔터 | 보내지 않음(건물 전체) | 경량 빈손일 때만 |
-| [`ai_search_sheet.dart`](../../../client/lib/widgets/ai_search_sheet.dart) | 경로 안내 화면 FAB | 현재 층을 보냄 | 질의–응답 로그를 쌓는 시트 |
+| ~~`ai_search_sheet.dart`~~ **(삭제됨)** | 경로 안내 화면 FAB | 현재 층을 보냄 | 질의–응답 로그를 쌓는 시트 |
 
 둘 다 [`http_destination_repository.dart`](../../../client/lib/repositories/http_destination_repository.dart)의
 `searchDestinationsAi` 하나를 공유하고, 이 메서드는 `/query/destination`과 파싱까지
 공유한다(`_query`). 따라서 `/query/ai` 응답 모양을 바꾸면 파서 한 곳이 아니라
 **추상 인터페이스(`destination_repository.dart`)·mock·두 화면·관련 테스트**가 함께 움직인다.
+> **`ai_search_sheet.dart`와 `directions_sheet.dart`는 그 뒤 삭제됐다**(실내 안내를 공용
+> 세션으로 모으고 실내 탭을 없앤 리팩터, 그리고 길찾기 입력을 상단 바 두 칸으로 되돌린
+> 변경). 이 문서에서 그 파일들을 가리키는 서술은 **당시 상태**이며, 지금 `/query/ai`를
+> 쓰는 곳은 [`search_panel.dart`](../../../client/lib/widgets/search_panel.dart)(상단 검색)와
+> [`map_shell_screen.dart`](../../../client/lib/screens/map_shell/map_shell_screen.dart)의
+> 길찾기 후보 조회 두 곳이다. 아래 "두 화면"이라는 표현도 그 전제에서 읽어야 한다.
+
 9절의 화면 상태는 상단 검색 패널 기준이며, `ai_search_sheet`를 같은 계약으로 옮길지
 탐색 진입점을 상단 검색 한 곳으로 합칠지는 12절 미결로 둔다.
 
@@ -392,9 +399,10 @@ Phase 1의 vocabulary는 `styles` 하나뿐이다.
 태그가 아니므로 vocabulary와 오버레이 어느 쪽에도 넣지 않고 `_intents.json` 한 파일에
 둔다. 매장별 배열(`"intents": ["신발"]`)로 손으로 적으면 `styles`에서 이미 겪은 드리프트가
 그대로 재현되기 때문이다(근거는 `app/repositories/store_facets.py` 모듈 docstring
-"왜 intents는 매장 태그가 아니라 '규칙 + 예외' 파일인가"). 현재 값은 `신발`(규칙
-`subcategory=슈즈` + 예외 매장 145건)과 `식사`(규칙 `subcategory=레스토랑`)이고, 시드가
-전개 결과를 `Store.search_facets["intents"]`에 적재해 경량 매칭이 소비한다.
+"왜 intents는 매장 태그가 아니라 '규칙 + 예외' 파일인가"). 시드가 규칙 전개 결과를
+`Store.search_facets["intents"]`에 적재하고 경량 매칭과 임베딩 문서가 그것을 소비한다.
+**선언 목록과 건수는 `_intents.json`이 단일 출처다** — 여기 옮겨 적으면 태깅 라운드마다
+낡는다. 확장 이력은 [facet-llm-tagging.md](facet-llm-tagging.md)를 본다.
 
 ### 5-2. 시드 검증
 
@@ -815,7 +823,7 @@ Material의 `ActionChip`·`FilterChip`을 쓰지 않는 이유는 크기다. 기
 함께 고쳐야 하는 파일:
 
 - [`search_panel.dart`](../../../client/lib/widgets/search_panel.dart) — 상태 열거·facet chip
-- [`ai_search_sheet.dart`](../../../client/lib/widgets/ai_search_sheet.dart) — 같은 `/query/ai`를 쓰는 두 번째 화면(1-3)
+- ~~`ai_search_sheet.dart`~~ — 같은 `/query/ai`를 쓰던 두 번째 화면(1-3). **삭제됐다**(아래 주석)
 - [`http_destination_repository.dart`](../../../client/lib/repositories/http_destination_repository.dart) —
   현재 `/destination`과 `_query` 하나를 공유하므로 분리가 필요하다
 - [`destination_repository.dart`](../../../client/lib/repositories/destination_repository.dart)·
@@ -971,7 +979,13 @@ facet도 새 응답 모델도 필요 없고, 넣어 두면 이후 단계의 검�
 - `intents` 스키마는 **소분류 규칙 객체 + 예외 매장 id**로 확정한다(매장별 배열은 기각).
   선언 위치는 vocabulary가 아니라 `resources/store_search_facets/_intents.json`이고,
   시드가 규칙을 전개해 `Store.search_facets["intents"]`에 적재한 값을 검색이 사용한다.
-  현재 `신발`은 실데이터 153건, `식사`는 57건이다(5-1-1, `store_facets.py` docstring).
+  선언 목록·건수는 그 파일이 단일 출처다(5-1-1).
+- **소분류에 없는 말만 intent로 넣는다.** 소분류가 이미 사용자 어휘와 같으면
+  (`아이웨어`·`호텔`) `query_synonyms.json` 별칭으로 잇는다 — intent는 임베딩 문서
+  텍스트를 바꾸므로 이름 신호를 밀어내 오타 질의가 회귀한다([FAISS.md](FAISS.md) 11-6).
+- **언어 축도 같은 파일이 맡는다.** 영문 일반명사(`toilet`·`shoes`)는 별칭으로 넣고
+  모델을 바꾸지 않는다 — 한국 매장명은 영어의 음차라 임베딩이 넘을 수 없고, 다국어
+  모델은 어느 임계값에서도 오탐이 0이 되지 않았다([FAISS.md](FAISS.md) 11-7).
 - 원본 JSON 전체를 Flutter에 보내지 않는다.
 - `/query/destination`의 단일 목적지 계약은 유지한다.
 - 대화형 탐색은 여러 후보·질문·선택지를 표현하는 별도 응답 모델을 사용한다.

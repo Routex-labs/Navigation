@@ -53,9 +53,17 @@ class Settings(BaseSettings):
     tile_cache_max_bytes: int = 64 * 1024 * 1024  # 64MB
     # 기동 워밍업을 기본 층(앱이 처음 여는 지상 1층)만 대상으로 할지 여부.
     # True면 사용자가 즉시 보는 층의 소켓 폭주만 선제 제거하고, 나머지 층은
-    # 첫 방문 때 lazy로 채운다 — 워밍 작업량·상주 메모리를 층 수만큼 줄인다.
-    # False면 예전처럼 전 층을 미리 인코딩한다.
-    tile_warm_default_floor_only: bool = True
+    # 첫 방문 때 lazy로 채운다.
+    #
+    # 기본값이 False(전 층 워밍)인 근거 — 라벨 계산 병목(볼록 4각형 조기 탈출 +
+    # 라벨 memo, label_point.py·tile_queries.py) 제거 후 실측(실데이터 12층 ×
+    # 워밍 줌 15~18 × padding 1 = 600타일):
+    #   - 워밍 총 시간 ~6.8s(백그라운드 데몬 스레드라 기동·readiness를 막지 않음)
+    #   - 캐시 점유 600항목 / 0.92MB — 상한(2048항목·64MB)의 각각 29%·1.4%
+    # 층 전환이 곧 카메라 줌 애니메이션인 클라이언트 특성상 어느 층이든 첫
+    # 방문에 타일 격자를 병렬 요청하므로, 전 층을 미리 채우는 편이 낫다.
+    # 메모리가 빠듯한 환경에서는 NAV_TILE_WARM_DEFAULT_FLOOR_ONLY=1로 되돌린다.
+    tile_warm_default_floor_only: bool = False
     # 기동 직후 백그라운드로 임베딩 모델을 올려 첫 /query/ai의 로드 대기를 없앤다.
     # 기본은 비활성 — 켜면 앱을 만드는 모든 프로세스(테스트 포함)가 torch를 로드하고
     # 400MB대 메모리를 상주시킨다. 배포 이미지에서만 켠다.

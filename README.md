@@ -89,6 +89,8 @@ Docker Compose는 배포 이미지·컨테이너 환경을 확인할 때만 사�
 
 ## 문서
 
+**전체 목록은 [문서 색인](docs/README.md)에 있습니다.** 자주 보는 것만 아래에 둡니다.
+
 - [로컬 개발 가이드](docs/guide/local-development-guide.md): 플랫폼별 실행, API 주소, 문제 해결
 - [FastAPI 요청 흐름](docs/backend/fastapi-request-flow.md): Router → Query → SQLite 구조
 - [대화형 매장 탐색·추천 설계](docs/backend/native/conversational-discovery.md): 검색 facet 원본, 복수 추천 계약, Flutter 질문·선택 흐름

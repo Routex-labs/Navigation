@@ -137,7 +137,12 @@ def get_place_detail(
 
     # 상세는 시트를 열 때마다 요청되고 내용은 재시드 전까지 바뀌지 않는다.
     # 직렬화된 본문에서 ETag를 뽑으므로 추가 쿼리가 없다.
-    body = PlaceDetailResponse.model_validate(result).model_dump_json()
+    #
+    # `exclude_none`이 있어야 계약 4-2 규칙 1이 HTTP 경계까지 지켜진다. 조립 단계는
+    # 값이 없는 선택 키를 이미 빼고 있는데, DTO가 직렬화하면서 `"price": null`로
+    # 도로 채워 넣는다. 그러면 클라이언트가 "없다"와 "있는데 비었다"를 구분하는
+    # 분기를 갖게 되고, 그 분기가 카드마다 다른 높이로 새어 나온다.
+    body = PlaceDetailResponse.model_validate(result).model_dump_json(exclude_none=True)
     etag = f'"{hashlib.blake2b(body.encode("utf-8"), digest_size=16).hexdigest()}"'
     headers = cache_headers(etag, settings.tile_cache_max_age)
 
@@ -156,11 +161,39 @@ def get_floor_map(
     building_id: str,
     floor_name: str,
     session: Session = Depends(get_db),
+    if_none_match: str | None = Header(default=None),
 ):
     result = building_queries.get_floor_map(session, building_id, floor_name)
     if result is None:
         raise HTTPException(status_code=404, detail="Floor not found")
-    return result
+
+    # 층 응답은 층을 전환할 때마다 요청되는데 내용은 재시드 전까지 바뀌지 않는다.
+    # 같은 파일의 타일·상세 엔드포인트처럼 짧은 max-age + ETag 재검증을 붙여
+    # 재방문을 304(본문 없음)로 끝낸다. ETag는 직렬화된 본문에서 뽑으므로 추가
+    # 쿼리가 없다. 상세(get_place_detail)와 달리 exclude_none을 주지 않는 이유:
+    # 이 응답은 지금까지 FastAPI 기본 직렬화(None 키 포함)로 나갔고, 클라이언트
+    # 모델이 그 형태를 소비 중이라 본문 계약을 그대로 유지한다.
+    #
+    # **by_alias=True가 반드시 있어야 한다.** FastAPI가 response_model로 직렬화할
+    # 때는 by_alias=True가 기본인데, ETag를 뽑으려고 여기서 직접 부르는
+    # model_dump_json()은 기본이 False다. 그래서 이 엔드포인트만 조용히
+    # `navigation_graph.edges[].from`/`to`가 필드명 `from_node_id`/`to_node_id`로
+    # 나갔다(GraphEdgeResponse의 alias). 같은 DTO를 쓰는 /floors/{floor}/graph·
+    # /graph는 FastAPI 경로라 계속 from/to였다 — 한 배포에서 두 엔드포인트의
+    # 계약이 갈렸다는 뜻이다.
+    #
+    # 클라이언트에서는 이게 조용한 파싱 예외로 나타났다(`json['from'] as String`).
+    # 그 예외 하나로 층 도면(FloorPlan)과 층 그래프가 통째로 null이 되어 층
+    # 외곽선·카메라 fit·매장 탭·검색 포커스가 한꺼번에 죽었고, 화면에는 "지하층이
+    # 잘려 보이고 매장을 눌러도 뒤 건물만 반응한다"로만 드러났다.
+    body = FloorMapResponse.model_validate(result).model_dump_json(by_alias=True)
+    etag = f'"{hashlib.blake2b(body.encode("utf-8"), digest_size=16).hexdigest()}"'
+    headers = cache_headers(etag, settings.tile_cache_max_age)
+
+    if etag_matches(if_none_match, etag):
+        return Response(status_code=304, headers=headers)
+
+    return Response(content=body, media_type="application/json", headers=headers)
 
 
 # 층 지도 벡터 타일(MVT). MapLibre GL의 벡터 타일 소스가 z/x/y로 호출한다.

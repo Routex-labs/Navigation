@@ -10,23 +10,25 @@ import '../../core/api_config.dart';
 import '../../core/service_locator.dart';
 import '../../domain/dijkstra.dart';
 import '../../domain/indoor_store_lookup.dart';
+import '../../domain/nearby_stores.dart';
 import '../../domain/nearest_store.dart';
-import '../../domain/route_endpoint_fill.dart';
-import '../../domain/single_flight.dart';
-import '../../domain/transit_walk_fill.dart';
 import '../../domain/outdoor_poi_ranking.dart';
+import '../../domain/route_endpoint_fill.dart';
+import '../../domain/route_endpoint_swap.dart';
+import '../../domain/single_flight.dart';
 import '../../domain/store_suggestions.dart';
+import '../../domain/transit_walk_fill.dart';
 import '../../features/debug_mode/debug_mode.dart';
 import '../../features/indoor_navigation/contract/floor_transition_ui_state.dart';
 import '../../models/building.dart';
 import '../../models/category_count.dart';
+import '../../models/directions_route.dart';
 import '../../models/favorite_place.dart';
 import '../../models/floor_plan.dart';
 import '../../models/outdoor_poi.dart';
-import '../../models/store_index_entry.dart';
-import '../../models/directions_route.dart';
-import '../../models/transit_route.dart';
 import '../../models/poi_search_result.dart';
+import '../../models/store_index_entry.dart';
+import '../../models/transit_route.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_menu_sheet.dart';
 import '../../widgets/category_icon.dart';
@@ -42,10 +44,11 @@ import '../../widgets/outdoor_poi_sheet.dart';
 import '../../widgets/place_detail_sheet.dart';
 import '../../widgets/route_field_results.dart';
 import '../../widgets/route_plan_mode.dart';
+import '../../widgets/search_panel.dart';
 import '../../widgets/transit_routes_sheet.dart';
 import '../../widgets/travel_mode_bar.dart';
-import '../../widgets/search_panel.dart';
 import '../outdoor_map/outdoor_map_screen.dart';
+
 
 /// 야외/실내 지도의 공통 뼈대. 홈(야외) ↔ 실내 전환은 Navigator push 없이
 /// 이 화면 안에서 모드만 바꿔 탭처럼 즉시 반응하게 한다. 검색·길찾기·앱
@@ -165,12 +168,33 @@ class _MapShellScreenState extends State<MapShellScreen> {
   ///
   /// 이미 고른 chip을 다시 누르면(=[selection]이 null) 해제만 하고 시트는 열지
   /// 않는다. 해제 수단이 사라지면 필터를 걸어 놓고 되돌릴 방법이 없어진다.
-  void _onCategoryChipTapped(CategorySelection? selection) {
+  ///
+  /// **떠 있는 목록 시트가 있으면 먼저 닫는다.** 이 시트는 barrier가 없어
+  /// 포인터를 지도로 흘리므로([_withMapsLocked] 주석) chip 줄이 시트 위에 계속
+  /// 떠 있고 그대로 눌린다. 닫지 않고 열면 chip을 누른 횟수만큼 시트가 그대로
+  /// 쌓여서, 카테고리 몇 개를 훑어본 사용자는 지도로 돌아가려고 닫기를 그만큼
+  /// 눌러야 한다. 매장 상세 시트가 같은 이유로 이미 하는 일이다
+  /// ([_openStoreFromMap]) — 두 시트가 같은 라우트를 쓰는 이상 규칙도 같아야 한다.
+  Future<void> _onCategoryChipTapped(CategorySelection? selection) async {
     _onCategorySelectionChanged(selection);
+    final closing = _categorySheetClosing;
+    if (closing != null) {
+      // pop은 chain 전체를 닫으라는 신호를 만들지만(PopScope), 아래
+      // `_runSheetChain`이 시작할 때 그 플래그를 초기화하므로 새 시트에는
+      // 영향이 없다([_openStoreFromMap]과 같은 규칙).
+      Navigator.of(context).pop();
+      await closing;
+      if (!mounted) return;
+    }
+    // 해제(다시 누르기)는 여기까지다 — 떠 있던 목록은 닫고 새로 열지는 않는다.
     final category = selection?.category;
     if (category == null) return;
-    _runSheetChain(() => _openCategoryStores(category));
+    await _runSheetChain(() => _openCategoryStores(category));
   }
+
+  /// 지금 떠 있는 카테고리 목록 시트가 닫히면 완료되는 Future. 안 떠 있으면 null.
+  /// 상세 시트의 [_placeDetailClosing]과 같은 역할이다.
+  Future<PoiSearchResult?>? _categorySheetClosing;
 
   /// 검색이 빈손일 때 패널이 제안한 카테고리를 골랐다(설계:
   /// `docs/client/search-result-list-ux.md` R절).
@@ -184,8 +208,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
     _onCategoryChipTapped(CategorySelection(category: category));
   }
 
-  ({String title, String subtitle})? _placeInfo;
   bool _outdoorRouteVisible = false;
+
+  /// 사용자가 고른 목적지로 안내 중인지. true면 지도 위 chrome(검색창·카테고리
+  /// 줄·하단 바)을 접어 지도와 안내 카드만 남긴다. 판정 기준과 그렇게 나눈
+  /// 이유는 `OutdoorMapBody`의 `_guidanceActive`에 있다.
+  bool _guidanceActive = false;
 
   /// 실내 지도에서 "위치 지정" 흐름이 켜져 있는지. IndoorMapBody가 콜백으로
   /// 알려주며, 하단 바 "위치 지정" 버튼을 눌린 상태로 표시하는 데 쓴다.
@@ -234,12 +262,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
   FloorTransitionUiState? _floorTransition;
   double _floorScrimOpacity = 0;
 
-  // 지도 위에 얹은 공용 오버레이(검색창·저장한 장소 pill·하단 홈/실내 바)의
-  // 영역을 IndoorMapBody가 map click 처리에서 제외할 수 있게 넘겨줄 key들.
+  // 지도 위에 얹은 공용 오버레이(검색창·카테고리 줄·하단 바)의 영역을
+  // IndoorMapBody가 map click 처리에서 제외할 수 있게 넘겨줄 key들.
   // MapLibre PlatformView가 gesture arena를 우회해서 오버레이 탭이 뒤의 매장
   // 까지 새어들어가는 문제를 여기서 함께 막는다.
   final _topBarKey = GlobalKey();
-  final _favoritesPillKey = GlobalKey();
   final _categoryRowKey = GlobalKey();
   final _bottomBarKey = GlobalKey();
   final _searchPanelKey = GlobalKey();
@@ -649,14 +676,89 @@ class _MapShellScreenState extends State<MapShellScreen> {
     await _runSheetChain(() => _showStoreInfo(store, focusOnMap: true));
   }
 
+  /// 자동완성 후보 한 곳을 골랐을 때. 좌표를 붙여 검색 결과를 고른 것과 **같은
+  /// 자리로 합류시킨다** — 후보에서 왔든 결과 목록에서 왔든 사용자에게는 같은
+  /// 동작이어야 한다.
+  ///
+  /// 좌표는 층 도면에서 찾는다(`OutdoorMapBodyState.resolveIndexEntry`). 추가
+  /// 요청은 없다 — 그 층은 어차피 열어야 하고, 도면이 매장마다 중심점을 들고 있다.
+  ///
+  /// 못 찾으면 예전처럼 그 이름으로 검색을 다시 돌린다. 후보와 층 도면이
+  /// 어긋나는 경우(시드 갱신 직후, 아직 야외라 층을 옮길 수 없는 경우 등)에
+  /// 아무 일도 일어나지 않는 것보다, 한 번 더 누르더라도 도달하는 편이 낫다.
+  Future<void> _onSearchSuggestionPicked(StoreIndexEntry entry) async {
+    recentSearchesController.add(_searchQuery);
+    final resolved = await _outdoorKey.currentState?.resolveIndexEntry(entry);
+    if (!mounted) return;
+    if (resolved == null) {
+      _onSearchQueryPicked(entry.name);
+      return;
+    }
+    _closeSearch();
+    await _runSheetChain(() => _showStoreInfo(resolved, focusOnMap: true));
+  }
+
+  /// 상세 시트가 부르는 "근처 매장" 계산.
+  ///
+  /// **여기서 하는 이유**: 그래프와 매장 색인은 이 화면이 이미 받아 두고 검색·경로에
+  /// 쓰는 것이다(둘 다 저장소가 future를 공유해 캐시한다). 시트가 직접 받아 오면 같은
+  /// 데이터가 두 벌이 되고, 시트를 테스트하려면 그래프부터 만들어야 한다.
+  ///
+  /// 서버에 새 엔드포인트를 만들지 않는 이유도 같다 — 필요한 것이 전부 이미 기기에
+  /// 있고, 거리는 어차피 온디바이스 다익스트라가 정답이다(AGENTS.md의 경로 계산 규칙).
+  Future<List<NearbyStore>> _loadNearbyStores(String entranceNodeId) async {
+    final graph = await buildingRepository.getBuildingGraph(_buildingId);
+    final index = await buildingRepository.getStoreIndex(_buildingId);
+    if (graph == null || index == null || graph.nodes.isEmpty) return const [];
+
+    final Map<String, NodeReach> reach;
+    try {
+      reach = reachableFrom(
+        nodes: graph.nodes,
+        edges: graph.edges,
+        startNodeId: entranceNodeId,
+      );
+    } on ArgumentError {
+      // 이 매장의 입구 노드가 그래프에 없다. 시드와 그래프가 어긋난 경우라
+      // 목록만 빠지고 상세는 그대로 뜬다.
+      return const [];
+    }
+
+    return nearbyStores(
+      stores: index,
+      reachByNodeId: reach,
+      excludePlaceId: _nearbyOriginPlaceId ?? '',
+    );
+  }
+
+  /// 근처 매장 목록에서 자기 자신을 빼려면 지금 열려 있는 매장 id가 필요하다.
+  /// 시트가 인자로 넘기지 않는 이유는, 이 화면이 어차피 시트를 띄우면서 그 id를
+  /// 이미 알고 있기 때문이다.
+  String? _nearbyOriginPlaceId;
+
+  /// 근처 매장 줄을 눌렀다. **검색 후보를 고른 것과 같은 경로**를 탄다 —
+  /// 같은 결과에 이르는 길이 둘로 갈리면 한쪽만 고쳐지는 날이 온다.
+  Future<void> _onNearbyStorePicked(StoreIndexEntry entry) async {
+    // 지금 시트를 먼저 닫는다. 닫지 않고 새 시트를 올리면 상세가 상세 위에 쌓여
+    // 뒤로 가기가 몇 번인지 사용자가 알 수 없게 된다.
+    Navigator.of(context).pop();
+
+    // `_onSearchSuggestionPicked`를 그대로 부르지 않는 이유는 그쪽이 **최근 검색어를
+    // 남기기** 때문이다. 근처 매장을 누른 것은 검색이 아니라서, 부르면 방금 친 적도
+    // 없는 말이 최근 목록에 쌓인다. 좌표를 찾고 시트를 여는 부분은 같은 함수를 쓴다.
+    final resolved = await _outdoorKey.currentState?.resolveIndexEntry(entry);
+    if (!mounted || resolved == null) return;
+    await _runSheetChain(() => _showStoreInfo(resolved, focusOnMap: true));
+  }
+
   void _onSearchBuildingPicked(Building building) {
     _closeSearch();
-    setState(() {
-      _placeInfo = (
-        title: building.name,
-        subtitle: '${building.floors.length}개 층',
-      );
-    });
+    // 카드만 띄우고 지도를 그대로 두면 사용자는 자기가 고른 건물이 화면 어디에
+    // 있는지 알 수 없다 — 이름만 적힌 카드가 뜰 뿐 지도는 방금 보던 자리 그대로다.
+    // 매장을 골랐을 때 [_showStoreInfo]가 카메라를 옮기는 것과 같은 규칙이다.
+    unawaited(
+      _outdoorKey.currentState?.focusBuilding(building) ?? Future.value(),
+    );
   }
 
   /// 매장 정보 시트를 띄운다. 검색 결과를 탭했을 때와 지도 위 매장 폴리곤을
@@ -666,20 +768,28 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 반환값은 사용자가 출발/도착 액션을 실제로 골랐는지를 뜻한다. 저장된
   /// 장소 시트에서 넘어온 경우 호출자가 이 값을 보고 "그냥 닫힘"이면 다시
   /// 저장된 장소 시트로 돌려보내는 데 쓴다.
+  ///
+  /// [keepZoom]이면 카메라를 옮기되 **배율은 그대로 둔다.** 지도에서 매장을
+  /// 직접 눌렀을 때 쓴다 — 그 매장은 이미 화면에 있으므로 확대까지 하면 방금
+  /// 보던 층 배치가 사라진다. 목록·검색 결과에서 온 매장은 지금 화면 어디에
+  /// 있는지 알 수 없으니 확대해서 보여 주는 편이 맞다.
   Future<bool> _showStoreInfo(
     PoiSearchResult match, {
     bool focusOnMap = false,
+    bool keepZoom = false,
   }) async {
-    // 목록에서 고른 매장은 지금 화면 어디에 있는지 알 수 없다. 시트를 띄우기
-    // 전에 지도를 그 매장으로 옮겨, 시트를 닫으면 바로 그 자리가 보이게 한다.
-    // 지도 폴리곤을 직접 탭한 경우에는 옮기지 않는다 — 이미 보고 있는 매장을
-    // 다시 중앙으로 끌어오면 방금 보던 주변 맥락이 사라진다.
+    // 시트를 띄우기 전에 지도를 그 매장으로 옮겨, 시트를 닫으면 바로 그 자리가
+    // 보이게 한다.
     if (focusOnMap) {
       // 곧 올라올 시트 높이를 함께 넘겨, 매장이 시트 뒤가 아니라 그 위 영역
       // 한가운데에 놓이게 한다. 시트 높이를 바꾸면 카메라도 자동으로 따라온다.
       await _outdoorKey.currentState?.focusStore(
         match,
         bottomSheetFraction: kPlaceDetailSheetInitialSize,
+        keepZoom: keepZoom,
+        // 검색·목록에서 고른 매장은 건물 밖에서 골랐어도 보여 준다. 지도에서
+        // 직접 누른 매장은 이미 건물 안이라 이 값과 무관하다.
+        enterBuildingIfNeeded: true,
       );
       if (!mounted) return false;
     }
@@ -688,7 +798,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
       buildingId: _buildingId,
     );
     if (!mounted) return false;
-    final action = await _withMapsLocked(
+    // 근처 매장 목록에서 자기 자신을 빼는 데 쓴다.
+    _nearbyOriginPlaceId = match.placeId;
+    final showing = _withMapsLocked(
       () => PlaceDetailSheet.show(
         context,
         title: match.name,
@@ -704,21 +816,38 @@ class _MapShellScreenState extends State<MapShellScreen> {
         // 검색 결과 목록이 쓰는 것과 **같은 계산 결과**를 넘긴다. 두 화면이
         // 같은 매장에 다른 거리를 적으면 어느 쪽도 못 믿게 된다.
         reach: match.nodeId == null ? null : _reachByNodeId?[match.nodeId],
-        // "이 매장에서" 가장 가까운 시설. 위 reach와 기준이 다르다.
+        // "이 매장에서" 잰 근처 매장. 위 reach와 기준이 다르다 — 사용자 기준
+        // 거리는 이미 헤더에 있고, 같은 기준으로 두 번 적으면 두 번째 줄이
+        // 알려 주는 게 없다.
+        nearbyStoresLoader: _loadNearbyStores,
+        onSelectNearbyStore: _onNearbyStorePicked,
         onCloseAll: _requestCloseSheetChain,
       ),
     );
+    // 떠 있는 동안만 값이 있다. 지도에서 다른 매장을 눌렀을 때 이 시트를 먼저
+    // 닫고 기다리는 데 쓴다([_openStoreFromMap]).
+    _placeDetailClosing = showing;
+    final action = await showing;
+    if (identical(_placeDetailClosing, showing)) _placeDetailClosing = null;
     if (!mounted) return false;
     // 시트가 어떻게 닫혔든(선택 없이 닫힘 포함) 지도 위 강조 표시도 같이 지운다.
     _outdoorKey.currentState?.clearHighlight();
+    // **아무것도 고르지 않고 닫았으면 층 화면으로 되돌린다.** 매장을 고르면
+    // 카메라가 그 매장으로 당겨지고 시트를 피해 위로 밀려 있는데, 그 치우친
+    // 화면이 그대로 남으면 사용자는 방금 보던 층 배치를 다시 찾아야 한다.
+    //
+    // 무언가를 골랐을 때(카테고리 보기·출발/도착)는 되돌리지 않는다 — 뒤이어
+    // 다른 시트나 경로 개요가 카메라를 자기 자리로 가져가므로, 여기서 한 번 더
+    // 움직이면 화면이 두 번 튄다.
+    if (action == null || _closeSheetChainRequested) {
+      unawaited(
+        _outdoorKey.currentState?.realignToActiveFloor() ?? Future.value(),
+      );
+    }
     // X로 chain 전체를 닫으라는 신호가 왔다면, 여기서 곧장 종료해 부모 loop가
     // 다음 시트를 다시 열지 못하게 한다.
     if (_closeSheetChainRequested) return true;
     if (action == null) return false;
-
-    if (action == StoreInfoAction.viewCategory && match.category != null) {
-      return _openCategoryStores(match.category!);
-    }
 
     final candidate = DirectionsCandidate(
       title: match.name,
@@ -744,9 +873,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
       // 둘 다 출발지로 완전하다 — 후자를 빼면 위치를 찍어둔 사용자가 "도착"을
       // 눌러도 아무 일도 안 일어난다.
       //
-      // 어느 쪽도 없을 때만 계산을 미루고 상단 초안 바를 남긴다. 그 상태에서
-      // 계산하면 실패 안내만 나오고, 초안 바가 있으면 사용자가 출발 행을 눌러
-      // DirectionsSheet 검색 흐름으로 이어갈 수 있다.
+      // 어느 쪽도 없을 때만 계산을 미루고 상단 길찾기 바를 남긴다. 그 상태에서
+      // 계산하면 실패 안내만 나오고, 바가 있으면 사용자가 출발 칸을 눌러 그
+      // 자리에서 출발지를 채울 수 있다.
       setState(() => _routeDraftDestination = candidate);
       final origin = _selectedOrigin;
       if (origin != null || _canRouteFromCurrentLocation) {
@@ -817,41 +946,48 @@ class _MapShellScreenState extends State<MapShellScreen> {
   }
 
   /// 카테고리 chip을 눌렀을 때 같은 카테고리의 매장 목록 시트를 연다. 항목을
-  /// 탭하면 그 매장의 매장 정보 시트로 넘어가고, 정보 시트에서 뒤로 돌아
-  /// 오면(=출발/도착 액션 없이 닫힘) 다시 카테고리 목록으로 돌아온다 —
-  /// 사용자가 여러 매장을 훑어보는 흐름을 위해 저장한 장소와 동일한 loop
-  /// 패턴을 쓴다.
+  /// 탭하면 목록이 닫히고 그 매장의 상세 시트가 뜬다.
+  ///
+  /// **상세를 닫아도 목록으로 돌아가지 않는다.** 예전에는 여기가 loop여서 상세를
+  /// 닫으면 카테고리 목록이 다시 올라왔다 — 여러 매장을 훑는 흐름을 노린 것이었다.
+  /// 그런데 사용자에게는 매장을 하나 눌렀을 뿐인데 시트가 겹겹이 쌓인 것으로
+  /// 읽혔다. 상세는 **그 매장 하나를 보는 자리**이고, 닫으면 지도로 끝나는 편이
+  /// 예측 가능하다. 목록을 다시 보고 싶으면 chip을 다시 누르면 된다.
   Future<bool> _openCategoryStores(String category) async {
-    while (mounted) {
-      final currentFloor = _activeIndoorFloor;
-      final picked = await _withMapsLocked(
-        () => CategoryStoresSheet.show(
-          context,
-          buildingId: _buildingId,
-          category: category,
-          onCloseAll: _requestCloseSheetChain,
-          currentFloor: currentFloor,
-          // 지도 강조와 시트 목록이 같은 소분류를 가리키게 한다. 다른 대분류가
-          // 걸려 있었다면(매장 정보 시트에서 카테고리를 타고 들어온 경우) 그
-          // 소분류는 이 대분류에 없는 값이므로 넘기지 않는다.
-          subcategory: _categorySelection?.category == category
-              ? _categorySelection?.subcategory
-              : null,
-          onSubcategoryChanged: (value) => _onCategorySelectionChanged(
-            CategorySelection(category: category, subcategory: value),
-          ),
-          onFirstStoreChanged: _focusCategoryFirstStore,
+    final currentFloor = _activeIndoorFloor;
+    final showing = _withMapsLocked(
+      () => CategoryStoresSheet.show(
+        context,
+        buildingId: _buildingId,
+        category: category,
+        onCloseAll: _requestCloseSheetChain,
+        currentFloor: currentFloor,
+        // 지도 강조와 시트 목록이 같은 소분류를 가리키게 한다. 다른 대분류가
+        // 걸려 있었다면(매장 정보 시트에서 카테고리를 타고 들어온 경우) 그
+        // 소분류는 이 대분류에 없는 값이므로 넘기지 않는다.
+        subcategory: _categorySelection?.category == category
+            ? _categorySelection?.subcategory
+            : null,
+        onFirstStoreChanged: _focusCategoryFirstStore,
+        onSubcategoryChanged: (value) => _onCategorySelectionChanged(
+          CategorySelection(category: category, subcategory: value),
         ),
-      );
-      if (_closeSheetChainRequested || picked == null || !mounted) return false;
-      final tookAction = await _showStoreInfo(picked, focusOnMap: true);
-      if (_closeSheetChainRequested || !mounted) return false;
-      if (tookAction) return true;
-    }
-    return false;
+      ),
+    );
+    // 떠 있는 동안만 값이 있다. 다른 chip을 눌렀을 때 이 시트를 먼저 닫고
+    // 기다리는 데 쓴다([_onCategoryChipTapped]).
+    _categorySheetClosing = showing;
+    final picked = await showing;
+    if (identical(_categorySheetClosing, showing)) _categorySheetClosing = null;
+    if (_closeSheetChainRequested || picked == null || !mounted) return false;
+    return _showStoreInfo(picked, focusOnMap: true);
   }
 
-  /// 카테고리 목록 맨 위 매장을 지도에서 보여 준다.
+  /// 카테고리 목록 맨 위 매장으로 지도를 옮긴다. **배율은 건드리지 않는다.**
+  ///
+  /// 카테고리를 고르는 것은 "저 업종이 어디 있나"를 훑는 행동이라, 화면이 확
+  /// 당겨지면 방금 보던 층 전체의 배치를 잃는다. 매장을 콕 집었을 때(검색 결과·
+  /// 목록 항목)만 확대하고, 여기서는 중앙만 맞춘다(`focusKeepZoom`).
   ///
   /// 시트가 화면 아래를, 카테고리 chip 줄이 위를 가리므로 **그 사이에 남는 띠
   /// 한가운데**가 목표 지점이다. 정중앙에 놓으면 시트 뒤에 숨고, 시트 높이만
@@ -868,6 +1004,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
         store,
         bottomSheetFraction: kCategoryStoresSheetInitialSize,
         topInsetPx: topInsetPx,
+        keepZoom: true,
       );
     }
   }
@@ -1101,7 +1238,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
     setState(() {
       _routeMode = true;
       _routeEditingField = field;
-      _placeInfo = null;
     });
     if (field == null) {
       _unfocusRouteFields();
@@ -1280,37 +1416,67 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 검색이 처음부터 다시 돌기만 하고, 사용자가 고른 적 없는 값이 확정된 것처럼
   /// 칸에 앉는다.
   ///
-  /// **출발지가 실제 후보일 때만** 누를 수 있다([_canSwapRoute]). 교체하면 지금
-  /// 출발지가 도착지가 되는데, "현재 위치"는 그런 후보 객체가 아예 없다 —
-  /// 출발지 칸에서만 null이라는 뜻으로 표현되는 특수값이라 도착지 자리로 옮길 수
-  /// 없다. 반대로 도착지가 비어 있어도 교체는 성립한다: "A에서 출발"을 뒤집으면
-  /// "현재 위치에서 출발해 A로 도착"이고 양쪽 모두 유효한 값이다.
-  void _swapRouteEndpoints() {
-    final origin = _selectedOrigin;
-    if (origin == null) return;
+  /// 출발지가 "현재 위치"면 **가장 가까운 매장**으로 굳혀 도착지에 놓는다. 규칙과
+  /// 실패 조건은 [nearestStoreForCurrentLocation]에 있다. 못 고르면 상태를
+  /// 건드리지 않고 이유만 알린다 — 절반만 바뀐 초안(출발지는 새 값, 도착지는 옛
+  /// 값)을 남기면 사용자가 무엇을 누른 것인지 알 수 없게 된다.
+  Future<void> _swapRouteEndpoints() async {
     final destination = _routeDraftDestination;
+    if (destination == null) return;
+    final origin = _selectedOrigin;
+
+    // 출발지가 실제 지점이면 그냥 맞바꾼다. 색인도 그래프도 필요 없다.
+    if (origin != null) {
+      _applySwappedEndpoints(newOrigin: destination, newDestination: origin);
+      await _startRoute(
+        origin: destination,
+        destination: origin,
+        // 사용자가 방금 직접 뒤집었다 — 위치가 옮겨간 것을 새삼 알릴 이유가 없다.
+        announceOriginAnchor: false,
+      );
+      return;
+    }
+
+    final replacement = await _nearestStoreAsCandidate(
+      excludeNodeId: destination.nodeId,
+    );
+    if (!mounted) return;
+    if (replacement == null) {
+      _showSnack('현재 위치를 대신할 가까운 매장을 찾지 못했어요.');
+      return;
+    }
+
+    _applySwappedEndpoints(newOrigin: destination, newDestination: replacement);
+    await _startRoute(
+      origin: destination,
+      destination: replacement,
+      announceOriginAnchor: false,
+    );
+  }
+
+  /// 뒤집은 결과를 두 칸과 상태에 함께 반영한다.
+  ///
+  /// 칸의 **글자**까지 같이 바꾸는 것이 핵심이다. 우리 상단 바는 라벨이 아니라
+  /// 입력창이라, 상태만 뒤집으면 화면에는 옛 글자가 그대로 남아 사용자가 보는
+  /// 것과 실제로 계산되는 경로가 어긋난다.
+  void _applySwappedEndpoints({
+    required DirectionsCandidate newOrigin,
+    required DirectionsCandidate newDestination,
+  }) {
     setState(() {
-      _selectedOrigin = destination;
-      _routeDraftDestination = origin;
-      // 도착지가 비어 있었다면 출발지는 "현재 위치"로 돌아간다. 값이 아니라
-      // 안내문이므로 컨트롤러는 비우고 [_selectedOrigin]도 null로 둔다.
-      _routeOriginController.text = destination?.title ?? '';
-      _routeDestinationController.text = origin.title;
+      _selectedOrigin = newOrigin;
+      _routeDraftDestination = newDestination;
+      _routeOriginController.text = newOrigin.title;
+      _routeDestinationController.text = newDestination.title;
       _routeEditingField = null;
     });
     // 교체 직전에 걸려 있던 조회를 무효화한다. 늦게 도착한 응답이 반대 칸의
     // 목록을 덮으면, 방금 만든 조합과 무관한 후보가 뜬다.
     _routeSearchSeq++;
     _unfocusRouteFields();
+    // 출발점이 바뀌었으니 목록 거리도 전부 옛 값이다.
     unawaited(_refreshReach());
-    unawaited(
-      _startRoute(origin: _selectedOrigin, destination: origin),
-    );
   }
-
-  /// 교체 버튼을 누를 수 있는지. 못 누르는 상태에서도 **숨기지 않는다** —
-  /// 버튼이 사라지면 사용자는 기능이 없다고 결론짓고 다시 찾지 않는다.
-  bool get _canSwapRoute => _selectedOrigin != null;
 
   /// 후보 목록에서 하나를 골랐을 때. 아직 도착지가 없으면 도착지 칸으로 넘겨
   /// 주고, 둘 다 준비됐으면 입력을 닫고 경로를 계산한다.
@@ -1362,7 +1528,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
           ? DirectionsMapPickTarget.origin
           : DirectionsMapPickTarget.destination;
       // 안내 카드와 자리가 겹치므로 장소 카드는 접는다.
-      _placeInfo = null;
     });
   }
 
@@ -1405,7 +1570,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
     setState(() {
       _routeMode = true;
       _routeEditingField = null;
-      _placeInfo = null;
     });
   }
 
@@ -1750,10 +1914,43 @@ class _MapShellScreenState extends State<MapShellScreen> {
   void _onMapStoreTap(PoiSearchResult match) {
     final target = _mapPickTarget;
     if (target == null) {
-      _runSheetChain(() => _showStoreInfo(match));
+      unawaited(_openStoreFromMap(match));
       return;
     }
     _applyMapPick(match, target);
+  }
+
+  /// 지금 떠 있는 상세 시트가 닫히면 완료되는 Future. 안 떠 있으면 null.
+  Future<StoreInfoAction?>? _placeDetailClosing;
+
+  /// 지도에서 매장을 눌러 상세를 연다. **떠 있는 상세가 있으면 먼저 닫는다.**
+  ///
+  /// 고른 매장은 폴리곤이 파랗게 채워지고([_highlightedStoreId]) 카메라가 그
+  /// 매장을 시트 위 영역 한가운데로 끌어온다. 화면 구석을 눌렀을 때 강조된
+  /// 매장이 곧바로 시트 뒤로 숨어 "무엇을 골랐는지" 확인할 수 없던 것을 없앤다.
+  /// 배율은 건드리지 않는다(`keepZoom` — [_showStoreInfo] 주석).
+  ///
+  /// 이 시트는 barrier가 없어 포인터를 지도로 흘린다([_withMapsLocked] 주석) —
+  /// 시트를 열어 둔 채 지도를 만질 수 있게 한 의도된 설계다. 그 대가로 다른
+  /// 매장을 누르면 시트가 그 위에 하나 더 쌓였고, 사용자는 매장 하나를 봤을
+  /// 뿐인데 닫기를 두 번 눌러야 했다.
+  ///
+  /// 닫기를 기다린 뒤에 여는 이유는 두 라우트가 겹치는 순간을 없애기 위해서다.
+  /// 기다리지 않고 바로 열면 이전 시트의 pop 애니메이션과 새 시트의 push가
+  /// 겹쳐 화면이 한 번 깜빡인다.
+  Future<void> _openStoreFromMap(PoiSearchResult match) async {
+    final closing = _placeDetailClosing;
+    if (closing != null) {
+      // pop은 chain 전체를 닫으라는 신호를 만들지만(PopScope), 아래
+      // `_runSheetChain`이 시작할 때 그 플래그를 초기화하므로 새 시트에는
+      // 영향이 없다.
+      Navigator.of(context).pop();
+      await closing;
+      if (!mounted) return;
+    }
+    await _runSheetChain(
+      () => _showStoreInfo(match, focusOnMap: true, keepZoom: true),
+    );
   }
 
   /// 지도에서 고르는 중에 **매장이 아닌 곳(복도·빈 공간)** 을 눌렀을 때.
@@ -1808,6 +2005,60 @@ class _MapShellScreenState extends State<MapShellScreen> {
     unawaited(_startRoute(origin: _selectedOrigin, destination: picked));
   }
 
+  /// 지금 출발↔도착을 맞바꿀 수 있는지. 상단 초안 바의 ⇅ 버튼 활성 조건이다.
+  ///
+  /// 출발지가 실제 지점이면 언제나 바꿀 수 있다(두 값을 그냥 맞바꾸면 된다).
+  /// 출발지가 "현재 위치"(=`_selectedOrigin`이 null)일 때만 조건이 붙는다 —
+  /// 도착지 자리에는 "현재 위치"라는 표현이 없어서 가장 가까운 매장으로 굳혀야
+  /// 하고, 그러려면 현재 위치에서 잰 거리([_reachByNodeId])가 있어야 한다.
+  ///
+  /// 여기서 후보를 실제로 고르지는 않는다. 매 프레임 색인을 뒤질 수는 없으므로
+  /// **고를 수 있는 상태인지**만 보고, 실제 선택은 누른 뒤 [_swapRouteEndpoints]가
+  /// 한다. 그래서 눌렀는데 못 고르는 경우가 남고(모든 최근접 후보가 지금
+  /// 도착지뿐일 때), 그건 그쪽에서 안내로 처리한다.
+  bool get _canSwapRouteEndpoints {
+    if (_routeDraftDestination == null) return false;
+    if (_selectedOrigin != null) return true;
+    return (_reachByNodeId?.isNotEmpty ?? false);
+  }
+
+  /// 현재 위치에서 가장 가까운 매장을 경로 후보로 만든다. 못 만들면 null.
+  ///
+  /// 좌표는 매장 색인이 아니라 **그래프 노드**에서 가져온다. [StoreIndexEntry]에는
+  /// 좌표가 없고(온디바이스 검색용이라 이름·층·입구 노드만 든다), 어차피 경로가
+  /// 이어지는 지점은 매장 중심이 아니라 입구 노드다 — 노드 좌표를 쓰면 계산 전에
+  /// 잠깐 뜨는 핀도 실제로 경로가 닿을 자리에 선다.
+  Future<DirectionsCandidate?> _nearestStoreAsCandidate({
+    String? excludeNodeId,
+  }) async {
+    final stores = await buildingRepository.getStoreIndex(_buildingId);
+    if (!mounted || stores == null || stores.isEmpty) return null;
+    final nearest = nearestStoreForCurrentLocation(
+      stores: stores,
+      reachByNodeId: _reachByNodeId,
+      excludeNodeId: excludeNodeId,
+    );
+    if (nearest == null) return null;
+
+    final graph = await buildingRepository.getBuildingGraph(_buildingId);
+    if (!mounted || graph == null) return null;
+    final nodeId = nearest.entranceNodeId;
+    final node = graph.nodes.where((n) => n.id == nodeId).firstOrNull;
+    final lat = node?.lat;
+    final lng = node?.lng;
+    // 건물에 실측 wgs84 앵커가 없으면 노드에 좌표가 없다(GraphNode.lat 주석).
+    // 좌표 없이는 핀도 야외 폴백 경로도 자리를 못 잡으므로 여기서 멈춘다.
+    if (lat == null || lng == null) return null;
+
+    return DirectionsCandidate(
+      title: nearest.name,
+      subtitle: nearest.floorName,
+      point: LatLng(lat, lng),
+      nodeId: nodeId,
+      floor: nearest.floorName,
+    );
+  }
+
   /// 실제 경로 표시. 길찾기 시트를 거치는 경로와, 이미 기억해둔 출발지로 바로
   /// 라우팅하는 경로가 함께 쓸 수 있게 뽑아뒀다. [origin]이 null이면 "현재
   /// 위치"(=PDR)로 라우팅한다.
@@ -1815,10 +2066,15 @@ class _MapShellScreenState extends State<MapShellScreen> {
   ///
   /// [autoSelectMode]가 참이면 목적지 종류를 보고 수단을 정한다. 사용자가 이동
   /// 수단 줄에서 직접 고른 경우에는 거짓으로 불러 그 선택을 덮지 않는다.
+  ///
+  /// [announceOriginAnchor]가 false면 매장을 출발지로 쓸 때 뜨는 "여기서
+  /// 출발하는 것으로 봤다" 안내를 띄우지 않는다. 사용자가 방금 그 이동을 직접
+  /// 시킨 경우(출발↔도착 맞바꾸기)에 쓴다.
   Future<void> _startRoute({
     DirectionsCandidate? origin,
     required DirectionsCandidate destination,
     bool autoSelectMode = true,
+    bool announceOriginAnchor = true,
   }) async {
     // 안내가 시작되면 상단 바는 길찾기 두 칸이어야 한다. 매장 시트·검색 결과·
     // 지도 탭처럼 길찾기 바를 거치지 않고 들어오는 경로가 있어서, 여기서 한 번
@@ -1895,6 +2151,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                 point: origin.point,
                 nodeId: origin.nodeId,
               ),
+        announceOriginAnchor: announceOriginAnchor,
       );
       return;
     }
@@ -1975,23 +2232,18 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 매장 정보 시트에서 출발/도착을 고르지 않고 뒤로 닫으면 다시 저장된 장소
   /// 시트로 돌아온다 — 사용자가 여러 저장 항목을 훑어보다 잘못 눌렀거나
   /// 다른 항목을 다시 고르려는 경우를 위한 흐름이다.
+  /// 저장한 장소 목록을 연다. 항목을 탭하면 목록이 닫히고 상세 시트가 뜬다.
+  ///
+  /// 상세를 닫아도 목록으로 돌아가지 않는다 — 이유는 [_openCategoryStores]와 같다.
   Future<void> _openFavorites() async {
     await _runSheetChain(() async {
-      while (mounted) {
-        final picked = await _withMapsLocked(
-          () =>
-              FavoritesSheet.show(context, onCloseAll: _requestCloseSheetChain),
-        );
-        if (_closeSheetChainRequested || picked == null || !mounted) return;
-        final enriched = await _favoriteWithCategory(picked);
-        if (_closeSheetChainRequested || !mounted) return;
-        final tookAction = await _showStoreInfo(
-          enriched.toPoiSearchResult(),
-          focusOnMap: true,
-        );
-        if (_closeSheetChainRequested || !mounted) return;
-        if (tookAction) return;
-      }
+      final picked = await _withMapsLocked(
+        () => FavoritesSheet.show(context, onCloseAll: _requestCloseSheetChain),
+      );
+      if (_closeSheetChainRequested || picked == null || !mounted) return;
+      final enriched = await _favoriteWithCategory(picked);
+      if (_closeSheetChainRequested || !mounted) return;
+      await _showStoreInfo(enriched.toPoiSearchResult(), focusOnMap: true);
     });
   }
 
@@ -2074,7 +2326,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final placeInfo = _placeInfo;
     final routeVisible = _outdoorRouteVisible;
     // 시트였을 때는 뒤로가기가 시트만 닫았다. 패널로 바뀌었다고 뒤로가기가
     // 앱을 종료해 버리면 안 되므로, 검색 중에는 pop을 가로채 검색만 닫는다.
@@ -2083,15 +2334,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _closeSearch();
       },
-      child: _buildShell(context, placeInfo, routeVisible),
+      child: _buildShell(context, routeVisible),
     );
   }
 
-  Widget _buildShell(
-    BuildContext context,
-    ({String title, String subtitle})? placeInfo,
-    bool routeVisible,
-  ) {
+  Widget _buildShell(BuildContext context, bool routeVisible) {
     return Scaffold(
       // 상단 검색창(MapTopBar)에 포커스가 들어가 소프트키보드가 올라올 때
       // Scaffold body가 리사이즈되면 그 안의 MapLibre PlatformView(지도)도
@@ -2109,6 +2356,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
             // 사라지고 출발/도착 칸이 남아, 안내를 껐는데 화면은 아직 길찾기
             // 중인 상태가 된다.
             onGuidanceDismissed: _forgetRouteDraft,
+            onGuidanceActiveChanged: (active) {
+              if (_guidanceActive == active) return;
+              setState(() => _guidanceActive = active);
+              // 안내가 시작되면 검색창이 사라진다. 검색이 열린 채였다면 입력
+              // 대상이 없는 결과 패널과 지도를 덮은 막만 남으므로 함께 닫는다.
+              if (active) _closeSearch();
+            },
             onPlacingLocationChanged: (placing) {
               if (_outdoorPlacingLocation == placing) return;
               setState(() => _outdoorPlacingLocation = placing);
@@ -2145,7 +2399,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
             // 실내 오버레이가 닫히거나 그 자리에 PDR 앵커가 찍힌다.
             outerOverlayKeys: [
               _topBarKey,
-              _favoritesPillKey,
               _categoryRowKey,
               _searchPanelKey,
               _bottomBarKey,
@@ -2231,8 +2484,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
                     onDestinationChanged: (value) =>
                         _onRouteFieldChanged(RoutePlanField.destination, value),
                     onClearRouteDraft: _clearRouteDraft,
-                    onSwapRouteEndpoints: _swapRouteEndpoints,
-                    canSwapRouteEndpoints: _canSwapRoute,
+                    onSwapRouteEndpoints: () =>
+                        unawaited(_swapRouteEndpoints()),
+                    canSwapRouteEndpoints: _canSwapRouteEndpoints,
                   ),
 
                   // 길찾기 두 칸 중 하나를 치는 중이면 그 후보 목록이 이 자리를
@@ -2313,6 +2567,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                           onStorePicked: _onSearchStorePicked,
                           onBuildingPicked: _onSearchBuildingPicked,
                           onQueryPicked: _onSearchQueryPicked,
+                          onSuggestionPicked: _onSearchSuggestionPicked,
                           indoorContextActive: _indoorContextActive,
                           currentFloorId: _activeIndoorFloor,
                           reachByNodeId: _reachByNodeId,
@@ -2338,7 +2593,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
                     )
                   // 층 전환 중에는 카테고리 줄을 접는다. 배너가 상단 바 바로
                   // 아래에 오도록 자리를 비우는 것이고, 전환은 몇 초짜리 상태다.
-                  else if (_floorTransition != null)
+                  // 안내 중에도 접는다. 칩을 누르면 매장 목록 시트가 올라오는데,
+                  // 그건 "어디 갈지 고르는" 조작이라 목적지가 이미 정해진 화면에
+                  // 있을 이유가 없다.
+                  else if (_floorTransition != null || _guidanceActive)
                     const SizedBox.shrink()
                   // 길찾기 draft에서는 **접지 않고 내려온다.** 상단 바가 출발/도착
                   // 두 줄로 커지면 이 Column이 그만큼 아래로 밀어 주므로 겹치지
@@ -2360,10 +2618,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
                             ? _lockMaps(_mapLockOverlayTouch)
                             : _unlockMaps(_mapLockOverlayTouch),
                         children: [
-                          _FavoritesPill(
-                            key: _favoritesPillKey,
-                            onTap: _openFavorites,
-                          ),
+                          // "장소"(저장한 장소) pill은 여기서 뺐다. 지도 위가 아니라
+                          // 화면 맨 아래 홈/장소 내비게이션으로 갈 자리다. 진입점이
+                          // 사라지는 것은 아니다 — 햄버거 메뉴의 "저장한 장소"가
+                          // 같은 시트를 연다([_openFavorites]).
+                          //
                           // 카테고리 필터는 **건물 안을 보고 있을 때만**
                           // 노출한다. 기준은
                           // [_indoorContextActive]다 — 야외 탭이어도 건물을
@@ -2377,7 +2636,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
                           // 아직 들어가지도 않은 건물의 카테고리를 누르게 되고,
                           // 강조는 도면 위에 그려지므로 결과가 보이지 않는다.
                           if (_indoorContextActive) ...[
-                            const SizedBox(width: 8),
                             _CategoryChipsRow(
                               entriesFuture: _categoryEntriesFuture,
                               selection: _categorySelection,
@@ -2411,43 +2669,34 @@ class _MapShellScreenState extends State<MapShellScreen> {
                             : (_selectedOrigin?.title ?? '현재 위치'),
                         onCancel: _stopPickingOnMap,
                       ),
-                    )
-                  else if (placeInfo != null && !_searchActive)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        12,
-                        _overlayGap,
-                        12,
-                        0,
-                      ),
-                      child: _PlaceInfoCard(
-                        title: placeInfo.title,
-                        subtitle: placeInfo.subtitle,
-                        onClose: () => setState(() => _placeInfo = null),
-                      ),
                     ),
                 ],
               ),
             ),
           ),
 
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-            left: 0,
-            right: 0,
-            bottom: routeVisible ? _etaBarLiftHeight : 0,
-            child: MapBottomBar(
-              key: _bottomBarKey,
-              onCalibrate: _onCalibrate,
-              onPlaceLocation: _onPlaceLocation,
-              placingLocation: _outdoorPlacingLocation,
-              // 야외에서는 실내 진입 오버레이가 켜져 있을 때만 위치 지정 버튼을
-              // 노출한다. 오버레이가 꺼진 순수 야외 상태에서는 지정할 층 정보가
-              // 없어 눌러도 의미가 없다.
-              showPlaceLocation: _outdoorIndoorEntered,
+          // 안내 중에는 접는다. 두 버튼("위치 지정"·"위치 보정") 모두 안내를
+          // 시작하기 **전에** 출발점을 잡는 조작이라, 이미 경로를 따라가는
+          // 중에는 쓸 일이 없다. 접히면 리프트도 의미가 없으므로
+          // [routeVisible] 분기는 접히지 않은 자동 안내에서만 남는다.
+          if (!_guidanceActive)
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+              left: 0,
+              right: 0,
+              bottom: routeVisible ? _etaBarLiftHeight : 0,
+              child: MapBottomBar(
+                key: _bottomBarKey,
+                onCalibrate: _onCalibrate,
+                onPlaceLocation: _onPlaceLocation,
+                placingLocation: _outdoorPlacingLocation,
+                // 야외에서는 실내 진입 오버레이가 켜져 있을 때만 위치 지정
+                // 버튼을 노출한다. 오버레이가 꺼진 순수 야외 상태에서는 지정할
+                // 층 정보가 없어 눌러도 의미가 없다.
+                showPlaceLocation: _outdoorIndoorEntered,
+              ),
             ),
-          ),
 
           // 층 전환 스크림. root Stack의 **마지막** 레이어라 지도뿐 아니라
           // 검색창·카테고리·하단 바까지 함께 덮는다. 도면 교체 프레임에서만
@@ -2580,52 +2829,7 @@ class _MapOverlayScrollRowState extends State<_MapOverlayScrollRow> {
   }
 }
 
-/// 검색창 바로 아래에 뜨는 작은 "장소" 칩. 저장해둔 매장 리스트로 가는
-/// 지름길이다. 검색과 시각적으로 분리되도록 흰 카드 톤을 유지한다.
-class _FavoritesPill extends StatelessWidget {
-  const _FavoritesPill({super.key, required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      // 지도에 붙은 조작 줄이다. 그림자를 줄이고 경계는 hairline이 맡는다
-      // (AppElevation.onMap).
-      elevation: AppElevation.onMap,
-      shadowColor: Colors.black.withValues(alpha: 0.12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: const BorderSide(color: AppColors.hairline),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.bookmark_outline, size: 16, color: AppColors.primary),
-              SizedBox(width: 6),
-              Text(
-                '장소',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.text,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 검색창 바로 아래 저장한 장소 pill 옆에 붙는 카테고리 chip 열.
+/// 검색창 바로 아래에 붙는 카테고리 chip 열.
 /// 건물에 실제 존재하는 대분류만 골라 각각 하나의 chip으로 노출한다.
 /// chip 탭 → 해당 카테고리 매장 목록 시트가 바로 열린다 (예전에는 카테고리
 /// pill → 카테고리 목록 시트 → 매장 목록 시트로 두 단계였음).
@@ -2820,8 +3024,10 @@ class _MapPickHintCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isOrigin = target == DirectionsMapPickTarget.origin;
     final counterpart = counterpartLabel;
+    // 색을 지정하지 않는다 — 테마 카드(surface + hairline)가 앱의 카드 문법이고,
+    // 파란 면(blue50)을 깔면 이 카드만 EtaCard·검색 패널과 다른 톤이 된다.
+    // 포인트는 아이콘의 primary 하나로 충분하다.
     return Card(
-      color: AppColors.blue50,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
         child: Row(
@@ -2866,61 +3072,6 @@ class _MapPickHintCard extends StatelessWidget {
             IconButton(
               tooltip: '지도에서 선택 취소',
               onPressed: onCancel,
-              icon: const Icon(Icons.close, size: 18, color: AppColors.muted),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PlaceInfoCard extends StatelessWidget {
-  const _PlaceInfoCard({
-    required this.title,
-    required this.subtitle,
-    required this.onClose,
-  });
-
-  final String title;
-  final String subtitle;
-  final VoidCallback onClose;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-        child: Row(
-          children: [
-            const Icon(Icons.info_outline, color: AppColors.primary, size: 20),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.muted,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            IconButton(
-              onPressed: onClose,
               icon: const Icon(Icons.close, size: 18, color: AppColors.muted),
             ),
           ],

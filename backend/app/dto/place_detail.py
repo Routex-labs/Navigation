@@ -107,9 +107,38 @@ class HeroSection(BaseModel):
 
 class MenuItem(BaseModel):
     name: str
-    price: str
-    description: str
     image_asset: str
+
+    # 아래는 전부 선택 항목이다. 출처마다 갖고 있는 것이 다르기 때문이다 —
+    # 스타벅스 코리아 공식 사이트는 가격을 공개하지 않는 대신 용량·칼로리·카페인을
+    # 주고, 푸드에는 영양정보가 없다. 없는 값을 채우려면 지어내는 수밖에 없으므로
+    # 필수로 만들지 않는다. 무엇이 비었는지에 따라 카드가 무엇을 보여줄지는
+    # 클라이언트가 정한다(계약 4-2 규칙 3).
+    # group은 화면 위쪽 갈래(음료·푸드), category는 그 안의 탭이다. 둘 다 순서는
+    # items에 처음 등장하는 순서다.
+    group: str | None = None
+    category: str | None = None
+    name_en: str | None = None
+    description: str | None = None
+    price: str | None = None
+    volume: str | None = None
+    calories: str | None = None
+    caffeine: str | None = None
+
+    # 알레르기 유발 성분. `"대두 / 우유"`처럼 공식 사이트가 쓰는 문장 그대로 싣는다 —
+    # 배열로 쪼개려면 구분자를 우리가 정해야 하는데, 원본이 `/`와 `,`를 섞어 쓰고
+    # 항목 안에 공백이 들어간 이름(`알류`·`오징어`)도 있어 쪼개는 순간 틀릴 자리가
+    # 생긴다. 화면은 이 값을 한 줄로 보여 주기만 하므로 쪼갤 이유가 없다.
+    allergens: str | None = None
+
+    # NEW·시즌 한정 같은 표시. 문자열 하나가 아니라 배열인 이유는 두 개가 함께
+    # 붙는 항목이 실제로 있기 때문이다.
+    #
+    # **빈 배열이 아니라 None이 기본값이다.** 라우터가 `exclude_none`으로 직렬화하는데
+    # 기본값을 `[]`로 두면 배지가 없는 284종에 `"badges": []`가 그대로 실려 나간다.
+    # 값이 없으면 키를 아예 빼는 규칙(계약 4-2 규칙 1)이 이 필드에서만 새는 셈이다.
+    # 클라이언트는 없는 키를 빈 목록으로 읽으므로 화면에는 차이가 없다.
+    badges: list[str] | None = None
 
 
 class MenuSection(BaseModel):
@@ -125,6 +154,110 @@ class BusinessInfoItem(BaseModel):
 class BusinessInfoSection(BaseModel):
     type: Literal["businessInfo"] = "businessInfo"
     items: list[BusinessInfoItem]
+
+
+class DemoInfoItem(BaseModel):
+    label: str
+    value: str
+    # businessInfo와 달리 출처를 항목마다 들고 간다. 이 섹션에는 영업시간·대표번호처럼
+    # 시간이 지나면 낡는 값이 들어오기 때문에, 화면이 확인일을 함께 보여 줄 수 있어야 한다.
+    source: str
+    confirmed_at: str
+
+
+# 소개 영상 촬영용 매장에만 붙는 운영 정보.
+#
+# `businessInfo`와 모양이 거의 같은데 굳이 섹션을 나눈 이유는, 두 섹션이 **다른 규칙을
+# 따르기** 때문이다. businessInfo는 forbidden_labels가 조건 없이 막고, 이쪽은 막지 않는
+# 대신 오버레이 검증기의 demo_allowlist에 id가 있어야 한다. 같은 섹션 안에서 항목별로
+# 규칙이 갈리면 그 분기가 곧 Wave 3.5에서 겪은 우회 경로가 된다.
+class DemoInfoSection(BaseModel):
+    type: Literal["demoInfo"] = "demoInfo"
+    items: list[DemoInfoItem]
+
+
+class LinkItem(BaseModel):
+    label: str
+    url: str
+
+
+# 공식 채널 링크. 화면에서 누르면 외부 브라우저로 열린다.
+#
+# `businessInfo`·`demoInfo`와 달리 값이 사람이 읽는 문장이 아니라 **주소**다. 낡으면
+# 거짓이 되는 것이 아니라 아예 열리지 않으므로, 검증기는 형식(http(s))만 보고 살아
+# 있는지는 보지 않는다 — 그건 사람이 확인할 일이다.
+class LinksSection(BaseModel):
+    type: Literal["links"] = "links"
+    items: list[LinkItem]
+
+
+# --- 영업시간 ---------------------------------------------------------
+#
+# 이 섹션만 값이 "사람이 읽는 문장"이 아니라 **계산 대상**이다. 다른 섹션은 서버가
+# 보낸 문자열을 그대로 그리면 끝이지만, 영업시간은 클라이언트가 지금 시각과 비교해
+# "지금 영업 중인지"를 계산한다. 그래서 문자열 한 줄이 아니라 구조체로 내려보낸다
+# (설계 9-1 · 지도·상세 UI 개선 계획 「보류 항목」 B안).
+#
+# **판정 문자열("영업 중"/"영업 종료")을 서버가 만들지 않는다.** 저장하는 순간 그 값은
+# 저장 시점부터 틀리기 시작한다. 서버가 내려보내는 것은 규칙뿐이고 판정은 화면이 한다.
+
+
+class HoursInterval(BaseModel):
+    """하루 안의 영업 구간 하나. `"HH:MM"` 24시간 표기."""
+
+    open: str
+    # close < open이면 **자정을 넘긴다**(예: 22:00–02:00은 다음 날 새벽 2시까지).
+    # 하루 종일 영업은 "00:00"–"24:00"으로 적는다 — close == open을 24시간으로
+    # 읽으면 "0분 영업"과 구분할 수 없어 검증기가 거부한다.
+    close: str
+
+
+class HoursException(BaseModel):
+    """특정 날짜에만 요일 규칙을 덮어쓴다. 백화점 정기 휴점일·명절이 여기 온다.
+
+    요일 규칙만으로는 이런 날을 표현할 수 없고, 표현하지 못하면 화면이 휴점일에
+    "영업 중"이라고 말한다 — 이 계약에서 가장 비싼 거짓말이다.
+    """
+
+    date: str  # YYYY-MM-DD
+    closed: bool = False  # 종일 휴무
+    intervals: list[HoursInterval] = []  # 단축·연장 영업. closed와 동시에 못 쓴다
+    note: str | None = None  # "백화점 정기 휴점" 같은 사유. 화면에 함께 그린다
+
+    # 이 날짜를 확인한 페이지. 섹션의 source와 **다를 수 있어서** 따로 둔다 —
+    # 요일 규칙은 매장이 공지하지만 정기 휴점일은 건물(백화점)이 공지하고, 그 공지는
+    # 한 달치씩만 올라왔다 내려간다. 어느 쪽을 다시 열어 봐야 하는지가 날짜마다
+    # 다르므로 섹션 하나의 source로는 답이 안 나온다. 화면에는 그리지 않는다.
+    source: str | None = None
+
+
+class HoursSection(BaseModel):
+    type: Literal["hours"] = "hours"
+
+    # 요일 → 그날의 영업 구간 목록. 키는 mon·tue·wed·thu·fri·sat·sun 7개가 **전부**
+    # 있어야 한다. 빈 배열은 "그 요일은 휴무"라는 명시이고, 키가 빠진 상태는 휴무인지
+    # 모르는 것인지 구분할 수 없어 검증기가 거부한다 — 모르는 것을 "휴무"로 그리면
+    # 그것도 거짓이다.
+    #
+    # 값이 배열인 이유는 **브레이크 타임** 때문이다. 요일당 구간이 하나라고 가정하면
+    # 11:00–14:00 · 17:00–21:00로 나뉘는 음식점에서 곧바로 깨진다.
+    weekly: dict[str, list[HoursInterval]]
+
+    exceptions: list[HoursException] = []
+
+    # 매장이 있는 지역의 UTC 오프셋(분). 한국은 서머타임이 없어 고정값 540으로
+    # 정확하다. 기기 시계가 다른 시간대일 수 있어서(여행 중이거나 설정이 틀린 기기)
+    # 클라이언트는 이 값으로 매장 현지 시각을 만든 뒤 비교한다.
+    utc_offset_minutes: int = 540
+
+    # 이 규칙을 실제로 확인한 날. 영업시간은 낡으면 저절로 거짓이 되므로 화면이
+    # 일정 기간을 넘긴 값의 **판정을 거둔다**(요일 표는 남기고 "지금 영업 중"만
+    # 말하지 않는다). 임계값과 근거는 클라이언트의 store_hours.dart에 있다.
+    confirmed_at: str
+
+    # 그 규칙이 실제로 적혀 있던 페이지. 화면에 그리지 않고 데이터를 고치는 사람이
+    # 쓴다(설계 7-A-3). demoInfo가 항목마다 출처를 받는 것과 같은 이유다.
+    source: str
 
 
 class NoticeSection(BaseModel):
@@ -163,6 +296,9 @@ DetailSection = (
     | HeroSection
     | MenuSection
     | BusinessInfoSection
+    | DemoInfoSection
+    | LinksSection
+    | HoursSection
     | NoticeSection
     | MapSection
     | ChildListSection

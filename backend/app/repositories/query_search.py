@@ -119,6 +119,24 @@ _NAME_PREFIX = 0  # 이름이 질의로 시작 — "이솝화" → "이솝 화�
 _WORD_PREFIX = 1  # 이름 속 단어가 질의로 시작 — "레이어드" → "카페 레이어드"
 _CONTAINS = 2  # 그 밖의 중간 포함 — "이솝" → "엘리베이터솝"(가상의 예)
 
+# 띄어쓰기를 양쪽에서 뗀 뒤의 일치. 위 세 단계보다 **항상 뒤에** 온다.
+#
+# 사람은 브랜드명을 띄어 치고("노스 페이스"), 데이터도 같은 시설을 제각각 띄어 적는다
+# (`물품보관함`·`물품 보관함`·`물 품 보 관 함` 세 이름이 실제로 있다). 어느 쪽이든
+# 공백은 뜻을 나르지 않는데 문자열 비교는 그걸 다른 이름으로 본다.
+#
+# 공백을 뗀 비교를 별도 단계로 두는 이유는 순위 때문이다. 원문 띄어쓰기 그대로 걸린
+# 매장이 있으면 그쪽이 무조건 먼저여야 한다 — 공백을 떼면 후보가 늘기만 하므로,
+# 같은 단계에 섞으면 정확히 친 사용자가 손해를 본다.
+#
+# 공백을 뗀 이름에는 단어 경계가 없어 _WORD_PREFIX에 해당하는 단계가 없다. 대신
+# "이름 전체가 같음"을 맨 앞에 둔다 — "노스 페이스"가 `노스페이스`(전체 일치)와
+# `노스페이스 화이트 라벨`(접두)을 같은 정밀도로 묶으면 둘 중 하나로 확정하지 못하고
+# 되물음으로 새 버린다.
+_SPACELESS_EXACT = 3  # 공백을 떼면 이름 전체와 같음 — "노스 페이스" → "노스페이스"
+_SPACELESS_PREFIX = 4  # 공백을 떼면 이름이 질의로 시작 — "노스 페이스" → "노스페이스 화이트 라벨"
+_SPACELESS_CONTAINS = 5  # 그 밖의 중간 포함
+
 # tier 2(이름 부분 일치)에 들어가려면 질의가 최소 2글자여야 한다. query_morph.normalize가
 # 형태소 분해로 오타·조사를 지우면서 질의가 1글자로 축소되는 경우가 있다("샤낼"→"샤",
 # "물 사고싶어"→"물"). 그 1글자가 무관한 매장 이름 접두와 우연히 맞아 오탐이 난다.
@@ -138,18 +156,64 @@ def _intent_names(store: Store) -> tuple[str, ...]:
     return tuple(_norm(value) for value in _facets(store).get("intents", ()))
 
 
-def _name_match_rank(name: str, q: str) -> int | None:
-    if not q or len(q) < _MIN_NAME_PARTIAL_MATCH_LEN or q not in name:
+def _squash_spaces(text: str) -> str:
+    return "".join(text.split())
+
+
+def _spaceless_match_rank(name: str, q: str) -> int | None:
+    """공백을 뗀 뒤의 부분 일치 정밀도. 뗄 공백이 아예 없으면 검사하지 않는다."""
+    squashed_name = _squash_spaces(name)
+    squashed_q = _squash_spaces(q)
+    # 양쪽 다 공백이 없으면 바로 위 검사와 완전히 같은 비교다 — 두 번 하지 않는다.
+    if squashed_name == name and squashed_q == q:
         return None
-    if name.startswith(q):
-        return _NAME_PREFIX
-    if any(token.startswith(q) for token in name.split()):
-        return _WORD_PREFIX
-    return _CONTAINS
+    if len(squashed_q) < _MIN_NAME_PARTIAL_MATCH_LEN or squashed_q not in squashed_name:
+        return None
+    if squashed_name == squashed_q:
+        return _SPACELESS_EXACT
+    if squashed_name.startswith(squashed_q):
+        return _SPACELESS_PREFIX
+    return _SPACELESS_CONTAINS
+
+
+def _name_match_rank(name: str, q: str) -> int | None:
+    if not q:
+        return None
+    if len(q) >= _MIN_NAME_PARTIAL_MATCH_LEN and q in name:
+        if name.startswith(q):
+            return _NAME_PREFIX
+        if any(token.startswith(q) for token in name.split()):
+            return _WORD_PREFIX
+        return _CONTAINS
+    return _spaceless_match_rank(name, q)
+
+
+# 질의를 **접두로 갖는** 별칭들의 표준형.
+#
+# 별칭 사전은 완전 일치 조회(`synonyms.get(q)`)라 `starbucks`를 끝까지 쳐야 걸렸다.
+# 한글은 매장명 자체가 `스타벅스 리저브`라 `스타`만 쳐도 부분 일치로 잡히는데,
+# 영어로 치는 사용자만 전부 입력해야 했다 — 같은 매장을 찾는 두 언어의 경험이
+# 달랐다.
+#
+# 그래서 `starb`처럼 별칭의 앞부분만 쳐도 그 별칭의 표준형(`스타벅스`)을 함께
+# 후보로 본다. 반대 방향(표준형이 질의의 접두)은 넣지 않는다 — `스`가 `스타벅스`
+# 별칭 전부를 끌어와 무관한 매장이 쏟아진다.
+#
+# 질의당 한 번만 계산해 매장 루프 밖에서 넘긴다. 사전이 190개 남짓이라 순회가
+# 싸고, 매장마다 다시 돌면 600곳 × 190개가 된다.
+def _prefix_expansions(synonyms: dict[str, str], q: str) -> tuple[str, ...]:
+    if len(q) < _MIN_NAME_PARTIAL_MATCH_LEN:
+        return ()
+    found: list[str] = []
+    for alias, canon in synonyms.items():
+        # 완전 일치는 호출부가 이미 canon으로 처리한다.
+        if alias != q and alias.startswith(q) and canon not in found:
+            found.append(canon)
+    return tuple(found)
 
 
 # 매칭 우선순위 (tier, tier 2 정밀도). 낮을수록 우선. 안 걸리면 None.
-def _tier(store: Store, q: str, canon: str) -> tuple[int, int] | None:
+def _tier(store: Store, q: str, canon: str, expansions: tuple[str, ...] = ()) -> tuple[int, int] | None:
     name = _norm(store.name or "")
     cat = _norm(store.category or "")
     sub = _norm(store.subcategory or "")
@@ -169,6 +233,10 @@ def _tier(store: Store, q: str, canon: str) -> tuple[int, int] | None:
         return 1, 0
     # 질의 원문과 동의어 표준형 중 더 정밀하게 걸린 쪽을 쓴다.
     ranks = [rank for rank in (_name_match_rank(name, q), _name_match_rank(name, canon)) if rank is not None]
+    for expanded in expansions:
+        rank = _name_match_rank(name, expanded)
+        if rank is not None:
+            ranks.append(rank)
     if ranks:
         return 2, min(ranks)  # 이름 부분 일치
     return None
@@ -189,14 +257,17 @@ def _rank_with_candidate(
     candidates = _query_candidates(text)
     synonyms = _synonyms()
 
+    # 후보마다 표준형과 접두 확장을 **매장 루프 밖에서** 한 번만 만든다.
+    expanded_candidates = [(synonyms.get(q, q), _prefix_expansions(synonyms, q)) for q in candidates]
+
     # 걸리는 매장마다 최선의 (tier, 후보 순서, 정밀도)를 고른다. tier가 같으면 원문에
     # 가까운 후보가 먼저라 "A.P.C."가 "A.P.C 골프"의 부분 일치보다 우선한다.
     scored_with_candidate = []
     for store, floor in rows:
         best: tuple[int, int, int] | None = None
         for candidate_order, q in enumerate(candidates):
-            canon = synonyms.get(q, q)
-            matched = _tier(store, q, canon)
+            canon, expansions = expanded_candidates[candidate_order]
+            matched = _tier(store, q, canon, expansions)
             if matched is None:
                 continue
             tier, precision = matched

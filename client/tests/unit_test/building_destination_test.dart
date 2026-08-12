@@ -92,6 +92,7 @@ void main() {
               onStorePicked: (_) {},
               onBuildingPicked: (_) {},
               onQueryPicked: (_) {},
+              onSuggestionPicked: (_) {},
               indoorContextActive: false,
               outdoorSearchCenter: const LatLng(37.5665, 126.9779),
               onOutdoorPoiPicked: (_) {},
@@ -180,6 +181,7 @@ void main() {
               onStorePicked: (_) {},
               onBuildingPicked: (_) {},
               onQueryPicked: (_) {},
+              onSuggestionPicked: (_) {},
               indoorContextActive: false,
               // 밖을 보고 있다는 뜻(야외 기준점이 있고 층은 없다).
               outdoorSearchCenter: const LatLng(37.5665, 126.9779),

@@ -31,9 +31,13 @@ typedef NearestStore = ({StoreIndexEntry store, NodeReach? reach});
 ///
 /// ## 거리를 모를 때 (실패 조건을 먼저 정한 것)
 ///
-/// - **[reachByNodeId]가 null이거나 비었을 때.** PDR 미시작·측위 실패다. 이때 억지로
-///   고르면 기준 없는 값이 되므로 **입력 첫 번째를 그대로** 돌려준다. 거리 줄이 아예
-///   안 뜨는 것이 A절이 정한 규칙이고, 후보 목록도 같게 둔다.
+/// - **[reachByNodeId]가 null이거나 비었을 때.** PDR 미시작·측위 실패다. 거리를 지어낼
+///   수는 없으므로 [reach]는 null로 두되, **[currentFloorId]와 같은 층이 있으면 그
+///   매장을 대표로 고른다.** 거리를 모른다고 입력 첫 번째로 돌아가면 서버 색인이
+///   `Floor.level DESC`라 항상 꼭대기 층이 뽑히고, B2에 서 있는 사람이 `화장실 · 6F`를
+///   보게 된다 — 이 함수가 애초에 없애려던 바로 그 화면이다. 같은 층은 "가장 가깝다"는
+///   주장이 아니라 **지금 보고 있는 층**이라는 사실이라, 거리를 모를 때도 안전하다.
+///   그마저 없으면 그때는 입력 첫 번째다.
 /// - **일부만 도달 가능할 때.** `entranceNodeId`가 null이거나 그래프가 끊겨
 ///   [reachByNodeId]에 키가 없는 매장이 섞인다. → **도달 가능한 것 중 최근접**을
 ///   고른다. 도달 못 하는 곳을 "가장 가깝다"고 적지 않는다.
@@ -53,11 +57,13 @@ typedef NearestStore = ({StoreIndexEntry store, NodeReach? reach});
 NearestStore nearestByWalkingDistance({
   required List<StoreIndexEntry> stores,
   required Map<String, NodeReach>? reachByNodeId,
+  String? currentFloorId,
 }) {
   assert(stores.isNotEmpty, '후보 한 줄은 최소 한 매장에서 나온다');
-  final first = stores.first;
+  // 거리를 모를 때 쓸 대표. 지금 보고 있는 층에 있으면 그것, 없으면 입력 첫 번째다.
+  final fallback = _onCurrentFloor(stores, currentFloorId) ?? stores.first;
   final reach = reachByNodeId;
-  if (reach == null || reach.isEmpty) return (store: first, reach: null);
+  if (reach == null || reach.isEmpty) return (store: fallback, reach: null);
 
   StoreIndexEntry? best;
   NodeReach? bestReach;
@@ -73,8 +79,24 @@ NearestStore nearestByWalkingDistance({
     }
   }
 
-  if (best == null) return (store: first, reach: null);
+  if (best == null) return (store: fallback, reach: null);
   return (store: best, reach: bestReach);
+}
+
+
+/// [stores] 중 [currentFloorId] 층에 있는 첫 매장. 없으면 null.
+///
+/// 같은 층이 여럿이어도 첫 번째로 족하다 — 어느 쪽이 더 가까운지는 거리를 알아야
+/// 정할 수 있는 값이고, 이 함수가 불리는 자리는 그 거리를 모르는 자리다.
+StoreIndexEntry? _onCurrentFloor(
+  List<StoreIndexEntry> stores,
+  String? currentFloorId,
+) {
+  if (currentFloorId == null) return null;
+  for (final store in stores) {
+    if (store.floorId == currentFloorId) return store;
+  }
+  return null;
 }
 
 

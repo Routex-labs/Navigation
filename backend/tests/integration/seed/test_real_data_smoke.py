@@ -289,6 +289,39 @@ def test_출구_질의가_지하철_출입구까지_포함한다(real_db_session
     assert any("지하철" in name for name in names), names
 
 
+# W12 전에는 리빙·서비스·식품관·키즈 네 대분류의 intent 커버리지가 **0%**였다. 아래
+# 질의는 전부 소분류 라벨에 없는 말이라, intent가 없으면 어휘로 닿을 방법이 없다
+# (닿더라도 임베딩이 0.52를 넘겨야 하는 운에 기댄다). 규칙이 지워지면 여기서 깨진다.
+@pytest.mark.parametrize(
+    ("query", "subcategory"),
+    [
+        ("장난감", "토이·완구"),
+        ("장보기", "식품·그로서리"),
+        ("전시", "문화·예술"),
+        ("침대", "침구·매트리스"),
+        ("꽃", "플라워"),
+        ("고객센터", "고객서비스"),
+    ],
+)
+def test_소분류에_없는_말도_intent로_후보에_닿는다(real_db_session, query, subcategory):
+    discovery = query_search.discover(real_db_session, REAL_BUILDING_ID, query)
+
+    assert discovery["mode"] != "no_match", query
+    assert discovery["matches"], query
+    assert all(match["subcategory"] == subcategory for match in discovery["matches"]), discovery["matches"]
+
+
+# 소분류가 이미 한 단어면 intent가 아니라 **별칭**으로 잇는다. `안경`을 intent로 넣었더니
+# 문서 텍스트가 `젠틀몬스터 패션 아이웨어 안경`이 되면서 이름 신호가 희석돼 오타 질의
+# `젠틀 몬스터`가 회귀했다(FAISS.md 11-6). 별칭은 경량 tier 1만 건드리고 문서를 안 바꾼다.
+@pytest.mark.parametrize("query", ["안경", "선글라스"])
+def test_아이웨어는_intent가_아니라_별칭으로_닿는다(real_db_session, query):
+    discovery = query_search.discover(real_db_session, REAL_BUILDING_ID, query)
+
+    assert discovery["source"] == "light", discovery["source"]
+    assert all(match["subcategory"] == "아이웨어" for match in discovery["matches"]), discovery["matches"]
+
+
 # 추천 이유가 사용자가 친 말과 이어지는지. 질문 축(styles)만 basis에 담기던 시절에는
 # "신발"을 물어도 "명품 스타일 매장이에요"만 나와 신발 근거가 사라졌다.
 def test_신발_질의의_추천_이유가_신발을_말한다(real_db_session):
@@ -364,3 +397,73 @@ def test_운동화는_꼬리가_붙어도_신발로_이어진다(real_db_session
 
     assert discovery["matches"], text
     assert all("신발" in (match["reason"] or "") for match in discovery["matches"]), text
+
+
+# 영문으로 치는 사용자가 한글로 치는 사용자와 **같은 곳**에 닿아야 한다.
+#
+# W12까지 사전에 있던 영문은 브랜드명뿐이었다(`gucci`→구찌). 일반명사·시설어는 통째로
+# 비어 있어서 `toilet`·`shoes`는 no_match였고, 한국 매장명은 영어의 음차라 임베딩도
+# 못 넘는다(스타벅스 ≠ seutabeokseu). 그래서 모델이 아니라 사전으로 푼다 —
+# 근거는 query_semantic.py 모듈 주석의 다국어 모델 비교표.
+#
+# 같은 결과인지를 보는 이유: 별칭이 살아 있는지만 보면(죽은 항목 검사) 엉뚱한 표준형을
+# 가리켜도 통과한다. 실제로 `information`을 `고객센터`로 보냈다가 안내데스크가 아니라
+# 수리 접수 창구로 새는 것을 이 대조로 잡았다.
+@pytest.mark.parametrize(
+    ("english", "korean"),
+    [
+        ("toilet", "화장실"),
+        ("elevator", "엘리베이터"),
+        ("escalator", "에스컬레이터"),
+        ("shoes", "신발"),
+        ("clothes", "의류"),
+        ("perfume", "향수"),
+        ("watches", "시계"),
+        ("grocery", "장보기"),
+        ("toys", "장난감"),
+        ("pharmacy", "약국"),
+        ("sunglasses", "아이웨어"),
+        ("coffee", "커피"),
+        ("luxury", "명품"),
+    ],
+)
+def test_영문_일반명사는_한글_질의와_같은_곳에_닿는다(real_db_session, english, korean):
+    en = query_search.discover(real_db_session, REAL_BUILDING_ID, english)
+    ko = query_search.discover(real_db_session, REAL_BUILDING_ID, korean)
+
+    assert en["matches"], english
+    assert en["mode"] == ko["mode"], english
+    assert [m["store_id"] for m in en["matches"]] == [m["store_id"] for m in ko["matches"]], english
+
+
+# 안내를 묻는 말은 안내데스크로 간다.
+#
+# `고객서비스` 소분류(교환·환불 데스크, 수리 접수 8곳)와 실제 안내데스크
+# (`컨시어지 (안내데스크)`, 편의시설)는 다른 곳이다. W12가 `안내데스크`를 `고객센터`
+# intent로 보내면서, 더 구체적으로 친 질의가 덜 구체적인 `안내`보다 나쁜 결과를 받았다
+# — tier 1(intent)이 tier 2(이름 부분 일치)를 이겨서 진짜 안내데스크가 8건 뒤로 밀렸다.
+@pytest.mark.parametrize("query", ["안내", "안내데스크", "컨시어지", "information", "info", "concierge"])
+def test_안내_질의는_안내데스크로_간다(real_db_session, query):
+    discovery = query_search.discover(real_db_session, REAL_BUILDING_ID, query)
+
+    assert [m["name"] for m in discovery["matches"]] == ["컨시어지 (안내데스크)"], query
+
+
+# 사후 서비스를 묻는 말은 그대로 고객서비스 창구로 남는다(위 분리가 한쪽으로 쏠리지 않았다).
+def test_사후_서비스_질의는_고객서비스_창구로_간다(real_db_session):
+    discovery = query_search.discover(real_db_session, REAL_BUILDING_ID, "customer service")
+
+    names = [m["name"] for m in discovery["matches"]]
+    assert "교환 / 환불 데스크" in names
+    assert "컨시어지 (안내데스크)" not in names
+
+
+# 띄어쓰기는 뜻을 나르지 않는다 — 사람은 브랜드명을 띄어 치고("노스 페이스"), 데이터도
+# 같은 시설을 제각각 띄어 적어 뒀다. 공백을 뗀 일치는 원문 그대로의 일치보다 항상 뒤라
+# 정확히 친 사용자가 손해 보지 않는다.
+def test_띄어_친_브랜드명도_같은_매장으로_간다(real_db_session):
+    spaced = query_search.discover(real_db_session, REAL_BUILDING_ID, "노스 페이스")
+    exact = query_search.discover(real_db_session, REAL_BUILDING_ID, "노스페이스")
+
+    assert spaced["mode"] == exact["mode"] == "direct"
+    assert [m["store_id"] for m in spaced["matches"]] == [m["store_id"] for m in exact["matches"]]

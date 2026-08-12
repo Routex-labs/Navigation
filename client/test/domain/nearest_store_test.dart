@@ -92,6 +92,63 @@ void main() {
     });
   });
 
+  // 측위가 아직 안 잡힌 상태에서도 **지금 보고 있는 층**은 안다. 거리를 모른다고
+  // 입력 첫 번째로 돌아가면 서버 색인이 `Floor.level DESC`라 늘 꼭대기 층이 뽑혀,
+  // B2에 서 있는 사람이 `화장실 · 6F`를 보게 된다.
+  group('O. 거리를 몰라도 지금 층은 안다', () {
+    test('reach가 없으면 현재 층 매장을 대표로 고른다', () {
+      final stores = [
+        _store('6F', nodeId: 'N6'),
+        _store('B2', nodeId: 'NB2'),
+        _store('1F', nodeId: 'N1'),
+      ];
+
+      final result = nearestByWalkingDistance(
+        stores: stores,
+        reachByNodeId: null,
+        currentFloorId: 'FL-B2',
+      );
+
+      expect(result.store.floorName, 'B2');
+      // 층을 골랐다고 거리를 아는 것은 아니다. 거리 줄은 여전히 뜨지 않는다.
+      expect(result.reach, isNull);
+    });
+
+    test('전원 도달 불가여도 현재 층을 고른다', () {
+      final result = nearestByWalkingDistance(
+        stores: [_store('6F', nodeId: 'N6'), _store('B2', nodeId: 'NB2')],
+        reachByNodeId: {'N-다른층': _reach(10)},
+        currentFloorId: 'FL-B2',
+      );
+
+      expect(result.store.floorName, 'B2');
+      expect(result.reach, isNull);
+    });
+
+    test('현재 층에 없으면 예전처럼 첫 번째다', () {
+      final result = nearestByWalkingDistance(
+        stores: [_store('6F', nodeId: 'N6'), _store('B2', nodeId: 'NB2')],
+        reachByNodeId: null,
+        currentFloorId: 'FL-3F',
+      );
+
+      expect(result.store.floorName, '6F');
+    });
+
+    // 거리를 알면 거리가 이긴다. 현재 층은 어디까지나 모를 때의 차선책이다 —
+    // 같은 층 200m보다 아래층 30m가 실제로 가깝다.
+    test('거리를 알면 현재 층보다 거리가 우선한다', () {
+      final result = nearestByWalkingDistance(
+        stores: [_store('6F', nodeId: 'N6'), _store('B2', nodeId: 'NB2')],
+        reachByNodeId: {'N6': _reach(200), 'NB2': _reach(30)},
+        currentFloorId: 'FL-6F',
+      );
+
+      expect(result.store.floorName, 'B2');
+      expect(result.reach?.distanceM, 30);
+    });
+  });
+
   group('O. 일부만 도달 가능할 때', () {
     test('entranceNodeId가 없는 매장은 후보에서 빠진다', () {
       // 가장 가까울 수도 있지만 경로를 못 그리므로 대표가 될 수 없다.

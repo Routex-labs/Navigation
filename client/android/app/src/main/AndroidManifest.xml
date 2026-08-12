@@ -51,5 +51,12 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- 매장 상세의 공식 채널 링크를 외부 브라우저로 열기 위해 필요하다.
+             Android 11부터 다른 앱을 조회하려면 여기 선언해야 하고, 없으면
+             url_launcher가 "열 수 있는 앱이 없다"고 판단해 조용히 실패한다. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
     </queries>
 </manifest>

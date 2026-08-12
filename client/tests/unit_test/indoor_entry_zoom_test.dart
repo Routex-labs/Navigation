@@ -406,4 +406,242 @@ void main() {
       );
     });
   });
+  group('건물 바깥 보기 — 검색만 했는데 실내가 열리면 안 된다', () {
+    // 이 그룹이 지키는 증상: 검색에서 "더현대 서울"을 고르자마자 도면이 열리던
+    // 문제. 카메라를 건물 외곽선에 꼭 맞췄는데, 그 배율이 곧 진입 조건이었다
+    // (진입 임계값의 정의가 "건물이 화면에 담기는 zoom"이다). 검색은 저 건물이
+    // 어디 있는지를 묻는 조작이고, 들어가는 것은 건물을 탭하는 별도 조작이다.
+
+    test('바깥 보기 배율에서는 진입이 발화하지 않는다 — 모든 층·화면 폭에서', () {
+      for (final entry in _floorScreenExtentsM.entries) {
+        final width = entry.value.width;
+        for (var px = 280.0; px <= 2400.0; px += 20) {
+          final entryZoom = indoorEntryZoomThresholdFor(
+            buildingWidthMeters: width,
+            viewportWidthPx: px,
+            latitude: referenceLatitude,
+          );
+          final exterior = exteriorViewZoomFor(
+            buildingWidthMeters: width,
+            viewportWidthPx: px,
+            latitude: referenceLatitude,
+          );
+          expect(
+            indoorEntryTransitionForZoom(
+              exterior,
+              // 건물을 화면에 놓고 보는 중이니 근접 게이트는 당연히 통과한다.
+              // 그 게이트에 기대면 안 된다는 것이 이 테스트의 요점이다.
+              buildingNearby: true,
+              entryZoom: entryZoom,
+            ),
+            isNot(IndoorEntryTransition.enter),
+            reason:
+                '${entry.key}(폭 ${width.toStringAsFixed(0)} m)를 ${px.toStringAsFixed(0)} px '
+                '화면에서 바깥 보기로 잡으면 zoom ${exterior.toStringAsFixed(2)}인데 '
+                '진입 임계값이 ${entryZoom.toStringAsFixed(2)}라 그대로 실내로 들어간다',
+          );
+        }
+      }
+    });
+
+    test('그렇다고 건물이 안 보일 만큼 물러서지는 않는다', () {
+      // 너무 많이 빼면 "여기 있다"가 아니라 "어딘가에 있다"가 된다. 건물이
+      // 화면 폭의 절반 이상은 차지해야 한다.
+      const width = 179.3; // 1F 정북 정렬 폭
+      final exterior = exteriorViewZoomFor(
+        buildingWidthMeters: width,
+        viewportWidthPx: referenceViewportWidthPx,
+        latitude: referenceLatitude,
+      );
+      final visible = visibleWidthMeters(
+        zoom: exterior,
+        availablePx: referenceViewportWidthPx,
+        latitude: referenceLatitude,
+      );
+      expect(
+        width / visible,
+        greaterThan(0.5),
+        reason:
+            '건물이 화면 폭의 ${(width / visible * 100).toStringAsFixed(0)}%밖에 '
+            '차지하지 않는다 — 무엇을 고른 것인지 알아보기 어렵다',
+      );
+    });
+  });
+  group('돌려 세운 상자 맞추기', () {
+    // 세로로 세운 건물을 화면에 담을 때는 가로·세로 두 제약을 **동시에** 지켜야
+    // 한다. 한쪽만 보면 나머지 축이 잘린 채로 확대된다.
+    const shortM = 148.0; // 짧은 축(화면 가로)
+    const longM = 295.0; // 긴 축(화면 세로)
+
+    test('두 축 모두 화면 안에 들어온다', () {
+      // 세로로 긴 폰부터 가로로 넓은 태블릿까지 훑는다.
+      for (final (wPx, hPx) in [
+        (360.0, 640.0),
+        (480.0, 1029.0),
+        (412.0, 915.0),
+        (834.0, 1112.0),
+        (1280.0, 800.0),
+      ]) {
+        final zoom = zoomToFitRotatedBox(
+          widthMeters: shortM,
+          heightMeters: longM,
+          viewportWidthPx: wPx,
+          viewportHeightPx: hPx,
+          latitude: referenceLatitude,
+        );
+        final visibleW = visibleWidthMeters(
+          zoom: zoom,
+          availablePx: wPx,
+          latitude: referenceLatitude,
+        );
+        final visibleH = visibleWidthMeters(
+          zoom: zoom,
+          availablePx: hPx,
+          latitude: referenceLatitude,
+        );
+        expect(
+          visibleW,
+          greaterThan(shortM - 0.001),
+          reason:
+              '${wPx.toStringAsFixed(0)}x${hPx.toStringAsFixed(0)}에서 가로가 잘린다',
+        );
+        expect(
+          visibleH,
+          greaterThan(longM - 0.001),
+          reason:
+              '${wPx.toStringAsFixed(0)}x${hPx.toStringAsFixed(0)}에서 세로가 잘린다',
+        );
+      }
+    });
+
+    test('가로로 넓은 화면에서는 세로가 제약이 된다', () {
+      // 태블릿 가로 모드처럼 폭이 넉넉하면 긴 축이 먼저 화면을 채운다.
+      final zoom = zoomToFitRotatedBox(
+        widthMeters: shortM,
+        heightMeters: longM,
+        viewportWidthPx: 1280,
+        viewportHeightPx: 800,
+        latitude: referenceLatitude,
+      );
+      final byHeightOnly = zoomToFitWidth(
+        widthMeters: longM,
+        availablePx: 800,
+        latitude: referenceLatitude,
+      );
+      expect(zoom, closeTo(byHeightOnly, 1e-9));
+    });
+
+    test('세로로 긴 폰에서는 가로가 제약이 된다', () {
+      final zoom = zoomToFitRotatedBox(
+        widthMeters: shortM,
+        heightMeters: longM,
+        viewportWidthPx: 480,
+        viewportHeightPx: 1029,
+        latitude: referenceLatitude,
+      );
+      final byWidthOnly = zoomToFitWidth(
+        widthMeters: shortM,
+        availablePx: 480,
+        latitude: referenceLatitude,
+      );
+      expect(zoom, closeTo(byWidthOnly, 1e-9));
+    });
+
+    test('세로로 세우면 정북 정렬보다 더 확대할 수 있다', () {
+      // 이 기능의 목적 자체다 — 같은 화면에서 도면이 더 크게 들어온다.
+      // 정북 정렬 폭은 53도 돌아앉은 148x295 건물의 축 정렬 상자 폭이다.
+      final northAlignedWidth =
+          shortM * math.cos(53 * math.pi / 180).abs() +
+          longM * math.sin(53 * math.pi / 180).abs();
+      final upright = zoomToFitRotatedBox(
+        widthMeters: shortM,
+        heightMeters: longM,
+        viewportWidthPx: 480,
+        viewportHeightPx: 1029,
+        latitude: referenceLatitude,
+      );
+      final northUp = zoomToFitWidth(
+        widthMeters: northAlignedWidth,
+        availablePx: 480,
+        latitude: referenceLatitude,
+      );
+      expect(
+        upright,
+        greaterThan(northUp),
+        reason:
+            '세로로 세웠는데도 정북 정렬($northUp)보다 확대가 안 된다면 '
+            '돌릴 이유가 없다',
+      );
+    });
+  });
+
+  group('층 전환 크로스페이드 opacity 표현식', () {
+    // 실기기 회귀: ['*', factor, interpolate]로 감싸면 MapLibre native가
+    // "zoom expression may only be used as input to a top-level step or
+    // interpolate"로 속성을 거부하고, opacity가 스펙 기본값 1로 굳어 새 도면이
+    // 투명하게 얹히지도, 페이드인되지도 않았다. 표현식은 어떤 계수에서도
+    // zoom을 입력으로 갖는 **최상위 interpolate**여야 한다.
+    test('어떤 계수에서도 최상위 interpolate를 유지한다(곱셈 래핑 금지)', () {
+      for (final factor in [0.0, 0.25, 0.62, 1.0]) {
+        final expr = indoorOverlayCrossfadeExpr(
+          entered: true,
+          crossfadeFactor: factor,
+        );
+        expect(
+          expr.first,
+          'interpolate',
+          reason: '계수 $factor에서 표현식이 최상위 interpolate가 아니면 '
+              'native가 opacity 설정을 거부한다',
+        );
+        expect(
+          expr[2],
+          ['zoom'],
+          reason: 'zoom은 최상위 interpolate의 입력 자리에 있어야 한다',
+        );
+      }
+    });
+
+    test('계수는 램프 끝 스톱에 곱해져 곱셈과 같은 값을 낸다', () {
+      const factor = 0.4;
+      final expr = indoorOverlayCrossfadeExpr(
+        entered: true,
+        crossfadeFactor: factor,
+      );
+      // 시작 스톱 값은 0(곱해도 0), 끝 스톱 값은 factor여야 모든 zoom에서
+      // "원래 램프 × factor"와 일치한다.
+      expect(expr[4], 0);
+      expect(expr[6], factor);
+      // 미러 함수로도 확인: 램프 끝(z=17)에서 0.4, 램프 시작 아래에서 0.
+      expect(
+        indoorOverlayOpacityAt(zoom: 17, entered: true, maxOpacity: factor),
+        factor,
+      );
+      expect(
+        indoorOverlayOpacityAt(zoom: 15, entered: true, maxOpacity: factor),
+        0,
+      );
+    });
+
+    test('계수 1이면 원래 페이드 램프와 같다', () {
+      expect(
+        indoorOverlayCrossfadeExpr(entered: true, crossfadeFactor: 1),
+        indoorOverlayFadeExpr(entered: true),
+      );
+      expect(
+        indoorOverlayCrossfadeExpr(entered: false, crossfadeFactor: 1),
+        indoorOverlayFadeExpr(entered: false),
+      );
+    });
+
+    test('범위를 벗어난 계수는 0~1로 잘린다', () {
+      expect(
+        indoorOverlayCrossfadeExpr(entered: true, crossfadeFactor: -0.2),
+        indoorOverlayFadeExpr(entered: true, maxOpacity: 0),
+      );
+      expect(
+        indoorOverlayCrossfadeExpr(entered: true, crossfadeFactor: 1.7),
+        indoorOverlayFadeExpr(entered: true, maxOpacity: 1),
+      );
+    });
+  });
 }

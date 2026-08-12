@@ -89,6 +89,7 @@ void main() {
             submitTick: 0,
             onStorePicked: (_) {},
             onBuildingPicked: (_) {},
+            onSuggestionPicked: (_) {},
             onQueryPicked: (_) {},
             indoorContextActive: true,
             reachByNodeId: reachByNodeId,
@@ -230,6 +231,7 @@ void main() {
             submitTick: 0,
             onStorePicked: (_) {},
             onBuildingPicked: (_) {},
+            onSuggestionPicked: (_) {},
             onQueryPicked: (_) {},
             indoorContextActive: true,
             reachByNodeId: reachByNodeId,
@@ -374,6 +376,7 @@ void main() {
             submitTick: 0,
             onStorePicked: (_) {},
             onBuildingPicked: (_) {},
+            onSuggestionPicked: (_) {},
             onQueryPicked: (value) => picked = value,
             indoorContextActive: true,
           ),
@@ -454,11 +457,13 @@ void main() {
     late DestinationRepository originalDestination;
     late BuildingRepository originalBuilding;
     String? picked;
+    StoreIndexEntry? opened;
 
     setUp(() {
       originalDestination = destinationRepository;
       originalBuilding = buildingRepository;
       picked = null;
+      opened = null;
     });
 
     tearDown(() {
@@ -480,6 +485,7 @@ void main() {
             submitTick: 0,
             onStorePicked: (_) {},
             onBuildingPicked: (_) {},
+            onSuggestionPicked: (entry) => opened = entry,
             onQueryPicked: (value) => picked = value,
             indoorContextActive: indoor,
             reachByNodeId: reachByNodeId,
@@ -537,7 +543,10 @@ void main() {
       expect(find.text('1F'), findsOneWidget);
     });
 
-    testWidgets('후보를 탭하면 그 이름으로 다시 검색한다', (tester) async {
+    // 한 곳짜리 후보는 **한 번 눌러 열린다.** 예전에는 이 자리에서 이름으로
+    // 검색을 다시 돌렸고, 사용자는 방금 고른 것과 사실상 같은 줄을 결과 목록에서
+    // 한 번 더 눌러야 했다 — 후보에 좌표가 없어서 생긴 우회였다.
+    testWidgets('후보를 탭하면 그 매장을 바로 연다', (tester) async {
       buildingRepository = _FakeBuildingRepository(
         storeIndex: [_entry('나이키 라이즈', '3F')],
       );
@@ -547,8 +556,10 @@ void main() {
       await pumpWhileTyping(tester);
       await tester.tap(find.byKey(const Key('suggestion-PO-나이키 라이즈')));
 
-      // 좌표를 들고 바로 이동하지 않고 이름으로 재검색한다(StoreIndexEntry 주석).
-      expect(picked, '나이키 라이즈');
+      expect(opened?.name, '나이키 라이즈');
+      expect(opened?.floorName, '3F');
+      // 재검색이 돌지 않아야 한 번으로 끝난다.
+      expect(picked, isNull);
     });
 
     // **실기기에서 잡은 회귀다.** `apc`는 서버 경량 매칭이 `name LIKE %apc%`라
@@ -683,8 +694,12 @@ void main() {
     // 되어 후보 화면으로 되돌아왔다. 그래서 "탭한 검색은 층을 안 좁힌다"로
     // 막았는데, 그러면 **어느 매장을 고를지를 서버가 자기 순서로 정한다** —
     // `화장실 · 1F 등 19곳 · 57m`을 탭했더니 `화장실 · B6 · 219m`로 갔다.
-    // 지금은 **고른 후보의 층**을 실어 보내 둘 다 막는다.
-    testWidgets('후보를 탭하면 그 후보의 층으로 좁혀 검색한다', (tester) async {
+    //
+    // 한 곳짜리 후보는 이제 재검색을 거치지 않으므로 서버가 고를 여지 자체가
+    // 없다. 대신 **후보의 id가 그대로 올라가는지**를 본다 — 이름으로 넘기면
+    // 동명 매장에서 같은 사고가 되살아난다. 묶인 시설(재검색이 남아 있는 경로)은
+    // 바로 아래 테스트가 층 스코프를 계속 지킨다.
+    testWidgets('후보를 탭하면 그 후보를 id로 확정해 넘긴다', (tester) async {
       buildingRepository = _FakeBuildingRepository(
         storeIndex: [_entry('A.P.C.', '3F')],
       );
@@ -714,6 +729,7 @@ void main() {
                   currentFloorId: 'FL-1F',
                   onStorePicked: (_) {},
                   onBuildingPicked: (_) {},
+                  onSuggestionPicked: (entry) => opened = entry,
                   onQueryPicked: (value) {
                     query.value = value;
                     submitTick.value++;
@@ -725,18 +741,20 @@ void main() {
           ),
         ),
       );
-      // 디바운스를 지나 1차 검색이 실제로 나가게 둔다. 그래야 "탭 전에는 층을
-      // 실어 보냈다"를 비교할 수 있다.
+      // 디바운스를 지나 1차 검색이 실제로 나가게 둔다. 그래야 "탭 뒤에 검색이
+      // 더 나가지 않았다"를 셀 수 있다.
       await tester.pump(const Duration(milliseconds: 350));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('suggestion-PO-A.P.C.')));
       await tester.pumpAndSettle();
 
-      expect(query.value, 'A.P.C.');
-      expect(repository.floorScopes.length, 2);
-      // 탭 전에는 지금 보고 있는 층, 탭 뒤에는 **고른 후보의 층**이다.
-      expect(repository.floorScopes.first, 'FL-1F');
-      expect(repository.floorScopes.last, 'FL-3F');
+      // 이름이 아니라 id로 확정된다. 구두점이 든 이름(A.P.C.)도 그대로 실린다.
+      expect(opened?.id, 'PO-A.P.C.');
+      expect(opened?.floorName, '3F');
+      // 검색은 탭 전 1차 한 번뿐이다 — 탭이 두 번째 검색을 만들지 않는다.
+      expect(repository.floorScopes.length, 1);
+      expect(repository.floorScopes.single, 'FL-1F');
+      expect(query.value, 'apc');
     });
 
     // 같은 이름이 층마다 있는 시설은 대표(최근접)의 층으로 좁혀야 화면에 적힌
@@ -771,6 +789,7 @@ void main() {
                   currentFloorId: 'FL-1F',
                   onStorePicked: (_) {},
                   onBuildingPicked: (_) {},
+                  onSuggestionPicked: (_) {},
                   onQueryPicked: (value) {
                     query.value = value;
                     submitTick.value++;
@@ -835,6 +854,7 @@ void main() {
                   currentFloorId: 'FL-1F',
                   onStorePicked: (_) {},
                   onBuildingPicked: (_) {},
+                  onSuggestionPicked: (_) {},
                   onQueryPicked: (value) {
                     query.value = value;
                     submitTick.value++;
@@ -937,6 +957,7 @@ void main() {
             submitTick: 0,
             onStorePicked: (_) {},
             onBuildingPicked: (_) {},
+            onSuggestionPicked: (_) {},
             onQueryPicked: (_) {},
             indoorContextActive: true,
             reachByNodeId: reachByNodeId,
@@ -1107,6 +1128,7 @@ void main() {
             submitTick: 0,
             onStorePicked: (_) {},
             onBuildingPicked: (_) {},
+            onSuggestionPicked: (_) {},
             onQueryPicked: (_) {},
             indoorContextActive: true,
             reachByNodeId: reachByNodeId,
@@ -1297,11 +1319,13 @@ void main() {
     late DestinationRepository originalDestination;
     late BuildingRepository originalBuilding;
     String? picked;
+    StoreIndexEntry? opened;
 
     setUp(() {
       originalDestination = destinationRepository;
       originalBuilding = buildingRepository;
       picked = null;
+      opened = null;
     });
 
     tearDown(() {
@@ -1322,6 +1346,7 @@ void main() {
             submitTick: 0,
             onStorePicked: (_) {},
             onBuildingPicked: (_) {},
+            onSuggestionPicked: (entry) => opened = entry,
             onQueryPicked: (value) => picked = value,
             indoorContextActive: true,
             reachByNodeId: reachByNodeId,
@@ -1414,14 +1439,18 @@ void main() {
       expect(find.byKey(const Key('sort-order')), findsNothing);
     });
 
-    testWidgets('형제를 탭하면 그 이름으로 다시 검색한다', (tester) async {
+    // 형제도 후보 행과 같은 위젯이라 같은 규칙을 따른다 — 한 번 눌러 그 매장이
+    // 열린다. `구찌 뷰티`를 눌렀는데 `구찌 뷰티`를 다시 검색하는 화면이 뜨는 것은
+    // 사용자에게 아무것도 아니다.
+    testWidgets('형제를 탭하면 그 매장을 바로 연다', (tester) async {
       useGucci();
 
       await tester.pumpWidget(buildSubject('구찌'));
       await settle(tester);
       await tester.tap(find.byKey(const Key('suggestion-PO-구찌 뷰티-1F')));
 
-      expect(picked, '구찌 뷰티');
+      expect(opened?.id, 'PO-구찌 뷰티-1F');
+      expect(picked, isNull);
     });
 
     // 서버는 카테고리로도 확정한다(tier 1). 그때 후보는 형제가 아니라 남남이다.
@@ -1519,6 +1548,7 @@ void main() {
             submitTick: 0,
             onStorePicked: (_) {},
             onBuildingPicked: (_) {},
+            onSuggestionPicked: (_) {},
             onQueryPicked: (_) {},
             indoorContextActive: indoor,
             categoryEntries: categoryEntries,
@@ -1601,6 +1631,102 @@ void main() {
       final label = reachLabel(const NodeReach(distanceM: 3, costM: 3));
 
       expect(label, '3m · 도보 1분');
+    });
+  });
+
+  group('검색 결과의 건물 한 줄', () {
+    // 이 그룹이 지키는 증상: 야외에서 "더현대"를 쳐도 건물 위치로 지도가
+    // 움직이지 않던 문제. 지도를 옮기는 것은 상위 화면이지만, 그 콜백이
+    // 불리려면 **건물 한 줄이 실제로 그려지고 눌려야** 한다. 여기서 그 앞단을
+    // 못 박아, 다음에 같은 증상이 나면 원인이 이쪽인지 지도 쪽인지 바로 갈린다.
+    late DestinationRepository originalDestination;
+    late BuildingRepository originalBuilding;
+
+    const building = Building(
+      id: 'thehyundai-seoul',
+      name: '더현대 서울',
+      floors: ['6F', '1F', 'B1', 'B2'],
+    );
+
+    setUp(() {
+      originalDestination = destinationRepository;
+      originalBuilding = buildingRepository;
+      buildingRepository = _FakeBuildingRepository(buildings: const [building]);
+      destinationRepository = _FakeDestinationRepository(const []);
+    });
+
+    tearDown(() {
+      destinationRepository = originalDestination;
+      buildingRepository = originalBuilding;
+    });
+
+    Widget buildSubject({
+      required ValueChanged<Building> onBuildingPicked,
+      bool indoorContextActive = false,
+    }) => MaterialApp(
+      home: Scaffold(
+        body: SizedBox(
+          height: 400,
+          child: SearchPanel(
+            buildingId: 'thehyundai-seoul',
+            query: '더현대',
+            submitTick: 0,
+            onStorePicked: (_) {},
+            onBuildingPicked: onBuildingPicked,
+            onSuggestionPicked: (_) {},
+            onQueryPicked: (_) {},
+            indoorContextActive: indoorContextActive,
+          ),
+        ),
+      ),
+    );
+
+    Future<void> settleSearch(WidgetTester tester) async {
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('이름이 겹치는 건물이 있으면 한 줄로 뜬다', (WidgetTester tester) async {
+      await tester.pumpWidget(buildSubject(onBuildingPicked: (_) {}));
+      await settleSearch(tester);
+
+      expect(find.text('더현대 서울'), findsOneWidget);
+      expect(find.text('건물 · 4개 층'), findsOneWidget);
+    });
+
+    testWidgets('그 줄을 누르면 건물이 상위로 전달된다', (WidgetTester tester) async {
+      Building? picked;
+      await tester.pumpWidget(
+        buildSubject(onBuildingPicked: (b) => picked = b),
+      );
+      await settleSearch(tester);
+
+      await tester.tap(find.text('더현대 서울'));
+      await tester.pumpAndSettle();
+
+      expect(
+        picked?.id,
+        'thehyundai-seoul',
+        reason: '이 콜백이 안 불리면 지도를 옮길 기회 자체가 없다',
+      );
+    });
+
+    testWidgets('건물 안을 보고 있어도 그 줄은 그대로 뜬다', (WidgetTester tester) async {
+      // 실내에서 건물 이름을 다시 검색하는 경우다. 여기서 줄이 사라지면
+      // "실내에서는 건물로 못 돌아간다"가 된다.
+      Building? picked;
+      await tester.pumpWidget(
+        buildSubject(
+          onBuildingPicked: (b) => picked = b,
+          indoorContextActive: true,
+        ),
+      );
+      await settleSearch(tester);
+
+      expect(find.text('더현대 서울'), findsOneWidget);
+      await tester.tap(find.text('더현대 서울'));
+      await tester.pumpAndSettle();
+      expect(picked?.id, 'thehyundai-seoul');
     });
   });
 }
@@ -1718,7 +1844,15 @@ StoreIndexEntry _entry(String name, String floor, {String? nodeId}) =>
 /// 나머지는 [noSuchMethod]로 열어 둬 인터페이스가 늘어도 이 테스트가 깨지지
 /// 않게 한다.
 class _FakeBuildingRepository implements BuildingRepository {
-  _FakeBuildingRepository({this.storeIndex, this.storeIndexFails = false});
+  _FakeBuildingRepository({
+    this.storeIndex,
+    this.storeIndexFails = false,
+    this.buildings = const [],
+  });
+
+  /// `getAllBuildings()`가 돌려줄 목록. 검색 패널은 여기서 질의와 이름이
+  /// 겹치는 건물을 찾아 결과 맨 위에 건물 한 줄을 세운다.
+  final List<Building> buildings;
 
   final List<StoreIndexEntry>? storeIndex;
 
@@ -1726,7 +1860,7 @@ class _FakeBuildingRepository implements BuildingRepository {
   final bool storeIndexFails;
 
   @override
-  Future<List<Building>> getAllBuildings() async => const [];
+  Future<List<Building>> getAllBuildings() async => buildings;
 
   /// 원본을 몇 번 받아갔는지. 야외에서 "받지 않는다"를 검증하려면 결과가 아니라
   /// 호출 자체를 세야 한다.

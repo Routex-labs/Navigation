@@ -125,6 +125,7 @@ void main() {
                 onBuildingPicked: (_) {},
                 // 실제 화면(MapShellScreen)이 하는 것과 같다 — 골라진 말로
                 // 검색창을 채우고 확정 카운터를 올려 한 바퀴를 다시 돌린다.
+                onSuggestionPicked: (_) {},
                 onQueryPicked: (value) {
                   query.value = value;
                   submitTick.value++;
@@ -713,6 +714,7 @@ void main() {
                   submitTick: submitTick.value,
                   onStorePicked: (_) {},
                   onBuildingPicked: (_) {},
+                  onSuggestionPicked: (_) {},
                   onQueryPicked: (value) {
                     query.value = value;
                     submitTick.value++;

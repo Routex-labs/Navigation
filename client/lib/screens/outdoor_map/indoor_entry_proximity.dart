@@ -46,7 +46,8 @@ bool isPointInPolygon(ll.LatLng point, List<ll.LatLng> polygon) {
     final yi = polygon[i].latitude;
     final xj = polygon[j].longitude;
     final yj = polygon[j].latitude;
-    final intersect = ((yi > point.latitude) != (yj > point.latitude)) &&
+    final intersect =
+        ((yi > point.latitude) != (yj > point.latitude)) &&
         (point.longitude < (xj - xi) * (point.latitude - yi) / (yj - yi) + xi);
     if (intersect) inside = !inside;
   }
@@ -113,7 +114,8 @@ double _metersToBoundary(ll.LatLng point, List<ll.LatLng> polygon) {
   final mPerDegLng =
       _metersPerDegreeLat * math.cos(point.latitude * math.pi / 180);
   double toLocalX(ll.LatLng p) => (p.longitude - point.longitude) * mPerDegLng;
-  double toLocalY(ll.LatLng p) => (p.latitude - point.latitude) * _metersPerDegreeLat;
+  double toLocalY(ll.LatLng p) =>
+      (p.latitude - point.latitude) * _metersPerDegreeLat;
 
   var best = double.infinity;
   final n = polygon.length;
@@ -159,4 +161,32 @@ bool isIndoorBuildingNearCamera({
 }) {
   if (camera == null || footprint == null || footprint.length < 3) return false;
   return metersToPolygon(camera, footprint) <= radiusMeters;
+}
+
+/// 실내에서 **건물 밖을 탭해 야외로 나가는** 판정의 여유 폭(m).
+///
+/// 외곽선 바로 바깥은 이탈로 치지 않는다. 벽에 붙은 매장을 누르거나 도면
+/// 가장자리를 짚을 때 손가락이 외곽선을 몇 미터 넘기는 일은 흔한데, 그때마다
+/// 실내가 통째로 닫히면 사용자는 매장을 누르려다 건물에서 쫓겨난다 — 되돌리려면
+/// 건물을 다시 찾아 탭해야 하는, 비용이 큰 오조작이다.
+///
+/// 반대로 너무 넓게 잡으면 진짜 나가려는 탭이 안 먹는다. 15 m는 이 건물 폭
+/// (약 180 m)의 8% 남짓이라, 화면에 건물이 꽉 찬 상태에서 손가락 두어 개
+/// 폭이다 — 가장자리를 스친 오탭은 걸러내고, 건물에서 눈에 띄게 떨어진 곳을
+/// 누른 탭은 그대로 통과한다.
+const indoorExitTapMarginMeters = 15.0;
+
+/// 이 탭이 **야외로 나가겠다는 뜻**인지. 실내 상태에서만 묻는다.
+///
+/// 외곽선 안이면 당연히 아니고, 바깥이어도 [marginMeters] 안쪽이면 오탭으로
+/// 보고 아니라고 답한다. 외곽선을 모르면(아직 로드 전) 판정 근거가 없으므로
+/// **나가지 않는 쪽**으로 기운다 — 잘못 나가는 비용이 잘못 머무는 비용보다
+/// 크다(다시 들어오려면 건물을 찾아 탭해야 한다).
+bool isTapOutsideBuildingForExit({
+  required ll.LatLng point,
+  required List<ll.LatLng>? footprint,
+  double marginMeters = indoorExitTapMarginMeters,
+}) {
+  if (footprint == null || footprint.length < 3) return false;
+  return metersToPolygon(point, footprint) > marginMeters;
 }

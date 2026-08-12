@@ -2,17 +2,26 @@
 
 작성일: 2026-07-30
 
-상태: Wave 1·2 완료 · Wave 3 구현 완료(검증 중) · Wave 3.5 착수
+상태: Wave 1~3.6 완료 · Wave 5 데이터 작업 진행 중 · Wave 4 미착수
 
 | 단계 | 상태 |
 |---|---|
 | Wave 1 갈래 A (클라이언트 id 관통) | 완료 — `afd3768` |
 | Wave 1 갈래 B (백엔드 계약) | 완료 — `60440be` |
 | Wave 2 C1·C2·C4 (스키마·검증기·테스트) | 완료 — `bb4c463` |
-| Wave 2 C3 (오버레이 내용 작성) | 파일럿 1건 완료 — 스타벅스 리저브(사용자 작성) |
-| Wave 3 D1~D7 (클라이언트 렌더러) | 구현 완료 · **미커밋** — 검증 중 |
-| **Wave 3.5 (출처 필수화 — D2′)** | **착수** |
-| Wave 4~5 | 미착수 |
+| Wave 2 C3 (오버레이 내용 작성) | 진행 중 — Wave 5 F1/F3과 같은 작업이라 아래로 합침 |
+| Wave 3 D1~D7 (클라이언트 렌더러) | 완료 |
+| Wave 3.5 (가드레일 복구 — D2) | 완료 (아래 절) |
+| **Wave 3.6 (소개 영상용 파일럿 확장 — D2″)** | **완료** (아래 절) |
+| Wave 4 (건물 스케일) | 미착수 |
+| Wave 5 F1·F3 (커버리지) | 진행 중 — 스타벅스 리저브·블루보틀 여의도·시그니처 공간 5곳 |
+| Wave 5 F2·F4·F5 | 미착수 |
+
+**커버리지 작업은 브랜드가 아니라 공간 쪽으로 방향을 틀었다.** 브랜드 공식
+사이트에서 지점 소개문을 구할 수 있는 곳이 15곳 중 1곳뿐이었고, 대신 더현대 서울
+자체의 시그니처 공간은 현대백화점이 직접 설명한다. 근거와 실패 목록은
+[bluebottle-yeouido-detail.md](bluebottle-yeouido-detail.md)·
+[thehyundai-landmarks-detail.md](thehyundai-landmarks-detail.md)에 있다.
 
 **C3에 대한 아래 원칙은 유지된다.** 파일럿 1건은 사용자가 직접 확인해 작성했고, 그 출처를
 [starbucks-detail-pilot.md](starbucks-detail-pilot.md)에 표로 남겼다. 에이전트는 내용을
@@ -23,8 +32,6 @@
 한다)를 설계가 아니라 데이터로 위반하게 된다. 검증기가 형식은 잡아 주지만 "그럴듯한
 거짓"은 잡지 못한다. 내용은 매장을 확인할 수 있는 사람이 쓰고, 검증기가 형식과
 드리프트를 본다.
-
-브랜치: `feature/store-detail`
 
 상위 문서: [place-detail-interface.md](place-detail-interface.md)(계약·실패 조건),
 [wave0-coverage.md](wave0-coverage.md)(사전 조사·결정)
@@ -196,6 +203,39 @@ Wave 1과 2는 완전 병렬(파일 교집합 0). Wave 3은 A·B가 끝나야 �
 
 **남은 결정**: `businessInfo`에 유일하게 남은 `주소`가 건물 주소라 전 매장이 동일하다.
 뺄지 여부는 설계 문서 10절 "남겨 둔 과제"에 있다.
+
+---
+
+## Wave 3.6 — 소개 영상용 파일럿 확장 (완료)
+
+**발단**: 소개 영상에 스타벅스 리저브 상세가 나오는데, 메뉴 4종에 영업시간도 없는 화면은
+보여 줄 것이 없었다. **한 매장의 데이터를 두껍게 채우는 것이 목적이고, 그 과정에서 스키마가
+견디지 못한 곳만 고쳤다.**
+
+| # | 결과 |
+|---|---|
+| H1 | `_schema.json` v2 — `item_keys` → `required_keys`/`optional_keys`. `menu`의 필수는 `name`·`image_asset`뿐이고 `category`·`price`·`volume` 등 7개는 선택 |
+| H2 | `_schema.json` — `demoInfo` 필드와 `demo_allowlist` 신설 (D2″) |
+| H3 | `place_details.py` — 키 목록을 **스키마에서 읽는다**. 선언하지 않은 키는 오타로 보고 실패시킨다. `_validate_demo_info` 신설 |
+| H4 | `place_detail_queries.py` — 선택 키는 값이 있을 때만 싣는다(빈 문자열로 채우지 않는다). `demoInfo` 섹션을 `businessInfo` 위에 놓는다 |
+| H5 | 오버레이 — 메뉴 30종·6카테고리, hero 5장, `demoInfo` 5항목 (이후 전량 316종·16카테고리로 확장 — [파일럿 문서](starbucks-detail-pilot.md#메뉴)) |
+| H6 | `place_detail.dart` — `MenuItem.price`를 선택으로. `DemoInfoSection` 추가 |
+| H7 | `place_detail_rich_sections.dart` — 메뉴 카테고리 탭, 가격 없을 때 용량·칼로리·카페인 대체, `PlaceDemoInfoSection` |
+| H8 | `pubspec.yaml` — 매장 상세 이미지를 파일 목록이 아니라 디렉터리 단위로 등록 |
+
+**완료 기준**
+- [x] 가격 없는 메뉴가 크래시 없이 파싱되고, 카드가 용량·칼로리·카페인을 대신 보여 준다
+- [x] 셋 다 없는 항목(푸드)은 그 줄을 아예 그리지 않는다
+- [x] 카테고리 탭이 서버 등장 순서대로 뜨고, 한 항목이라도 카테고리가 없으면 탭을 안 만든다
+- [x] `demo_allowlist`에 없는 매장이 `demoInfo`를 쓰면 검증이 실패한다
+- [x] `demoInfo` 항목의 `source`가 http(s)가 아니거나 `confirmed_at`이 `YYYY-MM-DD`가 아니면 실패한다
+- [x] 선언하지 않은 키(`calorie` 같은 오타)가 있으면 실패한다
+- [x] 백엔드 590건 · 클라이언트 631건 · ruff format/check · mypy · `flutter analyze` 무경고
+- [x] 스키마 v2가 기존 오버레이 11건을 그대로 통과시킨다 (필수 키를 줄인 변경이라
+      기존 데이터가 깨지지 않는다)
+
+**남은 결정**: 확인일 만료 기준이 없다. `demo_allowlist`에 매장을 더할 때의 절차와 함께
+설계 문서 10절 "남겨 둔 과제"에 있다.
 
 ---
 

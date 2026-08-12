@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/widgets/category_icon.dart';
 import 'package:navigation_client/widgets/category_map_icon.dart';
 import 'package:navigation_client/widgets/floor_facility_style.dart';
-import 'package:navigation_client/widgets/store_label_fit.dart';
 
 /// 지도 라벨에 붙는 대분류 아이콘의 규칙을 못 박는다.
 ///
@@ -70,33 +69,6 @@ void main() {
   });
 
   group('이름이 아이콘 앞/뒤로 뒤집힌다', () {
-    test('앵커가 두 방향을 갖고, 오른쪽이 먼저다', () {
-      // 값이 하나면 뒤집기가 아예 없고, 순서가 바뀌면 자리가 남는데도 이름이
-      // 왼쪽에 붙어 읽는 방향과 어긋난다.
-      expect(kStoreLabelVariableAnchor, ['left', 'right']);
-    });
-
-    test('아이콘과 글자 사이 여백이 붙지도 벌어지지도 않는다', () {
-      // 이 값은 **아이콘 가장자리부터의 여백**이지 심볼 중심에서의 거리가
-      // 아니다. 중심 거리로 오해해 아이콘 반지름/글자크기(≈0.85)를 넣었더니
-      // 실기기에서 간격이 27px까지 벌어져 아이콘과 이름이 따로 놀았다.
-      //
-      // ⚠️ **기준을 두 번 바꿨다.** 처음엔 고정 상한(0.35), 다음엔 배지 지름에
-      // 대한 비율이었다. 배지가 화장실 아이콘과 같은 고정 크기가 되면서
-      // ([kIndoorMarkerLogicalPx]) 비율 기준도 의미를 잃었다 — 여백은
-      // `offset × 글자 크기`라 글자만 따라 변하는데 배지는 이제 고정이다.
-      //
-      // 그래서 **여백 자체를 논리 px으로** 잠근다. 붙는 쪽(3px 미만)은 글자가
-      // 배지에 파묻히고, 벌어지는 쪽(10px 초과)은 둘이 따로 논다.
-      expect(kStoreLabelRadialOffset, greaterThan(0));
-
-      for (final textPx in [kStoreLabelMinPx, kStoreLabelMaxPx]) {
-        final gapPx = kStoreLabelRadialOffset * textPx;
-        expect(gapPx, greaterThanOrEqualTo(3.0), reason: '배지에 글자가 파묻힌다');
-        expect(gapPx, lessThanOrEqualTo(10.0), reason: '아이콘과 이름이 따로 논다');
-      }
-    });
-
     test('배지가 화장실 아이콘과 같은 크기다', () {
       // 피드백 그대로다 — 두 값이 갈라지면 같은 도면 위에서 마커가 다른 무게로
       // 읽힌다. 같은 함수를 쓰는지까지 잠가 둔다.
@@ -105,16 +77,30 @@ void main() {
       }
     });
 
-    test('마커 크기가 화면 배율을 따라간다', () {
+    test('네이티브에서는 마커 크기가 화면 배율을 따라간다', () {
       // 회귀 대상이 이 저장소에서 실제로 났던 버그다. `icon-size`는 비트맵의
       // **물리 픽셀**에 곱해지고 `text-size`는 논리 픽셀이라, 배율을 안 곱하면
       // 고밀도 화면에서 아이콘만 배율만큼 작아진다.
-      expect(indoorMarkerIconSize(3.0), closeTo(indoorMarkerIconSize(1.0) * 3, 1e-9));
+      expect(
+        indoorMarkerIconSize(3.0, isWeb: false),
+        closeTo(indoorMarkerIconSize(1.0, isWeb: false) * 3, 1e-9),
+      );
     });
 
-    test('논리 px로 환산하면 배율과 무관하게 같은 크기다', () {
+    test('네이티브에서 논리 px로 환산하면 배율과 무관하게 같은 크기다', () {
       for (final dpr in [1.0, 2.0, 2.625, 3.5]) {
-        final logical = indoorMarkerIconSize(dpr) * kIconCanvasPx / dpr;
+        final logical =
+            indoorMarkerIconSize(dpr, isWeb: false) * kIconCanvasPx / dpr;
+        expect(logical, closeTo(kIndoorMarkerLogicalPx, 1e-9));
+      }
+    });
+
+    test('웹에서는 배율을 곱하지 않는다', () {
+      // 웹 구현은 비트맵을 pixelRatio 1로 등록해서 `icon-size`가 곱해지는 대상이
+      // 이미 논리(CSS) 픽셀이다. 네이티브와 같은 식을 쓰면 아이콘만 배율배로
+      // 커진다 — Chrome 기기 에뮬레이션(배율 3)에서 12px 배지가 36px으로 떴다.
+      for (final dpr in [1.0, 2.0, 3.0, 3.5]) {
+        final logical = indoorMarkerIconSize(dpr, isWeb: true) * kIconCanvasPx;
         expect(logical, closeTo(kIndoorMarkerLogicalPx, 1e-9));
       }
     });

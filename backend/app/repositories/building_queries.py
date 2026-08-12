@@ -16,6 +16,7 @@ from app.geo.tiling import local_points_to_lnglat
 from app.graph.revision import graph_revision
 from app.models import Building, Edge, Floor, Node, Poi, Store
 from app.repositories.geo_transform import fit_building_geo_transform
+from app.repositories.place_detail_queries import classify_place_kind
 
 
 # 전체 건물 요약 목록. selectinload로 층 목록 N+1을 제거한다.
@@ -154,6 +155,12 @@ def list_store_index(session: Session, building_id: str) -> list[dict[str, Any]]
             "floor_name": floor_name,
             "category": category,
             "subcategory": subcategory,
+            # 상세와 **같은 분류**를 함께 준다. 이 색인에는 주차 787·에스컬레이터
+            # 152·엘리베이터 68이 섞여 있어서(전체의 61%), "근처 매장"처럼 매장만
+            # 골라야 하는 화면이 규칙을 다시 만들어야 한다. 클라이언트가 소분류
+            # 목록을 들고 스스로 판정하면 그 목록이 서버와 갈라지는 날 "상세는 안
+            # 열리는데 목록에는 있는" 상태가 조용히 생긴다.
+            "kind": classify_place_kind(subcategory),
             # 후보를 고른 직후 길찾기로 넘어가는 도착 노드. 이게 없으면 이름을 다시
             # 질의해 매장을 찾아야 한다.
             "entrance_node_id": entrance_node_id,

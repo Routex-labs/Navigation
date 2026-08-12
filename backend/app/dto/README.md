@@ -247,6 +247,13 @@ DB와 API 계약이 **독립적으로** 바뀐다.
 ## API 전용 표현들
 
 - **키 이름 변경**: `GraphEdgeResponse`는 `from_node_id`를 `Field(alias="from")`으로 노출한다(내부 컬럼명 ≠ API 키).
+  - ⚠️ **직접 직렬화할 때는 `by_alias=True`를 반드시 준다.** FastAPI가 `response_model`로
+    내보낼 때는 기본이 `by_alias=True`지만, ETag를 뽑으려고 라우터에서 부르는
+    `model_dump_json()`은 기본이 **False**다. 빠뜨리면 그 엔드포인트만 alias 없이
+    필드명으로 나가, 같은 DTO를 쓰는 다른 엔드포인트와 **한 배포 안에서 계약이 갈린다**
+    (실제로 `/floors/{floor}`만 `from`/`to` 대신 `from_node_id`/`to_node_id`로 나갔고,
+    클라이언트에서는 조용한 파싱 예외로 끝나 층 도면이 통째로 사라졌다).
+    `tests/integration/graph/test_floor_graph.py`가 두 엔드포인트의 키를 비교해 지킨다.
 - **계산 필드**: `StoreResponse.centroid_wgs84`, `polygon_wgs84`처럼 DB에 없고 변환으로만 만들어지는 값.
 - **리터럴 제약**: `navigation_coordinate_system: Literal["local_m"]`처럼 계약을 타입에 박아 둔다.
 

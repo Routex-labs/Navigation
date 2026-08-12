@@ -178,4 +178,67 @@ void main() {
       expect(indoorEntryProximityMeters, lessThan(150));
     });
   });
+  group('실내에서 밖을 탭해 나가는 판정 — 오탭으로 쫓겨나지 않는다', () {
+    // 이 그룹이 지키는 증상: 벽에 붙은 매장을 누르려다 손가락이 외곽선을 살짝
+    // 넘겨 실내가 통째로 닫히던 문제. 되돌리려면 건물을 다시 찾아 탭해야 해서
+    // 오조작 비용이 크다.
+
+    test('건물 안을 누르면 나가지 않는다', () {
+      expect(
+        isTapOutsideBuildingForExit(point: center, footprint: footprint),
+        isFalse,
+      );
+    });
+
+    test('외곽선 바로 바깥(여유 폭 안)은 오탭으로 보고 나가지 않는다', () {
+      for (final m in [0.5, 3.0, 8.0, 14.0]) {
+        expect(
+          isTapOutsideBuildingForExit(point: northOf(m), footprint: footprint),
+          isFalse,
+          reason: '외곽선에서 ${m}m 바깥 탭에 실내가 닫히면 매장을 누르려다 쫓겨난다',
+        );
+        expect(
+          isTapOutsideBuildingForExit(point: eastOf(m), footprint: footprint),
+          isFalse,
+          reason: '동쪽 ${m}m — 경도 축 환산이 틀리면 여기서만 어긋난다',
+        );
+      }
+    });
+
+    test('건물에서 눈에 띄게 떨어진 곳을 누르면 나간다', () {
+      for (final m in [20.0, 50.0, 200.0]) {
+        expect(
+          isTapOutsideBuildingForExit(point: northOf(m), footprint: footprint),
+          isTrue,
+          reason: '${m}m 바깥까지 못 나가면 탭으로 나가는 탈출 경로가 죽는다',
+        );
+      }
+    });
+
+    test('외곽선을 모르면 나가지 않는다', () {
+      // 아직 건물을 못 받았거나 외곽선이 없다. 판정 근거가 없을 때는 잘못
+      // 나가는 쪽보다 잘못 머무는 쪽이 싸다 — 머무는 것은 한 번 더 탭하면
+      // 되지만, 나간 것은 건물을 다시 찾아야 한다.
+      expect(
+        isTapOutsideBuildingForExit(point: northOf(500), footprint: null),
+        isFalse,
+      );
+      expect(
+        isTapOutsideBuildingForExit(
+          point: northOf(500),
+          footprint: const [ll.LatLng(37.5663, 126.9777)],
+        ),
+        isFalse,
+      );
+    });
+
+    test('여유 폭은 건물을 삼킬 만큼 크지 않다', () {
+      // 여유 폭이 건물 반폭보다 크면 건물 반대편을 눌러도 "안쪽"으로 판정돼
+      // 탭으로 나가는 길이 사실상 사라진다.
+      expect(
+        indoorExitTapMarginMeters,
+        lessThan(polygonWidthMeters(footprint) / 2),
+      );
+    });
+  });
 }

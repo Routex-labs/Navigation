@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -82,7 +83,17 @@ _ALLOWED_FIELDS = {
     "hero",
     "menu",
     "businessInfo",
+    "demoInfo",
+    "links",
+    "hours",
 }
+
+# 요일 키와 그 순서. 이 목록은 **클라이언트와 공유하는 전선 계약**이라 스키마 파일이
+# 아니라 코드에 둔다(Dart 쪽 store_hours.dart가 같은 순서를 갖는다). 스키마에 한 벌
+# 더 적어 두면 반드시 한쪽이 먼저 썩는다.
+WEEKDAY_KEYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+
+_TIME_PATTERN = re.compile(r"^([01]\d|2[0-4]):([0-5]\d)$")
 
 
 # 오버레이 한 파일을 검증한다. 오류 메시지 목록(빈 목록이면 정상).
@@ -101,6 +112,7 @@ def validate_overlay(
 ) -> list[str]:
     errors: list[str] = []
     forbidden = {label.strip() for label in schema.get("forbidden_labels", [])}
+    demo_allowlist = {str(place_id).strip() for place_id in schema.get("demo_allowlist", [])}
 
     for place_id, overlay in payload.items():
         if not isinstance(overlay, dict):
@@ -123,7 +135,7 @@ def validate_overlay(
         if unknown:
             errors.append(f"{place_id}: 스키마에 없는 키 {sorted(unknown)}")
 
-        errors += _validate_values(place_id, overlay, schema, forbidden, today)
+        errors += _validate_values(place_id, overlay, schema, forbidden, demo_allowlist, today)
 
     return errors
 
@@ -133,18 +145,20 @@ def _validate_values(
     overlay: dict[str, Any],
     schema: dict[str, Any],
     forbidden: set[str],
+    demo_allowlist: set[str],
     today: str,
 ) -> list[str]:
     errors: list[str] = []
     fields = schema.get("fields", {})
 
+    # 길이는 검사하지 않는다. 한때 60자 상한을 걸었는데, 그 값이 뜻한 것은
+    # "짧게 쓰라"였지 60이라는 숫자가 아니었다. 숫자로 굳혀 두니 브랜드가 쓴 공식
+    # 문구를 5자 차이로 버리고 뜻이 옅은 다른 문장을 싣는 일이 생겼다 — 검증기가
+    # 막아야 할 것은 틀린 값이지 긴 값이 아니다. 짧게 유지하는 것은 쓰는 사람의
+    # 판단으로 남긴다.
     summary = overlay.get("summary")
-    if summary is not None:
-        max_length = fields.get("summary", {}).get("max_length", 60)
-        if not isinstance(summary, str) or not summary.strip():
-            errors.append(f"{place_id}: summary가 비어 있습니다")
-        elif len(summary) > max_length:
-            errors.append(f"{place_id}: summary가 {max_length}자를 넘습니다")
+    if summary is not None and (not isinstance(summary, str) or not summary.strip()):
+        errors.append(f"{place_id}: summary가 비어 있습니다")
 
     # 출처. 공식 사이트에서 옮겨 온 문구는 **그 문구가 실제로 있던 페이지**를 남긴다.
     # 홈 주소만 적으면 나중에 다시 찾을 수 없어 확인이 불가능해진다.
@@ -168,21 +182,12 @@ def _validate_values(
         elif len(tags) > max_items:
             errors.append(f"{place_id}: tags가 {max_items}개를 넘습니다")
 
-    errors += _validate_asset_items(
-        place_id,
-        overlay.get("hero"),
-        "hero",
-        ("local_asset",),
-        fields,
-    )
-    errors += _validate_asset_items(
-        place_id,
-        overlay.get("menu"),
-        "menu",
-        ("name", "price", "description", "image_asset"),
-        fields,
-    )
+    errors += _validate_asset_items(place_id, overlay.get("hero"), "hero", fields)
+    errors += _validate_asset_items(place_id, overlay.get("menu"), "menu", fields)
     errors += _validate_business_info(place_id, overlay.get("businessInfo"), fields, forbidden)
+    errors += _validate_demo_info(place_id, overlay.get("demoInfo"), fields, demo_allowlist)
+    errors += _validate_links(place_id, overlay.get("links"), fields)
+    errors += _validate_hours(place_id, overlay.get("hours"), fields, today)
 
     for item in overlay.get("keyValue") or []:
         if not isinstance(item, dict) or "label" not in item or "value" not in item:
@@ -214,11 +219,19 @@ def _validate_values(
     return errors
 
 
+# 필수 키와 선택 키를 스키마에서 읽는다.
+#
+# 키 목록을 호출부에 하드코딩해 두면 스키마 파일과 코드가 서로 다른 진실을 갖게 되고,
+# 스키마만 고친 사람은 검증이 따라온 줄 안다. 선택 키를 **선언한 것만** 허용하는 이유도
+# 같다 — `image_assset` 같은 오타는 값이 조용히 사라질 뿐 아무 데서도 실패하지 않는다.
+#
+# `string_array_keys`는 값이 문자열이 아니라 문자열 배열인 선택 키다(menu.badges).
+# 형식을 여기서 보지 않으면 `"badges": "NEW"`가 검증을 통과해 놓고 응답을 만들 때
+# pydantic에서 터진다 — 데이터 한 건 때문에 API 전체가 500이 되는 자리다.
 def _validate_asset_items(
     place_id: str,
     value: Any,
     field_name: str,
-    required_keys: tuple[str, ...],
     fields: dict[str, Any],
 ) -> list[str]:
     if value is None:
@@ -228,16 +241,333 @@ def _validate_asset_items(
     if not isinstance(value, list):
         return [f"{place_id}: {field_name}는 객체 배열이어야 합니다"]
 
-    max_items = fields.get(field_name, {}).get("max_items")
+    spec = fields.get(field_name, {})
+    required_keys = tuple(spec.get("required_keys", ()))
+    array_keys = tuple(spec.get("string_array_keys", ()))
+    allowed_keys = set(required_keys) | set(spec.get("optional_keys", ())) | set(array_keys)
+
+    max_items = spec.get("max_items")
     if isinstance(max_items, int) and len(value) > max_items:
         errors.append(f"{place_id}: {field_name}가 {max_items}개를 넘습니다")
 
     required_label = "/".join(required_keys)
+    # 오류 메시지에서 항목을 가리키는 이름. 첫 필수 키를 쓴다(menu는 name).
+    name_key = required_keys[0] if required_keys else None
     for item in value:
         if not isinstance(item, dict) or any(
             not isinstance(item.get(key), str) or not item[key].strip() for key in required_keys
         ):
             errors.append(f"{place_id}: {field_name} 항목에 {required_label}가 필요합니다")
+            continue
+
+        unknown = set(item) - allowed_keys
+        if unknown:
+            errors.append(f"{place_id}: {field_name} 항목에 스키마에 없는 키 {sorted(unknown)}")
+
+        for key in array_keys:
+            entry = item.get(key)
+            if entry is None:
+                continue
+            if not isinstance(entry, list) or not all(isinstance(one, str) and one.strip() for one in entry):
+                label = str(item.get(name_key, "")) if name_key else field_name
+                errors.append(f"{place_id}: {field_name} '{label}'의 {key}는 문자열 배열이어야 합니다")
+    return errors
+
+
+# 링크는 값이 문장이 아니라 주소다. 열리지 않는 주소는 화면에서 아무 일도 일어나지
+# 않는 버튼이 되므로, 최소한 형식이 주소인지는 여기서 막는다. 살아 있는지는 사람이
+# 확인할 일이다 — 검증기가 네트워크를 타면 시드가 외부 사이트 사정에 묶인다.
+def _validate_links(place_id: str, value: Any, fields: dict[str, Any]) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        return [f"{place_id}: links는 객체 배열이어야 합니다"]
+
+    errors: list[str] = []
+    max_items = fields.get("links", {}).get("max_items")
+    if isinstance(max_items, int) and len(value) > max_items:
+        errors.append(f"{place_id}: links가 {max_items}개를 넘습니다")
+
+    for item in value:
+        if not isinstance(item, dict):
+            errors.append(f"{place_id}: links 항목은 객체여야 합니다")
+            continue
+
+        label = item.get("label")
+        if not isinstance(label, str) or not label.strip():
+            errors.append(f"{place_id}: links 항목에 label이 필요합니다")
+            continue
+
+        url = item.get("url")
+        if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+            errors.append(f"{place_id}: links '{label.strip()}'의 url은 http(s) 주소여야 합니다")
+
+    return errors
+
+
+# --- 영업시간 ---------------------------------------------------------------
+#
+# ## 왜 demo_allowlist로 가두지 않는가
+#
+# `demoInfo`를 허용 목록으로 가둔 이유는 그 필드가 **라벨도 값도 자유 문자열**이기
+# 때문이다. 무엇이 들어올지 스키마가 모르니 "누가 쓸 수 있나"로 범위를 좁히는 것
+# 말고는 막을 방법이 없었다. `hours`는 그 조건이 성립하지 않는다 — 요일 키·시각
+# 형식·구간 겹침·예외 날짜까지 전부 여기서 검사되고, 무엇보다 화면에 나가는
+# "영업 중/영업 종료"를 **저장하지 않고 클라이언트가 매번 계산한다.** 낡아서 거짓이
+# 되는 경로가 구조적으로 닫혀 있다.
+#
+# 남는 위험은 "요일 규칙 자체가 낡는 것"이고, 그건 허용 목록으로 못 막는다(목록에
+# 있는 매장의 값도 똑같이 낡는다). 그래서 대신 `confirmed_at`을 필수로 받고, 일정
+# 기간이 지나면 **클라이언트가 판정을 자동으로 거둔다.** 사람 목록보다 이쪽이 강하다.
+#
+# 애초에 B안(구조체 승격)의 목적이 전 매장 확대이므로, 여기에 허용 목록을 걸면
+# 이 작업이 존재할 이유가 사라진다.
+def _validate_hours(
+    place_id: str,
+    value: Any,
+    fields: dict[str, Any],
+    today: str,
+) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, dict):
+        return [f"{place_id}: hours는 객체여야 합니다"]
+
+    spec = fields.get("hours", {})
+    required_keys = tuple(spec.get("required_keys", ()))
+    allowed_keys = set(required_keys) | set(spec.get("optional_keys", ()))
+
+    errors: list[str] = []
+    missing = [key for key in required_keys if key not in value]
+    if missing:
+        errors.append(f"{place_id}: hours에 {'/'.join(missing)}가 필요합니다")
+    unknown = set(value) - allowed_keys
+    if unknown:
+        errors.append(f"{place_id}: hours에 스키마에 없는 키 {sorted(unknown)}")
+
+    source = value.get("source")
+    if not isinstance(source, str) or not source.startswith(("http://", "https://")):
+        errors.append(f"{place_id}: hours.source는 http(s) 주소여야 합니다")
+
+    confirmed_at = value.get("confirmed_at")
+    if not isinstance(confirmed_at, str) or not _DATE_PATTERN.match(confirmed_at):
+        errors.append(f"{place_id}: hours.confirmed_at 형식은 YYYY-MM-DD입니다")
+    elif confirmed_at > today:
+        # 미래 확인일은 오타다. 그대로 두면 낡음 판정이 영영 걸리지 않는다.
+        errors.append(f"{place_id}: hours.confirmed_at({confirmed_at})이 미래입니다")
+
+    offset = value.get("utc_offset_minutes")
+    if offset is not None and (not isinstance(offset, int) or isinstance(offset, bool) or not -720 <= offset <= 840):
+        errors.append(f"{place_id}: hours.utc_offset_minutes는 -720~840 사이 정수여야 합니다")
+
+    errors += _validate_weekly(place_id, value.get("weekly"))
+    errors += _validate_hours_exceptions(place_id, value.get("exceptions"))
+    return errors
+
+
+# 요일 표. 7개 키가 전부 있어야 하고, 빈 배열은 "그 요일 휴무"라는 **명시**다.
+#
+# 키를 빼도 되게 두면 "휴무"와 "아직 안 적었다"가 같은 모양이 되고, 화면은 둘을
+# 구분할 수 없어 모르는 요일에도 "영업 종료"라고 말하게 된다.
+def _validate_weekly(place_id: str, weekly: Any) -> list[str]:
+    if not isinstance(weekly, dict):
+        return [f"{place_id}: hours.weekly는 요일 7개를 가진 객체여야 합니다"]
+
+    errors: list[str] = []
+    missing = [key for key in WEEKDAY_KEYS if key not in weekly]
+    if missing:
+        errors.append(f"{place_id}: hours.weekly에 요일 {missing}가 없습니다")
+    unknown = set(weekly) - set(WEEKDAY_KEYS)
+    if unknown:
+        errors.append(f"{place_id}: hours.weekly에 알 수 없는 요일 키 {sorted(unknown)}")
+
+    parsed: dict[str, list[tuple[int, int]]] = {}
+    for key in WEEKDAY_KEYS:
+        if key not in weekly:
+            continue
+        day_errors, minutes = _parse_intervals(f"{place_id}: hours.weekly.{key}", weekly[key])
+        errors += day_errors
+        if not day_errors:
+            parsed[key] = minutes
+
+    # 자정을 넘긴 마지막 구간이 **다음 날 첫 구간을 덮어쓰는** 경우. 예를 들어
+    # 금 22:00–03:00 뒤에 토 02:00 개점이 오면 두 구간이 겹쳐, 토 02:30에 어느
+    # 규칙을 따를지가 코드 작성 순서로 갈린다. 데이터 단계에서 막는다.
+    for index, key in enumerate(WEEKDAY_KEYS):
+        intervals = parsed.get(key)
+        next_key = WEEKDAY_KEYS[(index + 1) % len(WEEKDAY_KEYS)]
+        next_intervals = parsed.get(next_key)
+        if not intervals or not next_intervals:
+            continue
+        open_m, close_m = intervals[-1]
+        if close_m > open_m:
+            continue  # 자정을 넘기지 않으므로 다음 날과 겹칠 수 없다
+        if close_m > next_intervals[0][0]:
+            errors.append(f"{place_id}: hours.weekly.{key}의 자정 넘김 구간이 {next_key} 첫 구간과 겹칩니다")
+
+    return errors
+
+
+# 예외 날짜. `closed: true`(종일 휴무)이거나 `intervals`(단축·연장) 중 **하나만** 쓴다.
+# 둘 다 주면 어느 쪽이 이기는지가 규칙이 아니라 구현 순서로 정해진다.
+def _validate_hours_exceptions(place_id: str, exceptions: Any) -> list[str]:
+    if exceptions is None:
+        return []
+    if not isinstance(exceptions, list):
+        return [f"{place_id}: hours.exceptions는 객체 배열이어야 합니다"]
+
+    errors: list[str] = []
+    seen: set[str] = set()
+    for entry in exceptions:
+        if not isinstance(entry, dict):
+            errors.append(f"{place_id}: hours.exceptions 항목은 객체여야 합니다")
+            continue
+
+        unknown = set(entry) - {"date", "closed", "intervals", "note", "source"}
+        if unknown:
+            errors.append(f"{place_id}: hours.exceptions 항목에 스키마에 없는 키 {sorted(unknown)}")
+
+        entry_source = entry.get("source")
+        if entry_source is not None and (
+            not isinstance(entry_source, str) or not entry_source.startswith(("http://", "https://"))
+        ):
+            errors.append(f"{place_id}: hours.exceptions의 source는 http(s) 주소여야 합니다")
+
+        raw_date = entry.get("date")
+        if not isinstance(raw_date, str) or not _DATE_PATTERN.match(raw_date):
+            errors.append(f"{place_id}: hours.exceptions의 date 형식은 YYYY-MM-DD입니다")
+            continue
+        try:
+            date.fromisoformat(raw_date)
+        except ValueError:
+            # 2026-02-30 같은 날은 형식만 보면 통과한다. 그 예외는 영원히 걸리지
+            # 않으므로 휴점일을 적어 둔 사람은 적용됐다고 믿는다.
+            errors.append(f"{place_id}: hours.exceptions의 {raw_date}는 없는 날짜입니다")
+            continue
+        if raw_date in seen:
+            errors.append(f"{place_id}: hours.exceptions에 {raw_date}가 두 번 있습니다")
+        seen.add(raw_date)
+
+        closed = entry.get("closed", False)
+        intervals = entry.get("intervals")
+        if not isinstance(closed, bool):
+            errors.append(f"{place_id}: hours.exceptions {raw_date}의 closed는 true/false여야 합니다")
+            continue
+        if closed and intervals:
+            errors.append(f"{place_id}: hours.exceptions {raw_date}는 closed와 intervals를 함께 쓸 수 없습니다")
+        elif not closed and not intervals:
+            errors.append(f"{place_id}: hours.exceptions {raw_date}에 closed 또는 intervals가 필요합니다")
+
+        if intervals:
+            errors += _parse_intervals(f"{place_id}: hours.exceptions {raw_date}", intervals)[0]
+
+    return errors
+
+
+# 구간 목록을 검사하고 분 단위로 바꾼다. (오류 목록, [(open, close)]).
+#
+# 구간을 **오름차순·비중첩**으로 강제하는 이유는 화면이 순서를 다시 정렬하지 않기
+# 때문이다. 겹치는 구간이 들어오면 "다음 개점 시각"이 뒤쪽 구간을 가리켜, 이미
+# 열려 있는데 "곧 엽니다"라고 말한다.
+def _parse_intervals(prefix: str, value: Any) -> tuple[list[str], list[tuple[int, int]]]:
+    if not isinstance(value, list):
+        return [f"{prefix}는 구간 배열이어야 합니다"], []
+
+    errors: list[str] = []
+    parsed: list[tuple[int, int]] = []
+    for entry in value:
+        if not isinstance(entry, dict) or set(entry) != {"open", "close"}:
+            errors.append(f"{prefix} 구간에는 open/close만 있어야 합니다")
+            continue
+        open_m = _minutes(entry["open"])
+        close_m = _minutes(entry["close"])
+        if open_m is None or close_m is None:
+            errors.append(f"{prefix} 구간의 시각 형식은 HH:MM입니다({entry['open']}~{entry['close']})")
+            continue
+        if open_m >= 24 * 60:
+            # 24:00 개점은 다음 날 00:00과 같은 말이라 어느 요일에 속하는지가 흐려진다.
+            errors.append(f"{prefix} 구간의 open은 24:00일 수 없습니다")
+            continue
+        if open_m == close_m:
+            # 하루 종일 영업은 00:00–24:00으로 적는다. 같은 값을 24시간으로 읽으면
+            # "0분 영업"과 구분할 수 없다.
+            errors.append(f"{prefix} 구간의 open과 close가 같습니다(종일 영업은 00:00–24:00)")
+            continue
+        parsed.append((open_m, close_m))
+
+    for index in range(1, len(parsed)):
+        previous_open, previous_close = parsed[index - 1]
+        current_open = parsed[index][0]
+        if previous_close <= previous_open:
+            # 자정을 넘긴 구간 뒤에는 같은 날 구간이 올 수 없다 — 반드시 겹친다.
+            errors.append(f"{prefix}에서 자정을 넘긴 구간은 그날의 마지막이어야 합니다")
+        elif current_open < previous_close:
+            errors.append(f"{prefix}의 구간이 겹치거나 순서가 뒤바뀌었습니다")
+
+    return errors, parsed
+
+
+# "HH:MM" → 자정부터의 분. 형식이 아니면 None.
+def _minutes(raw: Any) -> int | None:
+    if not isinstance(raw, str):
+        return None
+    matched = _TIME_PATTERN.match(raw)
+    if matched is None:
+        return None
+    hour, minute = int(matched.group(1)), int(matched.group(2))
+    # 24시는 정각만 뜻이 있다(하루의 끝). 24:30은 다음 날 00:30을 적으려던 오타다.
+    if hour == 24 and minute != 0:
+        return None
+    return hour * 60 + minute
+
+
+# demoInfo가 별도 함수인 이유
+#
+# 이 필드는 **forbidden_labels를 적용하지 않는 유일한 자리**다. 영업시간·대표번호처럼
+# 시간이 지나면 낡는 값을 소개 영상용 매장에 올리려고 열어 뒀다. 예외를 두는 순간
+# 문제는 "누가 이걸 쓸 수 있나"로 옮겨 가므로, 두 가지로 가둔다.
+#
+# 1. `demo_allowlist`에 id를 명시한 매장만 쓸 수 있다. 목록에 없으면 필드가 있다는
+#    것만으로 검증이 실패한다 — 이것이 없으면 "데모 전용"은 주석에만 있는 말이 되고,
+#    검증기를 통과한다는 이유로 다른 매장에 번져 나간다.
+# 2. 항목마다 source(그 값이 실제로 적혀 있던 페이지)와 confirmed_at이 필수다.
+#    낡는 것을 막지는 못하지만, 언제 확인한 값인지 모르는 상태는 막는다.
+def _validate_demo_info(
+    place_id: str,
+    value: Any,
+    fields: dict[str, Any],
+    demo_allowlist: set[str],
+) -> list[str]:
+    if value is None:
+        return []
+    if place_id not in demo_allowlist:
+        return [f"{place_id}: demoInfo는 demo_allowlist에 있는 매장만 쓸 수 있습니다"]
+    if not isinstance(value, list):
+        return [f"{place_id}: demoInfo는 객체 배열이어야 합니다"]
+
+    errors: list[str] = []
+    max_items = fields.get("demoInfo", {}).get("max_items")
+    if isinstance(max_items, int) and len(value) > max_items:
+        errors.append(f"{place_id}: demoInfo가 {max_items}개를 넘습니다")
+
+    for item in value:
+        if not isinstance(item, dict):
+            errors.append(f"{place_id}: demoInfo 항목은 객체여야 합니다")
+            continue
+
+        if any(not isinstance(item.get(key), str) or not item[key].strip() for key in ("label", "value")):
+            errors.append(f"{place_id}: demoInfo 항목에 label/value가 필요합니다")
+            continue
+
+        label = str(item["label"]).strip()
+        source = item.get("source")
+        if not isinstance(source, str) or not source.startswith(("http://", "https://")):
+            errors.append(f"{place_id}: demoInfo '{label}'의 source는 http(s) 주소여야 합니다")
+
+        confirmed_at = item.get("confirmed_at")
+        if not isinstance(confirmed_at, str) or not _DATE_PATTERN.match(confirmed_at):
+            errors.append(f"{place_id}: demoInfo '{label}'의 confirmed_at 형식은 YYYY-MM-DD입니다")
+
     return errors
 
 

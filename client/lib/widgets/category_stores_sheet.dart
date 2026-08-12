@@ -11,6 +11,7 @@ import 'sheet_grab_handle.dart';
 import 'sheet_header.dart';
 
 import 'map_overlay_guard.dart';
+import 'map_pass_through_sheet_route.dart';
 
 /// 매장 정보 시트에서 카테고리 chip을 누르면 뜨는, 같은 대분류에 속하는
 /// 매장을 층별로 훑어볼 수 있는 목록 시트. 사용자가 항목을 탭하면 그 매장의
@@ -72,27 +73,35 @@ class CategoryStoresSheet extends StatefulWidget {
     ValueChanged<String?>? onSubcategoryChanged,
     ValueChanged<PoiSearchResult?>? onFirstStoreChanged,
   }) {
-    return showModalBottomSheet<PoiSearchResult>(
-      context: context,
-      isScrollControlled: true,
-      isDismissible: true,
-      backgroundColor: Colors.transparent,
-      // 상세 시트와 같은 이유로 뒤 지도를 어둡게 덮지 않는다 — 목록을 훑는
-      // 동안에도 지도 위 카테고리 강조가 그대로 보여야 어느 층 어디쯤인지
-      // 가늠할 수 있다.
-      barrierColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) => MapOverlayGuard(
-        child: CategoryStoresSheet(
-          buildingId: buildingId,
-          category: category,
-          onCloseAll: onCloseAll,
-          currentFloor: currentFloor,
-          subcategory: subcategory,
-          onSubcategoryChanged: onSubcategoryChanged,
-          onFirstStoreChanged: onFirstStoreChanged,
+    // 상세 시트와 **같은 라우트**를 쓴다([MapPassThroughSheetRoute]). 예전에는
+    // `showModalBottomSheet`에 `barrierColor: Colors.transparent`만 줬는데, 그건
+    // barrier를 투명하게만 할 뿐 없애지 못한다 — barrier는 opaque라 포인터를
+    // 전부 흡수하므로, 목록이 떠 있는 동안 위쪽 지도가 통째로 얼었다. 뒤 지도를
+    // 어둡게 덮지 않으려던 원래 의도(목록을 훑는 동안에도 카테고리 강조가 보여야
+    // 어느 층 어디쯤인지 가늠할 수 있다)는 이 라우트가 제대로 이룬다.
+    final navigator = Navigator.of(context);
+    return navigator.push<PoiSearchResult>(
+      MapPassThroughSheetRoute<PoiSearchResult>(
+        capturedThemes: InheritedTheme.capture(
+          from: context,
+          to: navigator.context,
+        ),
+        isScrollControlled: true,
+        isDismissible: true,
+        backgroundColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        builder: (context) => MapOverlayGuard(
+          child: CategoryStoresSheet(
+            buildingId: buildingId,
+            category: category,
+            onCloseAll: onCloseAll,
+            currentFloor: currentFloor,
+            subcategory: subcategory,
+            onSubcategoryChanged: onSubcategoryChanged,
+            onFirstStoreChanged: onFirstStoreChanged,
+          ),
         ),
       ),
     );
@@ -117,8 +126,8 @@ class _CategoryStoresSheetState extends State<CategoryStoresSheet> {
   bool _firstStoreNotified = false;
 
   /// back/X/항목 선택처럼 명시적 조작으로 pop될 때 true. PopScope가 pop을
-  /// 받았을 때 이 값이 false면 barrier·drag-down으로 dismiss된 것으로 보고
-  /// chain 전체를 닫는다.
+  /// 받았을 때 이 값이 false면 아래로 끌어내려 dismiss된 것으로 보고 chain
+  /// 전체를 닫는다(barrier는 [MapPassThroughSheetRoute]가 없앴다).
   bool _intentionalPop = false;
   void _markIntentional() => _intentionalPop = true;
 
@@ -128,32 +137,6 @@ class _CategoryStoresSheetState extends State<CategoryStoresSheet> {
     return all
         .where((entry) => entry.store.subcategory == subcategory)
         .toList();
-  }
-
-  /// 목록 맨 위 매장을 상위에 알린다.
-  ///
-  /// build 중에 콜백을 부르면 상위가 그 자리에서 setState를 돌게 되므로 프레임
-  /// 뒤로 미룬다. 층이 다른 매장은 올리지 않는다 — 카메라를 옮기려면 지도가
-  /// 층을 갈아타야 하는데, 그러면 시트 머리글("현재 층 · 1F")이 가리키는 층과
-  /// 지도가 보여주는 층이 어긋난다.
-  void _notifyFirstStore(List<_CategoryStoreEntry> entries) {
-    final callback = widget.onFirstStoreChanged;
-    if (callback == null) return;
-    final current = widget.currentFloor;
-    _CategoryStoreEntry? first;
-    for (final entry in entries) {
-      if (current == null || entry.floor == current) {
-        first = entry;
-        break;
-      }
-    }
-    if (_firstStoreNotified && _notifiedFirstStoreId == first?.store.id) return;
-    _firstStoreNotified = true;
-    _notifiedFirstStoreId = first?.store.id;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      callback(first?.toPoiSearchResult());
-    });
   }
 
   Future<List<_CategoryStoreEntry>> _load() async {
@@ -200,78 +183,107 @@ class _CategoryStoresSheetState extends State<CategoryStoresSheet> {
     return 0;
   }
 
+  /// 목록 맨 위 매장을 상위에 알린다.
+  ///
+  /// build 중에 콜백을 부르면 상위가 그 자리에서 setState를 돌게 되므로 프레임
+  /// 뒤로 미룬다. 층이 다른 매장은 올리지 않는다 — 카메라를 옮기려면 지도가
+  /// 층을 갈아타야 하는데, 그러면 시트 머리글("현재 층 · 1F")이 가리키는 층과
+  /// 지도가 보여주는 층이 어긋난다.
+  void _notifyFirstStore(List<_CategoryStoreEntry> entries) {
+    final callback = widget.onFirstStoreChanged;
+    if (callback == null) return;
+    final current = widget.currentFloor;
+    _CategoryStoreEntry? first;
+    for (final entry in entries) {
+      if (current == null || entry.floor == current) {
+        first = entry;
+        break;
+      }
+    }
+    if (_firstStoreNotified && _notifiedFirstStoreId == first?.store.id) return;
+    _firstStoreNotified = true;
+    _notifiedFirstStoreId = first?.store.id;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      callback(first?.toPoiSearchResult());
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    // 바깥(투명 상단·barrier·drag-down) 탭으로 닫히면 PopScope가 잡아 chain
-    // 전체를 닫는다(back 버튼과 구분됨). 내부 콘텐츠는 inner GestureDetector가
-    // dismiss 전파를 막는다.
+    // 아래로 끌어내려 닫히면 PopScope가 잡아 chain 전체를 닫는다(back 버튼과
+    // 구분됨). 내부 콘텐츠는 inner GestureDetector가 dismiss 전파를 막는다.
     return PopScope(
       canPop: true,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop && !_intentionalPop) widget.onCloseAll();
       },
-      child: GestureDetector(
-        onTap: () => Navigator.of(context).maybePop(),
-        behavior: HitTestBehavior.opaque,
-        child: DraggableScrollableSheet(
-          initialChildSize: kCategoryStoresSheetInitialSize,
-          minChildSize: 0.35,
-          maxChildSize: 0.9,
-          expand: false,
-          builder: (context, scrollController) {
-            return GestureDetector(
-              onTap: () {},
-              behavior: HitTestBehavior.opaque,
-              child: Material(
-                color: Colors.white,
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: FutureBuilder<List<_CategoryStoreEntry>>(
-                  future: _entriesFuture,
-                  builder: (context, snapshot) {
-                    return CustomScrollView(
-                      controller: scrollController,
-                      slivers: [
-                        const SliverToBoxAdapter(child: SheetGrabHandle()),
-                        SliverToBoxAdapter(
-                          child: SheetHeader(
-                            title: widget.category,
-                            leading: Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color: categoryColorFor(
-                                  widget.category,
-                                ).withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(9),
-                              ),
-                              alignment: Alignment.center,
-                              child: Icon(
-                                categoryIconFor(widget.category),
-                                size: 16,
-                                color: categoryColorFor(widget.category),
-                              ),
-                            ),
-                            onCloseAll: widget.onCloseAll,
-                            onIntentionalPop: _markIntentional,
-                          ),
-                        ),
-                        SliverToBoxAdapter(
-                          child: _buildFilterBar(
-                            snapshot.data ?? const <_CategoryStoreEntry>[],
-                          ),
-                        ),
-                        ..._buildBody(snapshot),
-                      ],
-                    );
-                  },
-                ),
+      // **여기에 전체 화면 `GestureDetector(opaque)`를 두면 안 된다.** 이 시트는
+      // `isScrollControlled: true`라 라우트의 child가 화면 전체 높이를 차지해,
+      // 시트가 아래쪽만 그려져도 위쪽 투명 영역까지 히트 테스트에 걸린다 —
+      // 지도가 보이는 자리의 탭·드래그가 전부 빨려 들어갔다. 상세 시트가 같은
+      // 이유로 걷어낸 두 번째 겹이다([MapPassThroughSheetRoute] 주석).
+      //
+      // 이 래퍼가 하던 "바깥을 눌러 닫기"는 함께 사라진다. 그 자리는 지도가
+      // 가져가고, 닫기는 X·뒤로 가기·아래로 끌어내리기가 맡는다.
+      child: DraggableScrollableSheet(
+        initialChildSize: kCategoryStoresSheetInitialSize,
+        minChildSize: 0.35,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) {
+          return GestureDetector(
+            onTap: () {},
+            behavior: HitTestBehavior.opaque,
+            child: Material(
+              color: Colors.white,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
               ),
-            );
-          },
-        ),
+              clipBehavior: Clip.antiAlias,
+              child: FutureBuilder<List<_CategoryStoreEntry>>(
+                future: _entriesFuture,
+                builder: (context, snapshot) {
+                  return CustomScrollView(
+                    controller: scrollController,
+                    slivers: [
+                      const SliverToBoxAdapter(child: SheetGrabHandle()),
+                      SliverToBoxAdapter(
+                        child: SheetHeader(
+                          title: widget.category,
+                          leading: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: categoryColorFor(
+                                widget.category,
+                              ).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(9),
+                            ),
+                            alignment: Alignment.center,
+                            child: Icon(
+                              categoryIconFor(widget.category),
+                              size: 16,
+                              color: categoryColorFor(widget.category),
+                            ),
+                          ),
+                          onCloseAll: widget.onCloseAll,
+                          onIntentionalPop: _markIntentional,
+                        ),
+                      ),
+                      SliverToBoxAdapter(
+                        child: _buildFilterBar(
+                          snapshot.data ?? const <_CategoryStoreEntry>[],
+                        ),
+                      ),
+                      ..._buildBody(snapshot),
+                    ],
+                  );
+                },
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -300,7 +312,6 @@ class _CategoryStoresSheetState extends State<CategoryStoresSheet> {
     }
     final all = snapshot.data ?? const <_CategoryStoreEntry>[];
     if (all.isEmpty) {
-      _notifyFirstStore(const []);
       return const [
         SliverToBoxAdapter(
           child: Padding(

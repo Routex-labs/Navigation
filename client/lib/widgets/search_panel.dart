@@ -83,6 +83,7 @@ class SearchPanel extends StatefulWidget {
     required this.onStorePicked,
     required this.onBuildingPicked,
     required this.onQueryPicked,
+    required this.onSuggestionPicked,
     required this.indoorContextActive,
     this.currentFloorId,
     this.reachByNodeId,
@@ -120,6 +121,14 @@ class SearchPanel extends StatefulWidget {
 
   final ValueChanged<PoiSearchResult> onStorePicked;
   final ValueChanged<Building> onBuildingPicked;
+
+  /// 자동완성 후보 한 곳을 골랐을 때. 상위가 좌표를 붙여 상세 시트까지 연다.
+  ///
+  /// [onStorePicked]와 따로 두는 이유는 **패널이 좌표를 모르기 때문**이다.
+  /// 후보의 원본인 `/store-index`는 1,640건을 한 번에 내려보내는 응답이라
+  /// 좌표를 싣지 않는다(근거는 `StoreIndexResponse` 주석). 좌표는 층 지도를
+  /// 가진 상위가 id로 찾아 붙인다(`IndoorMapScreen.resolveIndexEntry`).
+  final ValueChanged<StoreIndexEntry> onSuggestionPicked;
 
   /// 최근 검색어를 골랐을 때. 패널이 입력창을 갖고 있지 않으므로(클래스 주석
   /// 참고) 검색을 스스로 다시 돌릴 수 없다 — 상위가 검색창 글자를 그 값으로
@@ -287,6 +296,28 @@ class _FloorScopeOverride {
 }
 
 class _SearchPanelState extends State<SearchPanel> {
+  /// 목록 공통 행 리듬. 결과·후보·건물·최근 검색 행이 전부 이 값을 쓴다.
+  ///
+  /// 네이버지도의 검색 목록은 종류가 달라도(제안·장소) **한 벌의 플랫 리스트**이고,
+  /// 종류는 좌측 아이콘 2종으로만 갈린다(naver-map-ui-ux-analysis.md 2절). 예전에는
+  /// 결과 행만 non-dense라 후보 행과 높이가 다르고, 행마다 구분선이 끼어 머리말·
+  /// 배너까지 칸칸이 나뉘어 보였다 — 같은 목록이 자리마다 다른 리듬으로 그려지면
+  /// 사용자는 그 차이에서 없는 의미를 읽는다. 구분선은 두지 않고 동일한 상하
+  /// 여백만으로 행을 가른다.
+  static const _rowVerticalPadding = 8.0;
+  static const _rowContentPadding = EdgeInsets.symmetric(horizontal: 16);
+  static const _rowTitleGap = 12.0;
+
+  /// 행 이름 한 줄. 강조 span(AppColors.primary)이 얹히는 바탕이다.
+  static const _rowTitleStyle = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+  );
+
+  /// 머리말(«검색 결과 N»·«검색어 제안»…) 공통 여백. 우측에 컨트롤이 붙는
+  /// 머리말은 좌·상·하만 이 값을 따르고 우측만 좁힌다.
+  static const _sectionLabelPadding = EdgeInsets.fromLTRB(16, 14, 16, 4);
+
   /// 경량 검색용 디바운스. 글자마다 서버를 때리지 않게 잠깐 모았다 보낸다.
   static const _lightDebounce = Duration(milliseconds: 300);
 
@@ -998,7 +1029,8 @@ class _SearchPanelState extends State<SearchPanel> {
     final floorText = floors.length == 1 ? floors.first : '${floors.length}개 층';
     final canNearest = canSortByNearest(widget.reachByNodeId);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 4, 2),
+      // 우측은 정렬 컨트롤의 자체 패딩이 이어받으므로 좁게 둔다.
+      padding: _sectionLabelPadding.copyWith(right: 4),
       child: Row(
         children: [
           Expanded(
@@ -1110,13 +1142,14 @@ class _SearchPanelState extends State<SearchPanel> {
                 nearestByWalkingDistance(
                   stores: suggestion.stores,
                   reachByNodeId: widget.reachByNodeId,
+                  currentFloorId: widget.currentFloorId,
                 ).store.floorName,
             ],
             canChoose: true,
           )
         else
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
+            padding: _sectionLabelPadding,
             child: Text(
               allCorrections ? '이걸 찾으셨나요?' : '검색어 제안',
               style: const TextStyle(
@@ -1128,6 +1161,7 @@ class _SearchPanelState extends State<SearchPanel> {
           ),
         Flexible(
           child: SingleChildScrollView(
+            padding: const EdgeInsets.only(bottom: 8),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1149,6 +1183,7 @@ class _SearchPanelState extends State<SearchPanel> {
     final nearest = nearestByWalkingDistance(
       stores: suggestion.stores,
       reachByNodeId: widget.reachByNodeId,
+      currentFloorId: widget.currentFloorId,
     );
     final store = nearest.store;
     final reach = nearest.reach;
@@ -1165,6 +1200,9 @@ class _SearchPanelState extends State<SearchPanel> {
     return ListTile(
       key: Key('suggestion-${store.id}'),
       dense: true,
+      minVerticalPadding: _rowVerticalPadding,
+      horizontalTitleGap: _rowTitleGap,
+      contentPadding: _rowContentPadding,
       // 돋보기와 핀 2종만 쓰는 네이버 관례를 따른다. 교정 후보만 다른 아이콘으로
       // "이건 네가 친 말이 아니다"를 알린다 — 검증 기준(L)의 "교정 후보임이
       // 화면에 드러남"이 이 아이콘과 아래 하이라이트 없음으로 충족된다.
@@ -1184,7 +1222,7 @@ class _SearchPanelState extends State<SearchPanel> {
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 14),
+              style: _rowTitleStyle,
             ),
           ),
           if (categoryLabel != null) ...[
@@ -1233,6 +1271,18 @@ class _SearchPanelState extends State<SearchPanel> {
       ),
       isThreeLine: reach != null,
       onTap: () {
+        // 한 곳짜리 후보는 그 매장을 열면 그만이다. 예전에는 여기서도 이름으로
+        // 검색을 다시 돌렸는데(아래 분기), 그러면 사용자가 방금 고른 것과 사실상
+        // 같은 줄을 결과 목록에서 한 번 더 눌러야 했다. 좌표가 없어서 생긴
+        // 우회였고, 좌표는 상위가 층 지도에서 찾아 붙인다.
+        if (count == 1) {
+          widget.onSuggestionPicked(store);
+          return;
+        }
+        // 층마다 있는 시설(화장실 19곳)은 한 줄에 묶여 있다. 여기서 한 곳을
+        // 바로 열면 나머지 18곳을 고를 방법이 사라지므로, 목록을 펼치는 기존
+        // 동작을 유지한다.
+        //
         // 화면에 적힌 그 층으로 확정되게 한다. 이름만 넘기면 같은 이름이 19곳인
         // 시설에서 서버가 자기 순서로 아무 층이나 고른다([_FloorScopeOverride]).
         _floorScopeOnce = _FloorScopeOverride(store.floorId);
@@ -1274,7 +1324,8 @@ class _SearchPanelState extends State<SearchPanel> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 8, 2),
+              // 우측은 «전체 삭제» 버튼의 자체 패딩이 이어받으므로 좁게 둔다.
+              padding: _sectionLabelPadding.copyWith(right: 8),
               child: Row(
                 children: [
                   const Expanded(
@@ -1300,6 +1351,7 @@ class _SearchPanelState extends State<SearchPanel> {
             // 주석 참고).
             Flexible(
               child: SingleChildScrollView(
+                padding: const EdgeInsets.only(bottom: 8),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -1307,6 +1359,9 @@ class _SearchPanelState extends State<SearchPanel> {
                       ListTile(
                         key: Key('recent-$query'),
                         dense: true,
+                        minVerticalPadding: _rowVerticalPadding,
+                        horizontalTitleGap: _rowTitleGap,
+                        contentPadding: _rowContentPadding,
                         leading: const Icon(
                           Icons.history,
                           size: 20,
@@ -1316,7 +1371,9 @@ class _SearchPanelState extends State<SearchPanel> {
                           query,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 14),
+                          // 최근 검색어는 매장 이름이 아니라 사용자가 친 글자라
+                          // 강조 span이 없다. 바탕 스타일은 다른 행과 같게 둔다.
+                          style: _rowTitleStyle,
                         ),
                         trailing: IconButton(
                           icon: const Icon(Icons.close, size: 18),
@@ -1382,7 +1439,7 @@ class _SearchPanelState extends State<SearchPanel> {
     if (_fromSemantic) {
       rows.add(
         const Padding(
-          padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
+          padding: _sectionLabelPadding,
           child: Row(
             children: [
               Icon(Icons.auto_awesome, size: 14, color: AppColors.primary),
@@ -1406,9 +1463,16 @@ class _SearchPanelState extends State<SearchPanel> {
     if (building != null) {
       rows.add(
         ListTile(
+          dense: true,
+          minVerticalPadding: _rowVerticalPadding,
+          horizontalTitleGap: _rowTitleGap,
+          contentPadding: _rowContentPadding,
+          // 종류는 아이콘 모양으로만 가른다(건물/매장/제안). 색·크기까지 다르면
+          // 한 목록이 칸칸이 나뉘어 보인다 — 강조색은 일치 구간 몫이다.
           leading: const Icon(
             Icons.apartment_outlined,
-            color: AppColors.primary,
+            size: 20,
+            color: AppColors.muted,
           ),
           title: Text.rich(
             TextSpan(
@@ -1416,7 +1480,7 @@ class _SearchPanelState extends State<SearchPanel> {
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            style: _rowTitleStyle,
           ),
           subtitle: Text(
             '건물 · ${building.floors.length}개 층',
@@ -1524,20 +1588,16 @@ class _SearchPanelState extends State<SearchPanel> {
     // Column은 자식을 전부 즉시 만들지만, 이 목록의 상한은 서버 쪽
     // MAX_SHOW_ALL_MATCHES(30)이라 지연 생성으로 아낄 것이 없다. 상한이 크게 늘면
     // 그때 다시 볼 문제다.
-    final children = <Widget>[];
-    for (var index = 0; index < rows.length; index++) {
-      if (index > 0) {
-        children.add(const Divider(height: 1, indent: 16));
-      }
-      children.add(rows[index]);
-    }
-
+    //
+    // 행 사이에 구분선을 끼우지 않는다 — 예전에는 모든 행 사이에 Divider가 있어
+    // 배너·머리말·건물 줄까지 칸칸이 나뉘어 보였다. 이유는 [_rowVerticalPadding]
+    // 주석에 있다.
     return Scrollbar(
       controller: _resultScrollController,
       child: SingleChildScrollView(
         controller: _resultScrollController,
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Column(mainAxisSize: MainAxisSize.min, children: children),
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Column(mainAxisSize: MainAxisSize.min, children: rows),
       ),
     );
   }
@@ -1571,7 +1631,7 @@ class _SearchPanelState extends State<SearchPanel> {
     );
     return [
       Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 2),
+        padding: _sectionLabelPadding,
         child: Text(
           '관련 매장 ${sorted.length}곳',
           style: const TextStyle(
@@ -1763,7 +1823,18 @@ class _SearchPanelState extends State<SearchPanel> {
     final floorLine = nodeId == null ? '$placeLine · 경로 안내 불가' : placeLine;
     final firstLine = reason == null ? floorLine : '$floorLine · $reason';
     return ListTile(
-      leading: const Icon(Icons.place_outlined, color: AppColors.primary),
+      // 후보 행(_suggestionTile)과 같은 리듬이다. 예전에는 결과 행만 non-dense에
+      // 굵은 이름·파란 핀이라, 같은 매장이 후보 화면과 결과 화면에서 다른 줄처럼
+      // 보였다. 종류는 아이콘 모양(핀/돋보기)으로만 가른다.
+      dense: true,
+      minVerticalPadding: _rowVerticalPadding,
+      horizontalTitleGap: _rowTitleGap,
+      contentPadding: _rowContentPadding,
+      leading: const Icon(
+        Icons.place_outlined,
+        size: 20,
+        color: AppColors.muted,
+      ),
       title: Row(
         children: [
           Expanded(
@@ -1773,7 +1844,7 @@ class _SearchPanelState extends State<SearchPanel> {
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+              style: _rowTitleStyle,
             ),
           ),
           if (categoryLabel != null) ...[

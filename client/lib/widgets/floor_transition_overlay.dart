@@ -81,11 +81,19 @@ class FloorTransitionScrim extends StatelessWidget {
   }
 }
 
-/// 스크림 가운데의 `B1 → 1F` 카드.
+/// 스크림 가운데의 층 전환 연출.
 ///
-/// 정지한 화살표 하나로는 **어느 쪽으로 가는 중인지**가 한눈에 안 읽힌다.
-/// 위/아래로 흐르는 chevron 세 개가 방향을 계속 말해 주고, 그 움직임 자체가
-/// "지금 진행 중"이라는 신호가 된다(멈춘 화면과 구분된다).
+/// 두 층 라벨을 **세로로** 세우고 그 사이를 선으로 잇는다. 점이 그 선을 타고
+/// 출발 층에서 도착 층으로 내려가면(올라가면), 라벨의 강조도 함께 넘어간다.
+///
+/// 가로로 `B1 → B2`라고 적지 않는 이유는 **층 이동이 수직 사건**이기 때문이다.
+/// 화살표 방향을 글로 읽어서 아는 것과, 점이 실제로 아래로 내려가는 것을 보는
+/// 것은 다르다 — 지하로 내려가는데 화면에서는 오른쪽으로 가는 그림을 보면 방향
+/// 감각이 한 번 꼬인다.
+///
+/// 애니메이션은 **반복한다.** 이 연출이 떠 있는 시간은 에스컬레이터 탑승 시간에
+/// 달려 있어 미리 알 수 없다. 한 번만 재생하면 남은 시간 동안 정지 화면이 되어
+/// "멈췄나" 싶어진다.
 class _FloorTransitionCard extends StatefulWidget {
   const _FloorTransitionCard({required this.state, required this.animating});
 
@@ -100,11 +108,21 @@ class _FloorTransitionCard extends StatefulWidget {
 
 class _FloorTransitionCardState extends State<_FloorTransitionCard>
     with SingleTickerProviderStateMixin {
-  static const _accent = Color(0xFF1A73E8);
+  // 강조는 앱 포인트 색 하나로 통일한다. 예전의 구글 파랑(#1A73E8)은 앱의
+  // 절제된 화이트/뮤트 톤에서 혼자 다른 팔레트로 떠 보였다.
+  static const _accent = AppColors.primary;
+
+  /// 점이 한쪽 끝에서 반대쪽 끝까지 가는 데 걸리는 시간.
+  static const _travel = Duration(milliseconds: 1600);
+
+  /// 두 라벨 사이 선의 길이. 짧으면 이동이 안 읽히고, 길면 라벨이 화면
+  /// 위아래로 흩어져 한 덩어리로 안 보인다.
+  static const _lineHeight = 104.0;
+  static const _dotRadius = 5.0;
 
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1100),
+    duration: _travel,
   );
 
   @override
@@ -134,46 +152,63 @@ class _FloorTransitionCardState extends State<_FloorTransitionCard>
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final state = widget.state;
-    return Material(
-      color: scheme.surface,
-      elevation: 6,
-      shadowColor: Colors.black.withValues(alpha: 0.18),
-      borderRadius: BorderRadius.circular(20),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(26, 20, 26, 18),
-        child: Column(
+    // 출발 층이 늘 **점이 떠나는 쪽**이다. 내려갈 때는 위, 올라갈 때는 아래.
+    final topLabel = state.goingUp ? state.toFloorLabel : state.fromFloorLabel;
+    final bottomLabel = state.goingUp
+        ? state.fromFloorLabel
+        : state.toFloorLabel;
+
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        // 진행도 0 = 출발 층, 1 = 도착 층.
+        final progress = _controller.value;
+        // 점이 도착 쪽에 가까워질수록 강조가 넘어간다. 라벨 색이 이동과 함께
+        // 변해야 "지금 어디로 가는 중"이 한 그림으로 읽힌다.
+        final arriving = Curves.easeInOut.transform(progress);
+        final topWeight = state.goingUp ? arriving : 1 - arriving;
+
+        return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text(
-                  state.fromFloorLabel,
-                  style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w700,
-                    color: scheme.onSurface.withValues(alpha: 0.4),
+            _FloorLabel(label: topLabel, emphasis: topWeight, scheme: scheme),
+            SizedBox(
+              height: _lineHeight,
+              width: 2 * _dotRadius + 6,
+              child: Stack(
+                alignment: Alignment.topCenter,
+                children: [
+                  // 선은 항상 같은 자리에 옅게 깔려 있다. 점이 지나간 자리를
+                  // 따로 칠하지 않는 이유는, 반복 재생이라 매 주기 지워야 해서
+                  // 오히려 깜빡임으로 읽히기 때문이다.
+                  Container(
+                    width: 1.5,
+                    height: _lineHeight,
+                    color: scheme.onSurface.withValues(alpha: 0.18),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  child: _FlowingChevrons(
-                    progress: _controller,
-                    goingUp: state.goingUp,
+                  Positioned(
+                    // 위에서 아래로 내려갈 때 progress가 곧 화면 아래 방향이다.
+                    top:
+                        (state.goingUp ? 1 - arriving : arriving) *
+                        (_lineHeight - 2 * _dotRadius),
+                    child: Container(
+                      width: 2 * _dotRadius,
+                      height: 2 * _dotRadius,
+                      decoration: const BoxDecoration(
+                        color: _accent,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
                   ),
-                ),
-                Text(
-                  state.toFloorLabel,
-                  style: const TextStyle(
-                    fontSize: 30,
-                    fontWeight: FontWeight.w800,
-                    color: _accent,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-            const SizedBox(height: 10),
+            _FloorLabel(
+              label: bottomLabel,
+              emphasis: 1 - topWeight,
+              scheme: scheme,
+            ),
+            const SizedBox(height: 14),
             Text(
               state.scrimCaption,
               textAlign: TextAlign.center,
@@ -184,62 +219,37 @@ class _FloorTransitionCardState extends State<_FloorTransitionCard>
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// 진행 방향으로 순차 점등하며 흐르는 chevron 세 개.
-class _FlowingChevrons extends StatelessWidget {
-  const _FlowingChevrons({required this.progress, required this.goingUp});
-
-  final Animation<double> progress;
-  final bool goingUp;
-
-  static const _count = 3;
-  static const _accent = Color(0xFF1A73E8);
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: progress,
-      builder: (context, _) {
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (var index = 0; index < _count; index++)
-              _chevron(
-                // 위로 갈 때는 아래쪽 chevron부터 밝아져야 시선이 위로 흐른다.
-                // 아래로 갈 때는 그 반대다.
-                phase: goingUp ? _count - 1 - index : index,
-              ),
-          ],
         );
       },
     );
   }
+}
 
-  Widget _chevron({required int phase}) {
-    // 각 chevron은 한 주기 안에서 자기 차례에만 밝아진다. 차례를 3등분해 두면
-    // 세 개가 겹치지 않고 한 줄기로 흐르는 것처럼 보인다.
-    final offset = (progress.value - phase / _count) % 1.0;
-    final glow = (1 - offset * 1.6).clamp(0.0, 1.0);
-    // chevron끼리 겹쳐 쌓아야 한 줄기로 흐르는 것처럼 보인다. 아이콘 자체는
-    // 22px지만 줄 높이는 12px만 차지하게 두고, 넘치는 부분은 OverflowBox로
-    // 허용한다(높이를 억지로 조이면 아이콘이 잘린다).
-    return SizedBox(
-      // 너비도 함께 준다. OverflowBox는 가로 제약이 무한이면 크기를 못 정한다
-      // (Row 안이라 그대로 두면 무한 폭이 내려온다).
-      width: 22,
-      height: 12,
-      child: OverflowBox(
-        minHeight: 22,
-        maxHeight: 22,
-        child: Icon(
-          goingUp ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-          size: 22,
-          color: Color.lerp(_accent.withValues(alpha: 0.18), _accent, glow),
+/// 층 라벨 한 개. [emphasis] 1이면 도착 층(포인트 파랑·큼), 0이면 지나온 층
+/// (옅은 회색·작음)이다. 그 사이를 연속으로 오간다.
+class _FloorLabel extends StatelessWidget {
+  const _FloorLabel({
+    required this.label,
+    required this.emphasis,
+    required this.scheme,
+  });
+
+  final String label;
+  final double emphasis;
+  final ColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = emphasis.clamp(0.0, 1.0);
+    return Text(
+      label,
+      style: TextStyle(
+        fontSize: 20 + 10 * t,
+        fontWeight: FontWeight.w800,
+        color: Color.lerp(
+          scheme.onSurface.withValues(alpha: 0.35),
+          AppColors.primary,
+          t,
         ),
       ),
     );
@@ -261,13 +271,16 @@ class FloorTransitionBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final undo = state.canUndo ? onUndo : null;
+    // 앱의 카드 문법(surface + hairline + 포인트만 primary)을 그대로 쓴다.
+    // 예전에는 구글 파랑(#1A73E8) 원색 알약이었는데, 절제된 화이트/뮤트 톤의
+    // 화면에서 이 배너만 다른 앱처럼 보였다. "임시 레이어라 가장 앞"이라는
+    // 위계는 색이 아니라 그림자(AppElevation.overlay)가 말한다. 흰 배경이라
+    // 경계선(hairline)이 윤곽을 맡는다.
     return Material(
-      color: const Color(0xFF1A73E8),
-      // 몇 초짜리 임시 레이어다 — 지금 층이 바뀌고 있다는 사실이 화면에서 가장
-      // 앞에 있어야 한다(AppElevation.overlay). 색이 진해 경계선은 필요 없다.
+      color: AppColors.surface,
       elevation: AppElevation.overlay,
       shadowColor: Colors.black.withValues(alpha: 0.2),
-      borderRadius: BorderRadius.circular(999),
+      shape: const StadiumBorder(side: BorderSide(color: AppColors.hairline)),
       child: Padding(
         padding: EdgeInsets.fromLTRB(14, 9, undo == null ? 14 : 6, 9),
         child: Row(
@@ -276,7 +289,7 @@ class FloorTransitionBanner extends StatelessWidget {
             Icon(
               state.goingUp ? Icons.arrow_upward : Icons.arrow_downward,
               size: 16,
-              color: Colors.white,
+              color: AppColors.primary,
             ),
             const SizedBox(width: 8),
             Flexible(
@@ -286,7 +299,7 @@ class FloorTransitionBanner extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: Colors.white,
+                  color: AppColors.text,
                 ),
               ),
             ),
@@ -297,7 +310,8 @@ class FloorTransitionBanner extends StatelessWidget {
                   minimumSize: const Size(0, 32),
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  foregroundColor: Colors.white,
+                  // 배너의 유일한 조작이므로 여기만 포인트 색이다.
+                  foregroundColor: AppColors.primary,
                 ),
                 child: const Text(
                   '아니에요',

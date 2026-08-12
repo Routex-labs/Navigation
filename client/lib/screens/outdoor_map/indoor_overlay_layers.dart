@@ -37,7 +37,6 @@ import '../../widgets/category_map_fill.dart';
 import '../../widgets/category_map_filter.dart';
 import '../../widgets/category_map_icon.dart';
 import '../../widgets/floor_facility_style.dart';
-import 'indoor_entry_zoom.dart';
 
 /// `Color`를 MapLibre가 받는 `#RRGGBB` 문자열로. 알파는 별도 opacity 속성으로
 /// 주므로 여기서는 RGB만 쓴다.
@@ -48,28 +47,6 @@ extension MapColorHex on Color {
     return '#${rgb.toRadixString(16).padLeft(6, '0').toUpperCase()}';
   }
 }
-
-/// POI/시설 아이콘 크기. 오버레이가 페이드인되는 구간에서는 살짝 작게, 사용자가
-/// 실내로 더 확대해 들어갈수록 실내 화면과 비슷한 크기로 커진다. 아이콘 캔버스
-/// 96px 기준으로 실내 화면은 [kIndoorPoiIconSize] 고정이지만, 야외 오버레이는
-/// 화면 시야가 훨씬 넓어 그대로 두면 라벨을 가릴 만큼 크게 보인다.
-///
-/// **두 방향의 피드백이 이 식의 양 끝을 각각 잡고 있다.** 아래쪽(축소)은
-/// "화장실·정수기 같은 시설이 잘 안 보인다"는 피드백에 맞춰 올린 값이라 그대로
-/// 두고, 위쪽(확대)은 "너무 크다"는 피드백에 맞춰 0.6에서 내렸다. 실내 화면
-/// ([kIndoorPoiIconSize] = 0.42)보다 아주 조금 큰 선이다.
-///
-/// 한쪽만 보고 고치면 반대쪽이 회귀한다 — 값을 바꿀 때는 z16 축소와 z20 확대를
-/// 반드시 함께 확인한다.
-const indoorIconSizeExpr = [
-  'interpolate',
-  ['linear'],
-  ['zoom'],
-  indoorOverlayFadeInEndZoom,
-  0.33,
-  20,
-  0.45,
-];
 
 /// 야외 건물 폴리곤 fill. 탭 피드백으로 opacity만 오르내리지만, 그때도 색을
 /// 반드시 함께 넘겨야 한다(파일 상단 규칙).
@@ -139,32 +116,6 @@ FillLayerProperties indoorVerticalTransportProps(List<Object> fadeExpr) =>
       fillOpacity: fadeExpr,
     );
 
-/// 야외 오버레이의 대분류 아이콘 배율.
-///
-/// 실내 화면([kStoreCategoryIconSizeIndoor])과 달리 글자 크기가 11로 고정이라
-/// 아이콘만 줌에 따라 조금 커진다. 시설 아이콘([indoorIconSizeExpr], 0.33~0.45)
-/// 보다 작게 두는 이유는 실내 화면과 같다 — 라벨 옆에 붙는 아이콘이 이름보다
-/// 커지면 도면이 아이콘 밭이 된다.
-///
-/// **z16 축소와 z20 확대를 반드시 함께 확인한다**([indoorIconSizeExpr] 주석의
-/// 함정이 여기에도 그대로 적용된다).
-///
-/// ## 여기는 키우지 않았다 (2026-08-09)
-///
-/// "동그란 아이콘이 너무 작다"는 피드백으로 실내는 확대 쪽을 0.20 → 0.24로
-/// 키웠지만([kStoreCategoryIconSizeIndoor]) 야외는 그대로 둔다. **실내는 글자
-/// 상한을 18 → 14px로 내려 심볼 예산이 남았는데, 야외는 글자가 11px 고정이라
-/// 내려간 것이 없다.** 여기서 아이콘만 키우면 늘어난 폭이 그대로 이름을 밀어낸다.
-const indoorCategoryIconSizeExpr = [
-  'interpolate',
-  ['linear'],
-  ['zoom'],
-  indoorOverlayFadeInEndZoom,
-  0.16,
-  20,
-  0.21,
-];
-
 /// 매장명 라벨 + 대분류 아이콘.
 ///
 /// 아이콘을 별도 레이어로 두지 않고 같은 심볼에 얹는 이유, 이름이 아이콘 앞/뒤로
@@ -178,30 +129,35 @@ const indoorCategoryIconSizeExpr = [
 /// (`_syncIndoorOverlayFade`)에서도 불리는데, 거기서 선택을 빼먹으면 줌만
 /// 움직여도 가려 뒀던 이름이 되살아난다(파일 상단의 "전체 교체" 규칙이 layout
 /// 속성에도 그대로 적용되는 경우다).
+///
+/// [devicePixelRatio]는 아이콘 크기를 논리 px으로 환산하는 데 쓴다 —
+/// [indoorMarkerIconSize] 주석 참고. 호출하는 쪽이 화면에서 읽어 넘긴다.
 SymbolLayerProperties indoorStoresLabelProps(
   List<Object> fadeExpr,
   CategorySelection? selection,
+  double devicePixelRatio,
 ) => SymbolLayerProperties(
   textField: categoryLabelTextField(selection),
   textFont: const [mapFontStackRegular],
-  textSize: 11,
-  // 색·헤일로는 [map_label_style.dart]가 단일 출처다(실내 화면과 같은 값).
-  // 크기만 여기서 고정인데, 야외는 도면 전체를 훑는 축소 화면이라 폴리곤
-  // 맞춤 크기를 쓰면 작은 매장 이름이 읽을 수 없게 작아진다.
+  // 색·헤일로·크기 전부 [map_label_style.dart]가 단일 출처다. 크기가 고정인
+  // 이유는 이 오버레이가 도면 전체를 훑는 축소 화면이라, 폴리곤 맞춤 크기를
+  // 쓰면 작은 매장 이름이 읽을 수 없게 작아지기 때문이다.
+  textSize: mapLabelFixedTextSize,
   textColor: mapLabelStoreColor,
   textHaloColor: mapLabelHaloColor,
   textHaloWidth: mapLabelHaloWidth,
-  textMaxWidth: 6,
+  textMaxWidth: mapLabelFixedMaxWidth,
   textOpacity: fadeExpr,
   iconImage: storeCategoryIconExpression(),
-  iconSize: indoorCategoryIconSizeExpr,
+  // 화장실·정수기 같은 시설 아이콘과 **같은 크기 하나**를 쓴다
+  // ([kIndoorMarkerLogicalPx]). 실내 화면이 같은 피드백("대분류 아이콘을
+  // 화장실만큼")으로 이미 내린 결론인데 이 오버레이만 따라오지 않았다.
+  iconSize: indoorMarkerIconSize(devicePixelRatio),
   iconOpacity: fadeExpr,
-  textVariableAnchor: kStoreLabelVariableAnchor,
-  // 아이콘 가장자리부터의 여백이다(중심 거리가 아니다 —
-  // [kStoreLabelRadialOffset]의 실측표 참고). 실내(0.18em)보다 조금 큰 것은
-  // 글자가 11로 고정이라 같은 em이 더 작은 픽셀이 되기 때문이다.
-  textRadialOffset: 0.20,
-  textJustify: 'auto',
+  // 이름은 항상 아이콘 아래다 — 실내 도면·편의시설 라벨과 같은 규칙.
+  textAnchor: 'top',
+  textOffset: mapLabelBelowIconOffset,
+  textJustify: 'center',
   textAllowOverlap: false,
   // 자리가 없으면 아이콘·이름 중 하나만이라도 남긴다. iconOptional이 없으면
   // 심볼이 넓어진 만큼 이름이 밀려난다(실내 화면 주석의 실측 참고).
@@ -221,48 +177,52 @@ SymbolLayerProperties indoorFacilityLabelProps(
 ) => SymbolLayerProperties(
   textField: categoryLabelTextField(selection),
   textFont: const [mapFontStackRegular],
-  textSize: mapLabelFacilityTextSize,
+  textSize: mapLabelFixedTextSize,
   textColor: mapLabelFacilityColor,
   textHaloColor: mapLabelHaloColor,
   textHaloWidth: mapLabelHaloWidth,
-  textMaxWidth: mapLabelFacilityMaxWidth,
+  textMaxWidth: mapLabelFixedMaxWidth,
   textOpacity: fadeExpr,
   // 아이콘이 centroid를 차지하므로 이름은 아래로 내린다.
   textOffset: mapLabelBelowIconOffset,
   textAllowOverlap: false,
 );
 
-SymbolLayerProperties indoorPoiIconProps(List<Object> fadeExpr) =>
-    SymbolLayerProperties(
-      iconImage: [
-        'match',
-        ['get', 'type'],
-        for (final entry in kPoiIconByType.entries) ...[
-          entry.key,
-          poiIconImageName(entry.value),
-        ],
-        poiIconImageName(kDefaultPoiIcon),
-      ],
-      iconSize: indoorIconSizeExpr,
-      iconOpacity: fadeExpr,
-      iconAllowOverlap: true,
-    );
+SymbolLayerProperties indoorPoiIconProps(
+  List<Object> fadeExpr,
+  double devicePixelRatio,
+) => SymbolLayerProperties(
+  iconImage: [
+    'match',
+    ['get', 'type'],
+    for (final entry in kPoiIconByType.entries) ...[
+      entry.key,
+      poiIconImageName(entry.value),
+    ],
+    poiIconImageName(kDefaultPoiIcon),
+  ],
+  iconSize: indoorMarkerIconSize(devicePixelRatio),
+  iconOpacity: fadeExpr,
+  iconAllowOverlap: true,
+);
 
-SymbolLayerProperties indoorFacilityIconProps(List<Object> fadeExpr) =>
-    SymbolLayerProperties(
-      iconImage: [
-        'match',
-        ['get', 'name'],
-        for (final entry in kStoreFacilityStyleByName.entries) ...[
-          entry.key,
-          facilityIconImageName(entry.key),
-        ],
-        poiIconImageName(kDefaultPoiIcon),
-      ],
-      iconSize: indoorIconSizeExpr,
-      iconOpacity: fadeExpr,
-      iconAllowOverlap: true,
-      // iconOffset 없음 = 폴리곤 중심(centroid)에 그린다. 실내 화면
-      // (`FloorPlanView`)의 편의시설 아이콘과 같은 기준이라 두 화면 사이에서
-      // 아이콘 위치가 어긋나지 않는다.
-    );
+SymbolLayerProperties indoorFacilityIconProps(
+  List<Object> fadeExpr,
+  double devicePixelRatio,
+) => SymbolLayerProperties(
+  iconImage: [
+    'match',
+    ['get', 'name'],
+    for (final entry in kStoreFacilityStyleByName.entries) ...[
+      entry.key,
+      facilityIconImageName(entry.key),
+    ],
+    poiIconImageName(kDefaultPoiIcon),
+  ],
+  iconSize: indoorMarkerIconSize(devicePixelRatio),
+  iconOpacity: fadeExpr,
+  iconAllowOverlap: true,
+  // iconOffset 없음 = 폴리곤 중심(centroid)에 그린다. 실내 화면
+  // (`FloorPlanView`)의 편의시설 아이콘과 같은 기준이라 두 화면 사이에서
+  // 아이콘 위치가 어긋나지 않는다.
+);

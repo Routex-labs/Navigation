@@ -50,6 +50,10 @@ class StoreIndexResponse(BaseModel):
     floor_name: str  # 사람이 보는 층 라벨(예: B2). 후보 한 줄에 바로 표시한다
     category: str | None  # 대분류(예: 패션), 없는 매장이 있어 선택
     subcategory: str | None  # 소분류(예: 여성패션), 선택
+    # 상세와 같은 분류(store·facility·excluded). 이 색인에는 상세를 열지 않는
+    # 주차·에스컬레이터·엘리베이터가 61% 섞여 있어, 매장만 골라야 하는 화면이
+    # 규칙을 다시 만들지 않도록 서버가 함께 준다.
+    kind: str
     entrance_node_id: str | None  # 도착 노드. null이면 그 후보는 길찾기로 이어지지 않는다
 
 

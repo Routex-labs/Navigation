@@ -77,6 +77,7 @@ void main() {
             onStorePicked: (_) {},
             onBuildingPicked: (_) {},
             onQueryPicked: (_) {},
+            onSuggestionPicked: (_) {},
             // 바깥을 찾는 상황이므로 실내 컨텍스트는 꺼 둔다. 이 값이 참이면
             // 온디바이스 자동완성이 목록을 대신 채운다(SearchPanel 주석).
             indoorContextActive: false,
