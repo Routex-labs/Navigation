@@ -59,7 +59,6 @@ import '../../widgets/eta_card.dart';
 import '../../widgets/transit_summary_card.dart';
 import '../../models/store_index_entry.dart';
 import '../../widgets/floor_camera_bounds.dart';
-import '../../core/map_route_style.dart';
 import '../../widgets/destination_pin.dart';
 import '../../widgets/category_map_filter.dart';
 import '../../widgets/category_map_icon.dart';
@@ -82,6 +81,7 @@ import 'indoor_entry_zoom.dart';
 import 'route_recompute_policy.dart';
 import 'indoor_overlay_layers.dart';
 import 'pdr_debug_map_layers.dart';
+import 'route_map_layers.dart';
 import 'transit_map_layers.dart';
 
 // 위치 조회 실패 시 대체 좌표 (서울시청). 저장·전달은 latlong2 타입으로 하고
@@ -210,17 +210,8 @@ const _indoorFacilityLabelLayerIdBase = 'outdoor-indoor-store-facility-label';
 const _indoorPoiIconLayerIdBase = 'outdoor-indoor-pois-icon';
 const _indoorStoreFacilityIconLayerIdBase =
     'outdoor-indoor-store-facility-icons';
-const _routeSourceId = 'outdoor-route';
-const _walkedRouteSourceId = 'outdoor-walked-route';
-const _walkedRouteLayerId = 'outdoor-walked-route-line';
-const _transferRouteSourceId = 'outdoor-transfer-route';
-const _transferRouteLayerId = 'outdoor-transfer-route-line';
-const _routeCasingLayerId = 'outdoor-route-casing';
-const _routeLineLayerId = 'outdoor-route-line';
-// 진행 방향 화살표. 본선 위에 얹혀 선을 따라 흐른다.
-const _routeWalkLayerId = 'outdoor-route-walk';
-const _routeIndoorLayerId = 'outdoor-route-indoor';
-const _routeArrowLayerId = 'outdoor-route-arrow';
+// 경로선 소스·레이어 id와 등록은 route_map_layers.dart가 소유한다. 화면은
+// 공개 소스 id(kOutdoorRoute*)로 데이터만 밀어 넣는다.
 // 대중교통 경로 오버레이(소스·레이어 id, 등록, 데이터 쓰기)는
 // transit_map_layers.dart가 소유한다.
 const _currentSourceId = 'outdoor-current';
@@ -4876,141 +4867,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       enableInteraction: false,
     );
 
-    // 지나온 계획 구간은 계획 경로와 분리한다. 계획 경로가 재탐색으로 바뀌어도
-    // 이전 경로의 완료 이력이 남아 있어야 하므로 전용 source를 둔다. 레이어는
-    // 아래 source만 먼저 등록하고, 파란 경로 레이어가 등록된 뒤 위에 올린다.
-    await controller.addSource(
-      _walkedRouteSourceId,
-      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
-    );
-
-    // 경로선: 진한 파랑 casing + 파란 본선 + 흰 화살표. 값과 근거는
-    // [map_route_style.dart]에 있다(실내 화면과 공유).
-    await controller.addSource(
-      _routeSourceId,
-      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
-    );
-    // 테두리는 **실선 구간에만** 깐다(자동차·실내). 점선 아래에 테두리를 깔면
-    // 점 사이 빈틈이 테두리 색으로 채워져 점선이 실선처럼 보이기 때문인데, 그
-    // 이유는 도보 점선에만 해당한다. 한때 자동차만 남겨 두는 바람에 실내 실선이
-    // 테두리 없이 도면 위에 맨살로 떠 있었다 — 밝은 매장 바닥 위에서 경계가
-    // 흐려 선이 얇고 초라해 보인다.
-    await controller.addLineLayer(
-      _routeSourceId,
-      _routeCasingLayerId,
-      const LineLayerProperties(
-        lineColor: kRouteCasingColor,
-        lineWidth: kRouteCasingWidthExpr,
-        lineCap: 'round',
-        lineJoin: 'round',
-      ),
-      filter: [
-        'match',
-        ['get', 'style'],
-        ['drive', 'indoor'],
-        true,
-        false,
-      ],
-    );
-    // 자동차만 실선이다. 운전 경로는 도로를 그대로 따라가므로 선이 곧 길이지만,
-    // 걷는 구간은 횡단보도·건물 앞 광장처럼 "이 근처로 가라"에 가까워 점선이 맞다.
-    await controller.addLineLayer(
-      _routeSourceId,
-      _routeLineLayerId,
-      const LineLayerProperties(
-        lineColor: kRouteLineColor,
-        lineWidth: kRouteLineWidthExpr,
-        lineCap: 'round',
-        lineJoin: 'round',
-      ),
-      filter: [
-        '==',
-        ['get', 'style'],
-        'drive',
-      ],
-    );
-    await controller.addLineLayer(
-      _routeSourceId,
-      _routeWalkLayerId,
-      const LineLayerProperties(
-        lineColor: kRouteWalkColor,
-        lineWidth: kRouteLineWidthExpr,
-        lineDasharray: kRouteWalkDashArray,
-        lineCap: 'round',
-        lineJoin: 'round',
-      ),
-      filter: [
-        '==',
-        ['get', 'style'],
-        'walk',
-      ],
-    );
-    await controller.addLineLayer(
-      _routeSourceId,
-      // 실내 구간은 **실선**이다. 건물 안에서는 복도가 정해져 있어 "대략 이쪽"이
-      // 아니라 실제로 그 길로 걷는다 — 점선으로 그리면 밖의 도보 구간과 같은
-      // 성격으로 읽힌다. 색은 야외 본선과 같다([kRouteIndoorLineColor] 주석).
-      _routeIndoorLayerId,
-      const LineLayerProperties(
-        lineColor: kRouteIndoorLineColor,
-        lineWidth: kRouteLineWidthExpr,
-        lineCap: 'round',
-        lineJoin: 'round',
-      ),
-      filter: [
-        '==',
-        ['get', 'style'],
-        'indoor',
-      ],
-    );
-    await controller.addImage(
-      kRouteArrowImageName,
-      await renderRouteArrowIcon(),
-    );
-    await controller.addSymbolLayer(
-      _routeSourceId,
-      _routeArrowLayerId,
-      routeArrowProps(),
-      enableInteraction: false,
-    );
-    // 회색선은 이전 경로의 완료 이력을 보존해야 하므로 파란 잔여선보다 위에
-    // 둔다. 현재 경로는 이미 완료/잔여로 분할되어 있어 두 선이 겹치지 않고,
-    // 재탐색 전 이력이 새 파란 경로에 가려지지도 않는다.
-    await controller.addLineLayer(
-      _walkedRouteSourceId,
-      _walkedRouteLayerId,
-      const LineLayerProperties(
-        lineColor: kRouteCompletedColor,
-        lineWidth: kRouteLineWidthExpr,
-        lineOpacity: 0.72,
-        lineCap: 'round',
-        lineJoin: 'round',
-      ),
-      enableInteraction: false,
-    );
+    // 경로선 묶음(회색 완료선 → casing → 본선들 → 화살표). 등록 순서가 곧
+    // 쌓임 순서라 아래 세 호출의 순서를 바꾸면 안 된다.
+    await registerRouteLayers(controller);
     // 대중교통 경로. 도보 경로 **바로 위**에 올려, 두 안내가 잠깐 겹치는
     // 순간에도 사용자가 방금 고른 대중교통 선이 가려지지 않게 한다.
     await registerTransitLayers(controller);
-    await controller.addSource(
-      _transferRouteSourceId,
-      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
-    );
-    await controller.addLineLayer(
-      _transferRouteSourceId,
-      _transferRouteLayerId,
-      const LineLayerProperties(
-        lineColor: kRouteLineColor,
-        lineWidth: kRouteTransferWidthExpr,
-        lineOpacity: 0.85,
-        lineDasharray: [1.2, 1.1],
-        lineCap: 'round',
-        lineJoin: 'round',
-      ),
-      enableInteraction: false,
-    );
+    await registerTransferRouteLayer(controller);
 
     // 현재 층 외곽선. **경로선 다음에** 등록하는 것이 핵심이다 — 실내 MVT
-    // 오버레이는 나중에 `belowLayerId: _routeCasingLayerId`로 삽입되므로, 경로선
+    // 오버레이는 나중에 `belowLayerId: kOutdoorRouteCasingLayerId`로 삽입되므로, 경로선
     // 앞(=건물 fill·dim scrim 옆)에 두면 불투명한 흰색 footprint fill 밑으로
     // 깔려 선이 반쯤 먹힌다. 도면 위에 얹혀야 경계가 그대로 보인다.
     //
@@ -6207,7 +6073,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _indoorFootprintLayerId,
         indoorFootprintProps(fadeExpr),
         sourceLayer: 'footprint',
-        belowLayerId: _routeCasingLayerId,
+        belowLayerId: kOutdoorRouteCasingLayerId,
         enableInteraction: false,
       );
       await controller.addFillLayer(
@@ -6215,7 +6081,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _indoorStoresFillLayerId,
         indoorStoresFillProps(fadeExpr),
         sourceLayer: 'stores',
-        belowLayerId: _routeCasingLayerId,
+        belowLayerId: kOutdoorRouteCasingLayerId,
         enableInteraction: false,
       );
       // 카테고리 강조. 일반 매장 fill 바로 위에 얹어 선택한 매장만 파랗게
@@ -6226,7 +6092,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _indoorCategoryHighlightFillLayerId,
         indoorCategoryHighlightProps(fadeExpr),
         sourceLayer: 'stores',
-        belowLayerId: _routeCasingLayerId,
+        belowLayerId: kOutdoorRouteCasingLayerId,
         filter: _categoryFilterExpression(),
         // 탭은 아래 일반 매장 fill이 받는다. 여기서도 받으면 같은 폴리곤에
         // 두 번 반응한다(실내 화면과 같은 이유).
@@ -6242,7 +6108,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _indoorVerticalTransportFillLayerId,
         indoorVerticalTransportProps(fadeExpr),
         sourceLayer: 'stores',
-        belowLayerId: _routeCasingLayerId,
+        belowLayerId: kOutdoorRouteCasingLayerId,
         filter: [
           'any',
           for (final name in kVerticalTransportStoreNames)
@@ -6277,7 +6143,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
             ['has', 'shared'],
           ],
         ],
-        belowLayerId: _routeCasingLayerId,
+        belowLayerId: kOutdoorRouteCasingLayerId,
         enableInteraction: false,
       );
       // 한 폴리곤을 여러 매장이 나눠 쓰는 자리 전용. 백엔드가 라벨 점을 흩어
@@ -6299,7 +6165,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           storeLabelWithCategoryIconFilter(),
           ['has', 'shared'],
         ],
-        belowLayerId: _routeCasingLayerId,
+        belowLayerId: kOutdoorRouteCasingLayerId,
         enableInteraction: false,
       );
       // 편의시설은 이름만 — 아이콘은 아래 _indoorStoreFacilityIconLayerId가
@@ -6311,7 +6177,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         // 매장명 라벨과 같은 이유로 라벨 점 레이어를 본다.
         sourceLayer: 'store_labels',
         filter: facilityStoreLabelFilter(),
-        belowLayerId: _routeCasingLayerId,
+        belowLayerId: kOutdoorRouteCasingLayerId,
         enableInteraction: false,
       );
       // POI(엘리베이터·에스컬레이터·화장실 등) 심볼 레이어. `pois` 소스 레이어에
@@ -6322,7 +6188,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _indoorPoiIconLayerId,
         indoorPoiIconProps(fadeExpr, _devicePixelRatio),
         sourceLayer: 'pois',
-        belowLayerId: _routeCasingLayerId,
+        belowLayerId: kOutdoorRouteCasingLayerId,
         enableInteraction: false,
       );
       // 편의시설 아이콘: 화장실·정수기 같은 시설물은 백엔드에서 `pois`가 아니라
@@ -6336,7 +6202,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         // 이름과 아이콘이 **같은 점**에 놓여야 한다. 하나만 라벨 점 레이어로
         // 옮기면 아이콘과 이름이 매장 안 서로 다른 자리에 뜬다.
         sourceLayer: 'store_labels',
-        belowLayerId: _routeCasingLayerId,
+        belowLayerId: kOutdoorRouteCasingLayerId,
         filter: [
           'any',
           for (final name in kStoreFacilityStyleByName.keys)
@@ -6624,7 +6490,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         ? null
         : transferRoutePointsOnFloor(transferSegment, _floorPlan, _floorGraph);
     await controller.setGeoJsonSource(
-      _transferRouteSourceId,
+      kOutdoorTransferRouteSourceId,
       transferPoints == null || transferPoints.length < 2
           ? emptyGeoJsonCollection()
           : geoJsonCollection([
@@ -6641,7 +6507,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         currentCompleted: visuals.completed,
       );
       await controller.setGeoJsonSource(
-        _routeSourceId,
+        kOutdoorRouteSourceId,
         visuals.remaining.length < 2
             ? emptyGeoJsonCollection()
             : geoJsonCollection([
@@ -6678,7 +6544,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       features.add(geoJsonLineFeature(preview.route.points, style: 'indoor'));
     }
     await controller.setGeoJsonSource(
-      _routeSourceId,
+      kOutdoorRouteSourceId,
       features.isEmpty ? emptyGeoJsonCollection() : geoJsonCollection(features),
     );
   }
@@ -6703,7 +6569,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       segments.add(currentCompleted);
     }
     await controller.setGeoJsonSource(
-      _walkedRouteSourceId,
+      kOutdoorWalkedRouteSourceId,
       segments.isEmpty
           ? emptyGeoJsonCollection()
           : geoJsonCollection([
