@@ -390,6 +390,86 @@ void main() {
     });
   });
 
+  group('탑승 중간 오확정 (2026-08-13 실측 회귀)', () {
+    test('진동이 흐르는 중의 순간 저속으로는 탑승 중에 확정하지 않는다', () {
+      // Samsung 실측: 발판 진동이 원시 걸음으로 세어지는 상태에서 순간 속도가
+      // 한 샘플 문턱 아래로 읽히자(격자 정체) 유지 시간 없이 그 자리에서
+      // 확정됐다 — Δ3.83m, 실제 층고 5.9m의 65% 지점, 하차 10초 전.
+      final fixture = _Fixture()
+        ..sampleIntervalMs = 180
+        ..quantizeHpa = 0.01;
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standNearBoarding();
+      // 상승 내내 발판 진동 peak가 흐른다.
+      fixture.ramp(fromM: 0, toM: 3.0, seconds: 13, rawPeaksPerSample: 2);
+      // 센서가 0.54초 동안 같은 값을 준다 — 순간 속도는 문턱 아래, 진동은 계속.
+      for (var i = 0; i < 3; i++) {
+        fixture.nowMs += fixture.sampleIntervalMs;
+        fixture.detector.onRawMotion(
+          RawMotionActivity(timestampMs: fixture.nowMs, accelPeakDelta: 2),
+        );
+        fixture.feed(3.0);
+      }
+      expect(
+        fixture.confirmed,
+        isEmpty,
+        reason: '진동은 걸음이 아니다 — 저속이 유지되지 않으면 확정하지 않는다',
+      );
+
+      // 남은 반 층을 마저 오르고 실제로 내린다.
+      fixture.ramp(fromM: 3.0, toM: 5.9, seconds: 13, rawPeaksPerSample: 2);
+      fixture.hold(atM: 5.9, seconds: 4);
+
+      expect(fixture.confirmed, hasLength(1));
+      expect(fixture.confirmed.single.toFloorLabel, '3F');
+      expect(fixture.confirmed.single.deltaM, closeTo(5.9, 0.7));
+    });
+
+    test('확정이 하차보다 일러도 잔여 이동분이 두 번째 층이 되지 않는다', () {
+      // Samsung 실측: 조기 확정으로 baseline이 탑승 중간 높이에 잡히자 남은
+      // 상승 2.1m가 새 후보로 열렸고, 확정 문턱(2.2m)에 6cm 차이로만
+      // 살아남았다 — 이전에 관측된 "한 번 타면 두 층"의 정체다. 확정 직후에는
+      // 수직 이동이 멎을 때까지 후보를 잠그고, 멎는 순간 잔여분을 baseline에
+      // 흡수해야 한다.
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standNearBoarding();
+      fixture.ramp(fromM: 0, toM: 4.5, seconds: 20);
+      // 하차 첫 걸음으로 보이는 입력과 함께 그 자리에서 확정된다(조기 확정).
+      fixture.nowMs += fixture.sampleIntervalMs;
+      fixture.steps++;
+      fixture.standNearBoarding();
+      fixture.feed(4.5);
+      expect(fixture.confirmed, hasLength(1));
+
+      // 화면은 3F로 넘어갔지만 실제 탑승은 안 끝났다 — 2.5m를 더 오른다.
+      fixture.detector.updateContext(
+        floorLabel: '3F',
+        graph: _graphFor3F(),
+        floorLabels: _floors,
+      );
+      fixture.standNearBoarding();
+      fixture.ramp(fromM: 4.5, toM: 7.0, seconds: 11);
+      fixture.hold(atM: 7.0, seconds: 6);
+
+      expect(
+        fixture.confirmed,
+        hasLength(1),
+        reason: '잔여 상승분은 층 이동이 아니다',
+      );
+      expect(
+        fixture.started,
+        hasLength(1),
+        reason: '잔여 상승분으로 조기 전환 신호를 또 내면 안 된다',
+      );
+      expect(
+        fixture.detector.deltaM!.abs(),
+        lessThan(0.6),
+        reason: '멎은 뒤에는 잔여분이 0점에 흡수되어야 다음 판정이 기울지 않는다',
+      );
+    });
+  });
+
   group('에스컬레이터에서 걷는 경우', () {
     test('걸음이 늘어도 확정하고, 걸음 수를 근거로 남긴다', () {
       // 걸음은 확정 조건이 아니다(가점도 감점도 아님). 계단과 구분하기 위한
@@ -561,10 +641,12 @@ void main() {
       );
     });
 
-    test('지도 전환은 반 층(2m)에 닿기 전에 열린다', () {
-      // 실측 층고 4.5m를 20초에 오르는 에스컬레이터(0.22 m/s). 예전 문턱
-      // (1.8m)에서는 지도가 8초쯤 뒤에 바뀌어, 사용자는 이미 탑승한 뒤로도
-      // 한참 이전 층 도면을 봤다. 이 테스트는 "얼마나 일찍 열리는가"를 고정한다.
+    test('지도 전환은 반 층 부근에서 열린다', () {
+      // 실측 층고 4.5m를 20초에 오르는 에스컬레이터(0.22 m/s). 처음에는 후보
+      // 문턱(1.2m)에서 바로 도면을 갈았는데, 2026-08-13 더현대 실측에서 26초
+      // 탑승 중 21초를 도착 층 도면으로 보게 되어 "층 전환이 너무 빠르다"는
+      // 피드백을 받았다. 지금은 반 층 부근(mapSwapDeltaM)에서 간다. 너무 이른
+      // 쪽과 너무 늦은 쪽 회귀를 모두 여기서 잡는다.
       final fixture = _Fixture();
       fixture.hold(atM: 0, seconds: 5);
       fixture.standNearBoarding();
@@ -576,8 +658,13 @@ void main() {
       expect(midpoint, isNotNull, reason: '탑승 중에 지도가 넘어가야 한다');
       expect(
         midpoint!.deltaM.abs(),
-        lessThan(2.0),
-        reason: '반 층을 다 오르기 전에 지도가 넘어가야 "탔는데 아직 이전 층"이 사라진다',
+        greaterThanOrEqualTo(2.4),
+        reason: '후보 문턱(1.2m)에서 바로 갈면 탑승 대부분을 도착 층 도면으로 보낸다',
+      );
+      expect(
+        midpoint.deltaM.abs(),
+        lessThan(3.4),
+        reason: '하차 직전에야 갈리면 조기 전환의 의미가 없다',
       );
     });
 
