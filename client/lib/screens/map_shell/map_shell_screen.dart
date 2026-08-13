@@ -129,13 +129,21 @@ class _MapShellScreenState extends State<MapShellScreen> {
   ///
   /// 탑승이 감지되면 검색을 닫는다. 검색 패널은 상단 Column 전체를 차지해
   /// 배너가 들어갈 자리가 없고, 그 순간 사용자에게 더 급한 정보는 길안내다.
-  void _onFloorTransitionChanged(FloorTransitionUiState? banner) {
+  void _onFloorTransitionChanged(
+    FloorTransitionUiState? banner,
+    double scrimOpacity,
+  ) {
     if (!mounted) return;
-    if (_floorTransition == banner) return;
+    if (_floorTransition == banner && _floorScrimOpacity == scrimOpacity) {
+      return;
+    }
     if (banner != null && _searchActive) {
       _closeSearch();
     }
-    setState(() => _floorTransition = banner);
+    setState(() {
+      _floorTransition = banner;
+      _floorScrimOpacity = scrimOpacity;
+    });
   }
 
   /// 카테고리 선택을 바꾼다. 지도 강조는 상태를 내려받은 두 지도가 알아서
@@ -241,12 +249,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   final _outdoorKey = GlobalKey<OutdoorMapBodyState>();
 
-  /// 층 전환 배너 상태. 판정과 상태 전이는 [IndoorMapBody]가 소유하고
+  /// 층 전환 배너·스크림 상태. 판정과 상태 전이는 [IndoorMapBody]가 소유하고
   /// 여기서는 그리기만 한다.
   ///
   /// 셸이 그려야 하는 이유: 검색창·카테고리 줄·하단 바가 이 Stack의 형제라,
   /// 지도 안에서 그린 배너는 그 뒤에 깔린다.
   FloorTransitionUiState? _floorTransition;
+  double _floorScrimOpacity = 0;
 
   // 지도 위에 얹은 공용 오버레이(검색창·카테고리 줄·하단 바)의 영역을
   // IndoorMapBody가 map click 처리에서 제외할 수 있게 넘겨줄 key들.
@@ -2516,7 +2525,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
                   // 놓는다. 상단 바 높이는 상태마다 달라지므로(검색 한 줄 ↔
                   // 출발/도착 두 줄), 상수로 잡으면 어느 한쪽에서 반드시 겹친다.
                   // 전환 중에는 아래 카테고리 줄을 접어 자리를 보장한다.
-                  if (_floorTransition case final transition?)
+                  //
+                  // 스크림이 올라온 구간에서는 배너를 접는다. 스크림 카드가 같은
+                  // 사실을 화면 한가운데에서 더 크게 말하고 있어서, 둘을 같이
+                  // 띄우면 같은 내용이 두 벌로 보인다(배너는 스크림 **아래** 층에
+                  // 깔리므로 흐려지기까지 한다).
+                  if (_floorTransition case final transition?
+                      when _floorScrimOpacity <= 0)
                     Padding(
                       padding: const EdgeInsets.only(top: _overlayGap),
                       child: Center(
@@ -2673,6 +2688,19 @@ class _MapShellScreenState extends State<MapShellScreen> {
                 showPlaceLocation: _outdoorIndoorEntered,
               ),
             ),
+
+          // 층 전환 스크림. root Stack의 **마지막** 레이어라 지도뿐 아니라
+          // 검색창·카테고리·하단 바까지 함께 덮는다. 탑승이 잡힌 순간부터
+          // 하차까지 덮으며, 그동안 뒤쪽 입력을 막는다 — 걸음이 멈춰 있어
+          // 지도에서 할 수 있는 일도 없는 구간이다.
+          Positioned.fill(
+            child: FloorTransitionScrim(
+              opacity: _floorScrimOpacity,
+              fadeIn: floorTransitionScrimFadeIn,
+              fadeOut: floorTransitionScrimFadeOut,
+              state: _floorTransition,
+            ),
+          ),
         ],
       ),
     );

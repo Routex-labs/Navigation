@@ -960,6 +960,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   PoiSearchResult? _preTransferDestination;
   GraphNode? _pendingArrivalNode;
 
+  /// 화면을 덮는 정도. 0이 아니면 셸이 스크림을 그린다.
+  ///
+  /// **걸음을 멈추는 순간 함께 올린다.** 위치가 갱신되지 않는 구간을 지도로
+  /// 열어 두면 마커가 굳은 채 서 있고, 그게 "위치가 고장 났다"로 읽힌다. 덮개
+  /// 뒤에서 도면 크로스페이드와 마커 활강이 그대로 돌아, 걷힐 때는 새 층과
+  /// 하차 지점이 이미 자리를 잡고 있다.
+  double _floorSwapVeil = 0;
+
   /// 탑승 중 마커가 흐르는 구간(탑승 노드 → 하차 노드, WGS84).
   ///
   /// 이 값이 있으면 마커 위치의 출처가 여기다. 탑승부터 하차 확정까지는 걸음이
@@ -1016,6 +1024,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   // 셸에 마지막으로 알린 층 전환 UI 상태. 같은 값이면 다시 알리지 않는다.
   FloorTransitionUiState? _reportedFloorTransition;
+  double _reportedFloorScrimOpacity = 0;
 
   /// 디버그 설정은 실내 지도와 공유한다 — 어느 화면에서 켜든 같은 상태를 본다.
   final DebugModeController _debugModeController = debugModeController;
@@ -1264,6 +1273,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Future<void> _pauseStepsForRide() async {
     if (_stepsPausedForRide) return;
     _stepsPausedForRide = true;
+    // 걸음이 멈추는 것과 화면이 덮이는 것은 **같은 사건**이다. 둘을 떼어 놓으면
+    // 그 사이에 굳은 마커가 그대로 보인다.
+    if (mounted) setState(() => _floorSwapVeil = 1);
     await indoorNavigationDriver.pauseStepTracking();
     if (mounted) return;
     // pause Future가 끝나기 직전에 화면이 닫히면 dispose는 pause된 사실을 볼 수
@@ -1280,7 +1292,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (_escalatorRide == null &&
         _escalatorStage == null &&
         !_stepsPausedForRide &&
-        _escalatorGlide == null) {
+        _escalatorGlide == null &&
+        _floorSwapVeil == 0) {
       return;
     }
     _stepsPausedForRide = false;
@@ -1290,6 +1303,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     setState(() {
       _escalatorRide = null;
       _escalatorStage = null;
+      _floorSwapVeil = 0;
     });
     _guidance.clearBoardingHold();
   }
@@ -1693,19 +1707,24 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     stage: _escalatorStage,
   );
 
-  /// 배너 상태가 바뀌면 셸에 알린다. 같은 값이면 알리지 않는다.
+  /// 배너·스크림 상태가 바뀌면 셸에 알린다. 같은 값이면 알리지 않는다.
   ///
   /// 값 비교로 막지 않으면 매 스냅샷마다 부모 setState가 돌아, 지도 전체가
   /// 초당 수 회 다시 그려진다.
   void _reportFloorTransitionUi() {
     final banner = _floorTransitionUiState;
-    if (banner == _reportedFloorTransition) return;
+    final scrim = _floorSwapVeil;
+    if (banner == _reportedFloorTransition &&
+        scrim == _reportedFloorScrimOpacity) {
+      return;
+    }
     _reportedFloorTransition = banner;
+    _reportedFloorScrimOpacity = scrim;
     final notify = widget.onFloorTransitionChanged;
     if (notify == null) return;
     // build 중에는 부모 setState를 호출할 수 없다.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) notify(banner);
+      if (mounted) notify(banner, scrim);
     });
   }
 
