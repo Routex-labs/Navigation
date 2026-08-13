@@ -271,7 +271,8 @@ landed
 
 - detector는 pure phase와 근거를 application 계층에 제공한다.
 - `IndoorMapBody`가 `FloorTransitionUiState`를 부모에게 전달한다.
-- `MapShellScreen`이 배너와 전체 화면 veil을 root Stack 최상위에서 렌더링한다.
+- `MapShellScreen`이 배너를 root Stack 최상위에서 렌더링한다(전체 화면 veil은 Phase 5에서
+  걷어냈다).
 - UI는 detector 임계값을 다시 계산하지 않는다.
 
 ---
@@ -644,15 +645,16 @@ class RawMotionActivity {
 
 ### Phase 5 — 전환 UI와 z-order
 
-> **상태**: 완료. 배너는 `MapShellScreen`의 상단 Column 흐름에, 층 전환 스크림은 root Stack
-> 마지막 레이어에 있다. 스크림은 도면을 갈아 끼우는 구간에만 뜨고 느린 페이드로 여닫는다
-> (임계값·문구는 `client/lib/features/indoor_navigation/application/README.md`가 단일 출처).
+> **상태**: 완료. 배너는 `MapShellScreen`의 상단 Column 흐름에 있다. 아래에 적혀 있던
+> **전체 화면 veil은 걷어냈다** — 실기기에서 깜빡임으로 읽혀, 지금은 도면을 크로스페이드
+> 하고 그 위를 마커가 흘러간다(임계값·문구·연출은
+> `client/lib/features/indoor_navigation/application/README.md`가 단일 출처).
 
 #### 상태 소유
 
 - detector/application이 `FloorTransitionUiState`를 만든다.
 - `IndoorMapBody`는 상태를 `MapShellScreen`에 전달한다.
-- 배너와 전체 화면 veil은 root Stack이 소유한다.
+- 배너는 root Stack이 소유한다.
 - UI는 phase를 문구와 animation으로만 변환한다.
 
 #### 배너
@@ -666,13 +668,12 @@ class RawMotionActivity {
 행을 접어 공간을 보장한다. 검색이 활성화된 상태에서 탑승이 감지되면 검색을 닫고 길안내 상태를
 우선한다.
 
-#### 층 지도 교체 veil
+#### 층 지도 교체 — 덮지 않는다
 
-- root Stack의 마지막 레이어에 둔다.
-- 지도·검색·카테고리·하단 바를 포함해 짧게 덮는다.
-- 중앙에 `B1 → 1F`와 이동 아이콘을 표시한다.
-- fade 중 pointer 입력을 차단한다.
-- 전체 탑승 시간에는 modal을 유지하지 않고 실제 도면 swap 구간에만 사용한다.
+계획 단계에서는 root Stack 마지막 레이어에 전체 화면 veil을 두기로 했으나, 실기기에서
+그것이 전환이 아니라 **깜빡임**으로 보여 걷어냈다. 지금은 이전 층 도면을 새 층 타일이
+도착할 때까지 남긴 채 크로스페이드하고, 그 위를 마커가 탑승 노드에서 하차 노드로
+흘러간다. 자세한 근거는 application README의 "단계 분리"에 있다.
 
 #### widget test
 
@@ -681,8 +682,7 @@ class RawMotionActivity {
 - 출발/도착 두 줄 + 대분류·소분류·개수 안내
 - ETA 카드 + 하단 바 + 층 선택기
 - 작은 iPhone 화면과 큰 글자 배율
-- 배너→veil→도착 배너와 되돌리기
-- 전환 중 뒤쪽 hit test 차단
+- 배너→도착 배너와 되돌리기
 
 ---
 
@@ -848,9 +848,9 @@ PDR 한 세션의 heading과 drift를 graph 형상으로 자동 저장하지 않
 ### UI
 
 - [x] 배너는 `MapShellScreen`이 소유한다.
-- [x] 실제 도면 swap veil은 root Stack 최상위다.
+- [x] 도면 교체는 화면을 덮지 않고 크로스페이드로 이어진다(veil 폐기).
+- [x] 도면이 바뀌는 동안에도 마커가 끊기지 않고 흐른다.
 - [x] 최대 높이 상단 UI와 겹치지 않는다.
-- [x] 전환 중 뒤쪽 입력이 차단된다.
 - [x] 도착 후 되돌리기가 직전 층·anchor·경로를 복원한다.
 
 ### 범위
