@@ -78,6 +78,29 @@ const streamRetryMinDelay = Duration(seconds: 2);
 /// 재연결 간격의 상한.
 const streamRetryMaxDelay = Duration(seconds: 30);
 
+/// 스트림을 연 뒤 이 시간 안에 좌표가 한 건도 안 오면 **죽은 것으로 본다.**
+///
+/// ## 왜 "닫힘"만으로는 부족한가
+///
+/// geolocator 안드로이드의 `StreamHandlerImpl.onListen`은 포그라운드 서비스
+/// 바인딩이 아직 안 끝났으면 위치 요청을 걸지 않고 **그냥 돌아선다.** Dart에는
+/// 에러도, 종료도 가지 않는다. 그래서 스트림은 열린 채로 평생 벙어리가 되고,
+/// `onDone`을 붙여 둬도 걸리지 않는다.
+///
+/// 바인딩은 `bindService`라 비동기다. 앱이 시작하자마자 지도가 구독하면 이
+/// 경합에 그대로 진다 — 실기기 로그에서 `Binding to location service` 바로 뒤에
+/// `Location background service has not started correctly`가 찍혔다.
+///
+/// ## 왜 하필 이 길이인가
+///
+/// 짧으면 **느릴 뿐 살아 있는 스트림**을 끊어 버린다. 그러면 좌표가 올 때마다
+/// 재등록이 겹쳐 오히려 더 느려진다. 실측에서 기기가 좌표를 만들어 낸 간격은
+/// 3.4~9.0초였으므로, 그보다 넉넉히 위에 둔다.
+///
+/// 길면 시작 직후 스트림이 벙어리인 구간이 그만큼 길어지는데, 그동안 화면은
+/// [shouldRequestFreshFix]의 일회성 조회가 떠받치므로 비어 있지는 않다.
+const streamFirstFixTimeout = Duration(seconds: 12);
+
 /// 다음 재연결까지 기다릴 시간. 실패가 이어지면 배로 늘리고 [streamRetryMaxDelay]
 /// 에서 멈춘다.
 ///

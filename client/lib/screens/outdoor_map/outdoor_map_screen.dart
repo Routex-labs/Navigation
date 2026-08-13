@@ -1947,6 +1947,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _buildingRetryTimer?.cancel();
     _positionSubscription?.cancel();
     _streamRetryTimer?.cancel();
+    _streamFirstFixTimer?.cancel();
     _pdrSnapshotSub?.cancel();
     _pdrCalibrationSub?.cancel();
     _pdrAltitudeSub?.cancel();
@@ -2672,6 +2673,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Duration _streamRetryDelay = streamRetryMinDelay;
   Timer? _streamRetryTimer;
 
+  /// 지금 열어 둔 스트림이 좌표를 한 건이라도 줬는지. 구독을 새로 열 때마다
+  /// false로 되돌린다.
+  bool _streamDeliveredFix = false;
+
+  /// 새로 연 스트림이 벙어리인지 지켜보는 타이머([streamFirstFixTimeout]).
+  Timer? _streamFirstFixTimer;
+
   /// 위치 스트림을 지금까지 몇 번 열었는지. **진단 전용이다.**
   ///
   /// 정상이라면 화면이 사는 동안 1이어야 한다. 실기기에서 이 값이 올라간다면
@@ -2715,9 +2723,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _freshFixInFlight = true;
     try {
       final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.best,
-        ),
+        locationSettings: oneShotFixSettings(),
       );
       if (!mounted) return;
       // 스트림으로 들어온 좌표와 **같은 문을 통과시킨다.** 진입 판정·경로·진단
@@ -2740,6 +2746,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
     _streamRetryTimer?.cancel();
     _streamRetryTimer = null;
+    _streamFirstFixTimer?.cancel();
+    _streamFirstFixTimer = null;
     _streamRetryDelay = streamRetryMinDelay;
     if (_positionSubscription == null) return;
     unawaited(_positionSubscription!.cancel());
@@ -2765,6 +2773,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// — 그 버튼은 스트림이 아니라 일회성 조회를 쓴다.
   void _subscribeToPositions() {
     _streamRestartCount++;
+    _streamDeliveredFix = false;
     _positionSubscription = watchPosition().listen(
       (position) => _handlePosition(position, fromStream: true),
       onError: (Object _) {
@@ -2773,6 +2782,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       },
       onDone: _handlePositionStreamClosed,
     );
+    // **닫히지 않고 벙어리가 되는 경우**를 잡는다. 위 onDone/onError는 둘 다
+    // 걸리지 않는다 — 자세한 사정은 [streamFirstFixTimeout] 주석에 있다.
+    _streamFirstFixTimer?.cancel();
+    _streamFirstFixTimer = Timer(streamFirstFixTimeout, () {
+      _streamFirstFixTimer = null;
+      if (!mounted || _streamDeliveredFix) return;
+      _handlePositionStreamClosed();
+    });
   }
 
   /// 스트림이 닫혔다. 끊어진 구독을 버리고 잠시 뒤 다시 연다.
@@ -2783,6 +2800,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// [_handlePosition]이 간격을 처음 값으로 되돌린다.
   void _handlePositionStreamClosed() {
     if (_positionSubscription == null) return;
+    _streamFirstFixTimer?.cancel();
+    _streamFirstFixTimer = null;
     unawaited(_positionSubscription!.cancel());
     _positionSubscription = null;
     if (!mounted || !_gpsTrackingWanted) return;
@@ -2805,9 +2824,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   void _handlePosition(Position position, {bool fromStream = false}) {
     if (!mounted) return;
     _lastFixFromStream = fromStream;
-    // 좌표가 한 건이라도 들어오면 스트림은 살아 있다. 재연결 간격을 되돌려,
-    // 다음에 끊겼을 때 30초를 기다리지 않게 한다.
-    if (fromStream) _streamRetryDelay = streamRetryMinDelay;
+    // 좌표가 한 건이라도 들어오면 스트림은 살아 있다. 벙어리 감시를 걷고,
+    // 재연결 간격도 되돌려 다음에 끊겼을 때 30초를 기다리지 않게 한다.
+    if (fromStream) {
+      _streamDeliveredFix = true;
+      _streamFirstFixTimer?.cancel();
+      _streamFirstFixTimer = null;
+      _streamRetryDelay = streamRetryMinDelay;
+    }
     // 실내 진입 직전에 이미 큐에 들어간 이벤트가 진입 후 도착할 수 있다.
     // 구독은 끊겼어도 이 한 건이 새어들어오면 위치 마커가 다시 켜지므로 막는다.
     if (!_gpsTrackingWanted) return;
@@ -3233,9 +3257,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
     try {
       final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.best,
-        ),
+        locationSettings: oneShotFixSettings(),
       );
       _handlePosition(position);
       final controller = _mapController;
