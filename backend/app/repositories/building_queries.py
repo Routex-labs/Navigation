@@ -389,10 +389,20 @@ def _to_edge_dict(edge: Edge, node_floor_ids: Mapping[str, str] | None = None) -
 def _to_store_dict(store: Store, transform: GeoTransform | None) -> dict[str, Any]:
     # 실좌표 앵커가 없는 건물이면 transform이 없어 wgs84 필드는 null로 나간다.
     centroid_wgs84 = None
+    entrance_wgs84 = None
     polygon_wgs84 = None
     if transform is not None:
         lat, lng = transform.apply(store.centroid_x_m, store.centroid_y_m)
         centroid_wgs84 = {"lat": lat, "lng": lng}
+        # 입구 좌표는 원본에서 **다비오 공식 POI 핀 위치**다
+        # (scripts/transform/build_studio_from_dabeeo.py의 `poi["position"]`).
+        # 한 폴리곤에 여러 매장이 붙은 자리에서 centroid는 전부 같은 값이지만
+        # 이 핀은 매장마다 다르므로, 화면이 라벨을 흩을 때 쓰는 유일한 근거다
+        # (client/lib/domain/store_label_anchor.dart). 클라이언트는 이 키를
+        # 예전부터 읽고 있었는데 서버가 보내지 않아 죽은 폴백이었다.
+        if store.entrance_x_m is not None and store.entrance_y_m is not None:
+            entrance_lat, entrance_lng = transform.apply(store.entrance_x_m, store.entrance_y_m)
+            entrance_wgs84 = {"lat": entrance_lat, "lng": entrance_lng}
         if store.polygon:
             polygon_wgs84 = [{"lng": lng, "lat": lat} for lng, lat in local_points_to_lnglat(store.polygon, transform)]
 
@@ -410,6 +420,7 @@ def _to_store_dict(store: Store, transform: GeoTransform | None) -> dict[str, An
             store.entrance_y_m,
             label=f"매장 {store.id} 입구",
         ),
+        "entrance_wgs84": entrance_wgs84,
         "entrance_node_id": store.entrance_node_id,
         "polygon_local_m": store.polygon,
     }

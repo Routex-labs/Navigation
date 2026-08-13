@@ -41,6 +41,11 @@ class StoreResponse(BaseModel):
     polygon_wgs84: list[LatLngResponse] | None  # 외곽 폴리곤 실좌표. 폴리곤이 없으면 null
 
     entrance_local_m: PointResponse | None  # 입구 좌표 (local_m), 선택
+    # 입구 실좌표. 원본에서 이 점은 **다비오 공식 POI 핀 위치**라, 한 폴리곤에
+    # 매장이 여럿 붙은 자리에서 매장을 서로 구분하는 유일한 좌표다 —
+    # centroid는 그 매장들이 전부 같은 값을 갖는다. 화면이 라벨을 흩는 근거로 쓴다
+    # (client/lib/widgets/store_label_anchor.dart). 변환 불가·입구 없음이면 null.
+    entrance_wgs84: LatLngResponse | None = None
     entrance_node_id: str | None  # 입구와 이어진 그래프 노드 id. 온디바이스 경로의 도착 노드
     polygon_local_m: list[PointResponse] | None  # 외곽 폴리곤 (local_m), 선택
 
