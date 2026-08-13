@@ -217,6 +217,28 @@ Stream<Position> defaultWatchPosition() {
   );
 }
 
+/// 스트림이 조용할 때 좌표를 한 건 직접 끌어올 때 쓰는 설정.
+///
+/// **간격을 안 주면 5초짜리 요청이 된다.** 일회성 조회라 간격은 상관없어 보이지만
+/// 그렇지 않다 — 안드로이드는 요청 간격의 두 배까지 묵은 좌표를 "지금 것"으로
+/// 돌려준다. 기본값 5초를 그대로 두면 **10초 전 좌표를 즉시 받고 새 좌표를 받은
+/// 것으로 착각한다.** 응답이 빠른 만큼 내용이 낡는다.
+///
+/// 1초로 좁히면 허용 나이가 2초가 되어, 그보다 묵었으면 기기가 새로 계산한다.
+/// 조금 느려지는 대신 화면에 그리는 좌표가 실제로 새 것이 된다.
+///
+/// iOS에는 간격 개념이 없어 정확도만 준다.
+LocationSettings oneShotFixSettings() {
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    return AndroidSettings(
+      accuracy: LocationAccuracy.best,
+      distanceFilter: 0,
+      intervalDuration: const Duration(seconds: 1),
+    );
+  }
+  return const LocationSettings(accuracy: LocationAccuracy.best);
+}
+
 /// 야외 지도 화면의 실시간 위치 스트림. 걷는 동안 위치 마커·경로·건물 진입
 /// 판정이 계속 갱신되도록 한다. 플랫폼 채널이 없는 테스트 환경에서는 이
 /// 변수를 가짜 [Position] 스트림으로 교체한다.
