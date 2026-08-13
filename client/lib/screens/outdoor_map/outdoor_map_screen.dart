@@ -35,6 +35,7 @@ import '../../features/indoor_navigation/application/indoor_guidance_position.da
 import '../../features/indoor_navigation/application/indoor_guidance_session.dart';
 import '../../features/indoor_navigation/application/indoor_location_estimate.dart';
 import '../../features/indoor_navigation/contract/indoor_navigation_contract.dart';
+import '../../features/indoor_navigation/debug/escalator_debug_text.dart';
 import '../../features/indoor_navigation/debug/pdr_debug_device_info.dart';
 import '../../features/indoor_navigation/debug/pdr_debug_session_recorder.dart';
 import '../../features/indoor_navigation/debug/pdr_debug_session_share.dart';
@@ -1164,7 +1165,20 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
     if (outcome.events.isNotEmpty) {
       recorder?.recordFloorTransitionEvents(outcome.events);
+      _lastEscalatorEvent = outcome.events.last;
     }
+    // 진단 칩은 이벤트 유무와 무관하게 매 샘플 갱신한다. 층이 **안** 바뀌는
+    // 동안의 Δ와 무장 여부가 곧 원인이라, 아무 일도 안 일어나는 구간이야말로
+    // 봐야 할 구간이다.
+    _escalatorDebugText.value = _debugModeController.enabled
+        ? describeEscalatorJudgement(
+            deltaM: _guidance.escalator.deltaM,
+            armed: _guidance.escalator.isArmed,
+            hasCandidate: _guidance.escalator.hasCandidate,
+            phase: _guidance.escalator.phase,
+            lastEvent: _lastEscalatorEvent,
+          )
+        : null;
     _handleEscalatorPhaseChanges();
 
     // 순서가 중요하다. 시작 → 취소 → 확정 순으로 큐에 넣어야 층·경로 복원이
@@ -1789,6 +1803,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 계속 구독한다.
     _debugModeController.removeListener(_onDebugModeChanged);
     _gpsVerdictDebugText.dispose();
+    _escalatorDebugText.dispose();
     super.dispose();
   }
 
@@ -1803,7 +1818,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     unawaited(_syncDebugPdrLayers());
     // 디버그를 끄면 마지막 판정 문구를 버린다. 남겨 두면 다시 켰을 때 몇 분 전
     // 좌표의 숫자가 지금 값인 것처럼 떠 있고, 현장에서는 그걸 구분할 수 없다.
-    if (!_debugModeController.enabled) _gpsVerdictDebugText.value = null;
+    if (!_debugModeController.enabled) {
+      _gpsVerdictDebugText.value = null;
+      _escalatorDebugText.value = null;
+    }
     if (mounted) setState(() {});
   }
 
@@ -2417,6 +2435,18 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   final ValueNotifier<String?> _gpsVerdictDebugText = ValueNotifier<String?>(
     null,
   );
+
+  /// 층 전환 판정의 근거를 띄우는 칩 문구. GPS 칩과 같은 이유로 [ValueNotifier]다
+  /// — 기압은 초당 여러 건 들어오므로 화면 전체를 다시 그리면 안 된다.
+  final ValueNotifier<String?> _escalatorDebugText = ValueNotifier<String?>(
+    null,
+  );
+
+  /// 마지막으로 나온 층 전환 진단 이벤트.
+  ///
+  /// 이벤트는 무슨 일이 일어난 순간에만 나온다. 들고 있지 않으면 거부 사유가
+  /// 한 프레임 떴다 사라져, 정작 읽어야 할 사람이 못 읽는다.
+  EscalatorDetectionEvent? _lastEscalatorEvent;
 
   /// 이번 실내 상태가 **자동 진입**으로 켜졌는지.
   ///
@@ -7457,9 +7487,24 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
             left: 12,
             child: SafeArea(
               bottom: false,
-              child: ValueListenableBuilder<String?>(
-                valueListenable: _gpsVerdictDebugText,
-                builder: (_, text, _) => MapDebugChip(text: text),
+              // 두 칩을 한 열에 쌓는다. 각자 Positioned로 띄우고 top에 상수를
+              // 더하면, 칩 높이가 바뀔 때마다 두 자리를 같이 고쳐야 하고 한쪽만
+              // 고치면 겹친다. 층 전환 칩을 아래에 두는 이유는 순서다 — 건물에
+              // 들어가야(위 칩) 층 판정이 돌기 시작한다(아래 칩).
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ValueListenableBuilder<String?>(
+                    valueListenable: _gpsVerdictDebugText,
+                    builder: (_, text, _) => MapDebugChip(text: text),
+                  ),
+                  const SizedBox(height: 6),
+                  ValueListenableBuilder<String?>(
+                    valueListenable: _escalatorDebugText,
+                    builder: (_, text, _) => MapDebugChip(text: text),
+                  ),
+                ],
               ),
             ),
           ),
