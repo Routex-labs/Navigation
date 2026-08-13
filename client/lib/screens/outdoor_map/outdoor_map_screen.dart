@@ -800,6 +800,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   MultiFloorRoute? _pendingIndoorRoute;
   PoiSearchResult? _pendingIndoorDestination;
 
+  /// 실내→야외 안내에서, 건물을 나간 뒤 이어 그릴 야외 목적지
+  /// ([showIndoorToOutdoorRouteTo]). 위 두 값의 거울상이다.
+  ll.LatLng? _pendingOutdoorDestination;
+  String? _pendingOutdoorLabel;
+
+  /// 지상 출입구가 있는 층. [_groundEntrances]와 짝이라 함께 채운다 — 출구를
+  /// 실내 경로의 도착 노드로 쓰려면 좌표·노드만이 아니라 **층**도 있어야 한다.
+  String? _groundEntranceFloor;
+
   /// 지금 그려진 경로가 자동차 경로인지. 선 모양이 이 값으로 갈린다 —
   /// 자동차는 실선, 걷기는 점선이다([_lineFeature]).
   bool _routeIsDriving = false;
@@ -1996,6 +2005,27 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// anchor가 없으면 위치를 도면에 놓을 수 없지만, 센서를 미리 돌려두면 사용자가
   /// 위치를 지정하는 순간 heading이 이미 수렴한 상태다. 권한이 거부돼 있으면
   /// 자동 시작을 시도하지 않는다 — 진입마다 재시도하면 degraded warning만 쌓인다.
+  /// 실내 위치를 통째로 버린다 — 앵커, 걸음 궤적, 복도 보정, 실내 경로.
+  ///
+  /// 사용자가 건물을 나갔다고 GPS가 판정했을 때만 부른다. 넷을 **함께** 비우는
+  /// 것이 중요하다. 하나라도 남으면 야외 지도 위에 실내의 흔적이 남는다.
+  ///
+  ///   - 앵커를 안 버리면 다시 도면을 열었을 때 걸어 본 적 없는 자리에서 시작한다.
+  ///   - 궤적을 안 버리면 야외 지도에 실내에서 걸은 초록 선이 그대로 얹혀 있다.
+  ///   - PDR 세션을 안 끄면 **밖에서 걷는 걸음이 실내 좌표계에 계속 쌓인다.**
+  ///     사용자가 신고한 "나갔는데도 실내에서 계속 움직이며 경로가 그려진다"가
+  ///     이것이다.
+  ///   - 실내 경로를 안 버리면 목적지가 건물 안이던 안내가 야외 화면에 남는다.
+  ///
+  /// 세션 정지는 기다리지 않는다. 화면 상태는 지금 즉시 맞아야 하고, 센서를
+  /// 내리는 데 실패해도 위 셋이 비어 있으면 아무것도 그려지지 않는다.
+  void _dropIndoorPosition() {
+    _pdrTrailState.beginNewSession();
+    _syncCorridorTracking(null);
+    _clearIndoorRoute();
+    unawaited(indoorNavigationDriver.stopGuidance());
+  }
+
   Future<void> _startPdrIfIdle() async {
     final floor = _activeFloor;
     final graph = _floorGraph;
@@ -2088,7 +2118,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (!mounted || geojson == null) return;
     final entrances = groundEntrancesFrom(FloorPlan.fromJson(geojson));
     if (entrances.isEmpty) return;
-    setState(() => _groundEntrances = entrances);
+    setState(() {
+      _groundEntrances = entrances;
+      _groundEntranceFloor = floor;
+    });
     _syncSelectedEntrance();
   }
 
@@ -2698,7 +2731,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 실측에서 1초를 요청했는데 15~36초에 한 건이 왔고, 같은 순간 "위치 갱신"
   /// 버튼의 일회성 조회는 즉시 응답했다. 그 경로를 앱이 대신 눌러 준다.
   void _syncFreshFixTimer() {
-    final wanted = _gpsTrackingWanted && !_indoorEntered;
+    // **실내에서도 돌린다.** 야외 이탈 판정의 유일한 입력이 GPS라서다 —
+    // 자세한 사정은 [indoorGpsFixMaxAge] 주석에 있다.
+    final wanted = _gpsTrackingWanted;
     if (!wanted) {
       _freshFixTimer?.cancel();
       _freshFixTimer = null;
@@ -2712,11 +2747,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   }
 
   Future<void> _maybeRequestFreshFix() async {
-    if (!mounted || _indoorEntered || !_gpsTrackingWanted) return;
+    if (!mounted || !_gpsTrackingWanted) return;
     if (!shouldRequestFreshFix(
       lastFixReceivedAt: _lastFixReceivedAt,
       now: DateTime.now(),
       requestInFlight: _freshFixInFlight,
+      maxAge: _indoorEntered ? indoorGpsFixMaxAge : gpsFixMaxAge,
     )) {
       return;
     }
@@ -2870,13 +2906,24 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 할지**만 정한다. 셋으로 갈린다.
   ///
   ///   - 안 + 야외 상태 + 자동 진입 무장 → 실내로 들어가고 위치를 잡는다.
-  ///   - 밖 → 자동 진입을 다시 무장한다. 그리고 자동으로 들어온 실내 상태였다면
-  ///     야외로 되돌린다.
+  ///   - 밖 + **실내에 실제로 있던 사람** → 야외로 되돌린다. 자동 진입을 다시
+  ///     무장하는 것도 여기서 한다.
   ///   - 모름 → 아무것도 하지 않는다.
   ///
-  /// 자동 이탈을 [_indoorEnteredByGps]로 막는 것이 중요하다. 사용자가 건물을 직접
-  /// 탭해 도면을 열어 둔 경우까지 닫으면, 길 건너에서 층 도면을 훑어보려던 사람의
-  /// 화면이 좌표가 들어오는 순간 제멋대로 닫힌다.
+  /// ## "실내에 실제로 있던 사람"을 어떻게 가리는가
+  ///
+  /// 예전에는 [_indoorEnteredByGps]로 갈랐다 — GPS가 들여보낸 경우에만 GPS가
+  /// 내보낸다는 규칙이다. 그래야 길 건너에서 층 도면을 훑어보려던 사람의 화면이
+  /// 좌표가 들어오는 순간 제멋대로 닫히지 않는다.
+  ///
+  /// 그런데 그 규칙은 **걸어서 들어온 사람을 놓친다.** 건물을 탭하거나 확대해서
+  /// 도면을 연 뒤 실제로 안을 걸어 다닌 사용자가 밖으로 나와도 실내 상태가
+  /// 유지되고, PDR이 계속 걸음을 쌓아 야외에 실내 궤적이 그려진다.
+  ///
+  /// 그래서 기준을 **"실내 위치가 잡혀 있는가"**([_indoorPositionPlaced])로
+  /// 넓힌다. PDR 앵커가 있다는 것은 이 사람이 건물 안 어딘가에 서 있다고 앱이
+  /// 믿고 있다는 뜻이고, 그 믿음은 밖으로 나온 순간 틀린 것이 된다. 반대로
+  /// 도면만 구경하는 사용자는 앵커가 없으므로 예전처럼 화면이 안 닫힌다.
   void _applyBuildingVerdict(Position position, {Duration? sinceLastFix}) {
     final judgement = judgeBuildingFromGps(
       fix: GpsFix(
@@ -2909,10 +2956,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       case GpsBuildingVerdict.outside:
         // 건물을 확실히 벗어났다. 다음 진입을 다시 자동으로 잡을 수 있게 한다.
         _gpsEntryArmed = true;
-        if (!_indoorEntered || !_indoorEnteredByGps) return;
+        if (!_indoorEntered) return;
+        if (!_indoorEnteredByGps && !_indoorPositionPlaced) return;
         // 앵커 배치 대기 중이었다면 함께 종료해 하단 바 버튼 톤도 되돌린다.
         if (_placingPdrAnchor) _setPlacingAnchor(false);
-        _setIndoorEntered(false);
+        // **이 자리가 유일하게 "정말로 나갔다"고 말할 수 있는 곳이다.**
+        // 실내 위치를 버리는 것도, 실내→야외 안내의 야외 구간을 올리는 것도
+        // 여기서만 일어난다([_setIndoorEntered]의 leftBuilding).
+        _setIndoorEntered(false, leftBuilding: true);
       case GpsBuildingVerdict.unclear:
         break;
     }
@@ -3337,6 +3388,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 이전 여정을 걷어낸다. 남겨 두면 사용자가 다른 곳으로 안내를 바꾼 뒤에
     // 건물에 들어갔을 때 지웠어야 할 실내 경로가 혼자 되살아난다.
     if (!keepPendingIndoorRoute) _clearPendingIndoorRoute();
+    // 실내→야외 예약은 조건 없이 접는다. 이 호출 자체가 "새 야외 목적지"라,
+    // 남겨 두면 나중에 건물을 나가는 순간 방금 지운 목적지가 되살아난다.
+    // (예약을 소비하는 [_activatePendingOutdoorRoute]는 부르기 전에 이미 비운다.)
+    _clearPendingOutdoorRoute();
     // 새 도보 목적지를 받으면 이전 대중교통 안내는 끝난 것이다. 남겨 두면
     // 다른 곳으로 걸어가는 화면 위에 예전 버스 노선이 계속 그려진다.
     clearTransitRoute();
@@ -3695,6 +3750,92 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _beginRouteRecordingSession();
   }
 
+  /// 건물 **안**에서 바깥 목적지까지 한 번에 안내한다. [showOutdoorToIndoorRouteTo]의
+  /// 거울상이다.
+  ///
+  /// 실내 구간(현재 위치 → 출구)만 먼저 그리고, 야외 구간은 예약해 두었다가
+  /// 사용자가 실제로 건물을 나간 순간 [_activatePendingOutdoorRoute]가 이어 붙인다.
+  /// 나갔다는 판정은 GPS가 한다([_applyBuildingVerdict]의 outside 갈래) — 야외에서
+  /// 들어올 때와 정확히 대칭이라, 두 방향이 같은 규칙 위에 선다.
+  ///
+  /// ## 출구는 목적지 기준으로 고른다
+  ///
+  /// 현재 위치에서 가까운 문이 아니라 **목적지에서 가까운 문**이다. 전체 이동
+  /// 거리를 줄이는 쪽이 그쪽이기 때문이다 — 건물 반대편으로 나가면 실내에서 아낀
+  /// 30 m를 바깥에서 200 m로 갚는다. 야외→실내가 출발지 기준으로 고르는 것과
+  /// 방향만 뒤집힌 같은 원리다.
+  ///
+  /// ## 어디서 깨지는가
+  ///
+  /// - **출구 데이터가 없는 건물** → 문을 경유할 수 없다. 야외 경로만 그린다.
+  ///   경로가 건물을 관통하겠지만, 안내가 아예 없는 것보다는 낫다.
+  /// - **실내 위치가 없다** → 실내 구간의 출발점을 만들 수 없다.
+  ///   [showIndoorRouteTo]가 "출발 위치를 먼저 지정해주세요"로 안내한다.
+  /// - **실내 경로가 안 풀린다** → 예약을 걸어 두면 안 된다. 문까지 못 가는데
+  ///   야외 구간만 기다리고 있으면, 나가지도 못한 채 아무 일도 안 일어난다.
+  ///   그래서 예약은 실내 구간이 실제로 그려진 것을 **확인한 뒤에** 건다.
+  Future<void> showIndoorToOutdoorRouteTo(
+    ll.LatLng destination, {
+    required String label,
+  }) async {
+    final exitFloor = _groundEntranceFloor;
+    final exit = exitFloor == null
+        ? null
+        : nearestEntrance(_groundEntrances, destination);
+    if (exitFloor == null || exit == null) {
+      await showRouteTo(destination, label: label);
+      return;
+    }
+
+    final exitLabel = entranceDirectionLabel(
+      exit,
+      _buildingCenter(_buildingFootprint ?? const []),
+    );
+    // 실내 구간은 기존 실내 라우팅을 그대로 쓴다. 출구도 노드를 가진 지점이라
+    // 매장과 다를 게 없다 — 따로 만들면 층 전환·재탐색·진행률이 전부 갈라진다.
+    await showIndoorRouteTo(
+      PoiSearchResult(
+        name: exitLabel,
+        floor: exitFloor,
+        point: exit.point,
+        nodeId: exit.nodeId,
+      ),
+    );
+    if (!mounted) return;
+    // 실내 구간이 실제로 그려졌을 때만 야외 구간을 예약한다. 위 호출은 실패해도
+    // 스낵바만 띄우고 조용히 돌아오므로, 성공 여부는 결과 상태로 확인한다.
+    if (_indoorRouteDestination == null) return;
+    setState(() {
+      _pendingOutdoorDestination = destination;
+      _pendingOutdoorLabel = label;
+    });
+    _showSnack('$exitLabel로 안내합니다. 건물을 나가면 바깥 경로가 이어집니다.');
+  }
+
+  /// 건물을 나간 순간, 예약해 둔 야외 구간을 실제 안내로 올린다.
+  ///
+  /// 출발지를 못박지 않는 이유는 **현재 위치에서 출발해야 하기 때문**이다.
+  /// 출구 좌표를 출발지로 주면 [showRouteTo]가 그 값을 [_fixedRouteOrigin]에
+  /// 넣어 경로를 고정하고, 그러면 걸어가는 동안 경로가 사용자를 따라오지 않는다.
+  Future<void> _activatePendingOutdoorRoute() async {
+    final destination = _pendingOutdoorDestination;
+    final label = _pendingOutdoorLabel;
+    if (destination == null || label == null) return;
+    _clearPendingOutdoorRoute();
+    await showRouteTo(destination, label: label);
+  }
+
+  /// 실내→야외 예약을 접는다. 그 안내가 더는 유효하지 않은 모든 자리에서 부른다.
+  void _clearPendingOutdoorRoute() {
+    if (_pendingOutdoorDestination == null && _pendingOutdoorLabel == null) {
+      return;
+    }
+    setState(() {
+      _pendingOutdoorDestination = null;
+      _pendingOutdoorLabel = null;
+    });
+  }
+
   /// 문 경유 안내를 접는다. 야외 구간이 사라지는 모든 경로에서 함께 불린다 —
   /// 남겨 두면 사용자가 안내를 끈 뒤에 건물에 들어갔을 때 지웠던 실내 경로가
   /// 혼자 되살아난다.
@@ -3821,6 +3962,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       );
       if (!mounted) return;
     }
+    // 새 실내 목적지를 고른 것이므로 실내→야외 예약도 접는다. 남겨 두면 다른
+    // 매장으로 안내를 바꾼 사용자가 건물을 나가는 순간 옛 야외 목적지가 뜬다.
+    // ([showIndoorToOutdoorRouteTo]는 이 호출이 끝난 **뒤에** 예약을 건다.)
+    _clearPendingOutdoorRoute();
     // 이전 걷기 경로가 남아 있으면 함께 지워, 실내 경로만 화면에 뜨도록 한다.
     setState(() {
       _route = null;
@@ -5556,8 +5701,29 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// [_indoorEntered] 상태 변경을 한 곳으로 모은 헬퍼. setState + 상위 콜백 통지에
   /// 더해 dim scrim의 fillOpacity도 함께 갱신해, 실내 진입/이탈에 스포트라이트
   /// 효과가 즉시 반영되게 한다.
-  void _setIndoorEntered(bool value) {
+  /// 실내 위치가 지금 잡혀 있는지. 자동 이탈을 허용할지 가르는 기준이다
+  /// ([_applyBuildingVerdict]).
+  ///
+  /// 앵커만으로 판단한다. 궤적(snapshot)은 세션이 끝난 뒤에도 남아 있어서
+  /// "지금 안에 있다"의 근거가 못 된다.
+  bool get _indoorPositionPlaced => _pdrTrailState.anchor != null;
+
+  /// [leftBuilding]은 **사용자가 실제로 건물을 나갔다**는 뜻이다(GPS 판정).
+  /// 화면에서 도면만 접은 것([returnToOutdoorView], 바깥 탭)과 구분해야 하는
+  /// 이유는 두 가지다.
+  ///
+  ///   - **실내 위치를 버릴지.** 도면을 접은 사용자는 잠시 뒤 다시 펼 수 있으니
+  ///     앵커와 걸음 누적을 남겨야 한다(안 남기면 오버레이를 여닫을 때마다 실내
+  ///     위치가 초기화된다). 반대로 건물을 나간 사용자의 앵커는 이미 틀린 값이라,
+  ///     남겨 두면 야외 지도 위에 실내 궤적이 계속 자란다.
+  ///   - **야외 구간을 올릴지.** 실내→야외 안내 중 사용자가 도면만 접었다고
+  ///     야외 구간으로 넘어가면, 아직 건물 안인데 실내 구간이 사라진다. 다시
+  ///     확대해도 예약은 이미 소비돼 안내가 통째로 없어진다.
+  void _setIndoorEntered(bool value, {bool leftBuilding = false}) {
     if (_indoorEntered == value) return;
+    // 상태를 내리기 **전에** 버린다. 아래 [_syncPdrCurrentLayer]가 이 값을 보고
+    // 그릴지 말지를 정하므로, 뒤에 버리면 그 한 프레임 동안 옛 위치가 남는다.
+    if (!value && leftBuilding) _dropIndoorPosition();
     // 자동으로 들어왔다는 표식은 야외로 나가는 순간 내린다. 남겨 두면 다음에
     // 사용자가 건물을 직접 탭해 연 도면까지 GPS가 제멋대로 닫는다
     // ([_applyBuildingVerdict]의 outside 갈래).
@@ -5601,12 +5767,22 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     unawaited(_syncIndoorOverlayFade());
     // 실내로 들어온 시점이 PDR을 켤 지점이다. 야외로 나갈 때는 세션을 끄지
     // 않는다 — 실내/야외 오버레이를 오가는 동안 세션이 껐다 켜지면 anchor와
-    // 걸음 누적이 매번 초기화된다.
+    // 걸음 누적이 매번 초기화된다. 진짜로 건물을 나간 경우만 예외이고, 그건
+    // 위에서 [dropIndoorPosition]으로 이미 처리했다.
     if (value) unawaited(_startPdrIfIdle());
-    // 문 경유 안내로 여기까지 왔다면, 지금이 야외 구간을 실내 구간으로 넘길
-    // 지점이다. 진입은 GPS·확대·탭 어느 쪽으로 판정되든 이 함수를 지나므로
-    // 승격도 여기 한 곳에만 둔다.
-    if (value) unawaited(_activatePendingIndoorRoute());
+    // 문 경유 안내로 여기까지 왔다면, 지금이 두 구간을 넘기는 지점이다. 진입도
+    // 이탈도 어느 경로로 판정되든 이 함수를 지나므로 승격은 여기 한 곳에만 둔다.
+    //
+    // 방향에 따라 넘기는 것이 반대다.
+    //   - 들어왔다 → 야외 구간이 끝났으니 실내 구간을 올린다.
+    //   - 나갔다   → 실내 구간이 끝났으니 야외 구간을 올린다.
+    //
+    // 나가는 쪽만 [leftBuilding]으로 한 번 더 좁힌다. 근거는 이 함수 문서에 있다.
+    if (value) {
+      unawaited(_activatePendingIndoorRoute());
+    } else if (leftBuilding) {
+      unawaited(_activatePendingOutdoorRoute());
+    }
   }
 
   /// 지금 화면 폭에서 쓸 실내 진입 임계값.

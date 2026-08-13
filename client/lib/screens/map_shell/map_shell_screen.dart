@@ -2187,6 +2187,29 @@ class _MapShellScreenState extends State<MapShellScreen> {
       return;
     }
 
+    // **건물 안에서 바깥 목적지를 고른 경우다.** 실내→야외 안내로 보낸다.
+    //
+    // 이 갈래가 없던 동안에는 아래 두 조건을 모두 비껴가 맨 끝의
+    // [showIndoorRouteTo]까지 흘러갔다. 거기서 야외 목적지는 층도 노드도 없으니
+    // "도착지 노드 정보가 없어 경로를 계산할 수 없습니다"만 뜨고 끝났다 —
+    // 실내에서 바깥으로 가는 길찾기가 통째로 없었던 것이다.
+    //
+    // 조건은 위의 실내 갈래와 **대칭**으로 읽으면 된다. 오버레이가 켜져 있고,
+    // 실내 위치가 실제로 잡혀 있고(= 사용자가 건물 안에 있다), 목적지에 실내
+    // 노드가 없다(= 바깥이다). 출발지를 따로 고른 경우는 제외한다 — 그건
+    // "지금 내가 있는 곳에서 나간다"가 아니라 다른 지점 사이의 경로라, 실내
+    // 구간의 출발점을 현재 위치로 잡는 이 흐름의 전제가 깨진다.
+    if (_indoorContextActive &&
+        indoorStartReady &&
+        origin == null &&
+        destination.nodeId == null) {
+      await _outdoorKey.currentState?.showIndoorToOutdoorRouteTo(
+        destination.point,
+        label: destination.title,
+      );
+      return;
+    }
+
     if (!_indoorContextActive) {
       // 야외 걷기 경로(TMAP)는 출발지도 야외 좌표여야 한다. 실내 지점이 출발지로
       // 남아 있으면(실내에서 "출발지로 설정"한 매장을 그대로 들고 나온 경우)
