@@ -5253,8 +5253,17 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     widget.onIndoorEnteredChanged?.call(value);
     // 진입/이탈로 "지금 보고 있는 층"의 유무 자체가 바뀐다.
     _notifyActiveFloor();
-    // 실내로 들어가면 GPS 구독을 끊고 마커를 지운다. 다시 나가면 재구독한다.
+    // 구독 자체는 실내에서도 유지된다(이탈 판정의 유일한 입력이다) — 여기서
+    // 하는 일은 이 화면이 안 보이게 됐을 때 끊는 것뿐이다.
     _syncGpsSubscription();
+    // GPS 마커는 **이 자리에서 직접** 지운다.
+    //
+    // [_syncCurrentLayer]가 [_outdoorGpsVisible]을 보고 알아서 비우기는 하지만,
+    // 그 함수는 다음 위치 이벤트가 와야 불린다. 진입 순간에 안 지우면 마지막
+    // 야외 좌표가 실내 도면 위에 그대로 남아, 사용자는 실내 위치 아이콘과 건물
+    // 밖 파란 점을 **동시에** 보게 된다. 위치 아이콘의 주인이 바뀌는 시점은
+    // 다음 좌표가 아니라 지금이다.
+    unawaited(_syncCurrentLayer());
     // 위치 아이콘의 주인이 바뀌는 순간이다. 야외로 나가면 실내 위치 마커를
     // 지우고(GPS 마커가 그 역할을 받는다), 실내로 들어가면 다시 그린다.
     unawaited(_syncPdrCurrentLayer());
