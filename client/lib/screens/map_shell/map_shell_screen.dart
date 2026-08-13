@@ -886,6 +886,20 @@ class _MapShellScreenState extends State<MapShellScreen> {
       final origin = _selectedOrigin;
       if (origin != null || _canRouteFromCurrentLocation) {
         await _startRoute(origin: origin, destination: candidate);
+      } else {
+        // 출발지가 없다(건물 안을 보고 있는데 위치 지정을 아직 안 했다).
+        //
+        // **여기서 멈추면 아무 일도 안 일어난 화면이 된다.** 위 주석이 약속한
+        // "상단 길찾기 바를 남긴다"를 실제로 하는 곳이 없었다 — 길찾기 바는
+        // [_routeMode]가 참일 때만 그려지는데, 이 갈래는 그 값을 세우지 않아
+        // 매장에서 "도착"을 눌러도 상단이 검색창인 채였다.
+        //
+        // 도착지를 채운 채로 바를 열고 커서를 출발 칸에 둔다. 사용자가 그
+        // 자리에서 출발지를 고르면 [_afterRouteFieldPicked]가 이어서 계산한다.
+        await _openRouteMode(
+          presetDestination: candidate,
+          focusField: RoutePlanField.origin,
+        );
       }
     }
     return true;
