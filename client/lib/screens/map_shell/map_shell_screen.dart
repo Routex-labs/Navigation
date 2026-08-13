@@ -954,6 +954,19 @@ class _MapShellScreenState extends State<MapShellScreen> {
         final origin = _selectedOrigin;
         if (origin != null || _canRouteFromCurrentLocation) {
           await _startRoute(origin: origin, destination: candidate);
+        } else {
+          // 매장 시트와 **같은 규칙**이다([_showStoreInfo]의 같은 갈래). 상단
+          // 검색은 건물 안에서도 바깥 장소를 함께 돌려주므로, 실내에서 위치 지정
+          // 전에 지하철역 같은 바깥 목적지를 고르는 흐름이 실제로 있다. 그때
+          // 여기서 멈추면 시트만 닫히고 상단은 검색창인 채라, 사용자는 도착을
+          // 누른 적 없는 화면을 본다.
+          //
+          // 바로 위 setOrigin 갈래는 이미 같은 모양의 else를 갖고 있었다 — 한
+          // switch 안에서 두 갈래가 달랐던 것이다.
+          await _openRouteMode(
+            presetDestination: candidate,
+            focusField: RoutePlanField.origin,
+          );
         }
       case OutdoorPoiAction.transit:
         setState(() {

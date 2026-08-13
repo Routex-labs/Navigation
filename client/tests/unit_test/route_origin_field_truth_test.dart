@@ -1,13 +1,62 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/core/service_locator.dart';
+import 'package:navigation_client/models/outdoor_poi.dart';
 import 'package:navigation_client/repositories/building_repository.dart';
 import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/repositories/mock_building_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
+import 'package:navigation_client/repositories/outdoor_poi_repository.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// 바깥 장소를 한 건 돌려주는 가짜 리포지토리. 네트워크 없이 "실내에서도 바깥이
+/// 검색된다"는 상황만 만든다.
+class _FakeOutdoorPoiRepository implements OutdoorPoiRepository {
+  @override
+  bool get isAvailable => true;
+
+  @override
+  Future<List<OutdoorPoi>> searchNearby(
+    String keyword, {
+    required LatLng center,
+    int radiusMeters = 1000,
+    int limit = 10,
+  }) async => [_subwayStation];
+}
+
+final _subwayStation = OutdoorPoi(
+  id: 'poi-1',
+  name: '여의도역',
+  point: const LatLng(37.5215, 126.9243),
+  category: '지하철역',
+  address: '서울 영등포구 여의나루로',
+  distanceMeters: 300,
+);
+
+/// **판정을 못 내리는** GPS 표본(정확도 60 m > [decisiveAccuracyMeters] 20 m).
+///
+/// 바깥 검색에는 기준점이 필요한데(`outdoorSearchCenter`), 그렇다고 정확한
+/// 좌표를 넣으면 건물 안/밖 판정이 서면서 실내 상태가 통째로 흔들린다 —
+/// 그게 바로 집에서 실내 기능을 못 잡아 두는 이유다. 정확도를 무너뜨리면
+/// 판정은 `unclear`로 비켜 가고 기준점만 남는다.
+Position _unclearFix() => Position(
+  latitude: 37.5665,
+  longitude: 126.9779,
+  timestamp: DateTime(2024, 1, 1),
+  accuracy: 60,
+  altitude: 0,
+  altitudeAccuracy: 0,
+  heading: 0,
+  headingAccuracy: 0,
+  speed: 0,
+  speedAccuracy: 0,
+);
 
 /// 길찾기 두 칸이 **실제로 계산되는 값과 같은 것을 말하는지**에 대한 회귀 테스트.
 ///
@@ -21,6 +70,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   late BuildingRepository originalBuildingRepository;
   late DestinationRepository originalDestinationRepository;
+  late OutdoorPoiRepository originalPoiRepository;
+  late Stream<Position> Function() originalWatchPosition;
+  late StreamController<Position> positions;
 
   final repository = MockBuildingRepository();
 
@@ -36,8 +88,13 @@ void main() {
     await debugModeController.reload();
     originalBuildingRepository = buildingRepository;
     originalDestinationRepository = destinationRepository;
+    originalPoiRepository = outdoorPoiRepository;
+    originalWatchPosition = watchPosition;
     buildingRepository = repository;
     destinationRepository = MockDestinationRepository(repository);
+    outdoorPoiRepository = _FakeOutdoorPoiRepository();
+    positions = StreamController<Position>.broadcast();
+    watchPosition = () => positions.stream;
     requestStartupPermissions = () async => {};
     await repository.getAllBuildings();
   });
@@ -45,7 +102,10 @@ void main() {
   tearDown(() {
     buildingRepository = originalBuildingRepository;
     destinationRepository = originalDestinationRepository;
+    outdoorPoiRepository = originalPoiRepository;
+    watchPosition = originalWatchPosition;
     requestStartupPermissions = defaultRequestStartupPermissions;
+    positions.close();
   });
 
   /// 건물 안을 보고 있는 상태를 만든다. 실내 오버레이는 이제 별도 탭이 아니라
@@ -119,6 +179,50 @@ void main() {
       '강의실 101',
       reason: '길찾기 바는 떴는데 방금 고른 도착지가 안 적혀 있다',
     );
+  });
+
+  testWidgets('바깥 장소를 도착으로 골라도 길찾기 바가 뜬다', (WidgetTester tester) async {
+    // 매장 시트와 **같은 조합**을 야외 POI 시트에서 만든다. 상단 검색은 건물
+    // 안에서도 바깥 장소를 함께 돌려주므로(실내에서 지하철역을 찾는 흐름),
+    // 두 시트 중 한쪽만 고치면 같은 증상이 다른 문으로 그대로 남는다.
+    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await drain(tester);
+    // 바깥 검색에는 기준점이 필요하다. 판정이 서지 않는 표본이라 실내 상태는
+    // 그대로 유지된다.
+    positions.add(_unclearFix());
+    await drain(tester);
+    await enterIndoor(tester);
+
+    await tester.tap(find.byType(TextField).first);
+    await drain(tester);
+    // 검색어는 **결과 이름과 다른 글자**여야 한다. 같으면 find.text가 결과 행이
+    // 아니라 검색 입력창 자체를 먼저 잡아, 아무것도 안 눌린 채 통과한다.
+    await tester.enterText(find.byType(TextField).first, '여의도');
+    await drain(tester);
+
+    final row = find.text('여의도역');
+    expect(
+      row,
+      findsWidgets,
+      reason: '테스트 전제(실내에서도 바깥 장소가 검색됨)가 성립하지 않았다',
+    );
+    await tester.tap(row.first);
+    await drain(tester);
+
+    expect(
+      find.text('도착'),
+      findsOneWidget,
+      reason: '테스트 전제(야외 장소 시트 열림)가 성립하지 않았다',
+    );
+    await tester.tap(find.text('도착'));
+    await drain(tester);
+
+    expect(
+      find.byKey(const Key('route-draft-destination')),
+      findsOneWidget,
+      reason: '바깥 목적지로 도착을 눌렀는데 길찾기 바가 뜨지 않았다',
+    );
+    expect(fieldText(tester, 'route-draft-destination'), '여의도역');
   });
 
   testWidgets('야외로 나가면 실내 출발지가 칸에서도 사라진다', (WidgetTester tester) async {
