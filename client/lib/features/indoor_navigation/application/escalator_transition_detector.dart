@@ -24,6 +24,7 @@ import 'dart:math' as math;
 
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
+import '../../../domain/floor_label.dart';
 import '../../../models/floor_graph.dart';
 import '../contract/altitude_sample.dart';
 import '../contract/raw_motion_activity.dart';
@@ -60,6 +61,8 @@ class EscalatorDetectorConfig {
     this.boardingPhaseTimeoutMs = 40000,
     this.minVerticalSpeedMps = 0.12,
     this.verticalMotionConsecutiveSamples = 2,
+    this.earlyVerticalDeltaM = 0.8,
+    this.earlyVerticalQuietSamples = 2,
   });
 
   /// 에스컬레이터 노드에 이만큼 다가오면 판정을 "허가"한다. 랜딩 폭과 보정
@@ -226,6 +229,29 @@ class EscalatorDetectorConfig {
 
   /// 단일 기압 튐을 배제하기 위해 요구하는 연속 관측 수.
   final int verticalMotionConsecutiveSamples;
+
+  /// 탑승 노드 허가 **없이** 걸음을 멈추기 위한 최소 누적 고도 변화(m).
+  ///
+  /// 노드 근접이 잡히지 않는 경우가 실측에서 흔했다 — 랜딩에서 보정 위치가
+  /// 12m까지 어긋나면 허가가 안 걸리고, 그러면 사용자가 이미 에스컬레이터에
+  /// 올라섰는데도 걸음이 계속 위치에 쌓인다. 노드는 "층을 바꿔도 되는가"의
+  /// 허가이지, "지금 몸이 수직으로 움직이는가"의 근거가 아니다.
+  ///
+  /// 0.8m은 **일상적으로 일어나는 고도 변화의 위**다. 문이 여닫히거나 HVAC이
+  /// 도는 정도는 평활 뒤 ±0.3m 안에서 논다. 반면 층고는 4~6m라 이 값은 반 층도
+  /// 되지 않는다 — 즉 "층이 바뀌었다"가 아니라 "지금 수직으로 실려 가고 있다"만
+  /// 말한다. 그래서 이 근거로 하는 일도 걸음 정지와 화면 덮개까지이고, 층 교체는
+  /// 여전히 노드 허가와 [minDeltaM]을 요구한다(되돌릴 수 없는 쪽은 근거를 그대로
+  /// 둔다).
+  final double earlyVerticalDeltaM;
+
+  /// 노드 없이 시작한 단계를 접기까지 필요한 "수직 속도 없음" 연속 샘플 수.
+  ///
+  /// 노드가 없으면 하차를 확정할 수단도 없어서, 그대로 두면 화면이 덮인 채
+  /// [boardingPhaseTimeoutMs](40초)를 기다린다. 수직 이동이 멎으면 내린 것으로
+  /// 보고 바로 걷는다 — 어차피 이 단계가 한 일은 걸음 정지뿐이라 되돌리는 비용이
+  /// 없다.
+  final int earlyVerticalQuietSamples;
 }
 
 /// 층 이동의 공개 진행 단계.
@@ -470,6 +496,11 @@ class EscalatorTransitionDetector {
   // 수직 이동 상태(걸음 pause 근거).
   int _verticalMotionSamples = 0;
   int _verticalMotionSign = 0;
+
+  /// 지금 걸음을 멈춘 단계가 **노드 허가 없이** 열린 것인지. 하차를 확정할
+  /// 수단이 없으므로, 수직 이동이 멎는 즉시 접어야 한다.
+  bool _earlyVerticalMotion = false;
+  int _verticalMotionQuietSamples = 0;
 
   final List<EscalatorDetectionEvent> _events = [];
 
@@ -851,13 +882,26 @@ class EscalatorTransitionDetector {
         if (!movingVertically) {
           _baselineM = _baselineM! + config.baselineTrackAlpha * delta;
         }
+        // **허가가 없어도 걸음은 멈춘다.** 노드 근접이 안 잡히는 랜딩이 실측에서
+        // 흔했고, 그때 사용자는 이미 에스컬레이터 위인데 마커만 계속 걸어갔다.
+        _updateVerticalMotion(
+          sample.timestampMs,
+          fastSpeedMps,
+          deltaM: delta,
+          hasMotionEvidence: hadNewSteps,
+        );
         _expireStalledPhase(sample.timestampMs, reason: 'armExpired');
         return null;
       }
       // 누적 고도가 아직 문턱에 못 미쳐도, **지금 오르내리는 중**이라는 근거는
       // 이미 있다. 걸음 pause는 여기서 시작한다 — 에스컬레이터 진동이 위치에
       // 쌓이는 것을 막는 데 반 층을 기다릴 이유가 없다.
-      _updateVerticalMotion(sample.timestampMs, fastSpeedMps);
+      _updateVerticalMotion(
+        sample.timestampMs,
+        fastSpeedMps,
+        deltaM: delta,
+        hasMotionEvidence: hadNewSteps,
+      );
       _expireStalledPhase(sample.timestampMs, reason: 'noVerticalMotion');
       if (delta.abs() < config.minDeltaM) return null;
       // 누적 변화량 + 지금도 그 방향으로 움직이는 중일 때만 후보를 연다.
@@ -1110,12 +1154,20 @@ class EscalatorTransitionDetector {
   ///
   /// 단일 기압 튐은 배제하려고 연속 관측을 요구하고, 같은 부호로 이어질 때만
   /// 센다. 여기서는 층을 바꾸지 않고 **걸음 적용만** 멈춘다.
-  void _updateVerticalMotion(int atMs, double? fastSpeedMps) {
-    if (fastSpeedMps == null || fastSpeedMps.abs() < config.minVerticalSpeedMps) {
+  void _updateVerticalMotion(
+    int atMs,
+    double? fastSpeedMps, {
+    required double deltaM,
+    required bool hasMotionEvidence,
+  }) {
+    if (fastSpeedMps == null ||
+        fastSpeedMps.abs() < config.minVerticalSpeedMps) {
       _verticalMotionSamples = 0;
       _verticalMotionSign = 0;
+      _expireEarlyVerticalMotion(atMs);
       return;
     }
+    _verticalMotionQuietSamples = 0;
     final sign = fastSpeedMps > 0 ? 1 : -1;
     if (sign != _verticalMotionSign) {
       _verticalMotionSign = sign;
@@ -1123,22 +1175,88 @@ class EscalatorTransitionDetector {
     } else {
       _verticalMotionSamples++;
     }
-    if (_verticalMotionSamples < config.verticalMotionConsecutiveSamples) return;
-    final direction = sign > 0 ? EscalatorDirection.up : EscalatorDirection.down;
+    if (_verticalMotionSamples < config.verticalMotionConsecutiveSamples) {
+      return;
+    }
+    final direction = sign > 0
+        ? EscalatorDirection.up
+        : EscalatorDirection.down;
     final boarding = _approachBoarding ?? _pickBoardingNode(direction);
-    if (boarding == null || boarding.name.direction != direction) return;
+    if (boarding != null && boarding.name.direction == direction) {
+      _earlyVerticalMotion = false;
+      _setPhase(
+        EscalatorPhase.verticalMotionDetected,
+        atMs: atMs,
+        reason: sign > 0 ? 'rising' : 'falling',
+        toFloorLabel: boarding.name.otherFloorLabel,
+        group: boarding.name.group,
+        direction: direction,
+        boardingNodeId: boarding.id,
+        expectedArrivalNodeId: boarding.id == _expectedBoardingNodeId
+            ? _expectedArrivalNodeId
+            : null,
+      );
+      return;
+    }
+    // 허가된 노드가 없다. 층을 바꾸지는 않지만 **걸음은 멈춰야 한다** — 지금
+    // 몸이 수직으로 실려 가고 있다는 근거는 이미 충분하고, 그 구간의 걸음은
+    // 어차피 발판 진동이다. 근거를 둘 더 요구한다: 일상적 변동을 넘는 누적
+    // 고도([earlyVerticalDeltaM])와, 기기가 실제로 움직이는 중이라는 신호.
+    // 후자가 없으면 책상 위에 둔 폰의 기압 드리프트로도 화면이 덮인다.
+    if (deltaM.abs() < config.earlyVerticalDeltaM) return;
+    if (!hasMotionEvidence) return;
+    final toFloor = _adjacentFloorLabel(direction);
+    if (toFloor == null) return;
+    _earlyVerticalMotion = true;
+    _verticalMotionQuietSamples = 0;
     _setPhase(
       EscalatorPhase.verticalMotionDetected,
       atMs: atMs,
-      reason: sign > 0 ? 'rising' : 'falling',
-      toFloorLabel: boarding.name.otherFloorLabel,
-      group: boarding.name.group,
+      reason: sign > 0 ? 'risingUnarmed' : 'fallingUnarmed',
+      toFloorLabel: toFloor,
       direction: direction,
-      boardingNodeId: boarding.id,
-      expectedArrivalNodeId: boarding.id == _expectedBoardingNodeId
-          ? _expectedArrivalNodeId
-          : null,
+      deltaM: deltaM,
     );
+  }
+
+  /// 노드 없이 열린 단계를 수직 이동이 멎으면 접는다.
+  ///
+  /// 이 단계는 하차를 확정할 수단이 없다(도착 노드를 모른다). 그대로 두면
+  /// [boardingPhaseTimeoutMs] 40초 동안 걸음이 멈춘 채 화면이 덮여 있다 —
+  /// 내려서 걷기 시작한 사용자에게 그 40초는 앱이 죽은 것과 같다.
+  void _expireEarlyVerticalMotion(int atMs) {
+    if (!_earlyVerticalMotion) return;
+    if (_phase != EscalatorPhase.verticalMotionDetected) return;
+    _verticalMotionQuietSamples++;
+    if (_verticalMotionQuietSamples < config.earlyVerticalQuietSamples) return;
+    _earlyVerticalMotion = false;
+    _verticalMotionQuietSamples = 0;
+    _setPhase(
+      EscalatorPhase.cancelled,
+      atMs: atMs,
+      reason: 'verticalMotionEnded',
+    );
+  }
+
+  /// [direction] 쪽으로 한 칸 붙어 있는 층 라벨. 알 수 없으면 null.
+  ///
+  /// 노드를 못 골랐을 때 화면에 적을 도착 층을 여기서 만든다. 층 목록의 나열
+  /// 순서에 기대지 않고 라벨 자체를 순위로 읽는다 — 서버 응답 순서는 위아래를
+  /// 약속하지 않는다.
+  String? _adjacentFloorLabel(EscalatorDirection direction) {
+    final from = _floorLabel;
+    if (from == null || _floorLabels.isEmpty) return null;
+    final fromRank = floorLabelRank(from);
+    if (fromRank == 0) return null;
+    final step = direction == EscalatorDirection.up ? 1 : -1;
+    // 지상 1층과 지하 1층 사이에는 0층이 없다.
+    final targetRank = fromRank + step == 0
+        ? fromRank + step * 2
+        : fromRank + step;
+    for (final label in _floorLabels) {
+      if (floorLabelRank(label) == targetRank) return label;
+    }
+    return null;
   }
 
   /// 배너·pause 단계가 근거 없이 오래 머물면 되돌린다.

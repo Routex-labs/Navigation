@@ -478,7 +478,10 @@ void main() {
       fixture.hold(atM: 0, seconds: 5);
       fixture.approachBoarding(remainingM: const [2]);
 
-      expect(fixture.phasesOf(), isNot(contains(EscalatorPhase.boardingDetected)));
+      expect(
+        fixture.phasesOf(),
+        isNot(contains(EscalatorPhase.boardingDetected)),
+      );
     });
 
     test('탑승점에서 다시 멀어지면 배너 단계를 되돌린다', () {
@@ -533,9 +536,9 @@ void main() {
       fixture.hold(atM: 0, seconds: 5);
       fixture.standNearBoarding();
       fixture.ramp(fromM: 0, toM: 4.5, seconds: 20);
-      final midpointIndex = fixture
-          .phasesOf()
-          .indexOf(EscalatorPhase.midpointReached);
+      final midpointIndex = fixture.phasesOf().indexOf(
+        EscalatorPhase.midpointReached,
+      );
       expect(midpointIndex, greaterThanOrEqualTo(0));
       expect(fixture.phasesOf(), isNot(contains(EscalatorPhase.landed)));
 
@@ -552,6 +555,73 @@ void main() {
 
       // 고도 변화 없이 제한 시간을 넘긴다.
       fixture.hold(atM: 0, seconds: 50);
+
+      expect(fixture.phasesOf(), contains(EscalatorPhase.cancelled));
+    });
+  });
+
+  group('노드 허가 없는 조기 정지', () {
+    // 실측에서 랜딩 보정 위치가 12m까지 어긋나 허가가 안 걸리는 일이 흔했다.
+    // 그 구간에서도 걸음은 멈춰야 한다 — 몸이 수직으로 실려 가는 중이라는
+    // 근거는 기압이 이미 주고 있다. 대신 층은 바꾸지 않는다.
+
+    test('허가가 없어도 수직 이동이 이어지면 걸음을 멈춘다', () {
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      // 위치를 한 번도 탑승 노드 근처로 주지 않는다(허가 없음).
+      fixture.standFarAway();
+      fixture.ramp(fromM: 0, toM: -3, seconds: 10, rawPeaksPerSample: 2);
+
+      final change = fixture.phases.firstWhere(
+        (c) => c.phase == EscalatorPhase.verticalMotionDetected,
+      );
+      expect(change.reason, 'fallingUnarmed');
+      expect(change.toFloorLabel, '1F', reason: '2F에서 내려가면 한 칸 아래는 1F다');
+      expect(change.boardingNodeId, isNull);
+      expect(fixture.started, isEmpty, reason: '층은 노드 허가 없이 바꾸지 않는다');
+      expect(fixture.confirmed, isEmpty);
+    });
+
+    test('일상적으로 생기는 고도 변동으로는 멈추지 않는다', () {
+      // 문이 여닫히거나 HVAC이 도는 정도(±0.3m)는 평활 뒤에도 남지만, 그걸로
+      // 화면을 덮으면 가만히 서 있는 사용자의 지도가 수시로 가려진다.
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standFarAway();
+      fixture.ramp(fromM: 0, toM: -0.5, seconds: 2, rawPeaksPerSample: 2);
+
+      expect(
+        fixture.phasesOf(),
+        isNot(contains(EscalatorPhase.verticalMotionDetected)),
+      );
+    });
+
+    test('기기가 멈춰 있으면 고도가 변해도 멈추지 않는다', () {
+      // 책상 위에 둔 폰의 기압 드리프트로 화면이 덮이면 안 된다.
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standFarAway();
+      fixture.ramp(fromM: 0, toM: -3, seconds: 10);
+
+      expect(
+        fixture.phasesOf(),
+        isNot(contains(EscalatorPhase.verticalMotionDetected)),
+      );
+    });
+
+    test('수직 이동이 멎으면 곧바로 접는다', () {
+      // 하차를 확정할 노드가 없으므로 40초 타임아웃을 기다리면 안 된다 —
+      // 내려서 걷기 시작한 사용자에게 그 시간은 앱이 죽은 것과 같다.
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standFarAway();
+      fixture.ramp(fromM: 0, toM: -3, seconds: 10, rawPeaksPerSample: 2);
+      expect(
+        fixture.phasesOf(),
+        contains(EscalatorPhase.verticalMotionDetected),
+      );
+
+      fixture.hold(atM: -3, seconds: 5);
 
       expect(fixture.phasesOf(), contains(EscalatorPhase.cancelled));
     });

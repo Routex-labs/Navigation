@@ -25,7 +25,7 @@ PDR UI와 지도 렌더링은 아래 파일에 모여 있다.
 
 | 구분 | 위치 | 역할 |
 |---|---|---|
-| 지도 셸 | `client/lib/screens/map_shell/map_shell_screen.dart` | 상단·하단 바와 시트를 조립하고 권한을 요청한다. 층 전환 배너도 여기서 그린다. |
+| 지도 셸 | `client/lib/screens/map_shell/map_shell_screen.dart` | 상단·하단 바와 시트를 조립하고 권한을 요청한다. 층 전환 배너·덮개도 여기서 그린다. |
 | 지도 + PDR UI | `client/lib/screens/outdoor_map/outdoor_map_screen.dart` | 지도 하나가 실외와 실내를 모두 그린다. 시작점 지정, 방향 보정 대화상자, 위치·경로 렌더링, JSON 공유를 담당한다. |
 | 실내 안내 세션 | `client/lib/features/indoor_navigation/application/indoor_guidance_session.dart` | 위치·층 전환 판정·경로 진행률·이탈 증거를 소유한다. 위젯을 모르는 headless 클래스다. |
 | 전역 세션 생성 | `client/lib/core/service_locator.dart` | 플랫폼별 센서 소스와 `IndoorNavigationDriver`를 앱 범위 singleton으로 생성한다. |

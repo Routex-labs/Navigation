@@ -23,20 +23,14 @@ library;
 
 import 'dart:async';
 
+import '../domain/floor_label.dart';
+
 /// 층 전환의 수직 방향. 에스컬레이터 모티프가 계단을 흘릴 방향을 정한다.
 enum FloorSwitchDirection { up, down }
 
-/// 층 라벨을 비교 가능한 순위로 바꾼다. "1F" → 1, "B1" → -1.
-///
-/// `Building.floors`의 나열 순서에 기대지 않는 이유: 그 순서는 서버 응답
-/// 순서일 뿐 위아래를 약속하지 않는다. 라벨 자체가 위아래를 말한다.
-/// 숫자를 못 읽는 라벨(옥상 등 비표준)은 0 — 방향을 단정하지 않는다.
-int floorSwitchRank(String label) {
-  final m = RegExp(r'^(B?)(\d+)').firstMatch(label.toUpperCase());
-  if (m == null) return 0;
-  final n = int.parse(m.group(2)!);
-  return m.group(1)!.isEmpty ? n : -n;
-}
+/// 층 라벨을 비교 가능한 순위로 바꾼다. 규칙은 [floorLabelRank]가 소유한다 —
+/// 층 판정기도 같은 규칙으로 인접 층을 찾으므로, 두 벌로 두면 한쪽만 고쳐진다.
+int floorSwitchRank(String label) => floorLabelRank(label);
 
 /// [from] 층에서 [to] 층으로 갈 때의 수직 방향. 판단할 수 없으면(시작 층이
 /// 없거나 순위가 같음) null — 모티프는 틀린 방향을 보여 주느니 안 띄운다.
