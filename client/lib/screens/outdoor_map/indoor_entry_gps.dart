@@ -72,10 +72,32 @@ const indoorEnterInsetMeters = 5.0;
 
 /// 외곽선에서 이만큼 바깥에 찍혀야 "나왔다"고 본다(m).
 ///
-/// [indoorEnterInsetMeters]보다 훨씬 크다. 실내에서 켜 둔 GPS는 좌표가 건물 밖
-/// 으로 튀는 일이 흔한데, 그 한 건으로 실내 상태를 접으면 사용자는 건물 안에서
-/// 도면과 위치 아이콘을 잃는다. 20 m면 문을 나와 몇 걸음 걸은 뒤라 확실하다.
-const outdoorExitMarginMeters = 20.0;
+/// [indoorEnterInsetMeters]보다 크다. 실내에서 켜 둔 GPS는 좌표가 건물 밖으로
+/// 튀는 일이 있는데, 그 한 건으로 실내 상태를 접으면 사용자는 건물 안에서 도면과
+/// 위치 아이콘을 잃는다.
+///
+/// 예전 값은 20 m였다. 그때는 실기기 오차가 15~45 m로 널뛰어 큰 완충이 필요했지만,
+/// 위치 스트림을 고친 뒤 오차가 11~15 m로 안정됐다. 20 m를 유지하면 문을 나와
+/// **20 m를 더 걸어야** 야외로 전환돼, 사용자 눈에는 전환이 한 박자 늦게 보인다.
+/// 12 m는 문을 나와 열 걸음 남짓이고, 지금 오차 수준에서 벽 안쪽 좌표가 여기까지
+/// 튀지는 않는다.
+const outdoorExitMarginMeters = 12.0;
+
+/// 우리 외곽선과 실제 건물 벽 사이의 알려진 어긋남(m).
+///
+/// 백엔드가 주는 footprint는 실내 도면에서 뽑은 것이라 지도 타일에 그려진 건물
+/// 윤곽보다 **조금 작다.** 실기기에서 건물 안으로 들어섰는데도 진입이 한 박자
+/// 늦는 이유가 이것이다 — 사용자는 이미 벽 안인데 우리 외곽선 기준으로는 아직
+/// 바깥이고, 거기서 [indoorEnterInsetMeters]를 또 넘어야 한다.
+///
+/// 그래서 판정에 쓰는 외곽선을 이만큼 **바깥으로 부풀린다.** 폴리곤을 실제로
+/// 다시 만들지 않고 거리에 더하고 빼는 것으로 같은 효과를 낸다
+/// ([judgeBuildingFromGps]).
+///
+/// 진입만 앞당기는 것이 아니라 **이탈은 그만큼 늦춘다**는 점이 중요하다. 한쪽만
+/// 손보면 벽 근처에서 진입과 이탈이 서로를 밀어내며 화면이 깜빡인다. 부풀린
+/// 외곽선 하나를 두 판정이 함께 쓰면 히스테리시스가 그대로 유지된다.
+const footprintOutwardToleranceMeters = 6.0;
 
 /// 판정에 쓰는 위치 한 건.
 class GpsFix {
@@ -155,8 +177,22 @@ GpsBuildingJudgement judgeBuildingFromGps({
   // 오차가 커서 결론이 unclear로 정해진 경우에도 거리는 끝까지 잰다. 판정에는
   // 쓰이지 않지만 진단에는 이 값이 전부다 — 안 재고 0으로 두면 "건물 한가운데서
   // 신호가 나빴다"가 "건물 밖이었다"와 같은 화면으로 보인다.
-  final metersInside = metersInsidePolygon(fix.point, footprint);
-  final metersOutside = metersToPolygon(fix.point, footprint);
+  // 우리 외곽선을 [footprintOutwardToleranceMeters]만큼 바깥으로 부풀린 것과 같게
+  // 만든다. 폴리곤을 다시 만들지 않고 거리를 옮기는 것으로 끝낸다 — 균일한 바깥
+  // 버퍼는 "안쪽 거리 + tolerance, 바깥 거리 − tolerance"와 같은 뜻이다.
+  //
+  // 음수로 내려가지 않게 자른다. 두 값은 "안이면 안쪽 거리, 밖이면 바깥 거리,
+  // 반대쪽은 0"이라는 약속 위에 서 있어서, 한쪽이 음수가 되면 진단 칩이 "바깥
+  // -3.0m" 같은 읽을 수 없는 문구를 띄운다.
+  final rawInside = metersInsidePolygon(fix.point, footprint);
+  final rawOutside = metersToPolygon(fix.point, footprint);
+  final metersInside = rawOutside > 0
+      ? (footprintOutwardToleranceMeters - rawOutside).clamp(0.0, double.infinity)
+      : rawInside + footprintOutwardToleranceMeters;
+  final metersOutside = (rawOutside - footprintOutwardToleranceMeters).clamp(
+    0.0,
+    double.infinity,
+  );
   return GpsBuildingJudgement(
     verdict: _verdictFrom(
       accuracyMeters: fix.accuracyMeters,
