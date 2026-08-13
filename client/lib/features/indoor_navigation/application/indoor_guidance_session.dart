@@ -79,6 +79,25 @@ PdrLocalPoint? routeBoardingHoldPoint({
   return node == null ? null : PdrLocalPoint(node.xM, node.yM);
 }
 
+/// 고정 지점이 지금 위치에서 이만큼 넘게 떨어져 있으면 **그 자리에 세운다**.
+///
+/// 고정은 원래 "탑승점을 지나 앞 매장으로 흘러가는 것"을 막으려는 것이다.
+/// 그런데 판정이 이르거나 틀렸을 때 먼 노드로 스냅하면 마커가 눈에 띄게 뒤로
+/// 순간이동하고, 사용자는 그걸 "위치가 튄다"로 읽는다 — 막으려던 것보다 나쁜
+/// 그림이다. 6m는 랜딩 폭과 보정 오차를 감안한 값으로, 실제로 탑승점에 서
+/// 있으면 이 안에 든다.
+const boardingHoldSnapRadiusM = 6.0;
+
+/// 고정 지점을 지금 위치 기준으로 다듬는다. 멀면 [currentM]을 그대로 쓴다.
+PdrLocalPoint? clampBoardingHold({
+  required PdrLocalPoint? holdPoint,
+  required PdrLocalPoint? currentM,
+  double radiusM = boardingHoldSnapRadiusM,
+}) {
+  if (holdPoint == null || currentM == null) return holdPoint ?? currentM;
+  return (holdPoint - currentM).distance <= radiusM ? holdPoint : currentM;
+}
+
 /// 교차점을 지나는 동안 이탈 증거를 새로 쌓지 않는 시간.
 ///
 /// 교차점에서는 어느 간선에 있는지가 잠깐 흔들린다. 이 보호가 없으면 통과하는
@@ -374,15 +393,24 @@ class IndoorGuidanceSession {
     if (!_attached) return const [];
     final changes = _escalator.takePhaseChanges();
     for (final change in changes) {
+      final currentM = _corridor.result?.previewPosition;
       switch (change.phase) {
         case EscalatorPhase.boardingDetected:
-          _boardingHoldPointM = _routeBoardingHoldPoint(change);
+          _boardingHoldPointM = clampBoardingHold(
+            holdPoint: _routeBoardingHoldPoint(change),
+            currentM: currentM,
+          );
         case EscalatorPhase.verticalMotionDetected:
-          _boardingHoldPointM = _routeBoardingHoldPoint(change);
-          _rideHoldPointM =
-              _boardingHoldPointM ??
-              _detectorBoardingNodePoint(change) ??
-              _corridor.result?.previewPosition;
+          _boardingHoldPointM = clampBoardingHold(
+            holdPoint: _routeBoardingHoldPoint(change),
+            currentM: currentM,
+          );
+          _rideHoldPointM = clampBoardingHold(
+            holdPoint:
+                _routeBoardingHoldPoint(change) ??
+                _detectorBoardingNodePoint(change),
+            currentM: currentM,
+          );
         case EscalatorPhase.cancelled:
         case EscalatorPhase.failed:
         case EscalatorPhase.idle:

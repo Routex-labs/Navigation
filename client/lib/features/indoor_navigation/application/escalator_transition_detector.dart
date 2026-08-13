@@ -62,6 +62,7 @@ class EscalatorDetectorConfig {
     this.minVerticalSpeedMps = 0.12,
     this.verticalMotionConsecutiveSamples = 2,
     this.visibleVerticalDeltaM = 1.2,
+    this.minVisibleRiseM = 0.5,
     this.earlyVerticalQuietSamples = 2,
   });
 
@@ -250,6 +251,18 @@ class EscalatorDetectorConfig {
   /// 발판 진동이 위치에 쌓이는 것을 막는 일이라 이르게 해도 손해가 없지만,
   /// 화면을 덮는 것은 이르면 지도를 못 보는 시간만 길어진다.
   final double visibleVerticalDeltaM;
+
+  /// 탑승점이 정해져 있어도 2차로 올리기 전에 요구하는 최소 수직 변화(m).
+  ///
+  /// 수직 **속도**만 보면 기압 노이즈 한 번에 단계가 올라간다. 평활 뒤 잔여
+  /// 노이즈가 ±0.3m쯤이고 빠른 EMA(α 0.65)는 그 튐을 0.6 m/s로 읽으므로, 두
+  /// 샘플 연속은 복도를 걷는 동안에도 성립한다. 실제로 **얼마나** 움직였는지를
+  /// 함께 봐야 걸을 때 마커가 탑승 노드로 끌려갔다 돌아오는 일이 없다(실기기에서
+  /// "걸을 때 위치가 계속 뒤로 순간이동한다"로 나타났다).
+  ///
+  /// 0.5m은 잔여 노이즈의 1.5배가 넘으면서 에스컬레이터 속도(0.25 m/s)로 2초면
+  /// 넘는 값이다 — 오탐은 막고 판정은 안 늦춘다.
+  final double minVisibleRiseM;
 
   /// 노드를 못 고른 채 열린 2차 단계를 접기까지 필요한 "수직 속도 없음" 연속
   /// 샘플 수.
@@ -1231,25 +1244,26 @@ class EscalatorTransitionDetector {
     // 여기까지가 **1차 감지**다. 화면에는 아무것도 알리지 않고, 걸음도 그대로
     // 흐른다. 아래 두 갈래 중 하나가 성립해야 2차로 올라간다.
     _verticalMotionObserved = true;
+    // 중앙값 delta와 빠른 EMA 적분 중 **먼저 문턱을 넘는 쪽**을 쓴다. 둘은 같은
+    // 것을 재지만 중앙값이 1초 넘게 늦고, 그 1초가 곧 발판 진동이 위치에 쌓이는
+    // 시간이다.
+    final risenM = math.max(deltaM.abs(), _fastDisplacementM.abs());
 
     final boarding = _approachBoarding ?? _pickBoardingNode(direction);
     if (boarding != null && boarding.name.direction == direction) {
-      // 갈래 1 — **탑승점에 충분히 붙었다.** 허가 반경(6m, 경로가 지목하면 16m)
-      // 만으로는 부족하다. 그 거리에서 마커를 세우면 사용자는 아직 통로 한복판을
-      // 걷고 있는데 점만 저 앞 에스컬레이터에 붙어 멈춘 화면을 본다. 실제로
-      // 발판에 올라섰다고 볼 수 있는 거리([boardingApproachRadiusM], 3m)에서만
-      // 사용자에게 보이는 단계로 올린다.
-      // 안내가 이 에스컬레이터를 타라고 지목했으면(=[_approachBoarding])
-      // 근접 거리를 따로 요구하지 않는다. "다음에 탈 것"이 정해져 있고 기압이
-      // 실제로 오르내리는 중이면, 그 둘로 이미 확정에 가깝다 — 여기서 3m를 더
-      // 기다리면 보정 위치가 늦게 수렴하는 랜딩에서 영영 안 걸린다.
+      // 갈래 1 — **탑승점이 정해져 있다.** 안내가 이 에스컬레이터를 타라고
+      // 지목했거나([_approachBoarding], 경로 접근 16m 안) 실제로 발판에
+      // 올라섰다고 볼 거리([boardingApproachRadiusM], 3m)까지 붙었을 때다.
+      //
+      // 그래도 **속도만으로는 올리지 않는다** — 얼마나 움직였는지를 함께 본다
+      // ([minVisibleRiseM], 그 상수에 근거가 있다).
       final distanceM =
           _observedBoardingDistances[boarding.id] ??
           _armedNodes[boarding.id]?.distanceM;
       final atBoardingPoint =
           _approachBoarding != null ||
           (distanceM != null && distanceM <= config.boardingApproachRadiusM);
-      if (atBoardingPoint) {
+      if (atBoardingPoint && risenM >= config.minVisibleRiseM) {
         _earlyVerticalMotion = false;
         _setPhase(
           EscalatorPhase.verticalMotionDetected,
@@ -1274,10 +1288,6 @@ class EscalatorTransitionDetector {
     //
     // 기기가 실제로 움직이는 중이라는 신호를 함께 요구한다. 없으면 책상 위에 둔
     // 폰의 기압 드리프트로도 화면이 덮인다.
-    // 중앙값 delta와 빠른 EMA 적분 중 **먼저 문턱을 넘는 쪽**을 쓴다. 둘은 같은
-    // 것을 재지만 중앙값이 1초 넘게 늦고, 그 1초가 곧 발판 진동이 위치에 쌓이는
-    // 시간이다.
-    final risenM = math.max(deltaM.abs(), _fastDisplacementM.abs());
     if (risenM < config.visibleVerticalDeltaM) return;
     if (!hasMotionEvidence) return;
     final toFloor = (boarding != null && boarding.name.direction == direction)

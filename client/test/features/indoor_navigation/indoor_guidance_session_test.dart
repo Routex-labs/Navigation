@@ -419,6 +419,38 @@ void main() {
     });
   });
 
+  group('고정 지점 다듬기', () {
+    // 먼 노드로 스냅하면 마커가 눈에 띄게 뒤로 순간이동한다. 막으려던 것보다
+    // 나쁜 그림이다.
+
+    test('가까우면 그 노드로 고정한다', () {
+      final held = clampBoardingHold(
+        holdPoint: const PdrLocalPoint(20, 0),
+        currentM: const PdrLocalPoint(17, 0),
+      );
+
+      expect(held?.eastM, 20);
+    });
+
+    test('멀면 지금 자리에 세운다', () {
+      final held = clampBoardingHold(
+        holdPoint: const PdrLocalPoint(20, 0),
+        currentM: const PdrLocalPoint(5, 0),
+      );
+
+      expect(held?.eastM, 5, reason: '15m 뒤로 끌려가면 위치가 튄 것으로 읽힌다');
+    });
+
+    test('지금 위치를 모르면 노드를 그대로 쓴다', () {
+      final held = clampBoardingHold(
+        holdPoint: const PdrLocalPoint(20, 0),
+        currentM: null,
+      );
+
+      expect(held?.eastM, 20);
+    });
+  });
+
   group('탑승 고정 — 수직 이동이 확인된 뒤', () {
     // 복도 끝에 하행 에스컬레이터가 붙어 있는 층. **경로는 주지 않는다** —
     // 경로가 지목한 탑승점과 일치할 때만 고정하던 시절에 마커가 흘러가던

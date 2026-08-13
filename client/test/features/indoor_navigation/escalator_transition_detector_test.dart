@@ -601,6 +601,22 @@ void main() {
   });
 
   group('2차 감지 — 안내가 지목한 에스컬레이터', () {
+    test('기압 노이즈 한 번으로는 멈추지 않는다', () {
+      // 빠른 EMA는 튐 하나를 0.6 m/s로 읽는다. 속도만 보면 복도를 걷는 동안에도
+      // 단계가 올라가고, 그때마다 마커가 탑승 노드로 끌려갔다 돌아온다.
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.approachBoarding(remainingM: const [14, 11, 8]);
+      // 0.4m 올랐다 그대로 되돌아오는 튐.
+      fixture.ramp(fromM: 0, toM: 0.4, seconds: 2, rawPeaksPerSample: 2);
+      fixture.ramp(fromM: 0.4, toM: 0, seconds: 2, rawPeaksPerSample: 2);
+
+      expect(
+        fixture.phasesOf(),
+        isNot(contains(EscalatorPhase.verticalMotionDetected)),
+      );
+    });
+
     test('경로가 지목했으면 3m까지 붙기 전에도 걸음을 멈춘다', () {
       // "다음에 탈 것"이 정해져 있고 기압이 실제로 오르내리면 그 둘로 이미
       // 확정에 가깝다. 여기서 3m를 더 기다리면 보정 위치가 늦게 수렴하는
@@ -609,7 +625,7 @@ void main() {
       fixture.hold(atM: 0, seconds: 5);
       // 경로 끝(탑승점)에서 아직 8m 떨어져 있다.
       fixture.approachBoarding(remainingM: const [14, 11, 8]);
-      fixture.ramp(fromM: 0, toM: 0.6, seconds: 3, rawPeaksPerSample: 2);
+      fixture.ramp(fromM: 0, toM: 1.0, seconds: 4, rawPeaksPerSample: 2);
 
       final change = fixture.phases.firstWhere(
         (c) => c.phase == EscalatorPhase.verticalMotionDetected,

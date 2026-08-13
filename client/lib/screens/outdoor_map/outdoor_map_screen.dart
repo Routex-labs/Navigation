@@ -4169,8 +4169,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _routeSourceId,
       GeojsonSourceProperties(data: _emptyCollection()),
     );
-    // 테두리는 자동차 실선에만 깐다. 점선 아래에 테두리를 깔면 점 사이 빈틈이
-    // 테두리 색으로 채워져 점선이 실선처럼 보인다.
+    // 테두리는 **실선 구간에만** 깐다(자동차·실내). 점선 아래에 테두리를 깔면
+    // 점 사이 빈틈이 테두리 색으로 채워져 점선이 실선처럼 보이기 때문인데, 그
+    // 이유는 도보 점선에만 해당한다. 한때 자동차만 남겨 두는 바람에 실내 실선이
+    // 테두리 없이 도면 위에 맨살로 떠 있었다 — 밝은 매장 바닥 위에서 경계가
+    // 흐려 선이 얇고 초라해 보인다.
     await controller.addLineLayer(
       _routeSourceId,
       _routeCasingLayerId,
@@ -4181,9 +4184,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         lineJoin: 'round',
       ),
       filter: [
-        '==',
+        'match',
         ['get', 'style'],
-        'drive',
+        ['drive', 'indoor'],
+        true,
+        false,
       ],
     );
     // 자동차만 실선이다. 운전 경로는 도로를 그대로 따라가므로 선이 곧 길이지만,
