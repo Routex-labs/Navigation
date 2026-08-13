@@ -177,14 +177,43 @@ Future<bool> defaultIsPedometerPermissionGranted() async {
 Future<bool> Function() isPedometerPermissionGranted =
     defaultIsPedometerPermissionGranted;
 
+/// 야외 위치 스트림을 얼마나 자주 받을지.
+///
+/// **안드로이드는 간격을 지정하지 않으면 5초에 한 번이다.** 기본
+/// [LocationSettings]가 채널로 보내는 값은 accuracy와 distanceFilter뿐인데,
+/// geolocator의 안드로이드 구현은 간격이 비어 있으면 5000 ms를 채워 넣고 그 값을
+/// `setIntervalMillis`와 `setMinUpdateIntervalMillis`에 **둘 다** 건다. 뒤엣것이
+/// 하한이라 신호가 아무리 좋아도 5초보다 빨리 오지 않는다. 이 기본값은
+/// 문서에도, 코드에도 드러나지 않아 "GPS가 원래 느린 것"처럼 보였다.
+///
+/// 여기에 예전의 `distanceFilter: 5`가 겹쳤다. 걷는 사람은 5초에 한 번, 6 m씩
+/// 순간이동하는 아이콘을 보게 된다 — 실기기 실험에서 "위치가 실시간으로 안
+/// 움직인다"고 관찰된 것이 이것이다. 두 제한을 모두 풀어 1초에 한 번 받는다.
+///
+/// **비용은 스트림이 아니라 소비 지점에서 막는다.** 예전 주석이 걱정한 것은
+/// 좌표가 올 때마다 나가는 TMAP 도보 경로 재요청이었는데, 그건 이제 마지막
+/// 요청 지점에서 충분히 움직였을 때만 나간다
+/// (`screens/outdoor_map/route_recompute_policy.dart`). 좌표 자체를 덜 받아서
+/// 네트워크를 아끼면 화면에 그리는 위치까지 같이 낡는다.
+///
+/// iOS에는 간격 개념이 없고 거리 필터만 있으므로 그것만 푼다.
+LocationSettings positionStreamSettings() {
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    return AndroidSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 0,
+      intervalDuration: const Duration(seconds: 1),
+    );
+  }
+  return const LocationSettings(
+    accuracy: LocationAccuracy.high,
+    distanceFilter: 0,
+  );
+}
+
 Stream<Position> defaultWatchPosition() {
   return Geolocator.getPositionStream(
-    locationSettings: const LocationSettings(
-      accuracy: LocationAccuracy.high,
-      // 5m 이상 움직였을 때만 새 이벤트를 받는다. 매 GPS 틱마다 반응하면
-      // 위치 마커/경로 재계산(TMAP 호출 포함)이 과도하게 자주 일어난다.
-      distanceFilter: 5,
-    ),
+    locationSettings: positionStreamSettings(),
   );
 }
 

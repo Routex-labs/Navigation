@@ -71,6 +71,7 @@ import 'indoor_entry_gps.dart';
 import 'building_orientation.dart';
 import 'indoor_entry_proximity.dart';
 import 'indoor_entry_zoom.dart';
+import 'route_recompute_policy.dart';
 import 'indoor_overlay_layers.dart';
 
 // 위치 조회 실패 시 대체 좌표 (서울시청). 저장·전달은 latlong2 타입으로 하고
@@ -2396,6 +2397,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     return ll.LatLng((minLat + maxLat) / 2, (minLng + maxLng) / 2);
   }
 
+  /// 직전 좌표를 기기가 찍은 시각. 좌표 사이 간격을 진단 칩에 띄우는 데만 쓴다.
+  DateTime? _lastFixAt;
+
+  /// 마지막으로 TMAP 도보 경로를 요청한 좌표.
+  ///
+  /// 위치 스트림이 1초에 한 번으로 빨라졌기 때문에 필요해졌다. 예전에는 스트림
+  /// 자체가 5 m마다 왔으므로 좌표 한 건 = 요청 한 번이어도 됐다.
+  ll.LatLng? _lastRouteRequestOrigin;
+
   /// 디버그 모드에서 지도 위에 띄우는 GPS 진입 판정 근거 한 줄.
   ///
   /// `setState`가 아니라 [ValueNotifier]인 이유는 갱신 빈도다. 좌표는 5 m마다
@@ -2480,6 +2490,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 실내 진입 직전에 이미 큐에 들어간 이벤트가 진입 후 도착할 수 있다.
     // 구독은 끊겼어도 이 한 건이 새어들어오면 위치 마커가 다시 켜지므로 막는다.
     if (!_gpsTrackingWanted) return;
+    // 좌표가 얼마 만에 왔는지는 **기기가 찍은 시각**으로 잰다. 앱이 받은 시각을
+    // 쓰면 프레임이 밀린 시간까지 섞여, 스트림이 느린 것인지 화면이 느린 것인지
+    // 구분되지 않는다. 진단 칩에만 쓰이는 값이다.
+    final sinceLastFix = _lastFixAt == null
+        ? null
+        : position.timestamp.difference(_lastFixAt!);
+    _lastFixAt = position.timestamp;
     // 실내에서도 좌표는 **들고 있는다.** 진입/이탈 판정의 유일한 입력이고,
     // 화면에 그릴지는 [_outdoorGpsVisible]이 따로 가른다([_syncCurrentLayer]).
     setState(() => _position = position);
@@ -2492,11 +2509,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 폴백으로 쓰는 문이 이 선택의 결과라, 순서를 뒤집으면 사용자가 이미 다른
     // 문으로 들어왔는데 폴백은 한 박자 전 문을 가리킨다.
     if (!_indoorEntered) _syncSelectedEntrance();
-    _applyBuildingVerdict(position);
+    _applyBuildingVerdict(position, sinceLastFix: sinceLastFix);
     // 여기서부터는 야외 전용이다. 건물 안에서 GPS로 걷기 경로를 다시 그리면,
     // 실내 도면 위에 건물을 관통하는 선이 얹힌다.
     if (_indoorEntered) return;
-    _updateRoute(position);
+    _updateRoute(position, fromPositionStream: true);
   }
 
   /// 위치 한 건이 말하는 건물 안팎을 상태에 반영한다.
@@ -2512,7 +2529,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 자동 이탈을 [_indoorEnteredByGps]로 막는 것이 중요하다. 사용자가 건물을 직접
   /// 탭해 도면을 열어 둔 경우까지 닫으면, 길 건너에서 층 도면을 훑어보려던 사람의
   /// 화면이 좌표가 들어오는 순간 제멋대로 닫힌다.
-  void _applyBuildingVerdict(Position position) {
+  void _applyBuildingVerdict(Position position, {Duration? sinceLastFix}) {
     final judgement = judgeBuildingFromGps(
       fix: GpsFix(
         point: ll.LatLng(position.latitude, position.longitude),
@@ -2523,7 +2540,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 진단 칩은 아래 switch가 상태를 바꾸기 **전에** 채운다. 무장 여부는 이 판정을
     // 내릴 때의 값이어야 하는데, switch가 그 값을 갱신하기 때문이다.
     _gpsVerdictDebugText.value = _debugModeController.enabled
-        ? describeGpsBuildingJudgement(judgement, armed: _gpsEntryArmed)
+        ? describeGpsBuildingJudgement(
+            judgement,
+            armed: _gpsEntryArmed,
+            sinceLastFix: sinceLastFix,
+          )
         : null;
     switch (judgement.verdict) {
       case GpsBuildingVerdict.inside:
@@ -2743,7 +2764,19 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     return PdrLocalPoint(dx, dy);
   }
 
-  Future<void> _updateRoute(Position position) async {
+  /// [fromPositionStream]이 true면 **마지막으로 요청한 지점에서 충분히 움직였을
+  /// 때만** TMAP을 다시 부른다([shouldRecomputeRouteAfterMove]). 위치 스트림이
+  /// 1초에 한 번 오게 된 뒤로, 걸으면서 이 함수를 부를 때마다 요청을 내보내면
+  /// 초당 한 번씩 외부 API를 두드린다.
+  ///
+  /// **사용자가 목적지를 고른 호출(false)은 절대 거르지 않는다.** 제자리에 서서
+  /// 도착지를 눌렀을 때 "아무 일도 일어나지 않는" 화면이 되기 때문이다. 문 재선택
+  /// ([_retargetJourneyEntrance])은 네트워크를 타지 않으므로 거르는 쪽에 두지
+  /// 않는다 — 좌표가 올 때마다 그대로 돈다.
+  Future<void> _updateRoute(
+    Position position, {
+    bool fromPositionStream = false,
+  }) async {
     // 문 경유 안내 중이면 이번 위치로 다시 고른 문이 목적지다. 걸어가는 동안
     // 더 가까운 문이 생기면([_syncSelectedEntrance]가 이미 갱신했다) 야외 구간의
     // 도착점과 실내 구간의 시작점을 함께 갈아 끼운다 — 한쪽만 바꾸면 도보 경로는
@@ -2765,8 +2798,18 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final target = _userDestination;
     if (target == null) return;
 
+    final origin = ll.LatLng(position.latitude, position.longitude);
+    if (fromPositionStream &&
+        !shouldRecomputeRouteAfterMove(
+          origin: origin,
+          lastRequestedOrigin: _lastRouteRequestOrigin,
+        )) {
+      return;
+    }
+    _lastRouteRequestOrigin = origin;
+
     final route = await directionsRepository.getWalkingRoute(
-      origin: ll.LatLng(position.latitude, position.longitude),
+      origin: origin,
       destination: target,
     );
     if (!mounted) return;
