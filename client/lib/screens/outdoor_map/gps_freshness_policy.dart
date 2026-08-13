@@ -51,3 +51,26 @@ bool shouldRequestFreshFix({
   if (lastFixReceivedAt == null) return true;
   return now.difference(lastFixReceivedAt) >= maxAge;
 }
+
+/// 닫힌 위치 스트림을 다시 열기까지 기다리는 첫 간격.
+///
+/// 짧게 잡는 이유는 정상 복구가 흔하기 때문이다 — 스트림이 순간적으로 닫히는
+/// 경우가 대부분이고, 그때 30초를 기다리면 그 30초 동안 화면이 멈춘다.
+const streamRetryMinDelay = Duration(seconds: 2);
+
+/// 재연결 간격의 상한.
+const streamRetryMaxDelay = Duration(seconds: 30);
+
+/// 다음 재연결까지 기다릴 시간. 실패가 이어지면 배로 늘리고 [streamRetryMaxDelay]
+/// 에서 멈춘다.
+///
+/// **간격을 늘리는 이유는 영구 실패 때문이다.** 위치 권한이 거부돼 있거나 기기의
+/// 위치 서비스가 꺼져 있으면 스트림은 열자마자 닫힌다. 고정 간격으로 다시 걸면
+/// 그 상태에서 2초마다 채널을 두드리며 배터리만 태우고, 고쳐지는 것은 없다.
+///
+/// 반대로 상한이 없으면 안 된다. 잠깐 끊겼다 돌아오는 기기에서 간격이 분 단위로
+/// 벌어지면, 신호가 멀쩡해진 뒤에도 화면은 한참 멈춰 있다.
+Duration nextStreamRetryDelay(Duration current) {
+  final doubled = current * 2;
+  return doubled > streamRetryMaxDelay ? streamRetryMaxDelay : doubled;
+}

@@ -66,4 +66,24 @@ void main() {
       );
     });
   });
+
+  group('nextStreamRetryDelay', () {
+    test('실패가 이어지면 간격이 배로 늘어난다', () {
+      expect(nextStreamRetryDelay(streamRetryMinDelay), const Duration(seconds: 4));
+      expect(nextStreamRetryDelay(const Duration(seconds: 4)), const Duration(seconds: 8));
+    });
+
+    test('상한에서 멈춘다', () {
+      // 상한이 없으면 잠깐 끊겼다 돌아오는 기기에서 간격이 분 단위로 벌어져,
+      // 신호가 멀쩡해진 뒤에도 화면이 한참 멈춰 있다.
+      expect(nextStreamRetryDelay(const Duration(seconds: 20)), streamRetryMaxDelay);
+      expect(nextStreamRetryDelay(streamRetryMaxDelay), streamRetryMaxDelay);
+    });
+
+    test('첫 간격은 화면이 멈춘 티가 안 날 만큼 짧다', () {
+      // 스트림은 순간적으로 닫혔다 돌아오는 경우가 대부분이다. 첫 대기가 길면
+      // 그 흔한 경우에서 매번 화면이 멈춘다.
+      expect(streamRetryMinDelay, lessThanOrEqualTo(const Duration(seconds: 3)));
+    });
+  });
 }

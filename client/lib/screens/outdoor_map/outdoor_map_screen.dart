@@ -1946,6 +1946,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   void dispose() {
     _buildingRetryTimer?.cancel();
     _positionSubscription?.cancel();
+    _streamRetryTimer?.cancel();
     _pdrSnapshotSub?.cancel();
     _pdrCalibrationSub?.cancel();
     _pdrAltitudeSub?.cancel();
@@ -2666,6 +2667,24 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 스트림이 조용한지 주기적으로 확인하는 타이머.
   Timer? _freshFixTimer;
 
+  /// 닫힌 스트림을 다시 열기까지 기다리는 시간. 계산은
+  /// [nextStreamRetryDelay]가 한다.
+  Duration _streamRetryDelay = streamRetryMinDelay;
+  Timer? _streamRetryTimer;
+
+  /// 위치 스트림을 지금까지 몇 번 열었는지. **진단 전용이다.**
+  ///
+  /// 정상이라면 화면이 사는 동안 1이어야 한다. 실기기에서 이 값이 올라간다면
+  /// 스트림이 죽고 있다는 뜻이고, 1에 머무는데도 좌표가 드물다면 스트림은
+  /// 살아 있고 기기가 좌표를 늦게 주는 것이다. **둘은 완전히 다른 문제라,
+  /// 이 값 없이는 화면만 보고 구분할 수 없다.**
+  int _streamRestartCount = 0;
+
+  /// 마지막 좌표가 스트림에서 왔는지(true) 일회성 조회에서 왔는지(false).
+  /// 진단 칩에만 쓰인다 — 스트림이 조용한 채 일회성 조회만 화면을 떠받치고
+  /// 있는 상태를 눈으로 구분하기 위한 것이다.
+  bool _lastFixFromStream = false;
+
   /// 스트림이 약속한 간격을 안 지키는 기기에서 위치를 직접 끌어온다.
   ///
   /// 실측에서 1초를 요청했는데 15~36초에 한 건이 왔고, 같은 순간 "위치 갱신"
@@ -2716,12 +2735,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncFreshFixTimer();
     if (_gpsTrackingWanted) {
       if (_positionSubscription != null) return;
-      _positionSubscription = watchPosition().listen(
-        _handlePosition,
-        onError: (Object _) => _handlePositionError(),
-      );
+      _subscribeToPositions();
       return;
     }
+    _streamRetryTimer?.cancel();
+    _streamRetryTimer = null;
+    _streamRetryDelay = streamRetryMinDelay;
     if (_positionSubscription == null) return;
     unawaited(_positionSubscription!.cancel());
     _positionSubscription = null;
@@ -2734,14 +2753,61 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncCurrentLayer();
   }
 
+  /// 위치 스트림을 새로 연다. **[_syncGpsSubscription]과 재연결만 이 함수를
+  /// 부른다** — 구독을 만드는 곳이 흩어지면 [onDone] 처리를 빠뜨린 경로가 다시
+  /// 생긴다.
+  ///
+  /// [onDone]이 왜 필요한가: 이 자리에는 원래 [onError]만 있었다. 그런데 스트림이
+  /// **에러 없이 닫히는** 경우가 있다(네이티브가 EventChannel을 해제할 때). 그때
+  /// [_positionSubscription]은 null이 아닌 채로 남고, [_syncGpsSubscription]은
+  /// `!= null`을 보고 그냥 돌아선다. **한 번 죽으면 앱이 영영 모른다.** 실기기에서
+  /// "위치 갱신 버튼은 되는데 화면은 안 움직인다"고 관찰된 상태가 정확히 이것이다
+  /// — 그 버튼은 스트림이 아니라 일회성 조회를 쓴다.
+  void _subscribeToPositions() {
+    _streamRestartCount++;
+    _positionSubscription = watchPosition().listen(
+      (position) => _handlePosition(position, fromStream: true),
+      onError: (Object _) {
+        _handlePositionError();
+        _handlePositionStreamClosed();
+      },
+      onDone: _handlePositionStreamClosed,
+    );
+  }
+
+  /// 스트림이 닫혔다. 끊어진 구독을 버리고 잠시 뒤 다시 연다.
+  ///
+  /// **간격을 두고 늘려 가는 이유는 영구 실패 때문이다.** 위치 권한이 거부돼
+  /// 있으면 스트림은 열자마자 에러로 닫힌다. 고정 간격으로 다시 걸면 그 상태에서
+  /// 초당 한 번씩 채널을 두드리며 배터리만 태운다. 좌표가 한 건이라도 들어오면
+  /// [_handlePosition]이 간격을 처음 값으로 되돌린다.
+  void _handlePositionStreamClosed() {
+    if (_positionSubscription == null) return;
+    unawaited(_positionSubscription!.cancel());
+    _positionSubscription = null;
+    if (!mounted || !_gpsTrackingWanted) return;
+    if (_streamRetryTimer != null) return;
+    _streamRetryTimer = Timer(_streamRetryDelay, () {
+      _streamRetryTimer = null;
+      _streamRetryDelay = nextStreamRetryDelay(_streamRetryDelay);
+      if (!mounted || !_gpsTrackingWanted) return;
+      if (_positionSubscription != null) return;
+      _subscribeToPositions();
+    });
+  }
+
   void _handlePositionError() {
     if (!mounted) return;
     setState(() => _position = null);
     _syncCurrentLayer();
   }
 
-  void _handlePosition(Position position) {
+  void _handlePosition(Position position, {bool fromStream = false}) {
     if (!mounted) return;
+    _lastFixFromStream = fromStream;
+    // 좌표가 한 건이라도 들어오면 스트림은 살아 있다. 재연결 간격을 되돌려,
+    // 다음에 끊겼을 때 30초를 기다리지 않게 한다.
+    if (fromStream) _streamRetryDelay = streamRetryMinDelay;
     // 실내 진입 직전에 이미 큐에 들어간 이벤트가 진입 후 도착할 수 있다.
     // 구독은 끊겼어도 이 한 건이 새어들어오면 위치 마커가 다시 켜지므로 막는다.
     if (!_gpsTrackingWanted) return;
@@ -2802,6 +2868,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
             judgement,
             armed: _gpsEntryArmed,
             sinceLastFix: sinceLastFix,
+            fromStream: _lastFixFromStream,
+            streamRestarts: _streamRestartCount,
           )
         : null;
     switch (judgement.verdict) {
