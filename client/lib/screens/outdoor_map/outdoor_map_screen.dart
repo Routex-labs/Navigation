@@ -955,7 +955,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   /// 전환 직전 상태. 되돌리기와 취소 복원이 이 값을 쓴다.
   String? _preTransferFloor;
-  PdrAnchor? _preTransferAnchor;
   IndoorRoute? _preTransferRoute;
   MultiFloorRoute? _preTransferMultiRoute;
   PoiSearchResult? _preTransferDestination;
@@ -1008,7 +1007,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   final List<({List<String> layerIds, String sourceId})> _retiringIndoorBlocks =
       [];
 
-  /// 층 이동 확정 뒤 "아니에요"를 띄워 두는 시간.
+  /// 층 이동 확정 뒤 도착 배너를 띄워 두는 시간.
   static const _indoorArrivalBannerHold = Duration(seconds: 6);
 
   /// 층 전환 작업을 직렬화한다. 겹쳐 돌면 층과 경로가 서로 다른 시점을 가리킨다.
@@ -1512,7 +1511,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _applyingFloorTransition = true;
     try {
       _preTransferFloor = _activeFloor;
-      _preTransferAnchor = _pdrTrailState.anchor;
       _preTransferRoute = _indoorRouteSegment;
       _preTransferMultiRoute = _indoorMultiFloorRoute;
       _preTransferDestination = _indoorRouteDestination;
@@ -1635,7 +1633,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     });
     _syncRouteLayer();
     _syncIndoorDestinationLayer();
-    _clearTransferRouteBackups(keepUndoAnchor: false);
+    _clearTransferRouteBackups();
   }
 
   /// 새 층에서 목적지까지 경로를 다시 뽑는다.
@@ -1649,7 +1647,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (destination == null ||
         destinationNodeId == null ||
         buildingId == null) {
-      _clearTransferRouteBackups(keepUndoAnchor: true);
+      _clearTransferRouteBackups();
       return;
     }
     setState(() => _indoorRouteDestination = destination);
@@ -1676,17 +1674,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       );
     }
     if (!mounted) return;
-    _clearTransferRouteBackups(keepUndoAnchor: true);
+    _clearTransferRouteBackups();
   }
 
-  void _clearTransferRouteBackups({required bool keepUndoAnchor}) {
+  /// 전환 직전 백업을 버린다. 확정으로 끝났든 취소로 끝났든, 이 이동에 대해
+  /// 되돌릴 것은 더 남아 있지 않다.
+  void _clearTransferRouteBackups() {
     _preTransferRoute = null;
     _preTransferMultiRoute = null;
     _preTransferDestination = null;
-    if (!keepUndoAnchor) {
-      _preTransferFloor = null;
-      _preTransferAnchor = null;
-    }
+    _preTransferFloor = null;
   }
 
   /// 지금 화면이 그려야 하는 층 전환 배너 상태.
@@ -1694,7 +1691,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     arrival: _escalatorArrival,
     ride: _escalatorRide,
     stage: _escalatorStage,
-    canUndo: _preTransferFloor != null && _preTransferAnchor != null,
   );
 
   /// 배너 상태가 바뀌면 셸에 알린다. 같은 값이면 알리지 않는다.
@@ -1711,45 +1707,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) notify(banner);
     });
-  }
-
-  /// 배너의 `아니에요`. 셸이 호출한다.
-  void undoFloorTransition() {
-    _escalatorArrivalTimer?.cancel();
-    setState(() => _escalatorArrival = null);
-    _enqueueFloorTransition(_undoFloorTransition);
-  }
-
-  /// 자동 전환을 되돌린다. 층과 앵커를 전환 직전 값으로 복원한다.
-  ///
-  /// 되돌린 뒤 위치는 "에스컬레이터를 타기 직전 지점"이다. 그 사이 걸은 거리는
-  /// 복원하지 않는다 — 잘못된 전환이었다면 그 구간의 걸음은 어차피 어느 층
-  /// 기준인지 알 수 없다.
-  Future<void> _undoFloorTransition() async {
-    final floor = _preTransferFloor;
-    final anchor = _preTransferAnchor;
-    if (floor == null || anchor == null) return;
-    _preTransferFloor = null;
-    _preTransferAnchor = null;
-    if (_applyingFloorTransition) return;
-    _applyingFloorTransition = true;
-    try {
-      await _endEscalatorRide();
-      if (!mounted) return;
-      await _switchOverlayFloorCrossfaded(floor);
-      if (!mounted) return;
-      setState(() {
-        _pdrTrailState.beginNewSession();
-        _guidance.resetTracking();
-      });
-      await indoorNavigationDriver.applyVerticalTransfer(
-        floorId: floor,
-        anchorLocalM: anchor.anchorLocalM,
-        axes: anchor.axes,
-      );
-    } finally {
-      _applyingFloorTransition = false;
-    }
   }
 
   /// 건물 로드가 실패한 상태인지. 배지를 띄우는 유일한 근거이며, 재시도가
@@ -7550,9 +7507,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         //
         // **안내 중에는 접는다.** 안내가 도는 동안 층은 사용자가 고르는 것이
         // 아니라 경로가 정한다 — 층이 바뀌는 순간 [_enqueueFloorTransition]이
-        // 도면을 갈아 끼우고, 그 판정이 틀렸을 때 되돌리는 수단은 층 선택기가
-        // 아니라 전환 배너의 "아니에요"다. 안내 중에 남겨 두면 사용자가 고른 층과
-        // 경로가 가리키는 층이 어긋난 화면이 생기고, 그 상태를 정리할 규칙이 없다.
+        // 도면을 갈아 끼운다. 안내 중에 남겨 두면 사용자가 고른 층과 경로가
+        // 가리키는 층이 어긋난 화면이 생기고, 그 상태를 정리할 규칙이 없다.
+        // 판정이 틀렸을 때의 출구는 안내 종료다(그러면 선택기가 다시 펴진다) —
+        // 판정기가 스스로 아니라고 본 경우는 묻지 않고 화면이 되돌린다.
         if (_indoorEntered &&
             !_guidanceActive &&
             _building != null &&

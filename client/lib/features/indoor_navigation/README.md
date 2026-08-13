@@ -96,8 +96,9 @@ flowchart LR
 [`application/README.md`](application/README.md)에 있다.
 
 층 선택기로 다른 층을 훑어보는 것과 이 자동 전환은 **다른 사건**이다. 전자는 PDR 세션과
-anchor를 건드리지 않고, 후자만 anchor를 새 층으로 옮긴다. 오탐 시 되돌릴 수 있도록 전환
-직후 토스트에 "아니에요"를 띄우고 직전 층·anchor를 복원한다.
+anchor를 건드리지 않고, 후자만 anchor를 새 층으로 옮긴다. 전환을 사용자에게 되묻는 버튼은
+두지 않는다 — 판정기가 스스로 취소한 경우에만 화면이 조용히 직전 층·anchor를 복원한다
+(근거는 [`application/README.md`](application/README.md)).
 
 ## 실패 지점
 

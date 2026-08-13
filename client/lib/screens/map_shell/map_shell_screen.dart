@@ -2520,11 +2520,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                     Padding(
                       padding: const EdgeInsets.only(top: _overlayGap),
                       child: Center(
-                        child: FloorTransitionBanner(
-                          state: transition,
-                          onUndo: () =>
-                              _outdoorKey.currentState?.undoFloorTransition(),
-                        ),
+                        child: FloorTransitionBanner(state: transition),
                       ),
                     ),
 

@@ -5,7 +5,6 @@ import 'package:navigation_client/widgets/floor_transition_overlay.dart';
 
 FloorTransitionUiState _state(
   FloorTransitionStage stage, {
-  bool canUndo = false,
   String from = 'B1',
   String to = '1F',
   bool goingUp = true,
@@ -14,7 +13,6 @@ FloorTransitionUiState _state(
   fromFloorLabel: from,
   toFloorLabel: to,
   goingUp: goingUp,
-  canUndo: canUndo,
 );
 
 Widget _host(Widget child, {double textScale = 1.0, Size? size}) => MediaQuery(
@@ -34,7 +32,7 @@ void main() {
         (FloorTransitionStage.boarding, '에스컬레이터 탑승을 감지했습니다'),
         (FloorTransitionStage.moving, '에스컬레이터로 이동 중 · B1 → 1F'),
         (FloorTransitionStage.swapping, '1F 지도로 전환하는 중'),
-        (FloorTransitionStage.arrived, '1F 도착으로 보고 위치를 옮겼습니다'),
+        (FloorTransitionStage.arrived, '1F로 이동했습니다'),
       ]) {
         await tester.pumpWidget(
           _host(FloorTransitionBanner(state: _state(stage))),
@@ -43,32 +41,16 @@ void main() {
       }
     });
 
-    testWidgets('되돌리기는 층을 실제로 옮긴 뒤에만 노출한다', (tester) async {
+    testWidgets('되돌리기 같은 조작을 두지 않는다', (tester) async {
+      // 층 전환은 "맞나요?"라고 되묻지 않는다. 기압이 일상적으로 몇 미터씩
+      // 움직이는 일이 없어서, 되묻는 비용이 판정을 의심하게 만드는 값보다 크다.
       await tester.pumpWidget(
         _host(
-          FloorTransitionBanner(
-            state: _state(FloorTransitionStage.moving),
-            onUndo: () {},
-          ),
+          FloorTransitionBanner(state: _state(FloorTransitionStage.arrived)),
         ),
-      );
-      expect(
-        find.text('아니에요'),
-        findsNothing,
-        reason: '아직 층을 옮기지 않았으면 되돌릴 것이 없다',
       );
 
-      var undone = false;
-      await tester.pumpWidget(
-        _host(
-          FloorTransitionBanner(
-            state: _state(FloorTransitionStage.arrived, canUndo: true),
-            onUndo: () => undone = true,
-          ),
-        ),
-      );
-      await tester.tap(find.text('아니에요'));
-      expect(undone, isTrue);
+      expect(find.byType(TextButton), findsNothing);
     });
 
     testWidgets('작은 화면 + 큰 글자 배율에서도 넘치지 않는다', (tester) async {
@@ -83,7 +65,6 @@ void main() {
             child: FloorTransitionBanner(
               state: _state(
                 FloorTransitionStage.moving,
-                canUndo: true,
                 from: 'B2',
                 to: '지하 1층 식품관',
               ),

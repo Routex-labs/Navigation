@@ -32,7 +32,7 @@ enum FloorTransitionStage {
   /// 목적 층 도면으로 바뀌었고 하차를 기다린다.
   swapping,
 
-  /// 하차가 확정돼 위치를 옮겼다. 되돌리기를 제공한다.
+  /// 하차가 확정돼 위치를 옮겼다.
   arrived,
 }
 
@@ -42,16 +42,12 @@ class FloorTransitionUiState {
     required this.fromFloorLabel,
     required this.toFloorLabel,
     required this.goingUp,
-    this.canUndo = false,
   });
 
   final FloorTransitionStage stage;
   final String fromFloorLabel;
   final String toFloorLabel;
   final bool goingUp;
-
-  /// 되돌리기(`아니에요`)를 노출할지. 층을 실제로 옮긴 뒤에만 true다.
-  final bool canUndo;
 
   /// 이 단계의 배너 문구. 층 전환 구간에서 화면이 말하는 **유일한** 문장이라,
   /// 단계마다 지금 무슨 일이 일어나는지가 여기서 다 읽혀야 한다.
@@ -60,7 +56,7 @@ class FloorTransitionUiState {
     FloorTransitionStage.moving =>
       '에스컬레이터로 이동 중 · $fromFloorLabel → $toFloorLabel',
     FloorTransitionStage.swapping => '$toFloorLabel 지도로 전환하는 중',
-    FloorTransitionStage.arrived => '$toFloorLabel 도착으로 보고 위치를 옮겼습니다',
+    FloorTransitionStage.arrived => '$toFloorLabel로 이동했습니다',
   };
 
   @override
@@ -69,10 +65,8 @@ class FloorTransitionUiState {
       other.stage == stage &&
       other.fromFloorLabel == fromFloorLabel &&
       other.toFloorLabel == toFloorLabel &&
-      other.goingUp == goingUp &&
-      other.canUndo == canUndo;
+      other.goingUp == goingUp;
 
   @override
-  int get hashCode =>
-      Object.hash(stage, fromFloorLabel, toFloorLabel, goingUp, canUndo);
+  int get hashCode => Object.hash(stage, fromFloorLabel, toFloorLabel, goingUp);
 }
