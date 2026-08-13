@@ -553,7 +553,7 @@ enum EscalatorPhase {
 - 최소 확정 고도 변화와 ramp 시간이 충족됨
 - fast altitude speed가 저속으로 감소
 - raw landing motion이 함께 있으면 첫 저속 샘플에서 확정
-- raw activity가 없으면 연속 저속 기압 샘플 fallback
+- raw activity가 없으면 저속이 일정 시간 유지될 때 fallback(6.1)
 
 동작 순서:
 
@@ -638,7 +638,7 @@ class RawMotionActivity {
 - 서로 다른 floor axes에서도 목적 층 원뿔 방향이 맞음
 - 고속 수직 이동 + vibration peak에서 resume하지 않음
 - 저속 전환 + 첫 raw landing peak에서 한 샘플로 resume
-- raw activity가 없으면 연속 저속 샘플 fallback
+- raw activity가 없으면 저속이 일정 시간 유지될 때 fallback(6.1)
 - 하차 후 직진·좌회전·우회전이 첫 2걸음 안에 올바른 후보로 수렴
 
 ---
@@ -693,8 +693,29 @@ class RawMotionActivity {
 
 ### Phase 6 — 통합 검증
 
-> **상태**: 자동 검증과 iOS 상·하행 실기기 확인은 통과했다. Android 센서 주기 차이와
+> **상태**: 자동 검증과 iOS 상·하행 실기기 확인은 통과했다. Android 센서 주기
+> 차이는 판정 문턱을 시간 기준으로 바꿔 해소했고(아래 6.1), 실기기 확인과
 > A/B replay 검증은 남아 있다.
+
+#### 6.1 센서 주기 차이 — 판정 문턱을 시간으로 적는다
+
+기압 샘플 주기는 iOS `CMAltimeter` 약 1069ms, Android `TYPE_PRESSURE` 약 180ms로
+5~6배 다르다. 그런데 하차·수직 이동 판정이 **연속 샘플 수**로 적혀 있어, 같은
+문턱이 iOS에서는 2.1초를 Android에서는 0.36초를 뜻했다. 그 결과 Android에서만
+타는 도중에 하차가 확정되고, baseline이 중간 높이로 다시 잡혀 남은 반 층이 또
+하나의 층 이동이 됐다 — **한 층을 내려가는데 층이 두 번 바뀌는** 증상이다.
+
+바꾼 것은 셋이다.
+
+- 빠른 EMA 계수를 **시정수**로 적고 매 샘플 `1 - exp(-dt/tau)`로 만든다.
+- 수직 속도를 직전 샘플이 아니라 **700ms 이상 떨어진 값**과 비교해 잰다. 기압
+  분해능(흔히 0.01 hPa ≈ 8.4cm)이 한 샘플의 실제 변화(180ms에 5cm)보다 커서
+  연속 샘플이 같은 값으로 나오는 구간을 이 밑변이 넘어선다.
+- 하차·수직 이동·램프 일관성의 "연속 샘플 수"를 전부 **지속 시간**과
+  **구간(stride) 수**로 바꾼다.
+
+문턱값은 iOS 실측 타이밍을 그대로 재현하도록 골랐다. 즉 이 변경은 통과 중인
+iOS 동작을 보존하면서 Android만 제자리로 돌린다.
 
 #### 자동 검증
 
@@ -872,5 +893,5 @@ PDR 한 세션의 heading과 drift를 graph 형상으로 자동 저장하지 않
 - [x] widget 테스트 통과
 - [x] `flutter analyze` 통과
 - [x] iOS 상행·하행 실기기 검증
-- [ ] Android 센서 주기 차이 검증 (남음)
+- [x] Android 센서 주기 차이 — 판정 문턱을 시간 기준으로 전환(6.1), 실기기 확인은 남음
 - [x] 진단 JSON에 phase·cursor·junction·raw activity 근거가 남는다.
