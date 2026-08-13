@@ -32,6 +32,74 @@ const _corridorGraph = FloorGraph(
   ],
 );
 
+const _turnRouteGraph = FloorGraph(
+  nodes: [
+    GraphNode(id: 'a', type: 'corridor', xM: 0, yM: 0),
+    GraphNode(id: 'b', type: 'junction', xM: 7, yM: 0),
+    GraphNode(id: 'c', type: 'corridor', xM: 7, yM: 7),
+  ],
+  edges: [
+    GraphEdge(
+      id: 'ab',
+      fromNodeId: 'a',
+      toNodeId: 'b',
+      lengthM: 7,
+      bidirectional: true,
+      geometryLocalM: [LocalPoint(0, 0), LocalPoint(7, 0)],
+    ),
+    GraphEdge(
+      id: 'bc',
+      fromNodeId: 'b',
+      toNodeId: 'c',
+      lengthM: 7,
+      bidirectional: true,
+      geometryLocalM: [LocalPoint(7, 0), LocalPoint(7, 7)],
+    ),
+  ],
+);
+
+const _turnRoute = IndoorRoute(
+  points: [],
+  pointsLocalM: [LocalPoint(0, 0), LocalPoint(7, 0), LocalPoint(7, 7)],
+  nodeIds: ['a', 'b', 'c'],
+  edgeIds: ['ab', 'bc'],
+  distanceMeters: 14,
+);
+
+const _branchGraph = FloorGraph(
+  nodes: [
+    GraphNode(id: 'a', type: 'corridor', xM: 0, yM: 0),
+    GraphNode(id: 'b', type: 'junction', xM: 7, yM: 0),
+    GraphNode(id: 'c', type: 'corridor', xM: 7, yM: 20),
+  ],
+  edges: [
+    GraphEdge(
+      id: 'ab',
+      fromNodeId: 'a',
+      toNodeId: 'b',
+      lengthM: 7,
+      bidirectional: true,
+      geometryLocalM: [LocalPoint(0, 0), LocalPoint(7, 0)],
+    ),
+    GraphEdge(
+      id: 'bc-off-route',
+      fromNodeId: 'b',
+      toNodeId: 'c',
+      lengthM: 20,
+      bidirectional: true,
+      geometryLocalM: [LocalPoint(7, 0), LocalPoint(7, 20)],
+    ),
+  ],
+);
+
+const _branchRoute = IndoorRoute(
+  points: [],
+  pointsLocalM: [LocalPoint(0, 0), LocalPoint(7, 0)],
+  nodeIds: ['a', 'b'],
+  edgeIds: ['ab'],
+  distanceMeters: 7,
+);
+
 PdrAnchor _anchor({
   String floorId = '1F',
   double eastM = 1,
@@ -88,6 +156,33 @@ PdrSnapshot _walkedEast(int steps) {
     distanceM: steps * 0.7,
     orientationHeadingDeg: 90,
     walkingHeadingDeg: 90,
+    hasHeading: true,
+    preview: PdrPreview(
+      position: path.last,
+      path: path,
+      steps: steps,
+      distanceM: steps * 0.7,
+      acceptedPeakTimesMs: List<int?>.filled(path.length, null),
+    ),
+    quality: _quality,
+  );
+}
+
+PdrSnapshot _walkedNorthTurn(int steps) {
+  final path = [
+    for (var index = 0; index <= steps; index += 1)
+      index <= 10
+          ? PdrLocalPoint(index * 0.7, 0)
+          : PdrLocalPoint(7, (index - 10) * 0.7),
+  ];
+  final heading = steps <= 10 ? 90.0 : 0.0;
+  return PdrSnapshot(
+    position: path.last,
+    path: path,
+    steps: steps,
+    distanceM: steps * 0.7,
+    orientationHeadingDeg: heading,
+    walkingHeadingDeg: heading,
     hasHeading: true,
     preview: PdrPreview(
       position: path.last,
@@ -583,6 +678,93 @@ void main() {
 
     IndoorGuidanceSession routedSession() =>
         attachedSession()..setRouteSegment(route);
+
+    test('코너를 돈 뒤에도 마커가 코너 직전 표시 진행률에 붙들리지 않는다', () {
+      final session = newSession()
+        ..attach(buildingId: 'b1')
+        ..setContext(floorId: '1F', graph: _turnRouteGraph)
+        ..setAnchor(_anchor(eastM: 0))
+        ..setRouteSegment(_turnRoute);
+
+      session.onSnapshot(_walkedNorthTurn(0), timestampMs: 0);
+      session.updateProgress(
+        session.trackingResult,
+        previewSteps: 0,
+        nowMs: 0,
+      );
+
+      for (var steps = 1; steps <= 14; steps += 1) {
+        final result = session.onSnapshot(
+          _walkedNorthTurn(steps),
+          timestampMs: steps * 500,
+        );
+        session.updateProgress(
+          result,
+          previewSteps: steps,
+          nowMs: steps * 500,
+        );
+      }
+
+      final trackerPosition = session.trackingResult!.previewPosition;
+      final markerPosition = session.position!.localM;
+      expect(trackerPosition.northM, greaterThan(1));
+      expect(markerPosition.northM, greaterThan(1));
+    });
+
+    test('교차점 통과 중에도 회색선 기준과 마커 위치를 분리한다', () {
+      final session = newSession()
+        ..attach(buildingId: 'b1')
+        ..setContext(floorId: '1F', graph: _branchGraph)
+        ..setAnchor(_anchor(eastM: 0))
+        ..setRouteSegment(_branchRoute);
+
+      var sawPendingDeviation = false;
+      for (var steps = 0; steps <= 30; steps += 1) {
+        final result = session.onSnapshot(
+          _walkedNorthTurn(steps),
+          timestampMs: steps * 500,
+        );
+        final update = session.updateProgress(
+          result,
+          previewSteps: steps,
+          nowMs: steps * 500,
+        );
+        if (update.holdReason == 'pendingDeviation') {
+          sawPendingDeviation = true;
+          expect(session.position!.localM.northM, greaterThan(0));
+        }
+      }
+
+      final trackerPosition = session.trackingResult!.previewPosition;
+      final markerPosition = session.position!.localM;
+      expect(sawPendingDeviation, isTrue);
+      expect(session.displayProgress!.traveledM, closeTo(7, 0.8));
+      expect(trackerPosition.northM, greaterThan(0));
+      expect(markerPosition.northM, greaterThan(0));
+    });
+
+    test('길안내 중에는 후퇴 방지된 경로 투영점을 마커에 우선 표시한다', () {
+      // 센서 보정 위치는 복도 중심선(y=0)에 있지만, 안내 경로의 표시선은
+      // 같은 간선 위에서 y=2로 보정돼 있다고 가정한다. 예전 홈 통합처럼
+      // previewPosition을 그대로 그리면 마커가 파란 안내선에서 벗어난다.
+      const shiftedRoute = IndoorRoute(
+        points: [],
+        pointsLocalM: [LocalPoint(0, 2), LocalPoint(50, 2)],
+        nodeIds: ['w', 'e'],
+        edgeIds: ['we'],
+        distanceMeters: 50,
+      );
+      final session = attachedSession()..setRouteSegment(shiftedRoute);
+
+      final result = session.onSnapshot(_walkedEast(10), timestampMs: 1000);
+      session.updateProgress(result, previewSteps: 10);
+
+      final preview = session.trackingResult!.previewPosition;
+      final marker = session.position!;
+      expect(preview.northM, closeTo(0, 1e-9));
+      expect(session.displayProgress!.projectedPoint, isNotNull);
+      expect(marker.localM.northM, closeTo(2, 1e-9));
+    });
 
     test('걸을수록 남은거리가 줄어든다', () {
       final session = routedSession();
