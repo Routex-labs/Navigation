@@ -68,6 +68,7 @@ import '../../widgets/map_icon_cache.dart';
 import '../../widgets/map_overlay_tap_guard.dart';
 import '../../widgets/status_badge.dart';
 import 'floor_outline.dart';
+import 'gps_freshness_policy.dart';
 import 'indoor_entry_gps.dart';
 import 'building_orientation.dart';
 import 'indoor_entry_proximity.dart';
@@ -1802,6 +1803,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 앱 전역 인스턴스라 dispose하지 않는다 — 실내 화면이 같은 컨트롤러를
     // 계속 구독한다.
     _debugModeController.removeListener(_onDebugModeChanged);
+    _freshFixTimer?.cancel();
     _gpsVerdictDebugText.dispose();
     _escalatorDebugText.dispose();
     super.dispose();
@@ -2488,7 +2490,64 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   /// GPS 구독을 [_gpsTrackingWanted] 상태에 맞춘다. 구독 시작/해제의 유일한
   /// 진입점이라 중복 구독이나 해제 누락이 생기지 않는다.
+  /// 좌표를 마지막으로 **받은** 시각. 낡음 판정의 기준이다
+  /// ([gps_freshness_policy.dart]).
+  DateTime? _lastFixReceivedAt;
+
+  /// 일회성 위치 조회가 떠 있는 동안 true. 겹쳐 쏘는 것을 막는다.
+  bool _freshFixInFlight = false;
+
+  /// 스트림이 조용한지 주기적으로 확인하는 타이머.
+  Timer? _freshFixTimer;
+
+  /// 스트림이 약속한 간격을 안 지키는 기기에서 위치를 직접 끌어온다.
+  ///
+  /// 실측에서 1초를 요청했는데 15~36초에 한 건이 왔고, 같은 순간 "위치 갱신"
+  /// 버튼의 일회성 조회는 즉시 응답했다. 그 경로를 앱이 대신 눌러 준다.
+  void _syncFreshFixTimer() {
+    final wanted = _gpsTrackingWanted && !_indoorEntered;
+    if (!wanted) {
+      _freshFixTimer?.cancel();
+      _freshFixTimer = null;
+      return;
+    }
+    if (_freshFixTimer != null) return;
+    _freshFixTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _maybeRequestFreshFix(),
+    );
+  }
+
+  Future<void> _maybeRequestFreshFix() async {
+    if (!mounted || _indoorEntered || !_gpsTrackingWanted) return;
+    if (!shouldRequestFreshFix(
+      lastFixReceivedAt: _lastFixReceivedAt,
+      now: DateTime.now(),
+      requestInFlight: _freshFixInFlight,
+    )) {
+      return;
+    }
+    _freshFixInFlight = true;
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.best,
+        ),
+      );
+      if (!mounted) return;
+      // 스트림으로 들어온 좌표와 **같은 문을 통과시킨다.** 진입 판정·경로·진단
+      // 칩이 전부 여기 걸려 있어서, 따로 처리하면 손으로 끌어온 좌표만 판정을
+      // 건너뛰는 상태가 된다.
+      _handlePosition(position);
+    } catch (_) {
+      // 조용히 넘긴다. 다음 주기에 다시 시도하고, 실패해도 스트림은 그대로다.
+    } finally {
+      _freshFixInFlight = false;
+    }
+  }
+
   void _syncGpsSubscription() {
+    _syncFreshFixTimer();
     if (_gpsTrackingWanted) {
       if (_positionSubscription != null) return;
       _positionSubscription = watchPosition().listen(
@@ -2527,6 +2586,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         ? null
         : position.timestamp.difference(_lastFixAt!);
     _lastFixAt = position.timestamp;
+    // 낡음 판정은 **받은 시각** 기준이다. 기기가 찍은 시각을 쓰면, 같은 좌표를
+    // 반복해서 받는 동안에도 계속 낡은 것으로 보여 요청이 멈추지 않는다.
+    _lastFixReceivedAt = DateTime.now();
     // 실내에서도 좌표는 **들고 있는다.** 진입/이탈 판정의 유일한 입력이고,
     // 화면에 그릴지는 [_outdoorGpsVisible]이 따로 가른다([_syncCurrentLayer]).
     setState(() => _position = position);
