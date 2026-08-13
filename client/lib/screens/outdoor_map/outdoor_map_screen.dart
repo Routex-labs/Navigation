@@ -1,9 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:math' show Point, pi;
-import 'dart:typed_data';
-import 'dart:ui' as ui;
+import 'dart:math' show Point;
 
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kIsWeb, visibleForTesting;
@@ -71,7 +69,7 @@ import '../../widgets/floor_selector.dart';
 import '../../widgets/floor_switch_escalator_motif.dart';
 import '../../widgets/guidance_recenter_button.dart';
 import '../../widgets/indoor_arrival_card.dart';
-import '../../widgets/location_marker.dart';
+import '../../widgets/location_marker_icon.dart';
 import '../../widgets/route_steps_sheet.dart';
 import '../../widgets/map_icon_cache.dart';
 import '../../widgets/map_overlay_tap_guard.dart';
@@ -254,7 +252,7 @@ const _destinationPinImageName = 'outdoor-destination-pin-v3';
 // 화면 높이는 172 x iconSize다.
 //
 // 기준은 현재 위치 마커다 — 그쪽은 zoom과 무관하게 42px 고정 도트인데
-// (_pdrLocationRimRadius 21의 지름), 이전 값(0.115/0.25)에서는 실내 오버레이를
+// (kLocationMarkerIconRimRadius 21의 지름), 이전 값(0.115/0.25)에서는 실내 오버레이를
 // 실제로 보는 zoom 18에서 핀이 31px밖에 안 돼 "저기가 목적지"를 가리키는
 // 랜드마크가 사용자 위치 도트보다 작았다. 지금 값은 z18 ≈ 48px, z20 ≈ 65px로
 // 도트보다 확실히 크다. 위쪽(z20) 상한은 확대했을 때 핀이 도착 매장 폴리곤을
@@ -268,26 +266,16 @@ const _destinationPinIconSizeZ20 = 0.38;
 const _pdrCurrentSourceId = 'outdoor-pdr-current';
 const _pdrCurrentLayerId = 'outdoor-pdr-current-dot';
 // PDR 위치 심볼 아이콘 이름(addImage 등록 키). heading이 있으면 방향 원뿔이
-// 함께 그려진 이미지, 없으면 원형 도트만 있는 이미지로 자동 교체된다. 실내
-// 지도의 현재 위치 마커와 동일한 시각 언어를 유지하려고 같은 파란 색·크기를
-// 사용한다(현시점 이 렌더링은 두 화면에 각각 있음 — 시각 스타일을 바꿀 땐
-// floor_plan_view.dart의 _renderCurrentLocationIcon도 함께 맞춰야 한다).
+// 함께 그려진 이미지, 없으면 원형 도트만 있는 이미지로 자동 교체된다. 그림과
+// 크기 상수는 실내 지도와 공유한다(location_marker_icon.dart) — 같은 지점을
+// 봤을 때 두 화면의 마커가 달라 보이면 안 된다.
 // 이름 끝에 코어 반지름을 박아 둔다 — 웹 addImage는 같은 이름이 이미 있으면
 // 새 비트맵을 버리고 건너뛰고, removeImage도 없어서 디자인을 바꿔도 살아 있는
 // 지도에는 예전 크기가 남는다(floor_plan_view.dart의 같은 주석 참고).
-const _pdrLocationImageName = 'outdoor-pdr-location-r$_pdrLocationCoreRadius';
+const _pdrLocationImageName =
+    'outdoor-pdr-location-r$kLocationMarkerIconCoreRadius';
 const _pdrLocationDotImageName =
-    'outdoor-pdr-location-dot-r$_pdrLocationCoreRadius';
-// 아래 세 값은 floor_plan_view.dart의 _currentLocationIcon* 상수와 같은 뜻이고
-// 같은 값이어야 한다. 코어 지름(반지름 16 → 32px)이 이 마커의 체감 크기를
-// 정한다 — 야외 GPS 도트(18px)보다 크고 정확도 원 테두리(44px)보다 작게 잡았다.
-const _pdrLocationIconPixelRatio = 2.0;
-// 화면 크기는 위젯과 **같은 상수**에서 온다(location_marker.dart). 층 전환
-// 덮개가 같은 그림의 점을 그리므로, 한쪽만 바꾸면 두 점의 크기가 어긋난다.
-const _pdrLocationCoreRadius =
-    kLocationMarkerCoreRadiusPx * _pdrLocationIconPixelRatio;
-const _pdrLocationRimRadius =
-    kLocationMarkerRimRadiusPx * _pdrLocationIconPixelRatio;
+    'outdoor-pdr-location-dot-r$kLocationMarkerIconCoreRadius';
 // 실내 오버레이에서 매장 폴리곤을 탭했을 때 그 매장 하나만 파란색으로 채우고
 // 테두리를 두르는 전용 소스·레이어. 색은 앱의 선택 색(mapSelectionColor =
 // AppColors.primary) 하나를 쓴다.
@@ -460,80 +448,6 @@ const _placingHintTopPx = 132.0;
 
 // latlong2 <-> MapLibre 타입 브릿지.
 LatLng _toGl(ll.LatLng p) => LatLng(p.latitude, p.longitude);
-
-/// PDR 현재 위치 마커용 아이콘을 오프스크린 캔버스에 그려 PNG 바이트로 만든다.
-/// [showHeading]이 true면 파란 도트 위에 방향 원뿔(radial gradient)이 함께
-/// 그려진 이미지가 나오고, false면 도트만 있는 이미지가 나온다. MapLibre
-/// SymbolLayer는 미리 addImage로 등록된 비트맵만 참조할 수 있어 이렇게 캔버스
-/// 렌더가 필요하다. 실내 [floor_plan_view.dart:_renderCurrentLocationIcon]의
-/// 시각을 그대로 옮겨, 실내·야외에서 같은 지점을 봤을 때 마커가 달라 보이지
-/// 않게 한다.
-Future<Uint8List> _renderPdrLocationIcon({required bool showHeading}) async {
-  const canvasSize = 144.0;
-  const center = Offset(canvasSize / 2, canvasSize / 2);
-  const pixelSize = canvasSize * _pdrLocationIconPixelRatio;
-  final recorder = ui.PictureRecorder();
-  final canvas = Canvas(
-    recorder,
-    const Rect.fromLTWH(0, 0, pixelSize, pixelSize),
-  );
-  canvas.scale(_pdrLocationIconPixelRatio);
-
-  if (showHeading) {
-    const coneRadius = 62.0;
-    const halfAngle = 31 * pi / 180;
-    final coneBounds = Rect.fromCircle(center: center, radius: coneRadius);
-    final headingCone = Path()
-      ..moveTo(center.dx, center.dy)
-      ..arcTo(coneBounds, -pi / 2 - halfAngle, halfAngle * 2, false)
-      ..close();
-    canvas.drawPath(
-      headingCone,
-      Paint()
-        ..shader = ui.Gradient.radial(
-          center,
-          coneRadius,
-          const [Color(0x8F1976D2), Color(0x451976D2), Color(0x001976D2)],
-          const [0, 0.58, 1],
-        )
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5),
-    );
-  }
-
-  canvas.drawCircle(
-    center + const Offset(0, 2),
-    _pdrLocationRimRadius + 3,
-    Paint()
-      ..color = const Color(0x33000000)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
-  );
-  canvas.drawCircle(
-    center,
-    _pdrLocationRimRadius,
-    Paint()..color = Colors.white,
-  );
-
-  canvas.drawCircle(
-    center,
-    _pdrLocationCoreRadius,
-    Paint()..color = kLocationMarkerColor,
-  );
-  // 코어 크기를 바꿔도 비율이 유지되도록 코어 반지름에서 파생시킨다
-  // (원본 디자인의 코어 18 / offset 5 / 반지름 4.5 비율).
-  const glossOffset = _pdrLocationCoreRadius * 0.28;
-  canvas.drawCircle(
-    center - const Offset(glossOffset, glossOffset),
-    _pdrLocationCoreRadius * 0.25,
-    Paint()..color = const Color(0x66FFFFFF),
-  );
-
-  final image = await recorder.endRecording().toImage(
-    pixelSize.toInt(),
-    pixelSize.toInt(),
-  );
-  final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-  return byteData!.buffer.asUint8List();
-}
 
 // 기본 지도 스타일. vworldApiKey가 있으면 VWorld Base 타일, 없으면 OSM으로 폴백해
 // 로컬 개발·테스트 환경에서도 지도가 항상 뜨도록 한다.
@@ -5291,11 +5205,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 'map'을 넣어야 사용자가 지도를 돌려도 원뿔이 실좌표 방향을 유지한다.
     await controller.addImage(
       _pdrLocationImageName,
-      await _renderPdrLocationIcon(showHeading: true),
+      await renderLocationMarkerIcon(showHeading: true),
     );
     await controller.addImage(
       _pdrLocationDotImageName,
-      await _renderPdrLocationIcon(showHeading: false),
+      await renderLocationMarkerIcon(showHeading: false),
     );
     // PDR 진단 레이어를 현재 위치 마커보다 **먼저** 등록해, 마커가 항상 경로
     // 위에 오게 한다. 진단 선이 현재 위치를 덮으면 정작 어디에 서 있는지가
@@ -5318,7 +5232,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         ],
         // 야외 GPS 마커(CircleLayer 상수 반지름)가 zoom과 무관하게 고정이므로
         // 이쪽도 고정으로 둔다 — 디자인 1px = 화면 1px.
-        iconSize: 1.0 / _pdrLocationIconPixelRatio,
+        iconSize: kLocationMarkerIconSize,
         iconRotate: [
           'coalesce',
           ['get', 'heading'],
