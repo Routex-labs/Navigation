@@ -1359,6 +1359,17 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
     final arrival = findEscalatorArrivalNode(_floorGraph, transition);
     if (arrival != null) setState(() => _pendingArrivalNode = arrival);
+    // **새 층 경로를 여기서 다시 뽑는다.** 안내가 계획한 에스컬레이터와 사용자가
+    // 실제로 탄 에스컬레이터가 다를 수 있다(경로를 벗어나 걸어가면 이 층 세그먼트
+    // 는 재탐색으로 갱신되지만, 다음 층 세그먼트는 계획 당시 그대로다). 그대로
+    // 두면 덮개가 걷힌 화면에 **하차 지점과 이어지지도 않는** 경로가 그려지고,
+    // 사용자는 엉뚱한 에스컬레이터로 유도된다. 하차 확정 뒤에도 같은 계산을
+    // 하지만([_rerouteAfterVerticalTransfer]), 그때까지 기다리면 타는 내내 틀린
+    // 경로를 보게 된다.
+    if (arrival != null) {
+      await _recomputeRouteFrom(nodeId: arrival.id, floor: floor);
+      if (!mounted || _activeFloor != floor) return false;
+    }
     final arrivalWgs84 = _nodeWgs84(_floorGraph, arrival?.id);
     _startEscalatorGlide(from: boardingWgs84, to: arrivalWgs84);
     // 카메라는 **기다리지 않는다.** 이 함수는 층 전환 큐 위에서 도는데, 여기서
@@ -1681,27 +1692,41 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     required String arrivalNodeId,
     required String floor,
   }) async {
+    await _recomputeRouteFrom(nodeId: arrivalNodeId, floor: floor);
+    if (!mounted) return;
+    _clearTransferRouteBackups();
+  }
+
+  /// 이 층 [nodeId]에서 목적지까지 경로를 다시 뽑는다.
+  ///
+  /// 이미 그 노드에서 시작하는 경로가 그려져 있으면 아무것도 하지 않는다 —
+  /// 같은 계산을 두 번 돌리면 진행률 기준점만 다시 흔들린다.
+  ///
+  /// 연출을 붙이지 않는다. 카메라는 [_swapIndoorFloorForRide]가 하차 지점과
+  /// 내리는 방향에 맞춰 뒀고, 이 재계산은 그 자리를 실제 하차 노드 기준으로
+  /// 다듬는 것뿐이다. 전환이 끝난 뒤에 또 움직이면 사용자는 방금 자리 잡은
+  /// 화면이 한 번 더 흔들리는 것을 본다.
+  Future<void> _recomputeRouteFrom({
+    required String nodeId,
+    required String floor,
+  }) async {
     final destination = _preTransferDestination ?? _indoorRouteDestination;
     final destinationNodeId = destination?.nodeId;
     final buildingId = _building?.id;
     if (destination == null ||
         destinationNodeId == null ||
         buildingId == null) {
-      _clearTransferRouteBackups();
       return;
     }
+    if (_routeStartsAt(nodeId, floor)) return;
     setState(() => _indoorRouteDestination = destination);
-    // 여기도 연출을 붙이지 않는다. 카메라는 이미 [_swapIndoorFloorForRide]가
-    // 하차 지점과 내리는 방향에 맞춰 뒀고, 이 재계산은 그 자리를 실제 하차
-    // 노드 기준으로 다듬는 것뿐이다. 전환이 끝난 뒤에 또 움직이면 사용자는
-    // 방금 자리 잡은 화면이 한 번 더 흔들리는 것을 본다.
     if (destination.floor == floor) {
       await _computeAndShowSingleFloorIndoorRoute(
         buildingId: buildingId,
         floor: floor,
         endNodeId: destinationNodeId,
         playOverview: false,
-        startNodeId: arrivalNodeId,
+        startNodeId: nodeId,
       );
     } else {
       await _computeAndShowMultiFloorIndoorRoute(
@@ -1710,11 +1735,18 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         endFloor: destination.floor,
         endNodeId: destinationNodeId,
         playOverview: false,
-        startNodeId: arrivalNodeId,
+        startNodeId: nodeId,
       );
     }
-    if (!mounted) return;
-    _clearTransferRouteBackups();
+  }
+
+  /// 지금 [floor]에 그려진 경로가 [nodeId]에서 시작하는가.
+  bool _routeStartsAt(String nodeId, String floor) {
+    final multi = _indoorMultiFloorRoute;
+    final route = multi == null
+        ? (_activeFloor == floor ? _indoorRouteSegment : null)
+        : multi.segmentForFloor(floor)?.route;
+    return route != null && route.nodeIds.firstOrNull == nodeId;
   }
 
   /// 전환 직전 백업을 버린다. 확정으로 끝났든 취소로 끝났든, 이 이동에 대해
