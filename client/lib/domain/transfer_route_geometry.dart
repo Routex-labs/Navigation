@@ -29,6 +29,35 @@ List<LatLng> transferRoutePointsOnFloor(
       .firstOrNull;
   if (transferNode == null) return segment.transferPointsToNext;
 
+  final axisPoints = escalatorAxisNearLocal(
+    transferNode.xM,
+    transferNode.yM,
+    floorPlan,
+  );
+  if (axisPoints == null) return segment.transferPointsToNext;
+
+  final (a, b) = axisPoints;
+  final routeEnd = segment.route.points.lastOrNull;
+  if (routeEnd == null) return [a, b];
+  const distance = Distance();
+  final axis = distance(a, routeEnd) <= distance(b, routeEnd) ? [a, b] : [b, a];
+
+  // 보행선의 탑승 노드에서 에스컬레이터 축이 끊겨 보이지 않게 연결한다.
+  // 선택된 축 자체는 실제 초록 폴리곤의 긴 방향을 그대로 유지한다.
+  return distance(routeEnd, axis.first) < 0.15 ? axis : [routeEnd, ...axis];
+}
+
+/// 층 로컬 좌표 [xM],[yM]에서 12m 안에 있는 가장 가까운 에스컬레이터 폴리곤의
+/// 긴 중심축(WGS84 두 점, 방향 미정). 없으면 null.
+///
+/// 전이선 표시([transferRoutePointsOnFloor])와 탑승 활강 경로가 같은 축을
+/// 쓴다 — 따로 계산하면 안내선과 마커가 서로 다른 자리를 지나간다.
+(LatLng, LatLng)? escalatorAxisNearLocal(
+  double xM,
+  double yM,
+  FloorPlan? floorPlan,
+) {
+  if (floorPlan == null) return null;
   final candidates = floorPlan.stores
       .where(
         (store) =>
@@ -37,31 +66,19 @@ List<LatLng> transferRoutePointsOnFloor(
             store.polygonLocalM.length >= 4,
       )
       .toList();
-  if (candidates.isEmpty) return segment.transferPointsToNext;
+  if (candidates.isEmpty) return null;
 
   candidates.sort((a, b) {
-    final aDistance = _distanceToPolygon(
-      transferNode.xM,
-      transferNode.yM,
-      a.polygonLocalM,
-    );
-    final bDistance = _distanceToPolygon(
-      transferNode.xM,
-      transferNode.yM,
-      b.polygonLocalM,
-    );
+    final aDistance = _distanceToPolygon(xM, yM, a.polygonLocalM);
+    final bDistance = _distanceToPolygon(xM, yM, b.polygonLocalM);
     return aDistance.compareTo(bDistance);
   });
 
   final selected = candidates.first;
-  final selectedDistance = _distanceToPolygon(
-    transferNode.xM,
-    transferNode.yM,
-    selected.polygonLocalM,
-  );
+  final selectedDistance = _distanceToPolygon(xM, yM, selected.polygonLocalM);
   // 폴리곤 데이터가 누락되거나 좌표계가 어긋난 층에서 멀리 떨어진 아무
-  // 에스컬레이터나 고르는 것보다 그래프의 원래 전이선을 유지하는 편이 안전하다.
-  if (selectedDistance > 12) return segment.transferPointsToNext;
+  // 에스컬레이터나 고르는 것보다 없다고 답하는 편이 안전하다.
+  if (selectedDistance > 12) return null;
 
   final polygon = selected.polygon;
   final centerLat =
@@ -95,16 +112,7 @@ List<LatLng> transferRoutePointsOnFloor(
     centerLat + axisY * projection,
     centerLng + axisX * projection / lngScale,
   );
-  final a = at(minProjection);
-  final b = at(maxProjection);
-  final routeEnd = segment.route.points.lastOrNull;
-  if (routeEnd == null) return [a, b];
-  const distance = Distance();
-  final axis = distance(a, routeEnd) <= distance(b, routeEnd) ? [a, b] : [b, a];
-
-  // 보행선의 탑승 노드에서 에스컬레이터 축이 끊겨 보이지 않게 연결한다.
-  // 선택된 축 자체는 실제 초록 폴리곤의 긴 방향을 그대로 유지한다.
-  return distance(routeEnd, axis.first) < 0.15 ? axis : [routeEnd, ...axis];
+  return (at(minProjection), at(maxProjection));
 }
 
 double _distanceToPolygon(double x, double y, List<LocalFloorPoint> polygon) {

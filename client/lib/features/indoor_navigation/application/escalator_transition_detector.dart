@@ -41,6 +41,7 @@ class EscalatorDetectorConfig {
     this.minSmoothingSamples = 3,
     this.maxSampleAgeMs = 15000,
     this.minDeltaM = 1.2,
+    this.mapSwapDeltaM = 2.4,
     this.minConfirmDeltaM = 2.2,
     this.rampConsistencyWindowMs = 5000,
     this.minDirectionalRampStrides = 3,
@@ -131,7 +132,23 @@ class EscalatorDetectorConfig {
   /// 이어지는 램프([minDirectionalRampStrides]), 지금도 그 속도로 움직이는 중
   /// ([minRampRiseM])이 모두 함께 성립해야 한다. 기상 드리프트는 세 번째 조건에서
   /// 걸린다.
+  ///
+  /// 예전에는 이 문턱이 **지도가 바뀌는 시점**이기도 했다. 지금은 후보만 열고,
+  /// 도면 교체는 [mapSwapDeltaM]에서 따로 한다.
   final double minDeltaM;
+
+  /// 목적 층 도면으로 갈아 끼우는(조기 층 전환 신호를 내는) 누적 변화량.
+  ///
+  /// [minDeltaM]과 분리한 이유는 2026-08-13 더현대 실측 피드백이다. Δ1.2m에서
+  /// 도면을 갈면 26초 탑승 중 21초를 도착 층 도면으로 보낸다 — 아직 출발 층
+  /// 천장도 못 지났는데 화면은 도착 층이라, 사용자가 "층 전환이 너무 빨리
+  /// 일어난다"고 느꼈다. 2.4m는 실측 층고(4.4~6.2m)의 반 층 부근이라, 도면이
+  /// 바뀌는 순간과 몸이 두 층 사이 중간을 지나는 순간이 대략 겹친다.
+  ///
+  /// [minConfirmDeltaM](2.2)보다 크므로 낮은 층고에서는 확정이 이 문턱보다
+  /// 먼저 올 수 있다. 그 경우 조기 신호 없이 `landed`에서 한 번에 전환된다 —
+  /// 신호 순서가 꼬이는 것보다 늦은 전환이 낫다.
+  final double mapSwapDeltaM;
 
   /// PDR 고정을 풀고 층 이동을 최종 확정할 최소 변화량. 고정된 한 층 높이를
   /// 맞히려 하지 않고, 같은 방향의 등속 변화와 하차 시 수직 속도 감소가 함께
@@ -556,6 +573,23 @@ class EscalatorTransitionDetector {
   int _rawMotionCount = 0;
   int _lastAltitudeRawMotionCount = 0;
 
+  /// 원시 움직임 중 **네이티브 걸음만** 센 것. 발판 진동(accel peak)은 여기
+  /// 안 들어간다 — 진동은 "기기가 움직이는 중"의 근거는 되지만 "하차 후 첫
+  /// 걸음"의 근거는 못 된다. 2026-08-13 Samsung 실측에서 진동이 걸음으로
+  /// 인정돼 탑승 중간(층고의 65%)에 하차가 확정됐다.
+  int _rawStepCount = 0;
+  int _lastAltitudeRawStepCount = 0;
+
+  /// 확정 직후 수직 이동이 실제로 멎을 때까지 새 후보를 열지 않는 잠금.
+  ///
+  /// 확정이 하차보다 이르면 baseline이 탑승 중간 높이로 잡히고, 남은 이동분이
+  /// **유령 후보**로 다시 열린다(2026-08-13 실측: 확정 10초 뒤 잔여 2.1m가
+  /// Δ2.14 후보로 열려 확정 문턱 2.2m에 6cm 차이로만 살아남았다 — 이전
+  /// 이중 층 전환의 정체). 저속이 [EscalatorDetectorConfig.earlyVerticalQuietMs]
+  /// 만큼 이어지면 그 시점 고도로 baseline을 다시 잡아 잔여분을 흡수한다.
+  bool _awaitingPostConfirmQuiet = false;
+  int? _postConfirmQuietSinceMs;
+
   // UI가 "층은 먼저 바꾸고 마커는 고정"하는 두 단계 전환을 적용할 수 있도록
   // 후보 시작/취소 신호를 한 번씩 보관한다. 최종 확정은 onAltitude 반환값이다.
   EscalatorTransition? _startedTransition;
@@ -899,19 +933,28 @@ class EscalatorTransitionDetector {
     if (!activity.hasMotion) return;
     _rawMotionCount +=
         activity.accelPeakDelta + (activity.nativeStepDelta ?? 0);
+    _rawStepCount += activity.nativeStepDelta ?? 0;
   }
 
   /// 기압 샘플을 넣고 판정한다. 층 이동이 확정된 순간에만 non-null.
   EscalatorTransition? onAltitude(AltitudeSample sample) {
     final previousFastAltitude = _fastAltitudeM;
     final previousFastAtMs = _lastFastAltitudeAtMs;
-    // 위치에 적용된 걸음 **또는** 원시 움직임 중 하나라도 늘었으면 근거로 본다.
-    // 탑승 중에는 앞의 값이 멈춰 있으므로 뒤의 값만 살아남는다.
+    // "하차 후 첫 걸음"은 위치에 적용된 걸음 **또는 네이티브 걸음**만 인정한다.
+    // 발판 진동(accel peak)은 여기서 빠진다 — 에스컬레이터 위에서는 진동이
+    // 항상 흐르므로, 진동을 걸음으로 치면 순간 저속 한 번(센서 격자·EMA 눌림)에
+    // 유지 시간 없이 그 자리에서 확정된다. 실제로 그렇게 탑승 중간에 확정이
+    // 났다(2026-08-13 Samsung 실측: 확정 Δ3.83m vs 실제 층고 5.9m).
     final hadNewSteps =
         _lastSteps > _lastAltitudeSteps ||
-        _rawMotionCount > _lastAltitudeRawMotionCount;
+        _rawStepCount > _lastAltitudeRawStepCount;
+    // 진동까지 포함한 "기기가 실제로 움직이는 중" 근거. 걸음 pause 갈래에서만
+    // 쓴다 — 그쪽은 책상 위 기압 드리프트를 거르는 용도라 진동도 근거가 된다.
+    final hadMotionEvidence =
+        hadNewSteps || _rawMotionCount > _lastAltitudeRawMotionCount;
     _lastAltitudeSteps = _lastSteps;
     _lastAltitudeRawMotionCount = _rawMotionCount;
+    _lastAltitudeRawStepCount = _rawStepCount;
 
     // 1) 시계열이 끊겼으면(background 복귀 등) 이전 관측을 통째로 버린다.
     //    공백 동안 층이 바뀌었을 수 있어 baseline과 후보도 함께 무효다.
@@ -933,6 +976,8 @@ class EscalatorTransitionDetector {
       _lastFastAltitudeAtMs = null;
       _fastHistory.clear();
       _fastExitQuietSinceMs = null;
+      _awaitingPostConfirmQuiet = false;
+      _postConfirmQuietSinceMs = null;
     }
 
     final rawAltitude = sample.altitudeM;
@@ -989,6 +1034,27 @@ class EscalatorTransitionDetector {
     }
     final delta = smoothed - _baselineM!;
 
+    if (_candidateStartMs == null && _awaitingPostConfirmQuiet) {
+      // 확정 직후 잠금 구간 — 하차가 실제로 끝났는지부터 본다. 확정이 하차보다
+      // 일렀다면 지금도 오르내리는 중이고, 그 잔여 이동분으로 후보를 열면 한
+      // 층이 두 층이 된다. 저속이 이어져 "멎었다"가 확인되는 순간, 그 자리
+      // 고도로 0점을 다시 잡아 잔여분을 통째로 흡수한다.
+      final quietNow =
+          fastSpeedMps != null &&
+          fastSpeedMps.abs() < config.minVerticalSpeedMps;
+      if (quietNow) {
+        final since = _postConfirmQuietSinceMs ??= sample.timestampMs;
+        if (sample.timestampMs - since >= config.earlyVerticalQuietMs) {
+          _baselineM = smoothed;
+          _awaitingPostConfirmQuiet = false;
+          _postConfirmQuietSinceMs = null;
+        }
+      } else {
+        _postConfirmQuietSinceMs = null;
+      }
+      return null;
+    }
+
     if (_candidateStartMs == null) {
       // 허가도 후보도 없는 구간에서만 baseline이 기상 드리프트를 따라간다.
       if (!armed) {
@@ -1012,7 +1078,7 @@ class EscalatorTransitionDetector {
           fastSpeedMps,
           fastStepM: fastStepM,
           deltaM: delta,
-          hasMotionEvidence: hadNewSteps,
+          hasMotionEvidence: hadMotionEvidence,
         );
         _expireStalledPhase(sample.timestampMs, reason: 'armExpired');
         return null;
@@ -1025,7 +1091,7 @@ class EscalatorTransitionDetector {
         fastSpeedMps,
         fastStepM: fastStepM,
         deltaM: delta,
-        hasMotionEvidence: hadNewSteps,
+        hasMotionEvidence: hadMotionEvidence,
       );
       _expireStalledPhase(sample.timestampMs, reason: 'noVerticalMotion');
       if (delta.abs() < config.minDeltaM) return null;
@@ -1074,28 +1140,8 @@ class EscalatorTransitionDetector {
       }
       _candidateBoarding = boarding;
       _candidateToFloor = toFloor;
-      final started = _buildTransition(
-        boarding: boarding,
-        direction: direction,
-        fromFloor: fromFloor,
-        toFloor: toFloor,
-        deltaM: delta,
-        elapsedMs: 0,
-      );
-      _pendingTransition = started;
-      _startedTransition = started;
-      _setPhase(
-        EscalatorPhase.midpointReached,
-        atMs: sample.timestampMs,
-        reason: sign > 0 ? 'rising' : 'falling',
-        toFloorLabel: toFloor,
-        group: boarding.name.group,
-        direction: direction,
-        boardingNodeId: boarding.id,
-        expectedArrivalNodeId: started.expectedArrivalNodeId,
-        deltaM: delta,
-        transition: started,
-      );
+      // 후보는 여기서 열리지만 조기 층 전환(도면 교체) 신호는 아직 내지 않는다.
+      // 그 신호는 아래 후보 유지 구간에서 [mapSwapDeltaM]에 닿을 때 나간다.
       return null;
     }
 
@@ -1135,6 +1181,43 @@ class EscalatorTransitionDetector {
         rebaselineTo: smoothed,
       );
       return null;
+    }
+
+    // 반 층 부근에서 조기 층 전환 신호(도면 교체)를 낸다. 후보 열림과 분리한
+    // 근거는 [EscalatorDetectorConfig.mapSwapDeltaM]에 적었다.
+    if (_pendingTransition == null &&
+        delta.abs() >= config.mapSwapDeltaM &&
+        delta * _candidateSign > 0) {
+      final boarding = _candidateBoarding;
+      final fromFloor = _floorLabel;
+      final toFloor = _candidateToFloor;
+      if (boarding != null && fromFloor != null && toFloor != null) {
+        final direction = _candidateSign > 0
+            ? EscalatorDirection.up
+            : EscalatorDirection.down;
+        final started = _buildTransition(
+          boarding: boarding,
+          direction: direction,
+          fromFloor: fromFloor,
+          toFloor: toFloor,
+          deltaM: delta,
+          elapsedMs: elapsedMs,
+        );
+        _pendingTransition = started;
+        _startedTransition = started;
+        _setPhase(
+          EscalatorPhase.midpointReached,
+          atMs: sample.timestampMs,
+          reason: _candidateSign > 0 ? 'rising' : 'falling',
+          toFloorLabel: toFloor,
+          group: boarding.name.group,
+          direction: direction,
+          boardingNodeId: boarding.id,
+          expectedArrivalNodeId: started.expectedArrivalNodeId,
+          deltaM: delta,
+          transition: started,
+        );
+      }
     }
 
     if (elapsedMs < config.minRampMs) return null;
@@ -1263,6 +1346,10 @@ class EscalatorTransitionDetector {
     _pendingTransition = null;
     _fastExitQuietSinceMs = null;
     _baselineM = smoothed;
+    // 확정이 하차보다 일렀을 수 있다. 수직 이동이 실제로 멎을 때까지 새 후보를
+    // 잠그고, 멎는 순간 잔여 이동분을 baseline에 흡수한다(필드 근거는 선언부).
+    _awaitingPostConfirmQuiet = true;
+    _postConfirmQuietSinceMs = null;
     _armedNodes.clear();
     _observedBoardingDistances.clear();
     _armedUntilMs = null;
@@ -1663,6 +1750,9 @@ class EscalatorTransitionDetector {
     _fastExitQuietSinceMs = null;
     _lastAltitudeSteps = _lastSteps;
     _lastAltitudeRawMotionCount = _rawMotionCount;
+    _lastAltitudeRawStepCount = _rawStepCount;
+    _awaitingPostConfirmQuiet = false;
+    _postConfirmQuietSinceMs = null;
     // 층이 바뀌었으면 진행 중인 단계도 끝난 것이다. 남겨 두면 새 층에서 옛
     // 배너와 pause가 그대로 이어진다.
     if (_phase == EscalatorPhase.boardingDetected ||

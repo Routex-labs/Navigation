@@ -1053,6 +1053,22 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 덮개 카드의 점은 이 값을 보간해 프레임 단위로 부드럽게 그린다.
   static const _escalatorGlideFrame = escalatorGlideSampleInterval;
 
+  /// 기압이 정하는 활강 진행률 목표. 표시값([_escalatorGlideProgress])은 매
+  /// 틱 이 값을 지수 평활로 따라간다. 노이즈로 뒤로 가지 않게 단조 증가만
+  /// 허용한다 — 하차 확정이 1.0을 채운다.
+  double _escalatorRideTargetProgress = 0;
+
+  /// 도면을 교체한 순간의 이동 방향 누적 Δ(m). 진행률 정규화의 0점이다.
+  double _escalatorRideSwapDeltaM = 0;
+
+  /// 이번 활강이 가정하는 층고(m). 같은 그룹의 직전 확정 Δ가 있으면 그 값,
+  /// 없으면 [escalatorDefaultFloorHeightM]이다.
+  double _escalatorRideExpectedM = escalatorDefaultFloorHeightM;
+
+  /// 에스컬레이터 그룹별 실측 층고(|확정 Δ|). 세션 동안만 산다 — 같은 건물을
+  /// 도는 동안 두 번째 탑승부터 진행률이 실측 높이로 정규화된다.
+  final Map<String, double> _escalatorGroupHeightM = {};
+
   // 사람 조작 층 전환이 오래 걸릴 때 뜨는 에스컬레이터 모티프. 아무것도 덮지
   // 않는다 — 이전 층 도면이 그대로 보이는 위에 카드 하나만 뜬다. 언제
   // 띄우고 걷을지(모티프 임계·최소 표시)는 컨트롤러가 정한다.
@@ -1090,11 +1106,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   /// 도면을 갈아 끼운 뒤 덮개를 그대로 두는 시간.
   ///
-  /// 페이드(진입 520ms · 해제 700ms)까지 더하면 화면이 가려지는 시간은 약 3.2초다.
-  /// 예전 400ms(총 1.6초)에서 늘렸다 — 그때는 덮개가 크로스페이드·마커 활강보다
-  /// 먼저 걷혀서 교체 과정이 그대로 보였다. 반대로 하차까지 덮으면 새 층 도면과
-  /// 다음 경로를 미리 볼 시간이 없어진다.
-  static const _indoorFloorSwapVeilHold = Duration(seconds: 2);
+  /// 페이드(진입 520ms · 해제 700ms)까지 더하면 화면이 가려지는 시간은 약 4.7초다.
+  /// 예전 400ms(총 1.6초)에서 두 번 늘렸다 — 처음엔 덮개가 크로스페이드·마커
+  /// 활강보다 먼저 걷혀 교체 과정이 그대로 보였고, 2026-08-13 실측에서는 도면
+  /// 교체가 반 층 시점으로 옮겨지며 "전환 연출을 좀 더 길게 봐도 된다"는
+  /// 피드백을 받았다(남은 탑승 ~10초 중 절반은 여전히 새 도면을 본다).
+  /// 하차까지 덮지는 않는다 — 내리기 전에 새 층 도면과 다음 경로를 봐 둬야 한다.
+  static const _indoorFloorSwapVeilHold = Duration(milliseconds: 3500);
 
   /// 층 이동 확정 뒤 도착 배너를 띄워 두는 시간.
   static const _indoorArrivalBannerHold = Duration(seconds: 6);
@@ -1272,6 +1290,23 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (outcome.events.isNotEmpty) {
       recorder?.recordFloorTransitionEvents(outcome.events);
     }
+
+    // 활강 진행률 목표를 기압으로 갱신한다. 단조 증가만 허용 — 평활 노이즈로
+    // 점이 뒤로 가지 않는다. 1.0은 하차 확정([_completeEscalatorTransition])만
+    // 채운다.
+    final ride = _escalatorRide;
+    final rideDelta = _guidance.escalator.deltaM;
+    if (_escalatorGlide != null && ride != null && rideDelta != null) {
+      final sign = ride.direction == EscalatorDirection.up ? 1.0 : -1.0;
+      _escalatorRideTargetProgress = math.max(
+        _escalatorRideTargetProgress,
+        escalatorRideProgressTarget(
+          deltaTowardsM: rideDelta * sign,
+          swapDeltaM: _escalatorRideSwapDeltaM,
+          expectedTotalM: _escalatorRideExpectedM,
+        ),
+      );
+    }
     _handleEscalatorPhaseChanges();
 
     // 순서가 중요하다. 시작 → 취소 → 확정 순으로 큐에 넣어야 층·경로 복원이
@@ -1442,7 +1477,17 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       if (!mounted || _activeFloor != floor) return false;
     }
     final arrivalWgs84 = _nodeWgs84(_floorGraph, arrival?.id);
-    _startEscalatorGlide(from: boardingWgs84, to: arrivalWgs84);
+    _startEscalatorGlide(
+      from: boardingWgs84,
+      to: arrivalWgs84,
+      transition: transition,
+      // 새 층 도면에서 하차 노드에 가장 가까운 에스컬레이터 폴리곤의 긴 축.
+      // 이게 없으면 활강이 두 노드를 직선으로 이어, 크로스형 뱅크에서 마커가
+      // 구조물을 대각선으로 가로지른다.
+      axis: arrival == null
+          ? null
+          : escalatorAxisNearLocal(arrival.xM, arrival.yM, _floorPlan),
+    );
     // 카메라는 **기다리지 않는다.** 이 함수는 층 전환 큐 위에서 도는데, 여기서
     // 활강 시간만큼 붙잡으면 그 뒤 하차 확정이 그만큼 밀린다.
     unawaited(_aimCameraAtEscalatorExit(from: boardingWgs84, to: arrivalWgs84));
@@ -1471,9 +1516,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 양 끝 중 하나라도 모르면 걸지 않는다 — 출발이나 도착을 모르는 활강은
   /// 아무 방향으로나 흐르는 점일 뿐이다. 그때는 예전처럼 마커가 잠깐 사라졌다
   /// 하차 확정과 함께 도착 노드에 나타난다.
+  ///
+  /// 진행률은 시간이 아니라 **기압**이 정한다([_onAltitude]가 목표를 갱신).
+  /// 서 있든 걷든 몸이 오르내린 높이만큼 점이 가고, 끝(1.0)은 하차 확정만이
+  /// 채운다 — 점이 끝에 닿는 순간이 곧 실제 하차다.
   void _startEscalatorGlide({
     required ll.LatLng? from,
     required ll.LatLng? to,
+    required EscalatorTransition transition,
+    (ll.LatLng, ll.LatLng)? axis,
   }) {
     _escalatorGlideTimer?.cancel();
     _escalatorGlideTimer = null;
@@ -1482,10 +1533,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       return;
     }
     _escalatorGlide = EscalatorGlide(
-      from: from,
-      to: to,
-      startedAtMs: DateTime.now().millisecondsSinceEpoch,
+      points: _glidePathPoints(from: from, to: to, axis: axis),
     );
+    // 진행률 정규화의 양 끝: 지금(도면 교체 순간)의 Δ가 0, 예상 층고가 1이다.
+    // 층고는 같은 그룹의 직전 확정 Δ가 있으면 실측을 쓴다.
+    final sign = transition.direction == EscalatorDirection.up ? 1.0 : -1.0;
+    _escalatorRideSwapDeltaM = (_guidance.escalator.deltaM ?? 0) * sign;
+    _escalatorRideExpectedM =
+        _escalatorGroupHeightM[transition.group] ?? escalatorDefaultFloorHeightM;
+    _escalatorRideTargetProgress = 0;
     _escalatorGlideProgress.value = 0;
     _escalatorGlideTimer = Timer.periodic(_escalatorGlideFrame, (timer) {
       final glide = _escalatorGlide;
@@ -1493,18 +1549,49 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         timer.cancel();
         return;
       }
-      final nowMs = DateTime.now().millisecondsSinceEpoch;
-      _escalatorGlideProgress.value = glide.progressAt(nowMs);
-      unawaited(_syncPdrCurrentLayer());
-      // 도착 노드에 닿으면 타이머만 접는다. 활강 자체는 하차가 확정될 때까지
-      // 살려 둬야 마커가 그 자리를 지킨다.
-      if (glide.isDoneAt(nowMs)) timer.cancel();
+      final value = _escalatorGlideProgress.value;
+      final target = _escalatorRideTargetProgress;
+      // 기압 샘플(0.18~1.07초 간격)을 그대로 그리면 점이 툭툭 끊긴다. 틱마다
+      // 목표 쪽으로 지수 평활 — 시정수 약 0.5초.
+      final next = (target - value).abs() < 0.002
+          ? target
+          : value + (target - value) * escalatorRideProgressEase;
+      if (next != value) {
+        _escalatorGlideProgress.value = next;
+        unawaited(_syncPdrCurrentLayer());
+      }
+      // 하차 확정(목표 1.0)에 다 붙었으면 타이머만 접는다. 활강 자체는 확정
+      // 절차가 끝날 때까지 살려 둬야 마커가 그 자리를 지킨다.
+      if (target >= 1 && next >= 1) timer.cancel();
     });
+  }
+
+  /// 활강 폴리라인. 에스컬레이터 축이 있으면 하차 노드에 가까운 끝이 마지막에
+  /// 오도록 방향을 맞춰 끼운다. 양 끝(탑승·하차 노드)과 1m 안으로 겹치는
+  /// 경유점은 버린다 — 겹친 점을 남기면 그 구간 진행률이 0으로 나뉜다.
+  List<ll.LatLng> _glidePathPoints({
+    required ll.LatLng from,
+    required ll.LatLng to,
+    required (ll.LatLng, ll.LatLng)? axis,
+  }) {
+    if (axis == null) return [from, to];
+    const distance = ll.Distance();
+    final (a, b) = axis;
+    final ordered = distance(b, to) <= distance(a, to) ? [a, b] : [b, a];
+    final via = ordered
+        .where(
+          (point) => distance(from, point) >= 1.0 && distance(point, to) >= 1.0,
+        )
+        .toList();
+    return [from, ...via, to];
   }
 
   void _stopEscalatorGlide() {
     _escalatorGlideTimer?.cancel();
     _escalatorGlideTimer = null;
+    _escalatorRideTargetProgress = 0;
+    _escalatorRideSwapDeltaM = 0;
+    _escalatorRideExpectedM = escalatorDefaultFloorHeightM;
     if (_escalatorGlide == null) return;
     _escalatorGlide = null;
     _escalatorGlideProgress.value = 0;
@@ -1545,8 +1632,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           tilt: camera?.tilt ?? 0,
         ),
       ),
-      // 마커 활강과 같은 시간을 쓴다 — 지도와 점이 따로 움직이면 두 번의 전환
-      // 으로 읽힌다.
+      // 하차 지점이 화면에 자리 잡는 시간. 마커는 기압 진행률로 따로 흐르지만
+      // 카메라까지 하차 확정을 기다리면 타는 내내 화면 구도가 안 잡힌다.
       duration: escalatorGlideDuration,
     );
   }
@@ -1693,6 +1780,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           return;
         }
       }
+      // 하차가 확정됐다 — 진행률 1.0은 오직 여기서 채워진다. 표시값은 틱마다
+      // 따라붙어(시정수 0.5초) 마커가 도착 노드에 부드럽게 닿는다.
+      _escalatorRideTargetProgress = 1;
+      // 이 그룹의 실측 층고를 기억한다. 다음 탑승부터 진행률이 기본값(5.8m)이
+      // 아니라 이 에스컬레이터의 실제 높이로 정규화된다.
+      if (transition.deltaM.abs() > 1.0) {
+        _escalatorGroupHeightM[transition.group] = transition.deltaM.abs();
+      }
       final graph = _floorGraph;
       final arrival =
           _pendingArrivalNode ?? findEscalatorArrivalNode(graph, transition);
@@ -1819,6 +1914,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         floor: floor,
         endNodeId: destinationNodeId,
         playOverview: false,
+        // 층 전환 후 재계산 — 같은 길안내의 연속이다.
+        beginNewRecordingSession: false,
         startNodeId: nodeId,
       );
     } else {
@@ -1828,6 +1925,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         endFloor: destination.floor,
         endNodeId: destinationNodeId,
         playOverview: false,
+        beginNewRecordingSession: false,
         startNodeId: nodeId,
       );
     }
@@ -1875,7 +1973,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (notify == null) return;
     // build 중에는 부모 setState를 호출할 수 없다.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) notify(banner, scrim, _escalatorGlideProgress);
+      if (mounted) notify(banner, scrim);
     });
   }
 
@@ -3877,6 +3975,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         floor: endFloor,
         endNodeId: endNodeId,
         playOverview: true,
+        // 목적지를 새로 고른 순간 — 여기서만 진단 세션이 새로 열린다.
+        beginNewRecordingSession: true,
         startNodeId: explicitStartNodeId,
       );
     } else {
@@ -3886,6 +3986,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         endFloor: endFloor,
         endNodeId: endNodeId,
         playOverview: true,
+        beginNewRecordingSession: true,
         startNodeId: explicitStartNodeId,
       );
     }
@@ -3980,11 +4081,18 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// [playOverview]는 경로를 그린 뒤 개요 연출([_fitCameraToRouteSegment])을 할지다.
   /// **기본값을 두지 않는다** — 안내 시작이냐 재탐색이냐에 따라 답이 정반대라,
   /// 빠뜨리면 조용히 틀린 쪽으로 굴러간다.
+  ///
+  /// [beginNewRecordingSession]도 같은 이유로 기본값이 없다. 사용자가 목적지를
+  /// 새로 고른 경우에만 true다. 재탐색·층 전환 후 재계산은 **같은 길안내의
+  /// 연속**이라 false — 여기서 세션을 갈면 층 전환마다 진단 로그가 지워져,
+  /// 정작 분석하려는 구간(에스컬레이터 탑승)이 파일에 안 남는다(2026-08-13
+  /// 실측에서 주행 로그가 마지막 재탐색 이후 10초만 남았다).
   Future<void> _computeAndShowSingleFloorIndoorRoute({
     required String buildingId,
     required String floor,
     required String endNodeId,
     required bool playOverview,
+    required bool beginNewRecordingSession,
     String? startNodeId,
   }) async {
     final completionAtRequest = _currentIndoorCompletionSnapshot();
@@ -4047,13 +4155,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncIndoorDestinationLayer();
     _notifyRouteStateIfChanged();
     if (playOverview) unawaited(_fitCameraToRouteSegment(route));
-    // 이 경로 한 건이 진단 세션 하나가 된다. 이전 세션 데이터는 여기서
-    // 버려지므로 내보내기 안내는 띄우지 않는다 — 길안내가 끝난 게 아니라
-    // 목적지가 바뀐 것이고, 안내를 눌러도 꺼낼 게 없다.
-    if (_pdrDebugRecorder != null) {
-      _endRouteRecordingSession(announceExport: false);
+    // 진단 세션의 경계는 **길안내 한 건**이다. 목적지를 새로 고른 경우에만
+    // 이전 세션을 버리고 새로 연다 — 재탐색·층 전환 후 재계산에서 세션을 갈면
+    // 층을 옮길 때마다 로그가 지워진다.
+    if (beginNewRecordingSession) {
+      if (_pdrDebugRecorder != null) {
+        _endRouteRecordingSession(announceExport: false);
+      }
+      _beginRouteRecordingSession();
     }
-    _beginRouteRecordingSession();
   }
 
   /// 층이 다른 매장까지의 층 간 경로를 계산해 층별 세그먼트로 나누고, 현재
@@ -4062,13 +4172,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 시작 층부터 훑도록 활성 층을 자동으로 시작 층으로 전환한다.
   /// [startNodeId]가 주어지면(길찾기 시트에서 매장을 출발지로 고른 경우) 그
   /// 노드에서 바로 출발하고, null이면 PDR 앵커 기준으로 시작 노드를 고른다.
-  /// [playOverview]의 뜻은 [_computeAndShowSingleFloorIndoorRoute]와 같다.
+  /// [playOverview]·[beginNewRecordingSession]의 뜻은
+  /// [_computeAndShowSingleFloorIndoorRoute]와 같다.
   Future<void> _computeAndShowMultiFloorIndoorRoute({
     required String buildingId,
     required String startFloor,
     required String endFloor,
     required String endNodeId,
     required bool playOverview,
+    required bool beginNewRecordingSession,
     String? startNodeId,
   }) async {
     final completionAtRequest = _currentIndoorCompletionSnapshot();
@@ -4125,10 +4237,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (playOverview && segment != null) {
       unawaited(_fitCameraToRouteSegment(segment.route));
     }
-    if (_pdrDebugRecorder != null) {
-      _endRouteRecordingSession(announceExport: false);
+    // 세션 경계 규칙은 [_computeAndShowSingleFloorIndoorRoute]와 같다.
+    if (beginNewRecordingSession) {
+      if (_pdrDebugRecorder != null) {
+        _endRouteRecordingSession(announceExport: false);
+      }
+      _beginRouteRecordingSession();
     }
-    _beginRouteRecordingSession();
   }
 
   /// 현재 위치에서 건물 안 **모든 그래프 노드**까지의 거리·비용.
@@ -6851,7 +6966,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 있어서, 이 갈래가 없으면 층이 바뀌는 순간 마커가 통째로 사라진다.
     final glide = _escalatorGlide;
     if (glide != null) {
-      return glide.pointAt(DateTime.now().millisecondsSinceEpoch);
+      return glide.pointAtProgress(_escalatorGlideProgress.value);
     }
     final graph = _floorGraph;
     if (graph == null || graph.nodes.isEmpty) return null;
@@ -7259,6 +7374,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           floor: floor,
           endNodeId: destinationNodeId,
           playOverview: false,
+          // 이탈 재탐색 — 같은 길안내의 연속이다.
+          beginNewRecordingSession: false,
           startNodeId: startNodeId,
         );
       } else {
@@ -7268,6 +7385,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           endFloor: destination.floor,
           endNodeId: destinationNodeId,
           playOverview: false,
+          beginNewRecordingSession: false,
           startNodeId: startNodeId,
         );
       }
