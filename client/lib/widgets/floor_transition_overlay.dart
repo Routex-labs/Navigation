@@ -184,10 +184,25 @@ class _FloorTransitionCardState extends State<_FloorTransitionCard>
 
   @override
   Widget build(BuildContext context) {
-    final driver = widget.progress ?? _ensureController();
+    final progress = widget.progress;
+    if (progress == null) {
+      final driver = _ensureController();
+      return AnimatedBuilder(
+        animation: driver,
+        builder: (context, _) => _build(context, driver.value.clamp(0.0, 1.0)),
+      );
+    }
+    // 활강 진행률은 [escalatorGlideSampleInterval]마다 한 번 갱신된다(지도 소스
+    // 를 플랫폼 채널로 밀어야 해서 프레임마다 보낼 수 없다). 그 값을 그대로
+    // 그리면 점이 초당 16번 툭툭 끊기므로, 샘플 사이를 프레임 단위로 잇는다.
     return AnimatedBuilder(
-      animation: driver,
-      builder: (context, _) => _build(context, driver.value.clamp(0.0, 1.0)),
+      animation: progress,
+      builder: (context, _) => TweenAnimationBuilder<double>(
+        tween: Tween(end: progress.value.clamp(0.0, 1.0)),
+        duration: escalatorGlideSampleInterval,
+        curve: Curves.linear,
+        builder: (context, value, _) => _build(context, value),
+      ),
     );
   }
 
@@ -273,10 +288,14 @@ class _MarkerDot extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         shape: BoxShape.circle,
+        // 지도 아이콘의 그림자와 **같은 무게**로 맞춘다. 아이콘은 2배 캔버스에
+        // 그려 절반으로 축소되므로, 캔버스에서 blur 5 / offset 2인 그림자가
+        // 화면에서는 blur 2.5 / offset 1이 된다. 여기에 원래 값을 그대로 쓰면
+        // 점이 한 겹 더 두꺼워 보이고, 그게 "덮개 점이 더 크다"로 읽힌다.
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 5,
+            blurRadius: 2.5,
             offset: const Offset(0, 1),
           ),
         ],

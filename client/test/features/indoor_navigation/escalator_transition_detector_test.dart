@@ -139,6 +139,7 @@ class _Fixture {
     PdrLocalPoint routeEnd = const PdrLocalPoint(0, 0),
     String boardingNodeId = 'n-up-to3f',
     String? arrivalNodeId = 'n3-up-fr2f',
+    bool immediateTransfer = false,
   }) {
     for (final remaining in remainingM) {
       steps += 2;
@@ -150,6 +151,7 @@ class _Fixture {
         expectedArrivalNodeId: arrivalNodeId,
         steps: steps,
         timestampMs: nowMs,
+        immediateTransfer: immediateTransfer,
       );
       phases.addAll(detector.takePhaseChanges());
     }
@@ -610,6 +612,38 @@ void main() {
       // 0.4m 올랐다 그대로 되돌아오는 튐.
       fixture.ramp(fromM: 0, toM: 0.4, seconds: 2, rawPeaksPerSample: 2);
       fixture.ramp(fromM: 0.4, toM: 0, seconds: 2, rawPeaksPerSample: 2);
+
+      expect(
+        fixture.phasesOf(),
+        isNot(contains(EscalatorPhase.verticalMotionDetected)),
+      );
+    });
+
+    test('연속 환승이면 최소 변화를 기다리지 않는다', () {
+      // 내리자마자 두어 걸음 옆의 다음 에스컬레이터를 타는 구간. 걸어갈 거리가
+      // 없으니 기다릴 이유가 없고, 기다리면 환승마다 마커가 먼저 흘러간다.
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.approachBoarding(
+        remainingM: const [3, 2],
+        immediateTransfer: true,
+      );
+      // 최소 변화(0.5m)에 못 미치는 0.45m만 오른다.
+      fixture.ramp(fromM: 0, toM: 0.45, seconds: 3, rawPeaksPerSample: 2);
+
+      expect(
+        fixture.phasesOf(),
+        contains(EscalatorPhase.verticalMotionDetected),
+      );
+    });
+
+    test('연속 환승이 아니면 같은 변화로는 아직 멈추지 않는다', () {
+      // 위 테스트와 **같은 시계열**이다. 다른 것은 안내가 알려 준 연속 환승
+      // 여부뿐이라, 그 신호가 실제로 문턱을 낮춘다는 것을 이 쌍이 고정한다.
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.approachBoarding(remainingM: const [3, 2]);
+      fixture.ramp(fromM: 0, toM: 0.45, seconds: 3, rawPeaksPerSample: 2);
 
       expect(
         fixture.phasesOf(),

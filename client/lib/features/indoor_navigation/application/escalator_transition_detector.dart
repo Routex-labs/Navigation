@@ -513,6 +513,13 @@ class EscalatorTransitionDetector {
   int? _lastApproachSteps;
   _EscalatorNode? _approachBoarding;
 
+  /// 내리자마자 바로 다음 에스컬레이터를 타는 구간인지. 안내가 알려 준다.
+  ///
+  /// 이 경우 사용자는 이미 발판 앞에 서 있고, 다음 행동은 타는 것 하나뿐이다.
+  /// "얼마나 올랐는지"를 기다릴 이유가 없고(어차피 걸을 거리가 없어 오탐 여지도
+  /// 없다), 기다리면 연속 환승마다 마커가 먼저 몇 걸음 흘러간다.
+  bool _immediateTransfer = false;
+
   // 수직 이동 상태(걸음 pause 근거).
   int _verticalMotionSamples = 0;
   int _verticalMotionSign = 0;
@@ -683,6 +690,7 @@ class EscalatorTransitionDetector {
     String? expectedArrivalNodeId,
     required int steps,
     required int timestampMs,
+    bool immediateTransfer = false,
   }) {
     final approachDistance = (positionM - routeEndM).distance;
     if (approachDistance > config.routeApproachArmRadiusM) {
@@ -701,6 +709,7 @@ class EscalatorTransitionDetector {
     _expectedBoardingNodeId = expectedBoardingNodeId;
     _expectedArrivalNodeId = expectedArrivalNodeId;
     _approachBoarding = expected;
+    _immediateTransfer = immediateTransfer;
     _armedNodes[expected.id] = _ArmedNode(
       nodeId: expected.id,
       distanceM: approachDistance,
@@ -772,6 +781,7 @@ class EscalatorTransitionDetector {
     _lastApproachSteps = null;
     _approachDecreaseUpdates = 0;
     _approachBoarding = null;
+    _immediateTransfer = false;
   }
 
   void _setPhase(
@@ -1263,7 +1273,13 @@ class EscalatorTransitionDetector {
       final atBoardingPoint =
           _approachBoarding != null ||
           (distanceM != null && distanceM <= config.boardingApproachRadiusM);
-      if (atBoardingPoint && risenM >= config.minVisibleRiseM) {
+      // 연속 환승(내리자마자 바로 다음 에스컬레이터)에서는 최소 변화를 요구하지
+      // 않는다. 걸어갈 거리가 없어 오탐 여지도 없고, 기다리면 환승마다 마커가
+      // 먼저 몇 걸음 흘러간다.
+      final requiredRiseM = _immediateTransfer && _approachBoarding != null
+          ? 0.0
+          : config.minVisibleRiseM;
+      if (atBoardingPoint && risenM >= requiredRiseM) {
         _earlyVerticalMotion = false;
         _setPhase(
           EscalatorPhase.verticalMotionDetected,

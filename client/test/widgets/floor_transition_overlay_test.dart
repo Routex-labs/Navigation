@@ -299,7 +299,8 @@ void main() {
       final startY = tester.getCenter(dot).dy;
 
       progress.value = 1;
-      await tester.pump();
+      // 샘플 사이를 프레임 단위로 잇는 보간이 붙어 있어 한 프레임으로는 다 안 간다.
+      await tester.pumpAndSettle();
 
       expect(
         tester.getCenter(dot).dy,

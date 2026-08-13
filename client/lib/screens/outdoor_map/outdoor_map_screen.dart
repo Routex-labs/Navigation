@@ -998,7 +998,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   /// 활강 중 마커를 다시 그리는 주기. 위젯 트리를 rebuild하지 않고 지도 소스만
   /// 갱신하므로(=[_syncPdrCurrentLayer]) 이 정도 빈도를 감당할 수 있다.
-  static const _escalatorGlideFrame = Duration(milliseconds: 60);
+  /// 덮개 카드의 점은 이 값을 보간해 프레임 단위로 부드럽게 그린다.
+  static const _escalatorGlideFrame = escalatorGlideSampleInterval;
 
   // 사람 조작 층 전환이 오래 걸릴 때 뜨는 에스컬레이터 모티프. 아무것도 덮지
   // 않는다 — 이전 층 도면이 그대로 보이는 위에 카드 하나만 뜬다. 언제

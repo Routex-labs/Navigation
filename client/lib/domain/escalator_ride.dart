@@ -29,6 +29,13 @@ import 'package:latlong2/latlong.dart';
 /// 있다"를 읽기에 충분한 길이다.
 const escalatorGlideDuration = Duration(milliseconds: 2400);
 
+/// 활강 위치를 다시 계산하는 주기.
+///
+/// 지도 마커는 플랫폼 채널로 소스를 갈아 끼우므로 프레임마다 보낼 수 없다.
+/// 대신 덮개 카드의 점은 이 값을 **보간해서** 그린다 — 같은 주기로 툭툭
+/// 끊기면 층 전환 연출이 저사양 앱처럼 보인다.
+const escalatorGlideSampleInterval = Duration(milliseconds: 60);
+
 /// 탑승 → 도착을 잇는 활강 한 건.
 ///
 /// 시간을 밖에서 받는다(생성 시각·현재 시각). 티커를 들지 않으므로 위젯 없이

@@ -98,6 +98,14 @@ PdrLocalPoint? clampBoardingHold({
   return (holdPoint - currentM).distance <= radiusM ? holdPoint : currentM;
 }
 
+/// 이 층에서 걸을 거리가 이보다 짧으면 **내리자마자 바로 다음 에스컬레이터**로
+/// 본다.
+///
+/// 다층 경로에서 흔한 모양이다 — B2에서 내려 두어 걸음 옆의 상행을 바로 탄다.
+/// 그 구간에서는 걸어갈 거리가 없으므로 탑승 판정을 늦출 이유가 없고, 늦추면
+/// 환승마다 마커가 먼저 몇 걸음 흘러간다.
+const consecutiveTransferRouteM = 6.0;
+
 /// 교차점을 지나는 동안 이탈 증거를 새로 쌓지 않는 시간.
 ///
 /// 교차점에서는 어느 간선에 있는지가 잠깐 흔들린다. 이 보호가 없으면 통과하는
@@ -361,6 +369,7 @@ class IndoorGuidanceSession {
         expectedArrivalNodeId: segment.transferToNodeId,
         steps: steps,
         timestampMs: atMs,
+        immediateTransfer: route.distanceMeters <= consecutiveTransferRouteM,
       );
     }
   }
