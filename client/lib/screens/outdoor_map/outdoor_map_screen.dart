@@ -6810,8 +6810,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   static LatLng _toMapLatLng(ll.LatLng point) =>
       LatLng(point.latitude, point.longitude);
 
-  /// 디버그 PDR 진단 소스·레이어를 한 번 등록한다. 색·굵기·점선은 실내 지도
-  /// (floor_plan_view.dart)와 같은 값을 쓴다 — 근거는 소스 ID 정의 위 주석 참고.
   /// 실내 위치(PDR) 마커. 야외 상태에서는 [_indoorLocationVisible]이 false라
   /// 항상 빈 소스를 밀어 넣어 마커가 사라진다 — 야외에서는 GPS 마커
   /// ([_syncCurrentLayer])만 보이고, 실내에서는 이쪽만 보인다.
