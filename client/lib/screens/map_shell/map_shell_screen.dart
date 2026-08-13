@@ -1051,15 +1051,31 @@ class _MapShellScreenState extends State<MapShellScreen> {
         .firstOrNull;
     List<DirectionsCandidate> storeCandidates() =>
         results.map((s) => _storeCandidate(s, buildingName)).toList();
-    if (_indoorContextActive) return storeCandidates();
+
+    // 건물 안에서 **아무것도 안 친** 경우만 여기서 끝낸다. 그때 빈 검색어는
+    // "이 건물의 장소 전체 목록"이라는 뜻이고, 그 목록에 바깥 건물을 섞으면
+    // 훑어보려던 화면이 지저분해진다.
+    if (_indoorContextActive && normalized.isEmpty) return storeCandidates();
 
     // 밖에서는 **아무것도 안 쳤으면 아무것도 보여주지 않는다.**
     //
-    // 건물 안에서는 빈 검색어가 "이 건물의 장소 전체 목록"이라는 뜻이라 그대로
-    // 훑어볼 수 있다. 밖에서는 그 목록이 "여기서 갈 만한 곳"이 아니라 남의 건물
-    // 내부 목록이라, 길찾기를 열자마자 띄우면 치지도 않은 답이 정해져 있는
-    // 화면이 된다.
+    // 그 목록이 "여기서 갈 만한 곳"이 아니라 남의 건물 내부 목록이라, 길찾기를
+    // 열자마자 띄우면 치지도 않은 답이 정해져 있는 화면이 된다.
     if (normalized.isEmpty) return const [];
+
+    // **여기부터는 실내·야외를 가리지 않는다.**
+    //
+    // 예전에는 실내면 위에서 매장 목록만 돌려주고 끝냈다. 그래서 건물 안에 선
+    // 사용자에게는 바깥 건물도, 바깥 POI도 검색되지 않았다 — 실내에서 지하철역이나
+    // 길 건너 건물로 가는 길을 찾을 방법이 아예 없었다. 실내→야외 안내
+    // ([OutdoorMapBodyState.showIndoorToOutdoorRouteTo])를 만들어 두고도 정작
+    // 그 목적지를 고를 수단이 없던 셈이다.
+    //
+    // 섞어도 안전한 이유는 **순서**에 있다. 아래 반환문이 우리 매장 줄을 항상
+    // 맨 위에 두므로, 실내에 답이 있으면 사용자는 위부터 읽고 바깥 줄은 눈에
+    // 들어오지도 않는다. 실내가 빈손일 때만 바깥이 첫 줄이 되는데, 그건 정확히
+    // 바깥이 답인 경우다. 상단 검색 패널이 같은 이유로 이미 게이트를 걷어냈다
+    // ([_activateSearch]) — 두 검색이 같은 규칙을 쓰게 맞춘다.
 
     // 건물 자체도 후보로 남기되 매장보다 뒤에 놓는다 — 밖에서 길찾기를 여는
     // 이유는 대개 특정 매장이다.
@@ -1366,9 +1382,19 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 상태를 없앤다. 건물 안을 보고 있을 때만 부른다 — `/query/ai`는 건물 안의
     // 매장을 찾는 계약이라, 밖에서 건물을 고르는 자리에서 승격시키면 눌러도 갈 수
     // 없는 목록이 된다.
-    if (results.isEmpty && query.trim().isNotEmpty && _indoorContextActive) {
-      results = await _semanticDirectionsCandidates(query);
+    //
+    // "빈손"의 기준은 **실내 줄이 없는가**이지 결과가 통째로 비었는가가 아니다.
+    // 실내에서도 바깥 결과를 함께 돌려주게 된 뒤로([_searchDirectionsCandidates]),
+    // "밥 먹을 곳"은 바깥 식당 POI로 채워져 결과가 비지 않는다. 결과 개수로 재면
+    // 그 순간부터 실내 의미 검색이 영영 안 돌아, 건물 안에서 밥집을 찾는 사람에게
+    // 길 건너 식당만 뜬다.
+    final hasIndoorHit = results.any((c) => c.nodeId != null);
+    if (!hasIndoorHit && query.trim().isNotEmpty && _indoorContextActive) {
+      final semantic = await _semanticDirectionsCandidates(query);
       if (!mounted || seq != _routeSearchSeq) return;
+      // 바깥 결과를 **버리지 않고 뒤에 붙인다.** 의미 검색도 빈손일 수 있고,
+      // 그때 바깥 줄까지 날리면 사용자는 아무것도 못 본다.
+      results = [...semantic, ...results];
     }
     setState(() {
       _routeResults = results;
