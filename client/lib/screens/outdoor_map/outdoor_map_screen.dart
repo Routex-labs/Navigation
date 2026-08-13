@@ -1618,8 +1618,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (!mounted) return;
     if (floor == null) return;
     if (_activeFloor != floor) {
-      // 사용자가 "아니에요"로 되돌린 직후다. [_endEscalatorRide]가 불투명
-      // 스크림을 이미 걷었으므로, 여기 층 복귀는 베일이 덮는다.
+      // 잘못 열린 목적 층을 원래 층으로 되돌린다. 사람 조작과 같은
+      // 크로스페이드를 쓴다 — 되돌리기는 사용자가 인지해야 하는 전환이 아니라
+      // 없던 일로 만드는 것이라, 안내 전환처럼 늦출 이유가 없다.
       await _switchOverlayFloorCrossfaded(floor);
       if (!mounted) return;
     }
