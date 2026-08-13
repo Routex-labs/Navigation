@@ -9,7 +9,7 @@ void main() {
   group('탑승 활강', () {
     const from = LatLng(37.5, 127.0);
     const to = LatLng(37.5, _tenMetersEastLng);
-    const glide = EscalatorGlide(from: from, to: to);
+    final glide = EscalatorGlide(points: const [from, to]);
 
     test('진행률 0이면 탑승 노드에 있다', () {
       expect(glide.pointAtProgress(0).longitude, from.longitude);
@@ -25,6 +25,26 @@ void main() {
       // 하차 확정 뒤 마커가 도착 노드를 지나쳐 매장 안으로 들어가면 안 된다.
       expect(glide.pointAtProgress(1.4).longitude, closeTo(to.longitude, 1e-12));
       expect(glide.pointAtProgress(-0.2).longitude, from.longitude);
+    });
+
+    test('경유점이 있으면 폴리라인을 따라 흐른다', () {
+      // ㄱ자 경로: 동쪽 10m, 북쪽 10m. 크로스형 뱅크에서 마커가 구조물을
+      // 대각선으로 가로지르지 않게 하는 근거다.
+      const corner = LatLng(37.5, _tenMetersEastLng);
+      const end = LatLng(37.5 + 10 / 111320.0, _tenMetersEastLng);
+      final bent = EscalatorGlide(points: const [from, corner, end]);
+
+      // 전체 20m 중 5m 지점 — 첫 구간 위, 동쪽으로 절반.
+      final quarter = bent.pointAtProgress(0.25);
+      expect(quarter.latitude, closeTo(from.latitude, 1e-9));
+      expect(quarter.longitude, greaterThan(from.longitude));
+      expect(quarter.longitude, lessThan(corner.longitude));
+
+      // 15m 지점 — 둘째 구간 위, 북쪽으로 절반.
+      final threeQuarter = bent.pointAtProgress(0.75);
+      expect(threeQuarter.longitude, closeTo(corner.longitude, 1e-9));
+      expect(threeQuarter.latitude, greaterThan(corner.latitude));
+      expect(threeQuarter.latitude, lessThan(end.latitude));
     });
   });
 

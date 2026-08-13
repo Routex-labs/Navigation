@@ -1481,6 +1481,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       from: boardingWgs84,
       to: arrivalWgs84,
       transition: transition,
+      // 새 층 도면에서 하차 노드에 가장 가까운 에스컬레이터 폴리곤의 긴 축.
+      // 이게 없으면 활강이 두 노드를 직선으로 이어, 크로스형 뱅크에서 마커가
+      // 구조물을 대각선으로 가로지른다.
+      axis: arrival == null
+          ? null
+          : escalatorAxisNearLocal(arrival.xM, arrival.yM, _floorPlan),
     );
     // 카메라는 **기다리지 않는다.** 이 함수는 층 전환 큐 위에서 도는데, 여기서
     // 활강 시간만큼 붙잡으면 그 뒤 하차 확정이 그만큼 밀린다.
@@ -1518,6 +1524,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     required ll.LatLng? from,
     required ll.LatLng? to,
     required EscalatorTransition transition,
+    (ll.LatLng, ll.LatLng)? axis,
   }) {
     _escalatorGlideTimer?.cancel();
     _escalatorGlideTimer = null;
@@ -1525,7 +1532,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _escalatorGlide = null;
       return;
     }
-    _escalatorGlide = EscalatorGlide(from: from, to: to);
+    _escalatorGlide = EscalatorGlide(
+      points: _glidePathPoints(from: from, to: to, axis: axis),
+    );
     // 진행률 정규화의 양 끝: 지금(도면 교체 순간)의 Δ가 0, 예상 층고가 1이다.
     // 층고는 같은 그룹의 직전 확정 Δ가 있으면 실측을 쓴다.
     final sign = transition.direction == EscalatorDirection.up ? 1.0 : -1.0;
@@ -1555,6 +1564,26 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       // 절차가 끝날 때까지 살려 둬야 마커가 그 자리를 지킨다.
       if (target >= 1 && next >= 1) timer.cancel();
     });
+  }
+
+  /// 활강 폴리라인. 에스컬레이터 축이 있으면 하차 노드에 가까운 끝이 마지막에
+  /// 오도록 방향을 맞춰 끼운다. 양 끝(탑승·하차 노드)과 1m 안으로 겹치는
+  /// 경유점은 버린다 — 겹친 점을 남기면 그 구간 진행률이 0으로 나뉜다.
+  List<ll.LatLng> _glidePathPoints({
+    required ll.LatLng from,
+    required ll.LatLng to,
+    required (ll.LatLng, ll.LatLng)? axis,
+  }) {
+    if (axis == null) return [from, to];
+    const distance = ll.Distance();
+    final (a, b) = axis;
+    final ordered = distance(b, to) <= distance(a, to) ? [a, b] : [b, a];
+    final via = ordered
+        .where(
+          (point) => distance(from, point) >= 1.0 && distance(point, to) >= 1.0,
+        )
+        .toList();
+    return [from, ...via, to];
   }
 
   void _stopEscalatorGlide() {
@@ -1944,7 +1973,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (notify == null) return;
     // build 중에는 부모 setState를 호출할 수 없다.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) notify(banner, scrim, _escalatorGlideProgress);
+      if (mounted) notify(banner, scrim);
     });
   }
 

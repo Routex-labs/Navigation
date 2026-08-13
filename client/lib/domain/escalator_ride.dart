@@ -26,9 +26,8 @@ const escalatorGlideDuration = Duration(milliseconds: 2400);
 
 /// 표시 진행률을 목표 쪽으로 끌어당기는 틱 주기.
 ///
-/// 기압 샘플은 기기에 따라 0.18~1.07초 간격이라 그대로 그리면 점이 툭툭
-/// 끊긴다. 이 주기로 [escalatorRideProgressEase]만큼씩 따라가고, 덮개 카드의
-/// 점도 같은 주기를 보간해 그린다.
+/// 기압 샘플은 기기에 따라 0.18~1.07초 간격이라 그대로 그리면 마커가 툭툭
+/// 끊긴다. 이 주기로 [escalatorRideProgressEase]만큼씩 따라간다.
 const escalatorGlideSampleInterval = Duration(milliseconds: 60);
 
 /// 같은 에스컬레이터의 실측 층고를 아직 모를 때 쓰는 기본값(m).
@@ -77,29 +76,69 @@ double escalatorRideProgressTarget({
 /// 진행률을 밖에서 받는다(기압이 정한다). 티커를 들지 않으므로 위젯 없이
 /// 검증할 수 있고, 화면은 표시 진행률이 바뀔 때마다 [pointAtProgress]를 물어
 /// 지도 소스만 갱신한다.
+///
+/// 경로는 두 점 직선이 아니라 **폴리라인**이다. 크로스형 뱅크에서는 탑승·하차
+/// 노드를 직선으로 이으면 마커가 에스컬레이터 구조물을 대각선으로 가로지른다
+/// (2026-08-13 실측 지적). 호출부가 에스컬레이터 폴리곤의 긴 축을 경유점으로
+/// 끼워 넣으면 마커가 초록 구조물 위를 따라 흐른다.
 class EscalatorGlide {
-  const EscalatorGlide({required this.from, required this.to});
+  EscalatorGlide({required this.points})
+    : assert(points.length >= 2, '양 끝 없이 활강을 그릴 수 없다'),
+      _cumulativeM = _cumulativeDistances(points);
 
-  /// 출발 층의 탑승 노드(WGS84).
-  final LatLng from;
-
-  /// 도착 층의 하차 노드(WGS84).
+  /// 탑승 노드 → (경유점들) → 하차 노드(WGS84).
   ///
-  /// **두 점 모두 절대 좌표다.** 층 로컬 m로 들고 있으면 도면이 갈아 끼워지는
+  /// **전부 절대 좌표다.** 층 로컬 m로 들고 있으면 도면이 갈아 끼워지는
   /// 순간 같은 숫자가 다른 자리를 가리켜 마커가 튄다.
-  final LatLng to;
+  final List<LatLng> points;
 
-  /// [progress](0=탑승, 1=하차)에서 마커를 그릴 자리.
+  final List<double> _cumulativeM;
+
+  LatLng get from => points.first;
+  LatLng get to => points.last;
+
+  /// [progress](0=탑승, 1=하차)에서 마커를 그릴 자리. 폴리라인 전체 길이에
+  /// 대한 비율로 자리를 잡는다.
   ///
   /// 등속(선형)이다 — 진행률 자체가 실제 오르내린 높이에서 나오므로, 여기에
   /// 완화 곡선을 또 얹으면 화면 위치가 물리 위치에서 벗어난다. 표시가 끊기지
   /// 않게 하는 평활은 진행률 쪽([escalatorRideProgressEase])이 맡는다.
   LatLng pointAtProgress(double progress) {
-    final t = progress.clamp(0.0, 1.0);
+    final totalM = _cumulativeM.last;
+    if (totalM <= 0) return to;
+    final targetM = progress.clamp(0.0, 1.0) * totalM;
+    var index = 1;
+    while (index < points.length - 1 && _cumulativeM[index] < targetM) {
+      index++;
+    }
+    final segmentStartM = _cumulativeM[index - 1];
+    final segmentM = _cumulativeM[index] - segmentStartM;
+    final t = segmentM <= 0 ? 1.0 : (targetM - segmentStartM) / segmentM;
+    final a = points[index - 1];
+    final b = points[index];
     return LatLng(
-      from.latitude + (to.latitude - from.latitude) * t,
-      from.longitude + (to.longitude - from.longitude) * t,
+      a.latitude + (b.latitude - a.latitude) * t,
+      a.longitude + (b.longitude - a.longitude) * t,
     );
+  }
+
+  /// 각 점까지의 누적 거리(m, 등장방형 근사). 진행률을 길이 비율로 옮길 때
+  /// 쓰므로 절대 정확도는 필요 없다 — 구간끼리의 비만 맞으면 된다.
+  static List<double> _cumulativeDistances(List<LatLng> points) {
+    const metersPerDegreeLat = 111320.0;
+    final result = List<double>.filled(points.length, 0);
+    for (var i = 1; i < points.length; i++) {
+      final a = points[i - 1];
+      final b = points[i];
+      final meanLatRad = (a.latitude + b.latitude) * math.pi / 360;
+      final eastM =
+          (b.longitude - a.longitude) *
+          math.cos(meanLatRad) *
+          metersPerDegreeLat;
+      final northM = (b.latitude - a.latitude) * metersPerDegreeLat;
+      result[i] = result[i - 1] + math.sqrt(eastM * eastM + northM * northM);
+    }
+    return result;
   }
 }
 
