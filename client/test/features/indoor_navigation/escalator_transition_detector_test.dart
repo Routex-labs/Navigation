@@ -560,12 +560,52 @@ void main() {
     });
   });
 
-  group('노드 허가 없는 조기 정지', () {
+  group('2차 감지 — 탑승점 근접으로 올라가는 갈래', () {
+    // 허가 반경(6m, 경로가 지목하면 16m)은 "층을 바꿔도 되는가"의 허가일 뿐이다.
+    // 그 거리에서 마커를 세우면 사용자는 아직 통로 한복판을 걷고 있는데 점만
+    // 저 앞 에스컬레이터에 붙어 멈춘 화면을 본다.
+
+    test('허가만 걸리고 아직 멀면 사용자에게 알리지 않는다', () {
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      // 허가 반경(6m) 안이지만 탑승 반경(3m) 밖이다.
+      fixture.standNearBoarding(x: 5, y: 0);
+      // 아직 누적 고도 갈래(1.8m)에도 못 미친다.
+      fixture.ramp(fromM: 0, toM: 1.0, seconds: 4, rawPeaksPerSample: 2);
+
+      expect(
+        fixture.phasesOf(),
+        isNot(contains(EscalatorPhase.verticalMotionDetected)),
+      );
+    });
+
+    test('탑승점까지 붙으면 그때 알린다', () {
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standNearBoarding(x: 5, y: 0);
+      fixture.ramp(fromM: 0, toM: 0.5, seconds: 2, rawPeaksPerSample: 2);
+      expect(
+        fixture.phasesOf(),
+        isNot(contains(EscalatorPhase.verticalMotionDetected)),
+      );
+
+      fixture.standNearBoarding();
+      fixture.ramp(fromM: 0.5, toM: 1.2, seconds: 3, rawPeaksPerSample: 2);
+
+      final change = fixture.phases.firstWhere(
+        (c) => c.phase == EscalatorPhase.verticalMotionDetected,
+      );
+      expect(change.reason, 'rising');
+      expect(change.boardingNodeId, 'n-up-to3f');
+    });
+  });
+
+  group('2차 감지 — 누적 고도로 올라가는 갈래', () {
     // 실측에서 랜딩 보정 위치가 12m까지 어긋나 허가가 안 걸리는 일이 흔했다.
     // 그 구간에서도 걸음은 멈춰야 한다 — 몸이 수직으로 실려 가는 중이라는
     // 근거는 기압이 이미 주고 있다. 대신 층은 바꾸지 않는다.
 
-    test('허가가 없어도 수직 이동이 이어지면 걸음을 멈춘다', () {
+    test('허가가 없어도 누적 고도가 문턱을 넘으면 걸음을 멈춘다', () {
       final fixture = _Fixture();
       fixture.hold(atM: 0, seconds: 5);
       // 위치를 한 번도 탑승 노드 근처로 주지 않는다(허가 없음).
@@ -575,20 +615,20 @@ void main() {
       final change = fixture.phases.firstWhere(
         (c) => c.phase == EscalatorPhase.verticalMotionDetected,
       );
-      expect(change.reason, 'fallingUnarmed');
+      expect(change.reason, 'fallingByAltitude');
       expect(change.toFloorLabel, '1F', reason: '2F에서 내려가면 한 칸 아래는 1F다');
       expect(change.boardingNodeId, isNull);
       expect(fixture.started, isEmpty, reason: '층은 노드 허가 없이 바꾸지 않는다');
       expect(fixture.confirmed, isEmpty);
     });
 
-    test('일상적으로 생기는 고도 변동으로는 멈추지 않는다', () {
-      // 문이 여닫히거나 HVAC이 도는 정도(±0.3m)는 평활 뒤에도 남지만, 그걸로
-      // 화면을 덮으면 가만히 서 있는 사용자의 지도가 수시로 가려진다.
+    test('문턱에 못 미치는 고도 변화로는 멈추지 않는다', () {
+      // 1차 감지(수직 속도)는 서지만 화면에는 알리지 않는다. 근거가 옅은
+      // 시점에 마커를 세우면 아직 통로를 걷는 사용자의 점이 먼저 멈춰 버린다.
       final fixture = _Fixture();
       fixture.hold(atM: 0, seconds: 5);
       fixture.standFarAway();
-      fixture.ramp(fromM: 0, toM: -0.5, seconds: 2, rawPeaksPerSample: 2);
+      fixture.ramp(fromM: 0, toM: -1.2, seconds: 4, rawPeaksPerSample: 2);
 
       expect(
         fixture.phasesOf(),

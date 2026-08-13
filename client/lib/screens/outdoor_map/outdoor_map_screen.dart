@@ -962,11 +962,18 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   /// 화면을 덮는 정도. 0이 아니면 셸이 스크림을 그린다.
   ///
-  /// **걸음을 멈추는 순간 함께 올린다.** 위치가 갱신되지 않는 구간을 지도로
-  /// 열어 두면 마커가 굳은 채 서 있고, 그게 "위치가 고장 났다"로 읽힌다. 덮개
-  /// 뒤에서 도면 크로스페이드와 마커 활강이 그대로 돌아, 걷힐 때는 새 층과
-  /// 하차 지점이 이미 자리를 잡고 있다.
+  /// **도면이 갈리는 앞뒤만 덮는다.** 걸음이 멈추는 순간부터 하차까지 덮어 본
+  /// 적이 있는데, 그 구간은 길게는 수십 초라 화면이 계속 막힌 것으로 읽혔다.
+  /// 무엇보다 사용자는 **내리기 전에** 새 층 도면과 다음 경로를 봐 둬야 한다 —
+  /// 내려서야 처음 보면 그 자리에서 한 번 멈춰 서게 된다.
+  ///
+  /// 대신 예전(총 1.6초)보다는 길게 잡는다([_indoorFloorSwapVeilHold]). 덮개
+  /// 뒤에서 크로스페이드와 마커 활강이 도는데, 그보다 먼저 걷히면 교체 장면이
+  /// 그대로 보인다.
   double _floorSwapVeil = 0;
+
+  /// 덮개를 내리기로 예약해 둔 타이머. 탑승이 먼저 끝나면 취소한다.
+  Timer? _floorSwapVeilTimer;
 
   /// 탑승 중 마커가 흐르는 구간(탑승 노드 → 하차 노드, WGS84).
   ///
@@ -1014,6 +1021,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 마지막 전환의 마무리가 한꺼번에 정리한다.
   final List<({List<String> layerIds, String sourceId})> _retiringIndoorBlocks =
       [];
+
+  /// 도면을 갈아 끼운 뒤 덮개를 그대로 두는 시간.
+  ///
+  /// 페이드(진입 520ms · 해제 700ms)까지 더하면 화면이 가려지는 시간은 약 3.2초다.
+  /// 예전 400ms(총 1.6초)에서 늘렸다 — 그때는 덮개가 크로스페이드·마커 활강보다
+  /// 먼저 걷혀서 교체 과정이 그대로 보였다. 반대로 하차까지 덮으면 새 층 도면과
+  /// 다음 경로를 미리 볼 시간이 없어진다.
+  static const _indoorFloorSwapVeilHold = Duration(seconds: 2);
 
   /// 층 이동 확정 뒤 도착 배너를 띄워 두는 시간.
   static const _indoorArrivalBannerHold = Duration(seconds: 6);
@@ -1273,9 +1288,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Future<void> _pauseStepsForRide() async {
     if (_stepsPausedForRide) return;
     _stepsPausedForRide = true;
-    // 걸음이 멈추는 것과 화면이 덮이는 것은 **같은 사건**이다. 둘을 떼어 놓으면
-    // 그 사이에 굳은 마커가 그대로 보인다.
-    if (mounted) setState(() => _floorSwapVeil = 1);
     await indoorNavigationDriver.pauseStepTracking();
     if (mounted) return;
     // pause Future가 끝나기 직전에 화면이 닫히면 dispose는 pause된 사실을 볼 수
@@ -1300,6 +1312,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await indoorNavigationDriver.resumeStepTracking();
     if (!mounted) return;
     _stopEscalatorGlide();
+    _floorSwapVeilTimer?.cancel();
+    _floorSwapVeilTimer = null;
     setState(() {
       _escalatorRide = null;
       _escalatorStage = null;
@@ -1308,19 +1322,18 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _guidance.clearBoardingHold();
   }
 
-  /// 탑승 중에 목적 층 도면으로 갈아탄다. **화면을 덮지 않는다.**
+  /// 탑승 중에 목적 층 도면으로 갈아탄다.
   ///
-  /// 예전에는 불투명 스크림으로 화면 전체를 덮었다가 걷었다. 실기기에서 그것은
-  /// 전환이 아니라 **깜빡임**으로 보였다 — 지도가 한 번 하얗게 날아가고, 그
-  /// 사이 마커가 사라졌다가 다른 자리에 다시 나타난다. 층이 바뀐 사실은 전달
-  /// 되지만 "내가 계속 이동하고 있다"는 연속성이 끊긴다.
+  /// 교체 구간만 덮개로 가린다([_floorSwapVeil]). 덮지 않고 크로스페이드만으로
+  /// 넘겨 본 적이 있는데, 층이 바뀌는 사건 자체가 화면에 드러나지 않아 사용자가
+  /// 다른 층 도면을 읽고 있는 줄 모른다. 반대로 하차까지 덮으면 내리기 전에
+  /// 새 층과 다음 경로를 볼 시간이 없다. 그래서 **교체 앞뒤 약 3초**만이다.
   ///
-  /// 지금은 사람이 층 chip을 눌렀을 때와 같은 크로스페이드를 쓴다
+  /// 덮개 뒤에서는 사람이 층 chip을 눌렀을 때와 같은 크로스페이드가 돈다
   /// ([_switchOverlayFloorCrossfaded]) — 이전 층 도면이 새 층 타일이 실제로
-  /// 도착할 때까지 남아 있고, 그 위로 새 도면이 페이드인된다. 흰 화면은 어느
-  /// 순간에도 없다. 대신 안내 중에는 페이드를 **두 배 느리게** 준다
-  /// ([floorSwitchGuidedCrossfadeDuration]) — 층 훑기와 달리 이건 사용자가
-  /// 알아채야 하는 사건이고, 그동안 마커가 에스컬레이터를 타고 흐른다.
+  /// 도착할 때까지 남아 있어, 덮개가 걷히는 순간 흰 화면이나 반쯤 그려진 도면이
+  /// 보이지 않는다. 안내 중에는 페이드를 두 배 느리게 준다
+  /// ([floorSwitchGuidedCrossfadeDuration]).
   ///
   /// 마커 활강과 카메라 정렬도 여기서 건다. 셋(도면 교체·마커·카메라)이 같은
   /// 시간 축 위에서 시작해야 하나의 전환으로 읽힌다.
@@ -1332,6 +1345,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final boardingWgs84 =
         _nodeWgs84(_floorGraph, transition.boardingNodeId) ??
         _pdrCurrentWgs84();
+    // 덮개가 다 올라온 **뒤에** 교체한다. 셸의 페이드와 여기 대기가 어긋나면
+    // 아직 덜 덮인 화면에서 도면이 바뀌는 장면이 그대로 보인다.
+    setState(() => _floorSwapVeil = 1);
+    await Future<void>.delayed(floorTransitionScrimFadeIn);
+    if (!mounted) return false;
     await _switchOverlayFloorCrossfaded(
       floor,
       recenterIfNeeded: false,
@@ -1346,6 +1364,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 카메라는 **기다리지 않는다.** 이 함수는 층 전환 큐 위에서 도는데, 여기서
     // 활강 시간만큼 붙잡으면 그 뒤 하차 확정이 그만큼 밀린다.
     unawaited(_aimCameraAtEscalatorExit(from: boardingWgs84, to: arrivalWgs84));
+    // 덮개도 같은 이유로 예약해서 내린다. 걷히면 사용자는 새 층 도면과 다음
+    // 경로를 보며 남은 구간을 탄다.
+    _floorSwapVeilTimer?.cancel();
+    _floorSwapVeilTimer = Timer(_indoorFloorSwapVeilHold, () {
+      _floorSwapVeilTimer = null;
+      if (!mounted) return;
+      setState(() => _floorSwapVeil = 0);
+    });
     return true;
   }
 
@@ -1861,6 +1887,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _escalatorArrivalTimer?.cancel();
     _escalatorGlideTimer?.cancel();
     _arrivalRouteClearTimer?.cancel();
+    _floorSwapVeilTimer?.cancel();
     _floorSwitchProgress.dispose();
     // 탑승 중 화면이 닫히면 걸음이 멈춘 채로 전역 PDR 세션이 남는다. 다음
     // 화면에서 아무리 걸어도 위치가 갱신되지 않는다.
