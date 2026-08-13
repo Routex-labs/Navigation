@@ -1,52 +1,84 @@
-/// 에스컬레이터를 타고 있는 동안 화면이 쓰는 두 가지 계산.
+/// 에스컬레이터를 타고 있는 동안 화면이 쓰는 계산들.
 ///
 /// 탑승부터 하차까지 우리는 **사용자의 수평 위치를 측정하지 못한다.** 걸음은
 /// 멈춰 있고(발판 진동이 걸음으로 세어지므로 일부러 멈춘다), 층 도면은 중간에
-/// 목적 층으로 갈아 끼워져 이전 층 좌표계가 무의미해진다. 예전에는 그 구간을
-/// 불투명 스크림으로 덮어 버렸는데, 사용자 입장에서는 화면이 한 번 번쩍하고
-/// 마커가 사라졌다가 다른 자리에 다시 나타나는 것으로 보였다.
+/// 목적 층으로 갈아 끼워져 이전 층 좌표계가 무의미해진다.
 ///
-/// 측정할 수 없다고 해서 아는 것이 없는 것은 아니다. **양 끝은 안다** — 어느
-/// 노드에서 탔고(판정기), 어느 노드로 내리는지(경로·이름 규칙). 그래서 그 두
-/// 점 사이를 시간으로 이어 마커를 흘려 보낸다. 이것은 측정값이 아니라 두 확정
-/// 지점 사이의 **보간**이며, 하차가 확정되는 순간 실제 앵커가 도착 노드에
-/// 잡히므로 연출이 끝나는 자리와 실제 위치가 어긋나지 않는다.
+/// 측정할 수 없다고 해서 아는 것이 없는 것은 아니다. **양 끝과 높이를 안다** —
+/// 어느 노드에서 탔고(판정기), 어느 노드로 내리는지(경로·이름 규칙), 그리고
+/// 지금까지 몇 미터를 오르내렸는지(기압 Δ). 그래서 마커는 두 점 사이를
+/// **기압 진행률**로 흐른다([escalatorRideProgressTarget]). 예전에는 고정
+/// 2.4초로 흘렸는데, 실제 탑승(20~35초)이 끝나기 한참 전에 연출이 끝나 "점이
+/// 끝까지 안 내려온다"로 보였고, 걷는 사람에게는 반대로 너무 느렸다. 기압으로
+/// 흘리면 서 있든 걷든 **몸이 시간을 정한다** — 점이 끝에 닿는 순간이 곧 하차
+/// 확정 순간이다.
 library;
 
 import 'dart:math' as math;
 
 import 'package:latlong2/latlong.dart';
 
-/// 탑승 노드에서 도착 노드까지 마커가 흐르는 데 걸리는 시간.
+/// 하차 지점 카메라 정렬 시간이자, 양 끝을 몰라 활강을 못 걸었을 때 스크림
+/// 카드가 자체 재생하는 길이.
 ///
-/// 실제 탑승 시간(층고·속도에 따라 10~25초)과 맞추지 않는다. 이 활강은 "지금
-/// 층을 옮기는 중"이라는 사실을 보여 주는 연출이고, 사용자는 그동안 화면이 아니라
-/// 자기 발밑을 보고 있다. 도착 노드에 먼저 도달해 멈춰 있는 편이, 하차 확정이
-/// 났는데 마커가 아직 중간에 있는 것보다 낫다 — 후자는 확정 순간 마커가 한 번
-/// 순간이동한다.
-///
-/// 2.4초는 층 도면 크로스페이드(0.6초)를 넉넉히 덮으면서, 사람이 "움직이고
-/// 있다"를 읽기에 충분한 길이다.
+/// 마커 활강 자체는 이 시간을 쓰지 않는다 — 진행률이 기압에서 나온다.
 const escalatorGlideDuration = Duration(milliseconds: 2400);
 
-/// 활강 위치를 다시 계산하는 주기.
+/// 표시 진행률을 목표 쪽으로 끌어당기는 틱 주기.
 ///
-/// 지도 마커는 플랫폼 채널로 소스를 갈아 끼우므로 프레임마다 보낼 수 없다.
-/// 대신 덮개 카드의 점은 이 값을 **보간해서** 그린다 — 같은 주기로 툭툭
-/// 끊기면 층 전환 연출이 저사양 앱처럼 보인다.
+/// 기압 샘플은 기기에 따라 0.18~1.07초 간격이라 그대로 그리면 점이 툭툭
+/// 끊긴다. 이 주기로 [escalatorRideProgressEase]만큼씩 따라가고, 덮개 카드의
+/// 점도 같은 주기를 보간해 그린다.
 const escalatorGlideSampleInterval = Duration(milliseconds: 60);
+
+/// 같은 에스컬레이터의 실측 층고를 아직 모를 때 쓰는 기본값(m).
+///
+/// 더현대 실측 한 층 4.4~6.2m의 가운데이며, 2026-08-13 B1↔B2 실측
+/// (0.7 hPa ≈ 5.8m)과 같다. 한 번 확정하고 나면 그 에스컬레이터 그룹의 실측
+/// Δ를 대신 쓴다.
+const escalatorDefaultFloorHeightM = 5.8;
+
+/// 하차 확정 전 진행률 상한.
+///
+/// 층고 추정이 실제보다 작으면 진행률이 하차 전에 1에 닿는다. 1은 "도착"을
+/// 말하는 값이라 추정으로는 채우지 않는다 — 확정(landed)만이 1을 채운다.
+const escalatorRideProgressCap = 0.95;
+
+/// 표시 진행률이 목표를 따라가는 지수 평활 계수(틱당).
+///
+/// 60ms 틱 기준 시정수 약 0.5초 — 기압 샘플이 1초 간격(iOS)이어도 점이
+/// 끊기지 않고, 하차 확정(목표 1.0)에는 반 초 안에 붙는다.
+const escalatorRideProgressEase = 0.12;
+
+/// 기압 누적 변화로 계산한 탑승 진행률 목표.
+///
+/// [deltaTowardsM]는 이동 방향으로 잰 누적 변화(상행이면 +Δ, 하행이면 -Δ의
+/// 절댓값 방향 정렬), [swapDeltaM]는 도면을 교체한 순간의 그 값이다. 활강은
+/// 교체 순간 시작하므로 그 지점을 0으로, 남은 높이([expectedTotalM] -
+/// [swapDeltaM])를 1로 정규화한다.
+///
+/// [escalatorRideProgressCap]에서 멈춘다 — 이 값은 추정이고, 끝맺음은 하차
+/// 확정 이벤트가 한다. 남은 높이가 1m 미만으로 추정되면 1m로 잡는다(층고
+/// 추정 오류로 진행률이 즉시 상한에 붙는 것 방지).
+double escalatorRideProgressTarget({
+  required double deltaTowardsM,
+  required double swapDeltaM,
+  required double expectedTotalM,
+}) {
+  final remainingM = math.max(expectedTotalM - swapDeltaM, 1.0);
+  return ((deltaTowardsM - swapDeltaM) / remainingM).clamp(
+    0.0,
+    escalatorRideProgressCap,
+  );
+}
 
 /// 탑승 → 도착을 잇는 활강 한 건.
 ///
-/// 시간을 밖에서 받는다(생성 시각·현재 시각). 티커를 들지 않으므로 위젯 없이
-/// 검증할 수 있고, 화면은 프레임마다 [pointAt]을 물어 지도 소스만 갱신한다.
+/// 진행률을 밖에서 받는다(기압이 정한다). 티커를 들지 않으므로 위젯 없이
+/// 검증할 수 있고, 화면은 표시 진행률이 바뀔 때마다 [pointAtProgress]를 물어
+/// 지도 소스만 갱신한다.
 class EscalatorGlide {
-  const EscalatorGlide({
-    required this.from,
-    required this.to,
-    required this.startedAtMs,
-    this.duration = escalatorGlideDuration,
-  });
+  const EscalatorGlide({required this.from, required this.to});
 
   /// 출발 층의 탑승 노드(WGS84).
   final LatLng from;
@@ -57,33 +89,18 @@ class EscalatorGlide {
   /// 순간 같은 숫자가 다른 자리를 가리켜 마커가 튄다.
   final LatLng to;
 
-  final int startedAtMs;
-  final Duration duration;
-
-  /// 0(탑승) ~ 1(하차). 시작 전이면 0, 끝난 뒤에는 1로 머문다.
-  double progressAt(int nowMs) {
-    final total = duration.inMilliseconds;
-    if (total <= 0) return 1;
-    return ((nowMs - startedAtMs) / total).clamp(0.0, 1.0);
-  }
-
-  bool isDoneAt(int nowMs) => progressAt(nowMs) >= 1;
-
-  /// 지금 마커를 그릴 자리.
+  /// [progress](0=탑승, 1=하차)에서 마커를 그릴 자리.
   ///
-  /// 양 끝에서 부드럽게 붙도록 ease-in-out을 쓴다. 등속으로 흘리면 출발과
-  /// 도착에서 각각 한 번씩 "탁" 걸리는 느낌이 난다 — 앞뒤 구간(고정된 탑승점,
-  /// 고정된 하차점) 모두 속도가 0인 정지 상태이기 때문이다.
-  LatLng pointAt(int nowMs) {
-    final t = _easeInOut(progressAt(nowMs));
+  /// 등속(선형)이다 — 진행률 자체가 실제 오르내린 높이에서 나오므로, 여기에
+  /// 완화 곡선을 또 얹으면 화면 위치가 물리 위치에서 벗어난다. 표시가 끊기지
+  /// 않게 하는 평활은 진행률 쪽([escalatorRideProgressEase])이 맡는다.
+  LatLng pointAtProgress(double progress) {
+    final t = progress.clamp(0.0, 1.0);
     return LatLng(
       from.latitude + (to.latitude - from.latitude) * t,
       from.longitude + (to.longitude - from.longitude) * t,
     );
   }
-
-  static double _easeInOut(double t) =>
-      t < 0.5 ? 2 * t * t : 1 - math.pow(-2 * t + 2, 2) / 2;
 }
 
 /// 하차 지점에서 두 점이 이만큼은 떨어져 있어야 방향을 말한다.
