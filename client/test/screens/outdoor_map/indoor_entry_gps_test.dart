@@ -53,6 +53,18 @@ void main() {
       expect(judgement.hasFootprint, isFalse);
     });
 
+    test('외곽선이 폴리곤이 아니면 판정하지 않는다', () {
+      // 점이 둘뿐이면 "안"이라는 개념 자체가 없다. 빈 목록만 막으면 이 경우가
+      // 면적 0인 폴리곤으로 계산돼 건물 한가운데가 "바깥"으로 읽힌다.
+      final judgement = _judge(
+        point: _center,
+        accuracy: 5,
+        footprint: [_offset(north: -_halfWidthMeters), _offset(north: _halfWidthMeters)],
+      );
+      expect(judgement.verdict, GpsBuildingVerdict.unclear);
+      expect(judgement.hasFootprint, isFalse);
+    });
+
     test('오차가 크면 좌표가 건물 한가운데여도 판정하지 않는다', () {
       final judgement = _judge(point: _center, accuracy: 34);
       expect(judgement.verdict, GpsBuildingVerdict.unclear);
@@ -88,6 +100,32 @@ void main() {
         accuracy: 5,
       );
       expect(judgement.verdict, GpsBuildingVerdict.outside);
+    });
+  });
+
+  group('judgeBuildingFromGps — 히스테리시스', () {
+    test('안팎 임계값 사이에 완충 구간이 있다', () {
+      // 이 구간이 없으면 벽에 붙어 선 사람의 좌표가 흔들릴 때마다 진입과 이탈이
+      // 번갈아 성립해 화면이 실내와 야외를 오간다.
+      expect(outdoorExitMarginMeters, greaterThan(indoorEnterInsetMeters));
+      for (var m = -outdoorExitMarginMeters + 1; m < indoorEnterInsetMeters; m += 1) {
+        // m > 0이면 벽 안쪽, m < 0이면 바깥쪽이다.
+        final judgement = _judge(
+          point: _offset(north: _halfWidthMeters - m),
+          accuracy: 5,
+        );
+        expect(
+          judgement.verdict,
+          GpsBuildingVerdict.unclear,
+          reason: '벽에서 ${m}m 지점은 완충 구간이어야 한다',
+        );
+      }
+    });
+
+    test('나가는 쪽이 더 엄격하다', () {
+      // 잘못 들어가는 비용(밖인데 도면이 뜸)보다 잘못 나오는 비용(안인데 PDR
+      // 추적이 끊김)이 크다.
+      expect(outdoorExitMarginMeters, greaterThanOrEqualTo(20));
     });
   });
 
