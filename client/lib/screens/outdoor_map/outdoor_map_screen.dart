@@ -14,6 +14,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../core/api_config.dart';
 import '../../core/floor_switch_progress.dart';
+import '../../core/map_geojson.dart';
 import '../../core/map_palette.dart';
 import '../../core/map_picked_point.dart';
 import '../../core/service_locator.dart';
@@ -612,37 +613,6 @@ Map<String, dynamic> _pointFeature(ll.LatLng point) {
   };
 }
 
-/// 경로선 feature 하나. [style]이 어느 레이어가 이 선을 그릴지 가른다 —
-/// `drive`(실선·파랑), `walk`(점선·회색), `indoor`(실선·야외 본선과 같은 파랑).
-Map<String, dynamic> _lineFeature(
-  List<ll.LatLng> points, {
-  String style = 'walk',
-  int? generation,
-}) {
-  final properties = <String, dynamic>{'style': style};
-  if (generation != null) properties['routeGeneration'] = generation;
-  return {
-    'type': 'Feature',
-    'properties': properties,
-    'geometry': {
-      'type': 'LineString',
-      'coordinates': [
-        for (final p in points) [p.longitude, p.latitude],
-      ],
-    },
-  };
-}
-
-Map<String, dynamic> _emptyCollection() => {
-  'type': 'FeatureCollection',
-  'features': const <Map<String, dynamic>>[],
-};
-
-Map<String, dynamic> _collection(List<Map<String, dynamic>> features) => {
-  'type': 'FeatureCollection',
-  'features': features,
-};
-
 /// 야외 지도 본문(지도 + 위치/경로 오버레이). 검색창·길찾기·건물 전환 같은
 /// 공통 UI는 [MapShellScreen]이 상단/하단 바로 얹으므로 여기서는 다루지 않는다.
 ///
@@ -839,7 +809,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   String? _groundEntranceFloor;
 
   /// 지금 그려진 경로가 자동차 경로인지. 선 모양이 이 값으로 갈린다 —
-  /// 자동차는 실선, 걷기는 점선이다([_lineFeature]).
+  /// 자동차는 실선, 걷기는 점선이다([geoJsonLineFeature]).
   bool _routeIsDriving = false;
 
   /// 지금 그려진 대중교통 안내. null이면 대중교통 경로가 없다.
@@ -4995,7 +4965,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 전용 소스로 뺐다.
     await controller.addSource(
       _buildingSourceId,
-      GeojsonSourceProperties(data: _emptyCollection()),
+      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
     );
     await controller.addFillLayer(
       _buildingSourceId,
@@ -5009,7 +4979,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 가 footprint 로드 후 세계 outer + 건물 hole 폴리곤으로 채운다.
     await controller.addSource(
       _dimScrimSourceId,
-      GeojsonSourceProperties(data: _emptyCollection()),
+      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
     );
     await controller.addFillLayer(
       _dimScrimSourceId,
@@ -5023,14 +4993,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 아래 source만 먼저 등록하고, 파란 경로 레이어가 등록된 뒤 위에 올린다.
     await controller.addSource(
       _walkedRouteSourceId,
-      GeojsonSourceProperties(data: _emptyCollection()),
+      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
     );
 
     // 경로선: 진한 파랑 casing + 파란 본선 + 흰 화살표. 값과 근거는
     // [map_route_style.dart]에 있다(실내 화면과 공유).
     await controller.addSource(
       _routeSourceId,
-      GeojsonSourceProperties(data: _emptyCollection()),
+      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
     );
     // 테두리는 **실선 구간에만** 깐다(자동차·실내). 점선 아래에 테두리를 깔면
     // 점 사이 빈틈이 테두리 색으로 채워져 점선이 실선처럼 보이기 때문인데, 그
@@ -5138,7 +5108,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 레이어를 지웠다 다시 등록해야 한다.
     await controller.addSource(
       _transitSourceId,
-      GeojsonSourceProperties(data: _emptyCollection()),
+      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
     );
     await controller.addLineLayer(
       _transitSourceId,
@@ -5182,7 +5152,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 선 레이어 필터가 그 점까지 훑고, 반대로 배지 필터가 선을 훑는다.
     await controller.addSource(
       _transitBadgeSourceId,
-      GeojsonSourceProperties(data: _emptyCollection()),
+      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
     );
     await controller.addImage(
       kRouteWalkBadgeImageName,
@@ -5224,7 +5194,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
     await controller.addSource(
       _transferRouteSourceId,
-      GeojsonSourceProperties(data: _emptyCollection()),
+      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
     );
     await controller.addLineLayer(
       _transferRouteSourceId,
@@ -5251,7 +5221,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 부를 필요가 없다(전체 교체 규칙에 걸릴 여지도 사라진다).
     await controller.addSource(
       _floorOutlineSourceId,
-      GeojsonSourceProperties(data: _emptyCollection()),
+      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
     );
     await controller.addLineLayer(
       _floorOutlineSourceId,
@@ -5263,7 +5233,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 현재 위치: 반투명 원(정확도 반경 시각화용, 픽셀 반경) + 진한 점.
     await controller.addSource(
       _currentSourceId,
-      GeojsonSourceProperties(data: _emptyCollection()),
+      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
     );
     await controller.addCircleLayer(
       _currentSourceId,
@@ -5290,7 +5260,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 목적지 핀.
     await controller.addSource(
       _destSourceId,
-      GeojsonSourceProperties(data: _emptyCollection()),
+      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
     );
     await controller.addCircleLayer(
       _destSourceId,
@@ -5308,7 +5278,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 이 아래에 삽입되어 강조가 매장 fill 위에 확실히 덮이도록 순서를 잡는다.
     await controller.addSource(
       _highlightSourceId,
-      GeojsonSourceProperties(data: _emptyCollection()),
+      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
     );
     await controller.addFillLayer(
       _highlightSourceId,
@@ -5351,7 +5321,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
     await controller.addSource(
       _pdrCurrentSourceId,
-      GeojsonSourceProperties(data: _emptyCollection()),
+      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
     );
     await controller.addSymbolLayer(
       _pdrCurrentSourceId,
@@ -5390,7 +5360,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     );
     await controller.addSource(
       _indoorDestSourceId,
-      GeojsonSourceProperties(data: _emptyCollection()),
+      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
     );
     await _addIndoorDestinationPinLayer(controller);
 
@@ -5424,13 +5394,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (controller == null || !_styleReady) return;
     final footprint = _buildingFootprint;
     if (footprint == null || footprint.length < 3) {
-      await controller.setGeoJsonSource(_buildingSourceId, _emptyCollection());
+      await controller.setGeoJsonSource(
+        _buildingSourceId,
+        emptyGeoJsonCollection(),
+      );
       return;
     }
     final ring = _closedRing(footprint);
     await controller.setGeoJsonSource(
       _buildingSourceId,
-      _collection([
+      geoJsonCollection([
         {
           'type': 'Feature',
           'properties': const <String, dynamic>{},
@@ -5467,13 +5440,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (ring == null) {
       await controller.setGeoJsonSource(
         _floorOutlineSourceId,
-        _emptyCollection(),
+        emptyGeoJsonCollection(),
       );
       return;
     }
     await controller.setGeoJsonSource(
       _floorOutlineSourceId,
-      _collection([
+      geoJsonCollection([
         {
           'type': 'Feature',
           'properties': const <String, dynamic>{},
@@ -5515,7 +5488,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // ([floorOutlineRing]).
     final footprint = _activeFloorOutlineRing() ?? _buildingFootprint;
     if (footprint == null || footprint.length < 3) {
-      await controller.setGeoJsonSource(_dimScrimSourceId, _emptyCollection());
+      await controller.setGeoJsonSource(
+        _dimScrimSourceId,
+        emptyGeoJsonCollection(),
+      );
     } else {
       // 세계 전체를 덮는 outer ring(웹 메르카토르 상하한). 어떤 위치·줌에서도
       // 화면 밖까지 확실히 덮어 가장자리가 새어나오지 않는다.
@@ -5531,7 +5507,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       final holeRing = _closedRing(footprint.reversed.toList());
       await controller.setGeoJsonSource(
         _dimScrimSourceId,
-        _collection([
+        geoJsonCollection([
           {
             'type': 'Feature',
             'properties': const <String, dynamic>{},
@@ -6645,12 +6621,17 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
     final pos = _outdoorGpsVisible ? _position : null;
     if (pos == null) {
-      await controller.setGeoJsonSource(_currentSourceId, _emptyCollection());
+      await controller.setGeoJsonSource(
+        _currentSourceId,
+        emptyGeoJsonCollection(),
+      );
       return;
     }
     await controller.setGeoJsonSource(
       _currentSourceId,
-      _collection([_pointFeature(ll.LatLng(pos.latitude, pos.longitude))]),
+      geoJsonCollection([
+        _pointFeature(ll.LatLng(pos.latitude, pos.longitude)),
+      ]),
     );
   }
 
@@ -6672,12 +6653,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _pendingIndoorRoute != null || _pendingIndoorDestination != null;
     final target = passingThroughDoor ? null : _userDestination;
     if (target == null) {
-      await controller.setGeoJsonSource(_destSourceId, _emptyCollection());
+      await controller.setGeoJsonSource(
+        _destSourceId,
+        emptyGeoJsonCollection(),
+      );
       return;
     }
     await controller.setGeoJsonSource(
       _destSourceId,
-      _collection([_pointFeature(target)]),
+      geoJsonCollection([_pointFeature(target)]),
     );
   }
 
@@ -6699,13 +6683,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (target == null) {
       await controller.setGeoJsonSource(
         _indoorDestSourceId,
-        _emptyCollection(),
+        emptyGeoJsonCollection(),
       );
       return;
     }
     await controller.setGeoJsonSource(
       _indoorDestSourceId,
-      _collection([_pointFeature(target)]),
+      geoJsonCollection([_pointFeature(target)]),
     );
   }
 
@@ -6824,10 +6808,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (controller == null || !_styleReady) return;
     final itinerary = _transitItinerary;
     if (itinerary == null) {
-      await controller.setGeoJsonSource(_transitSourceId, _emptyCollection());
+      await controller.setGeoJsonSource(
+        _transitSourceId,
+        emptyGeoJsonCollection(),
+      );
       await controller.setGeoJsonSource(
         _transitBadgeSourceId,
-        _emptyCollection(),
+        emptyGeoJsonCollection(),
       );
       return;
     }
@@ -6867,11 +6854,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
     await controller.setGeoJsonSource(
       _transitSourceId,
-      features.isEmpty ? _emptyCollection() : _collection(features),
+      features.isEmpty ? emptyGeoJsonCollection() : geoJsonCollection(features),
     );
     await controller.setGeoJsonSource(
       _transitBadgeSourceId,
-      badges.isEmpty ? _emptyCollection() : _collection(badges),
+      badges.isEmpty ? emptyGeoJsonCollection() : geoJsonCollection(badges),
     );
   }
 
@@ -6905,8 +6892,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await controller.setGeoJsonSource(
       _transferRouteSourceId,
       transferPoints == null || transferPoints.length < 2
-          ? _emptyCollection()
-          : _collection([_lineFeature(transferPoints, style: 'indoor')]),
+          ? emptyGeoJsonCollection()
+          : geoJsonCollection([
+              geoJsonLineFeature(transferPoints, style: 'indoor'),
+            ]),
     );
     // 실내 경로가 활성이면 그걸 우선 그린다(GPS 걷기 경로와 동시에 표시하지
     // 않는다 — 사용자는 지금 실내에 있고 실내 경로가 유일한 관심사).
@@ -6920,8 +6909,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       await controller.setGeoJsonSource(
         _routeSourceId,
         visuals.remaining.length < 2
-            ? _emptyCollection()
-            : _collection([_lineFeature(visuals.remaining, style: 'indoor')]),
+            ? emptyGeoJsonCollection()
+            : geoJsonCollection([
+                geoJsonLineFeature(visuals.remaining, style: 'indoor'),
+              ]),
       );
       return;
     }
@@ -6934,7 +6925,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final route = _route;
     if (route != null && outdoorVisuals.remaining.length >= 2) {
       features.add(
-        _lineFeature(
+        geoJsonLineFeature(
           outdoorVisuals.remaining,
           style: _routeIsDriving ? 'drive' : 'walk',
         ),
@@ -6950,11 +6941,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 층 chip을 넘기면 그 층의 구간이 이어서 보인다.
     final preview = _pendingIndoorRoute?.segmentForFloor(_activeFloor ?? '');
     if (preview != null && preview.route.points.length >= 2) {
-      features.add(_lineFeature(preview.route.points, style: 'indoor'));
+      features.add(geoJsonLineFeature(preview.route.points, style: 'indoor'));
     }
     await controller.setGeoJsonSource(
       _routeSourceId,
-      features.isEmpty ? _emptyCollection() : _collection(features),
+      features.isEmpty ? emptyGeoJsonCollection() : geoJsonCollection(features),
     );
   }
 
@@ -6980,10 +6971,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await controller.setGeoJsonSource(
       _walkedRouteSourceId,
       segments.isEmpty
-          ? _emptyCollection()
-          : _collection([
+          ? emptyGeoJsonCollection()
+          : geoJsonCollection([
               for (final segment in segments)
-                _lineFeature(segment, generation: _routeGeneration),
+                geoJsonLineFeature(segment, generation: _routeGeneration),
             ]),
     );
   }
@@ -7224,7 +7215,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Future<void> _registerDebugPdrLayers(MapLibreMapController controller) async {
     await controller.addSource(
       _debugGraphSourceId,
-      GeojsonSourceProperties(data: _emptyCollection()),
+      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
     );
     await controller.addLineLayer(
       _debugGraphSourceId,
@@ -7314,7 +7305,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // raw: 걸음 추정이 만든 날것의 궤적. 점선이라 확정 경로와 겹쳐도 구분된다.
     await controller.addSource(
       _pdrRawTrailSourceId,
-      GeojsonSourceProperties(data: _emptyCollection()),
+      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
     );
     await controller.addLineLayer(
       _pdrRawTrailSourceId,
@@ -7333,7 +7324,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // confirmed: 확정된 걸음만. 흰 casing을 깔아 어두운 배경에서도 읽힌다.
     await controller.addSource(
       _pdrConfirmedTrailSourceId,
-      GeojsonSourceProperties(data: _emptyCollection()),
+      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
     );
     await controller.addLineLayer(
       _pdrConfirmedTrailSourceId,
@@ -7364,7 +7355,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 어느 단계에서 틀어졌는지를 가리킨다.
     await controller.addSource(
       _pdrMatchedTrailSourceId,
-      GeojsonSourceProperties(data: _emptyCollection()),
+      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
     );
     await controller.addLineLayer(
       _pdrMatchedTrailSourceId,
@@ -7403,8 +7394,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final location = _indoorLocationVisible ? _pdrCurrentWgs84() : null;
     final heading = location == null ? null : _pdrCurrentHeadingDeg;
     final data = location == null
-        ? _emptyCollection()
-        : _collection([
+        ? emptyGeoJsonCollection()
+        : geoJsonCollection([
             {
               'type': 'Feature',
               'properties': <String, dynamic>{'heading': ?heading},
@@ -7596,7 +7587,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     ];
     await controller.setGeoJsonSource(
       _debugGraphSourceId,
-      _collection(features),
+      geoJsonCollection(features),
     );
 
     await _setTrail(
@@ -7631,8 +7622,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await controller.setGeoJsonSource(
       sourceId,
       points.length < 2
-          ? _emptyCollection()
-          : _collection([_lineFeature(points)]),
+          ? emptyGeoJsonCollection()
+          : geoJsonCollection([geoJsonLineFeature(points)]),
     );
   }
 
@@ -7926,7 +7917,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         ? null
         : plan.stores.where((s) => s.id == storeId).firstOrNull;
     if (store == null || store.polygon.length < 3) {
-      await controller.setGeoJsonSource(_highlightSourceId, _emptyCollection());
+      await controller.setGeoJsonSource(
+        _highlightSourceId,
+        emptyGeoJsonCollection(),
+      );
       return;
     }
     final ring = [
@@ -7937,7 +7931,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
     await controller.setGeoJsonSource(
       _highlightSourceId,
-      _collection([
+      geoJsonCollection([
         {
           'type': 'Feature',
           'properties': const <String, dynamic>{},
