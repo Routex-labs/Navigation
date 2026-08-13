@@ -148,6 +148,33 @@ void main() {
 
       expect(picked!.id, 's');
     });
+
+    test('실내→야외 안내는 목적지 기준으로 나갈 문을 고른다', () {
+      // 실내→야외([showIndoorToOutdoorRouteTo])는 같은 함수에 **목적지**를
+      // 넘긴다. 현재 위치 기준으로 고르면 건물 반대편으로 나가게 되어, 실내에서
+      // 아낀 몇십 m를 바깥에서 몇백 m로 갚는다.
+      final all = [
+        _entrance('nw', _northWest),
+        _entrance('s', _south),
+        _entrance('se', _southEast),
+      ];
+      // 건물 남쪽 바깥의 목적지(핏타민약국 방향).
+      final picked = nearestEntrance(all, const LatLng(37.52470, 126.92880));
+
+      expect(picked!.id, 's');
+    });
+
+    test('목적지가 북서쪽이면 북서쪽 문으로 나간다', () {
+      // 방향만 뒤집은 같은 규칙인지 확인한다 — 한 방향만 맞으면 우연일 수 있다.
+      final all = [
+        _entrance('nw', _northWest),
+        _entrance('s', _south),
+        _entrance('se', _southEast),
+      ];
+      final picked = nearestEntrance(all, const LatLng(37.52710, 126.92760));
+
+      expect(picked!.id, 'nw');
+    });
   });
 
   group('entranceDirectionLabel', () {

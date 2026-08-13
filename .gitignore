@@ -67,6 +67,10 @@ ui_redesign_prompt.md
 # Generated SQLite database (backend/scripts/reset_and_seed.py 로 재생성 가능)
 backend/data/
 
+# 로컬 요청/응답 추적 JSON (저장소 코드가 만드는 것이 아니라 외부 도구가 남긴다.
+# 타일 요청 한 건당 파일 하나라 금세 수천 개로 불어난다)
+backend/app/args/
+
 # Generated indoor navigation dataset
 output/
 thehyundai_indoor_navigation_dataset/*

@@ -39,6 +39,7 @@ import '../../features/indoor_navigation/application/indoor_guidance_position.da
 import '../../features/indoor_navigation/application/indoor_guidance_session.dart';
 import '../../features/indoor_navigation/application/indoor_location_estimate.dart';
 import '../../features/indoor_navigation/contract/indoor_navigation_contract.dart';
+import '../../features/indoor_navigation/debug/escalator_debug_text.dart';
 import '../../features/indoor_navigation/debug/pdr_debug_device_info.dart';
 import '../../features/indoor_navigation/debug/pdr_debug_session_recorder.dart';
 import '../../features/indoor_navigation/debug/pdr_debug_session_share.dart';
@@ -75,10 +76,12 @@ import '../../widgets/map_icon_cache.dart';
 import '../../widgets/map_overlay_tap_guard.dart';
 import '../../widgets/status_badge.dart';
 import 'floor_outline.dart';
+import 'gps_freshness_policy.dart';
 import 'indoor_entry_gps.dart';
 import 'building_orientation.dart';
 import 'indoor_entry_proximity.dart';
 import 'indoor_entry_zoom.dart';
+import 'route_recompute_policy.dart';
 import 'indoor_overlay_layers.dart';
 
 // 위치 조회 실패 시 대체 좌표 (서울시청). 저장·전달은 latlong2 타입으로 하고
@@ -823,6 +826,18 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   MultiFloorRoute? _pendingIndoorRoute;
   PoiSearchResult? _pendingIndoorDestination;
 
+  /// 실내→야외 안내에서, 건물을 나간 뒤 이어 그릴 야외 목적지
+  /// ([showIndoorToOutdoorRouteTo]). 위 두 값의 거울상이다.
+  ll.LatLng? _pendingOutdoorDestination;
+  String? _pendingOutdoorLabel;
+
+  /// 진행 중인 PDR 세션 정지. 다음 시작이 이걸 기다린다([_awaitPdrStop]).
+  Future<void>? _pdrStopInFlight;
+
+  /// 지상 출입구가 있는 층. [_groundEntrances]와 짝이라 함께 채운다 — 출구를
+  /// 실내 경로의 도착 노드로 쓰려면 좌표·노드만이 아니라 **층**도 있어야 한다.
+  String? _groundEntranceFloor;
+
   /// 지금 그려진 경로가 자동차 경로인지. 선 모양이 이 값으로 갈린다 —
   /// 자동차는 실선, 걷기는 점선이다([_lineFeature]).
   bool _routeIsDriving = false;
@@ -1289,7 +1304,20 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
     if (outcome.events.isNotEmpty) {
       recorder?.recordFloorTransitionEvents(outcome.events);
+      _lastEscalatorEvent = outcome.events.last;
     }
+    // 진단 칩은 이벤트 유무와 무관하게 매 샘플 갱신한다. 층이 **안** 바뀌는
+    // 동안의 Δ와 무장 여부가 곧 원인이라, 아무 일도 안 일어나는 구간이야말로
+    // 봐야 할 구간이다.
+    _escalatorDebugText.value = _debugModeController.enabled
+        ? describeEscalatorJudgement(
+            deltaM: _guidance.escalator.deltaM,
+            armed: _guidance.escalator.isArmed,
+            hasCandidate: _guidance.escalator.hasCandidate,
+            phase: _guidance.escalator.phase,
+            lastEvent: _lastEscalatorEvent,
+          )
+        : null;
 
     // 활강 진행률 목표를 기압으로 갱신한다. 단조 증가만 허용 — 평활 노이즈로
     // 점이 뒤로 가지 않는다. 1.0은 하차 확정([_completeEscalatorTransition])만
@@ -2103,6 +2131,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   void dispose() {
     _buildingRetryTimer?.cancel();
     _positionSubscription?.cancel();
+    _streamRetryTimer?.cancel();
+    _streamFirstFixTimer?.cancel();
     _pdrSnapshotSub?.cancel();
     _pdrCalibrationSub?.cancel();
     _pdrAltitudeSub?.cancel();
@@ -2122,6 +2152,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 앱 전역 인스턴스라 dispose하지 않는다 — 실내 화면이 같은 컨트롤러를
     // 계속 구독한다.
     _debugModeController.removeListener(_onDebugModeChanged);
+    _freshFixTimer?.cancel();
+    _gpsVerdictDebugText.dispose();
+    _escalatorDebugText.dispose();
     super.dispose();
   }
 
@@ -2134,6 +2167,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 디버그 시트에서 개별 경로 토글을 켜고 끄면 여기로 들어온다. 레이어는
     // 이미 등록돼 있으므로 데이터만 다시 채우면 즉시 반영된다.
     unawaited(_syncDebugPdrLayers());
+    // 디버그를 끄면 마지막 판정 문구를 버린다. 남겨 두면 다시 켰을 때 몇 분 전
+    // 좌표의 숫자가 지금 값인 것처럼 떠 있고, 현장에서는 그걸 구분할 수 없다.
+    if (!_debugModeController.enabled) {
+      _gpsVerdictDebugText.value = null;
+      _escalatorDebugText.value = null;
+    }
     if (mounted) setState(() {});
   }
 
@@ -2142,7 +2181,59 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// anchor가 없으면 위치를 도면에 놓을 수 없지만, 센서를 미리 돌려두면 사용자가
   /// 위치를 지정하는 순간 heading이 이미 수렴한 상태다. 권한이 거부돼 있으면
   /// 자동 시작을 시도하지 않는다 — 진입마다 재시도하면 degraded warning만 쌓인다.
+  /// 실내 위치를 통째로 버린다 — 앵커, 걸음 궤적, 복도 보정, 실내 경로.
+  ///
+  /// 사용자가 건물을 나갔다고 GPS가 판정했을 때만 부른다. 넷을 **함께** 비우는
+  /// 것이 중요하다. 하나라도 남으면 야외 지도 위에 실내의 흔적이 남는다.
+  ///
+  ///   - 앵커를 안 버리면 다시 도면을 열었을 때 걸어 본 적 없는 자리에서 시작한다.
+  ///   - 궤적을 안 버리면 야외 지도에 실내에서 걸은 초록 선이 그대로 얹혀 있다.
+  ///   - PDR 세션을 안 끄면 **밖에서 걷는 걸음이 실내 좌표계에 계속 쌓인다.**
+  ///     사용자가 신고한 "나갔는데도 실내에서 계속 움직이며 경로가 그려진다"가
+  ///     이것이다.
+  ///   - 실내 경로를 안 버리면 목적지가 건물 안이던 안내가 야외 화면에 남는다.
+  ///
+  /// 세션 정지는 여기서 기다리지 않는다 — 화면 상태는 지금 즉시 맞아야 한다.
+  /// 대신 **그 Future를 [_pdrStopInFlight]에 남겨** 다음 시작이 기다리게 한다.
+  /// 이유는 그 필드 주석에 있다.
+  void _dropIndoorPosition() {
+    _pdrTrailState.beginNewSession();
+    _syncCorridorTracking(null);
+    _clearIndoorRoute();
+    final stopping = indoorNavigationDriver.stopGuidance();
+    _pdrStopInFlight = stopping;
+    unawaited(stopping);
+  }
+
+  /// 아직 끝나지 않은 [IndoorNavigationController.stopGuidance]가 있으면 기다린다.
+  ///
+  /// ## 왜 기다려야 하는가
+  ///
+  /// `stopGuidance`는 상태를 곧바로 `idle`로 바꾸지 않는다. 먼저 `stopping`으로
+  /// 두고 네이티브 pedometer를 flush·정지한 **뒤에야** `idle`이 된다. 그 사이에
+  /// 사용자가 건물로 다시 들어오면 [_bindPdrSessionToFloor]가 "idle이 아니네 →
+  /// 이미 세션이 돌고 있구나"로 잘못 읽고 그대로 `true`를 돌려준다.
+  ///
+  /// 그러면 세션 없이 앵커만 찍힌다. 화면에는 실내 위치가 **뜨는데**(그 마커는
+  /// PDR이 아니라 [indoorLocationEstimateController]의 추정값이 그린다) 걸음이
+  /// 쌓이는 세션이 없어 **한 발짝도 움직이지 않는다.** 야외에 나갔다 다시 들어온
+  /// 뒤 위치가 굳어 있던 것이 이것이다.
+  Future<void> _awaitPdrStop() async {
+    final stopping = _pdrStopInFlight;
+    if (stopping == null) return;
+    try {
+      await stopping;
+    } on Object {
+      // 정지에 실패해도 시작은 시도해야 한다. 여기서 멈추면 센서가 한 번
+      // 어긋난 뒤로 실내 위치가 영영 안 잡힌다.
+    }
+    if (identical(_pdrStopInFlight, stopping)) _pdrStopInFlight = null;
+  }
+
   Future<void> _startPdrIfIdle() async {
+    // 아래 idle 판정이 정지 중인 세션을 "돌고 있다"로 읽지 않게 한다.
+    await _awaitPdrStop();
+    if (!mounted) return;
     final floor = _activeFloor;
     final graph = _floorGraph;
     if (floor == null ||
@@ -2234,7 +2325,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (!mounted || geojson == null) return;
     final entrances = groundEntrancesFrom(FloorPlan.fromJson(geojson));
     if (entrances.isEmpty) return;
-    setState(() => _groundEntrances = entrances);
+    setState(() {
+      _groundEntrances = entrances;
+      _groundEntranceFloor = floor;
+    });
     _syncSelectedEntrance();
   }
 
@@ -2731,6 +2825,39 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     return ll.LatLng((minLat + maxLat) / 2, (minLng + maxLng) / 2);
   }
 
+  /// 직전 좌표를 기기가 찍은 시각. 좌표 사이 간격을 진단 칩에 띄우는 데만 쓴다.
+  DateTime? _lastFixAt;
+
+  /// 마지막으로 TMAP 도보 경로를 요청한 좌표.
+  ///
+  /// 위치 스트림이 1초에 한 번으로 빨라졌기 때문에 필요해졌다. 예전에는 스트림
+  /// 자체가 5 m마다 왔으므로 좌표 한 건 = 요청 한 번이어도 됐다.
+  ll.LatLng? _lastRouteRequestOrigin;
+
+  /// 디버그 모드에서 지도 위에 띄우는 GPS 진입 판정 근거 한 줄.
+  ///
+  /// `setState`가 아니라 [ValueNotifier]인 이유는 갱신 빈도다. 좌표는 5 m마다
+  /// 들어오는데 그때마다 이 화면 전체(지도·오버레이·바)를 다시 그리면, 진단을
+  /// 켰다는 이유로 측정 대상인 성능이 달라진다. 칩만 다시 그린다.
+  ///
+  /// null이면 칩을 그리지 않는다 — 디버그 모드가 꺼져 있거나 아직 좌표가 한 건도
+  /// 안 들어온 상태다.
+  final ValueNotifier<String?> _gpsVerdictDebugText = ValueNotifier<String?>(
+    null,
+  );
+
+  /// 층 전환 판정의 근거를 띄우는 칩 문구. GPS 칩과 같은 이유로 [ValueNotifier]다
+  /// — 기압은 초당 여러 건 들어오므로 화면 전체를 다시 그리면 안 된다.
+  final ValueNotifier<String?> _escalatorDebugText = ValueNotifier<String?>(
+    null,
+  );
+
+  /// 마지막으로 나온 층 전환 진단 이벤트.
+  ///
+  /// 이벤트는 무슨 일이 일어난 순간에만 나온다. 들고 있지 않으면 거부 사유가
+  /// 한 프레임 떴다 사라져, 정작 읽어야 할 사람이 못 읽는다.
+  EscalatorDetectionEvent? _lastEscalatorEvent;
+
   /// 이번 실내 상태가 **자동 진입**으로 켜졌는지.
   ///
   /// 자동 이탈은 자동 진입을 되돌리기 위한 것이다. 사용자가 건물을 직접 탭해서
@@ -2771,15 +2898,99 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   /// GPS 구독을 [_gpsTrackingWanted] 상태에 맞춘다. 구독 시작/해제의 유일한
   /// 진입점이라 중복 구독이나 해제 누락이 생기지 않는다.
-  void _syncGpsSubscription() {
-    if (_gpsTrackingWanted) {
-      if (_positionSubscription != null) return;
-      _positionSubscription = watchPosition().listen(
-        _handlePosition,
-        onError: (Object _) => _handlePositionError(),
-      );
+  /// 좌표를 마지막으로 **받은** 시각. 낡음 판정의 기준이다
+  /// ([gps_freshness_policy.dart]).
+  DateTime? _lastFixReceivedAt;
+
+  /// 일회성 위치 조회가 떠 있는 동안 true. 겹쳐 쏘는 것을 막는다.
+  bool _freshFixInFlight = false;
+
+  /// 스트림이 조용한지 주기적으로 확인하는 타이머.
+  Timer? _freshFixTimer;
+
+  /// 닫힌 스트림을 다시 열기까지 기다리는 시간. 계산은
+  /// [nextStreamRetryDelay]가 한다.
+  Duration _streamRetryDelay = streamRetryMinDelay;
+  Timer? _streamRetryTimer;
+
+  /// 지금 열어 둔 스트림이 좌표를 한 건이라도 줬는지. 구독을 새로 열 때마다
+  /// false로 되돌린다.
+  bool _streamDeliveredFix = false;
+
+  /// 새로 연 스트림이 벙어리인지 지켜보는 타이머([streamFirstFixTimeout]).
+  Timer? _streamFirstFixTimer;
+
+  /// 위치 스트림을 지금까지 몇 번 열었는지. **진단 전용이다.**
+  ///
+  /// 정상이라면 화면이 사는 동안 1이어야 한다. 실기기에서 이 값이 올라간다면
+  /// 스트림이 죽고 있다는 뜻이고, 1에 머무는데도 좌표가 드물다면 스트림은
+  /// 살아 있고 기기가 좌표를 늦게 주는 것이다. **둘은 완전히 다른 문제라,
+  /// 이 값 없이는 화면만 보고 구분할 수 없다.**
+  int _streamRestartCount = 0;
+
+  /// 마지막 좌표가 스트림에서 왔는지(true) 일회성 조회에서 왔는지(false).
+  /// 진단 칩에만 쓰인다 — 스트림이 조용한 채 일회성 조회만 화면을 떠받치고
+  /// 있는 상태를 눈으로 구분하기 위한 것이다.
+  bool _lastFixFromStream = false;
+
+  /// 스트림이 약속한 간격을 안 지키는 기기에서 위치를 직접 끌어온다.
+  ///
+  /// 실측에서 1초를 요청했는데 15~36초에 한 건이 왔고, 같은 순간 "위치 갱신"
+  /// 버튼의 일회성 조회는 즉시 응답했다. 그 경로를 앱이 대신 눌러 준다.
+  void _syncFreshFixTimer() {
+    // **실내에서도 돌린다.** 야외 이탈 판정의 유일한 입력이 GPS라서다 —
+    // 자세한 사정은 [indoorGpsFixMaxAge] 주석에 있다.
+    final wanted = _gpsTrackingWanted;
+    if (!wanted) {
+      _freshFixTimer?.cancel();
+      _freshFixTimer = null;
       return;
     }
+    if (_freshFixTimer != null) return;
+    _freshFixTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _maybeRequestFreshFix(),
+    );
+  }
+
+  Future<void> _maybeRequestFreshFix() async {
+    if (!mounted || !_gpsTrackingWanted) return;
+    if (!shouldRequestFreshFix(
+      lastFixReceivedAt: _lastFixReceivedAt,
+      now: DateTime.now(),
+      requestInFlight: _freshFixInFlight,
+    )) {
+      return;
+    }
+    _freshFixInFlight = true;
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: oneShotFixSettings(),
+      );
+      if (!mounted) return;
+      // 스트림으로 들어온 좌표와 **같은 문을 통과시킨다.** 진입 판정·경로·진단
+      // 칩이 전부 여기 걸려 있어서, 따로 처리하면 손으로 끌어온 좌표만 판정을
+      // 건너뛰는 상태가 된다.
+      _handlePosition(position);
+    } catch (_) {
+      // 조용히 넘긴다. 다음 주기에 다시 시도하고, 실패해도 스트림은 그대로다.
+    } finally {
+      _freshFixInFlight = false;
+    }
+  }
+
+  void _syncGpsSubscription() {
+    _syncFreshFixTimer();
+    if (_gpsTrackingWanted) {
+      if (_positionSubscription != null) return;
+      _subscribeToPositions();
+      return;
+    }
+    _streamRetryTimer?.cancel();
+    _streamRetryTimer = null;
+    _streamFirstFixTimer?.cancel();
+    _streamFirstFixTimer = null;
+    _streamRetryDelay = streamRetryMinDelay;
     if (_positionSubscription == null) return;
     unawaited(_positionSubscription!.cancel());
     _positionSubscription = null;
@@ -2792,17 +3003,90 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncCurrentLayer();
   }
 
+  /// 위치 스트림을 새로 연다. **[_syncGpsSubscription]과 재연결만 이 함수를
+  /// 부른다** — 구독을 만드는 곳이 흩어지면 [onDone] 처리를 빠뜨린 경로가 다시
+  /// 생긴다.
+  ///
+  /// [onDone]이 왜 필요한가: 이 자리에는 원래 [onError]만 있었다. 그런데 스트림이
+  /// **에러 없이 닫히는** 경우가 있다(네이티브가 EventChannel을 해제할 때). 그때
+  /// [_positionSubscription]은 null이 아닌 채로 남고, [_syncGpsSubscription]은
+  /// `!= null`을 보고 그냥 돌아선다. **한 번 죽으면 앱이 영영 모른다.** 실기기에서
+  /// "위치 갱신 버튼은 되는데 화면은 안 움직인다"고 관찰된 상태가 정확히 이것이다
+  /// — 그 버튼은 스트림이 아니라 일회성 조회를 쓴다.
+  void _subscribeToPositions() {
+    _streamRestartCount++;
+    _streamDeliveredFix = false;
+    _positionSubscription = watchPosition().listen(
+      (position) => _handlePosition(position, fromStream: true),
+      onError: (Object _) {
+        _handlePositionError();
+        _handlePositionStreamClosed();
+      },
+      onDone: _handlePositionStreamClosed,
+    );
+    // **닫히지 않고 벙어리가 되는 경우**를 잡는다. 위 onDone/onError는 둘 다
+    // 걸리지 않는다 — 자세한 사정은 [streamFirstFixTimeout] 주석에 있다.
+    _streamFirstFixTimer?.cancel();
+    _streamFirstFixTimer = Timer(streamFirstFixTimeout, () {
+      _streamFirstFixTimer = null;
+      if (!mounted || _streamDeliveredFix) return;
+      _handlePositionStreamClosed();
+    });
+  }
+
+  /// 스트림이 닫혔다. 끊어진 구독을 버리고 잠시 뒤 다시 연다.
+  ///
+  /// **간격을 두고 늘려 가는 이유는 영구 실패 때문이다.** 위치 권한이 거부돼
+  /// 있으면 스트림은 열자마자 에러로 닫힌다. 고정 간격으로 다시 걸면 그 상태에서
+  /// 초당 한 번씩 채널을 두드리며 배터리만 태운다. 좌표가 한 건이라도 들어오면
+  /// [_handlePosition]이 간격을 처음 값으로 되돌린다.
+  void _handlePositionStreamClosed() {
+    if (_positionSubscription == null) return;
+    _streamFirstFixTimer?.cancel();
+    _streamFirstFixTimer = null;
+    unawaited(_positionSubscription!.cancel());
+    _positionSubscription = null;
+    if (!mounted || !_gpsTrackingWanted) return;
+    if (_streamRetryTimer != null) return;
+    _streamRetryTimer = Timer(_streamRetryDelay, () {
+      _streamRetryTimer = null;
+      _streamRetryDelay = nextStreamRetryDelay(_streamRetryDelay);
+      if (!mounted || !_gpsTrackingWanted) return;
+      if (_positionSubscription != null) return;
+      _subscribeToPositions();
+    });
+  }
+
   void _handlePositionError() {
     if (!mounted) return;
     setState(() => _position = null);
     _syncCurrentLayer();
   }
 
-  void _handlePosition(Position position) {
+  void _handlePosition(Position position, {bool fromStream = false}) {
     if (!mounted) return;
+    _lastFixFromStream = fromStream;
+    // 좌표가 한 건이라도 들어오면 스트림은 살아 있다. 벙어리 감시를 걷고,
+    // 재연결 간격도 되돌려 다음에 끊겼을 때 30초를 기다리지 않게 한다.
+    if (fromStream) {
+      _streamDeliveredFix = true;
+      _streamFirstFixTimer?.cancel();
+      _streamFirstFixTimer = null;
+      _streamRetryDelay = streamRetryMinDelay;
+    }
     // 실내 진입 직전에 이미 큐에 들어간 이벤트가 진입 후 도착할 수 있다.
     // 구독은 끊겼어도 이 한 건이 새어들어오면 위치 마커가 다시 켜지므로 막는다.
     if (!_gpsTrackingWanted) return;
+    // 좌표가 얼마 만에 왔는지는 **기기가 찍은 시각**으로 잰다. 앱이 받은 시각을
+    // 쓰면 프레임이 밀린 시간까지 섞여, 스트림이 느린 것인지 화면이 느린 것인지
+    // 구분되지 않는다. 진단 칩에만 쓰이는 값이다.
+    final sinceLastFix = _lastFixAt == null
+        ? null
+        : position.timestamp.difference(_lastFixAt!);
+    _lastFixAt = position.timestamp;
+    // 낡음 판정은 **받은 시각** 기준이다. 기기가 찍은 시각을 쓰면, 같은 좌표를
+    // 반복해서 받는 동안에도 계속 낡은 것으로 보여 요청이 멈추지 않는다.
+    _lastFixReceivedAt = DateTime.now();
     // 실내에서도 좌표는 **들고 있는다.** 진입/이탈 판정의 유일한 입력이고,
     // 화면에 그릴지는 [_outdoorGpsVisible]이 따로 가른다([_syncCurrentLayer]).
     setState(() => _position = position);
@@ -2815,13 +3099,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 폴백으로 쓰는 문이 이 선택의 결과라, 순서를 뒤집으면 사용자가 이미 다른
     // 문으로 들어왔는데 폴백은 한 박자 전 문을 가리킨다.
     if (!_indoorEntered) _syncSelectedEntrance();
-    _applyBuildingVerdict(position);
+    _applyBuildingVerdict(position, sinceLastFix: sinceLastFix);
     // 여기서부터는 야외 전용이다. 건물 안에서 GPS로 걷기 경로를 다시 그리면,
     // 실내 도면 위에 건물을 관통하는 선이 얹힌다.
     if (_indoorEntered) return;
     _updateOutdoorDisplayProgress(position);
     unawaited(_syncRouteLayer());
-    _updateRoute(position);
+    // 스트림이 준 좌표라고 알려, 제자리에서 초당 한 번씩 TMAP을 다시 부르지
+    // 않게 한다([_updateRoute]). 진행률·회색선 갱신은 그 거르기와 무관하게
+    // 매 좌표마다 돌아야 하므로 위 두 줄은 거르지 않는다.
+    _updateRoute(position, fromPositionStream: true);
   }
 
   /// 위치 한 건이 말하는 건물 안팎을 상태에 반영한다.
@@ -2830,22 +3117,44 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 할지**만 정한다. 셋으로 갈린다.
   ///
   ///   - 안 + 야외 상태 + 자동 진입 무장 → 실내로 들어가고 위치를 잡는다.
-  ///   - 밖 → 자동 진입을 다시 무장한다. 그리고 자동으로 들어온 실내 상태였다면
-  ///     야외로 되돌린다.
+  ///   - 밖 + **실내에 실제로 있던 사람** → 야외로 되돌린다. 자동 진입을 다시
+  ///     무장하는 것도 여기서 한다.
   ///   - 모름 → 아무것도 하지 않는다.
   ///
-  /// 자동 이탈을 [_indoorEnteredByGps]로 막는 것이 중요하다. 사용자가 건물을 직접
-  /// 탭해 도면을 열어 둔 경우까지 닫으면, 길 건너에서 층 도면을 훑어보려던 사람의
-  /// 화면이 좌표가 들어오는 순간 제멋대로 닫힌다.
-  void _applyBuildingVerdict(Position position) {
-    final verdict = judgeBuildingFromGps(
+  /// ## "실내에 실제로 있던 사람"을 어떻게 가리는가
+  ///
+  /// 예전에는 [_indoorEnteredByGps]로 갈랐다 — GPS가 들여보낸 경우에만 GPS가
+  /// 내보낸다는 규칙이다. 그래야 길 건너에서 층 도면을 훑어보려던 사람의 화면이
+  /// 좌표가 들어오는 순간 제멋대로 닫히지 않는다.
+  ///
+  /// 그런데 그 규칙은 **걸어서 들어온 사람을 놓친다.** 건물을 탭하거나 확대해서
+  /// 도면을 연 뒤 실제로 안을 걸어 다닌 사용자가 밖으로 나와도 실내 상태가
+  /// 유지되고, PDR이 계속 걸음을 쌓아 야외에 실내 궤적이 그려진다.
+  ///
+  /// 그래서 기준을 **"실내 위치가 잡혀 있는가"**([_indoorPositionPlaced])로
+  /// 넓힌다. PDR 앵커가 있다는 것은 이 사람이 건물 안 어딘가에 서 있다고 앱이
+  /// 믿고 있다는 뜻이고, 그 믿음은 밖으로 나온 순간 틀린 것이 된다. 반대로
+  /// 도면만 구경하는 사용자는 앵커가 없으므로 예전처럼 화면이 안 닫힌다.
+  void _applyBuildingVerdict(Position position, {Duration? sinceLastFix}) {
+    final judgement = judgeBuildingFromGps(
       fix: GpsFix(
         point: ll.LatLng(position.latitude, position.longitude),
         accuracyMeters: position.accuracy,
       ),
       footprint: _buildingFootprint,
     );
-    switch (verdict) {
+    // 진단 칩은 아래 switch가 상태를 바꾸기 **전에** 채운다. 무장 여부는 이 판정을
+    // 내릴 때의 값이어야 하는데, switch가 그 값을 갱신하기 때문이다.
+    _gpsVerdictDebugText.value = _debugModeController.enabled
+        ? describeGpsBuildingJudgement(
+            judgement,
+            armed: _gpsEntryArmed,
+            sinceLastFix: sinceLastFix,
+            fromStream: _lastFixFromStream,
+            streamRestarts: _streamRestartCount,
+          )
+        : null;
+    switch (judgement.verdict) {
       case GpsBuildingVerdict.inside:
         if (_indoorEntered || !_gpsEntryArmed) return;
         ScaffoldMessenger.of(
@@ -2858,10 +3167,21 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       case GpsBuildingVerdict.outside:
         // 건물을 확실히 벗어났다. 다음 진입을 다시 자동으로 잡을 수 있게 한다.
         _gpsEntryArmed = true;
-        if (!_indoorEntered || !_indoorEnteredByGps) return;
+        if (!_indoorEntered) return;
+        if (!_indoorEnteredByGps && !_indoorPositionPlaced) return;
         // 앵커 배치 대기 중이었다면 함께 종료해 하단 바 버튼 톤도 되돌린다.
         if (_placingPdrAnchor) _setPlacingAnchor(false);
-        _setIndoorEntered(false);
+        // **이 자리가 유일하게 "정말로 나갔다"고 말할 수 있는 곳이다.**
+        // 실내 위치를 버리는 것도, 실내→야외 안내의 야외 구간을 올리는 것도
+        // 여기서만 일어난다([_setIndoorEntered]의 leftBuilding).
+        _setIndoorEntered(false, leftBuilding: true);
+        // 위치의 주인이 GPS로 돌아온 순간이다. 마커는 [_setIndoorEntered] 안의
+        // [_syncCurrentLayer]가 이미 켰지만, 카메라는 아직 건물을 보고 있다.
+        // 실내에서 도면에 맞춰 확대해 둔 화면 그대로라 방금 켠 GPS 마커가 화면
+        // 밖일 수 있다 — 사용자 눈에는 "나왔는데 내 위치가 없다"로 보인다.
+        //
+        // 들어올 때 카메라가 건물로 붙는 것과 대칭이다. 나가면 나를 따라온다.
+        unawaited(_moveCameraToUser(position));
       case GpsBuildingVerdict.unclear:
         break;
     }
@@ -3063,7 +3383,19 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     return PdrLocalPoint(dx, dy);
   }
 
-  Future<void> _updateRoute(Position position) async {
+  /// [fromPositionStream]이 true면 **마지막으로 요청한 지점에서 충분히 움직였을
+  /// 때만** TMAP을 다시 부른다([shouldRecomputeRouteAfterMove]). 위치 스트림이
+  /// 1초에 한 번 오게 된 뒤로, 걸으면서 이 함수를 부를 때마다 요청을 내보내면
+  /// 초당 한 번씩 외부 API를 두드린다.
+  ///
+  /// **사용자가 목적지를 고른 호출(false)은 절대 거르지 않는다.** 제자리에 서서
+  /// 도착지를 눌렀을 때 "아무 일도 일어나지 않는" 화면이 되기 때문이다. 문 재선택
+  /// ([_retargetJourneyEntrance])은 네트워크를 타지 않으므로 거르는 쪽에 두지
+  /// 않는다 — 좌표가 올 때마다 그대로 돈다.
+  Future<void> _updateRoute(
+    Position position, {
+    bool fromPositionStream = false,
+  }) async {
     // 문 경유 안내 중이면 이번 위치로 다시 고른 문이 목적지다. 걸어가는 동안
     // 더 가까운 문이 생기면([_syncSelectedEntrance]가 이미 갱신했다) 야외 구간의
     // 도착점과 실내 구간의 시작점을 함께 갈아 끼운다 — 한쪽만 바꾸면 도보 경로는
@@ -3085,8 +3417,18 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final target = _userDestination;
     if (target == null) return;
 
+    final origin = ll.LatLng(position.latitude, position.longitude);
+    if (fromPositionStream &&
+        !shouldRecomputeRouteAfterMove(
+          origin: origin,
+          lastRequestedOrigin: _lastRouteRequestOrigin,
+        )) {
+      return;
+    }
+    _lastRouteRequestOrigin = origin;
+
     final route = await directionsRepository.getWalkingRoute(
-      origin: ll.LatLng(position.latitude, position.longitude),
+      origin: origin,
       destination: target,
     );
     if (!mounted) return;
@@ -3369,9 +3711,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
     try {
       final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.best,
-        ),
+        locationSettings: oneShotFixSettings(),
       );
       _handlePosition(position);
       final controller = _mapController;
@@ -3446,14 +3786,23 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     required String label,
     ll.LatLng? origin,
     bool keepPendingIndoorRoute = false,
+    bool keepCompletedHistory = false,
   }) async {
     // 새 야외 목적지를 시작하는 진입점이다. 같은 목적지의 재탐색은
     // _updateRoute/_applyRoute로만 들어오므로, 여기서만 이전 여정을 끊는다.
-    _clearCompletedRouteHistory();
+    // 예외는 실내→야외 예약을 소비하는 호출뿐이다([_activatePendingOutdoorRoute]) —
+    // 그건 새 여정이 아니라 **같은 여정의 다음 구간**이라, 방금 걸어온 실내
+    // 층의 회색선까지 지우면 안 된다. 야외 쪽 진행률은 이 경로가 확정될 때
+    // [_applyRoute]가 어차피 새로 잡는다.
+    if (!keepCompletedHistory) _clearCompletedRouteHistory();
     // 문 경유 안내가 스스로를 부를 때만 pending을 지키고, 그 밖의 새 안내는
     // 이전 여정을 걷어낸다. 남겨 두면 사용자가 다른 곳으로 안내를 바꾼 뒤에
     // 건물에 들어갔을 때 지웠어야 할 실내 경로가 혼자 되살아난다.
     if (!keepPendingIndoorRoute) _clearPendingIndoorRoute();
+    // 실내→야외 예약은 조건 없이 접는다. 이 호출 자체가 "새 야외 목적지"라,
+    // 남겨 두면 나중에 건물을 나가는 순간 방금 지운 목적지가 되살아난다.
+    // (예약을 소비하는 [_activatePendingOutdoorRoute]는 부르기 전에 이미 비운다.)
+    _clearPendingOutdoorRoute();
     // 새 도보 목적지를 받으면 이전 대중교통 안내는 끝난 것이다. 남겨 두면
     // 다른 곳으로 걸어가는 화면 위에 예전 버스 노선이 계속 그려진다.
     clearTransitRoute();
@@ -3814,6 +4163,98 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _beginRouteRecordingSession();
   }
 
+  /// 건물 **안**에서 바깥 목적지까지 한 번에 안내한다. [showOutdoorToIndoorRouteTo]의
+  /// 거울상이다.
+  ///
+  /// 실내 구간(현재 위치 → 출구)만 먼저 그리고, 야외 구간은 예약해 두었다가
+  /// 사용자가 실제로 건물을 나간 순간 [_activatePendingOutdoorRoute]가 이어 붙인다.
+  /// 나갔다는 판정은 GPS가 한다([_applyBuildingVerdict]의 outside 갈래) — 야외에서
+  /// 들어올 때와 정확히 대칭이라, 두 방향이 같은 규칙 위에 선다.
+  ///
+  /// ## 출구는 목적지 기준으로 고른다
+  ///
+  /// 현재 위치에서 가까운 문이 아니라 **목적지에서 가까운 문**이다. 전체 이동
+  /// 거리를 줄이는 쪽이 그쪽이기 때문이다 — 건물 반대편으로 나가면 실내에서 아낀
+  /// 30 m를 바깥에서 200 m로 갚는다. 야외→실내가 출발지 기준으로 고르는 것과
+  /// 방향만 뒤집힌 같은 원리다.
+  ///
+  /// ## 어디서 깨지는가
+  ///
+  /// - **출구 데이터가 없는 건물** → 문을 경유할 수 없다. 야외 경로만 그린다.
+  ///   경로가 건물을 관통하겠지만, 안내가 아예 없는 것보다는 낫다.
+  /// - **실내 위치가 없다** → 실내 구간의 출발점을 만들 수 없다.
+  ///   [showIndoorRouteTo]가 "출발 위치를 먼저 지정해주세요"로 안내한다.
+  /// - **실내 경로가 안 풀린다** → 예약을 걸어 두면 안 된다. 문까지 못 가는데
+  ///   야외 구간만 기다리고 있으면, 나가지도 못한 채 아무 일도 안 일어난다.
+  ///   그래서 예약은 실내 구간이 실제로 그려진 것을 **확인한 뒤에** 건다.
+  Future<void> showIndoorToOutdoorRouteTo(
+    ll.LatLng destination, {
+    required String label,
+  }) async {
+    final exitFloor = _groundEntranceFloor;
+    final exit = exitFloor == null
+        ? null
+        : nearestEntrance(_groundEntrances, destination);
+    if (exitFloor == null || exit == null) {
+      await showRouteTo(destination, label: label);
+      return;
+    }
+
+    final exitLabel = entranceDirectionLabel(
+      exit,
+      _buildingCenter(_buildingFootprint ?? const []),
+    );
+    // 실내 구간은 기존 실내 라우팅을 그대로 쓴다. 출구도 노드를 가진 지점이라
+    // 매장과 다를 게 없다 — 따로 만들면 층 전환·재탐색·진행률이 전부 갈라진다.
+    await showIndoorRouteTo(
+      PoiSearchResult(
+        name: exitLabel,
+        floor: exitFloor,
+        point: exit.point,
+        nodeId: exit.nodeId,
+      ),
+    );
+    if (!mounted) return;
+    // 실내 구간이 실제로 그려졌을 때만 야외 구간을 예약한다. 위 호출은 실패해도
+    // 스낵바만 띄우고 조용히 돌아오므로, 성공 여부는 결과 상태로 확인한다.
+    if (_indoorRouteDestination == null) return;
+    setState(() {
+      _pendingOutdoorDestination = destination;
+      _pendingOutdoorLabel = label;
+    });
+    _showSnack('$exitLabel로 안내합니다. 건물을 나가면 바깥 경로가 이어집니다.');
+  }
+
+  /// 건물을 나간 순간, 예약해 둔 야외 구간을 실제 안내로 올린다.
+  ///
+  /// 출발지를 못박지 않는 이유는 **현재 위치에서 출발해야 하기 때문**이다.
+  /// 출구 좌표를 출발지로 주면 [showRouteTo]가 그 값을 [_fixedRouteOrigin]에
+  /// 넣어 경로를 고정하고, 그러면 걸어가는 동안 경로가 사용자를 따라오지 않는다.
+  Future<void> _activatePendingOutdoorRoute() async {
+    final destination = _pendingOutdoorDestination;
+    final label = _pendingOutdoorLabel;
+    if (destination == null || label == null) return;
+    _clearPendingOutdoorRoute();
+    // 완료 이력은 들고 간다. 이 호출은 같은 여정의 다음 구간이라, 거울상인
+    // [_activatePendingIndoorRoute]가 야외 회색선을 남겨 두는 것과 대칭이다.
+    await showRouteTo(
+      destination,
+      label: label,
+      keepCompletedHistory: true,
+    );
+  }
+
+  /// 실내→야외 예약을 접는다. 그 안내가 더는 유효하지 않은 모든 자리에서 부른다.
+  void _clearPendingOutdoorRoute() {
+    if (_pendingOutdoorDestination == null && _pendingOutdoorLabel == null) {
+      return;
+    }
+    setState(() {
+      _pendingOutdoorDestination = null;
+      _pendingOutdoorLabel = null;
+    });
+  }
+
   /// 문 경유 안내를 접는다. 야외 구간이 사라지는 모든 경로에서 함께 불린다 —
   /// 남겨 두면 사용자가 안내를 끈 뒤에 건물에 들어갔을 때 지웠던 실내 경로가
   /// 혼자 되살아난다.
@@ -3941,6 +4382,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       );
       if (!mounted) return;
     }
+    // 새 실내 목적지를 고른 것이므로 실내→야외 예약도 접는다. 남겨 두면 다른
+    // 매장으로 안내를 바꾼 사용자가 건물을 나가는 순간 옛 야외 목적지가 뜬다.
+    // ([showIndoorToOutdoorRouteTo]는 이 호출이 끝난 **뒤에** 예약을 건다.)
+    _clearPendingOutdoorRoute();
     // 새 목적지를 고른 순간에는 이전 여정의 완료 이력도 함께 끝낸다. 이후
     // 실내 재탐색은 이 함수가 아니라 _computeAndShow*에서 이력을 이어 붙인다.
     _clearCompletedRouteHistory();
@@ -5760,8 +6205,29 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// [_indoorEntered] 상태 변경을 한 곳으로 모은 헬퍼. setState + 상위 콜백 통지에
   /// 더해 dim scrim의 fillOpacity도 함께 갱신해, 실내 진입/이탈에 스포트라이트
   /// 효과가 즉시 반영되게 한다.
-  void _setIndoorEntered(bool value) {
+  /// 실내 위치가 지금 잡혀 있는지. 자동 이탈을 허용할지 가르는 기준이다
+  /// ([_applyBuildingVerdict]).
+  ///
+  /// 앵커만으로 판단한다. 궤적(snapshot)은 세션이 끝난 뒤에도 남아 있어서
+  /// "지금 안에 있다"의 근거가 못 된다.
+  bool get _indoorPositionPlaced => _pdrTrailState.anchor != null;
+
+  /// [leftBuilding]은 **사용자가 실제로 건물을 나갔다**는 뜻이다(GPS 판정).
+  /// 화면에서 도면만 접은 것([returnToOutdoorView], 바깥 탭)과 구분해야 하는
+  /// 이유는 두 가지다.
+  ///
+  ///   - **실내 위치를 버릴지.** 도면을 접은 사용자는 잠시 뒤 다시 펼 수 있으니
+  ///     앵커와 걸음 누적을 남겨야 한다(안 남기면 오버레이를 여닫을 때마다 실내
+  ///     위치가 초기화된다). 반대로 건물을 나간 사용자의 앵커는 이미 틀린 값이라,
+  ///     남겨 두면 야외 지도 위에 실내 궤적이 계속 자란다.
+  ///   - **야외 구간을 올릴지.** 실내→야외 안내 중 사용자가 도면만 접었다고
+  ///     야외 구간으로 넘어가면, 아직 건물 안인데 실내 구간이 사라진다. 다시
+  ///     확대해도 예약은 이미 소비돼 안내가 통째로 없어진다.
+  void _setIndoorEntered(bool value, {bool leftBuilding = false}) {
     if (_indoorEntered == value) return;
+    // 상태를 내리기 **전에** 버린다. 아래 [_syncPdrCurrentLayer]가 이 값을 보고
+    // 그릴지 말지를 정하므로, 뒤에 버리면 그 한 프레임 동안 옛 위치가 남는다.
+    if (!value && leftBuilding) _dropIndoorPosition();
     // 자동으로 들어왔다는 표식은 야외로 나가는 순간 내린다. 남겨 두면 다음에
     // 사용자가 건물을 직접 탭해 연 도면까지 GPS가 제멋대로 닫는다
     // ([_applyBuildingVerdict]의 outside 갈래).
@@ -5783,8 +6249,17 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     widget.onIndoorEnteredChanged?.call(value);
     // 진입/이탈로 "지금 보고 있는 층"의 유무 자체가 바뀐다.
     _notifyActiveFloor();
-    // 실내로 들어가면 GPS 구독을 끊고 마커를 지운다. 다시 나가면 재구독한다.
+    // 구독 자체는 실내에서도 유지된다(이탈 판정의 유일한 입력이다) — 여기서
+    // 하는 일은 이 화면이 안 보이게 됐을 때 끊는 것뿐이다.
     _syncGpsSubscription();
+    // GPS 마커는 **이 자리에서 직접** 지운다.
+    //
+    // [_syncCurrentLayer]가 [_outdoorGpsVisible]을 보고 알아서 비우기는 하지만,
+    // 그 함수는 다음 위치 이벤트가 와야 불린다. 진입 순간에 안 지우면 마지막
+    // 야외 좌표가 실내 도면 위에 그대로 남아, 사용자는 실내 위치 아이콘과 건물
+    // 밖 파란 점을 **동시에** 보게 된다. 위치 아이콘의 주인이 바뀌는 시점은
+    // 다음 좌표가 아니라 지금이다.
+    unawaited(_syncCurrentLayer());
     // 위치 아이콘의 주인이 바뀌는 순간이다. 야외로 나가면 실내 위치 마커를
     // 지우고(GPS 마커가 그 역할을 받는다), 실내로 들어가면 다시 그린다.
     unawaited(_syncPdrCurrentLayer());
@@ -5796,12 +6271,22 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     unawaited(_syncIndoorOverlayFade());
     // 실내로 들어온 시점이 PDR을 켤 지점이다. 야외로 나갈 때는 세션을 끄지
     // 않는다 — 실내/야외 오버레이를 오가는 동안 세션이 껐다 켜지면 anchor와
-    // 걸음 누적이 매번 초기화된다.
+    // 걸음 누적이 매번 초기화된다. 진짜로 건물을 나간 경우만 예외이고, 그건
+    // 위에서 [dropIndoorPosition]으로 이미 처리했다.
     if (value) unawaited(_startPdrIfIdle());
-    // 문 경유 안내로 여기까지 왔다면, 지금이 야외 구간을 실내 구간으로 넘길
-    // 지점이다. 진입은 GPS·확대·탭 어느 쪽으로 판정되든 이 함수를 지나므로
-    // 승격도 여기 한 곳에만 둔다.
-    if (value) unawaited(_activatePendingIndoorRoute());
+    // 문 경유 안내로 여기까지 왔다면, 지금이 두 구간을 넘기는 지점이다. 진입도
+    // 이탈도 어느 경로로 판정되든 이 함수를 지나므로 승격은 여기 한 곳에만 둔다.
+    //
+    // 방향에 따라 넘기는 것이 반대다.
+    //   - 들어왔다 → 야외 구간이 끝났으니 실내 구간을 올린다.
+    //   - 나갔다   → 실내 구간이 끝났으니 야외 구간을 올린다.
+    //
+    // 나가는 쪽만 [leftBuilding]으로 한 번 더 좁힌다. 근거는 이 함수 문서에 있다.
+    if (value) {
+      unawaited(_activatePendingIndoorRoute());
+    } else if (leftBuilding) {
+      unawaited(_activatePendingOutdoorRoute());
+    }
   }
 
   /// 지금 화면 폭에서 쓸 실내 진입 임계값.
@@ -7771,6 +8256,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     bool gatePermission = true,
     bool announceFailure = false,
   }) async {
+    // 아래 사다리는 전부 "지금 세션 상태"를 읽어 갈린다. 정지가 아직 도는 중이면
+    // 그 상태가 거짓말을 한다([_awaitPdrStop]).
+    await _awaitPdrStop();
+    if (!mounted) return false;
     if (indoorNavigationDriver.currentRuntimeStatus.state ==
         PdrRuntimeState.idle) {
       if (!gatePermission) {
@@ -8313,6 +8802,44 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
                   color: AppColors.warning,
                   icon: Icons.wifi_off,
                 ),
+              ),
+            ),
+          ),
+
+        // GPS 실내 진입 판정의 근거를 그 자리에서 읽기 위한 진단 칩.
+        //
+        // 실기기를 들고 건물을 드나드는 실험에서, 화면에 보이는 유일한 신호는
+        // "건물 감지 중…" 스낵바와 도면 전환뿐이라 **안 걸렸을 때 원인을 알
+        // 방법이 없었다.** 오차가 커서 건너뛴 것인지, 안쪽 문턱을 못 넘은
+        // 것인지, 자동 진입이 꺼져 있는 것인지가 이 한 줄에서 갈린다.
+        //
+        // 자리는 건물 로드 실패 배지([_placingHintTopPx]) 한 줄 아래다. 둘은
+        // 동시에 뜰 수 있고(외곽선을 못 받으면 칩은 '외곽선 없음'을 띄운다),
+        // 겹치면 정작 원인을 가린다. 칩 자체는 IgnorePointer라 탭을 안 먹는다.
+        if (debugEnabled)
+          Positioned(
+            top: _placingHintTopPx + 44,
+            left: 12,
+            child: SafeArea(
+              bottom: false,
+              // 두 칩을 한 열에 쌓는다. 각자 Positioned로 띄우고 top에 상수를
+              // 더하면, 칩 높이가 바뀔 때마다 두 자리를 같이 고쳐야 하고 한쪽만
+              // 고치면 겹친다. 층 전환 칩을 아래에 두는 이유는 순서다 — 건물에
+              // 들어가야(위 칩) 층 판정이 돌기 시작한다(아래 칩).
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ValueListenableBuilder<String?>(
+                    valueListenable: _gpsVerdictDebugText,
+                    builder: (_, text, _) => MapDebugChip(text: text),
+                  ),
+                  const SizedBox(height: 6),
+                  ValueListenableBuilder<String?>(
+                    valueListenable: _escalatorDebugText,
+                    builder: (_, text, _) => MapDebugChip(text: text),
+                  ),
+                ],
               ),
             ),
           ),
