@@ -132,11 +132,18 @@ FillLayerProperties indoorVerticalTransportProps(List<Object> fadeExpr) =>
 ///
 /// [devicePixelRatio]는 아이콘 크기를 논리 px으로 환산하는 데 쓴다 —
 /// [indoorMarkerIconSize] 주석 참고. 호출하는 쪽이 화면에서 읽어 넘긴다.
+/// [alwaysVisible]은 **한 폴리곤을 여러 매장이 나눠 쓰는 자리**(타일 라벨의
+/// `shared` 속성) 전용이다. 백엔드가 라벨 점을 흩어 놓아도 간격이 글자 폭보다
+/// 좁을 수 있어, 충돌 판정에 맡기면 결국 하나가 지워진다 — 그러면 화면에는
+/// 이름 하나만 보이는데 그 자리에는 매장이 둘이라, 보이는 이름과 열리는 매장이
+/// 어긋난다. 같은 자리에 둘이 있다는 사실 자체가 정보이므로 이 라벨들은 조금
+/// 겹치더라도 전부 그린다(전체 1,640곳 중 91곳뿐이라 겹침이 번지지 않는다).
 SymbolLayerProperties indoorStoresLabelProps(
   List<Object> fadeExpr,
   CategorySelection? selection,
-  double devicePixelRatio,
-) => SymbolLayerProperties(
+  double devicePixelRatio, {
+  bool alwaysVisible = false,
+}) => SymbolLayerProperties(
   textField: categoryLabelTextField(selection),
   textFont: const [mapFontStackRegular],
   // 색·헤일로·크기 전부 [map_label_style.dart]가 단일 출처다. 크기가 고정인
@@ -158,11 +165,14 @@ SymbolLayerProperties indoorStoresLabelProps(
   textAnchor: 'top',
   textOffset: mapLabelBelowIconOffset,
   textJustify: 'center',
-  textAllowOverlap: false,
+  textAllowOverlap: alwaysVisible,
+  iconAllowOverlap: alwaysVisible,
   // 자리가 없으면 아이콘·이름 중 하나만이라도 남긴다. iconOptional이 없으면
   // 심볼이 넓어진 만큼 이름이 밀려난다(실내 화면 주석의 실측 참고).
-  textOptional: true,
-  iconOptional: true,
+  // alwaysVisible에서는 반대로 **아무것도 포기하지 않는다** — 포기가 곧
+  // "매장이 지도에서 사라짐"인 자리다.
+  textOptional: !alwaysVisible,
+  iconOptional: !alwaysVisible,
 );
 
 /// 편의시설의 텍스트 전용 라벨. 아이콘은 [indoorFacilityIconProps]가 그린다.
