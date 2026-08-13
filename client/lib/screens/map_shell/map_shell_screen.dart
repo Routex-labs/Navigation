@@ -443,12 +443,24 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 길찾기 시트의 출발지 칸에는 건물 안 매장이 적혀 있는데 실제 경로는 GPS에서
   /// 시작해, 화면에 적힌 출발지와 그려지는 경로가 어긋난다. 비우면 다시 "현재
   /// 위치"(=야외에서는 GPS)가 기본 출발지가 된다.
+  ///
+  /// **칸의 글자까지 함께 지운다.** 상태만 비우면 정확히 위에서 막으려던 그
+  /// 어긋남이 남는다 — 실제로 그랬다. 실내에서 매장을 출발지로 잡아 둔 채 GPS가
+  /// "건물 밖" 판정을 내리면(줌 아웃·건물에서 멀어짐) 오버레이가 꺼지면서 여기로
+  /// 오는데, 그때 출발지 칸에는 그 매장 이름이 그대로 남아 있었다. 사용자 화면은
+  /// "스타벅스 리저브 → 런던베이글 뮤지엄"인데 계산은 "GPS 현재 위치 → 런던베이글"
+  /// 이라, 같은 건물 안 두 매장 사이 경로가 20 km·270분으로 나왔다.
+  /// 규칙은 [_applySwappedEndpoints]와 같다: 두 칸은 라벨이 아니라 입력창이므로
+  /// 상태를 바꾸는 쪽이 글자도 함께 책임진다.
   void _dropIndoorOriginIfOutdoors() {
     if (_indoorContextActive) return;
     final origin = _selectedOrigin;
     if (origin == null) return;
     if (origin.floor == null && origin.nodeId == null) return;
-    setState(() => _selectedOrigin = null);
+    setState(() {
+      _selectedOrigin = null;
+      _routeOriginController.clear();
+    });
   }
 
   /// 지금 화면이 "건물 안"을 보고 있는지. 실내 탭이거나, 야외 탭이어도 실내
