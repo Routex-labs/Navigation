@@ -1,0 +1,169 @@
+import 'dart:math' as math;
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:navigation_client/screens/outdoor_map/indoor_entry_gps.dart';
+
+/// 판정 자체는 실기기를 들고 건물을 드나들어야 확인할 수 있지만, **어떤 숫자가
+/// 어떤 결론을 만드는지**는 여기서 끝난다. 실기기 실험은 "이 좌표가 정말 그
+/// 좌표인가"만 확인하면 된다.
+///
+/// 좌표는 중심 [_center]에서 동서남북 100 m씩 뻗은 정사각형이다. 실제 데모
+/// 건물(폭 약 180 m)과 비슷한 규모라 임계값(안쪽 5 m·바깥 20 m)이 건물 크기에
+/// 묻히지 않는다.
+const _center = LatLng(37.525862, 126.928540);
+const _halfWidthMeters = 100.0;
+const _metersPerDegreeLat = 111320.0;
+
+/// [_center]에서 북쪽으로 [north] m, 동쪽으로 [east] m 떨어진 좌표.
+LatLng _offset({double north = 0, double east = 0}) {
+  final mPerDegLng =
+      _metersPerDegreeLat * math.cos(_center.latitude * math.pi / 180);
+  return LatLng(
+    _center.latitude + north / _metersPerDegreeLat,
+    _center.longitude + east / mPerDegLng,
+  );
+}
+
+List<LatLng> _square() => [
+  _offset(north: _halfWidthMeters, east: -_halfWidthMeters),
+  _offset(north: _halfWidthMeters, east: _halfWidthMeters),
+  _offset(north: -_halfWidthMeters, east: _halfWidthMeters),
+  _offset(north: -_halfWidthMeters, east: -_halfWidthMeters),
+];
+
+GpsBuildingJudgement _judge({
+  required LatLng point,
+  required double accuracy,
+  List<LatLng>? footprint,
+}) => judgeBuildingFromGps(
+  fix: GpsFix(point: point, accuracyMeters: accuracy),
+  footprint: footprint ?? _square(),
+);
+
+void main() {
+  group('judgeBuildingFromGps — 결론', () {
+    test('외곽선을 모르면 판정하지 않는다', () {
+      final judgement = _judge(
+        point: _center,
+        accuracy: 5,
+        footprint: const [],
+      );
+      expect(judgement.verdict, GpsBuildingVerdict.unclear);
+      expect(judgement.hasFootprint, isFalse);
+    });
+
+    test('오차가 크면 좌표가 건물 한가운데여도 판정하지 않는다', () {
+      final judgement = _judge(point: _center, accuracy: 34);
+      expect(judgement.verdict, GpsBuildingVerdict.unclear);
+    });
+
+    test('믿을 수 있는 좌표가 안쪽 문턱을 넘으면 진입이다', () {
+      final judgement = _judge(
+        point: _offset(north: _halfWidthMeters - 6),
+        accuracy: 12,
+      );
+      expect(judgement.verdict, GpsBuildingVerdict.inside);
+    });
+
+    test('안쪽 문턱을 못 넘으면 아직 진입이 아니다', () {
+      final judgement = _judge(
+        point: _offset(north: _halfWidthMeters - 3),
+        accuracy: 5,
+      );
+      expect(judgement.verdict, GpsBuildingVerdict.unclear);
+    });
+
+    test('벽 바깥 완충 구간에서는 이탈로 보지 않는다', () {
+      final judgement = _judge(
+        point: _offset(north: _halfWidthMeters + 10),
+        accuracy: 5,
+      );
+      expect(judgement.verdict, GpsBuildingVerdict.unclear);
+    });
+
+    test('바깥 여유를 넘으면 이탈이다', () {
+      final judgement = _judge(
+        point: _offset(north: _halfWidthMeters + 30),
+        accuracy: 5,
+      );
+      expect(judgement.verdict, GpsBuildingVerdict.outside);
+    });
+  });
+
+  group('judgeBuildingFromGps — 근거', () {
+    test('오차 때문에 건너뛴 판정도 거리를 그대로 남긴다', () {
+      // 이 케이스가 이 기능의 존재 이유다. 거리를 안 재고 0으로 두면 "건물
+      // 한가운데서 신호가 나빴다"가 "건물 밖이었다"와 같은 화면으로 보인다.
+      final judgement = _judge(
+        point: _offset(north: _halfWidthMeters - 30),
+        accuracy: 34,
+      );
+      expect(judgement.verdict, GpsBuildingVerdict.unclear);
+      expect(judgement.metersInside, closeTo(30, 0.5));
+      expect(judgement.metersOutside, 0);
+    });
+
+    test('밖에 있으면 안쪽 거리가 0이다', () {
+      final judgement = _judge(
+        point: _offset(north: _halfWidthMeters + 30),
+        accuracy: 5,
+      );
+      expect(judgement.metersInside, 0);
+      expect(judgement.metersOutside, closeTo(30, 0.5));
+    });
+
+    test('오차는 판정과 무관하게 그대로 실린다', () {
+      final judgement = _judge(point: _center, accuracy: 7.4);
+      expect(judgement.accuracyMeters, 7.4);
+    });
+  });
+
+  group('describeGpsBuildingJudgement', () {
+    test('안쪽이면 안쪽 거리로 읽힌다', () {
+      final judgement = _judge(
+        point: _offset(north: _halfWidthMeters - 3),
+        accuracy: 5,
+      );
+      expect(
+        describeGpsBuildingJudgement(judgement, armed: true),
+        '정확도 5m · 안쪽 3.0m · unclear · 무장O',
+      );
+    });
+
+    test('바깥이면 바깥 거리로 읽힌다', () {
+      final judgement = _judge(
+        point: _offset(north: _halfWidthMeters + 30),
+        accuracy: 5,
+      );
+      expect(
+        describeGpsBuildingJudgement(judgement, armed: true),
+        '정확도 5m · 바깥 30.0m · outside · 무장O',
+      );
+    });
+
+    test('외곽선을 모르면 거리 대신 그 사실을 띄운다', () {
+      final judgement = _judge(
+        point: _center,
+        accuracy: 12,
+        footprint: const [],
+      );
+      expect(
+        describeGpsBuildingJudgement(judgement, armed: true),
+        '정확도 12m · 외곽선 없음 · unclear · 무장O',
+      );
+    });
+
+    test('자동 진입이 꺼져 있으면 무장X로 보인다', () {
+      // "안이라고 판정했는데 왜 안 들어가지"의 흔한 원인이라 한 줄에 함께 둔다.
+      final judgement = _judge(
+        point: _offset(north: _halfWidthMeters - 6),
+        accuracy: 12,
+      );
+      expect(
+        describeGpsBuildingJudgement(judgement, armed: false),
+        '정확도 12m · 안쪽 6.0m · inside · 무장X',
+      );
+    });
+  });
+}
