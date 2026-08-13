@@ -805,6 +805,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   ll.LatLng? _pendingOutdoorDestination;
   String? _pendingOutdoorLabel;
 
+  /// 진행 중인 PDR 세션 정지. 다음 시작이 이걸 기다린다([_awaitPdrStop]).
+  Future<void>? _pdrStopInFlight;
+
   /// 지상 출입구가 있는 층. [_groundEntrances]와 짝이라 함께 채운다 — 출구를
   /// 실내 경로의 도착 노드로 쓰려면 좌표·노드만이 아니라 **층**도 있어야 한다.
   String? _groundEntranceFloor;
@@ -2017,16 +2020,47 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   ///     이것이다.
   ///   - 실내 경로를 안 버리면 목적지가 건물 안이던 안내가 야외 화면에 남는다.
   ///
-  /// 세션 정지는 기다리지 않는다. 화면 상태는 지금 즉시 맞아야 하고, 센서를
-  /// 내리는 데 실패해도 위 셋이 비어 있으면 아무것도 그려지지 않는다.
+  /// 세션 정지는 여기서 기다리지 않는다 — 화면 상태는 지금 즉시 맞아야 한다.
+  /// 대신 **그 Future를 [_pdrStopInFlight]에 남겨** 다음 시작이 기다리게 한다.
+  /// 이유는 그 필드 주석에 있다.
   void _dropIndoorPosition() {
     _pdrTrailState.beginNewSession();
     _syncCorridorTracking(null);
     _clearIndoorRoute();
-    unawaited(indoorNavigationDriver.stopGuidance());
+    final stopping = indoorNavigationDriver.stopGuidance();
+    _pdrStopInFlight = stopping;
+    unawaited(stopping);
+  }
+
+  /// 아직 끝나지 않은 [IndoorNavigationController.stopGuidance]가 있으면 기다린다.
+  ///
+  /// ## 왜 기다려야 하는가
+  ///
+  /// `stopGuidance`는 상태를 곧바로 `idle`로 바꾸지 않는다. 먼저 `stopping`으로
+  /// 두고 네이티브 pedometer를 flush·정지한 **뒤에야** `idle`이 된다. 그 사이에
+  /// 사용자가 건물로 다시 들어오면 [_bindPdrSessionToFloor]가 "idle이 아니네 →
+  /// 이미 세션이 돌고 있구나"로 잘못 읽고 그대로 `true`를 돌려준다.
+  ///
+  /// 그러면 세션 없이 앵커만 찍힌다. 화면에는 실내 위치가 **뜨는데**(그 마커는
+  /// PDR이 아니라 [indoorLocationEstimateController]의 추정값이 그린다) 걸음이
+  /// 쌓이는 세션이 없어 **한 발짝도 움직이지 않는다.** 야외에 나갔다 다시 들어온
+  /// 뒤 위치가 굳어 있던 것이 이것이다.
+  Future<void> _awaitPdrStop() async {
+    final stopping = _pdrStopInFlight;
+    if (stopping == null) return;
+    try {
+      await stopping;
+    } on Object {
+      // 정지에 실패해도 시작은 시도해야 한다. 여기서 멈추면 센서가 한 번
+      // 어긋난 뒤로 실내 위치가 영영 안 잡힌다.
+    }
+    if (identical(_pdrStopInFlight, stopping)) _pdrStopInFlight = null;
   }
 
   Future<void> _startPdrIfIdle() async {
+    // 아래 idle 판정이 정지 중인 세션을 "돌고 있다"로 읽지 않게 한다.
+    await _awaitPdrStop();
+    if (!mounted) return;
     final floor = _activeFloor;
     final graph = _floorGraph;
     if (floor == null ||
@@ -2752,7 +2786,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       lastFixReceivedAt: _lastFixReceivedAt,
       now: DateTime.now(),
       requestInFlight: _freshFixInFlight,
-      maxAge: _indoorEntered ? indoorGpsFixMaxAge : gpsFixMaxAge,
     )) {
       return;
     }
@@ -2964,6 +2997,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         // 실내 위치를 버리는 것도, 실내→야외 안내의 야외 구간을 올리는 것도
         // 여기서만 일어난다([_setIndoorEntered]의 leftBuilding).
         _setIndoorEntered(false, leftBuilding: true);
+        // 위치의 주인이 GPS로 돌아온 순간이다. 마커는 [_setIndoorEntered] 안의
+        // [_syncCurrentLayer]가 이미 켰지만, 카메라는 아직 건물을 보고 있다.
+        // 실내에서 도면에 맞춰 확대해 둔 화면 그대로라 방금 켠 GPS 마커가 화면
+        // 밖일 수 있다 — 사용자 눈에는 "나왔는데 내 위치가 없다"로 보인다.
+        //
+        // 들어올 때 카메라가 건물로 붙는 것과 대칭이다. 나가면 나를 따라온다.
+        unawaited(_moveCameraToUser(position));
       case GpsBuildingVerdict.unclear:
         break;
     }
@@ -7500,6 +7540,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     bool gatePermission = true,
     bool announceFailure = false,
   }) async {
+    // 아래 사다리는 전부 "지금 세션 상태"를 읽어 갈린다. 정지가 아직 도는 중이면
+    // 그 상태가 거짓말을 한다([_awaitPdrStop]).
+    await _awaitPdrStop();
+    if (!mounted) return false;
     if (indoorNavigationDriver.currentRuntimeStatus.state ==
         PdrRuntimeState.idle) {
       if (!gatePermission) {

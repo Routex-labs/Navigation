@@ -64,6 +64,10 @@ const gpsFixMaxAge = Duration(seconds: 3);
 ///
 /// 아직 한 건도 못 받았으면([lastFixReceivedAt]이 null) 즉시 요청한다 — 스트림
 /// 첫 좌표가 늦는 기기에서 지도가 한참 빈 채로 열리는 것을 막는다.
+///
+/// **실내에서도 같은 기준을 쓴다.** 한때 실내는 느슨하게(5초) 두었는데, 그러면
+/// 문을 나선 뒤 야외 전환이 그만큼 늦는다. 실내에서 GPS는 화면에 안 그려지지만
+/// 이탈 판정의 유일한 입력이라, 늦게 받으면 판정도 그만큼 늦는다.
 bool shouldRequestFreshFix({
   required DateTime? lastFixReceivedAt,
   required DateTime now,
@@ -83,19 +87,6 @@ const streamRetryMinDelay = Duration(seconds: 2);
 
 /// 재연결 간격의 상한.
 const streamRetryMaxDelay = Duration(seconds: 30);
-
-/// 실내에 있을 때의 [gpsFixMaxAge].
-///
-/// **실내에서도 좌표는 받아야 한다.** 화면에 그리려는 것이 아니라 "이 사람이
-/// 건물을 나갔는가"를 판정할 입력이 필요해서다. 그 판정의 유일한 입력이 GPS인데,
-/// 예전에는 실내라는 이유로 일회성 조회를 아예 막아 두었다. 스트림까지 조용하면
-/// 실내에 있는 동안 좌표가 **한 건도** 안 들어오고, 이탈 판정은 영영 발화하지
-/// 않는다 — 나갔는데도 실내 위치가 계속 그려지던 것이 이것이다.
-///
-/// 야외보다 느슨하게 잡는 이유는 쓰임이 다르기 때문이다. 야외에서는 이 좌표가
-/// 화면의 내 위치라 1초라도 낡으면 눈에 띄지만, 실내에서는 위치의 주인이 PDR이고
-/// GPS는 판정에만 쓰인다. 문을 나선 뒤 5초 안에 전환되면 충분하다.
-const indoorGpsFixMaxAge = Duration(seconds: 5);
 
 /// 스트림을 연 뒤 이 시간 안에 좌표가 한 건도 안 오면 **죽은 것으로 본다.**
 ///
