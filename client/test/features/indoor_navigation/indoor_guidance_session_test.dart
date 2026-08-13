@@ -584,6 +584,29 @@ void main() {
     IndoorGuidanceSession routedSession() =>
         attachedSession()..setRouteSegment(route);
 
+    test('길안내 중에는 후퇴 방지된 경로 투영점을 마커에 우선 표시한다', () {
+      // 센서 보정 위치는 복도 중심선(y=0)에 있지만, 안내 경로의 표시선은
+      // 같은 간선 위에서 y=2로 보정돼 있다고 가정한다. 예전 홈 통합처럼
+      // previewPosition을 그대로 그리면 마커가 파란 안내선에서 벗어난다.
+      const shiftedRoute = IndoorRoute(
+        points: [],
+        pointsLocalM: [LocalPoint(0, 2), LocalPoint(50, 2)],
+        nodeIds: ['w', 'e'],
+        edgeIds: ['we'],
+        distanceMeters: 50,
+      );
+      final session = attachedSession()..setRouteSegment(shiftedRoute);
+
+      final result = session.onSnapshot(_walkedEast(10), timestampMs: 1000);
+      session.updateProgress(result, previewSteps: 10);
+
+      final preview = session.trackingResult!.previewPosition;
+      final marker = session.position!;
+      expect(preview.northM, closeTo(0, 1e-9));
+      expect(session.displayProgress!.projectedPoint, isNotNull);
+      expect(marker.localM.northM, closeTo(2, 1e-9));
+    });
+
     test('걸을수록 남은거리가 줄어든다', () {
       final session = routedSession();
 

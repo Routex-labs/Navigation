@@ -478,7 +478,9 @@ class IndoorGuidanceSession {
         // 이긴다 — 늦게 잡힌 쪽이 더 강한 근거다.
         return GuidancePosition(
           localM:
-              _rideHoldPointM ?? _boardingHoldPointM ?? result.previewPosition,
+              _rideHoldPointM ??
+              _boardingHoldPointM ??
+              _displayTrackedPosition(result),
           source: GuidancePositionSource.tracked,
           headingDeg: _floorHeadingDeg(anchor),
         );
@@ -501,6 +503,30 @@ class IndoorGuidanceSession {
       source: GuidancePositionSource.estimate,
       accuracyM: estimate.accuracyMeters,
     );
+  }
+
+  /// 길안내 중에는 화면용으로 채택한 경로 투영점을 우선한다.
+  ///
+  /// tracker의 위치를 경로에 끌어당기는 것이 아니다. tracker 결과와 경로 진행률
+  /// 계산은 그대로 두고, **표시할 때만** 예전 실내 화면과 같은 규칙을 적용한다.
+  /// 정상적으로 경로 위에 있거나 아직 이탈 증거가 충분히 쌓이지 않았으면
+  /// `projectedPoint`를 사용해 대표 간선 교체가 마커를 뒤로 밀지 않게 한다.
+  /// 이탈이 확정됐거나 재획득한 경우에는 raw preview로 돌아가 실제 이탈을
+  /// 숨기지 않는다.
+  PdrLocalPoint _displayTrackedPosition(CorridorTrackingResult result) {
+    final progress = _displayProgress;
+    final projected = progress?.projectedPoint;
+    final canFollowGuidance =
+        _routeSegment != null &&
+        progress != null &&
+        projected != null &&
+        result.state != CorridorTrackingState.uncertain &&
+        (progress.onRouteEdge ||
+            (!progress.reacquired &&
+                progress.offsetM < 4 &&
+                _offRouteEvidenceUpdates < 3));
+    if (!canFollowGuidance) return result.previewPosition;
+    return PdrLocalPoint(projected.x, projected.y);
   }
 
   // --- 경로 진행률 ---

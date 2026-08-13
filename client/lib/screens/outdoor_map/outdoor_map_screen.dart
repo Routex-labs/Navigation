@@ -32,6 +32,7 @@ import '../../features/indoor_navigation/application/escalator_node_naming.dart'
 import '../../features/indoor_navigation/application/escalator_transition_detector.dart';
 import '../../features/indoor_navigation/contract/floor_transition_ui_state.dart';
 import '../../features/indoor_navigation/application/floor_map_matcher.dart';
+import '../../features/indoor_navigation/application/guidance_trail_session.dart';
 import '../../features/indoor_navigation/application/indoor_guidance_position.dart';
 import '../../features/indoor_navigation/application/indoor_guidance_session.dart';
 import '../../features/indoor_navigation/application/indoor_location_estimate.dart';
@@ -197,6 +198,8 @@ const _indoorPoiIconLayerIdBase = 'outdoor-indoor-pois-icon';
 const _indoorStoreFacilityIconLayerIdBase =
     'outdoor-indoor-store-facility-icons';
 const _routeSourceId = 'outdoor-route';
+const _walkedRouteSourceId = 'outdoor-walked-route';
+const _walkedRouteLayerId = 'outdoor-walked-route-line';
 const _transferRouteSourceId = 'outdoor-transfer-route';
 const _transferRouteLayerId = 'outdoor-transfer-route-line';
 const _routeCasingLayerId = 'outdoor-route-casing';
@@ -840,6 +843,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   MapLibreMapController? _mapController;
   bool _styleReady = false;
+
+  /// PDR 마커 source 갱신은 센서·보정·층 전환에서 동시에 들어올 수 있다.
+  ///
+  /// MapLibre의 Future는 플랫폼 쪽 반영이 끝난 뒤 완료되므로 호출을 각각
+  /// fire-and-forget하면 오래된 위치 쓰기가 최신 위치 뒤에 완료될 수 있다.
+  /// revision으로 대기 중인 낡은 쓰기를 건너뛰고, 이미 시작된 native 쓰기는
+  /// 직렬 queue 뒤의 최신 쓰기가 반드시 덮어쓰게 한다.
+  int _pdrMarkerRevision = 0;
+  Future<void> _pdrMarkerWriteQueue = Future<void>.value();
+
   // 야외 오버레이가 지금 보여주는 층. 건물 로드 시 initialFloor로 자동 결정되고,
   // 실내 진입 상태에서 층 chip으로 사용자가 다른 층을 훑어볼 수 있다.
   String? _activeFloor;
@@ -951,6 +964,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 예전에는 이 화면이 복도 보정을 따로 돌려 놓고 결과를 읽지 않은 채 앵커를
   /// 고정 표시했다 — 홈에서 실내 길안내를 하면 마커가 움직이지 않았던 이유다.
   final IndoorGuidanceSession _guidance = IndoorGuidanceSession();
+  final GuidanceTrailSession _guidanceTrailSession = GuidanceTrailSession();
   StreamSubscription<PdrSnapshot>? _pdrSnapshotSub;
   StreamSubscription<CalibrationStatus>? _pdrCalibrationSub;
   StreamSubscription<AltitudeSample>? _pdrAltitudeSub;
@@ -1174,6 +1188,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _syncCorridorTracking(snapshot);
       });
       _syncPdrCurrentLayer();
+      unawaited(_syncWalkedRouteLayer());
       unawaited(_syncDebugPdrLayers());
     });
     _pdrCalibrationSub = indoorNavigationDriver.calibration.listen((status) {
@@ -1188,6 +1203,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _setPlacingAnchor(false);
       }
       _syncPdrCurrentLayer();
+      unawaited(_syncWalkedRouteLayer());
       unawaited(_syncDebugPdrLayers());
     });
     // 층 전환 판정. 실내 탭에만 있던 구독을 여기에도 둔다 — 이게 없으면 홈에서
@@ -3596,6 +3612,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _userDestinationLabel = null;
       _indoorRouteDestination = destination;
       _arrivedDestination = null;
+      // 목적지가 바뀌면 새로운 길안내다. 기존 궤적을 남기면 새 파란 경로와
+      // 이전 목적지로 걸어간 회색선이 한 여정처럼 섞인다.
+      _guidanceTrailSession.clear();
       // 새 경로를 그리기 전에 초기화 — 아래 compute가 성공하면 다시 채운다.
       _guidance.setRouteSegment(null);
       _indoorMultiFloorRoute = null;
@@ -4063,6 +4082,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         ..setRoute(null);
       _indoorMultiFloorRoute = null;
       _indoorRouteDestination = null;
+      _guidanceTrailSession.clear();
     });
     _syncRouteLayer();
     _syncIndoorDestinationLayer();
@@ -4175,6 +4195,27 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _dimScrimSourceId,
       _dimScrimFillLayerId,
       dimScrimProps(0),
+      enableInteraction: false,
+    );
+
+    // 지나온 궤적은 계획 경로와 분리한다. 계획 경로가 재탐색으로 바뀌어도
+    // 사용자가 실제로 걸어온 선은 남아 있어야 하므로, 전용 source를 둔다.
+    // 아래에 먼저 등록해 두면 뒤에 등록되는 파란 계획 경로가 회색선 위에
+    // 올라온다.
+    await controller.addSource(
+      _walkedRouteSourceId,
+      GeojsonSourceProperties(data: _emptyCollection()),
+    );
+    await controller.addLineLayer(
+      _walkedRouteSourceId,
+      _walkedRouteLayerId,
+      const LineLayerProperties(
+        lineColor: kRouteCompletedColor,
+        lineWidth: kRouteLineWidthExpr,
+        lineOpacity: 0.72,
+        lineCap: 'round',
+        lineJoin: 'round',
+      ),
       enableInteraction: false,
     );
 
@@ -5984,6 +6025,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Future<void> _syncRouteLayer() async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
+    await _syncWalkedRouteLayer();
     final transferSegment = _indoorMultiFloorRoute?.segmentForFloor(
       _activeFloor ?? '',
     );
@@ -6438,31 +6480,48 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 실내 위치(PDR) 마커. 야외 상태에서는 [_indoorLocationVisible]이 false라
   /// 항상 빈 소스를 밀어 넣어 마커가 사라진다 — 야외에서는 GPS 마커
   /// ([_syncCurrentLayer])만 보이고, 실내에서는 이쪽만 보인다.
-  Future<void> _syncPdrCurrentLayer() async {
+  Future<void> _syncPdrCurrentLayer() {
+    final revision = ++_pdrMarkerRevision;
     final controller = _mapController;
-    if (controller == null || !_styleReady) return;
+    if (controller == null || !_styleReady) return Future<void>.value();
+
     final location = _indoorLocationVisible ? _pdrCurrentWgs84() : null;
-    if (location == null) {
-      await controller.setGeoJsonSource(
-        _pdrCurrentSourceId,
-        _emptyCollection(),
-      );
-      return;
-    }
-    final heading = _pdrCurrentHeadingDeg;
-    await controller.setGeoJsonSource(
-      _pdrCurrentSourceId,
-      _collection([
-        {
-          'type': 'Feature',
-          'properties': <String, dynamic>{'heading': ?heading},
-          'geometry': {
-            'type': 'Point',
-            'coordinates': [location.longitude, location.latitude],
-          },
-        },
-      ]),
-    );
+    final heading = location == null ? null : _pdrCurrentHeadingDeg;
+    final data = location == null
+        ? _emptyCollection()
+        : _collection([
+            {
+              'type': 'Feature',
+              'properties': <String, dynamic>{'heading': ?heading},
+              'geometry': {
+                'type': 'Point',
+                'coordinates': [location.longitude, location.latitude],
+              },
+            },
+          ]);
+
+    final previous = _pdrMarkerWriteQueue;
+    _pdrMarkerWriteQueue = () async {
+      // 이전 native 호출이 실패해도 다음 센서 갱신은 계속 진행한다.
+      try {
+        await previous;
+      } catch (error, stackTrace) {
+        debugPrint('PDR marker update failed: $error\n$stackTrace');
+      }
+      // 큐에 들어온 사이 더 최신 snapshot이 왔다면 이 위치는 쓰지 않는다.
+      if (revision != _pdrMarkerRevision ||
+          !mounted ||
+          controller != _mapController ||
+          !_styleReady) {
+        return;
+      }
+      try {
+        await controller.setGeoJsonSource(_pdrCurrentSourceId, data);
+      } catch (error, stackTrace) {
+        debugPrint('PDR marker update failed: $error\n$stackTrace');
+      }
+    }();
+    return _pdrMarkerWriteQueue;
   }
 
   /// 지금 그려야 하는 실내 위치. 출처 판단은 [IndoorGuidanceSession]이 한다.
@@ -6574,6 +6633,43 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           return ll.LatLng(wgs84.$1, wgs84.$2);
         })
         .toList(growable: false);
+  }
+
+  /// 현재 층의 확정 궤적과 아직 확정되지 않은 preview 꼬리를 함께 돌려준다.
+  ///
+  /// 회색선의 저장 이력은 [GuidanceTrailSession]이 소유한다. 여기서 매 프레임
+  /// tracker 전체를 다시 매칭하지 않는 이유는, 대표 가설이 바뀌어도 이미 지나온
+  /// 선까지 과거 경로로 다시 칠해지는 일을 막기 위해서다.
+  List<List<ll.LatLng>> get _walkedGuidanceSegments {
+    final floor = _activeFloor;
+    final anchor = _pdrTrailState.anchor;
+    if (floor == null || anchor == null || anchor.floorId != floor) {
+      return const [];
+    }
+    final preview = _guidance.trackingResult?.previewPath ?? const [];
+    return [
+      for (final segment in _guidanceTrailSession.segmentsForFloor(
+        floor,
+        previewPath: preview.length >= 2 ? preview : const [],
+      ))
+        _floorPathToWgs84(segment),
+    ];
+  }
+
+  Future<void> _syncWalkedRouteLayer() async {
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    final segments = _walkedGuidanceSegments
+        .where((segment) => segment.length >= 2)
+        .toList(growable: false);
+    await controller.setGeoJsonSource(
+      _walkedRouteSourceId,
+      segments.isEmpty
+          ? _emptyCollection()
+          : _collection([
+              for (final segment in segments) _lineFeature(segment),
+            ]),
+    );
   }
 
   /// 디버그 모드의 PDR 진단 레이어(그래프 노드·간선 + 세 경로)를 갱신한다.
@@ -6709,6 +6805,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (result != null) _handleEscalatorPhaseChanges();
     _syncIndoorRouteProgress(result, snapshot);
     if (result == null) return;
+    final anchor = _pdrTrailState.anchor;
+    if (anchor != null) {
+      _guidanceTrailSession.update(floorId: anchor.floorId, result: result);
+    }
     _pdrDebugRecorder?.recordCorridorCorrection(result);
     if (snapshot != null) {
       _pdrDebugRecorder?.recordTrackerInput(
@@ -7352,7 +7452,18 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 상세한 근거는 실내 화면의 `_beginRouteRecordingSession` 주석을 본다. 요지는
   /// PDR이 상시 실행이 된 뒤 "시작~종료"를 경계로 쓸 수 없고, 그대로 두면 표본
   /// 상한에 걸려 분석하려는 구간이 앞에서부터 잘려 나간다는 것이다.
+  void _ensureGuidanceTrailSessionStarted() {
+    if (_guidanceTrailSession.isActive) return;
+    final floor = _pdrTrailState.anchor?.floorId ?? _activeFloor;
+    if (floor == null) return;
+    _guidanceTrailSession.start(
+      floorId: floor,
+      result: _guidance.trackingResult,
+    );
+  }
+
   void _beginRouteRecordingSession() {
+    _ensureGuidanceTrailSessionStarted();
     _pdrDebugRecorder = PdrDebugSessionRecorder()
       ..recordRuntime(indoorNavigationDriver.currentRuntimeStatus);
     final snapshot = indoorNavigationDriver.currentSnapshot;
