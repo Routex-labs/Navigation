@@ -60,6 +60,19 @@ const floorSwitchInstantSwapThreshold = Duration(milliseconds: 150);
 /// 하나의 전환으로 읽히도록, 짧지만 인지 가능한 길이로 잡는다.
 const floorSwitchCrossfadeDuration = Duration(milliseconds: 300);
 
+/// 안내 중 자동 층 전환(에스컬레이터 탑승)에서 쓰는 페이드인 시간.
+///
+/// 사람이 층 chip을 훑을 때보다 **두 배 느리다.** 훑기는 사용자가 스스로 일으킨
+/// 조작이라 결과가 빨리 나올수록 좋지만, 자동 전환은 사용자가 요청하지 않은
+/// 사건이라 "지금 층이 바뀌고 있다"를 알아챌 시간이 필요하다. 실기기에서 기존
+/// 연출은 "너무 빠르다"는 지적을 받았고, 그때 지도가 순간적으로 갈리는 것이
+/// 전환이 아니라 깜빡임으로 읽혔다.
+///
+/// 마커가 에스컬레이터를 타고 흐르는 시간([escalatorGlideDuration], 2.4초)보다
+/// 짧게 둔다 — 도면이 먼저 자리를 잡고 그 위를 마커가 마저 흘러가야, 사용자가
+/// 새 층 도면에서 자기 위치를 찾을 시간이 남는다.
+const floorSwitchGuidedCrossfadeDuration = Duration(milliseconds: 600);
+
 /// 크로스페이드를 몇 단계로 쪼개는가. maplibre_gl 바인딩에는 paint transition
 /// (`fill-opacity-transition`)을 넘길 통로가 없어 Dart에서 setLayerProperties를
 /// 단계적으로 보내 흉내 낸다. 단계가 많을수록 매끄럽지만 플랫폼 채널 호출도

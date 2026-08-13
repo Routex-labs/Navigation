@@ -26,6 +26,7 @@ import '../../domain/dijkstra.dart';
 import '../../domain/route_endpoint_fill.dart';
 import '../../domain/route_guidance.dart';
 import '../../features/indoor_navigation/application/corridor_position_tracker.dart';
+import '../../domain/escalator_ride.dart';
 import '../../features/indoor_navigation/application/escalator_arrival.dart';
 import '../../features/indoor_navigation/application/escalator_node_naming.dart';
 import '../../features/indoor_navigation/application/escalator_transition_detector.dart';
@@ -959,12 +960,20 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   PoiSearchResult? _preTransferDestination;
   GraphNode? _pendingArrivalNode;
 
-  /// 도면 교체 구간을 덮는 정도. 0이 아니면 셸이 스크림을 그린다.
-  double _floorSwapVeil = 0;
+  /// 탑승 중 마커가 흐르는 구간(탑승 노드 → 하차 노드, WGS84).
+  ///
+  /// 이 값이 있으면 마커 위치의 출처가 여기다. 탑승부터 하차 확정까지는 걸음이
+  /// 멈춰 있고 앵커도 아직 이전 층에 있어서, 이것이 없으면 마커가 **사라진 채**
+  /// 도면만 바뀐다. 근거와 한계는 [EscalatorGlide] 주석에 적었다.
+  EscalatorGlide? _escalatorGlide;
+  Timer? _escalatorGlideTimer;
 
-  // 사람 조작 층 전환이 오래 걸릴 때 뜨는 에스컬레이터 모티프. 안내용
-  // [_floorSwapVeil](셸이 chrome까지 덮는 불투명 스크림)과 달리 이쪽은 아무것도
-  // 덮지 않는다 — 이전 층 도면이 그대로 보이는 위에 카드 하나만 뜬다. 언제
+  /// 활강 중 마커를 다시 그리는 주기. 위젯 트리를 rebuild하지 않고 지도 소스만
+  /// 갱신하므로(=[_syncPdrCurrentLayer]) 이 정도 빈도를 감당할 수 있다.
+  static const _escalatorGlideFrame = Duration(milliseconds: 60);
+
+  // 사람 조작 층 전환이 오래 걸릴 때 뜨는 에스컬레이터 모티프. 아무것도 덮지
+  // 않는다 — 이전 층 도면이 그대로 보이는 위에 카드 하나만 뜬다. 언제
   // 띄우고 걷을지(모티프 임계·최소 표시)는 컨트롤러가 정한다.
   bool _floorSwitchMotifVisible = false;
 
@@ -998,9 +1007,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   final List<({List<String> layerIds, String sourceId})> _retiringIndoorBlocks =
       [];
 
-  /// 도면을 갈아 끼운 뒤 완전 불투명을 유지하는 시간. 실내 탭과 같은 값이다.
-  static const _indoorFloorSwapVeilHold = Duration(milliseconds: 400);
-
   /// 층 이동 확정 뒤 "아니에요"를 띄워 두는 시간.
   static const _indoorArrivalBannerHold = Duration(seconds: 6);
 
@@ -1010,7 +1016,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   // 셸에 마지막으로 알린 층 전환 UI 상태. 같은 값이면 다시 알리지 않는다.
   FloorTransitionUiState? _reportedFloorTransition;
-  double _reportedFloorScrimOpacity = 0;
 
   /// 디버그 설정은 실내 지도와 공유한다 — 어느 화면에서 켜든 같은 상태를 본다.
   final DebugModeController _debugModeController = debugModeController;
@@ -1267,51 +1272,149 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (_escalatorRide == null &&
         _escalatorStage == null &&
         !_stepsPausedForRide &&
-        _floorSwapVeil == 0) {
+        _escalatorGlide == null) {
       return;
     }
     _stepsPausedForRide = false;
     await indoorNavigationDriver.resumeStepTracking();
     if (!mounted) return;
+    _stopEscalatorGlide();
     setState(() {
       _escalatorRide = null;
       _escalatorStage = null;
-      _floorSwapVeil = 0;
     });
     _guidance.clearBoardingHold();
   }
 
-  /// 스크림으로 덮은 뒤 오버레이 층을 갈아 끼운다.
+  /// 탑승 중에 목적 층 도면으로 갈아탄다. **화면을 덮지 않는다.**
   ///
-  /// 실내 탭은 자체 렌더러의 카메라를 인계하지만, 홈은 MapLibre 소스를 통째로
-  /// 바꾸므로 카메라가 그대로 유지된다. 덮개만 같은 타이밍으로 맞춘다 — 셸의
-  /// 페이드와 여기 대기 시간이 어긋나면 교체 장면이 그대로 보인다.
+  /// 예전에는 불투명 스크림으로 화면 전체를 덮었다가 걷었다. 실기기에서 그것은
+  /// 전환이 아니라 **깜빡임**으로 보였다 — 지도가 한 번 하얗게 날아가고, 그
+  /// 사이 마커가 사라졌다가 다른 자리에 다시 나타난다. 층이 바뀐 사실은 전달
+  /// 되지만 "내가 계속 이동하고 있다"는 연속성이 끊긴다.
   ///
-  /// **새 층 경로에 카메라를 다시 맞추는 것도 여기서, 스크림이 덮인 동안 한다.**
-  /// 층마다 경로가 놓인 자리와 방향이 달라서 이전 층 배율·bearing 그대로 두면
-  /// 걷힌 화면에 경로가 비스듬히 눕거나 아예 밖으로 나가 있다. 그렇다고 걷힌
-  /// **뒤에** 움직이면 층이 바뀔 때마다 지도가 크게 도는 연출이 반복돼 피로하다.
-  /// 덮여 있는 동안 옮겨 두면 사용자는 새 층을 이미 맞춰진 상태로 만난다 —
-  /// 움직임을 못 봤으니 "순간이동"으로도 읽히지 않는다.
-  Future<bool> _swapIndoorFloorSmoothly(String floor) async {
+  /// 지금은 사람이 층 chip을 눌렀을 때와 같은 크로스페이드를 쓴다
+  /// ([_switchOverlayFloorCrossfaded]) — 이전 층 도면이 새 층 타일이 실제로
+  /// 도착할 때까지 남아 있고, 그 위로 새 도면이 페이드인된다. 흰 화면은 어느
+  /// 순간에도 없다. 대신 안내 중에는 페이드를 **두 배 느리게** 준다
+  /// ([floorSwitchGuidedCrossfadeDuration]) — 층 훑기와 달리 이건 사용자가
+  /// 알아채야 하는 사건이고, 그동안 마커가 에스컬레이터를 타고 흐른다.
+  ///
+  /// 마커 활강과 카메라 정렬도 여기서 건다. 셋(도면 교체·마커·카메라)이 같은
+  /// 시간 축 위에서 시작해야 하나의 전환으로 읽힌다.
+  Future<bool> _swapIndoorFloorForRide(EscalatorTransition transition) async {
+    final floor = transition.toFloorLabel;
     if (!(_building?.floors.contains(floor) ?? false)) return false;
-    setState(() => _floorSwapVeil = 1);
-    await Future<void>.delayed(floorTransitionScrimFadeIn);
-    if (!mounted) return false;
-    await _switchOverlayFloor(floor);
-    if (!mounted) return false;
-    // 덮인 동안이라 애니메이션 시간을 줄 이유가 없다. 사용자는 과정을 볼 수
-    // 없고, 기다리는 만큼 스크림만 길어진다.
-    final segment = _indoorRouteSegment;
-    if (segment != null) {
-      await _fitCameraToRouteSegment(segment, duration: Duration.zero);
-      if (!mounted) return false;
+    // 탑승 노드 좌표는 **층을 바꾸기 전에** 절대 좌표로 떠 둔다. 층이 바뀌면
+    // 이전 층 그래프가 사라져 local m을 WGS84로 옮길 수가 없다.
+    final boardingWgs84 =
+        _nodeWgs84(_floorGraph, transition.boardingNodeId) ??
+        _pdrCurrentWgs84();
+    await _switchOverlayFloorCrossfaded(
+      floor,
+      recenterIfNeeded: false,
+      crossfadeDuration: floorSwitchGuidedCrossfadeDuration,
+    );
+    if (!mounted || _activeFloor != floor) return false;
+
+    final arrival = findEscalatorArrivalNode(_floorGraph, transition);
+    if (arrival != null) setState(() => _pendingArrivalNode = arrival);
+    final arrivalWgs84 = _nodeWgs84(_floorGraph, arrival?.id);
+    _startEscalatorGlide(from: boardingWgs84, to: arrivalWgs84);
+    // 카메라는 **기다리지 않는다.** 이 함수는 층 전환 큐 위에서 도는데, 여기서
+    // 활강 시간만큼 붙잡으면 그 뒤 하차 확정이 그만큼 밀린다.
+    unawaited(_aimCameraAtEscalatorExit(from: boardingWgs84, to: arrivalWgs84));
+    return true;
+  }
+
+  /// 그래프 노드 하나의 WGS84 좌표. 노드를 못 찾으면 null.
+  ll.LatLng? _nodeWgs84(FloorGraph? graph, String? nodeId) {
+    if (graph == null || nodeId == null || graph.nodes.isEmpty) return null;
+    final node = graph.nodes.where((n) => n.id == nodeId).firstOrNull;
+    if (node == null) return null;
+    final wgs84 = fitFloorGeoTransform(graph.nodes).apply(node.xM, node.yM);
+    return ll.LatLng(wgs84.$1, wgs84.$2);
+  }
+
+  /// 탑승 노드 → 하차 노드 구간을 마커가 흐르게 한다.
+  ///
+  /// 양 끝 중 하나라도 모르면 걸지 않는다 — 출발이나 도착을 모르는 활강은
+  /// 아무 방향으로나 흐르는 점일 뿐이다. 그때는 예전처럼 마커가 잠깐 사라졌다
+  /// 하차 확정과 함께 도착 노드에 나타난다.
+  void _startEscalatorGlide({
+    required ll.LatLng? from,
+    required ll.LatLng? to,
+  }) {
+    _escalatorGlideTimer?.cancel();
+    _escalatorGlideTimer = null;
+    if (from == null || to == null) {
+      _escalatorGlide = null;
+      return;
     }
-    // 새 도면이 첫 프레임을 그릴 시간을 준 뒤에 걷는다.
-    await Future<void>.delayed(_indoorFloorSwapVeilHold);
-    if (!mounted) return false;
-    setState(() => _floorSwapVeil = 0);
-    return _activeFloor == floor;
+    _escalatorGlide = EscalatorGlide(
+      from: from,
+      to: to,
+      startedAtMs: DateTime.now().millisecondsSinceEpoch,
+    );
+    _escalatorGlideTimer = Timer.periodic(_escalatorGlideFrame, (timer) {
+      final glide = _escalatorGlide;
+      if (!mounted || glide == null) {
+        timer.cancel();
+        return;
+      }
+      unawaited(_syncPdrCurrentLayer());
+      // 도착 노드에 닿으면 타이머만 접는다. 활강 자체는 하차가 확정될 때까지
+      // 살려 둬야 마커가 그 자리를 지킨다.
+      if (glide.isDoneAt(DateTime.now().millisecondsSinceEpoch)) timer.cancel();
+    });
+  }
+
+  void _stopEscalatorGlide() {
+    _escalatorGlideTimer?.cancel();
+    _escalatorGlideTimer = null;
+    if (_escalatorGlide == null) return;
+    _escalatorGlide = null;
+    unawaited(_syncPdrCurrentLayer());
+  }
+
+  /// 하차 지점을 화면에 두고, **내리는 방향**이 화면 위로 오게 돌린다.
+  ///
+  /// 예전에는 새 층 경로 전체를 담는 개요([_fitCameraToRouteSegment])를 썼다.
+  /// 그러면 에스컬레이터에서 내리는 순간 화면은 이미 "앞으로 갈 방향"으로
+  /// 돌아가 있는데 몸은 아직 에스컬레이터 정면을 보고 있어서, 사용자가 어느
+  /// 쪽으로 몸을 틀어야 하는지 화면에서 읽을 수가 없었다.
+  ///
+  /// 방향을 못 구하면(두 노드가 겹쳐 있는 도면) 카메라 각도를 그대로 둔다 —
+  /// 틀린 방향으로 돌리는 것보다 안 돌리는 편이 낫다.
+  Future<void> _aimCameraAtEscalatorExit({
+    required ll.LatLng? from,
+    required ll.LatLng? to,
+  }) async {
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    if (to == null) {
+      // 하차 지점을 모르면 적어도 새 층 경로는 보여 준다(예전 동작).
+      final segment = _indoorRouteSegment;
+      if (segment != null) await _fitCameraToRouteSegment(segment);
+      return;
+    }
+    final camera = controller.cameraPosition;
+    final bearing = from == null
+        ? null
+        : escalatorExitBearingDeg(boarding: from, arrival: to);
+    await controller.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: _toGl(to),
+          zoom: math.max(camera?.zoom ?? _walkingViewZoom, _walkingViewZoom),
+          bearing: bearing ?? camera?.bearing ?? 0,
+          tilt: camera?.tilt ?? 0,
+        ),
+      ),
+      // 마커 활강과 같은 시간을 쓴다 — 지도와 점이 따로 움직이면 두 번의 전환
+      // 으로 읽힌다.
+      duration: escalatorGlideDuration,
+    );
   }
 
   /// 디버그 모드에서 강제로 태울 수 있는 다음 환승(지금 층 세그먼트 + 도착 층).
@@ -1337,9 +1440,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   ///
   /// **판정기를 흉내 내는 것이지 우회하는 것이 아니다.** 판정기가 확정을 냈을 때
   /// 타는 경로(시작 → 확정, [_beginEscalatorTransition] →
-  /// [_completeEscalatorTransition])에 합성 transition을 그대로 넣는다. 스크림,
-  /// 스크림 뒤 카메라 재배치([_swapIndoorFloorSmoothly]), 새 층 앵커 복원,
-  /// 재탐색까지 전부 프로덕션 코드가 돈다 — 여기서 따로 그리는 화면이 없으므로
+  /// [_completeEscalatorTransition])에 합성 transition을 그대로 넣는다. 도면
+  /// 크로스페이드와 마커 활강·카메라 정렬([_swapIndoorFloorForRide]), 새 층
+  /// 앵커 복원, 재탐색까지 전부 프로덕션 코드가 돈다 — 여기서 따로 그리는 화면이 없으므로
   /// 이 버튼으로 본 연출이 곧 실기기에서 에스컬레이터를 탔을 때의 연출이다.
   ///
   /// 도착 노드는 경로가 지목한 노드([IndoorRouteSegment.transferToNodeId])를
@@ -1414,15 +1517,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _escalatorStage = null;
       });
 
-      if (!await _swapIndoorFloorSmoothly(transition.toFloorLabel)) {
+      if (!await _swapIndoorFloorForRide(transition)) {
         await _endEscalatorRide();
         if (mounted) {
           _showSnack('${transition.toFloorLabel} 지도를 불러오지 못했습니다. 현재 층을 유지합니다.');
         }
         return;
       }
-      final arrival = findEscalatorArrivalNode(_floorGraph, transition);
-      if (arrival != null) setState(() => _pendingArrivalNode = arrival);
     } finally {
       _applyingFloorTransition = false;
     }
@@ -1437,7 +1538,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     try {
       if (_activeFloor != transition.toFloorLabel) {
         // 조기 전환 없이 바로 확정된 경우(후보와 확정이 거의 동시).
-        if (!await _swapIndoorFloorSmoothly(transition.toFloorLabel)) {
+        if (!await _swapIndoorFloorForRide(transition)) {
           await _endEscalatorRide();
           if (mounted) {
             _showSnack(
@@ -1542,9 +1643,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       return;
     }
     setState(() => _indoorRouteDestination = destination);
-    // 여기도 연출을 붙이지 않는다. 카메라는 이미 [_swapIndoorFloorSmoothly]가
-    // 스크림 뒤에서 새 층 경로에 맞춰 뒀고, 이 재계산은 그 자리를 실제 하차
-    // 노드 기준으로 다듬는 것뿐이다. 스크림이 걷힌 뒤에 또 움직이면 사용자는
+    // 여기도 연출을 붙이지 않는다. 카메라는 이미 [_swapIndoorFloorForRide]가
+    // 하차 지점과 내리는 방향에 맞춰 뒀고, 이 재계산은 그 자리를 실제 하차
+    // 노드 기준으로 다듬는 것뿐이다. 전환이 끝난 뒤에 또 움직이면 사용자는
     // 방금 자리 잡은 화면이 한 번 더 흔들리는 것을 본다.
     if (destination.floor == floor) {
       await _computeAndShowSingleFloorIndoorRoute(
@@ -1586,24 +1687,19 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     canUndo: _preTransferFloor != null && _preTransferAnchor != null,
   );
 
-  /// 배너·스크림 상태가 바뀌면 셸에 알린다. 같은 값이면 알리지 않는다.
+  /// 배너 상태가 바뀌면 셸에 알린다. 같은 값이면 알리지 않는다.
   ///
   /// 값 비교로 막지 않으면 매 스냅샷마다 부모 setState가 돌아, 지도 전체가
   /// 초당 수 회 다시 그려진다.
   void _reportFloorTransitionUi() {
     final banner = _floorTransitionUiState;
-    final scrim = _floorSwapVeil;
-    if (banner == _reportedFloorTransition &&
-        scrim == _reportedFloorScrimOpacity) {
-      return;
-    }
+    if (banner == _reportedFloorTransition) return;
     _reportedFloorTransition = banner;
-    _reportedFloorScrimOpacity = scrim;
     final notify = widget.onFloorTransitionChanged;
     if (notify == null) return;
     // build 중에는 부모 setState를 호출할 수 없다.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) notify(banner, scrim);
+      if (mounted) notify(banner);
     });
   }
 
@@ -1777,6 +1873,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _pdrAltitudeSub?.cancel();
     _pdrRawMotionSub?.cancel();
     _escalatorArrivalTimer?.cancel();
+    _escalatorGlideTimer?.cancel();
     _floorSwitchProgress.dispose();
     // 탑승 중 화면이 닫히면 걸음이 멈춘 채로 전역 PDR 세션이 남는다. 다음
     // 화면에서 아무리 걸어도 위치가 갱신되지 않는다.
@@ -2050,8 +2147,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 모든 경로**(층 선택기, 검색·카테고리에서 타 층 매장, 경로 계산의 층 이동,
   /// 자동 전환 취소·되돌리기)가 이걸 쓴다 — 크로스페이드 없이 직접
   /// [_switchOverlayFloor]를 부르면 타일 교체가 "지워졌다 다시 그려지는"
-  /// 장면으로 드러난다. 예외는 안내 중 자동 전환([_swapIndoorFloorSmoothly])
-  /// 하나 — 거긴 셸의 불투명 스크림이 이미 같은 일을 한다.
+  /// 장면으로 드러난다. 안내 중 자동 전환([_swapIndoorFloorForRide])도 같은
+  /// 길로 들어오며, 페이드 시간만 두 배로 늘려 잡는다.
   ///
   /// 이전 층 도면은 새 층 타일이 실제로 도착할 때까지 그대로 남고, 도착하면
   /// 새 도면이 그 위로 페이드인된다(오래 걸리면 그동안 에스컬레이터 모티프가
@@ -2062,6 +2159,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Future<void> _switchOverlayFloorCrossfaded(
     String floor, {
     bool recenterIfNeeded = true,
+    Duration crossfadeDuration = floorSwitchCrossfadeDuration,
   }) async {
     final token = _floorSwitchProgress.begin(
       floorSwitchDirectionBetween(_activeFloor, floor),
@@ -2073,6 +2171,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         recenterIfNeeded: recenterIfNeeded,
         crossfade: true,
         progressToken: token,
+        crossfadeDuration: crossfadeDuration,
       );
     } finally {
       // 크로스페이드 마무리가 예약됐으면 완료 통지도 거기서 한다(타일이 아직
@@ -2101,6 +2200,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     bool recenterIfNeeded = true,
     bool crossfade = false,
     int? progressToken,
+    Duration crossfadeDuration = floorSwitchCrossfadeDuration,
   }) async {
     if (floor == _activeFloor) return false;
     final controller = _mapController;
@@ -2190,6 +2290,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _finalizeIndoorFloorCrossfade(
           generation: _indoorIdGeneration,
           progressToken: progressToken,
+          crossfadeDuration: crossfadeDuration,
         ),
       );
     }
@@ -2234,6 +2335,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Future<void> _finalizeIndoorFloorCrossfade({
     required int generation,
     int? progressToken,
+    Duration crossfadeDuration = floorSwitchCrossfadeDuration,
   }) async {
     try {
       final elapsed = Stopwatch()..start();
@@ -2266,8 +2368,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           _indoorOverlayFadeFactor < 1 &&
           elapsed.elapsed >= floorSwitchInstantSwapThreshold;
       if (animate) {
-        final stepInterval =
-            floorSwitchCrossfadeDuration ~/ floorSwitchCrossfadeSteps;
+        final stepInterval = crossfadeDuration ~/ floorSwitchCrossfadeSteps;
         for (var step = 1; step <= floorSwitchCrossfadeSteps; step++) {
           _indoorOverlayFadeFactor = Curves.easeOut.transform(
             step / floorSwitchCrossfadeSteps,
@@ -3426,8 +3527,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
     // 사용자가 목적지를 고른 **이 순간**이 개요 연출을 하는 유일한 자리다.
     // 여기서만 켜 두면 "안내당 한 번"이 별도 플래그 없이 지켜진다 — 재탐색은
-    // 아래 [_rerouteIndoorFromCurrentPosition]에서 끄고, 층 전환은 스크림 뒤에서
-    // 조용히 처리한다([_swapIndoorFloorSmoothly]).
+    // 아래 [_rerouteIndoorFromCurrentPosition]에서 끄고, 층 전환은 하차 지점
+    // 기준으로 따로 맞춘다([_swapIndoorFloorForRide]).
     if (startFloor == endFloor) {
       await _computeAndShowSingleFloorIndoorRoute(
         buildingId: building.id,
@@ -4884,7 +4985,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   ///
   /// 다층 경로 전체를 담으려 하면 **화면에 없는 층의 좌표까지** 상자에 들어간다.
   /// 층마다 도면 위치가 어긋나 있으면 상자가 엉뚱하게 커지고, 그만큼 축소돼
-  /// 지금 걸을 구간이 도리어 안 보인다. 층은 [_swapIndoorFloorSmoothly]가 바뀔
+  /// 지금 걸을 구간이 도리어 안 보인다. 층은 [_swapIndoorFloorForRide]가 바뀔
   /// 때마다 다시 맞춘다.
   ///
   /// ## 왜 newLatLngBounds를 안 쓰나
@@ -6093,6 +6194,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   GuidancePosition? get _indoorPosition => _guidance.position;
 
   ll.LatLng? _pdrCurrentWgs84() {
+    // 탑승 중에는 활강이 위치의 출처다. 걸음은 멈춰 있고 앵커는 아직 이전 층에
+    // 있어서, 이 갈래가 없으면 층이 바뀌는 순간 마커가 통째로 사라진다.
+    final glide = _escalatorGlide;
+    if (glide != null) {
+      return glide.pointAt(DateTime.now().millisecondsSinceEpoch);
+    }
     final graph = _floorGraph;
     if (graph == null || graph.nodes.isEmpty) return null;
     final position = _indoorPosition;

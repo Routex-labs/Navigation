@@ -49,7 +49,6 @@ import '../../widgets/transit_routes_sheet.dart';
 import '../../widgets/travel_mode_bar.dart';
 import '../outdoor_map/outdoor_map_screen.dart';
 
-
 /// 야외/실내 지도의 공통 뼈대. 홈(야외) ↔ 실내 전환은 Navigator push 없이
 /// 이 화면 안에서 모드만 바꿔 탭처럼 즉시 반응하게 한다. 검색·길찾기·앱
 /// 메뉴·위치 보정은 전부 이 화면이 상단/하단 공용 바를 통해 중계한다.
@@ -77,10 +76,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 대신하는 유일한 값이다. 상단 바 높이가 상태에 따라 달라져도 이 간격은
   /// 그대로라 어느 모드에서든 같은 여백으로 보인다.
   static const _overlayGap = 8.0;
-
-  // 스크림 페이드 시간은 계약(floorTransitionScrimFadeIn/Out)이 정한다.
-  // [IndoorMapBody]가 "덮인 뒤에 도면을 교체"하려고 같은 값을 기다리므로,
-  // 여기서 따로 잡으면 두 값이 어긋나 교체 장면이 그대로 보인다.
 
   /// 이 앱이 다루는 건물. 한동안 햄버거 버튼이 "건물 선택 (테스트)" 시트를 열어
   /// 백엔드에 적재된 건물 목록에서 바꿀 수 있었지만, 데모용 전환 수단이었고
@@ -134,21 +129,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
   ///
   /// 탑승이 감지되면 검색을 닫는다. 검색 패널은 상단 Column 전체를 차지해
   /// 배너가 들어갈 자리가 없고, 그 순간 사용자에게 더 급한 정보는 길안내다.
-  void _onFloorTransitionChanged(
-    FloorTransitionUiState? banner,
-    double scrimOpacity,
-  ) {
+  void _onFloorTransitionChanged(FloorTransitionUiState? banner) {
     if (!mounted) return;
-    if (_floorTransition == banner && _floorScrimOpacity == scrimOpacity) {
-      return;
-    }
+    if (_floorTransition == banner) return;
     if (banner != null && _searchActive) {
       _closeSearch();
     }
-    setState(() {
-      _floorTransition = banner;
-      _floorScrimOpacity = scrimOpacity;
-    });
+    setState(() => _floorTransition = banner);
   }
 
   /// 카테고리 선택을 바꾼다. 지도 강조는 상태를 내려받은 두 지도가 알아서
@@ -254,13 +241,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   final _outdoorKey = GlobalKey<OutdoorMapBodyState>();
 
-  /// 층 전환 배너·스크림 상태. 판정과 상태 전이는 [IndoorMapBody]가 소유하고
+  /// 층 전환 배너 상태. 판정과 상태 전이는 [IndoorMapBody]가 소유하고
   /// 여기서는 그리기만 한다.
   ///
   /// 셸이 그려야 하는 이유: 검색창·카테고리 줄·하단 바가 이 Stack의 형제라,
   /// 지도 안에서 그린 배너는 그 뒤에 깔린다.
   FloorTransitionUiState? _floorTransition;
-  double _floorScrimOpacity = 0;
 
   // 지도 위에 얹은 공용 오버레이(검색창·카테고리 줄·하단 바)의 영역을
   // IndoorMapBody가 map click 처리에서 제외할 수 있게 넘겨줄 key들.
@@ -2530,13 +2516,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
                   // 놓는다. 상단 바 높이는 상태마다 달라지므로(검색 한 줄 ↔
                   // 출발/도착 두 줄), 상수로 잡으면 어느 한쪽에서 반드시 겹친다.
                   // 전환 중에는 아래 카테고리 줄을 접어 자리를 보장한다.
-                  //
-                  // 스크림이 올라온 구간에서는 배너를 접는다. 스크림 카드가 같은
-                  // 문장을 화면 한가운데에서 더 크게 말하고 있어서, 둘을 같이
-                  // 띄우면 같은 내용이 두 벌로 보인다(배너는 스크림 **아래** 층에
-                  // 깔리므로 흐려지기까지 한다).
-                  if (_floorTransition case final transition?
-                      when _floorScrimOpacity <= 0)
+                  if (_floorTransition case final transition?)
                     Padding(
                       padding: const EdgeInsets.only(top: _overlayGap),
                       child: Center(
@@ -2697,19 +2677,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
                 showPlaceLocation: _outdoorIndoorEntered,
               ),
             ),
-
-          // 층 전환 스크림. root Stack의 **마지막** 레이어라 지도뿐 아니라
-          // 검색창·카테고리·하단 바까지 함께 덮는다. 도면 교체 프레임에서만
-          // 완전히 덮고 뒤쪽 입력을 막으며, 탑승 구간은 반투명이라 사용자가
-          // 지도를 계속 만질 수 있다.
-          Positioned.fill(
-            child: FloorTransitionScrim(
-              opacity: _floorScrimOpacity,
-              fadeIn: floorTransitionScrimFadeIn,
-              fadeOut: floorTransitionScrimFadeOut,
-              state: _floorTransition,
-            ),
-          ),
         ],
       ),
     );
