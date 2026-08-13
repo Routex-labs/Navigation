@@ -273,6 +273,106 @@ void main() {
       expect(find.textContaining('이동 중'), findsOneWidget);
     });
 
+    testWidgets('점은 지도 마커와 같은 진행률로 움직인다', (tester) async {
+      // 덮개는 마커를 가리는 것이 아니라 데려간다. 진행률이 활강과 같은 값이라
+      // 걷히는 순간 점이 있던 자리에 마커가 서 있다.
+      final progress = ValueNotifier<double>(0);
+      addTearDown(progress.dispose);
+      await tester.pumpWidget(
+        _host(
+          FloorTransitionScrim(
+            opacity: 1,
+            fadeIn: Duration.zero,
+            fadeOut: Duration.zero,
+            progress: progress,
+            state: _state(
+              FloorTransitionStage.moving,
+              from: 'B1',
+              to: 'B2',
+              goingUp: false,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      final dot = find.byKey(const Key('floor-transition-dot'));
+      final startY = tester.getCenter(dot).dy;
+
+      progress.value = 1;
+      await tester.pump();
+
+      expect(
+        tester.getCenter(dot).dy,
+        greaterThan(startY),
+        reason: '내려가는 전환이면 점도 아래로 내려가야 한다',
+      );
+    });
+
+    testWidgets('진행률을 받으면 자체 반복 애니메이션을 돌리지 않는다', (tester) async {
+      // 반복 재생은 덮개가 길어질 때 같은 장면을 두 번 보여 준다.
+      final progress = ValueNotifier<double>(0.4);
+      addTearDown(progress.dispose);
+      await tester.pumpWidget(
+        _host(
+          FloorTransitionScrim(
+            opacity: 1,
+            fadeIn: Duration.zero,
+            fadeOut: Duration.zero,
+            progress: progress,
+            state: _state(FloorTransitionStage.moving, goingUp: false),
+          ),
+        ),
+      );
+
+      // 자체 애니메이션이 돌고 있으면 pumpAndSettle이 타임아웃으로 실패한다.
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('캡션은 가는 방향 쪽에 붙는다', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          FloorTransitionScrim(
+            opacity: 1,
+            fadeIn: Duration.zero,
+            fadeOut: Duration.zero,
+            state: _state(
+              FloorTransitionStage.moving,
+              from: 'B1',
+              to: 'B2',
+              goingUp: false,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      // 내려갈 때는 캡션이 아래 라벨보다 아래에 있다.
+      expect(
+        tester.getCenter(find.textContaining('이동 중')).dy,
+        greaterThan(tester.getCenter(find.text('B2')).dy),
+      );
+
+      await tester.pumpWidget(
+        _host(
+          FloorTransitionScrim(
+            opacity: 1,
+            fadeIn: Duration.zero,
+            fadeOut: Duration.zero,
+            state: _state(
+              FloorTransitionStage.moving,
+              from: 'B1',
+              to: '1F',
+              goingUp: true,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(
+        tester.getCenter(find.textContaining('이동 중')).dy,
+        lessThan(tester.getCenter(find.text('1F')).dy),
+      );
+    });
+
     testWidgets('스크림이 걷히면 반복 애니메이션도 멈춘다', (tester) async {
       // 보이지도 않는 위젯이 매 프레임 rebuild를 요청하면 안 된다.
       await tester.pumpWidget(

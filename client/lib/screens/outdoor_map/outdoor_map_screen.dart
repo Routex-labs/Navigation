@@ -64,6 +64,7 @@ import '../../widgets/floor_selector.dart';
 import '../../widgets/floor_switch_escalator_motif.dart';
 import '../../widgets/guidance_recenter_button.dart';
 import '../../widgets/indoor_arrival_card.dart';
+import '../../widgets/location_marker.dart';
 import '../../widgets/route_steps_sheet.dart';
 import '../../widgets/map_icon_cache.dart';
 import '../../widgets/map_overlay_tap_guard.dart';
@@ -256,8 +257,12 @@ const _pdrLocationDotImageName =
 // 같은 값이어야 한다. 코어 지름(반지름 16 → 32px)이 이 마커의 체감 크기를
 // 정한다 — 야외 GPS 도트(18px)보다 크고 정확도 원 테두리(44px)보다 작게 잡았다.
 const _pdrLocationIconPixelRatio = 2.0;
-const _pdrLocationCoreRadius = 16.0;
-const _pdrLocationRimRadius = _pdrLocationCoreRadius + 5;
+// 화면 크기는 위젯과 **같은 상수**에서 온다(location_marker.dart). 층 전환
+// 덮개가 같은 그림의 점을 그리므로, 한쪽만 바꾸면 두 점의 크기가 어긋난다.
+const _pdrLocationCoreRadius =
+    kLocationMarkerCoreRadiusPx * _pdrLocationIconPixelRatio;
+const _pdrLocationRimRadius =
+    kLocationMarkerRimRadiusPx * _pdrLocationIconPixelRatio;
 // 실내 오버레이에서 매장 폴리곤을 탭했을 때 그 매장 하나만 파란색으로 채우고
 // 테두리를 두르는 전용 소스·레이어. 색은 앱의 선택 색(mapSelectionColor =
 // AppColors.primary) 하나를 쓴다.
@@ -501,8 +506,11 @@ Future<Uint8List> _renderPdrLocationIcon({required bool showHeading}) async {
     Paint()..color = Colors.white,
   );
 
-  const blue = Color(0xFF1976D2);
-  canvas.drawCircle(center, _pdrLocationCoreRadius, Paint()..color = blue);
+  canvas.drawCircle(
+    center,
+    _pdrLocationCoreRadius,
+    Paint()..color = kLocationMarkerColor,
+  );
   // 코어 크기를 바꿔도 비율이 유지되도록 코어 반지름에서 파생시킨다
   // (원본 디자인의 코어 18 / offset 5 / 반지름 4.5 비율).
   const glossOffset = _pdrLocationCoreRadius * 0.28;
@@ -983,6 +991,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   EscalatorGlide? _escalatorGlide;
   Timer? _escalatorGlideTimer;
 
+  /// 활강 진행률(0 = 탑승 노드, 1 = 하차 노드). 층 전환 덮개의 점이 이 값을
+  /// 듣는다 — 지도 위 마커와 같은 값이라 덮개를 사이에 두고도 하나의 움직임이다.
+  /// 객체 정체성이 유지돼야 셸이 매 프레임 다시 그리지 않는다.
+  final ValueNotifier<double> _escalatorGlideProgress = ValueNotifier(0);
+
   /// 활강 중 마커를 다시 그리는 주기. 위젯 트리를 rebuild하지 않고 지도 소스만
   /// 갱신하므로(=[_syncPdrCurrentLayer]) 이 정도 빈도를 감당할 수 있다.
   static const _escalatorGlideFrame = Duration(milliseconds: 60);
@@ -1415,16 +1428,19 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       to: to,
       startedAtMs: DateTime.now().millisecondsSinceEpoch,
     );
+    _escalatorGlideProgress.value = 0;
     _escalatorGlideTimer = Timer.periodic(_escalatorGlideFrame, (timer) {
       final glide = _escalatorGlide;
       if (!mounted || glide == null) {
         timer.cancel();
         return;
       }
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      _escalatorGlideProgress.value = glide.progressAt(nowMs);
       unawaited(_syncPdrCurrentLayer());
       // 도착 노드에 닿으면 타이머만 접는다. 활강 자체는 하차가 확정될 때까지
       // 살려 둬야 마커가 그 자리를 지킨다.
-      if (glide.isDoneAt(DateTime.now().millisecondsSinceEpoch)) timer.cancel();
+      if (glide.isDoneAt(nowMs)) timer.cancel();
     });
   }
 
@@ -1433,6 +1449,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _escalatorGlideTimer = null;
     if (_escalatorGlide == null) return;
     _escalatorGlide = null;
+    _escalatorGlideProgress.value = 0;
     unawaited(_syncPdrCurrentLayer());
   }
 
@@ -1782,7 +1799,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (notify == null) return;
     // build 중에는 부모 setState를 호출할 수 없다.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) notify(banner, scrim);
+      if (mounted) notify(banner, scrim, _escalatorGlideProgress);
     });
   }
 
@@ -1920,6 +1937,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _escalatorGlideTimer?.cancel();
     _arrivalRouteClearTimer?.cancel();
     _floorSwapVeilTimer?.cancel();
+    _escalatorGlideProgress.dispose();
     _floorSwitchProgress.dispose();
     // 탑승 중 화면이 닫히면 걸음이 멈춘 채로 전역 PDR 세션이 남는다. 다음
     // 화면에서 아무리 걸어도 위치가 갱신되지 않는다.

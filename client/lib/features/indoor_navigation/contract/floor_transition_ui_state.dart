@@ -9,6 +9,8 @@
 /// (자식의 top 상수를 아무리 조정해도 부모 sibling 위로 올라갈 수 없다).
 library;
 
+import 'package:flutter/foundation.dart';
+
 /// 스크림이 짙어지는/걷히는 시간.
 ///
 /// **일부러 느리다.** 층 전환은 사용자가 알아채야 하는 사건이다. 빠른 페이드는
@@ -21,10 +23,18 @@ const floorTransitionScrimFadeOut = Duration(milliseconds: 700);
 
 /// 층 전환 UI 상태가 바뀔 때 상위 셸에 알리는 계약.
 ///
-/// [banner]가 null이면 배너를 감춘다. [scrimOpacity]는 탑승이 잡힌 구간에서 1이
-/// 되며, 그동안 뒤쪽 입력을 막는다.
+/// [banner]가 null이면 배너를 감춘다. [scrimOpacity]는 도면을 갈아 끼우는
+/// 구간에서 1이 되며, 그동안 뒤쪽 입력을 막는다.
+///
+/// [rideProgress]는 탑승 활강의 진행률이다. **매 프레임 값이 아니라 리스너블
+/// 자체를 넘긴다** — 값으로 넘기면 셸이 초당 수십 번 setState를 돌려 지도까지
+/// 다시 그린다. 덮개 안의 점만 이 값을 듣는다.
 typedef FloorTransitionUiChanged =
-    void Function(FloorTransitionUiState? banner, double scrimOpacity);
+    void Function(
+      FloorTransitionUiState? banner,
+      double scrimOpacity,
+      ValueListenable<double> rideProgress,
+    );
 
 /// 사용자에게 보이는 층 전환 진행 단계.
 enum FloorTransitionStage {
