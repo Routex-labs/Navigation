@@ -1,5 +1,3 @@
-import 'package:latlong2/latlong.dart' as ll;
-
 /// MapLibre 소스에 밀어 넣는 GeoJSON을 만드는 최소 헬퍼.
 ///
 /// 화면 코드에서 분리해 둔 이유는 **파일을 나눌 수 없게 만드는 걸림돌이었기
@@ -10,6 +8,8 @@ import 'package:latlong2/latlong.dart' as ll;
 ///
 /// 그래서 이 파일은 "공용 유틸"이라서가 아니라 **분해의 선행 조건**으로 존재한다.
 library;
+
+import 'package:latlong2/latlong.dart' as ll;
 
 /// 빈 FeatureCollection. 레이어를 지웠다 다시 만드는 대신 데이터만 비울 때 쓴다.
 ///
