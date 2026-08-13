@@ -511,11 +511,39 @@ class IndoorGuidanceSession {
   /// 계산은 그대로 두고, **표시할 때만** 예전 실내 화면과 같은 규칙을 적용한다.
   /// 정상적으로 경로 위에 있거나 아직 이탈 증거가 충분히 쌓이지 않았으면
   /// `projectedPoint`를 사용해 대표 간선 교체가 마커를 뒤로 밀지 않게 한다.
-  /// 이탈이 확정됐거나 재획득한 경우에는 raw preview로 돌아가 실제 이탈을
+  /// 다만 재탐색 대기 중에는 회색선 기준인 `displayProgress`만 멈추고, 마커는
+  /// tracker의 optimistic 위치를 계속 따라가야 한다. 둘을 같이 멈추면 사람이
+  /// 이미 코너를 돌아 걸어가도 코너 직전에서 마커가 고정된다.
+  /// 이탈이 확정됐거나 재획득한 경우에도 raw preview로 돌아가 실제 이탈을
   /// 숨기지 않는다.
   PdrLocalPoint _displayTrackedPosition(CorridorTrackingResult result) {
+    // 이탈 대기(pendingDeviation)는 회색선이 센서 흔들림을 따라 늘어나지 않게
+    // 하는 상태다. 위치 표시까지 이전 투영점에 붙들 이유는 없다. tracker가
+    // 이미 다음 연결 간선으로 이동한 optimistic cursor를 공개하고 있으므로
+    // 마커는 그 값을 쓴다. 실제 재탐색이 확정되면 다음 progress 갱신에서 새
+    // 경로의 displayProgress가 다시 시작된다.
+    if (_displayProgressHoldReason == 'pendingDeviation') {
+      return result.previewPosition;
+    }
+
     final progress = _displayProgress;
     final projected = progress?.projectedPoint;
+    final junctionPreviewHasMoved =
+        projected != null &&
+        result.isInJunctionZone &&
+        result.state != CorridorTrackingState.uncertain &&
+        (result.previewPosition -
+                    PdrLocalPoint(projected.x, projected.y))
+                .distance >
+            0.75;
+    if (junctionPreviewHasMoved) {
+      // 교차점에서는 `currentEdgeId`·route edge 일치가 한두 peak 늦을 수 있다.
+      // 이때 경로 투영점만 쓰면 outgoing 간선으로 이미 코너를 돈 preview가
+      // incoming 간선 끝점에 눌린다. tracker가 연결 간선 후보를 그래프로
+      // 제한하고 있으므로, 불확실 상태가 아닌 동안은 실제 preview를 쓴다.
+      return result.previewPosition;
+    }
+
     final canFollowGuidance =
         _routeSegment != null &&
         progress != null &&
@@ -549,6 +577,7 @@ class IndoorGuidanceSession {
   double? _lastTraveledM;
   int? _lastAcceptedSteps;
   int? _lastEvaluatedSteps;
+  String? _displayProgressHoldReason;
 
   int _offRouteEvidenceUpdates = 0;
   int? _offRouteFirstEvidenceAtMs;
@@ -582,6 +611,7 @@ class IndoorGuidanceSession {
     _lastTraveledM = progress?.traveledM;
     _lastAcceptedSteps = progress == null ? null : atSteps;
     _lastEvaluatedSteps = null;
+    _displayProgressHoldReason = null;
     _offRouteEvidenceUpdates = 0;
     _offRouteFirstEvidenceAtMs = null;
   }
@@ -737,6 +767,7 @@ class IndoorGuidanceSession {
 
     _displayProgress = display;
     _measuredProgress = progress;
+    _displayProgressHoldReason = holdReason;
     _lastTraveledM = progress.traveledM;
     if (holdReason == null) _lastAcceptedSteps = responsiveSteps;
 
