@@ -27,6 +27,8 @@ import 'map_icon_cache.dart';
 import 'category_map_filter.dart';
 import 'category_map_icon.dart';
 import 'floor_facility_style.dart';
+import 'store_cluster_sheet.dart';
+import 'store_label_anchor.dart';
 import 'store_label_fit.dart';
 
 /// maplibre_gl은 web/android/iOS만 지원한다(패키지 자체 pubspec에 명시된
@@ -79,7 +81,8 @@ const _tileLayerBases = <String>[
   _storesFillLayerId,
   _categoryHighlightFillLayerId,
   _verticalTransportFillLayerId,
-  'floor-stores-label',
+  _storeLabelLayerId,
+  _sharedStoreLabelLayerId,
   _facilityLabelLayerId,
   'floor-pois-icon',
   'floor-pois-label',
@@ -110,6 +113,20 @@ const _debugGraphSourceId = 'floor-debug-graph';
 const _markersSourceId = 'floor-markers';
 const _highlightSourceId = 'floor-highlight';
 const _storesFillLayerId = 'floor-stores-fill';
+
+/// 매장명 라벨(대분류 아이콘 + 이름) 심볼 레이어. 탭 판정이 이 레이어를 먼저
+/// 보므로([_storeAt]) id를 상수로 둔다 — 문자열이 흩어져 있으면 한쪽만 고쳐
+/// 탭이 조용히 폴리곤 판정으로 되돌아간다.
+const _storeLabelLayerId = 'floor-stores-label';
+
+/// 폴리곤을 눌렀을 때 "이 근처에 그려진 이름"을 찾는 반경(px). 라벨 글자보다는
+/// 넉넉하고 옆 매장까지 훑지는 않을 크기다 — 매장 폭이 화면에서 대개 이보다
+/// 크므로 옆집 이름이 끌려오지 않는다.
+const double _labelHitRadius = 44;
+
+/// 한 자리를 여러 매장이 나눠 쓰는 라벨만 그리는 레이어. 충돌 판정을 끄고
+/// 그리므로([_storeLabelSymbolProps]의 alwaysVisible) 이름이 사라지지 않는다.
+const _sharedStoreLabelLayerId = 'floor-stores-label-shared';
 const _categoryHighlightFillLayerId = 'floor-category-highlight-fill';
 const _verticalTransportFillLayerId = 'floor-vertical-transport-fill';
 
@@ -549,6 +566,20 @@ class FloorPlanViewState extends State<FloorPlanView> {
   /// 지금 지도에 설치돼 있는 층의 타일. 층이 바뀌면 이 값이 가리키는 레이어를
   /// 새 층 것으로 갈아 끼운다(위젯을 다시 만들지 않는다).
   String? _activeTileFloor;
+
+  /// 매장 id → 라벨 앵커. [_storeLabelFeatureCollection]이 라벨을 만들 때
+  /// 채우고, 탭이 폴리곤으로 폴백했을 때 [_nearestSharingStore]가 읽는다.
+  /// 화면에 그려진 이름과 열리는 매장을 같은 좌표로 판단하기 위한 것이라,
+  /// 여기서 따로 계산하지 않고 **라벨이 쓴 값을 그대로** 본다.
+  Map<String, ll.LatLng> _labelAnchors = const {};
+
+  /// 묶음 매장 id([aggregateStoreIds]). 라벨을 만들 때 채우고, 탭 판정이
+  /// 이 매장들을 건너뛴다 — 지도에서 매장으로 취급하지 않는다.
+  Set<String> _aggregateIds = const {};
+
+  /// 대표 매장 id → 그 자리를 나눠 쓰는 매장들(3곳 이상). 라벨을 만들 때
+  /// 채우고, 묶음 라벨을 눌렀을 때 목록 시트가 이 그룹을 보여 준다.
+  Map<String, List<StorePolygon>> _clusterGroups = const {};
 
   /// 타일 교체가 도는 중인지. 사용자가 층 선택기를 빠르게 여러 번 누르면
   /// 교체가 겹쳐 같은 층을 두 번 설치하거나, 아직 안 얹힌 층을 지우려 든다.
@@ -1101,14 +1132,46 @@ class FloorPlanViewState extends State<FloorPlanView> {
     // 고르면 이름을 다는 매장이 바뀌므로, 등록과 갱신이 같은 함수를 봐야 한다.
     await controller.addSymbolLayer(
       labelSourceId,
-      _tileLayerId('floor-stores-label', floor),
+      _tileLayerId(_storeLabelLayerId, floor),
       _storeLabelSymbolProps(labelLatitude),
       belowLayerId: belowLayerId,
       // 라벨 소스는 타일이 아니라 클라이언트 GeoJSON이라 타일 소스의 zoom 범위를
       // 물려받지 않는다. 그대로 두면 도면 타일이 아직 안 나오는 축소 구간에서
       // **이름만 허공에 뜬다.** 소스 minzoom과 같은 값을 레이어에 직접 건다.
       minzoom: indoorTilesMinZoom,
-      filter: storeLabelWithCategoryIconFilter(),
+      // 같은 자리를 나눠 쓰는 라벨은 아래 전용 레이어가 그린다. 두 레이어가
+      // 같은 feature를 그리면 이름이 두 번 찍힌다.
+      filter: [
+        'all',
+        storeLabelWithCategoryIconFilter(),
+        [
+          '!',
+          ['has', kStoreLabelSharedProperty],
+        ],
+      ],
+      enableInteraction: false,
+    );
+    // **한 자리에 여러 매장이 있는 곳만** 그리는 라벨. 충돌 판정을 끄고 그린다.
+    //
+    // 칸을 나눠도([store_label_anchor.dart]) 충돌 처리는 아이콘(px 고정)까지 함께
+    // 재기 때문에 축척에 따라 한쪽 이름이 지워졌다. 그러면 화면에는 「오설록」
+    // 하나만 보이는데 탭 판정은 둘로 갈려 있어, 보이는 이름과 열리는 매장이
+    // 어긋난다 — 실기기에서 이 증상이 반복해서 나왔다.
+    //
+    // **같은 자리에 둘이 있다는 사실 자체가 정보다.** 그래서 이 자리만은 조금
+    // 겹치더라도 둘 다 그린다. 겹침이 번지지 않는 이유는 이 레이어가 전체
+    // 1,640곳 중 91곳(31자리)만 상대하기 때문이다.
+    await controller.addSymbolLayer(
+      labelSourceId,
+      _tileLayerId(_sharedStoreLabelLayerId, floor),
+      _storeLabelSymbolProps(labelLatitude, alwaysVisible: true),
+      belowLayerId: belowLayerId,
+      minzoom: indoorTilesMinZoom,
+      filter: [
+        'all',
+        storeLabelWithCategoryIconFilter(),
+        ['has', kStoreLabelSharedProperty],
+      ],
       enableInteraction: false,
     );
 
@@ -1357,8 +1420,11 @@ class FloorPlanViewState extends State<FloorPlanView> {
   /// 매장명 라벨 앵커 FeatureCollection.
   ///
   /// 점 하나에 이름·카테고리(필터·아이콘용)와 [store_label_fit.dart]가 계산한
-  /// 크기 두 값을 싣는다. 좌표는 백엔드가 준 매장 중심점을 그대로 쓴다 —
-  /// 오목한 폴리곤에서도 데이터가 의도한 라벨 자리다.
+  /// 크기 두 값을 싣는다. 좌표는 백엔드가 준 매장 중심점이 기본이고 —
+  /// 오목한 폴리곤에서도 데이터가 의도한 라벨 자리다 — **한 자리에 여러 매장이
+  /// 붙어 중심점이 겹치는 경우에만** [store_label_anchor.dart]가 각자의 POI
+  /// 핀으로 흩는다. 흩지 않으면 심볼이 포개져 하나만 그려지고, 나머지 매장은
+  /// 화면에서 누를 방법이 사라진다.
   ///
   /// 폴리곤이 비어 온 매장(실좌표 앵커가 없는 건물)은 박스를 잴 수 없어
   /// 크기가 0으로 나가고, 표현식의 하한이 받아 [kStoreLabelMinPx]로 그린다 —
@@ -1367,9 +1433,39 @@ class FloorPlanViewState extends State<FloorPlanView> {
     // 라벨 박스는 화면 가로/세로로 재야 한다. 초기 카메라가 건물 축에 맞춰
     // 돌아가 있으므로([_buildMapLibre]) 그 각도를 기준으로 쓴다.
     final bearing = _straighteningBearing(widget.floorPlan.footprint);
+    // 묶음 매장은 라벨을 만들지 않고 칸 배치에서도 뺀다 — 구성 매장들이
+    // 이미 각자 라벨을 갖고 있다(백엔드 타일도 같은 규칙).
+    _aggregateIds = aggregateStoreIds(widget.floorPlan.stores);
+    final nonAggregate = widget.floorPlan.stores
+        .where((s) => !_aggregateIds.contains(s.id))
+        .toList();
+    // 세 곳 이상이 한 자리를 나눠 쓰면 칸이 줄무늬처럼 잘게 갈라진다(실기기
+    // 확인). 개별 라벨 대신 「첫 매장 외 N」 하나로 접고, 누르면 목록 시트를
+    // 띄운다([showStoreClusterSheet]). 두 곳은 칸 분할이 그대로 낫다.
+    final clusters = sharedStoreGroups(
+      nonAggregate,
+      bearingDeg: bearing,
+    ).where((group) => group.length >= 3).toList();
+    _clusterGroups = {for (final group in clusters) group.first.id: group};
+    final clusteredIds = {
+      for (final group in clusters)
+        for (final store in group) store.id,
+    };
+    final labelStores = nonAggregate
+        .where((s) => !clusteredIds.contains(s.id))
+        .toList();
+    final anchors = resolveStoreLabelAnchors(
+      stores: labelStores,
+      bearingDeg: bearing,
+    );
+    // 탭이 폴리곤으로 폴백했을 때 "누른 자리에서 가장 가까운 이름"을 고르려면
+    // 이 앵커가 필요하다([_storeAt]). 라벨을 만들 때 한 번 계산해 들고 있는다.
+    _labelAnchors = anchors;
+    final shares = storeLabelShareCounts(labelStores);
     final features = <Map<String, dynamic>>[];
-    for (final store in widget.floorPlan.stores) {
+    for (final store in labelStores) {
       if (store.name.trim().isEmpty) continue;
+      final anchor = anchors[store.id] ?? store.centroid;
       final box = storeLabelBoxMeters(
         polygon: store.polygon,
         bearingDeg: bearing,
@@ -1377,16 +1473,15 @@ class FloorPlanViewState extends State<FloorPlanView> {
       final fit = fitStoreLabel(
         name: store.name,
         boxWidthM: box.widthM,
-        boxHeightM: box.heightM,
+        // 같은 폴리곤을 나눠 쓰는 만큼 세로 예산을 나눈다. 안 나누면 두 라벨이
+        // 각자 폴리곤 전체 크기를 요구해 부딪히고, 충돌 처리가 하나를 지운다.
+        boxHeightM: box.heightM / (shares[store.id] ?? 1),
       );
       features.add(<String, dynamic>{
         'type': 'Feature',
         'geometry': <String, dynamic>{
           'type': 'Point',
-          'coordinates': <double>[
-            store.centroid.longitude,
-            store.centroid.latitude,
-          ],
+          'coordinates': <double>[anchor.longitude, anchor.latitude],
         },
         'properties': <String, dynamic>{
           'id': store.id,
@@ -1396,6 +1491,43 @@ class FloorPlanViewState extends State<FloorPlanView> {
           // (백엔드 `_store_properties`가 같은 이유로 같은 규칙을 쓴다).
           if (store.category != null) 'category': store.category,
           if (store.subcategory != null) 'subcategory': store.subcategory,
+          // 같은 자리를 나눠 쓰는 라벨은 충돌을 무시하는 별도 레이어가 그린다.
+          if ((shares[store.id] ?? 1) > 1) kStoreLabelSharedProperty: true,
+          kStoreLabelEmMetersProperty: fit.emMeters,
+          kStoreLabelMaxWidthProperty: fit.maxWidthEm,
+        },
+      });
+    }
+    for (final group in clusters) {
+      final first = group.first;
+      final box = storeLabelBoxMeters(
+        polygon: first.polygon,
+        bearingDeg: bearing,
+      );
+      final text = clusterLabelText(group);
+      final fit = fitStoreLabel(
+        name: text,
+        boxWidthM: box.widthM,
+        boxHeightM: box.heightM,
+      );
+      features.add(<String, dynamic>{
+        'type': 'Feature',
+        'geometry': <String, dynamic>{
+          'type': 'Point',
+          'coordinates': <double>[
+            first.centroid.longitude,
+            first.centroid.latitude,
+          ],
+        },
+        'properties': <String, dynamic>{
+          'id': first.id,
+          'name': text,
+          'cluster': group.length,
+          if (first.category != null) 'category': first.category,
+          if (first.subcategory != null) 'subcategory': first.subcategory,
+          // 이 라벨 하나가 그 자리 전체의 유일한 입구다 — 충돌로 사라지면
+          // 매장 N곳이 통째로 숨으므로 항상 그리는 레이어에 태운다.
+          kStoreLabelSharedProperty: true,
           kStoreLabelEmMetersProperty: fit.emMeters,
           kStoreLabelMaxWidthProperty: fit.maxWidthEm,
         },
@@ -1602,8 +1734,10 @@ class FloorPlanViewState extends State<FloorPlanView> {
   /// 쪽에서 속성 하나라도 빠지면 그 속성이 스펙 기본값으로 돌아간다 — 심볼
   /// 레이어에서는 `text-field`·`icon-image`가 null이 되어 라벨과 아이콘이 통째로
   /// 사라진다(indoor_overlay_layers.dart 상단 주석).
-  SymbolLayerProperties _storeLabelSymbolProps(double labelLatitude) =>
-      SymbolLayerProperties(
+  SymbolLayerProperties _storeLabelSymbolProps(
+    double labelLatitude, {
+    bool alwaysVisible = false,
+  }) => SymbolLayerProperties(
         // 카테고리를 고르면 그 매장만 이름을 단다. 나머지는 빈 문자열이 되어
         // 아이콘만 남는다(판단 근거는 [categoryLabelTextField] 주석).
         textField: categoryLabelTextField(widget.categorySelection),
@@ -1634,7 +1768,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
         textHaloWidth: mapLabelHaloWidth,
         // variable-anchor는 충돌 판정 위에서만 동작한다. true로 바꾸면 앵커가
         // 항상 첫 번째 값으로 굳어 뒤집기가 조용히 죽는다.
-        textAllowOverlap: false,
+        textAllowOverlap: alwaysVisible,
         // 자리가 없으면 **이름만** 포기한다. 아이콘은 항상 그린다.
         //
         // ⚠️ **예전 규칙을 뒤집었다.** 원래는 `iconOptional: true`로 두고
@@ -1653,7 +1787,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
         // 덮였다. 배지를 장애물로 되돌려 이름들이 그 자리를 피해 가게 한다.
         // 배지 자체는 `iconAllowOverlap`·`iconOptional: false` 덕에 그래도
         // 사라지지 않는다.
-        textOptional: true,
+        textOptional: !alwaysVisible,
         iconOptional: false,
         iconAllowOverlap: true,
       );
@@ -1711,7 +1845,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
       _categoryFilterExpression(),
     );
     await controller.setLayerProperties(
-      _tileLayerId('floor-stores-label', floor),
+      _tileLayerId(_storeLabelLayerId, floor),
       _storeLabelSymbolProps(_storeLabelLatitude()),
     );
     await controller.setLayerProperties(
@@ -2941,7 +3075,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
     // 복도를 누른 탭이 조용히 사라져, 길찾기의 "지도에서 선택"에서 복도를 눌러도
     // 아무 일도 안 일어나는 상태가 된다.
     final tapped = ll.LatLng(coordinates.latitude, coordinates.longitude);
-    final store = await _storeAt(point);
+    final store = await _storeAt(point, tapped);
     if (store == null) {
       widget.onEmptyMapPressed?.call(tapped);
       return;
@@ -2949,22 +3083,164 @@ class FloorPlanViewState extends State<FloorPlanView> {
     widget.onStoreSelected?.call(store);
   }
 
-  /// 화면 픽셀 [point]에 그려져 있는 매장 폴리곤. 없으면 null.
-  Future<StorePolygon?> _storeAt(Point<double> point) async {
+  /// 화면 픽셀 [point]에 그려져 있는 매장. 없으면 null.
+  ///
+  /// **라벨을 폴리곤보다 먼저 본다.** 한 폴리곤에 매장이 여러 개 붙은 자리가
+  /// 더현대 서울에만 31곳(91개 매장) 있는데, 폴리곤만 보면 그 매장들이 완전히
+  /// 같은 도형이라 `features.first`가 언제나 같은 한 곳을 돌려준다 — 오설록을
+  /// 눌러도 일상다완이 열리던 원인이다. 라벨은 [store_label_anchor.dart]가
+  /// 각자의 POI 핀으로 흩어 놓았으므로 누른 이름과 열리는 매장이 일치한다.
+  ///
+  /// 라벨을 못 맞히면 폴리곤으로 폴백한다. 라벨은 축소 구간에서 충돌로 사라질
+  /// 수 있고(그때도 면은 남는다), 이름이 빈 매장은 라벨 자체가 없다. **폴백에서
+  /// 폴리곤이 여러 매장의 것이면 [tapped]에서 가장 가까운 이름을 고른다** —
+  /// 그러지 않으면 목록의 첫 매장이 언제나 이기고, 사용자가 누른 이름과 열리는
+  /// 매장이 어긋난다.
+  Future<StorePolygon?> _storeAt(Point<double> point, ll.LatLng tapped) async {
     final controller = _controller;
     if (controller == null) return null;
     final activeFloor = _activeTileFloor;
     if (activeFloor == null) return null;
-    final features = await controller.queryRenderedFeatures(point, [
+
+    for (final layerId in <String>[
+      _tileLayerId(_sharedStoreLabelLayerId, activeFloor),
+      _tileLayerId(_storeLabelLayerId, activeFloor),
+      _tileLayerId(_facilityLabelLayerId, activeFloor),
       _tileLayerId(_storesFillLayerId, activeFloor),
+    ]) {
+      final features = await controller.queryRenderedFeatures(point, [
+        layerId,
+      ], null);
+      if (features.isEmpty) continue;
+      // 묶음 매장은 탭 대상이 아니다. 겹친 feature 중 묶음이 아닌 첫 매장을
+      // 고른다 — 구역 폴리곤(묶음)과 그 안 매장 폴리곤이 겹쳐 오기 때문이다.
+      String? id;
+      var isCluster = false;
+      for (final feature in features) {
+        final properties = (feature as Map)['properties'] as Map?;
+        final candidate = properties?['id'] as String?;
+        if (candidate == null || _aggregateIds.contains(candidate)) continue;
+        id = candidate;
+        isCluster = properties?['cluster'] != null;
+        break;
+      }
+      if (id == null) continue;
+      // 묶음 라벨(「첫 매장 외 N」)을 눌렀다 — 목록 시트에서 고르게 한다.
+      if (isCluster) {
+        final group = _clusterGroups[id];
+        if (group != null && mounted) {
+          return showStoreClusterSheet(context, group);
+        }
+      }
+      final store = widget.floorPlan.stores
+          .where((s) => s.id == id)
+          .firstOrNull;
+      if (store == null) continue;
+      if (layerId == _tileLayerId(_storesFillLayerId, activeFloor)) {
+        // 폴리곤은 여러 매장이 같은 도형을 공유할 수 있어 이것만으로는 못
+        // 가린다. **화면에 실제로 그려진 이름**을 먼저 찾고, 그것도 없으면
+        // 앵커 거리로 넘어간다.
+        return await _labelNear(point, activeFloor, store, tapped) ??
+            await _nearestSharingStore(store, tapped);
+      }
+      return store;
+    }
+    return null;
+  }
+
+  /// 누른 지점 둘레 [_labelHitRadius]px 안에 **실제로 그려져 있는** 매장 이름 중
+  /// [hit]과 같은 자리를 공유하는 것. 없으면 null.
+  ///
+  /// 라벨은 충돌하면 지워진다. 지워진 이름의 칸을 눌렀을 때 그 매장을 여는 것은
+  /// 사용자 입장에서 "보이지도 않는 가게가 열리는" 일이라, 보이는 이름이 하나뿐일
+  /// 때는 그쪽으로 몰아준다 — 오설록만 보이는데 일상다완이 열리던 증상이 이것이다.
+  Future<StorePolygon?> _labelNear(
+    Point<double> point,
+    String floor,
+    StorePolygon hit,
+    ll.LatLng tapped,
+  ) async {
+    final controller = _controller;
+    if (controller == null) return null;
+    final rect = Rect.fromCenter(
+      center: Offset(point.x, point.y),
+      width: _labelHitRadius * 2,
+      height: _labelHitRadius * 2,
+    );
+    final features = await controller.queryRenderedFeaturesInRect(rect, [
+      _tileLayerId(_sharedStoreLabelLayerId, floor),
+      _tileLayerId(_storeLabelLayerId, floor),
     ], null);
     if (features.isEmpty) return null;
 
-    final properties = (features.first as Map)['properties'] as Map?;
-    final id = properties?['id'] as String?;
-    if (id == null) return null;
+    final ids = <String>{};
+    for (final feature in features) {
+      final id = ((feature as Map)['properties'] as Map?)?['id'] as String?;
+      if (id != null) ids.add(id);
+    }
+    final candidates = widget.floorPlan.stores
+        .where(
+          (s) =>
+              ids.contains(s.id) &&
+              s.centroid.latitude == hit.centroid.latitude &&
+              s.centroid.longitude == hit.centroid.longitude,
+        )
+        .toList();
+    if (candidates.isEmpty) return null;
+    if (candidates.length == 1) return candidates.first;
+    // 여럿이 보이면 그중 누른 자리에 가까운 쪽.
+    return _nearestByAnchor(candidates, tapped);
+  }
 
-    return widget.floorPlan.stores.where((s) => s.id == id).firstOrNull;
+  /// [hit]과 같은 자리(중심점)를 쓰는 매장이 여럿이면 [tapped]에 가장 가까운
+  /// 라벨의 매장을, 아니면 [hit]을 그대로 돌려준다.
+  ///
+  /// 거리는 미터로 환산해 비교한다. 위경도 차를 그대로 제곱하면 서울에서 경도
+  /// 1도가 위도 1도보다 20%쯤 짧아, 라벨이 가로로 늘어선 자리에서 순서가
+  /// 뒤집힌다 — 칸을 세로로 쌓아도 카메라가 돌아가 있으면 그 축이 화면 가로가
+  /// 될 수 있다.
+  Future<StorePolygon?> _nearestSharingStore(
+    StorePolygon hit,
+    ll.LatLng tapped,
+  ) async {
+    final sharing = widget.floorPlan.stores
+        .where(
+          (s) =>
+              !_aggregateIds.contains(s.id) &&
+              s.centroid.latitude == hit.centroid.latitude &&
+              s.centroid.longitude == hit.centroid.longitude,
+        )
+        .toList();
+    if (sharing.length < 2) return hit;
+    // 세 곳 이상은 라벨이 묶음 하나뿐이라 "가장 가까운 라벨"로 가릴 수 없다.
+    // 묶음 라벨을 눌렀을 때와 같은 목록 시트에서 고르게 한다.
+    if (sharing.length >= 3) {
+      if (!mounted) return hit;
+      return await showStoreClusterSheet(context, sharing) ?? hit;
+    }
+
+    return _nearestByAnchor(sharing, tapped) ?? hit;
+  }
+
+  /// [candidates] 중 라벨 앵커가 [tapped]에 가장 가까운 매장.
+  StorePolygon? _nearestByAnchor(
+    List<StorePolygon> candidates,
+    ll.LatLng tapped,
+  ) {
+    final cosLat = cos(tapped.latitude * pi / 180);
+    StorePolygon? best;
+    var bestDistance = double.infinity;
+    for (final store in candidates) {
+      final anchor = _labelAnchors[store.id] ?? store.centroid;
+      final dLat = anchor.latitude - tapped.latitude;
+      final dLng = (anchor.longitude - tapped.longitude) * cosLat;
+      final distance = dLat * dLat + dLng * dLng;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = store;
+      }
+    }
+    return best;
   }
 
   LatLng _initialCenter(FloorPlan floorPlan) {

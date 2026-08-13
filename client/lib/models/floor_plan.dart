@@ -37,6 +37,7 @@ class StorePolygon {
     required this.name,
     required this.polygon,
     required this.centroid,
+    this.entrance,
     this.polygonLocalM = const [],
     this.entranceNodeId,
     this.category,
@@ -48,6 +49,13 @@ class StorePolygon {
   final String name;
   final List<LatLng> polygon;
   final LatLng centroid;
+
+  /// 원본(다비오)이 이 매장에 찍은 POI 핀 위치. 한 폴리곤에 여러 매장이 붙은
+  /// 자리에서 [centroid]는 전부 같은 값으로 오지만 이 점은 매장마다 다르다 —
+  /// 라벨을 흩어 각각 누를 수 있게 만드는 유일한 근거다
+  /// ([store_label_anchor.dart]). 폴리곤 없이 점만 있는 시설에서는 [centroid]가
+  /// 이미 이 값으로 채워져 있을 수 있다.
+  final LatLng? entrance;
 
   /// 실제 도면의 로컬(m) 폴리곤. 길찾기 그래프 노드도 같은 좌표계를 쓰므로
   /// 서로 다른 ID를 가진 에스컬레이터 도형과 탑승 노드를 공간적으로 매칭한다.
@@ -126,13 +134,14 @@ class FloorPlan {
           // entrance_wgs84만 내려오는 경우가 있어, 그때는 entrance를 대체
           // 앵커로 쓴다 — 폴리곤이 없어도 목록/검색에는 등장해야 하기 때문.
           // 둘 다 없는 건물은 실좌표 앵커 자체가 없는 것이므로 건너뛴다.
+          final entrance = wgs84PointToLatLng(
+            store['entrance_wgs84'] as Map<String, dynamic>?,
+          );
           final centroid =
               wgs84PointToLatLng(
                 store['centroid_wgs84'] as Map<String, dynamic>?,
               ) ??
-              wgs84PointToLatLng(
-                store['entrance_wgs84'] as Map<String, dynamic>?,
-              );
+              entrance;
           if (centroid == null) return null;
           final polygon =
               ((store['polygon_wgs84'] as List<dynamic>?) ?? const [])
@@ -154,6 +163,7 @@ class FloorPlan {
             name: store['name'] as String? ?? '',
             polygon: polygon,
             centroid: centroid,
+            entrance: entrance,
             polygonLocalM: polygonLocalM,
             entranceNodeId: store['entrance_node_id'] as String?,
             category: store['category'] as String?,

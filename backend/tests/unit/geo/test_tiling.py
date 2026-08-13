@@ -352,3 +352,221 @@ def test_라벨_점이_없는_타일에는_라벨을_싣지_않는다():
 
     assert next(layer for layer in layers if layer["name"] == "stores")["features"]
     assert next(layer for layer in layers if layer["name"] == "store_labels")["features"] == []
+
+
+# 한 폴리곤을 여러 매장이 나눠 쓰면(더현대 서울 31곳·91매장) label_point가
+# 폴리곤당 한 점이라 라벨이 정확히 포개지고, MapLibre 충돌 처리가 하나만
+# 남긴다 — 나머지 매장은 지도에서 보이지도, 눌리지도 않는다. 그래서 이런
+# 매장의 라벨은 (1) 서로 다른 점에 놓이고 (2) `shared` 표시를 달아야 한다.
+def _shared_polygon_store(store_id: str, entrance_x: float) -> Store:
+    # 오설록·일상다완의 실제 모양을 축소한 것: 같은 폴리곤·같은 centroid,
+    # 입구 핀만 다르다. 긴 축은 x(가로 9.6m > 세로 6.2m 비율).
+    return Store(
+        id=store_id,
+        floor_id="f1",
+        name=store_id,
+        centroid_x_m=4.8,
+        centroid_y_m=3.0,
+        entrance_x_m=entrance_x,
+        entrance_y_m=3.0,
+        polygon=[
+            {"x": 0.0, "y": 0.0},
+            {"x": 9.6, "y": 0.0},
+            {"x": 9.6, "y": 6.0},
+            {"x": 0.0, "y": 6.0},
+        ],
+    )
+
+
+def test_한_폴리곤을_나눠_쓰는_매장들의_라벨이_갈라진다():
+    layers = build_floor_tile_layers(
+        _building(),
+        # 입구 핀 순서(2.0 < 7.0)가 라벨 배치 순서가 되는지도 함께 본다.
+        stores=[_shared_polygon_store("ilsang", 7.0), _shared_polygon_store("osulloc", 2.0)],
+        pois=[],
+        transform=IDENTITY_TRANSFORM,
+        bounds=tile_bounds(0, 0, 0),
+    )
+
+    labels = {
+        feature["properties"]["id"]: feature
+        for feature in next(layer for layer in layers if layer["name"] == "store_labels")["features"]
+    }
+
+    assert set(labels) == {"osulloc", "ilsang"}
+    osulloc_xy = labels["osulloc"]["geometry"]["coordinates"]
+    ilsang_xy = labels["ilsang"]["geometry"]["coordinates"]
+    # 긴 축(x)을 반으로 나눈 칸의 중심: 2.4m / 7.2m 지점 (+126 오프셋).
+    assert osulloc_xy[0] == pytest.approx(126.0 + 2.4)
+    assert ilsang_xy[0] == pytest.approx(126.0 + 7.2)
+    # 짧은 축은 centroid 그대로.
+    assert osulloc_xy[1] == pytest.approx(37.0 + 3.0)
+    # 클라이언트가 충돌 판정을 끈 전용 레이어로 갈라낼 표시.
+    assert labels["osulloc"]["properties"]["shared"] is True
+    assert labels["ilsang"]["properties"]["shared"] is True
+
+
+def test_혼자_쓰는_폴리곤에는_shared_표시가_없다():
+    layers = build_floor_tile_layers(
+        _building(),
+        stores=[_shared_polygon_store("alone", 2.0)],
+        pois=[],
+        transform=IDENTITY_TRANSFORM,
+        bounds=tile_bounds(0, 0, 0),
+    )
+
+    feature = next(layer for layer in layers if layer["name"] == "store_labels")["features"][0]
+    assert "shared" not in feature["properties"]
+
+
+# 묶음 매장 — 이름이 같은 층 다른 매장 이름 2개 이상을 이어 붙인 항목
+# (「마사비스 리치몬드 과자점 은비스브레드 니드쿠키앤베이커리」류). 구성
+# 매장들이 각자 폴리곤·라벨을 갖고 있으므로 묶음에는 라벨을 달지 않는다.
+def _named_store(store_id: str, name: str, cx: float, cy: float) -> Store:
+    return Store(
+        id=store_id,
+        floor_id="f1",
+        name=name,
+        centroid_x_m=cx,
+        centroid_y_m=cy,
+        polygon=[
+            {"x": cx - 1.0, "y": cy - 1.0},
+            {"x": cx + 1.0, "y": cy - 1.0},
+            {"x": cx + 1.0, "y": cy + 1.0},
+            {"x": cx - 1.0, "y": cy + 1.0},
+        ],
+    )
+
+
+def test_묶음_매장에는_라벨을_달지_않는다():
+    layers = build_floor_tile_layers(
+        _building(),
+        stores=[
+            # 표기 흔들림까지 재현: 묶음은 「세띠엠므」, 구성 매장은 「세띠 엠므」.
+            _named_store("agg", "포동 푸딩 우나하우스 세띠엠므 멜로드도산", 5.0, 5.0),
+            _named_store("podong", "포동 푸딩", 3.0, 3.0),
+            _named_store("setti", "세띠 엠므", 7.0, 3.0),
+            _named_store("melrod", "멜로드도산", 7.0, 7.0),
+        ],
+        pois=[],
+        transform=IDENTITY_TRANSFORM,
+        bounds=tile_bounds(0, 0, 0),
+    )
+
+    label_ids = {
+        feature["properties"]["id"]
+        for feature in next(layer for layer in layers if layer["name"] == "store_labels")["features"]
+    }
+    fill_ids = {
+        feature["properties"]["id"]
+        for feature in next(layer for layer in layers if layer["name"] == "stores")["features"]
+    }
+
+    assert label_ids == {"podong", "setti", "melrod"}
+    # 폴리곤 fill은 남는다 — 구역 배경으로는 유효한 도형이다.
+    assert "agg" in fill_ids
+
+
+def test_이름_하나만_품는_매장은_묶음이_아니다():
+    layers = build_floor_tile_layers(
+        _building(),
+        stores=[
+            _named_store("nb", "뉴발란스", 3.0, 3.0),
+            _named_store("nbkids", "뉴발란스 키즈", 7.0, 7.0),
+        ],
+        pois=[],
+        transform=IDENTITY_TRANSFORM,
+        bounds=tile_bounds(0, 0, 0),
+    )
+
+    label_ids = {
+        feature["properties"]["id"]
+        for feature in next(layer for layer in layers if layer["name"] == "store_labels")["features"]
+    }
+    assert label_ids == {"nb", "nbkids"}
+
+
+# 묶음이 구성 매장과 centroid를 공유하는 자리(니드쿠키앤베이커리 실사례):
+# 묶음을 그룹에서 빼므로 구성 매장은 혼자가 되어 칸도 shared 표시도 없어야 한다.
+def test_묶음과_centroid를_공유하는_매장은_혼자로_취급한다():
+    aggregate = _named_store("agg", "마사비스 은비스브레드 니드쿠키앤베이커리", 5.0, 5.0)
+    member = _named_store("need", "니드쿠키앤베이커리", 5.0, 5.0)
+    others = [_named_store("masa", "마사비스", 2.0, 2.0), _named_store("eunbi", "은비스브레드", 8.0, 2.0)]
+
+    layers = build_floor_tile_layers(
+        _building(),
+        stores=[aggregate, member, *others],
+        pois=[],
+        transform=IDENTITY_TRANSFORM,
+        bounds=tile_bounds(0, 0, 0),
+    )
+
+    labels = {
+        feature["properties"]["id"]: feature
+        for feature in next(layer for layer in layers if layer["name"] == "store_labels")["features"]
+    }
+    assert "agg" not in labels
+    assert "shared" not in labels["need"]["properties"]
+
+
+# 같은 폴리곤을 나눠 쓰는 매장은 fill도 자기 칸으로 잘려 나가야 화면에서
+# 나뉜 구역으로 보이고 탭 판정이 폴리곤만으로 정확해진다.
+def test_나눠_쓰는_매장의_fill이_칸으로_잘린다():
+    layers = build_floor_tile_layers(
+        _building(),
+        stores=[_shared_polygon_store("ilsang", 7.0), _shared_polygon_store("osulloc", 2.0)],
+        pois=[],
+        transform=IDENTITY_TRANSFORM,
+        bounds=tile_bounds(0, 0, 0),
+    )
+
+    fills = {
+        feature["properties"]["id"]: feature["geometry"]["coordinates"][0]
+        for feature in next(layer for layer in layers if layer["name"] == "stores")["features"]
+    }
+
+    osulloc_lngs = [point[0] for point in fills["osulloc"]]
+    ilsang_lngs = [point[0] for point in fills["ilsang"]]
+    # 긴 축(x, 0~9.6m)을 반으로: 오설록(입구 2.0) 왼쪽 칸, 일상다완(입구 7.0) 오른쪽 칸.
+    assert max(osulloc_lngs) == pytest.approx(126.0 + 4.8)
+    assert min(ilsang_lngs) == pytest.approx(126.0 + 4.8)
+    # 각 라벨이 자기 칸 안에 있다.
+    labels = {
+        feature["properties"]["id"]: feature["geometry"]["coordinates"]
+        for feature in next(layer for layer in layers if layer["name"] == "store_labels")["features"]
+    }
+    assert min(osulloc_lngs) <= labels["osulloc"][0] <= max(osulloc_lngs)
+    assert min(ilsang_lngs) <= labels["ilsang"][0] <= max(ilsang_lngs)
+
+
+# 세 곳 이상이 한 폴리곤을 나눠 쓰면 칸이 줄무늬처럼 잘게 갈라진다(실기기
+# 확인). 개별 라벨·fill 분할 대신 「첫 매장 외 N」 라벨 하나로 접고,
+# 클라이언트가 누르면 목록 시트를 띄운다.
+def test_세_곳_이상은_묶음_라벨_하나로_접는다():
+    layers = build_floor_tile_layers(
+        _building(),
+        stores=[
+            _shared_polygon_store("bao", 7.0),
+            _shared_polygon_store("paris", 2.0),
+            _shared_polygon_store("saru", 5.0),
+        ],
+        pois=[],
+        transform=IDENTITY_TRANSFORM,
+        bounds=tile_bounds(0, 0, 0),
+    )
+
+    labels = next(layer for layer in layers if layer["name"] == "store_labels")["features"]
+    assert len(labels) == 1
+    cluster = labels[0]
+    # 입구 핀 순서(2.0 < 5.0 < 7.0)로 첫 매장은 paris다.
+    assert cluster["properties"]["name"] == "paris 외 2"
+    assert cluster["properties"]["id"] == "paris"
+    assert cluster["properties"]["cluster"] == 3
+    # 이 라벨 하나가 그 자리의 유일한 입구다 — 충돌로 사라지면 안 된다.
+    assert cluster["properties"]["shared"] is True
+
+    # fill은 자르지 않는다 — 세 조각 전부 원본 폭(0~9.6m) 그대로다.
+    fills = next(layer for layer in layers if layer["name"] == "stores")["features"]
+    for feature in fills:
+        lngs = [point[0] for point in feature["geometry"]["coordinates"][0]]
+        assert max(lngs) - min(lngs) == pytest.approx(9.6)
