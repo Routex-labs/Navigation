@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../domain/escalator_ride.dart';
@@ -18,13 +17,17 @@ import 'location_marker.dart';
 /// - **카드**: 배경이 조금이라도 덮인 동안 **또렷하게** 뜬다. 같이 흐려지면
 ///   정작 읽어야 할 문구가 제일 안 보인다.
 ///
-/// **도면이 갈리는 앞뒤만 덮는다**(약 3.2초). 하차까지 덮어 본 적이 있는데,
+/// **도면이 갈리는 앞뒤만 덮는다**(약 4.7초). 하차까지 덮어 본 적이 있는데,
 /// 그러면 내리기 전에 새 층 도면과 다음 경로를 볼 시간이 없다.
 ///
 /// 덮인 **뒤에서** 도면 크로스페이드와 마커 활강이 그대로 돈다. 걷히는 순간
-/// 새 층 도면과 하차 지점에 선 마커가 이미 자리를 잡고 있어야, 이 덮개가
-/// "가려 놓고 순간이동시킨" 것으로 보이지 않는다. 가운데 카드의 점은 그 활강과
-/// **같은 진행률**로 움직인다 — 덮개는 마커를 가리는 것이 아니라 데려간다.
+/// 새 층 도면과 활강 중인 마커가 이미 자리를 잡고 있어야, 이 덮개가 "가려
+/// 놓고 순간이동시킨" 것으로 보이지 않는다.
+///
+/// 카드의 점은 실제 진행률을 **따르지 않는다.** 실제 진행(기압 구동)은 남은
+/// 탑승 10초 이상에 걸쳐 흐르는데 덮개는 몇 초만 보여서, 그대로 얹으면 점이
+/// 멈춘 것으로 읽혔다(2026-08-13 실측). 카드는 자체 시계로 한 번의 전체
+/// 스위프를 재생하는 상징이고, 물리적 위치는 걷힌 뒤의 지도 마커가 말한다.
 ///
 /// 페이드는 느리다(진입 0.5초 / 해제 0.7초) — 빠르면 전환이 아니라 깜빡임으로
 /// 읽힌다.
@@ -35,7 +38,6 @@ class FloorTransitionScrim extends StatelessWidget {
     required this.fadeIn,
     required this.fadeOut,
     this.state,
-    this.progress,
   });
 
   /// 배경을 덮는 정도. 0이면 아무것도 그리지 않고 입력도 그대로 통과한다.
@@ -45,10 +47,6 @@ class FloorTransitionScrim extends StatelessWidget {
 
   /// 가운데 카드에 표시할 `B1 → 1F`. 없으면 배경만 덮는다.
   final FloorTransitionUiState? state;
-
-  /// 탑승 활강의 진행률. 카드의 점이 이 값으로 움직인다 — 지도 위 마커와 같은
-  /// 값이라 덮개를 사이에 두고도 하나의 움직임으로 이어진다.
-  final ValueListenable<double>? progress;
 
   /// 이 이상 덮였으면 뒤쪽 입력을 막는다.
   ///
@@ -81,7 +79,6 @@ class FloorTransitionScrim extends StatelessWidget {
               child: Center(
                 child: _FloorTransitionCard(
                   state: transition,
-                  progress: progress,
                   // 걷힌 뒤에도 카드는 트리에 남는다(페이드 아웃 때문에).
                   // 애니메이션까지 남겨 두면 보이지도 않는 위젯이 매 프레임
                   // rebuild를 요청한다.
@@ -105,32 +102,22 @@ class FloorTransitionScrim extends StatelessWidget {
 /// 것은 다르다 — 지하로 내려가는데 화면에서는 오른쪽으로 가는 그림을 보면 방향
 /// 감각이 한 번 꼬인다.
 ///
-/// **점은 지도 마커 그 자체다.** 생김새(흰 테 + 파란 코어)를 지도 위 현재 위치
-/// 마커와 맞추고, 위치도 마커와 **같은 진행률**로 움직인다([progress] — 실제
-/// 탑승 활강이 내는 값이다). 덮개가 마커를 가져와서 층 사이를 데려간 뒤 새 층에
-/// 내려놓는 그림이라, 사용자가 보는 것은 처음부터 끝까지 같은 점 하나다.
+/// 점은 자체 시계로 **한 번** 전체를 재생하고 도착 쪽에 머문다. 실제 탑승
+/// 진행률을 얹어 본 적이 있는데(2026-08-13), 남은 탑승 10초 이상에 걸친
+/// 진행이 덮개가 보이는 몇 초 안에서는 거의 0이라 점이 멈춘 것으로 읽혔다.
+/// 이 점은 "층을 옮기는 중"이라는 상징이고, 물리적 위치는 걷힌 뒤의 지도
+/// 마커(기압 구동 활강)가 말한다.
 ///
-/// 그래서 **반복하지 않는다.** 예전에는 1.6초짜리 왕복을 무한 반복했는데, 덮개가
+/// **반복하지 않는다.** 예전에는 1.6초짜리 왕복을 무한 반복했는데, 덮개가
 /// 3초를 넘기자 같은 내려가는 장면이 두 번 재생돼 "지금 어디쯤인지"를 오히려
-/// 알 수 없게 만들었다. 진행률이 실제 값이면 남은 시간도 사용자가 읽을 수 있다.
-///
-/// [progress]가 없을 때(양 끝을 몰라 활강을 못 건 경우)만 자체 시계로 한 번
-/// 재생하고 도착 쪽에 머문다. 그때도 반복은 하지 않는다.
+/// 알 수 없게 만들었다.
 class _FloorTransitionCard extends StatefulWidget {
-  const _FloorTransitionCard({
-    required this.state,
-    required this.animating,
-    this.progress,
-  });
+  const _FloorTransitionCard({required this.state, required this.animating});
 
   final FloorTransitionUiState state;
 
   /// 애니메이션을 돌릴지. 스크림이 걷힌 뒤에는 false로 내려온다.
   final bool animating;
-
-  /// 탑승 활강의 진행률(0 = 출발 층, 1 = 도착 층). 지도 위 마커가 쓰는 값과
-  /// **같은 객체**라, 덮개 뒤에서 움직이는 마커와 이 점이 어긋날 수 없다.
-  final ValueListenable<double>? progress;
 
   @override
   State<_FloorTransitionCard> createState() => _FloorTransitionCardState();
@@ -138,71 +125,48 @@ class _FloorTransitionCard extends StatefulWidget {
 
 class _FloorTransitionCardState extends State<_FloorTransitionCard>
     with SingleTickerProviderStateMixin {
-  /// 진행률을 못 받았을 때 자체로 한 번 재생하는 시간. 활강과 같은 길이라
-  /// 어느 경로로 그리든 리듬이 같다.
+  /// 한 번 재생하는 스위프의 길이. 덮개가 완전히 걷히기 전에 점이 도착 쪽에
+  /// 닿아 있도록 덮개 유지 시간(약 4.7초)보다 짧게 둔다.
   static const _travel = escalatorGlideDuration;
 
   /// 두 라벨 사이 선의 길이. 짧으면 이동이 안 읽히고, 길면 라벨이 화면
   /// 위아래로 흩어져 한 덩어리로 안 보인다.
   static const _lineHeight = 104.0;
 
-  /// 진행률을 받은 경우에는 **만들지 않는다.** 쓰지 않는 티커를 들고 있으면
-  /// dispose에서 뒤늦게 생성되며 트리가 이미 죽은 뒤 ancestor를 찾는다.
-  AnimationController? _controller;
-
-  AnimationController _ensureController() =>
-      _controller ??= AnimationController(vsync: this, duration: _travel);
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: _travel,
+  );
 
   @override
   void initState() {
     super.initState();
-    if (widget.animating && widget.progress == null) {
-      _ensureController().forward();
-    }
+    if (widget.animating) _controller.forward();
   }
 
   @override
   void didUpdateWidget(covariant _FloorTransitionCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.progress != null) {
-      _controller?.stop();
-      return;
-    }
     if (widget.animating == oldWidget.animating) return;
     if (widget.animating) {
-      _ensureController().forward(from: 0);
+      _controller.forward(from: 0);
     } else {
-      _controller?.stop();
+      _controller.stop();
     }
   }
 
   @override
   void dispose() {
-    _controller?.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final progress = widget.progress;
-    if (progress == null) {
-      final driver = _ensureController();
-      return AnimatedBuilder(
-        animation: driver,
-        builder: (context, _) => _build(context, driver.value.clamp(0.0, 1.0)),
-      );
-    }
-    // 활강 진행률은 [escalatorGlideSampleInterval]마다 한 번 갱신된다(지도 소스
-    // 를 플랫폼 채널로 밀어야 해서 프레임마다 보낼 수 없다). 그 값을 그대로
-    // 그리면 점이 초당 16번 툭툭 끊기므로, 샘플 사이를 프레임 단위로 잇는다.
     return AnimatedBuilder(
-      animation: progress,
-      builder: (context, _) => TweenAnimationBuilder<double>(
-        tween: Tween(end: progress.value.clamp(0.0, 1.0)),
-        duration: escalatorGlideSampleInterval,
-        curve: Curves.linear,
-        builder: (context, value, _) => _build(context, value),
-      ),
+      animation: _controller,
+      builder: (context, _) =>
+          _build(context, _controller.value.clamp(0.0, 1.0)),
     );
   }
 

@@ -18,7 +18,7 @@
 | 순간 | 그림 | 연출 |
 |---|---|---|
 | 길안내 시작 | 지금 층 경로 전체가 한눈에 | 700ms 줌아웃 + 경로 축으로 회전 |
-| 층 전환 | 하차 지점으로 이동 + 내리는 방향으로 회전 | 마커 활강과 같은 2.4초 |
+| 층 전환 | 하차 지점으로 이동 + 내리는 방향으로 회전 | 2.4초 고정(마커 활강은 기압 구동이라 더 길다) |
 | 재탐색 | — | **없음** |
 
 "재배치되는 듯한" 극적인 효과는 **안내당 한 번만** 준다. 매 걸음마다 카메라가
@@ -82,7 +82,7 @@ chrome 보정과 줌 하한을 한 함수에만 둔 이유는, 각자 갖게 두
 | 시점 | 자리 | 연출 |
 |---|---|---|
 | 안내 시작 | `showIndoorRouteTo` → `_computeAndShow*(playOverview: true)` | 700ms 개요 |
-| 층 전환 | `_swapIndoorFloorForRide` → `_aimCameraAtEscalatorExit` | 2.4초(마커 활강과 같은 값) |
+| 층 전환 | `_swapIndoorFloorForRide` → `_aimCameraAtEscalatorExit` | 2.4초 고정(마커 활강은 기압 구동) |
 | 층 전환 후 재계산 | `_rerouteAfterVerticalTransfer` | 없음 |
 | 경로 이탈 재탐색 | `_rerouteIndoorFromCurrentPosition` | 없음 |
 

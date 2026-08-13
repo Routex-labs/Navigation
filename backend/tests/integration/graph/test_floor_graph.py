@@ -53,6 +53,26 @@ def test_층_지도에_Studio_그래프와_매장_폴리곤을_응답한다(api_
     assert all(store["polygon_local_m"] is not None for store in body["stores"])
 
 
+# 입구(=원본 POI 핀) 좌표를 wgs84로도 내려보내는지 검증한다.
+#
+# **화면이 이 키를 오래 전부터 읽고 있었는데 서버가 보내지 않았다.** 한 폴리곤에
+# 매장이 여럿 붙은 자리(실데이터 31곳·91매장)에서 centroid는 전부 같은 값이라,
+# 라벨을 흩어 각각 누를 수 있게 만드는 근거가 이 좌표뿐이다
+# (client/lib/widgets/store_label_anchor.dart). 죽은 폴백으로 되돌아가지 않게
+# 계약을 여기서 고정한다.
+def test_층_지도가_입구_좌표를_wgs84로도_내려준다(api_client):
+    response = api_client.get(f"/buildings/{BUILDING_ID}/floors/{FLOOR_NAME}")
+
+    assert response.status_code == 200
+    shop_a = next(store for store in response.json()["stores"] if store["name"] == "가게A")
+
+    assert shop_a["entrance_local_m"] == {"x": 30.0, "y": 40.0}
+    entrance = shop_a["entrance_wgs84"]
+    assert entrance is not None
+    # 픽스처는 입구와 중심이 같은 점이라, 같은 변환을 거치면 값도 같아야 한다.
+    assert entrance == shop_a["centroid_wgs84"]
+
+
 # 층 지도 응답의 간선 키가 alias(from/to)인지 검증한다.
 #
 # **이 엔드포인트만 따로 지켜야 한다.** ETag를 뽑으려고 model_dump_json()을 직접

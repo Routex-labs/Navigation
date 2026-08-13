@@ -125,6 +125,209 @@ def _store_properties(store: Store) -> dict:
     return properties
 
 
+# 이름이 **같은 층 다른 매장 이름 2개 이상을 이어 붙인** "묶음 매장" id.
+#
+# 원본(다비오)은 구역 폴리곤에 그 안 매장들의 이름을 전부 이어 붙인 항목을
+# 함께 둔다 — 「마사비스 리치몬드 과자점 은비스브레드 니드쿠키앤베이커리」,
+# 「포동 푸딩 우나하우스 세띠엠므 멜로드도산」, 「비비안/ 바바라/ 피앳유즈」….
+# 구성 매장들이 각자 폴리곤·라벨을 이미 갖고 있으므로, 이 묶음에 라벨을 달면
+# 같은 이름이 화면에 두 번 적히고 탭도 이 묶음이 가로챈다. 지도에서는 매장으로
+# 취급하지 않는다(라벨 없음·탭 대상 아님). 폴리곤 fill은 남긴다 — 구역 배경으로
+# 는 유효한 도형이다.
+#
+# 판정: 공백을 지운 이름에 **다른 매장의 공백 지운 이름이 2개 이상** 들어
+# 있으면 묶음이다. 공백을 지우는 이유는 원본 표기가 흔들리기 때문이다 —
+# 묶음에는 「세띠엠므」, 구성 매장에는 「세띠 엠므」로 적혀 있다. 2개 이상을
+# 요구하는 이유는 「뉴발란스 키즈」(「뉴발란스」 포함)처럼 이름이 다른 매장
+# 이름을 하나만 품는 정상 매장을 오인하지 않기 위해서다.
+def _aggregate_store_ids(stores: Sequence[Store]) -> set[str]:
+    squashed = {store.id: "".join(store.name.split()) for store in stores if store.name}
+    aggregate_ids: set[str] = set()
+    for store in stores:
+        mine = squashed.get(store.id, "")
+        if len(mine) < 4:
+            continue
+        contained = {
+            other_name
+            for other_id, other_name in squashed.items()
+            if other_id != store.id and len(other_name) >= 2 and other_name != mine and other_name in mine
+        }
+        if len(contained) >= 2:
+            aggregate_ids.add(store.id)
+    return aggregate_ids
+
+
+# 한 폴리곤을 여러 매장이 나눠 쓰는 자리(더현대 서울 기준 31곳·91매장 —
+# 오설록·일상다완, 4F 주방용품 10곳, B1 푸드트럭 8곳 …)의 배치.
+#
+# label_point는 폴리곤당 한 점이라 이 매장들의 라벨이 **정확히 포개지고**,
+# MapLibre 충돌 처리가 하나만 남긴다 — 지도에서 나머지 매장은 보이지도 않고
+# 누를 수도 없다(오설록을 눌러도 일상다완이 열리던 증상의 뿌리).
+#
+# 폴리곤의 **긴 축**을 매장 수로 나눠 한 칸에 하나씩 배정한다. 긴 축인 이유는
+# 분리 폭이 가장 커지는 방향이고, 화면 회전(클라이언트가 건물 축에 맞춰
+# 카메라를 돌린다)과 무관하게 정해지는 값이기 때문이다. 순서는 다비오가 찍은
+# 입구 핀(entrance_x/y_m)을 같은 축에 투영해 따른다 — 위치는 우리가 정하지만
+# 배치 순서는 원본 지도를 그대로 유지한다. 핀이 없으면 id로 고정한다.
+#
+# **두 곳까지만 칸으로 나눈다.** 라벨과 함께 fill 폴리곤도 잘라 내보내
+# 화면에서 실제로 나뉜 구역으로 보이고 탭 판정도 폴리곤만으로 정확해진다.
+# 세 곳 이상은 칸이 줄무늬처럼 잘게 갈라져 도면이 표처럼 보였다(실기기 확인).
+# 그런 자리는 [_cluster_labels]가 「첫 매장 외 N」 라벨 하나로 접고,
+# 클라이언트가 누르면 목록 시트를 띄운다.
+#
+# 묶음 매장([_aggregate_store_ids])은 그룹에서 뺀다 — 묶음과 구성 매장이
+# centroid를 공유하는 자리에서 묶음을 끼워 주면 정상 매장의 라벨·폴리곤이
+# 반쪽이 된다.
+#
+# 반환: 매장 id → 배치. 라벨 feature에는 `shared` 속성이 붙어, 클라이언트가
+# 충돌 판정을 끈 전용 레이어로 그린다.
+@dataclass(frozen=True)
+class _SharedSlot:
+    label_lnglat: tuple[float, float]
+    axis_is_x: bool
+    low: float
+    high: float
+
+
+def _shared_store_groups(
+    stores: Sequence[Store],
+    exclude_ids: set[str],
+) -> list[list[Store]]:
+    groups: dict[tuple[float, float], list[Store]] = {}
+    for store in stores:
+        if not store.polygon or store.id in exclude_ids:
+            continue
+        # mm 단위 반올림. 원본이 같은 값을 복사해 넣은 경우만 묶이고,
+        # 실제로 다른 매장이 우연히 묶일 수 없는 정밀도다.
+        key = (round(store.centroid_x_m, 3), round(store.centroid_y_m, 3))
+        groups.setdefault(key, []).append(store)
+    return [group for group in groups.values() if len(group) >= 2]
+
+
+# 그룹 폴리곤의 긴 축(axis_is_x, low, span)과 그 축 기준 매장 순서.
+# 순서는 다비오 입구 핀을 축에 투영해 따르고, 핀이 없으면 id로 고정한다.
+def _group_axis_and_order(group: list[Store]) -> tuple[bool, float, float, list[Store]]:
+    # 그룹은 폴리곤 있는 매장만 담는다([_shared_store_groups]) — 타입만 좁힌다.
+    polygon = group[0].polygon or []
+    xs = [point["x"] for point in polygon]
+    ys = [point["y"] for point in polygon]
+    span_x = max(xs) - min(xs)
+    span_y = max(ys) - min(ys)
+    axis_is_x = span_x >= span_y
+    low = min(xs) if axis_is_x else min(ys)
+    span = span_x if axis_is_x else span_y
+
+    def order_key(store: Store) -> tuple[float, str]:
+        coord = store.entrance_x_m if axis_is_x else store.entrance_y_m
+        return (coord if coord is not None else 0.0, store.id)
+
+    return axis_is_x, low, span, sorted(group, key=order_key)
+
+
+def _shared_layouts(
+    groups: Sequence[list[Store]],
+    transform: GeoTransform,
+) -> dict[str, _SharedSlot]:
+    out: dict[str, _SharedSlot] = {}
+    for group in groups:
+        if len(group) != 2:
+            continue
+        axis_is_x, low, span, ordered = _group_axis_and_order(group)
+        slot = span / len(ordered)
+        for i, store in enumerate(ordered):
+            slot_low = low + i * slot
+            along = slot_low + slot / 2
+            x_m, y_m = (along, store.centroid_y_m) if axis_is_x else (store.centroid_x_m, along)
+            lat, lng = transform.apply(x_m, y_m)
+            out[store.id] = _SharedSlot(
+                label_lnglat=(lng, lat),
+                axis_is_x=axis_is_x,
+                low=slot_low,
+                high=slot_low + slot,
+            )
+    return out
+
+
+# 세 곳 이상이 한 폴리곤을 나눠 쓰는 자리의 **묶음 라벨 하나**.
+#
+# 칸으로 나누면 도면이 줄무늬 표처럼 보인다(실기기 확인). 대신 「첫 매장
+# 외 N」 라벨 하나를 centroid에 놓고, 클라이언트가 누르면 매장 목록 시트를
+# 띄운다 — 라벨 feature의 `cluster`(매장 수)가 그 신호이고, `id`는 대표(첫)
+# 매장이라 클라이언트가 같은 centroid의 매장들을 되찾는 열쇠가 된다.
+# `shared`도 함께 붙어 충돌 판정을 끈 레이어가 그린다 — 이 라벨 하나가 그
+# 자리 전체의 유일한 입구라, 밀려서 사라지면 매장 N곳이 통째로 숨는다.
+def _cluster_labels(
+    groups: Sequence[list[Store]],
+    transform: GeoTransform,
+) -> list[dict]:
+    features: list[dict] = []
+    for group in groups:
+        if len(group) < 3:
+            continue
+        _, _, _, ordered = _group_axis_and_order(group)
+        first = ordered[0]
+        lat, lng = transform.apply(first.centroid_x_m, first.centroid_y_m)
+        properties: dict = {
+            "id": first.id,
+            "name": f"{first.name} 외 {len(ordered) - 1}",
+            "kind": "store",
+            "cluster": len(ordered),
+            "shared": True,
+        }
+        if first.category is not None:
+            properties["category"] = first.category
+        if first.subcategory is not None:
+            properties["subcategory"] = first.subcategory
+        features.append(
+            {
+                "geometry": {"type": "Point", "coordinates": [lng, lat]},
+                "properties": properties,
+            }
+        )
+    return features
+
+
+# 폴리곤(local_m)을 축에 수직인 두 경계(low·high) 사이의 띠로 자른다.
+# Sutherland–Hodgman 클리핑 — 띠는 볼록 영역이라 오목한 폴리곤도 안전하다.
+# 잘린 결과가 도형이 못 되면(< 3점) 빈 목록을 돌려주고 호출부가 원본을 쓴다.
+def _clip_polygon_to_slab(
+    polygon: list[dict],
+    axis_is_x: bool,
+    low: float,
+    high: float,
+) -> list[dict]:
+    def axis_value(point: dict) -> float:
+        return point["x"] if axis_is_x else point["y"]
+
+    def clip(points: list[dict], bound: float, keep_ge: bool) -> list[dict]:
+        result: list[dict] = []
+        for index in range(len(points)):
+            current = points[index]
+            previous = points[index - 1]
+            current_in = (axis_value(current) >= bound) == keep_ge or axis_value(current) == bound
+            previous_in = (axis_value(previous) >= bound) == keep_ge or axis_value(previous) == bound
+            if current_in != previous_in:
+                span = axis_value(current) - axis_value(previous)
+                t = 0.0 if span == 0 else (bound - axis_value(previous)) / span
+                result.append(
+                    {
+                        "x": previous["x"] + (current["x"] - previous["x"]) * t,
+                        "y": previous["y"] + (current["y"] - previous["y"]) * t,
+                    }
+                )
+            if current_in:
+                result.append(current)
+        return result
+
+    points = list(polygon)
+    points = clip(points, low, keep_ge=True)
+    if len(points) < 3:
+        return []
+    points = clip(points, high, keep_ge=False)
+    return points if len(points) >= 3 else []
+
+
 # 건물 하나의 layers(footprint/stores/pois)를 wgs84 GeoJSON feature로 만든다.
 # 타일 경계 상자와 겹치지 않는 feature는 걸러낸다(정밀 클리핑 없이 bbox 교차만
 # 확인 — 실내 지도는 feature 수가 적어 이 정도로도 타일이 과도하게 커지지 않는다).
@@ -179,10 +382,27 @@ def build_floor_tile_layers(
     # 가운데가 아니다.
     store_features = []
     label_features = []
+    # 묶음 매장(다른 매장 이름을 이어 붙인 항목)은 라벨을 달지 않고 칸 배치
+    # 그룹에서도 뺀다 — 구성 매장들이 이미 각자 폴리곤·라벨을 갖고 있다.
+    aggregate_ids = _aggregate_store_ids(stores)
+    shared_groups = _shared_store_groups(stores, aggregate_ids)
+    # 두 곳 그룹의 칸 배치. label_point 격자 탐색이 아니라 산술 계산뿐이라
+    # memo를 거치지 않는다.
+    shared_layouts = _shared_layouts(shared_groups, transform)
+    # 세 곳 이상 그룹의 구성 매장 — 개별 라벨 대신 묶음 라벨 하나로 접는다.
+    clustered_ids = {store.id for group in shared_groups if len(group) >= 3 for store in group}
     for store in stores:
         if not store.polygon:
             continue
-        ring = _local_polygon_ring(store.polygon, transform)
+        layout = shared_layouts.get(store.id)
+        polygon_local = store.polygon
+        if layout is not None:
+            # 나눠 쓰는 자리는 fill도 자기 칸으로 잘라 내보낸다. 화면에서 실제로
+            # 나뉜 구역으로 보이고, 탭 판정이 폴리곤만으로 정확해진다.
+            clipped = _clip_polygon_to_slab(store.polygon, layout.axis_is_x, layout.low, layout.high)
+            if clipped:
+                polygon_local = clipped
+        ring = _local_polygon_ring(polygon_local, transform)
         if not ring or not bounds.intersects(*_polygon_bbox(ring)):
             continue
         store_features.append(
@@ -196,19 +416,40 @@ def build_floor_tile_layers(
         # 하나씩 갖게 되고, 두 타일이 함께 떠 있는 순간 같은 이름이 두 번
         # 찍힌다. 대신 화면 가장자리에서 폴리곤 타일만 로드된 상태면 그 매장
         # 라벨이 잠깐 안 보이는데, POI 레이어가 이미 같은 규칙으로 동작한다.
-        label_xy = store_label_memo.get(store.id) if store_label_memo is not None else None
-        if label_xy is None:
-            label_xy = label_point(_closed_ring_to_points(ring))
-            if store_label_memo is not None:
-                store_label_memo[store.id] = label_xy
+        # 묶음 매장은 라벨을 달지 않는다 — 구성 매장들의 이름이 이미 화면에
+        # 있다. 세 곳 이상 그룹의 구성 매장도 개별 라벨 대신 아래에서 묶음
+        # 라벨 하나로 접는다.
+        if store.id in aggregate_ids or store.id in clustered_ids:
+            continue
+        if layout is not None:
+            label_xy = layout.label_lnglat
+        else:
+            memoized = store_label_memo.get(store.id) if store_label_memo is not None else None
+            if memoized is None:
+                label_xy = label_point(_closed_ring_to_points(ring))
+                if store_label_memo is not None:
+                    store_label_memo[store.id] = label_xy
+            else:
+                label_xy = memoized
         label_x, label_y = label_xy
         if bounds.intersects(label_x, label_y, label_x, label_y):
+            label_properties = _store_properties(store)
+            if layout is not None:
+                # 클라이언트가 이 표시로 충돌 판정을 끈 전용 레이어를 갈라낸다.
+                # 칸으로 나눠도 라벨 간격이 글자 폭보다 좁을 수 있어, 일반
+                # 레이어에 두면 충돌 처리가 결국 하나를 지운다.
+                label_properties["shared"] = True
             label_features.append(
                 {
                     "geometry": {"type": "Point", "coordinates": [label_x, label_y]},
-                    "properties": _store_properties(store),
+                    "properties": label_properties,
                 }
             )
+    # 세 곳 이상 그룹의 묶음 라벨. 점이라 bbox 교차가 곧 포함 여부다.
+    for feature in _cluster_labels(shared_groups, transform):
+        lng, lat = feature["geometry"]["coordinates"]
+        if bounds.intersects(lng, lat, lng, lat):
+            label_features.append(feature)
     layers.append({"name": "stores", "features": store_features})
     layers.append({"name": "store_labels", "features": label_features})
 

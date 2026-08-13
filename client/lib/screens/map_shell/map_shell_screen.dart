@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kIsWeb, ValueListenable;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
@@ -132,10 +132,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
   void _onFloorTransitionChanged(
     FloorTransitionUiState? banner,
     double scrimOpacity,
-    ValueListenable<double> rideProgress,
   ) {
     if (!mounted) return;
-    _rideProgress = rideProgress;
     if (_floorTransition == banner && _floorScrimOpacity == scrimOpacity) {
       return;
     }
@@ -258,9 +256,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 지도 안에서 그린 배너는 그 뒤에 깔린다.
   FloorTransitionUiState? _floorTransition;
   double _floorScrimOpacity = 0;
-
-  /// 덮개 안의 점이 듣는 활강 진행률. 지도가 넘겨준 객체를 그대로 들고 있는다.
-  ValueListenable<double>? _rideProgress;
 
   // 지도 위에 얹은 공용 오버레이(검색창·카테고리 줄·하단 바)의 영역을
   // IndoorMapBody가 map click 처리에서 제외할 수 있게 넘겨줄 key들.
@@ -2749,7 +2744,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
           // 지도에서 할 수 있는 일도 없는 구간이다.
           Positioned.fill(
             child: FloorTransitionScrim(
-              progress: _rideProgress,
               opacity: _floorScrimOpacity,
               fadeIn: floorTransitionScrimFadeIn,
               fadeOut: floorTransitionScrimFadeOut,

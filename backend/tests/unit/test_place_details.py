@@ -822,14 +822,18 @@ def test_오버레이가_참조하는_사진이_전부_번들에_있다():
 
 
 # 반대 방향. 지운 메뉴의 사진이 남아 있으면 APK만 무거워지고, 다음 사람은 그게 쓰이는
-# 사진인지 확인할 방법이 없다. 매장 사진(`starbucks_store_*`)이나 다른 브랜드 사진은
-# 대상이 아니다 — 이름 규칙이 제품코드인 메뉴 사진만 본다.
+# 사진인지 확인할 방법이 없다. 매장 사진(`*_store_*`)은 대상이 아니다 — 이름 규칙이
+# 없어 사람이 골라 넣고 골라 빼는 자산이다.
+#
+# 브랜드 이름을 박지 않고 `*_menu_*`로 보는 이유: 한때 `starbucks_menu_*`만 훑었는데,
+# 그러면 브랜드가 늘어난 날 새 사진들은 **가드 밖에서** 쌓인다. 감시 대상을 늘리는
+# 일을 사람이 기억해야 하는 구조는 반드시 한 번은 잊힌다.
 def test_참조되지_않는_메뉴_사진이_없다():
     referenced = _referenced_assets()
     menu_dir = _asset_root() / "assets" / "place_details"
 
     orphans = sorted(
-        path.name for path in menu_dir.glob("starbucks_menu_*") if f"assets/place_details/{path.name}" not in referenced
+        path.name for path in menu_dir.glob("*_menu_*") if f"assets/place_details/{path.name}" not in referenced
     )
 
     assert orphans == []

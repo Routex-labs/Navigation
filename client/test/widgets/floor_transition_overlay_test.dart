@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/domain/escalator_ride.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/floor_transition_ui_state.dart';
 import 'package:navigation_client/widgets/floor_transition_overlay.dart';
 
@@ -273,18 +274,16 @@ void main() {
       expect(find.textContaining('이동 중'), findsOneWidget);
     });
 
-    testWidgets('점은 지도 마커와 같은 진행률로 움직인다', (tester) async {
-      // 덮개는 마커를 가리는 것이 아니라 데려간다. 진행률이 활강과 같은 값이라
-      // 걷히는 순간 점이 있던 자리에 마커가 서 있다.
-      final progress = ValueNotifier<double>(0);
-      addTearDown(progress.dispose);
+    testWidgets('점은 한 번의 스위프로 도착 쪽까지 완주한다', (tester) async {
+      // 실제 탑승 진행률을 얹으면 덮개가 보이는 몇 초 동안 점이 거의 움직이지
+      // 않아 멈춘 것으로 읽힌다(2026-08-13 실측). 카드는 자체 시계로 전체를
+      // 한 번 재생하는 상징이다.
       await tester.pumpWidget(
         _host(
           FloorTransitionScrim(
             opacity: 1,
             fadeIn: Duration.zero,
             fadeOut: Duration.zero,
-            progress: progress,
             state: _state(
               FloorTransitionStage.moving,
               from: 'B1',
@@ -298,35 +297,21 @@ void main() {
       final dot = find.byKey(const Key('floor-transition-dot'));
       final startY = tester.getCenter(dot).dy;
 
-      progress.value = 1;
-      // 샘플 사이를 프레임 단위로 잇는 보간이 붙어 있어 한 프레임으로는 다 안 간다.
-      await tester.pumpAndSettle();
-
+      await tester.pump(escalatorGlideDuration ~/ 2);
+      final midY = tester.getCenter(dot).dy;
       expect(
-        tester.getCenter(dot).dy,
+        midY,
         greaterThan(startY),
         reason: '내려가는 전환이면 점도 아래로 내려가야 한다',
       );
-    });
 
-    testWidgets('진행률을 받으면 자체 반복 애니메이션을 돌리지 않는다', (tester) async {
-      // 반복 재생은 덮개가 길어질 때 같은 장면을 두 번 보여 준다.
-      final progress = ValueNotifier<double>(0.4);
-      addTearDown(progress.dispose);
-      await tester.pumpWidget(
-        _host(
-          FloorTransitionScrim(
-            opacity: 1,
-            fadeIn: Duration.zero,
-            fadeOut: Duration.zero,
-            progress: progress,
-            state: _state(FloorTransitionStage.moving, goingUp: false),
-          ),
-        ),
-      );
-
-      // 자체 애니메이션이 돌고 있으면 pumpAndSettle이 타임아웃으로 실패한다.
       await tester.pumpAndSettle();
+      final endY = tester.getCenter(dot).dy;
+      expect(endY, greaterThan(midY), reason: '스위프가 끝까지 가야 한다');
+
+      // 완주 뒤에는 도착 쪽에 머문다 — 반복하면 같은 장면이 두 번 보인다.
+      await tester.pump(const Duration(seconds: 1));
+      expect(tester.getCenter(dot).dy, endY);
     });
 
     testWidgets('캡션은 가는 방향 쪽에 붙는다', (tester) async {
