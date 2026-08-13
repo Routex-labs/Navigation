@@ -44,8 +44,7 @@ class EscalatorAltitudeOutcome {
   /// 세션 로그에 지난 판정이 섞인다.
   final List<EscalatorDetectionEvent> events;
 
-  bool get isEmpty =>
-      started == null && cancelled == null && confirmed == null;
+  bool get isEmpty => started == null && cancelled == null && confirmed == null;
 }
 
 /// 탑승 판정이 가리키는 노드가 **안내가 지목한 탑승점**이면 그 좌표, 아니면 null.
@@ -79,6 +78,33 @@ PdrLocalPoint? routeBoardingHoldPoint({
   final node = graph?.nodes.where((n) => n.id == boardingNodeId).firstOrNull;
   return node == null ? null : PdrLocalPoint(node.xM, node.yM);
 }
+
+/// 고정 지점이 지금 위치에서 이만큼 넘게 떨어져 있으면 **그 자리에 세운다**.
+///
+/// 고정은 원래 "탑승점을 지나 앞 매장으로 흘러가는 것"을 막으려는 것이다.
+/// 그런데 판정이 이르거나 틀렸을 때 먼 노드로 스냅하면 마커가 눈에 띄게 뒤로
+/// 순간이동하고, 사용자는 그걸 "위치가 튄다"로 읽는다 — 막으려던 것보다 나쁜
+/// 그림이다. 6m는 랜딩 폭과 보정 오차를 감안한 값으로, 실제로 탑승점에 서
+/// 있으면 이 안에 든다.
+const boardingHoldSnapRadiusM = 6.0;
+
+/// 고정 지점을 지금 위치 기준으로 다듬는다. 멀면 [currentM]을 그대로 쓴다.
+PdrLocalPoint? clampBoardingHold({
+  required PdrLocalPoint? holdPoint,
+  required PdrLocalPoint? currentM,
+  double radiusM = boardingHoldSnapRadiusM,
+}) {
+  if (holdPoint == null || currentM == null) return holdPoint ?? currentM;
+  return (holdPoint - currentM).distance <= radiusM ? holdPoint : currentM;
+}
+
+/// 이 층에서 걸을 거리가 이보다 짧으면 **내리자마자 바로 다음 에스컬레이터**로
+/// 본다.
+///
+/// 다층 경로에서 흔한 모양이다 — B2에서 내려 두어 걸음 옆의 상행을 바로 탄다.
+/// 그 구간에서는 걸어갈 거리가 없으므로 탑승 판정을 늦출 이유가 없고, 늦추면
+/// 환승마다 마커가 먼저 몇 걸음 흘러간다.
+const consecutiveTransferRouteM = 6.0;
 
 /// 교차점을 지나는 동안 이탈 증거를 새로 쌓지 않는 시간.
 ///
@@ -133,6 +159,23 @@ class IndoorGuidanceSession {
   /// 탑승 판정 중 위치를 고정할 지점. 안내가 지목한 탑승점일 때만 채워진다.
   PdrLocalPoint? _boardingHoldPointM;
 
+  /// 실제 수직 이동이 확인된 뒤 마커를 묶어 두는 지점.
+  ///
+  /// [_boardingHoldPointM]과 나누는 이유는 **근거의 세기가 다르기** 때문이다.
+  /// 접근 단계(boardingDetected)는 에스컬레이터 옆을 스쳐 지나가기만 해도
+  /// 올라가므로, 안내가 지목한 탑승점과 판정기가 고른 노드가 일치할 때만
+  /// 고정한다 — 아니면 그냥 걷는 사람의 마커를 세우게 된다.
+  ///
+  /// 반면 수직 이동(verticalMotionDetected)은 기압이 실제로 움직였다는 뜻이라
+  /// 스쳐 지나감이 아니다. 그런데 이때도 경로 조건이 어긋나면(경로가 없거나
+  /// 판정기가 다른 레인을 골랐거나) 고정이 걸리지 않아, **에스컬레이터 위에
+  /// 서 있는 동안 발판 진동이 걸음으로 세어져 마커가 앞 매장으로 흘러갔다.**
+  /// 걸음 pause(`pauseStepTracking`)는 화면이 비동기로 거는 것이라 그 사이
+  /// 프레임도 막지 못한다. 그래서 이 단계에서는 근거를 물러서며 잡아 **반드시**
+  /// 어딘가에 고정한다: 안내가 지목한 탑승점 → 판정기가 고른 탑승 노드 →
+  /// 그 순간의 보정 위치(적어도 제자리에 선다).
+  PdrLocalPoint? _rideHoldPointM;
+
   bool get isAttached => _attached;
   String? get buildingId => _buildingId;
   String? get floorId => _floorId;
@@ -142,6 +185,13 @@ class IndoorGuidanceSession {
 
   /// 탑승점에 고정 중인지. 화면은 이 구간에서 경로 진행률을 갱신하지 않는다.
   PdrLocalPoint? get boardingHoldPointM => _boardingHoldPointM;
+
+  /// 걸음이 위치를 더 못 밀고 있는가(접근 고정이든 탑승 고정이든).
+  ///
+  /// 진행률 갱신을 멈출지 판단하는 자리가 이 값 하나를 보게 해서, 고정 지점이
+  /// 늘어날 때마다 조건을 두 곳에서 맞추는 일이 없게 한다.
+  bool get isPositionHeld =>
+      _boardingHoldPointM != null || _rideHoldPointM != null;
 
   /// 복도 보정 결과 원본. 디버그 궤적과 경로 진행률이 함께 쓴다.
   CorridorTrackingResult? get trackingResult =>
@@ -177,6 +227,7 @@ class IndoorGuidanceSession {
   /// 경로가 있다. 그 경로가 고정을 안 풀면 마커가 탑승점에 붙은 채 남는다.
   void clearBoardingHold() {
     _boardingHoldPointM = null;
+    _rideHoldPointM = null;
   }
 
   /// 부착·층·경로는 그대로 두고 **보정만** 처음부터 다시 본다.
@@ -187,7 +238,7 @@ class IndoorGuidanceSession {
   void resetTracking() {
     _corridor.reset();
     _snapshot = null;
-    _boardingHoldPointM = null;
+    clearBoardingHold();
   }
 
   void _resetTracking() {
@@ -197,7 +248,7 @@ class IndoorGuidanceSession {
     _floorId = null;
     _graph = null;
     _multiFloorRoute = null;
-    _boardingHoldPointM = null;
+    clearBoardingHold();
   }
 
   /// 지금 보고 있는 층과 그 층의 그래프를 알려 준다.
@@ -223,7 +274,10 @@ class IndoorGuidanceSession {
     if (floorChanged) {
       _corridor.reset();
       _snapshot = null;
-      _boardingHoldPointM = null;
+      // 고정 지점은 **이전 층의 local m**이다. 같은 숫자가 새 층에서는 다른
+      // 자리를 가리키므로 들고 가지 않는다. 조기 전환으로 목적 층 도면이 먼저
+      // 열린 구간에서 마커가 사라지는 것은 화면이 따로 메운다(탑승 활강).
+      clearBoardingHold();
     }
     if (_escalator.pendingTransition == null) {
       _escalator.updateContext(
@@ -315,6 +369,7 @@ class IndoorGuidanceSession {
         expectedArrivalNodeId: segment.transferToNodeId,
         steps: steps,
         timestampMs: atMs,
+        immediateTransfer: route.distanceMeters <= consecutiveTransferRouteM,
       );
     }
   }
@@ -347,20 +402,46 @@ class IndoorGuidanceSession {
     if (!_attached) return const [];
     final changes = _escalator.takePhaseChanges();
     for (final change in changes) {
+      final currentM = _corridor.result?.previewPosition;
       switch (change.phase) {
         case EscalatorPhase.boardingDetected:
+          _boardingHoldPointM = clampBoardingHold(
+            holdPoint: _routeBoardingHoldPoint(change),
+            currentM: currentM,
+          );
         case EscalatorPhase.verticalMotionDetected:
-          _boardingHoldPointM = _routeBoardingHoldPoint(change);
+          _boardingHoldPointM = clampBoardingHold(
+            holdPoint: _routeBoardingHoldPoint(change),
+            currentM: currentM,
+          );
+          _rideHoldPointM = clampBoardingHold(
+            holdPoint:
+                _routeBoardingHoldPoint(change) ??
+                _detectorBoardingNodePoint(change),
+            currentM: currentM,
+          );
         case EscalatorPhase.cancelled:
         case EscalatorPhase.failed:
         case EscalatorPhase.idle:
-          _boardingHoldPointM = null;
+          clearBoardingHold();
         case EscalatorPhase.midpointReached:
         case EscalatorPhase.landed:
           break;
       }
     }
     return changes;
+  }
+
+  /// 판정기가 고른 탑승 노드의 좌표. 경로가 지목한 노드가 아니어도 쓴다 —
+  /// 수직 이동이 확인된 뒤라 "에스컬레이터 위"라는 사실 자체는 이미 근거가 있다.
+  ///
+  /// 앵커가 다른 층에 있으면 null이다. 그때의 local m은 남의 층 좌표라, 고정할
+  /// 자리로 쓰면 마커를 엉뚱한 곳에 못 박는다.
+  PdrLocalPoint? _detectorBoardingNodePoint(EscalatorPhaseChange change) {
+    final nodeId = change.boardingNodeId;
+    if (nodeId == null || _anchor?.floorId != _floorId) return null;
+    final node = _graph?.nodes.where((n) => n.id == nodeId).firstOrNull;
+    return node == null ? null : PdrLocalPoint(node.xM, node.yM);
   }
 
   PdrLocalPoint? _routeBoardingHoldPoint(EscalatorPhaseChange change) =>
@@ -391,11 +472,13 @@ class IndoorGuidanceSession {
     if (onThisFloor) {
       final result = _corridor.result;
       if (result != null) {
-        // 탑승점에 고정 중이면 걸음이 더 세어져도 그 자리다. 에스컬레이터 앞에
-        // 선 뒤의 걸음은 발판 위 진동이거나 대기 중 제자리 움직임이라, 그대로
-        // 두면 마커가 탑승점을 지나 앞 매장으로 흘러간다.
+        // 고정 중이면 걸음이 더 세어져도 그 자리다. 에스컬레이터 앞에 선 뒤의
+        // 걸음은 발판 위 진동이거나 대기 중 제자리 움직임이라, 그대로 두면
+        // 마커가 탑승점을 지나 앞 매장으로 흘러간다. 탑승 고정이 접근 고정을
+        // 이긴다 — 늦게 잡힌 쪽이 더 강한 근거다.
         return GuidancePosition(
-          localM: _boardingHoldPointM ?? result.previewPosition,
+          localM:
+              _rideHoldPointM ?? _boardingHoldPointM ?? result.previewPosition,
           source: GuidancePositionSource.tracked,
           headingDeg: _floorHeadingDeg(anchor),
         );
@@ -557,7 +640,7 @@ class IndoorGuidanceSession {
     // 에스컬레이터 위나 탑승점 고정 구간에서는 진행 상태를 갱신하지 않는다.
     // 위치가 한 지점에 묶여 있어 그 투영은 "경로를 벗어났다"는 오판만 만들고,
     // 곧 층이 바뀔 자리에서 재탐색을 돌린다.
-    if (onEscalator || _boardingHoldPointM != null) {
+    if (onEscalator || isPositionHeld) {
       return GuidanceProgressUpdate(
         displayProgress: _displayProgress,
         measuredProgress: _measuredProgress,

@@ -12,6 +12,8 @@ Flutter 화면이나 HTTP를 모르는 계산 계층이다. 백엔드가 제공�
 | [`multi_floor_router.dart`](multi_floor_router.dart) | 건물 전체 그래프 경로를 층별 세그먼트로 분할 | `computeMultiFloorRoute` |
 | [`route_progress.dart`](route_progress.dart) | 현재 위치를 경로에 투영해 진행·남은거리·이탈 판정 | `RouteProgress`, `computeRouteProgress` |
 | [`route_guidance.dart`](route_guidance.dart) | 다음 행동 한 줄 안내, 진행 지점 기준 경로선 분할(지나온/남은), 도착 시 안내 자동 종료 판단 | `RouteGuidanceAction`, `RouteGuidanceInstruction`, `RoutePolylineSplit`, `splitRouteAtProgress`, `decideArrivalAutoClear` |
+| [`escalator_ride.dart`](escalator_ride.dart) | 탑승~하차 구간의 마커 활강(양 끝 사이 보간)과 내리는 방향 방위각 | `EscalatorGlide`, `escalatorGlideDuration`, `escalatorExitBearingDeg` |
+| [`floor_label.dart`](floor_label.dart) | 층 라벨을 위아래 순위로 읽음("1F"→1, "B1"→-1) | `floorLabelRank` |
 | [`geo_transform.dart`](geo_transform.dart) | 2D affine 피팅·적용, PDR/층 좌표 연결 | `AffineTransform` |
 | [`transit_walk_fill.dart`](transit_walk_fill.dart) | 카카오가 주지 않는 앞뒤 도보를 대중교통 경로에 붙임 | `fillTransitWalkLegs` |
 | [`single_flight.dart`](single_flight.dart) | 같은 작업이 겹쳐 도는 것을 막음(겹치면 버린다) | `SingleFlight` |

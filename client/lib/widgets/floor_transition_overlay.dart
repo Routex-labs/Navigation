@@ -1,7 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../domain/escalator_ride.dart';
 import '../features/indoor_navigation/contract/floor_transition_ui_state.dart';
 import '../theme/app_theme.dart';
+import 'location_marker.dart';
 
 /// 층 도면이 교체되는 구간을 덮는 스크림.
 ///
@@ -15,11 +18,16 @@ import '../theme/app_theme.dart';
 /// - **카드**: 배경이 조금이라도 덮인 동안 **또렷하게** 뜬다. 같이 흐려지면
 ///   정작 읽어야 할 문구가 제일 안 보인다.
 ///
-/// **탑승 구간 전체를 덮지 않는다.** 한때 하차까지 반투명으로 덮어 뒀는데,
-/// 그 구간은 길게는 수십 초라 "전환 중"이 아니라 "화면이 계속 덮여 있다"로
-/// 읽혔다. 덮개는 도면이 바뀌는 **사건**을 알리는 것이고, 탑승 중이라는
-/// **상태**는 배너가 말한다. 대신 페이드를 느리게 둬서(진입 0.5초 / 해제 0.7초)
-/// 전환이 일어났다는 사실이 눈에 남게 한다.
+/// **도면이 갈리는 앞뒤만 덮는다**(약 3.2초). 하차까지 덮어 본 적이 있는데,
+/// 그러면 내리기 전에 새 층 도면과 다음 경로를 볼 시간이 없다.
+///
+/// 덮인 **뒤에서** 도면 크로스페이드와 마커 활강이 그대로 돈다. 걷히는 순간
+/// 새 층 도면과 하차 지점에 선 마커가 이미 자리를 잡고 있어야, 이 덮개가
+/// "가려 놓고 순간이동시킨" 것으로 보이지 않는다. 가운데 카드의 점은 그 활강과
+/// **같은 진행률**로 움직인다 — 덮개는 마커를 가리는 것이 아니라 데려간다.
+///
+/// 페이드는 느리다(진입 0.5초 / 해제 0.7초) — 빠르면 전환이 아니라 깜빡임으로
+/// 읽힌다.
 class FloorTransitionScrim extends StatelessWidget {
   const FloorTransitionScrim({
     super.key,
@@ -27,6 +35,7 @@ class FloorTransitionScrim extends StatelessWidget {
     required this.fadeIn,
     required this.fadeOut,
     this.state,
+    this.progress,
   });
 
   /// 배경을 덮는 정도. 0이면 아무것도 그리지 않고 입력도 그대로 통과한다.
@@ -36,6 +45,10 @@ class FloorTransitionScrim extends StatelessWidget {
 
   /// 가운데 카드에 표시할 `B1 → 1F`. 없으면 배경만 덮는다.
   final FloorTransitionUiState? state;
+
+  /// 탑승 활강의 진행률. 카드의 점이 이 값으로 움직인다 — 지도 위 마커와 같은
+  /// 값이라 덮개를 사이에 두고도 하나의 움직임으로 이어진다.
+  final ValueListenable<double>? progress;
 
   /// 이 이상 덮였으면 뒤쪽 입력을 막는다.
   ///
@@ -68,9 +81,10 @@ class FloorTransitionScrim extends StatelessWidget {
               child: Center(
                 child: _FloorTransitionCard(
                   state: transition,
+                  progress: progress,
                   // 걷힌 뒤에도 카드는 트리에 남는다(페이드 아웃 때문에).
-                  // 반복 애니메이션까지 남겨 두면 보이지도 않는 위젯이 매
-                  // 프레임 rebuild를 요청한다.
+                  // 애니메이션까지 남겨 두면 보이지도 않는 위젯이 매 프레임
+                  // rebuild를 요청한다.
                   animating: opacity > 0,
                 ),
               ),
@@ -91,16 +105,32 @@ class FloorTransitionScrim extends StatelessWidget {
 /// 것은 다르다 — 지하로 내려가는데 화면에서는 오른쪽으로 가는 그림을 보면 방향
 /// 감각이 한 번 꼬인다.
 ///
-/// 애니메이션은 **반복한다.** 이 연출이 떠 있는 시간은 에스컬레이터 탑승 시간에
-/// 달려 있어 미리 알 수 없다. 한 번만 재생하면 남은 시간 동안 정지 화면이 되어
-/// "멈췄나" 싶어진다.
+/// **점은 지도 마커 그 자체다.** 생김새(흰 테 + 파란 코어)를 지도 위 현재 위치
+/// 마커와 맞추고, 위치도 마커와 **같은 진행률**로 움직인다([progress] — 실제
+/// 탑승 활강이 내는 값이다). 덮개가 마커를 가져와서 층 사이를 데려간 뒤 새 층에
+/// 내려놓는 그림이라, 사용자가 보는 것은 처음부터 끝까지 같은 점 하나다.
+///
+/// 그래서 **반복하지 않는다.** 예전에는 1.6초짜리 왕복을 무한 반복했는데, 덮개가
+/// 3초를 넘기자 같은 내려가는 장면이 두 번 재생돼 "지금 어디쯤인지"를 오히려
+/// 알 수 없게 만들었다. 진행률이 실제 값이면 남은 시간도 사용자가 읽을 수 있다.
+///
+/// [progress]가 없을 때(양 끝을 몰라 활강을 못 건 경우)만 자체 시계로 한 번
+/// 재생하고 도착 쪽에 머문다. 그때도 반복은 하지 않는다.
 class _FloorTransitionCard extends StatefulWidget {
-  const _FloorTransitionCard({required this.state, required this.animating});
+  const _FloorTransitionCard({
+    required this.state,
+    required this.animating,
+    this.progress,
+  });
 
   final FloorTransitionUiState state;
 
-  /// 반복 애니메이션을 돌릴지. 스크림이 걷힌 뒤에는 false로 내려온다.
+  /// 애니메이션을 돌릴지. 스크림이 걷힌 뒤에는 false로 내려온다.
   final bool animating;
+
+  /// 탑승 활강의 진행률(0 = 출발 층, 1 = 도착 층). 지도 위 마커가 쓰는 값과
+  /// **같은 객체**라, 덮개 뒤에서 움직이는 마커와 이 점이 어긋날 수 없다.
+  final ValueListenable<double>? progress;
 
   @override
   State<_FloorTransitionCard> createState() => _FloorTransitionCardState();
@@ -108,48 +138,75 @@ class _FloorTransitionCard extends StatefulWidget {
 
 class _FloorTransitionCardState extends State<_FloorTransitionCard>
     with SingleTickerProviderStateMixin {
-  // 강조는 앱 포인트 색 하나로 통일한다. 예전의 구글 파랑(#1A73E8)은 앱의
-  // 절제된 화이트/뮤트 톤에서 혼자 다른 팔레트로 떠 보였다.
-  static const _accent = AppColors.primary;
-
-  /// 점이 한쪽 끝에서 반대쪽 끝까지 가는 데 걸리는 시간.
-  static const _travel = Duration(milliseconds: 1600);
+  /// 진행률을 못 받았을 때 자체로 한 번 재생하는 시간. 활강과 같은 길이라
+  /// 어느 경로로 그리든 리듬이 같다.
+  static const _travel = escalatorGlideDuration;
 
   /// 두 라벨 사이 선의 길이. 짧으면 이동이 안 읽히고, 길면 라벨이 화면
   /// 위아래로 흩어져 한 덩어리로 안 보인다.
   static const _lineHeight = 104.0;
-  static const _dotRadius = 5.0;
 
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: _travel,
-  );
+  /// 진행률을 받은 경우에는 **만들지 않는다.** 쓰지 않는 티커를 들고 있으면
+  /// dispose에서 뒤늦게 생성되며 트리가 이미 죽은 뒤 ancestor를 찾는다.
+  AnimationController? _controller;
+
+  AnimationController _ensureController() =>
+      _controller ??= AnimationController(vsync: this, duration: _travel);
 
   @override
   void initState() {
     super.initState();
-    if (widget.animating) _controller.repeat();
+    if (widget.animating && widget.progress == null) {
+      _ensureController().forward();
+    }
   }
 
   @override
   void didUpdateWidget(covariant _FloorTransitionCard oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.progress != null) {
+      _controller?.stop();
+      return;
+    }
     if (widget.animating == oldWidget.animating) return;
     if (widget.animating) {
-      _controller.repeat();
+      _ensureController().forward(from: 0);
     } else {
-      _controller.stop();
+      _controller?.stop();
     }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final progress = widget.progress;
+    if (progress == null) {
+      final driver = _ensureController();
+      return AnimatedBuilder(
+        animation: driver,
+        builder: (context, _) => _build(context, driver.value.clamp(0.0, 1.0)),
+      );
+    }
+    // 활강 진행률은 [escalatorGlideSampleInterval]마다 한 번 갱신된다(지도 소스
+    // 를 플랫폼 채널로 밀어야 해서 프레임마다 보낼 수 없다). 그 값을 그대로
+    // 그리면 점이 초당 16번 툭툭 끊기므로, 샘플 사이를 프레임 단위로 잇는다.
+    return AnimatedBuilder(
+      animation: progress,
+      builder: (context, _) => TweenAnimationBuilder<double>(
+        tween: Tween(end: progress.value.clamp(0.0, 1.0)),
+        duration: escalatorGlideSampleInterval,
+        curve: Curves.linear,
+        builder: (context, value, _) => _build(context, value),
+      ),
+    );
+  }
+
+  Widget _build(BuildContext context, double progress) {
     final scheme = Theme.of(context).colorScheme;
     final state = widget.state;
     // 출발 층이 늘 **점이 떠나는 쪽**이다. 내려갈 때는 위, 올라갈 때는 아래.
@@ -158,72 +215,106 @@ class _FloorTransitionCardState extends State<_FloorTransitionCard>
         ? state.fromFloorLabel
         : state.toFloorLabel;
 
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, _) {
-        // 진행도 0 = 출발 층, 1 = 도착 층.
-        final progress = _controller.value;
-        // 점이 도착 쪽에 가까워질수록 강조가 넘어간다. 라벨 색이 이동과 함께
-        // 변해야 "지금 어디로 가는 중"이 한 그림으로 읽힌다.
-        final arriving = Curves.easeInOut.transform(progress);
-        final topWeight = state.goingUp ? arriving : 1 - arriving;
+    // 점이 도착 쪽에 가까워질수록 강조가 넘어간다. 라벨 색이 이동과 함께
+    // 변해야 "지금 어디로 가는 중"이 한 그림으로 읽힌다.
+    final arriving = Curves.easeInOut.transform(progress);
+    final topWeight = state.goingUp ? arriving : 1 - arriving;
 
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _FloorLabel(label: topLabel, emphasis: topWeight, scheme: scheme),
-            SizedBox(
-              height: _lineHeight,
-              width: 2 * _dotRadius + 6,
-              child: Stack(
-                alignment: Alignment.topCenter,
-                children: [
-                  // 선은 항상 같은 자리에 옅게 깔려 있다. 점이 지나간 자리를
-                  // 따로 칠하지 않는 이유는, 반복 재생이라 매 주기 지워야 해서
-                  // 오히려 깜빡임으로 읽히기 때문이다.
-                  Container(
-                    width: 1.5,
-                    height: _lineHeight,
-                    color: scheme.onSurface.withValues(alpha: 0.18),
-                  ),
-                  Positioned(
-                    // 위에서 아래로 내려갈 때 progress가 곧 화면 아래 방향이다.
-                    top:
-                        (state.goingUp ? 1 - arriving : arriving) *
-                        (_lineHeight - 2 * _dotRadius),
-                    child: Container(
-                      width: 2 * _dotRadius,
-                      height: 2 * _dotRadius,
-                      decoration: const BoxDecoration(
-                        color: _accent,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                ],
+    // 캡션은 **가는 방향 쪽**에 붙인다. 내려가는데 글이 위에 있으면 시선이
+    // 점과 반대로 끌려간다.
+    final caption = Text(
+      state.scrimCaption,
+      textAlign: TextAlign.center,
+      style: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w500,
+        color: scheme.onSurface.withValues(alpha: 0.6),
+      ),
+    );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (state.goingUp) ...[caption, const SizedBox(height: 14)],
+        _FloorLabel(label: topLabel, emphasis: topWeight, scheme: scheme),
+        SizedBox(
+          height: _lineHeight,
+          width: 2 * _markerRimRadius,
+          child: Stack(
+            alignment: Alignment.topCenter,
+            children: [
+              // 선은 항상 같은 자리에 옅게 깔려 있다. 지나온 구간을 따로
+              // 칠하지 않는 이유는, 이 점이 곧 마커라 "지나온 길"이 아니라
+              // "지금 어디"만 말하면 되기 때문이다.
+              Container(
+                width: 1.5,
+                height: _lineHeight,
+                color: scheme.onSurface.withValues(alpha: 0.18),
               ),
-            ),
-            _FloorLabel(
-              label: bottomLabel,
-              emphasis: 1 - topWeight,
-              scheme: scheme,
-            ),
-            const SizedBox(height: 14),
-            Text(
-              state.scrimCaption,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: scheme.onSurface.withValues(alpha: 0.6),
+              Positioned(
+                // 위에서 아래로 내려갈 때 progress가 곧 화면 아래 방향이다.
+                top:
+                    (state.goingUp ? 1 - arriving : arriving) *
+                    (_lineHeight - 2 * _markerRimRadius),
+                child: const _MarkerDot(key: Key('floor-transition-dot')),
               ),
-            ),
-          ],
-        );
-      },
+            ],
+          ),
+        ),
+        _FloorLabel(
+          label: bottomLabel,
+          emphasis: 1 - topWeight,
+          scheme: scheme,
+        ),
+        if (!state.goingUp) ...[const SizedBox(height: 14), caption],
+      ],
     );
   }
 }
+
+/// 지도 위 현재 위치 마커와 **같은 그림**의 점.
+///
+/// 크기·색을 마커와 맞춰야 덮개가 마커를 가져온 것으로 읽힌다. 값의 출처는
+/// [kLocationMarkerCoreRadiusPx]·[kLocationMarkerRimRadiusPx]로, 지도가 아이콘을
+/// 그릴 때 쓰는 것과 같은 상수다 — 한쪽만 바꾸면 두 점의 크기가 어긋난다.
+class _MarkerDot extends StatelessWidget {
+  const _MarkerDot({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 2 * _markerRimRadius,
+      height: 2 * _markerRimRadius,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        // 지도 아이콘의 그림자와 **같은 무게**로 맞춘다. 아이콘은 2배 캔버스에
+        // 그려 절반으로 축소되므로, 캔버스에서 blur 5 / offset 2인 그림자가
+        // 화면에서는 blur 2.5 / offset 1이 된다. 여기에 원래 값을 그대로 쓰면
+        // 점이 한 겹 더 두꺼워 보이고, 그게 "덮개 점이 더 크다"로 읽힌다.
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 2.5,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Center(
+        child: Container(
+          width: 2 * kLocationMarkerCoreRadiusPx,
+          height: 2 * kLocationMarkerCoreRadiusPx,
+          decoration: const BoxDecoration(
+            color: kLocationMarkerColor,
+            shape: BoxShape.circle,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+const _markerRimRadius = kLocationMarkerRimRadiusPx;
 
 /// 층 라벨 한 개. [emphasis] 1이면 도착 층(포인트 파랑·큼), 0이면 지나온 층
 /// (옅은 회색·작음)이다. 그 사이를 연속으로 오간다.
@@ -261,16 +352,12 @@ class _FloorLabel extends StatelessWidget {
 /// 문구는 [FloorTransitionUiState.message]가 정한다. 이 위젯은 임계값도
 /// 단계 판정도 모른다 — 상태를 받아 그리기만 한다.
 class FloorTransitionBanner extends StatelessWidget {
-  const FloorTransitionBanner({super.key, required this.state, this.onUndo});
+  const FloorTransitionBanner({super.key, required this.state});
 
   final FloorTransitionUiState state;
 
-  /// 되돌리기 콜백. [FloorTransitionUiState.canUndo]가 true일 때만 쓰인다.
-  final VoidCallback? onUndo;
-
   @override
   Widget build(BuildContext context) {
-    final undo = state.canUndo ? onUndo : null;
     // 앱의 카드 문법(surface + hairline + 포인트만 primary)을 그대로 쓴다.
     // 예전에는 구글 파랑(#1A73E8) 원색 알약이었는데, 절제된 화이트/뮤트 톤의
     // 화면에서 이 배너만 다른 앱처럼 보였다. "임시 레이어라 가장 앞"이라는
@@ -282,7 +369,7 @@ class FloorTransitionBanner extends StatelessWidget {
       shadowColor: Colors.black.withValues(alpha: 0.2),
       shape: const StadiumBorder(side: BorderSide(color: AppColors.hairline)),
       child: Padding(
-        padding: EdgeInsets.fromLTRB(14, 9, undo == null ? 14 : 6, 9),
+        padding: const EdgeInsets.fromLTRB(14, 9, 14, 9),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -303,21 +390,6 @@ class FloorTransitionBanner extends StatelessWidget {
                 ),
               ),
             ),
-            if (undo != null)
-              TextButton(
-                onPressed: undo,
-                style: TextButton.styleFrom(
-                  minimumSize: const Size(0, 32),
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  // 배너의 유일한 조작이므로 여기만 포인트 색이다.
-                  foregroundColor: AppColors.primary,
-                ),
-                child: const Text(
-                  '아니에요',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                ),
-              ),
           ],
         ),
       ),

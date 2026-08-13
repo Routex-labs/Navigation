@@ -5,7 +5,6 @@ import 'package:navigation_client/widgets/floor_transition_overlay.dart';
 
 FloorTransitionUiState _state(
   FloorTransitionStage stage, {
-  bool canUndo = false,
   String from = 'B1',
   String to = '1F',
   bool goingUp = true,
@@ -14,7 +13,6 @@ FloorTransitionUiState _state(
   fromFloorLabel: from,
   toFloorLabel: to,
   goingUp: goingUp,
-  canUndo: canUndo,
 );
 
 Widget _host(Widget child, {double textScale = 1.0, Size? size}) => MediaQuery(
@@ -34,7 +32,7 @@ void main() {
         (FloorTransitionStage.boarding, '에스컬레이터 탑승을 감지했습니다'),
         (FloorTransitionStage.moving, '에스컬레이터로 이동 중 · B1 → 1F'),
         (FloorTransitionStage.swapping, '1F 지도로 전환하는 중'),
-        (FloorTransitionStage.arrived, '1F 도착으로 보고 위치를 옮겼습니다'),
+        (FloorTransitionStage.arrived, '1F로 이동했습니다'),
       ]) {
         await tester.pumpWidget(
           _host(FloorTransitionBanner(state: _state(stage))),
@@ -43,32 +41,16 @@ void main() {
       }
     });
 
-    testWidgets('되돌리기는 층을 실제로 옮긴 뒤에만 노출한다', (tester) async {
+    testWidgets('되돌리기 같은 조작을 두지 않는다', (tester) async {
+      // 층 전환은 "맞나요?"라고 되묻지 않는다. 기압이 일상적으로 몇 미터씩
+      // 움직이는 일이 없어서, 되묻는 비용이 판정을 의심하게 만드는 값보다 크다.
       await tester.pumpWidget(
         _host(
-          FloorTransitionBanner(
-            state: _state(FloorTransitionStage.moving),
-            onUndo: () {},
-          ),
+          FloorTransitionBanner(state: _state(FloorTransitionStage.arrived)),
         ),
-      );
-      expect(
-        find.text('아니에요'),
-        findsNothing,
-        reason: '아직 층을 옮기지 않았으면 되돌릴 것이 없다',
       );
 
-      var undone = false;
-      await tester.pumpWidget(
-        _host(
-          FloorTransitionBanner(
-            state: _state(FloorTransitionStage.arrived, canUndo: true),
-            onUndo: () => undone = true,
-          ),
-        ),
-      );
-      await tester.tap(find.text('아니에요'));
-      expect(undone, isTrue);
+      expect(find.byType(TextButton), findsNothing);
     });
 
     testWidgets('작은 화면 + 큰 글자 배율에서도 넘치지 않는다', (tester) async {
@@ -83,7 +65,6 @@ void main() {
             child: FloorTransitionBanner(
               state: _state(
                 FloorTransitionStage.moving,
-                canUndo: true,
                 from: 'B2',
                 to: '지하 1층 식품관',
               ),
@@ -290,6 +271,107 @@ void main() {
       expect(find.text('B1'), findsOneWidget);
       expect(find.text('B2'), findsOneWidget);
       expect(find.textContaining('이동 중'), findsOneWidget);
+    });
+
+    testWidgets('점은 지도 마커와 같은 진행률로 움직인다', (tester) async {
+      // 덮개는 마커를 가리는 것이 아니라 데려간다. 진행률이 활강과 같은 값이라
+      // 걷히는 순간 점이 있던 자리에 마커가 서 있다.
+      final progress = ValueNotifier<double>(0);
+      addTearDown(progress.dispose);
+      await tester.pumpWidget(
+        _host(
+          FloorTransitionScrim(
+            opacity: 1,
+            fadeIn: Duration.zero,
+            fadeOut: Duration.zero,
+            progress: progress,
+            state: _state(
+              FloorTransitionStage.moving,
+              from: 'B1',
+              to: 'B2',
+              goingUp: false,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      final dot = find.byKey(const Key('floor-transition-dot'));
+      final startY = tester.getCenter(dot).dy;
+
+      progress.value = 1;
+      // 샘플 사이를 프레임 단위로 잇는 보간이 붙어 있어 한 프레임으로는 다 안 간다.
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getCenter(dot).dy,
+        greaterThan(startY),
+        reason: '내려가는 전환이면 점도 아래로 내려가야 한다',
+      );
+    });
+
+    testWidgets('진행률을 받으면 자체 반복 애니메이션을 돌리지 않는다', (tester) async {
+      // 반복 재생은 덮개가 길어질 때 같은 장면을 두 번 보여 준다.
+      final progress = ValueNotifier<double>(0.4);
+      addTearDown(progress.dispose);
+      await tester.pumpWidget(
+        _host(
+          FloorTransitionScrim(
+            opacity: 1,
+            fadeIn: Duration.zero,
+            fadeOut: Duration.zero,
+            progress: progress,
+            state: _state(FloorTransitionStage.moving, goingUp: false),
+          ),
+        ),
+      );
+
+      // 자체 애니메이션이 돌고 있으면 pumpAndSettle이 타임아웃으로 실패한다.
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('캡션은 가는 방향 쪽에 붙는다', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          FloorTransitionScrim(
+            opacity: 1,
+            fadeIn: Duration.zero,
+            fadeOut: Duration.zero,
+            state: _state(
+              FloorTransitionStage.moving,
+              from: 'B1',
+              to: 'B2',
+              goingUp: false,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      // 내려갈 때는 캡션이 아래 라벨보다 아래에 있다.
+      expect(
+        tester.getCenter(find.textContaining('이동 중')).dy,
+        greaterThan(tester.getCenter(find.text('B2')).dy),
+      );
+
+      await tester.pumpWidget(
+        _host(
+          FloorTransitionScrim(
+            opacity: 1,
+            fadeIn: Duration.zero,
+            fadeOut: Duration.zero,
+            state: _state(
+              FloorTransitionStage.moving,
+              from: 'B1',
+              to: '1F',
+              goingUp: true,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(
+        tester.getCenter(find.textContaining('이동 중')).dy,
+        lessThan(tester.getCenter(find.text('1F')).dy),
+      );
     });
 
     testWidgets('스크림이 걷히면 반복 애니메이션도 멈춘다', (tester) async {
