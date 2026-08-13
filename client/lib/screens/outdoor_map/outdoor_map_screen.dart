@@ -1819,6 +1819,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         floor: floor,
         endNodeId: destinationNodeId,
         playOverview: false,
+        // 층 전환 후 재계산 — 같은 길안내의 연속이다.
+        beginNewRecordingSession: false,
         startNodeId: nodeId,
       );
     } else {
@@ -1828,6 +1830,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         endFloor: destination.floor,
         endNodeId: destinationNodeId,
         playOverview: false,
+        beginNewRecordingSession: false,
         startNodeId: nodeId,
       );
     }
@@ -3877,6 +3880,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         floor: endFloor,
         endNodeId: endNodeId,
         playOverview: true,
+        // 목적지를 새로 고른 순간 — 여기서만 진단 세션이 새로 열린다.
+        beginNewRecordingSession: true,
         startNodeId: explicitStartNodeId,
       );
     } else {
@@ -3886,6 +3891,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         endFloor: endFloor,
         endNodeId: endNodeId,
         playOverview: true,
+        beginNewRecordingSession: true,
         startNodeId: explicitStartNodeId,
       );
     }
@@ -3980,11 +3986,18 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// [playOverview]는 경로를 그린 뒤 개요 연출([_fitCameraToRouteSegment])을 할지다.
   /// **기본값을 두지 않는다** — 안내 시작이냐 재탐색이냐에 따라 답이 정반대라,
   /// 빠뜨리면 조용히 틀린 쪽으로 굴러간다.
+  ///
+  /// [beginNewRecordingSession]도 같은 이유로 기본값이 없다. 사용자가 목적지를
+  /// 새로 고른 경우에만 true다. 재탐색·층 전환 후 재계산은 **같은 길안내의
+  /// 연속**이라 false — 여기서 세션을 갈면 층 전환마다 진단 로그가 지워져,
+  /// 정작 분석하려는 구간(에스컬레이터 탑승)이 파일에 안 남는다(2026-08-13
+  /// 실측에서 주행 로그가 마지막 재탐색 이후 10초만 남았다).
   Future<void> _computeAndShowSingleFloorIndoorRoute({
     required String buildingId,
     required String floor,
     required String endNodeId,
     required bool playOverview,
+    required bool beginNewRecordingSession,
     String? startNodeId,
   }) async {
     final completionAtRequest = _currentIndoorCompletionSnapshot();
@@ -4047,13 +4060,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncIndoorDestinationLayer();
     _notifyRouteStateIfChanged();
     if (playOverview) unawaited(_fitCameraToRouteSegment(route));
-    // 이 경로 한 건이 진단 세션 하나가 된다. 이전 세션 데이터는 여기서
-    // 버려지므로 내보내기 안내는 띄우지 않는다 — 길안내가 끝난 게 아니라
-    // 목적지가 바뀐 것이고, 안내를 눌러도 꺼낼 게 없다.
-    if (_pdrDebugRecorder != null) {
-      _endRouteRecordingSession(announceExport: false);
+    // 진단 세션의 경계는 **길안내 한 건**이다. 목적지를 새로 고른 경우에만
+    // 이전 세션을 버리고 새로 연다 — 재탐색·층 전환 후 재계산에서 세션을 갈면
+    // 층을 옮길 때마다 로그가 지워진다.
+    if (beginNewRecordingSession) {
+      if (_pdrDebugRecorder != null) {
+        _endRouteRecordingSession(announceExport: false);
+      }
+      _beginRouteRecordingSession();
     }
-    _beginRouteRecordingSession();
   }
 
   /// 층이 다른 매장까지의 층 간 경로를 계산해 층별 세그먼트로 나누고, 현재
@@ -4062,13 +4077,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 시작 층부터 훑도록 활성 층을 자동으로 시작 층으로 전환한다.
   /// [startNodeId]가 주어지면(길찾기 시트에서 매장을 출발지로 고른 경우) 그
   /// 노드에서 바로 출발하고, null이면 PDR 앵커 기준으로 시작 노드를 고른다.
-  /// [playOverview]의 뜻은 [_computeAndShowSingleFloorIndoorRoute]와 같다.
+  /// [playOverview]·[beginNewRecordingSession]의 뜻은
+  /// [_computeAndShowSingleFloorIndoorRoute]와 같다.
   Future<void> _computeAndShowMultiFloorIndoorRoute({
     required String buildingId,
     required String startFloor,
     required String endFloor,
     required String endNodeId,
     required bool playOverview,
+    required bool beginNewRecordingSession,
     String? startNodeId,
   }) async {
     final completionAtRequest = _currentIndoorCompletionSnapshot();
@@ -4125,10 +4142,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (playOverview && segment != null) {
       unawaited(_fitCameraToRouteSegment(segment.route));
     }
-    if (_pdrDebugRecorder != null) {
-      _endRouteRecordingSession(announceExport: false);
+    // 세션 경계 규칙은 [_computeAndShowSingleFloorIndoorRoute]와 같다.
+    if (beginNewRecordingSession) {
+      if (_pdrDebugRecorder != null) {
+        _endRouteRecordingSession(announceExport: false);
+      }
+      _beginRouteRecordingSession();
     }
-    _beginRouteRecordingSession();
   }
 
   /// 현재 위치에서 건물 안 **모든 그래프 노드**까지의 거리·비용.
@@ -7259,6 +7279,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           floor: floor,
           endNodeId: destinationNodeId,
           playOverview: false,
+          // 이탈 재탐색 — 같은 길안내의 연속이다.
+          beginNewRecordingSession: false,
           startNodeId: startNodeId,
         );
       } else {
@@ -7268,6 +7290,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           endFloor: destination.floor,
           endNodeId: destinationNodeId,
           playOverview: false,
+          beginNewRecordingSession: false,
           startNodeId: startNodeId,
         );
       }
