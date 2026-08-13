@@ -50,7 +50,7 @@ GraphNode? findEscalatorArrivalNode(
 
 /// 지금 화면이 그려야 하는 층 전환 배너 상태. 없으면 null.
 ///
-/// 판정 단계를 UI 개념(문구·되돌리기)으로 **한 번만** 옮긴다. 화면은 여기서
+/// 판정 단계를 UI 문구로 **한 번만** 옮긴다. 화면은 여기서
 /// 나온 값만 보고 그린다 — 임계값이나 노드 근접을 다시 계산하지 않는다.
 ///
 /// 우선순위가 이 함수의 전부다. 도착 → 탑승 중 → 접근 순으로 보며, 앞의 것이
@@ -59,7 +59,6 @@ FloorTransitionUiState? floorTransitionUiState({
   required EscalatorTransition? arrival,
   required EscalatorTransition? ride,
   required EscalatorPhaseChange? stage,
-  required bool canUndo,
 }) {
   if (arrival != null && ride == null) {
     return FloorTransitionUiState(
@@ -67,7 +66,6 @@ FloorTransitionUiState? floorTransitionUiState({
       fromFloorLabel: arrival.fromFloorLabel,
       toFloorLabel: arrival.toFloorLabel,
       goingUp: arrival.direction == EscalatorDirection.up,
-      canUndo: canUndo,
     );
   }
   if (ride != null) {

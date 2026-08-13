@@ -82,6 +82,14 @@ class _Fixture {
   /// 테스트하면 평활 창 경계에 걸리는 버그를 놓친다(실제로 놓쳤다).
   int sampleIntervalMs = 1069;
 
+  /// 기압 보고 격자(hPa). 0이면 격자 없음(iOS `CMAltimeter`처럼 연속값).
+  ///
+  /// Android `TYPE_PRESSURE`는 흔히 0.01 hPa(약 8.4cm) 단위로 끊어서 준다.
+  /// 5.5Hz에서 에스컬레이터가 한 샘플에 움직이는 거리는 5cm라 **격자보다
+  /// 작고**, 그러면 연속 두 샘플이 같은 값으로 나와 수직 속도가 0으로 읽힌다.
+  /// 판정기가 그것을 "하차"로 보면 타는 도중에 확정이 난다.
+  double quantizeHpa = 0;
+
   /// [seconds]초 동안 고도를 [fromM] → [toM]으로 선형 변화시킨다.
   void ramp({
     required double fromM,
@@ -116,10 +124,14 @@ class _Fixture {
       ramp(fromM: atM, toM: atM, seconds: seconds);
 
   void feed(double altitudeM) {
+    var pressureHpa = _pressureForAltitudeM(altitudeM);
+    if (quantizeHpa > 0) {
+      pressureHpa = (pressureHpa / quantizeHpa).roundToDouble() * quantizeHpa;
+    }
     final transition = detector.onAltitude(
       AltitudeSample(
         timestampMs: nowMs,
-        pressureHpa: _pressureForAltitudeM(altitudeM),
+        pressureHpa: pressureHpa,
         source: 'test',
       ),
     );
@@ -139,6 +151,7 @@ class _Fixture {
     PdrLocalPoint routeEnd = const PdrLocalPoint(0, 0),
     String boardingNodeId = 'n-up-to3f',
     String? arrivalNodeId = 'n3-up-fr2f',
+    bool immediateTransfer = false,
   }) {
     for (final remaining in remainingM) {
       steps += 2;
@@ -150,6 +163,7 @@ class _Fixture {
         expectedArrivalNodeId: arrivalNodeId,
         steps: steps,
         timestampMs: nowMs,
+        immediateTransfer: immediateTransfer,
       );
       phases.addAll(detector.takePhaseChanges());
     }
@@ -324,6 +338,42 @@ void main() {
       );
     });
 
+    test('Android 180ms 간격에서도 한 층 하강은 한 번만 확정된다', () {
+      // 친구 갤럭시에서 "한 층 내려가는데 층이 두 번 바뀐다"로 보고된 증상.
+      // 판정 문턱이 "연속 샘플 수"였을 때, 그 2개가 iOS에서는 2.1초지만
+      // Android 5.5Hz에서는 0.36초라 노이즈 한 번이 하차로 읽혔다. 그러면 타는
+      // 도중에 확정이 나고 baseline이 중간 높이로 다시 잡혀, 남은 반 층이
+      // **또 하나의 층 이동**이 된다.
+      final fixture = _Fixture()..sampleIntervalMs = 180;
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standNearBoarding(x: 3.0, y: 0.5);
+      fixture.ramp(fromM: 0, toM: -4.5, seconds: 20);
+      fixture.hold(atM: -4.5, seconds: 5);
+
+      expect(fixture.confirmed, hasLength(1));
+      expect(fixture.confirmed.single.direction, EscalatorDirection.down);
+      expect(fixture.confirmed.single.toFloorLabel, '1F');
+    });
+
+    test('기압을 0.01hPa 격자로 끊어 주는 기기에서도 타는 중에 확정하지 않는다', () {
+      // 격자(8.4cm)가 한 샘플의 실제 변화(5cm)보다 커서 연속 샘플이 같은 값으로
+      // 나오는 구간이 생긴다. 속도를 직전 샘플과의 차이로 재면 그때마다 0으로
+      // 읽혀 "멈췄다"가 된다 — 밑변을 시간으로 고정해야 사라지는 오탐이다.
+      final fixture = _Fixture()
+        ..sampleIntervalMs = 180
+        ..quantizeHpa = 0.01;
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standNearBoarding(x: 3.0, y: 0.5);
+      fixture.ramp(fromM: 0, toM: -4.5, seconds: 20);
+      // 아직 타는 중이다. 여기서 확정이 나 있으면 남은 반 층이 두 번째 층
+      // 이동으로 이어진다.
+      expect(fixture.confirmed, isEmpty);
+
+      fixture.hold(atM: -4.5, seconds: 5);
+      expect(fixture.confirmed, hasLength(1));
+      expect(fixture.confirmed.single.toFloorLabel, '1F');
+    });
+
     test('시계열이 끊긴 뒤에는 옛 고도를 섞지 않고 창을 다시 채운다', () {
       final fixture = _Fixture();
       fixture.hold(atM: 0, seconds: 6);
@@ -478,7 +528,10 @@ void main() {
       fixture.hold(atM: 0, seconds: 5);
       fixture.approachBoarding(remainingM: const [2]);
 
-      expect(fixture.phasesOf(), isNot(contains(EscalatorPhase.boardingDetected)));
+      expect(
+        fixture.phasesOf(),
+        isNot(contains(EscalatorPhase.boardingDetected)),
+      );
     });
 
     test('탑승점에서 다시 멀어지면 배너 단계를 되돌린다', () {
@@ -533,9 +586,9 @@ void main() {
       fixture.hold(atM: 0, seconds: 5);
       fixture.standNearBoarding();
       fixture.ramp(fromM: 0, toM: 4.5, seconds: 20);
-      final midpointIndex = fixture
-          .phasesOf()
-          .indexOf(EscalatorPhase.midpointReached);
+      final midpointIndex = fixture.phasesOf().indexOf(
+        EscalatorPhase.midpointReached,
+      );
       expect(midpointIndex, greaterThanOrEqualTo(0));
       expect(fixture.phasesOf(), isNot(contains(EscalatorPhase.landed)));
 
@@ -552,6 +605,203 @@ void main() {
 
       // 고도 변화 없이 제한 시간을 넘긴다.
       fixture.hold(atM: 0, seconds: 50);
+
+      expect(fixture.phasesOf(), contains(EscalatorPhase.cancelled));
+    });
+  });
+
+  group('2차 감지 — 탑승점 근접으로 올라가는 갈래', () {
+    // 허가 반경(6m, 경로가 지목하면 16m)은 "층을 바꿔도 되는가"의 허가일 뿐이다.
+    // 그 거리에서 마커를 세우면 사용자는 아직 통로 한복판을 걷고 있는데 점만
+    // 저 앞 에스컬레이터에 붙어 멈춘 화면을 본다.
+
+    test('허가만 걸리고 아직 멀면 사용자에게 알리지 않는다', () {
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      // 허가 반경(6m) 안이지만 탑승 반경(3m) 밖이다.
+      fixture.standNearBoarding(x: 5, y: 0);
+      // 아직 누적 고도 갈래(1.8m)에도 못 미친다.
+      fixture.ramp(fromM: 0, toM: 1.0, seconds: 4, rawPeaksPerSample: 2);
+
+      expect(
+        fixture.phasesOf(),
+        isNot(contains(EscalatorPhase.verticalMotionDetected)),
+      );
+    });
+
+    test('탑승점까지 붙으면 그때 알린다', () {
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standNearBoarding(x: 5, y: 0);
+      fixture.ramp(fromM: 0, toM: 0.5, seconds: 2, rawPeaksPerSample: 2);
+      expect(
+        fixture.phasesOf(),
+        isNot(contains(EscalatorPhase.verticalMotionDetected)),
+      );
+
+      fixture.standNearBoarding();
+      fixture.ramp(fromM: 0.5, toM: 1.2, seconds: 3, rawPeaksPerSample: 2);
+
+      final change = fixture.phases.firstWhere(
+        (c) => c.phase == EscalatorPhase.verticalMotionDetected,
+      );
+      expect(change.reason, 'rising');
+      expect(change.boardingNodeId, 'n-up-to3f');
+    });
+  });
+
+  group('2차 감지 — 안내가 지목한 에스컬레이터', () {
+    test('기압 노이즈 한 번으로는 멈추지 않는다', () {
+      // 빠른 EMA는 튐 하나를 0.6 m/s로 읽는다. 속도만 보면 복도를 걷는 동안에도
+      // 단계가 올라가고, 그때마다 마커가 탑승 노드로 끌려갔다 돌아온다.
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.approachBoarding(remainingM: const [14, 11, 8]);
+      // 0.4m 올랐다 그대로 되돌아오는 튐.
+      fixture.ramp(fromM: 0, toM: 0.4, seconds: 2, rawPeaksPerSample: 2);
+      fixture.ramp(fromM: 0.4, toM: 0, seconds: 2, rawPeaksPerSample: 2);
+
+      expect(
+        fixture.phasesOf(),
+        isNot(contains(EscalatorPhase.verticalMotionDetected)),
+      );
+    });
+
+    test('연속 환승이면 최소 변화를 기다리지 않는다', () {
+      // 내리자마자 두어 걸음 옆의 다음 에스컬레이터를 타는 구간. 걸어갈 거리가
+      // 없으니 기다릴 이유가 없고, 기다리면 환승마다 마커가 먼저 흘러간다.
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.approachBoarding(
+        remainingM: const [3, 2],
+        immediateTransfer: true,
+      );
+      // 최소 변화(0.5m)에 못 미치는 0.45m만 오른다.
+      fixture.ramp(fromM: 0, toM: 0.45, seconds: 3, rawPeaksPerSample: 2);
+
+      expect(
+        fixture.phasesOf(),
+        contains(EscalatorPhase.verticalMotionDetected),
+      );
+    });
+
+    test('연속 환승이 아니면 같은 변화로는 아직 멈추지 않는다', () {
+      // 위 테스트와 **같은 시계열**이다. 다른 것은 안내가 알려 준 연속 환승
+      // 여부뿐이라, 그 신호가 실제로 문턱을 낮춘다는 것을 이 쌍이 고정한다.
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.approachBoarding(remainingM: const [3, 2]);
+      fixture.ramp(fromM: 0, toM: 0.45, seconds: 3, rawPeaksPerSample: 2);
+
+      expect(
+        fixture.phasesOf(),
+        isNot(contains(EscalatorPhase.verticalMotionDetected)),
+      );
+    });
+
+    test('경로가 지목했으면 3m까지 붙기 전에도 걸음을 멈춘다', () {
+      // "다음에 탈 것"이 정해져 있고 기압이 실제로 오르내리면 그 둘로 이미
+      // 확정에 가깝다. 여기서 3m를 더 기다리면 보정 위치가 늦게 수렴하는
+      // 랜딩에서 영영 안 걸린다.
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      // 경로 끝(탑승점)에서 아직 8m 떨어져 있다.
+      fixture.approachBoarding(remainingM: const [14, 11, 8]);
+      fixture.ramp(fromM: 0, toM: 1.0, seconds: 4, rawPeaksPerSample: 2);
+
+      final change = fixture.phases.firstWhere(
+        (c) => c.phase == EscalatorPhase.verticalMotionDetected,
+      );
+      expect(change.reason, 'rising');
+      expect(change.boardingNodeId, 'n-up-to3f');
+      expect(
+        change.deltaM.abs(),
+        lessThan(1.2),
+        reason: '누적 고도 갈래가 아니라 경로 지목으로 걸렸다',
+      );
+    });
+  });
+
+  group('2차 감지 — 누적 고도로 올라가는 갈래', () {
+    // 실측에서 랜딩 보정 위치가 12m까지 어긋나 허가가 안 걸리는 일이 흔했다.
+    // 그 구간에서도 걸음은 멈춰야 한다 — 몸이 수직으로 실려 가는 중이라는
+    // 근거는 기압이 이미 주고 있다. 대신 층은 바꾸지 않는다.
+
+    test('허가가 없어도 누적 고도가 문턱을 넘으면 걸음을 멈춘다', () {
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      // 위치를 한 번도 탑승 노드 근처로 주지 않는다(허가 없음).
+      fixture.standFarAway();
+      fixture.ramp(fromM: 0, toM: -3, seconds: 10, rawPeaksPerSample: 2);
+
+      final change = fixture.phases.firstWhere(
+        (c) => c.phase == EscalatorPhase.verticalMotionDetected,
+      );
+      expect(change.reason, 'fallingByAltitude');
+      expect(change.toFloorLabel, '1F', reason: '2F에서 내려가면 한 칸 아래는 1F다');
+      expect(change.boardingNodeId, isNull);
+      expect(fixture.started, isEmpty, reason: '층은 노드 허가 없이 바꾸지 않는다');
+      expect(fixture.confirmed, isEmpty);
+    });
+
+    test('중앙값이 문턱에 닿기 전에 빠른 적분으로 먼저 멈춘다', () {
+      // 중앙값 평활은 창 절반(약 1.1초)만큼 뒤처진다. 그 1초가 곧 발판 진동이
+      // 위치에 쌓이는 시간이라, 걸음 정지만은 덜 늦은 값으로 건다.
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standFarAway();
+      fixture.ramp(fromM: 0, toM: -2.0, seconds: 7, rawPeaksPerSample: 2);
+
+      final change = fixture.phases.firstWhere(
+        (c) => c.phase == EscalatorPhase.verticalMotionDetected,
+      );
+      expect(
+        change.deltaM.abs(),
+        lessThan(1.2),
+        reason: '중앙값 delta가 아직 문턱에 못 미친 시점에 이미 멈춰야 한다',
+      );
+    });
+
+    test('문턱에 못 미치는 고도 변화로는 멈추지 않는다', () {
+      // 1차 감지(수직 속도)는 서지만 화면에는 알리지 않는다. 근거가 옅은
+      // 시점에 마커를 세우면 아직 통로를 걷는 사용자의 점이 먼저 멈춰 버린다.
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standFarAway();
+      fixture.ramp(fromM: 0, toM: -0.9, seconds: 3, rawPeaksPerSample: 2);
+
+      expect(
+        fixture.phasesOf(),
+        isNot(contains(EscalatorPhase.verticalMotionDetected)),
+      );
+    });
+
+    test('기기가 멈춰 있으면 고도가 변해도 멈추지 않는다', () {
+      // 책상 위에 둔 폰의 기압 드리프트로 화면이 덮이면 안 된다.
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standFarAway();
+      fixture.ramp(fromM: 0, toM: -3, seconds: 10);
+
+      expect(
+        fixture.phasesOf(),
+        isNot(contains(EscalatorPhase.verticalMotionDetected)),
+      );
+    });
+
+    test('수직 이동이 멎으면 곧바로 접는다', () {
+      // 하차를 확정할 노드가 없으므로 40초 타임아웃을 기다리면 안 된다 —
+      // 내려서 걷기 시작한 사용자에게 그 시간은 앱이 죽은 것과 같다.
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standFarAway();
+      fixture.ramp(fromM: 0, toM: -3, seconds: 10, rawPeaksPerSample: 2);
+      expect(
+        fixture.phasesOf(),
+        contains(EscalatorPhase.verticalMotionDetected),
+      );
+
+      fixture.hold(atM: -3, seconds: 5);
 
       expect(fixture.phasesOf(), contains(EscalatorPhase.cancelled));
     });

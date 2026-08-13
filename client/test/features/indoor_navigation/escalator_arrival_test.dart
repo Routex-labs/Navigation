@@ -127,11 +127,9 @@ void main() {
         arrival: _transition(),
         ride: null,
         stage: _stage(phase: EscalatorPhase.verticalMotionDetected),
-        canUndo: true,
       );
 
       expect(state?.stage, FloorTransitionStage.arrived);
-      expect(state?.canUndo, isTrue);
     });
 
     test('아직 타는 중이면 도착 값이 있어도 swapping이다', () {
@@ -139,21 +137,9 @@ void main() {
         arrival: _transition(),
         ride: _transition(),
         stage: null,
-        canUndo: true,
       );
 
       expect(state?.stage, FloorTransitionStage.swapping);
-    });
-
-    test('되돌릴 근거가 없으면 도착 배너에 되돌리기를 주지 않는다', () {
-      final state = floorTransitionUiState(
-        arrival: _transition(),
-        ride: null,
-        stage: null,
-        canUndo: false,
-      );
-
-      expect(state?.canUndo, isFalse);
     });
 
     test('수직 이동이 관측되면 moving, 접근만이면 boarding', () {
@@ -162,7 +148,6 @@ void main() {
           arrival: null,
           ride: null,
           stage: _stage(phase: EscalatorPhase.verticalMotionDetected),
-          canUndo: false,
         )?.stage,
         FloorTransitionStage.moving,
       );
@@ -171,7 +156,6 @@ void main() {
           arrival: null,
           ride: null,
           stage: _stage(phase: EscalatorPhase.boardingDetected),
-          canUndo: false,
         )?.stage,
         FloorTransitionStage.boarding,
       );
@@ -183,7 +167,6 @@ void main() {
         arrival: null,
         ride: null,
         stage: _stage(phase: EscalatorPhase.boardingDetected, to: null),
-        canUndo: false,
       );
 
       expect(state, isNull);
@@ -191,12 +174,7 @@ void main() {
 
     test('아무 단계도 없으면 null', () {
       expect(
-        floorTransitionUiState(
-          arrival: null,
-          ride: null,
-          stage: null,
-          canUndo: false,
-        ),
+        floorTransitionUiState(arrival: null, ride: null, stage: null),
         isNull,
       );
     });
@@ -207,7 +185,6 @@ void main() {
           arrival: null,
           ride: _transition(direction: EscalatorDirection.up),
           stage: null,
-          canUndo: false,
         )?.goingUp,
         isTrue,
       );
@@ -216,7 +193,6 @@ void main() {
           arrival: null,
           ride: _transition(direction: EscalatorDirection.down),
           stage: null,
-          canUndo: false,
         )?.goingUp,
         isFalse,
       );

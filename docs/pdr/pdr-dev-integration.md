@@ -25,7 +25,7 @@ PDR UI와 지도 렌더링은 아래 파일에 모여 있다.
 
 | 구분 | 위치 | 역할 |
 |---|---|---|
-| 지도 셸 | `client/lib/screens/map_shell/map_shell_screen.dart` | 상단·하단 바와 시트를 조립하고 권한을 요청한다. 층 전환 배너·스크림도 여기서 그린다. |
+| 지도 셸 | `client/lib/screens/map_shell/map_shell_screen.dart` | 상단·하단 바와 시트를 조립하고 권한을 요청한다. 층 전환 배너·덮개도 여기서 그린다. |
 | 지도 + PDR UI | `client/lib/screens/outdoor_map/outdoor_map_screen.dart` | 지도 하나가 실외와 실내를 모두 그린다. 시작점 지정, 방향 보정 대화상자, 위치·경로 렌더링, JSON 공유를 담당한다. |
 | 실내 안내 세션 | `client/lib/features/indoor_navigation/application/indoor_guidance_session.dart` | 위치·층 전환 판정·경로 진행률·이탈 증거를 소유한다. 위젯을 모르는 headless 클래스다. |
 | 전역 세션 생성 | `client/lib/core/service_locator.dart` | 플랫폼별 센서 소스와 `IndoorNavigationDriver`를 앱 범위 singleton으로 생성한다. |
@@ -72,8 +72,8 @@ flowchart LR
   다시 요청한다.
 - **에스컬레이터로 층을 옮기면 기압계가 이를 감지해 도면·경로를 자동으로 바꾸고, 새 층의
   에스컬레이터 도착 지점으로 위치를 옮긴다.** 이때는 시작점을 다시 지정하지 않는다 — 같은
-  센서 세션이라 방향 기준이 유지되므로 회전값을 그대로 물려받는다. 오탐이면 토스트의
-  "아니에요"로 직전 층·위치로 되돌린다. 판정 조건과 범위 한계는
+  센서 세션이라 방향 기준이 유지되므로 회전값을 그대로 물려받는다. 전환을 되묻는 버튼은
+  없다 — 판정기가 스스로 취소한 경우에만 화면이 직전 층·위치로 되돌린다. 판정 조건과 범위 한계는
   [`client/lib/features/indoor_navigation/application/README.md`](../../client/lib/features/indoor_navigation/application/README.md)
   에 있다.
 - 시작점 지정 중에는 취소 버튼으로 배치 모드만 빠져나온다(세션은 계속 돈다).

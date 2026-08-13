@@ -106,7 +106,7 @@
 - 정상 하차 뒤 iOS 저속 기압 샘플 두 개 이상을 항상 기다려 2초 이상 멈춘다.
 - 탑승 중 heading sensor 또는 heading frame을 초기화한다.
 - 목적 층 도면을 먼저 연 뒤 출발 층 axes로 heading을 그려 방향이 틀어진다.
-- 취소·오류·되돌리기 경로 중 하나에서 PDR 걸음 적용이 pause 상태로 남는다.
+- 취소·오류 경로 중 하나에서 PDR 걸음 적용이 pause 상태로 남는다.
 
 ### 2.5 UI
 
@@ -271,7 +271,8 @@ landed
 
 - detector는 pure phase와 근거를 application 계층에 제공한다.
 - `IndoorMapBody`가 `FloorTransitionUiState`를 부모에게 전달한다.
-- `MapShellScreen`이 배너와 전체 화면 veil을 root Stack 최상위에서 렌더링한다.
+- `MapShellScreen`이 배너를 root Stack 최상위에서 렌더링한다(전체 화면 veil은 Phase 5에서
+  걷어냈다).
 - UI는 detector 임계값을 다시 계산하지 않는다.
 
 ---
@@ -552,7 +553,7 @@ enum EscalatorPhase {
 - 최소 확정 고도 변화와 ramp 시간이 충족됨
 - fast altitude speed가 저속으로 감소
 - raw landing motion이 함께 있으면 첫 저속 샘플에서 확정
-- raw activity가 없으면 연속 저속 기압 샘플 fallback
+- raw activity가 없으면 저속이 일정 시간 유지될 때 fallback(6.1)
 
 동작 순서:
 
@@ -561,7 +562,7 @@ enum EscalatorPhase {
 3. 걸음 적용을 즉시 resume한다.
 4. pending marker를 해제한다.
 5. 첫 1~2 optimistic 걸음 동안 arrival node의 연결 edge 후보를 유지한다.
-6. 도착 배너와 되돌리기 동작을 노출한다.
+6. 도착 배너를 노출한다(되돌리기 버튼은 두지 않는다 — Phase 5 참고).
 
 경로 재계산, 도착 배너 animation, 카메라 이동은 PDR resume의 선행조건으로 두지 않는다.
 
@@ -637,22 +638,24 @@ class RawMotionActivity {
 - 서로 다른 floor axes에서도 목적 층 원뿔 방향이 맞음
 - 고속 수직 이동 + vibration peak에서 resume하지 않음
 - 저속 전환 + 첫 raw landing peak에서 한 샘플로 resume
-- raw activity가 없으면 연속 저속 샘플 fallback
+- raw activity가 없으면 저속이 일정 시간 유지될 때 fallback(6.1)
 - 하차 후 직진·좌회전·우회전이 첫 2걸음 안에 올바른 후보로 수렴
 
 ---
 
 ### Phase 5 — 전환 UI와 z-order
 
-> **상태**: 완료. 배너는 `MapShellScreen`의 상단 Column 흐름에, 층 전환 스크림은 root Stack
-> 마지막 레이어에 있다. 스크림은 도면을 갈아 끼우는 구간에만 뜨고 느린 페이드로 여닫는다
-> (임계값·문구는 `client/lib/features/indoor_navigation/application/README.md`가 단일 출처).
+> **상태**: 완료. 배너는 `MapShellScreen`의 상단 Column 흐름에, 전체 화면 veil은 root Stack
+> 마지막 레이어에 있다. veil은 계획대로 도면 교체 구간만 덮되 길이가 약 3.2초로 늘었다.
+> 덮개 뒤에서 도면 크로스페이드와 마커 활강이 돌아, 걷힐 때 새 층과 하차 지점이 이미 자리를
+> 잡고 있다(임계값·문구·연출은
+> `client/lib/features/indoor_navigation/application/README.md`가 단일 출처).
 
 #### 상태 소유
 
 - detector/application이 `FloorTransitionUiState`를 만든다.
 - `IndoorMapBody`는 상태를 `MapShellScreen`에 전달한다.
-- 배너와 전체 화면 veil은 root Stack이 소유한다.
+- 배너는 root Stack이 소유한다.
 - UI는 phase를 문구와 animation으로만 변환한다.
 
 #### 배너
@@ -660,7 +663,7 @@ class RawMotionActivity {
 - `boardingDetected`: `에스컬레이터 탑승을 감지했습니다`
 - `verticalMotionDetected`: `에스컬레이터로 이동 중 · B1 → 1F`
 - `midpointReached`: `1F 지도로 전환하는 중`
-- `landed`: `1F에 도착한 것으로 보여 위치를 옮겼습니다 · 아니에요`
+- `landed`: `1F로 이동했습니다`
 
 배너는 고정 `top` 숫자로 배치하지 않는다. `MapTopBar` 다음 Column 흐름에 넣고 전환 중에는 카테고리
 행을 접어 공간을 보장한다. 검색이 활성화된 상태에서 탑승이 감지되면 검색을 닫고 길안내 상태를
@@ -669,10 +672,12 @@ class RawMotionActivity {
 #### 층 지도 교체 veil
 
 - root Stack의 마지막 레이어에 둔다.
-- 지도·검색·카테고리·하단 바를 포함해 짧게 덮는다.
-- 중앙에 `B1 → 1F`와 이동 아이콘을 표시한다.
-- fade 중 pointer 입력을 차단한다.
-- 전체 탑승 시간에는 modal을 유지하지 않고 실제 도면 swap 구간에만 사용한다.
+- 지도·검색·카테고리·하단 바를 포함해 덮고, 그동안 뒤쪽 입력을 막는다.
+- 중앙에 `B1 → 1F`를 세로로 세우고 점이 그 사이를 오간다.
+- **덮는 구간은 도면 swap 앞뒤 약 3.2초**다. 하차까지 덮어 보니 내리기 전에 새 층과 다음
+  경로를 볼 시간이 없었고, 예전 1.6초는 크로스페이드보다 먼저 걷혀 교체 과정이 보였다.
+- 덮개 뒤에서 도면 크로스페이드와 마커 활강이 그대로 돈다. 자세한 근거는 application
+  README의 "단계 분리"에 있다.
 
 #### widget test
 
@@ -681,15 +686,36 @@ class RawMotionActivity {
 - 출발/도착 두 줄 + 대분류·소분류·개수 안내
 - ETA 카드 + 하단 바 + 층 선택기
 - 작은 iPhone 화면과 큰 글자 배율
-- 배너→veil→도착 배너와 되돌리기
+- 배너→veil→도착 배너
 - 전환 중 뒤쪽 hit test 차단
 
 ---
 
 ### Phase 6 — 통합 검증
 
-> **상태**: 자동 검증과 iOS 상·하행 실기기 확인은 통과했다. Android 센서 주기 차이와
+> **상태**: 자동 검증과 iOS 상·하행 실기기 확인은 통과했다. Android 센서 주기
+> 차이는 판정 문턱을 시간 기준으로 바꿔 해소했고(아래 6.1), 실기기 확인과
 > A/B replay 검증은 남아 있다.
+
+#### 6.1 센서 주기 차이 — 판정 문턱을 시간으로 적는다
+
+기압 샘플 주기는 iOS `CMAltimeter` 약 1069ms, Android `TYPE_PRESSURE` 약 180ms로
+5~6배 다르다. 그런데 하차·수직 이동 판정이 **연속 샘플 수**로 적혀 있어, 같은
+문턱이 iOS에서는 2.1초를 Android에서는 0.36초를 뜻했다. 그 결과 Android에서만
+타는 도중에 하차가 확정되고, baseline이 중간 높이로 다시 잡혀 남은 반 층이 또
+하나의 층 이동이 됐다 — **한 층을 내려가는데 층이 두 번 바뀌는** 증상이다.
+
+바꾼 것은 셋이다.
+
+- 빠른 EMA 계수를 **시정수**로 적고 매 샘플 `1 - exp(-dt/tau)`로 만든다.
+- 수직 속도를 직전 샘플이 아니라 **700ms 이상 떨어진 값**과 비교해 잰다. 기압
+  분해능(흔히 0.01 hPa ≈ 8.4cm)이 한 샘플의 실제 변화(180ms에 5cm)보다 커서
+  연속 샘플이 같은 값으로 나오는 구간을 이 밑변이 넘어선다.
+- 하차·수직 이동·램프 일관성의 "연속 샘플 수"를 전부 **지속 시간**과
+  **구간(stride) 수**로 바꾼다.
+
+문턱값은 iOS 실측 타이밍을 그대로 재현하도록 골랐다. 즉 이 변경은 통과 중인
+iOS 동작을 보존하면서 Android만 제자리로 돌린다.
 
 #### 자동 검증
 
@@ -718,7 +744,7 @@ flutter analyze
 9. 하행 탑승→중간 층 전환→좌·우회전 하차
 10. 탑승 중 휴대폰 방향을 돌려 목적 층 marker 원뿔 확인
 11. 에스컬레이터 중간에서 걷거나 진동이 큰 상황
-12. 자동 전환 직후 `아니에요`로 되돌리기
+12. 자동 전환이 틀렸을 때 층 선택기로 직접 되돌아가기
 
 #### 롤아웃
 
@@ -848,10 +874,10 @@ PDR 한 세션의 heading과 drift를 graph 형상으로 자동 저장하지 않
 ### UI
 
 - [x] 배너는 `MapShellScreen`이 소유한다.
-- [x] 실제 도면 swap veil은 root Stack 최상위다.
+- [x] 도면 교체 앞뒤를 veil이 덮고 그동안 뒤쪽 입력을 막는다.
+- [x] 덮개 뒤에서 도면이 크로스페이드되고 마커가 끊기지 않고 흐른다.
 - [x] 최대 높이 상단 UI와 겹치지 않는다.
-- [x] 전환 중 뒤쪽 입력이 차단된다.
-- [x] 도착 후 되돌리기가 직전 층·anchor·경로를 복원한다.
+- [x] 판정기가 스스로 취소하면 직전 층·anchor·경로를 복원한다(사용자에게 묻는 버튼은 없다).
 
 ### 범위
 
@@ -867,5 +893,5 @@ PDR 한 세션의 heading과 drift를 graph 형상으로 자동 저장하지 않
 - [x] widget 테스트 통과
 - [x] `flutter analyze` 통과
 - [x] iOS 상행·하행 실기기 검증
-- [ ] Android 센서 주기 차이 검증 (남음)
+- [x] Android 센서 주기 차이 — 판정 문턱을 시간 기준으로 전환(6.1), 실기기 확인은 남음
 - [x] 진단 JSON에 phase·cursor·junction·raw activity 근거가 남는다.
