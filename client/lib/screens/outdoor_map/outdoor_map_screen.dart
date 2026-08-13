@@ -63,6 +63,7 @@ import '../../widgets/floor_facility_style.dart';
 import '../../widgets/floor_selector.dart';
 import '../../widgets/floor_switch_escalator_motif.dart';
 import '../../widgets/guidance_recenter_button.dart';
+import '../../widgets/indoor_arrival_card.dart';
 import '../../widgets/route_steps_sheet.dart';
 import '../../widgets/map_icon_cache.dart';
 import '../../widgets/map_overlay_tap_guard.dart';
@@ -1037,6 +1038,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   final GlobalKey _pdrControlKey = GlobalKey();
   final GlobalKey _pdrShareButtonKey = GlobalKey();
   final GlobalKey _etaCardKey = GlobalKey();
+
+  /// 도착 카드가 가리키는 목적지. 사용자가 확인을 누를 때까지 남는다.
+  PoiSearchResult? _arrivedDestination;
+
+  /// 도착 안내를 읽을 시간을 준 뒤 경로를 지우는 타이머. 살아 있다는 것 자체가
+  /// "이미 카운트다운 중"이라는 상태다([decideArrivalAutoClear]).
+  Timer? _arrivalRouteClearTimer;
+  final GlobalKey _arrivalCardKey = GlobalKey();
   final _mapOverlayTapGuard = MapOverlayTapGuard();
   Offset? _etaClosePointerDown;
 
@@ -1874,6 +1883,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _pdrRawMotionSub?.cancel();
     _escalatorArrivalTimer?.cancel();
     _escalatorGlideTimer?.cancel();
+    _arrivalRouteClearTimer?.cancel();
     _floorSwitchProgress.dispose();
     // 탑승 중 화면이 닫히면 걸음이 멈춘 채로 전역 PDR 세션이 남는다. 다음
     // 화면에서 아무리 걸어도 위치가 갱신되지 않는다.
@@ -3363,6 +3373,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _pendingIndoorDestination = null;
       _journeyEntrance = null;
       _indoorRouteDestination = destination;
+      // 새 안내가 시작되면 지난 도착 카드는 자리를 비운다.
+      _arrivedDestination = null;
       _indoorMultiFloorRoute = route;
       // 층별 구간은 공용 세션이 소유한다 — 진행률이 그 값에 투영되므로 여기서
       // 따로 들면 남은거리가 갈라진다([_indoorRouteSegment]). 같은 층 경로를
@@ -3514,6 +3526,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _userDestination = null;
       _userDestinationLabel = null;
       _indoorRouteDestination = destination;
+      _arrivedDestination = null;
       // 새 경로를 그리기 전에 초기화 — 아래 compute가 성공하면 다시 채운다.
       _guidance.setRouteSegment(null);
       _indoorMultiFloorRoute = null;
@@ -6491,6 +6504,52 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
     if (mounted) setState(() {});
     _syncArrivalHighlight();
+    _syncArrival();
+  }
+
+  /// 도착을 화면에 반영한다 — 도착 카드를 띄우고, 잠시 뒤 경로를 스스로 지운다.
+  ///
+  /// 판단은 [decideArrivalAutoClear]가 한다. 여기서 조건을 다시 세지 않는 이유는
+  /// "도착 상태에 들락날락하는 동안 카운트다운을 다시 걸지 않는다"는 규칙이
+  /// 걸음마다 돌아가는 이 자리에서 제일 틀리기 쉽기 때문이다.
+  void _syncArrival() {
+    if (!mounted) return;
+    final decision = decideArrivalAutoClear(
+      action: _indoorRouteGuidance?.action,
+      // 측정된 진행률이 없으면 "걸어서 도착"이 아니라 애초에 가까운 것이다.
+      hasMeasuredProgress: _guidance.measuredProgress != null,
+      alreadyScheduled: _arrivalRouteClearTimer != null,
+    );
+    switch (decision) {
+      case ArrivalAutoClearDecision.keep:
+        return;
+      case ArrivalAutoClearDecision.cancel:
+        // 도착 지점을 지나쳐 계속 걸어간 경우다. 카드는 **지우지 않는다** —
+        // 한 번 "도착했습니다"라고 말해 놓고 조용히 거두면 사용자는 자기가
+        // 잘못 본 줄 안다. 카드를 닫는 것은 사용자의 확인뿐이다.
+        _arrivalRouteClearTimer?.cancel();
+        _arrivalRouteClearTimer = null;
+        return;
+      case ArrivalAutoClearDecision.schedule:
+        final destination = _indoorRouteDestination;
+        if (destination == null) return;
+        setState(() => _arrivedDestination = destination);
+        _arrivalRouteClearTimer = Timer(arrivalAutoClearDelay, () {
+          _arrivalRouteClearTimer = null;
+          if (!mounted) return;
+          // 경로·핀·하단 배너를 정리한다. 도착 카드는 남는다 — 그것이 지금
+          // 화면에서 유일하게 "끝났다"고 말하는 것이다.
+          _clearIndoorRoute();
+        });
+    }
+  }
+
+  /// 도착 카드의 `안내 종료`. 남은 여정을 통째로 정리한다.
+  void _confirmArrival() {
+    _arrivalRouteClearTimer?.cancel();
+    _arrivalRouteClearTimer = null;
+    setState(() => _arrivedDestination = null);
+    _dismissIndoorRouteFromEtaCard();
   }
 
   /// 도착한 순간 목적지 매장 폴리곤을 강조하고, 벗어나면 되돌린다.
@@ -7109,6 +7168,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _placingHintKey,
       _buildingLoadFailedKey,
       _etaCardKey,
+      _arrivalCardKey,
       ...widget.outerOverlayKeys,
     ]) {
       final ctx = key.currentContext;
@@ -7620,6 +7680,27 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
               child: _PlacingAnchorHint(
                 key: _placingHintKey,
                 onCancel: () => unawaited(_cancelPdrAnchor()),
+              ),
+            ),
+          ),
+
+        // 도착 카드는 지도 한가운데다. 하단 배너와 같은 자리에 두면 도착도
+        // 걷는 중 안내와 같은 무게로 읽혀, 안내가 끝난 줄 모르고 계속 걷는다.
+        if (_arrivedDestination case final arrived?)
+          // 카드 바깥은 그대로 지도다 — Center는 자식 밖의 탭을 잡지 않으므로
+          // 도착 뒤에도 주변을 둘러볼 수 있다.
+          Positioned.fill(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: IndoorArrivalCard(
+                  key: _arrivalCardKey,
+                  destinationName: arrived.name,
+                  destinationFloor: arrived.floor,
+                  onConfirm: _confirmArrival,
+                  onConfirmPointerDown: (position) =>
+                      _etaClosePointerDown = position,
+                ),
               ),
             ),
           ),
