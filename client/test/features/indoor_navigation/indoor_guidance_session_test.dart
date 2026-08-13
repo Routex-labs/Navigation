@@ -1,9 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/features/indoor_navigation/application/indoor_guidance_position.dart';
 import 'package:navigation_client/features/indoor_navigation/application/indoor_guidance_session.dart';
 import 'package:navigation_client/features/indoor_navigation/application/indoor_location_estimate.dart';
+import 'package:navigation_client/features/indoor_navigation/application/escalator_transition_detector.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/altitude_sample.dart';
 import 'package:navigation_client/models/building_graph.dart';
 import 'package:navigation_client/domain/route_movement.dart';
@@ -29,16 +32,19 @@ const _corridorGraph = FloorGraph(
   ],
 );
 
-PdrAnchor _anchor({String floorId = '1F', double eastM = 1, double northM = 0}) =>
-    PdrAnchor(
-      floorId: floorId,
-      anchorLocalM: PdrLocalPoint(eastM, northM),
-      rotationDeg: 0,
-      headingReference: HeadingReference.magneticNorth,
-      requiresManualRotationCalibration: false,
-      source: AnchorSource.userPin,
-      confidence: 1,
-    );
+PdrAnchor _anchor({
+  String floorId = '1F',
+  double eastM = 1,
+  double northM = 0,
+}) => PdrAnchor(
+  floorId: floorId,
+  anchorLocalM: PdrLocalPoint(eastM, northM),
+  rotationDeg: 0,
+  headingReference: HeadingReference.magneticNorth,
+  requiresManualRotationCalibration: false,
+  source: AnchorSource.userPin,
+  confidence: 1,
+);
 
 /// 품질은 이 세션의 판단에 쓰이지 않는다. 스냅샷을 만들려면 필요할 뿐이라
 /// 최소값 한 벌을 재사용한다.
@@ -74,9 +80,7 @@ const _quality = PdrQuality(
 
 /// 동쪽으로 [steps]걸음(0.7m) 걸은 스냅샷.
 PdrSnapshot _walkedEast(int steps) {
-  final path = [
-    for (var i = 0; i <= steps; i += 1) PdrLocalPoint(i * 0.7, 0),
-  ];
+  final path = [for (var i = 0; i <= steps; i += 1) PdrLocalPoint(i * 0.7, 0)];
   return PdrSnapshot(
     position: path.last,
     path: path,
@@ -206,7 +210,9 @@ void main() {
       final session = newSession()
         ..attach(buildingId: 'b1')
         ..setContext(floorId: '1F', graph: _corridorGraph)
-        ..setEstimate(_estimate(observedAt: now.subtract(const Duration(seconds: 5))));
+        ..setEstimate(
+          _estimate(observedAt: now.subtract(const Duration(seconds: 5))),
+        );
 
       final position = session.position!;
       expect(position.source, GuidancePositionSource.estimate);
@@ -413,6 +419,126 @@ void main() {
     });
   });
 
+  group('탑승 고정 — 수직 이동이 확인된 뒤', () {
+    // 복도 끝에 하행 에스컬레이터가 붙어 있는 층. **경로는 주지 않는다** —
+    // 경로가 지목한 탑승점과 일치할 때만 고정하던 시절에 마커가 흘러가던
+    // 상황이 바로 이 배치다.
+    const graph = FloorGraph(
+      nodes: [
+        GraphNode(id: 'w', type: 'corridor', xM: 0, yM: 0),
+        GraphNode(
+          id: 'es-dn',
+          type: 'escalator',
+          name: 'ES1-DN(TOB1)',
+          xM: 20,
+          yM: 0,
+        ),
+      ],
+      edges: [
+        GraphEdge(
+          id: 'we',
+          fromNodeId: 'w',
+          toNodeId: 'es-dn',
+          lengthM: 20,
+          bidirectional: true,
+          geometryLocalM: [LocalPoint(0, 0), LocalPoint(20, 0)],
+        ),
+      ],
+    );
+
+    /// 표준대기 고도 → 기압. 판정기 테스트와 같은 역함수를 쓴다.
+    double pressureAt(double altitudeM) =>
+        1013.25 * math.pow(1.0 - altitudeM / 44330.0, 1 / 0.190295);
+
+    /// 에스컬레이터 앞까지 걸어간 뒤, 기압이 [toM]까지 내려가는 시계열을 넣는다.
+    /// 반환값은 그동안 세션이 낸 단계들.
+    List<EscalatorPhase> rideDown(
+      IndoorGuidanceSession session, {
+      required double toM,
+      int seconds = 12,
+    }) {
+      var nowMs = 1000;
+      // 탑승점 앞까지 걸어간다. 접근은 **여러 번** 알려야 한다 — 판정기는 한
+      // 프레임 근접만으로는 단계를 올리지 않는다(스쳐 지나감 방어).
+      for (final steps in [20, 23, 25, 27]) {
+        nowMs += 1500;
+        session.onSnapshot(_walkedEast(steps), timestampMs: nowMs);
+      }
+      final phases = <EscalatorPhase>[];
+
+      void feed(double altitudeM) {
+        nowMs += 1069;
+        session.onAltitude(
+          AltitudeSample(
+            timestampMs: nowMs,
+            pressureHpa: pressureAt(altitudeM),
+            source: 'test',
+          ),
+        );
+        // 화면과 같은 순서다 — 샘플을 넣은 뒤 단계를 꺼내 고정을 갱신한다.
+        phases.addAll(session.takePhaseChanges().map((c) => c.phase));
+      }
+
+      // 기준선을 잡는 정지 구간.
+      for (var i = 0; i < 5; i++) {
+        feed(0);
+      }
+      final sampleCount = (seconds * 1000 / 1069).round();
+      for (var i = 1; i <= sampleCount; i++) {
+        feed(toM * i / sampleCount);
+      }
+      return phases;
+    }
+
+    IndoorGuidanceSession ridingSession() => newSession()
+      ..attach(buildingId: 'b1')
+      ..setContext(floorId: '1F', graph: graph, floorLabels: ['1F', 'B1'])
+      ..setAnchor(_anchor());
+
+    test('경로가 없어도 수직 이동이 잡히면 마커를 그 자리에 세운다', () {
+      // 에스컬레이터 발판 위 진동이 걸음으로 세어져 마커가 앞 매장으로
+      // 흘러가던 버그. 경로 조건이 어긋나도 고정은 걸려야 한다.
+      final session = ridingSession();
+
+      final phases = rideDown(session, toM: -2.0, seconds: 8);
+      expect(phases, contains(EscalatorPhase.verticalMotionDetected));
+
+      final held = session.position!.localM;
+      expect(session.isPositionHeld, isTrue);
+
+      // 탑승 뒤에도 걸음이 20걸음(14m) 더 들어온다.
+      session.onSnapshot(_walkedEast(47), timestampMs: 40000);
+
+      expect(session.position!.localM.eastM, held.eastM);
+      expect(session.position!.localM.northM, held.northM);
+    });
+
+    test('고정 지점은 판정기가 고른 탑승 노드다', () {
+      final session = ridingSession();
+
+      rideDown(session, toM: -2.0, seconds: 8);
+
+      expect(session.position!.localM.eastM, 20);
+      expect(session.position!.localM.northM, 0);
+    });
+
+    test('판정이 취소되면 고정을 풀고 걸음을 다시 따라간다', () {
+      final session = ridingSession();
+      rideDown(session, toM: -2.0, seconds: 8);
+      expect(session.isPositionHeld, isTrue);
+
+      // 화면 쪽 출구(취소·되돌리기 정리)가 부르는 경로.
+      session.clearBoardingHold();
+      session.onSnapshot(_walkedEast(30), timestampMs: 40000);
+
+      expect(session.isPositionHeld, isFalse);
+      // 다시 보정 결과를 그대로 따라간다 — 고정된 노드 좌표가 아니다.
+      final tracked = session.trackingResult!.previewPosition;
+      expect(session.position!.localM.eastM, tracked.eastM);
+      expect(session.position!.localM.northM, tracked.northM);
+    });
+  });
+
   group('경로 진행률', () {
     /// 복도(0,0)~(50,0)을 그대로 따라가는 경로.
     const route = IndoorRoute(
@@ -513,7 +639,10 @@ void main() {
       var asked = false;
       for (var steps = 1; steps <= 20; steps += 1) {
         final update = session.updateProgress(
-          session.onSnapshot(_walkedEast(steps), timestampMs: 1000 + steps * 500),
+          session.onSnapshot(
+            _walkedEast(steps),
+            timestampMs: 1000 + steps * 500,
+          ),
           previewSteps: steps,
         );
         asked = asked || update.shouldReroute;
