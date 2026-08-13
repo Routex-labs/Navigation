@@ -65,6 +65,7 @@
 | [검색 입력 보조](client/search-input-assist.md) | 자동완성·오타 교정 |
 | [검색 결과 목록 UX](client/search-result-list-ux.md) | 결과 행 구조와 정렬 |
 | [카메라 연출](client/camera-choreography-plan.md) | 안내 시작·층 전환 카메라 |
+| [현장 검증 체크리스트](client/field-verification-thehyundai.md) | 더현대 서울에서만 확인되는 항목과 기록 방법 |
 
 ## 리팩터 과제
 
