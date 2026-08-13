@@ -628,7 +628,7 @@ void main() {
       final fixture = _Fixture();
       fixture.hold(atM: 0, seconds: 5);
       fixture.standFarAway();
-      fixture.ramp(fromM: 0, toM: -1.2, seconds: 4, rawPeaksPerSample: 2);
+      fixture.ramp(fromM: 0, toM: -0.9, seconds: 3, rawPeaksPerSample: 2);
 
       expect(
         fixture.phasesOf(),
