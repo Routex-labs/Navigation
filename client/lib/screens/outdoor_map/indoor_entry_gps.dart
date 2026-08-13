@@ -195,10 +195,20 @@ GpsBuildingVerdict _verdictFrom({
 /// 둔다 — 판정이 이상할 때 "규칙이 틀렸다"와 "좌표가 늦게 온다"는 완전히 다른
 /// 문제인데, 이 값이 없으면 화면만 보고는 둘을 구분할 수 없다. 첫 좌표에서는
 /// 비교 대상이 없으므로 붙이지 않는다.
+///
+/// [fromStream]과 [streamRestarts]는 그 "좌표가 늦게 온다"를 **다시 두 갈래로**
+/// 가른다. 간격이 벌어졌을 때 원인은 셋 중 하나인데, 화면에 이 둘이 없으면
+/// 셋을 구분할 방법이 없다.
+///
+///   - `스트림` + 재시작 1 → 스트림은 살아 있는데 기기가 좌표를 늦게 준다.
+///   - `직접` → 스트림이 조용하고 일회성 조회만 화면을 떠받치고 있다.
+///   - 재시작이 계속 올라감 → 스트림이 죽고 다시 열리기를 반복한다.
 String describeGpsBuildingJudgement(
   GpsBuildingJudgement judgement, {
   required bool armed,
   Duration? sinceLastFix,
+  bool? fromStream,
+  int? streamRestarts,
 }) {
   final accuracy = '정확도 ${judgement.accuracyMeters.toStringAsFixed(0)}m';
   final place = !judgement.hasFootprint
@@ -207,8 +217,12 @@ String describeGpsBuildingJudgement(
       ? '안쪽 ${judgement.metersInside.toStringAsFixed(1)}m'
       : '바깥 ${judgement.metersOutside.toStringAsFixed(1)}m';
   final verdict = judgement.verdict.name;
-  final line = '$accuracy · $place · $verdict · 무장${armed ? 'O' : 'X'}';
-  if (sinceLastFix == null) return line;
-  final seconds = (sinceLastFix.inMilliseconds / 1000).toStringAsFixed(1);
-  return '$line · +${seconds}s';
+  var line = '$accuracy · $place · $verdict · 무장${armed ? 'O' : 'X'}';
+  if (sinceLastFix != null) {
+    final seconds = (sinceLastFix.inMilliseconds / 1000).toStringAsFixed(1);
+    line = '$line · +${seconds}s';
+  }
+  if (fromStream != null) line = '$line · ${fromStream ? '스트림' : '직접'}';
+  if (streamRestarts != null) line = '$line · 재시작$streamRestarts';
+  return line;
 }

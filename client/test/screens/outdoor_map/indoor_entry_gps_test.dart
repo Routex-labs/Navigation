@@ -224,5 +224,44 @@ void main() {
         '정확도 12m · 안쪽 6.0m · inside · 무장X',
       );
     });
+
+    test('좌표 출처와 재시작 횟수를 뒤에 붙인다', () {
+      // 간격이 벌어졌을 때 "스트림이 느리다"와 "스트림이 죽고 일회성 조회만
+      // 남았다"는 완전히 다른 문제인데, 이 두 값 없이는 화면에서 구분되지 않는다.
+      final judgement = _judge(point: _center, accuracy: 5);
+      expect(
+        describeGpsBuildingJudgement(
+          judgement,
+          armed: true,
+          sinceLastFix: const Duration(seconds: 36),
+          fromStream: false,
+          streamRestarts: 4,
+        ),
+        endsWith('· +36.0s · 직접 · 재시작4'),
+      );
+    });
+
+    test('스트림에서 온 좌표는 스트림으로 보인다', () {
+      final judgement = _judge(point: _center, accuracy: 5);
+      expect(
+        describeGpsBuildingJudgement(
+          judgement,
+          armed: true,
+          fromStream: true,
+          streamRestarts: 1,
+        ),
+        endsWith('· 스트림 · 재시작1'),
+      );
+    });
+
+    test('진단값을 안 주면 예전 문구 그대로다', () {
+      // 이 함수는 디버그 모드에서만 쓰이지만, 인자를 안 넘긴 호출부가 남아도
+      // 문구가 깨지지 않아야 한다.
+      final judgement = _judge(point: _center, accuracy: 5);
+      final line = describeGpsBuildingJudgement(judgement, armed: true);
+      expect(line, isNot(contains('재시작')));
+      expect(line, isNot(contains('스트림')));
+      expect(line, isNot(contains('직접')));
+    });
   });
 }
