@@ -513,6 +513,20 @@ class EscalatorTransitionDetector {
   /// "왜 아직 탑승으로 안 넘어가는가"를 볼 수 있게만 내놓는다.
   bool _verticalMotionObserved = false;
 
+  /// 같은 방향으로 이어지는 동안 빠른 EMA 속도를 시간으로 적분한 변위(m).
+  ///
+  /// 중앙값 평활 delta와 **같은 것을 재지만 훨씬 덜 늦다.** 중앙값은 창 길이의
+  /// 절반쯤(iOS 1069ms 간격에 3샘플이면 약 1.1초) 뒤처지므로, 그 값으로 걸음
+  /// 정지를 걸면 실제로 오르내리기 시작한 시각보다 1초 넘게 늦게 멈춘다. 그
+  /// 1초가 곧 발판 진동이 위치에 쌓이는 시간이다.
+  ///
+  /// 방향이 바뀌거나 수직 속도가 문턱 아래로 떨어지면 0으로 되돌린다 — 누적이
+  /// 살아 있으면 오르내림을 반복하는 동안 값만 커진다.
+  ///
+  /// **층을 바꾸는 판정에는 쓰지 않는다.** 그쪽은 되돌릴 수 없으므로 노이즈에
+  /// 강한 중앙값을 그대로 쓴다.
+  double _fastDisplacementM = 0;
+
   final List<EscalatorDetectionEvent> _events = [];
 
   /// 디버그 오버레이·로그용 현재 관측값.
@@ -768,6 +782,10 @@ class EscalatorTransitionDetector {
       _resetApproach();
       _verticalMotionSamples = 0;
       _verticalMotionSign = 0;
+      _verticalMotionObserved = false;
+      _fastDisplacementM = 0;
+      _earlyVerticalMotion = false;
+      _verticalMotionQuietSamples = 0;
       _phase = EscalatorPhase.idle;
     }
     _phaseChanges.add(
@@ -902,6 +920,7 @@ class EscalatorTransitionDetector {
         _updateVerticalMotion(
           sample.timestampMs,
           fastSpeedMps,
+          deltaSeconds: fastDeltaSeconds,
           deltaM: delta,
           hasMotionEvidence: hadNewSteps,
         );
@@ -914,6 +933,7 @@ class EscalatorTransitionDetector {
       _updateVerticalMotion(
         sample.timestampMs,
         fastSpeedMps,
+        deltaSeconds: fastDeltaSeconds,
         deltaM: delta,
         hasMotionEvidence: hadNewSteps,
       );
@@ -1178,6 +1198,7 @@ class EscalatorTransitionDetector {
   void _updateVerticalMotion(
     int atMs,
     double? fastSpeedMps, {
+    required double? deltaSeconds,
     required double deltaM,
     required bool hasMotionEvidence,
   }) {
@@ -1186,16 +1207,20 @@ class EscalatorTransitionDetector {
       _verticalMotionSamples = 0;
       _verticalMotionSign = 0;
       _verticalMotionObserved = false;
+      _fastDisplacementM = 0;
       _expireEarlyVerticalMotion(atMs);
       return;
     }
     _verticalMotionQuietSamples = 0;
     final sign = fastSpeedMps > 0 ? 1 : -1;
+    final stepM = fastSpeedMps * (deltaSeconds ?? 0);
     if (sign != _verticalMotionSign) {
       _verticalMotionSign = sign;
       _verticalMotionSamples = 1;
+      _fastDisplacementM = stepM;
     } else {
       _verticalMotionSamples++;
+      _fastDisplacementM += stepM;
     }
     if (_verticalMotionSamples < config.verticalMotionConsecutiveSamples) {
       return;
@@ -1214,6 +1239,10 @@ class EscalatorTransitionDetector {
       // 걷고 있는데 점만 저 앞 에스컬레이터에 붙어 멈춘 화면을 본다. 실제로
       // 발판에 올라섰다고 볼 수 있는 거리([boardingApproachRadiusM], 3m)에서만
       // 사용자에게 보이는 단계로 올린다.
+      // 안내가 이 에스컬레이터를 타라고 지목했으면(=[_approachBoarding])
+      // 근접 거리를 따로 요구하지 않는다. "다음에 탈 것"이 정해져 있고 기압이
+      // 실제로 오르내리는 중이면, 그 둘로 이미 확정에 가깝다 — 여기서 3m를 더
+      // 기다리면 보정 위치가 늦게 수렴하는 랜딩에서 영영 안 걸린다.
       final distanceM =
           _observedBoardingDistances[boarding.id] ??
           _armedNodes[boarding.id]?.distanceM;
@@ -1245,7 +1274,11 @@ class EscalatorTransitionDetector {
     //
     // 기기가 실제로 움직이는 중이라는 신호를 함께 요구한다. 없으면 책상 위에 둔
     // 폰의 기압 드리프트로도 화면이 덮인다.
-    if (deltaM.abs() < config.visibleVerticalDeltaM) return;
+    // 중앙값 delta와 빠른 EMA 적분 중 **먼저 문턱을 넘는 쪽**을 쓴다. 둘은 같은
+    // 것을 재지만 중앙값이 1초 넘게 늦고, 그 1초가 곧 발판 진동이 위치에 쌓이는
+    // 시간이다.
+    final risenM = math.max(deltaM.abs(), _fastDisplacementM.abs());
+    if (risenM < config.visibleVerticalDeltaM) return;
     if (!hasMotionEvidence) return;
     final toFloor = (boarding != null && boarding.name.direction == direction)
         ? boarding.name.otherFloorLabel
@@ -1519,6 +1552,10 @@ class EscalatorTransitionDetector {
     _resetApproach();
     _verticalMotionSamples = 0;
     _verticalMotionSign = 0;
+    _verticalMotionObserved = false;
+    _fastDisplacementM = 0;
+    _earlyVerticalMotion = false;
+    _verticalMotionQuietSamples = 0;
   }
 
   void _pushEvent({

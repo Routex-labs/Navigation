@@ -600,6 +600,30 @@ void main() {
     });
   });
 
+  group('2차 감지 — 안내가 지목한 에스컬레이터', () {
+    test('경로가 지목했으면 3m까지 붙기 전에도 걸음을 멈춘다', () {
+      // "다음에 탈 것"이 정해져 있고 기압이 실제로 오르내리면 그 둘로 이미
+      // 확정에 가깝다. 여기서 3m를 더 기다리면 보정 위치가 늦게 수렴하는
+      // 랜딩에서 영영 안 걸린다.
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      // 경로 끝(탑승점)에서 아직 8m 떨어져 있다.
+      fixture.approachBoarding(remainingM: const [14, 11, 8]);
+      fixture.ramp(fromM: 0, toM: 0.6, seconds: 3, rawPeaksPerSample: 2);
+
+      final change = fixture.phases.firstWhere(
+        (c) => c.phase == EscalatorPhase.verticalMotionDetected,
+      );
+      expect(change.reason, 'rising');
+      expect(change.boardingNodeId, 'n-up-to3f');
+      expect(
+        change.deltaM.abs(),
+        lessThan(1.2),
+        reason: '누적 고도 갈래가 아니라 경로 지목으로 걸렸다',
+      );
+    });
+  });
+
   group('2차 감지 — 누적 고도로 올라가는 갈래', () {
     // 실측에서 랜딩 보정 위치가 12m까지 어긋나 허가가 안 걸리는 일이 흔했다.
     // 그 구간에서도 걸음은 멈춰야 한다 — 몸이 수직으로 실려 가는 중이라는
@@ -620,6 +644,24 @@ void main() {
       expect(change.boardingNodeId, isNull);
       expect(fixture.started, isEmpty, reason: '층은 노드 허가 없이 바꾸지 않는다');
       expect(fixture.confirmed, isEmpty);
+    });
+
+    test('중앙값이 문턱에 닿기 전에 빠른 적분으로 먼저 멈춘다', () {
+      // 중앙값 평활은 창 절반(약 1.1초)만큼 뒤처진다. 그 1초가 곧 발판 진동이
+      // 위치에 쌓이는 시간이라, 걸음 정지만은 덜 늦은 값으로 건다.
+      final fixture = _Fixture();
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standFarAway();
+      fixture.ramp(fromM: 0, toM: -2.0, seconds: 7, rawPeaksPerSample: 2);
+
+      final change = fixture.phases.firstWhere(
+        (c) => c.phase == EscalatorPhase.verticalMotionDetected,
+      );
+      expect(
+        change.deltaM.abs(),
+        lessThan(1.2),
+        reason: '중앙값 delta가 아직 문턱에 못 미친 시점에 이미 멈춰야 한다',
+      );
     });
 
     test('문턱에 못 미치는 고도 변화로는 멈추지 않는다', () {
