@@ -154,6 +154,27 @@ void main() {
       );
     });
 
+    test('좌표 간격을 주면 뒤에 붙는다', () {
+      // "판정 규칙이 틀렸다"와 "좌표가 늦게 온다"를 화면에서 가르는 값이다.
+      final judgement = _judge(point: _center, accuracy: 5);
+      expect(
+        describeGpsBuildingJudgement(
+          judgement,
+          armed: true,
+          sinceLastFix: const Duration(milliseconds: 5000),
+        ),
+        endsWith('· +5.0s'),
+      );
+    });
+
+    test('첫 좌표는 비교 대상이 없어 간격을 붙이지 않는다', () {
+      final judgement = _judge(point: _center, accuracy: 5);
+      expect(
+        describeGpsBuildingJudgement(judgement, armed: true),
+        isNot(contains('+')),
+      );
+    });
+
     test('자동 진입이 꺼져 있으면 무장X로 보인다', () {
       // "안이라고 판정했는데 왜 안 들어가지"의 흔한 원인이라 한 줄에 함께 둔다.
       final judgement = _judge(

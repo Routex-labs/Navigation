@@ -184,15 +184,21 @@ GpsBuildingVerdict _verdictFrom({
 
 /// 판정 한 건을 실기기 화면에 띄울 한 줄로 만든다.
 ///
-/// 예) `정확도 12m · 안쪽 3.1m · unclear · 무장O`
+/// 예) `정확도 12m · 안쪽 3.1m · unclear · 무장O · +1.0s`
 ///
 /// [armed]는 자동 진입이 무장돼 있는지다(화면 상태라 판정에는 안 들어간다).
 /// 이 값이 없으면 "안이라고 판정했는데 왜 안 들어갔지"라는 흔한 상황에서 원인이
 /// 화면에 안 보인다 — 직전 실험에서 건물 밖을 탭해 자동 진입이 꺼진 채로 걷고
 /// 있는 경우다.
+///
+/// [sinceLastFix]는 **직전 좌표와의 간격**이다. 판정과는 무관하지만 같은 줄에
+/// 둔다 — 판정이 이상할 때 "규칙이 틀렸다"와 "좌표가 늦게 온다"는 완전히 다른
+/// 문제인데, 이 값이 없으면 화면만 보고는 둘을 구분할 수 없다. 첫 좌표에서는
+/// 비교 대상이 없으므로 붙이지 않는다.
 String describeGpsBuildingJudgement(
   GpsBuildingJudgement judgement, {
   required bool armed,
+  Duration? sinceLastFix,
 }) {
   final accuracy = '정확도 ${judgement.accuracyMeters.toStringAsFixed(0)}m';
   final place = !judgement.hasFootprint
@@ -201,5 +207,8 @@ String describeGpsBuildingJudgement(
       ? '안쪽 ${judgement.metersInside.toStringAsFixed(1)}m'
       : '바깥 ${judgement.metersOutside.toStringAsFixed(1)}m';
   final verdict = judgement.verdict.name;
-  return '$accuracy · $place · $verdict · 무장${armed ? 'O' : 'X'}';
+  final line = '$accuracy · $place · $verdict · 무장${armed ? 'O' : 'X'}';
+  if (sinceLastFix == null) return line;
+  final seconds = (sinceLastFix.inMilliseconds / 1000).toStringAsFixed(1);
+  return '$line · +${seconds}s';
 }
