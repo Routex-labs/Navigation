@@ -82,6 +82,14 @@ class _Fixture {
   /// 테스트하면 평활 창 경계에 걸리는 버그를 놓친다(실제로 놓쳤다).
   int sampleIntervalMs = 1069;
 
+  /// 기압 보고 격자(hPa). 0이면 격자 없음(iOS `CMAltimeter`처럼 연속값).
+  ///
+  /// Android `TYPE_PRESSURE`는 흔히 0.01 hPa(약 8.4cm) 단위로 끊어서 준다.
+  /// 5.5Hz에서 에스컬레이터가 한 샘플에 움직이는 거리는 5cm라 **격자보다
+  /// 작고**, 그러면 연속 두 샘플이 같은 값으로 나와 수직 속도가 0으로 읽힌다.
+  /// 판정기가 그것을 "하차"로 보면 타는 도중에 확정이 난다.
+  double quantizeHpa = 0;
+
   /// [seconds]초 동안 고도를 [fromM] → [toM]으로 선형 변화시킨다.
   void ramp({
     required double fromM,
@@ -116,10 +124,14 @@ class _Fixture {
       ramp(fromM: atM, toM: atM, seconds: seconds);
 
   void feed(double altitudeM) {
+    var pressureHpa = _pressureForAltitudeM(altitudeM);
+    if (quantizeHpa > 0) {
+      pressureHpa = (pressureHpa / quantizeHpa).roundToDouble() * quantizeHpa;
+    }
     final transition = detector.onAltitude(
       AltitudeSample(
         timestampMs: nowMs,
-        pressureHpa: _pressureForAltitudeM(altitudeM),
+        pressureHpa: pressureHpa,
         source: 'test',
       ),
     );
@@ -324,6 +336,42 @@ void main() {
         fixture.rejectionReasons(),
         isNot(contains('multiFloorUnsupported')),
       );
+    });
+
+    test('Android 180ms 간격에서도 한 층 하강은 한 번만 확정된다', () {
+      // 친구 갤럭시에서 "한 층 내려가는데 층이 두 번 바뀐다"로 보고된 증상.
+      // 판정 문턱이 "연속 샘플 수"였을 때, 그 2개가 iOS에서는 2.1초지만
+      // Android 5.5Hz에서는 0.36초라 노이즈 한 번이 하차로 읽혔다. 그러면 타는
+      // 도중에 확정이 나고 baseline이 중간 높이로 다시 잡혀, 남은 반 층이
+      // **또 하나의 층 이동**이 된다.
+      final fixture = _Fixture()..sampleIntervalMs = 180;
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standNearBoarding(x: 3.0, y: 0.5);
+      fixture.ramp(fromM: 0, toM: -4.5, seconds: 20);
+      fixture.hold(atM: -4.5, seconds: 5);
+
+      expect(fixture.confirmed, hasLength(1));
+      expect(fixture.confirmed.single.direction, EscalatorDirection.down);
+      expect(fixture.confirmed.single.toFloorLabel, '1F');
+    });
+
+    test('기압을 0.01hPa 격자로 끊어 주는 기기에서도 타는 중에 확정하지 않는다', () {
+      // 격자(8.4cm)가 한 샘플의 실제 변화(5cm)보다 커서 연속 샘플이 같은 값으로
+      // 나오는 구간이 생긴다. 속도를 직전 샘플과의 차이로 재면 그때마다 0으로
+      // 읽혀 "멈췄다"가 된다 — 밑변을 시간으로 고정해야 사라지는 오탐이다.
+      final fixture = _Fixture()
+        ..sampleIntervalMs = 180
+        ..quantizeHpa = 0.01;
+      fixture.hold(atM: 0, seconds: 5);
+      fixture.standNearBoarding(x: 3.0, y: 0.5);
+      fixture.ramp(fromM: 0, toM: -4.5, seconds: 20);
+      // 아직 타는 중이다. 여기서 확정이 나 있으면 남은 반 층이 두 번째 층
+      // 이동으로 이어진다.
+      expect(fixture.confirmed, isEmpty);
+
+      fixture.hold(atM: -4.5, seconds: 5);
+      expect(fixture.confirmed, hasLength(1));
+      expect(fixture.confirmed.single.toFloorLabel, '1F');
     });
 
     test('시계열이 끊긴 뒤에는 옛 고도를 섞지 않고 창을 다시 채운다', () {
