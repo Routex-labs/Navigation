@@ -1787,6 +1787,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 앱 전역 인스턴스라 dispose하지 않는다 — 실내 화면이 같은 컨트롤러를
     // 계속 구독한다.
     _debugModeController.removeListener(_onDebugModeChanged);
+    _gpsVerdictDebugText.dispose();
     super.dispose();
   }
 
@@ -1799,6 +1800,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 디버그 시트에서 개별 경로 토글을 켜고 끄면 여기로 들어온다. 레이어는
     // 이미 등록돼 있으므로 데이터만 다시 채우면 즉시 반영된다.
     unawaited(_syncDebugPdrLayers());
+    // 디버그를 끄면 마지막 판정 문구를 버린다. 남겨 두면 다시 켰을 때 몇 분 전
+    // 좌표의 숫자가 지금 값인 것처럼 떠 있고, 현장에서는 그걸 구분할 수 없다.
+    if (!_debugModeController.enabled) _gpsVerdictDebugText.value = null;
     if (mounted) setState(() {});
   }
 
@@ -2392,6 +2396,18 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     return ll.LatLng((minLat + maxLat) / 2, (minLng + maxLng) / 2);
   }
 
+  /// 디버그 모드에서 지도 위에 띄우는 GPS 진입 판정 근거 한 줄.
+  ///
+  /// `setState`가 아니라 [ValueNotifier]인 이유는 갱신 빈도다. 좌표는 5 m마다
+  /// 들어오는데 그때마다 이 화면 전체(지도·오버레이·바)를 다시 그리면, 진단을
+  /// 켰다는 이유로 측정 대상인 성능이 달라진다. 칩만 다시 그린다.
+  ///
+  /// null이면 칩을 그리지 않는다 — 디버그 모드가 꺼져 있거나 아직 좌표가 한 건도
+  /// 안 들어온 상태다.
+  final ValueNotifier<String?> _gpsVerdictDebugText = ValueNotifier<String?>(
+    null,
+  );
+
   /// 이번 실내 상태가 **자동 진입**으로 켜졌는지.
   ///
   /// 자동 이탈은 자동 진입을 되돌리기 위한 것이다. 사용자가 건물을 직접 탭해서
@@ -2497,14 +2513,19 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 탭해 도면을 열어 둔 경우까지 닫으면, 길 건너에서 층 도면을 훑어보려던 사람의
   /// 화면이 좌표가 들어오는 순간 제멋대로 닫힌다.
   void _applyBuildingVerdict(Position position) {
-    final verdict = judgeBuildingFromGps(
+    final judgement = judgeBuildingFromGps(
       fix: GpsFix(
         point: ll.LatLng(position.latitude, position.longitude),
         accuracyMeters: position.accuracy,
       ),
       footprint: _buildingFootprint,
     );
-    switch (verdict) {
+    // 진단 칩은 아래 switch가 상태를 바꾸기 **전에** 채운다. 무장 여부는 이 판정을
+    // 내릴 때의 값이어야 하는데, switch가 그 값을 갱신하기 때문이다.
+    _gpsVerdictDebugText.value = _debugModeController.enabled
+        ? describeGpsBuildingJudgement(judgement, armed: _gpsEntryArmed)
+        : null;
+    switch (judgement.verdict) {
       case GpsBuildingVerdict.inside:
         if (_indoorEntered || !_gpsEntryArmed) return;
         ScaffoldMessenger.of(
@@ -7373,6 +7394,29 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
                   color: AppColors.warning,
                   icon: Icons.wifi_off,
                 ),
+              ),
+            ),
+          ),
+
+        // GPS 실내 진입 판정의 근거를 그 자리에서 읽기 위한 진단 칩.
+        //
+        // 실기기를 들고 건물을 드나드는 실험에서, 화면에 보이는 유일한 신호는
+        // "건물 감지 중…" 스낵바와 도면 전환뿐이라 **안 걸렸을 때 원인을 알
+        // 방법이 없었다.** 오차가 커서 건너뛴 것인지, 안쪽 문턱을 못 넘은
+        // 것인지, 자동 진입이 꺼져 있는 것인지가 이 한 줄에서 갈린다.
+        //
+        // 자리는 건물 로드 실패 배지([_placingHintTopPx]) 한 줄 아래다. 둘은
+        // 동시에 뜰 수 있고(외곽선을 못 받으면 칩은 '외곽선 없음'을 띄운다),
+        // 겹치면 정작 원인을 가린다. 칩 자체는 IgnorePointer라 탭을 안 먹는다.
+        if (debugEnabled)
+          Positioned(
+            top: _placingHintTopPx + 44,
+            left: 12,
+            child: SafeArea(
+              bottom: false,
+              child: ValueListenableBuilder<String?>(
+                valueListenable: _gpsVerdictDebugText,
+                builder: (_, text, _) => MapDebugChip(text: text),
               ),
             ),
           ),
