@@ -2,7 +2,7 @@
 
 ## 먼저: 지금 어느 파일을 열어야 하나
 
-0단계에서 화면을 성격별 `part` 파일로 갈랐다(e4aea19). **찾는 코드가 본체에 없으면
+0단계에서 화면을 성격별 `part` 파일로 갈랐다(1f841f67). **찾는 코드가 본체에 없으면
 아래에서 고른다.** 전부 같은 라이브러리라 심볼 이름은 그대로다.
 
 | 찾는 것 | 파일 | 줄 |
@@ -93,27 +93,27 @@ Dart의 파일 단위 프라이버시(`_`) 때문에 공개로 바꾼 것이고,
 
 | 옛 심볼 | 새 위치 | 커밋 |
 |---|---|---|
-| `_currentSourceId` `_destSourceId` `_indoorDestSourceId` | `screens/outdoor_map/layers/marker_map_layers.dart:kOutdoorCurrentSourceId` / `kOutdoorDestSourceId` / `kOutdoorIndoorDestSourceId` | 8a3b1d2 |
-| `_accuracyLayerId` `_currentDotLayerId` `_destLayerId` `_destinationPinImageName` `_destinationPinIconSizeZ16/Z20` | 〃 (파일 private) | 8a3b1d2 |
-| `_indoorDestLayerId` | 〃 `kOutdoorIndoorDestLayerId` | 8a3b1d2 |
-| 현재 위치·목적지 소스/레이어 등록 (`_onStyleLoaded` 안) | 〃 `registerCurrentLocationLayers` / `registerDestinationLayer` | 8a3b1d2 |
-| 실내 도착 핀 비트맵·소스 등록 (`_onStyleLoaded` 안) | 〃 `registerIndoorDestinationLayers` | 8a3b1d2 |
-| `_addIndoorDestinationPinLayer` | 〃 `addIndoorDestinationPinLayer` | 8a3b1d2 |
-| `_pointFeature` | 〃 `pointFeature` | 8a3b1d2 |
-| `_syncCurrentLayer` `_syncDestinationLayer` `_syncIndoorDestinationLayer`의 쓰기 부분 | 〃 `syncPointSource`(셋이 공유) | 8a3b1d2 |
-| `_buildingSourceId` `_dimScrimSourceId` `_floorOutlineSourceId` `_highlightSourceId` | `screens/outdoor_map/layers/shape_map_layers.dart:kOutdoorBuilding/DimScrim/FloorOutline/HighlightSourceId` | 981c022 |
-| `_buildingFillLayerId` `_dimScrimFillLayerId` | 〃 `kOutdoorBuildingFillLayerId` / `kOutdoorDimScrimFillLayerId` | 981c022 |
-| `_floorOutlineLayerId` `_highlightFillLayerId` `_highlightLineLayerId` `_highlightFillOpacity` | 〃 (파일 private) | 981c022 |
-| 건물·스크림·외곽선·강조 등록 (`_onStyleLoaded` 안) | 〃 `registerBuildingAndScrimLayers` / `registerFloorOutlineLayer` / `registerHighlightLayers` | 981c022 |
-| `_closedRing` | 〃 `closedRing` | 981c022 |
-| `_syncBuildingLayer` `_syncFloorOutlineLayer` `_syncHighlightLayer`의 쓰기 부분 | 〃 `syncPolygonSource`(셋이 공유) | 981c022 |
-| `_syncDimScrimLayer`의 geometry 쓰기 부분 | 〃 `syncDimScrimSource` (opacity 판단은 화면에 남음) | 981c022 |
-| `_pdrCurrentSourceId` | `screens/outdoor_map/layers/marker_map_layers.dart:kOutdoorPdrCurrentSourceId` | 4c4981a |
-| `_pdrCurrentLayerId` `_pdrLocationImageName` `_pdrLocationDotImageName` | 〃 (파일 private) | 4c4981a |
-| PDR 마커 비트맵·소스·레이어 등록 (`_onStyleLoaded` 안) | 〃 `registerPdrLocationImages` / `registerPdrLocationLayer` | 4c4981a |
-| `_syncPdrCurrentLayer`의 feature 조립 | 〃 `pdrLocationData` (쓰기 큐·revision 판단은 화면에 남음) | 4c4981a |
+| `_currentSourceId` `_destSourceId` `_indoorDestSourceId` | `screens/outdoor_map/layers/marker_map_layers.dart:kOutdoorCurrentSourceId` / `kOutdoorDestSourceId` / `kOutdoorIndoorDestSourceId` | 0a50df2e |
+| `_accuracyLayerId` `_currentDotLayerId` `_destLayerId` `_destinationPinImageName` `_destinationPinIconSizeZ16/Z20` | 〃 (파일 private) | 0a50df2e |
+| `_indoorDestLayerId` | 〃 `kOutdoorIndoorDestLayerId` | 0a50df2e |
+| 현재 위치·목적지 소스/레이어 등록 (`_onStyleLoaded` 안) | 〃 `registerCurrentLocationLayers` / `registerDestinationLayer` | 0a50df2e |
+| 실내 도착 핀 비트맵·소스 등록 (`_onStyleLoaded` 안) | 〃 `registerIndoorDestinationLayers` | 0a50df2e |
+| `_addIndoorDestinationPinLayer` | 〃 `addIndoorDestinationPinLayer` | 0a50df2e |
+| `_pointFeature` | 〃 `pointFeature` | 0a50df2e |
+| `_syncCurrentLayer` `_syncDestinationLayer` `_syncIndoorDestinationLayer`의 쓰기 부분 | 〃 `syncPointSource`(셋이 공유) | 0a50df2e |
+| `_buildingSourceId` `_dimScrimSourceId` `_floorOutlineSourceId` `_highlightSourceId` | `screens/outdoor_map/layers/shape_map_layers.dart:kOutdoorBuilding/DimScrim/FloorOutline/HighlightSourceId` | 0a50df2e |
+| `_buildingFillLayerId` `_dimScrimFillLayerId` | 〃 `kOutdoorBuildingFillLayerId` / `kOutdoorDimScrimFillLayerId` | 0a50df2e |
+| `_floorOutlineLayerId` `_highlightFillLayerId` `_highlightLineLayerId` `_highlightFillOpacity` | 〃 (파일 private) | 0a50df2e |
+| 건물·스크림·외곽선·강조 등록 (`_onStyleLoaded` 안) | 〃 `registerBuildingAndScrimLayers` / `registerFloorOutlineLayer` / `registerHighlightLayers` | 0a50df2e |
+| `_closedRing` | 〃 `closedRing` | 0a50df2e |
+| `_syncBuildingLayer` `_syncFloorOutlineLayer` `_syncHighlightLayer`의 쓰기 부분 | 〃 `syncPolygonSource`(셋이 공유) | 0a50df2e |
+| `_syncDimScrimLayer`의 geometry 쓰기 부분 | 〃 `syncDimScrimSource` (opacity 판단은 화면에 남음) | 0a50df2e |
+| `_pdrCurrentSourceId` | `screens/outdoor_map/layers/marker_map_layers.dart:kOutdoorPdrCurrentSourceId` | 0a50df2e |
+| `_pdrCurrentLayerId` `_pdrLocationImageName` `_pdrLocationDotImageName` | 〃 (파일 private) | 0a50df2e |
+| PDR 마커 비트맵·소스·레이어 등록 (`_onStyleLoaded` 안) | 〃 `registerPdrLocationImages` / `registerPdrLocationLayer` | 0a50df2e |
+| `_syncPdrCurrentLayer`의 feature 조립 | 〃 `pdrLocationData` (쓰기 큐·revision 판단은 화면에 남음) | 0a50df2e |
 
-**1단계 완료(4c4981a).** 화면 파일의 레이어 id 상수 0개, 8,569 → 8,188줄.
+**1단계 완료(0a50df2e).** 화면 파일의 레이어 id 상수 0개, 8,569 → 8,188줄.
 
 ### 2단계 — 카메라 명령 분리
 
@@ -122,12 +122,12 @@ Dart의 파일 단위 프라이버시(`_`) 때문에 공개로 바꾼 것이고,
 
 | 옛 심볼 | 새 위치 | 커밋 |
 |---|---|---|
-| `_animateCameraToFitBox`의 계산·호출 부분 | `screens/outdoor_map/camera/map_camera_commands.dart:animateCameraToFitBox` | 4cf5802 |
-| `_fitCameraToPoints`의 bbox 계산·호출 | 〃 `animateCameraToPoints` | 4cf5802 |
-| `_moveCameraToUser`의 호출 부분 | 〃 `animateCameraToPoint` | 4cf5802 |
-| `_recenterOnCurrentPosition`의 호출 부분 | 〃 `recenterKeepingBearing` | 4cf5802 |
-| `_toGl` | 〃 `toGlLatLng` | 4cf5802 |
-| `_floorFitFillRatio` | 〃 `_fitFillRatio`(파일 private) | 4cf5802 |
+| `_animateCameraToFitBox`의 계산·호출 부분 | `screens/outdoor_map/camera/map_camera_commands.dart:animateCameraToFitBox` | 21ba4a7f |
+| `_fitCameraToPoints`의 bbox 계산·호출 | 〃 `animateCameraToPoints` | 21ba4a7f |
+| `_moveCameraToUser`의 호출 부분 | 〃 `animateCameraToPoint` | 21ba4a7f |
+| `_recenterOnCurrentPosition`의 호출 부분 | 〃 `recenterKeepingBearing` | 21ba4a7f |
+| `_toGl` | 〃 `toGlLatLng` | 21ba4a7f |
+| `_floorFitFillRatio` | 〃 `_fitFillRatio`(파일 private) | 21ba4a7f |
 
 화면 크기를 `BuildContext`가 아니라 `Size`로 받는다 — 카메라 명령이 `MediaQuery`를 직접
 보면 위젯 트리 없이는 한 줄도 시험할 수 없는데, 실제로 필요한 것은 폭·높이 두 숫자뿐이다.
@@ -135,16 +135,16 @@ Dart의 파일 단위 프라이버시(`_`) 때문에 공개로 바꾼 것이고,
 ### 3단계 — GPS 세션 추출 (필드 이동 시작)
 
 옮기기 **전에** 특성 테스트를 먼저 썼다(`test/screens/outdoor_map/gps_stream_lifecycle_test.dart`,
-커밋 f375888). 이동 전후 모두 통과하는 것이 이 단계의 증거다.
+커밋 64aa38ad). 이동 전후 모두 통과하는 것이 이 단계의 증거다.
 
 | 옛 심볼 | 새 위치 | 커밋 |
 |---|---|---|
-| `_positionSubscription` `_streamRetryDelay` `_streamRetryTimer` `_streamDeliveredFix` `_streamFirstFixTimer` `_freshFixTimer` `_freshFixInFlight` `_lastFixReceivedAt` | `screens/outdoor_map/gps/gps_session.dart:GpsSession`(전부 private 필드) | ac32f7c |
-| `_streamRestartCount` `_lastFixFromStream` | 〃 `restartCount` / `lastFixFromStream` 게터 | ac32f7c |
-| `_subscribeToPositions` | 〃 `_subscribe` | ac32f7c |
-| `_handlePositionStreamClosed` | 〃 `_handleClosed` | ac32f7c |
-| `_syncFreshFixTimer` `_maybeRequestFreshFix` | 〃 (같은 이름, private) | ac32f7c |
-| `_handlePosition`의 스트림 상태 갱신 부분 | 〃 `_deliver` | ac32f7c |
+| `_positionSubscription` `_streamRetryDelay` `_streamRetryTimer` `_streamDeliveredFix` `_streamFirstFixTimer` `_freshFixTimer` `_freshFixInFlight` `_lastFixReceivedAt` | `screens/outdoor_map/gps/gps_session.dart:GpsSession`(전부 private 필드) | 655d940e |
+| `_streamRestartCount` `_lastFixFromStream` | 〃 `restartCount` / `lastFixFromStream` 게터 | 655d940e |
+| `_subscribeToPositions` | 〃 `_subscribe` | 655d940e |
+| `_handlePositionStreamClosed` | 〃 `_handleClosed` | 655d940e |
+| `_syncFreshFixTimer` `_maybeRequestFreshFix` | 〃 (같은 이름, private) | 655d940e |
+| `_handlePosition`의 스트림 상태 갱신 부분 | 〃 `_deliver` | 655d940e |
 
 화면에 남은 것: `_position`(그릴 값), `_lastFixAt`(진단), `_gpsEntryArmed`(진입 판정),
 `_handlePosition`의 판정·렌더링 부분, `_syncGpsSubscription`(켤지 말지 결정).
@@ -160,26 +160,26 @@ Dart의 파일 단위 프라이버시(`_`) 때문에 공개로 바꾼 것이고,
 
 | 옛 심볼 | 새 위치 | 커밋 |
 |---|---|---|
-| `_pdrStopInFlight` | `screens/outdoor_map/pdr_session_lifecycle.dart:PdrSessionLifecycle._stopInFlight` | 6f7e7c9 |
-| `_awaitPdrStop` | 〃 `awaitStop` | 6f7e7c9 |
-| `_startPdrIfIdle`의 게이트 사다리 | 〃 `startIfIdle` (층은 클로저 둘로 읽는다) | 6f7e7c9 |
-| `_dropIndoorPosition`의 정지 발사 부분 | 〃 `stopWithoutWaiting` | 6f7e7c9 |
+| `_pdrStopInFlight` | `screens/outdoor_map/pdr_session_lifecycle.dart:PdrSessionLifecycle._stopInFlight` | f11b7546 |
+| `_awaitPdrStop` | 〃 `awaitStop` | f11b7546 |
+| `_startPdrIfIdle`의 게이트 사다리 | 〃 `startIfIdle` (층은 클로저 둘로 읽는다) | f11b7546 |
+| `_dropIndoorPosition`의 정지 발사 부분 | 〃 `stopWithoutWaiting` | f11b7546 |
 
 화면에 남은 것: `_startPdrIfIdle`(층·그래프를 읽어 넘기는 껍데기), `_dropIndoorPosition`의
 궤적·경로 정리, `_bindPdrSessionToFloor`(setState와 층 결속이 섞여 있어 5단계 몫).
 
 곁들여 `indoorNavigationDriver`의 타입을 구현체에서 계약(`IndoorNavigationController`)으로
-좁히고, 계약에 빠져 있던 `onAppBackgrounded`·`onAppForegrounded`를 올렸다(bb1dc35).
+좁히고, 계약에 빠져 있던 `onAppBackgrounded`·`onAppForegrounded`를 올렸다(f11b7546).
 
 ### 5단계 — 실내 오버레이 (진행 중)
 
 | 옛 심볼 | 새 위치 | 커밋 |
 |---|---|---|
-| `_indoorIdGeneration` `_indoorTilesSourceId` `_indoorFootprintLayerId` `_indoorStoresFillLayerId` `_indoorCategoryHighlightFillLayerId` `_indoorVerticalTransportFillLayerId` `_indoorStoresLabelLayerId` `_indoorSharedStoresLabelLayerId` `_indoorFacilityLabelLayerId` `_indoorPoiIconLayerId` `_indoorStoreFacilityIconLayerId` | `screens/outdoor_map/layers/indoor_overlay_layers.dart:IndoorOverlayIds`의 게터 | a1bc6d2 |
-| `_idFor` `_bumpIndoorIds` | 〃 `_idFor` / `next()` | a1bc6d2 |
-| `_indoorOverlayLayerIds` | 〃 `layersTopFirst` | a1bc6d2 |
-| `_indoor*LayerIdBase` 상수 10개 | 〃 게터 안으로 인라인 | a1bc6d2 |
-| `_ensureIndoorTilesRegistered`의 등록·정리 부분 | 〃 `registerIndoorOverlayLayers` | b78443a |
+| `_indoorIdGeneration` `_indoorTilesSourceId` `_indoorFootprintLayerId` `_indoorStoresFillLayerId` `_indoorCategoryHighlightFillLayerId` `_indoorVerticalTransportFillLayerId` `_indoorStoresLabelLayerId` `_indoorSharedStoresLabelLayerId` `_indoorFacilityLabelLayerId` `_indoorPoiIconLayerId` `_indoorStoreFacilityIconLayerId` | `screens/outdoor_map/layers/indoor_overlay_layers.dart:IndoorOverlayIds`의 게터 | 26c6e461 |
+| `_idFor` `_bumpIndoorIds` | 〃 `_idFor` / `next()` | 26c6e461 |
+| `_indoorOverlayLayerIds` | 〃 `layersTopFirst` | 26c6e461 |
+| `_indoor*LayerIdBase` 상수 10개 | 〃 게터 안으로 인라인 | 26c6e461 |
+| `_ensureIndoorTilesRegistered`의 등록·정리 부분 | 〃 `registerIndoorOverlayLayers` | 26c6e461 |
 | `_syncIndoorOverlayFade`의 쓰기 목록 | 〃 `syncIndoorOverlayProps` | (이 커밋) |
 | `_applyCategoryFilter`의 라벨 쓰기 목록 | 〃 `syncIndoorOverlayProps(scope: labels)` | 〃 |
 | `_applyOverlayFillFadeFactor`의 fill 쓰기 목록 | 〃 `syncIndoorOverlayProps(scope: fills)` | 〃 |
