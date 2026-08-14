@@ -41,7 +41,7 @@ extension OutdoorMapPdr on OutdoorMapBodyState {
     );
   }
 
-  /// 센서 세션이 첫 이벤트를 보고할 때까지(최대 [_sensorWarmupTimeout]) 기다린다.
+  /// 센서 세션이 첫 이벤트를 보고할 때까지(최대 [sensorWarmupTimeout]) 기다린다.
   ///
   /// [IndoorNavigationDriver.confirmAnchorByPin]은 **호출 시점의** heading
   /// reference로 분기한다. 자북 heading을 이미 받았으면 회전 0으로 즉시 확정하고,
@@ -57,7 +57,7 @@ extension OutdoorMapPdr on OutdoorMapBodyState {
     try {
       await indoorNavigationDriver.runtimeStatuses
           .firstWhere((status) => reported(status.state))
-          .timeout(_sensorWarmupTimeout);
+          .timeout(sensorWarmupTimeout);
     } on Object {
       // 센서가 끝내 조용해도(권한 거부·미지원 기기·타임아웃) 앵커는 찍는다 —
       // 걸음이 쌓이지 않더라도 "어느 입구로 들어왔는지"는 지도에 보여야 한다.
@@ -100,7 +100,7 @@ extension OutdoorMapPdr on OutdoorMapBodyState {
       final myLocation = _pdrCurrentWgs84();
       final center = myLocation != null
           ? _toGl(myLocation)
-          : camera?.target ?? _toGl(_entrance ?? _fallbackLocation);
+          : camera?.target ?? _toGl(_entrance ?? fallbackLocation);
       await controller.animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(
@@ -179,8 +179,8 @@ extension OutdoorMapPdr on OutdoorMapBodyState {
       context,
       message: '$storeName에서 출발하는 것으로 보고 현재 위치를 잡았습니다.',
       bottomOffset:
-          _mapShellBottomChromePx +
-          (_hasAnyRouteVisible ? _etaCardHeightPx : 0) +
+          mapShellBottomChromePx +
+          (_hasAnyRouteVisible ? etaCardHeightPx : 0) +
           12,
       actionLabel: '위치 다시 지정',
       onAction: () => unawaited(_resetAnchorForManualPlacement(floor)),
@@ -559,7 +559,7 @@ extension OutdoorMapPdr on OutdoorMapBodyState {
       _showSnack('이 층의 통로 위치를 찾지 못했습니다. 다시 시도해주세요.');
       return;
     }
-    if (snapped.distanceToGraphM > _maxPdrAnchorSnapDistanceM) {
+    if (snapped.distanceToGraphM > maxPdrAnchorSnapDistanceM) {
       // 매번 같은 문구만 나오면 어디가 문제인지 알 수 없다. 실측 거리를 함께
       // 노출해서 "탭이 건물에서 얼마나 떨어진지" 사용자·개발자가 즉시 확인할
       // 수 있게 한다.

@@ -285,7 +285,8 @@ extension OutdoorMapEscalator on OutdoorMapBodyState {
     final sign = transition.direction == EscalatorDirection.up ? 1.0 : -1.0;
     _escalatorRideSwapDeltaM = (_guidance.escalator.deltaM ?? 0) * sign;
     _escalatorRideExpectedM =
-        _escalatorGroupHeightM[transition.group] ?? escalatorDefaultFloorHeightM;
+        _escalatorGroupHeightM[transition.group] ??
+        escalatorDefaultFloorHeightM;
     _escalatorRideTargetProgress = 0;
     _escalatorGlideProgress.value = 0;
     _escalatorGlideTimer = Timer.periodic(_escalatorGlideFrame, (timer) {
@@ -372,7 +373,7 @@ extension OutdoorMapEscalator on OutdoorMapBodyState {
       CameraUpdate.newCameraPosition(
         CameraPosition(
           target: _toGl(to),
-          zoom: math.max(camera?.zoom ?? _walkingViewZoom, _walkingViewZoom),
+          zoom: math.max(camera?.zoom ?? walkingViewZoom, walkingViewZoom),
           bearing: bearing ?? camera?.bearing ?? 0,
           tilt: camera?.tilt ?? 0,
         ),

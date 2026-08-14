@@ -44,7 +44,7 @@ extension OutdoorMapMap on OutdoorMapBodyState {
     // 건물 fill과 실내 진입 dim scrim. 등록 순서가 곧 쌓임 순서라 가장 먼저다.
     await registerBuildingAndScrimLayers(
       controller,
-      buildingFillOpacity: _buildingFillOpacityDefault,
+      buildingFillOpacity: buildingFillOpacityDefault,
     );
 
     // 경로선 묶음(회색 완료선 → casing → 본선들 → 화살표). 등록 순서가 곧
@@ -240,7 +240,7 @@ extension OutdoorMapMap on OutdoorMapBodyState {
   /// 상자를 **어떻게 구하느냐**는 호출부가 정한다([minAreaBoxFor] / [routeBoxFor]).
   /// 퇴화 입력 방어처럼 입력 종류마다 다른 규칙이 여기 섞이면, 이 함수가 층
   /// 외곽선용인지 경로용인지 알 수 없게 된다.
-  /// [maxZoom]은 확대해 들어가는 상한이다. 경로 개요만 준다([_routeFitMaxZoom])
+  /// [maxZoom]은 확대해 들어가는 상한이다. 경로 개요만 준다([routeFitMaxZoom])
   /// — 층 외곽선은 커서 그 배율까지 올라갈 일이 없다.
   Future<bool> _animateCameraToFitBox(
     BuildingBox box, {
@@ -365,7 +365,7 @@ extension OutdoorMapMap on OutdoorMapBodyState {
       graph,
     ).snapToWalkableNetwork(PdrLocalPoint(local.$1, local.$2));
     if (snapped == null) return false;
-    if (snapped.distanceToGraphM > _maxPdrAnchorSnapDistanceM) return false;
+    if (snapped.distanceToGraphM > maxPdrAnchorSnapDistanceM) return false;
 
     final nodeId = _nearestGraphNodeId(
       graph.nodes,

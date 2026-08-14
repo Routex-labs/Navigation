@@ -59,7 +59,7 @@ extension OutdoorMapUi on OutdoorMapBodyState {
     // 것처럼 읽혀 실제 동작(PDR 기반)과 어긋난다.
     final lowAccuracy =
         _outdoorGpsVisible &&
-        (position == null || accuracy > _lowAccuracyThresholdMeters);
+        (position == null || accuracy > lowAccuracyThresholdMeters);
     final route = _route;
     final userDestination = _userDestination;
     final indoorRouteDestination = _indoorRouteDestination;
@@ -71,7 +71,7 @@ extension OutdoorMapUi on OutdoorMapBodyState {
         indoorNavigationDriver.currentRuntimeStatus.state !=
         PdrRuntimeState.idle;
     final initialCenter = position == null
-        ? _fallbackLocation
+        ? fallbackLocation
         : ll.LatLng(position.latitude, position.longitude);
 
     return Stack(
@@ -159,14 +159,14 @@ extension OutdoorMapUi on OutdoorMapBodyState {
         // 사라진다. 그 이유를 화면에 남기고 재시도 경로를 준다 — 예전에는 이
         // 상태가 아무 표시 없이 조용히 지나갔다.
         //
-        // 자리는 위치 지정 안내와 같은 [_placingHintTopPx]다. **누를 수 있어야
+        // 자리는 위치 지정 안내와 같은 [placingHintTopPx]다. **누를 수 있어야
         // 하므로 GPS 배지 자리(top 76)를 쓰면 안 된다** — 거기는 MapShellScreen의
         // 카테고리 chip 열(top 78)에 덮여 탭이 chip으로 먹힌다. 두 오버레이는
         // 동시에 뜨지 않는다(위치 지정은 실내 진입 상태에서만 열리고, 그러려면
         // 건물이 로드돼 있어야 한다).
         if (_buildingLoadFailed)
           Positioned(
-            top: _placingHintTopPx,
+            top: placingHintTopPx,
             left: 12,
             child: SafeArea(
               bottom: false,
@@ -191,12 +191,12 @@ extension OutdoorMapUi on OutdoorMapBodyState {
         // 방법이 없었다.** 오차가 커서 건너뛴 것인지, 안쪽 문턱을 못 넘은
         // 것인지, 자동 진입이 꺼져 있는 것인지가 이 한 줄에서 갈린다.
         //
-        // 자리는 건물 로드 실패 배지([_placingHintTopPx]) 한 줄 아래다. 둘은
+        // 자리는 건물 로드 실패 배지([placingHintTopPx]) 한 줄 아래다. 둘은
         // 동시에 뜰 수 있고(외곽선을 못 받으면 칩은 '외곽선 없음'을 띄운다),
         // 겹치면 정작 원인을 가린다. 칩 자체는 IgnorePointer라 탭을 안 먹는다.
         if (debugEnabled)
           Positioned(
-            top: _placingHintTopPx + 44,
+            top: placingHintTopPx + 44,
             left: 12,
             child: SafeArea(
               bottom: false,
@@ -241,8 +241,8 @@ extension OutdoorMapUi on OutdoorMapBodyState {
             curve: Curves.easeOut,
             left: 16,
             bottom:
-                _floorSelectorBottomOffset +
-                (indoorRouteVisible ? _bottomBarLiftPx : 0),
+                floorSelectorBottomOffset +
+                (indoorRouteVisible ? bottomBarLiftPx : 0),
             child: SafeArea(
               top: false,
               child: FloorSelector(
@@ -267,8 +267,8 @@ extension OutdoorMapUi on OutdoorMapBodyState {
             curve: Curves.easeOut,
             left: 16,
             bottom:
-                _floorSelectorBottomOffset +
-                (indoorRouteVisible ? _bottomBarLiftPx : 0),
+                floorSelectorBottomOffset +
+                (indoorRouteVisible ? bottomBarLiftPx : 0),
             child: SafeArea(
               top: false,
               child: GuidanceRecenterButton(
@@ -287,8 +287,8 @@ extension OutdoorMapUi on OutdoorMapBodyState {
             curve: Curves.easeOut,
             left: 16,
             bottom:
-                _floorSelectorBottomOffset +
-                (indoorRouteVisible ? _bottomBarLiftPx : 0) +
+                floorSelectorBottomOffset +
+                (indoorRouteVisible ? bottomBarLiftPx : 0) +
                 52,
             child: SafeArea(
               top: false,
@@ -327,13 +327,13 @@ extension OutdoorMapUi on OutdoorMapBodyState {
           AnimatedPositioned(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOut,
-            right: _pdrControlRightInsetPx,
-            bottom: indoorRouteVisible ? _bottomBarLiftPx : 0,
+            right: pdrControlRightInsetPx,
+            bottom: indoorRouteVisible ? bottomBarLiftPx : 0,
             child: SafeArea(
               top: false,
               child: Padding(
                 padding: const EdgeInsets.only(
-                  bottom: _bottomBarInnerBottomPaddingPx,
+                  bottom: bottomBarInnerBottomPaddingPx,
                 ),
                 child: PdrMapControl(
                   key: _pdrControlKey,
@@ -351,12 +351,12 @@ extension OutdoorMapUi on OutdoorMapBodyState {
         // 개발 도구가 나타났다 사라지는 화면이기도 했다.
         if (_indoorEntered && _placingPdrAnchor)
           Positioned(
-            top: _placingHintTopPx,
+            top: placingHintTopPx,
             left: 12,
             right: 12,
             child: SafeArea(
               bottom: false,
-              child: _PlacingAnchorHint(
+              child: PlacingAnchorHint(
                 key: _placingHintKey,
                 onCancel: () => unawaited(_cancelPdrAnchor()),
               ),
@@ -406,7 +406,7 @@ extension OutdoorMapUi on OutdoorMapBodyState {
                     // 시간은 비용 기준 — 엘리베이터 대기·탑승 시간이 여기 들어 있다.
                     minutes:
                         (indoorEta.costM /
-                                _indoorWalkingSpeedMetersPerSecond /
+                                indoorWalkingSpeedMetersPerSecond /
                                 60)
                             .ceil()
                             .clamp(1, 999),

@@ -185,19 +185,6 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     });
   }
 
-  Future<void> _refreshIndoorDestinationPin() async {
-    final controller = _mapController;
-    if (controller == null || !_styleReady) return;
-    try {
-      await controller.removeLayer(kOutdoorIndoorDestLayerId);
-      await addIndoorDestinationPinLayer(controller);
-      await _syncIndoorDestinationLayer();
-    } catch (error, stackTrace) {
-      // hot reload 편의 기능이라 실패해도 앱을 죽이지 않는다.
-      debugPrint('destination pin refresh failed: $error\n$stackTrace');
-    }
-  }
-
   /// 건물(입구·footprint·층 목록)을 로드한다.
   ///
   /// **실패를 조용히 삼키면 안 된다.** 이 화면의 실내 기능은 전부 [_building]과
@@ -408,7 +395,7 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
       return;
     }
     if (!position.accuracy.isFinite ||
-        position.accuracy > _lowAccuracyThresholdMeters) {
+        position.accuracy > lowAccuracyThresholdMeters) {
       return;
     }
 
@@ -418,7 +405,7 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
       previousTraveledM: _outdoorDisplayProgress?.traveledM,
     );
     if (candidate == null ||
-        candidate.offsetM > _outdoorRouteMaxProjectionOffsetM ||
+        candidate.offsetM > outdoorRouteMaxProjectionOffsetM ||
         candidate.reacquired) {
       return;
     }
@@ -426,7 +413,7 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     final previous = _outdoorDisplayProgress;
     if (previous != null &&
         candidate.traveledM <
-            previous.traveledM - _outdoorRouteRegressionToleranceM) {
+            previous.traveledM - outdoorRouteRegressionToleranceM) {
       return;
     }
     _outdoorDisplayProgress = candidate;
@@ -668,11 +655,7 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     _clearPendingOutdoorRoute();
     // 완료 이력은 들고 간다. 이 호출은 같은 여정의 다음 구간이라, 거울상인
     // [_activatePendingIndoorRoute]가 야외 회색선을 남겨 두는 것과 대칭이다.
-    await showRouteTo(
-      destination,
-      label: label,
-      keepCompletedHistory: true,
-    );
+    await showRouteTo(destination, label: label, keepCompletedHistory: true);
   }
 
   /// 실내→야외 예약을 접는다. 그 안내가 더는 유효하지 않은 모든 자리에서 부른다.
@@ -1087,80 +1070,20 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
   /// [_animateCameraToFitPoints]처럼 `newCameraPosition`으로 직접 계산해야 한다.
   Future<void> _fitCameraToRouteSegment(
     IndoorRoute route, {
-    Duration duration = _routeOverviewDuration,
+    Duration duration = routeOverviewDuration,
   }) async {
     // 바로 옆 매장이면 담을 것이 없다 — 물러섰다 돌아오는 동작만 남는다.
-    if (route.distanceMeters < _routeOverviewMinDistanceM) return;
+    if (route.distanceMeters < routeOverviewMinDistanceM) return;
     // 퇴화한 경로(점 2개, 일직선)를 견디는 몫은 [routeBoxFor]가 진다.
-    final box = routeBoxFor(route.points, minSideM: _routeFitMinSideM);
+    final box = routeBoxFor(route.points, minSideM: routeFitMinSideM);
     if (box == null) return;
     await _animateCameraToFitBox(
       box,
-      topChromePx: _guidanceFitTopChromePx,
-      bottomChromePx: _guidanceFitBottomChromePx,
+      topChromePx: guidanceFitTopChromePx,
+      bottomChromePx: guidanceFitBottomChromePx,
       duration: duration,
-      maxZoom: _routeFitMaxZoom,
+      maxZoom: routeFitMaxZoom,
     );
-  }
-
-  /// 야외 목적지 핀.
-  ///
-  /// **[_entrance]로 폴백하지 않는다.** 그 값은 진입/이탈 판정의 기준점이지
-  /// 목적지가 아니다. 문 좌표가 채워지면서([_syncSelectedEntrance]) 폴백이
-  /// 되살아났고, 앱을 켜고 GPS가 잡히기만 하면 아무도 고르지 않은 문에 빨간
-  /// 핀이 찍혔다 — 경로 쪽에서 같은 폴백을 걷어낸 것과 같은 이유다.
-  ///
-  /// **문을 경유하는 안내 중에도 찍지 않는다.** 그때 [_userDestination]은
-  /// 목적지가 아니라 지나갈 문이고, 진짜 목적지는 건물 안이라 실내 도착 핀이
-  /// 따로 찍힌다([_syncIndoorDestinationLayer]). 둘 다 찍으면 야외 선이 끝나는
-  /// 자리에 "여기가 목적지"로 읽히는 핀이 하나 더 생긴다.
-  Future<void> _syncDestinationLayer() async {
-    final controller = _mapController;
-    if (controller == null || !_styleReady) return;
-    final passingThroughDoor =
-        _pendingIndoorRoute != null || _pendingIndoorDestination != null;
-    final target = passingThroughDoor ? null : _userDestination;
-    await syncPointSource(controller, kOutdoorDestSourceId, target);
-  }
-
-  /// 실내 경로의 도착 노드에 물방울 핀을 찍는다.
-  ///
-  /// 핀을 찍는 좌표는 매장 중심(centroid)이 아니라 **경로의 마지막 점**이다 —
-  /// 그래프 도착 노드는 매장 입구라 centroid와 몇 미터 어긋나고, 그 상태로
-  /// centroid에 찍으면 경로선이 핀에 닿지 않고 끊긴 것처럼 보인다. 경로가 아직
-  /// 계산되기 전 짧은 순간에는 경로가 없으므로 centroid로 폴백해 핀이 아예
-  /// 안 보이는 구간을 만들지 않는다(실내 화면의 _destinationPinForCurrentFloor와
-  /// 같은 규칙).
-  ///
-  /// 다층 경로에서는 **도착지 층을 보고 있을 때만** 찍는다. 중간 층은 지나가는
-  /// 층이라 그 층 좌표에 도착 핀이 있으면 "여기가 목적지"로 잘못 읽힌다.
-  Future<void> _syncIndoorDestinationLayer() async {
-    final controller = _mapController;
-    if (controller == null || !_styleReady) return;
-    await syncPointSource(
-      controller,
-      kOutdoorIndoorDestSourceId,
-      _indoorDestinationPinForActiveFloor(),
-    );
-  }
-
-  ll.LatLng? _indoorDestinationPinForActiveFloor() {
-    final destination = _indoorRouteDestination;
-    if (destination == null) return null;
-    final multi = _indoorMultiFloorRoute;
-    if (multi != null) {
-      if (multi.destinationSegment.floorName != _activeFloor) return null;
-      final points = multi.destinationSegment.route.points;
-      return points.isNotEmpty ? points.last : destination.point;
-    }
-    final segment = _indoorRouteSegment;
-    if (segment != null && segment.points.isNotEmpty) {
-      return segment.points.last;
-    }
-    // 단일 층 경로는 목적지 층에서만 그려진다. 층을 옮기면 _switchOverlayFloor가
-    // 세그먼트를 비우므로, 그때는 목적지 층이 아닌 곳에 centroid 폴백 핀이
-    // 남지 않도록 층을 직접 확인한다.
-    return destination.floor == _activeFloor ? destination.point : null;
   }
 
   /// 고른 대중교통 경로를 지도에 그린다.
@@ -1214,121 +1137,6 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
   ll.LatLng? entranceNearestTo(ll.LatLng point) =>
       nearestEntrance(_groundEntrances, point)?.point;
 
-  /// 대중교통 경로선을 지도에 반영한다. feature로 펼쳐 소스에 쓰는 일은
-  /// [syncTransitLayer]가 한다.
-  Future<void> _syncTransitLayer() async {
-    final controller = _mapController;
-    if (controller == null || !_styleReady) return;
-    await syncTransitLayer(controller, _transitItinerary);
-  }
-
-  Future<void> _syncRouteLayer() {
-    final scheduled = _routeLayerWriteQueue.then<void>(
-      (_) => _syncRouteLayerNow(),
-    );
-    _routeLayerWriteQueue = scheduled.catchError((Object _, StackTrace _) {});
-    return _routeLayerWriteQueue;
-  }
-
-  Future<void> _syncRouteLayerNow() async {
-    final controller = _mapController;
-    if (controller == null || !_styleReady) return;
-    final transferSegment = _indoorMultiFloorRoute?.segmentForFloor(
-      _activeFloor ?? '',
-    );
-    final transferPoints = transferSegment == null
-        ? null
-        : transferRoutePointsOnFloor(transferSegment, _floorPlan, _floorGraph);
-    await controller.setGeoJsonSource(
-      kOutdoorTransferRouteSourceId,
-      transferPoints == null || transferPoints.length < 2
-          ? emptyGeoJsonCollection()
-          : geoJsonCollection([
-              geoJsonLineFeature(transferPoints, style: 'indoor'),
-            ]),
-    );
-    // 실내 경로가 활성이면 그걸 우선 그린다(GPS 걷기 경로와 동시에 표시하지
-    // 않는다 — 사용자는 지금 실내에 있고 실내 경로가 유일한 관심사).
-    final indoor = _indoorRouteSegment;
-    if (indoor != null && indoor.points.length >= 2) {
-      final visuals = _indoorRouteVisuals(indoor);
-      await _syncCompletedRouteLayer(
-        scopeId: _activeFloor,
-        currentCompleted: visuals.completed,
-      );
-      await controller.setGeoJsonSource(
-        kOutdoorRouteSourceId,
-        visuals.remaining.length < 2
-            ? emptyGeoJsonCollection()
-            : geoJsonCollection([
-                geoJsonLineFeature(visuals.remaining, style: 'indoor'),
-              ]),
-      );
-      return;
-    }
-    final outdoorVisuals = _outdoorRouteVisuals(_route);
-    await _syncCompletedRouteLayer(
-      scopeId: CompletedRouteHistory.outdoorScope,
-      currentCompleted: outdoorVisuals.completed,
-    );
-    final features = <Map<String, dynamic>>[];
-    final route = _route;
-    if (route != null && outdoorVisuals.remaining.length >= 2) {
-      features.add(
-        geoJsonLineFeature(
-          outdoorVisuals.remaining,
-          style: _routeIsDriving ? 'drive' : 'walk',
-        ),
-      );
-    }
-    // **밖에서도 실내 구간을 미리 보여준다.** 아직 승격 전이라 상태는
-    // [_pendingIndoorRoute]에 있다. 예전에는 건물에 들어가야 그려져서, 안내를
-    // 받아 든 사용자가 "매장까지"라는 라벨만 보고 정작 건물 안 어디로 가는지는
-    // 도착할 때까지 알 수 없었다.
-    //
-    // 지금 펼쳐 둔 층의 구간만 그린다. 여러 층을 한꺼번에 겹쳐 그리면 같은
-    // 좌표 위에 선이 여러 겹 쌓여, 어느 것이 이 층의 길인지 알 수 없다 —
-    // 층 chip을 넘기면 그 층의 구간이 이어서 보인다.
-    final preview = _pendingIndoorRoute?.segmentForFloor(_activeFloor ?? '');
-    if (preview != null && preview.route.points.length >= 2) {
-      features.add(geoJsonLineFeature(preview.route.points, style: 'indoor'));
-    }
-    await controller.setGeoJsonSource(
-      kOutdoorRouteSourceId,
-      features.isEmpty ? emptyGeoJsonCollection() : geoJsonCollection(features),
-    );
-  }
-
-  /// 사용자에게 보여 줄 회색선 source를 갱신한다.
-  ///
-  /// [currentCompleted]는 아직 재탐색 이력으로 승격되지 않은 현재 경로의
-  /// 완료 구간이다. 재탐색이 확정되면 같은 점들이
-  /// [_completedRouteHistory]에 저장되고, 새 파란 경로가 이 자리를 대체한다.
-  /// GuidanceTrailSession은 여기에 들어오지 않는다.
-  Future<void> _syncCompletedRouteLayer({
-    required String? scopeId,
-    List<ll.LatLng> currentCompleted = const [],
-  }) async {
-    final controller = _mapController;
-    if (controller == null || !_styleReady) return;
-    final segments = <List<ll.LatLng>>[];
-    if (scopeId != null) {
-      segments.addAll(_completedRouteHistory.segmentsFor(scopeId));
-    }
-    if (currentCompleted.length >= 2) {
-      segments.add(currentCompleted);
-    }
-    await controller.setGeoJsonSource(
-      kOutdoorWalkedRouteSourceId,
-      segments.isEmpty
-          ? emptyGeoJsonCollection()
-          : geoJsonCollection([
-              for (final segment in segments)
-                geoJsonLineFeature(segment, generation: _routeGeneration),
-            ]),
-    );
-  }
-
   /// 실내/야외 경로 중 하나라도 활성이면 true. ETA 카드 노출과 하단 바 리프트
   /// 판정에 쓴다.
   bool get _hasAnyRouteVisible =>
@@ -1337,286 +1145,4 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
       _indoorRouteSegment != null ||
       _indoorMultiFloorRoute != null;
 
-  /// 사용자가 **직접 고른** 목적지로 안내 중인지. 안내 chrome(검색창·카테고리
-  /// 줄·층 선택기·하단 바)을 접을지의 유일한 판정 기준이다.
-  ///
-  /// 판정 규칙과 그렇게 나눈 이유는 [shouldFoldGuidanceChrome]에 있다. 요약하면
-  /// **접는 조건은 종료 버튼이 있는 조건과 같아야 한다** — 아래 ETA 카드 두
-  /// 분기가 `onClose`를 다는 조건과 이 getter가 정확히 맞물려야 하고, 어느
-  /// 한쪽을 고치면 그 함수를 통해 다른 쪽도 같이 바뀐다.
-  bool get _guidanceActive => shouldFoldGuidanceChrome(
-    hasUserDestination: _userDestination != null,
-    hasIndoorRouteDestination: _indoorRouteDestination != null,
-    hasComputedRoute: _route != null,
-  );
-
-  void _notifyRouteStateIfChanged() {
-    final visible = _hasAnyRouteVisible;
-    if (visible != _lastRouteVisibleNotified) {
-      _lastRouteVisibleNotified = visible;
-      widget.onRouteVisibleChanged?.call(visible);
-    }
-    final guiding = _guidanceActive;
-    if (guiding != _lastGuidanceActiveNotified) {
-      _lastGuidanceActiveNotified = guiding;
-      widget.onGuidanceActiveChanged?.call(guiding);
-    }
-  }
-
-  /// 세션에 스냅샷을 넘기고, 나온 보정 결과를 로그에 남긴다.
-  ///
-  /// 층·그래프·앵커·경로는 세션이 들고 있으므로 여기서 다시 확인하지 않는다.
-  /// 두 곳에서 같은 조건을 세면 반드시 한쪽이 먼저 낡는다.
-  /// 실내 안내를 지금 건물에 붙인다.
-  ///
-  /// 진입 시점에 건물이 아직 로드되지 않았을 수 있다. 그때 빈 id로 붙여 두면
-  /// GPS 추정점의 건물이 영원히 안 맞아 폴백 표시가 조용히 죽는다. 로드된 뒤
-  /// 처음 오는 스냅샷에서 제대로 붙인다.
-  void _ensureGuidanceAttached() {
-    final buildingId = _building?.id;
-    if (buildingId == null || _guidance.buildingId == buildingId) return;
-    _guidance.attach(buildingId: buildingId);
-  }
-
-  /// 실내 경로 진행률을 갱신한다. 계산은 세션이, 다시 그리기는 여기가 한다.
-  ///
-  /// 홈에도 이게 필요한 이유는 ETA 카드 때문이다. 예전에는 경로 전체 길이를
-  /// 고정으로 보여줘서, 목적지 앞에 서 있어도 출발할 때와 같은 거리가 떠 있었다.
-  void _syncIndoorRouteProgress(
-    CorridorTrackingResult? result,
-    PdrSnapshot? snapshot,
-  ) {
-    if (!_indoorEntered) return;
-    final anchor = _pdrTrailState.anchor;
-    final toFloor = anchor == null ? null : FloorCoordinateTransform(anchor);
-    final update = _guidance.updateProgress(
-      result,
-      rerouteInFlight: _indoorRerouteInFlight,
-      confirmedSteps: snapshot?.steps,
-      previewSteps: snapshot?.preview.steps,
-      orientationHeadingDeg: snapshot == null || toFloor == null
-          ? null
-          : toFloor.toFloorBearing(snapshot.orientationHeadingDeg),
-      walkingHeadingDeg: snapshot == null || toFloor == null
-          ? null
-          : toFloor.toFloorBearing(snapshot.walkingHeadingDeg),
-    );
-    for (final advance in update.stepAdvances) {
-      _pdrDebugRecorder?.recordRouteStepAdvance(
-        advance.step,
-        transition: advance.transition,
-      );
-    }
-    for (final event in update.checkpointEvents) {
-      _pdrDebugRecorder?.recordCheckpointEvent(event);
-    }
-    final measured = update.measuredProgress;
-    if (measured != null) {
-      _pdrDebugRecorder?.recordRouteProgress(
-        measured,
-        displayProgress: update.displayProgress,
-        holdReason: update.holdReason,
-      );
-    }
-    if (update.shouldReroute &&
-        DateTime.now().millisecondsSinceEpoch - _lastIndoorRerouteAtMs >=
-            2000) {
-      unawaited(_rerouteIndoorFromCurrentPosition());
-    }
-    if (mounted) setState(() {});
-    _syncArrivalHighlight();
-    _syncArrival();
-  }
-
-  /// 도착을 화면에 반영한다 — 도착 카드를 띄우고, 잠시 뒤 경로를 스스로 지운다.
-  ///
-  /// 판단은 [decideArrivalAutoClear]가 한다. 여기서 조건을 다시 세지 않는 이유는
-  /// "도착 상태에 들락날락하는 동안 카운트다운을 다시 걸지 않는다"는 규칙이
-  /// 걸음마다 돌아가는 이 자리에서 제일 틀리기 쉽기 때문이다.
-  void _syncArrival() {
-    if (!mounted) return;
-    final decision = decideArrivalAutoClear(
-      action: _indoorRouteGuidance?.action,
-      // 측정된 진행률이 없으면 "걸어서 도착"이 아니라 애초에 가까운 것이다.
-      hasMeasuredProgress: _guidance.measuredProgress != null,
-      alreadyScheduled: _arrivalRouteClearTimer != null,
-    );
-    switch (decision) {
-      case ArrivalAutoClearDecision.keep:
-        return;
-      case ArrivalAutoClearDecision.cancel:
-        // 도착 지점을 지나쳐 계속 걸어간 경우다. 카드는 **지우지 않는다** —
-        // 한 번 "도착했습니다"라고 말해 놓고 조용히 거두면 사용자는 자기가
-        // 잘못 본 줄 안다. 카드를 닫는 것은 사용자의 확인뿐이다.
-        _arrivalRouteClearTimer?.cancel();
-        _arrivalRouteClearTimer = null;
-        return;
-      case ArrivalAutoClearDecision.schedule:
-        final destination = _indoorRouteDestination;
-        if (destination == null) return;
-        setState(() => _arrivedDestination = destination);
-        _arrivalRouteClearTimer = Timer(arrivalAutoClearDelay, () {
-          _arrivalRouteClearTimer = null;
-          if (!mounted) return;
-          // 경로·핀·하단 배너를 정리한다. 도착 카드는 남는다 — 그것이 지금
-          // 화면에서 유일하게 "끝났다"고 말하는 것이다.
-          _clearIndoorRoute();
-        });
-    }
-  }
-
-  /// 도착 카드의 `안내 종료`. 남은 여정을 통째로 정리한다.
-  void _confirmArrival() {
-    _arrivalRouteClearTimer?.cancel();
-    _arrivalRouteClearTimer = null;
-    setState(() => _arrivedDestination = null);
-    _dismissIndoorRouteFromEtaCard();
-  }
-
-  /// 도착한 순간 목적지 매장 폴리곤을 강조하고, 벗어나면 되돌린다.
-  ///
-  /// 카드가 "여기에 도착했다"고 말할 때 지도에서 **그 여기가 어디인지**를 함께
-  /// 보여 준다. 이름만 적힌 카드로는 눈앞의 여러 매장 중 어느 쪽인지 알 수 없다.
-  ///
-  /// 도착이 아닐 때 강조를 지우는 쪽도 함께 둔다 — 도착 판정은 걸음에 따라
-  /// 들락날락할 수 있어서, 켜기만 하면 지나쳐 걸어간 뒤에도 강조가 남는다.
-  /// 사용자가 매장을 눌러 직접 켜 둔 강조는 건드리지 않는다.
-  void _syncArrivalHighlight() {
-    if (!mounted) return;
-    final destinationId = _indoorRouteDestination?.placeId;
-    if (destinationId == null) return;
-    final arrived = _indoorRouteGuidance?.action == RouteGuidanceAction.arrived;
-    final shouldHighlight = arrived ? destinationId : null;
-    if (shouldHighlight == null && _highlightedStoreId != destinationId) return;
-    if (_highlightedStoreId == shouldHighlight) return;
-    setState(() => _highlightedStoreId = shouldHighlight);
-    unawaited(_syncHighlightLayer());
-  }
-
-  /// 경로를 벗어난 것이 확인되면 목적지는 유지한 채 현 위치에서 다시 뽑는다.
-  ///
-  /// **층 선택기 층이 아니라 앵커 층을 기준으로 한다.** 선택기는 사용자가 다른
-  /// 층을 둘러보는 UI 상태일 뿐이다. 그 층으로 재탐색하면 다층 안내 중간
-  /// 세그먼트가 단층 경로로 바뀌어 최종 도착처럼 보인다.
-  Future<void> _rerouteIndoorFromCurrentPosition() async {
-    if (_indoorRerouteInFlight) return;
-    final destination = _indoorRouteDestination;
-    final destinationNodeId = destination?.nodeId;
-    final floor = _pdrTrailState.anchor?.floorId;
-    final graph = _floorGraph;
-    final buildingId = _building?.id;
-    final current = _guidance.trackingResult?.previewPosition;
-    if (destination == null ||
-        destinationNodeId == null ||
-        floor == null ||
-        graph == null ||
-        buildingId == null ||
-        current == null) {
-      return;
-    }
-    final startNodeId = _nearestNodeId(
-      graph.nodes,
-      current.eastM,
-      current.northM,
-      excludingNodeId: destinationNodeId,
-    );
-    if (startNodeId == null) return;
-
-    _indoorRerouteInFlight = true;
-    try {
-      // **재탐색에는 개요 연출을 붙이지 않는다.** 재탐색은 사용자가 걷고 있는
-      // 도중에 일어난다. 그때 카메라가 경로 전체를 담으러 크게 물러섰다 돌아오면
-      // 연출이 아니라 방해다 — 다음 걸음을 보려던 화면이 통째로 바뀐다.
-      if (destination.floor == floor) {
-        await _computeAndShowSingleFloorIndoorRoute(
-          buildingId: buildingId,
-          floor: floor,
-          endNodeId: destinationNodeId,
-          playOverview: false,
-          // 이탈 재탐색 — 같은 길안내의 연속이다.
-          beginNewRecordingSession: false,
-          startNodeId: startNodeId,
-        );
-      } else {
-        await _computeAndShowMultiFloorIndoorRoute(
-          buildingId: buildingId,
-          startFloor: floor,
-          endFloor: destination.floor,
-          endNodeId: destinationNodeId,
-          playOverview: false,
-          beginNewRecordingSession: false,
-          startNodeId: startNodeId,
-        );
-      }
-      _lastIndoorRerouteAtMs = DateTime.now().millisecondsSinceEpoch;
-    } finally {
-      _indoorRerouteInFlight = false;
-    }
-  }
-
-  /// 지금 이 층 실내 경로의 턴바이턴 안내. 없으면 null.
-  ///
-  /// 실내 탭과 같은 규칙을 쓴다 — 도착 안내는 **목적지 세그먼트에서만** 낸다.
-  /// 중간 층 세그먼트의 끝은 도착이 아니라 환승이라, 거기서 "도착했습니다"를
-  /// 띄우면 사용자가 남은 층을 안 가고 멈춘다.
-  RouteGuidanceInstruction? get _indoorRouteGuidance {
-    final route = _indoorRouteSegment;
-    if (route == null || route.pointsLocalM.isEmpty) return null;
-    // **실내 위치가 없으면 한 줄 안내를 내지 않는다.**
-    //
-    // [buildRouteGuidance]는 진행률이 null이면 경로 **전체**를 기준으로 다음
-    // 회전을 찾는다. 그래서 건물 밖에 서 있어도 "110미터 후 에스컬레이터 탑승"
-    // 같은 문장이 떴다 — 사용자는 아직 버스에서 내려 걷는 중인데 화면은 건물 안
-    // 몇 미터 앞을 말한다. 실내 오버레이만으로 가르면 안 되는 이유는, 그 오버레이가
-    // 건물로 확대하기만 해도 켜지기 때문이다(indoor_entry_zoom.dart).
-    //
-    // 기준은 "우리가 이 사람이 실내 어디에 있는지 아는가"다. 그게 곧 진행률의
-    // 출처이고, 진입을 실제로 감지해 앵커를 잡았을 때만 참이 된다.
-    if (_guidance.displayProgress == null) return null;
-    final multi = _indoorMultiFloorRoute;
-    final segment = multi?.segmentForFloor(_activeFloor ?? '');
-    final allowArrival =
-        multi == null ||
-        (segment != null &&
-            identical(segment, multi.destinationSegment) &&
-            _activeFloor == _indoorRouteDestination?.floor);
-    return buildRouteGuidance(
-      localPoints: route.pointsLocalM,
-      wgs84Points: route.points,
-      progress: _guidance.displayProgress,
-      travelDirectionState: _guidance.travelDirectionState,
-      transferMode: segment?.transferModeToNext,
-      allowArrival: allowArrival,
-    );
-  }
-
-  void _beginRouteRecordingSession() {
-    _ensureGuidanceTrailSessionStarted();
-    _pdrDebugRecorder = PdrDebugSessionRecorder()
-      ..recordRuntime(indoorNavigationDriver.currentRuntimeStatus);
-    final snapshot = indoorNavigationDriver.currentSnapshot;
-    if (snapshot != null) _pdrDebugRecorder?.recordSnapshot(snapshot);
-    _pdrDebugRecorder?.recordCalibration(
-      indoorNavigationDriver.currentCalibration,
-    );
-  }
-
-  /// 경로가 해제되면 세션을 닫는다. [announceExport]는 세션 경계 기록에만 쓴다
-  /// — 사용자가 끝낸 것(routeEnded)과 새 경로로 갈아탄 것(routeReplaced)을
-  /// 사후 분석에서 구분하기 위해서다.
-  ///
-  /// 예전에는 여기서 "진단 JSON을 내보낼 수 있다"는 토스트를 띄웠다. 안내가
-  /// 끝나는 순간은 도착 카드가 뜨는 순간이라 토스트가 그 위를 덮었고, 내보내기
-  /// 진입점은 디버그 모드의 공유 버튼([PdrMapControl])이 이미 지도에 상시로
-  /// 있다 — 같은 일을 하는 두 번째 입구가 화면을 가리기만 했다.
-  void _endRouteRecordingSession({bool announceExport = true}) {
-    final recorder = _pdrDebugRecorder;
-    if (recorder == null) return;
-    final snapshot = indoorNavigationDriver.currentSnapshot;
-    if (snapshot != null) recorder.recordSnapshot(snapshot);
-    recorder.recordRuntime(indoorNavigationDriver.currentRuntimeStatus);
-    recorder.recordSessionBoundary(
-      announceExport ? 'routeEnded' : 'routeReplaced',
-    );
-  }
 }

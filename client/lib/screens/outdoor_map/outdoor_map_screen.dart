@@ -75,6 +75,8 @@ import 'indoor_entry_gps.dart';
 import 'building_orientation.dart';
 import 'indoor_entry_proximity.dart';
 import 'indoor_entry_zoom.dart';
+import 'outdoor_map_tuning.dart';
+import 'widgets/placing_anchor_hint.dart';
 import 'route_recompute_policy.dart';
 import 'indoor_overlay_layers.dart';
 import 'map_camera_commands.dart';
@@ -88,80 +90,17 @@ import 'transit_map_layers.dart';
 part 'outdoor_map_screen_escalator.dart';
 part 'outdoor_map_screen_pdr.dart';
 part 'outdoor_map_screen_route.dart';
+part 'outdoor_map_screen_guidance.dart';
+part 'outdoor_map_screen_route_layers.dart';
 part 'outdoor_map_screen_indoor.dart';
+part 'outdoor_map_screen_floor_switch.dart';
+part 'outdoor_map_screen_store_tap.dart';
 part 'outdoor_map_screen_gps.dart';
 part 'outdoor_map_screen_map.dart';
 part 'outdoor_map_screen_ui.dart';
 
-// 위치 조회 실패 시 대체 좌표 (서울시청). 저장·전달은 latlong2 타입으로 하고
-// MapLibre API에 넘길 때만 [_toGl]로 변환한다 — 이 파일 외부(Building.entrance,
-// DirectionsRoute.points)가 latlong2를 쓰고 있어 그 타입을 저장 형식으로 유지한다.
-const _fallbackLocation = ll.LatLng(37.5665, 126.9780);
-// 'GPS 신호 약함' 배지 임계값.
-//
-// 진입 판정이 쓰는 [decisiveAccuracyMeters](20 m)보다 느슨하다. 배지는 "이 좌표를
-// 믿지 말라"는 경고이고 판정은 "이 좌표로 결론을 내도 되는가"라, 후자가 더
-// 엄격한 것이 맞다 — 20~30 m 구간에서는 배지 없이 판정만 보류한다.
-const _lowAccuracyThresholdMeters = 30.0;
-// 야외 완료선은 GPS가 이 거리 이상 경로에서 떨어진 틱을 채택하지 않는다.
-// 정확도 원 안에 경로가 들어오지 않는 상태에서 억지로 투영하면, 건물 안쪽이나
-// 평행한 도로를 걸은 흔적이 계획 경로 위에 회색으로 그려진다.
-const _outdoorRouteMaxProjectionOffsetM = 25.0;
-// GPS가 조금 흔들릴 때 진행점이 앞뒤로 떨리는 것을 표시하지 않는다. 실제로
-// 되돌아 걷는 경우에도 이미 지나온 선은 완료 이력으로 남아야 하므로, 야외
-// 사용자 선은 단조 증가 정책을 쓴다.
-const _outdoorRouteRegressionToleranceM = 2.0;
-// 실내 경로 ETA 분 계산에 쓰는 평균 걷기 속도. 실내 화면 상수와 일치시켜야
-// 같은 목적지 라우팅에서 두 화면 사이 표시가 어긋나지 않는다.
-const _indoorWalkingSpeedMetersPerSecond = 1.2;
-
 // 건물 진입/이탈 판정 정책은 indoor_entry_gps.dart가 소유한다. 임계값과 그 근거,
 // "왜 직전 값 대비 비율이 아닌가"는 전부 그쪽 주석에 있다.
-
-// 자동 진입 직후 입구를 기준으로 실내 위치(PDR 앵커)를 잡을 때, 입구 좌표에서
-// 통행 그래프까지 허용하는 최대 거리(m).
-//
-// 사용자가 손으로 찍는 경우(_maxPdrAnchorSnapDistanceM, 40 m)보다 좁게 잡는다.
-// 그쪽은 "화면에서 건물이 작게 보여 탭이 빗나가는" 오차를 감싸야 하지만, 여기서
-// 비교하는 두 좌표는 백엔드가 내려준 입구와 같은 백엔드가 내려준 통행 그래프라
-// 둘이 크게 벌어졌다면 그건 손 떨림이 아니라 **데이터 정합이 깨진 상태**다.
-// 그런 상태에서 억지로 스냅하면 건물 반대편 복도에 위치를 찍어 놓고 거기서부터
-// 걸음을 쌓는다 — 위치가 없는 것보다 나쁘다.
-// 자동차 안내를 시작할 때 현재 위치로 내려가며 맞추는 zoom. 다음 교차로가
-// 화면에 들어오는 정도이고, 실내 진입 임계값 위라 건물 근처에서 눌러도 도면이
-// 끼어들지 않는다.
-const _carGuidanceZoom = 17.5;
-
-const _maxEntranceAnchorSnapDistanceM = 25.0;
-
-// 자동 진입 때 GPS 좌표를 통로에 붙일 수 있는 최대 거리(m).
-//
-// 문 폴백([_maxEntranceAnchorSnapDistanceM])보다 조인다. 문은 "여기로 들어왔다"가
-// 확실한 지점이지만 GPS 좌표는 오차 반경을 달고 오므로, 통로에서 멀면 매장
-// 한가운데를 가리키고 있을 가능성이 크다. 그때는 억지로 붙이지 않고 문으로
-// 떨어지는 편이 낫다.
-const _maxIndoorGpsSnapDistanceM = 15.0;
-
-// 자동 앵커를 확정하기 전에 센서 세션의 첫 보고를 기다리는 최대 시간.
-// 근거는 [_awaitSensorWarmup] 주석 참고.
-const _sensorWarmupTimeout = Duration(seconds: 2);
-
-// GPS course(진행 방향)를 신뢰할 수 있다고 보는 최소 속도(m/s). 이보다 느리면
-// 플랫폼이 채워 넣는 0°를 "정북으로 걸어 들어왔다"로 오독하게 된다.
-const _entryCourseMinSpeedMps = 0.5;
-
-// 검색 결과에서 고른 야외 장소로 옮길 때의 zoom. 건물 하나가 화면에 들어오는
-// 정도이고, 실내 진입 임계보다 낮게 둬 위치만 확인하는 이동이 실내 진입으로
-// 읽히지 않게 한다.
-const _poiFocusZoom = 17.0;
-
-// TMAP POI 좌표가 이만큼 안에 있으면 그 건물의 가게로 본다.
-//
-// 엄격한 폴리곤 판정으로는 안 된다 — TMAP이 주는 좌표는 대표점이 아니라
-// **도로에서 들어오는 접근점**(frontLat/frontLon)이라 백화점 입점 매장도
-// 건물 벽 바깥 인도에 찍힌다. 여유가 남의 가게를 삼킬 여지는 좁다. 이 판정만으로
-// 두 줄을 합치는 것이 아니라 브랜드 이름까지 맞아야 하기 때문이다.
-const _poiBuildingProximityMeters = 40.0;
 
 // 실내 지도와 같은 이유. maplibre_gl은 web/android/iOS만 지원하므로
 // 데스크톱에서는 사전에 안내를 보여주고 지도 자체는 그리지 않는다.
@@ -191,145 +130,16 @@ bool get _isMapSupportedOnThisPlatform =>
 // pdr_debug_map_layers.dart가 소유한다. 여기서는 무엇을 보여줄지(토글·층·앵커
 // 판단)만 정해 완성된 데이터를 넘긴다.
 
-// 건물 폴리곤의 기본/눌린 상태 fill opacity. 기본은 옅게 존재만 알리고,
-// 사용자가 탭한 순간 잠깐 진하게 반짝여서 "인식됐다"는 시각 피드백을 준다.
-const _buildingFillOpacityDefault = 0.15;
-const _buildingFillOpacityPressed = 0.45;
-// 탭 후 오버레이 페이드인이 완료되는 시간 감각. 시각 피드백이 잠깐 이어져야
-// "인식됐다" 느낌을 준다.
-const _buildingPressedHoldMs = 220;
-
-/// 건물을 탭해 실내로 들어갈 때 카메라가 확대되는 시간.
-///
-/// 너무 빠르면(≤400ms) 한 번에 갈아 낀 것과 구분이 안 되고, 너무 느리면
-/// (≥1.5s) 탭에 대한 반응이 굼떠 두 번 누르게 된다. 900ms면 확대되는 과정이
-/// 눈에 남으면서도 기다린다는 느낌은 들지 않는다.
-///
-/// 반짝임([_buildingPressedHoldMs] 220ms)이 끝난 **뒤에** 시작하므로, 탭부터
-/// 도면이 자리 잡기까지는 약 1.1초다.
-const _indoorZoomInDuration = Duration(milliseconds: 900);
-
-/// 층을 갈아탈 때 카메라가 새 층 외곽선에 다시 맞춰지는 시간.
-///
-/// 진입([_indoorZoomInDuration])보다 짧다. 진입은 "밖에서 안으로 들어간다"는
-/// 큰 장면 전환이라 과정을 보여 줘야 하지만, 층 전환은 이미 같은 건물 안에서
-/// 도면만 갈아 끼우는 것이라 같은 900ms를 쓰면 층을 훑을 때마다 지도가 느릿하게
-/// 따라와 답답하다.
-const _floorSwitchZoomDuration = Duration(milliseconds: 500);
-
-/// 안내를 시작할 때 경로 전체를 담으러 물러서는 시간.
-///
-/// 진입(900ms)보다 짧고 층 전환(500ms)보다 길다. 진입만큼 큰 장면 전환은
-/// 아니지만 "지금부터 이 길로 간다"를 읽을 시간은 줘야 한다.
-const _routeOverviewDuration = Duration(milliseconds: 700);
-
-/// 개요 연출을 하지 않는 경로 길이(m).
-///
-/// 바로 옆 매장이면 담을 것이 없다. 물러섰다 돌아오는 동작만 남아 화면이
-/// 까닭 없이 출렁인다. 걷기 경로 쪽 [_fitCameraToRoute]의 5m 가드와 같은 취지다.
-const _routeOverviewMinDistanceM = 5.0;
-
-/// 경로 상자의 변 길이 하한(m).
-///
-/// **없으면 zoom이 발산한다.** 곧게 뻗은 복도 경로는 최소 넓이 상자의 짧은 변이
-/// 0에 수렴하는데, [zoomToFitWidth]는 `log(가용폭 / 폭)`이라 폭이 0이면 무한대를
-/// 돌려준다. 12m는 복도 폭 남짓이라, 곧은 경로도 양옆이 조금 보이는 배율에서
-/// 멈춘다.
-const _routeFitMinSideM = 12.0;
-
-/// 경로 개요가 확대해 들어가는 상한.
-///
-/// 하한([_routeFitMinSideM])만으로는 짧은 세그먼트에서 배율이 지나치게
-/// 올라간다 — 층 전환 직후 15m짜리 B1 세그먼트가 복도 하나만 꽉 채운 화면이
-/// 됐다. 경로가 화면에 다 들어와도 **주변 매장 몇 개는 함께 보여야** 여기가
-/// 어디인지 읽힌다. 타일이 더 세밀해지지 않는 상한(18)보다 반 단계 아래로
-/// 잡아 짧은 경로에서도 맥락이 남게 한다.
-const _routeFitMaxZoom = 17.5;
-
-/// "내 위치로" 버튼이 되돌아가는 배율의 하한.
-///
-/// 개요 연출이 물러선 자리에서 누르면 이만큼 다시 당겨 온다. 실내 타일이 더
-/// 세밀해지지 않는 상한([indoorTilesMaxZoom])을 그대로 쓴다 — 그 위로 확대해도
-/// 도면은 같은 그림을 늘린 것뿐이다.
-///
-/// 이미 이보다 확대해 둔 사용자에게는 **적용하지 않는다.** 무언가를 들여다보려
-/// 당겨 둔 배율을 버튼 한 번에 되돌리면, 위치로 돌아가는 대신 방금 보던 것을
-/// 잃는다.
-const _walkingViewZoom = indoorTilesMaxZoom;
-
-/// "내 위치로" 카메라 이동 시간. 층 전환 재정렬(500ms)보다 짧다 — 사용자가 직접
-/// 누른 조작이라 과정을 보여 줄 이유가 없고, 즉시 반응하는 편이 낫다.
-const _recenterDuration = Duration(milliseconds: 300);
-
 // 사람 조작 층 전환 크로스페이드의 근거·타이밍 정책(즉시 교체 임계, 페이드
 // 길이, 에스컬레이터 모티프 임계)은 core/floor_switch_progress.dart가 단일
 // 출처다.
 
 // 도면을 화면에 맞출 때 채우는 비율은 map_camera_commands.dart가 소유한다.
 
-/// 도면을 맞출 때 화면 위·아래에서 비워 두는 chrome 높이(논리 px).
-///
-/// 이걸 빼지 않으면 도면 한가운데가 화면 한가운데에 오는데, 위쪽은 검색창과
-/// 카테고리 줄이 덮고 있어서 **도면 윗부분 매장이 칩에 가린다.** 아래 chrome이
-/// 위보다 얇으므로, 가려지지 않는 띠의 한가운데로 도면을 내려 놓아야 한다.
-const _floorFitTopChromePx = _placingHintTopPx;
-const _floorFitBottomChromePx = _mapShellBottomChromePx;
-
-/// 안내 중에 화면 위·아래에서 비워 두는 chrome 높이(논리 px).
-///
-/// **층 도면용 값([_floorFitTopChromePx])을 그대로 쓰면 안 된다.** 그 132는
-/// 검색창 + 카테고리 칩 줄 기준인데, 안내가 시작되면 칩 줄은 통째로 접히고
-/// (map_shell_screen의 `_guidanceActive` 분기) 상단 바도 도착지 한 줄로 줄어든다.
-/// 없는 줄만큼 위를 비우면 경로가 필요 이상으로 화면 아래에 눌려 놓인다.
-/// 132에서 칩 줄(높이 ≈32 + 간격 8)을 뺀 값이다.
-///
-/// 아래도 마찬가지다. 하단 바는 안내 중 아예 그려지지 않고([_guidanceActive])
-/// ETA 카드만 화면 맨 아래에 도킹하므로, 카드 높이만 비우면 된다.
-const _guidanceFitTopChromePx = 92.0;
-const _guidanceFitBottomChromePx = _bottomBarLiftPx;
-
 // 실내 진입/이탈 임계값·오버레이 페이드 구간은 서로 얽혀 있어 한 곳에서만
 // 정의한다 — indoor_entry_zoom.dart 참고. 값 하나만 옮겨도 "도면이 다 보이기
 // 전에 실내에서 튕겨 나가는" 증상이나 "이탈 순간 도면이 툭 끊기는" 증상이
 // 조용히 되살아나므로, 관계를 함수로 고정하고 테스트로 지킨다.
-
-// PDR 앵커 배치 시 탭 위치에서 통로 그래프까지 허용하는 최대 거리(m).
-// 야외 지도에서는 건물이 화면 안에서 상대적으로 작게 보이고 탭 정밀도가 떨어져
-// 실내 SVG(12m)보다 크게 잡는다 — 사용자가 매장 폴리곤 안쪽을 탭해도 인근
-// 복도 노드까지 20~25m 벌어지는 경우가 흔하다. 그 이상이면 사실상 건물 밖을
-// 잘못 탭한 것으로 보고 다시 유도한다.
-const _maxPdrAnchorSnapDistanceM = 40.0;
-
-// 층 선택기와 하단 바 사이 baseline 계산에 쓰이는 MapBottomBar 내부 여백
-// (map_bottom_bar.dart의 outer padding).
-const _bottomBarInnerBottomPaddingPx = 14.0;
-// pill 하단을 하단 바의 맨 아래 줄(홈/실내 세그먼트)과 같은 baseline에 앉힌다.
-// 세그먼트는 우측, pill은 좌측이라 같은 줄에 내려도 겹치지 않는다. 실내 화면과
-// 동일한 계산이어야 두 화면 사이 pill 위치가 어긋나지 않는다.
-const _floorSelectorBottomOffset = _bottomBarInnerBottomPaddingPx;
-// 경로 ETA 카드가 화면에 뜨면 하단 바(=층 선택기 기준선)가 이만큼 위로 올라간다.
-// map_shell_screen.dart의 _etaBarLiftHeight와 동일해야 한다.
-const _bottomBarLiftPx = 92.0;
-
-// 홈/실내 세그먼트의 왼쪽에 8px 간격으로 PDR 제어를 붙이는 right inset.
-// indoor_map_screen.dart의 동명 상수와 같은 값이어야 실내 탭과 야외 실내 진입
-// 오버레이에서 PDR 버튼이 같은 자리에 놓인다.
-const _pdrControlRightInsetPx = 184.0;
-
-// PDR 안내 토스트를 하단 바(+ETA 카드) 위로 띄우기 위한 오프셋. 실내 화면의
-// _mapShellBottomChromePx/_etaCardHeightPx와 같은 값을 쓴다.
-const _mapShellBottomChromePx = 112.0;
-const _etaCardHeightPx = 130.0;
-
-// 위치 지정 안내를 상단 chrome 아래에 놓기 위한 오프셋. MapShellScreen의
-// 검색창(top 0)과 그 아래 카테고리 chip 열(top 78, 높이 ≈32) 밑으로 내려야
-// 안내가 chip에 가려지지 않는다. 이 오버레이는 chip 열과 **다른 Stack**에
-// 있으므로 Positioned만으로는 겹침을 피할 수 없다 — SafeArea로 감싸 노치
-// 기기에서 chip 열이 상태바만큼 내려앉는 것까지 같이 따라가야 한다.
-// 실내 화면의 동명 상수(184)와 **일부러 다르다.** 홈에서는 카테고리 칩을 아예
-// 노출하지 않기로 해서 여기 상단 오버레이는 장소 pill 한 줄뿐인 반면, 실내는
-// 대분류·소분류·개수 안내까지 3단이라 그만큼 더 내려야 한다.
-const _placingHintTopPx = 132.0;
 
 // latlong2 <-> MapLibre 타입 브릿지.
 LatLng _toGl(ll.LatLng p) => LatLng(p.latitude, p.longitude);
@@ -503,55 +313,54 @@ class OutdoorMapBody extends StatefulWidget {
   State<OutdoorMapBody> createState() => OutdoorMapBodyState();
 }
 
-  /// 활강 중 마커를 다시 그리는 주기. 위젯 트리를 rebuild하지 않고 지도 소스만
-  /// 갱신하므로(=[_syncPdrCurrentLayer]) 이 정도 빈도를 감당할 수 있다.
-  /// 덮개 카드의 점은 이 값을 보간해 프레임 단위로 부드럽게 그린다.
-  const _escalatorGlideFrame = escalatorGlideSampleInterval;
+/// 활강 중 마커를 다시 그리는 주기. 위젯 트리를 rebuild하지 않고 지도 소스만
+/// 갱신하므로(=[_syncPdrCurrentLayer]) 이 정도 빈도를 감당할 수 있다.
+/// 덮개 카드의 점은 이 값을 보간해 프레임 단위로 부드럽게 그린다.
+const _escalatorGlideFrame = escalatorGlideSampleInterval;
 
-  /// 도면을 갈아 끼운 뒤 덮개를 그대로 두는 시간.
-  ///
-  /// 페이드(진입 520ms · 해제 700ms)까지 더하면 화면이 가려지는 시간은 약 4.7초다.
-  /// 예전 400ms(총 1.6초)에서 두 번 늘렸다 — 처음엔 덮개가 크로스페이드·마커
-  /// 활강보다 먼저 걷혀 교체 과정이 그대로 보였고, 2026-08-13 실측에서는 도면
-  /// 교체가 반 층 시점으로 옮겨지며 "전환 연출을 좀 더 길게 봐도 된다"는
-  /// 피드백을 받았다(남은 탑승 ~10초 중 절반은 여전히 새 도면을 본다).
-  /// 하차까지 덮지는 않는다 — 내리기 전에 새 층 도면과 다음 경로를 봐 둬야 한다.
-  const _indoorFloorSwapVeilHold = Duration(milliseconds: 3500);
+/// 도면을 갈아 끼운 뒤 덮개를 그대로 두는 시간.
+///
+/// 페이드(진입 520ms · 해제 700ms)까지 더하면 화면이 가려지는 시간은 약 4.7초다.
+/// 예전 400ms(총 1.6초)에서 두 번 늘렸다 — 처음엔 덮개가 크로스페이드·마커
+/// 활강보다 먼저 걷혀 교체 과정이 그대로 보였고, 2026-08-13 실측에서는 도면
+/// 교체가 반 층 시점으로 옮겨지며 "전환 연출을 좀 더 길게 봐도 된다"는
+/// 피드백을 받았다(남은 탑승 ~10초 중 절반은 여전히 새 도면을 본다).
+/// 하차까지 덮지는 않는다 — 내리기 전에 새 층 도면과 다음 경로를 봐 둬야 한다.
+const _indoorFloorSwapVeilHold = Duration(milliseconds: 3500);
 
-  /// 층 이동 확정 뒤 도착 배너를 띄워 두는 시간.
-  const _indoorArrivalBannerHold = Duration(seconds: 6);
+/// 층 이동 확정 뒤 도착 배너를 띄워 두는 시간.
+const _indoorArrivalBannerHold = Duration(seconds: 6);
 
-  /// 실패했을 때 스스로 다시 시도하는 간격.
-  ///
-  /// **한 번 실패하면 영영 복구되지 않는 것이 실제 문제였다.** 이 로드는
-  /// initState에서 딱 한 번 돌고, 실패하면 사람이 배지를 누를 때까지 그대로
-  /// 남는다. 그런데 개발 중에는 `uvicorn --reload`가 백엔드 코드를 고칠 때마다
-  /// 서버를 잠깐 내리므로, 하필 그 순간 화면이 열려 있으면 층 선택기·위치
-  /// 지정·실내 진입·실내 도면이 통째로 죽은 채 남는다. 클라이언트를 hot
-  /// reload해도 initState는 다시 돌지 않아 그대로다.
-  ///
-  /// 간격을 늘려 가는 이유는 두 경우를 한 사다리로 덮기 위해서다 — 서버가
-  /// 리로드 중이라 곧 살아나는 경우(앞쪽 짧은 간격)와, 아직 뜨지도 않아 한참
-  /// 걸리는 경우(뒤쪽 긴 간격). 다 쓰면 약 1분간 6번 시도한다.
-  ///
-  /// **무한히 재시도하지는 않는다.** 백엔드가 아예 없는 환경(기기에서 서버
-  /// 없이 실행)에서 영원히 요청을 날리면 배터리와 로그만 태운다. 사다리를 다
-  /// 쓴 뒤에는 배지의 "다시 시도"에 맡긴다.
-  const _buildingRetryDelays = <Duration>[
-    Duration(seconds: 1),
-    Duration(seconds: 2),
-    Duration(seconds: 4),
-    Duration(seconds: 8),
-    Duration(seconds: 16),
-    Duration(seconds: 30),
-  ];
+/// 실패했을 때 스스로 다시 시도하는 간격.
+///
+/// **한 번 실패하면 영영 복구되지 않는 것이 실제 문제였다.** 이 로드는
+/// initState에서 딱 한 번 돌고, 실패하면 사람이 배지를 누를 때까지 그대로
+/// 남는다. 그런데 개발 중에는 `uvicorn --reload`가 백엔드 코드를 고칠 때마다
+/// 서버를 잠깐 내리므로, 하필 그 순간 화면이 열려 있으면 층 선택기·위치
+/// 지정·실내 진입·실내 도면이 통째로 죽은 채 남는다. 클라이언트를 hot
+/// reload해도 initState는 다시 돌지 않아 그대로다.
+///
+/// 간격을 늘려 가는 이유는 두 경우를 한 사다리로 덮기 위해서다 — 서버가
+/// 리로드 중이라 곧 살아나는 경우(앞쪽 짧은 간격)와, 아직 뜨지도 않아 한참
+/// 걸리는 경우(뒤쪽 긴 간격). 다 쓰면 약 1분간 6번 시도한다.
+///
+/// **무한히 재시도하지는 않는다.** 백엔드가 아예 없는 환경(기기에서 서버
+/// 없이 실행)에서 영원히 요청을 날리면 배터리와 로그만 태운다. 사다리를 다
+/// 쓴 뒤에는 배지의 "다시 시도"에 맡긴다.
+const _buildingRetryDelays = <Duration>[
+  Duration(seconds: 1),
+  Duration(seconds: 2),
+  Duration(seconds: 4),
+  Duration(seconds: 8),
+  Duration(seconds: 16),
+  Duration(seconds: 30),
+];
 
-  /// 목록에서 고른 매장을 볼 때의 최소 확대. 실내 화면과 같은 값이라야 두
-  /// 화면을 오가도 같은 크기로 보인다.
-  const _storeFocusZoom = 19.0;
+/// 목록에서 고른 매장을 볼 때의 최소 확대. 실내 화면과 같은 값이라야 두
+/// 화면을 오가도 같은 크기로 보인다.
+const _storeFocusZoom = 19.0;
 
-  LatLng _toMapLatLng(ll.LatLng point) =>
-      LatLng(point.latitude, point.longitude);
+LatLng _toMapLatLng(ll.LatLng point) => LatLng(point.latitude, point.longitude);
 
 class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// GPS 기반 자동 실내 진입이 지금 켜져 있는지.
@@ -1703,7 +1512,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       );
     }
     final indoorSeconds =
-        leg.totalCostMeters / _indoorWalkingSpeedMetersPerSecond;
+        leg.totalCostMeters / indoorWalkingSpeedMetersPerSecond;
     return (
       distanceM: route.distanceMeters + leg.totalDistanceMeters,
       minutes: ((route.durationSeconds + indoorSeconds) / 60).ceil().clamp(
@@ -1835,13 +1644,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 있어서 밖으로 연다([SearchPanel.isInsideIndoorBuilding]).
   ///
   /// **외곽선 안인지만 보면 안 된다.** 이유와 여유 폭의 근거는
-  /// [_poiBuildingProximityMeters]에 적어 뒀다 — 실제로 "스타벅스
+  /// [poiBuildingProximityMeters]에 적어 뒀다 — 실제로 "스타벅스
   /// 더현대서울(B2)R점"이 엄격 판정에서 "건물 밖"이 되어 우리 "스타벅스
   /// 리저브"와 나란히 남아 있었다.
   bool isAtIndoorBuilding(ll.LatLng point) {
     final footprint = _buildingFootprint;
     if (footprint == null || footprint.length < 3) return false;
-    return metersToPolygon(point, footprint) <= _poiBuildingProximityMeters;
+    return metersToPolygon(point, footprint) <= poiBuildingProximityMeters;
   }
 
   /// 지도를 한 지점으로 옮긴다. 검색 결과에서 고른 야외 장소를 시트가 덮기 전에
@@ -1850,7 +1659,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
     await controller.animateCamera(
-      CameraUpdate.newLatLngZoom(_toGl(point), _poiFocusZoom),
+      CameraUpdate.newLatLngZoom(_toGl(point), poiFocusZoom),
     );
   }
 
@@ -1872,7 +1681,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 실내에 들어와 있지 않으면 되돌릴 기준이 없으므로 아무것도 하지 않는다.
   Future<void> realignToActiveFloor() async {
     if (!_indoorEntered) return;
-    await _fitCameraToActiveFloor(duration: _floorSwitchZoomDuration);
+    await _fitCameraToActiveFloor(duration: floorSwitchZoomDuration);
   }
 
   /// 검색 후보(`StoreIndexEntry`)를 좌표까지 갖춘 [PoiSearchResult]로 바꾼다.
@@ -2154,96 +1963,5 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 같은 값이면 알리지 않으므로 매 프레임 불러도 부모가 다시 그리지 않는다.
     _reportFloorTransitionUi();
     return _buildBody();
-  }
-}
-
-/// PDR 앵커 배치 대기 중임을 상단에 짧게 알려주는 배지. 하단 바 버튼의 활성
-/// 톤과 함께 사용자에게 "지금 지도 탭이 다음 액션을 소비한다"는 상태를 전한다.
-///
-/// 배치 대기는 지도 탭을 통째로 가져가는 상태라(건물 진입·매장 선택이 모두
-/// 막힌다) **빠져나올 길이 안내 안에 있어야 한다.** 예전에는 축소해 실내
-/// 오버레이를 접거나 세그먼트를 옮기는 우회로밖에 없었다.
-class _PlacingAnchorHint extends StatelessWidget {
-  const _PlacingAnchorHint({super.key, required this.onCancel});
-
-  final VoidCallback onCancel;
-
-  @override
-  Widget build(BuildContext context) {
-    // 앱의 카드 문법(surface + hairline + 아이콘만 primary)을 따른다. 예전의
-    // 파란 원색(AppColors.indoor) 배경은 절제된 화이트/뮤트 톤에서 이 배지만
-    // 튀어 보였다. "지도 탭을 가져가는 상태"라는 긴장은 하단 바 버튼의 활성
-    // 톤이 이미 말하고 있으므로, 여기는 안내문답게 조용히 있는다.
-    return Material(
-      color: AppColors.surface,
-      elevation: AppElevation.chrome,
-      shadowColor: Colors.black.withValues(alpha: 0.10),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: const BorderSide(color: AppColors.hairline),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
-        child: Row(
-          // X는 문구 오른쪽 **상단**에 고정한다. 좁은 화면에서 문구가 두 줄로
-          // 접혀도 취소 버튼이 세로 중앙으로 밀려나지 않아, 눌러야 할 자리가
-          // 문구 길이에 따라 흔들리지 않는다.
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.only(top: 5),
-              child: Icon(Icons.touch_app, size: 16, color: AppColors.primary),
-            ),
-            const SizedBox(width: 8),
-            const Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(top: 4),
-                child: Text(
-                  '지도를 탭해 현재 서 있는 위치를 지정해주세요',
-                  maxLines: 2,
-                  style: TextStyle(
-                    color: AppColors.text,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 6),
-            _HintCancelButton(onPressed: onCancel, color: AppColors.muted),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// 안내 배너 오른쪽 상단의 취소(X).
-///
-/// Material `IconButton`을 쓰지 않는 이유: 기본 최소 탭 영역이 48x48이라
-/// 한 줄짜리 안내 pill 높이를 두 배 이상으로 늘려 카테고리 chip 열까지
-/// 밀어 올린다. 여기서는 26x26으로 줄이되 아이콘보다 넓은 탭 영역은 남긴다.
-class _HintCancelButton extends StatelessWidget {
-  const _HintCancelButton({required this.onPressed, required this.color});
-
-  final VoidCallback onPressed;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: '위치 지정 취소',
-      child: InkWell(
-        onTap: onPressed,
-        customBorder: const CircleBorder(),
-        child: SizedBox(
-          width: 26,
-          height: 26,
-          child: Center(
-            child: Icon(Icons.close_rounded, size: 18, color: color),
-          ),
-        ),
-      ),
-    );
   }
 }

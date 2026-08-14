@@ -99,7 +99,7 @@ extension OutdoorMapGps on OutdoorMapBodyState {
   /// **시작점은 방금 그 GPS 좌표에서 가장 가까운 통로 지점이다.** 진입 판정
   /// 자체가 "믿을 수 있는 좌표가 건물 안"이라는 근거로 났으므로, 그 좌표가 지금
   /// 사용자가 서 있는 곳에 가장 가까운 값이다. 스냅이 안 되면(통로에서
-  /// [_maxIndoorGpsSnapDistanceM]보다 멀거나 층 좌표로 못 옮기면) 방금 지나온
+  /// [autoEntryGpsSnapDistanceM]보다 멀거나 층 좌표로 못 옮기면) 방금 지나온
   /// 문으로 폴백한다 — 건물에 들어온 사람은 어느 문이든 통과했다.
   ///
   /// 예전에는 트리거가 층 오버레이만 켜고 끝났다. 그래서 건물에 들어와도 지도에는
@@ -152,7 +152,7 @@ extension OutdoorMapGps on OutdoorMapBodyState {
     // 이며, 사용자가 실제로 서 있는 곳에 가장 가깝다.
     var snapped = snap(
       ll.LatLng(position.latitude, position.longitude),
-      _maxIndoorGpsSnapDistanceM,
+      autoEntryGpsSnapDistanceM,
     );
     var estimateSource = 'gps';
     if (snapped == null) {
@@ -161,7 +161,7 @@ extension OutdoorMapGps on OutdoorMapBodyState {
       final entrance = _entrance;
       snapped = entrance == null
           ? null
-          : snap(entrance, _maxEntranceAnchorSnapDistanceM);
+          : snap(entrance, maxEntranceAnchorSnapDistanceM);
       estimateSource = 'entrance';
     }
     if (snapped == null) {
@@ -248,7 +248,7 @@ extension OutdoorMapGps on OutdoorMapBodyState {
       _showSnack('현재 위치를 아직 못 잡았습니다. 신호가 잡히면 그 자리로 지도를 옮깁니다.');
       return;
     }
-    await _moveCameraToUser(position, zoom: _carGuidanceZoom);
+    await _moveCameraToUser(position, zoom: carGuidanceZoom);
   }
 
   /// 따라가기를 멈춘다. 안내가 끝나거나(경로 삭제) 카메라의 주인이 바뀌는
@@ -261,7 +261,7 @@ extension OutdoorMapGps on OutdoorMapBodyState {
   ///
   /// **bearing과 tilt는 건드리지 않는다.** 개요 연출이 경로 축에 맞춰 세워 둔
   /// 방향이 여기서 정북으로 돌아가면, 돌아온 화면의 위쪽이 갈 방향과 어긋난다.
-  /// 배율도 [_walkingViewZoom]까지만 당기고 그보다 확대돼 있으면 그대로 둔다 —
+  /// 배율도 [walkingViewZoom]까지만 당기고 그보다 확대돼 있으면 그대로 둔다 —
   /// 자세한 설명은 그 상수에 있다.
   Future<void> _recenterOnCurrentPosition() async {
     final controller = _mapController;
@@ -273,8 +273,8 @@ extension OutdoorMapGps on OutdoorMapBodyState {
     await recenterKeepingBearing(
       controller,
       here,
-      minZoom: _walkingViewZoom,
-      duration: _recenterDuration,
+      minZoom: walkingViewZoom,
+      duration: recenterDuration,
     );
   }
 
