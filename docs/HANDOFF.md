@@ -285,13 +285,24 @@ text`는 한글을 못 보내지만 검색이 로마자를 한글로 맞춰 주�
 
 ```powershell
 cd client
-flutter analyze                             # 0건이어야 한다
-flutter test test/                          # 1,457개
-flutter test integration_test/ -d windows   # 부팅 테스트(CI는 linux)
+flutter analyze                                            # 0건이어야 한다
+flutter test test/                                         # 1,454개
+flutter test integration_test/app_test.dart -d windows     # 부팅 테스트(CI는 linux)
+flutter test integration_test/pdr_device_smoke_test.dart -d windows
 ```
+
+**통합 테스트는 파일마다 따로 준다.** `flutter test integration_test/`처럼 폴더를 주면
+두 번째 앱 실행이 `Error waiting for a debug connection`으로 죽는다 — 데스크톱
+디바이스가 앱을 연속으로 다시 띄우지 못한다(linux·windows 양쪽에서 재현). CI도 같은
+이유로 glob 반복문을 돈다.
+
+> **Windows에서 경로가 길면 통합 테스트가 빌드부터 실패한다** (`MSB3491 ... 260자`).
+> `subst X: <워크트리>` 로 짧은 드라이브에 걸고 `X:\client`에서 돌리면 된다.
 
 테스트는 `test/` 한 곳에 있고 **`lib/`의 디렉터리 구조를 그대로 미러한다.** 예전에는
 `tests/unit_test/`에 83개가 평면으로 쌓여 있었는데, CI가 그쪽만 돌려서 `test/` 아래
-337개가 한 번도 실행되지 않은 적이 있다.
+337개가 한 번도 실행되지 않은 적이 있다. **같은 사고가 통합 테스트에도 있었다** —
+`client/integration_test/pdr_device_smoke_test.dart`는 CI가 `tests/integration_test/`만
+돌려서 main에서 한 번도 실행되지 않았다.
 
 해체 브랜치에서는 여기에 **공개 API 19개 불변** 확인이 더 붙는다(계획서의 게이트).
