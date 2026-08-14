@@ -803,7 +803,11 @@ class _PlaceDetailSectionsState extends State<PlaceDetailSections> {
         LinksSection(:final items) => PlaceLinksSection(
           items: [
             for (final item in items)
-              PlaceLinkItem(label: item.label, url: item.url),
+              PlaceLinkItem(
+                label: item.label,
+                url: item.url,
+                iconAsset: item.iconAsset,
+              ),
           ],
         ),
         BusinessInfoSection(:final items) => PlaceBusinessInfoSection(

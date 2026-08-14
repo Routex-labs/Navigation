@@ -1051,18 +1051,26 @@ class PlaceBusinessInfoSection extends StatelessWidget {
 
 /// 공식 채널 링크 하나.
 class PlaceLinkItem {
-  const PlaceLinkItem({required this.label, required this.url});
+  const PlaceLinkItem({required this.label, required this.url, this.iconAsset});
 
   final String label;
   final String url;
+
+  /// 번들에 든 브랜드 아이콘. 있으면 배지가 이 그림이 되고, 없으면 라벨로 고른
+  /// Material 아이콘([linkBrandFor])으로 떨어진다.
+  final String? iconAsset;
 }
 
 /// 링크 줄 왼쪽 배지의 모양.
 ///
-/// **브랜드 favicon을 번들에 넣지 않는다.** 로고 파일을 담는 순간 저작권 정리 대상이
-/// 메뉴 사진과 같아지고, 원격 favicon URL은 시트 첫 프레임이 네트워크를 기다리게 해서
-/// 설계 9-1 D1′이 금지한 것과 같은 문제가 된다. 그래서 Material 아이콘을 그대로 쓰되
-/// **브랜드 색만** 입힌다 — 색은 로고가 아니라서 담을 것이 없다.
+/// **원격 favicon URL은 쓰지 않는다.** 시트 첫 프레임이 네트워크를 기다리게 해서
+/// 설계 9-1 D1′이 금지한 것과 같은 문제가 된다. 기본은 Material 아이콘에
+/// **브랜드 색만** 입히는 것이다 — 색은 로고가 아니라서 담을 것이 없다.
+///
+/// 예외는 서버가 [PlaceLinkItem.iconAsset]으로 **번들에 든 그림**을 지정한 경우다.
+/// 그때는 저작권 범위가 이미 그 매장 자산과 같아진 상태이므로(오설록은 제품 사진
+/// 309장이 같은 데모 식별용으로 들어 있다) 새로 생기는 위험이 없다. 아무 매장에나
+/// 로고를 담자는 뜻은 아니고, **담기로 이미 정한 매장에만** 열어 둔 문이다.
 class PlaceLinkBrand {
   const PlaceLinkBrand({required this.icon, required this.colors});
 
@@ -1075,37 +1083,65 @@ class PlaceLinkBrand {
 
 /// 라벨로 고른 브랜드 배지. 모르는 라벨에도 배지를 준다 — 라벨 글자가 항상 옆에
 /// 있어서 아이콘이 뜻을 혼자 짊어지지 않는다([infoIconFor]와 다른 점).
-PlaceLinkBrand linkBrandFor(String label) =>
-    switch (label.replaceAll(' ', '')) {
-      '공식사이트' || '홈페이지' || '웹사이트' => const PlaceLinkBrand(
-        icon: Icons.public,
-        colors: [Color(0xFF3C4043)],
-      ),
-      '페이스북' => const PlaceLinkBrand(
-        icon: Icons.facebook,
-        colors: [Color(0xFF1877F2)],
-      ),
-      '인스타그램' => const PlaceLinkBrand(
-        icon: Icons.camera_alt,
-        colors: [Color(0xFFF58529), Color(0xFFDD2A7B), Color(0xFF8134AF)],
-      ),
-      '스마트스토어' || '네이버' || '스토어' => const PlaceLinkBrand(
-        icon: Icons.storefront,
-        colors: [Color(0xFF03C75A)],
-      ),
-      _ => const PlaceLinkBrand(icon: Icons.link, colors: [AppColors.muted]),
-    };
+PlaceLinkBrand linkBrandFor(String label) {
+  final key = label.replaceAll(' ', '');
+  if (isWebsiteLabel(label)) {
+    return const PlaceLinkBrand(icon: Icons.public, colors: [Color(0xFF3C4043)]);
+  }
+  return switch (key) {
+    '페이스북' => const PlaceLinkBrand(
+      icon: Icons.facebook,
+      colors: [Color(0xFF1877F2)],
+    ),
+    '인스타그램' => const PlaceLinkBrand(
+      icon: Icons.camera_alt,
+      colors: [Color(0xFFF58529), Color(0xFFDD2A7B), Color(0xFF8134AF)],
+    ),
+    // 유튜브는 재생 삼각형이 브랜드 자체라 `play_arrow`가 아니라 화면 안에 삼각형이
+    // 든 글리프를 쓴다 — 빨간 원 안의 홑 삼각형은 다른 재생 버튼과 구분되지 않는다.
+    '유튜브' || 'youtube' || 'YouTube' => const PlaceLinkBrand(
+      icon: Icons.smart_display,
+      colors: [Color(0xFFFF0000)],
+    ),
+    // `네이버 브랜드스토어`가 공백을 지우면 `네이버브랜드스토어`라 정확히 일치하는
+    // 가지가 없어 회색 기본값으로 떨어져 있었다. 스토어류는 이름이 계속 바뀌므로
+    // (스마트스토어 → 브랜드스토어) 조각 일치로 받는다.
+    _ when key.contains('스토어') || key.contains('네이버') =>
+      const PlaceLinkBrand(icon: Icons.storefront, colors: [Color(0xFF03C75A)]),
+    _ => const PlaceLinkBrand(icon: Icons.link, colors: [AppColors.muted]),
+  };
+}
 
-/// 라벨 대신 주소를 보여 줄 줄인가.
+/// 주소를 함께 보여 줄 줄인가.
 ///
 /// **차례가 아니라 라벨로 판단한다.** 참고 화면에서 주소가 보이는 것은 그 줄이 첫
 /// 줄이어서가 아니라 웹사이트 줄이어서다 — `공식 사이트`라는 라벨은 어느 사이트인지를
 /// 말해 주지 않지만 `페이스북`·`인스타그램`은 라벨이 곧 정체다. 순서로 정하면 배열
 /// 순서를 바꿨을 때 뜻 없이 화면이 따라 바뀐다.
-bool isWebsiteLabel(String label) => switch (label.replaceAll(' ', '')) {
-  '공식사이트' || '홈페이지' || '웹사이트' => true,
-  _ => false,
-};
+///
+/// 앞에 매장 이름이 붙은 `오설록 공식 홈페이지`도 웹사이트 줄이다. 그래서 정확히
+/// 일치가 아니라 **끝이 맞는지**를 본다 — 이름은 매장마다 다르고 뒤 낱말은 같다.
+bool isWebsiteLabel(String label) => websiteNamePrefix(label) != null;
+
+/// 긴 것부터 본다. `오설록공식홈페이지`에서 `홈페이지`를 먼저 떼면 남는 것이
+/// `오설록공식`이 되어 이름이 아니게 된다.
+const _websiteSuffixes = ['공식홈페이지', '공식사이트', '홈페이지', '웹사이트'];
+
+/// 웹사이트 라벨에서 뒤 낱말을 뗀 앞부분. 웹사이트 줄이 아니면 `null`이고,
+/// **낱말만 있는 라벨(`공식 사이트`)이면 빈 문자열**이다.
+///
+/// 이 둘을 나누는 이유는 화면이 다르기 때문이다 — 앞에 이름이 있으면 그 이름이
+/// 정보라 주소 위에 남기고, 없으면 라벨이 어느 사이트인지 말해 주지 않으므로
+/// 주소만 보여 준다.
+String? websiteNamePrefix(String label) {
+  final key = label.replaceAll(' ', '');
+  for (final suffix in _websiteSuffixes) {
+    if (key.endsWith(suffix)) {
+      return key.substring(0, key.length - suffix.length);
+    }
+  }
+  return null;
+}
 
 /// 공식 채널 링크 목록. 누르면 외부 브라우저로 연다.
 class PlaceLinksSection extends StatelessWidget {
@@ -1167,28 +1203,50 @@ class _LinkRow extends StatelessWidget {
   Widget build(BuildContext context) {
     // 라벨이 비어 있어도 줄이 빈 채로 남지 않게 주소로 대신한다. 라벨은 사람이
     // 쓰는 자유 문자열이라 언제든 빠질 수 있다.
-    final showUrl = isWebsiteLabel(item.label) || item.label.trim().isEmpty;
+    final label = item.label.trim();
+    final showUrl = isWebsiteLabel(label) || label.isEmpty;
+    // 라벨과 주소를 함께 보여 줄 때만 두 줄이다. `오설록 공식 홈페이지`처럼 라벨이
+    // 어느 브랜드인지 말해 주면 그 글자를 주소로 덮어쓸 이유가 없고, 반대로 주소를
+    // 지우면 어디로 나가는지가 사라진다. 다른 줄은 그대로 한 줄이다.
+    final showBoth = (websiteNamePrefix(label) ?? '').isNotEmpty;
 
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Row(
         children: [
-          _LinkBadge(brand: linkBrandFor(item.label)),
+          _LinkBadge(brand: linkBrandFor(label), iconAsset: item.iconAsset),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              showUrl ? item.url : item.label,
-              // **한 줄 말줄임이고, 자르는 곳은 뒤다.** 주소는 앞쪽(호스트)이 어디로
-              // 가는지를 말하고 뒤쪽(경로)은 그렇지 않다. 두 줄로 흘리면 줄 높이가
-              // 항목마다 달라져 목록이 아니라 글 덩어리로 읽힌다.
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 13.5,
-                // 주소만 링크 색이다. 이 줄이 글자가 아니라 주소라는 표시.
-                color: showUrl ? AppColors.primary : AppColors.text,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (showBoth)
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      color: AppColors.text,
+                    ),
+                  ),
+                Text(
+                  showUrl ? item.url : label,
+                  // **한 줄 말줄임이고, 자르는 곳은 뒤다.** 주소는 앞쪽(호스트)이 어디로
+                  // 가는지를 말하고 뒤쪽(경로)은 그렇지 않다. 두 줄로 흘리면 줄 높이가
+                  // 항목마다 달라져 목록이 아니라 글 덩어리로 읽힌다.
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    // 주소가 라벨 아래로 내려가면 보조 정보라 한 급 작다.
+                    fontSize: showBoth ? 12 : 13.5,
+                    // 주소만 링크 색이다. 이 줄이 글자가 아니라 주소라는 표시.
+                    color: showUrl ? AppColors.primary : AppColors.text,
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(width: 8),
@@ -1201,9 +1259,36 @@ class _LinkRow extends StatelessWidget {
   }
 }
 
-/// 브랜드 색 원 안에 Material 아이콘 하나.
+/// 브랜드 색 원 안에 Material 아이콘 하나. [iconAsset]이 있으면 그 그림이 원을
+/// 채운다.
 class _LinkBadge extends StatelessWidget {
-  const _LinkBadge({required this.brand});
+  const _LinkBadge({required this.brand, this.iconAsset});
+
+  final PlaceLinkBrand brand;
+  final String? iconAsset;
+
+  @override
+  Widget build(BuildContext context) {
+    final asset = iconAsset;
+    if (asset != null && asset.isNotEmpty) {
+      return ClipOval(
+        child: Image.asset(
+          asset,
+          width: 30,
+          height: 30,
+          fit: BoxFit.cover,
+          // 그림이 빠져도 줄이 사라지지 않게 배지를 기본 모양으로 되돌린다.
+          // 자산 누락은 빌드가 아니라 실행 중에 드러난다.
+          errorBuilder: (_, _, _) => _BrandBadge(brand: brand),
+        ),
+      );
+    }
+    return _BrandBadge(brand: brand);
+  }
+}
+
+class _BrandBadge extends StatelessWidget {
+  const _BrandBadge({required this.brand});
 
   final PlaceLinkBrand brand;
 

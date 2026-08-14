@@ -388,14 +388,19 @@ class LinksSection extends PlaceDetailSection {
 }
 
 class PlaceLink {
-  const PlaceLink({required this.label, required this.url});
+  const PlaceLink({required this.label, required this.url, this.iconAsset});
 
   final String label;
   final String url;
 
+  /// 번들에 든 브랜드 아이콘. 없으면 `null`이고, 그때 화면은 라벨로 고른 Material
+  /// 아이콘을 쓴다. 구버전 서버는 이 키를 모르므로 없을 때 파싱이 깨지면 안 된다.
+  final String? iconAsset;
+
   factory PlaceLink.fromJson(Map<String, dynamic> json) => PlaceLink(
         label: json['label'] as String,
         url: json['url'] as String,
+        iconAsset: json['icon_asset'] as String?,
       );
 }
 

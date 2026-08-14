@@ -184,7 +184,7 @@ def _sections(
 
     # 링크는 운영 정보 아래에 둔다. 매장을 고르는 데 쓰이는 값이 아니라, 고른 뒤에
     # 더 알아보려는 사람이 찾는 자리다.
-    link_items = _rich_items(overlay.get("links"), ("label", "url"))
+    link_items = _rich_items(overlay.get("links"), ("label", "url"), ("icon_asset",))
     if link_items:
         sections.append({"type": "links", "items": link_items})
 

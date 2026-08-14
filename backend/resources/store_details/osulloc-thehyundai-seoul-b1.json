@@ -3044,8 +3044,9 @@
     ],
     "links": [
       {
-        "label": "공식 사이트",
-        "url": "https://www.osulloc.com/kr/ko"
+        "label": "오설록 공식 홈페이지",
+        "url": "https://www.osulloc.com/kr/ko",
+        "icon_asset": "assets/place_details/osulloc_favicon.png"
       },
       {
         "label": "인스타그램",
