@@ -1,0 +1,657 @@
+// ignore_for_file: invalid_use_of_protected_member
+//
+// 이 파일은 `OutdoorMapBodyState`의 part다. setState는 그 클래스가 State에서
+// 물려받은 protected 멤버이고, 여기서 부르는 것은 **같은 클래스의 코드**다 —
+// 파일만 갈라져 있을 뿐 바깥에서 남의 protected 멤버를 건드리는 것이 아니다.
+// 분석기는 extension을 "서브클래스가 아니다"로 보아 경고하므로 파일 단위로
+// 끈다. 본체(생명주기·build)는 클래스 안에 있어 이 해제의 영향을 받지 않는다.
+/// `OutdoorMapBodyState`의 **PDR·앵커·보정** 부분.
+///
+/// [outdoor_map_screen.dart]의 part다. 한 파일이 7,500줄을 넘어 읽을 수
+/// 없어져 성격별로 갈랐다 — **옮기기만 했고 동작은 그대로다.**
+///
+/// extension을 쓰는 이유: 같은 라이브러리(part)라 private 멤버가 그대로
+/// 보이고, extension끼리도 서로 부를 수 있다. mixin은 서로의 private
+/// 멤버를 못 봐서 이렇게 얽힌 클래스에는 쓸 수 없다.
+///
+/// 상태 필드와 생명주기(initState/dispose/build), 그리고 셸이 부르는
+/// 공개 API 19개는 본체에 남아 있다.
+part of 'outdoor_map_screen.dart';
+
+extension OutdoorMapPdr on OutdoorMapBodyState {
+  /// 세션이 꺼져 있으면 활성 층으로 켠다.
+  ///
+  /// 층을 두 번 읽는 이유와 두 조건이 다른 이유는 [PdrSessionLifecycle.startIfIdle]에
+  /// 있다. 화면이 사라졌으면 둘 다 null이 되어 시작이 취소된다.
+  Future<void> _startPdrIfIdle() {
+    return _pdrLifecycle.startIfIdle(
+      readStartableFloor: () {
+        if (!mounted) return null;
+        final floor = _activeFloor;
+        final graph = _floorGraph;
+        if (floor == null ||
+            graph == null ||
+            graph.nodes.isEmpty ||
+            graph.edges.isEmpty) {
+          return null;
+        }
+        return floor;
+      },
+      readActiveFloor: () => mounted ? _activeFloor : null,
+    );
+  }
+
+  /// 센서 세션이 첫 이벤트를 보고할 때까지(최대 [_sensorWarmupTimeout]) 기다린다.
+  ///
+  /// [IndoorNavigationDriver.confirmAnchorByPin]은 **호출 시점의** heading
+  /// reference로 분기한다. 자북 heading을 이미 받았으면 회전 0으로 즉시 확정하고,
+  /// 아직 아무 heading도 못 받았으면 arbitrary로 보고 수동 방향 보정을 요구한다.
+  /// 수동 배치에서는 사용자가 지도를 보고 탭하는 몇 초가 자연스러운 유예였지만,
+  /// 자동 배치는 startGuidance 직후 곧바로 찍으므로 그 유예가 없다. 기다리지
+  /// 않으면 나침반이 멀쩡한 기기까지 전부 방향 보정 분기로 빠져, 추정한 진입
+  /// 방향이 회전각으로 박히고 이후 궤적 전체가 그만큼 돌아간다.
+  Future<void> _awaitSensorWarmup() async {
+    bool reported(PdrRuntimeState state) =>
+        state == PdrRuntimeState.running || state == PdrRuntimeState.degraded;
+    if (reported(indoorNavigationDriver.currentRuntimeStatus.state)) return;
+    try {
+      await indoorNavigationDriver.runtimeStatuses
+          .firstWhere((status) => reported(status.state))
+          .timeout(_sensorWarmupTimeout);
+    } on Object {
+      // 센서가 끝내 조용해도(권한 거부·미지원 기기·타임아웃) 앵커는 찍는다 —
+      // 걸음이 쌓이지 않더라도 "어느 입구로 들어왔는지"는 지도에 보여야 한다.
+    }
+  }
+
+  /// 실내 진입 오버레이에서의 위치 보정. GPS를 호출하지 않고 PDR이 알고 있는
+  /// 실내 위치·방향만 쓴다.
+  ///
+  /// 실제로 동작을 수행한 탭만 카운트를 올린다 — 위치나 heading을 아직 몰라
+  /// 안내만 띄운 탭까지 세면, 사용자가 위치를 잡은 뒤 누른 다음 탭이 "회전"
+  /// 차례로 밀려 정작 중앙 정렬이 안 된다.
+  Future<void> _recalibrateIndoor() async {
+    if (_recalibrateTapCount.isEven) {
+      // 홀수 번째 탭 — 실내 위치를 화면 정중앙으로. 앵커가 다른 층에 있거나
+      // 층 그래프가 아직 없으면 null이라 여기서 걸린다. 지도가 아직 준비되지
+      // 않았더라도 "위치를 먼저 지정하라"는 안내는 먼저 띄운다.
+      final target = _pdrCurrentWgs84();
+      if (target == null) {
+        _showSnack('아직 현재 위치가 없습니다. 위치 지정 버튼으로 먼저 위치를 잡아주세요.');
+        return;
+      }
+      final controller = _mapController;
+      if (controller == null || !_styleReady) return;
+      await controller.animateCamera(CameraUpdate.newLatLng(_toGl(target)));
+    } else {
+      // 짝수 번째 탭 — 바라보는 방향이 화면 위쪽에 오도록 회전. 이때 내 실내
+      // 위치도 함께 화면 정중앙에 놓는다. 중앙 정렬 후 조금 걸어간 뒤 회전을
+      // 누르면 화면 중심과 내 위치가 이미 어긋나 있어, 중심을 그대로 두고
+      // 돌리면 내 위치가 화면 가장자리로 밀려나기 때문이다. 줌·tilt는 유지.
+      final heading = _pdrCurrentHeadingDeg;
+      if (heading == null) {
+        _showSnack('아직 바라보는 방향을 알 수 없습니다. 위치 지정 후 조금 걸어 방향을 잡아주세요.');
+        return;
+      }
+      final controller = _mapController;
+      if (controller == null || !_styleReady) return;
+      final camera = controller.cameraPosition;
+      // 위치를 아직 모르면(앵커가 다른 층 등) 지금 보고 있는 중심을 그대로 둔다.
+      final myLocation = _pdrCurrentWgs84();
+      final center = myLocation != null
+          ? _toGl(myLocation)
+          : camera?.target ?? _toGl(_entrance ?? _fallbackLocation);
+      await controller.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: center,
+            zoom: camera?.zoom ?? indoorEntryZoomThreshold,
+            bearing: heading,
+            tilt: camera?.tilt ?? 0,
+          ),
+        ),
+      );
+    }
+    _recalibrateTapCount++;
+  }
+
+  /// 출발지로 고른 매장 자리에 PDR 앵커를 다시 찍어, 현재 위치 아이콘을 그
+  /// 매장으로 옮긴다.
+  ///
+  /// 사용자가 "이 매장에서 출발한다"고 말한 것은 곧 "나는 지금 여기 있다"는
+  /// 뜻이므로, 지도를 탭해 직접 지정한 것과 같은 취급을 한다 — 그래서 배치도
+  /// 수동 배치와 **같은 함수**([_confirmPdrAnchor])를 쓴다. 자북 heading을 주는
+  /// 기기는 그 자리에서 조용히 확정되고, 그렇지 못한 기기는 수동 배치와 똑같이
+  /// 진행 방향을 한 번 물어본다. 방향을 0으로 가정해 조용히 넘어가면 이후
+  /// 걸음 궤적 전체가 그만큼 돌아간 채로 쌓인다.
+  ///
+  /// 실패는 조용히 넘긴다. 위치 아이콘을 못 옮기더라도 경로 자체는 그려져야
+  /// 한다 — 여기서 return해 버리면 길찾기가 통째로 죽는다.
+  /// [announce]가 false면 "여기서 출발하는 것으로 봤다"는 안내를 띄우지 않는다.
+  ///
+  /// 그 안내는 앱이 사용자의 현재 위치를 **말없이** 옮겼을 때 알리려는 것이다.
+  /// 출발↔도착 맞바꾸기처럼 사용자가 방금 그 이동을 직접 시킨 경우에는 알릴
+  /// 것이 없다 — 누를 때마다 되돌리기 손잡이가 뜨면 조작을 방해하기만 한다.
+  Future<void> _anchorAtStoreOrigin({
+    required String floor,
+    required String nodeId,
+    required ll.LatLng storePoint,
+    required String storeName,
+    bool announce = true,
+  }) async {
+    // [_confirmPdrAnchor]가 축 변환(axes)을 [_floorGraph]에서 가져오므로,
+    // 앵커를 찍기 전에 그 층 그래프가 화면에 올라와 있어야 한다.
+    if (floor != _activeFloor) {
+      await _switchOverlayFloorCrossfaded(floor);
+      if (!mounted) return;
+    }
+    final graph = _floorGraph;
+    if (graph == null || graph.nodes.isEmpty) return;
+
+    // 매장의 입구 노드를 그대로 쓴다. 그 노드는 이미 통로 위에 있으므로 스냅이
+    // 필요 없고, 경로 탐색이 시작하는 지점과도 정확히 같은 자리가 된다.
+    final node = graph.nodes.where((n) => n.id == nodeId).firstOrNull;
+    final PdrLocalPoint floorPoint;
+    if (node != null) {
+      floorPoint = PdrLocalPoint(node.xM, node.yM);
+    } else {
+      // 노드를 못 찾는 경우(그래프 갱신 시차 등)는 매장 좌표를 층 좌표로 되돌려
+      // 가장 가까운 통로에 붙인다 — 수동 배치가 탭 좌표에 하는 것과 같다.
+      final local = fitFloorGeoTransform(
+        graph.nodes,
+      ).invert(storePoint.latitude, storePoint.longitude);
+      if (local == null) return;
+      final snapped = FloorMapMatcher(
+        graph,
+      ).snapToWalkableNetwork(PdrLocalPoint(local.$1, local.$2));
+      if (snapped == null) return;
+      floorPoint = snapped.point;
+    }
+
+    if (!await _bindPdrSessionToFloor(floor)) return;
+    await _confirmPdrAnchor(floorPoint, notifyLocationChanged: false);
+    if (!mounted) return;
+    if (!indoorNavigationDriver.currentCalibration.canRenderPosition) return;
+    if (!announce) return;
+    // 되돌릴 손잡이를 함께 띄운다. 출발지가 실제 위치와 다르면 조용히 틀린
+    // 지점에서 안내가 시작되는데, 그건 사용자가 알아챌 수 있어야 한다.
+    showDebugToast(
+      context,
+      message: '$storeName에서 출발하는 것으로 보고 현재 위치를 잡았습니다.',
+      bottomOffset:
+          _mapShellBottomChromePx +
+          (_hasAnyRouteVisible ? _etaCardHeightPx : 0) +
+          12,
+      actionLabel: '위치 다시 지정',
+      onAction: () => unawaited(_resetAnchorForManualPlacement(floor)),
+    );
+  }
+
+  /// 자동으로 잡은 앵커를 버리고 사용자 지정 흐름으로 되돌린다.
+  Future<void> _resetAnchorForManualPlacement(String floor) async {
+    // changeFloor는 같은 층으로 불러도 걸음 세션과 앵커를 초기화하고
+    // awaitingPin으로 되돌린다 — 앵커만 버리는 전용 명령이 따로 없다.
+    await indoorNavigationDriver.changeFloor(floorId: floor);
+    if (!mounted) return;
+    await startLocationPlacement();
+  }
+
+  /// 실내 위치(PDR) 마커. 야외 상태에서는 [_indoorLocationVisible]이 false라
+  /// 항상 빈 소스를 밀어 넣어 마커가 사라진다 — 야외에서는 GPS 마커
+  /// ([_syncCurrentLayer])만 보이고, 실내에서는 이쪽만 보인다.
+  Future<void> _syncPdrCurrentLayer() {
+    final revision = ++_pdrMarkerRevision;
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return Future<void>.value();
+
+    final location = _indoorLocationVisible ? _pdrCurrentWgs84() : null;
+    final heading = location == null ? null : _pdrCurrentHeadingDeg;
+    final data = pdrLocationData(location, headingDeg: heading);
+
+    final previous = _pdrMarkerWriteQueue;
+    _pdrMarkerWriteQueue = () async {
+      // 이전 native 호출이 실패해도 다음 센서 갱신은 계속 진행한다.
+      try {
+        await previous;
+      } catch (error, stackTrace) {
+        debugPrint('PDR marker update failed: $error\n$stackTrace');
+      }
+      // 큐에 들어온 사이 더 최신 snapshot이 왔다면 이 위치는 쓰지 않는다.
+      if (revision != _pdrMarkerRevision ||
+          !mounted ||
+          controller != _mapController ||
+          !_styleReady) {
+        return;
+      }
+      try {
+        await controller.setGeoJsonSource(kOutdoorPdrCurrentSourceId, data);
+      } catch (error, stackTrace) {
+        debugPrint('PDR marker update failed: $error\n$stackTrace');
+      }
+    }();
+    return _pdrMarkerWriteQueue;
+  }
+
+  ll.LatLng? _pdrCurrentWgs84() {
+    // 탑승 중에는 활강이 위치의 출처다. 걸음은 멈춰 있고 앵커는 아직 이전 층에
+    // 있어서, 이 갈래가 없으면 층이 바뀌는 순간 마커가 통째로 사라진다.
+    final glide = _escalatorGlide;
+    if (glide != null) {
+      return glide.pointAtProgress(_escalatorGlideProgress.value);
+    }
+    final graph = _floorGraph;
+    if (graph == null || graph.nodes.isEmpty) return null;
+    final position = _indoorPosition;
+    if (position == null) return null;
+    final wgs84 = fitFloorGeoTransform(
+      graph.nodes,
+    ).apply(position.localM.eastM, position.localM.northM);
+    return ll.LatLng(wgs84.$1, wgs84.$2);
+  }
+
+  /// PDR 스냅샷의 층 로컬 좌표 경로들. 실내 지도와 같은 계산을 쓴다 — 두
+  /// 화면이 다른 값을 그리면 진단이 서로를 반박하게 된다.
+  ///
+  /// 앵커가 없거나 지금 보고 있는 층과 다른 층에 찍혀 있으면 빈 경로다.
+  /// 층을 바꾸면 그 층 경로만 보여야 하기 때문이다.
+  List<PdrLocalPoint> get _pdrConfirmedFloorPath {
+    final snapshot = _pdrTrailState.snapshot;
+    final anchor = _pdrTrailState.anchor;
+    final graph = _floorGraph;
+    if (snapshot == null ||
+        anchor == null ||
+        anchor.floorId != _activeFloor ||
+        graph == null ||
+        graph.nodes.isEmpty) {
+      return const [];
+    }
+    final pdrToFloor = FloorCoordinateTransform(anchor);
+    return snapshot.path.map(pdrToFloor.toFloor).toList(growable: false);
+  }
+
+  /// 확정 전 미리보기(preview)까지 포함한 날것의 궤적.
+  List<PdrLocalPoint> get _pdrRawFloorPath {
+    final snapshot = _pdrTrailState.snapshot;
+    final anchor = _pdrTrailState.anchor;
+    final graph = _floorGraph;
+    if (snapshot == null ||
+        anchor == null ||
+        anchor.floorId != _activeFloor ||
+        graph == null ||
+        graph.nodes.isEmpty) {
+      return const [];
+    }
+    final pdrToFloor = FloorCoordinateTransform(anchor);
+    return snapshot.reconciledPreviewPath
+        .map(pdrToFloor.toFloor)
+        .toList(growable: false);
+  }
+
+  /// confirmed 경로를 통행 간선에 스냅한 결과. 단순 스냅 점을 직선으로 잇지
+  /// 않고 간선이 바뀌는 구간은 그래프 경로로 펼친다(matchRoutedPath).
+  List<PdrLocalPoint> get _pdrMatchedFloorPath {
+    final graph = _floorGraph;
+    final confirmed = _pdrConfirmedFloorPath;
+    if (graph == null || confirmed.isEmpty) return const [];
+    return FloorMapMatcher(graph).matchRoutedPath(confirmed);
+  }
+
+  /// PDR이 올라타 있다고 판정된 간선들. 세션 시작 직후 원점 하나만 투영돼
+  /// 아직 걷지도 않은 간선이 강조되는 것을 막으려고 실제 이동이 생긴 뒤에만
+  /// 채운다.
+  Set<String> get _pdrMatchedEdgeIds {
+    final graph = _floorGraph;
+    final confirmed = _pdrConfirmedFloorPath;
+    if (graph == null || !_hasMeaningfulPdrMovement(confirmed)) return const {};
+    return FloorMapMatcher(
+      graph,
+    ).matchPath(confirmed).map((point) => point.edgeId).toSet();
+  }
+
+  /// 세션 시작 직후에는 원점 한 개만 가장 가까운 간선에 투영되면서, 아직 걷지도
+  /// 않았는데 그 간선 전체가 청록색으로 강조될 수 있다. 실내 지도와 같은 기준
+  /// (누적 이동 0.2 m)을 쓴다 — 두 화면이 다른 기준을 쓰면 같은 세션에서 활성
+  /// 간선이 한쪽에만 뜬다.
+  bool _hasMeaningfulPdrMovement(List<PdrLocalPoint> path) {
+    if (path.length < 2) return false;
+    var distanceM = 0.0;
+    for (var index = 1; index < path.length; index++) {
+      final dx = path[index].eastM - path[index - 1].eastM;
+      final dy = path[index].northM - path[index - 1].northM;
+      distanceM += math.sqrt(dx * dx + dy * dy);
+      if (distanceM >= 0.2) return true;
+    }
+    return false;
+  }
+
+  /// 디버그 모드의 PDR 진단 레이어(그래프 노드·간선 + 세 경로)를 갱신한다.
+  ///
+  /// 디버그 모드가 꺼져 있거나 개별 토글이 꺼져 있으면 빈 데이터를 넘겨 해당
+  /// 소스를 비운다. 지도 소스에 실제로 쓰는 일은 [syncPdrDebugLayers]가 한다.
+  Future<void> _syncDebugPdrLayers() async {
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    final debug = _debugModeController;
+    final on = debug.enabled;
+
+    // 그래프 노드·간선은 실내 지도와 같은 공용 변환기를 쓴다. 직접 from→to
+    // 직선을 긋지 않는 것이 중요하다 — 간선에 geometryLocalM(꺾인 복도)이 있으면
+    // 그 형상을 따라야 하고, 활성 간선에 물린 노드도 함께 강조돼야 한다.
+    final overlay = on
+        ? buildDebugMapOverlay(
+            _floorGraph,
+            showNodes: debug.showGraphNodes,
+            showEdges: debug.showGraphEdges,
+            activeEdgeIds: _pdrMatchedEdgeIds,
+          )
+        : const DebugMapOverlay();
+    await syncPdrDebugLayers(
+      controller,
+      overlay: overlay,
+      rawPath: on && debug.showRawPdrPath
+          ? _floorPathToWgs84(_pdrRawFloorPath)
+          : const [],
+      confirmedPath: on && debug.showConfirmedPdrPath
+          ? _floorPathToWgs84(_pdrConfirmedFloorPath)
+          : const [],
+      matchedPath: on && debug.showMapMatchedPdrPath
+          ? _floorPathToWgs84(_pdrMatchedFloorPath)
+          : const [],
+    );
+  }
+
+  /// 사용자가 바라보는 방향(true north 기준, 시계방향 도). PDR 세션이 heading을
+  /// 아직 못 얻은 상태(예: 자북 못 잡음 + 수동 방향 보정 아직 안 함, 첫 걸음
+  /// 전)에는 null을 돌려주고, 이 경우 마커도 heading 원뿔 없이 도트만 뜬다.
+  /// 계산식은 실내와 동일하며 walkOffset·복도 bias를 섞지 않는다.
+  double? get _pdrCurrentHeadingDeg {
+    final snapshot = _pdrTrailState.snapshot;
+    final anchor = _pdrTrailState.anchor;
+    if (snapshot == null || anchor == null || !snapshot.hasHeading) return null;
+    final transform = FloorCoordinateTransform(anchor);
+    final orientationFloorHeading = transform.toFloorBearing(
+      snapshot.orientationHeadingDeg,
+    );
+    return transform.floorBearingToMapBearing(orientationFloorHeading);
+  }
+
+  void _syncCorridorTracking(PdrSnapshot? snapshot) {
+    if (_indoorEntered) _ensureGuidanceAttached();
+    _guidance
+      ..setContext(
+        floorId: _activeFloor,
+        graph: _floorGraph,
+        floorLabels: _building?.floors ?? const [],
+      )
+      ..setAnchor(_pdrTrailState.anchor)
+      ..setEstimate(indoorLocationEstimateController.current)
+      ..setRoute(_indoorMultiFloorRoute);
+    final result = _guidance.onSnapshot(snapshot);
+    // 탑승점 접근 배너와 마커 고정은 기압이 아니라 **걸음 갱신**에서 올라온다.
+    // 여기서 비우지 않으면 다음 기압 샘플(iOS는 약 1초)까지 늦는다.
+    if (result != null) _handleEscalatorPhaseChanges();
+    _syncIndoorRouteProgress(result, snapshot);
+    if (result == null) return;
+    final anchor = _pdrTrailState.anchor;
+    if (anchor != null) {
+      _guidanceTrailSession.update(floorId: anchor.floorId, result: result);
+    }
+    _pdrDebugRecorder?.recordCorridorCorrection(result);
+    if (snapshot != null) {
+      _pdrDebugRecorder?.recordTrackerInput(
+        observation: _guidance.lastObservation,
+        wasReset: _guidance.lastWasReset,
+        result: result,
+        snapshot: snapshot,
+        previewTailPeakTimesMs: _guidance.corridor.previewTailPeakTimesMs(
+          snapshot,
+        ),
+      );
+    }
+  }
+
+  /// PDR 세션이 [floor]를 가리키게 맞춘다. 이어서 앵커를 찍어도 되면 true.
+  ///
+  /// **다른 층에서 이미 돌고 있는 세션을 그냥 재사용하면 안 된다.** 앵커에
+  /// 찍히는 층은 세션의 층([IndoorNavigationView.currentFloorId])이고, 위치
+  /// 마커·경로는 `anchor.floorId == 지금 보고 있는 층`일 때만 그려진다. 그래서
+  /// 1층에서 위치를 지정한 뒤 2층에서 다시 지정하면, 새 앵커가 여전히 1층으로
+  /// 기록돼 2층 지도에는 아무것도 나타나지 않았다 — 사용자 눈에는 "첫 층 말고는
+  /// 위치 지정이 안 되는" 버그였다. 오류도 안 뜨니 원인을 짚을 단서도 없었다.
+  ///
+  /// 앵커를 새로 찍는 것은 **기준점을 새로 잡는 것**이므로, 이전 기준점 기준의
+  /// 궤적·복도 보정을 함께 비운다. 이전 층에서 쌓은 걸음·궤적을 그대로 이어받으면
+  /// 새 앵커 기준 위치가 처음부터 어긋난 채 시작한다.
+  ///
+  /// [gatePermission]이 false면 권한을 확인하지 않고 곧바로 세션을 시작한다. GPS로
+  /// 건물 안임을 이미 확인한 **자동 진입** 경로만 그렇게 쓴다 — 거기서 게이트를 한
+  /// 번 더 두면 자동 추적 자체가 시작되지 않는다. 자동 진입은 또 세션이 이미 같은
+  /// 층에서 돌고 있으면 아무것도 건드리지 않는다. 사용자가 쌓아온 궤적을 GPS 틱이
+  /// 지울 이유가 없다.
+  ///
+  /// [announceFailure]는 센서를 못 켠 이유를 사용자에게 알릴지다. 사용자가 직접
+  /// "위치 지정"을 누른 경우에만 켠다 — 출발지 매장을 따라 찍는 경로는 조용히
+  /// 포기하고 경로만 그린다.
+  Future<bool> _bindPdrSessionToFloor(
+    String floor, {
+    bool gatePermission = true,
+    bool announceFailure = false,
+  }) async {
+    // 아래 사다리는 전부 "지금 세션 상태"를 읽어 갈린다. 정지가 아직 도는 중이면
+    // 그 상태가 거짓말을 한다([PdrSessionLifecycle.awaitStop]).
+    await _pdrLifecycle.awaitStop();
+    if (!mounted) return false;
+    if (indoorNavigationDriver.currentRuntimeStatus.state ==
+        PdrRuntimeState.idle) {
+      if (!gatePermission) {
+        setState(() => _pdrTrailState.beginNewSession());
+        await indoorNavigationDriver.startGuidance(floorId: floor);
+        return mounted;
+      }
+      await _startPdrIfIdle();
+      if (!mounted) return false;
+      if (indoorNavigationDriver.currentRuntimeStatus.state ==
+          PdrRuntimeState.idle) {
+        if (announceFailure) {
+          _showSnack('걸음 센서 권한이 없어 위치를 추적할 수 없습니다. 설정에서 동작·피트니스 권한을 허용해주세요.');
+        }
+        return false;
+      }
+    } else if (indoorNavigationDriver.currentFloorId != floor) {
+      await indoorNavigationDriver.changeFloor(floorId: floor);
+      if (!mounted) return false;
+    } else if (!gatePermission) {
+      // 자동 진입인데 이미 이 층 세션이 돌고 있다. 그대로 이어 쓴다.
+      return true;
+    }
+    setState(() {
+      _pdrTrailState.beginNewSession();
+      // 새 PDR 세션이다. 이전 세션의 보정을 들고 가면 첫 프레임이 지난 세션
+      // 좌표에서 시작한다. 층·경로 컨텍스트는 그대로 두고 보정만 비운다.
+      //
+      // 진행률 기준점도 함께 버린다. 앵커가 옮겨졌는데 진행거리만 이전 세션
+      // 값으로 남으면, 다음 걸음에서 남은거리가 튀거나 재획득이 매 걸음 켜진다.
+      _guidance
+        ..resetTracking()
+        ..clearProgress();
+    });
+    return true;
+  }
+
+  /// 앵커 배치 대기 상태 전환. 상위(MapShellScreen)에 알려 하단 바 "위치 지정"
+  /// 버튼의 활성 톤을 함께 갱신한다.
+  void _setPlacingAnchor(bool value) {
+    if (_placingPdrAnchor == value) return;
+    setState(() => _placingPdrAnchor = value);
+    widget.onPlacingLocationChanged?.call(value);
+  }
+
+  /// 진단 세션은 실내 지도 탭과 같은 경계를 쓴다 — **한 번의 길안내**.
+  ///
+  /// 상세한 근거는 실내 화면의 `_beginRouteRecordingSession` 주석을 본다. 요지는
+  /// PDR이 상시 실행이 된 뒤 "시작~종료"를 경계로 쓸 수 없고, 그대로 두면 표본
+  /// 상한에 걸려 분석하려는 구간이 앞에서부터 잘려 나간다는 것이다.
+  void _ensureGuidanceTrailSessionStarted() {
+    if (_guidanceTrailSession.isActive) return;
+    final floor = _pdrTrailState.anchor?.floorId ?? _activeFloor;
+    if (floor == null) return;
+    _guidanceTrailSession.start(
+      floorId: floor,
+      result: _guidance.trackingResult,
+    );
+  }
+
+  Future<void> _exportPdrDebugJson() async {
+    final recorder = _pdrDebugRecorder;
+    if (recorder == null || !recorder.hasSnapshot || _exportingPdrDebugJson) {
+      _showSnack('내보낼 PDR 세션이 없습니다.');
+      return;
+    }
+    setState(() => _exportingPdrDebugJson = true);
+    try {
+      final device = await PdrDebugDeviceInfo.load();
+      final session = recorder.buildJson(
+        buildingId: _building?.id ?? demoBuildingId,
+        selectedFloor: _activeFloor,
+        mapCalibrationVersion: _mapCalibrationVersion,
+        graph: _floorGraph,
+        device: device,
+      );
+      await const PdrDebugSessionShare().share(
+        session,
+        sharePositionOrigin: _pdrSharePositionOrigin(),
+      );
+    } on Object catch (error) {
+      if (mounted) _showSnack('PDR JSON을 내보내지 못했습니다: $error');
+    } finally {
+      if (mounted) setState(() => _exportingPdrDebugJson = false);
+    }
+  }
+
+  /// iOS 공유 시트는 popover 기준 사각형이 필요하다. 전달하지 않으면
+  /// share_plus가 `{0, 0, 0, 0}`을 보내 iOS에서 공유를 거부한다.
+  Rect? _pdrSharePositionOrigin() {
+    final box =
+        _pdrShareButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box != null && box.hasSize && !box.size.isEmpty) {
+      return box.localToGlobal(Offset.zero) & box.size;
+    }
+    return null;
+  }
+
+  Future<void> _onMapPressedForPdr(ll.LatLng point) async {
+    final graph = _floorGraph;
+    if (graph == null || graph.nodes.isEmpty) {
+      _showSnack('이 층의 지도 정보가 아직 없습니다.');
+      _setPlacingAnchor(false);
+      return;
+    }
+    final local = fitFloorGeoTransform(
+      graph.nodes,
+    ).invert(point.latitude, point.longitude);
+    if (local == null) {
+      _showSnack('이 층 좌표를 계산하지 못했습니다.');
+      return;
+    }
+    final tapped = PdrLocalPoint(local.$1, local.$2);
+    final snapped = FloorMapMatcher(graph).snapToWalkableNetwork(tapped);
+    if (snapped == null) {
+      _showSnack('이 층의 통로 위치를 찾지 못했습니다. 다시 시도해주세요.');
+      return;
+    }
+    if (snapped.distanceToGraphM > _maxPdrAnchorSnapDistanceM) {
+      // 매번 같은 문구만 나오면 어디가 문제인지 알 수 없다. 실측 거리를 함께
+      // 노출해서 "탭이 건물에서 얼마나 떨어진지" 사용자·개발자가 즉시 확인할
+      // 수 있게 한다.
+      final gapM = snapped.distanceToGraphM.toStringAsFixed(1);
+      _showSnack('가장 가까운 통로에서 약 ${gapM}m 떨어져 있습니다. 건물 안쪽 복도를 탭해주세요.');
+      return;
+    }
+    await _confirmPdrAnchor(snapped.point);
+  }
+
+  /// [notifyLocationChanged]는 "사용자의 현재 위치가 새로 잡혔다"를 상위에
+  /// 알릴지다. 기본은 알린다 — 지도 탭·입구 자동 배치처럼 **새 위치가 생긴**
+  /// 경우이기 때문이다. 출발지 매장을 따라 찍는 경우([_anchorAtStoreOrigin])만
+  /// 끈다. 그쪽은 상위가 방금 정한 출발지를 되짚어 찍는 것이라, 다시 알리면
+  /// 상위가 그 출발지를 스스로 버리게 된다.
+  Future<void> _confirmPdrAnchor(
+    PdrLocalPoint floorPoint, {
+    bool notifyLocationChanged = true,
+  }) async {
+    final graph = _floorGraph;
+    final axes = graph == null
+        ? const PdrToFloorAxes.identity()
+        : fitPdrToFloorAxes(graph.nodes);
+    await indoorNavigationDriver.confirmAnchorByPin(
+      floorPointM: floorPoint,
+      axes: axes,
+    );
+    if (!mounted) return;
+    if (indoorNavigationDriver.currentCalibration.phase ==
+        CalibrationPhase.awaitingHeading) {
+      final screenDirection = await _askScreenDirection();
+      if (screenDirection == null || !mounted) return;
+      final cameraBearing = _mapController?.cameraPosition?.bearing ?? 0;
+      final floorDirection = floorDirectionForScreenDirection(
+        cameraBearingDeg: cameraBearing,
+        screenClockwiseOffsetDeg: screenDirection,
+        axes: axes,
+      );
+      await indoorNavigationDriver.confirmAnchorByFloorDirection(
+        floorDirection: floorDirection,
+      );
+    }
+    if (!mounted) return;
+    _setPlacingAnchor(false);
+    _syncPdrCurrentLayer();
+    unawaited(_syncDebugPdrLayers());
+    if (notifyLocationChanged) widget.onLocationAnchored?.call();
+    // 배치가 끝났다는 안내는 따로 띄우지 않는다. 지도에 위치 마커가 바로
+    // 찍히고 안내 배너가 사라지는 것으로 이미 결과가 보이는데, 토스트까지
+    // 겹치면 방금 지정한 지점을 가린다.
+  }
+
+  /// 안내 오른쪽 상단 X — 위치 지정을 취소한다.
+  ///
+  /// 배치 대기만 끄는 게 아니라 PDR 세션까지 함께 멈춘다.
+  /// [startLocationPlacement]가 idle이던 세션을 켠 뒤 대기로 넘기므로, 대기만
+  /// 끄면 센서는 계속 돌면서 앵커 없는 세션이 남는다(실내 화면의 동명 함수와
+  /// 같은 계약).
+  Future<void> _cancelPdrAnchor() async {
+    if (!_placingPdrAnchor) return;
+    await indoorNavigationDriver.stopGuidance();
+    _pdrDebugRecorder?.recordPedometerFinalize(
+      indoorNavigationDriver.lastPedometerFinalizeInfo,
+    );
+    _pdrDebugRecorder?.recordSessionBoundary('sensorStopped');
+    _pdrDebugRecorder?.recordRuntime(
+      indoorNavigationDriver.currentRuntimeStatus,
+    );
+    if (mounted) _setPlacingAnchor(false);
+  }
+
+  Future<double?> _askScreenDirection() {
+    return showDialog<double>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('진행 방향 보정'),
+        content: const Text(
+          '이 기기는 절대 북쪽 기준 heading을 얻지 못했습니다. 현재 휴대폰이 향한 지도 방향을 선택해주세요.',
+        ),
+        actions: [
+          for (final entry in const [
+            (label: '위쪽', value: 0.0),
+            (label: '오른쪽', value: 90.0),
+            (label: '아래쪽', value: 180.0),
+            (label: '왼쪽', value: 270.0),
+          ])
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(entry.value),
+              child: Text(entry.label),
+            ),
+        ],
+      ),
+    );
+  }
+}
