@@ -73,11 +73,12 @@
 앞으로 규칙은 하나다 — **`lib/a/b/c.dart`의 테스트는 `test/a/b/c_test.dart`.**
 `lib/`에서 파일을 옮기면 테스트도 같은 자리로 옮긴다.
 
-### 남은 것 1: 한 파일이 여러 대상을 시험한다
+### 해결됨: 한 파일이 여러 대상을 시험하던 것
 
-`test/widgets/widgets_test.dart`가 본보기다 — `LocationMarker`·`UncertaintyCircle`·
-`StatusBadge`·`EtaCard` 각각 하나씩 + `SearchPanel` 20개가 한 파일에 있다.
-대상별로 가른다.
+`widgets_test.dart` 하나가 `LocationMarker`·`UncertaintyCircle`·`StatusBadge`·
+`EtaCard`·`SearchPanel` 다섯을 시험하고 있었다. 대상별로 갈랐다(430829a).
+`widget_test.dart`는 map_shell이 아니라 **앱 전체 스모크**여서 `test/app_test.dart`로
+옮겼다. 케이스 수는 1,415개 그대로다.
 
 ### 남은 것 2: 직접 테스트가 없는 모듈
 
@@ -93,8 +94,47 @@
 | `features/indoor_navigation/application/indoor_guidance_session.dart` | 876 |
 | `features/indoor_navigation/application/floor_map_matcher.dart` | 705 |
 | `models/transit_route.dart` | 462 |
-| `widgets/floor_facility_style.dart` | 390 |
+| `core/map/floor_facility_style.dart` | 390 |
 | `screens/map_shell/directions_candidates.dart` | 280 |
+
+## 문제 4 — 앱에서 닿지 않는 화면이 4,185줄 있다
+
+5단계(`floor_plan_view._onStyleLoaded` 분해)를 하다 발견했다. **이 저장소에서 가장 큰
+파일이 실행 중인 앱에서 한 번도 그려지지 않는다.**
+
+근거는 셋이다.
+
+1. `FloorPlanView`를 쓰는 화면은 `route_guide`와 `debug/floor_map_preview` 둘뿐이다.
+2. `route_guide`로 가는 유일한 길은 `destination` 화면인데, **`AppRoutes.destination`을
+   push하는 코드가 없다.** `floor_map_preview`·`pdr_svg_test`·`api_health`도 마찬가지로
+   라우트 표에만 있고 부르는 곳이 없다.
+3. 이름 없는 네비게이션(`Navigator.push`/`MaterialPageRoute`)이 **0건**이고,
+   AndroidManifest에도 딥링크 intent-filter가 없다(LAUNCHER 하나뿐).
+
+| 파일 | 줄 |
+|---|---|
+| `widgets/floor_plan_view.dart` | 2,772 |
+| `screens/debug/pdr_svg_test_screen.dart` | 468 |
+| `screens/route_guide/route_guide_screen.dart` | 335 |
+| `screens/debug/floor_map_preview_screen.dart` | 266 |
+| `screens/destination/destination_screen.dart` | 156 |
+| `screens/arrival/arrival_screen.dart` | 115 |
+| `screens/debug/api_health_check_screen.dart` | 73 |
+
+코드에 `IndoorMapBody`를 가리키는 주석이 열 군데 남아 있는데 **그런 클래스는 없다.**
+실내 탭이 있던 시절의 흔적으로 보인다 — 지금은 `MapShellScreen` 하나가 야외 지도
+위에 실내 오버레이를 얹는 방식이다.
+
+**지우지 않았다.** 저장소 규칙은 방치된 코드를 그 PR에서 지우라고 하지만, 이건
+"실내 렌더러를 버린다"는 제품 결정이라 혼자 내릴 수 없다. 세 갈래 중 하나를 골라야 한다.
+
+- **되살린다** — 실내 탭을 다시 붙일 계획이면 진입점을 만들고 테스트를 붙인다.
+- **지운다** — 계획이 없으면 4,185줄과 그 테스트를 함께 지운다. `lib/`가 8% 줄어든다.
+- **격리한다** — 당장 결정하지 않고 `lib/legacy/`로 모아 "여기는 앱이 안 쓴다"를
+  구조로 드러낸다.
+
+결정 전까지 **이 코드는 리팩터 대상에서 뺀다.** 안 쓰는 코드를 다듬는 것은
+가장 비싼 낭비다.
 
 ## 목표 구조
 
@@ -121,17 +161,31 @@ lib/
 
 앞이 끝나야 뒤가 깨끗하다.
 
-| # | 할 일 | 크기 | 위험 |
+| # | 할 일 | 크기 | 상태 |
 |---|---|---|---|
-| 1 | 테스트 루트 통합 | 83파일 | 없음(완료) |
-| 2 | `widgets/`의 **위젯 아닌 20개**를 `core/map/`으로 | 2,794줄 | 낮음 — 순수 이동 |
-| 3 | 화면 전용 위젯을 그 화면 밑으로 | ~3,500줄 | 낮음 |
-| 4 | `widgets_test.dart` 같은 잡동사니 테스트 분해 | — | 없음 |
-| 5 | `floor_plan_view._onStyleLoaded` 분해 | 371줄 | **중** — 실기기 확인 필요 |
-| 6 | `map_shell_screen` 분해(part → 진짜 분리) | 2,953줄 | 중 |
-| 7 | 직접 테스트 없는 큰 모듈에 테스트 | — | 없음 |
+| 1 | 테스트 루트 통합 | 83파일 | **완료** (584e83a) |
+| 2 | `widgets/`의 위젯 아닌 17개를 성격별로 | 2,794줄 | **완료** (1428a68) |
+| 3 | 화면 전용 위젯 25개를 그 화면 밑으로 | 8,000줄 | **완료** (1428a68) |
+| 4 | 여러 대상을 시험하던 테스트 분해 | 2파일 | **완료** (430829a) |
+| 5 | `floor_plan_view._onStyleLoaded` 분해 | 371 → 52줄 | **완료** (a3c1909) |
+| 6 | **앱에서 닿지 않는 4,185줄을 어떻게 할지 결정** | — | **막힘** — 제품 결정 필요 |
+| 7 | `map_shell_screen` 분해 | 2,953줄 | 중 |
+| 8 | 직접 테스트 없는 큰 모듈에 테스트 | — | 없음 |
 
-2~4는 기계적이라 한 번에 간다. 5부터는 야외 지도와 같은 방식(테스트 먼저 → 옮기고
+### 1~4를 마친 결과
+
+| 디렉터리 | 전 | 후 |
+|---|---|---|
+| `lib/widgets` | 13,610줄 / 49개 | **4,232줄 / 11개** |
+| `lib/core/map` | — | 2,340줄 / 12개 |
+| `lib/screens/map_shell/widgets` | — | 5,789줄 / 12개 (+ `place_detail/` 5개) |
+| `lib/screens/outdoor_map/widgets` | — | 974줄 / 9개 |
+| 테스트 루트 | `test/` + `tests/unit_test/` | `test/` 하나 |
+
+**`lib/widgets/`에 남은 11개는 전부 두 화면 이상이 실제로 쓴다.** 그 기준을
+README 맨 위에 적어 두었다 — 기준이 없으면 다시 쌓인다.
+
+5부터는 야외 지도와 같은 방식(테스트 먼저 → 옮기고
 → 원본과 대조 → 실기기 확인)을 쓴다.
 
 ## 이 개편이 건드리는 다른 곳
