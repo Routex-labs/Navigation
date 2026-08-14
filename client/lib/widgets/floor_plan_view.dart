@@ -22,6 +22,7 @@ import 'floor_camera_bounds.dart';
 import '../features/debug_mode/debug_map_overlay.dart';
 import '../models/floor_plan.dart';
 import '../screens/outdoor_map/indoor_entry_zoom.dart';
+import '../screens/outdoor_map/building_orientation.dart';
 import 'category_map_fill.dart';
 import 'map_icon_cache.dart';
 import 'category_map_filter.dart';
@@ -30,6 +31,7 @@ import 'floor_facility_style.dart';
 import 'store_cluster_sheet.dart';
 import 'store_label_anchor.dart';
 import 'store_label_fit.dart';
+import 'store_label_priority.dart';
 
 /// maplibre_gl은 web/android/iOS만 지원한다(패키지 자체 pubspec에 명시된
 /// 플랫폼 목록). Windows/Linux/macOS 데스크톱에서 `flutter run`으로 띄우면
@@ -54,7 +56,8 @@ String _tileSourceIdFor(String floor) => '$_tileSourceId-$floor';
 /// ([_installPrefetchTileSources]). 실제 층 소스([_tileSourceIdFor])와 id를
 /// 나눠, 층 전환의 addSource가 이미 있는 id에 부딪히는 경로를 만들지 않는다.
 String _prefetchSourceIdFor(String floor) => '$_tileSourceId-prefetch-$floor';
-String _prefetchLayerIdFor(String floor) => '$_tileSourceId-prefetch-fill-$floor';
+String _prefetchLayerIdFor(String floor) =>
+    '$_tileSourceId-prefetch-fill-$floor';
 
 /// 매장명 라벨 전용 GeoJSON 소스 id.
 ///
@@ -928,7 +931,6 @@ class FloorPlanViewState extends State<FloorPlanView> {
     }
   }
 
-
   /// 지도에 쓰는 비트맵 전부. **층과 무관**하므로 스타일 로드 때 한 번만 부른다.
   /// 층을 바꿀 때 다시 부르지 않는 것이 [_installFloorTileLayers]와 나눈 이유다 —
   /// 예전에는 층마다 지도를 새로 만들면서 이 26장을 매번 다시 구웠다.
@@ -941,7 +943,10 @@ class FloorPlanViewState extends State<FloorPlanView> {
       await controller.addImage(
         imageName,
         // 층을 오갈 때마다 같은 그림을 다시 굽지 않는다([map_icon_cache.dart]).
-        await cachedIconPng(imageName, () => renderStoreCategoryIconPng(category)),
+        await cachedIconPng(
+          imageName,
+          () => renderStoreCategoryIconPng(category),
+        ),
       );
     }
     // 엘리베이터/에스컬레이터/화장실 같은 POI는 단순 점 대신 종류별 아이콘으로
@@ -960,7 +965,10 @@ class FloorPlanViewState extends State<FloorPlanView> {
       final imageName = facilityIconImageName(entry.key);
       await controller.addImage(
         imageName,
-        await cachedIconPng(imageName, () => renderFacilityIconPng(entry.value)),
+        await cachedIconPng(
+          imageName,
+          () => renderFacilityIconPng(entry.value),
+        ),
       );
     }
     await controller.addImage(
@@ -1439,6 +1447,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
     final nonAggregate = widget.floorPlan.stores
         .where((s) => !_aggregateIds.contains(s.id))
         .toList();
+    final priorities = rankStoreLabels(nonAggregate);
     // 세 곳 이상이 한 자리를 나눠 쓰면 칸이 줄무늬처럼 잘게 갈라진다(실기기
     // 확인). 개별 라벨 대신 「첫 매장 외 N」 하나로 접고, 누르면 목록 시트를
     // 띄운다([showStoreClusterSheet]). 두 곳은 칸 분할이 그대로 낫다.
@@ -1495,6 +1504,8 @@ class FloorPlanViewState extends State<FloorPlanView> {
           if ((shares[store.id] ?? 1) > 1) kStoreLabelSharedProperty: true,
           kStoreLabelEmMetersProperty: fit.emMeters,
           kStoreLabelMaxWidthProperty: fit.maxWidthEm,
+          kStoreLabelPriorityProperty:
+              priorities[store.id] ?? priorities.length,
         },
       });
     }
@@ -1530,13 +1541,12 @@ class FloorPlanViewState extends State<FloorPlanView> {
           kStoreLabelSharedProperty: true,
           kStoreLabelEmMetersProperty: fit.emMeters,
           kStoreLabelMaxWidthProperty: fit.maxWidthEm,
+          kStoreLabelPriorityProperty:
+              priorities[first.id] ?? priorities.length,
         },
       });
     }
-    return <String, dynamic>{
-      'type': 'FeatureCollection',
-      'features': features,
-    };
+    return <String, dynamic>{'type': 'FeatureCollection', 'features': features};
   }
 
   /// 같은 층에서 도면 데이터만 새로 받아온 경우(재조회·건물 갱신) 라벨을
@@ -1738,59 +1748,48 @@ class FloorPlanViewState extends State<FloorPlanView> {
     double labelLatitude, {
     bool alwaysVisible = false,
   }) => SymbolLayerProperties(
-        // 카테고리를 고르면 그 매장만 이름을 단다. 나머지는 빈 문자열이 되어
-        // 아이콘만 남는다(판단 근거는 [categoryLabelTextField] 주석).
-        textField: categoryLabelTextField(widget.categorySelection),
-        textFont: _mapFontStack,
-        textSize: storeLabelTextSizeExpression(latitude: labelLatitude),
-        // 크기를 잴 때 가정한 줄바꿈 폭 그대로 걸어야 계산이 맞는다
-        // ([kStoreLabelMaxWidthProperty] 주석).
-        textMaxWidth: ['get', kStoreLabelMaxWidthProperty],
-        iconImage: storeCategoryIconExpression(),
-        // 크기는 화면 배율을 곱해 정한다 — `icon-size`는 물리 픽셀이고
-        // `text-size`는 논리 픽셀이라, 안 곱하면 고밀도 화면에서 아이콘만
-        // 배율만큼 작아진다([storeCategoryIconSizeIndoor] 실측표).
-        iconSize: storeCategoryIconSize(_devicePixelRatio),
-        // 이름은 **항상 아이콘 아래**다. 편의시설·POI 라벨과 같은 규칙이라
-        // 한 화면에서 이름이 붙는 자리가 하나로 읽힌다.
-        //
-        // 예전에는 `textVariableAnchor: ['left','right']`로 아이콘 오른쪽을
-        // 먼저 시도하고 자리가 없으면 왼쪽으로 넘겼다. 자리를 잘 찾는 대신
-        // **같은 화면에서 매장마다 이름이 다른 쪽에 붙어** 눈이 이름을 찾는
-        // 규칙을 못 세웠다. 시설은 이미 아래로 고정이라 두 규칙이 섞이기도 했다.
-        textAnchor: 'top',
-        textOffset: mapLabelBelowIconOffset,
-        // 앵커가 고정이므로 두 줄로 접힌 이름은 가운데 정렬이 맞는다.
-        textJustify: 'center',
-        // 색·헤일로는 [map_label_style.dart]가 단일 출처다(야외 오버레이와 같은 값).
-        textColor: mapLabelStoreColor,
-        textHaloColor: mapLabelHaloColor,
-        textHaloWidth: mapLabelHaloWidth,
-        // variable-anchor는 충돌 판정 위에서만 동작한다. true로 바꾸면 앵커가
-        // 항상 첫 번째 값으로 굳어 뒤집기가 조용히 죽는다.
-        textAllowOverlap: alwaysVisible,
-        // 자리가 없으면 **이름만** 포기한다. 아이콘은 항상 그린다.
-        //
-        // ⚠️ **예전 규칙을 뒤집었다.** 원래는 `iconOptional: true`로 두고
-        // "붐빌 때는 아이콘을 포기해 이름을 살린다"였는데, 실기기에서 재 보니
-        // 그 대가가 예상보다 훨씬 컸다 — 같은 1F에서 zoom을 한 단계씩 올리며
-        // 배지 픽셀을 세면 **0 → 5,956 → 0**이었다. 확대해서 자리가 남아도는
-        // 화면에서도 배지가 통째로 사라졌다. 사용자에게는 "아이콘이 커지거나
-        // 줄어드는 게 아니라 없어진다"로 보인다.
-        //
-        // 아이콘은 이름보다 조금 크기만 하고(11~16 논리 px) 색만으로도 업종을
-        // 말하므로, 밀릴 때 버릴 것은 이쪽이 아니다.
-        //
-        // **`iconIgnorePlacement`는 켰다가 껐다.** 켜 두면 배지가 충돌 판정에서
-        // 아예 빠져 "다른 라벨을 밀어내지 않는" 대신 **다른 매장 이름 위에 그대로
-        // 올라앉는다** — 실기기에서 「탬버린즈」·「오휘/후」가 옆 매장 배지에
-        // 덮였다. 배지를 장애물로 되돌려 이름들이 그 자리를 피해 가게 한다.
-        // 배지 자체는 `iconAllowOverlap`·`iconOptional: false` 덕에 그래도
-        // 사라지지 않는다.
-        textOptional: !alwaysVisible,
-        iconOptional: false,
-        iconAllowOverlap: true,
-      );
+    // 카테고리를 고르면 그 매장만 이름을 단다. 나머지는 빈 문자열이 되어
+    // 아이콘만 남는다(판단 근거는 [categoryLabelTextField] 주석).
+    textField: categoryLabelTextField(widget.categorySelection),
+    textFont: _mapFontStack,
+    textSize: storeLabelTextSizeExpression(latitude: labelLatitude),
+    // 크기를 잴 때 가정한 줄바꿈 폭 그대로 걸어야 계산이 맞는다
+    // ([kStoreLabelMaxWidthProperty] 주석).
+    textMaxWidth: ['get', kStoreLabelMaxWidthProperty],
+    iconImage: storeCategoryIconExpression(),
+    // 크기는 화면 배율을 곱해 정한다 — `icon-size`는 물리 픽셀이고
+    // `text-size`는 논리 픽셀이라, 안 곱하면 고밀도 화면에서 아이콘만
+    // 배율만큼 작아진다([storeCategoryIconSizeIndoor] 실측표).
+    iconSize: storeCategoryIconSize(_devicePixelRatio),
+    // 이름은 **항상 아이콘 아래**다. 편의시설·POI 라벨과 같은 규칙이라
+    // 한 화면에서 이름이 붙는 자리가 하나로 읽힌다.
+    //
+    // 예전에는 `textVariableAnchor: ['left','right']`로 아이콘 오른쪽을
+    // 먼저 시도하고 자리가 없으면 왼쪽으로 넘겼다. 자리를 잘 찾는 대신
+    // **같은 화면에서 매장마다 이름이 다른 쪽에 붙어** 눈이 이름을 찾는
+    // 규칙을 못 세웠다. 시설은 이미 아래로 고정이라 두 규칙이 섞이기도 했다.
+    textAnchor: 'top',
+    textOffset: mapLabelBelowIconOffset,
+    // 앵커가 고정이므로 두 줄로 접힌 이름은 가운데 정렬이 맞는다.
+    textJustify: 'center',
+    // 색·헤일로는 [map_label_style.dart]가 단일 출처다(야외 오버레이와 같은 값).
+    textColor: mapLabelStoreColor,
+    textHaloColor: mapLabelHaloColor,
+    textHaloWidth: mapLabelHaloWidth,
+    // variable-anchor는 충돌 판정 위에서만 동작한다. true로 바꾸면 앵커가
+    // 항상 첫 번째 값으로 굳어 뒤집기가 조용히 죽는다.
+    textAllowOverlap: alwaysVisible,
+    // 일반 매장은 아이콘과 이름을 **한 단위로** 배치한다. 이름만 충돌로 빠지고
+    // 아이콘이 남으면 축소 화면에 의미를 알 수 없는 색 점이 가득해져 밀도 조절의
+    // 목적이 사라진다. 둘 다 필수로 두면 심볼 전체가 함께 숨고, 확대해 자리가
+    // 생길 때 함께 돌아온다. 공유 매장은 overlap을 켜므로 이 규칙에서도 유지된다.
+    textOptional: false,
+    iconOptional: false,
+    iconAllowOverlap: alwaysVisible,
+    // 낮은 줌에서는 충돌 공간이 좁아 우선순위가 앞선 라벨만 남고, 확대해
+    // 공간이 생기면 뒤 순위가 자동으로 나타난다. 숫자가 낮을수록 먼저 배치된다.
+    symbolSortKey: ['get', kStoreLabelPriorityProperty],
+  );
 
   /// 편의시설(화장실·정수기 등) 이름 심볼의 속성 묶음.
   ///
@@ -2278,9 +2277,20 @@ class FloorPlanViewState extends State<FloorPlanView> {
     );
     if (clamped == null) return;
 
-    // 되돌림도 미끄러지게 한다. 기본 애니메이션은 짧아서 경계에서 지도가
-    // 튕겨 나오는 것처럼 보였다 — 같은 거리를 같은 방향으로 옮기더라도
-    // "벽에 부딪혔다"와 "벽에 닿아 멈췄다"는 다르게 읽힌다.
+    final viewport = _lastViewport ?? MediaQuery.sizeOf(context);
+    if (!shouldApplyCameraCorrection(
+      current: ll.LatLng(center.latitude, center.longitude),
+      corrected: clamped,
+      halfSpanLat: halfSpan?.lat ?? 0,
+      halfSpanLng: halfSpan?.lng ?? 0,
+      viewportWidthPx: viewport.width,
+      viewportHeightPx: viewport.height,
+    )) {
+      return;
+    }
+
+    // 화면상 의미 없는 차이는 위에서 버렸으므로 여기까지 왔다면 실제로 경계를
+    // 벗어난 경우다. 그때만 정확한 clamped 좌표까지 한 번에 미끄러지게 한다.
     await controller.animateCamera(
       CameraUpdate.newLatLng(_toMapLibreLatLng(clamped)),
       duration: _pullBackAnimationDuration,
@@ -2367,34 +2377,50 @@ class FloorPlanViewState extends State<FloorPlanView> {
     });
   }
 
-  /// 새 경로가 그려질 때 카메라를 경로의 **출발점**으로 옮긴다. 예전엔 경로
-  /// 전체 bounding box에 맞춰 줌아웃했지만, 그러면 사용자가 지금 서 있는
-  /// 위치와 바로 가야 할 방향이 화면 안에서 너무 작게 보인다. 특히 층 간
-  /// 경로(1F→6F)에서는 이 층에 그려진 세그먼트가 사용자 시점에서 크게 보여야
-  /// "여기서 저기 엘리베이터로 가면 되는구나"가 즉시 이해된다.
-  ///
-  /// 줌은 [_routeStartZoom]으로 고정한다(사용자가 방향을 놓치지 않을 정도로
-  /// 가깝게). 현재 bearing은 유지하며, 사용자가 이후 줌/이동을 하면 그 조작을
-  /// 덮지 않는다 — 이 함수는 "경로가 새로 생긴 순간"에만 호출된다.
+  /// 새 경로가 그려질 때 **이 층의 경로 전체**가 한눈에 들어오도록 맞춘다.
+  /// 출발점 고정 확대는 짧은 경로에는 좋지만 40~50m만 되어도 목적지가 화면 밖에
+  /// 남아, 안내를 시작한 직후 사용자가 다시 축소해야 했다. 경로의 최소 넓이
+  /// 상자를 화면에 맞추되 너무 짧은 경로는 주변 맥락이 사라지지 않도록 확대
+  /// 상한을 둔다.
   Future<void> _fitToRouteBounds(List<ll.LatLng> points) async {
     final controller = _controller;
-    if (controller == null || points.isEmpty) return;
+    if (controller == null || points.length < 2) return;
+    final box = routeBoxFor(points, minSideM: _routeFitMinSideM);
+    if (box == null) return;
+    final viewport = _lastViewport ?? MediaQuery.sizeOf(context);
     final current = controller.cameraPosition;
-    await controller.moveCamera(
+    final bearing = portraitBearingFor(
+      longAxisAzimuthDeg: box.longAxisAzimuthDeg,
+      currentBearing: current?.bearing,
+    );
+    final zoom = min(
+      zoomToFitRotatedBox(
+        widthMeters: box.shortSideM / _routeFitFillRatio,
+        heightMeters: box.longSideM / _routeFitFillRatio,
+        viewportWidthPx: viewport.width,
+        viewportHeightPx: max(1, viewport.height - _routeFitVerticalChromePx),
+        latitude: box.center.latitude,
+      ),
+      _routeFitMaxZoom,
+    );
+    await controller.animateCamera(
       CameraUpdate.newCameraPosition(
         CameraPosition(
-          target: _toMapLibreLatLng(points.first),
-          zoom: _routeStartZoom,
-          bearing: current?.bearing ?? 0,
+          target: _toMapLibreLatLng(box.center),
+          zoom: zoom,
+          bearing: bearing,
           tilt: current?.tilt ?? 0,
         ),
       ),
+      duration: _routeFitDuration,
     );
   }
 
-  /// 경로 시작 시 사용할 카메라 줌 레벨. 사용자가 지금 위치와 바로 앞 방향을
-  /// 명확히 볼 수 있을 정도의 값.
-  static const _routeStartZoom = 19.0;
+  static const _routeFitMinSideM = 12.0;
+  static const _routeFitFillRatio = 0.82;
+  static const _routeFitMaxZoom = 18.0;
+  static const _routeFitVerticalChromePx = 132.0;
+  static const _routeFitDuration = Duration(milliseconds: 700);
 
   /// 화면(뷰포트) 크기에 맞춰 건물이 최대한 크게(=매장 라벨이 최대한 많이
   /// 안 겹치고 보이게) 나오도록 카메라 bearing과 zoom을 같이 계산해서 적용한다.
@@ -2553,7 +2579,6 @@ class FloorPlanViewState extends State<FloorPlanView> {
     // 명시적 요청이므로 데드밴드를 건너뛴다.
     await _followCamera(force: true);
   }
-
 
   Future<void> _fitToFootprint() async {
     final controller = _controller;

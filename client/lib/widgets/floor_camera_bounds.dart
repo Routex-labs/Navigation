@@ -9,6 +9,53 @@ import 'package:latlong2/latlong.dart' as ll;
 /// 그 왕복이 멈추지 않는다.
 const _epsilonDeg = 1e-7;
 
+/// 화면에서 이 거리보다 작은 경계 보정은 실행하지 않는다.
+///
+/// 위경도 차이만으로는 같은 오차가 줌 단계에 따라 0.1px일 수도, 수십 px일 수도
+/// 있다. 사용자가 느끼는 것은 좌표 오차가 아니라 화면의 2차 이동이므로 픽셀을
+/// 기준으로 판단한다. 10px 미만은 도면을 읽는 데 영향이 없지만, 손을 뗀 직후
+/// 카메라가 한 번 더 움직였다는 느낌은 충분히 만든다.
+const kCameraCorrectionDeadbandPx = 10.0;
+
+/// [corrected]로 옮길 때 화면에서 보이는 거리가 데드밴드를 넘는지 판정한다.
+///
+/// [halfSpanLat]·[halfSpanLng]는 현재 화면이 덮는 위경도 범위의 절반이다.
+/// 따라서 좌표 차이를 전체 범위(`halfSpan * 2`)로 나눈 뒤 뷰포트 크기를
+/// 곱하면 회전된 지도에서도 충분히 보수적인 화면 거리 근사가 된다.
+///
+/// 화면 범위를 구하지 못했으면 기존처럼 보정한다. 계산 실패를 이유로 실제로
+/// 도면이 사라질 만큼 밀린 카메라까지 방치하는 쪽이 더 큰 실패이기 때문이다.
+bool shouldApplyCameraCorrection({
+  required ll.LatLng current,
+  required ll.LatLng corrected,
+  required double halfSpanLat,
+  required double halfSpanLng,
+  required double viewportWidthPx,
+  required double viewportHeightPx,
+  double deadbandPx = kCameraCorrectionDeadbandPx,
+}) {
+  if (halfSpanLat <= 0 ||
+      halfSpanLng <= 0 ||
+      viewportWidthPx <= 0 ||
+      viewportHeightPx <= 0 ||
+      !halfSpanLat.isFinite ||
+      !halfSpanLng.isFinite ||
+      !viewportWidthPx.isFinite ||
+      !viewportHeightPx.isFinite) {
+    return true;
+  }
+
+  final dx =
+      (corrected.longitude - current.longitude).abs() /
+      (halfSpanLng * 2) *
+      viewportWidthPx;
+  final dy =
+      (corrected.latitude - current.latitude).abs() /
+      (halfSpanLat * 2) *
+      viewportHeightPx;
+  return sqrt(dx * dx + dy * dy) >= deadbandPx;
+}
+
 /// 카메라 중심이 허용 영역 밖으로 나갔으면 안으로 당긴 좌표를, 이미 안에
 /// 있으면 null을 돌려준다.
 ///
