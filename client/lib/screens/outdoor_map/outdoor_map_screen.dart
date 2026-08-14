@@ -70,7 +70,7 @@ import '../../widgets/map_icon_cache.dart';
 import '../../widgets/map_overlay_tap_guard.dart';
 import '../../widgets/status_badge.dart';
 import 'floor_outline.dart';
-import 'gps_freshness_policy.dart';
+import 'gps_session.dart';
 import 'indoor_entry_gps.dart';
 import 'building_orientation.dart';
 import 'indoor_entry_proximity.dart';
@@ -635,7 +635,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 버튼 하나로 분리했다([EtaCard.onStartGuidance]).
   bool _offerStartGuidance = false;
 
-  StreamSubscription<Position>? _positionSubscription;
   bool _interactive = true;
   ll.LatLng? _userDestination;
   String? _userDestinationLabel;
@@ -1880,9 +1879,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   @override
   void dispose() {
     _buildingRetryTimer?.cancel();
-    _positionSubscription?.cancel();
-    _streamRetryTimer?.cancel();
-    _streamFirstFixTimer?.cancel();
+    _gps.dispose();
     _pdrSnapshotSub?.cancel();
     _pdrCalibrationSub?.cancel();
     _pdrAltitudeSub?.cancel();
@@ -1902,7 +1899,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 앱 전역 인스턴스라 dispose하지 않는다 — 실내 화면이 같은 컨트롤러를
     // 계속 구독한다.
     _debugModeController.removeListener(_onDebugModeChanged);
-    _freshFixTimer?.cancel();
     _gpsVerdictDebugText.dispose();
     _escalatorDebugText.dispose();
     super.dispose();
@@ -2648,163 +2644,28 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   /// GPS 구독을 [_gpsTrackingWanted] 상태에 맞춘다. 구독 시작/해제의 유일한
   /// 진입점이라 중복 구독이나 해제 누락이 생기지 않는다.
-  /// 좌표를 마지막으로 **받은** 시각. 낡음 판정의 기준이다
-  /// ([gps_freshness_policy.dart]).
-  DateTime? _lastFixReceivedAt;
-
-  /// 일회성 위치 조회가 떠 있는 동안 true. 겹쳐 쏘는 것을 막는다.
-  bool _freshFixInFlight = false;
-
-  /// 스트림이 조용한지 주기적으로 확인하는 타이머.
-  Timer? _freshFixTimer;
-
-  /// 닫힌 스트림을 다시 열기까지 기다리는 시간. 계산은
-  /// [nextStreamRetryDelay]가 한다.
-  Duration _streamRetryDelay = streamRetryMinDelay;
-  Timer? _streamRetryTimer;
-
-  /// 지금 열어 둔 스트림이 좌표를 한 건이라도 줬는지. 구독을 새로 열 때마다
-  /// false로 되돌린다.
-  bool _streamDeliveredFix = false;
-
-  /// 새로 연 스트림이 벙어리인지 지켜보는 타이머([streamFirstFixTimeout]).
-  Timer? _streamFirstFixTimer;
-
-  /// 위치 스트림을 지금까지 몇 번 열었는지. **진단 전용이다.**
-  ///
-  /// 정상이라면 화면이 사는 동안 1이어야 한다. 실기기에서 이 값이 올라간다면
-  /// 스트림이 죽고 있다는 뜻이고, 1에 머무는데도 좌표가 드물다면 스트림은
-  /// 살아 있고 기기가 좌표를 늦게 주는 것이다. **둘은 완전히 다른 문제라,
-  /// 이 값 없이는 화면만 보고 구분할 수 없다.**
-  int _streamRestartCount = 0;
-
-  /// 마지막 좌표가 스트림에서 왔는지(true) 일회성 조회에서 왔는지(false).
-  /// 진단 칩에만 쓰인다 — 스트림이 조용한 채 일회성 조회만 화면을 떠받치고
-  /// 있는 상태를 눈으로 구분하기 위한 것이다.
-  bool _lastFixFromStream = false;
-
-  /// 스트림이 약속한 간격을 안 지키는 기기에서 위치를 직접 끌어온다.
-  ///
-  /// 실측에서 1초를 요청했는데 15~36초에 한 건이 왔고, 같은 순간 "위치 갱신"
-  /// 버튼의 일회성 조회는 즉시 응답했다. 그 경로를 앱이 대신 눌러 준다.
-  void _syncFreshFixTimer() {
-    // **실내에서도 돌린다.** 야외 이탈 판정의 유일한 입력이 GPS라서다 —
-    // 자세한 사정은 [indoorGpsFixMaxAge] 주석에 있다.
-    final wanted = _gpsTrackingWanted;
-    if (!wanted) {
-      _freshFixTimer?.cancel();
-      _freshFixTimer = null;
-      return;
-    }
-    if (_freshFixTimer != null) return;
-    _freshFixTimer = Timer.periodic(
-      const Duration(seconds: 1),
-      (_) => _maybeRequestFreshFix(),
-    );
-  }
-
-  Future<void> _maybeRequestFreshFix() async {
-    if (!mounted || !_gpsTrackingWanted) return;
-    if (!shouldRequestFreshFix(
-      lastFixReceivedAt: _lastFixReceivedAt,
-      now: DateTime.now(),
-      requestInFlight: _freshFixInFlight,
-    )) {
-      return;
-    }
-    _freshFixInFlight = true;
-    try {
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: oneShotFixSettings(),
-      );
-      if (!mounted) return;
-      // 스트림으로 들어온 좌표와 **같은 문을 통과시킨다.** 진입 판정·경로·진단
-      // 칩이 전부 여기 걸려 있어서, 따로 처리하면 손으로 끌어온 좌표만 판정을
-      // 건너뛰는 상태가 된다.
-      _handlePosition(position);
-    } catch (_) {
-      // 조용히 넘긴다. 다음 주기에 다시 시도하고, 실패해도 스트림은 그대로다.
-    } finally {
-      _freshFixInFlight = false;
-    }
-  }
+  /// 위치 스트림의 수명(구독·재연결·벙어리 감시·일회성 조회)은 여기가 소유한다.
+  /// 화면은 좌표를 받아 쓰기만 한다.
+  late final GpsSession _gps = GpsSession(
+    onFix: (position, {bool fromStream = false}) =>
+        _handlePosition(position, fromStream: fromStream),
+    isActive: () => mounted && _gpsTrackingWanted,
+    onStreamError: _handlePositionError,
+  );
 
   void _syncGpsSubscription() {
-    _syncFreshFixTimer();
     if (_gpsTrackingWanted) {
-      if (_positionSubscription != null) return;
-      _subscribeToPositions();
+      _gps.start();
       return;
     }
-    _streamRetryTimer?.cancel();
-    _streamRetryTimer = null;
-    _streamFirstFixTimer?.cancel();
-    _streamFirstFixTimer = null;
-    _streamRetryDelay = streamRetryMinDelay;
-    if (_positionSubscription == null) return;
-    unawaited(_positionSubscription!.cancel());
-    _positionSubscription = null;
+    _gps.stop();
     // 마지막으로 알던 GPS 위치도 버린다. 남겨두면 실내에 들어간 뒤에도 마커가
-    // 그려지거나(“GPS 기반 위치가 보이면 안 된다”), 다시 야외로 나왔을 때 옛
+    // 그려지거나("GPS 기반 위치가 보이면 안 된다"), 다시 야외로 나왔을 때 옛
     // 좌표가 잠깐 현재 위치인 것처럼 보인다.
     _pendingCenterOnPosition = false;
     if (!mounted) return;
     setState(() => _position = null);
     _syncCurrentLayer();
-  }
-
-  /// 위치 스트림을 새로 연다. **[_syncGpsSubscription]과 재연결만 이 함수를
-  /// 부른다** — 구독을 만드는 곳이 흩어지면 [onDone] 처리를 빠뜨린 경로가 다시
-  /// 생긴다.
-  ///
-  /// [onDone]이 왜 필요한가: 이 자리에는 원래 [onError]만 있었다. 그런데 스트림이
-  /// **에러 없이 닫히는** 경우가 있다(네이티브가 EventChannel을 해제할 때). 그때
-  /// [_positionSubscription]은 null이 아닌 채로 남고, [_syncGpsSubscription]은
-  /// `!= null`을 보고 그냥 돌아선다. **한 번 죽으면 앱이 영영 모른다.** 실기기에서
-  /// "위치 갱신 버튼은 되는데 화면은 안 움직인다"고 관찰된 상태가 정확히 이것이다
-  /// — 그 버튼은 스트림이 아니라 일회성 조회를 쓴다.
-  void _subscribeToPositions() {
-    _streamRestartCount++;
-    _streamDeliveredFix = false;
-    _positionSubscription = watchPosition().listen(
-      (position) => _handlePosition(position, fromStream: true),
-      onError: (Object _) {
-        _handlePositionError();
-        _handlePositionStreamClosed();
-      },
-      onDone: _handlePositionStreamClosed,
-    );
-    // **닫히지 않고 벙어리가 되는 경우**를 잡는다. 위 onDone/onError는 둘 다
-    // 걸리지 않는다 — 자세한 사정은 [streamFirstFixTimeout] 주석에 있다.
-    _streamFirstFixTimer?.cancel();
-    _streamFirstFixTimer = Timer(streamFirstFixTimeout, () {
-      _streamFirstFixTimer = null;
-      if (!mounted || _streamDeliveredFix) return;
-      _handlePositionStreamClosed();
-    });
-  }
-
-  /// 스트림이 닫혔다. 끊어진 구독을 버리고 잠시 뒤 다시 연다.
-  ///
-  /// **간격을 두고 늘려 가는 이유는 영구 실패 때문이다.** 위치 권한이 거부돼
-  /// 있으면 스트림은 열자마자 에러로 닫힌다. 고정 간격으로 다시 걸면 그 상태에서
-  /// 초당 한 번씩 채널을 두드리며 배터리만 태운다. 좌표가 한 건이라도 들어오면
-  /// [_handlePosition]이 간격을 처음 값으로 되돌린다.
-  void _handlePositionStreamClosed() {
-    if (_positionSubscription == null) return;
-    _streamFirstFixTimer?.cancel();
-    _streamFirstFixTimer = null;
-    unawaited(_positionSubscription!.cancel());
-    _positionSubscription = null;
-    if (!mounted || !_gpsTrackingWanted) return;
-    if (_streamRetryTimer != null) return;
-    _streamRetryTimer = Timer(_streamRetryDelay, () {
-      _streamRetryTimer = null;
-      _streamRetryDelay = nextStreamRetryDelay(_streamRetryDelay);
-      if (!mounted || !_gpsTrackingWanted) return;
-      if (_positionSubscription != null) return;
-      _subscribeToPositions();
-    });
   }
 
   void _handlePositionError() {
@@ -2814,19 +2675,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   }
 
   void _handlePosition(Position position, {bool fromStream = false}) {
-    if (!mounted) return;
-    _lastFixFromStream = fromStream;
-    // 좌표가 한 건이라도 들어오면 스트림은 살아 있다. 벙어리 감시를 걷고,
-    // 재연결 간격도 되돌려 다음에 끊겼을 때 30초를 기다리지 않게 한다.
-    if (fromStream) {
-      _streamDeliveredFix = true;
-      _streamFirstFixTimer?.cancel();
-      _streamFirstFixTimer = null;
-      _streamRetryDelay = streamRetryMinDelay;
-    }
-    // 실내 진입 직전에 이미 큐에 들어간 이벤트가 진입 후 도착할 수 있다.
-    // 구독은 끊겼어도 이 한 건이 새어들어오면 위치 마커가 다시 켜지므로 막는다.
-    if (!_gpsTrackingWanted) return;
+    if (!mounted || !_gpsTrackingWanted) return;
     // 좌표가 얼마 만에 왔는지는 **기기가 찍은 시각**으로 잰다. 앱이 받은 시각을
     // 쓰면 프레임이 밀린 시간까지 섞여, 스트림이 느린 것인지 화면이 느린 것인지
     // 구분되지 않는다. 진단 칩에만 쓰이는 값이다.
@@ -2834,9 +2683,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         ? null
         : position.timestamp.difference(_lastFixAt!);
     _lastFixAt = position.timestamp;
-    // 낡음 판정은 **받은 시각** 기준이다. 기기가 찍은 시각을 쓰면, 같은 좌표를
-    // 반복해서 받는 동안에도 계속 낡은 것으로 보여 요청이 멈추지 않는다.
-    _lastFixReceivedAt = DateTime.now();
     // 실내에서도 좌표는 **들고 있는다.** 진입/이탈 판정의 유일한 입력이고,
     // 화면에 그릴지는 [_outdoorGpsVisible]이 따로 가른다([_syncCurrentLayer]).
     setState(() => _position = position);
@@ -2900,8 +2746,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
             judgement,
             armed: _gpsEntryArmed,
             sinceLastFix: sinceLastFix,
-            fromStream: _lastFixFromStream,
-            streamRestarts: _streamRestartCount,
+            fromStream: _gps.lastFixFromStream,
+            streamRestarts: _gps.restartCount,
           )
         : null;
     switch (judgement.verdict) {
