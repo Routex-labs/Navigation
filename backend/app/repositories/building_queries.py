@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.geo.georeference import GeoTransform
+from app.geo.shared_polygon import split_shared_polygons
 from app.geo.tiling import local_points_to_lnglat
 from app.graph.revision import graph_revision
 from app.models import Building, Edge, Floor, Node, Poi, Store
@@ -184,6 +185,7 @@ def get_floor_map(
     stores = session.scalars(select(Store).where(Store.floor_id == floor.id)).all()
     pois = session.scalars(select(Poi).where(Poi.floor_id == floor.id)).all()
     transform = fit_building_geo_transform(session, building_id)
+    shared_polygons = split_shared_polygons(stores)
 
     return {
         "floor": {"id": floor.id, "name": floor.name, "level": floor.level},
@@ -195,7 +197,11 @@ def get_floor_map(
         "footprint_wgs84": _footprint_wgs84(_floor_footprint(floor, building), transform),
         # Flutter는 최초 층 지도 응답에서 이 그래프를 캐시해 클라이언트 다익스트라를 실행한다.
         "navigation_graph": _to_floor_graph_dict(session, floor),
-        "stores": [_to_store_dict(store, transform) for store in stores],
+        # 나눠 쓰는 폴리곤은 타일과 **같은 함수**로 잘라 보낸다. 강조 오버레이가 이
+        # 값을 쓰는데 타일만 자르면 바닥 fill 위에 통짜 사각형이 얹힌다. 매장 검색에
+        # 같은 계산을 걸지 않는 이유는 그쪽이 이름으로 거른 부분 집합이라 짝을 못
+        # 찾기 때문이다(docs/backend/shared-polygon-split.md).
+        "stores": [_to_store_dict(store, transform, shared_polygons.get(store.id)) for store in stores],
         "pois": [_to_poi_dict(poi, transform) for poi in pois],
     }
 
@@ -386,7 +392,14 @@ def _to_edge_dict(edge: Edge, node_floor_ids: Mapping[str, str] | None = None) -
     }
 
 
-def _to_store_dict(store: Store, transform: GeoTransform | None) -> dict[str, Any]:
+def _to_store_dict(
+    store: Store,
+    transform: GeoTransform | None,
+    polygon_local_m: list[dict[str, float]] | None = None,
+) -> dict[str, Any]:
+    # 한 폴리곤을 둘이 나눠 쓰는 자리는 [polygon_local_m]으로 자기 칸을 받는다. 넘어오지
+    # 않으면 원본이다(docs/backend/shared-polygon-split.md).
+    polygon = polygon_local_m if polygon_local_m is not None else store.polygon
     # 실좌표 앵커가 없는 건물이면 transform이 없어 wgs84 필드는 null로 나간다.
     centroid_wgs84 = None
     entrance_wgs84 = None
@@ -403,8 +416,8 @@ def _to_store_dict(store: Store, transform: GeoTransform | None) -> dict[str, An
         if store.entrance_x_m is not None and store.entrance_y_m is not None:
             entrance_lat, entrance_lng = transform.apply(store.entrance_x_m, store.entrance_y_m)
             entrance_wgs84 = {"lat": entrance_lat, "lng": entrance_lng}
-        if store.polygon:
-            polygon_wgs84 = [{"lng": lng, "lat": lat} for lng, lat in local_points_to_lnglat(store.polygon, transform)]
+        if polygon:
+            polygon_wgs84 = [{"lng": lng, "lat": lat} for lng, lat in local_points_to_lnglat(polygon, transform)]
 
     return {
         "id": store.id,
@@ -422,7 +435,7 @@ def _to_store_dict(store: Store, transform: GeoTransform | None) -> dict[str, An
         ),
         "entrance_wgs84": entrance_wgs84,
         "entrance_node_id": store.entrance_node_id,
-        "polygon_local_m": store.polygon,
+        "polygon_local_m": polygon,
     }
 
 
