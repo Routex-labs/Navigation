@@ -1,7 +1,7 @@
 import 'package:navigation_client/domain/route/dijkstra.dart';
 import 'package:navigation_client/domain/store/nearest_store.dart';
 import 'package:navigation_client/domain/search/store_suggestions.dart';
-import 'package:navigation_client/models/store_index_entry.dart';
+import 'package:navigation_client/models/place/store_index_entry.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// 설계와 검증 기준은 `docs/client/search-result-list-ux.md` O절이 단일 출처다.

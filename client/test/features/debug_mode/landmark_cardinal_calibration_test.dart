@@ -13,7 +13,7 @@ import 'dart:math' as math;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/features/debug_mode/landmark_cardinal_calibration.dart';
-import 'package:navigation_client/models/floor_plan.dart';
+import 'package:navigation_client/models/building/floor_plan.dart';
 
 const _buildingId = 'thehyundai-seoul';
 

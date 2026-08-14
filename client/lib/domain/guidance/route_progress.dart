@@ -9,7 +9,7 @@ library;
 
 import 'dart:math' as math;
 
-import '../../models/floor_graph.dart';
+import '../../models/building/floor_graph.dart';
 import 'route_movement.dart';
 
 /// 경로 기준으로 해석한 현재 위치.

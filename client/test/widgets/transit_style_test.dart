@@ -7,7 +7,7 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:navigation_client/models/transit_route.dart';
+import 'package:navigation_client/models/route/transit_route.dart';
 import 'package:navigation_client/widgets/transit_style.dart';
 
 TransitLeg _leg(TransitMode mode, {String? colorHex, int seconds = 600}) =>

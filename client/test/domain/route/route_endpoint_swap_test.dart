@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/domain/route/dijkstra.dart';
 import 'package:navigation_client/domain/route/route_endpoint_swap.dart';
-import 'package:navigation_client/models/store_index_entry.dart';
+import 'package:navigation_client/models/place/store_index_entry.dart';
 
 StoreIndexEntry store(String id, {String? node, String floor = 'B1'}) =>
     StoreIndexEntry(

@@ -2,8 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 import 'package:navigation_client/domain/guidance/route_checkpoint.dart';
 import 'package:navigation_client/domain/guidance/route_movement.dart';
-import 'package:navigation_client/models/floor_graph.dart';
-import 'package:navigation_client/models/indoor_route.dart';
+import 'package:navigation_client/models/building/floor_graph.dart';
+import 'package:navigation_client/models/route/indoor_route.dart';
 import 'package:navigation_client/domain/guidance/corridor_tracking.dart';
 
 const _straightGraph = FloorGraph(

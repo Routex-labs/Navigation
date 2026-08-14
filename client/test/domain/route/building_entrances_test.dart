@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/domain/route/building_entrances.dart';
-import 'package:navigation_client/models/floor_plan.dart';
+import 'package:navigation_client/models/building/floor_plan.dart';
 
 /// 더현대 서울 1층의 실제 출구 5개(라이브 API 값). 축약하지 않고 그대로 쓴다 —
 /// 문 사이 거리와 배치가 히스테리시스 검증의 전제이기 때문이다.

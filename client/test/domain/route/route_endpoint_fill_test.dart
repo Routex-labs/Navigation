@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/domain/route/route_endpoint_fill.dart';
-import 'package:navigation_client/models/directions_route.dart';
+import 'package:navigation_client/models/route/directions_route.dart';
 
 /// 여의도 일대. 위도 1도 ≈ 111km라 소수 넷째 자리가 약 11m다.
 const _roadEnd = LatLng(37.5259, 126.9290);

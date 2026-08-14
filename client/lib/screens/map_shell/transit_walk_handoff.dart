@@ -8,7 +8,7 @@ library;
 
 import 'package:latlong2/latlong.dart';
 
-import '../../models/transit_route.dart';
+import '../../models/route/transit_route.dart';
 
 /// **내린 자리** — 마지막으로 "타는" 구간이 끝나는 곳.
 ///

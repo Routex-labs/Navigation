@@ -5,7 +5,7 @@ import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 import '../../../domain/guidance/route_progress.dart';
 import '../../../domain/guidance/route_checkpoint.dart';
 import '../../../domain/guidance/route_movement.dart';
-import '../../../models/floor_graph.dart';
+import '../../../models/building/floor_graph.dart';
 import '../application/corridor_position_tracker.dart';
 import '../application/escalator_transition_detector.dart';
 import '../application/floor_map_matcher.dart';

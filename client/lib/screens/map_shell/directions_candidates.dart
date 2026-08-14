@@ -8,10 +8,10 @@ import 'package:latlong2/latlong.dart';
 import '../../service_locator.dart';
 import '../../domain/store/indoor_store_lookup.dart';
 import '../../domain/store/outdoor_poi_ranking.dart';
-import '../../models/building.dart';
-import '../../models/outdoor_poi.dart';
-import '../../models/poi_search_result.dart';
-import '../../models/directions_candidate.dart';
+import '../../models/building/building.dart';
+import '../../models/place/outdoor_poi.dart';
+import '../../models/place/poi_search_result.dart';
+import '../../models/route/directions_candidate.dart';
 
 /// 후보 조립이 야외 지도 상태에서 읽는 값·판정.
 ///

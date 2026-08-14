@@ -4,13 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:navigation_client/service_locator.dart';
-import 'package:navigation_client/repositories/building_repository.dart';
-import 'package:navigation_client/repositories/destination_repository.dart';
-import 'package:navigation_client/repositories/mock_building_repository.dart';
-import 'package:navigation_client/repositories/mock_destination_repository.dart';
+import 'package:navigation_client/repositories/building/building_repository.dart';
+import 'package:navigation_client/repositories/place/destination_repository.dart';
+import 'package:navigation_client/repositories/building/mock_building_repository.dart';
+import 'package:navigation_client/repositories/place/mock_destination_repository.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:navigation_client/widgets/eta_card.dart';
-import 'package:navigation_client/screens/map_shell/widgets/place_detail_sheet.dart';
+import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// **검색은 길을 찾지 않는다**는 규칙에 대한 회귀 테스트.

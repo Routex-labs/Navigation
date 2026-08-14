@@ -7,7 +7,7 @@
 /// 검증 기준 9건은 `test/domain/nearby_stores_test.dart`가 단일 출처다.
 library;
 
-import '../../models/store_index_entry.dart';
+import '../../models/place/store_index_entry.dart';
 import '../route/dijkstra.dart';
 
 /// 근처 매장 한 줄. [reach]는 **이 매장에서** 잰 값이다.

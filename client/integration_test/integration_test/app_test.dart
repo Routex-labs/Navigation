@@ -8,8 +8,8 @@ import 'package:integration_test/integration_test.dart';
 
 import 'package:navigation_client/service_locator.dart';
 import 'package:navigation_client/main.dart' as app;
-import 'package:navigation_client/repositories/mock_building_repository.dart';
-import 'package:navigation_client/repositories/mock_destination_repository.dart';
+import 'package:navigation_client/repositories/building/mock_building_repository.dart';
+import 'package:navigation_client/repositories/place/mock_destination_repository.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();

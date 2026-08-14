@@ -10,7 +10,7 @@ import 'dart:math' as math;
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
 import '../../../domain/geo/floor_label.dart';
-import '../../../models/floor_graph.dart';
+import '../../../models/building/floor_graph.dart';
 import '../contract/altitude_sample.dart';
 import '../contract/raw_motion_activity.dart';
 import 'escalator_node_naming.dart';

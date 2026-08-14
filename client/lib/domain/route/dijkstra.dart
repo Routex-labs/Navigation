@@ -7,7 +7,7 @@ library;
 
 import 'package:collection/collection.dart';
 
-import '../../models/floor_graph.dart';
+import '../../models/building/floor_graph.dart';
 
 class ShortestPath {
   const ShortestPath({

@@ -5,7 +5,7 @@
 /// 설계 근거와 검증 기준은 `docs/client/search-input-assist.md` K·L절.
 library;
 
-import '../../models/store_index_entry.dart';
+import '../../models/place/store_index_entry.dart';
 import 'hangul.dart';
 
 /// 후보 개수 상한.

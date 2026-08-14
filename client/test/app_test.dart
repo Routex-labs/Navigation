@@ -8,11 +8,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:navigation_client/app.dart';
 import 'package:navigation_client/service_locator.dart';
-import 'package:navigation_client/models/discovery_result.dart';
-import 'package:navigation_client/models/poi_search_result.dart';
-import 'package:navigation_client/repositories/destination_repository.dart';
-import 'package:navigation_client/repositories/mock_building_repository.dart';
-import 'package:navigation_client/repositories/mock_destination_repository.dart';
+import 'package:navigation_client/models/place/discovery_result.dart';
+import 'package:navigation_client/models/place/poi_search_result.dart';
+import 'package:navigation_client/repositories/place/destination_repository.dart';
+import 'package:navigation_client/repositories/building/mock_building_repository.dart';
+import 'package:navigation_client/repositories/place/mock_destination_repository.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
 import 'package:navigation_client/screens/outdoor_map/widgets/floor_selector.dart';

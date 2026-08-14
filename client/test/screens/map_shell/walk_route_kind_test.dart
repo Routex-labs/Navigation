@@ -7,7 +7,7 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:navigation_client/models/directions_candidate.dart';
+import 'package:navigation_client/models/route/directions_candidate.dart';
 import 'package:navigation_client/screens/map_shell/walk_route_kind.dart';
 
 /// 건물 안 매장. 층과 노드를 **둘 다** 가진 후보만 실내로 친다.

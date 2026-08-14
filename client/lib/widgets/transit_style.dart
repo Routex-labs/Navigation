@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../models/transit_route.dart';
+import '../models/route/transit_route.dart';
 
 /// 대중교통 화면(경로 목록 시트·요약 카드·지도 경로선)이 공유하는 표현 규칙.
 ///

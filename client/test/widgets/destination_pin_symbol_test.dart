@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:navigation_client/map/destination_pin.dart';
+import 'package:navigation_client/map/icon/destination_pin.dart';
 
 /// 도착 핀 심볼 레이어 규칙을 못 박는다.
 ///

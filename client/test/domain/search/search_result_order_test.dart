@@ -3,8 +3,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/domain/route/dijkstra.dart';
 import 'package:navigation_client/domain/search/search_result_order.dart';
 import 'package:navigation_client/domain/search/store_suggestions.dart';
-import 'package:navigation_client/models/poi_search_result.dart';
-import 'package:navigation_client/models/store_index_entry.dart';
+import 'package:navigation_client/models/place/poi_search_result.dart';
+import 'package:navigation_client/models/place/store_index_entry.dart';
 
 /// 정렬은 이름·좌표를 보지 않으므로 검증에 필요한 `name`·`nodeId`만 다르게 준다.
 PoiSearchResult _store(String name, {String? nodeId}) => PoiSearchResult(

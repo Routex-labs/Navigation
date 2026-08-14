@@ -4,13 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:navigation_client/service_locator.dart';
-import 'package:navigation_client/repositories/building_repository.dart';
-import 'package:navigation_client/repositories/destination_repository.dart';
-import 'package:navigation_client/repositories/mock_building_repository.dart';
-import 'package:navigation_client/repositories/mock_destination_repository.dart';
+import 'package:navigation_client/repositories/building/building_repository.dart';
+import 'package:navigation_client/repositories/place/destination_repository.dart';
+import 'package:navigation_client/repositories/building/mock_building_repository.dart';
+import 'package:navigation_client/repositories/place/mock_destination_repository.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:navigation_client/widgets/eta_card.dart';
-import 'package:navigation_client/screens/map_shell/widgets/route_field_results.dart';
+import 'package:navigation_client/screens/map_shell/widgets/search/route_field_results.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 길찾기가 **상단 바 안에서** 끝나는지에 대한 회귀 테스트.

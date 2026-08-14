@@ -4,8 +4,8 @@
 /// 규칙마다의 근거는 `docs/client/search-result-list-ux.md` X절이 단일 출처다.
 library;
 
-import '../../models/outdoor_poi.dart';
-import '../../models/poi_search_result.dart';
+import '../../models/place/outdoor_poi.dart';
+import '../../models/place/poi_search_result.dart';
 
 /// 공백을 지우고 대소문자를 맞춘 이름. 비교의 기준 형태다.
 ///

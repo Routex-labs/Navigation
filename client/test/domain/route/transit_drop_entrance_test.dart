@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/domain/route/building_entrances.dart';
-import 'package:navigation_client/models/transit_route.dart';
+import 'package:navigation_client/models/route/transit_route.dart';
 
 /// 대중교통에서 **내린 자리 기준으로 문을 고른다**는 규칙을 고정한다.
 ///

@@ -7,7 +7,7 @@
 /// 검증 기준 17건은 `test/domain/store_hours_test.dart`가 단일 출처다.
 library;
 
-import '../../models/place_detail.dart';
+import '../../models/place/place_detail.dart';
 
 /// 요일 키와 순서. 서버(`app/repositories/place_details.WEEKDAY_KEYS`)와 같은
 /// 순서를 쓴다 — 전선 계약이라 양쪽 코드에 나란히 두고 스키마 파일에는 베끼지 않는다.

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/domain/search/store_suggestions.dart';
-import 'package:navigation_client/models/store_index_entry.dart';
+import 'package:navigation_client/models/place/store_index_entry.dart';
 
 /// 실제 매장 이름으로만 fixture를 만든다.
 ///

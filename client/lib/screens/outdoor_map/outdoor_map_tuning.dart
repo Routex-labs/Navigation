@@ -5,8 +5,8 @@ library;
 
 import 'package:latlong2/latlong.dart' as ll;
 
-import '../../map/zoom_math.dart';
-import 'indoor_entry_zoom.dart' show indoorTilesMaxZoom;
+import '../../map/camera/zoom_math.dart';
+import 'entry/indoor_entry_zoom.dart' show indoorTilesMaxZoom;
 
 /// 위치 조회 실패 시 대체 좌표(서울시청).
 const fallbackLocation = ll.LatLng(37.5665, 126.9780);

@@ -4,13 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:navigation_client/service_locator.dart';
-import 'package:navigation_client/repositories/building_repository.dart';
-import 'package:navigation_client/repositories/destination_repository.dart';
-import 'package:navigation_client/repositories/mock_building_repository.dart';
-import 'package:navigation_client/repositories/mock_destination_repository.dart';
+import 'package:navigation_client/repositories/building/building_repository.dart';
+import 'package:navigation_client/repositories/place/destination_repository.dart';
+import 'package:navigation_client/repositories/building/mock_building_repository.dart';
+import 'package:navigation_client/repositories/place/mock_destination_repository.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:navigation_client/widgets/eta_card.dart';
-import 'package:navigation_client/screens/map_shell/widgets/map_bottom_bar.dart';
+import 'package:navigation_client/screens/map_shell/widgets/chrome/map_bottom_bar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 안내가 시작되면 지도 위 사전 조작 chrome을 접는지에 대한 회귀 테스트.

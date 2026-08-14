@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:latlong2/latlong.dart';
 
-import '../../models/floor_graph.dart';
+import '../../models/building/floor_graph.dart';
 import 'route_movement.dart';
 import 'route_progress.dart';
 

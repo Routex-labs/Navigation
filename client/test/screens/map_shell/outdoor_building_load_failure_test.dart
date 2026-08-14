@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:navigation_client/models/category_count.dart';
-import 'package:navigation_client/models/store_index_entry.dart';
+import 'package:navigation_client/models/building/category_count.dart';
+import 'package:navigation_client/models/place/store_index_entry.dart';
 import 'package:navigation_client/service_locator.dart';
-import 'package:navigation_client/models/building.dart';
-import 'package:navigation_client/models/building_graph.dart';
-import 'package:navigation_client/models/indoor_route.dart';
-import 'package:navigation_client/repositories/building_repository.dart';
-import 'package:navigation_client/repositories/destination_repository.dart';
-import 'package:navigation_client/repositories/mock_building_repository.dart';
-import 'package:navigation_client/repositories/mock_destination_repository.dart';
+import 'package:navigation_client/models/building/building.dart';
+import 'package:navigation_client/models/building/building_graph.dart';
+import 'package:navigation_client/models/route/indoor_route.dart';
+import 'package:navigation_client/repositories/building/building_repository.dart';
+import 'package:navigation_client/repositories/place/destination_repository.dart';
+import 'package:navigation_client/repositories/building/mock_building_repository.dart';
+import 'package:navigation_client/repositories/place/mock_destination_repository.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

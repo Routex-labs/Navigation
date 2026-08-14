@@ -9,7 +9,7 @@ import 'package:navigation_client/features/indoor_navigation/contract/altitude_s
 import 'package:navigation_client/features/indoor_navigation/contract/calibration_state.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/pdr_anchor.dart';
 import 'package:navigation_client/features/indoor_navigation/debug/pdr_debug_session_recorder.dart';
-import 'package:navigation_client/models/floor_graph.dart';
+import 'package:navigation_client/models/building/floor_graph.dart';
 import 'package:navigation_client/domain/guidance/corridor_tracking.dart';
 
 PdrSnapshot _snapshot({

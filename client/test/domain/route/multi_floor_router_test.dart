@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/domain/route/multi_floor_router.dart';
-import 'package:navigation_client/models/building_graph.dart';
-import 'package:navigation_client/models/floor_graph.dart';
+import 'package:navigation_client/models/building/building_graph.dart';
+import 'package:navigation_client/models/building/floor_graph.dart';
 
 GraphNode _node(String id, String floor, double x, double y) =>
     GraphNode(id: id, type: 'junction', xM: x, yM: y, floorId: floor);

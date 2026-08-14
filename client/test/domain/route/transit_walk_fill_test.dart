@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/domain/route/transit_walk_fill.dart';
-import 'package:navigation_client/models/directions_route.dart';
-import 'package:navigation_client/models/transit_route.dart';
+import 'package:navigation_client/models/route/directions_route.dart';
+import 'package:navigation_client/models/route/transit_route.dart';
 
 const _origin = LatLng(37.5259, 126.9280); // 더현대 서울
 const _destination = LatLng(37.4979, 127.0276); // 강남역

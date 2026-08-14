@@ -1,5 +1,5 @@
-import '../../models/outdoor_poi.dart';
-import '../../models/poi_search_result.dart';
+import '../../models/place/outdoor_poi.dart';
+import '../../models/place/poi_search_result.dart';
 import 'outdoor_poi_ranking.dart';
 
 /// 한 번의 검색에서 브랜드로 되물을 최대 가짓수.

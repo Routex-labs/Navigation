@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/domain/guidance/route_guidance.dart';
-import 'package:navigation_client/models/floor_graph.dart';
+import 'package:navigation_client/models/building/floor_graph.dart';
 
 /// 경로 전체 단계 목록의 검증.
 ///

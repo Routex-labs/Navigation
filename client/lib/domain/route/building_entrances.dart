@@ -11,7 +11,7 @@ import 'dart:math' as math;
 
 import 'package:latlong2/latlong.dart';
 
-import '../../models/floor_plan.dart';
+import '../../models/building/floor_plan.dart';
 
 /// 지상 출입구가 들어 있는 매장 소분류.
 const kGroundEntranceSubcategory = '교통';

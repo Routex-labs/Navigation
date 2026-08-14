@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:navigation_client/screens/outdoor_map/indoor_overlay_layers.dart';
-import 'package:navigation_client/map/category_map_fill.dart';
-import 'package:navigation_client/map/category_map_filter.dart';
+import 'package:navigation_client/screens/outdoor_map/layers/indoor_overlay_layers.dart';
+import 'package:navigation_client/map/style/category_map_fill.dart';
+import 'package:navigation_client/map/style/category_map_filter.dart';
 
 /// 야외 오버레이의 카테고리 강조 fill 규칙을 못 박는다.
 ///

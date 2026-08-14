@@ -7,7 +7,7 @@ library;
 
 import 'package:latlong2/latlong.dart' as ll;
 
-import '../../models/floor_plan.dart';
+import '../../models/building/floor_plan.dart';
 
 /// 마지막으로 경로를 요청한 지점에서 이만큼 움직여야 다시 요청한다(m).
 ///

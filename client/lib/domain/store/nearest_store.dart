@@ -7,7 +7,7 @@
 /// 설계 근거와 검증 기준은 `docs/client/search-result-list-ux.md` O절이 단일 출처다.
 library;
 
-import '../../models/store_index_entry.dart';
+import '../../models/place/store_index_entry.dart';
 import '../route/dijkstra.dart';
 import '../search/store_suggestions.dart';
 

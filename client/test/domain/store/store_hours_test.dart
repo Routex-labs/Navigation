@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/domain/store/store_hours.dart';
-import 'package:navigation_client/models/place_detail.dart';
+import 'package:navigation_client/models/place/place_detail.dart';
 
 /// `lib/domain/store_hours.dart`의 표를 그대로 옮긴 것이다. 구현보다 먼저 정한
 /// 기준이라 이 파일이 통과한다는 것과 화면이 맞다는 것이 같은 뜻이 되게 둔다.

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/domain/route/floor_router.dart';
-import 'package:navigation_client/models/floor_graph.dart';
+import 'package:navigation_client/models/building/floor_graph.dart';
 
 void main() {
   test('최단 경로가 edge 저장 방향과 별도로 node 진행 순서를 보존한다', () {

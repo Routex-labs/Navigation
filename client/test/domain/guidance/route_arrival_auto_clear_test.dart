@@ -3,7 +3,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/domain/guidance/route_guidance.dart';
 import 'package:navigation_client/domain/guidance/route_movement.dart';
 import 'package:navigation_client/domain/guidance/route_progress.dart';
-import 'package:navigation_client/models/floor_graph.dart';
+import 'package:navigation_client/models/building/floor_graph.dart';
 
 /// 도착하면 안내를 스스로 끝내는 규칙을 고정한다.
 ///

@@ -1,6 +1,6 @@
 import 'package:latlong2/latlong.dart';
 
-import '../../models/directions_route.dart';
+import '../../models/route/directions_route.dart';
 
 /// 이 거리보다 멀리 떨어져 끝나면 도착점까지 선을 이어 붙인다(m).
 ///

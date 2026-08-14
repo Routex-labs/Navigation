@@ -4,7 +4,7 @@ import 'dart:math' as math;
 
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 import 'package:navigation_client/features/indoor_navigation/application/corridor_position_tracker.dart';
-import 'package:navigation_client/models/floor_graph.dart';
+import 'package:navigation_client/models/building/floor_graph.dart';
 
 /// v10 디버그 로그(`tracker_input_events`)를 [CorridorPositionTracker] 입력으로
 /// 되돌려 실측 세션을 재생한다.

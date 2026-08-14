@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/domain/route/dijkstra.dart';
 import 'package:navigation_client/domain/store/nearby_stores.dart';
-import 'package:navigation_client/models/store_index_entry.dart';
+import 'package:navigation_client/models/place/store_index_entry.dart';
 
 /// `nearby_stores.dart` 머리말의 검증 기준 표를 그대로 옮긴 것이다.
 void main() {

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/domain/route/dijkstra.dart';
-import 'package:navigation_client/models/floor_graph.dart';
+import 'package:navigation_client/models/building/floor_graph.dart';
 
 GraphNode _node(String id) =>
     GraphNode(id: id, type: 'junction', xM: 0, yM: 0, floorId: 'f1');

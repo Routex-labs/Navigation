@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/domain/store/outdoor_poi_ranking.dart';
-import 'package:navigation_client/models/outdoor_poi.dart';
-import 'package:navigation_client/models/poi_search_result.dart';
+import 'package:navigation_client/models/place/outdoor_poi.dart';
+import 'package:navigation_client/models/place/poi_search_result.dart';
 
 /// 야외 검색 결과를 화면에 올리기 전에 손보는 규칙의 테스트.
 ///

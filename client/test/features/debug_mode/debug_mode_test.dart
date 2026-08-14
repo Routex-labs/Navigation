@@ -5,8 +5,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/features/debug_mode/debug_mode.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/calibration_state.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/pdr_anchor.dart';
-import 'package:navigation_client/models/floor_graph.dart';
-import 'package:navigation_client/models/floor_plan.dart';
+import 'package:navigation_client/models/building/floor_graph.dart';
+import 'package:navigation_client/models/building/floor_plan.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 PdrSnapshot _snapshot() => const PdrSnapshot(

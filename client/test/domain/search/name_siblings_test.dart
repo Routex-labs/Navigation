@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/domain/search/name_siblings.dart';
 import 'package:navigation_client/domain/search/store_suggestions.dart';
-import 'package:navigation_client/models/store_index_entry.dart';
+import 'package:navigation_client/models/place/store_index_entry.dart';
 
 /// 설계와 검증 기준은 `docs/client/search-result-list-ux.md` S절이 단일 출처다.
 

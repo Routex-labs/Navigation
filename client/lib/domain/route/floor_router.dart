@@ -8,8 +8,8 @@ library;
 
 import 'package:latlong2/latlong.dart';
 
-import '../../models/floor_graph.dart';
-import '../../models/indoor_route.dart';
+import '../../models/building/floor_graph.dart';
+import '../../models/route/indoor_route.dart';
 import 'dijkstra.dart';
 import '../geo/geo_transform.dart';
 

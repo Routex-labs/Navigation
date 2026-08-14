@@ -6,7 +6,7 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:navigation_client/models/transit_route.dart';
+import 'package:navigation_client/models/route/transit_route.dart';
 import 'package:navigation_client/screens/map_shell/transit_walk_handoff.dart';
 
 const _fallback = LatLng(37.0, 127.0);

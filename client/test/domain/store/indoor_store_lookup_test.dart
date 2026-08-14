@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/domain/store/indoor_store_lookup.dart';
-import 'package:navigation_client/models/outdoor_poi.dart';
-import 'package:navigation_client/models/poi_search_result.dart';
+import 'package:navigation_client/models/place/outdoor_poi.dart';
+import 'package:navigation_client/models/place/poi_search_result.dart';
 
 /// 실기기에서 잡은 그 장면 그대로다 — 사용자가 "더현대 스타벅스"라고 쳤고,
 /// 우리 백엔드는 그 말로는 no_match를 냈다(배포 백엔드에서 확인).

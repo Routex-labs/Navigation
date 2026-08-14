@@ -2,9 +2,9 @@ import 'dart:math' as math;
 
 import 'package:latlong2/latlong.dart';
 
-import '../../models/building_graph.dart';
-import '../../models/floor_graph.dart';
-import '../../models/floor_plan.dart';
+import '../../models/building/building_graph.dart';
+import '../../models/building/floor_graph.dart';
+import '../../models/building/floor_plan.dart';
 
 /// 선택된 층간 전이와 연결된 에스컬레이터 폴리곤의 긴 중심축을 반환한다.
 ///

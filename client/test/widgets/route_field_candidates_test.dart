@@ -4,10 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/domain/route/dijkstra.dart';
 import 'package:navigation_client/domain/search/store_suggestions.dart';
-import 'package:navigation_client/models/store_index_entry.dart';
-import 'package:navigation_client/models/directions_candidate.dart';
-import 'package:navigation_client/screens/map_shell/widgets/route_field_results.dart';
-import 'package:navigation_client/models/route_plan_mode.dart';
+import 'package:navigation_client/models/place/store_index_entry.dart';
+import 'package:navigation_client/models/route/directions_candidate.dart';
+import 'package:navigation_client/screens/map_shell/widgets/search/route_field_results.dart';
+import 'package:navigation_client/models/route/route_plan_mode.dart';
 
 /// 상단 길찾기 바의 **후보 목록**이 무엇을 보여 주는지 고정하는 테스트.
 ///

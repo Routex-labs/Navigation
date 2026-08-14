@@ -5,7 +5,7 @@
 /// 정보가 없어..."만 뜨고 끝났다. 그래서 판정만 뗐다.
 library;
 
-import '../../models/directions_candidate.dart';
+import '../../models/route/directions_candidate.dart';
 
 /// 도보 길찾기의 갈래. 각각 부르는 지도 메서드가 다르다.
 enum WalkRouteKind {

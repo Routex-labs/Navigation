@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/domain/guidance/route_progress.dart';
 import 'package:navigation_client/domain/guidance/route_movement.dart';
-import 'package:navigation_client/models/floor_graph.dart';
+import 'package:navigation_client/models/building/floor_graph.dart';
 
 /// (0,0) → (20,0) 직선 복도.
 const _straightRoute = [LocalPoint(0, 0), LocalPoint(20, 0)];

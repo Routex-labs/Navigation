@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 import 'package:navigation_client/domain/geo/geo_transform.dart';
-import 'package:navigation_client/models/floor_graph.dart';
+import 'package:navigation_client/models/building/floor_graph.dart';
 
 /// api/app/domain/georeference.py::fit_wgs84_transform과 api/app/queries/
 /// geo_transform.py::fit_building_geo_transform의 포팅을 검증한다.

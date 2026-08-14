@@ -5,7 +5,7 @@
 /// 여기는 "어느 매장으로"만 정하고, 좌표 붙이기와 재계산은 화면이 한다.
 library;
 
-import '../../models/store_index_entry.dart';
+import '../../models/place/store_index_entry.dart';
 import 'dijkstra.dart';
 
 /// 현재 위치를 대신할 매장을 고른다. 못 고르면 null이고, 그때 화면은 **뒤집지

@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
 import 'corridor_tracking.dart';
-import '../../models/floor_graph.dart';
+import '../../models/building/floor_graph.dart';
 
 enum RouteStepRelation { forward, reverse, offRoute, ambiguous, relocated }
 

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/features/indoor_navigation/application/indoor_location_estimate.dart';
-import 'package:navigation_client/models/floor_graph.dart';
+import 'package:navigation_client/models/building/floor_graph.dart';
 
 const _graph = FloorGraph(
   nodes: [

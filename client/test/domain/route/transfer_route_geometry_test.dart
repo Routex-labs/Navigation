@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/domain/route/transfer_route_geometry.dart';
-import 'package:navigation_client/models/building_graph.dart';
-import 'package:navigation_client/models/floor_graph.dart';
-import 'package:navigation_client/models/floor_plan.dart';
-import 'package:navigation_client/models/indoor_route.dart';
+import 'package:navigation_client/models/building/building_graph.dart';
+import 'package:navigation_client/models/building/floor_graph.dart';
+import 'package:navigation_client/models/building/floor_plan.dart';
+import 'package:navigation_client/models/route/indoor_route.dart';
 
 void main() {
   test('탑승 노드와 가장 가까운 실제 에스컬레이터의 긴 축을 점선 경로로 쓴다', () {

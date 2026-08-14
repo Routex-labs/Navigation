@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/service_locator.dart';
-import 'package:navigation_client/models/category_count.dart';
-import 'package:navigation_client/repositories/building_repository.dart';
-import 'package:navigation_client/repositories/destination_repository.dart';
-import 'package:navigation_client/repositories/mock_building_repository.dart';
-import 'package:navigation_client/repositories/mock_destination_repository.dart';
+import 'package:navigation_client/models/building/category_count.dart';
+import 'package:navigation_client/repositories/building/building_repository.dart';
+import 'package:navigation_client/repositories/place/destination_repository.dart';
+import 'package:navigation_client/repositories/building/mock_building_repository.dart';
+import 'package:navigation_client/repositories/place/mock_destination_repository.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
-import 'package:navigation_client/screens/map_shell/widgets/category_stores_sheet.dart';
-import 'package:navigation_client/screens/map_shell/widgets/place_detail_sheet.dart';
+import 'package:navigation_client/screens/map_shell/widgets/sheets/category_stores_sheet.dart';
+import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 지도 위 대분류 chip을 누르면 **그 자리에서** 매장 목록 시트가 뜨는지 고정한다.

@@ -3,7 +3,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/domain/guidance/route_guidance.dart';
 import 'package:navigation_client/domain/guidance/route_movement.dart';
 import 'package:navigation_client/domain/guidance/route_progress.dart';
-import 'package:navigation_client/models/floor_graph.dart';
+import 'package:navigation_client/models/building/floor_graph.dart';
 
 void main() {
   test('역주행이면 다음 회전보다 먼저 되돌아가라는 안내를 만든다', () {

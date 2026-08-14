@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
-import '../../../models/floor_graph.dart';
+import '../../../models/building/floor_graph.dart';
 
 /// PDR의 floor-local 위치를 navigation graph의 통행 간선 위로 붙인다.
 ///

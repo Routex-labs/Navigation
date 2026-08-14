@@ -7,7 +7,7 @@
 /// 근거는 `search-result-list-ux.md` P절과 `search-input-assist.md` M절.
 library;
 
-import '../../models/poi_search_result.dart';
+import '../../models/place/poi_search_result.dart';
 import '../route/dijkstra.dart';
 import '../store/nearest_store.dart';
 import 'store_suggestions.dart';

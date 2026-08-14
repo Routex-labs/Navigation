@@ -1,7 +1,7 @@
 import 'package:latlong2/latlong.dart';
 
-import '../../models/directions_route.dart';
-import '../../models/transit_route.dart';
+import '../../models/route/directions_route.dart';
+import '../../models/route/transit_route.dart';
 
 /// 카카오 대중교통 경로에 빠져 있는 **앞뒤 도보 구간**을 채운다. 그대로 그리면
 /// 사용자가 선 자리에서 한참 떨어진 허공에서 선이 시작한다.

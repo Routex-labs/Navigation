@@ -6,7 +6,7 @@ import 'package:navigation_client/features/indoor_navigation/application/escalat
 import 'package:navigation_client/features/indoor_navigation/application/escalator_transition_detector.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/altitude_sample.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/raw_motion_activity.dart';
-import 'package:navigation_client/models/floor_graph.dart';
+import 'package:navigation_client/models/building/floor_graph.dart';
 
 /// 표준대기 고도 → 기압. [pressureAltitudeM]의 역함수라, 테스트는 "이 고도에
 /// 있었다면 센서가 봤을 기압"을 만들어 넣는다.
