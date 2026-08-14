@@ -773,12 +773,15 @@ class _MapShellScreenState extends State<MapShellScreen> {
     bool focusOnMap = false,
     bool keepZoom = false,
   }) async {
-    // 시트를 띄우기 전에 지도를 그 매장으로 옮겨, 시트를 닫으면 바로 그 자리가
-    // 보이게 한다.
+    // 카메라와 시트를 같은 박자에 시작한다. 카메라 완료를 기다린 뒤 시트를
+    // 올리면 `지도 이동 → 시트 등장`이 두 동작으로 끊겨 보이고, 반대로 시트를
+    // 먼저 다 올리면 목적지가 잠깐 시트 뒤에 남는다. focusStore는 최종 위치를
+    // 한 번의 애니메이션으로 계산하므로 둘을 병렬로 시작해도 중간 점프가 없다.
+    Future<void>? focusing;
     if (focusOnMap) {
       // 곧 올라올 시트 높이를 함께 넘겨, 매장이 시트 뒤가 아니라 그 위 영역
       // 한가운데에 놓이게 한다. 시트 높이를 바꾸면 카메라도 자동으로 따라온다.
-      await _outdoorKey.currentState?.focusStore(
+      focusing = _outdoorKey.currentState?.focusStore(
         match,
         bottomSheetFraction: kPlaceDetailSheetInitialSize,
         keepZoom: keepZoom,
@@ -786,7 +789,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
         // 직접 누른 매장은 이미 건물 안이라 이 값과 무관하다.
         enterBuildingIfNeeded: true,
       );
-      if (!mounted) return false;
     }
     final favorite = FavoritePlace.fromPoiSearchResult(
       match,
@@ -819,6 +821,15 @@ class _MapShellScreenState extends State<MapShellScreen> {
         onCloseAll: _requestCloseSheetChain,
       ),
     );
+    // 지도 플러그인 오류는 상세 열기를 막을 이유가 없다. 사용자는 정보·길찾기
+    // 버튼을 계속 쓸 수 있고, 다음 지도 조작이 카메라를 다시 맞춘다.
+    if (focusing != null) {
+      unawaited(
+        focusing.catchError((Object error, StackTrace stackTrace) {
+          debugPrint('[place focus] $error');
+        }),
+      );
+    }
     // 떠 있는 동안만 값이 있다. 지도에서 다른 매장을 눌렀을 때 이 시트를 먼저
     // 닫고 기다리는 데 쓴다([_openStoreFromMap]).
     _placeDetailClosing = showing;
@@ -827,18 +838,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
     if (!mounted) return false;
     // 시트가 어떻게 닫혔든(선택 없이 닫힘 포함) 지도 위 강조 표시도 같이 지운다.
     _outdoorKey.currentState?.clearHighlight();
-    // **아무것도 고르지 않고 닫았으면 층 화면으로 되돌린다.** 매장을 고르면
-    // 카메라가 그 매장으로 당겨지고 시트를 피해 위로 밀려 있는데, 그 치우친
-    // 화면이 그대로 남으면 사용자는 방금 보던 층 배치를 다시 찾아야 한다.
-    //
-    // 무언가를 골랐을 때(카테고리 보기·출발/도착)는 되돌리지 않는다 — 뒤이어
-    // 다른 시트나 경로 개요가 카메라를 자기 자리로 가져가므로, 여기서 한 번 더
-    // 움직이면 화면이 두 번 튄다.
-    if (action == null || _closeSheetChainRequested) {
-      unawaited(
-        _outdoorKey.currentState?.realignToActiveFloor() ?? Future.value(),
-      );
-    }
+    // 닫기는 선택 강조만 해제한다. 시트를 열어 둔 채 사용자가 지도를 움직일 수
+    // 있으므로, 여기서 층 전체 fit을 호출하면 사용자가 맞춘 중심·줌·회전까지
+    // 전부 잃는다. 카메라는 다음 명시적 조작(층 선택, 내 위치, 다른 매장)이
+    // 바꿀 때까지 그대로 둔다.
     // X로 chain 전체를 닫으라는 신호가 왔다면, 여기서 곧장 종료해 부모 loop가
     // 다음 시트를 다시 열지 못하게 한다.
     if (_closeSheetChainRequested) return true;

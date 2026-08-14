@@ -24,9 +24,24 @@ class PlaceSummarySection extends StatelessWidget {
   final String text;
 
   @override
-  Widget build(BuildContext context) => Text(
-    keepWordsWhole(text),
-    style: const TextStyle(fontSize: 14.5, height: 1.5, color: AppColors.text),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      const style = TextStyle(
+        fontSize: 14.5,
+        height: 1.55,
+        color: AppColors.text,
+      );
+      return Text(
+        balancedKoreanLines(
+          text,
+          style: style,
+          maxWidth: constraints.maxWidth,
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        ),
+        style: style,
+      );
+    },
   );
 }
 
@@ -74,7 +89,11 @@ class _KeyValueRow extends StatelessWidget {
       const SizedBox(height: 3),
       Text(
         keepWordsWhole(item.value),
-        style: const TextStyle(fontSize: 13.5, height: 1.4, color: AppColors.text),
+        style: const TextStyle(
+          fontSize: 13.5,
+          height: 1.4,
+          color: AppColors.text,
+        ),
       ),
     ],
   );
@@ -122,7 +141,11 @@ class PlaceNoticeSection extends StatelessWidget {
       children: [
         const Padding(
           padding: EdgeInsets.only(top: 1),
-          child: Icon(Icons.campaign_outlined, size: 19, color: AppColors.primary),
+          child: Icon(
+            Icons.campaign_outlined,
+            size: 19,
+            color: AppColors.primary,
+          ),
         ),
         const SizedBox(width: 10),
         Expanded(
@@ -172,7 +195,10 @@ class PlaceMapSection extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+              style: const TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],

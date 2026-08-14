@@ -20,6 +20,7 @@ import '../../core/service_locator.dart';
 import '../../core/tile_url.dart';
 import '../../domain/building_entrances.dart';
 import '../../domain/completed_route_history.dart';
+import '../../domain/floor_label.dart';
 import '../../domain/geo_transform.dart';
 import '../../domain/geo_route_progress.dart';
 import '../../domain/guidance_chrome.dart';
@@ -56,6 +57,8 @@ import '../../models/transit_route.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/store_cluster_sheet.dart';
 import '../../widgets/store_label_anchor.dart';
+import '../../widgets/store_label_fit.dart';
+import '../../widgets/store_label_priority.dart';
 import '../../widgets/eta_card.dart';
 import '../../widgets/transit_summary_card.dart';
 import '../../widgets/transit_style.dart';
@@ -67,7 +70,6 @@ import '../../widgets/category_map_filter.dart';
 import '../../widgets/category_map_icon.dart';
 import '../../widgets/floor_facility_style.dart';
 import '../../widgets/floor_selector.dart';
-import '../../widgets/floor_switch_escalator_motif.dart';
 import '../../widgets/guidance_recenter_button.dart';
 import '../../widgets/indoor_arrival_card.dart';
 import '../../widgets/location_marker.dart';
@@ -198,7 +200,8 @@ const _indoorStoresLabelLayerIdBase = 'outdoor-indoor-stores-label';
 /// 한 폴리곤을 여러 매장이 나눠 쓰는 자리의 라벨 전용 레이어. 타일 라벨의
 /// `shared` 속성으로 갈라내고, 충돌 판정을 꺼서 이름이 지워지지 않게 한다
 /// ([indoorStoresLabelProps]의 alwaysVisible).
-const _indoorSharedStoresLabelLayerIdBase = 'outdoor-indoor-stores-label-shared';
+const _indoorSharedStoresLabelLayerIdBase =
+    'outdoor-indoor-stores-label-shared';
 // 편의시설(화장실·정수기 등)의 텍스트 전용 라벨. 매장명 라벨에는 대분류 아이콘이
 // 붙는데, 시설은 이미 전용 아이콘 레이어가 있어 두 아이콘이 겹친다. 그래서 이름만
 // 따로 그린다(실내 화면의 floor-store-facility-label과 같은 이유).
@@ -210,6 +213,19 @@ const _indoorFacilityLabelLayerIdBase = 'outdoor-indoor-store-facility-label';
 const _indoorPoiIconLayerIdBase = 'outdoor-indoor-pois-icon';
 const _indoorStoreFacilityIconLayerIdBase =
     'outdoor-indoor-store-facility-icons';
+
+class _RetiringIndoorBlock {
+  _RetiringIndoorBlock({
+    required this.layerIds,
+    required this.sourceId,
+    required this.fadeFactor,
+  });
+
+  final List<String> layerIds;
+  final String sourceId;
+  double fadeFactor;
+}
+
 const _routeSourceId = 'outdoor-route';
 const _walkedRouteSourceId = 'outdoor-walked-route';
 const _walkedRouteLayerId = 'outdoor-walked-route-line';
@@ -355,6 +371,11 @@ const _indoorZoomInDuration = Duration(milliseconds: 900);
 /// 따라와 답답하다.
 const _floorSwitchZoomDuration = Duration(milliseconds: 500);
 
+/// 매장 선택과 상세 시트 등장을 한 동작으로 읽히게 하는 카메라 이동 시간.
+/// 시트(380ms)보다 한 박자만 길게 감속해 시트가 멈춘 뒤 지도가 오래 미끄러지는
+/// 느낌도, 카메라가 먼저 도착해 시트만 튀어 오르는 느낌도 남기지 않는다.
+const _storeFocusDuration = Duration(milliseconds: 520);
+
 /// 안내를 시작할 때 경로 전체를 담으러 물러서는 시간.
 ///
 /// 진입(900ms)보다 짧고 층 전환(500ms)보다 길다. 진입만큼 큰 장면 전환은
@@ -399,9 +420,8 @@ const _walkingViewZoom = indoorTilesMaxZoom;
 /// 누른 조작이라 과정을 보여 줄 이유가 없고, 즉시 반응하는 편이 낫다.
 const _recenterDuration = Duration(milliseconds: 300);
 
-// 사람 조작 층 전환 크로스페이드의 근거·타이밍 정책(즉시 교체 임계, 페이드
-// 길이, 에스컬레이터 모티프 임계)은 core/floor_switch_progress.dart가 단일
-// 출처다.
+// 층 전환 교차 페이드의 길이·단계·타일 대기 정책은
+// core/floor_switch_progress.dart가 단일 출처다.
 
 /// 도면을 화면에 맞출 때 실제로 채우는 비율.
 ///
@@ -899,6 +919,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   // 활성 층의 평면도(매장 목록 포함). 실내 오버레이 위에서 매장 폴리곤을
   // 탭했을 때 벡터 타일 feature id로 실제 매장 정보를 되찾는 데 쓴다.
   FloorPlan? _floorPlan;
+  Map<String, int> _storeLabelPriorities = const {};
   // 실내 오버레이에서 지금 강조 표시 중인 매장 id. null이면 강조 없음.
   // 사용자가 매장을 탭하면 채워지고, 매장 정보 시트가 닫히면 상위가
   // [clearHighlight]로 지운다.
@@ -1084,27 +1105,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 도는 동안 두 번째 탑승부터 진행률이 실측 높이로 정규화된다.
   final Map<String, double> _escalatorGroupHeightM = {};
 
-  // 사람 조작 층 전환이 오래 걸릴 때 뜨는 에스컬레이터 모티프. 아무것도 덮지
-  // 않는다 — 이전 층 도면이 그대로 보이는 위에 카드 하나만 뜬다. 언제
-  // 띄우고 걷을지(모티프 임계·최소 표시)는 컨트롤러가 정한다.
-  bool _floorSwitchMotifVisible = false;
-
-  /// 모티프가 마지막으로 흘렀던 방향. 숨김 전환(AnimatedSwitcher 페이드아웃)
-  /// 중에도 위젯이 잠깐 더 그려지므로, 방향 없는 프레임이 생기지 않게 마지막
-  /// 값을 들고 있는다.
-  FloorSwitchDirection _floorSwitchMotifDirection = FloorSwitchDirection.up;
-
-  late final FloorSwitchProgressController _floorSwitchProgress =
-      FloorSwitchProgressController(onChanged: _onFloorSwitchMotifChanged);
-
-  void _onFloorSwitchMotifChanged(FloorSwitchDirection? direction) {
-    if (!mounted) return;
-    setState(() {
-      _floorSwitchMotifVisible = direction != null;
-      if (direction != null) _floorSwitchMotifDirection = direction;
-    });
-  }
-
   /// 실내 오버레이 레이어 전체에 곱해지는 크로스페이드 계수(0=투명, 1=원래
   /// 불투명도). 크로스페이드 중이 아니면 항상 1이다. 페이드 갱신·카테고리
   /// 필터 등 오버레이 속성을 다시 쓰는 **모든** 경로가 이 계수를 거친
@@ -1116,8 +1116,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 묶음(은퇴 블록). 새 도면 페이드인이 끝나면 [_removeRetiringIndoorBlocks]가
   /// 지운다. 연타로 크로스페이드가 겹치면 블록이 잠시 여러 개 쌓일 수 있고,
   /// 마지막 전환의 마무리가 한꺼번에 정리한다.
-  final List<({List<String> layerIds, String sourceId})> _retiringIndoorBlocks =
-      [];
+  final List<_RetiringIndoorBlock> _retiringIndoorBlocks = [];
+
+  /// 층 크로스페이드 중에는 외곽선과 dim scrim hole을 새 층 도면 로드 시점에
+  /// 즉시 바꾸지 않는다. 두 경계는 MVT 9개 레이어와 별도 GeoJSON 소스라서,
+  /// 미루지 않으면 바닥은 페이드하는데 파란 외곽선만 먼저 `띡` 바뀐다.
+  bool _deferFloorBoundarySync = false;
 
   /// 도면을 갈아 끼운 뒤 덮개를 그대로 두는 시간.
   ///
@@ -1568,7 +1572,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final sign = transition.direction == EscalatorDirection.up ? 1.0 : -1.0;
     _escalatorRideSwapDeltaM = (_guidance.escalator.deltaM ?? 0) * sign;
     _escalatorRideExpectedM =
-        _escalatorGroupHeightM[transition.group] ?? escalatorDefaultFloorHeightM;
+        _escalatorGroupHeightM[transition.group] ??
+        escalatorDefaultFloorHeightM;
     _escalatorRideTargetProgress = 0;
     _escalatorGlideProgress.value = 0;
     _escalatorGlideTimer = Timer.periodic(_escalatorGlideFrame, (timer) {
@@ -1706,9 +1711,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final floor = _activeFloor;
     if (transfer == null || floor == null) return;
     final (:segment, :nextFloorLabel) = transfer;
-    // 층 라벨 → 순위 비교는 층 전환 연출 정책과 같은 함수를 쓴다
-    // (floor_switch_progress).
-    final goingUp = floorSwitchRank(nextFloorLabel) > floorSwitchRank(floor);
+    // 자동 전환 판정기와 같은 층 라벨 순위 규칙을 쓴다.
+    final goingUp = floorLabelRank(nextFloorLabel) > floorLabelRank(floor);
     final transition = EscalatorTransition(
       // 도착 노드를 경로 지목으로 찾으므로 그룹 매칭까지 갈 일이 없지만,
       // 진단 JSON에 남는 값이라 강제 전환임을 알아볼 수 있게 적는다.
@@ -2142,7 +2146,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _arrivalRouteClearTimer?.cancel();
     _floorSwapVeilTimer?.cancel();
     _escalatorGlideProgress.dispose();
-    _floorSwitchProgress.dispose();
     // 탑승 중 화면이 닫히면 걸음이 멈춘 채로 전역 PDR 세션이 남는다. 다음
     // 화면에서 아무리 걸어도 위치가 갱신되지 않는다.
     if (_stepsPausedForRide) {
@@ -2400,20 +2403,27 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           ? FloorGraph.fromJson(graphJson)
           : null;
       final plan = geojson != null ? FloorPlan.fromJson(geojson) : null;
+      final labelPriorities = rankStoreLabels(plan?.stores ?? const []);
       setState(() {
         _floorGraph = graph;
         _floorPlan = plan;
+        _storeLabelPriorities = labelPriorities;
         _mapCalibrationVersion =
             geojson?['map_calibration_version'] as String? ?? 'unversioned';
       });
       _syncCorridorTracking(_pdrTrailState.snapshot);
       _syncPdrCurrentLayer();
       unawaited(_syncDebugPdrLayers());
-      // 층 외곽선은 방금 받은 도면에서 나온다(어느 층이든 — [floorOutlineRing]).
-      // 도면이 도착한 이 시점에 한 번 더 그려야 층을 바꾼 직후의 빈 외곽선이
-      // 채워진다.
-      unawaited(_syncFloorOutlineLayer());
-      _syncDimScrimLayer();
+      // 일반 로드에서는 즉시 새 경계를 반영한다. 층 크로스페이드 중에는 이전
+      // 경계를 유지하고 [_finalizeIndoorFloorCrossfade]가 투명한 중간 프레임에서
+      // 지오메트리를 교체한다 — 바닥보다 외곽선만 먼저 바뀌는 팝을 막는다.
+      if (!_deferFloorBoundarySync) {
+        unawaited(_syncFloorOutlineLayer());
+        _syncDimScrimLayer();
+      }
+      // MVT 라벨에는 클라이언트가 계산한 순위가 없으므로 레이어의 sort-key
+      // 표현식을 새 층 매장 id 순위로 갱신한다.
+      unawaited(_syncIndoorOverlayFade());
       // 도면이 없어서 미뤄 둔 카메라 fit이 이 층 것이면 지금 실행한다
       // ([_pendingFloorFit]). 이 자리가 "그 층 외곽선이 처음으로 존재하는"
       // 시점이라, 여기서 맞춰야 배율이 정확히 한 번에 잡힌다.
@@ -2437,10 +2447,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         setState(() {
           _floorGraph = null;
           _floorPlan = null;
+          _storeLabelPriorities = const {};
           _mapCalibrationVersion = 'unversioned';
         });
-        unawaited(_syncFloorOutlineLayer());
-        _syncDimScrimLayer();
+        if (!_deferFloorBoundarySync) {
+          unawaited(_syncFloorOutlineLayer());
+          _syncDimScrimLayer();
+        }
       }
     }
   }
@@ -2480,38 +2493,24 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 자동 전환 취소·되돌리기)가 이걸 쓴다 — 크로스페이드 없이 직접
   /// [_switchOverlayFloor]를 부르면 타일 교체가 "지워졌다 다시 그려지는"
   /// 장면으로 드러난다. 안내 중 자동 전환([_swapIndoorFloorForRide])도 같은
-  /// 길로 들어오며, 페이드 시간만 두 배로 늘려 잡는다.
+  /// 길로 들어오며, 페이드 시간만 조금 늘려 잡는다.
   ///
   /// 이전 층 도면은 새 층 타일이 실제로 도착할 때까지 그대로 남고, 도착하면
-  /// 새 도면이 그 위로 페이드인된다(오래 걸리면 그동안 에스컬레이터 모티프가
-  /// 뜬다 — 판단은 [FloorSwitchProgressController]). 마무리(타일 대기 →
-  /// 페이드인 → 이전 블록 제거)는 [_finalizeIndoorFloorCrossfade]가 떼어져
-  /// 돌므로 이 함수는 층 그래프 로드까지만 기다린다. 연타 시 모티프의 주인은
-  /// 마지막 호출이다(토큰).
+  /// 두 도면이 반대 방향으로 교차 페이드된다. 로딩 카드나 덮개는 띄우지 않는다.
+  /// 마무리(타일 대기 → 교차 페이드 → 이전 블록 제거)는
+  /// [_finalizeIndoorFloorCrossfade]가 떼어져 돌므로 이 함수는 층 그래프
+  /// 로드까지만 기다린다.
   Future<void> _switchOverlayFloorCrossfaded(
     String floor, {
     bool recenterIfNeeded = true,
     Duration crossfadeDuration = floorSwitchCrossfadeDuration,
   }) async {
-    final token = _floorSwitchProgress.begin(
-      floorSwitchDirectionBetween(_activeFloor, floor),
+    await _switchOverlayFloor(
+      floor,
+      recenterIfNeeded: recenterIfNeeded,
+      crossfade: true,
+      crossfadeDuration: crossfadeDuration,
     );
-    var handedOff = false;
-    try {
-      handedOff = await _switchOverlayFloor(
-        floor,
-        recenterIfNeeded: recenterIfNeeded,
-        crossfade: true,
-        progressToken: token,
-        crossfadeDuration: crossfadeDuration,
-      );
-    } finally {
-      // 크로스페이드 마무리가 예약됐으면 완료 통지도 거기서 한다(타일이 아직
-      // 오는 중인데 여기서 finish하면 모티프가 "로딩 중"에 걷힌다). 예약까지
-      // 못 갔으면(같은 층, 지도 미준비, 예외) 여기서 반드시 알린다 — 안
-      // 그러면 모티프가 영영 안 걷힌다.
-      if (!handedOff) _floorSwitchProgress.finish(token);
-    }
   }
 
   /// 층 도면을 갈아 끼운다. 실내 MVT 오버레이 소스를 새 층 타일로 바꾸고,
@@ -2520,18 +2519,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 건너뛴다. 호출자가 곧바로 카메라를 다시 맞출 때 쓴다 — 두 애니메이션이
   /// 겹치면 지도가 한 번 움찔했다가 다시 움직인다.
   ///
-  /// [crossfade]가 false(안내 중 자동 전환 — 셸의 불투명 스크림이 교체를
-  /// 가린다)면 이전 층 소스·레이어를 지우고 새 층을 등록하는 즉시 교체다.
-  /// true(사람 조작, [_switchOverlayFloorCrossfaded])면 이전 층 블록을 화면에
+  /// [crossfade]가 false(최초 건물 진입처럼 비교할 이전 도면이 없는 경로)면
+  /// 이전 층 소스·레이어를 지우고 새 층을 등록하는 즉시 교체다.
+  /// true([_switchOverlayFloorCrossfaded])면 이전 층 블록을 화면에
   /// 남긴 채 새 층 블록을 **투명하게** 위에 등록하고, 타일 도착을 기다렸다가
   /// 페이드인하는 마무리([_finalizeIndoorFloorCrossfade])를 떼어서 예약한다.
-  /// 반환값은 그 마무리가 예약됐는지 — 예약됐다면 [progressToken]의 finish도
-  /// 마무리가 맡는다.
+  /// 반환값은 그 마무리가 예약됐는지다.
   Future<bool> _switchOverlayFloor(
     String floor, {
     bool recenterIfNeeded = true,
     bool crossfade = false,
-    int? progressToken,
     Duration crossfadeDuration = floorSwitchCrossfadeDuration,
   }) async {
     if (floor == _activeFloor) return false;
@@ -2543,6 +2540,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 이동이 대표적이다)이 조용히 사라진다. 지도 레이어를 만지는 부분만
     // 컨트롤러가 있을 때 한다.
     final canDrawLayers = controller != null && _styleReady;
+    final deferFloorBoundarySync =
+        crossfade && canDrawLayers && _indoorTilesRegistered;
+    _deferFloorBoundarySync = deferFloorBoundarySync;
 
     // 다층 경로가 있으면 새 층의 세그먼트로 갈아 끼운다(없으면 이 층에는
     // 안 그린다). 단일층 경로였다면 다른 층으로 옮기는 순간 경로가 무의미해지므로
@@ -2553,6 +2553,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _activeFloor = floor;
       _floorGraph = null;
       _floorPlan = null;
+      _storeLabelPriorities = const {};
       _mapCalibrationVersion = 'unversioned';
       // 세그먼트가 갈아타면 진행거리 기준점도 새 세그먼트 기준으로 다시 잡아야
       // 한다. 남겨두면 층을 바꾼 순간 남은거리가 튄다.
@@ -2572,19 +2573,22 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       floorLabels: building.floors,
     );
     _notifyActiveFloor();
-    // 층이 바뀐 순간 이전 층의 외곽선은 더 이상 맞지 않는다. 새 도면이 도착할
-    // 때까지(지하 → 다른 층) 선을 지워 둔다 — 틀린 경계를 보여주지 않는다.
-    unawaited(_syncFloorOutlineLayer());
+    // 즉시 교체 경로에서는 현재 경계를 비운다. 크로스페이드에서는 이전 경계를
+    // 그대로 두고, 새 바닥과 함께 투명해지는 중간 프레임에서 교체한다.
+    if (!deferFloorBoundarySync) unawaited(_syncFloorOutlineLayer());
     // 크로스페이드면 이전 층 블록을 지우지 않고 은퇴 목록으로 넘긴다 — 새 층
     // 타일이 도착할 때까지 이전 도면이 그대로 보이는 것이 연출의 핵심이다.
     // 제거는 페이드인이 끝난 뒤 [_finalizeIndoorFloorCrossfade]가 한다.
     var retiredForCrossfade = false;
     if (canDrawLayers && _indoorTilesRegistered) {
       if (crossfade) {
-        _retiringIndoorBlocks.add((
-          layerIds: _indoorOverlayLayerIds,
-          sourceId: _indoorTilesSourceId,
-        ));
+        _retiringIndoorBlocks.add(
+          _RetiringIndoorBlock(
+            layerIds: _indoorOverlayLayerIds,
+            sourceId: _indoorTilesSourceId,
+            fadeFactor: _indoorOverlayFadeFactor,
+          ),
+        );
         retiredForCrossfade = true;
         _indoorTilesRegistered = false;
         _bumpIndoorIds();
@@ -2615,18 +2619,24 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 페이드인 전까지는 이전 도면이 보인다. 은퇴 블록이 없으면(첫 등록) 가릴
     // 이전 도면 자체가 없으므로 원래 불투명도로 바로 얹는다.
     await _ensureIndoorTilesRegistered(fadeFactor: retiredForCrossfade ? 0 : 1);
+    final floorGraphLoad = _loadFloorGraph(building.id, floor);
     var crossfadeScheduled = false;
     if (crossfade && canDrawLayers && _indoorTilesRegistered) {
       crossfadeScheduled = true;
       unawaited(
         _finalizeIndoorFloorCrossfade(
           generation: _indoorIdGeneration,
-          progressToken: progressToken,
+          floorGraphLoad: floorGraphLoad,
           crossfadeDuration: crossfadeDuration,
         ),
       );
     }
-    await _loadFloorGraph(building.id, floor);
+    await floorGraphLoad;
+    if (!crossfadeScheduled) {
+      _deferFloorBoundarySync = false;
+      unawaited(_syncFloorOutlineLayer());
+      _syncDimScrimLayer();
+    }
     _syncPdrCurrentLayer();
     unawaited(_syncDebugPdrLayers());
     _syncRouteLayer();
@@ -2656,76 +2666,128 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 타일에 feature가 잡히는 순간을 준비 완료로 본다. 주차구역 폴리곤이 수백
   /// 개라 로드에 수 초 걸리는 층(B3·5F·6F)에서도 이전 도면이 끝까지 유지되는
   /// 근거다. 화면 밖·minzoom 미만이라 타일 요청 자체가 없으면 feature가 영영
-  /// 안 잡히므로 [floorSwitchTilesReadyTimeout]에서 끊고 그냥 교체한다(그
-  /// 줌에서는 오버레이가 어차피 안 보여 교체 장면도 없다).
+  /// 안 잡히므로 [floorSwitchTilesReadyTimeout]에서 대기를 끊고 같은 페이드를
+  /// 시작한다(그 줌에서는 오버레이가 어차피 안 보인다).
   ///
   /// [generation]은 이 마무리가 맡은 소스 세대다. 기다리는 사이 새 전환이
   /// 시작되면(세대 불일치) 즉시 물러난다 — 은퇴 블록 정리까지 포함해 마지막
-  /// 전환의 마무리가 이어받는다. [progressToken]이 있으면 어떤 경로로 끝나든
-  /// 에스컬레이터 모티프 컨트롤러에 완료를 알린다(추월당한 토큰의 finish는
-  /// 컨트롤러가 무시한다).
+  /// 전환의 마무리가 이어받는다.
   Future<void> _finalizeIndoorFloorCrossfade({
     required int generation,
-    int? progressToken,
+    required Future<void> floorGraphLoad,
     Duration crossfadeDuration = floorSwitchCrossfadeDuration,
   }) async {
-    try {
-      final elapsed = Stopwatch()..start();
-      while (true) {
-        if (!mounted || _indoorIdGeneration != generation) return;
-        final controller = _mapController;
-        if (controller == null) return;
-        List<dynamic> features = const [];
-        try {
+    final elapsed = Stopwatch()..start();
+    while (true) {
+      if (!mounted || _indoorIdGeneration != generation) return;
+      final controller = _mapController;
+      if (controller == null) return;
+      List<dynamic> features = const [];
+      try {
+        if (kIsWeb) {
+          // maplibre_gl_web은 벡터 타일(MVT)의 querySourceFeatures를
+          // 안정적으로 지원하지 않는다. 실제로 렌더된 현재 세대의
+          // footprint 레이어를 조회해 웹에서도 같은 준비 완료 신호를 얻는다.
+          final viewport = MediaQuery.sizeOf(context);
+          features = await controller.queryRenderedFeaturesInRect(
+            Rect.fromLTWH(0, 0, viewport.width, viewport.height),
+            [_indoorFootprintLayerId],
+            null,
+          );
+        } else {
+          // 네이티브는 기존 벡터 타일 source 조회 경로를 유지한다.
           features = await controller.querySourceFeatures(
             _indoorTilesSourceId,
             'footprint',
             null,
           );
-        } catch (_) {}
-        if (features.isNotEmpty ||
-            elapsed.elapsed >= floorSwitchTilesReadyTimeout) {
-          break;
         }
-        await Future<void>.delayed(floorSwitchTilesPollInterval);
+      } catch (_) {}
+      if (features.isNotEmpty ||
+          elapsed.elapsed >= floorSwitchTilesReadyTimeout) {
+        break;
       }
-      if (!mounted || _indoorIdGeneration != generation) return;
-      final controller = _mapController;
-      if (controller == null) return;
+      await Future<void>.delayed(floorSwitchTilesPollInterval);
+    }
+    if (!mounted || _indoorIdGeneration != generation) return;
+    final controller = _mapController;
+    if (controller == null) return;
 
-      // 즉시 교체 임계 안에 준비된 전환(캐시된 층)은 페이드 없이 바로 보여
-      // 준다 — 빠른 층 훑기에 페이드 잔상이 끌리지 않게. 계수가 이미 1이면
-      // (첫 등록이라 은퇴 블록이 없던 경우) 페이드할 것도 없다.
-      final animate =
-          _indoorOverlayFadeFactor < 1 &&
-          elapsed.elapsed >= floorSwitchInstantSwapThreshold;
-      if (animate) {
-        final stepInterval = crossfadeDuration ~/ floorSwitchCrossfadeSteps;
-        for (var step = 1; step <= floorSwitchCrossfadeSteps; step++) {
-          _indoorOverlayFadeFactor = Curves.easeOut.transform(
-            step / floorSwitchCrossfadeSteps,
+    // 외곽선과 scrim hole은 FloorPlan 좌표를 쓴다. MVT 타일만 먼저 도착했을 때
+    // null 지오메트리로 교체하지 않도록 두 데이터가 모두 준비된 뒤 페이드한다.
+    await floorGraphLoad;
+    if (!mounted || _indoorIdGeneration != generation) return;
+
+    // 캐시에 있어 즉시 준비된 층도 같은 페이드를 탄다. 전환 속도에 따라
+    // 모양이 달라지면 빠른 층만 '띡' 갈리는 것이 더 크게 느껴진다.
+    if (_indoorOverlayFadeFactor < 1) {
+      final frameBudget = crossfadeDuration ~/ floorSwitchCrossfadeSteps;
+      final retiringBlocks = List.of(_retiringIndoorBlocks);
+      final retiringStartFactors = {
+        for (final block in retiringBlocks) block: block.fadeFactor,
+      };
+      var boundaryGeometrySwapped = false;
+      for (var step = 1; step <= floorSwitchCrossfadeSteps; step++) {
+        final frameClock = Stopwatch()..start();
+        final progress = Curves.easeInOut.transform(
+          step / floorSwitchCrossfadeSteps,
+        );
+        _indoorOverlayFadeFactor = progress;
+
+        // 새 층부터 올린 뒤 이전 층을 내린다. 플랫폼 호출이 한 프레임 안에서
+        // 순차 처리될 때도 빈 도면이 노출되지 않고 잠깐 겹치는 쪽이 안전하다.
+        await _applyOverlayBlockFadeFactor(
+          controller,
+          _indoorOverlayLayerIds,
+          progress,
+        );
+        if (!mounted || _indoorIdGeneration != generation) return;
+        for (final block in retiringBlocks) {
+          block.fadeFactor = retiringStartFactors[block]! * (1 - progress);
+          await _applyOverlayBlockFadeFactor(
+            controller,
+            block.layerIds,
+            block.fadeFactor,
           );
-          await _applyOverlayFillFadeFactor(controller);
-          if (step < floorSwitchCrossfadeSteps) {
-            await Future<void>.delayed(stepInterval);
-          }
           if (!mounted || _indoorIdGeneration != generation) return;
         }
-      }
-      // 최종 상태: 계수 1로 전체 레이어(심볼 포함)를 원래 불투명도로 되돌린다.
-      // 심볼(라벨·아이콘)은 단계 페이드에서 뺐다 — 성긴 점 요소라 fill이 다
-      // 올라온 끝에 한 번에 켜져도 팝이 안 읽히고, 단계마다 보내는 전체 속성
-      // 교체(플랫폼 채널 호출)를 절반으로 줄인다.
-      _indoorOverlayFadeFactor = 1;
-      await _syncIndoorOverlayFade();
-      if (!mounted || _indoorIdGeneration != generation) return;
-      // 새 도면이 완전히 올라왔으니 이전 층 블록(연타로 쌓인 것 포함)을 지운다.
-      await _removeRetiringIndoorBlocks(controller);
-    } finally {
-      if (progressToken != null) {
-        _floorSwitchProgress.finish(progressToken);
+
+        // 외곽선은 단일 GeoJSON 소스라 이전·새 지오메트리를 동시에 둘 수 없다.
+        // 전반부에 이전 선을 페이드아웃하고, 완전히 투명한 중간에 새 경계로 바꾼
+        // 뒤 후반부에 페이드인한다. dim scrim의 **밝기는 건드리지 않는다** —
+        // 이것까지 0으로 내리면 층 전환 중 야외 지도가 잠깐 밝아져 실내 모드가
+        // 풀렸다 다시 들어오는 것처럼 보인다. hole 좌표만 중간에 교체한다.
+        final boundaryFactor = floorBoundaryCrossfadeFactor(progress);
+        await _setFloorBoundaryFadeFactor(
+          controller,
+          boundaryFactor,
+          scrim: false,
+        );
+        if (!boundaryGeometrySwapped && progress >= 0.5) {
+          await _setFloorBoundaryFadeFactor(controller, 0, scrim: false);
+          await _syncFloorOutlineLayer();
+          await _syncDimScrimGeometry();
+          boundaryGeometrySwapped = true;
+        }
+        if (!mounted || _indoorIdGeneration != generation) return;
+
+        // 속성 전송에 쓴 시간을 빼고 남은 프레임 예산만 기다린다. 호출 시간이
+        // 누적되어 320ms 연출이 기기마다 두세 배 길어지는 일을 막는다.
+        final remaining = frameBudget - frameClock.elapsed;
+        if (step < floorSwitchCrossfadeSteps && remaining > Duration.zero) {
+          await Future<void>.delayed(remaining);
+        }
       }
     }
+    _indoorOverlayFadeFactor = 1;
+    await _syncIndoorOverlayFade();
+    if (!mounted || _indoorIdGeneration != generation) return;
+    _deferFloorBoundarySync = false;
+    await _syncFloorOutlineLayer();
+    await _syncDimScrimLayer();
+    if (!mounted || _indoorIdGeneration != generation) return;
+    // 이전 층은 이미 투명하다. 여기서 레이어를 제거해도 시각적 팝이 없다.
+    await _removeRetiringIndoorBlocks(controller);
   }
 
   /// 크로스페이드 뒤에 남은 이전 층 소스·레이어 묶음을 전부 지운다. 이미 없는
@@ -2746,25 +2808,46 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
   }
 
-  /// 크로스페이드 단계마다 현재 계수([_indoorOverlayFadeFactor])를 fill 레이어
-  /// 4종에 적용한다. **opacity만 보내면 안 되고 전체 속성을 다시 보낸다** —
-  /// setLayerProperties는 patch가 아니라 전체 교체다(indoor_overlay_layers.dart
-  /// 상단 규칙).
-  Future<void> _applyOverlayFillFadeFactor(
+  /// 한 세대의 도형·라벨·아이콘 9종에 같은 페이드 계수를 적용한다.
+  /// **opacity만 보내면 안 되고 전체 속성을 다시 보낸다** —
+  /// setLayerProperties는 patch가 아니라 전체 교체다.
+  Future<void> _applyOverlayBlockFadeFactor(
     MapLibreMapController controller,
+    List<String> layerIds,
+    double factor,
   ) async {
-    final fadeExpr = _overlayFadeExpr();
+    if (layerIds.length != 9) return;
+    final fadeExpr = _overlayFadeExprFor(factor);
     for (final (id, props) in [
-      (_indoorFootprintLayerId, indoorFootprintProps(fadeExpr)),
-      (_indoorStoresFillLayerId, indoorStoresFillProps(fadeExpr)),
+      (layerIds[8], indoorFootprintProps(fadeExpr)),
+      (layerIds[7], indoorStoresFillProps(fadeExpr)),
+      (layerIds[6], indoorCategoryHighlightProps(fadeExpr)),
+      (layerIds[5], indoorVerticalTransportProps(fadeExpr)),
       (
-        _indoorCategoryHighlightFillLayerId,
-        indoorCategoryHighlightProps(fadeExpr),
+        layerIds[4],
+        indoorStoresLabelProps(
+          fadeExpr,
+          widget.categorySelection,
+          _devicePixelRatio,
+          symbolSortKey: _storeLabelSortKeyExpression(),
+        ),
       ),
       (
-        _indoorVerticalTransportFillLayerId,
-        indoorVerticalTransportProps(fadeExpr),
+        layerIds[3],
+        indoorStoresLabelProps(
+          fadeExpr,
+          widget.categorySelection,
+          _devicePixelRatio,
+          alwaysVisible: true,
+          symbolSortKey: _storeLabelSortKeyExpression(),
+        ),
       ),
+      (
+        layerIds[2],
+        indoorFacilityLabelProps(fadeExpr, widget.categorySelection),
+      ),
+      (layerIds[1], indoorPoiIconProps(fadeExpr, _devicePixelRatio)),
+      (layerIds[0], indoorFacilityIconProps(fadeExpr, _devicePixelRatio)),
     ]) {
       try {
         await controller.setLayerProperties(id, props);
@@ -4237,11 +4320,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _clearPendingOutdoorRoute();
     // 완료 이력은 들고 간다. 이 호출은 같은 여정의 다음 구간이라, 거울상인
     // [_activatePendingIndoorRoute]가 야외 회색선을 남겨 두는 것과 대칭이다.
-    await showRouteTo(
-      destination,
-      label: label,
-      keepCompletedHistory: true,
-    );
+    await showRouteTo(destination, label: label, keepCompletedHistory: true);
   }
 
   /// 실내→야외 예약을 접는다. 그 안내가 더는 유효하지 않은 모든 자리에서 부른다.
@@ -5504,6 +5583,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 있을 땐 opacity=0으로 완전히 사라진다. 이렇게 하면 건물 밖만 반투명 검정으로
   /// 덮이고 실내 오버레이는 그대로 밝게 보인다.
   Future<void> _syncDimScrimLayer() async {
+    await _syncDimScrimGeometry();
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    await _setFloorBoundaryFadeFactor(controller, 1, outline: false);
+  }
+
+  /// dim scrim의 hole 좌표만 갱신한다. 층 크로스페이드에서는 opacity가 0인
+  /// 중간 프레임에 이 함수만 불러, 새 모양이 먼저 드러나는 것을 막는다.
+  Future<void> _syncDimScrimGeometry() async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
     // hole은 외곽선과 **같은 링**을 쓴다. 건물 외곽선으로 뚫으면 그 층 도면 중
@@ -5543,22 +5631,32 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         ]),
       );
     }
+  }
 
-    if (_indoorEntered) {
-      // 실내 MVT 오버레이 페이드 구간과 동일한 zoom 창을 쓴다 — 오버레이가
-      // 뜨는 것과 동시에 스크림도 자연스럽게 짙어진다. 최대치 0.35는 기존 위젯
-      // 스크림(#40000000 = 0.25)보다 살짝 진하게 잡아 실내 vs 야외의 밝기
-      // 대비를 조금 더 명확히 준다.
-      // fillColor를 반드시 함께 넘긴다 — setLayerProperties는 patch가 아니라
-      // 전체 교체다(indoor_overlay_layers.dart 상단 주석 참고).
+  /// 층 경계 두 레이어의 opacity를 같은 계수로 조절한다. 외곽선만 바꿀 때와
+  /// scrim만 복구할 때도 전체 속성을 보내야 MapLibre 네이티브의 기본값 복귀를
+  /// 피할 수 있다([indoor_overlay_layers.dart] 상단 규칙).
+  Future<void> _setFloorBoundaryFadeFactor(
+    MapLibreMapController controller,
+    double factor, {
+    bool outline = true,
+    bool scrim = true,
+  }) async {
+    final clamped = factor.clamp(0.0, 1.0).toDouble();
+    if (outline) {
       await controller.setLayerProperties(
-        _dimScrimFillLayerId,
-        dimScrimProps(_fadeExpr(maxOpacity: 0.35)),
+        _floorOutlineLayerId,
+        floorOutlineProps(_overlayFadeExprFor(clamped)),
       );
-    } else {
+    }
+    if (scrim) {
+      // 실내 MVT 오버레이 페이드 구간과 동일한 zoom 창을 쓴다. 최대치 0.35는
+      // 기존 위젯 스크림보다 살짝 진해 실내와 야외의 밝기 차를 분명히 한다.
       await controller.setLayerProperties(
         _dimScrimFillLayerId,
-        dimScrimProps(0),
+        dimScrimProps(
+          _indoorEntered ? _fadeExpr(maxOpacity: 0.35 * clamped) : 0,
+        ),
       );
     }
   }
@@ -5572,6 +5670,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (selection == null) return kCategoryHighlightNoneFilter;
     return categoryHighlightFilter(selection);
   }
+
+  Object _storeLabelSortKeyExpression() => storeLabelSortKeyExpression(
+    _storeLabelPriorities,
+    selectedStoreId: _highlightedStoreId,
+  );
 
   /// 선택이 바뀌었을 때 오버레이에 그 선택을 반영한다.
   ///
@@ -5604,6 +5707,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           fadeExpr,
           widget.categorySelection,
           _devicePixelRatio,
+          symbolSortKey: _storeLabelSortKeyExpression(),
         ),
       ),
       (
@@ -5613,6 +5717,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           widget.categorySelection,
           _devicePixelRatio,
           alwaysVisible: true,
+          symbolSortKey: _storeLabelSortKeyExpression(),
         ),
       ),
       (
@@ -5640,11 +5745,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 곱셈을 `['*', ...]`로 감싸지 않고 램프 끝 스톱에 곱해 넣는 이유
   /// (native의 top-level zoom 제약)는 [indoorOverlayCrossfadeExpr]에 있다.
   List<Object> _overlayFadeExpr() {
-    final factor = _indoorOverlayFadeFactor;
+    return _overlayFadeExprFor(_indoorOverlayFadeFactor);
+  }
+
+  List<Object> _overlayFadeExprFor(double factor) {
     if (factor >= 1) return _fadeExpr();
     return indoorOverlayCrossfadeExpr(
       entered: _indoorEntered,
-      crossfadeFactor: factor,
+      crossfadeFactor: factor.clamp(0.0, 1.0).toDouble(),
     );
   }
 
@@ -5680,6 +5788,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           fadeExpr,
           widget.categorySelection,
           _devicePixelRatio,
+          symbolSortKey: _storeLabelSortKeyExpression(),
         ),
       ),
       (
@@ -5689,6 +5798,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           widget.categorySelection,
           _devicePixelRatio,
           alwaysVisible: true,
+          symbolSortKey: _storeLabelSortKeyExpression(),
         ),
       ),
       (
@@ -6486,6 +6596,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           fadeExpr,
           widget.categorySelection,
           _devicePixelRatio,
+          symbolSortKey: _storeLabelSortKeyExpression(),
         ),
         // **폴리곤이 아니라 라벨 전용 점 레이어를 본다.** MapLibre는 폴리곤
         // 심볼을 면적 무게중심에 찍는데, ㄱ자·길쭉한 매장에서 그 점이 눈에
@@ -6517,6 +6628,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           widget.categorySelection,
           _devicePixelRatio,
           alwaysVisible: true,
+          symbolSortKey: _storeLabelSortKeyExpression(),
         ),
         sourceLayer: 'store_labels',
         filter: [
@@ -7052,14 +7164,20 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 일상다완이 열리던 원인. 라벨은 백엔드가 매장마다 다른 점에 흩어 놓았다.
     // 묶음 매장(다른 매장 이름을 이어 붙인 구역 항목)은 탭 대상이 아니다.
     final aggregates = aggregateStoreIds(plan.stores);
-    var store = await _storeFromLayers(pointPx, [
-      _indoorSharedStoresLabelLayerId,
-      _indoorStoresLabelLayerId,
-    ], plan, skipIds: aggregates, sharingAggregates: aggregates);
+    var store = await _storeFromLayers(
+      pointPx,
+      [_indoorSharedStoresLabelLayerId, _indoorStoresLabelLayerId],
+      plan,
+      skipIds: aggregates,
+      sharingAggregates: aggregates,
+    );
     if (store == null) {
-      store = await _storeFromLayers(pointPx, [
-        _indoorStoresFillLayerId,
-      ], plan, skipIds: aggregates);
+      store = await _storeFromLayers(
+        pointPx,
+        [_indoorStoresFillLayerId],
+        plan,
+        skipIds: aggregates,
+      );
       if (store != null) {
         // 폴리곤으로 잡혔고 그 자리를 여럿이 나눠 쓰면, 화면에 그려진 라벨
         // 중 누른 곳에서 가장 가까운 매장으로 바꾼다.
@@ -7996,20 +8114,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (_highlightedStoreId == null) return;
     setState(() => _highlightedStoreId = null);
     _syncHighlightLayer();
-  }
-
-  /// 지금 층을 **다시 고른 것과 같은 화면**으로 되돌린다.
-  ///
-  /// 매장을 고르면 카메라가 그 매장으로 당겨지고 시트에 가리지 않도록 위로
-  /// 밀린다. 아무것도 고르지 않고 시트를 닫으면 사용자가 보려던 것은 다시 층
-  /// 전체인데, 그 치우친 화면이 그대로 남아 있으면 방금 어디를 보고 있었는지
-  /// 다시 찾아야 한다. 층 전환과 **같은 함수·같은 시간**으로 되돌려, 층 선택기를
-  /// 누른 것과 구분되지 않는 화면을 만든다.
-  ///
-  /// 실내에 들어와 있지 않으면 되돌릴 기준이 없으므로 아무것도 하지 않는다.
-  Future<void> realignToActiveFloor() async {
-    if (!_indoorEntered) return;
-    await _fitCameraToActiveFloor(duration: _floorSwitchZoomDuration);
+    unawaited(_syncIndoorOverlayFade());
   }
 
   /// 검색 후보(`StoreIndexEntry`)를 좌표까지 갖춘 [PoiSearchResult]로 바꾼다.
@@ -8087,7 +8192,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Future<void> focusStore(
     PoiSearchResult store, {
     double bottomSheetFraction = 0,
-    double topInsetPx = 0,
+    double topInsetPx = _placingHintTopPx,
     bool keepZoom = false,
     bool enterBuildingIfNeeded = false,
   }) async {
@@ -8125,6 +8230,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
     setState(() => _highlightedStoreId = store.placeId);
     await _syncHighlightLayer();
+    await _syncIndoorOverlayFade();
     if (!mounted) return;
 
     // 뷰포트는 카메라 이동 전에 읽는다(실내 화면과 같은 이유 — await 뒤에
@@ -8132,31 +8238,81 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final viewport = MediaQuery.sizeOf(context);
     final camera = controller.cameraPosition;
     final currentZoom = camera?.zoom ?? 0;
-    await controller.moveCamera(
+    final bearing = camera?.bearing ?? 0;
+    final focusZoom = _focusZoomForStore(
+      store,
+      viewport: viewport,
+      bottomSheetFraction: bottomSheetFraction,
+      topInsetPx: topInsetPx,
+      bearing: bearing,
+    );
+    final zoom = focusZoomFor(
+      currentZoom: currentZoom,
+      keepZoom: keepZoom && !fromOutside,
+      storeFocusZoom: focusZoom,
+    );
+    // 시트와 상단 chrome 사이, 실제로 보이는 띠의 중앙에 매장이 오도록 최종
+    // 카메라 목표를 먼저 계산한다. 예전처럼 `매장 중앙 이동`과 `scrollBy`를
+    // 나눠 부르면 첫 이동이 한 프레임 드러나 카메라가 두 번 튄다.
+    final lift = math.max(
+      0.0,
+      (viewport.height * bottomSheetFraction - topInsetPx) / 2,
+    );
+    final target = cameraTargetForScreenLift(
+      store.point,
+      bearing: bearing,
+      zoom: zoom,
+      liftPx: lift,
+    );
+    await controller.animateCamera(
       CameraUpdate.newCameraPosition(
         CameraPosition(
-          target: _toGl(store.point),
-          // 배율 규칙은 실내 도면과 한 함수를 공유한다(focusZoomFor).
-          zoom: focusZoomFor(
-            currentZoom: currentZoom,
-            keepZoom: keepZoom && !fromOutside,
-            storeFocusZoom: _storeFocusZoom,
-          ),
-          bearing: camera?.bearing ?? 0,
+          target: _toGl(target),
+          zoom: zoom,
+          bearing: bearing,
           tilt: camera?.tilt ?? 0,
         ),
       ),
+      duration: _storeFocusDuration,
     );
-    // 위(검색창·카테고리 줄)와 아래(시트)가 가리고 남는 띠의 한가운데로. 부호와
-    // 단위 근거는 `floor_plan_view.dart`의 같은 계산 주석에 있다.
-    final lift = (viewport.height * bottomSheetFraction - topInsetPx) / 2;
-    if (lift <= 0) return;
-    await controller.moveCamera(CameraUpdate.scrollBy(0, -lift));
   }
 
   /// 목록에서 고른 매장을 볼 때의 최소 확대. 실내 화면과 같은 값이라야 두
-  /// 화면을 오가도 같은 크기로 보인다.
-  static const _storeFocusZoom = 19.0;
+  /// 화면을 오가도 같은 크기로 보인다. 폴리곤을 못 찾을 때만 쓰는 폴백이고,
+  /// 보통은 [_focusZoomForStore]가 매장 크기에 맞춰 정한다.
+  static const _storeFocusZoom = 18.1;
+  static const _storeFocusMinZoom = 17.8;
+  static const _storeFocusMaxZoom = 20.4;
+
+  double _focusZoomForStore(
+    PoiSearchResult store, {
+    required Size viewport,
+    required double bottomSheetFraction,
+    required double topInsetPx,
+    required double bearing,
+  }) {
+    final polygon = _floorPlan?.stores
+        .where((candidate) => candidate.id == store.placeId)
+        .firstOrNull
+        ?.polygon;
+    if (polygon == null || polygon.length < 3) return _storeFocusZoom;
+
+    final box = storeLabelBoxMeters(polygon: polygon, bearingDeg: bearing);
+    final visibleBandHeight = math.max(
+      1.0,
+      viewport.height * (1 - bottomSheetFraction) - topInsetPx,
+    );
+    // 매장이 보이는 띠의 약 42%를 차지하게 한다. 작은 매장은 읽을 만큼
+    // 확대하고, 백화점의 큰 앵커 매장은 한 면이 화면을 가득 덮지 않게 한다.
+    final fitted = zoomToFitRotatedBox(
+      widthMeters: math.max(box.widthM, 3.5),
+      heightMeters: math.max(box.heightM, 3.5),
+      viewportWidthPx: math.max(1, viewport.width * 0.42),
+      viewportHeightPx: math.max(1, visibleBandHeight * 0.46),
+      latitude: store.point.latitude,
+    );
+    return fitted.clamp(_storeFocusMinZoom, _storeFocusMaxZoom).toDouble();
+  }
 
   /// 검색 결과에서 고른 **건물**의 바깥 모습이 보이도록 카메라를 옮긴다.
   ///
@@ -8737,28 +8893,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
           )
         else
           const ColoredBox(color: AppColors.surface),
-
-        // 층 전환이 오래 걸릴 때만 지도 위 중앙에 뜨는 에스컬레이터 모티프.
-        // 이전 층 도면이 그대로 보이는 위에 뜬다 — 덮개(베일)는 없다. 실기기
-        // 에서 흰 베일이 캡처 플래시처럼 번쩍여 걷어냈고, 모티프는 자체 카드
-        // 배경이 있어 도면 위에서도 읽힌다. 타이밍 정책은
-        // core/floor_switch_progress.dart. AnimatedSwitcher가 등장·퇴장을
-        // 페이드로 처리하고, 숨김이 끝나면 위젯을 트리에서 내려 벨트 애니메이션
-        // ticker도 함께 멈춘다. IgnorePointer라 지도 조작을 안 막는다.
-        Positioned.fill(
-          child: IgnorePointer(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 160),
-              child: _floorSwitchMotifVisible
-                  ? Center(
-                      child: FloorSwitchEscalatorMotif(
-                        direction: _floorSwitchMotifDirection,
-                      ),
-                    )
-                  : const SizedBox.shrink(),
-            ),
-          ),
-        ),
 
         // 실내 진입 시 야외만 어둡게 덮는 dim scrim은 위젯 트리가 아니라
         // MapLibre fill 레이어(_dimScrimFillLayerId)로 처리한다. 위젯 스크림은

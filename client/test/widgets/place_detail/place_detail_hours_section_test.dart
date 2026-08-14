@@ -34,19 +34,16 @@ void main() {
         minute,
       ).subtract(const Duration(minutes: 540));
 
-  Future<void> pump(
-    WidgetTester tester,
-    HoursSection section,
-    DateTime now,
-  ) => tester.pumpWidget(
-    MaterialApp(
-      home: Scaffold(
-        body: SingleChildScrollView(
-          child: PlaceHoursSection(hours: section, now: now),
+  Future<void> pump(WidgetTester tester, HoursSection section, DateTime now) =>
+      tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: PlaceHoursSection(hours: section, now: now),
+            ),
+          ),
         ),
-      ),
-    ),
-  );
+      );
 
   testWidgets('영업 중이면 닫는 시각을 함께 말한다', (tester) async {
     await pump(tester, hours(), kst(2026, 8, 11, 14));
@@ -115,9 +112,16 @@ void main() {
     expect(find.textContaining('10:30 - 20:00'), findsOneWidget);
   });
 
-  testWidgets('확인일을 늘 적는다', (tester) async {
+  testWidgets('최근 확인일은 본문 위계를 흐리지 않도록 숨긴다', (tester) async {
     await pump(tester, hours(), kst(2026, 8, 11, 14));
 
-    expect(find.text('2026-08-10 확인'), findsOneWidget);
+    expect(find.textContaining('2026-08-10'), findsNothing);
+  });
+
+  testWidgets('오래된 정보는 확인일을 경고의 근거로 남긴다', (tester) async {
+    await pump(tester, hours(confirmedAt: '2026-01-01'), kst(2026, 8, 11, 14));
+
+    expect(find.textContaining('2026-01-01 기준'), findsOneWidget);
+    expect(find.textContaining('달라졌을 수 있어요'), findsOneWidget);
   });
 }
