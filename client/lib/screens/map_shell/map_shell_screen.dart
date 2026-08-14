@@ -2458,23 +2458,15 @@ class _MapShellScreenState extends State<MapShellScreen> {
             ? _lockMaps(_mapLockOverlayTouch)
             : _unlockMaps(_mapLockOverlayTouch),
         children: [
-          // "장소"(저장한 장소) pill은 여기서 뺐다. 지도 위가 아니라
-          // 화면 맨 아래 홈/장소 내비게이션으로 갈 자리다. 진입점이
-          // 사라지는 것은 아니다 — 햄버거 메뉴의 "저장한 장소"가
-          // 같은 시트를 연다([_openFavorites]).
+          // 카테고리 필터는 모드가 아니라 [_indoorContextActive]로
+          // 가른다 — 야외 탭이어도 오버레이가 켜지면 도면과 강조가
+          // 이미 떠 있다. 모드로 분기하면 웹에서는 보이고 모바일
+          // (도면 탭으로 바로 진입)에서는 안 보인다. 반대로 순수
+          // 야외에서는 감춘다. 강조가 도면 위에 그려져 결과가 안
+          // 보이기 때문이다.
           //
-          // 카테고리 필터는 **건물 안을 보고 있을 때만**
-          // 노출한다. 기준은
-          // [_indoorContextActive]다 — 야외 탭이어도 건물을
-          // 탭하거나 줌으로 실내 오버레이가 켜지면 사용자에게는
-          // 실내 화면과 똑같은 도면이 떠 있고, 그 위에 강조가
-          // 그려진다. 모드로 분기하면 그 상태에서 칩만 사라져,
-          // 웹(마우스로 실내 탭을 눌러 들어감)에서는 보이고
-          // 모바일(도면을 탭해 바로 진입)에서는 안 보인다.
-          //
-          // 반대로 오버레이가 꺼진 순수 야외에서는 계속 감춘다.
-          // 아직 들어가지도 않은 건물의 카테고리를 누르게 되고,
-          // 강조는 도면 위에 그려지므로 결과가 보이지 않는다.
+          // "장소" pill은 화면 맨 아래 내비게이션으로 갔다. 진입점은
+          // 햄버거 메뉴의 "저장한 장소"([_openFavorites])에 남아 있다.
           if (_indoorContextActive) ...[
             CategoryChipsRow(
               entriesFuture: _categoryEntriesFuture,

@@ -1,21 +1,9 @@
 // ignore_for_file: invalid_use_of_protected_member
 //
-// 이 파일은 `OutdoorMapBodyState`의 part다. setState는 그 클래스가 State에서
-// 물려받은 protected 멤버이고, 여기서 부르는 것은 **같은 클래스의 코드**다 —
-// 파일만 갈라져 있을 뿐 바깥에서 남의 protected 멤버를 건드리는 것이 아니다.
-// 분석기는 extension을 "서브클래스가 아니다"로 보아 경고하므로 파일 단위로
-// 끈다. 본체(생명주기·build)는 클래스 안에 있어 이 해제의 영향을 받지 않는다.
+// part라 `setState`(protected) 호출이 경고로 잡힌다.
 /// `OutdoorMapBodyState`의 **PDR·앵커·보정** 부분.
 ///
-/// [outdoor_map_screen.dart]의 part다. 한 파일이 7,500줄을 넘어 읽을 수
-/// 없어져 성격별로 갈랐다 — **옮기기만 했고 동작은 그대로다.**
-///
-/// extension을 쓰는 이유: 같은 라이브러리(part)라 private 멤버가 그대로
-/// 보이고, extension끼리도 서로 부를 수 있다. mixin은 서로의 private
-/// 멤버를 못 봐서 이렇게 얽힌 클래스에는 쓸 수 없다.
-///
-/// 상태 필드와 생명주기(initState/dispose/build), 그리고 셸이 부르는
-/// 공개 API 19개는 본체에 남아 있다.
+/// part 규약과 이 파일로 가른 이유는 `docs/client/outdoor-map-moves.md`.
 part of 'outdoor_map_screen.dart';
 
 extension OutdoorMapPdr on OutdoorMapBodyState {

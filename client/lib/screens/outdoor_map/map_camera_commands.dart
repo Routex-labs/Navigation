@@ -4,14 +4,11 @@
 /// 인지, 사용자 위치인지는 상태와 얽힌 판단이다. 여기는 "이 상자에 맞춰라",
 /// "이 점으로 가라"를 받아 MapLibre 호출로 옮기기만 한다.
 ///
-/// 배율·방위 **계산**은 또 한 겹 아래에 있다(`building_orientation.dart`의
-/// [zoomToFitRotatedBox]·[portraitBearingFor]·[offsetByMeters]). 그쪽은 순수
-/// 함수라 테스트가 붙어 있고, 이 파일은 그 결과를 컨트롤러에 전달하는 얇은
-/// 층이다.
+/// 배율·방위 **계산**은 또 한 겹 아래(`building_orientation.dart`)에 있다. 이 파일은
+/// 그 결과를 컨트롤러에 전달하는 얇은 층이다.
 ///
-/// 화면 크기를 `BuildContext` 대신 [Size]로 받는다. 카메라 명령이
-/// `MediaQuery`를 직접 보면 위젯 트리 없이는 한 줄도 시험할 수 없고, 실제로
-/// 필요한 것은 폭·높이 두 숫자뿐이다.
+/// 화면 크기를 `BuildContext` 대신 [Size]로 받는다 — `MediaQuery`를 직접 보면 위젯
+/// 트리 없이는 한 줄도 시험할 수 없고, 실제로 필요한 건 폭·높이 두 숫자뿐이다.
 library;
 
 import 'dart:math' as math;

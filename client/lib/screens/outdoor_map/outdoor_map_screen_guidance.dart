@@ -1,15 +1,9 @@
 // ignore_for_file: invalid_use_of_protected_member
 //
-// 이 파일은 `OutdoorMapBodyState`의 part다. 사정은 다른 part 파일과 같다.
+// part라 `setState`(protected) 호출이 경고로 잡힌다.
 /// `OutdoorMapBodyState`의 **안내 진행·도착 판정** 부분.
 ///
-/// [outdoor_map_screen_route.dart]에서 갈라져 나왔다. 그 파일에는 관심사가 넷
-/// 섞여 있었다 — 경로 계산, 지도 레이어 동기화, 안내 진행, 층 전환 큐. 그중
-/// **"안내가 지금 어디까지 왔나"** 만 여기로 모은다.
-///
-/// 경로를 **만드는** 코드와 그 경로를 **따라가는** 코드는 고치는 이유가 다르다.
-/// 전자는 목적지가 바뀔 때, 후자는 걸음이 들어올 때 돈다. 한 파일에 두면
-/// 진행률 버그를 고치려는 사람이 TMAP 호출 코드까지 읽게 된다.
+/// part 규약과 이 파일로 가른 이유는 `docs/client/outdoor-map-moves.md`.
 part of 'outdoor_map_screen.dart';
 
 extension OutdoorMapGuidance on OutdoorMapBodyState {

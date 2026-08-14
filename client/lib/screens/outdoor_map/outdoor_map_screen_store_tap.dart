@@ -1,12 +1,9 @@
 // ignore_for_file: invalid_use_of_protected_member
 //
-// 이 파일은 `OutdoorMapBodyState`의 part다. 사정은 다른 part 파일과 같다.
+// part라 `setState`(protected) 호출이 경고로 잡힌다.
 /// `OutdoorMapBodyState`의 **매장 탭 판정** 부분.
 ///
-/// [outdoor_map_screen_indoor.dart]에서 갈라져 나왔다. "지금 누른 자리에 어떤
-/// 매장이 있나"는 화면 좌표 → 타일 feature → 도메인 모델을 거치는 별개의
-/// 문제다. 한 폴리곤을 여러 매장이 나눠 쓰는 자리에서는 가장 가까운 라벨까지
-/// 따져야 해서, 그 규칙이 실내 오버레이 코드 전체에 섞여 있으면 읽히지 않는다.
+/// part 규약과 이 파일로 가른 이유는 `docs/client/outdoor-map-moves.md`.
 part of 'outdoor_map_screen.dart';
 
 extension OutdoorMapStoreTap on OutdoorMapBodyState {

@@ -1,14 +1,9 @@
 // ignore_for_file: invalid_use_of_protected_member
 //
-// 이 파일은 `OutdoorMapBodyState`의 part다. 사정은 다른 part 파일과 같다.
+// part라 `setState`(protected) 호출이 경고로 잡힌다.
 /// `OutdoorMapBodyState`의 **층 전환 크로스페이드** 부분.
 ///
-/// [outdoor_map_screen_indoor.dart]에서 갈라져 나왔다. 층을 바꾸는 일은 실내
-/// 오버레이에서 가장 조심스러운 경로다 — 옛 층 레이어를 지우기 전에 새 층을
-/// 깔아야 깜빡임이 없고, 그 사이에 사용자가 또 층을 바꾸면 두 전환이 겹친다.
-///
-/// 그 순서와 세대(generation) 관리가 한 덩어리라 따로 둔다. 실내 오버레이의
-/// 다른 일(레이어 동기화·카메라 맞춤·탭 판정)과는 고치는 이유가 다르다.
+/// part 규약과 이 파일로 가른 이유는 `docs/client/outdoor-map-moves.md`.
 part of 'outdoor_map_screen.dart';
 
 extension OutdoorMapFloorSwitch on OutdoorMapBodyState {

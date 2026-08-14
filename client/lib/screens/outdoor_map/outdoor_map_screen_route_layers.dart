@@ -1,15 +1,9 @@
 // ignore_for_file: invalid_use_of_protected_member
 //
-// 이 파일은 `OutdoorMapBodyState`의 part다. 사정은 다른 part 파일과 같다.
+// part라 `setState`(protected) 호출이 경고로 잡힌다.
 /// `OutdoorMapBodyState`가 **경로·목적지를 지도에 쓰는** 부분.
 ///
-/// [outdoor_map_screen_route.dart]에서 갈라져 나왔다. 경로를 **계산하는** 코드와
-/// 그 결과를 **지도에 그리는** 코드는 고치는 이유가 다르다 — 전자는 목적지나
-/// 알고리즘이 바뀔 때, 후자는 레이어 순서나 MapLibre 동작이 바뀔 때 돈다.
-///
-/// 여기 있는 것은 전부 상태를 읽어 소스에 밀어 넣는 얇은 껍데기다. 실제 GeoJSON
-/// 조립과 레이어 등록은 [route_map_layers.dart]·[marker_map_layers.dart]가 하고,
-/// 그쪽은 화면 상태를 모르는 순수 함수라 따로 시험된다.
+/// part 규약과 이 파일로 가른 이유는 `docs/client/outdoor-map-moves.md`.
 part of 'outdoor_map_screen.dart';
 
 extension OutdoorMapRouteLayers on OutdoorMapBodyState {
