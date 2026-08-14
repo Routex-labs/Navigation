@@ -35,7 +35,7 @@
 | 진짜 재사용 위젯 | `status_badge` `sheet_header` `filter_pill` | `widgets/` 그대로 |
 | **위젯이 아닌 순수 규칙·스타일** | `store_label_fit` `floor_facility_style` `category_map_*` `floor_camera_*` `store_label_anchor` | `core/map/` — 위젯 트리 없이 시험되는 코드다 |
 | 특정 화면 전용 시트·바 | `search_panel` `map_top_bar` `outdoor_poi_sheet` `route_field_results` | 그 화면 밑(`screens/<화면>/widgets/`) |
-| 갓 위젯 | `floor_plan_view`(3,229줄) | 야외 지도와 같은 방식으로 해체 |
+| 갓 위젯 | `floor_plan_view`(3,229줄) | ~~해체~~ → **지웠다.** 앱에서 닿지 않았다(문제 4) |
 
 **위젯 클래스가 하나도 없는 파일이 20개 / 2,794줄**이다. `widgets/`에 있다는 이유로
 "UI 코드"로 읽히지만 실제로는 순수 함수라 위젯 없이 시험된다. 자리를 옮기면 그 사실이
@@ -49,7 +49,7 @@
 
 | 함수 | 줄 | await | setState | 지도쓰기 | 말 걸기 | 섞인 것 |
 |---|---|---|---|---|---|---|
-| `_onStyleLoaded` (floor_plan_view) | 371 | 51 | 0 | 31 | 0 | 이미지 등록 + 소스 등록 + 레이어 등록 + 초기 데이터 |
+| ~~`_onStyleLoaded` (floor_plan_view)~~ | 371 | 51 | 0 | 31 | 0 | 52줄로 줄인 뒤, 파일째 삭제(문제 4) |
 | `_buildShell` (map_shell) | 372 | 0 | 4 | 0 | 0 | 레이아웃 + 상태 전이 |
 | `_requestTransitRoute` (map_shell) | 152 | 6 | 1 | 0 | 5 | 조회 + 파싱 + 상태 + 안내 문구 |
 | `_buildBody` (outdoor_map) | 432 | 0 | 0 | 0 | 0 | 오버레이 14종 조립 |
@@ -58,7 +58,8 @@
 | `onAltitude` (escalator detector) | 331 | 0 | 0 | 0 | 0 | 판정 단계 6개가 한 함수 |
 
 파일별로는 `floor_plan_view`(334점) · `map_shell_screen`(285) · `outdoor_map_screen_route`(186)
-· `search_panel`(167) 순이다.
+· `search_panel`(167) 순이었다. 1위가 삭제됐으니 **지금 남은 최악은 `map_shell_screen`**이고,
+그 다음이 한 함수에 판정 6단계가 들어 있는 `onAltitude`(에스컬레이터 검출기)다.
 
 **에스컬레이터 판정(`onAltitude`)은 손대지 않는다** — 알고리즘 재작성이 예정돼 있다.
 
@@ -78,7 +79,7 @@
 `widgets_test.dart` 하나가 `LocationMarker`·`UncertaintyCircle`·`StatusBadge`·
 `EtaCard`·`SearchPanel` 다섯을 시험하고 있었다. 대상별로 갈랐다(430829a).
 `widget_test.dart`는 map_shell이 아니라 **앱 전체 스모크**여서 `test/app_test.dart`로
-옮겼다. 케이스 수는 1,415개 그대로다.
+옮겼다. 이때 케이스 수는 1,415개 그대로였다(지금은 죽은 화면 삭제로 1,397개).
 
 ### 남은 것 2: 직접 테스트가 없는 모듈
 
@@ -97,10 +98,10 @@
 | `core/map/floor_facility_style.dart` | 390 |
 | `screens/map_shell/directions_candidates.dart` | 280 |
 
-## 문제 4 — 앱에서 닿지 않는 화면이 4,185줄 있다
+## 문제 4 — 앱에서 닿지 않는 화면이 있었다 (해결: 5,135줄 삭제)
 
 5단계(`floor_plan_view._onStyleLoaded` 분해)를 하다 발견했다. **이 저장소에서 가장 큰
-파일이 실행 중인 앱에서 한 번도 그려지지 않는다.**
+파일이 실행 중인 앱에서 한 번도 그려지지 않았다.**
 
 근거는 셋이다.
 
@@ -111,30 +112,52 @@
 3. 이름 없는 네비게이션(`Navigator.push`/`MaterialPageRoute`)이 **0건**이고,
    AndroidManifest에도 딥링크 intent-filter가 없다(LAUNCHER 하나뿐).
 
-| 파일 | 줄 |
+### 경계를 손으로 고르지 않았다
+
+처음 손으로 센 것은 4,185줄이었는데 **실제로는 5,135줄이었다.** 화면을 지우면
+그 화면만 쓰던 파일이 죽고, 그 파일만 보던 테스트가 죽는다. 그래서 import
+그래프의 **고정점**을 구했다 — 더 이상 새로 죽는 게 없을 때까지 반복.
+
+뿌리를 잘못 잡으면 크게 틀린다. `main.dart` 하나만 뿌리로 두면 테스트 30여 개가
+쓰는 mock 리포지토리까지 "죽음"으로 나온다. 뿌리는 **실제 진입점 전부**여야 한다 —
+`main.dart`, 자기 `main()`을 가진 실기기 하니스, 그리고 살아남는 테스트들.
+
+그렇게 해도 자동으로 안 끊기는 고리가 있었다. `FloorPlanView`와 그 테스트가
+**서로를 살려주고 있었다** — 테스트가 파일을 import하니 파일이 "닿는다"로 세어지고,
+그 파일을 쓰는 게 그 테스트뿐이니 테스트도 "살아 있다"로 세어진다. 여기서
+기준은 사람이 정한다: **제품 코드에서 부르는 곳이 없으면 죽은 것이다. 테스트가
+있다는 건 커버리지의 증거지 사용의 증거가 아니다.**
+
+| 지운 것 | 줄 |
 |---|---|
 | `widgets/floor_plan_view.dart` | 2,772 |
+| `core/map/floor_plan_layers.dart` | 508 |
 | `screens/debug/pdr_svg_test_screen.dart` | 468 |
 | `screens/route_guide/route_guide_screen.dart` | 335 |
 | `screens/debug/floor_map_preview_screen.dart` | 266 |
 | `screens/destination/destination_screen.dart` | 156 |
 | `screens/arrival/arrival_screen.dart` | 115 |
 | `screens/debug/api_health_check_screen.dart` | 73 |
+| `core/floor_switch_timing.dart` | 68 |
+| `widgets/uncertainty_circle.dart` | 24 |
+| `repositories/mock_place_detail_repository.dart` | 12 |
+| 테스트 3개 + `app_test.dart`의 7블록 | 274 |
 
-코드에 `IndoorMapBody`를 가리키는 주석이 열 군데 남아 있는데 **그런 클래스는 없다.**
-실내 탭이 있던 시절의 흔적으로 보인다 — 지금은 `MapShellScreen` 하나가 야외 지도
-위에 실내 오버레이를 얹는 방식이다.
+### 살려 둔 것 — 자동 판정이 틀렸던 셋
 
-**지우지 않았다.** 저장소 규칙은 방치된 코드를 그 PR에서 지우라고 하지만, 이건
-"실내 렌더러를 버린다"는 제품 결정이라 혼자 내릴 수 없다. 세 갈래 중 하나를 골라야 한다.
+| 파일 | 왜 살렸나 |
+|---|---|
+| `repositories/mock_*_repository.dart` | 테스트 30여 개가 쓰는 대역이다 |
+| `features/indoor_navigation/debug/pdr_device_harness*` | 자기 `main()`을 가진 실기기 하니스 |
+| `repositories/tmap_transit_repository.dart` | 카카오 키가 소진되면 되돌릴 대체 구현이라고 코드가 명시한다 |
 
-- **되살린다** — 실내 탭을 다시 붙일 계획이면 진입점을 만들고 테스트를 붙인다.
-- **지운다** — 계획이 없으면 4,185줄과 그 테스트를 함께 지운다. `lib/`가 8% 줄어든다.
-- **격리한다** — 당장 결정하지 않고 `lib/legacy/`로 모아 "여기는 앱이 안 쓴다"를
-  구조로 드러낸다.
+### 남은 것
 
-결정 전까지 **이 코드는 리팩터 대상에서 뺀다.** 안 쓰는 코드를 다듬는 것은
-가장 비싼 낭비다.
+라우트가 **하나**가 됐다(`/` → `MapShellScreen`). `AppRoutes`에 상수 하나만
+남긴 이유는 `initialRoute`와 `routes`가 같은 문자열을 봐야 하기 때문이다.
+
+교훈 한 줄: **push가 없는 라우트는 죽은 코드다.** 화면 여섯 개가 라우트 표에만
+등록된 채 5,135줄을 붙들고 있었고, 그중 하나는 저장소에서 가장 큰 파일이었다.
 
 ## 목표 구조
 
@@ -168,7 +191,7 @@ lib/
 | 3 | 화면 전용 위젯 25개를 그 화면 밑으로 | 8,000줄 | **완료** (1428a68) |
 | 4 | 여러 대상을 시험하던 테스트 분해 | 2파일 | **완료** (430829a) |
 | 5 | `floor_plan_view._onStyleLoaded` 분해 | 371 → 52줄 | **완료** (a3c1909) |
-| 6 | **앱에서 닿지 않는 4,185줄을 어떻게 할지 결정** | — | **막힘** — 제품 결정 필요 |
+| 6 | 앱에서 닿지 않는 화면 삭제 | 5,135줄 | **완료** (512188d, aaa17e3) |
 | 7 | `map_shell_screen` 분해 | 2,953줄 | 중 |
 | 8 | 직접 테스트 없는 큰 모듈에 테스트 | — | 없음 |
 

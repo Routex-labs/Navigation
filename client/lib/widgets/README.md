@@ -8,10 +8,9 @@
 
 | 파일 | 역할 |
 |---|---|
-| [`floor_plan_view.dart`](floor_plan_view.dart) | MapLibre 층 지도. 매장·POI·현재 위치·경로 표시 (실내 탭·경로 안내·디버그 화면이 공유) |
-| [`eta_card.dart`](eta_card.dart) | 목적지까지 거리·시간 배너 (야외 지도·경로 안내·디버그 공유) |
+| [`eta_card.dart`](eta_card.dart) | 목적지까지 거리·시간 배너 |
 | [`transit_style.dart`](transit_style.dart), [`transit_itinerary_tile.dart`](transit_itinerary_tile.dart) | 대중교통 색·아이콘·시간 표기와 한 줄 타일 |
-| [`location_marker.dart`](location_marker.dart), [`uncertainty_circle.dart`](uncertainty_circle.dart) | 현재 위치와 불확실성 표현 |
+| [`location_marker.dart`](location_marker.dart) | 현재 위치 표현 |
 | [`sheet_header.dart`](sheet_header.dart), [`sheet_grab_handle.dart`](sheet_grab_handle.dart), [`filter_pill.dart`](filter_pill.dart) | 시트 머리·손잡이, 필터 pill |
 | [`map_overlay_guard.dart`](map_overlay_guard.dart), [`map_pass_through_sheet_route.dart`](map_pass_through_sheet_route.dart) | 시트가 열린 동안 지도 조작을 다루는 규칙 |
 
@@ -84,10 +83,10 @@
 동작은 [`../../test/directions_semantic_search_test.dart`](../../test/directions_semantic_search_test.dart)가
 고정한다 — 승격이 빠지는 회귀와 항상 승격하는 회귀 둘 다 잡는다.
 
-예전에는 경로 안내 화면(`route_guide_screen.dart`)의 FAB가 `ai_search_sheet.dart`라는
-별도 대화형 검색 시트를 열었다. 검색 진입점을 상단 검색 하나로 일원화하기로 하면서
-그 시트와 FAB를 제거했다(W12) — 경로 안내 화면은 상단 검색 인프라(포커스 상태·지도
-잠금 배선)를 갖고 있지 않아, 그 화면에 검색을 다시 붙이는 대신 진입점 자체를 없앴다.
+예전에는 별도 경로 안내 화면의 FAB가 `ai_search_sheet.dart`라는 대화형 검색 시트를
+열었다. 검색 진입점을 상단 검색 하나로 일원화하기로 하면서 그 시트와 FAB를
+제거했다(W12) — 그 화면은 상단 검색 인프라(포커스 상태·지도 잠금 배선)를 갖고
+있지 않아, 검색을 다시 붙이는 대신 진입점 자체를 없앴다. 화면 자체도 뒤에 지웠다.
 
 ## 햄버거는 앱 메뉴다 — 개발 도구가 들어가는 유일한 문
 
@@ -132,32 +131,17 @@
   행동이라 화면이 당겨지면 층 전체의 배치를 잃는다. 배율을 바꾸는 것은 매장을 콕
   집었을 때(검색 결과·목록 항목 탭)뿐이다.
 
-## `FloorPlanView` 경계
+## 지도는 여기 없다
 
-`FloorPlanView`는 받은 `FloorPlan`, `IndoorRoute`, 위치 값을 렌더링한다. API에서 데이터를
-가져오거나 최단 경로를 결정하는 책임은 화면·리포지토리에 있다.
+실내 도면을 그리던 `floor_plan_view.dart`가 오래 이 디렉터리에서 가장 큰 파일
+(2,772줄)이었지만 지웠다. 그것은 **실내 전용 전체화면**의 지도였고, 그 화면으로
+가는 길이 앱에서 사라진 뒤로 한 번도 그려지지 않았다.
 
-```mermaid
-flowchart LR
-    PLAN["FloorPlan"]
-    ROUTE["IndoorRoute"]
-    POSITION["현재 위치 · PDR 상태"]
-    DEBUG["debug_mode"]
-    VIEW["FloorPlanView"]
-
-    PLAN --> VIEW
-    ROUTE --> VIEW
-    POSITION --> VIEW
-    DEBUG --> VIEW
-
-    VIEW --> MAP["MapLibre 지도"]
-    VIEW --> LAYERS["매장 · POI 레이어"]
-    VIEW --> LINE["경로 polyline"]
-    VIEW --> MARKER["현재 위치 · 진단 overlay"]
-```
-
-지원하지 않는 플랫폼에서는 `_UnsupportedPlatformNotice`를 표시한다. 웹·모바일별
-렌더링 분기가 있으므로 지도 변경은 지원 대상 플랫폼을 나눠 확인한다.
+지금 실내 도면은 야외 지도 위에 겹치는 오버레이가 그린다
+([`../screens/outdoor_map/indoor_overlay_layers.dart`](../screens/outdoor_map/indoor_overlay_layers.dart)).
+그 아래에서 색·라벨·아이콘·경로선 스타일 같은 공유 값은
+[`../core/map/`](../core/map/)에 있다 — 지도가 하나가 된 지금도 레이어는 여럿이라
+값의 원본은 한 곳이어야 한다.
 
 ## 콜백 규칙
 
@@ -176,7 +160,7 @@ flowchart LR
 
 | 하고 싶은 것 | 위치 |
 |---|---|
-| 지도 레이어·마커 변경 | `floor_plan_view.dart` |
+| 지도 레이어·마커 변경 | [`../screens/outdoor_map/indoor_overlay_layers.dart`](../screens/outdoor_map/indoor_overlay_layers.dart)와 [`../core/map/`](../core/map/) |
 | 경로 모양 변경 | `domain/route_guidance.dart`(`RoutePolylineSplit`)와 `models/indoor_route.dart` |
 | 길찾기 출발/도착 입력 변경 | `map_top_bar.dart`(두 칸)와 `route_field_results.dart`(후보 목록) |
 | 공통 색·간격 변경 | [`../theme/README.md`](../theme/README.md) |

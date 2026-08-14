@@ -277,9 +277,9 @@ void main() {
     expect(find.text('1F'), findsOneWidget);
   });
 
-  // 예전에는 여기서 실내 탭의 FloorPlanView 렌더링을 확인했다. 실내 탭이 사라진
+  // 예전에는 여기서 실내 전용 화면의 도면 렌더링을 확인했다. 그 화면이 사라진
   // 뒤 도면은 MapLibre 레이어로 그려지고, 그 레이어는 위젯 트리에 없어 위젯
-  // 테스트로 볼 수 없다. FloorPlanView 위젯 자체는 floor_plan_view_test.dart가,
+  // 테스트로 볼 수 없다. 레이어 등록 자체는 indoor_overlay_ids_test.dart가,
   // 지도 위 개발 도구가 없다는 것은 아래 디버그 모드 테스트가 계속 지킨다.
 
   testWidgets('debug mode keeps always-on PDR free of a manual start control', (

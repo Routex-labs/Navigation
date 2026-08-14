@@ -99,7 +99,8 @@ chrome 보정과 줌 하한을 한 함수에만 둔 이유는, 각자 갖게 두
 ### 4.1 `newLatLngBounds`는 지도를 정북으로 되돌린다
 
 이 API는 항상 정북 정렬 기준으로 계산해서 bearing이 0으로 리셋된다
-(`widgets/floor_plan_view.dart`의 같은 주석 참고). 야외용
+(근거는 `screens/outdoor_map/outdoor_map_screen_route.dart`의
+`_fitCameraToRouteSegment` 주석에 있다). 야외용
 `_fitCameraToRoute(DirectionsRoute)`는 아직 이걸 쓰는데, 야외에는 세워 둘 도면이
 없어서 문제가 되지 않는다. **실내 경로에는 쓰지 말 것.**
 

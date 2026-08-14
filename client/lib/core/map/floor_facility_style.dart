@@ -9,8 +9,9 @@ import 'package:flutter/material.dart';
 /// category 속성이 없어 name으로 매칭한다. 매칭이 어긋나면(백엔드 name 변경 등)
 /// 초록 하이라이트만 빠지고 일반 매장 스타일로 폴백된다.
 ///
-/// 실내 지도(`FloorPlanView`)와 야외 오버레이(`OutdoorMapBody`)가 같은 이름을 써야
-/// 두 화면 사이에서 수직이동 폴리곤이 일관되게 강조된다.
+/// 야외 오버레이(`OutdoorMapBody`)가 층을 오갈 때 수직이동 폴리곤이 일관되게
+/// 강조되려면 이 목록이 한 곳에 있어야 한다 — fill·라벨·아이콘 레이어가 각자
+/// 이 이름을 보기 때문이다.
 const kVerticalTransportStoreNames = <String>[
   '에스컬레이터',
   '엘리베이터',
@@ -109,9 +110,9 @@ const kVerticalTransportPoiTypes = <String>[
 /// 이름을 그린다.
 ///
 /// `!=`의 `all`이다 — [storeLabelWithCategoryIconFilter]와 같은 형태를 쓴다.
-/// `['match', ...]`나 `['!', ['in', ...]]`가 MapLibre GL Native에서 조용히
-/// 어긋나던 전례가 있어([floor_plan_view.dart]의 fill 필터 주석) 검증된 쪽으로
-/// 통일한다.
+/// `['match', ...]`나 `['!', ['in', ...]]`가 MapLibre GL Native에서 예외도
+/// 로그도 없이 매치 0건이 되던 전례가 있어 검증된 쪽으로 통일한다
+/// (근거는 [category_map_filter.dart]에 적어 뒀다).
 List<Object> poiLabelFilter() => [
   'all',
   for (final type in kVerticalTransportPoiTypes)

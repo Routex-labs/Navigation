@@ -86,9 +86,8 @@ FillLayerProperties indoorFootprintProps(List<Object> fadeExpr) =>
       fillOpacity: fadeExpr,
     );
 
-/// 실내 오버레이의 매장 fill. 실내 화면(`FloorPlanView`)과 **같은 기본 색**이다.
-/// 두 화면이 같은 MVT `stores` 레이어를 보는데 색이 다르면 같은 매장이 야외
-/// 오버레이와 실내 화면에서 다르게 읽힌다.
+/// 실내 오버레이의 매장 fill. 색은 [map_palette.dart]에서 온다 — 여기에 hex를
+/// 직접 박으면 층 전환 사이에 같은 매장이 다른 색으로 보이던 옛 문제로 돌아간다.
 FillLayerProperties indoorStoresFillProps(List<Object> fadeExpr) =>
     FillLayerProperties(
       fillColor: mapStoreFill,
@@ -122,12 +121,10 @@ FillLayerProperties indoorVerticalTransportProps(List<Object> fadeExpr) =>
 /// 매장명 라벨 + 대분류 아이콘.
 ///
 /// 아이콘을 별도 레이어로 두지 않고 같은 심볼에 얹는 이유, 이름이 아이콘 앞/뒤로
-/// 뒤집히는 방식과 그 한계는 [category_map_icon.dart]에 적어 두었다. 실내 화면
-/// (`FloorPlanView`)과 **같은 표현식·같은 앵커 규칙**을 써야 두 화면 사이에서
-/// 같은 매장이 다른 아이콘을 달지 않는다.
+/// 뒤집히는 방식과 그 한계는 [category_map_icon.dart]에 적어 두었다.
 ///
-/// [selection]은 지금 고른 카테고리다. 실내 화면과 마찬가지로 선택이 있으면 그
-/// 매장만 이름을 달고 나머지는 아이콘만 남는다([categoryLabelTextField]).
+/// [selection]은 지금 고른 카테고리다. 선택이 있으면 그 매장만 이름을 달고
+/// 나머지는 아이콘만 남는다([categoryLabelTextField]).
 /// **호출하는 쪽이 모두 지금 선택을 넘겨야 한다** — 이 함수는 페이드 갱신
 /// (`_syncIndoorOverlayFade`)에서도 불리는데, 거기서 선택을 빼먹으면 줌만
 /// 움직여도 가려 뒀던 이름이 되살아난다(파일 상단의 "전체 교체" 규칙이 layout
@@ -235,9 +232,9 @@ SymbolLayerProperties indoorFacilityIconProps(
   iconSize: indoorMarkerIconSize(devicePixelRatio),
   iconOpacity: fadeExpr,
   iconAllowOverlap: true,
-  // iconOffset 없음 = 폴리곤 중심(centroid)에 그린다. 실내 화면
-  // (`FloorPlanView`)의 편의시설 아이콘과 같은 기준이라 두 화면 사이에서
-  // 아이콘 위치가 어긋나지 않는다.
+  // iconOffset 없음 = 폴리곤 중심(centroid)에 그린다. 매장 라벨은 칸을 나눠
+  // 배치하지만([store_label_anchor.dart]) 편의시설 아이콘은 하나뿐이라 중심이
+  // 곧 정답이다.
 );
 
 /// 실내 오버레이 소스·레이어의 **한 세대**분 실제 ID 묶음.

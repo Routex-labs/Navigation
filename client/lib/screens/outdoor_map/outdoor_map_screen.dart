@@ -950,8 +950,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   ///
   /// 레이어를 등록하는 코드가 여러 번의 `await` 뒤라 그 자리에서
   /// `MediaQuery.devicePixelRatioOf(context)`를 읽으면 위젯이 그 사이 사라졌을 때
-  /// 터진다. 실내 화면([FloorPlanViewState])과 같은 이유로 의존성이 잡히는
-  /// 시점에 한 번 받아 둔다.
+  /// 터진다. 그래서 의존성이 잡히는 시점에 한 번 받아 둔다.
   double _devicePixelRatio = 1;
 
   @override
@@ -1049,8 +1048,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   ///
   /// 위젯 코드(예: 하단 바 아이콘)는 hot reload가 즉시 반영하기 때문에, 같은
   /// 수정 세션에서 "버튼 아이콘은 바뀌었는데 지도 마커만 안 바뀐다"는 모습이
-  /// 나온다 — 코드를 의심하게 만드는 함정이라 훅으로 막아 둔다(실내 화면
-  /// `FloorPlanViewState.reassemble`과 같은 이유).
+  /// 나온다 — 코드를 의심하게 만드는 함정이라 훅으로 막아 둔다.
   @override
   void reassemble() {
     super.reassemble();
@@ -2012,8 +2010,18 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         ),
       ),
     );
-    // 위(검색창·카테고리 줄)와 아래(시트)가 가리고 남는 띠의 한가운데로. 부호와
-    // 단위 근거는 `floor_plan_view.dart`의 같은 계산 주석에 있다.
+    // 위(검색창·카테고리 줄)와 아래(시트)가 가리고 남는 띠의 한가운데로.
+    //
+    // 계산: 시트가 f를 덮고 위쪽이 t 픽셀을 덮으면 남는 띠는 [t, H(1-f)]이고
+    // 그 중앙은 (t + H(1-f))/2다. 정중앙(H/2)에서 그만큼 올리면 (H·f - t)/2.
+    //
+    // 실기기로 확인한 `scrollBy`의 성질 두 가지를 여기 남긴다. 문서만 보고
+    // 고치면 두 번 다 틀린다.
+    //  1. 단위는 **논리 픽셀**이다. dpr(3배)을 곱해 보정하면 대상이 건물 밖으로
+    //     날아간다.
+    //  2. 부호는 **음수가 위로**다. 문서는 "양수 dy면 카메라 타깃이 남쪽으로
+    //     간다"고 적혀 있어 대상이 위로 올라갈 것처럼 읽히지만, 실제로는 그만큼
+    //     아래로 내려가 시트 뒤에 숨었다.
     final lift = (viewport.height * bottomSheetFraction - topInsetPx) / 2;
     if (lift <= 0) return;
     await controller.moveCamera(CameraUpdate.scrollBy(0, -lift));

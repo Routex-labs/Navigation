@@ -75,7 +75,7 @@ class IndoorRouteSegment {
   /// 이 세그먼트가 속한 층의 내부 id (Floor.id).
   final String floorId;
 
-  /// 사람이 보는 층 라벨(예: "B2"). FloorPlanView와 매칭하려면 이 값이
+  /// 사람이 보는 층 라벨(예: "B2"). 지도가 그릴 층을 고를 때 쓰므로 이 값이
   /// [Building.floors]의 원소와 같아야 한다.
   final String floorName;
 

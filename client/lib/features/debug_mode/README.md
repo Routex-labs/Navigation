@@ -29,7 +29,7 @@
 ```mermaid
 flowchart LR
     MENU["AppMenuSheet(햄버거)"]
-    SCREEN["IndoorMapScreen"]
+    SCREEN["OutdoorMapBody"]
     SHEET["showDebugModeSettingsSheet"]
     CONTROLLER["DebugModeController"]
     MAP["DebugMapOverlay"]
@@ -37,8 +37,8 @@ flowchart LR
     TRAIL["DebugPdrTrailState"]
     CAL["LandmarkCardinalCalibration"]
     TOAST["debugToast"]
-    VIEW["FloorPlanView"]
-    RENDER["실내 지도 렌더"]
+    VIEW["pdr_debug_map_layers"]
+    RENDER["지도 렌더"]
 
     MENU --> SHEET -->|"옵션 변경"| CONTROLLER
     CONTROLLER -->|"상태 알림"| SCREEN
@@ -57,7 +57,7 @@ flowchart LR
 
 - 디버그 모드가 꺼져 있을 때 운영 경로·위치 계산 결과가 달라지면 안 된다.
 - 실제 PDR 세션과 맵 매칭은 `../indoor_navigation/`이 소유한다.
-- 지도 렌더 연결은 `widgets/floor_plan_view.dart`가 담당한다.
+- 지도 렌더 연결은 `screens/outdoor_map/pdr_debug_map_layers.dart`가 담당한다.
 
 ## 실패 지점
 

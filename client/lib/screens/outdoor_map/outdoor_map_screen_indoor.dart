@@ -737,9 +737,8 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
 
   /// 선택이 바뀌었을 때 오버레이에 그 선택을 반영한다.
   ///
-  /// 실내 화면(`FloorPlanView._applyCategoryFilter`)과 같은 두 가지가 바뀐다 —
-  /// **어느 매장이 색으로 강조되는가**(강조 fill의 필터)와 **어느 매장이 이름을
-  /// 다는가**(라벨의 `text-field`).
+  /// 두 가지가 바뀐다 — **어느 매장이 색으로 강조되는가**(강조 fill의 필터)와
+  /// **어느 매장이 이름을 다는가**(라벨의 `text-field`).
   ///
   /// 강조 fill은 `setLayerProperties`가 아니라 `setFilter`를 쓴다 — 전자는 넘기지
   /// 않은 속성까지 null로 함께 보내 스펙 기본값(fill-color는 검정)으로 되돌리므로

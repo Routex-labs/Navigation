@@ -31,8 +31,9 @@ flowchart LR
 > 좌표를 재보니 1F ES1 bank의 node 4개는 x로 2m씩 벌어진 나란한 lane 4줄이고,
 > 존재하는 폴리곤은 그중 한 줄만 덮는 폭 1.6m짜리였다. 그래서 1:1 대응으로 고쳤다.
 
-`client/lib/widgets/floor_plan_view.dart`는 이름이 `에스컬레이터`인 store 폴리곤을
-이미 초록색으로 표시한다. 따라서 클라이언트 렌더링 코드는 이번 범위에서 변경하지 않는다.
+클라이언트는 이름이 `에스컬레이터`인 store 폴리곤을 이미 초록색으로 표시한다
+(`client/lib/core/map/floor_facility_style.dart`의 `kVerticalTransportStoreNames`).
+따라서 클라이언트 렌더링 코드는 이번 범위에서 변경하지 않는다.
 
 ## 원인
 
@@ -62,7 +63,7 @@ flowchart LR
 
 ### 건드리지 않은 파일
 
-- `client/lib/widgets/floor_plan_view.dart`: 현재 fill 레이어와 색상 규칙은 이미 맞다.
+- 클라이언트 렌더링(`core/map/floor_facility_style.dart`): fill 레이어와 색상 규칙은 이미 맞다.
 - 수직 전이 생성(`scripts/transform/vertical_transfers.py`): 경로 데이터는 정상이다.
 - 에스컬레이터 node·POI: 새로 추가하면 아이콘 및 경로가 중복되므로 절대 추가하지 않는다.
 

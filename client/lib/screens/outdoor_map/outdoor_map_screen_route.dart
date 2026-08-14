@@ -1083,8 +1083,7 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
   ///
   /// 예전 `_fitCameraToIndoorRoute`가 그걸 썼는데, 그 API는 **항상 정북 정렬
   /// 기준으로 계산해 bearing을 0으로 되돌린다.** 진입·층 전환에서 애써 세로로
-  /// 세워 둔 도면이 안내를 시작하는 순간 도로 비스듬히 누웠다
-  /// (`widgets/floor_plan_view.dart`의 같은 주석 참고). 회전을 유지하려면
+  /// 세워 둔 도면이 안내를 시작하는 순간 도로 비스듬히 누웠다. 회전을 유지하려면
   /// [_animateCameraToFitPoints]처럼 `newCameraPosition`으로 직접 계산해야 한다.
   Future<void> _fitCameraToRouteSegment(
     IndoorRoute route, {

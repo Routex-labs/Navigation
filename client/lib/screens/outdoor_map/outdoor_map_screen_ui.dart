@@ -91,8 +91,7 @@ extension OutdoorMapUi on OutdoorMapBodyState {
             // 하는데, 이 값은 trackCameraPosition이 true일 때만 사용자의
             // pan/zoom을 따라 갱신된다(기본값 false면 초기 zoom 17에 고정 또는
             // 실기기에서 null). 그 상태에선 사용자가 축소해도 exit 조건이
-            // 판정되지 않아 층 선택기·위치 지정 버튼이 계속 남는다. 실내 지도의
-            // FloorPlanView도 같은 이유로 이 값을 명시적으로 켜고 있다.
+            // 판정되지 않아 층 선택기·위치 지정 버튼이 계속 남는다.
             trackCameraPosition: true,
             // 웹의 maplibre_gl은 기본값(false)이면 상호작용 가능한 벡터 레이어
             // (건물 fill처럼 enableInteraction이 켜진 레이어)를 탭한 순간 별도
@@ -100,7 +99,7 @@ extension OutdoorMapUi on OutdoorMapBodyState {
             // 실내 진입 오버레이 위에서 "위치 지정" → 건물 폴리곤을 탭했을
             // 때 _handleMapClick이 아예 호출되지 않아 PDR 앵커 배치가 조용히
             // 실패한다. 이 값을 켜서 feature-tap이 있어도 onMapClick도 함께
-            // 오게 만든다(실내 지도의 FloorPlanView가 같은 이유로 이미 켜둠).
+            // 오게 만든다.
             // 실내 오버레이 레이어는 전부 인터랙션을 꺼 두었다 — 이유는
             // _ensureIndoorTilesRegistered의 레이어 등록 주석 참고.
             featureTapsTriggersMapClick: true,

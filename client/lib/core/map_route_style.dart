@@ -4,10 +4,9 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
-/// 경로선 스타일. 실내 화면([FloorPlanView])과 야외 지도가 같은 경로를 그리므로
-/// 두 곳이 같은 값을 써야 한다.
+/// 경로선 스타일.
 ///
-/// 예전에는 두 파일이 각자 값을 갖고 있었고 실제로 어긋나 있었다 — 야외는
+/// 예전에는 실내 전용 화면과 야외 지도가 각자 값을 갖고 있었고 어긋나 있었다 — 야외는
 /// 흰 casing 8px + 불투명 본선, 실내는 casing 없이 `lineOpacity: 0.6`. 같은 경로가
 /// 화면을 옮길 때마다 다르게 보였다.
 ///

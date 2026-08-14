@@ -6,14 +6,18 @@
 ## 한 줄 요약
 
 야외 지도 갓클래스를 해체하는 중이고, **2026-08-17(월) 현장 검증이 다음 관문**이다.
-현장 데이터를 받기 전에는 실내 렌더링에 손대지 않는다.
+실내 렌더링은 `starbucks` 검색으로 책상에서 눈으로 확인하며 진행한다(아래 함정 참고) —
+현장이 꼭 필요한 것은 GPS 판정·PDR·에스컬레이터뿐이다.
+
+**앱에서 닿지 않던 화면 6개와 실내 전용 도면을 지웠다(5,135줄).** 라우트가 `/` 하나만
+남았다. 근거와 판정 방법은 [구조 개편 계획](client/structure-plan.md)의 "문제 4"에 있다.
 
 ## 브랜치 두 개 — 순서가 중요하다
 
 ```
 main
  └─ claude/msa-solid-structure-review-ci8j9p-2   (+14)  버그 수정 3 · 분할 5 · 문서
-     └─ refactor/outdoor-map-decomposition       (+31)  갓클래스 완전 해체(진행 중)
+     └─ refactor/outdoor-map-decomposition       (+37)  갓클래스 해체 + 구조 개편(진행 중)
 ```
 
 해체 브랜치는 **앞 브랜치 위에 쌓여 있다.** 그래서 병합 순서는 반드시:
@@ -55,14 +59,16 @@ adb install -r "C:/Users/HANSUNG/apk-baseline/field-baseline-msa-branch-1.5.1.ap
 - **08 마커 크기** — 층 전환 덮개의 점과 지도 마커가 같은 크기인지. 주석은 "같다"고
   단언하는데 상수를 따라가면 지도 쪽이 2배로 읽힌다. 눈으로 정해야 한다.
 
-## 이어서 할 일 — 해체 5단계
+## 이어서 할 일
 
-[해체 계획](client/outdoor-map-decomposition.md)의 단계 표를 보고 이어간다. 4단계까지
-완료(8,569 → 7,915줄, 상태 필드 156 → 146).
+두 계획이 나란히 돈다. **[구조 개편](client/structure-plan.md)이 지금 주된 축**이고,
+[해체 계획](client/outdoor-map-decomposition.md)은 야외 지도 클래스 내부용이다.
 
-**다음 단계는 현장 검증 뒤에 시작한다.** 5단계(실내 오버레이 + 지도 탭 판정 + PDR 앵커
-상태)는 실기기에서 도면이 통째로 검게 뜬 이력이 있는 코드이고, 책상에서는 참/거짓이
-갈리지 않는다.
+| 다음 | 어디 |
+|---|---|
+| `escalator_transition_detector` 분해 (1,870줄, `onAltitude` 한 함수에 판정 6단계) | 구조 개편 |
+| `map_shell_screen` 분해 (2,953줄) | 구조 개편 7단계 |
+| 직접 테스트 없는 큰 모듈에 테스트 | 구조 개편 8단계 |
 
 단계마다 쓰는 방식은 같다.
 
@@ -115,8 +121,10 @@ adb logcat -v time flutter:V FlutterError:V AndroidRuntime:E '*:S'   # 로그는
 통째로 사라진 적이 있다. 복사 후 키 4개(`API_BASE_URL` `TMAP_APP_KEY` `KAKAO_REST_KEY`
 `VWORLD_API_KEY`)가 다 있는지 확인한다.
 
-**에스컬레이터·층 전환 코드는 손대지 않는다.** 알고리즘 재작성이 예정돼 있어, 지금 옮기면
-그 작업과 정면으로 충돌한다.
+**~~에스컬레이터·층 전환 코드는 손대지 않는다.~~ 2026-08-14에 풀렸다.** 사용자가 클라이언트
+쪽 층 전이 코드도 건드려도 된다고 정했다. 다만 **백엔드**의 수직 전이 생성
+(`backend/scripts/transform/vertical_transfers.py`)은 여전히 재작성 예정이라 그대로 둔다 —
+원래 이 금지는 그쪽 얘기였다.
 
 **실내 도면은 책상에서도 눈으로 확인할 수 있다 — `starbucks`를 친다.** `adb shell input
 text`는 한글을 못 보내지만 검색이 로마자를 한글로 맞춰 주므로, `starbucks`를 치면
@@ -152,7 +160,7 @@ text`는 한글을 못 보내지만 검색이 로마자를 한글로 맞춰 주�
 ```powershell
 cd client
 flutter analyze                             # 0건이어야 한다
-flutter test test/                          # 1,415개
+flutter test test/                          # 1,397개
 flutter test integration_test/ -d windows   # 부팅 테스트(CI는 linux)
 ```
 

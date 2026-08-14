@@ -243,7 +243,8 @@ Column으로 바꾸면 좌표 계산이 달라질 수 있다.
 ### 문제
 
 아웃라인은 **이미 있다.** 문제는 대비가 거의 없다는 것이다
-(`client/lib/widgets/floor_plan_view.dart`).
+(당시 `client/lib/widgets/floor_plan_view.dart`. 그 파일은 뒤에 삭제됐고 같은
+스타일은 지금 `core/map_palette.dart`와 실내 오버레이가 들고 있다).
 
 | 요소 | fill | outline | 비고 |
 |---|---|---|---|
@@ -407,7 +408,9 @@ casing이 안 보이는 것과 정확히 같은 실수를 마커에서 반복하
 
 ![경로선 변경 전후](images/06-route-line.svg)
 
-### 현재 — 구현이 두 개고 서로 다르다
+### 당시 — 구현이 두 개고 서로 달랐다
+
+(지금은 `core/map_route_style.dart` 하나다. 실내 전용 화면도 삭제됐다.)
 
 | | 야외 + 실내 오버레이 | 실내 화면 |
 |---|---|---|

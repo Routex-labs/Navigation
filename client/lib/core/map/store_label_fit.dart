@@ -390,8 +390,8 @@ StoreLabelFit fitStoreLabel({
 /// 화면에 맞추려고 카메라를 돌려 두기 때문에, 안 돌리고 재면 비스듬한 매장의
 /// 박스가 실제보다 크게 잡힌다.
 ///
-/// 투영은 [FloorPlanView]의 카메라 계산과 같은 등방 평면 근사다(건물 규모
-/// 수백 m에서는 오차가 무시할 수준).
+/// 투영은 카메라 계산과 같은 등방 평면 근사다(건물 규모 수백 m에서는 오차가
+/// 무시할 수준).
 ({double widthM, double heightM}) storeLabelBoxMeters({
   required List<LatLng> polygon,
   required double bearingDeg,
@@ -417,8 +417,7 @@ StoreLabelFit fitStoreLabel({
         cosLat *
         _metersPerDegreeLat;
     final dy = (point.latitude - polygon.first.latitude) * _metersPerDegreeLat;
-    // bearing이 B인 카메라에서 화면 "위"는 나침반 B, "오른쪽"은 B+90이다
-    // (FloorPlanView._fitBearingAndZoom과 같은 식).
+    // bearing이 B인 카메라에서 화면 "위"는 나침반 B, "오른쪽"은 B+90이다.
     final rx = dx * cosB - dy * sinB;
     final ry = dx * sinB + dy * cosB;
     minX = min(minX, rx);

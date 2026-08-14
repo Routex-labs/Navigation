@@ -5,8 +5,8 @@ import 'package:navigation_client/core/map/category_map_filter.dart';
 ///
 /// 이 테스트가 지키려는 것은 값이 아니라 형태다. MapLibre GL Native는
 /// `['match', ...]`나 `['in', ..., ['literal', [...]]]`처럼 인자 자리에 배열이
-/// 오는 형태를 조용히 매치 0건으로 처리하는 경우가 있어(floor_plan_view.dart의
-/// 수직이동 레이어 주석 참고), `==` 비교만 쓰는 형태로 고정해야 한다.
+/// 오는 형태를 조용히 매치 0건으로 처리하는 경우가 있어, `==` 비교만 쓰는
+/// 형태로 고정해야 한다.
 /// 웹에서는 잘못된 형태도 동작하므로 실기기 없이 잡을 방법이 이 테스트뿐이다.
 void main() {
   group('categoryHighlightFilter', () {

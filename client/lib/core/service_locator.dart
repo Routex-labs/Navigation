@@ -86,7 +86,7 @@ BuildingRepository buildingRepository = HttpBuildingRepository();
 DestinationRepository destinationRepository = HttpDestinationRepository();
 
 /// 장소 상세는 실패해도 길찾기 흐름을 막지 않는 별도 조회다. 위젯 테스트에서
-/// HTTP를 피해야 할 때는 이 변수를 MockPlaceDetailRepository로 교체한다.
+/// HTTP를 피해야 할 때는 이 변수를 테스트가 만든 대역으로 교체한다.
 PlaceDetailRepository placeDetailRepository = HttpPlaceDetailRepository();
 
 /// --dart-define=TMAP_APP_KEY=... 로 키를 넘기면 자동으로 실제 API를 쓰고,

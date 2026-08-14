@@ -16,9 +16,9 @@
 flowchart LR
     SENSOR["Android · iOS 센서"]
     PDR["indoor_navigation<br/>측위 · 보정 · 맵 매칭"]
-    SCREEN["IndoorMapScreen"]
+    SCREEN["OutdoorMapBody<br/>지도 · 실내 오버레이"]
     DEBUG["debug_mode<br/>그래프 · 방위 · PDR 흔적"]
-    VIEW["FloorPlanView"]
+    VIEW["MapLibre 레이어"]
     GRAPH["FloorGraph"]
 
     SENSOR --> PDR

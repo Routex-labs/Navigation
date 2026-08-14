@@ -35,9 +35,10 @@ const _epsilonDeg = 1e-7;
 /// 중점 하나로 붕괴시켜 건물을 화면 가운데 고정한다 — 뒤집힌 범위를 그대로
 /// `clamp`에 넘기면 `ArgumentError`가 난다.
 ///
-/// **MapLibre의 `cameraTargetBounds`를 쓰지 않는 이유**는 호출부
-/// (`FloorPlanViewState._pullBackIntoFootprint`) 주석에 적었다 — 이 조합에서는
-/// 지도가 아예 렌더되지 않았다.
+/// **MapLibre의 `cameraTargetBounds`를 쓰지 않는다.** 써 봤는데 이 조합
+/// (maplibre_gl 0.26.2 + Android)에서는 지도가 아예 렌더되지 않았다. 도면이
+/// 통째로 안 그려져서 실기 확인 때 바로 드러났다. 그래서 카메라가 멎은 뒤
+/// 중심을 직접 되돌리는, 동작이 검증된 훅으로 같은 목적을 이룬다.
 ///
 /// [userLocation]이 있으면 허용 영역을 **내 위치에서 화면 절반 이내**로 한 번 더
 /// 좁힌다. 반경을 화면 절반으로 잡은 것은 그게 곧 "내 위치가 항상 화면 안에
@@ -138,8 +139,8 @@ const kFollowDeadbandRatio = 0.35;
 /// 화면 크기에 대한 비율이라 기준이 없으면 정의되지 않는데, 그때 안 옮기는 쪽을
 /// 고르면 마커가 화면 밖으로 나가도 카메라가 영영 따라가지 않는다.
 ///
-/// [halfSpan]은 회전된 뷰포트의 축정렬 bbox라 실제보다 넉넉하다
-/// (`FloorPlanViewState._visibleHalfSpan`). 그만큼 데드밴드도 조금 넓어지는데,
+/// [halfSpan]은 회전된 뷰포트의 축정렬 bbox라 실제보다 넉넉하다.
+/// 그만큼 데드밴드도 조금 넓어지는데,
 /// 방향이 어느 쪽이든 "덜 따라간다" 쪽이라 안전한 오차다.
 bool shouldRecenterFollow({
   required ll.LatLng camera,

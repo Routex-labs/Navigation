@@ -60,7 +60,7 @@ ID·좌표처럼 경로 계산에 필요한 필드를 임의 기본값으로 숨
 | 하고 싶은 것 | 확인 범위 |
 |---|---|
 | 백엔드 응답 필드 반영 | 해당 모델 `fromJson` + HTTP 리포지토리 + 테스트 |
-| 새 지도 요소 추가 | `FloorPlan` + `FloorPlanView` |
+| 새 지도 요소 추가 | `FloorPlan` + `screens/outdoor_map/indoor_overlay_layers.dart` |
 | 그래프 속성 추가 | `FloorGraph` + `domain/dijkstra.dart` |
 | 즐겨찾기 필드 추가 | `FavoritePlace.toJson/fromJson` + `FavoritesController` |
 
