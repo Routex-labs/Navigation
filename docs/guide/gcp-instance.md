@@ -5,7 +5,8 @@
 
 > **현재 상태(2026-07-31): `navigation-api` 서비스 배포·운영 중.** `main` 브랜치 push마다
 > Cloud Build 트리거(GitHub `Routex-labs/Navigation` 연동)가 이미지를 다시 빌드해 자동
-> 재배포한다(GCP CD). 서비스 URL·설정은 아래 표 기준이다. Cloud Run 파일시스템이 휘발성이라
+> 재배포한다(GCP CD). 그 트리거가 실제로 도는 명령은 아래 「CD가 무엇을 빌드하나」에
+> 적어 뒀다. 서비스 URL·설정은 아래 표 기준이다. Cloud Run 파일시스템이 휘발성이라
 > 재시작마다 DB가 비므로, 서비스 환경변수 `NAV_SEED_ON_START=1`로 기동 시 1회 시드한다.
 > 이 값이 빠지면 `/buildings`가 빈 테이블로 500이 난다(health는 OK). 수동 재배포·설정 변경은
 > [재배포](#재배포)를 따른다.
@@ -93,6 +94,29 @@
 > `NAV_ENVIRONMENT=production`인데 `NAV_CORS_ORIGINS`를 비워 두면 교차 출처 요청이 전부
 > 막힙니다(경고 로그가 남습니다). Flutter 웹을 다른 도메인에서 붙인다면 반드시 origin을 넣으세요.
 
+## CD가 무엇을 빌드하나
+
+`main` push 트리거는 저장소에 파일로 있지 않다(GCP 콘솔에 있다). 그래서 무엇을 빌드하는지
+저장소만 봐서는 알 수 없고, 실제로 한 번 몰라서 **운영 이미지가 두 벌인 채로 며칠 갔다.**
+지금 도는 단계는 셋이다.
+
+```
+docker build --no-cache -t $IMAGE backend -f backend/Dockerfile
+docker push $IMAGE
+gcloud run services update navigation-api --image=$IMAGE --region=asia-northeast3
+```
+
+**빌드 컨텍스트가 저장소 루트가 아니라 `backend`다.** 그래서 `backend/` 밖의 파일은 이미지에
+들어가지 않고, 적용되는 것도 `backend/.dockerignore`다. 운영 Dockerfile은
+`backend/Dockerfile` 하나뿐이다.
+
+바뀌었는지 다시 확인하려면:
+
+```powershell
+gcloud builds triggers list --format="value(name)"
+gcloud builds triggers describe <이름> --format=yaml
+```
+
 ## 재배포
 
 **평소에는 손댈 필요가 없다.** `main`에 push하면 Cloud Build 트리거가 자동으로 다시 빌드·배포한다(GCP CD).
@@ -118,9 +142,9 @@ gcloud run deploy navigation-api `
 ```
 
 > `--memory 2Gi`는 임베딩 모델 상주 때문에 필수다(위 "주의할 배포 스펙" 참고).
-> `--source .`는 `backend/`에서 실행하므로 Cloud Build가 `backend/Dockerfile`을 그대로 쓴다
-> (운영 이미지는 이 하나뿐 — 옛 루트 `Dockerfile`은 제거됐다). CPU 전용 torch 고정과 모델
-> 굽기가 자동 적용된다. 최초 빌드는 이미지가 커서(수 GB) 몇 분 걸린다.
+> `--source .`는 `backend/`에서 실행하므로 Cloud Build가 `backend/Dockerfile`을 그대로 쓴다 —
+> 위 CD와 같은 이미지가 나온다. CPU 전용 torch 고정과 모델 굽기가 자동 적용된다.
+> 최초 빌드는 이미지가 커서(수 GB) 몇 분 걸린다.
 > `NAV_SEED_ON_START=1`은 휘발성 DB 데모라 매 시작 시 시드하기 위한 것이다 — 영속 DB로
 > 바꾸면 빼라(위 "운영 환경변수" 참고).
 
