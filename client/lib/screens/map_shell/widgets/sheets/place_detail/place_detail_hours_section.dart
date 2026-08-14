@@ -43,44 +43,71 @@ class _PlaceHoursSectionState extends State<PlaceHoursSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        GestureDetector(
-          onTap: () => setState(() => _expanded = !_expanded),
-          behavior: HitTestBehavior.opaque,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        Semantics(
+          button: true,
+          expanded: _expanded,
+          child: InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              // 별도 카드 없이도 손가락이 닿는 40px 안팎의 행을 만든다.
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.schedule_outlined,
+                    size: 18,
+                    color: AppColors.muted,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _StatusLine(status: status, today: today),
+                  ),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    child: const Icon(
+                      Icons.expand_more,
+                      size: 20,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: Column(
+            key: ValueKey(_expanded),
             children: [
-              const Padding(
-                padding: EdgeInsets.only(top: 1),
-                child: Icon(
-                  Icons.schedule_outlined,
-                  size: 19,
-                  color: AppColors.muted,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _StatusLine(status: status, today: today),
-              ),
-              Icon(
-                _expanded ? Icons.expand_less : Icons.expand_more,
-                size: 20,
-                color: AppColors.muted,
-              ),
+              for (var index = 0; index < visibleCount; index++)
+                _HoursRow(day: week[index], isToday: index == 0),
             ],
           ),
         ),
-        const SizedBox(height: 10),
-        for (var index = 0; index < visibleCount; index++)
-          _HoursRow(day: week[index], isToday: index == 0),
-        // 확인일을 늘 적는다. 낡았을 때만 적으면 "확인일이 없다"와 "최근에
-        // 확인했다"가 화면에서 같은 모양이 된다.
-        const SizedBox(height: 10),
-        Text(
-          status.isStale
-              ? '${widget.hours.confirmedAt} 확인 · 그 뒤로 바뀌었을 수 있습니다'
-              : '${widget.hours.confirmedAt} 확인',
-          style: const TextStyle(fontSize: 11, color: AppColors.muted),
-        ),
+        // 최근 확인일은 영업시간을 읽는 데 필요한 정보가 아니라서 숨긴다. 오래된
+        // 데이터일 때만 신뢰도 경고의 근거로 작게 남긴다.
+        if (status.isStale) ...[
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.only(left: 28),
+            child: Text(
+              '${widget.hours.confirmedAt} 기준 · 영업시간이 달라졌을 수 있어요',
+              style: const TextStyle(
+                fontSize: 11.5,
+                height: 1.35,
+                color: AppColors.muted,
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -181,16 +208,16 @@ class _HoursRow extends StatelessWidget {
 
     return Padding(
       // 아이콘 폭(19)과 그 뒤 여백(10)만큼 들여 상태 줄과 왼쪽을 맞춘다.
-      padding: const EdgeInsets.only(left: 29, top: 5, bottom: 5),
+      padding: const EdgeInsets.only(left: 28, top: 4, bottom: 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 68,
+            width: 72,
             child: Text(
               label,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: 13.5,
                 height: 1.35,
                 fontWeight: isToday ? FontWeight.w700 : FontWeight.w400,
                 color: isToday ? AppColors.text : AppColors.muted,
@@ -204,7 +231,7 @@ class _HoursRow extends StatelessWidget {
                 Text(
                   value,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 13.5,
                     height: 1.35,
                     fontWeight: isToday ? FontWeight.w700 : FontWeight.w400,
                     color: day.intervals.isEmpty

@@ -108,7 +108,7 @@ extension OutdoorMapUi on OutdoorMapBodyState {
         // 이전 층 도면이 그대로 보이는 위에 뜬다 — 덮개(베일)는 없다. 실기기
         // 에서 흰 베일이 캡처 플래시처럼 번쩍여 걷어냈고, 모티프는 자체 카드
         // 배경이 있어 도면 위에서도 읽힌다. 타이밍 정책은
-        // core/floor_switch_progress.dart. AnimatedSwitcher가 등장·퇴장을
+        // map/camera/floor_switch_progress.dart. AnimatedSwitcher가 등장·퇴장을
         // 페이드로 처리하고, 숨김이 끝나면 위젯을 트리에서 내려 벨트 애니메이션
         // ticker도 함께 멈춘다. IgnorePointer라 지도 조작을 안 막는다.
         Positioned.fill(

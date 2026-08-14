@@ -28,7 +28,7 @@ const kOutdoorDimScrimFillLayerId = 'outdoor-dim-scrim-fill';
 
 /// 현재 층 외곽선.
 const kOutdoorFloorOutlineSourceId = 'outdoor-floor-outline';
-const _floorOutlineLayerId = 'outdoor-floor-outline-line';
+const kOutdoorFloorOutlineLayerId = 'outdoor-floor-outline-line';
 
 /// 실내 오버레이에서 매장 폴리곤을 탭했을 때 그 매장 하나만 파란색으로 채우고
 /// 테두리를 두르는 전용 소스·레이어. 색은 앱의 선택 색(mapSelectionColor)
@@ -101,7 +101,7 @@ Future<void> registerFloorOutlineLayer(
   );
   await controller.addLineLayer(
     kOutdoorFloorOutlineSourceId,
-    _floorOutlineLayerId,
+    kOutdoorFloorOutlineLayerId,
     floorOutlineProps(indoorOverlayFadeExpr(entered: true, maxOpacity: 0.9)),
     enableInteraction: false,
   );

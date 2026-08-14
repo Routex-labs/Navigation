@@ -9,6 +9,8 @@ import 'dart:math' as math;
 
 import 'package:latlong2/latlong.dart' as ll;
 
+import '../../../map/camera/zoom_math.dart';
+
 /// 위도 1도의 미터. 다른 좌표 계산과 같은 값을 쓴다
 /// (`indoor_entry_proximity.dart`, `domain/geo_transform.dart`).
 const _metersPerDegreeLat = 111320.0;
@@ -218,6 +220,34 @@ ll.LatLng offsetByMeters(
     mPerDegLng.abs() < 1e-9
         ? origin.longitude
         : origin.longitude + east / mPerDegLng,
+  );
+}
+
+/// [point]가 화면 중앙보다 [liftPx]만큼 위에 보이도록 카메라 목표점을 구한다.
+///
+/// 지도 카메라를 먼저 점에 붙이고 `scrollBy`를 다시 호출하면 사용자는 두 번의
+/// 이동(점으로 순간 이동 → 위로 밀림)을 그대로 보게 된다. 최종 목표점을 미리
+/// 계산하면 중심·배율·회전이 한 애니메이션 안에서 함께 움직인다.
+///
+/// 화면 위쪽은 현재 [bearing] 방향이므로, 점을 위로 보이게 하려면 카메라 목표는
+/// 그 반대쪽으로 옮겨야 한다. [visibleWidthMeters]는 같은 zoom에서 논리 픽셀
+/// 하나가 차지하는 실제 거리를 돌려준다.
+ll.LatLng cameraTargetForScreenLift(
+  ll.LatLng point, {
+  required double bearing,
+  required double zoom,
+  required double liftPx,
+}) {
+  if (!liftPx.isFinite || liftPx <= 0) return point;
+  final metersPerPx = visibleWidthMeters(
+    zoom: zoom,
+    availablePx: 1,
+    latitude: point.latitude,
+  );
+  return offsetByMeters(
+    point,
+    azimuthDeg: bearing + 180,
+    meters: liftPx * metersPerPx,
   );
 }
 

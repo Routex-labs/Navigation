@@ -17,8 +17,9 @@ void main() {
     reach: NodeReach(distanceM: distanceM, costM: distanceM),
   );
 
-  Widget subject(Widget child) =>
-      MaterialApp(home: Scaffold(body: SingleChildScrollView(child: child)));
+  Widget subject(Widget child) => MaterialApp(
+    home: Scaffold(body: SingleChildScrollView(child: child)),
+  );
 
   testWidgets('이름·층·거리를 한 줄에 그린다', (tester) async {
     await tester.pumpWidget(
@@ -61,9 +62,7 @@ void main() {
     expect(picked?.name, '탬버린즈');
   });
 
-  // 사진이 없어 세로로 쌓으면 글자만 다섯 줄이 된다. 가로로 밀면 "곁다리로 더
-  // 있다"가 모양만으로 전해지고 세로 자리도 한 칸만 쓴다.
-  testWidgets('가로로 밀 수 있는 목록이다', (tester) async {
+  testWidgets('처음에는 세 매장만 보이고 나머지는 부드럽게 펼친다', (tester) async {
     await tester.pumpWidget(
       subject(
         PlaceNearbySection(
@@ -76,13 +75,16 @@ void main() {
       ),
     );
 
-    final list = tester.widget<ListView>(find.byType(ListView));
-    expect(list.scrollDirection, Axis.horizontal);
-
-    // 화면 밖의 카드도 밀면 나온다. 세로 높이는 한 칸만 쓴다.
     expect(find.text('매장 0'), findsOneWidget);
-    await tester.drag(find.byType(ListView), const Offset(-400, 0));
+    expect(find.text('매장 2'), findsOneWidget);
+    expect(find.text('매장 3'), findsNothing);
+    expect(find.text('2개 더보기'), findsOneWidget);
+
+    await tester.tap(find.text('2개 더보기'));
     await tester.pumpAndSettle();
+
+    expect(find.text('매장 3'), findsOneWidget);
     expect(find.text('매장 4'), findsOneWidget);
+    expect(find.text('접기'), findsOneWidget);
   });
 }

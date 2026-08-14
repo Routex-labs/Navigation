@@ -97,6 +97,15 @@ extension OutdoorMapMap on OutdoorMapBodyState {
   /// 있을 땐 opacity=0으로 완전히 사라진다. 이렇게 하면 건물 밖만 반투명 검정으로
   /// 덮이고 실내 오버레이는 그대로 밝게 보인다.
   Future<void> _syncDimScrimLayer() async {
+    await _syncDimScrimGeometry();
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    await _setFloorBoundaryFadeFactor(controller, 1, outline: false);
+  }
+
+  /// dim scrim의 hole 좌표만 갱신한다. 층 크로스페이드에서는 opacity가 0인
+  /// 중간 프레임에 이 함수만 불러, 새 모양이 먼저 드러나는 것을 막는다.
+  Future<void> _syncDimScrimGeometry() async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
     // hole은 외곽선과 **같은 링**을 쓴다 — 건물 외곽선으로 뚫으면 층 도면이
@@ -107,17 +116,35 @@ extension OutdoorMapMap on OutdoorMapBodyState {
       _activeFloorOutlineRing() ?? _buildingFootprint,
     );
 
-    if (_indoorEntered) {
-      // 오버레이 페이드와 같은 zoom 창을 써서 함께 짙어진다.
-      // fillColor를 반드시 함께 넘긴다 — `setLayerProperties`는 전체 교체다.
+  }
+
+  /// 층 경계 두 레이어(외곽선·dim scrim)의 opacity를 같은 계수로 조절한다.
+  ///
+  /// 층 전환 중에 부르는 것이 요점이다 — 도면만 크로스페이드하고 경계를 즉시
+  /// 갈아 끼우면 그 한 프레임이 번쩍임으로 보인다([floorBoundaryCrossfadeFactor]).
+  ///
+  /// 한쪽만 바꿀 때도 **전체 속성을 보낸다** — `setLayerProperties`는 전체
+  /// 교체라 빠뜨린 속성이 스펙 기본값으로 되돌아간다.
+  Future<void> _setFloorBoundaryFadeFactor(
+    MapLibreMapController controller,
+    double factor, {
+    bool outline = true,
+    bool scrim = true,
+  }) async {
+    final clamped = factor.clamp(0.0, 1.0).toDouble();
+    if (outline) {
       await controller.setLayerProperties(
-        kOutdoorDimScrimFillLayerId,
-        dimScrimProps(_fadeExpr(maxOpacity: 0.35)),
+        kOutdoorFloorOutlineLayerId,
+        floorOutlineProps(_overlayFadeExprFor(clamped)),
       );
-    } else {
+    }
+    if (scrim) {
+      // 오버레이 페이드와 같은 zoom 창을 써서 함께 짙어진다. 실내가 아니면 0이다.
       await controller.setLayerProperties(
         kOutdoorDimScrimFillLayerId,
-        dimScrimProps(0),
+        dimScrimProps(
+          _indoorEntered ? _fadeExpr(maxOpacity: 0.35 * clamped) : 0,
+        ),
       );
     }
   }

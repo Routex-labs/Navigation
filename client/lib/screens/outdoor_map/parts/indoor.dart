@@ -93,20 +93,27 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
           ? FloorGraph.fromJson(graphJson)
           : null;
       final plan = geojson != null ? FloorPlan.fromJson(geojson) : null;
+      final labelPriorities = rankStoreLabels(plan?.stores ?? const []);
       setState(() {
         _floorGraph = graph;
         _floorPlan = plan;
+        _storeLabelPriorities = labelPriorities;
         _mapCalibrationVersion =
             geojson?['map_calibration_version'] as String? ?? 'unversioned';
       });
       _syncCorridorTracking(_pdrTrailState.snapshot);
       _syncPdrCurrentLayer();
       unawaited(_syncDebugPdrLayers());
-      // 층 외곽선은 방금 받은 도면에서 나온다(어느 층이든 — [floorOutlineRing]).
-      // 도면이 도착한 이 시점에 한 번 더 그려야 층을 바꾼 직후의 빈 외곽선이
-      // 채워진다.
-      unawaited(_syncFloorOutlineLayer());
-      _syncDimScrimLayer();
+      // 일반 로드에서는 즉시 새 경계를 반영한다. 층 크로스페이드 중에는 이전
+      // 경계를 유지하고 [_finalizeIndoorFloorCrossfade]가 투명한 중간 프레임에서
+      // 지오메트리를 교체한다 — 바닥보다 외곽선만 먼저 바뀌는 팝을 막는다.
+      if (!_deferFloorBoundarySync) {
+        unawaited(_syncFloorOutlineLayer());
+        _syncDimScrimLayer();
+      }
+      // MVT 라벨에는 클라이언트가 계산한 순위가 없으므로 레이어의 sort-key
+      // 표현식을 새 층 매장 id 순위로 갱신한다.
+      unawaited(_syncIndoorOverlayFade());
       // 도면이 없어서 미뤄 둔 카메라 fit이 이 층 것이면 지금 실행한다
       // ([_pendingFloorFit]). 이 자리가 "그 층 외곽선이 처음으로 존재하는"
       // 시점이라, 여기서 맞춰야 배율이 정확히 한 번에 잡힌다.
@@ -130,10 +137,13 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
         setState(() {
           _floorGraph = null;
           _floorPlan = null;
+          _storeLabelPriorities = const {};
           _mapCalibrationVersion = 'unversioned';
         });
-        unawaited(_syncFloorOutlineLayer());
-        _syncDimScrimLayer();
+        if (!_deferFloorBoundarySync) {
+          unawaited(_syncFloorOutlineLayer());
+          _syncDimScrimLayer();
+        }
       }
     }
   }
@@ -369,6 +379,16 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
     );
   }
 
+  /// 축소 단계에서 어떤 라벨을 먼저 남길지 정하는 `symbolSortKey` 표현식.
+  ///
+  /// 값이 작을수록 먼저 그려진다(MapLibre 규약). 지금 고른 매장은 항상 0으로
+  /// 내려 충돌에서 절대 지워지지 않게 한다 — 강조해 놓고 이름이 사라지면
+  /// 무엇을 고른 것인지 화면에서 읽을 수 없다.
+  Object _storeLabelSortKeyExpression() => storeLabelSortKeyExpression(
+    _storeLabelPriorities,
+    selectedStoreId: _highlightedStoreId,
+  );
+
   /// 지금 선택에 해당하는 MapLibre 필터 표현식. 선택이 없으면 아무것도 맞지
   /// 않는 필터를 돌려준다. 레이어 등록 시점과 갱신 시점이 같은 함수를 쓰게 해서
   /// 한쪽만 고쳐 어긋나는 일을 막는다(indoor_overlay_layers.dart의 "등록과
@@ -402,6 +422,7 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
       fadeExpr: _overlayFadeExpr(),
       categorySelection: widget.categorySelection,
       devicePixelRatio: _devicePixelRatio,
+      symbolSortKey: _storeLabelSortKeyExpression(),
       // fill·아이콘은 카테고리 선택과 무관하다. 라벨만 다시 민다.
       scope: IndoorOverlaySyncScope.labels,
     );
@@ -411,11 +432,14 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
   /// 것. 레이어 속성을 쓰는 모든 경로가 이걸 써야 페이드 도중 끼어든 갱신이 계수를
   /// 되돌리지 않는다(dim scrim은 층 전환과 무관해 [_fadeExpr] 그대로).
   List<Object> _overlayFadeExpr() {
-    final factor = _indoorOverlayFadeFactor;
+    return _overlayFadeExprFor(_indoorOverlayFadeFactor);
+  }
+
+  List<Object> _overlayFadeExprFor(double factor) {
     if (factor >= 1) return _fadeExpr();
     return indoorOverlayCrossfadeExpr(
       entered: _indoorEntered,
-      crossfadeFactor: factor,
+      crossfadeFactor: factor.clamp(0.0, 1.0).toDouble(),
     );
   }
 
@@ -435,6 +459,7 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
       fadeExpr: _overlayFadeExpr(),
       categorySelection: widget.categorySelection,
       devicePixelRatio: _devicePixelRatio,
+      symbolSortKey: _storeLabelSortKeyExpression(),
     );
   }
 
@@ -702,6 +727,7 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
       categoryFilter: _categoryFilterExpression(),
       categorySelection: widget.categorySelection,
       devicePixelRatio: _devicePixelRatio,
+      symbolSortKey: _storeLabelSortKeyExpression(),
       ensureIconImages: _ensureFacilityIconImagesRegistered,
     );
     _indoorTilesRegistered = registered;

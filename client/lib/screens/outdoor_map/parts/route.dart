@@ -50,9 +50,8 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     final floor = _activeFloor;
     if (transfer == null || floor == null) return;
     final (:segment, :nextFloorLabel) = transfer;
-    // 층 라벨 → 순위 비교는 층 전환 연출 정책과 같은 함수를 쓴다
-    // (floor_switch_progress).
-    final goingUp = floorSwitchRank(nextFloorLabel) > floorSwitchRank(floor);
+    // 자동 전환 판정기와 같은 층 라벨 순위 규칙을 쓴다.
+    final goingUp = floorLabelRank(nextFloorLabel) > floorLabelRank(floor);
     final transition = EscalatorTransition(
       // 도착 노드를 경로 지목으로 찾으므로 그룹 매칭까지 갈 일이 없지만,
       // 진단 JSON에 남는 값이라 강제 전환임을 알아볼 수 있게 적는다.

@@ -17,6 +17,7 @@ class MapPassThroughSheetRoute<T> extends ModalBottomSheetRoute<T> {
     super.backgroundColor,
     super.shape,
     super.isDismissible,
+    super.sheetAnimationStyle,
   });
 
   @override

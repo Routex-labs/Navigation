@@ -99,6 +99,7 @@ SymbolLayerProperties indoorStoresLabelProps(
   CategorySelection? selection,
   double devicePixelRatio, {
   bool alwaysVisible = false,
+  Object? symbolSortKey,
 }) => SymbolLayerProperties(
   textField: categoryLabelTextField(selection),
   textFont: const [mapFontStackRegular],
@@ -123,12 +124,14 @@ SymbolLayerProperties indoorStoresLabelProps(
   textJustify: 'center',
   textAllowOverlap: alwaysVisible,
   iconAllowOverlap: alwaysVisible,
-  // 자리가 없으면 아이콘·이름 중 하나만이라도 남긴다. iconOptional이 없으면
-  // 심볼이 넓어진 만큼 이름이 밀려난다(실내 화면 주석의 실측 참고).
-  // alwaysVisible에서는 반대로 **아무것도 포기하지 않는다** — 포기가 곧
-  // "매장이 지도에서 사라짐"인 자리다.
-  textOptional: !alwaysVisible,
-  iconOptional: !alwaysVisible,
+  // 일반 매장은 아이콘과 이름을 **한 단위로** 배치한다. 둘 중 하나만 optional로
+  // 두면 붐비는 축소 화면에서 이름은 사라지고 색 아이콘만 남아, 무엇을 뜻하는지
+  // 알 수 없는 점들로 지도가 다시 복잡해진다. 둘 다 필수면 한쪽이 충돌할 때
+  // 심볼 전체가 빠지고, 확대해 자리가 생기면 둘이 함께 돌아온다.
+  // 공유 매장은 alwaysVisible이 충돌 판정을 끄므로 같은 값이 그대로 안전하다.
+  textOptional: false,
+  iconOptional: false,
+  symbolSortKey: symbolSortKey,
 );
 
 /// 편의시설의 텍스트 전용 라벨. 아이콘은 [indoorFacilityIconProps]가 그린다.
@@ -278,6 +281,7 @@ Future<bool> registerIndoorOverlayLayers(
   required List<Object> categoryFilter,
   required CategorySelection? categorySelection,
   required double devicePixelRatio,
+  Object? symbolSortKey,
   required Future<void> Function(MapLibreMapController) ensureIconImages,
 }) async {
     try {
@@ -362,6 +366,7 @@ Future<bool> registerIndoorOverlayLayers(
           fadeExpr,
           categorySelection,
           devicePixelRatio,
+          symbolSortKey: symbolSortKey,
         ),
         // **폴리곤이 아니라 라벨 전용 점 레이어를 본다.** MapLibre는 폴리곤
         // 심볼을 면적 무게중심에 찍는데, ㄱ자·길쭉한 매장에서 그 점이 눈에
@@ -393,6 +398,7 @@ Future<bool> registerIndoorOverlayLayers(
           categorySelection,
           devicePixelRatio,
           alwaysVisible: true,
+          symbolSortKey: symbolSortKey,
         ),
         sourceLayer: 'store_labels',
         filter: [
@@ -491,6 +497,7 @@ Future<void> syncIndoorOverlayProps(
   required List<Object> fadeExpr,
   required CategorySelection? categorySelection,
   required double devicePixelRatio,
+  Object? symbolSortKey,
   IndoorOverlaySyncScope scope = IndoorOverlaySyncScope.all,
 }) async {
   // 선택을 반드시 함께 넘긴다. 빼면 줌을 움직일 때마다 가려 뒀던 매장 이름이
@@ -498,7 +505,12 @@ Future<void> syncIndoorOverlayProps(
   final labels = <(String, LayerProperties)>[
     (
       ids.storesLabel,
-      indoorStoresLabelProps(fadeExpr, categorySelection, devicePixelRatio),
+      indoorStoresLabelProps(
+        fadeExpr,
+        categorySelection,
+        devicePixelRatio,
+        symbolSortKey: symbolSortKey,
+      ),
     ),
     (
       ids.sharedStoresLabel,
@@ -507,6 +519,7 @@ Future<void> syncIndoorOverlayProps(
         categorySelection,
         devicePixelRatio,
         alwaysVisible: true,
+        symbolSortKey: symbolSortKey,
       ),
     ),
     (ids.facilityLabel, indoorFacilityLabelProps(fadeExpr, categorySelection)),

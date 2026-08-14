@@ -88,12 +88,11 @@ void main() {
       expect(json['text-offset'], isNotNull);
     });
 
-    test('매장 라벨 — 아이콘·이름 중 하나만이라도 남긴다', () {
+    test('매장 라벨 — 아이콘과 이름은 함께 숨고 함께 나타난다', () {
       final json = wireJson(indoorStoresLabelProps(fadeExpr, null, 1));
-      // 둘 다 필수로 두면 심볼이 넓어진 만큼 붐비는 층에서 라벨이 통째로
-      // 밀려난다(B1 한 화면 49개 → 38개를 실측했다).
-      expect(json['text-optional'], isTrue);
-      expect(json['icon-optional'], isTrue);
+      expect(json['text-optional'], isFalse);
+      expect(json['icon-optional'], isFalse);
+      expect(json['icon-allow-overlap'], isFalse);
     });
 
     test('카테고리를 골라도 text-field는 살아 있다', () {
@@ -109,7 +108,7 @@ void main() {
 
       expect(json['text-field'], isNotNull);
       expect((json['text-field'] as List).first, 'case');
-      // 이름이 사라져도 아이콘은 남아야 "여기는 다른 업종의 매장"이 읽힌다.
+      // 선택된 매장은 같은 심볼 안에서 아이콘과 이름을 함께 그린다.
       expect(json['icon-image'], isNotNull);
     });
 

@@ -18,6 +18,7 @@ import '../../service_locator.dart';
 import '../../core/tile_url.dart';
 import '../../domain/route/building_entrances.dart';
 import '../../domain/guidance/completed_route_history.dart';
+import '../../domain/geo/floor_label.dart';
 import '../../domain/geo/geo_transform.dart';
 import '../../domain/guidance/geo_route_progress.dart';
 import '../../domain/guidance/guidance_chrome.dart';
@@ -54,6 +55,9 @@ import '../../models/route/transit_route.dart';
 import '../../theme/app_theme.dart';
 import 'widgets/store_cluster_sheet.dart';
 import '../../map/label/store_label_anchor.dart';
+import '../../map/camera/zoom_math.dart';
+import '../../map/label/store_label_fit.dart';
+import '../../map/label/store_label_priority.dart';
 import '../../widgets/eta_card.dart';
 import 'widgets/transit_summary_card.dart';
 import '../../models/place/store_index_entry.dart';
@@ -119,9 +123,8 @@ bool get _isMapSupportedOnThisPlatform =>
 // pdr_debug_map_layers.dart가 소유한다. 여기서는 무엇을 보여줄지(토글·층·앵커
 // 판단)만 정해 완성된 데이터를 넘긴다.
 
-// 사람 조작 층 전환 크로스페이드의 근거·타이밍 정책(즉시 교체 임계, 페이드
-// 길이, 에스컬레이터 모티프 임계)은 core/floor_switch_progress.dart가 단일
-// 출처다.
+// 층 전환 교차 페이드의 길이·단계·타일 대기 정책은
+// core/floor_switch_progress.dart가 단일 출처다.
 
 // 도면을 화면에 맞출 때 채우는 비율은 map_camera_commands.dart가 소유한다.
 
@@ -183,6 +186,23 @@ String _baseMapStyle() {
 ///
 /// 실내 진입은 화면을 바꾸지 않고 **이 화면 위에 오버레이를 얹는다** — 층 chip과
 /// 위치 지정까지 한 화면에서 조작한다(판정: indoor-entry-rules.md).
+/// 크로스페이드 중 화면에 남겨 둔 이전 층 블록 하나.
+///
+/// record였던 것을 클래스로 바꾼 이유는 [fadeFactor]가 **단계마다 바뀌기**
+/// 때문이다 — 새 층이 올라오는 만큼 이전 층을 같이 내려야 진짜 크로스페이드가
+/// 된다. record는 불변이라 매 단계 목록을 다시 만들어야 했다.
+class _RetiringIndoorBlock {
+  _RetiringIndoorBlock({
+    required this.layerIds,
+    required this.sourceId,
+    required this.fadeFactor,
+  });
+
+  final List<String> layerIds;
+  final String sourceId;
+  double fadeFactor;
+}
+
 class OutdoorMapBody extends StatefulWidget {
   const OutdoorMapBody({
     super.key,
@@ -314,7 +334,18 @@ const _buildingRetryDelays = <Duration>[
 
 /// 목록에서 고른 매장을 볼 때의 최소 확대. 실내 화면과 같은 값이라야 두
 /// 화면을 오가도 같은 크기로 보인다.
+/// 매장 선택과 상세 시트 등장을 한 동작으로 읽히게 하는 카메라 이동 시간.
+/// 시트(380ms)보다 한 박자만 길게 감속해, 시트가 멈춘 뒤 지도가 오래 미끄러지는
+/// 느낌도 카메라가 먼저 도착해 시트만 튀어 오르는 느낌도 남기지 않는다.
+const _storeFocusDuration = Duration(milliseconds: 520);
+
+/// 폴리곤을 못 찾을 때만 쓰는 폴백 배율. 보통은 [_focusZoomForStore]가 매장
+/// 크기에 맞춰 정한다.
 const _storeFocusZoom = 19.0;
+
+/// 매장 크기로 정하는 배율의 상·하한.
+const _storeFocusMinZoom = 17.8;
+const _storeFocusMaxZoom = 20.4;
 
 LatLng _toMapLatLng(ll.LatLng point) => LatLng(point.latitude, point.longitude);
 
@@ -460,6 +491,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   // 활성 층의 평면도(매장 목록 포함). 실내 오버레이 위에서 매장 폴리곤을
   // 탭했을 때 벡터 타일 feature id로 실제 매장 정보를 되찾는 데 쓴다.
   FloorPlan? _floorPlan;
+
+  /// 층 도면이 바뀔 때마다 다시 매기는 매장 라벨 우선순위.
+  /// 축소 단계에서 어떤 이름을 먼저 남길지 정한다([rankStoreLabels]).
+  Map<String, int> _storeLabelPriorities = const {};
 
   // 실내 오버레이에서 지금 강조 표시 중인 매장 id. null이면 강조 없음.
   // 사용자가 매장을 탭하면 채워지고, 매장 정보 시트가 닫히면 상위가
@@ -614,8 +649,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 묶음(은퇴 블록). 새 도면 페이드인이 끝나면 [_removeRetiringIndoorBlocks]가
   /// 지운다. 연타로 크로스페이드가 겹치면 블록이 잠시 여러 개 쌓일 수 있고,
   /// 마지막 전환의 마무리가 한꺼번에 정리한다.
-  final List<({List<String> layerIds, String sourceId})> _retiringIndoorBlocks =
-      [];
+  final List<_RetiringIndoorBlock> _retiringIndoorBlocks = [];
+
+  /// 층 크로스페이드 중에는 외곽선과 dim scrim hole을 새 층 도면 로드 시점에
+  /// 즉시 바꾸지 않는다. 두 경계는 MVT 9개 레이어와 별도 GeoJSON 소스라서,
+  /// 미루지 않으면 바닥은 페이드하는데 파란 외곽선만 먼저 `띡` 바뀐다.
+  bool _deferFloorBoundarySync = false;
 
   /// 층 전환 작업을 직렬화한다. 겹쳐 돌면 층과 경로가 서로 다른 시점을 가리킨다.
   Future<void> _floorTransitionQueue = Future<void>.value();
@@ -815,7 +854,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _arrivalRouteClearTimer?.cancel();
     _floorSwapVeilTimer?.cancel();
     _escalatorGlideProgress.dispose();
-    _floorSwitchProgress.dispose();
     // 탑승 중 화면이 닫히면 걸음이 멈춘 채로 전역 PDR 세션이 남는다. 다음
     // 화면에서 아무리 걸어도 위치가 갱신되지 않는다.
     if (_stepsPausedForRide) {
@@ -1587,7 +1625,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Future<void> focusStore(
     PoiSearchResult store, {
     double bottomSheetFraction = 0,
-    double topInsetPx = 0,
+    double topInsetPx = placingHintTopPx,
     bool keepZoom = false,
     bool enterBuildingIfNeeded = false,
   }) async {
@@ -1619,6 +1657,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
     setState(() => _highlightedStoreId = store.placeId);
     await _syncHighlightLayer();
+    await _syncIndoorOverlayFade();
     if (!mounted) return;
 
     // 뷰포트는 카메라 이동 전에 읽는다(실내 화면과 같은 이유 — await 뒤에
@@ -1626,29 +1665,76 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final viewport = MediaQuery.sizeOf(context);
     final camera = controller.cameraPosition;
     final currentZoom = camera?.zoom ?? 0;
-    await controller.moveCamera(
+    final bearing = camera?.bearing ?? 0;
+    // 배율 규칙은 실내 도면과 한 함수를 공유한다(focusZoomFor).
+    final zoom = focusZoomFor(
+      currentZoom: currentZoom,
+      keepZoom: keepZoom && !fromOutside,
+      storeFocusZoom: _focusZoomForStore(
+        store,
+        viewport: viewport,
+        bottomSheetFraction: bottomSheetFraction,
+        topInsetPx: topInsetPx,
+        bearing: bearing,
+      ),
+    );
+    // **한 번만 움직인다.** 예전에는 매장 중앙으로 옮긴 뒤 `scrollBy`로 띠 한가운데로
+    // 다시 밀었는데, 첫 이동이 한 프레임 드러나 카메라가 두 번 튀었다. 최종 목표를
+    // 먼저 계산해 한 애니메이션으로 간다.
+    final lift = math.max(
+      0.0,
+      (viewport.height * bottomSheetFraction - topInsetPx) / 2,
+    );
+    final target = cameraTargetForScreenLift(
+      store.point,
+      bearing: bearing,
+      zoom: zoom,
+      liftPx: lift,
+    );
+    await controller.animateCamera(
       CameraUpdate.newCameraPosition(
         CameraPosition(
-          target: _toGl(store.point),
-          // 배율 규칙은 실내 도면과 한 함수를 공유한다(focusZoomFor).
-          zoom: focusZoomFor(
-            currentZoom: currentZoom,
-            keepZoom: keepZoom && !fromOutside,
-            storeFocusZoom: _storeFocusZoom,
-          ),
-          bearing: camera?.bearing ?? 0,
+          target: _toGl(target),
+          zoom: zoom,
+          bearing: bearing,
           tilt: camera?.tilt ?? 0,
         ),
       ),
+      duration: _storeFocusDuration,
     );
-    // 위아래가 가리고 남는 띠의 한가운데로. 시트가 f를, 위쪽이 t 픽셀을 덮으면
-    // 정중앙에서 (H·f - t)/2만큼 올리면 된다.
-    //
-    // **`scrollBy`는 문서대로 고치면 두 번 다 틀린다**(실기기 확인) — 단위는 논리
-    // 픽셀이라 dpr을 곱하면 건물 밖으로 날아가고, 부호는 음수가 위다.
-    final lift = (viewport.height * bottomSheetFraction - topInsetPx) / 2;
-    if (lift <= 0) return;
-    await controller.moveCamera(CameraUpdate.scrollBy(0, -lift));
+  }
+
+  /// 이 매장이 화면의 **보이는 띠**(시트와 상단 chrome 사이)에서 약 42%를 차지하는
+  /// 배율. 작은 매장은 읽을 만큼 확대하고, 백화점의 큰 앵커 매장은 한 면이 화면을
+  /// 가득 덮지 않게 한다.
+  ///
+  /// 폴리곤을 못 찾으면 [_storeFocusZoom]으로 떨어진다.
+  double _focusZoomForStore(
+    PoiSearchResult store, {
+    required Size viewport,
+    required double bottomSheetFraction,
+    required double topInsetPx,
+    required double bearing,
+  }) {
+    final polygon = _floorPlan?.stores
+        .where((candidate) => candidate.id == store.placeId)
+        .firstOrNull
+        ?.polygon;
+    if (polygon == null || polygon.length < 3) return _storeFocusZoom;
+
+    final box = storeLabelBoxMeters(polygon: polygon, bearingDeg: bearing);
+    final visibleBandHeight = math.max(
+      1.0,
+      viewport.height * (1 - bottomSheetFraction) - topInsetPx,
+    );
+    final fitted = zoomToFitRotatedBox(
+      widthMeters: math.max(box.widthM, 3.5),
+      heightMeters: math.max(box.heightM, 3.5),
+      viewportWidthPx: math.max(1, viewport.width * 0.42),
+      viewportHeightPx: math.max(1, visibleBandHeight * 0.46),
+      latitude: store.point.latitude,
+    );
+    return fitted.clamp(_storeFocusMinZoom, _storeFocusMaxZoom).toDouble();
   }
 
   /// 검색 결과에서 고른 **건물**의 바깥 모습이 보이도록 카메라를 옮긴다. 건물은

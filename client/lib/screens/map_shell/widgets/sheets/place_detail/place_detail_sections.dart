@@ -24,9 +24,24 @@ class PlaceSummarySection extends StatelessWidget {
   final String text;
 
   @override
-  Widget build(BuildContext context) => Text(
-    keepWordsWhole(text),
-    style: const TextStyle(fontSize: 14.5, height: 1.5, color: AppColors.text),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      const style = TextStyle(
+        fontSize: 14.5,
+        height: 1.55,
+        color: AppColors.text,
+      );
+      return Text(
+        balancedKoreanLines(
+          text,
+          style: style,
+          maxWidth: constraints.maxWidth,
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        ),
+        style: style,
+      );
+    },
   );
 }
 

@@ -35,6 +35,16 @@ import '../../../../domain/category/subcategory_label.dart';
 /// 여기만 바꾸면 카메라도 따라온다.
 const double kPlaceDetailSheetInitialSize = 0.5;
 
+/// 매장 선택 시 시트가 바닥에서 화면 절반까지 한 번에 이동하므로 Material 기본
+/// 250ms는 실기기에서 튀어 오르는 것처럼 보인다. 시작과 끝의 속도를 모두 낮춘
+/// 곡선으로 늘려 카메라 포커스와 한 동작으로 읽히게 한다.
+const kPlaceDetailSheetAnimationStyle = AnimationStyle(
+  duration: Duration(milliseconds: 380),
+  reverseDuration: Duration(milliseconds: 260),
+  curve: Curves.easeInOutCubic,
+  reverseCurve: Curves.easeInCubic,
+);
+
 /// 장소 상세 시트에서 호출자에게 돌려주는 다음 동작.
 ///
 /// 예전에는 `viewCategory`가 하나 더 있었는데, 대분류 칩을 시트에서 걷어낸 뒤로
@@ -127,6 +137,7 @@ class PlaceDetailSheet extends StatefulWidget {
         ),
         isScrollControlled: true,
         isDismissible: true,
+        sheetAnimationStyle: kPlaceDetailSheetAnimationStyle,
         backgroundColor: Colors.transparent,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -328,7 +339,7 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                             ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                      padding: const EdgeInsets.fromLTRB(20, 2, 20, 0),
                       child: _PlaceCore(
                         title: widget.title,
                         subtitle: widget.subtitle,
@@ -340,7 +351,7 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                     // 이름을 읽은 직후가 길찾기를 누르는 자리다. 사진·메뉴를
                     // 지나 하단까지 내려가야 한다면 흐름이 한 번 끊긴다.
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                       child: _PlaceActions(
                         onOrigin: () => _pop(StoreInfoAction.setOrigin),
                         onDestination: () =>
@@ -356,7 +367,7 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                       Padding(
                         // 좌우 여백은 섹션이 스스로 갖는다. 사진·메뉴는
                         // 시트 끝까지 써야 해서 여기서 일괄로 줄 수 없다.
-                        padding: const EdgeInsets.only(top: 20),
+                        padding: const EdgeInsets.only(top: 24),
                         child: PlaceDetailSections(
                           sections: sections,
                           floorLabel: _detail?.location.floorLabel,
@@ -445,8 +456,8 @@ class _PlaceCore extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  fontSize: 20,
-                  height: 1.15,
+                  fontSize: 21,
+                  height: 1.2,
                   fontWeight: FontWeight.w800,
                   color: AppColors.text,
                 ),
@@ -473,7 +484,7 @@ class _PlaceCore extends StatelessWidget {
                       if (hasFloor && label != null)
                         const TextSpan(
                           text: ' · ',
-                          style: TextStyle(color: AppColors.blue100),
+                          style: TextStyle(color: AppColors.blue300),
                         ),
                       if (label != null) TextSpan(text: label),
                     ],
@@ -889,8 +900,8 @@ class _SectionBreak extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const Padding(
-    padding: EdgeInsets.symmetric(vertical: 16),
-    child: Divider(height: 1, thickness: 1, color: AppColors.blue100),
+    padding: EdgeInsets.symmetric(vertical: 14),
+    child: Divider(height: 1, thickness: 1, color: AppColors.hairline),
   );
 }
 
@@ -904,6 +915,6 @@ class _TitledSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
-    children: [PlaceSectionTitle(title), const SizedBox(height: 10), child],
+    children: [PlaceSectionTitle(title), const SizedBox(height: 8), child],
   );
 }

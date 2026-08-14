@@ -32,17 +32,28 @@ const floorSwitchInstantSwapThreshold = Duration(milliseconds: 150);
 
 /// 새 도면이 이전 도면 위로 페이드인되는 시간. 카메라 재정렬(500ms)과 겹쳐
 /// 하나의 전환으로 읽히도록, 짧지만 인지 가능한 길이로 잡는다.
-const floorSwitchCrossfadeDuration = Duration(milliseconds: 300);
+const floorSwitchCrossfadeDuration = Duration(milliseconds: 320);
 
 /// 안내 중 자동 층 전환(에스컬레이터)의 페이드인 시간. 사람 조작보다 **두 배**
 /// 느리고, 마커 활강([escalatorGlideDuration])보다는 짧다.
-const floorSwitchGuidedCrossfadeDuration = Duration(milliseconds: 600);
+const floorSwitchGuidedCrossfadeDuration = Duration(milliseconds: 520);
 
 /// 크로스페이드를 몇 단계로 쪼개는가. maplibre_gl 바인딩에는 paint transition
 /// (`fill-opacity-transition`)을 넘길 통로가 없어 Dart에서 setLayerProperties를
 /// 단계적으로 보내 흉내 낸다. 단계가 많을수록 매끄럽지만 플랫폼 채널 호출도
 /// 그만큼 는다(단계마다 fill 레이어 4개 × 전체 속성 교체).
-const floorSwitchCrossfadeSteps = 6;
+const floorSwitchCrossfadeSteps = 8;
+
+/// 층 외곽선·scrim hole의 전환 계수(0=투명, 1=불투명).
+///
+/// 이 둘은 **단일 GeoJSON 소스**라 이전·새 지오메트리를 동시에 들 수 없다. 그래서
+/// 전반부에 1→0으로 이전 경계를 숨기고, 완전히 투명한 중간에 좌표를 바꾼 뒤
+/// 후반부에 0→1로 새 경계를 드러낸다 — 도면만 크로스페이드하고 외곽선을 즉시
+/// 갈아 끼우면 그 한 프레임이 번쩍임으로 보인다.
+double floorBoundaryCrossfadeFactor(double progress) {
+  final p = progress.clamp(0.0, 1.0).toDouble();
+  return (p * 2 - 1).abs();
+}
 
 /// 새 소스의 타일 도착을 확인하는 폴링 주기. 짧을수록 준비 완료를 빨리
 /// 알아채지만 채널 호출이 는다 — footprint 폴리곤은 층당 몇 개뿐이라 호출

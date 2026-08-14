@@ -17,6 +17,23 @@ void main() {
       expect(find.text(keepWordsWhole('한 줄 소개')), findsOneWidget);
     });
 
+    testWidgets('summary balances a paragraph without adding a line', (
+      tester,
+    ) async {
+      const text =
+          '1979년, 돌과 바람이 전부였던 제주의 땅에서 시작해 최고의 차를 '
+          '생산하기까지, 오설록의 차가 특별한 이유를 만나보세요.';
+      await tester.pumpWidget(
+        subject(
+          const SizedBox(width: 350, child: PlaceSummarySection(text: text)),
+        ),
+      );
+
+      final rendered = tester.widget<Text>(find.byType(Text).last).data!;
+      expect(rendered, contains('\n'));
+      expect(rendered.split('\n').last.length, greaterThan(10));
+    });
+
     testWidgets('key-value section renders each label and value', (
       tester,
     ) async {

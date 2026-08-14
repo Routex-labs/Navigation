@@ -12,6 +12,53 @@ const _footprint = [
 
 void main() {
   _focusZoomTests();
+
+  group('shouldApplyCameraCorrection', () {
+    const current = ll.LatLng(37.0, 127.0);
+
+    test('화면에서 10px보다 작은 차이는 보정하지 않는다', () {
+      expect(
+        shouldApplyCameraCorrection(
+          current: current,
+          corrected: const ll.LatLng(37.000005, 127.000005),
+          halfSpanLat: 0.001,
+          halfSpanLng: 0.001,
+          viewportWidthPx: 400,
+          viewportHeightPx: 800,
+        ),
+        isFalse,
+      );
+    });
+
+    test('눈에 띄게 벗어난 경우에는 정확한 경계 보정을 허용한다', () {
+      expect(
+        shouldApplyCameraCorrection(
+          current: current,
+          corrected: const ll.LatLng(37.00005, 127.00005),
+          halfSpanLat: 0.001,
+          halfSpanLng: 0.001,
+          viewportWidthPx: 400,
+          viewportHeightPx: 800,
+        ),
+        isTrue,
+      );
+    });
+
+    test('화면 범위를 구하지 못하면 실제 이탈을 방치하지 않는다', () {
+      expect(
+        shouldApplyCameraCorrection(
+          current: current,
+          corrected: const ll.LatLng(37.000001, 127.000001),
+          halfSpanLat: 0,
+          halfSpanLng: 0,
+          viewportWidthPx: 400,
+          viewportHeightPx: 800,
+        ),
+        isTrue,
+      );
+    });
+  });
+
   group('clampToFootprint', () {
     // 가만히 둔 지도가 매 idle마다 animateCamera로 미세하게 떨리면 안 된다.
     test('이미 도면 안이면 아무것도 하지 않는다', () {

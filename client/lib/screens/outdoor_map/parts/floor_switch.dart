@@ -85,6 +85,9 @@ extension OutdoorMapFloorSwitch on OutdoorMapBodyState {
     // 이동이 대표적이다)이 조용히 사라진다. 지도 레이어를 만지는 부분만
     // 컨트롤러가 있을 때 한다.
     final canDrawLayers = controller != null && _styleReady;
+    final deferFloorBoundarySync =
+        crossfade && canDrawLayers && _indoorTilesRegistered;
+    _deferFloorBoundarySync = deferFloorBoundarySync;
 
     // 다층 경로가 있으면 새 층의 세그먼트로 갈아 끼운다(없으면 이 층에는
     // 안 그린다). 단일층 경로였다면 다른 층으로 옮기는 순간 경로가 무의미해지므로
@@ -95,6 +98,7 @@ extension OutdoorMapFloorSwitch on OutdoorMapBodyState {
       _activeFloor = floor;
       _floorGraph = null;
       _floorPlan = null;
+      _storeLabelPriorities = const {};
       _mapCalibrationVersion = 'unversioned';
       // 세그먼트가 갈아타면 진행거리 기준점도 새 세그먼트 기준으로 다시 잡아야
       // 한다. 남겨두면 층을 바꾼 순간 남은거리가 튄다.
@@ -123,10 +127,13 @@ extension OutdoorMapFloorSwitch on OutdoorMapBodyState {
     var retiredForCrossfade = false;
     if (canDrawLayers && _indoorTilesRegistered) {
       if (crossfade) {
-        _retiringIndoorBlocks.add((
-          layerIds: _indoorIds.layersTopFirst,
-          sourceId: _indoorIds.source,
-        ));
+        _retiringIndoorBlocks.add(
+          _RetiringIndoorBlock(
+            layerIds: _indoorIds.layersTopFirst,
+            sourceId: _indoorIds.source,
+            fadeFactor: _indoorOverlayFadeFactor,
+          ),
+        );
         retiredForCrossfade = true;
         _indoorTilesRegistered = false;
         _indoorIds = _indoorIds.next();
@@ -283,6 +290,7 @@ extension OutdoorMapFloorSwitch on OutdoorMapBodyState {
       fadeExpr: _overlayFadeExpr(),
       categorySelection: widget.categorySelection,
       devicePixelRatio: _devicePixelRatio,
+      symbolSortKey: _storeLabelSortKeyExpression(),
       scope: IndoorOverlaySyncScope.fills,
     );
   }
