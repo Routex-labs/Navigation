@@ -198,8 +198,8 @@ lib/
 | 10 | 야외 지도 파일을 관심사별로 더 가르기 | 본체 2,250 → 1,967줄 | **완료** (0b6e534, 91eda5d, 22ab08f, 1a9866b) |
 | 11 | 주석의 자리 나누기 | 머리 주석 1,122 → 463줄 | **완료** (c81c99a, 92d3b4b, 7610f8b, c00c202) |
 | 12 | 계층 방향 세우기 + 주제별 폴더 | 위반 6 → 0 | **완료** (43e897d, 853e58d, 41540bc, 2b064fd) |
-| 13 | 주석 2차 압축 + 상한 조이기 | 12,239 → 9,649줄 | **완료** (69a8f94a … f82e684e) |
-| 14 | 폴더 안에서 한 겹 더 묶기 | 5개 디렉터리 · 147파일 | **완료** (db2cabfb, d84db884, fc2eef21, b93d9763, fc742aa0) |
+| 13 | 주석 2차 압축 + 상한 조이기 | 12,239 → 9,649줄 | **완료** (50a70700, 58db03ba, 2c7a3817) |
+| 14 | 폴더 안에서 한 겹 더 묶기 | 5개 디렉터리 · 147파일 | **완료** (abd96db8, 0fbc1cc9) |
 
 ### 14단계 — 폴더 안에서 한 겹 더 묶었다
 
@@ -207,15 +207,15 @@ lib/
 목록을 훑어야 원하는 파일을 찾을 수 있었다. 같은 기준(**함께 바뀌는가**)으로 한 겹
 더 묶는다.
 
-| 디렉터리 | 나눈 것 | 커밋 |
-|---|---|---|
-| `models/` | `building/` `place/` `route/` | db2cabfb |
-| `repositories/` | `building/` `place/` `routing/` — models와 같은 이름 | d84db884 |
-| `map/` | `style/` `label/` `icon/` `camera/` | fc2eef21 |
-| `screens/map_shell/widgets/` | `search/` `sheets/` `chrome/` | b93d9763 |
-| `screens/outdoor_map/` | `parts/` `entry/` `gps/` `layers/` `camera/` | fc742aa0 |
+| 디렉터리 | 나눈 것 |
+|---|---|
+| `models/` | `building/` `place/` `route/` |
+| `repositories/` | `building/` `place/` `routing/` — models와 같은 이름 |
+| `map/` | `style/` `label/` `icon/` `camera/` |
+| `screens/map_shell/widgets/` | `search/` `sheets/` `chrome/` |
+| `screens/outdoor_map/` | `parts/` `entry/` `gps/` `layers/` `camera/` |
 
-**본문은 한 글자도 바꾸지 않았다.** 다섯 커밋에서 바뀐 줄은 전부 import 경로이고,
+**본문은 한 글자도 바꾸지 않았다.** 바뀐 줄은 전부 import 경로이고,
 `git mv`라 이력도 따라온다. 검증은 매 단계 `flutter analyze` 0건 + 테스트 1,458개다.
 
 `parts/`에서는 `outdoor_map_screen_` 접두사를 뗐다 — 폴더가 그 일을 대신하므로 이름에
