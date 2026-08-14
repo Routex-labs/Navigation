@@ -7,13 +7,14 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre_gl/maplibre_gl.dart';
 
+import '../core/map/floor_plan_layers.dart';
+
 import '../core/api_config.dart';
 import '../core/floor_switch_timing.dart';
 import '../core/tile_url.dart';
 import '../core/map_fonts.dart';
 import '../core/map_label_style.dart';
 import '../core/map_palette.dart';
-import '../core/map_route_style.dart';
 import '../core/map/destination_pin.dart';
 import '../core/map/floor_camera_bearing.dart';
 import '../core/map/location_marker_icon.dart';
@@ -94,23 +95,6 @@ String _tileLayerId(String base, String floor) => '$base-$floor';
 /// 경로선·마커가 도면 밑으로 사라지지 않는다.
 const _firstOverlayLayerId = 'floor-completed-route-line';
 
-// 실내 MVT 소스의 zoom 범위는 indoor_entry_zoom.dart의 공용 상수를 그대로 쓴다.
-// 예전에는 이 파일이 같은 값을 따로 들고 "야외 화면과 같은 값"이라고 적어 뒀지만
-// 실제로는 minzoom이 16.0 vs 15.0으로 어긋나 있었다. 두 화면이 같은 백엔드
-// 엔드포인트를 부르는 이상 범위가 갈리면 (1) 한쪽에서만 도면이 비고 (2) 백엔드
-// 워밍업이 덮지 못하는 zoom이 생겨 그 타일만 쿼리를 새로 낸다. 값의 근거는
-// indoorTilesMinZoom/indoorTilesMaxZoom 정의 위 주석에 정리되어 있다.
-const _routeSourceId = 'floor-route';
-const _completedRouteSourceId = 'floor-completed-route';
-const _transferRouteSourceId = 'floor-transfer-route';
-const _pdrTrailSourceId = 'floor-pdr-trail';
-const _pdrPreviewTrailSourceId = 'floor-pdr-preview-trail';
-const _pdrRawTrailSourceId = 'floor-pdr-raw-trail';
-const _pdrConfirmedTrailSourceId = 'floor-pdr-confirmed-trail';
-const _pdrRoninTrailSourceId = 'floor-pdr-ronin-trail';
-const _debugGraphSourceId = 'floor-debug-graph';
-const _markersSourceId = 'floor-markers';
-const _highlightSourceId = 'floor-highlight';
 const _storesFillLayerId = 'floor-stores-fill';
 
 /// 매장명 라벨(대분류 아이콘 + 이름) 심볼 레이어. 탭 판정이 이 레이어를 먼저
@@ -134,75 +118,15 @@ const _verticalTransportFillLayerId = 'floor-vertical-transport-fill';
 /// ([facilityStoreLabelFilter]).
 const _facilityLabelLayerId = 'floor-store-facility-label';
 
-/// 목적지 핀 이미지의 addImage 등록 이름.
-// 디자인을 바꾸면 버전을 올린다 — 웹 addImage는 같은 이름이 이미 있으면
-// 새 비트맵을 버려서, 이름을 그대로 두면 살아 있는 지도에 반영되지 않는다.
-// v3: "도착" 글씨를 비트맵에 구워 넣었다(심볼 텍스트에서 이동).
-const _destinationPinImageName = 'marker-destination-pin-v3';
 
-/// 도착 핀 iconSize의 zoom 보간 구간. "도착" 글씨가 비트맵에 구워져 있으므로
-/// 이 값을 바꾸면 글씨도 같은 비율로 함께 커지고 작아진다.
-const _destPinIconSizeZ16 = 0.115;
-const _destPinIconSizeZ20 = 0.25;
 
-/// 현재 위치 심볼의 addImage 등록 이름. **이름 끝에 코어 반지름을 박아 둔다.**
-///
-/// maplibre_gl 웹 구현의 addImage는 같은 이름이 이미 등록돼 있으면 새 비트맵을
-/// 버리고 조용히 건너뛴다(`if (!_map.hasImage(name))` … `else { print(...) }`,
-/// maplibre_web_gl_platform.dart). 게다가 이 패키지의 플랫폼 인터페이스에는
-/// removeImage가 없어서 이미 등록된 이름을 지울 방법도 없다. 그래서 이름이
-/// 고정이면, 살아 있는 지도 인스턴스에 예전 크기의 비트맵이 그대로 남아
-/// 디자인을 바꿔도 화면이 안 바뀐다. 반지름을 이름에 넣어 두면 디자인이 바뀔
-/// 때 이름도 함께 바뀌므로 항상 새 비트맵으로 등록된다.
-const _currentLocationImageName =
-    'marker-current-location-r$kLocationMarkerIconCoreRadius';
-const _currentLocationDotImageName =
-    'marker-current-location-dot-r$kLocationMarkerIconCoreRadius';
 
 // 마커 비트맵 렌더와 크기 상수(디자인 좌표계·배율·iconSize·반지름)는 야외
 // 지도와 공유하는 location_marker_icon.dart가 소유한다.
 
-/// 현재 위치 심볼 레이어 id.
-const _currentMarkerLayerId = 'floor-markers-current';
 
-/// 목적지 핀 심볼 레이어 id. 현재 위치 레이어를 다시 등록할 때 이 레이어 아래로
-/// 넣어야 원래의 위/아래 순서(목적지 핀이 위)가 유지된다.
-const _destinationMarkerLayerId = 'floor-markers-destination-pin';
 
-/// 현재 위치 심볼 레이어의 filter. 마커 소스에는 목적지도 함께 들어오므로
-/// `kind`로 걸러낸다. 레이어를 다시 등록할 때 이 filter를 빠뜨리면 목적지
-/// 좌표에도 파란 도트가 찍힌다.
-const _currentMarkerFilter = <Object>[
-  '==',
-  ['get', 'kind'],
-  'current',
-];
 
-/// 현재 위치 심볼 레이어의 속성 묶음. 등록([_onStyleLoaded])과 hot reload 시
-/// 재적용([FloorPlanViewState.reassemble])이 같은 값을 쓰도록 한 곳에 모아 둔다.
-///
-/// 현재 위치와 heading을 하나의 심볼로 합친다. 미터 단위 GeoJSON 폴리곤은
-/// 확대할수록 화살표만 커지므로, 고정 픽셀 PNG를 회전시켜 점과 방향 표시가
-/// 언제나 같은 비율과 크기를 유지하게 한다. heading이 없을 때는 북쪽을 임의로
-/// 가리키지 않고 동일 디자인의 원형 점만 사용한다.
-const _currentLocationSymbolProperties = SymbolLayerProperties(
-  iconImage: [
-    'case',
-    ['has', 'heading'],
-    _currentLocationImageName,
-    _currentLocationDotImageName,
-  ],
-  iconSize: kLocationMarkerIconSize,
-  iconRotate: [
-    'coalesce',
-    ['get', 'heading'],
-    0,
-  ],
-  iconRotationAlignment: 'map',
-  iconPitchAlignment: 'viewport',
-  iconAllowOverlap: true,
-  iconIgnorePlacement: true,
-);
 
 /// 지도 위에 얹을 현재 위치/목적지 점 마커. 종류에 따라 스타일이 달라진다
 /// (마커 색상은 [_markersGeoJson]의 circle-color data-driven 표현식이 결정).
@@ -604,8 +528,8 @@ class FloorPlanViewState extends State<FloorPlanView> {
     final controller = _controller;
     if (controller == null || !_styleReady) return;
     try {
-      await controller.removeLayer(_destinationMarkerLayerId);
-      await _addDestinationPinSymbolLayer(controller);
+      await controller.removeLayer(kFloorPlanDestinationMarkerLayerId);
+      await addFloorPlanDestinationPinLayer(controller);
       await _refreshCurrentLocationSymbol();
     } catch (error, stackTrace) {
       // hot reload 편의 기능이므로 실패해도 앱을 죽이지 않는다.
@@ -613,64 +537,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
     }
   }
 
-  /// 목적지 핀 심볼 레이어를 얹는다.
-  ///
-  /// 도형과 글씨를 나눠 그리는 이유, 치수와 textOffset 유도, `text-font`를 반드시
-  /// 명시해야 하는 이유는 전부 [destination_pin.dart]에 있다.
-  ///
-  /// 현재 위치는 같은 소스에 함께 들어와 있어도 filter가 걸러낸다.
-  Future<void> _addDestinationPinSymbolLayer(
-    MapLibreMapController controller,
-  ) async {
-    await controller.addSymbolLayer(
-      _markersSourceId,
-      _destinationMarkerLayerId,
-      destinationPinSymbolProps(
-        imageName: _destinationPinImageName,
-        iconSizeZ16: _destPinIconSizeZ16,
-        iconSizeZ20: _destPinIconSizeZ20,
-      ),
-      filter: [
-        '==',
-        ['get', 'kind'],
-        'destination',
-      ],
-      enableInteraction: false,
-    );
-  }
 
-  /// 현재 위치 비트맵을 등록하고 심볼 레이어를 얹는다.
-  ///
-  /// 비트맵 이름에 코어 반지름이 들어 있으므로([_currentLocationImageName]),
-  /// 크기를 바꿨다면 새 이름이라 웹 addImage의 "이미 있으면 건너뛰기"에 걸리지
-  /// 않는다. 크기를 안 바꿨다면 같은 이름이라 건너뛰고 로그만 남는다.
-  Future<void> _addCurrentLocationSymbolLayer(
-    MapLibreMapController controller, {
-    String? belowLayerId,
-  }) async {
-    await controller.addImage(
-      _currentLocationImageName,
-      await cachedIconPng(
-        _currentLocationImageName,
-        () => renderLocationMarkerIcon(showHeading: true),
-      ),
-    );
-    await controller.addImage(
-      _currentLocationDotImageName,
-      await cachedIconPng(
-        _currentLocationDotImageName,
-        () => renderLocationMarkerIcon(showHeading: false),
-      ),
-    );
-    await controller.addSymbolLayer(
-      _markersSourceId,
-      _currentMarkerLayerId,
-      _currentLocationSymbolProperties,
-      filter: _currentMarkerFilter,
-      belowLayerId: belowLayerId,
-      enableInteraction: false,
-    );
-  }
 
   /// 현재 위치 심볼을 지우고 다시 등록한다.
   ///
@@ -690,10 +557,10 @@ class FloorPlanViewState extends State<FloorPlanView> {
     final controller = _controller;
     if (controller == null || !_styleReady) return;
     try {
-      await controller.removeLayer(_currentMarkerLayerId);
-      await _addCurrentLocationSymbolLayer(
+      await controller.removeLayer(kFloorPlanCurrentMarkerLayerId);
+      await addFloorPlanCurrentLocationLayer(
         controller,
-        belowLayerId: _destinationMarkerLayerId,
+        belowLayerId: kFloorPlanDestinationMarkerLayerId,
       );
     } catch (error, stackTrace) {
       // hot reload 편의 기능이므로 실패해도 앱을 죽이지 않는다. 레이어가 이미
@@ -926,20 +793,20 @@ class FloorPlanViewState extends State<FloorPlanView> {
       );
     }
     await controller.addImage(
-      _destinationPinImageName,
-      await cachedIconPng(_destinationPinImageName, renderDestinationPinIcon),
+      kFloorPlanDestinationPinImageName,
+      await cachedIconPng(kFloorPlanDestinationPinImageName, renderDestinationPinIcon),
     );
     await controller.addImage(
-      _currentLocationImageName,
+      kFloorPlanCurrentLocationImageName,
       await cachedIconPng(
-        _currentLocationImageName,
+        kFloorPlanCurrentLocationImageName,
         () => renderLocationMarkerIcon(showHeading: true),
       ),
     );
     await controller.addImage(
-      _currentLocationDotImageName,
+      kFloorPlanCurrentLocationDotImageName,
       await cachedIconPng(
-        _currentLocationDotImageName,
+        kFloorPlanCurrentLocationDotImageName,
         () => renderLocationMarkerIcon(showHeading: false),
       ),
     );
@@ -1065,7 +932,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
     // 읽히게 한다. 필터가 어긋나면(백엔드 name 변경 등) 이 레이어만 비고
     // 아래 일반 매장 스타일로 자연스럽게 폴백된다.
     //
-    // 필터는 이 파일의 다른 레이어(_debugGraphSourceId 등)와 같은 ['any',
+    // 필터는 이 파일의 다른 레이어(kFloorPlanDebugGraphSourceId 등)와 같은 ['any',
     // ['==', ...], ...] 형태를 쓴다 — ['match', [get, name], <배열>, ...]도
     // 스펙상은 유효하지만 MapLibre GL Native(Android/iOS)에서 label 위치의
     // 배열이 항상 안정적으로 파싱되지 않아 조용히 필터 매치가 0건이 되던
@@ -1828,326 +1695,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
     await _installFloorTileLayers(controller, widget.floorName);
     _activeTileFloor = widget.floorName;
 
-    await controller.addGeoJsonSource(
-      _completedRouteSourceId,
-      _emptyFeatureCollection,
-    );
-    await controller.addLineLayer(
-      _completedRouteSourceId,
-      'floor-completed-route-line',
-      const LineLayerProperties(
-        lineColor: kRouteCompletedColor,
-        lineWidth: kRouteLineWidthExpr,
-        lineOpacity: 0.72,
-        lineCap: 'round',
-        lineJoin: 'round',
-      ),
-      enableInteraction: false,
-    );
-    await controller.addGeoJsonSource(_routeSourceId, _emptyFeatureCollection);
-    // casing → 본선 → 화살표 순으로 얹는다. 값과 근거는 [map_route_style.dart].
-    await controller.addLineLayer(
-      _routeSourceId,
-      'floor-route-casing',
-      const LineLayerProperties(
-        lineColor: kRouteCasingColor,
-        lineWidth: kRouteCasingWidthExpr,
-        lineCap: 'round',
-        lineJoin: 'round',
-      ),
-      enableInteraction: false,
-    );
-    await controller.addLineLayer(
-      _routeSourceId,
-      'floor-route-line',
-      const LineLayerProperties(
-        lineColor: kRouteLineColor,
-        lineWidth: kRouteLineWidthExpr,
-        lineCap: 'round',
-        lineJoin: 'round',
-      ),
-      enableInteraction: false,
-    );
-    await controller.addImage(
-      kRouteArrowImageName,
-      await cachedIconPng(kRouteArrowImageName, renderRouteArrowIcon),
-    );
-    await controller.addSymbolLayer(
-      _routeSourceId,
-      'floor-route-arrow',
-      routeArrowProps(),
-      enableInteraction: false,
-    );
-    await controller.addGeoJsonSource(
-      _transferRouteSourceId,
-      _emptyFeatureCollection,
-    );
-    await controller.addLineLayer(
-      _transferRouteSourceId,
-      'floor-transfer-route-line',
-      const LineLayerProperties(
-        lineColor: kRouteLineColor,
-        lineWidth: kRouteTransferWidthExpr,
-        lineOpacity: 0.82,
-        lineDasharray: [1.2, 1.1],
-        lineCap: 'round',
-        lineJoin: 'round',
-      ),
-      enableInteraction: false,
-    );
-
-    await controller.addGeoJsonSource(
-      _debugGraphSourceId,
-      _emptyFeatureCollection,
-    );
-    await controller.addLineLayer(
-      _debugGraphSourceId,
-      'floor-debug-graph-edges',
-      const LineLayerProperties(
-        lineColor: '#607D8B',
-        lineWidth: 2,
-        lineOpacity: 0.72,
-        lineDasharray: [2, 1.5],
-        lineCap: 'round',
-        lineJoin: 'round',
-      ),
-      filter: [
-        '==',
-        ['get', 'kind'],
-        'edge',
-      ],
-      enableInteraction: false,
-    );
-    await controller.addLineLayer(
-      _debugGraphSourceId,
-      'floor-debug-graph-active-edges',
-      const LineLayerProperties(
-        lineColor: '#00ACC1',
-        lineWidth: 5,
-        lineOpacity: 0.88,
-        lineCap: 'round',
-        lineJoin: 'round',
-      ),
-      filter: [
-        'all',
-        [
-          '==',
-          ['get', 'kind'],
-          'edge',
-        ],
-        [
-          '==',
-          ['get', 'active'],
-          true,
-        ],
-      ],
-      enableInteraction: false,
-    );
-    await controller.addCircleLayer(
-      _debugGraphSourceId,
-      'floor-debug-graph-nodes',
-      const CircleLayerProperties(
-        circleRadius: 4,
-        circleColor: '#FFFFFF',
-        circleStrokeColor: '#455A64',
-        circleStrokeWidth: 2,
-      ),
-      filter: [
-        '==',
-        ['get', 'kind'],
-        'node',
-      ],
-      enableInteraction: false,
-    );
-    await controller.addCircleLayer(
-      _debugGraphSourceId,
-      'floor-debug-graph-active-nodes',
-      const CircleLayerProperties(
-        circleRadius: 6,
-        circleColor: '#00ACC1',
-        circleStrokeColor: '#FFFFFF',
-        circleStrokeWidth: 2,
-      ),
-      filter: [
-        'all',
-        [
-          '==',
-          ['get', 'kind'],
-          'node',
-        ],
-        [
-          '==',
-          ['get', 'active'],
-          true,
-        ],
-      ],
-      enableInteraction: false,
-    );
-    await controller.addGeoJsonSource(
-      _pdrRawTrailSourceId,
-      _emptyFeatureCollection,
-    );
-    await controller.addLineLayer(
-      _pdrRawTrailSourceId,
-      'floor-pdr-raw-trail-line',
-      const LineLayerProperties(
-        lineColor: '#F57C00',
-        lineWidth: 3.25,
-        lineOpacity: 0.95,
-        lineDasharray: [1.5, 1.5],
-        lineCap: 'round',
-        lineJoin: 'round',
-      ),
-      enableInteraction: false,
-    );
-
-    await controller.addGeoJsonSource(
-      _pdrConfirmedTrailSourceId,
-      _emptyFeatureCollection,
-    );
-    await controller.addLineLayer(
-      _pdrConfirmedTrailSourceId,
-      'floor-pdr-confirmed-trail-casing',
-      const LineLayerProperties(
-        lineColor: '#FFFFFF',
-        lineWidth: 6.25,
-        lineOpacity: 0.82,
-        lineCap: 'round',
-        lineJoin: 'round',
-      ),
-      enableInteraction: false,
-    );
-    await controller.addLineLayer(
-      _pdrConfirmedTrailSourceId,
-      'floor-pdr-confirmed-trail-line',
-      const LineLayerProperties(
-        lineColor: '#2E7D32',
-        lineWidth: 3.25,
-        lineOpacity: 0.96,
-        lineCap: 'round',
-        lineJoin: 'round',
-      ),
-      enableInteraction: false,
-    );
-
-    await controller.addGeoJsonSource(
-      _pdrRoninTrailSourceId,
-      _emptyFeatureCollection,
-    );
-    await controller.addLineLayer(
-      _pdrRoninTrailSourceId,
-      'floor-pdr-ronin-trail-casing',
-      const LineLayerProperties(
-        lineColor: '#FFFFFF',
-        lineWidth: 6.25,
-        lineOpacity: 0.82,
-        lineCap: 'round',
-        lineJoin: 'round',
-      ),
-      enableInteraction: false,
-    );
-    await controller.addLineLayer(
-      _pdrRoninTrailSourceId,
-      'floor-pdr-ronin-trail-line',
-      const LineLayerProperties(
-        lineColor: '#D81B60',
-        lineWidth: 3.5,
-        lineOpacity: 0.96,
-        lineDasharray: [3.0, 1.5],
-        lineCap: 'round',
-        lineJoin: 'round',
-      ),
-      enableInteraction: false,
-    );
-
-    await controller.addGeoJsonSource(
-      _pdrTrailSourceId,
-      _emptyFeatureCollection,
-    );
-    // 그래프에 부착한 경로는 raw(주황)·confirmed(초록)와 겹쳐도 구별되도록
-    // 보라색으로 그린다. 세 소스가 독립적이라 디버그 설정에서 각각 끌 수 있다.
-    await controller.addLineLayer(
-      _pdrTrailSourceId,
-      'floor-pdr-trail-casing',
-      const LineLayerProperties(
-        lineColor: '#FFFFFF',
-        lineWidth: 6.5,
-        lineOpacity: 0.9,
-        lineCap: 'round',
-        lineJoin: 'round',
-      ),
-      enableInteraction: false,
-    );
-    await controller.addLineLayer(
-      _pdrTrailSourceId,
-      'floor-pdr-trail-line',
-      const LineLayerProperties(
-        lineColor: '#7E57C2',
-        lineWidth: 3.25,
-        lineOpacity: 0.96,
-        lineCap: 'round',
-        lineJoin: 'round',
-      ),
-      enableInteraction: false,
-    );
-    await controller.addGeoJsonSource(
-      _pdrPreviewTrailSourceId,
-      _emptyFeatureCollection,
-    );
-    await controller.addLineLayer(
-      _pdrPreviewTrailSourceId,
-      'floor-pdr-preview-trail-line',
-      const LineLayerProperties(
-        lineColor: '#7E57C2',
-        lineWidth: 3.25,
-        lineOpacity: 0.68,
-        lineDasharray: [1.5, 1.5],
-        lineCap: 'round',
-        lineJoin: 'round',
-      ),
-      enableInteraction: false,
-    );
-
-    await controller.addGeoJsonSource(
-      _markersSourceId,
-      _emptyFeatureCollection,
-    );
-
-    // 목적지 핀 레이어보다 먼저 등록해, 겹칠 때 목적지 핀이 위에 오게 한다.
-    await _addCurrentLocationSymbolLayer(controller);
-
-    await _addDestinationPinSymbolLayer(controller);
-
-    await controller.addGeoJsonSource(
-      _highlightSourceId,
-      _emptyFeatureCollection,
-    );
-    // 선택된 매장을 옅게 채우고 테두리 선 색을 진하게 바꿔서 "포커스"가
-    // 어디 있는지 보여준다. 매장 탭/검색으로 고른 매장이 바뀔 때마다
-    // _updateHighlightSource가 이 소스의 폴리곤만 바꿔치기한다.
-    await controller.addFillLayer(
-      _highlightSourceId,
-      'floor-highlight-fill',
-      const FillLayerProperties(
-        fillColor: mapSelectionColor,
-        fillOpacity: 0.16,
-      ),
-      enableInteraction: false,
-    );
-    await controller.addLineLayer(
-      _highlightSourceId,
-      'floor-highlight-line',
-      const LineLayerProperties(
-        lineColor: mapSelectionColor,
-        // 두꺼운 파란 테두리는 옆 매장까지 덮어 지도 가독성을 해쳤다. 채움
-        // 색으로도 포커스를 충분히 표현하므로, 테두리는 매장 경계선을 아주
-        // 살짝 진하게 하는 정도로만 남긴다.
-        lineWidth: 1.2,
-        lineJoin: 'round',
-      ),
-      enableInteraction: false,
-    );
-
+    await registerFloorPlanLayers(controller);
     _styleReady = true;
     // 아이콘 비트맵·레이어 등록이 모두 끝난 시점.
     FloorSwitchTiming.mark('layers');
@@ -2300,8 +1848,8 @@ class FloorPlanViewState extends State<FloorPlanView> {
         : widget.floorPlan.stores.where((s) => s.id == storeId).firstOrNull;
     if (store == null || store.polygon.length < 3) {
       await controller.setGeoJsonSource(
-        _highlightSourceId,
-        _emptyFeatureCollection,
+        kFloorPlanHighlightSourceId,
+        kFloorPlanEmptyGeoJson,
       );
       return;
     }
@@ -2314,7 +1862,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
       ring.add(ring.first);
     }
 
-    await controller.setGeoJsonSource(_highlightSourceId, {
+    await controller.setGeoJsonSource(kFloorPlanHighlightSourceId, {
       'type': 'FeatureCollection',
       'features': [
         {
@@ -2692,12 +2240,12 @@ class FloorPlanViewState extends State<FloorPlanView> {
     final points = widget.routePoints;
     if (points.length < 2) {
       await controller.setGeoJsonSource(
-        _routeSourceId,
-        _emptyFeatureCollection,
+        kFloorPlanRouteSourceId,
+        kFloorPlanEmptyGeoJson,
       );
       return;
     }
-    await controller.setGeoJsonSource(_routeSourceId, {
+    await controller.setGeoJsonSource(kFloorPlanRouteSourceId, {
       'type': 'FeatureCollection',
       'features': [
         {
@@ -2715,7 +2263,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
   }
 
   Future<void> _updateTransferRouteSource() async {
-    await _updateLineSource(_transferRouteSourceId, widget.transferRoutePoints);
+    await _updateLineSource(kFloorPlanTransferRouteSourceId, widget.transferRoutePoints);
   }
 
   Future<void> _updateCompletedRouteSource() async {
@@ -2729,12 +2277,12 @@ class FloorPlanViewState extends State<FloorPlanView> {
     if (controller == null) return;
     if (drawable.isEmpty) {
       await controller.setGeoJsonSource(
-        _completedRouteSourceId,
-        _emptyFeatureCollection,
+        kFloorPlanCompletedRouteSourceId,
+        kFloorPlanEmptyGeoJson,
       );
       return;
     }
-    await controller.setGeoJsonSource(_completedRouteSourceId, {
+    await controller.setGeoJsonSource(kFloorPlanCompletedRouteSourceId, {
       'type': 'FeatureCollection',
       'features': [
         for (final segment in drawable)
@@ -2753,29 +2301,29 @@ class FloorPlanViewState extends State<FloorPlanView> {
   }
 
   Future<void> _updatePdrTrailSource() async {
-    await _updateLineSource(_pdrTrailSourceId, widget.pdrPathPoints);
+    await _updateLineSource(kFloorPlanPdrTrailSourceId, widget.pdrPathPoints);
   }
 
   Future<void> _updatePdrPreviewTrailSource() async {
     await _updateLineSource(
-      _pdrPreviewTrailSourceId,
+      kFloorPlanPdrPreviewTrailSourceId,
       widget.pdrPreviewPathPoints,
     );
   }
 
   Future<void> _updatePdrRawTrailSource() async {
-    await _updateLineSource(_pdrRawTrailSourceId, widget.pdrRawPathPoints);
+    await _updateLineSource(kFloorPlanPdrRawTrailSourceId, widget.pdrRawPathPoints);
   }
 
   Future<void> _updatePdrConfirmedTrailSource() async {
     await _updateLineSource(
-      _pdrConfirmedTrailSourceId,
+      kFloorPlanPdrConfirmedTrailSourceId,
       widget.pdrConfirmedPathPoints,
     );
   }
 
   Future<void> _updatePdrRoninTrailSource() async {
-    await _updateLineSource(_pdrRoninTrailSourceId, widget.pdrRoninPathPoints);
+    await _updateLineSource(kFloorPlanPdrRoninTrailSourceId, widget.pdrRoninPathPoints);
   }
 
   Future<void> _updateLineSource(
@@ -2785,7 +2333,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
     final controller = _controller;
     if (controller == null) return;
     if (points.length < 2) {
-      await controller.setGeoJsonSource(sourceId, _emptyFeatureCollection);
+      await controller.setGeoJsonSource(sourceId, kFloorPlanEmptyGeoJson);
       return;
     }
     await controller.setGeoJsonSource(sourceId, {
@@ -2811,8 +2359,8 @@ class FloorPlanViewState extends State<FloorPlanView> {
     final overlay = widget.debugMapOverlay;
     if (overlay.isEmpty) {
       await controller.setGeoJsonSource(
-        _debugGraphSourceId,
-        _emptyFeatureCollection,
+        kFloorPlanDebugGraphSourceId,
+        kFloorPlanEmptyGeoJson,
       );
       return;
     }
@@ -2845,7 +2393,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
         });
       }
     }
-    await controller.setGeoJsonSource(_debugGraphSourceId, {
+    await controller.setGeoJsonSource(kFloorPlanDebugGraphSourceId, {
       'type': 'FeatureCollection',
       'features': features,
     });
@@ -2869,7 +2417,7 @@ class FloorPlanViewState extends State<FloorPlanView> {
     if (destination != null) {
       features.add(_markerFeature(destination, MapMarkerKind.destination));
     }
-    await controller.setGeoJsonSource(_markersSourceId, {
+    await controller.setGeoJsonSource(kFloorPlanMarkersSourceId, {
       'type': 'FeatureCollection',
       'features': features,
     });
@@ -3194,10 +2742,6 @@ class _UnsupportedPlatformNotice extends StatelessWidget {
   }
 }
 
-const _emptyFeatureCollection = {
-  'type': 'FeatureCollection',
-  'features': <Map<String, dynamic>>[],
-};
 
 // 원본 SVG(hyundai_floor_map_corrected_v6.svg)의 배경색을 그대로 옮겼다.
 // 나머지 레이어(외곽선/매장/POI/경로)는 스타일 로드 후 벡터·GeoJSON

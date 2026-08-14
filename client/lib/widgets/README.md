@@ -1,32 +1,34 @@
-# `lib/widgets` — 재사용 UI와 지도 렌더링
+# `lib/widgets` — 여러 화면이 함께 쓰는 위젯
 
-여러 화면에서 다시 쓰는 시각 요소와 상호작용 묶음을 둔다. 단순 버튼부터 MapLibre 기반
-층 지도처럼 상태가 큰 위젯까지 포함하지만, 화면 이동과 앱 전체 사용자 흐름은 소유하지 않는다.
+**여기 남는 기준은 하나다 — 두 화면 이상이 실제로 쓴다.** 한 화면만 쓰면 그 화면
+밑으로, 위젯이 아니면(순수 규칙·값) 성격에 맞는 자리로 간다. 예전에는 49개가 여기
+쌓여 있었고 그중 20개는 위젯 클래스조차 없었다.
 
 ## 구성
 
-| 묶음 | 파일 | 역할 |
-|---|---|---|
-| 지도 | [`floor_plan_view.dart`](floor_plan_view.dart) | MapLibre 층 지도, 매장·POI·현재 위치·경로 표시 |
-| 지도 | [`location_marker.dart`](location_marker.dart), [`uncertainty_circle.dart`](uncertainty_circle.dart) | 현재 위치와 불확실성 표현 |
-| 지도 | [`floor_facility_style.dart`](floor_facility_style.dart), [`map_overlay_tap_guard.dart`](map_overlay_tap_guard.dart) | 수직이동 구조물·POI 아이콘/색 매핑, 오버레이 닫힘 직후 같은 포인터의 지도 오탭 차단 |
-| 지도 | [`store_label_fit.dart`](store_label_fit.dart) | 매장명 라벨 크기를 폴리곤 크기에 맞춰 계산(미터 단위 → zoom에서 px 환산), 줄바꿈 폭 추정 |
-| 지도 셸 | [`map_top_bar.dart`](map_top_bar.dart), [`map_bottom_bar.dart`](map_bottom_bar.dart), [`eta_card.dart`](eta_card.dart), [`status_badge.dart`](status_badge.dart) | 지도 화면 공통 조작·상태 |
-| 지도 셸 | [`floor_selector.dart`](floor_selector.dart) | 좌하단 세로 층 선택기(기본 접힘·펼치면 최대 5개 노출·현재 층 강조), 실내·야외 진입 오버레이 공유 |
-| 탐색 | [`search_panel.dart`](search_panel.dart), [`route_field_results.dart`](route_field_results.dart) | 매장 검색(경량)·AI 검색(의미), 상단 길찾기 두 칸의 출발/도착 후보 |
-| 길찾기 | [`travel_mode_bar.dart`](travel_mode_bar.dart), [`transit_routes_sheet.dart`](transit_routes_sheet.dart), [`transit_summary_card.dart`](transit_summary_card.dart) | 이동 수단(도보·자동차·대중교통) 선택, 대중교통 후보 목록·요약 |
-| 지도 셸 | [`app_menu_sheet.dart`](app_menu_sheet.dart) | 상단 바 햄버거가 여는 앱 메뉴(저장한 장소·길찾기·위치 지정/보정·디버그 설정) |
-| 장소 시트 | [`category_stores_sheet.dart`](category_stores_sheet.dart), [`place_detail_sheet.dart`](place_detail_sheet.dart), [`favorites_sheet.dart`](favorites_sheet.dart) | 카테고리 매장·매장 상세·즐겨찾기 |
-| 장소 상세 | [`place_detail/`](place_detail/) | 상세 시트 본문의 섹션별 렌더러(summary·hero·menu·매장정보 등) |
-| 카테고리 | [`category_icon.dart`](category_icon.dart), [`category_label_order.dart`](category_label_order.dart) | 카테고리 대분류 아이콘·색상(chip·시트·리스트 공유), label 중복 제거·가나다 정렬 |
-| 카테고리 | [`category_map_filter.dart`](category_map_filter.dart), [`category_map_icon.dart`](category_map_icon.dart) | 지도 카테고리 강조 필터, 매장명 라벨 옆 대분류 아이콘·이름 좌우 배치 규칙 |
-| 카테고리 | [`category_map_fill.dart`](category_map_fill.dart) | 강조된 매장 폴리곤을 선택한 대분류 색으로 칠하는 표현식(옅은 면 + 진한 테두리) |
-| 공통 | [`sheet_header.dart`](sheet_header.dart), [`sheet_grab_handle.dart`](sheet_grab_handle.dart) | 시트 헤더, 시트 상단 크기 조절 손잡이 |
+| 파일 | 역할 |
+|---|---|
+| [`floor_plan_view.dart`](floor_plan_view.dart) | MapLibre 층 지도. 매장·POI·현재 위치·경로 표시 (실내 탭·경로 안내·디버그 화면이 공유) |
+| [`eta_card.dart`](eta_card.dart) | 목적지까지 거리·시간 배너 (야외 지도·경로 안내·디버그 공유) |
+| [`transit_style.dart`](transit_style.dart), [`transit_itinerary_tile.dart`](transit_itinerary_tile.dart) | 대중교통 색·아이콘·시간 표기와 한 줄 타일 |
+| [`location_marker.dart`](location_marker.dart), [`uncertainty_circle.dart`](uncertainty_circle.dart) | 현재 위치와 불확실성 표현 |
+| [`sheet_header.dart`](sheet_header.dart), [`sheet_grab_handle.dart`](sheet_grab_handle.dart), [`filter_pill.dart`](filter_pill.dart) | 시트 머리·손잡이, 필터 pill |
+| [`map_overlay_guard.dart`](map_overlay_guard.dart), [`map_pass_through_sheet_route.dart`](map_pass_through_sheet_route.dart) | 시트가 열린 동안 지도 조작을 다루는 규칙 |
+
+## 여기 없는 것은 어디 있나
+
+| 찾는 것 | 자리 |
+|---|---|
+| 지도 렌더링 **규칙**(라벨 맞춤·아이콘·색·카메라 계산) | [`../core/map/`](../core/map/) |
+| 카테고리 분류·정렬, 도달 라벨 | [`../domain/`](../domain/) |
+| 길찾기 후보·경로 모드 같은 값 타입 | [`../models/`](../models/) |
+| 지도 셸 전용(검색 패널·상단바·시트·장소 상세) | [`../screens/map_shell/widgets/`](../screens/map_shell/widgets/) |
+| 야외 지도 전용(층 선택기·배지·경로 단계 시트) | [`../screens/outdoor_map/widgets/`](../screens/outdoor_map/widgets/) |
 
 ## 검색은 한 곳, 두 단계
 
-검색은 [`map_top_bar.dart`](map_top_bar.dart)의 검색창에서 **그 자리에서** 이뤄지고,
-결과는 바로 아래에 붙는 [`search_panel.dart`](search_panel.dart)가 보여준다. 한동안은
+검색은 [`map_top_bar.dart`](../screens/map_shell/widgets/map_top_bar.dart)의 검색창에서 **그 자리에서** 이뤄지고,
+결과는 바로 아래에 붙는 [`search_panel.dart`](../screens/map_shell/widgets/search_panel.dart)가 보여준다. 한동안은
 검색창을 탭하면 입력창이 하나 더 있는 시트가 올라왔는데, 방금 누른 창과 실제로 치는
 창이 달라 검색창이 두 개인 것처럼 보였다. **다만 결과를 놓을 자리는 반드시 있어야
 한다** — 결과 표시 없이 상단에서만 검색하면 그보다 더 예전처럼 스낵바로만 알리게 되어
@@ -67,7 +69,7 @@
 끝나서 "밥 먹을 곳"처럼 이름이 아닌 말은 **항상** "검색 결과가 없습니다"였다 —
 사용자에게는 상단에서는 찾아 주는 말이 길찾기에서는 안 되는, 자리에 따라 다른
 검색이었다. 두 단계는 모두 `map_shell_screen.dart`가 돌리고
-([`route_field_results.dart`](route_field_results.dart)는 결과만 그린다), 의미 검색은
+([`route_field_results.dart`](../screens/map_shell/widgets/route_field_results.dart)는 결과만 그린다), 의미 검색은
 건물 안을 보고 있을 때만 이어 붙인다 — `/query/ai`는 건물 안의 매장을 찾는 계약이라
 밖에서 건물을 고르는 자리에서 승격시키면 눌러도 갈 수 없는 목록이 된다.
 
@@ -89,7 +91,7 @@
 
 ## 햄버거는 앱 메뉴다 — 개발 도구가 들어가는 유일한 문
 
-[`app_menu_sheet.dart`](app_menu_sheet.dart)는 상단 바 왼쪽 햄버거가 여는 목록이다.
+[`app_menu_sheet.dart`](../screens/map_shell/widgets/app_menu_sheet.dart)는 상단 바 왼쪽 햄버거가 여는 목록이다.
 한동안 이 버튼은 실내 모드에서만 뜨는 "건물 선택 (테스트)" 시트였다. 건물을 바꿀 일이
 없어져 그 시트는 지웠고, 자리는 화면 구석에 흩어져 있던 진입점을 모으는 데 쓴다 —
 저장한 장소·길찾기·위치 지정/보정·**디버그 설정**.
@@ -101,7 +103,7 @@
 무관하게 고정된다. 그래서 햄버거는 이제 **모드와 상관없이 항상 보인다** — 야외에서
 숨기면 야외 화면에서만 닿지 않는 항목이 생긴다.
 
-시트는 스스로 아무것도 실행하지 않고 고른 [`AppMenuAction`](app_menu_sheet.dart)만
+시트는 스스로 아무것도 실행하지 않고 고른 [`AppMenuAction`](../screens/map_shell/widgets/app_menu_sheet.dart)만
 돌려준다. 실제 동작은 지도 상태를 쥔 `map_shell_screen.dart`가 시트가 닫힌 뒤 수행한다
 — 시트가 콜백을 직접 들고 있으면 이미 닫힌 시트의 `context`로 다음 시트를 띄우게 되고,
 그 사이 모드가 바뀌면 옛 상태에 대고 동작한다.
@@ -115,7 +117,7 @@
 ## 카테고리는 chip 한 번이면 목록이다
 
 지도 위 대분류 chip을 누르면 강조가 걸리는 **동시에**
-[`category_stores_sheet.dart`](category_stores_sheet.dart)가 열린다. 소분류 pill도 그 시트
+[`category_stores_sheet.dart`](../screens/map_shell/widgets/category_stores_sheet.dart)가 열린다. 소분류 pill도 그 시트
 안에 있고, 목록만이 아니라 지도 강조까지 함께 바꾼다(`onSubcategoryChanged`).
 
 - **지도 위에는 대분류 줄만 둔다.** 시트가 곧바로 뜨는데 같은 pill 줄을 지도에도 그리면
