@@ -67,7 +67,10 @@
 | [네이버지도 UI/UX 분석 (v2)](client/naver-map-ui-ux-analysis.md) | 정보 구조와 목록·시트 UX |
 | [검색 입력 보조](client/search-input-assist.md) | 자동완성·오타 교정 |
 | [검색 결과 목록 UX](client/search-result-list-ux.md) | 결과 행 구조와 정렬 |
-| [카메라 연출](client/camera-choreography-plan.md) | 안내 시작·층 전환 카메라 |
+| [카메라 연출](client/camera-choreography-plan.md) | 안내 시작·층 전환 카메라, 카메라 가둠 |
+| [지도 스타일 규칙](client/map-style-rules.md) | 도면 색·라벨·아이콘의 근거와 MapLibre 함정 |
+| [실내 진입·이탈 판정 규칙](client/indoor-entry-rules.md) | GPS·zoom·근접 세 축의 임계값 근거 |
+| [GPS 스트림 정책](client/gps-stream-policy.md) | 스트림 수명·신선도·경로 재계산 주기 |
 | [현장 검증 체크리스트](client/field-verification-thehyundai.md) | 더현대 서울에서만 확인되는 항목과 기록 방법 |
 | [클라이언트 구조 개편 계획](client/structure-plan.md) | `lib/` 전체 — 디렉터리 성격, 쪼갤 함수, 테스트 규칙 |
 | [야외 지도 화면 해체 계획](client/outdoor-map-decomposition.md) | 장기 브랜치의 목표·순서·rebase 규칙 |

@@ -94,6 +94,25 @@ flowchart LR
 경로 단위 세션에서는 비어 있다. 그 대조가 필요하면 앱을 백그라운드로 보내 세션이 멈춘
 뒤의 파일을 봐야 한다.
 
+#### 스키마 이력 — 각 판이 무엇을 못 보게 하고 있었나
+
+`PdrDebugSessionRecorder.schemaVersion`. 판을 올린 이유는 전부 같다 — **파일만 보고는
+가릴 수 없는 것**이 있었다. 새 필드를 넣을 때 이 표에 한 줄 더한다.
+
+| 판 | 추가한 것 | 그전에는 무엇을 못 가렸나 |
+|---|---|---|
+| v4 | 1 Hz 샘플의 preview(주황), pedometer live/재조회 대조 | 시계열에 confirmed(초록)만 있어 주황이 언제 벌어졌는지 몰랐다 |
+| v5 | heading 분해(fused/offset/device/gyro/walkDir)와 수렴 상태 | 방향이 틀어졌을 때 자력계·walkOffset·네이티브 유도식·실제 회전 중 무엇인지 |
+| v6 | Android RoNIN 자동보폭 비교 경로, 1 Hz 보폭/속도 관측 | — |
+| v7 | 세션형 복도 보정 위치·heading bias·상태 전이 시계열 | — |
+| v8 | 간선 누적 진행거리, 잠긴 진행 방향 | — |
+| v9 | 주황 기반 보라 preview 위치·후보 간선·모호성·경로 | — |
+| v10 | corridor tracker의 **입력 이벤트** | 출력(경로·1 Hz 샘플)만 있어 tracker를 정확히 재생할 수 없었다(주황 꼬리와 배치 경계가 없었다) |
+| v11 | 길찾기 경로 기준 진행률(경로 컨텍스트 + 시계열) | "어느 복도든 하나에 붙었는지"만 알 수 있었고, 정작 중요한 "사용자가 따라가는 그 경로에 붙었는지"는 계산조차 못 했다 |
+| v12 | 기압계 시계열, 층 전이 판정 이벤트(**거부 이유 포함**) | 에스컬레이터 임계값이 전부 초안값인데 원본 기압과 거부 이유가 없어 조정할 근거가 없었다. 확정만 남기면 **미탐은 파일에서 아예 보이지 않는다** |
+| v13 | optimistic(화면) cursor 상태 — 간선·진행거리·선행분·peak 합성 여부 | "preview 선행분"이 scalar 하나였고 매 프레임 재계산이라, 화면이 뒤로 간 프레임이 배치 때문인지 후보 교체 때문인지 몰랐다 |
+| v14 | orientation/walking/map-matched/route heading 분리, peak별 graph traversal, route signed 이동, measured/display 진행률 분리 | — |
+
 ## 4. 앱 구조와 데이터 흐름
 
 ```mermaid
