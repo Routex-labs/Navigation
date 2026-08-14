@@ -77,6 +77,7 @@ import 'indoor_entry_proximity.dart';
 import 'indoor_entry_zoom.dart';
 import 'route_recompute_policy.dart';
 import 'indoor_overlay_layers.dart';
+import 'map_camera_commands.dart';
 import 'marker_map_layers.dart';
 import 'shape_map_layers.dart';
 import 'pdr_debug_map_layers.dart';
@@ -291,12 +292,7 @@ const _recenterDuration = Duration(milliseconds: 300);
 // 길이, 에스컬레이터 모티프 임계)은 core/floor_switch_progress.dart가 단일
 // 출처다.
 
-/// 도면을 화면에 맞출 때 실제로 채우는 비율.
-///
-/// 1.0이면 외곽선이 화면 가장자리에 딱 붙는다 — 도면이 답답해 보이고 가장자리
-/// 매장 라벨이 잘린다. 0.86이면 사방에 7%씩 남아, 건물이 어디서 끝나는지가
-/// 보이면서도 도면은 충분히 크다.
-const _floorFitFillRatio = 0.86;
+// 도면을 화면에 맞출 때 채우는 비율은 map_camera_commands.dart가 소유한다.
 
 /// 도면을 맞출 때 화면 위·아래에서 비워 두는 chrome 높이(논리 px).
 ///
@@ -3417,34 +3413,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 경로가 같은 여백 규칙을 쓰도록 뽑아 두었다 — 값이 갈리면 안내를 바꿀
   /// 때마다 경로가 화면에서 다른 크기로 잡힌다.
   void _fitCameraToPoints(List<ll.LatLng> points) {
-    if (points.length < 2) return;
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
-
-    var minLat = double.infinity;
-    var maxLat = double.negativeInfinity;
-    var minLng = double.infinity;
-    var maxLng = double.negativeInfinity;
-    for (final p in points) {
-      minLat = p.latitude < minLat ? p.latitude : minLat;
-      maxLat = p.latitude > maxLat ? p.latitude : maxLat;
-      minLng = p.longitude < minLng ? p.longitude : minLng;
-      maxLng = p.longitude > maxLng ? p.longitude : maxLng;
-    }
-    // 경계 상자가 한 점으로 수렴하면(모든 좌표가 같음) 줌 계산이 발산한다.
-    if (maxLat - minLat < 1e-7 && maxLng - minLng < 1e-7) return;
-    controller.animateCamera(
-      CameraUpdate.newLatLngBounds(
-        LatLngBounds(
-          southwest: LatLng(minLat, minLng),
-          northeast: LatLng(maxLat, maxLng),
-        ),
-        left: 40,
-        top: 110,
-        right: 40,
-        bottom: 180,
-      ),
-    );
+    unawaited(animateCameraToPoints(controller, points));
   }
 
   /// 위치 보정 버튼.
@@ -3677,11 +3648,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Future<void> _moveCameraToUser(Position position, {double? zoom}) async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
-    final target = LatLng(position.latitude, position.longitude);
-    await controller.animateCamera(
-      zoom == null
-          ? CameraUpdate.newLatLng(target)
-          : CameraUpdate.newLatLngZoom(target, zoom),
+    await animateCameraToPoint(
+      controller,
+      ll.LatLng(position.latitude, position.longitude),
+      zoom: zoom,
     );
   }
 
@@ -5312,16 +5282,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 위치를 아직 못 그리는 상태면 되돌릴 자리도 없다. 버튼 노출 조건이 같은
     // 값을 보므로([_canRecenterOnCurrentPosition]) 보통은 여기 안 걸린다.
     if (here == null) return;
-    final camera = controller.cameraPosition;
-    await controller.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(
-          target: _toGl(here),
-          zoom: math.max(camera?.zoom ?? _walkingViewZoom, _walkingViewZoom),
-          bearing: camera?.bearing ?? 0,
-          tilt: camera?.tilt ?? 0,
-        ),
-      ),
+    await recenterKeepingBearing(
+      controller,
+      here,
+      minZoom: _walkingViewZoom,
       duration: _recenterDuration,
     );
   }
@@ -5353,73 +5317,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   }) async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return false;
-
-    // 중심은 **상자가 준다.** 호출부가 따로 구한 중심을 받던 시절에는 배율은
-    // 돌아간 상자로, 위치는 정북 정렬 bbox로 재서 둘이 어긋났다(근거는
-    // [BuildingBox.center]).
-    final center = box.center;
-    final bearing = portraitBearingFor(
-      longAxisAzimuthDeg: box.longAxisAzimuthDeg,
-      currentBearing: controller.cameraPosition?.bearing,
+    await animateCameraToFitBox(
+      controller,
+      box,
+      viewport: MediaQuery.sizeOf(context),
+      topChromePx: topChromePx,
+      bottomChromePx: bottomChromePx,
+      duration: duration,
+      maxZoom: maxZoom,
     );
-    // 위아래 chrome이 덮는 만큼을 뺀 **실제로 보이는 띠**에 맞춘다. 전체 높이로
-    // 맞추면 도면 윗부분이 카테고리 줄 뒤로 들어간다.
-    final viewport = MediaQuery.sizeOf(context);
-    final bandHeightPx = math.max(
-      1.0,
-      viewport.height - topChromePx - bottomChromePx,
-    );
-    final fitZoom = zoomToFitRotatedBox(
-      // 상자를 비율만큼 부풀려 맞추면 그만큼 사방에 여백이 남는다.
-      widthMeters: box.shortSideM / _floorFitFillRatio,
-      heightMeters: box.longSideM / _floorFitFillRatio,
-      viewportWidthPx: viewport.width,
-      viewportHeightPx: bandHeightPx,
-      latitude: center.latitude,
-    );
-    // 하한은 **이탈 임계값** 기준이다. 예전에는 진입 임계값까지 끌어올렸는데,
-    // 그러면 위에서 준 여백이 도로 먹혔다. 실내 상태는 이탈 임계값 위이기만
-    // 하면 유지된다([indoorEntryTransitionForZoom]은 그 아래에서만 exit를 낸다).
-    //
-    // 경로가 길어 이 배율에 다 담기지 않는 경우가 있는데, **그걸 받아들인다.**
-    // 억지로 담으려 더 물러서면 [_handleCameraIdle]이 이탈로 판정해 도면이 닫히고
-    // 야외로 튕긴다 — 경로 끝이 조금 잘리는 쪽이 낫다.
-    final zoom = math.min(
-      math.max(fitZoom, indoorExitZoomThreshold + 0.3),
-      maxZoom,
-    );
-
-    // 상자 한가운데를 화면 한가운데가 아니라 **가려지지 않는 띠의 한가운데**에
-    // 놓는다. 카메라 목표점은 늘 화면 중앙에 그려지므로, 목표점을 화면 위쪽
-    // (=지금 bearing 방향)으로 그만큼 밀면 상자가 그만큼 내려온다.
-    final shiftPx = (topChromePx - bottomChromePx) / 2;
-    final metersPerPx = visibleWidthMeters(
-      zoom: zoom,
-      availablePx: 1,
-      latitude: center.latitude,
-    );
-    final target = offsetByMeters(
-      center,
-      azimuthDeg: bearing,
-      meters: shiftPx * metersPerPx,
-    );
-
-    final update = CameraUpdate.newCameraPosition(
-      CameraPosition(
-        target: _toGl(target),
-        zoom: zoom,
-        bearing: bearing,
-        tilt: controller.cameraPosition?.tilt ?? 0,
-      ),
-    );
-    // 즉시 이동은 moveCamera로 간다. animateCamera에 Duration.zero를 주면
-    // Android MapLibre가 "Null duration"으로 예외를 던진다 — 층 전환 큐 안에서
-    // 터지면 전환 전체가 실패 복구로 빠진다([_recoverFloorTransitionFailure]).
-    if (duration <= Duration.zero) {
-      await controller.moveCamera(update);
-    } else {
-      await controller.animateCamera(update, duration: duration);
-    }
     return true;
   }
 
