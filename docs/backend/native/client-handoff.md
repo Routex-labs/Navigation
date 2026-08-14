@@ -58,7 +58,7 @@
 
 ## 핵심 주의점
 
-- **응답은 단일 `match` 객체다(리스트 아님).** 현재 `repositories/http_destination_repository.dart`는
+- **응답은 단일 `match` 객체다(리스트 아님).** 현재 `repositories/place/http_destination_repository.dart`는
   `/query/destination` 응답을 **`body['result']` 리스트**로 파싱하는데(주석엔 "백엔드는 아직 스텁"),
   실제 백엔드는 `{status, query, match}`를 반환한다 — **낡은 파서라 항상 빈 결과가 된다.**
   `/query/ai` 연동과 함께 이 파싱을 현재 계약(`match` 단일 객체)에 맞춰 고쳐야 한다.
@@ -71,7 +71,7 @@
 
 ## 작업 항목(파일별)
 
-- `repositories/destination_repository.dart` + `http_destination_repository.dart`:
+- `repositories/place/destination_repository.dart` + `http_destination_repository.dart`:
   - `/query/destination` 파서를 현재 계약(`{status, query, match}`)으로 교정.
   - `/query/ai`를 호출하는 메서드(또는 별도 repository) 추가 — 반환은 **단일 match**(store + `entrance_node_id` + 좌표).
 - AI 질의 진입점(상단 검색의 "AI 쿼리" 버튼 또는 전용 입력)에서 `/query/ai`를 호출하고, 결과 매장을

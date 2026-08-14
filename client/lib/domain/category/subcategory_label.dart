@@ -1,6 +1,6 @@
 /// 소분류 원본값을 사용자에게 보여 줄 문구로 바꾼다.
 ///
-/// 아이콘 표(`map/category_icon.dart`)가 아니라 domain에 둔다 — 표시 문구를 고르는
+/// 아이콘 표(`map/icon/category_icon.dart`)가 아니라 domain에 둔다 — 표시 문구를 고르는
 /// 것은 분류 규칙이고, 지도 쪽에 두면 domain이 지도를 import하게 된다.
 library;
 

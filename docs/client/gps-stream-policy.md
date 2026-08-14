@@ -6,8 +6,8 @@
 
 | 파일 | 책임 |
 |---|---|
-| `screens/outdoor_map/gps_session.dart` | 스트림 **수명** — 구독·재연결·벙어리 감시·조용한 구간 메우기 |
-| `screens/outdoor_map/gps_freshness_policy.dart` | 언제 일회성 조회를 쏠지, 재연결 간격은 얼마인지 |
+| `screens/outdoor_map/gps/gps_session.dart` | 스트림 **수명** — 구독·재연결·벙어리 감시·조용한 구간 메우기 |
+| `screens/outdoor_map/gps/gps_freshness_policy.dart` | 언제 일회성 조회를 쏠지, 재연결 간격은 얼마인지 |
 | `screens/outdoor_map/route_recompute_policy.dart` | 그 좌표로 도보 경로를 **언제 다시 계산할지** |
 
 ---

@@ -6,10 +6,10 @@
 
 | 축 | 파일 | 무엇을 본다 |
 |---|---|---|
-| GPS 좌표 | `screens/outdoor_map/indoor_entry_gps.dart` | 좌표가 건물 외곽선 안인가 |
-| zoom | `screens/outdoor_map/indoor_entry_zoom.dart` | 확대 배율이 "들어가겠다"는 의도인가 |
-| 근접 | `screens/outdoor_map/indoor_entry_proximity.dart` | 카메라가 도면 있는 건물 근처인가 |
-| 외곽선 그리기 | `screens/outdoor_map/floor_outline.dart` | 지금 층 테두리를 그릴까 |
+| GPS 좌표 | `screens/outdoor_map/entry/indoor_entry_gps.dart` | 좌표가 건물 외곽선 안인가 |
+| zoom | `screens/outdoor_map/entry/indoor_entry_zoom.dart` | 확대 배율이 "들어가겠다"는 의도인가 |
+| 근접 | `screens/outdoor_map/entry/indoor_entry_proximity.dart` | 카메라가 도면 있는 건물 근처인가 |
+| 외곽선 그리기 | `screens/outdoor_map/entry/floor_outline.dart` | 지금 층 테두리를 그릴까 |
 
 zoom과 근접은 **AND로 묶는다.** 확대만으로 켜면 건물이 없는 엉뚱한 지역(예: 서울
 반대편)을 확대했을 때도 층 선택기와 위치 지정 버튼이 뜬다 — 도면은 한 장도 없는데

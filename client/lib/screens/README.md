@@ -15,6 +15,25 @@
 지도 셸의 시트와 오버레이다. 화면을 넘나들 때마다 지도를 새로 만들고 카메라·층·
 PDR 세션을 인계해야 했는데 그 인계가 자주 실패해서 지도 하나로 합쳤다.
 
+## 화면 안의 폴더
+
+두 화면 모두 파일이 스무 개를 넘어 주제별로 한 겹 더 묶었다.
+
+```
+map_shell/widgets/   search/   검색 입력과 그 결과 목록
+                     sheets/   아래에서 올라오는 시트(place_detail/ 포함)
+                     chrome/   지도 위에 상시 떠 있는 바·칩·덮개
+
+outdoor_map/         parts/    화면 본체의 part 열한 개(`OutdoorMapBodyState`)
+                     entry/    실내 진입·이탈 판정(GPS·zoom·근접·층 외곽선)
+                     gps/      위치 스트림 수명과 신선도
+                     layers/   MapLibre 소스·레이어 등록
+                     camera/   건물 방향 계산과 카메라 명령
+```
+
+`parts/`의 파일 이름에서 `outdoor_map_screen_` 접두사를 뗐다 — 폴더가 그 일을
+대신하므로 이름에 두 번 적을 이유가 없다. `part of`는 `'../outdoor_map_screen.dart'`다.
+
 ## 사용자 흐름
 
 ```mermaid
@@ -27,7 +46,7 @@ flowchart LR
 ```
 
 `MapShellScreen`이 공통 지도 셸과 검색/즐겨찾기/카테고리 시트, 그리고 상단 바 햄버거가
-여는 앱 메뉴(`widgets/app_menu_sheet.dart` — 디버그 설정의 유일한 진입점)를 조립한다.
+여는 앱 메뉴(`widgets/sheets/app_menu_sheet.dart` — 디버그 설정의 유일한 진입점)를 조립한다.
 진단 기능은 별도 화면이 아니라 **디버그 모드 토글**로 지도 위에 겹쳐 보여준다
 ([`features/debug_mode/`](../features/debug_mode/README.md)) — 진단 화면을 따로
 두면 아무도 열지 않아 그대로 썩는다는 것을 한 번 겪었다.

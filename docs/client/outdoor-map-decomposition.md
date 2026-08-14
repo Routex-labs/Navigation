@@ -83,13 +83,13 @@ showIndoorToOutdoorRouteTo showOutdoorToIndoorRouteTo showRouteTo startLocationP
 | 파일 | 내용 |
 |---|---|
 | `outdoor_map_screen.dart` | 상수·위젯 클래스·**상태 필드 전부**·생명주기·build·공개 API 19개 |
-| `outdoor_map_screen_route.dart` | 경로·안내·대중교통 |
-| `outdoor_map_screen_indoor.dart` | 실내 오버레이·층·매장 |
-| `outdoor_map_screen_pdr.dart` | PDR·앵커·보정 |
-| `outdoor_map_screen_escalator.dart` | 에스컬레이터·층 전환 |
-| `outdoor_map_screen_ui.dart` | 시트·배너·`_buildBody` |
-| `outdoor_map_screen_map.dart` | 카메라·스타일·레이어 동기화 |
-| `outdoor_map_screen_gps.dart` | GPS·위치 |
+| `parts/route.dart` | 경로·안내·대중교통 |
+| `parts/indoor.dart` | 실내 오버레이·층·매장 |
+| `parts/pdr.dart` | PDR·앵커·보정 |
+| `parts/escalator.dart` | 에스컬레이터·층 전환 |
+| `parts/ui.dart` | 시트·배너·`_buildBody` |
+| `parts/map.dart` | 카메라·스타일·레이어 동기화 |
+| `parts/gps.dart` | GPS·위치 |
 
 ### mixin이 아니라 extension인 이유
 

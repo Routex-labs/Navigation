@@ -464,7 +464,7 @@ A.P.C. 불변("임베딩은 이름 후보를 덮지 못한다")은 글자 그대
 ## W. 트리거는 엔터가 아니라 「타이핑이 멎었다」 <sub>완료</sub>
 
 `SearchPanel`이 언제 무엇을 부르고 화면 단계를 어떻게 정하는지의 단일 출처다.
-코드는 [`search_panel.dart`](../../client/lib/screens/map_shell/widgets/search_panel.dart).
+코드는 [`search_panel.dart`](../../client/lib/screens/map_shell/widgets/search/search_panel.dart).
 
 ### 문제
 

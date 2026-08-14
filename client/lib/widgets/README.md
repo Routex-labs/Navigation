@@ -26,8 +26,8 @@
 
 ## 검색은 한 곳, 두 단계
 
-검색은 [`map_top_bar.dart`](../screens/map_shell/widgets/map_top_bar.dart)의 검색창에서 **그 자리에서** 이뤄지고,
-결과는 바로 아래에 붙는 [`search_panel.dart`](../screens/map_shell/widgets/search_panel.dart)가 보여준다. 한동안은
+검색은 [`map_top_bar.dart`](../screens/map_shell/widgets/chrome/map_top_bar.dart)의 검색창에서 **그 자리에서** 이뤄지고,
+결과는 바로 아래에 붙는 [`search_panel.dart`](../screens/map_shell/widgets/search/search_panel.dart)가 보여준다. 한동안은
 검색창을 탭하면 입력창이 하나 더 있는 시트가 올라왔는데, 방금 누른 창과 실제로 치는
 창이 달라 검색창이 두 개인 것처럼 보였다. **다만 결과를 놓을 자리는 반드시 있어야
 한다** — 결과 표시 없이 상단에서만 검색하면 그보다 더 예전처럼 스낵바로만 알리게 되어
@@ -68,7 +68,7 @@
 끝나서 "밥 먹을 곳"처럼 이름이 아닌 말은 **항상** "검색 결과가 없습니다"였다 —
 사용자에게는 상단에서는 찾아 주는 말이 길찾기에서는 안 되는, 자리에 따라 다른
 검색이었다. 두 단계는 모두 `map_shell_screen.dart`가 돌리고
-([`route_field_results.dart`](../screens/map_shell/widgets/route_field_results.dart)는 결과만 그린다), 의미 검색은
+([`route_field_results.dart`](../screens/map_shell/widgets/search/route_field_results.dart)는 결과만 그린다), 의미 검색은
 건물 안을 보고 있을 때만 이어 붙인다 — `/query/ai`는 건물 안의 매장을 찾는 계약이라
 밖에서 건물을 고르는 자리에서 승격시키면 눌러도 갈 수 없는 목록이 된다.
 
@@ -90,7 +90,7 @@
 
 ## 햄버거는 앱 메뉴다 — 개발 도구가 들어가는 유일한 문
 
-[`app_menu_sheet.dart`](../screens/map_shell/widgets/app_menu_sheet.dart)는 상단 바 왼쪽 햄버거가 여는 목록이다.
+[`app_menu_sheet.dart`](../screens/map_shell/widgets/sheets/app_menu_sheet.dart)는 상단 바 왼쪽 햄버거가 여는 목록이다.
 한동안 이 버튼은 실내 모드에서만 뜨는 "건물 선택 (테스트)" 시트였다. 건물을 바꿀 일이
 없어져 그 시트는 지웠고, 자리는 화면 구석에 흩어져 있던 진입점을 모으는 데 쓴다 —
 저장한 장소·길찾기·위치 지정/보정·**디버그 설정**.
@@ -102,7 +102,7 @@
 무관하게 고정된다. 그래서 햄버거는 이제 **모드와 상관없이 항상 보인다** — 야외에서
 숨기면 야외 화면에서만 닿지 않는 항목이 생긴다.
 
-시트는 스스로 아무것도 실행하지 않고 고른 [`AppMenuAction`](../screens/map_shell/widgets/app_menu_sheet.dart)만
+시트는 스스로 아무것도 실행하지 않고 고른 [`AppMenuAction`](../screens/map_shell/widgets/sheets/app_menu_sheet.dart)만
 돌려준다. 실제 동작은 지도 상태를 쥔 `map_shell_screen.dart`가 시트가 닫힌 뒤 수행한다
 — 시트가 콜백을 직접 들고 있으면 이미 닫힌 시트의 `context`로 다음 시트를 띄우게 되고,
 그 사이 모드가 바뀌면 옛 상태에 대고 동작한다.
@@ -110,13 +110,13 @@
 **실패 지점.** 목록이 길어지면 기본 시트 높이 상한(화면의 9/16)에 아래쪽 항목부터
 조용히 잘린다. 스크롤 되는 줄 모르는 사용자에게는 "메뉴에 디버그 설정이 없다"가 되므로
 `isScrollControlled: true`로 띄운다. 항목 구성과 반환값은
-[`../../test/screens/map_shell/widgets/app_menu_sheet_test.dart`](../../test/screens/map_shell/widgets/app_menu_sheet_test.dart)가
+[`../../test/screens/map_shell/widgets/app_menu_sheet_test.dart`](../../test/screens/map_shell/widgets/sheets/app_menu_sheet_test.dart)가
 고정한다.
 
 ## 카테고리는 chip 한 번이면 목록이다
 
 지도 위 대분류 chip을 누르면 강조가 걸리는 **동시에**
-[`category_stores_sheet.dart`](../screens/map_shell/widgets/category_stores_sheet.dart)가 열린다. 소분류 pill도 그 시트
+[`category_stores_sheet.dart`](../screens/map_shell/widgets/sheets/category_stores_sheet.dart)가 열린다. 소분류 pill도 그 시트
 안에 있고, 목록만이 아니라 지도 강조까지 함께 바꾼다(`onSubcategoryChanged`).
 
 - **지도 위에는 대분류 줄만 둔다.** 시트가 곧바로 뜨는데 같은 pill 줄을 지도에도 그리면
@@ -138,7 +138,7 @@
 가는 길이 앱에서 사라진 뒤로 한 번도 그려지지 않았다.
 
 지금 실내 도면은 야외 지도 위에 겹치는 오버레이가 그린다
-([`../screens/outdoor_map/indoor_overlay_layers.dart`](../screens/outdoor_map/indoor_overlay_layers.dart)).
+([`../screens/outdoor_map/layers/indoor_overlay_layers.dart`](../screens/outdoor_map/layers/indoor_overlay_layers.dart)).
 그 아래에서 색·라벨·아이콘·경로선 스타일 같은 공유 값은
 [`../map/`](../map/)에 있다 — 지도가 하나가 된 지금도 레이어는 여럿이라
 값의 원본은 한 곳이어야 한다.
@@ -160,8 +160,8 @@
 
 | 하고 싶은 것 | 위치 |
 |---|---|
-| 지도 레이어·마커 변경 | [`../screens/outdoor_map/indoor_overlay_layers.dart`](../screens/outdoor_map/indoor_overlay_layers.dart)와 [`../map/`](../map/) |
-| 경로 모양 변경 | `domain/route_guidance.dart`(`RoutePolylineSplit`)와 `models/indoor_route.dart` |
+| 지도 레이어·마커 변경 | [`../screens/outdoor_map/layers/indoor_overlay_layers.dart`](../screens/outdoor_map/layers/indoor_overlay_layers.dart)와 [`../map/`](../map/) |
+| 경로 모양 변경 | `domain/route_guidance.dart`(`RoutePolylineSplit`)와 `models/route/indoor_route.dart` |
 | 길찾기 출발/도착 입력 변경 | `map_top_bar.dart`(두 칸)와 `route_field_results.dart`(후보 목록) |
 | 공통 색·간격 변경 | [`../theme/README.md`](../theme/README.md) |
 

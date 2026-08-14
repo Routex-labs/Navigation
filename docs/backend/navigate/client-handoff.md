@@ -63,10 +63,10 @@
 
 ## 작업 항목(파일별)
 
-- `repositories/http_building_repository.dart`: 건물 전체 그래프를 받는 fetch 추가
+- `repositories/building/http_building_repository.dart`: 건물 전체 그래프를 받는 fetch 추가
   (캐시 키 `buildingId` + `vertical`). `getShortestRoute`가 단일 층 그래프 대신 이 그래프로
   경로를 내도록 변경(층 간 start/end 지원).
-- `models/floor_graph.dart`(또는 신규 `building_graph.dart`): 노드 `floor_id`, 간선
+- `models/building/floor_graph.dart`(또는 신규 `building_graph.dart`): 노드 `floor_id`, 간선
   `transfer_mode` 파싱 추가.
 - `domain/route/floor_router.dart`: 경로 폴리라인을 층별로 분할하고 전이 지점을 표기(렌더는 층 단위이므로).
 - `domain/route/dijkstra.dart`: **알고리즘 변경 불필요**(이미 방향·가중치 존중). 회귀 확인만.

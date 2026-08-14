@@ -10,9 +10,9 @@
 [wave-plan.md](wave-plan.md)(작업 분해),
 [starbucks-detail-pilot.md](starbucks-detail-pilot.md)(파일럿 데이터·출처)
 
-관련 코드: [place_detail_sheet.dart](../../../client/lib/screens/map_shell/widgets/place_detail_sheet.dart),
-[place_detail/](../../../client/lib/screens/map_shell/widgets/place_detail/)(섹션 렌더러),
-[place_detail.dart](../../../client/lib/models/place_detail.dart)(응답 파싱),
+관련 코드: [place_detail_sheet.dart](../../../client/lib/screens/map_shell/widgets/sheets/place_detail_sheet.dart),
+[place_detail/](../../../client/lib/screens/map_shell/widgets/sheets/place_detail/)(섹션 렌더러),
+[place_detail.dart](../../../client/lib/models/place/place_detail.dart)(응답 파싱),
 [place_detail.py](../../../backend/app/dto/place_detail.py)(DTO),
 [place_details.py](../../../backend/app/repositories/place_details.py)(오버레이 로더·검증기),
 [_schema.json](../../../backend/resources/store_details/_schema.json)
@@ -399,7 +399,7 @@ GET /buildings/{building_id}/places/{place_id}
 | `childList` | Wave 4에서 정의 | — |
 
 **모르는 `type`은 파싱 단계에서 버린다.** 위젯 분기까지 오지 않는다
-([place_detail.dart](../../../client/lib/models/place_detail.dart) `PlaceDetailSection.fromJson`이
+([place_detail.dart](../../../client/lib/models/place/place_detail.dart) `PlaceDetailSection.fromJson`이
 `_ => null`을 반환하고 `whereType`이 걸러낸다). 위젯 레이어의 `switch`는 sealed class라
 컴파일 타임에 전수 검사되고, 런타임 fallback 분기를 두지 않는다.
 

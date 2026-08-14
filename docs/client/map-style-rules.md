@@ -5,17 +5,17 @@
 
 | 주제 | 파일 |
 |---|---|
-| 도면 폴리곤 색 | `map/palette.dart` |
-| 라벨 글자색·헤일로 | `map/label_style.dart` |
-| 대분류 색·글리프 | `map/category_icon.dart` |
-| 카테고리 강조 fill·필터·라벨 | `map/category_map_fill.dart` · `category_map_filter.dart` |
-| 라벨 아이콘 배지 | `map/category_map_icon.dart` |
-| 라벨 크기 맞춤 | `map/store_label_fit.dart` |
-| 라벨 칸 나누기 | `map/store_label_anchor.dart` |
-| POI·편의시설 스타일 | `map/floor_facility_style.dart` |
-| 아이콘 비트맵 캐시 | `map/icon_cache.dart` |
-| 도착지 핀 | `map/destination_pin.dart` |
-| 실내 오버레이 레이어 속성 | `screens/outdoor_map/indoor_overlay_layers.dart` |
+| 도면 폴리곤 색 | `map/style/palette.dart` |
+| 라벨 글자색·헤일로 | `map/style/label_style.dart` |
+| 대분류 색·글리프 | `map/icon/category_icon.dart` |
+| 카테고리 강조 fill·필터·라벨 | `map/style/category_map_fill.dart` · `category_map_filter.dart` |
+| 라벨 아이콘 배지 | `map/icon/category_map_icon.dart` |
+| 라벨 크기 맞춤 | `map/label/store_label_fit.dart` |
+| 라벨 칸 나누기 | `map/label/store_label_anchor.dart` |
+| POI·편의시설 스타일 | `map/style/floor_facility_style.dart` |
+| 아이콘 비트맵 캐시 | `map/icon/icon_cache.dart` |
+| 도착지 핀 | `map/icon/destination_pin.dart` |
+| 실내 오버레이 레이어 속성 | `screens/outdoor_map/layers/indoor_overlay_layers.dart` |
 
 ---
 
@@ -71,7 +71,7 @@ as input to a top-level "step" or "interpolate" expression
 **고치는 법은 곱셈을 밖으로 빼는 것이 아니라 스톱 값 안으로 넣는 것이다.** 페이드 램프의
 시작 스톱이 0이므로, 끝 스톱(maxOpacity)에 계수를 곱한 **최상위 interpolate** 하나가 모든
 zoom에서 곱셈과 같은 값을 낸다. zoom이 최상위 입력으로 남으므로 native가 받아들인다.
-구현은 `screens/outdoor_map/indoor_entry_zoom.dart`.
+구현은 `screens/outdoor_map/entry/indoor_entry_zoom.dart`.
 
 ### MVT 소스 `minzoom`은 **도면이 조금이라도 보이는 zoom을 반드시 덮어야** 한다
 

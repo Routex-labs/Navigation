@@ -99,7 +99,7 @@ chrome 보정과 줌 하한을 한 함수에만 둔 이유는, 각자 갖게 두
 ### 4.1 `newLatLngBounds`는 지도를 정북으로 되돌린다
 
 이 API는 항상 정북 정렬 기준으로 계산해서 bearing이 0으로 리셋된다
-(근거는 `screens/outdoor_map/outdoor_map_screen_route.dart`의
+(근거는 `screens/outdoor_map/parts/route.dart`의
 `_fitCameraToRouteSegment` 주석에 있다). 야외용
 `_fitCameraToRoute(DirectionsRoute)`는 아직 이걸 쓰는데, 야외에는 세워 둘 도면이
 없어서 문제가 되지 않는다. **실내 경로에는 쓰지 말 것.**
@@ -224,14 +224,14 @@ B3~B6은 사방이 잘려 층 전체가 화면에 안 들어온다.
 [dto README의 alias 규칙](../../backend/app/dto/README.md#api-전용-표현들)에 있다.
 
 **여기서 지킬 것은 클라이언트 쪽 세 겹이다.** 파싱은 두 철자를 모두 받고
-(`models/floor_graph.dart`), 그 계약은
+(`models/building/floor_graph.dart`), 그 계약은
 `test/models/floor_graph_parse_test.dart`가 지키며, 삼키는 catch는 반드시 이유를
 로그에 남긴다. 서버를 고치더라도 구 버전 배포에 붙은 앱이 이것 하나로 통째로
 망가지면 안 된다.
 
 ### 4.12 카메라 가둠 — bbox를 넓히는 게 아니라 **깎는다**
 
-`map/floor_camera_bounds.dart`. 묶어 두지 않으면 사용자가 지도를 계속 밀어
+`map/camera/floor_camera_bounds.dart`. 묶어 두지 않으면 사용자가 지도를 계속 밀어
 도면이 화면에서 사라진 뒤에도 얼마든지 더 나갈 수 있고, 그 상태에서는 자기가 어디로
 얼마나 움직였는지 알 방법이 없어 "지도가 없어졌다"가 된다.
 
@@ -299,7 +299,7 @@ bbox를 절반만큼 **넓혀** 봤다가 그 여유만큼 건물이 화면 밖�
 
 ### 4.13 사람이 층을 바꿀 때의 타이밍
 
-`map/floor_switch_progress.dart`. 자동 전환(4.5)과 달리 **덮개를 씌우지 않는다** —
+`map/camera/floor_switch_progress.dart`. 자동 전환(4.5)과 달리 **덮개를 씌우지 않는다** —
 이전 층 도면을 계속 보여 주다가 새 층 타일이 실제로 도착한 뒤 크로스페이드한다. 흰 화면은
 어느 순간에도 없다.
 
@@ -396,8 +396,8 @@ client/lib/screens/outdoor_map/outdoor_map_screen.dart
   _recenterOnCurrentPosition(...)      ← "내 위치로"
   _applyRoute                          ← 4.2 결정을 건드리지 말 것
 
-client/lib/screens/outdoor_map/building_orientation.dart   ← 기하 도구·routeBoxFor
-client/lib/screens/outdoor_map/indoor_entry_zoom.dart      ← zoom 정책·임계값
+client/lib/screens/outdoor_map/camera/building_orientation.dart   ← 기하 도구·routeBoxFor
+client/lib/screens/outdoor_map/entry/indoor_entry_zoom.dart      ← zoom 정책·임계값
 client/lib/screens/outdoor_map/widgets/guidance_recenter_button.dart           ← 안내 중 되돌릴 수단
 client/lib/domain/guidance/guidance_chrome.dart                     ← 안내 중 chrome 규칙
 ```

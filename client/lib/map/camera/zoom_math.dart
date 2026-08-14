@@ -1,7 +1,7 @@
 /// MapLibre의 zoom과 실제 미터를 오가는 계산.
 ///
 /// **정책이 아니라 산수다.** 어느 배율에서 실내로 넘어갈지 같은 판단은 여기 없고
-/// (`screens/outdoor_map/indoor_entry_zoom.dart`), "이 폭을 담으려면 zoom이
+/// (`screens/outdoor_map/entry/indoor_entry_zoom.dart`), "이 폭을 담으려면 zoom이
 /// 얼마인가"만 있다. 그래서 지도 표현 쪽(라벨 크기)과 화면 정책 쪽이 같은 식을
 /// 나눠 쓸 수 있다 — 두 벌로 두면 한쪽만 고쳐 조용히 어긋난다.
 library;

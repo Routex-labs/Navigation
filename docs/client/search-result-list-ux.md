@@ -249,7 +249,7 @@ if (results.isEmpty && building == null) {
 
 전부 자동 테스트로 덮었다 — 순수 함수는
 [`nearest_store_test.dart`](../../client/test/domain/store/nearest_store_test.dart), 화면 배선은
-[`search_panel_test.dart`](../../client/test/screens/map_shell/widgets/search_panel_test.dart)의
+[`search_panel_test.dart`](../../client/test/screens/map_shell/widgets/search/search_panel_test.dart)의
 「후보 목록의 거리와 대표 층」 그룹이다.
 
 - [x] 위치가 있을 때 후보 행에 `Nm · 도보 N분`이 뜬다 — 묶인 시설·단일 매장 양쪽

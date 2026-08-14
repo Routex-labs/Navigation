@@ -29,7 +29,7 @@
 
 ```
 main
- └─ claude/msa-solid-structure-review-ci8j9p-2   (+14)  버그 수정 3 · 분할 5 · 문서
+ └─ claude/msa-solid-structure-review-ci8j9p-2   (+90)  버그 수정 3 · 분할 5 · 문서
      └─ refactor/outdoor-map-decomposition       (+83)  갓클래스 해체 + 구조 개편
 ```
 
@@ -72,12 +72,11 @@ adb install -r "C:/Users/HANSUNG/apk-baseline/field-baseline-msa-branch-1.5.1.ap
 - **08 마커 크기** — 층 전환 덮개의 점과 지도 마커가 같은 크기인지. 주석은 "같다"고
   단언하는데 상수를 따라가면 지도 쪽이 2배로 읽힌다. 눈으로 정해야 한다.
 
-## 지금 하는 중 — 폴더 더 묶기
+## 방금 끝난 것 — 주석 2차 압축과 폴더 묶기
 
-사용자 지시는 둘이었다. **"이미 짧은 건 놔두고, 화면에 주석밖에 없는 파일을 전부"**
-압축할 것, 그리고 **"패키지 내에서도 패키지로 더 묶을"** 것. **앞의 것은 끝났다.**
+사용자 지시 둘이었고 **둘 다 끝났다.**
 
-### 1. 주석 2차 압축 — 완료
+### 1. 주석 2차 압축
 
 | | 시작 | 지금 |
 |---|---|---|
@@ -87,39 +86,43 @@ adb install -r "C:/Users/HANSUNG/apk-baseline/field-baseline-msa-branch-1.5.1.ap
 
 **지운 근거는 없다.** 실측 로그·버린 대안은 전부 문서로 옮기고 코드에는 경로만
 남겼다. 새로 만든 문서는 [에스컬레이터 임계값](client/escalator-thresholds.md)
-하나이고, 나머지는 기존 문서에 절을 붙였다 — 검색 입력 보조 W절(트리거·디바운스),
-검색 결과 목록 X절(바깥 POI 병합), 지도 스타일 0·5·7절(MapLibre 함정 둘, 라벨 크기
-밴드 이력, 마커 지름), 카메라 연출 4.12·4.13(가둠 비율, 사람 조작 층 전환 타이밍),
-GPS 스트림 3절(안드로이드 기본 간격).
+하나이고, 나머지는 기존 문서에 절을 붙였다 — 검색 입력 보조 W절, 검색 결과 목록
+X절, 지도 스타일 0·5·7절, 카메라 연출 4.12·4.13, GPS 스트림 3절.
 
 **상한을 조여 뒀다.** `client/test/lib_header_comment_length_test.dart`가 파일 머리
 8줄·한 덩어리 13줄을 검사한다. 두 값 모두 **지금 최대치 바로 위**다 — 상한이 실제보다
 높으면 그 사이만큼 다시 자란다. 걸리면 지우지 말고 `docs/`로 옮긴다.
 
 > **붙어 버린 주석이 지금까지 일곱 나왔다.** A 선언의 doc이 B 선언 위에 얹힌 자리다
-> (`outdoor_map_tuning`의 `carGuidanceZoom`, `outdoor_map_screen`의 `_pendingFloorFit`,
-> `outdoor_map_screen_indoor`의 `_fitCameraToActiveFloor`·`_dropIndoorPosition`·
-> `_indoorPositionPlaced`, `map_shell_screen`의 `_startRoute`·`_openFavorites`).
-> 마지막 것은 낡기까지 해서 아래 문단과 **서로 반대되는 말**을 하고 있었다.
-> 요약 문단이 두 개인 블록을 보면 의심한다.
+> (`outdoor_map_tuning`의 `carGuidanceZoom`, `outdoor_map_screen.dart`의
+> `_pendingFloorFit`, `parts/indoor.dart`의 `_fitCameraToActiveFloor`·
+> `_dropIndoorPosition`·`_indoorPositionPlaced`, `map_shell_screen`의 `_startRoute`·
+> `_openFavorites`). 마지막 것은 낡기까지 해서 아래 문단과 **서로 반대되는 말**을
+> 하고 있었다. 요약 문단이 두 개인 블록을 보면 의심한다.
 
-### 2. 폴더 더 묶기 (아직)
+### 2. 폴더 묶기
 
-`domain/`처럼 나머지도 주제별로 묶는다. 이동 스크립트는 `part`/`part of`까지
-처리하도록 고쳐 두었다.
+다섯 디렉터리를 주제별로 한 겹 더 나눴다. 자세한 것은
+[구조 개편 계획 14단계](client/structure-plan.md).
 
 ```
-screens/outdoor_map/         parts/ entry/ gps/ layers/ camera/
-map/                         style/ label/ icon/ layer/ camera/
 models/                      building/ place/ route/
-repositories/                building/ place/ routing/
+repositories/                building/ place/ routing/     ← models와 같은 이름
+map/                         style/ label/ icon/ camera/
 screens/map_shell/widgets/   search/ sheets/ chrome/
+screens/outdoor_map/         parts/ entry/ gps/ layers/ camera/
 ```
 
-**옮긴 뒤 반드시 함께 고칠 것** — `client/test/`(구조를 미러한다), 각 디렉터리
-README와 그 "다음 읽기" 체인, `docs/`의 경로 문자열, `lib_layer_direction_test.dart`의
-등급표. 지금 깨진 링크는 `docs/` 안에 0건이니 그 상태를 유지한다(저장소 전체로는
-8건이 남아 있는데 전부 이 작업과 무관한 옛 파일이다 — VERSION.md·issues/·PR 템플릿).
+**본문은 한 글자도 안 바꿨다** — 다섯 커밋에서 바뀐 줄은 전부 import 경로다.
+`parts/`에서는 `outdoor_map_screen_` 접두사를 뗐다.
+
+> **다음에 파일을 옮길 때 함께 볼 것.**
+> - `lib_layer_direction_test.dart`의 등급표는 경로 **첫 조각**만 본다 — 최상위
+>   디렉터리를 바꿀 때만 손대면 된다.
+> - **경로를 글자로 박아 둔 테스트**가 있다(`pretendard_font_assets_test`). analyze는
+>   통과하고 테스트만 깨지므로 `flutter test`까지 돌려야 보인다.
+> - 디렉터리 README의 파일 표와 `docs/`의 경로 문자열이 함께 썩는다. 링크 검사로
+>   훑으면 한 번에 잡힌다(이 작업 전후 모두 깨진 링크 8건, 전부 무관한 옛 파일).
 
 > **`dart format`을 전체에 돌리지 말 것.** 이 환경의 포맷터 버전이 저장소와 달라
 > 무관한 파일 65개를 쓸고 그중 하나는 lint를 깼다(`if (cond)` 줄바꿈). 건드린

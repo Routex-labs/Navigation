@@ -8,17 +8,17 @@
 | 찾는 것 | 파일 | 줄 |
 |---|---|---|
 | 상태 필드·생명주기·`build`·공개 API 19개 | `outdoor_map_screen.dart` | 1,967 |
-| 경로 **계산**(TMAP·실내 그래프·pending 인계) | `outdoor_map_screen_route.dart` | 1,148 |
-| 실내 오버레이·건물 로드·카메라 맞춤 | `outdoor_map_screen_indoor.dart` | 976 |
-| PDR·앵커·보정 | `outdoor_map_screen_pdr.dart` | 657 |
-| 에스컬레이터 탑승·하차 판정 | `outdoor_map_screen_escalator.dart` | 605 |
-| 시트·배너·`_buildBody` | `outdoor_map_screen_ui.dart` | 485 |
-| 카메라·스타일 | `outdoor_map_screen_map.dart` | 395 |
-| **층 전환 크로스페이드**·세대 관리 | `outdoor_map_screen_floor_switch.dart` | 328 |
-| **안내 진행률·도착 판정**·기록 세션 | `outdoor_map_screen_guidance.dart` | 298 |
-| GPS·위치 | `outdoor_map_screen_gps.dart` | 285 |
-| **매장 탭 판정**(화면 좌표 → 매장) | `outdoor_map_screen_store_tap.dart` | 204 |
-| **경로·목적지를 지도에 쓰기**(sync 계열) | `outdoor_map_screen_route_layers.dart` | 203 |
+| 경로 **계산**(TMAP·실내 그래프·pending 인계) | `parts/route.dart` | 1,148 |
+| 실내 오버레이·건물 로드·카메라 맞춤 | `parts/indoor.dart` | 976 |
+| PDR·앵커·보정 | `parts/pdr.dart` | 657 |
+| 에스컬레이터 탑승·하차 판정 | `parts/escalator.dart` | 605 |
+| 시트·배너·`_buildBody` | `parts/ui.dart` | 485 |
+| 카메라·스타일 | `parts/map.dart` | 395 |
+| **층 전환 크로스페이드**·세대 관리 | `parts/floor_switch.dart` | 328 |
+| **안내 진행률·도착 판정**·기록 세션 | `parts/guidance.dart` | 298 |
+| GPS·위치 | `parts/gps.dart` | 285 |
+| **매장 탭 판정**(화면 좌표 → 매장) | `parts/store_tap.dart` | 204 |
+| **경로·목적지를 지도에 쓰기**(sync 계열) | `parts/route_layers.dart` | 203 |
 
 part가 아닌 이웃 파일 둘도 여기서 갈라져 나왔다.
 
@@ -75,16 +75,16 @@ Dart의 파일 단위 프라이버시(`_`) 때문에 공개로 바꾼 것이고,
 | 옛 심볼 | 새 위치 | 커밋 |
 |---|---|---|
 | `emptyGeoJsonCollection` `geoJsonCollection` `geoJsonLineFeature` (private) | `map/geojson.dart` (동명 공개) | 53a962b |
-| `_registerDebugPdrLayers` | `screens/outdoor_map/pdr_debug_map_layers.dart:registerPdrDebugLayers` | 6082e6f |
+| `_registerDebugPdrLayers` | `screens/outdoor_map/layers/pdr_debug_map_layers.dart:registerPdrDebugLayers` | 6082e6f |
 | `_syncDebugPdrLayers`의 지도 쓰기 부분 | 〃 `syncPdrDebugLayers` | 6082e6f |
 | `_setTrail` | 〃 `_setTrail`(파일 private) | 6082e6f |
 | `_renderPdrLocationIcon` | `widgets/location_marker_icon.dart:renderLocationMarkerIcon` | a3d8b6d |
 | `_pdrLocationIconPixelRatio` `_pdrLocationCoreRadius` `_pdrLocationRimRadius` | 〃 `kLocationMarkerIcon*` | a3d8b6d |
 | `FloorPlanViewState._renderCurrentLocationIcon` | 〃 (같은 함수로 통합) | a3d8b6d |
-| 대중교통 소스·레이어 등록 (`_onStyleLoaded` 안) | `screens/outdoor_map/transit_map_layers.dart:registerTransitLayers` | 7683ba0 |
+| 대중교통 소스·레이어 등록 (`_onStyleLoaded` 안) | `screens/outdoor_map/layers/transit_map_layers.dart:registerTransitLayers` | 7683ba0 |
 | `_syncTransitLayer`의 feature 변환·쓰기 | 〃 `syncTransitLayer` | 7683ba0 |
 | `_badgeImageFor` | 〃 `_badgeImageFor`(파일 private) | 7683ba0 |
-| 경로선 소스·레이어 등록 (`_onStyleLoaded` 안) | `screens/outdoor_map/route_map_layers.dart:registerRouteLayers` / `registerTransferRouteLayer` | 2a327cd |
+| 경로선 소스·레이어 등록 (`_onStyleLoaded` 안) | `screens/outdoor_map/layers/route_map_layers.dart:registerRouteLayers` / `registerTransferRouteLayer` | 2a327cd |
 | `_routeSourceId` `_walkedRouteSourceId` `_transferRouteSourceId` `_routeCasingLayerId` | 〃 `kOutdoorRoute*` / `kOutdoorRouteCasingLayerId` | 2a327cd |
 | `_searchDirectionsCandidates` (map_shell) | `screens/map_shell/directions_candidates.dart:searchDirectionsCandidates` | 0f71a80 |
 | `_semanticDirectionsCandidates` `_mergeOutdoorResults` `_storeCandidate` `_outdoorRowCandidate` `_buildingDestinationPoint` (map_shell) | 〃 | 0f71a80 |
@@ -93,7 +93,7 @@ Dart의 파일 단위 프라이버시(`_`) 때문에 공개로 바꾼 것이고,
 
 | 옛 심볼 | 새 위치 | 커밋 |
 |---|---|---|
-| `_currentSourceId` `_destSourceId` `_indoorDestSourceId` | `screens/outdoor_map/marker_map_layers.dart:kOutdoorCurrentSourceId` / `kOutdoorDestSourceId` / `kOutdoorIndoorDestSourceId` | 8a3b1d2 |
+| `_currentSourceId` `_destSourceId` `_indoorDestSourceId` | `screens/outdoor_map/layers/marker_map_layers.dart:kOutdoorCurrentSourceId` / `kOutdoorDestSourceId` / `kOutdoorIndoorDestSourceId` | 8a3b1d2 |
 | `_accuracyLayerId` `_currentDotLayerId` `_destLayerId` `_destinationPinImageName` `_destinationPinIconSizeZ16/Z20` | 〃 (파일 private) | 8a3b1d2 |
 | `_indoorDestLayerId` | 〃 `kOutdoorIndoorDestLayerId` | 8a3b1d2 |
 | 현재 위치·목적지 소스/레이어 등록 (`_onStyleLoaded` 안) | 〃 `registerCurrentLocationLayers` / `registerDestinationLayer` | 8a3b1d2 |
@@ -101,14 +101,14 @@ Dart의 파일 단위 프라이버시(`_`) 때문에 공개로 바꾼 것이고,
 | `_addIndoorDestinationPinLayer` | 〃 `addIndoorDestinationPinLayer` | 8a3b1d2 |
 | `_pointFeature` | 〃 `pointFeature` | 8a3b1d2 |
 | `_syncCurrentLayer` `_syncDestinationLayer` `_syncIndoorDestinationLayer`의 쓰기 부분 | 〃 `syncPointSource`(셋이 공유) | 8a3b1d2 |
-| `_buildingSourceId` `_dimScrimSourceId` `_floorOutlineSourceId` `_highlightSourceId` | `screens/outdoor_map/shape_map_layers.dart:kOutdoorBuilding/DimScrim/FloorOutline/HighlightSourceId` | 981c022 |
+| `_buildingSourceId` `_dimScrimSourceId` `_floorOutlineSourceId` `_highlightSourceId` | `screens/outdoor_map/layers/shape_map_layers.dart:kOutdoorBuilding/DimScrim/FloorOutline/HighlightSourceId` | 981c022 |
 | `_buildingFillLayerId` `_dimScrimFillLayerId` | 〃 `kOutdoorBuildingFillLayerId` / `kOutdoorDimScrimFillLayerId` | 981c022 |
 | `_floorOutlineLayerId` `_highlightFillLayerId` `_highlightLineLayerId` `_highlightFillOpacity` | 〃 (파일 private) | 981c022 |
 | 건물·스크림·외곽선·강조 등록 (`_onStyleLoaded` 안) | 〃 `registerBuildingAndScrimLayers` / `registerFloorOutlineLayer` / `registerHighlightLayers` | 981c022 |
 | `_closedRing` | 〃 `closedRing` | 981c022 |
 | `_syncBuildingLayer` `_syncFloorOutlineLayer` `_syncHighlightLayer`의 쓰기 부분 | 〃 `syncPolygonSource`(셋이 공유) | 981c022 |
 | `_syncDimScrimLayer`의 geometry 쓰기 부분 | 〃 `syncDimScrimSource` (opacity 판단은 화면에 남음) | 981c022 |
-| `_pdrCurrentSourceId` | `screens/outdoor_map/marker_map_layers.dart:kOutdoorPdrCurrentSourceId` | 4c4981a |
+| `_pdrCurrentSourceId` | `screens/outdoor_map/layers/marker_map_layers.dart:kOutdoorPdrCurrentSourceId` | 4c4981a |
 | `_pdrCurrentLayerId` `_pdrLocationImageName` `_pdrLocationDotImageName` | 〃 (파일 private) | 4c4981a |
 | PDR 마커 비트맵·소스·레이어 등록 (`_onStyleLoaded` 안) | 〃 `registerPdrLocationImages` / `registerPdrLocationLayer` | 4c4981a |
 | `_syncPdrCurrentLayer`의 feature 조립 | 〃 `pdrLocationData` (쓰기 큐·revision 판단은 화면에 남음) | 4c4981a |
@@ -122,7 +122,7 @@ Dart의 파일 단위 프라이버시(`_`) 때문에 공개로 바꾼 것이고,
 
 | 옛 심볼 | 새 위치 | 커밋 |
 |---|---|---|
-| `_animateCameraToFitBox`의 계산·호출 부분 | `screens/outdoor_map/map_camera_commands.dart:animateCameraToFitBox` | 4cf5802 |
+| `_animateCameraToFitBox`의 계산·호출 부분 | `screens/outdoor_map/camera/map_camera_commands.dart:animateCameraToFitBox` | 4cf5802 |
 | `_fitCameraToPoints`의 bbox 계산·호출 | 〃 `animateCameraToPoints` | 4cf5802 |
 | `_moveCameraToUser`의 호출 부분 | 〃 `animateCameraToPoint` | 4cf5802 |
 | `_recenterOnCurrentPosition`의 호출 부분 | 〃 `recenterKeepingBearing` | 4cf5802 |
@@ -139,7 +139,7 @@ Dart의 파일 단위 프라이버시(`_`) 때문에 공개로 바꾼 것이고,
 
 | 옛 심볼 | 새 위치 | 커밋 |
 |---|---|---|
-| `_positionSubscription` `_streamRetryDelay` `_streamRetryTimer` `_streamDeliveredFix` `_streamFirstFixTimer` `_freshFixTimer` `_freshFixInFlight` `_lastFixReceivedAt` | `screens/outdoor_map/gps_session.dart:GpsSession`(전부 private 필드) | ac32f7c |
+| `_positionSubscription` `_streamRetryDelay` `_streamRetryTimer` `_streamDeliveredFix` `_streamFirstFixTimer` `_freshFixTimer` `_freshFixInFlight` `_lastFixReceivedAt` | `screens/outdoor_map/gps/gps_session.dart:GpsSession`(전부 private 필드) | ac32f7c |
 | `_streamRestartCount` `_lastFixFromStream` | 〃 `restartCount` / `lastFixFromStream` 게터 | ac32f7c |
 | `_subscribeToPositions` | 〃 `_subscribe` | ac32f7c |
 | `_handlePositionStreamClosed` | 〃 `_handleClosed` | ac32f7c |
@@ -175,7 +175,7 @@ Dart의 파일 단위 프라이버시(`_`) 때문에 공개로 바꾼 것이고,
 
 | 옛 심볼 | 새 위치 | 커밋 |
 |---|---|---|
-| `_indoorIdGeneration` `_indoorTilesSourceId` `_indoorFootprintLayerId` `_indoorStoresFillLayerId` `_indoorCategoryHighlightFillLayerId` `_indoorVerticalTransportFillLayerId` `_indoorStoresLabelLayerId` `_indoorSharedStoresLabelLayerId` `_indoorFacilityLabelLayerId` `_indoorPoiIconLayerId` `_indoorStoreFacilityIconLayerId` | `screens/outdoor_map/indoor_overlay_layers.dart:IndoorOverlayIds`의 게터 | a1bc6d2 |
+| `_indoorIdGeneration` `_indoorTilesSourceId` `_indoorFootprintLayerId` `_indoorStoresFillLayerId` `_indoorCategoryHighlightFillLayerId` `_indoorVerticalTransportFillLayerId` `_indoorStoresLabelLayerId` `_indoorSharedStoresLabelLayerId` `_indoorFacilityLabelLayerId` `_indoorPoiIconLayerId` `_indoorStoreFacilityIconLayerId` | `screens/outdoor_map/layers/indoor_overlay_layers.dart:IndoorOverlayIds`의 게터 | a1bc6d2 |
 | `_idFor` `_bumpIndoorIds` | 〃 `_idFor` / `next()` | a1bc6d2 |
 | `_indoorOverlayLayerIds` | 〃 `layersTopFirst` | a1bc6d2 |
 | `_indoor*LayerIdBase` 상수 10개 | 〃 게터 안으로 인라인 | a1bc6d2 |

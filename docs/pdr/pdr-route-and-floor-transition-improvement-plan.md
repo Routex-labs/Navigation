@@ -726,7 +726,7 @@ flutter test test/features/indoor_navigation/corridor_replay_test.dart
 flutter test test/features/indoor_navigation/escalator_transition_detector_test.dart
 flutter test test/features/indoor_navigation/contract_test.dart
 flutter test test/domain/route_progress_test.dart
-flutter test test/widgets/floor_transition_overlay_test.dart
+flutter test test/screens/map_shell/widgets/chrome/floor_transition_overlay_test.dart
 flutter analyze
 ```
 

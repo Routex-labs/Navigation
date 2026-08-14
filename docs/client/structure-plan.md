@@ -57,7 +57,7 @@
 | `_search` (search_panel) | 163 | 4 | 4 | 0 | 0 | 경량 검색 + 의미 검색 + 상태 |
 | ~~`onAltitude` (escalator detector)~~ | 331 | 0 | 0 | 0 | 0 | 판정 단계 6개가 한 함수 → **41줄**(7단계) |
 
-파일별로는 `floor_plan_view`(334점) · `map_shell_screen`(285) · `outdoor_map_screen_route`(186)
+파일별로는 `floor_plan_view`(334점) · `map_shell_screen`(285) · `parts/route`(186)
 · `search_panel`(167) 순이었다. 1위가 삭제됐으니 **지금 남은 최악은 `map_shell_screen`**이고,
 그 다음이 한 함수에 판정 6단계가 들어 있는 `onAltitude`(에스컬레이터 검출기)다.
 
@@ -94,8 +94,8 @@
 | `features/indoor_navigation/application/corridor_position_tracker.dart` | 2,093 |
 | `features/indoor_navigation/application/indoor_guidance_session.dart` | 876 |
 | `features/indoor_navigation/application/floor_map_matcher.dart` | 705 |
-| `models/transit_route.dart` | 462 |
-| `map/floor_facility_style.dart` | 390 |
+| `models/route/transit_route.dart` | 462 |
+| `map/style/floor_facility_style.dart` | 390 |
 | `screens/map_shell/directions_candidates.dart` | 280 |
 
 ## 문제 4 — 앱에서 닿지 않는 화면이 있었다 (해결: 5,135줄 삭제)
@@ -149,7 +149,7 @@
 |---|---|
 | `repositories/mock_*_repository.dart` | 테스트 30여 개가 쓰는 대역이다 |
 | `features/indoor_navigation/debug/pdr_device_harness*` | 자기 `main()`을 가진 실기기 하니스 |
-| `repositories/tmap_transit_repository.dart` | 카카오 키가 소진되면 되돌릴 대체 구현이라고 코드가 명시한다 |
+| `repositories/routing/tmap_transit_repository.dart` | 카카오 키가 소진되면 되돌릴 대체 구현이라고 코드가 명시한다 |
 
 ### 남은 것
 
@@ -198,6 +198,37 @@ lib/
 | 10 | 야외 지도 파일을 관심사별로 더 가르기 | 본체 2,250 → 1,967줄 | **완료** (0b6e534, 91eda5d, 22ab08f, 1a9866b) |
 | 11 | 주석의 자리 나누기 | 머리 주석 1,122 → 463줄 | **완료** (c81c99a, 92d3b4b, 7610f8b, c00c202) |
 | 12 | 계층 방향 세우기 + 주제별 폴더 | 위반 6 → 0 | **완료** (43e897d, 853e58d, 41540bc, 2b064fd) |
+| 13 | 주석 2차 압축 + 상한 조이기 | 12,239 → 9,649줄 | **완료** (69a8f94a … f82e684e) |
+| 14 | 폴더 안에서 한 겹 더 묶기 | 5개 디렉터리 · 147파일 | **완료** (db2cabfb, d84db884, fc2eef21, b93d9763, fc742aa0) |
+
+### 14단계 — 폴더 안에서 한 겹 더 묶었다
+
+12단계가 `domain/`을 여섯으로 가른 뒤, 남은 다섯 디렉터리도 파일이 15~30개씩이라
+목록을 훑어야 원하는 파일을 찾을 수 있었다. 같은 기준(**함께 바뀌는가**)으로 한 겹
+더 묶는다.
+
+| 디렉터리 | 나눈 것 | 커밋 |
+|---|---|---|
+| `models/` | `building/` `place/` `route/` | db2cabfb |
+| `repositories/` | `building/` `place/` `routing/` — models와 같은 이름 | d84db884 |
+| `map/` | `style/` `label/` `icon/` `camera/` | fc2eef21 |
+| `screens/map_shell/widgets/` | `search/` `sheets/` `chrome/` | b93d9763 |
+| `screens/outdoor_map/` | `parts/` `entry/` `gps/` `layers/` `camera/` | fc742aa0 |
+
+**본문은 한 글자도 바꾸지 않았다.** 다섯 커밋에서 바뀐 줄은 전부 import 경로이고,
+`git mv`라 이력도 따라온다. 검증은 매 단계 `flutter analyze` 0건 + 테스트 1,458개다.
+
+`parts/`에서는 `outdoor_map_screen_` 접두사를 뗐다 — 폴더가 그 일을 대신하므로 이름에
+두 번 적을 이유가 없다(`map/`에서 `map_` 접두사를 뗀 것과 같다). `part of`는
+`'../outdoor_map_screen.dart'`로 한 단계 올라간다.
+
+**등급표는 손대지 않았다.** `lib_layer_direction_test.dart`는 경로의 **첫 조각**만 보고
+등급을 매기므로, 최상위 디렉터리가 그대로인 한 하위 폴더는 검사에 영향이 없다. 이건
+운이 아니라 그 테스트가 처음부터 그렇게 쓰였기 때문이다.
+
+**함께 고친 것** — 경로를 글자로 박아 둔 테스트 하나(`pretendard_font_assets_test`),
+디렉터리 README 넷의 파일 표, 문서 25곳의 경로 문자열. 깨진 링크는 이 작업 전후 모두
+8건이고 전부 이 작업과 무관한 옛 파일이다(VERSION.md · issues/ · PR 템플릿).
 
 ### 12단계 — 계층은 이미 있었고, 이름과 강제가 없었다
 
@@ -308,7 +339,7 @@ lib/
 | 파일 | 줄 | 왜 이것부터인가 | 케이스 |
 |---|---|---|---|
 | `features/debug_mode/landmark_cardinal_calibration.dart` | 170 | 실내 **북쪽**을 정한다. 틀리면 도면 전체가 돌아간 채로 그려지는데 화면에는 오류가 없다 — 각도는 언제나 하나 나온다 | 11 |
-| `screens/outdoor_map/gps_session.dart` | 224 | 스트림이 죽는 방식이 셋인데 **2번·3번이 차례로 빠져 있던 적이 있다.** 인계 문서에 "재시작이 잦다"가 미해결로 남아 있었다 | 11 |
+| `screens/outdoor_map/gps/gps_session.dart` | 224 | 스트림이 죽는 방식이 셋인데 **2번·3번이 차례로 빠져 있던 적이 있다.** 인계 문서에 "재시작이 잦다"가 미해결로 남아 있었다 | 11 |
 | `widgets/transit_style.dart` | 129 | 전부 순수 함수라 붙이는 비용이 거의 0인데 비어 있었다 | 14 |
 
 ### 차이만 재는 테스트는 상수 오차를 못 본다
