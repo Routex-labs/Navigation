@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import 'package:navigation_client/screens/outdoor_map/indoor_overlay_layers.dart';
-import 'package:navigation_client/widgets/category_map_filter.dart';
+import 'package:navigation_client/core/map/category_map_filter.dart';
 
 /// 실기기에서 건물이 **불투명한 검정 덩어리**로 덮이던 회귀를 막는 테스트.
 ///

@@ -1,0 +1,123 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/models/place_detail.dart';
+import 'package:navigation_client/screens/map_shell/widgets/place_detail/place_detail_hours_section.dart';
+
+/// 판정 자체는 `test/domain/store_hours_test.dart`가 본다. 여기서 보는 것은
+/// **그 결과가 화면의 어떤 문장이 되는가**와 접힘/펼침이다.
+void main() {
+  HoursSection hours({
+    List<StoreHoursException> exceptions = const [],
+    String confirmedAt = '2026-08-10',
+  }) => HoursSection(
+    weekly: const {
+      'mon': [],
+      'tue': [StoreHoursInterval(open: '10:30', close: '20:00')],
+      'wed': [StoreHoursInterval(open: '10:30', close: '20:00')],
+      'thu': [StoreHoursInterval(open: '10:30', close: '20:00')],
+      'fri': [StoreHoursInterval(open: '10:30', close: '20:30')],
+      'sat': [StoreHoursInterval(open: '10:30', close: '20:30')],
+      'sun': [StoreHoursInterval(open: '10:30', close: '20:30')],
+    },
+    exceptions: exceptions,
+    utcOffsetMinutes: 540,
+    confirmedAt: confirmedAt,
+  );
+
+  /// 매장 현지(KST) 벽시계 → 기기 시각.
+  DateTime kst(int year, int month, int day, int hour, [int minute = 0]) =>
+      DateTime.utc(
+        year,
+        month,
+        day,
+        hour,
+        minute,
+      ).subtract(const Duration(minutes: 540));
+
+  Future<void> pump(
+    WidgetTester tester,
+    HoursSection section,
+    DateTime now,
+  ) => tester.pumpWidget(
+    MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: PlaceHoursSection(hours: section, now: now),
+        ),
+      ),
+    ),
+  );
+
+  testWidgets('영업 중이면 닫는 시각을 함께 말한다', (tester) async {
+    await pump(tester, hours(), kst(2026, 8, 11, 14));
+
+    expect(find.textContaining('영업 중'), findsOneWidget);
+    expect(find.textContaining('20:00 종료'), findsOneWidget);
+  });
+
+  testWidgets('폐점 후에는 다음 개점 시각을 말한다', (tester) async {
+    await pump(tester, hours(), kst(2026, 8, 11, 21));
+
+    expect(find.textContaining('영업 종료'), findsOneWidget);
+    expect(find.textContaining('내일 10:30 영업 시작'), findsOneWidget);
+  });
+
+  // 오늘 줄만 펴 두는 이유는 나머지 섹션이 화면 밖으로 밀리지 않게 하기 위해서다.
+  testWidgets('접혀 있으면 오늘 줄만 보이고 펼치면 7일이 나온다', (tester) async {
+    await pump(tester, hours(), kst(2026, 8, 11, 14));
+
+    expect(find.textContaining('화(8/11)'), findsOneWidget);
+    expect(find.textContaining('수(8/12)'), findsNothing);
+
+    await tester.tap(find.textContaining('영업 중'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('수(8/12)'), findsOneWidget);
+    // 다음 월요일까지 7일.
+    expect(find.textContaining('월(8/17)'), findsOneWidget);
+  });
+
+  testWidgets('휴무 요일은 휴무로 적는다', (tester) async {
+    await pump(tester, hours(), kst(2026, 8, 10, 12));
+
+    expect(find.text('휴무'), findsOneWidget);
+  });
+
+  // 예외 사유를 빼면 휴점일이 "그냥 닫힌 날"과 구분되지 않는다.
+  testWidgets('예외 날짜에는 사유를 함께 적는다', (tester) async {
+    await pump(
+      tester,
+      hours(
+        exceptions: const [
+          StoreHoursException(
+            date: '2026-08-11',
+            closed: true,
+            intervals: [],
+            note: '백화점 정기 휴점',
+          ),
+        ],
+      ),
+      kst(2026, 8, 11, 14),
+    );
+
+    expect(find.text('백화점 정기 휴점'), findsOneWidget);
+    expect(find.text('휴무'), findsOneWidget);
+  });
+
+  // 낡은 데이터에서 "영업 종료"로 떨어뜨리면 열려 있는 매장을 돌려보낸다.
+  testWidgets('확인일이 오래되면 판정 대신 안내를 보여 준다', (tester) async {
+    await pump(tester, hours(confirmedAt: '2026-01-01'), kst(2026, 8, 11, 14));
+
+    expect(find.textContaining('오래됐'), findsWidgets);
+    expect(find.textContaining('영업 중'), findsNothing);
+    // 판정만 거두고 요일 표는 남긴다 — 통째로 지우면 "정보가 없는 앱"이 된다.
+    expect(find.textContaining('화(8/11)'), findsOneWidget);
+    expect(find.textContaining('10:30 - 20:00'), findsOneWidget);
+  });
+
+  testWidgets('확인일을 늘 적는다', (tester) async {
+    await pump(tester, hours(), kst(2026, 8, 11, 14));
+
+    expect(find.text('2026-08-10 확인'), findsOneWidget);
+  });
+}

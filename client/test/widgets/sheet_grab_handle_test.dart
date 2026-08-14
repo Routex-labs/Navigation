@@ -7,10 +7,10 @@ import 'package:navigation_client/repositories/building_repository.dart';
 import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/repositories/mock_building_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
-import 'package:navigation_client/widgets/app_menu_sheet.dart';
-import 'package:navigation_client/widgets/category_stores_sheet.dart';
-import 'package:navigation_client/widgets/favorites_sheet.dart';
-import 'package:navigation_client/widgets/place_detail_sheet.dart';
+import 'package:navigation_client/screens/map_shell/widgets/app_menu_sheet.dart';
+import 'package:navigation_client/screens/map_shell/widgets/category_stores_sheet.dart';
+import 'package:navigation_client/screens/map_shell/widgets/favorites_sheet.dart';
+import 'package:navigation_client/screens/map_shell/widgets/place_detail_sheet.dart';
 import 'package:navigation_client/widgets/sheet_grab_handle.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

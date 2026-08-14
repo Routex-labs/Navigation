@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/models/floor_plan.dart';
-import 'package:navigation_client/widgets/store_label_anchor.dart';
+import 'package:navigation_client/core/map/store_label_anchor.dart';
 
 /// **실제 서버 응답으로 재현한다.** 오설록·일상다완이 화면에서 하나로만 보이던
 /// 문제를 좌표 몇 개로 흉내 낸 값이 아니라 `/buildings/thehyundai-seoul/floors/B1`이

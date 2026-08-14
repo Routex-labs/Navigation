@@ -9,7 +9,7 @@ import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/repositories/mock_building_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
-import 'package:navigation_client/widgets/floor_selector.dart';
+import 'package:navigation_client/screens/outdoor_map/widgets/floor_selector.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 건물 안에서는 GPS를 **화면에 쓰지 않는다**는 규칙에 대한 회귀 테스트.

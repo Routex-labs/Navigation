@@ -6,7 +6,7 @@ import 'package:navigation_client/models/outdoor_poi.dart';
 import 'package:navigation_client/repositories/mock_building_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
 import 'package:navigation_client/repositories/outdoor_poi_repository.dart';
-import 'package:navigation_client/widgets/search_panel.dart';
+import 'package:navigation_client/screens/map_shell/widgets/search_panel.dart';
 
 /// 결과를 고정으로 돌려주는 야외 POI 리포지토리. 네트워크 없이 "바깥에서
 /// 찾았다"는 상황만 만든다.

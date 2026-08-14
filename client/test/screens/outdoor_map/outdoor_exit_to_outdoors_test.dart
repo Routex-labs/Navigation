@@ -15,7 +15,7 @@ import 'package:navigation_client/repositories/building_repository.dart';
 import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
 import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
-import 'package:navigation_client/widgets/floor_selector.dart';
+import 'package:navigation_client/screens/outdoor_map/widgets/floor_selector.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// "밖으로 나갔다"를 GPS로 알아채는 흐름에 대한 회귀 테스트.

@@ -14,8 +14,8 @@ import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/theme/app_theme.dart';
 import 'package:navigation_client/widgets/eta_card.dart';
 import 'package:navigation_client/widgets/location_marker.dart';
-import 'package:navigation_client/widgets/search_panel.dart';
-import 'package:navigation_client/widgets/status_badge.dart';
+import 'package:navigation_client/screens/map_shell/widgets/search_panel.dart';
+import 'package:navigation_client/screens/outdoor_map/widgets/status_badge.dart';
 import 'package:navigation_client/widgets/uncertainty_circle.dart';
 
 void main() {

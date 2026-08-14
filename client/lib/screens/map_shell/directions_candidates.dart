@@ -16,7 +16,7 @@ import '../../domain/outdoor_poi_ranking.dart';
 import '../../models/building.dart';
 import '../../models/outdoor_poi.dart';
 import '../../models/poi_search_result.dart';
-import '../../widgets/directions_candidate.dart';
+import '../../models/directions_candidate.dart';
 
 /// 후보 조립이 야외 지도 상태에서 읽는 값·판정.
 ///

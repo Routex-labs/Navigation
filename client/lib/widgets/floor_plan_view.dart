@@ -14,21 +14,21 @@ import '../core/map_fonts.dart';
 import '../core/map_label_style.dart';
 import '../core/map_palette.dart';
 import '../core/map_route_style.dart';
-import 'destination_pin.dart';
-import 'floor_camera_bearing.dart';
-import 'location_marker_icon.dart';
-import 'floor_camera_bounds.dart';
+import '../core/map/destination_pin.dart';
+import '../core/map/floor_camera_bearing.dart';
+import '../core/map/location_marker_icon.dart';
+import '../core/map/floor_camera_bounds.dart';
 import '../features/debug_mode/debug_map_overlay.dart';
 import '../models/floor_plan.dart';
 import '../screens/outdoor_map/indoor_entry_zoom.dart';
-import 'category_map_fill.dart';
-import 'map_icon_cache.dart';
-import 'category_map_filter.dart';
-import 'category_map_icon.dart';
-import 'floor_facility_style.dart';
-import 'store_cluster_sheet.dart';
-import 'store_label_anchor.dart';
-import 'store_label_fit.dart';
+import '../core/map/category_map_fill.dart';
+import '../core/map/map_icon_cache.dart';
+import '../core/map/category_map_filter.dart';
+import '../core/map/category_map_icon.dart';
+import '../core/map/floor_facility_style.dart';
+import '../screens/outdoor_map/widgets/store_cluster_sheet.dart';
+import '../core/map/store_label_anchor.dart';
+import '../core/map/store_label_fit.dart';
 
 /// maplibre_gl은 web/android/iOS만 지원한다(패키지 자체 pubspec에 명시된
 /// 플랫폼 목록). Windows/Linux/macOS 데스크톱에서 `flutter run`으로 띄우면

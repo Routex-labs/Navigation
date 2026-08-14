@@ -20,7 +20,7 @@ import 'package:navigation_client/screens/destination/destination_screen.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
 import 'package:navigation_client/screens/route_guide/route_guide_screen.dart';
-import 'package:navigation_client/widgets/floor_selector.dart';
+import 'package:navigation_client/screens/outdoor_map/widgets/floor_selector.dart';
 
 // 데모 건물 입구(37.5665, 126.9779)에서 약 185m 떨어진 좌표.
 // 자동 건물 진입 감지(반경 50m)에 걸리지 않도록 충분히 멀리 둔다.

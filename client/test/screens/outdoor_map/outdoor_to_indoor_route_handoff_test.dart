@@ -8,7 +8,7 @@ import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/repositories/mock_building_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
 import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
-import 'package:navigation_client/widgets/floor_selector.dart';
+import 'package:navigation_client/screens/outdoor_map/widgets/floor_selector.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// **밖에 서서 도면만 펴 놓은 상태**에서 건물 안 매장까지 안내를 시작했을 때,

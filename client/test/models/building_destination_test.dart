@@ -10,7 +10,7 @@ import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/repositories/mock_building_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
 import 'package:navigation_client/repositories/outdoor_poi_repository.dart';
-import 'package:navigation_client/widgets/search_panel.dart';
+import 'package:navigation_client/screens/map_shell/widgets/search_panel.dart';
 
 /// **밖에서 검색했을 때 목록에 무엇이 올라오는가**에 대한 테스트.
 ///

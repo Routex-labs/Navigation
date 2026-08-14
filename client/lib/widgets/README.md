@@ -79,7 +79,7 @@
 - 경량과 마찬가지로 층은 넘기지 않는다 — 길찾기는 항상 건물 전체를 뒤진다(위 `ce6fa1f`
   결정과 같은 이유).
 
-동작은 [`../../tests/unit_test/directions_semantic_search_test.dart`](../../tests/unit_test/directions_semantic_search_test.dart)가
+동작은 [`../../test/directions_semantic_search_test.dart`](../../test/directions_semantic_search_test.dart)가
 고정한다 — 승격이 빠지는 회귀와 항상 승격하는 회귀 둘 다 잡는다.
 
 예전에는 경로 안내 화면(`route_guide_screen.dart`)의 FAB가 `ai_search_sheet.dart`라는
@@ -109,7 +109,7 @@
 **실패 지점.** 목록이 길어지면 기본 시트 높이 상한(화면의 9/16)에 아래쪽 항목부터
 조용히 잘린다. 스크롤 되는 줄 모르는 사용자에게는 "메뉴에 디버그 설정이 없다"가 되므로
 `isScrollControlled: true`로 띄운다. 항목 구성과 반환값은
-[`../../tests/unit_test/app_menu_sheet_test.dart`](../../tests/unit_test/app_menu_sheet_test.dart)가
+[`../../test/widgets/app_menu_sheet_test.dart`](../../test/widgets/app_menu_sheet_test.dart)가
 고정한다.
 
 ## 카테고리는 chip 한 번이면 목록이다

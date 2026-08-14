@@ -34,10 +34,10 @@ import '../../core/map_fonts.dart';
 import '../../core/map_label_style.dart';
 import '../../core/map_palette.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/category_map_fill.dart';
-import '../../widgets/category_map_filter.dart';
-import '../../widgets/category_map_icon.dart';
-import '../../widgets/floor_facility_style.dart';
+import '../../core/map/category_map_fill.dart';
+import '../../core/map/category_map_filter.dart';
+import '../../core/map/category_map_icon.dart';
+import '../../core/map/floor_facility_style.dart';
 import 'indoor_entry_zoom.dart' show indoorTilesMaxZoom, indoorTilesMinZoom;
 import 'route_map_layers.dart' show kOutdoorRouteCasingLayerId;
 

@@ -10,7 +10,7 @@ import 'package:navigation_client/repositories/mock_building_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:navigation_client/widgets/eta_card.dart';
-import 'package:navigation_client/widgets/place_detail_sheet.dart';
+import 'package:navigation_client/screens/map_shell/widgets/place_detail_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// **검색은 길을 찾지 않는다**는 규칙에 대한 회귀 테스트.

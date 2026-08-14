@@ -10,7 +10,7 @@ import 'package:navigation_client/repositories/mock_building_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:navigation_client/widgets/eta_card.dart';
-import 'package:navigation_client/widgets/route_field_results.dart';
+import 'package:navigation_client/screens/map_shell/widgets/route_field_results.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 길찾기가 **상단 바 안에서** 끝나는지에 대한 회귀 테스트.

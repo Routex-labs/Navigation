@@ -13,8 +13,8 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../core/map_geojson.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/destination_pin.dart';
-import '../../widgets/location_marker_icon.dart';
+import '../../core/map/destination_pin.dart';
+import '../../core/map/location_marker_icon.dart';
 import 'indoor_overlay_layers.dart' show MapColorHex;
 
 /// 현재 위치: 반투명 원(정확도 반경 시각화용, 픽셀 반경) + 진한 점.

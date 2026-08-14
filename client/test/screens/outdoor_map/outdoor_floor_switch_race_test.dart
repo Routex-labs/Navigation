@@ -14,7 +14,7 @@ import 'package:navigation_client/repositories/building_repository.dart';
 import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
 import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
-import 'package:navigation_client/widgets/floor_selector.dart';
+import 'package:navigation_client/screens/outdoor_map/widgets/floor_selector.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 층 전환 크로스페이드(95f9b13) 뒤 실기기에서 나온 회귀 두 갈래를 고정한다.

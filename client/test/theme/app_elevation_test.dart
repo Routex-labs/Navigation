@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/theme/app_theme.dart';
-import 'package:navigation_client/widgets/map_top_bar.dart';
-import 'package:navigation_client/widgets/search_panel.dart';
+import 'package:navigation_client/screens/map_shell/widgets/map_top_bar.dart';
+import 'package:navigation_client/screens/map_shell/widgets/search_panel.dart';
 
 /// 설계와 검증 기준은 `docs/client/naver-map-ui-ux-analysis.md` I절이 단일 출처다.
 ///

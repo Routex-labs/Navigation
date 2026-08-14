@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/core/map_label_style.dart';
 import 'package:navigation_client/screens/outdoor_map/indoor_overlay_layers.dart';
-import 'package:navigation_client/widgets/floor_facility_style.dart';
-import 'package:navigation_client/widgets/store_label_fit.dart';
+import 'package:navigation_client/core/map/floor_facility_style.dart';
+import 'package:navigation_client/core/map/store_label_fit.dart';
 
 /// 라벨 스타일에서 지키려는 것은 **값 자체가 아니라 값이 하나라는 사실**이다.
 /// 색·헤일로가 레이어마다 갈라져 있던 것이 애초의 문제였으므로, 숫자를 잠그는
