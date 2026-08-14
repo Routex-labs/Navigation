@@ -937,9 +937,69 @@ class EscalatorTransitionDetector {
   }
 
   /// 기압 샘플을 넣고 판정한다. 층 이동이 확정된 순간에만 non-null.
+  ///
+  /// **단계 여섯이 순서대로 흐르고, 순서가 곧 의미다.**
+  ///
+  /// 1. [_takeMotionEvidence] — 걸음·진동이 새로 들어왔나
+  /// 2. [_clearOnTimelineGap] — 시계열이 끊겼으면 관측을 통째로 버린다
+  /// 3. [_updateFastAltitude] — 저지연 EMA와 수직 속도
+  /// 4. [_pushAndSmooth] — 중앙값 평활. 근거가 모자라면 여기서 끝
+  /// 5. [_absorbPostConfirmDrift] — 확정 직후 잔여 이동분 흡수
+  /// 6. [_openCandidate] / [_advanceCandidate] — 후보를 열거나, 기각·확정한다
+  ///
+  /// 1이 3보다 먼저여야 하는 이유는 2가 EMA 상태를 지우기 때문이다. 그래서
+  /// 직전 EMA 값은 **맨 처음에** 붙잡아 두고 3으로 넘긴다.
   EscalatorTransition? onAltitude(AltitudeSample sample) {
-    final previousFastAltitude = _fastAltitudeM;
-    final previousFastAtMs = _lastFastAltitudeAtMs;
+    final previousFast = (
+      altitudeM: _fastAltitudeM,
+      atMs: _lastFastAltitudeAtMs,
+    );
+    final motion = _takeMotionEvidence();
+    final timelineGap = _clearOnTimelineGap(sample);
+    final fast = _updateFastAltitude(
+      sample,
+      previous: previousFast,
+      timelineGap: timelineGap,
+    );
+
+    final smoothed = _pushAndSmooth(sample);
+    if (smoothed == null) return null;
+
+    _baselineM ??= smoothed;
+    final armed = _refreshArm(sample.timestampMs);
+    final delta = smoothed - _baselineM!;
+
+    if (_candidateStartMs == null && _awaitingPostConfirmQuiet) {
+      return _absorbPostConfirmDrift(sample, smoothed: smoothed, fast: fast);
+    }
+    if (_candidateStartMs == null) {
+      return _openCandidate(
+        sample,
+        smoothed: smoothed,
+        delta: delta,
+        armed: armed,
+        fast: fast,
+        motion: motion,
+      );
+    }
+    return _advanceCandidate(
+      sample,
+      smoothed: smoothed,
+      delta: delta,
+      fast: fast,
+      motion: motion,
+    );
+  }
+
+  // ── onAltitude의 단계들 ──
+  //
+  // 전부 onAltitude에서만 부른다. 따로 뗀 것은 재사용이 아니라 **한 함수가
+  // 331줄이면 어디서 무엇이 결정되는지 읽을 수 없어서**다. 상태 필드는 그대로
+  // 공유한다 — 여기서 상태까지 나누면 축자 이동이 아니게 되고, 오탐 비용이
+  // 큰 이 코드에서 무회귀를 증명할 수 없다.
+
+  /// 1) 직전 샘플 이후 걸음·진동이 새로 들어왔는지 읽고, 카운터를 갱신한다.
+  ({bool hadNewSteps, bool hadMotionEvidence}) _takeMotionEvidence() {
     // "하차 후 첫 걸음"은 위치에 적용된 걸음 **또는 네이티브 걸음**만 인정한다.
     // 발판 진동(accel peak)은 여기서 빠진다 — 에스컬레이터 위에서는 진동이
     // 항상 흐르므로, 진동을 걸음으로 치면 순간 저속 한 번(센서 격자·EMA 눌림)에
@@ -955,9 +1015,13 @@ class EscalatorTransitionDetector {
     _lastAltitudeSteps = _lastSteps;
     _lastAltitudeRawMotionCount = _rawMotionCount;
     _lastAltitudeRawStepCount = _rawStepCount;
+    return (hadNewSteps: hadNewSteps, hadMotionEvidence: hadMotionEvidence);
+  }
 
-    // 1) 시계열이 끊겼으면(background 복귀 등) 이전 관측을 통째로 버린다.
-    //    공백 동안 층이 바뀌었을 수 있어 baseline과 후보도 함께 무효다.
+  /// 2) 시계열이 끊겼으면(background 복귀 등) 이전 관측을 통째로 버린다.
+  ///
+  /// 공백 동안 층이 바뀌었을 수 있어 baseline과 후보도 함께 무효다.
+  bool _clearOnTimelineGap(AltitudeSample sample) {
     final previous = _window.isEmpty ? null : _window.last;
     final timelineGap =
         previous != null &&
@@ -979,13 +1043,21 @@ class EscalatorTransitionDetector {
       _awaitingPostConfirmQuiet = false;
       _postConfirmQuietSinceMs = null;
     }
+    return timelineGap;
+  }
 
+  /// 3) 저지연 EMA를 갱신하고, 이 샘플의 이동량과 수직 속도를 낸다.
+  ({double stepM, double? speedMps}) _updateFastAltitude(
+    AltitudeSample sample, {
+    required ({double? altitudeM, int? atMs}) previous,
+    required bool timelineGap,
+  }) {
     final rawAltitude = sample.altitudeM;
     // EMA 계수를 **경과 시간에서 만든다.** 샘플당 고정 계수를 쓰면 같은 숫자가
     // iOS(1069ms)에서는 시정수 1초, Android(180ms)에서는 0.2초짜리 필터가 된다.
-    final fastDeltaSeconds = timelineGap || previousFastAtMs == null
+    final fastDeltaSeconds = timelineGap || previous.atMs == null
         ? null
-        : (sample.timestampMs - previousFastAtMs) / 1000.0;
+        : (sample.timestampMs - previous.atMs!) / 1000.0;
     final alpha = fastDeltaSeconds == null || fastDeltaSeconds <= 0
         ? 1.0
         : 1 - math.exp(-fastDeltaSeconds * 1000 / config.fastAltitudeTauMs);
@@ -995,15 +1067,18 @@ class EscalatorTransitionDetector {
     _lastFastAltitudeAtMs = sample.timestampMs;
     // 이 샘플에서 실제로 움직인 양. 적분(_fastDisplacementM)은 이 값을 그대로
     // 더해 망원합이 되므로, 아래 속도가 어떤 밑변으로 재지든 영향받지 않는다.
-    final fastStepM = previousFastAltitude == null || fastDeltaSeconds == null
+    final fastStepM = previous.altitudeM == null || fastDeltaSeconds == null
         ? 0.0
-        : _fastAltitudeM! - previousFastAltitude;
+        : _fastAltitudeM! - previous.altitudeM!;
     _fastHistory.add(_Smoothed(sample.timestampMs, _fastAltitudeM!));
-    final fastSpeedMps = _fastSpeedOver(sample.timestampMs);
+    return (stepM: fastStepM, speedMps: _fastSpeedOver(sample.timestampMs));
+  }
 
+  /// 4) 샘플을 창에 넣고 중앙값으로 평활한다. 근거가 모자라면 null.
+  double? _pushAndSmooth(AltitudeSample sample) {
     _window.add(sample);
-    // 2) 시간 창으로 자르되 최근 minSmoothingSamples개는 항상 남긴다. 센서
-    //    주기가 창 대비 크면(iOS 1069ms) 창만으로는 개수를 못 채운다.
+    // 시간 창으로 자르되 최근 minSmoothingSamples개는 항상 남긴다. 센서
+    // 주기가 창 대비 크면(iOS 1069ms) 창만으로는 개수를 못 채운다.
     final windowStart = sample.timestampMs - config.smoothingWindowMs;
     while (_window.length > config.minSmoothingSamples &&
         _window.first.timestampMs < windowStart) {
@@ -1025,129 +1100,180 @@ class EscalatorTransitionDetector {
     final historyStart =
         sample.timestampMs - config.candidateTimeoutMs - config.settleWindowMs;
     _smoothedHistory.removeWhere((item) => item.atMs < historyStart);
+    return smoothed;
+  }
 
-    _baselineM ??= smoothed;
-    final armed = _armedUntilMs != null && sample.timestampMs <= _armedUntilMs!;
+  /// 허가가 살아 있는지 보고, 만료됐으면 근접 관측을 비운다.
+  bool _refreshArm(int atMs) {
+    final armed = _armedUntilMs != null && atMs <= _armedUntilMs!;
     if (!armed) {
       _armedNodes.clear();
       _observedBoardingDistances.clear();
     }
-    final delta = smoothed - _baselineM!;
+    return armed;
+  }
 
-    if (_candidateStartMs == null && _awaitingPostConfirmQuiet) {
-      // 확정 직후 잠금 구간 — 하차가 실제로 끝났는지부터 본다. 확정이 하차보다
-      // 일렀다면 지금도 오르내리는 중이고, 그 잔여 이동분으로 후보를 열면 한
-      // 층이 두 층이 된다. 저속이 이어져 "멎었다"가 확인되는 순간, 그 자리
-      // 고도로 0점을 다시 잡아 잔여분을 통째로 흡수한다.
-      final quietNow =
-          fastSpeedMps != null &&
-          fastSpeedMps.abs() < config.minVerticalSpeedMps;
-      if (quietNow) {
-        final since = _postConfirmQuietSinceMs ??= sample.timestampMs;
-        if (sample.timestampMs - since >= config.earlyVerticalQuietMs) {
-          _baselineM = smoothed;
-          _awaitingPostConfirmQuiet = false;
-          _postConfirmQuietSinceMs = null;
-        }
-      } else {
+  /// 5) 확정 직후 잠금 구간. 하차가 실제로 끝나면 그 자리 고도로 0점을 다시 잡는다.
+  EscalatorTransition? _absorbPostConfirmDrift(
+    AltitudeSample sample, {
+    required double smoothed,
+    required ({double stepM, double? speedMps}) fast,
+  }) {
+    final speed = fast.speedMps;
+    // 확정이 하차보다 일렀다면 지금도 오르내리는 중이고, 그 잔여 이동분으로
+    // 후보를 열면 한 층이 두 층이 된다. 저속이 이어져 "멎었다"가 확인되는
+    // 순간, 그 자리 고도로 0점을 다시 잡아 잔여분을 통째로 흡수한다.
+    final quietNow = speed != null && speed.abs() < config.minVerticalSpeedMps;
+    if (quietNow) {
+      final since = _postConfirmQuietSinceMs ??= sample.timestampMs;
+      if (sample.timestampMs - since >= config.earlyVerticalQuietMs) {
+        _baselineM = smoothed;
+        _awaitingPostConfirmQuiet = false;
         _postConfirmQuietSinceMs = null;
       }
-      return null;
+    } else {
+      _postConfirmQuietSinceMs = null;
     }
+    return null;
+  }
 
-    if (_candidateStartMs == null) {
-      // 허가도 후보도 없는 구간에서만 baseline이 기상 드리프트를 따라간다.
-      if (!armed) {
-        // **지금 실제로 오르내리는 중이면 따라가지 않는다.** 허가는 보정 위치가
-        // 탑승 노드에 닿아야 걸리는데, 그 위치가 늦게 수렴하면(하행 랜딩에서
-        // 실측 12m 오차가 있었다) 허가 전 구간의 고도 변화가 baseline에 그대로
-        // 흡수된다. 그러면 허가가 걸린 순간 Δ가 0으로 초기화된 것과 같아, 이미
-        // 반쯤 내려온 사용자가 처음부터 다시 [minDeltaM]을 채워야 한다.
-        // 정지 상태의 기상 드리프트는 이 조건에 걸리지 않으므로(0.01 m/s)
-        // 흡수는 그대로 유지된다.
-        final movingVertically =
-            fastSpeedMps != null &&
-            fastSpeedMps.abs() >= config.minVerticalSpeedMps;
-        if (!movingVertically) {
-          _baselineM = _baselineM! + config.baselineTrackAlpha * delta;
-        }
-        // **허가가 없어도 걸음은 멈춘다.** 노드 근접이 안 잡히는 랜딩이 실측에서
-        // 흔했고, 그때 사용자는 이미 에스컬레이터 위인데 마커만 계속 걸어갔다.
-        _updateVerticalMotion(
-          sample.timestampMs,
-          fastSpeedMps,
-          fastStepM: fastStepM,
-          deltaM: delta,
-          hasMotionEvidence: hadMotionEvidence,
-        );
-        _expireStalledPhase(sample.timestampMs, reason: 'armExpired');
-        return null;
-      }
-      // 누적 고도가 아직 문턱에 못 미쳐도, **지금 오르내리는 중**이라는 근거는
-      // 이미 있다. 걸음 pause는 여기서 시작한다 — 에스컬레이터 진동이 위치에
-      // 쌓이는 것을 막는 데 반 층을 기다릴 이유가 없다.
-      _updateVerticalMotion(
-        sample.timestampMs,
-        fastSpeedMps,
-        fastStepM: fastStepM,
-        deltaM: delta,
-        hasMotionEvidence: hadMotionEvidence,
-      );
-      _expireStalledPhase(sample.timestampMs, reason: 'noVerticalMotion');
-      if (delta.abs() < config.minDeltaM) return null;
-      // 누적 변화량 + 지금도 그 방향으로 움직이는 중일 때만 후보를 연다.
-      final rise = _riseOver(sample.timestampMs, smoothed);
-      if (rise == null) return null;
-      final sign = delta > 0 ? 1 : -1;
-      if (rise * sign < config.minRampRiseM) return null;
-      if (!_hasConsistentRamp(sample.timestampMs, sign)) return null;
-      _candidateStartMs = sample.timestampMs;
-      _candidateSign = sign;
-      _candidateStartSteps = _lastSteps;
-      _fastExitQuietSinceMs = null;
-      _pushEvent(
+  /// 6a) 후보가 없는 구간. baseline을 드리프트에 맞추고, 근거가 다 모이면 후보를 연다.
+  EscalatorTransition? _openCandidate(
+    AltitudeSample sample, {
+    required double smoothed,
+    required double delta,
+    required bool armed,
+    required ({double stepM, double? speedMps}) fast,
+    required ({bool hadNewSteps, bool hadMotionEvidence}) motion,
+  }) {
+    final speed = fast.speedMps;
+    // 허가도 후보도 없는 구간에서만 baseline이 기상 드리프트를 따라간다.
+    if (!armed) _trackBaselineDrift(delta, speed: speed);
+    // **허가가 없어도 걸음은 멈춘다.** 노드 근접이 안 잡히는 랜딩이 실측에서
+    // 흔했고, 그때 사용자는 이미 에스컬레이터 위인데 마커만 계속 걸어갔다.
+    // 허가가 있으면 여기가 더 이른 시작점이다 — 누적 고도가 문턱에 못 미쳐도
+    // **지금 오르내리는 중**이라는 근거는 이미 있으므로, 발판 진동이 위치에
+    // 쌓이는 것을 막는 데 반 층을 기다릴 이유가 없다.
+    _updateVerticalMotion(
+      sample.timestampMs,
+      speed,
+      fastStepM: fast.stepM,
+      deltaM: delta,
+      hasMotionEvidence: motion.hadMotionEvidence,
+    );
+    _expireStalledPhase(
+      sample.timestampMs,
+      reason: armed ? 'noVerticalMotion' : 'armExpired',
+    );
+    if (!armed) return null;
+
+    if (delta.abs() < config.minDeltaM) return null;
+    // 누적 변화량 + 지금도 그 방향으로 움직이는 중일 때만 후보를 연다.
+    final rise = _riseOver(sample.timestampMs, smoothed);
+    if (rise == null) return null;
+    final sign = delta > 0 ? 1 : -1;
+    if (rise * sign < config.minRampRiseM) return null;
+    if (!_hasConsistentRamp(sample.timestampMs, sign)) return null;
+    _candidateStartMs = sample.timestampMs;
+    _candidateSign = sign;
+    _candidateStartSteps = _lastSteps;
+    _fastExitQuietSinceMs = null;
+    _pushEvent(
+      atMs: sample.timestampMs,
+      kind: 'candidate',
+      reason: _candidateSign > 0 ? 'rising' : 'falling',
+      deltaM: delta,
+    );
+
+    final direction = sign > 0
+        ? EscalatorDirection.up
+        : EscalatorDirection.down;
+    final boarding = _pickBoardingNode(direction);
+    final fromFloor = _floorLabel;
+    if (fromFloor == null || boarding == null) {
+      _closeCandidate(
         atMs: sample.timestampMs,
-        kind: 'candidate',
-        reason: _candidateSign > 0 ? 'rising' : 'falling',
+        reason: 'noBoardingNode',
         deltaM: delta,
+        elapsedMs: 0,
       );
-
-      final direction = sign > 0
-          ? EscalatorDirection.up
-          : EscalatorDirection.down;
-      final boarding = _pickBoardingNode(direction);
-      final fromFloor = _floorLabel;
-      if (fromFloor == null || boarding == null) {
-        _closeCandidate(
-          atMs: sample.timestampMs,
-          reason: 'noBoardingNode',
-          deltaM: delta,
-          elapsedMs: 0,
-        );
-        return null;
-      }
-      final toFloor = boarding.name.otherFloorLabel;
-      if (_floorLabels.isNotEmpty && !_floorLabels.contains(toFloor)) {
-        _closeCandidate(
-          atMs: sample.timestampMs,
-          reason: 'unknownTargetFloor',
-          deltaM: delta,
-          elapsedMs: 0,
-          toFloorLabel: toFloor,
-          group: boarding.name.group,
-        );
-        return null;
-      }
-      _candidateBoarding = boarding;
-      _candidateToFloor = toFloor;
-      // 후보는 여기서 열리지만 조기 층 전환(도면 교체) 신호는 아직 내지 않는다.
-      // 그 신호는 아래 후보 유지 구간에서 [mapSwapDeltaM]에 닿을 때 나간다.
       return null;
     }
+    final toFloor = boarding.name.otherFloorLabel;
+    if (_floorLabels.isNotEmpty && !_floorLabels.contains(toFloor)) {
+      _closeCandidate(
+        atMs: sample.timestampMs,
+        reason: 'unknownTargetFloor',
+        deltaM: delta,
+        elapsedMs: 0,
+        toFloorLabel: toFloor,
+        group: boarding.name.group,
+      );
+      return null;
+    }
+    _candidateBoarding = boarding;
+    _candidateToFloor = toFloor;
+    // 후보는 여기서 열리지만 조기 층 전환(도면 교체) 신호는 아직 내지 않는다.
+    // 그 신호는 [_advanceCandidate]에서 [mapSwapDeltaM]에 닿을 때 나간다.
+    return null;
+  }
 
-    final candidateStartMs = _candidateStartMs!;
-    final elapsedMs = sample.timestampMs - candidateStartMs;
+  /// 6b) 후보가 열려 있는 구간. 기각하거나, 반 층에서 도면을 갈거나, 확정한다.
+  EscalatorTransition? _advanceCandidate(
+    AltitudeSample sample, {
+    required double smoothed,
+    required double delta,
+    required ({double stepM, double? speedMps}) fast,
+    required ({bool hadNewSteps, bool hadMotionEvidence}) motion,
+  }) {
+    final elapsedMs = sample.timestampMs - _candidateStartMs!;
+    if (_rejectCandidate(
+      sample,
+      delta: delta,
+      smoothed: smoothed,
+      elapsedMs: elapsedMs,
+    )) {
+      return null;
+    }
+    _emitMidpointIfReached(sample, delta: delta, elapsedMs: elapsedMs);
+    return _confirmIfSettled(
+      sample,
+      smoothed: smoothed,
+      delta: delta,
+      elapsedMs: elapsedMs,
+      fast: fast,
+      motion: motion,
+    );
+  }
 
+  /// baseline이 기상 드리프트를 천천히 따라가게 한다.
+  ///
+  /// **지금 실제로 오르내리는 중이면 따라가지 않는다.** 허가는 보정 위치가
+  /// 탑승 노드에 닿아야 걸리는데, 그 위치가 늦게 수렴하면(하행 랜딩에서
+  /// 실측 12m 오차가 있었다) 허가 전 구간의 고도 변화가 baseline에 그대로
+  /// 흡수된다. 그러면 허가가 걸린 순간 Δ가 0으로 초기화된 것과 같아, 이미
+  /// 반쯤 내려온 사용자가 처음부터 다시
+  /// [EscalatorDetectorConfig.minDeltaM]을 채워야 한다.
+  ///
+  /// 정지 상태의 기상 드리프트는 이 조건에 걸리지 않으므로(0.01 m/s) 흡수는
+  /// 그대로 유지된다.
+  void _trackBaselineDrift(double delta, {required double? speed}) {
+    final movingVertically =
+        speed != null && speed.abs() >= config.minVerticalSpeedMps;
+    if (movingVertically) return;
+    _baselineM = _baselineM! + config.baselineTrackAlpha * delta;
+  }
+
+  /// 후보를 접어야 하는 세 경우. 접었으면 true.
+  ///
+  /// 셋 다 **거부가 안전한 쪽**이라는 같은 판단에서 나온다 — 이 파일 맨 위
+  /// 설계 원칙 1번(오탐 비용 > 미탐 비용)이 여기서 세 번 적용된다.
+  bool _rejectCandidate(
+    AltitudeSample sample, {
+    required double delta,
+    required double smoothed,
+    required int elapsedMs,
+  }) {
     // 부호가 뒤집혔거나 baseline 근처로 돌아왔다 = 층을 옮긴 게 아니다.
     if (delta * _candidateSign < config.minDeltaM * 0.5) {
       _closeCandidate(
@@ -1156,7 +1282,7 @@ class EscalatorTransitionDetector {
         deltaM: delta,
         elapsedMs: elapsedMs,
       );
-      return null;
+      return true;
     }
 
     if (delta.abs() >= config.multiFloorRejectM) {
@@ -1169,7 +1295,7 @@ class EscalatorTransitionDetector {
         elapsedMs: elapsedMs,
         rebaselineTo: smoothed,
       );
-      return null;
+      return true;
     }
 
     if (elapsedMs > config.candidateTimeoutMs) {
@@ -1180,46 +1306,64 @@ class EscalatorTransitionDetector {
         elapsedMs: elapsedMs,
         rebaselineTo: smoothed,
       );
-      return null;
+      return true;
     }
+    return false;
+  }
 
-    // 반 층 부근에서 조기 층 전환 신호(도면 교체)를 낸다. 후보 열림과 분리한
-    // 근거는 [EscalatorDetectorConfig.mapSwapDeltaM]에 적었다.
-    if (_pendingTransition == null &&
-        delta.abs() >= config.mapSwapDeltaM &&
-        delta * _candidateSign > 0) {
-      final boarding = _candidateBoarding;
-      final fromFloor = _floorLabel;
-      final toFloor = _candidateToFloor;
-      if (boarding != null && fromFloor != null && toFloor != null) {
-        final direction = _candidateSign > 0
-            ? EscalatorDirection.up
-            : EscalatorDirection.down;
-        final started = _buildTransition(
-          boarding: boarding,
-          direction: direction,
-          fromFloor: fromFloor,
-          toFloor: toFloor,
-          deltaM: delta,
-          elapsedMs: elapsedMs,
-        );
-        _pendingTransition = started;
-        _startedTransition = started;
-        _setPhase(
-          EscalatorPhase.midpointReached,
-          atMs: sample.timestampMs,
-          reason: _candidateSign > 0 ? 'rising' : 'falling',
-          toFloorLabel: toFloor,
-          group: boarding.name.group,
-          direction: direction,
-          boardingNodeId: boarding.id,
-          expectedArrivalNodeId: started.expectedArrivalNodeId,
-          deltaM: delta,
-          transition: started,
-        );
-      }
-    }
+  /// 반 층 부근에서 조기 층 전환 신호(도면 교체)를 낸다.
+  ///
+  /// 후보 열림과 분리한 근거는 [EscalatorDetectorConfig.mapSwapDeltaM]에 적었다.
+  void _emitMidpointIfReached(
+    AltitudeSample sample, {
+    required double delta,
+    required int elapsedMs,
+  }) {
+    if (_pendingTransition != null) return;
+    if (delta.abs() < config.mapSwapDeltaM) return;
+    if (delta * _candidateSign <= 0) return;
 
+    final boarding = _candidateBoarding;
+    final fromFloor = _floorLabel;
+    final toFloor = _candidateToFloor;
+    if (boarding == null || fromFloor == null || toFloor == null) return;
+
+    final direction = _candidateSign > 0
+        ? EscalatorDirection.up
+        : EscalatorDirection.down;
+    final started = _buildTransition(
+      boarding: boarding,
+      direction: direction,
+      fromFloor: fromFloor,
+      toFloor: toFloor,
+      deltaM: delta,
+      elapsedMs: elapsedMs,
+    );
+    _pendingTransition = started;
+    _startedTransition = started;
+    _setPhase(
+      EscalatorPhase.midpointReached,
+      atMs: sample.timestampMs,
+      reason: _candidateSign > 0 ? 'rising' : 'falling',
+      toFloorLabel: toFloor,
+      group: boarding.name.group,
+      direction: direction,
+      boardingNodeId: boarding.id,
+      expectedArrivalNodeId: started.expectedArrivalNodeId,
+      deltaM: delta,
+      transition: started,
+    );
+  }
+
+  /// 하차가 끝났다고 볼 근거가 모이면 확정한다. 아니면 null.
+  EscalatorTransition? _confirmIfSettled(
+    AltitudeSample sample, {
+    required double smoothed,
+    required double delta,
+    required int elapsedMs,
+    required ({double stepM, double? speedMps}) fast,
+    required ({bool hadNewSteps, bool hadMotionEvidence}) motion,
+  }) {
     if (elapsedMs < config.minRampMs) return null;
     if (delta.abs() < config.minConfirmDeltaM) return null;
 
@@ -1231,11 +1375,12 @@ class EscalatorTransitionDetector {
     // **속도 자체가 이미 시간 밑변 위에서 재진 값이다**([_fastSpeedOver]).
     // 그래서 이 아래의 유지 시간과 밑변이 함께 "얼마나 오래 잠잠했는가"를
     // 정한다 — 어느 쪽도 센서 주기에 기대지 않는다.
-    if (fastSpeedMps != null) {
-      final slopeLimit = hadNewSteps
+    final speed = fast.speedMps;
+    if (speed != null) {
+      final slopeLimit = motion.hadNewSteps
           ? config.fastExitWithStepSlopeMps
           : config.fastExitSlopeMps;
-      if (fastSpeedMps.abs() <= slopeLimit) {
+      if (speed.abs() <= slopeLimit) {
         _fastExitQuietSinceMs ??= sample.timestampMs;
       } else {
         _fastExitQuietSinceMs = null;
@@ -1243,7 +1388,7 @@ class EscalatorTransitionDetector {
       final quietSince = _fastExitQuietSinceMs;
       final fastSettled =
           quietSince != null &&
-          (hadNewSteps ||
+          (motion.hadNewSteps ||
               sample.timestampMs - quietSince >= config.fastExitQuietMs);
       if (fastSettled) {
         return _confirm(
@@ -1258,7 +1403,7 @@ class EscalatorTransitionDetector {
     // fast EMA가 준비된 뒤에는 중앙값 창의 꼭대기를 정지로 오인하지 않는다.
     // 실제 하차는 저속 샘플이 연속되지만, 올라갔다 바로 내려오는 삼각형
     // 움직임은 방향 전환 지점의 한 샘플만 평평해질 수 있다.
-    if (fastSpeedMps == null && _hasSettled(sample.timestampMs, smoothed)) {
+    if (speed == null && _hasSettled(sample.timestampMs, smoothed)) {
       return _confirm(
         atMs: sample.timestampMs,
         smoothed: smoothed,
@@ -1419,50 +1564,90 @@ class EscalatorTransitionDetector {
     final risenM = math.max(deltaM.abs(), _fastDisplacementM.abs());
 
     final boarding = _approachBoarding ?? _pickBoardingNode(direction);
-    if (boarding != null && boarding.name.direction == direction) {
-      // 갈래 1 — **탑승점이 정해져 있다.** 안내가 이 에스컬레이터를 타라고
-      // 지목했거나([_approachBoarding], 경로 접근 16m 안) 실제로 발판에
-      // 올라섰다고 볼 거리([boardingApproachRadiusM], 3m)까지 붙었을 때다.
-      //
-      // 그래도 **속도만으로는 올리지 않는다** — 얼마나 움직였는지를 함께 본다
-      // ([minVisibleRiseM], 그 상수에 근거가 있다).
-      final distanceM =
-          _observedBoardingDistances[boarding.id] ??
-          _armedNodes[boarding.id]?.distanceM;
-      final atBoardingPoint =
-          _approachBoarding != null ||
-          (distanceM != null && distanceM <= config.boardingApproachRadiusM);
-      // 연속 환승(내리자마자 바로 다음 에스컬레이터)에서는 최소 변화를 요구하지
-      // 않는다. 걸어갈 거리가 없어 오탐 여지도 없고, 기다리면 환승마다 마커가
-      // 먼저 몇 걸음 흘러간다.
-      final requiredRiseM = _immediateTransfer && _approachBoarding != null
-          ? 0.0
-          : config.minVisibleRiseM;
-      if (atBoardingPoint && risenM >= requiredRiseM) {
-        _earlyVerticalMotion = false;
-        _setPhase(
-          EscalatorPhase.verticalMotionDetected,
-          atMs: atMs,
-          reason: sign > 0 ? 'rising' : 'falling',
-          toFloorLabel: boarding.name.otherFloorLabel,
-          group: boarding.name.group,
-          direction: direction,
-          boardingNodeId: boarding.id,
-          expectedArrivalNodeId: boarding.id == _expectedBoardingNodeId
-              ? _expectedArrivalNodeId
-              : null,
-        );
-        return;
-      }
+    if (_promoteAtBoardingPoint(
+      boarding,
+      atMs: atMs,
+      sign: sign,
+      direction: direction,
+      risenM: risenM,
+    )) {
+      return;
     }
+    _promoteByAltitude(
+      boarding,
+      atMs: atMs,
+      sign: sign,
+      direction: direction,
+      risenM: risenM,
+      deltaM: deltaM,
+      hasMotionEvidence: hasMotionEvidence,
+    );
+  }
 
-    // 갈래 2 — **이미 사람이 오를 수 없는 만큼 올라왔다.** 노드가 없거나 아직
-    // 멀어도, 누적 고도가 [visibleVerticalDeltaM]을 넘었으면 에스컬레이터 위인
-    // 것이 분명하다(층고의 3분의 1쯤이라 계단 몇 칸으로는 안 나온다). 이 갈래가
-    // 없으면 랜딩에서 보정 위치가 어긋난 실측 사례에서 마커가 끝까지 걸어간다.
-    //
-    // 기기가 실제로 움직이는 중이라는 신호를 함께 요구한다. 없으면 책상 위에 둔
-    // 폰의 기압 드리프트로도 화면이 덮인다.
+  /// 갈래 1 — **탑승점이 정해져 있다.** 올렸으면 true.
+  ///
+  /// 안내가 이 에스컬레이터를 타라고 지목했거나([_approachBoarding], 경로 접근
+  /// 16m 안) 실제로 발판에 올라섰다고 볼 거리
+  /// ([EscalatorDetectorConfig.boardingApproachRadiusM], 3m)까지 붙었을 때다.
+  ///
+  /// 그래도 **속도만으로는 올리지 않는다** — 얼마나 움직였는지를 함께 본다
+  /// ([EscalatorDetectorConfig.minVisibleRiseM], 그 상수에 근거가 있다).
+  bool _promoteAtBoardingPoint(
+    _EscalatorNode? boarding, {
+    required int atMs,
+    required int sign,
+    required EscalatorDirection direction,
+    required double risenM,
+  }) {
+    if (boarding == null || boarding.name.direction != direction) return false;
+    final distanceM =
+        _observedBoardingDistances[boarding.id] ??
+        _armedNodes[boarding.id]?.distanceM;
+    final atBoardingPoint =
+        _approachBoarding != null ||
+        (distanceM != null && distanceM <= config.boardingApproachRadiusM);
+    // 연속 환승(내리자마자 바로 다음 에스컬레이터)에서는 최소 변화를 요구하지
+    // 않는다. 걸어갈 거리가 없어 오탐 여지도 없고, 기다리면 환승마다 마커가
+    // 먼저 몇 걸음 흘러간다.
+    final requiredRiseM = _immediateTransfer && _approachBoarding != null
+        ? 0.0
+        : config.minVisibleRiseM;
+    if (!atBoardingPoint || risenM < requiredRiseM) return false;
+
+    _earlyVerticalMotion = false;
+    _setPhase(
+      EscalatorPhase.verticalMotionDetected,
+      atMs: atMs,
+      reason: sign > 0 ? 'rising' : 'falling',
+      toFloorLabel: boarding.name.otherFloorLabel,
+      group: boarding.name.group,
+      direction: direction,
+      boardingNodeId: boarding.id,
+      expectedArrivalNodeId: boarding.id == _expectedBoardingNodeId
+          ? _expectedArrivalNodeId
+          : null,
+    );
+    return true;
+  }
+
+  /// 갈래 2 — **이미 사람이 오를 수 없는 만큼 올라왔다.**
+  ///
+  /// 노드가 없거나 아직 멀어도, 누적 고도가
+  /// [EscalatorDetectorConfig.visibleVerticalDeltaM]을 넘었으면 에스컬레이터 위인
+  /// 것이 분명하다(층고의 3분의 1쯤이라 계단 몇 칸으로는 안 나온다). 이 갈래가
+  /// 없으면 랜딩에서 보정 위치가 어긋난 실측 사례에서 마커가 끝까지 걸어간다.
+  ///
+  /// 기기가 실제로 움직이는 중이라는 신호를 함께 요구한다. 없으면 책상 위에 둔
+  /// 폰의 기압 드리프트로도 화면이 덮인다.
+  void _promoteByAltitude(
+    _EscalatorNode? boarding, {
+    required int atMs,
+    required int sign,
+    required EscalatorDirection direction,
+    required double risenM,
+    required double deltaM,
+    required bool hasMotionEvidence,
+  }) {
     if (risenM < config.visibleVerticalDeltaM) return;
     if (!hasMotionEvidence) return;
     final toFloor = (boarding != null && boarding.name.direction == direction)
