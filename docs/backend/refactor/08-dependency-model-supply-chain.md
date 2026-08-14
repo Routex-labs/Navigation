@@ -119,8 +119,9 @@ TMAP/VWorld 키는 현재 클라이언트가 직접 사용한다(백엔드에는
 
 위 완료 기준 넷은 그대로 유효하다. 그런데 넷 모두 **소스(`requirements.txt`)를 대상으로**
 확인한 것이고, 실제로 배포되는 이미지 안을 들여다본 적은 없다. 그 틈에서 셋이 나왔다.
+A는 이번에 고쳤고, B·C는 남아 있다.
 
-### A. CI가 감사하는 의존성 그래프가 배포 이미지와 다르다
+### A. CI가 감사하는 의존성 그래프가 배포 이미지와 달랐다 — 해결됨
 
 `ci.yml`은 리눅스 러너에서 `pip install -r requirements.txt`와 `pip-audit -r requirements.txt`를
 돈다. `sentence-transformers`가 `torch>=1.11`만 요구하므로, PyPI 기본 인덱스는 리눅스에서
@@ -137,12 +138,28 @@ Collecting nvidia-nvshmem-cu13==3.4.5
 배포 이미지는 정반대다. `backend/Dockerfile`이 CPU 전용 인덱스에서 `torch==2.7.0`을 먼저
 고정하고 그 위에 `requirements.txt`를 깐다(그 이유는 Dockerfile 주석에 있다).
 
-즉 **감사받는 그래프와 배포되는 그래프가 다르다.** CI가 녹색이어도 이미지 안의 torch 계열에
-대해서는 아무 말도 하지 않은 것이다. CI가 매번 CUDA 휠 수 GB를 내려받는 낭비도 같은 뿌리다.
+즉 **감사받는 그래프와 배포되는 그래프가 달랐다.** CI가 녹색이어도 이미지 안의 torch 계열에
+대해서는 아무 말도 하지 않은 셈이다.
 
-- 고치는 방향 둘. (1) CI도 이미지와 같은 순서로 깐다 — CPU 인덱스에서 torch를 먼저 고정한 뒤
-  requirements. 싸고 즉시 되지만 "CI가 이미지를 흉내 낸다"는 구조는 그대로다. (2) 감사 대상을
-  **빌드한 이미지의 `pip freeze`** 로 바꾼다. 이쪽이 근본이고 아래 B와 한 몸이다.
+같은 뿌리에서 시간도 샜다. 백엔드 잡 236초 중 **129초(55%)** 가 이 3 GB를 옮기는 데 쓰였다.
+
+| 단계 | 시간 |
+|---|---|
+| `setup-python` (pip 캐시 3,033,176,230 B 복원) | 46s |
+| `pip install -r requirements.txt -r requirements-ci.txt` | 83s |
+| mypy | 38s |
+| pytest | 55s |
+| pip-audit | 11s |
+
+**고친 방법.** `ci.yml`이 Dockerfile과 같은 순서로 깐다 — CPU 인덱스에서 `torch==2.7.0`을 먼저
+고정하면 `sentence-transformers`의 `torch>=1.11`이 이미 충족돼 CUDA 휠을 안 끌어온다.
+`cache-dependency-path`에 `ci.yml`도 넣었다. 설치 명령이 바뀌면 캐시 내용도 바뀌는데
+requirements 해시만 키로 쓰면 옛 3 GB 캐시가 계속 복원되기 때문이다.
+
+- **남은 빚 하나.** torch 버전이 `ci.yml`과 `backend/Dockerfile` 두 곳에 적힌다. 한쪽만 올리면
+  다시 갈라진다(이 PR에서 지운 루트 Dockerfile이 정확히 그 실패였다). 양쪽 주석이 서로를
+  가리키게 해 뒀지만, 근본은 아래 B다 — **감사 대상을 빌드한 이미지의 `pip freeze`로 바꾸면**
+  CI가 이미지를 흉내 낼 필요 자체가 없어진다.
 
 ### B. 배포 산출물 자체를 검사하지 않는다
 
