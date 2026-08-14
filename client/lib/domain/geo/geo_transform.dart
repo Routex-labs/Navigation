@@ -1,13 +1,8 @@
 /// local_m(건물 로컬 평면 좌표) <-> WGS84 6-DOF affine 변환.
 ///
-/// api/app/domain/georeference.py, api/app/queries/geo_transform.py의 포팅이다.
-/// 백엔드는 건물 Node들의 (x_m, y_m, lat, lng) 실측 대응점으로 이 변환을
-/// 요청마다 즉석 피팅해서 /route 응답의 path_points_wgs84를 만든다.
-///
-/// GraphNodeResponse(= [GraphNode])가 x_m/y_m과 lat/lng을 이미 함께 내려주므로,
-/// 그래프 노드 자체를 대응점 삼아 클라이언트에서 같은 변환을 재구성할 수 있다.
-/// 이러면 클라이언트가 새 API 없이도 다익스트라로 구한 local_m 경로를 지도에
-/// 그릴 WGS84 폴리라인으로 바꿀 수 있다.
+/// 백엔드(`georeference.py`)의 포팅이다. 그래프 노드가 x_m/y_m과 lat/lng을 함께
+/// 내려주므로 그 노드를 대응점 삼아 같은 변환을 클라이언트에서 재구성한다 —
+/// 새 API 없이 다익스트라 결과를 지도에 그릴 수 있다.
 library;
 
 import 'dart:math' as math;

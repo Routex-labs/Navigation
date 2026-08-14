@@ -7,25 +7,16 @@
 part of 'outdoor_map_screen.dart';
 
 extension OutdoorMapGps on OutdoorMapBodyState {
-  /// GPS 구독을 붙여 둘 상태인지.
+  /// GPS 구독을 붙여 둘 상태인지. **실내에서도 끊지 않는다** — 이탈 판정의 유일한
+  /// 입력이라, 끊으면 조작 없이 걸어 나갔을 때 알 방법이 없다. 끊는 경우는 화면이
+  /// 안 보일 때뿐이다.
   ///
-  /// **실내에서도 끊지 않는다.** 진입/이탈 판정의 유일한 입력이 GPS 좌표라
-  /// ([judgeBuildingFromGps]), 끊으면 사용자가 아무 조작 없이 걸어 나갔을 때
-  /// 알 방법이 없다. 유일하게 끊는 경우는 이 화면이 안 보일 때다
-  /// (`widget.active == false`).
-  ///
-  /// 실내에서 들어온 좌표를 **화면에 쓰지 않는 것**은 별개의 게이트가 맡는다
-  /// ([_outdoorGpsVisible]). 두 값을 겸하게 하면 실내 도면 위에 건물 밖으로 튄
-  /// 파란 점이 찍히던 예전 문제가 돌아온다.
+  /// 그 좌표를 **화면에 쓸지**는 별개 게이트가 맡는다([_outdoorGpsVisible]).
   bool get _gpsTrackingWanted => widget.active;
 
-  /// GPS 기반 **표시**를 화면에 써도 되는 상태인지 — 현재 위치 마커, 'GPS 신호
-  /// 약함' 배지, 첫 위치로 카메라를 옮기는 동작이 여기에 걸린다.
-  ///
-  /// [_gpsTrackingWanted]와 반드시 구분해야 한다. 그쪽은 "구독이 붙어 있어야
-  /// 하는가"이고 실내 이탈 확인용 구독까지 포함하는데, 그 구독으로 들어온 위치는
-  /// 화면에 쓰면 안 된다. 둘을 같은 값으로 쓰면 실내 도면 위에 건물 밖 GPS 점이
-  /// 찍히고(예전 버그), 위치가 비어 있다는 이유만으로 신호 배지가 뜬다.
+  /// GPS 기반 **표시**를 써도 되는 상태인지 — 위치 마커·'신호 약함' 배지·첫 위치
+  /// 카메라가 여기 걸린다. [_gpsTrackingWanted](구독 여부)와 반드시 구분한다 —
+  /// 겸하면 실내 도면 위에 건물 밖 GPS 점이 찍힌다.
   bool get _outdoorGpsVisible => widget.active && !_indoorEntered;
 
   void _syncGpsSubscription() {
@@ -84,21 +75,12 @@ extension OutdoorMapGps on OutdoorMapBodyState {
 
   /// 자동 실내 진입 직후, 실내 위치(PDR 앵커)를 잡고 센서 추적을 시작한다.
   ///
-  /// **시작점은 방금 그 GPS 좌표에서 가장 가까운 통로 지점이다.** 진입 판정
-  /// 자체가 "믿을 수 있는 좌표가 건물 안"이라는 근거로 났으므로, 그 좌표가 지금
-  /// 사용자가 서 있는 곳에 가장 가까운 값이다. 스냅이 안 되면(통로에서
-  /// [autoEntryGpsSnapDistanceM]보다 멀거나 층 좌표로 못 옮기면) 방금 지나온
-  /// 문으로 폴백한다 — 건물에 들어온 사람은 어느 문이든 통과했다.
+  /// **시작점은 방금 그 GPS 좌표에서 가장 가까운 통로 지점**이고, 스냅이 안 되면
+  /// 방금 지나온 문으로 폴백한다(들어온 사람은 어느 문이든 통과했다).
   ///
-  /// 예전에는 트리거가 층 오버레이만 켜고 끝났다. 그래서 건물에 들어와도 지도에는
-  /// 내 위치가 없었고, 하단 바 "위치 지정"을 눌러 복도를 직접 탭해야 비로소 걸음
-  /// 추적이 시작됐다.
-  ///
-  /// **먼저 실패 조건부터.** 아래 중 하나라도 걸리면 자동 앵커를 포기하고 기존
-  /// 수동 경로를 안내한다 — 틀린 위치를 찍는 것보다 위치가 없는 편이 낫다.
-  ///   - 이미 확정된 앵커가 있다 → 사용자가 직접 잡아 둔 위치를 덮지 않는다.
-  ///   - 층 그래프가 없다 → WGS84를 층 좌표로 옮길 수 없다.
-  ///   - GPS 스냅도 문 폴백도 실패 → 시작점을 정할 근거가 없다.
+  /// **실패 조건 셋** — 이미 확정된 앵커가 있다·층 그래프가 없다·스냅도 폴백도
+  /// 실패. 하나라도 걸리면 포기하고 수동 경로를 안내한다: 틀린 위치를 찍는 것보다
+  /// 위치가 없는 편이 낫다.
   Future<void> _startTrackingFromGpsFix(Position position) async {
     if (indoorNavigationDriver.currentCalibration.canRenderPosition) return;
 
@@ -244,13 +226,8 @@ extension OutdoorMapGps on OutdoorMapBodyState {
   /// 한 건이 곧바로 되돌려 놓아 지도를 조작할 수 없다.
   void _stopFollowingUser() => _followingUser = false;
 
-  /// 안내 중 "내 위치로" 버튼([GuidanceRecenterButton]). 카메라를 지금 위치로
-  /// 옮긴다.
-  ///
-  /// **bearing과 tilt는 건드리지 않는다.** 개요 연출이 경로 축에 맞춰 세워 둔
-  /// 방향이 여기서 정북으로 돌아가면, 돌아온 화면의 위쪽이 갈 방향과 어긋난다.
-  /// 배율도 [walkingViewZoom]까지만 당기고 그보다 확대돼 있으면 그대로 둔다 —
-  /// 자세한 설명은 그 상수에 있다.
+  /// 안내 중 "내 위치로" 버튼. **bearing과 tilt는 건드리지 않는다** — 정북으로
+  /// 돌아가면 화면 위쪽이 갈 방향과 어긋난다. 배율도 [walkingViewZoom]까지만 당긴다.
   Future<void> _recenterOnCurrentPosition() async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;

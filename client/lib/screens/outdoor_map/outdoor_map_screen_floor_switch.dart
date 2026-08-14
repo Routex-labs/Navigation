@@ -7,18 +7,11 @@
 part of 'outdoor_map_screen.dart';
 
 extension OutdoorMapFloorSwitch on OutdoorMapBodyState {
-  /// 층 선택기에서 사용자가 직접 층을 골랐을 때.
+  /// 층 선택기에서 사용자가 직접 층을 골랐을 때. 갈아 끼운 뒤 **그 층 외곽선에
+  /// 카메라를 다시 맞춘다** — 층마다 크기가 달라(지상 180×190 m ↔ B3 286×305 m)
+  /// 이전 배율이 안 맞는다.
   ///
-  /// 층을 갈아 끼운 뒤 **그 층 외곽선에 카메라를 다시 맞춘다.** 층마다 크기가
-  /// 달라서(지상 약 180 x 190 m ↔ B3·B4 286 x 305 m) 이전 층에 맞춰 둔 배율이
-  /// 새 층에는 안 맞는다 — 지하로 내려가면 도면이 화면 밖으로 잘리고, 올라오면
-  /// 여백만 남는다.
-  ///
-  /// **자동 층 전환에는 붙이지 않는다.** 안내 중 층이 바뀌는 순간
-  /// ([_enqueueFloorTransition])에는 카메라가 사용자를 따라가야지 층 전체를
-  /// 담으려 물러서면 안 된다. 그래서 재정렬을 [_switchOverlayFloor] 안이 아니라
-  /// 이 사용자 조작 경로에만 둔다. (안내 중에는 층 선택기 자체가 접혀 있어
-  /// 이 경로로 들어올 수도 없다.)
+  /// **자동 전환에는 붙이지 않는다** — 안내 중에는 카메라가 사용자를 따라가야 한다.
   Future<void> _onFloorChipSelected(String floor) async {
     if (floor == _activeFloor) return;
     // 크로스페이드 마무리(타일 대기 → 페이드인)는 떼어 둔 채 곧바로 돌아오므로
@@ -37,19 +30,12 @@ extension OutdoorMapFloorSwitch on OutdoorMapBodyState {
     await _fitCameraToActiveFloor(duration: floorSwitchZoomDuration);
   }
 
-  /// [_switchOverlayFloor]를 크로스페이드로 돈다. **사람 조작으로 층이 바뀌는
-  /// 모든 경로**(층 선택기, 검색·카테고리에서 타 층 매장, 경로 계산의 층 이동,
-  /// 자동 전환 취소·되돌리기)가 이걸 쓴다 — 크로스페이드 없이 직접
-  /// [_switchOverlayFloor]를 부르면 타일 교체가 "지워졌다 다시 그려지는"
-  /// 장면으로 드러난다. 안내 중 자동 전환([_swapIndoorFloorForRide])도 같은
-  /// 길로 들어오며, 페이드 시간만 두 배로 늘려 잡는다.
+  /// [_switchOverlayFloor]를 크로스페이드로 돈다. **층이 바뀌는 모든 경로**가 이걸
+  /// 쓴다 — 직접 부르면 타일 교체가 "지워졌다 다시 그려지는" 장면으로 드러난다.
   ///
-  /// 이전 층 도면은 새 층 타일이 실제로 도착할 때까지 그대로 남고, 도착하면
-  /// 새 도면이 그 위로 페이드인된다(오래 걸리면 그동안 에스컬레이터 모티프가
-  /// 뜬다 — 판단은 [FloorSwitchProgressController]). 마무리(타일 대기 →
-  /// 페이드인 → 이전 블록 제거)는 [_finalizeIndoorFloorCrossfade]가 떼어져
-  /// 돌므로 이 함수는 층 그래프 로드까지만 기다린다. 연타 시 모티프의 주인은
-  /// 마지막 호출이다(토큰).
+  /// 이전 도면은 새 타일이 실제로 도착할 때까지 남는다. 마무리(타일 대기 → 페이드인
+  /// → 이전 블록 제거)는 [_finalizeIndoorFloorCrossfade]가 떼어져 돌므로 이 함수는
+  /// 층 그래프 로드까지만 기다린다. 타이밍 근거는 camera-choreography-plan.md 4.13.
   Future<void> _switchOverlayFloorCrossfaded(
     String floor, {
     bool recenterIfNeeded = true,
@@ -76,19 +62,13 @@ extension OutdoorMapFloorSwitch on OutdoorMapBodyState {
     }
   }
 
-  /// 층 도면을 갈아 끼운다. 실내 MVT 오버레이 소스를 새 층 타일로 바꾸고,
-  /// PDR 스냅용 층 그래프도 함께 갱신한다.
-  /// [recenterIfNeeded]가 false면 마지막의 [_recenterOnBuildingIfNeeded]를
-  /// 건너뛴다. 호출자가 곧바로 카메라를 다시 맞출 때 쓴다 — 두 애니메이션이
-  /// 겹치면 지도가 한 번 움찔했다가 다시 움직인다.
+  /// 층 도면을 갈아 끼운다(MVT 소스 + PDR 스냅용 층 그래프).
   ///
-  /// [crossfade]가 false(안내 중 자동 전환 — 셸의 불투명 스크림이 교체를
-  /// 가린다)면 이전 층 소스·레이어를 지우고 새 층을 등록하는 즉시 교체다.
-  /// true(사람 조작, [_switchOverlayFloorCrossfaded])면 이전 층 블록을 화면에
-  /// 남긴 채 새 층 블록을 **투명하게** 위에 등록하고, 타일 도착을 기다렸다가
-  /// 페이드인하는 마무리([_finalizeIndoorFloorCrossfade])를 떼어서 예약한다.
-  /// 반환값은 그 마무리가 예약됐는지 — 예약됐다면 [progressToken]의 finish도
-  /// 마무리가 맡는다.
+  /// [recenterIfNeeded]가 false면 재정렬을 건너뛴다 — 호출자가 곧바로 카메라를 맞출
+  /// 때 쓴다(두 애니메이션이 겹치면 지도가 한 번 움찔한다).
+  ///
+  /// [crossfade]가 false면 즉시 교체, true면 새 블록을 **투명하게** 얹고 마무리를
+  /// 예약한다. 반환값은 그 예약 여부이고, 예약됐으면 [progressToken]도 마무리가 맡는다.
   Future<bool> _switchOverlayFloor(
     String floor, {
     bool recenterIfNeeded = true,
@@ -197,35 +177,21 @@ extension OutdoorMapFloorSwitch on OutdoorMapBodyState {
     _syncIndoorDestinationLayer();
     _syncHighlightLayer();
     _notifyRouteStateIfChanged();
-    // 층 chip을 눌렀는데 카메라가 건물 밖을 보거나 실내 오버레이가 페이드인되기
-    // 전 zoom(<17.5)에 있으면 사용자는 새 층 도면을 볼 수 없다 — "5F/6F를 골랐는데
-    // 아무것도 안 나온다"는 인상을 준다. 층 chip 탭은 명시적으로 "그 층을 보고
-    // 싶다"는 신호이므로, 이 경우 건물 중심으로 카메라를 옮겨 오버레이가 확실히
-    // 화면에 뜨게 한다. 이미 건물이 잘 보이는 상태에서 층만 바꾼 경우에는 카메라를
-    // 건드리지 않는다 — 그 상황에서 강제로 재정렬하면 사용자의 view가 불필요하게
-    // 튀어 조작감이 나빠진다.
+    // 카메라가 건물 밖이거나 페이드인 전 zoom이면 "골랐는데 아무것도 안 나온다"가
+    // 된다. 층 chip 탭은 "그 층을 보고 싶다"는 신호라 그때만 카메라를 옮긴다 —
+    // 이미 잘 보이는 상태에서 재정렬하면 view가 불필요하게 튄다.
     if (recenterIfNeeded) await _recenterOnBuildingIfNeeded();
     return crossfadeScheduled;
   }
 
-  /// 크로스페이드 마무리 — 새 층 타일 도착을 기다렸다가 새 도면을 페이드인하고
-  /// 이전 층 블록을 지운다. [_switchOverlayFloor]가 새 블록을 등록한 직후
-  /// 떼어서(unawaited) 부른다 — 호출자는 타일을 기다릴 필요가 없고, 카메라
-  /// 재정렬이 로드와 겹쳐서 돈다.
+  /// 크로스페이드 마무리 — 타일 도착을 기다려 페이드인하고 이전 블록을 지운다.
+  /// 등록 직후 떼어서(unawaited) 부르므로 카메라 재정렬이 로드와 겹쳐 돈다.
   ///
-  /// "타일 도착"은 고정 딜레이가 아니라 **실제 로드 신호**다: 새 소스의
-  /// `footprint`를 [MapLibreMapController.querySourceFeatures]로 폴링해, 로드된
-  /// 타일에 feature가 잡히는 순간을 준비 완료로 본다. 주차구역 폴리곤이 수백
-  /// 개라 로드에 수 초 걸리는 층(B3·5F·6F)에서도 이전 도면이 끝까지 유지되는
-  /// 근거다. 화면 밖·minzoom 미만이라 타일 요청 자체가 없으면 feature가 영영
-  /// 안 잡히므로 [floorSwitchTilesReadyTimeout]에서 끊고 그냥 교체한다(그
-  /// 줌에서는 오버레이가 어차피 안 보여 교체 장면도 없다).
+  /// "타일 도착"은 `querySourceFeatures` 폴링으로 잡는 **실제 로드 신호**다. 타일
+  /// 요청 자체가 없으면 영영 안 잡히므로 [floorSwitchTilesReadyTimeout]에서 끊는다.
   ///
-  /// [generation]은 이 마무리가 맡은 소스 세대다. 기다리는 사이 새 전환이
-  /// 시작되면(세대 불일치) 즉시 물러난다 — 은퇴 블록 정리까지 포함해 마지막
-  /// 전환의 마무리가 이어받는다. [progressToken]이 있으면 어떤 경로로 끝나든
-  /// 에스컬레이터 모티프 컨트롤러에 완료를 알린다(추월당한 토큰의 finish는
-  /// 컨트롤러가 무시한다).
+  /// [generation]이 어긋나면(새 전환이 시작됨) 즉시 물러난다 — 은퇴 블록 정리까지
+  /// 마지막 전환이 이어받는다.
   Future<void> _finalizeIndoorFloorCrossfade({
     required int generation,
     int? progressToken,

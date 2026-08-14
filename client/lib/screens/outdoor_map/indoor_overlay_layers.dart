@@ -1,12 +1,7 @@
 /// 야외 지도 위 실내 오버레이 레이어의 **완성된** 속성 묶음.
 ///
-/// 지켜야 하는 규칙은 하나다 — **`setLayerProperties`는 patch가 아니라 전체
-/// 교체다.** 설정하지 않은 속성까지 null로 전송돼 스펙 기본값으로 되돌아가고,
-/// `fill-color`의 기본값이 검정이라 도면이 통째로 검게 덮인다. 웹에서는 경로가
-/// 달라 증상이 안 보인다.
-///
-/// 그래서 최초 등록과 갱신이 **같은 함수**를 쓴다. 자세한 경위는
-/// `docs/client/map-style-rules.md`.
+/// 규칙은 하나 — **`setLayerProperties`는 전체 교체다.** 그래서 최초 등록과 갱신이
+/// 같은 함수를 쓴다(경위: `docs/client/map-style-rules.md` 0절).
 library;
 
 import 'package:flutter/foundation.dart' show debugPrint;
@@ -41,15 +36,10 @@ FillLayerProperties buildingFillProps(double opacity) => FillLayerProperties(
   fillOpacity: opacity,
 );
 
-/// 실내 진입 상태에서만 그리는 현재 층 외곽선.
+/// 실내 진입 상태에서만 그리는 현재 층 외곽선. 도면 **위에** 얹히는 선이라 얇게
+/// (1px) 긋는다 — 굵으면 가장자리 매장을 덮고 선 자체가 도면처럼 읽힌다.
 ///
-/// 실내 도면 **위에** 얹히는 선이라 얇게(1px) 긋는다. 굵게 그으면 도면 가장자리
-/// 매장을 덮고, 지하처럼 외곽이 들쭉날쭉한 층에서는 선 자체가 도면처럼 읽힌다.
-///
-/// 어느 링을 따라갈지는 [floor_outline.dart]가 정한다. 그 링은 바로 아래
-/// [indoorFootprintProps]가 칠하는 타일 `footprint`와 **같은 층 footprint**에서
-/// 나온다 — 선과 바닥이 다른 데이터에서 나오면 층마다 경계가 미세하게 어긋난다
-/// (그렇게 어긋났던 경위는 [floor_outline.dart] 상단 주석 참고).
+/// 링과 바닥은 **같은 층 footprint**에서 나와야 한다(다르면 경계가 어긋난다).
 LineLayerProperties floorOutlineProps(List<Object> fadeExpr) =>
     LineLayerProperties(
       lineColor: AppColors.primary.toHexString(),
@@ -78,15 +68,9 @@ FillLayerProperties indoorStoresFillProps(List<Object> fadeExpr) =>
       fillOpacity: fadeExpr,
     );
 
-/// 카테고리 필터로 강조된 매장 fill.
-///
-/// 색은 실내 화면과 **같은 표현식**([category_map_fill.dart])을 써서 선택한
-/// 대분류의 색으로 칠한다. 두 화면이 같은 MVT `stores` 레이어를 보는데 강조색이
-/// 다르면, 같은 매장이 야외 오버레이에서와 실내 화면에서 다른 색으로 보인다.
-///
-/// 다른 점은 **opacity를 fadeExpr로 묶는다**는 것뿐이다. 야외 오버레이는 줌에
-/// 따라 통째로 페이드인/아웃되므로, 강조만 불투명하게 두면 도면이 아직 안 보이는
-/// 줌에서 강조 폴리곤만 공중에 뜬다.
+/// 카테고리 필터로 강조된 매장 fill. 색은 실내 화면과 **같은 표현식**을 쓰고
+/// (같은 매장이 두 화면에서 다른 색이면 안 된다), 다른 점은 **opacity를 fadeExpr로
+/// 묶는다**는 것뿐이다 — 안 묶으면 도면이 안 보이는 줌에서 강조만 공중에 뜬다.
 FillLayerProperties indoorCategoryHighlightProps(List<Object> fadeExpr) =>
     FillLayerProperties(
       fillColor: storeCategoryHighlightFillColorExpression(),
@@ -101,26 +85,15 @@ FillLayerProperties indoorVerticalTransportProps(List<Object> fadeExpr) =>
       fillOpacity: fadeExpr,
     );
 
-/// 매장명 라벨 + 대분류 아이콘.
+/// 매장명 라벨 + 대분류 아이콘(같은 심볼에 얹는 이유는 [category_map_icon.dart]).
 ///
-/// 아이콘을 별도 레이어로 두지 않고 같은 심볼에 얹는 이유, 이름이 아이콘 앞/뒤로
-/// 뒤집히는 방식과 그 한계는 [category_map_icon.dart]에 적어 두었다.
+/// **호출하는 쪽이 모두 [selection]을 넘겨야 한다** — 페이드 갱신에서도 불리는데
+/// 거기서 빼먹으면 줌만 움직여도 가려 뒀던 이름이 되살아난다(상단 "전체 교체"
+/// 규칙이 layout 속성에도 적용되는 경우다).
 ///
-/// [selection]은 지금 고른 카테고리다. 선택이 있으면 그 매장만 이름을 달고
-/// 나머지는 아이콘만 남는다([categoryLabelTextField]).
-/// **호출하는 쪽이 모두 지금 선택을 넘겨야 한다** — 이 함수는 페이드 갱신
-/// (`_syncIndoorOverlayFade`)에서도 불리는데, 거기서 선택을 빼먹으면 줌만
-/// 움직여도 가려 뒀던 이름이 되살아난다(파일 상단의 "전체 교체" 규칙이 layout
-/// 속성에도 그대로 적용되는 경우다).
-///
-/// [devicePixelRatio]는 아이콘 크기를 논리 px으로 환산하는 데 쓴다 —
-/// [indoorMarkerIconSize] 주석 참고. 호출하는 쪽이 화면에서 읽어 넘긴다.
-/// [alwaysVisible]은 **한 폴리곤을 여러 매장이 나눠 쓰는 자리**(타일 라벨의
-/// `shared` 속성) 전용이다. 백엔드가 라벨 점을 흩어 놓아도 간격이 글자 폭보다
-/// 좁을 수 있어, 충돌 판정에 맡기면 결국 하나가 지워진다 — 그러면 화면에는
-/// 이름 하나만 보이는데 그 자리에는 매장이 둘이라, 보이는 이름과 열리는 매장이
-/// 어긋난다. 같은 자리에 둘이 있다는 사실 자체가 정보이므로 이 라벨들은 조금
-/// 겹치더라도 전부 그린다(전체 1,640곳 중 91곳뿐이라 겹침이 번지지 않는다).
+/// [alwaysVisible]은 **한 폴리곤을 여러 매장이 나눠 쓰는 자리** 전용이다. 충돌
+/// 판정에 맡기면 하나가 지워져 보이는 이름과 열리는 매장이 어긋난다 — 1,640곳 중
+/// 91곳뿐이라 조금 겹쳐도 번지지 않는다.
 SymbolLayerProperties indoorStoresLabelProps(
   List<Object> fadeExpr,
   CategorySelection? selection,
@@ -222,16 +195,12 @@ SymbolLayerProperties indoorFacilityIconProps(
 
 /// 실내 오버레이 소스·레이어의 **한 세대**분 실제 ID 묶음.
 ///
-/// 층을 바꿀 때마다 세대(generation) 카운터를 베이스 이름 뒤에 붙여 매번 다른
-/// 실제 ID를 만든다 — 같은 ID로 removeSource → addSource를 반복하면 maplibre_gl
-/// native(Android/iOS)가 이전 소스 정리를 스케줄만 한 채 리턴해 곧이은 addSource가
-/// "source already exists"로 조용히 실패하는 사례가 있었다(특정 층으로 전환 시
-/// 아무것도 안 그려지는 증상). 세대 카운터로 실제 ID를 유일하게 만들면 native
-/// cleanup 경쟁이 사라진다.
+/// 같은 ID로 removeSource → addSource를 반복하면 native가 정리를 스케줄만 한 채
+/// 리턴해 다음 addSource가 "source already exists"로 조용히 실패한다(그 층만
+/// 아무것도 안 그려지는 증상). 세대 카운터로 ID를 유일하게 만들어 경쟁을 없앤다.
 ///
-/// 화면이 필드 11개로 들고 있던 것을 값 하나로 묶었다. 세대가 바뀔 때 하나라도
-/// 빠뜨리면 그 레이어만 이전 세대 ID로 남아 remove 대상에서 새는데, 묶어 두면
-/// [next]가 전부를 한 번에 넘긴다.
+/// 필드 11개를 값 하나로 묶은 이유는 하나라도 빠뜨리면 그 레이어만 이전 세대 ID로
+/// 남아 remove 대상에서 새기 때문이다.
 class IndoorOverlayIds {
   const IndoorOverlayIds([this.generation = 0]);
 
@@ -295,19 +264,12 @@ class IndoorOverlayIds {
 
 /// 실내 오버레이 소스와 레이어 9장을 한 번에 등록한다. 성공하면 true.
 ///
-/// 등록 **순서가 곧 쌓임 순서**다. 아래에서 위로 footprint → 매장 fill →
-/// 카테고리 강조 → 수직이동 → 라벨 → 아이콘이고, 전부 route casing 바로
-/// 아래에 넣는다. 순서를 바꾸면 경로선·GPS 마커가 매장 fill 밑으로 깔려
-/// 화면에서 사라진다(아래 주석 참고).
+/// 등록 **순서가 곧 쌓임 순서**다(footprint → fill → 강조 → 수직이동 → 라벨 →
+/// 아이콘, 전부 route casing 아래). 바꾸면 경로선·마커가 fill 밑으로 깔린다.
 ///
-/// [ensureIconImages]는 아이콘 비트맵 등록이다. 호출자가 "스타일당 한 번"
-/// 게이팅을 들고 있어 콜백으로 받는다 — 여기서 매번 부르면 층을 바꿀 때마다
-/// 비트맵을 다시 렌더한다.
-///
-/// 실패하면 부분 등록된 것을 스스로 정리하고 false를 돌려준다. 소스/레이어 등록은
-/// native 쪽에서 조용히 예외를 던지고 pending 상태로 남을 때가 있어(스타일 미준비·
-/// 잘못된 expression 등), 정리하지 않으면 다음 호출이 addSource를 다시 시도하며
-/// "source already exists"로 폭발한다.
+/// [ensureIconImages]를 콜백으로 받는 이유는 "스타일당 한 번" 게이팅을 호출자가
+/// 들고 있어서다. 실패하면 **부분 등록된 것을 스스로 정리한다** — 안 그러면 다음
+/// 호출이 "source already exists"로 폭발한다.
 Future<bool> registerIndoorOverlayLayers(
   MapLibreMapController controller, {
   required IndoorOverlayIds ids,
@@ -327,28 +289,20 @@ Future<bool> registerIndoorOverlayLayers(
           // over-scale된 채 잠깐 보이면서 도면이 회전한 것처럼 보이는 문제를
           // 예방한다. 근거는 indoorTilesMinZoom 정의 위 주석 참고.
           minzoom: indoorTilesMinZoom,
-          // maxzoom 이상에서는 MapLibre가 maxzoom 타일을 over-scale해 그린다.
-          // 백엔드의 mapbox_vector_tile.encode는 요청 zoom이 커질수록 tile 경계
-          // 사각형도 미세해지는데(z=21이면 20m 남짓), 이 좁은 사각형을 4096 유닛에
-          // quantize할 때 부동소수점 오차가 상대적으로 커져 사용자가 극한 확대를
-          // 하면 도면이 잠깐 뒤틀린 것처럼 보이는 원인이 됐다. z=18을 상한으로
-          // 잡으면 tile 경계가 ~150m로 충분히 넓어 quantize precision이 0.04m/유닛
-          // 이라 어떤 확대 배율에서도 sub-pixel로 안정된다.
+          // z=18 상한. 더 높이면 tile 경계가 좁아져(z=21은 20m 남짓) 4096 유닛
+          // quantize 오차가 커지고, 극한 확대에서 도면이 뒤틀려 보인다. 18이면
+          // 경계 ~150m라 0.04m/유닛으로 어떤 배율에서도 sub-pixel이다.
           maxzoom: indoorTilesMaxZoom,
         ),
       );
       // POI/시설 아이콘 비트맵을 스타일당 한 번만 addImage로 등록한다. 층을
       // 바꿔도 이미지는 그대로 재사용되므로 반복 렌더를 피한다.
       await ensureIconImages(controller);
-      // 실내 오버레이 레이어를 route casing 바로 아래에 삽입한다. 안 그러면
-      // _onStyleLoaded가 먼저 그린 경로선/GPS 마커/PDR dot이 나중에 얹힌 stores
-      // fill(줌 17.5+에서 fillOpacity=1) 밑으로 깔려 화면에서 완전히 사라진다.
-      // **전 레이어 인터랙션을 끈다** — 매장 탭 검출은 feature 탭 콜백이 아니라
-      // [_handleMapClick]의 queryRenderedFeatures(현재 세대 stores 레이어 id로
-      // 직접 질의)가 하고, onMapClick은 featureTapsTriggersMapClick=true라 어차피
-      // 항상 온다. stores를 인터랙션으로 남기면 층 전환 크로스페이드 동안 은퇴
-      // 목록([_retiringIndoorBlocks])에 남는 이전 층 stores 레이어까지 탭 대상이
-      // 되어, native feature 탭 판정이 화면과 무관한 이전 층 폴리곤에 걸린다.
+      // route casing 바로 아래에 삽입한다 — 안 그러면 먼저 그린 경로선·마커가
+      // stores fill 밑으로 깔려 사라진다.
+      // **전 레이어 인터랙션을 끈다** — 탭 검출은 [_handleMapClick]의
+      // queryRenderedFeatures가 하고, 남겨 두면 크로스페이드 동안 은퇴 목록에 있는
+      // 이전 층 폴리곤까지 탭 대상이 된다.
       await controller.addFillLayer(
         ids.source,
         ids.footprint,
@@ -525,19 +479,12 @@ enum IndoorOverlaySyncScope {
 }
 
 /// 이미 등록된 오버레이 레이어의 속성을 지금 상태로 갈아 끼운다.
+/// **각 레이어의 전체 속성을 매번 다시 넘긴다**(상단 주석).
 ///
-/// **각 레이어의 전체 속성을 매번 다시 넘긴다.** opacity만 넘기면 안 된다 —
-/// 이유는 이 파일 상단 주석 참고(설정하지 않은 속성이 스펙 기본값으로 되돌아가
-/// 도면이 검게 뜬다).
+/// [scope]로 범위를 좁힌다 — `labels`는 카테고리 선택만 바뀐 경우, `fills`는 층
+/// 전환 크로스페이드 단계(매 프레임 라벨까지 밀면 native 왕복이 두 배다).
 ///
-/// [scope]로 갱신 범위를 좁힌다. 전부 다시 밀 필요가 없는 경우가 둘 있다.
-///  - [IndoorOverlaySyncScope.labels] — 카테고리 선택만 바뀐 경우. fill·아이콘은
-///    선택과 무관하다.
-///  - [IndoorOverlaySyncScope.fills] — 층 전환 크로스페이드 단계. 계수는 fill에만
-///    보이면 되고, 라벨·아이콘까지 매 프레임 밀면 native 왕복이 두 배가 된다.
-///
-/// 이미 제거된 레이어에 대한 setLayerProperties가 native에서 예외를 던지는
-/// 구현이 있어(층 전환과 겹치는 순간) 각각 감싼다.
+/// 이미 제거된 레이어에 대한 호출이 native에서 예외를 던져 각각 감싼다.
 Future<void> syncIndoorOverlayProps(
   MapLibreMapController controller, {
   required IndoorOverlayIds ids,

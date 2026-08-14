@@ -111,20 +111,9 @@ const _mapSupportedNativePlatforms = {
 bool get _isMapSupportedOnThisPlatform =>
     kIsWeb || _mapSupportedNativePlatforms.contains(defaultTargetPlatform);
 
-// MapLibre 소스·레이어 ID. 층 지도의 명명 규칙(_로 시작하지 않는 kebab-case) 준수.
-// 건물 fill·dim scrim·층 외곽선·매장 강조의 소스/레이어 id, 등록, 폴리곤 쓰기는
-// shape_map_layers.dart가 소유한다.
-// 실내 오버레이 소스·레이어 id는 indoor_overlay_layers.dart의 [IndoorOverlayIds]가
-// 소유한다. 층 전환마다 세대를 올려 실제 id를 새로 만드는 이유도 거기 적혀 있다.
-// 경로선 소스·레이어 id와 등록은 route_map_layers.dart가 소유한다. 화면은
-// 공개 소스 id(kOutdoorRoute*)로 데이터만 밀어 넣는다.
-// 대중교통 경로 오버레이(소스·레이어 id, 등록, 데이터 쓰기)는
-// transit_map_layers.dart가 소유한다.
-// 현재 위치·야외 목적지·실내 도착 핀의 소스/레이어 id, 등록, 점 하나 쓰기는
-// marker_map_layers.dart가 소유한다. 화면은 공개 소스 id(kOutdoorCurrent/Dest/
-// IndoorDest)로 좌표만 넘긴다.
-// PDR 위치 마커의 소스/레이어 id, 비트맵·레이어 등록, 데이터 조립은
-// marker_map_layers.dart가 소유한다.
+// MapLibre 소스·레이어 id는 전부 `*_map_layers.dart`가 소유한다(건물·scrim은
+// shape, 경로선은 route, 대중교통은 transit, 마커·핀은 marker, 실내 오버레이는
+// indoor_overlay_layers). 화면은 공개 소스 id로 데이터만 밀어 넣는다.
 
 // 디버그 모드 전용 PDR 진단 레이어(소스·레이어 id, 등록, 데이터 쓰기)는
 // pdr_debug_map_layers.dart가 소유한다. 여기서는 무엇을 보여줄지(토글·층·앵커
@@ -168,13 +157,9 @@ String _baseMapStyle() {
   }
   return jsonEncode({
     'version': 8,
-    // glyphs 없이는 나중에 얹는 실내 오버레이의 매장명 SymbolLayer가 폰트를
-    // 못 받아 layout을 못 끝낸다. MapLibre GL Native는 같은 벡터 타일 소스에
-    // 딸린 fill 레이어(footprint/stores)까지 이 pending에 묶여 통째로 안
-    // 그려진다 — 실기기에서 야외 지도 위에 실내 오버레이가 통째로 사라지는
-    // 원인이었다. 웹은 이 부분이 관대해 fill만 그대로 보이지만, 실기기에서는
-    // 반드시 채워야 한다. 백엔드가 실내 지도용으로 이미 같은 endpoint를 서빙
-    // 하므로 같은 URL을 쓴다(fonts/{fontstack}/{range}.pbf).
+    // glyphs가 없으면 매장명 SymbolLayer가 layout을 못 끝내고, native는 같은 소스의
+    // fill 레이어까지 pending에 묶어 **실내 오버레이가 통째로 사라진다.**
+    // 웹은 관대해 fill만 그대로 보인다 — Chrome에서만 보면 못 잡는다.
     'glyphs': '$apiBaseUrl/fonts/{fontstack}/{range}.pbf',
     'sources': {'base': source},
     'layers': [
@@ -194,13 +179,10 @@ String _baseMapStyle() {
   });
 }
 
-/// 야외 지도 본문(지도 + 위치/경로 오버레이). 검색창·길찾기·건물 전환 같은
-/// 공통 UI는 [MapShellScreen]이 상단/하단 바로 얹으므로 여기서는 다루지 않는다.
+/// 야외 지도 본문(지도 + 위치/경로 오버레이). 공통 UI는 [MapShellScreen]이 얹는다.
 ///
-/// 실내 진입(건물 탭·줌 임계값 초과·GPS 근접 감지)은 화면 모드를 실내로 전환
-/// 하지 않고, 이 화면 위에 층 chip과 위치 지정 등 실내 UI 오버레이를 얹어
-/// 하나의 화면에서 계속 조작할 수 있게 한다. 하단 홈/실내 세그먼트는 그대로
-/// 두어 사용자가 원하면 종래의 별도 실내 지도로도 진입할 수 있다.
+/// 실내 진입은 화면을 바꾸지 않고 **이 화면 위에 오버레이를 얹는다** — 층 chip과
+/// 위치 지정까지 한 화면에서 조작한다(판정: indoor-entry-rules.md).
 class OutdoorMapBody extends StatefulWidget {
   const OutdoorMapBody({
     super.key,
@@ -230,13 +212,9 @@ class OutdoorMapBody extends StatefulWidget {
   /// 상위(MapShellScreen)가 이 값으로 하단 공용 바를 그 위로 띄운다.
   final ValueChanged<bool>? onRouteVisibleChanged;
 
-  /// 사용자가 **"안내 종료"를 눌러** 길안내를 끝냈을 때 호출된다.
-  ///
-  /// [onRouteVisibleChanged]와 반드시 구분해야 한다. 그쪽은 경로선이 있는지
-  /// 없는지라 재계산·수단 변경처럼 안내가 계속되는 중에도 오르내리지만, 이쪽은
-  /// "사용자가 그만두겠다고 눌렀다" 하나뿐이다. 상위는 이 신호로 상단 길찾기
-  /// 바까지 함께 닫는다 — 안 그러면 경로만 사라지고 출발/도착 칸이 남아,
-  /// 안내를 껐는데 화면은 아직 길찾기 중인 상태가 된다.
+  /// 사용자가 **"안내 종료"를 눌렀을 때**. [onRouteVisibleChanged]와 구분한다 —
+  /// 그쪽은 재계산·수단 변경으로도 오르내린다. 상위는 이 신호로 상단 길찾기 바까지
+  /// 닫는다.
   final VoidCallback? onGuidanceDismissed;
 
   /// 사용자가 **직접 고른** 목적지로 안내가 시작/종료될 때 호출된다.
@@ -269,13 +247,9 @@ class OutdoorMapBody extends StatefulWidget {
   /// 하므로 규칙도 같은 것을 쓴다.
   final bool pickingOnMap;
 
-  /// [pickingOnMap]인 동안 실내 오버레이 위에서 **매장이 아닌 곳**을 눌렀을 때,
-  /// 통행 그래프에 스냅해 만든 후보를 상위에 넘긴다.
-  ///
-  /// 이 화면에서 특히 중요한 이유가 하나 더 있다. 실내 오버레이를 보는 중에
-  /// 빈 곳을 누르면 원래 [_exitIndoorByOutsideTap]/[_triggerIndoorEntry]로
-  /// 흘러가 오버레이가 닫히거나 다시 열린다. 고르는 중에 그 경로를 타면 사용자는
-  /// 복도를 눌렀는데 실내 화면이 통째로 닫히는 것을 본다.
+  /// [pickingOnMap] 중 **매장이 아닌 곳**을 눌렀을 때 그래프에 스냅한 후보를 넘긴다.
+  /// 이 경로가 없으면 빈 곳 탭이 [_exitIndoorByOutsideTap]으로 흘러가, 복도를
+  /// 눌렀는데 실내 화면이 통째로 닫힌다.
   final ValueChanged<PoiSearchResult>? onMapPointPicked;
 
   /// 사용자의 현재 위치가 새로 잡혔을 때 호출된다 — "위치 지정"으로 지도를
@@ -318,35 +292,17 @@ class OutdoorMapBody extends StatefulWidget {
 /// 덮개 카드의 점은 이 값을 보간해 프레임 단위로 부드럽게 그린다.
 const _escalatorGlideFrame = escalatorGlideSampleInterval;
 
-/// 도면을 갈아 끼운 뒤 덮개를 그대로 두는 시간.
-///
-/// 페이드(진입 520ms · 해제 700ms)까지 더하면 화면이 가려지는 시간은 약 4.7초다.
-/// 예전 400ms(총 1.6초)에서 두 번 늘렸다 — 처음엔 덮개가 크로스페이드·마커
-/// 활강보다 먼저 걷혀 교체 과정이 그대로 보였고, 2026-08-13 실측에서는 도면
-/// 교체가 반 층 시점으로 옮겨지며 "전환 연출을 좀 더 길게 봐도 된다"는
-/// 피드백을 받았다(남은 탑승 ~10초 중 절반은 여전히 새 도면을 본다).
-/// 하차까지 덮지는 않는다 — 내리기 전에 새 층 도면과 다음 경로를 봐 둬야 한다.
+/// 도면을 갈아 끼운 뒤 덮개를 그대로 두는 시간(페이드까지 더하면 약 4.7초).
+/// 짧으면 덮개가 크로스페이드·마커 활강보다 먼저 걷혀 교체 과정이 보인다.
+/// **하차까지 덮지는 않는다** — 내리기 전에 새 층 도면과 다음 경로를 봐야 한다.
 const _indoorFloorSwapVeilHold = Duration(milliseconds: 3500);
 
 /// 층 이동 확정 뒤 도착 배너를 띄워 두는 시간.
 const _indoorArrivalBannerHold = Duration(seconds: 6);
 
-/// 실패했을 때 스스로 다시 시도하는 간격.
-///
-/// **한 번 실패하면 영영 복구되지 않는 것이 실제 문제였다.** 이 로드는
-/// initState에서 딱 한 번 돌고, 실패하면 사람이 배지를 누를 때까지 그대로
-/// 남는다. 그런데 개발 중에는 `uvicorn --reload`가 백엔드 코드를 고칠 때마다
-/// 서버를 잠깐 내리므로, 하필 그 순간 화면이 열려 있으면 층 선택기·위치
-/// 지정·실내 진입·실내 도면이 통째로 죽은 채 남는다. 클라이언트를 hot
-/// reload해도 initState는 다시 돌지 않아 그대로다.
-///
-/// 간격을 늘려 가는 이유는 두 경우를 한 사다리로 덮기 위해서다 — 서버가
-/// 리로드 중이라 곧 살아나는 경우(앞쪽 짧은 간격)와, 아직 뜨지도 않아 한참
-/// 걸리는 경우(뒤쪽 긴 간격). 다 쓰면 약 1분간 6번 시도한다.
-///
-/// **무한히 재시도하지는 않는다.** 백엔드가 아예 없는 환경(기기에서 서버
-/// 없이 실행)에서 영원히 요청을 날리면 배터리와 로그만 태운다. 사다리를 다
-/// 쓴 뒤에는 배지의 "다시 시도"에 맡긴다.
+/// 건물 로드 실패 시 다시 시도하는 간격 사다리(약 1분간 6번). 이 로드는 initState
+/// 한 번뿐이라 실패하면 영영 복구되지 않았다. **무한 재시도는 안 한다** — 백엔드
+/// 없는 환경에서 배터리만 태운다.
 const _buildingRetryDelays = <Duration>[
   Duration(seconds: 1),
   Duration(seconds: 2),
@@ -363,18 +319,10 @@ const _storeFocusZoom = 19.0;
 LatLng _toMapLatLng(ll.LatLng point) => LatLng(point.latitude, point.longitude);
 
 class OutdoorMapBodyState extends State<OutdoorMapBody> {
-  /// GPS 기반 자동 실내 진입이 지금 켜져 있는지.
+  /// GPS 자동 실내 진입이 지금 켜져 있는지. 1회성 플래그였을 때는 오탐 한 번이
+  /// 기능 자체를 죽였다([IndoorEntryGpsDecision.rearm]이 다시 켠다).
   ///
-  /// 예전에는 `_autoNavigated`라는 **되돌릴 수 없는** 1회성 플래그였다. 그래서
-  /// 입구 앞을 지나가다 한 번 잘못 발동하면, 사용자가 건물 밖을 탭해 나온 뒤
-  /// 진짜로 들어가도 자동 진입이 다시는 동작하지 않았다 — 오탐 한 번이 그 화면의
-  /// 자동 진입 기능 자체를 죽였다.
-  ///
-  /// 지금은 [IndoorEntryGpsDecision.rearm]이 다시 켠다. 조건은 "신뢰할 수 있는
-  /// 좌표가 입구에서 충분히 떨어진 곳에서 잡힘"이라, 실내에 그대로 있는 동안에는
-  /// 켜지지 않는다. **건물 밖을 탭한 것만으로는 켜지 않는 것이 중요하다** — 그건
-  /// "바깥 지도를 보여줘"라는 화면 조작이지 "내가 밖에 있다"가 아니라서, 그걸로
-  /// 다시 켜면 실내에 있는 사용자가 곧바로 되끌려 들어간다.
+  /// **건물 밖 탭만으로는 켜지 않는다** — 화면 조작이지 "내가 밖에 있다"가 아니다.
   bool _gpsEntryArmed = true;
 
   Position? _position;
@@ -604,14 +552,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   /// 화면을 덮는 정도. 0이 아니면 셸이 스크림을 그린다.
   ///
-  /// **도면이 갈리는 앞뒤만 덮는다.** 걸음이 멈추는 순간부터 하차까지 덮어 본
-  /// 적이 있는데, 그 구간은 길게는 수십 초라 화면이 계속 막힌 것으로 읽혔다.
-  /// 무엇보다 사용자는 **내리기 전에** 새 층 도면과 다음 경로를 봐 둬야 한다 —
-  /// 내려서야 처음 보면 그 자리에서 한 번 멈춰 서게 된다.
-  ///
-  /// 대신 예전(총 1.6초)보다는 길게 잡는다([_indoorFloorSwapVeilHold]). 덮개
-  /// 뒤에서 크로스페이드와 마커 활강이 도는데, 그보다 먼저 걷히면 교체 장면이
-  /// 그대로 보인다.
+  /// **도면이 갈리는 앞뒤만 덮는다** — 하차까지 덮으면 수십 초 막힌 것으로 읽히고,
+  /// 무엇보다 내리기 전에 새 층 도면을 봐 둬야 한다. 대신 크로스페이드와 마커 활강이
+  /// 끝나기 전에 걷히지 않을 만큼은 잡는다.
   double _floorSwapVeil = 0;
 
   /// 덮개를 내리기로 예약해 둔 타이머. 탑승이 먼저 끝나면 취소한다.
@@ -850,14 +793,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
   }
 
-  /// MapLibre 지도는 PlatformView라 hot reload로도 살아남고, 스타일이 이미 로드된
-  /// 상태에서는 `onStyleLoadedCallback`이 다시 불리지 않는다. 레이어 등록이 전부
-  /// [_onStyleLoaded] 안에 있으므로, 이 훅이 없으면 **핀 디자인이나 레이어 속성을
-  /// 고쳐도 hot reload 화면은 그대로다.**
-  ///
-  /// 위젯 코드(예: 하단 바 아이콘)는 hot reload가 즉시 반영하기 때문에, 같은
-  /// 수정 세션에서 "버튼 아이콘은 바뀌었는데 지도 마커만 안 바뀐다"는 모습이
-  /// 나온다 — 코드를 의심하게 만드는 함정이라 훅으로 막아 둔다.
+  /// 지도는 PlatformView라 hot reload로 살아남고 `onStyleLoadedCallback`이 다시
+  /// 불리지 않는다. 이 훅이 없으면 **레이어 속성을 고쳐도 화면이 그대로**인데
+  /// 위젯 코드는 즉시 반영돼, 코드를 의심하게 만드는 함정이 된다.
   @override
   void reassemble() {
     super.reassemble();
@@ -925,14 +863,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 자체가 5 m마다 왔으므로 좌표 한 건 = 요청 한 번이어도 됐다.
   ll.LatLng? _lastRouteRequestOrigin;
 
-  /// 디버그 모드에서 지도 위에 띄우는 GPS 진입 판정 근거 한 줄.
+  /// 디버그 모드에서 지도 위에 띄우는 GPS 진입 판정 근거 한 줄. null이면 안 그린다.
   ///
-  /// `setState`가 아니라 [ValueNotifier]인 이유는 갱신 빈도다. 좌표는 5 m마다
-  /// 들어오는데 그때마다 이 화면 전체(지도·오버레이·바)를 다시 그리면, 진단을
-  /// 켰다는 이유로 측정 대상인 성능이 달라진다. 칩만 다시 그린다.
-  ///
-  /// null이면 칩을 그리지 않는다 — 디버그 모드가 꺼져 있거나 아직 좌표가 한 건도
-  /// 안 들어온 상태다.
+  /// [ValueNotifier]인 이유는 갱신 빈도다 — 좌표마다 화면 전체를 다시 그리면
+  /// 진단을 켰다는 이유로 측정 대상인 성능이 달라진다.
   final ValueNotifier<String?> _gpsVerdictDebugText = ValueNotifier<String?>(
     null,
   );
@@ -1021,17 +955,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     );
   }
 
-  /// 위치 보정 버튼.
+  /// 위치 보정 버튼. 실내 오버레이가 켜져 있으면 **GPS를 건드리지 않는다** —
+  /// 건물 안에서 다시 찍으면 지도가 건물 밖으로 튀어 실내 위치를 잃는다.
   ///
-  /// 실내 진입 오버레이가 켜져 있으면 GPS를 아예 건드리지 않고 실내(PDR) 위치를
-  /// 기준으로 카메라를 맞춘다 — 건물 안에서 GPS를 다시 찍으면 지도가 건물 밖
-  /// 좌표로 튀어 방금 지정한 실내 위치를 잃는다. 동작은 실내 탭
-  /// ([IndoorMapBodyState.recalibrate])과 동일하게 탭마다 번갈아 수행한다:
-  /// 홀수 번째 탭은 실내 위치를 화면 정중앙에, 짝수 번째 탭은 바라보는 방향을
-  /// 화면 위쪽에 오도록 회전.
-  ///
-  /// 순수 야외 상태에서만 예전처럼 새 GPS 위치를 한 번 더 조회해 마커·지도
-  /// 중심을 갱신한다.
+  /// 탭마다 번갈아 돈다: 홀수는 화면 정중앙, 짝수는 바라보는 방향을 위로 회전.
+  /// 순수 야외에서만 GPS를 한 번 더 조회한다.
   Future<void> recalibrate() async {
     if (_indoorEntered) {
       await _recalibrateIndoor();
@@ -1143,40 +1071,21 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     return ll.LatLng(position.latitude, position.longitude);
   }
 
-  /// 야외(GPS)에서 건물 안 매장까지 한 번에 안내한다.
-  ///
-  /// 야외 구간만 그리고, 실내 구간은 계산해 두었다가 건물에 들어간 순간
+  /// 야외(GPS)에서 건물 안 매장까지. 야외 구간만 그리고 실내 구간은 들어간 순간
   /// [_activatePendingIndoorRoute]가 이어 붙인다.
   ///
-  /// **폴백을 먼저 정한다.** 아래 중 하나라도 걸리면 문을 경유하지 않고 예전처럼
-  /// 목적지 좌표로 곧장 걷기 경로를 그린다. 문 경유가 안 되는 것이 길안내가
-  /// 아예 안 되는 것보다 낫다.
-  ///   - 목적지에 실내 노드가 없다 → 실내 구간을 만들 수 없다.
-  ///   - 지상 출입구 데이터가 없다 → 경유할 문이 없다.
-  ///   - 건물 그래프를 못 받았거나 경로가 안 풀린다 → 야외 구간까지는 안내한다.
-  ///
-  /// [origin]을 주면 GPS 대신 그 지점에서 출발한다 — 사용자가 지도에서 출발
-  /// 위치를 직접 찍은 경우다. 문 선택도 그 지점 기준으로 바뀐다. 현재 위치가
-  /// 아니라 **출발 지점**에서 가까운 문으로 들어가는 것이 맞기 때문이다.
+  /// **폴백을 먼저 정한다** — 노드·출입구·그래프 중 하나라도 없으면 목적지 좌표로
+  /// 곧장 그린다. [origin]을 주면 문도 그 지점 기준으로 고른다.
   Future<void> showOutdoorToIndoorRouteTo(
     PoiSearchResult destination, {
     ll.LatLng? origin,
   }) async {
-    // **실내 오버레이가 켜져 있으면 먼저 접는다.**
+    // **실내 오버레이가 켜져 있으면 먼저 접는다.** 이 메서드는 "사용자가 밖에
+    // 있다"는 전제인데, 오버레이는 확대만으로도 켜져 밖에 선 사용자가 도면을 편 채
+    // 여기 들어온다.
     //
-    // 이 메서드는 "사용자가 건물 밖에 있다"는 전제 위에 서 있다 — 안에 있으면
-    // 호출부가 실내 라우팅으로 보낸다. 그런데 오버레이는 확대·건물 탭·검색의
-    // "건물 안에서 매장 고르기"만으로도 켜지므로, 밖에 선 사용자가 도면을 펴
-    // 놓은 채로 여기 들어오는 경로가 실제로 있다.
-    //
-    // 접지 않으면 실내 구간이 **영영 안 그려진다.** 아래에서 쌓아 두는
-    // [_pendingIndoorRoute]를 실제 안내로 올리는 트리거가 "실내로 들어가는
-    // 순간"([_setIndoorEntered])인데, 이미 들어와 있으면 그 순간이 다시 오지
-    // 않는다. 화면에는 도면 위에 야외 구간만 얹힌 채로 남는다.
-    //
-    // 접어 두면 두 가지가 동시에 맞는다 — 지금 필요한 안내(문까지 걸어가기)가
-    // 야외 지도에 제대로 보이고, 사용자가 실제로 건물에 들어가거나 다시 확대하는
-    // 순간 그 트리거가 정상으로 발화해 실내 구간이 이어 붙는다.
+    // 접지 않으면 실내 구간이 **영영 안 그려진다** — [_pendingIndoorRoute]를 올리는
+    // 트리거가 "실내로 들어가는 순간"인데 이미 들어와 있으면 그 순간이 오지 않는다.
     await returnToOutdoorView();
     if (!mounted) return;
 
@@ -1259,30 +1168,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     );
   }
 
-  /// 건물 **안**에서 바깥 목적지까지 한 번에 안내한다. [showOutdoorToIndoorRouteTo]의
-  /// 거울상이다.
+  /// 건물 **안**에서 바깥 목적지까지. [showOutdoorToIndoorRouteTo]의 거울상이다.
   ///
-  /// 실내 구간(현재 위치 → 출구)만 먼저 그리고, 야외 구간은 예약해 두었다가
-  /// 사용자가 실제로 건물을 나간 순간 [_activatePendingOutdoorRoute]가 이어 붙인다.
-  /// 나갔다는 판정은 GPS가 한다([_applyBuildingVerdict]의 outside 갈래) — 야외에서
-  /// 들어올 때와 정확히 대칭이라, 두 방향이 같은 규칙 위에 선다.
+  /// **출구는 목적지 기준으로 고른다** — 반대편으로 나가면 실내에서 아낀 30 m를
+  /// 바깥에서 200 m로 갚는다.
   ///
-  /// ## 출구는 목적지 기준으로 고른다
-  ///
-  /// 현재 위치에서 가까운 문이 아니라 **목적지에서 가까운 문**이다. 전체 이동
-  /// 거리를 줄이는 쪽이 그쪽이기 때문이다 — 건물 반대편으로 나가면 실내에서 아낀
-  /// 30 m를 바깥에서 200 m로 갚는다. 야외→실내가 출발지 기준으로 고르는 것과
-  /// 방향만 뒤집힌 같은 원리다.
-  ///
-  /// ## 어디서 깨지는가
-  ///
-  /// - **출구 데이터가 없는 건물** → 문을 경유할 수 없다. 야외 경로만 그린다.
-  ///   경로가 건물을 관통하겠지만, 안내가 아예 없는 것보다는 낫다.
-  /// - **실내 위치가 없다** → 실내 구간의 출발점을 만들 수 없다.
-  ///   [showIndoorRouteTo]가 "출발 위치를 먼저 지정해주세요"로 안내한다.
-  /// - **실내 경로가 안 풀린다** → 예약을 걸어 두면 안 된다. 문까지 못 가는데
-  ///   야외 구간만 기다리고 있으면, 나가지도 못한 채 아무 일도 안 일어난다.
-  ///   그래서 예약은 실내 구간이 실제로 그려진 것을 **확인한 뒤에** 건다.
+  /// 깨지는 자리 셋: 출구가 없으면 야외 경로만, 실내 위치가 없으면 안내로 되돌리고,
+  /// **실내 경로가 안 풀리면 예약을 걸지 않는다.**
   Future<void> showIndoorToOutdoorRouteTo(
     ll.LatLng destination, {
     required String label,
@@ -1331,16 +1223,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _clearIndoorRoute();
   }
 
-  /// 실내 진입 오버레이에서 매장까지의 실내 경로를 계산·표시한다. 사용자가
-  /// "위치 지정"으로 잡아둔 PDR 앵커를 시작점으로 쓰고, 결과는 야외 화면 위에
-  /// 그대로 그려서 다른 탭(실내 화면)으로 이동하지 않고 같은 화면에서 확인
-  /// 가능하도록 한다. 시작·도착 층이 같으면 서버의 단층 최단 경로 API를 쓰고,
-  /// 다르면 건물 전체 그래프로 층 간 경로를 계산해 현재 보고 있는 층의 세그먼트만
-  /// 지도에 얹는다(층 chip으로 다른 층을 훑을 때 [_switchOverlayFloor]가
-  /// 세그먼트를 갈아 끼운다).
-  /// [origin]을 주면 PDR 앵커 대신 그 매장을 출발지로 쓴다 — 상단 길찾기 시트에서
-  /// 매장을 출발지로 고른 경우다. 이때 앵커(위치 지정)가 없어도 경로를 그릴 수
-  /// 있어야 하므로, 앵커 필수 검사는 origin이 없을 때만 적용한다.
+  /// 실내 경로를 계산해 야외 화면 위에 그대로 그린다. 같은 층이면 단층 API를,
+  /// 다르면 건물 전체 그래프로 계산해 **보고 있는 층의 세그먼트만** 얹는다.
+  ///
+  /// [origin]을 주면 PDR 앵커 대신 그 매장에서 출발한다. 그때는 앵커가 없어도 그릴 수
+  /// 있어야 하므로 앵커 필수 검사는 origin이 없을 때만 건다.
   Future<void> showIndoorRouteTo(
     PoiSearchResult destination, {
     PoiSearchResult? origin,
@@ -1435,16 +1322,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     }
   }
 
-  /// 현재 위치에서 건물 안 **모든 그래프 노드**까지의 거리·비용.
+  /// 현재 위치에서 건물 안 **모든 노드**까지의 거리·비용. 검색 결과가 매장마다
+  /// "몇 m · 도보 몇 분"을 붙이는 데 쓴다.
   ///
-  /// 검색 결과 목록이 매장마다 "몇 m · 도보 몇 분"을 붙이는 데 쓴다. 목적지를
-  /// 아직 고르지 않은 시점에 부르는 값이라 [showRouteTo]와 달리 도착 노드가
-  /// 없고, 그래서 [reachableFrom]으로 한 번만 탐색해 전 노드 결과를 받는다.
-  ///
-  /// **null을 돌려주는 경우가 여러 가지다** — 위치(앵커)가 아직 없거나, 그래프를
-  /// 못 받았거나, 앵커 층에 그래프 노드가 없을 때다. 호출부는 어느 쪽이든 거리
-  /// 줄을 아예 그리지 않는다. 줄마다 "거리 알 수 없음"을 반복하면 목록이 읽히지
-  /// 않고, 사용자가 할 수 있는 일도 어차피 "위치 지정" 하나뿐이다.
+  /// **null인 경우가 여럿이다**(앵커 없음·그래프 없음·그 층에 노드 없음). 호출부는
+  /// 어느 쪽이든 거리 줄을 안 그린다 — 줄마다 "알 수 없음"을 반복하면 목록이 안 읽힌다.
   Future<Map<String, NodeReach>?> reachFromCurrentPosition() async {
     final anchor = _pdrTrailState.anchor;
     final buildingId = _building?.id;
@@ -1495,14 +1377,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     return nearest?.id;
   }
 
-  /// 야외 구간 ETA. 문 경유 안내 중이면 미리 풀어 둔 실내 구간까지 더한다.
+  /// 야외 구간 ETA. 문 경유 안내 중이면 실내 구간까지 더한다 — 안 더하면 "이솝까지"
+  /// 라고 적어 두고 **문까지의** 값을 보여 준다.
   ///
-  /// 더하지 않으면 카드가 "이솝까지"라고 적어 두고 실제로는 **문까지의** 거리와
-  /// 시간만 보여 준다. 목적지가 위층 안쪽이면 실제의 절반에도 못 미치는 값이라,
-  /// 사용자는 도착했다고 생각한 지점에서 안내가 다시 시작되는 경험을 한다.
-  ///
-  /// 시간은 실내 구간의 **비용**(costM)으로 잰다 — 엘리베이터 대기·탑승이 거기
-  /// 들어 있어서다. 거리는 실거리로 더한다. 실내 ETA([_indoorEta])와 같은 규칙이다.
+  /// 시간은 실내 구간의 **비용**(costM)으로 잰다(엘리베이터 대기가 거기 있다).
+  /// 거리는 실거리로 더한다. [_indoorEta]와 같은 규칙이다.
   ({double distanceM, int minutes}) _outdoorEta(DirectionsRoute route) {
     final leg = _pendingIndoorRoute;
     if (leg == null) {
@@ -1563,37 +1442,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   List<Object> _fadeExpr({double maxOpacity = 1}) =>
       indoorOverlayFadeExpr(entered: _indoorEntered, maxOpacity: maxOpacity);
 
-  /// 지금 층에서 **실제로 그려지는** 좌표 전부 — 외곽선 + 매장 폴리곤·중심 +
-  /// POI. 카메라를 맞출 때 덮어야 할 범위다.
+  /// 지금 층에서 **실제로 그려지는** 좌표 전부 — 외곽선 + 매장 폴리곤·중심 + POI.
   ///
-  /// 외곽선만으로는 모자란다. 백엔드 층 footprint는 도면을 감싸라고 만든 값이지
-  /// 매장을 다 덮는다는 보장이 없고, 실제로 더현대 서울 1F는 매장이 외곽선
-  /// 위아래로 12 m·19 m 튀어나와 있어 외곽선에 맞추면 그만큼이 화면 밖에 남는다.
-  /// 반대로 B2의 footprint는 매장보다 9 m 넓은 맨 사각형이라, 그 상자에 맞추면
-  /// 도면이 프레임 안에서 한쪽으로 치우친다. 둘 다 "그려지는 것"을 기준으로
-  /// 잡으면 사라진다.
-  /// 층 도면이 아직 없어 미뤄 둔 카메라 fit. 도면이 도착하면
-  /// [_fetchFloorGraph]가 이어서 실행한다. 층 이름을 함께 들고 있는 이유는,
-  /// 기다리는 사이 사용자가 다른 층으로 가 버리면 이 예약은 남의 층 것이라
-  /// 버려야 하기 때문이다.
+  /// 외곽선만으로는 모자란다. 1F는 매장이 외곽선 밖으로 12·19 m 튀어나오고, B2는
+  /// footprint가 매장보다 9 m 넓어 도면이 프레임에서 치우친다.
   ({String floor, Duration duration})? _pendingFloorFit;
 
-  /// 하단 바에서 '홈'(야외)을 눌러 이 화면으로 돌아왔을 때의 이탈. 상위
-  /// (MapShellScreen)가 모드를 야외로 바꿀 때 호출한다.
+  /// 하단 바 '홈'으로 야외에 돌아왔을 때의 이탈. **오버레이만 끄면 부족하다** —
+  /// 확대된 채면 도면이 그대로 보인다. 카메라도 축소하고 실내 앵커 경로도 지운다.
   ///
-  /// 여기서는 오버레이만 끄는 것으로 끝나지 않는다. 카메라가 건물을 크게 확대한
-  /// 자리에 그대로 남아 있으면, 오버레이를 껐어도 도면은 진입 램프
-  /// ([indoorOverlayFadeExpr])에 따라 그대로 보인다 — "홈을 눌렀는데 실내가
-  /// 보이는" 상태다. 그래서 카메라도 야외 시야([outdoorReturnZoom])로 함께
-  /// 축소한다.
-  ///
-  /// 실내 앵커에서 계산한 경로도 지운다. 야외에서 쓰는 위치는 GPS뿐이므로,
-  /// 실내 위치에서 출발하던 경로만 남으면 화면의 위치 아이콘과 경로 시작점이
-  /// 어긋난다.
-  ///
-  /// [_exitIndoorByOutsideTap]과 달리 **재무장한다**([_autoIndoorEntryArmed]).
-  /// 축소까지 함께 하므로 곧바로 다시 끌려 들어갈 위험이 없고, 사용자가 건물로
-  /// 다시 확대하면 예전처럼 자연스럽게 실내로 들어가야 한다.
+  /// [_exitIndoorByOutsideTap]과 달리 **재무장한다**(축소까지 하므로 안전하다).
   Future<void> returnToOutdoorView() async {
     if (!_indoorEntered) return;
     if (_placingPdrAnchor) _setPlacingAnchor(false);
@@ -1638,15 +1496,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     return ll.LatLng(target.latitude, target.longitude);
   }
 
-  /// 이 좌표가 우리 실내 도면이 있는 건물의 것인가.
+  /// 이 좌표가 우리 실내 도면이 있는 건물의 것인가. 검색 결과를 합칠 때 쓴다
+  /// ([SearchPanel.isInsideIndoorBuilding]).
   ///
-  /// 검색 결과를 합칠 때 "이 POI가 우리가 아는 건물의 가게인가"를 묻는 자리가
-  /// 있어서 밖으로 연다([SearchPanel.isInsideIndoorBuilding]).
-  ///
-  /// **외곽선 안인지만 보면 안 된다.** 이유와 여유 폭의 근거는
-  /// [poiBuildingProximityMeters]에 적어 뒀다 — 실제로 "스타벅스
-  /// 더현대서울(B2)R점"이 엄격 판정에서 "건물 밖"이 되어 우리 "스타벅스
-  /// 리저브"와 나란히 남아 있었다.
+  /// **외곽선 안인지만 보면 안 된다** — 여유 폭의 근거는
+  /// [poiBuildingProximityMeters]에.
   bool isAtIndoorBuilding(ll.LatLng point) {
     final footprint = _buildingFootprint;
     if (footprint == null || footprint.length < 3) return false;
@@ -1670,15 +1524,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _syncHighlightLayer();
   }
 
-  /// 지금 층을 **다시 고른 것과 같은 화면**으로 되돌린다.
-  ///
-  /// 매장을 고르면 카메라가 그 매장으로 당겨지고 시트에 가리지 않도록 위로
-  /// 밀린다. 아무것도 고르지 않고 시트를 닫으면 사용자가 보려던 것은 다시 층
-  /// 전체인데, 그 치우친 화면이 그대로 남아 있으면 방금 어디를 보고 있었는지
-  /// 다시 찾아야 한다. 층 전환과 **같은 함수·같은 시간**으로 되돌려, 층 선택기를
-  /// 누른 것과 구분되지 않는 화면을 만든다.
-  ///
-  /// 실내에 들어와 있지 않으면 되돌릴 기준이 없으므로 아무것도 하지 않는다.
+  /// 지금 층을 **다시 고른 것과 같은 화면**으로 되돌린다. 시트를 닫은 사용자가
+  /// 보려던 것은 다시 층 전체인데, 매장으로 치우친 화면이 남으면 다시 찾아야 한다.
+  /// 층 전환과 같은 함수·같은 시간을 쓴다.
   Future<void> realignToActiveFloor() async {
     if (!_indoorEntered) return;
     await _fitCameraToActiveFloor(duration: floorSwitchZoomDuration);
@@ -1687,22 +1535,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 검색 후보(`StoreIndexEntry`)를 좌표까지 갖춘 [PoiSearchResult]로 바꾼다.
   /// 찾지 못하면 null — 상위가 이름으로 검색을 다시 돌린다.
   ///
-  /// **후보 목록이 좌표를 들고 오지 않기 때문에 이 변환이 필요하다.**
-  /// `/store-index`는 1,640건을 한 번에 내려보내는 응답이라 좌표를 싣지 않는다
-  /// (근거와 실측치는 `StoreIndexResponse` 주석). 그렇다고 후보를 탭했을 때
-  /// 그 이름으로 검색을 다시 돌리면 사용자는 같은 줄을 두 번 누르게 된다.
+  /// 후보 목록에 좌표가 없어서 필요한 변환이고, 층 도면([_floorPlan])이 이미 들고
+  /// 있는 `centroid`에서 찾으므로 추가 요청이 없다. 이름은 유일 키가 아니라
+  /// **id로 찾는다.**
   ///
-  /// 그래서 이미 가진 것에서 좌표를 찾는다 — 층 도면([_floorPlan])이 매장마다
-  /// `centroid`를 들고 있고, 그 층은 어차피 열어야 한다. 추가 요청이 없다.
-  ///
-  /// 이름이 아니라 **id로 찾는다.** 이름은 유일 키가 아니라서(동명 시설 다수)
-  /// 이름으로 맞추면 같은 층의 다른 매장을 열 수 있다.
-  ///
-  /// **실내에 들어와 있지 않으면 층을 옮기지 않고 포기한다.** 층 전환은 실내
-  /// MVT 소스를 통째로 갈아 끼우고 끝에서 카메라를 건물로 당겨오는 작업이라,
-  /// 야외에서 부르면 매장 강조는 [focusStore]가 `_indoorEntered` 검사로 막는데
-  /// 카메라만 건물로 튀는 반쪽 이동이 남는다. 그 경우 null을 돌려주면 상위가
-  /// 이름 재검색으로 떨어지고, 사용자는 한 번 더 누르지만 화면은 어긋나지 않는다.
+  /// **실내가 아니면 층을 옮기지 않고 포기한다** — 야외에서 부르면 카메라만 건물로
+  /// 튀는 반쪽 이동이 남는다.
   Future<PoiSearchResult?> resolveIndexEntry(StoreIndexEntry entry) async {
     if (entry.floorName.isNotEmpty && entry.floorName != _activeFloor) {
       if (!_indoorEntered) return null;
@@ -1740,22 +1578,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     return null;
   }
 
-  /// 목록에서 고른 매장을 실내 진입 오버레이 위에서 보여 준다.
-  /// [IndoorMapBodyState.focusStore]와 같은 계약이라 상위가 두 화면을 똑같이
-  /// 다룰 수 있다 — 다만 **층은 옮기지 않는다**. 이 화면의 층 전환은 실내 MVT
-  /// 소스를 통째로 갈아 끼우는 작업이라, 목록을 훑는 중에 자동으로 일어나면
-  /// 사용자가 보고 있던 층이 소리 없이 바뀐다. 호출부가 지금 층 매장만 넘긴다.
-  /// [enterBuildingIfNeeded]면 건물 밖에서 골랐어도 **건물에 들어가고 층까지
-  /// 맞춘 뒤** 그 매장을 보여 준다.
+  /// 목록에서 고른 매장을 실내 오버레이 위에서 보여 준다.
+  /// [IndoorMapBodyState.focusStore]와 같은 계약이되 **층은 옮기지 않는다** —
+  /// 목록을 훑는 중에 보고 있던 층이 소리 없이 바뀐다.
   ///
-  /// 검색 결과에서 매장을 고르는 것은 "이 매장을 보여 달라"는 명시적 조작인데,
-  /// 예전에는 실내가 아니거나 다른 층이면 여기서 조용히 빠져나갔다. 그래서 멀리
-  /// 있는 사용자가 매장을 눌러도 아무 일도 일어나지 않았다 — 시트만 올라오고
-  /// 지도는 도시 축척 그대로였다.
-  ///
-  /// 지도 위 카테고리 목록에서 오는 호출은 이 값을 주지 않는다. 그쪽 시트는
-  /// **지금 층 매장만** 올려 주므로, 층을 갈아타면 시트 머리글이 말하는 층과
-  /// 지도가 어긋난다.
+  /// [enterBuildingIfNeeded]면 건물 밖에서 골랐어도 들어가서 보여 준다(검색 결과
+  /// 전용이다. 카테고리 목록은 지금 층 매장만 올려 주므로 이 값을 주지 않는다).
   Future<void> focusStore(
     PoiSearchResult store, {
     double bottomSheetFraction = 0,
@@ -1768,15 +1596,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final fromOutside = !_indoorEntered;
     if (fromOutside && !enterBuildingIfNeeded) return;
 
-    // **여기서 실내 모드를 직접 켜지 않는다.** 켜면 [_indoorContextActive]가
-    // 함께 참이 되고, 그 값이 길찾기의 출발지 규칙을 통째로 바꾼다 — 야외
-    // GPS 대신 PDR 앵커를 요구하게 되어, 멀리서 매장을 고른 사용자가 "도착"을
-    // 눌렀을 때 "출발 위치를 먼저 지정해주세요"로 막힌다. 검색에서 매장을 고른
-    // 것은 위치를 지정한 것이 아니다.
-    //
-    // 대신 카메라만 그 매장으로 확대한다. 진입 판정은 사용자가 직접 확대했을
-    // 때와 **같은 경로**([_handleCameraIdle])가 맡는다 — 그 배율에 도달하면
-    // 알아서 켜지고, 판정 근거(건물 근접·줌 임계값)도 한 곳에만 남는다.
+    // **여기서 실내 모드를 직접 켜지 않는다.** 켜면 길찾기 출발지 규칙이 PDR 앵커로
+    // 바뀌어, 멀리서 매장을 고른 사용자가 "출발 위치를 먼저 지정해주세요"로 막힌다.
+    // 카메라만 옮기고 진입 판정은 [_handleCameraIdle] 한 곳에 남긴다.
     if (store.floor.isNotEmpty && store.floor != _activeFloor) {
       if (!enterBuildingIfNeeded) return;
       // 층 교체는 실내 모드와 무관하다 — 도면 소스만 갈아 끼우므로, 카메라가
@@ -1819,40 +1641,22 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         ),
       ),
     );
-    // 위(검색창·카테고리 줄)와 아래(시트)가 가리고 남는 띠의 한가운데로.
+    // 위아래가 가리고 남는 띠의 한가운데로. 시트가 f를, 위쪽이 t 픽셀을 덮으면
+    // 정중앙에서 (H·f - t)/2만큼 올리면 된다.
     //
-    // 계산: 시트가 f를 덮고 위쪽이 t 픽셀을 덮으면 남는 띠는 [t, H(1-f)]이고
-    // 그 중앙은 (t + H(1-f))/2다. 정중앙(H/2)에서 그만큼 올리면 (H·f - t)/2.
-    //
-    // 실기기로 확인한 `scrollBy`의 성질 두 가지를 여기 남긴다. 문서만 보고
-    // 고치면 두 번 다 틀린다.
-    //  1. 단위는 **논리 픽셀**이다. dpr(3배)을 곱해 보정하면 대상이 건물 밖으로
-    //     날아간다.
-    //  2. 부호는 **음수가 위로**다. 문서는 "양수 dy면 카메라 타깃이 남쪽으로
-    //     간다"고 적혀 있어 대상이 위로 올라갈 것처럼 읽히지만, 실제로는 그만큼
-    //     아래로 내려가 시트 뒤에 숨었다.
+    // **`scrollBy`는 문서대로 고치면 두 번 다 틀린다**(실기기 확인) — 단위는 논리
+    // 픽셀이라 dpr을 곱하면 건물 밖으로 날아가고, 부호는 음수가 위다.
     final lift = (viewport.height * bottomSheetFraction - topInsetPx) / 2;
     if (lift <= 0) return;
     await controller.moveCamera(CameraUpdate.scrollBy(0, -lift));
   }
 
-  /// 검색 결과에서 고른 **건물**의 바깥 모습이 보이도록 카메라를 옮긴다.
+  /// 검색 결과에서 고른 **건물**의 바깥 모습이 보이도록 카메라를 옮긴다. 건물은
+  /// 면이라 입구 좌표 하나로 옮기면 큰 건물이 화면 밖으로 삐져나간다.
   ///
-  /// 매장은 [focusStore]가 한 점으로 끌어오지만 건물은 **면**이다. 입구 좌표
-  /// 하나로만 옮기면 더현대 서울처럼 큰 건물은 중심만 맞은 채 화면 밖으로
-  /// 삐져나가, 정작 "무엇을 고른 것인지"가 안 보인다.
-  ///
-  /// **여기서 실내로 들어가지는 않는다.** 이게 이 함수의 핵심 제약이다. 한때
-  /// 외곽선을 화면에 꼭 맞췄는데(`newLatLngBounds`), 그 배율이 곧 실내 진입
-  /// 임계값이라([_entryZoomThreshold]는 "건물이 화면을 채우는 zoom"이다) 검색 결과를
-  /// 누르자마자 도면이 열렸다. 검색은 "저 건물이 어디 있는지"를 묻는 조작이지
-  /// "들어가겠다"가 아니다. 들어가는 것은 건물을 **탭**하는 별도 조작이 맡는다
-  /// ([_handleMapClick] 끝의 [_triggerIndoorEntry]).
-  ///
-  /// 그래서 배율은 [exteriorViewZoomFor]가 정한다 — 진입 판정과 **같은 파일**에
-  /// 두어 두 값이 어긋날 수 없게 묶어 둔 함수다.
-  ///
-  /// 옮길 자리가 없으면(외곽선도 입구도 없는 건물) 아무 일도 하지 않는다.
+  /// **여기서 실내로 들어가지 않는다.** 외곽선을 화면에 꼭 맞추면 그 배율이 곧
+  /// 진입 임계값이라 누르자마자 도면이 열렸다 — 배율은 [exteriorViewZoomFor]가
+  /// 정한다(진입 판정과 같은 파일에 두어 어긋날 수 없게 묶었다).
   Future<void> focusBuilding(Building building) async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;

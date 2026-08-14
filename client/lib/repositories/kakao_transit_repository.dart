@@ -9,25 +9,15 @@ import '../models/transit_route.dart';
 import 'transit_repository.dart';
 
 /// 카카오맵 대중교통 경로 조회 `GET /v2/routing/publictraffic`.
-/// https://developers.kakao.com/docs/ko/kakaomap/rest-api
+/// TMAP에서 옮긴 이유는 무료 제공량이다(TMAP 하루 10건 ↔ 카카오 1,000건).
 ///
-/// TMAP에서 옮겨 온 이유는 하나다 — TMAP 대중교통 무료 제공량이 하루 10건이라
-/// 데모를 한 번 돌리면 소진됐다. 카카오는 하루 1,000건이다.
-///
-/// **TMAP과 다른 점 세 가지**를 알고 읽어야 한다.
-///
-/// 1. **첫 승차지점 앞·마지막 하차지점 뒤의 도보가 응답에 없다.** 카카오가
-///    "무엇을 어디서 타고 내리는지"만 답하기 때문이고, 공식 스펙이다. 역 안에서
-///    갈아타는 환승 도보는 `WALKING` step으로 들어온다. 빠진 양 끝은 화면이
-///    [DirectionsRepository]로 채운다 — 여기서 채우지 않는 이유는 후보가 최대
-///    15개 오는데 목록을 만들자고 보행자 API를 30번 부를 수는 없어서다.
-///    사용자가 후보 하나를 고른 뒤 2건만 부르면 된다.
-/// 2. **"너무 가까움"을 응답으로 알려주지 않는다.** TMAP은 700m 이내면
-///    `result.status=11`로 거부했는데, 카카오는 600m 거리에도 12분짜리 버스
-///    경로를 `OK`로 준다(걸어가는 편이 빠르다). 그래서 부르기 **전에** 직선
-///    거리로 우리가 판단한다([_walkableMeters]).
-/// 3. **후보 개수를 요청으로 조절할 수 없다.** `count` 같은 파라미터가 없고 늘
-///    전부 온다(실측 15개). 정렬한 뒤 우리가 자른다.
+/// **TMAP과 다른 점 셋.**
+/// 1. 첫 승차 앞·마지막 하차 뒤 도보가 **응답에 없다**(공식 스펙). 빠진 양 끝은
+///    화면이 채운다 — 후보가 15개 오는데 목록을 만들자고 보행자 API를 30번 부를
+///    수는 없다.
+/// 2. **"너무 가까움"을 알려주지 않는다** — 600m에도 12분짜리 버스를 `OK`로 준다.
+///    그래서 부르기 전에 직선거리로 판단한다([_walkableMeters]).
+/// 3. **후보 개수를 조절할 수 없다**(늘 전부, 실측 15개). 정렬한 뒤 우리가 자른다.
 class KakaoTransitRepository implements TransitRepository {
   KakaoTransitRepository({http.Client? client, String? restApiKey})
     : _client = client ?? http.Client(),

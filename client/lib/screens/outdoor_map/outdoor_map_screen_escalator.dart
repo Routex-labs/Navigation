@@ -172,19 +172,12 @@ extension OutdoorMapEscalator on OutdoorMapBodyState {
 
   /// 탑승 중에 목적 층 도면으로 갈아탄다.
   ///
-  /// 교체 구간만 덮개로 가린다([_floorSwapVeil]). 덮지 않고 크로스페이드만으로
-  /// 넘겨 본 적이 있는데, 층이 바뀌는 사건 자체가 화면에 드러나지 않아 사용자가
-  /// 다른 층 도면을 읽고 있는 줄 모른다. 반대로 하차까지 덮으면 내리기 전에
-  /// 새 층과 다음 경로를 볼 시간이 없다. 그래서 **교체 앞뒤 약 3초**만이다.
+  /// **교체 앞뒤만 덮개로 가린다** — 안 덮으면 층이 바뀌는 사건 자체가 안 드러나고,
+  /// 하차까지 덮으면 내리기 전에 새 층과 다음 경로를 볼 시간이 없다.
   ///
-  /// 덮개 뒤에서는 사람이 층 chip을 눌렀을 때와 같은 크로스페이드가 돈다
-  /// ([_switchOverlayFloorCrossfaded]) — 이전 층 도면이 새 층 타일이 실제로
-  /// 도착할 때까지 남아 있어, 덮개가 걷히는 순간 흰 화면이나 반쯤 그려진 도면이
-  /// 보이지 않는다. 안내 중에는 페이드를 두 배 느리게 준다
-  /// ([floorSwitchGuidedCrossfadeDuration]).
-  ///
-  /// 마커 활강과 카메라 정렬도 여기서 건다. 셋(도면 교체·마커·카메라)이 같은
-  /// 시간 축 위에서 시작해야 하나의 전환으로 읽힌다.
+  /// 덮개 뒤에서는 사람이 층 chip을 눌렀을 때와 같은 크로스페이드가 돈다(페이드만
+  /// 두 배 느리다). 마커 활강과 카메라 정렬도 여기서 걸어, 셋이 **같은 시간 축**
+  /// 위에서 시작해야 하나의 전환으로 읽힌다.
   Future<bool> _swapIndoorFloorForRide(EscalatorTransition transition) async {
     final floor = transition.toFloorLabel;
     if (!(_building?.floors.contains(floor) ?? false)) return false;

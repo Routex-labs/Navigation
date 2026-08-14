@@ -25,45 +25,11 @@ import '../../../domain/store/reach_label.dart';
 import '../../../widgets/transit_style.dart';
 import '../../../domain/category/subcategory_label.dart';
 
-/// 상단 검색창 바로 아래에 붙는 결과 패널.
+/// 상단 검색창 아래에 붙는 결과 패널. 입력창은 상단 바가 갖고 여기는 결과만 그린다.
 ///
-/// **입력창을 가지고 있지 않다.** 사용자는 상단 바의 검색창에 그대로 치고,
-/// 이 패널은 그 글자를 받아 결과만 그린다. 예전에는 검색창을 탭하면 아래에서
-/// 입력창이 하나 더 있는 시트가 올라왔는데, 방금 누른 창과 실제로 입력하는
-/// 창이 달라 "왜 검색창이 두 개냐"는 인상을 줬다.
-///
-/// ## 검색 한 곳, 두 단계
-///
-/// 사용자는 "일반 검색"과 "AI 검색"을 구분하지 않는다. 매장 이름을 치든
-/// 자연어를 치든 상단 검색창 한 곳에 치면 되고, 어느 경로로 찾을지는 이
-/// 패널이 정한다.
-///
-/// - **타이핑이 300ms 멎으면**: 경량 매칭(`/query/destination`). 형태소
-///   정규화(Kiwi)가 이 경로에 들어 있어 "MLB" 같은 이름은 즉시 걸린다.
-/// - **경량이 빈손이면**: 400ms를 더 기다렸다가 의미 검색(`/query/ai`)까지
-///   자동으로 이어 붙인다. "밥 먹을 곳"처럼 사전에 없는 표현이 여기서 걸린다.
-/// - **엔터로 확정**([submitTick] 증가): 두 대기를 모두 건너뛰고 같은 경로를
-///   즉시 탄다.
-///
-/// 두 요청 모두 [currentFloorId]가 있으면 함께 보낸다 — "화장실"처럼 층
-/// 시설을 가리키는 질의가 지금 보고 있는 층으로 확정되게 하기 위해서다.
-/// 매장 이름 검색이 다른 층에 있어 이 때문에 1차가 빈손이 되더라도, 2차
-/// 의미 검색은 층을 무시하고 건물 전체를 보므로 그대로 찾아낸다.
-///
-/// ### 왜 엔터를 트리거에서 뺐나
-///
-/// 의미 검색을 엔터에만 붙였더니 둘이 깨졌다. 한글 IME에서 첫 엔터가 조합 확정에
-/// 쓰이면 `onSubmitted`가 안 와 [submitTick]이 오르지 않고, 그동안 화면에는 경량이
-/// 빈손이라는 이유만으로 "찾지 못했어요"가 최종 결론처럼 떠 있었다 — "신발"·"밥집"은
-/// 타이핑만으로는 **항상** 그 화면이었다.
-///
-/// 그래서 트리거를 **타이핑이 멎었다는 사실**로 바꾸고, 비용은 디바운스를 두 단으로
-/// 나눠 막는다. 경량까지 700ms로 늦추면 이름을 정확히 아는 흔한 검색이 같이 느려지니,
-/// 비싼 경로에만 400ms를 더 얹는다.
-///
-/// 상태를 명령형으로 밀어 넣지 않고 [query]·[submitTick] 두 값으로만 받는 이유는
-/// **순서 문제**다. 패널은 검색이 활성화될 때 비로소 트리에 들어오므로, 상위가
-/// GlobalKey로 메서드를 부르면 첫 글자가 패널이 생기기 전에 도착해 조용히 사라진다.
+/// 타이핑이 300ms 멎으면 경량 매칭, 빈손이면 400ms 뒤 의미 검색까지 이어 붙인다
+/// ([submitTick]이 오르면 두 대기를 건너뛴다). 트리거·디바운스·단계 판정의 근거는
+/// `docs/client/search-input-assist.md` W절이 단일 출처다.
 class SearchPanel extends StatefulWidget {
   const SearchPanel({
     super.key,
@@ -100,24 +66,19 @@ class SearchPanel extends StatefulWidget {
   /// 카운터로 받는다.
   final int submitTick;
 
-  /// 현재 위치에서 각 그래프 노드까지의 거리·비용. 상위(MapShellScreen)가
-  /// 검색을 시작할 때 한 번 계산해 내려준다.
+  /// 현재 위치에서 각 그래프 노드까지의 거리·비용. 상위가 한 번 계산해 내려준다.
   ///
-  /// null이거나 매장의 노드가 여기 없으면 **거리 줄을 그리지 않는다.** 위치를
-  /// 아직 안 잡았을 때 줄마다 "거리 알 수 없음"이 반복되면 목록이 읽히지 않고,
-  /// 그 상태에서 사용자가 할 수 있는 일도 "위치 지정" 하나뿐이라 매 줄에
-  /// 알릴 이유가 없다.
+  /// null이거나 매장 노드가 없으면 **거리 줄을 그리지 않는다** — 줄마다 "거리 알 수
+  /// 없음"을 반복하면 목록이 안 읽힌다.
   final Map<String, NodeReach>? reachByNodeId;
 
   final ValueChanged<PoiSearchResult> onStorePicked;
   final ValueChanged<Building> onBuildingPicked;
 
-  /// 자동완성 후보 한 곳을 골랐을 때. 상위가 좌표를 붙여 상세 시트까지 연다.
+  /// 자동완성 후보를 골랐을 때. 상위가 좌표를 붙여 상세 시트까지 연다.
   ///
-  /// [onStorePicked]와 따로 두는 이유는 **패널이 좌표를 모르기 때문**이다.
-  /// 후보의 원본인 `/store-index`는 1,640건을 한 번에 내려보내는 응답이라
-  /// 좌표를 싣지 않는다(근거는 `StoreIndexResponse` 주석). 좌표는 층 지도를
-  /// 가진 상위가 id로 찾아 붙인다(`IndoorMapScreen.resolveIndexEntry`).
+  /// [onStorePicked]와 따로 두는 이유는 **패널이 좌표를 모르기 때문**이다 —
+  /// `/store-index`는 1,640건을 한 번에 주느라 좌표를 싣지 않는다.
   final ValueChanged<StoreIndexEntry> onSuggestionPicked;
 
   /// 최근 검색어를 골랐을 때. 패널이 입력창을 갖고 있지 않으므로(클래스 주석
@@ -125,45 +86,31 @@ class SearchPanel extends StatefulWidget {
   /// 바꾸고 [query]·[submitTick]을 새로 내려줘야 한 바퀴가 돈다.
   final ValueChanged<String> onQueryPicked;
 
-  /// 지금 건물 안을 보고 있는가(실내 모드이거나, 야외 지도 위에서 실내 도면을
-  /// 훑는 중). 상위의 `_indoorContextActive`를 그대로 받는다.
+  /// 지금 건물 안을 보고 있는가. 상위의 `_indoorContextActive`를 그대로 받는다.
   ///
-  /// **자동완성은 이 값이 참일 때만 동작한다.** 후보의 원본이 건물 하나의 매장
-  /// 목록이라, 야외에서 쓰면 지금 서 있는 곳과 무관한 매장을 제안하게 된다.
-  /// 실제로 시청 앞 야외 지도에서 `apc`를 치니 더현대서울 3층 매장이 후보로
-  /// 떴다 — 사용자가 야외에서 찾는 것은 그게 아니다.
-  ///
-  /// 야외 장소 검색은 [outdoorSearchCenter]가 있을 때만 도는 별도 경로다(TMAP
-  /// POI). 두 원본은 **서로를 배제한다** — 안에서는 자동완성, 밖에서는 POI다.
+  /// **자동완성은 참일 때만 돈다** — 후보 원본이 건물 하나의 매장 목록이라, 시청 앞에서
+  /// `apc`를 치면 더현대서울 3층이 떴다. [outdoorSearchCenter]와 서로를 배제한다.
   final bool indoorContextActive;
 
-  /// 건물 **밖** 장소를 함께 찾을 기준점. 야외를 보고 있을 때만 값이 있고,
-  /// 실내 도면을 보고 있으면(또는 위치를 아직 못 잡았으면) null이다.
+  /// 건물 **밖** 장소를 함께 찾을 기준점. 야외를 볼 때만 값이 있다.
   ///
-  /// null이면 바깥 검색을 아예 하지 않는다. 실내에서 "화장실"을 찾는 사람에게
-  /// 길 건너 편의점 화장실을 섞어 주면, 지금 서 있는 층의 결과가 뒤로 밀린다.
-  /// [indoorContextActive]와 짝을 이루는 값이라 보면 된다 — 그쪽이 참일 때
-  /// 이쪽은 null이고, 어느 원본으로 답할지가 그 한 쌍으로 갈린다.
+  /// null이면 바깥 검색을 아예 안 한다 — 실내에서 "화장실"을 찾는 사람에게 길 건너
+  /// 편의점을 섞으면 지금 층의 결과가 뒤로 밀린다.
   final LatLng? outdoorSearchCenter;
 
   /// 야외 장소를 골랐을 때. null이면 바깥 결과 줄을 눌러도 아무 일이 없으므로,
   /// [outdoorSearchCenter]가 있어도 이 콜백이 없으면 섹션을 그리지 않는다.
   final ValueChanged<OutdoorPoi>? onOutdoorPoiPicked;
 
-  /// 좌표가 우리 실내 도면이 있는 건물 안인지 묻는다. 야외 지도가 답한다.
+  /// 좌표가 우리 실내 도면이 있는 건물 안인지 묻는다(야외 지도가 답한다).
   ///
-  /// 같은 가게가 두 줄로 뜨는 것을 막는 데 쓴다 — 건물 **안** POI 중 우리
-  /// 실내 데이터가 이미 아는 것은 목록에서 뺀다([mergeOutdoorResults]).
-  /// null이면 그 정리를 하지 않는다.
+  /// 같은 가게가 두 줄로 뜨는 것을 막는 데 쓴다([mergeOutdoorResults]).
   final bool Function(LatLng point)? isInsideIndoorBuilding;
 
-  /// 건물의 (층·대분류·소분류)별 매장 수. **상위가 이미 들고 있는 Future를 그대로
-  /// 받는다** — 여기서 다시 요청하면 같은 정보를 두 번 받게 되고, 두 화면의
-  /// 카테고리 목록이 어긋날 수 있다.
+  /// 건물의 (층·대분류·소분류)별 매장 수. **상위 Future를 그대로 받는다** — 다시
+  /// 요청하면 두 화면의 카테고리 목록이 어긋난다.
   ///
-  /// "찾지 못했어요" 화면에서 **둘러볼 곳**을 제안하는 데만 쓴다(설계:
-  /// `docs/client/search-result-list-ux.md` R절). null이거나 로드가 실패하면
-  /// 그 줄만 조용히 사라진다.
+  /// "찾지 못했어요"의 둘러볼 곳 제안 전용(`search-result-list-ux.md` R절).
   final Future<List<CategoryCount>>? categoryEntries;
 
   /// 위 대분류를 골랐을 때. 상위가 검색을 닫고 그 카테고리의 매장 목록 시트를
@@ -174,11 +121,8 @@ class SearchPanel extends StatefulWidget {
   State<SearchPanel> createState() => _SearchPanelState();
 }
 
-/// 패널이 지금 어느 단계에 있는지. 예전에는 `_searching`·`_searchingSemantic`
-/// 불리언 두 개로 표현했는데, "경량은 끝났지만 의미 검색은 아직"이라는 단계가
-/// 생기면서 조합만으로는 화면을 정할 수 없게 됐다. 특히 [noMatch]는 **의미
-/// 검색까지 끝났을 때만** 들어갈 수 있어야 하는데, 불리언으로는 "검색 안 하는
-/// 중 + 결과 없음"과 구분이 안 된다.
+/// 패널이 지금 어느 단계인지. 불리언 두 개가 아니라 enum인 이유는
+/// `search-input-assist.md` W절에 있다 — [noMatch]는 2차까지 끝나야 들어갈 수 있다.
 ///
 enum _SearchPhase {
   /// 아직 아무것도 치지 않았다. 안내 문구만 보여준다.
@@ -215,22 +159,13 @@ enum _SearchPhase {
   error,
 }
 
-/// 이름에서 검색어와 일치하는 구간만 강조한 span 목록을 만든다.
+/// 이름에서 검색어와 일치하는 구간만 강조한 span 목록. 이 결과가 왜 나왔는지를
+/// 색으로 설명한다.
 ///
-/// **왜 강조하나** — 이 결과가 왜 나왔는지를 색으로 설명하기 위해서다. 예전에는
-/// 이름 전체가 같은 굵기의 검정이라, 검색어와 한 글자도 안 겹쳐 보이는 결과가
-/// 섞여 있어도 어디가 걸린 것인지 읽을 방법이 없었다.
-///
-/// **강조가 하나도 안 걸리는 것이 정상 상태다.** 의미 검색("밥 먹을 곳")은 이름에
-/// 검색어가 없는 결과를 돌려주는 게 목적이고, 그 화면은 [SearchPanel._fromSemantic]
-/// 배너가 대신 설명한다. 그래서 여기서는 못 찾았을 때 원문을 그대로 돌려줄 뿐
-/// 실패로 다루지 않는다.
-///
-/// 대소문자·앞뒤 공백만 정규화하고 그 밖의 정규화(형태소 분석 등)는 하지 않는다.
-/// 서버의 Kiwi 정규화까지 흉내내면 강조 구간이 오히려 서버 판정과 어긋난다 —
-/// [isExactNameMatch]와 같은 이유다. 그 결과 "더현대 서울"로 검색하면 띄어쓰기가
-/// 다른 "더현대서울점"에는 강조가 걸리지 않는데, 이건 강조가 빠질 뿐 결과 자체는
-/// 그대로 나오므로 손실이 없는 쪽으로 둔 선택이다.
+/// **하나도 안 걸리는 것이 정상 상태다** — 의미 검색은 이름에 검색어가 없는 결과를
+/// 주는 게 목적이라, 못 찾으면 원문을 그대로 돌려줄 뿐 실패로 다루지 않는다.
+/// 대소문자·앞뒤 공백만 정규화한다(서버 Kiwi를 흉내내면 판정과 어긋난다 —
+/// [isExactNameMatch]와 같은 이유).
 List<TextSpan> highlightedNameSpans(String name, String query) {
   final needle = query.trim().toLowerCase();
   if (needle.isEmpty) return [TextSpan(text: name)];
@@ -258,26 +193,11 @@ List<TextSpan> highlightedNameSpans(String name, String query) {
   return spans;
 }
 
-/// 다음 검색 한 번에만 적용할 층 스코프.
+/// 다음 검색 한 번에만 적용할 층 스코프. 목록에서 **고른 그 매장의 층**을 실어
+/// 보낸다 — 안 그러면 같은 이름 19곳(화장실)에서 서버가 자기 순서로 고른다.
 ///
-/// **예전에는 "층으로 좁히지 마라"는 bool 하나였다.** 1F에서 `apc` 후보로 뜬 3F의
-/// `A.P.C.`를 탭하면 층 스코프 때문에 1차가 빈손이 되어 후보 화면으로 되돌아오던
-/// 문제를 그렇게 막았다. 그런데 스코프를 아예 빼면 **어느 매장을 고를지는 서버가
-/// 자기 순서로 정한다.**
-///
-/// 실기기에서 그 대가가 드러났다. 1F에서 후보 `화장실 · 1F 등 19곳 · 57m`를 탭했더니
-/// **`화장실 · B6 · 219m`** 로 갔다. 화면이 1F라고 적어 놓고 네 배 먼 지하 6층으로
-/// 보낸 것이다. 같은 이름이 19곳이니 서버는 그중 하나를 고를 수밖에 없는데, 그
-/// 기준에 사용자 위치가 들어갈 자리가 없다.
-///
-/// **고른 후보의 층을 실어 보내면 둘 다 풀린다.** `A.P.C.`는 3F로 좁혀 확정되고,
-/// `화장실`은 화면에 적힌 그 1F로 확정된다. 추가 요청도, 계약 변경도 없다.
-///
-/// [floorId]가 null인 경우는 **층을 모르는 선택**이다 — 최근 검색어는 문자열
-/// 하나뿐이라 어느 층 매장이었는지 알 방법이 없다. 그때만 예전처럼 스코프를 뺀다.
-///
-/// 설계 근거와 검증 기준은 `docs/client/search-result-list-ux.md` T절이 단일
-/// 출처다.
+/// [floorId]가 null이면 **층을 모르는 선택**(최근 검색어)이라 스코프를 뺀다.
+/// 근거와 검증 기준은 `docs/client/search-result-list-ux.md` T절.
 class _FloorScopeOverride {
   const _FloorScopeOverride(this.floorId);
 
@@ -288,12 +208,8 @@ class _FloorScopeOverride {
 class _SearchPanelState extends State<SearchPanel> {
   /// 목록 공통 행 리듬. 결과·후보·건물·최근 검색 행이 전부 이 값을 쓴다.
   ///
-  /// 네이버지도의 검색 목록은 종류가 달라도(제안·장소) **한 벌의 플랫 리스트**이고,
-  /// 종류는 좌측 아이콘 2종으로만 갈린다(naver-map-ui-ux-analysis.md 2절). 예전에는
-  /// 결과 행만 non-dense라 후보 행과 높이가 다르고, 행마다 구분선이 끼어 머리말·
-  /// 배너까지 칸칸이 나뉘어 보였다 — 같은 목록이 자리마다 다른 리듬으로 그려지면
-  /// 사용자는 그 차이에서 없는 의미를 읽는다. 구분선은 두지 않고 동일한 상하
-  /// 여백만으로 행을 가른다.
+  /// **한 벌의 플랫 리스트**로 보이게 하려는 것이다(naver-map-ui-ux-analysis.md 2절).
+  /// 구분선은 두지 않는다 — 머리말·배너까지 칸칸이 나뉘어 보였다.
   static const _rowVerticalPadding = 8.0;
   static const _rowContentPadding = EdgeInsets.symmetric(horizontal: 16);
   static const _rowTitleGap = 12.0;
@@ -311,11 +227,8 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 경량 검색용 디바운스. 글자마다 서버를 때리지 않게 잠깐 모았다 보낸다.
   static const _lightDebounce = Duration(milliseconds: 300);
 
-  /// 경량이 빈손일 때 의미 검색으로 넘어가기 전에 한 번 더 기다리는 시간.
-  /// 300ms를 그대로 쓰지 않는 이유는 클래스 주석에 적었다 — 의미 검색은 경량과
-  /// 비용이 자릿수로 다르므로 "타이핑이 잠깐 멈췄다"가 아니라 "손을 뗐다"에
-  /// 가까운 신호에서만 태운다. 이 값을 0으로 두면 "밥"·"밥 먹"·"밥 먹을"이 전부
-  /// 모델을 태운다.
+  /// 경량이 빈손일 때 의미 검색으로 넘어가기 전에 더 기다리는 시간.
+  /// 0으로 두면 "밥"·"밥 먹"·"밥 먹을"이 전부 모델을 태운다(근거: W절).
   static const _semanticGrace = Duration(milliseconds: 400);
 
   /// 두 단계의 대기를 **한 필드로** 돌린다. 한 시점에 살아 있을 수 있는 대기는
@@ -386,31 +299,24 @@ class _SearchPanelState extends State<SearchPanel> {
 
   /// 온디바이스 자동완성의 원본. 건물당 1회 받아 둔다.
   ///
-  /// null은 "아직 못 받았거나 받기에 실패했다"는 뜻이고, **그 상태가 정상 경로에
-  /// 포함된다.** 자동완성은 부가 기능이라 목록이 없으면 후보만 조용히 사라지고
-  /// 서버 검색은 그대로 돈다(설계: search-input-assist.md K절 실패 조건).
+  /// null(못 받았거나 실패)도 **정상 경로다** — 후보만 조용히 사라지고 서버 검색은
+  /// 그대로 돈다(search-input-assist.md K절 실패 조건).
   List<StoreIndexEntry>? _storeIndex;
 
   /// 지금 질의에 대한 후보. **질의가 바뀔 때만** 다시 계산한다 — build에서 매번
   /// 계산하면 한 프레임에 여러 번 1640건을 훑는다.
   List<StoreSuggestion> _suggestions = const [];
 
-  /// 사용자가 직접 고른 정렬. null이면 아직 안 골랐다는 뜻이고, 그때는
-  /// [defaultSortOrder]가 위치 유무를 보고 정한다.
+  /// 사용자가 직접 고른 정렬. null이면 [defaultSortOrder]가 위치 유무로 정한다.
   ///
-  /// **검색어가 바뀌면 지운다**(didUpdateWidget). 세션에 저장하면 다음 검색이
-  /// 사용자가 기억하지 못하는 순서로 시작한다. 반대로 같은 검색어로 다시 엔터를
-  /// 누르는 경우에는 유지한다 — 방금 한 조작이 사라지면 안 된다.
+  /// **검색어가 바뀌면 지운다**(didUpdateWidget) — 세션에 남기면 다음 검색이 기억에
+  /// 없는 순서로 시작한다. 같은 검색어로 다시 엔터는 유지한다.
   SearchSortOrder? _sortOverride;
 
-  /// 다음 검색 **한 번만** 층 스코프를 이 값으로 바꾼다. null이면 재정의 없이
-  /// [SearchPanel.currentFloorId]를 그대로 쓴다.
+  /// 다음 검색 **한 번만** 층 스코프를 바꾼다. null이면 [SearchPanel.currentFloorId].
   ///
-  /// 목록에서 무언가를 **탭한 경우**에 선다. 층 스코프는 "화장실"처럼 사용자가
-  /// 직접 친 시설 질의를 지금 보는 층으로 확정하려고 있는 것이지, 목록에서 특정
-  /// 대상을 콕 집은 행동에 그대로 적용할 것이 아니다.
-  ///
-  /// 왜 bool이 아니라 층 값인지는 [_FloorScopeOverride] 주석에 있다.
+  /// 목록에서 무언가를 **탭한 경우**에 선다 — 층 스코프는 직접 친 시설 질의를 위한
+  /// 것이지, 특정 대상을 콕 집은 행동에 적용할 것이 아니다([_FloorScopeOverride]).
   _FloorScopeOverride? _floorScopeOnce;
 
   @override
@@ -533,14 +439,8 @@ class _SearchPanelState extends State<SearchPanel> {
     List<PoiSearchResult> results;
     Building? building;
     try {
-      // 1단계: 경량 매칭. 매장 이름·동의어는 여기서 즉시 걸린다.
-      // 현재 층을 함께 보낸다 — "화장실"처럼 시설을 가리키는 질의는 이래야
-      // 지금 보고 있는 층으로 확정된다(안 보내면 건물 전체에서 정렬 순서상
-      // 우연히 걸리는 층이 나온다). 매장을 이름으로 아는 검색이 다른 층에
-      // 있어 여기서 빈손이 되더라도, 빈손이면 아래에서 층 제한이 없는 의미
-      // 검색으로 자동으로 넘어가 그 매장을 여전히 찾아낸다.
-      // 목록에서 고른 검색이면 **고른 그 매장의 층**으로 좁힌다(위
-      // [_FloorScopeOverride]). 층을 모르는 선택(최근 검색어)만 스코프를 뺀다.
+      // 1단계: 경량 매칭. 현재 층을 함께 보낸다(근거: W절). 목록에서 고른
+      // 검색이면 고른 그 매장의 층으로 좁힌다([_FloorScopeOverride]).
       final override = _floorScopeOnce;
       final floorScope = override != null
           ? override.floorId
@@ -572,37 +472,14 @@ class _SearchPanelState extends State<SearchPanel> {
     // 지난 뒤에만 나올 수 있게 된다. 경량이 한 건이라도 잡으면 그대로 보여준다
     // — 잘 되던 검색은 여전히 빠르다.
     if (results.isEmpty && building == null) {
-      // **이름이 실제로 걸렸으면 의미 검색으로 넘어가지 않는다.**
-      //
-      // 실기기에서 `apc`로 확인한 문제다. 서버 경량 매칭은 `name LIKE %apc%`라
-      // 구두점이 든 `A.P.C.`를 못 잡고 `no_match`를 준다. 그런데 온디바이스
-      // 인덱스는 정규화 키로 이미 그 매장을 찾아 화면에 띄워 둔 상태다. 여기서
-      // 2차로 넘어가면 그 정답이 스피너에 덮이고, 임계값 0.50을 겨우 넘은
-      // 의미 검색이 **주차구역(6A·6E)** 을 "뜻이 비슷한 매장"이라며 확정했다.
-      // 맞는 답을 보여주다가 틀린 답으로 갈아치운 셈이다.
-      //
-      // FAISS.md 11절이 정한 역할 분리("정확한 이름은 1차가 확정하고 임베딩은
-      // 말로 푸는 질의만 담당")를 그대로 따르는 것이며, 달라진 건 그 1차가
-      // 서버뿐 아니라 온디바이스 인덱스이기도 하다는 점이다.
-      //
-      // 교정 후보만 있을 때는 넘긴다 — 그건 추측이라 의미 검색이 더 나을 수
-      // 있고, 2차도 실패하면 noMatch 화면이 그 교정 후보를 되묻는다.
+      // 이름 후보가 떠 있으면 스피너로 덮지 않는다(A.P.C. 불변).
+      // 교정 후보만 있을 때는 넘긴다 — 그건 추측이라 의미 검색이 더 나을 수 있다.
       final hasNameSuggestions = _suggestions.any((s) => !s.kind.isCorrection);
       if (hasNameSuggestions) {
-        // 후보를 **먼저 확정해 보여주고**, 서버 탐색은 그대로 이어서 던진다.
-        //
-        // 예전에는 여기서 return하며 2차를 아예 부르지 않았는데, 그건 필요보다
-        // 넓은 차단이었다. 막아야 했던 건 임베딩 추측이지 `/query/ai` 호출이
-        // 아니다 — 그 엔드포인트의 1차는 임베딩이 아니라 서버 어휘(동의어·
-        // intent·카테고리) 매칭이고, 이름 매칭과 같은 등급의 결정적 매칭이다.
-        //
-        // 실제로 `커피`를 치면 온디바이스가 상호에 "커피"가 든 4곳을 잡고 끝나
-        // 카페 53곳이 통째로 가려졌다(실기기 확인). 서버는 그 53곳을
-        // `source: light`로 이미 돌려줄 수 있었는데 묻지를 않았다.
-        //
-        // 응답이 오면 [DiscoverySource]로 판정한다 — light면 교체하고,
-        // semantic이면 버린다. A.P.C. 불변("임베딩은 이름 후보를 덮지 못한다")은
-        // 그대로이고, 차단 지점만 호출 전에서 응답 후로 옮긴 것이다.
+        // 후보를 **먼저 확정해 보여주고** 서버 탐색은 그대로 이어서 던진다.
+        // 응답이 오면 [DiscoverySource]로 판정한다 — light면 교체, semantic이면 버림.
+        // 온디바이스 후보는 임베딩에는 이기고 서버 어휘에는 진다
+        // (근거·실측: `docs/client/search-input-assist.md` V절).
         setState(() {
           _submittedQuery = query;
           _results = const [];
@@ -653,11 +530,8 @@ class _SearchPanelState extends State<SearchPanel> {
     });
   }
 
-  /// 건물 밖 장소 검색(TMAP POI). 실내 검색과 **독립적으로** 돈다.
-  ///
-  /// 실패해도 화면 단계([_phase])를 건드리지 않는다. 이 검색은 곁들이는
-  /// 정보라, 바깥 조회가 실패했다고 실내 결과까지 오류 화면으로 덮으면 원래
-  /// 되던 검색이 같이 죽는다.
+  /// 건물 밖 장소 검색(TMAP POI). 실내 검색과 **독립적으로** 돌고, 실패해도
+  /// 화면 단계([_phase])를 건드리지 않는다.
   Future<void> _searchOutdoorPois(String query, int requestId) async {
     final center = widget.outdoorSearchCenter;
     // **건너뛰는 이유를 반드시 남긴다.** 이 세 조건 중 하나만 걸려도 화면에는
@@ -707,17 +581,11 @@ class _SearchPanelState extends State<SearchPanel> {
     });
   }
 
-  /// 2단계. 여기까지 왔다는 건 경량이 확실히 빈손이라는 뜻이고, 이 함수가 끝나야
-  /// 비로소 [_SearchPhase.noMatch]를 최종 결론으로 쓸 수 있다.
+  /// 2단계. 이 함수가 끝나야 [_SearchPhase.noMatch]를 최종 결론으로 쓸 수 있다.
+  /// 응답(DiscoveryResponse)의 mode마다 명시적인 화면 상태로 옮긴다.
   ///
-  /// 백엔드 응답은 DiscoveryResponse(mode + source + question/options + matches)다.
-  /// mode마다 명시적인 화면 상태로 옮긴다. 추천 후보는 [DiscoveryMatch] 원본을
-  /// 별도 보관해 reason/storeId를 잃지 않고 기존 길찾기 콜백에는 변환값만 준다.
-  ///
-  /// [keepSuggestionsUnlessLight]가 참이면 화면에 이미 온디바이스 이름 후보가
-  /// 떠 있다는 뜻이다. 그때는 스피너로 덮지 않고, 응답이 어휘(`light`)로 잡은
-  /// 것일 때만 후보를 교체한다. 임베딩 결과는 조용히 버린다 — A.P.C.가
-  /// 주차구역으로 갈아치워지던 회귀를 막는 불변이다(`search-input-assist.md`).
+  /// [keepSuggestionsUnlessLight]가 참이면 이름 후보가 이미 떠 있다는 뜻이라,
+  /// 어휘(`light`)로 잡은 응답만 후보를 교체한다(search-input-assist.md V절).
   Future<void> _semanticSearch(
     String query,
     int requestId, {
@@ -748,12 +616,8 @@ class _SearchPanelState extends State<SearchPanel> {
     }
     if (!mounted || requestId != _requestId) return;
 
-    // 이름 후보가 떠 있는데 서버가 임베딩으로 잡은 결과를 줬다면 버린다.
-    // 화면은 이미 `suggestions`로 확정돼 있으므로 아무것도 하지 않으면 된다.
-    //
-    // 어휘로 잡았더라도 보여줄 게 없으면(빈 matches) 마찬가지로 버린다. 지금
-    // 서버 구현에서는 light + 빈 결과가 나올 수 없지만, 그 전제가 깨지는 날
-    // 화면에 떠 있던 맞는 후보가 "결과 없음"으로 지워지는 쪽이 최악이다.
+    // 임베딩 결과, 그리고 어휘라도 빈 matches면 버린다 — 화면에 떠 있던 맞는
+    // 후보가 "결과 없음"으로 지워지는 쪽이 최악이다(V절 실패 조건).
     if (keepSuggestionsUnlessLight &&
         (!discovery.source.canReplaceNameSuggestions ||
             discovery.matches.isEmpty)) {
@@ -770,14 +634,9 @@ class _SearchPanelState extends State<SearchPanel> {
       _submittedQuery = query;
       _results = results;
       _building = null;
-      // "뜻이 비슷한 매장"은 임베딩으로 찾았을 때만 맞는 말이다. 서버 어휘
-      // (동의어·intent·카테고리)로 잡은 `커피` → 카페 목록에 이 배너가 붙으면
-      // 정확히 찾아 준 것을 추측이라고 말하는 셈이다.
-      //
-      // source가 오기 전에는 이걸 알 수 없어서 이름 비교 휴리스틱으로 추정했다
-      // ([isExactNameMatch]). 이제 서버가 알려주므로 그 값을 먼저 본다.
-      // 휴리스틱은 여전히 필요하다 — 타 층 매장을 정확한 이름으로 쳐서 2차로
-      // 넘어온 경우는 source가 semantic이어도 "뜻으로 찾은" 게 아니다.
+      // "뜻이 비슷한 매장" 배너는 임베딩으로 찾았을 때만 맞는 말이라 source를 먼저
+      // 본다. 휴리스틱([isExactNameMatch])도 남긴다 — 타 층 매장을 정확한 이름으로
+      // 쳐서 2차로 온 경우는 source가 semantic이어도 "뜻으로 찾은" 게 아니다.
       _fromSemantic =
           results.isNotEmpty &&
           !discovery.source.canReplaceNameSuggestions &&
@@ -934,15 +793,7 @@ class _SearchPanelState extends State<SearchPanel> {
 
   Widget _body(BuildContext context) {
     // **후보를 띄울지는 단계가 아니라 "이번 글자의 답이 있는가"로 정한다.**
-    //
-    // [_phase]로 판단하면 안 되는 이유가 있다. 디바운스(300ms) 동안에는 아직
-    // 요청이 시작조차 안 해서 단계가 그대로 남아 있다 — 첫 글자에는 [idle],
-    // 두 번째 검색부터는 **직전 질의의 [results]** 다. 즉 단계만 보면 사용자가
-    // 이미 다른 말을 치고 있는데 화면은 이전 결과를 계속 보여준다.
-    //
-    // [_submittedQuery]는 지금 화면에 그려진 결과가 어느 질의의 것인지를 담고
-    // 있으므로, 검색창 글자와 다르면 "아직 이번 글자의 답이 아니다"가 된다.
-    // 온디바이스 후보는 0ms에 나오니 그 사이를 후보로 채운다.
+    // [_phase]로 판단하면 디바운스 동안 직전 질의의 결과가 그대로 남는다(W절).
     final awaitingAnswer = widget.query.trim() != _submittedQuery;
     if (_suggestions.isNotEmpty &&
         awaitingAnswer &&
@@ -953,12 +804,8 @@ class _SearchPanelState extends State<SearchPanel> {
       return _suggestionList(settled: false);
     }
 
-    // 건물 밖 결과가 하나라도 있으면 **어떤 단계에서도** 목록을 보여준다.
-    //
-    // 실내 검색이 아직 돌고 있거나(스피너) 빈손으로 끝났거나(결과 없음)
-    // 실패했더라도(오류), 사용자가 찾던 곳이 바깥에 이미 잡혀 있는데 그
-    // 화면들을 띄우면 답을 손에 쥐고도 못 보여 주는 셈이 된다. 실내가 아직
-    // 도는 중이라는 사실은 목록 안의 진행 줄이 대신 알린다.
+    // 건물 밖 결과가 하나라도 있으면 **어떤 단계에서도** 목록을 보여준다(W절).
+    // 실내가 도는 중이라는 사실은 목록 안의 진행 줄이 대신 알린다.
     final hasOutdoor = _pois.isNotEmpty;
     switch (_phase) {
       case _SearchPhase.idle:
@@ -996,20 +843,12 @@ class _SearchPanelState extends State<SearchPanel> {
   SearchSortOrder get _sortOrder =>
       _sortOverride ?? defaultSortOrder(widget.reachByNodeId);
 
-  /// 목록 머리말 — 개수·층 분포(Q)와 정렬 컨트롤(P)이 **한 줄**을 쓴다.
+  /// 목록 머리말 — 개수·층 분포(Q)와 정렬 컨트롤(P)이 **한 줄**을 쓴다. 이 패널은
+  /// 상단 오버레이라 세로가 가장 귀한 자원이다.
   ///
-  /// 줄을 두 개 만들면 그만큼 결과가 아래로 밀린다. 이 패널은 상단 오버레이라
-  /// 세로가 가장 귀한 자원이다.
-  ///
-  /// [floorNames]는 **화면에 그린 줄들의 층**이다. 묶인 시설(화장실 19곳)의
-  /// 나머지 층까지 세면 한 줄짜리 목록에 `10개 층`이라고 적히는데, 사용자가 보는
-  /// 것과 다른 수를 적는 셈이다. 서버 상한(30)이나 후보 상한(8)에 잘린 목록에서
-  /// 전체 개수를 적지 않는 것과 같은 규칙이다.
-  ///
-  /// 층을 `B2 ~ 3F` 같은 **범위**로 적지 않는다. `StoreIndexEntry`·
-  /// `PoiSearchResult` 어느 쪽에도 `Floor.level`이 없어서, 문자열을 사전순으로
-  /// 세우면 `1F`가 `B1`보다 앞에 온다. 순서 값이 생기기 전에는 `N개 층`이
-  /// 사실만 말하는 유일한 표기다.
+  /// [floorNames]는 **화면에 그린 줄들의 층**이다(묶인 시설의 나머지 층은 안 센다).
+  /// `B2 ~ 3F` 같은 범위로 적지 않는다 — `Floor.level`이 없어 사전순으로 세우면
+  /// `1F`가 `B1`보다 앞에 온다.
   Widget _listHeader({
     required int count,
     required Iterable<String> floorNames,
@@ -1085,29 +924,19 @@ class _SearchPanelState extends State<SearchPanel> {
     );
   }
 
-  /// 후보 목록. 상위가 [_storeIndex]를 못 받았으면 애초에 여기 오지 않는다.
+  /// 후보 목록. 탭하면 좌표를 들고 바로 가지 않고 그 이름으로 검색을 다시 돌린다
+  /// (`onQueryPicked`) — 이유는 [StoreIndexEntry] 주석에.
   ///
-  /// 후보를 탭하면 **좌표를 들고 바로 이동하지 않는다.** 그 이름으로 검색을 다시
-  /// 돌려(`onQueryPicked`) 기존 경량 매칭이 좌표까지 갖춘 결과를 만들게 한다 —
-  /// 이유는 [StoreIndexEntry] 주석에 있다.
-  /// [settled]는 **이 화면이 이번 글자의 결론인가**다. 타이핑 중(서버를 기다리는
-  /// 중)이면 false다.
-  ///
-  /// 이 값으로 갈리는 게 둘이다. **타이핑 중에는 정렬을 고르게 하지 않고, 순서도
-  /// 매칭 품질순 그대로 둔다.** 글자마다 목록이 거리로 다시 세워지면 아직 무엇을
-  /// 찾는지 정하지도 않은 사용자의 눈앞에서 줄이 위아래로 튄다. 그리고 매 글자
-  /// 컨트롤이 깜빡이면 아직 결론이 아닌 화면이 결론처럼 보인다.
+  /// [settled]는 **이 화면이 이번 글자의 결론인가**다. 타이핑 중이면 정렬 컨트롤을
+  /// 감추고 순서도 매칭 품질순으로 둔다 — 글자마다 줄이 거리로 다시 세워지면
+  /// 눈앞에서 위아래로 튄다.
   Widget _suggestionList({required bool settled}) {
     // 머리말은 호출 자리가 아니라 **후보의 성격**으로 정한다. 전부 교정 후보면
     // "네가 치려던 게 이거냐"는 되물음이고, 하나라도 이름이 실제로 걸렸으면
     // "이런 게 있다"는 제안이다. 자리로 나누면 같은 목록에 다른 말이 붙는다.
     final allCorrections = _suggestions.every((s) => s.kind.isCorrection);
-    // 교정 후보는 추측이다. 개수를 세고 거리로 정렬해 주는 건 "이게 답이다"라는
-    // 말인데, 여기서 우리가 아는 건 "표기가 비슷한 이름이 있다"뿐이다.
-    //
-    // **1건짜리 목록에는 머리말을 얹지 않는다.** `검색 결과 1 · 4F`는 바로 아래
-    // 한 줄이 이미 말한 것을 되풀이할 뿐이고, 정렬 컨트롤도 누를 대상이 없다.
-    // 개수 머리말과 컨트롤이 같은 조건으로 갈리므로 조건도 하나로 둔다.
+    // 교정 후보는 추측이라 개수·정렬을 붙이지 않는다. **1건짜리 목록에도 머리말을
+    // 얹지 않는다** — `검색 결과 1 · 4F`는 아래 한 줄이 이미 말한 것이다.
     final showCount =
         settled &&
         !allCorrections &&
@@ -1269,27 +1098,18 @@ class _SearchPanelState extends State<SearchPanel> {
           widget.onSuggestionPicked(store);
           return;
         }
-        // 층마다 있는 시설(화장실 19곳)은 한 줄에 묶여 있다. 여기서 한 곳을
-        // 바로 열면 나머지 18곳을 고를 방법이 사라지므로, 목록을 펼치는 기존
-        // 동작을 유지한다.
-        //
-        // 화면에 적힌 그 층으로 확정되게 한다. 이름만 넘기면 같은 이름이 19곳인
-        // 시설에서 서버가 자기 순서로 아무 층이나 고른다([_FloorScopeOverride]).
+        // 묶인 시설(화장실 19곳)은 목록을 펼친다 — 한 곳을 바로 열면 나머지 18곳을
+        // 고를 방법이 사라진다. 층은 화면에 적힌 그 층으로 확정한다.
         _floorScopeOnce = _FloorScopeOverride(store.floorId);
         widget.onQueryPicked(store.name);
       },
     );
   }
 
-  /// 아직 아무것도 치지 않은 화면. 최근 검색어가 있으면 그걸 보여주고, 없으면
-  /// 예전처럼 안내 문구만 남긴다.
+  /// 아직 아무것도 치지 않은 화면. 최근 검색어가 있으면 그걸, 없으면 안내 문구만.
   ///
-  /// **"인기 매장"은 만들지 않는다.** 방문·클릭 로그가 없어 순위를 만들 근거가
-  /// 없다(설계: naver-map-ui-ux-analysis.md J절). 클라이언트가 실제로 아는 것만
-  /// 쓴다.
-  ///
-  /// 첫 실행의 빈 목록은 오류가 아니라 정상 상태다. 그때는 목록 자리에
-  /// 빈 박스를 남기지 않고 안내 문구가 그 자리를 그대로 쓴다.
+  /// **"인기 매장"은 만들지 않는다** — 방문·클릭 로그가 없어 순위 근거가 없다
+  /// (naver-map-ui-ux-analysis.md J절). 첫 실행의 빈 목록은 정상 상태다.
   Widget _idleState() {
     return ListenableBuilder(
       listenable: recentSearchesController,
@@ -1480,12 +1300,9 @@ class _SearchPanelState extends State<SearchPanel> {
         ),
       );
     }
-    // 가까운 것부터 보여준다. 규칙과 실패 조건은
-    // [sortedSearchResults](../domain/search_result_order.dart)가 단일 출처다.
-    // 여기(build)에서 세우는 이유는 거리의 출처인 `widget.reachByNodeId`가 위치를
-    // 새로 잡을 때마다 바뀌기 때문이다 — 결과를 받는 시점에 한 번만 세우면
-    // 화면에 적힌 거리와 순서가 어긋난 목록이 남는다. 상한이 30건이라 매 빌드
-    // 정렬 비용은 무시할 수 있다.
+    // 규칙과 실패 조건은 domain/search/search_result_order.dart가 단일 출처.
+    // build에서 세우는 이유는 `widget.reachByNodeId`가 위치를 새로 잡을 때마다
+    // 바뀌기 때문이다 — 받는 시점에 한 번만 세우면 거리와 순서가 어긋난다.
     final ordered = sortedSearchResults(
       results: _results,
       reachByNodeId: widget.reachByNodeId,
@@ -1513,11 +1330,9 @@ class _SearchPanelState extends State<SearchPanel> {
         ),
       );
     }
-    // 추천 이유는 **storeId로** 짝짓는다. 예전에는 `_discoveryMatches[index]`로
-    // 인덱스를 맞췄는데, 정렬이 들어오면 이유가 엉뚱한 매장에 붙는다. 그리고
-    // 이건 가정이 아니다 — `_fromSemantic`은 결과가 정확한 이름 일치로 판정되면
-    // false가 되는데(_semanticSearch), 그때도 `_discoveryMatches`는 차 있다.
-    // 즉 "정렬은 도는데 인덱스 짝짓기는 깨지는" 조합이 실제 경로로 존재한다.
+    // 추천 이유는 **storeId로** 짝짓는다. 인덱스로 맞추면 정렬이 들어올 때 이유가
+    // 엉뚱한 매장에 붙고, 그 조합은 실제 경로로 존재한다(`_fromSemantic`이 false
+    // 인데 `_discoveryMatches`는 차 있는 경우).
     final matchByStoreId = {
       for (final match in _discoveryMatches) match.storeId: match,
     };
@@ -1526,16 +1341,10 @@ class _SearchPanelState extends State<SearchPanel> {
     final sharedReasons = sharedReasonSentences(
       _discoveryMatches.map((match) => match.reason),
     );
-    // 목록에 바깥 줄이 섞이는 순간부터 우리 매장 줄에 **건물 이름**을 붙인다.
-    //
-    // "스타벅스 리저브 / B2"만으로는 어느 건물의 스타벅스인지 알 수 없다. 밖에서
-    // 검색하면 길 건너 스타벅스가 함께 뜨는데 그 줄들은 주소가 적혀 구분이 되고
-    // 우리 줄만 층 하나로 남는다 — 정보가 가장 많은 줄이 가장 안 읽혔다.
-    //
-    // 조건을 "실내 컨텍스트인가"로 두지 않는 이유가 있다. 실내 오버레이는 건물로
-    // 확대하기만 해도 켜지므로(indoor_entry_zoom.dart) 그 조건으로는 건물 근처
-    // 검색이 전부 "건물 안"으로 판정돼 이름이 통째로 사라졌다. 헷갈릴 상대(바깥
-    // 줄)가 실제로 목록에 있는지로 가른다.
+    // 바깥 줄이 섞이는 순간부터 우리 매장 줄에 **건물 이름**을 붙인다 — 그 줄들은
+    // 주소가 있는데 우리 줄만 층 하나면 어느 건물인지 알 수 없다.
+    // "실내 컨텍스트인가"로 가르지 않는다. 오버레이는 확대만 해도 켜져서
+    // (indoor_entry_zoom.dart) 건물 근처 검색에서 이름이 통째로 사라졌다.
     final merged = _mergedResults(building);
     final showBuildingName = merged.outdoorRows.isNotEmpty;
     for (final store in ordered) {
@@ -1567,21 +1376,10 @@ class _SearchPanelState extends State<SearchPanel> {
     // "앱이 멈췄다"로 읽는다.
     if (rows.isEmpty) return _emptyState(context);
 
-    // 왜 ListView(shrinkWrap)가 아니라 SingleChildScrollView + Column인가.
-    //
-    // 이 패널은 결과가 적으면 내용만큼만 높고, 많으면 상위가 준 maxHeight 안에서
-    // 스크롤돼야 한다. `ListView(shrinkWrap: true)`가 그 두 가지를 다 해줄 것 같지만,
-    // 느슨한 제약(maxHeight만 있고 tight가 아닌) 안에서는 스크롤 범위를 실제 내용보다
-    // 짧게 잡아 **목록의 마지막 항목에 영영 도달하지 못했다.** 30건을 받아 끝까지
-    // 내려도 29번째에서 멈췄다(스크롤 위치는 최대값인데 마지막 타일이 안 나온다).
-    //
-    // Column은 자식을 전부 즉시 만들지만, 이 목록의 상한은 서버 쪽
-    // MAX_SHOW_ALL_MATCHES(30)이라 지연 생성으로 아낄 것이 없다. 상한이 크게 늘면
-    // 그때 다시 볼 문제다.
-    //
-    // 행 사이에 구분선을 끼우지 않는다 — 예전에는 모든 행 사이에 Divider가 있어
-    // 배너·머리말·건물 줄까지 칸칸이 나뉘어 보였다. 이유는 [_rowVerticalPadding]
-    // 주석에 있다.
+    // **`ListView(shrinkWrap: true)`가 아닌 이유** — 느슨한 제약(maxHeight만 있고
+    // tight가 아닌) 안에서 스크롤 범위를 내용보다 짧게 잡아 30건 중 29번째에서
+    // 멈췄다(마지막 타일에 영영 도달하지 못함). 상한이 30이라 지연 생성으로 아낄
+    // 것도 없다. 구분선은 두지 않는다([_rowVerticalPadding]).
     return Scrollbar(
       controller: _resultScrollController,
       child: SingleChildScrollView(
@@ -1592,16 +1390,11 @@ class _SearchPanelState extends State<SearchPanel> {
     );
   }
 
-  /// 서버가 확정한 1건 **아래에** 같은 계열 매장을 잇는 행들.
+  /// 서버가 확정한 1건 **아래에** 같은 계열 매장을 잇는 행들(`구찌` → `구찌 뷰티`).
+  /// 규칙과 실패 조건은 domain/search/name_siblings.dart가 단일 출처다.
   ///
-  /// `구찌`를 치면 서버는 `구찌` 한 곳을 자신 있게 확정하고, `구찌 뷰티`·
-  /// `구찌 선글라스`는 화면에서 사라진다. 규칙과 실패 조건은
-  /// [nameSiblings](../domain/name_siblings.dart)가 단일 출처다.
-  ///
-  /// **정확 일치 행은 맨 위에 고정한다.** 사용자가 친 그 이름이라 거리로 밀어
-  /// 내리면 "이름 맞춤"이라는 말 자체가 무너진다. 그래서 이 화면에는 정렬
-  /// 컨트롤을 두지 않는다 — 머리 행이 고정된 목록은 정렬 기준 하나로 설명되지
-  /// 않는다. 형제는 실데이터 기준 최대 3건이라 고를 것도 많지 않다.
+  /// **정확 일치 행은 맨 위에 고정**하므로 이 화면에는 정렬 컨트롤을 두지 않는다 —
+  /// 머리 행이 고정된 목록은 정렬 기준 하나로 설명되지 않는다.
   List<Widget> _siblingRows(List<PoiSearchResult> ordered) {
     // 경량 경로가 확정한 1건일 때만이다. 의미 검색·discovery 결과는 이름으로
     // 걸린 게 아니라 형제라는 개념 자체가 없다.
@@ -1639,13 +1432,9 @@ class _SearchPanelState extends State<SearchPanel> {
     final isClarify = _discoveryMode == DiscoveryMode.clarify;
     final hasSelection = _selectedFacets.isNotEmpty;
 
-    // 두 버튼은 clarify 흐름의 조작 수단이라, 되물음이 없는 화면에 두면 누를 대상이
-    // 없는 버튼이 된다. 예전에는 이 Wrap이 조건 없이 렌더돼 direct("커피" 1건)·
-    // no_match에서도 떴다. mode가 화면 분기의 유일한 근거라는 계약(DiscoveryResponse
-    // 주석)을 헤더에서도 지킨다.
-    //
-    // "전체 보기"는 아직 안 본 후보가 남아 있을 때만 뜻이 있다 — 질문이 서 있거나
-    // (clarify) 선택으로 좁혀진 상태다. 이미 전체를 보고 있으면 다시 눌러야 그대로다.
+    // 두 버튼은 clarify 흐름의 조작 수단이라 되물음이 없는 화면에서는 누를 대상이
+    // 없다. mode가 화면 분기의 유일한 근거라는 계약(DiscoveryResponse)을 여기서도
+    // 지킨다. "전체 보기"는 아직 안 본 후보가 남아 있을 때만 뜻이 있다.
     final canShowAll = (isClarify || hasSelection) && !_showingAll;
     // "다시 선택"은 되돌릴 답이 있을 때다. 선택 없이 전체 보기로 질문을 건너뛴
     // 상태도 포함한다 — 그 화면에서는 이 버튼이 질문으로 돌아가는 유일한 길이다.
@@ -1782,13 +1571,10 @@ class _SearchPanelState extends State<SearchPanel> {
     );
   }
 
-  /// 결과 한 줄. 이름(검색어 강조) + 업종을 한 줄에 두고, 그 아래 층 또는 추천 이유.
+  /// 결과 한 줄. 이름(검색어 강조) + 업종을 한 줄에, 그 아래 층 또는 추천 이유.
   ///
-  /// 업종을 왼쪽 아이콘이 아니라 **이름 오른쪽 회색 글자**로 두는 이유는, 매장마다
-  /// 다른 글리프를 만들지 않고도 소분류까지 그대로 읽히기 때문이다. 왼쪽 아이콘은
-  /// "이건 장소다"만 말하면 되므로 한 종류로 충분하다.
-  /// [showBuildingName]이 참이면 층 앞에 건물 이름을 붙인다. 판단 근거는
-  /// 호출부([_resultList])에 적혀 있다.
+  /// 업종을 아이콘이 아니라 **이름 오른쪽 회색 글자**로 두면 매장마다 글리프를 만들지
+  /// 않고도 소분류까지 읽힌다. [showBuildingName]의 판단은 호출부([_resultList])에.
   Widget _storeTile(
     PoiSearchResult store,
     DiscoveryMatch? match,
@@ -1886,17 +1672,9 @@ class _SearchPanelState extends State<SearchPanel> {
 
   /// 목록에 실제로 그릴 바깥 줄. 같은 곳을 두 번 보여주지 않는다.
   ///
-  /// **바깥 줄(POI) 쪽으로 합친다.** 사용자가 검색해서 본 이름이 POI 이름이고
-  /// ("스타벅스 더현대서울(B2)R점"), 우리 데이터 이름("스타벅스 리저브")으로
-  /// 바꿔 버리면 방금 친 검색어와 목록이 어긋난다. 대신 그 줄에 우리 매장의
-  /// 층·노드를 실어([mergeOutdoorResults]) 눌렀을 때 실내까지 안내되게 한다 —
-  /// 이름은 POI, 능력은 우리 데이터다.
-  ///
-  /// 건물 줄과 이름이 **완전히 같은**(공백·대소문자 무시) POI도 뺀다. TMAP도
-  /// 같은 건물을 POI 한 건으로 돌려주기 때문이다. `contains`로 넓히지 않는
-  /// 이유는 "더현대서울 스타벅스"처럼 건물 이름을 앞에 단 진짜 결과까지
-  /// 사라지기 때문이다 — 중복 한 줄을 지우려다 찾던 가게를 지우는 쪽이 훨씬
-  /// 나쁘다.
+  /// **POI 쪽으로 합친다** — 이름은 POI, 능력은 우리 데이터([mergeOutdoorResults]).
+  /// 건물 줄과 이름이 **완전히 같은** POI도 뺀다. `contains`로 넓히지 않는 이유는
+  /// "더현대서울 스타벅스"처럼 건물 이름을 앞에 단 진짜 결과까지 사라져서다.
   MergedOutdoorResults _mergedResults(Building? building) {
     final isAt = widget.isInsideIndoorBuilding;
     final merged = mergeOutdoorResults(
@@ -1922,12 +1700,8 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 직전에 남긴 로그 한 줄. build마다 같은 말을 반복하지 않으려고 들고 있는다.
   String _lastMergeLog = '';
 
-  /// **연결 결과를 로그로 남긴다.**
-  ///
-  /// 화면에서는 "실내 매장에 연결됐다"와 "연결할 게 없었다"가 똑같이 보인다 —
-  /// 둘 다 POI 줄 하나로 끝난다. 그래서 규칙이 통째로 안 도는 것을 눈으로
-  /// 구분할 수 없고, 실제로 이 자리를 세 번 잘못 짚었다. 다음에는 추측하지
-  /// 않도록 근거를 남긴다.
+  /// **연결 결과를 로그로 남긴다.** 화면에서는 "연결됐다"와 "연결할 게 없었다"가
+  /// 똑같이 보여(둘 다 POI 줄 하나) 규칙이 안 도는 것을 눈으로 구분할 수 없다.
   void _logMerge(MergedOutdoorResults merged) {
     if (_pois.isEmpty) return;
     final dropped = _pois.length - merged.outdoorRows.length;
@@ -2047,15 +1821,11 @@ class _SearchPanelState extends State<SearchPanel> {
     );
   }
 
-  /// 못 찾았을 때의 탈출구 — 카테고리로 둘러보기(R절).
+  /// 못 찾았을 때의 탈출구 — 카테고리로 둘러보기(R절). 순위 근거가 없어
+  /// "인기 검색어"는 두지 않고, 이 건물에 실제로 있는 대분류만 놓는다.
   ///
-  /// **"인기 검색어"는 만들지 않는다.** 방문·클릭 로그가 없어 순위를 만들 근거가
-  /// 없다(J절과 같은 이유). 여기 놓는 것은 우리가 실제로 아는 것 — 이 건물에
-  /// 어떤 대분류가 있는가 — 뿐이다.
-  ///
-  /// **야외에서는 그리지 않는다.** 아직 들어가지도 않은 건물의 카테고리를 누르게
-  /// 되고, 지도 강조는 도면 위에 그려지므로 결과가 보이지 않는다(지도 위 chip 줄이
-  /// `_indoorContextActive`로 갈리는 것과 같은 이유).
+  /// **야외에서는 그리지 않는다** — 아직 안 들어간 건물의 카테고리를 누르게 되고,
+  /// 지도 강조는 도면 위에 그려져 결과가 보이지 않는다.
   Widget _browseCategories() {
     final entries = widget.categoryEntries;
     final onPicked = widget.onCategoryPicked;
@@ -2154,11 +1924,8 @@ class _SearchPanelState extends State<SearchPanel> {
   }
 }
 
-/// 목록 맨 위에 붙는 "건물 안은 아직 찾는 중" 줄.
-///
-/// 바깥 결과가 먼저 도착하면 목록이 이미 떠 있는데, 그 상태를 최종 결과로
-/// 읽으면 사용자는 "우리 건물엔 없구나"라고 결론짓고 검색을 닫는다. 실내
-/// 응답이 오면 이 줄이 사라지고 위쪽에 매장이 채워진다.
+/// 목록 맨 위에 붙는 "건물 안은 아직 찾는 중" 줄. 바깥 결과만 뜬 상태를 최종
+/// 결과로 읽으면 사용자는 "우리 건물엔 없구나"라며 검색을 닫는다.
 class _IndoorSearchingRow extends StatelessWidget {
   const _IndoorSearchingRow();
 

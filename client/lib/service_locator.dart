@@ -42,40 +42,26 @@ PdrMotionSource createDefaultPdrMotionSource({
 
 final PdrMotionSource pdrMotionSource = createDefaultPdrMotionSource();
 
-/// 타입이 구현체가 아니라 **계약**([IndoorNavigationController])이다. 화면이
-/// 드라이버 내부에 손을 뻗으면 세션 로직을 화면 밖으로 떼어낼 때마다 구현체를
-/// 통째로 끌고 다녀야 한다. 계약으로 좁혀 두면 떼어낸 조각이 가짜 구현으로
-/// 시험된다.
+/// 타입이 구현체가 아니라 **계약**([IndoorNavigationController])이다 — 화면이
+/// 드라이버 내부에 손을 뻗으면 떼어낼 때마다 구현체를 끌고 다녀야 한다.
 ///
-/// final이다 — 테스트는 이 전역을 갈아끼우지 않고 native 채널을 모킹해 진짜
-/// 드라이버를 구동한다(`tests/unit_test/pdr_anchor_floor_rebind_test.dart`).
-/// 화면이 initState에서 이 인스턴스의 스트림을 구독하므로, 구독이 붙은 뒤에
-/// 인스턴스를 바꾸면 화면은 옛 것만 계속 바라본다(debugModeController와 같다).
+/// final이다. 화면이 initState에서 스트림을 구독하므로 뒤에 인스턴스를 바꾸면
+/// 옛 것만 계속 바라본다. 테스트는 native 채널을 모킹해 진짜 드라이버를 쓴다.
 final IndoorNavigationController indoorNavigationDriver = IndoorNavigationDriver(
   source: pdrMotionSource,
 );
 final IndoorLocationEstimateController indoorLocationEstimateController =
     IndoorLocationEstimateController();
 
-/// 디버그 모드 설정도 화면 간에 공유한다. 실내 지도와 야외 지도의 실내 진입
-/// 오버레이가 각자 컨트롤러를 만들면, 한쪽에서 디버그 모드를 켜도 다른 쪽은
-/// 자기 메모리 값(꺼짐)을 계속 보여줘 같은 세션 안에서 PDR 진입점이 있다
-/// 없다 한다. MapShellScreen이 두 body를 IndexedStack으로 동시에 살려 두기
-/// 때문에 특히 눈에 띈다 — 하나만 두고 양쪽이 같은 상태를 구독한다.
+/// 디버그 모드 설정도 화면 간에 공유한다 — 각자 만들면 한쪽에서 켜도 다른 쪽은
+/// 꺼진 값을 보여줘 같은 세션 안에서 PDR 진입점이 있다 없다 한다.
 ///
-/// 다른 전역들과 달리 교체 가능한 var가 아니라 final이다. 위젯이 구독하는
-/// ChangeNotifier라, 실행 중에 다른 인스턴스로 갈아끼우면 이미 구독 중인
-/// 화면들이 옛 인스턴스만 계속 바라보게 된다. 테스트에서 설정을 바꿔야 하면
-/// 인스턴스를 교체하지 말고 [DebugModeController.reload]를 쓴다.
+/// 위와 같은 이유로 final이다. 테스트에서 바꿔야 하면 인스턴스를 교체하지 말고
+/// [DebugModeController.reload]를 쓴다.
 final DebugModeController debugModeController = DebugModeController();
 
-/// 실내 지도·목적지 검색·경로 안내가 전부 백엔드(api/) 다익스트라 그래프로
-/// 동작하도록 HttpBuildingRepository를 쓴다. 백엔드 없이 오프라인으로 확인할
-/// 땐 이 한 줄만 MockBuildingRepository()로 되돌리면 된다.
-///
-/// watchPosition/requestStartupPermissions와 같은 이유로 final이 아니다 —
-/// 플랫폼 채널·네트워크가 없는 위젯 테스트 환경에서는 이 변수를
-/// MockBuildingRepository()로 교체해 실제 HTTP 호출 없이 동작을 검증한다.
+/// 실내 지도·목적지 검색·경로 안내가 전부 백엔드 그래프로 동작한다. 오프라인으로
+/// 확인할 땐 이 한 줄만 `MockBuildingRepository()`로 되돌린다(테스트도 같은 방법).
 BuildingRepository buildingRepository = HttpBuildingRepository();
 
 /// 목적지 자연어 질의는 백엔드의 POST /query/destination(라우터 하나로
@@ -95,26 +81,20 @@ final DirectionsRepository directionsRepository = tmapAppKey.isEmpty
     ? MockDirectionsRepository()
     : TmapDirectionsRepository();
 
-/// 건물 **밖** 장소 검색(TMAP POI 통합검색). 키가 없으면 기능 자체가 꺼진
-/// 구현이 들어가고, 검색 패널은 "주변 장소" 섹션을 아예 그리지 않는다.
+/// 건물 **밖** 장소 검색(TMAP POI). 키가 없으면 꺼진 구현이 들어가고 "주변 장소"
+/// 섹션이 아예 안 그려진다.
 ///
-/// 도보 경로와 달리 Mock을 두지 않는다. 직선 경로 Mock은 "대충 이 방향"이라도
-/// 맞지만, 없는 가게를 지어내면 사용자를 실제로 그 좌표까지 걸어가게 만든다.
-///
-/// 위젯 테스트에서 HTTP 없이 결과를 주입할 수 있도록 final이 아니다.
+/// **Mock을 두지 않는다** — 직선 경로 Mock은 "대충 이 방향"이라도 맞지만, 없는
+/// 가게를 지어내면 사용자를 실제로 그 좌표까지 걸어가게 만든다.
 OutdoorPoiRepository outdoorPoiRepository = tmapAppKey.isEmpty
     ? const UnavailableOutdoorPoiRepository()
     : TmapPoiRepository();
 
-/// 대중교통 경로(카카오맵). 위와 같은 이유로 키가 없으면 꺼진 구현이다.
+/// 대중교통 경로(카카오맵). **여기만 카카오 키를 본다** — TMAP 대중교통 무료
+/// 제공량이 하루 10건이라 데모 한 번에 소진돼 옮겼다.
 ///
-/// **여기만 TMAP 키가 아니라 카카오 키를 본다.** TMAP 대중교통 무료 제공량이
-/// 하루 10건이라 데모 한 번에 소진돼 옮겼다. 되돌리려면 `TmapTransitRepository()`
-/// 로 바꾸면 되지만, 그때는 판단 기준도 `tmapAppKey`로 함께 되돌려야 한다.
-///
-/// 카카오 응답에는 첫 승차지점 앞·마지막 하차지점 뒤 도보가 없다. 그 두 구간은
-/// 화면이 [directionsRepository]로 채우므로, 대중교통을 쓰는 흐름은 TMAP 키도
-/// 함께 있어야 완전한 경로가 그려진다.
+/// 카카오 응답에는 첫 승차 앞·마지막 하차 뒤 도보가 없어 화면이
+/// [directionsRepository]로 채운다 — 대중교통도 TMAP 키가 함께 있어야 완전하다.
 TransitRepository transitRepository = kakaoRestApiKey.isEmpty
     ? const UnavailableTransitRepository()
     : KakaoTransitRepository();
@@ -136,14 +116,8 @@ Permission get pedometerPermission =>
 
 /// 앱 시작 시 필요한 권한을 **하나씩 순서대로** 요청한다.
 ///
-/// 예전에는 `List<Permission>.request()`로 목록을 한 번에 던졌다. 이 호출은
-/// 요청을 동시에 보내기 때문에 OS 다이얼로그가 연달아 겹쳐 뜨고, 사용자는 첫
-/// 문구를 읽기도 전에 다음 창을 마주해 무엇을 허용했는지 모른 채 넘기게 된다.
-/// `await`로 앞 다이얼로그가 닫힌 뒤 다음을 요청하면 순서가 보장된다.
-///
-/// 두 권한 모두 앱을 쓰려면 결국 필요하므로 시점을 나누지 않고 여기서 함께
-/// 받는다. 위치를 먼저 요청하는 이유는 앱이 야외 지도로 시작하기 때문이다 —
-/// 사용자가 가장 먼저 보는 화면과 첫 다이얼로그가 맞아야 이유가 납득된다.
+/// 목록을 한 번에 던지면 OS 다이얼로그가 겹쳐 떠 무엇을 허용했는지 모른 채
+/// 넘기게 된다. 위치를 먼저 묻는 이유는 앱이 야외 지도로 시작하기 때문이다.
 Future<Map<Permission, PermissionStatus>>
 defaultRequestStartupPermissions() async {
   final statuses = <Permission, PermissionStatus>{};
@@ -162,15 +136,10 @@ Future<Map<Permission, PermissionStatus>> Function() requestStartupPermissions =
     defaultRequestStartupPermissions;
 
 /// 걸음 센서 권한이 지금 허용돼 있는지. **다이얼로그를 띄우지 않는다.**
+/// 거부된 상태에서 매번 시작을 시도하면 `sensorStartFailed`가 반복해 쌓인다.
 ///
-/// PDR 상시 실행이 화면 진입마다 센서를 켜려 하므로, 거부된 상태에서 매번
-/// 시작을 시도하면 `sensorStartFailed` degraded가 반복해서 쌓인다. 자동 시작
-/// 전에 이 값으로 걸러낸다.
-///
-/// iOS/Android가 아닌 플랫폼은 네이티브 PDR 구현 자체가 없으므로 false다.
-/// 모바일 테스트에서 권한 플러그인만 빠진 경우에는 **허용으로 본다**. 이 경우
-/// 센서 시작 실패는 driver가 degraded warning으로 바꿔 플랫폼 경계 안에서
-/// 처리한다.
+/// 모바일이 아니면 false, 모바일인데 권한 플러그인만 빠졌으면 **허용으로 본다**
+/// (그 경우 시작 실패는 driver가 degraded warning으로 바꾼다).
 Future<bool> defaultIsPedometerPermissionGranted() async {
   if (kIsWeb ||
       defaultTargetPlatform != TargetPlatform.iOS &&
@@ -190,24 +159,9 @@ Future<bool> Function() isPedometerPermissionGranted =
 
 /// 야외 위치 스트림을 얼마나 자주 받을지.
 ///
-/// **안드로이드는 간격을 지정하지 않으면 5초에 한 번이다.** 기본
-/// [LocationSettings]가 채널로 보내는 값은 accuracy와 distanceFilter뿐인데,
-/// geolocator의 안드로이드 구현은 간격이 비어 있으면 5000 ms를 채워 넣고 그 값을
-/// `setIntervalMillis`와 `setMinUpdateIntervalMillis`에 **둘 다** 건다. 뒤엣것이
-/// 하한이라 신호가 아무리 좋아도 5초보다 빨리 오지 않는다. 이 기본값은
-/// 문서에도, 코드에도 드러나지 않아 "GPS가 원래 느린 것"처럼 보였다.
-///
-/// 여기에 예전의 `distanceFilter: 5`가 겹쳤다. 걷는 사람은 5초에 한 번, 6 m씩
-/// 순간이동하는 아이콘을 보게 된다 — 실기기 실험에서 "위치가 실시간으로 안
-/// 움직인다"고 관찰된 것이 이것이다. 두 제한을 모두 풀어 1초에 한 번 받는다.
-///
-/// **비용은 스트림이 아니라 소비 지점에서 막는다.** 예전 주석이 걱정한 것은
-/// 좌표가 올 때마다 나가는 TMAP 도보 경로 재요청이었는데, 그건 이제 마지막
-/// 요청 지점에서 충분히 움직였을 때만 나간다
-/// (`screens/outdoor_map/route_recompute_policy.dart`). 좌표 자체를 덜 받아서
-/// 네트워크를 아끼면 화면에 그리는 위치까지 같이 낡는다.
-///
-/// iOS에는 간격 개념이 없고 거리 필터만 있으므로 그것만 푼다.
+/// **간격을 명시하지 않으면 안드로이드는 5초 하한이 걸린다.** 그 기본값이 문서에도
+/// 코드에도 안 드러나 "GPS가 원래 느린 것"처럼 보였다(근거와 실측:
+/// `docs/client/gps-stream-policy.md` 3절).
 LocationSettings positionStreamSettings() {
   if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
     return AndroidSettings(
@@ -230,15 +184,8 @@ Stream<Position> defaultWatchPosition() {
 
 /// 스트림이 조용할 때 좌표를 한 건 직접 끌어올 때 쓰는 설정.
 ///
-/// **간격을 안 주면 5초짜리 요청이 된다.** 일회성 조회라 간격은 상관없어 보이지만
-/// 그렇지 않다 — 안드로이드는 요청 간격의 두 배까지 묵은 좌표를 "지금 것"으로
-/// 돌려준다. 기본값 5초를 그대로 두면 **10초 전 좌표를 즉시 받고 새 좌표를 받은
-/// 것으로 착각한다.** 응답이 빠른 만큼 내용이 낡는다.
-///
-/// 1초로 좁히면 허용 나이가 2초가 되어, 그보다 묵었으면 기기가 새로 계산한다.
-/// 조금 느려지는 대신 화면에 그리는 좌표가 실제로 새 것이 된다.
-///
-/// iOS에는 간격 개념이 없어 정확도만 준다.
+/// **일회성이라도 간격을 준다** — 안드로이드는 요청 간격의 두 배까지 묵은 좌표를
+/// "지금 것"으로 돌려주기 때문이다(gps-stream-policy.md 3절).
 LocationSettings oneShotFixSettings() {
   if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
     return AndroidSettings(

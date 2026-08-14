@@ -37,15 +37,11 @@ enum DiscoveryMode {
   };
 }
 
-/// 서버가 후보를 **무엇으로** 잡았는지. 백엔드 DiscoveryResponse.source와 1:1.
+/// 서버가 후보를 **무엇으로** 잡았는지. [DiscoveryMode]와 축이 다르다 — mode는
+/// "얼마나 좁혀졌나", 이건 "무엇을 근거로".
 ///
-/// [DiscoveryMode]와 축이 다르다 — mode는 "얼마나 좁혀졌나"이고, 이건 "무엇을
-/// 근거로 잡았나"다. `results`·`clarify`는 어느 쪽 경로에서도 나오므로 mode만
-/// 봐서는 구분할 수 없다.
-///
-/// 화면이 이 값을 읽는 이유는 온디바이스 이름 후보와의 우선순위 때문이다 —
-/// 이름 후보는 추측인 [semantic]에는 이기고, 결정적 어휘인 [light]에는 진다.
-/// 근거는 `docs/client/search-input-assist.md` 「실기기 검증」 2번.
+/// 온디바이스 이름 후보는 [semantic]에는 이기고 [light]에는 진다
+/// (`docs/client/search-input-assist.md` V절).
 enum DiscoverySource {
   /// 이름·카테고리·동의어·intent로 잡았다. 이름 후보만큼 결정적이다.
   light,
@@ -103,14 +99,11 @@ class DiscoveryOption {
       );
 }
 
-/// 추천 매장 1건. 백엔드 DiscoveryMatch(dto/query.py) — QueryMatch(목적지
-/// 계약) 필드에 추천 근거(matchedFacets·reason)를 덧붙인 모양이다.
+/// 추천 매장 1건. 백엔드 DiscoveryMatch와 1:1.
 ///
-/// [PoiSearchResult]와 필드가 겹치지만 별도 클래스로 둔다: storeId·floorId처럼
-/// 지금 화면이 아직 쓰지 않는 필드도 그대로 보존해야 Wave 11(질문 chip·후보
-/// 목록 UI)이 값을 새로 파싱하지 않고 쓸 수 있고, matchedFacets·reason은
-/// destination 계약([PoiSearchResult])에는 없는 개념이라 거기 끼워 넣으면
-/// "목적지 결과인데 추천 이유가 있다"는 모순된 모양이 된다.
+/// [PoiSearchResult]와 필드가 겹쳐도 별도 클래스로 둔다 — matchedFacets·reason은
+/// destination 계약에 없는 개념이라, 끼워 넣으면 "목적지 결과인데 추천 이유가
+/// 있다"는 모순된 모양이 된다.
 class DiscoveryMatch {
   const DiscoveryMatch({
     required this.storeId,
@@ -162,20 +155,12 @@ class DiscoveryMatch {
   );
 }
 
-/// 의미 검색 결과가 사실상 정확한 이름 일치인지 휴리스틱으로 판정한다. 서버가
-/// 어느 tier(정확 일치·동의어·의미)로 매칭했는지는 클라이언트로 내려오지
-/// 않으므로, 질의와 결과 이름을 직접 비교해 추정한다.
+/// 의미 검색 결과가 사실상 정확한 이름 일치인지 휴리스틱으로 판정한다. 1차가 층
+/// 스코프로 빈손이 되어 2차로 넘어온 경우, 정확한 이름을 쳤는데 "뜻으로 찾았다"고
+/// 말하는 배너를 막는다.
 ///
-/// 1차 경량 검색이 층 스코프 등으로 빈손이 되어 2차 의미 검색으로 넘어오는
-/// 경우가 있다. 이때도 "뜻이 비슷한 매장을 찾았어요" 배너가 그대로 붙으면,
-/// 정확한 이름을 쳤는데 "뜻으로 찾았다"고 말하는 셈이라 부정확하다.
-///
-/// 대소문자·앞뒤 공백만 정규화하고 그 밖의 정규화(형태소 분석 등)는 하지
-/// 않는다. 서버의 Kiwi 정규화까지 흉내내려 하면 휴리스틱이 오히려 서버 판정과
-/// 어긋나는 경우가 늘어난다 — 여기서는 "누가 봐도 같은 이름"만 걸러낸다.
-///
-/// 상단 검색 패널과 길찾기 시트가 같은 배너 규칙을 써야 해서 모델 쪽에 둔다 —
-/// 한쪽만 고치면 같은 결과에 두 화면이 서로 다른 설명을 붙이게 된다.
+/// 대소문자·앞뒤 공백만 정규화한다 — 서버 Kiwi를 흉내내면 오히려 판정과 어긋난다.
+/// 두 화면이 같은 배너 규칙을 써야 해서 모델 쪽에 둔다.
 bool isExactNameMatch(String query, Iterable<String> names) {
   final normalizedQuery = query.trim().toLowerCase();
   if (normalizedQuery.isEmpty) return false;

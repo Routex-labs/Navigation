@@ -45,26 +45,14 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
     setState(() => _retryingBuildingLoad = false);
   }
 
-  /// 실내 진입 중에는 PDR 세션을 켜 둔다.
+  /// 실내 위치를 통째로 버린다 — 앵커, 걸음 궤적, PDR 세션, 실내 경로.
   ///
-  /// anchor가 없으면 위치를 도면에 놓을 수 없지만, 센서를 미리 돌려두면 사용자가
-  /// 위치를 지정하는 순간 heading이 이미 수렴한 상태다. 권한이 거부돼 있으면
-  /// 자동 시작을 시도하지 않는다 — 진입마다 재시도하면 degraded warning만 쌓인다.
-  /// 실내 위치를 통째로 버린다 — 앵커, 걸음 궤적, 복도 보정, 실내 경로.
+  /// 사용자가 건물을 나갔다고 GPS가 판정했을 때만 부른다. **넷을 함께 비운다** —
+  /// 하나라도 남으면 야외 지도 위에 실내의 흔적이 남는다(세션을 안 끄면 밖에서
+  /// 걷는 걸음이 실내 좌표계에 계속 쌓여, "나갔는데도 실내에서 움직인다"가 된다).
   ///
-  /// 사용자가 건물을 나갔다고 GPS가 판정했을 때만 부른다. 넷을 **함께** 비우는
-  /// 것이 중요하다. 하나라도 남으면 야외 지도 위에 실내의 흔적이 남는다.
-  ///
-  ///   - 앵커를 안 버리면 다시 도면을 열었을 때 걸어 본 적 없는 자리에서 시작한다.
-  ///   - 궤적을 안 버리면 야외 지도에 실내에서 걸은 초록 선이 그대로 얹혀 있다.
-  ///   - PDR 세션을 안 끄면 **밖에서 걷는 걸음이 실내 좌표계에 계속 쌓인다.**
-  ///     사용자가 신고한 "나갔는데도 실내에서 계속 움직이며 경로가 그려진다"가
-  ///     이것이다.
-  ///   - 실내 경로를 안 버리면 목적지가 건물 안이던 안내가 야외 화면에 남는다.
-  ///
-  /// 세션 정지는 여기서 기다리지 않는다 — 화면 상태는 지금 즉시 맞아야 한다.
-  /// 대신 그 Future를 [_pdrLifecycle]이 들고 있다가 다음 시작이 기다리게 한다.
-  /// 이유는 [PdrSessionLifecycle.awaitStop] 주석에 있다.
+  /// 세션 정지는 기다리지 않는다 — 화면 상태는 지금 즉시 맞아야 한다. 그 Future는
+  /// [PdrSessionLifecycle.awaitStop]이 들고 있다가 다음 시작이 기다리게 한다.
   void _dropIndoorPosition() {
     _pdrTrailState.beginNewSession();
     _syncCorridorTracking(null);
@@ -203,40 +191,24 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
     return ll.LatLng((minLat + maxLat) / 2, (minLng + maxLng) / 2);
   }
 
-  /// 실내(PDR) 위치를 화면과 길찾기에 써도 되는 상태인지 — [_outdoorGpsVisible]의
-  /// 반대쪽 짝이다. 두 값은 **동시에 true가 되지 않는다**: 실내 오버레이가 켜져
-  /// 있으면 PDR만, 야외 상태면 GPS만 쓴다.
+  /// 실내(PDR) 위치를 써도 되는 상태인지 — [_outdoorGpsVisible]의 반대쪽 짝이고
+  /// **동시에 true가 되지 않는다.**
   ///
-  /// 이 구분이 없으면 실내에서 위치를 지정한 뒤 축소해 야외로 나왔을 때, 야외
-  /// 지도 위에 실내 위치 아이콘이 그대로 남고(도면은 페이드로 사라졌는데 파란
-  /// 점만 공중에 떠 있는 상태) 길찾기 출발지도 그 실내 앵커로 잡힌다. 야외에서는
-  /// GPS가 위치의 유일한 출처여야 한다.
+  /// 없으면 축소해 나온 야외 지도에 실내 위치 아이콘이 공중에 떠 있고, 길찾기
+  /// 출발지도 그 실내 앵커로 잡힌다.
   bool get _indoorLocationVisible => _indoorEntered;
 
-  /// 위치 한 건이 말하는 건물 안팎을 상태에 반영한다.
-  ///
-  /// 판정 자체는 [judgeBuildingFromGps]가 하고, 여기서는 **그 판정으로 무엇을
-  /// 할지**만 정한다. 셋으로 갈린다.
+  /// 위치 한 건이 말하는 건물 안팎을 상태에 반영한다. 판정 자체는
+  /// [judgeBuildingFromGps]가 하고 여기서는 **그 판정으로 무엇을 할지**만 정한다.
   ///
   ///   - 안 + 야외 상태 + 자동 진입 무장 → 실내로 들어가고 위치를 잡는다.
-  ///   - 밖 + **실내에 실제로 있던 사람** → 야외로 되돌린다. 자동 진입을 다시
-  ///     무장하는 것도 여기서 한다.
+  ///   - 밖 + 실내 위치가 잡혀 있던 사람 → 야외로 되돌리고 자동 진입을 재무장한다.
   ///   - 모름 → 아무것도 하지 않는다.
   ///
-  /// ## "실내에 실제로 있던 사람"을 어떻게 가리는가
-  ///
-  /// 예전에는 [_indoorEnteredByGps]로 갈랐다 — GPS가 들여보낸 경우에만 GPS가
-  /// 내보낸다는 규칙이다. 그래야 길 건너에서 층 도면을 훑어보려던 사람의 화면이
-  /// 좌표가 들어오는 순간 제멋대로 닫히지 않는다.
-  ///
-  /// 그런데 그 규칙은 **걸어서 들어온 사람을 놓친다.** 건물을 탭하거나 확대해서
-  /// 도면을 연 뒤 실제로 안을 걸어 다닌 사용자가 밖으로 나와도 실내 상태가
-  /// 유지되고, PDR이 계속 걸음을 쌓아 야외에 실내 궤적이 그려진다.
-  ///
-  /// 그래서 기준을 **"실내 위치가 잡혀 있는가"**([_indoorPositionPlaced])로
-  /// 넓힌다. PDR 앵커가 있다는 것은 이 사람이 건물 안 어딘가에 서 있다고 앱이
-  /// 믿고 있다는 뜻이고, 그 믿음은 밖으로 나온 순간 틀린 것이 된다. 반대로
-  /// 도면만 구경하는 사용자는 앵커가 없으므로 예전처럼 화면이 안 닫힌다.
+  /// 이탈 기준이 [_indoorEnteredByGps]가 아니라 [_indoorPositionPlaced]인 이유는
+  /// **걸어서 들어온 사람을 놓치기 때문**이다. 앵커가 있다는 건 앱이 이 사람을
+  /// 건물 안이라고 믿는다는 뜻이고, 그 믿음은 밖으로 나온 순간 틀린 것이 된다.
+  /// 도면만 구경하는 사용자는 앵커가 없어 예전처럼 화면이 안 닫힌다.
   void _applyBuildingVerdict(Position position, {Duration? sinceLastFix}) {
     final judgement = judgeBuildingFromGps(
       fix: GpsFix(
@@ -407,17 +379,12 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
     return categoryHighlightFilter(selection);
   }
 
-  /// 선택이 바뀌었을 때 오버레이에 그 선택을 반영한다.
+  /// 선택이 바뀌었을 때 오버레이에 반영한다 — 강조 fill의 **필터**와 라벨의
+  /// **layout 속성** 둘이 바뀐다.
   ///
-  /// 두 가지가 바뀐다 — **어느 매장이 색으로 강조되는가**(강조 fill의 필터)와
-  /// **어느 매장이 이름을 다는가**(라벨의 `text-field`).
-  ///
-  /// 강조 fill은 `setLayerProperties`가 아니라 `setFilter`를 쓴다 — 전자는 넘기지
-  /// 않은 속성까지 null로 함께 보내 스펙 기본값(fill-color는 검정)으로 되돌리므로
-  /// 실기기에서 지도가 검게 덮인다(indoor_overlay_layers.dart 상단 주석). 라벨은
-  /// 바뀌는 것이 필터가 아니라 layout 속성이라 그 경로를 쓸 수 없고, 대신
-  /// [indoorStoresLabelProps]·[indoorFacilityLabelProps]가 **전체 속성**을 다시
-  /// 만들어 넘긴다.
+  /// 강조 fill에 `setLayerProperties`를 쓰지 않는 이유는 전체 교체라 지도가 검게
+  /// 덮이기 때문이다(map-style-rules.md 0절). 라벨은 필터로 못 바꿔 전체 속성을
+  /// 다시 만들어 넘긴다.
   Future<void> _applyCategoryFilter() async {
     final controller = _mapController;
     if (controller == null || !_styleReady || !_indoorTilesRegistered) return;
@@ -440,14 +407,9 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
     );
   }
 
-  /// 실내 오버레이 **레이어**용 페이드 표현식 — [_fadeExpr]에 층 전환
-  /// 크로스페이드 계수([_indoorOverlayFadeFactor])를 곱한 것. 오버레이 레이어
-  /// 속성을 쓰는 모든 경로(등록·페이드 갱신·카테고리 필터·크로스페이드 단계)가
-  /// 이걸 써야 페이드 도중 끼어든 갱신이 계수를 되돌리지 않는다. 건물 단위
-  /// dim scrim은 층 전환과 무관하므로 [_fadeExpr]를 그대로 쓴다.
-  ///
-  /// 곱셈을 `['*', ...]`로 감싸지 않고 램프 끝 스톱에 곱해 넣는 이유
-  /// (native의 top-level zoom 제약)는 [indoorOverlayCrossfadeExpr]에 있다.
+  /// 오버레이 **레이어**용 페이드 표현식 — [_fadeExpr]에 크로스페이드 계수를 곱한
+  /// 것. 레이어 속성을 쓰는 모든 경로가 이걸 써야 페이드 도중 끼어든 갱신이 계수를
+  /// 되돌리지 않는다(dim scrim은 층 전환과 무관해 [_fadeExpr] 그대로).
   List<Object> _overlayFadeExpr() {
     final factor = _indoorOverlayFadeFactor;
     if (factor >= 1) return _fadeExpr();
@@ -476,15 +438,11 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
     );
   }
 
-  /// 지도에서 탭한 위경도가 건물 footprint 내부인지 판정한다.
-  /// 판정 자체는 [isPointInPolygon]에 있다 — 실내 진입 근접 판정
-  /// ([isIndoorBuildingNearCamera])과 같은 계산을 써야 "탭은 건물 안인데 근접은
-  /// 아니다" 같은 모순이 생기지 않는다.
+  /// 탭한 위경도가 건물 footprint 내부인지. 근접 판정과 **같은 계산**
+  /// ([isPointInPolygon])을 써야 "탭은 안인데 근접은 아니다"가 안 생긴다.
   ///
-  /// 실내 진입 중이면 그 층 외곽선 안쪽도 "건물 안"으로 본다. 화면에 그려진
-  /// 외곽선 안을 탭했는데 야외로 튕겨 나가면(지하처럼 건물 외곽선 밖까지 뻗은
-  /// 층이 있다) 사용자 입장에서는 도면 위를 눌렀을 뿐이다. 두 링의 **합집합**을
-  /// 보므로 야외에서의 판정은 지금까지와 같다.
+  /// 실내 진입 중이면 그 층 외곽선 안쪽도 "건물 안"으로 본다(지하는 건물 외곽선
+  /// 밖까지 뻗는다). 두 링의 **합집합**이라 야외 판정은 그대로다.
   bool _isInsideBuilding(ll.LatLng point) {
     final footprint = _buildingFootprint;
     if (footprint != null && isPointInPolygon(point, footprint)) return true;
@@ -501,24 +459,15 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
   @visibleForTesting
   void enterIndoorForTest() => _setIndoorEntered(true);
 
-  /// 지금 보고 있는 **층 도면**이 화면을 채우도록 카메라를 맞춘다.
+  /// 지금 보고 있는 **층 도면**이 화면을 채우도록 카메라를 맞춘다. 기준은 건물이
+  /// 아니라 **그 층의 외곽선**이다(지상 180×190 m ↔ B3 286×305 m).
   ///
-  /// 기준은 건물 외곽선이 아니라 **그 층의 외곽선**이다 — 층마다 크기가 크게
-  /// 다르다(지상층 약 180 x 190 m ↔ B3·B4 286 x 305 m).
+  /// 건물 외곽선은 시드 구조상 1F의 것이라 지하에서 안 맞는다. 그래서 도면 로드를
+  /// 기다리되, 없으면 일단 맞추고 **다시 맞추기를 예약한다**([_pendingFloorFit]) —
+  /// 폴백을 없앴더니 실기기에서 진입 줌인이 통째로 사라졌다.
   ///
-  /// **건물 외곽선으로 폴백하지 않는다.** 그 값은 시드 구조상 **1F의 외곽선**이라
-  /// ([floorOutlineRing] 주석) 지하에서는 층 전체가 화면에 안 들어오고, 뒤이어 다시
-  /// 맞춰 주는 곳이 없어 그대로 굳는다. 그래서 도면 로드를 **기다렸다가** 맞춘다.
-  ///
-  /// 기다려도 없으면 건물 외곽선으로 일단 맞추되 **다시 맞추기를 예약한다**
-  /// ([_pendingFloorFit]). 폴백을 아예 없애 봤더니 "틀린 배율"이 "배율을 아예 안
-  /// 잡음"이 돼 더 나빴다 — 실기기에서 진입 줌인이 통째로 사라졌다.
-  ///
-  /// 배율은 돌려 세운 상자를 화면에 맞춘 값이되([zoomToFitRotatedBox]) **진입
-  /// 임계값 아래로는 내려가지 않는다.** 그 아래로 가면 도착한 뒤 [_handleCameraIdle]
-  /// 이 이탈로 판정해 방금 연 도면이 도로 닫힌다.
-  ///
-  /// 애니메이션과 회전을 쓰는 이유는 `docs/client/camera-choreography-plan.md`.
+  /// 배율은 **진입 임계값 아래로 내려가지 않는다** — 내려가면 도착한 뒤
+  /// [_handleCameraIdle]이 이탈로 판정해 방금 연 도면이 도로 닫힌다.
   Future<void> _fitCameraToActiveFloor({
     Duration duration = indoorZoomInDuration,
   }) async {
@@ -588,16 +537,9 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
     ];
   }
 
-  /// 건물 폴리곤을 잠깐 진하게 칠했다 되돌린다 — "이 건물을 말하는 것"이라는
-  /// 시각 피드백.
-  ///
-  /// 건물을 탭했을 때와 검색에서 골랐을 때가 **같은 신호**를 써야 한다. 탭에만
-  /// 있으면, 검색으로 고른 사용자는 카메라만 슥 움직이고 아무것도 강조되지 않는
-  /// 화면을 본다 — 옅은 파랑(0.15) 폴리곤은 배경 지도 위에서 눈에 잘 띄지 않아
-  /// "골랐다"는 사실이 화면에 드러나지 않는다.
-  ///
-  /// 장식이라 컨트롤러가 아직 없으면 조용히 건너뛴다. 이 반짝임에 진입이나
-  /// 카메라 이동을 걸어 두면 안 된다.
+  /// 건물 폴리곤을 잠깐 진하게 칠했다 되돌린다 — 탭과 검색 선택이 **같은 신호**를
+  /// 써야 한다. 장식이라 컨트롤러가 없으면 건너뛴다(진입이나 카메라 이동을 여기
+  /// 걸면 안 된다).
   Future<void> _flashBuildingFill() async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
@@ -617,19 +559,12 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
     );
   }
 
-  /// 실내 진입 트리거 — 건물 탭·줌 임계값 초과·GPS 근접 감지 중 하나로 호출.
-  /// 화면 모드는 바꾸지 않고 야외 지도 위에 얹는 실내 UI 오버레이만 켠다.
-  /// 사용자가 축소해 임계값 아래로 내려가면 [_handleCameraIdle]이 오버레이를
-  /// 다시 끄고 트리거를 재무장한다.
+  /// 실내 진입 트리거 — 건물 탭·줌 초과·GPS 근접 중 하나로 호출. 화면 모드는
+  /// 바꾸지 않고 오버레이만 켠다.
   ///
   /// [ignoreZoomArming]은 **자기 게이트를 따로 가진 호출자**가 쓴다.
-  /// [_autoIndoorEntryArmed]는 "같은 줌에서 카메라가 멈출 때마다 반복 발화하지
-  /// 않게" 하려는 zoom 트리거 전용 플래그이고, [_exitIndoorByOutsideTap]이 일부러
-  /// 재무장하지 않는다(아래 주석 참고). 그래서 이 플래그로 다른 경로까지 막으면
-  /// 두 가지가 조용히 죽는다.
-  ///   - 건물 밖을 탭해 나온 사용자가 건물을 **직접 다시 탭**해도 안 들어감
-  ///   - GPS 자동 진입이 [_gpsEntryArmed]로 다시 무장돼도 여기서 막힘
-  /// 둘 다 자기 쪽 게이트를 이미 통과한 호출이므로 zoom 무장은 보지 않는다.
+  /// [_autoIndoorEntryArmed]는 zoom 트리거 전용 플래그라, 이걸로 다른 경로까지
+  /// 막으면 건물 직접 탭과 GPS 재무장이 조용히 죽는다.
   void _triggerIndoorEntry({bool ignoreZoomArming = false}) {
     if (!ignoreZoomArming && !_autoIndoorEntryArmed) return;
     _autoIndoorEntryArmed = false;
@@ -637,18 +572,11 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
     _setIndoorEntered(true);
   }
 
-  /// 실내 모드에서 건물 바깥 야외 지도를 탭했을 때의 이탈.
+  /// 실내 모드에서 건물 바깥을 탭했을 때의 이탈.
   ///
-  /// 재무장([_autoIndoorEntryArmed])은 **하지 않는다.** 탭으로 나온 시점의 줌은
-  /// 보통 진입 임계값 위이므로, 재무장하면 다음 카메라 정지에서 곧바로 다시
-  /// 실내로 끌려 들어가 "나갈 수 없는" 상태가 된다. 다시 들어오는 경로는 두
-  /// 가지가 열려 있다 — 건물을 직접 탭하거나(위 [_triggerIndoorEntry]의
-  /// `ignoreZoomArming`), 이탈 임계값 아래로 축소했다가 다시 확대하는 것.
-  ///
-  /// **GPS 자동 진입도 함께 끈다**([_gpsEntryArmed]). 건물 안에 서서 밖을 탭해
-  /// 나온 경우 GPS는 여전히 "건물 안"을 가리키므로, 안 끄면 다음 위치 한 건이
-  /// 곧바로 다시 끌고 들어간다. 다시 자동으로 들어가는 것은 사용자가 실제로
-  /// 건물을 벗어난 뒤다([GpsBuildingVerdict.outside]).
+  /// **재무장하지 않는다** — 그 시점의 줌은 보통 임계값 위라, 재무장하면 다음 카메라
+  /// 정지에서 곧바로 되끌려 들어가 "나갈 수 없는" 상태가 된다. **GPS 자동 진입도
+  /// 함께 끈다** — GPS는 여전히 "건물 안"이라 다음 좌표 한 건이 다시 끌고 들어간다.
   void _exitIndoorByOutsideTap() {
     // 앵커 배치 대기 중이었다면 함께 종료해 하단 바 버튼 톤도 되돌린다.
     // (배치 대기 중인 탭은 위에서 이미 소비되므로 방어적 처리다.)
@@ -657,27 +585,19 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
     _setIndoorEntered(false);
   }
 
-  /// [_indoorEntered] 상태 변경을 한 곳으로 모은 헬퍼. setState + 상위 콜백 통지에
-  /// 더해 dim scrim의 fillOpacity도 함께 갱신해, 실내 진입/이탈에 스포트라이트
-  /// 효과가 즉시 반영되게 한다.
   /// 실내 위치가 지금 잡혀 있는지. 자동 이탈을 허용할지 가르는 기준이다
   /// ([_applyBuildingVerdict]).
   ///
-  /// 앵커만으로 판단한다. 궤적(snapshot)은 세션이 끝난 뒤에도 남아 있어서
-  /// "지금 안에 있다"의 근거가 못 된다.
+  /// 앵커만으로 판단한다 — 궤적은 세션이 끝난 뒤에도 남아 "지금 안에 있다"의
+  /// 근거가 못 된다.
   bool get _indoorPositionPlaced => _pdrTrailState.anchor != null;
 
-  /// [leftBuilding]은 **사용자가 실제로 건물을 나갔다**는 뜻이다(GPS 판정).
-  /// 화면에서 도면만 접은 것([returnToOutdoorView], 바깥 탭)과 구분해야 하는
-  /// 이유는 두 가지다.
+  /// [_indoorEntered] 상태 변경을 한 곳으로 모은 헬퍼. setState·상위 통지에 더해
+  /// dim scrim·마커·페이드까지 여기서 함께 갱신한다.
   ///
-  ///   - **실내 위치를 버릴지.** 도면을 접은 사용자는 잠시 뒤 다시 펼 수 있으니
-  ///     앵커와 걸음 누적을 남겨야 한다(안 남기면 오버레이를 여닫을 때마다 실내
-  ///     위치가 초기화된다). 반대로 건물을 나간 사용자의 앵커는 이미 틀린 값이라,
-  ///     남겨 두면 야외 지도 위에 실내 궤적이 계속 자란다.
-  ///   - **야외 구간을 올릴지.** 실내→야외 안내 중 사용자가 도면만 접었다고
-  ///     야외 구간으로 넘어가면, 아직 건물 안인데 실내 구간이 사라진다. 다시
-  ///     확대해도 예약은 이미 소비돼 안내가 통째로 없어진다.
+  /// [leftBuilding]은 **실제로 건물을 나갔다**는 뜻이다(GPS 판정). 도면만 접은 것
+  /// ([returnToOutdoorView])과 구분해야 실내 위치를 버릴지, 야외 구간을 올릴지가
+  /// 갈린다 — 접은 사용자는 다시 펼 수 있으니 앵커를 남기고 예약도 소비하지 않는다.
   void _setIndoorEntered(bool value, {bool leftBuilding = false}) {
     if (_indoorEntered == value) return;
     // 상태를 내리기 **전에** 버린다. 아래 [_syncPdrCurrentLayer]가 이 값을 보고
@@ -724,19 +644,12 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
     // 진입/이탈로 페이드 구간 자체가 바뀌므로 이미 붙어 있는 오버레이 레이어의
     // opacity 표현식도 함께 갈아 끼운다.
     unawaited(_syncIndoorOverlayFade());
-    // 실내로 들어온 시점이 PDR을 켤 지점이다. 야외로 나갈 때는 세션을 끄지
-    // 않는다 — 실내/야외 오버레이를 오가는 동안 세션이 껐다 켜지면 anchor와
-    // 걸음 누적이 매번 초기화된다. 진짜로 건물을 나간 경우만 예외이고, 그건
-    // 위에서 [dropIndoorPosition]으로 이미 처리했다.
+    // 실내로 들어온 시점이 PDR을 켤 지점이다. 미리 돌려 두면 사용자가 위치를
+    // 지정하는 순간 heading이 이미 수렴해 있다. **야외로 나갈 때는 끄지 않는다** —
+    // 오갈 때마다 껐다 켜지면 앵커와 걸음 누적이 매번 초기화된다.
     if (value) unawaited(_startPdrIfIdle());
-    // 문 경유 안내로 여기까지 왔다면, 지금이 두 구간을 넘기는 지점이다. 진입도
-    // 이탈도 어느 경로로 판정되든 이 함수를 지나므로 승격은 여기 한 곳에만 둔다.
-    //
-    // 방향에 따라 넘기는 것이 반대다.
-    //   - 들어왔다 → 야외 구간이 끝났으니 실내 구간을 올린다.
-    //   - 나갔다   → 실내 구간이 끝났으니 야외 구간을 올린다.
-    //
-    // 나가는 쪽만 [leftBuilding]으로 한 번 더 좁힌다. 근거는 이 함수 문서에 있다.
+    // 문 경유 안내의 구간 승격은 여기 한 곳에만 둔다 — 진입도 이탈도 어느 경로로
+    // 판정되든 이 함수를 지난다. 나가는 쪽만 [leftBuilding]으로 한 번 더 좁힌다.
     if (value) {
       unawaited(_activatePendingIndoorRoute());
     } else if (leftBuilding) {
@@ -773,15 +686,11 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
       '[outdoor overlay] registering MVT source url=$tileUrl '
       'apiBaseUrl=$apiBaseUrl',
     );
-    // 실내 도면은 확대에 따라 자연스럽게 나타나야 한다(Google Maps의 건물 내부
-    // 표시와 같은 패턴). 페이드 구간은 진입 상태에 따라 달라지므로
-    // [indoorOverlayFadeExpr]가 만들어 준다. zoom-interpolate 표현식이라
-    // 카메라 이동 중에는 setLayerProperties 없이도 실시간으로 반영되고,
-    // 진입/이탈로 구간 자체가 바뀔 때만 [_syncIndoorOverlayFade]가 갱신한다.
+    // zoom-interpolate 표현식이라 카메라 이동 중에는 setLayerProperties 없이도
+    // 실시간으로 반영된다.
     //
-    // **아래 호출보다 먼저** 반영해야 한다. [_overlayFadeExpr]이 이 값을 읽어
-    // 표현식을 만들기 때문이다 — 순서를 바꾸면 크로스페이드가 0이 아니라 이전
-    // 계수로 등록돼 새 층이 처음부터 불투명하게 튀어나온다.
+    // **아래 호출보다 먼저** 반영해야 한다 — [_overlayFadeExpr]이 이 값을 읽으므로,
+    // 순서를 바꾸면 새 층이 처음부터 불투명하게 튀어나온다.
     _indoorOverlayFadeFactor = fadeFactor;
     // 실패 시 부분 등록분 정리까지 저쪽이 한다. 여기서는 성공 여부만 받아
     // 플래그에 반영한다.

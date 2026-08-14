@@ -1403,19 +1403,12 @@ class _CopyButton extends StatelessWidget {
 
 /// 화면 아래쪽에 잠깐 떠 있다 사라지는 알림.
 ///
-/// **`ScaffoldMessenger`의 SnackBar를 쓰지 않는다.** 상세 시트는 `Navigator`에 얹힌
-/// 모달 라우트라 화면 아래 절반을 덮는데, SnackBar를 그리는 `Scaffold`는 그 **아래**에
-/// 있다. 즉 시트 안에서 띄운 SnackBar는 시트에 가려 보이지 않는다. 여기서는 루트
-/// `Overlay` 맨 위에 직접 끼워 시트보다 앞에 그린다.
+/// **SnackBar를 쓰지 않는다** — 상세 시트가 모달 라우트라 `Scaffold`보다 위에 있어,
+/// 시트 안에서 띄운 SnackBar는 시트에 가려 보이지 않는다. 루트 `Overlay` 맨 위에
+/// 직접 끼우고 포인터는 [IgnorePointer]로 통과시킨다.
 ///
-/// 포인터는 [IgnorePointer]로 통과시킨다. 1.6초짜리 알림이 그동안 시트의 탭을
-/// 가로채면 안 된다.
-///
-/// **토스트는 화면에 한 개만 둔다.** 엔트리와 타이머를 모듈 수준에서 들고
-/// 있다가, 새 토스트가 뜨는 순간 이전 것을 즉시 걷어낸다. 예전에는 취소
-/// 불가능한 `Future.delayed`가 해제를 맡았는데, 그 시점에 `entry.mounted`가
-/// false면 remove를 다시 시도하지 않아 토스트가 오버레이에 영원히 남았고,
-/// 연속 호출은 엔트리를 겹겹이 쌓기만 했다.
+/// **화면에 한 개만 둔다** — 엔트리와 타이머를 모듈 수준에서 들고 있다가 새 토스트가
+/// 뜨면 이전 것을 즉시 걷어낸다(`Future.delayed`에 맡겼더니 오버레이에 영원히 남았다).
 OverlayEntry? _placeToastEntry;
 Timer? _placeToastTimer;
 

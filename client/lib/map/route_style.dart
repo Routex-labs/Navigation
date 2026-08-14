@@ -4,18 +4,11 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
-/// 경로선 스타일.
+/// 경로선 스타일. 실내·야외가 **한 벌을 공유한다** — 각자 값을 갖고 있어 같은
+/// 경로가 화면을 옮길 때마다 다르게 보였다.
 ///
-/// 예전에는 실내 전용 화면과 야외 지도가 각자 값을 갖고 있었고 어긋나 있었다 — 야외는
-/// 흰 casing 8px + 불투명 본선, 실내는 casing 없이 `lineOpacity: 0.6`. 같은 경로가
-/// 화면을 옮길 때마다 다르게 보였다.
-///
-/// ## casing이 흰색이면 안 되는 이유
-///
-/// 실내 도면 바닥이 `#FFFFFF`다. 흰 선 위의 흰 테두리는 보이지 않는다. 네이버·
-/// 카카오가 경로선에 **진한 파랑 테두리**를 쓰는 것도 같은 이유다 — 밝은 배경이든
-/// 어두운 배경이든 선이 배경에서 떠 보이게 만드는 건 색조가 아니라 명도 차다.
-/// 흰색은 그 안에서 화살표가 맡는다.
+/// **casing은 흰색이면 안 된다** — 실내 도면 바닥이 `#FFFFFF`다. 근거는
+/// `docs/client/map-ui-redesign-plan.md` 5번 항목.
 
 /// 경로선 테두리. 본선보다 어두운 같은 계열이다.
 const kRouteCasingColor = '#1B57C4';
@@ -61,12 +54,8 @@ const kRouteTransferWidthExpr = [
 /// 웹 addImage는 같은 이름이 이미 있으면 새 비트맵을 버린다.
 const kRouteArrowImageName = 'route-direction-arrow-v2';
 
-/// 축소할수록 진행 방향 화살표를 더 자주 배치하기 위한 화면 픽셀 간격.
-///
-/// `symbol-spacing`은 지도 길이가 아니라 화면 픽셀 기준이다. 고정값이면 경로를
-/// 화면에 맞추며 축소했을 때 경로의 투영 길이만 짧아져 화살표가 너무 적어진다.
-/// z16의 40px은 가장 작은 화살표(약 13px)의 세 배라 서로 겹치지 않고, z20에서는
-/// 72px까지 넓혀 확대 화면에서 선을 덮지 않는다.
+/// 화살표 간격(화면 px). `symbol-spacing`은 지도 길이가 아니라 화면 픽셀 기준이라,
+/// 고정값이면 축소했을 때 화살표가 너무 적어진다.
 const kRouteArrowSpacingExpr = [
   'interpolate',
   ['linear'],
@@ -79,14 +68,10 @@ const kRouteArrowSpacingExpr = [
   72.0,
 ];
 
-/// 화살표를 얹는 심볼 레이어 속성.
+/// 화살표를 얹는 심볼 레이어 속성. `symbolPlacement: 'line'`이 선을 따라 배치하고
+/// 진행 방향으로 회전시킨다.
 ///
-/// `symbolPlacement: 'line'`이면 MapLibre가 선을 따라 일정 간격으로 아이콘을
-/// 배치하고 진행 방향으로 회전시킨다. 이게 선을 "그려진 선"에서 "가야 할 길"로
-/// 바꾸는 지점이다 — 구글·네이버·카카오가 모두 쓰는 표현이다.
-///
-/// ⚠️ **층 전환 구간에는 얹지 않는다.** 그 구간은 이미 점선이고, 수평 이동이
-/// 아니라 층 이동이라 방향 화살표의 의미가 다르다.
+/// ⚠️ **층 전환 구간에는 얹지 않는다** — 이미 점선이고 방향의 의미가 다르다.
 SymbolLayerProperties routeArrowProps() => const SymbolLayerProperties(
   iconImage: kRouteArrowImageName,
   iconSize: [
@@ -107,12 +92,11 @@ SymbolLayerProperties routeArrowProps() => const SymbolLayerProperties(
   iconIgnorePlacement: true,
 );
 
-/// 흰 chevron 비트맵. 글씨가 아니라 도형이라 캔버스에 구워도 안전하다
-/// (한글 글리프 문제는 텍스트에만 해당한다).
+/// 흰 chevron 비트맵. 도형이라 캔버스에 구워도 안전하다(한글 글리프 문제는
+/// 텍스트에만 해당한다).
 ///
-/// **오른쪽을 향하도록** 그린다. `symbolPlacement: 'line'`은 아이콘의 +x축(오른쪽)
-/// 을 선의 진행 방향에 맞춰 회전시킨다 — 위를 향하게 그리면 90° 틀어져 보인다.
-/// Mapbox·MapLibre 기본 스타일의 일방통행 화살표가 모두 오른쪽을 보는 이유다.
+/// **오른쪽을 향하도록** 그린다 — `line` 배치는 아이콘의 +x축을 진행 방향에 맞춰
+/// 회전시키므로, 위를 향하게 그리면 90° 틀어져 보인다.
 Future<Uint8List> renderRouteArrowIcon() async {
   const size = 48.0;
   final recorder = ui.PictureRecorder();
@@ -170,25 +154,13 @@ const kRouteSubwayBadgeImageName = 'route-badge-subway-v2';
 
 /// 수단 배지 비트맵 한 변의 길이(px).
 ///
-/// **화면에 찍히는 크기는 이 값 × [routeModeBadgeProps]의 `iconSize`다.** 처음엔
-/// 56px로 구웠는데, iconSize가 0.34~0.52라 실제로는 19~29px밖에 안 됐다 — 옆에
-/// 적히는 매장 이름 글자보다 작아서 "여기서 내려 걷는다"는 경계가 눈에 안 들어
-/// 왔다. iconSize는 그대로 두고 비트맵만 두 배로 키워 화면 크기를 두 배로 만든다.
-///
-/// iconSize를 올리지 않고 비트맵을 키우는 이유: iconSize > 1이면 MapLibre가 원본
-/// 보다 큰 크기로 늘려 그려서 원 테두리와 아이콘 획이 뭉개진다. 아래 모든 반지름·
-/// 글자 크기가 이 값에서 비례로 파생되므로, 크기를 다시 조정할 때는 여기만 바꾸고
-/// 위 이름의 버전을 올린다.
+/// **화면 크기는 이 값 × [routeModeBadgeProps]의 `iconSize`다.** 키울 때는 iconSize가
+/// 아니라 이 값을 올린다 — iconSize > 1이면 원본을 늘려 그려 획이 뭉개진다.
+/// 아래 반지름·글자 크기가 전부 여기서 파생되므로 위 이름의 버전도 함께 올린다.
 const kRouteModeBadgeCanvasSize = 112.0;
 
-/// 수단 배지 한 장을 굽는다 — 색 원판 위에 흰 아이콘.
-///
-/// 선 색만으로는 "어디까지 걷고 어디서 타는지"의 **경계**가 안 보인다. 색이
-/// 바뀌는 지점을 눈으로 찾아야 하는데, 구간이 짧으면 그 지점이 몇 픽셀이다.
-/// 시작점에 아이콘을 하나 찍으면 경계가 점이 되어 바로 읽힌다.
-///
-/// 아이콘은 Material 글리프를 그대로 굽는다. 한글 글리프 문제는 텍스트에만
-/// 해당하고([renderRouteArrowIcon] 주석), 아이콘 폰트는 앱에 함께 실린다.
+/// 수단 배지 한 장을 굽는다 — 색 원판 위에 흰 아이콘. 선 색만으로는 "어디까지
+/// 걷고 어디서 타는지"의 경계가 몇 픽셀이라 안 보인다.
 Future<Uint8List> renderModeBadgeIcon(IconData icon, Color background) async {
   const size = kRouteModeBadgeCanvasSize;
   // 흰 테두리 두께와 글자 크기는 한 변 길이에서 비례로 뽑는다. 상수로 박아 두면
@@ -235,13 +207,10 @@ Future<Uint8List> renderModeBadgeIcon(IconData icon, Color background) async {
   return byteData!.buffer.asUint8List();
 }
 
-/// 구간 시작 배지 레이어. [imageName] 하나만 그리고, 어떤 feature를 그릴지는
-/// 호출부가 필터로 정한다 — `iconImage`에 표현식을 넣는 방식은 이 바인딩에서
-/// 조용히 실패할 수 있어(아이콘이 안 뜨는데 오류도 없다) 이름을 상수로 박는다.
-///
-/// `iconSize`는 **비트맵 대비 배율**이라 이 값만으로는 화면 크기를 알 수 없다.
-/// 실제 크기는 [kRouteModeBadgeCanvasSize] × 아래 배율이다 — 배지를 키우려면
-/// 그 상수를 올린다(1을 넘는 배율은 비트맵을 늘려 그려서 뭉개진다).
+/// 구간 시작 배지 레이어. [imageName]을 상수로 박고 어떤 feature를 그릴지는
+/// 호출부가 필터로 정한다 — `iconImage` 표현식은 이 바인딩에서 조용히 실패한다
+/// (아이콘이 안 뜨는데 오류도 없다). `iconSize`는 [kRouteModeBadgeCanvasSize] 대비
+/// 배율이다.
 SymbolLayerProperties routeModeBadgeProps(String imageName) =>
     SymbolLayerProperties(
       iconImage: imageName,
@@ -263,12 +232,7 @@ SymbolLayerProperties routeModeBadgeProps(String imageName) =>
 
 /// 건물 **안** 구간의 선 색. 야외 본선([kRouteLineColor])과 **같은 색**이다.
 ///
-/// 한때 연한 파랑(`#A8C6F6`)으로 뺐다. "지금 걸을 길은 진하고 나중에 걸을 길은
-/// 연하다"는 규칙이었는데, 실기기에서는 그 규칙이 읽히기 전에 선이 먼저 안 보였다
-/// — 실내 도면 바닥이 밝은 회백색이라 연한 파랑이 배경에 묻히고, 건물에 들어가
-/// 실내 구간만 남은 뒤에는 비교 대상이 사라져 그냥 흐린 선 하나가 된다.
-///
-/// 밖에서 두 구간을 가르는 일은 색이 아니라 **점선/실선**이 맡는다(야외 도보는
-/// [kRouteWalkDashArray] 점선, 실내는 실선). 진하기는 "보이느냐"의 문제라
-/// 구분에 쓰기에는 대가가 너무 크다.
+/// 한때 연한 파랑으로 뺐다가 되돌렸다 — 실내 바닥이 밝아 배경에 묻히고, 실내
+/// 구간만 남으면 비교 대상도 사라진다. 두 구간을 가르는 일은 색이 아니라
+/// **점선/실선**([kRouteWalkDashArray])이 맡는다.
 const kRouteIndoorLineColor = kRouteLineColor;

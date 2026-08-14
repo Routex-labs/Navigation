@@ -1,13 +1,10 @@
 /// 층 전환 판정([EscalatorTransitionDetector])의 근거를 지도 위 칩 한 줄로 옮긴다.
 ///
-/// GPS 진입 판정 칩(`describeGpsBuildingJudgement`)과 같은 이유다 — **안 걸렸을 때
-/// 원인을 알 방법이 없다.** 층이 안 바뀌면 화면에는 "이전 층 도면 그대로"만 보이고,
-/// 그 하나로는 셋이 구분되지 않는다: 허가가 안 걸렸다(`무장X`), 고도가 문턱에 못
-/// 미쳤다(`무장O · 후보X`), 후보까지 갔는데 거부됐다(`rejected:이유`).
+/// **안 걸렸을 때 원인을 알 방법이 없어서** 둔다 — 층이 안 바뀌면 화면에는 "이전 층
+/// 그대로"만 보이고, 그 하나로는 셋(무장X · 후보X · rejected)이 구분되지 않는다.
 ///
-/// `rejected:multiFloorUnsupported`는 두 층을 한 번에 이동한 것으로 보여 판정이
-/// 스스로 포기한 경우다. 그때 Δ가 한 층(실측 6.2 m)의 두 배 근처로 찍히므로, 로그
-/// 없이도 그 자리에서 가설을 가릴 수 있다.
+/// `rejected:multiFloorUnsupported`면 Δ가 한 층(실측 6.2 m)의 두 배 근처로 찍히므로
+/// 로그 없이도 그 자리에서 가설을 가릴 수 있다.
 library;
 
 import '../application/escalator_transition_detector.dart';

@@ -1,14 +1,11 @@
 /// 지도 위 매장명 라벨에 붙는 **대분류 아이콘**과, 이름이 아이콘 좌/우 중 어느
 /// 쪽에 놓일지 정하는 규칙.
 ///
-/// 글리프와 색은 chip·매장 목록 시트가 쓰는 것과 **같은 표**
-/// ([categoryIconFor]·[categoryColorFor])에서 가져온다.
+/// 글리프와 색은 chip·목록 시트와 **같은 표**에서 가져온다.
 ///
-/// 좌/우 뒤집기는 MapLibre의 `text-variable-anchor`에 맡긴다 — 폴리곤 치수를
-/// 재는 것이 아니라 **충돌 판정**으로 자리를 고르므로, `text-allow-overlap`을
-/// true로 바꾸면 앵커가 항상 첫 번째 값이 되어 조용히 죽는다.
-///
-/// 왜 아이콘을 붙이는지와 배지 디자인의 근거는 `docs/client/map-style-rules.md`.
+/// 좌/우 뒤집기는 `text-variable-anchor`에 맡긴다 — **충돌 판정**으로 자리를 고르므로
+/// `text-allow-overlap`을 켜면 앵커가 항상 첫 값이 되어 조용히 죽는다.
+/// 그 밖의 근거는 `docs/client/map-style-rules.md` 7절.
 library;
 
 import 'dart:typed_data';

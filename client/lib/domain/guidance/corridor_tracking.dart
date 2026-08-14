@@ -1,14 +1,9 @@
 /// 복도 보정이 만들어 내는 **말**(vocabulary) — 확신도와 걸음 하나의 이동 사건.
 ///
-/// 만드는 쪽은 `features/indoor_navigation/application/corridor_position_tracker.dart`
-/// 이고, 소비하는 쪽은 경로 진행·체크포인트 판정([route_movement.dart]·
-/// [route_checkpoint.dart])이다. 두 쪽이 모두 여기를 보게 두는 이유는 계층 방향
-/// 때문이다 — 이 타입들이 tracker 파일에 있으면 domain이 features를 import하게
-/// 되어 화살표가 거꾸로 선다.
+/// tracker(features)와 경로 판정(domain)이 함께 쓰는 타입이라 여기 둔다 — tracker
+/// 파일에 두면 domain이 features를 import해 계층 화살표가 거꾸로 선다.
 ///
-/// **여기 있는 것은 값뿐이다.** tracker의 전체 출력([CorridorTrackingResult])은
-/// 30개 필드로 그쪽 내부 사정에 묶여 있으므로 내려오지 않는다. domain은 자기가
-/// 실제로 읽는 값만 받는다.
+/// **여기 있는 것은 값뿐이다** — tracker의 전체 출력(30개 필드)은 내려오지 않는다.
 library;
 
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';

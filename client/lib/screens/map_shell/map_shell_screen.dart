@@ -153,23 +153,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
     setState(() => _categorySelection = selection);
   }
 
-  /// 지도 위 대분류 chip을 눌렀을 때. 강조를 걸고 **곧바로** 매장 목록 시트를
-  /// 연다.
+  /// 지도 위 대분류 chip을 눌렀을 때. 강조를 걸고 **곧바로** 목록 시트를 연다.
   ///
-  /// 예전에는 chip → 소분류 pill 줄 → "목록" 버튼까지 세 번을 눌러야 이름을
-  /// 볼 수 있었다. 강조만으로는 "저 파란 칸이 뭔지"에 답하지 못하는데, 정작
-  /// 답이 있는 목록이 가장 멀리 있었다. 지금은 chip 한 번이면 목록이고,
-  /// 소분류는 그 시트 안에서 고른다.
+  /// 같은 chip을 다시 누르면([selection]이 null) 해제만 한다 — 해제 수단이 없으면
+  /// 필터를 되돌릴 방법이 없다.
   ///
-  /// 이미 고른 chip을 다시 누르면(=[selection]이 null) 해제만 하고 시트는 열지
-  /// 않는다. 해제 수단이 사라지면 필터를 걸어 놓고 되돌릴 방법이 없어진다.
-  ///
-  /// **떠 있는 목록 시트가 있으면 먼저 닫는다.** 이 시트는 barrier가 없어
-  /// 포인터를 지도로 흘리므로([_withMapsLocked] 주석) chip 줄이 시트 위에 계속
-  /// 떠 있고 그대로 눌린다. 닫지 않고 열면 chip을 누른 횟수만큼 시트가 그대로
-  /// 쌓여서, 카테고리 몇 개를 훑어본 사용자는 지도로 돌아가려고 닫기를 그만큼
-  /// 눌러야 한다. 매장 상세 시트가 같은 이유로 이미 하는 일이다
-  /// ([_openStoreFromMap]) — 두 시트가 같은 라우트를 쓰는 이상 규칙도 같아야 한다.
+  /// **떠 있는 목록 시트를 먼저 닫는다.** 이 시트는 barrier가 없어 chip 줄이 위에
+  /// 그대로 눌리므로, 안 닫으면 누른 횟수만큼 시트가 쌓인다.
   Future<void> _onCategoryChipTapped(CategorySelection? selection) async {
     _onCategorySelectionChanged(selection);
     final closing = _categorySheetClosing;
@@ -229,16 +219,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 기준으로 경로를 그린다. null이면 "현재 위치"(=PDR)을 기본 출발지로 쓴다.
   DirectionsCandidate? _selectedOrigin;
 
-  /// 길찾기 시트의 "지도에서 선택"을 눌러 지금 지도에서 고르는 중인 칸.
-  /// null이 아닌 동안에는 매장을 눌러도 매장 정보 시트가 뜨지 않고 그 매장이
-  /// 곧바로 그 칸(출발지 또는 도착지)의 값이 된다.
+  /// 지금 지도에서 고르는 중인 칸. null이 아니면 매장 탭이 시트 대신 그 칸의
+  /// 값이 된다.
   ///
-  /// **어느 칸인지까지 들고 있어야 한다.** bool이던 때는 도착지 전용이라
-  /// 충분했지만, 출발지도 같은 방식으로 고를 수 있게 되면서 지도 탭을 어느
-  /// 칸으로 흘려보낼지 이 값으로 갈린다.
-  ///
-  /// 이 상태를 화면에 안내로 띄우는 것이 중요하다. 시트가 닫히기만 하면
-  /// 사용자는 "지도에서 선택"을 눌렀는데 아무 일도 안 일어난 것으로 본다.
+  /// bool이 아니라 **어느 칸인지**를 들고 있어야 한다 — 출발지도 같은 방식으로
+  /// 고를 수 있다. 이 상태는 화면에 안내로 띄운다. 시트만 닫히면 사용자는 아무 일도
+  /// 안 일어난 것으로 본다.
   DirectionsMapPickTarget? _mapPickTarget;
 
   /// 도착지를 먼저 고른 길찾기 초안. 이전에는 `도착`을 누르는 즉시 경로
@@ -438,21 +424,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
     }
   }
 
-  /// 야외 컨텍스트로 나왔을 때, 실내 지점(층+노드)으로 잡아둔 출발지를 버린다.
+  /// 야외로 나왔을 때 실내 지점으로 잡아둔 출발지를 버린다. 안 버리면 칸에는
+  /// 건물 안 매장이 적혀 있는데 경로는 GPS에서 시작한다.
   ///
-  /// 실내에서 "출발지로 설정"한 매장은 야외 지도에서 쓸 수 없다. 그대로 두면
-  /// 길찾기 시트의 출발지 칸에는 건물 안 매장이 적혀 있는데 실제 경로는 GPS에서
-  /// 시작해, 화면에 적힌 출발지와 그려지는 경로가 어긋난다. 비우면 다시 "현재
-  /// 위치"(=야외에서는 GPS)가 기본 출발지가 된다.
-  ///
-  /// **칸의 글자까지 함께 지운다.** 상태만 비우면 정확히 위에서 막으려던 그
-  /// 어긋남이 남는다 — 실제로 그랬다. 실내에서 매장을 출발지로 잡아 둔 채 GPS가
-  /// "건물 밖" 판정을 내리면(줌 아웃·건물에서 멀어짐) 오버레이가 꺼지면서 여기로
-  /// 오는데, 그때 출발지 칸에는 그 매장 이름이 그대로 남아 있었다. 사용자 화면은
-  /// "스타벅스 리저브 → 런던베이글 뮤지엄"인데 계산은 "GPS 현재 위치 → 런던베이글"
-  /// 이라, 같은 건물 안 두 매장 사이 경로가 20 km·270분으로 나왔다.
-  /// 규칙은 [_applySwappedEndpoints]와 같다: 두 칸은 라벨이 아니라 입력창이므로
-  /// 상태를 바꾸는 쪽이 글자도 함께 책임진다.
+  /// **칸의 글자까지 지운다.** 상태만 비웠더니 화면은 "스타벅스 → 런던베이글"인데
+  /// 계산은 "GPS → 런던베이글"이라 같은 건물 두 매장이 20 km·270분으로 나왔다.
+  /// 두 칸은 라벨이 아니라 입력창이라, 상태를 바꾸는 쪽이 글자도 책임진다.
   void _dropIndoorOriginIfOutdoors() {
     if (_indoorContextActive) return;
     final origin = _selectedOrigin;
@@ -473,17 +450,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   /// 지금 "현재 위치에서 출발"로 경로를 그릴 수 있는지.
   ///
-  /// [_selectedOrigin]이 null인 것은 **두 가지를 겹쳐서** 뜻한다 — "현재 위치에서
-  /// 출발"(위치 지정·PDR로 위치가 이미 잡혀 있음)과 "출발지가 아직 없음". 앞쪽은
-  /// 도착지를 고르는 순간 바로 경로를 그려야 하고, 뒤쪽은 계산해도 실패 안내만
-  /// 나오므로 상단 초안 바를 남겨 사용자가 출발지를 고르게 해야 한다. 둘을 null
-  /// 하나로 뭉개면 "위치 지정으로 현재 위치를 찍은 뒤 매장에서 도착을 눌렀는데
-  /// 아무 일도 안 일어나는" 상태가 된다.
+  /// [_selectedOrigin]이 null인 것은 **두 가지가 겹친 값**이다 — "현재 위치에서
+  /// 출발"과 "출발지가 아직 없음". 뭉개면 위치를 찍어 둔 사용자가 도착을 눌러도
+  /// 아무 일도 안 일어난다.
   ///
-  /// 건물 안을 보고 있으면 기준은 PDR 앵커다. 앵커가 없으면 실내 라우팅이 시작할
-  /// 노드를 고르지 못한다([IndoorMapBodyState.showRouteTo]가 "출발 위치를 먼저
-  /// 지정해주세요"로 되돌린다). 야외는 GPS가 출발점이고, 위치가 아직 없을 때의
-  /// 안내는 야외 화면이 맡는다.
+  /// 실내 기준은 PDR 앵커(없으면 라우팅이 시작 노드를 못 고른다), 야외는 GPS다.
   bool get _canRouteFromCurrentLocation => _indoorContextActive
       ? indoorNavigationDriver.currentCalibration.canRenderPosition
       : true;
@@ -525,24 +496,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
     _outdoorKey.currentState?.setInteractive(interactive);
   }
 
-  /// 바텀시트가 떠 있는 동안 지도 제스처를 꺼서, 시트를 마우스 휠로
-  /// 스크롤할 때 그 아래 지도까지 같이 스크롤/줌되지 않게 한다.
+  /// 시트가 떠 있는 동안 지도 제스처를 꺼, 휠 스크롤이 아래 지도로 새지 않게 한다.
   ///
-  /// **웹에서만 잠근다.** 이 잠금이 막으려는 것은 웹 전용 증상이다 — 웹의
-  /// MapLibre는 Flutter가 그리는 캔버스가 아니라 DOM에 실제로 존재하는
-  /// `canvas.maplibregl-canvas`라, 그 위에 시트를 그려도 브라우저는 시트가 없는
-  /// 것처럼 휠 이벤트를 지도에 그대로 전달한다([map_overlay_guard.dart] 상단에
-  /// 같은 내용이 적혀 있다). iOS·Android는 지도가 네이티브 뷰이고 제스처가
-  /// Flutter 아레나를 거치므로 애초에 새지 않는다.
-  ///
-  /// 그런데 잠금은 플랫폼을 가리지 않고 걸려 있었다. 그래서 실기기에서는 얻는
-  /// 것 없이 **시트가 떠 있는 동안 지도가 통째로 얼었다** — 매장 상세 시트를 열면
-  /// 위쪽에 그 매장이 보이는데 끌 수도 확대할 수도 없었다. 매장 상세 시트는
-  /// barrier까지 없애 포인터를 지도로 흘리므로([_MapPassThroughSheetRoute]),
-  /// 이 잠금이 남아 있으면 그 작업이 통째로 무효가 된다.
-  ///
-  /// 다른 시트(메뉴·길찾기)는 여전히 자기 `ModalBarrier`가 포인터를 막으므로,
-  /// 네이티브에서 잠금을 풀어도 그쪽 동작은 달라지지 않는다.
+  /// **웹에서만 잠근다.** 웹 전용 증상이라(`widgets/map_overlay_guard.dart`) 플랫폼을
+  /// 가리지 않고 걸었더니 실기기에서 **시트가 떠 있는 동안 지도가 통째로 얼었다** —
+  /// 상세 시트가 barrier까지 없애 포인터를 흘리는 작업이 통째로 무효가 됐다.
   Future<T?> _withMapsLocked<T>(Future<T?> Function() showSheet) async {
     if (!kIsWeb) return showSheet();
     _lockMaps(_mapLockSheet);
@@ -567,19 +525,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
     _stopPickingOnMap();
     setState(() {
       _searchActive = true;
-      // **실내 도면을 보는 중에도 바깥을 함께 찾는다.**
+      // **실내 도면을 보는 중에도 바깥을 함께 찾는다.** 실내일 때 껐더니 기능이
+      // 통째로 죽었다 — 폰에서는 진입 임계 zoom이 16.8까지 내려가고 초기 zoom이
+      // 17이라 건물 근처에서는 첫 프레임부터 오버레이가 켜져 있다.
       //
-      // 처음에는 [_indoorContextActive]일 때 껐다. "실내에서 화장실을 찾는
-      // 사람에게 길 건너 편의점을 섞지 말자"는 뜻이었는데, 이 게이트가 기능을
-      // 통째로 죽였다 — 폰에서는 실내 진입 임계 zoom이 화면 폭에 맞춰 16.8까지
-      // 내려가는데(indoor_entry_zoom.dart) 야외 지도 초기 zoom이 17이라,
-      // 건물 근처에서 앱을 켜면 **첫 프레임부터** 오버레이가 켜져 있다. 즉
-      // 실기기에서는 이 조건이 거의 항상 참이라 바깥 검색이 한 번도 안 돌았다.
-      //
-      // 원래 걱정은 게이트가 아니라 **순서**로 이미 해결돼 있다. 바깥 결과는
-      // 항상 실내 결과 **아래**에 별도 헤더를 달고 붙으므로, 실내에 답이 있으면
-      // 사용자는 위부터 읽고 바깥은 눈에 들어오지도 않는다. 실내가 빈손일 때만
-      // 바깥이 첫 줄이 되는데, 그건 정확히 바깥이 답인 경우다.
+      // 원래 걱정은 **순서**가 이미 해결한다. 바깥 결과는 항상 실내 아래에 별도
+      // 헤더로 붙으므로, 바깥이 첫 줄이 되는 건 실내가 빈손일 때뿐이다.
       _outdoorSearchCenter = _outdoorKey.currentState?.outdoorSearchCenter;
     });
     // 결과에 붙일 거리는 여기서 한 번만 준비한다. 결과가 나오기 전에 시작하므로
@@ -625,14 +576,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
     _forgetRouteDraft();
   }
 
-  /// 지도에 그려진 것은 그대로 두고 **상단 길찾기 상태만** 비운다.
+  /// 지도에 그려진 것은 두고 **상단 길찾기 상태만** 비운다. 지도가 이미 자기 경로를
+  /// 지운 뒤 알려오는 경로라, 되돌려 보내면 같은 일을 두 번 한다.
   ///
-  /// 지도가 "안내 종료를 눌렀다"고 알려올 때([OutdoorMapBody.onGuidanceDismissed])
-  /// 쓰는 경로다. 그쪽은 이미 자기 경로를 지운 뒤라, 여기서 다시 지우라고
-  /// 되돌려 보내면 같은 일을 두 번 한다.
-  ///
-  /// 이동 수단 선택도 함께 잊는다. 안 지우면 다음 길찾기가 지난번에 고른
-  /// 자동차로 시작해, 초기화했는데 옛 선택이 따라온다.
+  /// 이동 수단도 잊는다 — 안 지우면 다음 길찾기가 지난번 자동차로 시작한다.
   void _forgetRouteDraft() {
     _unfocusRouteFields();
     _routeOriginController.clear();
@@ -683,16 +630,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
     await _runSheetChain(() => _showStoreInfo(store, focusOnMap: true));
   }
 
-  /// 자동완성 후보 한 곳을 골랐을 때. 좌표를 붙여 검색 결과를 고른 것과 **같은
-  /// 자리로 합류시킨다** — 후보에서 왔든 결과 목록에서 왔든 사용자에게는 같은
-  /// 동작이어야 한다.
+  /// 자동완성 후보를 골랐을 때. 좌표를 붙여 **검색 결과와 같은 자리로 합류시킨다.**
   ///
-  /// 좌표는 층 도면에서 찾는다(`OutdoorMapBodyState.resolveIndexEntry`). 추가
-  /// 요청은 없다 — 그 층은 어차피 열어야 하고, 도면이 매장마다 중심점을 들고 있다.
-  ///
-  /// 못 찾으면 예전처럼 그 이름으로 검색을 다시 돌린다. 후보와 층 도면이
-  /// 어긋나는 경우(시드 갱신 직후, 아직 야외라 층을 옮길 수 없는 경우 등)에
-  /// 아무 일도 일어나지 않는 것보다, 한 번 더 누르더라도 도달하는 편이 낫다.
+  /// 좌표는 층 도면에서 찾으므로 추가 요청이 없다. 못 찾으면 그 이름으로 검색을 다시
+  /// 돌린다 — 아무 일도 안 일어나는 것보다 한 번 더 누르더라도 도달하는 편이 낫다.
   Future<void> _onSearchSuggestionPicked(StoreIndexEntry entry) async {
     recentSearchesController.add(_searchQuery);
     final resolved = await _outdoorKey.currentState?.resolveIndexEntry(entry);
@@ -707,12 +648,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   /// 상세 시트가 부르는 "근처 매장" 계산.
   ///
-  /// **여기서 하는 이유**: 그래프와 매장 색인은 이 화면이 이미 받아 두고 검색·경로에
-  /// 쓰는 것이다(둘 다 저장소가 future를 공유해 캐시한다). 시트가 직접 받아 오면 같은
-  /// 데이터가 두 벌이 되고, 시트를 테스트하려면 그래프부터 만들어야 한다.
-  ///
-  /// 서버에 새 엔드포인트를 만들지 않는 이유도 같다 — 필요한 것이 전부 이미 기기에
-  /// 있고, 거리는 어차피 온디바이스 다익스트라가 정답이다(AGENTS.md의 경로 계산 규칙).
+  /// **여기서 하는 이유**는 그래프와 매장 색인을 이 화면이 이미 들고 있어서다. 시트가
+  /// 직접 받아 오면 데이터가 두 벌이 되고, 시트 테스트에 그래프부터 필요해진다.
   Future<List<NearbyStore>> _loadNearbyStores(String entranceNodeId) async {
     final graph = await buildingRepository.getBuildingGraph(_buildingId);
     final index = await buildingRepository.getStoreIndex(_buildingId);
@@ -768,18 +705,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
     );
   }
 
-  /// 매장 정보 시트를 띄운다. 검색 결과를 탭했을 때와 지도 위 매장 폴리곤을
-  /// 직접 탭했을 때 모두 이 메서드를 거쳐 같은 시트가 뜨고, 출발지/도착지로
-  /// 지정하면 그 매장을 채운 채로 길찾기 시트로 넘어간다.
+  /// 매장 정보 시트를 띄운다. 검색 결과 탭과 지도 폴리곤 탭이 모두 여기를 거친다.
   ///
-  /// 반환값은 사용자가 출발/도착 액션을 실제로 골랐는지를 뜻한다. 저장된
-  /// 장소 시트에서 넘어온 경우 호출자가 이 값을 보고 "그냥 닫힘"이면 다시
-  /// 저장된 장소 시트로 돌려보내는 데 쓴다.
+  /// 반환값은 사용자가 출발/도착 액션을 골랐는지다 — "그냥 닫힘"이면 호출자가 저장된
+  /// 장소 시트로 되돌린다.
   ///
-  /// [keepZoom]이면 카메라를 옮기되 **배율은 그대로 둔다.** 지도에서 매장을
-  /// 직접 눌렀을 때 쓴다 — 그 매장은 이미 화면에 있으므로 확대까지 하면 방금
-  /// 보던 층 배치가 사라진다. 목록·검색 결과에서 온 매장은 지금 화면 어디에
-  /// 있는지 알 수 없으니 확대해서 보여 주는 편이 맞다.
+  /// [keepZoom]이면 **배율은 그대로 둔다.** 지도에서 직접 누른 매장은 이미 화면에
+  /// 있으므로, 확대까지 하면 방금 보던 층 배치를 잃는다.
   Future<bool> _showStoreInfo(
     PoiSearchResult match, {
     bool focusOnMap = false,
@@ -875,28 +807,17 @@ class _MapShellScreenState extends State<MapShellScreen> {
         await _openRouteMode(presetOrigin: candidate);
       }
     } else if (action == StoreInfoAction.setDestination) {
-      // 출발지가 준비돼 있으면 바로 경로를 그린다. 명시적으로 고른 매장이거나,
-      // 위치 지정·PDR로 현재 위치가 잡혀 있으면([_canRouteFromCurrentLocation])
-      // 둘 다 출발지로 완전하다 — 후자를 빼면 위치를 찍어둔 사용자가 "도착"을
-      // 눌러도 아무 일도 안 일어난다.
-      //
-      // 어느 쪽도 없을 때만 계산을 미루고 상단 길찾기 바를 남긴다. 그 상태에서
-      // 계산하면 실패 안내만 나오고, 바가 있으면 사용자가 출발 칸을 눌러 그
-      // 자리에서 출발지를 채울 수 있다.
+      // 출발지가 준비돼 있으면 바로 그린다. 명시적으로 고른 매장이든 위치가 잡힌
+      // 현재 위치든([_canRouteFromCurrentLocation]) 둘 다 완전하다 — 후자를 빼면
+      // 위치를 찍어둔 사용자가 "도착"을 눌러도 아무 일도 안 일어난다.
       setState(() => _routeDraftDestination = candidate);
       final origin = _selectedOrigin;
       if (origin != null || _canRouteFromCurrentLocation) {
         await _startRoute(origin: origin, destination: candidate);
       } else {
-        // 출발지가 없다(건물 안을 보고 있는데 위치 지정을 아직 안 했다).
-        //
-        // **여기서 멈추면 아무 일도 안 일어난 화면이 된다.** 위 주석이 약속한
-        // "상단 길찾기 바를 남긴다"를 실제로 하는 곳이 없었다 — 길찾기 바는
-        // [_routeMode]가 참일 때만 그려지는데, 이 갈래는 그 값을 세우지 않아
-        // 매장에서 "도착"을 눌러도 상단이 검색창인 채였다.
-        //
-        // 도착지를 채운 채로 바를 열고 커서를 출발 칸에 둔다. 사용자가 그
-        // 자리에서 출발지를 고르면 [_afterRouteFieldPicked]가 이어서 계산한다.
+        // 출발지가 없다. **여기서 멈추면 아무 일도 안 일어난 화면이 된다** — 길찾기
+        // 바는 [_routeMode]가 참일 때만 그려지는데 이 갈래가 그걸 안 세웠다.
+        // 도착지를 채운 채로 바를 열고 커서를 출발 칸에 둔다.
         await _openRouteMode(
           presetDestination: candidate,
           focusField: RoutePlanField.origin,
@@ -956,14 +877,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
         if (origin != null || _canRouteFromCurrentLocation) {
           await _startRoute(origin: origin, destination: candidate);
         } else {
-          // 매장 시트와 **같은 규칙**이다([_showStoreInfo]의 같은 갈래). 상단
-          // 검색은 건물 안에서도 바깥 장소를 함께 돌려주므로, 실내에서 위치 지정
-          // 전에 지하철역 같은 바깥 목적지를 고르는 흐름이 실제로 있다. 그때
-          // 여기서 멈추면 시트만 닫히고 상단은 검색창인 채라, 사용자는 도착을
-          // 누른 적 없는 화면을 본다.
-          //
-          // 바로 위 setOrigin 갈래는 이미 같은 모양의 else를 갖고 있었다 — 한
-          // switch 안에서 두 갈래가 달랐던 것이다.
+          // 매장 시트와 **같은 규칙**이다. 실내에서 위치 지정 전에 바깥 목적지를
+          // 고르는 흐름이 실제로 있고, 멈추면 도착을 누른 적 없는 화면이 된다.
+          // 바로 위 setOrigin 갈래는 이미 같은 else를 갖고 있었다.
           await _openRouteMode(
             presetDestination: candidate,
             focusField: RoutePlanField.origin,
@@ -979,14 +895,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
     return true;
   }
 
-  /// 카테고리 chip을 눌렀을 때 같은 카테고리의 매장 목록 시트를 연다. 항목을
-  /// 탭하면 목록이 닫히고 그 매장의 상세 시트가 뜬다.
+  /// 카테고리 매장 목록 시트. 항목을 탭하면 목록이 닫히고 상세가 뜬다.
   ///
-  /// **상세를 닫아도 목록으로 돌아가지 않는다.** 예전에는 여기가 loop여서 상세를
-  /// 닫으면 카테고리 목록이 다시 올라왔다 — 여러 매장을 훑는 흐름을 노린 것이었다.
-  /// 그런데 사용자에게는 매장을 하나 눌렀을 뿐인데 시트가 겹겹이 쌓인 것으로
-  /// 읽혔다. 상세는 **그 매장 하나를 보는 자리**이고, 닫으면 지도로 끝나는 편이
-  /// 예측 가능하다. 목록을 다시 보고 싶으면 chip을 다시 누르면 된다.
+  /// **상세를 닫아도 목록으로 돌아가지 않는다.** loop였을 때는 시트가 겹겹이 쌓인
+  /// 것으로 읽혔다. 목록을 다시 보려면 chip을 다시 누른다.
   Future<bool> _openCategoryStores(String category) async {
     final currentFloor = _activeIndoorFloor;
     final showing = _withMapsLocked(
@@ -1017,19 +929,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
     return _showStoreInfo(picked, focusOnMap: true);
   }
 
-  /// 카테고리 목록 맨 위 매장으로 지도를 옮긴다. **배율은 건드리지 않는다.**
+  /// 카테고리 목록 맨 위 매장으로 지도를 옮긴다. **배율은 건드리지 않는다** —
+  /// 업종을 훑는 행동이라 화면이 당겨지면 층 전체 배치를 잃는다.
   ///
-  /// 카테고리를 고르는 것은 "저 업종이 어디 있나"를 훑는 행동이라, 화면이 확
-  /// 당겨지면 방금 보던 층 전체의 배치를 잃는다. 매장을 콕 집었을 때(검색 결과·
-  /// 목록 항목)만 확대하고, 여기서는 중앙만 맞춘다(`focusKeepZoom`).
-  ///
-  /// 시트가 화면 아래를, 카테고리 chip 줄이 위를 가리므로 **그 사이에 남는 띠
-  /// 한가운데**가 목표 지점이다. 정중앙에 놓으면 시트 뒤에 숨고, 시트 높이만
-  /// 감안하면 이번엔 chip 줄 뒤로 올라간다.
-  ///
-  /// 시트는 현재 층 매장만 올려 준다(`onFirstStoreChanged` 주석). 다른 층으로
-  /// 카메라를 보내면 지도가 층을 갈아타야 하는데, 그러면 시트 머리글이 말하는
-  /// 층과 지도가 어긋난다.
+  /// 목표는 시트(아래)와 chip 줄(위) **사이에 남는 띠 한가운데**다. 정중앙이면 시트
+  /// 뒤에 숨고, 시트 높이만 빼면 chip 줄 뒤로 올라간다.
   void _focusCategoryFirstStore(PoiSearchResult? store) {
     if (store == null || !mounted) return;
     final topInsetPx = _categoryRowBottomPx();
@@ -1077,12 +981,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   /// 길찾기를 시작한다(상단 바를 두 칸으로 바꾼다).
   ///
-  /// [presetOrigin]/[presetDestination]은 매장 정보 시트의 "출발지로 설정"/
-  /// "도착지로 설정"에서 넘어올 때 채워 둘 값이다. 넘기지 않으면 이미 기억해 둔
-  /// 값([_selectedOrigin]·[_routeDraftDestination])을 그대로 이어 간다.
-  ///
-  /// [focusField]는 커서를 둘 칸이다. 넘기지 않으면 아직 비어 있는 칸으로
-  /// 보낸다 — 도착지가 없으면 도착지, 있으면 아무 칸도 열지 않고 결과를 보여 준다.
+  /// preset을 안 넘기면 기억해 둔 값을 이어 간다. [focusField]를 안 넘기면 비어 있는
+  /// 칸으로 커서를 보내고, 둘 다 차 있으면 바로 결과를 보여 준다.
   Future<void> _openRouteMode({
     DirectionsCandidate? presetOrigin,
     DirectionsCandidate? presetDestination,
@@ -1234,17 +1134,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 여러 조회가 겹쳐 뜰 수 있어(빠른 타이핑) 마지막 요청 결과만 반영한다.
     if (!mounted || seq != _routeSearchSeq) return;
 
-    // 경량이 빈손이면 **의미 검색까지 이어 간다.** 상단 검색과 같은 계약을 태워,
-    // "밥 먹을 곳"처럼 이름이 아닌 말이 검색창에서는 되고 길찾기에서는 안 되는
-    // 상태를 없앤다. 건물 안을 보고 있을 때만 부른다 — `/query/ai`는 건물 안의
-    // 매장을 찾는 계약이라, 밖에서 건물을 고르는 자리에서 승격시키면 눌러도 갈 수
-    // 없는 목록이 된다.
+    // 경량이 빈손이면 **의미 검색까지 이어 간다.** 건물 안을 보고 있을 때만 부른다 —
+    // `/query/ai`는 건물 안 매장을 찾는 계약이다.
     //
-    // "빈손"의 기준은 **실내 줄이 없는가**이지 결과가 통째로 비었는가가 아니다.
-    // 실내에서도 바깥 결과를 함께 돌려주게 된 뒤로([searchDirectionsCandidates]),
-    // "밥 먹을 곳"은 바깥 식당 POI로 채워져 결과가 비지 않는다. 결과 개수로 재면
-    // 그 순간부터 실내 의미 검색이 영영 안 돌아, 건물 안에서 밥집을 찾는 사람에게
-    // 길 건너 식당만 뜬다.
+    // "빈손"의 기준은 **실내 줄이 없는가**이지 결과가 비었는가가 아니다. 개수로 재면
+    // 바깥 POI가 채워 주는 순간부터 실내 의미 검색이 영영 안 돈다.
     final hasIndoorHit = results.any((c) => c.nodeId != null);
     if (!hasIndoorHit && query.trim().isNotEmpty && _indoorContextActive) {
       final semantic = await semanticDirectionsCandidates(
@@ -1262,12 +1156,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
     });
   }
 
-  /// 출발지 ↔ 도착지 교체.
-  ///
-  /// **확정된 후보만 뒤집는다.** 아직 고르지 않고 타이핑 중인 글자는 후보가
-  /// 아니라 검색어라 뒤집을 대상이 없다. 검색어를 반대 칸으로 옮기면 그 칸의
-  /// 검색이 처음부터 다시 돌기만 하고, 사용자가 고른 적 없는 값이 확정된 것처럼
-  /// 칸에 앉는다.
+  /// 출발지 ↔ 도착지 교체. **확정된 후보만 뒤집는다** — 타이핑 중인 글자는 검색어라,
+  /// 옮기면 고른 적 없는 값이 확정된 것처럼 칸에 앉는다.
   ///
   /// 출발지가 "현재 위치"면 **가장 가까운 매장**으로 굳혀 도착지에 놓는다. 규칙과
   /// 실패 조건은 [nearestStoreForCurrentLocation]에 있다. 못 고르면 상태를
@@ -1433,15 +1323,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 값을 더 낮추면 두 정거장 거리를 굳이 버스로 안내하게 된다.
   static const _walkableMeters = 1500.0;
 
-  /// 거리를 보고 처음 보여 줄 이동 수단을 정한다.
+  /// 거리를 보고 처음 보여 줄 이동 수단을 정한다. 출발점을 모르면 도보로 둔다 —
+  /// 대중교통을 부르면 고른 적도 없는 수단의 실패 안내를 본다.
   ///
-  /// 출발점을 모르면(GPS 미확보) 도보로 둔다. 모르는 채로 대중교통을 부르면
-  /// "현재 위치를 아직 못 잡았습니다"만 뜨고 끝나, 사용자는 수단을 고른 적도
-  /// 없는데 실패 안내를 본다.
-  ///
-  /// 자동차는 **자동으로 고르지 않는다.** 사용자가 차를 갖고 있는지 우리는
-  /// 모르고, 걸어서 갈 거리에 운전 경로를 내밀면 무엇을 안내받는지부터 다시
-  /// 읽어야 한다.
+  /// **자동차는 자동으로 고르지 않는다** — 차가 있는지 모르고, 걸어갈 거리에
+  /// 운전 경로를 내밀면 무엇을 안내받는지부터 다시 읽어야 한다.
   RoutePlanMode _defaultTravelMode(
     DirectionsCandidate? origin,
     DirectionsCandidate destination,
@@ -1509,17 +1395,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // [transitDropPoint]에 있다.
     final dropPoint = transitDropPoint(picked, fallback: destination.point);
     final indoorStore = _indoorStoreOf(destination);
-    // **목적지가 우리 건물이면 문을 다시 고른다 — 기준은 내린 자리다.**
-    //
-    // 건물 후보의 좌표는 후보를 만들 때 이미 문 하나로 정해져 있는데, 그 문은
-    // **검색하던 시점의 현재 위치**에서 가까운 문이다([buildingDestinationPoint]).
-    // 한 시간 버스를 타고 반대편에서 내리면 그 문은 더 이상 가깝지 않다 — 실기기
-    // 에서 정확히 그 화면을 봤다. 내린 자리 바로 옆에 문이 있는데 건물을 빙 돌아
-    // 반대편 문으로 안내했다.
-    //
-    // 매장이 목적지인 경우도 같다(매장 좌표를 그대로 끝점으로 주면 TMAP이 가장
-    // 가까운 도로로 스냅해 내린 곳 반대편으로 데려간다). 그래서 두 경우를 하나로
-    // 묶어, **우리 건물을 향하는 안내면** 하차 지점 기준으로 문을 다시 고른다.
+    // **우리 건물을 향하는 안내면 하차 지점 기준으로 문을 다시 고른다.**
+    // 후보의 문은 검색하던 시점 위치에서 가까운 문이라, 버스를 타고 반대편에서
+    // 내리면 더 이상 가깝지 않다 — 실기기에서 바로 옆 문을 두고 건물을 빙 돌았다.
     final targetsOurBuilding =
         indoorStore != null || destination.buildingId == _buildingId;
     final walkTarget =
@@ -1716,22 +1594,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
     );
   }
 
-  /// 지도 화면이 "사용자 위치를 새로 잡았다"고 알려올 때. 기억해둔 출발지
-  /// 매장을 버려서, 다음 길찾기가 **방금 잡은 위치**에서 출발하게 한다.
+  /// 지도가 "위치를 새로 잡았다"고 알려올 때. 기억해둔 출발지 매장을 버려 다음
+  /// 길찾기가 **방금 잡은 위치**에서 출발하게 한다 — 없으면 새 위치 아이콘을 두고
+  /// 경로만 옛 매장에서 시작해 위치 지정이 무시된 것처럼 보인다.
   ///
-  /// 이게 없으면 이런 상태가 된다: 매장 A를 출발지로 지정해 길을 찾은 뒤,
-  /// "위치 지정"으로 지금 서 있는 곳을 다시 찍고 다른 매장까지 길을 찾으면
-  /// 경로가 여전히 A에서 출발한다. 화면에는 새로 찍은 위치 아이콘이 있는데
-  /// 경로만 엉뚱한 데서 시작하니, 사용자는 위치 지정이 무시됐다고 본다.
-  ///
-  /// 출발지를 "매장 선택"으로 갱신하는 경로는 [_showStoreInfo]·[_openDirections]가
-  /// 이미 [_selectedOrigin]을 새 값으로 덮어쓴다. 그래서 두 경로 모두 "마지막에
-  /// 갱신한 위치"가 출발지가 된다.
-  ///
-  /// 버릴 매장 출발지가 없어도 **다시 그린다.** 상단 출발 행의 라벨은
-  /// [_canRouteFromCurrentLocation]으로 갈리는데, 그 값은 이 시점에 막 참이 된다.
-  /// 여기서 조기 반환하면 도착 초안을 먼저 잡아둔 상태에서 위치를 찍었을 때
-  /// "출발지를 선택하세요"가 그대로 남는다 — 위치는 찍혔는데 화면만 아니라고 한다.
+  /// 버릴 매장 출발지가 없어도 **다시 그린다** — 출발 행 라벨을 가르는
+  /// [_canRouteFromCurrentLocation]이 이 시점에 막 참이 되기 때문이다.
   void _onLocationAnchored() {
     setState(() => _selectedOrigin = null);
     // 출발점이 바뀌었으니 목록에 적힌 거리도 전부 옛 값이다. 다시 계산한다.
@@ -1763,19 +1631,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   /// 지도에서 매장을 눌러 상세를 연다. **떠 있는 상세가 있으면 먼저 닫는다.**
   ///
-  /// 고른 매장은 폴리곤이 파랗게 채워지고([_highlightedStoreId]) 카메라가 그
-  /// 매장을 시트 위 영역 한가운데로 끌어온다. 화면 구석을 눌렀을 때 강조된
-  /// 매장이 곧바로 시트 뒤로 숨어 "무엇을 골랐는지" 확인할 수 없던 것을 없앤다.
-  /// 배율은 건드리지 않는다(`keepZoom` — [_showStoreInfo] 주석).
+  /// 고른 매장은 파랗게 채워지고 카메라가 시트 위 영역 한가운데로 끌어온다(배율은
+  /// 건드리지 않는다). 이 시트는 barrier가 없어 포인터를 지도로 흘리는 의도된
+  /// 설계라([_withMapsLocked]), 그 대가로 시트가 쌓이는 것을 여기서 막는다.
   ///
-  /// 이 시트는 barrier가 없어 포인터를 지도로 흘린다([_withMapsLocked] 주석) —
-  /// 시트를 열어 둔 채 지도를 만질 수 있게 한 의도된 설계다. 그 대가로 다른
-  /// 매장을 누르면 시트가 그 위에 하나 더 쌓였고, 사용자는 매장 하나를 봤을
-  /// 뿐인데 닫기를 두 번 눌러야 했다.
-  ///
-  /// 닫기를 기다린 뒤에 여는 이유는 두 라우트가 겹치는 순간을 없애기 위해서다.
-  /// 기다리지 않고 바로 열면 이전 시트의 pop 애니메이션과 새 시트의 push가
-  /// 겹쳐 화면이 한 번 깜빡인다.
+  /// 닫기를 **기다린 뒤** 연다 — 안 기다리면 pop과 push가 겹쳐 화면이 깜빡인다.
   Future<void> _openStoreFromMap(PoiSearchResult match) async {
     final closing = _placeDetailClosing;
     if (closing != null) {
@@ -1791,16 +1651,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
     );
   }
 
-  /// 지도에서 고르는 중에 **매장이 아닌 곳(복도·빈 공간)** 을 눌렀을 때.
+  /// 지도에서 고르는 중에 **매장이 아닌 곳**을 눌렀을 때. 매장을 눌렀을 때와
+  /// **완전히 같은 처리**를 태운다 — 갈리면 "복도로 지정한 출발지만 위치 아이콘이
+  /// 안 따라온다" 같은 절반짜리 동작이 생긴다.
   ///
-  /// 지도 화면이 그 탭을 통행 그래프에 스냅해 노드까지 확정한 뒤 넘겨주므로,
-  /// 여기서는 매장을 눌렀을 때와 **완전히 같은 처리**를 태운다. 두 경로가 갈리면
-  /// "복도로 지정한 출발지만 위치 아이콘이 안 따라온다" 같은 절반짜리 동작이
-  /// 생긴다.
-  ///
-  /// 고르는 중이 아닐 때는 아무 일도 하지 않는다. 지도 화면도 같은 조건으로
-  /// 막지만([IndoorMapBody.pickingOnMap]), 상태를 소유한 쪽에서 한 번 더 막아
-  /// 두 값이 한 프레임 어긋나는 순간에 빈 곳 탭이 목적지가 되는 일을 없앤다.
+  /// 고르는 중이 아니면 아무 일도 하지 않는다(지도 쪽도 막지만, 두 값이 한 프레임
+  /// 어긋나는 순간을 없애려 상태 주인이 한 번 더 막는다).
   void _onMapPointPicked(PoiSearchResult picked) {
     final target = _mapPickTarget;
     if (target == null) return;
@@ -1843,17 +1699,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
     unawaited(_startRoute(origin: _selectedOrigin, destination: picked));
   }
 
-  /// 지금 출발↔도착을 맞바꿀 수 있는지. 상단 초안 바의 ⇅ 버튼 활성 조건이다.
+  /// 지금 출발↔도착을 맞바꿀 수 있는지(⇅ 버튼 활성 조건).
   ///
-  /// 출발지가 실제 지점이면 언제나 바꿀 수 있다(두 값을 그냥 맞바꾸면 된다).
-  /// 출발지가 "현재 위치"(=`_selectedOrigin`이 null)일 때만 조건이 붙는다 —
-  /// 도착지 자리에는 "현재 위치"라는 표현이 없어서 가장 가까운 매장으로 굳혀야
-  /// 하고, 그러려면 현재 위치에서 잰 거리([_reachByNodeId])가 있어야 한다.
+  /// 출발지가 "현재 위치"일 때만 조건이 붙는다 — 도착지 자리에는 그 표현이 없어
+  /// 가장 가까운 매장으로 굳혀야 하고, 그러려면 [_reachByNodeId]가 있어야 한다.
   ///
-  /// 여기서 후보를 실제로 고르지는 않는다. 매 프레임 색인을 뒤질 수는 없으므로
-  /// **고를 수 있는 상태인지**만 보고, 실제 선택은 누른 뒤 [_swapRouteEndpoints]가
-  /// 한다. 그래서 눌렀는데 못 고르는 경우가 남고(모든 최근접 후보가 지금
-  /// 도착지뿐일 때), 그건 그쪽에서 안내로 처리한다.
+  /// 매 프레임 색인을 뒤질 수 없어 **고를 수 있는 상태인지**만 본다. 실제 선택은
+  /// [_swapRouteEndpoints]가 하므로 눌렀는데 못 고르는 경우가 남는다.
   bool get _canSwapRouteEndpoints {
     if (_routeDraftDestination == null) return false;
     if (_selectedOrigin != null) return true;
@@ -1897,17 +1749,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
     );
   }
 
-  /// 실제 경로 표시. 길찾기 시트를 거치는 경로와, 이미 기억해둔 출발지로 바로
-  /// 라우팅하는 경로가 함께 쓸 수 있게 뽑아뒀다. [origin]이 null이면 "현재
-  /// 위치"(=PDR)로 라우팅한다.
-  /// 도착지가 정해졌을 때 **어떻게 갈지를 먼저 고른다.**
+  /// 도착지가 정해졌을 때 **어떻게 갈지를 먼저 고른다.** [origin]이 null이면
+  /// "현재 위치"(=PDR)에서 출발한다.
   ///
-  /// [autoSelectMode]가 참이면 목적지 종류를 보고 수단을 정한다. 사용자가 이동
-  /// 수단 줄에서 직접 고른 경우에는 거짓으로 불러 그 선택을 덮지 않는다.
+  /// [autoSelectMode]가 참이면 목적지 종류를 보고 수단을 정한다 — 사용자가 직접
+  /// 고른 경우에는 거짓으로 불러 그 선택을 덮지 않는다.
   ///
-  /// [announceOriginAnchor]가 false면 매장을 출발지로 쓸 때 뜨는 "여기서
-  /// 출발하는 것으로 봤다" 안내를 띄우지 않는다. 사용자가 방금 그 이동을 직접
-  /// 시킨 경우(출발↔도착 맞바꾸기)에 쓴다.
+  /// [announceOriginAnchor]가 false면 "여기서 출발하는 것으로 봤다" 안내를 띄우지
+  /// 않는다(출발↔도착 맞바꾸기처럼 방금 직접 시킨 경우).
   Future<void> _startRoute({
     DirectionsCandidate? origin,
     required DirectionsCandidate destination,
@@ -2029,12 +1878,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
     nodeId: candidate.nodeId,
   );
 
-  /// "장소" 칩을 누르면 사용자가 저장해둔 매장 목록 시트를 연다. 항목을
-  /// 탭하면 지도에서 매장을 직접 눌렀을 때와 동일한 매장 정보 시트가 뜬다.
-  ///
-  /// 매장 정보 시트에서 출발/도착을 고르지 않고 뒤로 닫으면 다시 저장된 장소
-  /// 시트로 돌아온다 — 사용자가 여러 저장 항목을 훑어보다 잘못 눌렀거나
-  /// 다른 항목을 다시 고르려는 경우를 위한 흐름이다.
   /// 저장한 장소 목록을 연다. 항목을 탭하면 목록이 닫히고 상세 시트가 뜬다.
   ///
   /// 상세를 닫아도 목록으로 돌아가지 않는다 — 이유는 [_openCategoryStores]와 같다.
@@ -2246,18 +2089,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
     );
   }
 
-  /// 3층 — 상단 오버레이. 이동 수단·검색창·후보 목록·배너·카테고리·지도 선택
-  /// 안내가 **하나의 Column**으로 쌓인다.
+  /// 3층 — 상단 오버레이. 검색창·후보 목록·배너·카테고리가 **하나의 Column**으로
+  /// 쌓인다. 고정 offset이던 시절에는 `MapTopBar` 높이가 상태에 따라 달라져
+  /// (검색창 한 줄 ↔ 출발/도착 두 줄) 평소엔 여백이 남고 길찾기에서는 칩과 겹쳤다.
   ///
-  /// 예전에는 검색 패널·카테고리 열이 top: 78, 안내 카드가 top: 128인 고정
-  /// offset이었는데, `MapTopBar`의 높이가 상태에 따라 달라진다 — 평소엔 검색창
-  /// 한 줄이고 길찾기 draft에서는 출발/도착 두 줄 + Divider다. 그래서 78은 두
-  /// 상태의 타협치가 되어 평소엔 여백이 남고 길찾기에서는 칩과 겹쳤다. Column이면
-  /// 간격이 상수 하나로 통일되고 어느 상태에서도 어긋나지 않는다.
-  ///
-  /// 히트 테스트용 GlobalKey는 그대로 각 자식에 붙어 있다. 지도 제스처 잠금은
-  /// 키의 RenderBox를 localToGlobal로 읽으므로 부모가 Stack이든 Column이든
-  /// 같은 값이 나온다.
+  /// 히트 테스트용 GlobalKey는 그대로다 — localToGlobal은 부모가 무엇이든 같다.
   Widget _buildTopOverlays(BuildContext context) {
     return Positioned(
       top: 0,
@@ -2458,15 +2294,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
             ? _lockMaps(_mapLockOverlayTouch)
             : _unlockMaps(_mapLockOverlayTouch),
         children: [
-          // 카테고리 필터는 모드가 아니라 [_indoorContextActive]로
-          // 가른다 — 야외 탭이어도 오버레이가 켜지면 도면과 강조가
-          // 이미 떠 있다. 모드로 분기하면 웹에서는 보이고 모바일
-          // (도면 탭으로 바로 진입)에서는 안 보인다. 반대로 순수
-          // 야외에서는 감춘다. 강조가 도면 위에 그려져 결과가 안
-          // 보이기 때문이다.
-          //
-          // "장소" pill은 화면 맨 아래 내비게이션으로 갔다. 진입점은
-          // 햄버거 메뉴의 "저장한 장소"([_openFavorites])에 남아 있다.
+          // 카테고리 필터는 모드가 아니라 [_indoorContextActive]로 가른다 —
+          // 야외 탭이어도 오버레이가 켜지면 도면과 강조가 이미 떠 있다. 순수
+          // 야외에서는 감춘다(강조가 도면 위에 그려져 결과가 안 보인다).
           if (_indoorContextActive) ...[
             CategoryChipsRow(
               entriesFuture: _categoryEntriesFuture,

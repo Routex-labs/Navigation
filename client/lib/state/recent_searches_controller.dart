@@ -3,27 +3,16 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 사용자가 검색창에 입력했던 검색어를 최신순으로 보관·영속화한다.
+/// 검색창에 입력했던 검색어를 최신순으로 보관·영속화한다. 검색 패널의 idle 화면을
+/// 채우는 저장소이고, 근거는 `docs/client/naver-map-ui-ux-analysis.md` J절.
 ///
-/// 검색 패널의 idle(입력 전) 화면을 채우기 위한 저장소다. 근거와 스펙은
-/// `docs/client/naver-map-ui-ux-analysis.md`의 「J. 검색 빈 상태(idle) 채우기」가
-/// 단일 출처다. 「인기 매장」은 클릭·방문 로그가 없어 만들 수 없으므로,
-/// **클라이언트가 실제로 아는 것**인 최근 검색어부터 쓴다.
+/// **개인정보: 서버로 보내지 않는다.** 검색어는 무엇을 찾는지 그대로 드러내는
+/// 값이고, `conversational-discovery.md`의 비목표가 계정 단위 영구 저장을 금한다 —
+/// 기기 로컬에만 남기고 어떤 요청에도 싣지 않는다. 올려야 할 이유가 생기면 이
+/// 주석이 아니라 그 문서의 비목표를 먼저 고친다.
 ///
-/// 저장 계층은 `favorites_controller.dart`와 같다 — SharedPreferences에 JSON 문자열
-/// 하나로 넣고, ChangeNotifier로 노출해 화면이 즉시 반영하게 한다. 항목이
-/// 수십 개 규모이고 읽기 위주라 별도 DB가 필요 없다는 판단도 동일하다.
-///
-/// **개인정보: 서버로 보내지 않는다.** 검색어는 사용자가 무엇을 찾는지 그대로
-/// 드러내는 값이다. `docs/backend/native/conversational-discovery.md`의 비목표에
-/// "사용자 프로필의 계정 단위 영구 저장"이 명시돼 있으므로, 이 목록은 오직
-/// 기기 로컬(SharedPreferences)에만 남기고 어떤 API 요청에도 실어 보내지
-/// 않는다. 서버에 올려야 할 이유가 생기면 이 주석이 아니라 위 문서의 비목표를
-/// 먼저 고쳐야 한다.
-///
-/// **실패해도 조용히 degrade한다.** 최근 검색어는 검색 자체를 막지 않는 부가
-/// 기능이라, 저장소 읽기·쓰기가 실패하면 예외를 밖으로 던지지 않고 빈 목록으로
-/// 동작한다. 첫 실행(저장된 값 없음)도 오류가 아니라 정상 상태다.
+/// **실패해도 조용히 degrade한다** — 부가 기능이라 빈 목록으로 동작하고, 첫 실행의
+/// 빈 값도 정상 상태다.
 class RecentSearchesController extends ChangeNotifier {
   // ignore: prefer_initializing_formals -- _prefs는 lazy-init으로 채워야 해서 mutable이어야 함.
   RecentSearchesController({SharedPreferences? prefs}) : _prefs = prefs {

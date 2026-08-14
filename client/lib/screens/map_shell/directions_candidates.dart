@@ -1,10 +1,5 @@
-/// 길찾기(출발/도착 칸)의 후보 목록 조립.
-///
-/// 검색어 하나로 실내 매장·건물·바깥 POI를 어떤 순서로 섞을지가 여기의 전부다.
-/// 규칙 자체(이름 겹침 판정·순위)는 domain 함수들이 갖고 있고, 이 파일은 그
-/// 함수들을 길찾기 맥락으로 엮는다. 화면 상태(UI 시퀀스·setState)는 화면에
-/// 남는다 — 이 파일은 입력을 받아 후보 목록을 돌려줄 뿐, 아무것도 저장하지
-/// 않는다.
+/// 길찾기(출발/도착 칸)의 후보 목록 조립 — 실내 매장·건물·바깥 POI를 어떤 순서로
+/// 섞을지가 전부다. 규칙 자체는 domain이 갖고, 여기는 아무것도 저장하지 않는다.
 library;
 
 import 'package:flutter/foundation.dart' show debugPrint;
@@ -51,15 +46,9 @@ Future<List<DirectionsCandidate>> searchDirectionsCandidates(
 }) async {
   final normalized = query.trim().toLowerCase();
 
-  // 매장 검색은 **항상 건물 전체**를 뒤진다(currentFloorId를 넘기지 않는다).
-  //
-  // 예전에는 현재 층으로 좁히고 "전체 층에서 찾기" 토글로 넓히게 했다. 그런데
-  // 길찾기를 여는 이유 자체가 대개 "지금 층에 없는 곳으로 가려고"라, 기본값이
-  // 사용자 의도의 반대였다 — 찾는 매장이 결과에 아예 없어서 매번 토글을 켜야
-  // 했다. 다른 층 결과에는 층 라벨이 부제로 붙으므로, 어느 층 매장인지는
-  // 목록에서 그대로 읽힌다.
-  // [floorId]는 후보를 콕 집은 행동에만 값이 있다. 사용자가 직접 친 질의에는
-  // null이라 위 「항상 건물 전체」 규칙이 그대로 유지된다.
+  // 매장 검색은 **항상 건물 전체**를 뒤진다 — 길찾기를 여는 이유 자체가 대개
+  // "지금 층에 없는 곳으로 가려고"라, 층으로 좁히면 기본값이 의도의 반대가 된다.
+  // [floorId]는 후보를 콕 집은 행동에만 값이 있어 이 규칙을 깨지 않는다.
   final results = await destinationRepository.searchDestinations(
     buildingId,
     query,
@@ -85,27 +74,15 @@ Future<List<DirectionsCandidate>> searchDirectionsCandidates(
   // 열자마자 띄우면 치지도 않은 답이 정해져 있는 화면이 된다.
   if (normalized.isEmpty) return const [];
 
-  // **여기부터는 실내·야외를 가리지 않는다.**
+  // **여기부터는 실내·야외를 가리지 않는다.** 실내면 매장만 돌려주던 때는 실내→
+  // 야외 안내를 만들어 두고도 그 목적지를 고를 수단이 없었다.
   //
-  // 예전에는 실내면 위에서 매장 목록만 돌려주고 끝냈다. 그래서 건물 안에 선
-  // 사용자에게는 바깥 건물도, 바깥 POI도 검색되지 않았다 — 실내에서 지하철역이나
-  // 길 건너 건물로 가는 길을 찾을 방법이 아예 없었다. 실내→야외 안내
-  // ([OutdoorMapBodyState.showIndoorToOutdoorRouteTo])를 만들어 두고도 정작
-  // 그 목적지를 고를 수단이 없던 셈이다.
-  //
-  // 섞어도 안전한 이유는 **순서**에 있다. 아래 반환문이 우리 매장 줄을 항상
-  // 맨 위에 두므로, 실내에 답이 있으면 사용자는 위부터 읽고 바깥 줄은 눈에
-  // 들어오지도 않는다. 실내가 빈손일 때만 바깥이 첫 줄이 되는데, 그건 정확히
-  // 바깥이 답인 경우다. 상단 검색 패널이 같은 이유로 이미 게이트를 걷어냈다
-  // (map_shell_screen의 _activateSearch) — 두 검색이 같은 규칙을 쓰게 맞춘다.
+  // 섞어도 안전한 이유는 **순서**다 — 우리 매장 줄이 항상 맨 위라, 바깥이 첫 줄이
+  // 되는 것은 실내가 빈손일 때뿐이고 그건 정확히 바깥이 답인 경우다.
 
-  // 건물 자체도 후보로 남기되 매장보다 뒤에 놓는다 — 밖에서 길찾기를 여는
-  // 이유는 대개 특정 매장이다.
-  //
-  // **후보 좌표는 목록 응답만으로는 못 구한다.** `GET /buildings`는 id·이름·
-  // 층 목록만 주고 출입구·외곽선은 상세(`/buildings/{id}`)에만 있다. 그래서
-  // 야외 지도가 이미 상세로 받아 둔 값을 먼저 쓰고([buildingDestinationPoint]),
-  // 그마저 없으면 후보에서 뺀다 — 좌표 없는 후보는 눌러도 경로가 안 나온다.
+  // 건물도 후보로 남기되 매장보다 뒤에 둔다. **좌표는 목록 응답만으로 못 구한다** —
+  // `GET /buildings`에는 출입구·외곽선이 없어 야외 지도가 상세로 받아 둔 값을 쓰고,
+  // 그마저 없으면 후보에서 뺀다(눌러도 경로가 안 나온다).
   final buildingCandidates = <DirectionsCandidate>[];
   for (final building in buildings) {
     if (!building.name.toLowerCase().contains(normalized)) continue;
@@ -144,14 +121,9 @@ Future<List<DirectionsCandidate>> searchDirectionsCandidates(
   ];
 }
 
-/// 2단계(의미 검색). 경량이 빈손일 때만 부른다.
-///
-/// 경량과 마찬가지로 층은 넘기지 않는다: 길찾기는 원래 다른 층으로 가려고 여는
-/// 기능이고, 백엔드의 의미 단계는 current_floor_id를 받아도 건물 전체를 본다
-/// (query_search.match_ai_destination).
-///
-/// 실패는 빈 목록으로 삼킨다. 여기까지 왔다는 것은 경량이 이미 빈손이라는
-/// 뜻이라, 오류 화면으로 덮어도 사용자가 할 수 있는 일이 늘지 않는다.
+/// 2단계(의미 검색). 경량이 빈손일 때만 부르고, 층은 넘기지 않는다(백엔드도
+/// 건물 전체를 본다). 실패는 빈 목록으로 삼킨다 — 오류 화면으로 덮어도 사용자가
+/// 할 수 있는 일이 늘지 않는다.
 Future<List<DirectionsCandidate>> semanticDirectionsCandidates(
   String query, {
   required String buildingId,
@@ -178,13 +150,9 @@ Future<List<DirectionsCandidate>> semanticDirectionsCandidates(
   }
 }
 
-/// "이 건물까지" 안내할 때의 도착 좌표.
-///
-/// 야외 지도가 아는 **지상 출입구**를 우선한다 — 건물 중심을 도착점으로 주면
-/// TMAP 보행자 경로가 건물 안쪽을 향하다 아무 도로로나 스냅해, 실제로 들어갈
-/// 수 있는 문과 다른 면에 사용자를 내려놓는다. 야외 지도가 아직 그 건물을
-/// 로드하지 않았거나 문 데이터가 없으면 건물 응답의 출입구·외곽선 중심으로
-/// 떨어진다([Building.outdoorAnchor]). 그것마저 없으면 null.
+/// "이 건물까지" 안내할 때의 도착 좌표. **지상 출입구**를 우선한다 — 건물 중심을
+/// 주면 TMAP이 아무 도로로나 스냅해 들어갈 수 없는 면에 내려놓는다.
+/// 없으면 [Building.outdoorAnchor]로, 그것도 없으면 null.
 LatLng? buildingDestinationPoint(
   Building building,
   OutdoorSearchContext outdoor,

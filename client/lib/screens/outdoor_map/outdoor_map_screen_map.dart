@@ -99,25 +99,17 @@ extension OutdoorMapMap on OutdoorMapBodyState {
   Future<void> _syncDimScrimLayer() async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
-    // hole은 외곽선과 **같은 링**을 쓴다. 건물 외곽선으로 뚫으면 그 층 도면 중
-    // 건물 외곽선 밖으로 나간 부분이 스크림에 덮여, 사용자가 보는 외곽선 안쪽이
-    // 어두워지는 모순이 생긴다(지하가 특히 심하다). 링이 아직 없으면(층 도면
-    // 로딩 중) 건물 외곽선으로 폴백해 스크림 자체는 유지한다 — 스포트라이트가
-    // 한 프레임 통째로 꺼지는 것보다 낫다. 여기만 폴백을 허용하는 이유는
-    // 스크림이 "경계선"이 아니라 밝기 대비이기 때문이다 — 선은 폴백하지 않는다
-    // ([floorOutlineRing]).
+    // hole은 외곽선과 **같은 링**을 쓴다 — 건물 외곽선으로 뚫으면 층 도면이
+    // 그 밖으로 나간 부분이 덮여 외곽선 안쪽이 어두워진다(지하가 심하다).
+    // 여기만 폴백을 허용한다: 스크림은 경계선이 아니라 밝기 대비다.
     await syncDimScrimSource(
       controller,
       _activeFloorOutlineRing() ?? _buildingFootprint,
     );
 
     if (_indoorEntered) {
-      // 실내 MVT 오버레이 페이드 구간과 동일한 zoom 창을 쓴다 — 오버레이가
-      // 뜨는 것과 동시에 스크림도 자연스럽게 짙어진다. 최대치 0.35는 기존 위젯
-      // 스크림(#40000000 = 0.25)보다 살짝 진하게 잡아 실내 vs 야외의 밝기
-      // 대비를 조금 더 명확히 준다.
-      // fillColor를 반드시 함께 넘긴다 — setLayerProperties는 patch가 아니라
-      // 전체 교체다(indoor_overlay_layers.dart 상단 주석 참고).
+      // 오버레이 페이드와 같은 zoom 창을 써서 함께 짙어진다.
+      // fillColor를 반드시 함께 넘긴다 — `setLayerProperties`는 전체 교체다.
       await controller.setLayerProperties(
         kOutdoorDimScrimFillLayerId,
         dimScrimProps(_fadeExpr(maxOpacity: 0.35)),
@@ -130,16 +122,10 @@ extension OutdoorMapMap on OutdoorMapBodyState {
     }
   }
 
-  /// 지도 탭 처리의 테스트 진입점.
+  /// 지도 탭 처리의 테스트 진입점. 플랫폼 뷰가 없어 `onMapClick`이 발화하지 않으므로
+  /// 실기기와 **같은 함수**를 부른다(축약 경로를 두면 검증하려는 분기를 우회한다).
   ///
-  /// MapLibre 플랫폼 뷰는 위젯 테스트에 없어 `onMapClick`이 아예 발화하지
-  /// 않는다. 그래서 실기기에서 쓰이는 것과 **같은 함수**를 직접 부른다 —
-  /// 테스트용 축약 경로를 따로 두면 정작 검증하려는 분기(건물 밖 탭 → 야외
-  /// 전환)를 우회해 버린다.
-  ///
-  /// [screenPoint]는 지도 위젯 로컬 픽셀 좌표다. 오버레이(층 선택기 등) 위를
-  /// 누른 탭이 지도 탭으로 새어들어가는 경우를 재현하려면 이 값이 필요하다 —
-  /// 좌표가 늘 (0,0)이면 오버레이 배제 로직 자체가 검증되지 않는다.
+  /// [screenPoint]는 지도 로컬 픽셀이다 — 늘 (0,0)이면 오버레이 배제가 검증되지 않는다.
   @visibleForTesting
   Future<void> handleMapClickForTest(
     ll.LatLng point, {
@@ -183,14 +169,9 @@ extension OutdoorMapMap on OutdoorMapBodyState {
     // 폴리곤 히트 검사만 하고, 나머지 탭은 흡수하지 않아 지도 pan/zoom 제스처를
     // 방해하지 않는다(단일 탭이 여기 오면 그건 pan이 아닌 명시적 탭).
     if (!_isInsideBuilding(point)) {
-      // 실내 모드에서 건물 밖을 탭한 것 — 사용자가 야외로 나가겠다는 뜻이다.
-      // 축소해서 나가는 것보다 훨씬 직관적인 탈출 경로다.
-      //
-      // 단, **외곽선 바로 바깥은 이탈로 치지 않는다**
-      // ([isTapOutsideBuildingForExit]). 벽에 붙은 매장을 누르다 손가락이 선을
-      // 몇 미터 넘기는 일은 흔한데, 그때마다 실내가 닫히면 매장을 누르려던
-      // 사용자가 건물에서 쫓겨난다. 여기서 그냥 흡수해 아무 일도 일어나지 않게
-      // 두는 편이, 되돌리는 데 건물을 다시 찾아 탭해야 하는 것보다 낫다.
+      // 실내에서 건물 밖 탭 = 야외로 나가겠다는 뜻. 단, **외곽선 바로 바깥은 이탈로
+      // 치지 않는다**([isTapOutsideBuildingForExit]) — 벽에 붙은 매장을 누르다 손가락이
+      // 선을 몇 미터 넘기면 매장을 누르려던 사용자가 건물에서 쫓겨난다.
       if (_indoorEntered &&
           isTapOutsideBuildingForExit(
             point: point,
@@ -201,13 +182,8 @@ extension OutdoorMapMap on OutdoorMapBodyState {
       return;
     }
 
-    // 폴리곤을 잠깐 진하게 반짝여 "인식됐다"는 시각 피드백을 준 뒤, 야외 지도
-    // 위에 실내 UI 오버레이(층 chip, 위치 지정 버튼 등)를 켠다. 화면 모드는
-    // 그대로 야외로 유지된다.
-    //
-    // 반짝임은 장식이라 컨트롤러가 아직 없으면 건너뛴다. 진입을 컨트롤러 유무에
-    // 걸어 두면(예전 `if (controller == null) return;`) 스타일 로드 전에 건물을
-    // 탭한 사용자에게 아무 반응도 없다.
+    // 반짝임은 장식이라 컨트롤러가 없으면 건너뛴다. 진입 자체를 컨트롤러 유무에
+    // 걸면 스타일 로드 전에 건물을 탭한 사용자에게 아무 반응도 없다.
     await _flashBuildingFill();
     if (!mounted) return;
     _triggerIndoorEntry(ignoreZoomArming: true);
@@ -217,19 +193,11 @@ extension OutdoorMapMap on OutdoorMapBodyState {
     if (_indoorEntered) unawaited(_fitCameraToActiveFloor());
   }
 
-  /// [box]를 **가려지지 않는 띠**에 맞춰 카메라를 움직인다. 컨트롤러가 아직
-  /// 없으면 아무것도 하지 않고 false.
+  /// [box]를 **가려지지 않는 띠**에 맞춰 카메라를 움직인다. 컨트롤러가 없으면 false.
   ///
-  /// 층 도면 fit([_fitCameraToActiveFloor])과 경로 개요([_fitCameraToRouteSegment])의
-  /// **공통 몸통**이다. 둘을 한 함수로 묶는 이유는 chrome 보정과 줌 하한이 한
-  /// 곳에만 있어야 하기 때문이다 — 각자 갖게 두면 한쪽만 고쳐져 도면을 맞춘
-  /// 화면과 경로를 맞춘 화면에서 같은 지점이 다른 높이에 온다.
-  ///
-  /// 상자를 **어떻게 구하느냐**는 호출부가 정한다([minAreaBoxFor] / [routeBoxFor]).
-  /// 퇴화 입력 방어처럼 입력 종류마다 다른 규칙이 여기 섞이면, 이 함수가 층
-  /// 외곽선용인지 경로용인지 알 수 없게 된다.
-  /// [maxZoom]은 확대해 들어가는 상한이다. 경로 개요만 준다([routeFitMaxZoom])
-  /// — 층 외곽선은 커서 그 배율까지 올라갈 일이 없다.
+  /// 층 도면 fit과 경로 개요의 **공통 몸통**이다 — chrome 보정과 줌 하한이 한 곳에만
+  /// 있어야 두 화면에서 같은 지점이 같은 높이에 온다. 상자를 구하는 규칙은 호출부가
+  /// 정한다([minAreaBoxFor] / [routeBoxFor]). [maxZoom]은 경로 개요만 준다.
   Future<bool> _animateCameraToFitBox(
     BuildingBox box, {
     required double topChromePx,
@@ -251,16 +219,10 @@ extension OutdoorMapMap on OutdoorMapBodyState {
     return true;
   }
 
-  /// 지금 화면 폭에서 쓸 실내 진입 임계값.
+  /// 지금 화면 폭에서 쓸 실내 진입 임계값([indoorEntryZoomThresholdFor]).
   ///
-  /// 고정값 [indoorEntryZoomThreshold]는 화면이 좁을수록 "더 깊이 확대해야
-  /// 닿는" 값이라, 폰에서는 건물이 화면 밖으로 넘칠 때까지 확대해야 진입이
-  /// 발화했다. 근거와 보정식은 [indoorEntryZoomThresholdFor] 참고.
-  ///
-  /// 확대 진입 판정([_handleCameraIdle])과 건물 포커스
-  /// ([_recenterOnBuildingIfNeeded])가 **같은 값을 봐야 한다.** 둘이 어긋나면
-  /// 포커스가 맞춰 준 zoom이 진입 임계값에 못 미쳐, 건물로 포커스는 됐는데
-  /// 정작 실내로는 들어가지 않는 상태가 만들어진다.
+  /// 확대 진입 판정과 건물 포커스가 **같은 값을 봐야 한다** — 어긋나면 포커스가
+  /// 맞춘 zoom이 임계값에 못 미쳐 건물로 가고도 실내로는 안 들어간다.
   double _entryZoomThreshold() {
     final footprint = _buildingFootprint;
     if (footprint == null || footprint.length < 3) {
@@ -332,16 +294,11 @@ extension OutdoorMapMap on OutdoorMapBodyState {
     );
   }
 
-  /// 길찾기 "지도에서 선택" 중에 매장이 아닌 곳을 눌렀을 때. 후보를 만들어
-  /// 넘겼으면 true(=이 탭은 여기서 끝난다).
+  /// 길찾기 "지도에서 선택" 중 매장이 아닌 곳을 눌렀을 때. 넘겼으면 true.
+  /// 스냅 규칙은 [_onMapPressedForPdr]와 같고, 노드까지 확정해 넘긴다.
   ///
-  /// 스냅 규칙은 [_onMapPressedForPdr]와 **같은 것**을 쓰고, 노드까지 확정해
-  /// 넘기는 이유도 실내 화면의 동명 처리와 같다(다익스트라가 노드에서 시작·종료
-  /// 하므로 노드 id 없는 후보는 경로를 만들지 못한다).
-  ///
-  /// 통로에서 너무 먼 탭은 **false를 돌려 흘려보낸다.** 실내와 다른 점이 여기다 —
-  /// 야외 지도에서 그 탭은 대개 "건물 밖을 눌러 실내에서 나가겠다"는 뜻이므로,
-  /// 여기서 삼키면 고르는 중에는 실내에서 빠져나올 방법이 사라진다.
+  /// 통로에서 너무 먼 탭은 **false로 흘려보낸다** — 야외에서 그 탭은 대개 "나가겠다"
+  /// 는 뜻이라, 삼키면 고르는 중에 실내에서 빠져나올 방법이 사라진다.
   bool _handleMapPickTap(ll.LatLng point) {
     final floor = _activeFloor;
     final graph = _floorGraph;

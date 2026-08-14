@@ -275,20 +275,11 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
         if (didPop && !_intentionalPop) widget.onCloseAll();
       },
       // **여기에 전체 화면 `GestureDetector(opaque)`를 두면 안 된다.**
+      // `isScrollControlled: true`라 child가 화면 전체 높이를 차지해, 위쪽 투명한
+      // 영역까지 히트 테스트에 걸려 지도가 보이는데 만질 수 없게 된다
+      // ([MapPassThroughSheetRoute] 주석의 세 겹 중 두 번째).
       //
-      // 예전에는 `DraggableScrollableSheet`를 `GestureDetector(onTap: maybePop,
-      // behavior: opaque)`로 감싸 "바깥을 눌러 닫기"를 처리했다. 그런데 이 시트는
-      // `isScrollControlled: true`라 라우트의 child가 **화면 전체 높이**를 차지한다.
-      // 시트는 아래 절반만 그려지지만 위쪽 투명한 영역도 `opaque` 탓에 히트
-      // 테스트에 걸려서, 지도가 보이는 자리의 탭·드래그가 전부 그 GestureDetector로
-      // 빨려 들어갔다 — 지도는 보이는데 만질 수 없었다([MapPassThroughSheetRoute]
-      // 주석의 세 겹 중 두 번째).
-      //
-      // 지금은 감싸지 않는다. `DraggableScrollableSheet`는 `expand: false`라
-      // 시트가 실제로 그려지는 영역만 히트 테스트에 잡히고, 그 위 빈 자리는
-      // 포인터를 지도로 그대로 흘린다. 시트 본문 자체는 아래 builder 안쪽의
-      // `GestureDetector(onTap: () {})`가 계속 막고 있어 시트를 눌렀을 때 지도가
-      // 함께 반응하는 일은 없다.
+      // `expand: false`면 실제로 그려지는 영역만 잡히고 그 위는 포인터를 흘린다.
       child: DraggableScrollableSheet(
         initialChildSize: kPlaceDetailSheetInitialSize,
         minChildSize: 0.3,

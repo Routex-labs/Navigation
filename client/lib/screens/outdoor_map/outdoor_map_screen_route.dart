@@ -40,20 +40,11 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
 
   /// 디버그 전용 — 실제 탑승 없이 층 전환 시퀀스를 태운다.
   ///
-  /// **판정기를 흉내 내는 것이지 우회하는 것이 아니다.** 판정기가 확정을 냈을 때
-  /// 타는 경로(시작 → 확정, [_beginEscalatorTransition] →
-  /// [_completeEscalatorTransition])에 합성 transition을 그대로 넣는다. 도면
-  /// 크로스페이드와 마커 활강·카메라 정렬([_swapIndoorFloorForRide]), 새 층
-  /// 앵커 복원, 재탐색까지 전부 프로덕션 코드가 돈다 — 여기서 따로 그리는 화면이 없으므로
-  /// 이 버튼으로 본 연출이 곧 실기기에서 에스컬레이터를 탔을 때의 연출이다.
+  /// **판정기를 흉내 내는 것이지 우회하는 것이 아니다.** 확정 시 타는 경로에 합성
+  /// transition을 넣을 뿐이라, 이 버튼으로 본 연출이 곧 실기기의 연출이다.
   ///
-  /// 도착 노드는 경로가 지목한 노드([IndoorRouteSegment.transferToNodeId])를
-  /// 그대로 쓴다. 실제 판정도 활성 경로가 있으면 같은 값을 우선한다
-  /// ([findEscalatorArrivalNode]의 1단계).
-  ///
-  /// 판정기 자체([EscalatorTransitionDetector])는 건드리지 않는다 — 수직 전이
-  /// 알고리즘은 재작성이 예정돼 있어, 거기 디버그 주입구를 뚫으면 재작성 때
-  /// 같이 갈아엎어야 할 표면만 는다.
+  /// 판정기([EscalatorTransitionDetector])는 건드리지 않는다 — 재작성이 예정돼 있어
+  /// 디버그 주입구를 뚫으면 갈아엎을 표면만 는다.
   void _debugForceFloorTransition() {
     final transfer = _debugForceableTransfer;
     final floor = _activeFloor;
@@ -90,15 +81,11 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     _enqueueFloorTransition(() => _completeEscalatorTransition(transition));
   }
 
-  /// 이 층 [nodeId]에서 목적지까지 경로를 다시 뽑는다.
+  /// 이 층 [nodeId]에서 목적지까지 경로를 다시 뽑는다. 같은 노드면 아무것도 하지
+  /// 않는다(진행률 기준점만 흔들린다).
   ///
-  /// 이미 그 노드에서 시작하는 경로가 그려져 있으면 아무것도 하지 않는다 —
-  /// 같은 계산을 두 번 돌리면 진행률 기준점만 다시 흔들린다.
-  ///
-  /// 연출을 붙이지 않는다. 카메라는 [_swapIndoorFloorForRide]가 하차 지점과
-  /// 내리는 방향에 맞춰 뒀고, 이 재계산은 그 자리를 실제 하차 노드 기준으로
-  /// 다듬는 것뿐이다. 전환이 끝난 뒤에 또 움직이면 사용자는 방금 자리 잡은
-  /// 화면이 한 번 더 흔들리는 것을 본다.
+  /// **연출을 붙이지 않는다** — 카메라는 이미 하차 지점에 맞춰져 있고, 여기서 또
+  /// 움직이면 방금 자리 잡은 화면이 한 번 더 흔들린다.
   Future<void> _recomputeRouteFrom({
     required String nodeId,
     required String floor,
@@ -175,17 +162,10 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
 
   /// 건물(입구·footprint·층 목록)을 로드한다.
   ///
-  /// **실패를 조용히 삼키면 안 된다.** 이 화면의 실내 기능은 전부 [_building]과
-  /// [_buildingFootprint]에 걸려 있다 — 층 선택기, 위치 지정, 확대/탭 실내 진입
-  /// 판정, 실내 도면 오버레이 등록이 모두 그렇다. 요청이 던지면 아래 setState가
-  /// 아예 실행되지 않아 그 전부가 **아무 표시 없이** 사라진다. 예전에는 이
-  /// 호출이 await도 catch도 없이 initState에서 발사돼 예외가 unhandled async
-  /// error로만 남았고, 화면에는 "야외 지도는 멀쩡한데 실내 기능만 없는" 상태가
-  /// 원인을 짚을 단서 하나 없이 남았다.
-  ///
-  /// 야외 지도 자체는 건물 없이도 쓸 수 있으므로, 실내 화면([IndoorMapBody])
-  /// 처럼 전체 화면 에러로 덮지 않는다. 지도는 그대로 두고 재시도가 달린 배지만
-  /// 띄워, 사용자가 왜 실내 기능이 없는지 알고 그 자리에서 복구할 수 있게 한다.
+  /// **실패를 조용히 삼키면 안 된다** — 실내 기능 전부가 [_building]에 걸려 있어,
+  /// 예외가 unhandled async error로만 남으면 "야외는 멀쩡한데 실내 기능만 없는"
+  /// 화면이 단서 없이 남는다. 야외는 건물 없이도 쓸 수 있으므로 전체 화면 에러
+  /// 대신 재시도가 달린 배지만 띄운다.
   Future<void> _loadBuildingEntrance() async {
     final Building? building;
     try {
@@ -227,12 +207,8 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
 
   /// 지상 출입구 목록을 받아 [_groundEntrances]를 채운다.
   ///
-  /// 실패는 조용히 넘긴다. 문을 못 받으면 문을 경유하지 않는 예전 안내(목적지
-  /// 좌표로 바로 걷기 경로)로 폴백하는 것이 맞고, 여기서 에러를 띄우면 야외
-  /// 지도를 쓰던 사용자에게 아무 조치도 못 할 경고만 남는다.
-  ///
-  /// [floor]는 건물의 기본 층(=출입구가 있는 지상층)이다. 백엔드가
-  /// `default_floor`로 "출입구가 있는 지상 1층"을 내려주므로 그 값을 그대로 쓴다.
+  /// **실패는 조용히 넘긴다** — 문을 못 받으면 목적지 좌표로 바로 걷는 예전 안내로
+  /// 폴백하는 것이 맞고, 에러를 띄워 봐야 사용자가 할 수 있는 조치가 없다.
   Future<void> _loadGroundEntrances(String buildingId, String floor) async {
     final Map<String, dynamic>? geojson;
     try {
@@ -250,15 +226,11 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     _syncSelectedEntrance();
   }
 
-  /// 현재 위치에서 가장 가까운 문을 다시 고르고, 바뀌었으면 상태에 반영한다.
+  /// 현재 위치에서 가장 가까운 문을 다시 고르고, [_entrance]도 함께 갱신한다.
+  /// 그 값은 **실내 진입/이탈 판정 전체**의 기준점이라, null이던 동안 GPS 자동
+  /// 진입이 조건을 만족해도 발화하지 못했다.
   ///
-  /// 여기서 [_entrance]도 함께 갱신한다. 그 값은 이 화면의 **실내 진입/이탈
-  /// 판정 전체**가 보는 기준점이다. 백엔드 건물 응답에는 출입구 좌표가 없어
-  /// 지금까지 이 값이 계속 null이었고, 그래서 GPS 자동 진입은 조건을 아무리
-  /// 만족해도 발화하지 못했다. 문 좌표가 생긴 지금이 그 기준점을 채울 자리다.
-  ///
-  /// 위치를 아직 못 잡았으면 건물 중심을 대신 쓴다 — 문 하나라도 골라 둬야
-  /// 진입 판정이 살아 있고, 실제 위치가 들어오면 곧바로 다시 고른다.
+  /// 위치를 못 잡았으면 건물 중심을 쓴다 — 하나라도 골라 둬야 판정이 살아 있다.
   void _syncSelectedEntrance() {
     if (_groundEntrances.isEmpty) return;
     final position = _position;
@@ -279,15 +251,11 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     });
   }
 
-  /// [fromPositionStream]이 true면 **마지막으로 요청한 지점에서 충분히 움직였을
-  /// 때만** TMAP을 다시 부른다([shouldRecomputeRouteAfterMove]). 위치 스트림이
-  /// 1초에 한 번 오게 된 뒤로, 걸으면서 이 함수를 부를 때마다 요청을 내보내면
-  /// 초당 한 번씩 외부 API를 두드린다.
+  /// [fromPositionStream]이 true면 **충분히 움직였을 때만** TMAP을 다시 부른다
+  /// ([shouldRecomputeRouteAfterMove]) — 안 그러면 초당 한 번씩 외부 API를 두드린다.
   ///
-  /// **사용자가 목적지를 고른 호출(false)은 절대 거르지 않는다.** 제자리에 서서
-  /// 도착지를 눌렀을 때 "아무 일도 일어나지 않는" 화면이 되기 때문이다. 문 재선택
-  /// ([_retargetJourneyEntrance])은 네트워크를 타지 않으므로 거르는 쪽에 두지
-  /// 않는다 — 좌표가 올 때마다 그대로 돈다.
+  /// **사용자가 목적지를 고른 호출(false)은 절대 거르지 않는다** — 제자리에서
+  /// 도착지를 눌렀을 때 아무 일도 안 일어나는 화면이 된다.
   Future<void> _updateRoute(
     Position position, {
     bool fromPositionStream = false,
@@ -302,14 +270,9 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     // 다시 계산하면 사용자가 비교하려고 보고 있는 선이 걸음마다 흔들린다.
     if (_fixedRouteOrigin != null) return;
 
-    // 야외 걷기 경로는 **사용자가 목적지를 고른 경우에만** 그린다.
-    //
-    // 예전에는 목적지가 없으면 [_entrance]로 폴백했지만, 백엔드가 건물 출입구
-    // 좌표를 내려주지 않아 그 값이 늘 null이었고 폴백은 한 번도 실행되지 않았다.
-    // 이제 [_syncSelectedEntrance]가 실제 문 좌표로 그 값을 채우므로, 폴백을
-    // 그대로 두면 앱을 켜고 GPS가 잡히는 것만으로 아무도 요청하지 않은
-    // "가장 가까운 문까지" 경로가 그려지고, 위치가 갱신될 때마다 TMAP 요청이
-    // 나간다. [_entrance]는 진입/이탈 판정의 기준점이지 목적지가 아니다.
+    // 야외 걷기 경로는 **사용자가 목적지를 고른 경우에만** 그린다. [_entrance]로
+    // 폴백하면 앱을 켜고 GPS가 잡히는 것만으로 아무도 요청하지 않은 경로가 그려지고
+    // 좌표마다 TMAP 요청이 나간다 — 그 값은 판정 기준점이지 목적지가 아니다.
     final target = _userDestination;
     if (target == null) return;
 
@@ -462,18 +425,9 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     _notifyRouteStateIfChanged();
     final isVisible = route != null;
     if (!wasVisible && isVisible) {
-      // **자동으로 생긴 경로는 카메라를 가져가지 않는다.**
-      //
-      // 야외에서 GPS가 잡히면 사용자가 부탁한 적 없어도 건물 입구까지의 걷기
-      // 경로를 계산한다([_updateRoute]의 `_userDestination ?? _entrance`).
-      // 그 경로가 처음 생기는 순간 여기서 전체를 화면에 맞추면, 사용자가 지금
-      // 무엇을 보고 있든 **내 위치부터 건물까지**가 다 들어오는 배율로 튕겨
-      // 나간다. 멀리 있을수록 심해서, 검색으로 건물을 찾아 막 확대한 화면이
-      // 도시 전체 축척으로 바뀌고 정작 건물은 점이 된다 — "건물 위치가 안
-      // 나온다"의 정체가 이것이다.
-      //
-      // 사용자가 직접 고른 목적지([_userDestination])면 그대로 맞춘다. 그건
-      // "이 경로를 보여 달라"는 요청이라 화면을 가져가는 것이 맞다.
+      // **자동으로 생긴 경로는 카메라를 가져가지 않는다.** 맞춰 버리면 막 확대한
+      // 화면이 도시 축척으로 바뀌고 건물이 점이 된다 — "건물 위치가 안 나온다"의
+      // 정체가 이것이다. 사용자가 직접 고른 목적지면 그대로 맞춘다.
       if (_userDestination != null) _fitCameraToRoute(route);
     }
   }
@@ -486,19 +440,12 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     _fitCameraToPoints(route.points);
   }
 
-  /// 길찾기가 **미리 계산해 온** 도로 경로(자동차·도보)를 그대로 그린다.
+  /// 길찾기가 **미리 계산해 온** 도로 경로를 그대로 그린다. [showRouteTo]와 나눈
+  /// 이유는 다시 부르면 같은 구간을 두 번 조회하고, 두 응답이 달라지면 카드와
+  /// 지도가 다른 경로를 말하기 때문이다.
   ///
-  /// [showRouteTo]와 나눈 이유는 경로를 누가 계산하느냐가 다르기 때문이다.
-  /// showRouteTo는 목적지만 받아 이 화면이 직접 TMAP을 부르지만, 길찾기는 요약
-  /// 카드에 적을 거리·시간이 필요해 이미 응답을 손에 쥐고 있다. 여기서 다시
-  /// 부르면 같은 구간을 두 번 조회하고, 두 응답이 미묘하게 달라지면 카드와
-  /// 지도가 다른 경로를 말하게 된다.
-  ///
-  /// 출발점을 [_fixedRouteOrigin]으로 박는 것이 중요하다. 이건 걷는 동안 따라가는
-  /// 안내가 아니라 **한 번 그려 놓고 비교하는 계획 화면**이라, GPS가 갱신될
-  /// 때마다 경로가 다시 계산되면 사용자가 보던 선이 흔들린다.
-  ///
-  /// [offerStartGuidance]가 참이면 하단 카드에 "안내 시작"을 붙인다.
+  /// 출발점을 [_fixedRouteOrigin]으로 박는다 — 따라가는 안내가 아니라 **비교하는
+  /// 계획 화면**이라, GPS마다 다시 계산되면 보던 선이 흔들린다.
   Future<void> showPlannedRoadRoute(
     DirectionsRoute route, {
     required ll.LatLng origin,
@@ -528,17 +475,11 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     _applyRoute(route);
   }
 
-  /// [point]가 우리 실내 도면이 있는 건물 **안**이면, 그 건물의 지상 출입구
-  /// 좌표를 돌려준다. 밖이거나 건물을 아직 못 받았으면 null.
+  /// [point]가 우리 도면이 있는 건물 **안**이면 그 건물의 지상 출입구 좌표를
+  /// 돌려준다. POI 좌표를 그대로 끝점으로 쓰면 TMAP이 가장 가까운 도로로 스냅해
+  /// 들어갈 수 없는 면에 사용자를 내려놓는다.
   ///
-  /// TMAP POI 중에는 건물 **안** 매장이 섞여 있다(예: 백화점 입점 브랜드).
-  /// 그 좌표를 도로 안내의 끝점으로 그대로 쓰면 도착점이 건물 내부라, TMAP이
-  /// 가장 가까운 도로로 스냅하면서 실제로 들어갈 수 있는 문과 다른 면에
-  /// 사용자를 내려놓는다.
-  ///
-  /// 여기는 **엄격한** 판정을 쓴다. 묻는 것이 "이 좌표를 안내의 끝점으로 써도
-  /// 되는가"이고, 그게 못 쓰는 좌표가 되는 건 정말로 건물 안일 때뿐이다.
-  /// [isAtIndoorBuilding]처럼 여유를 주면 건물 옆 노점까지 건물 문으로 안내한다.
+  /// **엄격한 판정을 쓴다** — 여유를 주면 건물 옆 노점까지 건물 문으로 안내한다.
   ll.LatLng? entranceIfInsideBuilding(ll.LatLng point) {
     final footprint = _buildingFootprint;
     final inside = footprint != null && isPointInPolygon(point, footprint);
@@ -673,20 +614,11 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     unawaited(_syncDestinationLayer());
   }
 
-  /// "이 건물까지" 안내할 때 쓸 도착 좌표.
+  /// "이 건물까지" 안내할 때 쓸 도착 좌표. 지상 출입구 → [_entrance] → 외곽선
+  /// 중심 순으로 떨어지고, 셋 다 없으면 null(호출부가 버튼을 감춘다).
   ///
-  /// 지상 출입구를 **먼저** 고른다. 건물 중심을 도착점으로 주면 TMAP 보행자
-  /// 경로가 건물 안쪽을 향하다가 가장 가까운 도로로 스냅해, 실제로 들어갈 수
-  /// 있는 문과 다른 면에 사용자를 내려놓는다. 문은 출발 지점에서 가까운 것을
-  /// 고른다 — [showOutdoorToIndoorRouteTo]가 매장 안내에서 쓰는 규칙과 같다.
-  ///
-  /// 문 데이터가 없는 건물이면 [_entrance](백엔드 출입구 좌표)로, 그것도 없으면
-  /// 외곽선 중심으로 떨어진다. 셋 다 없으면 null이고, 호출부는 그때 도착·출발
-  /// 버튼 자체를 감춘다.
-  ///
-  /// [buildingId]를 받는 이유는 이 화면이 **한 채**의 건물만 로드하기
-  /// 때문이다(demoBuildingId). 인자 없이 좌표만 돌려주면, 호출부가 다른 건물을
-  /// 물었을 때도 이 건물의 문을 돌려줘 엉뚱한 좌표가 그 건물의 도착지로 박힌다.
+  /// [buildingId]를 받는 이유는 이 화면이 **한 채**만 로드하기 때문이다 — 좌표만
+  /// 돌려주면 다른 건물을 물었을 때도 이 건물의 문이 그 건물 도착지로 박힌다.
   ll.LatLng? entrancePointFor(String buildingId) {
     if (_building?.id != buildingId) return null;
     final position = _position;
@@ -725,20 +657,13 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     _notifyRouteStateIfChanged();
   }
 
-  /// 같은 층 안에서 계산한 실내 경로를 지도에 얹는다. 활성 층이 목적지 층과
-  /// 다르면 먼저 그 층으로 오버레이를 전환해 필요한 그래프를 다시 로드한다.
-  /// [startNodeId]가 주어지면(길찾기 시트에서 매장을 출발지로 고른 경우) 그
-  /// 노드에서 바로 출발하고, null이면 PDR 앵커 주변 최근접 통로 노드를 찾는다.
+  /// 같은 층 안에서 계산한 실내 경로를 지도에 얹는다. [startNodeId]가 없으면 PDR
+  /// 앵커 주변 최근접 통로 노드를 찾는다.
   ///
-  /// [playOverview]는 경로를 그린 뒤 개요 연출([_fitCameraToRouteSegment])을 할지다.
-  /// **기본값을 두지 않는다** — 안내 시작이냐 재탐색이냐에 따라 답이 정반대라,
-  /// 빠뜨리면 조용히 틀린 쪽으로 굴러간다.
-  ///
-  /// [beginNewRecordingSession]도 같은 이유로 기본값이 없다. 사용자가 목적지를
-  /// 새로 고른 경우에만 true다. 재탐색·층 전환 후 재계산은 **같은 길안내의
-  /// 연속**이라 false — 여기서 세션을 갈면 층 전환마다 진단 로그가 지워져,
-  /// 정작 분석하려는 구간(에스컬레이터 탑승)이 파일에 안 남는다(2026-08-13
-  /// 실측에서 주행 로그가 마지막 재탐색 이후 10초만 남았다).
+  /// [playOverview]·[beginNewRecordingSession] **둘 다 기본값을 두지 않는다** —
+  /// 안내 시작이냐 재탐색이냐에 따라 답이 정반대라 빠뜨리면 조용히 틀린 쪽으로
+  /// 굴러간다. 특히 후자를 재탐색에서 true로 두면 층 전환마다 진단 로그가 지워져
+  /// 분석하려는 구간이 파일에 안 남는다(실측: 마지막 재탐색 이후 10초만 남았다).
   Future<void> _computeAndShowSingleFloorIndoorRoute({
     required String buildingId,
     required String floor,
@@ -818,14 +743,9 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     }
   }
 
-  /// 층이 다른 매장까지의 층 간 경로를 계산해 층별 세그먼트로 나누고, 현재
-  /// 화면(_activeFloor)에 해당하는 세그먼트를 지도에 얹는다. 층 chip으로
-  /// 다른 층을 훑으면 [_switchOverlayFloor]가 그 층 세그먼트로 갈아탄다.
-  /// 시작 층부터 훑도록 활성 층을 자동으로 시작 층으로 전환한다.
-  /// [startNodeId]가 주어지면(길찾기 시트에서 매장을 출발지로 고른 경우) 그
-  /// 노드에서 바로 출발하고, null이면 PDR 앵커 기준으로 시작 노드를 고른다.
-  /// [playOverview]·[beginNewRecordingSession]의 뜻은
-  /// [_computeAndShowSingleFloorIndoorRoute]와 같다.
+  /// 층 간 경로를 층별 세그먼트로 나누고 현재 층 세그먼트를 지도에 얹는다. 활성
+  /// 층은 시작 층으로 자동 전환되고, 층 chip으로 훑으면 그 층 세그먼트로 갈아탄다.
+  /// 인자의 뜻은 [_computeAndShowSingleFloorIndoorRoute]와 같다.
   Future<void> _computeAndShowMultiFloorIndoorRoute({
     required String buildingId,
     required String startFloor,
@@ -1034,28 +954,14 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     }
   }
 
-  /// 안내가 시작된 순간, **지금 층 경로 전체**가 한눈에 들어오도록 카메라를 한 번
-  /// 크게 움직인다.
+  /// 안내가 시작된 순간 **지금 층 경로 전체**가 들어오도록 카메라를 한 번 크게
+  /// 움직인다. 층 도면이 아니라 경로에 맞추는 이유는 사용자가 알고 싶은 것이
+  /// "어디로 얼마나 가나"이기 때문이고, 지금 층만 담는 이유는 다층 상자에는
+  /// 화면에 없는 층 좌표까지 들어가 지금 걸을 구간이 도리어 안 보이기 때문이다.
   ///
-  /// ## 왜 층 도면이 아니라 경로에 맞추나
-  ///
-  /// 안내를 시작한 사용자가 알고 싶은 것은 "이 층이 어떻게 생겼나"가 아니라
-  /// "어디로 얼마나 가나"다. 층 전체를 담으면 경로는 그 안 한 귀퉁이의 짧은
-  /// 선이 되어 진행 방향이 읽히지 않는다.
-  ///
-  /// ## 왜 지금 층 세그먼트만인가
-  ///
-  /// 다층 경로 전체를 담으려 하면 **화면에 없는 층의 좌표까지** 상자에 들어간다.
-  /// 층마다 도면 위치가 어긋나 있으면 상자가 엉뚱하게 커지고, 그만큼 축소돼
-  /// 지금 걸을 구간이 도리어 안 보인다. 층은 [_swapIndoorFloorForRide]가 바뀔
-  /// 때마다 다시 맞춘다.
-  ///
-  /// ## 왜 newLatLngBounds를 안 쓰나
-  ///
-  /// 예전 `_fitCameraToIndoorRoute`가 그걸 썼는데, 그 API는 **항상 정북 정렬
-  /// 기준으로 계산해 bearing을 0으로 되돌린다.** 진입·층 전환에서 애써 세로로
-  /// 세워 둔 도면이 안내를 시작하는 순간 도로 비스듬히 누웠다. 회전을 유지하려면
-  /// [_animateCameraToFitPoints]처럼 `newCameraPosition`으로 직접 계산해야 한다.
+  /// **`newLatLngBounds`를 쓰지 않는다** — 그 API는 bearing을 0으로 되돌려, 애써
+  /// 세워 둔 도면이 안내를 시작하는 순간 도로 눕는다
+  /// (`docs/client/camera-choreography-plan.md` 4.1).
   Future<void> _fitCameraToRouteSegment(
     IndoorRoute route, {
     Duration duration = routeOverviewDuration,

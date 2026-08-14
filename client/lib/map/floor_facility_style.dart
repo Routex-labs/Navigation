@@ -4,38 +4,23 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
-/// 에스컬레이터/엘리베이터/유아차 전용 E/V — 수직이동 구조물 폴리곤을 초록톤으로
-/// 덧칠해 주변 매장에서 눈에 띄게 하기 위한 name 매칭 값. 백엔드 벡터 타일에는
-/// category 속성이 없어 name으로 매칭한다. 매칭이 어긋나면(백엔드 name 변경 등)
-/// 초록 하이라이트만 빠지고 일반 매장 스타일로 폴백된다.
+/// 수직이동 구조물 폴리곤을 초록톤으로 덧칠하기 위한 name 매칭 값. 벡터 타일에
+/// category 속성이 없어 name으로 매칭하고, 어긋나면 하이라이트만 빠진다.
 ///
-/// 야외 오버레이(`OutdoorMapBody`)가 층을 오갈 때 수직이동 폴리곤이 일관되게
-/// 강조되려면 이 목록이 한 곳에 있어야 한다 — fill·라벨·아이콘 레이어가 각자
-/// 이 이름을 보기 때문이다.
+/// fill·라벨·아이콘 레이어가 각자 이 이름을 보므로 한 곳에 있어야 한다.
 const kVerticalTransportStoreNames = <String>[
   '에스컬레이터',
   '엘리베이터',
   '유아차 전용 E/V',
 ];
 
-/// 매장명 라벨 레이어에서 **아이콘이 이미 말해 주는 것**을 걸러내는 MapLibre 필터.
+/// 매장명 라벨에서 **아이콘이 이미 말해 주는 것**을 걸러내는 필터. 둘을 뺀다.
 ///
-/// 두 종류를 뺀다.
+/// **수직이동 시설**(에스컬레이터 152·엘리베이터 68개)은 이름 자체가 중복이라
+/// 도면을 도배했다. **편의시설**은 이름을 살려야 하지만(「ATM (하나은행)」) 전용
+/// 아이콘 레이어가 이미 있어, 여기서 빼고 텍스트 전용 레이어가 이름만 그린다.
 ///
-/// **수직이동 시설** — 이 건물에는 에스컬레이터 152개, 엘리베이터 68개가 있고
-/// 전부 매장과 같은 무게의 텍스트 라벨을 달고 있었다. 도면이 "에스컬레이터"로
-/// 도배되어 정작 읽어야 할 매장명이 그 사이에 묻혔다. 아이콘이 이미 무슨
-/// 시설인지 말하므로 이름은 중복이다 — 구글·네이버도 에스컬레이터에 텍스트를
-/// 붙이지 않는다.
-///
-/// **[kStoreFacilityStyleByName]의 편의시설** — 이쪽은 이름을 **살려야 한다**
-/// (「ATM (하나은행)」은 이름이 정보다). 다만 전용 아이콘 레이어가 이미 아이콘을
-/// 그리고 있어서, 이 레이어까지 카테고리 아이콘을 붙이면 같은 폴리곤에 아이콘이
-/// 두 개 뜬다. 그래서 여기서 빼고 [facilityStoreLabelFilter]가 고른 **텍스트
-/// 전용** 레이어가 이름만 그린다.
-///
-/// `==`를 뒤집은 `!=`의 `all`이다. 같은 파일의 fill 필터가 `any` + `==`로
-/// 시설물만 고르는 것과 정확히 반대 집합이라, 한쪽을 고치면 다른 쪽도 본다.
+/// fill 필터(`any` + `==`)와 정확히 반대 집합이라 한쪽을 고치면 다른 쪽도 본다.
 List<Object> storeLabelWithCategoryIconFilter() => [
   'all',
   for (final name in kVerticalTransportStoreNames)
@@ -65,29 +50,20 @@ List<Object> facilityStoreLabelFilter() => [
     ],
 ];
 
-/// 이름을 **그리면 안 되는** POI `type`.
+/// 이름을 **그리면 안 되는** POI `type`. 이들의 `name`은 노드 식별자 그대로라
+/// (`ES1-DN(FR3F)`) 한 층에 영문 코드가 200개 넘게 떠 있었다.
 ///
-/// 이 POI들의 `name`은 노드 식별자 그대로라(`ES1-DN(FR3F)` · `EV1`) 사람에게 보여
-/// 줄 이름이 아니다. 실내 도면 한 층에 그런 영문 코드가 200개 넘게 떠 있었다.
-///
-/// **아이콘은 남긴다** — 위치 자체는 필요한 정보이고, 무슨 시설인지는
-/// [kPoiIconByType]이 말한다. `vertical-connection`은 더현대 데이터엔 없지만 다른
-/// 데이터셋을 위해 같이 막는다.
-///
-/// 왜 매장 라벨 쪽에서는 안 보였는지는 `docs/client/map-style-rules.md`.
+/// **아이콘은 남긴다** — 위치는 필요하고 종류는 [kPoiIconByType]이 말한다.
 const kVerticalTransportPoiTypes = <String>[
   'elevator',
   'escalator',
   'vertical-connection',
 ];
 
-/// POI 이름 라벨 필터. [kVerticalTransportPoiTypes]를 뺀 나머지(화장실·출구 등)만
-/// 이름을 그린다.
+/// POI 이름 라벨 필터. [kVerticalTransportPoiTypes]를 뺀 나머지만 이름을 그린다.
 ///
-/// `!=`의 `all`이다 — [storeLabelWithCategoryIconFilter]와 같은 형태를 쓴다.
-/// `['match', ...]`나 `['!', ['in', ...]]`가 MapLibre GL Native에서 예외도
-/// 로그도 없이 매치 0건이 되던 전례가 있어 검증된 쪽으로 통일한다
-/// (근거는 [category_map_filter.dart]에 적어 뒀다).
+/// `!=`의 `all`을 쓴다 — `match`·`in`이 native에서 예외도 로그도 없이 매치 0건이
+/// 되던 전례가 있다(map-style-rules.md 0절).
 List<Object> poiLabelFilter() => [
   'all',
   for (final type in kVerticalTransportPoiTypes)
@@ -114,29 +90,11 @@ const kPoiIconByType = <String, IconData>{
 const kDefaultPoiIcon = Icons.place;
 const kPoiIconBackgroundColor = Color(0xFF76AE6D);
 
-/// 실내 지도 위 **모든 마커의 지름(논리 px)**. 화장실·정수기 같은 편의시설,
-/// POI, 그리고 매장 라벨 옆 대분류 배지가 전부 이 하나를 쓴다.
+/// 실내 지도 위 **모든 마커의 지름(논리 px)**. 편의시설·POI·대분류 배지가 전부
+/// 이 하나를 쓴다 — 두 벌로 두면 한쪽만 조정할 때마다 다시 갈라진다.
 ///
-/// ## 왜 하나로 묶었나
-///
-/// "대분류 아이콘을 화장실만큼 해 달라"는 피드백이다. 값을 두 벌로 두면 한쪽만
-/// 조정할 때마다 다시 갈라진다 — 실제로 그렇게 갈라져 있었다. 배지는 화면 배율을
-/// 곱해 논리 px으로 잡혀 있었고([storeCategoryIconSize]) 시설 아이콘은 배율 없는
-/// 스칼라(0.42)라, 같은 숫자를 써도 기기마다 다른 비율로 벌어졌다.
-///
-/// ## 값의 근거
-///
-/// 12는 **시설 아이콘이 지금 보이는 크기 그대로**다. 예전 값 0.42는 비트맵
-/// 96px에 곱하는 배율이라 화면에서 40 물리 px이었고, 이 기기(배율 3.5)에서
-/// 약 11.5 논리 px이다. 그 크기는 두 번의 피드백을 통과한 값이라(0.28은 "안
-/// 보인다", 0.6은 "너무 크다") 기준으로 삼을 만하다.
-///
-/// **바뀐 것은 기기 간 일관성이다.** 예전엔 어느 기기에서나 40 **물리** px이라
-/// 고밀도 화면일수록 작아 보였는데, 이제 어느 기기에서나 12 **논리** px으로
-/// 같은 크기로 보인다.
-///
-/// 더 키우려면 [renderPoiIconPng]·[renderFacilityIconPng]의 캔버스(96px)도 같이
-/// 올려야 한다 — 그보다 크게 그리면 확대 렌더링이라 아이콘이 흐려진다.
+/// 값의 근거와 "더 키우려면 캔버스도 함께 올린다"는 제약은
+/// `docs/client/map-style-rules.md` 7절.
 const kIndoorMarkerLogicalPx = 12.0;
 
 /// 아이콘 비트맵 캔버스 한 변(px). [renderPoiIconPng] 등이 굽는 크기이자
@@ -145,41 +103,22 @@ const kIconCanvasPx = 96.0;
 
 /// [kIndoorMarkerLogicalPx]를 `icon-size` 값으로 환산한다.
 ///
-/// `icon-size`는 비트맵의 **물리** 픽셀에 곱해지는데 `text-size`는 논리 픽셀이라,
-/// 배율을 곱하지 않으면 고밀도 화면에서 아이콘만 배율만큼 작아진다. 이 저장소가
-/// 실제로 그 버그를 겪었다(`category_map_icon.dart`의 실측표).
+/// **네이티브에서만 배율을 곱한다** — 웹은 비트맵을 `pixelRatio: 1`로 등록해
+/// `icon-size`가 이미 논리 픽셀이다(근거·실측: map-style-rules.md 7절).
 ///
-/// ## 웹에서는 배율을 곱하면 안 된다
-///
-/// 위 "물리 픽셀" 전제는 **네이티브(Android·iOS)에만** 해당한다. 웹 구현은
-/// 비트맵을 `pixelRatio: 1`로 등록하기 때문에(`maplibre_gl_web` 0.26.2의
-/// `MapLibreWebGlPlatform.addImage`) `icon-size`가 곱해지는 대상이 CSS 픽셀,
-/// 즉 논리 픽셀이다. 여기서 배율까지 곱하면 아이콘만 배율배로 커진다 —
-/// Chrome 기기 에뮬레이션(iPhone 12, 배율 3)에서 12 논리 px짜리 배지가 36 px으로
-/// 떴고, 폰에서는 멀쩡한데 웹에서만 크다는 제보가 이것이다.
-///
-/// [isWeb]은 테스트가 두 갈래를 모두 고정할 수 있게 뚫어 둔 구멍이다. 실행
-/// 경로에서는 넘기지 않는다(`service_locator.dart`가 쓰는 방식과 같다).
+/// [isWeb]은 테스트가 두 갈래를 고정할 수 있게 뚫어 둔 구멍이다.
 double indoorMarkerIconSize(double devicePixelRatio, {bool? isWeb}) =>
     kIndoorMarkerLogicalPx *
     ((isWeb ?? kIsWeb) ? 1.0 : devicePixelRatio) /
     kIconCanvasPx;
 
-/// 매장 폴리곤이지만 이름이 이 표에 있는 시설(화장실·정수기 등)은 라벨 옆에
-/// 종류별 아이콘을 함께 얹는다. POI(엘리베이터·에스컬레이터 등)와 달리 이
-/// 시설들은 백엔드에서 `pois` 레이어가 아니라 `stores` 레이어에 들어오기 때문에
-/// POI 아이콘 매핑만으로는 눈에 띄지 않는다.
+/// 이름이 이 표에 있는 시설(화장실·정수기 등)은 라벨 옆에 종류별 아이콘을 얹는다.
+/// 이 시설들은 `pois`가 아니라 `stores` 레이어로 들어와 POI 매핑에 안 걸린다.
 ///
-/// **subcategory가 아니라 name으로 매칭하는 이유**는 세밀함이다. 벡터 타일은
-/// `category`·`subcategory`를 싣지만(`backend/app/geo/tiling.py`의
-/// `_store_properties`), 이 표가 구분하려는 것은 소분류보다 잘다 — 화장실과
-/// 장애인화장실은 subcategory가 같은 `생활편의`인데 아이콘은 달라야 한다.
+/// **subcategory가 아니라 name으로 매칭한다** — 화장실과 장애인화장실은
+/// subcategory가 같은 `생활편의`인데 아이콘은 달라야 한다.
 ///
-/// 화장실은 흰 원 안에 파란 Icons.man과 분홍 Icons.woman을 나란히 얹어 남/여
-/// 화장실임이 한눈에 읽히도록 한다(duo 스타일에서 left/rightBackground 값은
-/// 배경색이 아니라 좌/우 아이콘 색으로 쓰인다). 장애인화장실은 접근성 파랑 원에
-/// 휠체어 아이콘(Icons.accessible)을 얹고, 나머지 시설은 다른 POI와 동일하게
-/// 초록 원 위에 흰 아이콘으로 그린다.
+/// duo 스타일에서 left/rightBackground는 배경색이 아니라 **좌/우 아이콘 색**이다.
 const kStoreFacilityStyleByName = <String, FacilityIconStyle>{
   '화장실': FacilityIconStyle.duo(
     leftIcon: Icons.man,
