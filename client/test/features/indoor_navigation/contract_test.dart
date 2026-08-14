@@ -104,6 +104,12 @@ class FakeIndoorNavigation implements IndoorNavigationController {
   @override
   Future<void> resumeStepTracking() async => log.add('resumeSteps');
 
+  @override
+  Future<void> onAppBackgrounded() async => log.add('backgrounded');
+
+  @override
+  Future<void> onAppForegrounded() async => log.add('foregrounded');
+
   // 테스트 구동용.
   void pushCalibration(CalibrationStatus s) {
     _calib = s;

@@ -81,6 +81,7 @@ import 'map_camera_commands.dart';
 import 'marker_map_layers.dart';
 import 'shape_map_layers.dart';
 import 'pdr_debug_map_layers.dart';
+import 'pdr_session_lifecycle.dart';
 import 'route_map_layers.dart';
 import 'transit_map_layers.dart';
 
@@ -599,8 +600,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   ll.LatLng? _pendingOutdoorDestination;
   String? _pendingOutdoorLabel;
 
-  /// 진행 중인 PDR 세션 정지. 다음 시작이 이걸 기다린다([_awaitPdrStop]).
-  Future<void>? _pdrStopInFlight;
+  /// PDR 센서 세션을 언제 켜고 끌지. 정지가 끝나기를 기다리는 일도 여기가 한다.
+  late final PdrSessionLifecycle _pdrLifecycle = PdrSessionLifecycle(
+    driver: indoorNavigationDriver,
+    // 전역 seam을 호출 시점에 읽는다 — 테스트가 setUp에서 갈아끼운다.
+    isPermissionGranted: () => isPedometerPermissionGranted(),
+  );
 
   /// 지상 출입구가 있는 층. [_groundEntrances]와 짝이라 함께 채운다 — 출구를
   /// 실내 경로의 도착 노드로 쓰려면 좌표·노드만이 아니라 **층**도 있어야 한다.
@@ -1940,65 +1945,35 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   ///   - 실내 경로를 안 버리면 목적지가 건물 안이던 안내가 야외 화면에 남는다.
   ///
   /// 세션 정지는 여기서 기다리지 않는다 — 화면 상태는 지금 즉시 맞아야 한다.
-  /// 대신 **그 Future를 [_pdrStopInFlight]에 남겨** 다음 시작이 기다리게 한다.
-  /// 이유는 그 필드 주석에 있다.
+  /// 대신 그 Future를 [_pdrLifecycle]이 들고 있다가 다음 시작이 기다리게 한다.
+  /// 이유는 [PdrSessionLifecycle.awaitStop] 주석에 있다.
   void _dropIndoorPosition() {
     _pdrTrailState.beginNewSession();
     _syncCorridorTracking(null);
     _clearIndoorRoute();
-    final stopping = indoorNavigationDriver.stopGuidance();
-    _pdrStopInFlight = stopping;
-    unawaited(stopping);
+    _pdrLifecycle.stopWithoutWaiting();
   }
 
-  /// 아직 끝나지 않은 [IndoorNavigationController.stopGuidance]가 있으면 기다린다.
+  /// 세션이 꺼져 있으면 활성 층으로 켠다.
   ///
-  /// ## 왜 기다려야 하는가
-  ///
-  /// `stopGuidance`는 상태를 곧바로 `idle`로 바꾸지 않는다. 먼저 `stopping`으로
-  /// 두고 네이티브 pedometer를 flush·정지한 **뒤에야** `idle`이 된다. 그 사이에
-  /// 사용자가 건물로 다시 들어오면 [_bindPdrSessionToFloor]가 "idle이 아니네 →
-  /// 이미 세션이 돌고 있구나"로 잘못 읽고 그대로 `true`를 돌려준다.
-  ///
-  /// 그러면 세션 없이 앵커만 찍힌다. 화면에는 실내 위치가 **뜨는데**(그 마커는
-  /// PDR이 아니라 [indoorLocationEstimateController]의 추정값이 그린다) 걸음이
-  /// 쌓이는 세션이 없어 **한 발짝도 움직이지 않는다.** 야외에 나갔다 다시 들어온
-  /// 뒤 위치가 굳어 있던 것이 이것이다.
-  Future<void> _awaitPdrStop() async {
-    final stopping = _pdrStopInFlight;
-    if (stopping == null) return;
-    try {
-      await stopping;
-    } on Object {
-      // 정지에 실패해도 시작은 시도해야 한다. 여기서 멈추면 센서가 한 번
-      // 어긋난 뒤로 실내 위치가 영영 안 잡힌다.
-    }
-    if (identical(_pdrStopInFlight, stopping)) _pdrStopInFlight = null;
-  }
-
-  Future<void> _startPdrIfIdle() async {
-    // 아래 idle 판정이 정지 중인 세션을 "돌고 있다"로 읽지 않게 한다.
-    await _awaitPdrStop();
-    if (!mounted) return;
-    final floor = _activeFloor;
-    final graph = _floorGraph;
-    if (floor == null ||
-        graph == null ||
-        graph.nodes.isEmpty ||
-        graph.edges.isEmpty) {
-      return;
-    }
-    if (indoorNavigationDriver.currentRuntimeStatus.state !=
-        PdrRuntimeState.idle) {
-      return;
-    }
-    if (!await isPedometerPermissionGranted()) return;
-    if (!mounted || _activeFloor != floor) return;
-    if (indoorNavigationDriver.currentRuntimeStatus.state !=
-        PdrRuntimeState.idle) {
-      return;
-    }
-    await indoorNavigationDriver.startGuidance(floorId: floor);
+  /// 층을 두 번 읽는 이유와 두 조건이 다른 이유는 [PdrSessionLifecycle.startIfIdle]에
+  /// 있다. 화면이 사라졌으면 둘 다 null이 되어 시작이 취소된다.
+  Future<void> _startPdrIfIdle() {
+    return _pdrLifecycle.startIfIdle(
+      readStartableFloor: () {
+        if (!mounted) return null;
+        final floor = _activeFloor;
+        final graph = _floorGraph;
+        if (floor == null ||
+            graph == null ||
+            graph.nodes.isEmpty ||
+            graph.edges.isEmpty) {
+          return null;
+        }
+        return floor;
+      },
+      readActiveFloor: () => mounted ? _activeFloor : null,
+    );
   }
 
   /// 건물(입구·footprint·층 목록)을 로드한다.
@@ -6999,8 +6974,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     bool announceFailure = false,
   }) async {
     // 아래 사다리는 전부 "지금 세션 상태"를 읽어 갈린다. 정지가 아직 도는 중이면
-    // 그 상태가 거짓말을 한다([_awaitPdrStop]).
-    await _awaitPdrStop();
+    // 그 상태가 거짓말을 한다([PdrSessionLifecycle.awaitStop]).
+    await _pdrLifecycle.awaitStop();
     if (!mounted) return false;
     if (indoorNavigationDriver.currentRuntimeStatus.state ==
         PdrRuntimeState.idle) {

@@ -6,6 +6,7 @@ import 'api_config.dart';
 import '../features/debug_mode/debug_mode_controller.dart';
 import '../features/indoor_navigation/application/indoor_navigation_controller.dart';
 import '../features/indoor_navigation/application/indoor_location_estimate.dart';
+import '../features/indoor_navigation/contract/indoor_navigation_contract.dart';
 import '../features/indoor_navigation/platform/android_pdr_motion_source.dart';
 import '../features/indoor_navigation/platform/ios_pdr_motion_source.dart';
 import '../features/indoor_navigation/platform/pdr_motion_source.dart';
@@ -40,7 +41,17 @@ PdrMotionSource createDefaultPdrMotionSource({
 }
 
 final PdrMotionSource pdrMotionSource = createDefaultPdrMotionSource();
-final IndoorNavigationDriver indoorNavigationDriver = IndoorNavigationDriver(
+
+/// 타입이 구현체가 아니라 **계약**([IndoorNavigationController])이다. 화면이
+/// 드라이버 내부에 손을 뻗으면 세션 로직을 화면 밖으로 떼어낼 때마다 구현체를
+/// 통째로 끌고 다녀야 한다. 계약으로 좁혀 두면 떼어낸 조각이 가짜 구현으로
+/// 시험된다.
+///
+/// final이다 — 테스트는 이 전역을 갈아끼우지 않고 native 채널을 모킹해 진짜
+/// 드라이버를 구동한다(`tests/unit_test/pdr_anchor_floor_rebind_test.dart`).
+/// 화면이 initState에서 이 인스턴스의 스트림을 구독하므로, 구독이 붙은 뒤에
+/// 인스턴스를 바꾸면 화면은 옛 것만 계속 바라본다(debugModeController와 같다).
+final IndoorNavigationController indoorNavigationDriver = IndoorNavigationDriver(
   source: pdrMotionSource,
 );
 final IndoorLocationEstimateController indoorLocationEstimateController =
