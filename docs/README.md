@@ -66,6 +66,8 @@
 | [검색 결과 목록 UX](client/search-result-list-ux.md) | 결과 행 구조와 정렬 |
 | [카메라 연출](client/camera-choreography-plan.md) | 안내 시작·층 전환 카메라 |
 | [현장 검증 체크리스트](client/field-verification-thehyundai.md) | 더현대 서울에서만 확인되는 항목과 기록 방법 |
+| [야외 지도 화면 해체 계획](client/outdoor-map-decomposition.md) | 장기 브랜치의 목표·순서·rebase 규칙 |
+| [이동 대장](client/outdoor-map-moves.md) | 옛 심볼 → 새 위치 (rebase 충돌 해결용) |
 
 ## 리팩터 과제
 
