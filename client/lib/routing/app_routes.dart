@@ -1,12 +1,13 @@
+/// 앱의 named route.
+///
+/// **하나뿐이다.** 예전에는 목적지 선택 → 경로 안내 → 도착이 각각 화면이었고
+/// 실내 도면은 또 다른 전체화면이었지만, 지금은 지도 셸 하나가 야외·실내와
+/// 그 사이의 모든 단계를 시트·오버레이로 그린다. 그래서 push할 곳이 없다.
+///
+/// 상수 하나를 위해 클래스를 남기는 이유는 `initialRoute`와 `routes`가 같은
+/// 문자열을 봐야 하기 때문이다. 한쪽만 고치면 앱이 빈 화면으로 뜬다.
 class AppRoutes {
   AppRoutes._();
 
   static const outdoorMap = '/';
-  static const indoorMap = '/indoor-map';
-  static const destination = '/destination';
-  static const routeGuide = '/route-guide';
-  static const arrival = '/arrival';
-  static const debugApiHealth = '/debug/api-health';
-  static const debugFloorMapPreview = '/debug/floor-map-preview';
-  static const pdrSvgTest = '/debug/pdr-svg-test';
 }

@@ -13,13 +13,8 @@ import 'package:navigation_client/models/poi_search_result.dart';
 import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/repositories/mock_building_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';
-import 'package:navigation_client/routing/app_routes.dart';
-import 'package:navigation_client/screens/arrival/arrival_screen.dart';
-import 'package:navigation_client/screens/debug/api_health_check_screen.dart';
-import 'package:navigation_client/screens/destination/destination_screen.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
-import 'package:navigation_client/screens/route_guide/route_guide_screen.dart';
 import 'package:navigation_client/screens/outdoor_map/widgets/floor_selector.dart';
 
 // 데모 건물 입구(37.5665, 126.9779)에서 약 185m 떨어진 좌표.
@@ -134,22 +129,6 @@ void main() {
     // 상단 햄버거는 모드 신호가 아니다. 항상 보이는 앱 메뉴다.
     expect(find.byType(FloorSelector), findsNothing);
     expect(find.byKey(const Key('map-top-bar-menu')), findsOneWidget);
-  });
-
-  testWidgets('api health check shows loading then a status message', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(const MaterialApp(home: ApiHealthCheckScreen()));
-
-    // Right after start, the health check is in-flight.
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
-
-    // The http call will fail immediately in the widget-test environment
-    // (no real network), so let it settle and show a status message.
-    await tester.pumpAndSettle(const Duration(seconds: 6));
-
-    expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(find.byIcon(Icons.refresh), findsOneWidget);
   });
 
   testWidgets('outdoor map body renders map after position arrives', (
@@ -358,16 +337,6 @@ void main() {
     expect(mapKey.currentState!.currentFloor, '2F');
   });
 
-  testWidgets('destination screen shows every POI by default', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(const MaterialApp(home: DestinationScreen()));
-    await tester.pumpAndSettle();
-
-    expect(find.text('강의실 101'), findsOneWidget);
-    expect(find.text('강의실 201'), findsOneWidget);
-  });
-
   /// 새 검색 흐름: 상단 검색창에 그대로 친다. 아래에서 입력창이 하나 더 있는
   /// 시트가 올라오지 않고, 결과는 검색창 바로 밑 패널에 뜬다.
   Future<void> searchFromTopBar(WidgetTester tester, String query) async {
@@ -554,109 +523,6 @@ void main() {
 
     expect(repository.lightFloorScopes, isNot(contains(null)));
     expect(find.text('B2'), findsOneWidget);
-  });
-
-  testWidgets('destination screen filters as the user types', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(const MaterialApp(home: DestinationScreen()));
-    await tester.pumpAndSettle();
-
-    await tester.enterText(find.byType(TextField), '201');
-    await tester.pumpAndSettle();
-
-    expect(find.text('강의실 101'), findsNothing);
-    expect(find.text('강의실 201'), findsOneWidget);
-  });
-
-  testWidgets('destination screen shows an empty state for no matches', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(const MaterialApp(home: DestinationScreen()));
-    await tester.pumpAndSettle();
-
-    await tester.enterText(find.byType(TextField), '존재하지않는장소');
-    await tester.pumpAndSettle();
-
-    expect(find.text('찾을 수 없어요'), findsOneWidget);
-    expect(find.text('다시 입력해볼까요?'), findsOneWidget);
-  });
-
-  testWidgets('selecting a destination navigates to the route guide', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        routes: {
-          '/': (context) => const DestinationScreen(),
-          AppRoutes.routeGuide: (context) => const RouteGuideScreen(),
-        },
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('강의실 101'));
-    await tester.pumpAndSettle();
-
-    // 이전 화면(목적지 입력)의 "강의실 101" 목록 항목이 Navigator 스택에
-    // 남아있어 textContaining만으로는 새 화면과 구분되지 않는다 - 경로 안내
-    // 화면 AppBar에만 있는 정확한 제목으로 확인한다.
-    expect(find.text('강의실 101(으)로 안내'), findsOneWidget);
-    expect(find.textContaining('목적지까지'), findsWidgets);
-  });
-
-  testWidgets('arrival screen shows a generic message and navigates on tap', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: const ArrivalScreen(),
-        routes: {
-          AppRoutes.indoorMap: (context) =>
-              const Scaffold(body: Text('INDOOR')),
-        },
-      ),
-    );
-
-    expect(find.text('도착했습니다!'), findsOneWidget);
-
-    await tester.tap(find.text('새 목적지 탐색'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('INDOOR'), findsOneWidget);
-  });
-
-  testWidgets('arrival screen shows the destination and auto-dismisses', (
-    WidgetTester tester,
-  ) async {
-    const destination = PoiSearchResult(
-      name: '강의실 101',
-      floor: '1F',
-      point: LatLng(37.5665, 126.9780),
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(
-        routes: {
-          AppRoutes.indoorMap: (context) =>
-              const Scaffold(body: Text('INDOOR')),
-        },
-        onGenerateInitialRoutes: (initialRoute) => [
-          MaterialPageRoute(
-            settings: const RouteSettings(arguments: destination),
-            builder: (context) => const ArrivalScreen(),
-          ),
-        ],
-      ),
-    );
-
-    expect(find.text('강의실 101에 도착했습니다'), findsOneWidget);
-
-    // 자동 종료 타이머가 만료될 때까지 시간을 진행시킨다.
-    await tester.pump(const Duration(seconds: 2));
-    await tester.pumpAndSettle();
-
-    expect(find.text('INDOOR'), findsOneWidget);
   });
 }
 
