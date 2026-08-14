@@ -5,16 +5,27 @@
 0단계에서 화면을 성격별 `part` 파일로 갈랐다(e4aea19). **찾는 코드가 본체에 없으면
 아래에서 고른다.** 전부 같은 라이브러리라 심볼 이름은 그대로다.
 
+| 찾는 것 | 파일 | 줄 |
+|---|---|---|
+| 상태 필드·생명주기·`build`·공개 API 19개 | `outdoor_map_screen.dart` | 1,967 |
+| 경로 **계산**(TMAP·실내 그래프·pending 인계) | `outdoor_map_screen_route.dart` | 1,148 |
+| 실내 오버레이·건물 로드·카메라 맞춤 | `outdoor_map_screen_indoor.dart` | 976 |
+| PDR·앵커·보정 | `outdoor_map_screen_pdr.dart` | 657 |
+| 에스컬레이터 탑승·하차 판정 | `outdoor_map_screen_escalator.dart` | 605 |
+| 시트·배너·`_buildBody` | `outdoor_map_screen_ui.dart` | 485 |
+| 카메라·스타일 | `outdoor_map_screen_map.dart` | 395 |
+| **층 전환 크로스페이드**·세대 관리 | `outdoor_map_screen_floor_switch.dart` | 328 |
+| **안내 진행률·도착 판정**·기록 세션 | `outdoor_map_screen_guidance.dart` | 298 |
+| GPS·위치 | `outdoor_map_screen_gps.dart` | 285 |
+| **매장 탭 판정**(화면 좌표 → 매장) | `outdoor_map_screen_store_tap.dart` | 204 |
+| **경로·목적지를 지도에 쓰기**(sync 계열) | `outdoor_map_screen_route_layers.dart` | 203 |
+
+part가 아닌 이웃 파일 둘도 여기서 갈라져 나왔다.
+
 | 찾는 것 | 파일 |
 |---|---|
-| 상태 필드·생명주기·`build`·공개 API 19개 | `outdoor_map_screen.dart` |
-| 경로·안내·대중교통 | `outdoor_map_screen_route.dart` |
-| 실내 오버레이·층·매장 | `outdoor_map_screen_indoor.dart` |
-| PDR·앵커·보정 | `outdoor_map_screen_pdr.dart` |
-| 에스컬레이터·층 전환 | `outdoor_map_screen_escalator.dart` |
-| 시트·배너·`_buildBody` | `outdoor_map_screen_ui.dart` |
-| 카메라·스타일·레이어 동기화 | `outdoor_map_screen_map.dart` |
-| GPS·위치 | `outdoor_map_screen_gps.dart` |
+| 거리 문턱·줌 배율·애니메이션 길이·화면 여백 | `outdoor_map_tuning.dart` |
+| "위치 지정" 안내 카드 | `widgets/placing_anchor_hint.dart` |
 
 이름으로 나눈 것이라 **경계가 완벽하지 않다.** 못 찾으면 `grep -rn '심볼이름'
 lib/screens/outdoor_map/` 이 가장 빠르다.
