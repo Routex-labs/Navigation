@@ -58,7 +58,9 @@ class _PlaceHoursSectionState extends State<PlaceHoursSection> {
                 ),
               ),
               const SizedBox(width: 10),
-              Expanded(child: _StatusLine(status: status, today: today)),
+              Expanded(
+                child: _StatusLine(status: status, today: today),
+              ),
               Icon(
                 _expanded ? Icons.expand_less : Icons.expand_more,
                 size: 20,
@@ -171,7 +173,8 @@ class _HoursRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = '${weekdayLabelOf(day.date)}(${day.date.month}/${day.date.day})';
+    final label =
+        '${weekdayLabelOf(day.date)}(${day.date.month}/${day.date.day})';
     final value = day.intervals.isEmpty
         ? '휴무'
         : day.intervals.map((i) => '${i.open} - ${i.close}').join(' · ');

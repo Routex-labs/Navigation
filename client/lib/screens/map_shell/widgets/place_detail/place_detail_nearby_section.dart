@@ -61,18 +61,14 @@ class PlaceNearbySection extends StatelessWidget {
             scrollDirection: Axis.horizontal,
             // 좌우 여백을 목록 **안쪽**에 준다. 바깥에서 Padding으로 감싸면 스크롤
             // 영역까지 좁아져 첫 카드와 마지막 카드가 여백에서 잘린다.
-            padding: const EdgeInsets.symmetric(
-              horizontal: placeSectionGutter,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
             itemCount: stores.length,
             separatorBuilder: (_, _) => const SizedBox(width: 8),
             itemBuilder: (context, index) {
               final nearby = stores[index];
               return _NearbyCard(
                 nearby: nearby,
-                onTap: onSelect == null
-                    ? null
-                    : () => onSelect!(nearby.store),
+                onTap: onSelect == null ? null : () => onSelect!(nearby.store),
               );
             },
           ),

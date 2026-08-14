@@ -34,9 +34,8 @@ class FavoritesSheet extends StatefulWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => MapOverlayGuard(
-        child: FavoritesSheet(onCloseAll: onCloseAll),
-      ),
+      builder: (context) =>
+          MapOverlayGuard(child: FavoritesSheet(onCloseAll: onCloseAll)),
     );
   }
 
@@ -63,70 +62,73 @@ class _FavoritesSheetState extends State<FavoritesSheet> {
         if (didPop && !_intentionalPop) widget.onCloseAll();
       },
       child: SafeArea(
-      top: false,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: maxHeight),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 이 시트는 높이가 고정이라 손잡이를 끌면 크기가 아니라 시트가
-            // 통째로 끌린다(끌어서 닫기). 표시는 다른 시트와 같게 둔다.
-            const SheetGrabHandle(),
-            SheetHeader(
-              title: '저장한 장소',
-              onCloseAll: widget.onCloseAll,
-              onIntentionalPop: _markIntentional,
-            ),
-            Flexible(
-              child: ListenableBuilder(
-                listenable: favoritesController,
-                builder: (context, _) {
-                  final places = favoritesController.places;
-                  if (places.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.fromLTRB(20, 40, 20, 40),
-                      child: Center(
-                        child: Text(
-                          '아직 저장한 장소가 없어요.\n매장 정보에서 + 버튼으로 추가할 수 있어요.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 13, color: AppColors.muted),
-                        ),
-                      ),
-                    );
-                  }
-                  return ReorderableListView.builder(
-                    shrinkWrap: true,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    itemCount: places.length,
-                    // 오른쪽 기본 드래그 핸들(≡ 아이콘) 제거. 아이템 아무 데나
-                    // 꾹 누르면 살짝 떠오르며 이동한다.
-                    buildDefaultDragHandles: false,
-                    // ignore: deprecated_member_use -- onReorderItem은 최신 SDK 전용.
-                    onReorder: favoritesController.reorder,
-                    itemBuilder: (context, index) {
-                      final place = places[index];
-                      return ReorderableDelayedDragStartListener(
-                        key: ValueKey(place.key),
-                        index: index,
-                        child: _FavoriteTile(
-                          place: place,
-                          onTap: () {
-                            _markIntentional();
-                            Navigator.of(context).pop(place);
-                          },
-                          onDelete: () =>
-                              favoritesController.removeByKey(place.key),
+        top: false,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 이 시트는 높이가 고정이라 손잡이를 끌면 크기가 아니라 시트가
+              // 통째로 끌린다(끌어서 닫기). 표시는 다른 시트와 같게 둔다.
+              const SheetGrabHandle(),
+              SheetHeader(
+                title: '저장한 장소',
+                onCloseAll: widget.onCloseAll,
+                onIntentionalPop: _markIntentional,
+              ),
+              Flexible(
+                child: ListenableBuilder(
+                  listenable: favoritesController,
+                  builder: (context, _) {
+                    final places = favoritesController.places;
+                    if (places.isEmpty) {
+                      return const Padding(
+                        padding: EdgeInsets.fromLTRB(20, 40, 20, 40),
+                        child: Center(
+                          child: Text(
+                            '아직 저장한 장소가 없어요.\n매장 정보에서 + 버튼으로 추가할 수 있어요.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppColors.muted,
+                            ),
+                          ),
                         ),
                       );
-                    },
-                  );
-                },
+                    }
+                    return ReorderableListView.builder(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      itemCount: places.length,
+                      // 오른쪽 기본 드래그 핸들(≡ 아이콘) 제거. 아이템 아무 데나
+                      // 꾹 누르면 살짝 떠오르며 이동한다.
+                      buildDefaultDragHandles: false,
+                      // ignore: deprecated_member_use -- onReorderItem은 최신 SDK 전용.
+                      onReorder: favoritesController.reorder,
+                      itemBuilder: (context, index) {
+                        final place = places[index];
+                        return ReorderableDelayedDragStartListener(
+                          key: ValueKey(place.key),
+                          index: index,
+                          child: _FavoriteTile(
+                            place: place,
+                            onTap: () {
+                              _markIntentional();
+                              Navigator.of(context).pop(place);
+                            },
+                            onDelete: () =>
+                                favoritesController.removeByKey(place.key),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
       ),
     );
   }

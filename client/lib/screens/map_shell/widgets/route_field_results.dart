@@ -79,7 +79,8 @@ class RouteFieldResults extends StatelessWidget {
     // 아래에 아무 내용 없는 흰 막대가 하나 떠 있었다. 지름길 두 줄이 다 빠지고
     // (야외 + 도착 칸) 아직 아무것도 안 친 상태가 정확히 그 경우다.
     final hasShortcut = showPickOnMap || isOrigin;
-    final showSuggestions = suggestions.isNotEmpty && onSuggestionPicked != null;
+    final showSuggestions =
+        suggestions.isNotEmpty && onSuggestionPicked != null;
     if (!hasShortcut && results.isEmpty && !searching && !showSuggestions) {
       return const SizedBox.shrink();
     }
@@ -131,13 +132,13 @@ class RouteFieldResults extends StatelessWidget {
             ),
           // 지름길 줄과 목록 사이의 구분선. 한쪽이 비어 있으면 선만 남아 카드
           // 아래에 얇은 회색 줄이 떠다닌다.
-          if (hasShortcut && (results.isNotEmpty || searching || showSuggestions))
+          if (hasShortcut &&
+              (results.isNotEmpty || searching || showSuggestions))
             const Divider(height: 1),
           // 온디바이스 후보는 서버 결과 **위**다. 0ms에 나오는 값이라 사용자가
           // 치는 동안 이 자리가 먼저 차고, 서버가 답하면 아래가 채워진다.
           if (showSuggestions)
-            for (final suggestion in suggestions)
-              _suggestionTile(suggestion),
+            for (final suggestion in suggestions) _suggestionTile(suggestion),
           if (showSuggestions && (results.isNotEmpty || searching))
             const Divider(height: 1),
           if (results.isNotEmpty || searching)
