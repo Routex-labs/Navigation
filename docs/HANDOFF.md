@@ -30,7 +30,7 @@
 ```
 main
  └─ claude/msa-solid-structure-review-ci8j9p-2   (+14)  버그 수정 3 · 분할 5 · 문서
-     └─ refactor/outdoor-map-decomposition       (+71)  갓클래스 해체 + 구조 개편
+     └─ refactor/outdoor-map-decomposition       (+83)  갓클래스 해체 + 구조 개편
 ```
 
 해체 브랜치는 **앞 브랜치 위에 쌓여 있다.** 그래서 병합 순서는 반드시:
@@ -72,11 +72,64 @@ adb install -r "C:/Users/HANSUNG/apk-baseline/field-baseline-msa-branch-1.5.1.ap
 - **08 마커 크기** — 층 전환 덮개의 점과 지도 마커가 같은 크기인지. 주석은 "같다"고
   단언하는데 상수를 따라가면 지도 쪽이 2배로 읽힌다. 눈으로 정해야 한다.
 
+## 지금 하는 중 — 폴더 더 묶기
+
+사용자 지시는 둘이었다. **"이미 짧은 건 놔두고, 화면에 주석밖에 없는 파일을 전부"**
+압축할 것, 그리고 **"패키지 내에서도 패키지로 더 묶을"** 것. **앞의 것은 끝났다.**
+
+### 1. 주석 2차 압축 — 완료
+
+| | 시작 | 지금 |
+|---|---|---|
+| `lib/` 주석 | 12,239줄 (28%) | **9,649줄 (23.6%)** |
+| 가장 긴 주석 덩어리 | 39줄 | **13줄** |
+| 가장 긴 파일 머리 | 52줄 | **8줄** |
+
+**지운 근거는 없다.** 실측 로그·버린 대안은 전부 문서로 옮기고 코드에는 경로만
+남겼다. 새로 만든 문서는 [에스컬레이터 임계값](client/escalator-thresholds.md)
+하나이고, 나머지는 기존 문서에 절을 붙였다 — 검색 입력 보조 W절(트리거·디바운스),
+검색 결과 목록 X절(바깥 POI 병합), 지도 스타일 0·5·7절(MapLibre 함정 둘, 라벨 크기
+밴드 이력, 마커 지름), 카메라 연출 4.12·4.13(가둠 비율, 사람 조작 층 전환 타이밍),
+GPS 스트림 3절(안드로이드 기본 간격).
+
+**상한을 조여 뒀다.** `client/test/lib_header_comment_length_test.dart`가 파일 머리
+8줄·한 덩어리 13줄을 검사한다. 두 값 모두 **지금 최대치 바로 위**다 — 상한이 실제보다
+높으면 그 사이만큼 다시 자란다. 걸리면 지우지 말고 `docs/`로 옮긴다.
+
+> **붙어 버린 주석이 지금까지 일곱 나왔다.** A 선언의 doc이 B 선언 위에 얹힌 자리다
+> (`outdoor_map_tuning`의 `carGuidanceZoom`, `outdoor_map_screen`의 `_pendingFloorFit`,
+> `outdoor_map_screen_indoor`의 `_fitCameraToActiveFloor`·`_dropIndoorPosition`·
+> `_indoorPositionPlaced`, `map_shell_screen`의 `_startRoute`·`_openFavorites`).
+> 마지막 것은 낡기까지 해서 아래 문단과 **서로 반대되는 말**을 하고 있었다.
+> 요약 문단이 두 개인 블록을 보면 의심한다.
+
+### 2. 폴더 더 묶기 (아직)
+
+`domain/`처럼 나머지도 주제별로 묶는다. 이동 스크립트는 `part`/`part of`까지
+처리하도록 고쳐 두었다.
+
+```
+screens/outdoor_map/         parts/ entry/ gps/ layers/ camera/
+map/                         style/ label/ icon/ layer/ camera/
+models/                      building/ place/ route/
+repositories/                building/ place/ routing/
+screens/map_shell/widgets/   search/ sheets/ chrome/
+```
+
+**옮긴 뒤 반드시 함께 고칠 것** — `client/test/`(구조를 미러한다), 각 디렉터리
+README와 그 "다음 읽기" 체인, `docs/`의 경로 문자열, `lib_layer_direction_test.dart`의
+등급표. 지금 깨진 링크는 `docs/` 안에 0건이니 그 상태를 유지한다(저장소 전체로는
+8건이 남아 있는데 전부 이 작업과 무관한 옛 파일이다 — VERSION.md·issues/·PR 템플릿).
+
+> **`dart format`을 전체에 돌리지 말 것.** 이 환경의 포맷터 버전이 저장소와 달라
+> 무관한 파일 65개를 쓸고 그중 하나는 lint를 깼다(`if (cond)` 줄바꿈). 건드린
+> 파일만 지정해서 돌린다.
+
 ## 이어서 할 일
 
-**[구조 개편 계획](client/structure-plan.md)의 10단계가 모두 끝났다.** 표에
-남은 항목이 없다. ([해체 계획](client/outdoor-map-decomposition.md)은 야외 지도
-클래스 내부용으로 따로 남아 있다.)
+**[구조 개편 계획](client/structure-plan.md)의 12단계까지 끝났다.**
+([해체 계획](client/outdoor-map-decomposition.md)은 야외 지도 클래스 내부용으로
+따로 남아 있다.)
 
 **남은 것은 결합도 하나다.** 파일은 더 가를 수 있는 데까지 갔다 — 본체 1,967줄에
 남은 셋(상태 필드 150개·공개 API 19개·생명주기)은 전부 옮길 수 없는 것들이다
