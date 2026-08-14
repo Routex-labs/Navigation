@@ -135,7 +135,7 @@ destination에서 전부 no_match로 회귀 확인. 층 스코프 7건 전부 �
 
 - [ ] 1F에서 "화장실" 검색 → 1F 화장실이 나온다(2F, B1 등에서도 동일하게 교차 확인).
 - [ ] `ai_search_sheet.dart` 쪽은 기존처럼 계속 현재 층을 보낸다(회귀 없음).
-- [ ] `client/tests/unit_test/`에 층 스코프 회귀 테스트 추가.
+- [ ] `client/test/`에 층 스코프 회귀 테스트 추가.
 
 ---
 

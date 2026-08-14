@@ -132,7 +132,7 @@ text`는 한글을 못 보내지만 검색이 로마자를 한글로 맞춰 주�
 응답하는" 상황을 만들 수 없다. 4단계에서 세션 정지 경합을 이 방법으로 재현하려다,
 검증하려던 코드를 통째로 지워도 통과하는 테스트를 만들었다. 시간이 걸리는 native 응답에
 기대는 동작은 위젯 테스트 말고 **그 조각을 직접 부르는 단위 테스트**로 잡는다
-(본보기: `client/tests/unit_test/pdr_session_lifecycle_test.dart`).
+(본보기: `client/test/screens/outdoor_map/pdr_session_lifecycle_test.dart`).
 
 그리고 그 사고의 교훈은 더 일반적이다 — **테스트가 통과하는 것만 보고 넘어가지 않는다.
 고치려는 코드를 잠시 망가뜨려 그 테스트가 실패하는지 확인한다.**
@@ -151,10 +151,13 @@ text`는 한글을 못 보내지만 검색이 로마자를 한글로 맞춰 주�
 
 ```powershell
 cd client
-flutter analyze                      # 0건이어야 한다
-flutter test tests/unit_test/        # 579개
-flutter test test/                   # 831개
-flutter test tests/integration_test/ -d windows   # 부팅 테스트(CI는 linux)
+flutter analyze                             # 0건이어야 한다
+flutter test test/                          # 1,415개
+flutter test integration_test/ -d windows   # 부팅 테스트(CI는 linux)
 ```
+
+테스트는 `test/` 한 곳에 있고 **`lib/`의 디렉터리 구조를 그대로 미러한다.** 예전에는
+`tests/unit_test/`에 83개가 평면으로 쌓여 있었는데, CI가 그쪽만 돌려서 `test/` 아래
+337개가 한 번도 실행되지 않은 적이 있다.
 
 해체 브랜치에서는 여기에 **공개 API 19개 불변** 확인이 더 붙는다(계획서의 게이트).

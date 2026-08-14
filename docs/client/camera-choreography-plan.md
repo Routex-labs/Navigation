@@ -224,7 +224,7 @@ B3~B6은 사방이 잘려 층 전체가 화면에 안 들어온다.
 
 **여기서 지킬 것은 클라이언트 쪽 세 겹이다.** 파싱은 두 철자를 모두 받고
 (`models/floor_graph.dart`), 그 계약은
-`tests/unit_test/floor_graph_parse_test.dart`가 지키며, 삼키는 catch는 반드시 이유를
+`test/models/floor_graph_parse_test.dart`가 지키며, 삼키는 catch는 반드시 이유를
 로그에 남긴다. 서버를 고치더라도 구 버전 배포에 붙은 앱이 이것 하나로 통째로
 망가지면 안 된다.
 
@@ -245,7 +245,7 @@ B3~B6은 사방이 잘려 층 전체가 화면에 안 들어온다.
 ### 실패 조건 (이게 더 중요하다)
 
 - [x] 경로가 아주 짧을 때(바로 옆 매장) 발산하지 않는다 — 5 m 미만은 건너뛰고,
-      상자 변은 12 m로 받친다. `tests/unit_test/building_orientation_test.dart`의
+      상자 변은 12 m로 받친다. `test/screens/outdoor_map/building_orientation_test.dart`의
       `경로 상자` 그룹이 지킨다.
 - [x] 경로가 아주 길 때 이탈 임계값 아래로 내려가지 않는다.
 - [x] 연출 도중 화면을 벗어나거나 안내를 끝내도 `mounted` 검사로 안전하게 끝난다.
@@ -313,5 +313,5 @@ client/lib/domain/guidance_chrome.dart                     ← 안내 중 chrome
 ```
 
 기하 계산은 부호 하나만 틀려도 조용히 90도 어긋난다. 새로 만드는 계산은
-`tests/unit_test/building_orientation_test.dart`처럼 **방위를 아는 입력을 만들어
+`test/screens/outdoor_map/building_orientation_test.dart`처럼 **방위를 아는 입력을 만들어
 되찾아 오는지** 확인하는 테스트를 함께 둔다.

@@ -478,7 +478,7 @@ K는 J와 같은 자리(입력 중·idle)를 쓴다. **둘을 함께 넣어야 �
 
 ## 해결됨 — `client/test/`가 CI에서 돌지 않던 문제
 
-`.github/workflows/ci.yml`이 `flutter test tests/unit_test/`만 실행해서, 표준 Flutter
+`.github/workflows/ci.yml`이 `flutter test test/`만 실행해서, 표준 Flutter
 디렉터리인 `client/test/` 아래 테스트가 **작성돼 있으면서도 회귀를 막지 못하는** 상태였다.
 `flutter test test/`를 CI에 추가했다(로컬 전량 통과 확인 후). 이 문서의 K·L·M 테스트도
 그 디렉터리에 있으므로 이제 CI가 지켜 준다.

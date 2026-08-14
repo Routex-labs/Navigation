@@ -828,7 +828,7 @@ Material의 `ActionChip`·`FilterChip`을 쓰지 않는 이유는 크기다. 기
   현재 `/destination`과 `_query` 하나를 공유하므로 분리가 필요하다
 - [`destination_repository.dart`](../../../client/lib/repositories/destination_repository.dart)·
   [`mock_destination_repository.dart`](../../../client/lib/repositories/mock_destination_repository.dart) — 인터페이스와 mock
-- `client/tests/unit_test/`의 `widgets_test.dart`·`http_destination_repository_test.dart`
+- `client/test/`의 `widgets_test.dart`·`http_destination_repository_test.dart`
 
 ---
 

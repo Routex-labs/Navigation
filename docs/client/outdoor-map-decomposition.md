@@ -208,7 +208,7 @@ $adb = "C:\Users\HANSUNG\AppData\Local\Android\Sdk\platform-tools\adb.exe"
 그 밖에 이 단계의 근거는 둘 더 있다.
 
 - 등록 성공 로그(위 두 줄) — 등록이 예외로 실패하면 안 찍힌다.
-- `tests/unit_test/indoor_overlay_layers_test.dart` — 도면이 검게 뜨는 그 사고를 직접
+- `test/screens/outdoor_map/indoor_overlay_layers_test.dart` — 도면이 검게 뜨는 그 사고를 직접
   막는 테스트다(모든 fill의 `fill-color`가 null이 아님, symbol의 layout 속성 생존).
 
 **그래서 실내 *렌더링*은 현장에 나가지 않아도 검증된다.** 현장이 필요한 것은 GPS
@@ -261,7 +261,7 @@ $adb = "C:\Users\HANSUNG\AppData\Local\Android\Sdk\platform-tools\adb.exe"
    `idle`이 아니라서 **틀린 코드에서도 참**이었다.
 
 그래서 위젯 테스트를 버리고 [PdrSessionLifecycle]을 **직접** 시험했다
-(`tests/unit_test/pdr_session_lifecycle_test.dart`). 거기서는 정지 Future를 테스트가
+(`test/screens/outdoor_map/pdr_session_lifecycle_test.dart`). 거기서는 정지 Future를 테스트가
 쥐고 있어 창을 원하는 만큼 열어 둘 수 있다 — 세션 수명을 화면에서 떼어낸 값어치가
 바로 이것이다.
 
@@ -273,7 +273,7 @@ $adb = "C:\Users\HANSUNG\AppData\Local\Android\Sdk\platform-tools\adb.exe"
 단계마다 아래를 전부 통과해야 다음으로 넘어간다. 하나라도 빨간불이면 그 단계는 되돌린다.
 
 - `flutter analyze` 0건
-- `flutter test tests/unit_test/` + `flutter test test/` 전부 통과
+- `flutter test test/` 전부 통과
 - 공개 API 19개의 이름·시그니처 불변 (`grep`으로 확인)
 - **동작 동일성의 근거를 커밋 메시지에 적는다.** "옮기기만 했다"면 그렇게, 로직이 한 줄이라도
   바뀌었으면 무엇이 왜 바뀌었는지.

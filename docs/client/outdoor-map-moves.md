@@ -90,7 +90,7 @@ Dart의 파일 단위 프라이버시(`_`) 때문에 공개로 바꾼 것이고,
 
 ### 3단계 — GPS 세션 추출 (필드 이동 시작)
 
-옮기기 **전에** 특성 테스트를 먼저 썼다(`tests/unit_test/gps_stream_lifecycle_test.dart`,
+옮기기 **전에** 특성 테스트를 먼저 썼다(`test/screens/outdoor_map/gps_stream_lifecycle_test.dart`,
 커밋 f375888). 이동 전후 모두 통과하는 것이 이 단계의 증거다.
 
 | 옛 심볼 | 새 위치 | 커밋 |
