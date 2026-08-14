@@ -33,7 +33,17 @@ jobs:
       # 있었는데, CI가 `tests/`만 돌려서 `test/` 아래 337개가 한 번도 실행되지
       # 않은 적이 있다. 한 곳으로 합쳐 그 사고가 다시 나지 않게 한다.
       - run: flutter test test/
-      - run: xvfb-run -a flutter test integration_test/ -d linux
+      # 통합 테스트는 **파일마다 따로** 돌린다. 한 번에 두 개 이상을 주면 두 번째
+      # 앱 실행이 "Error waiting for a debug connection"으로 죽는다 — 데스크톱
+      # 디바이스가 앱을 연속으로 다시 띄우지 못한다(linux·windows 양쪽 재현).
+      # 파일을 나열하지 않고 glob으로 도는 이유는, 나열하면 새 파일이 조용히
+      # 빠지기 때문이다. 위 `test/` 한 곳으로 합친 것과 같은 이유다.
+      - run: |
+          for f in integration_test/*_test.dart; do
+            echo "::group::$f"
+            xvfb-run -a flutter test "$f" -d linux
+            echo "::endgroup::"
+          done
 
   backend:
     name: Backend (FastAPI)
