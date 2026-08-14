@@ -165,7 +165,7 @@ B2 매장 이름 앞 20건을 대상으로, 이름의 앞 1·2·3글자를 차�
 읽어 넣고 같은 절차를 돌린다. 순위 로직 자체의 회귀는 실제 매장명 59건 fixture를 쓰는
 `store_suggestions_test.dart`가 지킨다.
 
-#### 구현하며 정한 것 — `domain/store_suggestions.dart`의 규칙
+#### 구현하며 정한 것 — `domain/search/store_suggestions.dart`의 규칙
 
 여기 적힌 것이 코드의 단일 출처다. 함수 주석에는 계약만 두고 근거는 이쪽을 본다.
 
@@ -272,7 +272,7 @@ prefix 정렬** 로 재기 때문에 실제 후보가 훨씬 좁다.
 벽 하나 사이로 10m인 매장이 실제로는 반대편 에스컬레이터를 돌아 120m일 수 있다.
 
 우리는 온디바이스 Dijkstra가 있고, **거리 계산은 이미 끝나 있다.** A-2에서
-[`reachableFrom`](../../client/lib/domain/dijkstra.dart)을 한 번만 돌려 전 노드 결과를
+[`reachableFrom`](../../client/lib/domain/route/dijkstra.dart)을 한 번만 돌려 전 노드 결과를
 받아 두고, `SearchPanel`이 `widget.reachByNodeId`로 조회한다(`search_panel.dart:817`).
 **그 값을 표시에만 쓰고 정렬에는 안 쓰고 있다.**
 

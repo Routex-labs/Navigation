@@ -5,16 +5,16 @@
 
 | 주제 | 파일 |
 |---|---|
-| 도면 폴리곤 색 | `core/map_palette.dart` |
-| 라벨 글자색·헤일로 | `core/map_label_style.dart` |
-| 대분류 색·글리프 | `core/map/category_icon.dart` |
-| 카테고리 강조 fill·필터·라벨 | `core/map/category_map_fill.dart` · `category_map_filter.dart` |
-| 라벨 아이콘 배지 | `core/map/category_map_icon.dart` |
-| 라벨 크기 맞춤 | `core/map/store_label_fit.dart` |
-| 라벨 칸 나누기 | `core/map/store_label_anchor.dart` |
-| POI·편의시설 스타일 | `core/map/floor_facility_style.dart` |
-| 아이콘 비트맵 캐시 | `core/map/map_icon_cache.dart` |
-| 도착지 핀 | `core/map/destination_pin.dart` |
+| 도면 폴리곤 색 | `map/palette.dart` |
+| 라벨 글자색·헤일로 | `map/label_style.dart` |
+| 대분류 색·글리프 | `map/category_icon.dart` |
+| 카테고리 강조 fill·필터·라벨 | `map/category_map_fill.dart` · `category_map_filter.dart` |
+| 라벨 아이콘 배지 | `map/category_map_icon.dart` |
+| 라벨 크기 맞춤 | `map/store_label_fit.dart` |
+| 라벨 칸 나누기 | `map/store_label_anchor.dart` |
+| POI·편의시설 스타일 | `map/floor_facility_style.dart` |
+| 아이콘 비트맵 캐시 | `map/icon_cache.dart` |
+| 도착지 핀 | `map/destination_pin.dart` |
 | 실내 오버레이 레이어 속성 | `screens/outdoor_map/indoor_overlay_layers.dart` |
 
 ---

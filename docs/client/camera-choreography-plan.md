@@ -39,7 +39,7 @@
 
 **Q1을 "개요만"으로 정하면 빚이 하나 따라온다.** 카메라가 걸음을 따라가지 않는데
 안내 중에는 하단 바가 통째로 접혀([shouldFoldGuidanceChrome]) 사용자가 화면을
-자기 위치로 되돌릴 수단이 없다. 그래서 [`GuidanceRecenterButton`](../../client/lib/widgets/guidance_recenter_button.dart)을
+자기 위치로 되돌릴 수단이 없다. 그래서 [`GuidanceRecenterButton`](../../client/lib/screens/outdoor_map/widgets/guidance_recenter_button.dart)을
 함께 넣었다 — 접힌 층 선택기 자리에, 안내 중에만.
 
 ---
@@ -231,7 +231,7 @@ B3~B6은 사방이 잘려 층 전체가 화면에 안 들어온다.
 
 ### 4.12 카메라 가둠 — bbox를 넓히는 게 아니라 **깎는다**
 
-`core/map/floor_camera_bounds.dart`. 묶어 두지 않으면 사용자가 지도를 계속 밀어
+`map/floor_camera_bounds.dart`. 묶어 두지 않으면 사용자가 지도를 계속 밀어
 도면이 화면에서 사라진 뒤에도 얼마든지 더 나갈 수 있고, 그 상태에서는 자기가 어디로
 얼마나 움직였는지 알 방법이 없어 "지도가 없어졌다"가 된다.
 
@@ -345,8 +345,8 @@ client/lib/screens/outdoor_map/outdoor_map_screen.dart
 
 client/lib/screens/outdoor_map/building_orientation.dart   ← 기하 도구·routeBoxFor
 client/lib/screens/outdoor_map/indoor_entry_zoom.dart      ← zoom 정책·임계값
-client/lib/widgets/guidance_recenter_button.dart           ← 안내 중 되돌릴 수단
-client/lib/domain/guidance_chrome.dart                     ← 안내 중 chrome 규칙
+client/lib/screens/outdoor_map/widgets/guidance_recenter_button.dart           ← 안내 중 되돌릴 수단
+client/lib/domain/guidance/guidance_chrome.dart                     ← 안내 중 chrome 규칙
 ```
 
 기하 계산은 부호 하나만 틀려도 조용히 90도 어긋난다. 새로 만드는 계산은

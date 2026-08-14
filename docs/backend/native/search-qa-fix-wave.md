@@ -124,7 +124,7 @@ destination에서 전부 no_match로 회귀 확인. 층 스코프 7건 전부 �
 
 ### 변경 범위
 
-- `client/lib/widgets/search_panel.dart` — 검색 요청 조립부에 현재 층 상태를 실어 보낸다.
+- `client/lib/screens/map_shell/widgets/search_panel.dart` — 검색 요청 조립부에 현재 층 상태를 실어 보낸다.
   현재 층을 어디서 읽어오는지는 `outdoor_map_screen.dart`/`indoor_map_screen.dart`의 층
   상태 소스를 따라간다(신규 상태를 만들지 않는다).
 - 백엔드 계약은 이미 `current_floor_id: str | None`을 받으므로 **백엔드 변경 없음.**
@@ -173,7 +173,7 @@ destination에서 전부 no_match로 회귀 확인. 층 스코프 7건 전부 �
 
 **2-a (즉시, 작음): 클라이언트가 AI를 부르게 한다.** `conversational-discovery.md`
 Phase 0 항목 그대로다.
-- `client/lib/widgets/search_panel.dart` — 의미 검색을 `submitTick`(엔터) 하나에
+- `client/lib/screens/map_shell/widgets/search_panel.dart` — 의미 검색을 `submitTick`(엔터) 하나에
   의존하지 말고 debounce 종료 시에도 태운다. 경량 결과가 있어도(현재는
   `results.isNotEmpty`면 건너뜀) 스킵하지 않는다.
 - 타이핑 중 경량이 빈손이라는 이유만으로 최종 `"결과 없음"` 문구를 띄우지 않는다.

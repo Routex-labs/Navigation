@@ -33,7 +33,7 @@
 
 ### 1-2. 의미 검색이 엔터 + 경량 빈손이라는 두 조건을 모두 통과해야만 돈다
 
-현재 Flutter 상단 검색([`search_panel.dart`](../../../client/lib/widgets/search_panel.dart))은
+현재 Flutter 상단 검색([`search_panel.dart`](../../../client/lib/screens/map_shell/widgets/search_panel.dart))은
 타이핑 중 `POST /query/destination`만 호출한다. `POST /query/ai`는 `submitTick`이 올라간
 확정 시점에, 그것도 `results.isEmpty && building == null`일 때만 이어 붙는다
 (`_search(..., allowSemantic: true)`).
@@ -58,7 +58,7 @@
 
 | 호출부 | 진입 | `current_floor_id` | 비고 |
 |---|---|---|---|
-| [`search_panel.dart`](../../../client/lib/widgets/search_panel.dart) | 상단 검색창 엔터 | 보내지 않음(건물 전체) | 경량 빈손일 때만 |
+| [`search_panel.dart`](../../../client/lib/screens/map_shell/widgets/search_panel.dart) | 상단 검색창 엔터 | 보내지 않음(건물 전체) | 경량 빈손일 때만 |
 | ~~`ai_search_sheet.dart`~~ **(삭제됨)** | 경로 안내 화면 FAB | 현재 층을 보냄 | 질의–응답 로그를 쌓는 시트 |
 
 둘 다 [`http_destination_repository.dart`](../../../client/lib/repositories/http_destination_repository.dart)의
@@ -68,7 +68,7 @@
 > **`ai_search_sheet.dart`와 `directions_sheet.dart`는 그 뒤 삭제됐다**(실내 안내를 공용
 > 세션으로 모으고 실내 탭을 없앤 리팩터, 그리고 길찾기 입력을 상단 바 두 칸으로 되돌린
 > 변경). 이 문서에서 그 파일들을 가리키는 서술은 **당시 상태**이며, 지금 `/query/ai`를
-> 쓰는 곳은 [`search_panel.dart`](../../../client/lib/widgets/search_panel.dart)(상단 검색)와
+> 쓰는 곳은 [`search_panel.dart`](../../../client/lib/screens/map_shell/widgets/search_panel.dart)(상단 검색)와
 > [`map_shell_screen.dart`](../../../client/lib/screens/map_shell/map_shell_screen.dart)의
 > 길찾기 후보 조회 두 곳이다. 아래 "두 화면"이라는 표현도 그 전제에서 읽어야 한다.
 
@@ -795,7 +795,7 @@ Material의 `ActionChip`·`FilterChip`을 쓰지 않는 이유는 크기다. 기
 **서버 `reason`은 그대로 둔다.** 한 건만 떼어 봐도 근거가 서야 한다는 계약이고
 (`test_추천_이유는_질문축과_질의_intent를_함께_말한다`), 여러 행을 함께 놓고 볼 때
 무엇이 겹치는지는 **화면만 아는 사실**이다. 규칙은
-[`client/lib/domain/reason_text.dart`](../../../client/lib/domain/reason_text.dart)가
+[`client/lib/domain/search/reason_text.dart`](../../../client/lib/domain/search/reason_text.dart)가
 단일 출처다.
 
 구현하며 잡은 함정 둘 — **행이 하나뿐이면 공통은 없다**(비교할 상대가 없으면 되풀이도
@@ -822,7 +822,7 @@ Material의 `ActionChip`·`FilterChip`을 쓰지 않는 이유는 크기다. 기
 
 함께 고쳐야 하는 파일:
 
-- [`search_panel.dart`](../../../client/lib/widgets/search_panel.dart) — 상태 열거·facet chip
+- [`search_panel.dart`](../../../client/lib/screens/map_shell/widgets/search_panel.dart) — 상태 열거·facet chip
 - ~~`ai_search_sheet.dart`~~ — 같은 `/query/ai`를 쓰던 두 번째 화면(1-3). **삭제됐다**(아래 주석)
 - [`http_destination_repository.dart`](../../../client/lib/repositories/http_destination_repository.dart) —
   현재 `/destination`과 `_query` 하나를 공유하므로 분리가 필요하다
@@ -1029,6 +1029,6 @@ facet도 새 응답 모델도 필요 없고, 넣어 두면 이후 단계의 검�
 | 지도 응답 조립 | `backend/app/repositories/building_queries.py` | `_to_store_dict` |
 | 수작업 원본 로더 | `backend/scripts/seed/studio_adapter.py` | `STORE_CATEGORIES_PATH`, `_load_store_categories`, `_reshape_stores` |
 | 평가 | `backend/scripts/evaluate_query_hybrid.py`, `backend/notebooks/faiss_eval.ipynb` | 기준선 23/29 |
-| 상단 검색 | `client/lib/widgets/search_panel.dart` | `_search`, `_scheduleSearch`, `_emptyState`, `_requestId` |
+| 상단 검색 | `client/lib/screens/map_shell/widgets/search_panel.dart` | `_search`, `_scheduleSearch`, `_emptyState`, `_requestId` |
 | AI 시트 | `client/lib/widgets/ai_search_sheet.dart` | `_submit`, `_Exchange` |
 | HTTP | `client/lib/repositories/http_destination_repository.dart` | `_query`, `searchDestinationsAi` |

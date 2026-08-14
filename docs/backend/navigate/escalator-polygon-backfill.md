@@ -32,7 +32,7 @@ flowchart LR
 > 존재하는 폴리곤은 그중 한 줄만 덮는 폭 1.6m짜리였다. 그래서 1:1 대응으로 고쳤다.
 
 클라이언트는 이름이 `에스컬레이터`인 store 폴리곤을 이미 초록색으로 표시한다
-(`client/lib/core/map/floor_facility_style.dart`의 `kVerticalTransportStoreNames`).
+(`client/lib/map/floor_facility_style.dart`의 `kVerticalTransportStoreNames`).
 따라서 클라이언트 렌더링 코드는 이번 범위에서 변경하지 않는다.
 
 ## 원인
@@ -63,7 +63,7 @@ flowchart LR
 
 ### 건드리지 않은 파일
 
-- 클라이언트 렌더링(`core/map/floor_facility_style.dart`): fill 레이어와 색상 규칙은 이미 맞다.
+- 클라이언트 렌더링(`map/floor_facility_style.dart`): fill 레이어와 색상 규칙은 이미 맞다.
 - 수직 전이 생성(`scripts/transform/vertical_transfers.py`): 경로 데이터는 정상이다.
 - 에스컬레이터 node·POI: 새로 추가하면 아이콘 및 경로가 중복되므로 절대 추가하지 않는다.
 

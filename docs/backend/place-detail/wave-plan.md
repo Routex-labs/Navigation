@@ -152,8 +152,8 @@ Wave 1과 2는 완전 병렬(파일 교집합 0). Wave 3은 A·B가 끝나야 �
 |---|---|---|
 | D1 | `client/lib/models/place_detail.dart` (신규) | 응답 파싱. **모르는 섹션 타입은 조용히 버린다** — 설계 4-2 규칙 2를 파싱 단계에서 구현 |
 | D2 | `client/lib/repositories/place_detail_repository.dart` (신규)<br>+ http/mock 구현 | `service_locator`에 등록. 실패 시 예외를 던지지 않고 null 반환(부가 정보 실패가 주 기능을 막으면 안 된다) |
-| D3 | `client/lib/widgets/place_detail/` (신규) | 섹션별 렌더러 위젯. `summary`/`keyValue`/`tags`/`notice`/`map`. `hero`·`childList`는 이 Wave에서 만들지 않는다 |
-| D4 | `client/lib/widgets/place_detail_sheet.dart` (신규) | 시트 본체. `StoreInfoSheet`의 chain 규약 코드(`_intentionalPop`·`PopScope`·`onCloseAll`·`GestureDetector` 2단)를 **그대로 이식**하고 본문만 교체. 로딩·에러·빈 상태 3종 |
+| D3 | `client/lib/screens/map_shell/widgets/place_detail/` (신규) | 섹션별 렌더러 위젯. `summary`/`keyValue`/`tags`/`notice`/`map`. `hero`·`childList`는 이 Wave에서 만들지 않는다 |
+| D4 | `client/lib/screens/map_shell/widgets/place_detail_sheet.dart` (신규) | 시트 본체. `StoreInfoSheet`의 chain 규약 코드(`_intentionalPop`·`PopScope`·`onCloseAll`·`GestureDetector` 2단)를 **그대로 이식**하고 본문만 교체. 로딩·에러·빈 상태 3종 |
 | D5 | `client/lib/screens/map_shell/map_shell_screen.dart:280` | `_showStoreInfo`가 새 시트를 열도록 교체. `StoreInfoAction` 반환 계약(출발/도착/카테고리)은 유지 |
 | D6 | `client/lib/widgets/store_info_sheet.dart` | 삭제 (D5 이후 참조 0건 확인하고 별도 커밋) |
 | D7 | `client/test/widgets/place_detail_sheet_test.dart` (신규) | 아래 완료 기준을 위젯 테스트로 |
@@ -246,7 +246,7 @@ Wave 1과 2는 완전 병렬(파일 교집합 0). Wave 3은 A·B가 끝나야 �
 | # | 파일 | 작업 |
 |---|---|---|
 | E1 | `backend/app/repositories/place_detail_queries.py` | `kind: "building"` 분기. `childList` 섹션에 카테고리별 카운트를 넣는다. **이미 조사에서 센 값**(패션 266·식음료 134·…)이 그대로 화면 숫자가 된다 |
-| E2 | `client/lib/widgets/place_detail/child_list_section.dart` (신규) | 자식 목록 렌더러. 항목 탭 → 그 매장의 상세로(같은 시트 재귀) |
+| E2 | `client/lib/screens/map_shell/widgets/place_detail/child_list_section.dart` (신규) | 자식 목록 렌더러. 항목 탭 → 그 매장의 상세로(같은 시트 재귀) |
 | E3 | `client/lib/screens/map_shell/map_shell_screen.dart:263` | 건물 선택 시 `_placeInfo` 제목/부제 대신 상세 시트 |
 | E4 | 테스트 | 건물 상세 응답 + 자식 목록 탭 → 매장 상세 전이 |
 

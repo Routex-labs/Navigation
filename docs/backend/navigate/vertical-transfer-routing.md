@@ -2,7 +2,7 @@
 
 층 간 이동을 어떤 수단으로, 어느 방향으로, 얼마의 비용으로 할지를 **백엔드가 내보내는 그래프**로
 결정하는 설계 문서다. 최단 경로 계산 자체는 클라이언트 온디바이스 Dijkstra
-([`client/lib/domain/dijkstra.dart`](../../../client/lib/domain/dijkstra.dart))가 하고,
+([`client/lib/domain/route/dijkstra.dart`](../../../client/lib/domain/route/dijkstra.dart))가 하고,
 서버는 nodes·edges만 준다. 따라서 수단 선호·방향·불가능 경로 차단은 **전부 간선의
 존재·방향(`bidirectional`)·가중치(`length_m`)로만** 인코딩된다.
 

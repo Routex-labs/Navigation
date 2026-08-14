@@ -41,4 +41,4 @@ flowchart LR
 
 ---
 
-> **다음 읽기:** [`lib/widgets` — 재사용 UI와 지도 렌더링](../widgets/README.md)
+> **다음 읽기:** [`lib/map` — 지도에 그릴 값과 계산](../map/README.md)

@@ -16,7 +16,7 @@
 [`tmap_transit_repository.dart`](tmap_transit_repository.dart)는 배선에서 빠졌지만 지우지 않았다.
 TMAP 대중교통 무료 제공량이 하루 10건이라 카카오로 옮긴 것이고, 되돌릴 여지를 남긴다.
 
-구현 선택은 [`../core/service_locator.dart`](../core/service_locator.dart)에서 한다.
+구현 선택은 [`../service_locator.dart`](../service_locator.dart)에서 한다.
 
 ## 외부 지도 계약에서 조심할 것
 
@@ -39,7 +39,7 @@ TMAP 대중교통 무료 제공량이 하루 10건이라 카카오로 옮긴 것
   600m 거리에도 12분짜리 버스 경로를 `OK`로 준다. 그래서 호출 **전에** 직선 거리로
   자른다(`KakaoTransitRepository._walkableMeters`).
 - **카카오는 첫 승차지점 앞·마지막 하차지점 뒤 도보를 주지 않는다.** 역 안 환승 도보는
-  온다. 빠진 양 끝은 [`../domain/transit_walk_fill.dart`](../domain/transit_walk_fill.dart)가
+  온다. 빠진 양 끝은 [`../domain/route/transit_walk_fill.dart`](../domain/route/transit_walk_fill.dart)가
   보행자 경로로 채운다. 총 시간·거리에는 그 도보가 **이미 포함돼 있으므로** 다시 더하면 안 된다.
 - **후보 개수를 요청으로 못 줄인다.** 카카오에는 `count`가 없고 늘 전부 온다(실측 15개).
   정렬한 뒤 우리가 자른다.
@@ -86,7 +86,7 @@ flowchart LR
 
 `HttpDestinationRepository`가 두 엔드포인트를 모두 호출하고, Mock은 이미 로드된 건물
 데이터에서 검색한다. 앱 배선은 기본이 `HttpDestinationRepository`다
-(`../core/service_locator.dart`) — 자연어·탐색 검색 설계는
+(`../service_locator.dart`) — 자연어·탐색 검색 설계는
 [`../../../docs/backend/native/client-handoff.md`](../../../docs/backend/native/client-handoff.md)를 참고한다.
 
 ## 반환·오류 규칙

@@ -69,9 +69,9 @@ graph LR
 |---|---|---|
 | 1 | `fontFamily: 'Pretendard'` · pubspec에 400·500·600·700·800 등록 | `app_theme.dart`, `pubspec.yaml` |
 | 2 | 하드코딩 offset 대신 `_overlayGap` 상수 하나로 쌓은 Column | `map_shell_screen.dart` |
-| 3 | 도면 색이 `map_palette.dart` 한곳으로 모임 | `core/map_palette.dart` |
+| 3 | 도면 색이 `map_palette.dart` 한곳으로 모임 | `map/palette.dart` |
 | 4 | 도착 핀 두 화면 통일 · 시설물 텍스트 라벨 제거 | `outdoor_map_screen.dart`, `floor_plan_view.dart` |
-| 5 | 진한 테두리 + 진행 방향 화살표, 두 화면 동일 | `core/map_route_style.dart` |
+| 5 | 진한 테두리 + 진행 방향 화살표, 두 화면 동일 | `map/route_style.dart` |
 | 6 | 타일에 `category`·`subcategory`는 실림 — **라벨은 아직 `textColor: '#444846'` 고정, 카테고리 아이콘 레이어 없음** | `backend/app/geo/tiling.py`, `floor_plan_view.dart` |
 | 7 | **완료** — 상단 바 두 칸 + `route_field_results.dart` 후보 목록, `directions_sheet.dart` 제거 | `map_shell_screen.dart`, `map_top_bar.dart` |
 
@@ -173,7 +173,7 @@ Studio 원본만 보면 1,640개 중 1,278개가 `category: "매장"`이라 무�
 - 앱: `Pretendard-Regular/Medium/SemiBold/Bold/ExtraBold.otf` → `client/assets/fonts/`,
   `pubspec.yaml`에 실제 사용 weight(400·500·600·700·800)를 모두 등록 + `theme.fontFamily` 지정
 - 지도: Regular glyph만 생성 → `backend/resources/fonts/Pretendard Regular/`
-- fontstack 이름은 `client/lib/core/map_fonts.dart` 상수 하나로 모은다
+- fontstack 이름은 `client/lib/map/fonts.dart` 상수 하나로 모은다
 
 ### 위험
 
@@ -244,7 +244,7 @@ Column으로 바꾸면 좌표 계산이 달라질 수 있다.
 
 아웃라인은 **이미 있다.** 문제는 대비가 거의 없다는 것이다
 (당시 `client/lib/widgets/floor_plan_view.dart`. 그 파일은 뒤에 삭제됐고 같은
-스타일은 지금 `core/map_palette.dart`와 실내 오버레이가 들고 있다).
+스타일은 지금 `map/palette.dart`와 실내 오버레이가 들고 있다).
 
 | 요소 | fill | outline | 비고 |
 |---|---|---|---|
@@ -278,7 +278,7 @@ Column으로 바꾸면 좌표 계산이 달라질 수 있다.
 - [ ] 매장 경계가 통로와 구분되어 보임 (줌 z17, z19 양쪽)
 - [ ] 실내 화면과 야외 오버레이의 색이 동일
 - [ ] 수직이동(초록)이 여전히 매장과 구분됨
-- [ ] 매장명 라벨([`mapLabelStoreColor`](../../client/lib/core/map_label_style.dart)
+- [ ] 매장명 라벨([`mapLabelStoreColor`](../../client/lib/map/label_style.dart)
       + 흰 halo)이 어두워진 배경에서도 읽힘
 
 ---
@@ -362,7 +362,7 @@ casing이 안 보이는 것과 정확히 같은 실수를 마커에서 반복하
 > 화면 배율을 곱하지 않는 스칼라라 고밀도 기기에서 아이콘만 배율만큼 작아졌고
 > (배율 3.5에서 매장 배지가 4.4 논리 px), 실내 화면이 이미 내린 "모든 마커는 한
 > 크기" 결론과도 갈라져 있었다. 지금은 실내·오버레이가
-> [`kIndoorMarkerLogicalPx`](../../client/lib/widgets/floor_facility_style.dart)
+> [`kIndoorMarkerLogicalPx`](../../client/lib/map/floor_facility_style.dart)
 > 하나(12 논리 px, 배율 환산)를 함께 쓰고 줌 보간은 없다. 배율 환산은
 > **네이티브에만** 적용한다 — 웹은 비트맵이 `pixelRatio: 1`로 등록돼 배율을
 > 곱하면 아이콘만 배율배로 커진다(`indoorMarkerIconSize` 주석).
@@ -388,7 +388,7 @@ casing이 안 보이는 것과 정확히 같은 실수를 마커에서 반복하
 
 야외 오버레이는 POI를 아이콘으로만 그리고 이름 레이어가 아예 없어서
 **실내 화면에서만** 보였다. 자세한 근거와 필터는
-[`poiLabelFilter`](../../client/lib/widgets/floor_facility_style.dart)에 적어 두었고,
+[`poiLabelFilter`](../../client/lib/map/floor_facility_style.dart)에 적어 두었고,
 후속 정리는 아래 [6c](#6c-라벨-타이포그래피-통일)에서 이어서 다룬다.
 
 ### 검증 기준
@@ -410,7 +410,7 @@ casing이 안 보이는 것과 정확히 같은 실수를 마커에서 반복하
 
 ### 당시 — 구현이 두 개고 서로 달랐다
 
-(지금은 `core/map_route_style.dart` 하나다. 실내 전용 화면도 삭제됐다.)
+(지금은 `map/route_style.dart` 하나다. 실내 전용 화면도 삭제됐다.)
 
 | | 야외 + 실내 오버레이 | 실내 화면 |
 |---|---|---|
@@ -496,7 +496,7 @@ casing이 안 보이는 것과 정확히 같은 실수를 마커에서 반복하
 `_colorByCategory` 7종을 재사용하라고 아래에 적혀 있는데, 그 사이 대분류가 **9종**이
 됐다. `식음료`가 사용자 말이 아니어서 **음식점·카페·식품관**으로 나뉘었고, 편의시설
 소분류의 영어 원본값(`restroom`·`facility` 등)도 한글로 옮겼다. 색은
-`client/lib/widgets/category_icon.dart`가 계속 단일 출처다.
+`client/lib/map/category_icon.dart`가 계속 단일 출처다.
 
 - 카테고리 아이콘 심볼 레이어 추가 (기존 시설 아이콘과 같은 `addImage` 패턴 재사용)
 - 라벨 `textColor`를 카테고리 색으로 (`_colorByCategory` **9종** 재사용)
@@ -540,7 +540,7 @@ casing이 안 보이는 것과 정확히 같은 실수를 마커에서 반복하
 
 #### 한 것
 
-- **[`core/map_label_style.dart`](../../client/lib/core/map_label_style.dart) 신설.**
+- **[`map/label_style.dart`](../../client/lib/map/label_style.dart) 신설.**
   색·헤일로·보조 라벨 크기의 단일 출처다([`map_route_style.dart`]와 같은 패턴 —
   두 화면이 반드시 같아야 하는 값은 core에 모은다).
 - **색 3종 → 2단계.** `mapLabelStoreColor`(매장명)와
@@ -558,10 +558,10 @@ casing이 안 보이는 것과 정확히 같은 실수를 마커에서 반복하
   탐욕 배치가 달성하는 폭이 아니다 — 한글처럼 모든 글자 폭이 같은 이름에서는 평균에
   도달할 수 없어서, 5글자를 3줄로 접으려고 1.85em을 주면 실제로는 **5줄**이 나왔다.
   그 폭을 그대로 `text-max-width`로 내보냈으니 MapLibre도 같은 모양으로 접었다.
-  이제 [`storeLabelWrapWidth`](../../client/lib/widgets/store_label_fit.dart)가
+  이제 [`storeLabelWrapWidth`](../../client/lib/map/store_label_fit.dart)가
   **그 줄 수가 실제로 나오는 가장 좁은 폭**을 찾는다. 덤으로 `조 말론 런던`의
   글자 크기가 오히려 커졌다(2줄이 제대로 잡히면서 가로 예산이 넓어진다).
-- **매장명 상한 18 → 14.** 근거는 [`kStoreLabelMaxPx`](../../client/lib/widgets/store_label_fit.dart)
+- **매장명 상한 18 → 14.** 근거는 [`kStoreLabelMaxPx`](../../client/lib/map/store_label_fit.dart)
   주석에 있다. ⚠️ **이 값은 예전에 반대 방향으로 튜닝했던 값이다** — 16→18은 z18에서
   상한에 눌리는 매장을 191 → 97개로 줄여 **매장별 비례**를 최대화한 선택이었다.
   이번엔 그 비례가 곧 불균일이라는 피드백이라 되돌린다. **하한 9는 그대로 뒀다** —
@@ -584,7 +584,7 @@ casing이 안 보이는 것과 정확히 같은 실수를 마커에서 반복하
 그 위에서는 z18 타일을 확대해 재활용하고, 그 상태에서 심볼의 **아이콘만** 통째로
 빠진다. 글자와, 타일 소스를 쓰는 POI 아이콘은 멀쩡하다는 점이 단서였다 — 두
 레이어의 차이가 소스 종류였다. 값을 올릴 때마다 소실 지점이 정확히 한 단계씩 위로
-밀리는 것을 확인하고 스펙 상한(24)에 뒀다([`kStoreLabelSourceMaxZoom`](../../client/lib/widgets/store_label_fit.dart)).
+밀리는 것을 확인하고 스펙 상한(24)에 뒀다([`kStoreLabelSourceMaxZoom`](../../client/lib/map/store_label_fit.dart)).
 
 **원인 2 — `icon-size`만 화면 배율을 안 먹고 있었다.** `text-size`는 논리 픽셀이라
 MapLibre가 화면 배율을 곱해 그리는데 `icon-size`는 비트맵의 **물리 픽셀**에 곱해진다.
@@ -645,7 +645,7 @@ Galaxy S23(배율 3.5) 실측:
 #### 검증 기준
 
 - [x] 실내/야외 라벨이 같은 색·헤일로 상수를 본다
-      (`test/core/map_label_style_test.dart`가 잠근다 — 값이 아니라 **출처가 하나**임을 잠근다)
+      (`test/map/label_style_test.dart`가 잠근다 — 값이 아니라 **출처가 하나**임을 잠근다)
 - [x] 수직이동 POI가 이름 필터에서 빠지지 않는다 (같은 테스트)
 - [x] 편의시설 고정 크기가 매장명 크기 범위 안에 든다 (같은 테스트)
 - [x] 목표 줄 수가 실제로 나오는 폭을 고른다
@@ -953,7 +953,7 @@ chain 관련부 재배선 + `SearchPanel` 1,400여 줄의 이동. **한 번에 �
 | `dest` | `#E53935` | 도착 핀 |
 | `muted` | `#757575` | 보조 텍스트 |
 
-카테고리 색·아이콘은 [`client/lib/widgets/category_icon.dart`](../../client/lib/widgets/category_icon.dart)의
+카테고리 색·아이콘은 [`client/lib/map/category_icon.dart`](../../client/lib/map/category_icon.dart)의
 `_colorByCategory`·`_iconByCategory`가 **단일 출처**다 (6번에서 라벨 색으로 재사용).
 여기에 표를 베껴 두면 반드시 한쪽이 먼저 썩으므로 값은 옮겨 적지 않는다 — 실제로
 그렇게 썩어서 이 문단이 됐다.

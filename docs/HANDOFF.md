@@ -12,12 +12,25 @@
 **앱에서 닿지 않던 화면 6개와 실내 전용 도면을 지웠다(5,135줄).** 라우트가 `/` 하나만
 남았다. 근거와 판정 방법은 [구조 개편 계획](client/structure-plan.md)의 "문제 4"에 있다.
 
+**계층을 세웠다.** `lib/`의 import 방향을 재 보니 거의 다 맞았고 거꾸로 가는 화살표가
+여섯이었다 — 지금은 0이다. `core/`에 쌓여 있던 지도 스타일 18개를 `lib/map/`으로 떼고,
+`domain/` 32개를 여섯 갈래(route·guidance·store·search·category·geo)로 묶고, 조립 루트를
+`lib/` 최상단으로 올렸다. 방향은 `client/test/lib_layer_direction_test.dart`가 지킨다.
+자세한 것은 [구조 개편 계획](client/structure-plan.md)의 12단계.
+
+**주석의 자리를 나눴다.** 파일 머리에 쌓여 있던 설계 서사를 `docs/`로 옮기고 코드에는
+요약·계약·링크만 남겼다(머리 주석 10줄 이상 57개 1,122줄 → 38개 463줄, 최장 52 → 19줄).
+규칙은 [AGENTS.md](../AGENTS.md)의 "주석 — 어디에 무엇을 쓰나"에 있고 상한은
+`client/test/lib_header_comment_length_test.dart`가 지킨다. **주석 총량은 원래 문제가
+아니었다** — 우리 비율 28%는 Flutter SDK(material 28.8% · widgets 43.7%)와 같은
+대역이고, 문제는 파일을 열 때 코드 첫 줄까지 넘겨야 하는 벽이었다.
+
 ## 브랜치 두 개 — 순서가 중요하다
 
 ```
 main
  └─ claude/msa-solid-structure-review-ci8j9p-2   (+14)  버그 수정 3 · 분할 5 · 문서
-     └─ refactor/outdoor-map-decomposition       (+60)  갓클래스 해체 + 구조 개편
+     └─ refactor/outdoor-map-decomposition       (+71)  갓클래스 해체 + 구조 개편
 ```
 
 해체 브랜치는 **앞 브랜치 위에 쌓여 있다.** 그래서 병합 순서는 반드시:
@@ -195,7 +208,7 @@ text`는 한글을 못 보내지만 검색이 로마자를 한글로 맞춰 주�
 ```powershell
 cd client
 flutter analyze                             # 0건이어야 한다
-flutter test test/                          # 1,454개
+flutter test test/                          # 1,457개
 flutter test integration_test/ -d windows   # 부팅 테스트(CI는 linux)
 ```
 

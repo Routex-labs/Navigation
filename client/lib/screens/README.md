@@ -37,7 +37,7 @@ flowchart LR
 ```mermaid
 flowchart TD
     SCREENS["screens/*"]
-    CORE["core/service_locator"]
+    CORE["service_locator"]
     REPO["repositories"]
     DOMAIN["domain"]
     FEATURES["features"]

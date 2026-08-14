@@ -88,7 +88,7 @@ edge/route geometry는 이후 route snapping·map matching에 필요하지만, �
 ### 메인 앱 (client)
 - 화면 흐름: Splash → OutdoorMap → **IndoorMap → Destination → RouteGuide** → Arrival.
   라우팅은 `lib/app.dart` 정적 테이블.
-- DI: `lib/core/service_locator.dart` — 전역 final + 테스트 교체용 함수 변수 패턴. **이 패턴을 따른다.**
+- DI: `lib/service_locator.dart` — 전역 final + 테스트 교체용 함수 변수 패턴. **이 패턴을 따른다.**
 - **권한 준비 완료**: Info.plist `NSMotionUsageDescription`, 스플래시에서 `activityRecognition`
   요청, Android `ACTIVITY_RECOGNITION`. Phase 2에서 추가 작업 최소.
 - `lib/models/floor_plan.dart`는 mock GeoJSON(LatLng) 파서로 백엔드 `local_m` 스키마보다 뒤처진

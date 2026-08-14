@@ -74,7 +74,7 @@ Dart의 파일 단위 프라이버시(`_`) 때문에 공개로 바꾼 것이고,
 
 | 옛 심볼 | 새 위치 | 커밋 |
 |---|---|---|
-| `emptyGeoJsonCollection` `geoJsonCollection` `geoJsonLineFeature` (private) | `core/map_geojson.dart` (동명 공개) | 53a962b |
+| `emptyGeoJsonCollection` `geoJsonCollection` `geoJsonLineFeature` (private) | `map/geojson.dart` (동명 공개) | 53a962b |
 | `_registerDebugPdrLayers` | `screens/outdoor_map/pdr_debug_map_layers.dart:registerPdrDebugLayers` | 6082e6f |
 | `_syncDebugPdrLayers`의 지도 쓰기 부분 | 〃 `syncPdrDebugLayers` | 6082e6f |
 | `_setTrail` | 〃 `_setTrail`(파일 private) | 6082e6f |

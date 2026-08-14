@@ -68,8 +68,8 @@
   경로를 내도록 변경(층 간 start/end 지원).
 - `models/floor_graph.dart`(또는 신규 `building_graph.dart`): 노드 `floor_id`, 간선
   `transfer_mode` 파싱 추가.
-- `domain/floor_router.dart`: 경로 폴리라인을 층별로 분할하고 전이 지점을 표기(렌더는 층 단위이므로).
-- `domain/dijkstra.dart`: **알고리즘 변경 불필요**(이미 방향·가중치 존중). 회귀 확인만.
+- `domain/route/floor_router.dart`: 경로 폴리라인을 층별로 분할하고 전이 지점을 표기(렌더는 층 단위이므로).
+- `domain/route/dijkstra.dart`: **알고리즘 변경 불필요**(이미 방향·가중치 존중). 회귀 확인만.
 - 수직 이동 정책(`auto`/`elevator`/`escalator`)을 노출할 UI(설정/토글)와 요청 파라미터 연결.
   접근성 옵션이면 `elevator`.
 

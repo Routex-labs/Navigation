@@ -768,7 +768,7 @@ flutter analyze
 - `client/lib/features/indoor_navigation/application/indoor_navigation_controller.dart`
 - `client/lib/features/indoor_navigation/contract/indoor_navigation_intents.dart`
 - `client/lib/features/indoor_navigation/contract/indoor_navigation_view.dart`
-- `client/lib/domain/route_progress.dart`
+- `client/lib/domain/guidance/route_progress.dart`
 
 ### Flutter UI
 

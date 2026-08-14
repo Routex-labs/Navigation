@@ -3,32 +3,30 @@
 Flutter 화면이나 HTTP를 모르는 계산 계층이다. 백엔드가 제공한 그래프를 탐색해 경로를
 만들고, 건물 로컬 좌표와 지도 좌표 사이를 변환한다.
 
-## 구성 파일
+## 여섯 갈래로 나눠 둔다
 
-| 파일 | 역할 | 주요 항목 |
+가르는 기준은 파일 수가 아니라 **고치는 이유**다. 경로를 만드는 코드는 목적지가
+바뀔 때 돌고, 따라가는 코드는 걸음이 들어올 때 돈다 — 한 폴더에 두면 진행률 버그를
+고치려는 사람이 다익스트라까지 읽는다.
+
+| 폴더 | 무엇 | 대표 파일 |
 |---|---|---|
-| [`dijkstra.dart`](dijkstra.dart) | 가중 그래프 최단 경로 | `ShortestPath`, `dijkstra` |
-| [`floor_router.dart`](floor_router.dart) | node/edge 경로를 지도용 경로점으로 변환 | `computeShortestRoute` |
-| [`multi_floor_router.dart`](multi_floor_router.dart) | 건물 전체 그래프 경로를 층별 세그먼트로 분할 | `computeMultiFloorRoute` |
-| [`route_progress.dart`](route_progress.dart) | 현재 위치를 경로에 투영해 진행·남은거리·이탈 판정 | `RouteProgress`, `computeRouteProgress` |
-| [`route_guidance.dart`](route_guidance.dart) | 다음 행동 한 줄 안내, 진행 지점 기준 경로선 분할(지나온/남은), 도착 시 안내 자동 종료 판단 | `RouteGuidanceAction`, `RouteGuidanceInstruction`, `RoutePolylineSplit`, `splitRouteAtProgress`, `decideArrivalAutoClear` |
-| [`escalator_ride.dart`](escalator_ride.dart) | 탑승~하차 구간의 마커 활강(양 끝 사이 보간)과 내리는 방향 방위각 | `EscalatorGlide`, `escalatorGlideDuration`, `escalatorExitBearingDeg` |
-| [`floor_label.dart`](floor_label.dart) | 층 라벨을 위아래 순위로 읽음("1F"→1, "B1"→-1) | `floorLabelRank` |
-| [`geo_transform.dart`](geo_transform.dart) | 2D affine 피팅·적용, PDR/층 좌표 연결 | `AffineTransform` |
-| [`transit_walk_fill.dart`](transit_walk_fill.dart) | 카카오가 주지 않는 앞뒤 도보를 대중교통 경로에 붙임 | `fillTransitWalkLegs` |
-| [`single_flight.dart`](single_flight.dart) | 같은 작업이 겹쳐 도는 것을 막음(겹치면 버린다) | `SingleFlight` |
-| [`indoor_store_lookup.dart`](indoor_store_lookup.dart) | 사용자 검색어로 못 찾은 매장을 POI 브랜드로 다시 물음 | `lookUpIndoorStoresByBrand` |
-| [`route_endpoint_fill.dart`](route_endpoint_fill.dart) | 보행 경로의 끝을 실제 도착점(출입구)에 맞춤 — 끊긴 몇십 미터를 잇고, TMAP이 문에 닿지 못해 돌아간 뒷부분은 직선으로 바꿈 | `extendRouteToDestination` |
+| [`route/`](route) | **경로를 만든다** | `dijkstra.dart`(최단 경로) · `floor_router.dart`(경로점 변환) · `multi_floor_router.dart`(층별 분할) · `route_endpoint_fill.dart`(끝을 출입구에 맞춤) · `transit_walk_fill.dart`(앞뒤 도보 채움) · `building_entrances.dart`(어느 문으로 들어갈지) |
+| [`guidance/`](guidance) | **만든 경로를 따라간다** | `route_progress.dart`(진행·남은거리·이탈) · `route_guidance.dart`(다음 행동 한 줄, 경로선 분할, 도착 자동 종료) · `route_checkpoint.dart` · `corridor_tracking.dart`(복도 보정의 어휘) · `escalator_ride.dart`(탑승~하차 마커 활강) · `guidance_chrome.dart`(안내 중 chrome 접기) |
+| [`store/`](store) | **매장을 고른다** | `nearest_store.dart`(같은 이름 중 최근접) · `nearby_stores.dart`(이 매장 기준 근처) · `store_hours.dart`(지금 영업 중인가) · `indoor_store_lookup.dart`(POI 브랜드로 재조회) · `reach_label.dart`(몇 m · 도보 몇 분) |
+| [`search/`](search) | **질의를 후보로 바꾼다** | `store_suggestions.dart`(자동완성·오타 교정) · `hangul.dart`(자모 분해) · `search_result_order.dart`(거리순 정렬) · `name_siblings.dart`(형제 매장) · `reason_text.dart`(추천 이유 다듬기) |
+| [`category/`](category) | **분류와 표시 문구** | `category_taxonomy.dart` · `category_label_order.dart` · `subcategory_label.dart` |
+| [`geo/`](geo) | **좌표계** | `geo_transform.dart`(local_m ↔ WGS84 affine, PDR 축 피팅) · `floor_label.dart`(층 라벨 순위) |
 
 ## 단일 층 경로 계산
 
 ```mermaid
 flowchart LR
     INPUT["FloorGraph<br/>startNodeId · endNodeId"]
-    DIJKSTRA["dijkstra.dart<br/>lengthM 비용 · 방향 판정"]
+    DIJKSTRA["route/dijkstra.dart<br/>lengthM 비용 · 방향 판정"]
     PATH["ShortestPath<br/>nodeIds · edgeIds · 거리"]
-    ROUTER["floor_router.dart<br/>edge geometry 연결"]
-    GEO["geo_transform.dart<br/>local_m → WGS84"]
+    ROUTER["route/floor_router.dart<br/>edge geometry 연결"]
+    GEO["geo/geo_transform.dart<br/>local_m → WGS84"]
     ROUTE["IndoorRoute"]
 
     INPUT --> DIJKSTRA --> PATH --> ROUTER --> GEO --> ROUTE
@@ -41,13 +39,13 @@ flowchart LR
 
 ## 경로 기준 위치 해석 — 단방향
 
-PDR 위치 추정은 층 그래프 전체를 상대로 하고 경로를 모른다. `route_progress.dart`는
+PDR 위치 추정은 층 그래프 전체를 상대로 하고 경로를 모른다. `guidance/route_progress.dart`는
 그 결과를 **소비만** 한다.
 
 ```mermaid
 flowchart LR
     TRACKER["CorridorPositionTracker<br/>그래프 위 보정 위치 · currentEdgeId"]
-    PROGRESS["route_progress.dart<br/>경로 폴리라인 투영"]
+    PROGRESS["guidance/route_progress.dart<br/>경로 폴리라인 투영"]
     UI["남은거리 · ETA · 이탈 표시"]
 
     TRACKER -->|"위치 · 현재 간선"| PROGRESS --> UI
@@ -61,9 +59,13 @@ flowchart LR
 
 ## 의존 경계
 
-- `domain`은 `screens`, `widgets`, `repositories`, HTTP를 import하지 않는다.
-- 그래프·경로 값은 `models/`를 사용한다.
-- `geo_transform.dart`는 PDR anchor 좌표 계약을 연결하지만 센서 세션은 소유하지 않는다.
+- **`domain`은 `models`만 import한다.** 화면·위젯·리포지토리·지도·features·HTTP를
+  전부 보지 않는다. 이 방향은
+  [계층 검사](../../test/lib_layer_direction_test.dart)가 지킨다.
+- `geo/geo_transform.dart`는 PDR 좌표 계약(`PdrToFloorAxes`)을 **정의**하지만 센서
+  세션은 소유하지 않는다. features 쪽이 이 타입을 가져다 쓴다.
+- 한때 거꾸로 가는 화살표가 넷 있었다. 하나는 **주석에 건 대괄호 링크** 때문에
+  생겼다 — 대괄호는 import를 끌고 오므로, 위층을 가리킬 때는 경로를 글자로만 적는다.
 
 ## 실패 지점
 
@@ -87,9 +89,9 @@ flowchart LR
 - 경로를 따라 걸으면 진행거리는 단조 증가하고 남은거리는 단조 감소하며, 두 값의 합은 폴리라인 전체 길이다.
 - 이탈거리가 작아도 현재 간선이 경로에 없으면 경로 위로 판정하지 않는다.
 - 걸음 없는 큰 진행거리 점프는 표시에서 보류하고, 누적 걸음으로 설명되는 이동은 반영한다.
-  ([`../../test/domain/route_progress_test.dart`](../../test/domain/route_progress_test.dart))
+  ([`../../test/domain/guidance/route_progress_test.dart`](../../test/domain/guidance/route_progress_test.dart))
 - 측정된 진행률로 목적지에 도착했을 때만 안내 자동 종료를 예약하고, 도착 상태에서 벗어나면 취소한다. 환승 지점·역주행·진행률 없는 짧은 경로는 종료하지 않는다.
-  ([`../../test/domain/route_arrival_auto_clear_test.dart`](../../test/domain/route_arrival_auto_clear_test.dart))
+  ([`../../test/domain/guidance/route_arrival_auto_clear_test.dart`](../../test/domain/guidance/route_arrival_auto_clear_test.dart))
 
 ---
 

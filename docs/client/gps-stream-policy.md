@@ -36,7 +36,7 @@ geolocator 안드로이드의 `StreamHandlerImpl.onListen`은 포그라운드 �
 
 ### 실측 (더현대 앞, 2026-08-13)
 
-`core/service_locator.dart`의 `positionStreamSettings()`는 안드로이드에
+`service_locator.dart`의 `positionStreamSettings()`는 안드로이드에
 `distanceFilter: 0`, `intervalDuration: 1초`를 준다. 그런데 진단 칩이 찍은 좌표 사이
 간격은 이랬다.
 

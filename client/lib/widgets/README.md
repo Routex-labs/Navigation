@@ -18,7 +18,7 @@
 
 | 찾는 것 | 자리 |
 |---|---|
-| 지도 렌더링 **규칙**(라벨 맞춤·아이콘·색·카메라 계산) | [`../core/map/`](../core/map/) |
+| 지도 렌더링 **규칙**(라벨 맞춤·아이콘·색·카메라 계산) | [`../map/`](../map/) |
 | 카테고리 분류·정렬, 도달 라벨 | [`../domain/`](../domain/) |
 | 길찾기 후보·경로 모드 같은 값 타입 | [`../models/`](../models/) |
 | 지도 셸 전용(검색 패널·상단바·시트·장소 상세) | [`../screens/map_shell/widgets/`](../screens/map_shell/widgets/) |
@@ -80,7 +80,7 @@
 - 경량과 마찬가지로 층은 넘기지 않는다 — 길찾기는 항상 건물 전체를 뒤진다(위 `ce6fa1f`
   결정과 같은 이유).
 
-동작은 [`../../test/directions_semantic_search_test.dart`](../../test/directions_semantic_search_test.dart)가
+동작은 [`../../test/widgets/route_field_candidates_test.dart`](../../test/widgets/route_field_candidates_test.dart)가
 고정한다 — 승격이 빠지는 회귀와 항상 승격하는 회귀 둘 다 잡는다.
 
 예전에는 별도 경로 안내 화면의 FAB가 `ai_search_sheet.dart`라는 대화형 검색 시트를
@@ -110,7 +110,7 @@
 **실패 지점.** 목록이 길어지면 기본 시트 높이 상한(화면의 9/16)에 아래쪽 항목부터
 조용히 잘린다. 스크롤 되는 줄 모르는 사용자에게는 "메뉴에 디버그 설정이 없다"가 되므로
 `isScrollControlled: true`로 띄운다. 항목 구성과 반환값은
-[`../../test/widgets/app_menu_sheet_test.dart`](../../test/widgets/app_menu_sheet_test.dart)가
+[`../../test/screens/map_shell/widgets/app_menu_sheet_test.dart`](../../test/screens/map_shell/widgets/app_menu_sheet_test.dart)가
 고정한다.
 
 ## 카테고리는 chip 한 번이면 목록이다
@@ -140,7 +140,7 @@
 지금 실내 도면은 야외 지도 위에 겹치는 오버레이가 그린다
 ([`../screens/outdoor_map/indoor_overlay_layers.dart`](../screens/outdoor_map/indoor_overlay_layers.dart)).
 그 아래에서 색·라벨·아이콘·경로선 스타일 같은 공유 값은
-[`../core/map/`](../core/map/)에 있다 — 지도가 하나가 된 지금도 레이어는 여럿이라
+[`../map/`](../map/)에 있다 — 지도가 하나가 된 지금도 레이어는 여럿이라
 값의 원본은 한 곳이어야 한다.
 
 ## 콜백 규칙
@@ -160,7 +160,7 @@
 
 | 하고 싶은 것 | 위치 |
 |---|---|
-| 지도 레이어·마커 변경 | [`../screens/outdoor_map/indoor_overlay_layers.dart`](../screens/outdoor_map/indoor_overlay_layers.dart)와 [`../core/map/`](../core/map/) |
+| 지도 레이어·마커 변경 | [`../screens/outdoor_map/indoor_overlay_layers.dart`](../screens/outdoor_map/indoor_overlay_layers.dart)와 [`../map/`](../map/) |
 | 경로 모양 변경 | `domain/route_guidance.dart`(`RoutePolylineSplit`)와 `models/indoor_route.dart` |
 | 길찾기 출발/도착 입력 변경 | `map_top_bar.dart`(두 칸)와 `route_field_results.dart`(후보 목록) |
 | 공통 색·간격 변경 | [`../theme/README.md`](../theme/README.md) |

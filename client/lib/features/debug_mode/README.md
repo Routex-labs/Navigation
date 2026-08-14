@@ -4,7 +4,7 @@
 기록하기 위한 도구다.
 
 **진입점은 앱 메뉴 하나다** — 상단 바 햄버거 → `개발자` → `디버그 설정`
-([`../../widgets/app_menu_sheet.dart`](../../widgets/app_menu_sheet.dart)). 예전에는 지도
+([`../../screens/map_shell/widgets/app_menu_sheet.dart`](../../screens/map_shell/widgets/app_menu_sheet.dart)). 예전에는 지도
 왼쪽 아래에 원형 벌레 아이콘 버튼(`DebugModeSettingsButton`)이 떠 있었지만, 일반
 사용자가 볼 이유가 없는 개발 도구가 메인 지도를 차지했고 야외에서는 실내 진입 오버레이
 상태에 따라 나타났다 사라졌다. 그 버튼은 지웠다 — 지도에는 운영 화면만 남는다.

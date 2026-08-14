@@ -95,7 +95,7 @@
 | `features/indoor_navigation/application/indoor_guidance_session.dart` | 876 |
 | `features/indoor_navigation/application/floor_map_matcher.dart` | 705 |
 | `models/transit_route.dart` | 462 |
-| `core/map/floor_facility_style.dart` | 390 |
+| `map/floor_facility_style.dart` | 390 |
 | `screens/map_shell/directions_candidates.dart` | 280 |
 
 ## 문제 4 — 앱에서 닿지 않는 화면이 있었다 (해결: 5,135줄 삭제)
@@ -196,6 +196,69 @@ lib/
 | 8 | `map_shell_screen` 분해 | 2,953 → 2,553줄 | **완료** (1a369e0, dac2911, 8a7c88c, 5ad3864) |
 | 9 | 테스트가 비어 있는 모듈에 테스트 | 3파일 · 36케이스 | **완료** (3f3c2a4, bce48cc, bbd5794) |
 | 10 | 야외 지도 파일을 관심사별로 더 가르기 | 본체 2,250 → 1,967줄 | **완료** (0b6e534, 91eda5d, 22ab08f, 1a9866b) |
+| 11 | 주석의 자리 나누기 | 머리 주석 1,122 → 463줄 | **완료** (c81c99a, 92d3b4b, 7610f8b, c00c202) |
+| 12 | 계층 방향 세우기 + 주제별 폴더 | 위반 6 → 0 | **완료** (43e897d, 853e58d, 41540bc, 2b064fd) |
+
+### 12단계 — 계층은 이미 있었고, 이름과 강제가 없었다
+
+"파일에 계층이 없어 보인다"는 지적으로 시작했는데, **204개 파일의 import를 전부 따라가
+보니 방향은 거의 다 맞았다.** 거꾸로 가는 화살표가 여섯이었다.
+
+| 어긋난 곳 | 원인 | 고침 |
+|---|---|---|
+| `domain/geo_transform` → features | `PdrToFloorAxes`를 쓰는데 정의가 위층에 있었다 | 타입을 domain으로 내림(그 타입을 **계산하는** 함수가 원래 domain에 있었다) |
+| `domain/route_checkpoint`·`route_movement` → features | tracker의 30필드 결과 객체를 통째로 받았다 | 실제로 읽는 두 값만 인자로 받도록 좁힘 |
+| `core/map/store_label_fit` → screens | 라벨 크기 계산이 화면의 zoom 상수를 봤다 | zoom↔미터 산수를 `map/zoom_math`로 내림 |
+| `domain/category_taxonomy` → core/map | 표시 문구 함수가 아이콘 표에 얹혀 있었다 | `domain/category/subcategory_label`로 내림 |
+| `core/service_locator` → features·repositories | 조립 루트가 "설정" 폴더에 있었다 | `lib/` 최상단으로 올림 |
+| `map/location_marker_icon` → widgets | 마커 치수 상수가 위젯에 있었다 | 상수를 `map/`으로 내림 |
+
+**진짜 문제는 `core/`였다.** 그 폴더의 README는 스스로 "앱 설정과 전역 배선"이라
+선언하고 구성 파일로 둘만 적어 두었는데, 실제로는 지도 스타일 18개가 들어와 있었다.
+한 폴더에 최상층(조립 루트)과 최하층(설정)이 같이 있으니 어느 방향으로 화살표를
+그려도 순환이 났다 — `core`라는 이름이 계층이 아니라 **"어디에 둘지 모르겠는 것"**을
+뜻하고 있었던 것이다.
+
+지금 등급표(숫자가 클수록 위, import는 아래로만).
+
+```
+5  app.dart · main.dart · service_locator.dart
+4  screens/
+3  widgets/
+2  repositories/  features/  map/
+1  domain/  state/
+0  models/  core/  theme/  routing/
+```
+
+`domain/`은 32개가 평면으로 쌓여 있던 것을 여섯으로 나눴다 — `route`(경로를 만든다) ·
+`guidance`(따라간다) · `store` · `search` · `category` · `geo`. **가르는 기준은 파일
+수가 아니라 고치는 이유**이고, 그건 10단계에서 야외 지도를 가를 때 쓴 것과 같은 기준이다.
+
+`map/`은 19개를 평면으로 둔다. 안이 전부 "지도 표현" 한 주제라 더 나눌 축이 없다 —
+`domain/`이 문제였던 건 개수가 아니라 **관련 없는 주제 다섯이 섞여 있어서**였다.
+
+### 왜 pub 패키지로 쪼개지 않았나
+
+컴파일러가 방향을 강제한다는 점에서 그게 제일 세다. 비용도 재 봤는데 **작았다** —
+빈 path 의존 패키지 4개를 물려 봤더니 `pub get` 2.2초·`analyze` 9.0초로 차이가 없었다
+(path 의존은 요약으로 해석되고, 코드를 옮기면 그만큼 원래 패키지가 줄어든다).
+
+그런데 **지금은 쪼갤 수가 없었다.** pub은 순환 의존을 거부하므로 위 여섯을 먼저
+고쳐야 했고, 즉 패키지 분리의 1단계가 이 단계다. 경계가 굳은 뒤에 다시 판단한다.
+
+그때까지는 `test/lib_layer_direction_test.dart`가 그 자리를 대신한다. 등급은 지어낸
+것이 아니라 실제 그래프를 재서 나온 순서이고, 예외는 조립 루트 하나뿐이다.
+
+### 11단계 — 주석은 총량이 아니라 자리가 문제였다
+
+파일 머리에 설계 서사가 쌓여 있었다(최장 52줄 — 그 파일은 전체가 72줄이라 코드보다
+주석이 앞에 더 많았다). 같은 것을 Flutter SDK에서 재면 `material` 198파일에 10줄 넘는
+머리 주석이 **0개**다.
+
+**총량은 문제가 아니었다.** 우리 비율 28%는 Flutter material(28.8%)·widgets(43.7%)과
+같은 대역이고, 선언당 주석 길이는 오히려 우리가 더 짧다(15.5줄 ↔ 22.8줄). 문제는 파일을
+열 때 코드 첫 줄까지 넘겨야 하는 벽이었다. 규칙은 [AGENTS.md](../../AGENTS.md)에 있고
+상한은 `test/lib_header_comment_length_test.dart`가 지킨다.
 
 ### 10단계 — 파일 분할과 결합도는 별개 축이다
 
@@ -317,7 +380,7 @@ lib/
 | 디렉터리 | 전 | 후 |
 |---|---|---|
 | `lib/widgets` | 13,610줄 / 49개 | **4,232줄 / 11개** |
-| `lib/core/map` | — | 2,340줄 / 12개 |
+| `lib/core/map` | — | 2,340줄 / 12개 (12단계에서 `lib/map/`으로) |
 | `lib/screens/map_shell/widgets` | — | 5,789줄 / 12개 (+ `place_detail/` 5개) |
 | `lib/screens/outdoor_map/widgets` | — | 974줄 / 9개 |
 | 테스트 루트 | `test/` + `tests/unit_test/` | `test/` 하나 |
