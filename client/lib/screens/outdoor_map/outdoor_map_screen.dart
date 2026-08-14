@@ -13,7 +13,6 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import '../../core/api_config.dart';
 import '../../core/floor_switch_progress.dart';
 import '../../core/map_geojson.dart';
-import '../../core/map_palette.dart';
 import '../../core/map_picked_point.dart';
 import '../../core/service_locator.dart';
 import '../../core/tile_url.dart';
@@ -59,7 +58,6 @@ import '../../widgets/eta_card.dart';
 import '../../widgets/transit_summary_card.dart';
 import '../../models/store_index_entry.dart';
 import '../../widgets/floor_camera_bounds.dart';
-import '../../widgets/destination_pin.dart';
 import '../../widgets/category_map_filter.dart';
 import '../../widgets/category_map_icon.dart';
 import '../../widgets/floor_facility_style.dart';
@@ -67,7 +65,6 @@ import '../../widgets/floor_selector.dart';
 import '../../widgets/floor_switch_escalator_motif.dart';
 import '../../widgets/guidance_recenter_button.dart';
 import '../../widgets/indoor_arrival_card.dart';
-import '../../widgets/location_marker_icon.dart';
 import '../../widgets/route_steps_sheet.dart';
 import '../../widgets/map_icon_cache.dart';
 import '../../widgets/map_overlay_tap_guard.dart';
@@ -80,6 +77,8 @@ import 'indoor_entry_proximity.dart';
 import 'indoor_entry_zoom.dart';
 import 'route_recompute_policy.dart';
 import 'indoor_overlay_layers.dart';
+import 'marker_map_layers.dart';
+import 'shape_map_layers.dart';
 import 'pdr_debug_map_layers.dart';
 import 'route_map_layers.dart';
 import 'transit_map_layers.dart';
@@ -164,14 +163,8 @@ bool get _isMapSupportedOnThisPlatform =>
     kIsWeb || _mapSupportedNativePlatforms.contains(defaultTargetPlatform);
 
 // MapLibre 소스·레이어 ID. 층 지도의 명명 규칙(_로 시작하지 않는 kebab-case) 준수.
-const _buildingSourceId = 'outdoor-building';
-const _buildingFillLayerId = 'outdoor-building-fill';
-// 현재 층의 외곽선. 건물 폴리곤 소스와 **분리한** 전용 소스를 쓴다 — 지하층에서는
-// 건물 외곽선이 아니라 그 층 도면의 외곽선을 따라가야 해서 지오메트리가 서로
-// 다르고(규칙은 floor_outline.dart), 실내 도면 위에 얹혀야 보이므로 레이어 순서도
-// 건물 fill과 다르다.
-const _floorOutlineSourceId = 'outdoor-floor-outline';
-const _floorOutlineLayerId = 'outdoor-floor-outline-line';
+// 건물 fill·dim scrim·층 외곽선·매장 강조의 소스/레이어 id, 등록, 폴리곤 쓰기는
+// shape_map_layers.dart가 소유한다.
 // 실내 오버레이 소스·레이어 ID **베이스 이름**. 층을 바꿀 때마다 세대(generation)
 // 카운터를 이 뒤에 붙여 매번 다른 실제 ID를 만든다 — 같은 ID로 removeSource →
 // addSource를 반복하면 maplibre_gl native(Android/iOS)가 이전 소스 정리를
@@ -214,70 +207,11 @@ const _indoorStoreFacilityIconLayerIdBase =
 // 공개 소스 id(kOutdoorRoute*)로 데이터만 밀어 넣는다.
 // 대중교통 경로 오버레이(소스·레이어 id, 등록, 데이터 쓰기)는
 // transit_map_layers.dart가 소유한다.
-const _currentSourceId = 'outdoor-current';
-const _accuracyLayerId = 'outdoor-accuracy';
-const _currentDotLayerId = 'outdoor-current-dot';
-const _destSourceId = 'outdoor-destination';
-const _destLayerId = 'outdoor-destination-pin';
-// 실내 경로의 도착 노드에 찍는 물방울 핀. 야외 GPS 목적지 원(_destLayerId)과
-// **소스를 나눈다** — 같은 소스에 넣으면 원 레이어 필터가 없어 실내 도착
-// 노드에도 빨간 원이 함께 그려져 핀 밑에 원이 비어져 나온다.
-const _indoorDestSourceId = 'outdoor-indoor-destination';
-const _indoorDestLayerId = 'outdoor-indoor-destination-pin';
-// 도착 핀 비트맵의 addImage 등록 키. 실내 지도와 같은 도형을
-// ([destination_pin.dart]) 공유하지만 등록 키는 화면마다 따로 둔다. 웹 addImage는
-// 같은 이름이 이미 있으면 새 비트맵을 버리므로(위 _pdrLocationImageName 주석 참고)
-// 디자인을 바꿀 땐 이름의 버전도 같이 올려야 살아 있는 지도에 반영된다.
-// v3: "도착" 글씨를 비트맵에 구워 넣었다(심볼 텍스트에서 이동).
-const _destinationPinImageName = 'outdoor-destination-pin-v3';
-// 도착 핀 iconSize의 zoom 보간 구간(z16 → z20). 원본 비트맵이 128x172px이라
-// 화면 높이는 172 x iconSize다.
-//
-// 기준은 현재 위치 마커다 — 그쪽은 zoom과 무관하게 42px 고정 도트인데
-// (kLocationMarkerIconRimRadius 21의 지름), 이전 값(0.115/0.25)에서는 실내 오버레이를
-// 실제로 보는 zoom 18에서 핀이 31px밖에 안 돼 "저기가 목적지"를 가리키는
-// 랜드마크가 사용자 위치 도트보다 작았다. 지금 값은 z18 ≈ 48px, z20 ≈ 65px로
-// 도트보다 확실히 크다. 위쪽(z20) 상한은 확대했을 때 핀이 도착 매장 폴리곤을
-// 통째로 덮지 않는 선에서 잡았다.
-const _destinationPinIconSizeZ16 = 0.18;
-const _destinationPinIconSizeZ20 = 0.38;
-// 실내 진입 상태에서 사용자의 PDR 위치(앵커 또는 실시간 확정 위치)를 그리는
-// 전용 소스·레이어. 야외 GPS 마커와 함께 그려질 수 있지만 색과 위치가 달라
-// 겹쳐도 서로 구분된다 — GPS는 건물 밖 신호, PDR은 건물 내 실측이라 두 표시가
-// 동시에 보이는 순간이 자연스러운 전환기다.
-const _pdrCurrentSourceId = 'outdoor-pdr-current';
-const _pdrCurrentLayerId = 'outdoor-pdr-current-dot';
-// PDR 위치 심볼 아이콘 이름(addImage 등록 키). heading이 있으면 방향 원뿔이
-// 함께 그려진 이미지, 없으면 원형 도트만 있는 이미지로 자동 교체된다. 그림과
-// 크기 상수는 실내 지도와 공유한다(location_marker_icon.dart) — 같은 지점을
-// 봤을 때 두 화면의 마커가 달라 보이면 안 된다.
-// 이름 끝에 코어 반지름을 박아 둔다 — 웹 addImage는 같은 이름이 이미 있으면
-// 새 비트맵을 버리고 건너뛰고, removeImage도 없어서 디자인을 바꿔도 살아 있는
-// 지도에는 예전 크기가 남는다(floor_plan_view.dart의 같은 주석 참고).
-const _pdrLocationImageName =
-    'outdoor-pdr-location-r$kLocationMarkerIconCoreRadius';
-const _pdrLocationDotImageName =
-    'outdoor-pdr-location-dot-r$kLocationMarkerIconCoreRadius';
-// 실내 오버레이에서 매장 폴리곤을 탭했을 때 그 매장 하나만 파란색으로 채우고
-// 테두리를 두르는 전용 소스·레이어. 색은 앱의 선택 색(mapSelectionColor =
-// AppColors.primary) 하나를 쓴다.
-//
-// **fill 0.16은 사실상 안 보였다.** 매장 바닥(#F1EEEA)이 밝은 회색이라 16%
-// 파랑을 얹어도 "눌렀는데 아무 일도 안 일어난 것 같다"는 인상이었다. 0.35면
-// 어느 매장을 골랐는지 한눈에 들어오고, 매장 이름은 흰 헤일로를 두르고 그 위
-// 심볼 레이어에 찍히므로 여전히 읽힌다. 더 올리면 이름이 배경에 먹히기
-// 시작하므로 여기가 상한에 가깝다.
-const _highlightFillOpacity = 0.35;
-const _highlightSourceId = 'outdoor-highlight';
-const _highlightFillLayerId = 'outdoor-highlight-fill';
-const _highlightLineLayerId = 'outdoor-highlight-line';
-// 실내 진입 오버레이가 켜지면 건물 밖만 어둡게 덮어 실내 도면에 시선을 모으는
-// dim scrim. 위젯 트리 스크림이 아니라 MapLibre fill 레이어라, 세계를 덮는
-// outer ring + 건물 footprint를 hole로 뚫은 폴리곤으로 그려도 건물 안쪽은 그대로
-// 밝게 남는다. 삽입 순서를 야외 building outline 위 / 실내 MVT 오버레이 아래로
-// 잡아, 실내 오버레이가 스크림 위에 얹혀 스포트라이트처럼 보이게 한다.
-const _dimScrimSourceId = 'outdoor-dim-scrim';
-const _dimScrimFillLayerId = 'outdoor-dim-scrim-fill';
+// 현재 위치·야외 목적지·실내 도착 핀의 소스/레이어 id, 등록, 점 하나 쓰기는
+// marker_map_layers.dart가 소유한다. 화면은 공개 소스 id(kOutdoorCurrent/Dest/
+// IndoorDest)로 좌표만 넘긴다.
+// PDR 위치 마커의 소스/레이어 id, 비트맵·레이어 등록, 데이터 조립은
+// marker_map_layers.dart가 소유한다.
 
 // 디버그 모드 전용 PDR 진단 레이어(소스·레이어 id, 등록, 데이터 쓰기)는
 // pdr_debug_map_layers.dart가 소유한다. 여기서는 무엇을 보여줄지(토글·층·앵커
@@ -479,17 +413,6 @@ String _baseMapStyle() {
       {'id': 'base', 'type': 'raster', 'source': 'base'},
     ],
   });
-}
-
-Map<String, dynamic> _pointFeature(ll.LatLng point) {
-  return {
-    'type': 'Feature',
-    'properties': const <String, dynamic>{},
-    'geometry': {
-      'type': 'Point',
-      'coordinates': [point.longitude, point.latitude],
-    },
-  };
 }
 
 /// 야외 지도 본문(지도 + 위치/경로 오버레이). 검색창·길찾기·건물 전환 같은
@@ -1949,31 +1872,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
     try {
-      await controller.removeLayer(_indoorDestLayerId);
-      await _addIndoorDestinationPinLayer(controller);
+      await controller.removeLayer(kOutdoorIndoorDestLayerId);
+      await addIndoorDestinationPinLayer(controller);
       await _syncIndoorDestinationLayer();
     } catch (error, stackTrace) {
       // hot reload 편의 기능이라 실패해도 앱을 죽이지 않는다.
       debugPrint('destination pin refresh failed: $error\n$stackTrace');
     }
-  }
-
-  /// 실내 경로 도착 핀 레이어를 얹는다. 실내 화면과 **같은 함수**로 속성을
-  /// 만든다 — 두 화면이 각자 정의를 베껴 들고 있던 탓에 둘 다 `text-font`를
-  /// 빠뜨렸던 이력이 있다([destination_pin.dart] 주석).
-  Future<void> _addIndoorDestinationPinLayer(
-    MapLibreMapController controller,
-  ) async {
-    await controller.addSymbolLayer(
-      _indoorDestSourceId,
-      _indoorDestLayerId,
-      destinationPinSymbolProps(
-        imageName: _destinationPinImageName,
-        iconSizeZ16: _destinationPinIconSizeZ16,
-        iconSizeZ20: _destinationPinIconSizeZ20,
-      ),
-      enableInteraction: false,
-    );
   }
 
   @override
@@ -4837,34 +4742,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 다음 _ensureIndoorTilesRegistered 호출이 아이콘을 다시 등록하도록 리셋.
     _facilityIconImagesRegistered = false;
 
-    // 건물 폴리곤: 옅은 반투명 fill. "이 건물이 탭 가능하다"는 시각 힌트가 되고,
-    // 사용자가 탭하면 opacity를 잠깐 올려 인식됐다는 피드백을 준다. 다른
-    // 레이어(경로선·위치 점)가 위에 오도록 가장 먼저 추가한다. 외곽선은 여기
-    // 붙이지 않는다 — 실내 진입 상태에서만, 층에 따라 다른 링을 그리므로 아래
-    // 전용 소스로 뺐다.
-    await controller.addSource(
-      _buildingSourceId,
-      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
-    );
-    await controller.addFillLayer(
-      _buildingSourceId,
-      _buildingFillLayerId,
-      buildingFillProps(_buildingFillOpacityDefault),
-    );
-
-    // 실내 진입 dim scrim. 건물 fill 바로 위에 두어 이후 등록되는 route/실내
-    // MVT 오버레이보다 아래에 오게 한다 — 실내 도면은 스크림 위에 그려져 밝게
-    // 남고, 야외 base만 어두워진다. 초기 opacity=0, geometry는 _syncDimScrimLayer
-    // 가 footprint 로드 후 세계 outer + 건물 hole 폴리곤으로 채운다.
-    await controller.addSource(
-      _dimScrimSourceId,
-      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
-    );
-    await controller.addFillLayer(
-      _dimScrimSourceId,
-      _dimScrimFillLayerId,
-      dimScrimProps(0),
-      enableInteraction: false,
+    // 건물 fill과 실내 진입 dim scrim. 등록 순서가 곧 쌓임 순서라 가장 먼저다.
+    await registerBuildingAndScrimLayers(
+      controller,
+      buildingFillOpacity: _buildingFillOpacityDefault,
     );
 
     // 경로선 묶음(회색 완료선 → casing → 본선들 → 화살표). 등록 순서가 곧
@@ -4875,159 +4756,28 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await registerTransitLayers(controller);
     await registerTransferRouteLayer(controller);
 
-    // 현재 층 외곽선. **경로선 다음에** 등록하는 것이 핵심이다 — 실내 MVT
-    // 오버레이는 나중에 `belowLayerId: kOutdoorRouteCasingLayerId`로 삽입되므로, 경로선
-    // 앞(=건물 fill·dim scrim 옆)에 두면 불투명한 흰색 footprint fill 밑으로
-    // 깔려 선이 반쯤 먹힌다. 도면 위에 얹혀야 경계가 그대로 보인다.
-    //
-    // 페이드 표현식은 **진입 상태 램프로 고정**한다. 이 레이어는 진입했을 때만
-    // 지오메트리를 갖고(그 외에는 빈 소스), 진입 상태에서만 보이므로 진입 전
-    // 램프가 쓰일 일이 없다. 덕분에 상태가 바뀔 때 setLayerProperties를 다시
-    // 부를 필요가 없다(전체 교체 규칙에 걸릴 여지도 사라진다).
-    await controller.addSource(
-      _floorOutlineSourceId,
-      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
-    );
-    await controller.addLineLayer(
-      _floorOutlineSourceId,
-      _floorOutlineLayerId,
-      floorOutlineProps(indoorOverlayFadeExpr(entered: true, maxOpacity: 0.9)),
-      enableInteraction: false,
-    );
+    // 현재 층 외곽선. 경로선 다음이어야 하는 이유는 그 함수 doc에 있다.
+    await registerFloorOutlineLayer(controller);
 
-    // 현재 위치: 반투명 원(정확도 반경 시각화용, 픽셀 반경) + 진한 점.
-    await controller.addSource(
-      _currentSourceId,
-      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
-    );
-    await controller.addCircleLayer(
-      _currentSourceId,
-      _accuracyLayerId,
-      CircleLayerProperties(
-        circleRadius: 22,
-        circleColor: AppColors.primary.toHexString(),
-        circleOpacity: 0.18,
-        circleStrokeColor: AppColors.primary.toHexString(),
-        circleStrokeWidth: 1,
-      ),
-    );
-    await controller.addCircleLayer(
-      _currentSourceId,
-      _currentDotLayerId,
-      CircleLayerProperties(
-        circleRadius: 7,
-        circleColor: AppColors.primary.toHexString(),
-        circleStrokeColor: '#FFFFFF',
-        circleStrokeWidth: 2,
-      ),
-    );
+    // 현재 위치(GPS)와 야외 목적지 핀. 등록 순서가 곧 쌓임 순서다.
+    await registerCurrentLocationLayers(controller);
+    await registerDestinationLayer(controller);
 
-    // 목적지 핀.
-    await controller.addSource(
-      _destSourceId,
-      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
-    );
-    await controller.addCircleLayer(
-      _destSourceId,
-      _destLayerId,
-      CircleLayerProperties(
-        circleRadius: 9,
-        circleColor: AppColors.dest.toHexString(),
-        circleStrokeColor: '#FFFFFF',
-        circleStrokeWidth: 2,
-      ),
-    );
+    // 매장 강조. PDR 마커보다 아래·경로선보다 위다(그 함수 doc 참고).
+    await registerHighlightLayers(controller);
 
-    // 매장 강조 표시 소스·레이어. PDR 마커보다 아래·경로선보다 위에 두고,
-    // 실내 오버레이 fill(_indoorStoresFillLayerId)이 나중에 belowLayerId로
-    // 이 아래에 삽입되어 강조가 매장 fill 위에 확실히 덮이도록 순서를 잡는다.
-    await controller.addSource(
-      _highlightSourceId,
-      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
-    );
-    await controller.addFillLayer(
-      _highlightSourceId,
-      _highlightFillLayerId,
-      const FillLayerProperties(
-        fillColor: mapSelectionColor,
-        fillOpacity: _highlightFillOpacity,
-      ),
-      enableInteraction: false,
-    );
-    await controller.addLineLayer(
-      _highlightSourceId,
-      _highlightLineLayerId,
-      const LineLayerProperties(
-        lineColor: mapSelectionColor,
-        // fill이 진해진 만큼 테두리도 같이 올린다. 1.2px는 옅은 fill의 경계를
-        // 겨우 알려 주던 굵기라, 채운 뒤에는 fill에 묻혀 보이지 않는다.
-        lineWidth: 2,
-        lineJoin: 'round',
-      ),
-      enableInteraction: false,
-    );
-
-    // PDR 위치 마커 — 실내 지도와 같은 파란 도트 + heading 원뿔로 그린다.
-    // heading 유무에 따라 다른 아이콘을 자동 선택하고, heading이 있을 때만
-    // iconRotate로 지도 위에서 실제 방향을 가리키게 한다. iconRotationAlignment:
-    // 'map'을 넣어야 사용자가 지도를 돌려도 원뿔이 실좌표 방향을 유지한다.
-    await controller.addImage(
-      _pdrLocationImageName,
-      await renderLocationMarkerIcon(showHeading: true),
-    );
-    await controller.addImage(
-      _pdrLocationDotImageName,
-      await renderLocationMarkerIcon(showHeading: false),
-    );
-    // PDR 진단 레이어를 현재 위치 마커보다 **먼저** 등록해, 마커가 항상 경로
-    // 위에 오게 한다. 진단 선이 현재 위치를 덮으면 정작 어디에 서 있는지가
-    // 안 보인다.
+    // PDR 마커 비트맵을 먼저 굽고, 진단 레이어를 그 사이에 끼운 뒤 마커를
+    // 얹는다 — 순서의 근거는 각 함수 doc에 있다.
+    await registerPdrLocationImages(controller);
     await registerPdrDebugLayers(controller);
-
-    await controller.addSource(
-      _pdrCurrentSourceId,
-      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
-    );
-    await controller.addSymbolLayer(
-      _pdrCurrentSourceId,
-      _pdrCurrentLayerId,
-      SymbolLayerProperties(
-        iconImage: [
-          'case',
-          ['has', 'heading'],
-          _pdrLocationImageName,
-          _pdrLocationDotImageName,
-        ],
-        // 야외 GPS 마커(CircleLayer 상수 반지름)가 zoom과 무관하게 고정이므로
-        // 이쪽도 고정으로 둔다 — 디자인 1px = 화면 1px.
-        iconSize: kLocationMarkerIconSize,
-        iconRotate: [
-          'coalesce',
-          ['get', 'heading'],
-          0,
-        ],
-        iconRotationAlignment: 'map',
-        iconPitchAlignment: 'viewport',
-        iconAllowOverlap: true,
-        iconIgnorePlacement: true,
-      ),
-      enableInteraction: false,
-    );
+    await registerPdrLocationLayer(controller);
 
     // 실내 경로 도착 핀 — 현재 위치 마커보다 **나중에** 등록해, 도착 노드와
     // 사용자 위치가 겹칠 때 도착 핀이 위에 오게 한다(실내 지도와 같은 순서).
     // 핀 바닥(tip)이 도착 노드 좌표에 오도록 iconAnchor는 bottom이고, 크기는
     // zoom 보간식으로 걸어 축소했을 때 핀이 도면을 다 덮지 않게 한다.
     // allowOverlap을 켜 매장 라벨과 겹쳐도 핀은 항상 보인다.
-    await controller.addImage(
-      _destinationPinImageName,
-      await renderDestinationPinIcon(),
-    );
-    await controller.addSource(
-      _indoorDestSourceId,
-      GeojsonSourceProperties(data: emptyGeoJsonCollection()),
-    );
-    await _addIndoorDestinationPinLayer(controller);
+    await registerIndoorDestinationLayers(controller);
 
     if (!mounted) return;
     setState(() => _styleReady = true);
@@ -5057,27 +4807,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Future<void> _syncBuildingLayer() async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
-    final footprint = _buildingFootprint;
-    if (footprint == null || footprint.length < 3) {
-      await controller.setGeoJsonSource(
-        _buildingSourceId,
-        emptyGeoJsonCollection(),
-      );
-      return;
-    }
-    final ring = _closedRing(footprint);
-    await controller.setGeoJsonSource(
-      _buildingSourceId,
-      geoJsonCollection([
-        {
-          'type': 'Feature',
-          'properties': const <String, dynamic>{},
-          'geometry': {
-            'type': 'Polygon',
-            'coordinates': [ring],
-          },
-        },
-      ]),
+    await syncPolygonSource(
+      controller,
+      kOutdoorBuildingSourceId,
+      _buildingFootprint,
     );
     // 건물 footprint가 바뀌면 dim scrim의 hole과 층 외곽선도 함께 갱신해야 한다.
     _syncDimScrimLayer();
@@ -5101,39 +4834,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Future<void> _syncFloorOutlineLayer() async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
-    final ring = _activeFloorOutlineRing();
-    if (ring == null) {
-      await controller.setGeoJsonSource(
-        _floorOutlineSourceId,
-        emptyGeoJsonCollection(),
-      );
-      return;
-    }
-    await controller.setGeoJsonSource(
-      _floorOutlineSourceId,
-      geoJsonCollection([
-        {
-          'type': 'Feature',
-          'properties': const <String, dynamic>{},
-          'geometry': {
-            'type': 'Polygon',
-            'coordinates': [_closedRing(ring)],
-          },
-        },
-      ]),
+    await syncPolygonSource(
+      controller,
+      kOutdoorFloorOutlineSourceId,
+      _activeFloorOutlineRing(),
     );
-  }
-
-  /// GeoJSON Polygon linear ring은 첫 점과 마지막 점이 같아야 한다. 백엔드가
-  /// 이미 닫아 보내주면 중복 추가하지 않는다.
-  static List<List<double>> _closedRing(List<ll.LatLng> points) {
-    final ring = <List<double>>[
-      for (final p in points) [p.longitude, p.latitude],
-    ];
-    if (ring.first[0] != ring.last[0] || ring.first[1] != ring.last[1]) {
-      ring.add(ring.first);
-    }
-    return ring;
   }
 
   /// dim scrim 갱신. 건물 footprint가 있으면 세계 전체를 덮는 outer ring +
@@ -5151,39 +4856,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 한 프레임 통째로 꺼지는 것보다 낫다. 여기만 폴백을 허용하는 이유는
     // 스크림이 "경계선"이 아니라 밝기 대비이기 때문이다 — 선은 폴백하지 않는다
     // ([floorOutlineRing]).
-    final footprint = _activeFloorOutlineRing() ?? _buildingFootprint;
-    if (footprint == null || footprint.length < 3) {
-      await controller.setGeoJsonSource(
-        _dimScrimSourceId,
-        emptyGeoJsonCollection(),
-      );
-    } else {
-      // 세계 전체를 덮는 outer ring(웹 메르카토르 상하한). 어떤 위치·줌에서도
-      // 화면 밖까지 확실히 덮어 가장자리가 새어나오지 않는다.
-      const worldRing = [
-        [-180.0, -85.05112878],
-        [180.0, -85.05112878],
-        [180.0, 85.05112878],
-        [-180.0, 85.05112878],
-        [-180.0, -85.05112878],
-      ];
-      // GeoJSON 폴리곤 hole은 outer와 반대 방향(CW)이 표준. 백엔드 순회 방향에
-      // 상관없이 안전하게 hole로 처리되도록 reversed로 뒤집는다.
-      final holeRing = _closedRing(footprint.reversed.toList());
-      await controller.setGeoJsonSource(
-        _dimScrimSourceId,
-        geoJsonCollection([
-          {
-            'type': 'Feature',
-            'properties': const <String, dynamic>{},
-            'geometry': {
-              'type': 'Polygon',
-              'coordinates': [worldRing, holeRing],
-            },
-          },
-        ]),
-      );
-    }
+    await syncDimScrimSource(
+      controller,
+      _activeFloorOutlineRing() ?? _buildingFootprint,
+    );
 
     if (_indoorEntered) {
       // 실내 MVT 오버레이 페이드 구간과 동일한 zoom 창을 쓴다 — 오버레이가
@@ -5193,12 +4869,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       // fillColor를 반드시 함께 넘긴다 — setLayerProperties는 patch가 아니라
       // 전체 교체다(indoor_overlay_layers.dart 상단 주석 참고).
       await controller.setLayerProperties(
-        _dimScrimFillLayerId,
+        kOutdoorDimScrimFillLayerId,
         dimScrimProps(_fadeExpr(maxOpacity: 0.35)),
       );
     } else {
       await controller.setLayerProperties(
-        _dimScrimFillLayerId,
+        kOutdoorDimScrimFillLayerId,
         dimScrimProps(0),
       );
     }
@@ -5763,7 +5439,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // fillColor를 매번 함께 넘긴다 — 빼면 검정으로 되돌아간다
     // (indoor_overlay_layers.dart 상단 주석 참고).
     await controller.setLayerProperties(
-      _buildingFillLayerId,
+      kOutdoorBuildingFillLayerId,
       buildingFillProps(_buildingFillOpacityPressed),
     );
     await Future<void>.delayed(
@@ -5771,7 +5447,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     );
     if (!mounted) return;
     await controller.setLayerProperties(
-      _buildingFillLayerId,
+      kOutdoorBuildingFillLayerId,
       buildingFillProps(_buildingFillOpacityDefault),
     );
   }
@@ -6285,18 +5961,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       return;
     }
     final pos = _outdoorGpsVisible ? _position : null;
-    if (pos == null) {
-      await controller.setGeoJsonSource(
-        _currentSourceId,
-        emptyGeoJsonCollection(),
-      );
-      return;
-    }
-    await controller.setGeoJsonSource(
-      _currentSourceId,
-      geoJsonCollection([
-        _pointFeature(ll.LatLng(pos.latitude, pos.longitude)),
-      ]),
+    await syncPointSource(
+      controller,
+      kOutdoorCurrentSourceId,
+      pos == null ? null : ll.LatLng(pos.latitude, pos.longitude),
     );
   }
 
@@ -6317,17 +5985,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final passingThroughDoor =
         _pendingIndoorRoute != null || _pendingIndoorDestination != null;
     final target = passingThroughDoor ? null : _userDestination;
-    if (target == null) {
-      await controller.setGeoJsonSource(
-        _destSourceId,
-        emptyGeoJsonCollection(),
-      );
-      return;
-    }
-    await controller.setGeoJsonSource(
-      _destSourceId,
-      geoJsonCollection([_pointFeature(target)]),
-    );
+    await syncPointSource(controller, kOutdoorDestSourceId, target);
   }
 
   /// 실내 경로의 도착 노드에 물방울 핀을 찍는다.
@@ -6344,17 +6002,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Future<void> _syncIndoorDestinationLayer() async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
-    final target = _indoorDestinationPinForActiveFloor();
-    if (target == null) {
-      await controller.setGeoJsonSource(
-        _indoorDestSourceId,
-        emptyGeoJsonCollection(),
-      );
-      return;
-    }
-    await controller.setGeoJsonSource(
-      _indoorDestSourceId,
-      geoJsonCollection([_pointFeature(target)]),
+    await syncPointSource(
+      controller,
+      kOutdoorIndoorDestSourceId,
+      _indoorDestinationPinForActiveFloor(),
     );
   }
 
@@ -6820,18 +6471,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
     final location = _indoorLocationVisible ? _pdrCurrentWgs84() : null;
     final heading = location == null ? null : _pdrCurrentHeadingDeg;
-    final data = location == null
-        ? emptyGeoJsonCollection()
-        : geoJsonCollection([
-            {
-              'type': 'Feature',
-              'properties': <String, dynamic>{'heading': ?heading},
-              'geometry': {
-                'type': 'Point',
-                'coordinates': [location.longitude, location.latitude],
-              },
-            },
-          ]);
+    final data = pdrLocationData(location, headingDeg: heading);
 
     final previous = _pdrMarkerWriteQueue;
     _pdrMarkerWriteQueue = () async {
@@ -6849,7 +6489,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         return;
       }
       try {
-        await controller.setGeoJsonSource(_pdrCurrentSourceId, data);
+        await controller.setGeoJsonSource(kOutdoorPdrCurrentSourceId, data);
       } catch (error, stackTrace) {
         debugPrint('PDR marker update failed: $error\n$stackTrace');
       }
@@ -7293,31 +6933,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final store = (storeId == null || plan == null)
         ? null
         : plan.stores.where((s) => s.id == storeId).firstOrNull;
-    if (store == null || store.polygon.length < 3) {
-      await controller.setGeoJsonSource(
-        _highlightSourceId,
-        emptyGeoJsonCollection(),
-      );
-      return;
-    }
-    final ring = [
-      for (final p in store.polygon) [p.longitude, p.latitude],
-    ];
-    if (ring.first[0] != ring.last[0] || ring.first[1] != ring.last[1]) {
-      ring.add(ring.first);
-    }
-    await controller.setGeoJsonSource(
-      _highlightSourceId,
-      geoJsonCollection([
-        {
-          'type': 'Feature',
-          'properties': const <String, dynamic>{},
-          'geometry': {
-            'type': 'Polygon',
-            'coordinates': [ring],
-          },
-        },
-      ]),
+    await syncPolygonSource(
+      controller,
+      kOutdoorHighlightSourceId,
+      store?.polygon,
     );
   }
 
