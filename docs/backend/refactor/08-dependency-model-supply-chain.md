@@ -115,6 +115,89 @@ TMAP/VWorld 키는 현재 클라이언트가 직접 사용한다(백엔드에는
   - **도메인/레퍼러 제한**: 콘솔에서 허용 도메인(운영 프론트 호스트)으로 키 사용을 제한해 키 노출 시 임의 출처 사용을 줄인다.
 - **재검토 트리거**: 위 통제로도 남용이 반복되거나, 키를 노출 없이 완전 은닉해야 하는 요구가 생기면 그때 proxy 이전을 별도 과제로 승격. 그 경우 `backend/app/routers/`에 proxy 엔드포인트 추가 + 클라이언트 호출 경로 수정(별도 브랜치)이 필요하다.
 
+## 재점검 (2026-08-14) — 소스는 고쳤지만 배포되는 물건은 확인하지 않았다
+
+위 완료 기준 넷은 그대로 유효하다. 그런데 넷 모두 **소스(`requirements.txt`)를 대상으로**
+확인한 것이고, 실제로 배포되는 이미지 안을 들여다본 적은 없다. 그 틈에서 셋이 나왔다.
+A는 이번에 고쳤고, B·C는 남아 있다.
+
+### A. CI가 감사하는 의존성 그래프가 배포 이미지와 달랐다 — 해결됨
+
+`ci.yml`은 리눅스 러너에서 `pip install -r requirements.txt`와 `pip-audit -r requirements.txt`를
+돈다. `sentence-transformers`가 `torch>=1.11`만 요구하므로, PyPI 기본 인덱스는 리눅스에서
+CUDA 빌드를 고른다. 실제 CI 로그에 이렇게 찍힌다.
+
+```
+Collecting cuda-toolkit==13.0.3 (from ... torch>=1.11.0->sentence-transformers==5.6.*)
+Collecting nvidia-cudnn-cu13==9.20.0.48
+Collecting nvidia-cusparselt-cu13==0.8.1
+Collecting nvidia-nccl-cu13==2.29.7
+Collecting nvidia-nvshmem-cu13==3.4.5
+```
+
+배포 이미지는 정반대다. `backend/Dockerfile`이 CPU 전용 인덱스에서 `torch==2.7.0`을 먼저
+고정하고 그 위에 `requirements.txt`를 깐다(그 이유는 Dockerfile 주석에 있다).
+
+즉 **감사받는 그래프와 배포되는 그래프가 달랐다.** CI가 녹색이어도 이미지 안의 torch 계열에
+대해서는 아무 말도 하지 않은 셈이다.
+
+같은 뿌리에서 시간도 샜다. 백엔드 잡 236초 중 **129초(55%)** 가 이 3 GB를 옮기는 데 쓰였다.
+
+| 단계 | 시간 |
+|---|---|
+| `setup-python` (pip 캐시 3,033,176,230 B 복원) | 46s |
+| `pip install -r requirements.txt -r requirements-ci.txt` | 83s |
+| mypy | 38s |
+| pytest | 55s |
+| pip-audit | 11s |
+
+**고친 방법.** `ci.yml`이 Dockerfile과 같은 순서로 깐다 — CPU 인덱스에서 `torch==2.7.0`을 먼저
+고정하면 `sentence-transformers`의 `torch>=1.11`이 이미 충족돼 CUDA 휠을 안 끌어온다.
+`cache-dependency-path`에 `ci.yml`도 넣었다. 설치 명령이 바뀌면 캐시 내용도 바뀌는데
+requirements 해시만 키로 쓰면 옛 3 GB 캐시가 계속 복원되기 때문이다.
+
+- **남은 빚 하나.** torch 버전이 `ci.yml`과 `backend/Dockerfile` 두 곳에 적힌다. 한쪽만 올리면
+  다시 갈라진다(이 PR에서 지운 루트 Dockerfile이 정확히 그 실패였다). 양쪽 주석이 서로를
+  가리키게 해 뒀지만, 근본은 아래 B다 — **감사 대상을 빌드한 이미지의 `pip freeze`로 바꾸면**
+  CI가 이미지를 흉내 낼 필요 자체가 없어진다.
+
+### B. 배포 산출물 자체를 검사하지 않는다
+
+검사 대상이 전부 소스다. 이미지 SBOM도, 이미지 취약점 스캔도 없다. A가 보여주듯 소스 감사가
+통과해도 이미지 내용은 다를 수 있다.
+
+- 고치는 방향: CD가 만든 이미지에 SBOM 생성과 스캔을 붙이고, 예외로 승인되지 않은
+  High/Critical은 배포를 막는다. Artifact Registry의 컨테이너 스캔을 켜는 것이 가장 싼
+  출발점이다. CD가 무엇을 어떻게 빌드하는지는 [GCP 배포](../../guide/gcp-instance.md)의
+  「CD가 무엇을 빌드하나」가 단일 출처다.
+
+### C. ignore 목록에 소유자와 만료일이 없다
+
+`ci.yml`의 `--ignore-vuln` 7건은 위 6절에 근거가 적혀 있으므로 "설명 없는 예외"는 아니다.
+그러나 **언제까지인지가 없다.** FastAPI 대규모 업그레이드가 미뤄지는 동안 이 목록은 조용히
+영구화된다. 지금 CI의 의미는 "알려진 취약점 0"이 아니라 "예외로 뺀 것 말고는 0"이다.
+
+- 고치는 방향: 예외를 CI YAML에서 떼어 별도 파일로 옮기고 항목마다 소유자·근거·만료일·추적
+  이슈를 둔다. 만료 검사를 CI 단계로 넣으면 만료가 곧 빌드 실패가 된다.
+
+```yaml
+security_exceptions:
+  - id: PYSEC-2026-1941
+    package: starlette
+    owner: backend
+    rationale: "fastapi 0.115가 starlette<0.47을 핀한다"
+    fixed_in: 0.47.2
+    expires: 2026-11-30
+    tracking: "FastAPI+starlette 동반 업그레이드(위 6절)"
+```
+
+### 곁들여 — 운영 Dockerfile이 두 벌이었다
+
+루트 `Dockerfile`이 지워졌다 되살아나 있었고 base image digest가 고정돼 있지 않았다. 실제
+CD 트리거를 조회해 빌드 컨텍스트가 `backend`임을 확인한 뒤 지웠다. **콘솔에만 있는 설정은
+저장소와 함께 움직이지 않는다** — 그래서 지금은 [GCP 배포](../../guide/gcp-instance.md)에
+트리거가 도는 명령과 재확인 방법을 적어 뒀다.
+
 ## 참고
 
 - 원문서 23페이지 "6. 보안·공급망 점검"(6.1, 6.2).

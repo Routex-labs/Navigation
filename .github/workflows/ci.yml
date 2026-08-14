@@ -61,7 +61,18 @@ jobs:
           cache-dependency-path: |
             backend/requirements.txt
             backend/requirements-ci.txt
+            .github/workflows/ci.yml
 
+      # torch를 CPU 휠로 **먼저** 고정한다. `backend/Dockerfile`이 하는 것과 같다.
+      # requirements.txt의 sentence-transformers는 torch>=1.11만 요구하므로 PyPI에
+      # 맡기면 리눅스에서 CUDA 빌드를 끌어오는데, 배포 이미지는 그걸 안 쓴다.
+      # 그대로 두면 (1) 감사하는 의존성 그래프가 배포되는 것과 달라지고
+      # (2) 쓰지도 않을 3.03 GB를 pip 캐시로 매번 옮긴다(실측: 캐시 복원 46s +
+      # 설치 83s = 잡 시간의 55%).
+      #
+      # 버전이 Dockerfile과 두 곳에 적힌다 — 한쪽을 올리면 다른 쪽도 올린다.
+      # 근거는 docs/backend/refactor/08-dependency-model-supply-chain.md 「재점검」.
+      - run: pip install --index-url https://download.pytorch.org/whl/cpu torch==2.7.0
       - run: pip install -r requirements.txt -r requirements-ci.txt
 
       - name: Lint (ruff)
