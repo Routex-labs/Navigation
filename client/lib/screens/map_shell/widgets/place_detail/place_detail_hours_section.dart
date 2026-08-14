@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../domain/store_hours.dart';
+import '../../../../domain/store/store_hours.dart';
 import '../../../../models/place_detail.dart';
 import '../../../../theme/app_theme.dart';
 

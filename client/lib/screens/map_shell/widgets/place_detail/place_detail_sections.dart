@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../theme/app_theme.dart';
-import './korean_line_break.dart';
+import 'korean_line_break.dart';
 
 /// 상세 API의 `keyValue` 항목을 렌더러에 넘길 때 쓰는 작은 표시 모델.
 ///

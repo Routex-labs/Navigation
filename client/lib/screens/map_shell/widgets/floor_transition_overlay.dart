@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../../domain/escalator_ride.dart';
+import '../../../domain/guidance/escalator_ride.dart';
 import '../../../features/indoor_navigation/contract/floor_transition_ui_state.dart';
 import '../../../theme/app_theme.dart';
-import '../../../widgets/location_marker.dart';
+import '../../../map/location_marker_icon.dart';
 
 /// 층 도면이 교체되는 구간을 덮는 스크림.
 ///

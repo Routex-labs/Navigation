@@ -16,7 +16,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
-import '../../core/service_locator.dart';
+import '../../service_locator.dart';
 import 'gps_freshness_policy.dart';
 
 /// 좌표 한 건이 도착했을 때. [fromStream]이 false면 일회성 조회로 끌어온 것이다

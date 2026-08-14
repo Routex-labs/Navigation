@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../models/floor_plan.dart';
-import '../../../core/map/category_icon.dart';
+import '../../../map/category_icon.dart';
 import '../../../widgets/sheet_grab_handle.dart';
 
 /// 한 자리를 세 곳 이상이 나눠 쓸 때 뜨는 **매장 고르기 시트**.

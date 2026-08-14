@@ -5,6 +5,8 @@ import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 import 'package:navigation_client/features/indoor_navigation/application/corridor_position_tracker.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/pdr_anchor.dart';
 import 'package:navigation_client/models/floor_graph.dart';
+import 'package:navigation_client/domain/guidance/corridor_tracking.dart';
+import 'package:navigation_client/domain/geo/geo_transform.dart';
 
 const _crossGraph = FloorGraph(
   nodes: [

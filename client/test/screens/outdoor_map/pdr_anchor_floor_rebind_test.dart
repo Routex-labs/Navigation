@@ -5,7 +5,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/models/category_count.dart';
 import 'package:navigation_client/models/store_index_entry.dart';
 import 'package:navigation_client/core/api_config.dart';
-import 'package:navigation_client/core/service_locator.dart';
+import 'package:navigation_client/service_locator.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/indoor_navigation_contract.dart';
 import 'package:navigation_client/models/building.dart';
 import 'package:navigation_client/models/building_graph.dart';

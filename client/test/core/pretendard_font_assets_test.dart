@@ -32,7 +32,7 @@ void main() {
 
   test('UI·지도·목업 지도는 Pretendard만 참조한다', () {
     final appTheme = File('lib/theme/app_theme.dart').readAsStringSync();
-    final mapFonts = File('lib/core/map_fonts.dart').readAsStringSync();
+    final mapFonts = File('lib/map/fonts.dart').readAsStringSync();
     final mockMaps = [
       'assets/mock/demo_floor_map_v5.svg',
       'assets/mock/hyundai_floor_map.svg',

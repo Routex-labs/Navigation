@@ -3,15 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../../../core/service_locator.dart';
-import '../../../domain/dijkstra.dart';
-import '../../../domain/indoor_store_lookup.dart';
-import '../../../domain/name_siblings.dart';
-import '../../../domain/nearest_store.dart';
-import '../../../domain/outdoor_poi_ranking.dart';
-import '../../../domain/reason_text.dart';
-import '../../../domain/search_result_order.dart';
-import '../../../domain/store_suggestions.dart';
+import '../../../service_locator.dart';
+import '../../../domain/route/dijkstra.dart';
+import '../../../domain/store/indoor_store_lookup.dart';
+import '../../../domain/search/name_siblings.dart';
+import '../../../domain/store/nearest_store.dart';
+import '../../../domain/store/outdoor_poi_ranking.dart';
+import '../../../domain/search/reason_text.dart';
+import '../../../domain/search/search_result_order.dart';
+import '../../../domain/search/store_suggestions.dart';
 import '../../../models/building.dart';
 import '../../../models/category_count.dart';
 import '../../../models/discovery_result.dart';
@@ -19,11 +19,11 @@ import '../../../models/outdoor_poi.dart';
 import '../../../models/poi_search_result.dart';
 import '../../../models/store_index_entry.dart';
 import '../../../theme/app_theme.dart';
-import '../../../core/map/category_icon.dart';
-import '../../../domain/category_label_order.dart';
+import '../../../domain/category/category_label_order.dart';
 import '../../../widgets/filter_pill.dart';
-import '../../../domain/reach_label.dart';
+import '../../../domain/store/reach_label.dart';
 import '../../../widgets/transit_style.dart';
+import '../../../domain/category/subcategory_label.dart';
 
 /// 상단 검색창 바로 아래에 붙는 결과 패널.
 ///

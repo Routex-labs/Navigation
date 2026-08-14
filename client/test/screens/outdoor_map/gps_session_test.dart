@@ -14,7 +14,7 @@ import 'dart:async';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:navigation_client/core/service_locator.dart';
+import 'package:navigation_client/service_locator.dart';
 import 'package:navigation_client/screens/outdoor_map/gps_freshness_policy.dart';
 import 'package:navigation_client/screens/outdoor_map/gps_session.dart';
 

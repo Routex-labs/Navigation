@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../core/api_config.dart';
-import '../domain/floor_router.dart';
+import '../domain/route/floor_router.dart';
 import '../models/building.dart';
 import '../models/building_graph.dart';
 import '../models/category_count.dart';

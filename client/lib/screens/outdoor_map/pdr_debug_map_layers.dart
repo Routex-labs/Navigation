@@ -16,7 +16,7 @@ library;
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre_gl/maplibre_gl.dart';
 
-import '../../core/map_geojson.dart';
+import '../../map/geojson.dart';
 import '../../features/debug_mode/debug_map_overlay.dart';
 
 const _debugGraphSourceId = 'outdoor-debug-graph';

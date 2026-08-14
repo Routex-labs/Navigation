@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:navigation_client/domain/route_guidance.dart';
+import 'package:navigation_client/domain/guidance/route_guidance.dart';
 import 'package:navigation_client/widgets/eta_card.dart';
 
 /// 안내 배너가 한 줄로 필요한 것만 말하는지에 대한 테스트.

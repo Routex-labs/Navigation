@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/service_locator.dart';
+import '../../../service_locator.dart';
 import '../../../models/floor_plan.dart';
 import '../../../models/poi_search_result.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/filter_pill.dart';
-import '../../../core/map/category_icon.dart';
-import '../../../domain/category_taxonomy.dart';
+import '../../../map/category_icon.dart';
+import '../../../domain/category/category_taxonomy.dart';
 import '../../../widgets/sheet_grab_handle.dart';
 import '../../../widgets/sheet_header.dart';
 
 import '../../../widgets/map_overlay_guard.dart';
 import '../../../widgets/map_pass_through_sheet_route.dart';
+import '../../../domain/category/subcategory_label.dart';
 
 /// 매장 정보 시트에서 카테고리 chip을 누르면 뜨는, 같은 대분류에 속하는
 /// 매장을 층별로 훑어볼 수 있는 목록 시트. 사용자가 항목을 탭하면 그 매장의

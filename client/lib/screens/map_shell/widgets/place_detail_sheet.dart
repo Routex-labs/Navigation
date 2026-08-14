@@ -2,25 +2,26 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../../core/service_locator.dart';
-import '../../../domain/dijkstra.dart';
-import '../../../domain/nearby_stores.dart';
+import '../../../service_locator.dart';
+import '../../../domain/route/dijkstra.dart';
+import '../../../domain/store/nearby_stores.dart';
 import '../../../models/favorite_place.dart';
 import '../../../models/place_detail.dart';
 import '../../../models/store_index_entry.dart';
 import '../../../repositories/place_detail_repository.dart';
 import '../../../theme/app_theme.dart';
-import './place_detail/place_detail_hours_section.dart';
-import './place_detail/place_detail_nearby_section.dart';
-import './place_detail/place_detail_rich_sections.dart';
-import './place_detail/place_detail_sections.dart';
-import '../../../core/map/category_icon.dart';
-import '../../../domain/reach_label.dart';
+import 'place_detail/place_detail_hours_section.dart';
+import 'place_detail/place_detail_nearby_section.dart';
+import 'place_detail/place_detail_rich_sections.dart';
+import 'place_detail/place_detail_sections.dart';
+import '../../../map/category_icon.dart';
+import '../../../domain/store/reach_label.dart';
 import '../../../widgets/sheet_grab_handle.dart';
 import '../../../widgets/sheet_header.dart';
 
 import '../../../widgets/map_overlay_guard.dart';
 import '../../../widgets/map_pass_through_sheet_route.dart';
+import '../../../domain/category/subcategory_label.dart';
 
 /// 매장 상세 시트가 처음 올라오는 높이(화면 비율).
 ///

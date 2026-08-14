@@ -12,6 +12,7 @@ library;
 import 'package:latlong2/latlong.dart' as ll;
 
 import 'indoor_entry_zoom.dart' show indoorTilesMaxZoom;
+import '../../map/zoom_math.dart';
 
 // 위치 조회 실패 시 대체 좌표 (서울시청). 저장·전달은 latlong2 타입으로 하고
 // MapLibre API에 넘길 때만 [_toGl]로 변환한다 — 이 파일 외부(Building.entrance,

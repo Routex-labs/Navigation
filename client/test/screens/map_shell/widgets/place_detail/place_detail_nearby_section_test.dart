@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:navigation_client/domain/dijkstra.dart';
-import 'package:navigation_client/domain/nearby_stores.dart';
+import 'package:navigation_client/domain/route/dijkstra.dart';
+import 'package:navigation_client/domain/store/nearby_stores.dart';
 import 'package:navigation_client/models/store_index_entry.dart';
 import 'package:navigation_client/screens/map_shell/widgets/place_detail/place_detail_nearby_section.dart';
 

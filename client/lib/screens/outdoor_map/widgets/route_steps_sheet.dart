@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../domain/route_guidance.dart';
+import '../../../domain/guidance/route_guidance.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/eta_card.dart';
 

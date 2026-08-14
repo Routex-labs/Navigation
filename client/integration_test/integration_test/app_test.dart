@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:integration_test/integration_test.dart';
 
-import 'package:navigation_client/core/service_locator.dart';
+import 'package:navigation_client/service_locator.dart';
 import 'package:navigation_client/main.dart' as app;
 import 'package:navigation_client/repositories/mock_building_repository.dart';
 import 'package:navigation_client/repositories/mock_destination_repository.dart';

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:navigation_client/core/service_locator.dart';
+import 'package:navigation_client/service_locator.dart';
 import 'package:navigation_client/models/building.dart';
 import 'package:navigation_client/models/poi_search_result.dart';
 import 'package:navigation_client/repositories/building_repository.dart';

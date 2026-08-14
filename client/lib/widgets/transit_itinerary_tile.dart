@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/transit_route.dart';
 import '../theme/app_theme.dart';
-import './transit_style.dart';
+import 'transit_style.dart';
 
 /// 대중교통 경로 후보 **한 줄**.
 ///

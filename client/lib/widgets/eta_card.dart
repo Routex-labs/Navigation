@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
-import '../domain/route_guidance.dart';
+import '../domain/guidance/route_guidance.dart';
 
 /// 예상 도착 시간 카드 (design.md 공통 컴포넌트: EtaCard).
 class EtaCard extends StatelessWidget {

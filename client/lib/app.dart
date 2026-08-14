@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'core/service_locator.dart';
+import 'service_locator.dart';
 import 'routing/app_routes.dart';
 import 'theme/app_theme.dart';
 import 'screens/map_shell/map_shell_screen.dart';

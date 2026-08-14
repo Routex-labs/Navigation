@@ -14,8 +14,8 @@ library;
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre_gl/maplibre_gl.dart';
 
-import '../../core/map_geojson.dart';
-import '../../core/map_palette.dart';
+import '../../map/geojson.dart';
+import '../../map/palette.dart';
 import 'indoor_entry_zoom.dart';
 import 'indoor_overlay_layers.dart';
 

@@ -7,7 +7,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:navigation_client/app.dart';
-import 'package:navigation_client/core/service_locator.dart';
+import 'package:navigation_client/service_locator.dart';
 import 'package:navigation_client/models/discovery_result.dart';
 import 'package:navigation_client/models/poi_search_result.dart';
 import 'package:navigation_client/repositories/destination_repository.dart';

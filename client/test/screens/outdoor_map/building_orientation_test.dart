@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:navigation_client/screens/outdoor_map/building_orientation.dart';
-import 'package:navigation_client/screens/outdoor_map/indoor_entry_zoom.dart';
+import 'package:navigation_client/map/zoom_math.dart';
 
 /// 건물을 세로로 세우는 계산의 검증.
 ///

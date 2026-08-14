@@ -10,9 +10,9 @@ library;
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:latlong2/latlong.dart';
 
-import '../../core/service_locator.dart';
-import '../../domain/indoor_store_lookup.dart';
-import '../../domain/outdoor_poi_ranking.dart';
+import '../../service_locator.dart';
+import '../../domain/store/indoor_store_lookup.dart';
+import '../../domain/store/outdoor_poi_ranking.dart';
 import '../../models/building.dart';
 import '../../models/outdoor_poi.dart';
 import '../../models/poi_search_result.dart';

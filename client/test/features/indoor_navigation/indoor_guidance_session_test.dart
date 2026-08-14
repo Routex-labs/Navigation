@@ -9,7 +9,7 @@ import 'package:navigation_client/features/indoor_navigation/application/indoor_
 import 'package:navigation_client/features/indoor_navigation/application/escalator_transition_detector.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/altitude_sample.dart';
 import 'package:navigation_client/models/building_graph.dart';
-import 'package:navigation_client/domain/route_movement.dart';
+import 'package:navigation_client/domain/guidance/route_movement.dart';
 import 'package:navigation_client/models/indoor_route.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/pdr_anchor.dart';
 import 'package:navigation_client/models/floor_graph.dart';

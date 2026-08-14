@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/service_locator.dart';
+import '../../../service_locator.dart';
 import '../../../models/favorite_place.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/sheet_grab_handle.dart';

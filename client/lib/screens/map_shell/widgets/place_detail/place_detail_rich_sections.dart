@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../theme/app_theme.dart';
-import './korean_line_break.dart';
+import 'korean_line_break.dart';
 
 /// 매장 대표 사진의 로컬 asset 정보다. 네트워크 모델과 분리해 화면에 필요한
 /// 최소 표시 정보만 가진다.

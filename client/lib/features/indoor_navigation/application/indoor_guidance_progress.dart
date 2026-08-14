@@ -1,6 +1,6 @@
-import '../../../domain/route_checkpoint.dart';
-import '../../../domain/route_movement.dart';
-import '../../../domain/route_progress.dart';
+import '../../../domain/guidance/route_checkpoint.dart';
+import '../../../domain/guidance/route_movement.dart';
+import '../../../domain/guidance/route_progress.dart';
 
 /// 걸음 한 묶음이 만들어 낸 경로 진행 상태 변화.
 ///

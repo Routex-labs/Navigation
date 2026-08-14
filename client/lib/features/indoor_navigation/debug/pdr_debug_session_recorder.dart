@@ -2,9 +2,9 @@ import 'dart:math' as math;
 
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
-import '../../../domain/route_progress.dart';
-import '../../../domain/route_checkpoint.dart';
-import '../../../domain/route_movement.dart';
+import '../../../domain/guidance/route_progress.dart';
+import '../../../domain/guidance/route_checkpoint.dart';
+import '../../../domain/guidance/route_movement.dart';
 import '../../../models/floor_graph.dart';
 import '../application/corridor_position_tracker.dart';
 import '../application/escalator_transition_detector.dart';
@@ -13,6 +13,7 @@ import '../contract/altitude_sample.dart';
 import '../contract/calibration_state.dart';
 import '../contract/pdr_anchor.dart';
 import '../contract/pdr_runtime_status.dart';
+import '../../../domain/guidance/corridor_tracking.dart';
 
 /// 실측 뒤 원인을 되짚기 위한, 의도적으로 작은 PDR 디버그 세션 레코더.
 ///

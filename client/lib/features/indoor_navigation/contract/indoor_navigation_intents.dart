@@ -1,6 +1,6 @@
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
-import 'pdr_anchor.dart';
+import '../../../domain/geo/geo_transform.dart';
 
 /// UI가 **호출**하는 명령 계약(UI → 로직).
 ///

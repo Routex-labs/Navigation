@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/screens/outdoor_map/indoor_entry_zoom.dart';
+import 'package:navigation_client/map/zoom_math.dart';
 
 /// 더현대 서울 각 층 도면이 **정북 정렬 화면**에서 차지하는 크기(m).
 ///

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:navigation_client/domain/escalator_ride.dart';
+import 'package:navigation_client/domain/guidance/escalator_ride.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/floor_transition_ui_state.dart';
 import 'package:navigation_client/screens/map_shell/widgets/floor_transition_overlay.dart';
 

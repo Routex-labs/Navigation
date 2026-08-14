@@ -11,12 +11,13 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../../../domain/nearby_stores.dart';
+import '../../../../domain/store/nearby_stores.dart';
 import '../../../../models/store_index_entry.dart';
 import '../../../../theme/app_theme.dart';
-import '../../../../core/map/category_icon.dart';
-import '../../../../domain/reach_label.dart';
-import './place_detail_rich_sections.dart';
+import '../../../../map/category_icon.dart';
+import '../../../../domain/store/reach_label.dart';
+import 'place_detail_rich_sections.dart';
+import '../../../../domain/category/subcategory_label.dart';
 
 /// 카드 한 장의 너비. 화면 폭과 무관하게 **다음 카드가 일부 보이도록** 고정한다 —
 /// 잘린 카드가 보이는 것이 "옆으로 더 있다"를 말하는 가장 싼 방법이다. 화면 폭에

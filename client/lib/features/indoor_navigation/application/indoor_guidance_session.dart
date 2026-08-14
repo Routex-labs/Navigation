@@ -2,9 +2,9 @@ import 'dart:math' as math;
 
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
-import '../../../domain/route_checkpoint.dart';
-import '../../../domain/route_movement.dart';
-import '../../../domain/route_progress.dart';
+import '../../../domain/guidance/route_checkpoint.dart';
+import '../../../domain/guidance/route_movement.dart';
+import '../../../domain/guidance/route_progress.dart';
 import '../../../models/building_graph.dart';
 import '../../../models/floor_graph.dart';
 import '../contract/altitude_sample.dart';
@@ -17,6 +17,7 @@ import '../../../models/indoor_route.dart';
 import 'indoor_guidance_position.dart';
 import 'indoor_guidance_progress.dart';
 import 'indoor_location_estimate.dart';
+import '../../../domain/guidance/corridor_tracking.dart';
 
 /// 기압 샘플 한 건이 만들어 낸 층 이동 신호들.
 ///
@@ -532,8 +533,7 @@ class IndoorGuidanceSession {
         projected != null &&
         result.isInJunctionZone &&
         result.state != CorridorTrackingState.uncertain &&
-        (result.previewPosition -
-                    PdrLocalPoint(projected.x, projected.y))
+        (result.previewPosition - PdrLocalPoint(projected.x, projected.y))
                 .distance >
             0.75;
     if (junctionPreviewHasMoved) {
@@ -685,7 +685,8 @@ class IndoorGuidanceSession {
           _checkpoints.apply(
             step: routeStep,
             travelDirectionState: _travelDirection.state,
-            tracker: result,
+            trackerPreviewPosition: result.previewPosition,
+            trackerState: result.state,
             graph: graph,
             rerouteInFlight: rerouteInFlight,
           ),

@@ -2,8 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:navigation_client/domain/dijkstra.dart';
-import 'package:navigation_client/domain/store_suggestions.dart';
+import 'package:navigation_client/domain/route/dijkstra.dart';
+import 'package:navigation_client/domain/search/store_suggestions.dart';
 import 'package:navigation_client/models/store_index_entry.dart';
 import 'package:navigation_client/models/directions_candidate.dart';
 import 'package:navigation_client/screens/map_shell/widgets/route_field_results.dart';

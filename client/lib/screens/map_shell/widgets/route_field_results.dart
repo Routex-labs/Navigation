@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../../../domain/dijkstra.dart';
-import '../../../domain/nearest_store.dart';
-import '../../../domain/store_suggestions.dart';
+import '../../../domain/route/dijkstra.dart';
+import '../../../domain/store/nearest_store.dart';
+import '../../../domain/search/store_suggestions.dart';
 import '../../../theme/app_theme.dart';
 import '../../../models/directions_candidate.dart';
-import '../../../domain/reach_label.dart';
+import '../../../domain/store/reach_label.dart';
 import '../../../models/route_plan_mode.dart';
 
 /// 상단 길찾기 바에서 한 칸을 치는 동안 **그 바로 아래**에 붙는 후보 목록.

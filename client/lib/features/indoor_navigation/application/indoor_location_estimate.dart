@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../../../domain/geo_transform.dart';
+import '../../../domain/geo/geo_transform.dart';
 import '../../../models/floor_graph.dart';
 import 'floor_map_matcher.dart';
 

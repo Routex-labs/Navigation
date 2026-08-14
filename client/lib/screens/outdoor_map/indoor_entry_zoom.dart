@@ -7,34 +7,7 @@ library;
 
 import 'dart:math' as math;
 
-/// MapLibre zoom 0에서 적도 기준 픽셀당 미터.
-///
-/// **256 타일 규약(156543.03)이 아니라 512 타일 규약이다.** 실기기에서 재 확인한
-/// 값이고, 156543을 쓰면 필요한 zoom이 1레벨 높게 나온다.
-const metersPerPixelAtZoom0Equator = 78271.5170;
-
-/// 위도 [latitude]에서 폭 [widthMeters]가 [availablePx] 논리 픽셀 안에 들어오는
-/// 최대(=가장 확대된) zoom. 이보다 확대하면 잘린다.
-double zoomToFitWidth({
-  required double widthMeters,
-  required double availablePx,
-  required double latitude,
-}) {
-  final mppAtLat =
-      metersPerPixelAtZoom0Equator * math.cos(latitude * math.pi / 180);
-  return math.log(mppAtLat * availablePx / widthMeters) / math.ln2;
-}
-
-/// [zoom]에서 [availablePx] 논리 픽셀에 담기는 실제 폭(m).
-double visibleWidthMeters({
-  required double zoom,
-  required double availablePx,
-  required double latitude,
-}) {
-  final mppAtLat =
-      metersPerPixelAtZoom0Equator * math.cos(latitude * math.pi / 180);
-  return mppAtLat * availablePx / math.pow(2, zoom);
-}
+import '../../map/zoom_math.dart';
 
 /// 임계값을 잡을 때 기준으로 삼은 화면 폭(논리 px). 세로 모드 스마트폰의
 /// 흔한 하한이며, 여기서 성립하면 더 넓은 화면에서는 자동으로 성립한다.
@@ -104,34 +77,6 @@ double indoorEntryZoomThresholdFor({
     math.min(indoorEntryZoomThreshold, fitZoom),
     indoorOverlayFadeOutEndZoom,
   );
-}
-
-/// 돌려 세운 건물이 화면에 담기는 zoom.
-///
-/// 건물을 세로로 세운 뒤([building_orientation.dart]) 그 직사각형을 화면에
-/// 맞출 때 쓴다. 가로·세로 **둘 다** 담겨야 하므로 두 제약 중 더 축소해야 하는
-/// 쪽을 고른다 — 한쪽만 보면 나머지 축이 화면 밖으로 잘린다.
-///
-/// [widthMeters]는 화면 가로에 놓이는 변(짧은 축), [heightMeters]는 세로에
-/// 놓이는 변(긴 축)이다. 세로로 세운다는 것이 곧 이 대응을 뜻한다.
-double zoomToFitRotatedBox({
-  required double widthMeters,
-  required double heightMeters,
-  required double viewportWidthPx,
-  required double viewportHeightPx,
-  required double latitude,
-}) {
-  final byWidth = zoomToFitWidth(
-    widthMeters: widthMeters,
-    availablePx: viewportWidthPx,
-    latitude: latitude,
-  );
-  final byHeight = zoomToFitWidth(
-    widthMeters: heightMeters,
-    availablePx: viewportHeightPx,
-    latitude: latitude,
-  );
-  return math.min(byWidth, byHeight);
 }
 
 /// 건물을 **바깥에서 보여 줄 때** 진입 임계값에서 물러서는 폭(zoom 레벨).

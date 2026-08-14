@@ -13,8 +13,8 @@ library;
 import 'package:flutter/material.dart' show Color, Icons;
 import 'package:maplibre_gl/maplibre_gl.dart';
 
-import '../../core/map_geojson.dart';
-import '../../core/map_route_style.dart';
+import '../../map/geojson.dart';
+import '../../map/route_style.dart';
 import '../../models/transit_route.dart';
 import '../../widgets/transit_style.dart';
 

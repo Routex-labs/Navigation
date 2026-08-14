@@ -19,6 +19,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 
 import 'building_orientation.dart';
 import 'indoor_entry_zoom.dart';
+import '../../map/zoom_math.dart';
 
 /// 도면을 화면에 맞출 때 실제로 채우는 비율.
 ///

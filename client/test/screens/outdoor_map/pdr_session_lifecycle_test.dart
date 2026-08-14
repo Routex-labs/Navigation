@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/indoor_navigation_contract.dart';
 import 'package:navigation_client/screens/outdoor_map/pdr_session_lifecycle.dart';
+import 'package:navigation_client/domain/geo/geo_transform.dart';
 
 /// [PdrSessionLifecycle]을 화면 없이 직접 시험한다.
 ///

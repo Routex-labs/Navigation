@@ -9,8 +9,8 @@ library;
 
 import 'package:maplibre_gl/maplibre_gl.dart';
 
-import '../../core/map_geojson.dart';
-import '../../core/map_route_style.dart';
+import '../../map/geojson.dart';
+import '../../map/route_style.dart';
 
 /// 화면 sync 코드가 데이터를 밀어 넣는 소스 id들.
 ///

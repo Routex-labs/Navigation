@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
+import '../../../domain/geo/geo_transform.dart';
+
 /// anchor 확정 근거.
 ///
 /// [verticalTransfer]는 기압계가 층 이동을 확인해 새 층의 도착 노드로 위치를
@@ -51,50 +53,6 @@ class PdrAnchor {
   /// 이 floor의 local axis 규약. anchor를 확정할 때와 이후 경로를 그릴 때
   /// 반드시 같은 값을 써야, anchor 직전의 센서 이동도 올바르게 상쇄된다.
   final PdrToFloorAxes axes;
-}
-
-/// 자북 기준 PDR의 `(east, north)` 증분을 floor `local_m`의 `(x, y)` 증분으로
-/// 바꾸는 2×2 선형 변환이다.
-///
-/// 기본값은 기존 데이터셋과의 호환을 위한 항등이다. 실제 평면도에서는
-/// WGS84 대응점으로부터 [fitPdrToFloorAxes]가 계산한 값을 사용한다. 예를 들어
-/// 더현대 1F처럼 `+x=동쪽, +y=남쪽`인 경우 `(east, north) -> (east, -north)`가
-/// 되어 북쪽 보행이 지도에서 반대로 표시되는 일을 막는다.
-class PdrToFloorAxes {
-  const PdrToFloorAxes({
-    required this.eastToX,
-    required this.northToX,
-    required this.eastToY,
-    required this.northToY,
-  });
-
-  const PdrToFloorAxes.identity()
-    : eastToX = 1,
-      northToX = 0,
-      eastToY = 0,
-      northToY = 1;
-
-  final double eastToX;
-  final double northToX;
-  final double eastToY;
-  final double northToY;
-
-  PdrLocalPoint apply(PdrLocalPoint point) => PdrLocalPoint(
-    eastToX * point.eastM + northToX * point.northM,
-    eastToY * point.eastM + northToY * point.northM,
-  );
-
-  /// floor `local_m` 방향을 자북 기준 PDR `(east, north)` 방향으로 되돌린다.
-  ///
-  /// 실측 affine가 퇴화한 경우 잘못된 방향으로 보정하지 않도록 null을 반환한다.
-  PdrLocalPoint? inverseApply(PdrLocalPoint point) {
-    final determinant = eastToX * northToY - northToX * eastToY;
-    if (determinant.abs() < 1e-12) return null;
-    return PdrLocalPoint(
-      (northToY * point.eastM - northToX * point.northM) / determinant,
-      (-eastToY * point.eastM + eastToX * point.northM) / determinant,
-    );
-  }
 }
 
 /// 0°=북쪽, 90°=동쪽인 bearing을 PDR 동·북 단위 벡터로 바꾼다.

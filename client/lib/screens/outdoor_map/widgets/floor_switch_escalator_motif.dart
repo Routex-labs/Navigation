@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/floor_switch_progress.dart';
+import '../../../map/floor_switch_progress.dart';
 import '../../../theme/app_theme.dart';
 
 /// 층 전환이 오래 걸릴 때([floorSwitchMotifDelay] 초과) 지도 위 중앙에 띄우는

@@ -13,14 +13,14 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/painting.dart' show Color;
 import 'package:maplibre_gl/maplibre_gl.dart';
 
-import '../../core/map_fonts.dart';
-import '../../core/map_label_style.dart';
-import '../../core/map_palette.dart';
+import '../../map/fonts.dart';
+import '../../map/label_style.dart';
+import '../../map/palette.dart';
 import '../../theme/app_theme.dart';
-import '../../core/map/category_map_fill.dart';
-import '../../core/map/category_map_filter.dart';
-import '../../core/map/category_map_icon.dart';
-import '../../core/map/floor_facility_style.dart';
+import '../../map/category_map_fill.dart';
+import '../../map/category_map_filter.dart';
+import '../../map/category_map_icon.dart';
+import '../../map/floor_facility_style.dart';
 import 'indoor_entry_zoom.dart' show indoorTilesMaxZoom, indoorTilesMinZoom;
 import 'route_map_layers.dart' show kOutdoorRouteCasingLayerId;
 

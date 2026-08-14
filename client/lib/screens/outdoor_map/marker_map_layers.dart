@@ -11,10 +11,10 @@ library;
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre_gl/maplibre_gl.dart';
 
-import '../../core/map_geojson.dart';
+import '../../map/geojson.dart';
 import '../../theme/app_theme.dart';
-import '../../core/map/destination_pin.dart';
-import '../../core/map/location_marker_icon.dart';
+import '../../map/destination_pin.dart';
+import '../../map/location_marker_icon.dart';
 import 'indoor_overlay_layers.dart' show MapColorHex;
 
 /// 현재 위치: 반투명 원(정확도 반경 시각화용, 픽셀 반경) + 진한 점.

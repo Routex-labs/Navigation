@@ -2,9 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../models/category_count.dart';
 import '../../../theme/app_theme.dart';
-import '../../../core/map/category_icon.dart';
-import '../../../domain/category_label_order.dart';
-import '../../../core/map/category_map_filter.dart';
+import '../../../map/category_icon.dart';
+import '../../../domain/category/category_label_order.dart';
+import '../../../map/category_map_filter.dart';
 
 /// 검색창 바로 아래에 붙는 카테고리 chip 열.
 /// 건물에 실제 존재하는 대분류만 골라 각각 하나의 chip으로 노출한다.

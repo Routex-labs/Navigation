@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:navigation_client/core/service_locator.dart';
-import 'package:navigation_client/domain/dijkstra.dart';
-import 'package:navigation_client/domain/search_result_order.dart';
+import 'package:navigation_client/service_locator.dart';
+import 'package:navigation_client/domain/route/dijkstra.dart';
+import 'package:navigation_client/domain/search/search_result_order.dart';
 import 'package:navigation_client/models/building.dart';
 import 'package:navigation_client/models/category_count.dart';
 import 'package:navigation_client/models/discovery_result.dart';
@@ -13,7 +13,7 @@ import 'package:navigation_client/repositories/building_repository.dart';
 import 'package:navigation_client/repositories/destination_repository.dart';
 import 'package:navigation_client/state/recent_searches_controller.dart';
 import 'package:navigation_client/theme/app_theme.dart';
-import 'package:navigation_client/domain/reach_label.dart';
+import 'package:navigation_client/domain/store/reach_label.dart';
 import 'package:navigation_client/screens/map_shell/widgets/search_panel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
