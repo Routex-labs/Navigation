@@ -1568,8 +1568,9 @@ class PlaceSectionTitle extends StatelessWidget {
   Widget build(BuildContext context) => Text(
     text,
     style: const TextStyle(
-      fontSize: 17,
-      fontWeight: FontWeight.w800,
+      fontSize: 16,
+      height: 1.3,
+      fontWeight: FontWeight.w700,
       color: AppColors.text,
     ),
   );
