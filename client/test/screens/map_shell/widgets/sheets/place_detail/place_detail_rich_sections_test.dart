@@ -930,7 +930,7 @@ void main() {
           const PlaceLinksSection(
             items: [
               PlaceLinkItem(label: '', url: 'https://example.com/a'),
-              PlaceLinkItem(label: '유튜브', url: 'https://example.com/b'),
+              PlaceLinkItem(label: '블로그', url: 'https://example.com/b'),
             ],
           ),
         ),
@@ -938,9 +938,87 @@ void main() {
 
       // 라벨이 없으면 주소가 대신 선다.
       expect(find.text('https://example.com/a'), findsOneWidget);
-      expect(find.text('유튜브'), findsOneWidget);
+      expect(find.text('블로그'), findsOneWidget);
       expect(find.byIcon(Icons.link), findsNWidgets(2));
       expect(find.byIcon(Icons.chevron_right), findsNWidgets(2));
+    });
+
+    // 회색 기본 배지로 떨어지던 두 줄이다. 유튜브는 정확히 일치하는 가지가 없었고,
+    // `네이버 브랜드스토어`는 공백을 지워도 `스마트스토어`와 글자가 달랐다.
+    testWidgets('youtube and naver brand store get their own badges', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        subject(
+          const PlaceLinksSection(
+            items: [
+              PlaceLinkItem(
+                label: '유튜브',
+                url: 'https://www.youtube.com/channel/abc',
+              ),
+              PlaceLinkItem(
+                label: '네이버 브랜드스토어',
+                url: 'https://brand.naver.com/osulloc',
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(find.byIcon(Icons.smart_display), findsOneWidget);
+      expect(find.byIcon(Icons.storefront), findsOneWidget);
+      expect(find.byIcon(Icons.link), findsNothing);
+    });
+
+    // 앞에 매장 이름이 붙은 웹사이트 라벨은 이름이 정보라 주소 위에 남는다.
+    // 이름 없는 `공식 사이트`가 주소만 보여 주는 것과 갈리는 지점이다.
+    testWidgets('a named website label keeps the label above the url', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        subject(
+          const PlaceLinksSection(
+            items: [
+              PlaceLinkItem(
+                label: '오설록 공식 홈페이지',
+                url: 'https://www.osulloc.com/kr/ko',
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(find.text('오설록 공식 홈페이지'), findsOneWidget);
+      expect(find.text('https://www.osulloc.com/kr/ko'), findsOneWidget);
+    });
+
+    // 서버가 번들 자산을 지정하면 배지가 그 그림이 된다. 지정하지 않은 줄은
+    // 그대로 Material 아이콘이라, 한 목록에 둘이 섞여도 괜찮아야 한다.
+    testWidgets('an icon asset replaces the brand badge', (tester) async {
+      await tester.pumpWidget(
+        subject(
+          const PlaceLinksSection(
+            items: [
+              PlaceLinkItem(
+                label: '오설록 공식 홈페이지',
+                url: 'https://www.osulloc.com/kr/ko',
+                iconAsset: 'assets/place_details/osulloc_favicon.png',
+              ),
+              PlaceLinkItem(
+                label: '인스타그램',
+                url: 'https://www.instagram.com/osulloc_official/',
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final image = tester.widget<Image>(find.byType(Image));
+      expect((image.image as AssetImage).assetName,
+          'assets/place_details/osulloc_favicon.png');
+      // 자산을 준 줄만 그림이고, 나머지는 아이콘 그대로다.
+      expect(find.byIcon(Icons.public), findsNothing);
+      expect(find.byIcon(Icons.camera_alt), findsOneWidget);
     });
 
     // 아주 긴 주소가 와도 줄 높이가 흔들리면 안 된다.

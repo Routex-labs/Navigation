@@ -180,6 +180,10 @@ class LinkItem(BaseModel):
     label: str
     url: str
 
+    # 번들에 든 브랜드 아이콘 경로. 없으면 화면이 라벨로 고른 Material 아이콘을 쓴다
+    # (규칙 1대로 값이 없으면 키 자체를 뺀다).
+    icon_asset: str | None = None
+
 
 # 공식 채널 링크. 화면에서 누르면 외부 브라우저로 열린다.
 #
