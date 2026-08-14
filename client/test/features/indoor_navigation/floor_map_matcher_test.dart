@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/features/indoor_navigation/application/floor_map_matcher.dart';
-import 'package:navigation_client/models/floor_graph.dart';
+import 'package:navigation_client/models/building/floor_graph.dart';
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
 FloorGraph _testGraph() => FloorGraph(

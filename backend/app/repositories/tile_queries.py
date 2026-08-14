@@ -256,7 +256,7 @@ def tile_cache_warm_status() -> str:
 
 # 클라이언트가 실내 MVT 소스를 등록하는 zoom 범위 전체.
 #
-# 클라이언트(client/lib/screens/outdoor_map/indoor_entry_zoom.dart)의
+# 클라이언트(client/lib/screens/outdoor_map/entry/indoor_entry_zoom.dart)의
 # indoorTilesMinZoom=15 / indoorTilesMaxZoom=18과 맞춰야 한다. 여기가 좁으면
 # 덮지 못한 zoom의 타일만 캐시를 못 타서 요청마다 새로 5개 쿼리를 낸다.
 #

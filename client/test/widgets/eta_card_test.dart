@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:navigation_client/domain/route_guidance.dart';
+import 'package:navigation_client/domain/guidance/route_guidance.dart';
 import 'package:navigation_client/widgets/eta_card.dart';
 
 /// 안내 배너가 한 줄로 필요한 것만 말하는지에 대한 테스트.
@@ -199,5 +199,17 @@ void main() {
       await tester.tap(find.byKey(const Key('eta-card-close')));
       expect(closed, isTrue);
     });
+  });
+
+  testWidgets('EtaCard shows the distance and minutes', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: EtaCard(distanceMeters: 150, minutes: 2)),
+    );
+
+    expect(find.text('목적지까지'), findsOneWidget);
+    expect(find.textContaining('약 2분', findRichText: true), findsOneWidget);
+    expect(find.textContaining('150m', findRichText: true), findsOneWidget);
   });
 }

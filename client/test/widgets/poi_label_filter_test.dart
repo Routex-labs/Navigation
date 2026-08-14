@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:navigation_client/widgets/floor_facility_style.dart';
+import 'package:navigation_client/map/style/floor_facility_style.dart';
 
 /// POI 이름 라벨 필터가 지키는 것은 하나다 — **사람에게 보여 줄 이름이 아닌 것을
 /// 그리지 않는다.** 수직이동 POI의 `name`은 Studio 원본의 노드 식별자라

@@ -1,0 +1,248 @@
+/// 길찾기(출발/도착 칸)의 후보 목록 조립 — 실내 매장·건물·바깥 POI를 어떤 순서로
+/// 섞을지가 전부다. 규칙 자체는 domain이 갖고, 여기는 아무것도 저장하지 않는다.
+library;
+
+import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:latlong2/latlong.dart';
+
+import '../../service_locator.dart';
+import '../../domain/store/indoor_store_lookup.dart';
+import '../../domain/store/outdoor_poi_ranking.dart';
+import '../../models/building/building.dart';
+import '../../models/place/outdoor_poi.dart';
+import '../../models/place/poi_search_result.dart';
+import '../../models/route/directions_candidate.dart';
+
+/// 후보 조립이 야외 지도 상태에서 읽는 값·판정.
+///
+/// GlobalKey로 얻는 [OutdoorMapBodyState]를 통째로 받지 않고 필요한 세 가지만
+/// 받는다 — 후보 조립이 지도 화면의 나머지에 기대기 시작하면 이 파일을 뗀
+/// 의미가 없다. 지도가 아직 없으면(미로드) 모두 null로 두고, 그때는 해당 정보
+/// 없이 진행한다(바깥 조회 생략, 건물 좌표는 응답 값으로 폴백).
+class OutdoorSearchContext {
+  const OutdoorSearchContext({
+    this.entrancePointFor,
+    this.searchCenter,
+    this.isAtIndoorBuilding,
+  });
+
+  /// 야외 지도가 상세 응답으로 이미 알고 있는 지상 출입구.
+  final LatLng? Function(String buildingId)? entrancePointFor;
+
+  /// 바깥 POI 조회의 기준점(현재 위치 또는 카메라 중심).
+  final LatLng? searchCenter;
+
+  /// 이 좌표가 우리 실내 데이터가 있는 건물 위인지.
+  final bool Function(LatLng point)? isAtIndoorBuilding;
+}
+
+/// 1단계(경량 검색). 실내 매장 → 건물 → 바깥 POI 순으로 섞은 후보 목록.
+Future<List<DirectionsCandidate>> searchDirectionsCandidates(
+  String query, {
+  String? floorId,
+  required String buildingId,
+  required bool indoorContextActive,
+  required OutdoorSearchContext outdoor,
+}) async {
+  final normalized = query.trim().toLowerCase();
+
+  // 매장 검색은 **항상 건물 전체**를 뒤진다 — 길찾기를 여는 이유 자체가 대개
+  // "지금 층에 없는 곳으로 가려고"라, 층으로 좁히면 기본값이 의도의 반대가 된다.
+  // [floorId]는 후보를 콕 집은 행동에만 값이 있어 이 규칙을 깨지 않는다.
+  final results = await destinationRepository.searchDestinations(
+    buildingId,
+    query,
+    currentFloorId: floorId,
+  );
+  final buildings = await buildingRepository.getAllBuildings();
+  // 매장 줄에 함께 적을 건물 이름. 상단 검색 패널과 같은 규칙이다.
+  final buildingName = buildings
+      .where((b) => b.id == buildingId)
+      .map((b) => b.name)
+      .firstOrNull;
+  List<DirectionsCandidate> storeCandidates() =>
+      results.map((s) => _storeCandidate(s, buildingName)).toList();
+
+  // 건물 안에서 **아무것도 안 친** 경우만 여기서 끝낸다. 그때 빈 검색어는
+  // "이 건물의 장소 전체 목록"이라는 뜻이고, 그 목록에 바깥 건물을 섞으면
+  // 훑어보려던 화면이 지저분해진다.
+  if (indoorContextActive && normalized.isEmpty) return storeCandidates();
+
+  // 밖에서는 **아무것도 안 쳤으면 아무것도 보여주지 않는다.**
+  //
+  // 그 목록이 "여기서 갈 만한 곳"이 아니라 남의 건물 내부 목록이라, 길찾기를
+  // 열자마자 띄우면 치지도 않은 답이 정해져 있는 화면이 된다.
+  if (normalized.isEmpty) return const [];
+
+  // **여기부터는 실내·야외를 가리지 않는다.** 실내면 매장만 돌려주던 때는 실내→
+  // 야외 안내를 만들어 두고도 그 목적지를 고를 수단이 없었다.
+  //
+  // 섞어도 안전한 이유는 **순서**다 — 우리 매장 줄이 항상 맨 위라, 바깥이 첫 줄이
+  // 되는 것은 실내가 빈손일 때뿐이고 그건 정확히 바깥이 답인 경우다.
+
+  // 건물도 후보로 남기되 매장보다 뒤에 둔다. **좌표는 목록 응답만으로 못 구한다** —
+  // `GET /buildings`에는 출입구·외곽선이 없어 야외 지도가 상세로 받아 둔 값을 쓰고,
+  // 그마저 없으면 후보에서 뺀다(눌러도 경로가 안 나온다).
+  final buildingCandidates = <DirectionsCandidate>[];
+  for (final building in buildings) {
+    if (!building.name.toLowerCase().contains(normalized)) continue;
+    final point = buildingDestinationPoint(building, outdoor);
+    if (point == null) continue;
+    buildingCandidates.add(
+      DirectionsCandidate(
+        title: building.name,
+        subtitle: '${building.floors.length}개 층',
+        point: point,
+        // 이 후보가 건물이라는 표시. 목록의 아이콘(건물/핀)이 이 값으로 갈린다.
+        buildingId: building.id,
+      ),
+    );
+  }
+
+  final merged = await _mergeWithOutdoor(
+    query,
+    results,
+    buildings.map((b) => b.name).toList(),
+    buildingId: buildingId,
+    outdoor: outdoor,
+  );
+  final buildingNames = buildingCandidates
+      .map((c) => collapseName(c.title))
+      .toSet();
+  // 우리 매장 줄은 **전부** 남긴다. 겹치는 POI 줄은 이미 빠져 있다
+  // ([mergeOutdoorResults]) — 우리 줄에는 층·노드가 붙어 있어 실내까지
+  // 안내되고, POI 줄은 건물 입구에서 끝나기 때문이다.
+  return [
+    ...merged.indoorStores.map((s) => _storeCandidate(s, buildingName)),
+    ...buildingCandidates,
+    for (final row in merged.outdoorRows)
+      if (!buildingNames.contains(collapseName(row.poi.name)))
+        _outdoorRowCandidate(row),
+  ];
+}
+
+/// 2단계(의미 검색). 경량이 빈손일 때만 부르고, 층은 넘기지 않는다(백엔드도
+/// 건물 전체를 본다). 실패는 빈 목록으로 삼킨다 — 오류 화면으로 덮어도 사용자가
+/// 할 수 있는 일이 늘지 않는다.
+Future<List<DirectionsCandidate>> semanticDirectionsCandidates(
+  String query, {
+  required String buildingId,
+}) async {
+  try {
+    final discovery = await destinationRepository.searchDestinationsAi(
+      buildingId,
+      query,
+    );
+    return discovery.matches
+        .map(
+          (m) => DirectionsCandidate(
+            title: m.name,
+            subtitle: m.floorName,
+            point: m.point,
+            nodeId: m.entranceNodeId,
+            floor: m.floorName,
+            reason: m.reason,
+          ),
+        )
+        .toList();
+  } on Object {
+    return const [];
+  }
+}
+
+/// "이 건물까지" 안내할 때의 도착 좌표. **지상 출입구**를 우선한다 — 건물 중심을
+/// 주면 TMAP이 아무 도로로나 스냅해 들어갈 수 없는 면에 내려놓는다.
+/// 없으면 [Building.outdoorAnchor]로, 그것도 없으면 null.
+LatLng? buildingDestinationPoint(
+  Building building,
+  OutdoorSearchContext outdoor,
+) {
+  return outdoor.entrancePointFor?.call(building.id) ?? building.outdoorAnchor;
+}
+
+/// 매장 하나를 후보로 만든다. [buildingName]을 주면 부제에 함께 적는다.
+///
+/// "스타벅스 리저브 / B2"만으로는 어느 건물의 스타벅스인지 알 수 없다. 밖에서
+/// 검색하면 길 건너 스타벅스도 함께 뜨고 그쪽에는 주소가 적혀 있어, 정작
+/// 실내까지 안내되는 우리 줄만 층 하나로 남아 가장 안 읽혔다.
+DirectionsCandidate _storeCandidate(
+  PoiSearchResult store, [
+  String? buildingName,
+]) => DirectionsCandidate(
+  title: store.name,
+  subtitle: buildingName == null
+      ? store.floor
+      : '$buildingName · ${store.floor}',
+  point: store.point,
+  nodeId: store.nodeId,
+  floor: store.floor,
+);
+
+/// 바깥 줄 하나를 후보로 만든다.
+///
+/// 여기까지 온 POI는 우리가 모르는 곳이다 — 우리 실내 데이터가 아는 가게를
+/// 가리키는 POI는 목록을 만들 때 이미 빠진다([mergeOutdoorResults]).
+DirectionsCandidate _outdoorRowCandidate(OutdoorSearchRow row) =>
+    DirectionsCandidate(
+      title: row.poi.name,
+      subtitle: row.poi.address ?? '건물 밖 장소',
+      point: row.poi.point,
+    );
+
+/// 바깥 조회를 돌리고 우리 실내 결과와 합친다. 기준점을 못 구했거나 TMAP을
+/// 쓸 수 없으면 바깥 줄 없이 실내 결과만 돌려준다.
+Future<MergedOutdoorResults> _mergeWithOutdoor(
+  String query,
+  List<PoiSearchResult> indoorStores,
+  List<String> buildingNames, {
+  required String buildingId,
+  required OutdoorSearchContext outdoor,
+}) async {
+  final center = outdoor.searchCenter;
+  if (!outdoorPoiRepository.isAvailable || center == null) {
+    return MergedOutdoorResults(const [], indoorStores);
+  }
+
+  final List<OutdoorPoi> pois;
+  try {
+    pois = await outdoorPoiRepository.searchNearby(query, center: center);
+  } on Object {
+    // 바깥 조회 실패로 후보가 통째로 비면 안 된다. 매장·건물은 이미 손에 있다.
+    return MergedOutdoorResults(const [], indoorStores);
+  }
+
+  // 규칙은 도메인 함수가 갖고 있다(`domain/outdoor_poi_ranking.dart`).
+  // 상단 검색 패널도 같은 함수를 부른다 — 여기서 다시 구현하면 또 갈린다.
+  final relevant = filterByNameRelevance(query, pois);
+  bool isAtBuilding(OutdoorPoi poi) =>
+      outdoor.isAtIndoorBuilding?.call(poi.point) ?? false;
+
+  // 사용자가 친 말로 우리 매장을 못 찾았을 수 있다("더현대 스타벅스" →
+  // no_match). 그 경우 POI 이름의 브랜드로 한 번 더 묻는다 — 안 하면 겹침을
+  // 판정할 대상이 없어 TMAP 줄이 그대로 남고, 그 줄에는 층·노드가 없다.
+  final enrichedStores = await lookUpIndoorStoresByBrand(
+    pois: relevant,
+    indoorStores: indoorStores,
+    isAtBuilding: isAtBuilding,
+    buildingNames: buildingNames,
+    search: (brand) =>
+        destinationRepository.searchDestinations(buildingId, brand),
+  );
+
+  final merged = mergeOutdoorResults(
+    pois: relevant,
+    indoorStores: enrichedStores,
+    isAtBuilding: isAtBuilding,
+    buildingNames: buildingNames,
+  );
+  // **중복 제거 결과를 로그로 남긴다.** 화면에서는 "겹쳐서 뺐다"와 "원래
+  // 한 줄이었다"가 똑같이 보여서, 규칙이 통째로 안 도는 것을 눈으로 구분할
+  // 수 없다. 실제로 이 자리를 세 번 잘못 짚었다.
+  final dropped = pois.length - merged.outdoorRows.length;
+  debugPrint(
+    '[poi-merge] "$query" 바깥 ${pois.length}건 중 $dropped건이 '
+    '우리 매장과 겹쳐 빠짐 (실내 후보 ${enrichedStores.length}건, '
+    '건물 이름 $buildingNames)',
+  );
+  return merged;
+}

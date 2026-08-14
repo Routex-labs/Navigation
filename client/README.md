@@ -94,7 +94,7 @@ flowchart TD
         end
 
         subgraph ui["화면 · UI"]
-            SCREENS["screens/*<br/>outdoor · indoor · destination<br/>route_guide · arrival"]
+            SCREENS["screens/*<br/>map_shell · outdoor_map"]
             WIDGETS["widgets/*<br/>지도 · 시트 · 마커 · 경로선"]
         end
 
@@ -180,7 +180,7 @@ flowchart LR
 ```mermaid
 sequenceDiagram
     participant U as 사용자
-    participant S as 화면(destination/route_guide)
+    participant S as 화면(map_shell · outdoor_map)
     participant DR as destinationRepository
     participant BR as buildingRepository
     participant FR as domain/floor_router

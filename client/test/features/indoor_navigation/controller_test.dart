@@ -5,6 +5,7 @@ import 'package:navigation_client/features/indoor_navigation/application/indoor_
 import 'package:navigation_client/features/indoor_navigation/contract/indoor_navigation_contract.dart';
 import 'package:navigation_client/features/indoor_navigation/platform/native_pdr_event.dart';
 import 'package:navigation_client/features/indoor_navigation/platform/pdr_motion_source.dart';
+import 'package:navigation_client/domain/geo/geo_transform.dart';
 
 /// 테스트/하니스용 fake 소스. raw native map을 파서에 태워 흘린다(파서+컨트롤러+코어
 /// end-to-end = 헤드리스 하니스).

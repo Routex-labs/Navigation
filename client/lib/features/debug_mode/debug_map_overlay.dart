@@ -1,7 +1,7 @@
 import 'package:latlong2/latlong.dart' as ll;
 
-import '../../domain/geo_transform.dart';
-import '../../models/floor_graph.dart';
+import '../../domain/geo/geo_transform.dart';
+import '../../models/building/floor_graph.dart';
 
 class DebugMapNode {
   const DebugMapNode({

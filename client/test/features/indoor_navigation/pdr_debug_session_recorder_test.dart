@@ -1,15 +1,16 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
-import 'package:navigation_client/domain/route_progress.dart';
-import 'package:navigation_client/domain/route_checkpoint.dart';
-import 'package:navigation_client/domain/route_movement.dart';
+import 'package:navigation_client/domain/guidance/route_progress.dart';
+import 'package:navigation_client/domain/guidance/route_checkpoint.dart';
+import 'package:navigation_client/domain/guidance/route_movement.dart';
 import 'package:navigation_client/features/indoor_navigation/application/corridor_position_tracker.dart';
 import 'package:navigation_client/features/indoor_navigation/application/escalator_transition_detector.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/altitude_sample.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/calibration_state.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/pdr_anchor.dart';
 import 'package:navigation_client/features/indoor_navigation/debug/pdr_debug_session_recorder.dart';
-import 'package:navigation_client/models/floor_graph.dart';
+import 'package:navigation_client/models/building/floor_graph.dart';
+import 'package:navigation_client/domain/guidance/corridor_tracking.dart';
 
 PdrSnapshot _snapshot({
   required int steps,

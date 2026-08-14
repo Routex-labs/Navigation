@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/favorite_place.dart';
+import '../models/place/favorite_place.dart';
 
 /// 사용자가 "장소" 탭에 저장해둔 매장 목록을 보관·영속화한다.
 ///

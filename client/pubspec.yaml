@@ -57,6 +57,11 @@ dev_dependencies:
   integration_test:
     sdk: flutter
 
+  # 타이머가 있는 코드를 위젯 없이 시험한다. 위치 스트림 수명
+  # (gps_session_test.dart)이 재연결 백오프와 벙어리 감시를 초 단위로 확인하는데,
+  # tester.pump는 위젯 트리를 요구하고 실제 시계로는 12초를 기다릴 수 없다.
+  fake_async: ^1.3.1
+
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your

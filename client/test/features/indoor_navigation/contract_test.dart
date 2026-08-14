@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/indoor_navigation_contract.dart';
+import 'package:navigation_client/domain/geo/geo_transform.dart';
 
 /// 계약만 보고 만든 fake 구현. UI팀이 로직 완성을 기다리지 않고 이 계약으로
 /// 병렬 작업할 수 있음을 보인다(Phase 1.5).
@@ -103,6 +104,12 @@ class FakeIndoorNavigation implements IndoorNavigationController {
 
   @override
   Future<void> resumeStepTracking() async => log.add('resumeSteps');
+
+  @override
+  Future<void> onAppBackgrounded() async => log.add('backgrounded');
+
+  @override
+  Future<void> onAppForegrounded() async => log.add('foregrounded');
 
   // 테스트 구동용.
   void pushCalibration(CalibrationStatus s) {

@@ -2,27 +2,9 @@ import 'dart:math' as math;
 
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
-import '../../../models/floor_graph.dart';
+import '../../../domain/guidance/corridor_tracking.dart';
+import '../../../models/building/floor_graph.dart';
 import '../contract/pdr_anchor.dart';
-
-/// 보정 결과의 확신도.
-///
-/// 예전 구현의 상태기(직선/회전대기/노드확정/불확실) 이름을 유지하지만 의미가
-/// 다르다. 지금은 상태가 동작을 바꾸지 않는다 — 빔이 항상 모든 가설을 들고
-/// 있고, 이 값은 **그 빔이 지금 얼마나 갈렸는지**를 표시할 뿐이다.
-enum CorridorTrackingState {
-  /// 1등 가설이 뚜렷하다.
-  straightTracking,
-
-  /// 1·2등이 다른 간선인데 점수 차가 작다. 표시는 공통 지점에서 멈춘다.
-  turnPending,
-
-  /// 이번 갱신에서 1등 가설이 노드를 넘었다.
-  nodeConfirmed,
-
-  /// 모든 가설이 그래프로 설명되지 않는다(막다른 곳 등).
-  uncertain,
-}
 
 class CorridorTrackerConfig {
   const CorridorTrackerConfig({
@@ -292,61 +274,6 @@ class CorridorObservation {
   }
 }
 
-/// accepted preview peak 하나가 graph 위에서 실제로 지난 간선 조각.
-class OptimisticEdgeTraversal {
-  const OptimisticEdgeTraversal({
-    required this.edgeId,
-    required this.fromProgressM,
-    required this.toProgressM,
-  });
-
-  final String edgeId;
-  final double fromProgressM;
-  final double toProgressM;
-
-  double get distanceM => (toProgressM - fromProgressM).abs();
-  int get edgeDirectionSign => toProgressM >= fromProgressM ? 1 : -1;
-}
-
-/// accepted preview peak 하나가 선택된 optimistic 가설 안에서 만든 이동 사건.
-///
-/// 공개 leader의 전후 좌표 차이가 아니라, 선택된 가설이 자기 parent에서 실제로
-/// 전진한 조각을 보존한다. 그래서 node를 넘거나 graph 저장 방향이 반대여도 한
-/// 걸음의 거리와 부호를 잃지 않는다.
-class OptimisticStepAdvance {
-  const OptimisticStepAdvance({
-    required this.peakId,
-    required this.occurredAtMs,
-    required this.hypothesisId,
-    required this.parentHypothesisId,
-    required this.distanceM,
-    required this.edgeId,
-    required this.mapMatchedHeadingDeg,
-    required this.previewIsAmbiguous,
-    required this.position,
-    required this.traversals,
-    required this.crossedNodeIds,
-    required this.leaderRelocated,
-  });
-
-  final int peakId;
-  final int occurredAtMs;
-  final String hypothesisId;
-  final String parentHypothesisId;
-  final double distanceM;
-  final String edgeId;
-  final double mapMatchedHeadingDeg;
-  final bool previewIsAmbiguous;
-  final PdrLocalPoint position;
-  final List<OptimisticEdgeTraversal> traversals;
-  final List<String> crossedNodeIds;
-
-  /// 이 peak를 적용하는 동안 공개 leader의 lineage가 바뀌었는지.
-  ///
-  /// traversal은 진단·표시에 남기되 실제 이동 방향 확정 증거에서는 제외한다.
-  final bool leaderRelocated;
-}
-
 class CorridorTrackingResult {
   const CorridorTrackingResult({
     required this.state,
@@ -437,18 +364,12 @@ class CorridorTrackingResult {
 
 /// 초록·주황 원본을 수정하지 않고 실제 위치만 graph 제약으로 보정한다.
 ///
-/// **빔 서치**로 동작한다. 하나의 "현재 간선"을 잠그는 대신, 서로 다른 간선
-/// 위에 있는 가설 여러 개를 동시에 들고 다니면서 걸음마다 점수를 매기고,
-/// 언제든 1등이 바뀔 수 있게 둔다. 1등이 바뀌면 그 가설이 들고 있던 경로가
-/// 그대로 화면 경로가 되므로, 최근 구간이 통째로 다시 그려진다.
+/// **빔 서치**다 — 간선 하나를 잠그는 대신 가설 여럿을 동시에 들고 걸음마다 점수를
+/// 매겨 언제든 1등이 바뀔 수 있게 둔다. 이전의 탐욕적 상태기는 회전을 한 번 놓치면
+/// 되돌릴 수 없어 실측에서 교차점에 28초 멈춰 있었다.
 ///
-/// 이전 구현은 간선을 잠그고 노드에서만 엄격한 증거로 전환하는 탐욕적
-/// 상태기였다. 시간적 일관성은 얻었지만 회전을 한 번 놓치면 되돌릴 방법이
-/// 없어서, 실측에서 교차점에 28초 멈춰 있거나 한 복도를 계속 미끄러졌다.
-/// 빔은 놓친 회전을 "그 가설이 아직 살아 있다"는 형태로 해결한다.
-///
-/// 위치는 절대 멈추지 않는다. 어떤 가설도 그래프로 설명되지 않으면 벌점을
-/// 주되 진행은 시키므로, 걸은 거리가 통째로 사라지지 않는다.
+/// 위치는 절대 멈추지 않는다 — 어떤 가설도 설명되지 않으면 벌점을 주되 진행시켜
+/// 걸은 거리가 통째로 사라지지 않게 한다.
 class CorridorPositionTracker {
   CorridorPositionTracker(
     FloorGraph graph, {

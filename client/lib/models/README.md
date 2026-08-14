@@ -3,21 +3,32 @@
 백엔드 JSON과 화면·리포지토리 사이에서 전달하는 값의 모양을 정의한다. 저장 방식이나
 네트워크 호출은 모르며, 파싱·불변 값·간단한 파생값만 책임진다.
 
+## 폴더
+
+| 폴더 | 무엇 |
+|---|---|
+| `building/` | 건물·층·그래프·카테고리 개수 — 백엔드 `/buildings` 계열 응답 |
+| `place/` | 매장·POI·상세·즐겨찾기 — 사용자가 고르는 **대상** |
+| `route/` | 경로와 그 후보·수단 — 대상까지 **가는 방법** |
+
+셋으로 가른 기준은 **함께 바뀌는가**다. 백엔드 건물 응답이 바뀌면 `building/`이
+같이 움직이고, 검색·상세 계약이 바뀌면 `place/`가 움직인다.
+
 ## 구성 파일
 
 | 파일 | 주요 타입 | 역할 |
 |---|---|---|
-| [`building.dart`](building.dart) | `Building` | 건물 정보, 층 목록, 초기 층 |
-| [`floor_plan.dart`](floor_plan.dart) | `FloorPlan`, `StorePolygon`, `PoiMarker` | 층 외곽·매장·POI·복도 렌더 데이터 |
-| [`floor_graph.dart`](floor_graph.dart) | `FloorGraph`, `GraphNode`, `GraphEdge`, `LocalPoint` | `local_m` 내비게이션 그래프 |
-| [`indoor_route.dart`](indoor_route.dart) | `IndoorRoute` | 실내 경로점·거리 + 진행률 계산용 로컬 좌표·간선 id |
-| [`building_graph.dart`](building_graph.dart) | `BuildingGraph`, `IndoorRouteSegment`, `MultiFloorRoute` | 건물 전체 길찾기 그래프(전 층 노드 + 수직 전이 간선)와 층별로 분할된 층 간 경로 |
-| [`poi_search_result.dart`](poi_search_result.dart) | `PoiSearchResult` | 목적지 검색 결과 |
-| [`discovery_result.dart`](discovery_result.dart) | `DiscoveryResult`, `DiscoveryMode`, `DiscoveryMatch`, `DiscoveryOption` | 탐색(`/query/ai`) 응답: mode·질문·선택지·후보 |
-| [`directions_route.dart`](directions_route.dart) | `DirectionsRoute` | 실외 보행 경로점·거리·시간 |
-| [`outdoor_poi.dart`](outdoor_poi.dart) | `OutdoorPoi` | 건물 밖 장소(TMAP POI 통합검색). 노드가 없어 좌표로만 안내한다 |
-| [`transit_route.dart`](transit_route.dart) | `TransitRoutes`, `TransitItinerary`, `TransitLeg`, `TransitMode` | 대중교통 경로 후보와 구간, 조회 결말(`TransitRoutesStatus`) |
-| [`favorite_place.dart`](favorite_place.dart) | `FavoritePlace` | 저장 가능한 즐겨찾기 장소 |
+| [`building.dart`](building/building.dart) | `Building` | 건물 정보, 층 목록, 초기 층 |
+| [`floor_plan.dart`](building/floor_plan.dart) | `FloorPlan`, `StorePolygon`, `PoiMarker` | 층 외곽·매장·POI·복도 렌더 데이터 |
+| [`floor_graph.dart`](building/floor_graph.dart) | `FloorGraph`, `GraphNode`, `GraphEdge`, `LocalPoint` | `local_m` 내비게이션 그래프 |
+| [`indoor_route.dart`](route/indoor_route.dart) | `IndoorRoute` | 실내 경로점·거리 + 진행률 계산용 로컬 좌표·간선 id |
+| [`building_graph.dart`](building/building_graph.dart) | `BuildingGraph`, `IndoorRouteSegment`, `MultiFloorRoute` | 건물 전체 길찾기 그래프(전 층 노드 + 수직 전이 간선)와 층별로 분할된 층 간 경로 |
+| [`poi_search_result.dart`](place/poi_search_result.dart) | `PoiSearchResult` | 목적지 검색 결과 |
+| [`discovery_result.dart`](place/discovery_result.dart) | `DiscoveryResult`, `DiscoveryMode`, `DiscoveryMatch`, `DiscoveryOption` | 탐색(`/query/ai`) 응답: mode·질문·선택지·후보 |
+| [`directions_route.dart`](route/directions_route.dart) | `DirectionsRoute` | 실외 보행 경로점·거리·시간 |
+| [`outdoor_poi.dart`](place/outdoor_poi.dart) | `OutdoorPoi` | 건물 밖 장소(TMAP POI 통합검색). 노드가 없어 좌표로만 안내한다 |
+| [`transit_route.dart`](route/transit_route.dart) | `TransitRoutes`, `TransitItinerary`, `TransitLeg`, `TransitMode` | 대중교통 경로 후보와 구간, 조회 결말(`TransitRoutesStatus`) |
+| [`favorite_place.dart`](place/favorite_place.dart) | `FavoritePlace` | 저장 가능한 즐겨찾기 장소 |
 
 ## 좌표 모델
 
@@ -60,7 +71,7 @@ ID·좌표처럼 경로 계산에 필요한 필드를 임의 기본값으로 숨
 | 하고 싶은 것 | 확인 범위 |
 |---|---|
 | 백엔드 응답 필드 반영 | 해당 모델 `fromJson` + HTTP 리포지토리 + 테스트 |
-| 새 지도 요소 추가 | `FloorPlan` + `FloorPlanView` |
+| 새 지도 요소 추가 | `FloorPlan` + `screens/outdoor_map/layers/indoor_overlay_layers.dart` |
 | 그래프 속성 추가 | `FloorGraph` + `domain/dijkstra.dart` |
 | 즐겨찾기 필드 추가 | `FavoritePlace.toJson/fromJson` + `FavoritesController` |
 

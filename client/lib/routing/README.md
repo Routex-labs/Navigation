@@ -1,49 +1,37 @@
 # `lib/routing` — 화면 경로 이름
 
-화면 전환에 사용하는 문자열을 한곳에서 정의한다. 실제 화면 위젯 등록은
-[`../app.dart`](../app.dart)의 `MaterialApp.routes`가 담당한다.
+## route는 하나뿐이다
+
+| route | 화면 |
+|---|---|
+| `/` | `MapShellScreen` |
+
+**이 앱에는 push할 다른 화면이 없다.** 지도 셸 하나가 야외·실내와 그 사이의
+모든 단계를 시트·오버레이로 그린다. 목적지 검색은 상단 검색창과 시트로,
+경로 안내는 지도 위 오버레이로, 도착은 카드로 흡수됐다.
+
+예전에는 `/destination` → `/route-guide` → `/arrival`이 각각 화면이었고 실내
+도면은 또 다른 전체화면(`/indoor-map`)이었다. 화면을 넘나들 때마다 지도가 새로
+만들어지고 카메라·층·PDR 세션을 넘겨줘야 했는데, 그 인계가 실패하는 지점이
+많아 지도 하나로 합쳤다. 남은 라우트 표가 그 결과다.
 
 ## 구성 파일
 
 | 파일 | 역할 |
 |---|---|
-| [`app_routes.dart`](app_routes.dart) | `AppRoutes`의 route 상수 정의 |
+| [`app_routes.dart`](app_routes.dart) | `AppRoutes.outdoorMap` 상수 |
 
-## 등록 흐름
-
-```mermaid
-flowchart LR
-    ROUTES["app_routes.dart<br/>AppRoutes 상수"]
-    APP["app.dart<br/>MaterialApp.routes"]
-    NAV["Navigator.pushNamed"]
-    SCREEN["screens/*"]
-
-    ROUTES --> APP --> SCREEN
-    ROUTES --> NAV --> SCREEN
-    SCREEN -. "다음 화면 경로 사용" .-> ROUTES
-```
-
-| route | 화면 |
-|---|---|
-| `/` | `MapShellScreen` |
-| `/indoor-map` | `IndoorMapScreen` |
-| `/destination` | `DestinationScreen` |
-| `/route-guide` | `RouteGuideScreen` |
-| `/arrival` | `ArrivalScreen` |
-| `/debug/*` | API·층 지도·PDR 진단 화면 |
+상수 하나를 위해 파일과 클래스를 남기는 이유는 [`../app.dart`](../app.dart)의
+`initialRoute`와 `routes`가 **같은 문자열**을 봐야 하기 때문이다. 한쪽만 고치면
+앱이 빈 화면으로 뜬다.
 
 ## 실패 지점
 
-- 상수만 추가하고 `app.dart`에 builder를 등록하지 않으면 named route를 찾지 못한다.
-- 화면에서 문자열을 직접 쓰면 이름 변경 시 누락되므로 반드시 `AppRoutes`를 사용한다.
-- route argument는 컴파일 타임 검증이 되지 않는다. 받는 화면과 보내는 화면의 타입을 함께 확인한다.
-
-## 새 화면 추가
-
-1. `screens/`에 화면을 만든다.
-2. `AppRoutes`에 상수를 추가한다.
-3. `app.dart`의 `routes` Map에 위젯 builder를 등록한다.
-4. `Navigator.pushNamed` 호출과 argument 수신을 테스트한다.
+- 새 화면을 만들고 싶어지면 먼저 **정말 화면이어야 하는지** 묻는다. 지도 위에
+  겹치면 되는 것을 화면으로 만들면 위에 적은 인계 문제가 돌아온다.
+- 화면이 정말 필요하면 상수 추가 + `app.dart`의 `routes` 등록 + 그 화면으로
+  가는 `pushNamed` 호출, 셋을 한 번에 넣는다. **push가 없는 라우트는 죽은
+  코드다** — 실제로 그렇게 화면 여섯 개가 5,135줄을 붙들고 있었다.
 
 ---
 

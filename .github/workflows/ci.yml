@@ -28,13 +28,22 @@ jobs:
       - run: flutter config --enable-linux-desktop
       - run: flutter pub get
       - run: flutter analyze
-      # 테스트 디렉터리가 둘이다. `tests/`는 이 저장소가 따로 만든 것이고,
-      # `test/`는 flutter의 표준 위치다. 지금까지 `tests/`만 돌려서 `test/` 아래
-      # 337개(도메인·위젯)가 작성돼 있는데도 CI에서 한 번도 실행되지 않았다 —
-      # 회귀를 못 막는 테스트였다. 둘 다 돌린다.
-      - run: flutter test tests/unit_test/
+      # 테스트는 `test/` 한 곳에 있고 `lib/`의 디렉터리 구조를 그대로 미러한다.
+      # 예전에는 `tests/unit_test/`에 83개가 평면으로 쌓여 있고 `test/`가 따로
+      # 있었는데, CI가 `tests/`만 돌려서 `test/` 아래 337개가 한 번도 실행되지
+      # 않은 적이 있다. 한 곳으로 합쳐 그 사고가 다시 나지 않게 한다.
       - run: flutter test test/
-      - run: xvfb-run -a flutter test tests/integration_test/ -d linux
+      # 통합 테스트는 **파일마다 따로** 돌린다. 한 번에 두 개 이상을 주면 두 번째
+      # 앱 실행이 "Error waiting for a debug connection"으로 죽는다 — 데스크톱
+      # 디바이스가 앱을 연속으로 다시 띄우지 못한다(linux·windows 양쪽 재현).
+      # 파일을 나열하지 않고 glob으로 도는 이유는, 나열하면 새 파일이 조용히
+      # 빠지기 때문이다. 위 `test/` 한 곳으로 합친 것과 같은 이유다.
+      - run: |
+          for f in integration_test/*_test.dart; do
+            echo "::group::$f"
+            xvfb-run -a flutter test "$f" -d linux
+            echo "::endgroup::"
+          done
 
   backend:
     name: Backend (FastAPI)

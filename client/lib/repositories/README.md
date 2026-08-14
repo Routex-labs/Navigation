@@ -3,20 +3,26 @@
 화면이 백엔드·TMAP·assets의 차이를 모르도록 인터페이스로 감싼다. 실제 HTTP 구현과
 오프라인/테스트용 Mock이 같은 계약을 구현한다.
 
+## 폴더
+
+`models/`와 같은 세 갈래이고 이름도 맞춰 뒀다 — `building/` · `place/` · `routing/`.
+**계약과 그 구현(http·mock·tmap·kakao)이 같은 폴더에 모인다.** 계약을 바꾸면 반드시
+함께 고쳐야 하는 것들이라, 떨어져 있으면 한쪽만 고친 채 지나간다.
+
 ## 인터페이스와 구현
 
 | 계약 | 실제 구현 | 대체 구현 | 책임 |
 |---|---|---|---|
-| [`building_repository.dart`](building_repository.dart) | [`http_building_repository.dart`](http_building_repository.dart) | [`mock_building_repository.dart`](mock_building_repository.dart) | 건물·층 지도·층 그래프·건물 전체 그래프, 단일 층 최단 경로 |
-| [`destination_repository.dart`](destination_repository.dart) | [`http_destination_repository.dart`](http_destination_repository.dart) | [`mock_destination_repository.dart`](mock_destination_repository.dart) | 목적지·시설 검색과 현재 층 필터 |
-| [`directions_repository.dart`](directions_repository.dart) | [`tmap_directions_repository.dart`](tmap_directions_repository.dart) | [`mock_directions_repository.dart`](mock_directions_repository.dart) | 실외 도로 경로 — 도보(`/routes/pedestrian`)와 자동차(`/routes`) |
-| [`outdoor_poi_repository.dart`](outdoor_poi_repository.dart) | [`tmap_poi_repository.dart`](tmap_poi_repository.dart) | 같은 파일의 `UnavailableOutdoorPoiRepository` | 건물 밖 장소 검색(TMAP POI 통합검색) |
-| [`transit_repository.dart`](transit_repository.dart) | [`kakao_transit_repository.dart`](kakao_transit_repository.dart) | 같은 파일의 `UnavailableTransitRepository` | 대중교통 경로 후보(카카오맵) |
+| [`building_repository.dart`](building/building_repository.dart) | [`http_building_repository.dart`](building/http_building_repository.dart) | [`mock_building_repository.dart`](building/mock_building_repository.dart) | 건물·층 지도·층 그래프·건물 전체 그래프, 단일 층 최단 경로 |
+| [`destination_repository.dart`](place/destination_repository.dart) | [`http_destination_repository.dart`](place/http_destination_repository.dart) | [`mock_destination_repository.dart`](place/mock_destination_repository.dart) | 목적지·시설 검색과 현재 층 필터 |
+| [`directions_repository.dart`](routing/directions_repository.dart) | [`tmap_directions_repository.dart`](routing/tmap_directions_repository.dart) | [`mock_directions_repository.dart`](routing/mock_directions_repository.dart) | 실외 도로 경로 — 도보(`/routes/pedestrian`)와 자동차(`/routes`) |
+| [`outdoor_poi_repository.dart`](place/outdoor_poi_repository.dart) | [`tmap_poi_repository.dart`](place/tmap_poi_repository.dart) | 같은 파일의 `UnavailableOutdoorPoiRepository` | 건물 밖 장소 검색(TMAP POI 통합검색) |
+| [`transit_repository.dart`](routing/transit_repository.dart) | [`kakao_transit_repository.dart`](routing/kakao_transit_repository.dart) | 같은 파일의 `UnavailableTransitRepository` | 대중교통 경로 후보(카카오맵) |
 
-[`tmap_transit_repository.dart`](tmap_transit_repository.dart)는 배선에서 빠졌지만 지우지 않았다.
+[`tmap_transit_repository.dart`](routing/tmap_transit_repository.dart)는 배선에서 빠졌지만 지우지 않았다.
 TMAP 대중교통 무료 제공량이 하루 10건이라 카카오로 옮긴 것이고, 되돌릴 여지를 남긴다.
 
-구현 선택은 [`../core/service_locator.dart`](../core/service_locator.dart)에서 한다.
+구현 선택은 [`../service_locator.dart`](../service_locator.dart)에서 한다.
 
 ## 외부 지도 계약에서 조심할 것
 
@@ -39,7 +45,7 @@ TMAP 대중교통 무료 제공량이 하루 10건이라 카카오로 옮긴 것
   600m 거리에도 12분짜리 버스 경로를 `OK`로 준다. 그래서 호출 **전에** 직선 거리로
   자른다(`KakaoTransitRepository._walkableMeters`).
 - **카카오는 첫 승차지점 앞·마지막 하차지점 뒤 도보를 주지 않는다.** 역 안 환승 도보는
-  온다. 빠진 양 끝은 [`../domain/transit_walk_fill.dart`](../domain/transit_walk_fill.dart)가
+  온다. 빠진 양 끝은 [`../domain/route/transit_walk_fill.dart`](../domain/route/transit_walk_fill.dart)가
   보행자 경로로 채운다. 총 시간·거리에는 그 도보가 **이미 포함돼 있으므로** 다시 더하면 안 된다.
 - **후보 개수를 요청으로 못 줄인다.** 카카오에는 `count`가 없고 늘 전부 온다(실측 15개).
   정렬한 뒤 우리가 자른다.
@@ -86,7 +92,7 @@ flowchart LR
 
 `HttpDestinationRepository`가 두 엔드포인트를 모두 호출하고, Mock은 이미 로드된 건물
 데이터에서 검색한다. 앱 배선은 기본이 `HttpDestinationRepository`다
-(`../core/service_locator.dart`) — 자연어·탐색 검색 설계는
+(`../service_locator.dart`) — 자연어·탐색 검색 설계는
 [`../../../docs/backend/native/client-handoff.md`](../../../docs/backend/native/client-handoff.md)를 참고한다.
 
 ## 반환·오류 규칙

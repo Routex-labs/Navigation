@@ -12,7 +12,7 @@
 
 둘 다 `ChangeNotifier`이며 `SharedPreferences`의 JSON 문자열에 목록을 저장한다
 (즐겨찾기는 `FavoritePlace` 배열, 최근 검색어는 문자열 배열). 즐겨찾기의 앱 전역
-인스턴스는 [`../core/service_locator.dart`](../core/service_locator.dart)에 있다.
+인스턴스는 [`../service_locator.dart`](../service_locator.dart)에 있다.
 
 `RecentSearchesController`가 채우는 화면과 그 근거는
 [`docs/client/naver-map-ui-ux-analysis.md`](../../../docs/client/naver-map-ui-ux-analysis.md)의

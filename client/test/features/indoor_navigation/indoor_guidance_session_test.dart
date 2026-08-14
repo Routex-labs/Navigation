@@ -8,11 +8,11 @@ import 'package:navigation_client/features/indoor_navigation/application/indoor_
 import 'package:navigation_client/features/indoor_navigation/application/indoor_location_estimate.dart';
 import 'package:navigation_client/features/indoor_navigation/application/escalator_transition_detector.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/altitude_sample.dart';
-import 'package:navigation_client/models/building_graph.dart';
-import 'package:navigation_client/domain/route_movement.dart';
-import 'package:navigation_client/models/indoor_route.dart';
+import 'package:navigation_client/models/building/building_graph.dart';
+import 'package:navigation_client/domain/guidance/route_movement.dart';
+import 'package:navigation_client/models/route/indoor_route.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/pdr_anchor.dart';
-import 'package:navigation_client/models/floor_graph.dart';
+import 'package:navigation_client/models/building/floor_graph.dart';
 
 /// 동서로 뻗은 복도 하나. 걸음이 이 선 위로 보정된다.
 const _corridorGraph = FloorGraph(

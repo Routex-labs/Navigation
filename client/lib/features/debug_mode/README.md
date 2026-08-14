@@ -4,7 +4,7 @@
 기록하기 위한 도구다.
 
 **진입점은 앱 메뉴 하나다** — 상단 바 햄버거 → `개발자` → `디버그 설정`
-([`../../widgets/app_menu_sheet.dart`](../../widgets/app_menu_sheet.dart)). 예전에는 지도
+([`../../screens/map_shell/widgets/sheets/app_menu_sheet.dart`](../../screens/map_shell/widgets/sheets/app_menu_sheet.dart)). 예전에는 지도
 왼쪽 아래에 원형 벌레 아이콘 버튼(`DebugModeSettingsButton`)이 떠 있었지만, 일반
 사용자가 볼 이유가 없는 개발 도구가 메인 지도를 차지했고 야외에서는 실내 진입 오버레이
 상태에 따라 나타났다 사라졌다. 그 버튼은 지웠다 — 지도에는 운영 화면만 남는다.
@@ -29,7 +29,7 @@
 ```mermaid
 flowchart LR
     MENU["AppMenuSheet(햄버거)"]
-    SCREEN["IndoorMapScreen"]
+    SCREEN["OutdoorMapBody"]
     SHEET["showDebugModeSettingsSheet"]
     CONTROLLER["DebugModeController"]
     MAP["DebugMapOverlay"]
@@ -37,8 +37,8 @@ flowchart LR
     TRAIL["DebugPdrTrailState"]
     CAL["LandmarkCardinalCalibration"]
     TOAST["debugToast"]
-    VIEW["FloorPlanView"]
-    RENDER["실내 지도 렌더"]
+    VIEW["pdr_debug_map_layers"]
+    RENDER["지도 렌더"]
 
     MENU --> SHEET -->|"옵션 변경"| CONTROLLER
     CONTROLLER -->|"상태 알림"| SCREEN
@@ -57,7 +57,7 @@ flowchart LR
 
 - 디버그 모드가 꺼져 있을 때 운영 경로·위치 계산 결과가 달라지면 안 된다.
 - 실제 PDR 세션과 맵 매칭은 `../indoor_navigation/`이 소유한다.
-- 지도 렌더 연결은 `widgets/floor_plan_view.dart`가 담당한다.
+- 지도 렌더 연결은 `screens/outdoor_map/layers/pdr_debug_map_layers.dart`가 담당한다.
 
 ## 실패 지점
 

@@ -54,7 +54,7 @@ flowchart LR
 - 안내 종료에서 마지막 pedometer 값을 확정한 뒤 센서를 멈춘다.
 
 전역 인스턴스와 앱 lifecycle 연결은
-[`../../core/service_locator.dart`](../../core/service_locator.dart)와
+[`../../service_locator.dart`](../../service_locator.dart)와
 [`../../app.dart`](../../app.dart)가 담당한다.
 
 ## 보정

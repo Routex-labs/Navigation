@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 import 'package:navigation_client/features/indoor_navigation/application/corridor_position_tracker.dart';
 import 'package:navigation_client/features/indoor_navigation/application/guidance_trail_session.dart';
+import 'package:navigation_client/domain/guidance/corridor_tracking.dart';
 
 CorridorTrackingResult _result({
   required PdrLocalPoint corrected,

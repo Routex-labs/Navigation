@@ -2,21 +2,22 @@ import 'dart:math' as math;
 
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
-import '../../../domain/route_checkpoint.dart';
-import '../../../domain/route_movement.dart';
-import '../../../domain/route_progress.dart';
-import '../../../models/building_graph.dart';
-import '../../../models/floor_graph.dart';
+import '../../../domain/guidance/route_checkpoint.dart';
+import '../../../domain/guidance/route_movement.dart';
+import '../../../domain/guidance/route_progress.dart';
+import '../../../models/building/building_graph.dart';
+import '../../../models/building/floor_graph.dart';
 import '../contract/altitude_sample.dart';
 import '../contract/pdr_anchor.dart';
 import '../contract/raw_motion_activity.dart';
 import 'corridor_position_tracker.dart';
 import 'corridor_tracking_session.dart';
 import 'escalator_transition_detector.dart';
-import '../../../models/indoor_route.dart';
+import '../../../models/route/indoor_route.dart';
 import 'indoor_guidance_position.dart';
 import 'indoor_guidance_progress.dart';
 import 'indoor_location_estimate.dart';
+import '../../../domain/guidance/corridor_tracking.dart';
 
 /// 기압 샘플 한 건이 만들어 낸 층 이동 신호들.
 ///
@@ -115,20 +116,12 @@ const junctionRerouteHoldMs = 4000;
 
 /// 실내 안내에서 **"지금 어디에 있는가"** 하나를 소유하는 headless 세션.
 ///
-/// 이 클래스가 생긴 이유는 같은 판단이 두 화면에 따로 구현돼 있었기 때문이다.
-/// 실내 탭은 복도 보정 위치를 그렸고, 홈 지도는 같은 tracker를 돌려 놓고도
-/// 결과를 읽지 않은 채 앵커를 고정 표시했다. 두 화면이 다른 위치를 그리면
-/// 어느 쪽이 맞는지 사용자도 우리도 알 수 없다.
+/// 같은 판단이 두 화면에 따로 구현돼 서로 다른 위치를 그리던 것을 하나로 모은
+/// 것이다. 세션은 **위젯을 모른다** — 지도·카메라·도면은 화면 몫이고 여기서는
+/// 위치 한 건과 그 출처만 내준다.
 ///
-/// 세션은 **위젯을 모른다.** 지도 레이어·카메라·도면 로딩은 화면 몫이고,
-/// 여기서는 센서 입력을 받아 위치 한 건과 그 출처를 내준다.
-///
-/// ## 부착(attach)이 왜 필요한가
-///
-/// 홈 지도에는 "실내 오버레이가 꺼진 상태"가 있다. 예전에는 그 상태에서도
-/// 복도 보정이 계속 돌았다 — 화면에 안 보일 뿐 걸음은 트래커에 쌓이고 있었다.
-/// 야외를 걸어 다닌 거리가 실내 좌표계에 누적되다가, 다시 실내로 들어오는
-/// 순간 엉뚱한 곳에서 시작한다. [attach]/[detach]로 그 구간을 명시적으로 끊는다.
+/// [attach]/[detach]가 필요한 이유는 오버레이가 꺼진 구간이다 — 예전에는 그때도
+/// 복도 보정이 돌아, 야외를 걸은 거리가 실내 좌표계에 쌓였다.
 class IndoorGuidanceSession {
   IndoorGuidanceSession({
     DateTime Function()? now,
@@ -161,19 +154,12 @@ class IndoorGuidanceSession {
 
   /// 실제 수직 이동이 확인된 뒤 마커를 묶어 두는 지점.
   ///
-  /// [_boardingHoldPointM]과 나누는 이유는 **근거의 세기가 다르기** 때문이다.
-  /// 접근 단계(boardingDetected)는 에스컬레이터 옆을 스쳐 지나가기만 해도
-  /// 올라가므로, 안내가 지목한 탑승점과 판정기가 고른 노드가 일치할 때만
-  /// 고정한다 — 아니면 그냥 걷는 사람의 마커를 세우게 된다.
+  /// [_boardingHoldPointM]과 나누는 이유는 **근거의 세기가 다르기** 때문이다. 접근
+  /// 단계는 스쳐 지나가기만 해도 올라가므로 경로와 판정이 일치할 때만 고정한다.
   ///
-  /// 반면 수직 이동(verticalMotionDetected)은 기압이 실제로 움직였다는 뜻이라
-  /// 스쳐 지나감이 아니다. 그런데 이때도 경로 조건이 어긋나면(경로가 없거나
-  /// 판정기가 다른 레인을 골랐거나) 고정이 걸리지 않아, **에스컬레이터 위에
-  /// 서 있는 동안 발판 진동이 걸음으로 세어져 마커가 앞 매장으로 흘러갔다.**
-  /// 걸음 pause(`pauseStepTracking`)는 화면이 비동기로 거는 것이라 그 사이
-  /// 프레임도 막지 못한다. 그래서 이 단계에서는 근거를 물러서며 잡아 **반드시**
-  /// 어딘가에 고정한다: 안내가 지목한 탑승점 → 판정기가 고른 탑승 노드 →
-  /// 그 순간의 보정 위치(적어도 제자리에 선다).
+  /// 수직 이동은 스쳐 지나감이 아니라, 여기서는 근거를 물러서며 **반드시** 어딘가에
+  /// 고정한다(탑승점 → 판정기 노드 → 그 순간 보정 위치) — 안 그러면 발판 진동이
+  /// 걸음으로 세어져 마커가 앞 매장으로 흘러갔다.
   PdrLocalPoint? _rideHoldPointM;
 
   bool get isAttached => _attached;
@@ -532,8 +518,7 @@ class IndoorGuidanceSession {
         projected != null &&
         result.isInJunctionZone &&
         result.state != CorridorTrackingState.uncertain &&
-        (result.previewPosition -
-                    PdrLocalPoint(projected.x, projected.y))
+        (result.previewPosition - PdrLocalPoint(projected.x, projected.y))
                 .distance >
             0.75;
     if (junctionPreviewHasMoved) {
@@ -685,7 +670,8 @@ class IndoorGuidanceSession {
           _checkpoints.apply(
             step: routeStep,
             travelDirectionState: _travelDirection.state,
-            tracker: result,
+            trackerPreviewPosition: result.previewPosition,
+            trackerState: result.state,
             graph: graph,
             rerouteInFlight: rerouteInFlight,
           ),

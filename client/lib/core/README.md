@@ -1,15 +1,24 @@
-# `lib/core` — 앱 설정과 전역 배선
+# `lib/core` — 앱 설정, 그리고 전역 배선
 
-앱 전체가 공유하는 실행 설정과 구현체 조립을 한곳에 둔다. 화면이나 도메인 규칙을
-구현하는 계층이 아니라, **어떤 서버·외부 API·센서·리포지토리를 사용할지 결정하는
-조립 지점**이다.
+앱 전체가 공유하는 실행 설정을 둔다. **아무것도 import하지 않는 바닥 층**이라
+어느 계층에서든 읽을 수 있다([계층 검사](../../test/lib_layer_direction_test.dart)).
 
 ## 구성 파일
 
 | 파일 | 역할 | 주요 항목 |
 |---|---|---|
 | [`api_config.dart`](api_config.dart) | 실행 환경 설정 | `apiBaseUrl`, `demoBuildingId`, `tmapAppKey`, `kakaoRestApiKey`, `vworldApiKey` |
-| [`service_locator.dart`](service_locator.dart) | 앱 전역 의존성 조립 | 리포지토리, PDR 드라이버, 위치 스트림, 권한 요청, 즐겨찾기 |
+| [`tile_url.dart`](tile_url.dart) | 타일 URL 조립 | |
+| [`single_flight.dart`](single_flight.dart) | 같은 작업이 겹쳐 도는 것을 막는다 | `SingleFlight` |
+
+### 조립 지점은 여기가 아니라 [`lib/service_locator.dart`](../service_locator.dart)다
+
+**한때 이 폴더에 있었다.** 그런데 그 파일은 repositories·features·state를 전부
+import하므로, core에 두면 "바닥 층"이 위쪽을 보게 되어 순환이 생긴다. 조립 루트는
+정의상 **가장 위**라 `lib/` 최상단(`app.dart`·`main.dart` 옆)이 맞는 자리다.
+
+아래 문단들은 그 파일 이야기다 — 설정을 읽어 무엇을 조립하는지가 곧 설정의 의미라
+한 문서에 둔다.
 
 ## 설정 우선순위
 
@@ -72,7 +81,9 @@ flowchart LR
   `destinationRepository`를 다시 만들지 않으면 서로 다른 데이터 소스를 본다.
 - 키가 비어 있을 때 TMAP이 조용히 Mock으로 바뀌므로, 실제 API 검증에서는 실행 인자를 확인한다.
 - 여기에 화면별 상태나 경로 계산 규칙을 넣으면 전역 결합이 커진다. 계산은 `domain/`,
-  사용자 상태는 `state/`, 센서 세션은 `features/indoor_navigation/`에 둔다.
+  사용자 상태는 `state/`, 센서 세션은 `features/indoor_navigation/`, 지도 색·라벨은
+  `map/`에 둔다. **이 규칙은 한 번 지켜지지 않았다** — 지도 스타일 18개가 `core/map/`에
+  쌓여 있었고, 그러다 라벨 계산이 화면을 import하는 화살표까지 생겼다.
 
 ## 자주 하는 작업
 

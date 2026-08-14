@@ -10,9 +10,9 @@
 [wave-plan.md](wave-plan.md)(작업 분해),
 [starbucks-detail-pilot.md](starbucks-detail-pilot.md)(파일럿 데이터·출처)
 
-관련 코드: [place_detail_sheet.dart](../../../client/lib/widgets/place_detail_sheet.dart),
-[place_detail/](../../../client/lib/widgets/place_detail/)(섹션 렌더러),
-[place_detail.dart](../../../client/lib/models/place_detail.dart)(응답 파싱),
+관련 코드: [place_detail_sheet.dart](../../../client/lib/screens/map_shell/widgets/sheets/place_detail_sheet.dart),
+[place_detail/](../../../client/lib/screens/map_shell/widgets/sheets/place_detail/)(섹션 렌더러),
+[place_detail.dart](../../../client/lib/models/place/place_detail.dart)(응답 파싱),
 [place_detail.py](../../../backend/app/dto/place_detail.py)(DTO),
 [place_details.py](../../../backend/app/repositories/place_details.py)(오버레이 로더·검증기),
 [_schema.json](../../../backend/resources/store_details/_schema.json)
@@ -399,7 +399,7 @@ GET /buildings/{building_id}/places/{place_id}
 | `childList` | Wave 4에서 정의 | — |
 
 **모르는 `type`은 파싱 단계에서 버린다.** 위젯 분기까지 오지 않는다
-([place_detail.dart](../../../client/lib/models/place_detail.dart) `PlaceDetailSection.fromJson`이
+([place_detail.dart](../../../client/lib/models/place/place_detail.dart) `PlaceDetailSection.fromJson`이
 `_ => null`을 반환하고 `whereType`이 걸러낸다). 위젯 레이어의 `switch`는 sealed class라
 컴파일 타임에 전수 검사되고, 런타임 fallback 분기를 두지 않는다.
 
@@ -617,7 +617,7 @@ GET /buildings/{building_id}/places/{place_id}
 - [x] 스크롤로 이름 옆 버튼이 가려지면 하단 액션 바가 뜬다 (7-A-1)
 - [x] 실기기/브라우저에서 hero·menu·businessInfo가 7-A-2 명세대로 보인다
 - [x] 영업시간 판정이 폐점 정각·브레이크 타임·자정 넘김·예외 휴점일·다른 시간대 기기에서
-      각각 정해 둔 값을 낸다 (표와 테스트는 `client/lib/domain/store_hours.dart` 머리말과
+      각각 정해 둔 값을 낸다 (표와 테스트는 `client/lib/domain/store/store_hours.dart` 머리말과
       `client/test/domain/store_hours_test.dart`)
 - [x] 확인일이 임계값을 넘기면 판정 줄이 사라지고 요일 표는 남는다
 
@@ -710,7 +710,7 @@ D2″까지의 영업시간은 `"화~목 10:30–20:00 · 금~일 10:30–20:30"
 | 스키마 위치 | 응답 본체 필드가 아니라 **섹션**(4-2 아래 문단에 이유) |
 | 게이팅 | `demo_allowlist`를 **걸지 않는다**(아래) |
 | 판정 | 서버는 규칙만 준다. `영업 중`/`영업 종료`는 화면이 매번 계산한다 |
-| 판정 로직 | 위젯이 아니라 `client/lib/domain/store_hours.dart`의 순수 함수. 기준 시각을 인자로 받는다 |
+| 판정 로직 | 위젯이 아니라 `client/lib/domain/store/store_hours.dart`의 순수 함수. 기준 시각을 인자로 받는다 |
 
 **허용 목록을 걸지 않는 이유.** `demo_allowlist`는 `demoInfo`가 **라벨도 값도 자유
 문자열**이라 존재한다 — 무엇이 들어올지 스키마가 모르니 "누가 쓸 수 있나"로 좁히는 것 말고는

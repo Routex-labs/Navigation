@@ -5,6 +5,7 @@ import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 import '../contract/indoor_navigation_contract.dart';
 import '../platform/native_pdr_event.dart';
 import '../platform/pdr_motion_source.dart';
+import '../../../domain/geo/geo_transform.dart';
 
 /// 앱 범위 실내 내비게이션 세션을 소유하는 headless 컨트롤러.
 ///
@@ -284,6 +285,7 @@ class IndoorNavigationDriver implements IndoorNavigationController {
   // ── 앱 lifecycle (앱 셸이 호출) ──
 
   /// 앱이 background로 가면 tracking pause.
+  @override
   Future<void> onAppBackgrounded() =>
       _enqueueLifecycleTransition(_applyAppBackgrounded);
 
@@ -305,6 +307,7 @@ class IndoorNavigationDriver implements IndoorNavigationController {
   }
 
   /// 앱이 foreground로 돌아오면 tracking resume.
+  @override
   Future<void> onAppForegrounded() =>
       _enqueueLifecycleTransition(_applyAppForegrounded);
 

@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import '../../models/floor_plan.dart';
+import '../../models/building/floor_plan.dart';
 
 class CardinalCalibrationResult {
   const CardinalCalibrationResult({

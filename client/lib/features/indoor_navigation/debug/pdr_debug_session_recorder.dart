@@ -2,10 +2,10 @@ import 'dart:math' as math;
 
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
-import '../../../domain/route_progress.dart';
-import '../../../domain/route_checkpoint.dart';
-import '../../../domain/route_movement.dart';
-import '../../../models/floor_graph.dart';
+import '../../../domain/guidance/route_progress.dart';
+import '../../../domain/guidance/route_checkpoint.dart';
+import '../../../domain/guidance/route_movement.dart';
+import '../../../models/building/floor_graph.dart';
 import '../application/corridor_position_tracker.dart';
 import '../application/escalator_transition_detector.dart';
 import '../application/floor_map_matcher.dart';
@@ -13,6 +13,7 @@ import '../contract/altitude_sample.dart';
 import '../contract/calibration_state.dart';
 import '../contract/pdr_anchor.dart';
 import '../contract/pdr_runtime_status.dart';
+import '../../../domain/guidance/corridor_tracking.dart';
 
 /// 실측 뒤 원인을 되짚기 위한, 의도적으로 작은 PDR 디버그 세션 레코더.
 ///
@@ -22,36 +23,8 @@ class PdrDebugSessionRecorder {
   PdrDebugSessionRecorder({DateTime? startedAt})
     : _startedAt = startedAt ?? DateTime.now().toUtc();
 
-  // v4: 1Hz 샘플에 preview(주황)를 추가하고, pedometer live/재조회 대조 블록을
-  // 넣었다. 지금까지는 시계열에 confirmed(초록)만 있어서 주황이 언제 벌어졌는지
-  // 파일만으로는 알 수 없었다.
-  // v5: heading 분해(fused/offset/device/gyro/walkDir)와 수렴 상태를 추가했다.
-  // 방향이 틀어졌을 때 자력계·walkOffset·네이티브 유도식·실제 회전 중 무엇인지
-  // 파일만으로 가르기 위한 값이다.
-  // v6: Android RoNIN 자동보폭 비교 경로와 1Hz 보폭/속도 관측을 추가했다.
-  // v7: 세션형 복도 보정 위치·heading bias·상태 전이 시계열을 추가했다.
-  // v8: 간선 누적 진행거리와 잠긴 진행 방향을 추가했다.
-  // v9: 주황 기반 보라 preview 위치·후보 간선·모호성·경로를 추가했다.
-  // v10: corridor tracker의 **입력 이벤트**를 남긴다. v9까지는 출력(경로·1Hz
-  // 샘플)만 있어서 tracker를 정확히 재생할 수 없었다(주황 꼬리와 배치 경계가
-  // 없었다). 이제 tracker가 실제로 받은 관측 전체 + 확정 배치 식별자 +
-  // 그 시간창에서 소비된 accepted peak를 남겨 재생 fixture로 쓸 수 있다.
-  // v11: 길찾기 경로 기준 진행률을 남긴다. v10까지는 "어느 복도든 하나에
-  // 붙었는지"만 알 수 있었고, 실사용에서 정작 중요한 "사용자가 따라가는 그
-  // 경로에 붙었는지"는 파일에서 계산조차 할 수 없었다. 경로 컨텍스트(목적지·
-  // 간선 목록)와 진행률 시계열을 남겨 on-route 비율·진행거리·재획득 횟수를
-  // 사후에 뽑을 수 있게 한다.
-  // v12: 기압계 시계열과 층 전이 판정 이벤트를 남긴다. 에스컬레이터 층 추종의
-  // 임계값(변화량·상승속도·허가 반경·유지 시간)은 전부 초안값이라, 실측 기압
-  // 원본과 **거부된 판정의 이유**가 파일에 없으면 조정할 근거가 없다. 확정만
-  // 남기면 미탐은 파일에서 아예 보이지 않는다.
-  // v13: confirmed cursor와 별개로 사는 optimistic(화면) cursor의 상태를 남긴다.
-  // v12까지는 "preview 선행분"이 scalar 하나였고 그것도 매 프레임 재계산이라,
-  // 화면이 뒤로 간 프레임이 배치 때문인지 후보 교체 때문인지 파일에서 가릴 수
-  // 없었다. optimistic 간선·진행거리·선행분과 preview peak 식별자 합성 여부를
-  // 함께 남겨, 배치 구성과 무관한 위치 시계열인지 사후에 검증한다.
-  // v14: orientation/walking/map-matched/route heading, peak별 graph traversal,
-  // route signed 이동과 peak 기반 방향 상태, measured/display 진행률을 분리한다.
+  // 판을 올릴 때마다 `docs/pdr/pdr-dev-integration.md`의 「스키마 이력」에 "그전에는
+  // 무엇을 못 가렸나"를 한 줄 적는다. 그게 이 숫자가 존재하는 이유다.
   static const schemaVersion = 14;
   static const _maxQualitySamples = 900;
   static const _maxTrackerInputEvents = 4000;

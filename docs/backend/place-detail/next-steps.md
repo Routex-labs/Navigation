@@ -97,7 +97,7 @@ B안대로 `hours` 전용 구조체를 만들고 "지금 영업 중"은 화면�
 [매장 상세 인터페이스 9-1 D2‴](place-detail-interface.md)이다** — 여기에 베껴 적지 않는다.
 
 한 줄로 줄이면: `demoInfo`의 문자열 한 줄을 요일 표·구간 배열·예외 날짜·UTC 오프셋을
-가진 섹션으로 옮겼고, 판정 로직은 `client/lib/domain/store_hours.dart`의 순수 함수다.
+가진 섹션으로 옮겼고, 판정 로직은 `client/lib/domain/store/store_hours.dart`의 순수 함수다.
 `demo_allowlist`는 **걸지 않았다**(자유 문자열이 아니라 검증된 구조체이므로 — 근거는 D2‴).
 
 ### 월요일은 매주 휴무가 아니다 — 처음 옮길 때 틀렸던 곳
@@ -192,7 +192,7 @@ B안대로 `hours` 전용 구조체를 만들고 "지금 영업 중"은 화면�
 검색·경로가 쓰는 것이고, 거리는 어차피 온디바이스 다익스트라가 정답이다(AGENTS.md의
 경로 계산 규칙). 이 매장의 입구 노드에서 `reachableFrom`을 한 번 돌려 전 노드 거리를
 얻고, 색인을 그 맵으로 조회만 한다 — 검색 결과 목록·대표 매장 선택과 같은 방식이다.
-고르는 규칙과 실패 조건의 단일 출처는 `client/lib/domain/nearby_stores.dart` 머리말이다.
+고르는 규칙과 실패 조건의 단일 출처는 `client/lib/domain/store/nearby_stores.dart` 머리말이다.
 
 **정한 것**
 

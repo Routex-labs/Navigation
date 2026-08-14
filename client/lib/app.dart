@@ -2,16 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'core/service_locator.dart';
+import 'service_locator.dart';
 import 'routing/app_routes.dart';
 import 'theme/app_theme.dart';
-import 'screens/arrival/arrival_screen.dart';
-import 'screens/debug/api_health_check_screen.dart';
-import 'screens/debug/floor_map_preview_screen.dart';
-import 'screens/debug/pdr_svg_test_screen.dart';
-import 'screens/destination/destination_screen.dart';
 import 'screens/map_shell/map_shell_screen.dart';
-import 'screens/route_guide/route_guide_screen.dart';
 
 void defaultPdrBackgrounded() {
   unawaited(indoorNavigationDriver.onAppBackgrounded());
@@ -72,19 +66,11 @@ class _NavigationAppState extends State<NavigationApp>
 
   @override
   Widget build(BuildContext context) {
+    // 화면은 하나다. 지도 셸이 야외·실내를 한 화면 안에서 모두 그리므로
+    // 이 앱에는 push할 다른 화면이 없다 — 목적지 선택·경로 안내·도착 화면은
+    // 지도 셸의 시트와 오버레이로 흡수됐다.
     final routes = <String, WidgetBuilder>{
       AppRoutes.outdoorMap: (context) => const MapShellScreen(),
-      // 실내 전용 화면이 없어진 뒤에도 이 라우트는 남긴다. 도착 화면이
-      // pushNamedAndRemoveUntil로 여기를 부르고, 지도는 하나뿐이라 같은
-      // 셸로 보내면 된다.
-      AppRoutes.indoorMap: (context) => const MapShellScreen(),
-      AppRoutes.destination: (context) => const DestinationScreen(),
-      AppRoutes.routeGuide: (context) => const RouteGuideScreen(),
-      AppRoutes.arrival: (context) => const ArrivalScreen(),
-      AppRoutes.debugApiHealth: (context) => const ApiHealthCheckScreen(),
-      AppRoutes.debugFloorMapPreview: (context) =>
-          const FloorMapPreviewScreen(),
-      AppRoutes.pdrSvgTest: (context) => const PdrSvgTestScreen(),
     };
     if (widget.home != null) {
       routes.remove(AppRoutes.outdoorMap);

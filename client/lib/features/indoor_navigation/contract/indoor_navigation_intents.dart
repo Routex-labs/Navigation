@@ -1,6 +1,6 @@
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
-import 'pdr_anchor.dart';
+import '../../../domain/geo/geo_transform.dart';
 
 /// UI가 **호출**하는 명령 계약(UI → 로직).
 ///
@@ -62,4 +62,13 @@ abstract interface class IndoorNavigationIntents {
 
   /// [pauseStepTracking]으로 멈춘 걸음 누적을 다시 켠다.
   Future<void> resumeStepTracking();
+
+  /// 앱이 백그라운드로 내려갔다. native 센서 소스를 멈추고 세션을 일시정지한다.
+  ///
+  /// [pauseStepTracking]과 다르다 — 저쪽은 플래그 하나만 내리고 센서는 계속
+  /// 돌지만, 이쪽은 소스 자체를 끈다(위 주석 참고).
+  Future<void> onAppBackgrounded();
+
+  /// 앱이 다시 앞으로 나왔다. [onAppBackgrounded]로 멈춘 소스를 되살린다.
+  Future<void> onAppForegrounded();
 }

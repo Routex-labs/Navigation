@@ -102,7 +102,7 @@
 상세 API는 `place_id`로 조회한다. 그런데 시트에 전달되는 모델에 id가 없다.
 
 ```dart
-// client/lib/models/poi_search_result.dart
+// client/lib/models/place/poi_search_result.dart
 class PoiSearchResult {
   final String name;      // ← 1-3에서 봤듯 유일 키가 아니다
   final String floor;
@@ -117,7 +117,7 @@ id는 **상류에 이미 존재한다**. 잃어버리는 지점이 문제다.
 
 | 진입 경로 | id 보유 | 잃는 지점 |
 |---|---|---|
-| 지도 폴리곤 탭 | ○ `StorePolygon.id` ([floor_plan.dart:130](../../../client/lib/models/floor_plan.dart)) | `PoiSearchResult` 변환 |
+| 지도 폴리곤 탭 | ○ `StorePolygon.id` ([floor_plan.dart:130](../../../client/lib/models/building/floor_plan.dart)) | `PoiSearchResult` 변환 |
 | 텍스트 검색 | ○ 서버 `QueryMatch.store_id` ([query.py:24](../../../backend/app/dto/query.py)) | 응답 파싱 |
 | 저장한 장소 | ✗ `FavoritePlace`에 id 필드 자체가 없음 | **기기에 이미 저장된 항목은 소급 불가** |
 | 카테고리 목록 시트 | ○ 매장 목록 API | 변환 |

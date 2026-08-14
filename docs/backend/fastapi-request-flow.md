@@ -6,7 +6,7 @@
 > `app/repositories/`.
 >
 > **경로 계산은 서버에 없다.** 층 지도 응답의 `navigation_graph`(nodes·edges)를 받아
-> 클라이언트가 온디바이스 Dijkstra(`client/lib/domain/dijkstra.dart`)를 실행한다.
+> 클라이언트가 온디바이스 Dijkstra(`client/lib/domain/route/dijkstra.dart`)를 실행한다.
 > 서버는 그래프 데이터를 조회해 내려줄 뿐, 최단 경로를 계산하지 않는다.
 
 ## 0. 한 줄 대응표
@@ -74,7 +74,7 @@ erDiagram
 HTTP 계약 선언       → dto/          (Pydantic response_model)
 데이터 조회·조립     → repositories/ (Session + select + dict)
 그래프(nodes/edges)  → repositories/가 응답 dict에 실어 내려줌
-최단 경로 계산       → 클라이언트 (client/lib/domain/dijkstra.dart)
+최단 경로 계산       → 클라이언트 (client/lib/domain/route/dijkstra.dart)
 화면 그래프 그리기   → Flutter
 ```
 
@@ -207,7 +207,7 @@ flowchart TD
     s3["3. select(Node/Edge).where(floor_id=…)"]
     asm["응답 dict 조립<br/>stores·pois → 표시용 좌표·이름·카테고리<br/>navigation_graph → {nodes, edges}<br/>from_node_id→'from', x_m/y_m→{x,y} 명시 변환"]
     dtoN["FloorMapResponse<br/>dto/floor_map.py + dto/route.py"]
-    cli["Client — navigation_graph로 온디바이스 Dijkstra<br/>client/lib/domain/dijkstra.dart"]
+    cli["Client — navigation_graph로 온디바이스 Dijkstra<br/>client/lib/domain/route/dijkstra.dart"]
     draw["Polyline·마커 렌더링 (Flutter)"]
 
     call --> s1
@@ -228,7 +228,7 @@ flowchart TD
 > `/route` 엔드포인트를 제거했다. 그래프 파이프라인(Node/Edge, 시드, 층 간 전이 간선,
 > `/graph`, 응답의 `navigation_graph`)은 클라이언트의 라우팅 입력으로 그대로 남아 있다.
 > 층 간(건물 전체) 경로도 클라이언트가 온디바이스로 계산한다 — 서버는 위 건물 전체 그래프를
-> 내려줄 뿐이고, 층별 세그먼트 분할과 경로 탐색은 `client/lib/domain/multi_floor_router.dart`가
+> 내려줄 뿐이고, 층별 세그먼트 분할과 경로 탐색은 `client/lib/domain/route/multi_floor_router.dart`가
 > 한다. 한 층 안 경로는 층 지도의 `navigation_graph`로, 층 간 경로는 건물 전체 그래프로 계산한다.
 
 ### 4-2. 자연어 탐색 질의 — `discover()`의 mode 판정

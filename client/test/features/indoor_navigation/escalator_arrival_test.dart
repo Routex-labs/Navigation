@@ -3,7 +3,7 @@ import 'package:navigation_client/features/indoor_navigation/application/escalat
 import 'package:navigation_client/features/indoor_navigation/application/escalator_node_naming.dart';
 import 'package:navigation_client/features/indoor_navigation/application/escalator_transition_detector.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/floor_transition_ui_state.dart';
-import 'package:navigation_client/models/floor_graph.dart';
+import 'package:navigation_client/models/building/floor_graph.dart';
 
 GraphNode _escalator(String id, String? name, double x, double y) =>
     GraphNode(id: id, type: 'escalator', name: name, xM: x, yM: y);

@@ -1,4 +1,4 @@
-import '../../../models/floor_graph.dart';
+import '../../../models/building/floor_graph.dart';
 import '../contract/floor_transition_ui_state.dart';
 import 'escalator_node_naming.dart';
 import 'escalator_transition_detector.dart';
