@@ -200,4 +200,16 @@ void main() {
       expect(closed, isTrue);
     });
   });
+
+  testWidgets('EtaCard shows the distance and minutes', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: EtaCard(distanceMeters: 150, minutes: 2)),
+    );
+
+    expect(find.text('목적지까지'), findsOneWidget);
+    expect(find.textContaining('약 2분', findRichText: true), findsOneWidget);
+    expect(find.textContaining('150m', findRichText: true), findsOneWidget);
+  });
 }

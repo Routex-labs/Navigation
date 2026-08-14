@@ -11,76 +11,16 @@ import 'package:navigation_client/models/indoor_route.dart';
 import 'package:navigation_client/models/poi_search_result.dart';
 import 'package:navigation_client/repositories/building_repository.dart';
 import 'package:navigation_client/repositories/destination_repository.dart';
-import 'package:navigation_client/theme/app_theme.dart';
-import 'package:navigation_client/widgets/eta_card.dart';
-import 'package:navigation_client/widgets/location_marker.dart';
 import 'package:navigation_client/screens/map_shell/widgets/search_panel.dart';
-import 'package:navigation_client/screens/outdoor_map/widgets/status_badge.dart';
-import 'package:navigation_client/widgets/uncertainty_circle.dart';
+
+/// SearchPanel의 **대화형 탐색(discovery) 흐름** 테스트.
+///
+/// 경량 검색 → 의미 검색으로 넘어가는 시점, clarify 질문·선택·전체 보기,
+/// 층 스코프 전달이 여기 있다. 렌더링·정렬 같은 나머지 동작은 같은 폴더의
+/// `search_panel_test.dart`가 맡는다 — 한 파일에 63개가 이미 있어 더 붙이면
+/// 무엇이 깨졌는지 이름만 보고 알 수 없다.
 
 void main() {
-  testWidgets('LocationMarker uses the outdoor mode color by default', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      const MaterialApp(home: LocationMarker(mode: LocationMode.outdoor)),
-    );
-
-    final icon = tester.widget<Icon>(find.byType(Icon));
-    expect(icon.icon, Icons.navigation);
-    expect(icon.color, AppColors.primary);
-  });
-
-  testWidgets('LocationMarker colorOverride wins over the mode color', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: LocationMarker(
-          mode: LocationMode.outdoor,
-          colorOverride: Colors.amber,
-        ),
-      ),
-    );
-
-    final icon = tester.widget<Icon>(find.byType(Icon));
-    expect(icon.color, Colors.amber);
-  });
-
-  testWidgets('UncertaintyCircle renders with the requested diameter', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: UncertaintyCircle(diameter: 40, color: Colors.purple),
-      ),
-    );
-
-    final box = tester.widget<SizedBox>(find.byType(SizedBox));
-    expect(box.width, 40);
-    expect(box.height, 40);
-  });
-
-  testWidgets('StatusBadge shows the given label', (WidgetTester tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(home: StatusBadge(label: 'GPS 신호 약함')),
-    );
-
-    expect(find.text('GPS 신호 약함'), findsOneWidget);
-  });
-
-  testWidgets('EtaCard shows the distance and minutes', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      const MaterialApp(home: EtaCard(distanceMeters: 150, minutes: 2)),
-    );
-
-    expect(find.text('목적지까지'), findsOneWidget);
-    expect(find.textContaining('약 2분', findRichText: true), findsOneWidget);
-    expect(find.textContaining('150m', findRichText: true), findsOneWidget);
-  });
-
   group('SearchPanel', () {
     // 이 그룹의 관심사는 "의미 검색이 언제 도는가"와 "최종 없음 문구가 언제
     // 나오는가" 두 가지다. 예전에는 엔터(submitTick)가 올라야만 의미 검색이
