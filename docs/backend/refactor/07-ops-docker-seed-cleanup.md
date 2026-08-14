@@ -11,7 +11,7 @@ Dockerfile이 저장소 루트와 `backend/`에 유사한 내용으로 중복되
 
 ## 범위(백엔드만)
 
-`Dockerfile`(루트/`backend/`), `docker-compose.yml`, FastAPI 설정(`backend/app/main.py`, 환경별 Settings).
+`backend/Dockerfile`(운영 이미지는 이 하나뿐 — 루트 것은 08에서 제거했다), `docker-compose.yml`, FastAPI 설정(`backend/app/main.py`, 환경별 Settings).
 
 ## 작업 항목
 

@@ -20,10 +20,10 @@
   측정됐다. 표에 남아 있던 512 MiB로는 첫 AI 질의에서 OOM으로 컨테이너가 죽는다.
 - **이미지에서 torch는 CPU 전용 휠로 고정한다.** PyPI 기본 인덱스는 리눅스에서 CUDA
   빌드 torch를 주는데, `nvidia-*`/`triton`까지 합쳐 압축 기준 약 2.9 GB다. Cloud Run
-  컨테이너에는 GPU가 없어 전부 죽은 용량이므로 `Dockerfile`이 CPU 휠(약 168 MB)로
+  컨테이너에는 GPU가 없어 전부 죽은 용량이므로 `backend/Dockerfile`이 CPU 휠(약 168 MB)로
   고정한다. CUDA는 "GPU 필수"가 아니라 "GPU용 라이브러리를 동봉"한다는 뜻이라,
   CPU 휠로 바꿔도 추론 결과·속도는 동일하다.
-- **모델은 빌드 시점에 이미지에 굽는다.** `Dockerfile`이 `scripts.warm_embedding_model`로
+- **모델은 빌드 시점에 이미지에 굽는다.** `backend/Dockerfile`이 `scripts.warm_embedding_model`로
   모델(약 420 MB)을 미리 받아 캐시에 넣는다. Cloud Run 파일시스템은 휘발성이라, 굽지
   않으면 콜드 스타트마다 첫 질의가 다운로드를 기다린다.
 - **`NAV_WARM_EMBEDDING=1`은 이미지에 이미 설정돼 있다.** 기동 직후 백그라운드 데몬
