@@ -12,9 +12,16 @@ import 'package:latlong2/latlong.dart' as ll;
 
 import 'indoor_entry_proximity.dart';
 
-/// 진입/이탈 판정에 쓸 수 있는 좌표의 최대 오차(m). 넘으면 안팎 어느 쪽
-/// 근거로도 쓰지 않는다.
+/// **진입** 판정에 쓸 수 있는 좌표의 최대 오차(m). 넘으면 진입 근거로 안 쓴다.
 const decisiveAccuracyMeters = 20.0;
+
+/// **이탈** 판정에 쓸 수 있는 좌표의 최대 오차(m). 진입보다 느슨하다.
+///
+/// 건물에서 막 나온 순간이 정확히 오차가 큰 구간이라, 진입과 같은 20 m를
+/// 요구하면 그 구간이 통째로 `unclear`가 돼 전환이 늦는다. 이탈은 부풀린
+/// 외곽선 **밖으로 14 m**를 요구하므로(아래 두 상수의 합) 30 m 오차로도 그만큼
+/// 나갔다면 근거로 쓸 만하다. 진입은 안쪽 5 m뿐이라 같이 풀면 안 된다.
+const outdoorExitAccuracyMeters = 30.0;
 
 /// 외곽선에서 이만큼 안쪽에 찍혀야 "들어왔다"고 본다(m).
 const indoorEnterInsetMeters = 5.0;
@@ -23,7 +30,7 @@ const indoorEnterInsetMeters = 5.0;
 ///
 /// [indoorEnterInsetMeters]보다 크다 — 잘못 들어가는 비용보다 잘못 나오는 비용
 /// (안에 있는데 PDR 추적이 끊김)이 커서 나가는 쪽을 엄격하게 잡는다.
-const outdoorExitMarginMeters = 12.0;
+const outdoorExitMarginMeters = 8.0;
 
 /// 우리 외곽선과 실제 건물 벽 사이의 알려진 어긋남(m).
 ///
@@ -130,14 +137,23 @@ GpsBuildingJudgement judgeBuildingFromGps({
 }
 
 /// 잰 거리로 결론을 내리는 사다리. 순서가 곧 정책이다.
+///
+/// **오차 문턱을 두 갈래가 각자 본다.** 예전에는 맨 위에서 한 번만 걸렀는데,
+/// 그 값이 진입 기준(엄격)이라 이탈까지 같이 막혔다 — 건물에서 막 나온 순간이
+/// 정확히 오차가 큰 구간이라 그 구간이 통째로 `unclear`가 됐다.
 GpsBuildingVerdict _verdictFrom({
   required double accuracyMeters,
   required double metersInside,
   required double metersOutside,
 }) {
-  if (accuracyMeters > decisiveAccuracyMeters) return GpsBuildingVerdict.unclear;
-  if (metersInside >= indoorEnterInsetMeters) return GpsBuildingVerdict.inside;
-  if (metersOutside >= outdoorExitMarginMeters) return GpsBuildingVerdict.outside;
+  if (accuracyMeters <= decisiveAccuracyMeters &&
+      metersInside >= indoorEnterInsetMeters) {
+    return GpsBuildingVerdict.inside;
+  }
+  if (accuracyMeters <= outdoorExitAccuracyMeters &&
+      metersOutside >= outdoorExitMarginMeters) {
+    return GpsBuildingVerdict.outside;
+  }
   return GpsBuildingVerdict.unclear;
 }
 
