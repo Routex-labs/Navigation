@@ -1,7 +1,7 @@
 # `lib/state` — 지속되는 사용자 상태
 
 화면 하나보다 오래 유지되고 앱 재실행 뒤에도 복원해야 하는 사용자 상태를 둔다.
-현재는 즐겨찾기와 최근 검색어를 관리한다.
+현재는 즐겨찾기와 최근 검색어, 최근 출발지·목적지를 관리한다.
 
 ## 구성 파일
 
@@ -9,6 +9,12 @@
 |---|---|
 | [`favorites_controller.dart`](favorites_controller.dart) | 즐겨찾기 로드·추가·삭제·토글·순서 변경과 저장 |
 | [`recent_searches_controller.dart`](recent_searches_controller.dart) | 최근 검색어 로드·추가(최신순)·개별/전체 삭제와 저장 |
+| [`recent_route_points_controller.dart`](recent_route_points_controller.dart) | 길찾기에서 실제로 쓴 최근 출발지·목적지 |
+
+**최근 검색어와 최근 출발지·목적지는 다른 목록이다.** 앞은 사용자가 친 글자라
+다시 누르면 검색을 다시 돌지만, 뒤는 노드·층까지 든 `DirectionsCandidate`라 누르면
+곧바로 그 지점으로 확정된다. 저장 훅은 `MapShellScreen._startRoute` **한 곳**이다 —
+모든 길찾기가 그 함수를 지나므로 시트·검색·지도 탭 어느 문으로 들어와도 남는다.
 
 둘 다 `ChangeNotifier`이며 `SharedPreferences`의 JSON 문자열에 목록을 저장한다
 (즐겨찾기는 `FavoritePlace` 배열, 최근 검색어는 문자열 배열). 즐겨찾기의 앱 전역
