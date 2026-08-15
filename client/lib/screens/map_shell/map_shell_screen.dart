@@ -1887,10 +1887,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
           origin: origin?.point,
         );
 
+      // 나가는 방향도 실내 구간을 먼저 풀어 두고, 건물을 나가면 야외 경로를
+      // 이어 붙인다. origin이 있으면 그 매장에서, 없으면 PDR 앵커에서 출발한다.
       case WalkRouteKind.indoorToOutdoor:
         await map?.showIndoorToOutdoorRouteTo(
           destination.point,
           label: destination.title,
+          origin: origin == null ? null : _asPoi(origin),
         );
 
       case WalkRouteKind.outdoor:

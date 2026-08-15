@@ -16,7 +16,10 @@ enum WalkRouteKind {
   /// 좌표로 곧장 그리면 도착점이 건물 내부라 TMAP이 외벽에서 끝낸다.
   outdoorToIndoor,
 
-  /// 건물 안 → 바깥 목적지.
+  /// 건물 안 → 바깥 목적지. **[outdoorToIndoor]의 거울상이다** — 목적지에서
+  /// 가장 가까운 지상 출입구까지 실내로 안내하고, 건물을 나가면 그 문에서
+  /// 바깥 경로가 이어진다. 출발점은 PDR 앵커일 수도, 사용자가 고른 실내
+  /// 매장일 수도 있다.
   indoorToOutdoor,
 
   /// 순수 야외. TMAP 보행 경로.
@@ -62,12 +65,15 @@ WalkRouteKind classifyWalkRoute({
     return WalkRouteKind.outdoorToIndoor;
   }
 
-  // 3) 실내 → 야외. 1)과 대칭이다. 출발지를 따로 고른 경우는 제외한다 — 그건
-  // "지금 있는 곳에서 나간다"가 아니라 다른 두 지점 사이의 경로다.
+  // 3) 실내 → 야외. **1)과 판박이여야 한다.** 한때 `origin == null`을 달아
+  // "지금 있는 곳에서 나간다"만 이 갈래로 보냈는데, 그러면 실내 매장을
+  // 출발지로 고른 사용자가 아래 indoorFallback으로 떨어져 야외 목적지를 실내
+  // 라우팅에 넘기고 "도착지 노드 정보가 없어..."만 봤다. 출발 노드가 이미
+  // 있으면 PDR 앵커([indoorStartReady])는 필요 없다 — 그래서 조건 1)과 같은
+  // 모양으로 갈린다.
   if (indoorContextActive &&
-      indoorStartReady &&
-      origin == null &&
-      destination.nodeId == null) {
+      destination.nodeId == null &&
+      (origin == null ? indoorStartReady : origin.isIndoorPoint)) {
     return WalkRouteKind.indoorToOutdoor;
   }
 

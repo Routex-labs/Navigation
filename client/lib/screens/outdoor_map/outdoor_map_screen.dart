@@ -1239,17 +1239,27 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// **출구는 목적지 기준으로 고른다** — 반대편으로 나가면 실내에서 아낀 30 m를
   /// 바깥에서 200 m로 갚는다.
   ///
+  /// [origin]을 주면 PDR 앵커 대신 그 실내 매장에서 출발한다. 앵커가 없어도
+  /// 그릴 수 있어야 하므로 [showIndoorRouteTo]가 그 검사를 건너뛴다.
+  ///
   /// 깨지는 자리 셋: 출구가 없으면 야외 경로만, 실내 위치가 없으면 안내로 되돌리고,
   /// **실내 경로가 안 풀리면 예약을 걸지 않는다.**
   Future<void> showIndoorToOutdoorRouteTo(
     ll.LatLng destination, {
     required String label,
+    PoiSearchResult? origin,
   }) async {
     final exitFloor = _groundEntranceFloor;
     final exit = exitFloor == null
         ? null
         : nearestEntrance(_groundEntrances, destination);
     if (exitFloor == null || exit == null) {
+      // 출입구 데이터가 없으면 실내 구간을 만들 수 없다. 야외 경로만 그리되,
+      // 사용자가 실내 매장을 출발지로 **골랐다면** 그 선택이 조용히 무시되므로
+      // 말해 준다 — 안 그러면 "출발지를 잡았는데 왜 여기서 시작하지"가 된다.
+      if (origin != null) {
+        _showSnack('건물 출입구 정보가 없어 실내 구간을 건너뛰고 바깥 경로만 안내합니다.');
+      }
       await showRouteTo(destination, label: label);
       return;
     }
@@ -1267,6 +1277,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         point: exit.point,
         nodeId: exit.nodeId,
       ),
+      origin: origin,
     );
     if (!mounted) return;
     // 실내 구간이 실제로 그려졌을 때만 야외 구간을 예약한다. 위 호출은 실패해도
