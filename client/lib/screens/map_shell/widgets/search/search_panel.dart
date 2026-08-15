@@ -22,7 +22,7 @@ import '../../../../theme/app_theme.dart';
 import '../../../../domain/category/category_label_order.dart';
 import '../../../../widgets/filter_pill.dart';
 import '../../../../domain/store/reach_label.dart';
-import '../../../../widgets/transit_style.dart';
+import '../../../../domain/geo/distance_format.dart';
 import '../../../../domain/category/subcategory_label.dart';
 
 /// 상단 검색창 아래에 붙는 결과 패널. 입력창은 상단 바가 갖고 여기는 결과만 그린다.
@@ -1752,7 +1752,7 @@ class _SearchPanelState extends State<SearchPanel> {
     final poi = row.poi;
     final distance = poi.distanceMeters;
     final subtitleParts = [
-      if (distance != null) '약 ${formatTransitDistance(distance)}',
+      if (distance != null) '약 ${formatDistance(distance)}',
       if (poi.address != null) poi.address!,
     ];
     return ListTile(

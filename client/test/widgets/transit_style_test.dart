@@ -98,18 +98,8 @@ void main() {
     });
   });
 
-  group('거리', () {
-    test('1km 미만은 미터로 반올림한다', () {
-      expect(formatTransitDistance(0), '0m');
-      expect(formatTransitDistance(480.4), '480m');
-      expect(formatTransitDistance(999.4), '999m');
-    });
-
-    test('1km부터는 소수 한 자리 km다', () {
-      expect(formatTransitDistance(1000), '1.0km');
-      expect(formatTransitDistance(12400), '12.4km');
-    });
-  });
+  // 거리 표기는 더 이상 대중교통 전용이 아니다. 검증 기준은
+  // `test/domain/geo/distance_format_test.dart`가 단일 출처다.
 
   group('요금', () {
     test('천 단위마다 쉼표를 넣는다', () {

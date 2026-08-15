@@ -65,12 +65,6 @@ String formatTransitDuration(int seconds) {
   return rest == 0 ? '$hours시간' : '$hours시간 $rest분';
 }
 
-/// m → "480m" / "12.4km".
-String formatTransitDistance(double meters) {
-  if (meters < 1000) return '${meters.round()}m';
-  return '${(meters / 1000).toStringAsFixed(1)}km';
-}
-
 /// 요금 → "1,500원". 천 단위 구분자를 직접 넣는다(intl 의존 없이).
 String formatTransitFare(int fare) {
   final digits = fare.toString();

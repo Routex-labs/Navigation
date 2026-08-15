@@ -5,7 +5,7 @@ import '../../../../theme/app_theme.dart';
 import '../../../../widgets/map_overlay_guard.dart';
 import '../../../../widgets/sheet_grab_handle.dart';
 import '../../../../widgets/sheet_header.dart';
-import '../../../../widgets/transit_style.dart';
+import '../../../../domain/geo/distance_format.dart';
 
 /// 야외 장소 시트에서 사용자가 고른 다음 행동.
 enum OutdoorPoiAction {
@@ -166,7 +166,7 @@ class _PoiCore extends StatelessWidget {
     final subtitleParts = [
       if (poi.category != null) poi.category!,
       if (poi.distanceMeters != null)
-        '약 ${formatTransitDistance(poi.distanceMeters!)}',
+        '약 ${formatDistance(poi.distanceMeters!)}',
     ];
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
