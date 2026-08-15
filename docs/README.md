@@ -65,6 +65,8 @@
 |---|---|
 | [지도·상세 UI 개선 계획 (v1)](client/map-ui-redesign-plan.md) | 지도 렌더링 — 폰트·팔레트·마커·경로선 |
 | [네이버지도 UI/UX 분석 (v2)](client/naver-map-ui-ux-analysis.md) | 정보 구조와 목록·시트 UX |
+| [UI/UX 리서치 데스크](client/ui-ux-research-desk.md) | 참고 사이트·도구, 팔레트 대비 실측, 지도 4사 관찰 |
+| [카카오맵 실내 도면 관찰](client/kakao-map-indoor-observation.md) | 마커 위계, 출구·보이드·폭포정원 도출 작업과 데이터 판정 |
 | [검색 입력 보조](client/search-input-assist.md) | 자동완성·오타 교정 |
 | [검색 결과 목록 UX](client/search-result-list-ux.md) | 결과 행 구조와 정렬 |
 | [카메라 연출](client/camera-choreography-plan.md) | 안내 시작·층 전환 카메라, 카메라 가둠 |
