@@ -34,6 +34,7 @@ import 'widgets/sheets/favorites_sheet.dart';
 import 'widgets/chrome/floor_transition_overlay.dart';
 import 'widgets/chrome/map_bottom_bar.dart';
 import 'widgets/chrome/map_top_bar.dart';
+import 'widgets/sheets/building_info_sheet.dart';
 import 'widgets/sheets/outdoor_poi_sheet.dart';
 import 'widgets/sheets/place_detail_sheet.dart';
 import 'widgets/search/route_field_results.dart';
@@ -695,6 +696,87 @@ class _MapShellScreenState extends State<MapShellScreen> {
     await _runSheetChain(() => _showStoreInfo(resolved, focusOnMap: true));
   }
 
+  /// 야외 지도에서 건물 폴리곤을 눌렀을 때. 시트를 먼저 띄우고, 진입은 그
+  /// 시트가 시킬 때만 한다.
+  void _onMapBuildingTap(Building building) {
+    unawaited(_runSheetChain(() => _showBuildingInfo(building)));
+  }
+
+  /// 건물 정보 시트. 돌려주는 값에 따라 길찾기·실내 진입·매장 상세로 갈린다.
+  ///
+  /// 반환값 규칙은 매장 시트와 같다 — "출발/도착을 실제로 골랐는가"다.
+  Future<bool> _showBuildingInfo(Building building) async {
+    final picked = await _withMapsLocked(
+      () => BuildingInfoSheet.show(
+        context,
+        building: building,
+        onCloseAll: _requestCloseSheetChain,
+      ),
+    );
+    if (!mounted || _closeSheetChainRequested) return true;
+    if (picked == null) return false;
+
+    // 매장을 골랐으면 매장 상세로 넘긴다. 좌표·노드 해석과 실내 진입은
+    // [_onNearbyStorePicked]와 **같은 경로**를 쓴다 — 진입점마다 따로 만들면
+    // 한쪽만 층을 옮기거나 한쪽만 강조가 빠진다.
+    if (picked is StoreIndexEntry) {
+      final resolved = await _outdoorKey.currentState?.resolveIndexEntry(
+        picked,
+      );
+      if (!mounted || resolved == null) return false;
+      return _showStoreInfo(resolved, focusOnMap: true);
+    }
+
+    // 좌표만 있는 후보다. 건물 안 매장이 아니므로 실내 라우팅으로 가지 않고,
+    // 목적지 건물의 출입구를 경유하는 갈래는 [classifyWalkRoute]가 정한다.
+    final point = building.outdoorAnchor;
+    switch (picked) {
+      case BuildingInfoAction.enterIndoor:
+        // 건물 탭이 곧 진입이던 조작을 여기서 이어받는다.
+        _outdoorKey.currentState?.enterIndoorFromSheet();
+        return false;
+      case BuildingInfoAction.setOrigin when point != null:
+        final candidate = _buildingCandidate(building, point);
+        setState(() => _selectedOrigin = candidate);
+        final destination = _routeDraftDestination;
+        if (destination != null) {
+          await _startRoute(origin: candidate, destination: destination);
+        } else {
+          await _openRouteMode(presetOrigin: candidate);
+        }
+        return true;
+      case BuildingInfoAction.setDestination when point != null:
+        final candidate = _buildingCandidate(building, point);
+        setState(() => _routeDraftDestination = candidate);
+        final origin = _selectedOrigin;
+        if (origin != null || _canRouteFromCurrentLocation) {
+          await _startRoute(origin: origin, destination: candidate);
+        } else {
+          await _openRouteMode(
+            presetDestination: candidate,
+            focusField: RoutePlanField.origin,
+          );
+        }
+        return true;
+      default:
+        // 좌표를 모르는 건물이다(출입구도 외곽선도 없음). 경로의 끝점을 정할 수
+        // 없으므로 아무것도 하지 않는다 — 후보 목록이 같은 이유로 이런 건물을
+        // 아예 빼고 있다([searchDirectionsCandidates]).
+        _showSnack('이 건물의 위치 정보가 없어 길찾기를 시작할 수 없습니다.');
+        return false;
+    }
+  }
+
+  /// 건물 한 채를 길찾기 후보로 옮긴다. 후보 목록이 만드는 것과 같은 모양이라야
+  /// 두 경로가 같은 갈래로 흘러간다([searchDirectionsCandidates]).
+  DirectionsCandidate _buildingCandidate(Building building, LatLng point) =>
+      DirectionsCandidate(
+        title: building.name,
+        subtitle: '${building.floors.length}개 층',
+        point: point,
+        buildingId: building.id,
+      );
+
   void _onSearchBuildingPicked(Building building) {
     _closeSearch();
     // 카드만 띄우고 지도를 그대로 두면 사용자는 자기가 고른 건물이 화면 어디에
@@ -840,6 +922,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
       if (destination != null) {
         await _startRoute(origin: candidate, destination: destination);
       } else {
+        // 아직 도착지가 없어 경로를 그리지 않는다. 그래서 카메라를 잡아 줄
+        // 경로 개요도 없다 — 여기서 직접 그 매장(과 그 층)을 보여 준다.
+        _focusIndoorOrigin(candidate);
         await _openRouteMode(presetOrigin: candidate);
       }
     } else if (action == StoreInfoAction.setDestination) {
@@ -883,7 +968,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
         context,
         poi: poi,
         onCloseAll: _requestCloseSheetChain,
-        transitEnabled: transitRepository.isAvailable,
       ),
     );
     if (!mounted) return false;
@@ -921,12 +1005,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
             focusField: RoutePlanField.origin,
           );
         }
-      case OutdoorPoiAction.transit:
-        setState(() {
-          _routeDraftDestination = candidate;
-          _travelMode = RoutePlanMode.transit;
-        });
-        await _startTransitRoute(candidate);
     }
     return true;
   }
@@ -1271,7 +1349,33 @@ class _MapShellScreenState extends State<MapShellScreen> {
       }
     });
     if (field == RoutePlanField.origin) unawaited(_refreshReach());
+    // 도착지가 아직 없으면 [_afterRouteFieldPicked]가 경로를 시작하지 않는다.
+    // 그때만 카메라를 옮긴다(겹침 이유는 [_focusIndoorOrigin] 주석).
+    if (field == RoutePlanField.origin && _routeDraftDestination == null) {
+      _focusIndoorOrigin(candidate);
+    }
     _afterRouteFieldPicked();
+  }
+
+  /// 출발지로 고른 실내 매장으로 실내 지도를 옮긴다(층 전환 포함).
+  ///
+  /// 없으면 B2 매장을 출발지로 잡아도 화면은 보고 있던 층 그대로다 — 사용자는
+  /// 자기가 어디서 출발하는 것으로 잡혔는지 확인할 방법이 없다.
+  ///
+  /// **경로를 바로 계산하지 않는 경우에만 부른다.** 계산이 시작되면 경로 개요가
+  /// 두 끝점을 함께 담도록 카메라를 다시 잡으므로, 여기서 또 옮기면 두
+  /// 애니메이션이 겹쳐 화면이 두 번 튄다.
+  void _focusIndoorOrigin(DirectionsCandidate candidate) {
+    if (!candidate.isIndoorPoint) return;
+    unawaited(
+      _outdoorKey.currentState?.focusStore(
+            _asPoi(candidate),
+            // 밖에서 골랐어도 들어가서 보여 준다. 실내 모드를 직접 켜지는
+            // 않는다 — focusStore가 카메라만 옮기고 진입 판정은 그대로 둔다.
+            enterBuildingIfNeeded: true,
+          ) ??
+          Future<void>.value(),
+    );
   }
 
   /// 출발지를 "현재 위치"로 되돌린다. 값을 비우는 것이 곧 현재 위치라
@@ -1828,6 +1932,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 지도 탭처럼 길찾기 바를 거치지 않고 들어오는 경로가 있어서, 여기서 한 번
     // 맞춰 준다 — 안 맞추면 경로는 그려졌는데 상단은 검색창인 화면이 된다.
     _enterRouteModeForGuidance(origin, destination);
+    // 최근 목록도 **여기 한 곳에서만** 남긴다. 모든 길찾기가 반드시 이 함수를
+    // 지나므로, 시트·검색·지도 탭 어느 문으로 들어와도 빠짐없이 쌓인다.
+    // origin이 null이면 "현재 위치"라 남길 지점이 없다([_selectedOrigin] 주석).
+    if (origin != null) unawaited(recentRoutePointsController.add(origin));
+    unawaited(recentRoutePointsController.add(destination));
     // 건물 안 매장이 목적지면 **도보로 못박는다.** 그 안내는 "문을 경유해
     // 매장까지"라 도보 구간과 실내 구간이 한 몸이고([showOutdoorToIndoorRouteTo]),
     // 자동차로 가면 그 실내 구간이 통째로 사라진다.
@@ -1894,10 +2003,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
           origin: origin?.point,
         );
 
+      // 나가는 방향도 실내 구간을 먼저 풀어 두고, 건물을 나가면 야외 경로를
+      // 이어 붙인다. origin이 있으면 그 매장에서, 없으면 PDR 앵커에서 출발한다.
       case WalkRouteKind.indoorToOutdoor:
         await map?.showIndoorToOutdoorRouteTo(
           destination.point,
           label: destination.title,
+          origin: origin == null ? null : _asPoi(origin),
         );
 
       case WalkRouteKind.outdoor:
@@ -2111,6 +2223,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
         unawaited(_refreshReach());
       },
       onStoreTap: _onMapStoreTap,
+      onBuildingTap: _onMapBuildingTap,
       // 실내 오버레이 위에서도 복도를 골라 출발/도착을 정할 수 있다.
       // 실내 탭과 같은 조작이어야 하므로 같은 값을 내려 준다.
       pickingOnMap: _mapPickTarget != null,
@@ -2180,7 +2293,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
             // 이동 수단 줄은 **두 칸보다 위**다. "어떻게 갈지"를 먼저 정하고
             // 목적지를 넣는 순서이며, 아래에 두면 두 칸과 후보 목록 사이에
             // 끼어 입력하는 동안 시선을 가로막는다.
-            if (_routeMode) _buildTravelModeBar(),
+            //
+            // 안내가 시작되면 접는다. 수단을 고르는 것은 "어떻게 갈지 정하는"
+            // 조작이라 이미 그 길을 따라가는 중인 화면에 있을 이유가 없고,
+            // 누르면 경로가 통째로 다시 계산돼 따라가던 안내가 끊긴다.
+            // 하단 바(아래)·카테고리 줄과 같은 규칙이다.
+            if (_routeMode && !_guidanceActive) _buildTravelModeBar(),
             _buildTopBar(),
             // 길찾기 두 칸 중 하나를 치는 중이면 그 후보 목록이 이 자리를
             // 쓴다. 일반 검색 패널·카테고리 열과 자리를 다투므로 셋 중

@@ -56,7 +56,24 @@ extension OutdoorMapGps on OutdoorMapBodyState {
     // 안내 중이면 카메라가 사용자를 따라간다. 판정보다 먼저 두는 이유는, 이번
     // 위치로 실내에 들어가면 따라가기가 꺼지기 때문이다 — 그때는 카메라의
     // 주인이 실내 위치(PDR)로 바뀐다.
-    if (_followingUser) unawaited(_moveCameraToUser(position));
+    if (_followingUser) {
+      unawaited(_moveCameraToUser(position));
+    }
+    // 앱을 켠 직후 딱 한 번, 첫 좌표로 지도를 옮긴다. 안 하면 서울시청
+    // (fallbackLocation)에서 시작해 사용자가 직접 자기 자리를 찾아야 한다.
+    // 조건과 그 근거는 [shouldCenterOnFirstFix]에 있다.
+    //
+    // "사용자가 이미 지도를 만졌는가"는 보지 않는다 — 그걸 추적하는 상태가
+    // 없고, 첫 fix는 보통 1~2초 안에 온다.
+    else if (shouldCenterOnFirstFix(
+      alreadyCentered: _didInitialCenter,
+      followingUser: _followingUser,
+      indoorEntered: _indoorEntered,
+      mapReady: _styleReady && _mapController != null,
+    )) {
+      _didInitialCenter = true;
+      unawaited(_moveCameraToUser(position));
+    }
     // 문 선택은 진입 판정보다 **먼저** 갱신한다. 진입 직후 실내 위치를 잡을 때
     // 폴백으로 쓰는 문이 이 선택의 결과라, 순서를 뒤집으면 사용자가 이미 다른
     // 문으로 들어왔는데 폴백은 한 박자 전 문을 가리킨다.

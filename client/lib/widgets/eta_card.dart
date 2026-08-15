@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import '../domain/geo/distance_format.dart';
 import '../domain/guidance/route_guidance.dart';
 
 /// 예상 도착 시간 카드 (design.md 공통 컴포넌트: EtaCard).
@@ -234,12 +235,13 @@ class _ArrivalRow extends StatelessWidget {
   }
 }
 
-/// 남은 거리 표기. 10 m 미만은 한 자리까지 보여 준다 — 도착 직전에 "0 m"가
-/// 몇 걸음 동안 붙어 있으면 안내가 멈춘 것처럼 보인다.
+/// 남은 거리 표기. 10 m 미만만 한 자리까지 보여 준다 — 도착 직전에 "0m"가
+/// 몇 걸음 동안 붙어 있으면 안내가 멈춘 것처럼 보인다. 그 위는 [formatDistance]에
+/// 맡겨 검색 결과·장소 상세와 같은 규칙(1 km부터 km)을 쓴다.
 String _distanceLabel(double meters) {
   if (!meters.isFinite || meters < 0) return '';
-  if (meters < 10) return '${meters.toStringAsFixed(1)} m';
-  return '${meters.round()} m';
+  if (meters < 10) return '${meters.toStringAsFixed(1)}m';
+  return formatDistance(meters);
 }
 
 /// 안내 지시별 아이콘. 걷는 중 배너와 경로 단계 목록([RouteStepsSheet])이
@@ -297,7 +299,7 @@ class _LegacyEtaContent extends StatelessWidget {
                   children: [
                     TextSpan(text: '약 $minutes분 '),
                     TextSpan(
-                      text: '/ ${distanceMeters.round()}m',
+                      text: '/ ${formatDistance(distanceMeters)}',
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w400,

@@ -16,7 +16,7 @@ Flutter 화면이나 HTTP를 모르는 계산 계층이다. 백엔드가 제공�
 | [`store/`](store) | **매장을 고른다** | `nearest_store.dart`(같은 이름 중 최근접) · `nearby_stores.dart`(이 매장 기준 근처) · `store_hours.dart`(지금 영업 중인가) · `indoor_store_lookup.dart`(POI 브랜드로 재조회) · `reach_label.dart`(몇 m · 도보 몇 분) |
 | [`search/`](search) | **질의를 후보로 바꾼다** | `store_suggestions.dart`(자동완성·오타 교정) · `hangul.dart`(자모 분해) · `search_result_order.dart`(거리순 정렬) · `name_siblings.dart`(형제 매장) · `reason_text.dart`(추천 이유 다듬기) |
 | [`category/`](category) | **분류와 표시 문구** | `category_taxonomy.dart` · `category_label_order.dart` · `subcategory_label.dart` |
-| [`geo/`](geo) | **좌표계** | `geo_transform.dart`(local_m ↔ WGS84 affine, PDR 축 피팅) · `floor_label.dart`(층 라벨 순위) |
+| [`geo/`](geo) | **좌표계** | `geo_transform.dart`(local_m ↔ WGS84 affine, PDR 축 피팅) · `floor_label.dart`(층 라벨 순위) · `distance_format.dart`(거리 문구의 단일 출처, 1 km부터 km) |
 
 ## 단일 층 경로 계산
 

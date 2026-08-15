@@ -35,7 +35,9 @@ void main() {
       );
 
       expect(find.text('오른쪽 통로로 이동'), findsOneWidget);
-      expect(find.text('92 m'), findsOneWidget);
+      // 공백 없이 붙인다. 검색 결과·장소 상세와 같은 포매터를 쓰므로 한 화면
+      // 안에서 "92m"과 "92 m"이 섞이지 않는다.
+      expect(find.text('92m'), findsOneWidget);
       expect(
         find.textContaining('480'),
         findsNothing,
@@ -93,7 +95,22 @@ void main() {
         ),
       );
 
-      expect(find.text('3.4 m'), findsOneWidget);
+      expect(find.text('3.4m'), findsOneWidget);
+    });
+
+    testWidgets('1 km가 넘으면 km로 적는다', (WidgetTester tester) async {
+      // 카드가 자기 포매팅을 따로 들고 있으면 여기만 "1200m"으로 남는다.
+      await tester.pumpWidget(
+        wrap(
+          EtaCard(
+            distanceMeters: 4800,
+            minutes: 60,
+            instruction: turn(toAction: 1200),
+          ),
+        ),
+      );
+
+      expect(find.text('1.2km'), findsOneWidget);
     });
   });
 

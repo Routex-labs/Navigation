@@ -40,6 +40,49 @@ class DirectionsCandidate {
   /// 보여준다 — "왜 이 매장이 나왔는지"가 층 라벨보다 중요한 정보다.
   /// 경량 검색 후보에는 없다.
   final String? reason;
+
+  /// 같은 지점을 두 번 쌓지 않기 위한 키. [FavoritePlace.key]와 같은 규칙이다 —
+  /// 노드가 있으면 그걸로, 없으면 층·이름으로 대체한다. 야외 지점은 층도 없어
+  /// 좌표까지 내려간다(같은 이름의 다른 지점을 하나로 접으면 안 된다).
+  String get dedupeKey {
+    if (nodeId != null) return 'node::$nodeId';
+    if (buildingId != null) return 'building::$buildingId';
+    if (floor != null) return 'floor::$floor::$title';
+    return 'point::$title::${point.latitude}::${point.longitude}';
+  }
+
+  /// 최근 출발지·목적지로 남길 때 쓴다.
+  ///
+  /// **[reason]은 싣지 않는다.** 그건 이번 검색어에 대한 설명이라, 다음에 목록에서
+  /// 꺼냈을 때는 하지도 않은 질문의 답으로 남는다. [nodeId]·[floor]는 반드시
+  /// 실어야 한다 — 둘이 살아야 다시 눌렀을 때 실내 경로가 산다([isIndoorPoint]).
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    'subtitle': subtitle,
+    'lat': point.latitude,
+    'lng': point.longitude,
+    if (nodeId != null) 'nodeId': nodeId,
+    if (floor != null) 'floor': floor,
+    if (buildingId != null) 'buildingId': buildingId,
+  };
+
+  /// 저장된 한 건을 되살린다. 좌표나 제목이 깨져 있으면 null — 목록 전체를
+  /// 버리지 않고 그 줄만 건너뛰기 위해서다.
+  static DirectionsCandidate? fromJson(Map<String, dynamic> json) {
+    final title = json['title'];
+    final lat = json['lat'];
+    final lng = json['lng'];
+    if (title is! String || title.isEmpty) return null;
+    if (lat is! num || lng is! num) return null;
+    return DirectionsCandidate(
+      title: title,
+      subtitle: json['subtitle'] is String ? json['subtitle'] as String : '',
+      point: LatLng(lat.toDouble(), lng.toDouble()),
+      nodeId: json['nodeId'] as String?,
+      floor: json['floor'] as String?,
+      buildingId: json['buildingId'] as String?,
+    );
+  }
 }
 
 /// "지도에서 선택"으로 정할 대상. 출발지·도착지 양쪽 모두 지도에서 고를 수

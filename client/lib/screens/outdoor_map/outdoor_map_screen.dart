@@ -77,6 +77,7 @@ import 'widgets/status_badge.dart';
 import 'entry/floor_outline.dart';
 import 'gps/gps_session.dart';
 import 'entry/indoor_entry_gps.dart';
+import 'entry/initial_camera.dart';
 import 'camera/building_orientation.dart';
 import 'entry/indoor_entry_proximity.dart';
 import 'entry/indoor_entry_zoom.dart';
@@ -214,6 +215,7 @@ class OutdoorMapBody extends StatefulWidget {
     this.onPlacingLocationChanged,
     this.onIndoorEnteredChanged,
     this.onStoreTap,
+    this.onBuildingTap,
     this.onMapPointPicked,
     this.pickingOnMap = false,
     this.onLocationAnchored,
@@ -262,6 +264,13 @@ class OutdoorMapBody extends StatefulWidget {
   /// 실내 진입 오버레이에서 매장 폴리곤을 탭했을 때 호출된다. 상위
   /// (MapShellScreen)가 실내 화면과 동일한 매장 정보 시트를 띄운다.
   final ValueChanged<PoiSearchResult>? onStoreTap;
+
+  /// **야외에서** 건물 폴리곤을 탭했을 때 호출된다. 상위가 건물 정보 시트를 띄운다.
+  ///
+  /// 실내 진입은 그 시트가 시킬 때만 한다 — 예전에는 탭이 곧 진입이라, 건물을
+  /// 눌러 본 사용자가 "그 건물이 무엇인지" 대신 도면부터 봤다. 값이 null이면
+  /// 예전처럼 곧바로 진입한다(시트를 띄울 상위가 없는 테스트 등).
+  final ValueChanged<Building>? onBuildingTap;
 
   /// 길찾기의 "지도에서 선택"이 켜져 있는지. 계약과 근거는 실내 화면의 동명
   /// 필드([IndoorMapBody.pickingOnMap])와 같다 — 두 화면이 같은 조작을 제공해야
@@ -531,6 +540,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   // 스타일 로드 콜백에서 이를 반영한다.
   bool _pendingCenterOnPosition = false;
 
+  // 앱을 켠 뒤 첫 좌표로 지도를 한 번 옮겼는가.
+  //
+  // 위 pending 값만으로는 부족했다. 그 플래그는 [_syncCurrentLayer]의
+  // early-return 경로에서만 서기 때문에, **스타일 로드가 끝난 뒤에 첫 GPS가
+  // 도착하면** 아무도 카메라를 옮기지 않아 서울시청(fallbackLocation)에
+  // 머물렀다. 평상시 [_handlePosition]은 안내 중일 때만 카메라를 옮긴다.
+  bool _didInitialCenter = false;
+
   // 줌 임계값을 넘겼을 때 실내 진입 오버레이를 한 번만 켜기 위한 히스테리시스.
   // 임계값 아래로 다시 내려오기 전까지는 재발화하지 않는다.
   bool _autoIndoorEntryArmed = true;
@@ -787,6 +804,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _pdrSnapshotSub = indoorNavigationDriver.snapshots.listen((snapshot) {
       _pdrDebugRecorder?.recordSnapshot(snapshot);
       if (!mounted) return;
+      // **야외에서는 실내 위치에 반영하지 않는다.** 센서 세션은 계속 돌지만
+      // (오갈 때마다 껐다 켜면 heading이 매번 처음부터다), 그 걸음을 여기서
+      // 받으면 야외를 걸어 다닌 거리가 실내 좌표계에 그대로 쌓인다. 사용자에게는
+      // 밖에 서 있는데 실내 위치 아이콘만 도면 위를 계속 걸어가는 것으로 보인다.
+      // 진단 기록(_pdrDebugRecorder)은 위에서 이미 받았다 — 무슨 일이 있었는지는
+      // 남기되 화면 위치만 멈춘다.
+      if (!_indoorEntered) return;
       setState(() {
         _pdrTrailState.recordSnapshot(snapshot);
         _syncCorridorTracking(snapshot);
@@ -801,6 +825,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _pdrCalibrationSub = indoorNavigationDriver.calibration.listen((status) {
       _pdrDebugRecorder?.recordCalibration(status);
       if (!mounted) return;
+      // 스냅샷과 같은 이유로 야외에서는 받지 않는다. 앵커가 바뀌는 사건이라
+      // 여기서 받으면 야외에 선 채로 실내 위치가 한 번 더 움직인다.
+      if (!_indoorEntered) return;
       setState(() {
         _pdrTrailState.recordCalibration(status);
         _syncCorridorTracking(_pdrTrailState.snapshot);
@@ -1239,17 +1266,27 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// **출구는 목적지 기준으로 고른다** — 반대편으로 나가면 실내에서 아낀 30 m를
   /// 바깥에서 200 m로 갚는다.
   ///
+  /// [origin]을 주면 PDR 앵커 대신 그 실내 매장에서 출발한다. 앵커가 없어도
+  /// 그릴 수 있어야 하므로 [showIndoorRouteTo]가 그 검사를 건너뛴다.
+  ///
   /// 깨지는 자리 셋: 출구가 없으면 야외 경로만, 실내 위치가 없으면 안내로 되돌리고,
   /// **실내 경로가 안 풀리면 예약을 걸지 않는다.**
   Future<void> showIndoorToOutdoorRouteTo(
     ll.LatLng destination, {
     required String label,
+    PoiSearchResult? origin,
   }) async {
     final exitFloor = _groundEntranceFloor;
     final exit = exitFloor == null
         ? null
         : nearestEntrance(_groundEntrances, destination);
     if (exitFloor == null || exit == null) {
+      // 출입구 데이터가 없으면 실내 구간을 만들 수 없다. 야외 경로만 그리되,
+      // 사용자가 실내 매장을 출발지로 **골랐다면** 그 선택이 조용히 무시되므로
+      // 말해 준다 — 안 그러면 "출발지를 잡았는데 왜 여기서 시작하지"가 된다.
+      if (origin != null) {
+        _showSnack('건물 출입구 정보가 없어 실내 구간을 건너뛰고 바깥 경로만 안내합니다.');
+      }
       await showRouteTo(destination, label: label);
       return;
     }
@@ -1267,6 +1304,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         point: exit.point,
         nodeId: exit.nodeId,
       ),
+      origin: origin,
     );
     if (!mounted) return;
     // 실내 구간이 실제로 그려졌을 때만 야외 구간을 예약한다. 위 호출은 실패해도

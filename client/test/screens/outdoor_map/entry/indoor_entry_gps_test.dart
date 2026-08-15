@@ -142,7 +142,44 @@ void main() {
     test('나가는 쪽이 더 엄격하다', () {
       // 잘못 들어가는 비용(밖인데 도면이 뜸)보다 잘못 나오는 비용(안인데 PDR
       // 추적이 끊김)이 크다.
-      expect(outdoorExitMarginMeters, greaterThan(indoorEnterInsetMeters * 2));
+      //
+      // **실제 벽에서 잰 거리로 비교한다.** 상수끼리 비교하면 부풀리기
+      // (tolerance)가 빠져 두 값의 뜻이 달라진다 — 진입은 부풀린 만큼
+      // 앞당겨지고 이탈은 그만큼 미뤄지므로, 같은 6 m가 한쪽은 빼고 한쪽은
+      // 더한다.
+      const enterFromWall =
+          indoorEnterInsetMeters - footprintOutwardToleranceMeters;
+      const exitFromWall =
+          outdoorExitMarginMeters + footprintOutwardToleranceMeters;
+      expect(exitFromWall, greaterThan(enterFromWall));
+    });
+
+    test('이탈은 오차가 큰 좌표도 근거로 쓴다', () {
+      // 건물에서 막 나온 순간이 정확히 오차가 큰 구간이다. 진입과 같은 문턱을
+      // 요구하면 그 구간이 통째로 unclear가 돼 전환이 한참 늦는다.
+      final judgement = _judge(
+        point: _offset(north: _halfWidthMeters + 30),
+        accuracy: decisiveAccuracyMeters + 5,
+      );
+      expect(judgement.verdict, GpsBuildingVerdict.outside);
+    });
+
+    test('진입은 오차가 큰 좌표를 근거로 쓰지 않는다', () {
+      // 이탈 문턱까지 함께 풀면 안 된다 — 진입은 안쪽 5 m뿐이라, 30 m 오차로
+      // "안"을 인정하면 건물 밖에 선 사용자에게 도면이 뜬다.
+      final judgement = _judge(
+        point: _offset(north: _halfWidthMeters - 30),
+        accuracy: decisiveAccuracyMeters + 5,
+      );
+      expect(judgement.verdict, GpsBuildingVerdict.unclear);
+    });
+
+    test('오차가 이탈 문턱마저 넘으면 아무 판정도 하지 않는다', () {
+      final judgement = _judge(
+        point: _offset(north: _halfWidthMeters + 30),
+        accuracy: outdoorExitAccuracyMeters + 5,
+      );
+      expect(judgement.verdict, GpsBuildingVerdict.unclear);
     });
   });
 

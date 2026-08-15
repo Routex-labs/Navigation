@@ -669,6 +669,16 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
   /// [ignoreZoomArming]은 **자기 게이트를 따로 가진 호출자**가 쓴다.
   /// [_autoIndoorEntryArmed]는 zoom 트리거 전용 플래그라, 이걸로 다른 경로까지
   /// 막으면 건물 직접 탭과 GPS 재무장이 조용히 죽는다.
+  /// 건물 정보 시트가 "실내 지도 보기"로 진입을 시킬 때. 건물을 직접 탭하던
+  /// 조작과 **같은 자리로 들어간다** — 오버레이를 켜고 카메라를 도면에 맞춘다.
+  ///
+  /// 줌 무장([_autoIndoorEntryArmed])은 무시한다. 사용자가 명시적으로 누른
+  /// 것이라, zoom 트리거용 플래그로 막으면 눌러도 아무 일이 없다.
+  void enterIndoorFromSheet() {
+    _triggerIndoorEntry(ignoreZoomArming: true);
+    if (_indoorEntered) unawaited(_fitCameraToActiveFloor());
+  }
+
   void _triggerIndoorEntry({bool ignoreZoomArming = false}) {
     if (!ignoreZoomArming && !_autoIndoorEntryArmed) return;
     _autoIndoorEntryArmed = false;
@@ -720,6 +730,11 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
       _ensureGuidanceAttached();
     } else {
       _guidance.detach();
+      // GPS를 층 그래프에 투영한 추정치도 함께 버린다. 이 값은 30초 동안
+      // "신선"하고([IndoorLocationEstimate.isFresh]) 앵커가 없을 때의 마지막
+      // 폴백이라, 남겨 두면 야외로 나간 뒤에도 30초간 실내 좌표가 살아 있다.
+      // **호출처가 여기 하나뿐이다** — 만들기만 하고 버리는 자리가 없었다.
+      indoorLocationEstimateController.clear();
       // 야외로 나가면 진행 중이던 층 전환도 끝난다. 남겨 두면 배너가 야외
       // 화면에 떠 있고 걸음이 멈춘 채로 유지된다.
       _enqueueFloorTransition(_endEscalatorRide);
