@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../service_locator.dart';
 import '../../../../domain/route/dijkstra.dart';
 import '../../../../domain/store/nearest_store.dart';
 import '../../../../domain/search/store_suggestions.dart';
@@ -72,6 +73,14 @@ class RouteFieldResults extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 최근 목록이 바뀌면(고르거나 지우면) 이 카드도 다시 그려야 한다.
+    return ListenableBuilder(
+      listenable: recentRoutePointsController,
+      builder: (context, _) => _build(context),
+    );
+  }
+
+  Widget _build(BuildContext context) {
     final isOrigin = field == RoutePlanField.origin;
     // 보여 줄 것이 하나도 없으면 **아무것도 그리지 않는다.**
     //
@@ -81,7 +90,16 @@ class RouteFieldResults extends StatelessWidget {
     final hasShortcut = showPickOnMap || isOrigin;
     final showSuggestions =
         suggestions.isNotEmpty && onSuggestionPicked != null;
-    if (!hasShortcut && results.isEmpty && !searching && !showSuggestions) {
+    // 아직 아무것도 안 친 상태(idle)에서만 최근 목록을 보여 준다. 결과가 뜬
+    // 뒤에도 남겨 두면 방금 친 검색어의 답과 예전 기록이 한 목록에 섞인다.
+    final recents = results.isEmpty && !searching && !showSuggestions
+        ? recentRoutePointsController.points
+        : const <DirectionsCandidate>[];
+    if (!hasShortcut &&
+        results.isEmpty &&
+        !searching &&
+        !showSuggestions &&
+        recents.isEmpty) {
       return const SizedBox.shrink();
     }
     return Material(
@@ -133,8 +151,12 @@ class RouteFieldResults extends StatelessWidget {
           // 지름길 줄과 목록 사이의 구분선. 한쪽이 비어 있으면 선만 남아 카드
           // 아래에 얇은 회색 줄이 떠다닌다.
           if (hasShortcut &&
-              (results.isNotEmpty || searching || showSuggestions))
+              (results.isNotEmpty ||
+                  searching ||
+                  showSuggestions ||
+                  recents.isNotEmpty))
             const Divider(height: 1),
+          if (recents.isNotEmpty) _recentSection(recents),
           // 온디바이스 후보는 서버 결과 **위**다. 0ms에 나오는 값이라 사용자가
           // 치는 동안 이 자리가 먼저 차고, 서버가 답하면 아래가 채워진다.
           if (showSuggestions)
@@ -167,6 +189,92 @@ class RouteFieldResults extends StatelessWidget {
                       },
                     ),
             ),
+        ],
+      ),
+    );
+  }
+
+  /// 아직 아무것도 안 친 상태에서 보여 주는 최근 출발지·목적지.
+  ///
+  /// 상단 검색의 「최근 검색어」와 자리·모양을 맞춘다 — 두 목록이 같은 몸짓
+  /// (누르면 고르고, X로 한 건 지우고, 「전체 삭제」로 비운다)이어야 한 번
+  /// 배운 조작이 두 곳에서 통한다.
+  ///
+  /// 저장된 후보에는 노드·층이 그대로 들어 있어, 누르면 검색을 다시 돌지 않고
+  /// **바로 그 지점으로 확정된다**(문자열뿐인 최근 검색어와 다른 점이다).
+  Widget _recentSection(List<DirectionsCandidate> recents) {
+    return Flexible(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    '최근 출발지 · 목적지',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.muted,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  key: const Key('route-field-recent-clear'),
+                  onPressed: recentRoutePointsController.clear,
+                  child: const Text('전체 삭제', style: TextStyle(fontSize: 12)),
+                ),
+              ],
+            ),
+          ),
+          // 상한(10건)까지 차도 카드가 화면을 다 먹지 않도록 스크롤시킨다.
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final point in recents)
+                    ListTile(
+                      key: Key('route-field-recent-${point.dedupeKey}'),
+                      dense: true,
+                      leading: const Icon(
+                        Icons.history,
+                        size: 20,
+                        color: AppColors.muted,
+                      ),
+                      title: Text(
+                        point.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                      ),
+                      subtitle: point.subtitle.isEmpty
+                          ? null
+                          : Text(
+                              point.subtitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.close, size: 18),
+                        color: AppColors.muted,
+                        tooltip: '${point.title} 삭제',
+                        onPressed: () =>
+                            recentRoutePointsController.remove(point),
+                      ),
+                      onTap: () => onPicked(point),
+                    ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );

@@ -1850,6 +1850,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 지도 탭처럼 길찾기 바를 거치지 않고 들어오는 경로가 있어서, 여기서 한 번
     // 맞춰 준다 — 안 맞추면 경로는 그려졌는데 상단은 검색창인 화면이 된다.
     _enterRouteModeForGuidance(origin, destination);
+    // 최근 목록도 **여기 한 곳에서만** 남긴다. 모든 길찾기가 반드시 이 함수를
+    // 지나므로, 시트·검색·지도 탭 어느 문으로 들어와도 빠짐없이 쌓인다.
+    // origin이 null이면 "현재 위치"라 남길 지점이 없다([_selectedOrigin] 주석).
+    if (origin != null) unawaited(recentRoutePointsController.add(origin));
+    unawaited(recentRoutePointsController.add(destination));
     // 건물 안 매장이 목적지면 **도보로 못박는다.** 그 안내는 "문을 경유해
     // 매장까지"라 도보 구간과 실내 구간이 한 몸이고([showOutdoorToIndoorRouteTo]),
     // 자동차로 가면 그 실내 구간이 통째로 사라진다.
