@@ -2180,7 +2180,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
             // 이동 수단 줄은 **두 칸보다 위**다. "어떻게 갈지"를 먼저 정하고
             // 목적지를 넣는 순서이며, 아래에 두면 두 칸과 후보 목록 사이에
             // 끼어 입력하는 동안 시선을 가로막는다.
-            if (_routeMode) _buildTravelModeBar(),
+            //
+            // 안내가 시작되면 접는다. 수단을 고르는 것은 "어떻게 갈지 정하는"
+            // 조작이라 이미 그 길을 따라가는 중인 화면에 있을 이유가 없고,
+            // 누르면 경로가 통째로 다시 계산돼 따라가던 안내가 끊긴다.
+            // 하단 바(아래)·카테고리 줄과 같은 규칙이다.
+            if (_routeMode && !_guidanceActive) _buildTravelModeBar(),
             _buildTopBar(),
             // 길찾기 두 칸 중 하나를 치는 중이면 그 후보 목록이 이 자리를
             // 쓴다. 일반 검색 패널·카테고리 열과 자리를 다투므로 셋 중

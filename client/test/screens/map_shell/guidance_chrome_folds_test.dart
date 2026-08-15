@@ -157,6 +157,43 @@ void main() {
     );
   });
 
+  testWidgets('안내를 시작하면 이동 수단 줄이 접힌다', (WidgetTester tester) async {
+    await pumpShell(tester);
+    await tester.tap(find.byTooltip('길찾기'));
+    await drain(tester);
+    // 전제를 여기서 세운다. 원래 없던 걸 없다고 하면 이 테스트는 그냥 통과한다.
+    expect(
+      find.byKey(const ValueKey('travel-mode-bar')),
+      findsOneWidget,
+      reason: '테스트 전제(길찾기 모드에서는 이동 수단 줄이 뜸)가 성립하지 않았다',
+    );
+
+    await tester.enterText(
+      find.descendant(
+        of: find.byKey(const Key('route-draft-destination')),
+        matching: find.byType(TextField),
+      ),
+      '강의실',
+    );
+    await drain(tester);
+    await tester.tap(find.text('강의실 101').first);
+    await drain(tester);
+
+    expect(
+      find.byType(EtaCard),
+      findsOneWidget,
+      reason: '테스트 전제(도착지를 고르면 경로가 그려짐)가 성립하지 않았다',
+    );
+    // 초안 바는 남아 있다 — 즉 _routeMode는 그대로다. 줄이 사라진 이유가
+    // "길찾기가 끝나서"가 아니라 **안내가 시작돼서**임을 이 한 줄이 가른다.
+    expect(find.byKey(const Key('route-draft-destination')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('travel-mode-bar')),
+      findsNothing,
+      reason: '안내 중에 수단을 바꾸면 경로가 통째로 다시 계산돼 따라가던 안내가 끊긴다',
+    );
+  });
+
   testWidgets('안내 중에도 상단 초안 바는 남아 도착지를 바꿀 수 있다', (WidgetTester tester) async {
     await startGuidance(tester);
 
