@@ -85,6 +85,30 @@ FillLayerProperties indoorVerticalTransportProps(List<Object> fadeExpr) =>
       fillOpacity: fadeExpr,
     );
 
+/// 선택된 매장의 이름·아이콘을 키우는 **최종** 배수.
+///
+/// 핀만 키우면 글자가 그대로라 "핀은 큰데 이름은 남들과 같은" 어중간한 상태가
+/// 된다. 카카오는 고른 매장의 **핀·아이콘·이름을 함께** 키운다.
+///
+/// 여기까지 한 번에 뛰지 않는다 — 화면이 이 값으로 가는 과정을 카메라 이동과
+/// 같은 시간에 걸쳐 보간해 넘긴다([selectionScale] 인자).
+const kSelectedLabelScale = 1.35;
+
+/// [highlightedStoreId]가 있으면 그 매장만 [selectionScale]배로 키운다.
+/// null이거나 배수가 1이면 상수를 그대로 써서 표현식 비용을 만들지 않는다.
+Object _scaledBySelection(
+  double base,
+  String? highlightedStoreId,
+  double selectionScale,
+) => (highlightedStoreId == null || selectionScale == 1.0)
+    ? base
+    : <Object>[
+        'case',
+        ['==', ['get', 'id'], highlightedStoreId],
+        base * selectionScale,
+        base,
+      ];
+
 /// 매장명 라벨 + 대분류 아이콘(같은 심볼에 얹는 이유는 [category_map_icon.dart]).
 ///
 /// **호출하는 쪽이 모두 [selection]을 넘겨야 한다** — 페이드 갱신에서도 불리는데
@@ -100,13 +124,20 @@ SymbolLayerProperties indoorStoresLabelProps(
   double devicePixelRatio, {
   bool alwaysVisible = false,
   Object? symbolSortKey,
+  String? highlightedStoreId,
+  double selectionScale = kSelectedLabelScale,
 }) => SymbolLayerProperties(
   textField: categoryLabelTextField(selection),
   textFont: const [mapFontStackRegular],
   // 색·헤일로·크기 전부 [map_label_style.dart]가 단일 출처다. 크기가 고정인
   // 이유는 이 오버레이가 도면 전체를 훑는 축소 화면이라, 폴리곤 맞춤 크기를
-  // 쓰면 작은 매장 이름이 읽을 수 없게 작아지기 때문이다.
-  textSize: mapLabelFixedTextSize,
+  // 쓰면 작은 매장 이름이 읽을 수 없게 작아지기 때문이다. **고른 매장 하나만**
+  // 예외로 키운다.
+  textSize: _scaledBySelection(
+    mapLabelFixedTextSize,
+    highlightedStoreId,
+    selectionScale,
+  ),
   textColor: mapLabelStoreColor,
   textHaloColor: mapLabelHaloColor,
   textHaloWidth: mapLabelHaloWidth,
@@ -116,7 +147,11 @@ SymbolLayerProperties indoorStoresLabelProps(
   // 화장실·정수기 같은 시설 아이콘과 **같은 크기 하나**를 쓴다
   // ([kIndoorMarkerLogicalPx]). 실내 화면이 같은 피드백("대분류 아이콘을
   // 화장실만큼")으로 이미 내린 결론인데 이 오버레이만 따라오지 않았다.
-  iconSize: indoorMarkerIconSize(devicePixelRatio),
+  iconSize: _scaledBySelection(
+    indoorMarkerIconSize(devicePixelRatio),
+    highlightedStoreId,
+    selectionScale,
+  ),
   iconOpacity: fadeExpr,
   // 이름은 항상 아이콘 아래다 — 실내 도면·편의시설 라벨과 같은 규칙.
   textAnchor: 'top',
@@ -498,6 +533,8 @@ Future<void> syncIndoorOverlayProps(
   required CategorySelection? categorySelection,
   required double devicePixelRatio,
   Object? symbolSortKey,
+  String? highlightedStoreId,
+  double selectionScale = kSelectedLabelScale,
   IndoorOverlaySyncScope scope = IndoorOverlaySyncScope.all,
 }) async {
   // 선택을 반드시 함께 넘긴다. 빼면 줌을 움직일 때마다 가려 뒀던 매장 이름이
@@ -510,6 +547,8 @@ Future<void> syncIndoorOverlayProps(
         categorySelection,
         devicePixelRatio,
         symbolSortKey: symbolSortKey,
+        highlightedStoreId: highlightedStoreId,
+        selectionScale: selectionScale,
       ),
     ),
     (
@@ -520,6 +559,8 @@ Future<void> syncIndoorOverlayProps(
         devicePixelRatio,
         alwaysVisible: true,
         symbolSortKey: symbolSortKey,
+        highlightedStoreId: highlightedStoreId,
+        selectionScale: selectionScale,
       ),
     ),
     (ids.facilityLabel, indoorFacilityLabelProps(fadeExpr, categorySelection)),

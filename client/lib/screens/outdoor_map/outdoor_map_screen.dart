@@ -71,6 +71,7 @@ import 'widgets/guidance_recenter_button.dart';
 import 'widgets/indoor_arrival_card.dart';
 import 'widgets/route_steps_sheet.dart';
 import '../../map/icon/icon_cache.dart';
+import '../../map/icon/place_pin.dart';
 import 'widgets/map_overlay_tap_guard.dart';
 import 'widgets/status_badge.dart';
 import 'entry/floor_outline.dart';
@@ -350,6 +351,31 @@ const _storeFocusMaxZoom = 20.4;
 LatLng _toMapLatLng(ll.LatLng point) => LatLng(point.latitude, point.longitude);
 
 class OutdoorMapBodyState extends State<OutdoorMapBody> {
+  /// 선택 확대 애니메이션의 지금 배수(1.0 = 확대 없음).
+  /// 근거와 진행 방식은 [_animateSelectionScale].
+  double _selectionScale = 1.0;
+  Timer? _selectionScaleTimer;
+
+  /// 선택 핀이 **정확한 자리**에 놓였는지. 근사 자리에 먼저 세웠다가 나중에
+  /// 옮기면 순간이동으로 보이므로, 확정 전에는 아예 안 세운다.
+  bool _highlightAnchorFinal = false;
+
+  /// 카메라가 멈춘 뒤 한 번이라도 핀 자리를 다시 재 봤는지.
+  ///
+  /// 여기까지 왔는데도 라벨을 못 찾으면 **근사로라도 세운다** — 자리가 조금
+  /// 어긋나는 것보다 핀이 아예 없는 편이 나쁘다(실기기에서 큰 매장 하나가
+  /// 그렇게 사라졌다).
+  bool _cameraSettled = false;
+  Timer? _pinIntroTimer;
+
+  /// 핀이 자라기 시작하는 배수. 0에서 시작하면 한 프레임 사라졌다 나온 것처럼
+  /// 보이고, 0.8이면 자라는지 안 자라는지 알 수 없다.
+  static const double _pinIntroFrom = 0.55;
+
+  /// 확대 프레임 간격. 60fps로 돌리면 채널 왕복이 오히려 끊기게 만든다 —
+  /// 40ms(=25fps)면 크기 변화로는 충분히 부드럽고 왕복은 절반 이하다.
+  static const _selectionScaleStep = Duration(milliseconds: 40);
+
   /// GPS 자동 실내 진입이 지금 켜져 있는지. 1회성 플래그였을 때는 오탐 한 번이
   /// 기능 자체를 죽였다([IndoorEntryGpsDecision.rearm]이 다시 켠다).
   ///
@@ -844,6 +870,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   @override
   void dispose() {
     _buildingRetryTimer?.cancel();
+    _selectionScaleTimer?.cancel();
+    _pinIntroTimer?.cancel();
     _gps.dispose();
     _pdrSnapshotSub?.cancel();
     _pdrCalibrationSub?.cancel();
@@ -1656,8 +1684,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (controller == null || !_styleReady) return;
 
     setState(() => _highlightedStoreId = store.placeId);
+    // 핀 **자리**는 먼저 잡는다(점 하나라 순간이다). **크기**는 아래
+    // animateCamera와 함께 출발한다 — 여기서 키우면 글자가 먼저 커진 뒤
+    // 화면이 움직인다.
     await _syncHighlightLayer();
-    await _syncIndoorOverlayFade();
     if (!mounted) return;
 
     // 뷰포트는 카메라 이동 전에 읽는다(실내 화면과 같은 이유 — await 뒤에
@@ -1691,6 +1721,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       zoom: zoom,
       liftPx: lift,
     );
+    // 카메라와 확대를 **같이** 출발시킨다. 둘 다 _storeFocusDuration이라 끝도 같다.
+    unawaited(_animateSelectionScale(selected: true));
     await controller.animateCamera(
       CameraUpdate.newCameraPosition(
         CameraPosition(

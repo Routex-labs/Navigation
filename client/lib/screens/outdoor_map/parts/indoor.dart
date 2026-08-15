@@ -104,6 +104,9 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
       _syncCorridorTracking(_pdrTrailState.snapshot);
       _syncPdrCurrentLayer();
       unawaited(_syncDebugPdrLayers());
+      // 출구 핀은 도면에서만 나오므로 도면이 바뀔 때마다 다시 세운다.
+      // 1F 외 층에서는 0개가 되는 것이 정상이다.
+      unawaited(_syncGateLayer());
       // 일반 로드에서는 즉시 새 경계를 반영한다. 층 크로스페이드 중에는 이전
       // 경계를 유지하고 [_finalizeIndoorFloorCrossfade]가 투명한 중간 프레임에서
       // 지오메트리를 교체한다 — 바닥보다 외곽선만 먼저 바뀌는 팝을 막는다.
@@ -140,6 +143,9 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
           _storeLabelPriorities = const {};
           _mapCalibrationVersion = 'unversioned';
         });
+        // 도면이 사라졌으므로 출구 핀·못 걷는 면도 함께 지운다. 남겨 두면
+        // 다른 층 도면 위에 이전 층의 도형이 떠 있다.
+        unawaited(_syncGateLayer());
         if (!_deferFloorBoundarySync) {
           unawaited(_syncFloorOutlineLayer());
           _syncDimScrimLayer();
@@ -450,7 +456,76 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
   ///
   /// **각 레이어의 전체 속성을 매번 다시 넘긴다.** opacity만 넘기면 안 된다 —
   /// 이유는 indoor_overlay_layers.dart 상단 주석 참고.
-  Future<void> _syncIndoorOverlayFade() async {
+  /// 선택 확대를 **카메라 이동과 같은 시간에 걸쳐** 진행한다.
+  ///
+  /// 크기는 layout 속성이라 MapLibre transition이 안 걸려 손으로 보간한다.
+  /// 시작 시점·간격·이징의 근거는
+  /// `docs/client/kakao-map-indoor-observation.md` S절.
+  Future<void> _animateSelectionScale({required bool selected}) async {
+    _selectionScaleTimer?.cancel();
+    final from = _selectionScale;
+    final to = selected ? kSelectedLabelScale : 1.0;
+    if ((from - to).abs() < 0.001) return;
+
+    final started = DateTime.now();
+    final completer = Completer<void>();
+    _selectionScaleTimer = Timer.periodic(OutdoorMapBodyState._selectionScaleStep, (
+      timer,
+    ) async {
+      final elapsed = DateTime.now().difference(started);
+      final t = (elapsed.inMilliseconds / _storeFocusDuration.inMilliseconds)
+          .clamp(0.0, 1.0);
+      // easeOutCubic — 카메라 이징과 같은 성격이라 둘이 따로 놀지 않는다.
+      final eased = 1 - math.pow(1 - t, 3).toDouble();
+      _selectionScale = from + (to - from) * eased;
+      await _applySelectionScale();
+      if (t >= 1.0) {
+        timer.cancel();
+        if (!completer.isCompleted) completer.complete();
+      }
+    });
+    return completer.future;
+  }
+
+  /// 지금 배수를 라벨 두 레이어에 반영한다. **핀은 여기서 건드리지 않는다** —
+  /// 핀은 자리가 확정된 뒤에야 나타나므로 시작 시점이 라벨과 다르다
+  /// ([_animatePinIn]).
+  Future<void> _applySelectionScale() async {
+    if (_mapController == null || !_styleReady) return;
+    await _syncIndoorOverlayFade(scope: IndoorOverlaySyncScope.labels);
+  }
+
+  /// 확정된 자리에서 핀을 자라나게 한다(0.55배 → 1배).
+  ///
+  /// 자리를 잡은 **뒤에** 도는 것이 핵심이다. 근사 자리에 먼저 세워 두고 나중에
+  /// 옮기면 그게 곧 순간이동이다.
+  Future<void> _animatePinIn() async {
+    _pinIntroTimer?.cancel();
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    final started = DateTime.now();
+    await setSelectedPinScale(controller, OutdoorMapBodyState._pinIntroFrom);
+    _pinIntroTimer = Timer.periodic(OutdoorMapBodyState._selectionScaleStep, (
+      timer,
+    ) async {
+      final t = (DateTime.now().difference(started).inMilliseconds / 220)
+          .clamp(0.0, 1.0);
+      final eased = 1 - math.pow(1 - t, 3).toDouble();
+      const from = OutdoorMapBodyState._pinIntroFrom;
+      final scale = from + (1.0 - from) * eased;
+      final live = _mapController;
+      if (live == null) {
+        timer.cancel();
+        return;
+      }
+      await setSelectedPinScale(live, scale);
+      if (t >= 1.0) timer.cancel();
+    });
+  }
+
+  Future<void> _syncIndoorOverlayFade({
+    IndoorOverlaySyncScope scope = IndoorOverlaySyncScope.all,
+  }) async {
     final controller = _mapController;
     if (controller == null || !_styleReady || !_indoorTilesRegistered) return;
     await syncIndoorOverlayProps(
@@ -460,6 +535,10 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
       categorySelection: widget.categorySelection,
       devicePixelRatio: _devicePixelRatio,
       symbolSortKey: _storeLabelSortKeyExpression(),
+      // 고른 매장의 이름·아이콘을 함께 키운다(핀만 키우면 어중간해진다).
+      highlightedStoreId: _highlightedStoreId,
+      selectionScale: _selectionScale,
+      scope: scope,
     );
   }
 
@@ -833,7 +912,142 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
         .toList(growable: false);
   }
 
-  /// 강조 매장 폴리곤을 highlight 소스에 채운다. null 또는 미매치면 비운다.
+  /// 폴리곤이 없는 매장(점만 있는 시설)에서 라벨을 찾을 때 쓰는 사각형 한 변
+  /// (기기 픽셀). 폴리곤이 있으면 그 범위를 그대로 쓰므로 이 값은 안 쓴다.
+  static const double _labelProbePx = 400;
+
+  /// 폴리곤 범위로 찾을 때 사방에 더하는 여백(기기 픽셀). 라벨 심볼은 점이
+  /// 아니라 글자 상자라 폴리곤 경계에 딱 붙으면 판정에서 빠질 수 있다.
+  static const double _labelProbePadPx = 60;
+
+  /// 되읽기가 실패했을 때 쓸 **근사** 앵커. 두 핀(선택·출구)이 같은 규칙을 써야
+  /// 한 화면에서 서로 다른 기준으로 어긋나지 않는다.
+  ///
+  /// 혼자 쓰는 폴리곤에서는 centroid가 `label_point`와 사실상 같다(더현대 1F
+  /// 출구 5개에서 0.04~0.13 m). **나눠 쓰는 폴리곤만 예외로** `entrance`를
+  /// 쓴다 — 거기서는 centroid가 전부 같은 값이라 매장을 가리지 못한다.
+  /// 수치와 경위는 `docs/client/kakao-map-indoor-observation.md` S절.
+  ll.LatLng _labelAnchorFor(StorePolygon store, Map<String, int> shareCounts) {
+    final shared = (shareCounts[store.id] ?? 1) > 1;
+    return shared ? (store.entrance ?? store.centroid) : store.centroid;
+  }
+
+  /// [store]의 라벨이 **화면에 실제로 그려진** 좌표. 못 찾으면 null.
+  ///
+  /// 타일은 라벨을 centroid가 아니라 `label_point`에 찍는다. 그 계산은 백엔드가
+  /// 갖고 있고 베껴 오지 않는다 — 그려진 결과를 되읽는다.
+  ///
+  /// **화면 전체 rect로 물으면 0건이 돌아온다**(실기기 확인). 그래서 좁은
+  /// 사각형만 묻는데, **그 범위는 폴리곤에서 잡는다** — 라벨은 정의상 폴리곤
+  /// 안에 있기 때문이다. 근사 위치 주변 고정 크기로 물었더니 ARKET(917 m²)처럼
+  /// 큰 매장에서 라벨이 상자 밖으로 나가 핀만 딴 곳에 섰다.
+  ///
+  /// 좌표는 **기기 픽셀**이다. 근거는
+  /// `docs/client/kakao-map-indoor-observation.md` S절.
+  Future<ll.LatLng?> _renderedLabelAnchor(
+    StorePolygon store,
+    ll.LatLng near,
+  ) async {
+    final controller = _mapController;
+    if (controller == null) return null;
+    try {
+      final probe = await _labelProbeRect(controller, store, near);
+      if (probe == null) return null;
+      final rendered = await controller.queryRenderedFeaturesInRect(
+        probe,
+        [
+          _indoorIds.sharedStoresLabel,
+          _indoorIds.storesLabel,
+          _indoorIds.facilityLabel,
+        ],
+        null,
+      );
+      for (final feature in rendered) {
+        final map = feature as Map;
+        if ((map['properties'] as Map?)?['id'] != store.id) continue;
+        final coords = (map['geometry'] as Map?)?['coordinates'] as List?;
+        if (coords == null || coords.length < 2) continue;
+        return ll.LatLng(
+          (coords[1] as num).toDouble(),
+          (coords[0] as num).toDouble(),
+        );
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// 라벨을 찾을 화면 사각형(기기 픽셀). 좌표 변환이 실패하면 null.
+  ///
+  /// 폴리곤이 있으면 그 **네 모서리**를 화면 좌표로 옮겨 감싸는 상자를 만든다.
+  /// 점을 전부 옮기지 않는 이유는 변환 한 번이 플랫폼 채널 왕복이라서다 —
+  /// 모서리 넷이면 범위는 같고 왕복은 폴리곤 점 수와 무관하게 넷이다.
+  Future<Rect?> _labelProbeRect(
+    MapLibreMapController controller,
+    StorePolygon store,
+    ll.LatLng near,
+  ) async {
+    final polygon = store.polygon;
+    if (polygon.length < 3) {
+      final screen = await controller.toScreenLocation(_toMapLatLng(near));
+      return Rect.fromCenter(
+        center: Offset(screen.x.toDouble(), screen.y.toDouble()),
+        width: _labelProbePx,
+        height: _labelProbePx,
+      );
+    }
+    var minLat = polygon.first.latitude, maxLat = minLat;
+    var minLng = polygon.first.longitude, maxLng = minLng;
+    for (final point in polygon) {
+      minLat = math.min(minLat, point.latitude);
+      maxLat = math.max(maxLat, point.latitude);
+      minLng = math.min(minLng, point.longitude);
+      maxLng = math.max(maxLng, point.longitude);
+    }
+    // 지도가 회전해 있으면 위경도 모서리가 화면 모서리와 다르므로 넷을 모두
+    // 옮겨 감싼다.
+    var left = double.infinity, top = double.infinity;
+    var right = double.negativeInfinity, bottom = double.negativeInfinity;
+    for (final corner in [
+      ll.LatLng(minLat, minLng),
+      ll.LatLng(minLat, maxLng),
+      ll.LatLng(maxLat, minLng),
+      ll.LatLng(maxLat, maxLng),
+    ]) {
+      final screen = await controller.toScreenLocation(_toMapLatLng(corner));
+      final x = screen.x.toDouble(), y = screen.y.toDouble();
+      left = math.min(left, x);
+      right = math.max(right, x);
+      top = math.min(top, y);
+      bottom = math.max(bottom, y);
+    }
+    return _clampToViewport(
+      Rect.fromLTRB(
+        left - _labelProbePadPx,
+        top - _labelProbePadPx,
+        right + _labelProbePadPx,
+        bottom + _labelProbePadPx,
+      ),
+    );
+  }
+
+  /// 화면 밖으로 나간 부분을 잘라 낸다. 잘라 낸 뒤 남는 것이 없으면 null.
+  ///
+  /// **뷰포트를 넘는 사각형으로 물으면 0건이 돌아온다**(실기기 확인). 폴리곤이
+  /// 화면 밖까지 뻗은 큰 매장에서 그 일이 났고, 라벨이 화면 안에 있는데도
+  /// 못 찾아 핀이 근사 위치로 밀렸다.
+  Rect? _clampToViewport(Rect rect) {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return rect;
+    final viewport = Offset.zero & (box.size * _devicePixelRatio);
+    final clamped = rect.intersect(viewport);
+    if (clamped.width <= 1 || clamped.height <= 1) return null;
+    return clamped;
+  }
+
+  /// 강조 매장 자리에 핀을 세운다. null 또는 미매치면 비운다.
+  ///
+  /// **폴리곤이 아니라 점을 쓴다.** 폴리곤을 칠하던 시절에는 폴리곤이 없는
+  /// 시설(점만 있는 화장실 등)을 고르면 아무 일도 일어나지 않았다.
   Future<void> _syncHighlightLayer() async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
@@ -842,11 +1056,90 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
     final store = (storeId == null || plan == null)
         ? null
         : plan.stores.where((s) => s.id == storeId).firstOrNull;
-    await syncPolygonSource(
-      controller,
-      kOutdoorHighlightSourceId,
-      store?.polygon,
-    );
+    if (store == null) {
+      _highlightAnchorFinal = false;
+      _cameraSettled = false;
+      await syncPointSource(controller, kOutdoorHighlightSourceId, null);
+    } else {
+      final fallback = _labelAnchorFor(
+        store,
+        storeLabelShareCounts(plan!.stores),
+      );
+      final exact = await _renderedLabelAnchor(store, fallback);
+      // **정확해지기 전에는 세우지 않는다.** 근사로 먼저 세웠다가 카메라가 멈춘 뒤
+      // 옮기면 다 온 다음 핀이 순간이동하는 것으로 보인다. 라벨이 아직 안 그려진
+      // 동안만 비우고, [_handleCameraIdle]이 다시 불러 그때 세운다.
+      //
+      // **카메라가 멈춘 뒤에도 못 찾으면 근사로라도 세운다.** 안 그러면 라벨을
+      // 끝내 못 찾는 매장에서 핀이 영영 안 뜬다 — 자리가 조금 어긋나는 것보다
+      // 아무것도 없는 편이 나쁘다.
+      if (exact == null && !_highlightAnchorFinal && !_cameraSettled) {
+        await syncPointSource(controller, kOutdoorHighlightSourceId, null);
+      } else {
+        final placing = !_highlightAnchorFinal;
+        _highlightAnchorFinal = true;
+        await syncPointSource(
+          controller,
+          kOutdoorHighlightSourceId,
+          exact ?? fallback,
+        );
+        // 처음 세우는 순간에만 자라나게 한다. 이후 갱신에서 다시 돌면 깜빡인다.
+        if (placing) unawaited(_animatePinIn());
+      }
+    }
+    // **여기서 크기를 바꾸지 않는다.** 확대는 카메라와 같은 박자로 굴러야 하므로
+    // [_animateSelectionScale]이 맡는다 — 여기서 한 번에 바꾸면 글자가 먼저
+    // 커지고 그다음 화면이 움직이는, 사용자가 지적한 그 순서가 된다.
+    // 선택이 풀린 경우만 즉시 되돌린다(되돌릴 카메라 이동이 없다).
+    if (store == null && _selectionScale != 1.0) {
+      _selectionScaleTimer?.cancel();
+      _selectionScale = 1.0;
+      await _applySelectionScale();
+    }
+  }
+
+  /// 현재 층의 지상 출입구에 방위 핀을 세운다.
+  ///
+  /// 출구는 1F에만 있으므로 **다른 층에서 0개인 것이 정상**이다. 방위를 계산할
+  /// 수 없는 문(외곽선을 못 받은 건물)은 건너뛴다 — 글자 없는 핀을 세우면 그게
+  /// 무엇인지 알 수 없다.
+  ///
+  /// 비트맵은 방위마다 다르므로 여기서 굽는다. 등록 키가 곧 feature의 `icon`
+  /// 속성이다([kGatePinImagePrefix]).
+  Future<void> _syncGateLayer() async {
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    final plan = _floorPlan;
+    if (plan == null) {
+      await syncPointsSource(controller, kOutdoorGateSourceId, const []);
+      return;
+    }
+
+    final center = _buildingCenter(_buildingFootprint ?? const []);
+    final storeById = {for (final store in plan.stores) store.id: store};
+    final shareCounts = storeLabelShareCounts(plan.stores);
+    final points = <(ll.LatLng, Map<String, dynamic>)>[];
+    for (final entrance in groundEntrancesFrom(plan)) {
+      final direction = entranceDirection(entrance, center);
+      if (direction == null) continue;
+      final imageName = '$kGatePinImagePrefix$direction';
+      await controller.addImage(
+        imageName,
+        await cachedIconPng(imageName, () => renderGatePinIcon(direction)),
+      );
+      final store = storeById[entrance.id];
+      // **[BuildingEntrance.point]를 그대로 쓰지 않는다.** 그리는 점은 라벨에
+      // 맞춰야 하고([_labelAnchorFor]), 그 필드는 야외 도보가 끝날 *문 바깥*
+      // 좌표다. 둘이 다른 것은 어긋난 게 아니라 서로 다른 일이다.
+      final fallback = store == null
+          ? entrance.point
+          : _labelAnchorFor(store, shareCounts);
+      final anchor = store == null
+          ? fallback
+          : await _renderedLabelAnchor(store, fallback) ?? fallback;
+      points.add((anchor, {'icon': imageName}));
+    }
+    await syncPointsSource(controller, kOutdoorGateSourceId, points);
   }
 
   /// [localPoint]가 지도 위 Flutter 오버레이(층 선택기·PDR 제어와 상위가 얹은

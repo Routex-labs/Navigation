@@ -50,7 +50,9 @@ extension OutdoorMapMap on OutdoorMapBodyState {
     await registerCurrentLocationLayers(controller);
     await registerDestinationLayer(controller);
 
-    // 매장 강조. PDR 마커보다 아래·경로선보다 위다(그 함수 doc 참고).
+    // 출구 핀 → 선택 매장 핀 순. 둘이 겹치면 지금 고른 것이 위여야 한다.
+    // PDR 마커보다 아래·경로선보다 위다(각 함수 doc 참고).
+    await registerGateLayers(controller);
     await registerHighlightLayers(controller);
 
     // PDR 마커 비트맵을 먼저 굽고, 진단 레이어를 그 사이에 끼운 뒤 마커를
@@ -77,6 +79,11 @@ extension OutdoorMapMap on OutdoorMapBodyState {
     unawaited(_syncDebugPdrLayers());
     _syncHighlightLayer();
     _syncDimScrimLayer();
+    // **스타일이 준비된 지금 다시 채운다.** 첫 층 도면은 스타일보다 먼저
+    // 도착할 수 있는데, 그때 이 둘은 `_styleReady`가 false라 조용히 반환한다 —
+    // 그리고 층을 바꾸기 전까지 아무도 다시 부르지 않아 출구 핀과 못 걷는 면이
+    // 첫 화면에서 통째로 비어 있었다(실기기에서 확인).
+    unawaited(_syncGateLayer());
     _ensureIndoorTilesRegistered();
     // 스타일이 뜨기 전에 받아둔 첫 GPS 위치로의 카메라 이동. 그 사이에 실내로
     // 들어갔다면(줌 임계값·건물 탭) 실행하지 않는다 — 실내 도면을 보고 있는데
@@ -270,6 +277,12 @@ extension OutdoorMapMap on OutdoorMapBodyState {
     if (!mounted) return;
     final controller = _mapController;
     if (controller == null) return;
+    // 핀은 **그려진 라벨 좌표**에 맞추는데(그 함수 doc), 카메라가 움직이는
+    // 동안에는 목적지의 라벨이 아직 안 그려져 있어 근사로 떨어진다. 멈춘
+    // 지금이 정확한 좌표를 읽을 수 있는 첫 시점이다.
+    _cameraSettled = true;
+    unawaited(_syncHighlightLayer());
+    unawaited(_syncGateLayer());
     // zoom과 target은 같은 CameraPosition에서 나오고 둘 다 non-nullable이므로,
     // 카메라를 받았다면 중심 좌표도 항상 있다.
     final camera = controller.cameraPosition;
