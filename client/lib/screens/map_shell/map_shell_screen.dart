@@ -840,6 +840,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
       if (destination != null) {
         await _startRoute(origin: candidate, destination: destination);
       } else {
+        // 아직 도착지가 없어 경로를 그리지 않는다. 그래서 카메라를 잡아 줄
+        // 경로 개요도 없다 — 여기서 직접 그 매장(과 그 층)을 보여 준다.
+        _focusIndoorOrigin(candidate);
         await _openRouteMode(presetOrigin: candidate);
       }
     } else if (action == StoreInfoAction.setDestination) {
@@ -1264,7 +1267,33 @@ class _MapShellScreenState extends State<MapShellScreen> {
       }
     });
     if (field == RoutePlanField.origin) unawaited(_refreshReach());
+    // 도착지가 아직 없으면 [_afterRouteFieldPicked]가 경로를 시작하지 않는다.
+    // 그때만 카메라를 옮긴다(겹침 이유는 [_focusIndoorOrigin] 주석).
+    if (field == RoutePlanField.origin && _routeDraftDestination == null) {
+      _focusIndoorOrigin(candidate);
+    }
     _afterRouteFieldPicked();
+  }
+
+  /// 출발지로 고른 실내 매장으로 실내 지도를 옮긴다(층 전환 포함).
+  ///
+  /// 없으면 B2 매장을 출발지로 잡아도 화면은 보고 있던 층 그대로다 — 사용자는
+  /// 자기가 어디서 출발하는 것으로 잡혔는지 확인할 방법이 없다.
+  ///
+  /// **경로를 바로 계산하지 않는 경우에만 부른다.** 계산이 시작되면 경로 개요가
+  /// 두 끝점을 함께 담도록 카메라를 다시 잡으므로, 여기서 또 옮기면 두
+  /// 애니메이션이 겹쳐 화면이 두 번 튄다.
+  void _focusIndoorOrigin(DirectionsCandidate candidate) {
+    if (!candidate.isIndoorPoint) return;
+    unawaited(
+      _outdoorKey.currentState?.focusStore(
+            _asPoi(candidate),
+            // 밖에서 골랐어도 들어가서 보여 준다. 실내 모드를 직접 켜지는
+            // 않는다 — focusStore가 카메라만 옮기고 진입 판정은 그대로 둔다.
+            enterBuildingIfNeeded: true,
+          ) ??
+          Future<void>.value(),
+    );
   }
 
   /// 출발지를 "현재 위치"로 되돌린다. 값을 비우는 것이 곧 현재 위치라
