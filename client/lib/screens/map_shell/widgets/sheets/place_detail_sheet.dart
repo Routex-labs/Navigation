@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
 import '../../../../service_locator.dart';
@@ -23,27 +24,107 @@ import '../../../../widgets/map_overlay_guard.dart';
 import '../../../../widgets/map_pass_through_sheet_route.dart';
 import '../../../../domain/category/subcategory_label.dart';
 
-/// 매장 상세 시트가 처음 올라오는 높이(화면 비율).
+/// 매장 상세 시트가 처음 올라올 때 보여야 하는 높이(논리 픽셀).
 ///
-/// 이름·업종·길찾기 버튼에 **사진과 소개 앞부분까지**가 들어오는 선이다. 더
-/// 올리면 정보는 많이 보이지만 지도가 거의 안 남아, 방금 고른 매장이 건물
-/// 어디쯤인지 확인할 수 없다. 나머지는 시트를 끌어올려 본다.
+/// **이름·층·업종·출발·도착에 사진 윗부분까지**다. 이름·버튼까지만 담는
+/// 230도 화면에서 비교했는데, 사진이 있는 매장에서 사진이 통째로 숨어
+/// "있는지도 모르는" 상태가 됐다. 대신 사진이 없는 매장에서는 버튼 아래가
+/// 조금 빈다 — 매장마다 내용 길이가 다른데 높이는 하나라서, 어느 값을 골라도
+/// 한쪽은 손해다. 셋을 나란히 보고 이 값으로 정했다.
 ///
-/// **이 값은 지도 카메라와 짝을 이룬다.** 목록에서 매장을 고르면 지도가 그
-/// 매장으로 이동하는데, 시트가 덮는 만큼 위로 밀어 올려야 매장이 시트 뒤에
-/// 숨지 않는다. 그래서 상수를 공개해 `MapShellScreen`이 그대로 지도에 넘긴다 —
-/// 여기만 바꾸면 카메라도 따라온다.
-const double kPlaceDetailSheetInitialSize = 0.5;
+/// **비율이 아니라 픽셀인 이유가 있다.** 담아야 할 내용의 높이는 화면 크기와
+/// 무관하게 거의 고정인데, 비율로 잡으면 짧은 화면에서 버튼이 잘린다 —
+/// 0.25로 고정했다가 위젯 테스트(600px 화면)에서 출발·도착이 사라져 17건이
+/// 깨졌다. 비율은 [placeDetailSheetInitialSize]가 화면 높이에서 계산한다.
+const double kPlaceDetailSheetPeekPx = 343;
 
-/// 매장 선택 시 시트가 바닥에서 화면 절반까지 한 번에 이동하므로 Material 기본
-/// 250ms는 실기기에서 튀어 오르는 것처럼 보인다. 시작과 끝의 속도를 모두 낮춘
-/// 곡선으로 늘려 카메라 포커스와 한 동작으로 읽히게 한다.
+/// [kPlaceDetailSheetPeekPx]를 [screenHeight]에 대한 비율로. 상·하한은 안전장치다
+/// — 너무 낮으면 잡을 것이 없고, 너무 높으면 줄이려던 이동 거리가 되돌아온다.
+///
+/// 예전에는 화면 절반(0.5) 고정이었다. 매장을 바꿔 누를 때마다 그 절반을
+/// 내려갔다 올라와(260ms + 380ms) 눈이 피로하다는 지적을 받았다.
+///
+/// **이 값은 지도 카메라와 짝을 이룬다.** 매장을 고르면 지도가 그 매장으로
+/// 이동하는데, 시트가 덮는 만큼 위로 밀어 올려야 매장이 시트 뒤에 숨지 않는다.
+/// `MapShellScreen`이 같은 함수를 불러 지도에 넘기므로 **여기만 바꾸면 카메라도
+/// 따라온다** — 이동 거리를 줄이면 카메라 리프트도 함께 줄어 두 모션이 동시에
+/// 작아진다.
+double placeDetailSheetInitialSize(double screenHeight) => screenHeight <= 0
+    ? 0.5
+    : (kPlaceDetailSheetPeekPx / screenHeight).clamp(0.22, 0.5);
+
+/// 첫 등장 전환. 바닥에서 올라오는 그 동작이 "새로 떴다"를 말해 준다.
+///
+/// **일부러 느리다.** 빠르게 튀어 오르면 주변시가 그 움직임에 끌려 지도를 보던
+/// 눈이 아래로 딸려 내려간다. 같은 거리라도 천천히 오르면 시선을 낚아채지 않고
+/// "저기에 무언가 생겼다"만 남는다. 나갈 때는 이미 다 읽은 뒤라 그럴 이유가
+/// 없어 절반만 쓴다.
 const kPlaceDetailSheetAnimationStyle = AnimationStyle(
-  duration: Duration(milliseconds: 380),
+  duration: Duration(milliseconds: 520),
   reverseDuration: Duration(milliseconds: 260),
-  curve: Curves.easeInOutCubic,
+  curve: Curves.easeOutCubic,
   reverseCurve: Curves.easeInCubic,
 );
+
+/// 지금 떠 있는 상세 시트의 라우트. 없으면 null.
+///
+/// **전역이지만 하나뿐이다.** 셸이 "상세 시트는 한 번에 하나"를 강제하므로
+/// (`_openStoreFromMap`이 열려 있으면 먼저 닫는다) 이 참조가 가리킬 대상은 늘
+/// 하나다. 나가는 전환을 바꾸려면 그 라우트를 잡고 있어야 하는데, 반환값은
+/// Future 하나뿐이라 호출부가 라우트를 볼 길이 없다.
+MapPassThroughSheetRoute<StoreInfoAction>? _currentRoute;
+
+/// 지금 떠 있는 상세 시트를 **애니메이션 없이 즉시** 걷어낸다. 있었으면 true.
+///
+/// 다른 매장으로 갈아 끼우기 직전에 부른다. `pop`은 내려가는 260ms를 그대로
+/// 재생하는데, 그 자리에 곧바로 새 시트가 뜨므로 내려갈 이유가 없다.
+/// `removeRoute`는 전환을 건너뛰고 라우트를 떼어 낸다.
+bool removePlaceDetailRouteImmediately(BuildContext context) {
+  final route = _currentRoute;
+  if (route == null) return false;
+  _currentRoute = null;
+  Navigator.of(context).removeRoute(route);
+  return true;
+}
+
+/// 제자리 교체용. **시트 자체의 전환을 사실상 끈다.**
+///
+/// `ModalBottomSheetRoute`의 올라오는 동작은 `buildTransitions`가 아니라 시트를
+/// 앉히는 **레이아웃**이 만든다(애니메이션 값으로 높이를 늘린다). 그래서 전환에
+/// 페이드를 얹어도 슬라이드는 그대로 남는다 — 값을 즉시 1로 보내야 안 움직인다.
+///
+/// 대신 부드러움은 내용 쪽 [_kSwapFadeDuration]이 맡는다.
+const kPlaceDetailSheetInstantStyle = AnimationStyle(
+  duration: Duration(milliseconds: 1),
+  reverseDuration: Duration(milliseconds: 1),
+);
+
+/// 시트가 **떠 있는 채로 갈아 끼울 수 있는** 값 묶음.
+///
+/// 다른 매장을 눌러도 시트를 떼었다 붙이지 않는다 — 떼는 순간 아무것도 없는
+/// 프레임이 생겨 번쩍인다(실기기에서 확인). 라우트는 그대로 두고 이 값만 바꾼다.
+///
+/// 건물 id·저장소·콜백은 여기 없다. 매장이 바뀌어도 안 변하는 것들이라 위젯
+/// 필드로 남겨 두는 편이 "무엇이 바뀌는가"를 분명히 한다.
+class PlaceDetailTarget {
+  const PlaceDetailTarget({
+    required this.title,
+    required this.subtitle,
+    required this.placeId,
+    this.favorite,
+    this.category,
+    this.subcategory,
+    this.reach,
+  });
+
+  final String title;
+  final String subtitle;
+  final String? placeId;
+  final FavoritePlace? favorite;
+  final String? category;
+  final String? subcategory;
+  final NodeReach? reach;
+}
 
 /// 장소 상세 시트에서 호출자에게 돌려주는 다음 동작.
 ///
@@ -60,38 +141,23 @@ enum StoreInfoAction { setOrigin, setDestination }
 class PlaceDetailSheet extends StatefulWidget {
   const PlaceDetailSheet({
     super.key,
-    required this.title,
-    required this.subtitle,
+    required this.target,
     required this.buildingId,
-    required this.placeId,
-    this.favorite,
-    this.category,
-    this.subcategory,
-    this.reach,
     this.nearbyStoresLoader,
     this.onSelectNearbyStore,
     this.repository,
     required this.onCloseAll,
   });
 
-  final String title;
-  final String subtitle;
-  final String buildingId;
-  final String? placeId;
-  final FavoritePlace? favorite;
+  /// 지금 보여 줄 매장. **값이 바뀌면 시트를 다시 만들지 않고 내용만 바꾼다.**
+  final ValueListenable<PlaceDetailTarget> target;
 
-  /// 현재 위치에서 이 매장까지의 거리·비용. 상위(MapShellScreen)가 검색 결과
-  /// 목록과 **같은 계산 결과**를 그대로 넘긴다 — 목록에 74m라고 적혀 있는데
-  /// 눌러 들어온 상세가 다른 값을 말하면 어느 쪽도 못 믿게 된다.
-  ///
-  /// null이면 줄을 그리지 않는다. 위치를 아직 안 잡았거나 그래프가 끊긴
-  /// 경우이고, 그 상태에서 "거리 알 수 없음"을 적어 봐야 사용자가 할 수 있는
-  /// 일은 "위치 지정" 하나뿐이라 이 자리에서 알릴 이유가 없다.
-  final NodeReach? reach;
+  final String buildingId;
 
   /// 이 매장에서 가까운 다른 매장을 찾아 온다. 인자는 **이 매장의 입구 노드**다.
   ///
-  /// [reach]와 **기준이 다르다** — 이쪽은 사용자가 아니라 이 매장에서 잰 거리다.
+  /// [PlaceDetailTarget.reach]와 **기준이 다르다** — 이쪽은 사용자가 아니라 이
+  /// 매장에서 잰 거리다.
   /// 같은 기준으로 두 번 적으면 두 번째 줄이 알려 주는 게 없다.
   ///
   /// 시트가 그래프·매장 색인을 직접 들고 오지 않는 이유는, 둘 다 상위(지도 화면)가
@@ -103,63 +169,54 @@ class PlaceDetailSheet extends StatefulWidget {
   /// 근처 매장 줄을 눌렀을 때. null이면 누를 수 없는 목록으로 그린다.
   final void Function(StoreIndexEntry store)? onSelectNearbyStore;
 
-  /// 헤더 아이콘의 대분류 폴백·강조색. 세부 규칙(`카페·베이커리` 등)이 먼저고,
-  /// 거기 걸리지 않는 일반 매장이 이 값으로 떨어진다.
-  final String? category;
-  final String? subcategory;
-
   /// 테스트에서는 가짜를 넣고, 앱에서는 service locator의 전역 저장소를 쓴다.
   final PlaceDetailRepository? repository;
   final VoidCallback onCloseAll;
 
   static Future<StoreInfoAction?> show(
     BuildContext context, {
-    required String title,
-    required String subtitle,
+    required ValueListenable<PlaceDetailTarget> target,
     required String buildingId,
-    required String? placeId,
-    FavoritePlace? favorite,
-    String? category,
-    String? subcategory,
-    NodeReach? reach,
     Future<List<NearbyStore>> Function(String entranceNodeId)?
     nearbyStoresLoader,
     void Function(StoreIndexEntry store)? onSelectNearbyStore,
     PlaceDetailRepository? repository,
     required VoidCallback onCloseAll,
+    bool crossFade = false,
   }) {
     final navigator = Navigator.of(context);
-    return navigator.push<StoreInfoAction>(
-      MapPassThroughSheetRoute<StoreInfoAction>(
-        capturedThemes: InheritedTheme.capture(
-          from: context,
-          to: navigator.context,
-        ),
-        isScrollControlled: true,
-        isDismissible: true,
-        sheetAnimationStyle: kPlaceDetailSheetAnimationStyle,
-        backgroundColor: Colors.transparent,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        builder: (context) => MapOverlayGuard(
-          child: PlaceDetailSheet(
-            title: title,
-            subtitle: subtitle,
-            buildingId: buildingId,
-            placeId: placeId,
-            favorite: favorite,
-            category: category,
-            subcategory: subcategory,
-            reach: reach,
-            nearbyStoresLoader: nearbyStoresLoader,
-            onSelectNearbyStore: onSelectNearbyStore,
-            repository: repository,
-            onCloseAll: onCloseAll,
-          ),
+    final route = MapPassThroughSheetRoute<StoreInfoAction>(
+      // 이미 시트가 떠 있던 자리를 이어받으면 올라오지 않고 내용만 바뀐다.
+      crossFade: crossFade,
+      capturedThemes: InheritedTheme.capture(
+        from: context,
+        to: navigator.context,
+      ),
+      isScrollControlled: true,
+      isDismissible: true,
+      sheetAnimationStyle: crossFade
+          ? kPlaceDetailSheetInstantStyle
+          : kPlaceDetailSheetAnimationStyle,
+      backgroundColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => MapOverlayGuard(
+        child: PlaceDetailSheet(
+          target: target,
+          buildingId: buildingId,
+          nearbyStoresLoader: nearbyStoresLoader,
+          onSelectNearbyStore: onSelectNearbyStore,
+          repository: repository,
+          onCloseAll: onCloseAll,
         ),
       ),
     );
+    _currentRoute = route;
+    return navigator.push<StoreInfoAction>(route).whenComplete(() {
+      // 다음 시트가 이미 자리를 이어받았으면 그쪽 참조를 지우지 않는다.
+      if (identical(_currentRoute, route)) _currentRoute = null;
+    });
   }
 
   @override
@@ -201,17 +258,37 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
     Navigator.of(context).pop(action);
   }
 
+  /// 지금 보여 주는 매장. [PlaceDetailSheet.target]이 바뀌면 여기가 따라간다.
+  PlaceDetailTarget get _target => widget.target.value;
+
+  /// 어느 매장의 상세를 그리고 있는지. 갈아 끼운 뒤 **늦게 도착한 이전 요청**을
+  /// 버리는 데 쓴다 — 안 버리면 A를 누르고 B로 옮겼을 때 A의 상세가 B 위에 얹힌다.
+  String? _loadedFor;
+
   @override
   void initState() {
     super.initState();
     favoritesController.addListener(_onFavoritesChanged);
+    widget.target.addListener(_onTargetChanged);
     _loadDetailContent();
   }
 
   @override
   void dispose() {
     favoritesController.removeListener(_onFavoritesChanged);
+    widget.target.removeListener(_onTargetChanged);
     super.dispose();
+  }
+
+  /// 다른 매장으로 갈아 끼운다. **시트는 그대로 두고 내용만 바꾼다.**
+  ///
+  /// 이름·층·업종·길찾기 버튼은 탭 즉시 아는 값이라 곧바로 바뀐다. 본문(사진·
+  /// 소개)은 **이전 것을 그대로 둔 채** 새 상세가 도착하면 교체한다 — 비우고
+  /// 기다리면 그 빈 구간이 번쩍임으로 보인다.
+  void _onTargetChanged() {
+    if (!mounted) return;
+    setState(() {});
+    _loadDetailContent();
   }
 
   void _markIntentional() => _intentionalPop = true;
@@ -221,15 +298,32 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
   }
 
   Future<void> _loadDetailContent() async {
-    final placeId = widget.placeId;
-    if (placeId == null) return;
+    final placeId = _target.placeId;
+    if (placeId == null) {
+      // 상세를 받을 수 없는 장소로 갈아 끼웠다면 이전 매장의 본문을 지운다.
+      if (_loadedFor != null && mounted) {
+        setState(() {
+          _detail = null;
+          _nearbyStores = const [];
+          _loadedFor = null;
+        });
+      }
+      return;
+    }
 
     setState(() => _isLoading = true);
     try {
       final detail = await (widget.repository ?? placeDetailRepository)
           .getPlaceDetail(widget.buildingId, placeId);
+      // 그 사이 다른 매장으로 옮겼으면 이 응답은 이미 남의 것이다.
+      if (placeId != _target.placeId) return;
       if (mounted && detail != null) {
-        setState(() => _detail = detail);
+        setState(() {
+          _detail = detail;
+          _loadedFor = placeId;
+          // 이전 매장의 근처 목록이 남아 있으면 새 상세와 섞인다.
+          _nearbyStores = const [];
+        });
         // 상세가 온 **뒤에** 시작한다. 근처 매장은 이 매장의 입구 노드에서 재는데,
         // 그 값이 상세 응답에 들어 있기 때문이다.
         unawaited(_loadNearbyStores(detail));
@@ -259,7 +353,7 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
   }
 
   Future<void> _onToggleFavorite() async {
-    final favorite = widget.favorite;
+    final favorite = _target.favorite;
     if (favorite == null) return;
     await favoritesController.toggle(favorite);
     if (!mounted) return;
@@ -274,11 +368,14 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final favorite = widget.favorite;
+    final favorite = _target.favorite;
     final saved =
         favorite != null && favoritesController.contains(favorite.key);
-    final subcategory = widget.subcategory;
+    final subcategory = _target.subcategory;
     final sections = _visibleSections;
+    final initialSize = placeDetailSheetInitialSize(
+      MediaQuery.sizeOf(context).height,
+    );
 
     return PopScope(
       canPop: true,
@@ -292,8 +389,10 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
       //
       // `expand: false`면 실제로 그려지는 영역만 잡히고 그 위는 포인터를 흘린다.
       child: DraggableScrollableSheet(
-        initialChildSize: kPlaceDetailSheetInitialSize,
-        minChildSize: 0.3,
+        initialChildSize: initialSize,
+        // **초기 높이보다 크면 안 된다.** 크면 시트가 뜨자마자 최소 높이까지
+        // 스스로 튀어 올라, 줄이려던 세로 운동이 오히려 하나 더 생긴다.
+        minChildSize: initialSize,
         maxChildSize: 0.92,
         expand: false,
         builder: (context, scrollController) => GestureDetector(
@@ -326,6 +425,7 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const SheetGrabHandle(),
+                    _SheetLoadingLine(visible: _isLoading),
                     SheetHeader(
                       onCloseAll: widget.onCloseAll,
                       onIntentionalPop: _markIntentional,
@@ -341,11 +441,11 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 2, 20, 0),
                       child: _PlaceCore(
-                        title: widget.title,
-                        subtitle: widget.subtitle,
-                        category: widget.category,
+                        title: _target.title,
+                        subtitle: _target.subtitle,
+                        category: _target.category,
                         subcategory: subcategory,
-                        reach: widget.reach,
+                        reach: _target.reach,
                       ),
                     ),
                     // 이름을 읽은 직후가 길찾기를 누르는 자리다. 사진·메뉴를
@@ -358,12 +458,7 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                             _pop(StoreInfoAction.setDestination),
                       ),
                     ),
-                    if (_isLoading)
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(20, 24, 20, 8),
-                        child: _DetailLoadingPlaceholder(),
-                      )
-                    else if (sections.isNotEmpty)
+                    if (sections.isNotEmpty)
                       Padding(
                         // 좌우 여백은 섹션이 스스로 갖는다. 사진·메뉴는
                         // 시트 끝까지 써야 해서 여기서 일괄로 줄 수 없다.
@@ -620,18 +715,41 @@ class _SaveToggle extends StatelessWidget {
   );
 }
 
-class _DetailLoadingPlaceholder extends StatelessWidget {
-  const _DetailLoadingPlaceholder();
+/// 손잡이 **바로 아래**에 놓이는 얇은 로딩 줄.
+///
+/// 예전에는 본문에 회색 막대를 놓고, 갈아 끼울 때는 시트 전체를 페이드했다.
+/// 전체 페이드는 내용이 사라졌다 다시 뜨는 것처럼 보여 번쩍였다 — 시트가
+/// 그대로 있는데 화면만 깜빡이는 셈이라 오히려 더 눈에 띄었다.
+///
+/// 지금은 **시트도 내용도 그대로 두고** 이 줄만 켠다. 손잡이 아래는 눈이 이미
+/// 시트 위쪽을 보고 있는 자리라 알아채기 쉽고, 본문을 밀지 않는다.
+///
+/// 높이를 항상 차지한다 — 껐다 켤 때 아래 내용이 위아래로 움직이면 그것이 또
+/// 하나의 세로 운동이 된다.
+class _SheetLoadingLine extends StatelessWidget {
+  const _SheetLoadingLine({required this.visible});
+
+  final bool visible;
+
+  static const double _height = 18;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      key: const ValueKey('place-detail-loading'),
-      height: 44,
-      decoration: BoxDecoration(
-        color: AppColors.blue50,
-        borderRadius: BorderRadius.circular(10),
-      ),
+    // **안 보일 때는 트리에서 뺀다.** 투명도만 0으로 두면 인디케이터가 계속
+    // 돌아 프레임이 멎지 않는다 — 앱에서는 배터리를, 위젯 테스트에서는
+    // `pumpAndSettle`을 영원히 붙잡는다(실제로 26건이 그렇게 멈췄다).
+    return SizedBox(
+      height: _height,
+      child: visible
+          ? const Center(
+              child: SizedBox(
+                key: ValueKey('place-detail-loading'),
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          : null,
     );
   }
 }

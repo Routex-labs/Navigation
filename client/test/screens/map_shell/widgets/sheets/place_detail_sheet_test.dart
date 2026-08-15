@@ -27,6 +27,19 @@ final _favorite = FavoritePlace.fromPoiSearchResult(
 );
 
 void main() {
+  /// 시트가 떠 있는 채로 매장을 갈아 끼우는 테스트가 이 값을 바꾼다.
+  late ValueNotifier<PlaceDetailTarget> target;
+
+  setUp(() {
+    target = ValueNotifier(
+      const PlaceDetailTarget(
+        title: '테스트 매장',
+        subtitle: '1F',
+        placeId: 'place-1',
+      ),
+    );
+  });
+
   Widget buildSubject({
     PlaceDetailRepository? repository,
     VoidCallback? onCloseAll,
@@ -36,17 +49,20 @@ void main() {
     FavoritePlace? favorite,
     NodeReach? reach,
   }) {
+    target.value = PlaceDetailTarget(
+      title: '테스트 매장',
+      subtitle: subtitle,
+      placeId: 'place-1',
+      category: category,
+      subcategory: subcategory,
+      favorite: favorite,
+      reach: reach,
+    );
     return MaterialApp(
       home: Scaffold(
         body: PlaceDetailSheet(
-          title: '테스트 매장',
-          subtitle: subtitle,
+          target: target,
           buildingId: 'building-1',
-          placeId: 'place-1',
-          category: category,
-          subcategory: subcategory,
-          favorite: favorite,
-          reach: reach,
           onCloseAll: onCloseAll ?? () {},
           repository: repository,
         ),
@@ -65,12 +81,17 @@ void main() {
     expect(find.text('출발'), findsOneWidget);
     expect(find.text('도착'), findsOneWidget);
     expect(find.byKey(const ValueKey('place-detail-loading')), findsOneWidget);
+    // **동그란 로더여야 한다.** 예전엔 빈 회색 막대였는데, 그 위(이름·층·
+    // 출발·도착)가 이미 다 차 있어서 기다리는 중인지 원래 그런 매장인지
+    // 구분이 안 됐다. 돌아가는 것은 그 자체로 "지금 하는 중"을 말한다.
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
     completer.complete(_detailWithSummary());
     await tester.pumpAndSettle();
 
     expect(find.text(keepWordsWhole('상세 섹션')), findsOneWidget);
     expect(find.byKey(const ValueKey('place-detail-loading')), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
   // --- 설계 7-A-3·7-A-4 ---
@@ -422,10 +443,8 @@ void main() {
             onPressed: () async {
               result = await PlaceDetailSheet.show(
                 context,
-                title: '테스트 매장',
-                subtitle: '1F',
+                target: target,
                 buildingId: 'building-1',
-                placeId: 'place-1',
                 repository: _FakeRepository(Future.value(null)),
                 onCloseAll: () {},
               );
@@ -452,10 +471,8 @@ void main() {
           builder: (context) => FilledButton(
             onPressed: () => PlaceDetailSheet.show(
               context,
-              title: '테스트 매장',
-              subtitle: '1F',
+              target: target,
               buildingId: 'building-1',
-              placeId: 'place-1',
               repository: _FakeRepository(Future.value(null)),
               onCloseAll: () => closedAll = true,
             ),
@@ -482,10 +499,8 @@ void main() {
           builder: (context) => FilledButton(
             onPressed: () => PlaceDetailSheet.show(
               context,
-              title: '테스트 매장',
-              subtitle: '1F',
+              target: target,
               buildingId: 'building-1',
-              placeId: 'place-1',
               repository: _FakeRepository(Future.value(null)),
               onCloseAll: () => closedAll = true,
             ),
@@ -584,16 +599,123 @@ void main() {
 
     expect(find.byIcon(Icons.storefront), findsOneWidget);
   });
+
+  group('떠 있는 채로 갈아 끼우기', () {
+    // 다른 매장을 눌러도 시트를 떼었다 붙이지 않는다. 떼는 순간 아무것도 없는
+    // 프레임이 생겨 번쩍인다(실기기에서 확인).
+    testWidgets('이름·층은 즉시 바뀌고 본문은 새 상세가 올 때까지 남는다', (tester) async {
+      await tester.pumpWidget(
+        buildSubject(repository: _FakeRepository(Future.value(_detailWithSummary()))),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('테스트 매장'), findsOneWidget);
+      expect(find.text(keepWordsWhole('상세 섹션')), findsOneWidget);
+
+      final next = Completer<PlaceDetail?>();
+      // 다음 요청이 늦게 오는 상황을 만든다.
+      target.value = const PlaceDetailTarget(
+        title: '다른 매장',
+        subtitle: 'B2',
+        placeId: 'place-2',
+      );
+      await tester.pump();
+
+      // 머리는 즉시 바뀐다.
+      expect(find.text('다른 매장'), findsOneWidget);
+      expect(find.text('테스트 매장'), findsNothing);
+      // **본문은 아직 이전 것이다** — 비우면 그 빈 구간이 번쩍임이 된다.
+      expect(find.text(keepWordsWhole('상세 섹션')), findsOneWidget);
+      next.complete(null);
+    });
+
+    testWidgets('늦게 온 이전 매장의 상세는 버린다', (tester) async {
+      final first = Completer<PlaceDetail?>();
+      await tester.pumpWidget(
+        buildSubject(
+          repository: _FakeRepository(
+            Completer<PlaceDetail?>().future,
+            byPlaceId: {'place-1': first.future},
+          ),
+        ),
+      );
+      await tester.pump();
+
+      target.value = const PlaceDetailTarget(
+        title: '다른 매장',
+        subtitle: 'B2',
+        placeId: 'place-2',
+      );
+      await tester.pump();
+
+      // 첫 매장의 응답이 이제야 도착한다. 이미 남의 자리다.
+      first.complete(_detailWithSummary());
+      await tester.pumpAndSettle();
+
+      expect(find.text('다른 매장'), findsOneWidget);
+      expect(find.text(keepWordsWhole('상세 섹션')), findsNothing);
+    });
+  });
+
+  group('처음 올라오는 높이', () {
+    // 이름·층·출발·도착까지만 보이면 된다. 화면 절반(0.5)이던 시절에는 매장을
+    // 바꿔 누를 때마다 그만큼 내려갔다 올라와 눈이 피로했다.
+    test('내용 높이를 화면 비율로 환산한다', () {
+      // 큰 폰(Galaxy S23 ≈ 1029dp): 이름·버튼에 사진 윗부분까지.
+      expect(placeDetailSheetInitialSize(1029), closeTo(0.333, 0.005));
+      // 예전 고정값(0.5)보다 확실히 낮다 — 이동 거리가 그만큼 줄었다.
+      expect(placeDetailSheetInitialSize(1029), lessThan(0.4));
+    });
+
+    test('짧은 화면에서는 비율이 커진다 — 버튼이 잘리면 안 된다', () {
+      // **비율로 고정했다가 실제로 깨진 적이 있다.** 0.25로 박았더니 600dp
+      // 화면에서 출발·도착이 화면 밖으로 밀려 위젯 테스트 17건이 실패했다.
+      // 담을 내용의 높이는 화면 크기와 무관하게 거의 고정이다.
+      expect(
+        placeDetailSheetInitialSize(600),
+        greaterThan(placeDetailSheetInitialSize(1029)),
+      );
+      // 큰 화면에서는 요구한 높이를 그대로 채운다.
+      expect(
+        placeDetailSheetInitialSize(1029) * 1029,
+        closeTo(kPlaceDetailSheetPeekPx, 1),
+      );
+    });
+
+    test('아주 짧은 화면에서는 상한이 이겨 내용이 잘린다', () {
+      // 600dp에서 343px는 화면의 57%다. 그대로 두면 지도가 거의 안 남으므로
+      // **상한(0.5)이 이긴다** — 내용 일부가 잘리는 쪽을 택한 것이고, 잘린
+      // 만큼은 끌어올려 본다. 이 절충을 모르고 상한을 올리면 작은 화면에서
+      // 시트가 지도를 통째로 덮는다.
+      expect(placeDetailSheetInitialSize(600), 0.5);
+    });
+
+    test('아주 짧은 화면에서도 절반을 넘지 않는다', () {
+      // 상한이 없으면 작은 화면에서 시트가 지도를 통째로 덮는다.
+      expect(placeDetailSheetInitialSize(300), lessThanOrEqualTo(0.5));
+      expect(placeDetailSheetInitialSize(1), lessThanOrEqualTo(0.5));
+    });
+
+    test('화면 높이가 0이어도 터지지 않는다', () {
+      // 첫 프레임 전 MediaQuery가 0을 줄 수 있다. 0으로 나누면 Infinity가 되고
+      // DraggableScrollableSheet가 그 자리에서 assert로 죽는다.
+      expect(placeDetailSheetInitialSize(0), 0.5);
+    });
+  });
+
 }
 
 class _FakeRepository implements PlaceDetailRepository {
-  _FakeRepository(this.response);
+  _FakeRepository(this.response, {this.byPlaceId});
 
   final Future<PlaceDetail?> response;
 
+  /// 매장마다 다른 응답을 주고 싶을 때. 갈아 끼우기 테스트는 **요청마다 다른
+  /// Future**여야 "늦게 온 이전 응답"을 만들 수 있다.
+  final Map<String, Future<PlaceDetail?>>? byPlaceId;
+
   @override
   Future<PlaceDetail?> getPlaceDetail(String buildingId, String placeId) =>
-      response;
+      byPlaceId?[placeId] ?? response;
 }
 
 PlaceDetail _detail({

@@ -71,11 +71,11 @@ void main() {
       tester,
       (context) => PlaceDetailSheet.show(
         context,
-        title: 'MLB',
-        subtitle: 'B2',
+        target: ValueNotifier(
+          // 상세를 부르지 않는 경로(구버전 저장 항목)로 열어 손잡이만 본다.
+          const PlaceDetailTarget(title: 'MLB', subtitle: 'B2', placeId: null),
+        ),
         buildingId: demoBuildingId,
-        // 상세를 부르지 않는 경로(구버전 저장 항목)로 열어 손잡이만 본다.
-        placeId: null,
         onCloseAll: () {},
       ),
     );
@@ -118,11 +118,11 @@ void main() {
       tester,
       (context) => PlaceDetailSheet.show(
         context,
-        title: 'MLB',
-        subtitle: 'B2',
+        target: ValueNotifier(
+          // 상세를 부르지 않는 경로(구버전 저장 항목)로 열어 손잡이만 본다.
+          const PlaceDetailTarget(title: 'MLB', subtitle: 'B2', placeId: null),
+        ),
         buildingId: demoBuildingId,
-        // 상세를 부르지 않는 경로(구버전 저장 항목)로 열어 손잡이만 본다.
-        placeId: null,
         onCloseAll: () {},
       ),
     );
