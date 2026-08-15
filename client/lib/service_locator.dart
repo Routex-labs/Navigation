@@ -24,6 +24,7 @@ import 'repositories/routing/tmap_directions_repository.dart';
 import 'repositories/place/tmap_poi_repository.dart';
 import 'repositories/routing/transit_repository.dart';
 import 'state/favorites_controller.dart';
+import 'state/recent_route_points_controller.dart';
 import 'state/recent_searches_controller.dart';
 
 /// 앱 전체에서 공유하는 PDR 센서 소스와 세션 드라이버다. 화면이 바뀌어도
@@ -106,6 +107,12 @@ FavoritesController favoritesController = FavoritesController();
 /// 사용자가 최근에 검색한 말. 검색 패널의 빈 화면(idle)을 채운다. 즐겨찾기와
 /// 같은 저장소를 쓰지만 **기기 밖으로 나가지 않는다** — 서버로 보내지 않는다.
 RecentSearchesController recentSearchesController = RecentSearchesController();
+
+/// 사용자가 길찾기에서 실제로 쓴 출발지·목적지. 길찾기 두 칸의 빈 화면을
+/// 채운다. 최근 검색어와 **다른 목록**이다 — 이쪽은 노드·층까지 들고 있어
+/// 누르면 바로 경로가 선다. 마찬가지로 기기 밖으로 나가지 않는다.
+RecentRoutePointsController recentRoutePointsController =
+    RecentRoutePointsController();
 
 /// 걸음 센서(PDR)에 필요한 권한. iOS는 Motion & Fitness, Android는
 /// ActivityRecognition이며 가속도·자력계 원시값은 권한이 필요 없다.
