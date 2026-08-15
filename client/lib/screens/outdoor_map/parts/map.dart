@@ -223,6 +223,21 @@ extension OutdoorMapMap on OutdoorMapBodyState {
     // 걸면 스타일 로드 전에 건물을 탭한 사용자에게 아무 반응도 없다.
     await _flashBuildingFill();
     if (!mounted) return;
+
+    // **야외에서 건물을 눌렀으면 정보 시트가 먼저다.** 예전에는 탭이 곧 진입이라,
+    // 건물을 눌러 본 사용자가 "그 건물이 무엇인지" 대신 도면부터 봤다. 진입은
+    // 그 시트가 시킨다(안의 매장을 고르거나 "실내 지도 보기"를 누를 때).
+    //
+    // **이미 실내면 지금까지 그대로다.** 도면을 보는 중에 건물 안쪽 빈 곳을
+    // 누른 것이라 시트를 띄울 이유가 없고, 띄우면 매장을 누르려다 빗나간
+    // 손가락마다 시트가 올라온다.
+    final building = _building;
+    final onBuildingTap = widget.onBuildingTap;
+    if (!_indoorEntered && building != null && onBuildingTap != null) {
+      onBuildingTap(building);
+      return;
+    }
+
     _triggerIndoorEntry(ignoreZoomArming: true);
     // 오버레이만 켜면 도면이 지금 배율 그대로 뜬다 — 바깥에서 건물을 눌러
     // 들어온 경우 건물이 화면의 60% 남짓이라 "들어왔다"는 느낌이 안 난다.

@@ -215,6 +215,7 @@ class OutdoorMapBody extends StatefulWidget {
     this.onPlacingLocationChanged,
     this.onIndoorEnteredChanged,
     this.onStoreTap,
+    this.onBuildingTap,
     this.onMapPointPicked,
     this.pickingOnMap = false,
     this.onLocationAnchored,
@@ -263,6 +264,13 @@ class OutdoorMapBody extends StatefulWidget {
   /// 실내 진입 오버레이에서 매장 폴리곤을 탭했을 때 호출된다. 상위
   /// (MapShellScreen)가 실내 화면과 동일한 매장 정보 시트를 띄운다.
   final ValueChanged<PoiSearchResult>? onStoreTap;
+
+  /// **야외에서** 건물 폴리곤을 탭했을 때 호출된다. 상위가 건물 정보 시트를 띄운다.
+  ///
+  /// 실내 진입은 그 시트가 시킬 때만 한다 — 예전에는 탭이 곧 진입이라, 건물을
+  /// 눌러 본 사용자가 "그 건물이 무엇인지" 대신 도면부터 봤다. 값이 null이면
+  /// 예전처럼 곧바로 진입한다(시트를 띄울 상위가 없는 테스트 등).
+  final ValueChanged<Building>? onBuildingTap;
 
   /// 길찾기의 "지도에서 선택"이 켜져 있는지. 계약과 근거는 실내 화면의 동명
   /// 필드([IndoorMapBody.pickingOnMap])와 같다 — 두 화면이 같은 조작을 제공해야

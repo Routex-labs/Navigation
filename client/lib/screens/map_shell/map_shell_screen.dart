@@ -34,6 +34,7 @@ import 'widgets/sheets/favorites_sheet.dart';
 import 'widgets/chrome/floor_transition_overlay.dart';
 import 'widgets/chrome/map_bottom_bar.dart';
 import 'widgets/chrome/map_top_bar.dart';
+import 'widgets/sheets/building_info_sheet.dart';
 import 'widgets/sheets/outdoor_poi_sheet.dart';
 import 'widgets/sheets/place_detail_sheet.dart';
 import 'widgets/search/route_field_results.dart';
@@ -694,6 +695,87 @@ class _MapShellScreenState extends State<MapShellScreen> {
     if (!mounted || resolved == null) return;
     await _runSheetChain(() => _showStoreInfo(resolved, focusOnMap: true));
   }
+
+  /// 야외 지도에서 건물 폴리곤을 눌렀을 때. 시트를 먼저 띄우고, 진입은 그
+  /// 시트가 시킬 때만 한다.
+  void _onMapBuildingTap(Building building) {
+    unawaited(_runSheetChain(() => _showBuildingInfo(building)));
+  }
+
+  /// 건물 정보 시트. 돌려주는 값에 따라 길찾기·실내 진입·매장 상세로 갈린다.
+  ///
+  /// 반환값 규칙은 매장 시트와 같다 — "출발/도착을 실제로 골랐는가"다.
+  Future<bool> _showBuildingInfo(Building building) async {
+    final picked = await _withMapsLocked(
+      () => BuildingInfoSheet.show(
+        context,
+        building: building,
+        onCloseAll: _requestCloseSheetChain,
+      ),
+    );
+    if (!mounted || _closeSheetChainRequested) return true;
+    if (picked == null) return false;
+
+    // 매장을 골랐으면 매장 상세로 넘긴다. 좌표·노드 해석과 실내 진입은
+    // [_onNearbyStorePicked]와 **같은 경로**를 쓴다 — 진입점마다 따로 만들면
+    // 한쪽만 층을 옮기거나 한쪽만 강조가 빠진다.
+    if (picked is StoreIndexEntry) {
+      final resolved = await _outdoorKey.currentState?.resolveIndexEntry(
+        picked,
+      );
+      if (!mounted || resolved == null) return false;
+      return _showStoreInfo(resolved, focusOnMap: true);
+    }
+
+    // 좌표만 있는 후보다. 건물 안 매장이 아니므로 실내 라우팅으로 가지 않고,
+    // 목적지 건물의 출입구를 경유하는 갈래는 [classifyWalkRoute]가 정한다.
+    final point = building.outdoorAnchor;
+    switch (picked) {
+      case BuildingInfoAction.enterIndoor:
+        // 건물 탭이 곧 진입이던 조작을 여기서 이어받는다.
+        _outdoorKey.currentState?.enterIndoorFromSheet();
+        return false;
+      case BuildingInfoAction.setOrigin when point != null:
+        final candidate = _buildingCandidate(building, point);
+        setState(() => _selectedOrigin = candidate);
+        final destination = _routeDraftDestination;
+        if (destination != null) {
+          await _startRoute(origin: candidate, destination: destination);
+        } else {
+          await _openRouteMode(presetOrigin: candidate);
+        }
+        return true;
+      case BuildingInfoAction.setDestination when point != null:
+        final candidate = _buildingCandidate(building, point);
+        setState(() => _routeDraftDestination = candidate);
+        final origin = _selectedOrigin;
+        if (origin != null || _canRouteFromCurrentLocation) {
+          await _startRoute(origin: origin, destination: candidate);
+        } else {
+          await _openRouteMode(
+            presetDestination: candidate,
+            focusField: RoutePlanField.origin,
+          );
+        }
+        return true;
+      default:
+        // 좌표를 모르는 건물이다(출입구도 외곽선도 없음). 경로의 끝점을 정할 수
+        // 없으므로 아무것도 하지 않는다 — 후보 목록이 같은 이유로 이런 건물을
+        // 아예 빼고 있다([searchDirectionsCandidates]).
+        _showSnack('이 건물의 위치 정보가 없어 길찾기를 시작할 수 없습니다.');
+        return false;
+    }
+  }
+
+  /// 건물 한 채를 길찾기 후보로 옮긴다. 후보 목록이 만드는 것과 같은 모양이라야
+  /// 두 경로가 같은 갈래로 흘러간다([searchDirectionsCandidates]).
+  DirectionsCandidate _buildingCandidate(Building building, LatLng point) =>
+      DirectionsCandidate(
+        title: building.name,
+        subtitle: '${building.floors.length}개 층',
+        point: point,
+        buildingId: building.id,
+      );
 
   void _onSearchBuildingPicked(Building building) {
     _closeSearch();
@@ -2141,6 +2223,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
         unawaited(_refreshReach());
       },
       onStoreTap: _onMapStoreTap,
+      onBuildingTap: _onMapBuildingTap,
       // 실내 오버레이 위에서도 복도를 골라 출발/도착을 정할 수 있다.
       // 실내 탭과 같은 조작이어야 하므로 같은 값을 내려 준다.
       pickingOnMap: _mapPickTarget != null,
