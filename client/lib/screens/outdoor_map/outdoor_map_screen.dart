@@ -77,6 +77,7 @@ import 'widgets/status_badge.dart';
 import 'entry/floor_outline.dart';
 import 'gps/gps_session.dart';
 import 'entry/indoor_entry_gps.dart';
+import 'entry/initial_camera.dart';
 import 'camera/building_orientation.dart';
 import 'entry/indoor_entry_proximity.dart';
 import 'entry/indoor_entry_zoom.dart';
@@ -530,6 +531,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   // 지도가 아직 안 뜬 시점의 첫 GPS 위치를 잊지 않도록 pending 값을 두고,
   // 스타일 로드 콜백에서 이를 반영한다.
   bool _pendingCenterOnPosition = false;
+
+  // 앱을 켠 뒤 첫 좌표로 지도를 한 번 옮겼는가.
+  //
+  // 위 pending 값만으로는 부족했다. 그 플래그는 [_syncCurrentLayer]의
+  // early-return 경로에서만 서기 때문에, **스타일 로드가 끝난 뒤에 첫 GPS가
+  // 도착하면** 아무도 카메라를 옮기지 않아 서울시청(fallbackLocation)에
+  // 머물렀다. 평상시 [_handlePosition]은 안내 중일 때만 카메라를 옮긴다.
+  bool _didInitialCenter = false;
 
   // 줌 임계값을 넘겼을 때 실내 진입 오버레이를 한 번만 켜기 위한 히스테리시스.
   // 임계값 아래로 다시 내려오기 전까지는 재발화하지 않는다.
