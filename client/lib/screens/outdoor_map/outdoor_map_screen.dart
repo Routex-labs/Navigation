@@ -787,6 +787,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _pdrSnapshotSub = indoorNavigationDriver.snapshots.listen((snapshot) {
       _pdrDebugRecorder?.recordSnapshot(snapshot);
       if (!mounted) return;
+      // **야외에서는 실내 위치에 반영하지 않는다.** 센서 세션은 계속 돌지만
+      // (오갈 때마다 껐다 켜면 heading이 매번 처음부터다), 그 걸음을 여기서
+      // 받으면 야외를 걸어 다닌 거리가 실내 좌표계에 그대로 쌓인다. 사용자에게는
+      // 밖에 서 있는데 실내 위치 아이콘만 도면 위를 계속 걸어가는 것으로 보인다.
+      // 진단 기록(_pdrDebugRecorder)은 위에서 이미 받았다 — 무슨 일이 있었는지는
+      // 남기되 화면 위치만 멈춘다.
+      if (!_indoorEntered) return;
       setState(() {
         _pdrTrailState.recordSnapshot(snapshot);
         _syncCorridorTracking(snapshot);
@@ -801,6 +808,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _pdrCalibrationSub = indoorNavigationDriver.calibration.listen((status) {
       _pdrDebugRecorder?.recordCalibration(status);
       if (!mounted) return;
+      // 스냅샷과 같은 이유로 야외에서는 받지 않는다. 앵커가 바뀌는 사건이라
+      // 여기서 받으면 야외에 선 채로 실내 위치가 한 번 더 움직인다.
+      if (!_indoorEntered) return;
       setState(() {
         _pdrTrailState.recordCalibration(status);
         _syncCorridorTracking(_pdrTrailState.snapshot);

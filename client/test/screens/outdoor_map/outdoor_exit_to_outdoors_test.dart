@@ -222,6 +222,33 @@ void main() {
     expect(find.text('GPS 신호 약함'), findsNothing);
   });
 
+  testWidgets('밖으로 나가면 실내 위치 추정치를 버린다', (WidgetTester tester) async {
+    // 이 추정치는 GPS를 층 그래프에 투영한 값이고 **30초 동안 살아 있다**
+    // (IndoorLocationEstimate.isFresh). 앵커가 없을 때의 마지막 폴백이라,
+    // 안 버리면 야외로 나간 뒤에도 30초간 실내 좌표가 유효한 채로 남는다.
+    // 한때 clear()를 부르는 코드가 앱 전체에 하나도 없었다.
+    final positions = StreamController<Position>.broadcast();
+    await enterIndoorByGps(tester, positions);
+    await settleSensorWarmup(tester);
+
+    expect(
+      indoorLocationEstimateController.current,
+      isNotNull,
+      reason: '테스트 전제(자동 진입이 추정치를 채움)가 성립하지 않았다',
+    );
+
+    positions.add(fix(wellOutside, 8));
+    await tester.pump(const Duration(milliseconds: 50));
+    await drain(tester);
+
+    expect(find.byType(FloorSelector), findsNothing);
+    expect(
+      indoorLocationEstimateController.current,
+      isNull,
+      reason: '야외에 선 사용자에게 30초짜리 실내 좌표가 남아 있으면 안 된다',
+    );
+  });
+
   testWidgets('건물 밖을 탭해 나오면 안에 서 있어도 다시 끌려 들어가지 않는다', (
     WidgetTester tester,
   ) async {
