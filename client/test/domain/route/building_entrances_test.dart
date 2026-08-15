@@ -194,4 +194,31 @@ void main() {
       expect(entranceDirectionLabel(_entrance('s', _south), null), '출구');
     });
   });
+
+  group('entranceDirection', () {
+    test('지도 핀에 굽는 방위 글자만 돌려준다', () {
+      expect(entranceDirection(_entrance('s', _south), _center), '남');
+      expect(entranceDirection(_entrance('nw', _northWest), _center), '북서');
+      expect(entranceDirection(_entrance('se', _southEast), _center), '남동');
+    });
+
+    test('문구와 계산을 공유한다 — 핀 글자와 안내 문구가 어긋나면 안 된다', () {
+      for (final point in [_south, _northWest, _southEast]) {
+        final entrance = _entrance('e', point);
+        final direction = entranceDirection(entrance, _center);
+        expect(
+          entranceDirectionLabel(entrance, _center),
+          '$direction쪽 ${entrance.name}',
+        );
+      }
+    });
+
+    test('중심을 모르면 null — 호출자는 글자 없는 핀을 세우지 않는다', () {
+      expect(entranceDirection(_entrance('s', _south), null), isNull);
+    });
+
+    test('문이 정확히 중심이면 방위가 없다', () {
+      expect(entranceDirection(_entrance('c', _center), _center), isNull);
+    });
+  });
 }

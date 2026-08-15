@@ -23,8 +23,7 @@ const mapStoreFill = '#F1EEEA';
 /// 따로 얹는 비용을 낸다.
 const mapStoreOutline = '#A69C90';
 
-/// 선택(포커스)된 매장 강조 fill·테두리.
-///
-/// **`AppColors.primary`와 같은 값이어야 한다** — 다르면 같은 "선택됨"이 화면
-/// 요소마다 다른 색으로 말해진다. MapLibre는 hex 문자열만 받아 다시 적는다.
-const mapSelectionColor = '#4A87F1';
+// `mapSelectionColor`는 여기 없다. 선택 강조가 폴리곤 fill에서 **핀**으로
+// 바뀌면서(`docs/client/kakao-map-indoor-observation.md` S절) 참조가 0이 됐다.
+// 핀은 비트맵이라 hex 문자열이 아니라 `AppColors`를 직접 읽는다 —
+// MapLibre에 넘기는 색만 이 파일이 갖는다.

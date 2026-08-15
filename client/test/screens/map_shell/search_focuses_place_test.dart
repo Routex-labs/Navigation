@@ -112,4 +112,20 @@ void main() {
     // 길찾기 버튼에서 시작한다.
     expect(find.byType(EtaCard), findsNothing);
   });
+
+  testWidgets('시트가 떠 있을 때 다시 검색해도 시트는 하나다', (WidgetTester tester) async {
+    // **두 겹으로 쌓이면 화면으로는 안 보인다.** 같은 자리에 같은 모양이
+    // 겹치기 때문이다. 실기기에서는 뒤로가기를 눌러도 화면이 그대로인 것으로만
+    // 드러났다 — 그래서 눈이 아니라 위젯 수로 잠근다.
+    await search(tester, '강의실');
+    await tester.tap(find.text('강의실 101').first);
+    await drain(tester);
+    expect(find.byType(PlaceDetailSheet), findsOneWidget);
+
+    await search(tester, '강의실');
+    await tester.tap(find.text('강의실 101').first);
+    await drain(tester);
+
+    expect(find.byType(PlaceDetailSheet), findsOneWidget);
+  });
 }

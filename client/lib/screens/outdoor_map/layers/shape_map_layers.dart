@@ -1,18 +1,17 @@
-/// 폴리곤으로 그려지는 레이어들 — 건물 fill, 실내 진입 dim scrim, 현재 층
-/// 외곽선, 매장 강조.
+/// 건물 fill·dim scrim·층 외곽선(링)과 선택 매장·출구 핀(점)의 소스·레이어.
 ///
-/// 넷 다 "링 하나(또는 없음)를 소스에 쓴다"가 전부이고, **어떤 링을 쓸지는 화면이
+/// 전부 "링 또는 점 몇 개를 소스에 쓴다"가 전부이고, **무엇을 쓸지는 화면이
 /// 정한다.**
 ///
 /// 레이어 속성은 [indoor_overlay_layers.dart]가 소유한다(전체 교체 규칙이 거기 있다).
-/// 여기는 그 속성으로 **어떤 소스·레이어를 어떤 순서로 쌓는지**만 안다.
+/// 핀 두 종의 도형은 [place_pin.dart]가 굽는다.
 library;
 
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../../map/geojson.dart';
-import '../../../map/style/palette.dart';
+import '../../../map/icon/place_pin.dart';
 import '../entry/indoor_entry_zoom.dart';
 import 'indoor_overlay_layers.dart';
 
@@ -30,19 +29,42 @@ const kOutdoorDimScrimFillLayerId = 'outdoor-dim-scrim-fill';
 const kOutdoorFloorOutlineSourceId = 'outdoor-floor-outline';
 const kOutdoorFloorOutlineLayerId = 'outdoor-floor-outline-line';
 
-/// 실내 오버레이에서 매장 폴리곤을 탭했을 때 그 매장 하나만 파란색으로 채우고
-/// 테두리를 두르는 전용 소스·레이어. 색은 앱의 선택 색(mapSelectionColor)
-/// 하나를 쓴다.
+/// 실내 오버레이에서 매장을 탭했을 때 그 매장 하나에 **파란 핀을 세우는** 전용
+/// 소스·레이어.
+///
+/// **예전에는 폴리곤을 파랑 35%로 칠했다.** 그 방식의 문제가 셋이었다 —
+/// 매장 이름이 배경으로 밀리고, 폴리곤 없는 시설(점만 있는 화장실 등)에서는
+/// 아무 일도 일어나지 않고, 한 폴리곤을 여러 매장이 나눠 쓰는 자리에서 어느
+/// 매장을 골랐는지 칸으로는 말할 수 없었다. 핀은 점 하나만 있으면 되므로 셋이
+/// 함께 사라진다. 근거는 `docs/client/kakao-map-indoor-observation.md` S절.
 const kOutdoorHighlightSourceId = 'outdoor-highlight';
-const _highlightFillLayerId = 'outdoor-highlight-fill';
-const _highlightLineLayerId = 'outdoor-highlight-line';
+const _highlightPinLayerId = 'outdoor-highlight-pin';
 
-/// **fill 0.16은 사실상 안 보였다.** 매장 바닥(#F1EEEA)이 밝은 회색이라 16%
-/// 파랑을 얹어도 "눌렀는데 아무 일도 안 일어난 것 같다"는 인상이었다. 0.35면
-/// 어느 매장을 골랐는지 한눈에 들어오고, 매장 이름은 흰 헤일로를 두르고 그 위
-/// 심볼 레이어에 찍히므로 여전히 읽힌다. 더 올리면 이름이 배경에 먹히기
-/// 시작하므로 여기가 상한에 가깝다.
-const _highlightFillOpacity = 0.35;
+/// 선택 매장 핀 비트맵의 addImage 등록 키. 디자인을 바꾸면 버전을 올린다 —
+/// 웹 addImage는 같은 이름이 이미 있으면 새 비트맵을 버린다.
+const _highlightPinImageName = 'outdoor-selected-store-pin-v1';
+
+/// 출구 핀 소스·레이어. 매장 핀과 **소스를 나눈다** — 같은 소스에 넣으면
+/// 아이콘을 고르는 표현식이 필요해지는데, 출구 핀은 방위마다 비트맵이 달라
+/// 표현식이 8갈래로 늘어난다. 소스를 나누면 각자 자기 아이콘만 안다.
+const kOutdoorGateSourceId = 'outdoor-gate';
+const _gatePinLayerId = 'outdoor-gate-pin';
+
+/// 출구 핀 비트맵 등록 키의 접두사. 뒤에 방위 글자가 붙는다.
+const kGatePinImagePrefix = 'outdoor-gate-pin-v1-';
+
+/// 선택 매장 핀의 iconSize zoom 보간 구간(z16 → z20).
+///
+/// **도착 핀(0.18/0.38)과 같은 크기다.** 화면에 하나뿐이고 "지금 이걸 골랐다"를
+/// 말하는 자리라 작으면 아무 말도 못 한다. 처음엔 0.13/0.28로 뒀다가 실기기에서
+/// 매장 이름보다도 작게 보여 올렸다.
+const _selectedPinIconSizeZ16 = 0.18;
+const _selectedPinIconSizeZ20 = 0.38;
+
+/// 출구 핀은 **한 층에 다섯이라** 선택 핀보다 작다. 같은 크기로 두면 1F 도면이
+/// 핀 다섯 개로 덮인다.
+const _gatePinIconSizeZ16 = 0.12;
+const _gatePinIconSizeZ20 = 0.26;
 
 /// 건물 fill과 dim scrim을 등록한다.
 ///
@@ -107,36 +129,128 @@ Future<void> registerFloorOutlineLayer(
   );
 }
 
-/// 매장 강조 소스·레이어를 등록한다.
+/// 선택 매장 핀의 비트맵·소스·레이어를 등록한다.
 ///
 /// PDR 마커보다 아래·경로선보다 위에 두고, 실내 오버레이 매장 fill이 나중에
-/// `belowLayerId`로 이 아래에 삽입되어 강조가 매장 fill 위에 확실히 덮이도록
-/// 순서를 잡는다.
+/// `belowLayerId`로 이 아래에 삽입되어 핀이 도면 위에 확실히 얹히도록 순서를
+/// 잡는다.
 Future<void> registerHighlightLayers(MapLibreMapController controller) async {
+  await controller.addImage(
+    _highlightPinImageName,
+    await renderSelectedStorePinIcon(),
+  );
   await controller.addSource(
     kOutdoorHighlightSourceId,
     GeojsonSourceProperties(data: emptyGeoJsonCollection()),
   );
-  await controller.addFillLayer(
+  await controller.addSymbolLayer(
     kOutdoorHighlightSourceId,
-    _highlightFillLayerId,
-    const FillLayerProperties(
-      fillColor: mapSelectionColor,
-      fillOpacity: _highlightFillOpacity,
+    _highlightPinLayerId,
+    _placePinProps(
+      _highlightPinImageName,
+      sizeZ16: _selectedPinIconSizeZ16,
+      sizeZ20: _selectedPinIconSizeZ20,
     ),
     enableInteraction: false,
   );
-  await controller.addLineLayer(
-    kOutdoorHighlightSourceId,
-    _highlightLineLayerId,
-    const LineLayerProperties(
-      lineColor: mapSelectionColor,
-      // fill이 진해진 만큼 테두리도 같이 올린다. 1.2px는 옅은 fill의 경계를
-      // 겨우 알려 주던 굵기라, 채운 뒤에는 fill에 묻혀 보이지 않는다.
-      lineWidth: 2,
-      lineJoin: 'round',
+}
+
+/// 출구 핀 소스·레이어를 등록한다. 비트맵은 방위를 알아야 구울 수 있으므로
+/// 여기서 굽지 않는다 — 층 도면이 로드된 뒤 화면이 [kGatePinImagePrefix]로
+/// 등록한다.
+///
+/// **선택 핀보다 먼저** 불러야 한다. 출구와 선택 매장이 겹칠 때 지금 고른 것이
+/// 위에 와야 한다.
+Future<void> registerGateLayers(MapLibreMapController controller) async {
+  await controller.addSource(
+    kOutdoorGateSourceId,
+    GeojsonSourceProperties(data: emptyGeoJsonCollection()),
+  );
+  await controller.addSymbolLayer(
+    kOutdoorGateSourceId,
+    _gatePinLayerId,
+    // 아이콘 이름을 feature 속성에서 읽는다. 방위마다 비트맵이 다르다.
+    _placePinProps(
+      ['get', 'icon'],
+      sizeZ16: _gatePinIconSizeZ16,
+      sizeZ20: _gatePinIconSizeZ20,
     ),
     enableInteraction: false,
+  );
+}
+
+/// 두 핀이 공유하는 심볼 속성. **한 곳에 두는 이유는 [destination_pin.dart]와
+/// 같다** — 두 레이어가 각자 정의를 들고 있으면 조용히 어긋난다. 다른 것은
+/// 아이콘과 크기뿐이다.
+SymbolLayerProperties _placePinProps(
+  Object iconImage, {
+  required double sizeZ16,
+  required double sizeZ20,
+}) => SymbolLayerProperties(
+  iconImage: iconImage,
+  iconSize: [
+    'interpolate',
+    ['linear'],
+    ['zoom'],
+    16,
+    sizeZ16,
+    20,
+    sizeZ20,
+  ],
+  // 핀 바닥(tip)이 실제 좌표에 오도록.
+  iconAnchor: 'bottom',
+  // 매장 라벨과 충돌한다고 숨으면 정작 고른 것이 화면에서 사라진다.
+  iconAllowOverlap: true,
+  iconIgnorePlacement: true,
+);
+
+/// 선택 핀의 크기를 [scale]배로 다시 준다(1.0이면 원래 크기).
+///
+/// **크기는 layout 속성이라 MapLibre의 transition이 안 걸린다.** 그래서 화면이
+/// 프레임마다 이 함수를 불러 손으로 보간한다 — 근거는 호출부
+/// (`parts/indoor.dart`의 선택 확대 애니메이션).
+Future<void> setSelectedPinScale(
+  MapLibreMapController controller,
+  double scale,
+) async {
+  try {
+    await controller.setLayerProperties(
+      _highlightPinLayerId,
+      _placePinProps(
+        _highlightPinImageName,
+        sizeZ16: _selectedPinIconSizeZ16 * scale,
+        sizeZ20: _selectedPinIconSizeZ20 * scale,
+      ),
+    );
+  } catch (_) {}
+}
+
+/// 점 여러 개를 **속성과 함께** 넣는다. 빈 목록이면 소스를 비운다.
+///
+/// 점 하나짜리는 `marker_map_layers.dart`의 `syncPointSource`가 이미 있다.
+/// 여기가 따로 있는 이유는 **속성**이다 — 출구 핀은 방위마다 비트맵이 달라
+/// feature가 자기 아이콘 이름을 들고 있어야 한다.
+Future<void> syncPointsSource(
+  MapLibreMapController controller,
+  String sourceId,
+  List<(ll.LatLng, Map<String, dynamic>)> points,
+) async {
+  await controller.setGeoJsonSource(
+    sourceId,
+    points.isEmpty
+        ? emptyGeoJsonCollection()
+        : geoJsonCollection([
+            for (final (point, props) in points)
+              {
+                'type': 'Feature',
+                'properties': props,
+                'geometry': {
+                  'type': 'Point',
+                  // GeoJSON 좌표 순서는 [longitude, latitude]다.
+                  'coordinates': [point.longitude, point.latitude],
+                },
+              },
+          ]),
   );
 }
 

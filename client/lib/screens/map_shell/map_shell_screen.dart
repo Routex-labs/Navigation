@@ -712,11 +712,47 @@ class _MapShellScreenState extends State<MapShellScreen> {
   ///
   /// [keepZoom]이면 **배율은 그대로 둔다.** 지도에서 직접 누른 매장은 이미 화면에
   /// 있으므로, 확대까지 하면 방금 보던 층 배치를 잃는다.
+  /// 이미 상세 시트가 떠 있으면 **그 시트의 내용만** 갈아 끼운다. 갈아 끼웠으면 true.
+  ///
+  /// 떼었다 붙이면 빈 프레임이 생겨 번쩍이고, 그냥 얹으면 같은 시트가 두 겹으로
+  /// 쌓인다 — 검색으로 같은 매장을 두 번 열면 뒤로가기 한 번에 화면이 안 바뀌는
+  /// 것으로 드러났다. 자세한 것은
+  /// `docs/client/kakao-map-indoor-observation.md` S절.
+  bool _swapOpenPlaceDetail(PoiSearchResult match) {
+    if (_placeDetailClosing == null) return false;
+    _activePlaceMatch = match;
+    _nearbyOriginPlaceId = match.placeId;
+    _placeDetailTarget.value = _targetFor(
+      match,
+      FavoritePlace.fromPoiSearchResult(match, buildingId: _buildingId),
+    );
+    unawaited(
+      (_outdoorKey.currentState?.focusStore(
+                match,
+                bottomSheetFraction: placeDetailSheetInitialSize(
+                  MediaQuery.sizeOf(context).height,
+                ),
+                enterBuildingIfNeeded: true,
+              ) ??
+              Future.value())
+          .catchError((Object error, StackTrace _) {
+            debugPrint('[place focus] $error');
+          }),
+    );
+    return true;
+  }
+
   Future<bool> _showStoreInfo(
     PoiSearchResult match, {
     bool focusOnMap = false,
     bool keepZoom = false,
+    bool crossFade = false,
   }) async {
+    // **여기가 상세 시트의 유일한 입구다.** 검색·근처 매장·저장한 장소·지도 탭이
+    // 모두 이 함수를 지나므로, 중복 방지를 각 호출부에 흩지 않고 여기 한 곳에
+    // 둔다. 갈아 끼웠다면 이 호출은 시트를 열지 않았으므로 false로 끝낸다 —
+    // 사용자가 고른 동작은 원래 떠 있던 시트의 await가 받는다.
+    if (_swapOpenPlaceDetail(match)) return false;
     // 카메라와 시트를 같은 박자에 시작한다. 카메라 완료를 기다린 뒤 시트를
     // 올리면 `지도 이동 → 시트 등장`이 두 동작으로 끊겨 보이고, 반대로 시트를
     // 먼저 다 올리면 목적지가 잠깐 시트 뒤에 남는다. focusStore는 최종 위치를
@@ -727,7 +763,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
       // 한가운데에 놓이게 한다. 시트 높이를 바꾸면 카메라도 자동으로 따라온다.
       focusing = _outdoorKey.currentState?.focusStore(
         match,
-        bottomSheetFraction: kPlaceDetailSheetInitialSize,
+        bottomSheetFraction: placeDetailSheetInitialSize(
+          MediaQuery.sizeOf(context).height,
+        ),
         keepZoom: keepZoom,
         // 검색·목록에서 고른 매장은 건물 밖에서 골랐어도 보여 준다. 지도에서
         // 직접 누른 매장은 이미 건물 안이라 이 값과 무관하다.
@@ -741,24 +779,16 @@ class _MapShellScreenState extends State<MapShellScreen> {
     if (!mounted) return false;
     // 근처 매장 목록에서 자기 자신을 빼는 데 쓴다.
     _nearbyOriginPlaceId = match.placeId;
+    _activePlaceMatch = match;
+    _placeDetailTarget.value = _targetFor(match, favorite);
     final showing = _withMapsLocked(
       () => PlaceDetailSheet.show(
         context,
-        title: match.name,
-        subtitle: match.floor,
+        crossFade: crossFade,
+        target: _placeDetailTarget,
         buildingId: _buildingId,
-        placeId: match.placeId,
-        favorite: favorite,
-        // 대분류는 화면에 글자로 나오지 않고 헤더 아이콘의 폴백·강조색으로만 쓴다.
-        category: match.category,
-        // 대분류 칩을 없앴으므로 업종은 한 줄로만 보여 준다. 소분류가 없는
-        // 장소에서 업종이 통째로 사라지지 않도록 대분류로 떨어뜨린다.
-        subcategory: match.subcategory ?? match.category,
-        // 검색 결과 목록이 쓰는 것과 **같은 계산 결과**를 넘긴다. 두 화면이
-        // 같은 매장에 다른 거리를 적으면 어느 쪽도 못 믿게 된다.
-        reach: match.nodeId == null ? null : _reachByNodeId?[match.nodeId],
-        // "이 매장에서" 잰 근처 매장. 위 reach와 기준이 다르다 — 사용자 기준
-        // 거리는 이미 헤더에 있고, 같은 기준으로 두 번 적으면 두 번째 줄이
+        // "이 매장에서" 잰 근처 매장. target의 reach와 기준이 다르다 — 사용자
+        // 기준 거리는 이미 헤더에 있고, 같은 기준으로 두 번 적으면 두 번째 줄이
         // 알려 주는 게 없다.
         nearbyStoresLoader: _loadNearbyStores,
         onSelectNearbyStore: _onNearbyStorePicked,
@@ -791,12 +821,15 @@ class _MapShellScreenState extends State<MapShellScreen> {
     if (_closeSheetChainRequested) return true;
     if (action == null) return false;
 
+    // **처음 누른 매장이 아니라 지금 시트가 보여 주던 매장**이다. 갈아 끼우기가
+    // 라우트를 그대로 두므로, 여기 `match`는 첫 매장에 묶여 있다.
+    final active = _activePlaceMatch ?? match;
     final candidate = DirectionsCandidate(
-      title: match.name,
-      subtitle: match.floor,
-      point: match.point,
-      nodeId: match.nodeId,
-      floor: match.floor,
+      title: active.name,
+      subtitle: active.floor,
+      point: active.point,
+      nodeId: active.nodeId,
+      floor: active.floor,
     );
     if (action == StoreInfoAction.setOrigin) {
       // 출발지를 지정하면 다음 "도착" 탭이 시트를 다시 열지 않고 바로 이
@@ -1632,25 +1665,50 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 지금 떠 있는 상세 시트가 닫히면 완료되는 Future. 안 떠 있으면 null.
   Future<StoreInfoAction?>? _placeDetailClosing;
 
+  /// 시트가 보여 주는 매장. **떠 있는 채로 갈아 끼운다** — 다른 매장을 눌러도
+  /// 라우트를 떼지 않으므로 아무것도 없는 프레임이 생기지 않는다.
+  final _placeDetailTarget = ValueNotifier(
+    const PlaceDetailTarget(title: '', subtitle: '', placeId: null),
+  );
+
+  /// 시트가 지금 가리키는 매장. 시트가 닫힌 뒤 출발·도착 후보를 만들 때 쓴다 —
+  /// 갈아 끼웠다면 **처음 누른 매장이 아니라 마지막 매장**이어야 한다.
+  PoiSearchResult? _activePlaceMatch;
+
+  PlaceDetailTarget _targetFor(PoiSearchResult match, FavoritePlace? favorite) =>
+      PlaceDetailTarget(
+        title: match.name,
+        subtitle: match.floor,
+        placeId: match.placeId,
+        favorite: favorite,
+        // 대분류는 화면에 글자로 나오지 않고 헤더 아이콘의 폴백·강조색으로만 쓴다.
+        category: match.category,
+        // 대분류 칩을 없앴으므로 업종은 한 줄로만 보여 준다. 소분류가 없는
+        // 장소에서 업종이 통째로 사라지지 않도록 대분류로 떨어뜨린다.
+        subcategory: match.subcategory ?? match.category,
+        // 검색 결과 목록이 쓰는 것과 **같은 계산 결과**를 넘긴다. 두 화면이
+        // 같은 매장에 다른 거리를 적으면 어느 쪽도 못 믿게 된다.
+        reach: match.nodeId == null ? null : _reachByNodeId?[match.nodeId],
+      );
+
   /// 지도에서 매장을 눌러 상세를 연다. **떠 있는 상세가 있으면 먼저 닫는다.**
   ///
-  /// 고른 매장은 파랗게 채워지고 카메라가 시트 위 영역 한가운데로 끌어온다(배율은
-  /// 건드리지 않는다). 이 시트는 barrier가 없어 포인터를 지도로 흘리는 의도된
-  /// 설계라([_withMapsLocked]), 그 대가로 시트가 쌓이는 것을 여기서 막는다.
+  /// 고른 매장에 핀이 서고 카메라가 시트 위 영역 한가운데로 끌어온다. 이 시트는
+  /// barrier가 없어 포인터를 지도로 흘리는 의도된 설계라([_withMapsLocked]),
+  /// 그 대가로 시트가 쌓이는 것을 여기서 막는다.
   ///
-  /// 닫기를 **기다린 뒤** 연다 — 안 기다리면 pop과 push가 겹쳐 화면이 깜빡인다.
+  /// **이미 떠 있었으면 제자리에서 갈아 끼운다.** 닫고 다시 여는 기본 동작은
+  /// 화면의 3분의 1을 왕복해(260ms + 380ms) 매장을 훑을수록 눈이 피로하다.
+  /// 시트가 이미 그 자리에 있으니 움직일 이유가 없다 — 내용만 바꾼다.
   Future<void> _openStoreFromMap(PoiSearchResult match) async {
-    final closing = _placeDetailClosing;
-    if (closing != null) {
-      // pop은 chain 전체를 닫으라는 신호를 만들지만(PopScope), 아래
-      // `_runSheetChain`이 시작할 때 그 플래그를 초기화하므로 새 시트에는
-      // 영향이 없다.
-      Navigator.of(context).pop();
-      await closing;
-      if (!mounted) return;
-    }
+    if (_swapOpenPlaceDetail(match)) return;
     await _runSheetChain(
-      () => _showStoreInfo(match, focusOnMap: true, keepZoom: true),
+      // **배율을 유지하지 않는다.** 예전에는 "지도에서 직접 누른 매장은 이미
+      // 화면에 있으니 확대하면 층 배치를 잃는다"는 이유로 유지했는데, 선택
+      // 강조가 폴리곤 칠에서 핀으로 바뀌면서 전제가 깨졌다 — 칠은 축소 상태에서도
+      // 면으로 보이지만 핀은 점이라, 멀리서 누르면 무엇이 골라졌는지 안 보인다.
+      // `focusZoomFor`는 이미 더 가까우면 그대로 두므로 훑는 중에 튀지 않는다.
+      () => _showStoreInfo(match, focusOnMap: true),
     );
   }
 

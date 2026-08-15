@@ -133,19 +133,35 @@ String entranceDirectionLabel(
   BuildingEntrance entrance,
   LatLng? buildingCenter,
 ) {
-  if (buildingCenter == null) return entrance.name;
+  final direction = entranceDirection(entrance, buildingCenter);
+  if (direction == null) return entrance.name;
+  return '$direction쪽 ${entrance.name}';
+}
+
+/// 건물 중심에서 본 [entrance]의 방위 한두 글자(`남`·`남동`). 방위를 정할 수
+/// 없으면 null.
+///
+/// 지도 위 출구 핀에 굽는 글자가 이 값이다. 문구용
+/// [entranceDirectionLabel]과 **계산을 공유해야** 핀의 글자와 안내 문구가
+/// 어긋나지 않는다 — 나눠 두면 한쪽만 고치는 일이 반드시 생긴다.
+///
+/// null이 되는 경우는 둘이다 — 외곽선을 못 받아 [buildingCenter]가 없거나,
+/// 문이 정확히 중심에 있어 방위가 정의되지 않을 때. 둘 다 정상 상황이므로
+/// 호출자는 그 핀을 글자 없이 그리거나 건너뛴다.
+String? entranceDirection(BuildingEntrance entrance, LatLng? buildingCenter) {
+  if (buildingCenter == null) return null;
   final latDelta = entrance.point.latitude - buildingCenter.latitude;
   // 경도 1도는 위도 1도보다 짧다(cos 위도 배). 보정 없이 각을 재면 동서로
   // 납작한 건물에서 방위가 남북 쪽으로 쏠린다.
   final lngDelta =
       (entrance.point.longitude - buildingCenter.longitude) *
       _cosLatitude(buildingCenter.latitude);
-  if (latDelta == 0 && lngDelta == 0) return entrance.name;
+  if (latDelta == 0 && lngDelta == 0) return null;
 
   const labels = ['북', '북동', '동', '남동', '남', '남서', '서', '북서'];
   final bearing = (_atan2Degrees(lngDelta, latDelta) + 360) % 360;
   final index = (((bearing + 22.5) % 360) ~/ 45).toInt();
-  return '${labels[index]}쪽 ${entrance.name}';
+  return labels[index];
 }
 
 double _cosLatitude(double latitude) =>

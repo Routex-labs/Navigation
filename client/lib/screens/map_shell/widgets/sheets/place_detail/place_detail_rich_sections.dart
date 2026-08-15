@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../../core/clipboard_confirmation.dart';
 import '../../../../../theme/app_theme.dart';
 import 'korean_line_break.dart';
 
@@ -1451,6 +1452,10 @@ class _CopyButton extends StatelessWidget {
   // 클립보드는 실패할 수 있다. 웹은 브라우저 권한을, 리눅스는 클립보드 매니저를
   // 타고, 둘 다 없으면 플랫폼 채널이 예외를 던진다. 조용히 삼키면 사용자는
   // 복사된 줄 알고 붙여 넣기를 시도하므로, 실패를 실패라고 말한다.
+  //
+  // **성공은 기기가 이미 알릴 수 있다.** Android 13+는 시스템이 확인 UI를
+  // 띄워, 우리 토스트까지 얹으면 "복사했습니다"가 두 번 뜬다
+  // ([shouldAnnounceClipboardCopy]).
   Future<void> _copy(BuildContext context) async {
     var copied = true;
     try {
@@ -1458,6 +1463,7 @@ class _CopyButton extends StatelessWidget {
     } catch (_) {
       copied = false;
     }
+    if (copied && !await shouldAnnounceClipboardCopy()) return;
     if (!context.mounted) return;
     showPlaceToast(context, copied ? '복사했습니다' : '복사하지 못했습니다');
   }

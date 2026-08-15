@@ -18,8 +18,39 @@ class MapPassThroughSheetRoute<T> extends ModalBottomSheetRoute<T> {
     super.shape,
     super.isDismissible,
     super.sheetAnimationStyle,
+    this.crossFade = false,
   });
+
+  /// 제자리에서 나타난다 — **창이 움직이지 않고 내용만 바뀐다.**
+  ///
+  /// 이미 떠 있는 시트를 다른 매장으로 갈아 끼울 때 쓴다. 첫 등장에는 쓰지
+  /// 않는다: 바닥에서 올라오는 동작이 "새로 떴다"를 말해 준다.
+  ///
+  /// **떠 있는 동안 바뀔 수 있다.** 나가기 직전에 켜면 그 시트도 내려가지 않고
+  /// 사라진다(`beginPlaceDetailCrossFadeExit`). 경위는
+  /// `docs/client/kakao-map-indoor-observation.md` S절.
+  bool crossFade;
 
   @override
   Widget buildModalBarrier() => const SizedBox.shrink();
+
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    if (!crossFade) {
+      return super.buildTransitions(
+        context,
+        animation,
+        secondaryAnimation,
+        child,
+      );
+    }
+    // 슬라이드를 걷어내고 투명도만 남긴다. 이 자리에서 바뀌는 것은 위치가
+    // 아니라 내용이다.
+    return FadeTransition(opacity: animation, child: child);
+  }
 }

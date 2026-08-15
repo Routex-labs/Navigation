@@ -11,6 +11,14 @@ abstract final class AppColors {
   static const blue400 = Color(0xFF6C9BF2);
   static const blue500 = Color(0xFF4A87F1);
 
+  /// **흰 글자·흰 그림을 얹는 유일한 파랑.** [blue500]은 흰 글자 대비가
+  /// 3.48:1이라 본문 기준(4.5:1)에 못 미치는데, 스케일이 거기서 끝나 있어
+  /// 그 색이 단색 배경으로도 쓰이고 있었다. 이 칸이 그 자리를 맡는다(5.18:1).
+  ///
+  /// 반대로 **면을 칠할 때는 쓰지 않는다** — 도면 위에서 너무 무겁다.
+  /// 근거와 12단계 대조표는 `docs/client/ui-ux-research-desk.md` 3-2절.
+  static const blue600 = Color(0xFF3068D4);
+
   static const primary = blue500;
   static const indoor =
       blue400; // 실내 그래픽/보조 강조 — 이전 보라(0xFF6C3FE0)에서 파스텔 파랑으로 통일.
