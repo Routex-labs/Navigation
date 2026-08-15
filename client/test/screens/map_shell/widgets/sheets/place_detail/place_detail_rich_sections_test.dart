@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/theme/app_theme.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail/korean_line_break.dart';
+import 'package:navigation_client/core/clipboard_confirmation.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail/place_detail_rich_sections.dart';
 
 void main() {
@@ -771,6 +772,10 @@ void main() {
     testWidgets(
       'copying the phone number puts only the number on the clipboard',
       (tester) async {
+        // 기기 조회에 기대지 않는다 — 이 테스트가 보려는 것은 "무엇이
+        // 복사되나"이지 "누가 알리나"가 아니다.
+        setClipboardAnnouncementForTest(true);
+        addTearDown(() => setClipboardAnnouncementForTest(null));
         String? copied;
         tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
           SystemChannels.platform,
@@ -803,7 +808,9 @@ void main() {
         );
 
         await tester.tap(find.text('복사'));
-        await tester.pump();
+        // 복사 뒤 "우리가 알려야 하나"를 한 번 물어보므로(Android 13+는 시스템이
+        // 대신 띄운다) 토스트는 한 프레임 늦게 붙는다.
+        await tester.pumpAndSettle();
 
         // 부연(영업시간)까지 함께 복사하면 전화 앱에 붙여 넣을 수 없다.
         expect(copied, '1522-3232');
@@ -816,10 +823,48 @@ void main() {
       },
     );
 
+    // 시스템이 이미 확인 UI를 띄우는 기기(Android 13+)에서는 우리가 침묵한다.
+    // 실기기에서 "복사했습니다"가 두 번 겹쳐 보였다.
+    testWidgets('시스템이 알리는 기기에서는 앱 토스트를 띄우지 않는다', (tester) async {
+      setClipboardAnnouncementForTest(false);
+      addTearDown(() => setClipboardAnnouncementForTest(null));
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async => null,
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+
+      await tester.pumpWidget(
+        subject(
+          const PlaceDemoInfoSection(
+            items: [
+              PlaceDemoInfo(
+                label: '고객센터',
+                value: '1522-3232',
+                confirmedAt: '2026-08-10',
+              ),
+            ],
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('복사'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('복사했습니다'), findsNothing);
+    });
+
     // 클립보드는 웹·리눅스에서 막힐 수 있다. 조용히 삼키면 사용자는 복사된 줄 안다.
     testWidgets('a failing clipboard says so instead of pretending', (
       tester,
     ) async {
+      setClipboardAnnouncementForTest(true);
+      addTearDown(() => setClipboardAnnouncementForTest(null));
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         SystemChannels.platform,
         (call) async {
@@ -851,7 +896,7 @@ void main() {
       );
 
       await tester.tap(find.text('복사'));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(find.text('복사하지 못했습니다'), findsOneWidget);
       await tester.pump(const Duration(seconds: 2));
