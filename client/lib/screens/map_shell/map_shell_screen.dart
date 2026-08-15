@@ -883,7 +883,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
         context,
         poi: poi,
         onCloseAll: _requestCloseSheetChain,
-        transitEnabled: transitRepository.isAvailable,
       ),
     );
     if (!mounted) return false;
@@ -921,12 +920,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
             focusField: RoutePlanField.origin,
           );
         }
-      case OutdoorPoiAction.transit:
-        setState(() {
-          _routeDraftDestination = candidate;
-          _travelMode = RoutePlanMode.transit;
-        });
-        await _startTransitRoute(candidate);
     }
     return true;
   }

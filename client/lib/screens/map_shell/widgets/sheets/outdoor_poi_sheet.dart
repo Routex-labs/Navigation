@@ -8,42 +8,31 @@ import '../../../../widgets/sheet_header.dart';
 import '../../../../domain/geo/distance_format.dart';
 
 /// 야외 장소 시트에서 사용자가 고른 다음 행동.
-enum OutdoorPoiAction {
-  setOrigin,
-  setDestination,
-
-  /// 여기까지 **대중교통**으로 가는 경로를 본다. 도보 안내와 따로 두는 이유는
-  /// 건물 밖 장소는 걸어서 30분 넘는 거리도 흔하기 때문이다 — 매장 시트에는
-  /// 없던 선택지다.
-  transit,
-}
+///
+/// 예전에는 `transit`이 하나 더 있었다. 장소 상세는 "여기가 어디인가"를 보는
+/// 자리라 이동 수단을 고르는 조작이 섞이면 안 되고, 수단은 길찾기에 들어간 뒤
+/// 상단 줄에서 고른다.
+enum OutdoorPoiAction { setOrigin, setDestination }
 
 /// TMAP POI 검색 결과 한 건의 상세 시트.
 ///
 /// 매장 시트([PlaceDetailSheet])와 나눠 둔 이유는 **가진 정보가 다르기**
 /// 때문이다. 이쪽에는 층·노드·사진·메뉴가 없고 대신 주소·전화·직선 거리가
-/// 있으며, 대중교통이라는 선택지가 하나 더 붙는다. 한 시트에 합치면 절반이
-/// 늘 비어 있는 화면이 된다.
+/// 있다. 한 시트에 합치면 절반이 늘 비어 있는 화면이 된다.
 class OutdoorPoiSheet extends StatefulWidget {
   const OutdoorPoiSheet({
     super.key,
     required this.poi,
     required this.onCloseAll,
-    this.transitEnabled = true,
   });
 
   final OutdoorPoi poi;
   final VoidCallback onCloseAll;
 
-  /// 카카오 키가 없어 대중교통을 쓸 수 없으면 false. 버튼을 아예 감춘다 —
-  /// 눌러서 "쓸 수 없습니다"를 보는 것보다 없는 편이 낫다.
-  final bool transitEnabled;
-
   static Future<OutdoorPoiAction?> show(
     BuildContext context, {
     required OutdoorPoi poi,
     required VoidCallback onCloseAll,
-    bool transitEnabled = true,
   }) {
     return showModalBottomSheet<OutdoorPoiAction>(
       context: context,
@@ -53,11 +42,7 @@ class OutdoorPoiSheet extends StatefulWidget {
       // 그 장소로 이동하는데, 확인하러 온 그 지점이 어두워지면 안 된다.
       barrierColor: Colors.transparent,
       builder: (context) => MapOverlayGuard(
-        child: OutdoorPoiSheet(
-          poi: poi,
-          onCloseAll: onCloseAll,
-          transitEnabled: transitEnabled,
-        ),
+        child: OutdoorPoiSheet(poi: poi, onCloseAll: onCloseAll),
       ),
     );
   }
@@ -123,11 +108,9 @@ class _OutdoorPoiSheetState extends State<OutdoorPoiSheet> {
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                       child: _PoiActions(
-                        transitEnabled: widget.transitEnabled,
                         onOrigin: () => _pop(OutdoorPoiAction.setOrigin),
                         onDestination: () =>
                             _pop(OutdoorPoiAction.setDestination),
-                        onTransit: () => _pop(OutdoorPoiAction.transit),
                       ),
                     ),
                     if (poi.address != null || poi.telNo != null)
@@ -267,21 +250,13 @@ class _FactRow extends StatelessWidget {
   );
 }
 
-/// 출발·도착·대중교통 한 줄. 매장 시트의 출발/도착 쌍과 자리·모양을 맞추고
-/// 대중교통만 오른쪽에 덧붙인다 — 두 시트에서 같은 조작이 다른 자리에 있으면
-/// 사용자는 매번 다시 찾는다.
+/// 출발·도착 한 줄. 매장 시트([PlaceDetailSheet])의 쌍과 자리·모양을 맞춘다 —
+/// 두 시트에서 같은 조작이 다른 자리에 있으면 사용자는 매번 다시 찾는다.
 class _PoiActions extends StatelessWidget {
-  const _PoiActions({
-    required this.onOrigin,
-    required this.onDestination,
-    required this.onTransit,
-    required this.transitEnabled,
-  });
+  const _PoiActions({required this.onOrigin, required this.onDestination});
 
   final VoidCallback onOrigin;
   final VoidCallback onDestination;
-  final VoidCallback onTransit;
-  final bool transitEnabled;
 
   @override
   Widget build(BuildContext context) => Row(
@@ -304,24 +279,6 @@ class _PoiActions extends StatelessWidget {
         ),
         child: const Text('도착'),
       ),
-      if (transitEnabled) ...[
-        const SizedBox(width: 8),
-        OutlinedButton.icon(
-          key: const ValueKey('outdoor-poi-transit'),
-          onPressed: onTransit,
-          icon: const Icon(Icons.directions_transit_rounded, size: 18),
-          label: const Text('대중교통'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.primary,
-            side: const BorderSide(color: AppColors.blue200),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            textStyle: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-      ],
     ],
   );
 }
