@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:routex_design_system/routex_design_system.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../../service_locator.dart';
 import '../../../../domain/route/dijkstra.dart';
@@ -11,6 +12,7 @@ import '../../../../models/place/favorite_place.dart';
 import '../../../../models/place/place_detail.dart';
 import '../../../../models/place/store_index_entry.dart';
 import '../../../../repositories/place/place_detail_repository.dart';
+import '../../../../routing/place_link.dart';
 import '../../../../theme/app_theme.dart';
 import 'place_detail/place_detail_hours_section.dart';
 import 'place_detail/place_detail_nearby_section.dart';
@@ -253,6 +255,39 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
   List<PlaceDetailSection> get _visibleSections =>
       _isExcluded ? const [] : (_detail?.sections ?? const []);
 
+  /// 지금 장소의 공유 링크. 만들 수 없으면 null이고 그때는 공유 버튼도 없다.
+  Uri? get _shareLink {
+    final placeId = _target.placeId;
+    if (placeId == null) return null;
+    return buildPlaceLink(buildingId: widget.buildingId, placeId: placeId);
+  }
+
+  /// 장소 이름과 링크를 시스템 공유 시트로 넘긴다.
+  ///
+  /// **취소를 실패로 보지 않는다.** 공유 시트를 열었다 닫는 것은 사용자의 선택이고,
+  /// 거기에 오류 문구를 띄우면 아무 문제도 없는 조작이 실패로 읽힌다. 알리는 것은
+  /// 플랫폼 호출 자체가 던졌을 때뿐이다.
+  ///
+  /// iPad는 popover가 뜰 자리를 요구한다. 0 크기를 주면 그 자리에서 공유를 거부하므로
+  /// 헤더가 실제로 차지한 사각형을 넘긴다.
+  Future<void> _share() async {
+    final link = _shareLink;
+    if (link == null) return;
+    final box = context.findRenderObject() as RenderBox?;
+    try {
+      await Share.share(
+        [_target.title, '$link'].join('\n'),
+        subject: _target.title,
+        sharePositionOrigin: box == null
+            ? null
+            : box.localToGlobal(Offset.zero) & box.size,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      RoutexToast.show(context, '공유하지 못했습니다');
+    }
+  }
+
   /// 길찾기 버튼은 이름 바로 아래 한 곳에만 있다. chain 규약을 타지 않도록
   /// `_markIntentional`을 거친다(F5).
   void _pop(StoreInfoAction action) {
@@ -487,6 +522,10 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                             onSaved: favorite == null
                                 ? null
                                 : (_) => _onToggleFavorite(),
+                            // 링크를 만들 수 없으면 버튼도 없다. 만들 수는 있어도
+                            // 그 주소가 증명 파일을 내지 못하면 받은 사람에게는
+                            // 브라우저로 새는 링크일 뿐이다([placeLinkOrigin]).
+                            onShare: _shareLink == null ? null : _share,
                           ),
                         ),
                         // 이름을 읽은 직후가 길찾기를 누르는 자리다. 사진·메뉴를

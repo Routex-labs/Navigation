@@ -6,6 +6,9 @@ import 'package:latlong2/latlong.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/api_config.dart';
+import 'package:routex_design_system/routex_design_system.dart';
+
+import '../../routing/place_link.dart';
 import '../../service_locator.dart';
 import '../../domain/route/dijkstra.dart';
 import '../../domain/store/nearby_stores.dart';
@@ -391,10 +394,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
     _routeOriginFocus.addListener(_onRouteOriginFocusChanged);
     _routeDestinationFocus.addListener(_onRouteDestinationFocusChanged);
     _requestStartupPermissions();
+    // 화면이 세워지기 전에 도착한 링크가 여기 남아 있을 수 있다(cold start).
+    placeLinkInbox.addListener(_onPlaceLinkChanged);
+    _onPlaceLinkChanged();
   }
 
   @override
   void dispose() {
+    placeLinkInbox.removeListener(_onPlaceLinkChanged);
     _searchFocus.removeListener(_onSearchFocusChanged);
     _searchFocus.dispose();
     _searchController.dispose();
@@ -1149,6 +1156,50 @@ class _MapShellScreenState extends State<MapShellScreen> {
     } on Object {
       // 자동완성만 포기한다.
     }
+  }
+
+  void _onPlaceLinkChanged() {
+    final link = placeLinkInbox.value;
+    if (link == null) return;
+    placeLinkInbox.take();
+    unawaited(_openPlaceFromLink(link));
+  }
+
+  /// 링크가 가리키는 매장을 연다.
+  ///
+  /// **이름으로 찾거나 첫 결과로 대신하지 않는다.** 같은 이름의 매장이 층마다 있는
+  /// 시설이라, 한 번이라도 흉내를 내면 공유받은 사람이 **다른 매장**을 보고 그것을
+  /// 공유한 사람의 의도로 읽는다. 정확히 그 id가 없으면 아무것도 열지 않고 지금
+  /// 지도에 머문다.
+  Future<void> _openPlaceFromLink(PlaceLink link) async {
+    if (link.buildingId != _buildingId) {
+      _showLinkFailure();
+      return;
+    }
+    await _loadRouteStoreIndex();
+    if (!mounted) return;
+    final entry = _routeStoreIndex
+        ?.where((e) => e.id == link.placeId)
+        .firstOrNull;
+    if (entry == null) {
+      _showLinkFailure();
+      return;
+    }
+    final resolved = await _outdoorKey.currentState?.resolveIndexEntry(entry);
+    if (!mounted) return;
+    if (resolved == null) {
+      _showLinkFailure();
+      return;
+    }
+    _closeSearch();
+    await _runSheetChain(() => _showStoreInfo(resolved, focusOnMap: true));
+  }
+
+  /// 링크로 아무것도 열지 못했을 때. **원인을 과장하지 않는다** — 네트워크 실패와
+  /// 삭제를 클라이언트가 구분할 수 없어서, 둘 다 같은 한 줄로 끝낸다.
+  void _showLinkFailure() {
+    if (!mounted) return;
+    RoutexToast.show(context, '장소를 찾을 수 없습니다');
   }
 
   /// 후보 계산. **건물 안을 보고 있을 때만** 만든다 — 원본이 건물 하나의 매장
