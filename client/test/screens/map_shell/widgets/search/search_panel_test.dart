@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/service_locator.dart';
 import 'package:navigation_client/domain/route/dijkstra.dart';
-import 'package:navigation_client/domain/search/search_result_order.dart';
 import 'package:navigation_client/models/building/building.dart';
 import 'package:navigation_client/models/building/category_count.dart';
 import 'package:navigation_client/models/place/discovery_result.dart';
@@ -1170,7 +1169,7 @@ void main() {
       await pumpWhileTyping(tester);
 
       expect(find.text('검색어 제안'), findsOneWidget);
-      expect(find.byKey(const Key('sort-order')), findsNothing);
+      expect(find.byType(RoutexSortMenu), findsNothing);
     });
 
     testWidgets('위치가 있으면 가까운 순이 기본이고 그렇게 세운다', (tester) async {
@@ -1198,7 +1197,7 @@ void main() {
       await tester.pumpWidget(buildSubject('구찌', reachByNodeId: brandReach));
       await settleAmbiguous(tester);
 
-      await tester.tap(find.byKey(const Key('sort-order')));
+      await tester.tap(find.byType(RoutexSortMenu));
       await tester.pumpAndSettle();
       await tester.tap(find.text('이름 맞춤 순').last);
       await tester.pumpAndSettle();
@@ -1224,11 +1223,13 @@ void main() {
 
       expect(find.text('이름 맞춤 순'), findsOneWidget);
 
-      await tester.tap(find.byKey(const Key('sort-order')));
+      await tester.tap(find.byType(RoutexSortMenu));
       await tester.pumpAndSettle();
 
-      final item = tester.widget<PopupMenuItem<SearchSortOrder>>(
-        find.widgetWithText(PopupMenuItem<SearchSortOrder>, '가까운 순 (현재 위치 필요)'),
+      // **쓸 수 없는 기준을 감추지 않는다.** 감추면 "가까운 순"이 아예 없는 앱으로
+      // 읽히고, 눌러 본 뒤 막으면 왜 안 되는지를 그때야 안다.
+      final item = tester.widget<PopupMenuItem<String>>(
+        find.widgetWithText(PopupMenuItem<String>, '가까운 순 (현재 위치 필요)'),
       );
       expect(item.enabled, isFalse);
     });
@@ -1247,7 +1248,7 @@ void main() {
       );
       await settleAmbiguous(tester);
 
-      expect(find.byKey(const Key('sort-order')), findsNothing);
+      expect(find.byType(RoutexSortMenu), findsNothing);
       expect(find.textContaining('검색 결과'), findsNothing);
     });
 
@@ -1276,7 +1277,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('이걸 찾으셨나요?'), findsOneWidget);
-      expect(find.byKey(const Key('sort-order')), findsNothing);
+      expect(find.byType(RoutexSortMenu), findsNothing);
     });
 
     // 검색어가 바뀌면 초기화한다 — 저장하면 다음 검색이 사용자가 기억 못 하는
@@ -1286,7 +1287,7 @@ void main() {
 
       await tester.pumpWidget(buildSubject('구찌', reachByNodeId: brandReach));
       await settleAmbiguous(tester);
-      await tester.tap(find.byKey(const Key('sort-order')));
+      await tester.tap(find.byType(RoutexSortMenu));
       await tester.pumpAndSettle();
       await tester.tap(find.text('이름 맞춤 순').last);
       await tester.pumpAndSettle();
@@ -1421,7 +1422,7 @@ void main() {
       );
       await settle(tester);
 
-      expect(find.byKey(const Key('sort-order')), findsNothing);
+      expect(find.byType(RoutexSortMenu), findsNothing);
     });
 
     // 형제도 후보 행과 같은 위젯이라 같은 규칙을 따른다 — 한 번 눌러 그 매장이

@@ -831,79 +831,31 @@ class _SearchPanelState extends State<SearchPanel> {
   /// [floorNames]는 **화면에 그린 줄들의 층**이다(묶인 시설의 나머지 층은 안 센다).
   /// `B2 ~ 3F` 같은 범위로 적지 않는다 — `Floor.level`이 없어 사전순으로 세우면
   /// `1F`가 `B1`보다 앞에 온다.
-  Widget _listHeader({
-    required int count,
-    required Iterable<String> floorNames,
-    required bool canChoose,
-  }) {
+  /// 개수·층 머리말 문장. 서식은 앱이 정하고 자리는 `RoutexResultList`가 갖는다.
+  String _listSummary({required int count, required Iterable<String> floorNames}) {
     final floors = floorNames.toSet();
     final floorText = floors.length == 1 ? floors.first : '${floors.length}개 층';
-    final canNearest = canSortByNearest(widget.reachByNodeId);
-    return Padding(
-      // 우측은 정렬 컨트롤의 자체 패딩이 이어받으므로 좁게 둔다.
-      padding: _sectionLabelPadding.copyWith(right: 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              '검색 결과 $count · $floorText',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: AppColors.muted,
-              ),
-            ),
-          ),
-          if (canChoose)
-            // 네이버가 필터를 칩으로 늘어놓지 않고 헤더 우측에 `추천순 ⌄`로
-            // 접는 것과 같은 자리다(naver-map-ui-ux-analysis.md 1절).
-            PopupMenuButton<SearchSortOrder>(
-              key: const Key('sort-order'),
-              initialValue: _sortOrder,
-              tooltip: '정렬 기준',
-              onSelected: (value) => setState(() => _sortOverride = value),
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: SearchSortOrder.nearest,
-                  // 거리를 아무도 모르면 눌러도 순서가 안 바뀐다. 고를 수 있게
-                  // 두면 사용자는 정렬이 고장 났다고 읽는다.
-                  enabled: canNearest,
-                  child: Text(canNearest ? '가까운 순' : '가까운 순 (현재 위치 필요)'),
-                ),
-                const PopupMenuItem(
-                  value: SearchSortOrder.bestMatch,
-                  child: Text('이름 맞춤 순'),
-                ),
-              ],
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _sortOrder == SearchSortOrder.nearest
-                          ? '가까운 순'
-                          : '이름 맞춤 순',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.text,
-                      ),
-                    ),
-                    const Icon(
-                      Icons.expand_more,
-                      size: 16,
-                      color: AppColors.muted,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
+    return '검색 결과 $count · $floorText';
+  }
+
+  /// 정렬 선택지. **쓸 수 없는 기준을 감추지 않는다** — 감추면 "가까운 순"이 아예
+  /// 없는 앱으로 읽히고, 눌러 본 뒤 막으면 왜 안 되는지를 그때야 안다.
+  List<RoutexSortOption> get _sortOptions => [
+    RoutexSortOption(
+      id: SearchSortOrder.nearest.name,
+      label: '가까운 순',
+      unavailableReason: canSortByNearest(widget.reachByNodeId)
+          ? null
+          : '현재 위치 필요',
+    ),
+    RoutexSortOption(id: SearchSortOrder.bestMatch.name, label: '이름 맞춤 순'),
+  ];
+
+  void _onSortSelected(String id) {
+    final order = SearchSortOrder.values.firstWhere(
+      (value) => value.name == id,
     );
+    setState(() => _sortOverride = order);
   }
 
   /// 후보 목록. 탭하면 좌표를 들고 바로 가지 않고 그 이름으로 검색을 다시 돌린다
@@ -934,21 +886,7 @@ class _SearchPanelState extends State<SearchPanel> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (showCount)
-          _listHeader(
-            count: suggestions.length,
-            // 묶인 시설은 화면에 그린 대표의 층만 센다(_listHeader 주석).
-            floorNames: [
-              for (final suggestion in suggestions)
-                nearestByWalkingDistance(
-                  stores: suggestion.stores,
-                  reachByNodeId: widget.reachByNodeId,
-                  currentFloorId: widget.currentFloorId,
-                ).store.floorName,
-            ],
-            canChoose: true,
-          )
-        else
+        if (!showCount)
           Padding(
             padding: _sectionLabelPadding,
             child: Text(
@@ -963,8 +901,25 @@ class _SearchPanelState extends State<SearchPanel> {
         Flexible(
           child: SingleChildScrollView(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+            child: RoutexResultList(
+              status: RoutexResultStatus.ready,
+              summary: showCount
+                  ? _listSummary(
+                      count: suggestions.length,
+                      // 묶인 시설은 화면에 그린 대표의 층만 센다.
+                      floorNames: [
+                        for (final suggestion in suggestions)
+                          nearestByWalkingDistance(
+                            stores: suggestion.stores,
+                            reachByNodeId: widget.reachByNodeId,
+                            currentFloorId: widget.currentFloorId,
+                          ).store.floorName,
+                      ],
+                    )
+                  : null,
+              sortOptions: showCount ? _sortOptions : const [],
+              selectedSortId: showCount ? _sortOrder.name : null,
+              onSortSelected: showCount ? _onSortSelected : null,
               children: [
                 for (final suggestion in suggestions)
                   _suggestionTile(suggestion),
@@ -1152,17 +1107,19 @@ class _SearchPanelState extends State<SearchPanel> {
   }
 
   Widget _resultList() {
-    final rows = <Widget>[];
+    // 목록 **위**에 서는 것들. 결과 행이 아니라 이 화면이 지금 무엇을 보여 주는지를
+    // 말하는 조각이라, 개수·정렬 머리말보다 위에 둔다.
+    final prelude = <Widget>[];
     // 바깥 결과 덕분에 목록이 먼저 떴을 뿐, 건물 안 검색은 아직 돌고 있을 수
     // 있다. 그 사실을 안 밝히면 사용자는 이게 최종 목록이라고 읽는다.
     if (_phase == _SearchPhase.typingLightSearch ||
         _phase == _SearchPhase.semanticSearching) {
-      rows.add(const _IndoorSearchingRow());
+      prelude.add(const _IndoorSearchingRow());
     }
     final isDiscovery = _discoveryMode != null;
-    if (isDiscovery) rows.add(_discoveryHeader());
+    if (isDiscovery) prelude.add(_discoveryHeader());
     if (_fromSemantic) {
-      rows.add(
+      prelude.add(
         const Padding(
           padding: _sectionLabelPadding,
           child: Row(
@@ -1186,7 +1143,9 @@ class _SearchPanelState extends State<SearchPanel> {
     }
     final building = _building;
     if (building != null) {
-      rows.add(
+      // **결과 목록 밖이다.** "검색 결과 N"의 N은 매장 수이고 건물은 세지 않으므로,
+      // 머리말 위에 두어야 그 줄까지 세는 것처럼 읽히지 않는다.
+      prelude.add(
         RoutexListCell(
           // 종류는 아이콘 모양으로만 가른다(건물/매장/제안). 색까지 다르면 한 목록이
           // 칸칸이 나뉘어 보인다 — 강조색은 일치 구간 몫이다.
@@ -1218,17 +1177,7 @@ class _SearchPanelState extends State<SearchPanel> {
           itemCount: ordered.length,
           fromSemantic: _fromSemantic,
         );
-    // 건물 행 **아래**에 둔다. "검색 결과 N"의 N은 매장 수이고 건물은 세지
-    // 않으므로, 건물 위에 얹으면 그 줄까지 세는 것처럼 읽힌다.
-    if (canChoose) {
-      rows.add(
-        _listHeader(
-          count: ordered.length,
-          floorNames: [for (final store in ordered) store.floor],
-          canChoose: true,
-        ),
-      );
-    }
+    final rows = <Widget>[];
     // 추천 이유는 **storeId로** 짝짓는다. 인덱스로 맞추면 정렬이 들어올 때 이유가
     // 엉뚱한 매장에 붙고, 그 조합은 실제 경로로 존재한다(`_fromSemantic`이 false
     // 인데 `_discoveryMatches`는 차 있는 경우).
@@ -1272,8 +1221,9 @@ class _SearchPanelState extends State<SearchPanel> {
     }
 
     // 그릴 줄이 하나도 없으면 빈 패널 대신 없다고 말한다. 사용자는 빈 패널을
-    // "앱이 멈췄다"로 읽는다.
-    if (rows.isEmpty) return _emptyState(context);
+    // "앱이 멈췄다"로 읽는다. **안내 줄만 있어도 빈손이 아니다** — 되물음은 질문을
+    // 세워 놓고 "찾지 못했어요"라고 답하면 안 된다.
+    if (prelude.isEmpty && rows.isEmpty) return _emptyState(context);
 
     // **`ListView(shrinkWrap: true)`가 아닌 이유** — 느슨한 제약(maxHeight만 있고
     // tight가 아닌) 안에서 스크롤 범위를 내용보다 짧게 잡아 30건 중 29번째에서
@@ -1284,7 +1234,27 @@ class _SearchPanelState extends State<SearchPanel> {
       child: SingleChildScrollView(
         controller: _resultScrollController,
         padding: const EdgeInsets.only(bottom: 8),
-        child: Column(mainAxisSize: MainAxisSize.min, children: rows),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ...prelude,
+            if (rows.isNotEmpty)
+              RoutexResultList(
+                status: RoutexResultStatus.ready,
+                summary: canChoose
+                    ? _listSummary(
+                        count: ordered.length,
+                        floorNames: [for (final store in ordered) store.floor],
+                      )
+                    : null,
+                sortOptions: canChoose ? _sortOptions : const [],
+                selectedSortId: canChoose ? _sortOrder.name : null,
+                onSortSelected: canChoose ? _onSortSelected : null,
+                children: rows,
+              ),
+          ],
+        ),
       ),
     );
   }
