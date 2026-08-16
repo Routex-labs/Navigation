@@ -206,7 +206,9 @@ Future<void> _openSheet(
   ValueChanged<PoiSearchResult?>? onFirstStoreChanged,
 }) async {
   await tester.pumpWidget(
-    MaterialApp(theme: AppTheme.light, home: Scaffold(
+    MaterialApp(
+      theme: AppTheme.light,
+      home: Scaffold(
         body: Builder(
           builder: (context) => TextButton(
             onPressed: () => CategoryStoresSheet.show(

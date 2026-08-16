@@ -17,7 +17,9 @@ void main() {
   }) async {
     AppMenuAction? picked;
     await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light, home: Scaffold(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: Scaffold(
           body: Builder(
             builder: (context) => TextButton(
               onPressed: () async {
@@ -77,7 +79,9 @@ void main() {
     ]) {
       AppMenuAction? picked;
       await tester.pumpWidget(
-        MaterialApp(theme: AppTheme.light, home: Scaffold(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: Scaffold(
             body: Builder(
               builder: (context) => TextButton(
                 onPressed: () async {

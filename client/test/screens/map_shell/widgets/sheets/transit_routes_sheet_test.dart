@@ -55,7 +55,9 @@ const _withTransfer = TransitItinerary(
 void main() {
   testWidgets('경로마다 소요 시간·환승·도보·요금을 함께 적는다', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light, home: Scaffold(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: Scaffold(
           body: TransitRoutesSheet(
             routes: const TransitRoutes.ok([_busOnly, _withTransfer]),
             destinationLabel: '여의도공원',
@@ -84,7 +86,9 @@ void main() {
   testWidgets('경로를 누르면 그 경로를 돌려준다', (tester) async {
     TransitItinerary? picked;
     await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light, home: Scaffold(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: Scaffold(
           body: Builder(
             builder: (context) => TextButton(
               onPressed: () async {
@@ -113,7 +117,9 @@ void main() {
   testWidgets('요약 카드는 총 시간과 구간을 보여주고 안내 종료만 남긴다', (tester) async {
     var closed = false;
     await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light, home: Scaffold(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: Scaffold(
           body: TransitSummaryCard(
             itinerary: _withTransfer,
             label: '여의도공원까지',

@@ -15,37 +15,6 @@ void main() {
   );
 
   group('Place rich detail renderers', () {
-    testWidgets('hero carousel exposes every supplied local asset', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        subject(
-          const PlaceHeroCarousel(
-            images: [
-              PlaceHeroImage(
-                assetPath: 'assets/place_details/starbucks_store_01.jpg',
-              ),
-              PlaceHeroImage(
-                assetPath: 'assets/place_details/starbucks_store_04.jpg',
-              ),
-            ],
-          ),
-        ),
-      );
-
-      expect(find.byType(PageView), findsOneWidget);
-      expect(find.byType(Image), findsOneWidget);
-      expect(find.text('1 / 2'), findsOneWidget);
-    });
-
-    testWidgets('hero carousel is omitted when no local image is available', (
-      tester,
-    ) async {
-      await tester.pumpWidget(subject(const PlaceHeroCarousel(images: [])));
-
-      expect(find.byType(PageView), findsNothing);
-    });
-
     // 한 줄에 이름·영문명·설명·가격이 다 오면 무엇이 제목인지 흐려진다. 영문명은
     // 골라서 팝업을 연 사람에게만 필요하다.
     testWidgets('menu row drops the english name and keeps the description', (

@@ -94,6 +94,43 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
+  // 사진을 어디서 가져올지는 이 앱이 정한다. Runtime Kit은 자산을 갖지 않아서
+  // 경로가 아니라 ImageProvider를 받는다 — 그 변환이 여기서 끊기면 사진이 통째로
+  // 사라지는데, 화면에는 "사진 없는 매장"과 똑같이 보인다.
+  testWidgets('hero 섹션의 번들 경로가 순서대로 캐러셀 사진이 된다', (tester) async {
+    await tester.pumpWidget(
+      buildSubject(
+        repository: _FakeRepository(
+          Future.value(
+            _detail(
+              sections: const [
+                {
+                  'type': 'hero',
+                  'items': [
+                    {'local_asset': 'assets/place_details/starbucks_01.jpg'},
+                    {'local_asset': 'assets/place_details/starbucks_04.jpg'},
+                  ],
+                },
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final carousel = tester.widget<RoutexMediaCarousel>(
+      find.byType(RoutexMediaCarousel),
+    );
+    expect(
+      carousel.items.map((item) => (item.image as AssetImage).assetName),
+      const [
+        'assets/place_details/starbucks_01.jpg',
+        'assets/place_details/starbucks_04.jpg',
+      ],
+    );
+  });
+
   // --- 설계 7-A-3·7-A-4 ---
 
   testWidgets('섹션이 0개여도 길찾기 버튼은 남는다', (tester) async {

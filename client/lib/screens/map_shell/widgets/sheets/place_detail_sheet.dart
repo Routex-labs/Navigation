@@ -733,7 +733,10 @@ class _PlaceDetailSectionsState extends State<PlaceDetailSections> {
         else if (active == _menuTab)
           _render(menu)
         else if (active == _photoTab)
-          PlacePhotoGrid(assetPaths: photos)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
+            child: RoutexPhotoGrid(items: _mediaItems(photos)),
+          )
         else
           _render(home),
         // 탭이 없으면 본문이 곧 홈이므로 그때도 붙인다.
@@ -753,11 +756,15 @@ class _PlaceDetailSectionsState extends State<PlaceDetailSections> {
           title: '소개',
           child: PlaceSummarySection(text: text),
         ),
-        HeroSection(:final items) => PlaceHeroCarousel(
-          images: [
-            for (final item in items)
-              PlaceHeroImage(assetPath: item.localAsset),
-          ],
+        HeroSection(:final items) => Padding(
+          // 캐러셀은 페이지 **안쪽**에 여백을 두고 넘긴다. 사진 가장자리를 본문
+          // 여백선에 맞추려면 그만큼 뺀 값을 바깥에 준다.
+          padding: const EdgeInsets.symmetric(
+            horizontal: placeSectionGutter - RoutexSpacing.inlineGap,
+          ),
+          child: RoutexMediaCarousel(
+            items: _mediaItems([for (final item in items) item.localAsset]),
+          ),
         ),
         KeyValueSection(:final items) => PlaceKeyValueSection(
           items: [
@@ -907,6 +914,14 @@ class _SectionTabs extends StatelessWidget {
     ),
   );
 }
+
+/// 번들 asset 경로를 사진 항목으로 바꾼다.
+///
+/// 이 앱의 매장 사진은 전부 번들에 들어 있어서 `AssetImage` 하나로 끝난다. 어디서
+/// 가져올지를 Runtime Kit이 정하지 않는 이유는 자산을 갖지 않기 때문이다.
+List<RoutexMediaItem> _mediaItems(List<String> assetPaths) => [
+  for (final path in assetPaths) RoutexMediaItem(image: AssetImage(path)),
+];
 
 /// 섹션과 섹션 사이의 경계. 여백 + 시트 폭을 가로지르는 선 한 줄이다.
 class _SectionBreak extends StatelessWidget {

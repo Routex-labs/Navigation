@@ -22,7 +22,9 @@ void main() {
 
   Future<void> pumpSheet(WidgetTester tester) async {
     await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light, home: Scaffold(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: Scaffold(
           body: OutdoorPoiSheet(poi: poi(), onCloseAll: () {}),
         ),
       ),
