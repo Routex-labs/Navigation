@@ -16,7 +16,6 @@ import 'package:navigation_client/screens/map_shell/widgets/sheets/category_stor
 import 'package:navigation_client/screens/map_shell/widgets/sheets/favorites_sheet.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/outdoor_poi_sheet.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail_sheet.dart';
-import 'package:navigation_client/widgets/sheet_grab_handle.dart';
 import 'package:routex_design_system/routex_design_system.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -26,10 +25,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 잘려 있어도 위로 끌 수 있다는 걸 모르고, 있는데 끌리지 않으면 눌러도 아무 일이
 /// 없는 표시가 된다. 둘 다 화면만 봐서는 멀쩡해 보이는 실패라 여기서 못 박는다.
 ///
-/// **기대가 한 번 뒤집혔다.** 예전에는 여섯 시트 전부에 손잡이를 두고 "빠지지
-/// 않는지"만 봤다. 저장한 장소와 앱 메뉴는 실제로는 끌 수 없어(각 파일의 주석 참고)
-/// 약속만 남아 있었다. 판정 기준은 포팅 가이드 단계 3 — 실제 min/max extent 사이를
-/// 끌 수 있는 시트에만 하나 둔다.
+/// **기대가 한 번 뒤집혔다.** 예전에는 시트마다 손잡이를 두고 "빠지지 않는지"만 봤다.
+/// 저장한 장소·앱 메뉴·매장 무리 시트는 실제로는 끌 수 없어(각 파일의 주석 참고) 약속만
+/// 남아 있었다. 판정 기준은 포팅 가이드 단계 3 — 실제 min/max extent 사이를 끌 수 있는
+/// 시트에만 하나 둔다.
+///
+/// 이 파일은 `lib/`의 한 파일을 비추지 않는다. 손잡이 계약이 시트 여덟에 걸쳐 있어서다.
 void main() {
   late BuildingRepository originalBuildingRepository;
   late DestinationRepository originalDestinationRepository;
@@ -53,14 +54,7 @@ void main() {
     destinationRepository = originalDestinationRepository;
   });
 
-  /// 손잡이 하나. **두 종류를 모두 받는다** — 시트가 포팅 가이드 단계 3에서 하나씩
-  /// Runtime Kit 표면으로 옮겨가는 중이라, 옮긴 시트는 [RoutexSheetHandle]을, 아직
-  /// 앱 표면인 시트는 [SheetGrabHandle]을 그린다. 여기서 고정하려는 것은 어느
-  /// 위젯이냐가 아니라 **끌 수 있는 시트에만 손잡이가 있다**는 계약이다.
-  final grabHandle = find.byWidgetPredicate(
-    (widget) => widget is SheetGrabHandle || widget is RoutexSheetHandle,
-    description: '시트 손잡이',
-  );
+  final grabHandle = find.byType(RoutexSheetHandle);
 
   /// [open]이 여는 시트를 띄운다.
   Future<void> openSheet(
