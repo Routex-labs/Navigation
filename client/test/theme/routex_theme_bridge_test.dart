@@ -38,7 +38,10 @@ void main() {
     });
 
     test('앱 테마에 Runtime Kit 토큰이 설치돼 있다', () {
-      expect(AppTheme.light.extension<RoutexColorTokens>(), RoutexColorTokens.light);
+      expect(
+        AppTheme.light.extension<RoutexColorTokens>(),
+        RoutexColorTokens.light,
+      );
     });
   });
 
@@ -50,7 +53,6 @@ void main() {
       expect(theme.scaffoldBackgroundColor, AppColors.background);
       expect(theme.cardTheme.elevation, AppElevation.chrome);
       expect(theme.dividerTheme.color, AppColors.blue100);
-      expect(theme.floatingActionButtonTheme.elevation, AppElevation.onMap);
     });
 
     // `RoutexTheme.light`는 focus·divider·disabled를 semantic 토큰으로 덮는다.
@@ -71,9 +73,7 @@ void main() {
 
   group('테마 다리 — Runtime Kit 렌더링', () {
     testWidgets('앱 테마 위에서 토큰 누락 없이 그려진다', (tester) async {
-      await tester.pumpWidget(
-        appThemedHost(const RoutexBadge(label: '영업 중')),
-      );
+      await tester.pumpWidget(appThemedHost(const RoutexBadge(label: '영업 중')));
 
       expect(find.text('영업 중'), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -93,9 +93,7 @@ void main() {
     });
 
     testWidgets('공급자 테마 경로도 따로 살아 있다', (tester) async {
-      await tester.pumpWidget(
-        runtimeKitHost(const RoutexBadge(label: '영업 중')),
-      );
+      await tester.pumpWidget(runtimeKitHost(const RoutexBadge(label: '영업 중')));
 
       expect(find.text('영업 중'), findsOneWidget);
       expect(tester.takeException(), isNull);

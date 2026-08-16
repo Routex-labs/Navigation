@@ -23,8 +23,6 @@ abstract final class AppColors {
   static const primary = blue500;
   static const indoor =
       blue400; // 실내 그래픽/보조 강조 — 이전 보라(0xFF6C3FE0)에서 파스텔 파랑으로 통일.
-  static const success = Color(0xFF34A853);
-  static const warning = Color(0xFFFBBC04);
   static const error = Color(0xFFEA4335);
   static const dest = Color(0xFFE53935);
   static const background = blue50;
@@ -57,8 +55,8 @@ abstract final class AppColors {
 /// 설계 근거와 검증 기준은 `docs/client/naver-map-ui-ux-analysis.md` I절이 단일
 /// 출처다.
 abstract final class AppElevation {
-  /// 지도에 붙어 있는 조작 — 카테고리 chip, 저장한 장소 pill, 원형 버튼.
-  /// 지도의 일부처럼 읽혀야 한다.
+  /// 지도에 붙어 있는 조작 — 지금은 카테고리 chip 줄뿐이다. 지도 위 원형 버튼과
+  /// 층 선택기는 Runtime Kit이 자기 깊이를 소유한다. 지도의 일부처럼 읽혀야 한다.
   static const onMap = 1.0;
 
   /// 늘 있는 chrome — 상단 검색 바, 하단 모드 바, 카드.
@@ -163,15 +161,6 @@ abstract final class AppTheme {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(26),
           borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
-        ),
-      ),
-      floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: AppColors.surface,
-        foregroundColor: AppColors.primary,
-        // 지도에 붙어 있는 조작이다. 상시 chrome보다 앞에 나올 이유가 없다.
-        elevation: AppElevation.onMap,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(16)),
         ),
       ),
       progressIndicatorTheme: const ProgressIndicatorThemeData(
