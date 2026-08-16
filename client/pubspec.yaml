@@ -59,7 +59,7 @@ dependencies:
   routex_design_system:
     git:
       url: https://github.com/Routex-labs/routex-design-system.git
-      ref: 7a76c5d0a57e11ef4701fe73e786934120a6aa86
+      ref: 28952df8b0c88e44e80e7d4c6b2d9d40587b4fcb
       path: packages/routex_design_system
   url_launcher: ^6.3.2
 
