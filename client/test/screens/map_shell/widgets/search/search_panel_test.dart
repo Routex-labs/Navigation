@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/service_locator.dart';
@@ -18,49 +19,42 @@ import 'package:navigation_client/screens/map_shell/widgets/search/search_panel.
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  group('highlightedNameSpans', () {
-    test('검색어와 일치하는 구간만 강조하고 나머지는 원문 그대로 둔다', () {
-      final spans = highlightedNameSpans('죠죠 더현대서울점', '더현대서울');
+  group('nameHighlightRanges', () {
+    // 구간만 돌려주고 어떻게 보일지는 정하지 않는다 — 그리는 일은
+    // `RoutexListCell.titleHighlights`가 맡는다. 여기 남는 것은 판정이다.
+    String slice(String name, TextRange range) =>
+        name.substring(range.start, range.end);
 
-      expect(spans.map((span) => span.text).toList(), ['죠죠 ', '더현대서울', '점']);
-      expect(spans[0].style?.color, isNull);
-      expect(spans[1].style?.color, AppColors.primary);
-      expect(spans[2].style?.color, isNull);
+    test('검색어와 일치하는 구간만 짚는다', () {
+      const name = '죠죠 더현대서울점';
+      final ranges = nameHighlightRanges(name, '더현대서울');
+
+      expect(ranges.map((range) => slice(name, range)).toList(), ['더현대서울']);
+      expect(ranges.single.start, 3, reason: '앞의 `죠죠 `는 건드리지 않는다');
     });
 
     test('대소문자는 무시하되 원문의 표기는 보존한다', () {
-      final spans = highlightedNameSpans('EQL 더현대서울점', 'eql');
+      const name = 'EQL 더현대서울점';
+      final ranges = nameHighlightRanges(name, 'eql');
 
-      expect(spans.first.text, 'EQL');
-      expect(spans.first.style?.color, AppColors.primary);
+      expect(slice(name, ranges.single), 'EQL');
     });
 
-    test('여러 번 나오면 모두 강조한다', () {
-      final spans = highlightedNameSpans('나이키 나이키키즈', '나이키');
+    test('여러 번 나오면 모두 짚는다', () {
+      const name = '나이키 나이키키즈';
+      final ranges = nameHighlightRanges(name, '나이키');
 
-      final highlighted = spans
-          .where((span) => span.style?.color == AppColors.primary)
-          .map((span) => span.text)
-          .toList();
-      expect(highlighted, ['나이키', '나이키']);
+      expect(ranges.map((range) => slice(name, range)).toList(), ['나이키', '나이키']);
     });
 
     // 의미 검색("밥 먹을 곳" → "정돈프리미엄")은 이름에 검색어가 없는 결과를
-    // 돌려주는 것이 목적이다. 강조가 하나도 안 걸리는 것이 정상 상태이므로
-    // 원문 한 덩어리를 그대로 돌려줘야 한다.
-    test('일치하는 구간이 없으면 강조 없이 원문 한 덩어리를 돌려준다', () {
-      final spans = highlightedNameSpans('정돈프리미엄', '밥 먹을 곳');
-
-      expect(spans.length, 1);
-      expect(spans.single.text, '정돈프리미엄');
-      expect(spans.single.style, isNull);
+    // 돌려주는 것이 목적이다. 하나도 안 걸리는 것이 정상 상태다.
+    test('일치하는 구간이 없으면 빈 목록이다', () {
+      expect(nameHighlightRanges('정돈프리미엄', '밥 먹을 곳'), isEmpty);
     });
 
-    test('검색어가 비어 있으면 원문 한 덩어리를 돌려준다', () {
-      final spans = highlightedNameSpans('나이키', '   ');
-
-      expect(spans.length, 1);
-      expect(spans.single.text, '나이키');
+    test('검색어가 비어 있으면 빈 목록이다', () {
+      expect(nameHighlightRanges('나이키', '   '), isEmpty);
     });
   });
 
@@ -111,8 +105,9 @@ void main() {
       await tester.pumpWidget(buildSubject());
       await settleSearch(tester);
 
-      expect(find.text('여성패션'), findsOneWidget);
-      expect(find.text('3F'), findsOneWidget);
+      // 업종은 이름 오른쪽이 아니라 맥락 줄 맨 앞이다. 그 자리는 폭 상한이 있어
+      // 긴 업종이 반쯤 잘려 나왔다(포팅 가이드 단계 4의 결정).
+      expect(find.text('여성패션 · 3F'), findsOneWidget);
     });
 
     testWidgets('소분류가 없으면 업종이 사라지지 않고 대분류로 떨어진다', (tester) async {
@@ -123,7 +118,7 @@ void main() {
       await tester.pumpWidget(buildSubject());
       await settleSearch(tester);
 
-      expect(find.text('패션'), findsOneWidget);
+      expect(find.text('패션 · 3F'), findsOneWidget);
     });
 
     testWidgets('대분류도 없으면 업종 자리를 비운다', (tester) async {
@@ -136,7 +131,7 @@ void main() {
 
       // 이름과 층은 그대로 나오고, 업종만 없다.
       expect(find.text('3F'), findsOneWidget);
-      expect(find.text('패션'), findsNothing);
+      expect(find.textContaining('패션'), findsNothing);
     });
 
     // 영어 열거값(restroom 등)은 화면에 그대로 나가면 안 된다. 상세 시트가 쓰는
@@ -149,8 +144,8 @@ void main() {
       await tester.pumpWidget(buildSubject());
       await settleSearch(tester);
 
-      expect(find.text('화장실'), findsOneWidget);
-      expect(find.text('restroom'), findsNothing);
+      expect(find.text('화장실 · 3F'), findsOneWidget);
+      expect(find.textContaining('restroom'), findsNothing);
     });
 
     testWidgets('위치를 잡았으면 거리와 도보 시간을 함께 보여준다', (tester) async {
@@ -182,7 +177,7 @@ void main() {
       await settleSearch(tester);
 
       expect(find.textContaining('도보'), findsNothing);
-      expect(find.text('3F'), findsOneWidget);
+      expect(find.text('여성패션 · 3F'), findsOneWidget);
     });
 
     // 그래프가 끊겨 있으면 그 노드는 맵에 키가 없다(reachableFrom 계약).
@@ -319,14 +314,14 @@ void main() {
       // 가까운 매장이 위로 올라왔고,
       // 층이 앞에 붙는다 — 근거가 층을 밀어내지 않는다(domain/reason_text.dart).
       expect(
-        tester.getTopLeft(find.text('3F · 이유-가까운곳')).dy,
-        lessThan(tester.getTopLeft(find.text('5F · 이유-먼곳')).dy),
+        tester.getTopLeft(find.textContaining('3F · 이유-가까운곳')).dy,
+        lessThan(tester.getTopLeft(find.textContaining('5F · 이유-먼곳')).dy),
       );
       // 그 줄의 거리도 가까운 매장의 것이다. 인덱스로 짝지었다면 이유와 거리가
       // 서로 다른 매장의 값이 되어 여기서 걸린다.
       final nearTile = find.ancestor(
-        of: find.text('3F · 이유-가까운곳'),
-        matching: find.byType(ListTile),
+        of: find.textContaining('3F · 이유-가까운곳'),
+        matching: find.byType(RoutexListCell),
       );
       expect(
         find.descendant(of: nearTile, matching: find.textContaining('50m')),
@@ -897,7 +892,7 @@ void main() {
 
       expect(find.text('검색어 제안'), findsNothing);
       // 서버 결과는 정상적으로 나온다.
-      expect(find.text('여성패션'), findsOneWidget);
+      expect(find.text('여성패션 · 3F'), findsOneWidget);
     });
 
     // 층마다 있는 시설은 한 줄로 묶여 온다. 몇 곳인지 안 적으면 사용자는
@@ -1083,7 +1078,7 @@ void main() {
       );
       await pumpWhileTyping(tester);
 
-      final tiles = tester.widgetList<ListTile>(find.byType(ListTile)).toList();
+      final tiles = tester.widgetList<RoutexListCell>(find.byType(RoutexListCell)).toList();
       expect(
         (tiles.first.key as ValueKey<String>?)?.value,
         'suggestion-PO-타임-3F',
@@ -1185,7 +1180,7 @@ void main() {
       await settleAmbiguous(tester);
 
       expect(find.text('가까운 순'), findsOneWidget);
-      final tiles = tester.widgetList<ListTile>(find.byType(ListTile)).toList();
+      final tiles = tester.widgetList<RoutexListCell>(find.byType(RoutexListCell)).toList();
       expect(
         [for (final t in tiles) (t.key as ValueKey<String>?)?.value],
         [
@@ -1208,7 +1203,7 @@ void main() {
       await tester.tap(find.text('이름 맞춤 순').last);
       await tester.pumpAndSettle();
 
-      final tiles = tester.widgetList<ListTile>(find.byType(ListTile)).toList();
+      final tiles = tester.widgetList<RoutexListCell>(find.byType(RoutexListCell)).toList();
       expect(
         [for (final t in tiles) (t.key as ValueKey<String>?)?.value],
         [
@@ -1405,7 +1400,7 @@ void main() {
       );
       await settle(tester);
 
-      final tiles = tester.widgetList<ListTile>(find.byType(ListTile)).toList();
+      final tiles = tester.widgetList<RoutexListCell>(find.byType(RoutexListCell)).toList();
       // 첫 행은 서버 결과라 Key가 없는 _storeTile이다.
       expect((tiles.first.key as ValueKey<String>?)?.value, isNull);
       expect(

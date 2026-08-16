@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../../service_locator.dart';
@@ -159,38 +160,29 @@ enum _SearchPhase {
   error,
 }
 
-/// 이름에서 검색어와 일치하는 구간만 강조한 span 목록. 이 결과가 왜 나왔는지를
-/// 색으로 설명한다.
+/// 이름에서 검색어와 일치하는 구간. 이 결과가 왜 나왔는지를 화면이 설명하는 근거다.
+///
+/// **구간만 돌려주고 어떻게 보일지는 정하지 않는다** — 그리는 일은 `RoutexListCell`이
+/// 맡는다. 여기 남는 것은 판정이고, 판정은 서버와 맞춰야 하는 도메인이다.
 ///
 /// **하나도 안 걸리는 것이 정상 상태다** — 의미 검색은 이름에 검색어가 없는 결과를
-/// 주는 게 목적이라, 못 찾으면 원문을 그대로 돌려줄 뿐 실패로 다루지 않는다.
+/// 주는 게 목적이라, 못 찾으면 빈 목록을 돌려줄 뿐 실패로 다루지 않는다.
 /// 대소문자·앞뒤 공백만 정규화한다(서버 Kiwi를 흉내내면 판정과 어긋난다 —
 /// [isExactNameMatch]와 같은 이유).
-List<TextSpan> highlightedNameSpans(String name, String query) {
+List<TextRange> nameHighlightRanges(String name, String query) {
   final needle = query.trim().toLowerCase();
-  if (needle.isEmpty) return [TextSpan(text: name)];
+  if (needle.isEmpty) return const [];
 
   final haystack = name.toLowerCase();
-  final spans = <TextSpan>[];
+  final ranges = <TextRange>[];
   var cursor = 0;
   while (true) {
     final index = haystack.indexOf(needle, cursor);
     if (index < 0) break;
-    if (index > cursor) {
-      spans.add(TextSpan(text: name.substring(cursor, index)));
-    }
-    spans.add(
-      TextSpan(
-        text: name.substring(index, index + needle.length),
-        style: const TextStyle(color: AppColors.primary),
-      ),
-    );
+    ranges.add(TextRange(start: index, end: index + needle.length));
     cursor = index + needle.length;
   }
-
-  if (spans.isEmpty) return [TextSpan(text: name)];
-  if (cursor < name.length) spans.add(TextSpan(text: name.substring(cursor)));
-  return spans;
+  return ranges;
 }
 
 /// 다음 검색 한 번에만 적용할 층 스코프. 목록에서 **고른 그 매장의 층**을 실어
@@ -1016,80 +1008,26 @@ class _SearchPanelState extends State<SearchPanel> {
     final floorLine = count > 1
         ? '${store.floorName} 등 $count곳'
         : store.floorName;
-    return ListTile(
+    return RoutexListCell(
       key: Key('suggestion-${store.id}'),
-      dense: true,
-      minVerticalPadding: _rowVerticalPadding,
-      horizontalTitleGap: _rowTitleGap,
-      contentPadding: _rowContentPadding,
       // 돋보기와 핀 2종만 쓰는 네이버 관례를 따른다. 교정 후보만 다른 아이콘으로
       // "이건 네가 친 말이 아니다"를 알린다 — 검증 기준(L)의 "교정 후보임이
       // 화면에 드러남"이 이 아이콘과 아래 하이라이트 없음으로 충족된다.
-      leading: Icon(
-        suggestion.kind.isCorrection ? Icons.auto_fix_high : Icons.search,
-        size: 20,
-        color: AppColors.muted,
-      ),
-      title: Row(
-        children: [
-          Expanded(
-            child: Text.rich(
-              // 교정 후보는 사용자가 친 글자와 이름이 어긋나 있어 하이라이트가
-              // 안 걸린다. 그게 정상이다(highlightedNameSpans 주석).
-              TextSpan(
-                children: highlightedNameSpans(store.name, widget.query),
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: _rowTitleStyle,
-            ),
-          ),
-          if (categoryLabel != null) ...[
-            const SizedBox(width: 8),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 84),
-              child: Text(
-                categoryLabel,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end,
-                style: const TextStyle(fontSize: 12, color: AppColors.muted),
-              ),
-            ),
-          ],
-        ],
-      ),
-      // 결과 목록(_storeTile)과 같은 두 줄 구조다. 후보 목록이 사실상 결과
-      // 화면으로도 쓰이는데(서버가 한 곳을 지목 못 한 브랜드 질의) 거리만 없어서,
-      // 가장 흔한 검색이 가장 빈약한 화면으로 가고 있었다.
-      // 설계: docs/client/search-result-list-ux.md O절.
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            floorLine,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12, color: AppColors.muted),
-          ),
-          if (reach != null)
-            Text(
-              reachLabel(reach),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              // 결과 행과 같은 무게. 두 목록이 같은 값을 다르게 그리면 사용자는
-              // 둘이 다른 것을 뜻한다고 읽는다.
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.text,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-        ],
-      ),
-      isThreeLine: reach != null,
-      onTap: () {
+      leadingIcon: suggestion.kind.isCorrection
+          ? Icons.auto_fix_high
+          : Icons.search,
+      // 종류가 섞인 목록이라 아이콘은 모양으로만 가른다. 강조색은 일치 구간 몫이다.
+      leadingIconTone: RoutexListIconTone.quiet,
+      title: store.name,
+      // 교정 후보는 사용자가 친 글자와 이름이 어긋나 있어 하나도 안 걸린다.
+      // 그게 정상이다([nameHighlightRanges] 주석).
+      titleHighlights: nameHighlightRanges(store.name, widget.query),
+      // 결과 목록과 같은 두 줄 구조다. 후보 목록이 사실상 결과 화면으로도 쓰이는데
+      // (서버가 한 곳을 지목 못 한 브랜드 질의) 거리만 없어서, 가장 흔한 검색이
+      // 가장 빈약한 화면으로 가고 있었다. 설계: docs/client/search-result-list-ux.md O절.
+      subtitle: [?categoryLabel, floorLine].join(' · '),
+      metric: reach == null ? null : reachLabel(reach),
+      onPressed: () {
         // 한 곳짜리 후보는 그 매장을 열면 그만이다. 예전에는 여기서도 이름으로
         // 검색을 다시 돌렸는데(아래 분기), 그러면 사용자가 방금 고른 것과 사실상
         // 같은 줄을 결과 목록에서 한 번 더 눌러야 했다. 좌표가 없어서 생긴
@@ -1272,31 +1210,15 @@ class _SearchPanelState extends State<SearchPanel> {
     final building = _building;
     if (building != null) {
       rows.add(
-        ListTile(
-          dense: true,
-          minVerticalPadding: _rowVerticalPadding,
-          horizontalTitleGap: _rowTitleGap,
-          contentPadding: _rowContentPadding,
-          // 종류는 아이콘 모양으로만 가른다(건물/매장/제안). 색·크기까지 다르면
-          // 한 목록이 칸칸이 나뉘어 보인다 — 강조색은 일치 구간 몫이다.
-          leading: const Icon(
-            Icons.apartment_outlined,
-            size: 20,
-            color: AppColors.muted,
-          ),
-          title: Text.rich(
-            TextSpan(
-              children: highlightedNameSpans(building.name, _submittedQuery),
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: _rowTitleStyle,
-          ),
-          subtitle: Text(
-            '건물 · ${building.floors.length}개 층',
-            style: const TextStyle(fontSize: 12, color: AppColors.muted),
-          ),
-          onTap: () => widget.onBuildingPicked(building),
+        RoutexListCell(
+          // 종류는 아이콘 모양으로만 가른다(건물/매장/제안). 색까지 다르면 한 목록이
+          // 칸칸이 나뉘어 보인다 — 강조색은 일치 구간 몫이다.
+          leadingIcon: Icons.apartment_outlined,
+          leadingIconTone: RoutexListIconTone.quiet,
+          title: building.name,
+          titleHighlights: nameHighlightRanges(building.name, _submittedQuery),
+          subtitle: '건물 · ${building.floors.length}개 층',
+          onPressed: () => widget.onBuildingPicked(building),
         ),
       );
     }
@@ -1598,75 +1520,20 @@ class _SearchPanelState extends State<SearchPanel> {
         : '$buildingName · ${store.floor}';
     final floorLine = nodeId == null ? '$placeLine · 경로 안내 불가' : placeLine;
     final firstLine = reason == null ? floorLine : '$floorLine · $reason';
-    return ListTile(
-      // 후보 행(_suggestionTile)과 같은 리듬이다. 예전에는 결과 행만 non-dense에
-      // 굵은 이름·파란 핀이라, 같은 매장이 후보 화면과 결과 화면에서 다른 줄처럼
-      // 보였다. 종류는 아이콘 모양(핀/돋보기)으로만 가른다.
-      dense: true,
-      minVerticalPadding: _rowVerticalPadding,
-      horizontalTitleGap: _rowTitleGap,
-      contentPadding: _rowContentPadding,
-      leading: const Icon(
-        Icons.place_outlined,
-        size: 20,
-        color: AppColors.muted,
-      ),
-      title: Row(
-        children: [
-          Expanded(
-            child: Text.rich(
-              TextSpan(
-                children: highlightedNameSpans(store.name, _submittedQuery),
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: _rowTitleStyle,
-            ),
-          ),
-          if (categoryLabel != null) ...[
-            const SizedBox(width: 8),
-            // 업종이 길어도 이름 자리를 먹지 않도록 상한을 둔다. 이름이 먼저
-            // 읽혀야 하는 줄이라 남는 폭은 이름 쪽에 준다.
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 84),
-              child: Text(
-                categoryLabel,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end,
-                style: const TextStyle(fontSize: 12, color: AppColors.muted),
-              ),
-            ),
-          ],
-        ],
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            firstLine,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12, color: AppColors.muted),
-          ),
-          if (reach != null)
-            Text(
-              reachLabel(reach),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              // 거리는 "지금 갈지"를 정하는 값이라 층보다 한 단계 진하게 둔다.
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.text,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-        ],
-      ),
-      // 두 줄짜리 subtitle은 ListTile에 알려야 세로 정렬이 맞는다.
-      isThreeLine: reach != null,
-      onTap: () => widget.onStorePicked(store),
+    return RoutexListCell(
+      // 후보 행과 같은 리듬이다. 예전에는 결과 행만 굵은 이름·파란 핀이라, 같은
+      // 매장이 후보 화면과 결과 화면에서 다른 줄처럼 보였다. 종류는 아이콘
+      // 모양(핀/돋보기)으로만 가른다.
+      leadingIcon: Icons.place_outlined,
+      leadingIconTone: RoutexListIconTone.quiet,
+      title: store.name,
+      titleHighlights: nameHighlightRanges(store.name, _submittedQuery),
+      // 업종은 이름 오른쪽이 아니라 맥락 줄 맨 앞이다. 그 자리는 폭 상한이 있어
+      // 긴 업종이 이미 반쯤 잘려 나왔고, 잘린 업종은 정보가 아니라 얼룩이다.
+      subtitle: [?categoryLabel, firstLine].join(' · '),
+      // 거리는 "지금 갈지"를 정하는 값이라 맥락과 줄을 나눈다.
+      metric: reach == null ? null : reachLabel(reach),
+      onPressed: () => widget.onStorePicked(store),
     );
   }
 
@@ -1751,48 +1618,20 @@ class _SearchPanelState extends State<SearchPanel> {
   Widget _poiTile(OutdoorSearchRow row, ValueChanged<OutdoorPoi> onPicked) {
     final poi = row.poi;
     final distance = poi.distanceMeters;
+    // 거리는 맥락이 아니라 **고를지 정하는 값**이라 아래 [RoutexListCell.metric]으로
+    // 올라간다. 여기 남는 것은 "어디에 있는가"뿐이다.
     final subtitleParts = [
-      if (distance != null) '약 ${formatDistance(distance)}',
+      if (poi.category != null) poi.category!,
       if (poi.address != null) poi.address!,
     ];
-    return ListTile(
-      leading: const Icon(Icons.storefront_outlined, color: AppColors.muted),
-      title: Row(
-        children: [
-          Expanded(
-            child: Text.rich(
-              TextSpan(
-                children: highlightedNameSpans(poi.name, _submittedQuery),
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-            ),
-          ),
-          if (poi.category != null) ...[
-            const SizedBox(width: 8),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 84),
-              child: Text(
-                poi.category!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end,
-                style: const TextStyle(fontSize: 12, color: AppColors.muted),
-              ),
-            ),
-          ],
-        ],
-      ),
-      subtitle: subtitleParts.isEmpty
-          ? null
-          : Text(
-              subtitleParts.join(' · '),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12, color: AppColors.muted),
-            ),
-      onTap: () => onPicked(poi),
+    return RoutexListCell(
+      leadingIcon: Icons.storefront_outlined,
+      leadingIconTone: RoutexListIconTone.quiet,
+      title: poi.name,
+      titleHighlights: nameHighlightRanges(poi.name, _submittedQuery),
+      subtitle: subtitleParts.isEmpty ? null : subtitleParts.join(' · '),
+      metric: distance == null ? null : '약 ${formatDistance(distance)}',
+      onPressed: () => onPicked(poi),
     );
   }
 
