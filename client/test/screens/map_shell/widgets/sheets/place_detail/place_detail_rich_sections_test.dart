@@ -402,8 +402,16 @@ void main() {
       for (var index = 0; index < 6; index++) {
         expect(find.text('메뉴 $index'), findsOneWidget);
       }
-      // 다 펼쳤으면 더보기는 사라진다.
+      // 다 펼치면 그 줄이 돌아가는 길이 된다. 펼쳐 놓고 나가지 못하면 메뉴 하나
+      // 보려던 사람이 여섯 줄을 지나 다음 섹션으로 가야 한다.
       expect(find.text('더보기'), findsNothing);
+      expect(find.text('접기'), findsOneWidget);
+
+      await tester.tap(find.text('접기'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('메뉴 5'), findsNothing);
+      expect(find.text('더보기'), findsOneWidget);
     });
 
     // 탭을 옮기면 다시 접는다. 카테고리마다 펼침 상태를 들고 있으면, 돌아왔을 때

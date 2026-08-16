@@ -279,7 +279,8 @@ class _PlaceMenuSectionState extends State<PlaceMenuSection> {
               .where((item) => item.category == active)
               .toList(growable: false);
 
-    final capped = !_expanded && visible.length > _menuVisibleCap;
+    final overflowing = visible.length > _menuVisibleCap;
+    final capped = !_expanded && overflowing;
     final shown = capped
         ? visible.take(_menuVisibleCap).toList(growable: false)
         : visible;
@@ -343,7 +344,16 @@ class _PlaceMenuSectionState extends State<PlaceMenuSection> {
         // 세로 목록이라 스크롤을 따로 갖지 않는다. 시트 본문이 이미 스크롤이고,
         // 그 안에 또 스크롤을 넣으면 어느 쪽이 움직일지가 손끝에서 갈린다.
         for (final item in shown) _MenuRow(item: item),
-        if (capped) _MenuMoreRow(onTap: () => setState(() => _expanded = true)),
+        // 개수를 적지 않는다. "6종"을 보고 누를지 말지를 정하는 사람은 없고,
+        // 눌러서 나온 목록에 이미 전부 있다.
+        if (overflowing)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
+            child: RoutexShowMore(
+              expanded: _expanded,
+              onExpanded: (value) => setState(() => _expanded = value),
+            ),
+          ),
       ],
     );
   }
@@ -563,43 +573,6 @@ class _MenuBadge extends StatelessWidget {
       ),
     );
   }
-}
-
-/// 목록 끝의 "더보기". 누르면 그 자리에서 나머지가 펼쳐진다.
-///
-/// 개수를 적지 않는 이유는 그 숫자가 판단에 쓰이지 않기 때문이다. "6종"을 보고 누를지
-/// 말지를 정하는 사람은 없고, 눌러서 나온 목록에 이미 전부 있다.
-class _MenuMoreRow extends StatelessWidget {
-  const _MenuMoreRow({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    behavior: HitTestBehavior.opaque,
-    child: Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: placeSectionGutter,
-        vertical: 12,
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Text(
-            '더보기',
-            style: TextStyle(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w700,
-              color: AppColors.primary,
-            ),
-          ),
-          const SizedBox(width: 2),
-          const Icon(Icons.expand_more, size: 20, color: AppColors.primary),
-        ],
-      ),
-    ),
-  );
 }
 
 /// 위쪽 갈래(음료·푸드) 선택. 카테고리 탭보다 굵게 두어 위계를 드러낸다.
