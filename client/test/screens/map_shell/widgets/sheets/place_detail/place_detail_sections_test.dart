@@ -44,25 +44,19 @@ void main() {
     ) async {
       await tester.pumpWidget(
         subject(
-          const PlaceKeyValueSection(
-            items: [
-              PlaceKeyValue(label: '위치', value: 'B2 서편'),
-              PlaceKeyValue(label: '안내', value: '에스컬레이터 옆'),
+          const RoutexKeyValueRows(
+            rows: [
+              RoutexKeyValue(label: '위치', value: 'B2 서편'),
+              RoutexKeyValue(label: '안내', value: '에스컬레이터 옆'),
             ],
           ),
         ),
       );
 
       expect(find.text('위치'), findsOneWidget);
-      expect(
-        find.text(RoutexTypography.keepWordsWhole('B2 서편')),
-        findsOneWidget,
-      );
+      expect(find.text('B2 서편'), findsOneWidget);
       expect(find.text('안내'), findsOneWidget);
-      expect(
-        find.text(RoutexTypography.keepWordsWhole('에스컬레이터 옆')),
-        findsOneWidget,
-      );
+      expect(find.text('에스컬레이터 옆'), findsOneWidget);
     });
 
     // 누를 수 없는 표시라 배지다. 알약(Chip)으로 그리면 바로 위 지도의 분류 칩과

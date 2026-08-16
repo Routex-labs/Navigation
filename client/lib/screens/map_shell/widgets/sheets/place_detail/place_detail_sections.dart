@@ -4,17 +4,6 @@ import 'package:routex_design_system/routex_design_system.dart';
 import '../../../../../theme/app_theme.dart';
 import 'korean_line_break.dart';
 
-/// 상세 API의 `keyValue` 항목을 렌더러에 넘길 때 쓰는 작은 표시 모델.
-///
-/// 네트워크 모델을 위젯 트리에 그대로 퍼뜨리지 않는다. 시트는 API 모델의
-/// `KeyValueItem`을 이 타입으로 한 번 변환하고, 이 폴더의 위젯은 표시만 맡는다.
-class PlaceKeyValue {
-  const PlaceKeyValue({required this.label, required this.value});
-
-  final String label;
-  final String value;
-}
-
 /// 한 줄 소개 섹션.
 ///
 /// 흰 시트 위에 흰 카드를 얹으면 테두리가 구분하는 대상이 없어 상자만 늘어난다.
@@ -27,11 +16,7 @@ class PlaceSummarySection extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      const style = TextStyle(
-        fontSize: 14.5,
-        height: 1.55,
-        color: AppColors.text,
-      );
+      const style = RoutexTypography.body;
       return Text(
         balancedKoreanLines(
           text,
@@ -43,60 +28,6 @@ class PlaceSummarySection extends StatelessWidget {
         style: style,
       );
     },
-  );
-}
-
-/// 위치 안내처럼 라벨과 값이 한 쌍인 섹션.
-///
-/// 카드 대신 구분선만 쓴다. 같은 라벨-값 형태인 `PlaceBusinessInfoSection`과
-/// 리듬을 맞춰 시트가 카드의 나열로 보이지 않게 한다.
-class PlaceKeyValueSection extends StatelessWidget {
-  const PlaceKeyValueSection({super.key, required this.items});
-
-  final List<PlaceKeyValue> items;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      // 여백은 항목 사이에만 — `PlaceBusinessInfoSection`과 같은 규칙이다.
-      for (var index = 0; index < items.length; index++) ...[
-        if (index > 0) ...[
-          const SizedBox(height: 10),
-          const Divider(height: 1),
-          const SizedBox(height: 10),
-        ],
-        _KeyValueRow(item: items[index]),
-      ],
-    ],
-  );
-}
-
-class _KeyValueRow extends StatelessWidget {
-  const _KeyValueRow({required this.item});
-
-  final PlaceKeyValue item;
-
-  // 라벨을 값 위 캡션으로 둔다 — `PlaceBusinessInfoSection`과 같은 이유이자 같은
-  // 리듬이다.
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        item.label,
-        style: const TextStyle(fontSize: 12, color: AppColors.muted),
-      ),
-      const SizedBox(height: 3),
-      Text(
-        RoutexTypography.keepWordsWhole(item.value),
-        style: const TextStyle(
-          fontSize: 13.5,
-          height: 1.4,
-          color: AppColors.text,
-        ),
-      ),
-    ],
   );
 }
 
@@ -130,38 +61,18 @@ class PlaceNoticeSection extends StatelessWidget {
   final String? until;
 
   @override
-  Widget build(BuildContext context) => _TintedBlock(
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.only(top: 1),
-          child: Icon(
-            Icons.campaign_outlined,
-            size: 19,
-            color: AppColors.primary,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                RoutexTypography.keepWordsWhole(text),
-                style: const TextStyle(fontSize: 13, color: AppColors.text),
-              ),
-              if (until != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  '$until까지',
-                  style: const TextStyle(fontSize: 12, color: AppColors.muted),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
+  Widget build(BuildContext context) => RoutexSurface(
+    role: RoutexSurfaceRole.flat,
+    child: RoutexInset(
+      role: RoutexInsetRole.component,
+      child: RoutexInfoRow(
+        // 라벨은 확성기 아이콘이 대신한다. 값이 곧 공지 문장이라 그 위에 '공지'를
+        // 한 번 더 적으면 같은 말이 두 줄을 쓴다.
+        label: '공지',
+        value: text,
+        icon: Icons.campaign_outlined,
+        caption: until == null ? null : '$until까지',
+      ),
     ),
   );
 }

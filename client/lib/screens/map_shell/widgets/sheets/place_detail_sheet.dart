@@ -774,12 +774,17 @@ class _PlaceDetailSectionsState extends State<PlaceDetailSections> {
             items: _mediaItems([for (final item in items) item.localAsset]),
           ),
         ),
-        KeyValueSection(:final items) => PlaceKeyValueSection(
-          items: [
-            for (final item in items)
-              PlaceKeyValue(label: item.label, value: item.value),
-          ],
-        ),
+        KeyValueSection(:final items) when items.isNotEmpty =>
+          RoutexKeyValueRows(
+            rows: [
+              for (final item in items)
+                RoutexKeyValue(label: item.label, value: item.value),
+            ],
+          ),
+        // 라벨만 있고 값이 빈 표는 "정보가 없다"가 아니라 "불러오지 못했다"로
+        // 읽힌다. 서버가 빈 목록을 보내지 않지만, 그 계약이 여기까지 오는 길에
+        // 끊기면 표가 아니라 아무것도 없는 편이 낫다.
+        KeyValueSection() => const SizedBox.shrink(),
         TagsSection(:final tags) => PlaceTagsSection(tags: tags),
         NoticeSection(:final text, :final until) => PlaceNoticeSection(
           text: text,
