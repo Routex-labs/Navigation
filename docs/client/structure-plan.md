@@ -32,7 +32,7 @@
 
 | 성격 | 예 | 어디로 가야 하나 |
 |---|---|---|
-| 진짜 재사용 위젯 | `status_badge` `sheet_header` `filter_pill` | `widgets/` 그대로 |
+| 진짜 재사용 위젯 | `sheet_header` | `widgets/` 그대로 |
 | **위젯이 아닌 순수 규칙·스타일** | `store_label_fit` `floor_facility_style` `category_map_*` `floor_camera_*` `store_label_anchor` | `core/map/` — 위젯 트리 없이 시험되는 코드다 |
 | 특정 화면 전용 시트·바 | `search_panel` `map_top_bar` `outdoor_poi_sheet` `route_field_results` | 그 화면 밑(`screens/<화면>/widgets/`) |
 | 갓 위젯 | `floor_plan_view`(3,229줄) | ~~해체~~ → **지웠다.** 앱에서 닿지 않았다(문제 4) |
