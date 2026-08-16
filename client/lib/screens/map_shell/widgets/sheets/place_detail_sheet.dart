@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 import '../../../../service_locator.dart';
 import '../../../../domain/route/dijkstra.dart';
@@ -234,6 +235,14 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
   /// 근처 매장. 비어 있으면 섹션을 통째로 그리지 않는다.
   List<NearbyStore> _nearbyStores = const [];
 
+  /// 저장 결과 알림. **한 번에 한 개다.**
+  ///
+  /// 예전에는 `ScaffoldMessenger`의 SnackBar를 썼다. 이 시트는 `Navigator`에 얹힌
+  /// 모달이라 SnackBar를 그리는 `Scaffold`가 시트 아래에 있고, 그래서 결과가 시트에
+  /// 가려 보이지 않을 수 있었다 — 눌렀는데 아무 일도 안 일어난 것과 구분되지 않는다.
+  String? _saveNotice;
+  Timer? _saveNoticeTimer;
+
   /// 주차·에스컬레이터·엘리베이터 1,007건. 서버가 404 대신 `excluded`로 200을
   /// 주고, "시트를 열지 말지"는 클라이언트가 이 값만 보고 정한다(설계 4-1).
   /// 분류 규칙을 클라이언트에 심지 않기 위한 계약이라, 여기서 카테고리 문자열을
@@ -275,6 +284,7 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
 
   @override
   void dispose() {
+    _saveNoticeTimer?.cancel();
     favoritesController.removeListener(_onFavoritesChanged);
     widget.target.removeListener(_onTargetChanged);
     super.dispose();
@@ -357,13 +367,38 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
     if (favorite == null) return;
     await favoritesController.toggle(favorite);
     if (!mounted) return;
-    final saved = favoritesController.contains(favorite.key);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(saved ? '장소에 저장했습니다' : '저장을 취소했습니다'),
-        duration: const Duration(milliseconds: 1400),
-      ),
+    // 컴포넌트가 넘긴 값이 아니라 controller의 실제 상태를 읽는다. 저장이
+    // 실패했는데 성공했다고 말하지 않기 위해서다.
+    _showSaveNotice(favoritesController.contains(favorite.key));
+  }
+
+  /// 저장 한 사건에 알림 한 개. 이전 알림은 새 알림이 걷어낸다 — 같은 자리에 둘이
+  /// 쌓이면 어느 쪽이 방금 누른 결과인지 알 수 없다.
+  void _showSaveNotice(bool saved) {
+    _saveNoticeTimer?.cancel();
+    setState(() => _saveNotice = saved ? '장소에 저장했습니다' : '저장을 해제했습니다');
+    _saveNoticeTimer = Timer(
+      RoutexFeedbackTiming.noticeVisibility,
+      _dismissSaveNotice,
     );
+  }
+
+  void _dismissSaveNotice() {
+    _saveNoticeTimer?.cancel();
+    _saveNoticeTimer = null;
+    if (mounted) setState(() => _saveNotice = null);
+  }
+
+  /// 알림의 되돌리기.
+  ///
+  /// 되돌린 결과를 다시 알리지 않는다. 한 번의 탭에 알림이 두 개 뜨는 것을 막고,
+  /// 헤더의 저장 토글이 이미 바뀐 상태를 말하고 있다. 이 지름길을 놓쳐도 그 토글로
+  /// 언제든 되돌릴 수 있어서 알림은 시간이 지나면 사라져도 된다.
+  Future<void> _undoSave() async {
+    final favorite = _target.favorite;
+    if (favorite == null) return;
+    _dismissSaveNotice();
+    await favoritesController.toggle(favorite);
   }
 
   @override
@@ -404,79 +439,99 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
               borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
             ),
             clipBehavior: Clip.antiAlias,
-            child: ScrollConfiguration(
-              behavior: const _NoOverscrollIndicator(),
-              child: SingleChildScrollView(
-                controller: scrollController,
-                // 키보드(`viewInsets`)만큼 아래를 더 비운다. 이 시트는 화면 높이의
-                // 비율로 크기가 정해져서 키보드가 올라와도 **줄어들지 않는다** —
-                // 아래쪽이 키보드에 덮인 채로 남는다. 그 자리에 있는 입력칸은
-                // 가려지고, 스크롤로 끌어올리려 해도 스크롤할 길이가 없어서 꺼낼
-                // 수가 없다. 여기서 길이를 만들어 줘야 [_MenuSearchField]가
-                // 자기를 보이는 자리로 올릴 수 있다.
-                padding: EdgeInsets.only(
-                  bottom:
-                      20 +
-                      MediaQuery.paddingOf(context).bottom +
-                      MediaQuery.viewInsetsOf(context).bottom,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SheetGrabHandle(),
-                    _SheetLoadingLine(visible: _isLoading),
-                    SheetHeader(
-                      onCloseAll: widget.onCloseAll,
-                      onIntentionalPop: _markIntentional,
-                      // 저장은 눌러도 시트가 그대로 남는 유일한 버튼이라 길찾기와
-                      // 같은 줄에 두지 않는다([SheetHeader.trailing] 주석).
-                      trailing: favorite == null
-                          ? null
-                          : _SaveToggle(
-                              isSaved: saved,
-                              onPressed: _onToggleFavorite,
-                            ),
+            child: Stack(
+              children: [
+                ScrollConfiguration(
+                  behavior: const _NoOverscrollIndicator(),
+                  child: SingleChildScrollView(
+                    controller: scrollController,
+                    // 키보드(`viewInsets`)만큼 아래를 더 비운다. 이 시트는 화면 높이의
+                    // 비율로 크기가 정해져서 키보드가 올라와도 **줄어들지 않는다** —
+                    // 아래쪽이 키보드에 덮인 채로 남는다. 그 자리에 있는 입력칸은
+                    // 가려지고, 스크롤로 끌어올리려 해도 스크롤할 길이가 없어서 꺼낼
+                    // 수가 없다. 여기서 길이를 만들어 줘야 [_MenuSearchField]가
+                    // 자기를 보이는 자리로 올릴 수 있다.
+                    padding: EdgeInsets.only(
+                      bottom:
+                          20 +
+                          MediaQuery.paddingOf(context).bottom +
+                          MediaQuery.viewInsetsOf(context).bottom,
                     ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 2, 20, 0),
-                      child: _PlaceCore(
-                        title: _target.title,
-                        subtitle: _target.subtitle,
-                        category: _target.category,
-                        subcategory: subcategory,
-                        reach: _target.reach,
-                      ),
-                    ),
-                    // 이름을 읽은 직후가 길찾기를 누르는 자리다. 사진·메뉴를
-                    // 지나 하단까지 내려가야 한다면 흐름이 한 번 끊긴다.
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                      child: _PlaceActions(
-                        onOrigin: () => _pop(StoreInfoAction.setOrigin),
-                        onDestination: () =>
-                            _pop(StoreInfoAction.setDestination),
-                      ),
-                    ),
-                    if (sections.isNotEmpty)
-                      Padding(
-                        // 좌우 여백은 섹션이 스스로 갖는다. 사진·메뉴는
-                        // 시트 끝까지 써야 해서 여기서 일괄로 줄 수 없다.
-                        padding: const EdgeInsets.only(top: 24),
-                        child: PlaceDetailSections(
-                          sections: sections,
-                          floorLabel: _detail?.location.floorLabel,
-                          homeFooter: _nearbyStores.isEmpty
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SheetGrabHandle(),
+                        _SheetLoadingLine(visible: _isLoading),
+                        SheetHeader(
+                          onCloseAll: widget.onCloseAll,
+                          onIntentionalPop: _markIntentional,
+                          // 저장은 눌러도 시트가 그대로 남는 유일한 버튼이라 길찾기와
+                          // 같은 줄에 두지 않는다([SheetHeader.trailing] 주석).
+                          trailing: favorite == null
                               ? null
-                              : PlaceNearbySection(
-                                  stores: _nearbyStores,
-                                  onSelect: widget.onSelectNearbyStore,
+                              : _SaveToggle(
+                                  isSaved: saved,
+                                  onPressed: _onToggleFavorite,
                                 ),
                         ),
-                      ),
-                  ],
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 2, 20, 0),
+                          child: _PlaceCore(
+                            title: _target.title,
+                            subtitle: _target.subtitle,
+                            category: _target.category,
+                            subcategory: subcategory,
+                            reach: _target.reach,
+                          ),
+                        ),
+                        // 이름을 읽은 직후가 길찾기를 누르는 자리다. 사진·메뉴를
+                        // 지나 하단까지 내려가야 한다면 흐름이 한 번 끊긴다.
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                          child: _PlaceActions(
+                            onOrigin: () => _pop(StoreInfoAction.setOrigin),
+                            onDestination: () =>
+                                _pop(StoreInfoAction.setDestination),
+                          ),
+                        ),
+                        if (sections.isNotEmpty)
+                          Padding(
+                            // 좌우 여백은 섹션이 스스로 갖는다. 사진·메뉴는
+                            // 시트 끝까지 써야 해서 여기서 일괄로 줄 수 없다.
+                            padding: const EdgeInsets.only(top: 24),
+                            child: PlaceDetailSections(
+                              sections: sections,
+                              floorLabel: _detail?.location.floorLabel,
+                              homeFooter: _nearbyStores.isEmpty
+                                  ? null
+                                  : PlaceNearbySection(
+                                      stores: _nearbyStores,
+                                      onSelect: widget.onSelectNearbyStore,
+                                    ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+                // 스크롤과 함께 흘러가지 않게 시트 안에 고정한다. 결과를 말하는
+                // 줄이 본문을 따라 올라가 버리면, 저장을 누른 뒤 목록을 조금만
+                // 내려도 되돌리기가 화면 밖으로 나간다.
+                if (_saveNotice case final notice?)
+                  PositionedDirectional(
+                    start: RoutexSpacing.componentPadding,
+                    end: RoutexSpacing.componentPadding,
+                    bottom:
+                        MediaQuery.paddingOf(context).bottom +
+                        RoutexSpacing.componentPadding,
+                    child: RoutexInlineNotice(
+                      message: notice,
+                      actionLabel: '실행 취소',
+                      onAction: _undoSave,
+                    ),
+                  ),
+              ],
             ),
           ),
         ),
