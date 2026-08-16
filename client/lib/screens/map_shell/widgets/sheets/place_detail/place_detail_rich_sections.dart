@@ -300,7 +300,11 @@ class _MenuRow extends StatelessWidget {
                     spacing: 4,
                     runSpacing: 4,
                     children: [
-                      for (final badge in item.badges) _MenuBadge(label: badge),
+                      for (final badge in item.badges)
+                        RoutexBadge(
+                          label: badge,
+                          accent: badgeAccentFor(badge),
+                        ),
                     ],
                   ),
                 ],
@@ -363,92 +367,27 @@ class _MenuRow extends StatelessWidget {
   }
 }
 
-/// `NEW`·`시즌 한정` 같은 표시 하나.
-///
-/// **아이콘이 아니라 글자다.** 공식 사이트가 이미지 배지로 주는 값이지만, 그 이미지를
-/// 그대로 번들에 넣으면 상표를 한 벌 더 들여오는 셈이고 배지 종류가 늘 때마다 사진을
-/// 다시 받아야 한다. 글자면 값이 무엇이 오든 그려진다.
-///
-/// 색은 종류로 갈리지 않는다. 지금 데이터의 배지는 `NEW` 31건·`시즌 한정` 5건 둘뿐인데,
-/// 여기서 이름으로 색을 나누면 처음 보는 배지가 왔을 때 그릴 색이 없어진다.
-/// 배지 한 종류의 색. 배경·테두리·글자를 함께 들고 다닌다 — 셋을 따로 고르면
-/// 대비가 어긋난 조합이 조용히 만들어진다.
-class BadgeTone {
-  const BadgeTone({
-    required this.background,
-    required this.border,
-    required this.foreground,
-  });
-
-  final Color background;
-  final Color border;
-  final Color foreground;
-}
-
-/// 모르는 배지가 왔을 때의 색. **이 값이 있어야 색을 종류별로 나눌 수 있다** —
-/// 스타벅스가 새 배지를 만들면(예: "한정 판매") 그리지 못하는 것이 아니라 무채색으로
-/// 떨어진다. 색은 정보를 더하는 장치이지 그리기 위한 조건이 아니다.
-const _badgeToneDefault = BadgeTone(
-  background: Color(0xFFF3F4F6),
-  border: Color(0xFFE0E3E7),
-  foreground: AppColors.muted,
-);
-
 /// 배지 이름 → 색. 둘 다 연한 배경 + 진한 글자(tonal)라 사진 옆에서 튀지 않는다.
 ///
 /// 갈라 놓는 이유는 **한 줄에 둘이 나란히 뜨는 항목이 있기 때문이다.** 같은 색이면
 /// 두 배지가 한 덩어리로 읽힌다. 초록은 새로 나온 것, 주황은 기간이 정해진 것으로
 /// 쓴다 — 빨강을 쓰지 않는 것은 앱에서 이미 오류·목적지에 배정된 색이라 뜻이
 /// 겹치기 때문이다.
-/// 키는 아래 [badgeToneFor]가 쓰는 정규화된 형태(공백 제거·대문자)로 적는다.
-const _badgeTones = <String, BadgeTone>{
-  'NEW': BadgeTone(
-    background: Color(0xFFE8F5EC),
-    border: Color(0xFFC6E6D0),
-    foreground: Color(0xFF1E7B45),
-  ),
-  '시즌한정': BadgeTone(
-    background: Color(0xFFFDF0E7),
-    border: Color(0xFFF7D9C2),
-    foreground: Color(0xFFB4600F),
-  ),
+/// 키는 아래 [badgeAccentFor]가 쓰는 정규화된 형태(공백 제거·대문자)로 적는다.
+const _badgeAccents = <String, RoutexBadgeAccent>{
+  'NEW': RoutexBadgeAccent(surface: Color(0xFFE8F5EC), ink: Color(0xFF1E7B45)),
+  '시즌한정': RoutexBadgeAccent(surface: Color(0xFFFDF0E7), ink: Color(0xFFB4600F)),
 };
 
-/// 배지 색을 고른다. 공백을 지우고 대문자로 맞춰 찾는 이유는 수집 원본이 `NEW`와
-/// `New`, `시즌 한정`과 `시즌한정`을 섞어 쓸 수 있어서다 — 표기 하나가 달라졌다고
-/// 색이 조용히 사라지면 원인을 찾기 어렵다. 화면에 그리는 글자는 원본 그대로다.
-BadgeTone badgeToneFor(String label) =>
-    _badgeTones[label.replaceAll(' ', '').toUpperCase()] ?? _badgeToneDefault;
-
-class _MenuBadge extends StatelessWidget {
-  const _MenuBadge({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final tone = badgeToneFor(label);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: tone.background,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: tone.border),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 10.5,
-            fontWeight: FontWeight.w700,
-            height: 1.2,
-            color: tone.foreground,
-          ),
-        ),
-      ),
-    );
-  }
-}
+/// 배지 색을 고른다. **모르는 배지는 null이고, 그때는 무채색으로 떨어진다** —
+/// 스타벅스가 새 배지를 만들면(예: "한정 판매") 그리지 못하는 것이 아니다. 색은
+/// 정보를 더하는 장치이지 그리기 위한 조건이 아니다.
+///
+/// 공백을 지우고 대문자로 맞춰 찾는 이유는 수집 원본이 `NEW`와 `New`, `시즌 한정`과
+/// `시즌한정`을 섞어 쓸 수 있어서다 — 표기 하나가 달라졌다고 색이 조용히 사라지면
+/// 원인을 찾기 어렵다. 화면에 그리는 글자는 원본 그대로다.
+RoutexBadgeAccent? badgeAccentFor(String label) =>
+    _badgeAccents[label.replaceAll(' ', '').toUpperCase()];
 
 /// 위쪽 갈래(음료·푸드) 선택. 카테고리 탭보다 굵게 두어 위계를 드러낸다.
 class _MenuGroupTabs extends StatelessWidget {

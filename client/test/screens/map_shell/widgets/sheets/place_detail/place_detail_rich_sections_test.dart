@@ -106,20 +106,21 @@ void main() {
     // 배지 색은 종류마다 다르다. 한 줄에 둘이 나란히 뜨는 항목이 있어서, 같은 색이면
     // 두 배지가 한 덩어리로 읽힌다. 모르는 배지는 색을 못 고르는 것이 아니라 무채색으로
     // 떨어진다 — 색은 정보를 더하는 장치이지 그리기 위한 조건이 아니다.
-    test('배지 색은 종류마다 다르고 모르는 배지는 무채색이다', () {
-      final newTone = badgeToneFor('NEW');
-      final seasonTone = badgeToneFor('시즌 한정');
-      final unknownTone = badgeToneFor('한정 판매');
+    test('배지 색은 종류마다 다르고 모르는 배지는 색을 갖지 않는다', () {
+      final newAccent = badgeAccentFor('NEW')!;
+      final seasonAccent = badgeAccentFor('시즌 한정')!;
 
-      expect(newTone.foreground, const Color(0xFF1E7B45));
-      expect(seasonTone.foreground, const Color(0xFFB4600F));
-      expect(newTone.background, isNot(seasonTone.background));
-      expect(unknownTone.foreground, AppColors.muted);
+      expect(newAccent.ink, const Color(0xFF1E7B45));
+      expect(seasonAccent.ink, const Color(0xFFB4600F));
+      expect(newAccent.surface, isNot(seasonAccent.surface));
+      // 색을 못 고르는 것이 아니라 무채색으로 떨어진다. 그 판단은 Runtime Kit이
+      // 한다 — 여기서는 색을 넘기지 않는다는 사실만 잠근다.
+      expect(badgeAccentFor('한정 판매'), isNull);
 
       // 표기가 흔들려도 같은 색으로 간다. 공백 하나 때문에 색이 사라지면
       // 데이터가 아니라 화면을 의심하게 된다.
-      expect(badgeToneFor('시즌한정').foreground, seasonTone.foreground);
-      expect(badgeToneFor('new').foreground, newTone.foreground);
+      expect(badgeAccentFor('시즌한정')!.ink, seasonAccent.ink);
+      expect(badgeAccentFor('new')!.ink, newAccent.ink);
     });
 
     // 알레르기만 있고 설명·영양정보가 없는 항목도 팝업을 연다. `hasDetail`이
