@@ -17,6 +17,7 @@ import 'package:navigation_client/screens/map_shell/widgets/sheets/favorites_she
 import 'package:navigation_client/screens/map_shell/widgets/sheets/outdoor_poi_sheet.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail_sheet.dart';
 import 'package:navigation_client/widgets/sheet_grab_handle.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 손잡이가 **끌 수 있는 시트에만** 있는지 시트마다 열어 확인한다.
@@ -51,6 +52,15 @@ void main() {
     buildingRepository = originalBuildingRepository;
     destinationRepository = originalDestinationRepository;
   });
+
+  /// 손잡이 하나. **두 종류를 모두 받는다** — 시트가 포팅 가이드 단계 3에서 하나씩
+  /// Runtime Kit 표면으로 옮겨가는 중이라, 옮긴 시트는 [RoutexSheetHandle]을, 아직
+  /// 앱 표면인 시트는 [SheetGrabHandle]을 그린다. 여기서 고정하려는 것은 어느
+  /// 위젯이냐가 아니라 **끌 수 있는 시트에만 손잡이가 있다**는 계약이다.
+  final grabHandle = find.byWidgetPredicate(
+    (widget) => widget is SheetGrabHandle || widget is RoutexSheetHandle,
+    description: '시트 손잡이',
+  );
 
   /// [open]이 여는 시트를 띄운다.
   Future<void> openSheet(
@@ -89,7 +99,7 @@ void main() {
     testWidgets('매장 상세', (WidgetTester tester) async {
       await openSheet(tester, openPlaceDetail);
 
-      expect(find.byType(SheetGrabHandle), findsOneWidget);
+      expect(grabHandle, findsOneWidget);
     });
 
     testWidgets('카테고리 매장 목록', (WidgetTester tester) async {
@@ -103,7 +113,7 @@ void main() {
         ),
       );
 
-      expect(find.byType(SheetGrabHandle), findsOneWidget);
+      expect(grabHandle, findsOneWidget);
     });
 
     testWidgets('건물 정보', (WidgetTester tester) async {
@@ -114,7 +124,7 @@ void main() {
             BuildingInfoSheet.show(context, building: building, onCloseAll: () {}),
       );
 
-      expect(find.byType(SheetGrabHandle), findsOneWidget);
+      expect(grabHandle, findsOneWidget);
     });
 
     testWidgets('야외 장소', (WidgetTester tester) async {
@@ -131,7 +141,7 @@ void main() {
         ),
       );
 
-      expect(find.byType(SheetGrabHandle), findsOneWidget);
+      expect(grabHandle, findsOneWidget);
     });
 
     testWidgets('손잡이는 시트 콘텐츠보다 위에 그려진다', (WidgetTester tester) async {
@@ -139,7 +149,7 @@ void main() {
       // 기준으로 세로 위치를 고정한다.
       await openSheet(tester, openPlaceDetail);
 
-      final handleBottom = tester.getRect(find.byType(SheetGrabHandle)).bottom;
+      final handleBottom = tester.getRect(grabHandle).bottom;
       final titleTop = tester.getRect(find.text('MLB')).top;
       expect(handleBottom, lessThan(titleTop));
     });
@@ -153,7 +163,7 @@ void main() {
       );
 
       expect(find.text('저장한 장소'), findsOneWidget, reason: '시트는 떴다');
-      expect(find.byType(SheetGrabHandle), findsNothing);
+      expect(grabHandle, findsNothing);
     });
 
     // 비어 있을 때만 확인하면 "목록이 생기면 손잡이도 같이 돌아오는" 회귀를 못 잡는다.
@@ -176,7 +186,7 @@ void main() {
       );
 
       expect(find.text('MLB'), findsOneWidget, reason: '목록이 그려졌다');
-      expect(find.byType(SheetGrabHandle), findsNothing);
+      expect(grabHandle, findsNothing);
     });
 
     testWidgets('앱 메뉴', (WidgetTester tester) async {
@@ -190,7 +200,7 @@ void main() {
       );
 
       expect(find.text('메뉴'), findsOneWidget, reason: '시트는 떴다');
-      expect(find.byType(SheetGrabHandle), findsNothing);
+      expect(grabHandle, findsNothing);
     });
   });
 }

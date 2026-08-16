@@ -18,7 +18,6 @@ import 'place_detail/place_detail_rich_sections.dart';
 import 'place_detail/place_detail_sections.dart';
 import '../../../../map/icon/category_icon.dart';
 import '../../../../domain/store/reach_label.dart';
-import '../../../../widgets/sheet_grab_handle.dart';
 import '../../../../widgets/sheet_header.dart';
 
 import '../../../../widgets/map_overlay_guard.dart';
@@ -439,12 +438,11 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
         builder: (context, scrollController) => GestureDetector(
           onTap: () {},
           behavior: HitTestBehavior.opaque,
-          child: Material(
-            color: Colors.white,
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            ),
-            clipBehavior: Clip.antiAlias,
+          // 표면(색·곡률·그림자·자르기)은 Runtime Kit이 소유하고, 드래그와 라우트는
+          // 여기 남는다([MapPassThroughSheetRoute]). 여백은 본문이 갖는다 — 대표
+          // 사진이 가장자리까지 닿아야 해서 표면이 넣어 주면 표현할 수 없다.
+          child: RoutexBottomSheet(
+            contentInset: RoutexBottomSheetContentInset.content,
             child: Stack(
               children: [
                 ScrollConfiguration(
@@ -467,7 +465,7 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const SheetGrabHandle(),
+                        const RoutexSheetHandle(),
                         _SheetLoadingLine(visible: _isLoading),
                         SheetHeader(
                           onCloseAll: widget.onCloseAll,
