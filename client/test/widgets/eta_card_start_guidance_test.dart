@@ -34,7 +34,7 @@ void main() {
     // 헷갈린다. 계획을 접는 길은 상단 길찾기 바에 있다.
     expect(find.text('안내 종료'), findsNothing);
 
-    await tester.tap(find.byKey(const ValueKey('eta-start-guidance')));
+    await tester.tap(find.text('안내 시작'));
     await tester.pump();
     expect(started, isTrue);
   });

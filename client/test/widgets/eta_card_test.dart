@@ -117,30 +117,32 @@ void main() {
   });
 
   group('안내가 없을 때(자동 경로)', () {
-    testWidgets('예전 두 줄 표기를 그대로 쓴다', (WidgetTester tester) async {
-      // 건물 입구까지 같은 경로에는 지시 문구가 없다. 그때까지 한 줄로 바꾸면
-      // 화면에 남는 정보가 거리 하나뿐이라 무엇을 향한 거리인지 알 수 없다.
+    testWidgets('무엇을 향한 값인지 함께 적는다', (WidgetTester tester) async {
+      // 건물 입구까지 같은 경로에는 지시 문구가 없다. 화면에 남는 정보가 거리
+      // 하나뿐이면 무엇을 향한 거리인지 알 수 없다.
       await tester.pumpWidget(
         wrap(const EtaCard(distanceMeters: 480, minutes: 7, label: '건물 입구까지')),
       );
 
       expect(find.text('건물 입구까지'), findsOneWidget);
-      // 이 줄은 RichText 스팬이라 기본 finder에 안 걸린다.
-      expect(find.textContaining('약 7분', findRichText: true), findsOneWidget);
+      // 수치 줄은 RichText 스팬이라 기본 finder에 안 걸린다.
+      expect(find.textContaining('7분', findRichText: true), findsOneWidget);
+      expect(find.textContaining('480m', findRichText: true), findsOneWidget);
     });
   });
+
   testWidgets('EtaCard shows the distance and minutes', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light,
-        home: EtaCard(distanceMeters: 150, minutes: 2),
+        home: const EtaCard(distanceMeters: 150, minutes: 2),
       ),
     );
 
     expect(find.text('목적지까지'), findsOneWidget);
-    expect(find.textContaining('약 2분', findRichText: true), findsOneWidget);
+    expect(find.textContaining('2분', findRichText: true), findsOneWidget);
     expect(find.textContaining('150m', findRichText: true), findsOneWidget);
   });
 }

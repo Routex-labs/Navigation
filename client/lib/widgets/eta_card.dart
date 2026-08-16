@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:routex_design_system/routex_design_system.dart';
+
 import '../theme/app_theme.dart';
 import '../domain/geo/distance_format.dart';
 import '../domain/guidance/route_guidance.dart';
@@ -41,31 +43,72 @@ class EtaCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final guidance = instruction;
-    return Card(
-      child: Padding(
+    if (guidance != null) {
+      return Card(
         // 안내 한 줄은 위아래를 조인다 — 배너가 얇을수록 도면이 넓어진다.
-        // 두 줄인 legacy 쪽은 예전 여백을 유지해야 글자가 답답하지 않다.
-        padding: guidance == null
-            ? const EdgeInsets.fromLTRB(16, 14, 12, 14)
-            : const EdgeInsets.fromLTRB(16, 8, 8, 8),
-        child: guidance == null
-            ? _LegacyEtaContent(
-                label: label,
-                minutes: minutes,
-                distanceMeters: distanceMeters,
-                onClose: onClose,
-                onStartGuidance: onStartGuidance,
-                onClosePointerDown: onClosePointerDown,
-              )
-            : _GuidanceRow(
-                guidance: guidance,
-                onClose: onClose,
-                onClosePointerDown: onClosePointerDown,
-              ),
-      ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+          child: _GuidanceRow(
+            guidance: guidance,
+            onClose: onClose,
+            onClosePointerDown: onClosePointerDown,
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        RoutexEtaCard(
+          // 기본값 `도착 예정` 대신 목적지를 적는다. 다층 경로에서는 경유 층과
+          // 환승 수단까지 이 줄에 들어 있고(`레페토까지 · 1F → B1 (에스컬레이터)`),
+          // 그 값이 화면 어디에도 다시 나오지 않는다.
+          title: label,
+          arrivalTime: _arrivalTimeText(context, minutes),
+          metrics: [
+            RoutexTripMetric(value: '$minutes분', label: '소요'),
+            RoutexTripMetric(
+              value: formatDistance(distanceMeters),
+              label: '거리',
+            ),
+          ],
+          // null이면 버튼이 사라진다. 시작 동작이 없는 자동 경로(건물 입구까지)가
+          // 그 경우다.
+          onStart: onStartGuidance,
+        ),
+        // **시작과 종료는 함께 뜨지 않는다.** 계획 상태에서 할 일은 출발뿐이고,
+        // 안내 중에 할 일은 그만두는 것뿐이다. 둘을 나란히 두면 아직 출발도 안
+        // 한 화면에 "종료"가 있어, 사용자는 무엇이 이미 시작됐는지부터 헷갈린다.
+        //
+        // 카드 **밖**에 두는 이유는 공통 카드가 주 행동 하나만 갖기 때문이다.
+        // 계획을 접는 길은 상단 길찾기 바에도 그대로 있다.
+        if (onClose case final onClose? when onStartGuidance == null) ...[
+          const SizedBox(height: RoutexSpacing.controlGap),
+          Listener(
+            onPointerDown: (event) => onClosePointerDown?.call(event.position),
+            child: RoutexButton(
+              label: '안내 종료',
+              variant: RoutexButtonVariant.secondary,
+              onPressed: onClose,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
+
+/// 지금부터 [minutes]분 뒤의 시각. `오후 3:24`처럼 지역 표기를 따른다.
+///
+/// **소요 시간이 아니라 시각을 큰 글자로 두는 이유**는 약속과 바로 견줄 수 있어서다.
+/// `22분`은 언제 나가야 하는지를 사람이 다시 계산하게 만든다. 소요와 거리는 그 아래
+/// 수치 줄로 내린다.
+String _arrivalTimeText(BuildContext context, int minutes) =>
+    TimeOfDay.fromDateTime(
+      DateTime.now().add(Duration(minutes: minutes)),
+    ).format(context);
 
 /// 안내 중 배너 본문. **한 줄이다** — 아이콘 · 지시 문구 · 다음 조작까지 거리.
 ///
@@ -161,122 +204,3 @@ IconData routeGuidanceIcon(RouteGuidanceAction action) => switch (action) {
   RouteGuidanceAction.arrived => Icons.flag_rounded,
   RouteGuidanceAction.straight => Icons.straight_rounded,
 };
-
-class _LegacyEtaContent extends StatelessWidget {
-  const _LegacyEtaContent({
-    required this.label,
-    required this.minutes,
-    required this.distanceMeters,
-    required this.onClose,
-    required this.onStartGuidance,
-    required this.onClosePointerDown,
-  });
-
-  final String label;
-  final int minutes;
-  final double distanceMeters;
-  final VoidCallback? onClose;
-  final VoidCallback? onStartGuidance;
-  final ValueChanged<Offset>? onClosePointerDown;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(fontSize: 11, color: AppColors.muted),
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 3),
-              RichText(
-                text: TextSpan(
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.text,
-                  ),
-                  children: [
-                    TextSpan(text: '약 $minutes분 '),
-                    TextSpan(
-                      text: '/ ${formatDistance(distanceMeters)}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w400,
-                        color: AppColors.muted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        // 이동 수단을 고르는 자리는 길찾기 화면 하나다. 예전에는 이 카드에도
-        // "대중교통" 버튼이 있었는데, 안내가 이미 그려진 자리에서 수단이 또
-        // 갈리면 같은 선택이 두 화면에 흩어진다 — 상단 초안 바의 행을 눌러
-        // 길찾기 화면으로 돌아가면 거기서 세 수단을 한 줄로 고를 수 있다.
-        if (onStartGuidance != null) ...[
-          const SizedBox(width: 8),
-          // "안내 시작"은 이 카드에서 **권하는** 다음 행동이라 채운 버튼이다.
-          // 종료(외곽선)와 톤을 나눠, 운전 전에 눌러야 할 것이 무엇인지 색으로
-          // 먼저 읽히게 한다.
-          FilledButton(
-            key: const ValueKey('eta-start-guidance'),
-            onPressed: onStartGuidance,
-            style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              textStyle: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            child: const Text('안내 시작'),
-          ),
-        ],
-        // **시작과 종료는 함께 뜨지 않는다.** 계획 상태에서 할 일은 출발뿐이고,
-        // 안내 중에 할 일은 그만두는 것뿐이다. 둘을 나란히 두면 아직 출발도 안
-        // 한 화면에 "종료"가 있어, 사용자는 무엇이 이미 시작됐는지부터 헷갈린다.
-        // 계획을 접는 길은 상단 길찾기 바에 그대로 있다.
-        if (onClose != null && onStartGuidance == null) ...[
-          const SizedBox(width: 8),
-          // "안내 종료"는 되돌리기 어려운 조작(경로/도착지 리셋)이므로
-          // 색상은 부드럽되, 다른 카드 요소보다 명확히 눌러야 할 지점으로
-          // 읽히도록 outlined 톤을 준다.
-          Listener(
-            onPointerDown: (event) => onClosePointerDown?.call(event.position),
-            child: TextButton(
-              onPressed: onClose,
-              style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFFD93025),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                shape: RoundedRectangleBorder(
-                  side: const BorderSide(color: Color(0x33D93025)),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                textStyle: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              child: const Text('안내 종료'),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}

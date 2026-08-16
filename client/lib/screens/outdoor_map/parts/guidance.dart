@@ -147,11 +147,37 @@ extension OutdoorMapGuidance on OutdoorMapBodyState {
     }
   }
 
+  /// GPS가 지금 이 사람을 **건물 밖이라고 분명히 말하는가.**
+  ///
+  /// 판정하지 못하는 경우(`unclear`)는 밖으로 치지 않는다. 실내에서는 GPS 오차가
+  /// 커서 unclear가 흔하고, 거기서 막으면 **정작 건물 안에 있는 사람이 안내를
+  /// 시작하지 못한다.** 막아야 할 것은 확실히 밖인 경우뿐이다.
+  bool get _gpsSaysOutsideBuilding {
+    final position = _position;
+    if (position == null) return false;
+    final judgement = judgeBuildingFromGps(
+      fix: GpsFix(
+        point: ll.LatLng(position.latitude, position.longitude),
+        accuracyMeters: position.accuracy,
+      ),
+      footprint: _buildingFootprint,
+    );
+    return judgement.verdict == GpsBuildingVerdict.outside;
+  }
+
   /// 미리 보던 실내 경로에서 **실제 안내를 시작한다.**
   ///
   /// 여기서야 출발지 매장에 앵커를 찍는다. 미리 보는 동안 찍지 않는 이유는
   /// [_indoorRoutePreview]에 적었다 — 그 사람은 아직 거기 서 있지 않다.
+  ///
+  /// **건물 밖에서 누르면 아무것도 바꾸지 않는다.** 앵커를 찍어 봐야 다음 GPS 틱이
+  /// 곧바로 뒤집어 도면과 경로가 아무 말 없이 사라진다. 그래서 화면은 그대로 두고
+  /// 언제 시작할 수 있는지만 말한다 — 보던 경로를 잃지 않는 것이 이 화면의 목적이다.
   Future<void> _startIndoorGuidance() async {
+    if (_gpsSaysOutsideBuilding) {
+      _showSnack('건물에 도착하면 안내를 시작할 수 있습니다.');
+      return;
+    }
     final origin = _indoorRoutePreviewOrigin;
     final floor = origin?.floor;
     final nodeId = origin?.nodeId;
