@@ -197,10 +197,9 @@ class PlaceDetailSheet extends StatefulWidget {
       sheetAnimationStyle: crossFade
           ? kPlaceDetailSheetInstantStyle
           : kPlaceDetailSheetAnimationStyle,
+      // 곡률은 시트 표면이 그린다([RoutexBottomSheet]). 라우트에도 적으면 같은
+      // 값이 두 곳에서 정해진다.
       backgroundColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
       builder: (context) => MapOverlayGuard(
         child: PlaceDetailSheet(
           target: target,
