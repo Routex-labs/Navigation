@@ -1163,13 +1163,11 @@ class PlaceLinksSection extends StatelessWidget {
     } catch (_) {
       opened = false;
     }
+    // SnackBar를 쓰던 자리다. **이 시트에서는 보이지 않았다** — 상세 시트가
+    // Navigator에 얹힌 모달이라 SnackBar를 그리는 Scaffold보다 위에 있다. 열기가
+    // 실패해도 화면에는 아무 일도 안 일어난 것으로 보였다. 이유는 [RoutexToast].
     if (!opened && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${item.label}을(를) 열지 못했습니다'),
-          duration: const Duration(milliseconds: 1600),
-        ),
-      );
+      RoutexToast.show(context, '${item.label}을(를) 열지 못했습니다');
     }
   }
 

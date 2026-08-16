@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 import 'package:navigation_client/theme/app_theme.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail/korean_line_break.dart';
 import 'package:navigation_client/core/clipboard_confirmation.dart';
@@ -1082,6 +1085,65 @@ void main() {
       expect(text.maxLines, 1);
       expect(text.overflow, TextOverflow.ellipsis);
       expect(tester.takeException(), isNull);
+    });
+
+    // 열기 실패는 **시트 위에** 떠야 한다.
+    //
+    // 예전에는 `ScaffoldMessenger`의 SnackBar였는데, 상세 시트는 Navigator에 얹힌
+    // 모달이라 SnackBar를 그리는 Scaffold보다 위에 있다. 그래서 실패 문구가 시트
+    // 뒤에 그려져 **한 번도 보이지 않았다** — 눌렀는데 아무 일도 안 일어난 것과
+    // 구분되지 않았다. 같은 파일의 복사 버튼만 오버레이 토스트를 쓰고 있었다.
+    testWidgets('링크를 열지 못하면 시트에 가리지 않는 알림으로 말한다', (tester) async {
+      // 위젯 테스트에는 플러그인이 등록되지 않아 기본 MethodChannel 구현이 탄다.
+      // `false`는 "열지 못했다"이고, 이때만 알림이 뜬다.
+      const channel = MethodChannel('plugins.flutter.io/url_launcher');
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        (call) async => false,
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          channel,
+          null,
+        ),
+      );
+
+      final navigatorKey = GlobalKey<NavigatorState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: navigatorKey,
+          theme: AppTheme.light,
+          home: const Scaffold(body: SizedBox.expand()),
+        ),
+      );
+
+      unawaited(
+        showModalBottomSheet<void>(
+          context: navigatorKey.currentContext!,
+          builder: (_) => const PlaceLinksSection(
+            items: [
+              PlaceLinkItem(
+                label: '인스타그램',
+                url: 'https://www.instagram.com/starbuckskorea',
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('인스타그램'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('인스타그램을(를) 열지 못했습니다'), findsOneWidget);
+      // 루트 Overlay에 얹힌 토스트다. 시트 아래에 그려지는 SnackBar가 아니다.
+      expect(RoutexToast.isVisible, isTrue);
+      expect(find.byType(SnackBar), findsNothing);
+
+      // 토스트는 스스로 사라진다. 남은 타이머를 흘려보내지 않으면 테스트가
+      // 대기 중인 타이머로 실패한다.
+      await tester.pump(RoutexToast.visibleDuration);
+      expect(find.text('인스타그램을(를) 열지 못했습니다'), findsNothing);
     });
 
     testWidgets('business information replaces the label with an icon', (
