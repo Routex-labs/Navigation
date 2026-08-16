@@ -198,19 +198,9 @@ class _FloorScopeOverride {
 }
 
 class _SearchPanelState extends State<SearchPanel> {
-  /// 목록 공통 행 리듬. 결과·후보·건물·최근 검색 행이 전부 이 값을 쓴다.
-  ///
-  /// **한 벌의 플랫 리스트**로 보이게 하려는 것이다(naver-map-ui-ux-analysis.md 2절).
-  /// 구분선은 두지 않는다 — 머리말·배너까지 칸칸이 나뉘어 보였다.
-  static const _rowVerticalPadding = 8.0;
-  static const _rowContentPadding = EdgeInsets.symmetric(horizontal: 16);
-  static const _rowTitleGap = 12.0;
-
-  /// 행 이름 한 줄. 강조 span(AppColors.primary)이 얹히는 바탕이다.
-  static const _rowTitleStyle = TextStyle(
-    fontSize: 14,
-    fontWeight: FontWeight.w600,
-  );
+  /// 행 리듬은 이제 `RoutexListCell`이 갖는다. **한 벌의 플랫 리스트**로 보이게
+  /// 하려는 것은 그대로다(naver-map-ui-ux-analysis.md 2절) — 구분선은 두지 않는다.
+  /// 머리말·배너까지 칸칸이 나뉘어 보였다.
 
   /// 머리말(«검색 결과 N»·«검색어 제안»…) 공통 여백. 우측에 컨트롤이 붙는
   /// 머리말은 좌·상·하만 이 값을 따르고 우측만 좁힌다.
@@ -1104,33 +1094,20 @@ class _SearchPanelState extends State<SearchPanel> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     for (final query in queries)
-                      ListTile(
+                      RoutexListCell(
                         key: Key('recent-$query'),
-                        dense: true,
-                        minVerticalPadding: _rowVerticalPadding,
-                        horizontalTitleGap: _rowTitleGap,
-                        contentPadding: _rowContentPadding,
-                        leading: const Icon(
-                          Icons.history,
-                          size: 20,
-                          color: AppColors.muted,
-                        ),
-                        title: Text(
-                          query,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          // 최근 검색어는 매장 이름이 아니라 사용자가 친 글자라
-                          // 강조 span이 없다. 바탕 스타일은 다른 행과 같게 둔다.
-                          style: _rowTitleStyle,
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.close, size: 18),
-                          color: AppColors.muted,
-                          tooltip: '$query 삭제',
-                          onPressed: () =>
-                              recentSearchesController.remove(query),
-                        ),
-                        onTap: () {
+                        leadingIcon: Icons.history,
+                        leadingIconTone: RoutexListIconTone.quiet,
+                        // 최근 검색어는 매장 이름이 아니라 사용자가 친 글자라
+                        // 강조할 구간이 없다.
+                        title: query,
+                        // 지우기는 갈래가 하나뿐이라 ×다. ⋯를 두면 메뉴가 열릴
+                        // 줄 알고 누른다.
+                        trailingActionLabel: '$query 삭제',
+                        trailingActionIcon: Icons.close,
+                        onTrailingAction: () =>
+                            recentSearchesController.remove(query),
+                        onPressed: () {
                           // 최근 검색어는 문자열 하나뿐이라 어느 층 매장이었는지
                           // 알 방법이 없다. 층을 모르는 선택이므로 스코프를 뺀다.
                           _floorScopeOnce = const _FloorScopeOverride(null);
@@ -1301,7 +1278,7 @@ class _SearchPanelState extends State<SearchPanel> {
     // **`ListView(shrinkWrap: true)`가 아닌 이유** — 느슨한 제약(maxHeight만 있고
     // tight가 아닌) 안에서 스크롤 범위를 내용보다 짧게 잡아 30건 중 29번째에서
     // 멈췄다(마지막 타일에 영영 도달하지 못함). 상한이 30이라 지연 생성으로 아낄
-    // 것도 없다. 구분선은 두지 않는다([_rowVerticalPadding]).
+    // 것도 없다. 구분선은 두지 않는다(행 리듬은 RoutexListCell이 갖는다).
     return Scrollbar(
       controller: _resultScrollController,
       child: SingleChildScrollView(
@@ -1444,28 +1421,43 @@ class _SearchPanelState extends State<SearchPanel> {
             // 넘어가 정작 결과 목록이 화면 밖으로 밀린다. 줄을 고정하면 선택지가
             // 몇 개든 패널 높이가 그대로다.
             if (_discoveryOptions.isNotEmpty)
-              SizedBox(
-                height: 30,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
                   children: [
-                    for (final option in _discoveryOptions) ...[
-                      FilterPill(
-                        key: Key(
-                          'facet-option-${option.facet}-${option.value}',
-                        ),
-                        label: '${option.label} (${option.count})',
-                        selected: false,
-                        onTap: () => _selectFacet(option),
+                    Expanded(
+                      child: RoutexChipBar(
+                        options: [
+                          for (final option in _discoveryOptions)
+                            RoutexChipOption(
+                              // 칩 줄이 이 id를 그대로 위젯 key로 쓴다.
+                              id: 'facet-option-${option.facet}-${option.value}',
+                              label: option.label,
+                              count: option.count,
+                            ),
+                        ],
+                        // 고르는 순간 다음 질문으로 넘어가므로 이 줄에는 선택이
+                        // 머무르지 않는다.
+                        selectedId: null,
+                        onSelected: (id) {
+                          if (id == null) return;
+                          _selectFacet(
+                            _discoveryOptions.firstWhere(
+                              (option) =>
+                                  'facet-option-${option.facet}-${option.value}' ==
+                                  id,
+                            ),
+                          );
+                        },
+                        semanticsLabel: '선택지',
                       ),
-                      const SizedBox(width: 6),
-                    ],
-                    // 성격이 다른 것은 같은 줄에 두되 섞이지 않게 구분선으로
-                    // 나눈다(naver-map-ui-ux-analysis.md 5·6절의 필터 줄과 같다).
-                    // 위 pill들은 "이 값으로 좁혀라"이고, 이건 "좁히지 말고 다 봐라"다.
+                    ),
+                    // **줄 안에 섞지 않는다.** 위 칩들은 "이 값으로 좁혀라"이고 이건
+                    // "좁히지 말고 다 봐라"다. 예전에는 구분선으로 갈랐는데, 성격이
+                    // 다른 것을 같은 줄에 두고 선으로 나누는 것보다 스크롤 밖에
+                    // 고정해 두는 편이 분명하다 — 선택지가 길어도 안 밀려난다.
                     if (canShowAll) ...[
-                      const VerticalDivider(width: 10, indent: 6, endIndent: 6),
+                      const SizedBox(width: 6),
                       FilterPill(
                         key: const Key('show-all'),
                         label: '전체 보기',
