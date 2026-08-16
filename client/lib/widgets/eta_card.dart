@@ -66,9 +66,12 @@ class EtaCard extends StatelessWidget {
           // 환승 수단까지 이 줄에 들어 있고(`레페토까지 · 1F → B1 (에스컬레이터)`),
           // 그 값이 화면 어디에도 다시 나오지 않는다.
           title: label,
-          arrivalTime: _arrivalTimeText(context, minutes),
+          // **도착 시각을 쓰지 않는다.** 시각이 소요 시간보다 나은 이유는 약속과
+          // 바로 견줄 수 있어서인데, 그 이점은 이동이 길 때만 생긴다. 건물 안
+          // 87 m를 걷는 사람에게 `오후 2:20`은 지금이 몇 시인지 빼야 뜻이 생기고,
+          // 그 뺄셈을 사람이 한다. 실내 안내는 대부분 1~5분이다.
+          arrivalTime: '약 $minutes분',
           metrics: [
-            RoutexTripMetric(value: '$minutes분', label: '소요'),
             RoutexTripMetric(
               value: formatDistance(distanceMeters),
               label: '거리',
@@ -99,16 +102,6 @@ class EtaCard extends StatelessWidget {
     );
   }
 }
-
-/// 지금부터 [minutes]분 뒤의 시각. `오후 3:24`처럼 지역 표기를 따른다.
-///
-/// **소요 시간이 아니라 시각을 큰 글자로 두는 이유**는 약속과 바로 견줄 수 있어서다.
-/// `22분`은 언제 나가야 하는지를 사람이 다시 계산하게 만든다. 소요와 거리는 그 아래
-/// 수치 줄로 내린다.
-String _arrivalTimeText(BuildContext context, int minutes) =>
-    TimeOfDay.fromDateTime(
-      DateTime.now().add(Duration(minutes: minutes)),
-    ).format(context);
 
 /// 안내 중 배너 본문. **한 줄이다** — 아이콘 · 지시 문구 · 다음 조작까지 거리.
 ///
