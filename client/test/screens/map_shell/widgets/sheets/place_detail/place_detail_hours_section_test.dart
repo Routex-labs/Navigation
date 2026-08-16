@@ -3,8 +3,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/models/place/place_detail.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail/place_detail_hours_section.dart';
 
-/// 판정 자체는 `test/domain/store_hours_test.dart`가 본다. 여기서 보는 것은
-/// **그 결과가 화면의 어떤 문장이 되는가**와 접힘/펼침이다.
+import '../../../../../support/routex_test_host.dart';
+
+/// 판정은 `test/domain/store/store_hours_test.dart`, 값을 줄로 옮기는 규칙은
+/// `place_detail_hours_view_test.dart`가 본다. 여기서 보는 것은 **그 둘이
+/// 붙었을 때 화면에 무엇이 남는가**와 접힘/펼침이다.
 void main() {
   HoursSection hours({
     List<StoreHoursException> exceptions = const [],
@@ -36,11 +39,9 @@ void main() {
 
   Future<void> pump(WidgetTester tester, HoursSection section, DateTime now) =>
       tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: PlaceHoursSection(hours: section, now: now),
-            ),
+        appThemedHost(
+          SingleChildScrollView(
+            child: PlaceHoursSection(hours: section, now: now),
           ),
         ),
       );
@@ -63,21 +64,21 @@ void main() {
   testWidgets('접혀 있으면 오늘 줄만 보이고 펼치면 7일이 나온다', (tester) async {
     await pump(tester, hours(), kst(2026, 8, 11, 14));
 
-    expect(find.textContaining('화(8/11)'), findsOneWidget);
-    expect(find.textContaining('수(8/12)'), findsNothing);
+    expect(find.text('화 · 10:30 - 20:00'), findsOneWidget);
+    expect(find.text('수 · 10:30 - 20:00'), findsNothing);
 
     await tester.tap(find.textContaining('영업 중'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('수(8/12)'), findsOneWidget);
-    // 다음 월요일까지 7일.
-    expect(find.textContaining('월(8/17)'), findsOneWidget);
+    expect(find.text('수 · 10:30 - 20:00'), findsOneWidget);
+    // 다음 월요일까지 7일. 월요일은 휴무다.
+    expect(find.text('월 · 휴무'), findsOneWidget);
   });
 
   testWidgets('휴무 요일은 휴무로 적는다', (tester) async {
     await pump(tester, hours(), kst(2026, 8, 10, 12));
 
-    expect(find.text('휴무'), findsOneWidget);
+    expect(find.text('월 · 휴무'), findsOneWidget);
   });
 
   // 예외 사유를 빼면 휴점일이 "그냥 닫힌 날"과 구분되지 않는다.
@@ -98,7 +99,7 @@ void main() {
     );
 
     expect(find.text('백화점 정기 휴점'), findsOneWidget);
-    expect(find.text('휴무'), findsOneWidget);
+    expect(find.text('화 · 휴무'), findsOneWidget);
   });
 
   // 낡은 데이터에서 "영업 종료"로 떨어뜨리면 열려 있는 매장을 돌려보낸다.
@@ -108,8 +109,7 @@ void main() {
     expect(find.textContaining('오래됐'), findsWidgets);
     expect(find.textContaining('영업 중'), findsNothing);
     // 판정만 거두고 요일 표는 남긴다 — 통째로 지우면 "정보가 없는 앱"이 된다.
-    expect(find.textContaining('화(8/11)'), findsOneWidget);
-    expect(find.textContaining('10:30 - 20:00'), findsOneWidget);
+    expect(find.text('화 · 10:30 - 20:00'), findsOneWidget);
   });
 
   testWidgets('최근 확인일은 본문 위계를 흐리지 않도록 숨긴다', (tester) async {
@@ -118,10 +118,14 @@ void main() {
     expect(find.textContaining('2026-08-10'), findsNothing);
   });
 
-  testWidgets('오래된 정보는 확인일을 경고의 근거로 남긴다', (tester) async {
+  // 머리 줄의 "오래됐어요"는 주장이고 확인일은 그 근거다. 펼쳐야 근거가 나오면
+  // 읽는 사람은 무엇을 보고 판단할지 알 수 없다.
+  testWidgets('오래된 정보는 접혀 있어도 확인일을 근거로 남긴다', (tester) async {
     await pump(tester, hours(confirmedAt: '2026-01-01'), kst(2026, 8, 11, 14));
 
     expect(find.textContaining('2026-01-01 기준'), findsOneWidget);
     expect(find.textContaining('달라졌을 수 있어요'), findsOneWidget);
+    // 근거만 남기고 나머지 요일은 그대로 접혀 있다.
+    expect(find.text('수 · 10:30 - 20:00'), findsNothing);
   });
 }

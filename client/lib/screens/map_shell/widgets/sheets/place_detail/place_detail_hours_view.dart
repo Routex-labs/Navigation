@@ -1,0 +1,84 @@
+import 'package:routex_design_system/routex_design_system.dart';
+
+import '../../../../../domain/store/store_hours.dart';
+
+/// 영업시간 판정 결과를 Runtime Kit이 그리는 값으로 바꾼다.
+///
+/// **판정은 여기서 하지 않는다.** `domain/store/store_hours.dart`의 순수 함수가
+/// 계산한 결과를 문장과 줄로 옮기기만 한다. 폐점 정각·자정 넘김 같은 경계는
+/// `test/domain/store/store_hours_test.dart`가 단일 출처다.
+///
+/// 위젯이 아니라 함수로 두는 이유는 화면을 띄우지 않고 확인하기 위해서다.
+
+/// [StoreOpenState]를 같은 뜻의 표시 상태로 옮긴다.
+///
+/// `unknown`을 `closed`로 떨어뜨리지 않는다. 모르는 것을 닫혔다고 말하면 열려
+/// 있는 매장을 돌려보낸다.
+RoutexHoursState routexHoursState(StoreOpenState state) => switch (state) {
+  StoreOpenState.open => RoutexHoursState.open,
+  StoreOpenState.closed => RoutexHoursState.closed,
+  StoreOpenState.unknown => RoutexHoursState.unknown,
+};
+
+/// 오늘부터 이레를 요일 줄로 바꾼다. 첫 줄이 오늘이다.
+///
+/// 라벨에 날짜를 섞지 않는다. 매주 반복되는 규칙에 `(8/11)`을 붙이면 읽는 사람이
+/// 그 날짜에만 해당하는 시간으로 읽는다. 그날만 다른 이유는 [RoutexHoursDay.note]가
+/// 말한다.
+List<RoutexHoursDay> routexHoursDays(List<StoreHoursDay> week) => [
+  for (final day in week)
+    RoutexHoursDay(
+      label: weekdayLabelOf(day.date),
+      value: day.intervals.isEmpty
+          ? '휴무'
+          : day.intervals
+                .map((interval) => '${interval.open} - ${interval.close}')
+                .join(' · '),
+      note: day.note,
+      closed: day.intervals.isEmpty,
+    ),
+];
+
+/// `20:00 종료` / `내일 10:30 영업 시작`. 말할 것이 없으면 null.
+String? routexHoursDetail(StoreHoursStatus status, DateTime today) {
+  final next = status.nextChangeAt;
+  if (status.state == StoreOpenState.unknown) return null;
+  if (next == null) {
+    // 영업 중인데 바뀌는 시각이 없으면 종일 영업이고, 닫혀 있는데 없으면 앞으로
+    // 여는 날이 없다는 뜻이다. 둘은 전혀 다른 말이라 같은 문구를 쓰지 않는다.
+    return status.state == StoreOpenState.open ? '24시간 영업' : null;
+  }
+  final suffix = status.state == StoreOpenState.open ? '종료' : '영업 시작';
+  return '${_whenText(next, today)} $suffix';
+}
+
+/// 판정을 거둔 이유를 적은 한 줄. 거두지 않았으면 null.
+///
+/// 확인일은 그 자체로 읽을 정보가 아니라 **경고의 근거**다. 그래서 오래됐을
+/// 때만 넘긴다 — 늘 넘기면 방금 확인한 영업시간에도 경고가 붙는다.
+String? routexHoursStaleNote(StoreHoursStatus status, String confirmedAt) =>
+    status.isStale ? '$confirmedAt 기준 · 영업시간이 달라졌을 수 있어요' : null;
+
+/// 월~일 한 글자 라벨.
+String weekdayLabelOf(DateTime date) =>
+    const ['월', '화', '수', '목', '금', '토', '일'][(date.weekday - 1) % 7];
+
+/// 전환 시각을 `20:00` / `내일 10:30` / `금 10:30`으로 적는다.
+///
+/// 날짜를 그대로 적지 않는 이유는 대부분의 전환이 오늘·내일 안에서 일어나기
+/// 때문이다. `8월 12일 10:30`은 읽는 사람이 오늘 날짜를 떠올려야 뜻이 선다.
+String _whenText(DateTime next, DateTime today) {
+  final time =
+      '${next.hour.toString().padLeft(2, '0')}:'
+      '${next.minute.toString().padLeft(2, '0')}';
+  final days = DateTime.utc(
+    next.year,
+    next.month,
+    next.day,
+  ).difference(today).inDays;
+  return switch (days) {
+    0 => time,
+    1 => '내일 $time',
+    _ => '${weekdayLabelOf(next)} $time',
+  };
+}
