@@ -1153,11 +1153,11 @@ class PlaceLinksSection extends StatelessWidget {
 
   // 열기에 실패하면 조용히 넘기지 않는다. 눌렀는데 아무 일도 일어나지 않으면
   // 사용자는 앱이 멈춘 줄 안다 — 실패했다는 사실만이라도 알려 준다.
-  Future<void> _open(BuildContext context, PlaceLinkItem item) async {
+  Future<void> _open(BuildContext context, String url, String label) async {
     var opened = false;
     try {
       opened = await launchUrl(
-        Uri.parse(item.url),
+        Uri.parse(url),
         mode: LaunchMode.externalApplication,
       );
     } catch (_) {
@@ -1167,7 +1167,7 @@ class PlaceLinksSection extends StatelessWidget {
     // Navigator에 얹힌 모달이라 SnackBar를 그리는 Scaffold보다 위에 있다. 열기가
     // 실패해도 화면에는 아무 일도 안 일어난 것으로 보였다. 이유는 [RoutexToast].
     if (!opened && context.mounted) {
-      RoutexToast.show(context, '${item.label}을(를) 열지 못했습니다');
+      RoutexToast.show(context, '$label을(를) 열지 못했습니다');
     }
   }
 
@@ -1180,135 +1180,44 @@ class PlaceLinksSection extends StatelessWidget {
       children: [
         const PlaceSectionTitle('SNS'),
         const SizedBox(height: 12),
-        for (var index = 0; index < items.length; index++) ...[
-          if (index > 0) const SizedBox(height: infoRowGap),
-          _LinkRow(
-            item: items[index],
-            onTap: () => _open(context, items[index]),
-          ),
-        ],
+        RoutexLinkList(
+          items: [
+            for (final item in items)
+              RoutexLinkItem(
+                label: item.label,
+                url: item.url,
+                display: _displayFor(item.label),
+                accent: _accentFor(item),
+              ),
+          ],
+          // 여는 일은 앱이 한다 — 외부 앱을 여는 것은 플랫폼 능력이다.
+          onSelected: (selected) => _open(context, selected.url, selected.label),
+        ),
       ],
     );
   }
-}
 
-/// 링크 한 줄 — 브랜드 배지 · 라벨(또는 주소) · 오른쪽 `>`.
-class _LinkRow extends StatelessWidget {
-  const _LinkRow({required this.item, required this.onTap});
-
-  final PlaceLinkItem item;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    // 라벨이 비어 있어도 줄이 빈 채로 남지 않게 주소로 대신한다. 라벨은 사람이
-    // 쓰는 자유 문자열이라 언제든 빠질 수 있다.
-    final label = item.label.trim();
-    final showUrl = isWebsiteLabel(label) || label.isEmpty;
-    // 라벨과 주소를 함께 보여 줄 때만 두 줄이다. `오설록 공식 홈페이지`처럼 라벨이
-    // 어느 브랜드인지 말해 주면 그 글자를 주소로 덮어쓸 이유가 없고, 반대로 주소를
-    // 지우면 어디로 나가는지가 사라진다. 다른 줄은 그대로 한 줄이다.
-    final showBoth = (websiteNamePrefix(label) ?? '').isNotEmpty;
-
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Row(
-        children: [
-          _LinkBadge(brand: linkBrandFor(label), iconAsset: item.iconAsset),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (showBoth)
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 13.5,
-                      color: AppColors.text,
-                    ),
-                  ),
-                Text(
-                  showUrl ? item.url : label,
-                  // **한 줄 말줄임이고, 자르는 곳은 뒤다.** 주소는 앞쪽(호스트)이 어디로
-                  // 가는지를 말하고 뒤쪽(경로)은 그렇지 않다. 두 줄로 흘리면 줄 높이가
-                  // 항목마다 달라져 목록이 아니라 글 덩어리로 읽힌다.
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    // 주소가 라벨 아래로 내려가면 보조 정보라 한 급 작다.
-                    fontSize: showBoth ? 12 : 13.5,
-                    // 주소만 링크 색이다. 이 줄이 글자가 아니라 주소라는 표시.
-                    color: showUrl ? AppColors.primary : AppColors.text,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          // 참고 화면을 따라 `>`를 쓴다. 앱 밖으로 나간다는 사실은 브랜드 배지와
-          // (웹사이트 줄에서는) 주소가 대신 알려 준다.
-          const Icon(Icons.chevron_right, size: 18, color: AppColors.muted),
-        ],
-      ),
-    );
-  }
-}
-
-/// 브랜드 색 원 안에 Material 아이콘 하나. [iconAsset]이 있으면 그 그림이 원을
-/// 채운다.
-class _LinkBadge extends StatelessWidget {
-  const _LinkBadge({required this.brand, this.iconAsset});
-
-  final PlaceLinkBrand brand;
-  final String? iconAsset;
-
-  @override
-  Widget build(BuildContext context) {
-    final asset = iconAsset;
-    if (asset != null && asset.isNotEmpty) {
-      return ClipOval(
-        child: Image.asset(
-          asset,
-          width: 30,
-          height: 30,
-          fit: BoxFit.cover,
-          // 그림이 빠져도 줄이 사라지지 않게 배지를 기본 모양으로 되돌린다.
-          // 자산 누락은 빌드가 아니라 실행 중에 드러난다.
-          errorBuilder: (_, _, _) => _BrandBadge(brand: brand),
-        ),
-      );
+  /// 이 줄에서 사람이 읽을 값이 무엇인가. **라벨의 성격으로 정한다** — 차례로
+  /// 정하면 배열을 바꿨을 때 뜻 없이 화면이 따라 바뀐다.
+  static RoutexLinkDisplay _displayFor(String rawLabel) {
+    final label = rawLabel.trim();
+    if (label.isEmpty) return RoutexLinkDisplay.url;
+    // `오설록 공식 홈페이지`처럼 **브랜드를 말하는 웹사이트 라벨**이 먼저다. 이걸
+    // 뒤에 두면 웹사이트 판정이 먼저 걸려 라벨이 주소에 덮인다.
+    if ((websiteNamePrefix(label) ?? '').isNotEmpty) {
+      return RoutexLinkDisplay.labelAndUrl;
     }
-    return _BrandBadge(brand: brand);
+    if (isWebsiteLabel(label)) return RoutexLinkDisplay.url;
+    return RoutexLinkDisplay.label;
   }
-}
 
-class _BrandBadge extends StatelessWidget {
-  const _BrandBadge({required this.brand});
-
-  final PlaceLinkBrand brand;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = brand.colors;
-    return Container(
-      width: 30,
-      height: 30,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        // LinearGradient는 색이 두 개 이상이어야 해서 단색이면 같은 색을 겹친다.
-        gradient: LinearGradient(
-          colors: colors.length == 1 ? [colors.first, colors.first] : colors,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Icon(brand.icon, size: 17, color: Colors.white),
+  static RoutexLinkAccent _accentFor(PlaceLinkItem item) {
+    final brand = linkBrandFor(item.label.trim());
+    final asset = item.iconAsset;
+    return RoutexLinkAccent(
+      icon: brand.icon,
+      colors: brand.colors,
+      image: asset == null || asset.isEmpty ? null : AssetImage(asset),
     );
   }
 }
