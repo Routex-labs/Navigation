@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 import 'package:navigation_client/map/icon/category_icon.dart';
 import 'package:navigation_client/domain/category/subcategory_label.dart';
 
@@ -44,6 +45,34 @@ void main() {
 
     test('모르는 대분류는 상점 아이콘으로 폴백한다', () {
       expect(categoryIconFor('없는분류'), Icons.storefront);
+    });
+
+    // 같은 분류를 두 표가 안다. 지도 폴리곤·심볼은 위의 앱 표를 읽고, 지도 위
+    // 분류 칩은 Runtime Kit의 `RoutexCategoryTokens`를 읽는다. 값을 옮겨 적은
+    // 것이라 **한쪽만 고치면 조용히 갈라진다** — 같은 분류가 도면에서는 살구색인데
+    // 칩에서는 회색 storefront로 나오는 식이다. 화면은 멀쩡해 보인다.
+    //
+    // 표를 하나로 합치지 않은 이유는 지도 쪽이 MapLibre에 비트맵을 사전 등록하는
+    // 경로라 단계 7까지 앱이 소유하기 때문이다. 합치기 전까지는 이 테스트가
+    // 두 표를 묶어 둔다.
+    test('앱 표와 Runtime Kit 표가 같은 색·글리프를 가리킨다', () {
+      expect(
+        RoutexCategoryTokens.categories.toSet(),
+        categoryPaletteCategories.toSet(),
+        reason: '한쪽에만 있는 대분류가 생기면 칩과 도면이 갈라진다',
+      );
+      for (final category in categoryPaletteCategories) {
+        expect(
+          RoutexCategoryTokens.colorFor(category),
+          categoryColorFor(category),
+          reason: category,
+        );
+        expect(
+          RoutexCategoryTokens.iconFor(category),
+          categoryIconFor(category),
+          reason: category,
+        );
+      }
     });
   });
 
