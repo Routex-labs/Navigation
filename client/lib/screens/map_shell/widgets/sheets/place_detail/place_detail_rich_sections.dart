@@ -125,6 +125,14 @@ class _PlaceMenuSectionState extends State<PlaceMenuSection> {
   /// 않는 목록이 열려 있다.
   bool _expanded = false;
 
+  /// 카테고리를 사람이 한 번이라도 건드렸는지.
+  ///
+  /// 처음에는 첫 카테고리를 골라 둔 것처럼 시작한다 — 갈래 하나에 200종 가까이
+  /// 있어서 전체를 먼저 보여 주면 아무것도 좁혀 주지 않는다. 대신 **고른 칩을 다시
+  /// 누르면 그때부터 전체**가 된다. 그 길을 막으면 한 번 고른 카테고리에서 빠져나올
+  /// 수 없다(검색 패널에서 같은 이유로 되돌린 적이 있다).
+  bool _tabTouched = false;
+
   @override
   Widget build(BuildContext context) {
     if (widget.items.isEmpty) return const SizedBox.shrink();
@@ -147,18 +155,14 @@ class _PlaceMenuSectionState extends State<PlaceMenuSection> {
     // 검색 중에는 카테고리 탭을 숨긴다. 검색 결과가 여러 카테고리에 걸치는데 탭이
     // 남아 있으면 "지금 뭘 보고 있는지"가 두 곳에서 다르게 말해진다.
     final tabs = searching ? const <String>[] : menuCategoryTabs(matched);
-    final active = tabs.contains(_activeTab) ? _activeTab : tabs.firstOrNull;
+    final active = _tabTouched
+        ? (tabs.contains(_activeTab) ? _activeTab : null)
+        : tabs.firstOrNull;
     final visible = active == null
         ? matched
         : matched
               .where((item) => item.category == active)
               .toList(growable: false);
-
-    final overflowing = visible.length > _menuVisibleCap;
-    final capped = !_expanded && overflowing;
-    final shown = capped
-        ? visible.take(_menuVisibleCap).toList(growable: false)
-        : visible;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -169,14 +173,18 @@ class _PlaceMenuSectionState extends State<PlaceMenuSection> {
         ),
         if (groups.isNotEmpty) ...[
           const SizedBox(height: 12),
-          _MenuGroupTabs(
-            tabs: groups,
-            active: activeGroup!,
-            onSelect: (group) => setState(() {
-              _activeGroup = group;
-              _activeTab = null;
-              _expanded = false;
-            }),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
+            child: RoutexTabs(
+              labels: groups,
+              selectedIndex: groups.indexOf(activeGroup!),
+              onSelected: (index) => setState(() {
+                _activeGroup = groups[index];
+                _activeTab = null;
+                _tabTouched = false;
+                _expanded = false;
+              }),
+            ),
           ),
         ],
         // 검색창은 메뉴가 한 화면에 안 들어올 때만 의미가 있다. 열 줄도 안 되는
@@ -193,19 +201,28 @@ class _PlaceMenuSectionState extends State<PlaceMenuSection> {
         ],
         if (tabs.isNotEmpty) ...[
           const SizedBox(height: 10),
-          _MenuCategoryTabs(
-            tabs: tabs,
-            active: active!,
-            onSelect: (tab) => setState(() {
-              _activeTab = tab;
-              _expanded = false;
-            }),
+          // 줄이 스스로 가로로 넘긴다. 지도 위 칩 줄과 달리 여기는 부모가 가로
+          // 스크롤을 갖고 있지 않다.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
+            child: RoutexChipBar(
+              options: [
+                for (final tab in tabs) RoutexChipOption(id: tab, label: tab),
+              ],
+              selectedId: active,
+              semanticsLabel: '메뉴 분류',
+              onSelected: (id) => setState(() {
+                _tabTouched = true;
+                _activeTab = id;
+                _expanded = false;
+              }),
+            ),
           ),
         ],
         const SizedBox(height: 6),
         if (visible.isEmpty)
-          const Padding(
-            padding: EdgeInsets.fromLTRB(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
               placeSectionGutter,
               14,
               placeSectionGutter,
@@ -213,22 +230,48 @@ class _PlaceMenuSectionState extends State<PlaceMenuSection> {
             ),
             child: Text(
               '찾는 메뉴가 없습니다',
-              style: TextStyle(fontSize: 13.5, color: AppColors.muted),
+              style: RoutexTypography.bodySmall.copyWith(
+                color: context.routexColors.contentSecondary,
+              ),
             ),
           ),
         // 세로 목록이라 스크롤을 따로 갖지 않는다. 시트 본문이 이미 스크롤이고,
         // 그 안에 또 스크롤을 넣으면 어느 쪽이 움직일지가 손끝에서 갈린다.
-        for (final item in shown) _MenuRow(item: item),
-        // 개수를 적지 않는다. "6종"을 보고 누를지 말지를 정하는 사람은 없고,
-        // 눌러서 나온 목록에 이미 전부 있다.
-        if (overflowing)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
-            child: RoutexShowMore(
-              expanded: _expanded,
-              onExpanded: (value) => setState(() => _expanded = value),
+        Padding(
+          // 줄은 제 여백을 갖고 있다. 본문 여백선에 맞추려면 그만큼 뺀 값을
+          // 바깥에 준다.
+          padding: const EdgeInsets.symmetric(
+            horizontal: placeSectionGutter - RoutexSpacing.contentGap,
+          ),
+          child: RoutexMenuList(
+            entries: [
+              for (final item in visible)
+                RoutexMenuEntry(
+                  name: item.name,
+                  description: item.description,
+                  price: item.price,
+                  selectable: item.hasDetail,
+                  badges: [
+                    for (final badge in item.badges)
+                      RoutexBadge(label: badge, accent: badgeAccentFor(badge)),
+                  ],
+                  thumbnail: item.imageAssetPath == null
+                      ? null
+                      : RoutexMediaItem(
+                          image: AssetImage(item.imageAssetPath!),
+                        ),
+                ),
+            ],
+            collapsedCount: _menuVisibleCap,
+            thumbnailAspectRatio: _menuImageAspect,
+            expanded: _expanded,
+            onExpanded: (value) => setState(() => _expanded = value),
+            onSelected: (index) => showDialog<void>(
+              context: context,
+              builder: (_) => _menuDialog(visible[index]),
             ),
           ),
+        ),
       ],
     );
   }
@@ -253,120 +296,6 @@ List<PlaceMenuItem> _search(List<PlaceMenuItem> items, String query) {
       .toList(growable: false);
 }
 
-/// 메뉴 한 줄. 왼쪽에 이름·설명·가격, 오른쪽에 사진.
-///
-/// 글을 왼쪽에 둔 이유는 **읽는 순서** 때문이다. 사람은 왼쪽부터 읽는데 사진이 앞에
-/// 있으면 이름을 보려고 눈이 한 번 건너뛴다. 사진은 이름을 확인한 뒤 "그래서 뭐가
-/// 나오는데"에 답하는 자리라 오른쪽이 맞다.
-///
-/// **영문명은 줄에서 뺐다.** 한 줄에 이름·영문명·설명·가격이 다 오면 무엇이 제목인지
-/// 흐려진다. 영문명은 골라서 팝업을 연 사람에게만 필요하다.
-class _MenuRow extends StatelessWidget {
-  const _MenuRow({required this.item});
-
-  final PlaceMenuItem item;
-
-  @override
-  Widget build(BuildContext context) {
-    final row = Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: placeSectionGutter,
-        vertical: 12,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    height: 1.3,
-                    color: AppColors.text,
-                  ),
-                ),
-                // 배지는 이름 **아래** 줄이다. 옆에 붙이면 이름이 그만큼 짧게
-                // 잘리는데, 316종 중 배지가 붙는 건 32종뿐이라 나머지 284종의
-                // 이름 자리를 소수를 위해 내주는 셈이 된다.
-                if (item.badges.isNotEmpty) ...[
-                  const SizedBox(height: 5),
-                  Wrap(
-                    spacing: 4,
-                    runSpacing: 4,
-                    children: [
-                      for (final badge in item.badges)
-                        RoutexBadge(
-                          label: badge,
-                          accent: badgeAccentFor(badge),
-                        ),
-                    ],
-                  ),
-                ],
-                if (item.description != null) ...[
-                  const SizedBox(height: 5),
-                  Text(
-                    item.description!,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      height: 1.35,
-                      color: AppColors.muted,
-                    ),
-                  ),
-                ],
-                // 가격이 있으면 설명 아래. 지금 데이터에는 없어서 그려지지 않는다 —
-                // 공식 사이트가 가격을 공개하지 않아 지어내는 대신 비워 뒀다.
-                if (item.price != null) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    item.price!,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.text,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (item.imageAssetPath != null) ...[
-            const SizedBox(width: 14),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: Image.asset(
-                item.imageAssetPath!,
-                width: _menuThumbWidth,
-                height: _menuThumbHeight,
-                // 카드와 같은 이유로 원본 비율을 지킨다(설계 7-A-2).
-                fit: BoxFit.contain,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-
-    if (!item.hasDetail) return row;
-
-    return GestureDetector(
-      onTap: () => showDialog<void>(
-        context: context,
-        builder: (_) => _MenuDetailDialog(item: item),
-      ),
-      behavior: HitTestBehavior.opaque,
-      child: row,
-    );
-  }
-}
-
 /// 배지 이름 → 색. 둘 다 연한 배경 + 진한 글자(tonal)라 사진 옆에서 튀지 않는다.
 ///
 /// 갈라 놓는 이유는 **한 줄에 둘이 나란히 뜨는 항목이 있기 때문이다.** 같은 색이면
@@ -388,44 +317,6 @@ const _badgeAccents = <String, RoutexBadgeAccent>{
 /// 원인을 찾기 어렵다. 화면에 그리는 글자는 원본 그대로다.
 RoutexBadgeAccent? badgeAccentFor(String label) =>
     _badgeAccents[label.replaceAll(' ', '').toUpperCase()];
-
-/// 위쪽 갈래(음료·푸드) 선택. 카테고리 탭보다 굵게 두어 위계를 드러낸다.
-class _MenuGroupTabs extends StatelessWidget {
-  const _MenuGroupTabs({
-    required this.tabs,
-    required this.active,
-    required this.onSelect,
-  });
-
-  final List<String> tabs;
-  final String active;
-  final ValueChanged<String> onSelect;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
-    child: Row(
-      children: [
-        for (final tab in tabs)
-          Padding(
-            padding: const EdgeInsets.only(right: 18),
-            child: GestureDetector(
-              onTap: () => onSelect(tab),
-              behavior: HitTestBehavior.opaque,
-              child: Text(
-                tab,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: tab == active ? FontWeight.w800 : FontWeight.w500,
-                  color: tab == active ? AppColors.text : AppColors.muted,
-                ),
-              ),
-            ),
-          ),
-      ],
-    ),
-  );
-}
 
 /// 메뉴 이름으로 좁히는 검색창.
 class _MenuSearchField extends StatefulWidget {
@@ -580,58 +471,6 @@ class _MenuSearchFieldState extends State<_MenuSearchField>
   }
 }
 
-class _MenuCategoryTabs extends StatelessWidget {
-  const _MenuCategoryTabs({
-    required this.tabs,
-    required this.active,
-    required this.onSelect,
-  });
-
-  final List<String> tabs;
-  final String active;
-  final ValueChanged<String> onSelect;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 32,
-    child: ListView.separated(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
-      itemCount: tabs.length,
-      separatorBuilder: (_, _) => const SizedBox(width: 8),
-      itemBuilder: (context, index) {
-        final tab = tabs[index];
-        final selected = tab == active;
-        return GestureDetector(
-          onTap: () => onSelect(tab),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: selected ? AppColors.blue500 : AppColors.surface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: selected ? AppColors.blue500 : AppColors.blue100,
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: Center(
-                child: Text(
-                  tab,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: selected ? Colors.white : AppColors.muted,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    ),
-  );
-}
-
 /// 메뉴 사진의 가로÷세로. 번들에 든 316장이 전부 300×313이라 그 값을 그대로 쓴다.
 ///
 /// **썸네일을 이 비율로 잡는 이유는 자르지 않기 위해서다.** 정사각으로 넣으면 비율이
@@ -644,10 +483,6 @@ class _MenuCategoryTabs extends StatelessWidget {
 /// 않지만 줄마다 사진 크기가 달라 보인다. 그때는 이 상수가 아니라 사진을 맞춘다.
 const _menuImageAspect = 300 / 313;
 
-/// 목록 썸네일 크기. 한 줄에 사진·이름·설명이 같이 들어가야 해서 작게 잡는다.
-const _menuThumbWidth = 76.0;
-final _menuThumbHeight = (_menuThumbWidth / _menuImageAspect).ceilToDouble();
-
 /// 한 카테고리에서 접힌 상태로 보여 주는 줄 수. 넘는 만큼은 "더보기" 뒤로 보낸다.
 ///
 /// 세로 목록이라 줄이 늘어날수록 다른 섹션(영업 정보·매장 정보)이 화면 밖으로 밀린다.
@@ -655,112 +490,29 @@ final _menuThumbHeight = (_menuThumbWidth / _menuImageAspect).ceilToDouble();
 /// 더 볼 사람만 펼치면 된다.
 const _menuVisibleCap = 4;
 
-/// 메뉴 하나의 상세. 카드에서 뺀 설명과 영양정보가 여기 모인다.
+/// 메뉴 하나의 상세. 줄에서 뺀 영문명·설명·영양정보가 여기 모인다.
 ///
 /// 시트가 아니라 다이얼로그인 이유는 **뒤로가기 규약**(설계 F5) 때문이다. 상세 시트는
 /// 자기 라우트가 pop되면 `onCloseAll`로 시트 묶음 전체를 닫는데, 그 위에 시트를 하나
 /// 더 쌓으면 뒤로가기 한 번이 어디까지 닫는지가 흐려진다. 다이얼로그는 별도 라우트라
 /// 뒤로가기가 팝업만 닫고 상세 시트는 그대로 남는다.
-class _MenuDetailDialog extends StatelessWidget {
-  const _MenuDetailDialog({required this.item});
-
-  final PlaceMenuItem item;
-
-  @override
-  Widget build(BuildContext context) {
-    final facts = item.nutritionFacts;
-
-    return Dialog(
-      backgroundColor: AppColors.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 340),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (item.imageAssetPath != null)
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(18),
-                  ),
-                  // 카드와 같은 이유로 비율을 사진에 맞춘다. 높이를 200으로 박아
-                  // 두면 폭이 340이라 세로를 60% 넘게 잘라냈다 — 메뉴를 자세히
-                  // 보려고 연 팝업에서 정작 사진이 제일 많이 잘렸다.
-                  child: AspectRatio(
-                    aspectRatio: _menuImageAspect,
-                    child: Image.asset(
-                      item.imageAssetPath!,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.name,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.text,
-                      ),
-                    ),
-                    if (item.nameEn != null) ...[
-                      const SizedBox(height: 3),
-                      Text(
-                        item.nameEn!,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: AppColors.muted,
-                        ),
-                      ),
-                    ],
-                    if (item.description != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        RoutexTypography.keepWordsWhole(item.description!),
-                        style: const TextStyle(
-                          fontSize: 14,
-                          height: 1.45,
-                          color: AppColors.text,
-                        ),
-                      ),
-                    ],
-                    // 푸드에는 영양정보가 없다. 라벨만 남은 빈 표를 그리면 "정보가
-                    // 없다"가 아니라 "못 불러왔다"로 읽히므로 블록째 생략한다.
-                    if (facts.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      RoutexKeyValueRows(
-                        rows: [
-                          for (final fact in facts)
-                            RoutexKeyValue(label: fact.$1, value: fact.$2),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 0, 12, 8),
-                  child: TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('닫기'),
-                  ),
-                ),
-              ),
-            ],
-          ),
+RoutexDialog _menuDialog(PlaceMenuItem item) => RoutexDialog(
+  title: item.name,
+  subtitle: item.nameEn,
+  description: item.description,
+  media: item.imageAssetPath == null
+      ? null
+      // 높이를 박아 두면 폭이 넓어 세로를 60% 넘게 잘라낸다 — 메뉴를 자세히 보려고
+      // 연 팝업에서 정작 사진이 제일 많이 잘렸다. 그래서 비율을 사진에 맞춘다.
+      : AspectRatio(
+          aspectRatio: _menuImageAspect,
+          child: Image.asset(item.imageAssetPath!, fit: BoxFit.contain),
         ),
-      ),
-    );
-  }
-}
+  facts: [
+    for (final fact in item.nutritionFacts)
+      RoutexKeyValue(label: fact.$1, value: fact.$2),
+  ],
+);
 
 /// 주소·주차처럼 매장을 설명하는 운영 정보다.
 ///

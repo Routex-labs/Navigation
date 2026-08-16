@@ -329,11 +329,11 @@ void main() {
         ),
       );
 
-      expect(find.text('더보기'), findsOneWidget);
+      // 남은 개수를 적는다 — 근처 매장 줄과 같은 규칙이다. 접혀 있을 때만 세고,
+      // 펼친 뒤에는 이미 보이는 것을 다시 세지 않는다.
+      expect(find.text('2개 더보기'), findsOneWidget);
       expect(find.text('메뉴 0'), findsOneWidget);
       expect(find.text('메뉴 4'), findsNothing);
-      // 개수는 적지 않는다. 눌러서 나온 목록에 이미 전부 있다.
-      expect(find.text('6종'), findsNothing);
     });
 
     testWidgets('a category within the cap has no 더보기 row', (tester) async {
@@ -348,7 +348,7 @@ void main() {
         ),
       );
 
-      expect(find.text('더보기'), findsNothing);
+      expect(find.textContaining('더보기'), findsNothing);
     });
 
     // 팝업으로 띄우지 않고 그 자리에서 펼친다. 목록을 보러 팝업을 여는 것은
@@ -365,7 +365,7 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('더보기'));
+      await tester.tap(find.text('2개 더보기'));
       await tester.pumpAndSettle();
 
       expect(find.byType(Dialog), findsNothing);
@@ -374,14 +374,14 @@ void main() {
       }
       // 다 펼치면 그 줄이 돌아가는 길이 된다. 펼쳐 놓고 나가지 못하면 메뉴 하나
       // 보려던 사람이 여섯 줄을 지나 다음 섹션으로 가야 한다.
-      expect(find.text('더보기'), findsNothing);
+      expect(find.textContaining('더보기'), findsNothing);
       expect(find.text('접기'), findsOneWidget);
 
       await tester.tap(find.text('접기'));
       await tester.pumpAndSettle();
 
       expect(find.text('메뉴 5'), findsNothing);
-      expect(find.text('더보기'), findsOneWidget);
+      expect(find.text('2개 더보기'), findsOneWidget);
     });
 
     // 탭을 옮기면 다시 접는다. 카테고리마다 펼침 상태를 들고 있으면, 돌아왔을 때
@@ -401,7 +401,7 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('더보기'));
+      await tester.tap(find.text('2개 더보기'));
       await tester.pumpAndSettle();
       expect(find.text('리저브 5'), findsOneWidget);
 
@@ -410,7 +410,7 @@ void main() {
       await tester.tap(find.text('리저브').last);
       await tester.pumpAndSettle();
 
-      expect(find.text('더보기'), findsOneWidget);
+      expect(find.text('2개 더보기'), findsOneWidget);
       expect(find.text('리저브 5'), findsNothing);
     });
 
