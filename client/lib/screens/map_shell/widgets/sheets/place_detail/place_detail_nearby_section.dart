@@ -8,6 +8,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 import '../../../../../domain/store/nearby_stores.dart';
 import '../../../../../models/place/store_index_entry.dart';
@@ -59,7 +60,7 @@ class _PlaceNearbySectionState extends State<PlaceNearbySection> {
       children: [
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: placeSectionGutter),
-          child: PlaceSectionTitle('근처 매장'),
+          child: RoutexSectionHeader(title: '근처 매장'),
         ),
         const SizedBox(height: 8),
         AnimatedSize(

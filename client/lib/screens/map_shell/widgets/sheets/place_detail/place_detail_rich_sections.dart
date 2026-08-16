@@ -289,7 +289,7 @@ class _PlaceMenuSectionState extends State<PlaceMenuSection> {
       children: [
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: placeSectionGutter),
-          child: PlaceSectionTitle('메뉴'),
+          child: RoutexSectionHeader(title: '메뉴'),
         ),
         if (groups.isNotEmpty) ...[
           const SizedBox(height: 12),
@@ -1038,7 +1038,7 @@ class PlaceBusinessInfoSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const PlaceSectionTitle('매장 정보'),
+        const RoutexSectionHeader(title: '매장 정보'),
         const SizedBox(height: 12),
         for (var index = 0; index < items.length; index++) ...[
           if (index > 0) const SizedBox(height: infoRowGap),
@@ -1185,7 +1185,7 @@ class PlaceLinksSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const PlaceSectionTitle('SNS'),
+        const RoutexSectionHeader(title: 'SNS'),
         const SizedBox(height: 12),
         RoutexLinkList(
           items: [
@@ -1327,7 +1327,7 @@ class PlaceDemoInfoSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const PlaceSectionTitle('영업 정보'),
+        const RoutexSectionHeader(title: '영업 정보'),
         const SizedBox(height: 12),
         for (var index = 0; index < items.length; index++) ...[
           if (index > 0) const SizedBox(height: infoRowGap),
@@ -1347,22 +1347,3 @@ class PlaceDemoInfoSection extends StatelessWidget {
 
 /// 상세 본문의 좌우 여백. 사진처럼 끝까지 채우는 섹션만 이 값을 쓰지 않는다.
 const placeSectionGutter = 20.0;
-
-/// 섹션 제목. 카드 테두리를 걷어낸 뒤로는 이 제목과 여백이 섹션 경계를 만드는
-/// 유일한 장치라, 모든 섹션이 같은 굵기·크기를 쓰게 한곳에 둔다.
-class PlaceSectionTitle extends StatelessWidget {
-  const PlaceSectionTitle(this.text, {super.key});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Text(
-    text,
-    style: const TextStyle(
-      fontSize: 16,
-      height: 1.3,
-      fontWeight: FontWeight.w700,
-      color: AppColors.text,
-    ),
-  );
-}

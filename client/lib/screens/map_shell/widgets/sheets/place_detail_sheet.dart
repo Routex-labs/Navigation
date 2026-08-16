@@ -929,6 +929,10 @@ class _TitledSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
-    children: [PlaceSectionTitle(title), const SizedBox(height: 8), child],
+    children: [
+      RoutexSectionHeader(title: title),
+      const SizedBox(height: 8),
+      child,
+    ],
   );
 }
