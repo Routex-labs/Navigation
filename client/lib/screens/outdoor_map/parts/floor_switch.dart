@@ -174,6 +174,16 @@ extension OutdoorMapFloorSwitch on OutdoorMapBodyState {
           crossfadeDuration: crossfadeDuration,
         ),
       );
+    } else if (controller != null) {
+      // **마무리를 예약하지 못했으면 여기서 지운다.** 은퇴 블록을 지우는 곳은
+      // [_finalizeIndoorFloorCrossfade] 하나뿐인데, 새 층 등록이 실패했거나
+      // (`_indoorTilesRegistered`가 false) 크로스페이드가 아닌 전환이면 그것이
+      // 예약되지 않는다. 그러면 이전 층 블록이 영영 남는다.
+      await _removeRetiringIndoorBlocks(controller);
+      await purgeStaleIndoorOverlay(
+        controller,
+        keepGeneration: _indoorIds.generation,
+      );
     }
     await _loadFloorGraph(building.id, floor);
     _syncPdrCurrentLayer();
@@ -256,6 +266,12 @@ extension OutdoorMapFloorSwitch on OutdoorMapBodyState {
       if (!mounted || _indoorIds.generation != generation) return;
       // 새 도면이 완전히 올라왔으니 이전 층 블록(연타로 쌓인 것 포함)을 지운다.
       await _removeRetiringIndoorBlocks(controller);
+      // 그리고 **지도에 직접 물어** 우리 장부에 없는 이전 세대까지 쓸어 담는다.
+      // 위 목록은 이 함수가 중간에 물러난 전환의 블록을 담고 있지 않다.
+      await purgeStaleIndoorOverlay(
+        controller,
+        keepGeneration: _indoorIds.generation,
+      );
     } finally {
       if (progressToken != null) {
         _floorSwitchProgress.finish(progressToken);

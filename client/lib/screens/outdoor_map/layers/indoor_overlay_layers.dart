@@ -300,6 +300,51 @@ class IndoorOverlayIds {
   ];
 }
 
+/// 세대 접미사가 붙은 실내 오버레이 id인지 가려낸다. `outdoor-indoor-destination`
+/// 처럼 세대가 없는 이웃 id를 쓸어 담지 않으려고 끝의 `-g<숫자>`까지 요구한다.
+final _indoorOverlayIdPattern = RegExp(r'^outdoor-indoor-.+-g(\d+)$');
+
+/// 지도에 **실제로 붙어 있는** 레이어·소스를 훑어 [keepGeneration]이 아닌 실내
+/// 오버레이를 전부 지운다.
+///
+/// 층 전환은 이전 층 블록을 바로 지우지 않고 은퇴 목록에 넘긴 뒤, 크로스페이드
+/// 마무리가 지우기로 **위임**한다. 그 마무리가 예약되지 않거나(등록 실패·비
+/// 크로스페이드 전환) 중간에 물러나면 블록이 그대로 남고, 남은 블록은 새 층
+/// 도면보다 아래에 깔려 **새 층이 덮지 못하는 바깥쪽만 밝게 보인다.** 지하는
+/// 지상보다 외곽선이 최대 30 m 넓어서 그 차이가 띠로 남는다.
+///
+/// 그래서 장부를 믿지 않고 지도에 직접 묻는다. 우리가 놓친 블록도 여기서 잡힌다.
+Future<void> purgeStaleIndoorOverlay(
+  MapLibreMapController controller, {
+  required int keepGeneration,
+}) async {
+  bool stale(String id) {
+    final match = _indoorOverlayIdPattern.firstMatch(id);
+    return match != null && match.group(1) != '$keepGeneration';
+  }
+
+  // 레이어를 먼저 지운다 — 소스에 레이어가 붙어 있으면 removeSource가 실패한다.
+  try {
+    for (final raw in await controller.getLayerIds()) {
+      final id = raw?.toString() ?? '';
+      if (!stale(id)) continue;
+      try {
+        await controller.removeLayer(id);
+      } catch (_) {}
+    }
+  } catch (_) {
+    return;
+  }
+  try {
+    for (final id in await controller.getSourceIds()) {
+      if (!stale(id)) continue;
+      try {
+        await controller.removeSource(id);
+      } catch (_) {}
+    }
+  } catch (_) {}
+}
+
 /// 실내 오버레이 소스와 레이어 9장을 한 번에 등록한다. 성공하면 true.
 ///
 /// 등록 **순서가 곧 쌓임 순서**다(footprint → fill → 강조 → 수직이동 → 라벨 →

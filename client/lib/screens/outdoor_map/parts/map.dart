@@ -301,6 +301,18 @@ extension OutdoorMapMap on OutdoorMapBodyState {
     _cameraSettled = true;
     unawaited(_syncHighlightLayer());
     unawaited(_syncGateLayer());
+    // 마지막 안전망. 크로스페이드가 도는 중이 아닐 때만(은퇴 목록이 비었을 때)
+    // 이전 세대 실내 오버레이가 남아 있는지 지도에 직접 물어 지운다 — 층 전환이
+    // 중간에 끊기면 그 블록을 지울 주체가 아무도 없고, 남으면 새 층이 덮지 못하는
+    // 바깥쪽이 밝은 띠로 계속 보인다.
+    if (_retiringIndoorBlocks.isEmpty) {
+      unawaited(
+        purgeStaleIndoorOverlay(
+          controller,
+          keepGeneration: _indoorIds.generation,
+        ),
+      );
+    }
     // zoom과 target은 같은 CameraPosition에서 나오고 둘 다 non-nullable이므로,
     // 카메라를 받았다면 중심 좌표도 항상 있다.
     final camera = controller.cameraPosition;
