@@ -10,6 +10,9 @@ import 'package:navigation_client/models/place/place_detail.dart';
 import 'package:navigation_client/models/place/poi_search_result.dart';
 import 'package:navigation_client/repositories/place/place_detail_repository.dart';
 import 'package:navigation_client/state/favorites_controller.dart';
+import 'package:routex_design_system/routex_design_system.dart';
+
+import '../../../../support/routex_test_host.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail/korean_line_break.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail_sheet.dart';
 import 'package:navigation_client/widgets/sheet_header.dart';
@@ -58,14 +61,12 @@ void main() {
       favorite: favorite,
       reach: reach,
     );
-    return MaterialApp(
-      home: Scaffold(
-        body: PlaceDetailSheet(
-          target: target,
-          buildingId: 'building-1',
-          onCloseAll: onCloseAll ?? () {},
-          repository: repository,
-        ),
+    return appThemedHost(
+      PlaceDetailSheet(
+        target: target,
+        buildingId: 'building-1',
+        onCloseAll: onCloseAll ?? () {},
+        repository: repository,
       ),
     );
   }
@@ -430,6 +431,80 @@ void main() {
       // 시트는 그대로 있고, 토글만 저장됨 상태가 된다.
       expect(find.text('테스트 매장'), findsOneWidget);
       expect(find.byTooltip('저장 취소'), findsOneWidget);
+      expect(favoritesController.contains(_favorite.key), isTrue);
+    });
+
+    Future<void> pumpSaved(WidgetTester tester) async {
+      await tester.pumpWidget(
+        buildSubject(
+          favorite: _favorite,
+          repository: _FakeRepository(Future.value(null)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('place-detail-save')));
+      await tester.pumpAndSettle();
+    }
+
+    // 이 시트는 Navigator에 얹힌 모달이라 SnackBar를 그리는 Scaffold가 아래에
+    // 있다. 결과가 시트에 가려 보이지 않으면 아무 일도 안 일어난 것과 같다.
+    testWidgets('저장 결과는 시트 안 알림 한 개로 알린다', (tester) async {
+      await pumpSaved(tester);
+
+      expect(find.byType(RoutexInlineNotice), findsOneWidget);
+      expect(find.text('장소에 저장했습니다'), findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    testWidgets('다시 눌러도 알림은 한 개이고 문구만 바뀐다', (tester) async {
+      await pumpSaved(tester);
+      await tester.tap(find.byKey(const ValueKey('place-detail-save')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(RoutexInlineNotice), findsOneWidget);
+      expect(find.text('저장을 해제했습니다'), findsOneWidget);
+      expect(find.text('장소에 저장했습니다'), findsNothing);
+    });
+
+    // 되돌린 결과를 다시 알리면 한 번의 탭에 알림이 두 개가 된다. 바뀐 상태는
+    // 헤더의 토글이 이미 말하고 있다.
+    testWidgets('실행 취소는 저장을 되돌리고 알림을 걷는다', (tester) async {
+      await pumpSaved(tester);
+      await tester.tap(find.text('실행 취소'));
+      await tester.pumpAndSettle();
+
+      expect(favoritesController.contains(_favorite.key), isFalse);
+      expect(find.byType(RoutexInlineNotice), findsNothing);
+      expect(find.byTooltip('장소에 저장'), findsOneWidget);
+    });
+
+    // 되돌릴 길이 여기뿐이 아니라 헤더 토글에도 있으므로 시간이 지나면 사라져도
+    // 된다. 남겨 두면 본문 아래를 계속 가린다.
+    testWidgets('알림은 시간이 지나면 사라진다', (tester) async {
+      await pumpSaved(tester);
+
+      await tester.pump(RoutexFeedbackTiming.noticeVisibility);
+      await tester.pump();
+
+      expect(find.byType(RoutexInlineNotice), findsNothing);
+      expect(favoritesController.contains(_favorite.key), isTrue);
+    });
+
+    // 알림을 남겨 두면 되돌리기가 이전 장소가 아니라 지금 보고 있는 장소를
+    // 토글한다. 문구와 손대는 대상이 어긋나는 자리다.
+    testWidgets('다른 장소로 갈아 끼우면 이전 알림을 걷는다', (tester) async {
+      await pumpSaved(tester);
+      expect(find.byType(RoutexInlineNotice), findsOneWidget);
+
+      target.value = const PlaceDetailTarget(
+        title: '다른 매장',
+        subtitle: 'B2',
+        placeId: 'place-2',
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(RoutexInlineNotice), findsNothing);
+      // 알림만 걷힐 뿐 이전 장소의 저장은 그대로다.
       expect(favoritesController.contains(_favorite.key), isTrue);
     });
   });
