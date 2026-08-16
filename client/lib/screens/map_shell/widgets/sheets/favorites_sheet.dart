@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 import '../../../../service_locator.dart';
 import '../../../../models/place/favorite_place.dart';
 import '../../../../theme/app_theme.dart';
-import '../../../../widgets/sheet_grab_handle.dart';
 import '../../../../widgets/sheet_header.dart';
 
 import '../../../../widgets/map_overlay_guard.dart';
@@ -69,9 +69,11 @@ class _FavoritesSheetState extends State<FavoritesSheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 이 시트는 높이가 고정이라 손잡이를 끌면 크기가 아니라 시트가
-              // 통째로 끌린다(끌어서 닫기). 표시는 다른 시트와 같게 둔다.
-              const SheetGrabHandle(),
+              // 손잡이가 있던 자리다. **이 시트는 끌어서 크기를 바꿀 수 없고**
+              // (위 주석의 reorder assertion), 손잡이는 그 조작이 있다는 약속이라
+              // 여기 두면 할 수 없는 일을 약속하게 된다. 남긴 여백은 손잡이가
+              // 차지하던 값과 같고, Runtime Kit이 손잡이 없는 시트에 쓰는 값이다.
+              const SizedBox(height: RoutexSpacing.componentPadding),
               SheetHeader(
                 title: '저장한 장소',
                 onCloseAll: widget.onCloseAll,

@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 import '../../../../core/api_config.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../widgets/map_overlay_guard.dart';
-import '../../../../widgets/sheet_grab_handle.dart';
 
 /// 앱 메뉴에서 고를 수 있는 동작. 시트는 **고른 것만 돌려주고 아무것도 직접
 /// 실행하지 않는다** — 실제 동작은 전부 지도 상태를 들고 있는
@@ -80,7 +80,10 @@ class AppMenuSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SheetGrabHandle(),
+            // 손잡이가 있던 자리다. 이 시트는 내용 높이로 뜨고 끌어서 크기를
+            // 바꿀 수 없어, 손잡이를 두면 할 수 없는 조작을 약속하게 된다.
+            // 여백은 손잡이가 차지하던 값과 같다.
+            const SizedBox(height: RoutexSpacing.componentPadding),
             const Padding(
               padding: EdgeInsets.fromLTRB(20, 10, 20, 4),
               child: Text(
