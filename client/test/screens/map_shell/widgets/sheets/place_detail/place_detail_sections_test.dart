@@ -65,14 +65,17 @@ void main() {
       );
     });
 
-    testWidgets('tags are individually visible chips', (tester) async {
+    // 누를 수 없는 표시라 배지다. 알약(Chip)으로 그리면 바로 위 지도의 분류 칩과
+    // 같은 모양이라 눌러 보고 아무 일도 없는 것을 겪는다.
+    testWidgets('tags are individually visible badges', (tester) async {
       await tester.pumpWidget(
         subject(const PlaceTagsSection(tags: ['포장', '문화비소득공제'])),
       );
 
       expect(find.text('포장'), findsOneWidget);
       expect(find.text('문화비소득공제'), findsOneWidget);
-      expect(find.byType(Chip), findsNWidgets(2));
+      expect(find.byType(RoutexBadge), findsNWidgets(2));
+      expect(find.byType(Chip), findsNothing);
     });
 
     testWidgets('notice exposes the message and expiry date', (tester) async {

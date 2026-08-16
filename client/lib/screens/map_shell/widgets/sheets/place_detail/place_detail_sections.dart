@@ -100,7 +100,11 @@ class _KeyValueRow extends StatelessWidget {
   );
 }
 
-/// 특징 chip 묶음.
+/// 특징 표시 묶음.
+///
+/// **누르는 것이 아니다.** 예전에는 Material `Chip`이라 알약 모양이었는데, 바로 위
+/// 지도의 분류 칩과 같은 모양이라 눌러 보고 아무 일도 없는 것을 겪게 된다. 읽기만
+/// 하는 표시는 배지로 그린다.
 class PlaceTagsSection extends StatelessWidget {
   const PlaceTagsSection({super.key, required this.tags});
 
@@ -108,21 +112,11 @@ class PlaceTagsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Wrap(
-    spacing: 8,
-    runSpacing: 8,
+    spacing: RoutexSpacing.controlGap,
+    runSpacing: RoutexSpacing.controlGap,
     children: [
       for (final tag in tags)
-        Chip(
-          label: Text(tag),
-          labelStyle: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: AppColors.primary,
-          ),
-          backgroundColor: AppColors.blue50,
-          side: const BorderSide(color: AppColors.blue100),
-          visualDensity: VisualDensity.compact,
-        ),
+        RoutexBadge(label: tag, tone: RoutexBadgeTone.info),
     ],
   );
 }
