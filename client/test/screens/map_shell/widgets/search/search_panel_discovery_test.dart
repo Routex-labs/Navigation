@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/theme/app_theme.dart';
 import 'package:latlong2/latlong.dart';
@@ -271,7 +272,9 @@ void main() {
       await settleSearch(tester);
 
       expect(find.textContaining('찾지 못했어요'), findsNothing);
-      expect(find.textContaining('다시 시도'), findsOneWidget);
+      // 문구만 다른 것이 아니라 **할 수 있는 일**이 다르다. 결과 없음에는 다시
+      // 시도할 것이 없고, 여기에는 있다.
+      expect(find.widgetWithText(RoutexButton, '다시 시도'), findsOneWidget);
     });
 
     testWidgets('현재 층이 주어지면 경량·의미 검색 요청 모두에 실어 보낸다', (

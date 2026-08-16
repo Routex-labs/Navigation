@@ -1713,43 +1713,26 @@ class _SearchPanelState extends State<SearchPanel> {
   Widget _degradedState() {
     return const Padding(
       padding: EdgeInsets.fromLTRB(16, 20, 16, 22),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '추천 기능을 지금은 제한적으로만 사용할 수 있어요.',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-          ),
-          SizedBox(height: 6),
-          Text(
-            '잠시 후 다시 검색하거나 다른 표현으로 찾아보세요.',
-            style: TextStyle(fontSize: 12.5, color: AppColors.muted),
-          ),
-        ],
+      child: RoutexResultList(
+        status: RoutexResultStatus.degraded,
+        statusMessage: '잠시 후 다시 검색하거나 다른 표현으로 찾아보세요.',
+        children: [],
       ),
     );
   }
 
   /// 검색을 끝내지 못한 화면. "찾지 못했어요"와 문구를 나누는 이유는 사용자가
-  /// 할 행동이 다르기 때문이다 — 여기서는 말을 바꿔도 소용이 없다.
+  /// 할 행동이 다르기 때문이다 — 여기서는 말을 바꿔도 소용이 없다. 다시 시도가
+  /// 붙는 것도 그래서다.
   Widget _errorState() {
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(16, 20, 16, 22),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '지금은 검색할 수 없어요.',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-          ),
-          SizedBox(height: 6),
-          Text(
-            '연결 상태를 확인하고 잠시 후 다시 시도해 주세요.',
-            style: TextStyle(fontSize: 12.5, color: AppColors.muted),
-          ),
-        ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 22),
+      child: RoutexResultList(
+        status: RoutexResultStatus.error,
+        statusMessage: '연결 상태를 확인하고 잠시 후 다시 시도해 주세요.',
+        statusActionLabel: '다시 시도',
+        onStatusAction: () => unawaited(_search(widget.query, immediate: true)),
+        children: const [],
       ),
     );
   }
