@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:navigation_client/domain/guidance/route_guidance.dart';
 import 'package:navigation_client/widgets/eta_card.dart';
 
@@ -10,8 +11,7 @@ import 'package:navigation_client/widgets/eta_card.dart';
 /// 거리여야 한다 — 두 값을 섞으면 사용자는 적힌 만큼 걷고도 모퉁이가 안 나오는
 /// 화면을 본다.
 void main() {
-  Widget wrap(Widget child) => MaterialApp(
-    home: Scaffold(body: Center(child: child)),
+  Widget wrap(Widget child) => MaterialApp(theme: AppTheme.light, home: Scaffold(body: Center(child: child)),
   );
 
   RouteGuidanceInstruction turn({double toAction = 92}) =>
@@ -222,7 +222,7 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(home: EtaCard(distanceMeters: 150, minutes: 2)),
+      MaterialApp(theme: AppTheme.light, home: EtaCard(distanceMeters: 150, minutes: 2)),
     );
 
     expect(find.text('목적지까지'), findsOneWidget);

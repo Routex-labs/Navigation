@@ -6,6 +6,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:navigation_client/theme/app_theme.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 import 'package:navigation_client/app.dart';
 import 'package:navigation_client/service_locator.dart';
 import 'package:navigation_client/models/place/discovery_result.dart';
@@ -134,7 +136,7 @@ void main() {
   testWidgets('outdoor map body renders map after position arrives', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(MaterialApp(home: const OutdoorMapBody()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const OutdoorMapBody()));
 
     // OutdoorMapBody는 위치 신호를 기다리는 동안에도 지도를 그리며,
     // 로딩 스피너로 화면을 가리지 않는다. 첫 pump가 끝나면 fake 스트림이
@@ -155,10 +157,66 @@ void main() {
   ) async {
     watchPosition = () => Stream.value(_fakeLowAccuracyPosition);
 
-    await tester.pumpWidget(MaterialApp(home: const OutdoorMapBody()));
+    await tester.pumpWidget(
+      MaterialApp(theme: AppTheme.light, home: const OutdoorMapBody()),
+    );
     await tester.pump();
 
     expect(find.text('GPS 신호 약함'), findsOneWidget);
+  });
+
+  // 포팅 가이드 단계 2 통과 기준: "GPS 약함은 낮은 강도의 Badge 또는 미표시이며
+  // 경로 이탈보다 강하지 않다". 강도와 **행동 없음**을 여기서 못 박는다.
+  testWidgets('GPS 약함은 누를 수 없는 낮은 강도의 배지다', (WidgetTester tester) async {
+    watchPosition = () => Stream.value(_fakeLowAccuracyPosition);
+
+    await tester.pumpWidget(
+      MaterialApp(theme: AppTheme.light, home: const OutdoorMapBody()),
+    );
+    await tester.pump();
+
+    final badge = tester.widget<RoutexBadge>(
+      find.ancestor(
+        of: find.text('GPS 신호 약함'),
+        matching: find.byType(RoutexBadge),
+      ),
+    );
+    expect(badge.tone, RoutexBadgeTone.warning);
+    // 지도 위에 홀로 떠 있으므로 깊이는 갖는다(없으면 지도의 일부로 읽힌다).
+    expect(badge.surface, RoutexBadgeSurface.onMap);
+
+    // **누를 수 없다.** 사용자가 할 수 있는 일이 없는 상태라 행동을 붙이지
+    // 않는다. 붙이면 건물 로드 실패 알림("다시 시도")과 구분되지 않는다.
+    expect(
+      find.ancestor(
+        of: find.text('GPS 신호 약함'),
+        matching: find.byType(InkWell),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.ancestor(
+        of: find.text('GPS 신호 약함'),
+        matching: find.byType(GestureDetector),
+      ),
+      findsNothing,
+    );
+
+    // 경로 이탈보다 약하다. 이탈은 error 색을 쓰고([EtaCard]의 wrong-way),
+    // 이 배지는 같은 색이 아니라 **연한 warning 배경**을 쓴다.
+    const colors = RoutexColorTokens.light;
+    final box = tester.widget<DecoratedBox>(
+      find
+          .descendant(
+            of: find.byType(RoutexBadge),
+            matching: find.byType(DecoratedBox),
+          )
+          .first,
+    );
+    final decoration = box.decoration as BoxDecoration;
+    expect(decoration.color, colors.statusWarningSubtle);
+    expect(decoration.color, isNot(colors.statusError));
+    expect(decoration.color, isNot(colors.statusWarning));
   });
 
   testWidgets(
@@ -169,7 +227,7 @@ void main() {
         _fakePositionAtEntrance,
       ]);
 
-      await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+      await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
 
       // 접근 표본 → 진입 표본 순으로 흘러야 판정이 서므로, 두 건이 모두 도착할
       // 때까지 프레임을 진행한다.
@@ -213,7 +271,7 @@ void main() {
       );
       watchPosition = () => Stream.value(passingByPosition);
 
-      await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+      await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
       await tester.pump();
       await tester.pump();
 
@@ -230,7 +288,7 @@ void main() {
     final controller = StreamController<Position>();
     watchPosition = () => controller.stream;
 
-    await tester.pumpWidget(MaterialApp(home: const OutdoorMapBody()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const OutdoorMapBody()));
 
     controller.add(_fakePosition);
     // MapLibre 이관 후 _handlePosition이 비동기 _syncCurrentLayer / _updateRoute
@@ -253,7 +311,7 @@ void main() {
   ) async {
     watchPosition = () => Stream.error(Exception('위치를 가져올 수 없음'));
 
-    await tester.pumpWidget(MaterialApp(home: const OutdoorMapBody()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const OutdoorMapBody()));
     await tester.pump();
 
     // 위치 실패 시에도 지도 body는 폴백 좌표로 렌더되고 GPS 신호 약함 배지가
@@ -267,7 +325,7 @@ void main() {
     WidgetTester tester,
   ) async {
     final key = GlobalKey<OutdoorMapBodyState>();
-    await tester.pumpWidget(MaterialApp(home: OutdoorMapBody(key: key)));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: OutdoorMapBody(key: key)));
     await tester.pumpAndSettle();
     // ignore: invalid_use_of_visible_for_testing_member
     key.currentState!.enterIndoorForTest();
@@ -297,7 +355,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(
-      const MaterialApp(home: MapShellScreen()),
+      MaterialApp(theme: AppTheme.light, home: const MapShellScreen()),
     );
     await tester.pumpAndSettle();
 
@@ -320,7 +378,7 @@ void main() {
     WidgetTester tester,
   ) async {
     final mapKey = GlobalKey<OutdoorMapBodyState>();
-    await tester.pumpWidget(MaterialApp(home: OutdoorMapBody(key: mapKey)));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: OutdoorMapBody(key: mapKey)));
     await tester.pumpAndSettle();
     // ignore: invalid_use_of_visible_for_testing_member
     mapKey.currentState!.enterIndoorForTest();
@@ -360,7 +418,7 @@ void main() {
     );
     destinationRepository = repository;
 
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await tester.pumpAndSettle();
     await searchFromTopBar(tester, 'MLB');
 
@@ -383,7 +441,7 @@ void main() {
     );
     destinationRepository = repository;
 
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await tester.pumpAndSettle();
     await searchFromTopBar(tester, '밥 먹을 곳');
 
@@ -407,7 +465,7 @@ void main() {
     );
     destinationRepository = repository;
 
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await tester.pumpAndSettle();
     await searchFromTopBar(tester, 'MLB');
 
@@ -435,7 +493,7 @@ void main() {
     );
     destinationRepository = repository;
 
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byType(TextField));
@@ -458,7 +516,7 @@ void main() {
     // TextField는 상단 바의 것 하나뿐이어야 한다.
     destinationRepository = _FallbackDestinationRepository();
 
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await tester.pumpAndSettle();
 
     expect(find.byType(TextField), findsOneWidget);
@@ -478,7 +536,7 @@ void main() {
   testWidgets('카테고리 열에 AI 검색 pill이 더는 없다', (WidgetTester tester) async {
     destinationRepository = _FallbackDestinationRepository();
 
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await tester.pumpAndSettle();
 
     expect(find.text('AI 검색'), findsNothing);
@@ -488,7 +546,7 @@ void main() {
     // 매장과 건물을 같은 결과 패널에 함께 얹는다.
     destinationRepository = _FallbackDestinationRepository();
 
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await tester.pumpAndSettle();
     await searchFromTopBar(tester, '데모');
 
@@ -511,7 +569,7 @@ void main() {
     );
     destinationRepository = repository;
 
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await tester.pumpAndSettle();
     // 실내 오버레이가 켜져야 현재 층(_activeIndoorFloor)이 잡힌다.
     tester

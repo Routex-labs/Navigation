@@ -7,8 +7,7 @@ import 'package:navigation_client/core/clipboard_confirmation.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail/place_detail_rich_sections.dart';
 
 void main() {
-  Widget subject(Widget child) => MaterialApp(
-    home: Scaffold(body: SingleChildScrollView(child: child)),
+  Widget subject(Widget child) => MaterialApp(theme: AppTheme.light, home: Scaffold(body: SingleChildScrollView(child: child)),
   );
 
   group('Place rich detail renderers', () {
@@ -288,8 +287,7 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: MediaQuery(
+        MaterialApp(theme: AppTheme.light, home: MediaQuery(
             data: const MediaQueryData(textScaler: TextScaler.linear(2.0)),
             child: const Scaffold(
               body: SingleChildScrollView(
@@ -518,8 +516,7 @@ void main() {
       addTearDown(tester.view.reset);
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
+        MaterialApp(theme: AppTheme.light, home: Scaffold(
             // 상세 시트와 같은 조건을 만든다. 시트는 화면 비율로 크기가 정해져
             // 키보드가 올라와도 **줄어들지 않는다** — Scaffold가 알아서 줄여 주면
             // Flutter 기본 동작이 대신 스크롤해 버려서, 이 테스트가 검증하려는

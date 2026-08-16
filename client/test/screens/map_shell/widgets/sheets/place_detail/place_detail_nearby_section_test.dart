@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:navigation_client/domain/route/dijkstra.dart';
 import 'package:navigation_client/domain/store/nearby_stores.dart';
 import 'package:navigation_client/models/place/store_index_entry.dart';
@@ -17,8 +18,7 @@ void main() {
     reach: NodeReach(distanceM: distanceM, costM: distanceM),
   );
 
-  Widget subject(Widget child) => MaterialApp(
-    home: Scaffold(body: SingleChildScrollView(child: child)),
+  Widget subject(Widget child) => MaterialApp(theme: AppTheme.light, home: Scaffold(body: SingleChildScrollView(child: child)),
   );
 
   testWidgets('이름·층·거리를 한 줄에 그린다', (tester) async {

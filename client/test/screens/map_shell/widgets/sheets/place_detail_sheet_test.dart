@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/service_locator.dart';
 import 'package:navigation_client/domain/route/dijkstra.dart';
@@ -512,8 +513,7 @@ void main() {
   testWidgets('출발 버튼은 기존 StoreInfoAction 계약으로 닫힌다', (tester) async {
     StoreInfoAction? result;
     await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
+      MaterialApp(theme: AppTheme.light, home: Builder(
           builder: (context) => FilledButton(
             onPressed: () async {
               result = await PlaceDetailSheet.show(
@@ -541,8 +541,7 @@ void main() {
   testWidgets('X는 전체 닫기 콜백을 호출하고 현재 시트를 닫는다', (tester) async {
     var closedAll = false;
     await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
+      MaterialApp(theme: AppTheme.light, home: Builder(
           builder: (context) => FilledButton(
             onPressed: () => PlaceDetailSheet.show(
               context,
@@ -569,8 +568,7 @@ void main() {
   testWidgets('뒤로는 전체 닫기 없이 현재 시트만 닫는다', (tester) async {
     var closedAll = false;
     await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
+      MaterialApp(theme: AppTheme.light, home: Builder(
           builder: (context) => FilledButton(
             onPressed: () => PlaceDetailSheet.show(
               context,

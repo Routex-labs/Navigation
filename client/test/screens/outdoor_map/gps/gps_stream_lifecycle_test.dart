@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:navigation_client/service_locator.dart';
 import 'package:navigation_client/repositories/building/building_repository.dart';
@@ -61,7 +62,7 @@ void main() {
 
   Future<void> pumpMap(WidgetTester tester) async {
     await tester.pumpWidget(
-      const MaterialApp(home: Scaffold(body: OutdoorMapBody())),
+      MaterialApp(theme: AppTheme.light, home: Scaffold(body: OutdoorMapBody())),
     );
     await tester.pump(const Duration(milliseconds: 100));
   }
@@ -97,7 +98,7 @@ void main() {
 
     // 타이머가 남아 있으면 테스트가 pending timer로 실패한다. 화면을 내려
     // 정리 경로까지 함께 태운다.
-    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const SizedBox()));
     await tester.pump(const Duration(milliseconds: 100));
   });
 
@@ -127,7 +128,7 @@ void main() {
       reason: '열린 채 벙어리인 스트림을 감지하지 못하면 위치가 영영 안 온다',
     );
 
-    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const SizedBox()));
     await tester.pump(const Duration(milliseconds: 100));
   });
 }

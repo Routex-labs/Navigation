@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:navigation_client/service_locator.dart';
 import 'package:navigation_client/models/building/building.dart';
 import 'package:navigation_client/models/place/poi_search_result.dart';
@@ -205,8 +206,7 @@ Future<void> _openSheet(
   ValueChanged<PoiSearchResult?>? onFirstStoreChanged,
 }) async {
   await tester.pumpWidget(
-    MaterialApp(
-      home: Scaffold(
+    MaterialApp(theme: AppTheme.light, home: Scaffold(
         body: Builder(
           builder: (context) => TextButton(
             onPressed: () => CategoryStoresSheet.show(

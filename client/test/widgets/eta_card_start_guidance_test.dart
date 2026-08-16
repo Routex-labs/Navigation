@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:navigation_client/widgets/eta_card.dart';
 
 /// "안내 시작"은 자동차 경로를 **계획 상태**로 그려 둔 동안만 뜬다.
@@ -9,8 +10,7 @@ import 'package:navigation_client/widgets/eta_card.dart';
 /// 나눴고, 이 테스트가 그 버튼의 유무 규칙을 지킨다.
 void main() {
   Widget host({VoidCallback? onStartGuidance, VoidCallback? onClose}) {
-    return MaterialApp(
-      home: Scaffold(
+    return MaterialApp(theme: AppTheme.light, home: Scaffold(
         body: EtaCard(
           distanceMeters: 5200,
           minutes: 14,

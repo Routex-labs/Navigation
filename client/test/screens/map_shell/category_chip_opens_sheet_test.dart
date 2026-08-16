@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:navigation_client/service_locator.dart';
 import 'package:navigation_client/models/building/category_count.dart';
 import 'package:navigation_client/repositories/building/building_repository.dart';
@@ -40,7 +41,7 @@ void main() {
   });
 
   testWidgets('카테고리 chip을 누르면 매장 목록 시트가 바로 뜬다', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await tester.pumpAndSettle();
     // 카테고리 칩 줄은 셸이 그리고, 건물 안을 보고 있을 때만 뜬다. 예전에는
     // 하단 '실내' 세그먼트를 눌렀는데, 실내가 별도 탭이 아니게 되면서 진입
@@ -76,7 +77,7 @@ void main() {
   // 확대되지도 않는" 화면이 된다 — 상세 시트가 이미 겪고 고친 증상이다.
   // ([MapPassThroughSheetRoute])
   testWidgets('목록이 떠 있어도 위쪽 지도로 포인터가 지나간다', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await tester.pumpAndSettle();
     tester
         .state<OutdoorMapBodyState>(find.byType(OutdoorMapBody))
@@ -99,7 +100,7 @@ void main() {
   // 뿐인데 시트가 겹겹이 쌓인 것으로 읽혔다. 상세는 그 매장 하나를 보는 자리이고,
   // 닫으면 지도로 끝난다.
   testWidgets('상세를 닫으면 카테고리 목록으로 돌아가지 않는다', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await tester.pumpAndSettle();
     // 위 테스트와 같은 이유로 세그먼트가 아니라 오버레이를 직접 켠다.
     tester

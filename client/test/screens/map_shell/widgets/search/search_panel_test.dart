@@ -79,8 +79,7 @@ void main() {
       buildingRepository = originalBuilding;
     });
 
-    Widget buildSubject({Map<String, NodeReach>? reachByNodeId}) => MaterialApp(
-      home: Scaffold(
+    Widget buildSubject({Map<String, NodeReach>? reachByNodeId}) => MaterialApp(theme: AppTheme.light, home: Scaffold(
         body: SizedBox(
           height: 400,
           child: SearchPanel(
@@ -221,8 +220,7 @@ void main() {
       buildingRepository = originalBuilding;
     });
 
-    Widget buildSubject({Map<String, NodeReach>? reachByNodeId}) => MaterialApp(
-      home: Scaffold(
+    Widget buildSubject({Map<String, NodeReach>? reachByNodeId}) => MaterialApp(theme: AppTheme.light, home: Scaffold(
         body: SizedBox(
           height: 600,
           child: SearchPanel(
@@ -365,8 +363,7 @@ void main() {
       recentSearchesController = controller;
     }
 
-    Widget buildSubject() => MaterialApp(
-      home: Scaffold(
+    Widget buildSubject() => MaterialApp(theme: AppTheme.light, home: Scaffold(
         body: SizedBox(
           height: 400,
           child: SearchPanel(
@@ -475,8 +472,7 @@ void main() {
       String query, {
       bool indoor = true,
       Map<String, NodeReach>? reachByNodeId,
-    }) => MaterialApp(
-      home: Scaffold(
+    }) => MaterialApp(theme: AppTheme.light, home: Scaffold(
         body: SizedBox(
           height: 500,
           child: SearchPanel(
@@ -715,8 +711,7 @@ void main() {
       addTearDown(submitTick.dispose);
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
+        MaterialApp(theme: AppTheme.light, home: Scaffold(
             body: SizedBox(
               height: 500,
               child: ListenableBuilder(
@@ -776,8 +771,7 @@ void main() {
       addTearDown(submitTick.dispose);
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
+        MaterialApp(theme: AppTheme.light, home: Scaffold(
             body: SizedBox(
               height: 500,
               child: ListenableBuilder(
@@ -841,8 +835,7 @@ void main() {
       addTearDown(submitTick.dispose);
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
+        MaterialApp(theme: AppTheme.light, home: Scaffold(
             body: SizedBox(
               height: 500,
               child: ListenableBuilder(
@@ -947,8 +940,7 @@ void main() {
     Widget buildSubject(
       String query, {
       Map<String, NodeReach>? reachByNodeId,
-    }) => MaterialApp(
-      home: Scaffold(
+    }) => MaterialApp(theme: AppTheme.light, home: Scaffold(
         body: SizedBox(
           height: 500,
           child: SearchPanel(
@@ -1118,8 +1110,7 @@ void main() {
     Widget buildSubject(
       String query, {
       Map<String, NodeReach>? reachByNodeId,
-    }) => MaterialApp(
-      home: Scaffold(
+    }) => MaterialApp(theme: AppTheme.light, home: Scaffold(
         body: SizedBox(
           height: 600,
           child: SearchPanel(
@@ -1336,8 +1327,7 @@ void main() {
     Widget buildSubject(
       String query, {
       Map<String, NodeReach>? reachByNodeId,
-    }) => MaterialApp(
-      home: Scaffold(
+    }) => MaterialApp(theme: AppTheme.light, home: Scaffold(
         body: SizedBox(
           height: 700,
           child: SearchPanel(
@@ -1538,8 +1528,7 @@ void main() {
     Widget buildSubject({
       bool indoor = true,
       Future<List<CategoryCount>>? categoryEntries,
-    }) => MaterialApp(
-      home: Scaffold(
+    }) => MaterialApp(theme: AppTheme.light, home: Scaffold(
         body: SizedBox(
           height: 600,
           child: SearchPanel(
@@ -1663,8 +1652,7 @@ void main() {
     Widget buildSubject({
       required ValueChanged<Building> onBuildingPicked,
       bool indoorContextActive = false,
-    }) => MaterialApp(
-      home: Scaffold(
+    }) => MaterialApp(theme: AppTheme.light, home: Scaffold(
         body: SizedBox(
           height: 400,
           child: SearchPanel(

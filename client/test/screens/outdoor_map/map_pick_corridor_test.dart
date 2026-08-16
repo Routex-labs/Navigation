@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/core/api_config.dart';
 import 'package:navigation_client/map/picked_point.dart';
@@ -113,8 +114,7 @@ void main() {
     final key = GlobalKey<OutdoorMapBodyState>();
     final picked = <PoiSearchResult>[];
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
+      MaterialApp(theme: AppTheme.light, home: Scaffold(
           body: OutdoorMapBody(
             key: key,
             pickingOnMap: picking,

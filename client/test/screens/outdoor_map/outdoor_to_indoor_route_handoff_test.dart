@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:navigation_client/service_locator.dart';
 import 'package:navigation_client/models/place/poi_search_result.dart';
@@ -69,8 +70,7 @@ void main() {
     // Scaffold로 감싼다 — 진입·안내 경로가 스낵바를 띄울 수 있고, 하위에
     // ScaffoldMessenger가 없으면 그 자리에서 예외로 끊긴다.
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(body: OutdoorMapBody(key: key)),
+      MaterialApp(theme: AppTheme.light, home: Scaffold(body: OutdoorMapBody(key: key)),
       ),
     );
     await drain(tester);
@@ -112,8 +112,7 @@ void main() {
     // 나란히 떴던 화면이 그것이다.
     final key = GlobalKey<OutdoorMapBodyState>();
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(body: OutdoorMapBody(key: key)),
+      MaterialApp(theme: AppTheme.light, home: Scaffold(body: OutdoorMapBody(key: key)),
       ),
     );
     await drain(tester);

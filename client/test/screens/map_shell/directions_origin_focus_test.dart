@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:navigation_client/service_locator.dart';
 import 'package:navigation_client/repositories/building/building_repository.dart';
 import 'package:navigation_client/repositories/place/destination_repository.dart';
@@ -50,7 +51,7 @@ void main() {
   /// 도착지를 정해 상단 초안 바가 뜬 상태를 만든다. 경로 계산까지 갈 필요는
   /// 없으므로(GPS 없음) 초안 바가 떴는지만 확인한다.
   Future<void> openRouteDraft(WidgetTester tester) async {
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await drain(tester);
 
     await tester.tap(find.byType(TextField).first);

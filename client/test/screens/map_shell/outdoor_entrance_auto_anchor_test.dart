@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/models/building/category_count.dart';
@@ -130,7 +131,7 @@ void main() {
     // 호출마다 새 스트림을 준다.
     final positions = StreamController<Position>.broadcast();
     watchPosition = () => positions.stream;
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     // 위치를 흘리기 전에 건물(입구 좌표·층 그래프) 로드가 끝날 때까지 진행한다.
     await drain(tester);
     positions.add(farAway());

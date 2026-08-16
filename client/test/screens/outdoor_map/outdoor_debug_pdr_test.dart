@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:navigation_client/service_locator.dart';
 import 'package:navigation_client/repositories/building/building_repository.dart';
 import 'package:navigation_client/repositories/building/mock_building_repository.dart';
@@ -37,7 +38,7 @@ void main() {
   });
 
   testWidgets('세 경로 토글을 켜고 꺼도 야외 화면이 살아 있다', (WidgetTester tester) async {
-    await tester.pumpWidget(const MaterialApp(home: OutdoorMapBody()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const OutdoorMapBody()));
     await tester.pump();
 
     await debugModeController.setEnabled(true);
@@ -59,7 +60,7 @@ void main() {
   });
 
   testWidgets('디버그 모드를 끄면 개별 토글이 켜져 있어도 그리지 않는다', (WidgetTester tester) async {
-    await tester.pumpWidget(const MaterialApp(home: OutdoorMapBody()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const OutdoorMapBody()));
     await tester.pump();
 
     await debugModeController.setEnabled(false);

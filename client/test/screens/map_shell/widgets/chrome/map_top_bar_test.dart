@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 
 import 'package:navigation_client/screens/map_shell/widgets/chrome/map_top_bar.dart';
 
@@ -38,8 +39,7 @@ void main() {
     final events = <String>[];
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
+      MaterialApp(theme: AppTheme.light, home: Scaffold(
           body: MapTopBar(
             onMenuTap: () {},
             controller: c.search,
@@ -84,8 +84,7 @@ void main() {
     final c = makeControllers(tester);
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
+      MaterialApp(theme: AppTheme.light, home: Scaffold(
           body: MapTopBar(
             onMenuTap: () {},
             controller: c.search,
@@ -116,8 +115,7 @@ void main() {
     addTearDown(focusNode.dispose);
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
+      MaterialApp(theme: AppTheme.light, home: Scaffold(
           body: MapTopBar(
             onMenuTap: () {},
             controller: controller,

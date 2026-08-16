@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:navigation_client/models/route/route_plan_mode.dart';
 import 'package:navigation_client/screens/map_shell/widgets/chrome/travel_mode_bar.dart';
 
@@ -17,8 +18,7 @@ void main() {
     List<RoutePlanMode> modes = RoutePlanMode.values,
   }) async {
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
+      MaterialApp(theme: AppTheme.light, home: Scaffold(
           body: TravelModeBar(
             selected: selected,
             modes: modes,

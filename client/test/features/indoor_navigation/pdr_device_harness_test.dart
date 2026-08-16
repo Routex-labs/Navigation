@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:navigation_client/features/indoor_navigation/application/indoor_navigation_controller.dart';
 import 'package:navigation_client/features/indoor_navigation/debug/pdr_device_harness.dart';
 import 'package:navigation_client/features/indoor_navigation/platform/native_pdr_event.dart';
@@ -40,8 +41,7 @@ void main() {
     final driver = IndoorNavigationDriver(source: source, nowMs: () => 0);
     final receipts = <String>[];
     await tester.pumpWidget(
-      MaterialApp(
-        home: PdrDeviceHarness(
+      MaterialApp(theme: AppTheme.light, home: PdrDeviceHarness(
           source: source,
           driver: driver,
           walkingTimeout: const Duration(seconds: 5),

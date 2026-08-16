@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/service_locator.dart';
@@ -94,7 +95,7 @@ void main() {
   testWidgets('실내 진입 오버레이가 켜져 있어도 건물 밖 검색은 그대로 돈다', (tester) async {
     watchPosition = () => Stream.fromIterable([_approaching, _atEntrance]);
 
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     for (var i = 0; i < 5; i++) {
       await tester.pump(const Duration(milliseconds: 50));
     }

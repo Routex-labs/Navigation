@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/app_menu_sheet.dart';
 
 /// 햄버거 메뉴가 "목록"으로서 갖춰야 할 것을 고정한다.
@@ -16,8 +17,7 @@ void main() {
   }) async {
     AppMenuAction? picked;
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
+      MaterialApp(theme: AppTheme.light, home: Scaffold(
           body: Builder(
             builder: (context) => TextButton(
               onPressed: () async {
@@ -77,8 +77,7 @@ void main() {
     ]) {
       AppMenuAction? picked;
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
+        MaterialApp(theme: AppTheme.light, home: Scaffold(
             body: Builder(
               builder: (context) => TextButton(
                 onPressed: () async {

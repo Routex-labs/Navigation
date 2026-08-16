@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 import '../../core/api_config.dart';
 import '../../map/camera/floor_switch_progress.dart';
@@ -73,7 +74,6 @@ import 'widgets/route_steps_sheet.dart';
 import '../../map/icon/icon_cache.dart';
 import '../../map/icon/place_pin.dart';
 import 'widgets/map_overlay_tap_guard.dart';
-import 'widgets/status_badge.dart';
 import 'entry/floor_outline.dart';
 import 'gps/gps_session.dart';
 import 'entry/indoor_entry_gps.dart';

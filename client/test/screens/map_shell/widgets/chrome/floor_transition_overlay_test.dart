@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:navigation_client/domain/guidance/escalator_ride.dart';
 import 'package:navigation_client/features/indoor_navigation/contract/floor_transition_ui_state.dart';
 import 'package:navigation_client/screens/map_shell/widgets/chrome/floor_transition_overlay.dart';
@@ -21,8 +22,7 @@ Widget _host(Widget child, {double textScale = 1.0, Size? size}) => MediaQuery(
     textScaler: TextScaler.linear(textScale),
     size: size ?? const Size(390, 844),
   ),
-  child: MaterialApp(
-    home: Scaffold(body: Center(child: child)),
+  child: MaterialApp(theme: AppTheme.light, home: Scaffold(body: Center(child: child)),
   ),
 );
 
@@ -84,8 +84,7 @@ void main() {
     testWidgets('전환 중에는 뒤쪽 입력을 막는다', (tester) async {
       var tapped = false;
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
+        MaterialApp(theme: AppTheme.light, home: Scaffold(
             body: Stack(
               children: [
                 Positioned.fill(
@@ -118,8 +117,7 @@ void main() {
     testWidgets('덮개가 옅어지는 동안에는 입력이 통과한다', (tester) async {
       var tapped = false;
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
+        MaterialApp(theme: AppTheme.light, home: Scaffold(
             body: Stack(
               children: [
                 Positioned.fill(
@@ -155,8 +153,7 @@ void main() {
     testWidgets('스크림이 걷히면 뒤쪽 입력이 다시 통과한다', (tester) async {
       var tapped = false;
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
+        MaterialApp(theme: AppTheme.light, home: Scaffold(
             body: Stack(
               children: [
                 Positioned.fill(

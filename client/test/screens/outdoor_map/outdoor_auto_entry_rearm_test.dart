@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:navigation_client/service_locator.dart';
@@ -80,8 +81,7 @@ void main() {
 
     // 자동 진입 안내가 스낵바라 ScaffoldMessenger의 Scaffold 조상이 필요하다.
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(body: OutdoorMapBody(key: key)),
+      MaterialApp(theme: AppTheme.light, home: Scaffold(body: OutdoorMapBody(key: key)),
       ),
     );
     await drain(tester);
@@ -134,8 +134,7 @@ void main() {
 
     // 자동 진입 안내가 스낵바라 ScaffoldMessenger의 Scaffold 조상이 필요하다.
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(body: OutdoorMapBody(key: key)),
+      MaterialApp(theme: AppTheme.light, home: Scaffold(body: OutdoorMapBody(key: key)),
       ),
     );
     await drain(tester);

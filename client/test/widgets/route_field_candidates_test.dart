@@ -1,6 +1,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/domain/route/dijkstra.dart';
 import 'package:navigation_client/domain/search/store_suggestions.dart';
@@ -30,8 +31,7 @@ void main() {
       RoutePlanField field = RoutePlanField.destination,
     }) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
+        MaterialApp(theme: AppTheme.light, home: Scaffold(
             body: RouteFieldResults(
               field: field,
               results: results,

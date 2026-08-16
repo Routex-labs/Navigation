@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/core/api_config.dart';
 import 'package:navigation_client/service_locator.dart';
@@ -67,8 +68,7 @@ void main() {
   ) async {
     final key = GlobalKey<OutdoorMapBodyState>();
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
+      MaterialApp(theme: AppTheme.light, home: Scaffold(
           body: OutdoorMapBody(key: key),
         ),
       ),

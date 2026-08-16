@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:navigation_client/screens/outdoor_map/widgets/indoor_arrival_card.dart';
 
 Widget _host(Widget child, {double textScale = 1.0}) => MediaQuery(
   data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
-  child: MaterialApp(
-    home: Scaffold(body: Center(child: child)),
+  child: MaterialApp(theme: AppTheme.light, home: Scaffold(body: Center(child: child)),
   ),
 );
 
