@@ -147,6 +147,29 @@ extension OutdoorMapGuidance on OutdoorMapBodyState {
     }
   }
 
+  /// 미리 보던 실내 경로에서 **실제 안내를 시작한다.**
+  ///
+  /// 여기서야 출발지 매장에 앵커를 찍는다. 미리 보는 동안 찍지 않는 이유는
+  /// [_indoorRoutePreview]에 적었다 — 그 사람은 아직 거기 서 있지 않다.
+  Future<void> _startIndoorGuidance() async {
+    final origin = _indoorRoutePreviewOrigin;
+    final floor = origin?.floor;
+    final nodeId = origin?.nodeId;
+    if (origin == null || nodeId == null || floor == null || floor.isEmpty) {
+      return;
+    }
+    setState(() {
+      _indoorRoutePreview = false;
+      _indoorRoutePreviewOrigin = null;
+    });
+    await _anchorAtStoreOrigin(
+      floor: floor,
+      nodeId: nodeId,
+      storePoint: origin.point,
+      storeName: origin.name,
+    );
+  }
+
   /// 도착 카드의 `안내 종료`. 남은 여정을 통째로 정리한다.
   void _confirmArrival() {
     _arrivalRouteClearTimer?.cancel();

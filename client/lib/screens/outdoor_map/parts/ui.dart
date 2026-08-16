@@ -422,6 +422,11 @@ extension OutdoorMapUi on OutdoorMapBodyState {
                             .clamp(1, 999),
                     label: _indoorEtaLabel(indoorRouteDestination),
                     instruction: _indoorRouteGuidance,
+                    // 미리 보는 동안은 계획 카드다 — 경로만 그려 두고, 따라가기는
+                    // 이 버튼을 누른 뒤에 시작한다.
+                    onStartGuidance: _indoorRoutePreview
+                        ? () => unawaited(_startIndoorGuidance())
+                        : null,
                     onClose: _dismissIndoorRouteFromEtaCard,
                     onClosePointerDown: (position) =>
                         _etaClosePointerDown = position,

@@ -104,9 +104,11 @@ void main() {
       );
     });
 
-    test('출발지가 실내 매장이면 문을 경유하지 않는다', () {
-      // 건물 안 두 지점 사이의 이동이라 "밖에서 문으로 들어간다"는 전제가
-      // 성립하지 않는다. 도면이 꺼져 있으므로 야외 걷기로 흘러간다.
+    // 건물 안 두 지점 사이의 이동이라 "밖에서 문으로 들어간다"는 전제가 성립하지
+    // 않는다. **도면이 꺼져 있어도, 밖에 서 있어도 마찬가지다** — 두 끝점이 다
+    // 건물 안 노드면 그릴 수 있는 경로이고, 그것이 "거기는 어떻게 되어 있지?" 하고
+    // 미리 보는 길이다. 미리 보기와 실제 안내는 "안내 시작" 버튼이 가른다.
+    test('출발지가 실내 매장이면 밖에 서 있어도 실내 경로다', () {
       expect(
         classifyWalkRoute(
           origin: indoor(floor: '1F', nodeId: 'n9'),
@@ -114,7 +116,7 @@ void main() {
           indoorContextActive: false,
           indoorStartReady: false,
         ),
-        WalkRouteKind.outdoor,
+        WalkRouteKind.indoorToIndoor,
       );
     });
   });

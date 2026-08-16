@@ -733,6 +733,17 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   final GlobalKey _etaCardKey = GlobalKey();
 
+  /// 실내 경로를 **미리 보는 중**인가. 참이면 안내가 아직 시작되지 않았다.
+  ///
+  /// 건물 밖에서도 "거기는 어떻게 되어 있지?" 하고 안을 볼 수 있어야 한다. 그때
+  /// 사용자는 그 매장에 서 있지 않으므로 **현재 위치를 그 매장으로 잡지 않는다** —
+  /// 잡아 버리면 화면이 사실이 아닌 위치를 말하고, PDR이 거기서부터 걸음을 센다.
+  /// 경로선과 요약은 그대로 그리고, 시작은 카드의 `안내 시작`이 맡는다.
+  bool _indoorRoutePreview = false;
+
+  /// 미리 보기에서 `안내 시작`을 누르면 앵커를 찍을 출발지. 없으면 지금 위치다.
+  PoiSearchResult? _indoorRoutePreviewOrigin;
+
   /// 도착 카드가 가리키는 목적지. 사용자가 확인을 누를 때까지 남는다.
   PoiSearchResult? _arrivedDestination;
 
@@ -1345,6 +1356,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     PoiSearchResult destination, {
     PoiSearchResult? origin,
     bool announceOriginAnchor = true,
+    bool preview = false,
   }) async {
     final anchor = _pdrTrailState.anchor;
     // 명시적 출발지는 노드 id와 층이 둘 다 있어야 그래프 탐색을 시작할 수 있다.
@@ -1370,7 +1382,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 매장을 출발지로 골랐으면 현재 위치도 그 매장으로 옮긴다. 이걸 안 하면
     // 경로는 그 매장에서 뻗어 나가는데 위치 아이콘만 예전 자리(또는 아무 데도)
     // 남아, 사용자는 자기가 어디 있다고 표시되는지와 경로가 어긋난 화면을 본다.
-    if (hasExplicitOrigin) {
+    //
+    // **미리 보기에서는 찍지 않는다.** 그 사람은 그 매장에 서 있지 않다 — 찍으면
+    // 화면이 사실이 아닌 위치를 말하고 PDR이 거기서부터 걸음을 센다. 앵커는
+    // 카드의 `안내 시작`을 누른 순간에 찍는다.
+    if (hasExplicitOrigin && !preview) {
       await _anchorAtStoreOrigin(
         floor: originFloor,
         nodeId: originNodeId,
@@ -1393,6 +1409,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _userDestination = null;
       _userDestinationLabel = null;
       _indoorRouteDestination = destination;
+      _indoorRoutePreview = preview && hasExplicitOrigin;
+      _indoorRoutePreviewOrigin = preview ? origin : null;
       _arrivedDestination = null;
       // 목적지가 바뀌면 새로운 길안내다. 기존 궤적을 남기면 새 파란 경로와
       // 이전 목적지로 걸어간 회색선이 한 여정처럼 섞인다.

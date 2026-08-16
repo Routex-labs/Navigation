@@ -1779,21 +1779,23 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 갈아 끼웠다면 **처음 누른 매장이 아니라 마지막 매장**이어야 한다.
   PoiSearchResult? _activePlaceMatch;
 
-  PlaceDetailTarget _targetFor(PoiSearchResult match, FavoritePlace? favorite) =>
-      PlaceDetailTarget(
-        title: match.name,
-        subtitle: match.floor,
-        placeId: match.placeId,
-        favorite: favorite,
-        // 대분류는 화면에 글자로 나오지 않고 헤더 아이콘의 폴백·강조색으로만 쓴다.
-        category: match.category,
-        // 대분류 칩을 없앴으므로 업종은 한 줄로만 보여 준다. 소분류가 없는
-        // 장소에서 업종이 통째로 사라지지 않도록 대분류로 떨어뜨린다.
-        subcategory: match.subcategory ?? match.category,
-        // 검색 결과 목록이 쓰는 것과 **같은 계산 결과**를 넘긴다. 두 화면이
-        // 같은 매장에 다른 거리를 적으면 어느 쪽도 못 믿게 된다.
-        reach: match.nodeId == null ? null : _reachByNodeId?[match.nodeId],
-      );
+  PlaceDetailTarget _targetFor(
+    PoiSearchResult match,
+    FavoritePlace? favorite,
+  ) => PlaceDetailTarget(
+    title: match.name,
+    subtitle: match.floor,
+    placeId: match.placeId,
+    favorite: favorite,
+    // 대분류는 화면에 글자로 나오지 않고 헤더 아이콘의 폴백·강조색으로만 쓴다.
+    category: match.category,
+    // 대분류 칩을 없앴으므로 업종은 한 줄로만 보여 준다. 소분류가 없는
+    // 장소에서 업종이 통째로 사라지지 않도록 대분류로 떨어뜨린다.
+    subcategory: match.subcategory ?? match.category,
+    // 검색 결과 목록이 쓰는 것과 **같은 계산 결과**를 넘긴다. 두 화면이
+    // 같은 매장에 다른 거리를 적으면 어느 쪽도 못 믿게 된다.
+    reach: match.nodeId == null ? null : _reachByNodeId?[match.nodeId],
+  );
 
   /// 지도에서 매장을 눌러 상세를 연다. **떠 있는 상세가 있으면 먼저 닫는다.**
   ///
@@ -1994,6 +1996,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
           _asPoi(destination),
           origin: origin == null ? null : _asPoi(origin),
           announceOriginAnchor: announceOriginAnchor,
+          // 실내 위치가 아직 없으면 그 사람은 건물 밖이다. 경로는 그려 주되
+          // 현재 위치를 출발지 매장으로 잡지는 않는다 — 시작은 카드의
+          // `안내 시작`이 맡는다.
+          preview:
+              origin != null &&
+              !indoorNavigationDriver.currentCalibration.canRenderPosition,
         );
 
       // 실내 구간까지 미리 풀어 두었다가 건물에 들어가면 이어 붙인다.

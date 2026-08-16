@@ -877,6 +877,8 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
         ..setRoute(null);
       _indoorMultiFloorRoute = null;
       _indoorRouteDestination = null;
+      _indoorRoutePreview = false;
+      _indoorRoutePreviewOrigin = null;
       _guidanceTrailSession.clear();
     });
     _syncRouteLayer();
@@ -1037,5 +1039,4 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
       _transitItinerary != null ||
       _indoorRouteSegment != null ||
       _indoorMultiFloorRoute != null;
-
 }
