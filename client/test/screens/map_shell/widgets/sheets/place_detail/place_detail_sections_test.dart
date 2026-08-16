@@ -83,20 +83,5 @@ void main() {
       );
       expect(find.text('2026-08-31까지'), findsOneWidget);
     });
-
-    // 탭 핸들러가 없는 블록이라 버튼처럼 보이면 안 된다.
-    testWidgets(
-      'map section is a local visual hint without an image provider',
-      (tester) async {
-        await tester.pumpWidget(
-          subject(const PlaceMapSection(floorLabel: 'B2')),
-        );
-
-        expect(find.text('B2 위치'), findsOneWidget);
-        expect(find.byIcon(Icons.place_outlined), findsOneWidget);
-        expect(find.byType(Image), findsNothing);
-        expect(find.byIcon(Icons.chevron_right), findsNothing);
-      },
-    );
   });
 }

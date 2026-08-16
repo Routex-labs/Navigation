@@ -247,14 +247,11 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
 
   /// 본문에 그릴 섹션. excluded면 비운다.
   ///
-  /// `map`은 걸러 낸다. 지도 미리보기가 아직 없어서 층 이름만 적힌 블록인데,
-  /// 그 층은 헤더 배지에 이미 있다. 누를 수도 없는 중복이라 자리만 차지했다.
-  /// 서버 계약은 그대로 두고 화면에서만 뺀다 — 지도 이동을 붙이는 날 되살린다.
-  List<PlaceDetailSection> get _visibleSections => _isExcluded
-      ? const []
-      : (_detail?.sections ?? const [])
-            .where((section) => section is! MapSection)
-            .toList();
+  /// 서버가 보내는 `map` 섹션은 여기까지 오지 않는다 — 모델이 파싱하지 않는다.
+  /// 담긴 것이 매장 폴리곤인데 지도는 그것을 매장 색인에서 이미 갖고 있고, 화면에
+  /// 남은 것은 층 이름 한 줄이라 헤더 배지와 같은 말이었다.
+  List<PlaceDetailSection> get _visibleSections =>
+      _isExcluded ? const [] : (_detail?.sections ?? const []);
 
   /// 길찾기 버튼은 이름 바로 아래 한 곳에만 있다. chain 규약을 타지 않도록
   /// `_markIntentional`을 거친다(F5).
@@ -509,7 +506,6 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                             padding: const EdgeInsets.only(top: 24),
                             child: PlaceDetailSections(
                               sections: sections,
-                              floorLabel: _detail?.location.floorLabel,
                               homeFooter: _nearbyStores.isEmpty
                                   ? null
                                   : PlaceNearbySection(
@@ -652,13 +648,11 @@ class PlaceDetailSections extends StatefulWidget {
   const PlaceDetailSections({
     super.key,
     required this.sections,
-    required this.floorLabel,
     this.now,
     this.homeFooter,
   });
 
   final List<PlaceDetailSection> sections;
-  final String? floorLabel;
 
   /// 영업시간 판정의 기준 시각. 테스트가 넘기고 앱에서는 null이라
   /// [DateTime.now]가 쓰인다 — 시각에 의존하는 화면을 고정할 수 있어야 한다.
@@ -790,7 +784,6 @@ class _PlaceDetailSectionsState extends State<PlaceDetailSections> {
           text: text,
           until: until,
         ),
-        MapSection() => PlaceMapSection(floorLabel: widget.floorLabel),
         MenuSection(:final items) => PlaceMenuSection(
           items: [
             for (final item in items)

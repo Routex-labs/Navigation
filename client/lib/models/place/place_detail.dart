@@ -33,10 +33,10 @@ class PlaceDetail {
     final rawSections = json['sections'];
     final sections = rawSections is List
         ? rawSections
-            .whereType<Map<String, dynamic>>()
-            .map(PlaceDetailSection.fromJson)
-            .whereType<PlaceDetailSection>()
-            .toList(growable: false)
+              .whereType<Map<String, dynamic>>()
+              .map(PlaceDetailSection.fromJson)
+              .whereType<PlaceDetailSection>()
+              .toList(growable: false)
         : const <PlaceDetailSection>[];
     final rawActions = json['actions'];
 
@@ -47,16 +47,19 @@ class PlaceDetail {
       subtitle: json['subtitle'] as String,
       category: json['category'] as String?,
       subcategory: json['subcategory'] as String?,
-      location: PlaceLocation.fromJson(json['location'] as Map<String, dynamic>),
+      location: PlaceLocation.fromJson(
+        json['location'] as Map<String, dynamic>,
+      ),
       actions: rawActions is List
           ? rawActions
-              .whereType<Map<String, dynamic>>()
-              .map(PlaceAction.fromJson)
-              .toList(growable: false)
+                .whereType<Map<String, dynamic>>()
+                .map(PlaceAction.fromJson)
+                .toList(growable: false)
           : const <PlaceAction>[],
       sections: sections,
-      provenance:
-          PlaceProvenance.fromJson(json['provenance'] as Map<String, dynamic>),
+      provenance: PlaceProvenance.fromJson(
+        json['provenance'] as Map<String, dynamic>,
+      ),
     );
   }
 }
@@ -75,15 +78,15 @@ class PlaceLocation {
   final String? entranceNodeId;
 
   factory PlaceLocation.fromJson(Map<String, dynamic> json) => PlaceLocation(
-        buildingId: json['building_id'] as String,
-        floorLabel: json['floor_label'] as String?,
-        // Dart 3 pattern matching을 지원하지 않는 Flutter SDK에서도 동작하도록
-        // 전통적인 타입 검사로 파싱한다.
-        positionLocalM: json['position_local_m'] is Map<String, dynamic>
-            ? PlacePoint.fromJson(json['position_local_m'] as Map<String, dynamic>)
-            : null,
-        entranceNodeId: json['entrance_node_id'] as String?,
-      );
+    buildingId: json['building_id'] as String,
+    floorLabel: json['floor_label'] as String?,
+    // Dart 3 pattern matching을 지원하지 않는 Flutter SDK에서도 동작하도록
+    // 전통적인 타입 검사로 파싱한다.
+    positionLocalM: json['position_local_m'] is Map<String, dynamic>
+        ? PlacePoint.fromJson(json['position_local_m'] as Map<String, dynamic>)
+        : null,
+    entranceNodeId: json['entrance_node_id'] as String?,
+  );
 }
 
 class PlacePoint {
@@ -93,9 +96,9 @@ class PlacePoint {
   final double y;
 
   factory PlacePoint.fromJson(Map<String, dynamic> json) => PlacePoint(
-        x: (json['x'] as num).toDouble(),
-        y: (json['y'] as num).toDouble(),
-      );
+    x: (json['x'] as num).toDouble(),
+    y: (json['y'] as num).toDouble(),
+  );
 }
 
 class PlaceAction {
@@ -104,10 +107,8 @@ class PlaceAction {
   final String type;
   final String label;
 
-  factory PlaceAction.fromJson(Map<String, dynamic> json) => PlaceAction(
-        type: json['type'] as String,
-        label: json['label'] as String,
-      );
+  factory PlaceAction.fromJson(Map<String, dynamic> json) =>
+      PlaceAction(type: json['type'] as String, label: json['label'] as String);
 }
 
 class PlaceProvenance {
@@ -116,7 +117,8 @@ class PlaceProvenance {
   final String source;
   final String? updatedAt;
 
-  factory PlaceProvenance.fromJson(Map<String, dynamic> json) => PlaceProvenance(
+  factory PlaceProvenance.fromJson(Map<String, dynamic> json) =>
+      PlaceProvenance(
         source: json['source'] as String,
         updatedAt: json['updated_at'] as String?,
       );
@@ -132,7 +134,6 @@ sealed class PlaceDetailSection {
       'keyValue' => KeyValueSection.fromJson(json),
       'tags' => TagsSection.fromJson(json),
       'notice' => NoticeSection.fromJson(json),
-      'map' => MapSection.fromJson(json),
       'menu' => MenuSection.fromJson(json),
       'businessInfo' => BusinessInfoSection.fromJson(json),
       'demoInfo' => DemoInfoSection.fromJson(json),
@@ -159,9 +160,9 @@ class HeroSection extends PlaceDetailSection {
     return HeroSection(
       items: rawItems is List
           ? rawItems
-              .whereType<Map<String, dynamic>>()
-              .map(HeroItem.fromJson)
-              .toList(growable: false)
+                .whereType<Map<String, dynamic>>()
+                .map(HeroItem.fromJson)
+                .toList(growable: false)
           : const <HeroItem>[],
     );
   }
@@ -186,9 +187,9 @@ class KeyValueSection extends PlaceDetailSection {
     return KeyValueSection(
       items: rawItems is List
           ? rawItems
-              .whereType<Map<String, dynamic>>()
-              .map(KeyValueItem.fromJson)
-              .toList(growable: false)
+                .whereType<Map<String, dynamic>>()
+                .map(KeyValueItem.fromJson)
+                .toList(growable: false)
           : const <KeyValueItem>[],
     );
   }
@@ -201,9 +202,9 @@ class KeyValueItem {
   final String value;
 
   factory KeyValueItem.fromJson(Map<String, dynamic> json) => KeyValueItem(
-        label: json['label'] as String,
-        value: json['value'] as String,
-      );
+    label: json['label'] as String,
+    value: json['value'] as String,
+  );
 }
 
 class TagsSection extends PlaceDetailSection {
@@ -212,9 +213,10 @@ class TagsSection extends PlaceDetailSection {
   final List<String> tags;
 
   factory TagsSection.fromJson(Map<String, dynamic> json) => TagsSection(
-        tags: (json['tags'] as List?)?.whereType<String>().toList(growable: false) ??
-            const <String>[],
-      );
+    tags:
+        (json['tags'] as List?)?.whereType<String>().toList(growable: false) ??
+        const <String>[],
+  );
 }
 
 class NoticeSection extends PlaceDetailSection {
@@ -224,27 +226,9 @@ class NoticeSection extends PlaceDetailSection {
   final String? until;
 
   factory NoticeSection.fromJson(Map<String, dynamic> json) => NoticeSection(
-        text: json['text'] as String,
-        until: json['until'] as String?,
-      );
-}
-
-class MapSection extends PlaceDetailSection {
-  const MapSection({required this.polygonLocalM});
-
-  final List<PlacePoint> polygonLocalM;
-
-  factory MapSection.fromJson(Map<String, dynamic> json) {
-    final rawPoints = json['polygon_local_m'];
-    return MapSection(
-      polygonLocalM: rawPoints is List
-          ? rawPoints
-              .whereType<Map<String, dynamic>>()
-              .map(PlacePoint.fromJson)
-              .toList(growable: false)
-          : const <PlacePoint>[],
-    );
-  }
+    text: json['text'] as String,
+    until: json['until'] as String?,
+  );
 }
 
 class MenuSection extends PlaceDetailSection {
@@ -257,9 +241,9 @@ class MenuSection extends PlaceDetailSection {
     return MenuSection(
       items: rawItems is List
           ? rawItems
-              .whereType<Map<String, dynamic>>()
-              .map(MenuItem.fromJson)
-              .toList(growable: false)
+                .whereType<Map<String, dynamic>>()
+                .map(MenuItem.fromJson)
+                .toList(growable: false)
           : const <MenuItem>[],
     );
   }
@@ -313,25 +297,27 @@ class MenuItem {
   final List<String> badges;
 
   factory MenuItem.fromJson(Map<String, dynamic> json) => MenuItem(
-        name: json['name'] as String,
-        imageAsset: json['image_asset'] as String?,
-        group: json['group'] as String?,
-        category: json['category'] as String?,
-        nameEn: json['name_en'] as String?,
-        description: json['description'] as String?,
-        price: json['price'] as String?,
-        volume: json['volume'] as String?,
-        calories: json['calories'] as String?,
-        caffeine: json['caffeine'] as String?,
-        allergens: json['allergens'] as String?,
-        // 서버는 값이 없으면 키를 빼고 보낸다(계약 4-2 규칙 1). 구버전 서버는
-        // 이 키 자체를 모르므로 `as List` 캐스트로 받지 않는다 — 없는 키에 캐스트를
-        // 걸면 파싱이 통째로 던지고, 배지 하나 때문에 메뉴 316종이 사라진다.
-        badges: switch (json['badges']) {
-          final List<dynamic> raw => raw.whereType<String>().toList(growable: false),
-          _ => const <String>[],
-        },
-      );
+    name: json['name'] as String,
+    imageAsset: json['image_asset'] as String?,
+    group: json['group'] as String?,
+    category: json['category'] as String?,
+    nameEn: json['name_en'] as String?,
+    description: json['description'] as String?,
+    price: json['price'] as String?,
+    volume: json['volume'] as String?,
+    calories: json['calories'] as String?,
+    caffeine: json['caffeine'] as String?,
+    allergens: json['allergens'] as String?,
+    // 서버는 값이 없으면 키를 빼고 보낸다(계약 4-2 규칙 1). 구버전 서버는
+    // 이 키 자체를 모르므로 `as List` 캐스트로 받지 않는다 — 없는 키에 캐스트를
+    // 걸면 파싱이 통째로 던지고, 배지 하나 때문에 메뉴 316종이 사라진다.
+    badges: switch (json['badges']) {
+      final List<dynamic> raw => raw.whereType<String>().toList(
+        growable: false,
+      ),
+      _ => const <String>[],
+    },
+  );
 }
 
 class BusinessInfoSection extends PlaceDetailSection {
@@ -344,9 +330,9 @@ class BusinessInfoSection extends PlaceDetailSection {
     return BusinessInfoSection(
       items: rawItems is List
           ? rawItems
-              .whereType<Map<String, dynamic>>()
-              .map(BusinessInfoItem.fromJson)
-              .toList(growable: false)
+                .whereType<Map<String, dynamic>>()
+                .map(BusinessInfoItem.fromJson)
+                .toList(growable: false)
           : const <BusinessInfoItem>[],
     );
   }
@@ -379,9 +365,9 @@ class LinksSection extends PlaceDetailSection {
     return LinksSection(
       items: rawItems is List
           ? rawItems
-              .whereType<Map<String, dynamic>>()
-              .map(PlaceLink.fromJson)
-              .toList(growable: false)
+                .whereType<Map<String, dynamic>>()
+                .map(PlaceLink.fromJson)
+                .toList(growable: false)
           : const <PlaceLink>[],
     );
   }
@@ -398,10 +384,10 @@ class PlaceLink {
   final String? iconAsset;
 
   factory PlaceLink.fromJson(Map<String, dynamic> json) => PlaceLink(
-        label: json['label'] as String,
-        url: json['url'] as String,
-        iconAsset: json['icon_asset'] as String?,
-      );
+    label: json['label'] as String,
+    url: json['url'] as String,
+    iconAsset: json['icon_asset'] as String?,
+  );
 }
 
 /// 소개 영상 촬영용 매장에만 붙는 운영 정보다.
@@ -420,9 +406,9 @@ class DemoInfoSection extends PlaceDetailSection {
     return DemoInfoSection(
       items: rawItems is List
           ? rawItems
-              .whereType<Map<String, dynamic>>()
-              .map(DemoInfoItem.fromJson)
-              .toList(growable: false)
+                .whereType<Map<String, dynamic>>()
+                .map(DemoInfoItem.fromJson)
+                .toList(growable: false)
           : const <DemoInfoItem>[],
     );
   }
@@ -548,8 +534,8 @@ class DemoInfoItem {
   // 고치는 사람에게 필요한 것이고, 사용자에게 필요한 것은 "언제 확인한 값인가"다
   // (설계 7-A-3).
   factory DemoInfoItem.fromJson(Map<String, dynamic> json) => DemoInfoItem(
-        label: json['label'] as String,
-        value: json['value'] as String,
-        confirmedAt: json['confirmed_at'] as String,
-      );
+    label: json['label'] as String,
+    value: json['value'] as String,
+    confirmedAt: json['confirmed_at'] as String,
+  );
 }

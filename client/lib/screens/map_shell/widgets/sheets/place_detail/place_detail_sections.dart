@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:routex_design_system/routex_design_system.dart';
 
-import '../../../../../theme/app_theme.dart';
 import 'korean_line_break.dart';
 
 /// 한 줄 소개 섹션.
@@ -74,60 +73,5 @@ class PlaceNoticeSection extends StatelessWidget {
         caption: until == null ? null : '$until까지',
       ),
     ),
-  );
-}
-
-/// MapLibre 미리보기는 첫 프레임에 별도 지도·타일 요청을 만들기 때문에 이 Wave에서
-/// 넣지 않는다. 이 섹션은 위치가 있다는 사실만 가볍게 알려 주고, 실제 지도 이동은
-/// 기존 지도 화면과 후속 상호작용에 맡긴다.
-///
-/// **눌리는 것처럼 보이면 안 된다.** 탭 핸들러가 없으므로 화살표 같은 버튼
-/// 기표를 두지 않는다. 지도 이동을 붙이는 날 그때 버튼으로 바꾼다.
-class PlaceMapSection extends StatelessWidget {
-  const PlaceMapSection({super.key, this.floorLabel});
-
-  final String? floorLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = floorLabel == null || floorLabel!.isEmpty
-        ? '지도에서 위치 확인'
-        : '${floorLabel!} 위치';
-    return _TintedBlock(
-      child: Row(
-        children: [
-          const Icon(Icons.place_outlined, color: AppColors.primary, size: 20),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 배경색으로만 구분하는 블록. 공지·지도 바로가기처럼 "본문이 아니라 하나의
-/// 덩어리"인 것에만 쓴다. 테두리는 두지 않는다 — 배경색만으로 이미 구분된다.
-class _TintedBlock extends StatelessWidget {
-  const _TintedBlock({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: AppColors.blue50,
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: child,
   );
 }
