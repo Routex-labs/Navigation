@@ -16,7 +16,6 @@ import 'package:routex_design_system/routex_design_system.dart';
 import '../../../../support/routex_test_host.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail/korean_line_break.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail_sheet.dart';
-import 'package:navigation_client/widgets/sheet_header.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 final _favorite = FavoritePlace.fromPoiSearchResult(
@@ -338,10 +337,13 @@ void main() {
     expect(find.byType(SingleChildScrollView), findsOneWidget);
   });
 
-  group('현재 위치 기준 거리', () {
-    // 목록에 74m라고 적혀 있는데 눌러 들어온 상세가 다른 값을 말하면 어느 쪽도
-    // 못 믿게 된다. 두 화면이 같은 reachLabel을 쓰는지 값으로 확인한다.
-    testWidgets('거리와 도보 시간을 층·업종 아래에 보여준다', (tester) async {
+  // **기대가 뒤집혔다.** 예전에는 상세 헤더가 목록과 같은 거리·도보 시간을 한 번 더
+  // 적었고, 그 근거는 "목록에서 본 값을 상세에서도 같은 자리에 둔다"였다. 지금은
+  // 반대로 정했다 — 비교해서 고를 때는 필요한 값이지만 **이미 고른 장소**의 상세에서
+  // 같은 값을 반복하면 화면만 길어진다. 결정의 단일 출처는 공급 저장소의
+  // place-detail-guidance-decisions.md이고, 거리는 검색 목록이 계속 말한다.
+  group('상세 헤더가 반복하지 않는 것', () {
+    testWidgets('거리를 알아도 도보 시간을 다시 적지 않는다', (tester) async {
       await tester.pumpWidget(
         buildSubject(
           repository: _FakeRepository(Future.value(null)),
@@ -350,17 +352,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('124m · 도보 2분'), findsOneWidget);
-    });
-
-    testWidgets('위치가 없으면 거리 줄을 아예 그리지 않는다', (tester) async {
-      await tester.pumpWidget(
-        buildSubject(repository: _FakeRepository(Future.value(null))),
-      );
-      await tester.pumpAndSettle();
-
       expect(find.textContaining('도보'), findsNothing);
-      // 층·업종 줄은 그대로다.
+      expect(find.textContaining('124m'), findsNothing);
+      // 층·업종 줄은 그대로다 — 그건 "어디인가"라서 상세에서도 필요하다.
       expect(find.textContaining('1F'), findsOneWidget);
     });
   });
@@ -380,7 +374,7 @@ void main() {
 
     // 저장은 눌러도 화면이 그대로 남는 유일한 버튼이다. 시트를 닫는 출발·도착과
     // 같은 줄에 두면 무엇이 화면을 바꾸는 버튼인지 예측할 수 없다.
-    testWidgets('저장은 길찾기 줄이 아니라 헤더에 있다', (tester) async {
+    testWidgets('저장은 길찾기 줄이 아니라 장소 헤더에 있다', (tester) async {
       await tester.pumpWidget(
         buildSubject(
           favorite: _favorite,
@@ -389,10 +383,12 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final save = find.byKey(const ValueKey('place-detail-save'));
+      final save = find.byTooltip('장소 저장');
       expect(save, findsOneWidget);
+      // **장소 헤더 안이다.** 저장은 시트가 아니라 그 장소에 붙는 동작이라 이름
+      // 옆에 선다. 시트 상단 바(뒤로·닫기)는 시트를 다루는 동작만 갖는다.
       expect(
-        find.descendant(of: find.byType(SheetHeader), matching: save),
+        find.descendant(of: find.byType(RoutexPlaceHeader), matching: save),
         findsOneWidget,
       );
       expect(
@@ -410,7 +406,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey('place-detail-save')), findsNothing);
+      expect(find.byTooltip('장소 저장'), findsNothing);
       // 토글이 빠져도 헤더의 뒤로·X는 그대로다.
       expect(find.byTooltip('뒤로'), findsOneWidget);
       expect(find.byTooltip('전체 닫기'), findsOneWidget);
@@ -425,8 +421,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byTooltip('장소에 저장'), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('place-detail-save')));
+      expect(find.byTooltip('장소 저장'), findsOneWidget);
+      await tester.tap(find.byTooltip('장소 저장'));
       await tester.pumpAndSettle();
 
       // 시트는 그대로 있고, 토글만 저장됨 상태가 된다.
@@ -443,7 +439,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('place-detail-save')));
+      await tester.tap(find.byTooltip('장소 저장'));
       await tester.pumpAndSettle();
     }
 
@@ -459,7 +455,7 @@ void main() {
 
     testWidgets('다시 눌러도 알림은 한 개이고 문구만 바뀐다', (tester) async {
       await pumpSaved(tester);
-      await tester.tap(find.byKey(const ValueKey('place-detail-save')));
+      await tester.tap(find.byTooltip('저장 취소'));
       await tester.pumpAndSettle();
 
       expect(find.byType(RoutexInlineNotice), findsOneWidget);
@@ -476,7 +472,7 @@ void main() {
 
       expect(favoritesController.contains(_favorite.key), isFalse);
       expect(find.byType(RoutexInlineNotice), findsNothing);
-      expect(find.byTooltip('장소에 저장'), findsOneWidget);
+      expect(find.byTooltip('장소 저장'), findsOneWidget);
     });
 
     // 되돌릴 길이 여기뿐이 아니라 헤더 토글에도 있으므로 시간이 지나면 사라져도
@@ -635,7 +631,11 @@ void main() {
     expect(find.textContaining('restroom'), findsNothing);
   });
 
-  testWidgets('헤더 아이콘은 세부 규칙을 대분류보다 먼저 쓴다', (tester) async {
+  // **장식용 매장 아이콘을 뺐다.** 예전에는 이름 앞에 분류 색을 입힌 44 사각형이
+  // 있었고, 목록에서 보던 글리프를 상세에서도 같은 자리에 두려는 것이었다. 상세는
+  // 이미 그 장소만 보여 주는 화면이라 "무엇을 눌렀는지" 확인시킬 이유가 없다.
+  // 근거는 위 group과 같은 결정 문서다.
+  testWidgets('이름 앞에 장식용 분류 아이콘을 두지 않는다', (tester) async {
     await tester.pumpWidget(
       buildSubject(
         category: '식음료',
@@ -645,32 +645,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 식음료 대분류는 restaurant지만, 카페 세부 규칙이 이겨야 한다.
-    expect(find.byIcon(Icons.local_cafe_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.local_cafe_outlined), findsNothing);
     expect(find.byIcon(Icons.restaurant), findsNothing);
-  });
-
-  testWidgets('세부 규칙에 걸리지 않으면 대분류 아이콘으로 떨어진다', (tester) async {
-    await tester.pumpWidget(
-      buildSubject(
-        category: '패션',
-        subcategory: '명품',
-        repository: _FakeRepository(Future.value(null)),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.byIcon(Icons.checkroom), findsOneWidget);
     expect(find.byIcon(Icons.storefront), findsNothing);
-  });
-
-  testWidgets('카테고리가 없으면 상점 아이콘으로 떨어진다', (tester) async {
-    await tester.pumpWidget(
-      buildSubject(repository: _FakeRepository(Future.value(null))),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.byIcon(Icons.storefront), findsOneWidget);
+    // 이름과 층·업종은 그대로다.
+    expect(find.text('테스트 매장'), findsOneWidget);
   });
 
   group('떠 있는 채로 갈아 끼우기', () {

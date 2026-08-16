@@ -16,8 +16,6 @@ import 'place_detail/place_detail_hours_section.dart';
 import 'place_detail/place_detail_nearby_section.dart';
 import 'place_detail/place_detail_rich_sections.dart';
 import 'place_detail/place_detail_sections.dart';
-import '../../../../map/icon/category_icon.dart';
-import '../../../../domain/store/reach_label.dart';
 import '../../../../widgets/sheet_header.dart';
 
 import '../../../../widgets/map_overlay_guard.dart';
@@ -466,26 +464,32 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                       children: [
                         const RoutexSheetHandle(),
                         _SheetLoadingLine(visible: _isLoading),
+                        // 저장은 시트가 아니라 **장소**에 붙는 동작이라 이름 옆으로
+                        // 내려갔다([RoutexPlaceHeader]). 시트 상단 바는 뒤로·닫기만
+                        // 갖는다 — 그 둘은 시트를 다루는 동작이다.
                         SheetHeader(
                           onCloseAll: widget.onCloseAll,
                           onIntentionalPop: _markIntentional,
-                          // 저장은 눌러도 시트가 그대로 남는 유일한 버튼이라 길찾기와
-                          // 같은 줄에 두지 않는다([SheetHeader.trailing] 주석).
-                          trailing: favorite == null
-                              ? null
-                              : _SaveToggle(
-                                  isSaved: saved,
-                                  onPressed: _onToggleFavorite,
-                                ),
                         ),
                         Padding(
                           padding: const EdgeInsets.fromLTRB(20, 2, 20, 0),
-                          child: _PlaceCore(
-                            title: _target.title,
-                            subtitle: _target.subtitle,
-                            category: _target.category,
-                            subcategory: subcategory,
-                            reach: _target.reach,
+                          // **도보 시간을 반복하지 않는다.** 목록에서 고를 때는
+                          // 비교에 쓰는 값이지만, 이미 고른 장소의 상세에서는 같은
+                          // 값을 한 번 더 읽을 이유가 없다. 이름 앞 장식용 매장
+                          // 아이콘도 같은 이유로 뺀다. 결정의 단일 출처는 공급
+                          // 저장소의 place-detail-guidance-decisions.md다.
+                          child: RoutexPlaceHeader(
+                            name: _target.title,
+                            metadata: [
+                              if (_target.subtitle.isNotEmpty) _target.subtitle,
+                              ?subcategoryLabelFor(subcategory),
+                            ].join(' · '),
+                            saved: saved,
+                            // 저장할 대상이 없으면(구버전 저장 항목) 담을 곳이
+                            // 없다. 그때는 토글 자체를 그리지 않는다.
+                            onSaved: favorite == null
+                                ? null
+                                : (_) => _onToggleFavorite(),
                           ),
                         ),
                         // 이름을 읽은 직후가 길찾기를 누르는 자리다. 사진·메뉴를
@@ -539,150 +543,6 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// 시트 최상단의 아이콘·이름·층·업종 블록.
-///
-/// 왼쪽 아이콘은 카테고리 칩·카테고리 매장 목록과 같은 [storeIconFor] 규칙을
-/// 쓴다. 목록에서 보던 글리프가 상세에서도 같은 자리에 있어야 "방금 누른 그것"이
-/// 이어진다. 한때 이 자리에 있던 건 모든 매장에 똑같이 붙는 storefront 하나라
-/// 알려 주는 게 없었는데, 지금은 대분류 폴백이 있어 매장마다 달라진다.
-///
-/// 층은 배지가 아니라 업종 줄 앞의 pill이다. 44px 정사각형은 로고 자리로 읽혀서
-/// 텍스트를 넣으면 브랜드 마크처럼 오독된다.
-class _PlaceCore extends StatelessWidget {
-  const _PlaceCore({
-    required this.title,
-    required this.subtitle,
-    required this.category,
-    required this.subcategory,
-    required this.reach,
-  });
-
-  final String title;
-  final String subtitle;
-  final String? category;
-  final String? subcategory;
-  final NodeReach? reach;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = subcategoryLabelFor(subcategory);
-    final reach = this.reach;
-    final hasFloor = subtitle.isNotEmpty;
-    final accent = category == null
-        ? AppColors.primary
-        : categoryColorFor(category!);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: accent.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(13),
-          ),
-          alignment: Alignment.center,
-          child: Icon(
-            storeIconFor(
-              name: title,
-              subcategory: subcategory,
-              category: category,
-            ),
-            size: 22,
-            color: accent,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                title,
-                // 긴 이름은 잘라내기 전에 두 줄까지 준다. 그 이상은 헤더 높이가
-                // 튀어서 본문 첫 화면을 먹는다.
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 21,
-                  height: 1.2,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.text,
-                ),
-              ),
-              // 층도 업종도 없으면 줄 자체를 만들지 않는다 — 빈 줄이 제목 아래
-              // 여백만 늘린다.
-              if (hasFloor || label != null) ...[
-                const SizedBox(height: 5),
-                // 층·구분점·업종을 위젯 세 개로 나열하지 않고 한 문장으로 그린다.
-                // 위젯으로 나누면 사이 간격을 padding 상수로 찍어야 하는데, 그
-                // 값이 글자 사이 자연스러운 간격과 어긋나 층만 동떨어져 보였다.
-                // 하나의 텍스트로 두면 간격을 폰트가 정한다.
-                Text.rich(
-                  TextSpan(
-                    children: [
-                      if (hasFloor)
-                        TextSpan(
-                          text: subtitle,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      if (hasFloor && label != null)
-                        const TextSpan(
-                          text: ' · ',
-                          style: TextStyle(color: AppColors.blue300),
-                        ),
-                      if (label != null) TextSpan(text: label),
-                    ],
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    height: 1.3,
-                    color: AppColors.muted,
-                  ),
-                ),
-              ],
-              // "어디인가" 다음 줄이 "어떻게 닿는가"다. 목록에서 이미 본 값을
-              // 상세에서도 같은 자리에 두어, 눌러 들어온 뒤 다시 찾지 않게 한다.
-              if (reach != null) ...[
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.directions_walk,
-                      size: 14,
-                      color: AppColors.muted,
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        reachLabel(reach),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          height: 1.3,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.text,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
     );
   }
 }
@@ -744,32 +604,6 @@ class _PlaceActions extends StatelessWidget {
         child: const Text('도착'),
       ),
     ],
-  );
-}
-
-/// 헤더 우측의 저장 토글.
-///
-/// 예전에는 본문 액션 줄에서 "저장"/"저장됨" 글자를 달고 있었고, 그 주석은
-/// 아이콘만으로 짐작하게 두지 않으려는 것이라고 적고 있었다. 헤더는 자리가
-/// 아이콘 폭뿐이라 글자를 뗀다. **그 자리를 세 가지로 메운다** — 채움/윤곽으로
-/// 저장 여부를 구분하고, tooltip을 달고, 누른 결과를 스낵바가 문장으로 알린다.
-/// 셋 중 하나라도 빠지면 글자를 뗀 것이 그냥 후퇴가 된다.
-class _SaveToggle extends StatelessWidget {
-  const _SaveToggle({required this.isSaved, required this.onPressed});
-
-  final bool isSaved;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) => IconButton(
-    key: const ValueKey('place-detail-save'),
-    tooltip: isSaved ? '저장 취소' : '장소에 저장',
-    onPressed: onPressed,
-    icon: Icon(
-      isSaved ? Icons.bookmark : Icons.bookmark_border,
-      size: 22,
-      color: isSaved ? AppColors.primary : AppColors.muted,
-    ),
   );
 }
 
