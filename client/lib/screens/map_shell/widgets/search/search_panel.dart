@@ -21,7 +21,6 @@ import '../../../../models/place/poi_search_result.dart';
 import '../../../../models/place/store_index_entry.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../domain/category/category_label_order.dart';
-import '../../../../widgets/filter_pill.dart';
 import '../../../../domain/store/reach_label.dart';
 import '../../../../domain/geo/distance_format.dart';
 import '../../../../domain/category/subcategory_label.dart';
@@ -832,7 +831,10 @@ class _SearchPanelState extends State<SearchPanel> {
   /// `B2 ~ 3F` 같은 범위로 적지 않는다 — `Floor.level`이 없어 사전순으로 세우면
   /// `1F`가 `B1`보다 앞에 온다.
   /// 개수·층 머리말 문장. 서식은 앱이 정하고 자리는 `RoutexResultList`가 갖는다.
-  String _listSummary({required int count, required Iterable<String> floorNames}) {
+  String _listSummary({
+    required int count,
+    required Iterable<String> floorNames,
+  }) {
     final floors = floorNames.toSet();
     final floorText = floors.length == 1 ? floors.first : '${floors.length}개 층';
     return '검색 결과 $count · $floorText';
@@ -1310,52 +1312,58 @@ class _SearchPanelState extends State<SearchPanel> {
     final canChooseAgain = hasSelection || _showingAll;
 
     // 선택·되돌리기 줄. 답을 한 번이라도 골랐을 때만 선다.
+    //
+    // **값 하나에 줄 하나다.** 이 줄의 선택은 축마다 하나씩 여럿인데 칩 줄의 선택은
+    // 없거나 하나라, 한 줄에 다 담으면 여러 개를 동시에 강조할 수 없다. 줄을 값마다
+    // 두면 각자 자기 하나를 고른 상태가 되고, 가로 스크롤은 바깥 ListView가 이미
+    // 소유하고 있어 `deferToParent`가 성립한다.
+    //
+    // **`×`를 붙이지 않는다.** 고른 값을 다시 누르면 풀리는 것이 칩 줄의 계약이라
+    // 동작은 그대로고, 위 선택지 줄은 아무것도 안 골라 회색이라 두 줄이 색으로 이미
+    // 갈린다. 해제 글리프는 예전에 계약으로 냈다가 어댑터가 이미 풀고 있어 걷어낸
+    // 것이다(v0.2.9).
     final selectedRow = <Widget>[];
     for (final entry in _selectedFacets.entries) {
       for (final value in entry.value) {
-        if (selectedRow.isNotEmpty) selectedRow.add(const SizedBox(width: 6));
+        if (selectedRow.isNotEmpty) {
+          selectedRow.add(const SizedBox(width: RoutexSpacing.controlGap));
+        }
         selectedRow.add(
-          FilterPill(
+          RoutexChipBar(
             key: Key('selected-facet-${entry.key}-$value'),
-            label: value,
-            selected: true,
-            // 고른 값을 다시 누르면 풀린다. 카테고리 시트의 소분류 pill과 같은
-            // 규칙이라 같은 모양이 같게 동작한다. `×`는 그 사실을 눈에 보이게 한다.
-            trailing: Icons.close,
-            onTap: () => _removeFacet(entry.key, value),
+            options: [RoutexChipOption(id: value, label: value)],
+            selectedId: value,
+            overflow: RoutexChipBarOverflow.deferToParent,
+            onSelected: (_) => _removeFacet(entry.key, value),
           ),
         );
       }
     }
-    // 조작 pill(전체 보기·다시 선택)은 **선택 줄 끝에 구분선 뒤로** 붙인다. 예전에는
-    // "전체 보기"가 혼자 윗줄에 떠서, 방금 고른 선택보다 위에 있는 탈출구가 됐다.
-    // clarify 화면에서는 이미 선택지 줄 끝에 있으므로 여기서는 빼고 중복시키지 않는다.
+    // 조작(전체 보기·다시 선택)은 **칩이 아니라 버튼이다.** 위 칩들은 "이 값으로
+    // 좁혀라"이고 이 둘은 "좁히지 말고 다 봐라"·"방금 답을 되돌려라"라 성격이 다르다.
+    // 같은 모양으로 두고 구분선으로 가르던 것을 그만둔다 — 모양이 다르면 선이 필요
+    // 없다. clarify 화면에서는 전체 보기가 이미 선택지 줄 끝에 있어 여기서는 뺀다.
     final trailingActions = <Widget>[
       if (canShowAll && !isClarify)
-        FilterPill(
+        RoutexButton(
           key: const Key('show-all'),
           label: '전체 보기',
-          selected: false,
-          onTap: () => _requestDiscovery(showAll: true),
+          variant: RoutexButtonVariant.quiet,
+          onPressed: () => _requestDiscovery(showAll: true),
         ),
       if (canChooseAgain)
-        FilterPill(
+        RoutexButton(
           key: const Key('choose-again'),
           label: '다시 선택',
-          selected: false,
-          onTap: _chooseAgain,
+          variant: RoutexButtonVariant.quiet,
+          onPressed: _chooseAgain,
         ),
     ];
-    if (trailingActions.isNotEmpty) {
+    for (final action in trailingActions) {
       if (selectedRow.isNotEmpty) {
-        selectedRow.add(
-          const VerticalDivider(width: 10, indent: 6, endIndent: 6),
-        );
+        selectedRow.add(const SizedBox(width: RoutexSpacing.controlGap));
       }
-      for (var index = 0; index < trailingActions.length; index++) {
-        if (index > 0) selectedRow.add(const SizedBox(width: 6));
-        selectedRow.add(trailingActions[index]);
-      }
+      selectedRow.add(action);
     }
 
     return Padding(
@@ -1427,12 +1435,12 @@ class _SearchPanelState extends State<SearchPanel> {
                     // 다른 것을 같은 줄에 두고 선으로 나누는 것보다 스크롤 밖에
                     // 고정해 두는 편이 분명하다 — 선택지가 길어도 안 밀려난다.
                     if (canShowAll) ...[
-                      const SizedBox(width: 6),
-                      FilterPill(
+                      const SizedBox(width: RoutexSpacing.controlGap),
+                      RoutexButton(
                         key: const Key('show-all'),
                         label: '전체 보기',
-                        selected: false,
-                        onTap: () => _requestDiscovery(showAll: true),
+                        variant: RoutexButtonVariant.quiet,
+                        onPressed: () => _requestDiscovery(showAll: true),
                       ),
                     ],
                   ],
@@ -1442,7 +1450,8 @@ class _SearchPanelState extends State<SearchPanel> {
           if (selectedRow.isNotEmpty) ...[
             if (isClarify) const SizedBox(height: 6),
             SizedBox(
-              height: 30,
+              // 칩이 터치 영역 48을 감싸고 있어 30에 두면 그 자리에서 넘친다.
+              height: RoutexMetrics.minimumTouchTarget,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1660,16 +1669,22 @@ class _SearchPanelState extends State<SearchPanel> {
               const SizedBox(height: 8),
               // 대분류가 6~7개라 접으면 두 줄이 된다. 이 화면은 결과가 없어
               // 세로가 남으므로 Wrap으로 두어 한눈에 다 보이게 한다.
+              //
+              // 칩 줄을 분류마다 하나씩 둔다. 줄이 여럿을 담으면 스스로 가로로
+              // 넘기는데(`RoutexChipBarOverflow.scroll`) 그러면 이 화면의 탈출구
+              // 절반이 접혀 사라진다. 하나짜리 줄은 넘칠 것이 없어 `deferToParent`가
+              // 성립하고, 접는 일은 바깥 Wrap이 맡는다.
               Wrap(
-                spacing: 6,
-                runSpacing: 6,
+                spacing: RoutexSpacing.controlGap,
+                runSpacing: RoutexSpacing.controlGap,
                 children: [
                   for (final category in categories)
-                    FilterPill(
+                    RoutexChipBar(
                       key: Key('browse-category-$category'),
-                      label: category,
-                      selected: false,
-                      onTap: () => onPicked(category),
+                      options: [RoutexChipOption.category(category)],
+                      selectedId: null,
+                      overflow: RoutexChipBarOverflow.deferToParent,
+                      onSelected: (_) => onPicked(category),
                     ),
                 ],
               ),
