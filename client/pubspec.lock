@@ -629,6 +629,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.6.0"
+  routex_design_system:
+    dependency: "direct main"
+    description:
+      path: "packages/routex_design_system"
+      ref: "4e049762388763a44dab832561ac673c483dd8bb"
+      resolved-ref: "4e049762388763a44dab832561ac673c483dd8bb"
+      url: "https://github.com/Routex-labs/routex-design-system.git"
+    source: git
+    version: "0.2.1"
   share_plus:
     dependency: "direct main"
     description:

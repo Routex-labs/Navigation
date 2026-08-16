@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 /// 앱 전역 디자인 토큰. 실내 지도(MapLibre) 렌더링과 경로선/마커에서도
 /// 같은 값을 참조해 Material UI와 지도 위 그래픽의 색이 어긋나지 않게 한다.
@@ -69,7 +70,24 @@ abstract final class AppElevation {
 }
 
 abstract final class AppTheme {
-  static ThemeData get light {
+  /// 앱 전역 테마. 앱이 소유한 [_appOwned]에 Runtime Kit 토큰만 얹은 결과다.
+  static ThemeData get light => withRoutexTokens(_appOwned);
+
+  /// 받은 [base]는 그대로 두고 Runtime Kit이 요구하는 ThemeExtension만 더한다.
+  ///
+  /// 전역을 `RoutexTheme.light`로 갈아 끼우지 않는 이유는, 그 순간 아직 옮기지
+  /// 않은 카드·입력창·버튼까지 한꺼번에 바뀌어 어느 변화가 포팅 때문인지 가릴 수
+  /// 없어서다. 그래서 이 다리의 합격 기준은 "Runtime Kit이 그려진다"가 아니라
+  /// **포팅하지 않은 위젯의 계산된 ThemeData가 이전과 같다**이다.
+  ///
+  /// [base]에 이미 있는 extension은 덮어쓰지 않고 뒤에 붙인다.
+  static ThemeData withRoutexTokens(ThemeData base) {
+    return base.copyWith(
+      extensions: base.extensions.values.toList()..add(RoutexColorTokens.light),
+    );
+  }
+
+  static ThemeData get _appOwned {
     final colorScheme = ColorScheme.fromSeed(
       seedColor: AppColors.primary,
       brightness: Brightness.light,
