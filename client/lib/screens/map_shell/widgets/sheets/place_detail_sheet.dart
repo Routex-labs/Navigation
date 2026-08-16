@@ -297,6 +297,12 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
   /// 기다리면 그 빈 구간이 번쩍임으로 보인다.
   void _onTargetChanged() {
     if (!mounted) return;
+    // 이전 장소의 저장 알림도 함께 걷는다. 남겨 두면 그 되돌리기가 방금 저장한
+    // 곳이 아니라 **지금 보고 있는 곳**을 토글한다 — 문구는 이전 장소를 말하는데
+    // 손대는 대상은 다른 장소다.
+    _saveNoticeTimer?.cancel();
+    _saveNoticeTimer = null;
+    _saveNotice = null;
     setState(() {});
     _loadDetailContent();
   }

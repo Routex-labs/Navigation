@@ -489,6 +489,24 @@ void main() {
       expect(find.byType(RoutexInlineNotice), findsNothing);
       expect(favoritesController.contains(_favorite.key), isTrue);
     });
+
+    // 알림을 남겨 두면 되돌리기가 이전 장소가 아니라 지금 보고 있는 장소를
+    // 토글한다. 문구와 손대는 대상이 어긋나는 자리다.
+    testWidgets('다른 장소로 갈아 끼우면 이전 알림을 걷는다', (tester) async {
+      await pumpSaved(tester);
+      expect(find.byType(RoutexInlineNotice), findsOneWidget);
+
+      target.value = const PlaceDetailTarget(
+        title: '다른 매장',
+        subtitle: 'B2',
+        placeId: 'place-2',
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(RoutexInlineNotice), findsNothing);
+      // 알림만 걷힐 뿐 이전 장소의 저장은 그대로다.
+      expect(favoritesController.contains(_favorite.key), isTrue);
+    });
   });
 
   testWidgets('출발 버튼은 기존 StoreInfoAction 계약으로 닫힌다', (tester) async {
