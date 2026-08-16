@@ -10,7 +10,9 @@ import 'package:navigation_client/core/clipboard_confirmation.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail/place_detail_rich_sections.dart';
 
 void main() {
-  Widget subject(Widget child) => MaterialApp(theme: AppTheme.light, home: Scaffold(body: SingleChildScrollView(child: child)),
+  Widget subject(Widget child) => MaterialApp(
+    theme: AppTheme.light,
+    home: Scaffold(body: SingleChildScrollView(child: child)),
   );
 
   group('Place rich detail renderers', () {
@@ -290,7 +292,9 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        MaterialApp(theme: AppTheme.light, home: MediaQuery(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: MediaQuery(
             data: const MediaQueryData(textScaler: TextScaler.linear(2.0)),
             child: const Scaffold(
               body: SingleChildScrollView(
@@ -519,7 +523,9 @@ void main() {
       addTearDown(tester.view.reset);
 
       await tester.pumpWidget(
-        MaterialApp(theme: AppTheme.light, home: Scaffold(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: Scaffold(
             // 상세 시트와 같은 조건을 만든다. 시트는 화면 비율로 크기가 정해져
             // 키보드가 올라와도 **줄어들지 않는다** — Scaffold가 알아서 줄여 주면
             // Flutter 기본 동작이 대신 스크롤해 버려서, 이 테스트가 검증하려는
@@ -1059,8 +1065,10 @@ void main() {
       );
 
       final image = tester.widget<Image>(find.byType(Image));
-      expect((image.image as AssetImage).assetName,
-          'assets/place_details/osulloc_favicon.png');
+      expect(
+        (image.image as AssetImage).assetName,
+        'assets/place_details/osulloc_favicon.png',
+      );
       // 자산을 준 줄만 그림이고, 나머지는 아이콘 그대로다.
       expect(find.byIcon(Icons.public), findsNothing);
       expect(find.byIcon(Icons.camera_alt), findsOneWidget);
@@ -1160,7 +1168,10 @@ void main() {
       expect(find.text('매장 정보'), findsOneWidget);
       expect(find.byIcon(Icons.place_outlined), findsOneWidget);
       expect(find.text('주소'), findsNothing);
-      expect(find.text(keepWordsWhole('서울 영등포구 여의대로 108')), findsOneWidget);
+      expect(
+        find.text(RoutexTypography.keepWordsWhole('서울 영등포구 여의대로 108')),
+        findsOneWidget,
+      );
     });
 
     // 데이터는 사람이 쓰는 자유 문자열이라 언제든 새 라벨이 들어온다. 아무 아이콘이나

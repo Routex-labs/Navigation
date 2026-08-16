@@ -150,7 +150,10 @@ void main() {
     expect(find.text('매장 정보'), findsOneWidget);
     expect(find.text('주소'), findsNothing);
     expect(find.byIcon(Icons.place_outlined), findsOneWidget);
-    expect(find.text(keepWordsWhole('서울특별시 영등포구 여의대로 108')), findsOneWidget);
+    expect(
+      find.text(RoutexTypography.keepWordsWhole('서울특별시 영등포구 여의대로 108')),
+      findsOneWidget,
+    );
   });
 
   // 주소는 페이지 맨 아래로 내려가 소개와 떨어졌다. 둘은 각자 제목을 갖는다.
@@ -179,7 +182,10 @@ void main() {
     expect(find.text('매장 정보'), findsOneWidget);
     expect(find.text('소개'), findsOneWidget);
     expect(find.text(keepWordsWhole('한 줄 소개')), findsOneWidget);
-    expect(find.text(keepWordsWhole('여의대로 108')), findsOneWidget);
+    expect(
+      find.text(RoutexTypography.keepWordsWhole('여의대로 108')),
+      findsOneWidget,
+    );
   });
 
   // 메뉴가 30종까지 늘면서 한 줄로 이어 붙인 본문이 너무 길어졌다. 영업시간을 보려면
@@ -509,7 +515,9 @@ void main() {
   testWidgets('출발 버튼은 기존 StoreInfoAction 계약으로 닫힌다', (tester) async {
     StoreInfoAction? result;
     await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light, home: Builder(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: Builder(
           builder: (context) => FilledButton(
             onPressed: () async {
               result = await PlaceDetailSheet.show(
@@ -537,7 +545,9 @@ void main() {
   testWidgets('X는 전체 닫기 콜백을 호출하고 현재 시트를 닫는다', (tester) async {
     var closedAll = false;
     await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light, home: Builder(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: Builder(
           builder: (context) => FilledButton(
             onPressed: () => PlaceDetailSheet.show(
               context,
@@ -564,7 +574,9 @@ void main() {
   testWidgets('뒤로는 전체 닫기 없이 현재 시트만 닫는다', (tester) async {
     var closedAll = false;
     await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light, home: Builder(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: Builder(
           builder: (context) => FilledButton(
             onPressed: () => PlaceDetailSheet.show(
               context,
@@ -657,7 +669,9 @@ void main() {
     // 프레임이 생겨 번쩍인다(실기기에서 확인).
     testWidgets('이름·층은 즉시 바뀌고 본문은 새 상세가 올 때까지 남는다', (tester) async {
       await tester.pumpWidget(
-        buildSubject(repository: _FakeRepository(Future.value(_detailWithSummary()))),
+        buildSubject(
+          repository: _FakeRepository(Future.value(_detailWithSummary())),
+        ),
       );
       await tester.pumpAndSettle();
       expect(find.text('테스트 매장'), findsOneWidget);
@@ -753,7 +767,6 @@ void main() {
       expect(placeDetailSheetInitialSize(0), 0.5);
     });
   });
-
 }
 
 class _FakeRepository implements PlaceDetailRepository {

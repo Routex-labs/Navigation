@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:routex_design_system/routex_design_system.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -1044,7 +1043,11 @@ class PlaceBusinessInfoSection extends StatelessWidget {
         const SizedBox(height: 12),
         for (var index = 0; index < items.length; index++) ...[
           if (index > 0) const SizedBox(height: infoRowGap),
-          PlaceInfoRow(label: items[index].label, value: items[index].value),
+          RoutexInfoRow(
+            label: items[index].label,
+            value: items[index].value,
+            icon: infoIconFor(items[index].label),
+          ),
         ],
       ],
     );
@@ -1088,7 +1091,10 @@ class PlaceLinkBrand {
 PlaceLinkBrand linkBrandFor(String label) {
   final key = label.replaceAll(' ', '');
   if (isWebsiteLabel(label)) {
-    return const PlaceLinkBrand(icon: Icons.public, colors: [Color(0xFF3C4043)]);
+    return const PlaceLinkBrand(
+      icon: Icons.public,
+      colors: [Color(0xFF3C4043)],
+    );
   }
   return switch (key) {
     '페이스북' => const PlaceLinkBrand(
@@ -1108,8 +1114,10 @@ PlaceLinkBrand linkBrandFor(String label) {
     // `네이버 브랜드스토어`가 공백을 지우면 `네이버브랜드스토어`라 정확히 일치하는
     // 가지가 없어 회색 기본값으로 떨어져 있었다. 스토어류는 이름이 계속 바뀌므로
     // (스마트스토어 → 브랜드스토어) 조각 일치로 받는다.
-    _ when key.contains('스토어') || key.contains('네이버') =>
-      const PlaceLinkBrand(icon: Icons.storefront, colors: [Color(0xFF03C75A)]),
+    _ when key.contains('스토어') || key.contains('네이버') => const PlaceLinkBrand(
+      icon: Icons.storefront,
+      colors: [Color(0xFF03C75A)],
+    ),
     _ => const PlaceLinkBrand(icon: Icons.link, colors: [AppColors.muted]),
   };
 }
@@ -1191,7 +1199,8 @@ class PlaceLinksSection extends StatelessWidget {
               ),
           ],
           // 여는 일은 앱이 한다 — 외부 앱을 여는 것은 플랫폼 능력이다.
-          onSelected: (selected) => _open(context, selected.url, selected.label),
+          onSelected: (selected) =>
+              _open(context, selected.url, selected.label),
         ),
       ],
     );
@@ -1238,7 +1247,7 @@ IconData? infoIconFor(String label) => switch (label.replaceAll(' ', '')) {
   // 고객센터는 수화기가 아니라 상담원 아이콘이다. 같은 전화번호라도 "이 매장에
   // 건다"와 "본사 콜센터에 건다"는 다른 일이고, 둘을 같은 글리프로 그리면 화면이
   // 그 차이를 지운다. 아이콘만으로는 부족해서 이 줄은 라벨 글자도 함께 남긴다
-  // ([PlaceInfoRow.keepLabel]).
+  // (`RoutexInfoRow.keepLabel`).
   '고객센터' => Icons.support_agent_outlined,
   '대표번호' || '전화번호' || '연락처' || '문의' => Icons.call_outlined,
   '매장타입' || '매장유형' => Icons.storefront_outlined,
@@ -1248,157 +1257,6 @@ IconData? infoIconFor(String label) => switch (label.replaceAll(' ', '')) {
   '홈페이지' || '웹사이트' => Icons.language_outlined,
   _ => null,
 };
-
-/// 아이콘 + 값 한 줄. 아이콘이 라벨을 대신하므로 라벨 글자가 사라진다.
-///
-/// 라벨을 값 위 캡션으로 올렸던 이전 배치는 한 항목이 두 줄을 썼다. 항목이 여섯
-/// 개면 열두 줄이라 시트가 글 덩어리로 읽혔다. 아이콘은 가로 24px만 쓰고 값이
-/// 본문 폭을 그대로 받으므로, 같은 내용이 절반 높이에 들어간다.
-class PlaceInfoRow extends StatelessWidget {
-  const PlaceInfoRow({
-    super.key,
-    required this.label,
-    required this.value,
-    this.caption,
-    this.keepLabel = false,
-    this.copyText,
-  });
-
-  final String label;
-  final String value;
-
-  /// 값 아래 작은 글씨(확인일 등). 없으면 그리지 않는다.
-  final String? caption;
-
-  /// 아이콘이 있어도 라벨 글자를 남긴다.
-  ///
-  /// 기본은 아이콘이 라벨을 대신하는 것이고, 그 전제는 "아이콘이 라벨을 정확히
-  /// 가리킨다"였다. 라벨 자체가 **값의 뜻을 바꾸는** 줄에서는 그 전제가 깨진다 —
-  /// `고객센터 1522-3232`에서 `고객센터`를 지우면 남은 것은 매장 직통 번호처럼
-  /// 읽히고, 그건 정보가 줄어든 게 아니라 틀린 정보가 된 것이다.
-  final bool keepLabel;
-
-  /// 값 옆 '복사' 버튼이 클립보드에 담을 문자열. null이면 버튼을 그리지 않는다.
-  ///
-  /// 값 전체가 아니라 **복사할 만한 토막**만 받는다. `1522-3232 (평일 09:00–18:00)`을
-  /// 통째로 복사하면 전화 앱에 붙여 넣을 수 없다.
-  final String? copyText;
-
-  @override
-  Widget build(BuildContext context) {
-    final icon = infoIconFor(label);
-    final copyText = this.copyText;
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 아이콘은 첫 줄 글자의 중앙에 맞춘다. 위쪽 정렬만 하면 값이 두 줄일 때
-        // 아이콘이 글자보다 살짝 떠 보인다.
-        Padding(
-          padding: const EdgeInsets.only(top: 1),
-          child: Icon(
-            icon ?? Icons.circle,
-            size: icon == null ? 5 : 19,
-            color: AppColors.muted,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 아이콘이 라벨을 대신하지 못할 때만 라벨을 글자로 남긴다.
-              if (icon == null || keepLabel) ...[
-                Text(
-                  label,
-                  style: const TextStyle(fontSize: 12, color: AppColors.muted),
-                ),
-                const SizedBox(height: 3),
-              ],
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Flexible(
-                    child: Text(
-                      keepWordsWhole(value),
-                      style: const TextStyle(
-                        fontSize: 13.5,
-                        height: 1.4,
-                        color: AppColors.text,
-                      ),
-                    ),
-                  ),
-                  // 복사 버튼은 값 **바로 옆**이다. 줄 오른쪽 끝에 붙이면 값이 짧을
-                  // 때 무엇을 복사하는 버튼인지가 멀어진다.
-                  if (copyText != null) _CopyButton(text: copyText),
-                ],
-              ),
-              if (caption != null) ...[
-                const SizedBox(height: 3),
-                Text(
-                  caption!,
-                  style: const TextStyle(fontSize: 11, color: AppColors.muted),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// 값 옆에 붙는 '복사' 버튼.
-///
-/// 아이콘 대신 글자를 쓴다. 전화번호 옆의 겹친 사각형 글리프는 "저장"·"공유"로도
-/// 읽히는데, 잘못 눌러도 잃는 게 없는 동작이라 아이콘 수수께끼를 낼 이유가 없다.
-class _CopyButton extends StatelessWidget {
-  const _CopyButton({required this.text});
-
-  final String text;
-
-  // 클립보드는 실패할 수 있다. 웹은 브라우저 권한을, 리눅스는 클립보드 매니저를
-  // 타고, 둘 다 없으면 플랫폼 채널이 예외를 던진다. 조용히 삼키면 사용자는
-  // 복사된 줄 알고 붙여 넣기를 시도하므로, 실패를 실패라고 말한다.
-  //
-  // **성공은 기기가 이미 알릴 수 있다.** Android 13+는 시스템이 확인 UI를
-  // 띄워, 우리 토스트까지 얹으면 "복사했습니다"가 두 번 뜬다
-  // ([shouldAnnounceClipboardCopy]).
-  Future<void> _copy(BuildContext context) async {
-    var copied = true;
-    try {
-      await Clipboard.setData(ClipboardData(text: text));
-    } catch (_) {
-      copied = false;
-    }
-    if (copied && !await shouldAnnounceClipboardCopy()) return;
-    if (!context.mounted) return;
-    RoutexToast.show(context, copied ? '복사했습니다' : '복사하지 못했습니다');
-  }
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: () => _copy(context),
-    behavior: HitTestBehavior.opaque,
-    child: Semantics(
-      button: true,
-      label: '$text 복사',
-      child: const Padding(
-        // 글자만으로는 손가락이 닿을 자리가 안 나온다. 여백으로 세로 26·가로 42를
-        // 만든다.
-        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-        child: Text(
-          '복사',
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w700,
-            color: AppColors.primary,
-          ),
-        ),
-      ),
-    ),
-  );
-}
 
 /// 영업시간·대표번호처럼 **시간이 지나면 저절로 거짓이 되는** 운영 정보다.
 ///
@@ -1441,15 +1299,17 @@ class PlaceDemoInfoSection extends StatelessWidget {
 
   final List<PlaceDemoInfo> items;
 
-  Widget _row(PlaceDemoInfo item, String? sharedDate) {
+  Widget _row(BuildContext context, PlaceDemoInfo item, String? sharedDate) {
     final isPhone = isPhoneLabel(item.label);
-    return PlaceInfoRow(
+    return RoutexInfoRow(
       label: item.label,
       value: item.value,
+      icon: infoIconFor(item.label),
       // 전화 줄만 라벨을 남긴다. 누가 받는 번호인지는 아이콘이 말해 주지 못하고,
       // 그 한 단어가 빠지면 값의 뜻이 달라진다.
       keepLabel: isPhone,
       copyText: isPhone ? phoneNumberIn(item.value) : null,
+      onCopied: () => announceClipboardCopy(context),
       // 확인일이 제각각일 때만 항목마다 붙인다. 묶을 수 없기 때문이다.
       caption: sharedDate == null ? '${item.confirmedAt} 확인' : null,
     );
@@ -1472,7 +1332,7 @@ class PlaceDemoInfoSection extends StatelessWidget {
         const SizedBox(height: 12),
         for (var index = 0; index < items.length; index++) ...[
           if (index > 0) const SizedBox(height: infoRowGap),
-          _row(items[index], sharedDate),
+          _row(context, items[index], sharedDate),
         ],
         if (sharedDate != null) ...[
           const SizedBox(height: 12),
