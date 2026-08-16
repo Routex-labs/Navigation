@@ -705,6 +705,11 @@ class _PlaceDetailSectionsState extends State<PlaceDetailSections> {
         for (final item in section.items) item.localAsset,
     ];
 
+    // 메뉴가 30종까지 늘면서 한 줄로 이어 붙인 본문이 너무 길어졌다. 영업시간을
+    // 보려면 메뉴를 한참 지나야 했고 그 반대도 마찬가지다. 어느 쪽을 보러 왔는지는
+    // 사람마다 다르므로 둘을 나란히 두고 고르게 한다. 섹션 **순서**는 그대로 서버가
+    // 정하고(계약 4-2 규칙 3), 여기가 하는 것은 묶는 일뿐이다.
+    //
     // 있는 탭만 만든다. 탭 하나짜리 탭 바는 아무것도 나누지 않으면서 자리만
     // 차지한다(메뉴 카테고리 탭과 같은 규칙).
     final tabs = [
@@ -721,10 +726,13 @@ class _PlaceDetailSectionsState extends State<PlaceDetailSections> {
       children: [
         if (hero.isNotEmpty) ...[_render(hero), const SizedBox(height: 16)],
         if (tabbed) ...[
-          _SectionTabs(
-            tabs: tabs,
-            active: active!,
-            onSelect: (tab) => setState(() => _activeTab = tab),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
+            child: RoutexTabs(
+              labels: tabs,
+              selectedIndex: tabs.indexOf(active!),
+              onSelected: (index) => setState(() => _activeTab = tabs[index]),
+            ),
           ),
           const SizedBox(height: 18),
         ],
@@ -855,64 +863,6 @@ class _PlaceDetailSectionsState extends State<PlaceDetailSections> {
       children: widgets,
     );
   }
-}
-
-/// 시트 본문을 가르는 상단 탭.
-///
-/// 메뉴가 30종까지 늘면서 한 줄로 이어 붙인 본문이 너무 길어졌다. 상세를 열었을 때
-/// 영업시간이 보이려면 메뉴를 한참 지나쳐야 했고, 반대로 메뉴를 보려면 소개를 지나야
-/// 했다. **어느 쪽을 보러 왔는지는 사람마다 다르므로** 둘을 나란히 두고 고르게 한다.
-///
-/// 섹션 순서는 그대로 서버가 정한다(계약 4-2 규칙 3). 클라이언트가 하는 것은 **묶는
-/// 일**뿐이고, 한 탭 안에서는 서버가 보낸 순서대로 쌓는다.
-class _SectionTabs extends StatelessWidget {
-  const _SectionTabs({
-    required this.tabs,
-    required this.active,
-    required this.onSelect,
-  });
-
-  final List<String> tabs;
-  final String active;
-  final ValueChanged<String> onSelect;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
-    child: Row(
-      children: [
-        for (final tab in tabs)
-          Expanded(
-            child: GestureDetector(
-              onTap: () => onSelect(tab),
-              behavior: HitTestBehavior.opaque,
-              child: Container(
-                padding: const EdgeInsets.only(bottom: 10),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(
-                      color: tab == active
-                          ? AppColors.primary
-                          : AppColors.blue100,
-                      width: tab == active ? 2.5 : 1,
-                    ),
-                  ),
-                ),
-                child: Text(
-                  tab,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: tab == active ? AppColors.primary : AppColors.muted,
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
-    ),
-  );
 }
 
 /// 번들 asset 경로를 사진 항목으로 바꾼다.
