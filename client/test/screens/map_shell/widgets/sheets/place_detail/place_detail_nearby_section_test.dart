@@ -18,7 +18,9 @@ void main() {
     reach: NodeReach(distanceM: distanceM, costM: distanceM),
   );
 
-  Widget subject(Widget child) => MaterialApp(theme: AppTheme.light, home: Scaffold(body: SingleChildScrollView(child: child)),
+  Widget subject(Widget child) => MaterialApp(
+    theme: AppTheme.light,
+    home: Scaffold(body: SingleChildScrollView(child: child)),
   );
 
   testWidgets('이름·층·거리를 한 줄에 그린다', (tester) async {

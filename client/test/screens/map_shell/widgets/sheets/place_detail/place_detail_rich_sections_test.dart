@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:routex_design_system/routex_design_system.dart';
 import 'package:navigation_client/theme/app_theme.dart';
-import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail/korean_line_break.dart';
 import 'package:navigation_client/core/clipboard_confirmation.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail/place_detail_rich_sections.dart';
 
@@ -238,7 +237,10 @@ void main() {
       await tester.tap(find.text('리저브 콜드 브루'));
       await tester.pumpAndSettle();
 
-      expect(find.text(keepWordsWhole('깊고 부드러운 풍미의 커피')), findsOneWidget);
+      expect(
+        find.text(RoutexTypography.keepWordsWhole('깊고 부드러운 풍미의 커피')),
+        findsOneWidget,
+      );
       expect(find.text('355ml'), findsOneWidget);
       expect(find.text('5kcal'), findsOneWidget);
       expect(find.text('190mg'), findsOneWidget);
@@ -261,7 +263,10 @@ void main() {
       await tester.tap(find.text('플레인 베이글'));
       await tester.pumpAndSettle();
 
-      expect(find.text(keepWordsWhole('담백한 베이글')), findsOneWidget);
+      expect(
+        find.text(RoutexTypography.keepWordsWhole('담백한 베이글')),
+        findsOneWidget,
+      );
       expect(find.text('용량'), findsNothing);
       expect(find.text('칼로리'), findsNothing);
       expect(find.text('카페인'), findsNothing);
@@ -1186,7 +1191,7 @@ void main() {
       );
 
       expect(find.text('반려동물 동반'), findsOneWidget);
-      expect(find.text(keepWordsWhole('가능')), findsOneWidget);
+      expect(find.text(RoutexTypography.keepWordsWhole('가능')), findsOneWidget);
     });
   });
 }

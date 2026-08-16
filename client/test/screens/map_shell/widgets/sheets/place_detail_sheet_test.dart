@@ -14,7 +14,6 @@ import 'package:navigation_client/state/favorites_controller.dart';
 import 'package:routex_design_system/routex_design_system.dart';
 
 import '../../../../support/routex_test_host.dart';
-import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail/korean_line_break.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -90,7 +89,7 @@ void main() {
     completer.complete(_detailWithSummary());
     await tester.pumpAndSettle();
 
-    expect(find.text(keepWordsWhole('상세 섹션')), findsOneWidget);
+    expect(find.text(RoutexTypography.keepWordsWhole('상세 섹션')), findsOneWidget);
     expect(find.byKey(const ValueKey('place-detail-loading')), findsNothing);
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
@@ -119,7 +118,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text(keepWordsWhole('상세 섹션')), findsNothing);
+    expect(find.text(RoutexTypography.keepWordsWhole('상세 섹션')), findsNothing);
     expect(find.text('출발'), findsOneWidget);
     expect(find.text('도착'), findsOneWidget);
   });
@@ -181,7 +180,10 @@ void main() {
 
     expect(find.text('매장 정보'), findsOneWidget);
     expect(find.text('소개'), findsOneWidget);
-    expect(find.text(keepWordsWhole('한 줄 소개')), findsOneWidget);
+    expect(
+      find.text(RoutexTypography.keepWordsWhole('한 줄 소개')),
+      findsOneWidget,
+    );
     expect(
       find.text(RoutexTypography.keepWordsWhole('여의대로 108')),
       findsOneWidget,
@@ -215,14 +217,17 @@ void main() {
     expect(find.text('홈'), findsOneWidget);
     expect(find.text('메뉴'), findsOneWidget);
     // 처음엔 홈 탭. 메뉴 항목은 아직 그리지 않는다.
-    expect(find.text(keepWordsWhole('한 줄 소개')), findsOneWidget);
+    expect(
+      find.text(RoutexTypography.keepWordsWhole('한 줄 소개')),
+      findsOneWidget,
+    );
     expect(find.text('카페 아메리카노'), findsNothing);
 
     await tester.tap(find.text('메뉴'));
     await tester.pumpAndSettle();
 
     expect(find.text('카페 아메리카노'), findsOneWidget);
-    expect(find.text(keepWordsWhole('한 줄 소개')), findsNothing);
+    expect(find.text(RoutexTypography.keepWordsWhole('한 줄 소개')), findsNothing);
   });
 
   // 탭 하나짜리 탭 바는 아무것도 나누지 않으면서 자리만 차지한다.
@@ -243,7 +248,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('홈'), findsNothing);
-    expect(find.text(keepWordsWhole('한 줄 소개')), findsOneWidget);
+    expect(
+      find.text(RoutexTypography.keepWordsWhole('한 줄 소개')),
+      findsOneWidget,
+    );
   });
 
   // 지도 미리보기가 붙기 전까지 map 섹션은 층 이름만 적힌 중복 블록이다.
@@ -675,7 +683,10 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('테스트 매장'), findsOneWidget);
-      expect(find.text(keepWordsWhole('상세 섹션')), findsOneWidget);
+      expect(
+        find.text(RoutexTypography.keepWordsWhole('상세 섹션')),
+        findsOneWidget,
+      );
 
       final next = Completer<PlaceDetail?>();
       // 다음 요청이 늦게 오는 상황을 만든다.
@@ -690,7 +701,10 @@ void main() {
       expect(find.text('다른 매장'), findsOneWidget);
       expect(find.text('테스트 매장'), findsNothing);
       // **본문은 아직 이전 것이다** — 비우면 그 빈 구간이 번쩍임이 된다.
-      expect(find.text(keepWordsWhole('상세 섹션')), findsOneWidget);
+      expect(
+        find.text(RoutexTypography.keepWordsWhole('상세 섹션')),
+        findsOneWidget,
+      );
       next.complete(null);
     });
 
@@ -718,7 +732,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('다른 매장'), findsOneWidget);
-      expect(find.text(keepWordsWhole('상세 섹션')), findsNothing);
+      expect(find.text(RoutexTypography.keepWordsWhole('상세 섹션')), findsNothing);
     });
   });
 

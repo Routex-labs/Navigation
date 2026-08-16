@@ -135,7 +135,10 @@ void main() {
 
       final week = storeHoursWeek(section, kst(2026, 8, 11, 12));
 
-      expect(routexHoursDays(week).first.value, '10:30 - 14:00 · 17:00 - 20:00');
+      expect(
+        routexHoursDays(week).first.value,
+        '10:30 - 14:00 · 17:00 - 20:00',
+      );
     });
   });
 

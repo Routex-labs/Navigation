@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 import '../../../../../theme/app_theme.dart';
 import 'korean_line_break.dart';
@@ -88,7 +89,7 @@ class _KeyValueRow extends StatelessWidget {
       ),
       const SizedBox(height: 3),
       Text(
-        keepWordsWhole(item.value),
+        RoutexTypography.keepWordsWhole(item.value),
         style: const TextStyle(
           fontSize: 13.5,
           height: 1.4,
@@ -153,7 +154,7 @@ class PlaceNoticeSection extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                keepWordsWhole(text),
+                RoutexTypography.keepWordsWhole(text),
                 style: const TextStyle(fontSize: 13, color: AppColors.text),
               ),
               if (until != null) ...[

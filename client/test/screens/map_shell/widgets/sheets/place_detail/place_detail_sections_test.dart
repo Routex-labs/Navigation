@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/theme/app_theme.dart';
-import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail/korean_line_break.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail/place_detail_sections.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 void main() {
-  Widget subject(Widget child) => MaterialApp(theme: AppTheme.light, home: Scaffold(body: SingleChildScrollView(child: child)),
+  Widget subject(Widget child) => MaterialApp(
+    theme: AppTheme.light,
+    home: Scaffold(body: SingleChildScrollView(child: child)),
   );
 
   group('Place detail section renderers', () {
@@ -14,7 +16,10 @@ void main() {
         subject(const PlaceSummarySection(text: '한 줄 소개')),
       );
 
-      expect(find.text(keepWordsWhole('한 줄 소개')), findsOneWidget);
+      expect(
+        find.text(RoutexTypography.keepWordsWhole('한 줄 소개')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('summary balances a paragraph without adding a line', (
@@ -49,9 +54,15 @@ void main() {
       );
 
       expect(find.text('위치'), findsOneWidget);
-      expect(find.text(keepWordsWhole('B2 서편')), findsOneWidget);
+      expect(
+        find.text(RoutexTypography.keepWordsWhole('B2 서편')),
+        findsOneWidget,
+      );
       expect(find.text('안내'), findsOneWidget);
-      expect(find.text(keepWordsWhole('에스컬레이터 옆')), findsOneWidget);
+      expect(
+        find.text(RoutexTypography.keepWordsWhole('에스컬레이터 옆')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('tags are individually visible chips', (tester) async {
@@ -69,7 +80,10 @@ void main() {
         subject(const PlaceNoticeSection(text: '팝업 운영', until: '2026-08-31')),
       );
 
-      expect(find.text(keepWordsWhole('팝업 운영')), findsOneWidget);
+      expect(
+        find.text(RoutexTypography.keepWordsWhole('팝업 운영')),
+        findsOneWidget,
+      );
       expect(find.text('2026-08-31까지'), findsOneWidget);
     });
 
