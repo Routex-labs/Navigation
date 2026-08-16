@@ -173,18 +173,15 @@ class _PlaceMenuSectionState extends State<PlaceMenuSection> {
         ),
         if (groups.isNotEmpty) ...[
           const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
-            child: RoutexTabs(
-              labels: groups,
-              selectedIndex: groups.indexOf(activeGroup!),
-              onSelected: (index) => setState(() {
-                _activeGroup = groups[index];
-                _activeTab = null;
-                _tabTouched = false;
-                _expanded = false;
-              }),
-            ),
+          _MenuGroupTabs(
+            tabs: groups,
+            active: activeGroup!,
+            onSelect: (group) => setState(() {
+              _activeGroup = group;
+              _activeTab = null;
+              _tabTouched = false;
+              _expanded = false;
+            }),
           ),
         ],
         // 검색창은 메뉴가 한 화면에 안 들어올 때만 의미가 있다. 열 줄도 안 되는
@@ -317,6 +314,67 @@ const _badgeAccents = <String, RoutexBadgeAccent>{
 /// 원인을 찾기 어렵다. 화면에 그리는 글자는 원본 그대로다.
 RoutexBadgeAccent? badgeAccentFor(String label) =>
     _badgeAccents[label.replaceAll(' ', '').toUpperCase()];
+
+/// 위쪽 갈래(음료·푸드) 선택.
+///
+/// **`RoutexTabs`를 쓰지 않는다.** 한 번 옮겨 폰에서 봤더니 시트 위쪽의
+/// 홈·메뉴·사진 줄과 **똑같은 밑줄 탭이 둘 겹쳐** 어느 줄이 무엇을 가르는지가
+/// 흐려졌다. 갈래가 둘뿐이라 균등 폭도 화면 절반씩을 먹었다. Runtime Kit의 선택
+/// register는 탭과 칩 둘인데 이 화면은 셋(시트 탭 → 갈래 → 분류)이 필요하고, 그
+/// 세 번째 자리를 굵기로 만든다. 색·글자·간격은 Kit 토큰을 쓴다.
+class _MenuGroupTabs extends StatelessWidget {
+  const _MenuGroupTabs({
+    required this.tabs,
+    required this.active,
+    required this.onSelect,
+  });
+
+  final List<String> tabs;
+  final String active;
+  final ValueChanged<String> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.routexColors;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
+      child: Row(
+        children: [
+          for (final tab in tabs)
+            Semantics(
+              button: true,
+              selected: tab == active,
+              label: tab,
+              excludeSemantics: true,
+              child: GestureDetector(
+                onTap: () => onSelect(tab),
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  // 보이는 크기는 글자 그대로 두고 누르는 상자만 세로로 넓힌다.
+                  padding: const EdgeInsets.only(
+                    right: RoutexSpacing.sectionGap,
+                    top: RoutexSpacing.contentGap,
+                    bottom: RoutexSpacing.contentGap,
+                  ),
+                  child: Text(
+                    tab,
+                    style: RoutexTypography.body.copyWith(
+                      fontWeight: tab == active
+                          ? FontWeight.w800
+                          : FontWeight.w500,
+                      color: tab == active
+                          ? colors.contentPrimary
+                          : colors.contentSecondary,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
 
 /// 메뉴 이름으로 좁히는 검색창.
 class _MenuSearchField extends StatefulWidget {
