@@ -31,9 +31,9 @@ class FavoritesSheet extends StatefulWidget {
     return showModalBottomSheet<FavoritePlace>(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      // 표면은 시트 본문이 그린다([RoutexBottomSheet]). 라우트까지 배경을 칠하면
+      // 같은 표면이 두 겹이 되고, 곡률·그림자가 두 곳에서 정해진다.
+      backgroundColor: Colors.transparent,
       builder: (context) =>
           MapOverlayGuard(child: FavoritesSheet(onCloseAll: onCloseAll)),
     );
@@ -61,74 +61,79 @@ class _FavoritesSheetState extends State<FavoritesSheet> {
       onPopInvokedWithResult: (didPop, _) {
         if (didPop && !_intentionalPop) widget.onCloseAll();
       },
-      child: SafeArea(
-        top: false,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: maxHeight),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 손잡이가 있던 자리다. **이 시트는 끌어서 크기를 바꿀 수 없고**
-              // (위 주석의 reorder assertion), 손잡이는 그 조작이 있다는 약속이라
-              // 여기 두면 할 수 없는 일을 약속하게 된다. 남긴 여백은 손잡이가
-              // 차지하던 값과 같고, Runtime Kit이 손잡이 없는 시트에 쓰는 값이다.
-              const SizedBox(height: RoutexSpacing.componentPadding),
-              SheetHeader(
-                title: '저장한 장소',
-                onCloseAll: widget.onCloseAll,
-                onIntentionalPop: _markIntentional,
-              ),
-              Flexible(
-                child: ListenableBuilder(
-                  listenable: favoritesController,
-                  builder: (context, _) {
-                    final places = favoritesController.places;
-                    if (places.isEmpty) {
-                      return const Padding(
-                        padding: EdgeInsets.fromLTRB(20, 40, 20, 40),
-                        child: Center(
-                          child: Text(
-                            '아직 저장한 장소가 없어요.\n매장 정보에서 + 버튼으로 추가할 수 있어요.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: AppColors.muted,
+      // 표면이 SafeArea 바깥이다. 안에 두면 배경이 홈 인디케이터 위에서 끊겨
+      // 시트 아래로 지도가 비친다.
+      child: RoutexBottomSheet(
+        contentInset: RoutexBottomSheetContentInset.content,
+        child: SafeArea(
+          top: false,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 손잡이가 있던 자리다. **이 시트는 끌어서 크기를 바꿀 수 없고**
+                // (위 주석의 reorder assertion), 손잡이는 그 조작이 있다는 약속이라
+                // 여기 두면 할 수 없는 일을 약속하게 된다. 남긴 여백은 손잡이가
+                // 차지하던 값과 같고, Runtime Kit이 손잡이 없는 시트에 쓰는 값이다.
+                const SizedBox(height: RoutexSpacing.componentPadding),
+                SheetHeader(
+                  title: '저장한 장소',
+                  onCloseAll: widget.onCloseAll,
+                  onIntentionalPop: _markIntentional,
+                ),
+                Flexible(
+                  child: ListenableBuilder(
+                    listenable: favoritesController,
+                    builder: (context, _) {
+                      final places = favoritesController.places;
+                      if (places.isEmpty) {
+                        return const Padding(
+                          padding: EdgeInsets.fromLTRB(20, 40, 20, 40),
+                          child: Center(
+                            child: Text(
+                              '아직 저장한 장소가 없어요.\n매장 정보에서 + 버튼으로 추가할 수 있어요.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: AppColors.muted,
+                              ),
                             ),
                           ),
-                        ),
-                      );
-                    }
-                    return ReorderableListView.builder(
-                      shrinkWrap: true,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      itemCount: places.length,
-                      // 오른쪽 기본 드래그 핸들(≡ 아이콘) 제거. 아이템 아무 데나
-                      // 꾹 누르면 살짝 떠오르며 이동한다.
-                      buildDefaultDragHandles: false,
-                      // ignore: deprecated_member_use -- onReorderItem은 최신 SDK 전용.
-                      onReorder: favoritesController.reorder,
-                      itemBuilder: (context, index) {
-                        final place = places[index];
-                        return ReorderableDelayedDragStartListener(
-                          key: ValueKey(place.key),
-                          index: index,
-                          child: _FavoriteTile(
-                            place: place,
-                            onTap: () {
-                              _markIntentional();
-                              Navigator.of(context).pop(place);
-                            },
-                            onDelete: () =>
-                                favoritesController.removeByKey(place.key),
-                          ),
                         );
-                      },
-                    );
-                  },
+                      }
+                      return ReorderableListView.builder(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        itemCount: places.length,
+                        // 오른쪽 기본 드래그 핸들(≡ 아이콘) 제거. 아이템 아무 데나
+                        // 꾹 누르면 살짝 떠오르며 이동한다.
+                        buildDefaultDragHandles: false,
+                        // ignore: deprecated_member_use -- onReorderItem은 최신 SDK 전용.
+                        onReorder: favoritesController.reorder,
+                        itemBuilder: (context, index) {
+                          final place = places[index];
+                          return ReorderableDelayedDragStartListener(
+                            key: ValueKey(place.key),
+                            index: index,
+                            child: _FavoriteTile(
+                              place: place,
+                              onTap: () {
+                                _markIntentional();
+                                Navigator.of(context).pop(place);
+                              },
+                              onDelete: () =>
+                                  favoritesController.removeByKey(place.key),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
