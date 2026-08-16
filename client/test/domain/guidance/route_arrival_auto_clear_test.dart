@@ -12,6 +12,56 @@ import 'package:navigation_client/models/building/floor_graph.dart';
 /// 이미 도착한 경로가 ETA 카드로 지도를 계속 가린다. 그래서 여기서는 "언제
 /// 켜지는가"뿐 아니라 **켜지면 안 되는 경우**를 함께 못박는다.
 void main() {
+  // 도착을 **말하는 것**과 경로를 **지우는 것**은 조건이 다르다. 한때 한 조건에
+  // 묶여 있었고, 그때 진행률이 측정되지 않는 짧은 경로(바로 옆 매장)에서는 도착을
+  // 말하는 것이 화면에 하나도 없었다.
+  group('shouldAnnounceArrival', () {
+    test('걸어서 도착한 것이 아니어도 도착은 말한다', () {
+      // 자동 종료는 같은 상태에서 걸리지 않는다 — 아래 두 단언이 갈라지는 것이
+      // 이 규칙의 전부다.
+      expect(
+        shouldAnnounceArrival(
+          action: RouteGuidanceAction.arrived,
+          hasDestination: true,
+        ),
+        isTrue,
+      );
+      expect(
+        decideArrivalAutoClear(
+          action: RouteGuidanceAction.arrived,
+          hasMeasuredProgress: false,
+          alreadyScheduled: false,
+        ),
+        ArrivalAutoClearDecision.cancel,
+      );
+    });
+
+    test('무엇에 도착했는지 모르면 말하지 않는다', () {
+      // 이름 없는 도착 카드를 그리느니 아무것도 그리지 않는다.
+      expect(
+        shouldAnnounceArrival(
+          action: RouteGuidanceAction.arrived,
+          hasDestination: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('도착이 아니면 말하지 않는다', () {
+      expect(
+        shouldAnnounceArrival(
+          action: RouteGuidanceAction.straight,
+          hasDestination: true,
+        ),
+        isFalse,
+      );
+      expect(
+        shouldAnnounceArrival(action: null, hasDestination: true),
+        isFalse,
+      );
+    });
+  });
+
   group('decideArrivalAutoClear', () {
     test('측정된 진행률과 함께 도착하면 자동 종료를 예약한다', () {
       expect(

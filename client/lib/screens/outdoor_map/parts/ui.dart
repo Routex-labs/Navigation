@@ -390,7 +390,11 @@ extension OutdoorMapUi on OutdoorMapBodyState {
             ),
           ),
 
-        if (indoorRouteDestination != null)
+        // 도착하면 하단 배너를 걷는다. 도착 문구는 화면에 하나여야 하고, 그
+        // 하나는 위 도착 카드다 — 걷는 중 안내와 같은 자리·같은 무게로 또 말하면
+        // 안내가 끝난 줄 모르고 계속 걷는다. 지나쳐 걸어가 안내가 되살아나면
+        // (`arrived`가 풀리면) 배너도 함께 돌아온다.
+        if (indoorRouteDestination != null && !_showingArrivalOnly)
           Positioned(
             left: 0,
             right: 0,
@@ -418,11 +422,6 @@ extension OutdoorMapUi on OutdoorMapBodyState {
                             .clamp(1, 999),
                     label: _indoorEtaLabel(indoorRouteDestination),
                     instruction: _indoorRouteGuidance,
-                    // 도착 순간 배너가 "어디에 도착했는지"를 말하도록 목적지를
-                    // 함께 넘긴다. [_indoorEtaLabel]은 경유 층까지 붙인 긴 줄이라
-                    // 카드 제목으로는 쓸 수 없다.
-                    destinationName: indoorRouteDestination.name,
-                    destinationFloor: indoorRouteDestination.floor,
                     onClose: _dismissIndoorRouteFromEtaCard,
                     onClosePointerDown: (position) =>
                         _etaClosePointerDown = position,

@@ -49,6 +49,20 @@ enum ArrivalAutoClearDecision {
 /// 정도로 잡은 임의값이다.
 const Duration arrivalAutoClearDelay = Duration(seconds: 5);
 
+/// 도착을 화면이 말해야 하는가.
+///
+/// **[decideArrivalAutoClear]와 조건이 다르다.** 자동 종료는 걸어서 도착했을 때만
+/// 하지만(바로 옆 매장은 고르자마자 경로가 사라지면 안 된다), 도착했다는 말은 그
+/// 경로에서도 해야 한다. 한때 둘을 한 조건에 묶어 뒀고, 그때 진행률이 측정되지 않는
+/// 짧은 경로에서는 **도착을 말하는 것이 화면에 하나도 없었다.**
+///
+/// [hasDestination]은 무엇에 도착했는지를 아는가다. 이름 없는 도착 카드를 그리느니
+/// 아무것도 그리지 않는다.
+bool shouldAnnounceArrival({
+  required RouteGuidanceAction? action,
+  required bool hasDestination,
+}) => action == RouteGuidanceAction.arrived && hasDestination;
+
 /// 지금 안내 상태에서 "안내를 자동으로 끝낼지"를 판단한다.
 ///
 /// [hasMeasuredProgress]는 **실제로 측정된 진행률이 있는지**다. 이 값이 없으면

@@ -736,6 +736,15 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 도착 카드가 가리키는 목적지. 사용자가 확인을 누를 때까지 남는다.
   PoiSearchResult? _arrivedDestination;
 
+  /// 지금 화면에서 도착만 말하고 있는가. 참이면 하단 안내 배너를 그리지 않는다.
+  ///
+  /// 도착 문구는 화면에 하나여야 한다. 카드가 떠 있는 것만으로는 부족하다 —
+  /// 도착 지점을 지나쳐 계속 걸으면 카드는 그대로 두고(한 번 말한 것을 조용히
+  /// 거두지 않는다) 안내는 되살아나야 하므로, 지금 판정이 도착인지도 함께 본다.
+  bool get _showingArrivalOnly =>
+      _arrivedDestination != null &&
+      _indoorRouteGuidance?.action == RouteGuidanceAction.arrived;
+
   /// 도착 안내를 읽을 시간을 준 뒤 경로를 지우는 타이머. 살아 있다는 것 자체가
   /// "이미 카운트다운 중"이라는 상태다([decideArrivalAutoClear]).
   Timer? _arrivalRouteClearTimer;

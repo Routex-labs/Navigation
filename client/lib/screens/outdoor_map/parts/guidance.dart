@@ -100,11 +100,26 @@ extension OutdoorMapGuidance on OutdoorMapBodyState {
 
   /// 도착을 화면에 반영한다 — 도착 카드를 띄우고, 잠시 뒤 경로를 스스로 지운다.
   ///
-  /// 판단은 [decideArrivalAutoClear]가 한다. 여기서 조건을 다시 세지 않는 이유는
-  /// "도착 상태에 들락날락하는 동안 카운트다운을 다시 걸지 않는다"는 규칙이
+  /// **도착을 말하는 것과 경로를 지우는 것은 조건이 다르다.** 바로 옆 매장은 걸어서
+  /// 도착한 것이 아니라 애초에 가까운 것이라 경로를 자동으로 지우지 않지만, 도착한
+  /// 사실은 그때도 말해야 한다. 둘을 한 조건에 묶어 뒀더니 그 경로에서는 도착을
+  /// 말하는 것이 화면에 하나도 없었다.
+  ///
+  /// 지우는 쪽 판단은 [decideArrivalAutoClear]가 한다. 여기서 조건을 다시 세지 않는
+  /// 이유는 "도착 상태에 들락날락하는 동안 카운트다운을 다시 걸지 않는다"는 규칙이
   /// 걸음마다 돌아가는 이 자리에서 제일 틀리기 쉽기 때문이다.
   void _syncArrival() {
     if (!mounted) return;
+
+    final destination = _indoorRouteDestination;
+    if (_arrivedDestination == null &&
+        shouldAnnounceArrival(
+          action: _indoorRouteGuidance?.action,
+          hasDestination: destination != null,
+        )) {
+      setState(() => _arrivedDestination = destination);
+    }
+
     final decision = decideArrivalAutoClear(
       action: _indoorRouteGuidance?.action,
       // 측정된 진행률이 없으면 "걸어서 도착"이 아니라 애초에 가까운 것이다.
@@ -122,9 +137,6 @@ extension OutdoorMapGuidance on OutdoorMapBodyState {
         _arrivalRouteClearTimer = null;
         return;
       case ArrivalAutoClearDecision.schedule:
-        final destination = _indoorRouteDestination;
-        if (destination == null) return;
-        setState(() => _arrivedDestination = destination);
         _arrivalRouteClearTimer = Timer(arrivalAutoClearDelay, () {
           _arrivalRouteClearTimer = null;
           if (!mounted) return;
