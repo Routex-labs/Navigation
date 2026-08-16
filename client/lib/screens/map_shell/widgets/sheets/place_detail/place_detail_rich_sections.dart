@@ -947,13 +947,12 @@ class _MenuDetailDialog extends StatelessWidget {
                     // 없다"가 아니라 "못 불러왔다"로 읽히므로 블록째 생략한다.
                     if (facts.isNotEmpty) ...[
                       const SizedBox(height: 16),
-                      for (var index = 0; index < facts.length; index++) ...[
-                        if (index > 0) const Divider(height: 17),
-                        _NutritionRow(
-                          label: facts[index].$1,
-                          value: facts[index].$2,
-                        ),
-                      ],
+                      RoutexKeyValueRows(
+                        rows: [
+                          for (final fact in facts)
+                            RoutexKeyValue(label: fact.$1, value: fact.$2),
+                        ],
+                      ),
                     ],
                   ],
                 ),
@@ -974,40 +973,6 @@ class _MenuDetailDialog extends StatelessWidget {
       ),
     );
   }
-}
-
-class _NutritionRow extends StatelessWidget {
-  const _NutritionRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-    children: [
-      Text(label, style: const TextStyle(fontSize: 13, color: AppColors.muted)),
-      // **값을 Flexible로 감싼다.** 용량·칼로리는 `355ml`처럼 짧아서 한 줄에 남지만
-      // 알레르기는 `땅콩 / 대두 / 우유 / 알류 / 밀 / 오징어`처럼 27자까지 온다.
-      // 감싸지 않으면 팝업 폭(340)을 넘겨 RenderFlex 오버플로가 난다.
-      Flexible(
-        child: Padding(
-          padding: const EdgeInsets.only(left: 16),
-          child: Text(
-            value,
-            textAlign: TextAlign.right,
-            style: const TextStyle(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w700,
-              height: 1.35,
-              color: AppColors.text,
-            ),
-          ),
-        ),
-      ),
-    ],
-  );
 }
 
 /// 주소·주차처럼 매장을 설명하는 운영 정보다.
