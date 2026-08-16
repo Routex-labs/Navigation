@@ -11,7 +11,7 @@
 | [`eta_card.dart`](eta_card.dart) | 목적지까지 거리·시간 배너 |
 | [`transit_style.dart`](transit_style.dart), [`transit_itinerary_tile.dart`](transit_itinerary_tile.dart) | 대중교통 색·아이콘·시간 표기와 한 줄 타일 |
 | [`location_marker.dart`](location_marker.dart) | 현재 위치 표현 |
-| [`sheet_header.dart`](sheet_header.dart), [`sheet_grab_handle.dart`](sheet_grab_handle.dart), [`filter_pill.dart`](filter_pill.dart) | 시트 머리·손잡이, 필터 pill |
+| [`sheet_header.dart`](sheet_header.dart), [`filter_pill.dart`](filter_pill.dart) | 시트 머리, 필터 pill |
 | [`map_overlay_guard.dart`](map_overlay_guard.dart), [`map_pass_through_sheet_route.dart`](map_pass_through_sheet_route.dart) | 시트가 열린 동안 지도 조작을 다루는 규칙 |
 
 ## 여기 없는 것은 어디 있나
