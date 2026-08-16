@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-
-import '../../../../theme/app_theme.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 /// 하단 바에서 전환 가능한 지도 모드. [outdoor]는 야외(GPS) 지도,
 /// [indoor]는 실내 지도 화면에 대응한다.
@@ -60,40 +59,19 @@ class MapBottomBar extends StatelessWidget {
                     onPressed: onPlaceLocation,
                     active: placingLocation,
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: RoutexSpacing.controlGap),
                 ],
-                _CalibrateButton(onPressed: onCalibrate),
+                RoutexMapControl(
+                  label: '위치 보정',
+                  icon: Icons.my_location,
+                  // 늘 강조되지만 선택 상태는 아니다 — 누를 때마다 같은 일을
+                  // 하는 조작이다.
+                  tone: RoutexMapControlTone.accent,
+                  onPressed: onCalibrate,
+                ),
               ],
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CalibrateButton extends StatelessWidget {
-  const _CalibrateButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: '위치 보정',
-      child: Material(
-        color: Colors.white,
-        shape: const CircleBorder(),
-        // 지도에 붙은 조작이다(AppElevation.onMap).
-        elevation: AppElevation.onMap,
-        shadowColor: Colors.black.withValues(alpha: 0.14),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onPressed,
-          child: const Padding(
-            padding: EdgeInsets.all(12),
-            child: Icon(Icons.my_location, size: 20, color: AppColors.primary),
-          ),
         ),
       ),
     );
@@ -119,38 +97,20 @@ class _PlaceLocationButton extends StatelessWidget {
   final bool active;
 
   @override
-  Widget build(BuildContext context) {
-    // 활성은 채워진 primary + 흰 아이콘, 비활성은 흰 배경 + primary 아이콘.
-    // 홈/실내 세그먼트의 활성 표시와 시각 언어를 맞춘다.
-    final backgroundColor = active ? AppColors.primary : Colors.white;
-    final iconColor = active ? Colors.white : AppColors.primary;
-    return Tooltip(
-      message: active ? '지도를 탭해 위치를 지정' : '지도에서 내 위치 지정',
-      child: Material(
-        color: backgroundColor,
-        shape: const CircleBorder(),
-        // 눌린 상태만 한 단계 앞으로 나온다 — 지도 탭을 기다리는 중이라는 신호다.
-        elevation: active ? AppElevation.chrome : AppElevation.onMap,
-        shadowColor: (active ? AppColors.primary : Colors.black).withValues(
-          alpha: active ? 0.30 : 0.14,
-        ),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onPressed,
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: SvgPicture.asset(
-              _placeLocationIconAsset,
-              width: 20,
-              height: 20,
-              // SVG는 색을 알파로만 들고 있다. srcIn이 RGB를 갈아치우고 알파는
-              // 남기므로, 몸통(옅음)과 외곽선(진함)의 농담 차이가 두 상태에서
-              // 모두 유지된다(에셋 파일 주석 참고).
-              colorFilter: ColorFilter.mode(iconColor, BlendMode.srcIn),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => RoutexMapControl(
+    label: active ? '지도를 탭해 위치를 지정' : '지도에서 내 위치 지정',
+    // 대기 중이면 다음 지도 탭을 이 버튼이 가져간 상태다. 그때만 채워지고 한
+    // 단계 앞으로 나온다.
+    tone: active ? RoutexMapControlTone.active : RoutexMapControlTone.accent,
+    glyphBuilder: (context, color, size) => SvgPicture.asset(
+      _placeLocationIconAsset,
+      width: size,
+      height: size,
+      // SVG는 색을 알파로만 들고 있다. srcIn이 RGB를 갈아치우고 알파는
+      // 남기므로, 몸통(옅음)과 외곽선(진함)의 농담 차이가 두 상태에서 모두
+      // 유지된다(에셋 파일 주석 참고).
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+    ),
+    onPressed: onPressed,
+  );
 }
