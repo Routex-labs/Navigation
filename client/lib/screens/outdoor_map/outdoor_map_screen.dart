@@ -1805,16 +1805,19 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       final currentZoom = camera?.zoom ?? 0;
       final bearing = camera?.bearing ?? 0;
       // 배율 규칙은 실내 도면과 한 함수를 공유한다(focusZoomFor).
+      final fitted = _focusZoomForStore(
+        store,
+        viewport: viewport,
+        bottomSheetFraction: bottomSheetFraction,
+        topInsetPx: topInsetPx,
+        bearing: bearing,
+      );
       final zoom = focusZoomFor(
         currentZoom: currentZoom,
         keepZoom: keepZoom && !fromOutside,
-        storeFocusZoom: _focusZoomForStore(
-          store,
-          viewport: viewport,
-          bottomSheetFraction: bottomSheetFraction,
-          topInsetPx: topInsetPx,
-          bearing: bearing,
-        ),
+        storeFocusZoom: fitted ?? _storeFocusZoom,
+        // 폴리곤을 잰 값일 때만 물러선다 — 매장 전체가 화면에 들어와야 한다.
+        storeFitsViewport: fitted != null,
       );
       // **한 번만 움직인다.** 예전에는 매장 중앙으로 옮긴 뒤 `scrollBy`로 띠 한가운데로
       // 다시 밀었는데, 첫 이동이 한 프레임 드러나 카메라가 두 번 튀었다. 최종 목표를
@@ -1847,10 +1850,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   /// 이 매장이 화면의 **보이는 띠**(시트와 상단 chrome 사이)에서 약 42%를 차지하는
   /// 배율. 작은 매장은 읽을 만큼 확대하고, 백화점의 큰 앵커 매장은 한 면이 화면을
-  /// 가득 덮지 않게 한다.
+  /// 가득 덮지 않게 한다. **매장마다 다른 값이다** — 크기를 실제로 재서 정한다.
   ///
-  /// 폴리곤을 못 찾으면 [_storeFocusZoom]으로 떨어진다.
-  double _focusZoomForStore(
+  /// 폴리곤을 못 찾으면 null이다. 호출자는 그때만 [_storeFocusZoom] 상수로
+  /// 떨어지고, 잰 값일 때는 지금보다 멀어지는 방향으로도 간다
+  /// ([focusZoomFor]의 `storeFitsViewport`).
+  double? _focusZoomForStore(
     PoiSearchResult store, {
     required Size viewport,
     required double bottomSheetFraction,
@@ -1861,7 +1866,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         .where((candidate) => candidate.id == store.placeId)
         .firstOrNull
         ?.polygon;
-    if (polygon == null || polygon.length < 3) return _storeFocusZoom;
+    if (polygon == null || polygon.length < 3) return null;
 
     final box = storeLabelBoxMeters(polygon: polygon, bearingDeg: bearing);
     final visibleBandHeight = math.max(
