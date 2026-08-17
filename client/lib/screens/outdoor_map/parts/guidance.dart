@@ -8,20 +8,31 @@ part of '../outdoor_map_screen.dart';
 
 extension OutdoorMapGuidance on OutdoorMapBodyState {
   /// 사용자가 **직접 고른** 목적지로 안내 중인지. 안내 chrome(검색창·카테고리
-  /// 줄·층 선택기·하단 바)을 접을지의 유일한 판정 기준이다.
+  /// 줄·하단 바)을 접을지의 판정 기준이다. **층 선택기만 한 발 먼저 접는다** —
+  /// [_guidancePlanned].
   ///
   /// 판정 규칙과 그렇게 나눈 이유는 [shouldFoldGuidanceChrome]에 있다. 요약하면
   /// **접는 조건은 종료 버튼이 있는 조건과 같아야 한다** — 아래 ETA 카드 두
   /// 분기가 `onClose`를 다는 조건과 이 getter가 정확히 맞물려야 하고, 어느
   /// 한쪽을 고치면 그 함수를 통해 다른 쪽도 같이 바뀐다.
-  bool get _guidanceActive =>
-      _guidanceStarted &&
-      (_transitItinerary != null ||
-          shouldFoldGuidanceChrome(
-            hasUserDestination: _userDestination != null,
-            hasIndoorRouteDestination: _indoorRouteDestination != null,
-            hasComputedRoute: _route != null,
-          ));
+  bool get _guidanceActive => _guidanceStarted && _guidancePlanned;
+
+  /// 하단에 **"안내 시작" 카드가 떠 있는지.** [_guidanceActive]에서 "이미
+  /// 시작했는가"만 뺀 값이라, 시작 버튼을 누르기 전부터 참이다.
+  ///
+  /// 층 선택기는 이 시점부터 접는다. 카드가 뜬 뒤로 층은 사용자가 고르는 것이
+  /// 아니라 경로가 정하고, 사용자는 "이쪽으로 가면 되는구나"를 가리는 것 없이
+  /// 봐야 한다.
+  ///
+  /// **목적지 없이 자동으로 그린 걷기 경로는 여기 안 든다** — 그 카드에는
+  /// 애초에 "안내 시작"이 없다([shouldFoldGuidanceChrome]).
+  bool get _guidancePlanned =>
+      _transitItinerary != null ||
+      shouldFoldGuidanceChrome(
+        hasUserDestination: _userDestination != null,
+        hasIndoorRouteDestination: _indoorRouteDestination != null,
+        hasComputedRoute: _route != null,
+      );
 
   void _notifyRouteStateIfChanged() {
     final visible = _hasAnyRouteVisible;
