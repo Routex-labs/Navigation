@@ -113,6 +113,105 @@ extension OutdoorMapGps on OutdoorMapBodyState {
       if (!mounted || !_indoorEntered) return;
     }
     await _startTrackingFromGpsFix(position);
+    if (!mounted || !_indoorEntered) return;
+    await _askNearbyStoreForAnchor();
+  }
+
+  /// GPS가 잡아 준 **어림 위치를 사람이 다듬게 한다.**
+  ///
+  /// 자동 배치는 "이쯤"까지다 — 건물 안 GPS는 오차가 십수 m라 복도 하나쯤은
+  /// 예사로 틀린다. 지금 무엇 앞에 서 있는지는 **사람이 훨씬 정확히 안다.**
+  /// 고른 매장의 입구 노드가 곧 위치가 된다.
+  ///
+  /// 어림 위치조차 없으면(층 그래프가 없거나 스냅 실패) 묻지 않는다 — 거리를
+  /// 잴 기준이 없어 "가까운 순"이 성립하지 않는다. 그때는 지금까지처럼 하단
+  /// 바의 "위치 지정"이 출구다.
+  Future<void> _askNearbyStoreForAnchor() async {
+    final rows = _nearbyStoreRows();
+    if (rows.isEmpty) return;
+    final picked = await showNearbyStoreSheet(context, rows: rows);
+    if (picked == null || !mounted || !_indoorEntered) return;
+    await _anchorAtNearbyStore(picked);
+  }
+
+  /// 지금 어림 위치에서 가까운 매장 줄. 기준점이 없거나 층 도면이 없으면 빈 목록.
+  List<NearbyStoreRow> _nearbyStoreRows() {
+    final plan = _floorPlan;
+    final graph = _floorGraph;
+    if (plan == null || graph == null || graph.nodes.isEmpty) return const [];
+    final from = _pdrTrailState.anchor?.anchorLocalM ?? _estimatedFloorPoint();
+    if (from == null) return const [];
+
+    final transform = fitFloorGeoTransform(graph.nodes);
+    final nodeById = {for (final node in graph.nodes) node.id: node};
+    final storeById = <String, StorePolygon>{};
+    final points = <({String id, double x, double y})>[];
+    for (final store in plan.stores) {
+      // **입구 노드를 먼저 쓴다.** 고른 뒤 앵커를 찍을 자리가 바로 그 노드라,
+      // 목록에 적힌 거리와 실제로 옮겨 가는 자리가 같아야 한다.
+      final node = nodeById[store.entranceNodeId];
+      final double x;
+      final double y;
+      if (node != null) {
+        x = node.xM;
+        y = node.yM;
+      } else {
+        final local = transform.invert(
+          store.centroid.latitude,
+          store.centroid.longitude,
+        );
+        if (local == null) continue;
+        x = local.$1;
+        y = local.$2;
+      }
+      storeById[store.id] = store;
+      points.add((id: store.id, x: x, y: y));
+    }
+
+    return [
+      for (final near in nearestAroundMe(
+        fromX: from.eastM,
+        fromY: from.northM,
+        points: points,
+      ))
+        if (storeById[near.id] case final store?)
+          (store: store, distanceM: near.distanceM),
+    ];
+  }
+
+  /// GPS를 층 그래프에 투영해 둔 어림 위치. 없으면 null.
+  PdrLocalPoint? _estimatedFloorPoint() {
+    final estimate = indoorLocationEstimateController.current;
+    if (estimate == null || estimate.floorId != _activeFloor) return null;
+    return estimate.localM;
+  }
+
+  /// 고른 매장 앞을 지금 위치로 확정한다. 지도를 탭해 찍는 것과 **같은 함수**를
+  /// 지나 방향 보정까지 같은 규칙을 탄다([_confirmPdrAnchor]).
+  Future<void> _anchorAtNearbyStore(StorePolygon store) async {
+    final graph = _floorGraph;
+    if (graph == null) return;
+    final node = graph.nodes
+        .where((n) => n.id == store.entranceNodeId)
+        .firstOrNull;
+    final PdrLocalPoint floorPoint;
+    if (node != null) {
+      floorPoint = PdrLocalPoint(node.xM, node.yM);
+    } else {
+      // 입구 노드가 없는 매장은 중심점을 통로에 붙인다 — 수동 배치가 탭 좌표에
+      // 하는 것과 같다. 붙일 통로를 못 찾으면 찍지 않는다: 틀린 자리를 찍는
+      // 것보다 어림 위치를 그대로 두는 편이 낫다.
+      final local = fitFloorGeoTransform(
+        graph.nodes,
+      ).invert(store.centroid.latitude, store.centroid.longitude);
+      if (local == null) return;
+      final snapped = FloorMapMatcher(
+        graph,
+      ).snapToWalkableNetwork(PdrLocalPoint(local.$1, local.$2));
+      if (snapped == null) return;
+      floorPoint = snapped.point;
+    }
+    await _confirmPdrAnchor(floorPoint);
   }
 
   /// 층을 묻는다. 물을 이유가 없으면(이미 물었다·건물을 모른다·층이 하나뿐)
