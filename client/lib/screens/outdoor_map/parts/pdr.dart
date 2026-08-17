@@ -79,7 +79,11 @@ extension OutdoorMapPdr on OutdoorMapBodyState {
       // 돌리면 내 위치가 화면 가장자리로 밀려나기 때문이다. 줌·tilt는 유지.
       final heading = _pdrCurrentHeadingDeg;
       if (heading == null) {
-        _showSnack('아직 바라보는 방향을 알 수 없습니다. 위치 지정 후 조금 걸어 방향을 잡아주세요.');
+        // 위치를 잡으라는 말은 그 버튼이 깜빡여 대신한다([_recalibrateIndoor]의
+        // 홀수 탭과 같다). 남는 것은 "조금 걸어야 방향이 잡힌다"는 사실 하나뿐
+        // 이라 한 줄로 짧게, 잠깐만 띄운다.
+        widget.onNeedLocationPlacement?.call();
+        _showSnack('조금 걸으면 방향이 잡힙니다', duration: OutdoorMapUi._briefSnackDuration);
         return;
       }
       final controller = _mapController;

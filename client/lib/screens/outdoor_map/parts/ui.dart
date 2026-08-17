@@ -48,6 +48,18 @@ extension OutdoorMapUi on OutdoorMapBodyState {
           SnackBar(
             content: Text(message),
             duration: duration ?? const Duration(seconds: 4),
+            // **하단 바 위로 띄운다.** 기본 SnackBar는 화면 맨 아래에 붙어
+            // "위치 지정"·"위치 보정" 버튼을 통째로 덮는데, 이 안내들이 하필
+            // 그 버튼을 누르라고 말하는 문장이다 — 읽고 나서 누를 것을 자기가
+            // 가리고 있었다. ETA 카드가 뜨면 버튼과 함께 그만큼 더 올라간다.
+            behavior: SnackBarBehavior.floating,
+            margin: EdgeInsets.only(
+              left: RoutexSpacing.componentPadding,
+              right: RoutexSpacing.componentPadding,
+              bottom:
+                  mapShellBottomChromePx +
+                  (_hasAnyRouteVisible ? bottomBarLiftPx : 0),
+            ),
           ),
         )
         .closed
