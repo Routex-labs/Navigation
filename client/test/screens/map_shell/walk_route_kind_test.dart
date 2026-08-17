@@ -264,4 +264,81 @@ void main() {
       );
     });
   });
+
+  // 이동 수단 줄(자동차·대중교통·도보)을 띄울지 정하는 판정. 위 갈래 판정과
+  // **같은 모양이어야** 화면에 뜬 버튼과 실제 계산이 어긋나지 않는다.
+  group('이동 수단 줄을 접는 조건', () {
+    test('건물 안에서 건물 안으로 가면 접는다', () {
+      // 수단이 도보 하나로 못박히는 여정이라 고를 것이 없다.
+      expect(
+        isIndoorOnlyWalk(
+          origin: null,
+          destination: indoor(),
+          indoorContextActive: true,
+        ),
+        isTrue,
+      );
+      expect(
+        isIndoorOnlyWalk(
+          origin: indoor(nodeId: 'n0'),
+          destination: indoor(),
+          indoorContextActive: false,
+        ),
+        isTrue,
+      );
+    });
+
+    // 실기기에서 "서울창업허브 → 샤브미담"으로 걸린 회귀다. 도착지만 보고
+    // 접었더니 5km 떨어진 건물 안 매장을 찍는 길에서 대중교통이 사라졌다.
+    test('멀리 있는 야외 출발지면 접지 않는다', () {
+      expect(
+        isIndoorOnlyWalk(
+          origin: outdoorPoint(),
+          destination: indoor(),
+          indoorContextActive: false,
+        ),
+        isFalse,
+      );
+      // 건물 도면을 펴 놓은 채여도, 출발지를 밖으로 직접 골랐으면 야외 여정이다.
+      expect(
+        isIndoorOnlyWalk(
+          origin: outdoorPoint(),
+          destination: indoor(),
+          indoorContextActive: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('도착지가 실내가 아니면 접지 않는다', () {
+      expect(
+        isIndoorOnlyWalk(
+          origin: indoor(),
+          destination: outdoorPoint(),
+          indoorContextActive: true,
+        ),
+        isFalse,
+      );
+      // 반쪽짜리 후보는 실내 라우팅이 못 태우므로 실내로 치지 않는다.
+      expect(
+        isIndoorOnlyWalk(
+          origin: null,
+          destination: halfIndoor(),
+          indoorContextActive: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('도착지가 아직 없으면 접지 않는다', () {
+      expect(
+        isIndoorOnlyWalk(
+          origin: null,
+          destination: null,
+          indoorContextActive: true,
+        ),
+        isFalse,
+      );
+    });
+  });
 }

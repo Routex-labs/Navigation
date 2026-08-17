@@ -1481,16 +1481,24 @@ class _MapShellScreenState extends State<MapShellScreen> {
       if (mode != RoutePlanMode.transit || transitRepository.isAvailable) mode,
   ];
 
-  /// 지금 계획 중인 도착지가 **건물 안 노드**인지 — 즉 실내 안내인지.
+  /// 지금 계획 중인 것이 **건물 안에서 건물 안으로** 가는 경로인지.
   ///
-  /// 참이면 [_startRoute]가 이동 수단을 도보로 못박는다. 그런데 화면에는 세
-  /// 수단이 그대로 떠 있었고, 직접 누르면 [_onTravelModePicked]가 자동 선택을
-  /// 건너뛰어 그 못이 풀렸다 — 실내 구간이 통째로 빠진 자동차 경로가 그려진다.
-  /// 눌리면 안 되는 버튼은 띄우지 않는다.
+  /// 참이면 이동 수단 줄을 아예 띄우지 않는다. [_startRoute]가 이미 도보로
+  /// 못박는데 화면에는 세 수단이 떠 있었고, 직접 누르면 [_onTravelModePicked]가
+  /// 자동 선택을 건너뛰어 그 못이 풀렸다 — 실내 구간이 통째로 빠진 자동차
+  /// 경로가 그려진다. 눌리면 안 되는 버튼은 띄우지 않는다.
   ///
-  /// **[_indoorContextActive]가 아니라 도착지로 가른다.** 건물 안에 서서 바깥
-  /// 목적지를 찍는 길이 있고, 그때는 자동차·대중교통이 정당한 선택이다.
-  bool get _indoorDestinationPlanned => _routeDraftDestination?.nodeId != null;
+  /// **두 끝점을 다 본다.** 도착지만 보고 감췄더니 "서울창업허브 → 샤브미담"
+  /// 처럼 멀리서 건물 안 매장을 찍는 길에서 자동차·대중교통이 함께 사라졌다 —
+  /// 그건 실내 안내가 아니라 야외 이동이 대부분인 여정이다.
+  ///
+  /// 판정 규칙과 그 근거는 [isIndoorOnlyWalk]에 있다 — 도보 갈래를 정하는
+  /// [classifyWalkRoute] 바로 옆에 둬야 둘이 갈리지 않는다.
+  bool get _indoorOnlyRoutePlanned => isIndoorOnlyWalk(
+    origin: _selectedOrigin,
+    destination: _routeDraftDestination,
+    indoorContextActive: _indoorContextActive,
+  );
 
   /// 두 끝점이 검색어가 아니라 실제 위치로 확정됐는지.
   ///
@@ -2439,11 +2447,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
       canSwapRouteEndpoints: _canSwapRouteEndpoints,
       selectedTravelMode: _travelMode,
       // 이동수단은 출발·도착이 모두 확정된 뒤에만 고른다. 입력 중에 먼저
-      // 노출하면 아직 계산할 수 없는 버튼이 카드 높이만 키운다. 실내 안내는
-      // 수단이 도보 하나로 못박혀 있어 아예 띄우지 않는다
-      // ([_indoorDestinationPlanned]).
-      availableTravelModes:
-          _routeEndpointsReady && !_indoorDestinationPlanned
+      // 노출하면 아직 계산할 수 없는 버튼이 카드 높이만 키운다. 건물 안에서
+      // 건물 안으로 가는 경로는 수단이 도보 하나로 못박혀 있어 아예 띄우지
+      // 않는다([_indoorOnlyRoutePlanned]).
+      availableTravelModes: _routeEndpointsReady && !_indoorOnlyRoutePlanned
           ? _availableTravelModes
           : const [],
       onTravelModeSelected: (mode) => unawaited(_onTravelModePicked(mode)),

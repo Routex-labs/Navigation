@@ -98,3 +98,25 @@ WalkRouteKind classifyWalkRoute({
 
   return WalkRouteKind.indoorFallback;
 }
+
+/// 이 여정이 **건물 안에서 건물 안으로**만 가는지. 화면이 이동 수단 줄을 띄울지
+/// 정할 때 쓴다 — 참이면 수단은 도보 하나뿐이라 고를 것이 없다.
+///
+/// 판정 모양은 위 1) `indoorToIndoor` 갈래와 **같아야 한다.** 갈리면 화면에는
+/// 자동차·대중교통이 떠 있는데 계산은 실내 그래프로 도는 상태가 생긴다.
+///
+/// 다른 점은 하나, **[indoorStartReady]를 묻지 않는다.** 그건 실내 위치가
+/// 잡혔는가이지 이 여정이 어떤 종류인가가 아니다 — 앵커를 아직 못 잡았다고
+/// 자동차 버튼이 나타나면, 누르는 순간 실내 구간이 통째로 빠진다.
+///
+/// **두 끝점을 다 본다.** 도착지만 보면 "서울창업허브 → 샤브미담"처럼 멀리서
+/// 건물 안 매장을 찍는 길까지 참이 되는데, 그건 야외 이동이 대부분인 여정이라
+/// 대중교통이 정당한 선택이다.
+bool isIndoorOnlyWalk({
+  required DirectionsCandidate? origin,
+  required DirectionsCandidate? destination,
+  required bool indoorContextActive,
+}) {
+  if (destination == null || !destination.isIndoorPoint) return false;
+  return origin == null ? indoorContextActive : origin.isIndoorPoint;
+}
