@@ -11,6 +11,11 @@
 
 루트 적용 지점은 [`../app.dart`](../app.dart)의 `MaterialApp.theme`이다.
 
+Runtime Kit(`routex_design_system`)과는 **다리 하나로** 이어져 있다 —
+`AppTheme.withRoutexTokens`가 `RoutexColorTokens` ThemeExtension만 더하고 나머지 필드는
+앱이 그대로 소유한다. 전역을 `RoutexTheme.light`로 넘길 조건과 남은 차이는
+[전역 테마 넘기기](../../../docs/client/theme-handover.md)에 있다.
+
 ## 적용 관계
 
 ```mermaid

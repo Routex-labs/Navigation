@@ -3,6 +3,13 @@
 다른 세션이 이 작업을 이어받을 때 **먼저 읽는 문서**다. 여기는 "지금 어디까지 왔고 다음에
 무엇을 하나"만 적는다. 계획·기록의 내용은 각 문서가 단일 출처이므로 링크로 넘긴다.
 
+> **이 문서는 야외 지도 해체 브랜치(`refactor/outdoor-map-decomposition`) 이야기다.**
+> 지금 별도로 진행 중인 **디자인 시스템 포팅**(`feat/badge-chip-semantics`)은 여기 없다 —
+> 그쪽의 단일 출처는 공급 저장소의
+> [포팅 가이드](https://github.com/Routex-labs/routex-design-system/blob/main/docs/navigation-app-porting-guide.md)이고,
+> 단계 번호(0~8)는 전부 그 문서를 가리킨다. 전역 테마 전환 판정은
+> [전역 테마 넘기기](client/theme-handover.md)에 있다.
+
 ## 한 줄 요약
 
 야외 지도 갓클래스를 해체하는 중이고, **2026-08-17(월) 현장 검증이 다음 관문**이다.
