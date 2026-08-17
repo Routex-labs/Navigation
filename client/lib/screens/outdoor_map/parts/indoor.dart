@@ -669,16 +669,6 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
   /// [ignoreZoomArming]은 **자기 게이트를 따로 가진 호출자**가 쓴다.
   /// [_autoIndoorEntryArmed]는 zoom 트리거 전용 플래그라, 이걸로 다른 경로까지
   /// 막으면 건물 직접 탭과 GPS 재무장이 조용히 죽는다.
-  /// 건물 정보 시트가 "실내 지도 보기"로 진입을 시킬 때. 건물을 직접 탭하던
-  /// 조작과 **같은 자리로 들어간다** — 오버레이를 켜고 카메라를 도면에 맞춘다.
-  ///
-  /// 줌 무장([_autoIndoorEntryArmed])은 무시한다. 사용자가 명시적으로 누른
-  /// 것이라, zoom 트리거용 플래그로 막으면 눌러도 아무 일이 없다.
-  void enterIndoorFromSheet() {
-    _triggerIndoorEntry(ignoreZoomArming: true);
-    if (_indoorEntered) unawaited(_fitCameraToActiveFloor());
-  }
-
   void _triggerIndoorEntry({bool ignoreZoomArming = false}) {
     if (!ignoreZoomArming && !_autoIndoorEntryArmed) return;
     _autoIndoorEntryArmed = false;
