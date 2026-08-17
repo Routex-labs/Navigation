@@ -52,6 +52,7 @@ class PdrMotionBridge(
     private var fusedHeadingDeg = 0.0
     private var gyroHeadingDeg = 0.0
     private var gyroHeadingInitialized = false
+    private var headingHoldActive = false
     private var selectedHeadingSource = "unavailable"
     private var deviceHeadingDeg = -1.0
     private var yawDeg = 0.0
@@ -68,6 +69,7 @@ class PdrMotionBridge(
     private var motionHz = 0.0
     private var lastImuSensorNs = 0L
     private var lastGyroNs = 0L
+    private var lastRotationNs = 0L
     private var lastMotionEmitMs = 0.0
 
     private var stepSessionId = 0
@@ -234,11 +236,34 @@ class PdrMotionBridge(
             if (!gyroHeadingInitialized) {
                 gyroHeadingDeg = rawRotationHeadingDeg
                 gyroHeadingInitialized = true
+            } else {
+                pullGyroHeadingTowardRotation(event.timestamp)
             }
         }
+        lastRotationNs = event.timestamp
         yawDeg = normalizeDegrees(Math.toDegrees(orientation[0].toDouble()))
         pitchDeg = Math.toDegrees(orientation[1].toDouble())
         rollDeg = Math.toDegrees(orientation[2].toDouble())
+    }
+
+    /**
+     * 적분 heading을 rotation vector 쪽으로 상시 끌어당긴다.
+     *
+     * seed를 세션당 한 번만 하면 자이로 바이어스가 단조 누적되고, 그 편차가
+     * 곧 hold 진입 조건(innovation)이라 스스로를 가둔다. 상시로 당기면 정상
+     * 구간에서 편차가 0 근처에 머물러 래치가 성립하지 않고, hold 중에도 느리게
+     * 좁혀지므로 탈출이 보장된다. hold 중 시정수를 크게 두는 것은 진짜 자기
+     * 교란을 몇 초간 버티기 위한 값이며, 그 대가로 교란이 길어지면 오차를
+     * 따라간다. 무한히 벌어지는 것보다 유계인 쪽이 낫다는 판단이다.
+     */
+    private fun pullGyroHeadingTowardRotation(sensorNs: Long) {
+        if (lastRotationNs == 0L) return
+        val dt = (sensorNs - lastRotationNs) / 1_000_000_000.0
+        if (dt <= 0.0 || dt > 0.5) return
+        val tau = if (headingHoldActive) HOLD_PULL_TAU_S else TRACK_PULL_TAU_S
+        val gain = (dt / tau).coerceIn(0.0, 1.0)
+        val delta = signedDelta(rawRotationHeadingDeg, gyroHeadingDeg)
+        gyroHeadingDeg = normalizeDegrees(gyroHeadingDeg + gain * delta)
     }
 
     private fun updateGyro(event: SensorEvent) {
@@ -302,6 +327,12 @@ class PdrMotionBridge(
     /** A short gyro hold avoids a sudden magnetic jump; healthy rotation-vector
      * values relock immediately. SensorManager still supplies the base fusion. */
     private fun selectHeading() {
+        // hold 중에도 갱신한다. early return 뒤에 두면 자기 교란으로 hold에
+        // 들어간 순간 baseline이 얼어붙어 fieldDeviation이 영원히 임계 위에
+        // 남는다 — 진입 조건이 스스로를 유지시키는 두 번째 래치였다.
+        if (magneticField > 1) {
+            magneticFieldBaseline = (magneticFieldBaseline ?: magneticField) * 0.985 + magneticField * 0.015
+        }
         val baseline = magneticFieldBaseline
         val fieldDeviation = if (baseline != null && baseline > 1 && magneticField > 1) {
             abs(magneticField - baseline) / baseline
@@ -311,6 +342,7 @@ class PdrMotionBridge(
         val inaccurate = rotationHeadingAccuracyDeg > 35
         val useGyroHold = rotationSource.contains("game_rotation_vector") || poorMagnetic ||
             fieldDeviation > 0.35 || innovation > 35 || inaccurate
+        headingHoldActive = useGyroHold
         if (useGyroHold && gyroHeadingInitialized) {
             fusedHeadingDeg = gyroHeadingDeg
             // TYPE_ROTATION_VECTOR는 자력계까지 포함한 9-axis fusion이라
@@ -331,9 +363,6 @@ class PdrMotionBridge(
         fusedHeadingDeg = rawRotationHeadingDeg
         selectedHeadingSource = rotationSource
         headingStable = rotationSource.contains("rotation_vector") && !rotationSource.contains("game")
-        if (magneticField > 1) {
-            magneticFieldBaseline = (magneticFieldBaseline ?: magneticField) * 0.985 + magneticField * 0.015
-        }
     }
 
     private fun updateStepCounter(value: Float, sensorNs: Long) {
@@ -454,6 +483,8 @@ class PdrMotionBridge(
         horizontalSamples.clear()
         walkDirConfidence = 0.0
         gyroHeadingInitialized = false
+        headingHoldActive = false
+        lastRotationNs = 0L
         magneticFieldBaseline = null
         roninEstimator.resetSession()
         emit("snapshot")
@@ -655,6 +686,17 @@ class PdrMotionBridge(
     private fun angularDistance(a: Double, b: Double): Double =
         abs(((a - b + 540.0) % 360.0) - 180.0)
 
+    /** [current]에서 [target]까지의 최단 회전(-180..180). 360° 경계에서도 부호가 맞는다. */
+    private fun signedDelta(target: Double, current: Double): Double =
+        ((target - current + 540.0) % 360.0) - 180.0
+
     private fun normalizeDegrees(degrees: Double): Double =
         ((degrees % 360.0) + 360.0) % 360.0
+
+    private companion object {
+        // 정상 구간: RV를 사실상 따라간다. 편차가 못 쌓이므로 래치가 불가능하다.
+        const val TRACK_PULL_TAU_S = 0.5
+        // hold 구간: 몇 초짜리 자기 교란은 버티고, 길어지면 유계로 수렴한다.
+        const val HOLD_PULL_TAU_S = 20.0
+    }
 }
