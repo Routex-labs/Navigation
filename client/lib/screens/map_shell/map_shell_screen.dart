@@ -395,8 +395,15 @@ class _MapShellScreenState extends State<MapShellScreen> {
     _routeDestinationFocus.addListener(_onRouteDestinationFocusChanged);
     _requestStartupPermissions();
     // 화면이 세워지기 전에 도착한 링크가 여기 남아 있을 수 있다(cold start).
+    //
+    // **첫 프레임 뒤에 꺼낸다.** 실패 안내가 토스트라 Overlay와 MediaQuery를
+    // 건드리는데, 다른 건물을 가리키는 링크는 네트워크를 타지 않고 **동기로**
+    // 그 실패 경로에 닿는다. initState 안에서 부르면 그 자리에서 프레임이
+    // 깨진다(`test/screens/map_shell/place_link_cold_start_test.dart`).
     placeLinkInbox.addListener(_onPlaceLinkChanged);
-    _onPlaceLinkChanged();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _onPlaceLinkChanged();
+    });
   }
 
   @override
