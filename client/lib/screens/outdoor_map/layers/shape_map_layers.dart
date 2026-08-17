@@ -11,6 +11,7 @@ import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../../map/geojson.dart';
+import '../../../map/style/palette.dart';
 import '../entry/indoor_entry_zoom.dart';
 import 'indoor_overlay_layers.dart';
 
@@ -27,6 +28,12 @@ const kOutdoorDimScrimFillLayerId = 'outdoor-dim-scrim-fill';
 /// 현재 층 외곽선.
 const kOutdoorFloorOutlineSourceId = 'outdoor-floor-outline';
 const kOutdoorFloorOutlineLayerId = 'outdoor-floor-outline-line';
+
+/// 실내 오버레이에서 고른 매장 하나만 칠하고 테두리를 두르는 전용 소스·레이어.
+/// 색은 [mapSelectionFill]·[mapSelectionLine] 하나씩만 쓴다.
+const kOutdoorHighlightSourceId = 'outdoor-highlight';
+const _highlightFillLayerId = 'outdoor-highlight-fill';
+const _highlightLineLayerId = 'outdoor-highlight-line';
 
 /// 출구 핀 소스·레이어. 매장 핀과 **소스를 나눈다** — 같은 소스에 넣으면
 /// 아이콘을 고르는 표현식이 필요해지는데, 출구 핀은 방위마다 비트맵이 달라
@@ -120,6 +127,41 @@ Future<void> registerGateLayers(MapLibreMapController controller) async {
       ['get', 'icon'],
       sizeZ16: _gatePinIconSizeZ16,
       sizeZ20: _gatePinIconSizeZ20,
+    ),
+    enableInteraction: false,
+  );
+}
+
+/// 고른 매장 하나만 칠하는 소스·레이어를 등록한다.
+///
+/// **PDR 마커보다 아래·경로선보다 위다.** 실내 오버레이의 매장 fill은 나중에
+/// `belowLayerId`로 이 아래에 삽입되므로, 칠이 도면 위에 확실히 덮인다.
+///
+/// 라벨 아이콘의 선택 색과 **둘 다 쓴다.** 아이콘은 "이거 하나"를, 이 면은
+/// "여기까지"를 말한다 — 색을 나눈 이유는 [mapSelectionFill].
+Future<void> registerHighlightLayers(MapLibreMapController controller) async {
+  await controller.addSource(
+    kOutdoorHighlightSourceId,
+    GeojsonSourceProperties(data: emptyGeoJsonCollection()),
+  );
+  await controller.addFillLayer(
+    kOutdoorHighlightSourceId,
+    _highlightFillLayerId,
+    const FillLayerProperties(
+      fillColor: mapSelectionFill,
+      fillOpacity: mapSelectionFillOpacity,
+    ),
+    enableInteraction: false,
+  );
+  await controller.addLineLayer(
+    kOutdoorHighlightSourceId,
+    _highlightLineLayerId,
+    const LineLayerProperties(
+      lineColor: mapSelectionLine,
+      // 면을 옅게 둔 만큼 경계는 이 선이 만든다. 1.2px는 옅은 칠 위에서
+      // 있는지 없는지 알 수 없던 굵기다.
+      lineWidth: 2,
+      lineJoin: 'round',
     ),
     enableInteraction: false,
   );

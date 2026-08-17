@@ -994,12 +994,28 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
     return clamped;
   }
 
-  /// 선택된 매장의 기존 카테고리 아이콘만 포인트 색으로 바꾼다.
+  /// 고른 매장을 **폴리곤 칠 + 아이콘 색** 두 가지로 표시한다.
   ///
-  /// 별도 핀을 세우지 않는다. 같은 장소에 기존 아이콘과 파란 핀이 함께 서면
-  /// 무엇이 실제 POI이고 무엇이 선택 장식인지 위계가 갈라진다.
+  /// 아이콘은 "이거 하나"를 콕 집고, 칠은 "여기까지"를 말한다 — 둘이 다른 일을
+  /// 해서 함께 쓴다. 별도 핀은 세우지 않는다: 같은 장소에 기존 아이콘과 핀이
+  /// 함께 서면 무엇이 실제 POI이고 무엇이 선택 장식인지 위계가 갈라진다.
+  ///
+  /// 폴리곤이 없는 매장(점만 있는 시설)은 칠할 것이 없어 아이콘 색만 바뀐다 —
+  /// 칠 하나만 쓰던 시절 그런 자리에서 **아무 일도 안 일어나던** 것이 아이콘
+  /// 색을 함께 두는 이유다.
   Future<void> _syncHighlightLayer() async {
-    if (_mapController == null || !_styleReady) return;
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    final storeId = _highlightedStoreId;
+    final plan = _floorPlan;
+    final store = (storeId == null || plan == null)
+        ? null
+        : plan.stores.where((s) => s.id == storeId).firstOrNull;
+    await syncPolygonSource(
+      controller,
+      kOutdoorHighlightSourceId,
+      store?.polygon,
+    );
     await _syncIndoorOverlayFade(scope: IndoorOverlaySyncScope.labels);
   }
 
