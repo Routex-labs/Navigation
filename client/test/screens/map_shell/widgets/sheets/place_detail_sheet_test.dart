@@ -457,8 +457,8 @@ void main() {
 
       expect(find.byTooltip('장소 저장'), findsNothing);
       // 토글이 빠져도 헤더의 뒤로·X는 그대로다.
-      expect(find.byTooltip('뒤로'), findsOneWidget);
-      expect(find.byTooltip('전체 닫기'), findsOneWidget);
+      expect(find.byTooltip('이전으로'), findsOneWidget);
+      expect(find.byTooltip('닫기'), findsOneWidget);
     });
 
     testWidgets('저장을 눌러도 시트가 닫히지 않고 상태만 바뀐다', (tester) async {
@@ -607,7 +607,7 @@ void main() {
 
     await tester.tap(find.text('열기'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('전체 닫기'));
+    await tester.tap(find.byTooltip('닫기'));
     await tester.pumpAndSettle();
 
     expect(closedAll, isTrue);
@@ -636,7 +636,7 @@ void main() {
 
     await tester.tap(find.text('열기'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('뒤로'));
+    await tester.tap(find.byTooltip('이전으로'));
     await tester.pumpAndSettle();
 
     expect(closedAll, isFalse);

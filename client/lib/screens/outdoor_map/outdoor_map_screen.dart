@@ -482,12 +482,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 다시 그려진다.
   bool _followingUser = false;
 
-  /// 계획 상태로 그려 둔 자동차 경로가 있어서 "안내 시작"을 권해야 하는지.
+  /// 경로선이 보이는 것과 실제 안내가 시작된 것을 가른다.
   ///
-  /// 자동차 경로를 그린 직후에는 카메라가 **경로 전체**에 맞춰져 있다. 사용자가
-  /// 어디로 어떻게 가는지 한 번 보고 나서 출발하도록, 위치로 내려가는 조작은
-  /// 버튼 하나로 분리했다([EtaCard.onStartGuidance]).
-  bool _offerStartGuidance = false;
+  /// 출발·도착 확정은 경로 전체를 보는 계획 상태까지만 만든다. 사용자가 계획
+  /// 카드의 `안내 시작`을 누른 뒤에만 chrome을 접고 진행 UI로 전환한다.
+  bool _guidanceStarted = false;
 
   bool _interactive = true;
 
@@ -765,14 +764,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   final GlobalKey _pdrShareButtonKey = GlobalKey();
 
   final GlobalKey _etaCardKey = GlobalKey();
-
-  /// 실내 경로를 **미리 보는 중**인가. 참이면 안내가 아직 시작되지 않았다.
-  ///
-  /// 건물 밖에서도 "거기는 어떻게 되어 있지?" 하고 안을 볼 수 있어야 한다. 그때
-  /// 사용자는 그 매장에 서 있지 않으므로 **현재 위치를 그 매장으로 잡지 않는다** —
-  /// 잡아 버리면 화면이 사실이 아닌 위치를 말하고, PDR이 거기서부터 걸음을 센다.
-  /// 경로선과 요약은 그대로 그리고, 시작은 카드의 `안내 시작`이 맡는다.
-  bool _indoorRoutePreview = false;
 
   /// 미리 보기에서 `안내 시작`을 누르면 앵커를 찍을 출발지. 없으면 지금 위치다.
   PoiSearchResult? _indoorRoutePreviewOrigin;
@@ -1150,6 +1141,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     bool keepPendingIndoorRoute = false,
     bool keepCompletedHistory = false,
   }) async {
+    // 같은 여정의 실내→야외 전환에서는 이미 누른 `안내 시작`도 이어 간다.
+    // 새 구간을 계산한다는 이유로 계획 상태로 돌아가면 건물 출구에서 시작 버튼이
+    // 다시 나타나고, 상단 길찾기 chrome도 갑자기 펼쳐진다.
+    final continueGuidance = keepCompletedHistory && _guidanceStarted;
     // 새 야외 목적지를 시작하는 진입점이다. 같은 목적지의 재탐색은
     // _updateRoute/_applyRoute로만 들어오므로, 여기서만 이전 여정을 끊는다.
     // 예외는 실내→야외 예약을 소비하는 호출뿐이다([_activatePendingOutdoorRoute]) —
@@ -1178,7 +1173,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _fixedRouteOrigin = origin;
       // 이 경로는 걷는 안내다. 자동차에서 넘어왔으면 실선으로 남지 않게 되돌린다.
       _routeIsDriving = false;
-      _offerStartGuidance = false;
+      _guidanceStarted = continueGuidance;
       _userDestination = destination;
       _userDestinationLabel = label;
       // 새 목적지를 받을 때마다 초기화해서, 이번 경로가 계산되면
@@ -1453,10 +1448,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _userDestination = null;
       _userDestinationLabel = null;
       _indoorRouteDestination = destination;
-      _indoorRoutePreview = preview && hasExplicitOrigin;
       _indoorRoutePreviewOrigin = preview ? origin : null;
       _indoorRoutePreviewAnnounce = announceOriginAnchor;
       _arrivedDestination = null;
+      _guidanceStarted = false;
       // 목적지가 바뀌면 새로운 길안내다. 기존 궤적을 남기면 새 파란 경로와
       // 이전 목적지로 걸어간 회색선이 한 여정처럼 섞인다.
       _guidanceTrailSession.clear();

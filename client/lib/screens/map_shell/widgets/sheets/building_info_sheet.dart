@@ -145,7 +145,9 @@ class _BuildingInfoSheetState extends State<BuildingInfoSheet> {
       future: _storesFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Center(child: CircularProgressIndicator());
+          return const SingleChildScrollView(
+            child: RoutexSkeletonList(count: 4),
+          );
         }
         final stores = snapshot.data ?? const <StoreIndexEntry>[];
         if (stores.isEmpty) {
@@ -162,43 +164,28 @@ class _BuildingInfoSheetState extends State<BuildingInfoSheet> {
           controller: controller,
           padding: const EdgeInsets.only(bottom: 24),
           itemCount: stores.length + 1,
-          separatorBuilder: (_, _) => const Divider(height: 1),
+          separatorBuilder: (_, _) =>
+              const RoutexDivider(role: RoutexDividerRole.row),
           itemBuilder: (context, index) {
             if (index == 0) {
               return const Padding(
-                padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
-                child: Text(
-                  '매장',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.muted,
-                  ),
+                padding: EdgeInsets.symmetric(
+                  horizontal: RoutexSpacing.contentGap,
+                ),
+                child: RoutexSectionHeader(
+                  title: '매장',
+                  level: RoutexSectionHeaderLevel.group,
                 ),
               );
             }
             final store = stores[index - 1];
-            return ListTile(
+            return RoutexListCell(
               key: Key('building-info-store-${store.id}'),
-              dense: true,
-              leading: Icon(
-                categoryIconFor(store.category ?? ''),
-                color: AppColors.primary,
-              ),
-              title: Text(
-                store.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                ),
-              ),
-              subtitle: Text(
-                store.floorName,
-                style: const TextStyle(fontSize: 12, color: AppColors.muted),
-              ),
-              onTap: () => _pop(store),
+              title: store.name,
+              subtitle: store.floorName,
+              leadingIcon: categoryIconFor(store.category ?? ''),
+              trailingIcon: RoutexIcons.forward,
+              onPressed: () => _pop(store),
             );
           },
         );
@@ -252,40 +239,15 @@ class _Actions extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     mainAxisSize: MainAxisSize.min,
     children: [
-      Row(
-        children: [
-          FilledButton(
-            onPressed: onOrigin,
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.blue50,
-              foregroundColor: AppColors.primary,
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-            ),
-            child: const Text('출발'),
-          ),
-          const SizedBox(width: 8),
-          FilledButton(
-            onPressed: onDestination,
-            style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-            ),
-            child: const Text('도착'),
-          ),
-        ],
-      ),
-      const SizedBox(height: 8),
+      RoutexPlaceActions(onOrigin: onOrigin, onDestination: onDestination),
+      const SizedBox(height: RoutexSpacing.controlGap),
       // 매장을 고르지 않고도 도면으로 들어갈 길. 건물 탭이 곧 진입이던 조작을
       // 여기서 이어받는다.
-      OutlinedButton.icon(
+      RoutexButton(
         key: const ValueKey('building-info-enter-indoor'),
+        label: '실내 지도 보기',
+        variant: RoutexButtonVariant.secondary,
         onPressed: onEnterIndoor,
-        icon: const Icon(Icons.map_outlined, size: 18),
-        label: const Text('실내 지도 보기'),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.primary,
-          side: const BorderSide(color: AppColors.blue200),
-          padding: const EdgeInsets.symmetric(vertical: 12),
-        ),
       ),
     ],
   );

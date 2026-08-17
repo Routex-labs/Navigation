@@ -14,11 +14,14 @@ extension OutdoorMapGuidance on OutdoorMapBodyState {
   /// **접는 조건은 종료 버튼이 있는 조건과 같아야 한다** — 아래 ETA 카드 두
   /// 분기가 `onClose`를 다는 조건과 이 getter가 정확히 맞물려야 하고, 어느
   /// 한쪽을 고치면 그 함수를 통해 다른 쪽도 같이 바뀐다.
-  bool get _guidanceActive => shouldFoldGuidanceChrome(
-    hasUserDestination: _userDestination != null,
-    hasIndoorRouteDestination: _indoorRouteDestination != null,
-    hasComputedRoute: _route != null,
-  );
+  bool get _guidanceActive =>
+      _guidanceStarted &&
+      (_transitItinerary != null ||
+          shouldFoldGuidanceChrome(
+            hasUserDestination: _userDestination != null,
+            hasIndoorRouteDestination: _indoorRouteDestination != null,
+            hasComputedRoute: _route != null,
+          ));
 
   void _notifyRouteStateIfChanged() {
     final visible = _hasAnyRouteVisible;
@@ -168,7 +171,7 @@ extension OutdoorMapGuidance on OutdoorMapBodyState {
   /// 미리 보던 실내 경로에서 **실제 안내를 시작한다.**
   ///
   /// 여기서야 출발지 매장에 앵커를 찍는다. 미리 보는 동안 찍지 않는 이유는
-  /// [_indoorRoutePreview]에 적었다 — 그 사람은 아직 거기 서 있지 않다.
+  /// [_indoorRoutePreviewOrigin]에 적었다 — 그 사람은 아직 거기 서 있지 않다.
   ///
   /// **건물 밖에서 누르면 아무것도 바꾸지 않는다.** 앵커를 찍어 봐야 다음 GPS 틱이
   /// 곧바로 뒤집어 도면과 경로가 아무 말 없이 사라진다. 그래서 화면은 그대로 두고
@@ -185,8 +188,8 @@ extension OutdoorMapGuidance on OutdoorMapBodyState {
       return;
     }
     setState(() {
-      _indoorRoutePreview = false;
       _indoorRoutePreviewOrigin = null;
+      _guidanceStarted = true;
     });
     await _anchorAtStoreOrigin(
       floor: floor,
@@ -196,6 +199,21 @@ extension OutdoorMapGuidance on OutdoorMapBodyState {
       // 미리 보기가 앵커를 여기까지 미뤘으므로, 그때 받은 판단을 그대로 쓴다.
       announce: _indoorRoutePreviewAnnounce,
     );
+    _notifyRouteStateIfChanged();
+  }
+
+  /// 계획 카드의 `안내 시작`을 모든 이동수단에서 같은 상태 전이로 처리한다.
+  Future<void> _startCurrentGuidance() async {
+    if (_indoorRoutePreviewOrigin != null) {
+      await _startIndoorGuidance();
+      return;
+    }
+    if (_guidanceStarted || !_hasAnyRouteVisible) return;
+    setState(() {
+      _guidanceStarted = true;
+    });
+    _notifyRouteStateIfChanged();
+    if (_routeIsDriving) await startFollowingCurrentLocation();
   }
 
   /// 도착 카드의 `안내 종료`. 남은 여정을 통째로 정리한다.

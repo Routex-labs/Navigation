@@ -1033,9 +1033,10 @@ class _SearchPanelState extends State<SearchPanel> {
                       ),
                     ),
                   ),
-                  TextButton(
+                  RoutexButton(
+                    label: '전체 삭제',
+                    variant: RoutexButtonVariant.quiet,
                     onPressed: recentSearchesController.clear,
-                    child: const Text('전체 삭제', style: TextStyle(fontSize: 12)),
                   ),
                 ],
               ),
@@ -1081,30 +1082,14 @@ class _SearchPanelState extends State<SearchPanel> {
     );
   }
 
-  /// 아직 결론이 아니라는 화면. 경량 단계에서는 스피너만 돌리고, 의미 검색으로
-  /// 넘어가면 문구를 덧붙인다 — 여기서 갑자기 오래 걸리기 시작하기 때문에,
-  /// 같은 스피너만 계속 돌면 사용자는 앱이 멈췄다고 읽는다.
+  /// 아직 결론이 아니라는 화면. 의미 검색으로 넘어가면 기다리는 이유를 덧붙인다.
   Widget _searchingState() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 28),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const CircularProgressIndicator(),
-          if (_phase == _SearchPhase.semanticSearching) ...[
-            const SizedBox(height: 14),
-            const Text(
-              '취향에 맞는 매장을 찾는 중…',
-              style: TextStyle(fontSize: 13, color: AppColors.muted),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              '처음 한 번은 조금 오래 걸릴 수 있어요',
-              style: TextStyle(fontSize: 11.5, color: AppColors.muted),
-            ),
-          ],
-        ],
-      ),
+    return RoutexResultList(
+      status: RoutexResultStatus.loading,
+      loadingMessage: _phase == _SearchPhase.semanticSearching
+          ? '취향에 맞는 매장을 찾는 중 · 처음 한 번은 조금 오래 걸릴 수 있어요'
+          : null,
+      children: const [],
     );
   }
 
@@ -1732,19 +1717,10 @@ class _IndoorSearchingRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Padding(
       padding: EdgeInsets.fromLTRB(16, 12, 16, 10),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 13,
-            height: 13,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-          SizedBox(width: 8),
-          Text(
-            '건물 안에서도 찾는 중…',
-            style: TextStyle(fontSize: 12, color: AppColors.muted),
-          ),
-        ],
+      child: RoutexStatusBanner(
+        title: '건물 안에서도 찾는 중…',
+        detail: '바깥 결과를 먼저 보여드리고 있어요',
+        icon: RoutexIcons.search,
       ),
     );
   }

@@ -453,7 +453,6 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     required ll.LatLng origin,
     required ll.LatLng destination,
     required String label,
-    bool offerStartGuidance = false,
     bool driving = false,
   }) async {
     _clearCompletedRouteHistory();
@@ -463,7 +462,7 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     // 이므로 카메라는 경로 전체를 보여 줘야 한다.
     _stopFollowingUser();
     setState(() {
-      _offerStartGuidance = offerStartGuidance;
+      _guidanceStarted = false;
       _routeIsDriving = driving;
       _fixedRouteOrigin = origin;
       _userDestination = destination;
@@ -650,9 +649,7 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
       _userDestinationLabel = null;
       _route = null;
       _fixedRouteOrigin = null;
-      // 그릴 경로가 없으면 시작할 안내도 없다. 안 지우면 다음에 뜨는 도보 카드에
-      // 자동차용 "안내 시작"이 얹힌다.
-      _offerStartGuidance = false;
+      _guidanceStarted = false;
     });
     _syncDestinationLayer();
     _syncRouteLayer();
@@ -880,8 +877,8 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
         ..setRoute(null);
       _indoorMultiFloorRoute = null;
       _indoorRouteDestination = null;
-      _indoorRoutePreview = false;
       _indoorRoutePreviewOrigin = null;
+      _guidanceStarted = false;
       _guidanceTrailSession.clear();
     });
     _syncRouteLayer();
@@ -1004,7 +1001,7 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
       // 도보 경로와 그 목적지 핀은 접는다. 목적지 자체는 대중교통 경로의 끝점
       // 으로 그대로 남아 있다.
       _route = null;
-      _offerStartGuidance = false;
+      _guidanceStarted = false;
       _userDestination = destination;
       _userDestinationLabel = label;
     });
@@ -1021,6 +1018,7 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     setState(() {
       _transitItinerary = null;
       _transitLabel = null;
+      _guidanceStarted = false;
     });
     unawaited(_syncTransitLayer());
     _notifyRouteStateIfChanged();

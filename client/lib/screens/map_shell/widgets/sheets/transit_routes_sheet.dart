@@ -95,7 +95,7 @@ class _TransitRoutesSheetState extends State<TransitRoutesSheet> {
                     onCloseAll: widget.onCloseAll,
                     onIntentionalPop: _markIntentional,
                   ),
-                  const Divider(height: 1),
+                  const RoutexDivider(role: RoutexDividerRole.section),
                   Expanded(
                     child: ListView.separated(
                       controller: scrollController,
@@ -105,7 +105,7 @@ class _TransitRoutesSheetState extends State<TransitRoutesSheet> {
                       ),
                       itemCount: itineraries.length,
                       separatorBuilder: (_, _) =>
-                          const Divider(height: 1, indent: 20, endIndent: 20),
+                          const RoutexDivider(role: RoutexDividerRole.row),
                       itemBuilder: (context, index) => TransitItineraryTile(
                         itinerary: itineraries[index],
                         // 첫 줄은 정렬상 가장 빠른 경로다. 그 사실을 배지로

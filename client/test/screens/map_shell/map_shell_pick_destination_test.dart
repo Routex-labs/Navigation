@@ -105,7 +105,7 @@ void main() {
 
     expect(find.byKey(const Key('route-field-pick-on-map')), findsNothing);
     // 목록 자체는 떠 있어야 한다 — 줄 하나만 빠진 것이다.
-    expect(find.byKey(const Key('route-draft-destination')), findsOneWidget);
+    expect(find.byKey(const Key('route-planner')), findsOneWidget);
   });
 
   testWidgets('지도에서 선택을 누르면 지도 위에 안내가 남는다', (WidgetTester tester) async {
@@ -139,8 +139,8 @@ void main() {
 
     await tester.tap(
       find.descendant(
-        of: find.byKey(const Key('route-draft-destination')),
-        matching: find.byType(TextField),
+        of: find.byKey(const Key('route-planner')),
+        matching: find.text('도착지를 정해 주세요'),
       ),
     );
     await drain(tester);

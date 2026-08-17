@@ -47,7 +47,6 @@ import 'widgets/sheets/transit_routes_sheet.dart';
 import 'widgets/chrome/category_chips_row.dart';
 import 'widgets/chrome/map_overlay_scroll_row.dart';
 import 'widgets/chrome/map_pick_hint_card.dart';
-import 'widgets/chrome/travel_mode_bar.dart';
 import '../outdoor_map/outdoor_map_screen.dart';
 import 'directions_candidates.dart';
 import 'transit_walk_handoff.dart';
@@ -337,7 +336,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 상황은 없다.
   final _transitRequest = SingleFlight();
 
-  final _travelModeBarKey = GlobalKey();
   final _routeResultsKey = GlobalKey();
 
   /// 건물 밖 장소를 함께 찾을 기준점. 검색을 시작할 때 야외 지도에서 한 번
@@ -1281,6 +1279,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
     _routeDestinationFocus.unfocus();
   }
 
+  void _cancelRouteEditing() {
+    if (_routeEditingField == null) return;
+    _routeSearchSeq++;
+    setState(() => _routeEditingField = null);
+    _unfocusRouteFields();
+  }
+
   /// 두 칸 중 하나에 글자가 들어왔을 때.
   ///
   /// 글자를 고치는 것은 **지금 잡혀 있는 값을 버렸다는 뜻**이다. 안 버리면
@@ -1806,7 +1811,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
       origin: from,
       destination: to,
       label: destination.title,
-      offerStartGuidance: true,
       driving: true,
     );
   }
@@ -2074,9 +2078,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
           // 실내 위치가 아직 없으면 그 사람은 건물 밖이다. 경로는 그려 주되
           // 현재 위치를 출발지 매장으로 잡지는 않는다 — 시작은 카드의
           // `안내 시작`이 맡는다.
-          preview:
-              origin != null &&
-              !indoorNavigationDriver.currentCalibration.canRenderPosition,
+          preview: true,
         );
 
       // 실내 구간까지 미리 풀어 두었다가 건물에 들어가면 이어 붙인다.
@@ -2119,6 +2121,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
         await map?.showIndoorRouteTo(
           _asPoi(destination),
           origin: origin == null ? null : _asPoi(origin),
+          preview: true,
         );
     }
   }
@@ -2373,21 +2376,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
           // 개수에 따라 폭이 들쭉날쭉해진다.
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 이동 수단 줄은 **두 칸보다 위**다. "어떻게 갈지"를 먼저 정하고
-            // 목적지를 넣는 순서이며, 아래에 두면 두 칸과 후보 목록 사이에
-            // 끼어 입력하는 동안 시선을 가로막는다.
-            //
-            // 안내가 시작되면 접는다. 수단을 고르는 것은 "어떻게 갈지 정하는"
-            // 조작이라 이미 그 길을 따라가는 중인 화면에 있을 이유가 없고,
-            // 누르면 경로가 통째로 다시 계산돼 따라가던 안내가 끊긴다.
-            // 하단 바(아래)·카테고리 줄과 같은 규칙이다.
-            if (_routeMode && !_guidanceActive) _buildTravelModeBar(),
-            _buildTopBar(),
+            if (!_guidanceActive) _buildTopBar(),
             // 길찾기 두 칸 중 하나를 치는 중이면 그 후보 목록이 이 자리를
             // 쓴다. 일반 검색 패널·카테고리 열과 자리를 다투므로 셋 중
             // 하나만 뜬다.
-            if (_routeEditingField case final field?)
-              _buildRouteFieldResults(field),
+            if (!_guidanceActive)
+              if (_routeEditingField case final field?)
+                _buildRouteFieldResults(field),
             // 층 전환 배너는 고정 top 숫자가 아니라 **이 Column 흐름**에
             // 놓는다. 상단 바 높이는 상태마다 달라지므로(검색 한 줄 ↔
             // 출발/도착 두 줄), 상수로 잡으면 어느 한쪽에서 반드시 겹친다.
@@ -2425,19 +2420,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
     );
   }
 
-  /// 이동 수단 줄(도보·자동차·대중교통).
-  Widget _buildTravelModeBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-      child: TravelModeBar(
-        key: _travelModeBarKey,
-        selected: _travelMode,
-        modes: _availableTravelModes,
-        onSelected: (mode) => unawaited(_onTravelModePicked(mode)),
-      ),
-    );
-  }
-
   /// 검색창, 또는 길찾기 draft에서는 출발/도착 두 칸.
   Widget _buildTopBar() {
     return MapTopBar(
@@ -2451,6 +2433,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
       onCancelSearch: _closeSearch,
       onDirectionsTap: () => unawaited(_openRouteMode()),
       routeMode: _routeMode,
+      routeEditingField: _routeEditingField,
       originController: _routeOriginController,
       destinationController: _routeDestinationController,
       originFocus: _routeOriginFocus,
@@ -2459,9 +2442,21 @@ class _MapShellScreenState extends State<MapShellScreen> {
           _onRouteFieldChanged(RoutePlanField.origin, value),
       onDestinationChanged: (value) =>
           _onRouteFieldChanged(RoutePlanField.destination, value),
+      onOriginPressed: () => _onRouteFieldFocused(
+        RoutePlanField.origin,
+        _routeOriginController.text,
+      ),
+      onDestinationPressed: () => _onRouteFieldFocused(
+        RoutePlanField.destination,
+        _routeDestinationController.text,
+      ),
+      onCancelRouteEditing: _cancelRouteEditing,
       onClearRouteDraft: _clearRouteDraft,
       onSwapRouteEndpoints: () => unawaited(_swapRouteEndpoints()),
       canSwapRouteEndpoints: _canSwapRouteEndpoints,
+      selectedTravelMode: _travelMode,
+      availableTravelModes: _availableTravelModes,
+      onTravelModeSelected: (mode) => unawaited(_onTravelModePicked(mode)),
     );
   }
 

@@ -13,7 +13,6 @@ import '../../../../models/place/place_detail.dart';
 import '../../../../models/place/store_index_entry.dart';
 import '../../../../repositories/place/place_detail_repository.dart';
 import '../../../../routing/place_link.dart';
-import '../../../../theme/app_theme.dart';
 import 'place_detail/place_detail_hours_section.dart';
 import 'place_detail/place_detail_nearby_section.dart';
 import 'place_detail/place_detail_rich_sections.dart';
@@ -616,27 +615,10 @@ class _PlaceActions extends StatelessWidget {
   final VoidCallback onDestination;
 
   @override
-  Widget build(BuildContext context) => Row(
+  Widget build(BuildContext context) => RoutexPlaceActions(
     key: const ValueKey('place-detail-actions'),
-    children: [
-      FilledButton(
-        onPressed: onOrigin,
-        style: FilledButton.styleFrom(
-          backgroundColor: AppColors.blue50,
-          foregroundColor: AppColors.primary,
-          padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 12),
-        ),
-        child: const Text('출발'),
-      ),
-      const SizedBox(width: 8),
-      FilledButton(
-        onPressed: onDestination,
-        style: FilledButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 12),
-        ),
-        child: const Text('도착'),
-      ),
-    ],
+    onOrigin: onOrigin,
+    onDestination: onDestination,
   );
 }
 
@@ -915,7 +897,7 @@ class _SectionBreak extends StatelessWidget {
   @override
   Widget build(BuildContext context) => const Padding(
     padding: EdgeInsets.symmetric(vertical: 14),
-    child: Divider(height: 1, thickness: 1, color: AppColors.hairline),
+    child: RoutexDivider(role: RoutexDividerRole.section),
   );
 }
 

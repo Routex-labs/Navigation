@@ -50,17 +50,10 @@ dependencies:
     path: ../packages/indoor_pdr_core
   pointer_interceptor: ^0.10.1+2
 
-  # 제품 UI의 semantic token과 공통 컴포넌트. 아래 SHA는 공급 저장소의 `v0.2.21`
-  # release다. tag 이름이 아니라 **전체 커밋 SHA**를 적는 이유는 tag가 나중에
-  # 옮겨질 수 있어서다 — 브랜치나 로컬 sibling 경로도 같은 이유로 쓰지 않는다.
-  # 공급 저장소가 움직이는 순간 같은 앱 커밋이 개발자마다 다른 화면을 그리고,
-  # lockfile이 그 사실을 숨긴다. ref를 올릴 때는 이 줄과 pubspec.lock을 같은
-  # 커밋에서 함께 바꾼다.
+  # 개발 중에는 로컬 디자인 시스템을 바로 반영한다. 릴리즈 전에는 배포용 SHA로
+  # 되돌려 앱 커밋과 디자인 시스템 버전을 함께 고정한다.
   routex_design_system:
-    git:
-      url: https://github.com/Routex-labs/routex-design-system.git
-      ref: 1e08e6118c634040950221fad8c77184a311b34d
-      path: packages/routex_design_system
+    path: ../../navdesignsystem+promo/packages/routex_design_system
   url_launcher: ^6.3.2
   # 공유 링크 수신. cold start의 최초 URI와 실행 중 URI stream을 함께 준다.
   app_links: ^6.3.2

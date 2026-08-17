@@ -19,7 +19,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 한동안 길찾기는 전체 화면(`screens/route_planner/`)이었다. 지도를 새로 만들지
 /// 않으려고 오버레이로 얹었지만 화면이 통째로 바뀌는 것은 마찬가지라, 목적지를
 /// 고치려면 지도를 잃고 그 화면을 다시 열어야 했다. 지금은 상단 바가 출발/도착
-/// 두 칸이 되고 그 아래에 이동 수단 줄이 붙는다.
+/// 두 위치가 되고 그 아래에 이동 수단 줄이 붙는다.
 void main() {
   late BuildingRepository originalBuildingRepository;
   late DestinationRepository originalDestinationRepository;
@@ -72,7 +72,9 @@ void main() {
     addTearDown(positions.close);
     watchPosition = () => positions.stream;
 
-    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
+    await tester.pumpWidget(
+      MaterialApp(theme: AppTheme.light, home: const MapShellScreen()),
+    );
     await drain(tester);
     positions.add(fix());
     await drain(tester);
@@ -83,9 +85,7 @@ void main() {
     matching: find.byType(TextField),
   );
 
-  testWidgets('길찾기를 누르면 두 칸과 이동 수단 줄이 상단에 뜬다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('길찾기를 누르면 기존 플래너와 이동 수단 줄이 상단에 뜬다', (WidgetTester tester) async {
     await pumpShell(tester);
     // 전체 화면이 아니라는 것부터 고정한다 — 지도가 그대로 보여야 한다.
     expect(find.byKey(const Key('route-draft-origin')), findsNothing);
@@ -93,21 +93,18 @@ void main() {
     await tester.tap(find.byTooltip('길찾기'));
     await drain(tester);
 
-    expect(find.byKey(const Key('route-draft-origin')), findsOneWidget);
+    expect(find.byKey(const Key('route-planner')), findsOneWidget);
+    expect(find.text('현재 위치'), findsOneWidget);
     expect(find.byKey(const Key('route-draft-destination')), findsOneWidget);
-    expect(find.byKey(const ValueKey('travel-mode-bar')), findsOneWidget);
     // 수단이 나란히 있다. 테스트 환경에는 카카오 키가 없어 대중교통은 빠지므로
-    // (그 규칙은 travel_mode_bar_test가 따로 지킨다) 나머지 둘로 확인한다.
+    // Runtime Kit 자체 테스트가 수단 줄의 선택 규칙을 맡으므로 나머지 둘로 확인한다.
     expect(find.text('자동차'), findsOneWidget);
     expect(find.text('도보'), findsOneWidget);
 
-    // 수단 줄은 두 칸보다 **위**다. "어떻게 갈지"를 먼저 정하고 목적지를 넣는
-    // 순서이며, 아래에 두면 두 칸과 후보 목록 사이에 끼어 시선을 가로막는다.
+    // Runtime Kit 플래너는 출발 → 도착 → 이동수단 순서를 고정한다.
     expect(
-      tester.getRect(find.byKey(const ValueKey('travel-mode-bar'))).bottom,
-      lessThanOrEqualTo(
-        tester.getRect(find.byKey(const Key('route-draft-origin'))).top,
-      ),
+      tester.getRect(find.text('도보')).top,
+      greaterThan(tester.getRect(find.text('현재 위치')).bottom),
     );
   });
 
@@ -126,9 +123,7 @@ void main() {
     expect(tester.getSize(find.byType(RouteFieldResults)).height, 0);
   });
 
-  testWidgets('도착지를 그 자리에서 쳐서 고르면 경로가 그려진다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('도착지를 그 자리에서 쳐서 고르면 경로가 그려진다', (WidgetTester tester) async {
     await pumpShell(tester);
     await tester.tap(find.byTooltip('길찾기'));
     await drain(tester);
@@ -141,10 +136,8 @@ void main() {
 
     expect(find.byType(EtaCard), findsOneWidget);
     // 고른 값이 그 칸에 그대로 남아, 다시 눌러 고칠 수 있다.
-    expect(
-      tester.widget<TextField>(destinationField()).controller?.text,
-      '강의실 101',
-    );
+    expect(find.byKey(const Key('route-draft-destination')), findsNothing);
+    expect(find.text('강의실 101'), findsWidgets);
   });
 
   testWidgets('X를 누르면 길찾기 바와 경로가 함께 사라진다', (WidgetTester tester) async {
@@ -157,7 +150,7 @@ void main() {
     await drain(tester);
     expect(find.byType(EtaCard), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('route-draft-clear')));
+    await tester.tap(find.byTooltip('경로 계획 닫기'));
     await drain(tester);
 
     expect(find.byKey(const Key('route-draft-origin')), findsNothing);
@@ -166,17 +159,15 @@ void main() {
     expect(find.byTooltip('길찾기'), findsOneWidget);
   });
 
-  testWidgets('출발 칸을 누르면 "현재 위치"로 되돌릴 길이 목록에 있다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('출발 칸을 누르면 "현재 위치"로 되돌릴 길이 목록에 있다', (WidgetTester tester) async {
     await pumpShell(tester);
     await tester.tap(find.byTooltip('길찾기'));
     await drain(tester);
 
     await tester.tap(
       find.descendant(
-        of: find.byKey(const Key('route-draft-origin')),
-        matching: find.byType(TextField),
+        of: find.byKey(const Key('route-planner')),
+        matching: find.text('현재 위치'),
       ),
     );
     await drain(tester);

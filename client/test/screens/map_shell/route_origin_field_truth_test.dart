@@ -136,16 +136,6 @@ void main() {
     await drain(tester);
   }
 
-  String fieldText(WidgetTester tester, String key) {
-    final field = tester.widget<TextField>(
-      find.descendant(
-        of: find.byKey(Key(key)),
-        matching: find.byType(TextField),
-      ),
-    );
-    return field.controller?.text ?? '';
-  }
-
   testWidgets('건물 안에서 위치 지정 전에 "도착"을 눌러도 길찾기 바가 뜬다', (
     WidgetTester tester,
   ) async {
@@ -171,13 +161,16 @@ void main() {
     await drain(tester);
 
     expect(
-      find.byKey(const Key('route-draft-destination')),
+      find.byKey(const Key('route-planner')),
       findsOneWidget,
       reason: '도착을 눌렀는데 길찾기 바가 뜨지 않아 출발지를 채울 자리가 없다',
     );
     expect(
-      fieldText(tester, 'route-draft-destination'),
-      '강의실 101',
+      find.descendant(
+        of: find.byKey(const Key('route-planner')),
+        matching: find.text('강의실 101'),
+      ),
+      findsOneWidget,
       reason: '길찾기 바는 떴는데 방금 고른 도착지가 안 적혀 있다',
     );
   });
@@ -219,11 +212,11 @@ void main() {
     await drain(tester);
 
     expect(
-      find.byKey(const Key('route-draft-destination')),
+      find.byKey(const Key('route-planner')),
       findsOneWidget,
       reason: '바깥 목적지로 도착을 눌렀는데 길찾기 바가 뜨지 않았다',
     );
-    expect(fieldText(tester, 'route-draft-destination'), '여의도역');
+    expect(find.text('여의도역'), findsOneWidget);
   });
 
   testWidgets('야외로 나가면 실내 출발지가 칸에서도 사라진다', (WidgetTester tester) async {
@@ -249,8 +242,11 @@ void main() {
     await drain(tester);
 
     expect(
-      fieldText(tester, 'route-draft-origin'),
-      '강의실 101',
+      find.descendant(
+        of: find.byKey(const Key('route-planner')),
+        matching: find.text('강의실 101'),
+      ),
+      findsOneWidget,
       reason: '테스트 전제(출발지 칸이 그 매장으로 채워짐)가 성립하지 않았다',
     );
 
@@ -263,8 +259,8 @@ void main() {
     await drain(tester);
 
     expect(
-      fieldText(tester, 'route-draft-origin'),
-      isEmpty,
+      find.text('현재 위치'),
+      findsOneWidget,
       reason: '야외에서는 쓸 수 없는 출발지가 칸에 남아, 화면과 계산이 어긋난다',
     );
   });

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../../theme/app_theme.dart';
+import 'package:routex_design_system/routex_design_system.dart';
+
 import '../../../../models/route/directions_candidate.dart';
 
 /// "지도에서 선택"을 누른 뒤 지도 위에 뜨는 안내.
@@ -31,17 +32,24 @@ class MapPickHintCard extends StatelessWidget {
     // 색을 지정하지 않는다 — 테마 카드(surface + hairline)가 앱의 카드 문법이고,
     // 파란 면(blue50)을 깔면 이 카드만 EtaCard·검색 패널과 다른 톤이 된다.
     // 포인트는 아이콘의 primary 하나로 충분하다.
-    return Card(
+    final colors = context.routexColors;
+    return RoutexSurface(
+      role: RoutexSurfaceRole.onMap,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+        padding: const EdgeInsetsDirectional.fromSTEB(
+          RoutexSpacing.contentGap,
+          RoutexSpacing.contentGap,
+          RoutexSpacing.controlGap,
+          RoutexSpacing.contentGap,
+        ),
         child: Row(
           children: [
-            const Icon(
-              Icons.touch_app_outlined,
-              color: AppColors.primary,
-              size: 20,
+            Icon(
+              RoutexIcons.placeLocation,
+              color: colors.actionPrimary,
+              size: RoutexMetrics.iconMedium,
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: RoutexSpacing.contentGap),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -55,28 +63,24 @@ class MapPickHintCard extends StatelessWidget {
                     isOrigin
                         ? '출발지로 지정할 매장이나 복도를 지도에서 눌러주세요'
                         : '도착지로 지정할 매장이나 복도를 지도에서 눌러주세요',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.text,
-                    ),
+                    style: RoutexTypography.label,
                   ),
                   if (counterpart != null)
                     Text(
                       isOrigin ? '도착: $counterpart' : '출발: $counterpart',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.muted,
+                      style: RoutexTypography.caption.copyWith(
+                        color: colors.contentSecondary,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
                 ],
               ),
             ),
-            IconButton(
-              tooltip: '지도에서 선택 취소',
+            RoutexIconAction(
+              label: '지도에서 선택 취소',
               onPressed: onCancel,
-              icon: const Icon(Icons.close, size: 18, color: AppColors.muted),
+              icon: RoutexIcons.close,
+              tone: RoutexIconActionTone.quiet,
             ),
           ],
         ),
