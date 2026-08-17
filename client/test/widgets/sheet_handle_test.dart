@@ -114,8 +114,11 @@ void main() {
       final building = (await repository.getAllBuildings()).first;
       await openSheet(
         tester,
-        (context) =>
-            BuildingInfoSheet.show(context, building: building, onCloseAll: () {}),
+        (context) => BuildingInfoSheet.show(
+          context,
+          building: building,
+          onCloseAll: () {},
+        ),
       );
 
       expect(grabHandle, findsOneWidget);
@@ -145,7 +148,11 @@ void main() {
 
       final handleBottom = tester.getRect(grabHandle).bottom;
       final titleTop = tester.getRect(find.text('MLB')).top;
-      expect(handleBottom, lessThan(titleTop));
+      expect(
+        handleBottom,
+        lessThanOrEqualTo(titleTop),
+        reason: '손잡이와 첫 콘텐츠는 붙을 수는 있어도 겹치면 안 된다',
+      );
     });
   });
 

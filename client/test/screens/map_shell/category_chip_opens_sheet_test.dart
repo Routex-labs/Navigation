@@ -142,10 +142,9 @@ void main() {
     expect(find.byType(CategoryStoresSheet), findsNothing);
     expect(find.byType(PlaceDetailSheet), findsOneWidget);
 
-    // **헤더의 뒤로 화살표로 닫는다.** 바깥을 눌러 닫는 경로는 chain 전체를
-    // 접으라는 신호(onCloseAll)라 어느 구현에서도 목록이 안 뜬다 — 그 경로로
-    // 검사하면 이 테스트는 아무것도 지키지 못한다.
-    await tester.tap(find.byTooltip('이전으로'));
+    // 상세는 이제 이름 옆 X가 바로 전체 chain을 닫는 공용 계약이다.
+    // 상세를 닫을 때 이전 카테고리 목록이 다시 올라오지 않아야 한다.
+    await tester.tap(find.byTooltip('닫기'));
     await tester.pumpAndSettle();
 
     expect(find.byType(PlaceDetailSheet), findsNothing);

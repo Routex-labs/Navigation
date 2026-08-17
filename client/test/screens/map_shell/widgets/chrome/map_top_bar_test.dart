@@ -67,7 +67,7 @@ void main() {
     expect(find.byKey(const Key('route-planner')), findsOneWidget);
     // 플래너를 복제하지 않고, 지금 고치는 위치만 실제 입력 줄로 연다.
     expect(find.byType(TextField), findsOneWidget);
-    expect(find.text('다이슨'), findsNWidgets(2));
+    expect(find.text('다이슨'), findsOneWidget);
     // 출발지가 비어 있으면 "현재 위치"가 안내문으로만 뜬다 — 글자로 채우면
     // 사용자가 다른 곳을 치기 전에 먼저 지워야 한다.
     expect(find.text('현재 위치'), findsOneWidget);

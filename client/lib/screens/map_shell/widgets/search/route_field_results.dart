@@ -20,8 +20,6 @@ class RouteFieldResults extends StatelessWidget {
     required this.results,
     required this.searching,
     required this.onPicked,
-    required this.onPickOnMap,
-    required this.showPickOnMap,
     required this.onCurrentLocation,
     this.suggestions = const [],
     this.onSuggestionPicked,
@@ -32,8 +30,6 @@ class RouteFieldResults extends StatelessWidget {
   final List<DirectionsCandidate> results;
   final bool searching;
   final ValueChanged<DirectionsCandidate> onPicked;
-  final VoidCallback onPickOnMap;
-  final bool showPickOnMap;
   final VoidCallback onCurrentLocation;
   final List<StoreSuggestion> suggestions;
   final ValueChanged<StoreSuggestion>? onSuggestionPicked;
@@ -47,7 +43,7 @@ class RouteFieldResults extends StatelessWidget {
 
   Widget _build(BuildContext context) {
     final isOrigin = field == RoutePlanField.origin;
-    final hasShortcut = showPickOnMap || isOrigin;
+    final hasShortcut = isOrigin;
     final showSuggestions =
         suggestions.isNotEmpty && onSuggestionPicked != null;
     final recents = results.isEmpty && !searching && !showSuggestions
@@ -76,17 +72,6 @@ class RouteFieldResults extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (showPickOnMap)
-              RoutexListCell(
-                key: const Key('route-field-pick-on-map'),
-                title: '지도에서 선택',
-                subtitle: isOrigin
-                    ? '지도에서 매장을 눌러 출발지로 지정합니다'
-                    : '지도에서 매장을 눌러 도착지로 지정합니다',
-                leadingIcon: RoutexIcons.placeLocation,
-                trailingIcon: RoutexIcons.forward,
-                onPressed: onPickOnMap,
-              ),
             if (isOrigin)
               RoutexListCell(
                 key: const Key('route-field-current-location'),
@@ -97,26 +82,21 @@ class RouteFieldResults extends StatelessWidget {
             if (hasShortcut &&
                 (recents.isNotEmpty || showSuggestions || hasResults))
               const RoutexDivider(role: RoutexDividerRole.section),
-            if (recents.isNotEmpty) ...[
-              RoutexSectionHeader(
+            if (recents.isNotEmpty)
+              RoutexRecentList(
                 title: '최근 출발지 · 목적지',
-                actionLabel: '전체 삭제',
-                onAction: recentRoutePointsController.clear,
+                onClear: recentRoutePointsController.clear,
+                items: [
+                  for (final point in recents)
+                    RoutexRecentItem(
+                      id: 'route-field-recent-${point.dedupeKey}',
+                      title: point.title,
+                      subtitle: point.subtitle.isEmpty ? null : point.subtitle,
+                      onRemove: () => recentRoutePointsController.remove(point),
+                      onPressed: () => onPicked(point),
+                    ),
+                ],
               ),
-              for (final point in recents)
-                RoutexListCell(
-                  key: Key('route-field-recent-${point.dedupeKey}'),
-                  title: point.title,
-                  subtitle: point.subtitle.isEmpty ? null : point.subtitle,
-                  leadingIcon: RoutexIcons.recent,
-                  leadingIconTone: RoutexListIconTone.quiet,
-                  trailingActionLabel: '${point.title} 삭제',
-                  trailingActionIcon: RoutexIcons.close,
-                  onTrailingAction: () =>
-                      recentRoutePointsController.remove(point),
-                  onPressed: () => onPicked(point),
-                ),
-            ],
             if (showSuggestions) ...[
               if (recents.isNotEmpty)
                 const RoutexDivider(role: RoutexDividerRole.section),

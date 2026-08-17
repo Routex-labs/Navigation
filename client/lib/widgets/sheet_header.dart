@@ -16,6 +16,7 @@ class SheetHeader extends StatelessWidget {
     super.key,
     this.title,
     this.leading,
+    this.showBack = true,
     required this.onCloseAll,
     required this.onIntentionalPop,
   });
@@ -24,6 +25,7 @@ class SheetHeader extends StatelessWidget {
 
   /// 이전 화면 호환용 제목 장식. 새 시트에서는 제목 자체로 충분하면 생략한다.
   final Widget? leading;
+  final bool showBack;
 
   /// X 버튼이 눌렸을 때 호출. 상위(MapShellScreen)가 chain-close 플래그를
   /// set하는 함수를 넘긴다.
@@ -37,10 +39,12 @@ class SheetHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final header = RoutexSheetHeader(
       title: title,
-      onBack: () {
-        onIntentionalPop();
-        Navigator.of(context).maybePop();
-      },
+      onBack: showBack
+          ? () {
+              onIntentionalPop();
+              Navigator.of(context).maybePop();
+            }
+          : null,
       onClose: () {
         onIntentionalPop();
         onCloseAll();

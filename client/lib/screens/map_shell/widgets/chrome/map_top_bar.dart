@@ -6,8 +6,8 @@ import '../../../../models/route/route_plan_mode.dart';
 /// 지도 상단의 검색과 경로 계획을 Runtime Kit 패턴에 연결한다.
 ///
 /// 검색·경로 상태와 후보 조회는 상위가 소유하고, 이 위젯은 공개 패턴에 값과
-/// callback만 전달한다. 경로 위치를 고치는 동안에는 planner 아래 검색 줄 하나만
-/// 추가하며, 확정 뒤에는 planner만 남긴다.
+/// callback만 전달한다. 경로 위치를 고치는 동안에는 해당 행 자체가
+/// 입력칸이 되며, 독립된 두 번째 검색 바를 만들지 않는다.
 class MapTopBar extends StatelessWidget {
   const MapTopBar({
     super.key,
@@ -29,7 +29,6 @@ class MapTopBar extends StatelessWidget {
     this.onDestinationChanged,
     this.onOriginPressed,
     this.onDestinationPressed,
-    this.onCancelRouteEditing,
     this.onClearRouteDraft,
     this.onSwapRouteEndpoints,
     this.canSwapRouteEndpoints = false,
@@ -57,7 +56,6 @@ class MapTopBar extends StatelessWidget {
   final ValueChanged<String>? onDestinationChanged;
   final VoidCallback? onOriginPressed;
   final VoidCallback? onDestinationPressed;
-  final VoidCallback? onCancelRouteEditing;
   final VoidCallback? onClearRouteDraft;
   final VoidCallback? onSwapRouteEndpoints;
   final bool canSwapRouteEndpoints;
@@ -127,45 +125,37 @@ class MapTopBar extends StatelessWidget {
       },
       onClose: onClearRouteDraft,
       onDestinationMore: canSwapRouteEndpoints ? onSwapRouteEndpoints : null,
+      editingField: switch (routeEditingField) {
+        RoutePlanField.origin => RoutexRouteField.origin,
+        RoutePlanField.destination => RoutexRouteField.destination,
+        null => null,
+      },
+      editingController: switch (routeEditingField) {
+        RoutePlanField.origin => originController,
+        RoutePlanField.destination => destinationController,
+        null => null,
+      },
+      editingFocusNode: switch (routeEditingField) {
+        RoutePlanField.origin => originFocus,
+        RoutePlanField.destination => destinationFocus,
+        null => null,
+      },
+      editingFieldKey: switch (routeEditingField) {
+        RoutePlanField.origin => const Key('route-draft-origin'),
+        RoutePlanField.destination => const Key('route-draft-destination'),
+        null => null,
+      },
+      onEditingChanged: switch (routeEditingField) {
+        RoutePlanField.origin => onOriginChanged,
+        RoutePlanField.destination => onDestinationChanged,
+        null => null,
+      },
+      onEditingSubmitted: switch (routeEditingField) {
+        RoutePlanField.origin => onOriginChanged,
+        RoutePlanField.destination => onDestinationChanged,
+        null => null,
+      },
     );
-    final field = routeEditingField;
-    if (field == null) {
-      return KeyedSubtree(key: const Key('route-planner'), child: planner);
-    }
-
-    final editingOrigin = field == RoutePlanField.origin;
-    final activeController = editingOrigin
-        ? originController!
-        : destinationController!;
-    final activeFocus = editingOrigin ? originFocus : destinationFocus;
-    final activeChanged = editingOrigin
-        ? onOriginChanged
-        : onDestinationChanged;
-    final cancelEditing = onCancelRouteEditing ?? () => activeFocus?.unfocus();
-    return RoutexStack(
-      gap: RoutexStackGap.control,
-      children: [
-        KeyedSubtree(key: const Key('route-planner'), child: planner),
-        KeyedSubtree(
-          key: Key(
-            editingOrigin ? 'route-draft-origin' : 'route-draft-destination',
-          ),
-          child: RoutexSearchBar(
-            placeholder: editingOrigin ? '출발지를 입력하세요' : '도착지를 입력하세요',
-            controller: activeController,
-            focusNode: activeFocus,
-            onSearchPressed: activeFocus?.requestFocus,
-            onChanged: activeChanged,
-            onSubmitted: activeChanged,
-            onClear: () {
-              activeController.clear();
-              activeChanged?.call('');
-            },
-            leading: RoutexSearchLeading.back,
-            onLeadingPressed: cancelEditing,
-          ),
-        ),
-      ],
-    );
+    return KeyedSubtree(key: const Key('route-planner'), child: planner);
   }
 }

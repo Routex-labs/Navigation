@@ -46,7 +46,6 @@ import 'widgets/search/search_panel.dart';
 import 'widgets/sheets/transit_routes_sheet.dart';
 import 'widgets/chrome/category_chips_row.dart';
 import 'widgets/chrome/map_overlay_scroll_row.dart';
-import 'widgets/chrome/map_pick_hint_card.dart';
 import '../outdoor_map/outdoor_map_screen.dart';
 import 'directions_candidates.dart';
 import 'transit_walk_handoff.dart';
@@ -228,7 +227,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// bool이 아니라 **어느 칸인지**를 들고 있어야 한다 — 출발지도 같은 방식으로
   /// 고를 수 있다. 이 상태는 화면에 안내로 띄운다. 시트만 닫히면 사용자는 아무 일도
   /// 안 일어난 것으로 본다.
-  DirectionsMapPickTarget? _mapPickTarget;
 
   /// 도착지를 먼저 고른 길찾기 초안. 이전에는 `도착`을 누르는 즉시 경로
   /// 계산을 시도해서, 출발 위치가 준비되지 않은 경우 이 후보가 화면과 함께
@@ -257,7 +255,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   /// "지도에서 도착지를 골라주세요" 안내. 이 카드의 X를 누른 탭이 지도까지
   /// 새어들어가면, 취소를 누른 손가락이 그 아래 매장을 도착지로 지정해 버린다.
-  final _mapPickHintKey = GlobalKey();
 
   // 상단 검색창은 이제 여기(상위)가 소유한다. 결과 패널이 검색창 바로 아래에
   // 붙어야 하므로, 입력 상태를 검색창과 패널이 함께 볼 수 있는 이 자리에 둔다.
@@ -533,9 +530,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   void _activateSearch() {
     if (_searchActive) return;
-    // 검색을 시작했다는 것은 지도에서 고르는 걸 그만뒀다는 뜻이다. 안내만 남으면
-    // 검색 결과를 고른 뒤에도 다음 매장 탭이 출발지/도착지로 먹혀 버린다.
-    _stopPickingOnMap();
     setState(() {
       _searchActive = true;
       // **실내 도면을 보는 중에도 바깥을 함께 찾는다.** 실내일 때 껐더니 기능이
@@ -1115,9 +1109,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
     RoutePlanField? focusField,
   }) async {
     _closeSearch();
-    // 지도에서 고르는 중이었다면 그 상태는 끝난다. 안 끄면 다음 지도 탭이
-    // 엉뚱하게 출발지/도착지로 먹힌다.
-    _stopPickingOnMap();
     // 자동완성 원본은 여기서 한 번만 받아 둔다. 결과를 기다리지 않으므로
     // 목록은 먼저 뜨고, 도착하면 후보 줄만 뒤늦게 채워진다.
     unawaited(_loadRouteStoreIndex());
@@ -1267,9 +1258,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   void _onRouteFieldFocused(RoutePlanField field, String query) {
     if (_routeEditingField == field) return;
-    // 다시 치기 시작했다는 것은 지도에서 고르는 걸 그만뒀다는 뜻이다. 안 끄면
-    // 후보를 골라 경로를 그린 **뒤에도** 다음 지도 탭이 그 칸으로 먹힌다.
-    _stopPickingOnMap();
     setState(() => _routeEditingField = field);
     unawaited(_searchRouteCandidates(query));
   }
@@ -1277,13 +1265,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
   void _unfocusRouteFields() {
     _routeOriginFocus.unfocus();
     _routeDestinationFocus.unfocus();
-  }
-
-  void _cancelRouteEditing() {
-    if (_routeEditingField == null) return;
-    _routeSearchSeq++;
-    setState(() => _routeEditingField = null);
-    _unfocusRouteFields();
   }
 
   /// 두 칸 중 하나에 글자가 들어왔을 때.
@@ -1483,18 +1464,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
     unawaited(_startRoute(origin: _selectedOrigin, destination: destination));
   }
 
-  /// 후보 목록의 "지도에서 선택". 목록을 접고 지도 탭을 기다린다 — 고른 값은
-  /// [_applyPickedCandidate]가 그 칸에 넣는다.
-  void _pickRouteEndpointOnMap(RoutePlanField field) {
-    _unfocusRouteFields();
-    setState(() {
-      _routeEditingField = null;
-      _mapPickTarget = field == RoutePlanField.origin
-          ? DirectionsMapPickTarget.origin
-          : DirectionsMapPickTarget.destination;
-      // 안내 카드와 자리가 겹치므로 장소 카드는 접는다.
-    });
-  }
+  /// 경로 행을 편집하는 동안은 지도 탭도 같은 입력의 다른 방법이다.
+  DirectionsMapPickTarget? get _routeMapPickTarget =>
+      switch (_routeEditingField) {
+        RoutePlanField.origin => DirectionsMapPickTarget.origin,
+        RoutePlanField.destination => DirectionsMapPickTarget.destination,
+        null => null,
+      };
 
   /// 지금 화면에서 고를 수 있는 이동 수단.
   ///
@@ -1837,19 +1813,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
     unawaited(_refreshReach());
   }
 
-  /// 지도에서 고르기를 끝낸다(선택 완료·취소 공통, 출발지·도착지 공통).
-  void _stopPickingOnMap() {
-    if (_mapPickTarget == null) return;
-    setState(() => _mapPickTarget = null);
-  }
-
   /// 지도에서 매장을 눌렀을 때의 분기점. 지도에서 고르는 중이면 매장 정보
   /// 시트를 열지 않고 그 매장을 해당 칸(출발지/도착지)의 값으로 쓴다.
   ///
   /// 두 지도(야외의 실내 진입 오버레이·실내 탭)가 같은 콜백을 쓰므로, 어느 쪽에서
   /// 골라도 동일하게 동작한다.
   void _onMapStoreTap(PoiSearchResult match) {
-    final target = _mapPickTarget;
+    final target = _routeMapPickTarget;
     if (target == null) {
       unawaited(_openStoreFromMap(match));
       return;
@@ -1888,7 +1858,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   /// 지도에서 매장을 눌러 상세를 연다. **떠 있는 상세가 있으면 먼저 닫는다.**
   ///
-  /// 고른 매장에 핀이 서고 카메라가 시트 위 영역 한가운데로 끌어온다. 이 시트는
+  /// 고른 매장의 기존 아이콘·이름이 커지고 카메라가 시트 위 영역 한가운데로 끌어온다.
+  /// 이 시트는
   /// barrier가 없어 포인터를 지도로 흘리는 의도된 설계라([_withMapsLocked]),
   /// 그 대가로 시트가 쌓이는 것을 여기서 막는다.
   ///
@@ -1898,10 +1869,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
   Future<void> _openStoreFromMap(PoiSearchResult match) async {
     if (_swapOpenPlaceDetail(match)) return;
     await _runSheetChain(
-      // **배율을 유지하지 않는다.** 예전에는 "지도에서 직접 누른 매장은 이미
-      // 화면에 있으니 확대하면 층 배치를 잃는다"는 이유로 유지했는데, 선택
-      // 강조가 폴리곤 칠에서 핀으로 바뀌면서 전제가 깨졌다 — 칠은 축소 상태에서도
-      // 면으로 보이지만 핀은 점이라, 멀리서 누르면 무엇이 골라졌는지 안 보인다.
       // `focusZoomFor`는 이미 더 가까우면 그대로 두므로 훑는 중에 튀지 않는다.
       () => _showStoreInfo(match, focusOnMap: true),
     );
@@ -1914,7 +1881,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 고르는 중이 아니면 아무 일도 하지 않는다(지도 쪽도 막지만, 두 값이 한 프레임
   /// 어긋나는 순간을 없애려 상태 주인이 한 번 더 막는다).
   void _onMapPointPicked(PoiSearchResult picked) {
-    final target = _mapPickTarget;
+    final target = _routeMapPickTarget;
     if (target == null) return;
     _applyMapPick(picked, target);
   }
@@ -1922,7 +1889,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 지도 탭으로 확정된 지점을 출발지/도착지에 반영한다. 매장 탭과 복도 탭이
   /// 공유하는 유일한 경로다.
   void _applyMapPick(PoiSearchResult match, DirectionsMapPickTarget target) {
-    _stopPickingOnMap();
     // 강조 표시는 남겨두지 않는다 — 곧 경로와 핀이 그 자리를 대신한다.
     _outdoorKey.currentState?.clearHighlight();
     final picked = DirectionsCandidate(
@@ -2274,7 +2240,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
           _buildMap(),
           if (_searchActive) _buildSearchBarrier(),
           _buildTopOverlays(context),
-          if (!_guidanceActive) _buildBottomBar(routeVisible),
+          if (!_guidanceActive && !_routeMode) _buildBottomBar(routeVisible),
           _buildFloorScrim(),
         ],
       ),
@@ -2322,7 +2288,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
       onBuildingTap: _onMapBuildingTap,
       // 실내 오버레이 위에서도 복도를 골라 출발/도착을 정할 수 있다.
       // 실내 탭과 같은 조작이어야 하므로 같은 값을 내려 준다.
-      pickingOnMap: _mapPickTarget != null,
+      pickingOnMap: _routeMapPickTarget != null,
       onMapPointPicked: _onMapPointPicked,
       onLocationAnchored: _onLocationAnchored,
       // 실내 화면과 같은 선택을 넘긴다. 야외 지도도 실내 진입
@@ -2340,7 +2306,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
         _categoryRowKey,
         _searchPanelKey,
         _bottomBarKey,
-        _mapPickHintKey,
       ],
     );
   }
@@ -2415,15 +2380,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
             // 있을 이유가 없다.
             else if (_floorTransition != null ||
                 _guidanceActive ||
+                _routeMode ||
                 _routeEditingField != null)
               const SizedBox.shrink()
             // 두 끝점을 확정해 후보 목록이 닫힌 뒤에는 다시 보여 준다. 입력 중엔
             // 후보 패널과 키보드가 공간을 쓰므로 카테고리 조작을 함께 띄우지 않는다.
             else
               _buildCategoryRow(),
-            // 지도에서 고르는 중이라는 안내. 이게 없으면 "지도에서 선택"을
-            // 눌렀을 때 시트만 닫히고 아무 일도 안 일어난 것처럼 보인다.
-            if (_mapPickTarget != null && !_searchActive) _buildMapPickHint(),
           ],
         ),
       ),
@@ -2460,7 +2423,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
         RoutePlanField.destination,
         _routeDestinationController.text,
       ),
-      onCancelRouteEditing: _cancelRouteEditing,
       onClearRouteDraft: _clearRouteDraft,
       onSwapRouteEndpoints: () => unawaited(_swapRouteEndpoints()),
       canSwapRouteEndpoints: _canSwapRouteEndpoints,
@@ -2500,10 +2462,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
           reachByNodeId: _reachByNodeId,
           suggestions: _routeSuggestions,
           onSuggestionPicked: _onRouteSuggestionPicked,
-          onPickOnMap: () => _pickRouteEndpointOnMap(field),
-          // 야외 지도에서 누르면 이름 없는 좌표가 잡힌다. 도면을
-          // 보고 있을 때만 매장(층·노드)이 잡히므로 그때만 준다.
-          showPickOnMap: _indoorContextActive,
           onCurrentLocation: _pickCurrentLocationAsOrigin,
         ),
       ),
@@ -2587,32 +2545,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
             ),
           ],
         ],
-      ),
-    );
-  }
-
-  /// 지도에서 고르는 중이라는 안내.
-  ///
-  /// 이게 없으면 "지도에서 선택"을 눌렀을 때 시트만 닫히고 아무 일도 안 일어난
-  /// 것처럼 보인다.
-  Widget _buildMapPickHint() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        RoutexSpacing.screenGutter,
-        _overlayGap,
-        RoutexSpacing.screenGutter,
-        0,
-      ),
-      child: MapPickHintCard(
-        key: _mapPickHintKey,
-        target: _mapPickTarget!,
-        // 지금 고르는 칸의 **반대쪽**을 보여준다. 출발지를 고르는
-        // 중이면 도착지가, 도착지를 고르는 중이면 출발지가 무엇으로
-        // 잡혀 있는지 알아야 지금 무엇을 누를지 판단할 수 있다.
-        counterpartLabel: _mapPickTarget == DirectionsMapPickTarget.origin
-            ? _routeDraftDestination?.title
-            : (_selectedOrigin?.title ?? '현재 위치'),
-        onCancel: _stopPickingOnMap,
       ),
     );
   }

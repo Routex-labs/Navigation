@@ -381,16 +381,13 @@ extension OutdoorMapUi on OutdoorMapBodyState {
             left: 0,
             right: 0,
             bottom: 0,
-            child: SafeArea(
-              top: false,
-              child: IndoorArrivalCard(
-                key: _arrivalCardKey,
-                destinationName: arrived.name,
-                destinationFloor: arrived.floor,
-                onConfirm: _confirmArrival,
-                onConfirmPointerDown: (position) =>
-                    _etaClosePointerDown = position,
-              ),
+            child: IndoorArrivalCard(
+              key: _arrivalCardKey,
+              destinationName: arrived.name,
+              destinationFloor: arrived.floor,
+              onConfirm: _confirmArrival,
+              onConfirmPointerDown: (position) =>
+                  _etaClosePointerDown = position,
             ),
           ),
 
@@ -403,28 +400,21 @@ extension OutdoorMapUi on OutdoorMapBodyState {
             left: 0,
             right: 0,
             bottom: 0,
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                child: EtaCard(
-                  key: _etaCardKey,
-                  distanceMeters: indoorEta.distanceM,
-                  // 시간은 비용 기준 — 엘리베이터 대기·탑승 시간이 여기 들어 있다.
-                  minutes:
-                      (indoorEta.costM / indoorWalkingSpeedMetersPerSecond / 60)
-                          .ceil()
-                          .clamp(1, 999),
-                  label: _indoorEtaLabel(indoorRouteDestination),
-                  guidanceStarted: _guidanceStarted,
-                  onStartGuidance: _guidanceStarted
-                      ? null
-                      : () => unawaited(_startCurrentGuidance()),
-                  onClose: _dismissIndoorRouteFromEtaCard,
-                  onClosePointerDown: (position) =>
-                      _etaClosePointerDown = position,
-                ),
-              ),
+            child: EtaCard(
+              key: _etaCardKey,
+              distanceMeters: indoorEta.distanceM,
+              // 시간은 비용 기준 — 엘리베이터 대기·탑승 시간이 여기 들어 있다.
+              minutes:
+                  (indoorEta.costM / indoorWalkingSpeedMetersPerSecond / 60)
+                      .ceil()
+                      .clamp(1, 999),
+              label: _indoorEtaLabel(indoorRouteDestination),
+              guidanceStarted: _guidanceStarted,
+              onStartGuidance: _guidanceStarted
+                  ? null
+                  : () => unawaited(_startCurrentGuidance()),
+              onClose: _dismissIndoorRouteFromEtaCard,
+              onClosePointerDown: (position) => _etaClosePointerDown = position,
             ),
           )
         // 대중교통 안내는 도보 ETA 카드와 **같은 자리**를 쓰고 서로를 밀어낸다.
@@ -435,22 +425,15 @@ extension OutdoorMapUi on OutdoorMapBodyState {
             left: 0,
             right: 0,
             bottom: 0,
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                child: TransitSummaryCard(
-                  key: _etaCardKey,
-                  itinerary: itinerary,
-                  label: _transitLabel ?? '목적지까지',
-                  onStartGuidance: _guidanceStarted
-                      ? null
-                      : () => unawaited(_startCurrentGuidance()),
-                  onClose: _dismissUserDestinationFromEtaCard,
-                  onClosePointerDown: (position) =>
-                      _etaClosePointerDown = position,
-                ),
-              ),
+            child: TransitSummaryCard(
+              key: _etaCardKey,
+              itinerary: itinerary,
+              label: _transitLabel ?? '목적지까지',
+              onStartGuidance: _guidanceStarted
+                  ? null
+                  : () => unawaited(_startCurrentGuidance()),
+              onClose: _dismissUserDestinationFromEtaCard,
+              onClosePointerDown: (position) => _etaClosePointerDown = position,
             ),
           )
         else if (route != null)
@@ -458,29 +441,23 @@ extension OutdoorMapUi on OutdoorMapBodyState {
             left: 0,
             right: 0,
             bottom: 0,
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                child: EtaCard(
-                  key: _etaCardKey,
-                  distanceMeters: _outdoorEta(route).distanceM,
-                  minutes: _outdoorEta(route).minutes,
-                  label: userDestination != null
-                      ? (_userDestinationLabel ?? '목적지까지')
-                      : '건물 입구까지',
-                  guidanceStarted: _guidanceStarted,
-                  onClose: userDestination != null
-                      ? _dismissUserDestinationFromEtaCard
-                      : null,
-                  onStartGuidance: userDestination != null && !_guidanceStarted
-                      ? () => unawaited(_startCurrentGuidance())
-                      : null,
-                  onClosePointerDown: userDestination != null
-                      ? (position) => _etaClosePointerDown = position
-                      : null,
-                ),
-              ),
+            child: EtaCard(
+              key: _etaCardKey,
+              distanceMeters: _outdoorEta(route).distanceM,
+              minutes: _outdoorEta(route).minutes,
+              label: userDestination != null
+                  ? (_userDestinationLabel ?? '목적지까지')
+                  : '건물 입구까지',
+              guidanceStarted: _guidanceStarted,
+              onClose: userDestination != null
+                  ? _dismissUserDestinationFromEtaCard
+                  : null,
+              onStartGuidance: userDestination != null && !_guidanceStarted
+                  ? () => unawaited(_startCurrentGuidance())
+                  : null,
+              onClosePointerDown: userDestination != null
+                  ? (position) => _etaClosePointerDown = position
+                  : null,
             ),
           ),
       ],

@@ -675,7 +675,7 @@ packages:
       path: "../../navdesignsystem+promo/packages/routex_design_system"
       relative: true
     source: path
-    version: "0.2.22"
+    version: "0.2.23"
   share_plus:
     dependency: "direct main"
     description:

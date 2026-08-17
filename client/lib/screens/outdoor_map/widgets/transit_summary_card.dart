@@ -32,6 +32,7 @@ class TransitSummaryCard extends StatelessWidget {
     final child = start == null
         ? RoutexBottomSheet(
             showHandle: false,
+            includeBottomSafeArea: true,
             child: RoutexStack(
               gap: RoutexStackGap.content,
               children: [

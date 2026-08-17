@@ -165,14 +165,12 @@ void main() {
     await drain(tester);
 
     // 출발지는 "현재 위치"(= _selectedOrigin이 null)이고, 이 테스트 환경에는
-    // 실내 도달 거리 맵이 없다. 대신 놓을 매장을 고를 근거가 없으므로 눌러도
-    // 아무 일도 하지 않는 버튼이 되어서는 안 된다.
-    final button = tester.widget<IconButton>(
-      find.ancestor(
-        of: find.byTooltip('목적지 더보기'),
-        matching: find.byType(IconButton),
-      ),
+    // 실내 도달 거리 맵이 없다. 놓을 매장을 고를 근거가 없으므로 공용
+    // 패턴은 누르지 못하는 장식 버튼 대신 동작 자체를 숨긴다.
+    expect(
+      find.byTooltip('목적지 더보기'),
+      findsNothing,
+      reason: '고를 근거가 없으면 활성처럼 보여서는 안 된다',
     );
-    expect(button.onPressed, isNull, reason: '고를 근거가 없으면 활성처럼 보여서는 안 된다');
   });
 }

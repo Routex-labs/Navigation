@@ -17,8 +17,6 @@ import 'place_detail/place_detail_hours_section.dart';
 import 'place_detail/place_detail_nearby_section.dart';
 import 'place_detail/place_detail_rich_sections.dart';
 import 'place_detail/place_detail_sections.dart';
-import '../../../../widgets/sheet_header.dart';
-
 import '../../../../widgets/map_overlay_guard.dart';
 import '../../../../widgets/map_pass_through_sheet_route.dart';
 import '../../../../domain/category/subcategory_label.dart';
@@ -292,6 +290,13 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
     Navigator.of(context).pop(action);
   }
 
+  /// 장소 이름 줄의 X로 상세 chain 전체를 닫는다.
+  void _closeAll() {
+    _markIntentional();
+    widget.onCloseAll();
+    Navigator.of(context).maybePop();
+  }
+
   /// 지금 보여 주는 매장. [PlaceDetailSheet.target]이 바뀌면 여기가 따라간다.
   PlaceDetailTarget get _target => widget.target.value;
 
@@ -498,15 +503,8 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                       children: [
                         const RoutexSheetHandle(),
                         _SheetLoadingLine(visible: _isLoading),
-                        // 저장은 시트가 아니라 **장소**에 붙는 동작이라 이름 옆으로
-                        // 내려갔다([RoutexPlaceHeader]). 시트 상단 바는 뒤로·닫기만
-                        // 갖는다 — 그 둘은 시트를 다루는 동작이다.
-                        SheetHeader(
-                          onCloseAll: widget.onCloseAll,
-                          onIntentionalPop: _markIntentional,
-                        ),
                         // Showcase의 장소 상세와 같은 조립 순서다:
-                        // 대표 사진 → 장소 이름/메타 → 출발·도착 → 나머지 본문.
+                        // 장소 이름/메타/X → 출발·도착/공유/저장 → 대표 사진 → 본문.
                         // 사진이 없을 때도 overview는 그대로 첫 내용이 된다.
                         PlaceDetailSections(
                           sections: sections,
@@ -519,6 +517,7 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                               ?subcategoryLabelFor(subcategory),
                             ].join(' · '),
                             saved: saved,
+                            onClose: _closeAll,
                             onSaved: favorite == null
                                 ? null
                                 : (_) => _onToggleFavorite(),

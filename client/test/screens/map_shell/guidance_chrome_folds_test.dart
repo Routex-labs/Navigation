@@ -124,6 +124,11 @@ void main() {
       reason: '테스트 전제(도착을 누르면 경로가 그려짐)가 성립하지 않았다',
     );
     expect(
+      tester.getBottomLeft(find.byType(EtaCard)).dy,
+      tester.getSize(find.byType(Scaffold).first).height,
+      reason: '안내 중 하단 패널은 지도 위에 뜨지 않고 화면 아래에 붙어야 한다',
+    );
+    expect(
       find.byType(MapBottomBar),
       findsNothing,
       reason: '안내 중에는 위치 지정·위치 보정 버튼을 접어 지도를 비워야 한다',

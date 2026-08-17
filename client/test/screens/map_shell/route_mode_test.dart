@@ -10,6 +10,8 @@ import 'package:navigation_client/repositories/place/destination_repository.dart
 import 'package:navigation_client/repositories/building/mock_building_repository.dart';
 import 'package:navigation_client/repositories/place/mock_destination_repository.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
+import 'package:navigation_client/screens/map_shell/widgets/chrome/map_bottom_bar.dart';
+import 'package:navigation_client/screens/map_shell/widgets/chrome/map_overlay_scroll_row.dart';
 import 'package:navigation_client/widgets/eta_card.dart';
 import 'package:navigation_client/screens/map_shell/widgets/search/route_field_results.dart';
 import 'package:navigation_client/state/recent_route_points_controller.dart';
@@ -125,8 +127,8 @@ void main() {
   testWidgets('야외에서 아직 아무것도 안 쳤으면 빈 후보 카드를 남기지 않는다', (
     WidgetTester tester,
   ) async {
-    // 야외 + 도착 칸이면 지름길 두 줄("지도에서 선택"·"현재 위치")이 모두 빠지고
-    // 빈 검색어의 후보도 없다. 그런데도 카드를 그리면 이동 수단 줄 아래에 아무
+    // 야외 + 빈 도착 칸에는 별도 지름길이나 빈 검색 후보가 없다. 그런데도
+    // 카드를 그리면 위치 행 아래에 아무
     // 내용 없는 흰 막대가 떠 있게 된다.
     await pumpShell(tester);
     await tester.tap(find.byTooltip('길찾기'));
@@ -149,6 +151,13 @@ void main() {
     await drain(tester);
 
     expect(find.byType(EtaCard), findsOneWidget);
+    expect(find.byType(MapBottomBar), findsNothing);
+    expect(find.byType(MapOverlayScrollRow), findsNothing);
+    expect(
+      tester.getBottomLeft(find.byType(EtaCard)).dy,
+      tester.getSize(find.byType(Scaffold).first).height,
+      reason: '안내 시작 전 경로 요약도 화면 하단에 붙어야 한다',
+    );
     // 고른 값이 그 칸에 그대로 남아, 다시 눌러 고칠 수 있다.
     expect(find.byKey(const Key('route-draft-destination')), findsNothing);
     expect(find.text('강의실 101'), findsWidgets);
@@ -192,8 +201,7 @@ void main() {
       find.byKey(const Key('route-field-current-location')),
       findsOneWidget,
     );
-    // 야외에서는 "지도에서 선택"을 주지 않는다 — 이름 없는 좌표가 잡히는 줄이라
-    // 매장 이름으로 고르는 줄과 나란히 두면 같은 무게로 읽힌다.
+    // 지도 탭은 위치 행 편집 자체에 연결되므로 별도 지름길을 만들지 않는다.
     expect(find.byKey(const Key('route-field-pick-on-map')), findsNothing);
   });
 }

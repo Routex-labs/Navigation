@@ -2,7 +2,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import 'package:navigation_client/screens/outdoor_map/layers/indoor_overlay_layers.dart';
+import 'package:navigation_client/map/icon/category_map_icon.dart';
 import 'package:navigation_client/map/style/category_map_filter.dart';
+import 'package:navigation_client/map/style/floor_facility_style.dart';
+import 'package:navigation_client/map/style/label_style.dart';
 
 /// 실기기에서 건물이 **불투명한 검정 덩어리**로 덮이던 회귀를 막는 테스트.
 ///
@@ -105,6 +108,34 @@ void main() {
       expect(json['text-optional'], isFalse);
       expect(json['icon-optional'], isFalse);
       expect(json['icon-allow-overlap'], isFalse);
+    });
+
+    test('선택 매장은 크기 대신 기존 아이콘의 색만 바꾼다', () {
+      const selectedId = 'store-osulloc';
+      final json = wireJson(
+        indoorStoresLabelProps(
+          fadeExpr,
+          null,
+          1,
+          highlightedStoreId: selectedId,
+        ),
+      );
+
+      expect(json['text-size'], mapLabelFixedTextSize);
+      expect(json['icon-size'], indoorMarkerIconSize(1));
+      final iconImage = json['icon-image'] as List<Object?>;
+      expect(iconImage[0], 'case');
+      expect(iconImage[1], [
+        '==',
+        ['get', 'id'],
+        selectedId,
+      ]);
+      expect(
+        iconImage.toString(),
+        contains(selectedStoreCategoryIconImageName('카페')),
+      );
+      expect(iconImage.toString(), contains(storeCategoryIconImageName('카페')));
+      expect(iconImage, isNot(contains(mapLabelFixedTextSize * 1.35)));
     });
 
     test('카테고리를 골라도 text-field는 살아 있다', () {

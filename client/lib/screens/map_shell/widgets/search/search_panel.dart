@@ -1016,31 +1016,8 @@ class _SearchPanelState extends State<SearchPanel> {
         }
         return Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              // 우측은 «전체 삭제» 버튼의 자체 패딩이 이어받으므로 좁게 둔다.
-              padding: _sectionLabelPadding.copyWith(right: 8),
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      '최근 검색어',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.muted,
-                      ),
-                    ),
-                  ),
-                  RoutexButton(
-                    label: '전체 삭제',
-                    variant: RoutexButtonVariant.quiet,
-                    onPressed: recentSearchesController.clear,
-                  ),
-                ],
-              ),
-            ),
             // 목록이 상한(컨트롤러의 maxEntries)까지 차도 패널이 화면을 다 먹지
             // 않도록 상위가 준 높이 안에서 스크롤시킨다. 결과 목록과 같은 이유로
             // ListView가 아니라 Column + SingleChildScrollView다(아래 _resultList
@@ -1048,26 +1025,18 @@ class _SearchPanelState extends State<SearchPanel> {
             Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
+                child: RoutexRecentList(
+                  title: '최근 검색어',
+                  onClear: recentSearchesController.clear,
+                  items: [
                     for (final query in queries)
-                      RoutexListCell(
-                        key: Key('recent-$query'),
-                        leadingIcon: Icons.history,
-                        leadingIconTone: RoutexListIconTone.quiet,
-                        // 최근 검색어는 매장 이름이 아니라 사용자가 친 글자라
-                        // 강조할 구간이 없다.
+                      RoutexRecentItem(
+                        id: 'recent-$query',
                         title: query,
-                        // 지우기는 갈래가 하나뿐이라 ×다. ⋯를 두면 메뉴가 열릴
-                        // 줄 알고 누른다.
-                        trailingActionLabel: '$query 삭제',
-                        trailingActionIcon: Icons.close,
-                        onTrailingAction: () =>
-                            recentSearchesController.remove(query),
+                        onRemove: () => recentSearchesController.remove(query),
                         onPressed: () {
-                          // 최근 검색어는 문자열 하나뿐이라 어느 층 매장이었는지
-                          // 알 방법이 없다. 층을 모르는 선택이므로 스코프를 뺀다.
+                          // 최근 검색어는 문자열 하나뿐이라 어느 층 매장인지
+                          // 모른다. 다시 검색할 때는 층 스코프를 뺀다.
                           _floorScopeOnce = const _FloorScopeOverride(null);
                           widget.onQueryPicked(query);
                         },
