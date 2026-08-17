@@ -65,7 +65,8 @@ extension OutdoorMapPdr on OutdoorMapBodyState {
       // 않았더라도 "위치를 먼저 지정하라"는 안내는 먼저 띄운다.
       final target = _pdrCurrentWgs84();
       if (target == null) {
-        _showSnack('아직 현재 위치가 없습니다. 위치 지정 버튼으로 먼저 위치를 잡아주세요.');
+        // 눌러야 할 버튼을 깜빡여 말한다([OutdoorMapBody.onNeedLocationPlacement]).
+        widget.onNeedLocationPlacement?.call();
         return;
       }
       final controller = _mapController;

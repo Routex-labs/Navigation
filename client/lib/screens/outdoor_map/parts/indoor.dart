@@ -655,7 +655,10 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
     if (!value) _indoorEnteredByGps = false;
     // **정말로 나갔을 때만** 층 질문을 다시 열어 둔다. 도면만 접은 사용자는 같은
     // 자리에 그대로 있어서, 다시 펼 때마다 묻는 것은 답을 아는 질문을 되묻는 것이다.
-    if (!value && leftBuilding) _entryFloorAsked = false;
+    if (!value && leftBuilding) {
+      _entryFloorAsked = false;
+      _nearbyStoreAsked = false;
+    }
     // 실내 안내를 켜고 끄는 유일한 지점이다.
     //
     // 예전에는 오버레이가 꺼져도 복도 보정이 계속 돌았다 — 화면에 안 보일 뿐

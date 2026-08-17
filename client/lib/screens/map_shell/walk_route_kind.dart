@@ -94,6 +94,21 @@ WalkRouteKind classifyWalkRoute({
     return WalkRouteKind.indoorToOutdoor;
   }
 
+  // 4) 두 끝점이 모두 건물 밖 지점이면 **도면이 떠 있어도 야외 걷기다.**
+  //
+  // 예전에는 아래 `indoorContextActive` 한 줄만 보고 [indoorFallback]으로
+  // 흘려보냈다. 그래서 건물 안에 선 채로 바깥 두 지점을 이으면(실기기:
+  // "서울창업허브 공덕 → 공덕" 도보) 실내 라우팅이 그 요청을 받아 "도착지 노드
+  // 정보가 없어 경로를 계산할 수 없습니다"만 띄우고 끝났다 — 사용자에게는
+  // 도보만 안 되는 화면으로 보인다.
+  //
+  // [indoorFallback]은 **끝점 어느 한쪽에라도 실내 정보가 있을 때**의 갈래다.
+  // 아무 쪽에도 없으면 실내 그래프가 할 수 있는 일이 없다.
+  if (_isOutdoorPoint(destination) &&
+      (origin == null || _isOutdoorPoint(origin))) {
+    return WalkRouteKind.outdoor;
+  }
+
   if (!indoorContextActive) return WalkRouteKind.outdoor;
 
   return WalkRouteKind.indoorFallback;

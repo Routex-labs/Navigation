@@ -22,6 +22,7 @@ class MapBottomBar extends StatelessWidget {
     this.onPickNearbyStore,
     this.placingLocation = false,
     this.showPlaceLocation = true,
+    this.attentionOnPlaceLocation = false,
   });
 
   final VoidCallback onCalibrate;
@@ -48,6 +49,13 @@ class MapBottomBar extends StatelessWidget {
   /// 켜지지 않았거나 층 정보가 준비되지 않은 상황에서는 상위가 false로 넘겨
   /// 버튼을 숨긴다 — 눌러도 의미가 없는 버튼을 노출해 혼란을 주지 않는다.
   final bool showPlaceLocation;
+
+  /// "위치 지정"을 눌러야 할 때. 참이면 버튼이 잠깐 깜빡인다.
+  ///
+  /// 문장 대신 쓴다 — "위치 지정 버튼으로 먼저 위치를 잡아주세요"는 눌러야 할
+  /// 버튼을 말로 가리키면서 그 버튼을 가리고 떴다. 여기를 보라는 말은 여기서
+  /// 하는 것이 짧다.
+  final bool attentionOnPlaceLocation;
 
   @override
   Widget build(BuildContext context) {
@@ -76,9 +84,12 @@ class MapBottomBar extends StatelessWidget {
                   const SizedBox(width: RoutexSpacing.controlGap),
                 ],
                 if (showPlaceLocation) ...[
-                  _PlaceLocationButton(
-                    onPressed: onPlaceLocation,
-                    active: placingLocation,
+                  _AttentionPulse(
+                    active: attentionOnPlaceLocation,
+                    child: _PlaceLocationButton(
+                      onPressed: onPlaceLocation,
+                      active: placingLocation,
+                    ),
                   ),
                   const SizedBox(width: RoutexSpacing.controlGap),
                 ],
@@ -134,4 +145,78 @@ class _PlaceLocationButton extends StatelessWidget {
     ),
     onPressed: onPressed,
   );
+}
+
+/// [active]인 동안 자식을 천천히 깜빡인다.
+///
+/// **투명도만 흔든다.** 크기를 흔들면 옆 버튼과의 간격이 같이 움직여 하단 바
+/// 전체가 들썩이고, 색을 바꾸면 "눌린 상태"([RoutexMapControlTone.active])와
+/// 구분되지 않는다.
+///
+/// 접근성 설정에서 애니메이션을 끈 기기에서는 깜빡이지 않는다 — 그때는 버튼이
+/// 그냥 그 자리에 있고, 사용자가 찾을 수 있다.
+class _AttentionPulse extends StatefulWidget {
+  const _AttentionPulse({required this.active, required this.child});
+
+  final bool active;
+  final Widget child;
+
+  @override
+  State<_AttentionPulse> createState() => _AttentionPulseState();
+}
+
+class _AttentionPulseState extends State<_AttentionPulse>
+    with SingleTickerProviderStateMixin {
+  // **`late final`로 미루지 않는다.** 한 번도 깜빡이지 않은 채 화면이 사라지면
+  // dispose가 그제서야 controller를 만들고, 그 시점의 element는 이미 죽어 있어
+  // "Looking up a deactivated widget's ancestor is unsafe"로 터진다.
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+    if (widget.active) _controller.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _AttentionPulse oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active == oldWidget.active) return;
+    if (widget.active) {
+      _controller.repeat(reverse: true);
+    } else {
+      // 어느 밝기에서 멈추든 상관없도록 원래대로 되돌린 뒤 멈춘다.
+      _controller.stop();
+      _controller.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  late final Animation<double> _pulse = Tween<double>(
+    begin: 1,
+    end: 0.35,
+  ).animate(_controller);
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    // **트리 모양은 켜고 꺼도 그대로다.** 자식을 감쌌다 풀면 그 자식 element가
+    // 한 번 죽었다 살아나는데, 안에 든 Tooltip이 그때 ticker를 두 번 만들며
+    // 터진다(위젯 테스트에서 잡혔다).
+    return FadeTransition(
+      opacity: widget.active && !reduceMotion
+          ? _pulse
+          : const AlwaysStoppedAnimation(1.0),
+      child: widget.child,
+    );
+  }
 }

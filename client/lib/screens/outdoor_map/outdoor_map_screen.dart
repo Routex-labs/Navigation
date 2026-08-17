@@ -224,6 +224,7 @@ class OutdoorMapBody extends StatefulWidget {
     this.onMapPointPicked,
     this.pickingOnMap = false,
     this.onLocationAnchored,
+    this.onNeedLocationPlacement,
     this.categorySelection,
     this.onFloorChanged,
     this.onFloorTransitionChanged,
@@ -293,6 +294,13 @@ class OutdoorMapBody extends StatefulWidget {
   /// 않으면 매장을 출발지로 지정해 길찾기를 한 뒤 위치를 다시 잡아도, 다음
   /// 길찾기가 방금 잡은 위치가 아니라 예전에 고른 매장에서 출발한다.
   final VoidCallback? onLocationAnchored;
+
+  /// 실내 위치를 아직 모르는데 그 위치가 필요한 조작을 했다.
+  ///
+  /// **문장으로 알리지 않는다.** 예전에는 "위치 지정 버튼으로 먼저 위치를
+  /// 잡아주세요"를 스낵바로 띄웠는데, 눌러야 할 버튼을 말로 가리키는 안내는
+  /// 그 버튼을 가리면서 뜬다. 상위가 그 버튼을 깜빡여 대신 말한다.
+  final VoidCallback? onNeedLocationPlacement;
 
   /// 지금 카테고리 필터에서 고른 값. 실내 진입 오버레이의 매장 강조에 쓴다.
   ///
@@ -1014,6 +1022,14 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 매 진입마다 물으면 그 화면이 되풀이해 떠 지도에 닿을 수가 없다. 도면만 접은
   /// 경우(`returnToOutdoorView`)도 되돌리지 않는다 — 같은 자리에 그대로 있다.
   bool _entryFloorAsked = false;
+
+  /// 이번 진입에서 "근처 매장에서 골라주세요"를 이미 띄웠는지.
+  ///
+  /// **[_entryFloorAsked]와 같은 규칙으로 되돌린다.** 지도를 크게 축소하면 실내
+  /// 오버레이가 닫히고, 다시 확대하거나 GPS가 한 번 더 잡히면 진입이 다시
+  /// 발화한다 — 그때마다 시트가 올라오면 지도를 훑을 수가 없다. 다시 고르고
+  /// 싶으면 하단 바의 "가까운 매장으로 위치 지정"이 그 자리에 있다.
+  bool _nearbyStoreAsked = false;
 
   /// GPS 구독을 [_gpsTrackingWanted] 상태에 맞춘다. 구독 시작/해제의 유일한
   /// 진입점이라 중복 구독이나 해제 누락이 생기지 않는다.
@@ -1988,8 +2004,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 위치를 다시 지정하는 것은 기준점을 새로 잡는 것이다. 세션을 이 층에 맞추고
     // 이전 기준점 기준의 궤적·보정을 비우는 일은 모두 여기서 처리한다.
     if (!await _bindPdrSessionToFloor(floor, announceFailure: true)) return;
+    // 무엇을 해야 하는지는 지도 위쪽 [PlacingAnchorHint]가 말한다. 스낵바로 한
+    // 번 더 말하면 같은 문장이 화면 위아래에 동시에 뜨고, 아래 것은 하단 바까지
+    // 가린다 — 정작 눌러야 할 지도를 덮는 셈이다.
     _setPlacingAnchor(true);
-    _showSnack('지도에서 현재 서 있는 위치를 탭해 지정해주세요.');
   }
 
   /// [xM], [yM]에 가장 가까운 그래프 노드 id. 실내 화면의 동명 헬퍼와 같은

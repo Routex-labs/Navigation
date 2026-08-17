@@ -10,6 +10,7 @@ import 'package:navigation_client/repositories/place/destination_repository.dart
 import 'package:navigation_client/repositories/building/mock_building_repository.dart';
 import 'package:navigation_client/repositories/place/mock_destination_repository.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
+import 'package:navigation_client/screens/map_shell/widgets/chrome/map_bottom_bar.dart';
 import 'package:navigation_client/screens/outdoor_map/widgets/floor_selector.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -207,7 +208,15 @@ void main() {
     await tester.tap(find.byIcon(Icons.my_location));
     await tester.pump();
 
-    expect(find.textContaining('아직 현재 위치가 없습니다'), findsOneWidget);
+    // **문장이 아니라 버튼이 말한다.** 눌러야 할 버튼을 말로 가리키는 안내는
+    // 그 버튼을 가리면서 떴다 — 지금은 "위치 지정"이 잠깐 깜빡인다.
+    expect(
+      tester
+          .widget<MapBottomBar>(find.byType(MapBottomBar))
+          .attentionOnPlaceLocation,
+      isTrue,
+    );
+    // GPS 갈래를 탔다면 플러그인 채널이 없어 이 문구가 떴을 것이다.
     expect(find.textContaining('위치를 다시 확인하지 못했습니다'), findsNothing);
   });
 }

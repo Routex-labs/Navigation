@@ -413,6 +413,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
     _routeDestinationFocus.dispose();
     _routeOriginController.dispose();
     _routeDestinationController.dispose();
+    _placeLocationAttentionTimer?.cancel();
     super.dispose();
   }
 
@@ -2212,6 +2213,27 @@ class _MapShellScreenState extends State<MapShellScreen> {
     _outdoorKey.currentState?.startLocationPlacement();
   }
 
+  /// "위치 지정" 버튼을 지금 깜빡이는 중인지.
+  bool _placeLocationAttention = false;
+  Timer? _placeLocationAttentionTimer;
+
+  /// 실내 위치가 없는데 그 위치가 필요한 조작을 했다. **문장 대신 버튼을
+  /// 깜빡인다** — 이유는 [MapBottomBar.attentionOnPlaceLocation].
+  ///
+  /// 스스로 꺼진다. 사용자가 위치를 잡을 때까지 계속 깜빡이면 그 움직임이 곧
+  /// 배경이 되어 아무것도 알리지 못한다.
+  void _onNeedLocationPlacement() {
+    _placeLocationAttentionTimer?.cancel();
+    setState(() => _placeLocationAttention = true);
+    _placeLocationAttentionTimer = Timer(_placeLocationAttentionDuration, () {
+      _placeLocationAttentionTimer = null;
+      if (mounted) setState(() => _placeLocationAttention = false);
+    });
+  }
+
+  /// 깜빡이는 시간. 세 번쯤 깜빡이고 멎는다(주기 700ms × 왕복).
+  static const _placeLocationAttentionDuration = Duration(milliseconds: 2100);
+
   /// "가까운 매장으로 위치 지정" 버튼(하단 바). 들어올 때 띄웠던 목록을 다시 연다.
   ///
   /// 검색을 먼저 닫는 이유는 [_onPlaceLocation]과 같다 — 시트가 검색 패널
@@ -2310,6 +2332,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
       pickingOnMap: _routeMapPickTarget != null,
       onMapPointPicked: _onMapPointPicked,
       onLocationAnchored: _onLocationAnchored,
+      onNeedLocationPlacement: _onNeedLocationPlacement,
       // 실내 화면과 같은 선택을 넘긴다. 야외 지도도 실내 진입
       // 오버레이가 켜지면 같은 도면을 그리므로, 안 넘기면 칩을
       // 눌러도 강조가 안 뜬다.
@@ -2592,6 +2615,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
         // 버튼을 노출한다. 오버레이가 꺼진 순수 야외 상태에서는 지정할
         // 층 정보가 없어 눌러도 의미가 없다.
         showPlaceLocation: _outdoorIndoorEntered,
+        attentionOnPlaceLocation: _placeLocationAttention,
         // 목록을 만들 수 있을 때만 띄운다 — 기준점이 없으면 눌러도 아무 일이
         // 없는 버튼이 된다. 판단은 목록을 실제로 만드는 쪽이 한다.
         onPickNearbyStore:

@@ -181,9 +181,14 @@ void main() {
       );
     });
 
-    test('출발지가 야외 좌표면 실내→야외가 아니다', () {
+    test('출발지가 야외 좌표면 야외 걷기다', () {
       // 밖의 두 지점 사이 이동이다. 도면이 떠 있다는 것만으로 문을 경유시키면
       // 건물과 상관없는 경로에 실내 구간이 끼어든다.
+      //
+      // **한때 indoorFallback이었다.** 이 테스트가 못 박으려던 것은 "실내→야외가
+      // 아니다"였고 그때의 폴백 값을 그대로 적었는데, 그 값이 요청을 실내
+      // 라우팅에 넘겨 "도착지 노드 정보가 없어…"만 띄웠다(실기기: "서울창업허브
+      // 공덕 → 공덕" 도보). 끝점 어느 쪽에도 실내 정보가 없으면 야외다.
       expect(
         classifyWalkRoute(
           origin: outdoorPoint(),
@@ -191,12 +196,13 @@ void main() {
           indoorContextActive: true,
           indoorStartReady: true,
         ),
-        WalkRouteKind.indoorFallback,
+        WalkRouteKind.outdoor,
       );
     });
 
-    test('출발지가 없고 실내 위치도 없으면 실내→야외가 아니다', () {
-      // 출발점을 정할 근거가 아무것도 없다. 노드도 앵커도 없다.
+    test('출발지가 없고 실내 위치도 없으면 야외 걷기다', () {
+      // 출발점을 정할 근거가 아무것도 없다. 노드도 앵커도 없다 — 실내 위치가
+      // 없다는 것은 그 사람이 아직 밖이라는 뜻이고, 목적지도 밖이다.
       expect(
         classifyWalkRoute(
           origin: null,
@@ -204,7 +210,7 @@ void main() {
           indoorContextActive: true,
           indoorStartReady: false,
         ),
-        WalkRouteKind.indoorFallback,
+        WalkRouteKind.outdoor,
       );
     });
 

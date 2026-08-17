@@ -104,6 +104,16 @@ extension OutdoorMapGps on OutdoorMapBodyState {
   /// 건너뛰면(null) 지금까지와 같이 기본 층으로 간다 — 층은 선택기로 언제든
   /// 바꿀 수 있고, 여기서 막으면 판정이 틀렸을 때의 출구가 사라진다.
   Future<void> _askEntryFloorThenTrack(Position position) async {
+    // **경로를 그리는 중이면 아무것도 묻지 않는다.** "서울창업허브 → 더현대
+    // 서울"처럼 목적지를 정해 두고 걸어 들어오는 길이 있는데, 그때 도착해서
+    // 층·매장을 묻는 시트가 뜨면 방금 보던 경로를 통째로 덮는다. 어디로 가는
+    // 중인지는 이미 화면이 말하고 있고, 위치가 필요하면 하단 바의 두 버튼이
+    // 그 자리에 있다. **위치는 그대로 자동으로 잡는다** — 묻지 않는 것과
+    // 추적하지 않는 것은 다르다.
+    if (_guidancePlanned) {
+      await _startTrackingFromGpsFix(position);
+      return;
+    }
     final floor = await _askEntryFloor();
     if (!mounted || !_indoorEntered) return;
     // 층 전환은 chip을 누른 것과 **같은 경로**를 탄다 — 도면 교체와 그 층
@@ -114,7 +124,9 @@ extension OutdoorMapGps on OutdoorMapBodyState {
     }
     await _startTrackingFromGpsFix(position);
     if (!mounted || !_indoorEntered) return;
-    await _askNearbyStoreForAnchor();
+    // 자동으로 띄우는 것은 **진입 한 번에 한 번뿐이다**. 버튼으로 다시 여는
+    // 쪽은 이 제한을 받지 않는다.
+    await _askNearbyStoreForAnchor(once: true);
   }
 
   /// GPS가 잡아 준 **어림 위치를 사람이 다듬게 한다.**
@@ -126,9 +138,11 @@ extension OutdoorMapGps on OutdoorMapBodyState {
   /// 어림 위치조차 없으면(층 그래프가 없거나 스냅 실패) 묻지 않는다 — 거리를
   /// 잴 기준이 없어 "가까운 순"이 성립하지 않는다. 그때는 지금까지처럼 하단
   /// 바의 "위치 지정"이 출구다.
-  Future<void> _askNearbyStoreForAnchor() async {
+  Future<void> _askNearbyStoreForAnchor({bool once = false}) async {
+    if (once && _nearbyStoreAsked) return;
     final rows = _nearbyStoreRows();
     if (rows.isEmpty) return;
+    if (once) _nearbyStoreAsked = true;
     final picked = await showNearbyStoreSheet(context, rows: rows);
     if (picked == null || !mounted || !_indoorEntered) return;
     await _anchorAtNearbyStore(picked);
@@ -144,9 +158,18 @@ extension OutdoorMapGps on OutdoorMapBodyState {
 
     final transform = fitFloorGeoTransform(graph.nodes);
     final nodeById = {for (final node in graph.nodes) node.id: node};
+    // 묶음 매장(다른 매장 이름을 이어 붙인 구역 항목)은 지도에서도 탭 대상이
+    // 아니다([aggregateStoreIds]). 목록에서도 빼야 같은 자리가 두 줄이 되지 않는다.
+    final aggregates = aggregateStoreIds(plan.stores);
     final storeById = <String, StorePolygon>{};
     final points = <({String id, double x, double y})>[];
     for (final store in plan.stores) {
+      if (aggregates.contains(store.id)) continue;
+      // **수직이동 구조물은 뺀다.** 이름이 층마다 열 몇 개씩 같아서
+      // ("에스컬레이터" 1F에만 16개) 목록을 채우기만 하고, 무엇을 고른 것인지
+      // 사용자가 가릴 수 없다. 위치의 기준으로도 나쁘다 — 타고 오르내리는
+      // 자리라 "그 앞에 서 있다"가 한 지점을 가리키지 않는다.
+      if (kVerticalTransportStoreNames.contains(store.name)) continue;
       // **입구 노드를 먼저 쓴다.** 고른 뒤 앵커를 찍을 자리가 바로 그 노드라,
       // 목록에 적힌 거리와 실제로 옮겨 가는 자리가 같아야 한다.
       final node = nodeById[store.entranceNodeId];
@@ -212,6 +235,12 @@ extension OutdoorMapGps on OutdoorMapBodyState {
       floorPoint = snapped.point;
     }
     await _confirmPdrAnchor(floorPoint);
+    if (!mounted) return;
+    // **찍은 자리로 데려간다.** 시트를 걷고 나면 위치 점이 화면 밖일 수 있는데,
+    // 그러면 방금 고른 것이 반영됐는지 확인할 방법이 없다. "내 위치로"와 같은
+    // 함수를 써서 bearing을 건드리지 않는다 — 도면에 맞춰 둔 방향이 틀어지면
+    // 사용자가 보던 배치를 잃는다.
+    await _recenterOnCurrentPosition();
   }
 
   /// 층을 묻는다. 물을 이유가 없으면(이미 물었다·건물을 모른다·층이 하나뿐)
