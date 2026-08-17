@@ -69,7 +69,7 @@ extension OutdoorMapGps on OutdoorMapBodyState {
       alreadyCentered: _didInitialCenter,
       followingUser: _followingUser,
       indoorEntered: _indoorEntered,
-      storeFocusOwnsCamera: _storeFocusOwnsCamera,
+      initialCameraClaimed: _initialCameraClaimed,
       mapReady: _styleReady && _mapController != null,
     )) {
       _didInitialCenter = true;

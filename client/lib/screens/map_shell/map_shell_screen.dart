@@ -395,8 +395,15 @@ class _MapShellScreenState extends State<MapShellScreen> {
     _routeDestinationFocus.addListener(_onRouteDestinationFocusChanged);
     _requestStartupPermissions();
     // 화면이 세워지기 전에 도착한 링크가 여기 남아 있을 수 있다(cold start).
+    //
+    // **첫 프레임 뒤에 꺼낸다.** 실패 안내가 토스트라 Overlay와 MediaQuery를
+    // 건드리는데, 다른 건물을 가리키는 링크는 네트워크를 타지 않고 **동기로**
+    // 그 실패 경로에 닿는다. initState 안에서 부르면 그 자리에서 프레임이
+    // 깨진다(`test/screens/map_shell/place_link_cold_start_test.dart`).
     placeLinkInbox.addListener(_onPlaceLinkChanged);
-    _onPlaceLinkChanged();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _onPlaceLinkChanged();
+    });
   }
 
   @override
@@ -1172,6 +1179,20 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 공유한 사람의 의도로 읽는다. 정확히 그 id가 없으면 아무것도 열지 않고 지금
   /// 지도에 머문다.
   Future<void> _openPlaceFromLink(PlaceLink link) async {
+    // **초기 카메라는 이 링크의 것이다.** 여기서부터 매장을 그리기까지 색인 조회와
+    // 층 전환을 거치는데, 그 사이 첫 GPS 좌표가 오면 화면이 사용자 위치로 튄다.
+    // 예약을 지도 쪽 포커스 시점에 걸었더니 그보다 늦어 못 막았다(실기기 확인).
+    final map = _outdoorKey.currentState?..claimInitialCamera();
+    try {
+      await _openPlaceFromLinkInner(link);
+    } finally {
+      // 열었으면 지도가 `_didInitialCenter`로 이어받았고, 못 열었으면 첫 좌표
+      // 센터링을 되살려야 한다. 어느 쪽이든 예약은 여기서 끝난다.
+      map?.releaseInitialCamera();
+    }
+  }
+
+  Future<void> _openPlaceFromLinkInner(PlaceLink link) async {
     if (link.buildingId != _buildingId) {
       _showLinkFailure();
       return;
@@ -1843,8 +1864,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
     subtitle: match.floor,
     placeId: match.placeId,
     favorite: favorite,
-    // 대분류는 화면에 글자로 나오지 않고 헤더 아이콘의 폴백·강조색으로만 쓴다.
-    category: match.category,
     // 대분류 칩을 없앴으므로 업종은 한 줄로만 보여 준다. 소분류가 없는
     // 장소에서 업종이 통째로 사라지지 않도록 대분류로 떨어뜨린다.
     subcategory: match.subcategory ?? match.category,

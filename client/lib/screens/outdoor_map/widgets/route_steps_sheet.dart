@@ -43,27 +43,38 @@ class _RouteStepsSheet extends StatelessWidget {
       title: '$destinationName까지',
       onClose: () => Navigator.of(context).pop(),
     ),
-    child: SingleChildScrollView(
-      child: RoutexStepList(
-        steps: [
-          for (final step in steps)
-            () {
-              final parts = routeStepParts(step);
-              return RoutexStep(
-                // 도착 행은 어디에 도착하는지까지 말한다 — "도착" 한 단어는
-                // 목록의 마지막 줄로는 심심하다.
-                instruction: step.action == RouteGuidanceAction.arrived
-                    ? '$destinationName 도착'
-                    : parts.instruction,
-                // 걷는 중 배너와 같은 매핑 — 이유는 [routeGuidanceIcon]에.
-                icon: routeGuidanceIcon(step.action),
-                distance: parts.distance,
-                detail: parts.detail,
-              );
-            }(),
-        ],
-        // 지금 어느 단계인지는 아직 세지 않는다. 계약상 null은 "아직 출발하지
-        // 않았다"는 뜻이고, 이 목록을 여는 자리가 대부분 그 상태다.
+    // **목록에 뷰포트를 준다.** 손잡이나 머리 줄이 있는 시트는 본문을
+    // `Column(mainAxisSize: min)` 안에 놓으므로, 감싸지 않으면 스크롤 뷰가 세로
+    // 제약을 못 받아 콘텐츠 높이 그대로 커진다 — 스크롤이 아니라 **넘침**이 되고
+    // 마지막 단계들이 잘린다(24단계에서 1,128px 넘쳤다).
+    //
+    // `expand: true`로도 뷰포트는 생기지만 그러면 세 단계짜리 경로에도 시트가
+    // 화면 절반을 가져간다. 이 시트의 계약은 위 `showRouteStepsSheet` 주석대로
+    // "길면 절반까지"이므로 loose fit이 맞다. 검증은
+    // `test/screens/outdoor_map/widgets/route_steps_sheet_test.dart`.
+    child: Flexible(
+      child: SingleChildScrollView(
+        child: RoutexStepList(
+          steps: [
+            for (final step in steps)
+              () {
+                final parts = routeStepParts(step);
+                return RoutexStep(
+                  // 도착 행은 어디에 도착하는지까지 말한다 — "도착" 한 단어는
+                  // 목록의 마지막 줄로는 심심하다.
+                  instruction: step.action == RouteGuidanceAction.arrived
+                      ? '$destinationName 도착'
+                      : parts.instruction,
+                  // 걷는 중 배너와 같은 매핑 — 이유는 [routeGuidanceIcon]에.
+                  icon: routeGuidanceIcon(step.action),
+                  distance: parts.distance,
+                  detail: parts.detail,
+                );
+              }(),
+          ],
+          // 지금 어느 단계인지는 아직 세지 않는다. 계약상 null은 "아직 출발하지
+          // 않았다"는 뜻이고, 이 목록을 여는 자리가 대부분 그 상태다.
+        ),
       ),
     ),
   );

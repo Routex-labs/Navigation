@@ -188,6 +188,9 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
       _buildingFootprint = building?.footprintWgs84;
       _activeFloor = building?.initialFloor;
     });
+    if (building != null && !_buildingReadySignal.isCompleted) {
+      _buildingReadySignal.complete();
+    }
     _notifyActiveFloor();
     _syncDestinationLayer();
     _syncBuildingLayer();

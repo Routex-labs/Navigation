@@ -165,6 +165,22 @@ void main() {
       );
     });
 
+    test('도면이 꺼져 있어도 실내 매장이 출발지면 실내→야외다', () {
+      // **1)과 판박이여야 한다는 것이 이 갈래의 규칙이다.** 출발 노드를 이미
+      // 알고 있으면 지금 무엇을 보고 있는지는 갈래를 바꾸지 않는다. 도면을
+      // 요구하면 야외 지도에서 실내 매장을 출발지로 고른 사용자가 outdoor로
+      // 떨어져, 건물을 관통하는 TMAP 보행선을 보게 된다.
+      expect(
+        classifyWalkRoute(
+          origin: indoor(floor: 'B2', nodeId: 'n7'),
+          destination: outdoorPoint(),
+          indoorContextActive: false,
+          indoorStartReady: false,
+        ),
+        WalkRouteKind.indoorToOutdoor,
+      );
+    });
+
     test('출발지가 야외 좌표면 실내→야외가 아니다', () {
       // 밖의 두 지점 사이 이동이다. 도면이 떠 있다는 것만으로 문을 경유시키면
       // 건물과 상관없는 경로에 실내 구간이 끼어든다.

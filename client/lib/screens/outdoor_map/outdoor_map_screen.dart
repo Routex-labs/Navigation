@@ -499,6 +499,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   bool _styleReady = false;
 
+  /// 건물 정보가 도착하기를 기다리는 자리를 위한 신호.
+  ///
+  /// 공유 링크는 `/store-index`와 `/buildings/{id}`를 함께 부르는데 **도착 순서가
+  /// 정해져 있지 않다.** 건물이 늦으면 층 전환이 조용히 실패하고, 인덱스에서 이미
+  /// 찾아 놓은 매장을 "장소를 찾을 수 없습니다"라고 말하게 된다.
+  final _buildingReadySignal = Completer<void>();
+
   /// 스타일 로드가 끝나기를 기다리는 자리를 위한 신호.
   ///
   /// 공유 링크로 들어오면 **지도보다 링크가 먼저 도착한다** — 앱을 켜자마자
@@ -506,13 +513,24 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 포기하고 카메라는 첫 GPS 좌표로 간다(실기기 로그로 확인).
   final _styleReadySignal = Completer<void>();
 
-  /// [focusStore]가 초기 카메라를 예약해 둔 동안만 참이다.
+  /// 초기 카메라를 누군가 이미 가져갔다.
   ///
-  /// 스타일을 기다리는 **동안에도** 첫 GPS 센터링을 막아야 한다. 안 막으면
-  /// 카메라가 사용자 위치로 갔다가 매장으로 다시 가 두 번 튄다. 카메라를
-  /// 실제로 잡으면 `_didInitialCenter`가 그 일을 이어받고, 중간에 포기하면
-  /// 풀어 준다 — 걸린 채 남으면 첫 좌표 센터링이 영영 막힌다.
-  bool _storeFocusOwnsCamera = false;
+  /// 첫 GPS 좌표가 올 때까지 **일이 끝나 있으리라는 보장이 없다.** 공유 링크는
+  /// store-index 조회와 층 전환을 거쳐 [focusStore]에 닿기까지 수백 ms가 걸리는데,
+  /// 그 사이 좌표가 오면 화면이 사용자 위치로 튄다(실기기 로그로 확인). 그래서
+  /// 예약은 **일을 시작하는 자리**에서 건다 — [claimInitialCamera].
+  ///
+  /// 카메라를 실제로 잡으면 `_didInitialCenter`가 그 일을 이어받고, 중간에
+  /// 포기하면 풀어 준다 — 걸린 채 남으면 첫 좌표 센터링이 영영 막힌다.
+  bool _initialCameraClaimed = false;
+
+  /// 링크처럼 **지도 밖에서 시작하는 일**이 초기 카메라를 예약한다.
+  ///
+  /// 반드시 [releaseInitialCamera]와 짝을 이뤄야 한다. 실패해서 아무것도 열지
+  /// 못했는데 예약이 남으면 그 세션 내내 첫 좌표 센터링이 막힌다.
+  void claimInitialCamera() => _initialCameraClaimed = true;
+
+  void releaseInitialCamera() => _initialCameraClaimed = false;
 
   /// PDR 마커 source 갱신은 센서·보정·층 전환에서 동시에 들어올 수 있다.
   ///
@@ -759,6 +777,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 미리 보기에서 `안내 시작`을 누르면 앵커를 찍을 출발지. 없으면 지금 위치다.
   PoiSearchResult? _indoorRoutePreviewOrigin;
 
+  /// 그 앵커를 찍을 때 "여기서 출발하는 것으로 봤다"를 알릴지.
+  ///
+  /// 미리 보기는 앵커를 `안내 시작`까지 미루므로, [showIndoorRouteTo]가 받은
+  /// `announceOriginAnchor`를 여기 들고 있어야 한다. 안 들고 가면 맞바꾸기처럼
+  /// **사용자가 방금 직접 시킨 이동**에서도 안내가 뜬다.
+  bool _indoorRoutePreviewAnnounce = true;
+
   /// 도착 카드가 가리키는 목적지. 사용자가 확인을 누를 때까지 남는다.
   PoiSearchResult? _arrivedDestination;
 
@@ -931,9 +956,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   @override
   void dispose() {
-    // 스타일을 기다리던 매장 포커스를 풀어 준다. 안 풀면 그 await가 영영
+    // 스타일·건물을 기다리던 자리를 풀어 준다. 안 풀면 그 await가 영영
     // 돌아오지 않아 뒤따르는 mounted 검사에 닿지 못한다.
     if (!_styleReadySignal.isCompleted) _styleReadySignal.complete();
+    if (!_buildingReadySignal.isCompleted) _buildingReadySignal.complete();
     _buildingRetryTimer?.cancel();
     _selectionScaleTimer?.cancel();
     _pinIntroTimer?.cancel();
@@ -1429,6 +1455,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _indoorRouteDestination = destination;
       _indoorRoutePreview = preview && hasExplicitOrigin;
       _indoorRoutePreviewOrigin = preview ? origin : null;
+      _indoorRoutePreviewAnnounce = announceOriginAnchor;
       _arrivedDestination = null;
       // 목적지가 바뀌면 새로운 길안내다. 기존 궤적을 남기면 새 파란 경로와
       // 이전 목적지로 걸어간 회색선이 한 여정처럼 섞인다.
@@ -1699,6 +1726,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   }) async {
     if (entry.floorName.isNotEmpty && entry.floorName != _activeFloor) {
       if (!_indoorEntered && !enterBuildingIfNeeded) return null;
+      // **건물을 기다린다.** 없으면 층 전환이 false만 돌려주고, 위층에서는 그것이
+      // "그런 매장이 없다"와 구분되지 않는다.
+      if (_building == null) await _buildingReadySignal.future;
+      if (!mounted) return null;
       // 검색에서 타 층 매장을 고른 경로 — 사용자가 층 전환을 가장 자주 체감하는
       // 자리다. 새 도면 페이드인은 이어지는 매장 포커스 카메라 이동과 겹친다.
       await _switchOverlayFloorCrossfaded(entry.floorName);
@@ -1753,98 +1784,101 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
     // **여기서부터 카메라는 이 포커스의 것이다.** 아래에서 층 도면과 스타일을
     // 기다리는데, 그 사이 첫 GPS 좌표가 오면 화면을 사용자 위치로 가져간다.
-    _storeFocusOwnsCamera = true;
+    _initialCameraClaimed = true;
 
-    // **여기서 실내 모드를 직접 켜지 않는다.** 켜면 길찾기 출발지 규칙이 PDR 앵커로
-    // 바뀌어, 멀리서 매장을 고른 사용자가 "출발 위치를 먼저 지정해주세요"로 막힌다.
-    // 카메라만 옮기고 진입 판정은 [_handleCameraIdle] 한 곳에 남긴다.
-    if (store.floor.isNotEmpty && store.floor != _activeFloor) {
-      if (!enterBuildingIfNeeded) return;
-      // 층 교체는 실내 모드와 무관하다 — 도면 소스만 갈아 끼우므로, 카메라가
-      // 도착했을 때 그 매장이 있는 층이 그려져 있게 된다.
-      await _switchOverlayFloorCrossfaded(store.floor);
+    // **예약은 어느 경로로 나가든 반드시 푼다.** 걸어 둔 채 나가면 첫 좌표
+    // 센터링이 영영 막혀 카메라가 서울시청(fallback)에 남는다. return이 여럿이고
+    // 층 전환이 던질 수도 있어 finally로 묶는다.
+    try {
+      // **여기서 실내 모드를 직접 켜지 않는다.** 켜면 길찾기 출발지 규칙이 PDR 앵커로
+      // 바뀌어, 멀리서 매장을 고른 사용자가 "출발 위치를 먼저 지정해주세요"로 막힌다.
+      // 카메라만 옮기고 진입 판정은 [_handleCameraIdle] 한 곳에 남긴다.
+      if (store.floor.isNotEmpty && store.floor != _activeFloor) {
+        if (!enterBuildingIfNeeded) return;
+        // 층 교체는 실내 모드와 무관하다 — 도면 소스만 갈아 끼우므로, 카메라가
+        // 도착했을 때 그 매장이 있는 층이 그려져 있게 된다.
+        await _switchOverlayFloorCrossfaded(store.floor);
+        if (!mounted) return;
+        // 층 전환이 실패했으면(그 층 그래프·도면을 못 받음) 다른 층 도면 위에
+        // 엉뚱한 자리를 강조하게 되므로 여기서 멈춘다.
+        if (store.floor != _activeFloor) {
+          return;
+        }
+      }
+      // 도면 로드가 아직 도는 중이면 기다린다 — 아래 강조([_syncHighlightLayer])가
+      // [_floorPlan]에서 매장 폴리곤을 찾으므로, 로드 전에 그리면 강조 없이
+      // 카메라만 움직이는 반쪽 포커스가 된다([resolveIndexEntry]와 같은 이유).
+      await _floorGraphLoad;
       if (!mounted) return;
-      // 층 전환이 실패했으면(그 층 그래프·도면을 못 받음) 다른 층 도면 위에
-      // 엉뚱한 자리를 강조하게 되므로 여기서 멈춘다. 예약도 함께 푼다 — 걸어
-      // 둔 채 나가면 첫 좌표 센터링이 영영 막혀 카메라가 서울시청에 남는다.
-      if (store.floor != _activeFloor) {
-        _storeFocusOwnsCamera = false;
+      // **지도를 기다린다.** 공유 링크로 앱이 켜지면 여기 도달할 때 컨트롤러가
+      // 아직 없다. 예전에는 그대로 포기해, 층 도면과 시트는 매장을 가리키는데
+      // 카메라만 첫 GPS 좌표로 가 있었다.
+      if (!_styleReady) await _styleReadySignal.future;
+      if (!mounted) return;
+      final controller = _mapController;
+      if (controller == null || !_styleReady) {
         return;
       }
-    }
-    // 도면 로드가 아직 도는 중이면 기다린다 — 아래 강조([_syncHighlightLayer])가
-    // [_floorPlan]에서 매장 폴리곤을 찾으므로, 로드 전에 그리면 강조 없이
-    // 카메라만 움직이는 반쪽 포커스가 된다([resolveIndexEntry]와 같은 이유).
-    await _floorGraphLoad;
-    if (!mounted) return;
-    // **지도를 기다린다.** 공유 링크로 앱이 켜지면 여기 도달할 때 컨트롤러가
-    // 아직 없다. 예전에는 그대로 포기해, 층 도면과 시트는 매장을 가리키는데
-    // 카메라만 첫 GPS 좌표로 가 있었다.
-    if (!_styleReady) await _styleReadySignal.future;
-    if (!mounted) return;
-    final controller = _mapController;
-    if (controller == null || !_styleReady) {
-      _storeFocusOwnsCamera = false;
-      return;
-    }
 
-    // 초기 카메라를 이 포커스가 썼다. 뒤늦은 첫 좌표가 화면을 뺏지 않는다.
-    // 여기서부터는 [_didInitialCenter]가 그 일을 맡으므로 예약을 놓아 준다.
-    _didInitialCenter = true;
-    _pendingCenterOnPosition = false;
-    _storeFocusOwnsCamera = false;
+      // 초기 카메라를 이 포커스가 썼다. 예약은 곧 finally가 풀지만, 뒤늦은 첫
+      // 좌표를 막는 일은 여기서부터 [_didInitialCenter]가 이어받는다.
+      _didInitialCenter = true;
+      _pendingCenterOnPosition = false;
 
-    setState(() => _highlightedStoreId = store.placeId);
-    // 핀 **자리**는 먼저 잡는다(점 하나라 순간이다). **크기**는 아래
-    // animateCamera와 함께 출발한다 — 여기서 키우면 글자가 먼저 커진 뒤
-    // 화면이 움직인다.
-    await _syncHighlightLayer();
-    if (!mounted) return;
+      setState(() => _highlightedStoreId = store.placeId);
+      // 핀 **자리**는 먼저 잡는다(점 하나라 순간이다). **크기**는 아래
+      // animateCamera와 함께 출발한다 — 여기서 키우면 글자가 먼저 커진 뒤
+      // 화면이 움직인다.
+      await _syncHighlightLayer();
+      if (!mounted) return;
 
-    // 뷰포트는 카메라 이동 전에 읽는다(실내 화면과 같은 이유 — await 뒤에
-    // MediaQuery를 보면 그 사이 위젯이 트리에서 빠졌을 수 있다).
-    final viewport = MediaQuery.sizeOf(context);
-    final camera = controller.cameraPosition;
-    final currentZoom = camera?.zoom ?? 0;
-    final bearing = camera?.bearing ?? 0;
-    // 배율 규칙은 실내 도면과 한 함수를 공유한다(focusZoomFor).
-    final zoom = focusZoomFor(
-      currentZoom: currentZoom,
-      keepZoom: keepZoom && !fromOutside,
-      storeFocusZoom: _focusZoomForStore(
-        store,
-        viewport: viewport,
-        bottomSheetFraction: bottomSheetFraction,
-        topInsetPx: topInsetPx,
-        bearing: bearing,
-      ),
-    );
-    // **한 번만 움직인다.** 예전에는 매장 중앙으로 옮긴 뒤 `scrollBy`로 띠 한가운데로
-    // 다시 밀었는데, 첫 이동이 한 프레임 드러나 카메라가 두 번 튀었다. 최종 목표를
-    // 먼저 계산해 한 애니메이션으로 간다.
-    final lift = math.max(
-      0.0,
-      (viewport.height * bottomSheetFraction - topInsetPx) / 2,
-    );
-    final target = cameraTargetForScreenLift(
-      store.point,
-      bearing: bearing,
-      zoom: zoom,
-      liftPx: lift,
-    );
-    // 카메라와 확대를 **같이** 출발시킨다. 둘 다 _storeFocusDuration이라 끝도 같다.
-    unawaited(_animateSelectionScale(selected: true));
-    await controller.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(
-          target: _toGl(target),
-          zoom: zoom,
+      // 뷰포트는 카메라 이동 전에 읽는다(실내 화면과 같은 이유 — await 뒤에
+      // MediaQuery를 보면 그 사이 위젯이 트리에서 빠졌을 수 있다).
+      final viewport = MediaQuery.sizeOf(context);
+      final camera = controller.cameraPosition;
+      final currentZoom = camera?.zoom ?? 0;
+      final bearing = camera?.bearing ?? 0;
+      // 배율 규칙은 실내 도면과 한 함수를 공유한다(focusZoomFor).
+      final zoom = focusZoomFor(
+        currentZoom: currentZoom,
+        keepZoom: keepZoom && !fromOutside,
+        storeFocusZoom: _focusZoomForStore(
+          store,
+          viewport: viewport,
+          bottomSheetFraction: bottomSheetFraction,
+          topInsetPx: topInsetPx,
           bearing: bearing,
-          tilt: camera?.tilt ?? 0,
         ),
-      ),
-      duration: _storeFocusDuration,
-    );
+      );
+      // **한 번만 움직인다.** 예전에는 매장 중앙으로 옮긴 뒤 `scrollBy`로 띠 한가운데로
+      // 다시 밀었는데, 첫 이동이 한 프레임 드러나 카메라가 두 번 튀었다. 최종 목표를
+      // 먼저 계산해 한 애니메이션으로 간다.
+      final lift = math.max(
+        0.0,
+        (viewport.height * bottomSheetFraction - topInsetPx) / 2,
+      );
+      final target = cameraTargetForScreenLift(
+        store.point,
+        bearing: bearing,
+        zoom: zoom,
+        liftPx: lift,
+      );
+      // 카메라와 확대를 **같이** 출발시킨다. 둘 다 _storeFocusDuration이라 끝도 같다.
+      unawaited(_animateSelectionScale(selected: true));
+      await controller.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: _toGl(target),
+            zoom: zoom,
+            bearing: bearing,
+            tilt: camera?.tilt ?? 0,
+          ),
+        ),
+        duration: _storeFocusDuration,
+      );
+    } finally {
+      _initialCameraClaimed = false;
+    }
   }
 
   /// 이 매장이 화면의 **보이는 띠**(시트와 상단 chrome 사이)에서 약 42%를 차지하는
