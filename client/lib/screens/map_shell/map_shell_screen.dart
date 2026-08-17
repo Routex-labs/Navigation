@@ -1185,7 +1185,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
       _showLinkFailure();
       return;
     }
-    final resolved = await _outdoorKey.currentState?.resolveIndexEntry(entry);
+    // 링크를 받은 사람은 대개 건물 밖에 있다 — 그게 공유의 목적이다. 밖이라고
+    // 타 층을 포기하면 공유가 주 사용 맥락에서 아무것도 열지 못한다.
+    final resolved = await _outdoorKey.currentState?.resolveIndexEntry(
+      entry,
+      enterBuildingIfNeeded: true,
+    );
     if (!mounted) return;
     if (resolved == null) {
       _showLinkFailure();

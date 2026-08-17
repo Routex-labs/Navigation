@@ -1671,10 +1671,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// **id로 찾는다.**
   ///
   /// **실내가 아니면 층을 옮기지 않고 포기한다** — 야외에서 부르면 카메라만 건물로
-  /// 튀는 반쪽 이동이 남는다.
-  Future<PoiSearchResult?> resolveIndexEntry(StoreIndexEntry entry) async {
+  /// 튀는 반쪽 이동이 남는다. [enterBuildingIfNeeded]면 밖에서도 옮긴다
+  /// ([focusStore]와 같은 뜻이며, 공유 링크로 들어온 경로가 그렇다 — 링크를 받은
+  /// 사람은 대개 건물 밖에 있어서, 막으면 공유가 주 사용 맥락에서 아무것도 열지
+  /// 못한다). 층 교체는 도면 소스만 갈아 끼우므로 **실내 모드를 켜지 않는다.**
+  Future<PoiSearchResult?> resolveIndexEntry(
+    StoreIndexEntry entry, {
+    bool enterBuildingIfNeeded = false,
+  }) async {
     if (entry.floorName.isNotEmpty && entry.floorName != _activeFloor) {
-      if (!_indoorEntered) return null;
+      if (!_indoorEntered && !enterBuildingIfNeeded) return null;
       // 검색에서 타 층 매장을 고른 경로 — 사용자가 층 전환을 가장 자주 체감하는
       // 자리다. 새 도면 페이드인은 이어지는 매장 포커스 카메라 이동과 겹친다.
       await _switchOverlayFloorCrossfaded(entry.floorName);
