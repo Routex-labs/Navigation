@@ -990,12 +990,14 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     required ll.LatLng destination,
     required String label,
     ll.LatLng? origin,
+    List<TransitItinerary> alternatives = const [],
   }) async {
     _clearCompletedRouteHistory();
     _clearPendingIndoorRoute();
     _stopFollowingUser();
     setState(() {
       _transitItinerary = itinerary;
+      _transitAlternatives = alternatives;
       _transitLabel = label;
       _fixedRouteOrigin = origin;
       // 도보 경로와 그 목적지 핀은 접는다. 목적지 자체는 대중교통 경로의 끝점
@@ -1017,6 +1019,7 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     if (_transitItinerary == null) return;
     setState(() {
       _transitItinerary = null;
+      _transitAlternatives = const [];
       _transitLabel = null;
       _guidanceStarted = false;
     });

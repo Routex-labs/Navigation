@@ -1349,10 +1349,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 출발지가 실제 지점이면 그냥 맞바꾼다. 색인도 그래프도 필요 없다.
     if (origin != null) {
       _applySwappedEndpoints(newOrigin: destination, newDestination: origin);
-      await _startRoute(
-        origin: destination,
-        destination: origin,
-      );
+      await _startRoute(origin: destination, destination: origin);
       return;
     }
 
@@ -1366,10 +1363,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
     }
 
     _applySwappedEndpoints(newOrigin: destination, newDestination: replacement);
-    await _startRoute(
-      origin: destination,
-      destination: replacement,
-    );
+    await _startRoute(origin: destination, destination: replacement);
   }
 
   /// 뒤집은 결과를 두 칸과 상태에 함께 반영한다.
@@ -1660,6 +1654,20 @@ class _MapShellScreenState extends State<MapShellScreen> {
       destination: walkTarget,
       label: '${destination.title}까지',
       origin: origin,
+      // 나머지 후보도 함께 넘겨 회색으로 깔린다. 고른 것 하나만 그리면 "다른
+      // 길도 있다"가 시트를 다시 열기 전까지 화면에서 사라진다.
+      //
+      // **다듬기 전 원본을 넘긴다.** 고른 경로만 문·하차 지점에 맞춰 끝을
+      // 손보는데([_withTransitWalkLegs]), 후보까지 같은 손질을 하려면 조회를
+      // 후보 수만큼 더 해야 한다. 회색 선이 말하는 것은 "대충 어디로 도는가"라
+      // 그 정밀도가 필요 없다.
+      // **고른 것은 뺀 나머지다.** `completed`는 picked를 다듬은 사본이라
+      // 목록 안의 원본과 같은 객체가 아니고, 그대로 넘기면 파란 선 밑에 자기
+      // 회색 선이 한 겹 더 깔린다.
+      alternatives: [
+        for (final candidate in routes.itineraries)
+          if (!identical(candidate, picked)) candidate,
+      ],
     );
     if (!mounted || indoorStore == null) return;
 

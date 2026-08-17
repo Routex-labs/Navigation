@@ -454,6 +454,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 지금 그려진 대중교통 안내. null이면 대중교통 경로가 없다.
   TransitItinerary? _transitItinerary;
 
+  /// 같은 조회에서 함께 온 나머지 후보. 고른 것 아래에 회색으로 깔린다.
+  ///
+  /// **고른 경로가 사라지면 함께 비운다.** 후보만 남으면 지도에 회색 선 몇 개가
+  /// 주인 없이 떠 있고, 눌러도 아무 일이 없다.
+  List<TransitItinerary> _transitAlternatives = const [];
+
   /// 대중교통 요약 카드에 적을 목적지 이름.
   String? _transitLabel;
 

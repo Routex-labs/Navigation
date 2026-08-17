@@ -85,7 +85,11 @@ extension OutdoorMapRouteLayers on OutdoorMapBodyState {
   Future<void> _syncTransitLayer() async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
-    await syncTransitLayer(controller, _transitItinerary);
+    await syncTransitLayer(
+      controller,
+      _transitItinerary,
+      alternatives: _transitAlternatives,
+    );
   }
 
   Future<void> _syncRouteLayer() {
