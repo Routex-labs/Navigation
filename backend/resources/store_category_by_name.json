@@ -613,7 +613,7 @@
   },
   "고객상담실": {
     "category": "편의시설",
-    "subcategory": "생활편의"
+    "subcategory": "고객서비스"
   },
   "고디바": {
     "category": "카페",
@@ -653,7 +653,7 @@
   },
   "교환 / 환불 데스크": {
     "category": "편의시설",
-    "subcategory": "생활편의"
+    "subcategory": "고객서비스"
   },
   "구찌": {
     "category": "패션",
@@ -1061,7 +1061,7 @@
   },
   "르플로럼 (플라워)": {
     "category": "리빙",
-    "subcategory": "가구·인테리어"
+    "subcategory": "플라워"
   },
   "리네 로제": {
     "category": "리빙",
@@ -1317,7 +1317,7 @@
   },
   "배송 접수 데스크": {
     "category": "편의시설",
-    "subcategory": "생활편의"
+    "subcategory": "고객서비스"
   },
   "버버리": {
     "category": "패션",
@@ -2153,7 +2153,7 @@
   },
   "케이스티파이": {
     "category": "패션",
-    "subcategory": "캐주얼·스트리트"
+    "subcategory": "잡화·액세서리"
   },
   "코닥 x 디오디": {
     "category": "패션",
