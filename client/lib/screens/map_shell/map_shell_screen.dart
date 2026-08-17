@@ -1850,8 +1850,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
     subtitle: match.floor,
     placeId: match.placeId,
     favorite: favorite,
-    // 대분류는 화면에 글자로 나오지 않고 헤더 아이콘의 폴백·강조색으로만 쓴다.
-    category: match.category,
     // 대분류 칩을 없앴으므로 업종은 한 줄로만 보여 준다. 소분류가 없는
     // 장소에서 업종이 통째로 사라지지 않도록 대분류로 떨어뜨린다.
     subcategory: match.subcategory ?? match.category,

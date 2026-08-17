@@ -112,7 +112,6 @@ class PlaceDetailTarget {
     required this.subtitle,
     required this.placeId,
     this.favorite,
-    this.category,
     this.subcategory,
     this.reach,
   });
@@ -121,7 +120,6 @@ class PlaceDetailTarget {
   final String subtitle;
   final String? placeId;
   final FavoritePlace? favorite;
-  final String? category;
   final String? subcategory;
   final NodeReach? reach;
 }

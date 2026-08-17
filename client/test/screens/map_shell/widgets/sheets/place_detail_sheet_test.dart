@@ -46,7 +46,6 @@ void main() {
     PlaceDetailRepository? repository,
     VoidCallback? onCloseAll,
     String subtitle = '1F',
-    String? category,
     String? subcategory,
     FavoritePlace? favorite,
     NodeReach? reach,
@@ -55,7 +54,6 @@ void main() {
       title: '테스트 매장',
       subtitle: subtitle,
       placeId: 'place-1',
-      category: category,
       subcategory: subcategory,
       favorite: favorite,
       reach: reach,
@@ -676,7 +674,6 @@ void main() {
   testWidgets('영어 subcategory는 한글 라벨로 바꿔 그린다', (tester) async {
     await tester.pumpWidget(
       buildSubject(
-        category: '편의시설',
         subcategory: 'restroom',
         repository: _FakeRepository(Future.value(null)),
       ),
@@ -695,7 +692,6 @@ void main() {
   testWidgets('이름 앞에 장식용 분류 아이콘을 두지 않는다', (tester) async {
     await tester.pumpWidget(
       buildSubject(
-        category: '식음료',
         subcategory: '카페·베이커리',
         repository: _FakeRepository(Future.value(null)),
       ),
