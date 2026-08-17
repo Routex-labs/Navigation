@@ -83,9 +83,14 @@ WalkRouteKind classifyWalkRoute({
   // 라우팅에 넘기고 "도착지 노드 정보가 없어..."만 봤다. 출발 노드가 이미
   // 있으면 PDR 앵커([indoorStartReady])는 필요 없다 — 그래서 조건 1)과 같은
   // 모양으로 갈린다.
-  if (indoorContextActive &&
-      destination.nodeId == null &&
-      (origin == null ? indoorStartReady : origin.isIndoorPoint)) {
+  //
+  // **도면 유무도 1)과 같이 다룬다.** 출발지를 직접 골랐으면 지금 야외 지도를
+  // 보고 있어도 그 노드가 시작점이다. 도면을 요구하던 동안에는 그 요청이 아래
+  // `outdoor`로 떨어져 건물을 관통하는 TMAP 보행선이 그려졌다.
+  if (destination.nodeId == null &&
+      (origin == null
+          ? (indoorContextActive && indoorStartReady)
+          : origin.isIndoorPoint)) {
     return WalkRouteKind.indoorToOutdoor;
   }
 
