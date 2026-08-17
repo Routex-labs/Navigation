@@ -70,6 +70,7 @@ extension OutdoorMapMap on OutdoorMapBodyState {
 
     if (!mounted) return;
     setState(() => _styleReady = true);
+    if (!_styleReadySignal.isCompleted) _styleReadySignal.complete();
     _syncBuildingLayer();
     _syncCurrentLayer();
     _syncDestinationLayer();
@@ -88,7 +89,12 @@ extension OutdoorMapMap on OutdoorMapBodyState {
     // 스타일이 뜨기 전에 받아둔 첫 GPS 위치로의 카메라 이동. 그 사이에 실내로
     // 들어갔다면(줌 임계값·건물 탭) 실행하지 않는다 — 실내 도면을 보고 있는데
     // 카메라가 GPS 좌표로 튀면 안 된다.
-    if (_pendingCenterOnPosition && _position != null && _outdoorGpsVisible) {
+    // 매장 포커스가 카메라를 예약했으면 건너뛴다 — 공유 링크는 지도보다 먼저
+    // 도착해 여기서 기다리는 중이고, 그 화면을 GPS로 덮으면 두 번 튄다.
+    if (_pendingCenterOnPosition &&
+        _position != null &&
+        _outdoorGpsVisible &&
+        !_storeFocusOwnsCamera) {
       _pendingCenterOnPosition = false;
       // 첫 좌표 센터링은 여기서 끝났다. 표시해 두지 않으면 다음 좌표가 올 때
       // [_handlePosition]의 갈래가 한 번 더 옮겨 화면이 두 번 튄다.
@@ -125,7 +131,6 @@ extension OutdoorMapMap on OutdoorMapBodyState {
       controller,
       _activeFloorOutlineRing() ?? _buildingFootprint,
     );
-
   }
 
   /// 층 경계 두 레이어(외곽선·dim scrim)의 opacity를 같은 계수로 조절한다.

@@ -499,6 +499,21 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   bool _styleReady = false;
 
+  /// 스타일 로드가 끝나기를 기다리는 자리를 위한 신호.
+  ///
+  /// 공유 링크로 들어오면 **지도보다 링크가 먼저 도착한다** — 앱을 켜자마자
+  /// 매장을 여는데 컨트롤러는 아직 없다. 기다리지 않으면 [focusStore]가 조용히
+  /// 포기하고 카메라는 첫 GPS 좌표로 간다(실기기 로그로 확인).
+  final _styleReadySignal = Completer<void>();
+
+  /// [focusStore]가 초기 카메라를 예약해 둔 동안만 참이다.
+  ///
+  /// 스타일을 기다리는 **동안에도** 첫 GPS 센터링을 막아야 한다. 안 막으면
+  /// 카메라가 사용자 위치로 갔다가 매장으로 다시 가 두 번 튄다. 카메라를
+  /// 실제로 잡으면 `_didInitialCenter`가 그 일을 이어받고, 중간에 포기하면
+  /// 풀어 준다 — 걸린 채 남으면 첫 좌표 센터링이 영영 막힌다.
+  bool _storeFocusOwnsCamera = false;
+
   /// PDR 마커 source 갱신은 센서·보정·층 전환에서 동시에 들어올 수 있다.
   ///
   /// MapLibre의 Future는 플랫폼 쪽 반영이 끝난 뒤 완료되므로 호출을 각각
@@ -916,6 +931,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   @override
   void dispose() {
+    // 스타일을 기다리던 매장 포커스를 풀어 준다. 안 풀면 그 await가 영영
+    // 돌아오지 않아 뒤따르는 mounted 검사에 닿지 못한다.
+    if (!_styleReadySignal.isCompleted) _styleReadySignal.complete();
     _buildingRetryTimer?.cancel();
     _selectionScaleTimer?.cancel();
     _pinIntroTimer?.cancel();
@@ -1733,6 +1751,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final fromOutside = !_indoorEntered;
     if (fromOutside && !enterBuildingIfNeeded) return;
 
+    // **여기서부터 카메라는 이 포커스의 것이다.** 아래에서 층 도면과 스타일을
+    // 기다리는데, 그 사이 첫 GPS 좌표가 오면 화면을 사용자 위치로 가져간다.
+    _storeFocusOwnsCamera = true;
+
     // **여기서 실내 모드를 직접 켜지 않는다.** 켜면 길찾기 출발지 규칙이 PDR 앵커로
     // 바뀌어, 멀리서 매장을 고른 사용자가 "출발 위치를 먼저 지정해주세요"로 막힌다.
     // 카메라만 옮기고 진입 판정은 [_handleCameraIdle] 한 곳에 남긴다.
@@ -1743,16 +1765,34 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       await _switchOverlayFloorCrossfaded(store.floor);
       if (!mounted) return;
       // 층 전환이 실패했으면(그 층 그래프·도면을 못 받음) 다른 층 도면 위에
-      // 엉뚱한 자리를 강조하게 되므로 여기서 멈춘다.
-      if (store.floor != _activeFloor) return;
+      // 엉뚱한 자리를 강조하게 되므로 여기서 멈춘다. 예약도 함께 푼다 — 걸어
+      // 둔 채 나가면 첫 좌표 센터링이 영영 막혀 카메라가 서울시청에 남는다.
+      if (store.floor != _activeFloor) {
+        _storeFocusOwnsCamera = false;
+        return;
+      }
     }
     // 도면 로드가 아직 도는 중이면 기다린다 — 아래 강조([_syncHighlightLayer])가
     // [_floorPlan]에서 매장 폴리곤을 찾으므로, 로드 전에 그리면 강조 없이
     // 카메라만 움직이는 반쪽 포커스가 된다([resolveIndexEntry]와 같은 이유).
     await _floorGraphLoad;
     if (!mounted) return;
+    // **지도를 기다린다.** 공유 링크로 앱이 켜지면 여기 도달할 때 컨트롤러가
+    // 아직 없다. 예전에는 그대로 포기해, 층 도면과 시트는 매장을 가리키는데
+    // 카메라만 첫 GPS 좌표로 가 있었다.
+    if (!_styleReady) await _styleReadySignal.future;
+    if (!mounted) return;
     final controller = _mapController;
-    if (controller == null || !_styleReady) return;
+    if (controller == null || !_styleReady) {
+      _storeFocusOwnsCamera = false;
+      return;
+    }
+
+    // 초기 카메라를 이 포커스가 썼다. 뒤늦은 첫 좌표가 화면을 뺏지 않는다.
+    // 여기서부터는 [_didInitialCenter]가 그 일을 맡으므로 예약을 놓아 준다.
+    _didInitialCenter = true;
+    _pendingCenterOnPosition = false;
+    _storeFocusOwnsCamera = false;
 
     setState(() => _highlightedStoreId = store.placeId);
     // 핀 **자리**는 먼저 잡는다(점 하나라 순간이다). **크기**는 아래
