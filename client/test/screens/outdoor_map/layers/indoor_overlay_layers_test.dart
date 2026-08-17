@@ -34,6 +34,7 @@ void main() {
     final cases = <String, FillLayerProperties>{
       '실내 footprint': indoorFootprintProps(fadeExpr),
       '실내 매장 fill': indoorStoresFillProps(fadeExpr),
+      '못 걷는 면': indoorNonWalkableProps(fadeExpr),
       '수직이동 구조물': indoorVerticalTransportProps(fadeExpr),
       '건물 폴리곤': buildingFillProps(0.15),
       'dim scrim': dimScrimProps(0),
@@ -55,6 +56,17 @@ void main() {
 
     test('실내 footprint는 흰색이다', () {
       expect(wireJson(indoorFootprintProps(fadeExpr))['fill-color'], '#FFFFFF');
+    });
+
+    test('못 걷는 면은 통로와 매장 사이 밝기이고 경계선을 갖는다', () {
+      // 면끼리는 통로(#FFFFFF)와 9/255 차이라 실기기에서 거의 안 보인다 —
+      // 구분을 만드는 것은 경계선이다(palette.dart 상단 규칙). 색이 매장 fill과
+      // 같아지면 걸을 수 없는 곳이 매장처럼 읽힌다.
+      final json = wireJson(indoorNonWalkableProps(fadeExpr));
+      expect(json['fill-color'], '#F6F4F1');
+      expect(json['fill-outline-color'], isNotNull);
+      expect(json['fill-outline-color'], isNot(json['fill-color']));
+      expect(json['fill-color'], isNot('#F1EEEA'));
     });
 
     test('건물 폴리곤은 검정이 아닌 테마 색이다', () {
