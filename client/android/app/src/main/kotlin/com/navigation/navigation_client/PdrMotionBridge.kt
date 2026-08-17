@@ -11,6 +11,11 @@ import android.hardware.SensorManager
 import android.os.Build
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
+import com.google.android.gms.location.DeviceOrientation
+import com.google.android.gms.location.DeviceOrientationListener
+import com.google.android.gms.location.DeviceOrientationRequest
+import com.google.android.gms.location.FusedOrientationProviderClient
+import com.google.android.gms.location.LocationServices
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
@@ -34,9 +39,15 @@ class PdrMotionBridge(
 ) : EventChannel.StreamHandler, MethodChannel.MethodCallHandler, SensorEventListener {
     private val sensorManager = activity.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val roninEstimator = RoninStrideEstimator(activity.applicationContext)
+    private val fopClient: FusedOrientationProviderClient =
+        LocationServices.getFusedOrientationProviderClient(activity)
+    private val fopListener = DeviceOrientationListener { orientation ->
+        updateFusedOrientation(orientation)
+    }
     private var sink: EventChannel.EventSink? = null
 
     private val rotationMatrix = FloatArray(9)
+    private val fopMatrix = FloatArray(9)
     private val orientation = FloatArray(3)
     private val gravity = FloatArray(3)
     private val linearAccel = FloatArray(3)
@@ -49,6 +60,13 @@ class PdrMotionBridge(
     private var rotationSource = "unavailable"
 
     private var rawRotationHeadingDeg = 0.0
+    private var rvHeadingDeg = 0.0
+    private var fopHeadingDeg = -1.0
+    private var fopHeadingErrorDeg = -1.0
+    private var fopBlendHeadingDeg = -1.0
+    private var fopAtNs = 0L
+    private var fopSupported = false
+    private var fopStatus = "unavailable"
     private var fusedHeadingDeg = 0.0
     private var gyroHeadingDeg = 0.0
     private var gyroHeadingInitialized = false
@@ -137,6 +155,7 @@ class PdrMotionBridge(
 
     override fun onCancel(arguments: Any?) {
         sensorManager.unregisterListener(this)
+        stopFusedOrientation()
         roninEstimator.resetSession()
         sink = null
     }
@@ -149,8 +168,78 @@ class PdrMotionBridge(
         }
     }
 
+    /**
+     * FusedOrientationProvider 구독. heading에만 쓴다.
+     *
+     * RoNIN 입력과 월드 가속 변환은 계속 플랫폼 rotation vector를 쓴다 —
+     * 자세 소스를 통째로 바꾸면 보폭 추론까지 한 번에 흔들려서, 결과가
+     * 나빠졌을 때 heading 때문인지 보폭 때문인지 가릴 수 없다.
+     */
+    private fun startFusedOrientation() {
+        val request = DeviceOrientationRequest.Builder(
+            DeviceOrientationRequest.OUTPUT_PERIOD_DEFAULT,
+        ).build()
+        fopStatus = "requested"
+        runCatching {
+            fopClient.requestOrientationUpdates(
+                request,
+                ContextCompat.getMainExecutor(activity),
+                fopListener,
+            )
+        }.onFailure { error ->
+            fopSupported = false
+            fopStatus = "request_failed:${error.javaClass.simpleName}"
+        }
+    }
+
+    private fun stopFusedOrientation() {
+        runCatching { fopClient.removeOrientationUpdates(fopListener) }
+        fopAtNs = 0L
+        fopStatus = "stopped"
+    }
+
+    /**
+     * FOP 자세를 우리 forward 축 규약으로 다시 계산한다.
+     *
+     * `getHeadingDegrees()`를 그대로 쓰지 않는 이유는 그 값의 forward 축 정의가
+     * 우리 +Y/-Z 블렌드와 같다는 보장이 없어서다. 같은 ENU 자세에서 같은 식을
+     * 돌리면 소스만 갈리고 규약은 유지된다. 원본 heading은 진단으로 함께 싣는다.
+     */
+    private fun updateFusedOrientation(orientationSample: DeviceOrientation) {
+        val attitude = orientationSample.attitude
+        if (attitude.size < 4) return
+        SensorManager.getRotationMatrixFromVector(fopMatrix, attitude)
+        fopBlendHeadingDeg = forwardHeadingFromMatrix(fopMatrix) ?: return
+        fopHeadingDeg = orientationSample.headingDegrees.toDouble()
+        fopHeadingErrorDeg = orientationSample.headingErrorDegrees.toDouble()
+        fopAtNs = SystemClock.elapsedRealtimeNanos()
+        fopSupported = true
+        fopStatus = "streaming"
+    }
+
+    /** FOP 표본이 아직 유효한지. 끊기면 플랫폼 rotation vector로 되돌아간다. */
+    private fun fopFresh(): Boolean =
+        fopAtNs != 0L &&
+            SystemClock.elapsedRealtimeNanos() - fopAtNs <= FOP_STALE_NS
+
+    /**
+     * device→world 행렬에서 진행 정면 방위를 뽑는다. 수평 성분이 너무 짧으면
+     * 방위가 의미 없으므로 null이다(기존 0.4 문턱과 같은 값).
+     */
+    private fun forwardHeadingFromMatrix(m: FloatArray): Double? {
+        // +Y(top) is the usual forward axis. When upright, smoothly use the
+        // rear-camera (-Z) direction so portrait and held-flat walks agree.
+        val topUp = m[7].toDouble()
+        val cameraWeight = ((topUp - 0.5) / 0.37).coerceIn(0.0, 1.0)
+        val forwardEast = m[1].toDouble() - cameraWeight * m[2]
+        val forwardNorth = m[4].toDouble() - cameraWeight * m[5]
+        if (sqrt(forwardEast * forwardEast + forwardNorth * forwardNorth) <= 0.4) return null
+        return normalizeDegrees(Math.toDegrees(atan2(forwardEast, forwardNorth)))
+    }
+
     private fun startSensors() {
         sensorManager.unregisterListener(this)
+        startFusedOrientation()
         val rotation = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
             ?: sensorManager.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
         rotationSource = when (rotation?.type) {
@@ -221,18 +310,27 @@ class PdrMotionBridge(
         SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
         SensorManager.getOrientation(rotationMatrix, orientation)
         hasRotation = true
-        rotationHeadingAccuracyDeg = event.values.getOrNull(4)?.toDouble()?.takeIf { it >= 0 }
+        val vendorAccuracyDeg = event.values.getOrNull(4)?.toDouble()?.takeIf { it >= 0 }
             ?.let { Math.toDegrees(it) } ?: -1.0
 
-        // +Y(top) is the usual forward axis. When upright, smoothly use the
-        // rear-camera (-Z) direction so portrait and held-flat walks agree.
-        val topUp = rotationMatrix[7].toDouble()
-        val cameraWeight = ((topUp - 0.5) / 0.37).coerceIn(0.0, 1.0)
-        val forwardEast = rotationMatrix[1].toDouble() - cameraWeight * rotationMatrix[2]
-        val forwardNorth = rotationMatrix[4].toDouble() - cameraWeight * rotationMatrix[5]
-        if (sqrt(forwardEast * forwardEast + forwardNorth * forwardNorth) > 0.4) {
-            rawRotationHeadingDeg = normalizeDegrees(Math.toDegrees(atan2(forwardEast, forwardNorth)))
-            deviceHeadingDeg = rawRotationHeadingDeg
+        val rvHeading = forwardHeadingFromMatrix(rotationMatrix)
+        if (rvHeading != null) {
+            rvHeadingDeg = rvHeading
+            // 플랫폼 rotation vector 값은 진단으로 그대로 남긴다. FOP를 쓰는
+            // 동안에도 이 값이 있어야 둘을 나란히 놓고 어느 쪽이 틀렸는지 판정한다.
+            deviceHeadingDeg = rvHeading
+        }
+        // SM-G996N은 values[4]를 -1로 준다. FOP의 headingError가 이 기기에서
+        // 유일한 정량 불확실성이라, 있으면 그쪽을 쓴다.
+        val useFop = fopFresh()
+        rotationHeadingAccuracyDeg = if (useFop && fopHeadingErrorDeg >= 0) {
+            fopHeadingErrorDeg
+        } else {
+            vendorAccuracyDeg
+        }
+        val forward = if (useFop) fopBlendHeadingDeg else rvHeading
+        if (forward != null && forward >= 0) {
+            rawRotationHeadingDeg = forward
             if (!gyroHeadingInitialized) {
                 gyroHeadingDeg = rawRotationHeadingDeg
                 gyroHeadingInitialized = true
@@ -250,11 +348,12 @@ class PdrMotionBridge(
      * 적분 heading을 rotation vector 쪽으로 상시 끌어당긴다.
      *
      * seed를 세션당 한 번만 하면 자이로 바이어스가 단조 누적되고, 그 편차가
-     * 곧 hold 진입 조건(innovation)이라 스스로를 가둔다. 상시로 당기면 정상
-     * 구간에서 편차가 0 근처에 머물러 래치가 성립하지 않고, hold 중에도 느리게
-     * 좁혀지므로 탈출이 보장된다. hold 중 시정수를 크게 두는 것은 진짜 자기
-     * 교란을 몇 초간 버티기 위한 값이며, 그 대가로 교란이 길어지면 오차를
-     * 따라간다. 무한히 벌어지는 것보다 유계인 쪽이 낫다는 판단이다.
+     * 곧 hold 진입 조건(innovation)이라 스스로를 가둔다 — 초기 오차가 세션
+     * 내내 박제되던 원인이다. 상시로 당기면 정상 구간에서 편차가 0 근처에
+     * 머물러 래치가 성립하지 않고, hold 중에도 느리게나마 좁혀지므로 탈출이
+     * 보장된다. hold 중 시정수를 크게 두는 것은 진짜 자기 교란을 몇 초간
+     * 버티기 위한 값이며, 그 대가로 교란이 길어지면 오차를 따라간다. 무한히
+     * 벌어지는 것보다 유계인 쪽이 낫다는 판단이다.
      */
     private fun pullGyroHeadingTowardRotation(sensorNs: Long) {
         if (lastRotationNs == 0L) return
@@ -338,9 +437,16 @@ class PdrMotionBridge(
             abs(magneticField - baseline) / baseline
         } else 0.0
         val innovation = angularDistance(rawRotationHeadingDeg, gyroHeadingDeg)
-        val poorMagnetic = magneticAccuracy == "low" || magneticAccuracy == "uncalibrated"
+        val usingFop = fopFresh()
+        // FOP를 쓰는 동안에는 원시 자력계 정확도 플래그로 hold하지 않는다.
+        // 실측에서 이 플래그가 세션 내내 "low"라 hold가 상시 켜졌는데, 그
+        // 보정을 대신 해 주는 게 바로 FOP다. 대신 FOP가 주는 headingError를
+        // 문턱으로 쓴다 — 벤더가 -1로 주던 값을 처음으로 숫자로 받는다.
+        val poorMagnetic = !usingFop &&
+            (magneticAccuracy == "low" || magneticAccuracy == "uncalibrated")
         val inaccurate = rotationHeadingAccuracyDeg > 35
-        val useGyroHold = rotationSource.contains("game_rotation_vector") || poorMagnetic ||
+        val activeSource = if (usingFop) "fused_orientation_provider" else rotationSource
+        val useGyroHold = activeSource.contains("game_rotation_vector") || poorMagnetic ||
             fieldDeviation > 0.35 || innovation > 35 || inaccurate
         headingHoldActive = useGyroHold
         if (useGyroHold && gyroHeadingInitialized) {
@@ -351,8 +457,11 @@ class PdrMotionBridge(
             // 바뀐다는 뜻은 아니다. 반대로 game rotation vector는 처음부터
             // 자력계를 쓰지 않으므로 기존처럼 absolute heading으로 선언하지
             // 않는다.
-            selectedHeadingSource = if (rotationSource.contains("rotation_vector") &&
-                !rotationSource.contains("game")) {
+            selectedHeadingSource = if (usingFop) {
+                "fused_orientation_provider+gyro_hold"
+            } else if (rotationSource.contains("rotation_vector") &&
+                !rotationSource.contains("game")
+            ) {
                 "sensor_manager/rotation_vector+gyro_hold"
             } else {
                 "sensor_manager/gyro_hold"
@@ -361,8 +470,9 @@ class PdrMotionBridge(
             return
         }
         fusedHeadingDeg = rawRotationHeadingDeg
-        selectedHeadingSource = rotationSource
-        headingStable = rotationSource.contains("rotation_vector") && !rotationSource.contains("game")
+        selectedHeadingSource = activeSource
+        headingStable = usingFop ||
+            (rotationSource.contains("rotation_vector") && !rotationSource.contains("game"))
     }
 
     private fun updateStepCounter(value: Float, sensorNs: Long) {
@@ -588,6 +698,13 @@ class PdrMotionBridge(
                 "motionTimestamp" to motionTimestampMs, "motionHz" to motionHz,
                 "stepPeakCount" to stepPeakCount, "latestStepPeakMs" to latestStepPeakMs,
                 "accelMagnitude" to accelMagnitude, "gyroZ" to gyroZ,
+                // FOP 원본 heading과 그 불확실성. 우리가 재계산한 블렌드 값과
+                // 나란히 남겨야 "FOP가 틀렸나, 우리 축 규약이 틀렸나"를 가른다.
+                "fopSupported" to fopSupported, "fopStatus" to fopStatus,
+                "fopHeadingDeg" to fopHeadingDeg,
+                "fopHeadingErrorDeg" to fopHeadingErrorDeg,
+                "fopBlendHeadingDeg" to fopBlendHeadingDeg,
+                "rvHeadingDeg" to rvHeadingDeg,
             ))
         }
         if (kind != "motion") {
@@ -698,5 +815,8 @@ class PdrMotionBridge(
         const val TRACK_PULL_TAU_S = 0.5
         // hold 구간: 몇 초짜리 자기 교란은 버티고, 길어지면 유계로 수렴한다.
         const val HOLD_PULL_TAU_S = 20.0
+        // FOP 표본이 이보다 오래되면 플랫폼 rotation vector로 되돌아간다.
+        // Play Services 미설치·업데이트 중에도 heading이 끊기지 않아야 한다.
+        const val FOP_STALE_NS = 1_000_000_000L
     }
 }
