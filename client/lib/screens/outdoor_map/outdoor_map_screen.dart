@@ -759,6 +759,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 미리 보기에서 `안내 시작`을 누르면 앵커를 찍을 출발지. 없으면 지금 위치다.
   PoiSearchResult? _indoorRoutePreviewOrigin;
 
+  /// 그 앵커를 찍을 때 "여기서 출발하는 것으로 봤다"를 알릴지.
+  ///
+  /// 미리 보기는 앵커를 `안내 시작`까지 미루므로, [showIndoorRouteTo]가 받은
+  /// `announceOriginAnchor`를 여기 들고 있어야 한다. 안 들고 가면 맞바꾸기처럼
+  /// **사용자가 방금 직접 시킨 이동**에서도 안내가 뜬다.
+  bool _indoorRoutePreviewAnnounce = true;
+
   /// 도착 카드가 가리키는 목적지. 사용자가 확인을 누를 때까지 남는다.
   PoiSearchResult? _arrivedDestination;
 
@@ -1429,6 +1436,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _indoorRouteDestination = destination;
       _indoorRoutePreview = preview && hasExplicitOrigin;
       _indoorRoutePreviewOrigin = preview ? origin : null;
+      _indoorRoutePreviewAnnounce = announceOriginAnchor;
       _arrivedDestination = null;
       // 목적지가 바뀌면 새로운 길안내다. 기존 궤적을 남기면 새 파란 경로와
       // 이전 목적지로 걸어간 회색선이 한 여정처럼 섞인다.
