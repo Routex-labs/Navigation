@@ -19,11 +19,19 @@ class MapBottomBar extends StatelessWidget {
     super.key,
     required this.onCalibrate,
     required this.onPlaceLocation,
+    this.onPickNearbyStore,
     this.placingLocation = false,
     this.showPlaceLocation = true,
   });
 
   final VoidCallback onCalibrate;
+
+  /// "가까운 매장으로 위치 지정"을 눌렀을 때. null이면 버튼을 그리지 않는다.
+  ///
+  /// 들어올 때 한 번 물었던 그 목록을 **다시 여는** 자리다. 처음 고른 매장이
+  /// 틀렸거나, 걸어서 자리를 옮겼거나, 그때 건너뛴 사람 모두 여기로 돌아온다 —
+  /// 없으면 지도를 탭해 복도를 직접 찍는 길만 남는데, 그건 훨씬 어렵다.
+  final VoidCallback? onPickNearbyStore;
 
   /// 위치 보정 버튼 옆에 놓인 "위치 지정" 버튼을 눌렀을 때 호출된다. 지도를
   /// 켜지 않은 채 건물에 들어와 자동 위치 추정이 되지 않을 때, 사용자가 직접
@@ -54,6 +62,19 @@ class MapBottomBar extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // 왼쪽부터 **어려운 순서**다 — 목록에서 고르기(쉬움) → 지도에서
+                // 직접 찍기 → 위치 보정. 오른쪽 끝은 늘 같은 자리에 있어야
+                // 하는 조작이라 마지막이다.
+                if (onPickNearbyStore case final onPressed?) ...[
+                  RoutexMapControl(
+                    key: const Key('pick-nearby-store'),
+                    label: '가까운 매장으로 위치 지정',
+                    icon: RoutexIcons.place,
+                    tone: RoutexMapControlTone.accent,
+                    onPressed: onPressed,
+                  ),
+                  const SizedBox(width: RoutexSpacing.controlGap),
+                ],
                 if (showPlaceLocation) ...[
                   _PlaceLocationButton(
                     onPressed: onPlaceLocation,

@@ -2212,6 +2212,18 @@ class _MapShellScreenState extends State<MapShellScreen> {
     _outdoorKey.currentState?.startLocationPlacement();
   }
 
+  /// "가까운 매장으로 위치 지정" 버튼(하단 바). 들어올 때 띄웠던 목록을 다시 연다.
+  ///
+  /// 검색을 먼저 닫는 이유는 [_onPlaceLocation]과 같다 — 시트가 검색 패널
+  /// 뒤로 들어가면 목록을 볼 수가 없다.
+  void _onPickNearbyStore() {
+    _closeSearch();
+    unawaited(
+      _outdoorKey.currentState?.pickNearbyStoreForAnchor() ??
+          Future<void>.value(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final routeVisible = _outdoorRouteVisible;
@@ -2580,6 +2592,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
         // 버튼을 노출한다. 오버레이가 꺼진 순수 야외 상태에서는 지정할
         // 층 정보가 없어 눌러도 의미가 없다.
         showPlaceLocation: _outdoorIndoorEntered,
+        // 목록을 만들 수 있을 때만 띄운다 — 기준점이 없으면 눌러도 아무 일이
+        // 없는 버튼이 된다. 판단은 목록을 실제로 만드는 쪽이 한다.
+        onPickNearbyStore:
+            (_outdoorKey.currentState?.canPickNearbyStore ?? false)
+            ? _onPickNearbyStore
+            : null,
       ),
     );
   }

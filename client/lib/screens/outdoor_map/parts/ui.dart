@@ -204,28 +204,31 @@ extension OutdoorMapUi on OutdoorMapBodyState {
         //
         // **누를 수 없다.** 배지는 지금 상태를 읽는 표시일 뿐이고, 사용자가
         // 할 수 있는 일이 없다 — 정확도는 기다리면 회복된다.
-        //
-        // 축척 막대는 **GPS 배지 바로 위 칸**이다. 둘을 한 Column에 넣어 배지가
-        // 뜨고 지는 것과 무관하게 막대가 같은 자리에 남게 한다 — 따로 두면 배지가
-        // 사라질 때 막대만 공중에 뜬 것처럼 보이고, 자리도 어긋난다.
-        Positioned(
-          top: 76,
-          left: 12,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildScaleBar(initialCenter.latitude),
-              if (lowAccuracy) ...[
-                const SizedBox(height: 6),
-                const RoutexBadge(
-                  label: 'GPS 신호 약함',
-                  tone: RoutexBadgeTone.warning,
-                  icon: Icons.warning_amber_rounded,
-                  surface: RoutexBadgeSurface.onMap,
-                ),
-              ],
-            ],
+        if (lowAccuracy)
+          const Positioned(
+            top: 76,
+            left: 12,
+            child: RoutexBadge(
+              label: 'GPS 신호 약함',
+              tone: RoutexBadgeTone.warning,
+              icon: Icons.warning_amber_rounded,
+              surface: RoutexBadgeSurface.onMap,
+            ),
+          ),
+
+        // 축척 막대는 **위치 보정·위치 지정 버튼 바로 위**다. 그 두 버튼과 같은
+        // 오른쪽 끝선(16)에 세워 한 열로 읽히게 하고, ETA 카드가 뜨면 버튼과
+        // 함께 올라간다 — 따로 두면 카드가 막대만 덮는다.
+        AnimatedPositioned(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          right: RoutexSpacing.componentPadding,
+          bottom:
+              mapShellBottomChromePx +
+              (indoorRouteVisible ? bottomBarLiftPx : 0),
+          child: SafeArea(
+            top: false,
+            child: IgnorePointer(child: _buildScaleBar(initialCenter.latitude)),
           ),
         ),
 

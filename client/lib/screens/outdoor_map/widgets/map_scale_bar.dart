@@ -32,68 +32,83 @@ class MapScaleBar extends StatelessWidget {
       container: true,
       label: '지도 축척 ${step.label}',
       excludeSemantics: true,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: colors.surfaceBase,
-          borderRadius: RoutexRadii.control,
-          border: Border.all(
-            color: colors.contentSecondary.withValues(
-              alpha: RoutexOpacity.subtleOutline,
+      // **면을 깔지 않는다.** 알약을 두면 지도 위에 누를 수 있는 것이 하나 더
+      // 있는 것처럼 보이는데, 이건 읽기만 하는 표시다. 글자에 흰 헤일로를
+      // 둘러 도면·건물 어느 배경에서도 읽히게 한다.
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            step.label,
+            style: RoutexTypography.control(RoutexTypography.caption).copyWith(
+              color: colors.contentPrimary,
+              shadows: _haloShadows(colors.surfaceBase),
             ),
           ),
-          boxShadow: RoutexLayer.shadow(RoutexLayerRole.onMap, colors),
-        ),
-        child: Padding(
-          padding: const EdgeInsetsDirectional.symmetric(
-            horizontal: RoutexSpacing.controlGap,
-            vertical: RoutexSpacing.inlineGap,
+          const SizedBox(height: 2),
+          // 막대는 **양 끝에 턱이 있는 자**다. 선만 그으면 어디까지가 그
+          // 거리인지 눈이 못 끊는다.
+          CustomPaint(
+            size: Size(step.widthPx, _barHeightPx),
+            painter: _ScaleRulePainter(
+              color: colors.contentPrimary,
+              haloColor: colors.surfaceBase,
+            ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                step.label,
-                style: RoutexTypography.control(
-                  RoutexTypography.caption,
-                ).copyWith(color: colors.contentSecondary),
-              ),
-              const SizedBox(height: 2),
-              // 막대는 **양 끝에 턱이 있는 자**다. 선만 그으면 어디까지가 그
-              // 거리인지 눈이 못 끊는다.
-              CustomPaint(
-                size: Size(step.widthPx, _barHeightPx),
-                painter: _ScaleRulePainter(color: colors.contentSecondary),
-              ),
-            ],
-          ),
-        ),
+        ],
       ),
     );
   }
 }
 
+/// 글자 뒤에 사방으로 까는 헤일로. 배경이 없으므로 이것이 대비의 전부다.
+List<Shadow> _haloShadows(Color color) => [
+  for (final offset in const [
+    Offset(1, 0),
+    Offset(-1, 0),
+    Offset(0, 1),
+    Offset(0, -1),
+  ])
+    Shadow(color: color, offset: offset, blurRadius: 2),
+];
+
 /// 자의 높이(논리 px). 턱 높이가 곧 이 값이다.
 const double _barHeightPx = 6;
 
 class _ScaleRulePainter extends CustomPainter {
-  const _ScaleRulePainter({required this.color});
+  const _ScaleRulePainter({required this.color, required this.haloColor});
 
   final Color color;
 
+  /// 자 뒤에 한 겹 더 굵게 까는 색. 배경이 없으므로 어두운 도면 위에서도
+  /// 선이 살아 있으려면 글자와 같은 방법이 필요하다.
+  final Color haloColor;
+
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = RoutexStroke.emphasis
-      ..strokeCap = StrokeCap.square;
-    final baseY = size.height - paint.strokeWidth / 2;
-    canvas.drawLine(Offset(0, baseY), Offset(size.width, baseY), paint);
-    canvas.drawLine(const Offset(0, 0), Offset(0, baseY), paint);
-    canvas.drawLine(Offset(size.width, 0), Offset(size.width, baseY), paint);
+    void rule(Paint paint) {
+      final baseY = size.height - RoutexStroke.emphasis / 2;
+      canvas.drawLine(Offset(0, baseY), Offset(size.width, baseY), paint);
+      canvas.drawLine(const Offset(0, 0), Offset(0, baseY), paint);
+      canvas.drawLine(Offset(size.width, 0), Offset(size.width, baseY), paint);
+    }
+
+    rule(
+      Paint()
+        ..color = haloColor
+        ..strokeWidth = RoutexStroke.emphasis + 2
+        ..strokeCap = StrokeCap.round,
+    );
+    rule(
+      Paint()
+        ..color = color
+        ..strokeWidth = RoutexStroke.emphasis
+        ..strokeCap = StrokeCap.square,
+    );
   }
 
   @override
   bool shouldRepaint(_ScaleRulePainter oldDelegate) =>
-      oldDelegate.color != color;
+      oldDelegate.color != color || oldDelegate.haloColor != haloColor;
 }

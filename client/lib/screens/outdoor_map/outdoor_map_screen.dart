@@ -1945,6 +1945,26 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await controller.animateCamera(CameraUpdate.newLatLng(_toGl(entrance)));
   }
 
+  /// 하단 바 "가까운 매장으로 위치 지정" 버튼 진입점.
+  ///
+  /// 들어올 때 한 번 띄웠던 목록을 다시 연다. 규칙은 그때와 **완전히 같다** —
+  /// 기준점이 없으면 조용히 아무 일도 하지 않는다([_askNearbyStoreForAnchor]).
+  /// 버튼을 띄울지는 [canPickNearbyStore]가 미리 가른다.
+  Future<void> pickNearbyStoreForAnchor() => _askNearbyStoreForAnchor();
+
+  /// 지금 "가까운 매장" 목록을 만들 수 있는지. 만들 수 없으면 상위가 버튼을
+  /// 띄우지 않는다 — 눌러도 아무 일이 없는 버튼을 하단 바에 세우지 않는다.
+  ///
+  /// **목록을 실제로 만들어 보지 않는다.** 상위 build마다 불리는 값이라, 매장
+  /// 전부를 층 좌표로 되돌리는 일을 여기서 하면 프레임마다 반복된다. 전제
+  /// (도면·그래프·기준점)만 확인하고, 목록이 비는 드문 경우는 시트를 여는
+  /// 쪽이 조용히 되돌린다([_askNearbyStoreForAnchor]).
+  bool get canPickNearbyStore =>
+      _indoorEntered &&
+      _floorPlan != null &&
+      (_floorGraph?.nodes.isNotEmpty ?? false) &&
+      (_pdrTrailState.anchor != null || _estimatedFloorPoint() != null);
+
   /// 하단 바 "위치 지정" 버튼 진입점. PDR 세션이 꺼져 있으면 활성 층으로 시작
   /// 하고, 이미 켜져 있으면(다른 층에서 이어서 진입 등) 앵커만 다시 잡도록
   /// 대기 상태로 넘긴다. 실제 탭 처리는 [_onMapPressedForPdr]가 맡는다.
