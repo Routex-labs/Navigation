@@ -672,9 +672,11 @@ packages:
   routex_design_system:
     dependency: "direct main"
     description:
-      path: "../../navdesignsystem+promo/packages/routex_design_system"
-      relative: true
-    source: path
+      path: "packages/routex_design_system"
+      ref: "104f0fce777d9e2596b281e6a8ed8c98b3e13b77"
+      resolved-ref: "104f0fce777d9e2596b281e6a8ed8c98b3e13b77"
+      url: "https://github.com/Routex-labs/routex-design-system.git"
+    source: git
     version: "0.2.23"
   share_plus:
     dependency: "direct main"
