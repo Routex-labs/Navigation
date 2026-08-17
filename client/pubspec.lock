@@ -673,11 +673,11 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/routex_design_system"
-      ref: "1e08e6118c634040950221fad8c77184a311b34d"
-      resolved-ref: "1e08e6118c634040950221fad8c77184a311b34d"
+      ref: "104f0fce777d9e2596b281e6a8ed8c98b3e13b77"
+      resolved-ref: "104f0fce777d9e2596b281e6a8ed8c98b3e13b77"
       url: "https://github.com/Routex-labs/routex-design-system.git"
     source: git
-    version: "0.2.21"
+    version: "0.2.23"
   share_plus:
     dependency: "direct main"
     description:

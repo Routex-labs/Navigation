@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-
-import '../theme/app_theme.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 /// 매장 정보·저장한 장소·카테고리 매장 목록 시트가 공유하는 헤더.
 ///
@@ -17,14 +16,16 @@ class SheetHeader extends StatelessWidget {
     super.key,
     this.title,
     this.leading,
+    this.showBack = true,
     required this.onCloseAll,
     required this.onIntentionalPop,
   });
 
   final String? title;
 
-  /// 제목 왼쪽에 붙일 선택적 위젯(예: 아이콘 배지). null이면 자리 비움.
+  /// 이전 화면 호환용 제목 장식. 새 시트에서는 제목 자체로 충분하면 생략한다.
   final Widget? leading;
+  final bool showBack;
 
   /// X 버튼이 눌렸을 때 호출. 상위(MapShellScreen)가 chain-close 플래그를
   /// set하는 함수를 넘긴다.
@@ -36,47 +37,31 @@ class SheetHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final header = RoutexSheetHeader(
+      title: title,
+      onBack: showBack
+          ? () {
+              onIntentionalPop();
+              Navigator.of(context).maybePop();
+            }
+          : null,
+      onClose: () {
+        onIntentionalPop();
+        onCloseAll();
+        Navigator.of(context).maybePop();
+      },
+    );
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
-      child: Row(
-        children: [
-          IconButton(
-            tooltip: '뒤로',
-            onPressed: () {
-              onIntentionalPop();
-              Navigator.of(context).maybePop();
-            },
-            icon: const Icon(
-              Icons.arrow_back,
-              size: 22,
-              color: AppColors.muted,
+      padding: const EdgeInsets.symmetric(horizontal: RoutexSpacing.contentGap),
+      child: leading == null
+          ? header
+          : Row(
+              children: [
+                leading!,
+                const SizedBox(width: RoutexSpacing.controlGap),
+                Expanded(child: header),
+              ],
             ),
-          ),
-          if (leading != null) ...[leading!, const SizedBox(width: 10)],
-          Expanded(
-            child: title == null
-                ? const SizedBox.shrink()
-                : Text(
-                    title!,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.text,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-          ),
-          IconButton(
-            tooltip: '전체 닫기',
-            onPressed: () {
-              onIntentionalPop();
-              onCloseAll();
-              Navigator.of(context).maybePop();
-            },
-            icon: const Icon(Icons.close, size: 22, color: AppColors.muted),
-          ),
-        ],
-      ),
     );
   }
 }

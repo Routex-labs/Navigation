@@ -130,8 +130,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('여의도공원까지'), findsOneWidget);
-    expect(find.text('약 40분'), findsOneWidget);
+    expect(find.text('40분'), findsOneWidget);
     expect(find.textContaining('1,500원'), findsOneWidget);
 
     // 이동 수단을 고르는 자리는 상단 이동 수단 줄 하나다. 카드에 "도보"를 다시

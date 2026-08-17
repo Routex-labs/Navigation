@@ -232,8 +232,6 @@ extension OutdoorMapGps on OutdoorMapBodyState {
   /// 따라가지 못한다. 대신 지금 아무 일도 안 일어나는 이유는 알린다.
   Future<void> startFollowingCurrentLocation() async {
     _followingUser = true;
-    // 버튼을 눌렀으면 이제 안내 중이다. 계획 상태로 되돌리는 길은 안내 종료뿐.
-    if (_offerStartGuidance) setState(() => _offerStartGuidance = false);
     final position = _position;
     if (position == null) {
       _showSnack('현재 위치를 아직 못 잡았습니다. 신호가 잡히면 그 자리로 지도를 옮깁니다.');

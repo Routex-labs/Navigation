@@ -272,9 +272,8 @@ class OutdoorMapBody extends StatefulWidget {
   /// 예전처럼 곧바로 진입한다(시트를 띄울 상위가 없는 테스트 등).
   final ValueChanged<Building>? onBuildingTap;
 
-  /// 길찾기의 "지도에서 선택"이 켜져 있는지. 계약과 근거는 실내 화면의 동명
-  /// 필드([IndoorMapBody.pickingOnMap])와 같다 — 두 화면이 같은 조작을 제공해야
-  /// 하므로 규칙도 같은 것을 쓴다.
+  /// 출발·도착 위치 행을 편집 중인지. 이때 지도 탭도 같은 행의 값을 정한다.
+  /// 계약과 근거는 실내 화면의 동명 필드([IndoorMapBody.pickingOnMap])와 같다.
   final bool pickingOnMap;
 
   /// [pickingOnMap] 중 **매장이 아닌 곳**을 눌렀을 때 그래프에 스냅한 후보를 넘긴다.
@@ -360,31 +359,6 @@ const _storeFocusMaxZoom = 20.4;
 LatLng _toMapLatLng(ll.LatLng point) => LatLng(point.latitude, point.longitude);
 
 class OutdoorMapBodyState extends State<OutdoorMapBody> {
-  /// 선택 확대 애니메이션의 지금 배수(1.0 = 확대 없음).
-  /// 근거와 진행 방식은 [_animateSelectionScale].
-  double _selectionScale = 1.0;
-  Timer? _selectionScaleTimer;
-
-  /// 선택 핀이 **정확한 자리**에 놓였는지. 근사 자리에 먼저 세웠다가 나중에
-  /// 옮기면 순간이동으로 보이므로, 확정 전에는 아예 안 세운다.
-  bool _highlightAnchorFinal = false;
-
-  /// 카메라가 멈춘 뒤 한 번이라도 핀 자리를 다시 재 봤는지.
-  ///
-  /// 여기까지 왔는데도 라벨을 못 찾으면 **근사로라도 세운다** — 자리가 조금
-  /// 어긋나는 것보다 핀이 아예 없는 편이 나쁘다(실기기에서 큰 매장 하나가
-  /// 그렇게 사라졌다).
-  bool _cameraSettled = false;
-  Timer? _pinIntroTimer;
-
-  /// 핀이 자라기 시작하는 배수. 0에서 시작하면 한 프레임 사라졌다 나온 것처럼
-  /// 보이고, 0.8이면 자라는지 안 자라는지 알 수 없다.
-  static const double _pinIntroFrom = 0.55;
-
-  /// 확대 프레임 간격. 60fps로 돌리면 채널 왕복이 오히려 끊기게 만든다 —
-  /// 40ms(=25fps)면 크기 변화로는 충분히 부드럽고 왕복은 절반 이하다.
-  static const _selectionScaleStep = Duration(milliseconds: 40);
-
   /// GPS 자동 실내 진입이 지금 켜져 있는지. 1회성 플래그였을 때는 오탐 한 번이
   /// 기능 자체를 죽였다([IndoorEntryGpsDecision.rearm]이 다시 켠다).
   ///
@@ -482,12 +456,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 다시 그려진다.
   bool _followingUser = false;
 
-  /// 계획 상태로 그려 둔 자동차 경로가 있어서 "안내 시작"을 권해야 하는지.
+  /// 경로선이 보이는 것과 실제 안내가 시작된 것을 가른다.
   ///
-  /// 자동차 경로를 그린 직후에는 카메라가 **경로 전체**에 맞춰져 있다. 사용자가
-  /// 어디로 어떻게 가는지 한 번 보고 나서 출발하도록, 위치로 내려가는 조작은
-  /// 버튼 하나로 분리했다([EtaCard.onStartGuidance]).
-  bool _offerStartGuidance = false;
+  /// 출발·도착 확정은 경로 전체를 보는 계획 상태까지만 만든다. 사용자가 계획
+  /// 카드의 `안내 시작`을 누른 뒤에만 chrome을 접고 진행 UI로 전환한다.
+  bool _guidanceStarted = false;
 
   bool _interactive = true;
 
@@ -766,14 +739,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   final GlobalKey _etaCardKey = GlobalKey();
 
-  /// 실내 경로를 **미리 보는 중**인가. 참이면 안내가 아직 시작되지 않았다.
-  ///
-  /// 건물 밖에서도 "거기는 어떻게 되어 있지?" 하고 안을 볼 수 있어야 한다. 그때
-  /// 사용자는 그 매장에 서 있지 않으므로 **현재 위치를 그 매장으로 잡지 않는다** —
-  /// 잡아 버리면 화면이 사실이 아닌 위치를 말하고, PDR이 거기서부터 걸음을 센다.
-  /// 경로선과 요약은 그대로 그리고, 시작은 카드의 `안내 시작`이 맡는다.
-  bool _indoorRoutePreview = false;
-
   /// 미리 보기에서 `안내 시작`을 누르면 앵커를 찍을 출발지. 없으면 지금 위치다.
   PoiSearchResult? _indoorRoutePreviewOrigin;
 
@@ -961,8 +926,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     if (!_styleReadySignal.isCompleted) _styleReadySignal.complete();
     if (!_buildingReadySignal.isCompleted) _buildingReadySignal.complete();
     _buildingRetryTimer?.cancel();
-    _selectionScaleTimer?.cancel();
-    _pinIntroTimer?.cancel();
     _gps.dispose();
     _pdrSnapshotSub?.cancel();
     _pdrCalibrationSub?.cancel();
@@ -1150,6 +1113,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     bool keepPendingIndoorRoute = false,
     bool keepCompletedHistory = false,
   }) async {
+    // 같은 여정의 실내→야외 전환에서는 이미 누른 `안내 시작`도 이어 간다.
+    // 새 구간을 계산한다는 이유로 계획 상태로 돌아가면 건물 출구에서 시작 버튼이
+    // 다시 나타나고, 상단 길찾기 chrome도 갑자기 펼쳐진다.
+    final continueGuidance = keepCompletedHistory && _guidanceStarted;
     // 새 야외 목적지를 시작하는 진입점이다. 같은 목적지의 재탐색은
     // _updateRoute/_applyRoute로만 들어오므로, 여기서만 이전 여정을 끊는다.
     // 예외는 실내→야외 예약을 소비하는 호출뿐이다([_activatePendingOutdoorRoute]) —
@@ -1178,7 +1145,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _fixedRouteOrigin = origin;
       // 이 경로는 걷는 안내다. 자동차에서 넘어왔으면 실선으로 남지 않게 되돌린다.
       _routeIsDriving = false;
-      _offerStartGuidance = false;
+      _guidanceStarted = continueGuidance;
       _userDestination = destination;
       _userDestinationLabel = label;
       // 새 목적지를 받을 때마다 초기화해서, 이번 경로가 계산되면
@@ -1453,10 +1420,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _userDestination = null;
       _userDestinationLabel = null;
       _indoorRouteDestination = destination;
-      _indoorRoutePreview = preview && hasExplicitOrigin;
       _indoorRoutePreviewOrigin = preview ? origin : null;
       _indoorRoutePreviewAnnounce = announceOriginAnchor;
       _arrivedDestination = null;
+      _guidanceStarted = false;
       // 목적지가 바뀌면 새로운 길안내다. 기존 궤적을 남기면 새 파란 경로와
       // 이전 목적지로 걸어간 회색선이 한 여정처럼 섞인다.
       _guidanceTrailSession.clear();
@@ -1826,9 +1793,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _pendingCenterOnPosition = false;
 
       setState(() => _highlightedStoreId = store.placeId);
-      // 핀 **자리**는 먼저 잡는다(점 하나라 순간이다). **크기**는 아래
-      // animateCamera와 함께 출발한다 — 여기서 키우면 글자가 먼저 커진 뒤
-      // 화면이 움직인다.
+      // 기존 매장 아이콘의 선택 색을 먼저 동기화한다. 이름·아이콘
+      // 크기는 바꾸지 않아 아래 카메라 이동 중에도 라벨 밀도가 흔들리지 않는다.
       await _syncHighlightLayer();
       if (!mounted) return;
 
@@ -1863,8 +1829,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         zoom: zoom,
         liftPx: lift,
       );
-      // 카메라와 확대를 **같이** 출발시킨다. 둘 다 _storeFocusDuration이라 끝도 같다.
-      unawaited(_animateSelectionScale(selected: true));
       await controller.animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(

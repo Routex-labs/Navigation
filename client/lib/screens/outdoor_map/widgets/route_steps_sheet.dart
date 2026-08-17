@@ -43,16 +43,17 @@ class _RouteStepsSheet extends StatelessWidget {
       title: '$destinationName까지',
       onClose: () => Navigator.of(context).pop(),
     ),
-    // **목록에 뷰포트를 준다.** 손잡이나 머리 줄이 있는 시트는 본문을
-    // `Column(mainAxisSize: min)` 안에 놓으므로, 감싸지 않으면 스크롤 뷰가 세로
-    // 제약을 못 받아 콘텐츠 높이 그대로 커진다 — 스크롤이 아니라 **넘침**이 되고
-    // 마지막 단계들이 잘린다(24단계에서 1,128px 넘쳤다).
-    //
-    // `expand: true`로도 뷰포트는 생기지만 그러면 세 단계짜리 경로에도 시트가
-    // 화면 절반을 가져간다. 이 시트의 계약은 위 `showRouteStepsSheet` 주석대로
-    // "길면 절반까지"이므로 loose fit이 맞다. 검증은
-    // `test/screens/outdoor_map/widgets/route_steps_sheet_test.dart`.
-    child: Flexible(
+    // 긴 목록에만 뷰포트 상한을 준다. `expand`로 시트 전체를
+    // 늘리면 세 단계에도 화면 절반을 가리므로, header·handle·여백의
+    // 상한을 뺀 본문만 제한한다. 검증은 route_steps_sheet_test.dart.
+    child: ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight:
+            MediaQuery.sizeOf(context).height * 0.5 -
+            RoutexMetrics.minimumTouchTarget -
+            RoutexSpacing.sectionGap * 2 -
+            RoutexSpacing.controlGap,
+      ),
       child: SingleChildScrollView(
         child: RoutexStepList(
           steps: [

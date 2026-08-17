@@ -127,6 +127,16 @@ void main() {
         'assets/place_details/starbucks_04.jpg',
       ],
     );
+    expect(
+      tester.getTopLeft(find.text('테스트 매장')).dy,
+      lessThan(tester.getTopLeft(find.byType(RoutexMediaCarousel)).dy),
+      reason: '장소 정보와 경로 행동이 대표 사진보다 먼저 보여야 한다',
+    );
+    expect(
+      tester.getTopLeft(find.byType(RoutexPlaceActions)).dy,
+      lessThan(tester.getTopLeft(find.byType(RoutexMediaCarousel)).dy),
+      reason: '초기 시트 높이 안에 출발·도착이 먼저 들어와야 한다',
+    );
   });
 
   // --- 설계 7-A-3·7-A-4 ---
@@ -343,7 +353,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final bar = find.byKey(const ValueKey('place-detail-actions'));
+    final bar = find.byType(RoutexPlaceActions);
     expect(bar, findsOneWidget);
 
     // DraggableScrollableSheet는 첫 드래그를 시트 확장에 쓴다. 실제 본문 스크롤은
@@ -421,9 +431,7 @@ void main() {
 
     tearDown(() => favoritesController = original);
 
-    // 저장은 눌러도 화면이 그대로 남는 유일한 버튼이다. 시트를 닫는 출발·도착과
-    // 같은 줄에 두면 무엇이 화면을 바꾸는 버튼인지 예측할 수 없다.
-    testWidgets('저장은 길찾기 줄이 아니라 장소 헤더에 있다', (tester) async {
+    testWidgets('X는 이름 줄에, 저장은 출발·도착 줄 오른쪽에 있다', (tester) async {
       await tester.pumpWidget(
         buildSubject(
           favorite: _favorite,
@@ -434,31 +442,37 @@ void main() {
 
       final save = find.byTooltip('장소 저장');
       expect(save, findsOneWidget);
-      // **장소 헤더 안이다.** 저장은 시트가 아니라 그 장소에 붙는 동작이라 이름
-      // 옆에 선다. 시트 상단 바(뒤로·닫기)는 시트를 다루는 동작만 갖는다.
       expect(
         find.descendant(of: find.byType(RoutexPlaceHeader), matching: save),
-        findsOneWidget,
+        findsNothing,
       );
       expect(
         find.descendant(
-          of: find.byKey(const ValueKey('place-detail-actions')),
-          matching: save,
+          of: find.byType(RoutexPlaceHeader),
+          matching: find.byTooltip('닫기'),
         ),
+        findsOneWidget,
+      );
+      expect(
+        tester.getTopLeft(save).dx,
+        greaterThan(tester.getTopRight(find.text('도착')).dx),
+      );
+      expect(
+        find.descendant(of: find.byType(RoutexPlaceActions), matching: save),
         findsNothing,
       );
     });
 
-    testWidgets('저장할 대상이 없으면 헤더에 토글을 그리지 않는다', (tester) async {
+    testWidgets('저장할 대상이 없으면 상세 행동 줄에 토글을 그리지 않는다', (tester) async {
       await tester.pumpWidget(
         buildSubject(repository: _FakeRepository(Future.value(null))),
       );
       await tester.pumpAndSettle();
 
       expect(find.byTooltip('장소 저장'), findsNothing);
-      // 토글이 빠져도 헤더의 뒤로·X는 그대로다.
-      expect(find.byTooltip('뒤로'), findsOneWidget);
-      expect(find.byTooltip('전체 닫기'), findsOneWidget);
+      // 상세는 이전 시트를 쌓지 않으므로 같은 pop인 뒤로를 중복하지 않는다.
+      expect(find.byTooltip('이전으로'), findsNothing);
+      expect(find.byTooltip('닫기'), findsOneWidget);
     });
 
     testWidgets('저장을 눌러도 시트가 닫히지 않고 상태만 바뀐다', (tester) async {
@@ -607,15 +621,14 @@ void main() {
 
     await tester.tap(find.text('열기'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('전체 닫기'));
+    await tester.tap(find.byTooltip('닫기'));
     await tester.pumpAndSettle();
 
     expect(closedAll, isTrue);
     expect(find.text('테스트 매장'), findsNothing);
   });
 
-  testWidgets('뒤로는 전체 닫기 없이 현재 시트만 닫는다', (tester) async {
-    var closedAll = false;
+  testWidgets('상세 상단에는 같은 동작인 뒤로와 닫기를 함께 두지 않는다', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light,
@@ -626,7 +639,7 @@ void main() {
               target: target,
               buildingId: 'building-1',
               repository: _FakeRepository(Future.value(null)),
-              onCloseAll: () => closedAll = true,
+              onCloseAll: () {},
             ),
             child: const Text('열기'),
           ),
@@ -636,11 +649,8 @@ void main() {
 
     await tester.tap(find.text('열기'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('뒤로'));
-    await tester.pumpAndSettle();
-
-    expect(closedAll, isFalse);
-    expect(find.text('테스트 매장'), findsNothing);
+    expect(find.byTooltip('이전으로'), findsNothing);
+    expect(find.byTooltip('닫기'), findsOneWidget);
   });
 
   // --- 헤더: 카테고리 아이콘 + 층 pill ---
