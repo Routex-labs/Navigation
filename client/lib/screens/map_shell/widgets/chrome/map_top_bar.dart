@@ -68,7 +68,12 @@ class MapTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+    padding: const EdgeInsets.fromLTRB(
+      RoutexSpacing.screenGutter,
+      RoutexSpacing.controlGap,
+      RoutexSpacing.screenGutter,
+      0,
+    ),
     child:
         routeMode && originController != null && destinationController != null
         ? _routePlanner()

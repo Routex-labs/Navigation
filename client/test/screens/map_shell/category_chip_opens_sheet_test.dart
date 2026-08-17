@@ -74,6 +74,25 @@ void main() {
     expect(find.text('목록'), findsNothing);
   });
 
+  testWidgets('검색이나 경로 위치를 입력하는 동안 지도 카테고리 칩을 숨긴다', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(theme: AppTheme.light, home: const MapShellScreen()),
+    );
+    await tester.pumpAndSettle();
+    tester
+        .state<OutdoorMapBodyState>(find.byType(OutdoorMapBody))
+        // ignore: invalid_use_of_visible_for_testing_member
+        .enterIndoorForTest();
+    await tester.pumpAndSettle();
+
+    expect(find.text('서비스'), findsOneWidget);
+    await tester.tap(find.byTooltip('길찾기'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('route-draft-destination')), findsOneWidget);
+    expect(find.text('서비스'), findsNothing);
+  });
+
   // 목록이 떠 있는 동안 위쪽 지도를 만질 수 있어야 한다. barrier는 투명해도
   // opaque라 포인터를 전부 흡수하므로, 남아 있으면 "지도는 보이는데 끌리지도
   // 확대되지도 않는" 화면이 된다 — 상세 시트가 이미 겪고 고친 증상이다.

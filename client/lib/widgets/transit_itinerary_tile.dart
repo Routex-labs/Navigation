@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 import '../models/route/transit_route.dart';
-import '../theme/app_theme.dart';
 import 'transit_style.dart';
 
 /// 대중교통 경로 후보 **한 줄**.
@@ -36,104 +36,19 @@ class TransitItineraryTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fare = itinerary.fare;
-    final facts = [
-      itinerary.transferCount == 0 ? '환승 없음' : '환승 ${itinerary.transferCount}회',
-      '도보 ${formatTransitDuration(itinerary.totalWalkTimeSeconds)}',
-      if (fare != null && fare > 0) formatTransitFare(fare),
-    ];
-    return InkWell(
-      onTap: onTap,
-      child: Ink(
-        color: selected ? AppColors.blue50 : Colors.transparent,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Text(
-                    formatTransitDuration(itinerary.totalTimeSeconds),
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.text,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  if (fastest)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.blue50,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: const Text(
-                        '최단 시간',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ),
-                  const Spacer(),
-                  const Icon(
-                    Icons.chevron_right,
-                    size: 20,
-                    color: AppColors.muted,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                facts.join(' · '),
-                style: const TextStyle(fontSize: 12.5, color: AppColors.muted),
-              ),
-              const SizedBox(height: 10),
-              // 구간을 순서대로 늘어놓는다. 도보까지 포함해야 "지하철역까지 12분
-              // 걷는다"는 사실이 목록에서 읽힌다 — 요약 숫자만으로는 안 보인다.
-              TransitLegStrip(legs: itinerary.legs),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// `도보 5분 › 5호선 › 도보 3분`처럼 구간을 화살표로 잇는 줄.
-class TransitLegStrip extends StatelessWidget {
-  const TransitLegStrip({super.key, required this.legs});
-
-  final List<TransitLeg> legs;
-
-  @override
-  Widget build(BuildContext context) {
-    final children = <Widget>[];
-    for (var i = 0; i < legs.length; i++) {
-      if (i > 0) {
-        children.add(
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 4),
-            child: Icon(Icons.chevron_right, size: 14, color: AppColors.muted),
-          ),
-        );
-      }
-      children.add(TransitLegChip(leg: legs[i]));
-    }
-    // 구간이 많으면 줄바꿈된다. 가로 스크롤로 두면 지도 위 시트에서 스크롤
-    // 방향이 겹쳐(세로 시트 드래그 vs 가로 스트립) 둘 다 잘 안 먹는다.
-    return Wrap(
-      crossAxisAlignment: WrapCrossAlignment.center,
-      runSpacing: 6,
-      children: children,
+    return RoutexTransitItinerary(
+      duration: formatTransitDuration(itinerary.totalTimeSeconds),
+      facts: [
+        itinerary.transferCount == 0
+            ? '환승 없음'
+            : '환승 ${itinerary.transferCount}회',
+        '도보 ${formatTransitDuration(itinerary.totalWalkTimeSeconds)}',
+        if (fare != null && fare > 0) formatTransitFare(fare),
+      ],
+      legs: [for (final leg in itinerary.legs) routexTransitLeg(leg)],
+      fastest: fastest,
+      selected: selected,
+      onPressed: onTap,
     );
   }
 }

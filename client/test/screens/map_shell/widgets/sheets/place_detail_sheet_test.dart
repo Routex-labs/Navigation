@@ -127,6 +127,11 @@ void main() {
         'assets/place_details/starbucks_04.jpg',
       ],
     );
+    expect(
+      tester.getTopLeft(find.byType(RoutexMediaCarousel)).dy,
+      lessThan(tester.getTopLeft(find.text('테스트 매장')).dy),
+      reason: 'Showcase와 같이 대표 사진 뒤에 장소 요약과 행동이 와야 한다',
+    );
   });
 
   // --- 설계 7-A-3·7-A-4 ---
@@ -343,7 +348,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final bar = find.byKey(const ValueKey('place-detail-actions'));
+    final bar = find.byType(RoutexPlaceActions);
     expect(bar, findsOneWidget);
 
     // DraggableScrollableSheet는 첫 드래그를 시트 확장에 쓴다. 실제 본문 스크롤은
@@ -441,10 +446,7 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.descendant(
-          of: find.byKey(const ValueKey('place-detail-actions')),
-          matching: save,
-        ),
+        find.descendant(of: find.byType(RoutexPlaceActions), matching: save),
         findsNothing,
       );
     });

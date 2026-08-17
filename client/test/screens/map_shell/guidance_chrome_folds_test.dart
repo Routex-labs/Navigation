@@ -167,9 +167,8 @@ void main() {
     await pumpShell(tester);
     await tester.tap(find.byTooltip('길찾기'));
     await drain(tester);
-    // 전제를 여기서 세운다. 원래 없던 걸 없다고 하면 이 테스트는 그냥 통과한다.
-    expect(find.text('자동차'), findsOneWidget);
-    expect(find.text('도보'), findsOneWidget);
+    expect(find.text('자동차'), findsNothing);
+    expect(find.text('도보'), findsNothing);
 
     await tester.enterText(
       find.descendant(
@@ -190,6 +189,8 @@ void main() {
     // 경로만 계산된 계획 상태에서는 플래너와 수단 줄이 그대로 남는다.
     expect(find.byKey(const Key('route-planner')), findsOneWidget);
     expect(find.text('안내 시작'), findsOneWidget);
+    expect(find.text('자동차'), findsOneWidget);
+    expect(find.text('도보'), findsOneWidget);
 
     await tester.tap(find.text('안내 시작'));
     await drain(tester);

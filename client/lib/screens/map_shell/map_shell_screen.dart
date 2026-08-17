@@ -78,7 +78,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 상단 오버레이 사이 간격. 예전 top: 78 / top: 128 같은 고정 offset을
   /// 대신하는 유일한 값이다. 상단 바 높이가 상태에 따라 달라져도 이 간격은
   /// 그대로라 어느 모드에서든 같은 여백으로 보인다.
-  static const _overlayGap = 8.0;
+  static const _overlayGap = RoutexSpacing.controlGap;
 
   /// 이 앱이 다루는 건물. 한동안 햄버거 버튼이 "건물 선택 (테스트)" 시트를 열어
   /// 백엔드에 적재된 건물 목록에서 바꿀 수 있었지만, 데모용 전환 수단이었고
@@ -1505,6 +1505,16 @@ class _MapShellScreenState extends State<MapShellScreen> {
       if (mode != RoutePlanMode.transit || transitRepository.isAvailable) mode,
   ];
 
+  /// 두 끝점이 검색어가 아니라 실제 위치로 확정됐는지.
+  ///
+  /// 빈 출발지는 현재 위치라는 유효한 선택이다. 반대로 글자가 있으면 후보를
+  /// 골라 [_selectedOrigin]이 생겨야 확정이다. 편집 중에는 기존 값을 지웠을 수
+  /// 있으므로 이동수단을 잠시 감춘다.
+  bool get _routeEndpointsReady =>
+      _routeEditingField == null &&
+      _routeDraftDestination != null &&
+      (_routeOriginController.text.trim().isEmpty || _selectedOrigin != null);
+
   /// 이동 수단 줄에서 직접 골랐을 때.
   ///
   /// 도착지가 아직 없으면 상태만 바꿔 둔다. 그 상태에서 계산하면 실패 안내만
@@ -2403,12 +2413,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
             // 안내 중에도 접는다. 칩을 누르면 매장 목록 시트가 올라오는데,
             // 그건 "어디 갈지 고르는" 조작이라 목적지가 이미 정해진 화면에
             // 있을 이유가 없다.
-            else if (_floorTransition != null || _guidanceActive)
+            else if (_floorTransition != null ||
+                _guidanceActive ||
+                _routeEditingField != null)
               const SizedBox.shrink()
-            // 길찾기 draft에서는 **접지 않고 내려온다.** 상단 바가 출발/도착
-            // 두 줄로 커지면 이 Column이 그만큼 아래로 밀어 주므로 겹치지
-            // 않는다. 한때 접어 뒀지만, 도착지를 정한 뒤에도 "그럼 저긴
-            // 뭐였지" 하고 카테고리를 다시 훑는 흐름이 끊겼다.
+            // 두 끝점을 확정해 후보 목록이 닫힌 뒤에는 다시 보여 준다. 입력 중엔
+            // 후보 패널과 키보드가 공간을 쓰므로 카테고리 조작을 함께 띄우지 않는다.
             else
               _buildCategoryRow(),
             // 지도에서 고르는 중이라는 안내. 이게 없으면 "지도에서 선택"을
@@ -2455,7 +2465,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
       onSwapRouteEndpoints: () => unawaited(_swapRouteEndpoints()),
       canSwapRouteEndpoints: _canSwapRouteEndpoints,
       selectedTravelMode: _travelMode,
-      availableTravelModes: _availableTravelModes,
+      // 이동수단은 출발·도착이 모두 확정된 뒤에만 고른다. 입력 중에 먼저
+      // 노출하면 아직 계산할 수 없는 버튼이 카드 높이만 키운다.
+      availableTravelModes: _routeEndpointsReady
+          ? _availableTravelModes
+          : const [],
       onTravelModeSelected: (mode) => unawaited(_onTravelModePicked(mode)),
     );
   }
@@ -2464,7 +2478,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
   Widget _buildRouteFieldResults(RoutePlanField field) {
     return Flexible(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, _overlayGap, 12, 12),
+        padding: const EdgeInsets.fromLTRB(
+          RoutexSpacing.screenGutter,
+          _overlayGap,
+          RoutexSpacing.screenGutter,
+          RoutexSpacing.contentGap,
+        ),
         child: RouteFieldResults(
           key: _routeResultsKey,
           field: field,
@@ -2503,7 +2522,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
   Widget _buildSearchPanel() {
     return Flexible(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, _overlayGap, 12, 12),
+        padding: const EdgeInsets.fromLTRB(
+          RoutexSpacing.screenGutter,
+          _overlayGap,
+          RoutexSpacing.screenGutter,
+          RoutexSpacing.contentGap,
+        ),
         child: SearchPanel(
           key: _searchPanelKey,
           buildingId: _buildingId,
@@ -2573,7 +2597,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 것처럼 보인다.
   Widget _buildMapPickHint() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, _overlayGap, 12, 0),
+      padding: const EdgeInsets.fromLTRB(
+        RoutexSpacing.screenGutter,
+        _overlayGap,
+        RoutexSpacing.screenGutter,
+        0,
+      ),
       child: MapPickHintCard(
         key: _mapPickHintKey,
         target: _mapPickTarget!,

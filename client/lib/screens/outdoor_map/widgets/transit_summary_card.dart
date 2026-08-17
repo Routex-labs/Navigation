@@ -76,25 +76,9 @@ class TransitSummaryCard extends StatelessWidget {
         '도보 ${formatTransitDuration(itinerary.totalWalkTimeSeconds)}',
         if (fare != null && fare > 0) formatTransitFare(fare),
       ],
-      legs: [for (final leg in itinerary.legs) _leg(leg)],
+      legs: [for (final leg in itinerary.legs) routexTransitLeg(leg)],
       selected: true,
       onPressed: () {},
-    );
-  }
-
-  RoutexTransitLeg _leg(TransitLeg leg) {
-    final color = transitLegColor(leg);
-    return RoutexTransitLeg(
-      label: leg.mode.isWalk
-          ? '도보 ${formatTransitDuration(leg.sectionTimeSeconds)}'
-          : leg.shortLabel,
-      icon: transitModeIcon(leg.mode),
-      accent: leg.mode.isWalk
-          ? null
-          : RoutexBadgeAccent(
-              surface: color.withValues(alpha: 0.14),
-              ink: color,
-            ),
     );
   }
 }

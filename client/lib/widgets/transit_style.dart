@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 import '../models/route/transit_route.dart';
 
@@ -76,48 +77,16 @@ String formatTransitFare(int fare) {
   return '$buffer원';
 }
 
-/// 경로 한 줄 요약의 수단 칩. 목록·요약 카드가 같은 모양을 쓴다.
-class TransitLegChip extends StatelessWidget {
-  const TransitLegChip({super.key, required this.leg, this.compact = false});
-
-  final TransitLeg leg;
-
-  /// 좁은 자리(요약 카드)에서는 시간 표기를 뺀다.
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = transitLegColor(leg);
-    // 도보는 노선명이 없으므로 소요 시간을 라벨로 쓴다 — "도보"만 적으면
-    // 몇 분을 걷는지가 목록에서 사라진다.
-    final label = leg.mode.isWalk
-        ? formatTransitDuration(leg.sectionTimeSeconds)
-        : leg.shortLabel;
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: compact ? 7 : 9, vertical: 4),
-      decoration: BoxDecoration(
-        color: leg.mode.isWalk ? const Color(0xFFF1F3F5) : color,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            transitModeIcon(leg.mode),
-            size: compact ? 13 : 14,
-            color: leg.mode.isWalk ? const Color(0xFF5F6B76) : Colors.white,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: compact ? 11 : 12,
-              fontWeight: FontWeight.w700,
-              color: leg.mode.isWalk ? const Color(0xFF5F6B76) : Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+/// 앱의 대중교통 모델을 Runtime Kit 구간 표현으로 바꾼다.
+RoutexTransitLeg routexTransitLeg(TransitLeg leg) {
+  final color = transitLegColor(leg);
+  return RoutexTransitLeg(
+    label: leg.mode.isWalk
+        ? '도보 ${formatTransitDuration(leg.sectionTimeSeconds)}'
+        : leg.shortLabel,
+    icon: transitModeIcon(leg.mode),
+    accent: leg.mode.isWalk
+        ? null
+        : RoutexBadgeAccent(surface: color.withValues(alpha: 0.14), ink: color),
+  );
 }

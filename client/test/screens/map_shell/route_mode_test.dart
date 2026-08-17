@@ -12,6 +12,7 @@ import 'package:navigation_client/repositories/place/mock_destination_repository
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:navigation_client/widgets/eta_card.dart';
 import 'package:navigation_client/screens/map_shell/widgets/search/route_field_results.dart';
+import 'package:navigation_client/state/recent_route_points_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 길찾기가 **상단 바 안에서** 끝나는지에 대한 회귀 테스트.
@@ -23,6 +24,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   late BuildingRepository originalBuildingRepository;
   late DestinationRepository originalDestinationRepository;
+  late RecentRoutePointsController originalRecents;
 
   final repository = MockBuildingRepository();
 
@@ -53,8 +55,11 @@ void main() {
     await debugModeController.reload();
     originalBuildingRepository = buildingRepository;
     originalDestinationRepository = destinationRepository;
+    originalRecents = recentRoutePointsController;
     buildingRepository = repository;
     destinationRepository = MockDestinationRepository(repository);
+    recentRoutePointsController = RecentRoutePointsController();
+    await recentRoutePointsController.ready;
     requestStartupPermissions = () async => {};
     await repository.getAllBuildings();
   });
@@ -62,6 +67,7 @@ void main() {
   tearDown(() {
     buildingRepository = originalBuildingRepository;
     destinationRepository = originalDestinationRepository;
+    recentRoutePointsController = originalRecents;
     requestStartupPermissions = defaultRequestStartupPermissions;
     watchPosition = defaultWatchPosition;
   });
@@ -85,7 +91,9 @@ void main() {
     matching: find.byType(TextField),
   );
 
-  testWidgets('길찾기를 누르면 기존 플래너와 이동 수단 줄이 상단에 뜬다', (WidgetTester tester) async {
+  testWidgets('길찾기를 누르면 플래너가 뜨고 끝점 확정 뒤 이동 수단이 나타난다', (
+    WidgetTester tester,
+  ) async {
     await pumpShell(tester);
     // 전체 화면이 아니라는 것부터 고정한다 — 지도가 그대로 보여야 한다.
     expect(find.byKey(const Key('route-draft-origin')), findsNothing);
@@ -96,12 +104,18 @@ void main() {
     expect(find.byKey(const Key('route-planner')), findsOneWidget);
     expect(find.text('현재 위치'), findsOneWidget);
     expect(find.byKey(const Key('route-draft-destination')), findsOneWidget);
-    // 수단이 나란히 있다. 테스트 환경에는 카카오 키가 없어 대중교통은 빠지므로
-    // Runtime Kit 자체 테스트가 수단 줄의 선택 규칙을 맡으므로 나머지 둘로 확인한다.
+    expect(find.text('자동차'), findsNothing);
+    expect(find.text('도보'), findsNothing);
+
+    await tester.enterText(destinationField(), '강의실');
+    await drain(tester);
+    await tester.tap(find.text('강의실 101').first);
+    await drain(tester);
+
+    // 테스트 환경에는 카카오 키가 없어 대중교통은 빠진다. 두 끝점이 확정된
+    // 뒤에만 나머지 수단이 나타난다.
     expect(find.text('자동차'), findsOneWidget);
     expect(find.text('도보'), findsOneWidget);
-
-    // Runtime Kit 플래너는 출발 → 도착 → 이동수단 순서를 고정한다.
     expect(
       tester.getRect(find.text('도보')).top,
       greaterThan(tester.getRect(find.text('현재 위치')).bottom),

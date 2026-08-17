@@ -64,78 +64,78 @@ class RouteFieldResults extends StatelessWidget {
     final hasResults = results.isNotEmpty || searching;
     return RoutexSurface(
       role: RoutexSurfaceRole.chrome,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (showPickOnMap)
-            RoutexListCell(
-              key: const Key('route-field-pick-on-map'),
-              title: '지도에서 선택',
-              subtitle: isOrigin
-                  ? '지도에서 매장을 눌러 출발지로 지정합니다'
-                  : '지도에서 매장을 눌러 도착지로 지정합니다',
-              leadingIcon: RoutexIcons.placeLocation,
-              trailingIcon: RoutexIcons.forward,
-              onPressed: onPickOnMap,
-            ),
-          if (isOrigin)
-            RoutexListCell(
-              key: const Key('route-field-current-location'),
-              title: '현재 위치',
-              leadingIcon: RoutexIcons.currentLocation,
-              onPressed: onCurrentLocation,
-            ),
-          if (hasShortcut &&
-              (recents.isNotEmpty || showSuggestions || hasResults))
-            const RoutexDivider(role: RoutexDividerRole.section),
-          if (recents.isNotEmpty) ...[
-            RoutexSectionHeader(
-              title: '최근 출발지 · 목적지',
-              actionLabel: '전체 삭제',
-              onAction: recentRoutePointsController.clear,
-            ),
-            for (final point in recents)
+      // 키보드가 올라오면 최근 항목까지 포함한 패널 전체가 남은 높이 안에서
+      // 스크롤되어야 한다. 결과 목록만 스크롤하면 헤더·최근 항목이 먼저 잘린다.
+      child: SingleChildScrollView(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom > 0
+              ? RoutexSpacing.controlGap
+              : 0,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (showPickOnMap)
               RoutexListCell(
-                key: Key('route-field-recent-${point.dedupeKey}'),
-                title: point.title,
-                subtitle: point.subtitle.isEmpty ? null : point.subtitle,
-                leadingIcon: RoutexIcons.recent,
-                leadingIconTone: RoutexListIconTone.quiet,
-                trailingActionLabel: '${point.title} 삭제',
-                trailingActionIcon: RoutexIcons.close,
-                onTrailingAction: () =>
-                    recentRoutePointsController.remove(point),
-                onPressed: () => onPicked(point),
+                key: const Key('route-field-pick-on-map'),
+                title: '지도에서 선택',
+                subtitle: isOrigin
+                    ? '지도에서 매장을 눌러 출발지로 지정합니다'
+                    : '지도에서 매장을 눌러 도착지로 지정합니다',
+                leadingIcon: RoutexIcons.placeLocation,
+                trailingIcon: RoutexIcons.forward,
+                onPressed: onPickOnMap,
               ),
-          ],
-          if (showSuggestions) ...[
-            if (recents.isNotEmpty)
+            if (isOrigin)
+              RoutexListCell(
+                key: const Key('route-field-current-location'),
+                title: '현재 위치',
+                leadingIcon: RoutexIcons.currentLocation,
+                onPressed: onCurrentLocation,
+              ),
+            if (hasShortcut &&
+                (recents.isNotEmpty || showSuggestions || hasResults))
               const RoutexDivider(role: RoutexDividerRole.section),
-            for (final suggestion in suggestions) _suggestionCell(suggestion),
-          ],
-          if (showSuggestions && hasResults)
-            const RoutexDivider(role: RoutexDividerRole.section),
-          if (hasResults)
-            Flexible(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.only(
-                  bottom: MediaQuery.viewInsetsOf(context).bottom > 0
-                      ? RoutexSpacing.controlGap
-                      : 0,
-                ),
-                child: RoutexResultList(
-                  status: searching && results.isEmpty
-                      ? RoutexResultStatus.loading
-                      : RoutexResultStatus.ready,
-                  loadingMessage: '경로 후보를 찾는 중',
-                  children: [
-                    for (final candidate in results) _candidateCell(candidate),
-                  ],
-                ),
+            if (recents.isNotEmpty) ...[
+              RoutexSectionHeader(
+                title: '최근 출발지 · 목적지',
+                actionLabel: '전체 삭제',
+                onAction: recentRoutePointsController.clear,
               ),
-            ),
-        ],
+              for (final point in recents)
+                RoutexListCell(
+                  key: Key('route-field-recent-${point.dedupeKey}'),
+                  title: point.title,
+                  subtitle: point.subtitle.isEmpty ? null : point.subtitle,
+                  leadingIcon: RoutexIcons.recent,
+                  leadingIconTone: RoutexListIconTone.quiet,
+                  trailingActionLabel: '${point.title} 삭제',
+                  trailingActionIcon: RoutexIcons.close,
+                  onTrailingAction: () =>
+                      recentRoutePointsController.remove(point),
+                  onPressed: () => onPicked(point),
+                ),
+            ],
+            if (showSuggestions) ...[
+              if (recents.isNotEmpty)
+                const RoutexDivider(role: RoutexDividerRole.section),
+              for (final suggestion in suggestions) _suggestionCell(suggestion),
+            ],
+            if (showSuggestions && hasResults)
+              const RoutexDivider(role: RoutexDividerRole.section),
+            if (hasResults)
+              RoutexResultList(
+                status: searching && results.isEmpty
+                    ? RoutexResultStatus.loading
+                    : RoutexResultStatus.ready,
+                loadingMessage: '경로 후보를 찾는 중',
+                children: [
+                  for (final candidate in results) _candidateCell(candidate),
+                ],
+              ),
+          ],
+        ),
       ),
     );
   }
