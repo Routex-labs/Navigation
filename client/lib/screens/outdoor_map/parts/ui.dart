@@ -7,7 +7,15 @@
 part of '../outdoor_map_screen.dart';
 
 extension OutdoorMapUi on OutdoorMapBodyState {
-  void _showSnack(String message) => _showSnackGuarded(message, replace: false);
+  void _showSnack(String message, {Duration? duration}) =>
+      _showSnackGuarded(message, replace: false, duration: duration);
+
+  /// **읽고 나서 할 일이 없는** 한 줄 안내가 떠 있는 시간.
+  ///
+  /// 기본 4초는 "되돌리기가 붙은 알림"의 시간이라([RoutexFeedbackTiming]) 손이
+  /// 닿을 여유까지 재 둔 값이다. 누를 것이 없는 안내를 그만큼 붙들면 하단 바를
+  /// 그 시간 내내 가린다 — 사용자는 그동안 다른 조작을 못 한다.
+  static const _briefSnackDuration = RoutexFeedbackTiming.toastVisibility;
 
   /// 지금 떠 있는 안내를 걷어내고 새 안내를 띄운다.
   ///
@@ -25,14 +33,23 @@ extension OutdoorMapUi on OutdoorMapBodyState {
   /// 된다(replace 계열은 이전 것을 걷어내고 새로 띄우므로 특히 그렇다). 시각
   /// 기억 대신 "지금 그 문구가 떠 있는가"를 기준으로 거른다 — 닫힌 뒤의 정당한
   /// 재표시는 막지 않고, 테스트의 가짜 시계와도 어긋나지 않는다.
-  void _showSnackGuarded(String message, {required bool replace}) {
+  void _showSnackGuarded(
+    String message, {
+    required bool replace,
+    Duration? duration,
+  }) {
     if (!mounted) return;
     if (_visibleSnackMessage == message) return;
     final messenger = ScaffoldMessenger.of(context);
     if (replace) messenger.hideCurrentSnackBar();
     _visibleSnackMessage = message;
     messenger
-        .showSnackBar(SnackBar(content: Text(message)))
+        .showSnackBar(
+          SnackBar(
+            content: Text(message),
+            duration: duration ?? const Duration(seconds: 4),
+          ),
+        )
         .closed
         .whenComplete(() {
           if (_visibleSnackMessage == message) _visibleSnackMessage = null;

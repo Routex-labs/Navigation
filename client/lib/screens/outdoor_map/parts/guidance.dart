@@ -207,8 +207,6 @@ extension OutdoorMapGuidance on OutdoorMapBodyState {
       nodeId: nodeId,
       storePoint: origin.point,
       storeName: origin.name,
-      // 미리 보기가 앵커를 여기까지 미뤘으므로, 그때 받은 판단을 그대로 쓴다.
-      announce: _indoorRoutePreviewAnnounce,
     );
     _notifyRouteStateIfChanged();
   }

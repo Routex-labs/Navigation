@@ -1351,8 +1351,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
       await _startRoute(
         origin: destination,
         destination: origin,
-        // 사용자가 방금 직접 뒤집었다 — 위치가 옮겨간 것을 새삼 알릴 이유가 없다.
-        announceOriginAnchor: false,
       );
       return;
     }
@@ -1370,7 +1368,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
     await _startRoute(
       origin: destination,
       destination: replacement,
-      announceOriginAnchor: false,
     );
   }
 
@@ -1996,13 +1993,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// [autoSelectMode]가 참이면 목적지 종류를 보고 수단을 정한다 — 사용자가 직접
   /// 고른 경우에는 거짓으로 불러 그 선택을 덮지 않는다.
   ///
-  /// [announceOriginAnchor]가 false면 "여기서 출발하는 것으로 봤다" 안내를 띄우지
-  /// 않는다(출발↔도착 맞바꾸기처럼 방금 직접 시킨 경우).
   Future<void> _startRoute({
     DirectionsCandidate? origin,
     required DirectionsCandidate destination,
     bool autoSelectMode = true,
-    bool announceOriginAnchor = true,
   }) async {
     // 안내가 시작되면 상단 바는 길찾기 두 칸이어야 한다. 매장 시트·검색 결과·
     // 지도 탭처럼 길찾기 바를 거치지 않고 들어오는 경로가 있어서, 여기서 한 번
@@ -2035,11 +2029,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
         await _startCarRoute(origin, destination);
         return;
       case RoutePlanMode.walk:
-        await _startWalkRoute(
-          origin: origin,
-          destination: destination,
-          announceOriginAnchor: announceOriginAnchor,
-        );
+        await _startWalkRoute(origin: origin, destination: destination);
     }
   }
 
@@ -2052,7 +2042,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
   Future<void> _startWalkRoute({
     required DirectionsCandidate? origin,
     required DirectionsCandidate destination,
-    required bool announceOriginAnchor,
   }) async {
     final map = _outdoorKey.currentState;
     final kind = classifyWalkRoute(
@@ -2069,7 +2058,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
         await map?.showIndoorRouteTo(
           _asPoi(destination),
           origin: origin == null ? null : _asPoi(origin),
-          announceOriginAnchor: announceOriginAnchor,
           // 실내 위치가 아직 없으면 그 사람은 건물 밖이다. 경로는 그려 주되
           // 현재 위치를 출발지 매장으로 잡지는 않는다 — 시작은 카드의
           // `안내 시작`이 맡는다.
