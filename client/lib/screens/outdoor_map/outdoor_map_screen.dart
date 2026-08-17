@@ -499,6 +499,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   bool _styleReady = false;
 
+  /// 건물 정보가 도착하기를 기다리는 자리를 위한 신호.
+  ///
+  /// 공유 링크는 `/store-index`와 `/buildings/{id}`를 함께 부르는데 **도착 순서가
+  /// 정해져 있지 않다.** 건물이 늦으면 층 전환이 조용히 실패하고, 인덱스에서 이미
+  /// 찾아 놓은 매장을 "장소를 찾을 수 없습니다"라고 말하게 된다.
+  final _buildingReadySignal = Completer<void>();
+
   /// 스타일 로드가 끝나기를 기다리는 자리를 위한 신호.
   ///
   /// 공유 링크로 들어오면 **지도보다 링크가 먼저 도착한다** — 앱을 켜자마자
@@ -938,9 +945,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   @override
   void dispose() {
-    // 스타일을 기다리던 매장 포커스를 풀어 준다. 안 풀면 그 await가 영영
+    // 스타일·건물을 기다리던 자리를 풀어 준다. 안 풀면 그 await가 영영
     // 돌아오지 않아 뒤따르는 mounted 검사에 닿지 못한다.
     if (!_styleReadySignal.isCompleted) _styleReadySignal.complete();
+    if (!_buildingReadySignal.isCompleted) _buildingReadySignal.complete();
     _buildingRetryTimer?.cancel();
     _selectionScaleTimer?.cancel();
     _pinIntroTimer?.cancel();
@@ -1707,6 +1715,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   }) async {
     if (entry.floorName.isNotEmpty && entry.floorName != _activeFloor) {
       if (!_indoorEntered && !enterBuildingIfNeeded) return null;
+      // **건물을 기다린다.** 없으면 층 전환이 false만 돌려주고, 위층에서는 그것이
+      // "그런 매장이 없다"와 구분되지 않는다.
+      if (_building == null) await _buildingReadySignal.future;
+      if (!mounted) return null;
       // 검색에서 타 층 매장을 고른 경로 — 사용자가 층 전환을 가장 자주 체감하는
       // 자리다. 새 도면 페이드인은 이어지는 매장 포커스 카메라 이동과 겹친다.
       await _switchOverlayFloorCrossfaded(entry.floorName);
