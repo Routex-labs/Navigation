@@ -1359,14 +1359,31 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       origin: origin,
     );
     if (!mounted) return;
-    // 실내 구간이 실제로 그려졌을 때만 야외 구간을 예약한다. 위 호출은 실패해도
+    // 실내 구간이 실제로 그려졌을 때만 다음으로 간다. 위 호출은 실패해도
     // 스낵바만 띄우고 조용히 돌아오므로, 성공 여부는 결과 상태로 확인한다.
     if (_indoorRouteDestination == null) return;
+
+    // **야외 구간도 지금 함께 그린다.** 예전에는 예약만 걸어 두고 건물을 나가는
+    // 순간에야 그렸는데, 그러면 "자동차·대중교통·도보 어느 것을 눌러도 실내
+    // 안내만 나오고 나머지 경로가 사라진" 것으로 보인다 — 정작 지금 고르려는
+    // 것은 바깥을 어떻게 갈지다. 출발점은 방금 고른 출구다.
+    //
+    // 두 구간은 서로를 지우지 않는다. [showRouteTo]는 실내 경로 상태를 건드리지
+    // 않고, `_route`를 null로 되돌렸다가 채우므로 카메라도 새 경로 전체에 맞춰
+    // 다시 잡힌다([_applyRoute]) — 그 상자가 출구(=건물)부터 목적지까지라 실내
+    // 구간도 그 안에 든다.
+    await showRouteTo(destination, label: label, origin: exit.point);
+    if (!mounted || _indoorRouteDestination == null) return;
+
+    // **예약은 그래도 남긴다.** 방금 그린 야외 구간은 출구에서 출발하는 미리
+    // 보기이고, 실제로 나가면 그 사람이 선 자리에서 다시 그려야 한다
+    // ([_activatePendingOutdoorRoute]). [showRouteTo]가 예약을 비우므로 순서상
+    // 여기서 다시 건다.
     setState(() {
       _pendingOutdoorDestination = destination;
       _pendingOutdoorLabel = label;
     });
-    _showSnack('$exitLabel로 안내합니다. 건물을 나가면 바깥 경로가 이어집니다.');
+    _showSnack('$exitLabel로 나가 목적지까지 이어집니다');
   }
 
   /// 이 화면에 그려진 안내를 **전부** 지운다 — 야외 도보 구간과 실내 구간까지.
