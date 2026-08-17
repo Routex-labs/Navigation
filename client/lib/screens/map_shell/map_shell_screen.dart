@@ -6,6 +6,9 @@ import 'package:latlong2/latlong.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/api_config.dart';
+import 'package:routex_design_system/routex_design_system.dart';
+
+import '../../routing/place_link.dart';
 import '../../service_locator.dart';
 import '../../domain/route/dijkstra.dart';
 import '../../domain/store/nearby_stores.dart';
@@ -391,10 +394,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
     _routeOriginFocus.addListener(_onRouteOriginFocusChanged);
     _routeDestinationFocus.addListener(_onRouteDestinationFocusChanged);
     _requestStartupPermissions();
+    // 화면이 세워지기 전에 도착한 링크가 여기 남아 있을 수 있다(cold start).
+    placeLinkInbox.addListener(_onPlaceLinkChanged);
+    _onPlaceLinkChanged();
   }
 
   @override
   void dispose() {
+    placeLinkInbox.removeListener(_onPlaceLinkChanged);
     _searchFocus.removeListener(_onSearchFocusChanged);
     _searchFocus.dispose();
     _searchController.dispose();
@@ -1151,6 +1158,55 @@ class _MapShellScreenState extends State<MapShellScreen> {
     }
   }
 
+  void _onPlaceLinkChanged() {
+    final link = placeLinkInbox.value;
+    if (link == null) return;
+    placeLinkInbox.take();
+    unawaited(_openPlaceFromLink(link));
+  }
+
+  /// 링크가 가리키는 매장을 연다.
+  ///
+  /// **이름으로 찾거나 첫 결과로 대신하지 않는다.** 같은 이름의 매장이 층마다 있는
+  /// 시설이라, 한 번이라도 흉내를 내면 공유받은 사람이 **다른 매장**을 보고 그것을
+  /// 공유한 사람의 의도로 읽는다. 정확히 그 id가 없으면 아무것도 열지 않고 지금
+  /// 지도에 머문다.
+  Future<void> _openPlaceFromLink(PlaceLink link) async {
+    if (link.buildingId != _buildingId) {
+      _showLinkFailure();
+      return;
+    }
+    await _loadRouteStoreIndex();
+    if (!mounted) return;
+    final entry = _routeStoreIndex
+        ?.where((e) => e.id == link.placeId)
+        .firstOrNull;
+    if (entry == null) {
+      _showLinkFailure();
+      return;
+    }
+    // 링크를 받은 사람은 대개 건물 밖에 있다 — 그게 공유의 목적이다. 밖이라고
+    // 타 층을 포기하면 공유가 주 사용 맥락에서 아무것도 열지 못한다.
+    final resolved = await _outdoorKey.currentState?.resolveIndexEntry(
+      entry,
+      enterBuildingIfNeeded: true,
+    );
+    if (!mounted) return;
+    if (resolved == null) {
+      _showLinkFailure();
+      return;
+    }
+    _closeSearch();
+    await _runSheetChain(() => _showStoreInfo(resolved, focusOnMap: true));
+  }
+
+  /// 링크로 아무것도 열지 못했을 때. **원인을 과장하지 않는다** — 네트워크 실패와
+  /// 삭제를 클라이언트가 구분할 수 없어서, 둘 다 같은 한 줄로 끝낸다.
+  void _showLinkFailure() {
+    if (!mounted) return;
+    RoutexToast.show(context, '장소를 찾을 수 없습니다');
+  }
+
   /// 후보 계산. **건물 안을 보고 있을 때만** 만든다 — 원본이 건물 하나의 매장
   /// 목록이라, 야외에서 쓰면 지금 서 있는 곳과 무관한 매장을 제안하게 된다
   /// (상단 검색 패널의 `indoorContextActive`와 같은 이유).
@@ -1779,21 +1835,23 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 갈아 끼웠다면 **처음 누른 매장이 아니라 마지막 매장**이어야 한다.
   PoiSearchResult? _activePlaceMatch;
 
-  PlaceDetailTarget _targetFor(PoiSearchResult match, FavoritePlace? favorite) =>
-      PlaceDetailTarget(
-        title: match.name,
-        subtitle: match.floor,
-        placeId: match.placeId,
-        favorite: favorite,
-        // 대분류는 화면에 글자로 나오지 않고 헤더 아이콘의 폴백·강조색으로만 쓴다.
-        category: match.category,
-        // 대분류 칩을 없앴으므로 업종은 한 줄로만 보여 준다. 소분류가 없는
-        // 장소에서 업종이 통째로 사라지지 않도록 대분류로 떨어뜨린다.
-        subcategory: match.subcategory ?? match.category,
-        // 검색 결과 목록이 쓰는 것과 **같은 계산 결과**를 넘긴다. 두 화면이
-        // 같은 매장에 다른 거리를 적으면 어느 쪽도 못 믿게 된다.
-        reach: match.nodeId == null ? null : _reachByNodeId?[match.nodeId],
-      );
+  PlaceDetailTarget _targetFor(
+    PoiSearchResult match,
+    FavoritePlace? favorite,
+  ) => PlaceDetailTarget(
+    title: match.name,
+    subtitle: match.floor,
+    placeId: match.placeId,
+    favorite: favorite,
+    // 대분류는 화면에 글자로 나오지 않고 헤더 아이콘의 폴백·강조색으로만 쓴다.
+    category: match.category,
+    // 대분류 칩을 없앴으므로 업종은 한 줄로만 보여 준다. 소분류가 없는
+    // 장소에서 업종이 통째로 사라지지 않도록 대분류로 떨어뜨린다.
+    subcategory: match.subcategory ?? match.category,
+    // 검색 결과 목록이 쓰는 것과 **같은 계산 결과**를 넘긴다. 두 화면이
+    // 같은 매장에 다른 거리를 적으면 어느 쪽도 못 믿게 된다.
+    reach: match.nodeId == null ? null : _reachByNodeId?[match.nodeId],
+  );
 
   /// 지도에서 매장을 눌러 상세를 연다. **떠 있는 상세가 있으면 먼저 닫는다.**
   ///
@@ -1994,6 +2052,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
           _asPoi(destination),
           origin: origin == null ? null : _asPoi(origin),
           announceOriginAnchor: announceOriginAnchor,
+          // 실내 위치가 아직 없으면 그 사람은 건물 밖이다. 경로는 그려 주되
+          // 현재 위치를 출발지 매장으로 잡지는 않는다 — 시작은 카드의
+          // `안내 시작`이 맡는다.
+          preview:
+              origin != null &&
+              !indoorNavigationDriver.currentCalibration.canRenderPosition,
         );
 
       // 실내 구간까지 미리 풀어 두었다가 건물에 들어가면 이어 붙인다.

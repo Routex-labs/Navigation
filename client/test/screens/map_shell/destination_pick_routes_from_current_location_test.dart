@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:navigation_client/service_locator.dart';
 import 'package:navigation_client/repositories/building/building_repository.dart';
 import 'package:navigation_client/repositories/place/destination_repository.dart';
@@ -53,7 +54,7 @@ void main() {
 
   /// 상단 검색으로 mock 매장을 찾아 매장 정보 시트를 띄운다.
   Future<void> openStoreInfoBySearch(WidgetTester tester) async {
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await drain(tester);
 
     await tester.tap(find.byType(TextField).first);

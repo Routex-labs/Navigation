@@ -1,18 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
-import '../../../../../theme/app_theme.dart';
 import 'korean_line_break.dart';
-
-/// 상세 API의 `keyValue` 항목을 렌더러에 넘길 때 쓰는 작은 표시 모델.
-///
-/// 네트워크 모델을 위젯 트리에 그대로 퍼뜨리지 않는다. 시트는 API 모델의
-/// `KeyValueItem`을 이 타입으로 한 번 변환하고, 이 폴더의 위젯은 표시만 맡는다.
-class PlaceKeyValue {
-  const PlaceKeyValue({required this.label, required this.value});
-
-  final String label;
-  final String value;
-}
 
 /// 한 줄 소개 섹션.
 ///
@@ -26,11 +15,7 @@ class PlaceSummarySection extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      const style = TextStyle(
-        fontSize: 14.5,
-        height: 1.55,
-        color: AppColors.text,
-      );
+      const style = RoutexTypography.body;
       return Text(
         balancedKoreanLines(
           text,
@@ -45,61 +30,11 @@ class PlaceSummarySection extends StatelessWidget {
   );
 }
 
-/// 위치 안내처럼 라벨과 값이 한 쌍인 섹션.
+/// 특징 표시 묶음.
 ///
-/// 카드 대신 구분선만 쓴다. 같은 라벨-값 형태인 `PlaceBusinessInfoSection`과
-/// 리듬을 맞춰 시트가 카드의 나열로 보이지 않게 한다.
-class PlaceKeyValueSection extends StatelessWidget {
-  const PlaceKeyValueSection({super.key, required this.items});
-
-  final List<PlaceKeyValue> items;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      // 여백은 항목 사이에만 — `PlaceBusinessInfoSection`과 같은 규칙이다.
-      for (var index = 0; index < items.length; index++) ...[
-        if (index > 0) ...[
-          const SizedBox(height: 10),
-          const Divider(height: 1),
-          const SizedBox(height: 10),
-        ],
-        _KeyValueRow(item: items[index]),
-      ],
-    ],
-  );
-}
-
-class _KeyValueRow extends StatelessWidget {
-  const _KeyValueRow({required this.item});
-
-  final PlaceKeyValue item;
-
-  // 라벨을 값 위 캡션으로 둔다 — `PlaceBusinessInfoSection`과 같은 이유이자 같은
-  // 리듬이다.
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        item.label,
-        style: const TextStyle(fontSize: 12, color: AppColors.muted),
-      ),
-      const SizedBox(height: 3),
-      Text(
-        keepWordsWhole(item.value),
-        style: const TextStyle(
-          fontSize: 13.5,
-          height: 1.4,
-          color: AppColors.text,
-        ),
-      ),
-    ],
-  );
-}
-
-/// 특징 chip 묶음.
+/// **누르는 것이 아니다.** 예전에는 Material `Chip`이라 알약 모양이었는데, 바로 위
+/// 지도의 분류 칩과 같은 모양이라 눌러 보고 아무 일도 없는 것을 겪게 된다. 읽기만
+/// 하는 표시는 배지로 그린다.
 class PlaceTagsSection extends StatelessWidget {
   const PlaceTagsSection({super.key, required this.tags});
 
@@ -107,21 +42,11 @@ class PlaceTagsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Wrap(
-    spacing: 8,
-    runSpacing: 8,
+    spacing: RoutexSpacing.controlGap,
+    runSpacing: RoutexSpacing.controlGap,
     children: [
       for (final tag in tags)
-        Chip(
-          label: Text(tag),
-          labelStyle: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: AppColors.primary,
-          ),
-          backgroundColor: AppColors.blue50,
-          side: const BorderSide(color: AppColors.blue100),
-          visualDensity: VisualDensity.compact,
-        ),
+        RoutexBadge(label: tag, tone: RoutexBadgeTone.info),
     ],
   );
 }
@@ -135,93 +60,18 @@ class PlaceNoticeSection extends StatelessWidget {
   final String? until;
 
   @override
-  Widget build(BuildContext context) => _TintedBlock(
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.only(top: 1),
-          child: Icon(
-            Icons.campaign_outlined,
-            size: 19,
-            color: AppColors.primary,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                keepWordsWhole(text),
-                style: const TextStyle(fontSize: 13, color: AppColors.text),
-              ),
-              if (until != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  '$until까지',
-                  style: const TextStyle(fontSize: 12, color: AppColors.muted),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-/// MapLibre 미리보기는 첫 프레임에 별도 지도·타일 요청을 만들기 때문에 이 Wave에서
-/// 넣지 않는다. 이 섹션은 위치가 있다는 사실만 가볍게 알려 주고, 실제 지도 이동은
-/// 기존 지도 화면과 후속 상호작용에 맡긴다.
-///
-/// **눌리는 것처럼 보이면 안 된다.** 탭 핸들러가 없으므로 화살표 같은 버튼
-/// 기표를 두지 않는다. 지도 이동을 붙이는 날 그때 버튼으로 바꾼다.
-class PlaceMapSection extends StatelessWidget {
-  const PlaceMapSection({super.key, this.floorLabel});
-
-  final String? floorLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = floorLabel == null || floorLabel!.isEmpty
-        ? '지도에서 위치 확인'
-        : '${floorLabel!} 위치';
-    return _TintedBlock(
-      child: Row(
-        children: [
-          const Icon(Icons.place_outlined, color: AppColors.primary, size: 20),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
+  Widget build(BuildContext context) => RoutexSurface(
+    role: RoutexSurfaceRole.flat,
+    child: RoutexInset(
+      role: RoutexInsetRole.component,
+      child: RoutexInfoRow(
+        // 라벨은 확성기 아이콘이 대신한다. 값이 곧 공지 문장이라 그 위에 '공지'를
+        // 한 번 더 적으면 같은 말이 두 줄을 쓴다.
+        label: '공지',
+        value: text,
+        icon: Icons.campaign_outlined,
+        caption: until == null ? null : '$until까지',
       ),
-    );
-  }
-}
-
-/// 배경색으로만 구분하는 블록. 공지·지도 바로가기처럼 "본문이 아니라 하나의
-/// 덩어리"인 것에만 쓴다. 테두리는 두지 않는다 — 배경색만으로 이미 구분된다.
-class _TintedBlock extends StatelessWidget {
-  const _TintedBlock({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: AppColors.blue50,
-      borderRadius: BorderRadius.circular(12),
     ),
-    child: child,
   );
 }

@@ -1,48 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 import 'package:navigation_client/theme/app_theme.dart';
-import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail/korean_line_break.dart';
 import 'package:navigation_client/core/clipboard_confirmation.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail/place_detail_rich_sections.dart';
 
 void main() {
   Widget subject(Widget child) => MaterialApp(
+    theme: AppTheme.light,
     home: Scaffold(body: SingleChildScrollView(child: child)),
   );
 
   group('Place rich detail renderers', () {
-    testWidgets('hero carousel exposes every supplied local asset', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        subject(
-          const PlaceHeroCarousel(
-            images: [
-              PlaceHeroImage(
-                assetPath: 'assets/place_details/starbucks_store_01.jpg',
-              ),
-              PlaceHeroImage(
-                assetPath: 'assets/place_details/starbucks_store_04.jpg',
-              ),
-            ],
-          ),
-        ),
-      );
-
-      expect(find.byType(PageView), findsOneWidget);
-      expect(find.byType(Image), findsOneWidget);
-      expect(find.text('1 / 2'), findsOneWidget);
-    });
-
-    testWidgets('hero carousel is omitted when no local image is available', (
-      tester,
-    ) async {
-      await tester.pumpWidget(subject(const PlaceHeroCarousel(images: [])));
-
-      expect(find.byType(PageView), findsNothing);
-    });
-
     // 한 줄에 이름·영문명·설명·가격이 다 오면 무엇이 제목인지 흐려진다. 영문명은
     // 골라서 팝업을 연 사람에게만 필요하다.
     testWidgets('menu row drops the english name and keeps the description', (
@@ -134,20 +106,21 @@ void main() {
     // 배지 색은 종류마다 다르다. 한 줄에 둘이 나란히 뜨는 항목이 있어서, 같은 색이면
     // 두 배지가 한 덩어리로 읽힌다. 모르는 배지는 색을 못 고르는 것이 아니라 무채색으로
     // 떨어진다 — 색은 정보를 더하는 장치이지 그리기 위한 조건이 아니다.
-    test('배지 색은 종류마다 다르고 모르는 배지는 무채색이다', () {
-      final newTone = badgeToneFor('NEW');
-      final seasonTone = badgeToneFor('시즌 한정');
-      final unknownTone = badgeToneFor('한정 판매');
+    test('배지 색은 종류마다 다르고 모르는 배지는 색을 갖지 않는다', () {
+      final newAccent = badgeAccentFor('NEW')!;
+      final seasonAccent = badgeAccentFor('시즌 한정')!;
 
-      expect(newTone.foreground, const Color(0xFF1E7B45));
-      expect(seasonTone.foreground, const Color(0xFFB4600F));
-      expect(newTone.background, isNot(seasonTone.background));
-      expect(unknownTone.foreground, AppColors.muted);
+      expect(newAccent.ink, const Color(0xFF1E7B45));
+      expect(seasonAccent.ink, const Color(0xFFB4600F));
+      expect(newAccent.surface, isNot(seasonAccent.surface));
+      // 색을 못 고르는 것이 아니라 무채색으로 떨어진다. 그 판단은 Runtime Kit이
+      // 한다 — 여기서는 색을 넘기지 않는다는 사실만 잠근다.
+      expect(badgeAccentFor('한정 판매'), isNull);
 
       // 표기가 흔들려도 같은 색으로 간다. 공백 하나 때문에 색이 사라지면
       // 데이터가 아니라 화면을 의심하게 된다.
-      expect(badgeToneFor('시즌한정').foreground, seasonTone.foreground);
-      expect(badgeToneFor('new').foreground, newTone.foreground);
+      expect(badgeAccentFor('시즌한정')!.ink, seasonAccent.ink);
+      expect(badgeAccentFor('new')!.ink, newAccent.ink);
     });
 
     // 알레르기만 있고 설명·영양정보가 없는 항목도 팝업을 연다. `hasDetail`이
@@ -234,7 +207,10 @@ void main() {
       await tester.tap(find.text('리저브 콜드 브루'));
       await tester.pumpAndSettle();
 
-      expect(find.text(keepWordsWhole('깊고 부드러운 풍미의 커피')), findsOneWidget);
+      expect(
+        find.text(RoutexTypography.keepWordsWhole('깊고 부드러운 풍미의 커피')),
+        findsOneWidget,
+      );
       expect(find.text('355ml'), findsOneWidget);
       expect(find.text('5kcal'), findsOneWidget);
       expect(find.text('190mg'), findsOneWidget);
@@ -257,7 +233,10 @@ void main() {
       await tester.tap(find.text('플레인 베이글'));
       await tester.pumpAndSettle();
 
-      expect(find.text(keepWordsWhole('담백한 베이글')), findsOneWidget);
+      expect(
+        find.text(RoutexTypography.keepWordsWhole('담백한 베이글')),
+        findsOneWidget,
+      );
       expect(find.text('용량'), findsNothing);
       expect(find.text('칼로리'), findsNothing);
       expect(find.text('카페인'), findsNothing);
@@ -289,6 +268,7 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
+          theme: AppTheme.light,
           home: MediaQuery(
             data: const MediaQueryData(textScaler: TextScaler.linear(2.0)),
             child: const Scaffold(
@@ -349,11 +329,11 @@ void main() {
         ),
       );
 
-      expect(find.text('더보기'), findsOneWidget);
+      // 남은 개수를 적는다 — 근처 매장 줄과 같은 규칙이다. 접혀 있을 때만 세고,
+      // 펼친 뒤에는 이미 보이는 것을 다시 세지 않는다.
+      expect(find.text('2개 더보기'), findsOneWidget);
       expect(find.text('메뉴 0'), findsOneWidget);
       expect(find.text('메뉴 4'), findsNothing);
-      // 개수는 적지 않는다. 눌러서 나온 목록에 이미 전부 있다.
-      expect(find.text('6종'), findsNothing);
     });
 
     testWidgets('a category within the cap has no 더보기 row', (tester) async {
@@ -368,7 +348,7 @@ void main() {
         ),
       );
 
-      expect(find.text('더보기'), findsNothing);
+      expect(find.textContaining('더보기'), findsNothing);
     });
 
     // 팝업으로 띄우지 않고 그 자리에서 펼친다. 목록을 보러 팝업을 여는 것은
@@ -385,15 +365,23 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('더보기'));
+      await tester.tap(find.text('2개 더보기'));
       await tester.pumpAndSettle();
 
       expect(find.byType(Dialog), findsNothing);
       for (var index = 0; index < 6; index++) {
         expect(find.text('메뉴 $index'), findsOneWidget);
       }
-      // 다 펼쳤으면 더보기는 사라진다.
-      expect(find.text('더보기'), findsNothing);
+      // 다 펼치면 그 줄이 돌아가는 길이 된다. 펼쳐 놓고 나가지 못하면 메뉴 하나
+      // 보려던 사람이 여섯 줄을 지나 다음 섹션으로 가야 한다.
+      expect(find.textContaining('더보기'), findsNothing);
+      expect(find.text('접기'), findsOneWidget);
+
+      await tester.tap(find.text('접기'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('메뉴 5'), findsNothing);
+      expect(find.text('2개 더보기'), findsOneWidget);
     });
 
     // 탭을 옮기면 다시 접는다. 카테고리마다 펼침 상태를 들고 있으면, 돌아왔을 때
@@ -413,7 +401,7 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('더보기'));
+      await tester.tap(find.text('2개 더보기'));
       await tester.pumpAndSettle();
       expect(find.text('리저브 5'), findsOneWidget);
 
@@ -422,7 +410,7 @@ void main() {
       await tester.tap(find.text('리저브').last);
       await tester.pumpAndSettle();
 
-      expect(find.text('더보기'), findsOneWidget);
+      expect(find.text('2개 더보기'), findsOneWidget);
       expect(find.text('리저브 5'), findsNothing);
     });
 
@@ -519,6 +507,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          theme: AppTheme.light,
           home: Scaffold(
             // 상세 시트와 같은 조건을 만든다. 시트는 화면 비율로 크기가 정해져
             // 키보드가 올라와도 **줄어들지 않는다** — Scaffold가 알아서 줄여 주면
@@ -1059,8 +1048,10 @@ void main() {
       );
 
       final image = tester.widget<Image>(find.byType(Image));
-      expect((image.image as AssetImage).assetName,
-          'assets/place_details/osulloc_favicon.png');
+      expect(
+        (image.image as AssetImage).assetName,
+        'assets/place_details/osulloc_favicon.png',
+      );
       // 자산을 준 줄만 그림이고, 나머지는 아이콘 그대로다.
       expect(find.byIcon(Icons.public), findsNothing);
       expect(find.byIcon(Icons.camera_alt), findsOneWidget);
@@ -1087,6 +1078,65 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    // 열기 실패는 **시트 위에** 떠야 한다.
+    //
+    // 예전에는 `ScaffoldMessenger`의 SnackBar였는데, 상세 시트는 Navigator에 얹힌
+    // 모달이라 SnackBar를 그리는 Scaffold보다 위에 있다. 그래서 실패 문구가 시트
+    // 뒤에 그려져 **한 번도 보이지 않았다** — 눌렀는데 아무 일도 안 일어난 것과
+    // 구분되지 않았다. 같은 파일의 복사 버튼만 오버레이 토스트를 쓰고 있었다.
+    testWidgets('링크를 열지 못하면 시트에 가리지 않는 알림으로 말한다', (tester) async {
+      // 위젯 테스트에는 플러그인이 등록되지 않아 기본 MethodChannel 구현이 탄다.
+      // `false`는 "열지 못했다"이고, 이때만 알림이 뜬다.
+      const channel = MethodChannel('plugins.flutter.io/url_launcher');
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        (call) async => false,
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          channel,
+          null,
+        ),
+      );
+
+      final navigatorKey = GlobalKey<NavigatorState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: navigatorKey,
+          theme: AppTheme.light,
+          home: const Scaffold(body: SizedBox.expand()),
+        ),
+      );
+
+      unawaited(
+        showModalBottomSheet<void>(
+          context: navigatorKey.currentContext!,
+          builder: (_) => const PlaceLinksSection(
+            items: [
+              PlaceLinkItem(
+                label: '인스타그램',
+                url: 'https://www.instagram.com/starbuckskorea',
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('인스타그램'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('인스타그램을(를) 열지 못했습니다'), findsOneWidget);
+      // 루트 Overlay에 얹힌 토스트다. 시트 아래에 그려지는 SnackBar가 아니다.
+      expect(RoutexToast.isVisible, isTrue);
+      expect(find.byType(SnackBar), findsNothing);
+
+      // 토스트는 스스로 사라진다. 남은 타이머를 흘려보내지 않으면 테스트가
+      // 대기 중인 타이머로 실패한다.
+      await tester.pump(RoutexToast.visibleDuration);
+      expect(find.text('인스타그램을(를) 열지 못했습니다'), findsNothing);
+    });
+
     testWidgets('business information replaces the label with an icon', (
       tester,
     ) async {
@@ -1101,7 +1151,10 @@ void main() {
       expect(find.text('매장 정보'), findsOneWidget);
       expect(find.byIcon(Icons.place_outlined), findsOneWidget);
       expect(find.text('주소'), findsNothing);
-      expect(find.text(keepWordsWhole('서울 영등포구 여의대로 108')), findsOneWidget);
+      expect(
+        find.text(RoutexTypography.keepWordsWhole('서울 영등포구 여의대로 108')),
+        findsOneWidget,
+      );
     });
 
     // 데이터는 사람이 쓰는 자유 문자열이라 언제든 새 라벨이 들어온다. 아무 아이콘이나
@@ -1116,7 +1169,7 @@ void main() {
       );
 
       expect(find.text('반려동물 동반'), findsOneWidget);
-      expect(find.text(keepWordsWhole('가능')), findsOneWidget);
+      expect(find.text(RoutexTypography.keepWordsWhole('가능')), findsOneWidget);
     });
   });
 }

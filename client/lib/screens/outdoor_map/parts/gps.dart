@@ -69,9 +69,13 @@ extension OutdoorMapGps on OutdoorMapBodyState {
       alreadyCentered: _didInitialCenter,
       followingUser: _followingUser,
       indoorEntered: _indoorEntered,
+      storeFocusOwnsCamera: _storeFocusOwnsCamera,
       mapReady: _styleReady && _mapController != null,
     )) {
       _didInitialCenter = true;
+      // 카메라가 어디로 왜 갔는지는 화면만 봐서는 못 가린다. 공유 링크가 맞춰
+      // 둔 매장 화면을 이 줄이 가져가고 있었는데, 조용해서 한참 못 찾았다.
+      debugPrint('[first fix] 첫 좌표로 카메라를 옮긴다');
       unawaited(_moveCameraToUser(position));
     }
     // 문 선택은 진입 판정보다 **먼저** 갱신한다. 진입 직후 실내 위치를 잡을 때

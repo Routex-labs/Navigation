@@ -71,6 +71,7 @@
 | [검색 결과 목록 UX](client/search-result-list-ux.md) | 결과 행 구조와 정렬 |
 | [카메라 연출](client/camera-choreography-plan.md) | 안내 시작·층 전환 카메라, 카메라 가둠 |
 | [지도 스타일 규칙](client/map-style-rules.md) | 도면 색·라벨·아이콘의 근거와 MapLibre 함정 |
+| [전역 테마 넘기기](client/theme-handover.md) | Runtime Kit 전환의 조건·재 본 값·남은 순서 |
 | [실내 진입·이탈 판정 규칙](client/indoor-entry-rules.md) | GPS·zoom·근접 세 축의 임계값 근거 |
 | [GPS 스트림 정책](client/gps-stream-policy.md) | 스트림 수명·신선도·경로 재계산 주기 |
 | [에스컬레이터 층 판정 임계값](client/escalator-thresholds.md) | 상수마다의 실측 근거와 실측에서 나온 함정 |

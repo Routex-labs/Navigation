@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/models/building/category_count.dart';
@@ -140,7 +141,7 @@ void main() {
   ) async {
     watchPosition = () => positions.stream;
     await tester.pumpWidget(
-      const MaterialApp(home: Scaffold(body: OutdoorMapBody())),
+      MaterialApp(theme: AppTheme.light, home: Scaffold(body: OutdoorMapBody())),
     );
     await drain(tester);
     positions.add(fix(entrance, 10));

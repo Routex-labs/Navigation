@@ -8,6 +8,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 import '../../../../../domain/store/nearby_stores.dart';
 import '../../../../../models/place/store_index_entry.dart';
@@ -59,7 +60,7 @@ class _PlaceNearbySectionState extends State<PlaceNearbySection> {
       children: [
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: placeSectionGutter),
-          child: PlaceSectionTitle('근처 매장'),
+          child: RoutexSectionHeader(title: '근처 매장'),
         ),
         const SizedBox(height: 8),
         AnimatedSize(
@@ -85,6 +86,8 @@ class _PlaceNearbySectionState extends State<PlaceNearbySection> {
             ),
           ),
         ),
+        // 접었을 때만 개수가 붙는다. 펼친 뒤의 "N개 접기"는 이미 화면에 보이는
+        // 것을 다시 세는 말이라 확인할 이유가 없다.
         if (hiddenCount > 0)
           Padding(
             padding: const EdgeInsets.fromLTRB(
@@ -93,29 +96,10 @@ class _PlaceNearbySectionState extends State<PlaceNearbySection> {
               placeSectionGutter,
               0,
             ),
-            child: SizedBox(
-              width: double.infinity,
-              child: TextButton.icon(
-                onPressed: () => setState(() => _expanded = !_expanded),
-                iconAlignment: IconAlignment.end,
-                icon: AnimatedRotation(
-                  turns: _expanded ? 0.5 : 0,
-                  duration: _expandDuration,
-                  curve: Curves.easeOutCubic,
-                  child: const Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    size: 19,
-                  ),
-                ),
-                label: Text(_expanded ? '접기' : '$hiddenCount개 더보기'),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.muted,
-                  textStyle: const TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
+            child: RoutexShowMore(
+              expanded: _expanded,
+              hiddenCount: hiddenCount,
+              onExpanded: (value) => setState(() => _expanded = value),
             ),
           ),
       ],

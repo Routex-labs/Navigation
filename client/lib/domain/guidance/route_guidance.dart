@@ -49,6 +49,20 @@ enum ArrivalAutoClearDecision {
 /// 정도로 잡은 임의값이다.
 const Duration arrivalAutoClearDelay = Duration(seconds: 5);
 
+/// 도착을 화면이 말해야 하는가.
+///
+/// **[decideArrivalAutoClear]와 조건이 다르다.** 자동 종료는 걸어서 도착했을 때만
+/// 하지만(바로 옆 매장은 고르자마자 경로가 사라지면 안 된다), 도착했다는 말은 그
+/// 경로에서도 해야 한다. 한때 둘을 한 조건에 묶어 뒀고, 그때 진행률이 측정되지 않는
+/// 짧은 경로에서는 **도착을 말하는 것이 화면에 하나도 없었다.**
+///
+/// [hasDestination]은 무엇에 도착했는지를 아는가다. 이름 없는 도착 카드를 그리느니
+/// 아무것도 그리지 않는다.
+bool shouldAnnounceArrival({
+  required RouteGuidanceAction? action,
+  required bool hasDestination,
+}) => action == RouteGuidanceAction.arrived && hasDestination;
+
 /// 지금 안내 상태에서 "안내를 자동으로 끝낼지"를 판단한다.
 ///
 /// [hasMeasuredProgress]는 **실제로 측정된 진행률이 있는지**다. 이 값이 없으면
@@ -353,6 +367,60 @@ String routeStepText(RouteStep step) => switch (step.action) {
   RouteGuidanceAction.arrived => '도착',
   RouteGuidanceAction.wrongWay => '',
 };
+
+/// 단계 한 줄을 **방향·거리·부연 셋으로 나눈다.**
+///
+/// [routeStepText]는 셋을 한 문장으로 이어 붙인 값이고, 이쪽은 거리를 목록 오른쪽
+/// 열에 따로 세우는 화면이 쓴다. 두 함수가 같은 헬퍼([_roundedGuidanceMeters],
+/// [_transferFloors])를 부르므로 **반올림·층 표기 규칙은 한 곳에만 있다** — 갈라
+/// 두면 배너의 `10미터`와 목록의 `9m`가 같은 구간을 다르게 말한다.
+({String instruction, String? distance, String? detail}) routeStepParts(
+  RouteStep step,
+) => switch (step.action) {
+  RouteGuidanceAction.straight => (
+    instruction: '직진',
+    distance: '${_roundedGuidanceMeters(step.distanceM)}m',
+    detail: null,
+  ),
+  RouteGuidanceAction.turnLeft => (
+    instruction: '좌회전',
+    distance: null,
+    detail: null,
+  ),
+  RouteGuidanceAction.turnRight => (
+    instruction: '우회전',
+    distance: null,
+    detail: null,
+  ),
+  RouteGuidanceAction.escalator => (
+    instruction: '에스컬레이터 탑승',
+    distance: null,
+    detail: _transferFloors(step),
+  ),
+  RouteGuidanceAction.elevator => (
+    instruction: '엘리베이터 탑승',
+    distance: null,
+    detail: _transferFloors(step),
+  ),
+  RouteGuidanceAction.arrived => (
+    instruction: '도착',
+    distance: null,
+    detail: null,
+  ),
+  RouteGuidanceAction.wrongWay => (
+    instruction: '',
+    distance: null,
+    detail: null,
+  ),
+};
+
+/// `1F → B1`. 층을 모르면 null이라 부연 줄 자체가 생기지 않는다.
+String? _transferFloors(RouteStep step) {
+  final from = step.fromFloor;
+  final to = step.toFloor;
+  if (from == null || to == null) return null;
+  return '$from → $to';
+}
 
 String _transferText(String mode, RouteStep step) {
   final from = step.fromFloor;

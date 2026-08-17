@@ -174,6 +174,17 @@ extension OutdoorMapFloorSwitch on OutdoorMapBodyState {
           crossfadeDuration: crossfadeDuration,
         ),
       );
+    } else if (controller != null) {
+      // **마무리를 예약하지 못했으면 여기서 지운다.** 은퇴 블록을 지우는 곳은
+      // [_finalizeIndoorFloorCrossfade] 하나뿐인데, 새 층 등록이 실패했거나
+      // (`_indoorTilesRegistered`가 false) 크로스페이드가 아닌 전환이면 그것이
+      // 예약되지 않는다. 그러면 이전 층 블록이 영영 남는다.
+      await _removeRetiringIndoorBlocks(controller);
+      await purgeStaleIndoorOverlay(
+        controller,
+        keepGeneration: _indoorIds.generation,
+      );
+      await _syncFloorBoundaryToActiveFloor();
     }
     await _loadFloorGraph(building.id, floor);
     _syncPdrCurrentLayer();
@@ -256,11 +267,33 @@ extension OutdoorMapFloorSwitch on OutdoorMapBodyState {
       if (!mounted || _indoorIds.generation != generation) return;
       // 새 도면이 완전히 올라왔으니 이전 층 블록(연타로 쌓인 것 포함)을 지운다.
       await _removeRetiringIndoorBlocks(controller);
+      // 그리고 **지도에 직접 물어** 우리 장부에 없는 이전 세대까지 쓸어 담는다.
+      // 위 목록은 이 함수가 중간에 물러난 전환의 블록을 담고 있지 않다.
+      await purgeStaleIndoorOverlay(
+        controller,
+        keepGeneration: _indoorIds.generation,
+      );
+      await _syncFloorBoundaryToActiveFloor();
     } finally {
       if (progressToken != null) {
         _floorSwitchProgress.finish(progressToken);
       }
     }
+  }
+
+  /// 층 경계 둘(외곽선·dim scrim 구멍)을 지금 층 것으로 맞춘다.
+  ///
+  /// **층을 바꾸면 둘 다 낡는다.** 전환 초입에서 외곽선은 지우지만(틀린 경계를
+  /// 보여주지 않으려고) 다시 그리는 곳이 없었고, 스크림 구멍은 아예 손대지 않아
+  /// 이전 층 링에 머물렀다. 스크림은 구멍 **밖**을 어둡게 하는 층이라, 구멍이 이전
+  /// 층(더 넓은 지하) 링이면 새 층 도면 밖인데도 어두워지지 않는 영역이 남는다 —
+  /// 화면에서는 도로 위에 매장이 하나 더 있는 것처럼 밝은 띠로 보인다.
+  ///
+  /// 부르는 자리는 **새 도면이 다 올라온 뒤**다. 크로스페이드 중에 구멍을 새 층
+  /// 것으로 좁히면 아직 보이고 있는 이전 도면이 그만큼 어두워진다.
+  Future<void> _syncFloorBoundaryToActiveFloor() async {
+    await _syncFloorOutlineLayer();
+    await _syncDimScrimGeometry();
   }
 
   /// 크로스페이드 뒤에 남은 이전 층 소스·레이어 묶음을 전부 지운다. 이미 없는

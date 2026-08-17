@@ -42,6 +42,9 @@ bool _isOutdoorPoint(DirectionsCandidate c) =>
 /// [indoorContextActive](도면이 떠 있는가)와 [indoorStartReady](실내 위치가 잡혔는가)
 /// 는 **다르다** — 도면은 건물을 확대만 해도 켜지므로 밖에 선 사용자에게도 켜진다.
 /// 뭉개면 밖에 있는 사용자가 "출발 위치를 먼저 지정해주세요"만 보고 끝난다.
+///
+/// 둘 다 **출발지를 고르지 않았을 때만** 쓴다. 고른 출발지가 건물 안 노드면 그
+/// 자체가 시작점이라, 지금 어디에 서 있는지는 어느 갈래인지를 바꾸지 않는다.
 WalkRouteKind classifyWalkRoute({
   required DirectionsCandidate? origin,
   required DirectionsCandidate destination,
@@ -50,11 +53,20 @@ WalkRouteKind classifyWalkRoute({
 }) {
   final destinationIndoor = destination.isIndoorPoint;
 
-  // 1) 실내 → 실내. **도면이 켜져 있고 출발점이 실제로 건물 안일 때만** 탄다.
-  // 도면만 보고 태우면 야외 지도를 보는 중에도 예전 앵커에서 경로가 뻗는다.
-  if (indoorContextActive &&
-      destinationIndoor &&
-      (origin == null ? indoorStartReady : origin.isIndoorPoint)) {
+  // 1) 실내 → 실내.
+  //
+  // **출발지를 직접 골랐으면 도면이 떠 있는지는 상관없다.** 건물 밖에서 "거기는
+  // 어떻게 되어 있지?" 하고 미리 보는 길이 그것이다 — 두 끝점이 다 건물 안 노드면
+  // 밖에 서 있든 말든 그릴 수 있는 경로이고, 막아 두면 그 사람은 건물에 들어가기
+  // 전까지 안을 볼 방법이 없다. 미리 보기와 실제 안내를 가르는 것은 이 판정이
+  // 아니라 "안내 시작" 버튼이다.
+  //
+  // **출발지가 없을 때(=지금 있는 곳)는 예전 조건 그대로다.** 도면만 보고 태우면
+  // 야외 지도를 보는 중에도 예전 앵커에서 경로가 뻗는다.
+  if (destinationIndoor &&
+      (origin == null
+          ? (indoorContextActive && indoorStartReady)
+          : origin.isIndoorPoint)) {
     return WalkRouteKind.indoorToIndoor;
   }
 

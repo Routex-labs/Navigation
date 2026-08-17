@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 import '../../../../models/route/transit_route.dart';
 import '../../../../widgets/map_overlay_guard.dart';
-import '../../../../widgets/sheet_grab_handle.dart';
 import '../../../../widgets/sheet_header.dart';
 import '../../../../widgets/transit_itinerary_tile.dart';
 
@@ -82,16 +82,14 @@ class _TransitRoutesSheetState extends State<TransitRoutesSheet> {
           builder: (context, scrollController) => GestureDetector(
             onTap: () {},
             behavior: HitTestBehavior.opaque,
-            child: Material(
-              color: Colors.white,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              clipBehavior: Clip.antiAlias,
+            child: RoutexBottomSheet(
+              // 표면은 Runtime Kit이, 드래그와 라우트는 앱이 갖는다. 여백은 조각마다
+              // 달라서 본문이 소유한다.
+              contentInset: RoutexBottomSheetContentInset.content,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const SheetGrabHandle(),
+                  const RoutexSheetHandle(),
                   SheetHeader(
                     title: '${widget.destinationLabel}까지 대중교통',
                     onCloseAll: widget.onCloseAll,

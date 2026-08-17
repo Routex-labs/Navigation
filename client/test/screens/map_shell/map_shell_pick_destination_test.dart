@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:navigation_client/service_locator.dart';
 import 'package:navigation_client/repositories/building/building_repository.dart';
@@ -75,7 +76,7 @@ void main() {
     addTearDown(positions.close);
     watchPosition = () => positions.stream;
 
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await drain(tester);
     positions.add(insideBuilding());
     await drain(tester);
@@ -96,7 +97,7 @@ void main() {
     // 야외에서 지도를 누르면 이름 없는 좌표가 잡힌다. 매장 이름으로 고르는 줄과
     // 나란히 두면 같은 무게로 읽히는데, 실제로 쓸 일은 GPS가 안 잡히는 예외뿐이라
     // 그 경우는 하단 바의 "위치 지정"이 따로 맡는다.
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await drain(tester);
 
     await tester.tap(find.byTooltip('길찾기'));

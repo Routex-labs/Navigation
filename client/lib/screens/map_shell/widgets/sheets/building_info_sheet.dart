@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 import '../../../../service_locator.dart';
 import '../../../../models/building/building.dart';
@@ -7,7 +8,6 @@ import '../../../../theme/app_theme.dart';
 import '../../../../map/icon/category_icon.dart';
 import '../../../../widgets/map_overlay_guard.dart';
 import '../../../../widgets/map_pass_through_sheet_route.dart';
-import '../../../../widgets/sheet_grab_handle.dart';
 import '../../../../widgets/sheet_header.dart';
 
 /// 야외 지도에서 건물 폴리곤을 눌렀을 때의 다음 행동.
@@ -56,15 +56,11 @@ class BuildingInfoSheet extends StatefulWidget {
         ),
         isScrollControlled: true,
         isDismissible: true,
+        // 곡률은 시트 표면이 그린다([RoutexBottomSheet]). 라우트에도 적으면 같은
+        // 값이 두 곳에서 정해진다.
         backgroundColor: Colors.transparent,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
         builder: (context) => MapOverlayGuard(
-          child: BuildingInfoSheet(
-            building: building,
-            onCloseAll: onCloseAll,
-          ),
+          child: BuildingInfoSheet(building: building, onCloseAll: onCloseAll),
         ),
       ),
     );
@@ -110,17 +106,15 @@ class _BuildingInfoSheetState extends State<BuildingInfoSheet> {
         minChildSize: 0.25,
         maxChildSize: 0.9,
         expand: false,
-        builder: (context, scrollController) => Material(
-          color: Colors.white,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          clipBehavior: Clip.antiAlias,
+        builder: (context, scrollController) => RoutexBottomSheet(
+          // 표면은 Runtime Kit이, 드래그와 라우트는 앱이 갖는다. 여백은 조각마다
+          // 달라서 본문이 소유한다.
+          contentInset: RoutexBottomSheetContentInset.content,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SheetGrabHandle(),
+              const RoutexSheetHandle(),
               SheetHeader(
                 onCloseAll: widget.onCloseAll,
                 onIntentionalPop: _markIntentional,
@@ -265,10 +259,7 @@ class _Actions extends StatelessWidget {
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.blue50,
               foregroundColor: AppColors.primary,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 22,
-                vertical: 12,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
             ),
             child: const Text('출발'),
           ),
@@ -276,10 +267,7 @@ class _Actions extends StatelessWidget {
           FilledButton(
             onPressed: onDestination,
             style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 22,
-                vertical: 12,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
             ),
             child: const Text('도착'),
           ),

@@ -8,7 +8,7 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(home: LocationMarker(mode: LocationMode.outdoor)),
+      MaterialApp(theme: AppTheme.light, home: LocationMarker(mode: LocationMode.outdoor)),
     );
 
     final icon = tester.widget<Icon>(find.byType(Icon));
@@ -20,8 +20,7 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(
-        home: LocationMarker(
+      MaterialApp(theme: AppTheme.light, home: LocationMarker(
           mode: LocationMode.outdoor,
           colorOverride: Colors.amber,
         ),

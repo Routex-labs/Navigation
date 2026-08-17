@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/models/place/outdoor_poi.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/outdoor_poi_sheet.dart';
@@ -22,6 +23,7 @@ void main() {
   Future<void> pumpSheet(WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
+        theme: AppTheme.light,
         home: Scaffold(
           body: OutdoorPoiSheet(poi: poi(), onCloseAll: () {}),
         ),

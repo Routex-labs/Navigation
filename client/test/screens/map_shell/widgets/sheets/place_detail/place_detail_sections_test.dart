@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail/korean_line_break.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail/place_detail_sections.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 void main() {
   Widget subject(Widget child) => MaterialApp(
+    theme: AppTheme.light,
     home: Scaffold(body: SingleChildScrollView(child: child)),
   );
 
@@ -14,7 +16,10 @@ void main() {
         subject(const PlaceSummarySection(text: '한 줄 소개')),
       );
 
-      expect(find.text(keepWordsWhole('한 줄 소개')), findsOneWidget);
+      expect(
+        find.text(RoutexTypography.keepWordsWhole('한 줄 소개')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('summary balances a paragraph without adding a line', (
@@ -39,29 +44,32 @@ void main() {
     ) async {
       await tester.pumpWidget(
         subject(
-          const PlaceKeyValueSection(
-            items: [
-              PlaceKeyValue(label: '위치', value: 'B2 서편'),
-              PlaceKeyValue(label: '안내', value: '에스컬레이터 옆'),
+          const RoutexKeyValueRows(
+            rows: [
+              RoutexKeyValue(label: '위치', value: 'B2 서편'),
+              RoutexKeyValue(label: '안내', value: '에스컬레이터 옆'),
             ],
           ),
         ),
       );
 
       expect(find.text('위치'), findsOneWidget);
-      expect(find.text(keepWordsWhole('B2 서편')), findsOneWidget);
+      expect(find.text('B2 서편'), findsOneWidget);
       expect(find.text('안내'), findsOneWidget);
-      expect(find.text(keepWordsWhole('에스컬레이터 옆')), findsOneWidget);
+      expect(find.text('에스컬레이터 옆'), findsOneWidget);
     });
 
-    testWidgets('tags are individually visible chips', (tester) async {
+    // 누를 수 없는 표시라 배지다. 알약(Chip)으로 그리면 바로 위 지도의 분류 칩과
+    // 같은 모양이라 눌러 보고 아무 일도 없는 것을 겪는다.
+    testWidgets('tags are individually visible badges', (tester) async {
       await tester.pumpWidget(
         subject(const PlaceTagsSection(tags: ['포장', '문화비소득공제'])),
       );
 
       expect(find.text('포장'), findsOneWidget);
       expect(find.text('문화비소득공제'), findsOneWidget);
-      expect(find.byType(Chip), findsNWidgets(2));
+      expect(find.byType(RoutexBadge), findsNWidgets(2));
+      expect(find.byType(Chip), findsNothing);
     });
 
     testWidgets('notice exposes the message and expiry date', (tester) async {
@@ -69,23 +77,11 @@ void main() {
         subject(const PlaceNoticeSection(text: '팝업 운영', until: '2026-08-31')),
       );
 
-      expect(find.text(keepWordsWhole('팝업 운영')), findsOneWidget);
+      expect(
+        find.text(RoutexTypography.keepWordsWhole('팝업 운영')),
+        findsOneWidget,
+      );
       expect(find.text('2026-08-31까지'), findsOneWidget);
     });
-
-    // 탭 핸들러가 없는 블록이라 버튼처럼 보이면 안 된다.
-    testWidgets(
-      'map section is a local visual hint without an image provider',
-      (tester) async {
-        await tester.pumpWidget(
-          subject(const PlaceMapSection(floorLabel: 'B2')),
-        );
-
-        expect(find.text('B2 위치'), findsOneWidget);
-        expect(find.byIcon(Icons.place_outlined), findsOneWidget);
-        expect(find.byType(Image), findsNothing);
-        expect(find.byIcon(Icons.chevron_right), findsNothing);
-      },
-    );
   });
 }

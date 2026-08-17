@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:routex_design_system/routex_design_system.dart';
+
 import '../theme/app_theme.dart';
 import '../domain/geo/distance_format.dart';
 import '../domain/guidance/route_guidance.dart';
@@ -12,8 +14,6 @@ class EtaCard extends StatelessWidget {
     required this.minutes,
     this.label = '목적지까지',
     this.instruction,
-    this.destinationName,
-    this.destinationFloor,
     this.onClose,
     this.onStartGuidance,
     this.onClosePointerDown,
@@ -23,11 +23,6 @@ class EtaCard extends StatelessWidget {
   final int minutes;
   final String label;
   final RouteGuidanceInstruction? instruction;
-
-  /// 도착 안내에 적을 목적지 이름·층. 둘 다 있으면 도착 순간 배너가 매장을
-  /// 가리키는 카드로 바뀐다 — 없으면 지시 문구 한 줄 그대로다.
-  final String? destinationName;
-  final String? destinationFloor;
 
   /// 있으면 카드 오른쪽에 "안내 종료" 버튼을 보여준다. 사용자가 길찾기로
   /// 직접 고른 경로를 취소할 때만 쓰고, 자동 안내(예: 건물 입구까지)에는
@@ -48,39 +43,62 @@ class EtaCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final guidance = instruction;
-    return Card(
-      child: Padding(
+    if (guidance != null) {
+      return Card(
         // 안내 한 줄은 위아래를 조인다 — 배너가 얇을수록 도면이 넓어진다.
-        // 두 줄인 legacy 쪽은 예전 여백을 유지해야 글자가 답답하지 않다.
-        padding: guidance == null
-            ? const EdgeInsets.fromLTRB(16, 14, 12, 14)
-            : const EdgeInsets.fromLTRB(16, 8, 8, 8),
-        child: guidance == null
-            ? _LegacyEtaContent(
-                label: label,
-                minutes: minutes,
-                distanceMeters: distanceMeters,
-                onClose: onClose,
-                onStartGuidance: onStartGuidance,
-                onClosePointerDown: onClosePointerDown,
-              )
-            : (guidance.action == RouteGuidanceAction.arrived &&
-                  destinationName != null)
-            // 도착은 "다음에 무엇을 할지"가 없는 유일한 상태다. 남은
-            // 거리도 0이라, 같은 한 줄 배너로 그리면 `0 m`만 붙은 이상한
-            // 줄이 된다. 대신 **어디에 도착했는지**를 말한다.
-            ? _ArrivalRow(
-                name: destinationName!,
-                floor: destinationFloor,
-                onClose: onClose,
-                onClosePointerDown: onClosePointerDown,
-              )
-            : _GuidanceRow(
-                guidance: guidance,
-                onClose: onClose,
-                onClosePointerDown: onClosePointerDown,
-              ),
-      ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+          child: _GuidanceRow(
+            guidance: guidance,
+            onClose: onClose,
+            onClosePointerDown: onClosePointerDown,
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        RoutexEtaCard(
+          // 기본값 `도착 예정` 대신 목적지를 적는다. 다층 경로에서는 경유 층과
+          // 환승 수단까지 이 줄에 들어 있고(`레페토까지 · 1F → B1 (에스컬레이터)`),
+          // 그 값이 화면 어디에도 다시 나오지 않는다.
+          title: label,
+          // **도착 시각을 쓰지 않는다.** 시각이 소요 시간보다 나은 이유는 약속과
+          // 바로 견줄 수 있어서인데, 그 이점은 이동이 길 때만 생긴다. 건물 안
+          // 87 m를 걷는 사람에게 `오후 2:20`은 지금이 몇 시인지 빼야 뜻이 생기고,
+          // 그 뺄셈을 사람이 한다. 실내 안내는 대부분 1~5분이다.
+          arrivalTime: '약 $minutes분',
+          metrics: [
+            RoutexTripMetric(
+              value: formatDistance(distanceMeters),
+              label: '거리',
+            ),
+          ],
+          // null이면 버튼이 사라진다. 시작 동작이 없는 자동 경로(건물 입구까지)가
+          // 그 경우다.
+          onStart: onStartGuidance,
+        ),
+        // **시작과 종료는 함께 뜨지 않는다.** 계획 상태에서 할 일은 출발뿐이고,
+        // 안내 중에 할 일은 그만두는 것뿐이다. 둘을 나란히 두면 아직 출발도 안
+        // 한 화면에 "종료"가 있어, 사용자는 무엇이 이미 시작됐는지부터 헷갈린다.
+        //
+        // 카드 **밖**에 두는 이유는 공통 카드가 주 행동 하나만 갖기 때문이다.
+        // 계획을 접는 길은 상단 길찾기 바에도 그대로 있다.
+        if (onClose case final onClose? when onStartGuidance == null) ...[
+          const SizedBox(height: RoutexSpacing.controlGap),
+          Listener(
+            onPointerDown: (event) => onClosePointerDown?.call(event.position),
+            child: RoutexButton(
+              label: '안내 종료',
+              variant: RoutexButtonVariant.secondary,
+              onPressed: onClose,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -158,83 +176,6 @@ class _GuidanceRow extends StatelessWidget {
   }
 }
 
-/// 도착 안내. 지시 배너가 아니라 **목적지를 가리키는 카드**다.
-///
-/// 안내가 끝났음을 알리는 동시에 "여기가 그 매장"임을 확인시켜 준다 — 지도에는
-/// 같은 순간 그 매장 폴리곤이 강조된다.
-class _ArrivalRow extends StatelessWidget {
-  const _ArrivalRow({
-    required this.name,
-    required this.floor,
-    required this.onClose,
-    required this.onClosePointerDown,
-  });
-
-  final String name;
-  final String? floor;
-  final VoidCallback? onClose;
-  final ValueChanged<Offset>? onClosePointerDown;
-
-  @override
-  Widget build(BuildContext context) {
-    final where = (floor == null || floor!.isEmpty)
-        ? '목적지에 도착했습니다'
-        : '$floor · 목적지에 도착했습니다';
-    return Row(
-      children: [
-        const Icon(Icons.place, size: 24, color: Color(0xFFD93025)),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                name,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.text,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 2),
-              Text(
-                where,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.muted,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
-        if (onClose != null) ...[
-          const SizedBox(width: 8),
-          // 도착에서는 X가 아니라 체크다. 같은 동작(안내를 끝낸다)이지만 여기서는
-          // 취소가 아니라 확인이라, 아이콘이 다르면 사용자가 "실패했나" 하고
-          // 망설이지 않는다.
-          Listener(
-            onPointerDown: (event) => onClosePointerDown?.call(event.position),
-            child: IconButton(
-              key: const Key('eta-card-close'),
-              onPressed: onClose,
-              icon: const Icon(Icons.check_circle, size: 24),
-              color: AppColors.primary,
-              tooltip: '안내 종료',
-              visualDensity: VisualDensity.compact,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
 /// 남은 거리 표기. 10 m 미만만 한 자리까지 보여 준다 — 도착 직전에 "0m"가
 /// 몇 걸음 동안 붙어 있으면 안내가 멈춘 것처럼 보인다. 그 위는 [formatDistance]에
 /// 맡겨 검색 결과·장소 상세와 같은 규칙(1 km부터 km)을 쓴다.
@@ -256,122 +197,3 @@ IconData routeGuidanceIcon(RouteGuidanceAction action) => switch (action) {
   RouteGuidanceAction.arrived => Icons.flag_rounded,
   RouteGuidanceAction.straight => Icons.straight_rounded,
 };
-
-class _LegacyEtaContent extends StatelessWidget {
-  const _LegacyEtaContent({
-    required this.label,
-    required this.minutes,
-    required this.distanceMeters,
-    required this.onClose,
-    required this.onStartGuidance,
-    required this.onClosePointerDown,
-  });
-
-  final String label;
-  final int minutes;
-  final double distanceMeters;
-  final VoidCallback? onClose;
-  final VoidCallback? onStartGuidance;
-  final ValueChanged<Offset>? onClosePointerDown;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(fontSize: 11, color: AppColors.muted),
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 3),
-              RichText(
-                text: TextSpan(
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.text,
-                  ),
-                  children: [
-                    TextSpan(text: '약 $minutes분 '),
-                    TextSpan(
-                      text: '/ ${formatDistance(distanceMeters)}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w400,
-                        color: AppColors.muted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        // 이동 수단을 고르는 자리는 길찾기 화면 하나다. 예전에는 이 카드에도
-        // "대중교통" 버튼이 있었는데, 안내가 이미 그려진 자리에서 수단이 또
-        // 갈리면 같은 선택이 두 화면에 흩어진다 — 상단 초안 바의 행을 눌러
-        // 길찾기 화면으로 돌아가면 거기서 세 수단을 한 줄로 고를 수 있다.
-        if (onStartGuidance != null) ...[
-          const SizedBox(width: 8),
-          // "안내 시작"은 이 카드에서 **권하는** 다음 행동이라 채운 버튼이다.
-          // 종료(외곽선)와 톤을 나눠, 운전 전에 눌러야 할 것이 무엇인지 색으로
-          // 먼저 읽히게 한다.
-          FilledButton(
-            key: const ValueKey('eta-start-guidance'),
-            onPressed: onStartGuidance,
-            style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              textStyle: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            child: const Text('안내 시작'),
-          ),
-        ],
-        // **시작과 종료는 함께 뜨지 않는다.** 계획 상태에서 할 일은 출발뿐이고,
-        // 안내 중에 할 일은 그만두는 것뿐이다. 둘을 나란히 두면 아직 출발도 안
-        // 한 화면에 "종료"가 있어, 사용자는 무엇이 이미 시작됐는지부터 헷갈린다.
-        // 계획을 접는 길은 상단 길찾기 바에 그대로 있다.
-        if (onClose != null && onStartGuidance == null) ...[
-          const SizedBox(width: 8),
-          // "안내 종료"는 되돌리기 어려운 조작(경로/도착지 리셋)이므로
-          // 색상은 부드럽되, 다른 카드 요소보다 명확히 눌러야 할 지점으로
-          // 읽히도록 outlined 톤을 준다.
-          Listener(
-            onPointerDown: (event) => onClosePointerDown?.call(event.position),
-            child: TextButton(
-              onPressed: onClose,
-              style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFFD93025),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                shape: RoundedRectangleBorder(
-                  side: const BorderSide(color: Color(0x33D93025)),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                textStyle: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              child: const Text('안내 종료'),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}

@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 import '../../../../core/api_config.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../widgets/map_overlay_guard.dart';
-import '../../../../widgets/sheet_grab_handle.dart';
 
 /// 앱 메뉴에서 고를 수 있는 동작. 시트는 **고른 것만 돌려주고 아무것도 직접
 /// 실행하지 않는다** — 실제 동작은 전부 지도 상태를 들고 있는
@@ -58,9 +58,9 @@ class AppMenuSheet extends StatelessWidget {
       // 모르는 사용자에게는 "메뉴에 디버그 설정이 없다"가 된다. 목록이 길어질수록
       // 아래쪽 항목부터 조용히 사라지는 실패라 상한을 풀고 내용 높이로 띄운다.
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      // 표면은 시트 본문이 그린다([RoutexBottomSheet]). 라우트까지 배경을 칠하면
+      // 같은 표면이 두 겹이 된다.
+      backgroundColor: Colors.transparent,
       builder: (context) => MapOverlayGuard(
         child: AppMenuSheet(
           showPlaceLocation: showPlaceLocation,
@@ -72,75 +72,82 @@ class AppMenuSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SheetGrabHandle(),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 10, 20, 4),
-              child: Text(
-                '메뉴',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.text,
+    // 표면이 SafeArea 바깥이다. 안에 두면 배경이 홈 인디케이터 위에서 끊긴다.
+    return RoutexBottomSheet(
+      contentInset: RoutexBottomSheetContentInset.content,
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 손잡이가 있던 자리다. 이 시트는 내용 높이로 뜨고 끌어서 크기를
+              // 바꿀 수 없어, 손잡이를 두면 할 수 없는 조작을 약속하게 된다.
+              // 여백은 손잡이가 차지하던 값과 같다.
+              const SizedBox(height: RoutexSpacing.componentPadding),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 10, 20, 4),
+                child: Text(
+                  '메뉴',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.text,
+                  ),
                 ),
               ),
-            ),
 
-            const _MenuSectionLabel('찾기'),
-            _MenuTile(
-              itemKey: const Key('app-menu-favorites'),
-              icon: Icons.bookmark_outline,
-              title: '저장한 장소',
-              subtitle: '저장해 둔 매장을 목록에서 고릅니다',
-              action: AppMenuAction.favorites,
-            ),
-            _MenuTile(
-              itemKey: const Key('app-menu-directions'),
-              icon: Icons.directions_outlined,
-              title: '길찾기',
-              subtitle: '출발지·도착지를 골라 경로를 그립니다',
-              action: AppMenuAction.directions,
-            ),
-
-            const Divider(height: 8, indent: 20, endIndent: 20),
-            const _MenuSectionLabel('내 위치'),
-            if (showPlaceLocation)
+              const _MenuSectionLabel('찾기'),
               _MenuTile(
-                itemKey: const Key('app-menu-place-location'),
-                icon: Icons.pin_drop_outlined,
-                title: '지도에서 내 위치 지정',
-                subtitle: '도면 위 한 점을 탭해 현재 위치를 직접 찍습니다',
-                action: AppMenuAction.placeLocation,
+                itemKey: const Key('app-menu-favorites'),
+                icon: Icons.bookmark_outline,
+                title: '저장한 장소',
+                subtitle: '저장해 둔 매장을 목록에서 고릅니다',
+                action: AppMenuAction.favorites,
               ),
-            _MenuTile(
-              itemKey: const Key('app-menu-calibrate'),
-              icon: Icons.explore_outlined,
-              title: '위치 보정',
-              subtitle: '방위와 현재 위치를 다시 맞춥니다',
-              action: AppMenuAction.calibrate,
-            ),
+              _MenuTile(
+                itemKey: const Key('app-menu-directions'),
+                icon: Icons.directions_outlined,
+                title: '길찾기',
+                subtitle: '출발지·도착지를 골라 경로를 그립니다',
+                action: AppMenuAction.directions,
+              ),
 
-            const Divider(height: 8, indent: 20, endIndent: 20),
-            const _MenuSectionLabel('개발자'),
-            _MenuTile(
-              itemKey: const Key('app-menu-debug'),
-              icon: Icons.bug_report_outlined,
-              title: '디버그 설정',
-              subtitle: debugEnabled
-                  ? '사용 중 · PDR 제어와 진단 레이어가 지도에 표시됩니다'
-                  : '꺼짐 · PDR 제어와 진단 레이어를 켤 수 있습니다',
-              action: AppMenuAction.debugSettings,
-              highlighted: debugEnabled,
-            ),
-            const _BuildInfoLine(),
-          ],
+              const Divider(height: 8, indent: 20, endIndent: 20),
+              const _MenuSectionLabel('내 위치'),
+              if (showPlaceLocation)
+                _MenuTile(
+                  itemKey: const Key('app-menu-place-location'),
+                  icon: Icons.pin_drop_outlined,
+                  title: '지도에서 내 위치 지정',
+                  subtitle: '도면 위 한 점을 탭해 현재 위치를 직접 찍습니다',
+                  action: AppMenuAction.placeLocation,
+                ),
+              _MenuTile(
+                itemKey: const Key('app-menu-calibrate'),
+                icon: Icons.explore_outlined,
+                title: '위치 보정',
+                subtitle: '방위와 현재 위치를 다시 맞춥니다',
+                action: AppMenuAction.calibrate,
+              ),
+
+              const Divider(height: 8, indent: 20, endIndent: 20),
+              const _MenuSectionLabel('개발자'),
+              _MenuTile(
+                itemKey: const Key('app-menu-debug'),
+                icon: Icons.bug_report_outlined,
+                title: '디버그 설정',
+                subtitle: debugEnabled
+                    ? '사용 중 · PDR 제어와 진단 레이어가 지도에 표시됩니다'
+                    : '꺼짐 · PDR 제어와 진단 레이어를 켤 수 있습니다',
+                action: AppMenuAction.debugSettings,
+                highlighted: debugEnabled,
+              ),
+              const _BuildInfoLine(),
+            ],
+          ),
         ),
       ),
     );

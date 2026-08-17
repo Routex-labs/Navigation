@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/features/debug_mode/debug_mode.dart';
@@ -154,8 +155,7 @@ void main() {
 
   testWidgets('방위 격자는 지도와 별개인 전체 화면 painter로 표시된다', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
-        home: SizedBox.expand(
+      MaterialApp(theme: AppTheme.light, home: SizedBox.expand(
           child: CardinalGridOverlay(
             northMapBearingDeg: 305,
             cameraBearingDeg: 90,
@@ -251,8 +251,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
+      MaterialApp(theme: AppTheme.light, home: Scaffold(
           body: Builder(
             builder: (context) => TextButton(
               onPressed: () => showDebugToast(
@@ -284,8 +283,7 @@ void main() {
     await controller.ready;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
+      MaterialApp(theme: AppTheme.light, home: Scaffold(
           body: Builder(
             builder: (context) => TextButton(
               onPressed: () => showDebugModeSettingsSheet(context, controller),

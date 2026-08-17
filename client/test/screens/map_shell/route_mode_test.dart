@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:navigation_client/service_locator.dart';
 import 'package:navigation_client/repositories/building/building_repository.dart';
@@ -71,7 +72,7 @@ void main() {
     addTearDown(positions.close);
     watchPosition = () => positions.stream;
 
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await drain(tester);
     positions.add(fix());
     await drain(tester);

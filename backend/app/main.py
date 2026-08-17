@@ -59,7 +59,7 @@ def create_app() -> FastAPI:
     # 로그 포맷·레벨을 먼저 통일한다(요청 상태·에러는 stdout으로 남는다).
     configure_logging()
 
-    from app.routers import buildings, fonts, health, query
+    from app.routers import buildings, fonts, health, links, query
 
     app = FastAPI(title="Navigation API", version="0.3.0")
 
@@ -99,6 +99,7 @@ def create_app() -> FastAPI:
     app.include_router(buildings.router)  # 건물/지도/그래프/경로 API
     app.include_router(fonts.router)  # MapLibre 심볼 레이어용 글리프
     app.include_router(query.router)  # 자연어 질의 API(경량 매칭 + AI 임베딩 검색)
+    app.include_router(links.router)  # 장소 공유 링크 증명 파일과 미설치 fallback
 
     from app.core.database import SessionLocal
 

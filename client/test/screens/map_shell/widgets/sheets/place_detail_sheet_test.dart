@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/service_locator.dart';
 import 'package:navigation_client/domain/route/dijkstra.dart';
@@ -13,9 +14,7 @@ import 'package:navigation_client/state/favorites_controller.dart';
 import 'package:routex_design_system/routex_design_system.dart';
 
 import '../../../../support/routex_test_host.dart';
-import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail/korean_line_break.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail_sheet.dart';
-import 'package:navigation_client/widgets/sheet_header.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 final _favorite = FavoritePlace.fromPoiSearchResult(
@@ -90,9 +89,46 @@ void main() {
     completer.complete(_detailWithSummary());
     await tester.pumpAndSettle();
 
-    expect(find.text(keepWordsWhole('상세 섹션')), findsOneWidget);
+    expect(find.text(RoutexTypography.keepWordsWhole('상세 섹션')), findsOneWidget);
     expect(find.byKey(const ValueKey('place-detail-loading')), findsNothing);
     expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  // 사진을 어디서 가져올지는 이 앱이 정한다. Runtime Kit은 자산을 갖지 않아서
+  // 경로가 아니라 ImageProvider를 받는다 — 그 변환이 여기서 끊기면 사진이 통째로
+  // 사라지는데, 화면에는 "사진 없는 매장"과 똑같이 보인다.
+  testWidgets('hero 섹션의 번들 경로가 순서대로 캐러셀 사진이 된다', (tester) async {
+    await tester.pumpWidget(
+      buildSubject(
+        repository: _FakeRepository(
+          Future.value(
+            _detail(
+              sections: const [
+                {
+                  'type': 'hero',
+                  'items': [
+                    {'local_asset': 'assets/place_details/starbucks_01.jpg'},
+                    {'local_asset': 'assets/place_details/starbucks_04.jpg'},
+                  ],
+                },
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final carousel = tester.widget<RoutexMediaCarousel>(
+      find.byType(RoutexMediaCarousel),
+    );
+    expect(
+      carousel.items.map((item) => (item.image as AssetImage).assetName),
+      const [
+        'assets/place_details/starbucks_01.jpg',
+        'assets/place_details/starbucks_04.jpg',
+      ],
+    );
   });
 
   // --- 설계 7-A-3·7-A-4 ---
@@ -119,7 +155,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text(keepWordsWhole('상세 섹션')), findsNothing);
+    expect(find.text(RoutexTypography.keepWordsWhole('상세 섹션')), findsNothing);
     expect(find.text('출발'), findsOneWidget);
     expect(find.text('도착'), findsOneWidget);
   });
@@ -150,7 +186,10 @@ void main() {
     expect(find.text('매장 정보'), findsOneWidget);
     expect(find.text('주소'), findsNothing);
     expect(find.byIcon(Icons.place_outlined), findsOneWidget);
-    expect(find.text(keepWordsWhole('서울특별시 영등포구 여의대로 108')), findsOneWidget);
+    expect(
+      find.text(RoutexTypography.keepWordsWhole('서울특별시 영등포구 여의대로 108')),
+      findsOneWidget,
+    );
   });
 
   // 주소는 페이지 맨 아래로 내려가 소개와 떨어졌다. 둘은 각자 제목을 갖는다.
@@ -178,8 +217,14 @@ void main() {
 
     expect(find.text('매장 정보'), findsOneWidget);
     expect(find.text('소개'), findsOneWidget);
-    expect(find.text(keepWordsWhole('한 줄 소개')), findsOneWidget);
-    expect(find.text(keepWordsWhole('여의대로 108')), findsOneWidget);
+    expect(
+      find.text(RoutexTypography.keepWordsWhole('한 줄 소개')),
+      findsOneWidget,
+    );
+    expect(
+      find.text(RoutexTypography.keepWordsWhole('여의대로 108')),
+      findsOneWidget,
+    );
   });
 
   // 메뉴가 30종까지 늘면서 한 줄로 이어 붙인 본문이 너무 길어졌다. 영업시간을 보려면
@@ -209,14 +254,17 @@ void main() {
     expect(find.text('홈'), findsOneWidget);
     expect(find.text('메뉴'), findsOneWidget);
     // 처음엔 홈 탭. 메뉴 항목은 아직 그리지 않는다.
-    expect(find.text(keepWordsWhole('한 줄 소개')), findsOneWidget);
+    expect(
+      find.text(RoutexTypography.keepWordsWhole('한 줄 소개')),
+      findsOneWidget,
+    );
     expect(find.text('카페 아메리카노'), findsNothing);
 
     await tester.tap(find.text('메뉴'));
     await tester.pumpAndSettle();
 
     expect(find.text('카페 아메리카노'), findsOneWidget);
-    expect(find.text(keepWordsWhole('한 줄 소개')), findsNothing);
+    expect(find.text(RoutexTypography.keepWordsWhole('한 줄 소개')), findsNothing);
   });
 
   // 탭 하나짜리 탭 바는 아무것도 나누지 않으면서 자리만 차지한다.
@@ -237,7 +285,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('홈'), findsNothing);
-    expect(find.text(keepWordsWhole('한 줄 소개')), findsOneWidget);
+    expect(
+      find.text(RoutexTypography.keepWordsWhole('한 줄 소개')),
+      findsOneWidget,
+    );
   });
 
   // 지도 미리보기가 붙기 전까지 map 섹션은 층 이름만 적힌 중복 블록이다.
@@ -337,10 +388,13 @@ void main() {
     expect(find.byType(SingleChildScrollView), findsOneWidget);
   });
 
-  group('현재 위치 기준 거리', () {
-    // 목록에 74m라고 적혀 있는데 눌러 들어온 상세가 다른 값을 말하면 어느 쪽도
-    // 못 믿게 된다. 두 화면이 같은 reachLabel을 쓰는지 값으로 확인한다.
-    testWidgets('거리와 도보 시간을 층·업종 아래에 보여준다', (tester) async {
+  // **기대가 뒤집혔다.** 예전에는 상세 헤더가 목록과 같은 거리·도보 시간을 한 번 더
+  // 적었고, 그 근거는 "목록에서 본 값을 상세에서도 같은 자리에 둔다"였다. 지금은
+  // 반대로 정했다 — 비교해서 고를 때는 필요한 값이지만 **이미 고른 장소**의 상세에서
+  // 같은 값을 반복하면 화면만 길어진다. 결정의 단일 출처는 공급 저장소의
+  // place-detail-guidance-decisions.md이고, 거리는 검색 목록이 계속 말한다.
+  group('상세 헤더가 반복하지 않는 것', () {
+    testWidgets('거리를 알아도 도보 시간을 다시 적지 않는다', (tester) async {
       await tester.pumpWidget(
         buildSubject(
           repository: _FakeRepository(Future.value(null)),
@@ -349,17 +403,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('124m · 도보 2분'), findsOneWidget);
-    });
-
-    testWidgets('위치가 없으면 거리 줄을 아예 그리지 않는다', (tester) async {
-      await tester.pumpWidget(
-        buildSubject(repository: _FakeRepository(Future.value(null))),
-      );
-      await tester.pumpAndSettle();
-
       expect(find.textContaining('도보'), findsNothing);
-      // 층·업종 줄은 그대로다.
+      expect(find.textContaining('124m'), findsNothing);
+      // 층·업종 줄은 그대로다 — 그건 "어디인가"라서 상세에서도 필요하다.
       expect(find.textContaining('1F'), findsOneWidget);
     });
   });
@@ -379,7 +425,7 @@ void main() {
 
     // 저장은 눌러도 화면이 그대로 남는 유일한 버튼이다. 시트를 닫는 출발·도착과
     // 같은 줄에 두면 무엇이 화면을 바꾸는 버튼인지 예측할 수 없다.
-    testWidgets('저장은 길찾기 줄이 아니라 헤더에 있다', (tester) async {
+    testWidgets('저장은 길찾기 줄이 아니라 장소 헤더에 있다', (tester) async {
       await tester.pumpWidget(
         buildSubject(
           favorite: _favorite,
@@ -388,10 +434,12 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final save = find.byKey(const ValueKey('place-detail-save'));
+      final save = find.byTooltip('장소 저장');
       expect(save, findsOneWidget);
+      // **장소 헤더 안이다.** 저장은 시트가 아니라 그 장소에 붙는 동작이라 이름
+      // 옆에 선다. 시트 상단 바(뒤로·닫기)는 시트를 다루는 동작만 갖는다.
       expect(
-        find.descendant(of: find.byType(SheetHeader), matching: save),
+        find.descendant(of: find.byType(RoutexPlaceHeader), matching: save),
         findsOneWidget,
       );
       expect(
@@ -409,7 +457,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey('place-detail-save')), findsNothing);
+      expect(find.byTooltip('장소 저장'), findsNothing);
       // 토글이 빠져도 헤더의 뒤로·X는 그대로다.
       expect(find.byTooltip('뒤로'), findsOneWidget);
       expect(find.byTooltip('전체 닫기'), findsOneWidget);
@@ -424,8 +472,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.byTooltip('장소에 저장'), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('place-detail-save')));
+      expect(find.byTooltip('장소 저장'), findsOneWidget);
+      await tester.tap(find.byTooltip('장소 저장'));
       await tester.pumpAndSettle();
 
       // 시트는 그대로 있고, 토글만 저장됨 상태가 된다.
@@ -442,7 +490,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('place-detail-save')));
+      await tester.tap(find.byTooltip('장소 저장'));
       await tester.pumpAndSettle();
     }
 
@@ -458,7 +506,7 @@ void main() {
 
     testWidgets('다시 눌러도 알림은 한 개이고 문구만 바뀐다', (tester) async {
       await pumpSaved(tester);
-      await tester.tap(find.byKey(const ValueKey('place-detail-save')));
+      await tester.tap(find.byTooltip('저장 취소'));
       await tester.pumpAndSettle();
 
       expect(find.byType(RoutexInlineNotice), findsOneWidget);
@@ -475,7 +523,7 @@ void main() {
 
       expect(favoritesController.contains(_favorite.key), isFalse);
       expect(find.byType(RoutexInlineNotice), findsNothing);
-      expect(find.byTooltip('장소에 저장'), findsOneWidget);
+      expect(find.byTooltip('장소 저장'), findsOneWidget);
     });
 
     // 되돌릴 길이 여기뿐이 아니라 헤더 토글에도 있으므로 시간이 지나면 사라져도
@@ -513,6 +561,7 @@ void main() {
     StoreInfoAction? result;
     await tester.pumpWidget(
       MaterialApp(
+        theme: AppTheme.light,
         home: Builder(
           builder: (context) => FilledButton(
             onPressed: () async {
@@ -542,6 +591,7 @@ void main() {
     var closedAll = false;
     await tester.pumpWidget(
       MaterialApp(
+        theme: AppTheme.light,
         home: Builder(
           builder: (context) => FilledButton(
             onPressed: () => PlaceDetailSheet.show(
@@ -570,6 +620,7 @@ void main() {
     var closedAll = false;
     await tester.pumpWidget(
       MaterialApp(
+        theme: AppTheme.light,
         home: Builder(
           builder: (context) => FilledButton(
             onPressed: () => PlaceDetailSheet.show(
@@ -637,7 +688,11 @@ void main() {
     expect(find.textContaining('restroom'), findsNothing);
   });
 
-  testWidgets('헤더 아이콘은 세부 규칙을 대분류보다 먼저 쓴다', (tester) async {
+  // **장식용 매장 아이콘을 뺐다.** 예전에는 이름 앞에 분류 색을 입힌 44 사각형이
+  // 있었고, 목록에서 보던 글리프를 상세에서도 같은 자리에 두려는 것이었다. 상세는
+  // 이미 그 장소만 보여 주는 화면이라 "무엇을 눌렀는지" 확인시킬 이유가 없다.
+  // 근거는 위 group과 같은 결정 문서다.
+  testWidgets('이름 앞에 장식용 분류 아이콘을 두지 않는다', (tester) async {
     await tester.pumpWidget(
       buildSubject(
         category: '식음료',
@@ -647,32 +702,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 식음료 대분류는 restaurant지만, 카페 세부 규칙이 이겨야 한다.
-    expect(find.byIcon(Icons.local_cafe_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.local_cafe_outlined), findsNothing);
     expect(find.byIcon(Icons.restaurant), findsNothing);
-  });
-
-  testWidgets('세부 규칙에 걸리지 않으면 대분류 아이콘으로 떨어진다', (tester) async {
-    await tester.pumpWidget(
-      buildSubject(
-        category: '패션',
-        subcategory: '명품',
-        repository: _FakeRepository(Future.value(null)),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.byIcon(Icons.checkroom), findsOneWidget);
     expect(find.byIcon(Icons.storefront), findsNothing);
-  });
-
-  testWidgets('카테고리가 없으면 상점 아이콘으로 떨어진다', (tester) async {
-    await tester.pumpWidget(
-      buildSubject(repository: _FakeRepository(Future.value(null))),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.byIcon(Icons.storefront), findsOneWidget);
+    // 이름과 층·업종은 그대로다.
+    expect(find.text('테스트 매장'), findsOneWidget);
   });
 
   group('떠 있는 채로 갈아 끼우기', () {
@@ -680,11 +714,16 @@ void main() {
     // 프레임이 생겨 번쩍인다(실기기에서 확인).
     testWidgets('이름·층은 즉시 바뀌고 본문은 새 상세가 올 때까지 남는다', (tester) async {
       await tester.pumpWidget(
-        buildSubject(repository: _FakeRepository(Future.value(_detailWithSummary()))),
+        buildSubject(
+          repository: _FakeRepository(Future.value(_detailWithSummary())),
+        ),
       );
       await tester.pumpAndSettle();
       expect(find.text('테스트 매장'), findsOneWidget);
-      expect(find.text(keepWordsWhole('상세 섹션')), findsOneWidget);
+      expect(
+        find.text(RoutexTypography.keepWordsWhole('상세 섹션')),
+        findsOneWidget,
+      );
 
       final next = Completer<PlaceDetail?>();
       // 다음 요청이 늦게 오는 상황을 만든다.
@@ -699,7 +738,10 @@ void main() {
       expect(find.text('다른 매장'), findsOneWidget);
       expect(find.text('테스트 매장'), findsNothing);
       // **본문은 아직 이전 것이다** — 비우면 그 빈 구간이 번쩍임이 된다.
-      expect(find.text(keepWordsWhole('상세 섹션')), findsOneWidget);
+      expect(
+        find.text(RoutexTypography.keepWordsWhole('상세 섹션')),
+        findsOneWidget,
+      );
       next.complete(null);
     });
 
@@ -727,7 +769,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('다른 매장'), findsOneWidget);
-      expect(find.text(keepWordsWhole('상세 섹션')), findsNothing);
+      expect(find.text(RoutexTypography.keepWordsWhole('상세 섹션')), findsNothing);
     });
   });
 
@@ -776,7 +818,6 @@ void main() {
       expect(placeDetailSheetInitialSize(0), 0.5);
     });
   });
-
 }
 
 class _FakeRepository implements PlaceDetailRepository {

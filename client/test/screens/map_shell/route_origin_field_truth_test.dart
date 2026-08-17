@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/service_locator.dart';
@@ -156,7 +157,7 @@ void main() {
     // 길찾기 바를 열지 않아, 매장에서 "도착"을 눌러도 상단이 검색창인 채였다는
     // 것이다 — 사용자에게는 누른 적 없는 화면이고, 출발지를 채워 넣을 자리도
     // 화면에 없다.
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await drain(tester);
     await enterIndoor(tester);
     await openStoreInfoBySearch(tester);
@@ -185,7 +186,7 @@ void main() {
     // 매장 시트와 **같은 조합**을 야외 POI 시트에서 만든다. 상단 검색은 건물
     // 안에서도 바깥 장소를 함께 돌려주므로(실내에서 지하철역을 찾는 흐름),
     // 두 시트 중 한쪽만 고치면 같은 증상이 다른 문으로 그대로 남는다.
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await drain(tester);
     // 바깥 검색에는 기준점이 필요하다. 판정이 서지 않는 표본이라 실내 상태는
     // 그대로 유지된다.
@@ -234,7 +235,7 @@ void main() {
     // 적혀 있는데 계산은 GPS 현재 위치에서 시작한다. 같은 건물 두 지점 사이
     // 경로가 20 km짜리 야외 경로로 나온 적이 있고, 화면만 봐서는 왜 그런지 알
     // 방법이 없었다.
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await drain(tester);
     await enterIndoor(tester);
     await openStoreInfoBySearch(tester);

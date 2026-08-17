@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/service_locator.dart';
 import 'package:navigation_client/models/place/outdoor_poi.dart';
@@ -68,8 +69,7 @@ void main() {
     ValueChanged<OutdoorPoi>? onPoiPicked,
   }) async {
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
+      MaterialApp(theme: AppTheme.light, home: Scaffold(
           body: SearchPanel(
             buildingId: 'thehyundai-seoul',
             query: query,

@@ -10,6 +10,8 @@ library;
 
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 /// 시스템이 복사 확인을 대신 띄우기 시작한 Android SDK.
 const int kSystemClipboardToastSdk = 33;
@@ -35,6 +37,19 @@ Future<bool> shouldAnnounceClipboardCopy() async {
   } catch (_) {
     return _cached = true;
   }
+}
+
+/// 복사 성공을 **우리가 알려야 할 때만** 알린다.
+///
+/// `RoutexInfoRow.onCopied`에 그대로 넘길 수 있는 모양이다. 그 컴포넌트는 값을
+/// 주지 않으면 제가 `복사했습니다`를 띄우는데, 시스템이 이미 띄우는 기기에서는
+/// 같은 말이 두 번 뜬다. 판정은 [shouldAnnounceClipboardCopy]가 맡는다.
+///
+/// 실패는 여기 오지 않는다 — 컴포넌트가 계속 맡는다.
+Future<void> announceClipboardCopy(BuildContext context) async {
+  if (!await shouldAnnounceClipboardCopy()) return;
+  if (!context.mounted) return;
+  RoutexToast.show(context, '복사했습니다');
 }
 
 /// 테스트에서 판정을 고정한다. null이면 다음 호출이 다시 조회한다.

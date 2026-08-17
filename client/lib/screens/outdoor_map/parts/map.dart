@@ -70,6 +70,7 @@ extension OutdoorMapMap on OutdoorMapBodyState {
 
     if (!mounted) return;
     setState(() => _styleReady = true);
+    if (!_styleReadySignal.isCompleted) _styleReadySignal.complete();
     _syncBuildingLayer();
     _syncCurrentLayer();
     _syncDestinationLayer();
@@ -88,7 +89,12 @@ extension OutdoorMapMap on OutdoorMapBodyState {
     // 스타일이 뜨기 전에 받아둔 첫 GPS 위치로의 카메라 이동. 그 사이에 실내로
     // 들어갔다면(줌 임계값·건물 탭) 실행하지 않는다 — 실내 도면을 보고 있는데
     // 카메라가 GPS 좌표로 튀면 안 된다.
-    if (_pendingCenterOnPosition && _position != null && _outdoorGpsVisible) {
+    // 매장 포커스가 카메라를 예약했으면 건너뛴다 — 공유 링크는 지도보다 먼저
+    // 도착해 여기서 기다리는 중이고, 그 화면을 GPS로 덮으면 두 번 튄다.
+    if (_pendingCenterOnPosition &&
+        _position != null &&
+        _outdoorGpsVisible &&
+        !_storeFocusOwnsCamera) {
       _pendingCenterOnPosition = false;
       // 첫 좌표 센터링은 여기서 끝났다. 표시해 두지 않으면 다음 좌표가 올 때
       // [_handlePosition]의 갈래가 한 번 더 옮겨 화면이 두 번 튄다.
@@ -125,7 +131,6 @@ extension OutdoorMapMap on OutdoorMapBodyState {
       controller,
       _activeFloorOutlineRing() ?? _buildingFootprint,
     );
-
   }
 
   /// 층 경계 두 레이어(외곽선·dim scrim)의 opacity를 같은 계수로 조절한다.
@@ -301,6 +306,18 @@ extension OutdoorMapMap on OutdoorMapBodyState {
     _cameraSettled = true;
     unawaited(_syncHighlightLayer());
     unawaited(_syncGateLayer());
+    // 마지막 안전망. 크로스페이드가 도는 중이 아닐 때만(은퇴 목록이 비었을 때)
+    // 이전 세대 실내 오버레이가 남아 있는지 지도에 직접 물어 지운다 — 층 전환이
+    // 중간에 끊기면 그 블록을 지울 주체가 아무도 없고, 남으면 새 층이 덮지 못하는
+    // 바깥쪽이 밝은 띠로 계속 보인다.
+    if (_retiringIndoorBlocks.isEmpty) {
+      unawaited(
+        purgeStaleIndoorOverlay(
+          controller,
+          keepGeneration: _indoorIds.generation,
+        ),
+      );
+    }
     // zoom과 target은 같은 CameraPosition에서 나오고 둘 다 non-nullable이므로,
     // 카메라를 받았다면 중심 좌표도 항상 있다.
     final camera = controller.cameraPosition;

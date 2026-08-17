@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 import '../../../../service_locator.dart';
 import '../../../../models/building/floor_plan.dart';
 import '../../../../models/place/poi_search_result.dart';
 import '../../../../theme/app_theme.dart';
-import '../../../../widgets/filter_pill.dart';
 import '../../../../map/icon/category_icon.dart';
 import '../../../../domain/category/category_taxonomy.dart';
-import '../../../../widgets/sheet_grab_handle.dart';
 import '../../../../widgets/sheet_header.dart';
 
 import '../../../../widgets/map_overlay_guard.dart';
@@ -89,10 +88,9 @@ class CategoryStoresSheet extends StatefulWidget {
         ),
         isScrollControlled: true,
         isDismissible: true,
+        // 곡률은 시트 표면이 그린다([RoutexBottomSheet]). 라우트에도 적으면 같은
+        // 값이 두 곳에서 정해진다.
         backgroundColor: Colors.transparent,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
         builder: (context) => MapOverlayGuard(
           child: CategoryStoresSheet(
             buildingId: buildingId,
@@ -236,19 +234,17 @@ class _CategoryStoresSheetState extends State<CategoryStoresSheet> {
           return GestureDetector(
             onTap: () {},
             behavior: HitTestBehavior.opaque,
-            child: Material(
-              color: Colors.white,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              clipBehavior: Clip.antiAlias,
+            child: RoutexBottomSheet(
+              // 표면은 Runtime Kit이, 드래그와 라우트는 앱이 갖는다. 여백은 조각마다
+              // 달라서 본문이 소유한다.
+              contentInset: RoutexBottomSheetContentInset.content,
               child: FutureBuilder<List<_CategoryStoreEntry>>(
                 future: _entriesFuture,
                 builder: (context, snapshot) {
                   return CustomScrollView(
                     controller: scrollController,
                     slivers: [
-                      const SliverToBoxAdapter(child: SheetGrabHandle()),
+                      const SliverToBoxAdapter(child: RoutexSheetHandle()),
                       SliverToBoxAdapter(
                         child: SheetHeader(
                           title: widget.category,
@@ -432,31 +428,23 @@ class _CategoryStoresSheetState extends State<CategoryStoresSheet> {
     // 걸 것이 없으면 줄 자체를 지운다 — 예전에는 이 자리에 검색창이 늘 있어
     // 빈 줄이 생기지 않았지만, 지금은 pill이 없으면 남길 것이 없다.
     if (!hasMeaningfulSubcategories(options)) return const SizedBox.shrink();
+    // `전체`는 "좁히지 않음"을 뜻하는 칩이다. 칩 줄은 선택이 없는 상태를 null로
+    // 말하는데, 이 화면에서 그것은 곧 전체다 — 어댑터가 둘을 이어 주므로 화면에는
+    // 늘 하나가 강조돼 있다. 그래서 고른 소분류를 다시 눌러 전체로 돌아오는 길도
+    // 그대로 남는다.
+    const allId = '';
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-      child: SizedBox(
-        height: 30,
-        child: ListView(
-          scrollDirection: Axis.horizontal,
-          children: [
-            FilterPill(
-              label: '전체',
-              selected: _subcategory == null,
-              onTap: () => _selectSubcategory(null),
-            ),
-            for (final option in options) ...[
-              const SizedBox(width: 6),
-              FilterPill(
-                label: option.label,
-                selected: _subcategory == option.value,
-                // 이미 고른 소분류를 다시 누르면 대분류 전체로 되돌린다.
-                onTap: () => _selectSubcategory(
-                  _subcategory == option.value ? null : option.value,
-                ),
-              ),
-            ],
-          ],
-        ),
+      child: RoutexChipBar(
+        options: [
+          const RoutexChipOption(id: allId, label: '전체'),
+          for (final option in options)
+            RoutexChipOption(id: option.value, label: option.label),
+        ],
+        selectedId: _subcategory ?? allId,
+        onSelected: (value) =>
+            _selectSubcategory(value == null || value == allId ? null : value),
+        semanticsLabel: '소분류',
       ),
     );
   }

@@ -132,14 +132,22 @@ extension OutdoorMapUi on OutdoorMapBodyState {
         // 실내까지 어두워지는 문제가 있었다. 지금은 세계를 덮는 outer ring +
         // 건물 footprint를 hole로 뚫은 폴리곤을 스크림 레이어로 그리고, 실내
         // 오버레이 아래에 삽입해 건물 안쪽만 밝게 스포트라이트된다.
+        // **낮은 강도로 둔다.** 예전에는 단색 노랑 알약에 같은 색 글로우까지
+        // 얹혀 있어, 지도 위에서 가장 시끄러운 것이 "GPS가 조금 부정확하다"였다.
+        // 경로를 벗어났다는 알림([EtaCard]의 wrong-way, 빨강)보다 세면 무엇이
+        // 급한지가 뒤집힌다. 연한 배경 + 같은 계열 글자로 내린다.
+        //
+        // **누를 수 없다.** 배지는 지금 상태를 읽는 표시일 뿐이고, 사용자가
+        // 할 수 있는 일이 없다 — 정확도는 기다리면 회복된다.
         if (lowAccuracy)
           const Positioned(
             top: 76,
             left: 12,
-            child: StatusBadge(
+            child: RoutexBadge(
               label: 'GPS 신호 약함',
-              color: AppColors.warning,
+              tone: RoutexBadgeTone.warning,
               icon: Icons.warning_amber_rounded,
+              surface: RoutexBadgeSurface.onMap,
             ),
           ),
 
@@ -150,23 +158,33 @@ extension OutdoorMapUi on OutdoorMapBodyState {
         // 자리는 위치 지정 안내와 같은 [placingHintTopPx]다. **누를 수 있어야
         // 하므로 GPS 배지 자리(top 76)를 쓰면 안 된다** — 거기는 MapShellScreen의
         // 카테고리 chip 열(top 78)에 덮여 탭이 chip으로 먹힌다. 두 오버레이는
-        // 동시에 뜨지 않는다(위치 지정은 실내 진입 상태에서만 열리고, 그러려면
-        // 건물이 로드돼 있어야 한다).
+        // 동시에 뜨지 않는다.
+        //
+        // **배지가 아니다.** 사용자가 할 일이 있는 상태라 문장과 행동을 가진
+        // 알림으로 그린다. GPS 배지와 같은 모양이면 "누르면 되는 것"과 "읽기만
+        // 하는 것"이 구분되지 않는다.
         if (_buildingLoadFailed)
           Positioned(
             top: placingHintTopPx,
             left: 12,
+            right: 12,
             child: SafeArea(
               bottom: false,
-              child: GestureDetector(
-                key: _buildingLoadFailedKey,
-                onTap: () => unawaited(_retryBuildingLoad()),
-                child: StatusBadge(
-                  label: _retryingBuildingLoad
-                      ? '건물 정보를 다시 불러오는 중…'
-                      : '건물 정보를 불러오지 못했습니다 · 다시 시도',
-                  color: AppColors.warning,
-                  icon: Icons.wifi_off,
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: KeyedSubtree(
+                  key: _buildingLoadFailedKey,
+                  child: RoutexInlineNotice(
+                    message: _retryingBuildingLoad
+                        ? '건물 정보를 다시 불러오는 중…'
+                        : '건물 정보를 불러오지 못했습니다',
+                    // 다시 부르는 중에는 행동을 걷는다 — 같은 요청을 겹쳐 보내는
+                    // 것을 막고, 지금 무엇을 하는 중인지는 문장이 말한다.
+                    actionLabel: _retryingBuildingLoad ? null : '다시 시도',
+                    onAction: _retryingBuildingLoad
+                        ? null
+                        : () => unawaited(_retryBuildingLoad()),
+                  ),
                 ),
               ),
             ),
@@ -372,7 +390,11 @@ extension OutdoorMapUi on OutdoorMapBodyState {
             ),
           ),
 
-        if (indoorRouteDestination != null)
+        // 도착하면 하단 배너를 걷는다. 도착 문구는 화면에 하나여야 하고, 그
+        // 하나는 위 도착 카드다 — 걷는 중 안내와 같은 자리·같은 무게로 또 말하면
+        // 안내가 끝난 줄 모르고 계속 걷는다. 지나쳐 걸어가 안내가 되살아나면
+        // (`arrived`가 풀리면) 배너도 함께 돌아온다.
+        if (indoorRouteDestination != null && !_showingArrivalOnly)
           Positioned(
             left: 0,
             right: 0,
@@ -400,11 +422,11 @@ extension OutdoorMapUi on OutdoorMapBodyState {
                             .clamp(1, 999),
                     label: _indoorEtaLabel(indoorRouteDestination),
                     instruction: _indoorRouteGuidance,
-                    // 도착 순간 배너가 "어디에 도착했는지"를 말하도록 목적지를
-                    // 함께 넘긴다. [_indoorEtaLabel]은 경유 층까지 붙인 긴 줄이라
-                    // 카드 제목으로는 쓸 수 없다.
-                    destinationName: indoorRouteDestination.name,
-                    destinationFloor: indoorRouteDestination.floor,
+                    // 미리 보는 동안은 계획 카드다 — 경로만 그려 두고, 따라가기는
+                    // 이 버튼을 누른 뒤에 시작한다.
+                    onStartGuidance: _indoorRoutePreview
+                        ? () => unawaited(_startIndoorGuidance())
+                        : null,
                     onClose: _dismissIndoorRouteFromEtaCard,
                     onClosePointerDown: (position) =>
                         _etaClosePointerDown = position,

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:navigation_client/service_locator.dart';
 import 'package:navigation_client/repositories/building/building_repository.dart';
@@ -132,7 +133,7 @@ void main() {
     );
     watchPosition = () => positions.stream;
 
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     // 위치를 흘리기 전에 건물(입구 좌표) 로드가 끝날 때까지 프레임을 진행한다.
     // 자동 실내 진입 판정은 입구 좌표가 있어야 성립하므로, 이걸 기다리지 않으면
     // asset 로드 속도에 따라 진입이 됐다 안 됐다 하는 플래키 테스트가 된다.
@@ -171,7 +172,7 @@ void main() {
     final positions = StreamController<Position>();
     watchPosition = () => positions.stream;
 
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     // 위치를 흘리기 전에 건물(입구 좌표) 로드가 끝날 때까지 프레임을 진행한다.
     // 자동 실내 진입 판정은 입구 좌표가 있어야 성립하므로, 이걸 기다리지 않으면
     // asset 로드 속도에 따라 진입이 됐다 안 됐다 하는 플래키 테스트가 된다.

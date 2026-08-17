@@ -3,6 +3,14 @@
 다른 세션이 이 작업을 이어받을 때 **먼저 읽는 문서**다. 여기는 "지금 어디까지 왔고 다음에
 무엇을 하나"만 적는다. 계획·기록의 내용은 각 문서가 단일 출처이므로 링크로 넘긴다.
 
+> **이 문서는 야외 지도 해체 브랜치(`refactor/outdoor-map-decomposition`) 이야기다.**
+> 지금 별도로 진행 중인 **디자인 시스템 포팅**(`feat/badge-chip-semantics`)은 여기 없다 —
+> 그쪽의 단일 출처는 공급 저장소의
+> [포팅 가이드](https://github.com/Routex-labs/routex-design-system/blob/main/docs/navigation-app-porting-guide.md)이고,
+> 단계 번호(0~8)는 전부 그 문서를 가리킨다. 전역 테마 전환 판정은
+> [전역 테마 넘기기](client/theme-handover.md)에 있고, **폰에서 확인이 남은 것**은
+> 아래 [디자인 시스템 브랜치](#디자인-시스템-브랜치--폰에서-확인이-남았다)에 있다.
+
 ## 한 줄 요약
 
 야외 지도 갓클래스를 해체하는 중이고, **2026-08-17(월) 현장 검증이 다음 관문**이다.
@@ -306,3 +314,53 @@ flutter test integration_test/pdr_device_smoke_test.dart -d windows
 돌려서 main에서 한 번도 실행되지 않았다.
 
 해체 브랜치에서는 여기에 **공개 API 19개 불변** 확인이 더 붙는다(계획서의 게이트).
+
+## 디자인 시스템 브랜치 — 폰에서 확인이 남았다
+
+`feat/badge-chip-semantics`의 **공유 링크 수정 둘은 커밋됐지만, 고친 뒤 실기기에서
+보지 못했다**(2026-08-17, 사용자가 야외라 설치할 수 없었다). analyze 무결·1,557개
+통과·부팅 테스트 통과까지는 확인했다.
+
+**원인은 로그로 확정했다.** 고치기 전 cold start에서 이렇게 찍혔다.
+
+```
+[focus store] 포기: controller=false styleReady=false
+[first fix] 첫 좌표로 카메라를 옮긴다        ← 1.7초 뒤
+```
+
+공유 링크는 **지도보다 먼저 도착한다.** `focusStore`가 컨트롤러 없이 조용히 포기해,
+층 도면과 상세 시트는 매장을 가리키는데 카메라만 첫 GPS 좌표로 갔다.
+
+### 확인 절차
+
+로컬 백엔드를 띄우고([로컬 개발 가이드](guide/local-development-guide.md)) `client/`의
+`config.local.json`에서 `API_BASE_URL`을 PC의 Tailscale 주소(`http://100.121.75.43:8001`)로
+바꾼 뒤 빌드·설치한다. `PLACE_LINK_ORIGIN`은 **https라야 하고 manifest의 intent-filter
+host와 같아야 하므로 Cloud Run 주소 그대로 둔다.**
+
+```bash
+ORIGIN=https://navigation-api-465890645804.asia-northeast3.run.app
+adb shell am force-stop com.navigation.navigation_client
+adb logcat -c
+adb shell am start -a android.intent.action.VIEW -c android.intent.category.BROWSABLE \
+  -d "$ORIGIN/place/thehyundai-seoul/PO-HU40njvml1512" com.navigation.navigation_client
+adb logcat -d -v time flutter:V '*:S' | grep -E "focus store|first fix"
+```
+
+**합격 기준: `[first fix]`가 찍히지 않고**, 카메라가 스타벅스 리저브(B2)에 선다.
+`PO-HU40njvml1512`가 스타벅스 리저브, `PO--Aksc58lQ1986`이 에르메스 뷰티(1F)다.
+
+### 이미 눈으로 본 것
+
+| 항목 | 결과 |
+|---|---|
+| 같은 층 매장 링크 | 열림 |
+| 실내 진입 후 타 층 | 열림 (B2로 층 전환) |
+| 없는 placeId | 다른 매장 안 열고 `장소를 찾을 수 없습니다` |
+| 백엔드 증명 파일 둘·fallback 페이지 | 200 |
+
+### 배포 없이는 볼 수 없는 것
+
+OS가 `assetlinks.json`을 받아 가 **링크를 앱에 자동으로 넘기는지**는 Cloud Run에
+`links` 라우터를 올려야 판정된다. 지금까지는 `am start`로 intent를 직접 쏘아 앱 쪽
+경로만 확인했다 — 카톡에 붙인 링크를 눌러서 앱이 뜨는지는 아직 모른다.

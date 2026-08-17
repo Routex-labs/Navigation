@@ -13,11 +13,13 @@ void main() {
     bool alreadyCentered = false,
     bool followingUser = false,
     bool indoorEntered = false,
+    bool storeFocusOwnsCamera = false,
     bool mapReady = true,
   }) => shouldCenterOnFirstFix(
     alreadyCentered: alreadyCentered,
     followingUser: followingUser,
     indoorEntered: indoorEntered,
+    storeFocusOwnsCamera: storeFocusOwnsCamera,
     mapReady: mapReady,
   );
 
@@ -38,6 +40,14 @@ void main() {
   test('실내 도면을 보는 중이면 옮기지 않는다', () {
     // 카메라의 주인이 실내 위치(PDR)로 바뀐 상태다.
     expect(call(indoorEntered: true), isFalse);
+  });
+
+  test('매장 포커스가 카메라를 예약했으면 옮기지 않는다', () {
+    // 공유 링크는 **지도보다 먼저 도착한다.** 그 포커스는 스타일 로드를
+    // 기다리는 중이고 실내 모드는 아직 꺼져 있어, indoorEntered가 이 자리를
+    // 대신하지 못한다. 막지 않으면 카메라가 사용자 위치로 갔다가 매장으로
+    // 다시 가 두 번 튄다(실기기 로그로 확인).
+    expect(call(storeFocusOwnsCamera: true), isFalse);
   });
 
   test('지도가 아직 준비되지 않았으면 옮기지 않는다', () {

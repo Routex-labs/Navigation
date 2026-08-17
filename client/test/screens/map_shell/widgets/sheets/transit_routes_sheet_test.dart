@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/models/route/transit_route.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/transit_routes_sheet.dart';
@@ -55,6 +56,7 @@ void main() {
   testWidgets('경로마다 소요 시간·환승·도보·요금을 함께 적는다', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
+        theme: AppTheme.light,
         home: Scaffold(
           body: TransitRoutesSheet(
             routes: const TransitRoutes.ok([_busOnly, _withTransfer]),
@@ -85,6 +87,7 @@ void main() {
     TransitItinerary? picked;
     await tester.pumpWidget(
       MaterialApp(
+        theme: AppTheme.light,
         home: Scaffold(
           body: Builder(
             builder: (context) => TextButton(
@@ -115,6 +118,7 @@ void main() {
     var closed = false;
     await tester.pumpWidget(
       MaterialApp(
+        theme: AppTheme.light,
         home: Scaffold(
           body: TransitSummaryCard(
             itinerary: _withTransfer,

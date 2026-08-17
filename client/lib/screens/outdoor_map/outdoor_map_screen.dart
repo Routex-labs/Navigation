@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 import '../../core/api_config.dart';
 import '../../map/camera/floor_switch_progress.dart';
@@ -73,7 +74,6 @@ import 'widgets/route_steps_sheet.dart';
 import '../../map/icon/icon_cache.dart';
 import '../../map/icon/place_pin.dart';
 import 'widgets/map_overlay_tap_guard.dart';
-import 'widgets/status_badge.dart';
 import 'entry/floor_outline.dart';
 import 'gps/gps_session.dart';
 import 'entry/indoor_entry_gps.dart';
@@ -499,6 +499,21 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   bool _styleReady = false;
 
+  /// 스타일 로드가 끝나기를 기다리는 자리를 위한 신호.
+  ///
+  /// 공유 링크로 들어오면 **지도보다 링크가 먼저 도착한다** — 앱을 켜자마자
+  /// 매장을 여는데 컨트롤러는 아직 없다. 기다리지 않으면 [focusStore]가 조용히
+  /// 포기하고 카메라는 첫 GPS 좌표로 간다(실기기 로그로 확인).
+  final _styleReadySignal = Completer<void>();
+
+  /// [focusStore]가 초기 카메라를 예약해 둔 동안만 참이다.
+  ///
+  /// 스타일을 기다리는 **동안에도** 첫 GPS 센터링을 막아야 한다. 안 막으면
+  /// 카메라가 사용자 위치로 갔다가 매장으로 다시 가 두 번 튄다. 카메라를
+  /// 실제로 잡으면 `_didInitialCenter`가 그 일을 이어받고, 중간에 포기하면
+  /// 풀어 준다 — 걸린 채 남으면 첫 좌표 센터링이 영영 막힌다.
+  bool _storeFocusOwnsCamera = false;
+
   /// PDR 마커 source 갱신은 센서·보정·층 전환에서 동시에 들어올 수 있다.
   ///
   /// MapLibre의 Future는 플랫폼 쪽 반영이 끝난 뒤 완료되므로 호출을 각각
@@ -733,8 +748,28 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   final GlobalKey _etaCardKey = GlobalKey();
 
+  /// 실내 경로를 **미리 보는 중**인가. 참이면 안내가 아직 시작되지 않았다.
+  ///
+  /// 건물 밖에서도 "거기는 어떻게 되어 있지?" 하고 안을 볼 수 있어야 한다. 그때
+  /// 사용자는 그 매장에 서 있지 않으므로 **현재 위치를 그 매장으로 잡지 않는다** —
+  /// 잡아 버리면 화면이 사실이 아닌 위치를 말하고, PDR이 거기서부터 걸음을 센다.
+  /// 경로선과 요약은 그대로 그리고, 시작은 카드의 `안내 시작`이 맡는다.
+  bool _indoorRoutePreview = false;
+
+  /// 미리 보기에서 `안내 시작`을 누르면 앵커를 찍을 출발지. 없으면 지금 위치다.
+  PoiSearchResult? _indoorRoutePreviewOrigin;
+
   /// 도착 카드가 가리키는 목적지. 사용자가 확인을 누를 때까지 남는다.
   PoiSearchResult? _arrivedDestination;
+
+  /// 지금 화면에서 도착만 말하고 있는가. 참이면 하단 안내 배너를 그리지 않는다.
+  ///
+  /// 도착 문구는 화면에 하나여야 한다. 카드가 떠 있는 것만으로는 부족하다 —
+  /// 도착 지점을 지나쳐 계속 걸으면 카드는 그대로 두고(한 번 말한 것을 조용히
+  /// 거두지 않는다) 안내는 되살아나야 하므로, 지금 판정이 도착인지도 함께 본다.
+  bool get _showingArrivalOnly =>
+      _arrivedDestination != null &&
+      _indoorRouteGuidance?.action == RouteGuidanceAction.arrived;
 
   /// 도착 안내를 읽을 시간을 준 뒤 경로를 지우는 타이머. 살아 있다는 것 자체가
   /// "이미 카운트다운 중"이라는 상태다([decideArrivalAutoClear]).
@@ -896,6 +931,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   @override
   void dispose() {
+    // 스타일을 기다리던 매장 포커스를 풀어 준다. 안 풀면 그 await가 영영
+    // 돌아오지 않아 뒤따르는 mounted 검사에 닿지 못한다.
+    if (!_styleReadySignal.isCompleted) _styleReadySignal.complete();
     _buildingRetryTimer?.cancel();
     _selectionScaleTimer?.cancel();
     _pinIntroTimer?.cancel();
@@ -1336,6 +1374,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     PoiSearchResult destination, {
     PoiSearchResult? origin,
     bool announceOriginAnchor = true,
+    bool preview = false,
   }) async {
     final anchor = _pdrTrailState.anchor;
     // 명시적 출발지는 노드 id와 층이 둘 다 있어야 그래프 탐색을 시작할 수 있다.
@@ -1361,7 +1400,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 매장을 출발지로 골랐으면 현재 위치도 그 매장으로 옮긴다. 이걸 안 하면
     // 경로는 그 매장에서 뻗어 나가는데 위치 아이콘만 예전 자리(또는 아무 데도)
     // 남아, 사용자는 자기가 어디 있다고 표시되는지와 경로가 어긋난 화면을 본다.
-    if (hasExplicitOrigin) {
+    //
+    // **미리 보기에서는 찍지 않는다.** 그 사람은 그 매장에 서 있지 않다 — 찍으면
+    // 화면이 사실이 아닌 위치를 말하고 PDR이 거기서부터 걸음을 센다. 앵커는
+    // 카드의 `안내 시작`을 누른 순간에 찍는다.
+    if (hasExplicitOrigin && !preview) {
       await _anchorAtStoreOrigin(
         floor: originFloor,
         nodeId: originNodeId,
@@ -1384,6 +1427,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _userDestination = null;
       _userDestinationLabel = null;
       _indoorRouteDestination = destination;
+      _indoorRoutePreview = preview && hasExplicitOrigin;
+      _indoorRoutePreviewOrigin = preview ? origin : null;
       _arrivedDestination = null;
       // 목적지가 바뀌면 새로운 길안내다. 기존 궤적을 남기면 새 파란 경로와
       // 이전 목적지로 걸어간 회색선이 한 여정처럼 섞인다.
@@ -1644,10 +1689,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// **id로 찾는다.**
   ///
   /// **실내가 아니면 층을 옮기지 않고 포기한다** — 야외에서 부르면 카메라만 건물로
-  /// 튀는 반쪽 이동이 남는다.
-  Future<PoiSearchResult?> resolveIndexEntry(StoreIndexEntry entry) async {
+  /// 튀는 반쪽 이동이 남는다. [enterBuildingIfNeeded]면 밖에서도 옮긴다
+  /// ([focusStore]와 같은 뜻이며, 공유 링크로 들어온 경로가 그렇다 — 링크를 받은
+  /// 사람은 대개 건물 밖에 있어서, 막으면 공유가 주 사용 맥락에서 아무것도 열지
+  /// 못한다). 층 교체는 도면 소스만 갈아 끼우므로 **실내 모드를 켜지 않는다.**
+  Future<PoiSearchResult?> resolveIndexEntry(
+    StoreIndexEntry entry, {
+    bool enterBuildingIfNeeded = false,
+  }) async {
     if (entry.floorName.isNotEmpty && entry.floorName != _activeFloor) {
-      if (!_indoorEntered) return null;
+      if (!_indoorEntered && !enterBuildingIfNeeded) return null;
       // 검색에서 타 층 매장을 고른 경로 — 사용자가 층 전환을 가장 자주 체감하는
       // 자리다. 새 도면 페이드인은 이어지는 매장 포커스 카메라 이동과 겹친다.
       await _switchOverlayFloorCrossfaded(entry.floorName);
@@ -1700,6 +1751,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     final fromOutside = !_indoorEntered;
     if (fromOutside && !enterBuildingIfNeeded) return;
 
+    // **여기서부터 카메라는 이 포커스의 것이다.** 아래에서 층 도면과 스타일을
+    // 기다리는데, 그 사이 첫 GPS 좌표가 오면 화면을 사용자 위치로 가져간다.
+    _storeFocusOwnsCamera = true;
+
     // **여기서 실내 모드를 직접 켜지 않는다.** 켜면 길찾기 출발지 규칙이 PDR 앵커로
     // 바뀌어, 멀리서 매장을 고른 사용자가 "출발 위치를 먼저 지정해주세요"로 막힌다.
     // 카메라만 옮기고 진입 판정은 [_handleCameraIdle] 한 곳에 남긴다.
@@ -1710,16 +1765,34 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       await _switchOverlayFloorCrossfaded(store.floor);
       if (!mounted) return;
       // 층 전환이 실패했으면(그 층 그래프·도면을 못 받음) 다른 층 도면 위에
-      // 엉뚱한 자리를 강조하게 되므로 여기서 멈춘다.
-      if (store.floor != _activeFloor) return;
+      // 엉뚱한 자리를 강조하게 되므로 여기서 멈춘다. 예약도 함께 푼다 — 걸어
+      // 둔 채 나가면 첫 좌표 센터링이 영영 막혀 카메라가 서울시청에 남는다.
+      if (store.floor != _activeFloor) {
+        _storeFocusOwnsCamera = false;
+        return;
+      }
     }
     // 도면 로드가 아직 도는 중이면 기다린다 — 아래 강조([_syncHighlightLayer])가
     // [_floorPlan]에서 매장 폴리곤을 찾으므로, 로드 전에 그리면 강조 없이
     // 카메라만 움직이는 반쪽 포커스가 된다([resolveIndexEntry]와 같은 이유).
     await _floorGraphLoad;
     if (!mounted) return;
+    // **지도를 기다린다.** 공유 링크로 앱이 켜지면 여기 도달할 때 컨트롤러가
+    // 아직 없다. 예전에는 그대로 포기해, 층 도면과 시트는 매장을 가리키는데
+    // 카메라만 첫 GPS 좌표로 가 있었다.
+    if (!_styleReady) await _styleReadySignal.future;
+    if (!mounted) return;
     final controller = _mapController;
-    if (controller == null || !_styleReady) return;
+    if (controller == null || !_styleReady) {
+      _storeFocusOwnsCamera = false;
+      return;
+    }
+
+    // 초기 카메라를 이 포커스가 썼다. 뒤늦은 첫 좌표가 화면을 뺏지 않는다.
+    // 여기서부터는 [_didInitialCenter]가 그 일을 맡으므로 예약을 놓아 준다.
+    _didInitialCenter = true;
+    _pendingCenterOnPosition = false;
+    _storeFocusOwnsCamera = false;
 
     setState(() => _highlightedStoreId = store.placeId);
     // 핀 **자리**는 먼저 잡는다(점 하나라 순간이다). **크기**는 아래

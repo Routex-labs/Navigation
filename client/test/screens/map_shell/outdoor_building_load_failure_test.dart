@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 import 'package:navigation_client/models/building/category_count.dart';
 import 'package:navigation_client/models/place/store_index_entry.dart';
 import 'package:navigation_client/service_locator.dart';
@@ -58,29 +60,39 @@ void main() {
     destinationRepository = MockDestinationRepository(repository);
   }
 
-  testWidgets('건물 로드가 실패하면 재시도 배지를 띄운다', (WidgetTester tester) async {
+  testWidgets('건물 로드가 실패하면 다시 시도할 수 있는 알림을 띄운다', (WidgetTester tester) async {
     final failing = _FlakyBuildingRepository(inner)..failing = true;
     useRepository(failing);
 
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(
+      MaterialApp(theme: AppTheme.light, home: const MapShellScreen()),
+    );
     await drain(tester);
 
     // 실패가 화면에 남는다. 이게 없으면 사용자는 "실내 기능이 왜 없는지" 알 길이
     // 없고, 예외는 unhandled async error로만 흘러간다.
     expect(find.textContaining('건물 정보를 불러오지 못했습니다'), findsOneWidget);
+    // **행동이 붙어 있어야 한다.** 사용자가 할 일이 있는 상태라 배지가 아니다 —
+    // 읽기만 하는 GPS 배지와 같은 모양으로 그리면 둘이 구분되지 않는다.
+    expect(find.byType(RoutexInlineNotice), findsOneWidget);
+    expect(find.text('다시 시도'), findsOneWidget);
   });
 
-  testWidgets('배지를 누르면 다시 불러와 복구된다', (WidgetTester tester) async {
+  testWidgets('다시 시도를 누르면 다시 불러와 복구된다', (WidgetTester tester) async {
     final failing = _FlakyBuildingRepository(inner)..failing = true;
     useRepository(failing);
 
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(
+      MaterialApp(theme: AppTheme.light, home: const MapShellScreen()),
+    );
     await drain(tester);
     expect(find.textContaining('건물 정보를 불러오지 못했습니다'), findsOneWidget);
 
-    // 백엔드가 살아난 뒤 재시도.
+    // 백엔드가 살아난 뒤 재시도. **문장이 아니라 행동을 누른다** — 예전에는
+    // 알림 전체가 탭 대상이라 문장을 눌러도 통과했고, 그래서 이 테스트는 자동
+    // 재시도와 구분되지 않았다.
     failing.failing = false;
-    await tester.tap(find.textContaining('건물 정보를 불러오지 못했습니다'));
+    await tester.tap(find.text('다시 시도'));
     await drain(tester);
 
     expect(find.textContaining('건물 정보를 불러오지 못했습니다'), findsNothing);
@@ -96,7 +108,9 @@ void main() {
     final failing = _FlakyBuildingRepository(inner)..failing = true;
     useRepository(failing);
 
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(
+      MaterialApp(theme: AppTheme.light, home: const MapShellScreen()),
+    );
     await drain(tester);
     expect(find.textContaining('건물 정보를 불러오지 못했습니다'), findsOneWidget);
 
@@ -114,7 +128,9 @@ void main() {
     final failing = _FlakyBuildingRepository(inner)..failing = true;
     useRepository(failing);
 
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(
+      MaterialApp(theme: AppTheme.light, home: const MapShellScreen()),
+    );
     await drain(tester);
 
     // 사다리 총합(1+2+4+8+16+30 = 61초)을 훌쩍 넘겨 진행시킨다.
@@ -135,11 +151,13 @@ void main() {
     expect(afterLadder, lessThan(20));
   });
 
-  testWidgets('정상 로드에서는 배지가 뜨지 않는다', (WidgetTester tester) async {
+  testWidgets('정상 로드에서는 알림이 뜨지 않는다', (WidgetTester tester) async {
     // 배지가 항상 떠 있으면(=조건이 뒤집혔으면) 위 두 테스트는 그대로 통과한다.
     useRepository(_FlakyBuildingRepository(inner));
 
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(
+      MaterialApp(theme: AppTheme.light, home: const MapShellScreen()),
+    );
     await drain(tester);
 
     expect(find.textContaining('건물 정보를 불러오지 못했습니다'), findsNothing);

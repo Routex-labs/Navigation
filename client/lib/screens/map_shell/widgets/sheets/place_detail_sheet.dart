@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:routex_design_system/routex_design_system.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../../service_locator.dart';
 import '../../../../domain/route/dijkstra.dart';
@@ -11,14 +12,12 @@ import '../../../../models/place/favorite_place.dart';
 import '../../../../models/place/place_detail.dart';
 import '../../../../models/place/store_index_entry.dart';
 import '../../../../repositories/place/place_detail_repository.dart';
+import '../../../../routing/place_link.dart';
 import '../../../../theme/app_theme.dart';
 import 'place_detail/place_detail_hours_section.dart';
 import 'place_detail/place_detail_nearby_section.dart';
 import 'place_detail/place_detail_rich_sections.dart';
 import 'place_detail/place_detail_sections.dart';
-import '../../../../map/icon/category_icon.dart';
-import '../../../../domain/store/reach_label.dart';
-import '../../../../widgets/sheet_grab_handle.dart';
 import '../../../../widgets/sheet_header.dart';
 
 import '../../../../widgets/map_overlay_guard.dart';
@@ -198,10 +197,9 @@ class PlaceDetailSheet extends StatefulWidget {
       sheetAnimationStyle: crossFade
           ? kPlaceDetailSheetInstantStyle
           : kPlaceDetailSheetAnimationStyle,
+      // 곡률은 시트 표면이 그린다([RoutexBottomSheet]). 라우트에도 적으면 같은
+      // 값이 두 곳에서 정해진다.
       backgroundColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
       builder: (context) => MapOverlayGuard(
         child: PlaceDetailSheet(
           target: target,
@@ -251,14 +249,44 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
 
   /// 본문에 그릴 섹션. excluded면 비운다.
   ///
-  /// `map`은 걸러 낸다. 지도 미리보기가 아직 없어서 층 이름만 적힌 블록인데,
-  /// 그 층은 헤더 배지에 이미 있다. 누를 수도 없는 중복이라 자리만 차지했다.
-  /// 서버 계약은 그대로 두고 화면에서만 뺀다 — 지도 이동을 붙이는 날 되살린다.
-  List<PlaceDetailSection> get _visibleSections => _isExcluded
-      ? const []
-      : (_detail?.sections ?? const [])
-            .where((section) => section is! MapSection)
-            .toList();
+  /// 서버가 보내는 `map` 섹션은 여기까지 오지 않는다 — 모델이 파싱하지 않는다.
+  /// 담긴 것이 매장 폴리곤인데 지도는 그것을 매장 색인에서 이미 갖고 있고, 화면에
+  /// 남은 것은 층 이름 한 줄이라 헤더 배지와 같은 말이었다.
+  List<PlaceDetailSection> get _visibleSections =>
+      _isExcluded ? const [] : (_detail?.sections ?? const []);
+
+  /// 지금 장소의 공유 링크. 만들 수 없으면 null이고 그때는 공유 버튼도 없다.
+  Uri? get _shareLink {
+    final placeId = _target.placeId;
+    if (placeId == null) return null;
+    return buildPlaceLink(buildingId: widget.buildingId, placeId: placeId);
+  }
+
+  /// 장소 이름과 링크를 시스템 공유 시트로 넘긴다.
+  ///
+  /// **취소를 실패로 보지 않는다.** 공유 시트를 열었다 닫는 것은 사용자의 선택이고,
+  /// 거기에 오류 문구를 띄우면 아무 문제도 없는 조작이 실패로 읽힌다. 알리는 것은
+  /// 플랫폼 호출 자체가 던졌을 때뿐이다.
+  ///
+  /// iPad는 popover가 뜰 자리를 요구한다. 0 크기를 주면 그 자리에서 공유를 거부하므로
+  /// 헤더가 실제로 차지한 사각형을 넘긴다.
+  Future<void> _share() async {
+    final link = _shareLink;
+    if (link == null) return;
+    final box = context.findRenderObject() as RenderBox?;
+    try {
+      await Share.share(
+        [_target.title, '$link'].join('\n'),
+        subject: _target.title,
+        sharePositionOrigin: box == null
+            ? null
+            : box.localToGlobal(Offset.zero) & box.size,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      RoutexToast.show(context, '공유하지 못했습니다');
+    }
+  }
 
   /// 길찾기 버튼은 이름 바로 아래 한 곳에만 있다. chain 규약을 타지 않도록
   /// `_markIntentional`을 거친다(F5).
@@ -439,12 +467,11 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
         builder: (context, scrollController) => GestureDetector(
           onTap: () {},
           behavior: HitTestBehavior.opaque,
-          child: Material(
-            color: Colors.white,
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            ),
-            clipBehavior: Clip.antiAlias,
+          // 표면(색·곡률·그림자·자르기)은 Runtime Kit이 소유하고, 드래그와 라우트는
+          // 여기 남는다([MapPassThroughSheetRoute]). 여백은 본문이 갖는다 — 대표
+          // 사진이 가장자리까지 닿아야 해서 표면이 넣어 주면 표현할 수 없다.
+          child: RoutexBottomSheet(
+            contentInset: RoutexBottomSheetContentInset.content,
             child: Stack(
               children: [
                 ScrollConfiguration(
@@ -467,28 +494,38 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const SheetGrabHandle(),
+                        const RoutexSheetHandle(),
                         _SheetLoadingLine(visible: _isLoading),
+                        // 저장은 시트가 아니라 **장소**에 붙는 동작이라 이름 옆으로
+                        // 내려갔다([RoutexPlaceHeader]). 시트 상단 바는 뒤로·닫기만
+                        // 갖는다 — 그 둘은 시트를 다루는 동작이다.
                         SheetHeader(
                           onCloseAll: widget.onCloseAll,
                           onIntentionalPop: _markIntentional,
-                          // 저장은 눌러도 시트가 그대로 남는 유일한 버튼이라 길찾기와
-                          // 같은 줄에 두지 않는다([SheetHeader.trailing] 주석).
-                          trailing: favorite == null
-                              ? null
-                              : _SaveToggle(
-                                  isSaved: saved,
-                                  onPressed: _onToggleFavorite,
-                                ),
                         ),
                         Padding(
                           padding: const EdgeInsets.fromLTRB(20, 2, 20, 0),
-                          child: _PlaceCore(
-                            title: _target.title,
-                            subtitle: _target.subtitle,
-                            category: _target.category,
-                            subcategory: subcategory,
-                            reach: _target.reach,
+                          // **도보 시간을 반복하지 않는다.** 목록에서 고를 때는
+                          // 비교에 쓰는 값이지만, 이미 고른 장소의 상세에서는 같은
+                          // 값을 한 번 더 읽을 이유가 없다. 이름 앞 장식용 매장
+                          // 아이콘도 같은 이유로 뺀다. 결정의 단일 출처는 공급
+                          // 저장소의 place-detail-guidance-decisions.md다.
+                          child: RoutexPlaceHeader(
+                            name: _target.title,
+                            metadata: [
+                              if (_target.subtitle.isNotEmpty) _target.subtitle,
+                              ?subcategoryLabelFor(subcategory),
+                            ].join(' · '),
+                            saved: saved,
+                            // 저장할 대상이 없으면(구버전 저장 항목) 담을 곳이
+                            // 없다. 그때는 토글 자체를 그리지 않는다.
+                            onSaved: favorite == null
+                                ? null
+                                : (_) => _onToggleFavorite(),
+                            // 링크를 만들 수 없으면 버튼도 없다. 만들 수는 있어도
+                            // 그 주소가 증명 파일을 내지 못하면 받은 사람에게는
+                            // 브라우저로 새는 링크일 뿐이다([placeLinkOrigin]).
+                            onShare: _shareLink == null ? null : _share,
                           ),
                         ),
                         // 이름을 읽은 직후가 길찾기를 누르는 자리다. 사진·메뉴를
@@ -508,7 +545,6 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                             padding: const EdgeInsets.only(top: 24),
                             child: PlaceDetailSections(
                               sections: sections,
-                              floorLabel: _detail?.location.floorLabel,
                               homeFooter: _nearbyStores.isEmpty
                                   ? null
                                   : PlaceNearbySection(
@@ -542,150 +578,6 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// 시트 최상단의 아이콘·이름·층·업종 블록.
-///
-/// 왼쪽 아이콘은 카테고리 칩·카테고리 매장 목록과 같은 [storeIconFor] 규칙을
-/// 쓴다. 목록에서 보던 글리프가 상세에서도 같은 자리에 있어야 "방금 누른 그것"이
-/// 이어진다. 한때 이 자리에 있던 건 모든 매장에 똑같이 붙는 storefront 하나라
-/// 알려 주는 게 없었는데, 지금은 대분류 폴백이 있어 매장마다 달라진다.
-///
-/// 층은 배지가 아니라 업종 줄 앞의 pill이다. 44px 정사각형은 로고 자리로 읽혀서
-/// 텍스트를 넣으면 브랜드 마크처럼 오독된다.
-class _PlaceCore extends StatelessWidget {
-  const _PlaceCore({
-    required this.title,
-    required this.subtitle,
-    required this.category,
-    required this.subcategory,
-    required this.reach,
-  });
-
-  final String title;
-  final String subtitle;
-  final String? category;
-  final String? subcategory;
-  final NodeReach? reach;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = subcategoryLabelFor(subcategory);
-    final reach = this.reach;
-    final hasFloor = subtitle.isNotEmpty;
-    final accent = category == null
-        ? AppColors.primary
-        : categoryColorFor(category!);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: accent.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(13),
-          ),
-          alignment: Alignment.center,
-          child: Icon(
-            storeIconFor(
-              name: title,
-              subcategory: subcategory,
-              category: category,
-            ),
-            size: 22,
-            color: accent,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                title,
-                // 긴 이름은 잘라내기 전에 두 줄까지 준다. 그 이상은 헤더 높이가
-                // 튀어서 본문 첫 화면을 먹는다.
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 21,
-                  height: 1.2,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.text,
-                ),
-              ),
-              // 층도 업종도 없으면 줄 자체를 만들지 않는다 — 빈 줄이 제목 아래
-              // 여백만 늘린다.
-              if (hasFloor || label != null) ...[
-                const SizedBox(height: 5),
-                // 층·구분점·업종을 위젯 세 개로 나열하지 않고 한 문장으로 그린다.
-                // 위젯으로 나누면 사이 간격을 padding 상수로 찍어야 하는데, 그
-                // 값이 글자 사이 자연스러운 간격과 어긋나 층만 동떨어져 보였다.
-                // 하나의 텍스트로 두면 간격을 폰트가 정한다.
-                Text.rich(
-                  TextSpan(
-                    children: [
-                      if (hasFloor)
-                        TextSpan(
-                          text: subtitle,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      if (hasFloor && label != null)
-                        const TextSpan(
-                          text: ' · ',
-                          style: TextStyle(color: AppColors.blue300),
-                        ),
-                      if (label != null) TextSpan(text: label),
-                    ],
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    height: 1.3,
-                    color: AppColors.muted,
-                  ),
-                ),
-              ],
-              // "어디인가" 다음 줄이 "어떻게 닿는가"다. 목록에서 이미 본 값을
-              // 상세에서도 같은 자리에 두어, 눌러 들어온 뒤 다시 찾지 않게 한다.
-              if (reach != null) ...[
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.directions_walk,
-                      size: 14,
-                      color: AppColors.muted,
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        reachLabel(reach),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          height: 1.3,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.text,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
     );
   }
 }
@@ -750,32 +642,6 @@ class _PlaceActions extends StatelessWidget {
   );
 }
 
-/// 헤더 우측의 저장 토글.
-///
-/// 예전에는 본문 액션 줄에서 "저장"/"저장됨" 글자를 달고 있었고, 그 주석은
-/// 아이콘만으로 짐작하게 두지 않으려는 것이라고 적고 있었다. 헤더는 자리가
-/// 아이콘 폭뿐이라 글자를 뗀다. **그 자리를 세 가지로 메운다** — 채움/윤곽으로
-/// 저장 여부를 구분하고, tooltip을 달고, 누른 결과를 스낵바가 문장으로 알린다.
-/// 셋 중 하나라도 빠지면 글자를 뗀 것이 그냥 후퇴가 된다.
-class _SaveToggle extends StatelessWidget {
-  const _SaveToggle({required this.isSaved, required this.onPressed});
-
-  final bool isSaved;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) => IconButton(
-    key: const ValueKey('place-detail-save'),
-    tooltip: isSaved ? '저장 취소' : '장소에 저장',
-    onPressed: onPressed,
-    icon: Icon(
-      isSaved ? Icons.bookmark : Icons.bookmark_border,
-      size: 22,
-      color: isSaved ? AppColors.primary : AppColors.muted,
-    ),
-  );
-}
-
 /// 손잡이 **바로 아래**에 놓이는 얇은 로딩 줄.
 ///
 /// 예전에는 본문에 회색 막대를 놓고, 갈아 끼울 때는 시트 전체를 페이드했다.
@@ -821,13 +687,11 @@ class PlaceDetailSections extends StatefulWidget {
   const PlaceDetailSections({
     super.key,
     required this.sections,
-    required this.floorLabel,
     this.now,
     this.homeFooter,
   });
 
   final List<PlaceDetailSection> sections;
-  final String? floorLabel;
 
   /// 영업시간 판정의 기준 시각. 테스트가 넘기고 앱에서는 null이라
   /// [DateTime.now]가 쓰인다 — 시각에 의존하는 화면을 고정할 수 있어야 한다.
@@ -874,6 +738,11 @@ class _PlaceDetailSectionsState extends State<PlaceDetailSections> {
         for (final item in section.items) item.localAsset,
     ];
 
+    // 메뉴가 30종까지 늘면서 한 줄로 이어 붙인 본문이 너무 길어졌다. 영업시간을
+    // 보려면 메뉴를 한참 지나야 했고 그 반대도 마찬가지다. 어느 쪽을 보러 왔는지는
+    // 사람마다 다르므로 둘을 나란히 두고 고르게 한다. 섹션 **순서**는 그대로 서버가
+    // 정하고(계약 4-2 규칙 3), 여기가 하는 것은 묶는 일뿐이다.
+    //
     // 있는 탭만 만든다. 탭 하나짜리 탭 바는 아무것도 나누지 않으면서 자리만
     // 차지한다(메뉴 카테고리 탭과 같은 규칙).
     final tabs = [
@@ -890,10 +759,13 @@ class _PlaceDetailSectionsState extends State<PlaceDetailSections> {
       children: [
         if (hero.isNotEmpty) ...[_render(hero), const SizedBox(height: 16)],
         if (tabbed) ...[
-          _SectionTabs(
-            tabs: tabs,
-            active: active!,
-            onSelect: (tab) => setState(() => _activeTab = tab),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
+            child: RoutexTabs(
+              labels: tabs,
+              selectedIndex: tabs.indexOf(active!),
+              onSelected: (index) => setState(() => _activeTab = tabs[index]),
+            ),
           ),
           const SizedBox(height: 18),
         ],
@@ -902,7 +774,10 @@ class _PlaceDetailSectionsState extends State<PlaceDetailSections> {
         else if (active == _menuTab)
           _render(menu)
         else if (active == _photoTab)
-          PlacePhotoGrid(assetPaths: photos)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
+            child: RoutexPhotoGrid(items: _mediaItems(photos)),
+          )
         else
           _render(home),
         // 탭이 없으면 본문이 곧 홈이므로 그때도 붙인다.
@@ -922,24 +797,32 @@ class _PlaceDetailSectionsState extends State<PlaceDetailSections> {
           title: '소개',
           child: PlaceSummarySection(text: text),
         ),
-        HeroSection(:final items) => PlaceHeroCarousel(
-          images: [
-            for (final item in items)
-              PlaceHeroImage(assetPath: item.localAsset),
-          ],
+        HeroSection(:final items) => Padding(
+          // 캐러셀은 페이지 **안쪽**에 여백을 두고 넘긴다. 사진 가장자리를 본문
+          // 여백선에 맞추려면 그만큼 뺀 값을 바깥에 준다.
+          padding: const EdgeInsets.symmetric(
+            horizontal: placeSectionGutter - RoutexSpacing.inlineGap,
+          ),
+          child: RoutexMediaCarousel(
+            items: _mediaItems([for (final item in items) item.localAsset]),
+          ),
         ),
-        KeyValueSection(:final items) => PlaceKeyValueSection(
-          items: [
-            for (final item in items)
-              PlaceKeyValue(label: item.label, value: item.value),
-          ],
-        ),
+        KeyValueSection(:final items) when items.isNotEmpty =>
+          RoutexKeyValueRows(
+            rows: [
+              for (final item in items)
+                RoutexKeyValue(label: item.label, value: item.value),
+            ],
+          ),
+        // 라벨만 있고 값이 빈 표는 "정보가 없다"가 아니라 "불러오지 못했다"로
+        // 읽힌다. 서버가 빈 목록을 보내지 않지만, 그 계약이 여기까지 오는 길에
+        // 끊기면 표가 아니라 아무것도 없는 편이 낫다.
+        KeyValueSection() => const SizedBox.shrink(),
         TagsSection(:final tags) => PlaceTagsSection(tags: tags),
         NoticeSection(:final text, :final until) => PlaceNoticeSection(
           text: text,
           until: until,
         ),
-        MapSection() => PlaceMapSection(floorLabel: widget.floorLabel),
         MenuSection(:final items) => PlaceMenuSection(
           items: [
             for (final item in items)
@@ -1019,63 +902,13 @@ class _PlaceDetailSectionsState extends State<PlaceDetailSections> {
   }
 }
 
-/// 시트 본문을 가르는 상단 탭.
+/// 번들 asset 경로를 사진 항목으로 바꾼다.
 ///
-/// 메뉴가 30종까지 늘면서 한 줄로 이어 붙인 본문이 너무 길어졌다. 상세를 열었을 때
-/// 영업시간이 보이려면 메뉴를 한참 지나쳐야 했고, 반대로 메뉴를 보려면 소개를 지나야
-/// 했다. **어느 쪽을 보러 왔는지는 사람마다 다르므로** 둘을 나란히 두고 고르게 한다.
-///
-/// 섹션 순서는 그대로 서버가 정한다(계약 4-2 규칙 3). 클라이언트가 하는 것은 **묶는
-/// 일**뿐이고, 한 탭 안에서는 서버가 보낸 순서대로 쌓는다.
-class _SectionTabs extends StatelessWidget {
-  const _SectionTabs({
-    required this.tabs,
-    required this.active,
-    required this.onSelect,
-  });
-
-  final List<String> tabs;
-  final String active;
-  final ValueChanged<String> onSelect;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
-    child: Row(
-      children: [
-        for (final tab in tabs)
-          Expanded(
-            child: GestureDetector(
-              onTap: () => onSelect(tab),
-              behavior: HitTestBehavior.opaque,
-              child: Container(
-                padding: const EdgeInsets.only(bottom: 10),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(
-                      color: tab == active
-                          ? AppColors.primary
-                          : AppColors.blue100,
-                      width: tab == active ? 2.5 : 1,
-                    ),
-                  ),
-                ),
-                child: Text(
-                  tab,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: tab == active ? AppColors.primary : AppColors.muted,
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
-    ),
-  );
-}
+/// 이 앱의 매장 사진은 전부 번들에 들어 있어서 `AssetImage` 하나로 끝난다. 어디서
+/// 가져올지를 Runtime Kit이 정하지 않는 이유는 자산을 갖지 않기 때문이다.
+List<RoutexMediaItem> _mediaItems(List<String> assetPaths) => [
+  for (final path in assetPaths) RoutexMediaItem(image: AssetImage(path)),
+];
 
 /// 섹션과 섹션 사이의 경계. 여백 + 시트 폭을 가로지르는 선 한 줄이다.
 class _SectionBreak extends StatelessWidget {
@@ -1098,6 +931,10 @@ class _TitledSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
-    children: [PlaceSectionTitle(title), const SizedBox(height: 8), child],
+    children: [
+      RoutexSectionHeader(title: title),
+      const SizedBox(height: 8),
+      child,
+    ],
   );
 }

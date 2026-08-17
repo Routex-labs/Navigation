@@ -1,137 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../../core/clipboard_confirmation.dart';
 import '../../../../../theme/app_theme.dart';
-import 'korean_line_break.dart';
-
-/// 매장 대표 사진의 로컬 asset 정보다. 네트워크 모델과 분리해 화면에 필요한
-/// 최소 표시 정보만 가진다.
-class PlaceHeroImage {
-  const PlaceHeroImage({required this.assetPath, this.semanticLabel});
-
-  final String assetPath;
-  final String? semanticLabel;
-}
-
-/// 사진 asset을 가로로 넘겨 볼 수 있는 대표 이미지 영역.
-class PlaceHeroCarousel extends StatefulWidget {
-  const PlaceHeroCarousel({super.key, required this.images});
-
-  final List<PlaceHeroImage> images;
-
-  @override
-  State<PlaceHeroCarousel> createState() => _PlaceHeroCarouselState();
-}
-
-class _PlaceHeroCarouselState extends State<PlaceHeroCarousel> {
-  var _activeIndex = 0;
-
-  @override
-  Widget build(BuildContext context) {
-    if (widget.images.isEmpty) return const SizedBox.shrink();
-
-    // 본문과 같은 좌우 여백에 맞추고 모서리를 깎는다. 끝까지 채우면 사진이 시트
-    // 밖으로 이어지는 것처럼 보여서 다음 섹션과의 경계가 흐려진다.
-    return SizedBox(
-      height: 210,
-      child: Stack(
-        children: [
-          PageView.builder(
-            itemCount: widget.images.length,
-            onPageChanged: (index) => setState(() => _activeIndex = index),
-            itemBuilder: (context, index) {
-              final image = widget.images[index];
-              // PageView는 시트 폭 전체를 쓰고 여백은 페이지 안쪽에 준다. 그래야
-              // 넘길 때 두 장 사이가 좌우 여백만큼 벌어진다.
-              return Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: placeSectionGutter,
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Image.asset(
-                    image.assetPath,
-                    fit: BoxFit.cover,
-                    semanticLabel: image.semanticLabel,
-                    width: double.infinity,
-                  ),
-                ),
-              );
-            },
-          ),
-          if (widget.images.length > 1)
-            Positioned(
-              right: placeSectionGutter + 12,
-              bottom: 12,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.62),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  child: Text(
-                    '${_activeIndex + 1} / ${widget.images.length}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 사진 탭. 대표 사진들을 두 칸 격자로 늘어놓는다.
-///
-/// 위 캐러셀과 **같은 사진들**이다. 캐러셀은 한 장씩 넘겨야 해서 몇 장이 있는지·어떤
-/// 것이 있는지가 한눈에 안 들어오고, 격자는 그 반대다. 둘 중 하나만 두지 않는 이유는
-/// 역할이 달라서다 — 캐러셀은 "무슨 매장인지"를 알려 주고, 격자는 "사진을 보러 온"
-/// 사람을 위한 자리다.
-class PlacePhotoGrid extends StatelessWidget {
-  const PlacePhotoGrid({super.key, required this.assetPaths});
-
-  final List<String> assetPaths;
-
-  @override
-  Widget build(BuildContext context) {
-    if (assetPaths.isEmpty) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
-      child: GridView.builder(
-        // 시트 본문이 이미 스크롤이라 격자는 스스로 스크롤하지 않는다.
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
-        ),
-        itemCount: assetPaths.length,
-        itemBuilder: (context, index) => ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          // 매장 사진은 크기가 제각각이라 비율을 맞출 수 없다. 격자는 칸이 정사각으로
-          // 고정되므로 여기서는 `cover`로 채운다 — 메뉴 사진과 달리 잘려도 무엇을
-          // 찍은 사진인지 알아볼 수 있다.
-          child: Image.asset(assetPaths[index], fit: BoxFit.cover),
-        ),
-      ),
-    );
-  }
-}
 
 /// 메뉴 카드에 필요한 로컬 표시 데이터다. 메뉴의 판매 여부나 가격 갱신은
 /// 상위 데이터 공급자가 책임지고 이 위젯은 값을 그대로 렌더링한다.
@@ -251,6 +125,14 @@ class _PlaceMenuSectionState extends State<PlaceMenuSection> {
   /// 않는 목록이 열려 있다.
   bool _expanded = false;
 
+  /// 카테고리를 사람이 한 번이라도 건드렸는지.
+  ///
+  /// 처음에는 첫 카테고리를 골라 둔 것처럼 시작한다 — 갈래 하나에 200종 가까이
+  /// 있어서 전체를 먼저 보여 주면 아무것도 좁혀 주지 않는다. 대신 **고른 칩을 다시
+  /// 누르면 그때부터 전체**가 된다. 그 길을 막으면 한 번 고른 카테고리에서 빠져나올
+  /// 수 없다(검색 패널에서 같은 이유로 되돌린 적이 있다).
+  bool _tabTouched = false;
+
   @override
   Widget build(BuildContext context) {
     if (widget.items.isEmpty) return const SizedBox.shrink();
@@ -273,24 +155,21 @@ class _PlaceMenuSectionState extends State<PlaceMenuSection> {
     // 검색 중에는 카테고리 탭을 숨긴다. 검색 결과가 여러 카테고리에 걸치는데 탭이
     // 남아 있으면 "지금 뭘 보고 있는지"가 두 곳에서 다르게 말해진다.
     final tabs = searching ? const <String>[] : menuCategoryTabs(matched);
-    final active = tabs.contains(_activeTab) ? _activeTab : tabs.firstOrNull;
+    final active = _tabTouched
+        ? (tabs.contains(_activeTab) ? _activeTab : null)
+        : tabs.firstOrNull;
     final visible = active == null
         ? matched
         : matched
               .where((item) => item.category == active)
               .toList(growable: false);
 
-    final capped = !_expanded && visible.length > _menuVisibleCap;
-    final shown = capped
-        ? visible.take(_menuVisibleCap).toList(growable: false)
-        : visible;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: placeSectionGutter),
-          child: PlaceSectionTitle('메뉴'),
+          child: RoutexSectionHeader(title: '메뉴'),
         ),
         if (groups.isNotEmpty) ...[
           const SizedBox(height: 12),
@@ -300,6 +179,7 @@ class _PlaceMenuSectionState extends State<PlaceMenuSection> {
             onSelect: (group) => setState(() {
               _activeGroup = group;
               _activeTab = null;
+              _tabTouched = false;
               _expanded = false;
             }),
           ),
@@ -318,19 +198,28 @@ class _PlaceMenuSectionState extends State<PlaceMenuSection> {
         ],
         if (tabs.isNotEmpty) ...[
           const SizedBox(height: 10),
-          _MenuCategoryTabs(
-            tabs: tabs,
-            active: active!,
-            onSelect: (tab) => setState(() {
-              _activeTab = tab;
-              _expanded = false;
-            }),
+          // 줄이 스스로 가로로 넘긴다. 지도 위 칩 줄과 달리 여기는 부모가 가로
+          // 스크롤을 갖고 있지 않다.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
+            child: RoutexChipBar(
+              options: [
+                for (final tab in tabs) RoutexChipOption(id: tab, label: tab),
+              ],
+              selectedId: active,
+              semanticsLabel: '메뉴 분류',
+              onSelected: (id) => setState(() {
+                _tabTouched = true;
+                _activeTab = id;
+                _expanded = false;
+              }),
+            ),
           ),
         ],
         const SizedBox(height: 6),
         if (visible.isEmpty)
-          const Padding(
-            padding: EdgeInsets.fromLTRB(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
               placeSectionGutter,
               14,
               placeSectionGutter,
@@ -338,13 +227,48 @@ class _PlaceMenuSectionState extends State<PlaceMenuSection> {
             ),
             child: Text(
               '찾는 메뉴가 없습니다',
-              style: TextStyle(fontSize: 13.5, color: AppColors.muted),
+              style: RoutexTypography.bodySmall.copyWith(
+                color: context.routexColors.contentSecondary,
+              ),
             ),
           ),
         // 세로 목록이라 스크롤을 따로 갖지 않는다. 시트 본문이 이미 스크롤이고,
         // 그 안에 또 스크롤을 넣으면 어느 쪽이 움직일지가 손끝에서 갈린다.
-        for (final item in shown) _MenuRow(item: item),
-        if (capped) _MenuMoreRow(onTap: () => setState(() => _expanded = true)),
+        Padding(
+          // 줄은 제 여백을 갖고 있다. 본문 여백선에 맞추려면 그만큼 뺀 값을
+          // 바깥에 준다.
+          padding: const EdgeInsets.symmetric(
+            horizontal: placeSectionGutter - RoutexSpacing.contentGap,
+          ),
+          child: RoutexMenuList(
+            entries: [
+              for (final item in visible)
+                RoutexMenuEntry(
+                  name: item.name,
+                  description: item.description,
+                  price: item.price,
+                  selectable: item.hasDetail,
+                  badges: [
+                    for (final badge in item.badges)
+                      RoutexBadge(label: badge, accent: badgeAccentFor(badge)),
+                  ],
+                  thumbnail: item.imageAssetPath == null
+                      ? null
+                      : RoutexMediaItem(
+                          image: AssetImage(item.imageAssetPath!),
+                        ),
+                ),
+            ],
+            collapsedCount: _menuVisibleCap,
+            thumbnailAspectRatio: _menuImageAspect,
+            expanded: _expanded,
+            onExpanded: (value) => setState(() => _expanded = value),
+            onSelected: (index) => showDialog<void>(
+              context: context,
+              builder: (_) => _menuDialog(visible[index]),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -369,241 +293,35 @@ List<PlaceMenuItem> _search(List<PlaceMenuItem> items, String query) {
       .toList(growable: false);
 }
 
-/// 메뉴 한 줄. 왼쪽에 이름·설명·가격, 오른쪽에 사진.
-///
-/// 글을 왼쪽에 둔 이유는 **읽는 순서** 때문이다. 사람은 왼쪽부터 읽는데 사진이 앞에
-/// 있으면 이름을 보려고 눈이 한 번 건너뛴다. 사진은 이름을 확인한 뒤 "그래서 뭐가
-/// 나오는데"에 답하는 자리라 오른쪽이 맞다.
-///
-/// **영문명은 줄에서 뺐다.** 한 줄에 이름·영문명·설명·가격이 다 오면 무엇이 제목인지
-/// 흐려진다. 영문명은 골라서 팝업을 연 사람에게만 필요하다.
-class _MenuRow extends StatelessWidget {
-  const _MenuRow({required this.item});
-
-  final PlaceMenuItem item;
-
-  @override
-  Widget build(BuildContext context) {
-    final row = Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: placeSectionGutter,
-        vertical: 12,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    height: 1.3,
-                    color: AppColors.text,
-                  ),
-                ),
-                // 배지는 이름 **아래** 줄이다. 옆에 붙이면 이름이 그만큼 짧게
-                // 잘리는데, 316종 중 배지가 붙는 건 32종뿐이라 나머지 284종의
-                // 이름 자리를 소수를 위해 내주는 셈이 된다.
-                if (item.badges.isNotEmpty) ...[
-                  const SizedBox(height: 5),
-                  Wrap(
-                    spacing: 4,
-                    runSpacing: 4,
-                    children: [
-                      for (final badge in item.badges) _MenuBadge(label: badge),
-                    ],
-                  ),
-                ],
-                if (item.description != null) ...[
-                  const SizedBox(height: 5),
-                  Text(
-                    item.description!,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      height: 1.35,
-                      color: AppColors.muted,
-                    ),
-                  ),
-                ],
-                // 가격이 있으면 설명 아래. 지금 데이터에는 없어서 그려지지 않는다 —
-                // 공식 사이트가 가격을 공개하지 않아 지어내는 대신 비워 뒀다.
-                if (item.price != null) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    item.price!,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.text,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (item.imageAssetPath != null) ...[
-            const SizedBox(width: 14),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: Image.asset(
-                item.imageAssetPath!,
-                width: _menuThumbWidth,
-                height: _menuThumbHeight,
-                // 카드와 같은 이유로 원본 비율을 지킨다(설계 7-A-2).
-                fit: BoxFit.contain,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-
-    if (!item.hasDetail) return row;
-
-    return GestureDetector(
-      onTap: () => showDialog<void>(
-        context: context,
-        builder: (_) => _MenuDetailDialog(item: item),
-      ),
-      behavior: HitTestBehavior.opaque,
-      child: row,
-    );
-  }
-}
-
-/// `NEW`·`시즌 한정` 같은 표시 하나.
-///
-/// **아이콘이 아니라 글자다.** 공식 사이트가 이미지 배지로 주는 값이지만, 그 이미지를
-/// 그대로 번들에 넣으면 상표를 한 벌 더 들여오는 셈이고 배지 종류가 늘 때마다 사진을
-/// 다시 받아야 한다. 글자면 값이 무엇이 오든 그려진다.
-///
-/// 색은 종류로 갈리지 않는다. 지금 데이터의 배지는 `NEW` 31건·`시즌 한정` 5건 둘뿐인데,
-/// 여기서 이름으로 색을 나누면 처음 보는 배지가 왔을 때 그릴 색이 없어진다.
-/// 배지 한 종류의 색. 배경·테두리·글자를 함께 들고 다닌다 — 셋을 따로 고르면
-/// 대비가 어긋난 조합이 조용히 만들어진다.
-class BadgeTone {
-  const BadgeTone({
-    required this.background,
-    required this.border,
-    required this.foreground,
-  });
-
-  final Color background;
-  final Color border;
-  final Color foreground;
-}
-
-/// 모르는 배지가 왔을 때의 색. **이 값이 있어야 색을 종류별로 나눌 수 있다** —
-/// 스타벅스가 새 배지를 만들면(예: "한정 판매") 그리지 못하는 것이 아니라 무채색으로
-/// 떨어진다. 색은 정보를 더하는 장치이지 그리기 위한 조건이 아니다.
-const _badgeToneDefault = BadgeTone(
-  background: Color(0xFFF3F4F6),
-  border: Color(0xFFE0E3E7),
-  foreground: AppColors.muted,
-);
-
 /// 배지 이름 → 색. 둘 다 연한 배경 + 진한 글자(tonal)라 사진 옆에서 튀지 않는다.
 ///
 /// 갈라 놓는 이유는 **한 줄에 둘이 나란히 뜨는 항목이 있기 때문이다.** 같은 색이면
 /// 두 배지가 한 덩어리로 읽힌다. 초록은 새로 나온 것, 주황은 기간이 정해진 것으로
 /// 쓴다 — 빨강을 쓰지 않는 것은 앱에서 이미 오류·목적지에 배정된 색이라 뜻이
 /// 겹치기 때문이다.
-/// 키는 아래 [badgeToneFor]가 쓰는 정규화된 형태(공백 제거·대문자)로 적는다.
-const _badgeTones = <String, BadgeTone>{
-  'NEW': BadgeTone(
-    background: Color(0xFFE8F5EC),
-    border: Color(0xFFC6E6D0),
-    foreground: Color(0xFF1E7B45),
-  ),
-  '시즌한정': BadgeTone(
-    background: Color(0xFFFDF0E7),
-    border: Color(0xFFF7D9C2),
-    foreground: Color(0xFFB4600F),
-  ),
+/// 키는 아래 [badgeAccentFor]가 쓰는 정규화된 형태(공백 제거·대문자)로 적는다.
+const _badgeAccents = <String, RoutexBadgeAccent>{
+  'NEW': RoutexBadgeAccent(surface: Color(0xFFE8F5EC), ink: Color(0xFF1E7B45)),
+  '시즌한정': RoutexBadgeAccent(surface: Color(0xFFFDF0E7), ink: Color(0xFFB4600F)),
 };
 
-/// 배지 색을 고른다. 공백을 지우고 대문자로 맞춰 찾는 이유는 수집 원본이 `NEW`와
-/// `New`, `시즌 한정`과 `시즌한정`을 섞어 쓸 수 있어서다 — 표기 하나가 달라졌다고
-/// 색이 조용히 사라지면 원인을 찾기 어렵다. 화면에 그리는 글자는 원본 그대로다.
-BadgeTone badgeToneFor(String label) =>
-    _badgeTones[label.replaceAll(' ', '').toUpperCase()] ?? _badgeToneDefault;
-
-class _MenuBadge extends StatelessWidget {
-  const _MenuBadge({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final tone = badgeToneFor(label);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: tone.background,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: tone.border),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 10.5,
-            fontWeight: FontWeight.w700,
-            height: 1.2,
-            color: tone.foreground,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 목록 끝의 "더보기". 누르면 그 자리에서 나머지가 펼쳐진다.
+/// 배지 색을 고른다. **모르는 배지는 null이고, 그때는 무채색으로 떨어진다** —
+/// 스타벅스가 새 배지를 만들면(예: "한정 판매") 그리지 못하는 것이 아니다. 색은
+/// 정보를 더하는 장치이지 그리기 위한 조건이 아니다.
 ///
-/// 개수를 적지 않는 이유는 그 숫자가 판단에 쓰이지 않기 때문이다. "6종"을 보고 누를지
-/// 말지를 정하는 사람은 없고, 눌러서 나온 목록에 이미 전부 있다.
-class _MenuMoreRow extends StatelessWidget {
-  const _MenuMoreRow({required this.onTap});
+/// 공백을 지우고 대문자로 맞춰 찾는 이유는 수집 원본이 `NEW`와 `New`, `시즌 한정`과
+/// `시즌한정`을 섞어 쓸 수 있어서다 — 표기 하나가 달라졌다고 색이 조용히 사라지면
+/// 원인을 찾기 어렵다. 화면에 그리는 글자는 원본 그대로다.
+RoutexBadgeAccent? badgeAccentFor(String label) =>
+    _badgeAccents[label.replaceAll(' ', '').toUpperCase()];
 
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    behavior: HitTestBehavior.opaque,
-    child: Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: placeSectionGutter,
-        vertical: 12,
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Text(
-            '더보기',
-            style: TextStyle(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w700,
-              color: AppColors.primary,
-            ),
-          ),
-          const SizedBox(width: 2),
-          const Icon(Icons.expand_more, size: 20, color: AppColors.primary),
-        ],
-      ),
-    ),
-  );
-}
-
-/// 위쪽 갈래(음료·푸드) 선택. 카테고리 탭보다 굵게 두어 위계를 드러낸다.
+/// 위쪽 갈래(음료·푸드) 선택.
+///
+/// **`RoutexTabs`를 쓰지 않는다.** 한 번 옮겨 폰에서 봤더니 시트 위쪽의
+/// 홈·메뉴·사진 줄과 **똑같은 밑줄 탭이 둘 겹쳐** 어느 줄이 무엇을 가르는지가
+/// 흐려졌다. 갈래가 둘뿐이라 균등 폭도 화면 절반씩을 먹었다. Runtime Kit의 선택
+/// register는 탭과 칩 둘인데 이 화면은 셋(시트 탭 → 갈래 → 분류)이 필요하고, 그
+/// 세 번째 자리를 굵기로 만든다. 색·글자·간격은 Kit 토큰을 쓴다.
 class _MenuGroupTabs extends StatelessWidget {
   const _MenuGroupTabs({
     required this.tabs,
@@ -616,29 +334,46 @@ class _MenuGroupTabs extends StatelessWidget {
   final ValueChanged<String> onSelect;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
-    child: Row(
-      children: [
-        for (final tab in tabs)
-          Padding(
-            padding: const EdgeInsets.only(right: 18),
-            child: GestureDetector(
-              onTap: () => onSelect(tab),
-              behavior: HitTestBehavior.opaque,
-              child: Text(
-                tab,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: tab == active ? FontWeight.w800 : FontWeight.w500,
-                  color: tab == active ? AppColors.text : AppColors.muted,
+  Widget build(BuildContext context) {
+    final colors = context.routexColors;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
+      child: Row(
+        children: [
+          for (final tab in tabs)
+            Semantics(
+              button: true,
+              selected: tab == active,
+              label: tab,
+              excludeSemantics: true,
+              child: GestureDetector(
+                onTap: () => onSelect(tab),
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  // 보이는 크기는 글자 그대로 두고 누르는 상자만 세로로 넓힌다.
+                  padding: const EdgeInsets.only(
+                    right: RoutexSpacing.sectionGap,
+                    top: RoutexSpacing.contentGap,
+                    bottom: RoutexSpacing.contentGap,
+                  ),
+                  child: Text(
+                    tab,
+                    style: RoutexTypography.body.copyWith(
+                      fontWeight: tab == active
+                          ? FontWeight.w800
+                          : FontWeight.w500,
+                      color: tab == active
+                          ? colors.contentPrimary
+                          : colors.contentSecondary,
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }
 
 /// 메뉴 이름으로 좁히는 검색창.
@@ -794,58 +529,6 @@ class _MenuSearchFieldState extends State<_MenuSearchField>
   }
 }
 
-class _MenuCategoryTabs extends StatelessWidget {
-  const _MenuCategoryTabs({
-    required this.tabs,
-    required this.active,
-    required this.onSelect,
-  });
-
-  final List<String> tabs;
-  final String active;
-  final ValueChanged<String> onSelect;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 32,
-    child: ListView.separated(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: placeSectionGutter),
-      itemCount: tabs.length,
-      separatorBuilder: (_, _) => const SizedBox(width: 8),
-      itemBuilder: (context, index) {
-        final tab = tabs[index];
-        final selected = tab == active;
-        return GestureDetector(
-          onTap: () => onSelect(tab),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: selected ? AppColors.blue500 : AppColors.surface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: selected ? AppColors.blue500 : AppColors.blue100,
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: Center(
-                child: Text(
-                  tab,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: selected ? Colors.white : AppColors.muted,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    ),
-  );
-}
-
 /// 메뉴 사진의 가로÷세로. 번들에 든 316장이 전부 300×313이라 그 값을 그대로 쓴다.
 ///
 /// **썸네일을 이 비율로 잡는 이유는 자르지 않기 위해서다.** 정사각으로 넣으면 비율이
@@ -858,10 +541,6 @@ class _MenuCategoryTabs extends StatelessWidget {
 /// 않지만 줄마다 사진 크기가 달라 보인다. 그때는 이 상수가 아니라 사진을 맞춘다.
 const _menuImageAspect = 300 / 313;
 
-/// 목록 썸네일 크기. 한 줄에 사진·이름·설명이 같이 들어가야 해서 작게 잡는다.
-const _menuThumbWidth = 76.0;
-final _menuThumbHeight = (_menuThumbWidth / _menuImageAspect).ceilToDouble();
-
 /// 한 카테고리에서 접힌 상태로 보여 주는 줄 수. 넘는 만큼은 "더보기" 뒤로 보낸다.
 ///
 /// 세로 목록이라 줄이 늘어날수록 다른 섹션(영업 정보·매장 정보)이 화면 밖으로 밀린다.
@@ -869,147 +548,29 @@ final _menuThumbHeight = (_menuThumbWidth / _menuImageAspect).ceilToDouble();
 /// 더 볼 사람만 펼치면 된다.
 const _menuVisibleCap = 4;
 
-/// 메뉴 하나의 상세. 카드에서 뺀 설명과 영양정보가 여기 모인다.
+/// 메뉴 하나의 상세. 줄에서 뺀 영문명·설명·영양정보가 여기 모인다.
 ///
 /// 시트가 아니라 다이얼로그인 이유는 **뒤로가기 규약**(설계 F5) 때문이다. 상세 시트는
 /// 자기 라우트가 pop되면 `onCloseAll`로 시트 묶음 전체를 닫는데, 그 위에 시트를 하나
 /// 더 쌓으면 뒤로가기 한 번이 어디까지 닫는지가 흐려진다. 다이얼로그는 별도 라우트라
 /// 뒤로가기가 팝업만 닫고 상세 시트는 그대로 남는다.
-class _MenuDetailDialog extends StatelessWidget {
-  const _MenuDetailDialog({required this.item});
-
-  final PlaceMenuItem item;
-
-  @override
-  Widget build(BuildContext context) {
-    final facts = item.nutritionFacts;
-
-    return Dialog(
-      backgroundColor: AppColors.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 340),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (item.imageAssetPath != null)
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(18),
-                  ),
-                  // 카드와 같은 이유로 비율을 사진에 맞춘다. 높이를 200으로 박아
-                  // 두면 폭이 340이라 세로를 60% 넘게 잘라냈다 — 메뉴를 자세히
-                  // 보려고 연 팝업에서 정작 사진이 제일 많이 잘렸다.
-                  child: AspectRatio(
-                    aspectRatio: _menuImageAspect,
-                    child: Image.asset(
-                      item.imageAssetPath!,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.name,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.text,
-                      ),
-                    ),
-                    if (item.nameEn != null) ...[
-                      const SizedBox(height: 3),
-                      Text(
-                        item.nameEn!,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: AppColors.muted,
-                        ),
-                      ),
-                    ],
-                    if (item.description != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        keepWordsWhole(item.description!),
-                        style: const TextStyle(
-                          fontSize: 14,
-                          height: 1.45,
-                          color: AppColors.text,
-                        ),
-                      ),
-                    ],
-                    // 푸드에는 영양정보가 없다. 라벨만 남은 빈 표를 그리면 "정보가
-                    // 없다"가 아니라 "못 불러왔다"로 읽히므로 블록째 생략한다.
-                    if (facts.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      for (var index = 0; index < facts.length; index++) ...[
-                        if (index > 0) const Divider(height: 17),
-                        _NutritionRow(
-                          label: facts[index].$1,
-                          value: facts[index].$2,
-                        ),
-                      ],
-                    ],
-                  ],
-                ),
-              ),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 0, 12, 8),
-                  child: TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('닫기'),
-                  ),
-                ),
-              ),
-            ],
-          ),
+RoutexDialog _menuDialog(PlaceMenuItem item) => RoutexDialog(
+  title: item.name,
+  subtitle: item.nameEn,
+  description: item.description,
+  media: item.imageAssetPath == null
+      ? null
+      // 높이를 박아 두면 폭이 넓어 세로를 60% 넘게 잘라낸다 — 메뉴를 자세히 보려고
+      // 연 팝업에서 정작 사진이 제일 많이 잘렸다. 그래서 비율을 사진에 맞춘다.
+      : AspectRatio(
+          aspectRatio: _menuImageAspect,
+          child: Image.asset(item.imageAssetPath!, fit: BoxFit.contain),
         ),
-      ),
-    );
-  }
-}
-
-class _NutritionRow extends StatelessWidget {
-  const _NutritionRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-    children: [
-      Text(label, style: const TextStyle(fontSize: 13, color: AppColors.muted)),
-      // **값을 Flexible로 감싼다.** 용량·칼로리는 `355ml`처럼 짧아서 한 줄에 남지만
-      // 알레르기는 `땅콩 / 대두 / 우유 / 알류 / 밀 / 오징어`처럼 27자까지 온다.
-      // 감싸지 않으면 팝업 폭(340)을 넘겨 RenderFlex 오버플로가 난다.
-      Flexible(
-        child: Padding(
-          padding: const EdgeInsets.only(left: 16),
-          child: Text(
-            value,
-            textAlign: TextAlign.right,
-            style: const TextStyle(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w700,
-              height: 1.35,
-              color: AppColors.text,
-            ),
-          ),
-        ),
-      ),
-    ],
-  );
-}
+  facts: [
+    for (final fact in item.nutritionFacts)
+      RoutexKeyValue(label: fact.$1, value: fact.$2),
+  ],
+);
 
 /// 주소·주차처럼 매장을 설명하는 운영 정보다.
 ///
@@ -1039,11 +600,15 @@ class PlaceBusinessInfoSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const PlaceSectionTitle('매장 정보'),
+        const RoutexSectionHeader(title: '매장 정보'),
         const SizedBox(height: 12),
         for (var index = 0; index < items.length; index++) ...[
           if (index > 0) const SizedBox(height: infoRowGap),
-          PlaceInfoRow(label: items[index].label, value: items[index].value),
+          RoutexInfoRow(
+            label: items[index].label,
+            value: items[index].value,
+            icon: infoIconFor(items[index].label),
+          ),
         ],
       ],
     );
@@ -1087,7 +652,10 @@ class PlaceLinkBrand {
 PlaceLinkBrand linkBrandFor(String label) {
   final key = label.replaceAll(' ', '');
   if (isWebsiteLabel(label)) {
-    return const PlaceLinkBrand(icon: Icons.public, colors: [Color(0xFF3C4043)]);
+    return const PlaceLinkBrand(
+      icon: Icons.public,
+      colors: [Color(0xFF3C4043)],
+    );
   }
   return switch (key) {
     '페이스북' => const PlaceLinkBrand(
@@ -1107,8 +675,10 @@ PlaceLinkBrand linkBrandFor(String label) {
     // `네이버 브랜드스토어`가 공백을 지우면 `네이버브랜드스토어`라 정확히 일치하는
     // 가지가 없어 회색 기본값으로 떨어져 있었다. 스토어류는 이름이 계속 바뀌므로
     // (스마트스토어 → 브랜드스토어) 조각 일치로 받는다.
-    _ when key.contains('스토어') || key.contains('네이버') =>
-      const PlaceLinkBrand(icon: Icons.storefront, colors: [Color(0xFF03C75A)]),
+    _ when key.contains('스토어') || key.contains('네이버') => const PlaceLinkBrand(
+      icon: Icons.storefront,
+      colors: [Color(0xFF03C75A)],
+    ),
     _ => const PlaceLinkBrand(icon: Icons.link, colors: [AppColors.muted]),
   };
 }
@@ -1152,23 +722,21 @@ class PlaceLinksSection extends StatelessWidget {
 
   // 열기에 실패하면 조용히 넘기지 않는다. 눌렀는데 아무 일도 일어나지 않으면
   // 사용자는 앱이 멈춘 줄 안다 — 실패했다는 사실만이라도 알려 준다.
-  Future<void> _open(BuildContext context, PlaceLinkItem item) async {
+  Future<void> _open(BuildContext context, String url, String label) async {
     var opened = false;
     try {
       opened = await launchUrl(
-        Uri.parse(item.url),
+        Uri.parse(url),
         mode: LaunchMode.externalApplication,
       );
     } catch (_) {
       opened = false;
     }
+    // SnackBar를 쓰던 자리다. **이 시트에서는 보이지 않았다** — 상세 시트가
+    // Navigator에 얹힌 모달이라 SnackBar를 그리는 Scaffold보다 위에 있다. 열기가
+    // 실패해도 화면에는 아무 일도 안 일어난 것으로 보였다. 이유는 [RoutexToast].
     if (!opened && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${item.label}을(를) 열지 못했습니다'),
-          duration: const Duration(milliseconds: 1600),
-        ),
-      );
+      RoutexToast.show(context, '$label을(를) 열지 못했습니다');
     }
   }
 
@@ -1179,137 +747,47 @@ class PlaceLinksSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const PlaceSectionTitle('SNS'),
+        const RoutexSectionHeader(title: 'SNS'),
         const SizedBox(height: 12),
-        for (var index = 0; index < items.length; index++) ...[
-          if (index > 0) const SizedBox(height: infoRowGap),
-          _LinkRow(
-            item: items[index],
-            onTap: () => _open(context, items[index]),
-          ),
-        ],
+        RoutexLinkList(
+          items: [
+            for (final item in items)
+              RoutexLinkItem(
+                label: item.label,
+                url: item.url,
+                display: _displayFor(item.label),
+                accent: _accentFor(item),
+              ),
+          ],
+          // 여는 일은 앱이 한다 — 외부 앱을 여는 것은 플랫폼 능력이다.
+          onSelected: (selected) =>
+              _open(context, selected.url, selected.label),
+        ),
       ],
     );
   }
-}
 
-/// 링크 한 줄 — 브랜드 배지 · 라벨(또는 주소) · 오른쪽 `>`.
-class _LinkRow extends StatelessWidget {
-  const _LinkRow({required this.item, required this.onTap});
-
-  final PlaceLinkItem item;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    // 라벨이 비어 있어도 줄이 빈 채로 남지 않게 주소로 대신한다. 라벨은 사람이
-    // 쓰는 자유 문자열이라 언제든 빠질 수 있다.
-    final label = item.label.trim();
-    final showUrl = isWebsiteLabel(label) || label.isEmpty;
-    // 라벨과 주소를 함께 보여 줄 때만 두 줄이다. `오설록 공식 홈페이지`처럼 라벨이
-    // 어느 브랜드인지 말해 주면 그 글자를 주소로 덮어쓸 이유가 없고, 반대로 주소를
-    // 지우면 어디로 나가는지가 사라진다. 다른 줄은 그대로 한 줄이다.
-    final showBoth = (websiteNamePrefix(label) ?? '').isNotEmpty;
-
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Row(
-        children: [
-          _LinkBadge(brand: linkBrandFor(label), iconAsset: item.iconAsset),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (showBoth)
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 13.5,
-                      color: AppColors.text,
-                    ),
-                  ),
-                Text(
-                  showUrl ? item.url : label,
-                  // **한 줄 말줄임이고, 자르는 곳은 뒤다.** 주소는 앞쪽(호스트)이 어디로
-                  // 가는지를 말하고 뒤쪽(경로)은 그렇지 않다. 두 줄로 흘리면 줄 높이가
-                  // 항목마다 달라져 목록이 아니라 글 덩어리로 읽힌다.
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    // 주소가 라벨 아래로 내려가면 보조 정보라 한 급 작다.
-                    fontSize: showBoth ? 12 : 13.5,
-                    // 주소만 링크 색이다. 이 줄이 글자가 아니라 주소라는 표시.
-                    color: showUrl ? AppColors.primary : AppColors.text,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          // 참고 화면을 따라 `>`를 쓴다. 앱 밖으로 나간다는 사실은 브랜드 배지와
-          // (웹사이트 줄에서는) 주소가 대신 알려 준다.
-          const Icon(Icons.chevron_right, size: 18, color: AppColors.muted),
-        ],
-      ),
-    );
-  }
-}
-
-/// 브랜드 색 원 안에 Material 아이콘 하나. [iconAsset]이 있으면 그 그림이 원을
-/// 채운다.
-class _LinkBadge extends StatelessWidget {
-  const _LinkBadge({required this.brand, this.iconAsset});
-
-  final PlaceLinkBrand brand;
-  final String? iconAsset;
-
-  @override
-  Widget build(BuildContext context) {
-    final asset = iconAsset;
-    if (asset != null && asset.isNotEmpty) {
-      return ClipOval(
-        child: Image.asset(
-          asset,
-          width: 30,
-          height: 30,
-          fit: BoxFit.cover,
-          // 그림이 빠져도 줄이 사라지지 않게 배지를 기본 모양으로 되돌린다.
-          // 자산 누락은 빌드가 아니라 실행 중에 드러난다.
-          errorBuilder: (_, _, _) => _BrandBadge(brand: brand),
-        ),
-      );
+  /// 이 줄에서 사람이 읽을 값이 무엇인가. **라벨의 성격으로 정한다** — 차례로
+  /// 정하면 배열을 바꿨을 때 뜻 없이 화면이 따라 바뀐다.
+  static RoutexLinkDisplay _displayFor(String rawLabel) {
+    final label = rawLabel.trim();
+    if (label.isEmpty) return RoutexLinkDisplay.url;
+    // `오설록 공식 홈페이지`처럼 **브랜드를 말하는 웹사이트 라벨**이 먼저다. 이걸
+    // 뒤에 두면 웹사이트 판정이 먼저 걸려 라벨이 주소에 덮인다.
+    if ((websiteNamePrefix(label) ?? '').isNotEmpty) {
+      return RoutexLinkDisplay.labelAndUrl;
     }
-    return _BrandBadge(brand: brand);
+    if (isWebsiteLabel(label)) return RoutexLinkDisplay.url;
+    return RoutexLinkDisplay.label;
   }
-}
 
-class _BrandBadge extends StatelessWidget {
-  const _BrandBadge({required this.brand});
-
-  final PlaceLinkBrand brand;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = brand.colors;
-    return Container(
-      width: 30,
-      height: 30,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        // LinearGradient는 색이 두 개 이상이어야 해서 단색이면 같은 색을 겹친다.
-        gradient: LinearGradient(
-          colors: colors.length == 1 ? [colors.first, colors.first] : colors,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Icon(brand.icon, size: 17, color: Colors.white),
+  static RoutexLinkAccent _accentFor(PlaceLinkItem item) {
+    final brand = linkBrandFor(item.label.trim());
+    final asset = item.iconAsset;
+    return RoutexLinkAccent(
+      icon: brand.icon,
+      colors: brand.colors,
+      image: asset == null || asset.isEmpty ? null : AssetImage(asset),
     );
   }
 }
@@ -1330,7 +808,7 @@ IconData? infoIconFor(String label) => switch (label.replaceAll(' ', '')) {
   // 고객센터는 수화기가 아니라 상담원 아이콘이다. 같은 전화번호라도 "이 매장에
   // 건다"와 "본사 콜센터에 건다"는 다른 일이고, 둘을 같은 글리프로 그리면 화면이
   // 그 차이를 지운다. 아이콘만으로는 부족해서 이 줄은 라벨 글자도 함께 남긴다
-  // ([PlaceInfoRow.keepLabel]).
+  // (`RoutexInfoRow.keepLabel`).
   '고객센터' => Icons.support_agent_outlined,
   '대표번호' || '전화번호' || '연락처' || '문의' => Icons.call_outlined,
   '매장타입' || '매장유형' => Icons.storefront_outlined,
@@ -1340,217 +818,6 @@ IconData? infoIconFor(String label) => switch (label.replaceAll(' ', '')) {
   '홈페이지' || '웹사이트' => Icons.language_outlined,
   _ => null,
 };
-
-/// 아이콘 + 값 한 줄. 아이콘이 라벨을 대신하므로 라벨 글자가 사라진다.
-///
-/// 라벨을 값 위 캡션으로 올렸던 이전 배치는 한 항목이 두 줄을 썼다. 항목이 여섯
-/// 개면 열두 줄이라 시트가 글 덩어리로 읽혔다. 아이콘은 가로 24px만 쓰고 값이
-/// 본문 폭을 그대로 받으므로, 같은 내용이 절반 높이에 들어간다.
-class PlaceInfoRow extends StatelessWidget {
-  const PlaceInfoRow({
-    super.key,
-    required this.label,
-    required this.value,
-    this.caption,
-    this.keepLabel = false,
-    this.copyText,
-  });
-
-  final String label;
-  final String value;
-
-  /// 값 아래 작은 글씨(확인일 등). 없으면 그리지 않는다.
-  final String? caption;
-
-  /// 아이콘이 있어도 라벨 글자를 남긴다.
-  ///
-  /// 기본은 아이콘이 라벨을 대신하는 것이고, 그 전제는 "아이콘이 라벨을 정확히
-  /// 가리킨다"였다. 라벨 자체가 **값의 뜻을 바꾸는** 줄에서는 그 전제가 깨진다 —
-  /// `고객센터 1522-3232`에서 `고객센터`를 지우면 남은 것은 매장 직통 번호처럼
-  /// 읽히고, 그건 정보가 줄어든 게 아니라 틀린 정보가 된 것이다.
-  final bool keepLabel;
-
-  /// 값 옆 '복사' 버튼이 클립보드에 담을 문자열. null이면 버튼을 그리지 않는다.
-  ///
-  /// 값 전체가 아니라 **복사할 만한 토막**만 받는다. `1522-3232 (평일 09:00–18:00)`을
-  /// 통째로 복사하면 전화 앱에 붙여 넣을 수 없다.
-  final String? copyText;
-
-  @override
-  Widget build(BuildContext context) {
-    final icon = infoIconFor(label);
-    final copyText = this.copyText;
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 아이콘은 첫 줄 글자의 중앙에 맞춘다. 위쪽 정렬만 하면 값이 두 줄일 때
-        // 아이콘이 글자보다 살짝 떠 보인다.
-        Padding(
-          padding: const EdgeInsets.only(top: 1),
-          child: Icon(
-            icon ?? Icons.circle,
-            size: icon == null ? 5 : 19,
-            color: AppColors.muted,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 아이콘이 라벨을 대신하지 못할 때만 라벨을 글자로 남긴다.
-              if (icon == null || keepLabel) ...[
-                Text(
-                  label,
-                  style: const TextStyle(fontSize: 12, color: AppColors.muted),
-                ),
-                const SizedBox(height: 3),
-              ],
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Flexible(
-                    child: Text(
-                      keepWordsWhole(value),
-                      style: const TextStyle(
-                        fontSize: 13.5,
-                        height: 1.4,
-                        color: AppColors.text,
-                      ),
-                    ),
-                  ),
-                  // 복사 버튼은 값 **바로 옆**이다. 줄 오른쪽 끝에 붙이면 값이 짧을
-                  // 때 무엇을 복사하는 버튼인지가 멀어진다.
-                  if (copyText != null) _CopyButton(text: copyText),
-                ],
-              ),
-              if (caption != null) ...[
-                const SizedBox(height: 3),
-                Text(
-                  caption!,
-                  style: const TextStyle(fontSize: 11, color: AppColors.muted),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// 값 옆에 붙는 '복사' 버튼.
-///
-/// 아이콘 대신 글자를 쓴다. 전화번호 옆의 겹친 사각형 글리프는 "저장"·"공유"로도
-/// 읽히는데, 잘못 눌러도 잃는 게 없는 동작이라 아이콘 수수께끼를 낼 이유가 없다.
-class _CopyButton extends StatelessWidget {
-  const _CopyButton({required this.text});
-
-  final String text;
-
-  // 클립보드는 실패할 수 있다. 웹은 브라우저 권한을, 리눅스는 클립보드 매니저를
-  // 타고, 둘 다 없으면 플랫폼 채널이 예외를 던진다. 조용히 삼키면 사용자는
-  // 복사된 줄 알고 붙여 넣기를 시도하므로, 실패를 실패라고 말한다.
-  //
-  // **성공은 기기가 이미 알릴 수 있다.** Android 13+는 시스템이 확인 UI를
-  // 띄워, 우리 토스트까지 얹으면 "복사했습니다"가 두 번 뜬다
-  // ([shouldAnnounceClipboardCopy]).
-  Future<void> _copy(BuildContext context) async {
-    var copied = true;
-    try {
-      await Clipboard.setData(ClipboardData(text: text));
-    } catch (_) {
-      copied = false;
-    }
-    if (copied && !await shouldAnnounceClipboardCopy()) return;
-    if (!context.mounted) return;
-    showPlaceToast(context, copied ? '복사했습니다' : '복사하지 못했습니다');
-  }
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: () => _copy(context),
-    behavior: HitTestBehavior.opaque,
-    child: Semantics(
-      button: true,
-      label: '$text 복사',
-      child: const Padding(
-        // 글자만으로는 손가락이 닿을 자리가 안 나온다. 여백으로 세로 26·가로 42를
-        // 만든다.
-        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-        child: Text(
-          '복사',
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w700,
-            color: AppColors.primary,
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-/// 화면 아래쪽에 잠깐 떠 있다 사라지는 알림.
-///
-/// **SnackBar를 쓰지 않는다** — 상세 시트가 모달 라우트라 `Scaffold`보다 위에 있어,
-/// 시트 안에서 띄운 SnackBar는 시트에 가려 보이지 않는다. 루트 `Overlay` 맨 위에
-/// 직접 끼우고 포인터는 [IgnorePointer]로 통과시킨다.
-///
-/// **화면에 한 개만 둔다** — 엔트리와 타이머를 모듈 수준에서 들고 있다가 새 토스트가
-/// 뜨면 이전 것을 즉시 걷어낸다(`Future.delayed`에 맡겼더니 오버레이에 영원히 남았다).
-OverlayEntry? _placeToastEntry;
-Timer? _placeToastTimer;
-
-void showPlaceToast(BuildContext context, String message) {
-  final overlay = Overlay.maybeOf(context, rootOverlay: true);
-  if (overlay == null) return;
-
-  _dismissPlaceToast();
-
-  final entry = OverlayEntry(
-    builder: (context) => Positioned(
-      left: 24,
-      right: 24,
-      bottom: MediaQuery.paddingOf(context).bottom + 40,
-      child: IgnorePointer(
-        child: Center(
-          child: Material(
-            color: Colors.black.withValues(alpha: 0.82),
-            borderRadius: BorderRadius.circular(20),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-              child: Text(
-                message,
-                style: const TextStyle(color: Colors.white, fontSize: 13),
-              ),
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
-
-  _placeToastEntry = entry;
-  overlay.insert(entry);
-  _placeToastTimer = Timer(
-    const Duration(milliseconds: 1600),
-    _dismissPlaceToast,
-  );
-}
-
-/// 떠 있는 토스트를 확실히 걷어낸다. 실패 경로가 없다 — 여기 들어오는 엔트리는
-/// 전부 [showPlaceToast]가 insert한 것이고, [OverlayEntry.remove]는 Overlay가
-/// 이미 dispose된 뒤에도 안전하게 no-op으로 끝난다. 제거 후 참조를 비우므로
-/// 같은 엔트리를 두 번 remove할 일도 없다.
-void _dismissPlaceToast() {
-  _placeToastTimer?.cancel();
-  _placeToastTimer = null;
-  final entry = _placeToastEntry;
-  _placeToastEntry = null;
-  entry?.remove();
-}
 
 /// 영업시간·대표번호처럼 **시간이 지나면 저절로 거짓이 되는** 운영 정보다.
 ///
@@ -1593,15 +860,17 @@ class PlaceDemoInfoSection extends StatelessWidget {
 
   final List<PlaceDemoInfo> items;
 
-  Widget _row(PlaceDemoInfo item, String? sharedDate) {
+  Widget _row(BuildContext context, PlaceDemoInfo item, String? sharedDate) {
     final isPhone = isPhoneLabel(item.label);
-    return PlaceInfoRow(
+    return RoutexInfoRow(
       label: item.label,
       value: item.value,
+      icon: infoIconFor(item.label),
       // 전화 줄만 라벨을 남긴다. 누가 받는 번호인지는 아이콘이 말해 주지 못하고,
       // 그 한 단어가 빠지면 값의 뜻이 달라진다.
       keepLabel: isPhone,
       copyText: isPhone ? phoneNumberIn(item.value) : null,
+      onCopied: () => announceClipboardCopy(context),
       // 확인일이 제각각일 때만 항목마다 붙인다. 묶을 수 없기 때문이다.
       caption: sharedDate == null ? '${item.confirmedAt} 확인' : null,
     );
@@ -1620,11 +889,11 @@ class PlaceDemoInfoSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const PlaceSectionTitle('영업 정보'),
+        const RoutexSectionHeader(title: '영업 정보'),
         const SizedBox(height: 12),
         for (var index = 0; index < items.length; index++) ...[
           if (index > 0) const SizedBox(height: infoRowGap),
-          _row(items[index], sharedDate),
+          _row(context, items[index], sharedDate),
         ],
         if (sharedDate != null) ...[
           const SizedBox(height: 12),
@@ -1640,22 +909,3 @@ class PlaceDemoInfoSection extends StatelessWidget {
 
 /// 상세 본문의 좌우 여백. 사진처럼 끝까지 채우는 섹션만 이 값을 쓰지 않는다.
 const placeSectionGutter = 20.0;
-
-/// 섹션 제목. 카드 테두리를 걷어낸 뒤로는 이 제목과 여백이 섹션 경계를 만드는
-/// 유일한 장치라, 모든 섹션이 같은 굵기·크기를 쓰게 한곳에 둔다.
-class PlaceSectionTitle extends StatelessWidget {
-  const PlaceSectionTitle(this.text, {super.key});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Text(
-    text,
-    style: const TextStyle(
-      fontSize: 16,
-      height: 1.3,
-      fontWeight: FontWeight.w700,
-      color: AppColors.text,
-    ),
-  );
-}

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/repositories/building/building_repository.dart';
 import 'package:navigation_client/repositories/building/mock_building_repository.dart';
@@ -70,7 +71,7 @@ void main() {
   testWidgets('건물을 누르면 도면이 아니라 건물 정보 시트가 먼저 뜬다', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await drain(tester);
     expect(
       find.byType(FloorSelector),
@@ -91,7 +92,7 @@ void main() {
   testWidgets('길찾기 버튼은 출발·도착 둘뿐이다', (WidgetTester tester) async {
     // 매장 시트·야외 장소 시트와 같은 규칙이다. 수단은 길찾기에 들어간 뒤
     // 상단 줄에서 고른다.
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await drain(tester);
     await tapBuilding(tester);
 
@@ -103,7 +104,7 @@ void main() {
   testWidgets('"실내 지도 보기"를 누르면 그때 도면으로 들어간다', (WidgetTester tester) async {
     // 건물 탭이 곧 진입이던 조작을 이 줄이 이어받는다. 없으면 매장을 고르지
     // 않고는 도면에 들어갈 길이 사라진다.
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await drain(tester);
     await tapBuilding(tester);
 
@@ -122,7 +123,7 @@ void main() {
     // 목업 자산은 층 도면을 GeoJSON `features`로만 갖고 있어 매장 색인이 비어
     // 있다(`MockBuildingRepository.getStoreIndex`). 목록이 비는 것은 실제로도
     // 있을 수 있는 상태이고, 그때 시트가 통째로 쓸모없어지면 안 된다.
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await drain(tester);
     await tapBuilding(tester);
 
@@ -137,7 +138,7 @@ void main() {
   testWidgets('실내에서 건물 안쪽을 눌러도 시트를 띄우지 않는다', (WidgetTester tester) async {
     // 도면을 보는 중에 빈 곳을 누른 것이라, 시트를 띄우면 매장을 누르려다
     // 빗나간 손가락마다 시트가 올라온다.
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await drain(tester);
     tester
         .state<OutdoorMapBodyState>(find.byType(OutdoorMapBody))

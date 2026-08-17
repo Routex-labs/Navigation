@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-
-import '../../../theme/app_theme.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 /// 안내 중에 카메라를 **내 위치로** 되돌리는 버튼.
 ///
@@ -17,25 +16,11 @@ class GuidanceRecenterButton extends StatelessWidget {
   final VoidCallback onPressed;
 
   @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: '내 위치로',
-      child: Material(
-        color: Colors.white,
-        shape: const CircleBorder(),
-        // 지도에 붙은 조작이다(AppElevation.onMap) — 접히기 전의 위치 보정
-        // 버튼과 같은 높이여야 같은 층위의 조작으로 읽힌다.
-        elevation: AppElevation.onMap,
-        shadowColor: Colors.black.withValues(alpha: 0.14),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onPressed,
-          child: const Padding(
-            padding: EdgeInsets.all(12),
-            child: Icon(Icons.near_me, size: 20, color: AppColors.primary),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => RoutexMapControl(
+    label: '내 위치로',
+    icon: Icons.near_me,
+    // 접히기 전의 위치 보정 버튼과 같은 tone이어야 같은 층위의 조작으로 읽힌다.
+    tone: RoutexMapControlTone.accent,
+    onPressed: onPressed,
+  );
 }

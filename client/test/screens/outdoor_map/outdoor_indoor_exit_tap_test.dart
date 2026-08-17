@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:navigation_client/service_locator.dart';
@@ -133,8 +134,7 @@ void main() {
     // 코드가 그 자리에서 끊긴다(오버레이가 안 켜진 것처럼 보인다).
     final map = OutdoorMapBody(key: key, outerOverlayKeys: outerOverlayKeys);
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
+      MaterialApp(theme: AppTheme.light, home: Scaffold(
           body: outerOverlay == null
               ? map
               : Stack(fit: StackFit.expand, children: [map, outerOverlay]),
@@ -255,8 +255,7 @@ void main() {
     // 띄우는데, 하위에 Scaffold가 없으면 ScaffoldMessenger가 예외를 던져 진입
     // 코드가 그 자리에서 끊긴다(오버레이가 안 켜진 것처럼 보인다).
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(body: OutdoorMapBody(key: key)),
+      MaterialApp(theme: AppTheme.light, home: Scaffold(body: OutdoorMapBody(key: key)),
       ),
     );
     await drain(tester);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:navigation_client/domain/guidance/route_guidance.dart';
 import 'package:navigation_client/widgets/eta_card.dart';
 
@@ -11,6 +12,7 @@ import 'package:navigation_client/widgets/eta_card.dart';
 /// 화면을 본다.
 void main() {
   Widget wrap(Widget child) => MaterialApp(
+    theme: AppTheme.light,
     home: Scaffold(body: Center(child: child)),
   );
 
@@ -115,106 +117,17 @@ void main() {
   });
 
   group('안내가 없을 때(자동 경로)', () {
-    testWidgets('예전 두 줄 표기를 그대로 쓴다', (WidgetTester tester) async {
-      // 건물 입구까지 같은 경로에는 지시 문구가 없다. 그때까지 한 줄로 바꾸면
-      // 화면에 남는 정보가 거리 하나뿐이라 무엇을 향한 거리인지 알 수 없다.
+    testWidgets('무엇을 향한 값인지 함께 적는다', (WidgetTester tester) async {
+      // 건물 입구까지 같은 경로에는 지시 문구가 없다. 화면에 남는 정보가 거리
+      // 하나뿐이면 무엇을 향한 거리인지 알 수 없다.
       await tester.pumpWidget(
         wrap(const EtaCard(distanceMeters: 480, minutes: 7, label: '건물 입구까지')),
       );
 
       expect(find.text('건물 입구까지'), findsOneWidget);
-      // 이 줄은 RichText 스팬이라 기본 finder에 안 걸린다.
-      expect(find.textContaining('약 7분', findRichText: true), findsOneWidget);
-    });
-  });
-  group('도착 카드', () {
-    RouteGuidanceInstruction arrived() => const RouteGuidanceInstruction(
-      action: RouteGuidanceAction.arrived,
-      primaryText: '목적지에 도착했습니다',
-      distanceToActionM: 0,
-    );
-
-    testWidgets('목적지 이름과 층을 적는다', (WidgetTester tester) async {
-      await tester.pumpWidget(
-        wrap(
-          EtaCard(
-            distanceMeters: 0,
-            minutes: 1,
-            instruction: arrived(),
-            destinationName: '스타벅스 리저브',
-            destinationFloor: 'B2',
-          ),
-        ),
-      );
-
-      expect(find.text('스타벅스 리저브'), findsOneWidget);
-      expect(find.text('B2 · 목적지에 도착했습니다'), findsOneWidget);
-    });
-
-    testWidgets('남은 거리를 적지 않는다', (WidgetTester tester) async {
-      // 도착은 다음 조작이 없는 유일한 상태다. 같은 한 줄 배너로 그리면
-      // `0.0 m`만 붙은 이상한 줄이 된다.
-      await tester.pumpWidget(
-        wrap(
-          EtaCard(
-            distanceMeters: 0,
-            minutes: 1,
-            instruction: arrived(),
-            destinationName: '스타벅스 리저브',
-            destinationFloor: 'B2',
-          ),
-        ),
-      );
-
-      expect(find.textContaining(' m'), findsNothing);
-    });
-
-    testWidgets('층을 모르면 층 없이 적는다', (WidgetTester tester) async {
-      await tester.pumpWidget(
-        wrap(
-          EtaCard(
-            distanceMeters: 0,
-            minutes: 1,
-            instruction: arrived(),
-            destinationName: '스타벅스 리저브',
-            destinationFloor: '',
-          ),
-        ),
-      );
-
-      expect(find.text('목적지에 도착했습니다'), findsOneWidget);
-    });
-
-    testWidgets('목적지를 모르면 예전 한 줄 배너로 떨어진다', (WidgetTester tester) async {
-      // 야외 경로처럼 매장 정보가 없는 경우다. 이름 없는 도착 카드를 그리느니
-      // 지시 문구를 그대로 보여 주는 편이 낫다.
-      await tester.pumpWidget(
-        wrap(EtaCard(distanceMeters: 0, minutes: 1, instruction: arrived())),
-      );
-
-      expect(find.text('목적지에 도착했습니다'), findsOneWidget);
-    });
-
-    testWidgets('끝내는 버튼은 X가 아니라 체크다', (WidgetTester tester) async {
-      // 같은 동작이지만 도착에서는 취소가 아니라 확인이라, 아이콘이 다르면
-      // 사용자가 "실패했나" 하고 망설이지 않는다.
-      var closed = false;
-      await tester.pumpWidget(
-        wrap(
-          EtaCard(
-            distanceMeters: 0,
-            minutes: 1,
-            instruction: arrived(),
-            destinationName: '스타벅스 리저브',
-            destinationFloor: 'B2',
-            onClose: () => closed = true,
-          ),
-        ),
-      );
-
-      expect(find.byIcon(Icons.check_circle), findsOneWidget);
-      await tester.tap(find.byKey(const Key('eta-card-close')));
-      expect(closed, isTrue);
+      // 수치 줄은 RichText 스팬이라 기본 finder에 안 걸린다.
+      expect(find.textContaining('7분', findRichText: true), findsOneWidget);
+      expect(find.textContaining('480m', findRichText: true), findsOneWidget);
     });
   });
 
@@ -222,11 +135,14 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(home: EtaCard(distanceMeters: 150, minutes: 2)),
+      MaterialApp(
+        theme: AppTheme.light,
+        home: const EtaCard(distanceMeters: 150, minutes: 2),
+      ),
     );
 
     expect(find.text('목적지까지'), findsOneWidget);
-    expect(find.textContaining('약 2분', findRichText: true), findsOneWidget);
+    expect(find.textContaining('2분', findRichText: true), findsOneWidget);
     expect(find.textContaining('150m', findRichText: true), findsOneWidget);
   });
 }

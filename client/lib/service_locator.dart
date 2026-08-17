@@ -23,6 +23,7 @@ import 'repositories/place/place_detail_repository.dart';
 import 'repositories/routing/tmap_directions_repository.dart';
 import 'repositories/place/tmap_poi_repository.dart';
 import 'repositories/routing/transit_repository.dart';
+import 'routing/place_link_inbox.dart';
 import 'state/favorites_controller.dart';
 import 'state/recent_route_points_controller.dart';
 import 'state/recent_searches_controller.dart';
@@ -48,9 +49,8 @@ final PdrMotionSource pdrMotionSource = createDefaultPdrMotionSource();
 ///
 /// final이다. 화면이 initState에서 스트림을 구독하므로 뒤에 인스턴스를 바꾸면
 /// 옛 것만 계속 바라본다. 테스트는 native 채널을 모킹해 진짜 드라이버를 쓴다.
-final IndoorNavigationController indoorNavigationDriver = IndoorNavigationDriver(
-  source: pdrMotionSource,
-);
+final IndoorNavigationController indoorNavigationDriver =
+    IndoorNavigationDriver(source: pdrMotionSource);
 final IndoorLocationEstimateController indoorLocationEstimateController =
     IndoorLocationEstimateController();
 
@@ -237,3 +237,9 @@ Future<Position?> defaultRequestIndoorEstimatePosition() async {
 /// 테스트에서는 플랫폼 채널 없이 좌표/실패를 주입할 수 있도록 교체 가능하게 둔다.
 Future<Position?> Function() requestIndoorEstimatePosition =
     defaultRequestIndoorEstimatePosition;
+
+/// 링크로 받은 장소가 지도 셸에 닿을 때까지 머무는 자리.
+///
+/// singleton인 이유는 **보내는 쪽과 받는 쪽의 수명이 다르기 때문**이다. 링크는 앱
+/// 루트가 받고 화면은 그보다 늦게 세워지며, 화면은 다시 만들어질 수 있다.
+final placeLinkInbox = PlaceLinkInbox();

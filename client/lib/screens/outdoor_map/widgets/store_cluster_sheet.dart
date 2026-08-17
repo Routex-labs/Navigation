@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 import '../../../models/building/floor_plan.dart';
 import '../../../map/icon/category_icon.dart';
-import '../../../widgets/sheet_grab_handle.dart';
 
 /// 한 자리를 세 곳 이상이 나눠 쓸 때 뜨는 **매장 고르기 시트**.
 ///
@@ -20,49 +20,55 @@ Future<StorePolygon?> showStoreClusterSheet(
 ) {
   return showModalBottomSheet<StorePolygon>(
     context: context,
-    backgroundColor: Theme.of(context).colorScheme.surface,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-    ),
-    builder: (context) => SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SheetGrabHandle(),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-            child: Text(
-              '이 자리의 매장 ${stores.length}곳',
-              style: Theme.of(context).textTheme.titleMedium,
+    // 표면은 시트 본문이 그린다([RoutexBottomSheet]).
+    backgroundColor: Colors.transparent,
+    builder: (context) => RoutexBottomSheet(
+      contentInset: RoutexBottomSheetContentInset.content,
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 손잡이가 있던 자리다. 이 시트는 내용 높이로 뜨고 끌어서 크기를 바꿀
+            // 수 없어, 손잡이를 두면 할 수 없는 조작을 약속하게 된다.
+            const SizedBox(height: RoutexSpacing.componentPadding),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+              child: Text(
+                '이 자리의 매장 ${stores.length}곳',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
             ),
-          ),
-          Flexible(
-            child: ListView.separated(
-              shrinkWrap: true,
-              itemCount: stores.length,
-              separatorBuilder: (_, _) => const Divider(height: 1, indent: 56),
-              itemBuilder: (context, index) {
-                final store = stores[index];
-                final category = store.category;
-                return ListTile(
-                  onTap: () => Navigator.of(context).pop(store),
-                  leading: Icon(
-                    category != null ? categoryIconFor(category) : Icons.store,
-                    size: 20,
-                    color: category != null
-                        ? categoryColorFor(category)
-                        : Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  title: Text(store.name),
-                  subtitle: store.subcategory != null
-                      ? Text(store.subcategory!)
-                      : null,
-                );
-              },
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: stores.length,
+                separatorBuilder: (_, _) =>
+                    const Divider(height: 1, indent: 56),
+                itemBuilder: (context, index) {
+                  final store = stores[index];
+                  final category = store.category;
+                  return ListTile(
+                    onTap: () => Navigator.of(context).pop(store),
+                    leading: Icon(
+                      category != null
+                          ? categoryIconFor(category)
+                          : Icons.store,
+                      size: 20,
+                      color: category != null
+                          ? categoryColorFor(category)
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    title: Text(store.name),
+                    subtitle: store.subcategory != null
+                        ? Text(store.subcategory!)
+                        : null,
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     ),
   );

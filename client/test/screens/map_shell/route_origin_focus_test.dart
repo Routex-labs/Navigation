@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/models/building/building.dart';
 import 'package:navigation_client/models/building/building_graph.dart';
@@ -56,7 +57,7 @@ void main() {
   testWidgets('다른 층 매장을 출발지로 잡으면 실내 지도도 그 층으로 옮긴다', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: MapShellScreen()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.light, home: const MapShellScreen()));
     await drain(tester);
 
     final map = tester.state<OutdoorMapBodyState>(find.byType(OutdoorMapBody));

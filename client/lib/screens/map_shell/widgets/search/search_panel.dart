@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../../service_locator.dart';
@@ -20,7 +21,6 @@ import '../../../../models/place/poi_search_result.dart';
 import '../../../../models/place/store_index_entry.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../domain/category/category_label_order.dart';
-import '../../../../widgets/filter_pill.dart';
 import '../../../../domain/store/reach_label.dart';
 import '../../../../domain/geo/distance_format.dart';
 import '../../../../domain/category/subcategory_label.dart';
@@ -159,38 +159,29 @@ enum _SearchPhase {
   error,
 }
 
-/// 이름에서 검색어와 일치하는 구간만 강조한 span 목록. 이 결과가 왜 나왔는지를
-/// 색으로 설명한다.
+/// 이름에서 검색어와 일치하는 구간. 이 결과가 왜 나왔는지를 화면이 설명하는 근거다.
+///
+/// **구간만 돌려주고 어떻게 보일지는 정하지 않는다** — 그리는 일은 `RoutexListCell`이
+/// 맡는다. 여기 남는 것은 판정이고, 판정은 서버와 맞춰야 하는 도메인이다.
 ///
 /// **하나도 안 걸리는 것이 정상 상태다** — 의미 검색은 이름에 검색어가 없는 결과를
-/// 주는 게 목적이라, 못 찾으면 원문을 그대로 돌려줄 뿐 실패로 다루지 않는다.
+/// 주는 게 목적이라, 못 찾으면 빈 목록을 돌려줄 뿐 실패로 다루지 않는다.
 /// 대소문자·앞뒤 공백만 정규화한다(서버 Kiwi를 흉내내면 판정과 어긋난다 —
 /// [isExactNameMatch]와 같은 이유).
-List<TextSpan> highlightedNameSpans(String name, String query) {
+List<TextRange> nameHighlightRanges(String name, String query) {
   final needle = query.trim().toLowerCase();
-  if (needle.isEmpty) return [TextSpan(text: name)];
+  if (needle.isEmpty) return const [];
 
   final haystack = name.toLowerCase();
-  final spans = <TextSpan>[];
+  final ranges = <TextRange>[];
   var cursor = 0;
   while (true) {
     final index = haystack.indexOf(needle, cursor);
     if (index < 0) break;
-    if (index > cursor) {
-      spans.add(TextSpan(text: name.substring(cursor, index)));
-    }
-    spans.add(
-      TextSpan(
-        text: name.substring(index, index + needle.length),
-        style: const TextStyle(color: AppColors.primary),
-      ),
-    );
+    ranges.add(TextRange(start: index, end: index + needle.length));
     cursor = index + needle.length;
   }
-
-  if (spans.isEmpty) return [TextSpan(text: name)];
-  if (cursor < name.length) spans.add(TextSpan(text: name.substring(cursor)));
-  return spans;
+  return ranges;
 }
 
 /// 다음 검색 한 번에만 적용할 층 스코프. 목록에서 **고른 그 매장의 층**을 실어
@@ -206,19 +197,9 @@ class _FloorScopeOverride {
 }
 
 class _SearchPanelState extends State<SearchPanel> {
-  /// 목록 공통 행 리듬. 결과·후보·건물·최근 검색 행이 전부 이 값을 쓴다.
-  ///
-  /// **한 벌의 플랫 리스트**로 보이게 하려는 것이다(naver-map-ui-ux-analysis.md 2절).
-  /// 구분선은 두지 않는다 — 머리말·배너까지 칸칸이 나뉘어 보였다.
-  static const _rowVerticalPadding = 8.0;
-  static const _rowContentPadding = EdgeInsets.symmetric(horizontal: 16);
-  static const _rowTitleGap = 12.0;
-
-  /// 행 이름 한 줄. 강조 span(AppColors.primary)이 얹히는 바탕이다.
-  static const _rowTitleStyle = TextStyle(
-    fontSize: 14,
-    fontWeight: FontWeight.w600,
-  );
+  /// 행 리듬은 이제 `RoutexListCell`이 갖는다. **한 벌의 플랫 리스트**로 보이게
+  /// 하려는 것은 그대로다(naver-map-ui-ux-analysis.md 2절) — 구분선은 두지 않는다.
+  /// 머리말·배너까지 칸칸이 나뉘어 보였다.
 
   /// 머리말(«검색 결과 N»·«검색어 제안»…) 공통 여백. 우측에 컨트롤이 붙는
   /// 머리말은 좌·상·하만 이 값을 따르고 우측만 좁힌다.
@@ -849,79 +830,34 @@ class _SearchPanelState extends State<SearchPanel> {
   /// [floorNames]는 **화면에 그린 줄들의 층**이다(묶인 시설의 나머지 층은 안 센다).
   /// `B2 ~ 3F` 같은 범위로 적지 않는다 — `Floor.level`이 없어 사전순으로 세우면
   /// `1F`가 `B1`보다 앞에 온다.
-  Widget _listHeader({
+  /// 개수·층 머리말 문장. 서식은 앱이 정하고 자리는 `RoutexResultList`가 갖는다.
+  String _listSummary({
     required int count,
     required Iterable<String> floorNames,
-    required bool canChoose,
   }) {
     final floors = floorNames.toSet();
     final floorText = floors.length == 1 ? floors.first : '${floors.length}개 층';
-    final canNearest = canSortByNearest(widget.reachByNodeId);
-    return Padding(
-      // 우측은 정렬 컨트롤의 자체 패딩이 이어받으므로 좁게 둔다.
-      padding: _sectionLabelPadding.copyWith(right: 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              '검색 결과 $count · $floorText',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: AppColors.muted,
-              ),
-            ),
-          ),
-          if (canChoose)
-            // 네이버가 필터를 칩으로 늘어놓지 않고 헤더 우측에 `추천순 ⌄`로
-            // 접는 것과 같은 자리다(naver-map-ui-ux-analysis.md 1절).
-            PopupMenuButton<SearchSortOrder>(
-              key: const Key('sort-order'),
-              initialValue: _sortOrder,
-              tooltip: '정렬 기준',
-              onSelected: (value) => setState(() => _sortOverride = value),
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: SearchSortOrder.nearest,
-                  // 거리를 아무도 모르면 눌러도 순서가 안 바뀐다. 고를 수 있게
-                  // 두면 사용자는 정렬이 고장 났다고 읽는다.
-                  enabled: canNearest,
-                  child: Text(canNearest ? '가까운 순' : '가까운 순 (현재 위치 필요)'),
-                ),
-                const PopupMenuItem(
-                  value: SearchSortOrder.bestMatch,
-                  child: Text('이름 맞춤 순'),
-                ),
-              ],
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _sortOrder == SearchSortOrder.nearest
-                          ? '가까운 순'
-                          : '이름 맞춤 순',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.text,
-                      ),
-                    ),
-                    const Icon(
-                      Icons.expand_more,
-                      size: 16,
-                      color: AppColors.muted,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
+    return '검색 결과 $count · $floorText';
+  }
+
+  /// 정렬 선택지. **쓸 수 없는 기준을 감추지 않는다** — 감추면 "가까운 순"이 아예
+  /// 없는 앱으로 읽히고, 눌러 본 뒤 막으면 왜 안 되는지를 그때야 안다.
+  List<RoutexSortOption> get _sortOptions => [
+    RoutexSortOption(
+      id: SearchSortOrder.nearest.name,
+      label: '가까운 순',
+      unavailableReason: canSortByNearest(widget.reachByNodeId)
+          ? null
+          : '현재 위치 필요',
+    ),
+    RoutexSortOption(id: SearchSortOrder.bestMatch.name, label: '이름 맞춤 순'),
+  ];
+
+  void _onSortSelected(String id) {
+    final order = SearchSortOrder.values.firstWhere(
+      (value) => value.name == id,
     );
+    setState(() => _sortOverride = order);
   }
 
   /// 후보 목록. 탭하면 좌표를 들고 바로 가지 않고 그 이름으로 검색을 다시 돌린다
@@ -952,21 +888,7 @@ class _SearchPanelState extends State<SearchPanel> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (showCount)
-          _listHeader(
-            count: suggestions.length,
-            // 묶인 시설은 화면에 그린 대표의 층만 센다(_listHeader 주석).
-            floorNames: [
-              for (final suggestion in suggestions)
-                nearestByWalkingDistance(
-                  stores: suggestion.stores,
-                  reachByNodeId: widget.reachByNodeId,
-                  currentFloorId: widget.currentFloorId,
-                ).store.floorName,
-            ],
-            canChoose: true,
-          )
-        else
+        if (!showCount)
           Padding(
             padding: _sectionLabelPadding,
             child: Text(
@@ -981,8 +903,25 @@ class _SearchPanelState extends State<SearchPanel> {
         Flexible(
           child: SingleChildScrollView(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+            child: RoutexResultList(
+              status: RoutexResultStatus.ready,
+              summary: showCount
+                  ? _listSummary(
+                      count: suggestions.length,
+                      // 묶인 시설은 화면에 그린 대표의 층만 센다.
+                      floorNames: [
+                        for (final suggestion in suggestions)
+                          nearestByWalkingDistance(
+                            stores: suggestion.stores,
+                            reachByNodeId: widget.reachByNodeId,
+                            currentFloorId: widget.currentFloorId,
+                          ).store.floorName,
+                      ],
+                    )
+                  : null,
+              sortOptions: showCount ? _sortOptions : const [],
+              selectedSortId: showCount ? _sortOrder.name : null,
+              onSortSelected: showCount ? _onSortSelected : null,
               children: [
                 for (final suggestion in suggestions)
                   _suggestionTile(suggestion),
@@ -1016,80 +955,26 @@ class _SearchPanelState extends State<SearchPanel> {
     final floorLine = count > 1
         ? '${store.floorName} 등 $count곳'
         : store.floorName;
-    return ListTile(
+    return RoutexListCell(
       key: Key('suggestion-${store.id}'),
-      dense: true,
-      minVerticalPadding: _rowVerticalPadding,
-      horizontalTitleGap: _rowTitleGap,
-      contentPadding: _rowContentPadding,
       // 돋보기와 핀 2종만 쓰는 네이버 관례를 따른다. 교정 후보만 다른 아이콘으로
       // "이건 네가 친 말이 아니다"를 알린다 — 검증 기준(L)의 "교정 후보임이
       // 화면에 드러남"이 이 아이콘과 아래 하이라이트 없음으로 충족된다.
-      leading: Icon(
-        suggestion.kind.isCorrection ? Icons.auto_fix_high : Icons.search,
-        size: 20,
-        color: AppColors.muted,
-      ),
-      title: Row(
-        children: [
-          Expanded(
-            child: Text.rich(
-              // 교정 후보는 사용자가 친 글자와 이름이 어긋나 있어 하이라이트가
-              // 안 걸린다. 그게 정상이다(highlightedNameSpans 주석).
-              TextSpan(
-                children: highlightedNameSpans(store.name, widget.query),
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: _rowTitleStyle,
-            ),
-          ),
-          if (categoryLabel != null) ...[
-            const SizedBox(width: 8),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 84),
-              child: Text(
-                categoryLabel,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end,
-                style: const TextStyle(fontSize: 12, color: AppColors.muted),
-              ),
-            ),
-          ],
-        ],
-      ),
-      // 결과 목록(_storeTile)과 같은 두 줄 구조다. 후보 목록이 사실상 결과
-      // 화면으로도 쓰이는데(서버가 한 곳을 지목 못 한 브랜드 질의) 거리만 없어서,
-      // 가장 흔한 검색이 가장 빈약한 화면으로 가고 있었다.
-      // 설계: docs/client/search-result-list-ux.md O절.
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            floorLine,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12, color: AppColors.muted),
-          ),
-          if (reach != null)
-            Text(
-              reachLabel(reach),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              // 결과 행과 같은 무게. 두 목록이 같은 값을 다르게 그리면 사용자는
-              // 둘이 다른 것을 뜻한다고 읽는다.
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.text,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-        ],
-      ),
-      isThreeLine: reach != null,
-      onTap: () {
+      leadingIcon: suggestion.kind.isCorrection
+          ? Icons.auto_fix_high
+          : Icons.search,
+      // 종류가 섞인 목록이라 아이콘은 모양으로만 가른다. 강조색은 일치 구간 몫이다.
+      leadingIconTone: RoutexListIconTone.quiet,
+      title: store.name,
+      // 교정 후보는 사용자가 친 글자와 이름이 어긋나 있어 하나도 안 걸린다.
+      // 그게 정상이다([nameHighlightRanges] 주석).
+      titleHighlights: nameHighlightRanges(store.name, widget.query),
+      // 결과 목록과 같은 두 줄 구조다. 후보 목록이 사실상 결과 화면으로도 쓰이는데
+      // (서버가 한 곳을 지목 못 한 브랜드 질의) 거리만 없어서, 가장 흔한 검색이
+      // 가장 빈약한 화면으로 가고 있었다. 설계: docs/client/search-result-list-ux.md O절.
+      subtitle: [?categoryLabel, floorLine].join(' · '),
+      metric: reach == null ? null : reachLabel(reach),
+      onPressed: () {
         // 한 곳짜리 후보는 그 매장을 열면 그만이다. 예전에는 여기서도 이름으로
         // 검색을 다시 돌렸는데(아래 분기), 그러면 사용자가 방금 고른 것과 사실상
         // 같은 줄을 결과 목록에서 한 번 더 눌러야 했다. 좌표가 없어서 생긴
@@ -1166,33 +1051,20 @@ class _SearchPanelState extends State<SearchPanel> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     for (final query in queries)
-                      ListTile(
+                      RoutexListCell(
                         key: Key('recent-$query'),
-                        dense: true,
-                        minVerticalPadding: _rowVerticalPadding,
-                        horizontalTitleGap: _rowTitleGap,
-                        contentPadding: _rowContentPadding,
-                        leading: const Icon(
-                          Icons.history,
-                          size: 20,
-                          color: AppColors.muted,
-                        ),
-                        title: Text(
-                          query,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          // 최근 검색어는 매장 이름이 아니라 사용자가 친 글자라
-                          // 강조 span이 없다. 바탕 스타일은 다른 행과 같게 둔다.
-                          style: _rowTitleStyle,
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.close, size: 18),
-                          color: AppColors.muted,
-                          tooltip: '$query 삭제',
-                          onPressed: () =>
-                              recentSearchesController.remove(query),
-                        ),
-                        onTap: () {
+                        leadingIcon: Icons.history,
+                        leadingIconTone: RoutexListIconTone.quiet,
+                        // 최근 검색어는 매장 이름이 아니라 사용자가 친 글자라
+                        // 강조할 구간이 없다.
+                        title: query,
+                        // 지우기는 갈래가 하나뿐이라 ×다. ⋯를 두면 메뉴가 열릴
+                        // 줄 알고 누른다.
+                        trailingActionLabel: '$query 삭제',
+                        trailingActionIcon: Icons.close,
+                        onTrailingAction: () =>
+                            recentSearchesController.remove(query),
+                        onPressed: () {
                           // 최근 검색어는 문자열 하나뿐이라 어느 층 매장이었는지
                           // 알 방법이 없다. 층을 모르는 선택이므로 스코프를 뺀다.
                           _floorScopeOnce = const _FloorScopeOverride(null);
@@ -1237,17 +1109,19 @@ class _SearchPanelState extends State<SearchPanel> {
   }
 
   Widget _resultList() {
-    final rows = <Widget>[];
+    // 목록 **위**에 서는 것들. 결과 행이 아니라 이 화면이 지금 무엇을 보여 주는지를
+    // 말하는 조각이라, 개수·정렬 머리말보다 위에 둔다.
+    final prelude = <Widget>[];
     // 바깥 결과 덕분에 목록이 먼저 떴을 뿐, 건물 안 검색은 아직 돌고 있을 수
     // 있다. 그 사실을 안 밝히면 사용자는 이게 최종 목록이라고 읽는다.
     if (_phase == _SearchPhase.typingLightSearch ||
         _phase == _SearchPhase.semanticSearching) {
-      rows.add(const _IndoorSearchingRow());
+      prelude.add(const _IndoorSearchingRow());
     }
     final isDiscovery = _discoveryMode != null;
-    if (isDiscovery) rows.add(_discoveryHeader());
+    if (isDiscovery) prelude.add(_discoveryHeader());
     if (_fromSemantic) {
-      rows.add(
+      prelude.add(
         const Padding(
           padding: _sectionLabelPadding,
           child: Row(
@@ -1271,32 +1145,18 @@ class _SearchPanelState extends State<SearchPanel> {
     }
     final building = _building;
     if (building != null) {
-      rows.add(
-        ListTile(
-          dense: true,
-          minVerticalPadding: _rowVerticalPadding,
-          horizontalTitleGap: _rowTitleGap,
-          contentPadding: _rowContentPadding,
-          // 종류는 아이콘 모양으로만 가른다(건물/매장/제안). 색·크기까지 다르면
-          // 한 목록이 칸칸이 나뉘어 보인다 — 강조색은 일치 구간 몫이다.
-          leading: const Icon(
-            Icons.apartment_outlined,
-            size: 20,
-            color: AppColors.muted,
-          ),
-          title: Text.rich(
-            TextSpan(
-              children: highlightedNameSpans(building.name, _submittedQuery),
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: _rowTitleStyle,
-          ),
-          subtitle: Text(
-            '건물 · ${building.floors.length}개 층',
-            style: const TextStyle(fontSize: 12, color: AppColors.muted),
-          ),
-          onTap: () => widget.onBuildingPicked(building),
+      // **결과 목록 밖이다.** "검색 결과 N"의 N은 매장 수이고 건물은 세지 않으므로,
+      // 머리말 위에 두어야 그 줄까지 세는 것처럼 읽히지 않는다.
+      prelude.add(
+        RoutexListCell(
+          // 종류는 아이콘 모양으로만 가른다(건물/매장/제안). 색까지 다르면 한 목록이
+          // 칸칸이 나뉘어 보인다 — 강조색은 일치 구간 몫이다.
+          leadingIcon: Icons.apartment_outlined,
+          leadingIconTone: RoutexListIconTone.quiet,
+          title: building.name,
+          titleHighlights: nameHighlightRanges(building.name, _submittedQuery),
+          subtitle: '건물 · ${building.floors.length}개 층',
+          onPressed: () => widget.onBuildingPicked(building),
         ),
       );
     }
@@ -1319,17 +1179,7 @@ class _SearchPanelState extends State<SearchPanel> {
           itemCount: ordered.length,
           fromSemantic: _fromSemantic,
         );
-    // 건물 행 **아래**에 둔다. "검색 결과 N"의 N은 매장 수이고 건물은 세지
-    // 않으므로, 건물 위에 얹으면 그 줄까지 세는 것처럼 읽힌다.
-    if (canChoose) {
-      rows.add(
-        _listHeader(
-          count: ordered.length,
-          floorNames: [for (final store in ordered) store.floor],
-          canChoose: true,
-        ),
-      );
-    }
+    final rows = <Widget>[];
     // 추천 이유는 **storeId로** 짝짓는다. 인덱스로 맞추면 정렬이 들어올 때 이유가
     // 엉뚱한 매장에 붙고, 그 조합은 실제 경로로 존재한다(`_fromSemantic`이 false
     // 인데 `_discoveryMatches`는 차 있는 경우).
@@ -1373,19 +1223,40 @@ class _SearchPanelState extends State<SearchPanel> {
     }
 
     // 그릴 줄이 하나도 없으면 빈 패널 대신 없다고 말한다. 사용자는 빈 패널을
-    // "앱이 멈췄다"로 읽는다.
-    if (rows.isEmpty) return _emptyState(context);
+    // "앱이 멈췄다"로 읽는다. **안내 줄만 있어도 빈손이 아니다** — 되물음은 질문을
+    // 세워 놓고 "찾지 못했어요"라고 답하면 안 된다.
+    if (prelude.isEmpty && rows.isEmpty) return _emptyState(context);
 
     // **`ListView(shrinkWrap: true)`가 아닌 이유** — 느슨한 제약(maxHeight만 있고
     // tight가 아닌) 안에서 스크롤 범위를 내용보다 짧게 잡아 30건 중 29번째에서
     // 멈췄다(마지막 타일에 영영 도달하지 못함). 상한이 30이라 지연 생성으로 아낄
-    // 것도 없다. 구분선은 두지 않는다([_rowVerticalPadding]).
+    // 것도 없다. 구분선은 두지 않는다(행 리듬은 RoutexListCell이 갖는다).
     return Scrollbar(
       controller: _resultScrollController,
       child: SingleChildScrollView(
         controller: _resultScrollController,
         padding: const EdgeInsets.only(bottom: 8),
-        child: Column(mainAxisSize: MainAxisSize.min, children: rows),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ...prelude,
+            if (rows.isNotEmpty)
+              RoutexResultList(
+                status: RoutexResultStatus.ready,
+                summary: canChoose
+                    ? _listSummary(
+                        count: ordered.length,
+                        floorNames: [for (final store in ordered) store.floor],
+                      )
+                    : null,
+                sortOptions: canChoose ? _sortOptions : const [],
+                selectedSortId: canChoose ? _sortOrder.name : null,
+                onSortSelected: canChoose ? _onSortSelected : null,
+                children: rows,
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -1441,52 +1312,58 @@ class _SearchPanelState extends State<SearchPanel> {
     final canChooseAgain = hasSelection || _showingAll;
 
     // 선택·되돌리기 줄. 답을 한 번이라도 골랐을 때만 선다.
+    //
+    // **값 하나에 줄 하나다.** 이 줄의 선택은 축마다 하나씩 여럿인데 칩 줄의 선택은
+    // 없거나 하나라, 한 줄에 다 담으면 여러 개를 동시에 강조할 수 없다. 줄을 값마다
+    // 두면 각자 자기 하나를 고른 상태가 되고, 가로 스크롤은 바깥 ListView가 이미
+    // 소유하고 있어 `deferToParent`가 성립한다.
+    //
+    // **`×`를 붙이지 않는다.** 고른 값을 다시 누르면 풀리는 것이 칩 줄의 계약이라
+    // 동작은 그대로고, 위 선택지 줄은 아무것도 안 골라 회색이라 두 줄이 색으로 이미
+    // 갈린다. 해제 글리프는 예전에 계약으로 냈다가 어댑터가 이미 풀고 있어 걷어낸
+    // 것이다(v0.2.9).
     final selectedRow = <Widget>[];
     for (final entry in _selectedFacets.entries) {
       for (final value in entry.value) {
-        if (selectedRow.isNotEmpty) selectedRow.add(const SizedBox(width: 6));
+        if (selectedRow.isNotEmpty) {
+          selectedRow.add(const SizedBox(width: RoutexSpacing.controlGap));
+        }
         selectedRow.add(
-          FilterPill(
+          RoutexChipBar(
             key: Key('selected-facet-${entry.key}-$value'),
-            label: value,
-            selected: true,
-            // 고른 값을 다시 누르면 풀린다. 카테고리 시트의 소분류 pill과 같은
-            // 규칙이라 같은 모양이 같게 동작한다. `×`는 그 사실을 눈에 보이게 한다.
-            trailing: Icons.close,
-            onTap: () => _removeFacet(entry.key, value),
+            options: [RoutexChipOption(id: value, label: value)],
+            selectedId: value,
+            overflow: RoutexChipBarOverflow.deferToParent,
+            onSelected: (_) => _removeFacet(entry.key, value),
           ),
         );
       }
     }
-    // 조작 pill(전체 보기·다시 선택)은 **선택 줄 끝에 구분선 뒤로** 붙인다. 예전에는
-    // "전체 보기"가 혼자 윗줄에 떠서, 방금 고른 선택보다 위에 있는 탈출구가 됐다.
-    // clarify 화면에서는 이미 선택지 줄 끝에 있으므로 여기서는 빼고 중복시키지 않는다.
+    // 조작(전체 보기·다시 선택)은 **칩이 아니라 버튼이다.** 위 칩들은 "이 값으로
+    // 좁혀라"이고 이 둘은 "좁히지 말고 다 봐라"·"방금 답을 되돌려라"라 성격이 다르다.
+    // 같은 모양으로 두고 구분선으로 가르던 것을 그만둔다 — 모양이 다르면 선이 필요
+    // 없다. clarify 화면에서는 전체 보기가 이미 선택지 줄 끝에 있어 여기서는 뺀다.
     final trailingActions = <Widget>[
       if (canShowAll && !isClarify)
-        FilterPill(
+        RoutexButton(
           key: const Key('show-all'),
           label: '전체 보기',
-          selected: false,
-          onTap: () => _requestDiscovery(showAll: true),
+          variant: RoutexButtonVariant.quiet,
+          onPressed: () => _requestDiscovery(showAll: true),
         ),
       if (canChooseAgain)
-        FilterPill(
+        RoutexButton(
           key: const Key('choose-again'),
           label: '다시 선택',
-          selected: false,
-          onTap: _chooseAgain,
+          variant: RoutexButtonVariant.quiet,
+          onPressed: _chooseAgain,
         ),
     ];
-    if (trailingActions.isNotEmpty) {
+    for (final action in trailingActions) {
       if (selectedRow.isNotEmpty) {
-        selectedRow.add(
-          const VerticalDivider(width: 10, indent: 6, endIndent: 6),
-        );
+        selectedRow.add(const SizedBox(width: RoutexSpacing.controlGap));
       }
-      for (var index = 0; index < trailingActions.length; index++) {
-        if (index > 0) selectedRow.add(const SizedBox(width: 6));
-        selectedRow.add(trailingActions[index]);
-      }
+      selectedRow.add(action);
     }
 
     return Padding(
@@ -1522,33 +1399,48 @@ class _SearchPanelState extends State<SearchPanel> {
             // 넘어가 정작 결과 목록이 화면 밖으로 밀린다. 줄을 고정하면 선택지가
             // 몇 개든 패널 높이가 그대로다.
             if (_discoveryOptions.isNotEmpty)
-              SizedBox(
-                height: 30,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
                   children: [
-                    for (final option in _discoveryOptions) ...[
-                      FilterPill(
-                        key: Key(
-                          'facet-option-${option.facet}-${option.value}',
-                        ),
-                        label: '${option.label} (${option.count})',
-                        selected: false,
-                        onTap: () => _selectFacet(option),
+                    Expanded(
+                      child: RoutexChipBar(
+                        options: [
+                          for (final option in _discoveryOptions)
+                            RoutexChipOption(
+                              // 칩 줄이 이 id를 그대로 위젯 key로 쓴다.
+                              id: 'facet-option-${option.facet}-${option.value}',
+                              label: option.label,
+                              count: option.count,
+                            ),
+                        ],
+                        // 고르는 순간 다음 질문으로 넘어가므로 이 줄에는 선택이
+                        // 머무르지 않는다.
+                        selectedId: null,
+                        onSelected: (id) {
+                          if (id == null) return;
+                          _selectFacet(
+                            _discoveryOptions.firstWhere(
+                              (option) =>
+                                  'facet-option-${option.facet}-${option.value}' ==
+                                  id,
+                            ),
+                          );
+                        },
+                        semanticsLabel: '선택지',
                       ),
-                      const SizedBox(width: 6),
-                    ],
-                    // 성격이 다른 것은 같은 줄에 두되 섞이지 않게 구분선으로
-                    // 나눈다(naver-map-ui-ux-analysis.md 5·6절의 필터 줄과 같다).
-                    // 위 pill들은 "이 값으로 좁혀라"이고, 이건 "좁히지 말고 다 봐라"다.
+                    ),
+                    // **줄 안에 섞지 않는다.** 위 칩들은 "이 값으로 좁혀라"이고 이건
+                    // "좁히지 말고 다 봐라"다. 예전에는 구분선으로 갈랐는데, 성격이
+                    // 다른 것을 같은 줄에 두고 선으로 나누는 것보다 스크롤 밖에
+                    // 고정해 두는 편이 분명하다 — 선택지가 길어도 안 밀려난다.
                     if (canShowAll) ...[
-                      const VerticalDivider(width: 10, indent: 6, endIndent: 6),
-                      FilterPill(
+                      const SizedBox(width: RoutexSpacing.controlGap),
+                      RoutexButton(
                         key: const Key('show-all'),
                         label: '전체 보기',
-                        selected: false,
-                        onTap: () => _requestDiscovery(showAll: true),
+                        variant: RoutexButtonVariant.quiet,
+                        onPressed: () => _requestDiscovery(showAll: true),
                       ),
                     ],
                   ],
@@ -1558,7 +1450,8 @@ class _SearchPanelState extends State<SearchPanel> {
           if (selectedRow.isNotEmpty) ...[
             if (isClarify) const SizedBox(height: 6),
             SizedBox(
-              height: 30,
+              // 칩이 터치 영역 48을 감싸고 있어 30에 두면 그 자리에서 넘친다.
+              height: RoutexMetrics.minimumTouchTarget,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1598,75 +1491,20 @@ class _SearchPanelState extends State<SearchPanel> {
         : '$buildingName · ${store.floor}';
     final floorLine = nodeId == null ? '$placeLine · 경로 안내 불가' : placeLine;
     final firstLine = reason == null ? floorLine : '$floorLine · $reason';
-    return ListTile(
-      // 후보 행(_suggestionTile)과 같은 리듬이다. 예전에는 결과 행만 non-dense에
-      // 굵은 이름·파란 핀이라, 같은 매장이 후보 화면과 결과 화면에서 다른 줄처럼
-      // 보였다. 종류는 아이콘 모양(핀/돋보기)으로만 가른다.
-      dense: true,
-      minVerticalPadding: _rowVerticalPadding,
-      horizontalTitleGap: _rowTitleGap,
-      contentPadding: _rowContentPadding,
-      leading: const Icon(
-        Icons.place_outlined,
-        size: 20,
-        color: AppColors.muted,
-      ),
-      title: Row(
-        children: [
-          Expanded(
-            child: Text.rich(
-              TextSpan(
-                children: highlightedNameSpans(store.name, _submittedQuery),
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: _rowTitleStyle,
-            ),
-          ),
-          if (categoryLabel != null) ...[
-            const SizedBox(width: 8),
-            // 업종이 길어도 이름 자리를 먹지 않도록 상한을 둔다. 이름이 먼저
-            // 읽혀야 하는 줄이라 남는 폭은 이름 쪽에 준다.
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 84),
-              child: Text(
-                categoryLabel,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end,
-                style: const TextStyle(fontSize: 12, color: AppColors.muted),
-              ),
-            ),
-          ],
-        ],
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            firstLine,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12, color: AppColors.muted),
-          ),
-          if (reach != null)
-            Text(
-              reachLabel(reach),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              // 거리는 "지금 갈지"를 정하는 값이라 층보다 한 단계 진하게 둔다.
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.text,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-        ],
-      ),
-      // 두 줄짜리 subtitle은 ListTile에 알려야 세로 정렬이 맞는다.
-      isThreeLine: reach != null,
-      onTap: () => widget.onStorePicked(store),
+    return RoutexListCell(
+      // 후보 행과 같은 리듬이다. 예전에는 결과 행만 굵은 이름·파란 핀이라, 같은
+      // 매장이 후보 화면과 결과 화면에서 다른 줄처럼 보였다. 종류는 아이콘
+      // 모양(핀/돋보기)으로만 가른다.
+      leadingIcon: Icons.place_outlined,
+      leadingIconTone: RoutexListIconTone.quiet,
+      title: store.name,
+      titleHighlights: nameHighlightRanges(store.name, _submittedQuery),
+      // 업종은 이름 오른쪽이 아니라 맥락 줄 맨 앞이다. 그 자리는 폭 상한이 있어
+      // 긴 업종이 이미 반쯤 잘려 나왔고, 잘린 업종은 정보가 아니라 얼룩이다.
+      subtitle: [?categoryLabel, firstLine].join(' · '),
+      // 거리는 "지금 갈지"를 정하는 값이라 맥락과 줄을 나눈다.
+      metric: reach == null ? null : reachLabel(reach),
+      onPressed: () => widget.onStorePicked(store),
     );
   }
 
@@ -1751,48 +1589,20 @@ class _SearchPanelState extends State<SearchPanel> {
   Widget _poiTile(OutdoorSearchRow row, ValueChanged<OutdoorPoi> onPicked) {
     final poi = row.poi;
     final distance = poi.distanceMeters;
+    // 거리는 맥락이 아니라 **고를지 정하는 값**이라 아래 [RoutexListCell.metric]으로
+    // 올라간다. 여기 남는 것은 "어디에 있는가"뿐이다.
     final subtitleParts = [
-      if (distance != null) '약 ${formatDistance(distance)}',
+      if (poi.category != null) poi.category!,
       if (poi.address != null) poi.address!,
     ];
-    return ListTile(
-      leading: const Icon(Icons.storefront_outlined, color: AppColors.muted),
-      title: Row(
-        children: [
-          Expanded(
-            child: Text.rich(
-              TextSpan(
-                children: highlightedNameSpans(poi.name, _submittedQuery),
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-            ),
-          ),
-          if (poi.category != null) ...[
-            const SizedBox(width: 8),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 84),
-              child: Text(
-                poi.category!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.end,
-                style: const TextStyle(fontSize: 12, color: AppColors.muted),
-              ),
-            ),
-          ],
-        ],
-      ),
-      subtitle: subtitleParts.isEmpty
-          ? null
-          : Text(
-              subtitleParts.join(' · '),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12, color: AppColors.muted),
-            ),
-      onTap: () => onPicked(poi),
+    return RoutexListCell(
+      leadingIcon: Icons.storefront_outlined,
+      leadingIconTone: RoutexListIconTone.quiet,
+      title: poi.name,
+      titleHighlights: nameHighlightRanges(poi.name, _submittedQuery),
+      subtitle: subtitleParts.isEmpty ? null : subtitleParts.join(' · '),
+      metric: distance == null ? null : '약 ${formatDistance(distance)}',
+      onPressed: () => onPicked(poi),
     );
   }
 
@@ -1859,16 +1669,22 @@ class _SearchPanelState extends State<SearchPanel> {
               const SizedBox(height: 8),
               // 대분류가 6~7개라 접으면 두 줄이 된다. 이 화면은 결과가 없어
               // 세로가 남으므로 Wrap으로 두어 한눈에 다 보이게 한다.
+              //
+              // 칩 줄을 분류마다 하나씩 둔다. 줄이 여럿을 담으면 스스로 가로로
+              // 넘기는데(`RoutexChipBarOverflow.scroll`) 그러면 이 화면의 탈출구
+              // 절반이 접혀 사라진다. 하나짜리 줄은 넘칠 것이 없어 `deferToParent`가
+              // 성립하고, 접는 일은 바깥 Wrap이 맡는다.
               Wrap(
-                spacing: 6,
-                runSpacing: 6,
+                spacing: RoutexSpacing.controlGap,
+                runSpacing: RoutexSpacing.controlGap,
                 children: [
                   for (final category in categories)
-                    FilterPill(
+                    RoutexChipBar(
                       key: Key('browse-category-$category'),
-                      label: category,
-                      selected: false,
-                      onTap: () => onPicked(category),
+                      options: [RoutexChipOption.category(category)],
+                      selectedId: null,
+                      overflow: RoutexChipBarOverflow.deferToParent,
+                      onSelected: (_) => onPicked(category),
                     ),
                 ],
               ),
@@ -1882,43 +1698,26 @@ class _SearchPanelState extends State<SearchPanel> {
   Widget _degradedState() {
     return const Padding(
       padding: EdgeInsets.fromLTRB(16, 20, 16, 22),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '추천 기능을 지금은 제한적으로만 사용할 수 있어요.',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-          ),
-          SizedBox(height: 6),
-          Text(
-            '잠시 후 다시 검색하거나 다른 표현으로 찾아보세요.',
-            style: TextStyle(fontSize: 12.5, color: AppColors.muted),
-          ),
-        ],
+      child: RoutexResultList(
+        status: RoutexResultStatus.degraded,
+        statusMessage: '잠시 후 다시 검색하거나 다른 표현으로 찾아보세요.',
+        children: [],
       ),
     );
   }
 
   /// 검색을 끝내지 못한 화면. "찾지 못했어요"와 문구를 나누는 이유는 사용자가
-  /// 할 행동이 다르기 때문이다 — 여기서는 말을 바꿔도 소용이 없다.
+  /// 할 행동이 다르기 때문이다 — 여기서는 말을 바꿔도 소용이 없다. 다시 시도가
+  /// 붙는 것도 그래서다.
   Widget _errorState() {
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(16, 20, 16, 22),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '지금은 검색할 수 없어요.',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-          ),
-          SizedBox(height: 6),
-          Text(
-            '연결 상태를 확인하고 잠시 후 다시 시도해 주세요.',
-            style: TextStyle(fontSize: 12.5, color: AppColors.muted),
-          ),
-        ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 22),
+      child: RoutexResultList(
+        status: RoutexResultStatus.error,
+        statusMessage: '연결 상태를 확인하고 잠시 후 다시 시도해 주세요.',
+        statusActionLabel: '다시 시도',
+        onStatusAction: () => unawaited(_search(widget.query, immediate: true)),
+        children: const [],
       ),
     );
   }

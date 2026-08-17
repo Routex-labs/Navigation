@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navigation_client/theme/app_theme.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/models/building/category_count.dart';
 import 'package:navigation_client/models/place/store_index_entry.dart';
@@ -53,8 +55,7 @@ void main() {
       query.value = '';
       submitTick.value = 0;
       return tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
+        MaterialApp(theme: AppTheme.light, home: Scaffold(
             body: ListenableBuilder(
               listenable: Listenable.merge([query, submitTick]),
               builder: (_, _) => SearchPanel(
@@ -271,7 +272,9 @@ void main() {
       await settleSearch(tester);
 
       expect(find.textContaining('찾지 못했어요'), findsNothing);
-      expect(find.textContaining('다시 시도'), findsOneWidget);
+      // 문구만 다른 것이 아니라 **할 수 있는 일**이 다르다. 결과 없음에는 다시
+      // 시도할 것이 없고, 여기에는 있다.
+      expect(find.widgetWithText(RoutexButton, '다시 시도'), findsOneWidget);
     });
 
     testWidgets('현재 층이 주어지면 경량·의미 검색 요청 모두에 실어 보낸다', (
@@ -387,7 +390,7 @@ void main() {
       expect(find.text('어떤 스타일의 신발을 찾으세요?'), findsOneWidget);
       expect(find.text('스포츠 (3)'), findsOneWidget);
       // 층이 앞에 붙는다. 결과가 한 건이라 되풀이가 없어 근거는 그대로 남는다.
-      expect(find.text('3F · 스포츠 신발을 찾을 때 볼 만해요.'), findsOneWidget);
+      expect(find.textContaining('3F · 스포츠 신발을 찾을 때 볼 만해요.'), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('facet-option-styles-스포츠')));
       await flush(tester);
@@ -641,8 +644,7 @@ void main() {
         ),
       ]);
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
+        MaterialApp(theme: AppTheme.light, home: Scaffold(
             body: ListenableBuilder(
               listenable: Listenable.merge([query, submitTick]),
               builder: (_, _) => ConstrainedBox(
