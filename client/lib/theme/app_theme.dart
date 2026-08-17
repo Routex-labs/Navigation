@@ -73,10 +73,10 @@ abstract final class AppTheme {
 
   /// 받은 [base]는 그대로 두고 Runtime Kit이 요구하는 ThemeExtension만 더한다.
   ///
-  /// 전역을 `RoutexTheme.light`로 갈아 끼우지 않는 이유는, 그 순간 아직 옮기지
-  /// 않은 카드·입력창·버튼까지 한꺼번에 바뀌어 어느 변화가 포팅 때문인지 가릴 수
-  /// 없어서다. 그래서 이 다리의 합격 기준은 "Runtime Kit이 그려진다"가 아니라
-  /// **포팅하지 않은 위젯의 계산된 ThemeData가 이전과 같다**이다.
+  /// 전역을 `RoutexTheme.light`로 갈아 끼우면 아직 옮기지 않은 카드·입력창·버튼이
+  /// 한꺼번에 바뀐다. 언제 넘길 수 있는지와 재 본 값은
+  /// `docs/client/theme-handover.md`에 있고, 남은 차이의 단일 출처는
+  /// `test/theme/routex_theme_bridge_test.dart`의 전환 게이트다.
   ///
   /// [base]에 이미 있는 extension은 덮어쓰지 않고 뒤에 붙인다.
   static ThemeData withRoutexTokens(ThemeData base) {

@@ -7,10 +7,9 @@ import '../support/routex_test_host.dart';
 
 /// 테마 다리의 합격 기준은 "Runtime Kit이 그려진다"가 아니다.
 ///
-/// 전역 테마를 `RoutexTheme.light`로 갈아 끼우면 아직 옮기지 않은 카드·입력창·
-/// 버튼까지 한꺼번에 바뀌어, 이후 포팅에서 생긴 변화와 구분할 수 없게 된다.
-/// 그래서 여기서 지키는 것은 **더해진 것이 ThemeExtension 하나뿐**이라는 사실이다.
-/// 절차와 실패 기준은 `docs/navigation-app-porting-guide.md` 5절이 단일 출처다.
+/// 지키는 것이 둘이다. **더해진 것이 ThemeExtension 하나뿐**이라는 사실과,
+/// 전역 전환이 아직 남겨 둔 **차이의 목록**이다. 뒤엣것이 비는 날 전환한다.
+/// 판정 근거와 순서는 `docs/client/theme-handover.md`가 단일 출처다.
 void main() {
   group('테마 다리 — 더하는 것은 ThemeExtension 하나뿐', () {
     test('나머지 ThemeData 필드는 그대로 둔다', () {
@@ -45,29 +44,41 @@ void main() {
     });
   });
 
-  group('테마 다리 — 포팅하지 않은 화면의 계약', () {
-    test('앱이 정한 Material 값이 그대로 남는다', () {
-      final theme = AppTheme.light;
+  group('테마 다리 — 전역 전환 게이트', () {
+    // 단계 8이 묻는 것은 "전환할 수 있나"이고, 답은 **남은 차이의 목록**이다.
+    // 목록이 비는 날 `AppTheme.light`를 `RoutexTheme.light`로 갈아 끼운다.
+    //
+    // 포팅이 진행돼 앱이 override 하나를 지우면 이 테스트가 실패한다. 그때
+    // 목록에서도 지운다 — 그래서 전환 조건이 문서가 아니라 여기에 산다.
+    // 각 항목의 소비처는 `docs/client/theme-handover.md`가 단일 출처다.
+    test('앱 테마가 Runtime Kit 테마와 다른 지점은 이 목록뿐이다', () {
+      const expected = {
+        // AppColors.primary(하늘)와 Kit actionPrimary(진파랑)는 다른 색이다.
+        // 앱이 AppColors.primary를 직접 읽는 자리가 남아 있는 한, 여기만 Kit
+        // 값으로 바꾸면 한 화면에 두 파랑이 선다.
+        'colorScheme.primary',
+        'colorScheme.secondary',
+        'colorScheme.error',
+        'colorScheme.outline',
+        'colorScheme.outlineVariant',
+        'scaffoldBackgroundColor',
+        'dividerColor',
+        'focusColor',
+        'disabledColor',
+        // 아직 앱이 그리는 Material 위젯이 읽는 값들.
+        'textTheme.bodyMedium',
+        'textTheme.titleMedium',
+        'appBarTheme',
+        'cardTheme',
+        'filledButtonTheme',
+        'textButtonTheme',
+        'inputDecorationTheme',
+        'listTileTheme',
+        'dividerTheme',
+        'progressIndicatorTheme',
+      };
 
-      expect(theme.textTheme.bodyMedium?.fontFamily, 'Pretendard');
-      expect(theme.scaffoldBackgroundColor, AppColors.background);
-      expect(theme.cardTheme.elevation, AppElevation.chrome);
-      expect(theme.dividerTheme.color, AppColors.blue100);
-    });
-
-    // `RoutexTheme.light`는 focus·divider·disabled를 semantic 토큰으로 덮는다.
-    // 그 값이 전역으로 새면 아직 옮기지 않은 Material 컨트롤의 focus 표시와
-    // 구분선이 함께 바뀐다. 앱 색 구성표로 만든 기본값과 같은지로 확인한다.
-    test('Runtime Kit의 semantic 값이 전역으로 새지 않는다', () {
-      final theme = AppTheme.light;
-      final materialDefault = ThemeData(
-        useMaterial3: true,
-        colorScheme: theme.colorScheme,
-      );
-
-      expect(theme.focusColor, materialDefault.focusColor);
-      expect(theme.dividerColor, materialDefault.dividerColor);
-      expect(theme.disabledColor, materialDefault.disabledColor);
+      expect(_differencesFromRuntimeKit(), expected);
     });
   });
 
@@ -99,6 +110,64 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+}
+
+/// 전환하면 화면이 달라지는 축만 골라 두 테마를 견준다.
+///
+/// `ThemeData`를 통째로 비교하면 화면에 닿지 않는 필드까지 세어 목록이 잡음이
+/// 된다. 여기 있는 이름은 전부 **아직 앱이 그리는 Material 위젯이 읽는 값**이다.
+Set<String> _differencesFromRuntimeKit() {
+  final app = AppTheme.light;
+  final kit = RoutexTheme.light;
+
+  final probes = <String, (Object?, Object?)>{
+    'colorScheme.primary': (app.colorScheme.primary, kit.colorScheme.primary),
+    'colorScheme.secondary': (
+      app.colorScheme.secondary,
+      kit.colorScheme.secondary,
+    ),
+    'colorScheme.surface': (app.colorScheme.surface, kit.colorScheme.surface),
+    'colorScheme.error': (app.colorScheme.error, kit.colorScheme.error),
+    'colorScheme.outline': (app.colorScheme.outline, kit.colorScheme.outline),
+    'colorScheme.outlineVariant': (
+      app.colorScheme.outlineVariant,
+      kit.colorScheme.outlineVariant,
+    ),
+    'scaffoldBackgroundColor': (
+      app.scaffoldBackgroundColor,
+      kit.scaffoldBackgroundColor,
+    ),
+    'dividerColor': (app.dividerColor, kit.dividerColor),
+    'focusColor': (app.focusColor, kit.focusColor),
+    'disabledColor': (app.disabledColor, kit.disabledColor),
+    'textTheme.bodyMedium': (
+      app.textTheme.bodyMedium,
+      kit.textTheme.bodyMedium,
+    ),
+    'textTheme.titleMedium': (
+      app.textTheme.titleMedium,
+      kit.textTheme.titleMedium,
+    ),
+    'appBarTheme': (app.appBarTheme, kit.appBarTheme),
+    'cardTheme': (app.cardTheme, kit.cardTheme),
+    'filledButtonTheme': (app.filledButtonTheme, kit.filledButtonTheme),
+    'textButtonTheme': (app.textButtonTheme, kit.textButtonTheme),
+    'inputDecorationTheme': (
+      app.inputDecorationTheme,
+      kit.inputDecorationTheme,
+    ),
+    'listTileTheme': (app.listTileTheme, kit.listTileTheme),
+    'dividerTheme': (app.dividerTheme, kit.dividerTheme),
+    'progressIndicatorTheme': (
+      app.progressIndicatorTheme,
+      kit.progressIndicatorTheme,
+    ),
+  };
+
+  return {
+    for (final probe in probes.entries)
+      if (probe.value.$1 != probe.value.$2) probe.key,
+  };
 }
 
 /// 앱이 이미 가진 extension을 흉내 내는 표식.
