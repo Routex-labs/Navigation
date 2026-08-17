@@ -751,6 +751,35 @@ void main() {
       next.complete(null);
     });
 
+    // 손잡이 아래에서 도는 원은 "시트가 통째로 바뀌는 중"으로 읽힌다. 갈아 끼울
+    // 때는 이전 본문이 그대로 떠 있어 알릴 기다림이 없다 — 결정과 근거는
+    // `docs/client/kakao-map-indoor-observation.md`의 "교체할 때 로딩 표시를
+    // 두지 않는다".
+    testWidgets('갈아 끼울 때는 로딩 표시를 두지 않는다', (tester) async {
+      await tester.pumpWidget(
+        buildSubject(
+          repository: _FakeRepository(
+            Completer<PlaceDetail?>().future,
+            byPlaceId: {'place-1': Future.value(_detailWithSummary())},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // 처음 열 때는 뜬다 — 그때는 보여 줄 본문이 아직 없다.
+      expect(find.byKey(const ValueKey('place-detail-loading')), findsNothing);
+
+      // 두 번째 매장의 응답은 영영 오지 않는다. 그동안에도 로딩 줄은 없어야 한다.
+      target.value = const PlaceDetailTarget(
+        title: '다른 매장',
+        subtitle: 'B2',
+        placeId: 'place-2',
+      );
+      await tester.pump();
+
+      expect(find.byKey(const ValueKey('place-detail-loading')), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    });
+
     testWidgets('늦게 온 이전 매장의 상세는 버린다', (tester) async {
       final first = Completer<PlaceDetail?>();
       await tester.pumpWidget(

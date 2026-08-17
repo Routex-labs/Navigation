@@ -50,8 +50,10 @@ extension OutdoorMapMap on OutdoorMapBodyState {
     await registerCurrentLocationLayers(controller);
     await registerDestinationLayer(controller);
 
-    // 출구 핀. 선택 매장은 별도 핀을 만들지 않고 기존 아이콘의 색만 바꾼다.
+    // 출구 핀 → 고른 매장 칠 순. PDR 마커보다 아래·경로선보다 위다
+    // (각 함수 doc 참고).
     await registerGateLayers(controller);
+    await registerHighlightLayers(controller);
 
     // PDR 마커 비트맵을 먼저 굽고, 진단 레이어를 그 사이에 끼운 뒤 마커를
     // 얹는다 — 순서의 근거는 각 함수 doc에 있다.

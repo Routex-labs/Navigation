@@ -66,7 +66,12 @@ import '../../map/camera/floor_camera_bounds.dart';
 import '../../map/style/category_map_filter.dart';
 import '../../map/icon/category_map_icon.dart';
 import '../../map/style/floor_facility_style.dart';
+import '../../domain/store/nearest_around_me.dart';
+import '../../map/camera/scale_bar.dart';
+import 'widgets/entry_floor_prompt.dart';
 import 'widgets/floor_selector.dart';
+import 'widgets/map_scale_bar.dart';
+import 'widgets/nearby_store_sheet.dart';
 import 'widgets/floor_switch_escalator_motif.dart';
 import 'widgets/guidance_recenter_button.dart';
 import 'widgets/indoor_arrival_card.dart';
@@ -219,6 +224,7 @@ class OutdoorMapBody extends StatefulWidget {
     this.onMapPointPicked,
     this.pickingOnMap = false,
     this.onLocationAnchored,
+    this.onNeedLocationPlacement,
     this.categorySelection,
     this.onFloorChanged,
     this.onFloorTransitionChanged,
@@ -288,6 +294,13 @@ class OutdoorMapBody extends StatefulWidget {
   /// 않으면 매장을 출발지로 지정해 길찾기를 한 뒤 위치를 다시 잡아도, 다음
   /// 길찾기가 방금 잡은 위치가 아니라 예전에 고른 매장에서 출발한다.
   final VoidCallback? onLocationAnchored;
+
+  /// 실내 위치를 아직 모르는데 그 위치가 필요한 조작을 했다.
+  ///
+  /// **문장으로 알리지 않는다.** 예전에는 "위치 지정 버튼으로 먼저 위치를
+  /// 잡아주세요"를 스낵바로 띄웠는데, 눌러야 할 버튼을 말로 가리키는 안내는
+  /// 그 버튼을 가리면서 뜬다. 상위가 그 버튼을 깜빡여 대신 말한다.
+  final VoidCallback? onNeedLocationPlacement;
 
   /// 지금 카테고리 필터에서 고른 값. 실내 진입 오버레이의 매장 강조에 쓴다.
   ///
@@ -440,6 +453,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   /// 지금 그려진 대중교통 안내. null이면 대중교통 경로가 없다.
   TransitItinerary? _transitItinerary;
+
+  /// 같은 조회에서 함께 온 나머지 후보. 고른 것 아래에 회색으로 깔린다.
+  ///
+  /// **고른 경로가 사라지면 함께 비운다.** 후보만 남으면 지도에 회색 선 몇 개가
+  /// 주인 없이 떠 있고, 눌러도 아무 일이 없다.
+  List<TransitItinerary> _transitAlternatives = const [];
 
   /// 대중교통 요약 카드에 적을 목적지 이름.
   String? _transitLabel;
@@ -742,13 +761,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 미리 보기에서 `안내 시작`을 누르면 앵커를 찍을 출발지. 없으면 지금 위치다.
   PoiSearchResult? _indoorRoutePreviewOrigin;
 
-  /// 그 앵커를 찍을 때 "여기서 출발하는 것으로 봤다"를 알릴지.
-  ///
-  /// 미리 보기는 앵커를 `안내 시작`까지 미루므로, [showIndoorRouteTo]가 받은
-  /// `announceOriginAnchor`를 여기 들고 있어야 한다. 안 들고 가면 맞바꾸기처럼
-  /// **사용자가 방금 직접 시킨 이동**에서도 안내가 뜬다.
-  bool _indoorRoutePreviewAnnounce = true;
-
   /// 도착 카드가 가리키는 목적지. 사용자가 확인을 누를 때까지 남는다.
   PoiSearchResult? _arrivedDestination;
 
@@ -1009,6 +1021,21 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 도면을 연 경우까지 자동으로 닫으면, 입구 앞에 서서 층 도면을 보려던 사람의
   /// 화면이 신호가 잡히는 순간 제멋대로 닫힌다.
   bool _indoorEnteredByGps = false;
+
+  /// 이번 진입에서 "몇 층에 계신가요?"를 이미 물었는지([_askEntryFloor]).
+  ///
+  /// **건물을 실제로 나갈 때만 되돌린다.** 벽 근처에서는 판정이 안팎을 오가는데,
+  /// 매 진입마다 물으면 그 화면이 되풀이해 떠 지도에 닿을 수가 없다. 도면만 접은
+  /// 경우(`returnToOutdoorView`)도 되돌리지 않는다 — 같은 자리에 그대로 있다.
+  bool _entryFloorAsked = false;
+
+  /// 이번 진입에서 "근처 매장에서 골라주세요"를 이미 띄웠는지.
+  ///
+  /// **[_entryFloorAsked]와 같은 규칙으로 되돌린다.** 지도를 크게 축소하면 실내
+  /// 오버레이가 닫히고, 다시 확대하거나 GPS가 한 번 더 잡히면 진입이 다시
+  /// 발화한다 — 그때마다 시트가 올라오면 지도를 훑을 수가 없다. 다시 고르고
+  /// 싶으면 하단 바의 "가까운 매장으로 위치 지정"이 그 자리에 있다.
+  bool _nearbyStoreAsked = false;
 
   /// GPS 구독을 [_gpsTrackingWanted] 상태에 맞춘다. 구독 시작/해제의 유일한
   /// 진입점이라 중복 구독이나 해제 누락이 생기지 않는다.
@@ -1338,14 +1365,31 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       origin: origin,
     );
     if (!mounted) return;
-    // 실내 구간이 실제로 그려졌을 때만 야외 구간을 예약한다. 위 호출은 실패해도
+    // 실내 구간이 실제로 그려졌을 때만 다음으로 간다. 위 호출은 실패해도
     // 스낵바만 띄우고 조용히 돌아오므로, 성공 여부는 결과 상태로 확인한다.
     if (_indoorRouteDestination == null) return;
+
+    // **야외 구간도 지금 함께 그린다.** 예전에는 예약만 걸어 두고 건물을 나가는
+    // 순간에야 그렸는데, 그러면 "자동차·대중교통·도보 어느 것을 눌러도 실내
+    // 안내만 나오고 나머지 경로가 사라진" 것으로 보인다 — 정작 지금 고르려는
+    // 것은 바깥을 어떻게 갈지다. 출발점은 방금 고른 출구다.
+    //
+    // 두 구간은 서로를 지우지 않는다. [showRouteTo]는 실내 경로 상태를 건드리지
+    // 않고, `_route`를 null로 되돌렸다가 채우므로 카메라도 새 경로 전체에 맞춰
+    // 다시 잡힌다([_applyRoute]) — 그 상자가 출구(=건물)부터 목적지까지라 실내
+    // 구간도 그 안에 든다.
+    await showRouteTo(destination, label: label, origin: exit.point);
+    if (!mounted || _indoorRouteDestination == null) return;
+
+    // **예약은 그래도 남긴다.** 방금 그린 야외 구간은 출구에서 출발하는 미리
+    // 보기이고, 실제로 나가면 그 사람이 선 자리에서 다시 그려야 한다
+    // ([_activatePendingOutdoorRoute]). [showRouteTo]가 예약을 비우므로 순서상
+    // 여기서 다시 건다.
     setState(() {
       _pendingOutdoorDestination = destination;
       _pendingOutdoorLabel = label;
     });
-    _showSnack('$exitLabel로 안내합니다. 건물을 나가면 바깥 경로가 이어집니다.');
+    _showSnack('$exitLabel로 나가 목적지까지 이어집니다');
   }
 
   /// 이 화면에 그려진 안내를 **전부** 지운다 — 야외 도보 구간과 실내 구간까지.
@@ -1366,7 +1410,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   Future<void> showIndoorRouteTo(
     PoiSearchResult destination, {
     PoiSearchResult? origin,
-    bool announceOriginAnchor = true,
     bool preview = false,
   }) async {
     final anchor = _pdrTrailState.anchor;
@@ -1403,7 +1446,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         nodeId: originNodeId,
         storePoint: origin!.point,
         storeName: origin.name,
-        announce: announceOriginAnchor,
       );
       if (!mounted) return;
     }
@@ -1421,7 +1463,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       _userDestinationLabel = null;
       _indoorRouteDestination = destination;
       _indoorRoutePreviewOrigin = preview ? origin : null;
-      _indoorRoutePreviewAnnounce = announceOriginAnchor;
       _arrivedDestination = null;
       _guidanceStarted = false;
       // 목적지가 바뀌면 새로운 길안내다. 기존 궤적을 남기면 새 파란 경로와
@@ -1805,16 +1846,19 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       final currentZoom = camera?.zoom ?? 0;
       final bearing = camera?.bearing ?? 0;
       // 배율 규칙은 실내 도면과 한 함수를 공유한다(focusZoomFor).
+      final fitted = _focusZoomForStore(
+        store,
+        viewport: viewport,
+        bottomSheetFraction: bottomSheetFraction,
+        topInsetPx: topInsetPx,
+        bearing: bearing,
+      );
       final zoom = focusZoomFor(
         currentZoom: currentZoom,
         keepZoom: keepZoom && !fromOutside,
-        storeFocusZoom: _focusZoomForStore(
-          store,
-          viewport: viewport,
-          bottomSheetFraction: bottomSheetFraction,
-          topInsetPx: topInsetPx,
-          bearing: bearing,
-        ),
+        storeFocusZoom: fitted ?? _storeFocusZoom,
+        // 폴리곤을 잰 값일 때만 물러선다 — 매장 전체가 화면에 들어와야 한다.
+        storeFitsViewport: fitted != null,
       );
       // **한 번만 움직인다.** 예전에는 매장 중앙으로 옮긴 뒤 `scrollBy`로 띠 한가운데로
       // 다시 밀었는데, 첫 이동이 한 프레임 드러나 카메라가 두 번 튀었다. 최종 목표를
@@ -1847,10 +1891,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   /// 이 매장이 화면의 **보이는 띠**(시트와 상단 chrome 사이)에서 약 42%를 차지하는
   /// 배율. 작은 매장은 읽을 만큼 확대하고, 백화점의 큰 앵커 매장은 한 면이 화면을
-  /// 가득 덮지 않게 한다.
+  /// 가득 덮지 않게 한다. **매장마다 다른 값이다** — 크기를 실제로 재서 정한다.
   ///
-  /// 폴리곤을 못 찾으면 [_storeFocusZoom]으로 떨어진다.
-  double _focusZoomForStore(
+  /// 폴리곤을 못 찾으면 null이다. 호출자는 그때만 [_storeFocusZoom] 상수로
+  /// 떨어지고, 잰 값일 때는 지금보다 멀어지는 방향으로도 간다
+  /// ([focusZoomFor]의 `storeFitsViewport`).
+  double? _focusZoomForStore(
     PoiSearchResult store, {
     required Size viewport,
     required double bottomSheetFraction,
@@ -1861,7 +1907,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         .where((candidate) => candidate.id == store.placeId)
         .firstOrNull
         ?.polygon;
-    if (polygon == null || polygon.length < 3) return _storeFocusZoom;
+    if (polygon == null || polygon.length < 3) return null;
 
     final box = storeLabelBoxMeters(polygon: polygon, bearingDeg: bearing);
     final visibleBandHeight = math.max(
@@ -1938,6 +1984,26 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     await controller.animateCamera(CameraUpdate.newLatLng(_toGl(entrance)));
   }
 
+  /// 하단 바 "가까운 매장으로 위치 지정" 버튼 진입점.
+  ///
+  /// 들어올 때 한 번 띄웠던 목록을 다시 연다. 규칙은 그때와 **완전히 같다** —
+  /// 기준점이 없으면 조용히 아무 일도 하지 않는다([_askNearbyStoreForAnchor]).
+  /// 버튼을 띄울지는 [canPickNearbyStore]가 미리 가른다.
+  Future<void> pickNearbyStoreForAnchor() => _askNearbyStoreForAnchor();
+
+  /// 지금 "가까운 매장" 목록을 만들 수 있는지. 만들 수 없으면 상위가 버튼을
+  /// 띄우지 않는다 — 눌러도 아무 일이 없는 버튼을 하단 바에 세우지 않는다.
+  ///
+  /// **목록을 실제로 만들어 보지 않는다.** 상위 build마다 불리는 값이라, 매장
+  /// 전부를 층 좌표로 되돌리는 일을 여기서 하면 프레임마다 반복된다. 전제
+  /// (도면·그래프·기준점)만 확인하고, 목록이 비는 드문 경우는 시트를 여는
+  /// 쪽이 조용히 되돌린다([_askNearbyStoreForAnchor]).
+  bool get canPickNearbyStore =>
+      _indoorEntered &&
+      _floorPlan != null &&
+      (_floorGraph?.nodes.isNotEmpty ?? false) &&
+      (_pdrTrailState.anchor != null || _estimatedFloorPoint() != null);
+
   /// 하단 바 "위치 지정" 버튼 진입점. PDR 세션이 꺼져 있으면 활성 층으로 시작
   /// 하고, 이미 켜져 있으면(다른 층에서 이어서 진입 등) 앵커만 다시 잡도록
   /// 대기 상태로 넘긴다. 실제 탭 처리는 [_onMapPressedForPdr]가 맡는다.
@@ -1961,8 +2027,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 위치를 다시 지정하는 것은 기준점을 새로 잡는 것이다. 세션을 이 층에 맞추고
     // 이전 기준점 기준의 궤적·보정을 비우는 일은 모두 여기서 처리한다.
     if (!await _bindPdrSessionToFloor(floor, announceFailure: true)) return;
+    // 무엇을 해야 하는지는 지도 위쪽 [PlacingAnchorHint]가 말한다. 스낵바로 한
+    // 번 더 말하면 같은 문장이 화면 위아래에 동시에 뜨고, 아래 것은 하단 바까지
+    // 가린다 — 정작 눌러야 할 지도를 덮는 셈이다.
     _setPlacingAnchor(true);
-    _showSnack('지도에서 현재 서 있는 위치를 탭해 지정해주세요.');
   }
 
   /// [xM], [yM]에 가장 가까운 그래프 노드 id. 실내 화면의 동명 헬퍼와 같은

@@ -413,6 +413,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
     _routeDestinationFocus.dispose();
     _routeOriginController.dispose();
     _routeDestinationController.dispose();
+    _placeLocationAttentionTimer?.cancel();
     super.dispose();
   }
 
@@ -1348,12 +1349,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 출발지가 실제 지점이면 그냥 맞바꾼다. 색인도 그래프도 필요 없다.
     if (origin != null) {
       _applySwappedEndpoints(newOrigin: destination, newDestination: origin);
-      await _startRoute(
-        origin: destination,
-        destination: origin,
-        // 사용자가 방금 직접 뒤집었다 — 위치가 옮겨간 것을 새삼 알릴 이유가 없다.
-        announceOriginAnchor: false,
-      );
+      await _startRoute(origin: destination, destination: origin);
       return;
     }
 
@@ -1367,11 +1363,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
     }
 
     _applySwappedEndpoints(newOrigin: destination, newDestination: replacement);
-    await _startRoute(
-      origin: destination,
-      destination: replacement,
-      announceOriginAnchor: false,
-    );
+    await _startRoute(origin: destination, destination: replacement);
   }
 
   /// 뒤집은 결과를 두 칸과 상태에 함께 반영한다.
@@ -1480,6 +1472,25 @@ class _MapShellScreenState extends State<MapShellScreen> {
     for (final mode in RoutePlanMode.values)
       if (mode != RoutePlanMode.transit || transitRepository.isAvailable) mode,
   ];
+
+  /// 지금 계획 중인 것이 **건물 안에서 건물 안으로** 가는 경로인지.
+  ///
+  /// 참이면 이동 수단 줄을 아예 띄우지 않는다. [_startRoute]가 이미 도보로
+  /// 못박는데 화면에는 세 수단이 떠 있었고, 직접 누르면 [_onTravelModePicked]가
+  /// 자동 선택을 건너뛰어 그 못이 풀렸다 — 실내 구간이 통째로 빠진 자동차
+  /// 경로가 그려진다. 눌리면 안 되는 버튼은 띄우지 않는다.
+  ///
+  /// **두 끝점을 다 본다.** 도착지만 보고 감췄더니 "서울창업허브 → 샤브미담"
+  /// 처럼 멀리서 건물 안 매장을 찍는 길에서 자동차·대중교통이 함께 사라졌다 —
+  /// 그건 실내 안내가 아니라 야외 이동이 대부분인 여정이다.
+  ///
+  /// 판정 규칙과 그 근거는 [isIndoorOnlyWalk]에 있다 — 도보 갈래를 정하는
+  /// [classifyWalkRoute] 바로 옆에 둬야 둘이 갈리지 않는다.
+  bool get _indoorOnlyRoutePlanned => isIndoorOnlyWalk(
+    origin: _selectedOrigin,
+    destination: _routeDraftDestination,
+    indoorContextActive: _indoorContextActive,
+  );
 
   /// 두 끝점이 검색어가 아니라 실제 위치로 확정됐는지.
   ///
@@ -1643,6 +1654,20 @@ class _MapShellScreenState extends State<MapShellScreen> {
       destination: walkTarget,
       label: '${destination.title}까지',
       origin: origin,
+      // 나머지 후보도 함께 넘겨 회색으로 깔린다. 고른 것 하나만 그리면 "다른
+      // 길도 있다"가 시트를 다시 열기 전까지 화면에서 사라진다.
+      //
+      // **다듬기 전 원본을 넘긴다.** 고른 경로만 문·하차 지점에 맞춰 끝을
+      // 손보는데([_withTransitWalkLegs]), 후보까지 같은 손질을 하려면 조회를
+      // 후보 수만큼 더 해야 한다. 회색 선이 말하는 것은 "대충 어디로 도는가"라
+      // 그 정밀도가 필요 없다.
+      // **고른 것은 뺀 나머지다.** `completed`는 picked를 다듬은 사본이라
+      // 목록 안의 원본과 같은 객체가 아니고, 그대로 넘기면 파란 선 밑에 자기
+      // 회색 선이 한 겹 더 깔린다.
+      alternatives: [
+        for (final candidate in routes.itineraries)
+          if (!identical(candidate, picked)) candidate,
+      ],
     );
     if (!mounted || indoorStore == null) return;
 
@@ -1977,13 +2002,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// [autoSelectMode]가 참이면 목적지 종류를 보고 수단을 정한다 — 사용자가 직접
   /// 고른 경우에는 거짓으로 불러 그 선택을 덮지 않는다.
   ///
-  /// [announceOriginAnchor]가 false면 "여기서 출발하는 것으로 봤다" 안내를 띄우지
-  /// 않는다(출발↔도착 맞바꾸기처럼 방금 직접 시킨 경우).
   Future<void> _startRoute({
     DirectionsCandidate? origin,
     required DirectionsCandidate destination,
     bool autoSelectMode = true,
-    bool announceOriginAnchor = true,
   }) async {
     // 안내가 시작되면 상단 바는 길찾기 두 칸이어야 한다. 매장 시트·검색 결과·
     // 지도 탭처럼 길찾기 바를 거치지 않고 들어오는 경로가 있어서, 여기서 한 번
@@ -2016,11 +2038,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
         await _startCarRoute(origin, destination);
         return;
       case RoutePlanMode.walk:
-        await _startWalkRoute(
-          origin: origin,
-          destination: destination,
-          announceOriginAnchor: announceOriginAnchor,
-        );
+        await _startWalkRoute(origin: origin, destination: destination);
     }
   }
 
@@ -2033,7 +2051,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
   Future<void> _startWalkRoute({
     required DirectionsCandidate? origin,
     required DirectionsCandidate destination,
-    required bool announceOriginAnchor,
   }) async {
     final map = _outdoorKey.currentState;
     final kind = classifyWalkRoute(
@@ -2050,7 +2067,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
         await map?.showIndoorRouteTo(
           _asPoi(destination),
           origin: origin == null ? null : _asPoi(origin),
-          announceOriginAnchor: announceOriginAnchor,
           // 실내 위치가 아직 없으면 그 사람은 건물 밖이다. 경로는 그려 주되
           // 현재 위치를 출발지 매장으로 잡지는 않는다 — 시작은 카드의
           // `안내 시작`이 맡는다.
@@ -2205,6 +2221,39 @@ class _MapShellScreenState extends State<MapShellScreen> {
     _outdoorKey.currentState?.startLocationPlacement();
   }
 
+  /// "위치 지정" 버튼을 지금 깜빡이는 중인지.
+  bool _placeLocationAttention = false;
+  Timer? _placeLocationAttentionTimer;
+
+  /// 실내 위치가 없는데 그 위치가 필요한 조작을 했다. **문장 대신 버튼을
+  /// 깜빡인다** — 이유는 [MapBottomBar.attentionOnPlaceLocation].
+  ///
+  /// 스스로 꺼진다. 사용자가 위치를 잡을 때까지 계속 깜빡이면 그 움직임이 곧
+  /// 배경이 되어 아무것도 알리지 못한다.
+  void _onNeedLocationPlacement() {
+    _placeLocationAttentionTimer?.cancel();
+    setState(() => _placeLocationAttention = true);
+    _placeLocationAttentionTimer = Timer(_placeLocationAttentionDuration, () {
+      _placeLocationAttentionTimer = null;
+      if (mounted) setState(() => _placeLocationAttention = false);
+    });
+  }
+
+  /// 깜빡이는 시간. 세 번쯤 깜빡이고 멎는다(주기 700ms × 왕복).
+  static const _placeLocationAttentionDuration = Duration(milliseconds: 2100);
+
+  /// "가까운 매장으로 위치 지정" 버튼(하단 바). 들어올 때 띄웠던 목록을 다시 연다.
+  ///
+  /// 검색을 먼저 닫는 이유는 [_onPlaceLocation]과 같다 — 시트가 검색 패널
+  /// 뒤로 들어가면 목록을 볼 수가 없다.
+  void _onPickNearbyStore() {
+    _closeSearch();
+    unawaited(
+      _outdoorKey.currentState?.pickNearbyStoreForAnchor() ??
+          Future<void>.value(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final routeVisible = _outdoorRouteVisible;
@@ -2291,6 +2340,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
       pickingOnMap: _routeMapPickTarget != null,
       onMapPointPicked: _onMapPointPicked,
       onLocationAnchored: _onLocationAnchored,
+      onNeedLocationPlacement: _onNeedLocationPlacement,
       // 실내 화면과 같은 선택을 넘긴다. 야외 지도도 실내 진입
       // 오버레이가 켜지면 같은 도면을 그리므로, 안 넘기면 칩을
       // 눌러도 강조가 안 뜬다.
@@ -2428,8 +2478,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
       canSwapRouteEndpoints: _canSwapRouteEndpoints,
       selectedTravelMode: _travelMode,
       // 이동수단은 출발·도착이 모두 확정된 뒤에만 고른다. 입력 중에 먼저
-      // 노출하면 아직 계산할 수 없는 버튼이 카드 높이만 키운다.
-      availableTravelModes: _routeEndpointsReady
+      // 노출하면 아직 계산할 수 없는 버튼이 카드 높이만 키운다. 건물 안에서
+      // 건물 안으로 가는 경로는 수단이 도보 하나로 못박혀 있어 아예 띄우지
+      // 않는다([_indoorOnlyRoutePlanned]).
+      availableTravelModes: _routeEndpointsReady && !_indoorOnlyRoutePlanned
           ? _availableTravelModes
           : const [],
       onTravelModeSelected: (mode) => unawaited(_onTravelModePicked(mode)),
@@ -2571,6 +2623,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
         // 버튼을 노출한다. 오버레이가 꺼진 순수 야외 상태에서는 지정할
         // 층 정보가 없어 눌러도 의미가 없다.
         showPlaceLocation: _outdoorIndoorEntered,
+        attentionOnPlaceLocation: _placeLocationAttention,
+        // 목록을 만들 수 있을 때만 띄운다 — 기준점이 없으면 눌러도 아무 일이
+        // 없는 버튼이 된다. 판단은 목록을 실제로 만드는 쪽이 한다.
+        onPickNearbyStore:
+            (_outdoorKey.currentState?.canPickNearbyStore ?? false)
+            ? _onPickNearbyStore
+            : null,
       ),
     );
   }

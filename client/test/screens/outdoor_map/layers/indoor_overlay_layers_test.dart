@@ -6,6 +6,14 @@ import 'package:navigation_client/map/icon/category_map_icon.dart';
 import 'package:navigation_client/map/style/category_map_filter.dart';
 import 'package:navigation_client/map/style/floor_facility_style.dart';
 import 'package:navigation_client/map/style/label_style.dart';
+import 'package:navigation_client/map/style/palette.dart';
+
+/// `#RRGGBB`의 상대 밝기. 팔레트가 회색조 한 계열이라 채널 평균으로 충분하다 —
+/// 여기서 가리는 것은 "어느 쪽이 더 밝은가" 하나다.
+int _luminance(String hex) {
+  final value = int.parse(hex.substring(1), radix: 16);
+  return ((value >> 16 & 0xFF) + (value >> 8 & 0xFF) + (value & 0xFF)) ~/ 3;
+}
 
 /// 실기기에서 건물이 **불투명한 검정 덩어리**로 덮이던 회귀를 막는 테스트.
 ///
@@ -62,14 +70,30 @@ void main() {
     });
 
     test('못 걷는 면은 통로와 매장 사이 밝기이고 경계선을 갖는다', () {
-      // 면끼리는 통로(#FFFFFF)와 9/255 차이라 실기기에서 거의 안 보인다 —
-      // 구분을 만드는 것은 경계선이다(palette.dart 상단 규칙). 색이 매장 fill과
-      // 같아지면 걸을 수 없는 곳이 매장처럼 읽힌다.
+      // **값이 아니라 순서를 못 박는다.** 팔레트에 hex를 베껴 두면 한쪽만
+      // 고쳐지는 날이 온다. 지켜야 하는 것은 "통로 > 못 걷는 면 > 매장" 순서와
+      // "구분은 경계선이 만든다"는 규칙이다(`docs/client/map-style-rules.md`).
       final json = wireJson(indoorNonWalkableProps(fadeExpr));
-      expect(json['fill-color'], '#F6F4F1');
+      expect(json['fill-color'], mapNonWalkableFill);
       expect(json['fill-outline-color'], isNotNull);
       expect(json['fill-outline-color'], isNot(json['fill-color']));
-      expect(json['fill-color'], isNot('#F1EEEA'));
+      // 매장과 같아지면 걸을 수 없는 곳이 매장처럼 읽힌다.
+      expect(json['fill-color'], isNot(mapStoreFill));
+      expect(
+        _luminance(mapFootprintFill),
+        greaterThan(_luminance(mapNonWalkableFill)),
+        reason: '통로가 가장 밝아야 한다 — 밝을수록 걷는 곳',
+      );
+      expect(
+        _luminance(mapNonWalkableFill),
+        greaterThan(_luminance(mapStoreFill)),
+        reason: '배경이 매장보다 진하면 빈 공간이 먼저 눈에 들어온다',
+      );
+      // 경계선은 매장 경계선보다 옅다 — 배경이 매장보다 또렷하면 안 된다.
+      expect(
+        _luminance(mapNonWalkableOutline),
+        greaterThan(_luminance(mapStoreOutline)),
+      );
     });
 
     test('건물 폴리곤은 검정이 아닌 테마 색이다', () {

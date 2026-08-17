@@ -357,7 +357,12 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
       return;
     }
 
-    setState(() => _isLoading = true);
+    // **갈아 끼울 때는 로딩 표시를 두지 않는다.** 이전 매장의 본문이 그대로 떠
+    // 있어 알릴 기다림이 없고, 손잡이 아래에서 도는 원은 "시트가 통째로 바뀌는
+    // 중"이라는 잘못된 신호가 된다. 처음 열 때만(보여 줄 본문이 아직 없을 때만)
+    // 켠다. 근거는 `docs/client/kakao-map-indoor-observation.md`의
+    // "교체할 때 로딩 표시를 두지 않는다".
+    if (_detail == null) setState(() => _isLoading = true);
     try {
       final detail = await (widget.repository ?? placeDetailRepository)
           .getPlaceDetail(widget.buildingId, placeId);
@@ -581,14 +586,13 @@ class _NoOverscrollIndicator extends MaterialScrollBehavior {
   ) => child;
 }
 
-/// 손잡이 **바로 아래**에 놓이는 얇은 로딩 줄.
+/// 손잡이 **바로 아래**에 놓이는 얇은 로딩 줄. **처음 열 때만 뜬다** —
+/// 다른 매장으로 갈아 끼울 때는 이전 본문이 그대로 있어 알릴 기다림이 없다
+/// ([_PlaceDetailSheetState._loadDetailContent]).
 ///
 /// 예전에는 본문에 회색 막대를 놓고, 갈아 끼울 때는 시트 전체를 페이드했다.
 /// 전체 페이드는 내용이 사라졌다 다시 뜨는 것처럼 보여 번쩍였다 — 시트가
 /// 그대로 있는데 화면만 깜빡이는 셈이라 오히려 더 눈에 띄었다.
-///
-/// 지금은 **시트도 내용도 그대로 두고** 이 줄만 켠다. 손잡이 아래는 눈이 이미
-/// 시트 위쪽을 보고 있는 자리라 알아채기 쉽고, 본문을 밀지 않는다.
 ///
 /// 로딩이 끝난 뒤에는 높이도 없앤다. 보이지 않는 18dp 슬롯을 남겨 두면 핸들과
 /// 헤더 사이가 벌어져 상세 시트의 첫 줄이 아래로 처져 보인다.

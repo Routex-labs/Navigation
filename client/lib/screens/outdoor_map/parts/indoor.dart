@@ -253,7 +253,7 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
         // _setIndoorEntered가 이 표식을 보므로 **먼저** 세운다.
         _indoorEnteredByGps = true;
         _setIndoorEntered(true);
-        unawaited(_startTrackingFromGpsFix(position));
+        unawaited(_askEntryFloorThenTrack(position));
       case GpsBuildingVerdict.outside:
         // 건물을 확실히 벗어났다. 다음 진입을 다시 자동으로 잡을 수 있게 한다.
         _gpsEntryArmed = true;
@@ -653,6 +653,12 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
     // 사용자가 건물을 직접 탭해 연 도면까지 GPS가 제멋대로 닫는다
     // ([_applyBuildingVerdict]의 outside 갈래).
     if (!value) _indoorEnteredByGps = false;
+    // **정말로 나갔을 때만** 층 질문을 다시 열어 둔다. 도면만 접은 사용자는 같은
+    // 자리에 그대로 있어서, 다시 펼 때마다 묻는 것은 답을 아는 질문을 되묻는 것이다.
+    if (!value && leftBuilding) {
+      _entryFloorAsked = false;
+      _nearbyStoreAsked = false;
+    }
     // 실내 안내를 켜고 끄는 유일한 지점이다.
     //
     // 예전에는 오버레이가 꺼져도 복도 보정이 계속 돌았다 — 화면에 안 보일 뿐
@@ -994,12 +1000,28 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
     return clamped;
   }
 
-  /// 선택된 매장의 기존 카테고리 아이콘만 포인트 색으로 바꾼다.
+  /// 고른 매장을 **폴리곤 칠 + 아이콘 색** 두 가지로 표시한다.
   ///
-  /// 별도 핀을 세우지 않는다. 같은 장소에 기존 아이콘과 파란 핀이 함께 서면
-  /// 무엇이 실제 POI이고 무엇이 선택 장식인지 위계가 갈라진다.
+  /// 아이콘은 "이거 하나"를 콕 집고, 칠은 "여기까지"를 말한다 — 둘이 다른 일을
+  /// 해서 함께 쓴다. 별도 핀은 세우지 않는다: 같은 장소에 기존 아이콘과 핀이
+  /// 함께 서면 무엇이 실제 POI이고 무엇이 선택 장식인지 위계가 갈라진다.
+  ///
+  /// 폴리곤이 없는 매장(점만 있는 시설)은 칠할 것이 없어 아이콘 색만 바뀐다 —
+  /// 칠 하나만 쓰던 시절 그런 자리에서 **아무 일도 안 일어나던** 것이 아이콘
+  /// 색을 함께 두는 이유다.
   Future<void> _syncHighlightLayer() async {
-    if (_mapController == null || !_styleReady) return;
+    final controller = _mapController;
+    if (controller == null || !_styleReady) return;
+    final storeId = _highlightedStoreId;
+    final plan = _floorPlan;
+    final store = (storeId == null || plan == null)
+        ? null
+        : plan.stores.where((s) => s.id == storeId).firstOrNull;
+    await syncPolygonSource(
+      controller,
+      kOutdoorHighlightSourceId,
+      store?.polygon,
+    );
     await _syncIndoorOverlayFade(scope: IndoorOverlaySyncScope.labels);
   }
 

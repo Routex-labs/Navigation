@@ -7,7 +7,15 @@
 part of '../outdoor_map_screen.dart';
 
 extension OutdoorMapUi on OutdoorMapBodyState {
-  void _showSnack(String message) => _showSnackGuarded(message, replace: false);
+  void _showSnack(String message, {Duration? duration}) =>
+      _showSnackGuarded(message, replace: false, duration: duration);
+
+  /// **읽고 나서 할 일이 없는** 한 줄 안내가 떠 있는 시간.
+  ///
+  /// 기본 4초는 "되돌리기가 붙은 알림"의 시간이라([RoutexFeedbackTiming]) 손이
+  /// 닿을 여유까지 재 둔 값이다. 누를 것이 없는 안내를 그만큼 붙들면 하단 바를
+  /// 그 시간 내내 가린다 — 사용자는 그동안 다른 조작을 못 한다.
+  static const _briefSnackDuration = RoutexFeedbackTiming.toastVisibility;
 
   /// 지금 떠 있는 안내를 걷어내고 새 안내를 띄운다.
   ///
@@ -25,18 +33,66 @@ extension OutdoorMapUi on OutdoorMapBodyState {
   /// 된다(replace 계열은 이전 것을 걷어내고 새로 띄우므로 특히 그렇다). 시각
   /// 기억 대신 "지금 그 문구가 떠 있는가"를 기준으로 거른다 — 닫힌 뒤의 정당한
   /// 재표시는 막지 않고, 테스트의 가짜 시계와도 어긋나지 않는다.
-  void _showSnackGuarded(String message, {required bool replace}) {
+  void _showSnackGuarded(
+    String message, {
+    required bool replace,
+    Duration? duration,
+  }) {
     if (!mounted) return;
     if (_visibleSnackMessage == message) return;
     final messenger = ScaffoldMessenger.of(context);
     if (replace) messenger.hideCurrentSnackBar();
     _visibleSnackMessage = message;
     messenger
-        .showSnackBar(SnackBar(content: Text(message)))
+        .showSnackBar(
+          SnackBar(
+            content: Text(message),
+            duration: duration ?? const Duration(seconds: 4),
+            // **하단 바 위로 띄운다.** 기본 SnackBar는 화면 맨 아래에 붙어
+            // "위치 지정"·"위치 보정" 버튼을 통째로 덮는데, 이 안내들이 하필
+            // 그 버튼을 누르라고 말하는 문장이다 — 읽고 나서 누를 것을 자기가
+            // 가리고 있었다. ETA 카드가 뜨면 버튼과 함께 그만큼 더 올라간다.
+            behavior: SnackBarBehavior.floating,
+            margin: EdgeInsets.only(
+              left: RoutexSpacing.componentPadding,
+              right: RoutexSpacing.componentPadding,
+              bottom:
+                  mapShellBottomChromePx +
+                  (_hasAnyRouteVisible ? bottomBarLiftPx : 0),
+            ),
+          ),
+        )
         .closed
         .whenComplete(() {
           if (_visibleSnackMessage == message) _visibleSnackMessage = null;
         });
+  }
+
+  /// 지도 축척 막대. 카메라가 움직일 때마다 값이 바뀌므로 컨트롤러를 직접
+  /// 듣는다 — `trackCameraPosition: true`라 확대/이동마다 notify가 온다.
+  /// `onCameraIdle`만 보면 손가락을 떼기 전까지 옛 값이 남는다.
+  ///
+  /// [fallbackLatitude]는 카메라를 아직 못 읽었을 때 쓴다. 축척은 위도에 따라
+  /// 달라지지만 한 도시 안에서는 차이가 0.1%도 안 돼, 첫 프레임의 근사로 충분하다.
+  Widget _buildScaleBar(double fallbackLatitude) {
+    final controller = _mapController;
+    if (controller == null) return const SizedBox.shrink();
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (_, _) {
+        final camera = controller.cameraPosition;
+        if (camera == null) return const SizedBox.shrink();
+        return MapScaleBar(
+          step: mapScaleStepFor(
+            metersPerPixel: metersPerPixelAt(
+              zoom: camera.zoom,
+              latitude: camera.target.latitude,
+            ),
+            maxWidthPx: kMapScaleBarMaxWidthPx,
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildBody() {
@@ -152,7 +208,8 @@ extension OutdoorMapUi on OutdoorMapBodyState {
         // 실내까지 어두워지는 문제가 있었다. 지금은 세계를 덮는 outer ring +
         // 건물 footprint를 hole로 뚫은 폴리곤을 스크림 레이어로 그리고, 실내
         // 오버레이 아래에 삽입해 건물 안쪽만 밝게 스포트라이트된다.
-        // **낮은 강도로 둔다.** 예전에는 단색 노랑 알약에 같은 색 글로우까지
+
+        // GPS 배지는 **낮은 강도로 둔다.** 예전에는 단색 노랑 알약에 같은 색 글로우까지
         // 얹혀 있어, 지도 위에서 가장 시끄러운 것이 "GPS가 조금 부정확하다"였다.
         // 경로를 벗어났다는 알림([EtaCard]의 wrong-way, 빨강)보다 세면 무엇이
         // 급한지가 뒤집힌다. 연한 배경 + 같은 계열 글자로 내린다.
@@ -170,6 +227,22 @@ extension OutdoorMapUi on OutdoorMapBodyState {
               surface: RoutexBadgeSurface.onMap,
             ),
           ),
+
+        // 축척 막대는 **위치 보정·위치 지정 버튼 바로 위**다. 그 두 버튼과 같은
+        // 오른쪽 끝선(16)에 세워 한 열로 읽히게 하고, ETA 카드가 뜨면 버튼과
+        // 함께 올라간다 — 따로 두면 카드가 막대만 덮는다.
+        AnimatedPositioned(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          right: RoutexSpacing.componentPadding,
+          bottom:
+              mapShellBottomChromePx +
+              (indoorRouteVisible ? bottomBarLiftPx : 0),
+          child: SafeArea(
+            top: false,
+            child: IgnorePointer(child: _buildScaleBar(initialCenter.latitude)),
+          ),
+        ),
 
         // 건물을 못 불러오면 층 선택기·위치 지정·실내 진입·실내 도면이 통째로
         // 사라진다. 그 이유를 화면에 남기고 재시도 경로를 준다 — 예전에는 이
@@ -251,14 +324,14 @@ extension OutdoorMapUi on OutdoorMapBodyState {
         // 실내 진입 오버레이 — 야외 지도 위 좌측 하단에 세로 층 선택기를 얹어
         // 실내 화면과 동일한 위치·디자인으로 층을 훑을 수 있게 한다.
         //
-        // **안내 중에는 접는다.** 안내가 도는 동안 층은 사용자가 고르는 것이
-        // 아니라 경로가 정한다 — 층이 바뀌는 순간 [_enqueueFloorTransition]이
-        // 도면을 갈아 끼운다. 안내 중에 남겨 두면 사용자가 고른 층과 경로가
-        // 가리키는 층이 어긋난 화면이 생기고, 그 상태를 정리할 규칙이 없다.
-        // 판정이 틀렸을 때의 출구는 안내 종료다(그러면 선택기가 다시 펴진다) —
-        // 판정기가 스스로 아니라고 본 경우는 묻지 않고 화면이 되돌린다.
+        // **"안내 시작" 카드가 뜨는 순간 접는다**([_guidancePlanned]). 카드가
+        // 뜬 뒤로 층은 사용자가 고르는 것이 아니라 경로가 정한다 — 층이 바뀌는
+        // 순간 [_enqueueFloorTransition]이 도면을 갈아 끼운다. 남겨 두면
+        // 사용자가 고른 층과 경로가 가리키는 층이 어긋난 화면이 생기고, 그
+        // 상태를 정리할 규칙이 없다. 판정이 틀렸을 때의 출구는 카드를 닫거나
+        // 안내를 끝내는 것이다(그러면 선택기가 다시 펴진다).
         if (_indoorEntered &&
-            !_guidanceActive &&
+            !_guidancePlanned &&
             _building != null &&
             _activeFloor != null &&
             _building!.floors.isNotEmpty)
