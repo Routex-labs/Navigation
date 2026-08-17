@@ -94,6 +94,41 @@ extension OutdoorMapGps on OutdoorMapBodyState {
     _updateRoute(position, fromPositionStream: true);
   }
 
+  /// 자동 실내 진입 직후, **층을 먼저 묻고** 그 층으로 실내 위치를 잡는다.
+  ///
+  /// GPS는 건물 안이라는 것까지만 말한다. 그대로 두면 [_activeFloor]가 건물의
+  /// `default_floor`(1F)로 굳어, B2에 서 있는 사람의 위치와 경로가 1층에 찍힌다.
+  ///
+  /// **묻는 것은 진입 한 번에 한 번뿐이다**([_entryFloorAsked]). 벽 근처에서
+  /// 판정이 오가면 이 화면이 되풀이해 뜨는데, 그러면 지도에 닿을 수가 없다.
+  /// 건너뛰면(null) 지금까지와 같이 기본 층으로 간다 — 층은 선택기로 언제든
+  /// 바꿀 수 있고, 여기서 막으면 판정이 틀렸을 때의 출구가 사라진다.
+  Future<void> _askEntryFloorThenTrack(Position position) async {
+    final floor = await _askEntryFloor();
+    if (!mounted || !_indoorEntered) return;
+    // 층 전환은 chip을 누른 것과 **같은 경로**를 탄다 — 도면 교체와 그 층
+    // 외곽선에 맞춘 카메라 정렬이 거기 붙어 있다([_onFloorChipSelected]).
+    if (floor != null && floor != _activeFloor) {
+      await _onFloorChipSelected(floor);
+      if (!mounted || !_indoorEntered) return;
+    }
+    await _startTrackingFromGpsFix(position);
+  }
+
+  /// 층을 묻는다. 물을 이유가 없으면(이미 물었다·건물을 모른다·층이 하나뿐)
+  /// 묻지 않고 null.
+  Future<String?> _askEntryFloor() async {
+    if (_entryFloorAsked) return null;
+    final building = _building;
+    if (building == null || building.floors.length < 2) return null;
+    _entryFloorAsked = true;
+    return showEntryFloorPrompt(
+      context,
+      buildingName: building.name,
+      floors: building.floors,
+    );
+  }
+
   /// 자동 실내 진입 직후, 실내 위치(PDR 앵커)를 잡고 센서 추적을 시작한다.
   ///
   /// **시작점은 방금 그 GPS 좌표에서 가장 가까운 통로 지점**이고, 스냅이 안 되면

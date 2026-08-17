@@ -253,7 +253,7 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
         // _setIndoorEntered가 이 표식을 보므로 **먼저** 세운다.
         _indoorEnteredByGps = true;
         _setIndoorEntered(true);
-        unawaited(_startTrackingFromGpsFix(position));
+        unawaited(_askEntryFloorThenTrack(position));
       case GpsBuildingVerdict.outside:
         // 건물을 확실히 벗어났다. 다음 진입을 다시 자동으로 잡을 수 있게 한다.
         _gpsEntryArmed = true;
@@ -653,6 +653,9 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
     // 사용자가 건물을 직접 탭해 연 도면까지 GPS가 제멋대로 닫는다
     // ([_applyBuildingVerdict]의 outside 갈래).
     if (!value) _indoorEnteredByGps = false;
+    // **정말로 나갔을 때만** 층 질문을 다시 열어 둔다. 도면만 접은 사용자는 같은
+    // 자리에 그대로 있어서, 다시 펼 때마다 묻는 것은 답을 아는 질문을 되묻는 것이다.
+    if (!value && leftBuilding) _entryFloorAsked = false;
     // 실내 안내를 켜고 끄는 유일한 지점이다.
     //
     // 예전에는 오버레이가 꺼져도 복도 보정이 계속 돌았다 — 화면에 안 보일 뿐

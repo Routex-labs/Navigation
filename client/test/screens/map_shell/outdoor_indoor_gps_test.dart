@@ -13,6 +13,8 @@ import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:navigation_client/screens/outdoor_map/widgets/floor_selector.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../support/entry_floor_prompt_helper.dart';
+
 /// 건물 안에서는 GPS를 **화면에 쓰지 않는다**는 규칙에 대한 회귀 테스트.
 ///
 /// 예전에는 야외 지도가 실내 진입 오버레이를 켠 뒤에도 GPS 좌표를 그대로 썼고,
@@ -188,6 +190,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     await drain(tester);
     expect(find.byType(FloorSelector), findsOneWidget);
+    // 자동 진입은 "몇 층에 계신가요?"를 먼저 띄운다. 그 화면이 지도를 덮으므로
+    // 아래 하단 바 탭을 시험하려면 먼저 걷어야 한다.
+    await dismissEntryFloorPrompt(tester);
 
     // 자동 진입이 띄운 '건물 감지 중...' 스낵바가 하단 바를 덮고 있으므로,
     // 사라질 때까지(기본 4초 + 퇴장 애니메이션) 프레임을 진행한 뒤에 누른다.

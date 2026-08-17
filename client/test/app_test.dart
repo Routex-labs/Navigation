@@ -6,6 +6,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'support/entry_floor_prompt_helper.dart';
+
 import 'package:navigation_client/theme/app_theme.dart';
 import 'package:routex_design_system/routex_design_system.dart';
 import 'package:navigation_client/app.dart';
@@ -240,6 +242,10 @@ void main() {
       // 채운 뒤에야 결과가 뜨면 이미 끝난 작업을 계속 보여주는 셈이다).
       // 이 fixture의 mock 층에는 navigation_graph가 없어 결과가 즉시 나오므로,
       // 여기서 보이는 것은 진행 문구가 아니라 수동 지정 안내다.
+      //
+      // 다만 그 작업은 **층을 답한 뒤에** 시작한다 — 자동 진입이 "몇 층에
+      // 계신가요?"를 먼저 띄운다.
+      await dismissEntryFloorPrompt(tester);
       expect(find.textContaining('위치 지정으로 직접 지정해주세요'), findsOneWidget);
 
       await tester.pumpAndSettle();

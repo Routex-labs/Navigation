@@ -66,6 +66,7 @@ import '../../map/camera/floor_camera_bounds.dart';
 import '../../map/style/category_map_filter.dart';
 import '../../map/icon/category_map_icon.dart';
 import '../../map/style/floor_facility_style.dart';
+import 'widgets/entry_floor_prompt.dart';
 import 'widgets/floor_selector.dart';
 import 'widgets/floor_switch_escalator_motif.dart';
 import 'widgets/guidance_recenter_button.dart';
@@ -1009,6 +1010,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 도면을 연 경우까지 자동으로 닫으면, 입구 앞에 서서 층 도면을 보려던 사람의
   /// 화면이 신호가 잡히는 순간 제멋대로 닫힌다.
   bool _indoorEnteredByGps = false;
+
+  /// 이번 진입에서 "몇 층에 계신가요?"를 이미 물었는지([_askEntryFloor]).
+  ///
+  /// **건물을 실제로 나갈 때만 되돌린다.** 벽 근처에서는 판정이 안팎을 오가는데,
+  /// 매 진입마다 물으면 그 화면이 되풀이해 떠 지도에 닿을 수가 없다. 도면만 접은
+  /// 경우(`returnToOutdoorView`)도 되돌리지 않는다 — 같은 자리에 그대로 있다.
+  bool _entryFloorAsked = false;
 
   /// GPS 구독을 [_gpsTrackingWanted] 상태에 맞춘다. 구독 시작/해제의 유일한
   /// 진입점이라 중복 구독이나 해제 누락이 생기지 않는다.
