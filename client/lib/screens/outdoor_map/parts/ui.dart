@@ -39,6 +39,33 @@ extension OutdoorMapUi on OutdoorMapBodyState {
         });
   }
 
+  /// 지도 축척 막대. 카메라가 움직일 때마다 값이 바뀌므로 컨트롤러를 직접
+  /// 듣는다 — `trackCameraPosition: true`라 확대/이동마다 notify가 온다.
+  /// `onCameraIdle`만 보면 손가락을 떼기 전까지 옛 값이 남는다.
+  ///
+  /// [fallbackLatitude]는 카메라를 아직 못 읽었을 때 쓴다. 축척은 위도에 따라
+  /// 달라지지만 한 도시 안에서는 차이가 0.1%도 안 돼, 첫 프레임의 근사로 충분하다.
+  Widget _buildScaleBar(double fallbackLatitude) {
+    final controller = _mapController;
+    if (controller == null) return const SizedBox.shrink();
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (_, _) {
+        final camera = controller.cameraPosition;
+        if (camera == null) return const SizedBox.shrink();
+        return MapScaleBar(
+          step: mapScaleStepFor(
+            metersPerPixel: metersPerPixelAt(
+              zoom: camera.zoom,
+              latitude: camera.target.latitude,
+            ),
+            maxWidthPx: kMapScaleBarMaxWidthPx,
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildBody() {
     final position = _position;
     final accuracy = position?.accuracy ?? 0;
@@ -152,24 +179,38 @@ extension OutdoorMapUi on OutdoorMapBodyState {
         // 실내까지 어두워지는 문제가 있었다. 지금은 세계를 덮는 outer ring +
         // 건물 footprint를 hole로 뚫은 폴리곤을 스크림 레이어로 그리고, 실내
         // 오버레이 아래에 삽입해 건물 안쪽만 밝게 스포트라이트된다.
-        // **낮은 강도로 둔다.** 예전에는 단색 노랑 알약에 같은 색 글로우까지
+
+        // GPS 배지는 **낮은 강도로 둔다.** 예전에는 단색 노랑 알약에 같은 색 글로우까지
         // 얹혀 있어, 지도 위에서 가장 시끄러운 것이 "GPS가 조금 부정확하다"였다.
         // 경로를 벗어났다는 알림([EtaCard]의 wrong-way, 빨강)보다 세면 무엇이
         // 급한지가 뒤집힌다. 연한 배경 + 같은 계열 글자로 내린다.
         //
         // **누를 수 없다.** 배지는 지금 상태를 읽는 표시일 뿐이고, 사용자가
         // 할 수 있는 일이 없다 — 정확도는 기다리면 회복된다.
-        if (lowAccuracy)
-          const Positioned(
-            top: 76,
-            left: 12,
-            child: RoutexBadge(
-              label: 'GPS 신호 약함',
-              tone: RoutexBadgeTone.warning,
-              icon: Icons.warning_amber_rounded,
-              surface: RoutexBadgeSurface.onMap,
-            ),
+        //
+        // 축척 막대는 **GPS 배지 바로 위 칸**이다. 둘을 한 Column에 넣어 배지가
+        // 뜨고 지는 것과 무관하게 막대가 같은 자리에 남게 한다 — 따로 두면 배지가
+        // 사라질 때 막대만 공중에 뜬 것처럼 보이고, 자리도 어긋난다.
+        Positioned(
+          top: 76,
+          left: 12,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildScaleBar(initialCenter.latitude),
+              if (lowAccuracy) ...[
+                const SizedBox(height: 6),
+                const RoutexBadge(
+                  label: 'GPS 신호 약함',
+                  tone: RoutexBadgeTone.warning,
+                  icon: Icons.warning_amber_rounded,
+                  surface: RoutexBadgeSurface.onMap,
+                ),
+              ],
+            ],
           ),
+        ),
 
         // 건물을 못 불러오면 층 선택기·위치 지정·실내 진입·실내 도면이 통째로
         // 사라진다. 그 이유를 화면에 남기고 재시도 경로를 준다 — 예전에는 이
