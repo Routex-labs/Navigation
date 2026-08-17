@@ -513,13 +513,24 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 포기하고 카메라는 첫 GPS 좌표로 간다(실기기 로그로 확인).
   final _styleReadySignal = Completer<void>();
 
-  /// [focusStore]가 초기 카메라를 예약해 둔 동안만 참이다.
+  /// 초기 카메라를 누군가 이미 가져갔다.
   ///
-  /// 스타일을 기다리는 **동안에도** 첫 GPS 센터링을 막아야 한다. 안 막으면
-  /// 카메라가 사용자 위치로 갔다가 매장으로 다시 가 두 번 튄다. 카메라를
-  /// 실제로 잡으면 `_didInitialCenter`가 그 일을 이어받고, 중간에 포기하면
-  /// 풀어 준다 — 걸린 채 남으면 첫 좌표 센터링이 영영 막힌다.
-  bool _storeFocusOwnsCamera = false;
+  /// 첫 GPS 좌표가 올 때까지 **일이 끝나 있으리라는 보장이 없다.** 공유 링크는
+  /// store-index 조회와 층 전환을 거쳐 [focusStore]에 닿기까지 수백 ms가 걸리는데,
+  /// 그 사이 좌표가 오면 화면이 사용자 위치로 튄다(실기기 로그로 확인). 그래서
+  /// 예약은 **일을 시작하는 자리**에서 건다 — [claimInitialCamera].
+  ///
+  /// 카메라를 실제로 잡으면 `_didInitialCenter`가 그 일을 이어받고, 중간에
+  /// 포기하면 풀어 준다 — 걸린 채 남으면 첫 좌표 센터링이 영영 막힌다.
+  bool _initialCameraClaimed = false;
+
+  /// 링크처럼 **지도 밖에서 시작하는 일**이 초기 카메라를 예약한다.
+  ///
+  /// 반드시 [releaseInitialCamera]와 짝을 이뤄야 한다. 실패해서 아무것도 열지
+  /// 못했는데 예약이 남으면 그 세션 내내 첫 좌표 센터링이 막힌다.
+  void claimInitialCamera() => _initialCameraClaimed = true;
+
+  void releaseInitialCamera() => _initialCameraClaimed = false;
 
   /// PDR 마커 source 갱신은 센서·보정·층 전환에서 동시에 들어올 수 있다.
   ///
@@ -1773,7 +1784,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
     // **여기서부터 카메라는 이 포커스의 것이다.** 아래에서 층 도면과 스타일을
     // 기다리는데, 그 사이 첫 GPS 좌표가 오면 화면을 사용자 위치로 가져간다.
-    _storeFocusOwnsCamera = true;
+    _initialCameraClaimed = true;
 
     // **예약은 어느 경로로 나가든 반드시 푼다.** 걸어 둔 채 나가면 첫 좌표
     // 센터링이 영영 막혀 카메라가 서울시청(fallback)에 남는다. return이 여럿이고
@@ -1866,7 +1877,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         duration: _storeFocusDuration,
       );
     } finally {
-      _storeFocusOwnsCamera = false;
+      _initialCameraClaimed = false;
     }
   }
 

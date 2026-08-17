@@ -1179,6 +1179,20 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 공유한 사람의 의도로 읽는다. 정확히 그 id가 없으면 아무것도 열지 않고 지금
   /// 지도에 머문다.
   Future<void> _openPlaceFromLink(PlaceLink link) async {
+    // **초기 카메라는 이 링크의 것이다.** 여기서부터 매장을 그리기까지 색인 조회와
+    // 층 전환을 거치는데, 그 사이 첫 GPS 좌표가 오면 화면이 사용자 위치로 튄다.
+    // 예약을 지도 쪽 포커스 시점에 걸었더니 그보다 늦어 못 막았다(실기기 확인).
+    final map = _outdoorKey.currentState?..claimInitialCamera();
+    try {
+      await _openPlaceFromLinkInner(link);
+    } finally {
+      // 열었으면 지도가 `_didInitialCenter`로 이어받았고, 못 열었으면 첫 좌표
+      // 센터링을 되살려야 한다. 어느 쪽이든 예약은 여기서 끝난다.
+      map?.releaseInitialCamera();
+    }
+  }
+
+  Future<void> _openPlaceFromLinkInner(PlaceLink link) async {
     if (link.buildingId != _buildingId) {
       _showLinkFailure();
       return;

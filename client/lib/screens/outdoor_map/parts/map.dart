@@ -94,7 +94,7 @@ extension OutdoorMapMap on OutdoorMapBodyState {
     if (_pendingCenterOnPosition &&
         _position != null &&
         _outdoorGpsVisible &&
-        !_storeFocusOwnsCamera) {
+        !_initialCameraClaimed) {
       _pendingCenterOnPosition = false;
       // 첫 좌표 센터링은 여기서 끝났다. 표시해 두지 않으면 다음 좌표가 올 때
       // [_handlePosition]의 갈래가 한 번 더 옮겨 화면이 두 번 튄다.
