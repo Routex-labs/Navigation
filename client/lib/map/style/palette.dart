@@ -17,6 +17,19 @@ const mapFootprintOutline = '#C8C1B8';
 /// 매장 폴리곤 면. 경계선이 얹힐 바탕을 주는 정도로만 낮춘다.
 const mapStoreFill = '#F1EEEA';
 
+/// 걸을 수 없는 면(아트리움 보이드·지하 기둥·조경) 면.
+///
+/// 통로(`mapFootprintFill`)와 매장(`mapStoreFill`) **사이**에 두되 매장보다 밝다 —
+/// 카카오 실측이 그렇고(통로 대비 매장 쪽으로 65% 지점), 걸을 수 없다고 매장보다
+/// 어두워지면 "밝을수록 걷는 곳"이라는 위 규칙이 뒤집힌다. 실측표는
+/// `docs/client/map-style-rules.md`.
+const mapNonWalkableFill = '#F6F4F1';
+
+/// 못 걷는 면 경계선. 면끼리는 통로와 9/255 차이뿐이라 **이 선이 구분을 만든다**
+/// (파일 상단 규칙). 매장 경계선(`mapStoreOutline`)보다 옅게 둬서 매장이 계속 더
+/// 강하게 읽히게 한다 — 배경이 매장보다 또렷하면 안 된다.
+const mapNonWalkableOutline = '#E4DFD8';
+
 /// 매장 경계선. 도면에서 실제로 구분을 만드는 값이라 면과 명도를 크게 벌린다.
 ///
 /// `fillOutlineColor`는 **두께가 1px 고정**이라, 색으로 모자랄 때만 line 레이어를

@@ -59,6 +59,18 @@ FillLayerProperties indoorFootprintProps(List<Object> fadeExpr) =>
       fillOpacity: fadeExpr,
     );
 
+/// 걸을 수 없는 면(보이드·기둥·조경) fill. 타일의 `non_walkable` 소스 레이어를
+/// 그린다.
+///
+/// **kind(void|pillar|feature)로 색을 가르지 않는다** — 카카오 실측에서 보이드와
+/// 조경이 같은 회색 하나이고, 기둥만 다른 값을 주면 근거 없는 숫자가 된다.
+FillLayerProperties indoorNonWalkableProps(List<Object> fadeExpr) =>
+    FillLayerProperties(
+      fillColor: mapNonWalkableFill,
+      fillOutlineColor: mapNonWalkableOutline,
+      fillOpacity: fadeExpr,
+    );
+
 /// 실내 오버레이의 매장 fill. 색은 [map_palette.dart]에서 온다 — 여기에 hex를
 /// 직접 박으면 층 전환 사이에 같은 매장이 다른 색으로 보이던 옛 문제로 돌아간다.
 FillLayerProperties indoorStoresFillProps(List<Object> fadeExpr) =>
@@ -237,7 +249,7 @@ SymbolLayerProperties indoorFacilityIconProps(
 /// 리턴해 다음 addSource가 "source already exists"로 조용히 실패한다(그 층만
 /// 아무것도 안 그려지는 증상). 세대 카운터로 ID를 유일하게 만들어 경쟁을 없앤다.
 ///
-/// 필드 11개를 값 하나로 묶은 이유는 하나라도 빠뜨리면 그 레이어만 이전 세대 ID로
+/// 필드 12개를 값 하나로 묶은 이유는 하나라도 빠뜨리면 그 레이어만 이전 세대 ID로
 /// 남아 remove 대상에서 새기 때문이다.
 class IndoorOverlayIds {
   const IndoorOverlayIds([this.generation = 0]);
@@ -253,6 +265,12 @@ class IndoorOverlayIds {
   String get source => _idFor('outdoor-indoor-tiles');
   String get footprint => _idFor('outdoor-indoor-footprint');
   String get storesFill => _idFor('outdoor-indoor-stores-fill');
+
+  /// 걸을 수 없는 면 fill. **[storesFill] 바로 위 한 자리뿐이다** — 아래로
+  /// 내리면 주차칸·흰 바닥에 가려 픽셀이 사라지고(2026-08-15 되돌림 2번),
+  /// [categoryHighlightFill] 위로 올리면 강조·수직이동 색이 회색에 덮인다.
+  /// 매장을 덮을 걱정은 임포터의 중심점 규칙이 받는다.
+  String get nonWalkableFill => _idFor('outdoor-indoor-non-walkable-fill');
 
   /// 카테고리 필터로 고른 매장만 파란톤으로 덧칠하는 fill. 일반 매장 fill 위,
   /// 수직이동 오버레이 아래에 넣어 실내 화면과 레이어 순서를 맞춘다 — 순서가
@@ -295,6 +313,7 @@ class IndoorOverlayIds {
     storesLabel,
     verticalTransportFill,
     categoryHighlightFill,
+    nonWalkableFill,
     storesFill,
     footprint,
   ];
@@ -345,10 +364,11 @@ Future<void> purgeStaleIndoorOverlay(
   } catch (_) {}
 }
 
-/// 실내 오버레이 소스와 레이어 9장을 한 번에 등록한다. 성공하면 true.
+/// 실내 오버레이 소스와 레이어 10장을 한 번에 등록한다. 성공하면 true.
 ///
-/// 등록 **순서가 곧 쌓임 순서**다(footprint → fill → 강조 → 수직이동 → 라벨 →
-/// 아이콘, 전부 route casing 아래). 바꾸면 경로선·마커가 fill 밑으로 깔린다.
+/// 등록 **순서가 곧 쌓임 순서**다(footprint → 매장 fill → 못 걷는 면 → 강조 →
+/// 수직이동 → 라벨 → 아이콘, 전부 route casing 아래). 바꾸면 경로선·마커가 fill
+/// 밑으로 깔린다.
 ///
 /// [ensureIconImages]를 콜백으로 받는 이유는 "스타일당 한 번" 게이팅을 호출자가
 /// 들고 있어서다. 실패하면 **부분 등록된 것을 스스로 정리한다** — 안 그러면 다음
@@ -401,6 +421,21 @@ Future<bool> registerIndoorOverlayLayers(
         indoorStoresFillProps(fadeExpr),
         sourceLayer: 'stores',
         belowLayerId: kOutdoorRouteCasingLayerId,
+        enableInteraction: false,
+      );
+      // 걸을 수 없는 면. **매장 fill 바로 위·카테고리 강조 바로 아래** — 지하
+      // 주차 구획이 전부 매장이라 매장 아래에 깔면 기둥 면적의 40%가 주차칸에
+      // 가린다(실측 근거는 docs/client/kakao-map-indoor-observation.md 3절).
+      // 위로 올려도 매장은 안 사라진다 — 중심점을 품는 도형은 임포터가 이미
+      // 뺐고, 남은 최대 겹침은 매장 하나의 28%다.
+      await controller.addFillLayer(
+        ids.source,
+        ids.nonWalkableFill,
+        indoorNonWalkableProps(fadeExpr),
+        sourceLayer: 'non_walkable',
+        belowLayerId: kOutdoorRouteCasingLayerId,
+        // 탭 대상이 아니다 — 이름도 id도 없는 배경 도형이라 누를 것이 없다.
+        // [store_tap.dart]의 레이어 목록에도 넣지 않는다.
         enableInteraction: false,
       );
       // 카테고리 강조. 일반 매장 fill 바로 위에 얹어 선택한 매장만 파랗게
@@ -560,7 +595,7 @@ enum IndoorOverlaySyncScope {
   /// 매장명·공유 매장명·편의시설 라벨 세 장.
   labels,
 
-  /// footprint·매장·카테고리 강조·수직이동 fill 네 장.
+  /// footprint·매장·못 걷는 면·카테고리 강조·수직이동 fill 다섯 장.
   fills,
 }
 
@@ -613,6 +648,9 @@ Future<void> syncIndoorOverlayProps(
   final fills = <(String, LayerProperties)>[
     (ids.footprint, indoorFootprintProps(fadeExpr)),
     (ids.storesFill, indoorStoresFillProps(fadeExpr)),
+    // 빠뜨리면 층 전환 크로스페이드 동안 이 한 장만 계수를 못 따라가, 이전 층
+    // 위에 못 걷는 면만 불투명하게 남는다.
+    (ids.nonWalkableFill, indoorNonWalkableProps(fadeExpr)),
     (ids.categoryHighlightFill, indoorCategoryHighlightProps(fadeExpr)),
     (ids.verticalTransportFill, indoorVerticalTransportProps(fadeExpr)),
   ];
