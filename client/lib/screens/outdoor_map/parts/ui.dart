@@ -522,6 +522,8 @@ extension OutdoorMapUi on OutdoorMapBodyState {
                   ? (_userDestinationLabel ?? '목적지까지')
                   : '건물 입구까지',
               guidanceStarted: _guidanceStarted,
+              routeOptions: _directionsRouteExtras(context, route),
+              extraMetric: _directionsFareMetric(route),
               onClose: userDestination != null
                   ? _dismissUserDestinationFromEtaCard
                   : null,
@@ -535,5 +537,53 @@ extension OutdoorMapUi on OutdoorMapBodyState {
           ),
       ],
     );
+  }
+
+  /// 후보 패널과 상세보기 버튼을 묶어 [EtaCard.routeOptions]에 얹는다.
+  /// 디자인시스템 카드에 상세보기 전용 슬롯이 없어 우리가 직접 붙인다.
+  Widget? _directionsRouteExtras(BuildContext context, DirectionsRoute route) {
+    final panel = _directionsRouteOptions.length > 1
+        ? DirectionsRouteOptionsPanel(
+            options: _directionsRouteOptions,
+            selectedIndex: _selectedDirectionsOptionIndex,
+            onSelect: (index) => unawaited(selectDirectionsOption(index)),
+          )
+        : null;
+    final detailButton = route.steps.isEmpty
+        ? null
+        : Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: TextButton(
+              onPressed: () => showDirectionsRouteDetailSheet(
+                context,
+                route: route,
+                destinationLabel: _userDestinationLabel ?? '목적지',
+              ),
+              child: const Text('상세보기'),
+            ),
+          );
+    if (panel == null && detailButton == null) return null;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [?panel, ?detailButton],
+    );
+  }
+
+  /// 통행료가 있으면(0원 포함) 그것을, 없으면 택시비를 세 번째 지표로
+  /// 쓴다. 도보 경로는 둘 다 null이라 아무것도 안 붙는다.
+  RoutexTripMetric? _directionsFareMetric(DirectionsRoute route) {
+    final toll = route.tollFareWon;
+    if (toll != null) {
+      return RoutexTripMetric(
+        value: toll == 0 ? '무료' : formatTransitFare(toll),
+        label: '통행료',
+      );
+    }
+    final taxi = route.taxiFareWon;
+    if (taxi != null) {
+      return RoutexTripMetric(value: formatTransitFare(taxi), label: '택시비');
+    }
+    return null;
   }
 }

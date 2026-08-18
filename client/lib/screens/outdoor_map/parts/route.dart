@@ -476,6 +476,43 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     _applyRoute(route);
   }
 
+  /// 자동차 후보 목록을 받아 첫 번째(추천)를 그린다. 이후
+  /// [selectDirectionsOption]으로 다른 후보를 고르면 다시 그린다.
+  Future<void> showPlannedRoadRouteOptions(
+    List<DirectionsRouteOption> options, {
+    required ll.LatLng origin,
+    required ll.LatLng destination,
+    required String label,
+  }) async {
+    _directionsRouteOptions = options;
+    _selectedDirectionsOptionIndex = 0;
+    await showPlannedRoadRoute(
+      options.first.route,
+      origin: origin,
+      destination: destination,
+      label: label,
+      driving: true,
+    );
+  }
+
+  /// 목록에서 다른 자동차 후보를 골랐을 때. 출발·도착·라벨은 그대로다 —
+  /// 바뀌는 것은 경로 선뿐이다.
+  Future<void> selectDirectionsOption(int index) async {
+    if (index == _selectedDirectionsOptionIndex) return;
+    final origin = _fixedRouteOrigin;
+    final destination = _userDestination;
+    final label = _userDestinationLabel;
+    if (origin == null || destination == null || label == null) return;
+    setState(() => _selectedDirectionsOptionIndex = index);
+    await showPlannedRoadRoute(
+      _directionsRouteOptions[index].route,
+      origin: origin,
+      destination: destination,
+      label: label,
+      driving: true,
+    );
+  }
+
   /// [point]가 우리 도면이 있는 건물 **안**이면 그 건물의 지상 출입구 좌표를
   /// 돌려준다. POI 좌표를 그대로 끝점으로 쓰면 TMAP이 가장 가까운 도로로 스냅해
   /// 들어갈 수 없는 면에 사용자를 내려놓는다.

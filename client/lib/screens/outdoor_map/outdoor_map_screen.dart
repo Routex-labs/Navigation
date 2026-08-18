@@ -48,6 +48,9 @@ import '../../domain/route/transfer_route_geometry.dart';
 import '../../models/building/building.dart';
 import '../../models/building/building_graph.dart';
 import '../../models/route/directions_route.dart';
+import '../../widgets/directions_route_options_panel.dart';
+import '../../widgets/transit_style.dart' show formatTransitFare;
+import 'widgets/directions_route_detail_sheet.dart';
 import '../../models/building/floor_graph.dart';
 import '../../models/building/floor_plan.dart';
 import '../../models/route/indoor_route.dart';
@@ -387,6 +390,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   List<ll.LatLng>? _buildingFootprint;
 
   DirectionsRoute? _route;
+
+  /// 자동차 경로 후보 목록. 1개 이하면 고를 게 없다는 뜻이라 패널을
+  /// 그리지 않는다([DirectionsRouteOptionsPanel] 참고).
+  List<DirectionsRouteOption> _directionsRouteOptions = const [];
+  int _selectedDirectionsOptionIndex = 0;
 
   final CompletedRouteHistory _completedRouteHistory = CompletedRouteHistory();
 
