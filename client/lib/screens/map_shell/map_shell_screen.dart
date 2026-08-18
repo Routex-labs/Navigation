@@ -1808,21 +1808,20 @@ class _MapShellScreenState extends State<MapShellScreen> {
     final to =
         outdoor.entranceIfInsideBuilding(destination.point) ??
         destination.point;
-    final route = await directionsRepository.getDrivingRoute(
+    final options = await directionsRepository.getDrivingRouteOptions(
       origin: from,
       destination: to,
     );
     if (!mounted) return;
-    if (route == null) {
+    if (!options.hasRoutes) {
       _showSnack('자동차 경로를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
       return;
     }
-    await outdoor.showPlannedRoadRoute(
-      route,
+    await outdoor.showPlannedRoadRouteOptions(
+      options.options,
       origin: from,
       destination: to,
       label: destination.title,
-      driving: true,
     );
   }
 

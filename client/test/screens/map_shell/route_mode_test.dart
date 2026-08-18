@@ -182,6 +182,31 @@ void main() {
     expect(find.byTooltip('길찾기'), findsOneWidget);
   });
 
+  testWidgets('자동차 모드에서 후보가 여러 개면 목록에서 고를 수 있다', (
+    WidgetTester tester,
+  ) async {
+    await pumpShell(tester);
+    await tester.tap(find.byTooltip('길찾기'));
+    await drain(tester);
+    await tester.enterText(destinationField(), '강의실');
+    await drain(tester);
+    await tester.tap(find.text('강의실 101').first);
+    await drain(tester);
+
+    await tester.tap(find.text('자동차'));
+    await drain(tester);
+
+    expect(find.byType(EtaCard), findsOneWidget);
+    expect(find.text('추천'), findsOneWidget);
+    expect(find.text('최단거리'), findsOneWidget);
+
+    await tester.tap(find.text('최단거리'));
+    await drain(tester);
+
+    expect(find.byType(EtaCard), findsOneWidget);
+    expect(find.text('최단거리'), findsOneWidget);
+  });
+
   testWidgets('출발 칸을 누르면 "현재 위치"로 되돌릴 길이 목록에 있다', (WidgetTester tester) async {
     await pumpShell(tester);
     await tester.tap(find.byTooltip('길찾기'));
