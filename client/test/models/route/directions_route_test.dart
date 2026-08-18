@@ -52,4 +52,34 @@ void main() {
     expect(step.distanceMeters, 200);
     expect(step.point, const LatLng(0.002, 0));
   });
+
+  test('자동차 옵션 라벨은 확인된 이름만 붙인다', () {
+    expect(DirectionsRouteOptionKind.recommended.label, '추천');
+    expect(DirectionsRouteOptionKind.shortestDistance.label, '최단거리');
+    expect(DirectionsRouteOptionKind.alternative.label, '대안');
+  });
+
+  test('hasRoutes는 ok 상태이고 옵션이 있을 때만 true다', () {
+    const route = DirectionsRoute(
+      points: [LatLng(0, 0), LatLng(1, 1)],
+      distanceMeters: 100,
+      durationSeconds: 60,
+    );
+    const withRoutes = DirectionsRouteOptions.ok([
+      DirectionsRouteOption(
+        kinds: [DirectionsRouteOptionKind.recommended],
+        route: route,
+      ),
+    ]);
+    expect(withRoutes.hasRoutes, isTrue);
+
+    const empty = DirectionsRouteOptions.ok([]);
+    expect(empty.hasRoutes, isFalse);
+
+    const failed = DirectionsRouteOptions.failure(
+      DirectionsRouteOptionsStatus.failed,
+    );
+    expect(failed.hasRoutes, isFalse);
+    expect(failed.options, isEmpty);
+  });
 }

@@ -68,3 +68,54 @@ class DirectionsRoute {
   /// `steps ?? const []`를 반복하지 않게 하려는 것이다.
   final List<DirectionsRouteStep> steps;
 }
+
+/// 자동차 옵션 종류. `feature-car-route-alternatives` 브랜치가 실측으로
+/// 고른 TMAP `searchOption` 4개(`0,2,3,10`) 중 의미가 확인된 둘만 이름이
+/// 있다. `2`·`3`은 [alternative]로 뭉뚱그린다 — 확인 못 한 의미를 지어내
+/// "무료우선"처럼 틀린 이름을 붙이는 것보다 낫다. 도보용 kind는 없다.
+enum DirectionsRouteOptionKind {
+  /// TMAP `searchOption=0`. 교통최적+추천.
+  recommended,
+
+  /// TMAP `searchOption=10`. 최단거리.
+  shortestDistance,
+
+  /// TMAP `searchOption=2` 또는 `3`. 정확한 의미 미확인.
+  alternative;
+
+  String get label => switch (this) {
+    DirectionsRouteOptionKind.recommended => '추천',
+    DirectionsRouteOptionKind.shortestDistance => '최단거리',
+    DirectionsRouteOptionKind.alternative => '대안',
+  };
+}
+
+/// 경로 후보 한 줄. 좌표열이 같은 후보는 kinds를 합쳐 한 줄로 보여준다
+/// (합치는 로직은 domain/route/directions_route_merge.dart).
+class DirectionsRouteOption {
+  const DirectionsRouteOption({required this.kinds, required this.route});
+
+  /// 항상 1개 이상. 순서 = 목록에 보일 순서.
+  final List<DirectionsRouteOptionKind> kinds;
+  final DirectionsRoute route;
+}
+
+/// `getDrivingRoute`(단일)가 이미 성공/null 둘로만 구분하듯, TMAP 요청은
+/// 네트워크 실패든 "경로 없음"이든 구분 없이 null만 준다 — 그 이상을
+/// 구분하는 상태값은 지금 신호가 없다.
+enum DirectionsRouteOptionsStatus { ok, failed }
+
+class DirectionsRouteOptions {
+  const DirectionsRouteOptions({required this.status, this.options = const []});
+
+  const DirectionsRouteOptions.ok(this.options)
+    : status = DirectionsRouteOptionsStatus.ok;
+
+  const DirectionsRouteOptions.failure(this.status) : options = const [];
+
+  final DirectionsRouteOptionsStatus status;
+  final List<DirectionsRouteOption> options;
+
+  bool get hasRoutes =>
+      status == DirectionsRouteOptionsStatus.ok && options.isNotEmpty;
+}
