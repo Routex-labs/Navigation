@@ -687,6 +687,10 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
       _route = null;
       _fixedRouteOrigin = null;
       _guidanceStarted = false;
+      // 목적지를 지우면 그 목적지에 딸려 있던 자동차 후보 목록도 같이 접는다 —
+      // 안 지우면 목적지가 없는 화면에 후보 패널만 혼자 남는다.
+      _directionsRouteOptions = const [];
+      _selectedDirectionsOptionIndex = 0;
     });
     _syncDestinationLayer();
     _syncRouteLayer();

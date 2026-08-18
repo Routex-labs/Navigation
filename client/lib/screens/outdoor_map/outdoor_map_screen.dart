@@ -1186,6 +1186,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       // 새 목적지를 받을 때마다 초기화해서, 이번 경로가 계산되면
       // _applyRoute가 "새로 생김"으로 보고 카메라를 다시 맞추게 한다.
       _route = null;
+      // 걷기 안내로 들어왔다. 자동차 후보 목록을 비우지 않으면 걷기 경로 위에
+      // 방금 본 자동차 후보 패널이 그대로 남는다.
+      _directionsRouteOptions = const [];
+      _selectedDirectionsOptionIndex = 0;
     });
     _syncDestinationLayer();
     _syncRouteLayer();
