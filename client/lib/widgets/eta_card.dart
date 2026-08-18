@@ -51,7 +51,7 @@ class EtaCard extends StatelessWidget {
         metrics: [
           RoutexTripMetric(value: '$minutes분', label: '소요'),
           RoutexTripMetric(value: formatDistance(distanceMeters), label: '거리'),
-          if (extraMetric != null) extraMetric!,
+          ?extraMetric,
         ],
         routeOptions: routeOptions,
         onStart: onStartGuidance,
