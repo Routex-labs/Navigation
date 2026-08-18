@@ -227,9 +227,7 @@ test('hasRoutes는 ok 상태이고 옵션이 있을 때만 true다', () {
   const empty = DirectionsRouteOptions.ok([]);
   expect(empty.hasRoutes, isFalse);
 
-  const failed = DirectionsRouteOptions.failure(
-    DirectionsRouteOptionsStatus.failed,
-  );
+  const failed = DirectionsRouteOptions.failure();
   expect(failed.hasRoutes, isFalse);
   expect(failed.options, isEmpty);
 });
@@ -287,7 +285,9 @@ class DirectionsRouteOptions {
   const DirectionsRouteOptions.ok(this.options)
     : status = DirectionsRouteOptionsStatus.ok;
 
-  const DirectionsRouteOptions.failure(this.status) : options = const [];
+  const DirectionsRouteOptions.failure()
+    : status = DirectionsRouteOptionsStatus.failed,
+      options = const [];
 
   final DirectionsRouteOptionsStatus status;
   final List<DirectionsRouteOption> options;
@@ -555,7 +555,13 @@ Expected: FAIL — `route.steps`가 빈 리스트라 `route.steps.length`가 0.
           lines.add(feature);
       }
     }
-    if (points.isEmpty) return const [];
+    // 안내지점 개수는 항상 구간 개수 + 1이어야 한다(SP, GP..., EP 사이사이에
+    // 구간이 하나씩 낀다). 어긋나면 응답이 예상 모양이 아니라는 뜻이라, 억지로
+    // 읽지 않고 빈 목록으로 물러난다 — `_request()`의 다른 실패(네트워크 오류,
+    // 200이 아닌 응답, JSON 파싱 실패)가 전부 조용히 null/빈 값으로 떨어지는
+    // 것과 같은 원칙이다. 여기서 예외를 던지면 이 메서드만 "절대 안 던진다"는
+    // 계약을 깨고, Task 5의 `Future.wait` 안에서 다른 옵션 응답까지 끌고 죽는다.
+    if (points.isEmpty || lines.length != points.length - 1) return const [];
 
     final steps = <DirectionsRouteStep>[];
     for (var i = 0; i < points.length; i++) {
@@ -794,9 +800,7 @@ Expected: FAIL — `getDrivingRouteOptions`이 없어(추상 메서드 미구현
         if (route != null) (kind, route),
     ];
     if (candidates.isEmpty) {
-      return const DirectionsRouteOptions.failure(
-        DirectionsRouteOptionsStatus.failed,
-      );
+      return const DirectionsRouteOptions.failure();
     }
     return DirectionsRouteOptions.ok(mergeDirectionsRouteOptions(candidates));
   }
@@ -811,9 +815,7 @@ Expected: FAIL — `getDrivingRouteOptions`이 없어(추상 메서드 미구현
   }) async {
     final direct = await getDrivingRoute(origin: origin, destination: destination);
     if (direct == null) {
-      return const DirectionsRouteOptions.failure(
-        DirectionsRouteOptionsStatus.failed,
-      );
+      return const DirectionsRouteOptions.failure();
     }
     // 대안 후보: 중점을 살짝 밀어 올린 경유점을 하나 끼운 두 번째 선. 실제
     // API처럼 값이 달라야 목록이 둘로 보인다 — 완전히 같으면
@@ -1511,7 +1513,7 @@ import 'widgets/directions_route_detail_sheet.dart';
   }
 ```
 
-`ui.dart` 파일 상단에 `import '../../../widgets/transit_style.dart' show formatTransitFare;`를 추가(경로는 `parts/`에서 `widgets/`까지의 상대 경로 — 기존 다른 import들의 `../../../` 깊이와 맞춘다).
+**주의:** `ui.dart`는 `part of '../outdoor_map_screen.dart';`로 시작하는 part 파일이라 자신의 `import` 지시문을 가질 수 없다 — Dart는 실행할 때 import를 소유 라이브러리 파일에서만 읽는다. 그래서 이 import는 **`outdoor_map_screen.dart`**(Step 1에서 이미 손댄 그 파일) 맨 위 import 블록에 추가한다: `import '../../widgets/transit_style.dart' show formatTransitFare;`(`import '../../models/route/directions_route.dart';`와 같은 깊이).
 
 - [ ] **Step 4: 정적 분석으로 컴파일 확인**
 
