@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
 import '../../core/api_config.dart';
+import '../../domain/route/directions_route_merge.dart';
 import '../../models/route/directions_route.dart';
 import 'directions_repository.dart';
 
@@ -47,6 +48,43 @@ class TmapDirectionsRepository implements DirectionsRepository {
       // 옵션을 사용자에게 열어 두려면 그때 인자로 올린다.
       extra: const {'searchOption': '0', 'trafficInfo': 'N'},
     );
+  }
+
+  /// 자동차 후보를 만들려고 물어보는 `searchOption` 값들. **순서가 곧
+  /// kind 대응 순서다.** TMAP에는 대안 경로를 한 번에 주는 엔드포인트가
+  /// 없어, 값을 바꿔 여러 번 묻고 우리가 비교해 후보를 만든다. 근거는
+  /// `docs/client/car-route-alternatives.md`.
+  static const _drivingSearchOptions = [
+    ('0', DirectionsRouteOptionKind.recommended),
+    ('2', DirectionsRouteOptionKind.alternative),
+    ('3', DirectionsRouteOptionKind.alternative),
+    ('10', DirectionsRouteOptionKind.shortestDistance),
+  ];
+
+  @override
+  Future<DirectionsRouteOptions> getDrivingRouteOptions({
+    required LatLng origin,
+    required LatLng destination,
+  }) async {
+    // 동시에 보낸다 — 순서대로 기다리면 옵션 수만큼 왕복 시간이 곱해진다.
+    final responses = await Future.wait([
+      for (final (option, kind) in _drivingSearchOptions)
+        _request(
+          Uri.parse('$tmapBaseUrl/routes?version=1'),
+          origin: origin,
+          destination: destination,
+          extra: {'searchOption': option, 'trafficInfo': 'N'},
+        ).then((route) => (kind, route)),
+    ]);
+
+    final candidates = [
+      for (final (kind, route) in responses)
+        if (route != null) (kind, route),
+    ];
+    if (candidates.isEmpty) {
+      return const DirectionsRouteOptions.failure();
+    }
+    return DirectionsRouteOptions.ok(mergeDirectionsRouteOptions(candidates));
   }
 
   Future<DirectionsRoute?> _request(

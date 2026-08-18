@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:navigation_client/models/route/directions_route.dart';
 import 'package:navigation_client/repositories/routing/tmap_directions_repository.dart';
 
 // 실제 TMAP 보행자 경로 API(POST /routes/pedestrian) 응답을 그대로 캡처한 픽스처.
@@ -125,6 +126,34 @@ const _drivingResponseBody = '''
         "coordinates": [[126.7, 37.63], [126.85, 37.56], [126.92, 37.53]]
       },
       "properties": { "distance": 30400, "time": 2100 }
+    }
+  ]
+}
+''';
+
+// searchOption '10'(최단거리) 전용 응답. 좌표가 달라야 병합에서 따로 남는다.
+const _shortestDistanceResponseBody = '''
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [126.7, 37.63] },
+      "properties": {
+        "totalDistance": 28000,
+        "totalTime": 1900,
+        "totalFare": 0,
+        "taxiFare": 28000,
+        "pointType": "S"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[126.7, 37.63], [126.80, 37.58], [126.92, 37.53]]
+      },
+      "properties": { "distance": 28000, "time": 1900 }
     }
   ]
 }
@@ -310,5 +339,47 @@ void main() {
     // 구간 개수(1)와 다르므로, _computeSteps는 예상 구조 불일치를
     // 감지해 빈 목록으로 돌아온다.
     expect(route!.steps, isEmpty);
+  });
+
+  test('자동차 후보 4개를 조회해 좌표로 중복 제거한다', () async {
+    final client = MockClient((request) async {
+      final option = request.bodyFields['searchOption'];
+      final body = option == '10'
+          ? _shortestDistanceResponseBody
+          : _drivingResponseBody; // '0','2','3'은 같은 응답 -> 하나로 합쳐짐
+      return http.Response(
+        body,
+        200,
+        headers: {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final repository = TmapDirectionsRepository(client: client);
+
+    final options = await repository.getDrivingRouteOptions(
+      origin: const LatLng(37.63, 126.7),
+      destination: const LatLng(37.53, 126.92),
+    );
+
+    expect(options.status, DirectionsRouteOptionsStatus.ok);
+    expect(options.options.length, 2);
+    expect(options.options[0].kinds, [
+      DirectionsRouteOptionKind.recommended,
+      DirectionsRouteOptionKind.alternative,
+      DirectionsRouteOptionKind.alternative,
+    ]);
+    expect(options.options[1].kinds, [DirectionsRouteOptionKind.shortestDistance]);
+  });
+
+  test('전부 실패하면 failed 상태를 돌려준다', () async {
+    final client = MockClient((request) async => http.Response('', 500));
+    final repository = TmapDirectionsRepository(client: client);
+
+    final options = await repository.getDrivingRouteOptions(
+      origin: const LatLng(37.63, 126.7),
+      destination: const LatLng(37.53, 126.92),
+    );
+
+    expect(options.status, DirectionsRouteOptionsStatus.failed);
+    expect(options.options, isEmpty);
   });
 }
