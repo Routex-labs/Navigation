@@ -182,6 +182,16 @@ class TmapDirectionsRepository implements DirectionsRepository {
     // 것과 같은 원칙이다. 여기서 예외를 던지면 이 메서드만 "절대 안 던진다"는
     // 계약을 깨고, Task 5의 `Future.wait` 안에서 다른 옵션 응답까지 끌고 죽는다.
     if (points.isEmpty || lines.length != points.length - 1) return const [];
+    // 방위각 계산이 좌표 2개(첫/끝 또는 끝에서 둘째)를 가정한다. 좌표가
+    // 0~1개뿐인 LineString이 섞여 있으면 위 개수 검사를 통과해도
+    // `_lineBearing`이 RangeError를 던지므로 여기서 미리 걸러 빈 목록으로
+    // 물러난다 — 같은 "예상 모양이 아니면 포기" 원칙이다.
+    for (final line in lines) {
+      final coordinates =
+          (line['geometry'] as Map<String, dynamic>)['coordinates']
+              as List<dynamic>;
+      if (coordinates.length < 2) return const [];
+    }
 
     final steps = <DirectionsRouteStep>[];
     for (var i = 0; i < points.length; i++) {

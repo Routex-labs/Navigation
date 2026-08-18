@@ -195,6 +195,42 @@ const _turnSampleResponseBody = '''
 }
 ''';
 
+// 안내지점 3개(SP·GP·EP)에 구간 2개가 있어 개수 검사는 통과하지만, 두 번째
+// LineString이 좌표 1쌍뿐인 퇴화 도형이다 — 서버가 이런 응답을 보낸 적은
+// 없지만 방위각 계산이 좌표 2개를 가정하므로 방어선을 검증한다.
+const _degenerateLineResponseBody = '''
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [0, 0] },
+      "properties": { "totalDistance": 100, "totalTime": 80, "pointType": "SP" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "LineString", "coordinates": [[0, 0], [0, 0.001]] },
+      "properties": { "distance": 50, "time": 40 }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [0, 0.001] },
+      "properties": { "pointType": "GP" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "LineString", "coordinates": [[0, 0.001]] },
+      "properties": { "distance": 50, "time": 40 }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [0, 0.002] },
+      "properties": { "pointType": "EP" }
+    }
+  ]
+}
+''';
+
 void main() {
   test(
     'parses distance/time from the first feature and flattens the path',
@@ -368,6 +404,25 @@ void main() {
       DirectionsRouteOptionKind.alternative,
     ]);
     expect(options.options[1].kinds, [DirectionsRouteOptionKind.shortestDistance]);
+  });
+
+  test('좌표 1개뿐인 퇴화 LineString이 있어도 던지지 않고 스텝을 비운다', () async {
+    final client = MockClient((request) async {
+      return http.Response(
+        _degenerateLineResponseBody,
+        200,
+        headers: {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final repository = TmapDirectionsRepository(client: client);
+
+    final route = await repository.getWalkingRoute(
+      origin: const LatLng(0, 0),
+      destination: const LatLng(0.002, 0),
+    );
+
+    expect(route, isNotNull);
+    expect(route!.steps, isEmpty);
   });
 
   test('전부 실패하면 failed 상태를 돌려준다', () async {
