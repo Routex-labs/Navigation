@@ -18,6 +18,8 @@ class EtaCard extends StatelessWidget {
     this.onClose,
     this.onStartGuidance,
     this.onClosePointerDown,
+    this.routeOptions,
+    this.extraMetric,
   });
 
   final double distanceMeters;
@@ -27,6 +29,15 @@ class EtaCard extends StatelessWidget {
   final VoidCallback? onClose;
   final VoidCallback? onStartGuidance;
   final ValueChanged<Offset>? onClosePointerDown;
+
+  /// 복수 경로 후보를 고를 수 있을 때 요약 위에 놓는 선택 영역. 출발 전
+  /// 계획 카드에서만 쓰인다 — 안내 중에는 경로를 바꿀 수 없다.
+  final Widget? routeOptions;
+
+  /// 소요·거리 옆에 하나 더 적을 값(통행료 등). `RoutexEtaCard`가 지표를
+  /// 3개까지만 받아 통행료·택시비를 동시에 넣을 자리가 없다 — 부르는
+  /// 쪽이 어느 쪽을 보여줄지 미리 고른다.
+  final RoutexTripMetric? extraMetric;
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +51,9 @@ class EtaCard extends StatelessWidget {
         metrics: [
           RoutexTripMetric(value: '$minutes분', label: '소요'),
           RoutexTripMetric(value: formatDistance(distanceMeters), label: '거리'),
+          if (extraMetric != null) extraMetric!,
         ],
+        routeOptions: routeOptions,
         onStart: onStartGuidance,
       );
     }

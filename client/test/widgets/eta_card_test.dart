@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/domain/guidance/route_guidance.dart';
 import 'package:navigation_client/theme/app_theme.dart';
 import 'package:navigation_client/widgets/eta_card.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 /// Runtime Kit의 계획 카드·안내 배너에 앱 경로 값이 올바르게 연결되는지 확인한다.
 void main() {
@@ -70,6 +71,37 @@ void main() {
       expect(find.textContaining('7분', findRichText: true), findsOneWidget);
       expect(find.textContaining('480m', findRichText: true), findsOneWidget);
       expect(find.text('안내 종료'), findsNothing);
+    });
+
+    testWidgets('routeOptions을 건네면 요약 위에 그린다', (tester) async {
+      await tester.pumpWidget(
+        wrap(
+          const EtaCard(
+            distanceMeters: 3900,
+            minutes: 8,
+            label: '목적지까지',
+            routeOptions: Text('옵션 영역'),
+          ),
+        ),
+      );
+
+      expect(find.text('옵션 영역'), findsOneWidget);
+    });
+
+    testWidgets('extraMetric을 건네면 소요·거리 옆에 함께 적는다', (tester) async {
+      await tester.pumpWidget(
+        wrap(
+          EtaCard(
+            distanceMeters: 3900,
+            minutes: 8,
+            label: '목적지까지',
+            extraMetric: const RoutexTripMetric(value: '무료', label: '통행료'),
+          ),
+        ),
+      );
+
+      expect(find.textContaining('무료', findRichText: true), findsOneWidget);
+      expect(find.textContaining('통행료', findRichText: true), findsOneWidget);
     });
   });
 
