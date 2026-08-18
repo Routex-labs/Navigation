@@ -289,4 +289,26 @@ void main() {
     expect(route.steps[2].instruction, '도착');
     expect(route.steps[2].distanceMeters, 180);
   });
+
+  test('기존 자동차 응답(1 Point/1 LineString)은 스텝을 생성하지 않는다', () async {
+    final client = MockClient((request) async {
+      return http.Response(
+        _drivingResponseBody,
+        200,
+        headers: {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final repository = TmapDirectionsRepository(client: client);
+
+    final route = await repository.getDrivingRoute(
+      origin: const LatLng(37.63, 126.7),
+      destination: const LatLng(37.53, 126.92),
+    );
+
+    // 이 응답은 Feature 구조가 SP(Point) + 선분(LineString) 하나로
+    // 이루어져 있다(SP-[LineString]-EP 구조가 아님). 안내지점 개수(1)가
+    // 구간 개수(1)와 다르므로, _computeSteps는 예상 구조 불일치를
+    // 감지해 빈 목록으로 돌아온다.
+    expect(route!.steps, isEmpty);
+  });
 }

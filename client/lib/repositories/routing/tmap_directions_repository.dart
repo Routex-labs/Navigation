@@ -137,7 +137,13 @@ class TmapDirectionsRepository implements DirectionsRepository {
           lines.add(feature);
       }
     }
-    if (points.isEmpty) return const [];
+    // 안내지점 개수는 항상 구간 개수 + 1이어야 한다(SP, GP..., EP 사이사이에
+    // 구간이 하나씩 낀다). 어긋나면 응답이 예상 모양이 아니라는 뜻이라, 억지로
+    // 읽지 않고 빈 목록으로 물러난다 — `_request()`의 다른 실패(네트워크 오류,
+    // 200이 아닌 응답, JSON 파싱 실패)가 전부 조용히 null/빈 값으로 떨어지는
+    // 것과 같은 원칙이다. 여기서 예외를 던지면 이 메서드만 "절대 안 던진다"는
+    // 계약을 깨고, Task 5의 `Future.wait` 안에서 다른 옵션 응답까지 끌고 죽는다.
+    if (points.isEmpty || lines.length != points.length - 1) return const [];
 
     final steps = <DirectionsRouteStep>[];
     for (var i = 0; i < points.length; i++) {
