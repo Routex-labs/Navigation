@@ -130,6 +130,42 @@ const _drivingResponseBody = '''
 }
 ''';
 
+// 합성 픽스처(실측 아님) — 방위각 계산을 검증하려고 손으로 만든 직각 경로.
+// 북쪽(0,0)->(0,0.002)으로 가다 안내지점에서 동쪽(0.002,0.002)으로 90도
+// 꺾인다. 손으로 방위각을 계산해 검증한 값이라 기대값이 정확하다.
+const _turnSampleResponseBody = '''
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [0, 0] },
+      "properties": { "totalDistance": 380, "totalTime": 290, "pointType": "SP" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "LineString", "coordinates": [[0, 0], [0, 0.002]] },
+      "properties": { "distance": 200, "time": 150 }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [0, 0.002] },
+      "properties": { "pointType": "GP" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "LineString", "coordinates": [[0, 0.002], [0.002, 0.002]] },
+      "properties": { "distance": 180, "time": 140 }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [0.002, 0.002] },
+      "properties": { "pointType": "EP" }
+    }
+  ]
+}
+''';
+
 void main() {
   test(
     'parses distance/time from the first feature and flattens the path',
@@ -228,5 +264,29 @@ void main() {
     );
 
     expect(route, isNull);
+  });
+
+  test('안내 지점을 좌회전/우회전/직진으로 계산해 스텝을 만든다', () async {
+    final client = MockClient((request) async {
+      return http.Response(
+        _turnSampleResponseBody,
+        200,
+        headers: {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final repository = TmapDirectionsRepository(client: client);
+
+    final route = await repository.getWalkingRoute(
+      origin: const LatLng(0, 0),
+      destination: const LatLng(0.002, 0.002),
+    );
+
+    expect(route!.steps.length, 3);
+    expect(route.steps[0].instruction, '출발');
+    expect(route.steps[0].distanceMeters, 0);
+    expect(route.steps[1].instruction, '우회전');
+    expect(route.steps[1].distanceMeters, 200);
+    expect(route.steps[2].instruction, '도착');
+    expect(route.steps[2].distanceMeters, 180);
   });
 }

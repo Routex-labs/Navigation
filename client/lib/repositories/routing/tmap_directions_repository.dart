@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
@@ -118,7 +119,102 @@ class TmapDirectionsRepository implements DirectionsRepository {
       // 요금 개념이 없다"는 뜻이다([DirectionsRoute.tollFareWon]).
       tollFareWon: _number(summary['totalFare'])?.round(),
       taxiFareWon: _number(summary['taxiFare'])?.round(),
+      steps: _computeSteps(features),
     );
+  }
+
+  static List<DirectionsRouteStep> _computeSteps(
+    List<Map<String, dynamic>> features,
+  ) {
+    final points = <Map<String, dynamic>>[];
+    final lines = <Map<String, dynamic>>[];
+    for (final feature in features) {
+      final geometry = feature['geometry'] as Map<String, dynamic>?;
+      switch (geometry?['type']) {
+        case 'Point':
+          points.add(feature);
+        case 'LineString':
+          lines.add(feature);
+      }
+    }
+    if (points.isEmpty) return const [];
+
+    final steps = <DirectionsRouteStep>[];
+    for (var i = 0; i < points.length; i++) {
+      final coordinate =
+          (points[i]['geometry'] as Map<String, dynamic>)['coordinates']
+              as List<dynamic>;
+      final point = _toLatLng(coordinate);
+
+      if (i == 0) {
+        steps.add(
+          DirectionsRouteStep(instruction: '출발', distanceMeters: 0, point: point),
+        );
+        continue;
+      }
+
+      final beforeLine = lines[i - 1];
+      final beforeDistance =
+          _number(beforeLine['properties']?['distance']) ?? 0;
+
+      if (i == points.length - 1) {
+        steps.add(
+          DirectionsRouteStep(
+            instruction: '도착',
+            distanceMeters: beforeDistance,
+            point: point,
+          ),
+        );
+        continue;
+      }
+
+      final afterLine = lines[i];
+      final bearingBefore = _lineBearing(beforeLine, atStart: false);
+      final bearingAfter = _lineBearing(afterLine, atStart: true);
+      final turn = classifyTurn(
+        bearingBeforeDeg: bearingBefore,
+        bearingAfterDeg: bearingAfter,
+      );
+      steps.add(
+        DirectionsRouteStep(
+          instruction: switch (turn) {
+            DirectionsTurn.straight => '직진',
+            DirectionsTurn.turnLeft => '좌회전',
+            DirectionsTurn.turnRight => '우회전',
+          },
+          distanceMeters: beforeDistance,
+          point: point,
+        ),
+      );
+    }
+    return steps;
+  }
+
+  /// [atStart]가 true면 선의 첫 두 점(진입 방위), false면 마지막 두 점
+  /// (진출 방위)으로 방위각을 잰다.
+  static double _lineBearing(
+    Map<String, dynamic> lineFeature, {
+    required bool atStart,
+  }) {
+    final coordinates =
+        ((lineFeature['geometry'] as Map<String, dynamic>)['coordinates']
+                as List<dynamic>)
+            .cast<List<dynamic>>();
+    final a = atStart
+        ? coordinates.first
+        : coordinates[coordinates.length - 2];
+    final b = atStart ? coordinates[1] : coordinates.last;
+    return _bearingDeg(_toLatLng(a), _toLatLng(b));
+  }
+
+  static LatLng _toLatLng(List<dynamic> pair) =>
+      LatLng((pair[1] as num).toDouble(), (pair[0] as num).toDouble());
+
+  static double _bearingDeg(LatLng from, LatLng to) {
+    final dLon = to.longitude - from.longitude;
+    final dLat = to.latitude - from.latitude;
+    final deg = math.atan2(dLon, dLat) * 180 / math.pi;
+    return deg < 0 ? deg + 360 : deg;
   }
 
   static double? _number(Object? value) {
