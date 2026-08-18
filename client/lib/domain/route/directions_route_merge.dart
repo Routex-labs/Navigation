@@ -2,9 +2,9 @@
 /// 합친다.
 ///
 /// 좌표열이 같은 후보는 한 줄로 합치고, 순서는 추천 > 최단거리 > 대안이다.
-/// `feature-car-route-alternatives` 브랜치의 `_geometryKey()`를 그대로
-/// 가져왔다 — 총거리·시간이 아니라 좌표열로 비교하는 이유는
-/// `docs/client/car-route-alternatives.md`에 있다.
+/// 총거리·시간이 아니라 좌표열로 비교하는 이유: 길이가 같은 다른 도로를
+/// 같은 경로로 묶거나, 같은 도로를 반올림 오차로 다른 경로로 가르는 것을
+/// 막기 위해서다.
 library;
 
 import '../../models/route/directions_route.dart';

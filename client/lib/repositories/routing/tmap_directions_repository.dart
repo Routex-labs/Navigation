@@ -52,8 +52,10 @@ class TmapDirectionsRepository implements DirectionsRepository {
 
   /// 자동차 후보를 만들려고 물어보는 `searchOption` 값들. **순서가 곧
   /// kind 대응 순서다.** TMAP에는 대안 경로를 한 번에 주는 엔드포인트가
-  /// 없어, 값을 바꿔 여러 번 묻고 우리가 비교해 후보를 만든다. 근거는
-  /// `docs/client/car-route-alternatives.md`.
+  /// 없어, 값을 바꿔 여러 번 묻고 우리가 비교해 후보를 만든다. 후보를 합칠
+  /// 때 총거리·시간이 아니라 좌표열로 비교하는 이유: 길이가 같은 다른
+  /// 도로를 같은 경로로 묶거나, 같은 도로를 반올림 오차로 다른 경로로
+  /// 가르는 것을 막기 위해서다.
   static const _drivingSearchOptions = [
     ('0', DirectionsRouteOptionKind.recommended),
     ('2', DirectionsRouteOptionKind.alternative),
