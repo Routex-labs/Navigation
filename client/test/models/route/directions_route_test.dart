@@ -76,9 +76,7 @@ void main() {
     const empty = DirectionsRouteOptions.ok([]);
     expect(empty.hasRoutes, isFalse);
 
-    const failed = DirectionsRouteOptions.failure(
-      DirectionsRouteOptionsStatus.failed,
-    );
+    const failed = DirectionsRouteOptions.failure();
     expect(failed.hasRoutes, isFalse);
     expect(failed.options, isEmpty);
   });

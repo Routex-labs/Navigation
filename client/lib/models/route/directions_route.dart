@@ -111,7 +111,9 @@ class DirectionsRouteOptions {
   const DirectionsRouteOptions.ok(this.options)
     : status = DirectionsRouteOptionsStatus.ok;
 
-  const DirectionsRouteOptions.failure(this.status) : options = const [];
+  const DirectionsRouteOptions.failure()
+    : status = DirectionsRouteOptionsStatus.failed,
+      options = const [];
 
   final DirectionsRouteOptionsStatus status;
   final List<DirectionsRouteOption> options;
