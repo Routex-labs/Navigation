@@ -63,8 +63,6 @@ class CorridorNetwork {
   final Map<String, CorridorEdge> _edgesById = {};
   final Map<String, List<CorridorEdge>> _incident = {};
 
-  CorridorEdge? edgeById(String id) => _edgesById[id];
-
   /// [radiusM] 안에 있는 모든 간선의 투영점. 빔의 시작 씨앗을 만든다.
   ///
   /// 가장 가까운 하나만 고르면 시작 위치가 평행 복도 사이에 있을 때 그 선택이
@@ -164,47 +162,6 @@ class CorridorNetwork {
     }
     return false;
   }
-
-  double nearestJunctionDistance(CorridorEdge edge, PdrLocalPoint point) =>
-      nearestJunctionOn(
-        edge,
-        point,
-        maxDistanceM: double.infinity,
-      )?.distanceM ??
-      double.infinity;
-
-  OutgoingEdge? bestOutgoing({
-    required String nodeId,
-    required String excludingEdgeId,
-    required double headingDeg,
-    required double toleranceDeg,
-  }) {
-    OutgoingEdge? best;
-    for (final edge in _incident[nodeId] ?? const []) {
-      if (edge.id == excludingEdgeId) continue;
-      if (edge.accessEdge) continue;
-      if (!edge.bidirectional && edge.fromNodeId != nodeId) continue;
-      final bearing = edge.bearingAwayFromNode(nodeId);
-      final error = headingError(headingDeg, bearing);
-      if (error > toleranceDeg || best != null && error >= best.errorDeg) {
-        continue;
-      }
-      best = OutgoingEdge(edge: edge, errorDeg: error);
-    }
-    return best;
-  }
-
-  OutgoingEdge? bestStraightContinuation({
-    required String nodeId,
-    required String excludingEdgeId,
-    required double incomingBearingDeg,
-    required double toleranceDeg,
-  }) => bestOutgoing(
-    nodeId: nodeId,
-    excludingEdgeId: excludingEdgeId,
-    headingDeg: incomingBearingDeg,
-    toleranceDeg: toleranceDeg,
-  );
 
   /// [fromEdge] 위 [progressM]에서 진행 방향으로 [maxDistanceM] 안에
   /// [targetEdgeId]에 닿을 수 있는지.
@@ -310,7 +267,6 @@ class CorridorEdge {
         point: projected,
         distanceM: (point - projected).distance,
         distanceAlongM: _lengths[index - 1] + segmentLength * t,
-        tangentBearingDeg: pdrBearingForDirection(delta),
       );
       if (best == null || candidate.distanceM < best.distanceM) {
         best = candidate;
@@ -401,14 +357,12 @@ class EdgeProjection {
     required this.point,
     required this.distanceM,
     required this.distanceAlongM,
-    required this.tangentBearingDeg,
   });
 
   final CorridorEdge edge;
   final PdrLocalPoint point;
   final double distanceM;
   final double distanceAlongM;
-  final double tangentBearingDeg;
 }
 
 class JunctionDistance {
@@ -416,13 +370,6 @@ class JunctionDistance {
 
   final CorridorNode node;
   final double distanceM;
-}
-
-class OutgoingEdge {
-  const OutgoingEdge({required this.edge, required this.errorDeg});
-
-  final CorridorEdge edge;
-  final double errorDeg;
 }
 
 List<double> _cumulativeLengths(List<PdrLocalPoint> points) {
