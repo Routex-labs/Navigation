@@ -134,7 +134,6 @@ const pdrControlRightInsetPx = 184.0;
 
 /// PDR 토스트를 하단 바(+ETA 카드) 위로 띄우는 오프셋.
 const mapShellBottomChromePx = 112.0;
-const etaCardHeightPx = 130.0;
 
 /// 위치 지정 안내를 상단 chrome 아래에 놓는 오프셋.
 ///
