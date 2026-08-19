@@ -45,6 +45,20 @@ void main() {
     expect(merged[1].kinds, [DirectionsRouteOptionKind.shortestDistance]);
   });
 
+  test('같은 kind가 두 번 들어와도 kinds에는 한 번만 남는다', () {
+    final merged = mergeDirectionsRouteOptions([
+      (DirectionsRouteOptionKind.recommended, routeA),
+      (DirectionsRouteOptionKind.alternative, routeASameGeometry),
+      (DirectionsRouteOptionKind.alternative, routeASameGeometry),
+    ]);
+
+    expect(merged.length, 1);
+    expect(merged.single.kinds, [
+      DirectionsRouteOptionKind.recommended,
+      DirectionsRouteOptionKind.alternative,
+    ]);
+  });
+
   test('입력이 비면 빈 목록을 돌려준다', () {
     expect(mergeDirectionsRouteOptions([]), isEmpty);
   });

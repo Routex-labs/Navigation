@@ -30,7 +30,9 @@ class DirectionsRouteOptionsPanel extends StatelessWidget {
       children: [
         for (var i = 0; i < options.length; i++)
           RoutexRouteOption(
-            title: options[i].kinds.map((kind) => kind.label).join(' · '),
+            // 병합 순서가 추천 > 최단거리 > 대안이라 first가 곧 "제일 앞"이다.
+            // 합쳐진 나머지 kind는 적지 않는다 — 라벨이 길어지는 쪽이 더 나쁘다.
+            title: options[i].kinds.first.label,
             detail: formatDistance(options[i].route.distanceMeters),
             meta: formatTransitDuration(options[i].route.durationSeconds),
             selected: i == selectedIndex,

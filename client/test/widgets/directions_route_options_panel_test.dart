@@ -69,4 +69,32 @@ void main() {
 
     expect(find.byType(RoutexRouteOption), findsNothing);
   });
+
+  testWidgets('kinds가 여럿이어도 라벨은 맨 앞 하나만 적는다', (tester) async {
+    await tester.pumpWidget(
+      wrap(
+        DirectionsRouteOptionsPanel(
+          options: const [
+            DirectionsRouteOption(
+              kinds: [
+                DirectionsRouteOptionKind.recommended,
+                DirectionsRouteOptionKind.alternative,
+              ],
+              route: routeA,
+            ),
+            DirectionsRouteOption(
+              kinds: [DirectionsRouteOptionKind.shortestDistance],
+              route: routeB,
+            ),
+          ],
+          selectedIndex: 0,
+          onSelect: (_) {},
+        ),
+      ),
+    );
+
+    expect(find.text('추천'), findsOneWidget);
+    expect(find.text('최단거리'), findsOneWidget);
+    expect(find.textContaining('대안'), findsNothing);
+  });
 }

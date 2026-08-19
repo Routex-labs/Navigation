@@ -31,7 +31,9 @@ List<DirectionsRouteOption> mergeDirectionsRouteOptions(
     if (existing == null) {
       order.add(key);
       byKey[key] = DirectionsRouteOption(kinds: [kind], route: route);
-    } else {
+    } else if (!existing.kinds.contains(kind)) {
+      // searchOption 2·3이 둘 다 alternative로 매핑돼, 좌표열까지 같으면 같은
+      // kind가 두 번 들어온다. 그대로 두면 목록이 "추천 · 대안 · 대안"이 된다.
       byKey[key] = DirectionsRouteOption(
         kinds: [...existing.kinds, kind],
         route: existing.route,
