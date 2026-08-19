@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:navigation_client/repositories/building/building_repository.dart';
@@ -16,6 +17,7 @@ import 'package:navigation_client/widgets/transit_itinerary_card.dart';
 import 'package:navigation_client/service_locator.dart';
 import 'package:navigation_client/state/recent_route_points_controller.dart';
 import 'package:navigation_client/theme/app_theme.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 import 'package:navigation_client/widgets/eta_card.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -154,26 +156,131 @@ void main() {
     await drain(tester);
   }
 
-  testWidgets('경로가 그려져 있으면 뒤로가기가 앱을 끄지 않고 경로만 지운다', (
+  /// 길찾기 바가 지금 보여 주는 도착지. 경로만 지웠는지(칸은 살아 있는지)를 본다.
+  /// 편집 중이 아닐 때 도착 칸은 TextField가 아니라 라벨이라 글자로 찾는다.
+  Finder plannerDestination(String label) => find.descendant(
+    of: find.byKey(const Key('route-planner')),
+    matching: find.text(label),
+  );
+
+  /// 앱이 실제로 꺼졌는지를 세는 자리. `SystemNavigator.pop`은 플랫폼 채널로
+  /// 나가므로 테스트에서는 가로채야 보인다.
+  List<String> watchExit(WidgetTester tester) {
+    final calls = <String>[];
+    final messenger = tester.binding.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'SystemNavigator.pop') calls.add(call.method);
+      return null;
+    });
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+    );
+    return calls;
+  }
+
+  testWidgets('경로가 그려져 있으면 뒤로가기가 경로만 지우고 출발·도착은 남긴다', (
     WidgetTester tester,
   ) async {
     await pumpShell(tester);
-    await tester.tap(find.byTooltip('길찾기'));
-    await drain(tester);
-    await tester.enterText(destinationField(), '강의실');
-    await drain(tester);
-    await tester.tap(find.text('강의실 101').first);
-    await drain(tester);
+    await planWalkRoute(tester);
     expect(find.byType(EtaCard), findsOneWidget);
 
     await tester.binding.handlePopRoute();
     await drain(tester);
 
-    // 화면이 살아 있고(앱이 안 꺼졌고) 경로만 벗겨졌다 — X를 누른 것과 같다.
+    // 벗겨진 것은 지도의 경로 한 겹뿐이다. 길찾기 바와 그 안의 도착지가 남아야
+    // 목적지를 다시 치지 않고 수단만 바꿔 볼 수 있다.
     expect(find.byType(MapShellScreen), findsOneWidget);
     expect(find.byType(EtaCard), findsNothing);
-    expect(find.byKey(const Key('route-draft-origin')), findsNothing);
+    expect(find.byKey(const Key('route-planner')), findsOneWidget);
+    expect(plannerDestination('강의실 101'), findsOneWidget);
+  });
+
+  testWidgets('경로가 없는 길찾기 바에서 뒤로가기는 바를 닫아 검색창으로 되돌린다', (
+    WidgetTester tester,
+  ) async {
+    await pumpShell(tester);
+    await planWalkRoute(tester);
+
+    await tester.binding.handlePopRoute(); // 경로 한 겹
+    await drain(tester);
+    await tester.binding.handlePopRoute(); // 길찾기 바 한 겹
+    await drain(tester);
+
+    expect(find.byKey(const Key('route-planner')), findsNothing);
     expect(find.byTooltip('길찾기'), findsOneWidget);
+  });
+
+  testWidgets('뒤로가기 세 번이 경로·길찾기 바·종료 확인을 한 겹씩 벗긴다', (
+    WidgetTester tester,
+  ) async {
+    final exits = watchExit(tester);
+    await pumpShell(tester);
+    await planWalkRoute(tester);
+
+    await tester.binding.handlePopRoute();
+    await drain(tester);
+    expect(find.byType(EtaCard), findsNothing);
+    expect(find.byKey(const Key('route-planner')), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await drain(tester);
+    expect(find.byTooltip('길찾기'), findsOneWidget);
+    expect(find.byType(RoutexDialog), findsNothing, reason: '두 겹을 한 번에 벗겼다');
+
+    await tester.binding.handlePopRoute();
+    await drain(tester);
+    expect(find.byType(RoutexDialog), findsOneWidget);
+    expect(exits, isEmpty, reason: '확인 전에 나가면 안전장치가 없는 것과 같다');
+  });
+
+  testWidgets('종료 확인에서 확인을 누르면 실제로 나간다', (WidgetTester tester) async {
+    final exits = watchExit(tester);
+    await pumpShell(tester);
+
+    await tester.binding.handlePopRoute();
+    await drain(tester);
+    expect(find.byType(RoutexDialog), findsOneWidget);
+    expect(exits, isEmpty);
+
+    await tester.tap(find.text('종료'));
+    await drain(tester);
+
+    expect(exits, hasLength(1));
+  });
+
+  testWidgets('종료 확인 위에서 뒤로가기는 다이얼로그만 닫는다', (WidgetTester tester) async {
+    final exits = watchExit(tester);
+    await pumpShell(tester);
+
+    await tester.binding.handlePopRoute();
+    await drain(tester);
+    expect(find.byType(RoutexDialog), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await drain(tester);
+
+    expect(find.byType(RoutexDialog), findsNothing);
+    expect(exits, isEmpty, reason: '확인창 위의 뒤로가기가 앱을 끄면 안전장치가 함정이 된다');
+    expect(find.byType(MapShellScreen), findsOneWidget);
+  });
+
+  testWidgets('뒤로가기를 연타해도 종료 확인이 두 겹으로 쌓이지 않는다', (
+    WidgetTester tester,
+  ) async {
+    final exits = watchExit(tester);
+    await pumpShell(tester);
+
+    // 한 프레임 간격의 연타. 둘째 누름이 방금 뜬 창을 도로 닫는 것까지는
+    // 정상이라 개수는 상한만 본다 — 두 겹으로 쌓이면 한 번 확인해도 뒤에 남은
+    // 창이 계속 길을 막는다.
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    await tester.binding.handlePopRoute();
+    await drain(tester);
+
+    expect(find.byType(RoutexDialog).evaluate(), hasLength(lessThan(2)));
+    expect(exits, isEmpty, reason: '연타가 확인 없이 앱을 끄면 안전장치가 없는 것과 같다');
   });
 
   testWidgets('안내 중이면 뒤로가기가 안내만 끄고 경로는 남긴다', (WidgetTester tester) async {
@@ -244,7 +351,9 @@ void main() {
     await tester.tap(find.byType(TransitItineraryCard).first);
     await drain(tester);
 
-    // 경로째로 지운다(뒤로가기 두 번째 겹 = 상단 X와 같은 정리).
+    // 경로 한 겹, 길찾기 바 한 겹. 둘을 합치면 상단 X와 같은 정리다.
+    await tester.binding.handlePopRoute();
+    await drain(tester);
     await tester.binding.handlePopRoute();
     await drain(tester);
     expect(

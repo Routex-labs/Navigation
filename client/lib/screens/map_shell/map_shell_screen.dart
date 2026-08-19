@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:latlong2/latlong.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -2375,9 +2376,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 시트였을 때는 뒤로가기가 시트만 닫았다. 패널로 바뀌었다고 뒤로가기가
     // 앱을 종료해 버리면 안 되므로, 열려 있는 것을 한 겹씩 벗긴다. 경로가
     // 그려진 채로 pop시키면 앱이 통째로 종료된다 — 대중교통 경로를 고른 뒤
-    // 뒤로가기를 눌러 앱이 꺼지던 것이 그 경우다.
+    // 뒤로가기를 눌러 앱이 꺼지던 것이 그 경우다. 어떤 상태에서 무엇이
+    // 벗겨지는지는 `test/screens/map_shell/back_steps_out_of_route_test.dart`.
     return PopScope(
-      canPop: !_searchActive && !routeVisible,
+      // 마지막 겹에서도 그냥 pop시키지 않는다. 아무것도 안 열린 화면의
+      // 뒤로가기는 종료 확인을 거쳐야 해서, pop을 여기서 가로채야 한다.
+      canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         // 검색이 먼저다. 둘 다 살아 있으면 한 번에 한 겹만 벗긴다.
@@ -2392,8 +2396,33 @@ class _MapShellScreenState extends State<MapShellScreen> {
           unawaited(_reopenTransitRoutesSheet());
           return;
         }
-        // 상단 길찾기 바의 X와 같은 정리다. 종료 동작을 두 벌로 만들지 않는다.
-        if (routeVisible) _clearRouteDraft();
+        // 그린 것과 찾던 것도 **다른 사건이다.** 지도의 선만 걷어내고 출발·도착은
+        // 남긴다 — 목적지는 그대로인데 경로까지 지우면 다시 쳐야 한다. 보관한
+        // 대중교통 조회도 그래서 남긴다(출발·도착이 그대로라 아직 유효하다).
+        if (routeVisible) {
+          _outdoorKey.currentState?.clearAllRoutes();
+          return;
+        }
+        // 남은 길찾기 바를 접어 검색창으로 되돌린다. 위 겹과 합치면 상단 X의
+        // 정리([_clearRouteDraft])와 같아, 종료 동작이 두 벌이 되지 않는다.
+        if (_routeMode) {
+          _forgetRouteDraft();
+          return;
+        }
+        // 다 벗겼다. 여기서 그냥 나가면 지도만 보다 한 번 잘못 누른 사람이
+        // 앱 밖으로 튕긴다. `confirmLabel`이 붙은 dialog는 바깥 누르기로도 안
+        // 닫혀, 나가는 길이 "종료"를 누르는 것 하나가 된다.
+        unawaited(
+          showRoutexDialog(
+            context: context,
+            dialog: RoutexDialog(
+              title: '앱을 종료할까요?',
+              confirmLabel: '종료',
+              closeLabel: '취소',
+              onConfirm: SystemNavigator.pop,
+            ),
+          ),
+        );
       },
       child: _buildShell(context, routeVisible),
     );
