@@ -23,6 +23,7 @@ import '../../domain/geo/floor_label.dart';
 import '../../domain/geo/geo_transform.dart';
 import '../../domain/guidance/geo_route_progress.dart';
 import '../../domain/guidance/guidance_chrome.dart';
+import '../../domain/guidance/guidance_start_reach.dart';
 import '../../features/debug_mode/debug_mode.dart';
 import '../../domain/route/dijkstra.dart';
 import '../../domain/route/route_endpoint_fill.dart';

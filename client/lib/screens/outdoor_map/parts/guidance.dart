@@ -211,13 +211,58 @@ extension OutdoorMapGuidance on OutdoorMapBodyState {
     _notifyRouteStateIfChanged();
   }
 
+  /// 안내 시작 판정에 쓸, 지금 지도에 그려진 야외 경로의 좌표열.
+  ///
+  /// 실내 경로만 살아 있으면 빈 목록이다 — 실내는 [_startIndoorGuidance]가
+  /// 자기 가드를 이미 갖고 있어서 여기서 다시 막지 않는다.
+  List<ll.LatLng> get _guidanceStartRoutePoints {
+    final route = _route;
+    if (route != null) return route.points;
+    final transit = _transitItinerary;
+    if (transit == null) return const [];
+    return [for (final leg in transit.legs) ...leg.points];
+  }
+
+  /// 마지막으로 받은 GPS를 위경도로. 아직 못 받았으면 null이다.
+  ll.LatLng? get _positionPoint {
+    final position = _position;
+    if (position == null) return null;
+    return ll.LatLng(position.latitude, position.longitude);
+  }
+
   /// 계획 카드의 `안내 시작`을 모든 이동수단에서 같은 상태 전이로 처리한다.
+  ///
+  /// **경로에서 멀면 아무것도 바꾸지 않는다.** 실내가 건물 밖에서 그렇게 하는
+  /// 것과 같은 이유다([_startIndoorGuidance]) — 카메라를 GPS로 끌고 가 봐야
+  /// 보던 경로가 화면에서 사라질 뿐이다. 도보도 함께 막는다. 카메라를 안 옮겨도
+  /// 안내 상태로 들어가면 엉뚱한 위치에서 진행 판정이 돌기 시작한다.
   Future<void> _startCurrentGuidance() async {
     if (_indoorRoutePreviewOrigin != null) {
       await _startIndoorGuidance();
       return;
     }
     if (_guidanceStarted || !_hasAnyRouteVisible) return;
+    // 좌표를 못 얻는 경로(실내 구간만 살아 있는 경우)에는 가드를 걸지 않는다.
+    // 잴 수 없는 것을 막으면 지금 되던 흐름이 조용히 죽는다.
+    final points = _guidanceStartRoutePoints;
+    if (points.length >= 2) {
+      // 위치를 아직 못 받은 것과 경로에서 먼 것은 **다른 사건이다.** 둘 다 막지만
+      // 문구를 같이 쓰면, GPS를 기다리는 중인 사용자가 경로를 잘못 잡았다고 읽고
+      // 엉뚱한 곳을 고치러 간다.
+      final position = _positionPoint;
+      if (position == null) {
+        _showSnack('현재 위치를 확인하는 중입니다.');
+        return;
+      }
+      if (!canStartGuidanceFrom(
+        routePoints: points,
+        position: position,
+        maxOffsetM: guidanceStartMaxOffsetM,
+      )) {
+        _showSnack('경로 근처에 있을 때 안내를 시작할 수 있습니다.');
+        return;
+      }
+    }
     setState(() {
       _guidanceStarted = true;
     });
