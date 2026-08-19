@@ -37,21 +37,6 @@ flutter run --dart-define-from-file=config.local.json 2>&1 | tee frontend.log
 백엔드를 직접 수정·검증해야 할 때만 로컬 Python으로 띄운다 —
 [로컬 개발 가이드](local-development-guide.md), [GCP 배포 문서](gcp-instance.md).
 
-## `flutter build`·`flutter test`를 `tail`로 파이프하지 마라
-
-파이프의 종료 코드는 마지막 명령(`tail`)의 것이라 **빌드 실패가 성공으로 보인다.**
-
-실제로 이것 때문에 실패한 빌드 위에서 세 번을 관찰한 적이 있다 — 계측 코드에 import가
-빠져 컴파일이 안 되는데 APK는 옛것 그대로였고, 그 위에서 "로그가 안 찍힌다"를 세 번
-분석했다. 잡아낸 것은 **이미 찍히는 로그 옆에 놓은 표식**이 안 나온 순간이었다.
-
-성공/실패 문구를 직접 거른다.
-
-```bash
-flutter build apk --release --dart-define-from-file=config.local.json 2>&1 | grep -E "^√ Built|failed|Error:"
-flutter test --reporter=failures-only
-```
-
 ## 경계
 
 - **경로 계산은 클라이언트 온디바이스**(Dijkstra, `client/lib/domain/route/`)가 담당한다.
