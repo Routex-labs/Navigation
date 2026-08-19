@@ -293,6 +293,12 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
       destination: target,
     );
     if (!mounted) return;
+    // **재탐색이 실패하면 보던 경로를 지우지 않는다.** 도보는 출발점을 박지
+    // 않아([_fixedRouteOrigin]) GPS가 움직일 때마다 여기로 다시 온다. 실패한
+    // null을 그대로 넣으면 걷는 중에 경로가 사라지고, 안내 판정도 함께 풀려
+    // 뒤로가기가 안내 겹을 건너뛰어 길찾기 전체를 지운다. 조회 실패는 화면을
+    // 비울 이유가 아니다 — 다음 GPS 틱이 다시 물어본다.
+    if (route == null && _route != null) return;
     // 도착점이 문이면 TMAP 선이 문 앞에서 끊기거나, 아예 문에 닿지 못한 채
     // 엉뚱한 곳으로 돌아간다([extendRouteToDestination]).
     _applyRoute(extendRouteToDestination(route, target));
@@ -476,6 +482,43 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     _applyRoute(route);
   }
 
+  /// 자동차 후보 목록을 받아 첫 번째(추천)를 그린다. 이후
+  /// [selectDirectionsOption]으로 다른 후보를 고르면 다시 그린다.
+  Future<void> showPlannedRoadRouteOptions(
+    List<DirectionsRouteOption> options, {
+    required ll.LatLng origin,
+    required ll.LatLng destination,
+    required String label,
+  }) async {
+    _directionsRouteOptions = options;
+    _selectedDirectionsOptionIndex = 0;
+    await showPlannedRoadRoute(
+      options.first.route,
+      origin: origin,
+      destination: destination,
+      label: label,
+      driving: true,
+    );
+  }
+
+  /// 목록에서 다른 자동차 후보를 골랐을 때. 출발·도착·라벨은 그대로다 —
+  /// 바뀌는 것은 경로 선뿐이다.
+  Future<void> selectDirectionsOption(int index) async {
+    if (index == _selectedDirectionsOptionIndex) return;
+    final origin = _fixedRouteOrigin;
+    final destination = _userDestination;
+    final label = _userDestinationLabel;
+    if (origin == null || destination == null || label == null) return;
+    setState(() => _selectedDirectionsOptionIndex = index);
+    await showPlannedRoadRoute(
+      _directionsRouteOptions[index].route,
+      origin: origin,
+      destination: destination,
+      label: label,
+      driving: true,
+    );
+  }
+
   /// [point]가 우리 도면이 있는 건물 **안**이면 그 건물의 지상 출입구 좌표를
   /// 돌려준다. POI 좌표를 그대로 끝점으로 쓰면 TMAP이 가장 가까운 도로로 스냅해
   /// 들어갈 수 없는 면에 사용자를 내려놓는다.
@@ -650,6 +693,10 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
       _route = null;
       _fixedRouteOrigin = null;
       _guidanceStarted = false;
+      // 목적지를 지우면 그 목적지에 딸려 있던 자동차 후보 목록도 같이 접는다 —
+      // 안 지우면 목적지가 없는 화면에 후보 패널만 혼자 남는다.
+      _directionsRouteOptions = const [];
+      _selectedDirectionsOptionIndex = 0;
     });
     _syncDestinationLayer();
     _syncRouteLayer();
@@ -868,7 +915,10 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
 
   /// 실내 경로 표시를 초기화한다. ETA 카드 닫기 버튼과 사용자 destination 초기화
   /// 시 호출된다.
-  void _clearIndoorRoute() {
+  ///
+  /// [endGuidance]가 거짓이면 그린 것만 지우고 **안내 세션은 살려 둔다.** 도착
+  /// 자동 지움만 그렇게 부른다 — 이유는 [clearRouteAfterArrival]에 있다.
+  void _clearIndoorRoute({bool endGuidance = true}) {
     _clearCompletedRouteHistory();
     setState(() {
       _guidance
@@ -878,7 +928,7 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
       _indoorMultiFloorRoute = null;
       _indoorRouteDestination = null;
       _indoorRoutePreviewOrigin = null;
-      _guidanceStarted = false;
+      if (endGuidance) _guidanceStarted = false;
       _guidanceTrailSession.clear();
     });
     _syncRouteLayer();
@@ -985,12 +1035,16 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
   ///
   /// 도보 안내는 여기서 **지운다.** 두 선을 겹쳐 두면 어느 쪽이 지금 안내인지
   /// 알 수 없고, 하단 카드가 서로 다른 소요 시간을 말하게 된다.
+  ///
+  /// [bottomSheetFraction]은 이 호출 **직후에** 열려 화면 아래를 덮을 시트의
+  /// 비율이다. 아직 트리에 없어 잴 수 없으므로 부르는 쪽만 안다.
   Future<void> showTransitRoute(
     TransitItinerary itinerary, {
     required ll.LatLng destination,
     required String label,
     ll.LatLng? origin,
     List<TransitItinerary> alternatives = const [],
+    double bottomSheetFraction = 0,
   }) async {
     _clearCompletedRouteHistory();
     _clearPendingIndoorRoute();
@@ -1003,6 +1057,10 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
       // 도보 경로와 그 목적지 핀은 접는다. 목적지 자체는 대중교통 경로의 끝점
       // 으로 그대로 남아 있다.
       _route = null;
+      // **자동차 표시를 함께 되돌린다.** 이 값이 남으면 안내를 시작할 때
+      // [_startCurrentGuidance]가 자동차 따라가기를 켜, 카메라가 경로 개요
+      // 대신 사용자 위치로 끌려간다(경로가 화면 귀퉁이로 밀린다).
+      _routeIsDriving = false;
       _guidanceStarted = false;
       _userDestination = destination;
       _userDestinationLabel = label;
@@ -1011,8 +1069,19 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     _syncRouteLayer();
     await _syncTransitLayer();
     _notifyRouteStateIfChanged();
-    _fitCameraToPoints(itinerary.points);
+    _fitCameraToPoints(
+      itinerary.points,
+      bottomSheetFraction: bottomSheetFraction,
+    );
   }
+
+  /// 후보 상세에서 확정한 경로로 **안내를 시작한다.** 셸(길찾기 화면)이
+  /// [showTransitRoute] 뒤에 부른다.
+  ///
+  /// 계획 카드의 `안내 시작`과 **같은 함수**를 태운다 — 여기에만 있는 판단이
+  /// 생기면 두 버튼이 서로 다른 조건에서 시작한다. 경로에서 멀면 그쪽 가드가
+  /// 막고 안내 문구만 뜬다(그때 카드에 버튼이 남는 것이 맞다).
+  Future<void> startGuidanceForPickedRoute() => _startCurrentGuidance();
 
   /// 대중교통 안내를 끈다. 경로선·요약 카드가 함께 사라진다.
   void clearTransitRoute() {

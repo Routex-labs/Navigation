@@ -311,13 +311,42 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
     return PdrLocalPoint(dx, dy);
   }
 
-  /// 좌표열 전체가 화면에 들어오도록 카메라를 맞춘다. 도보 경로와 대중교통
-  /// 경로가 같은 여백 규칙을 쓰도록 뽑아 두었다 — 값이 갈리면 안내를 바꿀
-  /// 때마다 경로가 화면에서 다른 크기로 잡힌다.
-  void _fitCameraToPoints(List<ll.LatLng> points) {
+  /// 좌표열 전체가 **가려지지 않는 띠**에 들어오도록 카메라를 맞춘다.
+  ///
+  /// 아래를 덮는 하단 카드는 여기서 직접 잰다 — 자동차 후보 3줄이면 카드가
+  /// 392px까지 자라 상수로는 못 따라간다. [bottomSheetFraction]은 이 fit **뒤에**
+  /// 열려 아직 트리에 없는 시트 몫이라 부르는 쪽이 알려 준다(0이면 시트 없음).
+  void _fitCameraToPoints(
+    List<ll.LatLng> points, {
+    double bottomSheetFraction = 0,
+  }) {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
-    unawaited(animateCameraToPoints(controller, points));
+    // 카드는 방금 setState로 바뀌었다. 한 프레임 뒤라야 **새** 카드를 잰다.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _mapController != controller || !_styleReady) return;
+      final viewport = MediaQuery.sizeOf(context);
+      unawaited(
+        animateCameraToPoints(
+          controller,
+          points,
+          viewport: viewport,
+          // 상태 표시줄은 기기마다 달라 상수로 못 박는다.
+          topInsetPx: MediaQuery.paddingOf(context).top + routeFitTopInsetPx,
+          bottomInsetPx: math.max(
+            _bottomCardHeightPx(),
+            viewport.height * bottomSheetFraction,
+          ),
+        ),
+      );
+    });
+  }
+
+  /// 지금 화면 아래를 덮고 있는 카드(ETA·대중교통 요약)의 높이(논리 px).
+  /// 트리에 없으면 0 — 가릴 것이 없다는 뜻이다.
+  double _bottomCardHeightPx() {
+    final box = _etaCardKey.currentContext?.findRenderObject() as RenderBox?;
+    return box == null || !box.hasSize ? 0 : box.size.height;
   }
 
   String? _pickStartNodeIdInBuildingGraph({

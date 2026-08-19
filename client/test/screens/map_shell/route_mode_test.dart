@@ -13,6 +13,7 @@ import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
 import 'package:navigation_client/screens/map_shell/widgets/chrome/map_bottom_bar.dart';
 import 'package:navigation_client/screens/map_shell/widgets/chrome/map_overlay_scroll_row.dart';
 import 'package:navigation_client/widgets/eta_card.dart';
+import 'package:navigation_client/widgets/directions_route_options_panel.dart';
 import 'package:navigation_client/screens/map_shell/widgets/search/route_field_results.dart';
 import 'package:navigation_client/state/recent_route_points_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -180,6 +181,56 @@ void main() {
     expect(find.byType(EtaCard), findsNothing);
     // 검색창이 돌아온다 — 길찾기가 끝났으니 상단 바는 원래 얼굴이어야 한다.
     expect(find.byTooltip('길찾기'), findsOneWidget);
+  });
+
+  testWidgets('자동차 모드에서 후보가 여러 개면 목록에서 고를 수 있다', (
+    WidgetTester tester,
+  ) async {
+    await pumpShell(tester);
+    await tester.tap(find.byTooltip('길찾기'));
+    await drain(tester);
+    await tester.enterText(destinationField(), '강의실');
+    await drain(tester);
+    await tester.tap(find.text('강의실 101').first);
+    await drain(tester);
+
+    await tester.tap(find.text('자동차'));
+    await drain(tester);
+
+    expect(find.byType(EtaCard), findsOneWidget);
+    expect(find.text('추천'), findsOneWidget);
+    expect(find.text('최단거리'), findsOneWidget);
+
+    await tester.tap(find.text('최단거리'));
+    await drain(tester);
+
+    expect(find.byType(EtaCard), findsOneWidget);
+    expect(find.text('최단거리'), findsOneWidget);
+  });
+
+  testWidgets('도보로 바꾸면 자동차 후보 목록이 남지 않는다', (WidgetTester tester) async {
+    await pumpShell(tester);
+    await tester.tap(find.byTooltip('길찾기'));
+    await drain(tester);
+    await tester.enterText(destinationField(), '강의실');
+    await drain(tester);
+    await tester.tap(find.text('강의실 101').first);
+    await drain(tester);
+
+    await tester.tap(find.text('자동차'));
+    await drain(tester);
+
+    // 자동차 후보가 여러 개 뜬 상태에서 시작한다(기존 테스트와 같은 전제).
+    expect(find.text('추천'), findsOneWidget);
+    expect(find.text('최단거리'), findsOneWidget);
+    expect(find.byType(DirectionsRouteOptionsPanel), findsOneWidget);
+
+    await tester.tap(find.text('도보'));
+    await drain(tester);
+
+    // 도보로 바뀌면 방금 본 자동차 후보 패널이 그대로 남아 있으면 안 된다.
+    expect(find.byType(DirectionsRouteOptionsPanel), findsNothing);
+    expect(find.text('최단거리'), findsNothing);
   });
 
   testWidgets('출발 칸을 누르면 "현재 위치"로 되돌릴 길이 목록에 있다', (WidgetTester tester) async {

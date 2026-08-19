@@ -18,11 +18,13 @@ import '../../map/picked_point.dart';
 import '../../service_locator.dart';
 import '../../core/tile_url.dart';
 import '../../domain/route/building_entrances.dart';
+import '../../domain/route/directions_route_alternatives.dart';
 import '../../domain/guidance/completed_route_history.dart';
 import '../../domain/geo/floor_label.dart';
 import '../../domain/geo/geo_transform.dart';
 import '../../domain/guidance/geo_route_progress.dart';
 import '../../domain/guidance/guidance_chrome.dart';
+import '../../domain/guidance/guidance_start_reach.dart';
 import '../../features/debug_mode/debug_mode.dart';
 import '../../domain/route/dijkstra.dart';
 import '../../domain/route/route_endpoint_fill.dart';
@@ -48,6 +50,9 @@ import '../../domain/route/transfer_route_geometry.dart';
 import '../../models/building/building.dart';
 import '../../models/building/building_graph.dart';
 import '../../models/route/directions_route.dart';
+import '../../widgets/directions_route_options_panel.dart';
+import '../../widgets/transit_style.dart' show formatTransitFare;
+import 'widgets/directions_route_detail_sheet.dart';
 import '../../models/building/floor_graph.dart';
 import '../../models/building/floor_plan.dart';
 import '../../models/route/indoor_route.dart';
@@ -229,6 +234,7 @@ class OutdoorMapBody extends StatefulWidget {
     this.onFloorChanged,
     this.onFloorTransitionChanged,
     this.outerOverlayKeys = const [],
+    this.transitRoutesSheetOpen = false,
   });
 
   /// 이 야외 지도가 지금 화면에 보이는지. [MapShellScreen]은 야외/실내를
@@ -236,6 +242,15 @@ class OutdoorMapBody extends StatefulWidget {
   /// 살아 있다. 알려주지 않으면 보이지도 않는 야외 지도가 GPS를 계속 구독한다 —
   /// 실내에 들어간 뒤에는 GPS를 쓰지 않는다는 규칙을 지키려면 이 값이 필요하다.
   final bool active;
+
+  /// 대중교통 **후보 목록 시트**가 지금 이 지도를 덮고 있는지. 그동안에는
+  /// 대중교통 요약 카드를 그리지 않는다 — 목록과 카드가 함께 뜨면 화면에 시트가
+  /// 두 겹이고, 미리 그린 경로가 어느 후보인지도 카드가 앞질러 말한다.
+  ///
+  /// 미리보기(경로선·카메라)는 그대로 둔다. 감추는 것은 카드뿐이다.
+  /// 시트를 여는 쪽(`screens/map_shell/map_shell_screen.dart`)만 알 수 있는
+  /// 사실이라 값으로 받는다.
+  final bool transitRoutesSheetOpen;
 
   /// ETA 카드가 화면 최하단에 새로 나타나거나 사라질 때 호출된다.
   /// 상위(MapShellScreen)가 이 값으로 하단 공용 바를 그 위로 띄운다.
@@ -387,6 +402,11 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   List<ll.LatLng>? _buildingFootprint;
 
   DirectionsRoute? _route;
+
+  /// 자동차 경로 후보 목록. 1개 이하면 고를 게 없다는 뜻이라 패널을
+  /// 그리지 않는다([DirectionsRouteOptionsPanel] 참고).
+  List<DirectionsRouteOption> _directionsRouteOptions = const [];
+  int _selectedDirectionsOptionIndex = 0;
 
   final CompletedRouteHistory _completedRouteHistory = CompletedRouteHistory();
 
@@ -1178,6 +1198,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       // 새 목적지를 받을 때마다 초기화해서, 이번 경로가 계산되면
       // _applyRoute가 "새로 생김"으로 보고 카메라를 다시 맞추게 한다.
       _route = null;
+      // 걷기 안내로 들어왔다. 자동차 후보 목록을 비우지 않으면 걷기 경로 위에
+      // 방금 본 자동차 후보 패널이 그대로 남는다.
+      _directionsRouteOptions = const [];
+      _selectedDirectionsOptionIndex = 0;
     });
     _syncDestinationLayer();
     _syncRouteLayer();

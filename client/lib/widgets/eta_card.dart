@@ -3,6 +3,7 @@ import 'package:routex_design_system/routex_design_system.dart';
 
 import '../domain/geo/distance_format.dart';
 import '../domain/guidance/route_guidance.dart';
+import 'transit_style.dart' show formatTransitDuration;
 
 /// 앱의 경로 값을 Runtime Kit의 계획·안내 패턴에 연결한다.
 ///
@@ -18,6 +19,8 @@ class EtaCard extends StatelessWidget {
     this.onClose,
     this.onStartGuidance,
     this.onClosePointerDown,
+    this.routeOptions,
+    this.extraMetric,
   });
 
   final double distanceMeters;
@@ -28,6 +31,15 @@ class EtaCard extends StatelessWidget {
   final VoidCallback? onStartGuidance;
   final ValueChanged<Offset>? onClosePointerDown;
 
+  /// 복수 경로 후보를 고를 수 있을 때 요약 위에 놓는 선택 영역. 출발 전
+  /// 계획 카드에서만 쓰인다 — 안내 중에는 경로를 바꿀 수 없다.
+  final Widget? routeOptions;
+
+  /// 소요·거리 옆에 하나 더 적을 값(통행료 등). `RoutexEtaCard`가 지표를
+  /// 3개까지만 받아 통행료·택시비를 동시에 넣을 자리가 없다 — 부르는
+  /// 쪽이 어느 쪽을 보여줄지 미리 고른다.
+  final RoutexTripMetric? extraMetric;
+
   @override
   Widget build(BuildContext context) {
     final arrivalTime = TimeOfDay.fromDateTime(
@@ -36,11 +48,16 @@ class EtaCard extends StatelessWidget {
     if (!guidanceStarted) {
       return RoutexEtaCard(
         title: label,
-        arrivalTime: arrivalTime,
+        // 이 자리가 카드의 headline이다. 도착 시각은 안내를 시작한 뒤 진행 바에서
+        // 본다 — 출발 전에 두 화면이 같은 값을 두 벌로 말할 필요가 없다.
+        // 60분을 넘으면 "272분"이 아니라 "4시간 32분"으로 적는다 — 분만 적으면
+        // 사용자가 머릿속에서 나눗셈을 해야 한다. 도보가 실제로 그렇게 길다.
+        arrivalTime: formatTransitDuration(minutes * 60),
         metrics: [
-          RoutexTripMetric(value: '$minutes분', label: '소요'),
           RoutexTripMetric(value: formatDistance(distanceMeters), label: '거리'),
+          ?extraMetric,
         ],
+        routeOptions: routeOptions,
         onStart: onStartGuidance,
       );
     }
@@ -50,7 +67,10 @@ class EtaCard extends StatelessWidget {
       child: RoutexTripProgress(
         metrics: [
           RoutexTripMetric(value: arrivalTime, label: '도착 예정'),
-          RoutexTripMetric(value: '$minutes분', label: '남은 시간'),
+          RoutexTripMetric(
+            value: formatTransitDuration(minutes * 60),
+            label: '남은 시간',
+          ),
           RoutexTripMetric(
             value: formatDistance(distanceMeters),
             label: '남은 거리',
