@@ -293,6 +293,12 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
       destination: target,
     );
     if (!mounted) return;
+    // **재탐색이 실패하면 보던 경로를 지우지 않는다.** 도보는 출발점을 박지
+    // 않아([_fixedRouteOrigin]) GPS가 움직일 때마다 여기로 다시 온다. 실패한
+    // null을 그대로 넣으면 걷는 중에 경로가 사라지고, 안내 판정도 함께 풀려
+    // 뒤로가기가 안내 겹을 건너뛰어 길찾기 전체를 지운다. 조회 실패는 화면을
+    // 비울 이유가 아니다 — 다음 GPS 틱이 다시 물어본다.
+    if (route == null && _route != null) return;
     // 도착점이 문이면 TMAP 선이 문 앞에서 끊기거나, 아예 문에 닿지 못한 채
     // 엉뚱한 곳으로 돌아간다([extendRouteToDestination]).
     _applyRoute(extendRouteToDestination(route, target));
