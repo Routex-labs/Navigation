@@ -2257,11 +2257,20 @@ class _MapShellScreenState extends State<MapShellScreen> {
   Widget build(BuildContext context) {
     final routeVisible = _outdoorRouteVisible;
     // 시트였을 때는 뒤로가기가 시트만 닫았다. 패널로 바뀌었다고 뒤로가기가
-    // 앱을 종료해 버리면 안 되므로, 검색 중에는 pop을 가로채 검색만 닫는다.
+    // 앱을 종료해 버리면 안 되므로, 열려 있는 것을 한 겹씩 벗긴다. 경로가
+    // 그려진 채로 pop시키면 앱이 통째로 종료된다 — 대중교통 경로를 고른 뒤
+    // 뒤로가기를 눌러 앱이 꺼지던 것이 그 경우다.
     return PopScope(
-      canPop: !_searchActive,
+      canPop: !_searchActive && !routeVisible,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _closeSearch();
+        if (didPop) return;
+        // 검색이 먼저다. 둘 다 살아 있으면 한 번에 한 겹만 벗긴다.
+        if (_searchActive) {
+          _closeSearch();
+          return;
+        }
+        // 상단 길찾기 바의 X와 같은 정리다. 종료 동작을 두 벌로 만들지 않는다.
+        if (routeVisible) _clearRouteDraft();
       },
       child: _buildShell(context, routeVisible),
     );
