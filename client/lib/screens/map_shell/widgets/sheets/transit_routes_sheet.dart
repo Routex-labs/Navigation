@@ -4,7 +4,8 @@ import 'package:routex_design_system/routex_design_system.dart';
 import '../../../../models/route/transit_route.dart';
 import '../../../../widgets/map_overlay_guard.dart';
 import '../../../../widgets/sheet_header.dart';
-import '../../../../widgets/transit_itinerary_tile.dart';
+import '../../../../domain/route/transit_itinerary_filter.dart';
+import '../../../../widgets/transit_itinerary_card.dart';
 
 /// 대중교통 경로 후보 목록 시트.
 ///
@@ -56,6 +57,14 @@ class TransitRoutesSheet extends StatefulWidget {
 class _TransitRoutesSheetState extends State<TransitRoutesSheet> {
   bool _intentionalPop = false;
 
+  /// 지금 고른 갈래. **목록만 좁힌다** — 지도에 그려진 경로는 건드리지 않는다.
+  /// 필터는 보는 범위를 줄이는 것이지 선택을 바꾸는 것이 아니다.
+  TransitFilter _filter = TransitFilter.all;
+
+  /// 상세보기가 펼쳐진 줄. 한 번에 하나다 — 여러 줄이 동시에 펼쳐지면 목록이
+  /// 화면 밖으로 밀린다.
+  int? _expandedIndex;
+
   void _markIntentional() => _intentionalPop = true;
 
   void _pick(TransitItinerary itinerary) {
@@ -65,7 +74,12 @@ class _TransitRoutesSheetState extends State<TransitRoutesSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final itineraries = widget.routes.itineraries;
+    final all = widget.routes.itineraries;
+    final filters = availableTransitFilters(all);
+    // 목록이 바뀌어 고른 갈래가 사라졌으면 전체로 되돌린다. 그러지 않으면 아무
+    // 탭도 안 눌린 채 빈 목록만 남는다.
+    final filter = filters.contains(_filter) ? _filter : TransitFilter.all;
+    final itineraries = applyTransitFilter(all, filter);
     return PopScope(
       canPop: true,
       onPopInvokedWithResult: (didPop, _) {
@@ -96,6 +110,21 @@ class _TransitRoutesSheetState extends State<TransitRoutesSheet> {
                     onIntentionalPop: _markIntentional,
                   ),
                   const RoutexDivider(role: RoutexDividerRole.section),
+                  RoutexTabs(
+                    // '전체'에는 숫자를 안 붙인다. 전부라는 말 자체가 개수보다
+                    // 먼저 읽히고, 나머지 탭의 숫자와 뜻이 겹친다.
+                    labels: [
+                      for (final item in filters)
+                        item == TransitFilter.all
+                            ? item.label
+                            : '${item.label} ${transitFilterCount(all, item)}',
+                    ],
+                    selectedIndex: filters.indexOf(filter),
+                    onSelected: (index) => setState(() {
+                      _filter = filters[index];
+                      _expandedIndex = null;
+                    }),
+                  ),
                   Expanded(
                     child: ListView.separated(
                       controller: scrollController,
@@ -106,11 +135,14 @@ class _TransitRoutesSheetState extends State<TransitRoutesSheet> {
                       itemCount: itineraries.length,
                       separatorBuilder: (_, _) =>
                           const RoutexDivider(role: RoutexDividerRole.row),
-                      itemBuilder: (context, index) => TransitItineraryTile(
+                      itemBuilder: (context, index) => TransitItineraryCard(
                         itinerary: itineraries[index],
                         // 첫 줄은 정렬상 가장 빠른 경로다. 그 사실을 배지로
                         // 밝히지 않으면 사용자는 순서의 의미를 추측해야 한다.
                         fastest: index == 0 && itineraries.length > 1,
+                        expanded: _expandedIndex == index,
+                        onExpanded: (open) =>
+                            setState(() => _expandedIndex = open ? index : null),
                         onTap: () => _pick(itineraries[index]),
                       ),
                     ),
