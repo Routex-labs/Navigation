@@ -7,6 +7,9 @@ import 'package:navigation_client/screens/map_shell/widgets/sheets/transit_route
 import 'package:navigation_client/screens/map_shell/widgets/sheets/transit_routes_sheet.dart';
 import 'package:navigation_client/screens/outdoor_map/widgets/transit_summary_card.dart';
 import 'package:navigation_client/widgets/transit_itinerary_card.dart';
+import 'package:navigation_client/widgets/transit_route_summary.dart';
+import 'package:navigation_client/widgets/transit_timeline.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 const _walkLeg = TransitLeg(
   mode: TransitMode.walk,
@@ -263,7 +266,7 @@ void main() {
     expect(rootPops, 0, reason: '상세를 닫는 뒤로가기가 루트 사다리까지 샜다');
   });
 
-  testWidgets('요약 카드는 총 시간과 구간을 보여주고 안내 종료만 남긴다', (tester) async {
+  testWidgets('요약 카드는 후보 목록과 같은 막대로 말하고 안내 종료만 남긴다', (tester) async {
     var closed = false;
     await tester.pumpWidget(
       MaterialApp(
@@ -281,13 +284,47 @@ void main() {
 
     expect(find.text('40분'), findsOneWidget);
     expect(find.textContaining('1,500원'), findsOneWidget);
-
+    // 후보 목록 카드와 **같은 막대**다. 확정 전후로 그림이 바뀌면 사용자는
+    // 자기가 고른 그 경로가 맞는지 다시 확인해야 한다.
+    expect(find.byType(TransitLegBar), findsOneWidget);
+    // 환승 횟수·도보 시간을 나열하던 글과 노선 칩 스트립은 걷어냈다 — 막대가
+    // 이미 그림으로 말한다.
+    expect(find.byType(RoutexTransitItinerary), findsNothing);
+    expect(find.textContaining('환승'), findsNothing);
     // 이동 수단을 고르는 자리는 상단 이동 수단 줄 하나다. 카드에 "도보"를 다시
     // 두면 같은 선택이 두 군데로 흩어진다.
-    expect(find.text('도보'), findsNothing);
+    expect(find.textContaining('도보'), findsNothing);
 
     await tester.tap(find.text('안내 종료'));
     await tester.pump();
     expect(closed, isTrue);
+  });
+
+  testWidgets('요약 카드의 화살표는 상세와 같은 세부 설명을 그 자리에 펼친다', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: Scaffold(
+          body: TransitSummaryCard(
+            itinerary: _withTransfer,
+            label: '여의도공원까지',
+            onClose: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 접힌 채로 시작한다 — 확정 직후 카드가 지도를 덮으면 경로가 안 보인다.
+    expect(find.byType(TransitTimeline), findsNothing);
+
+    await tester.tap(find.text('더보기'));
+    await tester.pumpAndSettle();
+
+    // 화면을 넘기지 않고 **그 자리에서** 펼친다. 상세 화면과 같은 위젯이라
+    // 두 화면이 같은 말을 한다.
+    expect(find.byType(TransitTimeline), findsOneWidget);
+    expect(find.byType(TransitRouteDetailSheet), findsNothing);
+    expect(find.text('여의도역'), findsOneWidget);
   });
 }
