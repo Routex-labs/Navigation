@@ -1606,12 +1606,78 @@ class _MapShellScreenState extends State<MapShellScreen> {
     );
     if (!mounted) return;
     if (await _announceTransitFailure(routes.status, destination)) return;
+
+    // **목록을 띄우기 전에** 앞뒤 도보를 채운다. 시트를 먼저 열고 나중에 채우면
+    // 사용자가 누르는 순간 카드 높이가 튀어 엉뚱한 후보를 고른다.
+    final filled = await _withListWalkLegs(
+      routes,
+      origin: origin,
+      destination: destination.point,
+    );
+    if (!mounted) return;
+
+    // **채운 목록을 보관한다** — 원본을 넣으면 뒤로가기로 다시 연 목록에서만
+    // 도보가 사라진다.
     _lastTransitQuery = (
-      routes: routes,
+      routes: filled,
       destination: destination,
       origin: origin,
     );
-    await _pickTransitRoute(routes, destination: destination, origin: origin);
+    await _pickTransitRoute(filled, destination: destination, origin: origin);
+  }
+
+  /// 후보 **전부**의 앞뒤 도보를 채운다. 카카오는 첫 승차 전·마지막 하차 뒤
+  /// 도보를 주지 않아, 그대로 그리면 목록의 선이 정류장에서 시작한다.
+  ///
+  /// 실호출은 [transitWalkGaps]가 중복을 지우고 상한을 건 만큼만 나간다 —
+  /// TMAP 경로안내 그룹이 하루 1,000건을 공유해서 후보마다 두 번씩 부르면
+  /// 자동차 조회까지 함께 죽는다. 잘린 구간과 실패한 요청은 맵에서 null로
+  /// 나와 `fillTransitWalkLegs`가 직선으로 잇는다.
+  Future<TransitRoutes> _withListWalkLegs(
+    TransitRoutes routes, {
+    required LatLng origin,
+    required LatLng destination,
+  }) async {
+    final gaps = transitWalkGaps(
+      routes.itineraries,
+      origin: origin,
+      destination: destination,
+    );
+    if (gaps.isEmpty) return routes;
+
+    final walks = await Future.wait([
+      for (final gap in gaps)
+        directionsRepository.getWalkingRoute(
+          origin: gap.from,
+          destination: gap.to,
+        ),
+    ]);
+    final byGap = <TransitWalkGap, DirectionsRoute?>{
+      for (var i = 0; i < gaps.length; i++) gaps[i]: walks[i],
+    };
+    DirectionsRoute? lookup(LatLng from, LatLng to) =>
+        byGap[TransitWalkGap(from: from, to: to)];
+
+    return TransitRoutes(
+      status: routes.status,
+      itineraries: [
+        for (final itinerary in routes.itineraries)
+          if (itinerary.legs.isEmpty)
+            itinerary
+          else
+            fillTransitWalkLegs(
+              itinerary,
+              origin: origin,
+              destination: destination,
+              head: itinerary.legs.first.points.isEmpty
+                  ? null
+                  : lookup(origin, itinerary.legs.first.points.first),
+              tail: itinerary.legs.last.points.isEmpty
+                  ? null
+                  : lookup(itinerary.legs.last.points.last, destination),
+            ),
+      ],
+    );
   }
 
   /// 안내를 끈 뒤 마지막 후보 목록을 다시 연다. 대중교통이 아니었으면 아무 일도
@@ -1683,10 +1749,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 가리킨다. 자세한 근거는 [trimTrailingWalkLeg]에 있다.
     final trimmed = trimTrailingWalkLeg(picked);
 
-    // 고른 **뒤에** 앞뒤 도보를 채운다. 후보는 최대 15개까지 오는데, 목록을
-    // 만들자고 후보마다 두 번씩 보행자 API를 부르면 30번이 나가고 사용자는
-    // 그중 하나만 본다. 목록 단계에서 도보가 없어도 총 소요시간은 정확하다 —
-    // 카카오 totalTime에 이미 포함돼 있다([fillTransitWalkLegs] 주석).
+    // 앞 도보는 목록에서 이미 채워져 왔다([_withListWalkLegs]) — 그래서 여기서
+    // 다시 나가는 실호출은 **뒤 도보 하나뿐**이다. 뒤는 방금 고른 문 기준으로
+    // 끝점이 달라져 목록의 것을 쓸 수 없다.
     final completed = await _withTransitWalkLegs(
       trimmed,
       origin: origin,
@@ -1702,10 +1767,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
       // 나머지 후보도 함께 넘겨 회색으로 깔린다. 고른 것 하나만 그리면 "다른
       // 길도 있다"가 시트를 다시 열기 전까지 화면에서 사라진다.
       //
-      // **다듬기 전 원본을 넘긴다.** 고른 경로만 문·하차 지점에 맞춰 끝을
-      // 손보는데([_withTransitWalkLegs]), 후보까지 같은 손질을 하려면 조회를
-      // 후보 수만큼 더 해야 한다. 회색 선이 말하는 것은 "대충 어디로 도는가"라
-      // 그 정밀도가 필요 없다.
+      // **다듬기 전 것을 넘긴다.** 앞뒤 도보는 이미 붙어 있고, 고른 경로만
+      // 문·하차 지점에 맞춰 끝을 다시 손본다([_withTransitWalkLegs]). 회색 선이
+      // 말하는 것은 "대충 어디로 도는가"라 그 정밀도가 필요 없다.
       // **고른 것은 뺀 나머지다.** `completed`는 picked를 다듬은 사본이라
       // 목록 안의 원본과 같은 객체가 아니고, 그대로 넘기면 파란 선 밑에 자기
       // 회색 선이 한 겹 더 깔린다.
@@ -1783,10 +1847,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
     );
   }
 
-  /// 카카오가 주지 않는 출발·도착 도보를 TMAP 보행자 경로로 채운다.
+  /// 고른 한 경로의 출발·도착 도보를 TMAP 보행자 경로로 채운다.
   ///
   /// 두 요청을 동시에 보낸다. 순서대로 기다리면 지도가 뜨기까지 왕복 시간이
-  /// 두 배가 되는데, 두 구간은 서로를 필요로 하지 않는다.
+  /// 두 배가 되는데, 두 구간은 서로를 필요로 하지 않는다. 목록에서 온 경로는
+  /// 앞 도보가 이미 붙어 있어(첫 구간이 도보라) 앞쪽 요청이 저절로 빠진다.
   ///
   /// 실패해도 안내를 막지 않는다. 도보선이 직선으로 떨어질 뿐이고, 사용자가
   /// 기다린 것은 "저기까지 가는 방법"이지 도보 구간의 정확한 모양이 아니다.
