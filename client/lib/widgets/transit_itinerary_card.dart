@@ -1,14 +1,15 @@
+/// 대중교통 경로 후보 한 장. 배지 박스 없이 색과 글자로만 나눈다.
+///
+/// 실시간 도착·혼잡도·기후동행은 카카오 응답에 없어 그리지 않는다. 모양의 근거는
+/// `docs/superpowers/specs/2026-08-19-route-alternatives-and-guidance-design.md` D절.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:routex_design_system/routex_design_system.dart';
 
 import '../map/style/route_style.dart';
 import '../models/route/transit_route.dart';
 import 'transit_style.dart';
-
-/// 대중교통 경로 후보 한 장. 배지 박스 없이 색과 글자로만 나눈다.
-///
-/// 실시간 도착·혼잡도·기후동행은 카카오 응답에 없어 그리지 않는다. 모양의 근거는
-/// `docs/superpowers/specs/2026-08-19-route-alternatives-and-guidance-design.md` D절.
 
 /// 지도 본선과 같은 파랑. DS의 `actionPrimary`는 teal이라 여기 쓰면 초록이 된다.
 final _accent = Color(
