@@ -20,8 +20,6 @@ class TransitItineraryCard extends StatelessWidget {
     super.key,
     required this.itinerary,
     required this.fastest,
-    required this.expanded,
-    required this.onExpanded,
     required this.onTap,
     this.selected = false,
   });
@@ -32,11 +30,8 @@ class TransitItineraryCard extends StatelessWidget {
   /// 사용자가 첫 줄이 왜 첫 줄인지 추측해야 한다.
   final bool fastest;
 
-  /// 카드가 펼쳐져 있는지. 접히면 헤더 한 줄만 남는다. **상태는 목록이 든다** —
-  /// 카드가 들면 `ListView`가 element를 재사용할 때 엉뚱한 줄로 옮겨 붙는다.
-  final bool expanded;
-
-  final ValueChanged<bool> onExpanded;
+  /// 카드를 누르면 상세 경로 화면이 열린다. 카드 한 장이 통째로 그 손잡이라
+  /// 접기 화살표 같은 별도 버튼은 두지 않는다.
   final VoidCallback onTap;
   final bool selected;
 
@@ -62,79 +57,46 @@ class TransitItineraryCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (fastest)
+                Text(
+                  '최적',
+                  style: RoutexTypography.bodySmall.copyWith(
+                    color: _accent,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (fastest)
-                          Text(
-                            '최적',
-                            style: RoutexTypography.bodySmall.copyWith(
-                              color: _accent,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        Row(
-                          children: [
-                            Text(
-                              formatTransitDuration(itinerary.totalTimeSeconds),
-                              style: RoutexTypography.tabular(
-                                RoutexTypography.headline,
-                              ),
-                            ),
-                            // 요금이 없으면 구분선도 함께 뺀다 — 안 그러면 헤더가
-                            // `19분 │`로 끝난다. 짧은 버스는 실제로 null로 온다.
-                            if (fare != null && fare > 0) ...[
-                              Container(
-                                width: 1,
-                                height: 12,
-                                margin: const EdgeInsets.symmetric(
-                                  horizontal: RoutexSpacing.controlGap,
-                                ),
-                                color: colors.borderStrong,
-                              ),
-                              Text(
-                                formatTransitFare(fare),
-                                style: RoutexTypography.bodySmall.copyWith(
-                                  color: colors.contentSecondary,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ],
-                    ),
+                  Text(
+                    formatTransitDuration(itinerary.totalTimeSeconds),
+                    style: RoutexTypography.tabular(RoutexTypography.headline),
                   ),
-                  IconButton(
-                    onPressed: () => onExpanded(!expanded),
-                    tooltip: expanded ? '접기' : '펼치기',
-                    iconSize: RoutexMetrics.iconSmall,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(
-                      width: 32,
-                      height: 32,
+                  // 요금이 없으면 구분선도 함께 뺀다 — 안 그러면 헤더가
+                  // `19분 │`로 끝난다. 짧은 버스는 실제로 null로 온다.
+                  if (fare != null && fare > 0) ...[
+                    Container(
+                      width: 1,
+                      height: 12,
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: RoutexSpacing.controlGap,
+                      ),
+                      color: colors.borderStrong,
                     ),
-                    color: colors.contentSecondary,
-                    icon: Icon(
-                      expanded
-                          ? Icons.keyboard_arrow_up_rounded
-                          : Icons.keyboard_arrow_down_rounded,
+                    Text(
+                      formatTransitFare(fare),
+                      style: RoutexTypography.bodySmall.copyWith(
+                        color: colors.contentSecondary,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
-              if (expanded) ...[
+              const SizedBox(height: RoutexSpacing.contentGap),
+              _LegBar(itinerary: itinerary),
+              if (rides.isNotEmpty) ...[
                 const SizedBox(height: RoutexSpacing.contentGap),
-                _LegBar(itinerary: itinerary),
-                if (rides.isNotEmpty) ...[
-                  const SizedBox(height: RoutexSpacing.contentGap),
-                  for (final ride in rides) _RideRow(leg: ride),
-                  if (rides.last.endName case final drop?) _DropRow(name: drop),
-                ],
+                for (final ride in rides) _RideRow(leg: ride),
+                if (rides.last.endName case final drop?) _DropRow(name: drop),
               ],
             ],
           ),

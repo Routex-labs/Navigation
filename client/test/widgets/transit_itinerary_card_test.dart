@@ -49,18 +49,8 @@ void main() {
     ],
   );
 
-  Widget card(
-    TransitItinerary itinerary, {
-    bool expanded = true,
-    ValueChanged<bool>? onExpanded,
-  }) => wrap(
-    TransitItineraryCard(
-      itinerary: itinerary,
-      fastest: true,
-      expanded: expanded,
-      onExpanded: onExpanded ?? (_) {},
-      onTap: () {},
-    ),
+  Widget card(TransitItinerary itinerary) => wrap(
+    TransitItineraryCard(itinerary: itinerary, fastest: true, onTap: () {}),
   );
 
   testWidgets('소요·요금·노선·정류장명을 적는다', (tester) async {
@@ -71,6 +61,10 @@ void main() {
     expect(find.text('7613'), findsOneWidget);
     expect(find.text('삼부아파트'), findsOneWidget);
     expect(find.text('공덕역2번출구'), findsOneWidget);
+    // 카드 전체가 상세를 여는 손잡이다. 접기 화살표도, 별도 '상세보기' 줄도
+    // 두지 않는다 — 둘 다 같은 자리를 두 번 차지한다.
+    expect(find.byType(IconButton), findsNothing);
+    expect(find.text('상세보기'), findsNothing);
   });
 
   testWidgets('최적은 배지 없이 지도 본선과 같은 파랑 글자다', (tester) async {
@@ -127,25 +121,6 @@ void main() {
     await tester.pumpWidget(card(zero));
 
     expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('접으면 막대와 노선 줄이 사라지고 헤더만 남는다', (tester) async {
-    await tester.pumpWidget(card(ride, expanded: false));
-
-    expect(find.text('19분'), findsOneWidget);
-    expect(find.text('7613'), findsNothing);
-    expect(find.text('공덕역2번출구'), findsNothing);
-  });
-
-  testWidgets('우측 상단 화살표가 접힘을 부모에게 알린다', (tester) async {
-    final asked = <bool>[];
-    await tester.pumpWidget(card(ride, onExpanded: asked.add));
-
-    await tester.tap(find.byIcon(Icons.keyboard_arrow_up_rounded));
-
-    expect(asked, [false]);
-    // 상세보기 줄은 없앴다 — 접기는 화살표 하나로만 한다.
-    expect(find.text('상세보기'), findsNothing);
   });
 
   testWidgets('정류장명이 길어도 노선번호를 자르지 않는다', (tester) async {
@@ -205,13 +180,7 @@ void main() {
 
   test('카드는 stateless다', () {
     expect(
-      TransitItineraryCard(
-        itinerary: ride,
-        fastest: true,
-        expanded: true,
-        onExpanded: (_) {},
-        onTap: () {},
-      ),
+      TransitItineraryCard(itinerary: ride, fastest: true, onTap: () {}),
       isA<StatelessWidget>(),
     );
   });

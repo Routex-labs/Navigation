@@ -61,13 +61,6 @@ class _TransitRoutesSheetState extends State<TransitRoutesSheet> {
   /// 필터는 보는 범위를 줄이는 것이지 선택을 바꾸는 것이 아니다.
   TransitFilter _filter = TransitFilter.all;
 
-  /// **접어 둔** 줄. 기본은 전부 펼침이다 — 카드가 접히면 소요와 요금만 남아
-  /// 후보를 견줄 수가 없다. 접기는 긴 목록에서 눈에 걸리는 줄을 치우는 손잡이다.
-  ///
-  /// 펼침이 아니라 접힘을 세는 이유: 기본값이 "빈 집합 = 전부 펼침"이라 목록이
-  /// 바뀌어도 초기화 규칙이 필요 없다.
-  final Set<int> _collapsed = <int>{};
-
   void _markIntentional() => _intentionalPop = true;
 
   void _pick(TransitItinerary itinerary) {
@@ -123,12 +116,8 @@ class _TransitRoutesSheetState extends State<TransitRoutesSheet> {
                             : '${item.label} ${transitFilterCount(all, item)}',
                     ],
                     selectedIndex: filters.indexOf(filter),
-                    onSelected: (index) => setState(() {
-                      _filter = filters[index];
-                      // 갈래를 바꾸면 같은 인덱스가 다른 경로를 가리킨다. 접힘을
-                      // 그대로 두면 엉뚱한 줄이 접힌 채로 뜬다.
-                      _collapsed.clear();
-                    }),
+                    onSelected: (index) =>
+                        setState(() => _filter = filters[index]),
                   ),
                   Expanded(
                     child: ListView.separated(
@@ -145,12 +134,6 @@ class _TransitRoutesSheetState extends State<TransitRoutesSheet> {
                         // 첫 줄은 정렬상 가장 빠른 경로다. 그 사실을 배지로
                         // 밝히지 않으면 사용자는 순서의 의미를 추측해야 한다.
                         fastest: index == 0 && itineraries.length > 1,
-                        expanded: !_collapsed.contains(index),
-                        onExpanded: (open) => setState(
-                          () => open
-                              ? _collapsed.remove(index)
-                              : _collapsed.add(index),
-                        ),
                         onTap: () => _pick(itineraries[index]),
                       ),
                     ),

@@ -93,8 +93,8 @@ void main() {
     // 대신한다.
     expect(find.text('여의도역'), findsOneWidget);
     expect(find.text('광화문역'), findsOneWidget);
-    // 목록은 기본이 펼침이다 — 접혀 있으면 후보를 견줄 수가 없다.
-    expect(find.byIcon(Icons.keyboard_arrow_up_rounded), findsNWidgets(2));
+    // 카드는 늘 펼친 모양 하나다 — 접기 화살표는 두지 않는다.
+    expect(find.byIcon(Icons.keyboard_arrow_up_rounded), findsNothing);
   });
 
   testWidgets('경로를 누르면 그 경로를 돌려준다', (tester) async {
