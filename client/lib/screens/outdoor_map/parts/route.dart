@@ -1057,6 +1057,10 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
       // 도보 경로와 그 목적지 핀은 접는다. 목적지 자체는 대중교통 경로의 끝점
       // 으로 그대로 남아 있다.
       _route = null;
+      // **자동차 표시를 함께 되돌린다.** 이 값이 남으면 안내를 시작할 때
+      // [_startCurrentGuidance]가 자동차 따라가기를 켜, 카메라가 경로 개요
+      // 대신 사용자 위치로 끌려간다(경로가 화면 귀퉁이로 밀린다).
+      _routeIsDriving = false;
       _guidanceStarted = false;
       _userDestination = destination;
       _userDestinationLabel = label;
