@@ -1231,7 +1231,8 @@ class TransitItineraryCard extends StatelessWidget {
               ],
               const SizedBox(height: RoutexSpacing.inlineGap),
               RoutexDisclosure(
-                header: '상세보기',
+                // header는 String이 아니라 Widget이다.
+                header: const Text('상세보기', style: RoutexTypography.bodySmall),
                 expanded: expanded,
                 onExpanded: onExpanded,
                 child: Column(
