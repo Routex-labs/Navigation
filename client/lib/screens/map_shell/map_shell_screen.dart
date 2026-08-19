@@ -1609,7 +1609,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
         : RoutePlanMode.walk;
   }
 
-  /// 대중교통 경로를 물어보고, 후보 중 하나를 고르면 야외 지도에 그린다.
+  /// 대중교통 경로를 물어보고, 첫 후보를 지도에 미리 그린 뒤 목록을 띄운다.
   ///
   /// 출발지는 야외 지도가 정한다([OutdoorMapBodyState.routeOriginPoint]) —
   /// 지도에서 찍은 출발 지점이 있으면 그것을, 없으면 GPS를 쓴다. 실내 앵커는
@@ -1657,7 +1657,43 @@ class _MapShellScreenState extends State<MapShellScreen> {
       destination: destination,
       origin: origin,
     );
+    // **목록보다 먼저 그린다.** 자동차·도보는 누른 즉시 경로가 뜨는데 대중교통만
+    // 고를 때까지 앞 수단 경로가 남아 있었다. 조회가 성공한 뒤에 그리는 순서라야
+    // 실패했을 때 앞 경로도 새 경로도 없는 빈 화면이 안 생긴다.
+    await _previewTransitRoute(
+      filled,
+      destination: destination,
+      origin: origin,
+    );
+    if (!mounted) return;
     await _pickTransitRoute(filled, destination: destination, origin: origin);
+  }
+
+  /// 고르기 전에 첫(최적) 후보를 지도에 그린다. 나머지는 회색으로 깔린다 —
+  /// 자동차 후보와 같은 그림이다.
+  ///
+  /// **실내 구간도 문 재선정도 하지 않는다.** 그건 확정했을 때 할 일이라
+  /// [_pickTransitRoute]가 한다. 여기서는 목록이 든 후보를 그대로 그리므로
+  /// TMAP 호출이 한 건도 더 나가지 않는다.
+  ///
+  /// 그릴 좌표가 없으면 아무 일도 하지 않는다 — 빈 선을 그리면 앞 수단 경로만
+  /// 지워져 지도가 빈 화면이 된다.
+  Future<void> _previewTransitRoute(
+    TransitRoutes routes, {
+    required DirectionsCandidate destination,
+    required LatLng origin,
+  }) async {
+    final outdoor = _outdoorKey.currentState;
+    if (outdoor == null || routes.itineraries.isEmpty) return;
+    final best = routes.itineraries.first;
+    if (best.points.isEmpty) return;
+    await outdoor.showTransitRoute(
+      best,
+      destination: destination.point,
+      label: '${destination.title}까지',
+      origin: origin,
+      alternatives: routes.itineraries.skip(1).toList(growable: false),
+    );
   }
 
   /// 후보 **전부**의 앞뒤 도보를 채운다. 카카오는 첫 승차 전·마지막 하차 뒤
