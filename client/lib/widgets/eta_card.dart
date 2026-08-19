@@ -3,6 +3,7 @@ import 'package:routex_design_system/routex_design_system.dart';
 
 import '../domain/geo/distance_format.dart';
 import '../domain/guidance/route_guidance.dart';
+import 'transit_style.dart' show formatTransitDuration;
 
 /// 앱의 경로 값을 Runtime Kit의 계획·안내 패턴에 연결한다.
 ///
@@ -49,7 +50,9 @@ class EtaCard extends StatelessWidget {
         title: label,
         // 이 자리가 카드의 headline이다. 도착 시각은 안내를 시작한 뒤 진행 바에서
         // 본다 — 출발 전에 두 화면이 같은 값을 두 벌로 말할 필요가 없다.
-        arrivalTime: '$minutes분',
+        // 60분을 넘으면 "272분"이 아니라 "4시간 32분"으로 적는다 — 분만 적으면
+        // 사용자가 머릿속에서 나눗셈을 해야 한다. 도보가 실제로 그렇게 길다.
+        arrivalTime: formatTransitDuration(minutes * 60),
         metrics: [
           RoutexTripMetric(value: formatDistance(distanceMeters), label: '거리'),
           ?extraMetric,
@@ -64,7 +67,10 @@ class EtaCard extends StatelessWidget {
       child: RoutexTripProgress(
         metrics: [
           RoutexTripMetric(value: arrivalTime, label: '도착 예정'),
-          RoutexTripMetric(value: '$minutes분', label: '남은 시간'),
+          RoutexTripMetric(
+            value: formatTransitDuration(minutes * 60),
+            label: '남은 시간',
+          ),
           RoutexTripMetric(
             value: formatDistance(distanceMeters),
             label: '남은 거리',

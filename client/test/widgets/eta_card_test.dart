@@ -104,6 +104,16 @@ void main() {
       expect(find.textContaining('통행료', findRichText: true), findsOneWidget);
     });
 
+    testWidgets('한 시간을 넘으면 분이 아니라 시간으로 적는다', (tester) async {
+      // 도보로 272분이 실제로 나온다. 분만 적으면 사용자가 나눗셈을 해야 한다.
+      await tester.pumpWidget(
+        wrap(const EtaCard(distanceMeters: 20000, minutes: 272)),
+      );
+
+      expect(find.text('4시간 32분'), findsOneWidget);
+      expect(find.text('272분'), findsNothing);
+    });
+
     testWidgets('headline은 도착 시각이 아니라 소요 시간이다', (tester) async {
       await tester.pumpWidget(
         wrap(const EtaCard(distanceMeters: 3900, minutes: 8)),
