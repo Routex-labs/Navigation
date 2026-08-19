@@ -201,6 +201,68 @@ void main() {
     expect(picked()?.totalTimeSeconds, 2400);
   });
 
+  testWidgets('상세를 열었다 닫아도 좁혀 둔 필터가 그대로다', (tester) async {
+    useTallViewport(tester);
+    await openSheet(tester);
+
+    await tester.tap(find.text('지하철 1'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TransitItineraryCard), findsOneWidget);
+
+    await tester.tap(find.byType(TransitItineraryCard).first);
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    // 목록이 전체로 되돌아가면 방금 좁힌 일이 없던 셈이 된다.
+    expect(find.byType(TransitItineraryCard), findsOneWidget);
+    expect(find.text('30분'), findsNothing);
+  });
+
+  testWidgets('상세 위 시스템 뒤로가기는 루트의 뒤로가기 사다리까지 내려가지 않는다', (
+    tester,
+  ) async {
+    useTallViewport(tester);
+    // 루트 화면의 PopScope 자리. 실제 앱에서는 여기에 검색·안내·종료 확인으로
+    // 이어지는 다섯 겹 사다리가 걸려 있다 - 상세를 닫는 뒤로가기가 여기 닿으면
+    // 상세만이 아니라 그 아래 상태까지 한 겹 벗겨진다.
+    var rootPops = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (_, _) => rootPops++,
+          child: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => TransitRoutesSheet.show(
+                  context,
+                  routes: const TransitRoutes.ok([_busOnly, _withTransfer]),
+                  destinationLabel: '여의도공원',
+                  onCloseAll: () {},
+                ),
+                child: const Text('열기'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('열기'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('40분'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TransitRouteDetailSheet), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TransitRouteDetailSheet), findsNothing);
+    expect(find.byType(TransitRoutesSheet), findsOneWidget);
+    expect(rootPops, 0, reason: '상세를 닫는 뒤로가기가 루트 사다리까지 샜다');
+  });
+
   testWidgets('요약 카드는 총 시간과 구간을 보여주고 안내 종료만 남긴다', (tester) async {
     var closed = false;
     await tester.pumpWidget(

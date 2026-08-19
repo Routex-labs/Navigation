@@ -1,4 +1,4 @@
-/// 대중교통 경로 하나를 자세히 보는 시트. 목록 시트 **위에** 쌓인다.
+/// 대중교통 경로 하나를 자세히 보는 **전체 화면**. 목록 시트 위에 라우트로 쌓인다.
 ///
 /// 여기서는 아무것도 확정되지 않는다 — 지도를 바꾸는 것은 `안내 시작`뿐이다.
 /// 실시간 도착·혼잡도·정류장 번호는 응답에 없어 자리도 두지 않는다. 근거는
@@ -16,7 +16,8 @@ import '../../../../widgets/transit_style.dart';
 /// 고른 경로 한 가지의 상세. **보는 화면이지 고르는 화면이 아니다.**
 ///
 /// 뒤로 닫으면 목록이 그대로 남아 다른 경로를 눌러 볼 수 있어야 하므로,
-/// 목록 시트를 대체하지 않고 그 위에 모달로 한 겹 쌓는다.
+/// 목록 시트를 대체하지 않고 그 위에 라우트를 한 겹 쌓는다. 이름의 `Sheet`는
+/// 시트였던 시절의 흔적이다 — 여러 테스트가 이 타입으로 화면을 찾는다.
 class TransitRouteDetailSheet extends StatefulWidget {
   const TransitRouteDetailSheet({
     super.key,
@@ -34,27 +35,25 @@ class TransitRouteDetailSheet extends StatefulWidget {
   /// null이면 화면을 그리는 순간이다(테스트만 값을 넘긴다).
   final DateTime? departureAt;
 
-  /// 목록 시트 위에 상세를 띄운다.
+  /// 목록 시트 위에 상세를 전체 화면으로 띄운다.
   ///
-  /// `안내 시작`을 눌렀을 때만 **true**를 돌려주고, 뒤로·바깥 탭으로 닫으면
-  /// null이다. 상세는 보는 화면이라 열고 닫는 것만으로는 지도에 아무 일도
-  /// 일어나지 않는다 — 배선하는 쪽은 true일 때만 경로를 확정한다.
+  /// `안내 시작`을 눌렀을 때만 **true**를 돌려주고, 뒤로가기로 닫으면 null이다.
+  /// 상세는 보는 화면이라 열고 닫는 것만으로는 지도에 아무 일도 일어나지
+  /// 않는다 — 배선하는 쪽은 true일 때만 경로를 확정한다.
   static Future<bool?> show(
     BuildContext context, {
     required TransitItinerary itinerary,
     required String destinationLabel,
     DateTime? departureAt,
   }) {
-    return showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.transparent,
-      builder: (context) => MapOverlayGuard(
-        child: TransitRouteDetailSheet(
-          itinerary: itinerary,
-          destinationLabel: destinationLabel,
-          departureAt: departureAt,
+    return Navigator.of(context).push<bool>(
+      _DetailRoute(
+        builder: (context) => MapOverlayGuard(
+          child: TransitRouteDetailSheet(
+            itinerary: itinerary,
+            destinationLabel: destinationLabel,
+            departureAt: departureAt,
+          ),
         ),
       ),
     );
@@ -78,31 +77,27 @@ class _TransitRouteDetailSheetState extends State<TransitRouteDetailSheet> {
     final itinerary = widget.itinerary;
     final total = itinerary.totalTimeSeconds;
 
-    return ConstrainedBox(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.sizeOf(context).height * 0.85,
-      ),
-      child: RoutexBottomSheet(
-        // 표면은 Runtime Kit이, 여백은 조각마다 다르므로 본문이 갖는다.
-        contentInset: RoutexBottomSheetContentInset.content,
+    return Scaffold(
+      // 아래 목록이 비치지 않으려면 표면이 불투명해야 한다. 이것이 시트를
+      // 그만둔 이유다 — 투명한 시트 위에 시트를 얹으니 둘이 겹쳐 보였다.
+      backgroundColor: context.routexColors.surfaceBase,
+      body: SafeArea(
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            const RoutexSheetHandle(),
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: RoutexSpacing.contentGap,
               ),
               child: RoutexSheetHeader(
                 title: '${widget.destinationLabel}까지',
-                // 뒤로는 이 시트만 닫는다. 목록이 그대로 남아 다른 경로를
+                // 뒤로는 이 화면만 닫는다. 목록이 그대로 남아 다른 경로를
                 // 눌러 보는 것이 이 화면의 존재 이유다.
                 onBack: () => Navigator.of(context).pop(),
               ),
             ),
             _Summary(itinerary: itinerary, arrival: _arrival(total)),
             const RoutexDivider(role: RoutexDividerRole.section),
-            Flexible(
+            Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(
                   horizontal: RoutexSpacing.componentPadding,
@@ -117,11 +112,10 @@ class _TransitRouteDetailSheetState extends State<TransitRouteDetailSheet> {
             ),
             const RoutexDivider(role: RoutexDividerRole.section),
             Padding(
-              padding: EdgeInsets.fromLTRB(
-                RoutexSpacing.componentPadding,
-                RoutexSpacing.contentGap,
-                RoutexSpacing.componentPadding,
-                RoutexSpacing.contentGap + MediaQuery.paddingOf(context).bottom,
+              // 아래 여백은 SafeArea가 이미 홈 인디케이터만큼 밀어 둔다.
+              padding: const EdgeInsets.symmetric(
+                horizontal: RoutexSpacing.componentPadding,
+                vertical: RoutexSpacing.contentGap,
               ),
               child: SizedBox(
                 width: double.infinity,
@@ -261,7 +255,7 @@ class _Summary extends StatelessWidget {
 /// 타임라인 한 칸 — 아이콘 열 + 본문 + 시작 시각.
 ///
 /// 아이콘 아래 짧은 선은 `RoutexStepList`와 같은 모양이다. 본문 높이만큼
-/// 늘이지 않는 이유는 그러려면 행마다 intrinsic 측정이 필요한데, 이 시트는
+/// 늘이지 않는 이유는 그러려면 행마다 intrinsic 측정이 필요한데, 이 화면은
 /// 정류장 30개를 펼칠 수 있어서 그 비용이 스크롤에 그대로 얹히기 때문이다.
 class _TimelineNode extends StatelessWidget {
   const _TimelineNode({
@@ -483,4 +477,28 @@ String _formatClockTime(DateTime time) {
   final hour = time.hour % 12 == 0 ? 12 : time.hour % 12;
   return '${time.hour < 12 ? '오전' : '오후'} $hour:'
       '${time.minute.toString().padLeft(2, '0')}';
+}
+
+/// 목록을 **화면에서 내리지 않는** 전체 화면 라우트.
+///
+/// 불투명 라우트는 아래 라우트를 offstage로 내린다. 그러면 목록이 위젯 트리에서
+/// 사라져 지도 플랫폼 뷰가 헐렸다 다시 붙고, 웹에서는 [MapOverlayGuard]가 막을
+/// 대상 자체가 없어진다. 겹쳐 보이던 문제는 막이 아니라 이 화면의 불투명한
+/// 표면이 막으므로 라우트 자체는 투명해도 된다.
+///
+/// `MaterialPageRoute` 대신 mixin을 직접 쓰는 이유는 하나다 — 그 생성자가
+/// `assert(opaque)`라 상속으로는 투명하게 만들 수 없다. 전환 효과는 같다.
+class _DetailRoute<T> extends PageRoute<T> with MaterialRouteTransitionMixin<T> {
+  _DetailRoute({required this.builder});
+
+  final WidgetBuilder builder;
+
+  @override
+  Widget buildContent(BuildContext context) => builder(context);
+
+  @override
+  bool get maintainState => true;
+
+  @override
+  bool get opaque => false;
 }
