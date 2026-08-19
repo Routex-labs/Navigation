@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:routex_design_system/routex_design_system.dart';
 
+import '../map/style/route_style.dart';
 import '../models/route/transit_route.dart';
 import 'transit_style.dart';
 
-/// 대중교통 경로 후보 한 장.
+/// 대중교통 경로 후보 한 장. 배지 박스 없이 색과 글자로만 나눈다.
 ///
-/// 실시간 도착·혼잡도·기후동행은 그리지 않는다 — 카카오 응답에 없다. 없는 칸은
-/// 자리도 남기지 않는다. 근거는
-/// `docs/superpowers/specs/2026-08-19-transit-screen-redesign-design.md`.
+/// 실시간 도착·혼잡도·기후동행은 카카오 응답에 없어 그리지 않는다. 모양의 근거는
+/// `docs/superpowers/specs/2026-08-19-route-alternatives-and-guidance-design.md` D절.
+
+/// 지도 본선과 같은 파랑. DS의 `actionPrimary`는 teal이라 여기 쓰면 초록이 된다.
+final _accent = Color(
+  0xFF000000 | int.parse(kRouteLineColor.substring(1), radix: 16),
+);
+
 class TransitItineraryCard extends StatelessWidget {
   const TransitItineraryCard({
     super.key,
@@ -22,19 +28,19 @@ class TransitItineraryCard extends StatelessWidget {
 
   final TransitItinerary itinerary;
 
-  /// 목록 첫 줄인지. 맞으면 `최적` 배지를 단다 — 정렬의 뜻을 밝히지 않으면
+  /// 목록 첫 줄인지. 맞으면 `최적`을 적는다 — 정렬의 뜻을 밝히지 않으면
   /// 사용자가 첫 줄이 왜 첫 줄인지 추측해야 한다.
   final bool fastest;
 
-  /// 상세보기가 펼쳐져 있는지. **상태는 목록이 들고 있다** — 카드마다 두면
-  /// 여러 줄이 동시에 펼쳐져 목록이 화면 밖으로 밀린다.
+  /// 카드가 펼쳐져 있는지. 접히면 헤더 한 줄만 남는다. **상태는 목록이 든다** —
+  /// 카드가 들면 `ListView`가 element를 재사용할 때 엉뚱한 줄로 옮겨 붙는다.
   final bool expanded;
 
   final ValueChanged<bool> onExpanded;
   final VoidCallback onTap;
   final bool selected;
 
-  /// 탈것 구간만. 승·하차 줄과 노선 배지가 읽는 값이다.
+  /// 탈것 구간만. 노선 줄과 하차 줄이 읽는 값이다.
   List<TransitLeg> get _rides => [
     for (final leg in itinerary.legs)
       if (!leg.mode.isWalk) leg,
@@ -45,9 +51,6 @@ class TransitItineraryCard extends StatelessWidget {
     final colors = context.routexColors;
     final fare = itinerary.fare;
     final rides = _rides;
-    final arrival = TimeOfDay.fromDateTime(
-      DateTime.now().add(Duration(seconds: itinerary.totalTimeSeconds)),
-    ).format(context);
 
     return Material(
       color: selected ? colors.actionPrimarySubtle : Colors.transparent,
@@ -59,57 +62,80 @@ class TransitItineraryCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (fastest) ...[
-                const RoutexBadge(label: '최적', tone: RoutexBadgeTone.info),
-                const SizedBox(height: RoutexSpacing.inlineGap),
-              ],
-              Wrap(
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: RoutexSpacing.controlGap,
-                runSpacing: RoutexSpacing.inlineGap,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    formatTransitDuration(itinerary.totalTimeSeconds),
-                    style: RoutexTypography.tabular(RoutexTypography.headline),
-                  ),
-                  Text(
-                    '$arrival 도착',
-                    style: RoutexTypography.bodySmall.copyWith(
-                      color: colors.contentSecondary,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (fastest)
+                          Text(
+                            '최적',
+                            style: RoutexTypography.bodySmall.copyWith(
+                              color: _accent,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        Row(
+                          children: [
+                            Text(
+                              formatTransitDuration(itinerary.totalTimeSeconds),
+                              style: RoutexTypography.tabular(
+                                RoutexTypography.headline,
+                              ),
+                            ),
+                            // 요금이 없으면 구분선도 함께 뺀다 — 안 그러면 헤더가
+                            // `19분 │`로 끝난다. 짧은 버스는 실제로 null로 온다.
+                            if (fare != null && fare > 0) ...[
+                              Container(
+                                width: 1,
+                                height: 12,
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: RoutexSpacing.controlGap,
+                                ),
+                                color: colors.borderStrong,
+                              ),
+                              Text(
+                                formatTransitFare(fare),
+                                style: RoutexTypography.bodySmall.copyWith(
+                                  color: colors.contentSecondary,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                  if (fare != null && fare > 0)
-                    Text(
-                      formatTransitFare(fare),
-                      style: RoutexTypography.bodySmall.copyWith(
-                        color: colors.contentSecondary,
-                      ),
+                  IconButton(
+                    onPressed: () => onExpanded(!expanded),
+                    tooltip: expanded ? '접기' : '펼치기',
+                    iconSize: RoutexMetrics.iconSmall,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 32,
+                      height: 32,
                     ),
+                    color: colors.contentSecondary,
+                    icon: Icon(
+                      expanded
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                    ),
+                  ),
                 ],
               ),
-              const SizedBox(height: RoutexSpacing.contentGap),
-              _LegBar(itinerary: itinerary),
-              if (rides.isNotEmpty) ...[
+              if (expanded) ...[
                 const SizedBox(height: RoutexSpacing.contentGap),
-                for (final ride in rides) _RideRow(leg: ride),
-                if (rides.last.endName case final drop?) ...[
-                  const SizedBox(height: RoutexSpacing.inlineGap),
-                  _LabeledRow(label: '하차', value: drop),
+                _LegBar(itinerary: itinerary),
+                if (rides.isNotEmpty) ...[
+                  const SizedBox(height: RoutexSpacing.contentGap),
+                  for (final ride in rides) _RideRow(leg: ride),
+                  if (rides.last.endName case final drop?) _DropRow(name: drop),
                 ],
               ],
-              const SizedBox(height: RoutexSpacing.inlineGap),
-              RoutexDisclosure(
-                header: const Text('상세보기', style: RoutexTypography.bodySmall),
-                expanded: expanded,
-                onExpanded: onExpanded,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (final leg in itinerary.legs) _StepRow(leg: leg),
-                  ],
-                ),
-              ),
             ],
           ),
         ),
@@ -118,7 +144,7 @@ class TransitItineraryCard extends StatelessWidget {
   }
 }
 
-/// 구간을 소요 시간 비율대로 이은 막대.
+/// 구간을 소요 시간 비율대로 이은 막대. 연한 트랙 하나 위에 탈것만 색 pill이다.
 ///
 /// 총 소요가 0이면 그리지 않는다 — 비율을 낼 수 없다. 짧은 구간이 사라지지
 /// 않도록 [Expanded]의 flex를 최소 1로 올린다. 비율이 그만큼 거짓이 되지만,
@@ -128,89 +154,119 @@ class _LegBar extends StatelessWidget {
 
   final TransitItinerary itinerary;
 
+  /// 트랙 높이. caption 글리프 12 px가 상하 2 px씩 남기고 들어가는 최소치다.
+  static const _height = 16.0;
+
   @override
   Widget build(BuildContext context) {
     final total = itinerary.totalTimeSeconds;
     if (total <= 0 || itinerary.legs.isEmpty) return const SizedBox.shrink();
     final colors = context.routexColors;
 
-    return SizedBox(
-      height: 20,
-      child: Row(
-        children: [
-          for (final leg in itinerary.legs)
-            Expanded(
-              flex: (leg.sectionTimeSeconds * 100 / total).round().clamp(1, 100),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 1),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: leg.mode.isWalk
-                        ? colors.contentSecondary.withValues(alpha: 0.25)
-                        : transitLegColor(leg),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  // 칸이 글자보다 좁으면 **자르지 않고 통째로 뺀다.** 실기기에서
-                  // "3분"이 "3"으로 잘려 나왔는데, 잘린 숫자는 정보가 아니라
-                  // 오독이다 — 정류장 수로 읽힌다. 시간은 상세보기에 온전히 있다.
-                  child: Center(
-                    child: _FittedDuration(
-                      label: formatTransitDuration(leg.sectionTimeSeconds),
-                      color: leg.mode.isWalk
-                          ? colors.contentSecondary
-                          : Colors.white,
-                    ),
-                  ),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.borderSubtle,
+        borderRadius: BorderRadius.circular(_height / 2),
+      ),
+      child: SizedBox(
+        height: _height,
+        child: Row(
+          children: [
+            for (final leg in itinerary.legs)
+              Expanded(
+                flex: (leg.sectionTimeSeconds * 100 / total).round().clamp(
+                  1,
+                  100,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 1),
+                  child: leg.mode.isWalk
+                      ? Center(
+                          child: _BarLabel(
+                            text: formatTransitDuration(leg.sectionTimeSeconds),
+                            color: colors.contentSecondary,
+                          ),
+                        )
+                      : DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: transitLegColor(leg),
+                            borderRadius: BorderRadius.circular(_height / 2),
+                          ),
+                          child: Center(
+                            child: _BarLabel(
+                              icon: transitModeIcon(leg.mode),
+                              text: formatTransitDuration(
+                                leg.sectionTimeSeconds,
+                              ),
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
-/// 막대 한 칸의 소요 시간. **다 안 들어가면 아무것도 안 그린다.**
+/// 막대 한 칸의 아이콘 + 소요 시간. **좁으면 글자를, 더 좁으면 전부 뺀다.**
 ///
-/// 글자를 줄이지 않는 이유는 한 막대 안에서 칸마다 크기가 달라지면 비율보다
-/// 글자 크기가 먼저 눈에 들어와서다. 자르지 않는 이유는 위 [_LegBar] 주석에 있다.
-class _FittedDuration extends StatelessWidget {
-  const _FittedDuration({required this.label, required this.color});
+/// 자르지 않는 이유는 실기기에서 "3분"이 "3"으로 잘려 정류장 수로 읽혔기
+/// 때문이다. 잘린 숫자는 정보가 아니라 오독이다.
+class _BarLabel extends StatelessWidget {
+  const _BarLabel({required this.text, required this.color, this.icon});
 
-  final String label;
+  final String text;
   final Color color;
+  final IconData? icon;
+
+  static const _iconSize = 11.0;
+  static const _gap = 2.0;
 
   @override
   Widget build(BuildContext context) {
-    final style = RoutexTypography.caption.copyWith(color: color);
+    // caption은 `height: 1.5`라 라인박스가 18 px다. 트랙이 16 px이므로 1.0으로
+    // 눌러야 들어간다 — 안 누르면 감춰지는 게 아니라 오버플로가 난다.
+    final style = RoutexTypography.caption.copyWith(color: color, height: 1);
     return LayoutBuilder(
       builder: (context, constraints) {
         final painter = TextPainter(
-          text: TextSpan(text: label, style: style),
+          text: TextSpan(text: text, style: style),
           textDirection: Directionality.of(context),
           textScaler: MediaQuery.textScalerOf(context),
         )..layout();
-        if (painter.width > constraints.maxWidth) return const SizedBox.shrink();
-        return Text(label, maxLines: 1, style: style);
+        final iconWidth = icon == null ? 0.0 : _iconSize + _gap;
+        if (painter.width + iconWidth <= constraints.maxWidth) {
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: _iconSize, color: color),
+                const SizedBox(width: _gap),
+              ],
+              Text(text, maxLines: 1, style: style),
+            ],
+          );
+        }
+        if (icon != null && _iconSize <= constraints.maxWidth) {
+          return Icon(icon, size: _iconSize, color: color);
+        }
+        return const SizedBox.shrink();
       },
     );
   }
 }
 
-/// 탈것 한 줄 — 수단 배지 + 승차 정류장 + 노선 번호 + 정류장 수.
+/// 탈것 한 줄 — 수단 아이콘 + 색 노선번호(왼쪽) + 승차 정류장명(오른쪽).
+///
+/// 긴 정류장명은 말줄임하고 **노선번호는 자르지 않는다** — 잘린 번호는 다른
+/// 노선으로 읽힌다.
 class _RideRow extends StatelessWidget {
   const _RideRow({required this.leg});
 
   final TransitLeg leg;
-
-  /// `간선:472`의 앞머리. 카카오는 접두사를 안 주므로 수단 이름으로 떨어진다.
-  String get _kind {
-    final route = leg.routeName;
-    if (route == null) return leg.modeLabel;
-    final colon = route.indexOf(':');
-    if (colon <= 0) return leg.modeLabel;
-    return route.substring(0, colon);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -220,110 +276,65 @@ class _RideRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: RoutexSpacing.inlineGap),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          RoutexBadge(
-            label: _kind,
-            icon: transitModeIcon(leg.mode),
-            accent: RoutexBadgeAccent(
-              surface: color.withValues(alpha: 0.14),
-              ink: color,
-            ),
+          Icon(
+            transitModeIcon(leg.mode),
+            size: RoutexMetrics.iconSmall,
+            color: color,
           ),
-          const SizedBox(width: RoutexSpacing.controlGap),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (leg.startName case final board?)
-                  Text(board, style: RoutexTypography.body),
-                const SizedBox(height: RoutexSpacing.inlineGap),
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: RoutexSpacing.controlGap,
-                  children: [
-                    Text(
-                      leg.shortLabel,
-                      style: RoutexTypography.tabular(
-                        RoutexTypography.body,
-                      ).copyWith(color: color),
-                    ),
-                    if (leg.stationCount > 0)
-                      Text(
-                        '${leg.stationCount}정류장',
-                        style: RoutexTypography.bodySmall.copyWith(
-                          color: colors.contentSecondary,
-                        ),
-                      ),
-                  ],
+          const SizedBox(width: RoutexSpacing.inlineGap),
+          Text(
+            leg.shortLabel,
+            style: RoutexTypography.tabular(
+              RoutexTypography.body,
+            ).copyWith(color: color),
+          ),
+          if (leg.startName case final board?) ...[
+            const SizedBox(width: RoutexSpacing.controlGap),
+            Expanded(
+              child: Text(
+                board,
+                textAlign: TextAlign.right,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: RoutexTypography.bodySmall.copyWith(
+                  color: colors.contentSecondary,
                 ),
-              ],
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
   }
 }
 
-class _LabeledRow extends StatelessWidget {
-  const _LabeledRow({required this.label, required this.value});
+/// `○ 하차 <이름>` 한 줄.
+class _DropRow extends StatelessWidget {
+  const _DropRow({required this.name});
 
-  final String label;
-  final String value;
+  final String name;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.routexColors;
     return Row(
       children: [
+        Icon(
+          Icons.circle_outlined,
+          size: RoutexMetrics.iconSmall,
+          color: colors.contentSecondary,
+        ),
+        const SizedBox(width: RoutexSpacing.inlineGap),
         Text(
-          label,
+          '하차',
           style: RoutexTypography.bodySmall.copyWith(
             color: colors.contentSecondary,
           ),
         ),
         const SizedBox(width: RoutexSpacing.controlGap),
-        Expanded(child: Text(value, style: RoutexTypography.body)),
+        Expanded(child: Text(name, style: RoutexTypography.body)),
       ],
-    );
-  }
-}
-
-/// 상세보기 안의 구간 한 줄. 도보까지 전부 적는다.
-class _StepRow extends StatelessWidget {
-  const _StepRow({required this.leg});
-
-  final TransitLeg leg;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.routexColors;
-    final where = leg.startName;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: RoutexSpacing.inlineGap),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            transitModeIcon(leg.mode),
-            size: RoutexMetrics.iconSmall,
-            color: leg.mode.isWalk
-                ? colors.contentSecondary
-                : transitLegColor(leg),
-          ),
-          const SizedBox(width: RoutexSpacing.controlGap),
-          Expanded(
-            child: Text(
-              leg.mode.isWalk
-                  ? '도보 ${formatTransitDuration(leg.sectionTimeSeconds)}'
-                  : '${leg.shortLabel} · ${formatTransitDuration(leg.sectionTimeSeconds)}'
-                        '${where == null ? '' : ' · $where 승차'}',
-              style: RoutexTypography.bodySmall,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/models/route/transit_route.dart';
 import 'package:navigation_client/theme/app_theme.dart';
 import 'package:navigation_client/widgets/transit_itinerary_card.dart';
+import 'package:routex_design_system/routex_design_system.dart';
 
 void main() {
   Widget wrap(Widget child) => MaterialApp(
@@ -48,17 +49,21 @@ void main() {
     ],
   );
 
-  Widget card(TransitItinerary itinerary, {bool expanded = false}) => wrap(
+  Widget card(
+    TransitItinerary itinerary, {
+    bool expanded = true,
+    ValueChanged<bool>? onExpanded,
+  }) => wrap(
     TransitItineraryCard(
       itinerary: itinerary,
       fastest: true,
       expanded: expanded,
-      onExpanded: (_) {},
+      onExpanded: onExpanded ?? (_) {},
       onTap: () {},
     ),
   );
 
-  testWidgets('소요·요금·노선·정류장 수를 적는다', (tester) async {
+  testWidgets('소요·요금·노선·정류장명을 적는다', (tester) async {
     await tester.pumpWidget(card(ride));
 
     expect(find.text('19분'), findsOneWidget);
@@ -66,19 +71,22 @@ void main() {
     expect(find.text('7613'), findsOneWidget);
     expect(find.text('삼부아파트'), findsOneWidget);
     expect(find.text('공덕역2번출구'), findsOneWidget);
-    expect(find.textContaining('2정류장'), findsOneWidget);
   });
 
-  testWidgets('첫 줄이면 최적 배지를 단다', (tester) async {
+  testWidgets('최적은 배지 없이 지도 본선과 같은 파랑 글자다', (tester) async {
     await tester.pumpWidget(card(ride));
 
-    expect(find.text('최적'), findsOneWidget);
+    // 배지 박스가 하나도 없어야 한다 — 사용자가 지적한 "박스가 너무 많다".
+    expect(find.byType(RoutexBadge), findsNothing);
+    final label = tester.widget<Text>(find.text('최적'));
+    // teal(actionPrimary)이 아니라 지도 본선과 같은 파랑이어야 한다.
+    expect(label.style?.color, const Color(0xFF4A87F1));
   });
 
-  testWidgets('도착 시각을 함께 적는다', (tester) async {
+  testWidgets('도착 시각은 적지 않는다', (tester) async {
     await tester.pumpWidget(card(ride));
 
-    expect(find.textContaining('도착'), findsWidgets);
+    expect(find.textContaining('도착'), findsNothing);
   });
 
   testWidgets('요금이 없으면 요금 칸을 그리지 않는다', (tester) async {
@@ -121,12 +129,47 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('펼치면 구간별 줄이 나온다', (tester) async {
-    await tester.pumpWidget(card(ride, expanded: true));
+  testWidgets('접으면 막대와 노선 줄이 사라지고 헤더만 남는다', (tester) async {
+    await tester.pumpWidget(card(ride, expanded: false));
 
-    expect(find.text('상세보기'), findsOneWidget);
-    // 접혀 있을 때는 없던 도보 구간 시간이 펼치면 보인다.
-    expect(find.textContaining('도보'), findsWidgets);
+    expect(find.text('19분'), findsOneWidget);
+    expect(find.text('7613'), findsNothing);
+    expect(find.text('공덕역2번출구'), findsNothing);
+  });
+
+  testWidgets('우측 상단 화살표가 접힘을 부모에게 알린다', (tester) async {
+    final asked = <bool>[];
+    await tester.pumpWidget(card(ride, onExpanded: asked.add));
+
+    await tester.tap(find.byIcon(Icons.keyboard_arrow_up_rounded));
+
+    expect(asked, [false]);
+    // 상세보기 줄은 없앴다 — 접기는 화살표 하나로만 한다.
+    expect(find.text('상세보기'), findsNothing);
+  });
+
+  testWidgets('정류장명이 길어도 노선번호를 자르지 않는다', (tester) async {
+    final longName = TransitItinerary(
+      totalTimeSeconds: 1140,
+      totalWalkTimeSeconds: 300,
+      totalDistanceMeters: 3000,
+      transferCount: 0,
+      fare: 1500,
+      legs: [
+        leg(
+          mode: TransitMode.bus,
+          seconds: 1140,
+          routeName: '지선:7613',
+          startName: '서울월드컵경기장앞정류장중앙차로승강장동편임시정류소',
+          endName: '공덕역2번출구',
+          stationCount: 2,
+        ),
+      ],
+    );
+    await tester.pumpWidget(card(longName));
+
+    expect(find.text('7613'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('막대 칸이 글자보다 좁으면 시간을 자르지 않고 뺀다', (tester) async {
@@ -156,5 +199,20 @@ void main() {
     // 좁은 칸은 잘린 조각이 아니라 아무것도 안 남긴다.
     expect(find.text('1분'), findsNothing);
     expect(find.text('1'), findsNothing);
+    // 막대 높이가 모자라면 오버플로로 터진다 — 그것도 여기서 잡는다.
+    expect(tester.takeException(), isNull);
+  });
+
+  test('카드는 stateless다', () {
+    expect(
+      TransitItineraryCard(
+        itinerary: ride,
+        fastest: true,
+        expanded: true,
+        onExpanded: (_) {},
+        onTap: () {},
+      ),
+      isA<StatelessWidget>(),
+    );
   });
 }
