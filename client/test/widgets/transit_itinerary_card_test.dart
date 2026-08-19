@@ -178,6 +178,41 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('시간을 모르는 도보 칸에는 분을 적지 않고 칸만 남긴다', (tester) async {
+    // TMAP 조회 상한에 잘린 후보는 앞뒤 도보가 0초 직선으로 채워진다.
+    // formatTransitDuration이 0초를 "1분"으로 올리므로, 그리는 쪽이 빼야 한다.
+    final unknownWalk = TransitItinerary(
+      totalTimeSeconds: 1800,
+      totalWalkTimeSeconds: 0,
+      totalDistanceMeters: 3000,
+      transferCount: 0,
+      fare: 1500,
+      legs: [
+        leg(mode: TransitMode.walk, seconds: 0),
+        leg(
+          mode: TransitMode.bus,
+          seconds: 300,
+          routeName: '지선:7613',
+          startName: '삼부아파트',
+          endName: '공덕역2번출구',
+          stationCount: 2,
+        ),
+        leg(mode: TransitMode.walk, seconds: 0),
+      ],
+    );
+    await tester.pumpWidget(card(unknownWalk));
+
+    // 모르는 시간을 지어내지 않는다.
+    expect(find.text('1분'), findsNothing);
+    expect(find.text('0분'), findsNothing);
+    // 아는 시간은 그대로 적는다.
+    expect(find.text('5분'), findsOneWidget);
+    // 칸 자체는 비율대로 남는다 — 거기 도보가 있다는 사실은 참이고 시간만
+    // 모른다. 글자가 들어가고도 남는 너비여야 "좁아서 빠진 것"과 구분된다.
+    expect(tester.getSize(find.byType(Center).first).width, greaterThan(20));
+    expect(tester.takeException(), isNull);
+  });
+
   test('카드는 stateless다', () {
     expect(
       TransitItineraryCard(itinerary: ride, fastest: true, onTap: () {}),

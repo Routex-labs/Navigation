@@ -120,6 +120,16 @@ class _LegBar extends StatelessWidget {
   /// 트랙 높이. caption 글리프 12 px가 상하 2 px씩 남기고 들어가는 최소치다.
   static const _height = 16.0;
 
+  /// 이 칸에 적을 시간. **0초면 null** — 값이 아니라 "모른다"는 뜻이다.
+  ///
+  /// TMAP 조회가 없거나 실패한 앞뒤 도보가 0초로 온다(`domain/route/
+  /// transit_walk_fill.dart`). formatTransitDuration은 0초를 1분으로 올리므로
+  /// 그대로 넘기면 모르는 도보에 "1분"이라고 적힌다. 그 함수는 진짜 짧은
+  /// 구간에도 쓰여 올림이 맞으니, 그릴지 말지는 아는 쪽인 여기서 정한다.
+  static String? _label(TransitLeg leg) => leg.sectionTimeSeconds > 0
+      ? formatTransitDuration(leg.sectionTimeSeconds)
+      : null;
+
   @override
   Widget build(BuildContext context) {
     final total = itinerary.totalTimeSeconds;
@@ -146,7 +156,7 @@ class _LegBar extends StatelessWidget {
                   child: leg.mode.isWalk
                       ? Center(
                           child: _BarLabel(
-                            text: formatTransitDuration(leg.sectionTimeSeconds),
+                            text: _label(leg),
                             color: colors.contentSecondary,
                           ),
                         )
@@ -158,9 +168,7 @@ class _LegBar extends StatelessWidget {
                           child: Center(
                             child: _BarLabel(
                               icon: transitModeIcon(leg.mode),
-                              text: formatTransitDuration(
-                                leg.sectionTimeSeconds,
-                              ),
+                              text: _label(leg),
                               color: Colors.white,
                             ),
                           ),
@@ -177,11 +185,12 @@ class _LegBar extends StatelessWidget {
 /// 막대 한 칸의 아이콘 + 소요 시간. **좁으면 글자를, 더 좁으면 전부 뺀다.**
 ///
 /// 자르지 않는 이유는 실기기에서 "3분"이 "3"으로 잘려 정류장 수로 읽혔기
-/// 때문이다. 잘린 숫자는 정보가 아니라 오독이다.
+/// 때문이다. 잘린 숫자는 정보가 아니라 오독이다. [text]가 null이면 시간을
+/// 모른다는 뜻이라 같은 이유로 빼고 아이콘만 남긴다 — 없는 숫자도 오독이다.
 class _BarLabel extends StatelessWidget {
   const _BarLabel({required this.text, required this.color, this.icon});
 
-  final String text;
+  final String? text;
   final Color color;
   final IconData? icon;
 
@@ -193,25 +202,28 @@ class _BarLabel extends StatelessWidget {
     // caption은 `height: 1.5`라 라인박스가 18 px다. 트랙이 16 px이므로 1.0으로
     // 눌러야 들어간다 — 안 누르면 감춰지는 게 아니라 오버플로가 난다.
     final style = RoutexTypography.caption.copyWith(color: color, height: 1);
+    final label = text;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final painter = TextPainter(
-          text: TextSpan(text: text, style: style),
-          textDirection: Directionality.of(context),
-          textScaler: MediaQuery.textScalerOf(context),
-        )..layout();
-        final iconWidth = icon == null ? 0.0 : _iconSize + _gap;
-        if (painter.width + iconWidth <= constraints.maxWidth) {
-          return Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (icon != null) ...[
-                Icon(icon, size: _iconSize, color: color),
-                const SizedBox(width: _gap),
+        if (label != null) {
+          final painter = TextPainter(
+            text: TextSpan(text: label, style: style),
+            textDirection: Directionality.of(context),
+            textScaler: MediaQuery.textScalerOf(context),
+          )..layout();
+          final iconWidth = icon == null ? 0.0 : _iconSize + _gap;
+          if (painter.width + iconWidth <= constraints.maxWidth) {
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, size: _iconSize, color: color),
+                  const SizedBox(width: _gap),
+                ],
+                Text(label, maxLines: 1, style: style),
               ],
-              Text(text, maxLines: 1, style: style),
-            ],
-          );
+            );
+          }
         }
         if (icon != null && _iconSize <= constraints.maxWidth) {
           return Icon(icon, size: _iconSize, color: color);
