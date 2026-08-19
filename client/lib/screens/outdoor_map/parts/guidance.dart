@@ -151,14 +151,30 @@ extension OutdoorMapGuidance on OutdoorMapBodyState {
         _arrivalRouteClearTimer = null;
         return;
       case ArrivalAutoClearDecision.schedule:
-        _arrivalRouteClearTimer = Timer(arrivalAutoClearDelay, () {
-          _arrivalRouteClearTimer = null;
-          if (!mounted) return;
-          // 경로·핀·하단 배너를 정리한다. 도착 카드는 남는다 — 그것이 지금
-          // 화면에서 유일하게 "끝났다"고 말하는 것이다.
-          _clearIndoorRoute();
-        });
+        _arrivalRouteClearTimer = Timer(
+          arrivalAutoClearDelay,
+          clearRouteAfterArrival,
+        );
     }
+  }
+
+  /// 도착 안내를 읽을 시간이 지난 뒤 경로·핀·하단 배너를 정리한다. 도착 카드는
+  /// 남는다 — 그것이 지금 화면에서 유일하게 "끝났다"고 말하는 것이다.
+  ///
+  /// **안내 세션은 끝내지 않는다.** 끝내면 접어 뒀던 상단 chrome이 펴져 방금
+  /// 지운 경로의 이동 수단 줄이 되살아나고(대중교통으로 왔으면 대중교통이 선택된
+  /// 채 경로만 없다), 실내→야외 이음매에서는 출구에서 `안내 시작`이 다시 뜬다
+  /// ([showRouteTo]의 continueGuidance). 세션을 끝내는 것은 도착 카드의
+  /// `안내 종료`뿐이다([_confirmArrival]).
+  ///
+  /// 타이머 콜백을 이름 있는 자리로 뺀 것은 테스트가 PDR 없이 이 순간을 부를 수
+  /// 있어야 하기 때문이다. **테스트 전용 뒷문이 아니라 실제 타이머가 부르는
+  /// 자리**라 `...ForTest`를 붙이지 않는다.
+  @visibleForTesting
+  void clearRouteAfterArrival() {
+    _arrivalRouteClearTimer = null;
+    if (!mounted) return;
+    _clearIndoorRoute(endGuidance: false);
   }
 
   /// GPS가 지금 이 사람을 **건물 밖이라고 분명히 말하는가.**

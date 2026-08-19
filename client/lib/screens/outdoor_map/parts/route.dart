@@ -909,7 +909,10 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
 
   /// 실내 경로 표시를 초기화한다. ETA 카드 닫기 버튼과 사용자 destination 초기화
   /// 시 호출된다.
-  void _clearIndoorRoute() {
+  ///
+  /// [endGuidance]가 거짓이면 그린 것만 지우고 **안내 세션은 살려 둔다.** 도착
+  /// 자동 지움만 그렇게 부른다 — 이유는 [clearRouteAfterArrival]에 있다.
+  void _clearIndoorRoute({bool endGuidance = true}) {
     _clearCompletedRouteHistory();
     setState(() {
       _guidance
@@ -919,7 +922,7 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
       _indoorMultiFloorRoute = null;
       _indoorRouteDestination = null;
       _indoorRoutePreviewOrigin = null;
-      _guidanceStarted = false;
+      if (endGuidance) _guidanceStarted = false;
       _guidanceTrailSession.clear();
     });
     _syncRouteLayer();
