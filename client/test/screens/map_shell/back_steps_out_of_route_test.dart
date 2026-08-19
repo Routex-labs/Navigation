@@ -12,6 +12,7 @@ import 'package:navigation_client/repositories/routing/transit_repository.dart';
 import 'package:navigation_client/models/route/transit_route.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
+import 'package:navigation_client/screens/map_shell/widgets/sheets/transit_route_detail_sheet.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/transit_routes_sheet.dart';
 import 'package:navigation_client/widgets/transit_itinerary_card.dart';
 import 'package:navigation_client/service_locator.dart';
@@ -154,6 +155,29 @@ void main() {
     await drain(tester);
     await tester.tap(find.text('강의실 101').first);
     await drain(tester);
+  }
+
+  /// 후보 목록에서 [index]번째 카드를 눌러 상세를 열고, 거기서 `안내 시작`으로
+  /// 그 경로를 확정한다. **카드 탭만으로는 아무것도 그려지지 않는다** — 상세는
+  /// 다른 후보와 견주라고 있는 한 겹이라, 지도는 이 버튼에서만 바뀐다.
+  ///
+  /// `안내 시작`은 뒤에 깔린 계획 카드에도 있는 글자라 상세 안으로 좁혀 찾는다.
+  Future<void> pickTransitCandidate(WidgetTester tester, [int index = 0]) async {
+    await tester.tap(find.byType(TransitItineraryCard).at(index));
+    await drain(tester);
+    expect(
+      find.byType(TransitRoutesSheet),
+      findsOneWidget,
+      reason: '카드를 눌렀다고 목록이 닫히면 다른 후보로 돌아올 길이 없다',
+    );
+    await tester.tap(
+      find.descendant(
+        of: find.byType(TransitRouteDetailSheet),
+        matching: find.text('안내 시작'),
+      ),
+    );
+    await drain(tester);
+    expect(find.byType(TransitRoutesSheet), findsNothing);
   }
 
   /// 길찾기 바가 지금 보여 주는 도착지. 경로만 지웠는지(칸은 살아 있는지)를 본다.
@@ -324,9 +348,7 @@ void main() {
       reason: '테스트 전제(후보 목록이 뜸)가 성립하지 않았다',
     );
 
-    await tester.tap(find.byType(TransitItineraryCard).first);
-    await drain(tester);
-    expect(find.byType(TransitRoutesSheet), findsNothing);
+    await pickTransitCandidate(tester);
     await tester.tap(find.text('안내 시작'));
     await drain(tester);
     expect(
@@ -348,8 +370,7 @@ void main() {
     await planWalkRoute(tester);
     await tester.tap(find.text('대중교통'));
     await drain(tester);
-    await tester.tap(find.byType(TransitItineraryCard).first);
-    await drain(tester);
+    await pickTransitCandidate(tester);
 
     // 경로 한 겹, 길찾기 바 한 겹. 둘을 합치면 상단 X와 같은 정리다.
     await tester.binding.handlePopRoute();
@@ -380,8 +401,7 @@ void main() {
     await planWalkRoute(tester);
     await tester.tap(find.text('대중교통'));
     await drain(tester);
-    await tester.tap(find.byType(TransitItineraryCard).first);
-    await drain(tester);
+    await pickTransitCandidate(tester);
 
     // 길찾기를 끝내지 않고 **수단만** 도보로 되돌린다. 여기서 옛 조회를 안
     // 버리면, 아래 뒤로가기가 도보 화면 위에 대중교통 후보 시트를 띄운다.

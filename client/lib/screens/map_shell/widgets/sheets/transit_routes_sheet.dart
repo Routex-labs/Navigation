@@ -6,6 +6,7 @@ import '../../../../widgets/map_overlay_guard.dart';
 import '../../../../widgets/sheet_header.dart';
 import '../../../../domain/route/transit_itinerary_filter.dart';
 import '../../../../widgets/transit_itinerary_card.dart';
+import 'transit_route_detail_sheet.dart';
 
 /// 대중교통 경로 후보 목록 시트.
 ///
@@ -29,6 +30,10 @@ class TransitRoutesSheet extends StatefulWidget {
 
   final VoidCallback onCloseAll;
 
+  /// 후보 목록을 띄우고, 사용자가 **확정한** 경로 하나를 돌려준다.
+  ///
+  /// 카드를 누르는 것은 고르는 것이 아니라 상세를 열어 보는 것이다 — 확정은
+  /// 상세 하단 `안내 시작`뿐이라, 그때만 값이 나오고 그 밖에는 null이다.
   static Future<TransitItinerary?> show(
     BuildContext context, {
     required TransitRoutes routes,
@@ -63,7 +68,17 @@ class _TransitRoutesSheetState extends State<TransitRoutesSheet> {
 
   void _markIntentional() => _intentionalPop = true;
 
-  void _pick(TransitItinerary itinerary) {
+  /// 카드 한 장을 눌렀을 때. **여기서는 아직 아무것도 확정되지 않는다** —
+  /// 상세를 한 겹 위에 띄우고, 거기서 `안내 시작`을 눌렀을 때만(true) 그
+  /// 경로를 결과로 목록을 닫는다. 뒤로 닫히면(null) 목록에 그대로 머물러
+  /// 다른 후보의 상세를 이어서 볼 수 있다 — 견주는 단계가 이것이다.
+  Future<void> _pick(TransitItinerary itinerary) async {
+    final start = await TransitRouteDetailSheet.show(
+      context,
+      itinerary: itinerary,
+      destinationLabel: widget.destinationLabel,
+    );
+    if (!mounted || start != true) return;
     _markIntentional();
     Navigator.of(context).pop(itinerary);
   }

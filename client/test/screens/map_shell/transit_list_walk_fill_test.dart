@@ -11,6 +11,7 @@ import 'package:navigation_client/repositories/place/destination_repository.dart
 import 'package:navigation_client/repositories/place/mock_destination_repository.dart';
 import 'package:navigation_client/repositories/routing/transit_repository.dart';
 import 'package:navigation_client/screens/map_shell/map_shell_screen.dart';
+import 'package:navigation_client/screens/map_shell/widgets/sheets/transit_route_detail_sheet.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/transit_routes_sheet.dart';
 import 'package:navigation_client/service_locator.dart';
 import 'package:navigation_client/state/recent_route_points_controller.dart';
@@ -159,6 +160,20 @@ void main() {
     await drain(tester);
   }
 
+  /// 첫 후보의 상세를 열어 `안내 시작`으로 확정한다. 카드 탭만으로는 아무것도
+  /// 그려지지 않는다 — 같은 글자가 뒤 계획 카드에도 있어 상세 안으로 좁혀 찾는다.
+  Future<void> pickFirstCandidate(WidgetTester tester) async {
+    await tester.tap(find.byType(TransitItineraryCard).first);
+    await drain(tester);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(TransitRouteDetailSheet),
+        matching: find.text('안내 시작'),
+      ),
+    );
+    await drain(tester);
+  }
+
   TransitItinerary cardAt(WidgetTester tester, int index) => tester
       .widget<TransitItineraryCard>(find.byType(TransitItineraryCard).at(index))
       .itinerary;
@@ -219,10 +234,43 @@ void main() {
     expect(legs.last.points.length, 2);
   });
 
+  /// [body]를 도는 동안 나온 도보 채우기 로그만 골라 담는다.
+  ///
+  /// `directionsRepository`는 바꿔 끼울 수 없어(service_locator의 final) 실호출
+  /// 건수를 세는 자리가 이 로그밖에 없다. `debugPrint`는 **테스트 본문 안에서**
+  /// 되돌린다 — addTearDown은 프레임워크의 전역 변수 검사보다 늦게 돈다.
+  Future<List<String>> walkFillLog(Future<void> Function() body) async {
+    final lines = <String>[];
+    final original = debugPrint;
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null && message.contains('도보 채우기')) lines.add(message);
+    };
+    try {
+      await body();
+    } finally {
+      debugPrint = original;
+    }
+    return lines;
+  }
+
+  testWidgets('목록에서 부른 도보를 후보 선택이 다시 부르지 않는다', (WidgetTester tester) async {
+    final lines = await walkFillLog(() async {
+      await openTransitList(tester, 2);
+      await pickFirstCandidate(tester);
+    });
+
+    // 후보 2개 × (앞·뒤) = 4건, 상한 10에 안 걸린다. 그리고 마지막 하차 →
+    // 목적지는 목록에서 이미 부른 그 구간이라 고를 때는 한 건도 안 나간다 —
+    // 여기가 1건이면 후보를 고를 때마다 TMAP 할당량을 그만큼 버리는 것이다.
+    expect(lines, [
+      '[transit] 목록 도보 채우기: 필요 4건 실호출 4건 잘림 0건',
+      '[transit] 고른 경로 도보 채우기: 실호출 0건',
+    ]);
+  });
+
   testWidgets('뒤로가기로 다시 연 목록에도 도보가 남아 있다', (WidgetTester tester) async {
     await openTransitList(tester, 2);
-    await tester.tap(find.byType(TransitItineraryCard).first);
-    await drain(tester);
+    await pickFirstCandidate(tester);
     await tester.tap(find.text('안내 시작'));
     await drain(tester);
     expect(

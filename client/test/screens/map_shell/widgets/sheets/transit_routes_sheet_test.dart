@@ -3,8 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/theme/app_theme.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:navigation_client/models/route/transit_route.dart';
+import 'package:navigation_client/screens/map_shell/widgets/sheets/transit_route_detail_sheet.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/transit_routes_sheet.dart';
 import 'package:navigation_client/screens/outdoor_map/widgets/transit_summary_card.dart';
+import 'package:navigation_client/widgets/transit_itinerary_card.dart';
 
 const _walkLeg = TransitLeg(
   mode: TransitMode.walk,
@@ -97,8 +99,11 @@ void main() {
     expect(find.byIcon(Icons.keyboard_arrow_up_rounded), findsNothing);
   });
 
-  testWidgets('경로를 누르면 그 경로를 돌려준다', (tester) async {
-    useTallViewport(tester);
+  /// 목록을 모달로 띄우고, **닫힐 때 돌려준 후보를 읽는 손잡이**를 준다.
+  ///
+  /// 진짜 라우트로 띄우는 이유는 상세가 그 위에 한 겹 더 쌓이는지, 시스템
+  /// 뒤로가기가 위 한 겹만 벗기는지를 봐야 하기 때문이다.
+  Future<TransitItinerary? Function()> openSheet(WidgetTester tester) async {
     TransitItinerary? picked;
     await tester.pumpWidget(
       MaterialApp(
@@ -120,13 +125,80 @@ void main() {
         ),
       ),
     );
-
     await tester.tap(find.text('열기'));
     await tester.pumpAndSettle();
+    return () => picked;
+  }
+
+  /// 상세 안의 `안내 시작`. 뒤에 깔린 화면에도 같은 글자가 있을 수 있어
+  /// 상세 안으로 범위를 좁힌다.
+  final startInDetail = find.descendant(
+    of: find.byType(TransitRouteDetailSheet),
+    matching: find.text('안내 시작'),
+  );
+
+  testWidgets('카드를 누르면 상세가 열릴 뿐 목록은 닫히지 않는다', (tester) async {
+    useTallViewport(tester);
+    final picked = await openSheet(tester);
+
     await tester.tap(find.text('40분'));
     await tester.pumpAndSettle();
 
-    expect(picked?.totalTimeSeconds, 2400);
+    expect(find.byType(TransitRouteDetailSheet), findsOneWidget);
+    expect(find.byType(TransitRoutesSheet), findsOneWidget, reason: '목록이 닫히면 다른 후보로 돌아올 길이 없다');
+    expect(picked(), isNull, reason: '상세를 여는 것만으로 경로가 확정되면 견주는 단계가 사라진다');
+  });
+
+  testWidgets('상세를 뒤로 닫으면 아무것도 고르지 않은 채 목록에 남는다', (tester) async {
+    useTallViewport(tester);
+    final picked = await openSheet(tester);
+
+    await tester.tap(find.text('40분'));
+    await tester.pumpAndSettle();
+    // 시스템 뒤로가기는 위 한 겹만 벗긴다.
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TransitRouteDetailSheet), findsNothing);
+    expect(find.byType(TransitRoutesSheet), findsOneWidget);
+    expect(picked(), isNull);
+  });
+
+  testWidgets('견줘 본 뒤 안내 시작을 누른 그 경로를 돌려준다', (tester) async {
+    useTallViewport(tester);
+    final picked = await openSheet(tester);
+
+    // 첫 경로를 열어 보고 뒤로 나온다.
+    await tester.tap(find.text('30분'));
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    // 두 번째 경로를 열어 안내를 시작한다. 돌아오는 것은 **나중에 고른 쪽**이다.
+    await tester.tap(find.text('40분'));
+    await tester.pumpAndSettle();
+    await tester.tap(startInDetail);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TransitRouteDetailSheet), findsNothing);
+    expect(find.byType(TransitRoutesSheet), findsNothing, reason: '고른 뒤에는 목록도 함께 닫힌다');
+    expect(picked()?.totalTimeSeconds, 2400);
+  });
+
+  testWidgets('필터로 좁힌 뒤 누르면 그 줄의 상세가 열린다', (tester) async {
+    useTallViewport(tester);
+    final picked = await openSheet(tester);
+
+    // 좁히기 전 첫 줄은 버스(30분)다. 지하철만 남기면 첫 줄이 40분으로 바뀐다 —
+    // 인덱스를 원본 목록에서 세면 여기서 30분짜리가 열린다.
+    await tester.tap(find.text('지하철 1'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(TransitItineraryCard).first);
+    await tester.pumpAndSettle();
+    await tester.tap(startInDetail);
+    await tester.pumpAndSettle();
+
+    expect(picked()?.totalTimeSeconds, 2400);
   });
 
   testWidgets('요약 카드는 총 시간과 구간을 보여주고 안내 종료만 남긴다', (tester) async {

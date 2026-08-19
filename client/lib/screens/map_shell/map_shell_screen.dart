@@ -344,6 +344,31 @@ class _MapShellScreenState extends State<MapShellScreen> {
   ({TransitRoutes routes, DirectionsCandidate destination, LatLng origin})?
   _lastTransitQuery;
 
+  /// 이번 조회에서 이미 받아 온 도보 구간. **같은 두 지점을 두 번 부르지
+  /// 않는다** — 목록에서 부른 (마지막 하차 → 목적지)를 후보를 고를 때마다
+  /// 그대로 다시 불러 TMAP 할당량을 선택당 1건씩 먹었다.
+  ///
+  /// 키가 스스로를 밝히므로(양 끝 좌표를 1m로 반올림) 적중은 곧 같은 요청이고,
+  /// 실패(null)도 담는다 — 재시도가 아끼려던 그 호출이다. 조회를 새로 시작할
+  /// 때 통째로 버린다([_withListWalkLegs]).
+  final _transitWalks = <TransitWalkGap, DirectionsRoute?>{};
+
+  /// 이 화면이 사는 동안 실제로 나간 보행자 경로 요청 수. **적중을 뺀 진짜
+  /// 호출**이라 메모 크기로는 못 센다 — 같은 키에 두 번 써도 크기는 안 자란다.
+  var _transitWalkCalls = 0;
+
+  /// [from]에서 [to]까지 보행자 경로. 이미 받아 온 구간이면 부르지 않는다.
+  Future<DirectionsRoute?> _walkingRoute(LatLng from, LatLng to) async {
+    final gap = TransitWalkGap(from: from, to: to);
+    if (_transitWalks.containsKey(gap)) return _transitWalks[gap];
+    _transitWalkCalls++;
+    final route = await directionsRepository.getWalkingRoute(
+      origin: from,
+      destination: to,
+    );
+    return _transitWalks[gap] = route;
+  }
+
   final _routeResultsKey = GlobalKey();
 
   /// 건물 밖 장소를 함께 찾을 기준점. 검색을 시작할 때 야외 지도에서 한 번
@@ -1639,6 +1664,16 @@ class _MapShellScreenState extends State<MapShellScreen> {
     required LatLng origin,
     required LatLng destination,
   }) async {
+    // 새 조회는 새 출발지·목적지라 지난 조회의 구간이 맞을 일이 거의 없다.
+    _transitWalks.clear();
+    // 상한 없이 한 번 더 뽑아 **잘린 몫을 눈에 보이게 한다.** 순수 계산이라
+    // 호출은 늘지 않는다. 상한이 넉넉한지는 이 로그 말고 볼 근거가 없다.
+    final needed = transitWalkGaps(
+      routes.itineraries,
+      origin: origin,
+      destination: destination,
+      maxGaps: 1 << 30,
+    );
     final gaps = transitWalkGaps(
       routes.itineraries,
       origin: origin,
@@ -1646,18 +1681,18 @@ class _MapShellScreenState extends State<MapShellScreen> {
     );
     if (gaps.isEmpty) return routes;
 
-    final walks = await Future.wait([
-      for (final gap in gaps)
-        directionsRepository.getWalkingRoute(
-          origin: gap.from,
-          destination: gap.to,
-        ),
+    final before = _transitWalkCalls;
+    await Future.wait([
+      for (final gap in gaps) _walkingRoute(gap.from, gap.to),
     ]);
-    final byGap = <TransitWalkGap, DirectionsRoute?>{
-      for (var i = 0; i < gaps.length; i++) gaps[i]: walks[i],
-    };
+    debugPrint(
+      '[transit] 목록 도보 채우기: 필요 ${needed.length}건 '
+      '실호출 ${_transitWalkCalls - before}건 잘림 ${needed.length - gaps.length}건',
+    );
+    // 받아 온 것은 메모에 그대로 있다. 상한에 잘린 구간과 실패한 요청은 null로
+    // 나와 `fillTransitWalkLegs`가 직선으로 잇는다.
     DirectionsRoute? lookup(LatLng from, LatLng to) =>
-        byGap[TransitWalkGap(from: from, to: to)];
+        _transitWalks[TransitWalkGap(from: from, to: to)];
 
     return TransitRoutes(
       status: routes.status,
@@ -1750,9 +1785,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
     // 가리킨다. 자세한 근거는 [trimTrailingWalkLeg]에 있다.
     final trimmed = trimTrailingWalkLeg(picked);
 
-    // 앞 도보는 목록에서 이미 채워져 왔다([_withListWalkLegs]) — 그래서 여기서
-    // 다시 나가는 실호출은 **뒤 도보 하나뿐**이다. 뒤는 방금 고른 문 기준으로
-    // 끝점이 달라져 목록의 것을 쓸 수 없다.
+    // 앞 도보는 목록에서 이미 채워져 왔다([_withListWalkLegs]). 뒤 도보는 방금
+    // 고른 문으로 끝점이 바뀌었을 수 있어 다시 채우지만, 문이 목적지 그대로면
+    // 목록에서 부른 그 구간이라 메모([_transitWalks])가 받아 호출이 안 나간다.
     final completed = await _withTransitWalkLegs(
       trimmed,
       origin: origin,
@@ -1852,7 +1887,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
   ///
   /// 두 요청을 동시에 보낸다. 순서대로 기다리면 지도가 뜨기까지 왕복 시간이
   /// 두 배가 되는데, 두 구간은 서로를 필요로 하지 않는다. 목록에서 온 경로는
-  /// 앞 도보가 이미 붙어 있어(첫 구간이 도보라) 앞쪽 요청이 저절로 빠진다.
+  /// 앞 도보가 이미 붙어 있어(첫 구간이 도보라) 앞쪽 요청이 저절로 빠지고,
+  /// 뒤 도보도 끝점이 그대로면 [_walkingRoute]의 메모가 받는다.
   ///
   /// 실패해도 안내를 막지 않는다. 도보선이 직선으로 떨어질 뿐이고, 사용자가
   /// 기다린 것은 "저기까지 가는 방법"이지 도보 구간의 정확한 모양이 아니다.
@@ -1865,20 +1901,19 @@ class _MapShellScreenState extends State<MapShellScreen> {
     final first = itinerary.legs.first;
     final last = itinerary.legs.last;
 
+    final before = _transitWalkCalls;
     final routes = await Future.wait([
       (first.mode.isWalk || first.points.isEmpty)
           ? Future<DirectionsRoute?>.value()
-          : directionsRepository.getWalkingRoute(
-              origin: origin,
-              destination: first.points.first,
-            ),
+          : _walkingRoute(origin, first.points.first),
       (last.mode.isWalk || last.points.isEmpty)
           ? Future<DirectionsRoute?>.value()
-          : directionsRepository.getWalkingRoute(
-              origin: last.points.last,
-              destination: destination,
-            ),
+          : _walkingRoute(last.points.last, destination),
     ]);
+
+    debugPrint(
+      '[transit] 고른 경로 도보 채우기: 실호출 ${_transitWalkCalls - before}건',
+    );
 
     return fillTransitWalkLegs(
       itinerary,
