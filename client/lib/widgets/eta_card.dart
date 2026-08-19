@@ -47,9 +47,10 @@ class EtaCard extends StatelessWidget {
     if (!guidanceStarted) {
       return RoutexEtaCard(
         title: label,
-        arrivalTime: arrivalTime,
+        // 이 자리가 카드의 headline이다. 도착 시각은 안내를 시작한 뒤 진행 바에서
+        // 본다 — 출발 전에 두 화면이 같은 값을 두 벌로 말할 필요가 없다.
+        arrivalTime: '$minutes분',
         metrics: [
-          RoutexTripMetric(value: '$minutes분', label: '소요'),
           RoutexTripMetric(value: formatDistance(distanceMeters), label: '거리'),
           ?extraMetric,
         ],

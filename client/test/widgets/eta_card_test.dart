@@ -103,6 +103,20 @@ void main() {
       expect(find.textContaining('무료', findRichText: true), findsOneWidget);
       expect(find.textContaining('통행료', findRichText: true), findsOneWidget);
     });
+
+    testWidgets('headline은 도착 시각이 아니라 소요 시간이다', (tester) async {
+      await tester.pumpWidget(
+        wrap(const EtaCard(distanceMeters: 3900, minutes: 8)),
+      );
+
+      // 소요가 metrics 줄(RichText)이 아니라 제 몫의 Text로 올라와 있다.
+      expect(find.text('8분'), findsOneWidget);
+      // 시각 표기(`오전`/`오후`)는 계획 카드에서 사라졌다.
+      expect(find.textContaining('오전', findRichText: true), findsNothing);
+      expect(find.textContaining('오후', findRichText: true), findsNothing);
+      // 목적지 라벨은 남는다 — title은 건드리지 않았다.
+      expect(find.text('목적지까지'), findsOneWidget);
+    });
   });
 
   testWidgets('안내 중에는 남은 값과 종료 동작을 보여 준다', (tester) async {
@@ -122,5 +136,15 @@ void main() {
     expect(find.text('150m'), findsOneWidget);
     await tester.tap(find.text('안내 종료'));
     expect(closed, isTrue);
+  });
+
+  testWidgets('안내 중에는 도착 예정 시각이 그대로 남는다', (tester) async {
+    await tester.pumpWidget(
+      wrap(
+        const EtaCard(distanceMeters: 150, minutes: 2, guidanceStarted: true),
+      ),
+    );
+
+    expect(find.text('도착 예정'), findsOneWidget);
   });
 }
