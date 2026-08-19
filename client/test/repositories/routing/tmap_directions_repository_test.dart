@@ -398,9 +398,11 @@ void main() {
 
     expect(options.status, DirectionsRouteOptionsStatus.ok);
     expect(options.options.length, 2);
+    // searchOption 2·3이 둘 다 alternative로 매핑되지만 kinds에는 한 번만
+    // 남는다. 같은 kind가 두 번 있는 것은 목록의 사실이 아니라 요청 방식의
+    // 부산물이다(domain/route/directions_route_merge.dart).
     expect(options.options[0].kinds, [
       DirectionsRouteOptionKind.recommended,
-      DirectionsRouteOptionKind.alternative,
       DirectionsRouteOptionKind.alternative,
     ]);
     expect(options.options[1].kinds, [DirectionsRouteOptionKind.shortestDistance]);

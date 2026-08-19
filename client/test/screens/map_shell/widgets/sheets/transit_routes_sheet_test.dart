@@ -53,7 +53,17 @@ const _withTransfer = TransitItinerary(
 );
 
 void main() {
-  testWidgets('경로마다 소요 시간·환승·도보·요금을 함께 적는다', (tester) async {
+  /// 결과 카드가 커져 기본 600px 뷰포트에는 한 장밖에 안 들어간다. `ListView`가
+  /// 지연 생성이라 두 번째 줄은 위젯 자체가 안 만들어져, 높이를 안 키우면 이
+  /// 파일의 단언이 "필터가 아니라 화면 높이"를 재게 된다.
+  void useTallViewport(WidgetTester tester) {
+    tester.view.physicalSize = const Size(1200, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+  }
+
+  testWidgets('경로마다 소요 시간·요금·노선·정류장을 함께 적는다', (tester) async {
+    useTallViewport(tester);
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light,
@@ -72,18 +82,22 @@ void main() {
     // 30분 / 40분 두 후보.
     expect(find.text('30분'), findsOneWidget);
     expect(find.text('40분'), findsOneWidget);
-    // 첫 줄에만 "최단 시간" 배지.
-    expect(find.text('최단 시간'), findsOneWidget);
-    // 환승 여부는 숫자가 아니라 문장으로 갈라 적는다.
-    expect(find.textContaining('환승 없음'), findsOneWidget);
-    expect(find.textContaining('환승 1회'), findsOneWidget);
+    // 첫 줄에만 "최적" 배지.
+    expect(find.text('최적'), findsOneWidget);
     expect(find.textContaining('1,600원'), findsOneWidget);
-    // 버스 노선은 "간선:" 접두사를 떼고 번호만 칩에 남는다.
+    // 버스 노선은 "간선:" 접두사를 떼고 번호만 남고, 접두사는 수단 배지가 된다.
     expect(find.text('472'), findsOneWidget);
+    expect(find.text('간선'), findsOneWidget);
     expect(find.text('수도권5호선'), findsOneWidget);
+    // 승·하차 지점과 정류장 수. 환승 횟수·도보 시간을 글자로 적던 자리는
+    // 구간 비율 막대가 대신한다.
+    expect(find.text('여의도역'), findsOneWidget);
+    expect(find.text('광화문역'), findsOneWidget);
+    expect(find.text('3정류장'), findsOneWidget);
   });
 
   testWidgets('경로를 누르면 그 경로를 돌려준다', (tester) async {
+    useTallViewport(tester);
     TransitItinerary? picked;
     await tester.pumpWidget(
       MaterialApp(
