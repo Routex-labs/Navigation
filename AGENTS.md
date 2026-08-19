@@ -6,57 +6,28 @@
 - **정상 동작보다 실패 조건을 먼저 생각한다.** 어디서 깨지는지, 어떤 입력·상태에서 실패하는지를 먼저 짚는다.
 - **AI보다 먼저 검증 기준을 정한다.** "무엇이 충족되면 맞다고 볼지"를 먼저 합의하고 그 기준으로 결과를 확인한다.
 
-이 셋이 이 문서에서 가장 값을 한다. 실패 조건을 먼저 적어 잡은 것들: 요금이 null인
-경로, 0으로 나누는 소요시간, 좌표가 빈 후보, 필터로 좁힌 뒤의 인덱스 어긋남.
-리팩터링에서는 검증 기준을 **"테스트를 한 개도 안 고쳐야 한다"**로 잡아, 옮기기에
-수정이 섞이는 것을 막았다.
+이 셋이 가장 값을 한다. 실패 조건을 먼저 적어 잡은 것들: 요금이 null인 경로, 0으로 나누는
+소요시간, 좌표가 빈 후보, 필터로 좁힌 뒤의 인덱스 어긋남. 리팩터링에서는 검증 기준을
+**"테스트를 한 개도 안 고쳐야 한다"**로 잡아, 옮기기에 수정이 섞이는 것을 막았다.
 
-## 프로젝트 세션 규칙
+## 계층 — import는 아래로만 간다
 
-Flutter 클라이언트 + FastAPI·SQLAlchemy·SQLite 백엔드 데모다. 개발자는 Windows(PowerShell)와 macOS 양쪽에 있다.
+```
+5  app.dart · main.dart · service_locator.dart
+4  screens/
+3  widgets/
+2  repositories/  features/  map/
+1  domain/  state/
+0  models/  core/  theme/  routing/
+```
 
-- **백엔드는 배포된 Cloud Run에 붙고, 로컬에선 클라이언트만 띄운다.** 백엔드를 직접 고치지 않는 한 로컬 서버는 실행하지 않는다.
-  - 최초 1회 `client/config.example.json`을 `config.local.json`으로 복사하고 배포 백엔드 주소(`API_BASE_URL`)·키를 채운다. (`.gitignore`라 커밋되지 않는다.)
-  - `client/`에서 실행한다. 창은 foreground로 띄우고, 명령은 체이닝하지 말고 한 줄씩 실행한다(쉘 버전에 따라 `&&`·`;`가 깨질 수 있음).
-    ```powershell
-    # Windows — 이 두 줄이 없으면 한글 로그가 CP949로 디코딩돼 중국어처럼 깨진다.
-    [Console]::OutputEncoding = [Text.Encoding]::UTF8
-    $OutputEncoding = [Text.Encoding]::UTF8
-    flutter run --dart-define-from-file=config.local.json 2>&1 | ForEach-Object { $_; $_ | Out-File frontend.log -Append -Encoding utf8 }
-    ```
-    ```bash
-    # macOS — 터미널이 기본 UTF-8이라 프렐류드 불필요
-    flutter run --dart-define-from-file=config.local.json 2>&1 | tee frontend.log
-    ```
-  - 사용자는 창에서 실시간 로그를, 에이전트는 `frontend.log`(`.gitignore`)를 읽어 추적한다. 주입 값은 컴파일 타임에 박히므로 URL·키를 바꾸면 `flutter run`을 재시작한다.
-  - 백엔드 python은 반대로 기본 CP949 출력이라, 콘솔을 UTF-8로 바꾸면 `$env:PYTHONUTF8=1`도 함께 준다.
-- **`flutter build`·`flutter test`를 `tail`로 파이프하지 마라.** 파이프의 종료 코드는 `tail`의 것이라 **빌드 실패가 성공으로 보인다.** 실제로 이것 때문에 실패한 빌드 위에서 세 번을 관찰한 적이 있다. 성공/실패 문구를 직접 `grep`한다.
-- **백엔드를 직접 수정·검증해야 할 때만** 로컬 Python으로 띄운다 — [로컬 개발 가이드](docs/guide/local-development-guide.md), [GCP 배포 문서](docs/guide/gcp-instance.md).
-- **경로 계산은 클라이언트 온디바이스**(Dijkstra, `client/lib/domain/route/`)가 담당한다. 서버는 그래프(nodes·edges)만 준다.
-- **API 계약(JSON)은 Flutter 클라이언트가 소비하는 형태를 우선**한다. 백엔드 응답 스키마를 바꾸면 클라이언트 모델·파싱도 함께 확인한다.
-- **문서·커밋·PR은 한국어로 쓴다.**
+`client/test/lib_layer_direction_test.dart`가 검사한다. 예외는 조립 루트
+(`service_locator.dart`) 하나뿐이다.
 
-## 계층과 주석 — 테스트가 지킨다
-
-두 규칙은 CI가 검사하므로 외우지 않아도 된다. 걸리면 그때 테스트가 이유를 말한다.
-
-| 무엇 | 단일 출처 |
-|---|---|
-| import는 아래로만 (`5 app` → `4 screens` → `3 widgets` → `2 repositories·features·map` → `1 domain·state` → `0 models·core·theme·routing`) | `client/test/lib_layer_direction_test.dart` |
-| 파일 머리 주석 8줄, 한 덩어리 20줄 | `client/test/lib_header_comment_length_test.dart` |
-
-두 테스트 주석에 **왜 그 값인지**가 실측과 함께 있다. 상한을 고치려면 거기부터 읽는다.
-
-손으로 지켜야 하는 것은 둘뿐이다.
-
-- **주석의 대괄호 링크(`[Foo]`)는 import를 끌고 온다.** 위층을 가리킬 때는 경로를 글자로만 적는다 — 실제로 그 한 줄 때문에 화살표가 거꾸로 선 적이 있다.
-- **거슬러 올라가고 싶어지면 대개 값이 잘못된 층에 있는 것이다.** 타입·상수를 아래로 내리거나, 큰 객체 대신 실제로 읽는 값만 인자로 받는다.
-
-주석을 **어디에** 쓰는지는 자리를 나누는 문제다. 파일 머리엔 한 문장 요약과 문서 경로,
-선언 위 `///`엔 호출 계약(입력 범위·null의 뜻·실패 조건), 코드 옆 `//`엔 사라지면 다시
-틀리는 실측값과 함정, 나머지 서사는 `docs/`. **근거는 지우지 않는다** — 실측값과 버린
-대안을 지우면 같은 실수를 다시 한다. 길어서 상한에 걸리면 지우지 말고 `docs/`로 옮기고
-경로 한 줄을 남긴다.
+- **거슬러 올라가고 싶어지면 대개 값이 잘못된 층에 있는 것이다.** 타입·상수를 아래로
+  내리거나, 큰 객체 대신 실제로 읽는 값만 인자로 받는다.
+- 새 디렉터리를 만들면 등급표에 추가한다. 등급표를 고치는 것은 마지막 수단이고, 고칠 때는
+  **왜 그 순서인지** 함께 적는다.
 
 폴더를 가르는 기준은 파일 수가 아니라 **고치는 이유**다. 경로를 만드는 코드
 (`domain/route/`)와 따라가는 코드(`domain/guidance/`)를 나눈 것이 그 예다.
@@ -67,19 +38,20 @@ Flutter 클라이언트 + FastAPI·SQLAlchemy·SQLite 백엔드 데모다. 개�
 정하고 나머지는 경로로 가리킨다.** 검증 기준의 단일 출처는 테스트다 — 주석에 표를
 베끼지 말고 테스트 파일 경로를 적는다.
 
-금지가 아니라 선택의 문제다. 실측 로그·벤치 숫자처럼 **남길 값이 있는 것은 반드시
-어딘가에 남긴다.** 코드에 둘지 `docs/`에 둘지만 정하면 된다.
+금지가 아니라 선택의 문제다. 실측 로그·벤치 숫자처럼 **남길 값이 있는 것은 반드시 어딘가에
+남긴다.** 코드에 둘지 `docs/`에 둘지만 정하면 된다.
 
-## 커밋 규칙
+## 커밋·PR에서 하나만
 
-- **논리적으로 관련된 작업 단위로 나눈다.** 성격이 다른 변경(기능·문서·이동·삭제)을 한 커밋에 섞지 않는다. 섞이면 무엇이 깨졌는지 못 가리고 되돌리기도 어렵다.
-- **제목은 한 줄**, `feat:`·`fix:`·`chore:`·`docs:`·`refactor:` 접두사로 시작하고 내용은 한글로 쓴다. 필요하면 빈 줄 뒤에 1~2줄 설명.
-- **`Co-Authored-By` 및 협업자 Claude 태그는 붙이지 않는다.**
+**`Co-Authored-By` 및 협업자 Claude 태그는 붙이지 않는다**(커밋·PR 모두).
 
-## PR 작성 규칙
+나머지 커밋·PR 규칙은 [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md).
 
-`.github/PULL_REQUEST_TEMPLATE.md`의 5섹션 형식을 따른다. 각 섹션은 팀원이 직접 설명할 수 있는 2~3줄로 쓴다. 리뷰는 작성자 본인을 제외한 모든 참가자에게 요청한다.
+## 나머지는 어디에 있나
 
-- **낡은 문서를 남기지 않는다.** 이번 변경으로 사실과 어긋나게 된 문서는 "남은 위험"에 적어 두지 말고 **같은 PR에서 고친다**(문서 수정은 별도 커밋).
-- **방치된 코드도 그 PR에서 지운다.** 더 이상 참조되지 않게 된 함수·상수·위젯·자산을 찾아서 함께 제거한다(제거는 별도 커밋). 적어 두는 순간 그것은 "다음에 할 일"이 되고, 다음은 오지 않는다.
-- 그래서 "남은 위험"의 **낡은 문서·방치 코드 항목은 평상시 "없음"이어야 한다.** 거기에 뭔가 적혀 있다면 그 PR이 뒷정리를 미룬 것이다. 못 지우는 경우(범위가 크거나 결정이 필요, 다른 브랜치가 쓰는 중)만 이유와 함께 남긴다.
+| 무엇 | 어디 |
+|---|---|
+| 앱 띄우기·UTF-8 창·백엔드 경계 | [docs/guide/session-rules.md](docs/guide/session-rules.md) |
+| 주석을 어디에 쓰나 (상한 8줄·20줄) | [docs/client/comment-placement.md](docs/client/comment-placement.md) |
+| 커밋 메시지·PR 5섹션·뒷정리 | [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md) |
+| 로컬 백엔드·배포 | [docs/guide/local-development-guide.md](docs/guide/local-development-guide.md) · [docs/guide/gcp-instance.md](docs/guide/gcp-instance.md) |

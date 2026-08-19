@@ -545,7 +545,7 @@ int? currentDirectionsStepIndex(List<LatLng> routePoints, List<double> stepDista
 `RoutexStepList` + `RoutexBottomSheet` + 높이 상한을 하고 있다. 더할 것은 셋 —
 대중교통 입력도 받고, 하단에 소요·도착·`안내시작`을 붙이고, 높이를 상세 화면답게 올린다.
 이름이 실제와 어긋나게 되므로 파일을 옮긴다(`route_detail_sheet.dart`). **이름 변경은 별도
-커밋이다**(`AGENTS.md` 커밋 규칙).
+커밋이다**(`.github/CONTRIBUTING.md` 커밋 규칙).
 
 ### 파일 (4단계)
 

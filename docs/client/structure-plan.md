@@ -324,7 +324,7 @@ part 규약(왜 extension인가, 왜 `ignore_for_file`인가)은
 
 **총량은 문제가 아니었다.** 우리 비율 28%는 Flutter material(28.8%)·widgets(43.7%)과
 같은 대역이고, 선언당 주석 길이는 오히려 우리가 더 짧다(15.5줄 ↔ 22.8줄). 문제는 파일을
-열 때 코드 첫 줄까지 넘겨야 하는 벽이었다. 규칙은 [AGENTS.md](../../AGENTS.md)에 있고
+열 때 코드 첫 줄까지 넘겨야 하는 벽이었다. 규칙은 [주석 자리](comment-placement.md)에 있고
 상한은 `test/lib_header_comment_length_test.dart`가 지킨다.
 
 ### 10단계 — 파일 분할과 결합도는 별개 축이다
