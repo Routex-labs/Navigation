@@ -270,6 +270,32 @@ extension OutdoorMapGuidance on OutdoorMapBodyState {
     if (_routeIsDriving) await startFollowingCurrentLocation();
   }
 
+  /// 안내만 끈다 — 경로선·후보·목적지는 남는다. **뒤로가기가 부른다.**
+  ///
+  /// `_dismissUserDestinationFromEtaCard`(parts/route.dart)와 다르다. 그쪽은
+  /// 경로까지 지우고 `onGuidanceDismissed`로 상단 길찾기 상태까지 비운다.
+  /// 여기서는 경로가 남으므로 그 신호를 **부르지 않는다** — 부르면 경로만 남고
+  /// 길찾기 바가 사라져, 다른 후보를 고를 문이 닫힌다.
+  void stopGuidanceKeepingRoute() {
+    if (!_guidanceStarted) return;
+    setState(() {
+      _guidanceStarted = false;
+      // 걸어온 자취를 함께 지운다. 안 지우면 계획 화면에 절반이 회색인 경로가 뜬다.
+      _clearCompletedRouteHistory();
+    });
+    _stopFollowingUser();
+    _notifyRouteStateIfChanged();
+    // 계획 화면의 약속은 "경로 전체가 보인다"다. 따라가기만 풀면 카메라가
+    // 사용자에게 확대된 채로 남아 어느 후보가 어느 선인지 대조할 수 없다.
+    final itinerary = _transitItinerary;
+    final route = _route;
+    if (itinerary != null) {
+      _fitCameraToPoints(itinerary.points);
+    } else if (route != null) {
+      _fitCameraToRoute(route);
+    }
+  }
+
   /// 도착 카드의 `안내 종료`. 남은 여정을 통째로 정리한다.
   void _confirmArrival() {
     _arrivalRouteClearTimer?.cancel();

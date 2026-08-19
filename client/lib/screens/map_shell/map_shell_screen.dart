@@ -333,6 +333,16 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 상황은 없다.
   final _transitRequest = SingleFlight();
 
+  /// 마지막으로 띄운 대중교통 후보 목록. **안내 중 뒤로가기가 이것을 다시 연다.**
+  ///
+  /// 조회 당시의 출발 좌표까지 함께 든다 — 다시 고른 경로의 앞뒤 도보를 그때와
+  /// 같은 지점에서 채워야 지도에 그려지는 선이 목록과 어긋나지 않는다.
+  ///
+  /// 길찾기가 끝나면 반드시 비운다([_forgetRouteDraft]). 안 비우면 다른 곳으로
+  /// 가는 안내 중에 뒤로가기를 눌러 **예전 목적지의 후보 목록**이 뜬다.
+  ({TransitRoutes routes, DirectionsCandidate destination, LatLng origin})?
+  _lastTransitQuery;
+
   final _routeResultsKey = GlobalKey();
 
   /// 건물 밖 장소를 함께 찾을 기준점. 검색을 시작할 때 야외 지도에서 한 번
@@ -590,6 +600,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 이동 수단도 잊는다 — 안 지우면 다음 길찾기가 지난번 자동차로 시작한다.
   void _forgetRouteDraft() {
     _unfocusRouteFields();
+    _lastTransitQuery = null;
     _routeOriginController.clear();
     _routeDestinationController.clear();
     setState(() {
@@ -1595,7 +1606,39 @@ class _MapShellScreenState extends State<MapShellScreen> {
     );
     if (!mounted) return;
     if (await _announceTransitFailure(routes.status, destination)) return;
+    _lastTransitQuery = (
+      routes: routes,
+      destination: destination,
+      origin: origin,
+    );
+    await _pickTransitRoute(routes, destination: destination, origin: origin);
+  }
 
+  /// 안내를 끈 뒤 마지막 후보 목록을 다시 연다. 대중교통이 아니었으면 아무 일도
+  /// 하지 않는다 — 자동차는 계획 카드 안에 후보 패널이 그대로 남아 있다.
+  ///
+  /// 중복 가드는 첫 조회와 같은 [_transitRequest]를 탄다. 뒤로가기를 연타해도
+  /// 시트가 두 겹으로 뜨지 않는다.
+  Future<void> _reopenTransitRoutesSheet() async {
+    final last = _lastTransitQuery;
+    if (last == null) return;
+    await _transitRequest.run(
+      () => _pickTransitRoute(
+        last.routes,
+        destination: last.destination,
+        origin: last.origin,
+      ),
+      onDuplicate: () => debugPrint('[transit] 목록이 이미 떠 있어 재열기 무시'),
+    );
+  }
+
+  /// 후보 목록을 띄우고 고른 하나를 지도에 그린다. **첫 조회와 뒤로가기가 같이
+  /// 쓴다** — 고른 뒤의 흐름을 두 벌로 만들면 한쪽만 고쳐진다.
+  Future<void> _pickTransitRoute(
+    TransitRoutes routes, {
+    required DirectionsCandidate destination,
+    required LatLng origin,
+  }) async {
     final picked = await _withMapsLocked(
       () => TransitRoutesSheet.show(
         context,
@@ -1605,6 +1648,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
       ),
     );
     if (!mounted || picked == null) return;
+    final outdoor = _outdoorKey.currentState;
+    if (outdoor == null) return;
 
     // **건물 안 매장이면 마지막 도보는 매장이 아니라 문으로 간다.**
     //
@@ -2267,6 +2312,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
         // 검색이 먼저다. 둘 다 살아 있으면 한 번에 한 겹만 벗긴다.
         if (_searchActive) {
           _closeSearch();
+          return;
+        }
+        // 안내를 끄는 것과 경로를 지우는 것은 **다른 사건이다.** 안내 중이면
+        // 안내 한 겹만 벗겨 후보를 다시 고를 수 있는 계획 화면으로 되돌린다.
+        if (_guidanceActive) {
+          _outdoorKey.currentState?.stopGuidanceKeepingRoute();
+          unawaited(_reopenTransitRoutesSheet());
           return;
         }
         // 상단 길찾기 바의 X와 같은 정리다. 종료 동작을 두 벌로 만들지 않는다.
