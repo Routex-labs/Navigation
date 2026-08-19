@@ -128,4 +128,33 @@ void main() {
     // 접혀 있을 때는 없던 도보 구간 시간이 펼치면 보인다.
     expect(find.textContaining('도보'), findsWidgets);
   });
+
+  testWidgets('막대 칸이 글자보다 좁으면 시간을 자르지 않고 뺀다', (tester) async {
+    // 1분짜리 도보가 60분 여정에 섞이면 그 칸은 몇 픽셀이다. 실기기에서 "3분"이
+    // "3"으로 잘려 정류장 수처럼 읽힌 적이 있다.
+    final lopsided = TransitItinerary(
+      totalTimeSeconds: 3600,
+      totalWalkTimeSeconds: 60,
+      totalDistanceMeters: 20000,
+      transferCount: 0,
+      legs: [
+        leg(mode: TransitMode.walk, seconds: 60),
+        leg(
+          mode: TransitMode.bus,
+          seconds: 3540,
+          routeName: '간선:472',
+          startName: '어딘가',
+          endName: '어딘가2',
+          stationCount: 9,
+        ),
+      ],
+    );
+    await tester.pumpWidget(card(lopsided));
+
+    // 넓은 칸은 그대로 적고,
+    expect(find.text('59분'), findsOneWidget);
+    // 좁은 칸은 잘린 조각이 아니라 아무것도 안 남긴다.
+    expect(find.text('1분'), findsNothing);
+    expect(find.text('1'), findsNothing);
+  });
 }

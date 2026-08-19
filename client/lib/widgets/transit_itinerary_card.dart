@@ -150,16 +150,15 @@ class _LegBar extends StatelessWidget {
                         : transitLegColor(leg),
                     borderRadius: BorderRadius.circular(10),
                   ),
+                  // 칸이 글자보다 좁으면 **자르지 않고 통째로 뺀다.** 실기기에서
+                  // "3분"이 "3"으로 잘려 나왔는데, 잘린 숫자는 정보가 아니라
+                  // 오독이다 — 정류장 수로 읽힌다. 시간은 상세보기에 온전히 있다.
                   child: Center(
-                    child: Text(
-                      formatTransitDuration(leg.sectionTimeSeconds),
-                      maxLines: 1,
-                      overflow: TextOverflow.clip,
-                      style: RoutexTypography.caption.copyWith(
-                        color: leg.mode.isWalk
-                            ? colors.contentSecondary
-                            : Colors.white,
-                      ),
+                    child: _FittedDuration(
+                      label: formatTransitDuration(leg.sectionTimeSeconds),
+                      color: leg.mode.isWalk
+                          ? colors.contentSecondary
+                          : Colors.white,
                     ),
                   ),
                 ),
@@ -167,6 +166,33 @@ class _LegBar extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// 막대 한 칸의 소요 시간. **다 안 들어가면 아무것도 안 그린다.**
+///
+/// 글자를 줄이지 않는 이유는 한 막대 안에서 칸마다 크기가 달라지면 비율보다
+/// 글자 크기가 먼저 눈에 들어와서다. 자르지 않는 이유는 위 [_LegBar] 주석에 있다.
+class _FittedDuration extends StatelessWidget {
+  const _FittedDuration({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = RoutexTypography.caption.copyWith(color: color);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: TextSpan(text: label, style: style),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        )..layout();
+        if (painter.width > constraints.maxWidth) return const SizedBox.shrink();
+        return Text(label, maxLines: 1, style: style);
+      },
     );
   }
 }
