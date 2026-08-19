@@ -98,11 +98,17 @@ class _TransitTimelineState extends State<TransitTimeline> {
   }
 }
 
+/// 아이콘과 아이콘을 잇는 세로선. 테스트가 자리와 길이를 재는 손잡이다.
+@visibleForTesting
+const transitTimelineConnectorKey = Key('transit-timeline-connector');
+
 /// 타임라인 한 칸 — 아이콘 열 + 본문 + 시작 시각.
 ///
-/// 아이콘 아래 짧은 선은 `RoutexStepList`와 같은 모양이다. 본문 높이만큼
-/// 늘이지 않는 이유는 그러려면 행마다 intrinsic 측정이 필요한데, 이 화면은
-/// 정류장 30개를 펼칠 수 있어서 그 비용이 스크롤에 그대로 얹히기 때문이다.
+/// 선은 아이콘 아래부터 칸 바닥까지 늘어나 다음 칸 아이콘에 닿는다. 위치를
+/// 지정한 `Stack` 자식이라 본문 높이를 다시 재지 않는다. `IntrinsicHeight`도
+/// 비용은 같았지만(정류장 120개 펼침에서 레이아웃 300회 ~780ms로 차이 없음),
+/// 본문에 intrinsic을 못 재는 위젯이 들어오면 그때 터진다.
+/// 선의 검증 기준은 `test/widgets/transit_timeline_test.dart`가 단일 출처다.
 class _TimelineNode extends StatelessWidget {
   const _TimelineNode({
     required this.icon,
@@ -122,45 +128,52 @@ class _TimelineNode extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.routexColors;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Stack(
       children: [
-        SizedBox(
-          width: RoutexMetrics.iconLarge,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: RoutexMetrics.iconMedium, color: iconColor),
-              if (!last)
-                Padding(
-                  padding: const EdgeInsets.only(top: RoutexSpacing.inlineGap),
-                  child: SizedBox(
-                    width: RoutexStroke.emphasis,
-                    height: RoutexSpacing.componentPadding,
-                    child: ColoredBox(color: iconColor),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(width: RoutexSpacing.contentGap),
-        Expanded(
-          child: Padding(
-            padding: EdgeInsets.only(
-              bottom: last ? 0 : RoutexSpacing.componentPadding,
+        // 칸 높이는 아래 Row가 정하고, 선은 그 높이에 얹힌다. 순서가 반대면
+        // (선이 위치를 안 잡은 자식이면) Stack이 선 길이만큼만 높아진다.
+        if (!last)
+          Positioned(
+            top: RoutexMetrics.iconMedium + RoutexSpacing.inlineGap,
+            bottom: 0,
+            left: (RoutexMetrics.iconLarge - RoutexStroke.emphasis) / 2,
+            width: RoutexStroke.emphasis,
+            child: ColoredBox(
+              key: transitTimelineConnectorKey,
+              color: iconColor,
             ),
-            child: child,
           ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: RoutexMetrics.iconLarge,
+              child: Icon(
+                icon,
+                size: RoutexMetrics.iconMedium,
+                color: iconColor,
+              ),
+            ),
+            const SizedBox(width: RoutexSpacing.contentGap),
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  bottom: last ? 0 : RoutexSpacing.componentPadding,
+                ),
+                child: child,
+              ),
+            ),
+            if (time case final time?) ...[
+              const SizedBox(width: RoutexSpacing.controlGap),
+              Text(
+                formatTransitClockTime(time),
+                style: RoutexTypography.tabular(
+                  RoutexTypography.caption,
+                ).copyWith(color: colors.contentSecondary),
+              ),
+            ],
+          ],
         ),
-        if (time case final time?) ...[
-          const SizedBox(width: RoutexSpacing.controlGap),
-          Text(
-            formatTransitClockTime(time),
-            style: RoutexTypography.tabular(
-              RoutexTypography.caption,
-            ).copyWith(color: colors.contentSecondary),
-          ),
-        ],
       ],
     );
   }
