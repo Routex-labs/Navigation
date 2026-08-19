@@ -493,7 +493,10 @@ extension OutdoorMapUi on OutdoorMapBodyState {
         // 대중교통 안내는 도보 ETA 카드와 **같은 자리**를 쓰고 서로를 밀어낸다.
         // 두 카드가 함께 뜨면 한 화면에서 소요 시간이 두 개가 되어, 지도에
         // 그려진 선이 어느 쪽인지 알 수 없다.
-        else if (_transitItinerary case final itinerary?)
+        //
+        // 후보 목록이 덮고 있는 동안에는 아예 안 그린다([OutdoorMapBody.transitRoutesSheetOpen]).
+        else if (_transitItinerary case final itinerary?
+            when !widget.transitRoutesSheetOpen)
           Positioned(
             left: 0,
             right: 0,

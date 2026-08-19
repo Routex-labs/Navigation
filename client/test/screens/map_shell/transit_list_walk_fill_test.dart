@@ -53,8 +53,10 @@ LatLng _alighting(int index) => LatLng(37.5720 + index * 0.001, 126.9900);
 
 /// 요금을 후보마다 다르게 둔다 — 헤더의 이 글자가 목록에서 그 후보를 찾는
 /// 손잡이다. 소요 시간은 뒤에 있는 도보 안내 카드와 겹칠 수 있어 안 쓴다.
-String _fareLabel(int index) => '${1500 + index * 100}원'
-    .replaceAllMapped(RegExp(r'^(\d)(\d{3})'), (m) => '${m[1]},${m[2]}');
+String _fareLabel(int index) => '${1500 + index * 100}원'.replaceAllMapped(
+  RegExp(r'^(\d)(\d{3})'),
+  (m) => '${m[1]},${m[2]}',
+);
 
 TransitItinerary _itinerary(int index) => TransitItinerary(
   totalTimeSeconds: 1200,
@@ -161,7 +163,7 @@ void main() {
   }
 
   /// 첫 후보의 상세를 열어 `안내 시작`으로 확정한다. 카드 탭만으로는 아무것도
-  /// 그려지지 않는다 — 같은 글자가 뒤 계획 카드에도 있어 상세 안으로 좁혀 찾는다.
+  /// 그려지지 않는다. 이 버튼 하나로 **안내까지 시작된다**(`transit_preview_test.dart`).
   Future<void> pickFirstCandidate(WidgetTester tester) async {
     await tester.tap(find.byType(TransitItineraryCard).first);
     await drain(tester);
@@ -271,8 +273,6 @@ void main() {
   testWidgets('안내를 끄고 다시 연 목록에도 도보가 남아 있다', (WidgetTester tester) async {
     await openTransitList(tester, 2);
     await pickFirstCandidate(tester);
-    await tester.tap(find.text('안내 시작'));
-    await drain(tester);
     expect(
       find.text('안내 종료'),
       findsOneWidget,

@@ -243,18 +243,22 @@ void main() {
     await planRoute(tester);
     await tester.tap(find.text('대중교통'));
     await drain(tester);
-    expect(find.byType(TransitItineraryCard), findsWidgets, reason: '후보 목록이 안 떴다');
+    expect(
+      find.byType(TransitItineraryCard),
+      findsWidgets,
+      reason: '후보 목록이 안 떴다',
+    );
 
     await tester.tap(find.byType(TransitItineraryCard).first);
     await drain(tester);
+    // 상세의 이 버튼 하나가 확정과 안내를 함께 한다 — 하단 카드에서 한 번 더
+    // 누를 필요가 없다(`transit_preview_test.dart`).
     await tester.tap(
       find.descendant(
         of: find.byType(TransitRouteDetailSheet),
         matching: find.text('안내 시작'),
       ),
     );
-    await drain(tester);
-    await tester.tap(find.text('안내 시작'));
     await drain(tester);
     expect(find.text('안내 종료'), findsOneWidget, reason: '테스트 전제(안내 시작)가 안 섰다');
 

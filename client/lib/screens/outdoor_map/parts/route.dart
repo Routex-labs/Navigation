@@ -1071,6 +1071,14 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     );
   }
 
+  /// 후보 상세에서 확정한 경로로 **안내를 시작한다.** 셸(길찾기 화면)이
+  /// [showTransitRoute] 뒤에 부른다.
+  ///
+  /// 계획 카드의 `안내 시작`과 **같은 함수**를 태운다 — 여기에만 있는 판단이
+  /// 생기면 두 버튼이 서로 다른 조건에서 시작한다. 경로에서 멀면 그쪽 가드가
+  /// 막고 안내 문구만 뜬다(그때 카드에 버튼이 남는 것이 맞다).
+  Future<void> startGuidanceForPickedRoute() => _startCurrentGuidance();
+
   /// 대중교통 안내를 끈다. 경로선·요약 카드가 함께 사라진다.
   void clearTransitRoute() {
     if (_transitItinerary == null) return;

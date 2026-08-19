@@ -345,6 +345,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
   ({TransitRoutes routes, DirectionsCandidate destination, LatLng origin})?
   _lastTransitQuery;
 
+  /// 후보 목록 시트가 지금 떠 있는지. 야외 지도에 넘겨 그동안 대중교통 요약
+  /// 카드를 접는다([OutdoorMapBody.transitRoutesSheetOpen]).
+  ///
+  /// 켜고 끄는 자리는 [_pickTransitRoute] 하나뿐이고 `finally`가 끈다 — 고르든
+  /// 안 고르든, 예외로 빠져나가든 카드는 반드시 돌아온다.
+  var _transitRoutesSheetOpen = false;
+
   /// 이번 조회에서 이미 받아 온 도보 구간. **같은 두 지점을 두 번 부르지
   /// 않는다** — 목록에서 부른 (마지막 하차 → 목적지)를 후보를 고를 때마다
   /// 그대로 다시 불러 TMAP 할당량을 선택당 1건씩 먹었다.
@@ -1669,8 +1676,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
     await _pickTransitRoute(filled, destination: destination, origin: origin);
   }
 
-  /// 고르기 전에 첫(최적) 후보를 지도에 그린다. 나머지는 회색으로 깔린다 —
-  /// 자동차 후보와 같은 그림이다.
+  /// 고르기 전에 첫(최적) 후보를 **지도에만** 그린다. 나머지는 회색으로 깔린다 —
+  /// 자동차 후보와 같은 그림이다. 하단 요약 카드는 목록이 닫힐 때까지 접혀
+  /// 있다([_transitRoutesSheetOpen]).
   ///
   /// **실내 구간도 문 재선정도 하지 않는다.** 그건 확정했을 때 할 일이라
   /// [_pickTransitRoute]가 한다. 여기서는 목록이 든 후보를 그대로 그리므로
@@ -1782,91 +1790,112 @@ class _MapShellScreenState extends State<MapShellScreen> {
     );
   }
 
-  /// 후보 목록을 띄우고 고른 하나를 지도에 그린다. **첫 조회와 뒤로가기가 같이
-  /// 쓴다** — 고른 뒤의 흐름을 두 벌로 만들면 한쪽만 고쳐진다.
+  /// 후보 목록을 띄우고, 확정한 하나를 지도에 그린 뒤 **안내까지 시작한다.**
+  /// **첫 조회와 뒤로가기가 같이 쓴다** — 고른 뒤의 흐름을 두 벌로 만들면 한쪽만
+  /// 고쳐진다.
+  ///
+  /// 목록이 떠 있는 동안에는 요약 카드를 접는다([_transitRoutesSheetOpen]).
   Future<void> _pickTransitRoute(
     TransitRoutes routes, {
     required DirectionsCandidate destination,
     required LatLng origin,
   }) async {
-    final picked = await _withMapsLocked(
-      () => TransitRoutesSheet.show(
-        context,
-        routes: routes,
-        destinationLabel: destination.title,
-        onCloseAll: _requestCloseSheetChain,
-      ),
-    );
-    if (!mounted || picked == null) return;
-    final outdoor = _outdoorKey.currentState;
-    if (outdoor == null) return;
+    setState(() => _transitRoutesSheetOpen = true);
+    try {
+      final picked = await _withMapsLocked(
+        () => TransitRoutesSheet.show(
+          context,
+          routes: routes,
+          destinationLabel: destination.title,
+          onCloseAll: _requestCloseSheetChain,
+        ),
+      );
+      if (!mounted || picked == null) return;
+      final outdoor = _outdoorKey.currentState;
+      if (outdoor == null) return;
 
-    // **건물 안 매장이면 마지막 도보는 매장이 아니라 문으로 간다.**
-    //
-    // 매장 좌표를 그대로 끝점으로 주면 TMAP이 그 좌표에서 가장 가까운 도로로
-    // 스냅하는데, 그 도로가 내린 곳 반대편일 수 있다. 내린 자리에서 가장 가까운
-    // 문을 우리가 직접 고른다 — 그 자리를 어떻게 구하는지는
-    // [transitDropPoint]에 있다.
-    final dropPoint = transitDropPoint(picked, fallback: destination.point);
-    final indoorStore = _indoorStoreOf(destination);
-    // **우리 건물을 향하는 안내면 하차 지점 기준으로 문을 다시 고른다.**
-    // 후보의 문은 검색하던 시점 위치에서 가까운 문이라, 버스를 타고 반대편에서
-    // 내리면 더 이상 가깝지 않다 — 실기기에서 바로 옆 문을 두고 건물을 빙 돌았다.
-    final targetsOurBuilding =
-        indoorStore != null || destination.buildingId == _buildingId;
-    final walkTarget =
-        (targetsOurBuilding ? outdoor.entranceNearestTo(dropPoint) : null) ??
-        destination.point;
-    debugPrint(
-      '[transit] 하차 지점 기준 문 선택: 우리 건물=$targetsOurBuilding '
-      '하차=(${dropPoint.latitude.toStringAsFixed(5)}, '
-      '${dropPoint.longitude.toStringAsFixed(5)}) '
-      '도보 도착=(${walkTarget.latitude.toStringAsFixed(5)}, '
-      '${walkTarget.longitude.toStringAsFixed(5)})',
-    );
-
-    // **카카오가 마지막 도보를 줬어도 우리가 다시 그린다.**
-    //
-    // 그 구간은 카카오가 정한 끝점(우리가 보낸 목적지 좌표)으로 가는데, 우리는
-    // 방금 하차 지점 기준으로 문을 다시 골랐다. 그대로 두면 지도에 그려진 도보는
-    // 옛 끝점으로 가고 실내 구간만 새 문에서 시작해, 두 선이 서로 다른 곳을
-    // 가리킨다. 자세한 근거는 [trimTrailingWalkLeg]에 있다.
-    final trimmed = trimTrailingWalkLeg(picked);
-
-    // 앞 도보는 목록에서 이미 채워져 왔다([_withListWalkLegs]). 뒤 도보는 방금
-    // 고른 문으로 끝점이 바뀌었을 수 있어 다시 채우지만, 문이 목적지 그대로면
-    // 목록에서 부른 그 구간이라 메모([_transitWalks])가 받아 호출이 안 나간다.
-    final completed = await _withTransitWalkLegs(
-      trimmed,
-      origin: origin,
-      destination: walkTarget,
-    );
-    if (!mounted) return;
-
-    await outdoor.showTransitRoute(
-      completed,
-      destination: walkTarget,
-      label: '${destination.title}까지',
-      origin: origin,
-      // 나머지 후보도 함께 넘겨 회색으로 깔린다. 고른 것 하나만 그리면 "다른
-      // 길도 있다"가 시트를 다시 열기 전까지 화면에서 사라진다.
+      // **건물 안 매장이면 마지막 도보는 매장이 아니라 문으로 간다.**
       //
-      // **다듬기 전 것을 넘긴다.** 앞뒤 도보는 이미 붙어 있고, 고른 경로만
-      // 문·하차 지점에 맞춰 끝을 다시 손본다([_withTransitWalkLegs]). 회색 선이
-      // 말하는 것은 "대충 어디로 도는가"라 그 정밀도가 필요 없다.
-      // **고른 것은 뺀 나머지다.** `completed`는 picked를 다듬은 사본이라
-      // 목록 안의 원본과 같은 객체가 아니고, 그대로 넘기면 파란 선 밑에 자기
-      // 회색 선이 한 겹 더 깔린다.
-      alternatives: [
-        for (final candidate in routes.itineraries)
-          if (!identical(candidate, picked)) candidate,
-      ],
-    );
-    if (!mounted || indoorStore == null) return;
+      // 매장 좌표를 그대로 끝점으로 주면 TMAP이 그 좌표에서 가장 가까운 도로로
+      // 스냅하는데, 그 도로가 내린 곳 반대편일 수 있다. 내린 자리에서 가장 가까운
+      // 문을 우리가 직접 고른다 — 그 자리를 어떻게 구하는지는
+      // [transitDropPoint]에 있다.
+      final dropPoint = transitDropPoint(picked, fallback: destination.point);
+      final indoorStore = _indoorStoreOf(destination);
+      // **우리 건물을 향하는 안내면 하차 지점 기준으로 문을 다시 고른다.**
+      // 후보의 문은 검색하던 시점 위치에서 가까운 문이라, 버스를 타고 반대편에서
+      // 내리면 더 이상 가깝지 않다 — 실기기에서 바로 옆 문을 두고 건물을 빙 돌았다.
+      final targetsOurBuilding =
+          indoorStore != null || destination.buildingId == _buildingId;
+      final walkTarget =
+          (targetsOurBuilding ? outdoor.entranceNearestTo(dropPoint) : null) ??
+          destination.point;
+      debugPrint(
+        '[transit] 하차 지점 기준 문 선택: 우리 건물=$targetsOurBuilding '
+        '하차=(${dropPoint.latitude.toStringAsFixed(5)}, '
+        '${dropPoint.longitude.toStringAsFixed(5)}) '
+        '도보 도착=(${walkTarget.latitude.toStringAsFixed(5)}, '
+        '${walkTarget.longitude.toStringAsFixed(5)})',
+      );
 
-    // 실내 구간은 **showTransitRoute 뒤에** 푼다. 그 함수가 시작할 때 pending을
-    // 비우므로, 앞에서 풀면 쌓아 둔 실내 구간이 곧바로 지워진다.
-    await outdoor.prepareIndoorLegFromDrop(indoorStore, dropPoint: dropPoint);
+      // **카카오가 마지막 도보를 줬어도 우리가 다시 그린다.**
+      //
+      // 그 구간은 카카오가 정한 끝점(우리가 보낸 목적지 좌표)으로 가는데, 우리는
+      // 방금 하차 지점 기준으로 문을 다시 골랐다. 그대로 두면 지도에 그려진 도보는
+      // 옛 끝점으로 가고 실내 구간만 새 문에서 시작해, 두 선이 서로 다른 곳을
+      // 가리킨다. 자세한 근거는 [trimTrailingWalkLeg]에 있다.
+      final trimmed = trimTrailingWalkLeg(picked);
+
+      // 앞 도보는 목록에서 이미 채워져 왔다([_withListWalkLegs]). 뒤 도보는 방금
+      // 고른 문으로 끝점이 바뀌었을 수 있어 다시 채우지만, 문이 목적지 그대로면
+      // 목록에서 부른 그 구간이라 메모([_transitWalks])가 받아 호출이 안 나간다.
+      final completed = await _withTransitWalkLegs(
+        trimmed,
+        origin: origin,
+        destination: walkTarget,
+      );
+      if (!mounted) return;
+
+      await outdoor.showTransitRoute(
+        completed,
+        destination: walkTarget,
+        label: '${destination.title}까지',
+        origin: origin,
+        // 나머지 후보도 함께 넘겨 회색으로 깔린다. 고른 것 하나만 그리면 "다른
+        // 길도 있다"가 시트를 다시 열기 전까지 화면에서 사라진다.
+        //
+        // **다듬기 전 것을 넘긴다.** 앞뒤 도보는 이미 붙어 있고, 고른 경로만
+        // 문·하차 지점에 맞춰 끝을 다시 손본다([_withTransitWalkLegs]). 회색 선이
+        // 말하는 것은 "대충 어디로 도는가"라 그 정밀도가 필요 없다.
+        // **고른 것은 뺀 나머지다.** `completed`는 picked를 다듬은 사본이라
+        // 목록 안의 원본과 같은 객체가 아니고, 그대로 넘기면 파란 선 밑에 자기
+        // 회색 선이 한 겹 더 깔린다.
+        alternatives: [
+          for (final candidate in routes.itineraries)
+            if (!identical(candidate, picked)) candidate,
+        ],
+      );
+      if (!mounted) return;
+      if (indoorStore != null) {
+        // 실내 구간은 **showTransitRoute 뒤에** 푼다. 그 함수가 시작할 때 pending을
+        // 비우므로, 앞에서 풀면 쌓아 둔 실내 구간이 곧바로 지워진다.
+        await outdoor.prepareIndoorLegFromDrop(
+          indoorStore,
+          dropPoint: dropPoint,
+        );
+        if (!mounted) return;
+      }
+
+      // **여기까지 왔다는 것은 상세에서 `안내 시작`을 눌렀다는 뜻이다** — 목록은
+      // 그 버튼에서만 값을 돌려준다(TransitRoutesSheet.show). 확정만 하고 멈추면
+      // 하단 카드가 같은 버튼을 한 번 더 내밀어 두 번 누르게 된다.
+      //
+      // 계획 카드의 버튼과 **같은 함수**를 탄다. 경로에서 멀면 그쪽 가드가 막고
+      // 안내 문구만 뜨는데, 그때 카드에 버튼이 남는 것이 맞는 동작이다.
+      await outdoor.startGuidanceForPickedRoute();
+    } finally {
+      if (mounted) setState(() => _transitRoutesSheetOpen = false);
+    }
   }
 
   /// 대중교통 조회를 보낼 출발 좌표.
@@ -1959,9 +1988,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
           : _walkingRoute(last.points.last, destination),
     ]);
 
-    debugPrint(
-      '[transit] 고른 경로 도보 채우기: 실호출 ${_transitWalkCalls - before}건',
-    );
+    debugPrint('[transit] 고른 경로 도보 채우기: 실호출 ${_transitWalkCalls - before}건');
 
     return fillTransitWalkLegs(
       itinerary,
@@ -2548,6 +2575,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
   Widget _buildMap() {
     return OutdoorMapBody(
       key: _outdoorKey,
+      transitRoutesSheetOpen: _transitRoutesSheetOpen,
       onRouteVisibleChanged: (visible) =>
           setState(() => _outdoorRouteVisible = visible),
       // 지도가 "안내 종료를 눌렀다"고 알려오는 신호. 경로는 그쪽이 이미

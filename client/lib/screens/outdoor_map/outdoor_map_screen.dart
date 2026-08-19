@@ -234,6 +234,7 @@ class OutdoorMapBody extends StatefulWidget {
     this.onFloorChanged,
     this.onFloorTransitionChanged,
     this.outerOverlayKeys = const [],
+    this.transitRoutesSheetOpen = false,
   });
 
   /// 이 야외 지도가 지금 화면에 보이는지. [MapShellScreen]은 야외/실내를
@@ -241,6 +242,15 @@ class OutdoorMapBody extends StatefulWidget {
   /// 살아 있다. 알려주지 않으면 보이지도 않는 야외 지도가 GPS를 계속 구독한다 —
   /// 실내에 들어간 뒤에는 GPS를 쓰지 않는다는 규칙을 지키려면 이 값이 필요하다.
   final bool active;
+
+  /// 대중교통 **후보 목록 시트**가 지금 이 지도를 덮고 있는지. 그동안에는
+  /// 대중교통 요약 카드를 그리지 않는다 — 목록과 카드가 함께 뜨면 화면에 시트가
+  /// 두 겹이고, 미리 그린 경로가 어느 후보인지도 카드가 앞질러 말한다.
+  ///
+  /// 미리보기(경로선·카메라)는 그대로 둔다. 감추는 것은 카드뿐이다.
+  /// 시트를 여는 쪽(`screens/map_shell/map_shell_screen.dart`)만 알 수 있는
+  /// 사실이라 값으로 받는다.
+  final bool transitRoutesSheetOpen;
 
   /// ETA 카드가 화면 최하단에 새로 나타나거나 사라질 때 호출된다.
   /// 상위(MapShellScreen)가 이 값으로 하단 공용 바를 그 위로 띄운다.

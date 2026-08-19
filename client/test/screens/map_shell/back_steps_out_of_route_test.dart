@@ -161,8 +161,12 @@ void main() {
   /// 그 경로를 확정한다. **카드 탭만으로는 아무것도 그려지지 않는다** — 상세는
   /// 다른 후보와 견주라고 있는 한 겹이라, 지도는 이 버튼에서만 바뀐다.
   ///
-  /// `안내 시작`은 뒤에 깔린 계획 카드에도 있는 글자라 상세 안으로 좁혀 찾는다.
-  Future<void> pickTransitCandidate(WidgetTester tester, [int index = 0]) async {
+  /// 이 버튼은 확정과 **안내 시작을 함께** 한다(`transit_preview_test.dart`).
+  /// 그래서 이 함수를 부른 뒤 화면은 계획이 아니라 안내 중이다.
+  Future<void> pickTransitCandidate(
+    WidgetTester tester, [
+    int index = 0,
+  ]) async {
     await tester.tap(find.byType(TransitItineraryCard).at(index));
     await drain(tester);
     expect(
@@ -289,9 +293,7 @@ void main() {
     expect(find.byType(MapShellScreen), findsOneWidget);
   });
 
-  testWidgets('뒤로가기를 연타해도 종료 확인이 두 겹으로 쌓이지 않는다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('뒤로가기를 연타해도 종료 확인이 두 겹으로 쌓이지 않는다', (WidgetTester tester) async {
     final exits = watchExit(tester);
     await pumpShell(tester);
 
@@ -351,8 +353,6 @@ void main() {
     );
 
     await pickTransitCandidate(tester);
-    await tester.tap(find.text('안내 시작'));
-    await drain(tester);
     expect(
       find.text('안내 종료'),
       findsOneWidget,
@@ -385,7 +385,10 @@ void main() {
     await drain(tester);
     await pickTransitCandidate(tester);
 
-    // 경로 한 겹, 길찾기 바 한 겹. 둘을 합치면 상단 X와 같은 정리다.
+    // 안내 한 겹, 경로 한 겹, 길찾기 바 한 겹. 셋을 합치면 상단 X와 같은 정리다.
+    // 첫 겹이 안내인 것은 상세의 `안내 시작`이 확정과 함께 안내를 걸기 때문이다.
+    await tester.binding.handlePopRoute();
+    await drain(tester);
     await tester.binding.handlePopRoute();
     await drain(tester);
     await tester.binding.handlePopRoute();
@@ -414,14 +417,17 @@ void main() {
     expect(find.byType(TransitRoutesSheet), findsNothing);
   });
 
-  testWidgets('수단을 바꾸면 보관한 대중교통 조회도 함께 버려진다', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('수단을 바꾸면 보관한 대중교통 조회도 함께 버려진다', (WidgetTester tester) async {
     await pumpShell(tester);
     await planWalkRoute(tester);
     await tester.tap(find.text('대중교통'));
     await drain(tester);
     await pickTransitCandidate(tester);
+
+    // 안내가 걸린 채로는 수단 줄이 접혀 있다. 뒤로 한 겹만 벗겨 계획 화면으로
+    // 돌아온다 — 길찾기 자체는 끝내지 않는다.
+    await tester.binding.handlePopRoute();
+    await drain(tester);
 
     // 길찾기를 끝내지 않고 **수단만** 도보로 되돌린다. 여기서 옛 조회를 안
     // 버리면, 아래 도보 칩 재탭이 도보 화면 위에 대중교통 후보 시트를 띄운다.
