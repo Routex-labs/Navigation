@@ -47,6 +47,7 @@ void main() {
             routes: routes,
             destinationLabel: '목적지',
             onCloseAll: () {},
+            onPreview: (_) {},
           ),
         ),
       ),

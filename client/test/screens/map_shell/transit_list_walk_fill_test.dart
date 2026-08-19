@@ -162,8 +162,8 @@ void main() {
     await drain(tester);
   }
 
-  /// 첫 후보의 상세를 열어 `안내 시작`으로 확정한다. 카드 탭만으로는 아무것도
-  /// 그려지지 않는다. 이 버튼 하나로 **안내까지 시작된다**(`transit_preview_test.dart`).
+  /// 첫 후보의 상세를 열어 `안내 시작`으로 확정한다. 카드 탭은 지도만 갈아치울
+  /// 뿐 확정이 아니고, 이 버튼 하나로 **안내까지 시작된다**(`transit_preview_test.dart`).
   Future<void> pickFirstCandidate(WidgetTester tester) async {
     await tester.tap(find.byType(TransitItineraryCard).first);
     await drain(tester);

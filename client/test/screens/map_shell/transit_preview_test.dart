@@ -23,7 +23,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// `대중교통` 칩이 자동차·도보와 **같은 그림**을 내는지에 대한 회귀 테스트.
 ///
-/// 조회가 끝나면 목록을 열기 전에 첫 후보를 미리 그린다. 그 미리보기는
+/// 조회가 끝나면 목록을 열기 전에 첫 후보를 미리 그리고, 그 뒤에는 카드를 누른
+/// 그 후보로 갈아친다(확정은 아니다). 그 미리보기는
 /// **지도에만** 나타난다 — 목록이 떠 있는 동안 요약 카드까지 뜨면 시트가 두
 /// 겹이다. 그리고 상세의 `안내 시작`은 확정과 안내를 한 번에 한다.
 /// 하네스(`fix()`·`drain()`·저장소 교체)는 `back_steps_out_of_route_test.dart`와 같다.
@@ -260,6 +261,28 @@ void main() {
     expect(find.byType(TransitRoutesSheet), findsNothing);
     expect(find.byType(TransitSummaryCard), findsOneWidget);
     expect(previewed(tester).fare, 1500, reason: '미리 그리는 것은 첫(최적) 후보다');
+  });
+
+  testWidgets('다른 카드를 누르면 지도 경로가 그 후보로 갈아탄다', (WidgetTester tester) async {
+    await tapTransit(
+      tester,
+      TransitRoutes.ok([_itinerary(1500), _itinerary(1600)]),
+    );
+
+    // 두 번째 후보의 상세를 열었다가 아무것도 안 고르고 나온다.
+    await tester.tap(find.byType(TransitItineraryCard).at(1));
+    await drain(tester);
+    await tester.binding.handlePopRoute();
+    await drain(tester);
+    // 목록도 닫는다 — 요약 카드는 목록이 덮는 동안 감춰져 있어 이때만 읽힌다.
+    await tester.binding.handlePopRoute();
+    await drain(tester);
+
+    expect(
+      previewed(tester).fare,
+      1600,
+      reason: '고르지 않고 닫아도 마지막에 본 후보가 지도에 남아야 한다',
+    );
   });
 
   testWidgets('상세를 열었다 뒤로 닫으면 목록만 남고 카드는 계속 감춰져 있다', (

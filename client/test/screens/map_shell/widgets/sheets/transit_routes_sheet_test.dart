@@ -6,6 +6,7 @@ import 'package:navigation_client/models/route/transit_route.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/transit_route_detail_sheet.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/transit_routes_sheet.dart';
 import 'package:navigation_client/screens/outdoor_map/widgets/transit_summary_card.dart';
+import 'package:navigation_client/widgets/sheet_header.dart';
 import 'package:navigation_client/widgets/transit_itinerary_card.dart';
 import 'package:navigation_client/widgets/transit_route_summary.dart';
 import 'package:navigation_client/widgets/transit_timeline.dart';
@@ -58,6 +59,18 @@ const _withTransfer = TransitItinerary(
 );
 
 void main() {
+  /// 카드를 눌렀을 때 지도로 나간 후보. 목록은 지도를 직접 안 그리므로, 이
+  /// 콜백이 눌린 그 줄의 후보를 제때 내보내는지가 유일한 검증점이다.
+  final previews = <TransitItinerary>[];
+
+  /// chain 전체를 닫으라는 신호가 몇 번 갔는지. X 버튼을 없앤 뒤로 이 신호를
+  /// 내는 길은 "고르지 않고 닫기"뿐이다.
+  var closeAlls = 0;
+  setUp(() {
+    previews.clear();
+    closeAlls = 0;
+  });
+
   /// 결과 카드가 커져 기본 600px 뷰포트에는 한 장밖에 안 들어간다. `ListView`가
   /// 지연 생성이라 두 번째 줄은 위젯 자체가 안 만들어져, 높이를 안 키우면 이
   /// 파일의 단언이 "필터가 아니라 화면 높이"를 재게 된다.
@@ -77,13 +90,17 @@ void main() {
             routes: const TransitRoutes.ok([_busOnly, _withTransfer]),
             destinationLabel: '여의도공원',
             onCloseAll: () {},
+            onPreview: previews.add,
           ),
         ),
       ),
     );
     await tester.pump();
 
-    expect(find.text('여의도공원까지 대중교통'), findsOneWidget);
+    // 머리줄은 걷어냈다 — 도착지는 화면 위 길찾기 바가 이미 말하고, 제목·뒤로·X
+    // 줄은 후보를 한 장 덜 보여 주는 값만 한다.
+    expect(find.text('여의도공원까지 대중교통'), findsNothing);
+    expect(find.byType(SheetHeader), findsNothing);
     // 30분 / 40분 두 후보.
     expect(find.text('30분'), findsOneWidget);
     expect(find.text('40분'), findsOneWidget);
@@ -119,7 +136,8 @@ void main() {
                   context,
                   routes: const TransitRoutes.ok([_busOnly, _withTransfer]),
                   destinationLabel: '여의도공원',
-                  onCloseAll: () {},
+                  onCloseAll: () => closeAlls++,
+                  onPreview: previews.add,
                 );
               },
               child: const Text('열기'),
@@ -148,8 +166,27 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(TransitRouteDetailSheet), findsOneWidget);
-    expect(find.byType(TransitRoutesSheet), findsOneWidget, reason: '목록이 닫히면 다른 후보로 돌아올 길이 없다');
+    expect(
+      find.byType(TransitRoutesSheet),
+      findsOneWidget,
+      reason: '목록이 닫히면 다른 후보로 돌아올 길이 없다',
+    );
     expect(picked(), isNull, reason: '상세를 여는 것만으로 경로가 확정되면 견주는 단계가 사라진다');
+    // 확정은 아니지만 지도는 갈아탄다 — 자동차 후보와 같은 그림이다.
+    expect(previews.single.totalTimeSeconds, 2400);
+  });
+
+  testWidgets('아무것도 안 고르고 닫으면 chain 종료 신호가 간다', (tester) async {
+    useTallViewport(tester);
+    await openSheet(tester);
+
+    // X 버튼이 하던 일이다. 머리줄을 걷어낸 뒤에는 바깥 탭·시스템 뒤로가기가
+    // 그 신호를 대신 낸다 — 이 길까지 막히면 chain을 한 번에 닫을 문이 없다.
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TransitRoutesSheet), findsNothing);
+    expect(closeAlls, 1);
   });
 
   testWidgets('상세를 뒤로 닫으면 아무것도 고르지 않은 채 목록에 남는다', (tester) async {
@@ -184,11 +221,18 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(TransitRouteDetailSheet), findsNothing);
-    expect(find.byType(TransitRoutesSheet), findsNothing, reason: '고른 뒤에는 목록도 함께 닫힌다');
+    expect(
+      find.byType(TransitRoutesSheet),
+      findsNothing,
+      reason: '고른 뒤에는 목록도 함께 닫힌다',
+    );
     expect(picked()?.totalTimeSeconds, 2400);
+    // 훑는 동안 지도도 같은 순서로 따라왔다.
+    expect([for (final item in previews) item.totalTimeSeconds], [1800, 2400]);
+    expect(closeAlls, 0, reason: '고르고 닫는 것은 chain을 접으라는 뜻이 아니다');
   });
 
-  testWidgets('필터로 좁힌 뒤 누르면 그 줄의 상세가 열린다', (tester) async {
+  testWidgets('필터로 좁힌 뒤 누르면 그 줄의 후보로 지도가 갈아탄다', (tester) async {
     useTallViewport(tester);
     final picked = await openSheet(tester);
 
@@ -202,6 +246,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(picked()?.totalTimeSeconds, 2400);
+    // 인덱스를 원본 목록에서 세면 여기로 30분짜리가 나간다.
+    expect(previews.single.totalTimeSeconds, 2400);
   });
 
   testWidgets('상세를 열었다 닫아도 좁혀 둔 필터가 그대로다', (tester) async {
@@ -222,9 +268,7 @@ void main() {
     expect(find.text('30분'), findsNothing);
   });
 
-  testWidgets('상세 위 시스템 뒤로가기는 루트의 뒤로가기 사다리까지 내려가지 않는다', (
-    tester,
-  ) async {
+  testWidgets('상세 위 시스템 뒤로가기는 루트의 뒤로가기 사다리까지 내려가지 않는다', (tester) async {
     useTallViewport(tester);
     // 루트 화면의 PopScope 자리. 실제 앱에서는 여기에 검색·안내·종료 확인으로
     // 이어지는 다섯 겹 사다리가 걸려 있다 - 상세를 닫는 뒤로가기가 여기 닿으면
@@ -244,6 +288,7 @@ void main() {
                   routes: const TransitRoutes.ok([_busOnly, _withTransfer]),
                   destinationLabel: '여의도공원',
                   onCloseAll: () {},
+                  onPreview: previews.add,
                 ),
                 child: const Text('열기'),
               ),

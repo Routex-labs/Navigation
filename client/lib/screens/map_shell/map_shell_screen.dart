@@ -1676,9 +1676,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
     await _pickTransitRoute(filled, destination: destination, origin: origin);
   }
 
-  /// 고르기 전에 첫(최적) 후보를 **지도에만** 그린다. 나머지는 회색으로 깔린다 —
+  /// 고르기 전에 후보 하나를 **지도에만** 그린다. 나머지는 회색으로 깔린다 —
   /// 자동차 후보와 같은 그림이다. 하단 요약 카드는 목록이 닫힐 때까지 접혀
   /// 있다([_transitRoutesSheetOpen]).
+  ///
+  /// [selected]가 null이면 첫(최적) 후보다. 목록에서 카드를 누르면 그 줄의
+  /// 후보가 들어와 **같은 길로** 다시 그린다 — 그리는 자리가 둘이면 그림도 둘이다.
   ///
   /// **실내 구간도 문 재선정도 하지 않는다.** 그건 확정했을 때 할 일이라
   /// [_pickTransitRoute]가 한다. 여기서는 목록이 든 후보를 그대로 그리므로
@@ -1690,17 +1693,23 @@ class _MapShellScreenState extends State<MapShellScreen> {
     TransitRoutes routes, {
     required DirectionsCandidate destination,
     required LatLng origin,
+    TransitItinerary? selected,
   }) async {
     final outdoor = _outdoorKey.currentState;
     if (outdoor == null || routes.itineraries.isEmpty) return;
-    final best = routes.itineraries.first;
+    final best = selected ?? routes.itineraries.first;
     if (best.points.isEmpty) return;
     await outdoor.showTransitRoute(
       best,
       destination: destination.point,
       label: '${destination.title}까지',
       origin: origin,
-      alternatives: routes.itineraries.skip(1).toList(growable: false),
+      // 그리는 것만 빼고 전부 회색으로 깐다. `skip(1)`로 세면 두 번째 후보를
+      // 그릴 때 자기 회색 선이 파란 선 밑에 한 겹 더 깔린다.
+      alternatives: [
+        for (final candidate in routes.itineraries)
+          if (!identical(candidate, best)) candidate,
+      ],
       // 이 그림 **뒤에** 후보 목록이 올라와 화면 아래를 덮는다. 카메라가
       // 전체 화면 기준으로 맞추면 경로 절반이 시트 뒤에 잠긴다.
       bottomSheetFraction: kTransitRoutesSheetInitialSize,
@@ -1808,6 +1817,16 @@ class _MapShellScreenState extends State<MapShellScreen> {
           routes: routes,
           destinationLabel: destination.title,
           onCloseAll: _requestCloseSheetChain,
+          // 누른 줄로 지도를 갈아친다. 미리보기와 **같은 함수**라 TMAP 호출은
+          // 한 건도 안 늘고, 고르지 않고 닫으면 마지막에 본 후보가 그대로 남는다.
+          onPreview: (itinerary) => unawaited(
+            _previewTransitRoute(
+              routes,
+              destination: destination,
+              origin: origin,
+              selected: itinerary,
+            ),
+          ),
         ),
       );
       if (!mounted || picked == null) return;
