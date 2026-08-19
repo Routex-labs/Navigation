@@ -1693,6 +1693,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
       label: '${destination.title}까지',
       origin: origin,
       alternatives: routes.itineraries.skip(1).toList(growable: false),
+      // 이 그림 **뒤에** 후보 목록이 올라와 화면 아래를 덮는다. 카메라가
+      // 전체 화면 기준으로 맞추면 경로 절반이 시트 뒤에 잠긴다.
+      bottomSheetFraction: kTransitRoutesSheetInitialSize,
     );
   }
 

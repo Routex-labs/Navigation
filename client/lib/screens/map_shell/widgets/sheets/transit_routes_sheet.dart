@@ -8,6 +8,11 @@ import '../../../../domain/route/transit_itinerary_filter.dart';
 import '../../../../widgets/transit_itinerary_card.dart';
 import 'transit_route_detail_sheet.dart';
 
+/// 시트가 처음 덮는 화면 비율. 후보를 미리 그리는 쪽이 카메라 아래 여백을
+/// 이만큼 비워야 경로가 시트 뒤에 잠기지 않는다 — 그래서 숫자를 여기 하나만
+/// 두고 양쪽이 읽는다.
+const double kTransitRoutesSheetInitialSize = 0.55;
+
 /// 대중교통 경로 후보 목록 시트.
 ///
 /// 목록으로 두는 이유는 **가장 빠른 경로가 늘 최선은 아니기 때문**이다. 3분
@@ -100,7 +105,7 @@ class _TransitRoutesSheetState extends State<TransitRoutesSheet> {
         onTap: () => Navigator.of(context).maybePop(),
         behavior: HitTestBehavior.opaque,
         child: DraggableScrollableSheet(
-          initialChildSize: 0.55,
+          initialChildSize: kTransitRoutesSheetInitialSize,
           minChildSize: 0.3,
           maxChildSize: 0.9,
           expand: false,

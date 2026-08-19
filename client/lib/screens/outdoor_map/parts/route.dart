@@ -1035,12 +1035,16 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
   ///
   /// 도보 안내는 여기서 **지운다.** 두 선을 겹쳐 두면 어느 쪽이 지금 안내인지
   /// 알 수 없고, 하단 카드가 서로 다른 소요 시간을 말하게 된다.
+  ///
+  /// [bottomSheetFraction]은 이 호출 **직후에** 열려 화면 아래를 덮을 시트의
+  /// 비율이다. 아직 트리에 없어 잴 수 없으므로 부르는 쪽만 안다.
   Future<void> showTransitRoute(
     TransitItinerary itinerary, {
     required ll.LatLng destination,
     required String label,
     ll.LatLng? origin,
     List<TransitItinerary> alternatives = const [],
+    double bottomSheetFraction = 0,
   }) async {
     _clearCompletedRouteHistory();
     _clearPendingIndoorRoute();
@@ -1061,7 +1065,10 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     _syncRouteLayer();
     await _syncTransitLayer();
     _notifyRouteStateIfChanged();
-    _fitCameraToPoints(itinerary.points);
+    _fitCameraToPoints(
+      itinerary.points,
+      bottomSheetFraction: bottomSheetFraction,
+    );
   }
 
   /// 대중교통 안내를 끈다. 경로선·요약 카드가 함께 사라진다.
