@@ -19,8 +19,8 @@ void main() {
       bottomInsetPx: routeFitBottomInsetPx,
     );
 
-    expect(padding.left, 40);
-    expect(padding.right, 40);
+    expect(padding.left, routeFitSideInsetPx);
+    expect(padding.right, routeFitSideInsetPx);
     expect(padding.top, routeFitTopInsetPx);
     expect(padding.bottom, routeFitBottomInsetPx);
   });

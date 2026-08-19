@@ -116,7 +116,11 @@ Future<void> animateCameraToFitBox(
 /// 후보 시트=화면의 55%)은 부르는 쪽이 **잰 값**을 넘긴다. 위 기본값은 길찾기
 /// 플래너 실측(117px)에 여유를 얹은 값이고, 상태 표시줄 높이는 부르는 쪽이
 /// `MediaQuery.paddingOf`로 더한다 — 기기마다 다르다.
-const routeFitSideInsetPx = 40.0;
+/// 좌우는 **줌을 정하는 변**이라 좁게 잡는다. 대중교통 경로는 납작하다 —
+/// 실측 예: 가로 17 km × 세로 6 km. 세로로 긴 화면에서는 가로가 먼저 차서
+/// 줌이 거기서 정해지고, 좌우 여백을 키운 만큼 경로가 통째로 작아진다.
+/// 40이면 세로에 빈 공간이 크게 남아 "축소된 것처럼" 보였다.
+const routeFitSideInsetPx = 16.0;
 const routeFitTopInsetPx = 120.0;
 const routeFitBottomInsetPx = 180.0;
 
