@@ -229,7 +229,7 @@ List<TransitWalkGap> transitWalkGaps(
 | 막대 | 칸마다 배경색, 높이 20 | 연한 회색 **트랙 하나** 위에 탈것만 색 pill(아이콘+시간), 도보는 배경 없는 회색 글자. 높이 14~16 |
 | 노선 줄 | `RoutexBadge` + 정류장명 + 노선번호 | 배지 없이 `아이콘 + 색 노선번호`(왼쪽) + `정류장명`(오른쪽) 한 줄 |
 | 하차 | `○ 하차 <이름>` | **그대로** |
-| 상세보기 | 카드 아래 `RoutexDisclosure` 줄 | **없앤다.** 우측 상단 화살표로 **카드 전체를 접는다** |
+| 상세보기 | 카드 아래 `RoutexDisclosure` 줄 | **없앤다.** 카드를 누르면 상세 화면이 열린다(4단계 F) |
 
 #### 실패 조건 먼저
 
@@ -255,23 +255,14 @@ List<TransitWalkGap> transitWalkGaps(
    긴 이름이 노선번호를 밀어낸다. 정류장명 쪽에 `Expanded` + `TextOverflow.ellipsis`를 건다 —
    **노선번호를 자르면 안 된다**(잘린 번호는 다른 노선으로 읽힌다. 막대 글자를 자르지 않는 것과
    같은 이유가 `_LegBar` 주석에 적혀 있다).
-7. **접힘 상태와 필터 인덱스가 어긋난다.** 접힘을 인덱스로 기억하는데 필터를 바꾸면 같은
-   인덱스가 다른 후보를 가리킨다. → 필터 전환 시 접힘을 비운다(지금 `_expandedIndex = null`로
-   하는 것과 같은 자리).
+#### 접기는 만들었다가 걷어냈다
 
-#### 접기의 뜻이 뒤집힌다
+한때 우측 상단에 접기 화살표를 두고 `Set<int> _collapsed`로 접힌 줄을 기억했다. **기기에서
+보고 걷어냈다** — 접으면 정보가 줄어들 뿐이고, 사용자가 원한 것은 그 반대(눌러서 **더**
+자세히)였기 때문이다.
 
-지금 `expanded`/`onExpanded`는 "상세를 **더** 편다"이고 기본값이 접힘이다. 바꾼 뒤는 "카드를
-접는다"이고 **기본값이 펼침**이어야 한다 — 막대와 노선 줄이 안 보이면 목록이 쓸모없다.
-
-상태를 누가 드느냐도 다시 정해야 한다.
-
-- (가) 지금처럼 "펼쳐진 줄 하나"만 기억 — 뒤집으면 "접힌 줄 하나"가 되어 **두 줄을 동시에 못
-  접는다.** 접기는 여러 줄에 걸치는 동작이라 맞지 않다.
-- (나) `Set<int> _collapsed` — 여러 줄을 접을 수 있고, 필터 전환 시 비우면 어긋남이 없다.
-  **채택.**
-- (다) 카드가 자기 상태를 든다(`StatefulWidget`) — `ListView`가 element를 재사용해 스크롤하면
-  접힘이 엉뚱한 줄로 옮겨 붙는다.
+지금은 **카드 한 장이 통째로 상세 화면을 여는 손잡이**다. 화살표를 따로 두면 같은 자리를 두
+번 차지한다. 그래서 `expanded`/`onExpanded`도 없고, 카드는 늘 같은 모양 하나다.
 
 #### 사라지는 것을 밝힌다
 
@@ -287,7 +278,7 @@ List<TransitWalkGap> transitWalkGaps(
 | `client/lib/domain/route/transit_walk_fill.dart` | `TransitWalkGap`, `transitWalkGaps` 추가 | 수정 |
 | `client/lib/screens/map_shell/map_shell_screen.dart` | 목록 단계 도보 채우기 + 캐시 | 수정 |
 | `client/lib/widgets/transit_itinerary_card.dart` | 카드 모양(사실상 재작성) | 수정 |
-| `client/lib/screens/map_shell/widgets/sheets/transit_routes_sheet.dart` | 접힘 `Set<int>` 소유 | 수정 |
+| `client/lib/screens/map_shell/widgets/sheets/transit_routes_sheet.dart` | 카드 탭을 상세 화면으로 잇는다 | 수정 |
 
 ### 테스트 기준 (2단계)
 
@@ -296,7 +287,7 @@ List<TransitWalkGap> transitWalkGaps(
 | gap 중복 제거·상한·도보로 시작하는 경로 제외 | `client/test/domain/route/transit_walk_fill_test.dart` (추가) |
 | 도보 조회가 실패해도 목록이 뜬다 / 실호출 수가 상한 이하 | `client/test/screens/map_shell/transit_walk_handoff_test.dart` (추가) |
 | 요금 null·탈것 없음·0초·긴 정류장명 | `client/test/widgets/transit_itinerary_card_test.dart` (수정) |
-| 접기 기본값이 펼침, 두 줄 동시 접기, 필터 전환 시 초기화 | `client/test/screens/map_shell/transit_routes_sheet_filter_test.dart` (추가) |
+| 카드에 접기 화살표가 없다(같은 자리를 두 번 차지하지 않는다) | `client/test/widgets/transit_itinerary_card_test.dart` |
 | 막대 글자가 실제로 보이는지 | **자동 테스트로 못 잡는다.** 기기 캡처로 본다 |
 
 ---
@@ -614,7 +605,7 @@ int? currentDirectionsStepIndex(List<LatLng> routePoints, List<double> stepDista
 | 2A | gap 뽑기 순수 함수 | `domain/route/transit_walk_fill.dart` + 테스트 |
 | 2B | 카드 모양 | `widgets/transit_itinerary_card.dart` + 테스트 |
 | 2C | 목록 단계 채우기 (**2A 뒤**) | `screens/map_shell/map_shell_screen.dart` + 테스트 |
-| 2D | 시트 접힘 상태 (**2B 뒤**) | `screens/map_shell/widgets/sheets/transit_routes_sheet.dart` + 테스트 |
+| 2D | 시트가 카드 탭을 받는다 (**2B 뒤**) | `screens/map_shell/widgets/sheets/transit_routes_sheet.dart` + 테스트 |
 
 2A와 2B는 파일이 하나도 안 겹친다. 2C와 2D도 서로 안 겹친다 — **2A→2C와 2B→2D 두 줄이
 끝까지 나란히 간다.**
