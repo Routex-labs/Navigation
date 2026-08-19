@@ -82,18 +82,19 @@ void main() {
     // 30분 / 40분 두 후보.
     expect(find.text('30분'), findsOneWidget);
     expect(find.text('40분'), findsOneWidget);
-    // 첫 줄에만 "최적" 배지.
+    // 첫 줄에만 "최적" — 배지 박스가 아니라 색 글자다.
     expect(find.text('최적'), findsOneWidget);
     expect(find.textContaining('1,600원'), findsOneWidget);
-    // 버스 노선은 "간선:" 접두사를 떼고 번호만 남고, 접두사는 수단 배지가 된다.
+    // 버스 노선은 "간선:" 접두사를 떼고 번호만 남는다. 접두사를 적던 배지는
+    // 없앴고(참조 캡처에 없다) 수단은 아이콘이 말한다.
     expect(find.text('472'), findsOneWidget);
-    expect(find.text('간선'), findsOneWidget);
     expect(find.text('수도권5호선'), findsOneWidget);
-    // 승·하차 지점과 정류장 수. 환승 횟수·도보 시간을 글자로 적던 자리는
-    // 구간 비율 막대가 대신한다.
+    // 승·하차 지점. 환승 횟수·도보 시간을 글자로 적던 자리는 구간 비율 막대가
+    // 대신한다.
     expect(find.text('여의도역'), findsOneWidget);
     expect(find.text('광화문역'), findsOneWidget);
-    expect(find.text('3정류장'), findsOneWidget);
+    // 목록은 기본이 펼침이다 — 접혀 있으면 후보를 견줄 수가 없다.
+    expect(find.byIcon(Icons.keyboard_arrow_up_rounded), findsNWidgets(2));
   });
 
   testWidgets('경로를 누르면 그 경로를 돌려준다', (tester) async {
