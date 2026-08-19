@@ -334,7 +334,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 상황은 없다.
   final _transitRequest = SingleFlight();
 
-  /// 마지막으로 띄운 대중교통 후보 목록. **안내 중 뒤로가기가 이것을 다시 연다.**
+  /// 마지막으로 띄운 대중교통 후보 목록. **이미 고른 `대중교통` 칩을 다시
+  /// 누르면 이것을 다시 연다**([_onTravelModePicked]).
   ///
   /// 조회 당시의 출발 좌표까지 함께 든다 — 다시 고른 경로의 앞뒤 도보를 그때와
   /// 같은 지점에서 채워야 지도에 그려지는 선이 목록과 어긋나지 않는다.
@@ -1543,8 +1544,15 @@ class _MapShellScreenState extends State<MapShellScreen> {
   ///
   /// 도착지가 아직 없으면 상태만 바꿔 둔다. 그 상태에서 계산하면 실패 안내만
   /// 나오고, 곧 도착지를 고르면 이 수단으로 그려진다.
+  ///
+  /// **이미 고른 `대중교통`을 다시 누르면 보관한 후보 목록을 연다.** 안내 중
+  /// 뒤로가기로 계획 화면에 돌아온 사람이 다른 후보로 갈아탈 문이 여기뿐이다.
+  /// 조회는 다시 하지 않는다([_lastTransitQuery]).
   Future<void> _onTravelModePicked(RoutePlanMode mode) async {
-    if (_travelMode == mode) return;
+    if (_travelMode == mode) {
+      if (mode == RoutePlanMode.transit) await _reopenTransitRoutesSheet();
+      return;
+    }
     setState(() => _travelMode = mode);
     final destination = _routeDraftDestination;
     if (destination == null) return;
@@ -1716,11 +1724,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
     );
   }
 
-  /// 안내를 끈 뒤 마지막 후보 목록을 다시 연다. 대중교통이 아니었으면 아무 일도
-  /// 하지 않는다 — 자동차는 계획 카드 안에 후보 패널이 그대로 남아 있다.
+  /// 마지막 후보 목록을 다시 연다. 보관한 조회가 없으면(대중교통이 아니었거나
+  /// 길찾기가 끝났으면) 아무 일도 하지 않는다 — 자동차는 계획 카드 안에 후보
+  /// 패널이 그대로 남아 있다.
   ///
-  /// 중복 가드는 첫 조회와 같은 [_transitRequest]를 탄다. 뒤로가기를 연타해도
-  /// 시트가 두 겹으로 뜨지 않는다.
+  /// 중복 가드는 첫 조회와 같은 [_transitRequest]를 탄다. 칩을 연타해도 시트가
+  /// 두 겹으로 뜨지 않는다.
   Future<void> _reopenTransitRoutesSheet() async {
     final last = _lastTransitQuery;
     if (last == null) return;
@@ -2424,11 +2433,15 @@ class _MapShellScreenState extends State<MapShellScreen> {
           _closeSearch();
           return;
         }
-        // 안내를 끄는 것과 경로를 지우는 것은 **다른 사건이다.** 안내 중이면
-        // 안내 한 겹만 벗겨 후보를 다시 고를 수 있는 계획 화면으로 되돌린다.
+        // 안내를 끄는 것과 경로를 지우는 것은 **다른 사건이다.** 안내 한 겹만
+        // 벗겨 이동 수단을 다시 고를 수 있는 계획 화면으로 되돌린다.
+        //
+        // **여기서 대중교통 후보 목록을 다시 열지 않는다.** 그 목록은 modal
+        // 시트라, 열리는 순간 뒤에 펴진 수단 줄이 보이기만 하고 안 눌린다
+        // (barrier가 먼저 먹고 시트를 닫는다). 목록으로 가는 문은 그 수단
+        // 줄의 `대중교통`을 다시 누르는 것이다([_onTravelModePicked]).
         if (_guidanceActive) {
           _outdoorKey.currentState?.stopGuidanceKeepingRoute();
-          unawaited(_reopenTransitRoutesSheet());
           return;
         }
         // 그린 것과 찾던 것도 **다른 사건이다.** 지도의 선만 걷어내고 출발·도착은

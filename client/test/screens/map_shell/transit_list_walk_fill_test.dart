@@ -268,7 +268,7 @@ void main() {
     ]);
   });
 
-  testWidgets('뒤로가기로 다시 연 목록에도 도보가 남아 있다', (WidgetTester tester) async {
+  testWidgets('안내를 끄고 다시 연 목록에도 도보가 남아 있다', (WidgetTester tester) async {
     await openTransitList(tester, 2);
     await pickFirstCandidate(tester);
     await tester.tap(find.text('안내 시작'));
@@ -279,7 +279,16 @@ void main() {
       reason: '테스트 전제(안내가 시작됨)가 성립하지 않았다',
     );
 
+    // 뒤로가기는 계획 화면까지만 벗긴다. 목록은 수단 줄의 `대중교통`을 다시
+    // 눌러 연다(`back_steps_out_of_route_test.dart`).
     await tester.binding.handlePopRoute();
+    await drain(tester);
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('route-planner')),
+        matching: find.text('대중교통'),
+      ),
+    );
     await drain(tester);
     expect(find.byType(TransitRoutesSheet), findsOneWidget);
 

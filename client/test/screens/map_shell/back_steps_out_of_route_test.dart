@@ -337,7 +337,9 @@ void main() {
     );
   });
 
-  testWidgets('대중교통 안내 중 뒤로가기는 후보 목록을 다시 연다', (WidgetTester tester) async {
+  testWidgets('대중교통 안내 중 뒤로가기 뒤, 같은 칩을 다시 누르면 후보 목록이 돌아온다', (
+    WidgetTester tester,
+  ) async {
     await pumpShell(tester);
     await planWalkRoute(tester);
     await tester.tap(find.text('대중교통'));
@@ -360,8 +362,19 @@ void main() {
     await tester.binding.handlePopRoute();
     await drain(tester);
 
-    // 대중교통에서 안내의 **바로 이전 상태가 목록**이다. 계획 카드는 사용자가
-    // 지나온 적 없는 화면이라 거기 떨어뜨리면 한 겹을 잘못 벗긴 것이 된다.
+    // 뒤로가기가 떨어뜨리는 곳은 **계획 화면**이다. 목록을 바로 띄우면 그
+    // modal 시트가 방금 편 수단 줄을 덮어, 보이기만 하고 안 눌린다.
+    expect(find.byType(TransitRoutesSheet), findsNothing);
+
+    // 목록으로 가는 문은 그 수단 줄에 있다. 조회는 다시 나가지 않는다.
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('route-planner')),
+        matching: find.text('대중교통'),
+      ),
+    );
+    await drain(tester);
+
     expect(find.byType(TransitRoutesSheet), findsOneWidget);
   });
 
@@ -383,12 +396,19 @@ void main() {
       reason: '테스트 전제(경로가 지워짐)가 성립하지 않았다',
     );
 
-    // 이번엔 도보로 다시 안내를 건다. 옛 조회가 남아 있으면 여기서
-    // **예전 목적지의 후보 목록**이 튀어나온다.
+    // 이번엔 도보로 다시 안내를 건다. 옛 조회가 남아 있으면 아래에서 도보
+    // 칩을 눌렀을 때 **예전 목적지의 후보 목록**이 튀어나온다.
     await planWalkRoute(tester);
     await tester.tap(find.text('안내 시작'));
     await drain(tester);
     await tester.binding.handlePopRoute();
+    await drain(tester);
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('route-planner')),
+        matching: find.text('도보'),
+      ),
+    );
     await drain(tester);
 
     expect(find.byType(TransitRoutesSheet), findsNothing);
@@ -404,13 +424,20 @@ void main() {
     await pickTransitCandidate(tester);
 
     // 길찾기를 끝내지 않고 **수단만** 도보로 되돌린다. 여기서 옛 조회를 안
-    // 버리면, 아래 뒤로가기가 도보 화면 위에 대중교통 후보 시트를 띄운다.
+    // 버리면, 아래 도보 칩 재탭이 도보 화면 위에 대중교통 후보 시트를 띄운다.
     await tester.tap(find.text('도보'));
     await drain(tester);
     await tester.tap(find.text('안내 시작'));
     await drain(tester);
 
     await tester.binding.handlePopRoute();
+    await drain(tester);
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('route-planner')),
+        matching: find.text('도보'),
+      ),
+    );
     await drain(tester);
 
     expect(find.byType(TransitRoutesSheet), findsNothing);
