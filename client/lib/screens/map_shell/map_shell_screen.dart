@@ -2116,6 +2116,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
     required DirectionsCandidate destination,
     bool autoSelectMode = true,
   }) async {
+    // **보관한 대중교통 후보를 여기서 버린다.** 길찾기는 무엇이든 이 함수를
+    // 지나므로, 수단을 바꾸거나 목적지만 갈아도 낡은 목록이 남지 않는다. 비우는
+    // 자리가 `_forgetRouteDraft` 하나뿐이었을 때는, 대중교통으로 찾아 본 뒤
+    // 도보로 바꿔 안내를 시작하고 뒤로가기를 누르면 **도보 화면 위에 대중교통
+    // 후보 시트**가 떴다. 대중교통이면 아래 `_requestTransitRoute`가 다시 채운다.
+    _lastTransitQuery = null;
     // 안내가 시작되면 상단 바는 길찾기 두 칸이어야 한다. 매장 시트·검색 결과·
     // 지도 탭처럼 길찾기 바를 거치지 않고 들어오는 경로가 있어서, 여기서 한 번
     // 맞춰 준다 — 안 맞추면 경로는 그려졌는데 상단은 검색창인 화면이 된다.

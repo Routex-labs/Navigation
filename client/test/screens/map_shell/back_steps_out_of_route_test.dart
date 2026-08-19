@@ -263,4 +263,27 @@ void main() {
 
     expect(find.byType(TransitRoutesSheet), findsNothing);
   });
+
+  testWidgets('수단을 바꾸면 보관한 대중교통 조회도 함께 버려진다', (
+    WidgetTester tester,
+  ) async {
+    await pumpShell(tester);
+    await planWalkRoute(tester);
+    await tester.tap(find.text('대중교통'));
+    await drain(tester);
+    await tester.tap(find.byType(TransitItineraryCard).first);
+    await drain(tester);
+
+    // 길찾기를 끝내지 않고 **수단만** 도보로 되돌린다. 여기서 옛 조회를 안
+    // 버리면, 아래 뒤로가기가 도보 화면 위에 대중교통 후보 시트를 띄운다.
+    await tester.tap(find.text('도보'));
+    await drain(tester);
+    await tester.tap(find.text('안내 시작'));
+    await drain(tester);
+
+    await tester.binding.handlePopRoute();
+    await drain(tester);
+
+    expect(find.byType(TransitRoutesSheet), findsNothing);
+  });
 }
