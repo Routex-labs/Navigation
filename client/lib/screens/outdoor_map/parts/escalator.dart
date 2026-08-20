@@ -507,14 +507,9 @@ extension OutdoorMapEscalator on OutdoorMapBodyState {
       );
       if (!mounted) return;
 
-      // 별도 토스트를 띄우지 않는다. 배너가 이미 같은 자리에서 같은 사실을
-      // 말하고 있어서, 확정 순간에 토스트가 겹치면 같은 내용이 두 벌이 된다.
-      _escalatorArrivalTimer?.cancel();
-      setState(() => _escalatorArrival = transition);
-      _escalatorArrivalTimer = Timer(_indoorArrivalBannerHold, () {
-        if (!mounted) return;
-        setState(() => _escalatorArrival = null);
-      });
+      // 확정을 알리는 표시는 여기서 끝이다 — 토스트도, "N층으로 이동했습니다"
+      // 배너도 띄우지 않는다. 그 순간 화면은 이미 새 층 도면과 새 경로를 그리고
+      // 있어서, 어느 쪽이든 방금 끝난 일을 한 번 더 말할 뿐이다.
     } finally {
       _applyingFloorTransition = false;
     }

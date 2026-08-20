@@ -132,11 +132,8 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
   }
 
   /// 지금 화면이 그려야 하는 층 전환 배너 상태.
-  FloorTransitionUiState? get _floorTransitionUiState => floorTransitionUiState(
-    arrival: _escalatorArrival,
-    ride: _escalatorRide,
-    stage: _escalatorStage,
-  );
+  FloorTransitionUiState? get _floorTransitionUiState =>
+      floorTransitionUiState(ride: _escalatorRide, stage: _escalatorStage);
 
   /// 배너·스크림 상태가 바뀌면 셸에 알린다. 같은 값이면 알리지 않는다.
   ///

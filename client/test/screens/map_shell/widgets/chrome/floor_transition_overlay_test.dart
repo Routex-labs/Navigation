@@ -22,69 +22,20 @@ Widget _host(Widget child, {double textScale = 1.0, Size? size}) => MediaQuery(
     textScaler: TextScaler.linear(textScale),
     size: size ?? const Size(390, 844),
   ),
-  child: MaterialApp(theme: AppTheme.light, home: Scaffold(body: Center(child: child)),
+  child: MaterialApp(
+    theme: AppTheme.light,
+    home: Scaffold(body: Center(child: child)),
   ),
 );
 
 void main() {
-  group('FloorTransitionBanner', () {
-    testWidgets('단계마다 다른 문구를 그린다', (tester) async {
-      for (final (stage, expected) in [
-        (FloorTransitionStage.boarding, '에스컬레이터 탑승을 감지했습니다'),
-        (FloorTransitionStage.moving, '에스컬레이터로 이동 중 · B1 → 1F'),
-        (FloorTransitionStage.swapping, '1F 지도로 전환하는 중'),
-        (FloorTransitionStage.arrived, '1F로 이동했습니다'),
-      ]) {
-        await tester.pumpWidget(
-          _host(FloorTransitionBanner(state: _state(stage))),
-        );
-        expect(find.text(expected), findsOneWidget);
-      }
-    });
-
-    testWidgets('되돌리기 같은 조작을 두지 않는다', (tester) async {
-      // 층 전환은 "맞나요?"라고 되묻지 않는다. 기압이 일상적으로 몇 미터씩
-      // 움직이는 일이 없어서, 되묻는 비용이 판정을 의심하게 만드는 값보다 크다.
-      await tester.pumpWidget(
-        _host(
-          FloorTransitionBanner(state: _state(FloorTransitionStage.arrived)),
-        ),
-      );
-
-      expect(find.byType(TextButton), findsNothing);
-    });
-
-    testWidgets('작은 화면 + 큰 글자 배율에서도 넘치지 않는다', (tester) async {
-      tester.view.physicalSize = const Size(320, 568);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-
-      await tester.pumpWidget(
-        _host(
-          SizedBox(
-            width: 288,
-            child: FloorTransitionBanner(
-              state: _state(
-                FloorTransitionStage.moving,
-                from: 'B2',
-                to: '지하 1층 식품관',
-              ),
-            ),
-          ),
-          textScale: 2,
-          size: const Size(320, 568),
-        ),
-      );
-
-      expect(tester.takeException(), isNull);
-    });
-  });
-
   group('FloorTransitionScrim', () {
     testWidgets('전환 중에는 뒤쪽 입력을 막는다', (tester) async {
       var tapped = false;
       await tester.pumpWidget(
-        MaterialApp(theme: AppTheme.light, home: Scaffold(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: Scaffold(
             body: Stack(
               children: [
                 Positioned.fill(
@@ -117,7 +68,9 @@ void main() {
     testWidgets('덮개가 옅어지는 동안에는 입력이 통과한다', (tester) async {
       var tapped = false;
       await tester.pumpWidget(
-        MaterialApp(theme: AppTheme.light, home: Scaffold(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: Scaffold(
             body: Stack(
               children: [
                 Positioned.fill(
@@ -144,16 +97,18 @@ void main() {
       await tester.pump();
       expect(tapped, isTrue, reason: '절반쯤 걷힌 화면을 계속 막아 두면 전환이 끝나도 먹통으로 느껴진다');
       expect(
-        find.text('지도를 전환하는 중'),
+        find.text('에스컬레이터로 이동 중'),
         findsOneWidget,
-        reason: '층 라벨 옆에 지금 무슨 일이 일어나는지 한 줄이 있어야 한다',
+        reason: '도면을 갈아 끼우는 것은 앱의 사정이다 — 그 사람은 층을 이동하는 중이다',
       );
     });
 
     testWidgets('스크림이 걷히면 뒤쪽 입력이 다시 통과한다', (tester) async {
       var tapped = false;
       await tester.pumpWidget(
-        MaterialApp(theme: AppTheme.light, home: Scaffold(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: Scaffold(
             body: Stack(
               children: [
                 Positioned.fill(
@@ -296,11 +251,7 @@ void main() {
 
       await tester.pump(escalatorGlideDuration ~/ 2);
       final midY = tester.getCenter(dot).dy;
-      expect(
-        midY,
-        greaterThan(startY),
-        reason: '내려가는 전환이면 점도 아래로 내려가야 한다',
-      );
+      expect(midY, greaterThan(startY), reason: '내려가는 전환이면 점도 아래로 내려가야 한다');
 
       await tester.pumpAndSettle();
       final endY = tester.getCenter(dot).dy;

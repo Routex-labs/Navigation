@@ -742,17 +742,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
             if (!_guidanceActive)
               if (_routeEditingField case final field?)
                 _buildRouteFieldResults(field),
-            // 층 전환 배너는 고정 top 숫자가 아니라 **이 Column 흐름**에
-            // 놓는다. 상단 바 높이는 상태마다 달라지므로(검색 한 줄 ↔
-            // 출발/도착 두 줄), 상수로 잡으면 어느 한쪽에서 반드시 겹친다.
+            // 층 전환 배너는 여기 없다. 지도가 안내 배너와 **같은 자리**에
+            // 그린다([GuidanceBanner]) — 셸이 따로 띄우면 안내 위에 알약이 한
+            // 겹 더 겹쳐, 한 사건이 두 개의 안내로 보인다.
             //
-            // 스크림이 올라온 구간에서는 배너를 접는다. 스크림 카드가 같은
-            // 사실을 화면 한가운데에서 더 크게 말하고 있어서, 둘을 같이
-            // 띄우면 같은 내용이 두 벌로 보인다(배너는 스크림 **아래** 층에
-            // 깔리므로 흐려지기까지 한다).
-            if (_floorTransition case final transition?
-                when _floorScrimOpacity <= 0)
-              _buildFloorTransitionBanner(transition),
             // 결과 패널과 카테고리 열은 같은 자리를 쓴다. 검색 중에는
             // 카테고리 열을 접어 두 오버레이가 겹치지 않게 한다.
             if (_searchActive)
@@ -854,14 +847,6 @@ class _MapShellScreenState extends State<MapShellScreen> {
     );
   }
 
-  /// 층 전환 배너. 전환 중에는 아래 카테고리 줄을 접어 자리를 보장한다.
-  Widget _buildFloorTransitionBanner(FloorTransitionUiState transition) {
-    return Padding(
-      padding: const EdgeInsets.only(top: _overlayGap),
-      child: Center(child: FloorTransitionBanner(state: transition)),
-    );
-  }
-
   /// 검색 결과 패널.
   Widget _buildSearchPanel() {
     return Flexible(
@@ -909,7 +894,11 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 지도에도 그리면 화면에 같은 조작이 두 벌 남는다.
   Widget _buildCategoryRow() {
     return Padding(
-      padding: const EdgeInsets.only(top: _overlayGap),
+      // 검색 바와 chip은 각각 48dp hit box 안에 더 작은 시각 표면이 있다.
+      // control gap을 다시 주면 보이는 면끼리는 18dp 떨어져 쇼케이스의 inline
+      // 조합보다 한 단계 더 벌어진다. 열 자체는 hit box를 유지하고, 두 표면 사이는
+      // inline gap으로 맞춘다.
+      padding: const EdgeInsets.only(top: RoutexSpacing.inlineGap),
       child: MapOverlayScrollRow(
         key: _categoryRowKey,
         onPointerOverChanged: (over) => over

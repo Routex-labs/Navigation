@@ -53,21 +53,15 @@ GraphNode? findEscalatorArrivalNode(
 /// 판정 단계를 UI 문구로 **한 번만** 옮긴다. 화면은 여기서
 /// 나온 값만 보고 그린다 — 임계값이나 노드 근접을 다시 계산하지 않는다.
 ///
-/// 우선순위가 이 함수의 전부다. 도착 → 탑승 중 → 접근 순으로 보며, 앞의 것이
-/// 있으면 뒤는 보지 않는다. 뒤집으면 하차 직후에도 "이동 중"이 떠 있다.
+/// 우선순위가 이 함수의 전부다. 탑승 중 → 접근 순으로 보며, 앞의 것이 있으면
+/// 뒤는 보지 않는다. 뒤집으면 도면을 갈아 끼우는 동안 "접근 중"이 떠 있다.
+///
+/// **하차 뒤 단계는 없다.** 확정되는 순간 [ride]가 비고 배너도 사라진다
+/// ([FloorTransitionStage]).
 FloorTransitionUiState? floorTransitionUiState({
-  required EscalatorTransition? arrival,
   required EscalatorTransition? ride,
   required EscalatorPhaseChange? stage,
 }) {
-  if (arrival != null && ride == null) {
-    return FloorTransitionUiState(
-      stage: FloorTransitionStage.arrived,
-      fromFloorLabel: arrival.fromFloorLabel,
-      toFloorLabel: arrival.toFloorLabel,
-      goingUp: arrival.direction == EscalatorDirection.up,
-    );
-  }
   if (ride != null) {
     return FloorTransitionUiState(
       stage: FloorTransitionStage.swapping,

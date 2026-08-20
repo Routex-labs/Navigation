@@ -15,7 +15,13 @@ extension OutdoorMapGuidance on OutdoorMapBodyState {
   /// **접는 조건은 종료 버튼이 있는 조건과 같아야 한다** — 아래 ETA 카드 두
   /// 분기가 `onClose`를 다는 조건과 이 getter가 정확히 맞물려야 하고, 어느
   /// 한쪽을 고치면 그 함수를 통해 다른 쪽도 같이 바뀐다.
-  bool get _guidanceActive => _guidanceStarted && _guidancePlanned;
+  ///
+  /// **도착 카드가 떠 있는 동안은 여정이 아직 안 끝났다.** 도착 몇 초 뒤 경로는
+  /// 스스로 지워지는데([_syncArrival]), 그것만으로 접기를 풀면 방금 도착한 화면
+  /// 위쪽에 출발/도착 두 칸이 되살아난다 — 끝난 길찾기를 다시 시키는 그림이다.
+  /// 여기서도 규칙은 그대로다: 그때 종료 버튼은 도착 카드가 들고 있다.
+  bool get _guidanceActive =>
+      _arrivedDestination != null || (_guidanceStarted && _guidancePlanned);
 
   /// 하단에 **"안내 시작" 카드가 떠 있는지.** [_guidanceActive]에서 "이미
   /// 시작했는가"만 뺀 값이라, 시작 버튼을 누르기 전부터 참이다.
@@ -132,6 +138,9 @@ extension OutdoorMapGuidance on OutdoorMapBodyState {
           hasDestination: destination != null,
         )) {
       setState(() => _arrivedDestination = destination);
+      // 도착 카드가 뜨는 것 자체가 접기 조건이다([_guidanceActive]). 안 알리면
+      // 경로가 자동으로 지워지는 순간 셸이 chrome을 펴 버린다.
+      _notifyRouteStateIfChanged();
     }
 
     final decision = decideArrivalAutoClear(
