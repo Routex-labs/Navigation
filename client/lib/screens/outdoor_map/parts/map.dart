@@ -268,6 +268,9 @@ extension OutdoorMapMap on OutdoorMapBodyState {
   }) async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return false;
+    // 층 도면 fit과 경로 개요가 도는 동안은 팔로우가 쉰다. 여기 하나로 두 주인이
+    // 다 덮인다 — 각자 걸게 두면 새 fit이 생길 때마다 빠뜨린다.
+    _holdFollowCamera(duration);
     await animateCameraToFitBox(
       controller,
       box,

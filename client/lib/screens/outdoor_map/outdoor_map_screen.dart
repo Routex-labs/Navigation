@@ -14,11 +14,13 @@ import 'package:routex_design_system/routex_design_system.dart';
 import '../../core/api_config.dart';
 import '../../core/startup_loading_timing.dart';
 import '../../map/camera/floor_switch_progress.dart';
+import '../../map/camera/follow_camera.dart';
 import '../../map/geojson.dart';
 import '../../map/picked_point.dart';
 import '../../service_locator.dart';
 import '../../core/tile_url.dart';
 import '../../domain/route/building_entrances.dart';
+import '../../domain/route/entrance_door_nodes.dart';
 import '../../domain/route/directions_route_alternatives.dart';
 import '../../domain/guidance/completed_route_history.dart';
 import '../../domain/geo/floor_label.dart';
@@ -87,11 +89,13 @@ import '../../map/icon/place_pin.dart';
 import 'widgets/map_overlay_tap_guard.dart';
 import 'entry/floor_outline.dart';
 import 'gps/gps_session.dart';
+import 'entry/gps_entry_floor.dart';
 import 'entry/indoor_entry_gps.dart';
 import 'entry/initial_camera.dart';
 import 'camera/building_orientation.dart';
 import 'entry/indoor_entry_proximity.dart';
 import 'entry/indoor_entry_zoom.dart';
+import 'entry/indoor_exit_evidence.dart';
 import 'outdoor_map_tuning.dart';
 import 'widgets/placing_anchor_hint.dart';
 import 'route_recompute_policy.dart';
@@ -524,6 +528,29 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 다시 그려진다.
   bool _followingUser = false;
 
+  /// 사용자가 지도를 손으로 움직여 **실내 팔로우를 물린** 상태인지.
+  ///
+  /// 안 물리면 다음 걸음이 곧바로 화면을 되돌려 놓아 지도를 볼 수가 없다
+  /// (`_stopFollowingUser`가 자동차 안내에서 배운 것과 같다). 다시 켜는 것은
+  /// "내 위치" 버튼 하나다([_recenterOnCurrentPosition]).
+  bool _followCameraReleasedByUser = false;
+
+  /// 팔로우 카메라를 다음에 명령해도 되는 시각(ms). 최소 간격과, 다른 카메라
+  /// 주인이 도는 동안의 유예([_holdFollowCamera])를 같은 값으로 센다.
+  int _followCameraNextMoveAtMs = 0;
+
+  /// 마지막으로 명령한 팔로우 bearing과 목표점. 데드밴드와 "움직였나" 판정의
+  /// 기준이라, 실제로 명령을 보낸 뒤에만 갱신한다.
+  double? _followCameraBearingDeg;
+
+  ll.LatLng? _followCameraTarget;
+
+  /// 마지막으로 걸음 수가 늘어난 시각(ms)과 그때의 걸음 수. "지금 걷는 중인가"를
+  /// 이 둘로 판정한다([followCameraWalkingStepWindowMs]).
+  int _followCameraLastStepAtMs = 0;
+
+  int? _followCameraLastSteps;
+
   /// 경로선이 보이는 것과 실제 안내가 시작된 것을 가른다.
   ///
   /// 출발·도착 확정은 경로 전체를 보는 계획 상태까지만 만든다. 사용자가 계획
@@ -580,6 +607,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// revision으로 대기 중인 낡은 쓰기를 건너뛰고, 이미 시작된 native 쓰기는
   /// 직렬 queue 뒤의 최신 쓰기가 반드시 덮어쓰게 한다.
   int _pdrMarkerRevision = 0;
+
+  /// 마지막으로 **실제로 그린** 실내 위치와 그때의 층.
+  ///
+  /// 다른 층 도면을 펴 놓은 동안 마커를 흐리게 이어 그리는 데만 쓴다
+  /// ([_syncPdrCurrentLayer]). 앵커가 다른 층에 있으면 그 층 그래프가 화면에
+  /// 없어 좌표를 다시 계산할 수 없다 — 마지막으로 알던 자리가 유일한 재료다.
+  ({String floorId, ll.LatLng point})? _lastIndoorMarker;
 
   Future<void> _pdrMarkerWriteQueue = Future<void>.value();
 
@@ -902,7 +936,13 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _pdrTrailState.recordSnapshot(snapshot);
         _syncCorridorTracking(snapshot);
       });
+      // 보정이 갱신된 **직후**가 "문에 닿았나"를 물을 자리다. GPS 판정에 걸면
+      // 좌표가 안 올 때 아예 못 묻는데, 지하에서 올라온 구간이 바로 그때다.
+      _checkExitDoorReached();
       _syncPdrCurrentLayer();
+      // 마커를 옮긴 **직후**가 카메라를 따라 보낼 자리다. 걸음마다 쏘지 않도록
+      // 거르는 몫은 [_moveFollowCamera] 안에 있다.
+      unawaited(_moveFollowCamera(snapshot));
       // 사용자 회색선은 실제 PDR 궤적이 아니라 현재 계획 경로의 완료 구간이다.
       // 진행률이 바뀐 같은 틱에 경로 source도 갱신해야 파란 잔여선과 회색 완료선이
       // 같은 투영점을 공유한다. GuidanceTrailSession은 별도 진단 궤적으로만 남긴다.
@@ -1089,6 +1129,20 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 발화한다 — 그때마다 시트가 올라오면 지도를 훑을 수가 없다. 다시 고르고
   /// 싶으면 하단 바의 "가까운 매장으로 위치 지정"이 그 자리에 있다.
   bool _nearbyStoreAsked = false;
+
+  /// 이번 실내 상태에서 **약한 이탈**을 이미 걸었는지([_applyWeakExit]).
+  bool _weakExitApplied = false;
+
+  /// 이번 실내 상태에서 출구 문 앞 반경 밖으로 한 번이라도 나가 봤는지.
+  ///
+  /// 들어오는 사람도 문 앞을 지나므로, 이 래치가 없으면 진입 직후에 곧바로
+  /// 이탈로 읽는다([stepExitDoorEvidence]).
+  bool _leftExitDoorZone = false;
+
+  /// 좌표가 **바깥에 찍히기 시작한** 시각. 안쪽으로 찍히면 null로 되돌린다.
+  /// 판정을 못 믿는 좌표(오차 초과·외곽선 없음)는 이 값을 건드리지 않는다
+  /// ([nextUnclearOutsideSince]).
+  DateTime? _unclearOutsideSince;
 
   /// GPS 구독을 [_gpsTrackingWanted] 상태에 맞춘다. 구독 시작/해제의 유일한
   /// 진입점이라 중복 구독이나 해제 누락이 생기지 않는다.
@@ -1352,9 +1406,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         _journeyBuildingGraph ??
         await buildingRepository.getBuildingGraph(building.id);
     if (!mounted) return;
+    // 실내 구간은 문 **노드**가 아니라 문에서 시작한다 — 안쪽 노드에서 시작하면
+    // 야외 구간이 끝나는 문 앞까지 7~12 m가 선 없이 남는다. 꿰매지 못한 출구는
+    // [entranceRouteNodeId]가 예전 노드로 폴백한다.
     final leg = graph == null
         ? null
-        : computeMultiFloorRoute(graph, entrance.nodeId, endNodeId);
+        : computeMultiFloorRoute(
+            graph,
+            entranceRouteNodeId(graph.nodes, entrance),
+            endNodeId,
+          );
 
     setState(() {
       _journeyBuildingGraph = graph;
@@ -1419,6 +1480,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
       exit,
       _buildingCenter(_buildingFootprint ?? const []),
     );
+    // 도착 노드는 문 **바깥** 노드다. 그래야 실내 선이 문까지 닿아 아래에서
+    // 그리는 야외 구간과 같은 점에서 맞물린다. 그래프를 못 받았거나 그 출구를
+    // 꿰매지 못했으면 [entranceRouteNodeId]가 예전 안쪽 노드로 폴백한다 —
+    // 이 호출은 캐시를 공유하므로 대개 네트워크를 타지 않는다.
+    final exitBuilding = _building;
+    final exitGraph = exitBuilding == null
+        ? null
+        : await buildingRepository.getBuildingGraph(exitBuilding.id);
+    if (!mounted) return;
+
     // 실내 구간은 기존 실내 라우팅을 그대로 쓴다. 출구도 노드를 가진 지점이라
     // 매장과 다를 게 없다 — 따로 만들면 층 전환·재탐색·진행률이 전부 갈라진다.
     await showIndoorRouteTo(
@@ -1426,7 +1497,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         name: exitLabel,
         floor: exitFloor,
         point: exit.point,
-        nodeId: exit.nodeId,
+        nodeId: entranceRouteNodeId(exitGraph?.nodes, exit),
       ),
       origin: origin,
     );
@@ -1939,6 +2010,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         zoom: zoom,
         liftPx: lift,
       );
+      _holdFollowCamera(_storeFocusDuration);
       await controller.animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(

@@ -151,7 +151,7 @@ Future<void> addIndoorDestinationPinLayer(
 const kOutdoorPdrCurrentSourceId = 'outdoor-pdr-current';
 const _pdrCurrentLayerId = 'outdoor-pdr-current-dot';
 
-/// PDR 위치 심볼 아이콘 이름(addImage 등록 키). heading이 있으면 방향 원뿔이
+/// PDR 위치 심볼 아이콘 이름(addImage 등록 키). heading이 있으면 방향 삼각형이
 /// 함께 그려진 이미지, 없으면 원형 도트만 있는 이미지로 자동 교체된다. 그림과
 /// 크기 상수는 실내 지도와 공유한다([location_marker_icon.dart]) — 같은 지점을
 /// 봤을 때 두 화면의 마커가 달라 보이면 안 된다.
@@ -159,16 +159,18 @@ const _pdrCurrentLayerId = 'outdoor-pdr-current-dot';
 /// 이름 끝에 코어 반지름을 박아 둔다 — 웹 addImage는 같은 이름이 이미 있으면
 /// 새 비트맵을 버리고 건너뛰고, removeImage도 없어서 디자인을 바꿔도 살아 있는
 /// 지도에는 예전 크기가 남는다.
+// `tri`는 방향 표시가 원뿔에서 삼각형으로 바뀐 세대다. 코어 반지름은 그대로라
+// 이름을 안 바꾸면 removeImage가 없는 웹에서 예전 원뿔이 계속 그려진다.
 const _pdrLocationImageName =
-    'outdoor-pdr-location-r$kLocationMarkerIconCoreRadius';
+    'outdoor-pdr-location-tri-r$kLocationMarkerIconCoreRadius';
 const _pdrLocationDotImageName =
     'outdoor-pdr-location-dot-r$kLocationMarkerIconCoreRadius';
 
-/// PDR 위치 마커를 등록한다 — 실내 지도와 같은 파란 도트 + heading 원뿔.
+/// PDR 위치 마커를 등록한다 — 실내 지도와 같은 파란 도트 + heading 삼각형.
 ///
 /// heading 유무에 따라 다른 아이콘을 자동 선택하고, heading이 있을 때만
 /// iconRotate로 지도 위에서 실제 방향을 가리키게 한다. `iconRotationAlignment:
-/// 'map'`을 넣어야 사용자가 지도를 돌려도 원뿔이 실좌표 방향을 유지한다.
+/// 'map'`을 넣어야 사용자가 지도를 돌려도 삼각형이 실좌표 방향을 유지한다.
 ///
 /// **PDR 진단 레이어보다 나중에** 불러야 마커가 항상 진단 선 위에 온다. 진단
 /// 선이 현재 위치를 덮으면 정작 어디에 서 있는지가 안 보인다.
@@ -197,12 +199,26 @@ Future<void> registerPdrLocationLayer(MapLibreMapController controller) async {
       ],
       iconRotationAlignment: 'map',
       iconPitchAlignment: 'viewport',
+      // 다른 층에 서 있는 동안의 마커는 흐리게. 지우면 사용자는 자기가 어디
+      // 있는지도, 왜 없는지도 모른다([pdrLocationData]의 offFloor).
+      iconOpacity: [
+        'case',
+        ['has', 'off_floor'],
+        kOffFloorMarkerOpacity,
+        1.0,
+      ],
       iconAllowOverlap: true,
       iconIgnorePlacement: true,
     ),
     enableInteraction: false,
   );
 }
+
+/// 다른 층에 서 있을 때 위치 마커의 불투명도.
+///
+/// 0.35는 "있는 줄은 알지만 이 층 것은 아니다"가 읽히는 값이다. 더 낮추면 지도
+/// 배경과 구분이 안 되고, 더 올리면 이 층에 서 있는 것과 헷갈린다.
+const kOffFloorMarkerOpacity = 0.35;
 
 /// PDR 마커 비트맵 두 벌을 등록한다. 소스·레이어보다 **먼저** 불러야 한다.
 Future<void> registerPdrLocationImages(MapLibreMapController controller) async {
@@ -220,12 +236,22 @@ Future<void> registerPdrLocationImages(MapLibreMapController controller) async {
 ///
 /// 쓰기 자체는 화면이 한다 — 센서 갱신마다 들어오는 호출을 큐로 직렬화하고 더
 /// 최신 스냅샷이 오면 버리는 판단이 화면 상태(revision)에 있기 때문이다.
-Map<String, dynamic> pdrLocationData(ll.LatLng? point, {double? headingDeg}) {
+///
+/// [offFloor]는 "이 위치는 지금 보고 있는 층 이야기가 아니다"를 뜻한다. 레이어가
+/// 그때만 [kOffFloorMarkerOpacity]로 흐리게 그린다.
+Map<String, dynamic> pdrLocationData(
+  ll.LatLng? point, {
+  double? headingDeg,
+  bool offFloor = false,
+}) {
   if (point == null) return emptyGeoJsonCollection();
   return geoJsonCollection([
     {
       'type': 'Feature',
-      'properties': <String, dynamic>{'heading': ?headingDeg},
+      'properties': <String, dynamic>{
+        'heading': ?headingDeg,
+        if (offFloor) 'off_floor': true,
+      },
       'geometry': {
         'type': 'Point',
         'coordinates': [point.longitude, point.latitude],
