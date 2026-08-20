@@ -90,6 +90,10 @@ extension OutdoorMapGuidance on OutdoorMapBodyState {
       walkingHeadingDeg: snapshot == null || toFloor == null
           ? null
           : toFloor.toFloorBearing(snapshot.walkingHeadingDeg),
+      // 탑승 중에는 이탈 판정을 건너뛴다. 조기 층 전환이 탑승점 고정을 풀어
+      // `isPositionHeld`가 먼저 false가 되므로, 이 인자가 없으면 리셋된
+      // 트래커 위치로 이탈 증거가 쌓여 재탐색이 돈다.
+      onEscalator: _escalatorRide != null,
     );
     for (final advance in update.stepAdvances) {
       _pdrDebugRecorder?.recordRouteStepAdvance(
@@ -262,6 +266,11 @@ extension OutdoorMapGuidance on OutdoorMapBodyState {
   /// 보던 경로가 화면에서 사라질 뿐이다. 도보도 함께 막는다. 카메라를 안 옮겨도
   /// 안내 상태로 들어가면 엉뚱한 위치에서 진행 판정이 돌기 시작한다.
   Future<void> _startCurrentGuidance() async {
+    // 이번 안내는 팔로우를 켠 채로 시작한다. 지난 안내에서 지도를 만져 물려
+    // 뒀던 것이 남으면, 새로 "안내 시작"을 눌러도 화면이 따라오지 않는다.
+    _followCameraReleasedByUser = false;
+    _followCameraBearingDeg = null;
+    _followCameraTarget = null;
     if (_indoorRoutePreviewOrigin != null) {
       await _startIndoorGuidance();
       return;
@@ -446,8 +455,19 @@ extension OutdoorMapGuidance on OutdoorMapBodyState {
     );
   }
 
+  /// 진단 세션 하나를 새로 연다.
+  ///
+  /// **실외 구간을 품은 세션은 갈아 끼우지 않는다.** 나갔다 들어온 뒤 새 길찾기를
+  /// 시작하는 것이 여기로 들어오는데, 그때 레코더를 새로 만들면 나갈 때 걸은
+  /// 구간이 통째로 사라진다 — 실내→실외→실내를 JSON 하나로 남기려는 것이 이
+  /// 분기의 유일한 이유다([PdrDebugSessionRecorder.spansBuildingExit]).
   void _beginRouteRecordingSession() {
     _ensureGuidanceTrailSessionStarted();
+    final continued = _pdrDebugRecorder;
+    if (continued != null && continued.spansBuildingExit) {
+      continued.recordSessionBoundary('routeStartedAfterReEntry');
+      return;
+    }
     _pdrDebugRecorder = PdrDebugSessionRecorder()
       ..recordRuntime(indoorNavigationDriver.currentRuntimeStatus);
     final snapshot = indoorNavigationDriver.currentSnapshot;
@@ -465,6 +485,18 @@ extension OutdoorMapGuidance on OutdoorMapBodyState {
   /// 끝나는 순간은 도착 카드가 뜨는 순간이라 토스트가 그 위를 덮었고, 내보내기
   /// 진입점은 디버그 모드의 공유 버튼([PdrMapControl])이 이미 지도에 상시로
   /// 있다 — 같은 일을 하는 두 번째 입구가 화면을 가리기만 했다.
+  /// 진단 세션을 여는 테스트 진입점. 실기기에서는 길안내 시작이 이 자리를
+  /// 지나는데(`_computeAndShow*IndoorRoute`), 그 흐름은 층 그래프·목적지·경로
+  /// 응답을 모두 갖춰야 해서 GPS 출입만 시험하는 테스트는 준비할 수 없다
+  /// ([OutdoorMapIndoor.enterIndoorForTest]와 같은 이유).
+  @visibleForTesting
+  void beginRouteRecordingSessionForTest() => _beginRouteRecordingSession();
+
+  /// 지금 열려 있는 진단 세션. 나갔다 들어와도 **같은 인스턴스**인지가
+  /// "한 주행이 JSON 하나로 남는가"의 검증 기준이다.
+  @visibleForTesting
+  PdrDebugSessionRecorder? get debugRecorderForTest => _pdrDebugRecorder;
+
   void _endRouteRecordingSession({bool announceExport = true}) {
     final recorder = _pdrDebugRecorder;
     if (recorder == null) return;
