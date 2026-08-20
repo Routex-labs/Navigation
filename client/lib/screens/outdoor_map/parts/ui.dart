@@ -114,9 +114,25 @@ extension OutdoorMapUi on OutdoorMapBodyState {
     final pdrActive =
         indoorNavigationDriver.currentRuntimeStatus.state !=
         PdrRuntimeState.idle;
-    final guidance = _guidanceStarted && !_showingArrivalOnly
-        ? _indoorRouteGuidance
-        : null;
+    final arrived = _arrivedDestination;
+    // 지도 위 안내는 **한 자리**다. 무엇이 그 자리를 쓰는지는 [GuidanceBanner]가
+    // 정한다 — 여기서는 각 상태의 재료만 넘긴다.
+    //
+    // 도착 배너는 [_guidanceStarted]가 풀린 뒤에도 남는다. 도착 몇 초 뒤 경로가
+    // 스스로 지워지는데(_syncArrival), 그때 배너까지 사라지면 화면 위쪽이 안내
+    // 도중에 통째로 비어 버린다. 닫는 것은 도착 카드의 `안내 종료`뿐이다.
+    final topBanner = GuidanceBanner(
+      instruction: _guidanceStarted && !_showingArrivalOnly
+          ? _indoorRouteGuidance
+          : null,
+      floorTransition: _guidanceStarted ? _floorTransitionUiState : null,
+      arrivalAt: arrived == null
+          ? null
+          : [
+              arrived.name,
+              if (arrived.floor.isNotEmpty) arrived.floor,
+            ].join(' · '),
+    );
     final initialCenter = position == null
         ? fallbackLocation
         : ll.LatLng(position.latitude, position.longitude);
@@ -163,7 +179,7 @@ extension OutdoorMapUi on OutdoorMapBodyState {
         else
           const ColoredBox(color: AppColors.surface),
 
-        if (guidance != null)
+        if (!topBanner.isEmpty)
           Positioned(
             top: 0,
             left: 12,
@@ -175,7 +191,7 @@ extension OutdoorMapUi on OutdoorMapBodyState {
                 onTap: indoorRouteDestination == null
                     ? null
                     : () => _showIndoorRouteSteps(indoorRouteDestination),
-                child: GuidanceBanner(instruction: guidance),
+                child: topBanner,
               ),
             ),
           ),
@@ -449,7 +465,10 @@ extension OutdoorMapUi on OutdoorMapBodyState {
 
         // 도착은 Runtime Kit의 전용 표면으로 바뀐다. 안내 중 배너는 아래에서
         // 구조적으로 빠지므로 같은 자리에 있어도 진행 상태와 섞이지 않는다.
-        if (_arrivedDestination case final arrived?)
+        //
+        // 여기까지 안내해 놓고 "그래서 이 매장이 뭔데"로 가는 길을 끊지 않는다 —
+        // 상세를 못 여는 목적지(placeId 없는 POI)에서만 그 버튼이 빠진다.
+        if (arrived != null)
           Positioned(
             left: 0,
             right: 0,
@@ -459,15 +478,22 @@ extension OutdoorMapUi on OutdoorMapBodyState {
               destinationName: arrived.name,
               destinationFloor: arrived.floor,
               onConfirm: _confirmArrival,
+              onShowDetail: arrived.placeId == null
+                  ? null
+                  : () => widget.onStoreTap?.call(arrived),
               onConfirmPointerDown: (position) =>
                   _etaClosePointerDown = position,
             ),
           ),
 
-        // 도착하면 하단 배너를 걷는다. 도착 문구는 화면에 하나여야 하고, 그
-        // 하나는 위 도착 카드다 — 걷는 중 안내와 같은 자리·같은 무게로 또 말하면
-        // 안내가 끝난 줄 모르고 계속 걷는다. 지나쳐 걸어가 안내가 되살아나면
-        // (`arrived`가 풀리면) 배너도 함께 돌아온다.
+        // 도착하면 남은 거리·시간 카드를 걷는다. **끝난 여정의 `0m`는 정보가
+        // 아니다** — 걷는 중과 같은 자리·같은 모양으로 남아 있으면 안내가 끝난
+        // 줄 모르고 계속 걷는다. 그 자리는 도착 카드가 받는다.
+        //
+        // 도착을 말하는 표면이 위(배너)·아래(카드) 둘인 것은 역할이 달라서다.
+        // 배너는 **무슨 일이 일어났는지**를, 카드는 **이제 무엇을 할지**(매장
+        // 정보·안내 종료)를 말한다. 지나쳐 걸어가 안내가 되살아나면(`arrived`가
+        // 풀리면) 이 카드가 다시 돌아온다.
         if (indoorRouteDestination != null && !_showingArrivalOnly)
           Positioned(
             left: 0,

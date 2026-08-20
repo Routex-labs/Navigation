@@ -3,8 +3,8 @@
 /// 판정기의 단계를 화면이 다시 해석하지 않게 하는 계약이다 — UI는 이 값을 문구와
 /// 애니메이션으로만 바꾸고 임계값을 다시 계산하지 않는다.
 ///
-/// **앱 셸의 최상위 Stack**이 그린다 — 지도 안에 두면 나중에 그리는 검색창 뒤로
-/// 깔리고, 자식의 top 상수로는 부모 sibling 위로 올라갈 수 없다.
+/// 스크림은 **앱 셸의 최상위 Stack**이, 배너는 지도의 **안내 한 자리**가 그린다
+/// (`GuidanceBanner`). 배너를 따로 띄우면 안내 위에 알약이 한 겹 더 겹친다.
 library;
 
 /// 스크림이 짙어지는/걷히는 시간.
@@ -30,6 +30,10 @@ typedef FloorTransitionUiChanged =
     void Function(FloorTransitionUiState? banner, double scrimOpacity);
 
 /// 사용자에게 보이는 층 전환 진행 단계.
+///
+/// **완료 단계가 없다.** 예전에는 하차 확정 뒤 "N층으로 이동했습니다"를 몇 초 더
+/// 띄웠는데, 그때 화면은 이미 새 층 도면과 새 경로를 그리고 있어서 배너가 방금
+/// 끝난 일을 한 번 더 말할 뿐이었다. 끝난 일은 화면이 이미 말한다.
 enum FloorTransitionStage {
   /// 탑승점에 접근했다. 배너만 뜨고 지도·걸음은 그대로다.
   boarding,
@@ -39,9 +43,6 @@ enum FloorTransitionStage {
 
   /// 목적 층 도면으로 바뀌었고 하차를 기다린다.
   swapping,
-
-  /// 하차가 확정돼 위치를 옮겼다.
-  arrived,
 }
 
 class FloorTransitionUiState {
@@ -57,26 +58,21 @@ class FloorTransitionUiState {
   final String toFloorLabel;
   final bool goingUp;
 
-  /// 이 단계의 배너 문구. 스크림이 덮인 동안에는 배너를 접으므로, 실제로 이
-  /// 문장이 보이는 것은 덮기 전(접근)과 걷힌 뒤(도착) 구간이다.
-  String get message => switch (stage) {
-    FloorTransitionStage.boarding => '에스컬레이터 탑승을 감지했습니다',
-    FloorTransitionStage.moving =>
-      '에스컬레이터로 이동 중 · $fromFloorLabel → $toFloorLabel',
-    FloorTransitionStage.swapping => '$toFloorLabel 지도로 전환하는 중',
-    FloorTransitionStage.arrived => '$toFloorLabel로 이동했습니다',
-  };
+  /// 안내 배너의 큰 줄. 남은거리가 서는 자리라 **가는 곳**을 적는다.
+  String get headline => '$fromFloorLabel → $toFloorLabel';
 
-  /// 화면을 덮는 스크림 안에 쓰는 한 줄.
+  /// 지금 사용자에게 일어나는 일. 안내 배너의 작은 줄과 스크림 캡션이 **같은
+  /// 문장**을 쓴다 — 한 사건을 두 표면이 다르게 부르면 화면 안에서 말이 갈린다.
   ///
-  /// 층 라벨은 스크림이 큰 글씨로 따로 그리므로 여기서는 **지금 무슨 일이
-  /// 일어나는지**만 말한다. 라벨을 문구에 또 넣으면 같은 글자가 카드 안에 두
-  /// 번 나온다.
-  String get scrimCaption => switch (stage) {
-    FloorTransitionStage.boarding => '에스컬레이터 탑승을 기다리는 중',
-    FloorTransitionStage.moving => '에스컬레이터로 이동 중',
-    FloorTransitionStage.swapping => '지도를 전환하는 중',
-    FloorTransitionStage.arrived => '도착했습니다',
+  /// 도면을 갈아 끼우는 구간(`swapping`)도 "에스컬레이터로 이동 중"이다. 지도가
+  /// 전환된다는 것은 앱의 사정이고, 그 사람에게 일어나는 일은 층 이동 하나다.
+  ///
+  /// 층 라벨은 넣지 않는다 — 배너는 [headline]이, 스크림은 큰 글씨가 따로 그려서
+  /// 넣으면 같은 글자가 한 카드에 두 번 나온다.
+  String get detail => switch (stage) {
+    FloorTransitionStage.boarding => '에스컬레이터 탑승을 감지했습니다',
+    FloorTransitionStage.moving ||
+    FloorTransitionStage.swapping => '에스컬레이터로 이동 중',
   };
 
   @override

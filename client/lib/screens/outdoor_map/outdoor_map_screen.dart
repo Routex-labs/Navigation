@@ -354,9 +354,6 @@ const _escalatorGlideFrame = escalatorGlideSampleInterval;
 /// **하차까지 덮지는 않는다** — 내리기 전에 새 층 도면과 다음 경로를 봐야 한다.
 const _indoorFloorSwapVeilHold = Duration(milliseconds: 3500);
 
-/// 층 이동 확정 뒤 도착 배너를 띄워 두는 시간.
-const _indoorArrivalBannerHold = Duration(seconds: 6);
-
 /// 건물 로드 실패 시 다시 시도하는 간격 사다리(약 1분간 6번). 이 로드는 initState
 /// 한 번뿐이라 실패하면 영영 복구되지 않았다. **무한 재시도는 안 한다** — 백엔드
 /// 없는 환경에서 배터리만 태운다.
@@ -646,11 +643,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   /// 조기 전환으로 목적 층을 이미 열어 둔 이동. 하차 확정 전까지 유지된다.
   EscalatorTransition? _escalatorRide;
-
-  /// 확정 직후 잠깐 "도착" 배너를 띄우는 이동. 되돌리기를 여기에 붙인다.
-  EscalatorTransition? _escalatorArrival;
-
-  Timer? _escalatorArrivalTimer;
 
   /// 배너만 띄우는 접근·수직이동 단계. 층 지도는 아직 안 바꾼다.
   EscalatorPhaseChange? _escalatorStage;
@@ -963,7 +955,6 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _pdrCalibrationSub?.cancel();
     _pdrAltitudeSub?.cancel();
     _pdrRawMotionSub?.cancel();
-    _escalatorArrivalTimer?.cancel();
     _escalatorGlideTimer?.cancel();
     _arrivalRouteClearTimer?.cancel();
     _floorSwapVeilTimer?.cancel();
@@ -1068,12 +1059,21 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     onStreamError: _handlePositionError,
   );
 
+  /// 이 층에서 지금까지 지나온 구간. 재탐색·층 전환이 이력으로 넘길 값이다.
+  ///
+  /// 화면에 그린 것과 **같은 값**을 넘겨야 한다([_syncCompletedRouteLayer]).
+  /// 이번 틱의 진행률이 뒤로 튄 순간에 승격이 걸리면, 여기서 다시 계산한 짧은
+  /// 구간이 이력에 박혀 회색선이 영구히 짧아진다.
   ({String scopeId, List<ll.LatLng> points})?
   _currentIndoorCompletionSnapshot() {
     final route = _indoorRouteSegment;
     final floor = _activeFloor;
     if (route == null || floor == null) return null;
-    final completed = _indoorRouteVisuals(route).completed;
+    final completed = _completedRouteHistory.advance(
+      scopeId: floor,
+      generation: _routeGeneration,
+      completed: _indoorRouteVisuals(route).completed,
+    );
     if (completed.length < 2) return null;
     return (scopeId: floor, points: completed);
   }

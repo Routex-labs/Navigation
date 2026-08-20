@@ -121,22 +121,11 @@ void main() {
   });
 
   group('floorTransitionUiState — 배너 단계', () {
-    test('도착이 탑승보다 먼저다', () {
-      // 뒤집으면 하차 직후에도 "이동 중"이 떠 있다.
+    test('타는 중이면 단계 값이 있어도 swapping이다', () {
+      // 뒤집으면 도면을 갈아 끼우는 동안 "접근 중"이 떠 있다.
       final state = floorTransitionUiState(
-        arrival: _transition(),
-        ride: null,
-        stage: _stage(phase: EscalatorPhase.verticalMotionDetected),
-      );
-
-      expect(state?.stage, FloorTransitionStage.arrived);
-    });
-
-    test('아직 타는 중이면 도착 값이 있어도 swapping이다', () {
-      final state = floorTransitionUiState(
-        arrival: _transition(),
         ride: _transition(),
-        stage: null,
+        stage: _stage(phase: EscalatorPhase.boardingDetected),
       );
 
       expect(state?.stage, FloorTransitionStage.swapping);
@@ -145,7 +134,6 @@ void main() {
     test('수직 이동이 관측되면 moving, 접근만이면 boarding', () {
       expect(
         floorTransitionUiState(
-          arrival: null,
           ride: null,
           stage: _stage(phase: EscalatorPhase.verticalMotionDetected),
         )?.stage,
@@ -153,7 +141,6 @@ void main() {
       );
       expect(
         floorTransitionUiState(
-          arrival: null,
           ride: null,
           stage: _stage(phase: EscalatorPhase.boardingDetected),
         )?.stage,
@@ -164,7 +151,6 @@ void main() {
     test('도착 층을 모르면 배너를 띄우지 않는다', () {
       // `{출발}→{도착}`이 문구의 뼈대라, 한쪽이 없으면 쓸 문장이 없다.
       final state = floorTransitionUiState(
-        arrival: null,
         ride: null,
         stage: _stage(phase: EscalatorPhase.boardingDetected, to: null),
       );
@@ -173,16 +159,14 @@ void main() {
     });
 
     test('아무 단계도 없으면 null', () {
-      expect(
-        floorTransitionUiState(arrival: null, ride: null, stage: null),
-        isNull,
-      );
+      // 하차가 확정되면 ride·stage가 함께 비고, 그 순간 배너도 사라진다 —
+      // "N층으로 이동했습니다"를 몇 초 더 띄우는 완료 단계는 없다.
+      expect(floorTransitionUiState(ride: null, stage: null), isNull);
     });
 
     test('상행·하행이 배너 화살표 방향으로 이어진다', () {
       expect(
         floorTransitionUiState(
-          arrival: null,
           ride: _transition(direction: EscalatorDirection.up),
           stage: null,
         )?.goingUp,
@@ -190,12 +174,39 @@ void main() {
       );
       expect(
         floorTransitionUiState(
-          arrival: null,
           ride: _transition(direction: EscalatorDirection.down),
           stage: null,
         )?.goingUp,
         isFalse,
       );
+    });
+  });
+
+  group('FloorTransitionUiState — 배너 문구', () {
+    FloorTransitionUiState state(FloorTransitionStage stage) =>
+        FloorTransitionUiState(
+          stage: stage,
+          fromFloorLabel: 'B2',
+          toFloorLabel: 'B1',
+          goingUp: true,
+        );
+
+    test('큰 줄은 가는 곳, 작은 줄은 지금 일어나는 일이다', () {
+      expect(state(FloorTransitionStage.moving).headline, 'B2 → B1');
+      expect(state(FloorTransitionStage.moving).detail, '에스컬레이터로 이동 중');
+    });
+
+    test('도면을 갈아 끼우는 동안도 "에스컬레이터로 이동 중"이다', () {
+      // 지도가 전환된다는 것은 앱의 사정이다. 그 사람에게 일어나는 일은
+      // 층 이동 하나뿐이라, 두 단계가 다른 말을 하면 안 된다.
+      expect(
+        state(FloorTransitionStage.swapping).detail,
+        state(FloorTransitionStage.moving).detail,
+      );
+    });
+
+    test('탑승 전에는 감지 사실을 말한다', () {
+      expect(state(FloorTransitionStage.boarding).detail, '에스컬레이터 탑승을 감지했습니다');
     });
   });
 }
