@@ -568,7 +568,11 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     final endNodeId = destination.nodeId;
     final leg = (graph == null || endNodeId == null)
         ? null
-        : computeMultiFloorRoute(graph, entrance.nodeId, endNodeId);
+        : computeMultiFloorRoute(
+            graph,
+            entranceRouteNodeId(graph.nodes, entrance),
+            endNodeId,
+          );
     setState(() {
       _journeyEntrance = entrance;
       _userDestination = entrance.point;

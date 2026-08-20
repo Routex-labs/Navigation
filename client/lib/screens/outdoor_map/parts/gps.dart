@@ -115,8 +115,12 @@ extension OutdoorMapGps on OutdoorMapBodyState {
   ///
   /// **묻는 것은 진입 한 번에 한 번뿐이다**([_entryFloorAsked]). 벽 근처에서
   /// 판정이 오가면 이 화면이 되풀이해 뜨는데, 그러면 지도에 닿을 수가 없다.
-  /// 건너뛰면(null) 지금까지와 같이 기본 층으로 간다 — 층은 선택기로 언제든
-  /// 바꿀 수 있고, 여기서 막으면 판정이 틀렸을 때의 출구가 사라진다.
+  ///
+  /// **아무도 답하지 않았으면**(안 물었다·건너뛰었다) 지금 보고 있는 층이 아니라
+  /// **진입 근거가 정한다**([_entryEvidenceFloor]). 보고 있는 층은 목적지를
+  /// 고르는 것만으로 갈리고, 그 층에 앵커를 찍으면 실제로는 1F에 서 있는 사람이
+  /// B2 그래프에 못 박힌다 — 층이 1F로 돌아오는 순간 위치 마커가 사라진다.
+  /// 판정이 틀렸을 때의 출구는 그대로다: 안내 중이 아니면 층 선택기가 떠 있다.
   Future<void> _askEntryFloorThenTrack(Position position) async {
     // **경로를 그리는 중이면 아무것도 묻지 않는다.** "서울창업허브 → 더현대
     // 서울"처럼 목적지를 정해 두고 걸어 들어오는 길이 있는데, 그때 도착해서
@@ -124,26 +128,49 @@ extension OutdoorMapGps on OutdoorMapBodyState {
     // 중인지는 이미 화면이 말하고 있고, 위치가 필요하면 하단 바의 두 버튼이
     // 그 자리에 있다. **위치는 그대로 자동으로 잡는다** — 묻지 않는 것과
     // 추적하지 않는 것은 다르다.
-    if (_guidancePlanned) {
-      await _startTrackingFromGpsFix(position);
-      if (mounted && _indoorEntered) _notifyStartupReady();
-      return;
-    }
-    final floor = await _askEntryFloor();
+    // **묻지 않는 것과 층을 안 고르는 것은 다르다.** 예전에는 안내 중이면 여기서
+    // 곧장 빠져나가 보고 있던 층(= 목적지 층)에 앵커를 찍었다. 지금은 묻지만
+    // 않고 아래 진입 근거로 층을 고른다.
+    final answer = _guidancePlanned ? null : await _askEntryFloor();
     if (!mounted || !_indoorEntered) return;
-    // 층 전환은 chip을 누른 것과 **같은 경로**를 탄다 — 도면 교체와 그 층
-    // 외곽선에 맞춘 카메라 정렬이 거기 붙어 있다([_onFloorChipSelected]).
-    if (floor != null && floor != _activeFloor) {
-      await _onFloorChipSelected(floor);
-      if (!mounted || !_indoorEntered) return;
+    if (answer != null) {
+      // 사람이 고른 층이 가장 강한 근거다. 층 전환은 chip을 누른 것과 **같은
+      // 경로**를 탄다 — 도면 교체와 그 층 외곽선에 맞춘 카메라 정렬이 거기
+      // 붙어 있다([_onFloorChipSelected]).
+      if (answer != _activeFloor) await _onFloorChipSelected(answer);
+    } else {
+      await _moveToEntryEvidenceFloor();
     }
+    if (!mounted || !_indoorEntered) return;
     await _startTrackingFromGpsFix(position);
     if (!mounted || !_indoorEntered) return;
+    // 시작 화면은 **모든 갈래에서** 걷힌다. 위치를 잡은 시점이 곧 가릴 이유가
+    // 없어진 시점이라, 아래 근처 매장 시트를 띄우는지와는 무관하다.
     _notifyStartupReady();
+    if (_guidancePlanned) return;
     // 자동으로 띄우는 것은 **진입 한 번에 한 번뿐이다**. 버튼으로 다시 여는
     // 쪽은 이 제한을 받지 않는다.
     await _askNearbyStoreForAnchor(once: true);
   }
+
+  /// 진입 근거가 가리키는 층으로 도면을 옮긴다. 옮길 근거가 없거나 이미 그
+  /// 층이면 아무것도 하지 않는다.
+  ///
+  /// **[_onFloorChipSelected]를 쓰지 않는다** — 그쪽은 사용자가 chip을 눌렀을
+  /// 때의 경로라 카메라를 그 층 외곽선에 맞춘다. 여기는 아무도 누르지 않았고,
+  /// 안내 중이면 카메라의 주인은 사용자 위치다.
+  Future<void> _moveToEntryEvidenceFloor() async {
+    final floor = _entryEvidenceFloor;
+    if (floor == null || floor == _activeFloor) return;
+    await _switchOverlayFloorCrossfaded(floor);
+  }
+
+  /// 이 사람이 서 있다고 볼 층. 고르는 규칙과 그 근거는 [gpsEntryAnchorFloor].
+  String? get _entryEvidenceFloor => gpsEntryAnchorFloor(
+    groundEntranceFloor: _groundEntranceFloor,
+    defaultFloor: _building?.initialFloor,
+    viewedFloor: _activeFloor,
+  );
 
   /// GPS가 잡아 준 **어림 위치를 사람이 다듬게 한다.**
   ///
@@ -294,6 +321,10 @@ extension OutdoorMapGps on OutdoorMapBodyState {
     await _floorGraphLoad;
     if (!mounted || !_indoorEntered) return;
 
+    // 앵커 층은 **호출자가 이미 옮겨 둔** 층이다([_askEntryFloorThenTrack]) —
+    // 사람이 고른 층이거나 진입 근거가 고른 층이지 목적지 층이 아니다. 여기서
+    // 다시 고르지 않는 이유는 그 층의 그래프·도면이 이미 이 값에 맞춰져 있기
+    // 때문이다.
     final floor = _activeFloor;
     final graph = _floorGraph;
     final buildingId = _building?.id;
@@ -432,6 +463,10 @@ extension OutdoorMapGps on OutdoorMapBodyState {
 
   /// 안내 중 "내 위치로" 버튼. **bearing과 tilt는 건드리지 않는다** — 정북으로
   /// 돌아가면 화면 위쪽이 갈 방향과 어긋난다. 배율도 [walkingViewZoom]까지만 당긴다.
+  ///
+  /// **팔로우를 다시 켜는 유일한 문이다.** 지도를 손으로 움직이면 팔로우가
+  /// 물리는데([_releaseFollowCameraToUser]), 그걸 푸는 자리가 없으면 안내가 끝날
+  /// 때까지 화면이 사용자를 따라가지 않는다.
   Future<void> _recenterOnCurrentPosition() async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
@@ -439,6 +474,10 @@ extension OutdoorMapGps on OutdoorMapBodyState {
     // 위치를 아직 못 그리는 상태면 되돌릴 자리도 없다. 버튼 노출 조건이 같은
     // 값을 보므로([_canRecenterOnCurrentPosition]) 보통은 여기 안 걸린다.
     if (here == null) return;
+    _followCameraReleasedByUser = false;
+    // 이 애니메이션이 도는 동안은 팔로우를 재운다. 안 재우면 같은 프레임에 두
+    // 명령이 겹쳐, 눌러서 돌아가는 도중에 화면이 한 번 튄다.
+    _holdFollowCamera(recenterDuration);
     await recenterKeepingBearing(
       controller,
       here,
