@@ -247,9 +247,11 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
     switch (judgement.verdict) {
       case GpsBuildingVerdict.inside:
         if (_indoorEntered || !_gpsEntryArmed) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('건물 감지 중...')));
+        if (!widget.startupLoading) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('건물 감지 중...')));
+        }
         // _setIndoorEntered가 이 표식을 보므로 **먼저** 세운다.
         _indoorEnteredByGps = true;
         _setIndoorEntered(true);

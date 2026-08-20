@@ -118,6 +118,7 @@ flutter:
     - assets/mock/hyundai_floor_map.svg
     - assets/mock/demo_floor_map_v5.svg
     - assets/icons/place_location_pin.svg
+    - assets/branding/routee_marker.png
 
   # 앱 전체 기본 글꼴. 지정하지 않으면 플랫폼 기본(iOS Apple SD Gothic Neo,
   # Android Noto Sans CJK, 웹 브라우저 기본)이 쓰여 같은 화면이 기기마다 다르게

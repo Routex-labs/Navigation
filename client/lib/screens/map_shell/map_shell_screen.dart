@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/api_config.dart';
+import '../../core/startup_loading_timing.dart';
 import 'package:routex_design_system/routex_design_system.dart';
 
 import '../../routing/place_link.dart';
@@ -21,6 +22,7 @@ import '../../domain/search/store_suggestions.dart';
 import '../../domain/route/transit_walk_fill.dart';
 import '../../features/debug_mode/debug_mode.dart';
 import '../../features/indoor_navigation/contract/floor_transition_ui_state.dart';
+import '../../widgets/startup_loading_overlay.dart';
 import '../../models/building/building.dart';
 import '../../models/building/category_count.dart';
 import '../../models/route/directions_route.dart';
@@ -98,6 +100,14 @@ const _mapLockOverlayHover = 'overlay-hover';
 const _mapLockOverlayTouch = 'overlay-touch';
 
 class _MapShellScreenState extends State<MapShellScreen> {
+  /// 첫 좌표 판정과 카메라 이동이 끝날 때까지 서울시청 fallback 지도를 가린다.
+  /// 위치 서비스가 응답하지 않아도 앱이 영구히 막히지 않도록 타임아웃을 둔다.
+  bool _startupLoading = true;
+  bool _startupMinimumElapsed = false;
+  bool _startupPreparationReady = false;
+  Timer? _startupMinimumTimer;
+  Timer? _startupLoadingTimeout;
+
   /// 상단 오버레이 사이 간격. 예전 top: 78 / top: 128 같은 고정 offset을
   /// 대신하는 유일한 값이다. 상단 바 높이가 상태에 따라 달라져도 이 간격은
   /// 그대로라 어느 모드에서든 같은 여백으로 보인다.
@@ -374,6 +384,17 @@ class _MapShellScreenState extends State<MapShellScreen> {
     _routeOriginFocus.addListener(_onRouteOriginFocusChanged);
     _routeDestinationFocus.addListener(_onRouteDestinationFocusChanged);
     _requestStartupPermissions();
+    _startupMinimumTimer = Timer(startupLoadingMinimum, () {
+      if (!mounted) return;
+      _startupMinimumElapsed = true;
+      _tryFinishStartupLoading();
+    });
+    _startupLoadingTimeout = Timer(startupLoadingFailureTimeout, () {
+      if (!mounted) return;
+      _startupMinimumElapsed = true;
+      _startupPreparationReady = true;
+      _tryFinishStartupLoading();
+    });
     // 화면이 세워지기 전에 도착한 링크가 여기 남아 있을 수 있다(cold start).
     //
     // **첫 프레임 뒤에 꺼낸다.** 실패 안내가 토스트라 Overlay와 MediaQuery를
@@ -388,6 +409,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
 
   @override
   void dispose() {
+    _startupMinimumTimer?.cancel();
+    _startupLoadingTimeout?.cancel();
     placeLinkInbox.removeListener(_onPlaceLinkChanged);
     _searchFocus.removeListener(_onSearchFocusChanged);
     _searchFocus.dispose();
@@ -402,9 +425,24 @@ class _MapShellScreenState extends State<MapShellScreen> {
     super.dispose();
   }
 
-  /// 예전에는 스플래시 화면이 이 요청을 진행 중 화면과 함께 보여줬지만,
-  /// 이제 앱이 바로 지도 화면으로 시작하므로 화면을 막지 않고 백그라운드로
-  /// 요청만 하고, 거부된 게 있으면 지도 위에 짧게 안내만 띄운다.
+  void _finishStartupLoading() {
+    _startupPreparationReady = true;
+    _tryFinishStartupLoading();
+  }
+
+  void _tryFinishStartupLoading() {
+    if (!_startupLoading) return;
+    if (!_startupMinimumElapsed || !_startupPreparationReady) return;
+    _startupMinimumTimer?.cancel();
+    _startupMinimumTimer = null;
+    _startupLoadingTimeout?.cancel();
+    _startupLoadingTimeout = null;
+    setState(() => _startupLoading = false);
+  }
+
+  /// 시작 덮개가 이 요청 중의 지도는 가리지만, 덮개의 완료 조건을 권한 응답과
+  /// 직접 묶지는 않는다. 시스템 창을 오래 열어 둬도 타임아웃으로 앱에 들어갈 수
+  /// 있어야 하고, 거부된 권한은 지도 위의 짧은 안내로 따로 알린다.
   ///
   /// 권한 요청은 한 번에 하나씩 순서대로 뜬다([requestStartupPermissions]).
   Future<void> _requestStartupPermissions() async {
@@ -601,7 +639,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
     );
   }
 
-  /// 화면은 **Stack 다섯 층**이다. 쌓임 순서가 곧 의미다.
+  /// 화면은 **Stack 여섯 층**이다. 쌓임 순서가 곧 의미다.
   ///
   /// | 층 | 무엇 |
   /// |---|---|
@@ -610,6 +648,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// | 3 | 상단 오버레이([_buildTopOverlays]) — 검색·길찾기·카테고리·배너 |
   /// | 4 | 하단 바([_buildBottomBar]) |
   /// | 5 | 층 전환 스크림([_buildFloorScrim]) — **맨 위여야 한다.** 지도뿐 아니라 검색창·하단 바까지 덮는다 |
+  /// | 6 | 시작 덮개 — 첫 위치 판정과 카메라 준비가 끝날 때까지 전부 가린다 |
   Widget _buildShell(BuildContext context, bool routeVisible) {
     return Scaffold(
       // 상단 검색창(MapTopBar)에 포커스가 들어가 소프트키보드가 올라올 때
@@ -624,6 +663,16 @@ class _MapShellScreenState extends State<MapShellScreen> {
           _buildTopOverlays(context),
           if (!_guidanceActive && !_routeMode) _buildBottomBar(routeVisible),
           _buildFloorScrim(),
+          IgnorePointer(
+            child: AnimatedSwitcher(
+              duration: startupLoadingFadeOut,
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInOutCubic,
+              child: _startupLoading
+                  ? const StartupLoadingOverlay()
+                  : const SizedBox.shrink(),
+            ),
+          ),
         ],
       ),
     );
@@ -634,6 +683,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
   Widget _buildMap() {
     return OutdoorMapBody(
       key: _outdoorKey,
+      startupLoading: _startupLoading,
       transitRoutesSheetOpen: _transitRoutesSheetOpen,
       onRouteVisibleChanged: (visible) =>
           setState(() => _outdoorRouteVisible = visible),
@@ -681,6 +731,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
       categorySelection: _categorySelection,
       onFloorChanged: _onActiveFloorChanged,
       onFloorTransitionChanged: _onFloorTransitionChanged,
+      onStartupReady: _finishStartupLoading,
       // 실내 화면과 같은 목록을 넘긴다. 야외 지도도 실내 진입
       // 오버레이가 켜지면 층 선택기·위치 지정을 함께 쓰므로, 상단
       // 검색창이나 하단 바를 누른 탭이 지도 탭으로 새어들어가면
