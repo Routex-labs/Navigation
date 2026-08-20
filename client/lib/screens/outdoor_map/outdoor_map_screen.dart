@@ -12,6 +12,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:routex_design_system/routex_design_system.dart';
 
 import '../../core/api_config.dart';
+import '../../core/startup_loading_timing.dart';
 import '../../map/camera/floor_switch_progress.dart';
 import '../../map/geojson.dart';
 import '../../map/picked_point.dart';
@@ -233,6 +234,8 @@ class OutdoorMapBody extends StatefulWidget {
     this.categorySelection,
     this.onFloorChanged,
     this.onFloorTransitionChanged,
+    this.onStartupReady,
+    this.startupLoading = false,
     this.outerOverlayKeys = const [],
     this.transitRoutesSheetOpen = false,
   });
@@ -272,6 +275,13 @@ class OutdoorMapBody extends StatefulWidget {
   /// 이 화면이 직접 그리지 않는 이유: 검색창·카테고리 줄·하단 바가 셸 Stack의
   /// 형제라, 지도 안에서 그린 배너는 그 뒤에 깔린다.
   final FloorTransitionUiChanged? onFloorTransitionChanged;
+
+  /// 첫 위치의 건물 안팎 판정과 그 결과에 맞는 카메라 준비가 끝났을 때 한 번 호출.
+  final VoidCallback? onStartupReady;
+
+  /// 상위 셸의 시작 덮개가 아직 보이는지. 자동 실내 판정은 계속하되, 이 동안에는
+  /// 덮개 위로 진행 스낵바를 올리지 않는다.
+  final bool startupLoading;
 
   /// PDR 앵커 배치 대기 상태가 바뀔 때 호출된다. 상위(MapShellScreen)가 이
   /// 값으로 하단 바의 "위치 지정" 버튼을 눌린(활성) 톤으로 표시한다.
@@ -384,6 +394,28 @@ const _storeFocusMaxZoom = 20.4;
 LatLng _toMapLatLng(ll.LatLng point) => LatLng(point.latitude, point.longitude);
 
 class OutdoorMapBodyState extends State<OutdoorMapBody> {
+  final Completer<void> _startupMinimumElapsed = Completer<void>();
+  Timer? _startupMinimumTimer;
+
+  bool _startupBuildingResolved = false;
+  bool _startupCameraPrepared = false;
+  bool _startupReadyNotified = false;
+
+  void _notifyStartupReady() {
+    if (_startupReadyNotified || !mounted) return;
+    _startupReadyNotified = true;
+    widget.onStartupReady?.call();
+  }
+
+  void _maybeNotifyOutdoorStartupReady() {
+    if (!_startupBuildingResolved ||
+        !_startupCameraPrepared ||
+        _indoorEntered) {
+      return;
+    }
+    _notifyStartupReady();
+  }
+
   /// GPS 자동 실내 진입이 지금 켜져 있는지. 1회성 플래그였을 때는 오탐 한 번이
   /// 기능 자체를 죽였다([IndoorEntryGpsDecision.rearm]이 다시 켠다).
   ///
@@ -845,6 +877,12 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   @override
   void initState() {
     super.initState();
+    _startupMinimumTimer = Timer(startupLoadingMinimum, () {
+      _startupMinimumTimer = null;
+      if (!_startupMinimumElapsed.isCompleted) {
+        _startupMinimumElapsed.complete();
+      }
+    });
     _pdrTrailState = DebugPdrTrailState.fromCurrent(
       snapshot: indoorNavigationDriver.currentSnapshot,
       calibration: indoorNavigationDriver.currentCalibration,
@@ -945,6 +983,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
 
   @override
   void dispose() {
+    _startupMinimumTimer?.cancel();
+    if (!_startupMinimumElapsed.isCompleted) {
+      _startupMinimumElapsed.complete();
+    }
     // 스타일·건물을 기다리던 자리를 풀어 준다. 안 풀면 그 await가 영영
     // 돌아오지 않아 뒤따르는 mounted 검사에 닿지 못한다.
     if (!_styleReadySignal.isCompleted) _styleReadySignal.complete();
@@ -1908,6 +1950,10 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         ),
         duration: _storeFocusDuration,
       );
+      if (mounted) {
+        _startupCameraPrepared = true;
+        _maybeNotifyOutdoorStartupReady();
+      }
     } finally {
       _initialCameraClaimed = false;
     }

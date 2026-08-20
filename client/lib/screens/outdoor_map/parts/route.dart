@@ -168,6 +168,8 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
       building = await buildingRepository.getBuilding(demoBuildingId);
     } catch (_) {
       if (!mounted) return;
+      _startupBuildingResolved = true;
+      _maybeNotifyOutdoorStartupReady();
       if (!_buildingLoadFailed) setState(() => _buildingLoadFailed = true);
       _scheduleBuildingRetry();
       return;
@@ -185,6 +187,7 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
       _buildingFootprint = building?.footprintWgs84;
       _activeFloor = building?.initialFloor;
     });
+    _startupBuildingResolved = true;
     if (building != null && !_buildingReadySignal.isCompleted) {
       _buildingReadySignal.complete();
     }
@@ -195,13 +198,20 @@ extension OutdoorMapRoute on OutdoorMapBodyState {
     // 위해 실내 MVT 소스도 여기서 한 번 더 등록 시도.
     _ensureIndoorTilesRegistered();
     final floor = _activeFloor;
+    Future<void>? initialFloorLoad;
     if (building != null && floor != null) {
       // 지상 출입구는 층 그래프와 **독립적으로** 필요하다. 사용자가 층 chip으로
       // 다른 층을 훑는 순간 [_floorPlan]은 그 층 것으로 갈리는데, 문 목록은
       // 그동안에도 남아 있어야 야외 안내가 끊기지 않는다.
       unawaited(_loadGroundEntrances(building.id, floor));
-      await _loadFloorGraph(building.id, floor);
+      initialFloorLoad = _loadFloorGraph(building.id, floor);
     }
+    // 첫 GPS가 건물 정보보다 먼저 왔어도 그 좌표를 다시 판정한다. 다음 위치
+    // 이벤트까지 기다리면 시작 화면을 걷은 뒤에야 실내 선택기가 튀어나온다.
+    final position = _position;
+    if (position != null) _applyBuildingVerdict(position);
+    _maybeNotifyOutdoorStartupReady();
+    await initialFloorLoad;
   }
 
   /// 지상 출입구 목록을 받아 [_groundEntrances]를 채운다.

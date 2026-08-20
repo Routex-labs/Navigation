@@ -76,13 +76,27 @@ extension OutdoorMapGps on OutdoorMapBodyState {
       // 카메라가 어디로 왜 갔는지는 화면만 봐서는 못 가린다. 공유 링크가 맞춰
       // 둔 매장 화면을 이 줄이 가져가고 있었는데, 조용해서 한참 못 찾았다.
       debugPrint('[first fix] 첫 좌표로 카메라를 옮긴다');
-      unawaited(_moveCameraToUser(position));
     }
     // 문 선택은 진입 판정보다 **먼저** 갱신한다. 진입 직후 실내 위치를 잡을 때
     // 폴백으로 쓰는 문이 이 선택의 결과라, 순서를 뒤집으면 사용자가 이미 다른
     // 문으로 들어왔는데 폴백은 한 박자 전 문을 가리킨다.
     if (!_indoorEntered) _syncSelectedEntrance();
     _applyBuildingVerdict(position, sinceLastFix: sinceLastFix);
+    // 건물 안이면 아래 이동을 생략한다. 실내 도면 카메라와 첫 GPS 카메라가
+    // 경합해 선택기 뒤에서 지도가 한 번 더 튀는 것을 막는다.
+    if (!_indoorEntered &&
+        !_startupCameraPrepared &&
+        !_initialCameraClaimed &&
+        _styleReady &&
+        _mapController != null) {
+      unawaited(
+        _moveCameraToUser(position).whenComplete(() {
+          if (!mounted || _indoorEntered) return;
+          _startupCameraPrepared = true;
+          _maybeNotifyOutdoorStartupReady();
+        }),
+      );
+    }
     // 여기서부터는 야외 전용이다. 건물 안에서 GPS로 걷기 경로를 다시 그리면,
     // 실내 도면 위에 건물을 관통하는 선이 얹힌다.
     if (_indoorEntered) return;
@@ -112,6 +126,7 @@ extension OutdoorMapGps on OutdoorMapBodyState {
     // 추적하지 않는 것은 다르다.
     if (_guidancePlanned) {
       await _startTrackingFromGpsFix(position);
+      if (mounted && _indoorEntered) _notifyStartupReady();
       return;
     }
     final floor = await _askEntryFloor();
@@ -124,6 +139,7 @@ extension OutdoorMapGps on OutdoorMapBodyState {
     }
     await _startTrackingFromGpsFix(position);
     if (!mounted || !_indoorEntered) return;
+    _notifyStartupReady();
     // 자동으로 띄우는 것은 **진입 한 번에 한 번뿐이다**. 버튼으로 다시 여는
     // 쪽은 이 제한을 받지 않는다.
     await _askNearbyStoreForAnchor(once: true);
@@ -250,6 +266,12 @@ extension OutdoorMapGps on OutdoorMapBodyState {
     final building = _building;
     if (building == null || building.floors.length < 2) return null;
     _entryFloorAsked = true;
+    // 시작 덮개 자체의 타이머만 기다리게 하면 이 Navigator 화면이 그 위를 먼저
+    // 덮어, 로고가 2초보다 훨씬 짧게 보인다. 질문을 올리는 시점도 같은 최소
+    // 노출 시간 뒤로 맞춘다. 앱을 사용하다 다시 들어온 경우에는 이미 지난 값이라
+    // 지연이 생기지 않는다.
+    await _startupMinimumElapsed.future;
+    if (!mounted || !_indoorEntered) return null;
     return showEntryFloorPrompt(
       context,
       buildingName: building.name,

@@ -104,6 +104,10 @@ extension OutdoorMapMap on OutdoorMapBodyState {
           LatLng(_position!.latitude, _position!.longitude),
         ),
       );
+      if (mounted && !_indoorEntered) {
+        _startupCameraPrepared = true;
+        _maybeNotifyOutdoorStartupReady();
+      }
     }
   }
 

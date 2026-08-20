@@ -237,6 +237,10 @@ void main() {
       for (var i = 0; i < 5; i++) {
         await tester.pump(const Duration(milliseconds: 50));
       }
+      // 시작 덮개가 너무 짧게 번쩍이지 않도록 보장하는 최소 1.2초가 지난 뒤
+      // 층 질문이 나타난다. 이 테스트는 진입 뒤 동작을 보므로 그 시간을 넘긴다.
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
       // 자동 진입은 '건물 감지 중...'을 먼저 띄운 뒤, 입구 기준으로 실내 위치를
       // 잡는 작업이 끝나면 같은 자리에 결과를 덮어쓴다(진행 문구가 4초를 다
       // 채운 뒤에야 결과가 뜨면 이미 끝난 작업을 계속 보여주는 셈이다).
