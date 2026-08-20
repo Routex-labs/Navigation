@@ -212,20 +212,24 @@ extension OutdoorMapEscalator on OutdoorMapBodyState {
       if (!mounted || _activeFloor != floor) return false;
     }
     final arrivalWgs84 = _nodeWgs84(_floorGraph, arrival?.id);
-    _startEscalatorGlide(
-      from: boardingWgs84,
-      to: arrivalWgs84,
-      transition: transition,
-      // 새 층 도면에서 하차 노드에 가장 가까운 에스컬레이터 폴리곤의 긴 축.
-      // 이게 없으면 활강이 두 노드를 직선으로 이어, 크로스형 뱅크에서 마커가
-      // 구조물을 대각선으로 가로지른다.
-      axis: arrival == null
-          ? null
-          : escalatorAxisNearLocal(arrival.xM, arrival.yM, _floorPlan),
-    );
+    // 새 층 도면에서 하차 노드에 가장 가까운 에스컬레이터 폴리곤의 긴 축.
+    // 이게 없으면 활강이 두 노드를 직선으로 이어, 크로스형 뱅크에서 마커가
+    // 구조물을 대각선으로 가로지른다.
+    final axis = arrival == null
+        ? null
+        : escalatorAxisNearLocal(arrival.xM, arrival.yM, _floorPlan);
+    final glidePoints = boardingWgs84 == null || arrivalWgs84 == null
+        ? null
+        : escalatorGlidePoints(
+            from: boardingWgs84,
+            to: arrivalWgs84,
+            axis: axis,
+          );
+    _logBoardingNodeAxisGap(boardingWgs84, glidePoints, axis);
+    _startEscalatorGlide(points: glidePoints, transition: transition);
     // 카메라는 **기다리지 않는다.** 이 함수는 층 전환 큐 위에서 도는데, 여기서
     // 활강 시간만큼 붙잡으면 그 뒤 하차 확정이 그만큼 밀린다.
-    unawaited(_aimCameraAtEscalatorExit(from: boardingWgs84, to: arrivalWgs84));
+    unawaited(_aimCameraAtEscalatorExit(points: glidePoints, to: arrivalWgs84));
     // 덮개도 같은 이유로 예약해서 내린다. 걷히면 사용자는 새 층 도면과 다음
     // 경로를 보며 남은 구간을 탄다.
     _floorSwapVeilTimer?.cancel();
@@ -247,20 +251,16 @@ extension OutdoorMapEscalator on OutdoorMapBodyState {
   /// 서 있든 걷든 몸이 오르내린 높이만큼 점이 가고, 끝(1.0)은 하차 확정만이
   /// 채운다 — 점이 끝에 닿는 순간이 곧 실제 하차다.
   void _startEscalatorGlide({
-    required ll.LatLng? from,
-    required ll.LatLng? to,
+    required List<ll.LatLng>? points,
     required EscalatorTransition transition,
-    (ll.LatLng, ll.LatLng)? axis,
   }) {
     _escalatorGlideTimer?.cancel();
     _escalatorGlideTimer = null;
-    if (from == null || to == null) {
+    if (points == null) {
       _escalatorGlide = null;
       return;
     }
-    _escalatorGlide = EscalatorGlide(
-      points: _glidePathPoints(from: from, to: to, axis: axis),
-    );
+    _escalatorGlide = EscalatorGlide(points: points);
     // 진행률 정규화의 양 끝: 지금(도면 교체 순간)의 Δ가 0, 예상 층고가 1이다.
     // 층고는 같은 그룹의 직전 확정 Δ가 있으면 실측을 쓴다.
     final sign = transition.direction == EscalatorDirection.up ? 1.0 : -1.0;
@@ -293,24 +293,23 @@ extension OutdoorMapEscalator on OutdoorMapBodyState {
     });
   }
 
-  /// 활강 폴리라인. 에스컬레이터 축이 있으면 하차 노드에 가까운 끝이 마지막에
-  /// 오도록 방향을 맞춰 끼운다. 양 끝(탑승·하차 노드)과 1m 안으로 겹치는
-  /// 경유점은 버린다 — 겹친 점을 남기면 그 구간 진행률이 0으로 나뉜다.
-  List<ll.LatLng> _glidePathPoints({
-    required ll.LatLng from,
-    required ll.LatLng to,
-    required (ll.LatLng, ll.LatLng)? axis,
-  }) {
-    if (axis == null) return [from, to];
+  /// 그래프 탑승 노드가 폴리곤 축에서 얼마나 벗어나 있었는지 남긴다.
+  ///
+  /// 활강은 이제 축 위에서 시작하므로 이 거리가 화면에 보이지는 않는다. 그래도
+  /// 크게 벌어진 값 자체가 **도면·그래프가 어긋난 층**을 가리키는 신호라 세션
+  /// 기록에 남겨 둔다. 디버그 녹화 중일 때만 찍는다.
+  void _logBoardingNodeAxisGap(
+    ll.LatLng? boarding,
+    List<ll.LatLng>? points,
+    (ll.LatLng, ll.LatLng)? axis,
+  ) {
+    if (_pdrDebugRecorder == null || boarding == null || axis == null) return;
+    if (points == null || points.isEmpty) return;
     const distance = ll.Distance();
-    final (a, b) = axis;
-    final ordered = distance(b, to) <= distance(a, to) ? [a, b] : [b, a];
-    final via = ordered
-        .where(
-          (point) => distance(from, point) >= 1.0 && distance(point, to) >= 1.0,
-        )
-        .toList();
-    return [from, ...via, to];
+    debugPrint(
+      '[escalator] boarding node ↔ axis start: '
+      '${distance(boarding, points.first).toStringAsFixed(1)}m',
+    );
   }
 
   void _stopEscalatorGlide() {
@@ -335,11 +334,14 @@ extension OutdoorMapEscalator on OutdoorMapBodyState {
   /// 방향을 못 구하면(두 노드가 겹쳐 있는 도면) 카메라 각도를 그대로 둔다 —
   /// 틀린 방향으로 돌리는 것보다 안 돌리는 편이 낫다.
   Future<void> _aimCameraAtEscalatorExit({
-    required ll.LatLng? from,
+    required List<ll.LatLng>? points,
     required ll.LatLng? to,
   }) async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
+    // 탑승 중에는 [_indoorFollowActive]가 이미 false지만, 하차 확정으로 탑승이
+    // 풀리는 순간 이 애니메이션이 아직 돌고 있다. 그 겹침만큼 더 재운다.
+    _holdFollowCamera(escalatorGlideDuration);
     if (to == null) {
       // 하차 지점을 모르면 적어도 새 층 경로는 보여 준다(예전 동작).
       final segment = _indoorRouteSegment;
@@ -347,9 +349,11 @@ extension OutdoorMapEscalator on OutdoorMapBodyState {
       return;
     }
     final camera = controller.cameraPosition;
-    final bearing = from == null
+    // 방향도 활강 폴리라인에서 뽑는다. 그래프 탑승 노드는 폴리곤과 어긋나 있어,
+    // 거기서 잰 방위각은 실제로 내리는 쪽과 다른 데를 가리킬 수 있다.
+    final bearing = points == null
         ? null
-        : escalatorExitBearingDeg(boarding: from, arrival: to);
+        : escalatorGlideExitBearingDeg(points);
     await controller.animateCamera(
       CameraUpdate.newCameraPosition(
         CameraPosition(
