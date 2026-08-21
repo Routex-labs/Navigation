@@ -41,19 +41,21 @@ const mapNonWalkableOutline = '#C8C1B8';
 /// 따로 얹는 비용을 낸다.
 const mapStoreOutline = '#A69C90';
 
-/// 고른 매장 폴리곤을 덮는 색.
+/// 고른 매장 폴리곤을 덮는 면의 불투명도.
 ///
-/// **연한 파랑 한 칸이다.** 라벨 아이콘의 선택 색(디자인시스템 `actionPrimary`,
-/// 짙은 청록)과 일부러 다르게 둔다 — 아이콘은 "이거 하나"를 콕 집는 점이고
-/// 이 면은 "여기까지"를 말하는 배경이라, 같은 세기로 칠하면 매장 이름이 면에
-/// 밀린다. 실제 화면에 나타나는 색은 이 값과 [mapSelectionFillOpacity]를 매장
-/// 바닥(`mapStoreFill`) 위에 합성한 결과다.
-const mapSelectionFill = '#4A87F1';
+/// **선택 칠은 매장명 라벨 위에 얹힌다**(레이어 순서가 그렇다). 0.16은 사실상
+/// 안 보였고 0.35는 이름을 먹기 시작했다(실기기 확인). 색이 파랑에서 대분류
+/// 색으로 바뀌면서 0.28에서 한 번 더 내렸다 — 어느 매장을 골랐는지는
+/// [mapSelectionLineWidth]짜리 진한 테두리가 못 박고, 면은 범위만 말한다.
+/// 테두리는 폴리곤 가장자리라 아무리 진해도 이름을 가리지 않는다.
+const mapSelectionFillOpacity = 0.2;
 
-/// **0.16은 사실상 안 보였고 0.35는 매장 이름을 먹기 시작했다**(실기기 확인).
-/// 그 사이에서 이름 쪽에 붙인 값이다 — 어느 매장을 골랐는지는 [mapSelectionLine]
-/// 테두리가 못 박고, 면은 범위만 말한다.
-const mapSelectionFillOpacity = 0.28;
+/// 고른 매장 테두리의 굵기(px). 면을 줄인 만큼 여기서 받는다.
+const mapSelectionLineWidth = 3.0;
 
-/// 고른 매장 폴리곤의 테두리. 면보다 진해야 경계가 읽힌다.
-const mapSelectionLine = '#4A87F1';
+/// 대분류가 없는 매장을 골랐을 때의 잉크.
+///
+/// 색은 [storeSelectionColorExpression]이 대분류마다 고르는데, 표에 없으면
+/// 여기로 떨어진다. **기본 매장 색으로 떨어뜨리면 안 된다** — 골랐는데 아무
+/// 일도 안 일어난 것처럼 보인다.
+const mapSelectionFallback = '#5B5B5B';
