@@ -114,6 +114,8 @@ flutter:
     # 맞춰 두는 것보다 낫다.
     - assets/place_details/
     - assets/mock/sample_building.json
+    - assets/mock/events.json
+    - assets/events/
     - assets/mock/hyundai_floor_1f.json
     - assets/mock/hyundai_floor_map.svg
     - assets/mock/demo_floor_map_v5.svg

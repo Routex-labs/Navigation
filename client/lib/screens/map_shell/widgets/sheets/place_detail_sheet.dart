@@ -6,6 +6,7 @@ import 'package:routex_design_system/routex_design_system.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../../service_locator.dart';
+import '../../../../domain/event/building_events.dart';
 import '../../../../domain/route/dijkstra.dart';
 import '../../../../domain/store/nearby_stores.dart';
 import '../../../../models/place/favorite_place.dart';
@@ -111,6 +112,7 @@ class PlaceDetailTarget {
     this.favorite,
     this.subcategory,
     this.reach,
+    this.event,
   });
 
   final String title;
@@ -119,6 +121,11 @@ class PlaceDetailTarget {
   final FavoritePlace? favorite;
   final String? subcategory;
   final NodeReach? reach;
+
+  /// 지금 이 자리에서 열리는 행사. 있으면 [title]은 **행사 이름**이고 원래 매장
+  /// 이름은 [subtitle]로 내려간다 — `POP-UP ICONIC B2`보다 `명탐정 코난`이
+  /// 사용자가 찾아온 이름이다. 판단은 [PlaceDetailTarget]을 만드는 쪽이 한다.
+  final BuildingEvent? event;
 }
 
 /// 장소 상세 시트에서 호출자에게 돌려주는 다음 동작.
@@ -514,7 +521,14 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                         PlaceDetailSections(
                           sections: sections,
                           showHeroCarousel: false,
-                          overview: RoutexPlaceOverview(
+                          // **행사 카드는 overview 안에 붙인다.** overview가 그냥
+                          // Widget이라 새 슬롯을 만들 이유가 없다. 자리도 여기가
+                          // 맞다 — 이름·행동 바로 밑, 서버 본문보다 위다.
+                          overview: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              RoutexPlaceOverview(
                             mediaItems: heroItems,
                             name: _target.title,
                             metadata: [
@@ -530,6 +544,10 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                             onOrigin: () => _pop(StoreInfoAction.setOrigin),
                             onDestination: () =>
                                 _pop(StoreInfoAction.setDestination),
+                              ),
+                              if (_target.event case final event?)
+                                _EventCard(event: event),
+                            ],
                           ),
                           homeFooter: _nearbyStores.isEmpty
                               ? null
@@ -901,4 +919,107 @@ class _TitledSection extends StatelessWidget {
       child,
     ],
   );
+}
+
+
+/// 상세 시트 위쪽에 붙는 행사 카드. 사진·기간·장소를 한 장에 담는다.
+///
+/// 매장 이름이 이미 행사 이름으로 바뀌어 있으므로([PlaceDetailTarget.event])
+/// 여기서 제목을 다시 적지 않는다 — 같은 글자가 두 줄 겹친다.
+class _EventCard extends StatelessWidget {
+  const _EventCard({required this.event});
+
+  final BuildingEvent event;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.routexColors;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        placeSectionGutter,
+        4,
+        placeSectionGutter,
+        12,
+      ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.surfaceRaised,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (event.image case final path?)
+              ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(12),
+                ),
+                child: AspectRatio(
+                  // 원본이 정사각·가로 섞여 있어 비율을 카드가 정한다. 사진에
+                  // 맞추면 카드 높이가 매장마다 널뛴다.
+                  aspectRatio: 16 / 9,
+                  child: Image.asset(
+                    path,
+                    fit: BoxFit.cover,
+                    // 에셋이 빠져도 카드는 남아야 한다 — 기간·장소가 본문이다.
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  ),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.local_activity_outlined,
+                        size: 14,
+                        color: colors.accentBrand,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '진행 중인 행사',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: colors.accentBrand,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${_date(event.start)} ~ ${_date(event.end)}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: colors.contentPrimary,
+                    ),
+                  ),
+                  if (event.place.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      event.place,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colors.contentSecondary,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// `2026-08-26` → `08.26`.
+  static String _date(String iso) {
+    final parts = iso.split('-');
+    return parts.length == 3 ? '${parts[1]}.${parts[2]}' : iso;
+  }
 }
