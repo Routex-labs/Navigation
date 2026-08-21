@@ -307,6 +307,40 @@ extension OutdoorMapUi on OutdoorMapBodyState {
             ),
           ),
 
+        // 실내/실외 **전환 버튼** — 자동 판정이 문턱을 못 넘는 구간에서만 뜬다.
+        //
+        // 자리는 건물 로드 실패 알림·위치 지정 안내와 **같은 한 자리**다. 셋은
+        // 동시에 뜰 수 있으므로 여기서 순서를 정한다: 건물을 못 불러왔으면
+        // 안팎을 물을 근거 자체가 없고(외곽선이 없다), 위치를 찍는 중이면 그
+        // 안내가 지금 무엇을 하라는 말인지를 쥐고 있다. 전환 버튼은 그 둘이
+        // 없을 때만 그 자리를 쓴다.
+        //
+        // **시작 화면 뒤에서는 안 띄운다** — 덮개에 가려 안 보이는 채로 판정만
+        // 바뀌고, 걷히는 순간 사용자가 누른 적 없는 질문이 이미 떠 있다.
+        if (!widget.startupLoading && !_buildingLoadFailed && !_placingPdrAnchor)
+          Positioned(
+            top: placingHintTopPx,
+            left: 12,
+            right: 12,
+            child: SafeArea(
+              bottom: false,
+              child: ValueListenableBuilder<IndoorTransitionPrompt?>(
+                valueListenable: _transitionPrompt,
+                builder: (_, prompt, _) => prompt == null
+                    ? const SizedBox.shrink()
+                    : Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: RoutexInlineNotice(
+                          key: const Key('indoor-transition-prompt'),
+                          message: prompt.message,
+                          actionLabel: prompt.actionLabel,
+                          onAction: () => confirmTransitionPrompt(prompt),
+                        ),
+                      ),
+              ),
+            ),
+          ),
+
         // GPS 실내 진입 판정의 근거를 그 자리에서 읽기 위한 진단 칩.
         //
         // 실기기를 들고 건물을 드나드는 실험에서, 화면에 보이는 유일한 신호는

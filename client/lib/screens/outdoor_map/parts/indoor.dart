@@ -276,6 +276,20 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
       since: _unclearOutsideSince,
       now: now,
     );
+    _lastBuildingJudgement = judgement;
+    _applyVerdictBranch(position, judgement, now);
+    // 자동 갈래가 상태를 다 바꾼 **뒤에** 묻는다. 먼저 부르면 방금 자동으로
+    // 들어간 사람에게 "안에 계신가요?"가 한 프레임 뜬다.
+    _syncTransitionPrompt();
+  }
+
+  /// [_applyBuildingVerdict]의 판정 갈래. 중간에 빠져나가는 길이 여럿이라
+  /// 따로 뒀다 — 한 함수에 두면 그 return들이 뒤따르는 정리까지 건너뛴다.
+  void _applyVerdictBranch(
+    Position position,
+    GpsBuildingJudgement judgement,
+    DateTime now,
+  ) {
     switch (judgement.verdict) {
       case GpsBuildingVerdict.inside:
         if (_indoorEntered || !_gpsEntryArmed) return;
@@ -284,36 +298,19 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
             context,
           ).showSnackBar(const SnackBar(content: Text('건물 감지 중...')));
         }
-        // _setIndoorEntered가 이 표식을 보므로 **먼저** 세운다.
-        _indoorEnteredByGps = true;
-        _setIndoorEntered(true, source: 'gps');
-        unawaited(_askEntryFloorThenTrack(position));
+        _enterIndoorByEvidence(position, source: 'gps');
       case GpsBuildingVerdict.outside:
         // 건물을 확실히 벗어났다. 다음 진입을 다시 자동으로 잡을 수 있게 한다.
         _gpsEntryArmed = true;
         if (!_indoorEntered) return;
-        if (!_indoorEnteredByGps && !_indoorPositionPlaced) return;
-        // 앵커 배치 대기 중이었다면 함께 종료해 하단 바 버튼 톤도 되돌린다.
-        if (_placingPdrAnchor) _setPlacingAnchor(false);
-        // **이 자리가 유일하게 "정말로 나갔다"고 말할 수 있는 곳이다.**
-        // 실내 위치를 버리는 것도, 실내→야외 안내의 야외 구간을 올리는 것도
-        // 여기서만 일어난다([_setIndoorEntered]의 leftBuilding).
-        _pdrDebugRecorder?.recordIndoorExitEvent(
-          stage: 'confirmed',
+        if (!_indoorClaimed) return;
+        _confirmIndoorExit(
+          position,
           reason: 'gpsOutside',
-          floorId: _activeFloor,
-          gpsAccuracyM: judgement.accuracyMeters,
-          metersOutside: judgement.metersOutside,
+          source: 'gps',
+          judgement: judgement,
           at: now,
         );
-        _setIndoorEntered(false, leftBuilding: true, source: 'gps');
-        // 위치의 주인이 GPS로 돌아온 순간이다. 마커는 [_setIndoorEntered] 안의
-        // [_syncCurrentLayer]가 이미 켰지만, 카메라는 아직 건물을 보고 있다.
-        // 실내에서 도면에 맞춰 확대해 둔 화면 그대로라 방금 켠 GPS 마커가 화면
-        // 밖일 수 있다 — 사용자 눈에는 "나왔는데 내 위치가 없다"로 보인다.
-        //
-        // 들어올 때 카메라가 건물로 붙는 것과 대칭이다. 나가면 나를 따라온다.
-        unawaited(_moveCameraToUser(position));
       case GpsBuildingVerdict.unclear:
         // 문턱을 못 넘는 구간이다. 좌표가 계속 바깥에 찍히고 있으면 **되돌리기
         // 쉬운 것만** 먼저 되돌린다 — 앵커는 그대로 두므로 판정이 틀려도
@@ -327,6 +324,98 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
           );
         }
     }
+  }
+
+  /// 실내로 들어간다 — 상태를 세우고 층을 물은 뒤 위치를 잡는다.
+  ///
+  /// GPS 판정([_applyVerdictBranch])과 전환 버튼([confirmTransitionPrompt])이
+  /// **같은 이 함수를 지난다.** 사람이 누른 것과 자동으로 들어간 것의 결과가
+  /// 다르면, 현장에서 어느 쪽이 틀렸는지 가릴 수 없다. [source]만 갈린다.
+  void _enterIndoorByEvidence(Position position, {required String source}) {
+    // _setIndoorEntered가 이 표식을 보므로 **먼저** 세운다.
+    _indoorEnteredByGps = true;
+    _setIndoorEntered(true, source: source);
+    unawaited(_askEntryFloorThenTrack(position));
+  }
+
+  /// **확정 이탈** — 실내 위치를 버리고 야외로 되돌린다.
+  ///
+  /// 실내 위치를 버리는 것도, 실내→야외 안내의 야외 구간을 올리는 것도 여기서만
+  /// 일어난다([_setIndoorEntered]의 leftBuilding). 부르는 곳은 둘이다: GPS가
+  /// 건물 밖이라고 확정한 순간과, 사용자가 전환 버튼을 누른 순간.
+  ///
+  /// [position]이 null이면 카메라만 그대로 둔다 — 좌표가 없으면 옮길 자리도 없다.
+  void _confirmIndoorExit(
+    Position? position, {
+    required String reason,
+    required String source,
+    GpsBuildingJudgement? judgement,
+    DateTime? at,
+  }) {
+    // 앵커 배치 대기 중이었다면 함께 종료해 하단 바 버튼 톤도 되돌린다.
+    if (_placingPdrAnchor) _setPlacingAnchor(false);
+    _pdrDebugRecorder?.recordIndoorExitEvent(
+      stage: 'confirmed',
+      reason: reason,
+      floorId: _activeFloor,
+      gpsAccuracyM: judgement?.accuracyMeters,
+      metersOutside: judgement?.metersOutside,
+      at: at,
+    );
+    _setIndoorEntered(false, leftBuilding: true, source: source);
+    // 위치의 주인이 GPS로 돌아온 순간이다. 마커는 [_setIndoorEntered] 안의
+    // [_syncCurrentLayer]가 이미 켰지만, 카메라는 아직 건물을 보고 있다.
+    // 실내에서 도면에 맞춰 확대해 둔 화면 그대로라 방금 켠 GPS 마커가 화면
+    // 밖일 수 있다 — 사용자 눈에는 "나왔는데 내 위치가 없다"로 보인다.
+    //
+    // 들어올 때 카메라가 건물로 붙는 것과 대칭이다. 나가면 나를 따라온다.
+    if (position != null) unawaited(_moveCameraToUser(position));
+  }
+
+  /// 지금 띄울 전환 버튼을 다시 고른다. 판정을 바꾸는 값이 움직인 자리마다
+  /// 부른다(GPS 판정 · 약한 이탈 · 실내 상태 변경).
+  ///
+  /// 화면 전체를 다시 그리지 않는다 — 좌표마다 도는 경로라 진단 칩과 같은
+  /// 이유로 [ValueNotifier]다([_gpsVerdictDebugText]).
+  void _syncTransitionPrompt() {
+    _transitionPrompt.value = indoorTransitionPrompt(
+      indoorEntered: _indoorEntered,
+      indoorClaimed: _indoorClaimed,
+      judgement: _lastBuildingJudgement,
+      weakExitApplied: _weakExitApplied,
+      outsideClockRunning: _unclearOutsideSince != null,
+    );
+  }
+
+  /// 전환 버튼을 눌렀다. **사람의 답이 GPS보다 세다** — 오차·문턱을 다시 보지
+  /// 않고 그대로 확정한다. 이 버튼이 있는 이유가 그 문턱을 못 넘는 구간이다.
+  ///
+  /// 누르고 난 뒤 자동 갈래가 곧바로 되돌리면 안 된다:
+  /// - 나갔다고 했으면 자동 진입을 **끈다**([_exitIndoorByOutsideTap]과 같은
+  ///   이유 — GPS는 여전히 "안"이라 다음 좌표 한 건이 다시 끌고 들어간다).
+  /// - 들어왔다고 했으면 자동 이탈은 그대로 둔다. 걸어 나가면 GPS가 알아서
+  ///   확정 이탈을 건다.
+  void confirmTransitionPrompt(IndoorTransitionPrompt prompt) {
+    final position = _position;
+    switch (prompt) {
+      case IndoorTransitionPrompt.enterIndoor:
+        if (_indoorEntered) return;
+        if (position == null) {
+          _showSnack('현재 위치를 아직 못 잡았습니다. 신호가 잡히면 다시 눌러주세요.');
+          return;
+        }
+        _enterIndoorByEvidence(position, source: 'transitionPrompt');
+      case IndoorTransitionPrompt.exitOutdoor:
+        if (!_indoorEntered) return;
+        _gpsEntryArmed = false;
+        _confirmIndoorExit(
+          position,
+          reason: 'transitionPrompt',
+          source: 'transitionPrompt',
+          judgement: _lastBuildingJudgement,
+        );
+    }
+    _syncTransitionPrompt();
   }
 
   /// **약한 이탈** — 되돌리기 쉬운 것만 되돌린다.
@@ -359,6 +448,9 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
     _gpsEntryArmed = true;
     _entryFloorAsked = false;
     _nearbyStoreAsked = false;
+    // 약한 이탈은 전환 버튼의 근거이기도 하다. 여기서 안 부르면 문 앞에 닿아
+    // 래치가 선 순간이 아니라 **다음 GPS 좌표**에서야 버튼이 뜬다.
+    _syncTransitionPrompt();
     unawaited(_resetActiveFloorToDefault());
   }
 
@@ -825,6 +917,14 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
   /// 근거가 못 된다.
   bool get _indoorPositionPlaced => _pdrTrailState.anchor != null;
 
+  /// 앱이 이 사람을 **건물 안이라고 믿는지**. 자동으로 들어왔거나 실내 앵커가
+  /// 찍혀 있으면 그렇다.
+  ///
+  /// 자동 이탈([_applyVerdictBranch])과 전환 버튼([_syncTransitionPrompt])이
+  /// 같은 조건을 쓴다 — 도면만 구경하려고 확대해 연 사람은 어느 쪽으로도
+  /// 밖으로 끌려 나가지 않는다.
+  bool get _indoorClaimed => _indoorEnteredByGps || _indoorPositionPlaced;
+
   /// [_indoorEntered] 상태 변경을 한 곳으로 모은 헬퍼. setState·상위 통지에 더해
   /// dim scrim·마커·페이드까지 여기서 함께 갱신한다.
   ///
@@ -893,6 +993,9 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
       _enqueueFloorTransition(_endEscalatorRide);
     }
     setState(() => _indoorEntered = value);
+    // 실내 상태가 곧 전환 버튼의 방향이다. 여기서 갱신하므로 확대 진입·시트
+    // 탭·바깥 탭처럼 GPS를 안 거치는 경로에서도 버튼이 따라 뒤집힌다.
+    _syncTransitionPrompt();
     widget.onIndoorEnteredChanged?.call(value);
     // 진입/이탈로 "지금 보고 있는 층"의 유무 자체가 바뀐다.
     _notifyActiveFloor();

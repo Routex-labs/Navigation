@@ -99,6 +99,7 @@ import 'camera/building_orientation.dart';
 import 'entry/indoor_entry_proximity.dart';
 import 'entry/indoor_entry_zoom.dart';
 import 'entry/indoor_exit_evidence.dart';
+import 'entry/indoor_transition_prompt.dart';
 import 'outdoor_map_tuning.dart';
 import 'widgets/placing_anchor_hint.dart';
 import 'route_recompute_policy.dart';
@@ -1058,6 +1059,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _debugModeController.removeListener(_onDebugModeChanged);
     _gpsVerdictDebugText.dispose();
     _escalatorDebugText.dispose();
+    _transitionPrompt.dispose();
     super.dispose();
   }
 
@@ -1144,6 +1146,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 들어오는 사람도 문 앞을 지나므로, 이 래치가 없으면 진입 직후에 곧바로
   /// 이탈로 읽는다([stepExitDoorEvidence]).
   bool _leftExitDoorZone = false;
+
+  /// 마지막 GPS 안팎 판정. 전환 버튼이 이 값을 읽는다
+  /// ([_syncTransitionPrompt]) — 버튼과 자동 갈래가 **같은 판정 한 건**을 봐야
+  /// 화면에 뜬 말과 실제 동작이 어긋나지 않는다.
+  GpsBuildingJudgement? _lastBuildingJudgement;
+
+  /// 지금 띄울 전환 버튼. null이면 안 그린다. 고르는 규칙은
+  /// [indoorTransitionPrompt]가 단일 출처다.
+  final ValueNotifier<IndoorTransitionPrompt?> _transitionPrompt =
+      ValueNotifier<IndoorTransitionPrompt?>(null);
 
   /// 좌표가 **바깥에 찍히기 시작한** 시각. 안쪽으로 찍히면 null로 되돌린다.
   ///
