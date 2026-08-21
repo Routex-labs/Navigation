@@ -457,34 +457,47 @@ extension OutdoorMapGuidance on OutdoorMapBodyState {
 
   /// 진단 세션 하나를 새로 연다.
   ///
-  /// **실외 구간을 품은 세션은 갈아 끼우지 않는다.** 나갔다 들어온 뒤 새 길찾기를
-  /// 시작하는 것이 여기로 들어오는데, 그때 레코더를 새로 만들면 나갈 때 걸은
-  /// 구간이 통째로 사라진다 — 실내→실외→실내를 JSON 하나로 남기려는 것이 이
-  /// 분기의 유일한 이유다([PdrDebugSessionRecorder.spansBuildingExit]).
+  /// **디버그 모드에서는 레코더를 갈아 끼우지 않는다.** 경계만 찍고 이어 간다.
+  /// 여기가 실측에서 파일이 잘리던 자리다 — 문 앞에서 안내가 끝나면
+  /// [_endRouteRecordingSession]이 `routeEnded`를 찍고, 밖에서 다시 길을 잡는
+  /// 순간 이 함수가 새 레코더를 만들어 방금까지의 구간을 통째로 버렸다. 정작
+  /// 보려던 것(문 밖 GPS 표류, 길 건너에서 시작하는 경로, 재진입 뒤 마커)은
+  /// 전부 그 다음에 일어난다.
+  ///
+  /// **닫는 것은 사람이다** — 사용자가 JSON을 내보내는 순간이 세션의 끝이다
+  /// ([_exportPdrDebugJson]). 그래야 파일이 무한히 자라지 않는다(표본 배열에는
+  /// 상한이 없다).
+  ///
+  /// 디버그가 꺼진 일반 사용자에게는 예전 그대로 **길안내 한 건이 세션 하나**다.
+  /// 실외 구간을 품은 세션만은 그때도 갈지 않는다
+  /// ([PdrDebugSessionRecorder.spansBuildingExit]) — 나갈 때 걸은 구간이 사라진다.
   void _beginRouteRecordingSession() {
     _ensureGuidanceTrailSessionStarted();
     final continued = _pdrDebugRecorder;
-    if (continued != null && continued.spansBuildingExit) {
-      continued.recordSessionBoundary('routeStartedAfterReEntry');
+    if (continued != null &&
+        (_debugModeController.enabled || continued.spansBuildingExit)) {
+      continued.recordSessionBoundary(
+        continued.spansBuildingExit
+            ? 'routeStartedAfterReEntry'
+            : 'routeStarted',
+      );
       return;
     }
-    _pdrDebugRecorder = PdrDebugSessionRecorder()
-      ..recordRuntime(indoorNavigationDriver.currentRuntimeStatus);
-    final snapshot = indoorNavigationDriver.currentSnapshot;
-    if (snapshot != null) _pdrDebugRecorder?.recordSnapshot(snapshot);
-    _pdrDebugRecorder?.recordCalibration(
-      indoorNavigationDriver.currentCalibration,
-    );
+    _pdrDebugRecorder = _openRouteRecordingSession();
   }
 
-  /// 경로가 해제되면 세션을 닫는다. [announceExport]는 세션 경계 기록에만 쓴다
-  /// — 사용자가 끝낸 것(routeEnded)과 새 경로로 갈아탄 것(routeReplaced)을
-  /// 사후 분석에서 구분하기 위해서다.
-  ///
-  /// 예전에는 여기서 "진단 JSON을 내보낼 수 있다"는 토스트를 띄웠다. 안내가
-  /// 끝나는 순간은 도착 카드가 뜨는 순간이라 토스트가 그 위를 덮었고, 내보내기
-  /// 진입점은 디버그 모드의 공유 버튼([PdrMapControl])이 이미 지도에 상시로
-  /// 있다 — 같은 일을 하는 두 번째 입구가 화면을 가리기만 했다.
+  /// 레코더 하나를 만들어 지금의 런타임·스냅샷·보정으로 채운다. 새 세션이
+  /// 열리는 자리가 둘이라([_beginRouteRecordingSession]·[_exportPdrDebugJson])
+  /// 채우는 순서를 한 곳에 둔다.
+  PdrDebugSessionRecorder _openRouteRecordingSession() {
+    final recorder = PdrDebugSessionRecorder()
+      ..recordRuntime(indoorNavigationDriver.currentRuntimeStatus);
+    final snapshot = indoorNavigationDriver.currentSnapshot;
+    if (snapshot != null) recorder.recordSnapshot(snapshot);
+    recorder.recordCalibration(indoorNavigationDriver.currentCalibration);
+    return recorder;
+  }
+
   /// 진단 세션을 여는 테스트 진입점. 실기기에서는 길안내 시작이 이 자리를
   /// 지나는데(`_computeAndShow*IndoorRoute`), 그 흐름은 층 그래프·목적지·경로
   /// 응답을 모두 갖춰야 해서 GPS 출입만 시험하는 테스트는 준비할 수 없다
@@ -492,11 +505,27 @@ extension OutdoorMapGuidance on OutdoorMapBodyState {
   @visibleForTesting
   void beginRouteRecordingSessionForTest() => _beginRouteRecordingSession();
 
+  /// 안내가 끝나는 순간의 테스트 진입점. 위와 같은 이유로 실제 경로 해제
+  /// 흐름(`_clearIndoorRoute`)을 준비할 수 없다.
+  @visibleForTesting
+  void endRouteRecordingSessionForTest() => _endRouteRecordingSession();
+
   /// 지금 열려 있는 진단 세션. 나갔다 들어와도 **같은 인스턴스**인지가
   /// "한 주행이 JSON 하나로 남는가"의 검증 기준이다.
   @visibleForTesting
   PdrDebugSessionRecorder? get debugRecorderForTest => _pdrDebugRecorder;
 
+  /// 경로가 해제된 것을 시계열에 남긴다. [announceExport]는 세션 경계 기록에만
+  /// 쓴다 — 사용자가 끝낸 것(routeEnded)과 새 경로로 갈아탄 것(routeReplaced)을
+  /// 사후 분석에서 구분하기 위해서다.
+  ///
+  /// **레코더는 여기서 놓지 않는다.** 경계를 찍을 뿐이고, 갈아 끼울지는
+  /// [_beginRouteRecordingSession]이 정한다.
+  ///
+  /// 예전에는 여기서 "진단 JSON을 내보낼 수 있다"는 토스트를 띄웠다. 안내가
+  /// 끝나는 순간은 도착 카드가 뜨는 순간이라 토스트가 그 위를 덮었고, 내보내기
+  /// 진입점은 디버그 모드의 공유 버튼([PdrMapControl])이 이미 지도에 상시로
+  /// 있다 — 같은 일을 하는 두 번째 입구가 화면을 가리기만 했다.
   void _endRouteRecordingSession({bool announceExport = true}) {
     final recorder = _pdrDebugRecorder;
     if (recorder == null) return;

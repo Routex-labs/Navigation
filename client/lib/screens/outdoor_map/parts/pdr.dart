@@ -630,6 +630,16 @@ extension OutdoorMapPdr on OutdoorMapBodyState {
     );
   }
 
+  /// **내보내기가 세션을 닫는다**(디버그 모드에서 세션을 닫는 유일한 자리).
+  ///
+  /// 디버그 모드에서는 안내가 끝나도 레코더를 갈지 않으므로
+  /// ([_beginRouteRecordingSession]), 끝을 정하는 것이 여기밖에 없다. 표본
+  /// 배열에 상한이 없어서 아무도 안 닫으면 파일이 주행 시간에 비례해 계속 자란다
+  /// (20분 ≈ 1 MB).
+  ///
+  /// 닫는 즉시 새 세션을 연다 — 내보낸 뒤 계속 걸으면 그 구간도 남아야 한다.
+  /// 그 사실은 스낵으로 한 줄 말한다. 안 말하면 방금 내보낸 파일에 다음 걸음이
+  /// 이어 붙는 줄 알고 계속 걷게 된다.
   Future<void> _exportPdrDebugJson() async {
     final recorder = _pdrDebugRecorder;
     if (recorder == null || !recorder.hasSnapshot || _exportingPdrDebugJson) {
@@ -639,6 +649,9 @@ extension OutdoorMapPdr on OutdoorMapBodyState {
     setState(() => _exportingPdrDebugJson = true);
     try {
       final device = await PdrDebugDeviceInfo.load();
+      // 경계는 [buildJson] **앞에서** 찍는다. 뒤에 찍으면 내보낸 파일에만
+      // 그 줄이 없어, 파일만 보고는 어디서 끝난 세션인지 알 수 없다.
+      recorder.recordSessionBoundary('exported');
       final session = recorder.buildJson(
         buildingId: _building?.id ?? demoBuildingId,
         selectedFloor: _activeFloor,
@@ -650,11 +663,22 @@ extension OutdoorMapPdr on OutdoorMapBodyState {
         session,
         sharePositionOrigin: _pdrSharePositionOrigin(),
       );
+      if (mounted) rotateRecordingSessionAfterExport();
     } on Object catch (error) {
+      // 공유가 실패했으면 **갈지 않는다.** 넘기지도 못한 세션을 버리면 그
+      // 주행이 통째로 없어진다.
       if (mounted) _showSnack('PDR JSON을 내보내지 못했습니다: $error');
     } finally {
       if (mounted) setState(() => _exportingPdrDebugJson = false);
     }
+  }
+
+  /// 내보낸 세션을 놓고 새 세션을 연다. 공유 시트를 띄우지 않고 이 전이만
+  /// 시험할 수 있도록 이름 있는 자리로 뺐다.
+  @visibleForTesting
+  void rotateRecordingSessionAfterExport() {
+    _pdrDebugRecorder = _openRouteRecordingSession();
+    _showSnack('세션을 내보냈습니다. 지금부터는 새 세션으로 기록합니다.');
   }
 
   /// iOS 공유 시트는 popover 기준 사각형이 필요하다. 전달하지 않으면
