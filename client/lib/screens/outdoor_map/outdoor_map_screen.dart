@@ -90,6 +90,7 @@ import '../../map/icon/icon_cache.dart';
 import '../../map/icon/place_pin.dart';
 import 'widgets/map_overlay_tap_guard.dart';
 import 'entry/floor_outline.dart';
+import 'gps/gps_jump_filter.dart';
 import 'gps/gps_session.dart';
 import 'entry/gps_entry_floor.dart';
 import 'entry/indoor_entry_gps.dart';
@@ -505,6 +506,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 지금 그려진 경로가 자동차 경로인지. 선 모양이 이 값으로 갈린다 —
   /// 자동차는 실선, 걷기는 점선이다([geoJsonLineFeature]).
   bool _routeIsDriving = false;
+
+  /// 도약 거르기가 들고 있는 기준점. 규칙은 [stepGpsJumpFilter].
+  GpsJumpFilterState _gpsJumpFilter = const GpsJumpFilterState();
 
   /// 지금 그려진 대중교통 안내. null이면 대중교통 경로가 없다.
   TransitItinerary? _transitItinerary;

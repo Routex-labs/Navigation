@@ -19,6 +19,24 @@ extension OutdoorMapGps on OutdoorMapBodyState {
   /// 겸하면 실내 도면 위에 건물 밖 GPS 점이 찍힌다.
   bool get _outdoorGpsVisible => widget.active && !_indoorEntered;
 
+  /// 진입 직후 실내 위치가 아직 없을 때 **자리만 지키는** GPS 좌표. 없으면 null.
+  ///
+  /// 실내로 들어간 순간 GPS 마커는 꺼지는데([_outdoorGpsVisible]), 실내 마커는
+  /// 앵커를 찍고 보정이 수렴해야 나온다([_startTrackingFromGpsFix]). 실측에서 그
+  /// 공백이 25초였고 그동안 화면에 위치가 하나도 없었다 — 진입 판정은 맞았는데
+  /// "내 위치를 알려주는 게 안 뜬다"로 올라온 화면이 이것이다. 그 구간을 이
+  /// 좌표가 흐린 점 하나로 메운다([indoorMarkerAt]의 3순위).
+  ///
+  /// **표시 전용이다.** 건물 밖에서 찍힌 좌표라 도면 위 엉뚱한 자리일 수 있어,
+  /// 앵커·길안내 출발지·"내 위치로"([_canRecenterOnCurrentPosition])는 이 값을
+  /// 보지 않는다 — 그쪽은 전부 [_pdrCurrentWgs84]만 본다.
+  ll.LatLng? get _indoorGapGpsPoint {
+    if (!_indoorLocationVisible) return null;
+    final position = _position;
+    if (position == null) return null;
+    return ll.LatLng(position.latitude, position.longitude);
+  }
+
   void _syncGpsSubscription() {
     if (_gpsTrackingWanted) {
       _gps.start();
@@ -31,12 +49,18 @@ extension OutdoorMapGps on OutdoorMapBodyState {
     _pendingCenterOnPosition = false;
     if (!mounted) return;
     setState(() => _position = null);
+    // 구독이 끊긴 동안 사용자는 어디로든 갈 수 있다. 옛 기준점을 들고 있으면
+    // 돌아왔을 때 옳은 좌표를 거른다.
+    _gpsJumpFilter = const GpsJumpFilterState();
     _syncCurrentLayer();
   }
 
   void _handlePositionError() {
     if (!mounted) return;
     setState(() => _position = null);
+    // 구독이 끊긴 동안 사용자는 어디로든 갈 수 있다. 옛 기준점을 들고 있으면
+    // 돌아왔을 때 옳은 좌표를 거른다.
+    _gpsJumpFilter = const GpsJumpFilterState();
     _syncCurrentLayer();
   }
 
@@ -49,10 +73,44 @@ extension OutdoorMapGps on OutdoorMapBodyState {
         ? null
         : position.timestamp.difference(_lastFixAt!);
     _lastFixAt = position.timestamp;
+    // 오차 값이 아니라 **물리**로 거른다. 상한·유예·항복의 근거는
+    // [stepGpsJumpFilter]. 거른 좌표는 표시에서도 판정에서도 뺀다.
+    final jump = stepGpsJumpFilter(
+      state: _gpsJumpFilter,
+      point: ll.LatLng(position.latitude, position.longitude),
+      at: position.timestamp,
+      walking: !_routeIsDriving,
+    );
+    _gpsJumpFilter = jump.state;
+    if (!jump.accepted || jump.surrendered) {
+      // 거른 건과 **항복해서 받아들인** 건을 같은 배열에 남긴다. 항복이 잦으면
+      // 상한이 너무 빡빡하다는 뜻이라, 다음 실측에서 그것부터 본다.
+      _pdrDebugRecorder?.recordGpsRejectedFix(
+        jumpM: jump.jumpM!,
+        allowanceM: jump.allowanceM!,
+        elapsedSeconds: jump.elapsedSeconds,
+        gpsAccuracyM: position.accuracy,
+        surrendered: jump.surrendered,
+        indoorEntered: _indoorEntered,
+        at: position.timestamp,
+      );
+      if (!jump.accepted) {
+        // **표시에서만 뺀다.** 건물 안팎 판정에는 그대로 넣는다 — 이탈은 이제 문
+        // 근거가 주 경로이고, 여기서 좌표를 빼면 판정이 늦어지는 대가만 확실해진다.
+        // 판정에서도 빼야 하는지는 `gps_rejected_fixes`가 다음 실측에서 답한다:
+        // 거른 좌표가 verdict를 뒤집었을 값이었는지 보고 정한다.
+        _applyBuildingVerdict(position, sinceLastFix: sinceLastFix);
+        return;
+      }
+    }
     // 실내에서도 좌표는 **들고 있는다.** 진입/이탈 판정의 유일한 입력이고,
     // 화면에 그릴지는 [_outdoorGpsVisible]이 따로 가른다([_syncCurrentLayer]).
     setState(() => _position = position);
     _syncCurrentLayer();
+    // 실내 공백 구간에는 이 좌표가 마커의 자리를 지킨다([_indoorGapGpsPoint]).
+    // 좌표가 갱신되면 실내 마커 소스도 다시 써야 그 점이 따라 움직인다 — 안
+    // 쓰면 진입 순간의 좌표에 점이 못 박힌 채로 25초를 버틴다.
+    if (_indoorEntered) unawaited(_syncPdrCurrentLayer());
     // 안내 중이면 카메라가 사용자를 따라간다. 판정보다 먼저 두는 이유는, 이번
     // 위치로 실내에 들어가면 따라가기가 꺼지기 때문이다 — 그때는 카메라의
     // 주인이 실내 위치(PDR)로 바뀐다.
