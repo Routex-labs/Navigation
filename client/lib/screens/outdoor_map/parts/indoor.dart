@@ -1263,6 +1263,8 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
       controller,
       kOutdoorHighlightSourceId,
       store?.polygon,
+      // 면·선 색을 이 값으로 고른다. 없으면 회색 잉크로 떨어진다.
+      properties: {'category': store?.category},
     );
     await _syncIndoorOverlayFade(scope: IndoorOverlaySyncScope.labels);
   }
