@@ -1296,9 +1296,14 @@ class _SearchPanelState extends State<SearchPanel> {
     // 조작(전체 보기·다시 선택)은 **칩이 아니라 버튼이다.** 위 칩들은 "이 값으로
     // 좁혀라"이고 이 둘은 "좁히지 말고 다 봐라"·"방금 답을 되돌려라"라 성격이 다르다.
     // 같은 모양으로 두고 구분선으로 가르던 것을 그만둔다 — 모양이 다르면 선이 필요
-    // 없다. clarify 화면에서는 전체 보기가 이미 선택지 줄 끝에 있어 여기서는 뺀다.
+    // 없다.
+    //
+    // clarify 화면에서도 여기 둔다. 예전에는 선택지 줄 끝에 붙여 두었는데, 그
+    // 버튼이 가로 폭을 먼저 가져가는 바람에 마지막 칩이 "한식 (1..." 처럼 잘렸다.
+    // 선택지가 잘리는 것보다 버튼이 한 줄 아래로 내려가는 편이 낫다 — 칩은 읽어야
+    // 고르고, 버튼은 자리만 있으면 된다.
     final trailingActions = <Widget>[
-      if (canShowAll && !isClarify)
+      if (canShowAll)
         RoutexButton(
           key: const Key('show-all'),
           label: '전체 보기',
@@ -1355,49 +1360,29 @@ class _SearchPanelState extends State<SearchPanel> {
             if (_discoveryOptions.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: RoutexChipBar(
-                        options: [
-                          for (final option in _discoveryOptions)
-                            RoutexChipOption(
-                              // 칩 줄이 이 id를 그대로 위젯 key로 쓴다.
-                              id: 'facet-option-${option.facet}-${option.value}',
-                              label: option.label,
-                              count: option.count,
-                            ),
-                        ],
-                        // 고르는 순간 다음 질문으로 넘어가므로 이 줄에는 선택이
-                        // 머무르지 않는다.
-                        selectedId: null,
-                        onSelected: (id) {
-                          if (id == null) return;
-                          _selectFacet(
-                            _discoveryOptions.firstWhere(
-                              (option) =>
-                                  'facet-option-${option.facet}-${option.value}' ==
-                                  id,
-                            ),
-                          );
-                        },
-                        semanticsLabel: '선택지',
+                child: RoutexChipBar(
+                  options: [
+                    for (final option in _discoveryOptions)
+                      RoutexChipOption(
+                        // 칩 줄이 이 id를 그대로 위젯 key로 쓴다.
+                        id: 'facet-option-${option.facet}-${option.value}',
+                        label: option.label,
+                        count: option.count,
                       ),
-                    ),
-                    // **줄 안에 섞지 않는다.** 위 칩들은 "이 값으로 좁혀라"이고 이건
-                    // "좁히지 말고 다 봐라"다. 예전에는 구분선으로 갈랐는데, 성격이
-                    // 다른 것을 같은 줄에 두고 선으로 나누는 것보다 스크롤 밖에
-                    // 고정해 두는 편이 분명하다 — 선택지가 길어도 안 밀려난다.
-                    if (canShowAll) ...[
-                      const SizedBox(width: RoutexSpacing.controlGap),
-                      RoutexButton(
-                        key: const Key('show-all'),
-                        label: '전체 보기',
-                        variant: RoutexButtonVariant.quiet,
-                        onPressed: () => _requestDiscovery(showAll: true),
-                      ),
-                    ],
                   ],
+                  // 고르는 순간 다음 질문으로 넘어가므로 이 줄에는 선택이
+                  // 머무르지 않는다.
+                  selectedId: null,
+                  onSelected: (id) {
+                    if (id == null) return;
+                    _selectFacet(
+                      _discoveryOptions.firstWhere(
+                        (option) =>
+                            'facet-option-${option.facet}-${option.value}' == id,
+                      ),
+                    );
+                  },
+                  semanticsLabel: '선택지',
                 ),
               ),
           ],
