@@ -383,10 +383,18 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
       doorPointsM: doors,
     );
     _leftExitDoorZone = step.leftDoorZone;
-    if (!step.reached) return;
-    _applyWeakExit(
-      'exitDoorReached',
-      doorDistanceM: nearestExitDoorDistanceM(positionM, doors),
+    if (step.reached) {
+      _applyWeakExit('exitDoorReached', doorDistanceM: step.doorDistanceM);
+      return;
+    }
+    // 안 걸렸으면 **왜 안 걸렸는지**를 남긴다. 이 갈래가 통째로 안 도는 주행이
+    // 있었는데, 파일에 "안 걸렸다"는 흔적조차 없어 문턱(15 m)이 문제인지 PDR이
+    // 문까지 못 온 것인지 가릴 수가 없었다. 레코더는 **가장 가까웠던 한 건**만
+    // 들고 있으므로 걸음마다 불러도 파일이 안 자란다.
+    _pdrDebugRecorder?.recordExitDoorMiss(
+      reason: step.missReason ?? 'unknown',
+      doorDistanceM: step.doorDistanceM,
+      floorId: _activeFloor,
     );
   }
 

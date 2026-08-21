@@ -1142,8 +1142,9 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   bool _leftExitDoorZone = false;
 
   /// 좌표가 **바깥에 찍히기 시작한** 시각. 안쪽으로 찍히면 null로 되돌린다.
-  /// 판정을 못 믿는 좌표(오차 초과·외곽선 없음)는 이 값을 건드리지 않는다
-  /// ([nextUnclearOutsideSince]).
+  ///
+  /// 어느 좌표가 이 시계를 세우고 지우고 그대로 두는지는 [nextUnclearOutsideSince]가
+  /// 단일 출처다 — **오차는 안 본다.** 거리 세 띠로 가른다.
   DateTime? _unclearOutsideSince;
 
   /// GPS 구독을 [_gpsTrackingWanted] 상태에 맞춘다. 구독 시작/해제의 유일한

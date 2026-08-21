@@ -66,7 +66,8 @@ GpsBuildingJudgement _judgement({
   hasFootprint: hasFootprint,
 );
 
-({bool leftDoorZone, bool reached}) _step({
+({bool leftDoorZone, bool reached, String? missReason, double? doorDistanceM})
+_step({
   required bool leftDoorZone,
   required double x,
   required double y,
@@ -167,14 +168,14 @@ void main() {
 
     test('바깥이면 시작 시각을 세우고 이후에도 유지한다', () {
       final since = nextUnclearOutsideSince(
-        judgement: _judgement(outside: 2),
+        judgement: _judgement(outside: outdoorExitMarginMeters),
         since: null,
         now: t0,
       );
       expect(since, t0);
       expect(
         nextUnclearOutsideSince(
-          judgement: _judgement(outside: 5),
+          judgement: _judgement(outside: outdoorExitMarginMeters + 5),
           since: since,
           now: t0.add(const Duration(seconds: 5)),
         ),
@@ -193,20 +194,98 @@ void main() {
       );
     });
 
-    test('못 믿는 좌표는 시계를 건드리지 않는다', () {
-      for (final judgement in [
-        _judgement(accuracy: outdoorExitAccuracyMeters + 1),
-        _judgement(hasFootprint: false),
-      ]) {
-        expect(
-          nextUnclearOutsideSince(
-            judgement: judgement,
-            since: t0,
-            now: t0.add(const Duration(seconds: 5)),
+    test('외곽선을 모르면 시계를 건드리지 않는다', () {
+      expect(
+        nextUnclearOutsideSince(
+          judgement: _judgement(hasFootprint: false),
+          since: t0,
+          now: t0.add(const Duration(seconds: 5)),
+        ),
+        t0,
+      );
+    });
+
+    // 이 갈래가 실측에서 한 번도 안 돈 이유. 예전에는 오차가 문턱을 넘으면
+    // 시계를 못 세웠는데, 나가는 구간이 정확히 오차가 큰 구간이다.
+    test('오차가 커도 바깥이면 시계를 세운다', () {
+      expect(
+        nextUnclearOutsideSince(
+          judgement: _judgement(
+            accuracy: outdoorExitAccuracyMeters * 3,
+            outside: outdoorExitMarginMeters,
           ),
-          t0,
-        );
-      }
+          since: null,
+          now: t0,
+        ),
+        t0,
+      );
+    });
+
+    test('완충 띠는 세우지도 지우지도 않는다', () {
+      final buffer = _judgement(outside: outdoorExitMarginMeters - 0.1);
+      expect(
+        nextUnclearOutsideSince(judgement: buffer, since: null, now: t0),
+        isNull,
+      );
+      expect(
+        nextUnclearOutsideSince(
+          judgement: buffer,
+          since: t0,
+          now: t0.add(const Duration(seconds: 5)),
+        ),
+        t0,
+      );
+    });
+  });
+
+  // 안 걸린 이유는 레코더가 그대로 파일에 적는다. 이유가 갈려야 다음 실측에서
+  // "문턱이 문제인지 PDR이 못 온 것인지"를 가른다.
+  group('stepExitDoorEvidence의 missReason', () {
+    test('걸리면 null, 반경 밖이면 거리와 함께 이유가 붙는다', () {
+      final away = _step(leftDoorZone: false, x: 0, y: 40);
+      expect(away.missReason, 'outsideReachRadius');
+      expect(away.doorDistanceM, closeTo(50, 1e-9));
+      final back = _step(leftDoorZone: true, x: 0, y: -8);
+      expect(back.reached, isTrue);
+      expect(back.missReason, isNull);
+      expect(back.doorDistanceM, closeTo(2, 1e-9));
+    });
+
+    test('게이트마다 다른 이유가 나온다', () {
+      expect(
+        _step(leftDoorZone: true, x: 0, y: -8, onDefaultFloor: false).missReason,
+        'offDefaultFloor',
+      );
+      expect(
+        _step(leftDoorZone: true, x: 0, y: -8, state: null).missReason,
+        'noTracker',
+      );
+      expect(
+        _step(
+          leftDoorZone: true,
+          x: 0,
+          y: -8,
+          state: CorridorTrackingState.uncertain,
+        ).missReason,
+        'trackerUncertain',
+      );
+      expect(
+        _step(leftDoorZone: true, x: 0, y: -8, doors: const []).missReason,
+        'noDoorDistance',
+      );
+      expect(
+        _step(leftDoorZone: false, x: 0, y: -8).missReason,
+        'neverLeftDoorZone',
+      );
+    });
+
+    // 층·트래커 게이트에 막혀도 거리는 잰다 — 그 값이 곧 "얼마나 다가갔나"다.
+    test('게이트에 막혀도 거리는 채운다', () {
+      expect(
+        _step(leftDoorZone: true, x: 0, y: -8, onDefaultFloor: false)
+            .doorDistanceM,
+        closeTo(2, 1e-9),
+      );
     });
   });
 

@@ -35,10 +35,16 @@ const kExitDoorReachRadiusMeters = 15.0;
 
 /// unclear가 이어지는 동안 좌표가 계속 바깥에 찍히면, 이만큼 뒤 약한 이탈로 본다.
 ///
-/// **실측 없이 정한 값이다.** 좌표가 1 Hz 안팎이라 20초는 연속 20건쯤에 해당한다 —
-/// 벽 옆에서 한두 건이 튀는 것으로는 안 걸리고, 정말 걸어 나갔다면 그 안에 채운다.
-/// 틀렸을 때의 비용이 층 하나뿐이라 짧은 쪽으로 잡았다. 실기기 로그에서 문을 지난
-/// 시각과 이 값이 걸린 시각의 차를 재서 조정한다.
+/// **실측 없이 정한 값이고, 아직도 그렇다.** 좌표가 1 Hz 안팎이라 20초는 연속
+/// 20건쯤에 해당한다 — 벽 옆에서 한두 건이 튀는 것으로는 안 걸리고, 정말 걸어
+/// 나갔다면 그 안에 채운다. 틀렸을 때의 비용이 층 하나뿐이라 짧은 쪽으로 잡았다.
+///
+/// **값을 안 고친 이유**: 이 갈래는 [nextUnclearOutsideSince]의 오차 문턱 때문에
+/// 실측에서 한 번도 시계조차 안 섰다(그 함수 주석). 발화한 적이 없으니 20이 길다
+/// 짧다를 말할 근거가 없고, 근거 없이 옮기면 지금과 똑같이 "왜 그 값인지 못 적는"
+/// 상수가 하나 더 생긴다. 갈래를 살리고 값은 그대로 둔 채, 다음 실측에서
+/// `gps_position_deltas`의 `meters_outside`·`gps_accuracy_m`로 **바깥이 실제로
+/// 몇 초 이어졌는지**를 재서 정한다.
 const kUnclearOutsideExitHold = Duration(seconds: 20);
 
 /// 문 앞 도달 판정 **한 걸음**. 상태를 안 들고 있으니 호출자가 [leftDoorZone]을
@@ -51,24 +57,58 @@ const kUnclearOutsideExitHold = Duration(seconds: 20);
 /// - [onDefaultFloor]가 false — 지상 출구는 건물 기본 층에만 있다.
 /// - [corridorState]가 null이거나 [CorridorTrackingState.uncertain] — 위치를
 ///   못 믿는 상태에서 "문에 닿았다"고 말하면 안 된다.
-({bool leftDoorZone, bool reached}) stepExitDoorEvidence({
+///
+/// [missReason]은 **안 걸린 이유**다(걸렸으면 null). 위 조건 목록을 레코더 쪽에
+/// 다시 적지 않으려고 여기서 함께 돌려준다 — 이유가 두 곳에 있으면 한쪽이 썩는다.
+/// [doorDistanceM]은 잰 거리 그대로이고, 못 쟀으면 null이다.
+({bool leftDoorZone, bool reached, String? missReason, double? doorDistanceM})
+stepExitDoorEvidence({
   required bool leftDoorZone,
   required PdrLocalPoint? positionM,
   required bool onDefaultFloor,
   required CorridorTrackingState? corridorState,
   required List<PdrLocalPoint> doorPointsM,
 }) {
-  if (!onDefaultFloor ||
-      corridorState == null ||
-      corridorState == CorridorTrackingState.uncertain) {
-    return (leftDoorZone: leftDoorZone, reached: false);
-  }
   final nearestM = nearestExitDoorDistanceM(positionM, doorPointsM);
-  if (nearestM == null) return (leftDoorZone: leftDoorZone, reached: false);
-  if (nearestM > kExitDoorReachRadiusMeters) {
-    return (leftDoorZone: true, reached: false);
+  if (!onDefaultFloor) {
+    return (
+      leftDoorZone: leftDoorZone,
+      reached: false,
+      missReason: 'offDefaultFloor',
+      doorDistanceM: nearestM,
+    );
   }
-  return (leftDoorZone: leftDoorZone, reached: leftDoorZone);
+  if (corridorState == null ||
+      corridorState == CorridorTrackingState.uncertain) {
+    return (
+      leftDoorZone: leftDoorZone,
+      reached: false,
+      missReason: corridorState == null ? 'noTracker' : 'trackerUncertain',
+      doorDistanceM: nearestM,
+    );
+  }
+  if (nearestM == null) {
+    return (
+      leftDoorZone: leftDoorZone,
+      reached: false,
+      missReason: 'noDoorDistance',
+      doorDistanceM: null,
+    );
+  }
+  if (nearestM > kExitDoorReachRadiusMeters) {
+    return (
+      leftDoorZone: true,
+      reached: false,
+      missReason: 'outsideReachRadius',
+      doorDistanceM: nearestM,
+    );
+  }
+  return (
+    leftDoorZone: leftDoorZone,
+    reached: leftDoorZone,
+    missReason: leftDoorZone ? null : 'neverLeftDoorZone',
+    doorDistanceM: nearestM,
+  );
 }
 
 /// 문 앞 좌표까지의 최단 거리(m). 잴 수 없으면 null.
@@ -113,19 +153,30 @@ List<PdrLocalPoint> exitDoorPointsFloorLocalM(
 
 /// "바깥에 찍히기 시작한 시각"을 좌표 한 건으로 갱신한다.
 ///
-/// - 외곽선을 모르거나 오차가 [outdoorExitAccuracyMeters]를 넘으면 **그대로 둔다.**
-///   못 믿는 좌표가 시계를 되돌리면, 오차가 큰 구간이 바로 이 판정이 필요한
-///   구간이라 영영 안 걸린다.
-/// - 바깥이면 시작 시각을 세우고(이미 있으면 유지), 안쪽이면 null로 되돌린다.
+/// 좌표를 **세 띠로 나눈다. 오차는 안 본다** — 지속 시간이 그 자리를 대신한다.
+/// - 바깥 [outdoorExitMarginMeters] 이상: 시작 시각을 세우고, 있으면 유지한다.
+/// - 외곽선 안쪽([GpsBuildingJudgement.metersInside] > 0): null로 되돌린다.
+/// - 그 사이 완충 띠: 그대로 둔다. 시계를 세울 만큼도, 지울 만큼도 아니다.
+///
+/// **예전에는 오차 30 m 초과를 통째로 건너뛰었다**(`return since`). 못 믿는 좌표가
+/// 시계를 **되돌리지** 않게 하려던 것인데, 같은 줄이 시계를 **세우는 것까지**
+/// 막았다. 건물에서 막 나온 구간이 정확히 오차가 큰 구간이라, 나가는 내내 오차가
+/// 30 m를 넘으면 시계는 끝까지 null이고 [unclearOutsideExitDue]는 영영 false다 —
+/// 이 갈래가 실측에서 한 번도 발화하지 않은 이유다.
+///
+/// 오차 문턱을 버린 대신 **거리 문턱을 0 m에서 확정 이탈과 같은
+/// [outdoorExitMarginMeters]로 올렸다.** 좌표 한 건을 믿으려면 오차가 작아야 하고
+/// (확정 이탈), 오차를 안 볼 거면 같은 거리가 [kUnclearOutsideExitHold]만큼
+/// 이어져야 한다(여기). 문턱을 낮춘 게 아니라 맞바꾼 것이다.
 DateTime? nextUnclearOutsideSince({
   required GpsBuildingJudgement judgement,
   required DateTime? since,
   required DateTime now,
 }) {
   if (!judgement.hasFootprint) return since;
-  if (judgement.accuracyMeters > outdoorExitAccuracyMeters) return since;
-  if (judgement.metersOutside > 0) return since ?? now;
-  return null;
+  if (judgement.metersOutside >= outdoorExitMarginMeters) return since ?? now;
+  if (judgement.metersInside > 0) return null;
+  return since;
 }
 
 /// 바깥 지속이 [kUnclearOutsideExitHold]를 채웠는지.
