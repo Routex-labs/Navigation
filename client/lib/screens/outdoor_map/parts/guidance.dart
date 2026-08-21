@@ -271,14 +271,21 @@ extension OutdoorMapGuidance on OutdoorMapBodyState {
     _followCameraReleasedByUser = false;
     _followCameraBearingDeg = null;
     _followCameraTarget = null;
-    if (_indoorRoutePreviewOrigin != null) {
+    // **이 여정에 야외 구간이 있으면 실내 갈래로 새지 않는다.** 묻는 것은
+    // "미리 보기 출발지가 남아 있나"가 아니라 **"지금 시작할 구간이 실내인가"**다.
+    // 두 질문이 갈리면, 문 경유 안내(실외 → 건물 안 매장)를 그려 놓고도
+    // [_startIndoorGuidance]의 "건물에 도착하면…"에 막힌다 — 그 여정은 정의상
+    // 밖에서 시작하는데, 밖이라는 이유로 시작을 거부하는 화면이 된다.
+    //
+    // 이 목록이 비었다는 것이 곧 "실내 구간만 살아 있다"이다([_guidanceStartRoutePoints]).
+    final points = _guidanceStartRoutePoints;
+    if (points.isEmpty && _indoorRoutePreviewOrigin != null) {
       await _startIndoorGuidance();
       return;
     }
     if (_guidanceStarted || !_hasAnyRouteVisible) return;
     // 좌표를 못 얻는 경로(실내 구간만 살아 있는 경우)에는 가드를 걸지 않는다.
     // 잴 수 없는 것을 막으면 지금 되던 흐름이 조용히 죽는다.
-    final points = _guidanceStartRoutePoints;
     if (points.length >= 2) {
       // 위치를 아직 못 받은 것과 경로에서 먼 것은 **다른 사건이다.** 둘 다 막지만
       // 문구를 같이 쓰면, GPS를 기다리는 중인 사용자가 경로를 잘못 잡았다고 읽고

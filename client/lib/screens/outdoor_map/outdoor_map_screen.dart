@@ -1366,6 +1366,29 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 트리거가 "실내로 들어가는 순간"인데 이미 들어와 있으면 그 순간이 오지 않는다.
     await returnToOutdoorView();
     if (!mounted) return;
+    // **배율이 층 도면을 켜므로, 활성 층은 실외에서도 사실이어야 한다.**
+    // 도면은 `_indoorEntered`가 아니라 zoom 16.5~17.5로 페이드인하는데
+    // ([indoorOverlayFadeInStartZoom]), 아래 [showRouteTo]가 문 경유 경로에
+    // 카메라를 맞추면 그 배율이 페이드 끝이다. 밖에서 지하 매장을 검색·탭한
+    // 사용자는 활성 층이 그 매장 층이라, 지상 출구에서 끝나는 야외선 밑에 지하
+    // 도면이 깔린다(실기기 화면과 근거: docs/client/indoor-entry-rules.md 6절).
+    //
+    // 층을 고르는 규칙은 GPS 자동 진입과 **같은 질문**이라 같은 함수를 쓴다 —
+    // 갈리면 문을 지난 순간 도면이 한 번 더 튄다. 근거가 없으면 보던 층이 그대로
+    // 돌아와 아래 전환이 no-op이 된다.
+    final journeyStartFloor = gpsEntryAnchorFloor(
+      groundEntranceFloor: _groundEntranceFloor,
+      defaultFloor: _building?.initialFloor,
+      viewedFloor: _activeFloor,
+    );
+    if (journeyStartFloor != null && journeyStartFloor != _activeFloor) {
+      // 카메라는 만지지 않는다 — 곧 [showRouteTo]가 경로 전체에 맞춘다.
+      await _switchOverlayFloorCrossfaded(
+        journeyStartFloor,
+        recenterIfNeeded: false,
+      );
+      if (!mounted) return;
+    }
 
     final building = _building;
     final endNodeId = destination.nodeId;
