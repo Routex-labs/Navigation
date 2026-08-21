@@ -168,7 +168,10 @@ extension OutdoorMapPdr on OutdoorMapBodyState {
   /// 항상 빈 소스를 밀어 넣어 마커가 사라진다 — 야외에서는 GPS 마커
   /// ([_syncCurrentLayer])만 보이고, 실내에서는 이쪽만 보인다.
   ///
-  /// 다른 층을 펴 놓은 동안에는 [_offFloorIndoorMarker]를 **흐리게** 그린다.
+  /// 다른 층을 펴 놓은 동안에는 [_offFloorIndoorMarker]를, 진입 직후 실내 위치가
+  /// 아직 없는 동안에는 [_indoorGapGpsPoint]를 **흐리게** 그린다. 셋 중 무엇을
+  /// 고르는지는 [indoorMarkerAt] 하나가 정한다 — 소스가 하나뿐이라 화면 위의
+  /// 점도 항상 하나다.
   Future<void> _syncPdrCurrentLayer() {
     final revision = ++_pdrMarkerRevision;
     final controller = _mapController;
@@ -180,15 +183,19 @@ extension OutdoorMapPdr on OutdoorMapBodyState {
     if (here != null && floor != null) {
       _lastIndoorMarker = (floorId: floor, point: here);
     }
-    final offFloor = here == null ? _offFloorIndoorMarker() : null;
-    final location = here ?? offFloor;
-    // 흐린 마커에는 방향을 붙이지 않는다. 그 층에서 마지막으로 알던 자리라
-    // 지금 어디를 보고 있는지는 모른다 — 삼각형을 그리면 모르는 것을 아는 척한다.
+    final marker = indoorMarkerAt(
+      indoorPoint: here,
+      offFloorPoint: here == null ? _offFloorIndoorMarker() : null,
+      gpsFallback: _indoorGapGpsPoint,
+    );
+    // 흐린 마커에는 방향을 붙이지 않는다. 마지막으로 알던 자리이거나 건물 밖
+    // GPS라, 지금 어디를 보고 있는지는 모른다 — 삼각형을 그리면 모르는 것을
+    // 아는 척한다.
     final heading = here == null ? null : _pdrCurrentHeadingDeg;
     final data = pdrLocationData(
-      location,
+      marker?.point,
       headingDeg: heading,
-      offFloor: offFloor != null,
+      offFloor: marker?.offFloor ?? false,
     );
 
     final previous = _pdrMarkerWriteQueue;

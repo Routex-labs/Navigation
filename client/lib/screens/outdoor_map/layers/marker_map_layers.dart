@@ -214,10 +214,14 @@ Future<void> registerPdrLocationLayer(MapLibreMapController controller) async {
   );
 }
 
-/// 다른 층에 서 있을 때 위치 마커의 불투명도.
+/// **지금 이 도면의 위치가 아닐 때** 마커의 불투명도.
 ///
 /// 0.35는 "있는 줄은 알지만 이 층 것은 아니다"가 읽히는 값이다. 더 낮추면 지도
 /// 배경과 구분이 안 되고, 더 올리면 이 층에 서 있는 것과 헷갈린다.
+///
+/// 뜻이 둘로 늘었다 — 다른 층에 서 있을 때와, 진입 직후 실내 위치가 아직 없어
+/// GPS 좌표가 자리만 지킬 때다([indoorMarkerAt]). 둘 다 사용자에게 하는 말은
+/// 같다: "여기 있는 건 맞는데 이 도면 위의 자리는 아니다."
 const kOffFloorMarkerOpacity = 0.35;
 
 /// PDR 마커 비트맵 두 벌을 등록한다. 소스·레이어보다 **먼저** 불러야 한다.
@@ -232,13 +236,40 @@ Future<void> registerPdrLocationImages(MapLibreMapController controller) async {
   );
 }
 
+/// PDR 마커 소스가 그릴 자리 **하나**. 없으면 null(마커가 사라진다).
+///
+/// 소스가 하나뿐이라, 이 함수가 고른 점이 곧 화면 위의 점 하나다 — 실내에서
+/// 두 마커가 동시에 뜨는 상태 자체가 만들어지지 않는다. 야외 GPS 마커는 실내
+/// 진입과 동시에 꺼진 채로 있다(`_outdoorGpsVisible`).
+///
+/// 우선순위 셋:
+///   1. [indoorPoint] — 실제 실내 위치. 있으면 나머지는 볼 것도 없다.
+///   2. [offFloorPoint] — 다른 층에 서 있을 때, 그 층에서 마지막으로 알던 자리.
+///   3. [gpsFallback] — **진입 직후 앵커가 생기기 전의 공백**을 메운다. 건물
+///      밖에서 찍힌 좌표라 도면 위 엉뚱한 자리를 가리킬 수 있지만, 빈 화면은
+///      사용자에게 "앱이 나를 잃었다"로 읽힌다. 그 오해가 더 비싸다.
+///
+/// 2·3은 지금 보고 있는 도면의 위치가 아니므로 [kOffFloorMarkerOpacity]로 흐리게
+/// 그린다(`offFloor`). 1은 그대로다.
+///
+/// 검증 기준은 `client/test/screens/outdoor_map/indoor_marker_gap_test.dart`.
+({ll.LatLng point, bool offFloor})? indoorMarkerAt({
+  ll.LatLng? indoorPoint,
+  ll.LatLng? offFloorPoint,
+  ll.LatLng? gpsFallback,
+}) {
+  if (indoorPoint != null) return (point: indoorPoint, offFloor: false);
+  final dimmed = offFloorPoint ?? gpsFallback;
+  return dimmed == null ? null : (point: dimmed, offFloor: true);
+}
+
 /// PDR 마커 소스에 넣을 데이터. [point]가 null이면 빈 컬렉션이라 마커가 사라진다.
 ///
 /// 쓰기 자체는 화면이 한다 — 센서 갱신마다 들어오는 호출을 큐로 직렬화하고 더
 /// 최신 스냅샷이 오면 버리는 판단이 화면 상태(revision)에 있기 때문이다.
 ///
-/// [offFloor]는 "이 위치는 지금 보고 있는 층 이야기가 아니다"를 뜻한다. 레이어가
-/// 그때만 [kOffFloorMarkerOpacity]로 흐리게 그린다.
+/// [offFloor]는 "이 위치는 지금 보고 있는 도면 이야기가 아니다"를 뜻한다. 레이어가
+/// 그때만 [kOffFloorMarkerOpacity]로 흐리게 그린다. 고르는 것은 [indoorMarkerAt].
 Map<String, dynamic> pdrLocationData(
   ll.LatLng? point, {
   double? headingDeg,
