@@ -70,8 +70,8 @@ flutter run --dart-define-from-file=config.local.json
 **전체 목록은 [문서 색인](docs/README.md)에 있습니다.** 자주 보는 것만 아래에 둡니다.
 
 - [로컬 개발 가이드](docs/guide/local-development-guide.md): 플랫폼별 실행, API 주소, 문제 해결
-- [FastAPI 요청 흐름](docs/backend/fastapi-request-flow.md): Router → Query → SQLite 구조
-- [대화형 매장 탐색·추천 설계](docs/backend/native/conversational-discovery.md): 검색 facet 원본, 복수 추천 계약, Flutter 질문·선택 흐름
+- [엔드포인트 계약](https://github.com/Routex-labs/backend/blob/main/docs/api/contract.md): 스프링 백엔드가 내는 응답의 단일 출처
+- [대화형 매장 탐색·추천 설계](https://github.com/Routex-labs/fastapi/blob/main/docs/native/conversational-discovery.md): 검색 facet 원본, 복수 추천 계약, Flutter 질문·선택 흐름
 
 ## 데이터셋 작업
 
