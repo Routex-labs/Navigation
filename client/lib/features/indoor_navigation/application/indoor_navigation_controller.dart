@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:indoor_pdr_core/indoor_pdr_core.dart';
 
 import '../contract/indoor_navigation_contract.dart';
@@ -21,16 +22,26 @@ class IndoorNavigationDriver implements IndoorNavigationController {
     required PdrMotionSource source,
     PdrSessionConfig? config,
     int Function()? nowMs,
+    ValueListenable<double>? headingOffsetDeg,
   }) : _source = source, // ignore: prefer_initializing_formals
-       _nowMs = nowMs ?? _defaultNowMs {
+       _nowMs = nowMs ?? _defaultNowMs,
+       // ignore: prefer_initializing_formals
+       _headingOffsetDeg = headingOffsetDeg {
     _session = PdrSession(config: config);
     _sessionSub = _session.snapshots.listen(_onSnapshot);
+    _headingOffsetDeg?.addListener(_onHeadingOffsetChanged);
   }
 
   static int _defaultNowMs() => DateTime.now().millisecondsSinceEpoch;
 
   final PdrMotionSource _source;
   final int Function() _nowMs;
+
+  /// 디버그 전용 현장 보정 노브. null이면(=일반 사용자) 언제나 0도다.
+  final ValueListenable<double>? _headingOffsetDeg;
+
+  /// 노브를 뺀 회전각. 노브를 돌릴 때마다 이 값 위에 다시 얹는다.
+  double _baseRotationDeg = 0;
 
   late final PdrSession _session;
   late final StreamSubscription<PdrSnapshot> _sessionSub;
@@ -189,8 +200,12 @@ class IndoorNavigationDriver implements IndoorNavigationController {
     _pendingPinPdrM = PdrLocalPoint.zero;
     _pendingAxes = axes;
     if (_session.headingReference == HeadingReference.magneticNorth) {
-      // 자북 기준: 서버 north_alignment 오프셋을 Phase 3에서 주입한다. 지금은 0.
-      _finalizeAnchor(rotationDeg: 0, source: AnchorSource.userPin);
+      // 자북 기준 heading을 floor 축(진북 기준)에 맞추려면 자편각을 더해야 한다.
+      // 여기를 0으로 두면 실내 heading 전체가 그만큼 통째로 돌아간다.
+      _finalizeAnchor(
+        rotationDeg: magneticDeclinationDeg,
+        source: AnchorSource.userPin,
+      );
     } else {
       // arbitrary corrected: 진행 방향 보정이 필수(§4).
       _updateCalibration(CalibrationPhase.awaitingHeading);
@@ -255,7 +270,8 @@ class IndoorNavigationDriver implements IndoorNavigationController {
         anchorLocalM: anchorLocalM,
         // 같은 센서 세션이므로 heading frame이 끊기지 않는다. 회전값을 물려받아
         // 사용자가 새 층에서 방향 보정을 다시 하지 않게 한다.
-        rotationDeg: previous.rotationDeg,
+        rotationDeg: _rotationWithOffset(),
+        headingOffsetDeg: _headingOffset,
         headingReference: reference,
         requiresManualRotationCalibration:
             reference != HeadingReference.magneticNorth,
@@ -339,6 +355,7 @@ class IndoorNavigationDriver implements IndoorNavigationController {
   }
 
   Future<void> dispose() async {
+    _headingOffsetDeg?.removeListener(_onHeadingOffsetChanged);
     await _eventSub?.cancel();
     await _sessionSub.cancel();
     _session.dispose();
@@ -470,6 +487,38 @@ class IndoorNavigationDriver implements IndoorNavigationController {
     _session.rebasePath(atMs: _nowMs());
   }
 
+  /// 지금 적용할 현장 보정 노브 값. 디버그가 꺼져 있으면 0이다.
+  double get _headingOffset => _headingOffsetDeg?.value ?? 0;
+
+  /// 노브를 돌리면 이미 선 anchor의 회전각도 바로 따라간다.
+  ///
+  /// 실기기 앞에서 몇 도인지 맞춰 보려면 값을 바꿀 때마다 화면이 돌아야 한다.
+  /// 다시 pin을 찍게 하면 노브가 아니라 재보정 절차가 된다. pin은 언제나 PDR
+  /// 원점(0,0)에서 찍으므로 anchorLocalM은 회전과 무관하다 — 회전각만 갈아
+  /// 끼우면 된다.
+  void _onHeadingOffsetChanged() {
+    final anchor = _calib.anchor;
+    if (anchor == null) return;
+    _updateCalibration(
+      _calib.phase,
+      anchor: PdrAnchor(
+        floorId: anchor.floorId,
+        anchorLocalM: anchor.anchorLocalM,
+        rotationDeg: _rotationWithOffset(),
+        headingReference: anchor.headingReference,
+        requiresManualRotationCalibration:
+            anchor.requiresManualRotationCalibration,
+        source: anchor.source,
+        confidence: anchor.confidence,
+        axes: anchor.axes,
+        headingOffsetDeg: _headingOffset,
+      ),
+    );
+  }
+
+  double _rotationWithOffset() =>
+      normalizePdrRotation(_baseRotationDeg + _headingOffset);
+
   void _finalizeAnchor({
     required double rotationDeg,
     required AnchorSource source,
@@ -479,12 +528,12 @@ class IndoorNavigationDriver implements IndoorNavigationController {
     if (pinFloor == null || pinPdr == null) {
       return;
     }
+    _baseRotationDeg = rotationDeg;
+    final rotation = _rotationWithOffset();
     // anchorLocalM = pinFloor - axes·R(rotationDeg)·pinPdr.
     // PDR는 +east/+north지만 floor local_m은 +y가 남쪽일 수 있으므로, anchor
     // 확정에도 렌더링과 같은 축 변환을 적용해야 한다.
-    final mappedPinPdr = _pendingAxes.apply(
-      rotatePdrBearing(pinPdr, rotationDeg),
-    );
+    final mappedPinPdr = _pendingAxes.apply(rotatePdrBearing(pinPdr, rotation));
     final anchorLocalM = PdrLocalPoint(
       pinFloor.eastM - mappedPinPdr.eastM,
       pinFloor.northM - mappedPinPdr.northM,
@@ -494,7 +543,8 @@ class IndoorNavigationDriver implements IndoorNavigationController {
     final anchor = PdrAnchor(
       floorId: _floorId ?? '',
       anchorLocalM: anchorLocalM,
-      rotationDeg: rotationDeg,
+      rotationDeg: rotation,
+      headingOffsetDeg: _headingOffset,
       headingReference: reference,
       requiresManualRotationCalibration:
           reference != HeadingReference.magneticNorth,

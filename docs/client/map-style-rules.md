@@ -152,7 +152,7 @@ z=15 타일은 이 위도에서 폭 약 970 m라 4096 유닛 양자화가 0.24 m
 (2026-08-15 되돌림 2번). 위로 올리면 카테고리 강조·수직이동 색이 회색에 덮인다.
 매장이 사라질 걱정은 순서가 아니라 임포터의 중심점 규칙이 받는다 — 근거와 실측은
 [카카오맵 실내 도면 관찰](kakao-map-indoor-observation.md) 3절. 백엔드 타일도 같은 순서로
-굽고(`backend/app/geo/tiling.py`), 클라이언트 순서는
+굽고(`app/geo/tiling.py`), 클라이언트 순서는
 `client/test/screens/outdoor_map/layers/indoor_overlay_ids_test.dart`가 못 박는다.
 
 `mapSelectionColor`가 `AppColors.primary`와 같아야 하는 이유: UI 위젯의 포인트 색과 지도 위
@@ -588,7 +588,7 @@ MapLibre 심볼 레이어는 **미리 등록된 비트맵만** 참조할 수 있
 ## 8. 수직이동 POI는 이름을 그리지 않는다
 
 POI는 Studio 원본의 `elevator`/`escalator` 노드를 마커로 승격한 것이라
-(`backend/scripts/seed/studio_adapter.py`의 `_generate_pois`) `name`이 노드 식별자 그대로다.
+(`scripts/seed/studio_adapter.py`의 `_generate_pois`(Routex-labs/fastapi)) `name`이 노드 식별자 그대로다.
 
 | type | 개수 | 이름 예시 |
 |---|---|---|

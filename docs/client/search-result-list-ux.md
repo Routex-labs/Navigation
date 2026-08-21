@@ -8,8 +8,8 @@
   다룬다. 이 문서는 그 둘이 만나는 자리 — **입력이 끝난 뒤 사용자가 실제로 고르는
   목록** — 을 다루고, 항목 번호는 겹치지 않게 **O부터** 이어 붙인다.
 - 매칭 파이프라인 자체(임계값·인덱스 문서·facet)는 손대지 않는다. 단일 출처는
-  [query.md](../backend/native/query.md) · [FAISS.md](../backend/native/FAISS.md) ·
-  [conversational-discovery.md](../backend/native/conversational-discovery.md)다.
+  [query.md](https://github.com/Routex-labs/fastapi/blob/main/docs/native/query.md) · [FAISS.md](https://github.com/Routex-labs/fastapi/blob/main/docs/native/FAISS.md) ·
+  [conversational-discovery.md](https://github.com/Routex-labs/fastapi/blob/main/docs/native/conversational-discovery.md)다.
 - 정상 동작보다 **실패 조건을 먼저** 적고, **무엇이 충족되면 맞다고 볼지**를 함께 적는다
   (AGENTS.md 규칙).
 

@@ -140,41 +140,49 @@ extension OutdoorMapUi on OutdoorMapBodyState {
     return Stack(
       children: [
         if (_isMapSupportedOnThisPlatform)
-          MapLibreMap(
-            styleString: _baseMapStyle(),
-            initialCameraPosition: CameraPosition(
-              target: _toGl(initialCenter),
-              zoom: 17,
+          // **손을 대면 팔로우가 물러난다.** MapLibre는 PlatformView라
+          // onCameraIdle만으로는 사용자가 민 것인지 우리가 민 것인지 가릴 수
+          // 없다. 지도 위 pointer-down은 어느 쪽이든 "지금은 내가 본다"는 뜻이라
+          // 그걸 신호로 쓴다. 지도 위 Flutter 버튼(내 위치 등)은 Stack에서
+          // 먼저 히트되므로 여기까지 내려오지 않는다.
+          Listener(
+            onPointerDown: (_) => _releaseFollowCameraToUser(),
+            child: MapLibreMap(
+              styleString: _baseMapStyle(),
+              initialCameraPosition: CameraPosition(
+                target: _toGl(initialCenter),
+                zoom: 17,
+              ),
+              onMapCreated: (controller) => _mapController = controller,
+              onStyleLoadedCallback: _onStyleLoaded,
+              onMapClick: _handleMapClick,
+              onCameraIdle: _handleCameraIdle,
+              // _handleCameraIdle이 실내 진입/이탈을 판정하려면 현재 줌을 읽어야
+              // 하는데, 이 값은 trackCameraPosition이 true일 때만 사용자의
+              // pan/zoom을 따라 갱신된다(기본값 false면 초기 zoom 17에 고정 또는
+              // 실기기에서 null). 그 상태에선 사용자가 축소해도 exit 조건이
+              // 판정되지 않아 층 선택기·위치 지정 버튼이 계속 남는다.
+              trackCameraPosition: true,
+              // 웹의 maplibre_gl은 기본값(false)이면 상호작용 가능한 벡터 레이어
+              // (건물 fill처럼 enableInteraction이 켜진 레이어)를 탭한 순간 별도
+              // feature-tap만 발화하고 onMapClick은 삼켜버린다. 그러면 사용자가
+              // 실내 진입 오버레이 위에서 "위치 지정" → 건물 폴리곤을 탭했을
+              // 때 _handleMapClick이 아예 호출되지 않아 PDR 앵커 배치가 조용히
+              // 실패한다. 이 값을 켜서 feature-tap이 있어도 onMapClick도 함께
+              // 오게 만든다.
+              // 실내 오버레이 레이어는 전부 인터랙션을 꺼 두었다 — 이유는
+              // _ensureIndoorTilesRegistered의 레이어 등록 주석 참고.
+              featureTapsTriggersMapClick: true,
+              compassEnabled: false,
+              myLocationEnabled: false,
+              logoEnabled: false,
+              attributionButtonPosition: AttributionButtonPosition.bottomRight,
+              scrollGesturesEnabled: _interactive,
+              zoomGesturesEnabled: _interactive,
+              rotateGesturesEnabled: _interactive,
+              tiltGesturesEnabled: _interactive,
+              dragEnabled: _interactive,
             ),
-            onMapCreated: (controller) => _mapController = controller,
-            onStyleLoadedCallback: _onStyleLoaded,
-            onMapClick: _handleMapClick,
-            onCameraIdle: _handleCameraIdle,
-            // _handleCameraIdle이 실내 진입/이탈을 판정하려면 현재 줌을 읽어야
-            // 하는데, 이 값은 trackCameraPosition이 true일 때만 사용자의
-            // pan/zoom을 따라 갱신된다(기본값 false면 초기 zoom 17에 고정 또는
-            // 실기기에서 null). 그 상태에선 사용자가 축소해도 exit 조건이
-            // 판정되지 않아 층 선택기·위치 지정 버튼이 계속 남는다.
-            trackCameraPosition: true,
-            // 웹의 maplibre_gl은 기본값(false)이면 상호작용 가능한 벡터 레이어
-            // (건물 fill처럼 enableInteraction이 켜진 레이어)를 탭한 순간 별도
-            // feature-tap만 발화하고 onMapClick은 삼켜버린다. 그러면 사용자가
-            // 실내 진입 오버레이 위에서 "위치 지정" → 건물 폴리곤을 탭했을
-            // 때 _handleMapClick이 아예 호출되지 않아 PDR 앵커 배치가 조용히
-            // 실패한다. 이 값을 켜서 feature-tap이 있어도 onMapClick도 함께
-            // 오게 만든다.
-            // 실내 오버레이 레이어는 전부 인터랙션을 꺼 두었다 — 이유는
-            // _ensureIndoorTilesRegistered의 레이어 등록 주석 참고.
-            featureTapsTriggersMapClick: true,
-            compassEnabled: false,
-            myLocationEnabled: false,
-            logoEnabled: false,
-            attributionButtonPosition: AttributionButtonPosition.bottomRight,
-            scrollGesturesEnabled: _interactive,
-            zoomGesturesEnabled: _interactive,
-            rotateGesturesEnabled: _interactive,
-            tiltGesturesEnabled: _interactive,
-            dragEnabled: _interactive,
           )
         else
           const ColoredBox(color: AppColors.surface),
@@ -416,32 +424,25 @@ extension OutdoorMapUi on OutdoorMapBodyState {
             ),
           ),
 
-        // PDR 제어 — 실내 지도 탭과 같은 자리(하단 홈/실내 세그먼트 왼쪽,
-        // 층 선택기 옆)에 같은 위젯으로 놓는다. 두 화면에서 버튼이 옮겨 다니면
-        // 실측 중에 "지금 어느 화면인지"를 먼저 확인해야 해서 테스트가 끊긴다.
+        // PDR 제어 — **오른쪽 위**, 디버그 칩 열과 같은 줄이다. 하단은 도착
+        // 카드·ETA 카드가 통째로 덮어, 실측 직후 세션 JSON을 꺼낼 수 없었다.
+        // 자리를 고른 이유는 [pdrControlTopPx].
         //
         // 노출 조건에 pdrActive를 함께 두는 이유: 세션이 도는 중에 사용자가
         // 지도를 축소하면 _handleCameraIdle이 실내 진입 오버레이를 끄는데,
         // 그때 버튼까지 사라지면 방금 걸은 세션을 내보낼 수단이 없어진다.
         if (debugEnabled && (_indoorEntered || pdrActive))
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-            right: pdrControlRightInsetPx,
-            bottom: indoorRouteVisible ? bottomBarLiftPx : 0,
+          Positioned(
+            top: pdrControlTopPx,
+            right: RoutexSpacing.componentPadding,
             child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.only(
-                  bottom: bottomBarInnerBottomPaddingPx,
-                ),
-                child: PdrMapControl(
-                  key: _pdrControlKey,
-                  canExport: _pdrDebugRecorder?.hasSnapshot ?? false,
-                  exporting: _exportingPdrDebugJson,
-                  onExport: () => unawaited(_exportPdrDebugJson()),
-                  shareButtonKey: _pdrShareButtonKey,
-                ),
+              bottom: false,
+              child: PdrMapControl(
+                key: _pdrControlKey,
+                canExport: _pdrDebugRecorder?.hasSnapshot ?? false,
+                exporting: _exportingPdrDebugJson,
+                onExport: () => unawaited(_exportPdrDebugJson()),
+                shareButtonKey: _pdrShareButtonKey,
               ),
             ),
           ),

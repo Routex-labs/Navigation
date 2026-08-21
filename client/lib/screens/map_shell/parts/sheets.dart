@@ -162,7 +162,11 @@ extension _MapShellSheets on _MapShellScreenState {
   /// 쌓인다 — 검색으로 같은 매장을 두 번 열면 뒤로가기 한 번에 화면이 안 바뀌는
   /// 것으로 드러났다. 자세한 것은
   /// `docs/client/kakao-map-indoor-observation.md` S절.
-  bool _swapOpenPlaceDetail(PoiSearchResult match) {
+  ///
+  /// [focusOnMap]이 false면 **카메라는 그대로 둔다.** 갈아 끼우기는 시트를 다시
+  /// 열지 않으므로 카메라를 여기서 따로 움직인다 — 지도 탭의 "안 움직인다"는
+  /// 두 입구([_openStoreFromMap]과 여기)를 모두 막아야 성립한다.
+  bool _swapOpenPlaceDetail(PoiSearchResult match, {bool focusOnMap = true}) {
     if (_placeDetailClosing == null) return false;
     _activePlaceMatch = match;
     _nearbyOriginPlaceId = match.placeId;
@@ -170,19 +174,21 @@ extension _MapShellSheets on _MapShellScreenState {
       match,
       FavoritePlace.fromPoiSearchResult(match, buildingId: _buildingId),
     );
-    unawaited(
-      (_outdoorKey.currentState?.focusStore(
-                match,
-                bottomSheetFraction: placeDetailSheetInitialSize(
-                  MediaQuery.sizeOf(context).height,
-                ),
-                enterBuildingIfNeeded: true,
-              ) ??
-              Future.value())
-          .catchError((Object error, StackTrace _) {
-            debugPrint('[place focus] $error');
-          }),
-    );
+    if (focusOnMap) {
+      unawaited(
+        (_outdoorKey.currentState?.focusStore(
+                  match,
+                  bottomSheetFraction: placeDetailSheetInitialSize(
+                    MediaQuery.sizeOf(context).height,
+                  ),
+                  enterBuildingIfNeeded: true,
+                ) ??
+                Future.value())
+            .catchError((Object error, StackTrace _) {
+              debugPrint('[place focus] $error');
+            }),
+      );
+    }
     return true;
   }
 
@@ -196,7 +202,7 @@ extension _MapShellSheets on _MapShellScreenState {
     // 모두 이 함수를 지나므로, 중복 방지를 각 호출부에 흩지 않고 여기 한 곳에
     // 둔다. 갈아 끼웠다면 이 호출은 시트를 열지 않았으므로 false로 끝낸다 —
     // 사용자가 고른 동작은 원래 떠 있던 시트의 await가 받는다.
-    if (_swapOpenPlaceDetail(match)) return false;
+    if (_swapOpenPlaceDetail(match, focusOnMap: focusOnMap)) return false;
     // 카메라와 시트를 같은 박자에 시작한다. 카메라 완료를 기다린 뒤 시트를
     // 올리면 `지도 이동 → 시트 등장`이 두 동작으로 끊겨 보이고, 반대로 시트를
     // 먼저 다 올리면 목적지가 잠깐 시트 뒤에 남는다. focusStore는 최종 위치를
@@ -452,8 +458,7 @@ extension _MapShellSheets on _MapShellScreenState {
 
   /// 지도에서 매장을 눌러 상세를 연다. **떠 있는 상세가 있으면 먼저 닫는다.**
   ///
-  /// 고른 매장의 기존 아이콘·이름이 커지고 카메라가 시트 위 영역 한가운데로 끌어온다.
-  /// 이 시트는
+  /// 고른 매장의 기존 아이콘·이름이 커진다. **카메라는 움직이지 않는다.** 이 시트는
   /// barrier가 없어 포인터를 지도로 흘리는 의도된 설계라([_withMapsLocked]),
   /// 그 대가로 시트가 쌓이는 것을 여기서 막는다.
   ///
@@ -461,10 +466,14 @@ extension _MapShellSheets on _MapShellScreenState {
   /// 화면의 3분의 1을 왕복해(260ms + 380ms) 매장을 훑을수록 눈이 피로하다.
   /// 시트가 이미 그 자리에 있으니 움직일 이유가 없다 — 내용만 바꾼다.
   Future<void> _openStoreFromMap(PoiSearchResult match) async {
-    if (_swapOpenPlaceDetail(match)) return;
+    if (_swapOpenPlaceDetail(match, focusOnMap: false)) return;
     await _runSheetChain(
-      // `focusZoomFor`는 이미 더 가까우면 그대로 두므로 훑는 중에 튀지 않는다.
-      () => _showStoreInfo(match, focusOnMap: true),
+      // **이 입구만 카메라를 옮기지 않는다.** 지도에서 누른 매장은 이미 화면에
+      // 보이던 것이라 옮길 이유가 없고, 실내에는 카메라를 사용자에게 붙여 두는
+      // 모드가 없어 안내 중에 한 번 끌려가면 되돌아오지 않는다. 검색·근처
+      // 매장·저장한 장소는 화면 밖일 수 있어 이동이 필요하고, 그 셋은 여기를
+      // 지나지 않는다.
+      () => _showStoreInfo(match, focusOnMap: false),
     );
   }
 }

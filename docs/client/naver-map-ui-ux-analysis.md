@@ -68,14 +68,14 @@
 ## 벤치마크 경계 — 있어도 넣으면 안 되는 것
 
 네이버 화면에는 있지만 **이 저장소가 코드로 금지**하는 정보가 있다.
-`backend/resources/store_details/_schema.json`의 `forbidden_labels`:
+`resources/store_details/_schema.json`의 `forbidden_labels`:
 
 ```
 "영업시간", "영업 시간", "운영시간", "운영 시간",
 "전화", "전화번호", "대표번호", "연락처", "문의", "평점", "리뷰"
 ```
 
-`backend/app/repositories/place_details.py`가 시드 적재 **전에** 검증 실패시킨다.
+`app/repositories/place_details.py`가 시드 적재 **전에** 검증 실패시킨다.
 과거에 출처 없는 영업시간·대표번호가 응답에 실려 나간 사고가 있어 막아둔 규칙이다
 (v1 「보류 항목」 참조).
 
@@ -91,7 +91,7 @@
 **영업시간과 연락처는 지금 서로 다른 길에 있다.**
 
 - **영업시간** — 요일별 구조체 `hours`로 열렸고 허용 목록이 없다. 판정 문자열을 저장하지
-  않고 화면이 매번 계산한다([9-1 D2‴](../backend/place-detail/place-detail-interface.md#9-1-갱신된-결정-파일럿-이후)).
+  않고 화면이 매번 계산한다([9-1 D2‴](https://github.com/Routex-labs/fastapi/blob/main/docs/place-detail/place-detail-interface.md#9-1-갱신된-결정-파일럿-이후)).
 - **연락처** — `demoInfo` + `demo_allowlist`에 id가 있는 한 매장만. 항목마다 출처·확인일이
   필수이고 나머지 매장에서는 `forbidden_labels`가 그대로 막는다(9-1 D2″).
 
