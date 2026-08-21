@@ -237,17 +237,36 @@ Future<void> syncPolygonSource(
   String sourceId,
   List<ll.LatLng>? ring, {
   Map<String, dynamic> properties = const {},
+}) => syncPolygonsSource(
+  controller,
+  sourceId,
+  [?ring],
+  properties: properties,
+);
+
+/// 폴리곤 여럿을 한 소스에 넣는다. 점이 3개 미만인 링은 버린다 — 폴리곤이
+/// 성립하지 않는다.
+///
+/// 강조는 **한 매장**에서 시작했지만(매장 탭) 종류로 고르는 조작이 생기면서
+/// 여럿이 됐다(편의시설 필터). 소스를 나누지 않고 이 함수 하나로 받는 이유는
+/// 색·테두리가 같은 강조이기 때문이다 — 레이어를 늘리면 같은 색을 두 곳에서
+/// 정하게 된다. [properties]는 그 여럿이 **같은 색**일 때만 성립한다(지금은
+/// 한 소분류를 통째로 고르는 자리라 늘 같다).
+Future<void> syncPolygonsSource(
+  MapLibreMapController controller,
+  String sourceId,
+  List<List<ll.LatLng>> rings, {
+  Map<String, dynamic> properties = const {},
 }) async {
-  if (ring == null || ring.length < 3) {
+  final features = [
+    for (final ring in rings)
+      if (ring.length >= 3) _polygonFeature([closedRing(ring)], properties),
+  ];
+  if (features.isEmpty) {
     await controller.setGeoJsonSource(sourceId, emptyGeoJsonCollection());
     return;
   }
-  await controller.setGeoJsonSource(
-    sourceId,
-    geoJsonCollection([
-      _polygonFeature([closedRing(ring)], properties),
-    ]),
-  );
+  await controller.setGeoJsonSource(sourceId, geoJsonCollection(features));
 }
 
 /// 세계를 덮고 [hole] 만큼을 뚫은 스크림 폴리곤을 쓴다. [hole]이 없으면 비운다.

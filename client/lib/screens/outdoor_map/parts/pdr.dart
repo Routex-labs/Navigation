@@ -59,6 +59,14 @@ extension OutdoorMapPdr on OutdoorMapBodyState {
   /// 안내만 띄운 탭까지 세면, 사용자가 위치를 잡은 뒤 누른 다음 탭이 "회전"
   /// 차례로 밀려 정작 중앙 정렬이 안 된다.
   Future<void> _recalibrateIndoor() async {
+    // 다른 층을 보는 중이면 **먼저 내 층으로 되돌린다.** 그 상태에서는
+    // `_pdrCurrentWgs84()`가 null이라 아래 갈래가 "위치를 지정하라"며 하단 바
+    // 버튼을 깜빡였다 — 위치는 이미 잡혀 있는데 다시 잡으라고 말하는 셈이라,
+    // 층을 훑어본 사용자에게 돌아올 문이 아니라 막다른 길이었다.
+    if (_viewingOtherFloor) {
+      await _returnToMyFloor();
+      return;
+    }
     if (_recalibrateTapCount.isEven) {
       // 홀수 번째 탭 — 실내 위치를 화면 정중앙으로. 앵커가 다른 층에 있거나
       // 층 그래프가 아직 없으면 null이라 여기서 걸린다. 지도가 아직 준비되지
@@ -234,11 +242,21 @@ extension OutdoorMapPdr on OutdoorMapBodyState {
   /// 층에서 마지막으로 알던 자리 그대로이고, 다시 그 층으로 돌아오면 원래
   /// 마커가 이어받는다. 흐린 것 자체가 "이 층 이야기가 아니다"라는 표시다.
   ll.LatLng? _offFloorIndoorMarker() {
-    if (!_indoorLocationVisible) return null;
-    final anchorFloor = _pdrTrailState.anchor?.floorId;
-    if (anchorFloor == null || anchorFloor == _activeFloor) return null;
+    if (!_viewingOtherFloor) return null;
     final last = _lastIndoorMarker;
-    return last != null && last.floorId == anchorFloor ? last.point : null;
+    if (last == null) return null;
+    return last.floorId == _pdrTrailState.anchor?.floorId ? last.point : null;
+  }
+
+  /// 내 위치가 **지금 보고 있는 층이 아닌 다른 층**에 찍혀 있다.
+  ///
+  /// 이 상태에서는 마커가 흐린 점 하나로 물러나고([_offFloorIndoorMarker]) 걸음
+  /// 보정도 멈춘다. 되돌아오는 문을 띄우는 조건이자([GuidanceRecenterButton])
+  /// "위치 보정"이 층부터 되돌려야 하는 조건이다([_recalibrateIndoor]).
+  bool get _viewingOtherFloor {
+    if (!_indoorLocationVisible) return false;
+    final anchorFloor = _pdrTrailState.anchor?.floorId;
+    return anchorFloor != null && anchorFloor != _activeFloor;
   }
 
   ll.LatLng? _pdrCurrentWgs84() {

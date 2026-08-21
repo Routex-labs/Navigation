@@ -122,6 +122,34 @@ extension _MapShellSearch on _MapShellScreenState {
     await _runSheetChain(() => _showStoreInfo(resolved, focusOnMap: true));
   }
 
+  /// 결과 줄 끝의 `도착`. **상세 시트를 열지 않는다** — 그게 이 버튼의 요점이다
+  /// (검색 → 결과 → 상세 → 도착이 네 걸음이었다).
+  ///
+  /// 검색을 먼저 닫는다. 패널은 상단 Column 전체를 차지해서, 안 닫으면 경로가
+  /// 그려져도 화면은 검색 결과에 덮여 있다.
+  void _onSearchStoreDestination(PoiSearchResult store) {
+    _closeSearch();
+    unawaited(_setRouteDestination(candidateForPlace(store)));
+  }
+
+  /// 후보 줄 끝의 `도착`. 후보는 좌표를 안 싣고 오므로 층 도면에서 찾아 붙인다
+  /// ([_onSearchSuggestionPicked]와 **같은 해석 경로**다).
+  Future<void> _onSearchSuggestionDestination(StoreIndexEntry entry) async {
+    _closeSearch();
+    final resolved = await _outdoorKey.currentState?.resolveIndexEntry(entry);
+    if (!mounted) return;
+    if (resolved == null) {
+      // 도면에서 못 찾았다. 상세를 여는 쪽은 이름으로 검색을 다시 돌려 되살리지만
+      // (`_onSearchSuggestionPicked`), 여기서 그러면 방금 닫은 검색이 되살아나
+      // "도착을 눌렀는데 검색으로 돌아왔다"가 된다.
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('이 매장의 위치를 찾지 못했습니다')));
+      return;
+    }
+    await _setRouteDestination(candidateForPlace(resolved));
+  }
+
   void _onSearchBuildingPicked(Building building) {
     _closeSearch();
     // 카드만 띄우고 지도를 그대로 두면 사용자는 자기가 고른 건물이 화면 어디에
