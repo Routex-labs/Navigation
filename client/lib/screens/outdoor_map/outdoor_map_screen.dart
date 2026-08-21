@@ -74,6 +74,7 @@ import 'widgets/transit_summary_card.dart';
 import '../../models/place/store_index_entry.dart';
 import '../../map/camera/floor_camera_bounds.dart';
 import '../../map/style/category_map_filter.dart';
+import '../../map/style/facility_highlight.dart';
 import '../../map/icon/category_map_icon.dart';
 import '../../map/style/floor_facility_style.dart';
 import '../../domain/store/nearest_around_me.dart';
@@ -238,6 +239,9 @@ class OutdoorMapBody extends StatefulWidget {
     this.pickingOnMap = false,
     this.onLocationAnchored,
     this.onNeedLocationPlacement,
+    this.onFacilitiesTap,
+    this.facilitiesActive = false,
+    this.bottomOverlayLiftPx = 0,
     this.categorySelection,
     this.onFloorChanged,
     this.onFloorTransitionChanged,
@@ -333,6 +337,25 @@ class OutdoorMapBody extends StatefulWidget {
   /// 잡아주세요"를 스낵바로 띄웠는데, 눌러야 할 버튼을 말로 가리키는 안내는
   /// 그 버튼을 가리면서 뜬다. 상위가 그 버튼을 깜빡여 대신 말한다.
   final VoidCallback? onNeedLocationPlacement;
+
+  /// 층 선택기 위 편의시설 버튼을 눌렀다. **목록은 셸이 연다** — 시설을 고르면
+  /// 거기로 경로를 그려야 하는데, 도달 거리·출발지·경로는 전부 셸이 들고 있다
+  /// ([onStoreTap]과 같은 규칙: 지도는 눌렸다고 알리고 시트는 셸이 연다).
+  ///
+  /// null이면 버튼을 그리지 않는다 — 눌러도 아무 일이 없는 버튼을 두지 않는다.
+  final VoidCallback? onFacilitiesTap;
+
+  /// 그 시설 목록이 지금 떠 있는지. 버튼을 켜진 상태로 그린다 — 시트가 지도
+  /// 아래쪽만 덮으므로, 켜진 표시가 없으면 무엇이 이 시트를 띄웠는지 화면에서
+  /// 사라진다.
+  final bool facilitiesActive;
+
+  /// 셸이 지도 아래쪽에 얹은 표면(시설 시트)의 높이. 층 선택기를 그만큼 밀어
+  /// 올린다 — 안 올리면 시트가 선택기를 덮어, 시트를 열어 둔 채로는 층을 못 바꾼다.
+  ///
+  /// 지도가 시트를 아는 대신 **높이만 값으로 받는다.** 시트가 늘거나 바뀌어도
+  /// 이 화면은 그대로다.
+  final double bottomOverlayLiftPx;
 
   /// 지금 카테고리 필터에서 고른 값. 실내 진입 오버레이의 매장 강조에 쓴다.
   ///
@@ -1015,6 +1038,8 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     // 다시 만들지 않는 이유는 kCategoryHighlightNoneFilter 주석 참고.
     if (oldWidget.categorySelection != widget.categorySelection) {
       unawaited(_applyCategoryFilter());
+      // 시설 선택은 타일 필터가 아니라 강조 소스가 그린다([_highlightedPolygons]).
+      unawaited(_syncHighlightLayer());
     }
   }
 
@@ -1945,12 +1970,20 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   ///
   /// [enterBuildingIfNeeded]면 건물 밖에서 골랐어도 들어가서 보여 준다(검색 결과
   /// 전용이다. 카테고리 목록은 지금 층 매장만 올려 주므로 이 값을 주지 않는다).
+  /// [focusRatio]는 **포커스를 얼마나 줄지**다. 1이면 예전 그대로 — 매장이 시트
+  /// 위 띠 한가운데에 오고 배율도 그 매장에 맞춘다. 0.5면 지금 배율과 그 목표의
+  /// 중간까지만 가고 밀어 올리는 양도 절반이다.
+  ///
+  /// **줌과 리프트를 한 값으로 묶는다.** 하나만 줄이면 "절반 포커스"가 아니라
+  /// 다른 동작이 된다 — 배율을 아예 고정해 봤더니(`keepZoom`) 도면 전체가
+  /// 보이는 상태에서는 리프트가 수십 px이라 화면이 그대로였다.
   Future<void> focusStore(
     PoiSearchResult store, {
     double bottomSheetFraction = 0,
     double topInsetPx = placingHintTopPx,
     bool keepZoom = false,
     bool enterBuildingIfNeeded = false,
+    double focusRatio = 1,
   }) async {
     // 밖에서 들어온 경우 배율을 유지하면 도시 축척 그대로 매장 위에 서게 된다.
     // 그때는 keepZoom 요청을 무시하고 매장이 보이는 배율까지 확대한다.
@@ -2026,14 +2059,22 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         storeFocusZoom: fitted ?? _storeFocusZoom,
         // 폴리곤을 잰 값일 때만 물러선다 — 매장 전체가 화면에 들어와야 한다.
         storeFitsViewport: fitted != null,
+        ratio: focusRatio,
+        // **절반 포커스는 어디서 눌렀든 같은 그림이어야 한다.** 지금 배율에서
+        // 재면 카테고리로 한 매장을 크게 본 다음 칩을 풀고 다른 매장을 눌렀을
+        // 때 확대된 채로 조금만 움직인다. 도면 전체가 보이는 배율에서 재면
+        // 그만큼 물러선다.
+        fromZoom: focusRatio < 1 ? _entryZoomThreshold() : null,
       );
       // **한 번만 움직인다.** 예전에는 매장 중앙으로 옮긴 뒤 `scrollBy`로 띠 한가운데로
       // 다시 밀었는데, 첫 이동이 한 프레임 드러나 카메라가 두 번 튀었다. 최종 목표를
       // 먼저 계산해 한 애니메이션으로 간다.
-      final lift = math.max(
-        0.0,
-        (viewport.height * bottomSheetFraction - topInsetPx) / 2,
-      );
+      final lift =
+          math.max(
+            0.0,
+            (viewport.height * bottomSheetFraction - topInsetPx) / 2,
+          ) *
+          focusRatio;
       final target = cameraTargetForScreenLift(
         store.point,
         bearing: bearing,

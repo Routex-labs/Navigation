@@ -116,6 +116,9 @@ extension _MapShellRoutePlan on _MapShellScreenState {
     final nearest = nearestByWalkingDistance(
       stores: suggestion.stores,
       reachByNodeId: _reachByNodeId,
+      // 화면에 적힌 층과 실제로 가는 층이 어긋나지 않게 지금 층을 함께 넘긴다.
+      // 안 넘기면 거리를 모를 때 색인 첫 줄(B6)이 대표가 된다.
+      currentFloorId: _activeIndoorFloor,
     );
     final store = nearest.store;
     _routeFloorScopeOnce = store.floorId;

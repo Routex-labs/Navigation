@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -33,10 +34,12 @@ import '../../models/place/poi_search_result.dart';
 import '../../models/place/store_index_entry.dart';
 import '../../models/route/transit_route.dart';
 import 'widgets/sheets/app_menu_sheet.dart';
+import '../../domain/category/category_taxonomy.dart';
 import '../../map/style/category_map_filter.dart';
 import 'widgets/sheets/category_stores_sheet.dart';
 import 'widgets/sheets/events_sheet.dart';
 import '../../domain/event/building_events.dart';
+import 'widgets/sheets/facility_filter_sheet.dart';
 import '../../models/route/directions_candidate.dart';
 import 'widgets/sheets/favorites_sheet.dart';
 import 'widgets/chrome/floor_transition_overlay.dart';
@@ -126,7 +129,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 야외 지도도 실내 진입 오버레이가 켜지면 같은 콜백으로 알려준다. 그쪽에서도
   /// 카테고리 필터를 쓰므로, 안 받으면 "이 층 N곳"이 실내 탭에 들렀을 때의 옛
   /// 층에 머문다. 오버레이가 꺼진 순수 야외에서는 null이 올라온다.
-  String? _activeFloorLabel;
+  final _activeFloorNotifier = ValueNotifier<String?>(null);
+
+  /// 떠 있는 시트도 층을 봐야 한다. 시설 필터 시트의 제목("1F 편의시설")이
+  /// 그렇다 — 시트가 뜬 뒤에도 층 선택기는 그대로 눌리므로, 값으로 넘기면
+  /// 제목이 옛 층에 머문다. 상태를 두 벌로 두지 않으려고 이 화면이 읽는 쪽도
+  /// 같은 notifier를 지난다.
+  String? get _activeFloorLabel => _activeFloorNotifier.value;
 
   /// 건물의 (층·대분류·소분류)별 매장 수. pill 목록과 개수 안내가 같은 데이터를
   /// 봐야 하므로 화면 하나가 소유하고 아래로 내려 준다.
@@ -157,6 +166,18 @@ class _MapShellScreenState extends State<MapShellScreen> {
       _floorScrimOpacity = scrimOpacity;
     });
   }
+
+  /// 시설 시트가 덮는 높이(논리 px). 층 선택기와 하단 바를 그만큼 밀어 올린다.
+  ///
+  /// 시트가 **높이를 비율로 고정하기 때문에** 계산이 성립한다
+  /// ([kFacilitySheetHeightFraction]) — 줄 수에 따라 늘었다 줄면 여기서 알 수 없다.
+  double _facilitiesSheetLiftPx(BuildContext context) => _facilitiesSheetOpen
+      ? MediaQuery.sizeOf(context).height * kFacilitySheetHeightFraction
+      : 0;
+
+  /// 시설 필터 시트가 지금 떠 있는지. 층 선택기 위 버튼을 켜진 상태로 그리는
+  /// 데 쓰고, 같은 버튼을 두 번 눌러 시트가 겹치는 것도 이 값으로 막는다.
+  bool _facilitiesSheetOpen = false;
 
   /// 지금 떠 있는 카테고리 목록 시트가 닫히면 완료되는 Future. 안 떠 있으면 null.
   /// 상세 시트의 [_placeDetailClosing]과 같은 역할이다.
@@ -428,6 +449,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
     _routeDestinationFocus.dispose();
     _routeOriginController.dispose();
     _routeDestinationController.dispose();
+    _activeFloorNotifier.dispose();
     _placeLocationAttentionTimer?.cancel();
     super.dispose();
   }
@@ -732,6 +754,13 @@ class _MapShellScreenState extends State<MapShellScreen> {
       onMapPointPicked: _onMapPointPicked,
       onLocationAnchored: _onLocationAnchored,
       onNeedLocationPlacement: _onNeedLocationPlacement,
+      // 실내 도면을 보는 동안에만 뜬다. 야외에서는 층도 도달 거리도 없어
+      // 가까운 시설을 셀 수 없다.
+      onFacilitiesTap: _indoorContextActive
+          ? () => unawaited(_onFacilitiesTap())
+          : null,
+      facilitiesActive: _facilitiesSheetOpen,
+      bottomOverlayLiftPx: _facilitiesSheetLiftPx(context),
       // 실내 화면과 같은 선택을 넘긴다. 야외 지도도 실내 진입
       // 오버레이가 켜지면 같은 도면을 그리므로, 안 넘기면 칩을
       // 눌러도 강조가 안 뜬다.
@@ -897,6 +926,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
           // 화면이 같은 매장에 다른 거리를 적으면 어느 쪽도 못
           // 믿게 된다.
           reachByNodeId: _reachByNodeId,
+          currentFloorId: _activeIndoorFloor,
           suggestions: _routeSuggestions,
           onSuggestionPicked: _onRouteSuggestionPicked,
           onCurrentLocation: _pickCurrentLocationAsOrigin,
@@ -924,6 +954,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
           onBuildingPicked: _onSearchBuildingPicked,
           onQueryPicked: _onSearchQueryPicked,
           onSuggestionPicked: _onSearchSuggestionPicked,
+          // 줄 끝 `도착`. 상세를 거치지 않고 곧바로 경로를 그린다.
+          onStoreDestination: _onSearchStoreDestination,
+          onSuggestionDestination: (entry) =>
+              unawaited(_onSearchSuggestionDestination(entry)),
           indoorContextActive: _indoorContextActive,
           currentFloorId: _activeIndoorFloor,
           reachByNodeId: _reachByNodeId,
@@ -1006,7 +1040,12 @@ class _MapShellScreenState extends State<MapShellScreen> {
       curve: Curves.easeOut,
       left: 0,
       right: 0,
-      bottom: routeVisible ? _etaBarLiftHeight : 0,
+      // ETA 카드와 시설 시트는 같은 바닥을 두고 다툰다. 더 높은 쪽 하나만
+      // 쓴다 — 더하면 둘 다 떠 있을 때 바가 화면 밖으로 밀린다.
+      bottom: math.max(
+        routeVisible ? _etaBarLiftHeight : 0,
+        _facilitiesSheetLiftPx(context),
+      ),
       child: MapBottomBar(
         key: _bottomBarKey,
         onCalibrate: _onCalibrate,

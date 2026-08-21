@@ -1254,17 +1254,41 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
   Future<void> _syncHighlightLayer() async {
     final controller = _mapController;
     if (controller == null || !_styleReady) return;
-    final storeId = _highlightedStoreId;
-    final plan = _floorPlan;
-    final store = (storeId == null || plan == null)
-        ? null
-        : plan.stores.where((s) => s.id == storeId).firstOrNull;
-    await syncPolygonSource(
+    final target = _highlightTarget();
+    await syncPolygonsSource(
       controller,
       kOutdoorHighlightSourceId,
-      store?.polygon,
+      target.polygons,
+      // 면·선 색을 이 값으로 고른다. 없으면 회색 잉크로 떨어진다.
+      properties: {'category': target.category},
     );
     await _syncIndoorOverlayFade(scope: IndoorOverlaySyncScope.labels);
+  }
+
+  /// 지금 강조할 폴리곤들과 그 색을 고를 대분류. 매장을 탭했으면 그 하나,
+  /// 편의시설을 종류로 골랐으면 이 층의 그 종류 전부다
+  /// ([facilityHighlightPolygons]가 고른다).
+  ///
+  /// 둘이 겹치면 탭이 이긴다 — 방금 누른 것이 먼저다.
+  ({List<List<ll.LatLng>> polygons, String? category}) _highlightTarget() {
+    final plan = _floorPlan;
+    if (plan == null) return (polygons: const [], category: null);
+    final storeId = _highlightedStoreId;
+    if (storeId != null) {
+      final store = plan.stores.where((s) => s.id == storeId).firstOrNull;
+      return (
+        polygons: [if (store != null) store.polygon],
+        category: store?.category,
+      );
+    }
+    return (
+      polygons: facilityHighlightPolygons(
+        stores: plan.stores,
+        selection: widget.categorySelection,
+      ),
+      // 시설은 한 소분류를 통째로 고르는 자리라 색도 하나다.
+      category: widget.categorySelection?.category,
+    );
   }
 
   /// 현재 층의 지상 출입구에 방위 핀을 세운다.
