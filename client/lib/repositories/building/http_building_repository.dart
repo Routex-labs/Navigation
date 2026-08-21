@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../core/api_config.dart';
+import '../../domain/route/corridor_shortcuts.dart';
+import '../../domain/route/corridor_shortcuts_data.dart';
 import '../../domain/route/entrance_door_nodes.dart';
 import '../../domain/route/floor_router.dart';
 import '../../models/building/building.dart';
@@ -169,8 +171,16 @@ class HttpBuildingRepository implements BuildingRepository {
       // 있어 추가 요청이 0이고, 화면이 따로 파싱하는 FloorGraph(지도 매칭·복도
       // 추적용)와는 다른 인스턴스라 스냅 동작에 영향이 없다.
       if (navigationGraph != null) {
+        // 지름길은 출구 문 노드와 달리 **화면 쪽 FloorGraph에도 같이 들어가야
+        // 한다**(corridor_shortcuts.dart 머리말). 여기서만 얹으면 경로선은
+        // 대각선인데 복도 추적은 그 간선을 몰라 마커가 ㄱ자에 남는다.
         _floorGraphCache[cacheKey] = floorGraphWithEntranceDoors(
-          FloorGraph.fromJson(navigationGraph),
+          floorGraphWithCorridorShortcuts(
+            FloorGraph.fromJson(navigationGraph),
+            kCorridorShortcuts,
+            buildingId: buildingId,
+            floorName: floor,
+          ),
           FloorPlan.fromJson(geojson),
         );
       }

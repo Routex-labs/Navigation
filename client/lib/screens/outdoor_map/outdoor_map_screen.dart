@@ -21,6 +21,8 @@ import '../../service_locator.dart';
 import '../../core/tile_url.dart';
 import '../../domain/route/building_entrances.dart';
 import '../../domain/route/entrance_door_nodes.dart';
+import '../../domain/route/corridor_shortcuts.dart';
+import '../../domain/route/corridor_shortcuts_data.dart';
 import '../../domain/route/directions_route_alternatives.dart';
 import '../../domain/guidance/completed_route_history.dart';
 import '../../domain/geo/floor_label.dart';

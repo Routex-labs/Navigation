@@ -101,8 +101,19 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
         return;
       }
       final graphJson = geojson?['navigation_graph'];
+      // 복도 지름길을 **여기에도** 얹는다. 라우팅 그래프(리포지토리)에만 얹으면
+      // 경로는 지름길로 가는데 복도 추적은 그 간선을 몰라 마커가 예전 ㄱ자에
+      // 스냅된다 — 경로와 마커가 다른 길을 가리키는, 지금보다 나쁜 상태다.
+      // 출구 문 노드를 화면 그래프에 **안** 넣은 것과 반대 판단인데, 문 노드는
+      // 건물 밖 가짜 복도를 만들지만 지름길은 실제로 걷는 자리이기 때문이다.
+      // 채택 근거와 대조군 숫자는 `docs/client/corridor-graph-detour.md`.
       final graph = graphJson is Map<String, dynamic>
-          ? FloorGraph.fromJson(graphJson)
+          ? floorGraphWithCorridorShortcuts(
+              FloorGraph.fromJson(graphJson),
+              kCorridorShortcuts,
+              buildingId: buildingId,
+              floorName: floor,
+            )
           : null;
       final plan = geojson != null ? FloorPlan.fromJson(geojson) : null;
       final labelPriorities = rankStoreLabels(plan?.stores ?? const []);
