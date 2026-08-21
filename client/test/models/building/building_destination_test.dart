@@ -136,6 +136,11 @@ void main() {
 
       await pumpPanel(tester, '데모 건물');
 
+      // 바깥 줄은 물어본 뒤에 펼쳐진다. 여기서 보는 것은 "겹치지 않는 이름이
+      // 살아남는가"이지 자동으로 뜨는가가 아니다.
+      await tester.tap(find.byKey(const Key('show-outdoor')));
+      await tester.pump();
+
       expect(find.text('건물 밖 주변 장소'), findsOneWidget);
       expect(find.textContaining('스타벅스', findRichText: true), findsOneWidget);
     });

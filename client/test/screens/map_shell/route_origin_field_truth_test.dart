@@ -194,6 +194,13 @@ void main() {
     await tester.enterText(find.byType(TextField).first, '여의도');
     await drain(tester);
 
+    // 실내에 답이 없으면 바깥은 물어본 뒤에 펼쳐진다(지하철역을 찾는 흐름).
+    final ask = find.byKey(const Key('show-outdoor'));
+    if (ask.evaluate().isNotEmpty) {
+      await tester.tap(ask);
+      await drain(tester);
+    }
+
     final row = find.text('여의도역');
     expect(
       row,

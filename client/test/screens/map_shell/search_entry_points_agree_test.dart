@@ -89,6 +89,15 @@ void main() {
   /// 상단 검색창에 [query]를 치고 목록에 [name]이 있는지 본다.
   ///
   /// 이름은 검색어 강조 때문에 `Text.rich`로 그려지므로 findRichText가 필요하다.
+  /// 바깥 결과는 이제 **물어본 뒤에** 펼쳐진다. 두 진입점이 "찾아내는가"를 보는
+  /// 테스트라, 그 한 번의 확인을 눌러 주고 나서 판정한다.
+  Future<void> revealOutdoorIfAsked(WidgetTester tester) async {
+    final ask = find.byKey(const Key('show-outdoor'));
+    if (ask.evaluate().isEmpty) return;
+    await tester.tap(ask);
+    await drain(tester);
+  }
+
   Future<bool> foundInTopSearch(
     WidgetTester tester, {
     required String query,
@@ -102,6 +111,7 @@ void main() {
     await tester.enterText(find.byType(TextField).first, query);
     await tester.pump();
     await drain(tester);
+    await revealOutdoorIfAsked(tester);
     return find.text(name, findRichText: true).evaluate().isNotEmpty;
   }
 
@@ -123,6 +133,7 @@ void main() {
     await drain(tester);
     await tester.enterText(find.byType(TextField).last, query);
     await drain(tester);
+    await revealOutdoorIfAsked(tester);
     return find.text(name, findRichText: true).evaluate().isNotEmpty;
   }
 
