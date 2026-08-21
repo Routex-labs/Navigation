@@ -92,15 +92,32 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('건물 안에 없어도 밖에서 찾은 장소를 보여준다', (tester) async {
+  testWidgets('건물 안에 없으면 바깥을 바로 펼치지 않고 물어본다', (tester) async {
     await pumpPanel(
       tester,
       query: '스타벅스',
       center: const LatLng(37.5260, 126.9270),
     );
 
-    // 실내 검색이 빈손이어도 "찾지 못했어요"로 끝나지 않는다 — 바깥에 답이 있다.
+    // 실내가 빈손이어도 "찾지 못했어요"로 끝나지 않는다 — 바깥에 답이 있다.
+    // 다만 그 답을 결과처럼 놓지는 않는다. 사용자가 바깥을 보겠다고 한 적이 없다.
     expect(find.textContaining('찾지 못했어요'), findsNothing);
+    expect(find.textContaining('이 건물에는 없어요'), findsOneWidget);
+    expect(find.byKey(const Key('show-outdoor')), findsOneWidget);
+    expect(find.text('건물 밖 주변 장소'), findsNothing);
+    expect(find.textContaining('스타벅스 여의도점'), findsNothing);
+  });
+
+  testWidgets('물어본 뒤 누르면 밖에서 찾은 장소를 보여준다', (tester) async {
+    await pumpPanel(
+      tester,
+      query: '스타벅스',
+      center: const LatLng(37.5260, 126.9270),
+    );
+
+    await tester.tap(find.byKey(const Key('show-outdoor')));
+    await tester.pump();
+
     expect(find.text('건물 밖 주변 장소'), findsOneWidget);
     expect(find.textContaining('스타벅스 여의도점'), findsOneWidget);
     // 층 대신 거리·주소로 어느 지점인지 가른다.
@@ -117,6 +134,8 @@ void main() {
       onPoiPicked: (poi) => picked = poi,
     );
 
+    await tester.tap(find.byKey(const Key('show-outdoor')));
+    await tester.pump();
     await tester.tap(find.textContaining('스타벅스 여의도점'));
     await tester.pump();
 

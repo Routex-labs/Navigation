@@ -229,6 +229,13 @@ class _SearchPanelState extends State<SearchPanel> {
   /// 이번 질의로 찾은 건물 **밖** 장소(TMAP POI). 실내 결과와 독립적으로 찬다.
   List<OutdoorPoi> _pois = const [];
 
+  /// 건물 밖 결과를 펼쳐 달라고 사용자가 **직접 눌렀는가.**
+  ///
+  /// 실내에 답이 있는데 다른 건물 매장을 함께 보여 주면, 건물 안 길찾기라는
+  /// 본업이 흐려지고 "인천 계양구" 같은 줄이 결과에 섞인다. 그래서 기본은 숨김이고,
+  /// 실내가 빈손일 때만 물어본 뒤 이 값이 켜진다.
+  bool _showOutdoor = false;
+
   /// 우리가 도면을 가진 건물들의 이름. POI 이름이 우리 건물을 부르고 있는지
   /// 판정하는 데 쓴다([mentionsBuilding]) — 좌표만으로는 접근점이 외곽선 밖에
   /// 찍혀 판정이 갈린다.
@@ -396,6 +403,7 @@ class _SearchPanelState extends State<SearchPanel> {
         _selectedFacets = const {};
         _facetSelectionOrder.clear();
         _showingAll = false;
+        _showOutdoor = false;
         _phase = _SearchPhase.idle;
       });
       return;
@@ -408,6 +416,7 @@ class _SearchPanelState extends State<SearchPanel> {
       _selectedFacets = const {};
       _facetSelectionOrder.clear();
       _showingAll = false;
+      _showOutdoor = false;
       _pois = const [];
       _phase = _SearchPhase.typingLightSearch;
     });
@@ -1150,7 +1159,10 @@ class _SearchPanelState extends State<SearchPanel> {
     // "실내 컨텍스트인가"로 가르지 않는다. 오버레이는 확대만 해도 켜져서
     // (indoor_entry_zoom.dart) 건물 근처 검색에서 이름이 통째로 사라졌다.
     final merged = _mergedResults(building);
-    final showBuildingName = merged.outdoorRows.isNotEmpty;
+    // 바깥 줄을 **실제로 그릴 때만** 건물 이름을 붙인다. 안 그리는데 붙이면
+    // 우리 건물 매장만 있는 화면에 이름이 반복돼 층이 밀린다.
+    final outdoorVisible = merged.outdoorRows.isNotEmpty && _showOutdoor;
+    final showBuildingName = outdoorVisible;
     for (final store in ordered) {
       final placeId = store.placeId;
       rows.add(
@@ -1164,15 +1176,29 @@ class _SearchPanelState extends State<SearchPanel> {
     }
     rows.addAll(_siblingRows(ordered));
 
-    // 건물 밖 결과는 **항상 실내 아래**에 둔다. 이 앱의 본업은 건물 안 길찾기라,
-    // 같은 이름이 안팎에 다 있으면 사용자가 지금 서 있는 건물 안 매장을 먼저
-    // 보는 것이 맞다. 대신 어디까지가 우리 건물이고 어디부터 바깥인지 헤더로
-    // 명확히 가른다 — 안 가르면 다른 건물 매장을 우리 매장으로 오해한다.
+    // 건물 밖 결과는 **묻기 전에는 그리지 않는다.** 이 앱의 본업은 건물 안
+    // 길찾기다. 실내에 답이 있는데 바깥 줄을 함께 얹으면 "밥집"에 인천 계양구
+    // 가게가 딸려 나온다 — 답이 아니라 잡음이다.
+    //
+    // 실내가 빈손일 때만 한 줄로 물어본다. 누르면 그때 펼친다. 자동으로 펼치지
+    // 않는 이유는 "못 찾았다"와 "밖에서 찾아 왔다"가 다른 말이기 때문이다 —
+    // 사용자가 바깥을 보겠다고 한 적 없이 바깥 결과가 답처럼 놓이면 안 된다.
+    //
+    // 펼친 뒤에도 순서는 실내가 먼저다. 어디까지가 우리 건물이고 어디부터
+    // 바깥인지는 헤더가 가른다 — 안 가르면 다른 건물 매장을 우리 것으로 읽는다.
     final onPoiPicked = widget.onOutdoorPoiPicked;
     if (merged.outdoorRows.isNotEmpty && onPoiPicked != null) {
-      rows.add(_outdoorHeader());
-      for (final row in merged.outdoorRows) {
-        rows.add(_poiTile(row, onPoiPicked));
+      if (_showOutdoor) {
+        rows.add(_outdoorHeader());
+        for (final row in merged.outdoorRows) {
+          rows.add(_poiTile(row, onPoiPicked));
+        }
+      } else {
+        // **건물 줄도 답이다.** 건물은 목록(rows)이 아니라 머리말(prelude)에
+        // 실리므로 매장 수만 보면 "빈손"으로 잘못 읽는다 — "데모 건물"을 쳐서
+        // 그 건물이 떠 있는데 "이 건물에는 없어요"를 띄우면 앞뒤가 안 맞는다.
+        final indoorEmpty = ordered.isEmpty && building == null;
+        rows.add(_outdoorPrompt(merged.outdoorRows.length, indoorEmpty));
       }
     }
 
@@ -1491,6 +1517,42 @@ class _SearchPanelState extends State<SearchPanel> {
     for (final row in merged.outdoorRows) {
       debugPrint('[poi-merge]   남김: "${row.poi.name}"');
     }
+  }
+
+  /// 바깥 결과를 펼치는 한 줄. **줄을 대신 놓는 것이 아니라 물어보는 것이다.**
+  ///
+  /// 결과처럼 보이면 안 되므로 매장 줄(RoutexListCell)과 같은 모양을 쓰지 않는다.
+  /// 건수를 적는 것은 눌러 볼 값어치가 있는지 미리 알려 주기 위해서다 — 눌렀는데
+  /// 한 건이면 누른 것이 아깝다.
+  ///
+  /// [indoorEmpty]면 왜 비었는지 먼저 밝힌다. 실내에 답이 있을 때는 그 문장이
+  /// 거짓이므로 버튼만 남긴다 — 답을 찾은 사람에게 "없어요"라고 말하면 안 된다.
+  /// 어느 쪽이든 **버튼은 항상 남는다.** 실내에 답이 있어도 밖을 찾는 흐름이
+  /// 있기 때문이다(건물 안에서 지하철역 찾기).
+  Widget _outdoorPrompt(int count, bool indoorEmpty) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (indoorEmpty) ...[
+            Text(
+              '"$_submittedQuery"에 맞는 매장이 이 건물에는 없어요.',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+          ],
+          RoutexButton(
+            key: const Key('show-outdoor'),
+            label: indoorEmpty
+                ? '건물 밖에서 찾으셨나요? 주변 $count곳 보기'
+                : '건물 밖 주변 $count곳 보기',
+            variant: RoutexButtonVariant.quiet,
+            onPressed: () => setState(() => _showOutdoor = true),
+          ),
+        ],
+      ),
+    );
   }
 
   /// "건물 밖" 구분선. 여기부터는 우리 백엔드가 아니라 외부 지도(TMAP)에서 온
