@@ -304,6 +304,51 @@ GPS는 **건물 안이라는 것까지만** 말한다. 그다음 두 가지를 �
 
 ---
 
+## 6. 배율이 도면을 켜므로, 활성 층은 실외에서도 사실이어야 한다
+
+2절의 zoom 판정은 **실내 모드**를 켜는 규칙이고, 도면 자체는 그보다 **먼저** 보인다 —
+`indoorOverlayFadeInStartZoom` 16.5에서 페이드인이 시작해 17.5에서 끝난다(2절 표).
+그 사이 구간에서는 `_indoorEntered`가 거짓인데도 층 도면이 화면에 깔린다. 의도한
+동작이다(야외 지도에서 건물을 확대해 들여다보는 것이 곧 미리보기다).
+
+그래서 **활성 층은 실내 상태와 무관하게 항상 사실이어야 한다.** 실내 모드가 아니니
+아무 층이나 놔둬도 안 보인다는 가정이 성립하지 않는다.
+
+### 실기기 (2026-08-20, 더현대 서울)
+
+밖(정확도 3~4 m · 외곽선 밖 26~31 m · `outside`)에서 지하 2층 매장을 목적지로 잡았다.
+
+- 하단 카드는 `"스타벅스 리저브까지 · 남서쪽 출구 경유 · 4분 262 m"` — **야외 구간은
+  맞게 섰다.** 실내 구간도 `computeMultiFloorRoute`가 **지상 출입구 노드**에서 시작해
+  맞게 풀렸다. 경로 계산에는 틀린 곳이 없었다.
+- 그런데 화면에는 **B2 도면**이 깔려 있었다. 지상 출구에서 끝나는 야외선과 이어지는
+  것이 하나도 없어, 사용자에게는 "경로가 지하 2층 기준으로 섰다"로 보인다.
+
+### 왜 B2가 남았나
+
+| 자리 | 하는 일 |
+|---|---|
+| `resolveIndexEntry` / `focusStore` | 밖에서 매장을 검색·탭하면 **실내 모드는 안 켜고** 도면 층만 그 매장 층으로 갈아 끼운다 |
+| `_resetActiveFloorToDefault` | 활성 층을 되돌리는 **유일한** 자리인데, `_setIndoorEntered(false, leftBuilding: true)` — GPS로 진짜 나갔을 때만 불린다 |
+| `returnToOutdoorView` | 도면만 접는다. `leftBuilding`이 아니라 층을 안 건드린다 |
+
+즉 "밖에서 지하 매장을 보기만 한" 사용자에게는 층을 되돌릴 주체가 아무도 없었다.
+그리고 262 m 경로에 카메라를 맞추면(`_fitCameraToRoute`) 배율이 페이드 구간의 끝이라,
+아무도 켠 적 없는 B2 도면이 거의 불투명하게 그려진다.
+
+### 지금 규칙
+
+`showOutdoorToIndoorRouteTo`가 `returnToOutdoorView` 직후에 활성 층을 **이 여정의 실내
+구간이 시작하는 층**으로 맞춘다. 고르는 규칙은 GPS 자동 진입의 앵커 층과 **같은 함수**
+(`screens/outdoor_map/entry/gps_entry_floor.dart`의 `gpsEntryAnchorFloor`)다 — 지상 출입구 층 → `default_floor` → 보던 층. 두 답이 갈리면
+문을 지나는 순간 도면이 한 번 더 튄다.
+
+폴백 갈래(노드·출입구·그래프 없음)에서도 같은 자리를 지나므로 함께 맞춰진다.
+
+검증 기준은 `client/test/screens/outdoor_map/outdoor_to_indoor_journey_floor_test.dart`.
+
+---
+
 ## 곁가지
 
 - GPS 스트림 자체의 수명·신선도는 [GPS 스트림 정책](gps-stream-policy.md).
