@@ -47,13 +47,13 @@ extension OutdoorMapEscalator on OutdoorMapBodyState {
     // 동안의 Δ와 무장 여부가 곧 원인이라, 아무 일도 안 일어나는 구간이야말로
     // 봐야 할 구간이다.
     _escalatorDebugText.value = _debugModeController.enabled
-        ? describeEscalatorJudgement(
+        ? '${describeEscalatorJudgement(
             deltaM: _guidance.escalator.deltaM,
             armed: _guidance.escalator.isArmed,
             hasCandidate: _guidance.escalator.hasCandidate,
             phase: _guidance.escalator.phase,
             lastEvent: _lastEscalatorEvent,
-          )
+          )} · ${_describeBoardingApproach()}'
         : null;
 
     // 활강 진행률 목표를 기압으로 갱신한다. 단조 증가만 허용 — 평활 노이즈로
@@ -91,6 +91,22 @@ extension OutdoorMapEscalator on OutdoorMapBodyState {
         () => _completeEscalatorTransition(outcome.confirmed!),
       );
     }
+  }
+
+  /// 탑승점 게이트를 칩 한 조각으로 옮긴다.
+  ///
+  /// 판정기 상태(무장·후보·phase)만으로는 idle 구간에서 **재탐색이 막혔는지 마커가
+  /// 붙들렸는지**가 안 보인다. 거리를 함께 적는 이유는 게이트가 안 열렸을 때
+  /// "멀어서"인지 "경로가 탑승점을 안 지목해서(`-`)"인지가 그것으로만 갈리기
+  /// 때문이다. 예) `탑승점2.1m·차단O고정O`
+  String _describeBoardingApproach() {
+    final distanceM = _guidance.boardingApproachDistanceM;
+    final distance = distanceM == null
+        ? '-'
+        : '${distanceM.toStringAsFixed(1)}m';
+    final blocked = _guidance.isNearRouteBoarding ? 'O' : 'X';
+    final held = _guidance.isPositionHeld ? 'O' : 'X';
+    return '탑승점$distance·차단$blocked고정$held';
   }
 
   /// 판정기의 단계 전이를 화면 동작으로 옮긴다.
