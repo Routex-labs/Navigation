@@ -68,6 +68,21 @@ extension _MapShellSheets on _MapShellScreenState {
     await _runSheetChain(() => _showStoreInfo(resolved, focusOnMap: true));
   }
 
+  /// 지도 위 "이벤트" pill. 오늘 열리는 행사를 고르면 **검색 후보를 고른 것과
+  /// 같은 경로**로 상세를 연다 — 진입점마다 따로 만들면 한쪽만 층을 옮긴다.
+  Future<void> _onEventsPressed() async {
+    final entry = await EventsSheet.show(context, onCloseAll: _requestCloseSheetChain);
+    if (!mounted || entry == null) return;
+    // 이벤트를 보는 사람은 아직 건물 밖일 수 있다 — 공유 링크와 같은 맥락이라
+    // 진입까지 맡긴다. 밖이라고 포기하면 pill이 야외에서 아무것도 못 연다.
+    final resolved = await _outdoorKey.currentState?.resolveIndexEntry(
+      entry,
+      enterBuildingIfNeeded: true,
+    );
+    if (!mounted || resolved == null) return;
+    await _runSheetChain(() => _showStoreInfo(resolved, focusOnMap: true));
+  }
+
   /// 야외 지도에서 건물 폴리곤을 눌렀을 때. 시트를 먼저 띄우고, 진입은 그
   /// 시트가 시킬 때만 한다.
   void _onMapBuildingTap(Building building) {
@@ -440,21 +455,52 @@ extension _MapShellSheets on _MapShellScreenState {
     _applyMapPick(match, target);
   }
 
-  PlaceDetailTarget _targetFor(
-    PoiSearchResult match,
-    FavoritePlace? favorite,
-  ) => PlaceDetailTarget(
-    title: match.name,
-    subtitle: match.floor,
-    placeId: match.placeId,
-    favorite: favorite,
-    // 대분류 칩을 없앴으므로 업종은 한 줄로만 보여 준다. 소분류가 없는
-    // 장소에서 업종이 통째로 사라지지 않도록 대분류로 떨어뜨린다.
-    subcategory: match.subcategory ?? match.category,
-    // 검색 결과 목록이 쓰는 것과 **같은 계산 결과**를 넘긴다. 두 화면이
-    // 같은 매장에 다른 거리를 적으면 어느 쪽도 못 믿게 된다.
-    reach: match.nodeId == null ? null : _reachByNodeId?[match.nodeId],
-  );
+  /// 행사 스냅샷을 한 번 읽어 둔다. **실패를 삼킨다** — 행사는 곁들이라,
+  /// 파일이 깨졌다고 지도 화면이 뜨지 못하면 손해가 훨씬 크다.
+  Future<void> _loadBuildingEvents() async {
+    try {
+      final source = await rootBundle.loadString('assets/mock/events.json');
+      if (!mounted) return;
+      setState(() => _buildingEvents = parseBuildingEvents(source));
+    } on Object catch (error) {
+      debugPrint('[events] $error');
+    }
+  }
+
+  /// 지금 이 자리에서 열리는 행사. 없으면 null.
+  ///
+  /// **매장 색인이 아니라 placeId로 찾는다** — 같은 팝업 공간에 행사가 며칠씩
+  /// 갈아드는데, 이름으로 맞추면 `POP-UP EAST`처럼 이름이 겹치는 칸에서 엉뚱한
+  /// 행사가 붙는다.
+  BuildingEvent? _eventAt(String? placeId) {
+    if (placeId == null) return null;
+    for (final event in _buildingEvents?.openOn(todayKey()) ?? const []) {
+      if (event.storeId == placeId) return event;
+    }
+    return null;
+  }
+
+  PlaceDetailTarget _targetFor(PoiSearchResult match, FavoritePlace? favorite) {
+    final event = _eventAt(match.placeId);
+    return PlaceDetailTarget(
+      // **행사 중이면 행사 이름이 제목이다.** 사용자가 찾아온 이름은
+      // `POP-UP ICONIC B2`가 아니라 `명탐정 코난`이다. 원래 매장명은 아래
+      // 메타 줄에 남겨 둔다 — 지도 라벨·검색은 그대로라 두 이름이 이어져야 한다.
+      title: event?.title ?? match.name,
+      subtitle: event == null
+          ? match.floor
+          : [match.floor, match.name].join(' · '),
+      event: event,
+      placeId: match.placeId,
+      favorite: favorite,
+      // 대분류 칩을 없앴으므로 업종은 한 줄로만 보여 준다. 소분류가 없는
+      // 장소에서 업종이 통째로 사라지지 않도록 대분류로 떨어뜨린다.
+      subcategory: match.subcategory ?? match.category,
+      // 검색 결과 목록이 쓰는 것과 **같은 계산 결과**를 넘긴다. 두 화면이
+      // 같은 매장에 다른 거리를 적으면 어느 쪽도 못 믿게 된다.
+      reach: match.nodeId == null ? null : _reachByNodeId?[match.nodeId],
+    );
+  }
 
   /// 지도에서 매장을 눌러 상세를 연다. **떠 있는 상세가 있으면 먼저 닫는다.**
   ///

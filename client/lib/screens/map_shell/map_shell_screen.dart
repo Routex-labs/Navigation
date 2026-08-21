@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show SystemNavigator;
+import 'package:flutter/services.dart' show SystemNavigator, rootBundle;
 import 'package:latlong2/latlong.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -35,6 +35,8 @@ import '../../models/route/transit_route.dart';
 import 'widgets/sheets/app_menu_sheet.dart';
 import '../../map/style/category_map_filter.dart';
 import 'widgets/sheets/category_stores_sheet.dart';
+import 'widgets/sheets/events_sheet.dart';
+import '../../domain/event/building_events.dart';
 import '../../models/route/directions_candidate.dart';
 import 'widgets/sheets/favorites_sheet.dart';
 import 'widgets/chrome/floor_transition_overlay.dart';
@@ -377,9 +379,14 @@ class _MapShellScreenState extends State<MapShellScreen> {
     unawaited(_openPlaceFromLink(link));
   }
 
+  /// 오늘 이 건물에서 열리는 행사. 상세 시트의 제목·카드가 이걸 본다
+  /// ([_targetFor]). 실패하면 null로 남고 화면은 행사가 없던 때와 같아진다.
+  BuildingEvents? _buildingEvents;
+
   @override
   void initState() {
     super.initState();
+    unawaited(_loadBuildingEvents());
     _searchFocus.addListener(_onSearchFocusChanged);
     _routeOriginFocus.addListener(_onRouteOriginFocusChanged);
     _routeDestinationFocus.addListener(_onRouteDestinationFocusChanged);
@@ -959,6 +966,18 @@ class _MapShellScreenState extends State<MapShellScreen> {
             ? _lockMaps(_mapLockOverlayTouch)
             : _unlockMaps(_mapLockOverlayTouch),
         children: [
+          // "이벤트"는 카테고리와 달리 **실내/야외를 가리지 않는다** — 오늘 뭘
+          // 하는지는 건물에 들어가기 전에 궁금한 것이고, 고르면 진입까지
+          // 이어진다([_onEventsPressed]).
+          RoutexChipBar(
+            key: const Key('events-pill'),
+            options: const [RoutexChipOption(id: 'events', label: '이벤트')],
+            selectedId: null,
+            overflow: RoutexChipBarOverflow.deferToParent,
+            onSelected: (_) => unawaited(_onEventsPressed()),
+            semanticsLabel: '오늘의 이벤트',
+          ),
+          const SizedBox(width: RoutexSpacing.controlGap),
           // 카테고리 필터는 모드가 아니라 [_indoorContextActive]로 가른다 —
           // 야외 탭이어도 오버레이가 켜지면 도면과 강조가 이미 떠 있다. 순수
           // 야외에서는 감춘다(강조가 도면 위에 그려져 결과가 안 보인다).
