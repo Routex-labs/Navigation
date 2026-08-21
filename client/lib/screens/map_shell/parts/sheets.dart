@@ -311,24 +311,30 @@ extension _MapShellSheets on _MapShellScreenState {
         await _openRouteMode(presetOrigin: candidate);
       }
     } else if (action == StoreInfoAction.setDestination) {
-      // 출발지가 준비돼 있으면 바로 그린다. 명시적으로 고른 매장이든 위치가 잡힌
-      // 현재 위치든([_canRouteFromCurrentLocation]) 둘 다 완전하다 — 후자를 빼면
-      // 위치를 찍어둔 사용자가 "도착"을 눌러도 아무 일도 안 일어난다.
-      setState(() => _routeDraftDestination = candidate);
-      final origin = _selectedOrigin;
-      if (origin != null || _canRouteFromCurrentLocation) {
-        await _startRoute(origin: origin, destination: candidate);
-      } else {
-        // 출발지가 없다. **여기서 멈추면 아무 일도 안 일어난 화면이 된다** — 길찾기
-        // 바는 [_routeMode]가 참일 때만 그려지는데 이 갈래가 그걸 안 세웠다.
-        // 도착지를 채운 채로 바를 열고 커서를 출발 칸에 둔다.
-        await _openRouteMode(
-          presetDestination: candidate,
-          focusField: RoutePlanField.origin,
-        );
-      }
+      await _setRouteDestination(candidate);
     }
     return true;
+  }
+
+  /// 도착지를 확정한다. 상세 시트의 "도착"과 시설 목록의 줄 선택이 **같은 이
+  /// 함수**를 지난다 — 같은 결과에 이르는 길이 둘로 갈리면 한쪽만 고쳐지는 날이 온다.
+  Future<void> _setRouteDestination(DirectionsCandidate candidate) async {
+    // 출발지가 준비돼 있으면 바로 그린다. 명시적으로 고른 매장이든 위치가 잡힌
+    // 현재 위치든([_canRouteFromCurrentLocation]) 둘 다 완전하다 — 후자를 빼면
+    // 위치를 찍어둔 사용자가 "도착"을 눌러도 아무 일도 안 일어난다.
+    setState(() => _routeDraftDestination = candidate);
+    final origin = _selectedOrigin;
+    if (origin != null || _canRouteFromCurrentLocation) {
+      await _startRoute(origin: origin, destination: candidate);
+      return;
+    }
+    // 출발지가 없다. **여기서 멈추면 아무 일도 안 일어난 화면이 된다** — 길찾기
+    // 바는 [_routeMode]가 참일 때만 그려지는데 이 갈래가 그걸 안 세웠다.
+    // 도착지를 채운 채로 바를 열고 커서를 출발 칸에 둔다.
+    await _openRouteMode(
+      presetDestination: candidate,
+      focusField: RoutePlanField.origin,
+    );
   }
 
   /// 야외 장소 시트. 매장 시트와 같은 규칙으로 "출발/도착을 실제로 골랐는가"를

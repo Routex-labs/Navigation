@@ -365,7 +365,8 @@ extension OutdoorMapUi on OutdoorMapBodyState {
             left: 16,
             bottom:
                 floorSelectorBottomOffset +
-                (indoorRouteVisible ? bottomBarLiftPx : 0),
+                (indoorRouteVisible ? bottomBarLiftPx : 0) +
+                widget.bottomOverlayLiftPx,
             child: SafeArea(
               top: false,
               // 키가 열 전체를 덮어야 한다. 선택기에만 걸면 그 위 "내 위치로"를
@@ -384,6 +385,26 @@ extension OutdoorMapUi on OutdoorMapBodyState {
                       GuidanceRecenterButton(
                         key: const Key('return-to-my-floor'),
                         onPressed: () => unawaited(_returnToMyFloor()),
+                      ),
+                      const SizedBox(height: RoutexSpacing.controlGap),
+                    ],
+                    // 편의시설은 **층 선택기 바로 위**다. 둘 다 "건물 안에서 몸을
+                    // 옮기는" 조작이고, 상단 카테고리 칩 줄은 엄지에서 가장 먼
+                    // 자리다. 조건부인 위 버튼이 이 아래가 아니라 위에 붙는 이유는
+                    // 자리 이동 때문이다 — 뜨고 질 때마다 아래 둘이 밀리면 방금
+                    // 누른 자리가 매번 달라진다.
+                    if (widget.onFacilitiesTap case final onPressed?) ...[
+                      RoutexMapControl(
+                        key: const Key('nearby-facilities'),
+                        label: '가까운 편의시설',
+                        // Kit에 시설 글리프가 없다. `wc`는 셋 중 가장 많이 찾는
+                        // 화장실을 가리키면서 "편의시설"로도 읽히는 유일한 아이콘이다
+                        // (엘리베이터·에스컬레이터 글리프는 그 하나만 가리킨다).
+                        icon: Icons.wc_rounded,
+                        tone: widget.facilitiesActive
+                            ? RoutexMapControlTone.active
+                            : RoutexMapControlTone.neutral,
+                        onPressed: onPressed,
                       ),
                       const SizedBox(height: RoutexSpacing.controlGap),
                     ],
