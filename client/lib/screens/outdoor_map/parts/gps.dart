@@ -548,4 +548,22 @@ extension OutdoorMapGps on OutdoorMapBodyState {
   /// [_recenterOnCurrentPosition]이 실제로 쓰는 값과 **같은 값**을 본다.
   bool get _canRecenterOnCurrentPosition =>
       _indoorLocationVisible && _pdrCurrentWgs84() != null;
+
+  /// 내 위치가 찍힌 층으로 도면을 되돌리고 카메라를 그 자리에 놓는다.
+  ///
+  /// **층 전환에 카메라를 맡기지 않는다.** [_onFloorChipSelected]는 새 층
+  /// 외곽선에 맞추므로, 그걸 쓰면 층 전체가 잡힌 뒤 내 자리로 한 번 더 움직여
+  /// 전환이 두 박자로 쪼개진다. 여기서는 도면만 갈아 끼우고 카메라는 곧바로
+  /// 내 위치로 간다.
+  Future<void> _returnToMyFloor() async {
+    final anchorFloor = _pdrTrailState.anchor?.floorId;
+    if (anchorFloor == null) return;
+    if (anchorFloor != _activeFloor) {
+      await _switchOverlayFloorCrossfaded(anchorFloor, recenterIfNeeded: false);
+      // 연타로 이 호출이 추월당했으면 카메라를 만지지 않는다 — 사용자가 마지막에
+      // 고른 층 위에서 엉뚱한 자리로 끌려간다([_onFloorChipSelected]와 같은 규칙).
+      if (!mounted || _activeFloor != anchorFloor) return;
+    }
+    await _recenterOnCurrentPosition();
+  }
 }

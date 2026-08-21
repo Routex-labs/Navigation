@@ -368,11 +368,32 @@ extension OutdoorMapUi on OutdoorMapBodyState {
                 (indoorRouteVisible ? bottomBarLiftPx : 0),
             child: SafeArea(
               top: false,
-              child: FloorSelector(
+              // 키가 열 전체를 덮어야 한다. 선택기에만 걸면 그 위 "내 위치로"를
+              // 누른 탭이 지도까지 새어들어가 건물 밖 탭으로 판정된다
+              // ([_floorSelectorKey]의 주석이 말하는 그 증상).
+              child: KeyedSubtree(
                 key: _floorSelectorKey,
-                floors: _building!.floors,
-                selectedFloor: _activeFloor!,
-                onSelectFloor: _onFloorChipSelected,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 다른 층을 보는 동안에만 뜬다. 같은 층에서는 하단 바의
+                    // "위치 보정"이 이미 그 일을 하므로, 늘 띄우면 비슷하게 생긴
+                    // 두 조작이 화면에 남는다([GuidanceRecenterButton]).
+                    if (_viewingOtherFloor) ...[
+                      GuidanceRecenterButton(
+                        key: const Key('return-to-my-floor'),
+                        onPressed: () => unawaited(_returnToMyFloor()),
+                      ),
+                      const SizedBox(height: RoutexSpacing.controlGap),
+                    ],
+                    FloorSelector(
+                      floors: _building!.floors,
+                      selectedFloor: _activeFloor!,
+                      onSelectFloor: _onFloorChipSelected,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
