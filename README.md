@@ -2,7 +2,7 @@
 
 > 실외에서 실내까지 이어지는 경로 안내를 위한 Flutter 클라이언트 데모입니다.
 
-**백엔드는 이 저장소에 없습니다.** Spring Boot로 이식돼 [Routex-labs/backend](https://github.com/Routex-labs/backend)에 있고, 앱이 붙는 Cloud Run 서비스가 그것을 서빙합니다.
+**백엔드는 이 저장소에 없습니다.** Spring Boot로 이식돼 [Routex-labs/backend](https://github.com/Routex-labs/backend)에 있고, 앱이 붙는 Cloud Run 서비스가 그것을 서빙합니다. 걷어낸 FastAPI 백엔드와 **원본 도면 데이터·시드/변환 파이프라인**은 [Routex-labs/fastapi](https://github.com/Routex-labs/fastapi)에 히스토리째 남아 있습니다.
 
 처음 실행한다면 [로컬 개발 가이드](docs/guide/local-development-guide.md)부터 보세요. Windows, macOS, Android 에뮬레이터/실기기, iOS 시뮬레이터/실기기 실행 방법을 분리해서 정리해 두었습니다.
 

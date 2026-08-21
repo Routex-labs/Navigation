@@ -143,7 +143,7 @@ FAISS 임계값·인덱스 문서를 세 번 재평가했는데 총점이 움직
 
 B2 매장 이름 앞 20건을 대상으로, 이름의 앞 1·2·3글자를 차례로 넣어 그 매장이 후보
 목록에서 몇 위에 오는지 쟀다. 원본은 시드 리소스
-(`backend/resources/studio/thehyundai-seoul-dabeeo/stores_*.json`, 12개 층 1640건)이며,
+(`resources/studio/thehyundai-seoul-dabeeo/stores_*.json`(Routex-labs/fastapi), 12개 층 1640건)이며,
 `suggestStores()`를 그대로 호출했다.
 
 **20/20 통과.** 눈여겨볼 점 둘.

@@ -589,7 +589,7 @@ id로 박아 뒀다(`backend/tests/unit/transform/test_build_studio_from_dabeeo.
 ## 4. 원본을 어떻게 되찾았나
 
 > 아래 임포터 변경은 지금 저장소에 있다
-> (`backend/scripts/transform/build_studio_from_dabeeo.py`). 원본을 **다시 받아야 할 때**
+> (`scripts/transform/build_studio_from_dabeeo.py`(Routex-labs/fastapi)). 원본을 **다시 받아야 할 때**
 > 같은 길을 두 번 찾지 않도록 경로를 남긴다.
 
 **임포터가 버리고 있었다.** `build_studio_from_dabeeo.py`가

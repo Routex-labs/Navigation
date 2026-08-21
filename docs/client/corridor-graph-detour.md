@@ -1,10 +1,10 @@
 # 복도 그래프의 ㄱ·ㄴ 우회 — 실측
 
-측정 대상: `backend/resources/studio/thehyundai-seoul-dabeeo/*.json` 12개 층.
+측정 대상: `resources/studio/thehyundai-seoul-dabeeo/*.json`(Routex-labs/fastapi) 12개 층.
 서버가 시드하는 원본이자 클라이언트가 받는 `navigation_graph`의 단일 출처다.
 
 채택 규칙과 "새 노드 0개"를 못 푸는 이유는 여기 베끼지 않는다 —
-`backend/scripts/transform/build_corridor_shortcuts.py`의 docstring이 단일 출처다.
+`scripts/transform/build_corridor_shortcuts.py`(Routex-labs/fastapi)의 docstring이 단일 출처다.
 검증 기준은 `client/test/domain/route/corridor_shortcuts_test.dart`.
 
 ## geometry는 무죄다
@@ -117,7 +117,7 @@ studio json (키 없음)
 ## 층별 채택 결과
 
 생성기가 낸 값이다. 코드에 표를 베끼지 않고 여기 한 곳에 둔다 — 원본은
-`backend/scripts/transform/build_corridor_shortcuts.py`를 다시 돌리면 나온다.
+`scripts/transform/build_corridor_shortcuts.py`(Routex-labs/fastapi)를 다시 돌리면 나온다.
 `여유폭 기준`은 그 층 기존 간선 p25 × 1.2이고, 그보다 좁은 후보는 버린다.
 
 | 층 | 채택 | 검수대기 | 여유폭 기준 | 기존 간선 |

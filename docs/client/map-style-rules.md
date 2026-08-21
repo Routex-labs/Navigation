@@ -588,7 +588,7 @@ MapLibre 심볼 레이어는 **미리 등록된 비트맵만** 참조할 수 있
 ## 8. 수직이동 POI는 이름을 그리지 않는다
 
 POI는 Studio 원본의 `elevator`/`escalator` 노드를 마커로 승격한 것이라
-(`backend/scripts/seed/studio_adapter.py`의 `_generate_pois`) `name`이 노드 식별자 그대로다.
+(`scripts/seed/studio_adapter.py`의 `_generate_pois`(Routex-labs/fastapi)) `name`이 노드 식별자 그대로다.
 
 | type | 개수 | 이름 예시 |
 |---|---|---|

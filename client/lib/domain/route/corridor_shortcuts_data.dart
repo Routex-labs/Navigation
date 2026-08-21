@@ -1,5 +1,7 @@
 // 생성된 파일이다. 손으로 고치지 마라.
-// 생성: backend/scripts/transform/build_corridor_shortcuts.py
+// 생성: Routex-labs/fastapi의 scripts/transform/build_corridor_shortcuts.py
+// 입력(원본 도면)도 그 저장소에 있다 — resources/studio/thehyundai-seoul-dabeeo/.
+// 이 저장소만으로는 다시 만들 수 없다.
 //
 // 채택 19개 · 검수대기 18개(기본 꺼짐). 층별 표와 B2·B3를 건너뛴 이유,
 // '새 노드 0개'를 풀면 안 되는 근거는 docs/client/corridor-graph-detour.md.
