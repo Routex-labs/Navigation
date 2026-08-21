@@ -919,6 +919,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
           // 화면이 같은 매장에 다른 거리를 적으면 어느 쪽도 못
           // 믿게 된다.
           reachByNodeId: _reachByNodeId,
+          currentFloorId: _activeIndoorFloor,
           suggestions: _routeSuggestions,
           onSuggestionPicked: _onRouteSuggestionPicked,
           onCurrentLocation: _pickCurrentLocationAsOrigin,
@@ -946,6 +947,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
           onBuildingPicked: _onSearchBuildingPicked,
           onQueryPicked: _onSearchQueryPicked,
           onSuggestionPicked: _onSearchSuggestionPicked,
+          // 줄 끝 `도착`. 상세를 거치지 않고 곧바로 경로를 그린다.
+          onStoreDestination: _onSearchStoreDestination,
+          onSuggestionDestination: (entry) =>
+              unawaited(_onSearchSuggestionDestination(entry)),
           indoorContextActive: _indoorContextActive,
           currentFloorId: _activeIndoorFloor,
           reachByNodeId: _reachByNodeId,

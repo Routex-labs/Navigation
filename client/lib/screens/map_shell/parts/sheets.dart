@@ -289,13 +289,7 @@ extension _MapShellSheets on _MapShellScreenState {
     // **처음 누른 매장이 아니라 지금 시트가 보여 주던 매장**이다. 갈아 끼우기가
     // 라우트를 그대로 두므로, 여기 `match`는 첫 매장에 묶여 있다.
     final active = _activePlaceMatch ?? match;
-    final candidate = DirectionsCandidate(
-      title: active.name,
-      subtitle: active.floor,
-      point: active.point,
-      nodeId: active.nodeId,
-      floor: active.floor,
-    );
+    final candidate = candidateForPlace(active);
     if (action == StoreInfoAction.setOrigin) {
       // 출발지를 지정하면 다음 "도착" 탭이 시트를 다시 열지 않고 바로 이
       // 매장을 출발지로 쓸 수 있도록 상위 상태에도 기억해둔다. 이미 도착
@@ -315,6 +309,17 @@ extension _MapShellSheets on _MapShellScreenState {
     }
     return true;
   }
+
+  /// 검색 결과 한 줄을 길찾기 후보로 옮긴다. 상세 시트·검색 결과·시설 목록이
+  /// **같은 변환**을 써야 세 입구가 같은 경로로 흘러간다.
+  DirectionsCandidate candidateForPlace(PoiSearchResult place) =>
+      DirectionsCandidate(
+        title: place.name,
+        subtitle: place.floor,
+        point: place.point,
+        nodeId: place.nodeId,
+        floor: place.floor,
+      );
 
   /// 도착지를 확정한다. 상세 시트의 "도착"과 시설 목록의 줄 선택이 **같은 이
   /// 함수**를 지난다 — 같은 결과에 이르는 길이 둘로 갈리면 한쪽만 고쳐지는 날이 온다.

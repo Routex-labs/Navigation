@@ -167,15 +167,7 @@ extension _MapShellCategory on _MapShellScreenState {
       ).showSnackBar(const SnackBar(content: Text('이 시설의 위치를 찾지 못했습니다')));
       return;
     }
-    await _setRouteDestination(
-      DirectionsCandidate(
-        title: resolved.name,
-        subtitle: resolved.floor,
-        point: resolved.point,
-        nodeId: resolved.nodeId,
-        floor: resolved.floor,
-      ),
-    );
+    await _setRouteDestination(candidateForPlace(resolved));
   }
 
   /// 지도 위 카테고리 chip 줄의 아래 끝(화면 좌표·논리 픽셀). 상수로 박지 않고

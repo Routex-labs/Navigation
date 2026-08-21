@@ -40,6 +40,8 @@ class SearchPanel extends StatefulWidget {
     required this.onBuildingPicked,
     required this.onQueryPicked,
     required this.onSuggestionPicked,
+    this.onStoreDestination,
+    this.onSuggestionDestination,
     required this.indoorContextActive,
     this.currentFloorId,
     this.reachByNodeId,
@@ -80,6 +82,17 @@ class SearchPanel extends StatefulWidget {
   /// [onStorePicked]와 따로 두는 이유는 **패널이 좌표를 모르기 때문**이다 —
   /// `/store-index`는 1,640건을 한 번에 주느라 좌표를 싣지 않는다.
   final ValueChanged<StoreIndexEntry> onSuggestionPicked;
+
+  /// 줄 끝 `도착` 버튼. **행 본문(상세 열기)과 다른 동작이다** — 여기까지 온
+  /// 사용자의 대부분은 그 매장이 어떤 곳인지가 아니라 거기까지 가는 길을 원한다.
+  ///
+  /// null이면 버튼을 그리지 않는다. 경로를 만들 수 없는 줄(입구 노드가 없는 매장)도
+  /// 그리지 않는다 — 눌러도 아무 일이 없는 버튼을 두지 않는다.
+  final ValueChanged<PoiSearchResult>? onStoreDestination;
+
+  /// 후보 줄(자동완성)의 같은 버튼. 후보는 좌표를 안 싣고 오므로 호출부가 층
+  /// 도면에서 좌표를 찾아 준다([resolveIndexEntry]).
+  final ValueChanged<StoreIndexEntry>? onSuggestionDestination;
 
   /// 최근 검색어를 골랐을 때. 패널이 입력창을 갖고 있지 않으므로(클래스 주석
   /// 참고) 검색을 스스로 다시 돌릴 수 없다 — 상위가 검색창 글자를 그 값으로
@@ -983,6 +996,16 @@ class _SearchPanelState extends State<SearchPanel> {
       // 가장 빈약한 화면으로 가고 있었다. 설계: docs/client/search-result-list-ux.md O절.
       subtitle: [?categoryLabel, floorLine].join(' · '),
       metric: reach == null ? null : reachLabel(reach),
+      // 묶인 후보(화장실 19곳)의 `도착`은 **대표 한 곳**으로 간다. 그 대표가
+      // 위에서 고른 가장 가까운 곳이라([nearestByWalkingDistance]) 목록을 펼쳐
+      // 고르는 것과 같은 답이면서 두 탭이 준다.
+      trailingActionLabel: store.entranceNodeId == null ? null : '도착',
+      trailingActionIcon: RoutexIcons.directions,
+      onTrailingAction:
+          store.entranceNodeId == null ||
+              widget.onSuggestionDestination == null
+          ? null
+          : () => widget.onSuggestionDestination!(store),
       onPressed: () {
         // 한 곳짜리 후보는 그 매장을 열면 그만이다. 예전에는 여기서도 이름으로
         // 검색을 다시 돌렸는데(아래 분기), 그러면 사용자가 방금 고른 것과 사실상
@@ -1469,6 +1492,14 @@ class _SearchPanelState extends State<SearchPanel> {
       subtitle: [?categoryLabel, firstLine].join(' · '),
       // 거리는 "지금 갈지"를 정하는 값이라 맥락과 줄을 나눈다.
       metric: reach == null ? null : reachLabel(reach),
+      // 끝 버튼은 행 본문과 **다른 동작**이라 터치 타깃이 갈린다(Kit이 나눈다).
+      // 노드가 없는 매장은 경로를 못 그리므로 버튼도 없다 — 그 사실은 위
+      // `경로 안내 불가`가 이미 말한다.
+      trailingActionLabel: nodeId == null ? null : '도착',
+      trailingActionIcon: RoutexIcons.directions,
+      onTrailingAction: nodeId == null || widget.onStoreDestination == null
+          ? null
+          : () => widget.onStoreDestination!(store),
       onPressed: () => widget.onStorePicked(store),
     );
   }
