@@ -25,9 +25,11 @@ class PdrDebugSessionRecorder {
 
   // 판을 올릴 때마다 `docs/pdr/pdr-dev-integration.md`의 「스키마 이력」에 "그전에는
   // 무엇을 못 가렸나"를 한 줄 적는다. 그게 이 숫자가 존재하는 이유다.
-  // v16이 늘린 것: 세션 경계 시계열 `session_boundaries`, 실내 상태 변경의
-  // 출처 `indoor_state_changes`.
-  static const schemaVersion = 17;
+  // v18이 늘린 것: 문 근거가 안 걸린 이유와 그때의 최단 거리
+  // `exit_door_closest_miss`, GPS 좌표별 `meters_outside`.
+  // v19가 늘린 것: 도약으로 **거른** GPS 좌표 `gps_rejected_fixes`.
+  // v20이 늘린 것: 진입 시각 ~ 첫 실내 위치 사이의 공백 `indoor_position_gaps`.
+  static const schemaVersion = 20;
 
   // **표본 배열에 상한이 없다** — 품질·복도·tracker 입력·경로 진행·기압·층 전이·
   // GPS 차이는 세션이 끝날 때까지 무한히 쌓인다.
@@ -74,6 +76,11 @@ class PdrDebugSessionRecorder {
   String _sessionBoundary = 'running';
   final List<Map<String, Object?>> _sessionBoundaries = [];
   final List<Map<String, Object?>> _indoorStateChanges = [];
+  final List<Map<String, Object?>> _indoorPositionGaps = [];
+
+  /// 진입은 했는데 실내 위치가 아직 없는 구간의 **시작 시각**. 위치가 잡히면
+  /// null로 되돌아간다([_closeIndoorPositionGap]).
+  DateTime? _awaitingIndoorPositionSince;
   bool _spansBuildingExit = false;
   DateTime? _lastQualitySampleAt;
   int? _lastSampledSteps;
@@ -83,7 +90,20 @@ class PdrDebugSessionRecorder {
   final List<Map<String, Object?>> _altimeterSamples = [];
   final List<Map<String, Object?>> _floorTransitionEvents = [];
   final List<Map<String, Object?>> _indoorExitEvents = [];
+
+  /// 문 근거가 **안 걸린** 이유 중 문에 가장 가까웠던 한 건(v18)과 그 호출 횟수.
+  ///
+  /// 걸음마다 갱신되므로 배열로 두면 다른 배열들을 다 합친 것보다 커진다. 알고
+  /// 싶은 것은 하나뿐이다 — **PDR이 문에 얼마나까지 다가갔었나.** 그 최솟값이
+  /// 문 도달 반경(`kExitDoorReachRadiusMeters`)보다 크면 문턱이 아니라 PDR이 문제이고, 작은데도
+  /// 안 걸렸다면 `reason`이 어느 게이트였는지 말해 준다.
+  Map<String, Object?>? _exitDoorClosestMiss;
+  int _exitDoorMissCount = 0;
   final List<Map<String, Object?>> _gpsPositionDeltas = [];
+
+  /// 도약으로 걸러 낸 좌표(v19). **상한을 안 둔다** — 위 시계열 배열들과 같은
+  /// 이유이고, 여기 쌓이는 건수 자체가 규칙이 얼마나 자주 물었는지다.
+  final List<Map<String, Object?>> _gpsRejectedFixes = [];
 
   /// 층별 마지막 궤적(v15). **키가 층이라 상한을 따로 안 둔다** — 건물 층 수가
   /// 곧 상한이다. 같은 층을 다시 밟으면 그 층의 이전 궤적은 덮인다: 앵커가
@@ -215,6 +235,33 @@ class PdrDebugSessionRecorder {
     });
   }
 
+  /// 문 근거가 안 걸린 한 건. **가장 가까웠던 것만** 남기고 나머지는 센다.
+  ///
+  /// 거리를 못 잰 건(`doorDistanceM == null`)은 잰 건에 언제나 밀린다 — 문턱을
+  /// 다시 잡을 때 읽는 값이 거리다. 이유 목록의 단일 출처는
+  /// `screens/outdoor_map/entry/indoor_exit_evidence.dart`의 `stepExitDoorEvidence`.
+  void recordExitDoorMiss({
+    required String reason,
+    double? doorDistanceM,
+    String? floorId,
+    DateTime? at,
+  }) {
+    _exitDoorMissCount++;
+    final previous = _exitDoorClosestMiss?['door_distance_m'] as double?;
+    final closer =
+        _exitDoorClosestMiss == null ||
+        (doorDistanceM != null &&
+            (previous == null || doorDistanceM < previous));
+    if (!closer) return;
+    _exitDoorClosestMiss = {
+      'at_utc': (at ?? DateTime.now()).toUtc().toIso8601String(),
+      'reason': reason,
+      'door_distance_m': doorDistanceM,
+      'floor_id': floorId,
+      'steps': _latestSnapshot?.steps,
+    };
+  }
+
   /// GPS 좌표와 화면이 그리는 "내 위치"의 거리(v15).
   ///
   /// [distanceM]이 null이면 둘 중 하나가 없었다는 뜻이다 — **그 구간이 어디였는지도
@@ -223,20 +270,80 @@ class PdrDebugSessionRecorder {
   void recordGpsPositionDelta({
     required double? distanceM,
     required double gpsAccuracyM,
+    required double metersOutsideM,
     required String? positionSource,
     required String verdict,
     required String? floorId,
     required bool indoorEntered,
     DateTime? at,
   }) {
+    final now = (at ?? DateTime.now()).toUtc();
+    // v20. `position_source`가 처음 값을 갖는 순간이 곧 "마커가 없던 구간"의
+    // 끝이다. 별도 호출을 두지 않는 이유는 그 값이 이미 여기로 오기 때문이다.
+    if (positionSource != null) _closeIndoorPositionGap(now, floorId);
     _gpsPositionDeltas.add({
-      'at_utc': (at ?? DateTime.now()).toUtc().toIso8601String(),
+      'at_utc': now.toIso8601String(),
       'distance_m': distanceM,
       'gps_accuracy_m': gpsAccuracyM,
+      // v18. `unclear`가 이어지는 구간에서 좌표가 실제로 얼마나 바깥이었는지 —
+      // 약한 이탈의 거리·지속 문턱을 이 시계열로 되짚는다.
+      'meters_outside_m': metersOutsideM,
       'position_source': positionSource,
       'building_verdict': verdict,
       'floor_id': floorId,
       'indoor_entered': indoorEntered,
+    });
+  }
+
+  /// 도약으로 거른 좌표 한 건(v19).
+  ///
+  /// 남기는 이유는 **다음 실측에서 이 규칙이 맞았는지 보기 위해서**다. 실측에서
+  /// 수신기는 오차 11~13 m를 보고하면서 50~77 m를 튀었다 — [gpsAccuracyM]과
+  /// [jumpM]을 나란히 남겨야 "오차 값을 못 믿는다"는 전제를 다음 로그로 다시
+  /// 확인하거나 뒤집을 수 있다. [allowanceM]은 그때 허용치라, 상한을 다시 잡을
+  /// 때 읽는 값이다.
+  ///
+  /// 규칙과 상수의 단일 출처는
+  /// `screens/outdoor_map/gps/gps_jump_filter.dart`의 `stepGpsJumpFilter`.
+  void recordGpsRejectedFix({
+    required double jumpM,
+    required double allowanceM,
+    required double elapsedSeconds,
+    required double gpsAccuracyM,
+    required bool surrendered,
+    required bool indoorEntered,
+    DateTime? at,
+  }) {
+    _gpsRejectedFixes.add({
+      'at_utc': (at ?? DateTime.now()).toUtc().toIso8601String(),
+      'jump_m': jumpM,
+      'allowance_m': allowanceM,
+      'elapsed_s': elapsedSeconds,
+      'gps_accuracy_m': gpsAccuracyM,
+      'surrendered': surrendered,
+      'indoor_entered': indoorEntered,
+      'steps': _latestSnapshot?.steps,
+    });
+  }
+
+  /// 진입 직후 **위치 마커가 하나도 없던** 구간을 닫는다(v20).
+  ///
+  /// 진입 시각([recordIndoorStateChange])부터 `position_source`가 처음 값을 갖는
+  /// 시각까지다. 실측에서 25초였고, 그동안 야외 GPS 마커는 진입과 동시에 꺼지고
+  /// 실내 마커는 앵커가 없어 안 떠서 화면에 아무것도 없었다. **그 25초가 줄었는지
+  /// 다음 실측에서 숫자로 보려고 남긴다.**
+  ///
+  /// 두 시각의 출처가 다르다 — 진입은 앱 시계, 첫 위치는 GPS 좌표의 timestamp라
+  /// 1초 안팎이 섞인다. 25초 규모를 보는 값이라 그대로 둔다.
+  void _closeIndoorPositionGap(DateTime at, String? floorId) {
+    final since = _awaitingIndoorPositionSince;
+    if (since == null) return;
+    _awaitingIndoorPositionSince = null;
+    _indoorPositionGaps.add({
+      'entered_at_utc': since.toIso8601String(),
+      'first_position_at_utc': at.toIso8601String(),
+      'gap_ms': at.difference(since).inMilliseconds,
+      'floor_id': floorId,
     });
   }
 
@@ -450,8 +557,12 @@ class PdrDebugSessionRecorder {
     String? floorId,
     DateTime? at,
   }) {
+    final now = (at ?? DateTime.now()).toUtc();
+    // v20. 진입한 순간이 곧 "마커가 없는" 구간의 시작이다. 나가면 잴 대상이
+    // 없어지므로 되돌린다 — 안 지우면 다음 진입의 공백이 실외 구간까지 삼킨다.
+    _awaitingIndoorPositionSince = entered ? now : null;
     _indoorStateChanges.add({
-      'at_utc': (at ?? DateTime.now()).toUtc().toIso8601String(),
+      'at_utc': now.toIso8601String(),
       'entered': entered,
       'source': source,
       'floor_id': floorId,
@@ -691,7 +802,13 @@ class PdrDebugSessionRecorder {
       'floor_transition_events': _floorTransitionEvents,
       // 실외 이탈 계측(v15). weak는 되돌리기 쉬운 일만, confirmed는 앵커 폐기다.
       'indoor_exit_events': _indoorExitEvents,
+      'exit_door_closest_miss': _exitDoorClosestMiss == null
+          ? null
+          : {..._exitDoorClosestMiss!, 'sample_count': _exitDoorMissCount},
       'gps_position_deltas': _gpsPositionDeltas,
+      // 도약으로 거른 좌표(v19). `surrendered`가 true인 건은 **거르다 항복해서
+      // 받아들인** 것이라, 이 값이 잦으면 상한이 너무 빡빡하다는 뜻이다.
+      'gps_rejected_fixes': _gpsRejectedFixes,
       'runtime': {
         'state': _runtimeStatus.state.name,
         'warnings': _runtimeStatus.warnings,
@@ -703,6 +820,8 @@ class PdrDebugSessionRecorder {
       'session_boundaries': _sessionBoundaries,
       'spans_building_exit': _spansBuildingExit,
       'indoor_state_changes': _indoorStateChanges,
+      // 진입 직후 위치 마커가 하나도 없던 구간(v20). [_closeIndoorPositionGap].
+      'indoor_position_gaps': _indoorPositionGaps,
     };
   }
 

@@ -421,6 +421,7 @@ extension OutdoorMapIndoor on OutdoorMapBodyState {
               here,
             ),
       gpsAccuracyM: position.accuracy,
+      metersOutsideM: judgement.metersOutside,
       positionSource: indoor?.source.name,
       verdict: judgement.verdict.name,
       floorId: _activeFloor,
