@@ -154,8 +154,8 @@ extension _MapShellSheets on _MapShellScreenState {
   /// 반환값은 사용자가 출발/도착 액션을 골랐는지다 — "그냥 닫힘"이면 호출자가 저장된
   /// 장소 시트로 되돌린다.
   ///
-  /// [keepZoom]이면 **배율은 그대로 둔다.** 지도에서 직접 누른 매장은 이미 화면에
-  /// 있으므로, 확대까지 하면 방금 보던 층 배치를 잃는다.
+  /// [keepZoom]이면 **배율은 그대로 둔다.** [focusRatio]는 그보다 부드러운
+  /// 조절기다 — 0.5면 지금 배율과 그 매장에 맞춘 배율의 중간까지만 간다.
   /// 이미 상세 시트가 떠 있으면 **그 시트의 내용만** 갈아 끼운다. 갈아 끼웠으면 true.
   ///
   /// 떼었다 붙이면 빈 프레임이 생겨 번쩍이고, 그냥 얹으면 같은 시트가 두 겹으로
@@ -164,9 +164,14 @@ extension _MapShellSheets on _MapShellScreenState {
   /// `docs/client/kakao-map-indoor-observation.md` S절.
   ///
   /// [focusOnMap]이 false면 **카메라는 그대로 둔다.** 갈아 끼우기는 시트를 다시
-  /// 열지 않으므로 카메라를 여기서 따로 움직인다 — 지도 탭의 "안 움직인다"는
-  /// 두 입구([_openStoreFromMap]과 여기)를 모두 막아야 성립한다.
-  bool _swapOpenPlaceDetail(PoiSearchResult match, {bool focusOnMap = true}) {
+  /// 열지 않으므로 카메라를 여기서 따로 움직인다 — 지도 탭의 포커스 세기는
+  /// 두 입구([_openStoreFromMap]과 여기)가 같은 [focusRatio]를 써야 맞는다.
+  bool _swapOpenPlaceDetail(
+    PoiSearchResult match, {
+    bool focusOnMap = true,
+    bool keepZoom = false,
+    double focusRatio = 1,
+  }) {
     if (_placeDetailClosing == null) return false;
     _activePlaceMatch = match;
     _nearbyOriginPlaceId = match.placeId;
@@ -181,6 +186,8 @@ extension _MapShellSheets on _MapShellScreenState {
                   bottomSheetFraction: placeDetailSheetInitialSize(
                     MediaQuery.sizeOf(context).height,
                   ),
+                  keepZoom: keepZoom,
+                  focusRatio: focusRatio,
                   enterBuildingIfNeeded: true,
                 ) ??
                 Future.value())
@@ -197,12 +204,19 @@ extension _MapShellSheets on _MapShellScreenState {
     bool focusOnMap = false,
     bool keepZoom = false,
     bool crossFade = false,
+    double focusRatio = 1,
   }) async {
     // **여기가 상세 시트의 유일한 입구다.** 검색·근처 매장·저장한 장소·지도 탭이
     // 모두 이 함수를 지나므로, 중복 방지를 각 호출부에 흩지 않고 여기 한 곳에
     // 둔다. 갈아 끼웠다면 이 호출은 시트를 열지 않았으므로 false로 끝낸다 —
     // 사용자가 고른 동작은 원래 떠 있던 시트의 await가 받는다.
-    if (_swapOpenPlaceDetail(match, focusOnMap: focusOnMap)) return false;
+    if (_swapOpenPlaceDetail(
+      match,
+      focusOnMap: focusOnMap,
+      keepZoom: keepZoom,
+    )) {
+      return false;
+    }
     // 카메라와 시트를 같은 박자에 시작한다. 카메라 완료를 기다린 뒤 시트를
     // 올리면 `지도 이동 → 시트 등장`이 두 동작으로 끊겨 보이고, 반대로 시트를
     // 먼저 다 올리면 목적지가 잠깐 시트 뒤에 남는다. focusStore는 최종 위치를
@@ -217,6 +231,7 @@ extension _MapShellSheets on _MapShellScreenState {
           MediaQuery.sizeOf(context).height,
         ),
         keepZoom: keepZoom,
+        focusRatio: focusRatio,
         // 검색·목록에서 고른 매장은 건물 밖에서 골랐어도 보여 준다. 지도에서
         // 직접 누른 매장은 이미 건물 안이라 이 값과 무관하다.
         enterBuildingIfNeeded: true,
@@ -458,22 +473,28 @@ extension _MapShellSheets on _MapShellScreenState {
 
   /// 지도에서 매장을 눌러 상세를 연다. **떠 있는 상세가 있으면 먼저 닫는다.**
   ///
-  /// 고른 매장의 기존 아이콘·이름이 커진다. **카메라는 움직이지 않는다.** 이 시트는
-  /// barrier가 없어 포인터를 지도로 흘리는 의도된 설계라([_withMapsLocked]),
-  /// 그 대가로 시트가 쌓이는 것을 여기서 막는다.
+  /// 이 시트는 barrier가 없어 포인터를 지도로 흘리는 의도된 설계라
+  /// ([_withMapsLocked]), 그 대가로 시트가 쌓이는 것을 여기서 막는다.
   ///
   /// **이미 떠 있었으면 제자리에서 갈아 끼운다.** 닫고 다시 여는 기본 동작은
   /// 화면의 3분의 1을 왕복해(260ms + 380ms) 매장을 훑을수록 눈이 피로하다.
   /// 시트가 이미 그 자리에 있으니 움직일 이유가 없다 — 내용만 바꾼다.
   Future<void> _openStoreFromMap(PoiSearchResult match) async {
-    if (_swapOpenPlaceDetail(match, focusOnMap: false)) return;
+    // **카테고리를 켜 놓고 누른 매장은 보러 간 것이다.** 칩으로 그 대분류만
+    // 남겨 놓고 하나를 고르는 흐름이라 예전 그대로 완전히 포커스한다.
+    // 그냥 도면을 훑다 누른 것은 다르다 — 화면이 통째로 끌려가면 방금까지
+    // 보던 자리를 잃으므로 그 절반까지만 간다.
+    final focusRatio = _categorySelection == null ? 0.5 : 1.0;
+    if (_swapOpenPlaceDetail(match, focusOnMap: true, focusRatio: focusRatio)) {
+      return;
+    }
     await _runSheetChain(
-      // **이 입구만 카메라를 옮기지 않는다.** 지도에서 누른 매장은 이미 화면에
-      // 보이던 것이라 옮길 이유가 없고, 실내에는 카메라를 사용자에게 붙여 두는
-      // 모드가 없어 안내 중에 한 번 끌려가면 되돌아오지 않는다. 검색·근처
-      // 매장·저장한 장소는 화면 밖일 수 있어 이동이 필요하고, 그 셋은 여기를
-      // 지나지 않는다.
-      () => _showStoreInfo(match, focusOnMap: false),
+      // 예전에는 이 입구만 카메라를 아예 안 움직였다("이미 보이던 것"). 시트가
+      // 화면 아래 절반을 덮는 것을 못 본 규칙이라, 아래쪽을 눌렀으면 방금 고른
+      // 매장이 시트 뒤로 들어갔다. 배율을 고정한 채 자리만 맞추는 것
+      // (`keepZoom`)도 답이 아니었다 — 도면 전체가 보이는 상태에서는 리프트가
+      // 수십 px이라 화면이 그대로였다. 배율까지 같은 비율로 함께 끈다.
+      () => _showStoreInfo(match, focusOnMap: true, focusRatio: focusRatio),
     );
   }
 }

@@ -1945,12 +1945,20 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   ///
   /// [enterBuildingIfNeeded]면 건물 밖에서 골랐어도 들어가서 보여 준다(검색 결과
   /// 전용이다. 카테고리 목록은 지금 층 매장만 올려 주므로 이 값을 주지 않는다).
+  /// [focusRatio]는 **포커스를 얼마나 줄지**다. 1이면 예전 그대로 — 매장이 시트
+  /// 위 띠 한가운데에 오고 배율도 그 매장에 맞춘다. 0.5면 지금 배율과 그 목표의
+  /// 중간까지만 가고 밀어 올리는 양도 절반이다.
+  ///
+  /// **줌과 리프트를 한 값으로 묶는다.** 하나만 줄이면 "절반 포커스"가 아니라
+  /// 다른 동작이 된다 — 배율을 아예 고정해 봤더니(`keepZoom`) 도면 전체가
+  /// 보이는 상태에서는 리프트가 수십 px이라 화면이 그대로였다.
   Future<void> focusStore(
     PoiSearchResult store, {
     double bottomSheetFraction = 0,
     double topInsetPx = placingHintTopPx,
     bool keepZoom = false,
     bool enterBuildingIfNeeded = false,
+    double focusRatio = 1,
   }) async {
     // 밖에서 들어온 경우 배율을 유지하면 도시 축척 그대로 매장 위에 서게 된다.
     // 그때는 keepZoom 요청을 무시하고 매장이 보이는 배율까지 확대한다.
@@ -2026,14 +2034,22 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
         storeFocusZoom: fitted ?? _storeFocusZoom,
         // 폴리곤을 잰 값일 때만 물러선다 — 매장 전체가 화면에 들어와야 한다.
         storeFitsViewport: fitted != null,
+        ratio: focusRatio,
+        // **절반 포커스는 어디서 눌렀든 같은 그림이어야 한다.** 지금 배율에서
+        // 재면 카테고리로 한 매장을 크게 본 다음 칩을 풀고 다른 매장을 눌렀을
+        // 때 확대된 채로 조금만 움직인다. 도면 전체가 보이는 배율에서 재면
+        // 그만큼 물러선다.
+        fromZoom: focusRatio < 1 ? _entryZoomThreshold() : null,
       );
       // **한 번만 움직인다.** 예전에는 매장 중앙으로 옮긴 뒤 `scrollBy`로 띠 한가운데로
       // 다시 밀었는데, 첫 이동이 한 프레임 드러나 카메라가 두 번 튀었다. 최종 목표를
       // 먼저 계산해 한 애니메이션으로 간다.
-      final lift = math.max(
-        0.0,
-        (viewport.height * bottomSheetFraction - topInsetPx) / 2,
-      );
+      final lift =
+          math.max(
+            0.0,
+            (viewport.height * bottomSheetFraction - topInsetPx) / 2,
+          ) *
+          focusRatio;
       final target = cameraTargetForScreenLift(
         store.point,
         bearing: bearing,
