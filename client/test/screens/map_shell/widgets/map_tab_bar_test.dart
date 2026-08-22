@@ -12,12 +12,17 @@ void main() {
   Widget host({
     MapTab selected = MapTab.map,
     ValueChanged<MapTab>? onSelected,
+    Set<MapTab> disabled = const {},
   }) => MaterialApp(
     theme: AppTheme.light,
     home: Scaffold(
       body: Align(
         alignment: Alignment.bottomCenter,
-        child: MapTabBar(selected: selected, onSelected: onSelected ?? (_) {}),
+        child: MapTabBar(
+          selected: selected,
+          onSelected: onSelected ?? (_) {},
+          disabled: disabled,
+        ),
       ),
     ),
   );
@@ -52,6 +57,33 @@ void main() {
     await tester.tap(find.byKey(const Key('map-tab-directions')));
 
     expect(picked, [MapTab.saved, MapTab.directions]);
+  });
+
+  /// 이 앱의 행사는 더현대 서울 한 건물 것뿐이다. 몇 킬로 떨어진 데서 "오늘의
+  /// 이벤트"를 열면 그것이 지금 있는 동네 이야기로 읽힌다.
+  testWidgets('여기서 열 것이 없는 탭은 빠지지 않고 흐려진다', (tester) async {
+    final picked = <MapTab>[];
+    await tester.pumpWidget(
+      host(onSelected: picked.add, disabled: const {MapTab.events}),
+    );
+
+    // 자리는 그대로다 — 뜨고 지면 바닥이라는 약속이 깨진다.
+    expect(find.byKey(const Key('map-tab-events')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('map-tab-events')));
+    expect(picked, isEmpty);
+
+    // 흐린 것과 그냥 안 고른 것이 같은 색이면 구분이 안 된다.
+    final off = tester.widget<Text>(find.text('이벤트')).style?.color;
+    final on = tester.widget<Text>(find.text('저장')).style?.color;
+    expect(off, isNot(on));
+
+    // 색만으로 가르지 않는다 — 읽어 주는 쪽에도 알린다.
+    final semantics = tester.widget<Semantics>(
+      find
+          .ancestor(of: find.text('이벤트'), matching: find.byType(Semantics))
+          .first,
+    );
+    expect(semantics.properties.enabled, isFalse);
   });
 
   testWidgets('안전영역만큼 아래를 비우고, 줄 자체 높이는 고정이다', (tester) async {

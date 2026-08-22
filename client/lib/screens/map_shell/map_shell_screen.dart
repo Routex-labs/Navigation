@@ -1170,6 +1170,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
         key: _tabBarKey,
         selected: _activeTab,
         onSelected: _onTabSelected,
+        // **행사는 건물 안의 것이다.** 이 앱의 행사 데이터는 더현대 서울 한
+        // 건물 것뿐이라, 몇 킬로 떨어진 데서 "오늘의 이벤트"를 열면 그것이 지금
+        // 있는 동네 이야기로 읽힌다. 밖에서는 흐리게 두고 열지 않는다.
+        disabled: _indoorContextActive ? const {} : const {MapTab.events},
       ),
     );
   }
@@ -1192,13 +1196,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
     }
   }
 
-  /// 이벤트 탭. 건물 안에서는 판을 켜고 끄고, 밖에서는 오늘 목록 시트를 연다 —
-  /// 밖에서는 얹을 판이 없다(판은 실내 전용이다).
+  /// 이벤트 탭. 판을 켜고 끈다. **건물 밖에서는 눌리지 않는다**(탭 줄이 막는다).
   void _onEventsTab() {
-    if (!_indoorContextActive) {
-      unawaited(_onEventsPressed());
-      return;
-    }
     setState(() => _issueDiaryDismissed = !_issueDiaryDismissed);
   }
 

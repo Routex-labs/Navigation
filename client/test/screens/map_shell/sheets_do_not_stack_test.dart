@@ -74,7 +74,9 @@ void main() {
   });
 
   Future<void> tapMap(WidgetTester tester) async {
-    final state = tester.state<OutdoorMapBodyState>(find.byType(OutdoorMapBody));
+    final state = tester.state<OutdoorMapBodyState>(
+      find.byType(OutdoorMapBody),
+    );
     // 화면 좌표를 함께 준다. 기본값 (0,0)은 상단 바 아래라
     // [_isTapOnMapOverlay]가 먼저 삼켜, 검증하려는 분기까지 오지 않는다.
     // ignore: invalid_use_of_visible_for_testing_member
@@ -118,19 +120,9 @@ void main() {
     return find.byType(AppMenuSheet).evaluate().isNotEmpty;
   }
 
-  /// 맨 아래 탭 줄의 이벤트. **야외에서만 시트를 연다** — 실내에서는 같은 탭이
-  /// 하단 판을 켜고 끄고, 시트는 그 판의 쪽 카드에서 열린다.
-  Future<bool> openEventsTab(WidgetTester tester) async {
-    await tester.tap(
-      find.byKey(const Key('map-tab-events')),
-      warnIfMissed: false,
-    );
-    await drain(tester);
-    return find.byType(EventsSheet).evaluate().isNotEmpty;
-  }
-
   /// 실내에서 그 시트가 떠 있는 상태. 판의 쪽 카드를 누르면 열리는 것과 같은
-  /// 시트를 직접 띄운다 — 판에 오늘 카드가 몇 장인지는 스냅샷 날짜에 달려 있어,
+  /// 시트를 직접 띄운다 — 탭 줄의 이벤트는 시트가 아니라 판을 켜고 끄고,
+  /// 건물 밖에서는 아예 눌리지 않는다 — 판에 오늘 카드가 몇 장인지는 스냅샷 날짜에 달려 있어,
   /// 카드를 눌러 여는 길로 만들면 날짜가 지나는 순간 이 표가 통째로 헛돈다.
   Future<bool> openEventsSheet(WidgetTester tester) async {
     unawaited(
@@ -149,7 +141,6 @@ void main() {
       return find.byType(BuildingInfoSheet).evaluate().isNotEmpty;
     },
     '상단 바 메뉴': openMenu,
-    '이벤트 탭': openEventsTab,
   };
 
   final indoorEntries = <String, Future<bool> Function(WidgetTester)>{
@@ -206,14 +197,18 @@ void main() {
   /// 지금 **화면에 실제로 보이는** 시트 수. 라우트를 세는 [SheetStackGuard]와
   /// 따로 재는 이유는, 라우트가 하나여도 위젯이 남아 있으면 사용자에게는 두 장
   /// 겹친 것으로 보이기 때문이다.
-  List<String> visibleSheetNames() => {
-    '건물 정보': find.byType(BuildingInfoSheet),
-    '앱 메뉴': find.byType(AppMenuSheet),
-    '카테고리 목록': find.byType(CategoryStoresSheet),
-    '오늘의 이벤트': find.byType(EventsSheet),
-    '매장 상세': find.byType(PlaceDetailSheet),
-    '근처 매장': find.text('근처 매장에서 골라주세요'),
-  }.entries.where((e) => e.value.evaluate().isNotEmpty).map((e) => e.key).toList();
+  List<String> visibleSheetNames() =>
+      {
+            '건물 정보': find.byType(BuildingInfoSheet),
+            '앱 메뉴': find.byType(AppMenuSheet),
+            '카테고리 목록': find.byType(CategoryStoresSheet),
+            '오늘의 이벤트': find.byType(EventsSheet),
+            '매장 상세': find.byType(PlaceDetailSheet),
+            '근처 매장': find.text('근처 매장에서 골라주세요'),
+          }.entries
+          .where((e) => e.value.evaluate().isNotEmpty)
+          .map((e) => e.key)
+          .toList();
 
   Future<void> sweep(
     WidgetTester tester,

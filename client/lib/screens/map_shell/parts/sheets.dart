@@ -68,16 +68,6 @@ extension _MapShellSheets on _MapShellScreenState {
     await _runSheetChain(() => _showStoreInfo(resolved, focusOnMap: true));
   }
 
-  /// 지도 위 "이벤트" pill. 오늘 열리는 행사를 고르면 **검색 후보를 고른 것과
-  /// 같은 경로**로 상세를 연다 — 진입점마다 따로 만들면 한쪽만 층을 옮긴다.
-  Future<void> _onEventsPressed() async {
-    final entry = await EventsSheet.show(
-      context,
-      onCloseAll: _requestCloseSheetChain,
-    );
-    await _openPickedEvent(entry);
-  }
-
   /// 행사 목록에서 고른 매장으로 상세를 연다. 진입점(pill·쪽 카드)이 무엇이든
   /// 여기 하나로 모인다 — 따로 만들면 한쪽만 층을 옮기거나 한쪽만 강조가 빠진다.
   Future<void> _openPickedEvent(StoreIndexEntry? entry) async {

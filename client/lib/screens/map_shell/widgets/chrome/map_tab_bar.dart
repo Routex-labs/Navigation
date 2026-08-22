@@ -31,10 +31,16 @@ class MapTabBar extends StatelessWidget {
     super.key,
     required this.selected,
     required this.onSelected,
+    this.disabled = const {},
   });
 
   final MapTab selected;
   final ValueChanged<MapTab> onSelected;
+
+  /// 지금 여기서는 열 것이 없는 탭. **빼지 않고 흐리게 둔다** — 자리가 뜨고 지면
+  /// 바닥이라는 약속이 깨지고, 사용자는 방금 누른 자리를 다시 찾아야 한다. 흐린
+  /// 채로 남아 있으면 "여기서는 못 쓴다"가 그대로 읽힌다.
+  final Set<MapTab> disabled;
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +61,9 @@ class MapTabBar extends StatelessWidget {
                     key: Key('map-tab-${tab.name}'),
                     tab: tab,
                     selected: tab == selected,
-                    onTap: () => onSelected(tab),
+                    onTap: disabled.contains(tab)
+                        ? null
+                        : () => onSelected(tab),
                   ),
                 ),
             ],
@@ -76,15 +84,23 @@ class _TabItem extends StatelessWidget {
 
   final MapTab tab;
   final bool selected;
-  final VoidCallback onTap;
+
+  /// null이면 여기서 열 것이 없는 탭이다.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.primary : AppColors.muted;
+    final enabled = onTap != null;
+    final color = switch ((enabled, selected)) {
+      (false, _) => AppColors.muted.withValues(alpha: 0.38),
+      (_, true) => AppColors.primary,
+      _ => AppColors.muted,
+    };
     return InkWell(
       onTap: onTap,
       child: Semantics(
         selected: selected,
+        enabled: enabled,
         button: true,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
