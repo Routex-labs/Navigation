@@ -537,9 +537,16 @@ extension _MapShellSheets on _MapShellScreenState {
     _applyMapPick(match, target);
   }
 
-  /// 행사 스냅샷을 한 번 읽어 둔다. **실패를 삼킨다** — 행사는 곁들이라,
-  /// 파일이 깨졌다고 지도 화면이 뜨지 못하면 손해가 훨씬 크다.
+  /// 행사를 서버에서 받아 둔다. **실패를 삼킨다** — 행사는 곁들이라, 못 받았다고
+  /// 지도 화면이 뜨지 못하면 손해가 훨씬 크다.
+  ///
+  /// **한 번으로 끝내지 않는다.** 앱을 켜자마자 부르는 자리라 그때는 DNS도 아직
+  /// 안 선다 — 실기기에서 첫 요청이 `Failed host lookup`으로 떨어졌고, 삼킨 뒤로는
+  /// 다시 받을 길이 없어 그 세션 내내 판이 안 떴다. 그래서 **받은 것이 없으면 또
+  /// 부를 수 있게** 두고, 건물에 들어가는 순간 한 번 더 부른다(그때쯤이면 GPS와
+  /// 지도 요청이 이미 오간 뒤라 망이 서 있다).
   Future<void> _loadBuildingEvents() async {
+    if (_buildingEvents != null) return;
     try {
       final events = await fetchBuildingEvents();
       if (!mounted || events == null) return;

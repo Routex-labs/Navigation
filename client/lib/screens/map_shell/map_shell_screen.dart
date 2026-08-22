@@ -772,6 +772,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
           // 화면이 새로 시작하는 것이라 그 뜻도 함께 끝난다.
           if (!entered) _issueDiaryDismissed = false;
         });
+        // 앱을 켜자마자 건 요청이 망보다 빨랐을 수 있다. 판이 실제로 필요해지는
+        // 이 순간 한 번 더 받는다 — 이미 받아 뒀으면 그냥 돌아온다.
+        if (entered) unawaited(_loadBuildingEvents());
         // 오버레이를 닫고 야외로 나온 순간부터는 위치·출발지가 GPS다.
         if (!entered) _dropIndoorOriginIfOutdoors();
         // 실내 컨텍스트가 켜지고 꺼질 때마다 거리 기준이 통째로 바뀐다.
