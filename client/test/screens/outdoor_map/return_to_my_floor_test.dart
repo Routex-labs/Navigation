@@ -220,6 +220,10 @@ class _TwoFloorGraphRepository implements BuildingRepository {
       const [];
 
   @override
+  Future<Map<String, dynamic>?> getBuildingEvents(String buildingId) async =>
+      null;
+
+  @override
   Future<List<StoreIndexEntry>?> getStoreIndex(String buildingId) async =>
       const [];
 

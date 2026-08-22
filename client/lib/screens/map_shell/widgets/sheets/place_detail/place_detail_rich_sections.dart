@@ -810,7 +810,10 @@ IconData? infoIconFor(String label) => switch (label.replaceAll(' ', '')) {
   // 그 차이를 지운다. 아이콘만으로는 부족해서 이 줄은 라벨 글자도 함께 남긴다
   // (`RoutexInfoRow.keepLabel`).
   '고객센터' => Icons.support_agent_outlined,
-  '대표번호' || '전화번호' || '연락처' || '문의' => Icons.call_outlined,
+  // `전화`가 빠져 있어 한 번 물렸다 — 그 라벨로 적힌 매장 20곳이 아이콘도 복사
+  // 버튼도 없이 나갔다. 지금 데이터는 전부 contact로 옮겼지만, 표에 구멍이 남아
+  // 있으면 같은 라벨이 다시 들어온 날 조용히 되풀이된다.
+  '전화' || '대표번호' || '전화번호' || '연락처' || '문의' => Icons.call_outlined,
   '매장타입' || '매장유형' => Icons.storefront_outlined,
   '주차' => Icons.local_parking_outlined,
   '위생등급' => Icons.verified_outlined,
@@ -819,21 +822,86 @@ IconData? infoIconFor(String label) => switch (label.replaceAll(' ', '')) {
   _ => null,
 };
 
-/// 영업시간·대표번호처럼 **시간이 지나면 저절로 거짓이 되는** 운영 정보다.
+/// 매장 전화번호 한 줄.
 ///
-/// [PlaceBusinessInfo]와 갈라 둔 이유가 여기 있다. 저쪽은 주소처럼 잘 변하지 않는 값만
-/// 담고 확인일을 붙이지 않는다 — 정보량 대비 소음만 늘기 때문이다(설계 7-A-3). 이쪽은
-/// 반대로 확인일 없이는 값 자체를 믿을 수 없어서, 서버가 항목마다 확인일을 필수로 준다.
+/// [PlaceDemoInfoSection]과 그리는 모양이 같은데도 따로 있는 이유는 **데이터가 오는
+/// 길이 다르기 때문**이다. 저쪽은 소개 영상용 매장에만 붙이는 자유 문자열이고, 이쪽은
+/// 서버가 번호·출처·확인일 셋을 검증해 보내는 구조체라 전 매장에 나간다.
+///
+/// **줄을 누르면 전화가 걸린다. 복사 버튼은 두지 않는다.**
+///
+/// 복사 버튼은 누를 자리 48dp를 지키느라 상자가 값(24dp)보다 두 배 높다. 그 상자가
+/// 줄 높이를 정하고 그 안에서 숫자가 가운데로 밀려서, 라벨과 숫자 사이가 설계값
+/// 4dp가 아니라 17dp로 벌어졌다 — 위아래 여백이 서로 다르게 보이던 것이 이것이다.
+/// 48dp를 지키면서 그 슬랙만 없앨 방법은 없다.
+///
+/// 그래서 동작 하나만 남겼다. 이 앱이 도는 전화기에는 다이얼러가 늘 있고, 번호를
+/// 복사해 두는 것보다 바로 거는 쪽이 이 화면에서 하려는 일이다.
+/// **확인일은 그리지 않는다.** 서버가 `confirmed_at`을 함께 주지만 그것은 값을
+/// 다시 확인할 근거이지 읽을 정보가 아니다. 줄마다 날짜가 붙으면 한 줄짜리 섹션이
+/// 두 줄이 되고, 사용자가 정할 것은 "이 번호로 걸까"뿐이다. 상세 시트의 다른 섹션도
+/// 같은 이유로 확인일을 그리지 않는다.
+class PlaceContactSection extends StatelessWidget {
+  const PlaceContactSection({super.key, required this.tel});
+
+  final String tel;
+
+  /// 걸지 못하면 조용히 넘기지 않는다. 눌렀는데 아무 일도 없으면 앱이 멈춘 줄 안다.
+  ///
+  /// 상세 시트는 Navigator에 얹힌 모달이라 SnackBar가 시트 뒤에 그려진다. 링크 열기와
+  /// 같은 이유로 오버레이 토스트를 쓴다([PlaceLinksSection]).
+  Future<void> _call(BuildContext context) async {
+    var dialed = false;
+    try {
+      // `tel:`은 구분기호를 그대로 받는다. 숫자만 남기지 않는 이유는 화면에 보이는
+      // 번호와 걸리는 번호가 같아야 사용자가 무엇이 걸렸는지 확인할 수 있어서다.
+      dialed = await launchUrl(Uri(scheme: 'tel', path: tel));
+    } catch (_) {
+      dialed = false;
+    }
+    if (!dialed && context.mounted) {
+      RoutexToast.show(context, '전화를 걸지 못했습니다');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (tel.isEmpty) return const SizedBox.shrink();
+    // **섹션 제목을 두지 않는다.** 줄이 하나뿐인데 `연락처` 제목과 `전화번호` 라벨이
+    // 같은 말을 두 번 하면서 38dp를 쓴다. 수화기 아이콘과 라벨만으로 무슨 줄인지
+    // 충분하고, 섹션 경계는 이미 시트가 선으로 긋는다.
+    return Semantics(
+      button: true,
+      label: '$tel에 전화',
+      child: InkWell(
+        onTap: () => _call(context),
+        child: RoutexInfoRow(
+          label: '전화번호',
+          value: tel,
+          icon: infoIconFor('전화번호'),
+          // 아이콘만으로는 누가 받는 번호인지 말하지 못한다. 운영 정보 줄과 같은
+          // 이유로 라벨 글자를 남긴다.
+          keepLabel: true,
+        ),
+      ),
+    );
+  }
+}
+
+/// 매장 타입·주차·위생등급처럼 서버가 출처와 확인일을 검증해 주는 운영 정보다.
+///
+/// **확인일은 화면에 그리지 않는다.** 서버는 항목마다 확인일을 필수로 받지만, 그것은
+/// 값을 다시 확인할 근거이지 읽는 사람이 무언가를 정하는 데 쓰는 값이 아니다. 줄마다
+/// 날짜가 붙으면 세 줄짜리 섹션이 여섯 줄이 되고, 정작 값이 묻힌다.
+///
+/// **실제로 낡는 둘은 이미 여기를 떠났다** — 영업시간은 `hours`, 전화번호는 `contact`로
+/// 갔고, 각자 낡음을 다루는 방법이 따로 있다(영업시간은 임계값을 넘기면 판정을 거두고
+/// 그 줄에 이유를 적는다).
 class PlaceDemoInfo {
-  const PlaceDemoInfo({
-    required this.label,
-    required this.value,
-    required this.confirmedAt,
-  });
+  const PlaceDemoInfo({required this.label, required this.value});
 
   final String label;
   final String value;
-  final String confirmedAt;
 }
 
 /// 전화번호가 들어 있는 줄인가.
@@ -841,7 +909,7 @@ class PlaceDemoInfo {
 /// **값이 아니라 라벨로 먼저 거른다.** 값만 보고 판단하면 영업시간 줄의
 /// `2026-08-10`이나 층 안내의 `B2-1` 같은 토막에 복사 버튼이 붙는다.
 bool isPhoneLabel(String label) => switch (label.replaceAll(' ', '')) {
-  '고객센터' || '대표번호' || '전화번호' || '연락처' || '문의' => true,
+  '고객센터' || '전화' || '대표번호' || '전화번호' || '연락처' || '문의' => true,
   _ => false,
 };
 
@@ -854,13 +922,13 @@ String? phoneNumberIn(String value) =>
 
 final _phonePattern = RegExp(r'\d{2,4}-\d{3,4}(?:-\d{4})?');
 
-/// 확인일이 붙은 운영 정보를 라벨-값 행으로 보여 준다.
+/// 서버가 검증한 운영 정보를 라벨-값 행으로 보여 준다.
 class PlaceDemoInfoSection extends StatelessWidget {
   const PlaceDemoInfoSection({super.key, required this.items});
 
   final List<PlaceDemoInfo> items;
 
-  Widget _row(BuildContext context, PlaceDemoInfo item, String? sharedDate) {
+  Widget _row(BuildContext context, PlaceDemoInfo item) {
     final isPhone = isPhoneLabel(item.label);
     return RoutexInfoRow(
       label: item.label,
@@ -871,20 +939,12 @@ class PlaceDemoInfoSection extends StatelessWidget {
       keepLabel: isPhone,
       copyText: isPhone ? phoneNumberIn(item.value) : null,
       onCopied: () => announceClipboardCopy(context),
-      // 확인일이 제각각일 때만 항목마다 붙인다. 묶을 수 없기 때문이다.
-      caption: sharedDate == null ? '${item.confirmedAt} 확인' : null,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) return const SizedBox.shrink();
-
-    // 확인일이 전부 같으면 섹션 아래에 한 번만 적는다. 다섯 항목에 같은 날짜를 다섯
-    // 번 적으면 읽히지 않는 소음이 되고, **다르면 묶을 수 없다** — 묶는 순간 오래된
-    // 항목이 최근에 확인된 것처럼 보인다.
-    final dates = {for (final item in items) item.confirmedAt};
-    final sharedDate = dates.length == 1 ? dates.single : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -893,14 +953,7 @@ class PlaceDemoInfoSection extends StatelessWidget {
         const SizedBox(height: 12),
         for (var index = 0; index < items.length; index++) ...[
           if (index > 0) const SizedBox(height: infoRowGap),
-          _row(context, items[index], sharedDate),
-        ],
-        if (sharedDate != null) ...[
-          const SizedBox(height: 12),
-          Text(
-            '$sharedDate 확인',
-            style: const TextStyle(fontSize: 11, color: AppColors.muted),
-          ),
+          _row(context, items[index]),
         ],
       ],
     );
