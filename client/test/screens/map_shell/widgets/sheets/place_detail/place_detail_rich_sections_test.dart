@@ -1155,44 +1155,9 @@ void main() {
       // 확인일은 값을 다시 확인할 근거이지 읽을 정보가 아니다. 한 줄짜리 섹션이
       // 날짜 때문에 두 줄이 되면 정작 정할 것("이 번호로 걸까")이 흐려진다.
       expect(find.textContaining('확인'), findsNothing);
-    });
-
-    testWidgets('copying the contact puts the number on the clipboard', (
-      tester,
-    ) async {
-      setClipboardAnnouncementForTest(true);
-      addTearDown(() => setClipboardAnnouncementForTest(null));
-      String? copied;
-      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        SystemChannels.platform,
-        (call) async {
-          if (call.method == 'Clipboard.setData') {
-            copied = (call.arguments as Map)['text'] as String?;
-          }
-          return null;
-        },
-      );
-      addTearDown(
-        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-          SystemChannels.platform,
-          null,
-        ),
-      );
-
-      await tester.pumpWidget(
-        subject(
-          const PlaceContactSection(tel: '1522-3232'),
-        ),
-      );
-
-      await tester.tap(find.text('복사'));
-      await tester.pumpAndSettle();
-
-      expect(copied, '1522-3232');
-
-      // 토스트가 스스로 사라지기를 기다린다. 남은 타이머를 흘려보내지 않으면
-      // 테스트가 대기 중인 타이머로 실패한다.
-      await tester.pump(const Duration(seconds: 2));
+      // 복사 버튼을 두지 않는다. 48dp 상자가 줄을 부풀려 라벨과 숫자 사이가
+      // 벌어지고, 이 화면에서 하려는 일은 복사가 아니라 거는 것이다.
+      expect(find.text('복사'), findsNothing);
     });
 
     testWidgets('tapping the contact row dials the number as shown', (
