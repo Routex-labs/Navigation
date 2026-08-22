@@ -1098,12 +1098,10 @@ class _SearchPanelState extends State<SearchPanel> {
     // 목록 **위**에 서는 것들. 결과 행이 아니라 이 화면이 지금 무엇을 보여 주는지를
     // 말하는 조각이라, 개수·정렬 머리말보다 위에 둔다.
     final prelude = <Widget>[];
-    // 바깥 결과 덕분에 목록이 먼저 떴을 뿐, 건물 안 검색은 아직 돌고 있을 수
-    // 있다. 그 사실을 안 밝히면 사용자는 이게 최종 목록이라고 읽는다.
-    if (_phase == _SearchPhase.typingLightSearch ||
-        _phase == _SearchPhase.semanticSearching) {
-      prelude.add(const _IndoorSearchingRow());
-    }
+    // **"건물 안에서도 찾는 중"은 붙이지 않는다.** 건물 밖에서 검색하는 사람은
+    // 건물 안 결과를 기다리지 않고, 실제로는 안 검색이 끝나 "이 건물에는
+    // 없어요"가 뜬 화면에도 함께 떠서 한 화면이 두 가지 말을 했다. 안 결과가
+    // 늦게 오면 목록이 그때 늘어나는 것으로 충분하다.
     final isDiscovery = _discoveryMode != null;
     if (isDiscovery) prelude.add(_discoveryHeader());
     if (_fromSemantic) {
@@ -1750,24 +1748,6 @@ class _SearchPanelState extends State<SearchPanel> {
         statusActionLabel: '다시 시도',
         onStatusAction: () => unawaited(_search(widget.query, immediate: true)),
         children: const [],
-      ),
-    );
-  }
-}
-
-/// 목록 맨 위에 붙는 "건물 안은 아직 찾는 중" 줄. 바깥 결과만 뜬 상태를 최종
-/// 결과로 읽으면 사용자는 "우리 건물엔 없구나"라며 검색을 닫는다.
-class _IndoorSearchingRow extends StatelessWidget {
-  const _IndoorSearchingRow();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(16, 12, 16, 10),
-      child: RoutexStatusBanner(
-        title: '건물 안에서도 찾는 중…',
-        detail: '바깥 결과를 먼저 보여드리고 있어요',
-        icon: RoutexIcons.search,
       ),
     );
   }
