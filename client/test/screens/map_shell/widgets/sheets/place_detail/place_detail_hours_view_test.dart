@@ -120,7 +120,9 @@ void main() {
       expect(today.value, '휴무');
     });
 
-    test('구간이 여럿이면 순서를 지켜 잇는다', () {
+    // 브레이크 타임은 줄로 나눈다. 한 줄에 이으면 가운뎃점이 시각 사이의 줄표에
+    // 묻혀 네 시각이 한 덩어리로 읽힌다.
+    test('구간이 여럿이면 순서를 지켜 줄로 나눈다', () {
       const section = HoursSection(
         weekly: {
           'tue': [
@@ -137,7 +139,7 @@ void main() {
 
       expect(
         routexHoursDays(week).first.value,
-        '10:30 - 14:00 · 17:00 - 20:00',
+        '10:30 - 14:00\n17:00 - 20:00',
       );
     });
   });

@@ -482,6 +482,11 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
         // 스스로 튀어 올라, 줄이려던 세로 운동이 오히려 하나 더 생긴다.
         minChildSize: initialSize,
         maxChildSize: 0.92,
+        // **끌어 놓은 높이가 두 자리 중 하나로 붙는다.** 없으면 다 펼친 상태에서
+        // 아래로 끈 손가락이 중간에 걸리는 데 없이 그대로 닫힘까지 간다 — 목록을
+        // 훑다가 접으려던 사람이 시트를 통째로 잃는다. 붙을 자리는 처음 높이와
+        // 최대 높이 둘이고, 처음 높이에서 한 번 더 내리면 그때 닫힌다.
+        snap: true,
         expand: false,
         builder: (context, scrollController) => GestureDetector(
           onTap: () {},
@@ -834,10 +839,7 @@ class _PlaceDetailSectionsState extends State<PlaceDetailSections> {
           hours: section,
           now: widget.now ?? DateTime.now(),
         ),
-        ContactSection(:final tel, :final confirmedAt) => PlaceContactSection(
-          tel: tel,
-          confirmedAt: confirmedAt,
-        ),
+        ContactSection(:final tel) => PlaceContactSection(tel: tel),
         DemoInfoSection(:final items) => PlaceDemoInfoSection(
           items: [
             for (final item in items)

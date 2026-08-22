@@ -1172,23 +1172,20 @@ void main() {
       expect(find.text(RoutexTypography.keepWordsWhole('가능')), findsOneWidget);
     });
 
-    testWidgets('contact keeps the phone label and shows when it was checked', (
+    testWidgets('contact keeps the phone label and drops the checked date', (
       tester,
     ) async {
       await tester.pumpWidget(
-        subject(
-          const PlaceContactSection(
-            tel: '02-3277-0132',
-            confirmedAt: '2026-08-22',
-          ),
-        ),
+        subject(const PlaceContactSection(tel: '02-3277-0132')),
       );
 
       expect(find.text('연락처'), findsOneWidget);
       expect(find.byIcon(Icons.call_outlined), findsOneWidget);
       // 아이콘만으로는 누가 받는 번호인지 말하지 못한다.
       expect(find.text('전화번호'), findsOneWidget);
-      expect(find.text('2026-08-22 확인'), findsOneWidget);
+      // 확인일은 값을 다시 확인할 근거이지 읽을 정보가 아니다. 한 줄짜리 섹션이
+      // 날짜 때문에 두 줄이 되면 정작 정할 것("이 번호로 걸까")이 흐려진다.
+      expect(find.textContaining('확인'), findsNothing);
     });
 
     testWidgets('copying the contact puts the number on the clipboard', (
@@ -1215,10 +1212,7 @@ void main() {
 
       await tester.pumpWidget(
         subject(
-          const PlaceContactSection(
-            tel: '1522-3232',
-            confirmedAt: '2026-08-22',
-          ),
+          const PlaceContactSection(tel: '1522-3232'),
         ),
       );
 
@@ -1254,10 +1248,7 @@ void main() {
 
       await tester.pumpWidget(
         subject(
-          const PlaceContactSection(
-            tel: '02-3277-0132',
-            confirmedAt: '2026-08-22',
-          ),
+          const PlaceContactSection(tel: '02-3277-0132'),
         ),
       );
 
@@ -1298,10 +1289,7 @@ void main() {
       unawaited(
         showModalBottomSheet<void>(
           context: navigatorKey.currentContext!,
-          builder: (_) => const PlaceContactSection(
-            tel: '02-3277-0132',
-            confirmedAt: '2026-08-22',
-          ),
+          builder: (_) => const PlaceContactSection(tel: '02-3277-0132'),
         ),
       );
       await tester.pumpAndSettle();
@@ -1323,7 +1311,7 @@ void main() {
     // 오는 길에 끊겨도 빈 줄이 남지는 않아야 한다.
     testWidgets('an empty number renders nothing', (tester) async {
       await tester.pumpWidget(
-        subject(const PlaceContactSection(tel: '', confirmedAt: '2026-08-22')),
+        subject(const PlaceContactSection(tel: '')),
       );
 
       expect(find.text('연락처'), findsNothing);

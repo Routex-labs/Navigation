@@ -810,7 +810,10 @@ IconData? infoIconFor(String label) => switch (label.replaceAll(' ', '')) {
   // 그 차이를 지운다. 아이콘만으로는 부족해서 이 줄은 라벨 글자도 함께 남긴다
   // (`RoutexInfoRow.keepLabel`).
   '고객센터' => Icons.support_agent_outlined,
-  '대표번호' || '전화번호' || '연락처' || '문의' => Icons.call_outlined,
+  // `전화`가 빠져 있어 한 번 물렸다 — 그 라벨로 적힌 매장 20곳이 아이콘도 복사
+  // 버튼도 없이 나갔다. 지금 데이터는 전부 contact로 옮겼지만, 표에 구멍이 남아
+  // 있으면 같은 라벨이 다시 들어온 날 조용히 되풀이된다.
+  '전화' || '대표번호' || '전화번호' || '연락처' || '문의' => Icons.call_outlined,
   '매장타입' || '매장유형' => Icons.storefront_outlined,
   '주차' => Icons.local_parking_outlined,
   '위생등급' => Icons.verified_outlined,
@@ -827,15 +830,14 @@ IconData? infoIconFor(String label) => switch (label.replaceAll(' ', '')) {
 ///
 /// **줄을 누르면 전화가 걸린다.** 복사 버튼은 그대로 남는다 — 거는 것이 목적이지만
 /// 다이얼러가 없는 기기(태블릿·데스크톱)가 있고, 그때 남는 길이 복사다.
+/// **확인일은 그리지 않는다.** 서버가 `confirmed_at`을 함께 주지만 그것은 값을
+/// 다시 확인할 근거이지 읽을 정보가 아니다. 줄마다 날짜가 붙으면 한 줄짜리 섹션이
+/// 두 줄이 되고, 사용자가 정할 것은 "이 번호로 걸까"뿐이다. 영업시간이 확인일을
+/// **오래됐을 때만** 내보이는 것과 같은 판단이다(`routexHoursStaleNote`).
 class PlaceContactSection extends StatelessWidget {
-  const PlaceContactSection({
-    super.key,
-    required this.tel,
-    required this.confirmedAt,
-  });
+  const PlaceContactSection({super.key, required this.tel});
 
   final String tel;
-  final String confirmedAt;
 
   /// 걸지 못하면 조용히 넘기지 않는다. 눌렀는데 아무 일도 없으면 앱이 멈춘 줄 안다.
   ///
@@ -877,7 +879,6 @@ class PlaceContactSection extends StatelessWidget {
               keepLabel: true,
               copyText: tel,
               onCopied: () => announceClipboardCopy(context),
-              caption: confirmedAt.isEmpty ? null : '$confirmedAt 확인',
             ),
           ),
         ),
@@ -908,7 +909,7 @@ class PlaceDemoInfo {
 /// **값이 아니라 라벨로 먼저 거른다.** 값만 보고 판단하면 영업시간 줄의
 /// `2026-08-10`이나 층 안내의 `B2-1` 같은 토막에 복사 버튼이 붙는다.
 bool isPhoneLabel(String label) => switch (label.replaceAll(' ', '')) {
-  '고객센터' || '대표번호' || '전화번호' || '연락처' || '문의' => true,
+  '고객센터' || '전화' || '대표번호' || '전화번호' || '연락처' || '문의' => true,
   _ => false,
 };
 

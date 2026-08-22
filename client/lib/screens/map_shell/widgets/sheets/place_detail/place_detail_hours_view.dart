@@ -29,11 +29,15 @@ List<RoutexHoursDay> routexHoursDays(List<StoreHoursDay> week) => [
   for (final day in week)
     RoutexHoursDay(
       label: weekdayLabelOf(day.date),
+      // 브레이크 타임이 있는 날은 구간을 **줄로 나눈다**. 한 줄에 이어 붙이면
+      // `10:30 - 15:00 · 17:00 - 22:00`이 되는데, 가운뎃점이 시각 사이의 짧은
+      // 줄표에 묻혀 네 시각이 한 덩어리로 읽힌다 — 언제 닫았다 다시 여는지가
+      // 사라진다.
       value: day.intervals.isEmpty
           ? '휴무'
           : day.intervals
                 .map((interval) => '${interval.open} - ${interval.close}')
-                .join(' · '),
+                .join('\n'),
       note: day.note,
       closed: day.intervals.isEmpty,
     ),
