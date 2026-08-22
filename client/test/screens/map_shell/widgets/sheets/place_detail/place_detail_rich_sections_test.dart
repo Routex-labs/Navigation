@@ -1179,7 +1179,9 @@ void main() {
         subject(const PlaceContactSection(tel: '02-3277-0132')),
       );
 
-      expect(find.text('연락처'), findsOneWidget);
+      // 줄이 하나뿐이라 섹션 제목을 두지 않는다. `연락처`와 `전화번호`가 같은 말을
+      // 두 번 하면서 38dp를 쓰던 자리다.
+      expect(find.text('연락처'), findsNothing);
       expect(find.byIcon(Icons.call_outlined), findsOneWidget);
       // 아이콘만으로는 누가 받는 번호인지 말하지 못한다.
       expect(find.text('전화번호'), findsOneWidget);
@@ -1314,7 +1316,8 @@ void main() {
         subject(const PlaceContactSection(tel: '')),
       );
 
-      expect(find.text('연락처'), findsNothing);
+      expect(find.byIcon(Icons.call_outlined), findsNothing);
+      expect(find.text('전화번호'), findsNothing);
     });
   });
 }

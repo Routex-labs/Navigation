@@ -860,29 +860,25 @@ class PlaceContactSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (tel.isEmpty) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const RoutexSectionHeader(title: '연락처'),
-        const SizedBox(height: 12),
-        Semantics(
-          button: true,
-          label: '$tel에 전화',
-          child: InkWell(
-            onTap: () => _call(context),
-            child: RoutexInfoRow(
-              label: '전화번호',
-              value: tel,
-              icon: infoIconFor('전화번호'),
-              // 아이콘만으로는 누가 받는 번호인지 말하지 못한다. 운영 정보 줄과
-              // 같은 이유로 라벨 글자를 남긴다.
-              keepLabel: true,
-              copyText: tel,
-              onCopied: () => announceClipboardCopy(context),
-            ),
-          ),
+    // **섹션 제목을 두지 않는다.** 줄이 하나뿐인데 `연락처` 제목과 `전화번호` 라벨이
+    // 같은 말을 두 번 하면서 38dp를 쓴다. 수화기 아이콘과 라벨만으로 무슨 줄인지
+    // 충분하고, 섹션 경계는 이미 시트가 선으로 긋는다.
+    return Semantics(
+      button: true,
+      label: '$tel에 전화',
+      child: InkWell(
+        onTap: () => _call(context),
+        child: RoutexInfoRow(
+          label: '전화번호',
+          value: tel,
+          icon: infoIconFor('전화번호'),
+          // 아이콘만으로는 누가 받는 번호인지 말하지 못한다. 운영 정보 줄과 같은
+          // 이유로 라벨 글자를 남긴다.
+          keepLabel: true,
+          copyText: tel,
+          onCopied: () => announceClipboardCopy(context),
         ),
-      ],
+      ),
     );
   }
 }
