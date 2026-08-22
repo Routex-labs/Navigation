@@ -541,9 +541,9 @@ extension _MapShellSheets on _MapShellScreenState {
   /// 파일이 깨졌다고 지도 화면이 뜨지 못하면 손해가 훨씬 크다.
   Future<void> _loadBuildingEvents() async {
     try {
-      final source = await rootBundle.loadString('assets/mock/events.json');
-      if (!mounted) return;
-      setState(() => _buildingEvents = parseBuildingEvents(source));
+      final events = await fetchBuildingEvents();
+      if (!mounted || events == null) return;
+      setState(() => _buildingEvents = events);
     } on Object catch (error) {
       debugPrint('[events] $error');
     }

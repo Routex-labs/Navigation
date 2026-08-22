@@ -36,6 +36,7 @@ class HttpBuildingRepository implements BuildingRepository {
   final Map<String, Future<BuildingGraph?>> _buildingGraphFutures = {};
   final Map<String, Future<List<CategoryCount>?>> _categoryCountFutures = {};
   final Map<String, Future<List<StoreIndexEntry>?>> _storeIndexFutures = {};
+  final Map<String, Future<Map<String, dynamic>?>> _eventFutures = {};
 
   // 아래 둘은 네트워크가 아니라 계산 결과라 값 캐시로 충분하다.
   final Map<String, FloorGraph> _floorGraphCache = {};
@@ -139,6 +140,17 @@ class HttpBuildingRepository implements BuildingRepository {
       return list
           .map((item) => StoreIndexEntry.fromJson(item as Map<String, dynamic>))
           .toList();
+    });
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getBuildingEvents(String buildingId) {
+    return _shared(_eventFutures, buildingId, () async {
+      final response = await _client.get(
+        Uri.parse('$apiBaseUrl/buildings/$buildingId/events'),
+      );
+      if (response.statusCode == 404) return null;
+      return jsonDecode(response.body) as Map<String, dynamic>;
     });
   }
 

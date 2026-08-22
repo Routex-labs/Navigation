@@ -1,5 +1,3 @@
-import 'package:flutter/services.dart' show rootBundle;
-
 import '../../../../core/api_config.dart';
 import '../../../../domain/event/building_events.dart';
 import '../../../../models/place/store_index_entry.dart';
@@ -21,23 +19,30 @@ class TodayEvent {
 /// 도는 스피너만 남았다.
 const _indexTimeout = Duration(seconds: 6);
 
+/// 그 건물의 행사를 서버에서 받는다. 모아 둔 것이 없으면 null이다.
+///
+/// **실패를 삼키지 않는다.** 부르는 쪽이 곁들이로 볼지 없으면 실패로 볼지를 정한다
+/// — 지도 화면은 삼키고(행사 하나 때문에 지도가 못 뜨면 손해가 크다) 목록 시트는
+/// 빈 화면으로 떨어진다.
+Future<BuildingEvents?> fetchBuildingEvents() async {
+  final json = await buildingRepository.getBuildingEvents(demoBuildingId);
+  return json == null ? null : buildingEventsFromJson(json);
+}
+
 /// 오늘 열리는 행사를 **갈래 순서로** 읽고, 각 건에 매장을 붙인다.
 ///
 /// 하단 줄·목록 시트·포스터가 **같은 순서의 같은 목록**을 써야 한다. 포스터는
 /// 좌우로 밀며 목록 전체를 훑는 화면이라, 진입점마다 순서가 다르면 3번째 카드를
 /// 눌러 놓고 다른 행사가 열린다.
 ///
-/// [events]를 주면 그것을 쓰고, 없으면 에셋을 읽는다 — 지도 화면은 이미 한 번
-/// 읽어 두므로 다시 읽을 이유가 없다. [diary]를 주면 그 쪽에서 온 것만 남는다.
+/// [events]를 주면 그것을 쓰고, 없으면 서버에서 받는다 — 지도 화면은 이미 한 번
+/// 받아 두므로 다시 받을 이유가 없다. [diary]를 주면 그 쪽에서 온 것만 남는다.
 Future<List<TodayEvent>> loadTodayEvents({
   BuildingEvents? events,
   EventDiary? diary,
 }) async {
-  final parsed =
-      events ??
-      parseBuildingEvents(
-        await rootBundle.loadString('assets/mock/events.json'),
-      );
+  final parsed = events ?? await fetchBuildingEvents();
+  if (parsed == null) return const [];
   final open = diary == null
       ? parsed.openOnByDiary(todayKey())
       : parsed.openOn(todayKey(), diary: diary);
