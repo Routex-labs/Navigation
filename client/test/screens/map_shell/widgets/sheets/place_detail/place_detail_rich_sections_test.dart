@@ -1171,5 +1171,162 @@ void main() {
       expect(find.text('반려동물 동반'), findsOneWidget);
       expect(find.text(RoutexTypography.keepWordsWhole('가능')), findsOneWidget);
     });
+
+    testWidgets('contact keeps the phone label and shows when it was checked', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        subject(
+          const PlaceContactSection(
+            tel: '02-3277-0132',
+            confirmedAt: '2026-08-22',
+          ),
+        ),
+      );
+
+      expect(find.text('연락처'), findsOneWidget);
+      expect(find.byIcon(Icons.call_outlined), findsOneWidget);
+      // 아이콘만으로는 누가 받는 번호인지 말하지 못한다.
+      expect(find.text('전화번호'), findsOneWidget);
+      expect(find.text('2026-08-22 확인'), findsOneWidget);
+    });
+
+    testWidgets('copying the contact puts the number on the clipboard', (
+      tester,
+    ) async {
+      setClipboardAnnouncementForTest(true);
+      addTearDown(() => setClipboardAnnouncementForTest(null));
+      String? copied;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied = (call.arguments as Map)['text'] as String?;
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+
+      await tester.pumpWidget(
+        subject(
+          const PlaceContactSection(
+            tel: '1522-3232',
+            confirmedAt: '2026-08-22',
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('복사'));
+      await tester.pumpAndSettle();
+
+      expect(copied, '1522-3232');
+
+      // 토스트가 스스로 사라지기를 기다린다. 남은 타이머를 흘려보내지 않으면
+      // 테스트가 대기 중인 타이머로 실패한다.
+      await tester.pump(const Duration(seconds: 2));
+    });
+
+    testWidgets('tapping the contact row dials the number as shown', (
+      tester,
+    ) async {
+      const channel = MethodChannel('plugins.flutter.io/url_launcher');
+      String? launched;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+        call,
+      ) async {
+        if (call.method == 'launch') {
+          launched = (call.arguments as Map)['url'] as String?;
+        }
+        return true;
+      });
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          channel,
+          null,
+        ),
+      );
+
+      await tester.pumpWidget(
+        subject(
+          const PlaceContactSection(
+            tel: '02-3277-0132',
+            confirmedAt: '2026-08-22',
+          ),
+        ),
+      );
+
+      // 복사 버튼도 InkWell이라 타입으로 찾으면 둘이 걸린다. 줄 안쪽,
+      // 복사 버튼 밖에 있는 수화기 아이콘을 누른다.
+      await tester.tap(find.byIcon(Icons.call_outlined));
+      await tester.pumpAndSettle();
+
+      // 구분기호를 지우지 않는다. 화면에 보이는 번호와 걸리는 번호가 같아야
+      // 무엇이 걸렸는지 확인할 수 있다.
+      expect(launched, 'tel:02-3277-0132');
+    });
+
+    // 눌렀는데 아무 일도 없으면 앱이 멈춘 줄 안다. 다이얼러가 없는 기기에서도
+    // 실패했다는 사실만은 알린다.
+    testWidgets('전화를 걸지 못하면 시트에 가리지 않는 알림으로 말한다', (tester) async {
+      const channel = MethodChannel('plugins.flutter.io/url_launcher');
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        (call) async => false,
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          channel,
+          null,
+        ),
+      );
+
+      final navigatorKey = GlobalKey<NavigatorState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: navigatorKey,
+          theme: AppTheme.light,
+          home: const Scaffold(body: SizedBox.expand()),
+        ),
+      );
+
+      unawaited(
+        showModalBottomSheet<void>(
+          context: navigatorKey.currentContext!,
+          builder: (_) => const PlaceContactSection(
+            tel: '02-3277-0132',
+            confirmedAt: '2026-08-22',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.call_outlined));
+      await tester.pumpAndSettle();
+
+      expect(find.text('전화를 걸지 못했습니다'), findsOneWidget);
+      // 루트 Overlay에 얹힌 토스트다. 시트 아래에 그려지는 SnackBar가 아니다.
+      expect(find.byType(SnackBar), findsNothing);
+
+      // 토스트는 스스로 사라진다. 남은 타이머를 흘려보내지 않으면 테스트가
+      // 대기 중인 타이머로 실패한다.
+      await tester.pump(RoutexToast.visibleDuration);
+      expect(find.text('전화를 걸지 못했습니다'), findsNothing);
+    });
+
+    // 서버는 번호·출처·확인일이 다 있을 때만 섹션을 만든다. 그 계약이 여기까지
+    // 오는 길에 끊겨도 빈 줄이 남지는 않아야 한다.
+    testWidgets('an empty number renders nothing', (tester) async {
+      await tester.pumpWidget(
+        subject(const PlaceContactSection(tel: '', confirmedAt: '2026-08-22')),
+      );
+
+      expect(find.text('연락처'), findsNothing);
+    });
   });
 }

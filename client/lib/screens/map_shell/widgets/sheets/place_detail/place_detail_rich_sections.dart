@@ -819,6 +819,73 @@ IconData? infoIconFor(String label) => switch (label.replaceAll(' ', '')) {
   _ => null,
 };
 
+/// 매장 전화번호 한 줄.
+///
+/// [PlaceDemoInfoSection]과 그리는 모양이 같은데도 따로 있는 이유는 **데이터가 오는
+/// 길이 다르기 때문**이다. 저쪽은 소개 영상용 매장에만 붙이는 자유 문자열이고, 이쪽은
+/// 서버가 번호·출처·확인일 셋을 검증해 보내는 구조체라 전 매장에 나간다.
+///
+/// **줄을 누르면 전화가 걸린다.** 복사 버튼은 그대로 남는다 — 거는 것이 목적이지만
+/// 다이얼러가 없는 기기(태블릿·데스크톱)가 있고, 그때 남는 길이 복사다.
+class PlaceContactSection extends StatelessWidget {
+  const PlaceContactSection({
+    super.key,
+    required this.tel,
+    required this.confirmedAt,
+  });
+
+  final String tel;
+  final String confirmedAt;
+
+  /// 걸지 못하면 조용히 넘기지 않는다. 눌렀는데 아무 일도 없으면 앱이 멈춘 줄 안다.
+  ///
+  /// 상세 시트는 Navigator에 얹힌 모달이라 SnackBar가 시트 뒤에 그려진다. 링크 열기와
+  /// 같은 이유로 오버레이 토스트를 쓴다([PlaceLinksSection]).
+  Future<void> _call(BuildContext context) async {
+    var dialed = false;
+    try {
+      // `tel:`은 구분기호를 그대로 받는다. 숫자만 남기지 않는 이유는 화면에 보이는
+      // 번호와 걸리는 번호가 같아야 사용자가 무엇이 걸렸는지 확인할 수 있어서다.
+      dialed = await launchUrl(Uri(scheme: 'tel', path: tel));
+    } catch (_) {
+      dialed = false;
+    }
+    if (!dialed && context.mounted) {
+      RoutexToast.show(context, '전화를 걸지 못했습니다');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (tel.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const RoutexSectionHeader(title: '연락처'),
+        const SizedBox(height: 12),
+        Semantics(
+          button: true,
+          label: '$tel에 전화',
+          child: InkWell(
+            onTap: () => _call(context),
+            child: RoutexInfoRow(
+              label: '전화번호',
+              value: tel,
+              icon: infoIconFor('전화번호'),
+              // 아이콘만으로는 누가 받는 번호인지 말하지 못한다. 운영 정보 줄과
+              // 같은 이유로 라벨 글자를 남긴다.
+              keepLabel: true,
+              copyText: tel,
+              onCopied: () => announceClipboardCopy(context),
+              caption: confirmedAt.isEmpty ? null : '$confirmedAt 확인',
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// 영업시간·대표번호처럼 **시간이 지나면 저절로 거짓이 되는** 운영 정보다.
 ///
 /// [PlaceBusinessInfo]와 갈라 둔 이유가 여기 있다. 저쪽은 주소처럼 잘 변하지 않는 값만

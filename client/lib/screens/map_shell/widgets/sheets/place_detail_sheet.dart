@@ -834,6 +834,10 @@ class _PlaceDetailSectionsState extends State<PlaceDetailSections> {
           hours: section,
           now: widget.now ?? DateTime.now(),
         ),
+        ContactSection(:final tel, :final confirmedAt) => PlaceContactSection(
+          tel: tel,
+          confirmedAt: confirmedAt,
+        ),
         DemoInfoSection(:final items) => PlaceDemoInfoSection(
           items: [
             for (final item in items)
