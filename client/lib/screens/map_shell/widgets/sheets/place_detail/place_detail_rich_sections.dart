@@ -832,8 +832,8 @@ IconData? infoIconFor(String label) => switch (label.replaceAll(' ', '')) {
 /// 다이얼러가 없는 기기(태블릿·데스크톱)가 있고, 그때 남는 길이 복사다.
 /// **확인일은 그리지 않는다.** 서버가 `confirmed_at`을 함께 주지만 그것은 값을
 /// 다시 확인할 근거이지 읽을 정보가 아니다. 줄마다 날짜가 붙으면 한 줄짜리 섹션이
-/// 두 줄이 되고, 사용자가 정할 것은 "이 번호로 걸까"뿐이다. 영업시간이 확인일을
-/// **오래됐을 때만** 내보이는 것과 같은 판단이다(`routexHoursStaleNote`).
+/// 두 줄이 되고, 사용자가 정할 것은 "이 번호로 걸까"뿐이다. 상세 시트의 다른 섹션도
+/// 같은 이유로 확인일을 그리지 않는다.
 class PlaceContactSection extends StatelessWidget {
   const PlaceContactSection({super.key, required this.tel});
 
@@ -883,21 +883,20 @@ class PlaceContactSection extends StatelessWidget {
   }
 }
 
-/// 영업시간·대표번호처럼 **시간이 지나면 저절로 거짓이 되는** 운영 정보다.
+/// 매장 타입·주차·위생등급처럼 서버가 출처와 확인일을 검증해 주는 운영 정보다.
 ///
-/// [PlaceBusinessInfo]와 갈라 둔 이유가 여기 있다. 저쪽은 주소처럼 잘 변하지 않는 값만
-/// 담고 확인일을 붙이지 않는다 — 정보량 대비 소음만 늘기 때문이다(설계 7-A-3). 이쪽은
-/// 반대로 확인일 없이는 값 자체를 믿을 수 없어서, 서버가 항목마다 확인일을 필수로 준다.
+/// **확인일은 화면에 그리지 않는다.** 서버는 항목마다 확인일을 필수로 받지만, 그것은
+/// 값을 다시 확인할 근거이지 읽는 사람이 무언가를 정하는 데 쓰는 값이 아니다. 줄마다
+/// 날짜가 붙으면 세 줄짜리 섹션이 여섯 줄이 되고, 정작 값이 묻힌다.
+///
+/// **실제로 낡는 둘은 이미 여기를 떠났다** — 영업시간은 `hours`, 전화번호는 `contact`로
+/// 갔고, 각자 낡음을 다루는 방법이 따로 있다(영업시간은 임계값을 넘기면 판정을 거두고
+/// 그 줄에 이유를 적는다).
 class PlaceDemoInfo {
-  const PlaceDemoInfo({
-    required this.label,
-    required this.value,
-    required this.confirmedAt,
-  });
+  const PlaceDemoInfo({required this.label, required this.value});
 
   final String label;
   final String value;
-  final String confirmedAt;
 }
 
 /// 전화번호가 들어 있는 줄인가.
@@ -918,13 +917,13 @@ String? phoneNumberIn(String value) =>
 
 final _phonePattern = RegExp(r'\d{2,4}-\d{3,4}(?:-\d{4})?');
 
-/// 확인일이 붙은 운영 정보를 라벨-값 행으로 보여 준다.
+/// 서버가 검증한 운영 정보를 라벨-값 행으로 보여 준다.
 class PlaceDemoInfoSection extends StatelessWidget {
   const PlaceDemoInfoSection({super.key, required this.items});
 
   final List<PlaceDemoInfo> items;
 
-  Widget _row(BuildContext context, PlaceDemoInfo item, String? sharedDate) {
+  Widget _row(BuildContext context, PlaceDemoInfo item) {
     final isPhone = isPhoneLabel(item.label);
     return RoutexInfoRow(
       label: item.label,
@@ -935,20 +934,12 @@ class PlaceDemoInfoSection extends StatelessWidget {
       keepLabel: isPhone,
       copyText: isPhone ? phoneNumberIn(item.value) : null,
       onCopied: () => announceClipboardCopy(context),
-      // 확인일이 제각각일 때만 항목마다 붙인다. 묶을 수 없기 때문이다.
-      caption: sharedDate == null ? '${item.confirmedAt} 확인' : null,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) return const SizedBox.shrink();
-
-    // 확인일이 전부 같으면 섹션 아래에 한 번만 적는다. 다섯 항목에 같은 날짜를 다섯
-    // 번 적으면 읽히지 않는 소음이 되고, **다르면 묶을 수 없다** — 묶는 순간 오래된
-    // 항목이 최근에 확인된 것처럼 보인다.
-    final dates = {for (final item in items) item.confirmedAt};
-    final sharedDate = dates.length == 1 ? dates.single : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -957,14 +948,7 @@ class PlaceDemoInfoSection extends StatelessWidget {
         const SizedBox(height: 12),
         for (var index = 0; index < items.length; index++) ...[
           if (index > 0) const SizedBox(height: infoRowGap),
-          _row(context, items[index], sharedDate),
-        ],
-        if (sharedDate != null) ...[
-          const SizedBox(height: 12),
-          Text(
-            '$sharedDate 확인',
-            style: const TextStyle(fontSize: 11, color: AppColors.muted),
-          ),
+          _row(context, items[index]),
         ],
       ],
     );

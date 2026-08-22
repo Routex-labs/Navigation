@@ -143,30 +143,4 @@ void main() {
       );
     });
   });
-
-  group('오래됨 근거', () {
-    StoreHoursStatus statusAt(String confirmedAt, DateTime now) =>
-        computeStoreHoursStatus(hours(confirmedAt: confirmedAt), now);
-
-    // 확인일은 그 자체로 읽을 정보가 아니라 경고의 근거다.
-    test('오래되지 않았으면 넘기지 않는다', () {
-      expect(
-        routexHoursStaleNote(
-          statusAt('2026-08-10', kst(2026, 8, 11, 14)),
-          '2026-08-10',
-        ),
-        isNull,
-      );
-    });
-
-    test('오래됐으면 확인일과 함께 근거를 만든다', () {
-      expect(
-        routexHoursStaleNote(
-          statusAt('2026-01-01', kst(2026, 8, 11, 14)),
-          '2026-01-01',
-        ),
-        '2026-01-01 기준 · 영업시간이 달라졌을 수 있어요',
-      );
-    });
-  });
 }

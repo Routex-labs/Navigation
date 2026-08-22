@@ -56,13 +56,6 @@ String? routexHoursDetail(StoreHoursStatus status, DateTime today) {
   return '${_whenText(next, today)} $suffix';
 }
 
-/// 판정을 거둔 이유를 적은 한 줄. 거두지 않았으면 null.
-///
-/// 확인일은 그 자체로 읽을 정보가 아니라 **경고의 근거**다. 그래서 오래됐을
-/// 때만 넘긴다 — 늘 넘기면 방금 확인한 영업시간에도 경고가 붙는다.
-String? routexHoursStaleNote(StoreHoursStatus status, String confirmedAt) =>
-    status.isStale ? '$confirmedAt 기준 · 영업시간이 달라졌을 수 있어요' : null;
-
 /// 월~일 한 글자 라벨.
 String weekdayLabelOf(DateTime date) =>
     const ['월', '화', '수', '목', '금', '토', '일'][(date.weekday - 1) % 7];

@@ -843,11 +843,7 @@ class _PlaceDetailSectionsState extends State<PlaceDetailSections> {
         DemoInfoSection(:final items) => PlaceDemoInfoSection(
           items: [
             for (final item in items)
-              PlaceDemoInfo(
-                label: item.label,
-                value: item.value,
-                confirmedAt: item.confirmedAt,
-              ),
+              PlaceDemoInfo(label: item.label, value: item.value),
           ],
         ),
         LinksSection(:final items) => PlaceLinksSection(

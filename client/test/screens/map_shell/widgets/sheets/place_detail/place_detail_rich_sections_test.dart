@@ -669,7 +669,7 @@ void main() {
       expect(find.text('리저브 나이트로'), findsOneWidget);
     });
 
-    testWidgets('demo info shows one shared confirmation date', (tester) async {
+    testWidgets('demo info renders rows without any date', (tester) async {
       await tester.pumpWidget(
         subject(
           const PlaceDemoInfoSection(
@@ -677,12 +677,10 @@ void main() {
               PlaceDemoInfo(
                 label: '영업시간',
                 value: '화~목 10:30-20:00',
-                confirmedAt: '2026-08-10',
               ),
               PlaceDemoInfo(
                 label: '주차',
                 value: '주차 지원 불가',
-                confirmedAt: '2026-08-10',
               ),
             ],
           ),
@@ -692,37 +690,12 @@ void main() {
       expect(find.text('영업 정보'), findsOneWidget);
       expect(find.byIcon(Icons.schedule_outlined), findsOneWidget);
       expect(find.byIcon(Icons.local_parking_outlined), findsOneWidget);
-      expect(find.text('2026-08-10 확인'), findsOneWidget);
+      // 확인일은 값을 다시 확인할 근거이지 읽는 사람이 무언가를 정하는 데 쓰는
+      // 값이 아니다. 줄마다 날짜가 붙으면 세 줄짜리 섹션이 여섯 줄이 된다.
+      expect(find.textContaining('확인'), findsNothing);
+      expect(find.textContaining('2026-'), findsNothing);
       // 라벨은 아이콘이 대신하므로 글자로 남지 않는다.
       expect(find.text('영업시간'), findsNothing);
-    });
-
-    // 확인일이 다르면 하나로 묶을 수 없다. 묶는 순간 오래된 항목이 최근에 확인된
-    // 것처럼 보인다.
-    testWidgets('demo info keeps per-item dates when they differ', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        subject(
-          const PlaceDemoInfoSection(
-            items: [
-              PlaceDemoInfo(
-                label: '영업시간',
-                value: '화~목 10:30-20:00',
-                confirmedAt: '2026-08-10',
-              ),
-              PlaceDemoInfo(
-                label: '주차',
-                value: '주차 지원 불가',
-                confirmedAt: '2026-07-30',
-              ),
-            ],
-          ),
-        ),
-      );
-
-      expect(find.text('2026-08-10 확인'), findsOneWidget);
-      expect(find.text('2026-07-30 확인'), findsOneWidget);
     });
 
     // `1522-3232`는 매장 직통이 아니라 전국 고객센터 번호다. 아이콘이 라벨을
@@ -738,12 +711,10 @@ void main() {
               PlaceDemoInfo(
                 label: '고객센터',
                 value: '1522-3232 (평일 09:00–18:00)',
-                confirmedAt: '2026-08-10',
               ),
               PlaceDemoInfo(
                 label: '주차',
                 value: '주차 지원 불가',
-                confirmedAt: '2026-08-10',
               ),
             ],
           ),
@@ -789,7 +760,6 @@ void main() {
                 PlaceDemoInfo(
                   label: '고객센터',
                   value: '1522-3232 (평일 09:00–18:00)',
-                  confirmedAt: '2026-08-10',
                 ),
               ],
             ),
@@ -835,7 +805,6 @@ void main() {
               PlaceDemoInfo(
                 label: '고객센터',
                 value: '1522-3232',
-                confirmedAt: '2026-08-10',
               ),
             ],
           ),
@@ -877,7 +846,6 @@ void main() {
               PlaceDemoInfo(
                 label: '고객센터',
                 value: '1522-3232 (평일 09:00–18:00)',
-                confirmedAt: '2026-08-10',
               ),
             ],
           ),
@@ -901,7 +869,6 @@ void main() {
               PlaceDemoInfo(
                 label: '영업시간',
                 value: '화~목 10:30–20:00 (2026-08-10 월요일 휴점)',
-                confirmedAt: '2026-08-10',
               ),
             ],
           ),
