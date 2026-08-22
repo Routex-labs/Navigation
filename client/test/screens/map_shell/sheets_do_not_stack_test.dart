@@ -11,6 +11,7 @@ import 'package:navigation_client/screens/map_shell/widgets/chrome/category_chip
 import 'package:navigation_client/screens/map_shell/widgets/sheets/app_menu_sheet.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/building_info_sheet.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/category_stores_sheet.dart';
+import 'package:navigation_client/screens/map_shell/widgets/sheets/events_sheet.dart';
 import 'package:navigation_client/screens/map_shell/widgets/sheets/place_detail_sheet.dart';
 import 'package:navigation_client/models/building/floor_plan.dart';
 import 'package:navigation_client/screens/outdoor_map/outdoor_map_screen.dart';
@@ -117,12 +118,38 @@ void main() {
     return find.byType(AppMenuSheet).evaluate().isNotEmpty;
   }
 
+  /// 맨 아래 탭 줄의 이벤트. **야외에서만 시트를 연다** — 실내에서는 같은 탭이
+  /// 하단 판을 켜고 끄고, 시트는 그 판의 쪽 카드에서 열린다.
+  Future<bool> openEventsTab(WidgetTester tester) async {
+    await tester.tap(
+      find.byKey(const Key('map-tab-events')),
+      warnIfMissed: false,
+    );
+    await drain(tester);
+    return find.byType(EventsSheet).evaluate().isNotEmpty;
+  }
+
+  /// 실내에서 그 시트가 떠 있는 상태. 판의 쪽 카드를 누르면 열리는 것과 같은
+  /// 시트를 직접 띄운다 — 판에 오늘 카드가 몇 장인지는 스냅샷 날짜에 달려 있어,
+  /// 카드를 눌러 여는 길로 만들면 날짜가 지나는 순간 이 표가 통째로 헛돈다.
+  Future<bool> openEventsSheet(WidgetTester tester) async {
+    unawaited(
+      EventsSheet.show(
+        tester.element(find.byType(OutdoorMapBody)),
+        onCloseAll: () {},
+      ),
+    );
+    await drain(tester);
+    return find.byType(EventsSheet).evaluate().isNotEmpty;
+  }
+
   final outdoorEntries = <String, Future<bool> Function(WidgetTester)>{
     '건물 폴리곤 탭': (tester) async {
       await tapMap(tester);
       return find.byType(BuildingInfoSheet).evaluate().isNotEmpty;
     },
     '상단 바 메뉴': openMenu,
+    '이벤트 탭': openEventsTab,
   };
 
   final indoorEntries = <String, Future<bool> Function(WidgetTester)>{
@@ -173,6 +200,7 @@ void main() {
       await drain(tester);
       return find.text('근처 매장에서 골라주세요').evaluate().isNotEmpty;
     },
+    '오늘의 이벤트 시트': openEventsSheet,
   };
 
   /// 지금 **화면에 실제로 보이는** 시트 수. 라우트를 세는 [SheetStackGuard]와
@@ -182,6 +210,7 @@ void main() {
     '건물 정보': find.byType(BuildingInfoSheet),
     '앱 메뉴': find.byType(AppMenuSheet),
     '카테고리 목록': find.byType(CategoryStoresSheet),
+    '오늘의 이벤트': find.byType(EventsSheet),
     '매장 상세': find.byType(PlaceDetailSheet),
     '근처 매장': find.text('근처 매장에서 골라주세요'),
   }.entries.where((e) => e.value.evaluate().isNotEmpty).map((e) => e.key).toList();

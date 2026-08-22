@@ -23,6 +23,7 @@ import '../../domain/search/store_suggestions.dart';
 import '../../domain/route/transit_walk_fill.dart';
 import '../../features/debug_mode/debug_mode.dart';
 import '../../features/indoor_navigation/contract/floor_transition_ui_state.dart';
+import '../../widgets/sheet_stack_guard.dart';
 import '../../widgets/startup_loading_overlay.dart';
 import '../../models/building/building.dart';
 import '../../models/building/category_count.dart';
@@ -54,6 +55,10 @@ import 'widgets/search/search_panel.dart';
 import 'widgets/sheets/transit_routes_sheet.dart';
 import 'widgets/chrome/category_chips_row.dart';
 import 'widgets/chrome/map_overlay_scroll_row.dart';
+import 'widgets/chrome/issue_diary_panel.dart';
+import 'widgets/chrome/map_tab_bar.dart';
+import 'widgets/sheets/today_events.dart';
+import 'widgets/sheets/event_poster_view.dart';
 import '../outdoor_map/outdoor_map_screen.dart';
 import 'directions_candidates.dart';
 import 'transit_walk_handoff.dart';
@@ -239,6 +244,19 @@ class _MapShellScreenState extends State<MapShellScreen> {
   final _topBarKey = GlobalKey();
   final _categoryRowKey = GlobalKey();
   final _bottomBarKey = GlobalKey();
+
+  /// 하단 이슈 다이어리 판. **[outerOverlayKeys]에 반드시 들어가야 한다** — 안
+  /// 넣으면 판을 미는 손가락이 지도 탭으로 새어들어가 실내 오버레이가 닫히거나 그
+  /// 자리에 PDR 앵커가 찍힌다.
+  final _issueDiaryKey = GlobalKey();
+
+  /// 맨 아래 탭 줄. 판과 같은 이유로 [outerOverlayKeys]에 들어간다.
+  final _tabBarKey = GlobalKey();
+
+  /// 사용자가 이슈 다이어리 판을 끌어내려 치웠는지. **건물을 나갔다 들어오면
+  /// 풀린다** — 치운 것은 "지금 이 화면에서 비켜라"였지 "다시는 보지 말자"가
+  /// 아니다.
+  bool _issueDiaryDismissed = false;
   final _searchPanelKey = GlobalKey();
 
   /// "지도에서 도착지를 골라주세요" 안내. 이 카드의 X를 누른 탭이 지도까지
@@ -408,6 +426,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
   void initState() {
     super.initState();
     unawaited(_loadBuildingEvents());
+    // 시트가 뜨고 지는 것을 판이 알아야 한다([_issueDiaryVisible]).
+    sheetStackGuard.openSheets.addListener(_onSheetCountChanged);
     _searchFocus.addListener(_onSearchFocusChanged);
     _routeOriginFocus.addListener(_onRouteOriginFocusChanged);
     _routeDestinationFocus.addListener(_onRouteDestinationFocusChanged);
@@ -435,11 +455,17 @@ class _MapShellScreenState extends State<MapShellScreen> {
     });
   }
 
+  /// 시트가 뜨고 지면 판의 노출 조건이 바뀐다([_issueDiaryVisible]).
+  void _onSheetCountChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
     _startupMinimumTimer?.cancel();
     _startupLoadingTimeout?.cancel();
     placeLinkInbox.removeListener(_onPlaceLinkChanged);
+    sheetStackGuard.openSheets.removeListener(_onSheetCountChanged);
     _searchFocus.removeListener(_onSearchFocusChanged);
     _searchFocus.dispose();
     _searchController.dispose();
@@ -675,7 +701,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// | 1 | 지도([_buildMap]) — 나머지는 전부 이 위에 얹힌다 |
   /// | 2 | 검색 막([_buildSearchBarrier]) — 바깥을 눌러 검색을 닫는 길 |
   /// | 3 | 상단 오버레이([_buildTopOverlays]) — 검색·길찾기·카테고리·배너 |
-  /// | 4 | 하단 바([_buildBottomBar]) |
+  /// | 4 | 하단 바([_buildBottomBar]) — 조작 버튼과 이슈 다이어리 판 |
+  /// | 4.5 | 탭 줄([_buildTabBar]) — **바닥에 고정**. 위 것들이 이만큼 띄운다 |
   /// | 5 | 층 전환 스크림([_buildFloorScrim]) — **맨 위여야 한다.** 지도뿐 아니라 검색창·하단 바까지 덮는다 |
   /// | 6 | 시작 덮개 — 첫 위치 판정과 카메라 준비가 끝날 때까지 전부 가린다 |
   Widget _buildShell(BuildContext context, bool routeVisible) {
@@ -691,6 +718,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
           if (_searchActive) _buildSearchBarrier(),
           _buildTopOverlays(context),
           if (!_guidanceActive && !_routeMode) _buildBottomBar(routeVisible),
+          if (!_guidanceActive) _buildTabBar(),
           _buildFloorScrim(),
           IgnorePointer(
             child: AnimatedSwitcher(
@@ -740,6 +768,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
           // 남겨 두면 사용자가 해제할 수단이 없는 채로, 다시 들어갔을
           // 때 영문 모를 강조가 걸려 있다(홈 탭으로 나갈 때와 같은 이유).
           if (!entered) _categorySelection = null;
+          // 판을 치운 것은 "지금 이 화면에서 비켜라"였다. 건물을 나갔다 오면
+          // 화면이 새로 시작하는 것이라 그 뜻도 함께 끝난다.
+          if (!entered) _issueDiaryDismissed = false;
         });
         // 오버레이를 닫고 야외로 나온 순간부터는 위치·출발지가 GPS다.
         if (!entered) _dropIndoorOriginIfOutdoors();
@@ -760,7 +791,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
           ? () => unawaited(_onFacilitiesTap())
           : null,
       facilitiesActive: _facilitiesSheetOpen,
-      bottomOverlayLiftPx: _facilitiesSheetLiftPx(context),
+      bottomOverlayLiftPx: _bottomOverlayLiftPx(context),
       // 실내 화면과 같은 선택을 넘긴다. 야외 지도도 실내 진입
       // 오버레이가 켜지면 같은 도면을 그리므로, 안 넘기면 칩을
       // 눌러도 강조가 안 뜬다.
@@ -777,6 +808,8 @@ class _MapShellScreenState extends State<MapShellScreen> {
         _categoryRowKey,
         _searchPanelKey,
         _bottomBarKey,
+        _issueDiaryKey,
+        _tabBarKey,
       ],
     );
   }
@@ -1000,18 +1033,9 @@ class _MapShellScreenState extends State<MapShellScreen> {
             ? _lockMaps(_mapLockOverlayTouch)
             : _unlockMaps(_mapLockOverlayTouch),
         children: [
-          // "이벤트"는 카테고리와 달리 **실내/야외를 가리지 않는다** — 오늘 뭘
-          // 하는지는 건물에 들어가기 전에 궁금한 것이고, 고르면 진입까지
-          // 이어진다([_onEventsPressed]).
-          RoutexChipBar(
-            key: const Key('events-pill'),
-            options: const [RoutexChipOption(id: 'events', label: '이벤트')],
-            selectedId: null,
-            overflow: RoutexChipBarOverflow.deferToParent,
-            onSelected: (_) => unawaited(_onEventsPressed()),
-            semanticsLabel: '오늘의 이벤트',
-          ),
-          const SizedBox(width: RoutexSpacing.controlGap),
+          // 예전에는 여기에 "이벤트" pill이 있었다. 지금은 맨 아래 탭 줄이 그
+          // 자리를 맡는다([MapTab.events]) — 같은 조작을 두 벌 두면 사용자가 둘이
+          // 다른 것인 줄 안다.
           // 카테고리 필터는 모드가 아니라 [_indoorContextActive]로 가른다 —
           // 야외 탭이어도 오버레이가 켜지면 도면과 강조가 이미 떠 있다. 순수
           // 야외에서는 감춘다(강조가 도면 위에 그려져 결과가 안 보인다).
@@ -1042,27 +1066,157 @@ class _MapShellScreenState extends State<MapShellScreen> {
       right: 0,
       // ETA 카드와 시설 시트는 같은 바닥을 두고 다툰다. 더 높은 쪽 하나만
       // 쓴다 — 더하면 둘 다 떠 있을 때 바가 화면 밖으로 밀린다.
-      bottom: math.max(
-        routeVisible ? _etaBarLiftHeight : 0,
+      // 탭 줄은 늘 바닥에 있으므로 그 높이는 **더한다**. 나머지 둘(ETA 카드·시설
+      // 시트)은 같은 자리를 두고 다투므로 높은 쪽 하나만 쓴다 — 더하면 둘 다 떠
+      // 있을 때 바가 화면 밖으로 밀린다.
+      bottom:
+          _tabBarLiftPx(context) +
+          math.max(
+            routeVisible ? _etaBarLiftHeight : 0,
+            _facilitiesSheetLiftPx(context),
+          ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 조작 버튼이 판 **위에** 탄다. 판이 펼쳐지면 함께 밀려 올라가 늘 손이
+          // 닿는다 — 판 뒤로 숨기면 목록을 보다가 위치를 잡을 수 없다.
+          _buildBottomControls(),
+          if (_issueDiaryVisible) _buildIssueDiaryPanel(),
+        ],
+      ),
+    );
+  }
+
+  /// 지금 하단 이슈 다이어리 판을 그릴 때인가.
+  ///
+  /// **건물 안일 때만이다.** 밖에서는 지도에 이 건물 말고도 볼 것이 있고, 화면
+  /// 아래를 행사가 차지하면 그것들을 덮는다. 스냅샷을 아직 못 읽었거나 오늘
+  /// 열리는 것이 없으면 빈 줄을 남기지 않고 통째로 뺀다.
+  bool get _issueDiaryVisible =>
+      _indoorContextActive &&
+      !_issueDiaryDismissed &&
+      // **시트가 떠 있는 동안에는 물러난다.** 판은 라우트가 아니라 하단 chrome
+      // 이라 [SheetStackGuard]가 세는 대상이 아니다. 그대로 두면 시트보다 짧을
+      // 때 판의 윗머리가 시트 위로 삐져나와, 두 장이 겹친 것처럼 보인다.
+      sheetStackGuard.openSheets.value == 0 &&
+      _openDiaryPages.isNotEmpty;
+
+  /// 오늘 열리는 행사를 가진 쪽과 그 건수. 자식이 없는 쪽은 빠진다.
+  List<({EventDiaryPage page, int count})> get _openDiaryPages =>
+      _buildingEvents?.diariesOpenOn(todayKey()) ?? const [];
+
+  /// 오늘 열리는 행사, 갈래 순서로. 판이 펼쳐졌을 때의 목록이다.
+  List<BuildingEvent> get _openEventsToday =>
+      _buildingEvents?.openOnByDiary(todayKey()) ?? const [];
+
+  Widget _buildIssueDiaryPanel() {
+    return IssueDiaryPanel(
+      key: _issueDiaryKey,
+      pages: _openDiaryPages,
+      events: _openEventsToday,
+      onPickPage: (page) => unawaited(_onIssueDiaryPick(page)),
+      onPickEvent: (index) => unawaited(_onIssueDiaryEventPick(index)),
+      onDismissed: () => setState(() => _issueDiaryDismissed = true),
+      // 카테고리 줄과 **같은 잠금**이다 — 이 줄 위에서 민 손가락이 지도까지
+      // 내려가 지도가 함께 움직이는 것을 막는다.
+      onPointerOverChanged: (over) => over
+          ? _lockMaps(_mapLockOverlayHover)
+          : _unlockMaps(_mapLockOverlayHover),
+      onPointerDownChanged: (down) => down
+          ? _lockMaps(_mapLockOverlayTouch)
+          : _unlockMaps(_mapLockOverlayTouch),
+    );
+  }
+
+  /// 탭 줄이 먹는 높이. 안전영역까지 합친 값이라 위에 얹히는 것들이 이만큼
+  /// 띄우면 정확히 탭 줄 위에 앉는다.
+  double _tabBarLiftPx(BuildContext context) => _guidanceActive
+      ? 0
+      : kMapTabBarHeight + MediaQuery.paddingOf(context).bottom;
+
+  /// 지도가 자기 것(층 선택기·시설 버튼)을 밀어 올려야 할 높이.
+  ///
+  /// **안전영역을 빼고 준다** — 받는 쪽이 제 [SafeArea]로 이미 그만큼 올라와
+  /// 있어서, 여기서 더하면 두 번 세어 선택기가 붕 뜬다.
+  ///
+  /// 탭 줄은 늘 바닥에 있으므로 **더하고**, 그 위를 다투는 둘(시설 시트·이슈
+  /// 다이어리 판)은 높은 쪽만 쓴다. 판은 **접힌 높이만** 센다 — 펼치면 화면의
+  /// 3분의 2라, 거기까지 선택기를 올리면 화면 한가운데에 매달린다. 펼친 동안은
+  /// 층이 아니라 행사를 보는 중이다.
+  double _bottomOverlayLiftPx(BuildContext context) =>
+      (_guidanceActive ? 0 : kMapTabBarHeight) +
+      math.max(
         _facilitiesSheetLiftPx(context),
+        _issueDiaryVisible ? IssueDiaryPanel.peekHeight : 0,
+      );
+
+  /// 지금 켜져 있는 것을 탭 줄에 표시한다. 아무것도 아니면 지도가 켜진 자리다.
+  MapTab get _activeTab => switch (null) {
+    _ when _routeMode => MapTab.directions,
+    _ when _issueDiaryVisible => MapTab.events,
+    _ => MapTab.map,
+  };
+
+  Widget _buildTabBar() {
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: MapTabBar(
+        key: _tabBarKey,
+        selected: _activeTab,
+        onSelected: _onTabSelected,
       ),
-      child: MapBottomBar(
-        key: _bottomBarKey,
-        onCalibrate: _onCalibrate,
-        onPlaceLocation: _onPlaceLocation,
-        placingLocation: _outdoorPlacingLocation,
-        // 야외에서는 실내 진입 오버레이가 켜져 있을 때만 위치 지정
-        // 버튼을 노출한다. 오버레이가 꺼진 순수 야외 상태에서는 지정할
-        // 층 정보가 없어 눌러도 의미가 없다.
-        showPlaceLocation: _outdoorIndoorEntered,
-        attentionOnPlaceLocation: _placeLocationAttention,
-        // 목록을 만들 수 있을 때만 띄운다 — 기준점이 없으면 눌러도 아무 일이
-        // 없는 버튼이 된다. 판단은 목록을 실제로 만드는 쪽이 한다.
-        onPickNearbyStore:
-            (_outdoorKey.currentState?.canPickNearbyStore ?? false)
-            ? _onPickNearbyStore
-            : null,
-      ),
+    );
+  }
+
+  /// 탭 하나를 눌렀다. **화면을 갈아 끼우지 않는다** — 이 앱은 지도 한 화면이라,
+  /// 탭은 그 위에 무엇을 띄울지만 고른다.
+  void _onTabSelected(MapTab tab) {
+    switch (tab) {
+      case MapTab.map:
+        // 지도는 "돌아오는 자리"다. 켜져 있던 것을 걷고 지도만 남긴다.
+        _closeSearch();
+        if (_routeMode) _forgetRouteDraft();
+        if (_issueDiaryVisible) setState(() => _issueDiaryDismissed = true);
+      case MapTab.directions:
+        unawaited(_openRouteMode());
+      case MapTab.events:
+        _onEventsTab();
+      case MapTab.saved:
+        unawaited(_openFavorites());
+    }
+  }
+
+  /// 이벤트 탭. 건물 안에서는 판을 켜고 끄고, 밖에서는 오늘 목록 시트를 연다 —
+  /// 밖에서는 얹을 판이 없다(판은 실내 전용이다).
+  void _onEventsTab() {
+    if (!_indoorContextActive) {
+      unawaited(_onEventsPressed());
+      return;
+    }
+    setState(() => _issueDiaryDismissed = !_issueDiaryDismissed);
+  }
+
+  Widget _buildBottomControls() {
+    return MapBottomBar(
+      key: _bottomBarKey,
+      // 아래 안전영역은 늘 탭 줄이 먹는다.
+      bottomInset: false,
+      onCalibrate: _onCalibrate,
+      onPlaceLocation: _onPlaceLocation,
+      placingLocation: _outdoorPlacingLocation,
+      // 야외에서는 실내 진입 오버레이가 켜져 있을 때만 위치 지정
+      // 버튼을 노출한다. 오버레이가 꺼진 순수 야외 상태에서는 지정할
+      // 층 정보가 없어 눌러도 의미가 없다.
+      showPlaceLocation: _outdoorIndoorEntered,
+      attentionOnPlaceLocation: _placeLocationAttention,
+      // 목록을 만들 수 있을 때만 띄운다 — 기준점이 없으면 눌러도 아무 일이
+      // 없는 버튼이 된다. 판단은 목록을 실제로 만드는 쪽이 한다.
+      onPickNearbyStore: (_outdoorKey.currentState?.canPickNearbyStore ?? false)
+          ? _onPickNearbyStore
+          : null,
     );
   }
 
