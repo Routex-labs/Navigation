@@ -2,9 +2,28 @@
   "_source": "docs/client/thehyundai-event-source.md",
   "_note": "thehyundaiseoul.ehyundai.com 이슈다이어리의 RSC flight 페이로드에서 뽑았다. storeId는 place를 store-index에 붙인 결과다.",
   "_captured": "2026-08-21",
+  "_diaries_note": "원본 이슈 다이어리 쪽. 사진은 그 쪽의 대표 이미지다. ALT.1·주차 안내는 자식 행사에 기간이 없어 아직 담지 않았다.",
+  "diaries": [
+   {
+    "key": "popup",
+    "title": "WEEKLY POP-UP",
+    "image": "assets/events/diary_popup.png"
+   },
+   {
+    "key": "tasty",
+    "title": "TASTY SEOUL",
+    "image": "assets/events/diary_tasty.png"
+   },
+   {
+    "key": "shopping",
+    "title": "SHOPPING NEWS",
+    "image": "assets/events/diary_shopping.png"
+   }
+  ],
   "events": [
     {
       "title": "모드나인",
+      "diary": "popup",
       "start": "2026-08-14",
       "end": "2026-09-10",
       "place": "3층 POP-UP (CP컴퍼니 옆)",
@@ -73,6 +92,7 @@
     },
     {
       "title": "시슬리",
+      "diary": "popup",
       "start": "2026-08-17",
       "end": "2026-08-23",
       "place": "1층 GATE 1번 앞",
@@ -127,6 +147,7 @@
     },
     {
       "title": "S.T.DUPONT",
+      "diary": "shopping",
       "start": "2026-08-18",
       "end": "2026-09-13",
       "place": "2층 해당 매장 (몽블랑 옆)",
@@ -189,6 +210,7 @@
     },
     {
       "title": "샤넬 '카페 마드모아젤' 팝업",
+      "diary": "popup",
       "start": "2026-08-19",
       "end": "2026-09-03",
       "place": "5층 사운즈 포레스트 / 에픽 서울",
@@ -274,6 +296,7 @@
     },
     {
       "title": "명탐정 코난 WIND FESTIVAL",
+      "diary": "popup",
       "start": "2026-08-20",
       "end": "2026-08-26",
       "place": "지하2층 POP-UP@ICONIC",
@@ -321,6 +344,7 @@
     },
     {
       "title": "어데케이드 (A.DECADE)",
+      "diary": "popup",
       "start": "2026-08-20",
       "end": "2026-08-26",
       "place": "지하2층 POP-UP@WEST",
@@ -404,6 +428,7 @@
     },
     {
       "title": "108파운드",
+      "diary": "popup",
       "start": "2026-08-20",
       "end": "2026-08-26",
       "place": "지하2층 POP-UP@EAST",
@@ -468,6 +493,7 @@
     },
     {
       "title": "핫토이",
+      "diary": "popup",
       "start": "2026-08-20",
       "end": "2026-09-02",
       "place": "지하2층 ATTAG!",
@@ -504,6 +530,7 @@
     },
     {
       "title": "플로미 취향 상담소",
+      "diary": "popup",
       "start": "2026-08-20",
       "end": "2026-08-30",
       "place": "4층 POP-UP STUDIO B (웨스트엘름 앞)",
@@ -569,6 +596,7 @@
     },
     {
       "title": "살로몬&칼렉",
+      "diary": "popup",
       "start": "2026-08-20",
       "end": "2026-09-03",
       "place": "4층 해당 매장(굿러너컴퍼니 옆)",
@@ -619,6 +647,7 @@
     },
     {
       "title": "아마이모찌도넛",
+      "diary": "tasty",
       "start": "2026-08-21",
       "end": "2026-09-15",
       "place": "지하1층 POP-UP STUDIO (핑크스핫도그 옆)",
@@ -681,6 +710,7 @@
     },
     {
       "title": "싱싱베이커리",
+      "diary": "tasty",
       "start": "2026-08-21",
       "end": "2026-08-27",
       "place": "지하1층 식품행사장",
@@ -727,6 +757,7 @@
     },
     {
       "title": "키킥",
+      "diary": "tasty",
       "start": "2026-08-21",
       "end": "2026-08-27",
       "place": "지하1층 식품행사장",
@@ -800,6 +831,7 @@
     },
     {
       "title": "소보심",
+      "diary": "tasty",
       "start": "2026-08-21",
       "end": "2026-08-27",
       "place": "지하1층 식품행사장",
@@ -852,6 +884,7 @@
     },
     {
       "title": "글렌스코샤 & 로크로몬드",
+      "diary": "tasty",
       "start": "2026-08-21",
       "end": "2026-08-30",
       "place": "지하1층 중앙 에스컬레이터 옆 행사장",
@@ -913,6 +946,7 @@
     },
     {
       "title": "아워글래스",
+      "diary": "popup",
       "start": "2026-08-24",
       "end": "2026-08-30",
       "place": "1층 GATE 3 앞",
@@ -978,6 +1012,7 @@
     },
     {
       "title": "맥(MAC)",
+      "diary": "popup",
       "start": "2026-08-24",
       "end": "2026-08-30",
       "place": "1층 GATE 3 앞",

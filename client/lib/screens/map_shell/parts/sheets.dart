@@ -71,7 +71,16 @@ extension _MapShellSheets on _MapShellScreenState {
   /// 지도 위 "이벤트" pill. 오늘 열리는 행사를 고르면 **검색 후보를 고른 것과
   /// 같은 경로**로 상세를 연다 — 진입점마다 따로 만들면 한쪽만 층을 옮긴다.
   Future<void> _onEventsPressed() async {
-    final entry = await EventsSheet.show(context, onCloseAll: _requestCloseSheetChain);
+    final entry = await EventsSheet.show(
+      context,
+      onCloseAll: _requestCloseSheetChain,
+    );
+    await _openPickedEvent(entry);
+  }
+
+  /// 행사 목록에서 고른 매장으로 상세를 연다. 진입점(pill·쪽 카드)이 무엇이든
+  /// 여기 하나로 모인다 — 따로 만들면 한쪽만 층을 옮기거나 한쪽만 강조가 빠진다.
+  Future<void> _openPickedEvent(StoreIndexEntry? entry) async {
     if (!mounted || entry == null) return;
     // 이벤트를 보는 사람은 아직 건물 밖일 수 있다 — 공유 링크와 같은 맥락이라
     // 진입까지 맡긴다. 밖이라고 포기하면 pill이 야외에서 아무것도 못 연다.
@@ -81,6 +90,52 @@ extension _MapShellSheets on _MapShellScreenState {
     );
     if (!mounted || resolved == null) return;
     await _runSheetChain(() => _showStoreInfo(resolved, focusOnMap: true));
+  }
+
+  /// 하단 줄의 쪽 카드. 원본과 같은 층 구조로 내려간다 — **쪽 → 그 안의 행사
+  /// 목록 → 좌우로 넘겨보는 포스터**. 목록·포스터·안내는 pill이 여는 것과 같은
+  /// 화면이고, 갈래로 좁혀 들어간다는 것만 다르다.
+  Future<void> _onIssueDiaryPick(EventDiaryPage page) async {
+    final entry = await EventsSheet.show(
+      context,
+      onCloseAll: _requestCloseSheetChain,
+      diary: page.diary,
+      title: page.title,
+    );
+    await _openPickedEvent(entry);
+  }
+
+  /// 펼친 판의 목록 줄. **목록 시트를 거치지 않고 포스터로 바로 간다** — 판이
+  /// 이미 목록이라, 줄을 눌러 같은 목록을 한 번 더 펴면 한 단계가 헛돈다.
+  ///
+  /// 색인을 여기서 한 번 더 받는 이유는 **판이 그리는 목록과 포스터가 미는 목록이
+  /// 같아야** 하기 때문이다(같은 [loadTodayEvents]). 건물 안이면 색인은 이미 받아
+  /// 둔 것이 캐시에 있어 기다림이 없다.
+  Future<void> _onIssueDiaryEventPick(int index) async {
+    final rows = await loadTodayEvents(events: _buildingEvents);
+    if (!mounted || index < 0 || index >= rows.length) return;
+    final picked = await EventPosterView.show(
+      context,
+      events: [for (final r in rows) r.event],
+      initialIndex: index,
+      navigable: [for (final r in rows) r.entry != null],
+    );
+    // 밀어서 다른 행사를 보다가 눌렀을 수 있다 — 안내는 **그때 고른 것**으로 건다.
+    if (!mounted || picked == null) return;
+    await _openPickedEvent(rows[picked].entry);
+  }
+
+  /// 상세 시트의 행사 카드. **포스터만 띄운다** — 이미 그 매장의 시트에 서 있어서
+  /// 갈 곳을 다시 고를 일이 없다. 그래서 포스터의 안내 버튼도 감춘다(눌러도 방금
+  /// 떠난 화면으로 돌아올 뿐이다). 닫으면 보고 있던 시트가 그대로 남는다.
+  Future<void> _onPlaceDetailEventTap(BuildingEvent event) async {
+    await EventPosterView.show(
+      context,
+      events: [event],
+      initialIndex: 0,
+      navigable: const [false],
+      showGuide: false,
+    );
   }
 
   /// 야외 지도에서 건물 폴리곤을 눌렀을 때. 시트를 먼저 띄우고, 진입은 그
@@ -272,6 +327,7 @@ extension _MapShellSheets on _MapShellScreenState {
         // 알려 주는 게 없다.
         nearbyStoresLoader: _loadNearbyStores,
         onSelectNearbyStore: _onNearbyStorePicked,
+        onShowEvent: (event) => unawaited(_onPlaceDetailEventTap(event)),
         onCloseAll: _requestCloseSheetChain,
       ),
     );
