@@ -209,4 +209,101 @@ void main() {
       expect(state(FloorTransitionStage.boarding).detail, '에스컬레이터 탑승을 감지했습니다');
     });
   });
+
+  group('findEscalatorBoardingNode — 디버그 강제 전환이 고를 탑승 노드', () {
+    // 3F 랜딩: 위로는 5F까지 한 번에 가는 에스컬레이터가, 아래로는 2F로 가는
+    // 것이 붙어 있다. 도착 노드(FR)는 탑승 후보가 아니다.
+    final graph = FloorGraph(
+      nodes: [
+        _escalator('n-up-fr2f', 'ES1-UP(FR2F)', 0, 0),
+        _escalator('n-up-to5f', 'ES1-UP(TO5F)', 1.5, 0),
+        _escalator('n-dn-to2f', 'ES1-DN(TO2F)', 3.0, 0),
+        const GraphNode(id: 'n-hall', type: 'corridor', xM: 20, yM: 20),
+      ],
+      edges: const [],
+    );
+    const floors = ['B1', '1F', '2F', '3F', '4F', '5F'];
+
+    test('가는 층은 순위가 아니라 노드 이름이 정한다', () {
+      // 한 번에 두 층을 건너뛰는 에스컬레이터가 실제로 있다. 이웃 층으로
+      // 계산하면 4F가 나오고, 그 경로는 강제 전환으로 영영 재현되지 않는다.
+      final up = findEscalatorBoardingNode(
+        graph: graph,
+        direction: EscalatorDirection.up,
+        knownFloorLabels: floors,
+      );
+      expect(up?.name.otherFloorLabel, '5F');
+      expect(up?.node.id, 'n-up-to5f');
+    });
+
+    test('도착 노드는 탑승 후보가 아니다', () {
+      final down = findEscalatorBoardingNode(
+        graph: graph,
+        direction: EscalatorDirection.down,
+        knownFloorLabels: floors,
+      );
+      expect(down?.node.id, 'n-dn-to2f');
+    });
+
+    test('도면이 없는 층으로는 태우지 않는다', () {
+      // 도착 층 도면을 못 열면 시퀀스가 되돌아가, 보려던 연출 대신 실패
+      // 경로를 보게 된다.
+      expect(
+        findEscalatorBoardingNode(
+          graph: graph,
+          direction: EscalatorDirection.up,
+          knownFloorLabels: const ['3F'],
+        ),
+        isNull,
+      );
+    });
+
+    test('그래프가 없거나 이름 규칙이 깨졌으면 null이다', () {
+      expect(
+        findEscalatorBoardingNode(
+          graph: null,
+          direction: EscalatorDirection.up,
+          knownFloorLabels: floors,
+        ),
+        isNull,
+      );
+      final unnamed = FloorGraph(
+        nodes: [_escalator('n-x', null, 0, 0)],
+        edges: const [],
+      );
+      expect(
+        findEscalatorBoardingNode(
+          graph: unnamed,
+          direction: EscalatorDirection.up,
+          knownFloorLabels: floors,
+        ),
+        isNull,
+      );
+    });
+  });
+
+  group('floorTransitionScrimHold — 덮개를 붙잡는 시간', () {
+    test('사진이 없거나 한 장이면 교체를 가리는 최소치만 쓴다', () {
+      // 볼 것이 없는데 화면만 붙잡고 있으면 전환이 느리게만 느껴진다.
+      expect(floorTransitionScrimHold(0), const Duration(milliseconds: 3500));
+      expect(floorTransitionScrimHold(1), const Duration(milliseconds: 3500));
+    });
+
+    test('한 장 늘 때마다 그 장이 머무는 만큼 늘어난다', () {
+      expect(
+        floorTransitionScrimHold(2) - floorTransitionScrimHold(1),
+        floorPhotoDwell,
+      );
+      expect(
+        floorTransitionScrimHold(3) - floorTransitionScrimHold(2),
+        floorPhotoDwell,
+      );
+    });
+
+    test('상한에서 멈춘다', () {
+      // 하차까지 덮으면 내리기 전에 새 층 도면과 다음 경로를 볼 시간이 없다.
+      expect(floorTransitionScrimHold(5), const Duration(milliseconds: 9000));
+      expect(floorTransitionScrimHold(50), const Duration(milliseconds: 9000));
+    });
+  });
 }

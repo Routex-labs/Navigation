@@ -48,6 +48,33 @@ GraphNode? findEscalatorArrivalNode(
   return sameGroupFallback;
 }
 
+/// 이 층에서 [direction]으로 **실제로 데려다주는** 탑승 노드. 없으면 null.
+///
+/// 디버그 강제 전환이 "위층/아래층"을 정할 때 쓴다. **층 순위로 ±1을 계산하지
+/// 않는다** — 노드 이름이 갈 층을 직접 적고(`ES1-UP(TO3F)`), 한 번에 두 층을
+/// 건너뛰는 에스컬레이터가 실제로 있다(2026-08-13 실측). 순위로 이웃 층을 잡으면
+/// 그런 에스컬레이터는 강제 전환으로 영영 재현할 수 없다.
+///
+/// [knownFloorLabels]에 없는 층으로는 태우지 않는다. 도착 층 도면을 못 열면
+/// 시퀀스가 중간에 되돌아가서, 보려던 연출 대신 실패 경로를 보게 된다.
+({GraphNode node, EscalatorNodeName name})? findEscalatorBoardingNode({
+  required FloorGraph? graph,
+  required EscalatorDirection direction,
+  required List<String> knownFloorLabels,
+}) {
+  if (graph == null) return null;
+  for (final node in graph.nodes) {
+    if (node.type != 'escalator') continue;
+    final name = EscalatorNodeName.tryParse(node.name);
+    if (name == null) continue;
+    if (name.role != EscalatorNodeRole.boarding) continue;
+    if (name.direction != direction) continue;
+    if (!knownFloorLabels.contains(name.otherFloorLabel)) continue;
+    return (node: node, name: name);
+  }
+  return null;
+}
+
 /// 지금 화면이 그려야 하는 층 전환 배너 상태. 없으면 null.
 ///
 /// 판정 단계를 UI 문구로 **한 번만** 옮긴다. 화면은 여기서
