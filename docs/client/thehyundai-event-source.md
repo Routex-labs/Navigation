@@ -145,7 +145,8 @@ robots(`Allow: /` · `Disallow: /api/`, `/styleguide`)는 위 경로를 막지 �
 
 | 무엇 | 어디 |
 |---|---|
-| 데이터(쪽 3·행사 17건·이미지 69장) | `client/assets/mock/events.json` · `client/assets/events/` |
+| 데이터(쪽 3·행사 17건) | **서버** — `GET /buildings/{id}/events`(backend `resources/events/`) |
+| 사진 69장 | `client/assets/events/` — 서버는 **경로만** 준다(매장 상세 오버레이와 같은 방식) |
 | 목록 규칙·본문 블록 파싱 | `client/lib/domain/event/building_events.dart` |
 | 검증 기준 | `client/test/domain/event/building_events_test.dart` |
 | 오늘 목록 + 매장 붙이기 | `.../widgets/sheets/today_events.dart` |
@@ -225,6 +226,20 @@ robots(`Allow: /` · `Disallow: /api/`, `/styleguide`)는 위 경로를 막지 �
 
 - flight 페이로드는 공식 계약이 아니라 Next.js 내부 형식이다. 사이트가 프레임워크를
   올리면 깨진다. **파서가 0건을 내면 조용히 빈 목록을 보이지 말고 실패로 처리한다.**
-- DB에 넣는다면 **매장 행을 고치지 말고 별도 테이블**이어야 한다. 한 매장에 행사가
-  동시에 여럿 열리고(B1 식품 행사장에 지금 4건이 겹친다) 끝나면 되돌려야 하는데,
-  매장 칸을 덮어쓰면 원래 값을 아무도 모른다.
+- **매장 행을 고치지 말아야 한다.** 한 매장에 행사가 동시에 여럿 열리고(B1 식품 행사장에
+  지금 4건이 겹친다) 끝나면 되돌려야 하는데, 매장 칸을 덮어쓰면 원래 값을 아무도 모른다.
+  지금 서버는 DB가 아니라 classpath JSON에 둔다 — 사람이 모은 값이라 재시드 때 날아가지
+  않아야 하고, 이유는 backend `PlaceOverlays`에 적혀 있다.
+
+### 앱은 서버에서 받는다
+
+`buildingRepository.getBuildingEvents(buildingId)` 하나가 통로다. **날짜로 좁히지 않은
+통짜를 받아** 오늘 판정은 화면이 기기 로컬 날짜로 한다 — 서버가 고르면 그 응답은 만들어진
+순간부터 틀리기 시작하고 캐시가 더 오래 살린다(영업시간과 같은 판단).
+
+**모아 둔 것이 없는 건물은 빈 목록이 아니라 null이다.** 빈 목록으로 떨어뜨리면 "행사가 없는
+건물"과 "아직 안 모은 건물"이 같은 화면이 된다. 지도 화면은 그 실패를 삼키고(행사 하나 때문에
+지도가 못 뜨면 손해가 크다) 목록 시트는 빈 화면으로 떨어진다.
+
+앱에는 스냅샷 사본을 남기지 않는다. 폴백으로 두면 "빈 목록은 실패다"라는 규칙이 흐려지고,
+서버와 앱 중 어느 쪽을 보고 있는지가 화면만으로는 구분되지 않는다.
