@@ -14,6 +14,7 @@ class EventPosterView extends StatefulWidget {
     required this.events,
     required this.initialIndex,
     required this.navigable,
+    this.showGuide = true,
   });
 
   final List<BuildingEvent> events;
@@ -22,12 +23,17 @@ class EventPosterView extends StatefulWidget {
   /// 그 행사로 안내를 걸 수 있는가. [events]와 길이가 같다.
   final List<bool> navigable;
 
+  /// 안내 버튼을 그릴지. **이미 그 매장의 상세 시트에서 열었으면 끈다** — 눌러도
+  /// 방금 떠난 화면으로 돌아올 뿐이라, 잠긴 버튼을 두면 못 가는 곳처럼 읽힌다.
+  final bool showGuide;
+
   /// 사용자가 "여기로 안내"를 누르면 그 행사의 인덱스로 pop한다. 그냥 닫으면 null.
   static Future<int?> show(
     BuildContext context, {
     required List<BuildingEvent> events,
     required int initialIndex,
     required List<bool> navigable,
+    bool showGuide = true,
   }) {
     return Navigator.of(context).push<int>(
       // **불투명 라우트다.** 이 화면은 지도를 가리는 것이 목적이라, 시트들이
@@ -38,6 +44,7 @@ class EventPosterView extends StatefulWidget {
           events: events,
           initialIndex: initialIndex,
           navigable: navigable,
+          showGuide: showGuide,
         ),
       ),
     );
@@ -103,14 +110,15 @@ class _EventPosterViewState extends State<EventPosterView> {
             onPressed: () => Navigator.of(context).pop(),
           ),
           const Spacer(),
-          Text(
-            '${_index + 1} / ${widget.events.length}',
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
+          if (widget.events.length > 1)
+            Text(
+              '${_index + 1} / ${widget.events.length}',
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -352,6 +360,7 @@ class _EventPosterViewState extends State<EventPosterView> {
   /// **공식 웹에 없는 줄이다.** 웹은 읽고 끝나지만 우리는 거기까지 데려가는 것이
   /// 기능이라, 포스터를 보는 그 자리에서 안내가 시작되어야 한다.
   Widget _action(BuildingEvent event) {
+    if (!widget.showGuide) return const SizedBox(height: 12);
     final can = widget.navigable[_index];
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 20),

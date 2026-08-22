@@ -69,6 +69,30 @@ void main() {
   // 의도적으로 겹치는 것까지 걷어내면 대중교통 상세(목록 위에 얹히는
   // `PageRoute`)와 사진 뷰어(`DialogRoute`)가 열리자마자 사라진다. 세는 대상을
   // `ModalBottomSheetRoute`로 좁힌 것이 그 예외를 표시 없이 만든다.
+  /// 지도 화면 아래에는 라우트가 아닌 표면(이슈 다이어리 판)도 있다. 그것은 이
+  /// 관찰자가 세는 대상이 아니라, 시트가 떠도 그대로 남아 두 장이 겹친 것처럼
+  /// 보였다. 같은 신호로 물러나게 하려면 값이 밖으로 나가야 한다.
+  testWidgets('열린 시트 수를 밖에서 들을 수 있다', (tester) async {
+    await pumpHost(tester);
+    final seen = <int>[];
+    guard.openSheets.addListener(() => seen.add(guard.openSheets.value));
+
+    await openSheet(tester, '첫 장');
+    expect(guard.openSheets.value, 1);
+
+    // 두 장째가 떠도 앞의 것이 걷히므로 값은 1에 머문다.
+    await openSheet(tester, '둘째 장');
+    expect(guard.openSheets.value, 1);
+
+    Navigator.of(tester.element(find.text('둘째 장'))).pop();
+    await tester.pumpAndSettle();
+    expect(guard.openSheets.value, 0);
+
+    // 0에서 1로, 1에서 0으로 — 판이 물러나고 돌아오는 두 신호가 다 왔다.
+    expect(seen.first, 1);
+    expect(seen.last, 0);
+  });
+
   testWidgets('시트가 아닌 라우트는 세지도 걷어내지도 않는다', (tester) async {
     await pumpHost(tester);
 

@@ -1,18 +1,21 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:routex_design_system/routex_design_system.dart';
 
-import '../../../../service_locator.dart';
-import '../../../../core/api_config.dart';
 import '../../../../domain/event/building_events.dart';
 import 'event_poster_view.dart';
+import 'sheet_drag_dismiss.dart';
+import 'today_events.dart';
 import '../../../../models/place/store_index_entry.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../widgets/map_overlay_guard.dart';
 import '../../../../widgets/map_pass_through_sheet_route.dart';
 import '../../../../widgets/sheet_header.dart';
+
+/// 처음 떠오르는 높이. 목록이 몇 줄인지와 무관하게 고정이다 — 줄 수를 따라
+/// 높이가 변하면 같은 조작이 매번 다른 거리를 움직인다.
+const double _initialSize = 0.55;
 
 /// 오늘 이 건물에서 열리는 행사 목록. 한 줄을 누르면 그 매장의
 /// [StoreIndexEntry]로 pop해서, 호출자가 **검색 후보를 고른 것과 같은 경로**로
@@ -20,13 +23,26 @@ import '../../../../widgets/sheet_header.dart';
 ///
 /// 원본과 수집 방법은 `docs/client/thehyundai-event-source.md`.
 class EventsSheet extends StatefulWidget {
-  const EventsSheet({super.key, required this.onCloseAll});
+  const EventsSheet({
+    super.key,
+    required this.onCloseAll,
+    this.diary,
+    this.title,
+  });
 
   final VoidCallback onCloseAll;
+
+  /// 이 쪽에서 온 것만 보인다. null이면 오늘 열리는 것 전부다.
+  final EventDiary? diary;
+
+  /// 머리에 적을 이름. 없으면 오늘 전체를 뜻하는 이름을 쓴다.
+  final String? title;
 
   static Future<StoreIndexEntry?> show(
     BuildContext context, {
     required VoidCallback onCloseAll,
+    EventDiary? diary,
+    String? title,
   }) {
     // 카테고리 목록 시트와 **같은 라우트**다 — 뒤 지도를 얼리지 않으려는 이유가
     // 같다([MapPassThroughSheetRoute]).
@@ -40,8 +56,13 @@ class EventsSheet extends StatefulWidget {
         isScrollControlled: true,
         isDismissible: true,
         backgroundColor: Colors.transparent,
-        builder: (context) =>
-            MapOverlayGuard(child: EventsSheet(onCloseAll: onCloseAll)),
+        builder: (context) => MapOverlayGuard(
+          child: EventsSheet(
+            onCloseAll: onCloseAll,
+            diary: diary,
+            title: title,
+          ),
+        ),
       ),
     );
   }
@@ -50,51 +71,18 @@ class EventsSheet extends StatefulWidget {
   State<EventsSheet> createState() => _EventsSheetState();
 }
 
-/// 행사 한 줄과 그 줄이 열 매장을 한 쌍으로 묶는다. 매장을 못 찾으면 [entry]가
-/// null이고 줄은 눌리지 않는다.
-class _Row {
-  const _Row(this.event, this.entry);
-  final BuildingEvent event;
-  final StoreIndexEntry? entry;
-}
-
-/// 매장 색인을 기다리는 시한. 색인은 안내를 걸기 위한 것이지 목록을 그리기 위한
-/// 것이 아니라, 못 받으면 기다리지 않고 장소 문구만으로 목록을 낸다.
-const _indexTimeout = Duration(seconds: 6);
-
 class _EventsSheetState extends State<EventsSheet> {
-  late final Future<List<_Row>> _rowsFuture = _load();
+  // 목록·하단 줄·포스터가 **같은 순서의 같은 목록**을 쓴다([loadTodayEvents]).
+  late final Future<List<TodayEvent>> _rowsFuture = loadTodayEvents(
+    diary: widget.diary,
+  );
   bool _intentionalPop = false;
 
   void _markIntentional() => _intentionalPop = true;
 
-  /// 오늘 날짜(`YYYY-MM-DD`). 기기 로컬 시각을 쓴다 — 행사 기간도 현지 날짜다.
-  static String _today() {
-    final now = DateTime.now();
-    final m = now.month.toString().padLeft(2, '0');
-    final d = now.day.toString().padLeft(2, '0');
-    return '${now.year}-$m-$d';
-  }
-
-  Future<List<_Row>> _load() async {
-    final source = await rootBundle.loadString('assets/mock/events.json');
-    final open = parseBuildingEvents(source).openOn(_today());
-    // 매장 색인은 검색이 이미 받아 두는 것과 **같은 캐시**다(같은 건물이면 두 번째
-    // 부터 즉시 온다). 실패하면 안내만 빠지고 목록은 그대로 뜬다.
-    //
-    // **시한을 건다.** 목록 자체는 에셋만으로 그릴 수 있는데 색인을 시한 없이
-    // 기다리면, 서버에 닿지 못하는 상황에서 예외가 아니라 **멎는다** — 그때
-    // 화면에는 영영 도는 스피너만 남는다(실기기에서 실제로 그랬다).
-    List<StoreIndexEntry>? index;
-    try {
-      index = await buildingRepository
-          .getStoreIndex(demoBuildingId)
-          .timeout(_indexTimeout);
-    } on Object {
-      index = null;
-    }
-    final byId = {for (final e in index ?? const <StoreIndexEntry>[]) e.id: e};
-    return [for (final e in open) _Row(e, byId[e.storeId])];
+  /// 끌어내려 닫는다. 상세 시트와 같은 뜻이다 — 뒤로 가기로 닫은 것과 같이 본다.
+  void _closeByDrag() {
+    if (mounted) Navigator.of(context).maybePop();
   }
 
   @override
@@ -105,30 +93,41 @@ class _EventsSheetState extends State<EventsSheet> {
         if (didPop && !_intentionalPop) widget.onCloseAll();
       },
       child: DraggableScrollableSheet(
-        initialChildSize: 0.55,
-        minChildSize: 0.35,
+        initialChildSize: _initialSize,
+        // 상세 시트와 **같은 감각**이다([SheetDragDismiss]) — 본문 어디를 잡고
+        // 내려도 따라 내려오고, 처음 높이의 18%쯤에서 닫힌다. 예전에는 바닥이
+        // 0.35라 거기서 멎어 버려, 닫으려고 끌면 손이 헛돌았다.
+        minChildSize: _initialSize * kSheetMinRatio,
         maxChildSize: 0.9,
+        // 놓으면 처음 높이나 끝까지 중 가까운 쪽으로 붙는다. 없으면 반쯤 내린
+        // 어중간한 높이에 그대로 멎는다.
+        snap: true,
+        snapSizes: const [_initialSize],
         expand: false,
         builder: (context, scrollController) => GestureDetector(
           onTap: () {},
           behavior: HitTestBehavior.opaque,
-          child: RoutexBottomSheet(
-            contentInset: RoutexBottomSheetContentInset.content,
-            child: FutureBuilder<List<_Row>>(
-              future: _rowsFuture,
-              builder: (context, snapshot) => CustomScrollView(
-                controller: scrollController,
-                slivers: [
-                  const SliverToBoxAdapter(child: RoutexSheetHandle()),
-                  SliverToBoxAdapter(
-                    child: SheetHeader(
-                      title: '오늘의 이벤트',
-                      onCloseAll: widget.onCloseAll,
-                      onIntentionalPop: _markIntentional,
+          child: SheetDragDismiss(
+            initialSize: _initialSize,
+            onDismiss: _closeByDrag,
+            child: RoutexBottomSheet(
+              contentInset: RoutexBottomSheetContentInset.content,
+              child: FutureBuilder<List<TodayEvent>>(
+                future: _rowsFuture,
+                builder: (context, snapshot) => CustomScrollView(
+                  controller: scrollController,
+                  slivers: [
+                    const SliverToBoxAdapter(child: RoutexSheetHandle()),
+                    SliverToBoxAdapter(
+                      child: SheetHeader(
+                        title: widget.title ?? '오늘의 이벤트',
+                        onCloseAll: widget.onCloseAll,
+                        onIntentionalPop: _markIntentional,
+                      ),
                     ),
-                  ),
-                  ..._body(snapshot),
-                ],
+                    ..._body(snapshot),
+                  ],
+                ),
               ),
             ),
           ),
@@ -137,7 +136,7 @@ class _EventsSheetState extends State<EventsSheet> {
     );
   }
 
-  List<Widget> _body(AsyncSnapshot<List<_Row>> snapshot) {
+  List<Widget> _body(AsyncSnapshot<List<TodayEvent>> snapshot) {
     if (snapshot.connectionState != ConnectionState.done) {
       return const [
         SliverToBoxAdapter(
@@ -148,7 +147,7 @@ class _EventsSheetState extends State<EventsSheet> {
         ),
       ];
     }
-    final rows = snapshot.data ?? const <_Row>[];
+    final rows = snapshot.data ?? const <TodayEvent>[];
     if (rows.isEmpty || snapshot.hasError) {
       // 파일이 깨진 경우와 오늘 열리는 것이 없는 경우를 **가르지 않는다** —
       // 사용자가 할 일이 어느 쪽이든 같고(다음에 다시 보기), 굳이 가르면
@@ -176,7 +175,7 @@ class _EventsSheetState extends State<EventsSheet> {
   /// 행사 한 줄. **[RoutexListCell]을 쓰지 않는다** — 그 셀은 leading이
   /// `IconData`뿐이라 사진이 못 들어가는데, 이 목록은 사진이 요점이다(어디를
   /// 갈지 정하는 데 글자보다 사진이 빠르다). 대신 색·간격은 셀과 맞춘다.
-  Widget _tile(_Row row) {
+  Widget _tile(TodayEvent row) {
     final event = row.event;
     final navigable = row.entry != null;
     return InkWell(
@@ -209,7 +208,14 @@ class _EventsSheetState extends State<EventsSheet> {
                     ),
                     const SizedBox(height: 2),
                     Text(
+                      // 갈래를 맨 앞에 둔다 — 목록이 갈래 순서로 서 있으므로,
+                      // 여기서 갈래가 바뀌는 자리가 곧 묶음의 경계로 읽힌다.
+                      // 이미 한 갈래로 좁혀 들어왔으면 적지 않는다 — 모든 줄에
+                      // 같은 낱말이 반복되면 그 자리는 읽히지 않는 여백이 된다.
                       [
+                        if (widget.diary == null &&
+                            event.diary.label.isNotEmpty)
+                          event.diary.label,
                         if (event.place.isNotEmpty) event.place,
                         _period(event),
                       ].join(' · '),
@@ -237,7 +243,7 @@ class _EventsSheetState extends State<EventsSheet> {
   ///
   /// 포스터에서 안내를 고르면 **그때 고른 행사**로 시트를 닫는다 — 밀어서 다른
   /// 행사를 보다가 눌렀는데 처음 줄로 안내되면 안 된다.
-  Future<void> _openPoster(_Row row) async {
+  Future<void> _openPoster(TodayEvent row) async {
     final rows = await _rowsFuture;
     if (!mounted) return;
     final start = rows.indexOf(row);
