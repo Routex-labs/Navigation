@@ -669,7 +669,7 @@ void main() {
       expect(find.text('리저브 나이트로'), findsOneWidget);
     });
 
-    testWidgets('demo info shows one shared confirmation date', (tester) async {
+    testWidgets('demo info renders rows without any date', (tester) async {
       await tester.pumpWidget(
         subject(
           const PlaceDemoInfoSection(
@@ -677,12 +677,10 @@ void main() {
               PlaceDemoInfo(
                 label: '영업시간',
                 value: '화~목 10:30-20:00',
-                confirmedAt: '2026-08-10',
               ),
               PlaceDemoInfo(
                 label: '주차',
                 value: '주차 지원 불가',
-                confirmedAt: '2026-08-10',
               ),
             ],
           ),
@@ -692,37 +690,12 @@ void main() {
       expect(find.text('영업 정보'), findsOneWidget);
       expect(find.byIcon(Icons.schedule_outlined), findsOneWidget);
       expect(find.byIcon(Icons.local_parking_outlined), findsOneWidget);
-      expect(find.text('2026-08-10 확인'), findsOneWidget);
+      // 확인일은 값을 다시 확인할 근거이지 읽는 사람이 무언가를 정하는 데 쓰는
+      // 값이 아니다. 줄마다 날짜가 붙으면 세 줄짜리 섹션이 여섯 줄이 된다.
+      expect(find.textContaining('확인'), findsNothing);
+      expect(find.textContaining('2026-'), findsNothing);
       // 라벨은 아이콘이 대신하므로 글자로 남지 않는다.
       expect(find.text('영업시간'), findsNothing);
-    });
-
-    // 확인일이 다르면 하나로 묶을 수 없다. 묶는 순간 오래된 항목이 최근에 확인된
-    // 것처럼 보인다.
-    testWidgets('demo info keeps per-item dates when they differ', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        subject(
-          const PlaceDemoInfoSection(
-            items: [
-              PlaceDemoInfo(
-                label: '영업시간',
-                value: '화~목 10:30-20:00',
-                confirmedAt: '2026-08-10',
-              ),
-              PlaceDemoInfo(
-                label: '주차',
-                value: '주차 지원 불가',
-                confirmedAt: '2026-07-30',
-              ),
-            ],
-          ),
-        ),
-      );
-
-      expect(find.text('2026-08-10 확인'), findsOneWidget);
-      expect(find.text('2026-07-30 확인'), findsOneWidget);
     });
 
     // `1522-3232`는 매장 직통이 아니라 전국 고객센터 번호다. 아이콘이 라벨을
@@ -738,12 +711,10 @@ void main() {
               PlaceDemoInfo(
                 label: '고객센터',
                 value: '1522-3232 (평일 09:00–18:00)',
-                confirmedAt: '2026-08-10',
               ),
               PlaceDemoInfo(
                 label: '주차',
                 value: '주차 지원 불가',
-                confirmedAt: '2026-08-10',
               ),
             ],
           ),
@@ -789,7 +760,6 @@ void main() {
                 PlaceDemoInfo(
                   label: '고객센터',
                   value: '1522-3232 (평일 09:00–18:00)',
-                  confirmedAt: '2026-08-10',
                 ),
               ],
             ),
@@ -835,7 +805,6 @@ void main() {
               PlaceDemoInfo(
                 label: '고객센터',
                 value: '1522-3232',
-                confirmedAt: '2026-08-10',
               ),
             ],
           ),
@@ -877,7 +846,6 @@ void main() {
               PlaceDemoInfo(
                 label: '고객센터',
                 value: '1522-3232 (평일 09:00–18:00)',
-                confirmedAt: '2026-08-10',
               ),
             ],
           ),
@@ -901,7 +869,6 @@ void main() {
               PlaceDemoInfo(
                 label: '영업시간',
                 value: '화~목 10:30–20:00 (2026-08-10 월요일 휴점)',
-                confirmedAt: '2026-08-10',
               ),
             ],
           ),
@@ -1170,6 +1137,119 @@ void main() {
 
       expect(find.text('반려동물 동반'), findsOneWidget);
       expect(find.text(RoutexTypography.keepWordsWhole('가능')), findsOneWidget);
+    });
+
+    testWidgets('contact keeps the phone label and drops the checked date', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        subject(const PlaceContactSection(tel: '02-3277-0132')),
+      );
+
+      // 줄이 하나뿐이라 섹션 제목을 두지 않는다. `연락처`와 `전화번호`가 같은 말을
+      // 두 번 하면서 38dp를 쓰던 자리다.
+      expect(find.text('연락처'), findsNothing);
+      expect(find.byIcon(Icons.call_outlined), findsOneWidget);
+      // 아이콘만으로는 누가 받는 번호인지 말하지 못한다.
+      expect(find.text('전화번호'), findsOneWidget);
+      // 확인일은 값을 다시 확인할 근거이지 읽을 정보가 아니다. 한 줄짜리 섹션이
+      // 날짜 때문에 두 줄이 되면 정작 정할 것("이 번호로 걸까")이 흐려진다.
+      expect(find.textContaining('확인'), findsNothing);
+      // 복사 버튼을 두지 않는다. 48dp 상자가 줄을 부풀려 라벨과 숫자 사이가
+      // 벌어지고, 이 화면에서 하려는 일은 복사가 아니라 거는 것이다.
+      expect(find.text('복사'), findsNothing);
+    });
+
+    testWidgets('tapping the contact row dials the number as shown', (
+      tester,
+    ) async {
+      const channel = MethodChannel('plugins.flutter.io/url_launcher');
+      String? launched;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+        call,
+      ) async {
+        if (call.method == 'launch') {
+          launched = (call.arguments as Map)['url'] as String?;
+        }
+        return true;
+      });
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          channel,
+          null,
+        ),
+      );
+
+      await tester.pumpWidget(
+        subject(
+          const PlaceContactSection(tel: '02-3277-0132'),
+        ),
+      );
+
+      // 복사 버튼도 InkWell이라 타입으로 찾으면 둘이 걸린다. 줄 안쪽,
+      // 복사 버튼 밖에 있는 수화기 아이콘을 누른다.
+      await tester.tap(find.byIcon(Icons.call_outlined));
+      await tester.pumpAndSettle();
+
+      // 구분기호를 지우지 않는다. 화면에 보이는 번호와 걸리는 번호가 같아야
+      // 무엇이 걸렸는지 확인할 수 있다.
+      expect(launched, 'tel:02-3277-0132');
+    });
+
+    // 눌렀는데 아무 일도 없으면 앱이 멈춘 줄 안다. 다이얼러가 없는 기기에서도
+    // 실패했다는 사실만은 알린다.
+    testWidgets('전화를 걸지 못하면 시트에 가리지 않는 알림으로 말한다', (tester) async {
+      const channel = MethodChannel('plugins.flutter.io/url_launcher');
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        (call) async => false,
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          channel,
+          null,
+        ),
+      );
+
+      final navigatorKey = GlobalKey<NavigatorState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: navigatorKey,
+          theme: AppTheme.light,
+          home: const Scaffold(body: SizedBox.expand()),
+        ),
+      );
+
+      unawaited(
+        showModalBottomSheet<void>(
+          context: navigatorKey.currentContext!,
+          builder: (_) => const PlaceContactSection(tel: '02-3277-0132'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.call_outlined));
+      await tester.pumpAndSettle();
+
+      expect(find.text('전화를 걸지 못했습니다'), findsOneWidget);
+      // 루트 Overlay에 얹힌 토스트다. 시트 아래에 그려지는 SnackBar가 아니다.
+      expect(find.byType(SnackBar), findsNothing);
+
+      // 토스트는 스스로 사라진다. 남은 타이머를 흘려보내지 않으면 테스트가
+      // 대기 중인 타이머로 실패한다.
+      await tester.pump(RoutexToast.visibleDuration);
+      expect(find.text('전화를 걸지 못했습니다'), findsNothing);
+    });
+
+    // 서버는 번호·출처·확인일이 다 있을 때만 섹션을 만든다. 그 계약이 여기까지
+    // 오는 길에 끊겨도 빈 줄이 남지는 않아야 한다.
+    testWidgets('an empty number renders nothing', (tester) async {
+      await tester.pumpWidget(
+        subject(const PlaceContactSection(tel: '')),
+      );
+
+      expect(find.byIcon(Icons.call_outlined), findsNothing);
+      expect(find.text('전화번호'), findsNothing);
     });
   });
 }
