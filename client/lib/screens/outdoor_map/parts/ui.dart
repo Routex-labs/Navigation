@@ -443,25 +443,63 @@ extension OutdoorMapUi on OutdoorMapBodyState {
             ),
           ),
 
-        // 디버그 전용 — 강제 층 전환. "내 위치로" 버튼 바로 위, 안내 중 +
-        // 디버그 모드 + 에스컬레이터 환승이 남아 있을 때만 뜬다.
-        // 무엇을 태우는지는 [_debugForceFloorTransition]에 있다.
-        if (debugEnabled && _guidanceActive && _debugForceableTransfer != null)
+        // 디버그 전용 — 강제 층 전환. 위층·아래층 두 개가 **오른쪽 아래**에
+        // 선다. 왼쪽 열은 층 선택기·"내 위치로"·안내 중 보정 버튼이 상황에 따라
+        // 번갈아 쓰는 자리라, 디버그 버튼을 끼워 넣으면 그 셋과 겹친다.
+        //
+        // 오른쪽 맨 아래는 셸의 하단 바(위치 보정·위치 지정)가 쓴다 — 그 줄은
+        // 오른쪽 정렬이라 왼쪽 열과 달리 여기서 부딪힌다. 한 칸 높이만큼 올려
+        // 그 위에 세운다. 안 올리면 **아래 버튼이 하단 바 뒤에 깔려** 위층
+        // 버튼 하나만 보인다(2026-08-22 실기기).
+        //
+        // **안내 중이 아니어도 뜬다** — 책상에서는 GPS가 실내 상태를 지워 안내를
+        // 끝까지 못 태우는데, 층 전환 연출은 그와 무관하게 봐야 한다. 무엇을
+        // 태우는지는 [_debugForceFloorTransition]에 있다.
+        //
+        // 버튼에 적히는 것은 방향이 아니라 **가는 층**이다. 그 층은 도면의 탑승
+        // 노드 이름이 정하며(두 층을 건너뛰기도 한다), 그 자리에 화살표만 그리면
+        // 눌러 보기 전에는 어디로 가는지 알 수 없다.
+        if (debugEnabled && (_indoorEntered || pdrActive))
           AnimatedPositioned(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOut,
-            left: 16,
+            right: 16,
             bottom:
                 floorSelectorBottomOffset +
                 (indoorRouteVisible ? bottomBarLiftPx : 0) +
-                52,
+                RoutexMetrics.minimumTouchTarget +
+                RoutexSpacing.controlGap,
             child: SafeArea(
               top: false,
-              child: RoutexMapControl(
-                key: const Key('debug-force-floor-transition'),
-                label: '층 전환 시뮬레이션',
-                icon: RoutexIcons.escalator,
-                onPressed: _debugForceFloorTransition,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final up in const [true, false])
+                    Padding(
+                      padding: EdgeInsets.only(bottom: up ? 8 : 0),
+                      child: Builder(
+                        builder: (context) {
+                          final boarding = _debugEscalatorBoarding(up: up);
+                          return RoutexMapControl(
+                            key: Key(
+                              'debug-force-floor-transition-${up ? 'up' : 'down'}',
+                            ),
+                            label: up ? '위층으로 층 전환' : '아래층으로 층 전환',
+                            // 방향 화살표는 디자인 시스템에 없다. 층 이동은
+                            // 접기/펼치기가 아니라 위아래 이동이라 그쪽 아이콘을
+                            // 빌려 쓰지 않는다.
+                            icon: up
+                                ? Icons.arrow_upward_rounded
+                                : Icons.arrow_downward_rounded,
+                            text: boarding?.name.otherFloorLabel,
+                            onPressed: boarding == null
+                                ? null
+                                : () => _debugForceFloorTransition(up: up),
+                          );
+                        },
+                      ),
+                    ),
+                ],
               ),
             ),
           ),

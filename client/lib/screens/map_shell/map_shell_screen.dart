@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:latlong2/latlong.dart';
@@ -40,6 +40,7 @@ import '../../map/style/category_map_filter.dart';
 import 'widgets/sheets/category_stores_sheet.dart';
 import 'widgets/sheets/events_sheet.dart';
 import '../../domain/event/building_events.dart';
+import '../../domain/floor/floor_concept_photo.dart';
 import 'widgets/sheets/facility_filter_sheet.dart';
 import '../../models/route/directions_candidate.dart';
 import 'widgets/sheets/favorites_sheet.dart';
@@ -166,8 +167,23 @@ class _MapShellScreenState extends State<MapShellScreen> {
     if (banner != null && _searchActive) {
       _closeSearch();
     }
+    final photos = banner == null
+        ? const <String>[]
+        : floorConceptPhotos(banner.toFloorLabel);
+    // **탑승이 잡힌 순간 미리 굽는다.** 덮개가 짙어지는 그 프레임은 도면을 갈아
+    // 끼우는 중이라 이미 제일 바쁘다 — 그때 사진을 처음 디코드하면 거기서 한 번
+    // 끊기고, 하필 사용자가 화면을 볼 수밖에 없는 구간이다.
+    //
+    // 뒷장까지 함께 굽는다. 첫 장만 구우면 사람이 곧바로 넘겼을 때 빈 칸이
+    // 지나간다 — 자동 넘김은 2초 뒤지만 손은 그보다 빠르다.
+    if (!listEquals(photos, _floorTransitionPhotos)) {
+      for (final photo in photos) {
+        unawaited(precacheImage(AssetImage(photo), context));
+      }
+    }
     setState(() {
       _floorTransition = banner;
+      _floorTransitionPhotos = photos;
       _floorScrimOpacity = scrimOpacity;
     });
   }
@@ -236,6 +252,10 @@ class _MapShellScreenState extends State<MapShellScreen> {
   /// 지도 안에서 그린 배너는 그 뒤에 깔린다.
   FloorTransitionUiState? _floorTransition;
   double _floorScrimOpacity = 0;
+
+  /// 덮개에 깔 도착 층 사진들. 층 라벨에서 나오므로 상태로 들고 있을 필요는
+  /// 없지만, **미리 굽는 시점**을 알려면 바뀌는 순간을 잡아야 한다.
+  List<String> _floorTransitionPhotos = const [];
 
   // 지도 위에 얹은 공용 오버레이(검색창·카테고리 줄·하단 바)의 영역을
   // IndoorMapBody가 map click 처리에서 제외할 수 있게 넘겨줄 key들.
@@ -1235,6 +1255,7 @@ class _MapShellScreenState extends State<MapShellScreen> {
         fadeIn: floorTransitionScrimFadeIn,
         fadeOut: floorTransitionScrimFadeOut,
         state: _floorTransition,
+        photoAssets: _floorTransitionPhotos,
       ),
     );
   }

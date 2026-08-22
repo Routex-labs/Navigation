@@ -36,6 +36,7 @@ import '../../domain/route/route_endpoint_fill.dart';
 import '../../domain/guidance/route_guidance.dart';
 import '../../features/indoor_navigation/application/corridor_position_tracker.dart';
 import '../../domain/guidance/escalator_ride.dart';
+import '../../domain/floor/floor_concept_photo.dart';
 import '../../features/indoor_navigation/application/escalator_arrival.dart';
 import '../../features/indoor_navigation/application/escalator_node_naming.dart';
 import '../../features/indoor_navigation/application/escalator_transition_detector.dart';
@@ -389,10 +390,6 @@ class OutdoorMapBody extends StatefulWidget {
 /// 덮개 카드의 점은 이 값을 보간해 프레임 단위로 부드럽게 그린다.
 const _escalatorGlideFrame = escalatorGlideSampleInterval;
 
-/// 도면을 갈아 끼운 뒤 덮개를 그대로 두는 시간(페이드까지 더하면 약 4.7초).
-/// 짧으면 덮개가 크로스페이드·마커 활강보다 먼저 걷혀 교체 과정이 보인다.
-/// **하차까지 덮지는 않는다** — 내리기 전에 새 층 도면과 다음 경로를 봐야 한다.
-const _indoorFloorSwapVeilHold = Duration(milliseconds: 3500);
 
 /// 건물 로드 실패 시 다시 시도하는 간격 사다리(약 1분간 6번). 이 로드는 initState
 /// 한 번뿐이라 실패하면 영영 복구되지 않았다. **무한 재시도는 안 한다** — 백엔드
@@ -770,6 +767,16 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
   /// 덮개를 내리기로 예약해 둔 타이머. 탑승이 먼저 끝나면 취소한다.
   Timer? _floorSwapVeilTimer;
 
+  /// 디버그 강제 전환에서 하차 확정을 기다리는 타이머와 그때 태울 transition.
+  ///
+  /// **큐에 대기를 쌓지 않는다.** `Future.delayed`를 층 전환 큐에 넣으면 버튼을
+  /// 누를 때마다 대기가 직렬로 붙어, 다음 층으로 가려면 앞의 대기가 다 끝나기를
+  /// 기다려야 한다 — 실기기에서 "뭐가 안 끝나서 바로 안 넘어간다"로 보였다
+  /// (2026-08-22). 타이머로 들고 있으면 새로 누를 때 앞엣것을 **지금 끝내고**
+  /// 이어 갈 수 있다.
+  Timer? _debugRideCompletionTimer;
+  EscalatorTransition? _debugRideCompletion;
+
   /// 탑승 중 마커가 흐르는 구간(탑승 노드 → 하차 노드, WGS84).
   ///
   /// 이 값이 있으면 마커 위치의 출처가 여기다. 탑승부터 하차 확정까지는 걸음이
@@ -1071,6 +1078,7 @@ class OutdoorMapBodyState extends State<OutdoorMapBody> {
     _escalatorGlideTimer?.cancel();
     _arrivalRouteClearTimer?.cancel();
     _floorSwapVeilTimer?.cancel();
+    _debugRideCompletionTimer?.cancel();
     _escalatorGlideProgress.dispose();
     // 탑승 중 화면이 닫히면 걸음이 멈춘 채로 전역 PDR 세션이 남는다. 다음
     // 화면에서 아무리 걸어도 위치가 갱신되지 않는다.

@@ -248,12 +248,18 @@ extension OutdoorMapEscalator on OutdoorMapBodyState {
     unawaited(_aimCameraAtEscalatorExit(points: glidePoints, to: arrivalWgs84));
     // 덮개도 같은 이유로 예약해서 내린다. 걷히면 사용자는 새 층 도면과 다음
     // 경로를 보며 남은 구간을 탄다.
+    //
+    // 붙잡는 시간은 **도착 층 사진 장수**가 정한다([floorTransitionScrimHold]).
+    // 한 장뿐인 층을 여러 장 기준으로 붙잡으면 볼 것이 없는데 화면만 잡혀 있다.
     _floorSwapVeilTimer?.cancel();
-    _floorSwapVeilTimer = Timer(_indoorFloorSwapVeilHold, () {
-      _floorSwapVeilTimer = null;
-      if (!mounted) return;
-      setState(() => _floorSwapVeil = 0);
-    });
+    _floorSwapVeilTimer = Timer(
+      floorTransitionScrimHold(floorConceptPhotos(floor).length),
+      () {
+        _floorSwapVeilTimer = null;
+        if (!mounted) return;
+        setState(() => _floorSwapVeil = 0);
+      },
+    );
     return true;
   }
 
@@ -403,6 +409,16 @@ extension OutdoorMapEscalator on OutdoorMapBodyState {
     if (seg.transferFromNodeId == null) return null;
     return (segment: seg, nextFloorLabel: multi.segments[i + 1].floorName);
   }
+
+  /// 디버그 전용 — 지금 층에서 [up] 방향 탑승 노드. 고르는 규칙은
+  /// [findEscalatorBoardingNode]에 있다.
+  ({GraphNode node, EscalatorNodeName name})? _debugEscalatorBoarding({
+    required bool up,
+  }) => findEscalatorBoardingNode(
+    graph: _floorGraph,
+    direction: up ? EscalatorDirection.up : EscalatorDirection.down,
+    knownFloorLabels: _building?.floors ?? const [],
+  );
 
   /// 반 층을 지났다. 목적 층 지도를 먼저 연다(하차는 아직).
   Future<void> _beginEscalatorTransition(EscalatorTransition transition) async {

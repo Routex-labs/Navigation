@@ -120,6 +120,7 @@ flutter:
     - assets/place_details/
     - assets/mock/sample_building.json
     - assets/events/
+    - assets/floors/
     - assets/mock/hyundai_floor_1f.json
     - assets/mock/hyundai_floor_map.svg
     - assets/mock/demo_floor_map_v5.svg
