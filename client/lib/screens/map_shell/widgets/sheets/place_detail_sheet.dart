@@ -902,11 +902,12 @@ List<RoutexMediaItem> _mediaItems(List<String> assetPaths) => [
 class _SectionBreak extends StatelessWidget {
   const _SectionBreak();
 
+  // **여백을 따로 주지 않는다.** `RoutexDivider(section)`의 height가 선과 앞뒤 여백을
+  // 함께 잡는다 — 여기서 Padding을 또 씌우면 같은 값이 두 곳에 생겨 경계마다 여백이
+  // 두 배가 된다. 실제로 그랬고, 섹션이 선에서 멀찍이 떨어져 보였다.
   @override
-  Widget build(BuildContext context) => const Padding(
-    padding: EdgeInsets.symmetric(vertical: 14),
-    child: RoutexDivider(role: RoutexDividerRole.section),
-  );
+  Widget build(BuildContext context) =>
+      const RoutexDivider(role: RoutexDividerRole.section);
 }
 
 /// 제목 + 본문 한 쌍. 섹션 위젯 자체가 제목을 갖지 않는 경우(소개)에 씌운다.
