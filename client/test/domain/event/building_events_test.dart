@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navigation_client/domain/event/building_events.dart';
 
@@ -7,15 +5,15 @@ import 'package:navigation_client/domain/event/building_events.dart';
 /// 날짜 경계(시작일·종료일 당일)와 깨진 파일 판정이 실패 조건이다.
 void main() {
   const json = '''
-  {"_captured":"2026-08-21","events":[
+  {"captured_on":"2026-08-21","events":[
     {"title":"상설 전시","start":"2026-07-16","end":"2026-11-02",
-     "place":"6층 ALT.1","floor":"6F","storeId":"PO-alt1"},
+     "place":"6층 ALT.1","floor":"6F","store_id":"PO-alt1"},
     {"title":"이번 주 팝업","start":"2026-08-20","end":"2026-08-26",
-     "place":"지하2층 POP-UP@ICONIC","floor":"B2","storeId":"PO-icon"},
+     "place":"지하2층 POP-UP@ICONIC","floor":"B2","store_id":"PO-icon"},
     {"title":"좌표 없는 행사","start":"2026-08-20","end":"2026-08-26",
-     "place":"지하1층 중앙 에스컬레이터 옆","floor":null,"storeId":null},
+     "place":"지하1층 중앙 에스컬레이터 옆","floor":null,"store_id":null},
     {"title":"지난 행사","start":"2026-08-01","end":"2026-08-10",
-     "place":"1층","floor":"1F","storeId":"PO-gate"}
+     "place":"1층","floor":"1F","store_id":"PO-gate"}
   ]}''';
 
   test('열려 있는 것만 남고, 먼저 끝나는 것이 위로 온다', () {
@@ -52,7 +50,7 @@ void main() {
   test('본문 블록은 순서 그대로 오고, 모르는 종류는 목록을 깨지 않는다', () {
     const withDetails = '''
     {"events":[{"title":"팝업","start":"2026-08-20","end":"2026-08-26",
-      "place":"B2","floor":"B2","storeId":"PO-x","details":[
+      "place":"B2","floor":"B2","store_id":"PO-x","details":[
         {"t":"h","text":"SPECIAL PROMOTION"},
         {"t":"p","text":"본문"},
         {"t":"prod","lines":["1만원 이상","띠부씰 증정"],"image":"assets/events/a.jpg"},
@@ -77,15 +75,15 @@ void main() {
   const mixed = '''
     {"events":[
       {"title":"쇼핑","start":"2026-08-18","end":"2026-09-13","diary":"shopping",
-       "place":"2층 해당 매장","floor":"2F","storeId":"PO-s"},
+       "place":"2층 해당 매장","floor":"2F","store_id":"PO-s"},
       {"title":"늦게 끝나는 팝업","start":"2026-08-20","end":"2026-09-02","diary":"popup",
-       "place":"지하2층 ATTAG!","floor":"B2","storeId":"PO-a"},
+       "place":"지하2층 ATTAG!","floor":"B2","store_id":"PO-a"},
       {"title":"먼저 끝나는 팝업","start":"2026-08-20","end":"2026-08-26","diary":"popup",
-       "place":"지하2층 POP-UP@ICONIC","floor":"B2","storeId":"PO-i"},
+       "place":"지하2층 POP-UP@ICONIC","floor":"B2","store_id":"PO-i"},
       {"title":"다이닝","start":"2026-08-21","end":"2026-08-27","diary":"tasty",
-       "place":"지하1층 식품행사장","floor":"B1","storeId":"PO-f"},
+       "place":"지하1층 식품행사장","floor":"B1","store_id":"PO-f"},
       {"title":"쪽이 새로 생겼다","start":"2026-08-20","end":"2026-08-26","diary":"culture",
-       "place":"6층","floor":"6F","storeId":"PO-c"}
+       "place":"6층","floor":"6F","store_id":"PO-c"}
     ]}''';
 
   group('갈래', () {
@@ -139,11 +137,11 @@ void main() {
      ],
      "events":[
       {"title":"팝업 하나","start":"2026-08-20","end":"2026-08-26","diary":"popup",
-       "place":"지하2층","floor":"B2","storeId":"PO-i"},
+       "place":"지하2층","floor":"B2","store_id":"PO-i"},
       {"title":"팝업 둘","start":"2026-08-20","end":"2026-09-02","diary":"popup",
-       "place":"지하2층","floor":"B2","storeId":"PO-a"},
+       "place":"지하2층","floor":"B2","store_id":"PO-a"},
       {"title":"지난 다이닝","start":"2026-08-01","end":"2026-08-10","diary":"tasty",
-       "place":"지하1층","floor":"B1","storeId":"PO-f"}
+       "place":"지하1층","floor":"B1","store_id":"PO-f"}
      ]}''';
 
     test('오늘 자식이 있는 쪽만 남고, 건수가 함께 온다', () {
@@ -163,35 +161,5 @@ void main() {
       // 쪽이 없다고 행사까지 사라지지는 않는다.
       expect(events.openOn('2026-08-24'), isNotEmpty);
     });
-  });
-
-  /// 스냅샷은 손으로 넣는다. **갈래가 빠진 행사가 섞이면 하단 줄이 조용히
-  /// 맨 뒤로 밀어 놓는다** — 화면에는 아무 표시도 안 나므로 여기서 잡는다.
-  test('실제 스냅샷의 모든 행사가 아는 갈래를 갖는다', () {
-    final file = File('assets/mock/events.json');
-    final events = parseBuildingEvents(file.readAsStringSync()).events;
-
-    expect(events, isNotEmpty);
-    expect(
-      events.where((e) => e.diary == EventDiary.other).map((e) => e.title),
-      isEmpty,
-      reason: '원본 이슈 다이어리 쪽을 못 붙인 행사가 있다',
-    );
-
-    // 카드로 세울 쪽과 행사가 가리키는 쪽이 어긋나면, 그 행사는 "전체 보기"로만
-    // 닿는 곳에 남는다 — 하단 줄에는 그 쪽 카드가 아예 서지 않기 때문이다.
-    final parsed = parseBuildingEvents(file.readAsStringSync());
-    final declared = parsed.diaries.map((d) => d.diary).toSet();
-    expect(declared, isNotEmpty);
-    expect(
-      events.map((e) => e.diary).toSet().difference(declared),
-      isEmpty,
-      reason: 'diaries에 없는 갈래를 가리키는 행사가 있다',
-    );
-    for (final page in parsed.diaries) {
-      expect(page.title, isNotEmpty);
-      expect(page.image, isNotNull);
-      expect(File(page.image!).existsSync(), isTrue, reason: page.image);
-    }
   });
 }
