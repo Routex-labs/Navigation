@@ -165,6 +165,7 @@ class BuildingEvents {
   });
 
   /// 원본을 받아 온 날(`YYYY-MM-DD`). 화면이 "언제 기준인지" 밝히는 데 쓴다.
+  /// 서버가 `captured_on`으로 준다.
   final String capturedOn;
   final List<BuildingEvent> events;
 
@@ -220,22 +221,29 @@ String todayKey([DateTime? now]) {
       '-${at.day.toString().padLeft(2, '0')}';
 }
 
-/// `assets/mock/events.json`을 읽는다. 형식이 어긋나면 [FormatException].
+/// 서버 응답(`GET /buildings/{id}/events`)을 읽는다. 형식이 어긋나면
+/// [FormatException].
 ///
-/// **빈 목록을 조용히 돌려주지 않는다.** 이 파일은 사람이 손으로 넣은 스냅샷이라
-/// 0건은 "행사가 없다"가 아니라 "파일이 깨졌다"에 가깝다. 호출자가 실패를 삼킬지는
-/// 호출자가 정한다.
+/// 검사에서 문자열로 넣기 편하도록 남겨 둔 얇은 겉이다. 앱이 실제로 쓰는 것은
+/// [buildingEventsFromJson]이다.
 BuildingEvents parseBuildingEvents(String source) {
   final root = jsonDecode(source);
   if (root is! Map<String, dynamic>) {
-    throw const FormatException('events.json의 최상위가 객체가 아니다');
+    throw const FormatException('행사 응답의 최상위가 객체가 아니다');
   }
+  return buildingEventsFromJson(root);
+}
+
+/// **빈 목록을 조용히 돌려주지 않는다.** 이 데이터는 사람이 손으로 모은
+/// 스냅샷이라 0건은 "행사가 없다"가 아니라 "받아 온 것이 깨졌다"에 가깝다.
+/// 호출자가 실패를 삼킬지는 호출자가 정한다.
+BuildingEvents buildingEventsFromJson(Map<String, dynamic> root) {
   final raw = root['events'];
   if (raw is! List || raw.isEmpty) {
-    throw const FormatException('events.json에 events 배열이 없거나 비어 있다');
+    throw const FormatException('행사 응답에 events 배열이 없거나 비어 있다');
   }
   return BuildingEvents(
-    capturedOn: root['_captured'] as String? ?? '',
+    capturedOn: root['captured_on'] as String? ?? '',
     diaries: [
       for (final page in (root['diaries'] as List? ?? const []))
         if (page is Map<String, dynamic>)
@@ -254,7 +262,7 @@ BuildingEvents parseBuildingEvents(String source) {
           place: item['place'] as String? ?? '',
           diary: EventDiary.parse(item['diary'] as String?),
           floorName: item['floor'] as String?,
-          storeId: item['storeId'] as String?,
+          storeId: item['store_id'] as String?,
           image: item['image'] as String?,
           details: [
             for (final block in (item['details'] as List? ?? const []))
